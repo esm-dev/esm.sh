@@ -13,6 +13,7 @@ import (
 	"os/exec"
 	"path"
 	"strings"
+	"sync"
 
 	"github.com/postui/postdb"
 
@@ -66,7 +67,12 @@ var targets = []string{
 	"ES2020",
 }
 
+var lock sync.Mutex
+
 func build(options buildOptions) (ret buildResult, err error) {
+	lock.Lock()
+	defer lock.Unlock()
+
 	buf := bytes.NewBufferString(options.target + "|" + options.env)
 	for _, pkg := range options.packages {
 		buf.WriteString("|" + pkg.name + "@" + pkg.version + "/" + pkg.submodule)
