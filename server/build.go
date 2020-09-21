@@ -24,12 +24,12 @@ import (
 
 // ImportMeta defines import meta
 type ImportMeta struct {
-	Exports     []string `json:"exports"`
-	PackageInfo Package  `json:"packageInfo"`
+	Exports []string   `json:"exports"`
+	Package NpmPackage `json:"package"`
 }
 
-// Package defines the package of npm
-type Package struct {
+// NpmPackage defines the package of npm
+type NpmPackage struct {
 	Name             string            `json:"name"`
 	Version          string            `json:"version"`
 	Types            string            `json:"types"`
@@ -153,7 +153,7 @@ func build(options buildOptions) (ret buildResult, err error) {
 	var peerDependencies []string
 	importMeta := map[string]ImportMeta{}
 	for _, pkg := range options.packages {
-		var p Package
+		var p NpmPackage
 		err = utils.ParseJSONFile(path.Join(tmpDir, "/node_modules/", pkg.name, "/package.json"), &p)
 		if err != nil {
 			return
@@ -163,7 +163,7 @@ func build(options buildOptions) (ret buildResult, err error) {
 			importName = pkg.name + "/" + pkg.submodule
 		}
 		importMeta[importName] = ImportMeta{
-			PackageInfo: p,
+			Package: p,
 		}
 		if len(p.PeerDependencies) > 0 {
 			for name := range p.PeerDependencies {
@@ -219,8 +219,8 @@ func build(options buildOptions) (ret buildResult, err error) {
 		v, ok := importMeta[name]
 		if ok {
 			importMeta[name] = ImportMeta{
-				PackageInfo: v.PackageInfo,
-				Exports:     meta.Exports,
+				Package: v.Package,
+				Exports: meta.Exports,
 			}
 		}
 	}

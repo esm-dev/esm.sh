@@ -25,12 +25,6 @@ const (
 	nodejsLatestLTS  = "12.18.4"
 )
 
-// NPMPackageInfo defines npm package info
-type NPMPackageInfo struct {
-	Name    string `json:"name"`
-	Version string `json:"version"`
-}
-
 // NodejsVersion defines nodejs version
 type NodejsVersion struct {
 	Node string `json:"node"`
@@ -155,10 +149,10 @@ func installNodejs(v string) (err error) {
 	return
 }
 
-func (env *NodeEnv) getPackageLatestInfo(name string) (info NPMPackageInfo, err error) {
+func (env *NodeEnv) getPackageLatestInfo(name string) (info NpmPackage, err error) {
 	value, err := env.cache.Get(name)
 	if err == nil {
-		info = NPMPackageInfo{Name: name, Version: string(value)}
+		info = NpmPackage{Name: name, Version: string(value)}
 		return
 	}
 	if err != nil && err != cache.ErrExpired && err != cache.ErrNotFound {
