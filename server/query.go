@@ -22,8 +22,8 @@ func init() {
 			return rex.File(path.Join(etcDir, "builds", strings.TrimPrefix(pathname, "/bundle-")))
 		}
 
-		var bundle []string
-		packageName, version := utils.SplitByLastByte(strings.Trim(pathname, "/"), '@')
+		var packages []module
+		packageName, version, submodule := parsePackageName(pathname)
 		if version == "" {
 			info, err := nodeEnv.getPackageLatestInfo(packageName)
 			if err != nil {
@@ -34,7 +34,7 @@ func init() {
 		bundleValue := ctx.Form.Value("bundle")
 		if bundleValue != "" {
 			for _, dep := range strings.Split(bundleValue, ",") {
-				packageName, version := utils.SplitByLastByte(dep, '@')
+				packageName, version, submodule := parsePackageName(dep)
 				if version == "" {
 					info, err := nodeEnv.getPackageLatestInfo(packageName)
 					if err != nil {
@@ -42,10 +42,18 @@ func init() {
 					}
 					version = info.Version
 				}
-				bundle = append(bundle, packageName+"@"+version)
+				packages = append(packages, module{
+					name:      packageName,
+					version:   version,
+					submodule: submodule,
+				})
 			}
 		} else {
-			bundle = []string{packageName + "@" + version}
+			packages = []module{{
+				name:      packageName,
+				version:   version,
+				submodule: submodule,
+			}}
 		}
 		env := strings.ToLower(ctx.Form.Value("env"))
 		if env != "development" {
@@ -56,17 +64,22 @@ func init() {
 			target = "ESNEXT"
 		}
 		ret, err := build(buildOptions{
-			bundle: bundle,
-			env:    env,
-			target: target,
+			packages: packages,
+			env:      env,
+			target:   target,
 		})
 		if err != nil {
 			return throwErrorJs(err)
 		}
 
-		importMeta, ok := ret.importMeta[packageName]
+		importName := packageName
+		if submodule != "" {
+			importName = packageName + "/" + submodule
+		}
+
+		importMeta, ok := ret.importMeta[importName]
 		if !ok {
-			return throwErrorJs(fmt.Errorf("package '%s' not found in bundle", packageName))
+			return throwErrorJs(fmt.Errorf("package '%s' not found in bundle", importName))
 		}
 
 		var exports []string
@@ -82,8 +95,12 @@ func init() {
 
 		eof := "\n"
 		buf := bytes.NewBuffer(nil)
-		identity := rename(packageName)
-		fmt.Fprintf(buf, `/* esm.sh - %s@%s */%s`, packageName, version, eof)
+		identity := rename(importName)
+		if submodule != "" {
+			fmt.Fprintf(buf, `/* esm.sh - %s@%s/%s */%s`, packageName, version, submodule, eof)
+		} else {
+			fmt.Fprintf(buf, `/* esm.sh - %s@%s */%s`, packageName, version, eof)
+		}
 		if cdnDomain != "" {
 			fmt.Fprintf(buf, `import { %s } from "https://%s/bundle-%s.js";%s`, identity, cdnDomain, ret.hash, eof)
 		} else {
@@ -93,8 +110,25 @@ func init() {
 		if !hasDefaultExport {
 			fmt.Fprintf(buf, `export default %s;%s`, identity, eof)
 		}
-		return rex.Content(packageName+".js", time.Now(), bytes.NewReader(buf.Bytes()))
+		return rex.Content(identity+".js", time.Now(), bytes.NewReader(buf.Bytes()))
 	})
+}
+
+func parsePackageName(pathname string) (string, string, string) {
+	a := strings.Split(strings.Trim(pathname, "/"), "/")
+	scope := ""
+	pkg := a[0]
+	submodule := strings.Join(a[1:], "/")
+	if strings.HasPrefix(a[0], "@") && len(a) > 1 {
+		scope = a[0]
+		pkg = a[1]
+		submodule = strings.Join(a[2:], "/")
+	}
+	packageName, version := utils.SplitByLastByte(pkg, '@')
+	if scope != "" {
+		packageName = scope + "/" + packageName
+	}
+	return packageName, version, submodule
 }
 
 func throwErrorJs(err error) interface{} {

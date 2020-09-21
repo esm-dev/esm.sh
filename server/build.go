@@ -24,14 +24,29 @@ import (
 
 // ImportMeta defines import meta
 type ImportMeta struct {
-	Exports     []string               `json:"exports"`
-	PackageInfo map[string]interface{} `json:"packageInfo"`
+	Exports     []string `json:"exports"`
+	PackageInfo Package  `json:"packageInfo"`
+}
+
+// Package defines the package of npm
+type Package struct {
+	Name             string            `json:"name"`
+	Version          string            `json:"version"`
+	Types            string            `json:"types"`
+	Dependencies     map[string]string `json:"dependencies"`
+	PeerDependencies map[string]string `json:"peerDependencies"`
+}
+
+type module struct {
+	name      string
+	version   string
+	submodule string
 }
 
 type buildOptions struct {
-	bundle []string
-	env    string
-	target string
+	packages []module
+	env      string
+	target   string
 }
 
 type buildResult struct {
@@ -52,7 +67,11 @@ var targets = []string{
 }
 
 func build(options buildOptions) (ret buildResult, err error) {
-	bundleID := base64.URLEncoding.EncodeToString([]byte(strings.Join(options.bundle, "+") + "|" + options.target + "|" + options.env))
+	buf := bytes.NewBufferString(options.target + "|" + options.env)
+	for _, pkg := range options.packages {
+		buf.WriteString("|" + pkg.name + "@" + pkg.version + "/" + pkg.submodule)
+	}
+	bundleID := base64.URLEncoding.EncodeToString(buf.Bytes())
 	p, err := db.Get(q.Alias(bundleID), q.K("hash", "importMeta"))
 	if err == nil {
 		err = json.Unmarshal(p.KV.Get("importMeta"), &ret.importMeta)
@@ -94,17 +113,63 @@ func build(options buildOptions) (ret buildResult, err error) {
 		return
 	}
 
-	log.Debug("yarn", "add", strings.Join(options.bundle, " "))
-	cmd := exec.Command("yarn", append([]string{"add"}, options.bundle...)...)
+	args := []string{"add"}
+	for _, pkg := range options.packages {
+		args = append(args, pkg.name+"@"+pkg.version)
+	}
+	log.Debug("yarn", strings.Join(args, " "))
+	cmd := exec.Command("yarn", args...)
 	err = cmd.Run()
 	if err != nil {
 		return
 	}
 
+	var peerDependencies []string
+	importMeta := map[string]ImportMeta{}
+	for _, pkg := range options.packages {
+		var p Package
+		err = utils.ParseJSONFile(path.Join(tmpDir, "/node_modules/", pkg.name, "/package.json"), &p)
+		if err != nil {
+			return
+		}
+		importName := pkg.name
+		if pkg.submodule != "" {
+			importName = pkg.name + "/" + pkg.submodule
+		}
+		importMeta[importName] = ImportMeta{
+			PackageInfo: p,
+		}
+		if len(p.PeerDependencies) > 0 {
+			for name := range p.PeerDependencies {
+				install := true
+				for _, pkg := range options.packages {
+					if pkg.name == name {
+						install = false
+						break
+					}
+				}
+				if install {
+					peerDependencies = append(peerDependencies, name)
+				}
+			}
+		}
+	}
+	if len(peerDependencies) > 0 {
+		log.Debug("yarn", "add", strings.Join(peerDependencies, " "))
+		cmd = exec.Command("yarn", append([]string{"add"}, peerDependencies...)...)
+		err = cmd.Run()
+		if err != nil {
+			return
+		}
+	}
+
 	codeBuf := bytes.NewBufferString("const meta = {};")
-	for _, pkg := range options.bundle {
-		pgkName, _ := utils.SplitByLastByte(pkg, '@')
-		fmt.Fprintf(codeBuf, `meta["%s"] = {exports: Object.keys(require("%s")), packageInfo: require("./node_modules/%s/package.json")};`, pgkName, pgkName, pgkName)
+	for _, pkg := range options.packages {
+		importName := pkg.name
+		if pkg.submodule != "" {
+			importName = pkg.name + "/" + pkg.submodule
+		}
+		fmt.Fprintf(codeBuf, `meta["%s"] = {exports: Object.keys(require("%s"))};`, importName, importName)
 	}
 	codeBuf.WriteString("process.stdout.write(JSON.stringify(meta));")
 	err = ioutil.WriteFile(path.Join(tmpDir, "test.js"), codeBuf.Bytes(), 0644)
@@ -119,19 +184,28 @@ func build(options buildOptions) (ret buildResult, err error) {
 		return
 	}
 
-	var importMeta map[string]ImportMeta
-	err = json.Unmarshal(testOutput, &importMeta)
+	var m map[string]ImportMeta
+	err = json.Unmarshal(testOutput, &m)
 	if err != nil {
 		return
 	}
-	for name, meta := range importMeta {
-		log.Debug(name, meta.Exports)
+	for name, meta := range m {
+		v, ok := importMeta[name]
+		if ok {
+			importMeta[name] = ImportMeta{
+				PackageInfo: v.PackageInfo,
+				Exports:     meta.Exports,
+			}
+		}
 	}
 
 	codeBuf = bytes.NewBuffer(nil)
-	for _, pkg := range options.bundle {
-		pgkName, _ := utils.SplitByLastByte(pkg, '@')
-		fmt.Fprintf(codeBuf, `export * as %s from "%s";`, rename(pgkName), pgkName)
+	for _, pkg := range options.packages {
+		importName := pkg.name
+		if pkg.submodule != "" {
+			importName = pkg.name + "/" + pkg.submodule
+		}
+		fmt.Fprintf(codeBuf, `export * as %s from "%s";`, rename(importName), importName)
 	}
 
 	err = ioutil.WriteFile(path.Join(tmpDir, "entry.js"), codeBuf.Bytes(), 0644)
@@ -186,14 +260,14 @@ esbuild:
 	hash := hex.EncodeToString(hasher.Sum(nil))
 
 	jsContentBuf := bytes.NewBuffer(nil)
-	fmt.Fprintf(jsContentBuf, `/* esm.sh - esbuild bundle(%s) %s %s */%s`, strings.Join(options.bundle, ","), strings.ToLower(options.target), options.env, "\n")
+	fmt.Fprintf(jsContentBuf, `/* esm.sh - esbuild bundle(%s) %s %s */%s`, strings.Join(args[1:], ","), strings.ToLower(options.target), options.env, "\n")
 	jsContentBuf.Write(result.OutputFiles[0].Contents)
 	err = ioutil.WriteFile(path.Join(etcDir, "builds", hash+".js"), jsContentBuf.Bytes(), 0644)
 	if err != nil {
 		return
 	}
 
-	db.Put(q.Alias(bundleID), q.KV{"hash": []byte(hash), "importMeta": testOutput})
+	db.Put(q.Alias(bundleID), q.KV{"hash": []byte(hash), "importMeta": utils.MustEncodeJSON(importMeta)})
 
 	ret.id = bundleID
 	ret.hash = hash
@@ -201,6 +275,6 @@ esbuild:
 	return
 }
 
-func rename(pgkName string) string {
-	return strings.ReplaceAll(strings.ReplaceAll(pgkName, "-", "_"), "@", "_")
+func rename(pkgName string) string {
+	return strings.ReplaceAll(strings.ReplaceAll(strings.ReplaceAll(pkgName, "/", "_"), "-", "_"), "@", "_")
 }
