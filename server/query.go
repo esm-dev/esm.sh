@@ -65,9 +65,9 @@ func init() {
 				})
 			}
 		}
-		env := strings.ToLower(ctx.Form.Value("env"))
-		if env != "development" {
-			env = "production"
+		env := "production"
+		if !ctx.Form.IsNil("dev") {
+			env = "development"
 		}
 		target := strings.ToUpper(strings.TrimSpace(ctx.Form.Value("target")))
 		if target == "" {
@@ -115,7 +115,9 @@ func init() {
 		} else {
 			fmt.Fprintf(buf, `import { %s } from "/bundle-%s.js";%s`, identity, ret.hash, EOL)
 		}
-		fmt.Fprintf(buf, `export const { %s } = %s;%s`, strings.Join(exports, ","), identity, EOL)
+		if len(exports) > 0 {
+			fmt.Fprintf(buf, `export const { %s } = %s;%s`, strings.Join(exports, ","), identity, EOL)
+		}
 		if !hasDefaultExport {
 			fmt.Fprintf(buf, `export default %s;%s`, identity, EOL)
 		}

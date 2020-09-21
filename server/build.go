@@ -186,13 +186,17 @@ func build(options buildOptions) (ret buildResult, err error) {
 		log.Debug("yarn", "add", strings.Join(peerDependencies, " "), "in", time.Now().Sub(start))
 	}
 
-	codeBuf := bytes.NewBufferString("const meta = {};")
+	codeBuf := bytes.NewBuffer(nil)
+	codeBuf.WriteString("const meta = {};")
+	codeBuf.WriteString("const isObject = v => typeof v === 'object' && v !== null;")
 	for _, pkg := range options.packages {
 		importName := pkg.name
 		if pkg.submodule != "" {
 			importName = pkg.name + "/" + pkg.submodule
 		}
-		fmt.Fprintf(codeBuf, `meta["%s"] = {exports: Object.keys(require("%s"))};`, importName, importName)
+		importIdentifier := rename(importName)
+		fmt.Fprintf(codeBuf, `const %s = require("%s");`, importIdentifier, importName)
+		fmt.Fprintf(codeBuf, `meta["%s"] = {exports: isObject(%s) ? Object.keys(%s) : []};`, importName, importIdentifier, importIdentifier)
 	}
 	codeBuf.WriteString("process.stdout.write(JSON.stringify(meta));")
 	err = ioutil.WriteFile(path.Join(tmpDir, "test.js"), codeBuf.Bytes(), 0644)
