@@ -33,14 +33,24 @@ fi
 
 port="80"
 httpsPort="443"
+etcDir="/etc/esmd"
+cdnDomain=""
 if [ "$init" == "yes" ]; then
-    read -p "please enter the server http port (default is 80): " p
+    read -p "please enter the server http port (default is ${port}): " p
     if [ "$p" != "" ]; then
         port="$p"
     fi
-    read -p "please enter the server https port (default is 443): " p
+    read -p "please enter the server https port (default is ${httpsPort}): " p
     if [ "$p" != "" ]; then
         httpsPort="$p"
+    fi
+    read -p "please enter the etc directory, user ${loginUser} should have r/w permission (default is ${etcDir}): " p
+    if [ "$p" != "" ]; then
+        etcDir="$p"
+    fi
+    read -p "please enter the cdn domain (optional): " p
+    if [ "$p" != "" ]; then
+        cdnDomain="$p"
     fi
 fi
 
@@ -50,41 +60,41 @@ if [ "$?" != "0" ]; then
 fi
 
 echo "--- uploading..."
-scp -P $hostSSHPort esmsh $loginUser@$host:/tmp/esmsh
+scp -P $hostSSHPort esmd $loginUser@$host:/tmp/esmd
 if [ "$?" != "0" ]; then
-    rm esmsh
+    rm esmd
     exit
 fi
 
 echo "--- installing..."
 ssh -p $hostSSHPort $loginUser@$host << EOF
-    supervisorctl status esmsh
+    supervisorctl status esmd
     if [ "$?" != "0" ]; then
         echo "error: missing supervisor!"
         exit
     fi
 
     writeSVConfLine () {
-        echo "\$1" >> /etc/supervisor/conf.d/esmsh.conf
+        echo "\$1" >> /etc/supervisor/conf.d/esmd.conf
     }
 
-    supervisorctl stop esmsh
-    rm -f /usr/local/bin/esmsh
-    mv -f /tmp/esmsh /usr/local/bin/esmsh
-    chmod +x /usr/local/bin/esmsh
+    supervisorctl stop esmd
+    rm -f /usr/local/bin/esmd
+    mv -f /tmp/esmd /usr/local/bin/esmd
+    chmod +x /usr/local/bin/esmd
 
     if [ "$init" == "yes" ]; then
-        rm -f /etc/supervisor/conf.d/esmsh.conf
-        writeSVConfLine "[program:esmsh]"
-        writeSVConfLine "command=/usr/local/bin/esmsh -port=${port} -https-port=${httpsPort}"
+        rm -f /etc/supervisor/conf.d/esmd.conf
+        writeSVConfLine "[program:esmd]"
+        writeSVConfLine "command=/usr/local/bin/esmd --port=${port} --https-port=${httpsPort} --etc-dir=${etcDir} --cdn-domain=${cdnDomain}"
         writeSVConfLine "directory=/tmp"
         writeSVConfLine "user=$loginUser"
         writeSVConfLine "autostart=true"
         writeSVConfLine "autorestart=true"        
         supervisorctl reload
     else
-        supervisorctl start esmsh
+        supervisorctl start esmd
     fi
 EOF
 
-rm -f esmsh
+rm -f esmd
