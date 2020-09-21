@@ -34,18 +34,21 @@ func init() {
 		bundleValue := ctx.Form.Value("bundle")
 		if bundleValue != "" {
 			for _, dep := range strings.Split(bundleValue, ",") {
-				packageName, version, submodule := parsePackageName(dep)
-				if version == "" {
-					info, err := nodeEnv.getPackageLatestInfo(packageName)
+				n, v, s := parsePackageName(dep)
+				if v == "" && n == packageName {
+					v = version
+				}
+				if v == "" {
+					info, err := nodeEnv.getPackageLatestInfo(n)
 					if err != nil {
 						return throwErrorJs(err)
 					}
-					version = info.Version
+					v = info.Version
 				}
 				packages = append(packages, module{
-					name:      packageName,
-					version:   version,
-					submodule: submodule,
+					name:      n,
+					version:   v,
+					submodule: s,
 				})
 			}
 		} else {
