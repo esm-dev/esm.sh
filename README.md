@@ -22,3 +22,9 @@ import React from 'https://esm.sh/react?target=es2020'
 ```javascript
 import React from 'https://esm.sh/react?env=development'
 ```
+
+## Submodule
+
+```javascript
+import { renderToString } from 'https://esm.sh/react-dom/server'
+```
