@@ -31,8 +31,8 @@ func Serve() {
 	flag.IntVar(&port, "port", 80, "http server port")
 	flag.IntVar(&httpsPort, "https-port", 443, "https server port")
 	flag.StringVar(&etcDir, "etc-dir", "/etc/esm.sh", "etc dir")
-	flag.StringVar(&cdnDomain, "cdn-domain", "cdn.esm.sh", "etc dir")
-	flag.BoolVar(&debug, "debug", false, "run server in development mode")
+	flag.StringVar(&cdnDomain, "cdn-domain", "cdn.esm.sh", "cdn domain")
+	flag.BoolVar(&debug, "debug", false, "run server in debug mode")
 	flag.Parse()
 
 	logDir := "/var/log/esm.sh"
