@@ -45,9 +45,10 @@ func Serve() {
 		cdnDomain = ""
 	}
 
-	_, err := os.Stat(path.Join(etcDir, "builds"))
+	buildsDir := path.Join(etcDir, "builds")
+	_, err := os.Stat(buildsDir)
 	if os.IsNotExist(err) {
-		os.MkdirAll(path.Join(etcDir, "builds"), 0755)
+		os.MkdirAll(buildsDir, 0755)
 	}
 
 	log, err = logx.New(fmt.Sprintf("file:%s?buffer=32k", path.Join(logDir, "main.log")))

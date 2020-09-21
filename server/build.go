@@ -3,7 +3,6 @@ package server
 import (
 	"bytes"
 	"crypto/sha1"
-	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -15,6 +14,7 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/evanw/esbuild/pkg/api"
 	"github.com/ije/gox/utils"
@@ -32,7 +32,7 @@ type ImportMeta struct {
 type NpmPackage struct {
 	Name             string            `json:"name"`
 	Version          string            `json:"version"`
-	Types            string            `json:"types"`
+	Typings          string            `json:"typings"`
 	Dependencies     map[string]string `json:"dependencies"`
 	PeerDependencies map[string]string `json:"peerDependencies"`
 }
@@ -44,7 +44,7 @@ type module struct {
 }
 
 func (m module) String() string {
-	s := m.name + "@" + m.version + "/"
+	s := m.name + "@" + m.version
 	if m.submodule != "" {
 		s = s + "/" + m.submodule
 	}
@@ -72,7 +72,6 @@ type buildOptions struct {
 }
 
 type buildResult struct {
-	id         string
 	hash       string
 	importMeta map[string]ImportMeta
 }
@@ -96,8 +95,7 @@ func build(options buildOptions) (ret buildResult, err error) {
 
 	sort.Sort(options.packages)
 
-	bundleIDRaw := options.packages.String() + " " + options.target + " " + options.env
-	bundleID := base64.URLEncoding.EncodeToString([]byte(bundleIDRaw))
+	bundleID := options.packages.String() + " " + options.target + " " + options.env
 	p, err := db.Get(q.Alias(bundleID), q.K("hash", "importMeta"))
 	if err == nil {
 		err = json.Unmarshal(p.KV.Get("importMeta"), &ret.importMeta)
@@ -112,7 +110,6 @@ func build(options buildOptions) (ret buildResult, err error) {
 		hash := string(p.KV.Get("hash"))
 		_, err = os.Stat(path.Join(etcDir, "builds", hash+".js"))
 		if err == nil {
-			ret.id = bundleID
 			ret.hash = string(p.KV.Get("hash"))
 			return
 		}
@@ -143,12 +140,12 @@ func build(options buildOptions) (ret buildResult, err error) {
 	for _, pkg := range options.packages {
 		args = append(args, pkg.name+"@"+pkg.version)
 	}
-	log.Debug("yarn", strings.Join(args, " "))
-	cmd := exec.Command("yarn", args...)
-	err = cmd.Run()
+	start := time.Now()
+	err = exec.Command("yarn", args...).Run()
 	if err != nil {
 		return
 	}
+	log.Debug("yarn", strings.Join(args, " "), "in", time.Now().Sub(start))
 
 	var peerDependencies []string
 	importMeta := map[string]ImportMeta{}
@@ -181,12 +178,12 @@ func build(options buildOptions) (ret buildResult, err error) {
 		}
 	}
 	if len(peerDependencies) > 0 {
-		log.Debug("yarn", "add", strings.Join(peerDependencies, " "))
-		cmd = exec.Command("yarn", append([]string{"add"}, peerDependencies...)...)
-		err = cmd.Run()
+		start := time.Now()
+		err = exec.Command("yarn", append([]string{"add"}, peerDependencies...)...).Run()
 		if err != nil {
 			return
 		}
+		log.Debug("yarn", "add", strings.Join(peerDependencies, " "), "in", time.Now().Sub(start))
 	}
 
 	codeBuf := bytes.NewBufferString("const meta = {};")
@@ -202,7 +199,7 @@ func build(options buildOptions) (ret buildResult, err error) {
 	if err != nil {
 		return
 	}
-	cmd = exec.Command("node", "test.js")
+	cmd := exec.Command("node", "test.js")
 	cmd.Env = append(os.Environ(), `NODE_ENV=`+options.env)
 	testOutput, err := cmd.CombinedOutput()
 	if err != nil {
@@ -248,6 +245,7 @@ func build(options buildOptions) (ret buildResult, err error) {
 	}
 	missingResolved := map[string]struct{}{}
 esbuild:
+	start = time.Now()
 	result := api.Build(api.BuildOptions{
 		EntryPoints:       []string{"entry.js"},
 		Bundle:            true,
@@ -266,12 +264,12 @@ esbuild:
 			if missingModule != "" {
 				_, ok := missingResolved[missingModule]
 				if !ok {
-					log.Debug("yarn", "add", missingModule)
-					cmd := exec.Command("yarn", "add", missingModule)
-					err = cmd.Run()
+					start := time.Now()
+					err = exec.Command("yarn", "add", missingModule).Run()
 					if err != nil {
 						return
 					}
+					log.Debug("yarn", "add", missingModule, "in", time.Now().Sub(start))
 					missingResolved[missingModule] = struct{}{}
 					goto esbuild
 				}
@@ -280,6 +278,8 @@ esbuild:
 		err = errors.New("esbuild: " + fe.Text)
 		return
 	}
+
+	log.Debug("esbuild", bundleID, "in", time.Now().Sub(start))
 
 	hasher := sha1.New()
 	hasher.Write(result.OutputFiles[0].Contents)
@@ -295,12 +295,20 @@ esbuild:
 
 	db.Put(q.Alias(bundleID), q.KV{"hash": []byte(hash), "importMeta": utils.MustEncodeJSON(importMeta)})
 
-	ret.id = bundleID
 	ret.hash = hash
 	ret.importMeta = importMeta
 	return
 }
 
 func rename(pkgName string) string {
-	return strings.ReplaceAll(strings.ReplaceAll(strings.ReplaceAll(pkgName, "/", "_"), "-", "_"), "@", "_")
+	p := make([]byte, len([]byte(pkgName)))
+	for i, c := range []byte(pkgName) {
+		switch c {
+		case '/', '-', '@', '.':
+			p[i] = '_'
+		default:
+			p[i] = c
+		}
+	}
+	return string(p)
 }
