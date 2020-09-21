@@ -25,7 +25,7 @@ import React from 'https://esm.sh/react?target=es2020'
 
 ### Development mode
 ```javascript
-import React from 'https://esm.sh/react?env=development'
+import React from 'https://esm.sh/react?dev'
 ```
 
 ### Submodule
