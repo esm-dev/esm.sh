@@ -125,7 +125,7 @@ func build(options buildOptions) (ret buildResult, err error) {
 		return
 	}
 	for name, meta := range importMeta {
-		log.Debug(name, meta)
+		log.Debug(name, meta.Exports)
 	}
 
 	codeBuf = bytes.NewBuffer(nil)
@@ -146,6 +146,8 @@ func build(options buildOptions) (ret buildResult, err error) {
 			target = api.Target(i)
 		}
 	}
+	missingResolved := map[string]struct{}{}
+esbuild:
 	result := api.Build(api.BuildOptions{
 		EntryPoints:       []string{"entry.js"},
 		Bundle:            true,
@@ -158,7 +160,24 @@ func build(options buildOptions) (ret buildResult, err error) {
 		Defines:           map[string]string{"process.env.NODE_ENV": `"` + options.env + `"`},
 	})
 	if len(result.Errors) > 0 {
-		err = errors.New(result.Errors[0].Text)
+		fe := result.Errors[0]
+		if strings.HasPrefix(fe.Text, "Could not resolve \"") {
+			missingModule := strings.Split(fe.Text, "\"")[1]
+			if missingModule != "" {
+				_, ok := missingResolved[missingModule]
+				if !ok {
+					log.Debug("yarn", "add", missingModule)
+					cmd := exec.Command("yarn", "add", missingModule)
+					err = cmd.Run()
+					if err != nil {
+						return
+					}
+					missingResolved[missingModule] = struct{}{}
+					goto esbuild
+				}
+			}
+		}
+		err = errors.New("esbuild: " + fe.Text)
 		return
 	}
 

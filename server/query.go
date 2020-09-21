@@ -69,11 +69,14 @@ func init() {
 			return throwErrorJs(fmt.Errorf("package '%s' not found in bundle", packageName))
 		}
 
+		var exports []string
 		hasDefaultExport := false
 		for _, name := range importMeta.Exports {
 			if name == "default" {
 				hasDefaultExport = true
 				break
+			} else if name != "import" {
+				exports = append(exports, name)
 			}
 		}
 
@@ -86,7 +89,7 @@ func init() {
 		} else {
 			fmt.Fprintf(buf, `import { %s } from "/bundle-%s.js";%s`, identity, ret.hash, eof)
 		}
-		fmt.Fprintf(buf, `export const { %s } = %s;%s`, strings.Join(importMeta.Exports, ","), identity, eof)
+		fmt.Fprintf(buf, `export const { %s } = %s;%s`, strings.Join(exports, ","), identity, eof)
 		if !hasDefaultExport {
 			fmt.Fprintf(buf, `export default %s;%s`, identity, eof)
 		}
