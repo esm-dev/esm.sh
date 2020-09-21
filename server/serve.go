@@ -21,7 +21,7 @@ var (
 	cdnDomain string
 )
 
-// Serve serves esm.sh server
+// Serve serves esmd server
 func Serve() {
 	var (
 		port      int
@@ -30,12 +30,12 @@ func Serve() {
 	)
 	flag.IntVar(&port, "port", 80, "http server port")
 	flag.IntVar(&httpsPort, "https-port", 443, "https server port")
-	flag.StringVar(&etcDir, "etc-dir", "/etc/esm.sh", "etc dir")
+	flag.StringVar(&etcDir, "etc-dir", "/etc/esmd", "etc dir")
 	flag.StringVar(&cdnDomain, "cdn-domain", "cdn.esm.sh", "cdn domain")
 	flag.BoolVar(&debug, "debug", false, "run server in debug mode")
 	flag.Parse()
 
-	logDir := "/var/log/esm.sh"
+	logDir := "/var/log/esmd"
 	exename := path.Base(os.Args[0])
 	isDev := exename == "main" || exename == "main.exe"
 	if isDev {
@@ -59,7 +59,7 @@ func Serve() {
 		log.SetQuite(true)
 	}
 
-	accessLogger, err := logx.New(fmt.Sprintf("file:%s?buffer=128k", path.Join(logDir, "access.log")))
+	accessLogger, err := logx.New(fmt.Sprintf("file:%s?buffer=32k", path.Join(logDir, "access.log")))
 	if err != nil {
 		log.Fatalf("initiate access logger: %v", err)
 	}
