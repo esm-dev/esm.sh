@@ -21,7 +21,7 @@ import (
 )
 
 const (
-	minNodejsVersion = 10
+	minNodejsVersion = 12
 	nodejsLatestLTS  = "12.18.4"
 )
 
