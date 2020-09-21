@@ -3,7 +3,7 @@ package server
 import (
 	"bytes"
 	"crypto/sha1"
-	"encoding/hex"
+	"encoding/base32"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -95,7 +95,7 @@ func build(options buildOptions) (ret buildResult, err error) {
 
 	sort.Sort(options.packages)
 
-	bundleID := options.packages.String() + " " + options.target + " " + options.env
+	bundleID := "bundle-" + options.packages.String() + " " + options.target + " " + options.env
 	p, err := db.Get(q.Alias(bundleID), q.K("hash", "importMeta"))
 	if err == nil {
 		err = json.Unmarshal(p.KV.Get("importMeta"), &ret.importMeta)
@@ -283,17 +283,24 @@ esbuild:
 
 	hasher := sha1.New()
 	hasher.Write(result.OutputFiles[0].Contents)
-	hash := hex.EncodeToString(hasher.Sum(nil))
+	hash := base32.StdEncoding.EncodeToString(hasher.Sum(nil))
 
 	jsContentBuf := bytes.NewBuffer(nil)
-	fmt.Fprintf(jsContentBuf, `/* esm.sh - esbuild bundle(%s) %s %s */%s`, strings.Join(args[1:], ","), strings.ToLower(options.target), options.env, "\n")
+	fmt.Fprintf(jsContentBuf, `/* esm.sh - esbuild bundle(%s) %s %s */%s`, strings.Join(args[1:], ","), strings.ToLower(options.target), options.env, EOL)
 	jsContentBuf.Write(result.OutputFiles[0].Contents)
 	err = ioutil.WriteFile(path.Join(etcDir, "builds", hash+".js"), jsContentBuf.Bytes(), 0644)
 	if err != nil {
 		return
 	}
 
-	db.Put(q.Alias(bundleID), q.KV{"hash": []byte(hash), "importMeta": utils.MustEncodeJSON(importMeta)})
+	db.Put(
+		q.Alias(bundleID),
+		q.Tags("bundle"),
+		q.KV{
+			"hash":       []byte(hash),
+			"importMeta": utils.MustEncodeJSON(importMeta),
+		},
+	)
 
 	ret.hash = hash
 	ret.importMeta = importMeta

@@ -11,6 +11,11 @@ import (
 	"github.com/ije/rex"
 )
 
+const (
+	// EOL defines char end of line
+	EOL = "\n"
+)
+
 func init() {
 	rex.Query("*", func(ctx *rex.Context) interface{} {
 		pathname := utils.CleanPath(ctx.R.URL.Path)
@@ -98,22 +103,21 @@ func init() {
 			}
 		}
 
-		eof := "\n"
 		buf := bytes.NewBuffer(nil)
 		identity := rename(importName)
 		if submodule != "" {
-			fmt.Fprintf(buf, `/* esm.sh - %s@%s/%s */%s`, packageName, version, submodule, eof)
+			fmt.Fprintf(buf, `/* esm.sh - %s@%s/%s */%s`, packageName, version, submodule, EOL)
 		} else {
-			fmt.Fprintf(buf, `/* esm.sh - %s@%s */%s`, packageName, version, eof)
+			fmt.Fprintf(buf, `/* esm.sh - %s@%s */%s`, packageName, version, EOL)
 		}
 		if cdnDomain != "" {
-			fmt.Fprintf(buf, `import { %s } from "https://%s/bundle-%s.js";%s`, identity, cdnDomain, ret.hash, eof)
+			fmt.Fprintf(buf, `import { %s } from "https://%s/bundle-%s.js";%s`, identity, cdnDomain, ret.hash, EOL)
 		} else {
-			fmt.Fprintf(buf, `import { %s } from "/bundle-%s.js";%s`, identity, ret.hash, eof)
+			fmt.Fprintf(buf, `import { %s } from "/bundle-%s.js";%s`, identity, ret.hash, EOL)
 		}
-		fmt.Fprintf(buf, `export const { %s } = %s;%s`, strings.Join(exports, ","), identity, eof)
+		fmt.Fprintf(buf, `export const { %s } = %s;%s`, strings.Join(exports, ","), identity, EOL)
 		if !hasDefaultExport {
-			fmt.Fprintf(buf, `export default %s;%s`, identity, eof)
+			fmt.Fprintf(buf, `export default %s;%s`, identity, EOL)
 		}
 		return rex.Content(identity+".js", time.Now(), bytes.NewReader(buf.Bytes()))
 	})
