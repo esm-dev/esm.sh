@@ -44,7 +44,7 @@ if [ "$init" == "yes" ]; then
     fi
 fi
 
-sh build.sh
+sh $(dirname $0)/build.sh
 if [ "$?" != "0" ]; then 
     exit
 fi
