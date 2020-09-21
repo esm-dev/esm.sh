@@ -12,15 +12,14 @@ import (
 	"os"
 	"os/exec"
 	"path"
+	"sort"
 	"strings"
 	"sync"
 
-	"github.com/postui/postdb"
-
-	"github.com/postui/postdb/q"
-
 	"github.com/evanw/esbuild/pkg/api"
 	"github.com/ije/gox/utils"
+	"github.com/postui/postdb"
+	"github.com/postui/postdb/q"
 )
 
 // ImportMeta defines import meta
@@ -44,10 +43,32 @@ type module struct {
 	submodule string
 }
 
+func (m module) String() string {
+	s := m.name + "@" + m.version + "/"
+	if m.submodule != "" {
+		s = s + "/" + m.submodule
+	}
+	return s
+}
+
+type moduleSlice []module
+
+func (a moduleSlice) Len() int           { return len(a) }
+func (a moduleSlice) Less(i, j int) bool { return a[i].String() < a[j].String() }
+func (a moduleSlice) Swap(i, j int)      { a[i], a[j] = a[j], a[i] }
+
+func (a moduleSlice) String() string {
+	s := make([]string, a.Len())
+	for i, m := range a {
+		s[i] = m.String()
+	}
+	return strings.Join(s, ",")
+}
+
 type buildOptions struct {
-	packages []module
-	env      string
+	packages moduleSlice
 	target   string
+	env      string
 }
 
 type buildResult struct {
@@ -73,11 +94,10 @@ func build(options buildOptions) (ret buildResult, err error) {
 	lock.Lock()
 	defer lock.Unlock()
 
-	buf := bytes.NewBufferString(options.target + "|" + options.env)
-	for _, pkg := range options.packages {
-		buf.WriteString("|" + pkg.name + "@" + pkg.version + "/" + pkg.submodule)
-	}
-	bundleID := base64.URLEncoding.EncodeToString(buf.Bytes())
+	sort.Sort(options.packages)
+
+	bundleIDRaw := options.packages.String() + " " + options.target + " " + options.env
+	bundleID := base64.URLEncoding.EncodeToString([]byte(bundleIDRaw))
 	p, err := db.Get(q.Alias(bundleID), q.K("hash", "importMeta"))
 	if err == nil {
 		err = json.Unmarshal(p.KV.Get("importMeta"), &ret.importMeta)

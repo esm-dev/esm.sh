@@ -22,7 +22,6 @@ func init() {
 			return rex.File(path.Join(etcDir, "builds", strings.TrimPrefix(pathname, "/bundle-")))
 		}
 
-		var packages []module
 		packageName, version, submodule := parsePackageName(pathname)
 		if version == "" {
 			info, err := nodeEnv.getPackageLatestInfo(packageName)
@@ -32,11 +31,20 @@ func init() {
 			version = info.Version
 		}
 		bundleValue := ctx.Form.Value("bundle")
+		module0 := module{
+			name:      packageName,
+			version:   version,
+			submodule: submodule,
+		}
+		packages := moduleSlice{module0}
 		if bundleValue != "" {
 			for _, dep := range strings.Split(bundleValue, ",") {
 				n, v, s := parsePackageName(dep)
-				if v == "" && n == packageName {
-					v = version
+				if n == module0.name && s == module0.submodule {
+					if v != "" && v != module0.version {
+						module0.version = v
+					}
+					continue
 				}
 				if v == "" {
 					info, err := nodeEnv.getPackageLatestInfo(n)
@@ -51,12 +59,6 @@ func init() {
 					submodule: s,
 				})
 			}
-		} else {
-			packages = []module{{
-				name:      packageName,
-				version:   version,
-				submodule: submodule,
-			}}
 		}
 		env := strings.ToLower(ctx.Form.Value("env"))
 		if env != "development" {

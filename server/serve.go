@@ -71,9 +71,9 @@ func Serve() {
 	}
 	log.Debugf("Nodejs: %+v %s", nodeEnv.version, nodeEnv.registry)
 
-	db, err = postdb.Open(path.Join(etcDir, "esm.db"), 0666)
+	db, err = postdb.Open(path.Join(etcDir, "esmd.db"), 0666)
 	if err != nil {
-		log.Fatalf("initiate esm db: %v", err)
+		log.Fatalf("initiate esmd.db: %v", err)
 	}
 
 	rex.Use(
