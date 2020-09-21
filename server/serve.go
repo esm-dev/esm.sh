@@ -6,7 +6,6 @@ import (
 	"os"
 	"path"
 	"path/filepath"
-	"time"
 
 	logx "github.com/ije/gox/log"
 	"github.com/ije/gox/utils"
@@ -14,21 +13,13 @@ import (
 	"github.com/postui/postdb"
 )
 
-const (
-	gwtExpires = 15 * time.Minute
-)
-
 var (
-	etcDir  string
-	db      *postdb.DB
-	log     *logx.Logger
-	nodeEnv *NodeEnv
+	db        *postdb.DB
+	log       *logx.Logger
+	nodeEnv   *NodeEnv
+	etcDir    string
+	cdnDomain string
 )
-
-type file struct {
-	modtime time.Time
-	content []byte
-}
 
 // Serve serves esm.sh server
 func Serve() {
@@ -40,6 +31,7 @@ func Serve() {
 	flag.IntVar(&port, "port", 80, "http server port")
 	flag.IntVar(&httpsPort, "https-port", 443, "https server port")
 	flag.StringVar(&etcDir, "etc-dir", "/etc/esm.sh", "etc dir")
+	flag.StringVar(&cdnDomain, "cdn-domain", "cdn.esm.sh", "etc dir")
 	flag.BoolVar(&debug, "debug", false, "run server in development mode")
 	flag.Parse()
 
@@ -50,6 +42,7 @@ func Serve() {
 		debug = true
 		etcDir, _ = filepath.Abs("./.dev")
 		logDir = path.Join(etcDir, "log")
+		cdnDomain = ""
 	}
 
 	_, err := os.Stat(path.Join(etcDir, "builds"))

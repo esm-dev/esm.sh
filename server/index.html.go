@@ -13,4 +13,5 @@ const indexHTML = `<!DOCTYPE html>
     <h1>ESM</h1>
 </body>
 
-</html>`
+</html>
+`

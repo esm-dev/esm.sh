@@ -81,7 +81,11 @@ func init() {
 		buf := bytes.NewBuffer(nil)
 		identity := rename(packageName)
 		fmt.Fprintf(buf, `/* esm.sh - %s@%s */%s`, packageName, version, eof)
-		fmt.Fprintf(buf, `import { %s } from "/bundle-%s.js";%s`, identity, ret.hash, eof)
+		if cdnDomain != "" {
+			fmt.Fprintf(buf, `import { %s } from "https://%s/bundle-%s.js";%s`, identity, cdnDomain, ret.hash, eof)
+		} else {
+			fmt.Fprintf(buf, `import { %s } from "/bundle-%s.js";%s`, identity, ret.hash, eof)
+		}
 		fmt.Fprintf(buf, `export const { %s } = %s;%s`, strings.Join(importMeta.Exports, ","), identity, eof)
 		if !hasDefaultExport {
 			fmt.Fprintf(buf, `export default %s;%s`, identity, eof)
