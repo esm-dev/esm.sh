@@ -87,6 +87,7 @@ func build(options buildOptions) (ret buildResult, err error) {
 
 	tmpDir := path.Join(os.TempDir(), bundleID)
 	os.MkdirAll(tmpDir, 0755)
+	defer os.RemoveAll(tmpDir)
 
 	err = os.Chdir(tmpDir)
 	if err != nil {
