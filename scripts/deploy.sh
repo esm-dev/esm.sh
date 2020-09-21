@@ -26,7 +26,7 @@ if [ "$port" != "" ]; then
 fi
 
 init="no"
-read -p "initiate services ('yes' or 'no', default is 'no')? " ok
+read -p "initiate service ('yes' or 'no', default is 'no')? " ok
 if [ "$ok" == "yes" ]; then
     init="yes"
 fi
@@ -68,8 +68,8 @@ fi
 
 echo "--- installing..."
 ssh -p $hostSSHPort $loginUser@$host << EOF
-    supervisorctl status esmd
-    if [ "$?" != "0" ]; then
+    supervisorctl version
+    if [ "\$?" != "0" ]; then
         echo "error: missing supervisor!"
         exit
     fi
