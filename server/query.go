@@ -32,49 +32,29 @@ func init() {
 			bundleSettings, pathname = utils.SplitByFirstByte(strings.TrimPrefix(pathname, "/["), ']')
 		}
 
-		packageName, version, submodule := parsePackageName(pathname)
-		if version == "" {
-			info, err := nodeEnv.getPackageLatestInfo(packageName)
-			if err != nil {
-				return throwErrorJs(err)
-			}
-			version = info.Version
-		}
-		importPath := packageName
-		if submodule != "" {
-			importPath = packageName + "/" + submodule
+		currentModule, err := parseModule(pathname)
+		if err != nil {
+			return throwErrorJs(err)
 		}
 
 		var packages moduleSlice
 		if bundleSettings != "" {
 			var containsPackage bool
 			for _, dep := range strings.Split(bundleSettings, ",") {
-				n, v, s := parsePackageName(strings.TrimSpace(dep))
-				if v == "" {
-					info, err := nodeEnv.getPackageLatestInfo(n)
-					if err != nil {
-						return throwErrorJs(err)
-					}
-					v = info.Version
+				m, err := parseModule(strings.TrimSpace(dep))
+				if err != nil {
+					return throwErrorJs(err)
 				}
-				if n == packageName && v == version && s == submodule {
+				if m.name == currentModule.name && m.version == currentModule.version && m.submodule == currentModule.submodule {
 					containsPackage = true
 				}
-				packages = append(packages, module{
-					name:      n,
-					version:   v,
-					submodule: s,
-				})
+				packages = append(packages, *m)
 			}
 			if !containsPackage {
-				return throwErrorJs(fmt.Errorf("package '%s' not found in the bundle list", importPath))
+				return throwErrorJs(fmt.Errorf("package '%s' not found in the bundle list", currentModule.ImportPath()))
 			}
 		} else {
-			packages = moduleSlice{{
-				name:      packageName,
-				version:   version,
-				submodule: submodule,
-			}}
+			packages = moduleSlice{*currentModule}
 		}
 		env := "production"
 		if !ctx.Form.IsNil("dev") {
@@ -86,16 +66,17 @@ func init() {
 		}
 		ret, err := build(buildOptions{
 			packages: packages,
-			env:      env,
 			target:   target,
+			env:      env,
 		})
 		if err != nil {
 			return throwErrorJs(err)
 		}
 
+		importPath := currentModule.ImportPath()
 		importMeta, ok := ret.importMeta[importPath]
 		if !ok {
-			return throwErrorJs(fmt.Errorf("package '%s' not found in bundle", packageName))
+			return throwErrorJs(fmt.Errorf("package '%s' not found in bundle", importPath))
 		}
 
 		var exports []string
@@ -110,29 +91,28 @@ func init() {
 		}
 
 		buf := bytes.NewBuffer(nil)
-		identity := rename(importPath)
-		if submodule != "" {
-			fmt.Fprintf(buf, `/* esm.sh - %s@%s/%s */%s`, packageName, version, submodule, EOL)
-		} else {
-			fmt.Fprintf(buf, `/* esm.sh - %s@%s */%s`, packageName, version, EOL)
-		}
+		importIdentifier := identify(importPath)
+		fmt.Fprintf(buf, `/* esm.sh - %v */%s`, currentModule, EOL)
 		if cdnDomain != "" {
-			fmt.Fprintf(buf, `import { %s } from "https://%s/bundle-%s.js";%s`, identity, cdnDomain, ret.hash, EOL)
+			fmt.Fprintf(buf, `import { %s } from "https://%s/bundle-%s.js";%s`, importIdentifier, cdnDomain, ret.hash, EOL)
 		} else {
-			fmt.Fprintf(buf, `import { %s } from "/bundle-%s.js";%s`, identity, ret.hash, EOL)
+			fmt.Fprintf(buf, `import { %s } from "/bundle-%s.js";%s`, importIdentifier, ret.hash, EOL)
 		}
 		if len(exports) > 0 {
-			fmt.Fprintf(buf, `export const { %s } = %s;%s`, strings.Join(exports, ","), identity, EOL)
+			fmt.Fprintf(buf, `export const { %s } = %s;%s`, strings.Join(exports, ","), importIdentifier, EOL)
 		}
 		if !hasDefaultExport {
-			fmt.Fprintf(buf, `export default %s;%s`, identity, EOL)
+			fmt.Fprintf(buf, `export default %s;%s`, importIdentifier, EOL)
 		}
-		return rex.Content(identity+".js", time.Now(), bytes.NewReader(buf.Bytes()))
+		return rex.Content(importIdentifier+".js", time.Now(), bytes.NewReader(buf.Bytes()))
 	})
 }
 
-func parsePackageName(pathname string) (string, string, string) {
+func parseModule(pathname string) (*module, error) {
 	a := strings.Split(strings.Trim(pathname, "/"), "/")
+	for i, s := range a {
+		a[i] = strings.TrimSpace(s)
+	}
 	scope := ""
 	pkg := a[0]
 	submodule := strings.Join(a[1:], "/")
@@ -141,11 +121,22 @@ func parsePackageName(pathname string) (string, string, string) {
 		pkg = a[1]
 		submodule = strings.Join(a[2:], "/")
 	}
-	packageName, version := utils.SplitByLastByte(pkg, '@')
+	name, version := utils.SplitByLastByte(pkg, '@')
 	if scope != "" {
-		packageName = scope + "/" + packageName
+		name = scope + "/" + name
 	}
-	return packageName, version, submodule
+	if version == "" {
+		info, err := nodeEnv.getPackageLatestInfo(name)
+		if err != nil {
+			return nil, err
+		}
+		version = info.Version
+	}
+	return &module{
+		name:      name,
+		version:   version,
+		submodule: submodule,
+	}, nil
 }
 
 func throwErrorJs(err error) interface{} {

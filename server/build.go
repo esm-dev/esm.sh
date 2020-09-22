@@ -22,6 +22,19 @@ import (
 	"github.com/postui/postdb/q"
 )
 
+var targets = []string{
+	"ESNext",
+	"ES5",
+	"ES2015",
+	"ES2016",
+	"ES2017",
+	"ES2018",
+	"ES2019",
+	"ES2020",
+}
+
+var buildLock sync.Mutex
+
 // ImportMeta defines import meta
 type ImportMeta struct {
 	Exports []string   `json:"exports"`
@@ -37,34 +50,6 @@ type NpmPackage struct {
 	PeerDependencies map[string]string `json:"peerDependencies"`
 }
 
-type module struct {
-	name      string
-	version   string
-	submodule string
-}
-
-func (m module) String() string {
-	s := m.name + "@" + m.version
-	if m.submodule != "" {
-		s += "/" + m.submodule
-	}
-	return s
-}
-
-type moduleSlice []module
-
-func (a moduleSlice) Len() int           { return len(a) }
-func (a moduleSlice) Less(i, j int) bool { return a[i].String() < a[j].String() }
-func (a moduleSlice) Swap(i, j int)      { a[i], a[j] = a[j], a[i] }
-
-func (a moduleSlice) String() string {
-	s := make([]string, a.Len())
-	for i, m := range a {
-		s[i] = m.String()
-	}
-	return strings.Join(s, ",")
-}
-
 type buildOptions struct {
 	packages moduleSlice
 	target   string
@@ -76,26 +61,13 @@ type buildResult struct {
 	importMeta map[string]ImportMeta
 }
 
-var targets = []string{
-	"ESNext",
-	"ES5",
-	"ES2015",
-	"ES2016",
-	"ES2017",
-	"ES2018",
-	"ES2019",
-	"ES2020",
-}
-
-var lock sync.Mutex
-
 func build(options buildOptions) (ret buildResult, err error) {
-	lock.Lock()
-	defer lock.Unlock()
+	buildLock.Lock()
+	defer buildLock.Unlock()
 
 	sort.Sort(options.packages)
 
-	bundleID := "bundle-" + options.packages.String() + " " + options.target + " " + options.env
+	bundleID := "bundle " + options.packages.String() + " " + options.target + " " + options.env
 	p, err := db.Get(q.Alias(bundleID), q.K("hash", "importMeta"))
 	if err == nil {
 		err = json.Unmarshal(p.KV.Get("importMeta"), &ret.importMeta)
@@ -185,14 +157,11 @@ func build(options buildOptions) (ret buildResult, err error) {
 	codeBuf := bytes.NewBuffer(nil)
 	codeBuf.WriteString("const meta = {};")
 	codeBuf.WriteString("const isObject = v => typeof v === 'object' && v !== null;")
-	for _, pkg := range options.packages {
-		importName := pkg.name
-		if pkg.submodule != "" {
-			importName = pkg.name + "/" + pkg.submodule
-		}
-		importIdentifier := rename(importName)
-		fmt.Fprintf(codeBuf, `const %s = require("%s");`, importIdentifier, importName)
-		fmt.Fprintf(codeBuf, `meta["%s"] = {exports: isObject(%s) ? Object.keys(%s) : []};`, importName, importIdentifier, importIdentifier)
+	for _, m := range options.packages {
+		importPath := m.ImportPath()
+		importIdentifier := identify(importPath)
+		fmt.Fprintf(codeBuf, `const %s = require("%s");`, importIdentifier, importPath)
+		fmt.Fprintf(codeBuf, `meta["%s"] = {exports: isObject(%s) ? Object.keys(%s) : []};`, importPath, importIdentifier, importIdentifier)
 	}
 	codeBuf.WriteString("process.stdout.write(JSON.stringify(meta));")
 	err = ioutil.WriteFile(path.Join(tmpDir, "test.js"), codeBuf.Bytes(), 0644)
@@ -226,12 +195,9 @@ func build(options buildOptions) (ret buildResult, err error) {
 	}
 
 	codeBuf = bytes.NewBuffer(nil)
-	for _, pkg := range options.packages {
-		importName := pkg.name
-		if pkg.submodule != "" {
-			importName = pkg.name + "/" + pkg.submodule
-		}
-		fmt.Fprintf(codeBuf, `export * as %s from "%s";`, rename(importName), importName)
+	for _, m := range options.packages {
+		importName := m.ImportPath()
+		fmt.Fprintf(codeBuf, `export * as %s from "%s";`, identify(importName), importName)
 	}
 
 	err = ioutil.WriteFile(path.Join(tmpDir, "entry.js"), codeBuf.Bytes(), 0644)
@@ -280,7 +246,7 @@ esbuild:
 		return
 	}
 
-	log.Debug("esbuild", bundleID, "in", time.Now().Sub(start))
+	log.Debugf("esbuild %s in %v", bundleID, time.Now().Sub(start))
 
 	hasher := sha1.New()
 	hasher.Write(result.OutputFiles[0].Contents)
@@ -315,13 +281,13 @@ func pnpmAdd(packages ...string) (err error) {
 	}
 	start := time.Now()
 	err = exec.Command("pnpm", args...).Run()
-	log.Debug("pnpm", strings.Join(args, " "), "in", time.Now().Sub(start))
+	log.Debug("pnpm add", strings.Join(packages, " "), "in", time.Now().Sub(start))
 	return
 }
 
-func rename(pkgName string) string {
-	p := make([]byte, len([]byte(pkgName)))
-	for i, c := range []byte(pkgName) {
+func identify(importPath string) string {
+	p := make([]byte, len([]byte(importPath)))
+	for i, c := range []byte(importPath) {
 		switch c {
 		case '/', '-', '@', '.':
 			p[i] = '_'
