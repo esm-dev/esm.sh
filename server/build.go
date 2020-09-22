@@ -136,16 +136,16 @@ func build(options buildOptions) (ret buildResult, err error) {
 		return
 	}
 
-	args := []string{"add"}
+	args := []string{"add", "--ignore-scripts"}
 	for _, pkg := range options.packages {
 		args = append(args, pkg.name+"@"+pkg.version)
 	}
 	start := time.Now()
-	err = exec.Command("yarn", args...).Run()
+	err = exec.Command("pnpm", args...).Run()
 	if err != nil {
 		return
 	}
-	log.Debug("yarn", strings.Join(args, " "), "in", time.Now().Sub(start))
+	log.Debug("pnpm", strings.Join(args, " "), "in", time.Now().Sub(start))
 
 	var peerDependencies []string
 	importMeta := map[string]ImportMeta{}
@@ -179,11 +179,11 @@ func build(options buildOptions) (ret buildResult, err error) {
 	}
 	if len(peerDependencies) > 0 {
 		start := time.Now()
-		err = exec.Command("yarn", append([]string{"add"}, peerDependencies...)...).Run()
+		err = exec.Command("pnpm", append([]string{"add", "--ignore-scripts"}, peerDependencies...)...).Run()
 		if err != nil {
 			return
 		}
-		log.Debug("yarn", "add", strings.Join(peerDependencies, " "), "in", time.Now().Sub(start))
+		log.Debug("pnpm", "add", strings.Join(peerDependencies, " "), "in", time.Now().Sub(start))
 	}
 
 	codeBuf := bytes.NewBuffer(nil)
@@ -203,6 +203,8 @@ func build(options buildOptions) (ret buildResult, err error) {
 	if err != nil {
 		return
 	}
+
+	start = time.Now()
 	cmd := exec.Command("node", "test.js")
 	cmd.Env = append(os.Environ(), `NODE_ENV=`+options.env)
 	testOutput, err := cmd.CombinedOutput()
@@ -210,6 +212,7 @@ func build(options buildOptions) (ret buildResult, err error) {
 		err = errors.New(string(testOutput))
 		return
 	}
+	log.Debug("node test.js in", time.Now().Sub(start))
 
 	var m map[string]ImportMeta
 	err = json.Unmarshal(testOutput, &m)
@@ -269,11 +272,11 @@ esbuild:
 				_, ok := missingResolved[missingModule]
 				if !ok {
 					start := time.Now()
-					err = exec.Command("yarn", "add", missingModule).Run()
+					err = exec.Command("pnpm", "add", "--ignore-scripts", missingModule).Run()
 					if err != nil {
 						return
 					}
-					log.Debug("yarn", "add", missingModule, "in", time.Now().Sub(start))
+					log.Debug("pnpm", "add", missingModule, "(missing) in", time.Now().Sub(start))
 					missingResolved[missingModule] = struct{}{}
 					goto esbuild
 				}
