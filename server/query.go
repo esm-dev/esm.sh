@@ -24,7 +24,7 @@ func init() {
 	rex.Query("*", func(ctx *rex.Context) interface{} {
 		pathname := utils.CleanPath(ctx.R.URL.Path)
 		if pathname == "/" {
-			return rex.HTML(indexHTML, 200)
+			return rex.HTML(indexHTML)
 		}
 
 		if strings.HasPrefix(pathname, "/bundle-") && strings.HasSuffix(pathname, ".js") {
@@ -32,8 +32,11 @@ func init() {
 		}
 
 		var bundleList string
-		if strings.HasPrefix(pathname, "/[") && strings.Contains(pathname, "]/") {
+		if strings.HasPrefix(pathname, "/[") && strings.Contains(pathname, "]") {
 			bundleList, pathname = utils.SplitByFirstByte(strings.TrimPrefix(pathname, "/["), ']')
+			if pathname == "" {
+				pathname = "/"
+			}
 		}
 
 		currentModule, err := parseModule(pathname)
@@ -43,26 +46,25 @@ func init() {
 
 		var packages moduleSlice
 		if bundleList != "" {
-			var containsPackage bool
+			containsPackage := currentModule.name == ""
 			for _, dep := range strings.Split(bundleList, ",") {
 				m, err := parseModule(strings.TrimSpace(dep))
 				if err != nil {
 					return throwErrorJs(err)
 				}
-				if m.name == currentModule.name && m.version == currentModule.version && m.submodule == currentModule.submodule {
+				if !containsPackage && m.Equels(*currentModule) {
 					containsPackage = true
 				}
 				packages = append(packages, *m)
+			}
+			if len(packages) > 10 {
+				return throwErrorJs(fmt.Errorf("too many packages in the bundle list, up to 10 but get %d", len(packages)))
 			}
 			if !containsPackage {
 				return throwErrorJs(fmt.Errorf("package '%s' not found in the bundle list", currentModule.ImportPath()))
 			}
 		} else {
 			packages = moduleSlice{*currentModule}
-		}
-
-		if len(packages) > 10 {
-			return throwErrorJs(fmt.Errorf("too many packages in the bundle list, up to 10 but get %d", len(packages)))
 		}
 
 		env := "production"
@@ -80,6 +82,10 @@ func init() {
 		})
 		if err != nil {
 			return throwErrorJs(err)
+		}
+
+		if currentModule.name == "" {
+			return ret.importMeta
 		}
 
 		importPath := currentModule.ImportPath()
@@ -115,37 +121,6 @@ func init() {
 		}
 		return rex.Content(importIdentifier+".js", time.Now(), bytes.NewReader(buf.Bytes()))
 	})
-}
-
-func parseModule(pathname string) (*module, error) {
-	a := strings.Split(strings.Trim(pathname, "/"), "/")
-	for i, s := range a {
-		a[i] = strings.TrimSpace(s)
-	}
-	scope := ""
-	packageName := a[0]
-	submodule := strings.Join(a[1:], "/")
-	if strings.HasPrefix(a[0], "@") && len(a) > 1 {
-		scope = a[0]
-		packageName = a[1]
-		submodule = strings.Join(a[2:], "/")
-	}
-	name, version := utils.SplitByLastByte(packageName, '@')
-	if scope != "" {
-		name = scope + "/" + name
-	}
-	if version == "" {
-		info, err := nodeEnv.getPackageLatestInfo(name)
-		if err != nil {
-			return nil, err
-		}
-		version = info.Version
-	}
-	return &module{
-		name:      name,
-		version:   version,
-		submodule: submodule,
-	}, nil
 }
 
 func throwErrorJs(err error) interface{} {

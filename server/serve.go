@@ -67,9 +67,9 @@ func Serve() {
 
 	nodeEnv, err = checkNodeEnv()
 	if err != nil {
-		log.Fatalf("check Nodejs: %v", err)
+		log.Fatalf("check nodejs: %v", err)
 	}
-	log.Debugf("Nodejs installed: v%s", nodeEnv.version)
+	log.Debugf("nodejs installed: v%s", nodeEnv.version)
 
 	db, err = postdb.Open(path.Join(etcDir, "esmd.db"), 0666)
 	if err != nil {
