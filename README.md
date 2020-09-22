@@ -18,7 +18,7 @@ import React from 'https://esm.sh/[react,react-dom]/react'
 import ReactDom from 'https://esm.sh/[react,react-dom]/react-dom'
 ```
 
-or your can define bundle list the `import-map.json` ([import-maps proposal](https://github.com/WICG/import-maps))
+or your can define bundle list in the `import-map.json` ([import-maps proposal](https://github.com/WICG/import-maps))
 ```json
 {
     "imports": {
@@ -32,7 +32,7 @@ or your can define bundle list the `import-map.json` ([import-maps proposal](htt
 import React from 'https://esm.sh/react' // actual import from 'https://esm.sh/[react,react-dom]/react'
 ```
 
-The packages in url are litmited up to **10**, to bundle more packages, please [create bundle](https://esm.sh/bundle) manually.
+⚠️ The bundle packages in url are litmited up to **10**, to bundle more packages, please [create bundle](https://esm.sh/bundle) manually.
 
 ### Specify ESM target
 ```javascript
@@ -50,4 +50,8 @@ import { renderToString } from 'https://esm.sh/react-dom/server'
 ```
 
 # Self-Hosting
-You will need [Go](https://golang.org/dl) 1.5+ to compile the server. On the host ensure the [supervisor](http://supervisord.org/) installed, then run `sh ./scripts/deploy.sh` to deploy the server. The server runtime will check the nodejs installation (12+) or install the latest LTS version automatically.
+You will need [Go](https://golang.org/dl) 1.14+ to compile the server. Before run the deploy script please ensure the [supervisor](http://supervisord.org/) installed on your host machine:
+```bash
+$ sh ./scripts/deploy.sh
+```
+The server runtime will check the nodejs installation (12+) or install the latest LTS version automatically.
