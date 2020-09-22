@@ -31,7 +31,7 @@ func Serve() {
 	flag.IntVar(&port, "port", 80, "http server port")
 	flag.IntVar(&httpsPort, "https-port", 443, "https server port")
 	flag.StringVar(&etcDir, "etc-dir", "/etc/esmd", "etc dir")
-	flag.StringVar(&cdnDomain, "cdn-domain", "cdn.esm.sh", "cdn domain")
+	flag.StringVar(&cdnDomain, "cdn-domain", "", "cdn domain")
 	flag.BoolVar(&debug, "debug", false, "run server in debug mode")
 	flag.Parse()
 
@@ -42,7 +42,6 @@ func Serve() {
 		debug = true
 		etcDir, _ = filepath.Abs("./.dev")
 		logDir = path.Join(etcDir, "log")
-		cdnDomain = ""
 	}
 
 	buildsDir := path.Join(etcDir, "builds")
@@ -70,7 +69,7 @@ func Serve() {
 	if err != nil {
 		log.Fatalf("check Nodejs: %v", err)
 	}
-	log.Debugf("Nodejs: %+v %s", nodeEnv.version, nodeEnv.registry)
+	log.Debugf("Nodejs installed: v%s", nodeEnv.version)
 
 	db, err = postdb.Open(path.Join(etcDir, "esmd.db"), 0666)
 	if err != nil {
