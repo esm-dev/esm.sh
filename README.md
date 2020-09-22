@@ -13,7 +13,6 @@ import React from 'https://esm.sh/react@16.13.1'
 
 ### Bundle mode
 ```javascript
-// bundle multiple packages
 import React from 'https://esm.sh/[react,react-dom]/react'
 import ReactDom from 'https://esm.sh/[react,react-dom]/react-dom'
 ```
@@ -29,7 +28,7 @@ or your can define bundle list in the `import-map.json` ([import-maps proposal](
 ```
 
 ```javascript
-import React from 'https://esm.sh/react' // actual import from 'https://esm.sh/[react,react-dom]/react'
+import React from 'https://esm.sh/react' // actual from 'https://esm.sh/[react,react-dom]/react'
 ```
 
 ⚠️ The bundle packages in url are litmited up to **10**, to bundle more packages, please [create bundle](https://esm.sh/bundle) manually.
@@ -50,7 +49,7 @@ import { renderToString } from 'https://esm.sh/react-dom/server'
 ```
 
 # Self-Hosting
-You will need [Go](https://golang.org/dl) 1.14+ to compile the server. Before run the deploy script please ensure the [supervisor](http://supervisord.org/) installed on your host machine:
+You will need [Go](https://golang.org/dl) 1.14+ to compile the server. Before run the deploy script please ensure the [supervisor](http://supervisord.org/) installed on your host machine.
 ```bash
 $ sh ./scripts/deploy.sh
 ```
