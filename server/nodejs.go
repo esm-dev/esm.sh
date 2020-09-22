@@ -1,7 +1,6 @@
 package server
 
 import (
-	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -23,19 +22,13 @@ import (
 const (
 	minNodejsVersion = 12
 	nodejsLatestLTS  = "12.18.4"
+	dlURI            = "https://npm.taobao.org/mirrors/node/"
 )
-
-// NodejsVersion defines nodejs version
-type NodejsVersion struct {
-	Node string `json:"node"`
-	Npm  string `json:"npm"`
-	Yarn string `json:"-"`
-}
 
 // NodeEnv defines the nodejs env
 type NodeEnv struct {
 	cache    cache.Cache
-	version  NodejsVersion
+	version  string
 	registry string
 }
 
@@ -45,74 +38,71 @@ func checkNodeEnv() (env *NodeEnv, err error) {
 		return
 	}
 	env = &NodeEnv{
-		cache: cache,
+		cache:    cache,
+		registry: "https://registry.npmjs.org/",
 	}
 
+	var installed bool
 CheckNodejs:
-	output, err := exec.Command("npm", "version", "--json").CombinedOutput()
-	if err != nil {
-		if errors.Is(err, exec.ErrNotFound) {
-			PATH := os.Getenv("PATH")
-			if !strings.Contains(PATH, "/usr/local/lib/nodejs/bin") {
-				os.Setenv("PATH", fmt.Sprintf("/usr/local/lib/nodejs/bin%c%s", os.PathListSeparator, PATH))
-				goto CheckNodejs
-			}
-			err = installNodejs(nodejsLatestLTS)
+	version, major, err := getSystemNodejsVersion()
+	if err != nil || major < minNodejsVersion {
+		PATH := os.Getenv("PATH")
+		nodeBinDir := path.Join(etcDir, "/nodejs/bin")
+		if !strings.Contains(PATH, nodeBinDir) {
+			os.Setenv("PATH", fmt.Sprintf("%s%c%s", nodeBinDir, os.PathListSeparator, PATH))
+			goto CheckNodejs
+		} else if !installed {
+			err = installNodejs(path.Join(etcDir, "/nodejs"), nodejsLatestLTS)
 			if err != nil {
 				return
 			}
 			log.Infof("nodejs %s installed", nodejsLatestLTS)
+			installed = true
 			goto CheckNodejs
 		} else {
-			err = errors.New("bad npm version")
+			if err == nil {
+				err = fmt.Errorf("bad nodejs version %s need %d+", env.version, minNodejsVersion)
+			}
+			return
 		}
-		return
+	}
+	env.version = version
+
+	output, err := exec.Command("npm", "config", "get", "registry").CombinedOutput()
+	if err == nil {
+		env.registry = strings.TrimRight(strings.TrimSpace(string(output)), "/") + "/"
 	}
 
-	json.NewDecoder(bytes.NewReader(output)).Decode(&env.version)
-	if err != nil {
-		err = errors.New("bad npm version")
-		return
-	}
-
-	s, _ := utils.SplitByFirstByte(env.version.Node, '.')
-	major, err := strconv.Atoi(s)
-	if err != nil {
-		err = errors.New("bad nodejs version")
-		return
-	}
-	if major < minNodejsVersion {
-		err = fmt.Errorf("bad nodejs version %s need %d+", env.version.Node, minNodejsVersion)
-		return
-	}
-
-	output, err = exec.Command("npm", "config", "get", "registry").CombinedOutput()
-	if err != nil {
-		err = errors.New("bad registry config")
-		return
-	}
-	env.registry = strings.TrimRight(strings.TrimSpace(string(output)), "/") + "/"
-
-CheckYarn:
-	output, err = exec.Command("yarn", "-v").CombinedOutput()
+CheckPnpm:
+	output, err = exec.Command("pnpm", "-v").CombinedOutput()
 	if err != nil {
 		if errors.Is(err, exec.ErrNotFound) {
-			output, err = exec.Command("npm", "install", "yarn", "-g").CombinedOutput()
+			output, err = exec.Command("npm", "install", "pnpm", "-g").CombinedOutput()
 			if err != nil {
-				err = errors.New("install yarn: " + strings.TrimSpace(string(output)))
+				err = errors.New("install pnpm: " + strings.TrimSpace(string(output)))
 				return
 			}
-			goto CheckYarn
+			goto CheckPnpm
 		}
-		err = errors.New("bad yarn version")
-		return
+		err = errors.New("bad pnpm version")
 	}
-	env.version.Yarn = strings.TrimSpace(string(output))
 	return
 }
 
-func installNodejs(v string) (err error) {
-	dlURL := fmt.Sprintf("https://npm.taobao.org/mirrors/node/v%s/node-v%s-%s-x64.tar.xz", v, v, runtime.GOOS)
+func getSystemNodejsVersion() (version string, major int, err error) {
+	output, err := exec.Command("node", "--version").CombinedOutput()
+	if err != nil {
+		return
+	}
+
+	version = strings.TrimPrefix(strings.TrimSpace(string(output)), "v")
+	s, _ := utils.SplitByFirstByte(version, '.')
+	major, err = strconv.Atoi(s)
+	return
+}
+
+func installNodejs(dir string, version string) (err error) {
+	dlURL := fmt.Sprintf("%sv%s/node-v%s-%s-x64.tar.xz", dlURI, version, version, runtime.GOOS)
 	resp, err := http.Get(dlURL)
 	if err != nil {
 		err = fmt.Errorf("download nodejs: %v", err)
@@ -138,7 +128,7 @@ func installNodejs(v string) (err error) {
 		return
 	}
 
-	cmd = exec.Command("mv", "-f", strings.TrimSuffix(path.Base(dlURL), ".tar.xz"), "/usr/local/lib/nodejs")
+	cmd = exec.Command("mv", "-f", strings.TrimSuffix(path.Base(dlURL), ".tar.xz"), dir)
 	cmd.Dir = os.TempDir()
 	output, err = cmd.CombinedOutput()
 	if err != nil {
