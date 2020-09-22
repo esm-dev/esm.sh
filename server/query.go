@@ -18,7 +18,7 @@ const (
 
 func init() {
 	rex.Query("bundle", func(ctx *rex.Context) interface{} {
-		return rex.HTML("<p>todo: bundle management<p>")
+		return rex.HTML(bundleHTML)
 	})
 
 	rex.Query("*", func(ctx *rex.Context) interface{} {
