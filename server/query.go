@@ -12,7 +12,7 @@ import (
 )
 
 const (
-	// EOL defines char end of line
+	// EOL defines the char of end of line
 	EOL = "\n"
 )
 
@@ -27,6 +27,11 @@ func init() {
 			return rex.File(path.Join(etcDir, "builds", strings.TrimPrefix(pathname, "/bundle-")))
 		}
 
+		var bundleSettings string
+		if strings.HasPrefix(pathname, "/[") && strings.Contains(pathname, "]/") {
+			bundleSettings, pathname = utils.SplitByFirstByte(strings.TrimPrefix(pathname, "/["), ']')
+		}
+
 		packageName, version, submodule := parsePackageName(pathname)
 		if version == "" {
 			info, err := nodeEnv.getPackageLatestInfo(packageName)
@@ -35,22 +40,16 @@ func init() {
 			}
 			version = info.Version
 		}
-		bundleValue := ctx.Form.Value("bundle")
-		module0 := module{
-			name:      packageName,
-			version:   version,
-			submodule: submodule,
+		importPath := packageName
+		if submodule != "" {
+			importPath = packageName + "/" + submodule
 		}
-		packages := moduleSlice{module0}
-		if bundleValue != "" {
-			for _, dep := range strings.Split(bundleValue, ",") {
+
+		var packages moduleSlice
+		if bundleSettings != "" {
+			var containsPackage bool
+			for _, dep := range strings.Split(bundleSettings, ",") {
 				n, v, s := parsePackageName(dep)
-				if n == module0.name && s == module0.submodule {
-					if v != "" && v != module0.version {
-						module0.version = v
-					}
-					continue
-				}
 				if v == "" {
 					info, err := nodeEnv.getPackageLatestInfo(n)
 					if err != nil {
@@ -58,12 +57,24 @@ func init() {
 					}
 					v = info.Version
 				}
+				if n == packageName && v == version && s == submodule {
+					containsPackage = true
+				}
 				packages = append(packages, module{
 					name:      n,
 					version:   v,
 					submodule: s,
 				})
 			}
+			if !containsPackage {
+				return throwErrorJs(fmt.Errorf("package '%s' not found in the bundle list", importPath))
+			}
+		} else {
+			packages = moduleSlice{{
+				name:      packageName,
+				version:   version,
+				submodule: submodule,
+			}}
 		}
 		env := "production"
 		if !ctx.Form.IsNil("dev") {
@@ -82,14 +93,9 @@ func init() {
 			return throwErrorJs(err)
 		}
 
-		importName := packageName
-		if submodule != "" {
-			importName = packageName + "/" + submodule
-		}
-
-		importMeta, ok := ret.importMeta[importName]
+		importMeta, ok := ret.importMeta[importPath]
 		if !ok {
-			return throwErrorJs(fmt.Errorf("package '%s' not found in bundle", importName))
+			return throwErrorJs(fmt.Errorf("package '%s' not found in bundle", packageName))
 		}
 
 		var exports []string
@@ -104,7 +110,7 @@ func init() {
 		}
 
 		buf := bytes.NewBuffer(nil)
-		identity := rename(importName)
+		identity := rename(importPath)
 		if submodule != "" {
 			fmt.Fprintf(buf, `/* esm.sh - %s@%s/%s */%s`, packageName, version, submodule, EOL)
 		} else {
