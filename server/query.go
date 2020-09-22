@@ -17,6 +17,10 @@ const (
 )
 
 func init() {
+	rex.Query("bundle", func(ctx *rex.Context) interface{} {
+		return rex.HTML("<p>todo: bundle management<p>")
+	})
+
 	rex.Query("*", func(ctx *rex.Context) interface{} {
 		pathname := utils.CleanPath(ctx.R.URL.Path)
 		if pathname == "/" {
@@ -27,9 +31,9 @@ func init() {
 			return rex.File(path.Join(etcDir, "builds", strings.TrimPrefix(pathname, "/bundle-")))
 		}
 
-		var bundleSettings string
+		var bundleList string
 		if strings.HasPrefix(pathname, "/[") && strings.Contains(pathname, "]/") {
-			bundleSettings, pathname = utils.SplitByFirstByte(strings.TrimPrefix(pathname, "/["), ']')
+			bundleList, pathname = utils.SplitByFirstByte(strings.TrimPrefix(pathname, "/["), ']')
 		}
 
 		currentModule, err := parseModule(pathname)
@@ -38,9 +42,9 @@ func init() {
 		}
 
 		var packages moduleSlice
-		if bundleSettings != "" {
+		if bundleList != "" {
 			var containsPackage bool
-			for _, dep := range strings.Split(bundleSettings, ",") {
+			for _, dep := range strings.Split(bundleList, ",") {
 				m, err := parseModule(strings.TrimSpace(dep))
 				if err != nil {
 					return throwErrorJs(err)
@@ -56,6 +60,11 @@ func init() {
 		} else {
 			packages = moduleSlice{*currentModule}
 		}
+
+		if len(packages) > 10 {
+			return throwErrorJs(fmt.Errorf("too many packages in the bundle list, up to 10 but get %d", len(packages)))
+		}
+
 		env := "production"
 		if !ctx.Form.IsNil("dev") {
 			env = "development"
@@ -114,14 +123,14 @@ func parseModule(pathname string) (*module, error) {
 		a[i] = strings.TrimSpace(s)
 	}
 	scope := ""
-	pkg := a[0]
+	packageName := a[0]
 	submodule := strings.Join(a[1:], "/")
 	if strings.HasPrefix(a[0], "@") && len(a) > 1 {
 		scope = a[0]
-		pkg = a[1]
+		packageName = a[1]
 		submodule = strings.Join(a[2:], "/")
 	}
-	name, version := utils.SplitByLastByte(pkg, '@')
+	name, version := utils.SplitByLastByte(packageName, '@')
 	if scope != "" {
 		name = scope + "/" + name
 	}

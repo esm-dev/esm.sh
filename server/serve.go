@@ -79,7 +79,7 @@ func Serve() {
 	rex.Use(
 		rex.ErrorLogger(log),
 		rex.AccessLogger(accessLogger),
-		rex.Header("Server", "esm.sh"),
+		rex.Header("Server", "esmd"),
 		rex.Cors(rex.CORS{
 			AllowAllOrigins: true,
 			AllowMethods:    []string{"GET", "POST"},
@@ -87,9 +87,6 @@ func Serve() {
 			MaxAge:          3600,
 		}),
 	)
-	if debug {
-		rex.Use(rex.Debug())
-	}
 
 	rex.Serve(rex.ServerConfig{
 		Port: uint16(port),
