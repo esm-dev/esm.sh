@@ -13,9 +13,22 @@ import React from 'https://esm.sh/react@16.13.1'
 
 ### Bundle mode
 ```javascript
-// bundle multiple packages in a single file  
-import React from 'https://esm.sh/react?bundle=react,react-dom'
-import ReactDom from 'https://esm.sh/react-dom?bundle=react,react-dom'
+// bundle multiple packages
+import React from 'https://esm.sh/[react,react-dom]/react'
+import ReactDom from 'https://esm.sh/[react,react-dom]/react-dom'
+```
+or your can define bundle list the `import-map.json` ([import maps proposal](https://github.com/WICG/import-maps))
+```json
+{
+    imports: {
+        "https://esm.sh/": "https://esm.sh/[react,react-dom]/",
+        ...
+    }
+}
+```
+
+```javascript
+import React from 'https://esm.sh/react' // actual import from 'https://esm.sh/[react,react-dom]/react'
 ```
 
 ### Specify ESM target
