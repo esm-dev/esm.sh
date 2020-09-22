@@ -49,7 +49,7 @@ func init() {
 		if bundleSettings != "" {
 			var containsPackage bool
 			for _, dep := range strings.Split(bundleSettings, ",") {
-				n, v, s := parsePackageName(dep)
+				n, v, s := parsePackageName(strings.TrimSpace(dep))
 				if v == "" {
 					info, err := nodeEnv.getPackageLatestInfo(n)
 					if err != nil {

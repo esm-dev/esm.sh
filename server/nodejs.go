@@ -160,8 +160,7 @@ func (env *NodeEnv) getPackageLatestInfo(name string) (info NpmPackage, err erro
 		return
 	} else if resp.StatusCode != 200 {
 		ret, _ := ioutil.ReadAll(resp.Body)
-		log.Warnf("npm: can't get metadata of package '%s' (%d: %s)", name, resp.StatusCode, string(ret))
-		err = fmt.Errorf("npm: can't get metadata of package '%s' (%d)", name, resp.StatusCode)
+		err = fmt.Errorf("npm: can't get metadata of package '%s' (%s: %s)", name, resp.Status, string(ret))
 		return
 	}
 
