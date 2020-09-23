@@ -44,12 +44,10 @@ func Serve() {
 		logDir = path.Join(etcDir, "log")
 	}
 
-	buildsDir := path.Join(etcDir, "builds")
-	_, err := os.Stat(buildsDir)
-	if os.IsNotExist(err) {
-		os.MkdirAll(buildsDir, 0755)
-	}
+	ensureDir(path.Join(etcDir, "builds"))
+	ensureDir(path.Join(etcDir, "types"))
 
+	var err error
 	log, err = logx.New(fmt.Sprintf("file:%s?buffer=32k", path.Join(logDir, "main.log")))
 	if err != nil {
 		log.Fatalf("initiate logger: %v", err)

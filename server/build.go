@@ -39,12 +39,14 @@ var buildLock sync.Mutex
 type ImportMeta struct {
 	Exports []string   `json:"exports"`
 	Package NpmPackage `json:"package"`
+	Types   string     `json:"types"`
 }
 
 // NpmPackage defines the package of npm
 type NpmPackage struct {
 	Name             string            `json:"name"`
 	Version          string            `json:"version"`
+	Types            string            `json:"types"`
 	Typings          string            `json:"typings"`
 	Dependencies     map[string]string `json:"dependencies"`
 	PeerDependencies map[string]string `json:"peerDependencies"`
@@ -66,7 +68,6 @@ func build(options buildOptions) (ret buildResult, err error) {
 	defer buildLock.Unlock()
 
 	sort.Sort(options.packages)
-
 	bundleID := "bundle " + options.packages.String() + " " + options.target + " " + options.env
 	p, err := db.Get(q.Alias(bundleID), q.K("hash", "importMeta"))
 	if err == nil {
@@ -99,11 +100,11 @@ func build(options buildOptions) (ret buildResult, err error) {
 		return
 	}
 
-	tmpDir := path.Join(os.TempDir(), bundleID)
-	os.MkdirAll(tmpDir, 0755)
-	defer os.RemoveAll(tmpDir)
+	buildDir := path.Join(os.TempDir(), bundleID)
+	os.MkdirAll(buildDir, 0755)
+	defer os.RemoveAll(buildDir)
 
-	err = os.Chdir(tmpDir)
+	err = os.Chdir(buildDir)
 	if err != nil {
 		return
 	}
@@ -121,17 +122,12 @@ func build(options buildOptions) (ret buildResult, err error) {
 	importMeta := map[string]ImportMeta{}
 	for _, pkg := range options.packages {
 		var p NpmPackage
-		err = utils.ParseJSONFile(path.Join(tmpDir, "/node_modules/", pkg.name, "/package.json"), &p)
+		pkgDir := path.Join(buildDir, "/node_modules/", pkg.name)
+		err = utils.ParseJSONFile(path.Join(pkgDir, "package.json"), &p)
 		if err != nil {
 			return
 		}
-		importName := pkg.name
-		if pkg.submodule != "" {
-			importName = pkg.name + "/" + pkg.submodule
-		}
-		importMeta[importName] = ImportMeta{
-			Package: p,
-		}
+		meta := ImportMeta{Package: p}
 		if len(p.PeerDependencies) > 0 {
 			for name := range p.PeerDependencies {
 				install := true
@@ -146,12 +142,42 @@ func build(options buildOptions) (ret buildResult, err error) {
 				}
 			}
 		}
-	}
-	if len(peerDependencies) > 0 {
-		err = pnpmAdd(peerDependencies...)
-		if err != nil {
-			return
+		if p.Types != "" {
+			meta.Types = p.Types
+		} else if p.Typings != "" {
+			meta.Types = p.Typings
+		} else {
+			fi, err := os.Lstat(path.Join(pkgDir, "index.d.ts"))
+			if err == nil {
+				if !fi.IsDir() {
+					meta.Types = "index.d.ts"
+				}
+			} else if os.IsNotExist(err) {
+				if !strings.HasPrefix(pkg.name, "@") {
+					info, err := nodeEnv.getPackageLatestInfo("@types/" + pkg.name)
+					if err == nil {
+						if info.Types != "" {
+							meta.Types = fmt.Sprintf("@types/%s/%s", pkg.name, info.Types)
+						} else if info.Typings != "" {
+							meta.Types = fmt.Sprintf("@types/%s/%s", pkg.name, info.Typings)
+						} else {
+							meta.Types = fmt.Sprintf("@types/%s/?", pkg.name)
+						}
+						peerDependencies = append(peerDependencies, "@types/"+pkg.name)
+					} else if err.Error() != fmt.Sprintf("npm: package '@types/%s' not found", pkg.name) {
+						return ret, err
+					}
+				}
+			} else {
+				return ret, err
+			}
 		}
+		importMeta[pkg.ImportPath()] = meta
+	}
+
+	err = pnpmAdd(peerDependencies...)
+	if err != nil {
+		return
 	}
 
 	codeBuf := bytes.NewBuffer(nil)
@@ -164,7 +190,7 @@ func build(options buildOptions) (ret buildResult, err error) {
 		fmt.Fprintf(codeBuf, `meta["%s"] = {exports: isObject(%s) ? Object.keys(%s) : []};`, importPath, importIdentifier, importIdentifier)
 	}
 	codeBuf.WriteString("process.stdout.write(JSON.stringify(meta));")
-	err = ioutil.WriteFile(path.Join(tmpDir, "test.js"), codeBuf.Bytes(), 0644)
+	err = ioutil.WriteFile(path.Join(buildDir, "test.js"), codeBuf.Bytes(), 0644)
 	if err != nil {
 		return
 	}
@@ -190,6 +216,7 @@ func build(options buildOptions) (ret buildResult, err error) {
 			importMeta[name] = ImportMeta{
 				Package: v.Package,
 				Exports: meta.Exports,
+				Types:   v.Types,
 			}
 		}
 	}
@@ -200,7 +227,7 @@ func build(options buildOptions) (ret buildResult, err error) {
 		fmt.Fprintf(codeBuf, `export * as %s from "%s";`, identify(importName), importName)
 	}
 
-	err = ioutil.WriteFile(path.Join(tmpDir, "entry.js"), codeBuf.Bytes(), 0644)
+	err = ioutil.WriteFile(path.Join(buildDir, "entry.js"), codeBuf.Bytes(), 0644)
 	if err != nil {
 		return
 	}
@@ -253,7 +280,7 @@ esbuild:
 	hash := base32.StdEncoding.EncodeToString(hasher.Sum(nil))
 
 	jsContentBuf := bytes.NewBuffer(nil)
-	fmt.Fprintf(jsContentBuf, `/* esm.sh - esbuild bundle(%s) %s %s */%s`, strings.Join(args[1:], ","), strings.ToLower(options.target), options.env, EOL)
+	fmt.Fprintf(jsContentBuf, `/* esm.sh - esbuild bundle(%s) %s %s */%s`, options.packages.String(), strings.ToLower(options.target), options.env, EOL)
 	jsContentBuf.Write(result.OutputFiles[0].Contents)
 	err = ioutil.WriteFile(path.Join(etcDir, "builds", hash+".js"), jsContentBuf.Bytes(), 0644)
 	if err != nil {
@@ -275,19 +302,21 @@ esbuild:
 }
 
 func pnpmAdd(packages ...string) (err error) {
-	args := []string{"add", "--ignore-scripts"}
-	for _, pkg := range packages {
-		args = append(args, pkg)
+	if len(packages) > 0 {
+		start := time.Now()
+		args := append([]string{"add"}, packages...)
+		output, err := exec.Command("pnpm", args...).CombinedOutput()
+		if err != nil {
+			return fmt.Errorf(string(output))
+		}
+		log.Debug("pnpm add", strings.Join(packages, " "), "in", time.Now().Sub(start))
 	}
-	start := time.Now()
-	err = exec.Command("pnpm", args...).Run()
-	log.Debug("pnpm add", strings.Join(packages, " "), "in", time.Now().Sub(start))
 	return
 }
 
 func identify(importPath string) string {
-	p := make([]byte, len([]byte(importPath)))
-	for i, c := range []byte(importPath) {
+	p := []byte(importPath)
+	for i, c := range p {
 		switch c {
 		case '/', '-', '@', '.':
 			p[i] = '_'
@@ -296,4 +325,12 @@ func identify(importPath string) string {
 		}
 	}
 	return string(p)
+}
+
+func ensureDir(dir string) (err error) {
+	_, err = os.Stat(dir)
+	if err != nil && os.IsNotExist(err) {
+		err = os.MkdirAll(dir, 0755)
+	}
+	return
 }
