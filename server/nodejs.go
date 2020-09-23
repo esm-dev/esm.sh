@@ -15,31 +15,28 @@ import (
 	"strings"
 	"time"
 
-	"github.com/ije/gox/cache"
+	"github.com/postui/postdb"
+
 	"github.com/ije/gox/utils"
+	"github.com/postui/postdb/q"
 )
 
 const (
 	minNodejsVersion = 12
 	nodejsLatestLTS  = "12.18.4"
 	dlURI            = "https://npm.taobao.org/mirrors/node/"
+	refreshDuration  = 10 * 60 // 10 minues
 )
 
 // NodeEnv defines the nodejs env
 type NodeEnv struct {
-	cache    cache.Cache
-	version  string
-	registry string
+	version     string
+	npmRegistry string
 }
 
 func checkNodeEnv() (env *NodeEnv, err error) {
-	cache, err := cache.New("memory")
-	if err != nil {
-		return
-	}
 	env = &NodeEnv{
-		cache:    cache,
-		registry: "https://registry.npmjs.org/",
+		npmRegistry: "https://registry.npmjs.org/",
 	}
 
 	var installed bool
@@ -70,7 +67,7 @@ CheckNodejs:
 
 	output, err := exec.Command("npm", "config", "get", "registry").CombinedOutput()
 	if err == nil {
-		env.registry = strings.TrimRight(strings.TrimSpace(string(output)), "/") + "/"
+		env.npmRegistry = strings.TrimRight(strings.TrimSpace(string(output)), "/") + "/"
 	}
 
 CheckPnpm:
@@ -141,17 +138,19 @@ func installNodejs(dir string, version string) (err error) {
 
 func (env *NodeEnv) getPackageInfo(name string, version string) (info NpmPackage, err error) {
 	key := name + "/" + version
-	value, err := env.cache.Get(key)
+	p, err := db.Get(q.Alias(key), q.K("package"))
 	if err == nil {
-		if json.Unmarshal(value, &info) == nil {
+		if (version == "latest" || version == "next" || version == "experimental") && int64(p.Crtime)+refreshDuration < time.Now().Unix() {
+			_, err = db.Delete(q.Alias(key))
+		} else if json.Unmarshal(p.KV.Get("package"), &info) == nil {
 			return
 		}
 	}
-	if err != nil && err != cache.ErrExpired && err != cache.ErrNotFound {
+	if err != nil && err != postdb.ErrNotFound {
 		return
 	}
 
-	resp, err := http.Get(env.registry + key)
+	resp, err := http.Get(env.npmRegistry + key)
 	if err != nil {
 		return
 	}
@@ -166,9 +165,17 @@ func (env *NodeEnv) getPackageInfo(name string, version string) (info NpmPackage
 		return
 	}
 
-	err = json.NewDecoder(resp.Body).Decode(&info)
+	data, err := ioutil.ReadAll(resp.Body)
+	if err == io.EOF {
+		err = nil
+	}
+	if err != nil {
+		return
+	}
+
+	err = json.Unmarshal(data, &info)
 	if err == nil {
-		env.cache.SetTTL(name, utils.MustEncodeJSON(info), 10*time.Minute)
+		db.Put(q.Alias(key), q.Tags("package"), q.KV{"package": data})
 	}
 	return
 }
