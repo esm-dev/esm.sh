@@ -119,6 +119,9 @@ func init() {
 		if !hasDefaultExport {
 			fmt.Fprintf(buf, `export default %s;%s`, importIdentifier, EOL)
 		}
+		if importMeta.Types != "" {
+			ctx.SetHeader("X-TypeScript-Types", "/"+importMeta.Types)
+		}
 		return rex.Content(importIdentifier+".js", time.Now(), bytes.NewReader(buf.Bytes()))
 	})
 }

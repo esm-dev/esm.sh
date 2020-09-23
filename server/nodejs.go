@@ -139,17 +139,19 @@ func installNodejs(dir string, version string) (err error) {
 	return
 }
 
-func (env *NodeEnv) getPackageLatestInfo(name string) (info NpmPackage, err error) {
-	value, err := env.cache.Get(name)
+func (env *NodeEnv) getPackageInfo(name string, version string) (info NpmPackage, err error) {
+	key := name + "/" + version
+	value, err := env.cache.Get(key)
 	if err == nil {
-		info = NpmPackage{Name: name, Version: string(value)}
-		return
+		if json.Unmarshal(value, &info) == nil {
+			return
+		}
 	}
 	if err != nil && err != cache.ErrExpired && err != cache.ErrNotFound {
 		return
 	}
 
-	resp, err := http.Get(env.registry + name + "/latest")
+	resp, err := http.Get(env.registry + key)
 	if err != nil {
 		return
 	}
@@ -166,7 +168,7 @@ func (env *NodeEnv) getPackageLatestInfo(name string) (info NpmPackage, err erro
 
 	err = json.NewDecoder(resp.Body).Decode(&info)
 	if err == nil {
-		env.cache.SetTTL(name, []byte(info.Version), 10*time.Second)
+		env.cache.SetTTL(name, utils.MustEncodeJSON(info), 10*time.Minute)
 	}
 	return
 }

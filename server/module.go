@@ -30,7 +30,7 @@ func parseModule(pathname string) (*module, error) {
 		name = scope + "/" + name
 	}
 	if name != "" && version == "" {
-		info, err := nodeEnv.getPackageLatestInfo(name)
+		info, err := nodeEnv.getPackageInfo(name, "latest")
 		if err != nil {
 			return nil, err
 		}
