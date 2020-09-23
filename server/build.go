@@ -242,6 +242,9 @@ func build(options buildOptions) (ret buildResult, err error) {
 	missingResolved := map[string]struct{}{}
 esbuild:
 	start = time.Now()
+	defines := map[string]string{
+		"process.env.NODE_ENV": fmt.Sprintf(`"%s"`, options.env),
+	}
 	result := api.Build(api.BuildOptions{
 		EntryPoints:       []string{"entry.js"},
 		Bundle:            true,
@@ -251,7 +254,7 @@ esbuild:
 		MinifyWhitespace:  !isDev,
 		MinifyIdentifiers: !isDev,
 		MinifySyntax:      !isDev,
-		Defines:           map[string]string{"process.env.NODE_ENV": `"` + options.env + `"`},
+		Defines:           defines,
 	})
 	if len(result.Errors) > 0 {
 		fe := result.Errors[0]
