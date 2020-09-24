@@ -16,7 +16,7 @@ $ esmm add react@next
 # remove some modules
 $ esmm remove lodash
 
-# start app in development mode
+# update installed modules
 $ aleph update
 
 # help message
