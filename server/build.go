@@ -33,6 +33,7 @@ var targets = []string{
 	"ES2020",
 }
 
+// todo: use queue to replace lock
 var buildLock sync.Mutex
 
 // ImportMeta defines import meta
@@ -337,19 +338,4 @@ func getTypesPath(p NpmPackage) string {
 		return fmt.Sprintf("%s@%s%s", p.Name, p.Version, ensureExt(utils.CleanPath(path), ".d.ts"))
 	}
 	return ""
-}
-
-func ensureExt(path string, ext string) string {
-	if !strings.HasSuffix(path, ext) {
-		return path + ext
-	}
-	return path
-}
-
-func ensureDir(dir string) (err error) {
-	_, err = os.Stat(dir)
-	if err != nil && os.IsNotExist(err) {
-		err = os.MkdirAll(dir, 0755)
-	}
-	return
 }

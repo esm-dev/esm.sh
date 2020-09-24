@@ -16,31 +16,33 @@ import (
 var (
 	etcDir    string
 	cdnDomain string
-	db        *postdb.DB
 	nodeEnv   *NodeEnv
-	log       = &logx.Logger{}
+	db        *postdb.DB
+)
+
+var (
+	log    = &logx.Logger{}
+	logDir = "/var/log/esmd"
 )
 
 // Serve serves esmd server
 func Serve() {
-	var (
-		port      int
-		httpsPort int
-		debug     bool
-	)
+	var port int
+	var httpsPort int
+	var debug bool
+	var dev bool
+
 	flag.IntVar(&port, "port", 80, "http server port")
 	flag.IntVar(&httpsPort, "https-port", 443, "https server port")
-	flag.StringVar(&etcDir, "etc-dir", "/etc/esmd", "etc dir")
+	flag.StringVar(&etcDir, "etc-dir", "/usr/local/etc/esmd", "etc dir")
 	flag.StringVar(&cdnDomain, "cdn-domain", "", "cdn domain")
 	flag.BoolVar(&debug, "debug", false, "run server in debug mode")
+	flag.BoolVar(&dev, "dev", false, "run server in dev mode")
 	flag.Parse()
 
-	logDir := "/var/log/esmd"
-	exename := path.Base(os.Args[0])
-	isDev := exename == "main" || exename == "main.exe"
-	if isDev {
+	if dev {
 		debug = true
-		etcDir, _ = filepath.Abs("./.dev")
+		etcDir, _ = filepath.Abs(".dev")
 		logDir = path.Join(etcDir, "log")
 	}
 
