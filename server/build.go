@@ -207,7 +207,7 @@ func build(options buildOptions) (ret buildResult, err error) {
 	start = time.Now()
 	for _, meta := range importMeta {
 		if meta.Types != "" {
-			err = copyDTS(path.Join(buildDir, "node_modules"), meta.Types, path.Join(etcDir, "types"))
+			err = copyDTS(path.Join(buildDir, "node_modules"), path.Join(etcDir, "types"), meta.Types)
 			if err != nil {
 				return
 			}

@@ -17,9 +17,9 @@ var reVersion = regexp.MustCompile(`([^/])@[\d\.]+/`)
 var reImortExportFrom = regexp.MustCompile(`(\s|})from\s*("|')`)
 var reReferenceTag = regexp.MustCompile(`^<reference\s+(path|types)\s*=\s*('|")([^'"]+)("|')\s*/>$`)
 
-func copyDTS(nmDir string, dts string, saveDir string) (err error) {
+func copyDTS(nodeModulesDir string, saveDir string, dts string) (err error) {
 	saveFilePath := path.Join(saveDir, dts)
-	dtsFilePath := path.Join(nmDir, reVersion.ReplaceAllString(dts, "$1/"))
+	dtsFilePath := path.Join(nodeModulesDir, reVersion.ReplaceAllString(dts, "$1/"))
 	dtsDir := path.Dir(dtsFilePath)
 	dtsFile, err := os.Open(dtsFilePath)
 	if err != nil {
@@ -60,10 +60,10 @@ func copyDTS(nmDir string, dts string, saveDir string) (err error) {
 				maybePackage = fmt.Sprintf("%s/%s", maybePackage, n)
 				subpath = s
 			}
-			packageJSONFile := path.Join(nmDir, "@types", maybePackage, "package.json")
+			packageJSONFile := path.Join(nodeModulesDir, "@types", maybePackage, "package.json")
 			fi, err := os.Lstat(packageJSONFile)
 			if err != nil && os.IsNotExist(err) {
-				packageJSONFile = path.Join(nmDir, maybePackage, "package.json")
+				packageJSONFile = path.Join(nodeModulesDir, maybePackage, "package.json")
 				fi, err = os.Lstat(packageJSONFile)
 			}
 			if err == nil && !fi.IsDir() {
@@ -192,12 +192,12 @@ func copyDTS(nmDir string, dts string, saveDir string) (err error) {
 					n, _ := utils.SplitByFirstByte(subpath, '/')
 					maybePackage = fmt.Sprintf("%s/%s", maybePackage, n)
 				}
-				err = copyDTS(nmDir, path.Join(maybePackage, dep), saveDir)
+				err = copyDTS(nodeModulesDir, saveDir, path.Join(maybePackage, dep))
 			} else {
-				err = copyDTS(nmDir, path.Join(path.Dir(dts), dep), saveDir)
+				err = copyDTS(nodeModulesDir, saveDir, path.Join(path.Dir(dts), dep))
 			}
 		} else {
-			err = copyDTS(nmDir, dep, saveDir)
+			err = copyDTS(nodeModulesDir, saveDir, dep)
 		}
 		if err != nil {
 			os.RemoveAll(saveFilePath)

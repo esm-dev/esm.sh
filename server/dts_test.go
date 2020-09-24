@@ -72,7 +72,7 @@ func TestCopyDTS(t *testing.T) {
 		}
 	}
 
-	err = copyDTS(nmDir, "test/index.d.ts", saveDir)
+	err = copyDTS(nmDir, saveDir, "test/index.d.ts")
 	if err != nil && os.IsExist(err) {
 		t.Fatal(err)
 	}
