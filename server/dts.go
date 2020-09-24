@@ -70,15 +70,9 @@ func copyDTS(nmDir string, dts string, saveDir string) (err error) {
 				var p NpmPackage
 				if utils.ParseJSONFile(packageJSONFile, &p) == nil {
 					if subpath != "" {
-						importPath = fmt.Sprintf("%s@%s/%s", p.Name, p.Version, ensureExt(subpath, ".d.ts"))
+						importPath = fmt.Sprintf("%s@%s%s", p.Name, p.Version, ensureExt(utils.CleanPath(subpath), ".d.ts"))
 					} else {
-						if p.Types != "" {
-							importPath = fmt.Sprintf("%s@%s/%s", p.Name, p.Version, ensureExt(p.Types, ".d.ts"))
-						} else if p.Typings != "" {
-							importPath = fmt.Sprintf("%s@%s/%s", p.Name, p.Version, ensureExt(p.Typings, ".d.ts"))
-						} else if p.Main != "" {
-							importPath = fmt.Sprintf("%s@%s/%s", p.Name, p.Version, ensureExt(strings.TrimSuffix(p.Main, ".js"), ".d.ts"))
-						}
+						importPath = getTypesPath(p)
 					}
 				}
 			} else {

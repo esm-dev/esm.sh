@@ -126,28 +126,23 @@ func build(options buildOptions) (ret buildResult, err error) {
 				}
 			}
 		}
-		if p.Types != "" {
-			meta.Types = fmt.Sprintf("%s@%s/%s", p.Name, p.Version, ensureExt(p.Types, ".d.ts"))
-		} else if p.Typings != "" {
-			meta.Types = fmt.Sprintf("%s@%s/%s", p.Name, p.Version, ensureExt(p.Typings, ".d.ts"))
+		if p.Types != "" || p.Typings != "" {
+			meta.Types = getTypesPath(p)
 		} else {
 			if !strings.HasPrefix(pkg.name, "@") {
 				info, err := nodeEnv.getPackageInfo("@types/"+pkg.name, "latest")
 				if err == nil {
-					if info.Types != "" {
-						meta.Types = fmt.Sprintf("%s@%s/%s", info.Name, info.Version, ensureExt(info.Types, ".d.ts"))
-					} else if info.Typings != "" {
-						meta.Types = fmt.Sprintf("%s@%s/%s", info.Name, info.Version, ensureExt(info.Typings, ".d.ts"))
-					} else if info.Main != "" {
-						meta.Types = fmt.Sprintf("%s@%s/%s", info.Name, info.Version, ensureExt(strings.TrimSuffix(info.Main, ".js"), ".d.ts"))
+					types := getTypesPath(info)
+					if types != "" {
+						meta.Types = types
+						installList = append(installList, fmt.Sprintf("%s@%s", info.Name, info.Version))
 					}
-					installList = append(installList, fmt.Sprintf("%s@%s", info.Name, info.Version))
 				} else if err.Error() != fmt.Sprintf("npm: package '@types/%s' not found", pkg.name) {
 					return ret, err
 				}
 			}
 			if meta.Types == "" && p.Main != "" {
-				meta.Types = fmt.Sprintf("%s@%s/%s", p.Name, p.Version, ensureExt(strings.TrimSuffix(p.Main, ".js"), ".d.ts"))
+				meta.Types = getTypesPath(p)
 			}
 		}
 		importMeta[pkg.ImportPath()] = meta
@@ -327,6 +322,21 @@ func identify(importPath string) string {
 		}
 	}
 	return string(p)
+}
+
+func getTypesPath(p NpmPackage) string {
+	path := ""
+	if p.Types != "" {
+		path = p.Types
+	} else if p.Typings != "" {
+		path = p.Typings
+	} else if p.Main != "" {
+		path = strings.TrimSuffix(p.Main, ".js")
+	}
+	if path != "" {
+		return fmt.Sprintf("%s@%s%s", p.Name, p.Version, ensureExt(utils.CleanPath(path), ".d.ts"))
+	}
+	return ""
 }
 
 func ensureExt(path string, ext string) string {
