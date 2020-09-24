@@ -323,22 +323,23 @@ esbuild:
 	jsContentBuf := bytes.NewBuffer(nil)
 	fmt.Fprintf(jsContentBuf, `/* esm.sh - esbuild bundle(%s) %s %s */%s`, options.packages.String(), strings.ToLower(options.target), env, EOL)
 	if len(independentPackages) > 0 {
+		var esModules []string
 		var eol, indent string
 		if options.dev {
-			indent = " "
+			indent = "  "
 			eol = EOL
 		}
 		for name, version := range independentPackages {
+			identifier := identify(name)
 			filename := path.Base(name)
 			if options.dev {
 				filename += ".development"
 			}
-			fmt.Fprintf(jsContentBuf, `import %s from "/%s@%s/%s/%s";%s`, identify(name), name, version, options.target, ensureExt(filename, ".js"), eol)
+			esModules = append(esModules, fmt.Sprintf(`"%s": %s`, name, identifier))
+			fmt.Fprintf(jsContentBuf, `import %s from "/%s@%s/%s/%s";%s`, identifier, name, version, options.target, ensureExt(filename, ".js"), eol)
 		}
 		fmt.Fprintf(jsContentBuf, `var __esModules = {%s`, eol)
-		for name := range independentPackages {
-			fmt.Fprintf(jsContentBuf, `%s"%s": %s,%s`, indent, name, identify(name), eol)
-		}
+		fmt.Fprintf(jsContentBuf, `%s%s%s`, indent, strings.Join(esModules, fmt.Sprintf(",%s%s", eol, indent)), eol)
 		fmt.Fprintf(jsContentBuf, `};%s`, eol)
 		fmt.Fprintf(jsContentBuf, `var require = name => __esModules[name];%s`, eol)
 	}
