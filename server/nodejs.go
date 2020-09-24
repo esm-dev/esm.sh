@@ -52,15 +52,15 @@ func checkNodeEnv() (env *NodeEnv, err error) {
 
 	var installed bool
 CheckNodejs:
-	version, major, err := getSystemNodejsVersion()
+	version, major, err := getNodejsVersion()
 	if err != nil || major < minNodejsVersion {
 		PATH := os.Getenv("PATH")
-		nodeBinDir := path.Join(etcDir, "/nodejs/bin")
+		nodeBinDir := "/usr/local/nodejs/bin"
 		if !strings.Contains(PATH, nodeBinDir) {
 			os.Setenv("PATH", fmt.Sprintf("%s%c%s", nodeBinDir, os.PathListSeparator, PATH))
 			goto CheckNodejs
 		} else if !installed {
-			err = installNodejs(path.Join(etcDir, "/nodejs"), nodejsLatestLTS)
+			err = installNodejs("/usr/local/nodejs", nodejsLatestLTS)
 			if err != nil {
 				return
 			}
@@ -97,7 +97,51 @@ CheckYarn:
 	return
 }
 
-func getSystemNodejsVersion() (version string, major int, err error) {
+func (env *NodeEnv) getPackageInfo(name string, version string) (info NpmPackage, err error) {
+	key := name + "/" + version
+	p, err := db.Get(q.Alias(key), q.K("package"))
+	if err == nil {
+		if (version == "latest" || version == "next" || version == "experimental") && int64(p.Crtime)+refreshDuration < time.Now().Unix() {
+			_, err = db.Delete(q.Alias(key))
+		} else if json.Unmarshal(p.KV.Get("package"), &info) == nil {
+			return
+		}
+	}
+	if err != nil && err != postdb.ErrNotFound {
+		return
+	}
+
+	resp, err := http.Get(env.npmRegistry + key)
+	if err != nil {
+		return
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode == 404 || resp.StatusCode == 401 {
+		err = fmt.Errorf("npm: package '%s' not found", name)
+		return
+	} else if resp.StatusCode != 200 {
+		ret, _ := ioutil.ReadAll(resp.Body)
+		err = fmt.Errorf("npm: can't get metadata of package '%s' (%s: %s)", name, resp.Status, string(ret))
+		return
+	}
+
+	data, err := ioutil.ReadAll(resp.Body)
+	if err == io.EOF {
+		err = nil
+	}
+	if err != nil {
+		return
+	}
+
+	err = json.Unmarshal(data, &info)
+	if err == nil {
+		db.Put(q.Alias(key), q.Tags("package"), q.KV{"package": data})
+	}
+	return
+}
+
+func getNodejsVersion() (version string, major int, err error) {
 	output, err := exec.Command("node", "--version").CombinedOutput()
 	if err != nil {
 		return
@@ -143,50 +187,6 @@ func installNodejs(dir string, version string) (err error) {
 		if len(output) > 0 {
 			err = errors.New(string(output))
 		}
-	}
-	return
-}
-
-func (env *NodeEnv) getPackageInfo(name string, version string) (info NpmPackage, err error) {
-	key := name + "/" + version
-	p, err := db.Get(q.Alias(key), q.K("package"))
-	if err == nil {
-		if (version == "latest" || version == "next" || version == "experimental") && int64(p.Crtime)+refreshDuration < time.Now().Unix() {
-			_, err = db.Delete(q.Alias(key))
-		} else if json.Unmarshal(p.KV.Get("package"), &info) == nil {
-			return
-		}
-	}
-	if err != nil && err != postdb.ErrNotFound {
-		return
-	}
-
-	resp, err := http.Get(env.npmRegistry + key)
-	if err != nil {
-		return
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode == 404 || resp.StatusCode == 401 {
-		err = fmt.Errorf("npm: package '%s' not found", name)
-		return
-	} else if resp.StatusCode != 200 {
-		ret, _ := ioutil.ReadAll(resp.Body)
-		err = fmt.Errorf("npm: can't get metadata of package '%s' (%s: %s)", name, resp.Status, string(ret))
-		return
-	}
-
-	data, err := ioutil.ReadAll(resp.Body)
-	if err == io.EOF {
-		err = nil
-	}
-	if err != nil {
-		return
-	}
-
-	err = json.Unmarshal(data, &info)
-	if err == nil {
-		db.Put(q.Alias(key), q.Tags("package"), q.KV{"package": data})
 	}
 	return
 }
