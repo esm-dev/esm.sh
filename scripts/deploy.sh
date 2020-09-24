@@ -68,11 +68,12 @@ fi
 
 echo "--- installing..."
 ssh -p $hostSSHPort $loginUser@$host << EOF
-    supervisorctl version
+    SV=\$(supervisorctl version)
     if [ "\$?" != "0" ]; then
         echo "error: missing supervisor!"
         exit
     fi
+    echo "supervisor \$SV"
 
     writeSVConfLine () {
         echo "\$1" >> /etc/supervisor/conf.d/esmd.conf
@@ -84,6 +85,7 @@ ssh -p $hostSSHPort $loginUser@$host << EOF
     chmod +x /usr/local/bin/esmd
 
     if [ "$init" == "yes" ]; then
+        mkdir ${etcDir}
         rm -f /etc/supervisor/conf.d/esmd.conf
         writeSVConfLine "[program:esmd]"
         writeSVConfLine "command=/usr/local/bin/esmd --port=${port} --https-port=${httpsPort} --etc-dir=${etcDir} --cdn-domain=${cdnDomain}"
