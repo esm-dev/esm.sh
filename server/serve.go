@@ -21,8 +21,8 @@ var (
 )
 
 var (
-	log    = &logx.Logger{}
 	logDir = "/var/log/esmd"
+	log    = &logx.Logger{}
 )
 
 // Serve serves esmd server
@@ -95,6 +95,7 @@ func Serve() {
 			AutoRedirect: !debug,
 			AutoTLS: rex.AutoTLSConfig{
 				AcceptTOS: !debug,
+				Hosts:     []string{"www.esm.sh", "esm.sh", "*.esm.sh", cdnDomain},
 				CacheDir:  path.Join(etcDir, "/cache/autotls"),
 			},
 		},
