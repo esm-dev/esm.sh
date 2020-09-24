@@ -167,7 +167,7 @@ func (env *NodeEnv) getPackageInfo(name string, version string) (info NpmPackage
 	}
 	defer resp.Body.Close()
 
-	if resp.StatusCode == 404 {
+	if resp.StatusCode == 404 || resp.StatusCode == 401 {
 		err = fmt.Errorf("npm: package '%s' not found", name)
 		return
 	} else if resp.StatusCode != 200 {
