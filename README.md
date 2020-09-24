@@ -1,7 +1,29 @@
-# ESM Delivery
-A fast, global content delivery network for ES Modules. All modules are transformed to ESM by [esbuild](https://github.com/evanw/esbuild) from [npm](http://npmjs.org/).
+# ESMM
+A fast, global content delivery network and package manager for ES Modules. All modules are transformed to ESM by [esbuild](https://github.com/evanw/esbuild) from [npm](http://npmjs.org/).
 
-# Usage
+## Usage
+```bash
+# install esmm command
+deno install --allow-read --allow-write --allow-net -n esmm https://deno.land/x/esmm/cli.ts
+
+# add some modules
+$ esmm add react react-dom
+
+# specify version or tag
+$ esmm add react@16.13.1
+$ esmm add react@next
+
+# remove some modules
+$ esmm remove lodash
+
+# start app in development mode
+$ aleph update
+
+# help message
+$ esmm -h
+```
+
+## Import from URL
 ```javascript
 import React from 'https://esm.sh/react'
 ```
@@ -46,9 +68,9 @@ or your can define bundle list in the `import-map.json` ([import-maps proposal](
 import React from 'https://esm.sh/react' // actual from 'https://esm.sh/[react,react-dom]/react'
 ```
 
-⚠️ The bundle packages in url are litmited up to **10**, to bundle more packages, please [create bundle](https://esm.sh/bundle) manually.
+⚠️ The packages in url are litmited up to **10**, to bundle more packages, please use esmm client.
 
-# Self-Hosting
+## Self-Hosting
 You will need [Go](https://golang.org/dl) 1.14+ to compile the server. Before run the deploy script please ensure the [supervisor](http://supervisord.org/) installed on your host machine.
 ```bash
 $ sh ./scripts/deploy.sh
