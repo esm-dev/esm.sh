@@ -11,6 +11,21 @@ import React from 'https://esm.sh/react'
 import React from 'https://esm.sh/react@16.13.1'
 ```
 
+### Specify ESM target
+```javascript
+import React from 'https://esm.sh/react?target=es2020'
+```
+
+### Development mode
+```javascript
+import React from 'https://esm.sh/react?dev'
+```
+
+### Submodule
+```javascript
+import { renderToString } from 'https://esm.sh/react-dom/server'
+```
+
 ### Bundle mode
 ```javascript
 import React from 'https://esm.sh/[react,react-dom]/react'
@@ -32,21 +47,6 @@ import React from 'https://esm.sh/react' // actual from 'https://esm.sh/[react,r
 ```
 
 ⚠️ The bundle packages in url are litmited up to **10**, to bundle more packages, please [create bundle](https://esm.sh/bundle) manually.
-
-### Specify ESM target
-```javascript
-import React from 'https://esm.sh/react?target=es2020'
-```
-
-### Development mode
-```javascript
-import React from 'https://esm.sh/react?dev'
-```
-
-### Submodule
-```javascript
-import { renderToString } from 'https://esm.sh/react-dom/server'
-```
 
 # Self-Hosting
 You will need [Go](https://golang.org/dl) 1.14+ to compile the server. Before run the deploy script please ensure the [supervisor](http://supervisord.org/) installed on your host machine.
