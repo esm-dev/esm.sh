@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"io/ioutil"
 	"os"
 	"os/exec"
@@ -23,14 +24,12 @@ import (
 )
 
 var targets = []string{
-	"ESNext",
-	"ES5",
-	"ES2015",
-	"ES2016",
-	"ES2017",
-	"ES2018",
-	"ES2019",
-	"ES2020",
+	"es2015",
+	"es2016",
+	"es2017",
+	"es2018",
+	"es2019",
+	"es2020",
 }
 
 // todo: use queue to replace lock
@@ -99,6 +98,7 @@ func build(options buildOptions) (ret buildResult, err error) {
 
 	start := time.Now()
 	importMeta := map[string]ImportMeta{}
+	peerDependencies := map[string]struct{}{}
 	for _, pkg := range options.packages {
 		var p NpmPackage
 		p, err = nodeEnv.getPackageInfo(pkg.name, pkg.version)
@@ -113,19 +113,8 @@ func build(options buildOptions) (ret buildResult, err error) {
 				PeerDependencies: p.PeerDependencies,
 			},
 		}
-		if len(p.PeerDependencies) > 0 {
-			for name := range p.PeerDependencies {
-				install := true
-				for _, pkg := range options.packages {
-					if pkg.name == name {
-						install = false
-						break
-					}
-				}
-				if install {
-					installList = append(installList, name)
-				}
-			}
+		for name := range p.PeerDependencies {
+			peerDependencies[name] = struct{}{}
 		}
 		if p.Types != "" || p.Typings != "" {
 			meta.Types = getTypesPath(p)
@@ -149,10 +138,35 @@ func build(options buildOptions) (ret buildResult, err error) {
 		importMeta[pkg.ImportPath()] = meta
 	}
 
+	independentPackages := map[string]string{}
+	for name := range peerDependencies {
+		independent := true
+		for _, pkg := range options.packages {
+			if pkg.name == name {
+				independent = false
+				break
+			}
+		}
+		if independent {
+			for _, meta := range importMeta {
+				for dep := range meta.Dependencies {
+					if dep == name {
+						independent = false
+						break
+					}
+				}
+			}
+		}
+		if independent {
+			installList = append(installList, name)
+			independentPackages[name] = "latest"
+		}
+	}
+
 	log.Debugf("parse importMeta in %v", time.Now().Sub(start))
 
 	buildDir := path.Join(etcDir, "builds/", bundleID)
-	os.MkdirAll(buildDir, 0755)
+	ensureDir(buildDir)
 	defer os.RemoveAll(buildDir)
 
 	err = os.Chdir(buildDir)
@@ -227,13 +241,31 @@ func build(options buildOptions) (ret buildResult, err error) {
 		return
 	}
 
+	externals := make([]string, len(independentPackages))
+	i := 0
+	for name := range independentPackages {
+		var p NpmPackage
+		err = utils.ParseJSONFile(path.Join(buildDir, "node_modules", name, "package.json"), &p)
+		if err != nil {
+			return
+		}
+		independentPackages[name] = p.Version
+		externals[i] = name
+		i++
+	}
+
 	isDev := options.env == "development"
 	target := api.ESNext
 	for i, t := range targets {
 		if options.target == t {
-			target = api.Target(i)
+			target = api.Target(i + 2)
+			break
 		}
 	}
+	if target == api.ESNext && options.target != "" {
+		options.target = ""
+	}
+
 	missingResolved := map[string]struct{}{}
 esbuild:
 	start = time.Now()
@@ -242,6 +274,7 @@ esbuild:
 	}
 	result := api.Build(api.BuildOptions{
 		EntryPoints:       []string{"bundle.js"},
+		Externals:         externals,
 		Bundle:            true,
 		Write:             false,
 		Target:            target,
@@ -253,8 +286,8 @@ esbuild:
 	})
 	if len(result.Errors) > 0 {
 		fe := result.Errors[0]
-		if strings.HasPrefix(fe.Text, "Could not resolve \"") {
-			missingModule := strings.Split(fe.Text, "\"")[1]
+		if strings.HasPrefix(fe.Text, `Could not resolve "`) {
+			missingModule := strings.Split(fe.Text, `"`)[1]
 			if missingModule != "" {
 				_, ok := missingResolved[missingModule]
 				if !ok {
@@ -273,14 +306,51 @@ esbuild:
 
 	log.Debugf("esbuild bundle %s %s %s in %v", options.packages.String(), options.target, options.env, time.Now().Sub(start))
 
-	hasher.Reset()
-	hasher.Write(result.OutputFiles[0].Contents)
-	hash := strings.ToLower(base32.StdEncoding.EncodeToString(hasher.Sum(nil)))
-
 	jsContentBuf := bytes.NewBuffer(nil)
 	fmt.Fprintf(jsContentBuf, `/* esm.sh - esbuild bundle(%s) %s %s */%s`, options.packages.String(), strings.ToLower(options.target), options.env, EOL)
+	if len(independentPackages) > 0 {
+		indent := "  "
+		eol := EOL
+		if !isDev {
+			indent = ""
+			eol = ""
+		}
+		for name, version := range independentPackages {
+			var query []string
+			if isDev {
+				query = append(query, "dev")
+			}
+			if target > 0 {
+				query = append(query, "target="+options.target)
+			}
+			var qs string
+			if len(query) > 0 {
+				qs = "?" + strings.Join(query, "&")
+			}
+			fmt.Fprintf(jsContentBuf, `import %s from "/%s@%s%s";%s`, identify(name), name, version, qs, eol)
+		}
+		fmt.Fprintf(jsContentBuf, `var __esModules = {%s`, eol)
+		for name := range independentPackages {
+			fmt.Fprintf(jsContentBuf, `%s"%s": %s,%s`, indent, name, identify(name), eol)
+		}
+		fmt.Fprintf(jsContentBuf, `};%s`, eol)
+		fmt.Fprintf(jsContentBuf, `var require = name => {%s`, eol)
+		fmt.Fprintf(jsContentBuf, `%sreturn __esModules[name];%s`, indent, eol)
+		fmt.Fprintf(jsContentBuf, `};%s`, eol)
+	}
 	jsContentBuf.Write(result.OutputFiles[0].Contents)
-	err = ioutil.WriteFile(path.Join(etcDir, "builds", hash+".js"), jsContentBuf.Bytes(), 0644)
+
+	hasher.Reset()
+	hasher.Write(jsContentBuf.Bytes())
+	hash := strings.ToLower(base32.StdEncoding.EncodeToString(hasher.Sum(nil)))
+
+	file, err := os.Create(path.Join(etcDir, "builds", hash+".js"))
+	if err != nil {
+		return
+	}
+	defer file.Close()
+
+	_, err = io.Copy(file, jsContentBuf)
 	if err != nil {
 		return
 	}

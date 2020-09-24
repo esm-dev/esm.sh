@@ -5,6 +5,11 @@ import (
 	"strings"
 )
 
+const (
+	// EOL defines the char of end of line
+	EOL = "\n"
+)
+
 func ensureExt(path string, ext string) string {
 	if !strings.HasSuffix(path, ext) {
 		return path + ext

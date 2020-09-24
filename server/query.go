@@ -11,11 +11,6 @@ import (
 	"github.com/ije/rex"
 )
 
-const (
-	// EOL defines the char of end of line
-	EOL = "\n"
-)
-
 func init() {
 	rex.Query("bundle", func(ctx *rex.Context) interface{} {
 		return rex.HTML(bundleHTML)
@@ -72,15 +67,10 @@ func init() {
 			packages = moduleSlice{*currentModule}
 		}
 
+		target := strings.ToLower(strings.TrimSpace(ctx.Form.Value("target")))
 		env := "production"
 		if !ctx.Form.IsNil("dev") {
 			env = "development"
-		} else if ctx.Form.Value("env") == "development" {
-			env = "development"
-		}
-		target := strings.ToUpper(strings.TrimSpace(ctx.Form.Value("target")))
-		if target == "" {
-			target = "ESNEXT"
 		}
 		ret, err := build(buildOptions{
 			packages: packages,

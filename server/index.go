@@ -23,8 +23,8 @@ const bundleHTML = `<!DOCTYPE html>
 <body>
     <main><em>Loading...</em></main>
     <script type="module">
-        import React from '/[react,react-dom]/react'
-        import ReactDom from '/[react,react-dom]/react-dom'
+        import React from '/react@16.13.1'
+        import ReactDom from '/react-dom@16.13.1'
 
         ReactDom.render(
             React.createElement('h1', null, 'ESM Bundler [WIP]'),
