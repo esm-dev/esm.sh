@@ -11,20 +11,24 @@ import (
 	"github.com/ije/rex"
 )
 
-func init() {
+func registerAPI(storageDir string, cdnDomain string) {
 	rex.Query("*", func(ctx *rex.Context) interface{} {
 		pathname := utils.CleanPath(ctx.R.URL.Path)
 		if pathname == "/" {
 			return rex.HTML(indexHTML)
 		}
 
-		if strings.HasPrefix(pathname, "/bundle-") && strings.HasSuffix(pathname, ".js") {
-			return rex.File(path.Join(etcDir, "builds", strings.TrimPrefix(pathname, "/bundle-")))
-		}
-
-		if strings.HasSuffix(pathname, ".d.ts") {
-			ctx.SetHeader("Content-Type", "application/typescript; charset=utf-8")
-			return rex.File(path.Join(etcDir, "types", pathname))
+		switch path.Ext(pathname) {
+		case ".js":
+			return rex.File(path.Join(storageDir, "builds", pathname))
+		case ".ts":
+			if strings.HasSuffix(pathname, ".d.ts") {
+				ctx.SetHeader("Content-Type", "application/typescript; charset=utf-8")
+				return rex.File(path.Join(storageDir, "types", pathname))
+			}
+			fallthrough
+		case ".json", ".jsx", ".tsx", ".css", ".less", ".sass", ".scss", "stylus", "styl", ".wasm":
+			return rex.File(path.Join(storageDir, "raw", pathname))
 		}
 
 		var bundleList string
@@ -64,14 +68,13 @@ func init() {
 		}
 
 		target := strings.ToLower(strings.TrimSpace(ctx.Form.Value("target")))
-		env := "production"
-		if !ctx.Form.IsNil("dev") {
-			env = "development"
+		if _, ok := targets[target]; !ok {
+			target = "esnext"
 		}
-		ret, err := build(buildOptions{
+		ret, err := build(storageDir, buildOptions{
 			packages: packages,
 			target:   target,
-			env:      env,
+			dev:      !ctx.Form.IsNil("dev"),
 		})
 		if err != nil {
 			return throwErrorJs(err)
@@ -100,11 +103,15 @@ func init() {
 
 		buf := bytes.NewBuffer(nil)
 		importIdentifier := identify(importPath)
-		fmt.Fprintf(buf, `/* esm.sh - %v */%s`, currentModule, EOL)
+		importPrefix := "/"
 		if cdnDomain != "" {
-			fmt.Fprintf(buf, `import { %s } from "https://%s/bundle-%s.js";%s`, importIdentifier, cdnDomain, ret.hash, EOL)
+			importPrefix = fmt.Sprintf("https://%s/", cdnDomain)
+		}
+		fmt.Fprintf(buf, `/* esm.sh - %v */%s`, currentModule, EOL)
+		if ret.single {
+			fmt.Fprintf(buf, `import %s from "%s%s.js";%s`, importIdentifier, importPrefix, ret.buildID, EOL)
 		} else {
-			fmt.Fprintf(buf, `import { %s } from "/bundle-%s.js";%s`, importIdentifier, ret.hash, EOL)
+			fmt.Fprintf(buf, `import { %s } from "%s%s.js";%s`, importIdentifier, importPrefix, ret.buildID, EOL)
 		}
 		if len(exports) > 0 {
 			fmt.Fprintf(buf, `export const { %s } = %s;%s`, strings.Join(exports, ","), importIdentifier, EOL)

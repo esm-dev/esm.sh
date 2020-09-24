@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"crypto/sha1"
 	"encoding/base32"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -23,13 +24,13 @@ import (
 	"github.com/postui/postdb/q"
 )
 
-var targets = []string{
-	"es2015",
-	"es2016",
-	"es2017",
-	"es2018",
-	"es2019",
-	"es2020",
+var targets = map[string]api.Target{
+	"es2015": api.ES2015,
+	"es2016": api.ES2016,
+	"es2017": api.ES2017,
+	"es2018": api.ES2018,
+	"es2019": api.ES2019,
+	"es2020": api.ES2020,
 }
 
 // todo: use queue to replace lock
@@ -44,48 +45,63 @@ type ImportMeta struct {
 type buildOptions struct {
 	packages moduleSlice
 	target   string
-	env      string
+	dev      bool
 }
 
 type buildResult struct {
-	hash       string
+	buildID    string
 	importMeta map[string]ImportMeta
+	single     bool
 }
 
-func build(options buildOptions) (ret buildResult, err error) {
+// https://esm.sh/bundle-4b6226feeorfljizaklr6kklrzah7kaw.js
+// https://esm.sh/react@16.13.1/es2015/react.development.js
+// https://esm.sh/react-dom@16.13.1/es2015/react-dom.development.js
+// https://esm.sh/react-dom@16.13.1/es2015/server.development.js
+func build(storageDir string, options buildOptions) (ret buildResult, err error) {
 	buildLock.Lock()
 	defer buildLock.Unlock()
 
-	hasher := sha1.New()
-	sort.Sort(options.packages)
-	fmt.Fprintf(hasher, "%s %s %s", options.packages.String(), options.target, options.env)
-	bundleID := "bundle-" + strings.ToLower(base32.StdEncoding.EncodeToString(hasher.Sum(nil)))
-	p, err := db.Get(q.Alias(bundleID), q.K("hash", "importMeta"))
+	n := len(options.packages)
+	if n == 0 {
+		err = fmt.Errorf("no packages")
+		return
+	}
+
+	ret.single = n == 1
+	if ret.single {
+		pkg := options.packages[0]
+		filename := path.Base(pkg.name)
+		if options.dev {
+			filename += ".development"
+		}
+		ret.buildID = fmt.Sprintf("%s@%s/%s/%s", pkg.name, pkg.version, options.target, filename)
+	} else {
+		hasher := sha1.New()
+		sort.Sort(options.packages)
+		fmt.Fprintf(hasher, "%s %s %v", options.packages.String(), options.target, options.dev)
+		ret.buildID = "bundle-" + strings.ToLower(base32.StdEncoding.EncodeToString(hasher.Sum(nil)))
+	}
+
+	p, err := db.Get(q.Alias(ret.buildID), q.K("hash", "importMeta"))
 	if err == nil {
 		err = json.Unmarshal(p.KV.Get("importMeta"), &ret.importMeta)
 		if err != nil {
-			_, err = db.Delete(q.Alias(bundleID))
+			_, err = db.Delete(q.Alias(ret.buildID))
 			if err != nil {
 				return
 			}
-			err = postdb.ErrNotFound
 		}
 
-		hash := string(p.KV.Get("hash"))
-		_, err = os.Stat(path.Join(etcDir, "builds", hash+".js"))
-		if err == nil {
-			ret.hash = string(p.KV.Get("hash"))
-			return
-		}
-		if os.IsExist(err) {
+		_, err = os.Stat(path.Join(storageDir, "builds", ret.buildID+".js"))
+		if err == nil || os.IsExist(err) {
 			return
 		}
 
-		_, err = db.Delete(q.Alias(bundleID))
+		_, err = db.Delete(q.Alias(ret.buildID))
 		if err != nil {
 			return
 		}
-		err = postdb.ErrNotFound
 	}
 	if err != nil && err != postdb.ErrNotFound {
 		return
@@ -165,7 +181,7 @@ func build(options buildOptions) (ret buildResult, err error) {
 
 	log.Debugf("parse importMeta in %v", time.Now().Sub(start))
 
-	buildDir := path.Join(etcDir, "builds/", bundleID)
+	buildDir := path.Join(os.TempDir(), "esmd-build", base64.URLEncoding.EncodeToString([]byte(ret.buildID)))
 	ensureDir(buildDir)
 	defer os.RemoveAll(buildDir)
 
@@ -194,9 +210,14 @@ func build(options buildOptions) (ret buildResult, err error) {
 		return
 	}
 
+	env := "production"
+	if options.dev {
+		env = "development"
+	}
+
 	start = time.Now()
 	cmd := exec.Command("node", "peer.js")
-	cmd.Env = append(os.Environ(), fmt.Sprintf(`NODE_ENV=%s`, options.env))
+	cmd.Env = append(os.Environ(), fmt.Sprintf(`NODE_ENV=%s`, env))
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		err = errors.New(string(output))
@@ -222,7 +243,7 @@ func build(options buildOptions) (ret buildResult, err error) {
 	start = time.Now()
 	for _, meta := range importMeta {
 		if meta.Types != "" {
-			err = copyDTS(path.Join(buildDir, "node_modules"), path.Join(etcDir, "types"), meta.Types)
+			err = copyDTS(path.Join(buildDir, "node_modules"), path.Join(storageDir, "types"), meta.Types)
 			if err != nil {
 				return
 			}
@@ -233,7 +254,11 @@ func build(options buildOptions) (ret buildResult, err error) {
 	codeBuf = bytes.NewBuffer(nil)
 	for _, m := range options.packages {
 		importName := m.ImportPath()
-		fmt.Fprintf(codeBuf, `export * as %s from "%s";`, identify(importName), importName)
+		if ret.single {
+			fmt.Fprintf(codeBuf, `export * as default from "%s";`, importName)
+		} else {
+			fmt.Fprintf(codeBuf, `export * as %s from "%s";`, identify(importName), importName)
+		}
 	}
 
 	err = ioutil.WriteFile(path.Join(buildDir, "bundle.js"), codeBuf.Bytes(), 0644)
@@ -254,34 +279,23 @@ func build(options buildOptions) (ret buildResult, err error) {
 		i++
 	}
 
-	isDev := options.env == "development"
-	target := api.ESNext
-	for i, t := range targets {
-		if options.target == t {
-			target = api.Target(i + 2)
-			break
-		}
-	}
-	if target == api.ESNext && options.target != "" {
-		options.target = ""
-	}
-
 	missingResolved := map[string]struct{}{}
 esbuild:
 	start = time.Now()
+	minify := !options.dev
 	defines := map[string]string{
-		"process.env.NODE_ENV": fmt.Sprintf(`"%s"`, options.env),
+		"process.env.NODE_ENV": fmt.Sprintf(`"%s"`, env),
 	}
 	result := api.Build(api.BuildOptions{
 		EntryPoints:       []string{"bundle.js"},
 		Externals:         externals,
 		Bundle:            true,
 		Write:             false,
-		Target:            target,
+		Target:            targets[options.target],
 		Format:            api.FormatESModule,
-		MinifyWhitespace:  !isDev,
-		MinifyIdentifiers: !isDev,
-		MinifySyntax:      !isDev,
+		MinifyWhitespace:  minify,
+		MinifyIdentifiers: minify,
+		MinifySyntax:      minify,
 		Defines:           defines,
 	})
 	if len(result.Errors) > 0 {
@@ -304,47 +318,35 @@ esbuild:
 		return
 	}
 
-	log.Debugf("esbuild bundle %s %s %s in %v", options.packages.String(), options.target, options.env, time.Now().Sub(start))
+	log.Debugf("esbuild bundle %s %s %s in %v", options.packages.String(), options.target, env, time.Now().Sub(start))
 
 	jsContentBuf := bytes.NewBuffer(nil)
-	fmt.Fprintf(jsContentBuf, `/* esm.sh - esbuild bundle(%s) %s %s */%s`, options.packages.String(), strings.ToLower(options.target), options.env, EOL)
+	fmt.Fprintf(jsContentBuf, `/* esm.sh - esbuild bundle(%s) %s %s */%s`, options.packages.String(), strings.ToLower(options.target), env, EOL)
 	if len(independentPackages) > 0 {
-		indent := "  "
-		eol := EOL
-		if !isDev {
-			indent = ""
-			eol = ""
+		var eol, indent string
+		if options.dev {
+			indent = " "
+			eol = EOL
 		}
 		for name, version := range independentPackages {
-			var query []string
-			if isDev {
-				query = append(query, "dev")
+			filename := path.Base(name)
+			if options.dev {
+				filename += ".development"
 			}
-			if target > 0 {
-				query = append(query, "target="+options.target)
-			}
-			var qs string
-			if len(query) > 0 {
-				qs = "?" + strings.Join(query, "&")
-			}
-			fmt.Fprintf(jsContentBuf, `import %s from "/%s@%s%s";%s`, identify(name), name, version, qs, eol)
+			fmt.Fprintf(jsContentBuf, `import %s from "/%s@%s/%s/%s";%s`, identify(name), name, version, options.target, ensureExt(filename, ".js"), eol)
 		}
 		fmt.Fprintf(jsContentBuf, `var __esModules = {%s`, eol)
 		for name := range independentPackages {
 			fmt.Fprintf(jsContentBuf, `%s"%s": %s,%s`, indent, name, identify(name), eol)
 		}
 		fmt.Fprintf(jsContentBuf, `};%s`, eol)
-		fmt.Fprintf(jsContentBuf, `var require = name => {%s`, eol)
-		fmt.Fprintf(jsContentBuf, `%sreturn __esModules[name];%s`, indent, eol)
-		fmt.Fprintf(jsContentBuf, `};%s`, eol)
+		fmt.Fprintf(jsContentBuf, `var require = name => __esModules[name];%s`, eol)
 	}
 	jsContentBuf.Write(result.OutputFiles[0].Contents)
 
-	hasher.Reset()
-	hasher.Write(jsContentBuf.Bytes())
-	hash := strings.ToLower(base32.StdEncoding.EncodeToString(hasher.Sum(nil)))
-
-	file, err := os.Create(path.Join(etcDir, "builds", hash+".js"))
+	saveFilePath := path.Join(storageDir, "builds", ret.buildID+".js")
+	ensureDir(path.Dir(saveFilePath))
+	file, err := os.Create(saveFilePath)
 	if err != nil {
 		return
 	}
@@ -356,15 +358,13 @@ esbuild:
 	}
 
 	db.Put(
-		q.Alias(bundleID),
+		q.Alias(ret.buildID),
 		q.Tags("bundle"),
 		q.KV{
-			"hash":       []byte(hash),
 			"importMeta": utils.MustEncodeJSON(importMeta),
 		},
 	)
 
-	ret.hash = hash
 	ret.importMeta = importMeta
 	return
 }

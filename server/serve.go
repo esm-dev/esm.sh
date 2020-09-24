@@ -14,21 +14,20 @@ import (
 )
 
 var (
-	etcDir    string
-	cdnDomain string
-	nodeEnv   *NodeEnv
-	db        *postdb.DB
+	nodeEnv *NodeEnv
+	db      *postdb.DB
 )
 
 var (
-	logDir = "/var/log/esmd"
-	log    = &logx.Logger{}
+	log = &logx.Logger{}
 )
 
 // Serve serves esmd server
 func Serve() {
 	var port int
 	var httpsPort int
+	var etcDir string
+	var cdnDomain string
 	var debug bool
 	var dev bool
 
@@ -40,20 +39,23 @@ func Serve() {
 	flag.BoolVar(&dev, "dev", false, "run server in dev mode")
 	flag.Parse()
 
+	logDir := "/var/log/esmd"
 	if dev {
 		debug = true
 		etcDir, _ = filepath.Abs(".dev")
 		logDir = path.Join(etcDir, "log")
 	}
 
-	ensureDir(path.Join(etcDir, "builds"))
-	ensureDir(path.Join(etcDir, "types"))
+	storageDir := path.Join(etcDir, "storage")
+	ensureDir(path.Join(storageDir, "builds"))
+	ensureDir(path.Join(storageDir, "types"))
+	ensureDir(path.Join(storageDir, "raw"))
 
-	var err error
-	log, err = logx.New(fmt.Sprintf("file:%s?buffer=32k", path.Join(logDir, "main.log")))
+	logger, err := logx.New(fmt.Sprintf("file:%s?buffer=32k", path.Join(logDir, "main.log")))
 	if err != nil {
 		log.Fatalf("initiate logger: %v", err)
 	}
+	log = logger
 	if !debug {
 		log.SetLevelByName("info")
 		log.SetQuite(true)
@@ -87,6 +89,8 @@ func Serve() {
 			MaxAge:          3600,
 		}),
 	)
+
+	registerAPI(storageDir, cdnDomain)
 
 	rex.Serve(rex.ServerConfig{
 		Port: uint16(port),
