@@ -1,15 +1,15 @@
 #!/bin/bash
 
 goos="linux"
-read -p "please enter the deploy OS(default is '$goos'): " sys
-if [ "$sys" != "" ]; then
-    goos="$sys"
+read -p "please enter the deploy OS(default is '$goos'): " val
+if [ "$val" != "" ]; then
+    goos="$val"
 fi
 
 goarch="amd64"
-read -p "please enter the deploy CPU Architecture(default is '$goarch'): " arch
-if [ "$arch" != "" ]; then
-    goarch="$arch"
+read -p "please enter the deploy CPU Architecture(default is '$goarch'): " val
+if [ "$val" != "" ]; then
+    goarch="$val"
 fi
 
 echo "--- compiling(${goos}_$goarch)..."

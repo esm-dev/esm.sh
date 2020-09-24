@@ -9,7 +9,7 @@ if [ "$host" == "" ]; then
 fi
 
 if [ "$host" == "" ]; then
-    echo "invalid server"
+    echo "invalid host"
     exit
 fi
 
@@ -62,7 +62,7 @@ fi
 echo "--- uploading..."
 scp -P $hostSSHPort esmd $loginUser@$host:/tmp/esmd
 if [ "$?" != "0" ]; then
-    rm esmd
+    rm -f esmd
     exit
 fi
 
