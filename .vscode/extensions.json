@@ -1,0 +1,6 @@
+{
+  "recommendations": [
+    "denoland.vscode-deno",
+    "golang.go"
+  ]
+}
