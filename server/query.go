@@ -12,10 +12,6 @@ import (
 )
 
 func init() {
-	rex.Query("bundle", func(ctx *rex.Context) interface{} {
-		return rex.HTML(bundleHTML)
-	})
-
 	rex.Query("*", func(ctx *rex.Context) interface{} {
 		pathname := utils.CleanPath(ctx.R.URL.Path)
 		if pathname == "/" {
