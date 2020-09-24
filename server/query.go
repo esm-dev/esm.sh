@@ -31,6 +31,11 @@ func init() {
 			return rex.File(path.Join(etcDir, "builds", strings.TrimPrefix(pathname, "/bundle-")))
 		}
 
+		if strings.HasSuffix(pathname, ".d.ts") {
+			ctx.SetHeader("Content-Type", "application/typescript; charset=utf-8")
+			return rex.File(path.Join(etcDir, "types", pathname))
+		}
+
 		var bundleList string
 		if strings.HasPrefix(pathname, "/[") && strings.Contains(pathname, "]") {
 			bundleList, pathname = utils.SplitByFirstByte(strings.TrimPrefix(pathname, "/["), ']')
@@ -69,6 +74,8 @@ func init() {
 
 		env := "production"
 		if !ctx.Form.IsNil("dev") {
+			env = "development"
+		} else if ctx.Form.Value("env") == "development" {
 			env = "development"
 		}
 		target := strings.ToUpper(strings.TrimSpace(ctx.Form.Value("target")))

@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"crypto/sha1"
 	"encoding/base32"
-	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -42,16 +41,6 @@ type ImportMeta struct {
 	NpmPackage
 }
 
-// NpmPackage defines the package of npm
-type NpmPackage struct {
-	Name             string            `json:"name"`
-	Version          string            `json:"version"`
-	Types            string            `json:"types,omitempty"`
-	Typings          string            `json:"typings,omitempty"`
-	Dependencies     map[string]string `json:"dependencies,omitempty"`
-	PeerDependencies map[string]string `json:"peerDependencies,omitempty"`
-}
-
 type buildOptions struct {
 	packages moduleSlice
 	target   string
@@ -67,9 +56,10 @@ func build(options buildOptions) (ret buildResult, err error) {
 	buildLock.Lock()
 	defer buildLock.Unlock()
 
+	hasher := sha1.New()
 	sort.Sort(options.packages)
-	bundleRaw := fmt.Sprintf("bundle %s %s %s", options.packages.String(), options.target, options.env)
-	bundleID := base64.URLEncoding.EncodeToString([]byte(bundleRaw))
+	fmt.Fprintf(hasher, "%s %s %s", options.packages.String(), options.target, options.env)
+	bundleID := "bundle-" + strings.ToLower(base32.StdEncoding.EncodeToString(hasher.Sum(nil)))
 	p, err := db.Get(q.Alias(bundleID), q.K("hash", "importMeta"))
 	if err == nil {
 		err = json.Unmarshal(p.KV.Get("importMeta"), &ret.importMeta)
@@ -137,27 +127,27 @@ func build(options buildOptions) (ret buildResult, err error) {
 			}
 		}
 		if p.Types != "" {
-			meta.Types = fmt.Sprintf("%s@%s/%s", p.Name, p.Version, p.Types)
+			meta.Types = fmt.Sprintf("%s@%s/%s", p.Name, p.Version, ensureExt(p.Types, ".d.ts"))
 		} else if p.Typings != "" {
-			meta.Types = fmt.Sprintf("%s@%s/%s", p.Name, p.Version, p.Typings)
+			meta.Types = fmt.Sprintf("%s@%s/%s", p.Name, p.Version, ensureExt(p.Typings, ".d.ts"))
 		} else {
 			if !strings.HasPrefix(pkg.name, "@") {
 				info, err := nodeEnv.getPackageInfo("@types/"+pkg.name, "latest")
 				if err == nil {
 					if info.Types != "" {
-						meta.Types = fmt.Sprintf("%s@%s/%s", info.Name, info.Version, info.Types)
+						meta.Types = fmt.Sprintf("%s@%s/%s", info.Name, info.Version, ensureExt(info.Types, ".d.ts"))
 					} else if info.Typings != "" {
-						meta.Types = fmt.Sprintf("%s@%s/%s", info.Name, info.Version, info.Typings)
-					} else {
-						meta.Types = fmt.Sprintf("%s@%s/?", info.Name, info.Version)
+						meta.Types = fmt.Sprintf("%s@%s/%s", info.Name, info.Version, ensureExt(info.Typings, ".d.ts"))
+					} else if info.Main != "" {
+						meta.Types = fmt.Sprintf("%s@%s/%s", info.Name, info.Version, ensureExt(strings.TrimSuffix(info.Main, ".js"), ".d.ts"))
 					}
 					installList = append(installList, fmt.Sprintf("%s@%s", info.Name, info.Version))
 				} else if err.Error() != fmt.Sprintf("npm: package '@types/%s' not found", pkg.name) {
 					return ret, err
 				}
 			}
-			if meta.Types == "" {
-				meta.Types = fmt.Sprintf("%s@%s/?", p.Name, p.Version)
+			if meta.Types == "" && p.Main != "" {
+				meta.Types = fmt.Sprintf("%s@%s/%s", p.Name, p.Version, ensureExt(strings.TrimSuffix(p.Main, ".js"), ".d.ts"))
 			}
 		}
 		importMeta[pkg.ImportPath()] = meta
@@ -165,7 +155,7 @@ func build(options buildOptions) (ret buildResult, err error) {
 
 	log.Debugf("parse importMeta in %v", time.Now().Sub(start))
 
-	buildDir := path.Join(os.TempDir(), bundleID)
+	buildDir := path.Join(etcDir, "builds/", bundleID)
 	os.MkdirAll(buildDir, 0755)
 	defer os.RemoveAll(buildDir)
 
@@ -174,7 +164,7 @@ func build(options buildOptions) (ret buildResult, err error) {
 		return
 	}
 
-	err = pnpmAdd(installList...)
+	err = yarnAdd(installList...)
 	if err != nil {
 		return
 	}
@@ -198,11 +188,11 @@ func build(options buildOptions) (ret buildResult, err error) {
 	cmd := exec.Command("node", "peer.js")
 	cmd.Env = append(os.Environ(), fmt.Sprintf(`NODE_ENV=%s`, options.env))
 	output, err := cmd.CombinedOutput()
-	log.Debug("node peer.js in", time.Now().Sub(start))
 	if err != nil {
 		err = errors.New(string(output))
 		return
 	}
+	log.Debug("node peer.js in", time.Now().Sub(start))
 
 	var m map[string]ImportMeta
 	err = json.Unmarshal(output, &m)
@@ -210,20 +200,25 @@ func build(options buildOptions) (ret buildResult, err error) {
 		return
 	}
 	for name, meta := range m {
-		v, ok := importMeta[name]
+		_meta, ok := importMeta[name]
 		if ok {
 			importMeta[name] = ImportMeta{
-				NpmPackage: v.NpmPackage,
+				NpmPackage: _meta.NpmPackage,
 				Exports:    meta.Exports,
 			}
 		}
+	}
+
+	start = time.Now()
+	for _, meta := range importMeta {
 		if meta.Types != "" {
 			err = copyDTS(path.Join(buildDir, "node_modules"), meta.Types, path.Join(etcDir, "types"))
-			if err != nil && os.IsExist(err) {
+			if err != nil {
 				return
 			}
 		}
 	}
+	log.Debug("copy dts in", time.Now().Sub(start))
 
 	codeBuf = bytes.NewBuffer(nil)
 	for _, m := range options.packages {
@@ -267,7 +262,7 @@ esbuild:
 			if missingModule != "" {
 				_, ok := missingResolved[missingModule]
 				if !ok {
-					err = pnpmAdd(missingModule)
+					err = yarnAdd(missingModule)
 					if err != nil {
 						return
 					}
@@ -282,7 +277,7 @@ esbuild:
 
 	log.Debugf("esbuild bundle %s %s %s in %v", options.packages.String(), options.target, options.env, time.Now().Sub(start))
 
-	hasher := sha1.New()
+	hasher.Reset()
 	hasher.Write(result.OutputFiles[0].Contents)
 	hash := strings.ToLower(base32.StdEncoding.EncodeToString(hasher.Sum(nil)))
 
@@ -308,25 +303,15 @@ esbuild:
 	return
 }
 
-func copyDTS(nmDir string, mainDTS string, saveDir string) (err error) {
-	dtsContent, err := ioutil.ReadFile(path.Join(nmDir, mainDTS))
-	if err != nil {
-		return
-	}
-
-	fmt.Println(string(dtsContent))
-	return
-}
-
-func pnpmAdd(packages ...string) (err error) {
+func yarnAdd(packages ...string) (err error) {
 	if len(packages) > 0 {
 		start := time.Now()
-		args := append([]string{"add", "--no-color", "--prefer-offline"}, packages...)
-		output, err := exec.Command("pnpm", args...).CombinedOutput()
+		args := append([]string{"add"}, packages...)
+		output, err := exec.Command("yarn", args...).CombinedOutput()
 		if err != nil {
 			return fmt.Errorf(string(output))
 		}
-		log.Debug("pnpm add", strings.Join(packages, " "), "in", time.Now().Sub(start))
+		log.Debug("yarn add", strings.Join(packages, " "), "in", time.Now().Sub(start))
 	}
 	return
 }
@@ -342,6 +327,13 @@ func identify(importPath string) string {
 		}
 	}
 	return string(p)
+}
+
+func ensureExt(path string, ext string) string {
+	if !strings.HasSuffix(path, ext) {
+		return path + ext
+	}
+	return path
 }
 
 func ensureDir(dir string) (err error) {

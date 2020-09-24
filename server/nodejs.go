@@ -28,6 +28,17 @@ const (
 	refreshDuration  = 10 * 60 // 10 minues
 )
 
+// NpmPackage defines the package of npm
+type NpmPackage struct {
+	Name             string            `json:"name"`
+	Version          string            `json:"version"`
+	Main             string            `json:"main,omitempty"`
+	Types            string            `json:"types,omitempty"`
+	Typings          string            `json:"typings,omitempty"`
+	Dependencies     map[string]string `json:"dependencies,omitempty"`
+	PeerDependencies map[string]string `json:"peerDependencies,omitempty"`
+}
+
 // NodeEnv defines the nodejs env
 type NodeEnv struct {
 	version     string
@@ -70,18 +81,18 @@ CheckNodejs:
 		env.npmRegistry = strings.TrimRight(strings.TrimSpace(string(output)), "/") + "/"
 	}
 
-CheckPnpm:
-	output, err = exec.Command("pnpm", "-v").CombinedOutput()
+CheckYarn:
+	output, err = exec.Command("yarn", "-v").CombinedOutput()
 	if err != nil {
 		if errors.Is(err, exec.ErrNotFound) {
-			output, err = exec.Command("npm", "install", "pnpm", "-g").CombinedOutput()
+			output, err = exec.Command("npm", "install", "yarn", "-g").CombinedOutput()
 			if err != nil {
-				err = errors.New("install pnpm: " + strings.TrimSpace(string(output)))
+				err = errors.New("install yarn: " + strings.TrimSpace(string(output)))
 				return
 			}
-			goto CheckPnpm
+			goto CheckYarn
 		}
-		err = errors.New("bad pnpm version")
+		err = errors.New("bad yarn version")
 	}
 	return
 }

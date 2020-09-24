@@ -14,11 +14,11 @@ import (
 )
 
 var (
-	db        *postdb.DB
-	log       *logx.Logger
-	nodeEnv   *NodeEnv
 	etcDir    string
 	cdnDomain string
+	db        *postdb.DB
+	nodeEnv   *NodeEnv
+	log       = &logx.Logger{}
 )
 
 // Serve serves esmd server
