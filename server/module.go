@@ -62,6 +62,7 @@ func (m module) String() string {
 	return s
 }
 
+// sortable module slice
 type moduleSlice []module
 
 func (a moduleSlice) Len() int           { return len(a) }

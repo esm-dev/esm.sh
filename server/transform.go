@@ -13,10 +13,12 @@ import (
 	"github.com/ije/gox/utils"
 )
 
-var reVersion = regexp.MustCompile(`([^/])@[\d\.]+/`)
-var reFromExpression = regexp.MustCompile(`(\s|})from\s*("|')`)
-var reAsExpression = regexp.MustCompile(`([0-9a-zA-Z\_\$])\s+as\s+([a-zA-Z\_\$])`)
-var reReferenceTag = regexp.MustCompile(`^<reference\s+(path|types)\s*=\s*('|")([^'"]+)("|')\s*/>$`)
+var (
+	reVersion        = regexp.MustCompile(`([^/])@[\d\.]+/`)
+	reFromExpression = regexp.MustCompile(`(\s|})from\s*("|')`)
+	reAsExpression   = regexp.MustCompile(`([0-9a-zA-Z\_\$])\s+as\s+([a-zA-Z\_\$])`)
+	reReferenceTag   = regexp.MustCompile(`^<reference\s+(path|types)\s*=\s*('|")([^'"]+)("|')\s*/>$`)
+)
 
 func toRequire(code []byte) (output []byte) {
 	buf := bytes.NewBuffer(nil)
@@ -47,9 +49,9 @@ func toRequire(code []byte) (output []byte) {
 		} else if strings.HasPrefix(pure, "//") {
 			buf.WriteString(pure)
 		} else {
-			var i int
 			scanner := bufio.NewScanner(strings.NewReader(pure))
 			scanner.Split(onSemicolon)
+			var i int
 			for scanner.Scan() {
 				if i > 0 {
 					buf.WriteByte(';')
@@ -241,9 +243,9 @@ func copyDTS(nodeModulesDir string, saveDir string, dts string) (err error) {
 		} else if strings.HasPrefix(pure, "//") {
 			buf.WriteString(pure)
 		} else {
-			var i int
 			scanner := bufio.NewScanner(strings.NewReader(pure))
 			scanner.Split(onSemicolon)
+			var i int
 			for scanner.Scan() {
 				if i > 0 {
 					buf.WriteByte(';')

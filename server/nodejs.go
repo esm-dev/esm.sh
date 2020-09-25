@@ -15,16 +15,15 @@ import (
 	"strings"
 	"time"
 
-	"github.com/postui/postdb"
-
 	"github.com/ije/gox/utils"
+	"github.com/postui/postdb"
 	"github.com/postui/postdb/q"
 )
 
 const (
 	minNodejsVersion = 12
 	nodejsLatestLTS  = "12.18.4"
-	dlURI            = "https://nodejs.org/dist/"
+	nodejsDistURL    = "https://nodejs.org/dist/"
 	refreshDuration  = 10 * 60 // 10 minues
 )
 
@@ -155,7 +154,7 @@ func getNodejsVersion() (version string, major int, err error) {
 }
 
 func installNodejs(dir string, version string) (err error) {
-	dlURL := fmt.Sprintf("%sv%s/node-v%s-%s-x64.tar.xz", dlURI, version, version, runtime.GOOS)
+	dlURL := fmt.Sprintf("%sv%s/node-v%s-%s-x64.tar.xz", nodejsDistURL, version, version, runtime.GOOS)
 	resp, err := http.Get(dlURL)
 	if err != nil {
 		err = fmt.Errorf("download nodejs: %v", err)
