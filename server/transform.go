@@ -317,19 +317,6 @@ func copyDTS(nodeModulesDir string, saveDir string, dts string) (err error) {
 	return
 }
 
-func isValidatedESImportPath(importPath string) bool {
-	return strings.HasPrefix(importPath, "/") || strings.HasPrefix(importPath, "./") || strings.HasPrefix(importPath, "../")
-}
-
-func startsWith(s string, prefixs ...string) bool {
-	for _, prefix := range prefixs {
-		if strings.HasPrefix(s, prefix) {
-			return true
-		}
-	}
-	return false
-}
-
 func onSemicolon(data []byte, atEOF bool) (advance int, token []byte, err error) {
 	for i := 0; i < len(data); i++ {
 		if data[i] == ';' {

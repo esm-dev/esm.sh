@@ -55,10 +55,6 @@ type buildResult struct {
 	single     bool
 }
 
-// https://esm.sh/bundle-4b6226feeorfljizaklr6kklrzah7kaw.js
-// https://esm.sh/react@16.13.1/es2015/react.development.js
-// https://esm.sh/react-dom@16.13.1/es2015/react-dom.development.js
-// https://esm.sh/react-dom@16.13.1/es2015/server.development.js
 func build(storageDir string, options buildOptions) (ret buildResult, err error) {
 	buildLock.Lock()
 	defer buildLock.Unlock()

@@ -10,6 +10,19 @@ const (
 	EOL = "\n"
 )
 
+func isValidatedESImportPath(importPath string) bool {
+	return strings.HasPrefix(importPath, "/") || strings.HasPrefix(importPath, "./") || strings.HasPrefix(importPath, "../")
+}
+
+func startsWith(s string, prefixs ...string) bool {
+	for _, prefix := range prefixs {
+		if strings.HasPrefix(s, prefix) {
+			return true
+		}
+	}
+	return false
+}
+
 func ensureExt(path string, ext string) string {
 	if !strings.HasSuffix(path, ext) {
 		return path + ext
