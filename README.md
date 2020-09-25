@@ -51,7 +51,7 @@ import React from 'https://esm.sh/react' // actual from 'https://esm.sh/[react,r
 ⚠️ The packages in url are litmited up to **10**, to bundle more packages, please use esmm client.
 
 
-## Client
+## Client for deno
 ```bash
 # install esmm command
 deno install --allow-read --allow-write --allow-net -n esmm https://deno.land/x/esmm/cli.ts
