@@ -2,7 +2,7 @@
 
 host="$1"
 if [ "$host" == "" ]; then
-    read -p "please enter the server hostname or ip to deploy: " h
+    read -p "please enter the host address: " h
     if [ "$h" != "" ]; then
         host="$h"
     fi
@@ -14,7 +14,7 @@ if [ "$host" == "" ]; then
 fi
 
 loginUser="root"
-read -p "please enter the host ssh login user (default is 'root'): " user
+read -p "please enter the host ssh user (default is 'root'): " user
 if [ "$user" != "" ]; then
     loginUser="$user"
 fi
@@ -44,7 +44,7 @@ if [ "$init" == "yes" ]; then
     if [ "$p" != "" ]; then
         httpsPort="$p"
     fi
-    read -p "please enter the etc directory, user ${loginUser} should have r/w permission (default is ${etcDir}): " p
+    read -p "please enter the etc directory, user ${loginUser} must have r/w permission of it(default is ${etcDir}): " p
     if [ "$p" != "" ]; then
         etcDir="$p"
     fi
@@ -55,7 +55,7 @@ if [ "$init" == "yes" ]; then
 fi
 
 sh $(dirname $0)/build.sh
-if [ "$?" != "0" ]; then 
+if [ "$?" != "0" ]; then
     exit
 fi
 
@@ -92,7 +92,7 @@ ssh -p $hostSSHPort $loginUser@$host << EOF
         writeSVConfLine "directory=/tmp"
         writeSVConfLine "user=$loginUser"
         writeSVConfLine "autostart=true"
-        writeSVConfLine "autorestart=true"        
+        writeSVConfLine "autorestart=true"
         supervisorctl reload
     else
         supervisorctl start esmd
