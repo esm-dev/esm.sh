@@ -24,7 +24,7 @@ import (
 const (
 	minNodejsVersion = 12
 	nodejsLatestLTS  = "12.18.4"
-	dlURI            = "https://npm.taobao.org/mirrors/node/"
+	dlURI            = "https://nodejs.org/dist/"
 	refreshDuration  = 10 * 60 // 10 minues
 )
 
