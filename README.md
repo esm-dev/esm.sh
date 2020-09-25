@@ -51,7 +51,7 @@ import React from 'https://esm.sh/react' // actual from 'https://esm.sh/[react,r
 ⚠️ The packages in url are litmited up to **10**, to bundle more packages, please use esmm client.
 
 
-## ESMM Client
+## Client
 ```bash
 # install esmm command
 deno install --allow-read --allow-write --allow-net -n esmm https://deno.land/x/esmm/cli.ts
@@ -74,8 +74,11 @@ $ esmm -h
 ```
 
 ## Self-Hosting
+
 You will need [Go](https://golang.org/dl) 1.14+ to compile the server, and ensure the [supervisor](http://supervisord.org/) installed on your host machine.
+
+The server runtime will check the nodejs installation (12+) or install the latest LTS version automatically.
+
 ```bash
 $ sh ./scripts/deploy.sh
 ```
-The server runtime will check the nodejs installation (12+) or install the latest LTS version automatically.
