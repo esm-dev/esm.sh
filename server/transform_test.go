@@ -20,7 +20,7 @@ func TestToRequire(t *testing.T) {
 		`} from 'react';`,
 		``,
 		`import { default as Anchor } from './anchor';`,
-		`import { default as AutoComplete } from './auto-complete';import { default as Alert , AlertOptions } from './alert';`,
+		`import { default as AutoComplete } from './auto-complete';export { default as Alert , AlertOptions } from './alert';`,
 		`/* avatar */ import { default as Avatar } from '../avatar';`,
 	}
 	expect := []string{
@@ -34,7 +34,7 @@ func TestToRequire(t *testing.T) {
 		`} = require('react');`,
 		``,
 		`const { default: Anchor } = require('./anchor');`,
-		`const { default: AutoComplete } = require('./auto-complete');const { default: Alert , AlertOptions } = require('./alert');`,
+		`const { default: AutoComplete } = require('./auto-complete');export const { default: Alert , AlertOptions } = require('./alert');`,
 		`/* avatar */ const { default: Avatar } = require('../avatar');`,
 	}
 

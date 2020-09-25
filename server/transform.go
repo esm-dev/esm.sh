@@ -22,8 +22,8 @@ func toRequire(code []byte) (output []byte) {
 	buf := bytes.NewBuffer(nil)
 	scanner := bufio.NewScanner(bytes.NewReader(code))
 	commentScope := false
-	importScope := false
-	importDestructionScope := false
+	importExportScope := false
+	destructionScope := false
 	for scanner.Scan() {
 		text := scanner.Text()
 		pure := strings.TrimSpace(text)
@@ -58,29 +58,32 @@ func toRequire(code []byte) (output []byte) {
 				exp := strings.TrimSpace(text)
 				buf.WriteString(text[:strings.Index(text, exp)])
 				if exp != "" {
-					if importScope || startsWith(exp, "import ", "import{") {
-						importScope = true
-						if importDestructionScope || strings.ContainsRune(exp, '{') {
-							if !importDestructionScope {
+					if importExportScope || startsWith(exp, "import ", "import{", "export ", "export{") {
+						importExportScope = true
+						if destructionScope || strings.ContainsRune(exp, '{') {
+							if !destructionScope {
 								a, b := utils.SplitByFirstByte(exp, '{')
 								exp = a + "{" + reAsExpression.ReplaceAllString(b, "$1: $2")
 							} else {
 								exp = reAsExpression.ReplaceAllString(exp, "$1: $2")
 							}
-							importDestructionScope = true
+							destructionScope = true
 							end := strings.ContainsRune(exp, '}')
 							if end {
 								a, b := utils.SplitByFirstByte(exp, '}')
 								exp = reAsExpression.ReplaceAllString(a, "$1: $2") + "}" + b
-								importDestructionScope = false
+								destructionScope = false
 							}
 						}
 						if strings.HasPrefix(exp, "import") {
 							exp = "const" + strings.TrimPrefix(exp, "import")
 						}
+						if strings.HasPrefix(exp, "export") {
+							exp = "export const" + strings.TrimPrefix(exp, "export")
+						}
 						end := reFromExpression.MatchString(exp)
 						if end {
-							importScope = false
+							importExportScope = false
 							sp := "'"
 							a := strings.Split(exp, sp)
 							if len(a) != 3 {
@@ -105,8 +108,8 @@ func toRequire(code []byte) (output []byte) {
 						buf.WriteString(exp)
 					}
 				}
-				if i > 0 && importScope {
-					importScope = false
+				if i > 0 && importExportScope {
+					importExportScope = false
 				}
 				i++
 			}
