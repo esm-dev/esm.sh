@@ -74,7 +74,7 @@ func build(storageDir string, options buildOptions) (ret buildResult, err error)
 		pkg := options.packages[0]
 		filename := path.Base(pkg.name)
 		if pkg.submodule != "" {
-			filename = pkg.submodule
+			filename = path.Join(pkg.submodule, path.Base(pkg.submodule))
 		}
 		if options.dev {
 			filename += ".development"
@@ -179,6 +179,8 @@ func build(storageDir string, options buildOptions) (ret buildResult, err error)
 		}
 		if independent {
 			installList = append(installList, name)
+		}
+		if ret.single {
 			independentPackages[name] = "latest"
 		}
 	}
@@ -197,6 +199,28 @@ func build(storageDir string, options buildOptions) (ret buildResult, err error)
 	err = yarnAdd(installList...)
 	if err != nil {
 		return
+	}
+
+	// parse submodule peer dependencies
+	singleIndependentSubmodule := false
+	if ret.single {
+		pkg := options.packages[0]
+		if pkg.submodule != "" {
+			var p NpmPackage
+			if utils.ParseJSONFile(path.Join(buildDir, "node_modules", pkg.name, pkg.submodule, "package.json"), &p) == nil {
+				singleIndependentSubmodule = true
+				for name := range p.PeerDependencies {
+					independentPackages[name] = "latest"
+				}
+				err = utils.CopyDir(
+					path.Join(buildDir, "node_modules", pkg.name, pkg.submodule),
+					path.Join(buildDir, "node_modules", identify(pkg.name+"/"+pkg.submodule)),
+				)
+				if err != nil {
+					return
+				}
+			}
+		}
 	}
 
 	codeBuf := bytes.NewBuffer(nil)
@@ -257,11 +281,14 @@ func build(storageDir string, options buildOptions) (ret buildResult, err error)
 
 	codeBuf = bytes.NewBuffer(nil)
 	for _, m := range options.packages {
-		importName := m.ImportPath()
+		importPath := m.ImportPath()
 		if ret.single {
-			fmt.Fprintf(codeBuf, `export * as default from "%s";`, importName)
+			if singleIndependentSubmodule {
+				importPath = identify(importPath)
+			}
+			fmt.Fprintf(codeBuf, `export * as default from "%s";`, importPath)
 		} else {
-			fmt.Fprintf(codeBuf, `export * as %s from "%s";`, identify(importName), importName)
+			fmt.Fprintf(codeBuf, `export * as %s from "%s";`, identify(importPath), importPath)
 		}
 	}
 
@@ -346,8 +373,10 @@ esbuild:
 		fmt.Fprintf(jsContentBuf, `%s%s%s`, indent, strings.Join(esModules, fmt.Sprintf(",%s%s", eol, indent)), eol)
 		fmt.Fprintf(jsContentBuf, `};%s`, eol)
 		fmt.Fprintf(jsContentBuf, `var require = name => __esModules[name];%s`, eol)
+		jsContentBuf.Write(toRequire(result.OutputFiles[0].Contents))
+	} else {
+		jsContentBuf.Write(result.OutputFiles[0].Contents)
 	}
-	jsContentBuf.Write(result.OutputFiles[0].Contents)
 
 	saveFilePath := path.Join(storageDir, "builds", ret.buildID+".js")
 	ensureDir(path.Dir(saveFilePath))
