@@ -13,11 +13,10 @@ import (
 func registerAPI(storageDir string, cdnDomain string) {
 	rex.Query("*", func(ctx *rex.Context) interface{} {
 		pathname := utils.CleanPath(ctx.R.URL.Path)
-		if pathname == "/" {
+		switch pathname {
+		case "/":
 			return rex.HTML(indexHTML)
-		}
-
-		if pathname == "/favicon.ico" {
+		case "/favicon.ico":
 			return 404
 		}
 
