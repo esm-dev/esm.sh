@@ -44,7 +44,7 @@ if [ "$init" == "yes" ]; then
     if [ "$p" != "" ]; then
         httpsPort="$p"
     fi
-    read -p "please enter the etc directory, user ${loginUser} must have r/w permission of it(default is ${etcDir}): " p
+    read -p "please enter the etc directory, user ${loginUser} must have r/w permission of it (default is ${etcDir}): " p
     if [ "$p" != "" ]; then
         etcDir="$p"
     fi
