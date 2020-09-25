@@ -119,8 +119,8 @@ func registerAPI(storageDir string, cdnDomain string) {
 		if !hasDefaultExport {
 			fmt.Fprintf(buf, `export default %s;%s`, importIdentifier, EOL)
 		}
-		if importMeta.Types != "" {
-			ctx.SetHeader("X-TypeScript-Types", "/"+importMeta.Types)
+		if importMeta.TypesPath != "" {
+			ctx.SetHeader("X-TypeScript-Types", importMeta.TypesPath)
 		}
 		return rex.Content(importIdentifier+".js", time.Now(), bytes.NewReader(buf.Bytes()))
 	})

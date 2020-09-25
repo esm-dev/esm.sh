@@ -148,10 +148,22 @@ func copyDTS(nodeModulesDir string, saveDir string, dts string) (err error) {
 		if isValidatedESImportPath(importPath) && !strings.HasSuffix(importPath, ".d.ts") {
 			fi, err := os.Lstat(path.Join(dtsDir, importPath, "index.d.ts"))
 			if err == nil && !fi.IsDir() {
-				importPath = importPath + "/index.d.ts"
+				importPath = strings.TrimSuffix(importPath, "/") + "/index.d.ts"
 			} else {
-				importPath += ".d.ts"
+				packageJSONFile := path.Join(dtsDir, importPath, "package.json")
+				fi, err := os.Lstat(packageJSONFile)
+				if err == nil && !fi.IsDir() {
+					var p NpmPackage
+					if utils.ParseJSONFile(packageJSONFile, &p) == nil {
+						types := getTypesPath(p)
+						if types != "" {
+							_, typespath := utils.SplitByFirstByte(types, '/')
+							importPath = strings.TrimSuffix(importPath, "/") + "/" + typespath
+						}
+					}
+				}
 			}
+			importPath = ensureExt(importPath, ".d.ts")
 		} else {
 			maybePackage, subpath := utils.SplitByFirstByte(importPath, '/')
 			if strings.HasPrefix(maybePackage, "@") {

@@ -39,8 +39,9 @@ var buildLock sync.Mutex
 
 // ImportMeta defines import meta
 type ImportMeta struct {
-	Exports []string `json:"exports"`
 	NpmPackage
+	Exports   []string `json:"exports"`
+	TypesPath string   `json:"typespath"`
 }
 
 type buildOptions struct {
@@ -51,7 +52,7 @@ type buildOptions struct {
 
 type buildResult struct {
 	buildID    string
-	importMeta map[string]ImportMeta
+	importMeta map[string]*ImportMeta
 	single     bool
 }
 
@@ -70,7 +71,7 @@ func build(storageDir string, options buildOptions) (ret buildResult, err error)
 		pkg := options.packages[0]
 		filename := path.Base(pkg.name)
 		if pkg.submodule != "" {
-			filename = path.Join(pkg.submodule, path.Base(pkg.submodule))
+			filename = pkg.submodule
 		}
 		if options.dev {
 			filename += ".development"
@@ -113,7 +114,7 @@ func build(storageDir string, options buildOptions) (ret buildResult, err error)
 	}
 
 	start := time.Now()
-	importMeta := map[string]ImportMeta{}
+	importMeta := map[string]*ImportMeta{}
 	peerDependencies := map[string]struct{}{}
 	for _, pkg := range options.packages {
 		var p NpmPackage
@@ -121,34 +122,21 @@ func build(storageDir string, options buildOptions) (ret buildResult, err error)
 		if err != nil {
 			return
 		}
-		meta := ImportMeta{
-			NpmPackage: NpmPackage{
-				Name:             p.Name,
-				Version:          p.Version,
-				Dependencies:     p.Dependencies,
-				PeerDependencies: p.PeerDependencies,
-			},
+		meta := &ImportMeta{
+			NpmPackage: p,
 		}
 		for name := range p.PeerDependencies {
 			peerDependencies[name] = struct{}{}
 		}
-		if p.Types != "" || p.Typings != "" {
-			meta.Types = getTypesPath(p)
-		} else {
-			if !strings.HasPrefix(pkg.name, "@") {
-				info, err := nodeEnv.getPackageInfo("@types/"+pkg.name, "latest")
-				if err == nil {
-					types := getTypesPath(info)
-					if types != "" {
-						meta.Types = types
-						installList = append(installList, fmt.Sprintf("%s@%s", info.Name, info.Version))
-					}
-				} else if err.Error() != fmt.Sprintf("npm: package '@types/%s' not found", pkg.name) {
-					return ret, err
+		if meta.Types == "" && meta.Typings == "" && !strings.HasPrefix(pkg.name, "@") {
+			var info NpmPackage
+			info, err = nodeEnv.getPackageInfo("@types/"+pkg.name, "latest")
+			if err == nil {
+				if info.Types != "" || info.Typings != "" || info.Main != "" {
+					installList = append(installList, fmt.Sprintf("%s@%s", info.Name, info.Version))
 				}
-			}
-			if meta.Types == "" && p.Main != "" {
-				meta.Types = getTypesPath(p)
+			} else if err.Error() != fmt.Sprintf("npm: package '@types/%s' not found", pkg.name) {
+				return
 			}
 		}
 		importMeta[pkg.ImportPath()] = meta
@@ -198,23 +186,24 @@ func build(storageDir string, options buildOptions) (ret buildResult, err error)
 	}
 
 	// parse submodule peer dependencies
-	singleIndependentSubmodule := false
+	var singleIndependentSubmodule *NpmPackage
 	if ret.single {
 		pkg := options.packages[0]
 		if pkg.submodule != "" {
 			var p NpmPackage
 			if utils.ParseJSONFile(path.Join(buildDir, "node_modules", pkg.name, pkg.submodule, "package.json"), &p) == nil {
-				singleIndependentSubmodule = true
-				for name := range p.PeerDependencies {
-					independentPackages[name] = "latest"
-				}
+				// copy submodule to node_modules dir since the esbuild external will ignore the submodule too
 				err = utils.CopyDir(
 					path.Join(buildDir, "node_modules", pkg.name, pkg.submodule),
-					path.Join(buildDir, "node_modules", identify(pkg.name+"/"+pkg.submodule)),
+					path.Join(buildDir, "node_modules", identify(pkg.ImportPath())),
 				)
 				if err != nil {
 					return
 				}
+				for name := range p.PeerDependencies {
+					independentPackages[name] = "latest"
+				}
+				singleIndependentSubmodule = &p
 			}
 		}
 	}
@@ -257,19 +246,39 @@ func build(storageDir string, options buildOptions) (ret buildResult, err error)
 	for name, meta := range m {
 		_meta, ok := importMeta[name]
 		if ok {
-			importMeta[name] = ImportMeta{
-				NpmPackage: _meta.NpmPackage,
-				Exports:    meta.Exports,
-			}
+			_meta.Exports = meta.Exports
 		}
 	}
 
 	start = time.Now()
-	for _, meta := range importMeta {
-		if meta.Types != "" {
-			err = copyDTS(path.Join(buildDir, "node_modules"), path.Join(storageDir, "types"), meta.Types)
-			if err != nil {
-				return
+	for _, pkg := range options.packages {
+		if pkg.submodule == "" || singleIndependentSubmodule != nil {
+			var types string
+			meta := importMeta[pkg.ImportPath()]
+			if singleIndependentSubmodule != nil {
+				types = getTypesPath(*singleIndependentSubmodule)
+				if types != "" {
+					_, typespath := utils.SplitByFirstByte(types, '/')
+					types = fmt.Sprintf("%s@%s/%s", meta.Name, meta.Version, path.Join(pkg.submodule, typespath))
+				}
+			} else if meta.Types == "" && meta.Typings == "" && !strings.HasPrefix(pkg.name, "@") {
+				var info NpmPackage
+				err = utils.ParseJSONFile(path.Join(buildDir, "node_modules", "@types/"+pkg.name, "package.json"), &info)
+				if err == nil {
+					types = getTypesPath(info)
+				} else if !os.IsNotExist(err) {
+					return
+				}
+			}
+			if types == "" {
+				types = getTypesPath(meta.NpmPackage)
+			}
+			if types != "" {
+				err = copyDTS(path.Join(buildDir, "node_modules"), path.Join(storageDir, "types"), types)
+				if err != nil {
+					return
+				}
+				meta.TypesPath = "/" + types
 			}
 		}
 	}
@@ -279,7 +288,7 @@ func build(storageDir string, options buildOptions) (ret buildResult, err error)
 	for _, m := range options.packages {
 		importPath := m.ImportPath()
 		if ret.single {
-			if singleIndependentSubmodule {
+			if singleIndependentSubmodule != nil {
 				importPath = identify(importPath)
 			}
 			fmt.Fprintf(codeBuf, `export * as default from "%s";`, importPath)
