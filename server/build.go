@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"crypto/sha1"
 	"encoding/base32"
-	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -17,6 +16,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/ije/gox/crypto/rs"
 
 	"github.com/evanw/esbuild/pkg/api"
 	"github.com/ije/gox/utils"
@@ -72,6 +73,9 @@ func build(storageDir string, options buildOptions) (ret buildResult, err error)
 	if ret.single {
 		pkg := options.packages[0]
 		filename := path.Base(pkg.name)
+		if pkg.submodule != "" {
+			filename = pkg.submodule
+		}
 		if options.dev {
 			filename += ".development"
 		}
@@ -181,7 +185,7 @@ func build(storageDir string, options buildOptions) (ret buildResult, err error)
 
 	log.Debugf("parse importMeta in %v", time.Now().Sub(start))
 
-	buildDir := path.Join(os.TempDir(), "esmd-build", base64.URLEncoding.EncodeToString([]byte(ret.buildID)))
+	buildDir := path.Join(os.TempDir(), "esmd-build", rs.Hex.String(16))
 	ensureDir(buildDir)
 	defer os.RemoveAll(buildDir)
 

@@ -41,7 +41,7 @@ func registerAPI(storageDir string, cdnDomain string) {
 
 		currentModule, err := parseModule(pathname)
 		if err != nil {
-			return throwErrorJs(err)
+			return throwErrorJS(err)
 		}
 
 		var packages moduleSlice
@@ -50,7 +50,7 @@ func registerAPI(storageDir string, cdnDomain string) {
 			for _, dep := range strings.Split(bundleList, ",") {
 				m, err := parseModule(strings.TrimSpace(dep))
 				if err != nil {
-					return throwErrorJs(err)
+					return throwErrorJS(err)
 				}
 				if !containsPackage && m.Equels(*currentModule) {
 					containsPackage = true
@@ -58,10 +58,10 @@ func registerAPI(storageDir string, cdnDomain string) {
 				packages = append(packages, *m)
 			}
 			if len(packages) > 10 {
-				return throwErrorJs(fmt.Errorf("too many packages in the bundle list, up to 10 but get %d", len(packages)))
+				return throwErrorJS(fmt.Errorf("too many packages in the bundle list, up to 10 but get %d", len(packages)))
 			}
 			if !containsPackage {
-				return throwErrorJs(fmt.Errorf("package '%s' not found in the bundle list", currentModule.ImportPath()))
+				return throwErrorJS(fmt.Errorf("package '%s' not found in the bundle list", currentModule.ImportPath()))
 			}
 		} else {
 			packages = moduleSlice{*currentModule}
@@ -77,7 +77,7 @@ func registerAPI(storageDir string, cdnDomain string) {
 			dev:      !ctx.Form.IsNil("dev"),
 		})
 		if err != nil {
-			return throwErrorJs(err)
+			return throwErrorJS(err)
 		}
 
 		if currentModule.name == "" {
@@ -87,7 +87,7 @@ func registerAPI(storageDir string, cdnDomain string) {
 		importPath := currentModule.ImportPath()
 		importMeta, ok := ret.importMeta[importPath]
 		if !ok {
-			return throwErrorJs(fmt.Errorf("package '%s' not found in bundle", importPath))
+			return throwErrorJS(fmt.Errorf("package '%s' not found in bundle", importPath))
 		}
 
 		var exports []string
@@ -126,7 +126,10 @@ func registerAPI(storageDir string, cdnDomain string) {
 	})
 }
 
-func throwErrorJs(err error) interface{} {
-	message := fmt.Sprintf(`throw new Error("[esm.sh] " + %s);`, strings.TrimSpace(string(utils.MustEncodeJSON(err.Error()))))
-	return rex.Content("error.js", time.Now(), bytes.NewReader([]byte(message)))
+func throwErrorJS(err error) interface{} {
+	buf := bytes.NewBuffer(nil)
+	fmt.Fprintf(buf, `/* esm.sh - error */%s`, EOL)
+	fmt.Fprintf(buf, `throw new Error("[esm.sh] " + %s);%s`, strings.TrimSpace(string(utils.MustEncodeJSON(err.Error()))), EOL)
+	fmt.Fprintf(buf, `export default null;%s`, EOL)
+	return rex.Content("error.js", time.Now(), bytes.NewReader(buf.Bytes()))
 }
