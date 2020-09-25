@@ -146,13 +146,11 @@ func copyDTS(nodeModulesDir string, saveDir string, dts string) (err error) {
 	deps := map[string]struct{}{}
 	rewritePath := func(importPath string) string {
 		if isValidatedESImportPath(importPath) && !strings.HasSuffix(importPath, ".d.ts") {
-			fi, err := os.Lstat(path.Join(dtsDir, importPath, "index.d.ts"))
-			if err == nil && !fi.IsDir() {
+			if fileExists(path.Join(dtsDir, importPath, "index.d.ts")) {
 				importPath = strings.TrimSuffix(importPath, "/") + "/index.d.ts"
 			} else {
 				packageJSONFile := path.Join(dtsDir, importPath, "package.json")
-				fi, err := os.Lstat(packageJSONFile)
-				if err == nil && !fi.IsDir() {
+				if fileExists(packageJSONFile) {
 					var p NpmPackage
 					if utils.ParseJSONFile(packageJSONFile, &p) == nil {
 						types := getTypesPath(p)
@@ -172,12 +170,10 @@ func copyDTS(nodeModulesDir string, saveDir string, dts string) (err error) {
 				subpath = s
 			}
 			packageJSONFile := path.Join(nodeModulesDir, "@types", maybePackage, "package.json")
-			fi, err := os.Lstat(packageJSONFile)
-			if err != nil && os.IsNotExist(err) {
+			if !fileExists(packageJSONFile) {
 				packageJSONFile = path.Join(nodeModulesDir, maybePackage, "package.json")
-				fi, err = os.Lstat(packageJSONFile)
 			}
-			if err == nil && !fi.IsDir() {
+			if fileExists(packageJSONFile) {
 				var p NpmPackage
 				if utils.ParseJSONFile(packageJSONFile, &p) == nil {
 					if subpath != "" {

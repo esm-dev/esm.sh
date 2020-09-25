@@ -23,6 +23,15 @@ func startsWith(s string, prefixs ...string) bool {
 	return false
 }
 
+func endsWith(s string, suffixs ...string) bool {
+	for _, suffix := range suffixs {
+		if strings.HasSuffix(s, suffix) {
+			return true
+		}
+	}
+	return false
+}
+
 func ensureExt(path string, ext string) string {
 	if !strings.HasSuffix(path, ext) {
 		return path + ext
@@ -36,4 +45,9 @@ func ensureDir(dir string) (err error) {
 		err = os.MkdirAll(dir, 0755)
 	}
 	return
+}
+
+func fileExists(filepath string) bool {
+	fi, err := os.Lstat(filepath)
+	return err == nil && !fi.IsDir()
 }

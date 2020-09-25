@@ -18,17 +18,26 @@ func registerAPI(storageDir string, cdnDomain string) {
 			return rex.HTML(indexHTML)
 		}
 
+		var storageType string
 		switch path.Ext(pathname) {
 		case ".js":
-			return rex.File(path.Join(storageDir, "builds", pathname))
+			storageType = "builds"
 		case ".ts":
 			if strings.HasSuffix(pathname, ".d.ts") {
-				ctx.SetHeader("Content-Type", "application/typescript; charset=utf-8")
-				return rex.File(path.Join(storageDir, "types", pathname))
+				storageType = "types"
 			}
 			fallthrough
-		case ".json", ".jsx", ".tsx", ".css", ".less", ".sass", ".scss", "stylus", "styl", ".wasm":
-			return rex.File(path.Join(storageDir, "raw", pathname))
+		case ".json", ".jsx", ".tsx", ".css", ".less", ".sass", ".scss", ".stylus", ".styl", ".wasm":
+			storageType = "raw"
+		}
+		if storageType != "" {
+			fp := path.Join(storageDir, storageType, pathname)
+			if fileExists(fp) {
+				if storageType == "types" {
+					ctx.SetHeader("Content-Type", "application/typescript; charset=utf-8")
+				}
+				return rex.File(fp)
+			}
 		}
 
 		var bundleList string
@@ -39,7 +48,38 @@ func registerAPI(storageDir string, cdnDomain string) {
 			}
 		}
 
-		currentModule, err := parseModule(pathname)
+		target := strings.ToLower(strings.TrimSpace(ctx.Form.Value("target")))
+		if _, ok := targets[target]; !ok {
+			target = "esnext"
+		}
+		isDev := !ctx.Form.IsNil("dev")
+
+		var currentModule *module
+		var isBare bool
+		var err error
+		if bundleList == "" && endsWith(pathname, ".js") {
+			currentModule, err = parseModule(pathname)
+			if err == nil && !endsWith(currentModule.name, ".js") {
+				a := strings.Split(currentModule.submodule, "/")
+				if len(a) > 1 {
+					if _, ok := targets[a[0]]; ok || a[0] == "esnext" {
+						submodule := strings.TrimSuffix(strings.Join(a[1:], "/"), ".js")
+						if endsWith(submodule, ".development") {
+							submodule = strings.TrimSuffix(submodule, ".development")
+							isDev = true
+						}
+						if submodule == path.Base(currentModule.name) {
+							submodule = ""
+						}
+						currentModule.submodule = submodule
+						target = a[0]
+						isBare = true
+					}
+				}
+			}
+		} else {
+			currentModule, err = parseModule(pathname)
+		}
 		if err != nil {
 			return throwErrorJS(err)
 		}
@@ -67,20 +107,21 @@ func registerAPI(storageDir string, cdnDomain string) {
 			packages = moduleSlice{*currentModule}
 		}
 
-		target := strings.ToLower(strings.TrimSpace(ctx.Form.Value("target")))
-		if _, ok := targets[target]; !ok {
-			target = "esnext"
-		}
 		ret, err := build(storageDir, buildOptions{
 			packages: packages,
 			target:   target,
-			dev:      !ctx.Form.IsNil("dev"),
+			dev:      isDev,
 		})
 		if err != nil {
 			return throwErrorJS(err)
 		}
 
-		if currentModule.name == "" {
+		if isBare {
+			fp := path.Join(storageDir, "builds", pathname)
+			return rex.File(fp)
+		}
+
+		if bundleList != "" && currentModule.name == "" {
 			return ret.importMeta
 		}
 
