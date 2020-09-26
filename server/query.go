@@ -139,13 +139,13 @@ func registerAPI(storageDir string, cdnDomain string) {
 		}
 
 		var exports []string
-		hasDefaultExport := false
+		var hasDefaultExport bool
 		for _, name := range importMeta.Exports {
+			if name != "import" {
+				exports = append(exports, name)
+			}
 			if name == "default" {
 				hasDefaultExport = true
-				break
-			} else if name != "import" {
-				exports = append(exports, name)
 			}
 		}
 

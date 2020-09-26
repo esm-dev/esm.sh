@@ -10,18 +10,31 @@ const indexHTML = `<!DOCTYPE html>
 <body>
     <main><em>Loading...</em></main>
     <script type="module">
-        import React from '/react?dev'
-        import ReactDom from '/react-dom?dev'
+        import { useState, createElement as h } from '/react?dev'
+        import { render } from '/react-dom?dev'
+        // import { render, h } from '/preact?dev'
+        // import { useState } from '/preact/hooks?dev'
 
-        ReactDom.render(
-            React.createElement('div', null,
-                React.createElement('h1', null, 'ESM'),
-                React.createElement('p', null,
-                    React.createElement('a', { href: "https://github.com/postui/esmm" }, "github")
+        function App() {
+            const [count, setCount] = useState(0)
+
+            return h('div', null,
+                h('h1', null, 'ESM'),
+                h('p', null, 'A fast, global content delivery network and package manager for ES Modules.'),
+                h('p', null,
+                    h('button', { onClick: () => setCount(n => n-1) }, '-'),
+                    ' ',
+                    h('span', null, count),
+                    ' ',
+                    h('button', { onClick: () => setCount(n => n+1) }, '+')
                 ),
-            ),
-            document.querySelector('main')
-        )
+                h('p', null,
+                    h('a', { href: 'https://github.com/postui/esmm' }, 'Github')
+                ),
+            )
+        }
+
+        render(h(App), document.querySelector('main'))
     </script>
 </body>
 </html>

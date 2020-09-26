@@ -20,12 +20,11 @@ var (
 	reReferenceTag   = regexp.MustCompile(`^<reference\s+(path|types)\s*=\s*('|")([^'"]+)("|')\s*/>$`)
 )
 
-func toRequire(code []byte) (output []byte) {
+func rewriteImportPath(code []byte, rewriteFn func(string) string) (output []byte) {
 	buf := bytes.NewBuffer(nil)
 	scanner := bufio.NewScanner(bytes.NewReader(code))
 	commentScope := false
 	importExportScope := false
-	destructionScope := false
 	for scanner.Scan() {
 		text := scanner.Text()
 		pure := strings.TrimSpace(text)
@@ -60,45 +59,22 @@ func toRequire(code []byte) (output []byte) {
 				exp := strings.TrimSpace(text)
 				buf.WriteString(text[:strings.Index(text, exp)])
 				if exp != "" {
-					if importExportScope || startsWith(exp, "import ", "import{", "export ", "export{") {
+					if importExportScope || startsWith(exp, "import ", "export ", "import{", "export{") {
 						importExportScope = true
-						if destructionScope || strings.ContainsRune(exp, '{') {
-							if !destructionScope {
-								a, b := utils.SplitByFirstByte(exp, '{')
-								exp = a + "{" + reAsExpression.ReplaceAllString(b, "$1: $2")
-							} else {
-								exp = reAsExpression.ReplaceAllString(exp, "$1: $2")
-							}
-							destructionScope = true
-							end := strings.ContainsRune(exp, '}')
-							if end {
-								a, b := utils.SplitByFirstByte(exp, '}')
-								exp = reAsExpression.ReplaceAllString(a, "$1: $2") + "}" + b
-								destructionScope = false
-							}
-						}
-						if strings.HasPrefix(exp, "import") {
-							exp = "const" + strings.TrimPrefix(exp, "import")
-						}
-						if strings.HasPrefix(exp, "export") {
-							exp = "export const" + strings.TrimPrefix(exp, "export")
-						}
 						end := reFromExpression.MatchString(exp)
 						if end {
 							importExportScope = false
-							sp := "'"
-							a := strings.Split(exp, sp)
+							q := "'"
+							a := strings.Split(exp, q)
 							if len(a) != 3 {
-								sp = `"`
-								a = strings.Split(exp, sp)
+								q = `"`
+								a = strings.Split(exp, q)
 							}
 							if len(a) == 3 {
-								buf.WriteString(strings.TrimSuffix(strings.TrimSpace(a[0]), "from"))
-								buf.WriteString("= require(")
-								buf.WriteString(sp)
-								buf.WriteString(a[1])
-								buf.WriteString(sp)
-								buf.WriteByte(')')
+								buf.WriteString(a[0])
+								buf.WriteString(q)
+								buf.WriteString(rewriteFn(a[1]))
+								buf.WriteString(q)
 								buf.WriteString(a[2])
 							} else {
 								buf.WriteString(exp)
@@ -149,7 +125,7 @@ func copyDTS(nodeModulesDir string, saveDir string, dts string) (err error) {
 	}
 
 	deps := map[string]struct{}{}
-	rewritePath := func(importPath string) string {
+	rewriteFn := func(importPath string) string {
 		if isValidatedESImportPath(importPath) && !strings.HasSuffix(importPath, ".d.ts") {
 			if fileExists(path.Join(dtsDir, importPath, "index.d.ts")) {
 				importPath = strings.TrimSuffix(importPath, "/") + "/index.d.ts"
@@ -236,7 +212,7 @@ func copyDTS(nodeModulesDir string, saveDir string, dts string) (err error) {
 						path = "./" + path
 					}
 				}
-				buf.WriteString(fmt.Sprintf(`/// <reference %s="%s" />`, format, rewritePath(path)))
+				buf.WriteString(fmt.Sprintf(`/// <reference %s="%s" />`, format, rewriteFn(path)))
 			} else {
 				buf.WriteString(pure)
 			}
@@ -259,17 +235,17 @@ func copyDTS(nodeModulesDir string, saveDir string, dts string) (err error) {
 						end := reFromExpression.MatchString(exp)
 						if end {
 							importExportScope = false
-							sp := "'"
-							a := strings.Split(exp, sp)
+							q := "'"
+							a := strings.Split(exp, q)
 							if len(a) != 3 {
-								sp = `"`
-								a = strings.Split(exp, sp)
+								q = `"`
+								a = strings.Split(exp, q)
 							}
 							if len(a) == 3 {
 								buf.WriteString(a[0])
-								buf.WriteString(sp)
-								buf.WriteString(rewritePath(a[1]))
-								buf.WriteString(sp)
+								buf.WriteString(q)
+								buf.WriteString(rewriteFn(a[1]))
+								buf.WriteString(q)
 								buf.WriteString(a[2])
 							} else {
 								buf.WriteString(exp)

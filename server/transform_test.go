@@ -22,25 +22,32 @@ func TestToRequire(t *testing.T) {
 		`import { default as Anchor } from './anchor';`,
 		`import { default as AutoComplete } from './auto-complete';export { default as Alert , AlertOptions } from './alert';`,
 		`/* avatar */ import { default as Avatar } from '../avatar';`,
+		`export {a as b, c};`,
 	}
 	expect := []string{
 		`// dts test`,
 		`/// <reference path="global.d.ts" />`,
 		``,
-		`const {`,
+		`import {`,
 		`    ReactInstance, Component, ComponentState,`,
-		`    ReactElement, SFCElement, CElement: CE,`,
+		`    ReactElement, SFCElement, CElement as CE,`,
 		`    DOMAttributes, DOMElement, ReactNode, ReactPortal`,
-		`} = require('react');`,
+		`} from '/react@16.13.1/react.js';`,
 		``,
-		`const { default: Anchor } = require('./anchor');`,
-		`const { default: AutoComplete } = require('./auto-complete');export const { default: Alert , AlertOptions } = require('./alert');`,
-		`/* avatar */ const { default: Avatar } = require('../avatar');`,
+		`import { default as Anchor } from './anchor';`,
+		`import { default as AutoComplete } from './auto-complete';export { default as Alert , AlertOptions } from './alert';`,
+		`/* avatar */ import { default as Avatar } from '../avatar';`,
+		`export {a as b, c};`,
 	}
 
-	data := toRequire([]byte(strings.Join(raw, "\n")))
+	data := rewriteImportPath([]byte(strings.Join(raw, "\n")), func(importPath string) string {
+		if importPath == "react" {
+			return "/react@16.13.1/react.js"
+		}
+		return importPath
+	})
 	if strings.TrimSpace(string(data)) != strings.Join(expect, "\n") {
-		t.Fatal("unexpected index.d.ts", string(data))
+		t.Fatalf("unexpected index.d.ts\n%s", string(data))
 	}
 }
 

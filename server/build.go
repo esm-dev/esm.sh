@@ -141,30 +141,28 @@ func build(storageDir string, options buildOptions) (ret buildResult, err error)
 		importMeta[pkg.ImportPath()] = meta
 	}
 
-	independentPackages := map[string]string{}
+	peerPackages := map[string]string{}
 	for name := range peerDependencies {
-		independent := true
+		peer := true
 		for _, pkg := range options.packages {
 			if pkg.name == name {
-				independent = false
+				peer = false
 				break
 			}
 		}
-		if independent {
+		if peer {
 			for _, meta := range importMeta {
 				for dep := range meta.Dependencies {
 					if dep == name {
-						independent = false
+						peer = false
 						break
 					}
 				}
 			}
 		}
-		if independent {
+		if peer {
+			peerPackages[name] = "latest"
 			installList = append(installList, name)
-		}
-		if ret.single {
-			independentPackages[name] = "latest"
 		}
 	}
 
@@ -182,29 +180,6 @@ func build(storageDir string, options buildOptions) (ret buildResult, err error)
 	err = yarnAdd(installList...)
 	if err != nil {
 		return
-	}
-
-	// parse submodule peer dependencies
-	var singleIndependentSubmodule *NpmPackage
-	if ret.single {
-		pkg := options.packages[0]
-		if pkg.submodule != "" {
-			var p NpmPackage
-			if utils.ParseJSONFile(path.Join(buildDir, "node_modules", pkg.name, pkg.submodule, "package.json"), &p) == nil {
-				// copy submodule to node_modules dir since the esbuild external will ignore the submodule too
-				err = utils.CopyDir(
-					path.Join(buildDir, "node_modules", pkg.name, pkg.submodule),
-					path.Join(buildDir, "node_modules", identify(pkg.ImportPath())),
-				)
-				if err != nil {
-					return
-				}
-				for name := range p.PeerDependencies {
-					independentPackages[name] = "latest"
-				}
-				singleIndependentSubmodule = &p
-			}
-		}
 	}
 
 	codeBuf := bytes.NewBuffer(nil)
@@ -250,17 +225,12 @@ func build(storageDir string, options buildOptions) (ret buildResult, err error)
 	}
 
 	start = time.Now()
-	for _, pkg := range options.packages {
-		if pkg.submodule == "" || singleIndependentSubmodule != nil {
-			var types string
-			meta := importMeta[pkg.ImportPath()]
-			if singleIndependentSubmodule != nil {
-				types = getTypesPath(*singleIndependentSubmodule)
-				if types != "" {
-					_, typespath := utils.SplitByFirstByte(types, '/')
-					types = fmt.Sprintf("%s@%s/%s", meta.Name, meta.Version, path.Join(pkg.submodule, typespath))
-				}
-			} else if meta.Types == "" && meta.Typings == "" && !strings.HasPrefix(pkg.name, "@") {
+	for i, pkg := range options.packages {
+		var types string
+		meta := importMeta[pkg.ImportPath()]
+		nv := fmt.Sprintf("%s@%s", meta.Name, meta.Version)
+		if pkg.submodule == "" {
+			if meta.Types == "" && meta.Typings == "" && !strings.HasPrefix(pkg.name, "@") {
 				var info NpmPackage
 				err = utils.ParseJSONFile(path.Join(buildDir, "node_modules", "@types/"+pkg.name, "package.json"), &info)
 				if err == nil {
@@ -272,44 +242,90 @@ func build(storageDir string, options buildOptions) (ret buildResult, err error)
 			if types == "" {
 				types = getTypesPath(meta.NpmPackage)
 			}
-			if types != "" {
-				err = copyDTS(path.Join(buildDir, "node_modules"), path.Join(storageDir, "types"), types)
-				if err != nil {
-					return
+		} else {
+			var p NpmPackage
+			err = utils.ParseJSONFile(path.Join(buildDir, "node_modules", pkg.name, pkg.submodule, "package.json"), &p)
+			if err == nil {
+				var tp string
+				if p.Types != "" {
+					tp = p.Types
+				} else if p.Typings != "" {
+					tp = p.Typings
+				} else if p.Main != "" {
+					tp = strings.TrimSuffix(p.Main, ".js")
 				}
-				meta.TypesPath = "/" + types
+				if tp != "" {
+					types = fmt.Sprintf("%s/%s", nv, ensureExt(path.Join(pkg.submodule, tp), ".d.ts"))
+				}
+				if p.PeerDependencies != nil {
+					_, ok := p.PeerDependencies[meta.Name]
+					if ok {
+						// copy submodule to node_modules dir since the esbuild external will ignore the submodule too
+						err = utils.CopyDir(
+							path.Join(buildDir, "node_modules", pkg.name, pkg.submodule),
+							path.Join(buildDir, "node_modules", identify(pkg.ImportPath())),
+						)
+						if err != nil {
+							return
+						}
+						options.packages[i] = module{
+							name:    identify(pkg.ImportPath()),
+							version: pkg.version,
+						}
+					}
+					for name := range p.PeerDependencies {
+						peerPackages[name] = "latest"
+					}
+				}
 			}
+			if types == "" {
+				if fileExists(path.Join(buildDir, "node_modules", pkg.name, pkg.submodule, "index.d.ts")) {
+					types = fmt.Sprintf("%s/%s", nv, path.Join(pkg.submodule, "index.d.ts"))
+				} else if fileExists(path.Join(buildDir, "node_modules", pkg.name, ensureExt(pkg.submodule, ".d.ts"))) {
+					types = fmt.Sprintf("%s/%s", nv, ensureExt(pkg.submodule, ".d.ts"))
+				} else if fileExists(path.Join(buildDir, "node_modules/@types", pkg.name, pkg.submodule, "index.d.ts")) {
+					types = fmt.Sprintf("@types/%s/%s", nv, path.Join(pkg.submodule, "index.d.ts"))
+				} else if fileExists(path.Join(buildDir, "node_modules/@types", pkg.name, ensureExt(pkg.submodule, ".d.ts"))) {
+					types = fmt.Sprintf("@types/%s/%s", nv, ensureExt(pkg.submodule, ".d.ts"))
+				}
+			}
+		}
+		if types != "" {
+			err = copyDTS(path.Join(buildDir, "node_modules"), path.Join(storageDir, "types"), types)
+			if err != nil {
+				return
+			}
+			meta.TypesPath = "/" + types
 		}
 	}
 	log.Debug("copy dts in", time.Now().Sub(start))
 
 	codeBuf = bytes.NewBuffer(nil)
-	for _, m := range options.packages {
-		importPath := m.ImportPath()
-		if ret.single {
-			if singleIndependentSubmodule != nil {
-				importPath = identify(importPath)
-			}
-			fmt.Fprintf(codeBuf, `export * as default from "%s";`, importPath)
-		} else {
+	if ret.single {
+		pkg := options.packages[0]
+		importPath := pkg.ImportPath()
+		fmt.Fprintf(codeBuf, `export * from "%s";`, importPath)
+		fmt.Fprintf(codeBuf, `export * as default from "%s";`, importPath)
+	} else {
+		for _, pkg := range options.packages {
+			importPath := pkg.ImportPath()
 			fmt.Fprintf(codeBuf, `export * as %s from "%s";`, identify(importPath), importPath)
 		}
 	}
-
 	err = ioutil.WriteFile(path.Join(buildDir, "bundle.js"), codeBuf.Bytes(), 0644)
 	if err != nil {
 		return
 	}
 
-	externals := make([]string, len(independentPackages))
+	externals := make([]string, len(peerPackages))
 	i := 0
-	for name := range independentPackages {
+	for name := range peerPackages {
 		var p NpmPackage
 		err = utils.ParseJSONFile(path.Join(buildDir, "node_modules", name, "package.json"), &p)
 		if err != nil {
 			return
 		}
-		independentPackages[name] = p.Version
+		peerPackages[name] = p.Version
 		externals[i] = name
 		i++
 	}
@@ -357,14 +373,14 @@ esbuild:
 
 	jsContentBuf := bytes.NewBuffer(nil)
 	fmt.Fprintf(jsContentBuf, `/* esm.sh - esbuild bundle(%s) %s %s */%s`, options.packages.String(), strings.ToLower(options.target), env, EOL)
-	if len(independentPackages) > 0 {
+	if len(peerPackages) > 0 {
 		var esModules []string
 		var eol, indent string
 		if options.dev {
 			indent = "  "
 			eol = EOL
 		}
-		for name, version := range independentPackages {
+		for name, version := range peerPackages {
 			identifier := identify(name)
 			filename := path.Base(name)
 			if options.dev {
@@ -377,7 +393,17 @@ esbuild:
 		fmt.Fprintf(jsContentBuf, `%s%s%s`, indent, strings.Join(esModules, fmt.Sprintf(",%s%s", eol, indent)), eol)
 		fmt.Fprintf(jsContentBuf, `};%s`, eol)
 		fmt.Fprintf(jsContentBuf, `var require = name => __esModules[name];%s`, eol)
-		jsContentBuf.Write(toRequire(result.OutputFiles[0].Contents))
+		jsContentBuf.Write(rewriteImportPath(result.OutputFiles[0].Contents, func(importPath string) string {
+			version, ok := peerPackages[importPath]
+			if ok {
+				filename := path.Base(importPath)
+				if options.dev {
+					filename += ".development"
+				}
+				return fmt.Sprintf("/%s@%s/%s/%s", importPath, version, options.target, ensureExt(filename, ".js"))
+			}
+			return importPath
+		}))
 	} else {
 		jsContentBuf.Write(result.OutputFiles[0].Contents)
 	}
@@ -434,16 +460,16 @@ func identify(importPath string) string {
 }
 
 func getTypesPath(p NpmPackage) string {
-	path := ""
+	types := ""
 	if p.Types != "" {
-		path = p.Types
+		types = p.Types
 	} else if p.Typings != "" {
-		path = p.Typings
+		types = p.Typings
 	} else if p.Main != "" {
-		path = strings.TrimSuffix(p.Main, ".js")
+		types = strings.TrimSuffix(p.Main, ".js")
 	}
-	if path != "" {
-		return fmt.Sprintf("%s@%s%s", p.Name, p.Version, ensureExt(utils.CleanPath(path), ".d.ts"))
+	if types != "" {
+		return fmt.Sprintf("%s@%s%s", p.Name, p.Version, ensureExt(path.Join("/", types), ".d.ts"))
 	}
 	return ""
 }
