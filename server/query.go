@@ -27,8 +27,9 @@ func registerAPI(storageDir string, cdnDomain string) {
 		case ".ts":
 			if strings.HasSuffix(pathname, ".d.ts") {
 				storageType = "types"
+			} else {
+				storageType = "raw"
 			}
-			fallthrough
 		case ".json", ".jsx", ".tsx", ".css", ".less", ".sass", ".scss", ".stylus", ".styl", ".wasm":
 			storageType = "raw"
 		}
