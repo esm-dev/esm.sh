@@ -1,4 +1,4 @@
-# ESMM
+# ESM
 A fast, global content delivery network and package manager for ES Modules. All modules are transformed to ESM by [esbuild](https://github.com/evanw/esbuild) from [npm](http://npmjs.org/).
 
 🚧 This project is work in progress.
@@ -54,23 +54,23 @@ import React from 'https://esm.sh/react' // actual from 'https://esm.sh/[react,r
 ## Client for deno
 ```bash
 # install esmm command
-deno install --allow-read --allow-write --allow-net -n esmm https://deno.land/x/esmm/cli.ts
+deno install --allow-read --allow-write --allow-net -n esm https://deno.land/x/esm/cli.ts
 
 # add some modules
-$ esmm add react react-dom
+$ esm add react react-dom
 
 # specify version or tag
-$ esmm add react@16.13.1
-$ esmm add react@next
+$ esm add react@16.13.1
+$ esm add react@next
 
 # remove some modules
-$ esmm remove lodash
+$ esm remove lodash
 
 # update installed modules
-$ aleph update
+$ esm update
 
 # help message
-$ esmm -h
+$ esm -h
 ```
 
 ## Self-Hosting
