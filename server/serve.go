@@ -27,23 +27,25 @@ func Serve() {
 	var port int
 	var httpsPort int
 	var etcDir string
+	var domain string
 	var cdnDomain string
-	var debug bool
+	var logLevel string
 	var dev bool
 
 	flag.IntVar(&port, "port", 80, "http server port")
 	flag.IntVar(&httpsPort, "https-port", 443, "https server port")
 	flag.StringVar(&etcDir, "etc-dir", "/usr/local/etc/esmd", "etc dir")
+	flag.StringVar(&domain, "domain", "esm.sh", "main domain")
 	flag.StringVar(&cdnDomain, "cdn-domain", "", "cdn domain")
-	flag.BoolVar(&debug, "debug", false, "run server in debug mode")
+	flag.StringVar(&logLevel, "log", "info", "log level")
 	flag.BoolVar(&dev, "dev", false, "run server in dev mode")
 	flag.Parse()
 
 	logDir := "/var/log/esmd"
 	if dev {
-		debug = true
 		etcDir, _ = filepath.Abs(".dev")
 		logDir = path.Join(etcDir, "log")
+		logLevel = "debug"
 	}
 
 	storageDir := path.Join(etcDir, "storage")
@@ -51,15 +53,13 @@ func Serve() {
 	ensureDir(path.Join(storageDir, "types"))
 	ensureDir(path.Join(storageDir, "raw"))
 
-	logger, err := logx.New(fmt.Sprintf("file:%s?buffer=32k", path.Join(logDir, "main.log")))
+	var err error
+	log, err = logx.New(fmt.Sprintf("file:%s?buffer=32k", path.Join(logDir, "main.log")))
 	if err != nil {
-		log.Fatalf("initiate logger: %v", err)
+		fmt.Printf("initiate logger: %v", err)
+		os.Exit(1)
 	}
-	log = logger
-	if !debug {
-		log.SetLevelByName("info")
-		log.SetQuite(true)
-	}
+	log.SetLevelByName(logLevel)
 
 	accessLogger, err := logx.New(fmt.Sprintf("file:%s?buffer=32k", path.Join(logDir, "access.log")))
 	if err != nil {
@@ -81,7 +81,7 @@ func Serve() {
 	rex.Use(
 		rex.ErrorLogger(log),
 		rex.AccessLogger(accessLogger),
-		rex.Header("Server", "esmd"),
+		rex.Header("Server", domain),
 		rex.Cors(rex.CORS{
 			AllowAllOrigins: true,
 			AllowMethods:    []string{"GET", "POST"},
@@ -96,10 +96,10 @@ func Serve() {
 		Port: uint16(port),
 		TLS: rex.TLSConfig{
 			Port:         uint16(httpsPort),
-			AutoRedirect: !debug,
+			AutoRedirect: !dev,
 			AutoTLS: rex.AutoTLSConfig{
-				AcceptTOS: !debug,
-				Hosts:     []string{"www.esm.sh", "esm.sh", "*.esm.sh", cdnDomain},
+				AcceptTOS: !dev,
+				Hosts:     []string{"www." + domain, domain, cdnDomain},
 				CacheDir:  path.Join(etcDir, "/cache/autotls"),
 			},
 		},
