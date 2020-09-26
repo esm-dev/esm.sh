@@ -48,10 +48,10 @@ or your can define bundle list in the `import-map.json` ([import-maps proposal](
 import React from 'https://esm.sh/react' // actual from 'https://esm.sh/[react,react-dom]/react'
 ```
 
-⚠️ The packages in url are litmited up to **10**, to bundle more packages, please use esmm client.
+⚠️ The packages in url are litmited up to **10**, to bundle more packages, please use esm client.
 
 
-## Client for deno
+## ESM Client in Deno
 ```bash
 # install esmm command
 deno install --allow-read --allow-write --allow-net -n esm https://deno.land/x/esm/cli.ts
