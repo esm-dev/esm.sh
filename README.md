@@ -71,6 +71,10 @@ $ esm update
 $ esm -h
 ```
 
+## X-Typescript-Types
+**esm.sh** will response a custom HTTP header of `X-TypeScript-Types` if the types defined, that is useful for deno types check.
+![figure #1](./assets/figure-1.png)
+
 ## Caveat
 Different with [Skypack](https://skypack.dev) and [jspm](https://jspm.org), **esm.sh** will bundle all dependencies(exclude peerDependencies) for each packages, that means there may be redundant contents transmitted when you are importing multiple packages.<br>
 This should be improved when the http/3(quic) is ready. For now the best practice is using the **bundle mode**.
