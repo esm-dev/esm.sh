@@ -311,7 +311,7 @@ const indexHTML = `<!DOCTYPE html>
 
         body{
             font-family: "Helvetica Neue", Helvetica, "Segoe UI", Arial, freesans, sans-serif;
-            font-size: 15px;
+            font-size: 16px;
             line-height: 1.5;
             word-wrap: break-word
         }
@@ -666,9 +666,14 @@ const indexHTML = `<!DOCTYPE html>
         h2, h3 {
             color: #222;
         }
+        h1 strong {
+            display: inline-block;
+            vertical-align: middle;
+        }
         h1 a {
             position: relative;
             display: inline-block;
+            vertical-align: middle;
             width: 27px;
             height: 27px;
             margin-left: 6px;
