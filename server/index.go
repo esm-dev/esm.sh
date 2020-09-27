@@ -320,7 +320,7 @@ const indexHTML = `<!DOCTYPE html>
             background-repeat: no-repeat;
             background-position: right center;
             border: 1px solid #ccc;
-            border-radius: 3px;
+            border-radius: 5px;
             outline: none;
             box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.075)
         }
@@ -366,7 +366,7 @@ const indexHTML = `<!DOCTYPE html>
             color: #fff;
             background: #9c2400;
             border: 0;
-            border-radius: 3px;
+            border-radius: 5px;
             -webkit-box-shadow: 1px 1px 1px rgba(0, 0, 0, 0.1)
         }
 
@@ -385,14 +385,6 @@ const indexHTML = `<!DOCTYPE html>
             font-size: 16px;
             line-height: 1.5;
             word-wrap: break-word
-        }
-
-        body>*:first-child {
-            margin-top: 0 !important
-        }
-
-        body>*:last-child {
-            margin-bottom: 0 !important
         }
 
         .absent {
@@ -611,7 +603,7 @@ const indexHTML = `<!DOCTYPE html>
             max-width: 100%%;
             -moz-box-sizing: border-box;
             box-sizing: border-box;
-            border-radius: 6px;
+            border-radius: 5px;
         }
 
         span.frame {
@@ -710,7 +702,7 @@ const indexHTML = `<!DOCTYPE html>
             margin: 0;
             font-size: 85%%;
             background-color: rgba(0, 0, 0, 0.04);
-            border-radius: 3px
+            border-radius: 5px
         }
 
         code:before,
@@ -752,7 +744,7 @@ const indexHTML = `<!DOCTYPE html>
             font-size: 85%%;
             line-height: 1.45;
             background-color: #f8f8f8;
-            border-radius: 3px
+            border-radius: 5px
         }
 
         .highlight pre {
@@ -787,12 +779,23 @@ const indexHTML = `<!DOCTYPE html>
     <style>
         /* esm.sh */
 
-        h1 {
+        h1, h2, h3 {
             color: #111;
+            font-weight: 500;
         }
 
-        h2, h3 {
-            color: #222;
+        h1 {
+            margin-top: 2.1em;
+            font-size: 2.1em;
+            font-weight:600;
+        }
+
+        h2 {
+            font-size: 1.5em;
+        }
+
+        h3 {
+            font-size: 1.2em;
         }
 
         h1 strong {
@@ -806,8 +809,8 @@ const indexHTML = `<!DOCTYPE html>
             vertical-align: middle;
             width: 27px;
             height: 27px;
-            margin-left: 6px;
-            color: #666;
+            margin-left: 12px;
+            color: #555;
         }
 
         h1 a svg {
