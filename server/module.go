@@ -1,6 +1,7 @@
 package server
 
 import (
+	"regexp"
 	"strings"
 
 	"github.com/ije/gox/utils"
@@ -11,6 +12,8 @@ type module struct {
 	version   string
 	submodule string
 }
+
+var reFullVersion = regexp.MustCompile(`^\d+\.\d+\.\d+$`)
 
 func parseModule(pathname string) (*module, error) {
 	a := strings.Split(strings.Trim(pathname, "/"), "/")
@@ -29,12 +32,16 @@ func parseModule(pathname string) (*module, error) {
 	if scope != "" {
 		name = scope + "/" + name
 	}
-	if name != "" && version == "" {
-		info, err := nodeEnv.getPackageInfo(name, "latest")
-		if err != nil {
-			return nil, err
+	if name != "" {
+		if version == "" {
+			info, err := nodeEnv.getPackageInfo(name, "latest")
+			if err != nil {
+				return nil, err
+			}
+			version = info.Version
+		} else if !reFullVersion.MatchString(version) {
+			// todo: get real version
 		}
-		version = info.Version
 	}
 	return &module{
 		name:      name,

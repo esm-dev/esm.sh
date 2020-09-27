@@ -736,24 +736,26 @@ const indexHTML = `<!DOCTYPE html>
         hljs.registerLanguage('bash', bash);
         hljs.initHighlighting();
 
-        document.getElementById('test').style.display="block";
+        if (location.hostname === 'localhost') {
+            document.querySelector('#test').style.display = "block";
+        }
     </script>
     <script type="module">
         import { createElement } from '/react';
         import { render } from '/react-dom';
 
-        render(createElement('span', null, '✅'), document.getElementById('react'));
+        render(createElement('span', null, '✅'), document.querySelector('#react'));
     </script>
     <script type="module">
         import { createElement } from '/[react,react-dom]/react';
         import { render } from '/[react,react-dom]/react-dom';
 
-        render(createElement('span', null, '✅'), document.getElementById('reactb'));
+        render(createElement('span', null, '✅'), document.querySelector('#reactb'));
     </script>
     <script type="module">
         import { h, render } from '/preact';
 
-        const el = document.getElementById('preact');
+        const el = document.querySelector('#preact');
         el.innerHTML = '';
         render(h('span', null, '✅'), el);
     </script>
@@ -768,7 +770,7 @@ const indexHTML = `<!DOCTYPE html>
         });
     </script>
     <script type="module">
-        import { createApp, h } from '/vue@next';
+        import { createApp, h } from '/vue@3.0.0';
 
         createApp({
             render() {
