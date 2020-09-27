@@ -30,7 +30,7 @@ func Serve() {
 	var domain string
 	var cdnDomain string
 	var logLevel string
-	var dev bool
+	var isDev bool
 
 	flag.IntVar(&port, "port", 80, "http server port")
 	flag.IntVar(&httpsPort, "https-port", 443, "https server port")
@@ -38,11 +38,11 @@ func Serve() {
 	flag.StringVar(&domain, "domain", "esm.sh", "main domain")
 	flag.StringVar(&cdnDomain, "cdn-domain", "", "cdn domain")
 	flag.StringVar(&logLevel, "log", "info", "log level")
-	flag.BoolVar(&dev, "dev", false, "run server in dev mode")
+	flag.BoolVar(&isDev, "dev", false, "run server in development mode")
 	flag.Parse()
 
 	logDir := "/var/log/esmd"
-	if dev {
+	if isDev {
 		etcDir, _ = filepath.Abs(".dev")
 		logDir = path.Join(etcDir, "log")
 		logLevel = "debug"
@@ -90,15 +90,15 @@ func Serve() {
 		}),
 	)
 
-	registerAPI(storageDir, cdnDomain)
+	registerAPI(storageDir, cdnDomain, isDev)
 
 	rex.Serve(rex.ServerConfig{
 		Port: uint16(port),
 		TLS: rex.TLSConfig{
 			Port:         uint16(httpsPort),
-			AutoRedirect: !dev,
+			AutoRedirect: !isDev,
 			AutoTLS: rex.AutoTLSConfig{
-				AcceptTOS: !dev,
+				AcceptTOS: !isDev,
 				Hosts:     []string{"www." + domain, domain, cdnDomain},
 				CacheDir:  path.Join(etcDir, "/cache/autotls"),
 			},

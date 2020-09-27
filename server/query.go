@@ -3,6 +3,7 @@ package server
 import (
 	"bytes"
 	"fmt"
+	"os"
 	"path"
 	"strings"
 
@@ -10,12 +11,22 @@ import (
 	"github.com/ije/rex"
 )
 
-func registerAPI(storageDir string, cdnDomain string) {
+func registerAPI(storageDir string, cdnDomain string, isDev bool) {
 	rex.Query("*", func(ctx *rex.Context) interface{} {
 		pathname := utils.CleanPath(ctx.R.URL.Path)
 		switch pathname {
 		case "/":
 			return rex.HTML(indexHTML)
+		case "/readme.md":
+			if isDev {
+				wd, err := os.Getwd()
+				if err != nil {
+					return err
+				}
+				return rex.File(path.Join(wd, "README.md"))
+			}
+			ctx.SetHeader("Content-Type", "text/markdown; charset=utf-8")
+			return readmemd
 		case "/favicon.ico":
 			return 404
 		}
@@ -139,23 +150,27 @@ func registerAPI(storageDir string, cdnDomain string) {
 			return throwErrorJS(ctx, fmt.Errorf("package '%s' not found in bundle", importPath))
 		}
 
-		var exports []string
-		var hasDefaultExport bool
-		for _, name := range importMeta.Exports {
-			if name != "import" {
-				exports = append(exports, name)
-			}
-			if name == "default" {
-				hasDefaultExport = true
-			}
-		}
-
 		buf := bytes.NewBuffer(nil)
 		importIdentifier := identify(importPath)
 		importPrefix := "/"
 		if cdnDomain != "" {
 			importPrefix = fmt.Sprintf("https://%s/", cdnDomain)
 		}
+
+		var exports []string
+		var hasDefaultExport bool
+		for _, name := range importMeta.Exports {
+			if name != "import" {
+				exports = append(exports, name)
+			}
+			if importIdentifier == name {
+				importIdentifier += "_default"
+			}
+			if name == "default" {
+				hasDefaultExport = true
+			}
+		}
+
 		fmt.Fprintf(buf, `/* esm.sh - %v */%s`, currentModule, EOL)
 		if ret.single {
 			fmt.Fprintf(buf, `import %s from "%s%s.js";%s`, importIdentifier, importPrefix, ret.buildID, EOL)
