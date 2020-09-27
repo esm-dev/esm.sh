@@ -18,8 +18,8 @@ const indexHTML = `<!DOCTYPE html>
         @charset "UTF-8";
         html {
             font-family: sans-serif;
-            -ms-text-size-adjust: 100%;
-            -webkit-text-size-adjust: 100%
+            -ms-text-size-adjust: 100%%;
+            -webkit-text-size-adjust: 100%%
         }
 
         body {
@@ -75,11 +75,11 @@ const indexHTML = `<!DOCTYPE html>
         }
 
         small {
-            font-size: 80%
+            font-size: 80%%
         }
 
         sub,sup {
-            font-size: 75%;
+            font-size: 75%%;
             line-height: 0;
             position: relative;
             vertical-align: baseline
@@ -213,7 +213,7 @@ const indexHTML = `<!DOCTYPE html>
             padding: 30px;
             max-width: 900px;
             margin: 0 auto;
-            font: 13px/1.4 Helvetica, arial, freesans, clean, sans-serif, "Segoe UI Emoji", "Segoe UI Symbol";
+            font: 14px/1.4 Helvetica, arial, freesans, clean, sans-serif, "Segoe UI Emoji", "Segoe UI Symbol";
             color: #333;
             background-color: #fff
         }
@@ -311,8 +311,8 @@ const indexHTML = `<!DOCTYPE html>
 
         body{
             font-family: "Helvetica Neue", Helvetica, "Segoe UI", Arial, freesans, sans-serif;
-            font-size: 16px;
-            line-height: 1.6;
+            font-size: 15px;
+            line-height: 1.5;
             word-wrap: break-word
         }
 
@@ -407,7 +407,7 @@ const indexHTML = `<!DOCTYPE html>
 
         p,blockquote,ul,ol,dl,table,pre {
             margin-top: 0;
-            margin-bottom: 16px
+            margin-bottom: 12px
         }
 
         hr {
@@ -469,7 +469,7 @@ const indexHTML = `<!DOCTYPE html>
 
         table {
             display: block;
-            width: 100%;
+            width: 100%%;
             overflow: auto;
             word-break: normal;
             word-break: keep-all
@@ -494,7 +494,7 @@ const indexHTML = `<!DOCTYPE html>
         }
 
         img {
-            max-width: 100%;
+            max-width: 100%%;
             -moz-box-sizing: border-box;
             box-sizing: border-box
         }
@@ -592,7 +592,7 @@ const indexHTML = `<!DOCTYPE html>
             padding-top: 0.2em;
             padding-bottom: 0.2em;
             margin: 0;
-            font-size: 85%;
+            font-size: 85%%;
             background-color: rgba(0,0,0,0.04);
             border-radius: 3px
         }
@@ -614,7 +614,7 @@ const indexHTML = `<!DOCTYPE html>
         pre>code {
             padding: 0;
             margin: 0;
-            font-size: 100%;
+            font-size: 100%%;
             word-break: normal;
             white-space: pre;
             background: transparent;
@@ -628,7 +628,7 @@ const indexHTML = `<!DOCTYPE html>
         .highlight pre,pre {
             padding: 16px;
             overflow: auto;
-            font-size: 85%;
+            font-size: 85%%;
             line-height: 1.45;
             background-color: #f6f8fa;
             border-radius: 3px
@@ -671,7 +671,7 @@ const indexHTML = `<!DOCTYPE html>
             display: inline-block;
             width: 27px;
             height: 27px;
-            margin-left: 18px;
+            margin-left: 6px;
             color: #666;
         }
         h1 a svg {
@@ -688,26 +688,24 @@ const indexHTML = `<!DOCTYPE html>
     </style>
 </head>
 <body>
+    <h1>
+        <strong>ESM</strong>
+        <a href="https://github.com/postui/esm.sh">
+            <svg fill="currentColor" viewBox="0 0 24 24">
+            <title>Github</title>
+            <path fill-rule="evenodd" d="M12 2C6.477 2 2 6.484 2 12.017c0 4.425 2.865 8.18 6.839 9.504.5.092.682-.217.682-.483 0-.237-.008-.868-.013-1.703-2.782.605-3.369-1.343-3.369-1.343-.454-1.158-1.11-1.466-1.11-1.466-.908-.62.069-.608.069-.608 1.003.07 1.531 1.032 1.531 1.032.892 1.53 2.341 1.088 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.113-4.555-4.951 0-1.093.39-1.988 1.029-2.688-.103-.253-.446-1.272.098-2.65 0 0 .84-.27 2.75 1.026A9.564 9.564 0 0112 6.844c.85.004 1.705.115 2.504.337 1.909-1.296 2.747-1.027 2.747-1.027.546 1.379.202 2.398.1 2.651.64.7 1.028 1.595 1.028 2.688 0 3.848-2.339 4.695-4.566 4.943.359.309.678.92.678 1.855 0 1.338-.012 2.419-.012 2.747 0 .268.18.58.688.482A10.019 10.019 0 0022 12.017C22 6.484 17.522 2 12 2z" clip-rule="evenodd"></path>
+            </svg>
+        </a>
+    </h1>
     <main><em style="color: #999;">Loading...</em></main>
     <script type="module">
         import marked from '/marked'
-
-        fetch('/readme.md').then(resp => resp.text()).then(readme => {
-            const mainEl = document.querySelector('main')
-            const readmeEl = document.createElement('div')
-            readmeEl.className = 'readme'
-            readmeEl.innerHTML = marked.parse(readme)
-            mainEl.removeChild(mainEl.firstElementChild)
-            mainEl.appendChild(readmeEl)
-            const h1 = readmeEl.querySelector('h1')
-            const a = document.createElement('a')
-            a.href="https://github.com/postui/esm.sh"
-            a.innerHTML = '<svg fill="currentColor" viewBox="0 0 24 24"><title>Github | ESM</title><path fill-rule="evenodd" d="M12 2C6.477 2 2 6.484 2 12.017c0 4.425 2.865 8.18 6.839 9.504.5.092.682-.217.682-.483 0-.237-.008-.868-.013-1.703-2.782.605-3.369-1.343-3.369-1.343-.454-1.158-1.11-1.466-1.11-1.466-.908-.62.069-.608.069-.608 1.003.07 1.531 1.032 1.531 1.032.892 1.53 2.341 1.088 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.113-4.555-4.951 0-1.093.39-1.988 1.029-2.688-.103-.253-.446-1.272.098-2.65 0 0 .84-.27 2.75 1.026A9.564 9.564 0 0112 6.844c.85.004 1.705.115 2.504.337 1.909-1.296 2.747-1.027 2.747-1.027.546 1.379.202 2.398.1 2.651.64.7 1.028 1.595 1.028 2.688 0 3.848-2.339 4.695-4.566 4.943.359.309.678.92.678 1.855 0 1.338-.012 2.419-.012 2.747 0 .268.18.58.688.482A10.019 10.019 0 0022 12.017C22 6.484 17.522 2 12 2z" clip-rule="evenodd"></path></svg>'
-            h1.appendChild(a)
-        })
+        const mainEl = document.querySelector('main')
+        mainEl.innerHTML = marked.parse(%s)
+        mainEl.removeChild(mainEl.querySelector('h1'))
     </script>
 </body>
 </html>
 `
 
-var readmemd string
+var readmeMD string

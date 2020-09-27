@@ -3,6 +3,7 @@ package server
 import (
 	"flag"
 	"fmt"
+	"io/ioutil"
 	"os"
 	"path"
 	"path/filepath"
@@ -48,7 +49,10 @@ func Serve() {
 		logLevel = "debug"
 		wd, err := os.Getwd()
 		if err == nil {
-			readmemd = path.Join(wd, "README.md")
+			data, err := ioutil.ReadFile(path.Join(wd, "README.md"))
+			if err == nil {
+				readmeMD = string(data)
+			}
 		}
 	}
 

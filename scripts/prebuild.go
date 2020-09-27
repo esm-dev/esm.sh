@@ -21,7 +21,7 @@ func main() {
 	err = ioutil.WriteFile(path.Join(root, "server", "readme_md.go"), []byte(strings.Join([]string{
 		"package server",
 		"func init() {",
-		"    readmemd = " + strings.TrimSpace(string(utils.MustEncodeJSON(string(readme)))),
+		"    readmeMD = " + strings.TrimSpace(string(utils.MustEncodeJSON(string(readme)))),
 		"}",
 	}, "\n")), 0644)
 	if err != nil {
