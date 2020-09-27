@@ -64,7 +64,7 @@ $ esm add react@next
 # remove some modules
 $ esm remove lodash
 
-# update installed modules
+# update installed modules to latest version
 $ esm update
 
 # help message
@@ -78,7 +78,7 @@ This should be improved when the http/3(quic) is ready. For now the best practic
 ## Self-Hosting
 
 You will need [Go](https://golang.org/dl) 1.14+ to compile the server, and ensure the [supervisor](http://supervisord.org/) installed on your host machine.<br>
-The server runtime will check the nodejs installation (12+) or install the latest LTS version automatically.
+The server runtime will check the nodejs installation (12+) exists or install the latest LTS version automatically.
 
 ```bash
 $ git clone https://github.com/postui/esm.sh
