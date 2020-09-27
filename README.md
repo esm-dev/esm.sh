@@ -51,7 +51,7 @@ import React from 'https://esm.sh/react' // actual from 'https://esm.sh/[react,r
 
 ## ESM Client in Deno [WIP]
 ```bash
-# install esmm command
+# install esm command
 deno install --allow-read --allow-write --allow-net -n esm https://deno.land/x/esm/cli.ts
 
 # add some modules
