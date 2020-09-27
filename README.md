@@ -1,8 +1,6 @@
 # ESM
 A fast, global content delivery network and package manager for ES Modules. All modules are transformed to ESM by [esbuild](https://github.com/evanw/esbuild) from [npm](http://npmjs.org/).
 
-🚧 This project is work in progress.
-
 ## Import from URL
 ```javascript
 import React from 'https://esm.sh/react'
@@ -80,5 +78,7 @@ You will need [Go](https://golang.org/dl) 1.14+ to compile the server, and ensur
 The server runtime will check the nodejs installation (12+) or install the latest LTS version automatically.
 
 ```bash
+$ git clone https://github.com/postui/esm.sh
+$ cd esm.sh
 $ sh ./scripts/deploy.sh
 ```
