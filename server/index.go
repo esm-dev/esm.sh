@@ -15,6 +15,7 @@ const indexHTML = `<!DOCTYPE html>
         Author: hzlzh(hzlzh.dev@gmail.com)
         URL: https://github.com/hzlzh/Mou-Theme
         */
+
         @charset "UTF-8";
         html {
             font-family: sans-serif;
@@ -704,10 +705,10 @@ const indexHTML = `<!DOCTYPE html>
     </h1>
     <main><em style="color: #999;">Loading...</em></main>
     <script type="module">
-        import marked from '/marked'
-        const mainEl = document.querySelector('main')
-        mainEl.innerHTML = marked.parse(%s)
-        mainEl.removeChild(mainEl.querySelector('h1'))
+        import marked from '/marked';
+        const mainEl = document.querySelector('main');
+        mainEl.innerHTML = marked.parse(%s);
+        mainEl.removeChild(mainEl.querySelector('h1'));
     </script>
 </body>
 </html>

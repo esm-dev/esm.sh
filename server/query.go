@@ -18,7 +18,7 @@ func registerAPI(storageDir string, cdnDomain string, isDev bool) {
 		pathname := utils.CleanPath(ctx.R.URL.Path)
 		switch pathname {
 		case "/":
-			mdStr := string(utils.MustEncodeJSON(readmeMD))
+			mdStr := strings.TrimSpace(string(utils.MustEncodeJSON(readmeMD)))
 			return rex.Content("index.html", start, bytes.NewReader([]byte(fmt.Sprintf(indexHTML, mdStr))))
 		case "/favicon.ico":
 			return 404
