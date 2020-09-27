@@ -610,7 +610,8 @@ const indexHTML = `<!DOCTYPE html>
         img {
             max-width: 100%%;
             -moz-box-sizing: border-box;
-            box-sizing: border-box
+            box-sizing: border-box;
+            border-radius: 6px;
         }
 
         span.frame {
@@ -867,6 +868,13 @@ const indexHTML = `<!DOCTYPE html>
         hljs.registerLanguage('json', json);
         hljs.registerLanguage('bash', bash);
         hljs.initHighlighting();
+
+        mainEl.querySelectorAll('img').forEach(img => {
+            const src = img.getAttribute('src')
+            if (src.startsWith('./assets/')) {
+                img.src = 'https://raw.githubusercontent.com/postui/esm.sh/master/' + src.replace('./', '')
+            }
+        })
 
         if (location.hostname === 'localhost') {
             document.querySelector('.test').style.display = "block";
