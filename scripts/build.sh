@@ -12,7 +12,13 @@ if [ "$val" != "" ]; then
     goarch="$val"
 fi
 
-echo "--- compiling(${goos}_$goarch)..."
+echo "--- prebuild..."
+go run $(dirname $0)/prebuild.go $(dirname $0)
+if [ "$?" != "0" ]; then
+    exit
+fi
+
+echo "--- building(${goos}_$goarch)..."
 export GOOS=$goos
 export GOARCH=$goarch
 go build -o esmd $(dirname $0)/../main.go

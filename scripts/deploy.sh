@@ -99,4 +99,5 @@ ssh -p $hostSSHPort $loginUser@$host << EOF
     fi
 EOF
 
+rm -f server/readme_md.go
 rm -f esmd
