@@ -631,7 +631,7 @@ const indexHTML = `<!DOCTYPE html>
             overflow: auto;
             font-size: 85%%;
             line-height: 1.45;
-            background-color: #f6f8fa;
+            background-color: #f8f8f8;
             border-radius: 3px
         }
 
@@ -691,24 +691,90 @@ const indexHTML = `<!DOCTYPE html>
         h1 a:hover {
            color: #000;
         }
+        #test {
+            display: none;
+        }
+        #test p {
+            display: inline-block;
+        }
     </style>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/highlightjs/cdn-release@10.1.2/build/styles/github.min.css" />
 </head>
 <body>
     <h1>
         <strong>ESM</strong>
         <a href="https://github.com/postui/esm.sh">
             <svg fill="currentColor" viewBox="0 0 24 24">
-            <title>Github</title>
-            <path fill-rule="evenodd" d="M12 2C6.477 2 2 6.484 2 12.017c0 4.425 2.865 8.18 6.839 9.504.5.092.682-.217.682-.483 0-.237-.008-.868-.013-1.703-2.782.605-3.369-1.343-3.369-1.343-.454-1.158-1.11-1.466-1.11-1.466-.908-.62.069-.608.069-.608 1.003.07 1.531 1.032 1.531 1.032.892 1.53 2.341 1.088 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.113-4.555-4.951 0-1.093.39-1.988 1.029-2.688-.103-.253-.446-1.272.098-2.65 0 0 .84-.27 2.75 1.026A9.564 9.564 0 0112 6.844c.85.004 1.705.115 2.504.337 1.909-1.296 2.747-1.027 2.747-1.027.546 1.379.202 2.398.1 2.651.64.7 1.028 1.595 1.028 2.688 0 3.848-2.339 4.695-4.566 4.943.359.309.678.92.678 1.855 0 1.338-.012 2.419-.012 2.747 0 .268.18.58.688.482A10.019 10.019 0 0022 12.017C22 6.484 17.522 2 12 2z" clip-rule="evenodd"></path>
+                <title>Github</title>
+                <path fill-rule="evenodd" d="M12 2C6.477 2 2 6.484 2 12.017c0 4.425 2.865 8.18 6.839 9.504.5.092.682-.217.682-.483 0-.237-.008-.868-.013-1.703-2.782.605-3.369-1.343-3.369-1.343-.454-1.158-1.11-1.466-1.11-1.466-.908-.62.069-.608.069-.608 1.003.07 1.531 1.032 1.531 1.032.892 1.53 2.341 1.088 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.113-4.555-4.951 0-1.093.39-1.988 1.029-2.688-.103-.253-.446-1.272.098-2.65 0 0 .84-.27 2.75 1.026A9.564 9.564 0 0112 6.844c.85.004 1.705.115 2.504.337 1.909-1.296 2.747-1.027 2.747-1.027.546 1.379.202 2.398.1 2.651.64.7 1.028 1.595 1.028 2.688 0 3.848-2.339 4.695-4.566 4.943.359.309.678.92.678 1.855 0 1.338-.012 2.419-.012 2.747 0 .268.18.58.688.482A10.019 10.019 0 0022 12.017C22 6.484 17.522 2 12 2z" clip-rule="evenodd"></path>
             </svg>
         </a>
     </h1>
-    <main><em style="color: #999;">Loading...</em></main>
+    <main>
+        <p><em style="color: #999;">Loading...</em></p>
+    </main>
+    <div id="test">
+        <h2>Test</h2>
+        <p><strong>React</strong>: <span id="react">❌</span></p>
+        <p><strong>React(bundle)</strong>: <span id="reactb">❌</span></p>
+        <p><strong>Preact</strong>: <span id="preact">❌</span></p>
+        <p><strong>Vue2</strong>: <span id="vue">❌</span></p>
+        <p><strong>Vue3</strong>: <span id="vue3">❌</span></p>
+    </div>
     <script type="module">
         import marked from '/marked';
+        import hljs from '/highlight.js/lib/core';
+        import javascript from '/highlight.js/lib/languages/javascript';
+        import json from '/highlight.js/lib/languages/json';
+        import bash from '/highlight.js/lib/languages/bash';
+
         const mainEl = document.querySelector('main');
         mainEl.innerHTML = marked.parse(%s);
         mainEl.removeChild(mainEl.querySelector('h1'));
+        hljs.registerLanguage('javascript', javascript);
+        hljs.registerLanguage('json', json);
+        hljs.registerLanguage('bash', bash);
+        hljs.initHighlighting();
+
+        document.getElementById('test').style.display="block";
+    </script>
+    <script type="module">
+        import { createElement } from '/react';
+        import { render } from '/react-dom';
+
+        render(createElement('span', null, '✅'), document.getElementById('react'));
+    </script>
+    <script type="module">
+        import { createElement } from '/[react,react-dom]/react';
+        import { render } from '/[react,react-dom]/react-dom';
+
+        render(createElement('span', null, '✅'), document.getElementById('reactb'));
+    </script>
+    <script type="module">
+        import { h, render } from '/preact';
+
+        const el = document.getElementById('preact');
+        el.innerHTML = '';
+        render(h('span', null, '✅'), el);
+    </script>
+    <script type="module">
+        import Vue from '/vue';
+
+        new Vue({
+            el: '#vue',
+            render(h) {
+                return h('span', null, '✅')
+            }
+        });
+    </script>
+    <script type="module">
+        import { createApp, h } from '/vue@next';
+
+        createApp({
+            render() {
+                return h('span', {}, '✅')
+            }
+        }).mount('#vue3');
     </script>
 </body>
 </html>
