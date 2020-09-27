@@ -72,7 +72,9 @@ $ esm -h
 ```
 
 ## Caveat
-Different with [Skypack](https://skypack.dev) and [jspm](https://jspm.org), **esm.sh** will bundle all dependencies(exclude peerDependencies) for each packages, that means there may be redundant contents be transmitted when you are importing multiple packages. This should be improved when the http3(quic) is ready. For now the best practice is using the **bundle mode**.
+Different with [Skypack](https://skypack.dev) and [jspm](https://jspm.org), **esm.sh** will bundle all dependencies(exclude peerDependencies) for each packages, that means there may be redundant contents transmitted when you are importing multiple packages.
+
+This should be improved when the http/3(quic) is ready. For now the best practice is using the **bundle mode**.
 
 ## Self-Hosting
 
