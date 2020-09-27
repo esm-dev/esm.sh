@@ -150,31 +150,48 @@ func registerAPI(storageDir string, cdnDomain string, isDev bool) {
 			importPrefix = fmt.Sprintf("https://%s/", cdnDomain)
 		}
 
-		var exports []string
-		var hasDefaultExport bool
-		for _, name := range importMeta.Exports {
-			if name != "import" {
-				exports = append(exports, name)
-			}
-			if importIdentifier == name {
-				importIdentifier += "_default"
-			}
-			if name == "default" {
-				hasDefaultExport = true
-			}
-		}
-
 		fmt.Fprintf(buf, `/* esm.sh - %v */%s`, currentModule, EOL)
+		var exported bool
 		if ret.single {
-			fmt.Fprintf(buf, `import %s from "%s%s.js";%s`, importIdentifier, importPrefix, ret.buildID, EOL)
+			if importMeta.Module != "" {
+				exported = true
+				if len(importMeta.Exports) > 0 {
+					fmt.Fprintf(buf, `export * from "%s%s.js";%s`, importPrefix, ret.buildID, EOL)
+					for _, name := range importMeta.Exports {
+						if name == "default" {
+							fmt.Fprintf(buf, `export {default} from "%s%s.js";%s`, importPrefix, ret.buildID, EOL)
+							break
+						}
+					}
+				} else {
+					fmt.Fprintf(buf, `export {default} from "%s%s.js";%s`, importPrefix, ret.buildID, EOL)
+				}
+			} else {
+				fmt.Fprintf(buf, `import %s from "%s%s.js";%s`, importIdentifier, importPrefix, ret.buildID, EOL)
+			}
 		} else {
 			fmt.Fprintf(buf, `import { %s } from "%s%s.js";%s`, importIdentifier, importPrefix, ret.buildID, EOL)
 		}
-		if len(exports) > 0 {
-			fmt.Fprintf(buf, `export const { %s } = %s;%s`, strings.Join(exports, ","), importIdentifier, EOL)
-		}
-		if !hasDefaultExport {
-			fmt.Fprintf(buf, `export default %s;%s`, importIdentifier, EOL)
+		if !exported {
+			var exports []string
+			var hasDefaultExport bool
+			for _, name := range importMeta.Exports {
+				if name != "import" {
+					exports = append(exports, name)
+				}
+				if importIdentifier == name {
+					importIdentifier += "_default"
+				}
+				if name == "default" {
+					hasDefaultExport = true
+				}
+			}
+			if len(exports) > 0 {
+				fmt.Fprintf(buf, `export const { %s } = %s;%s`, strings.Join(exports, ","), importIdentifier, EOL)
+			}
+			if !hasDefaultExport {
+				fmt.Fprintf(buf, `export default %s;%s`, importIdentifier, EOL)
+			}
 		}
 		if importMeta.TypesPath != "" {
 			ctx.SetHeader("X-TypeScript-Types", importMeta.TypesPath)

@@ -301,18 +301,45 @@ func build(storageDir string, options buildOptions) (ret buildResult, err error)
 	log.Debug("copy dts in", time.Now().Sub(start))
 
 	codeBuf = bytes.NewBuffer(nil)
+	// todo: has submodule
 	if ret.single {
 		pkg := options.packages[0]
 		importPath := pkg.ImportPath()
-		fmt.Fprintf(codeBuf, `export * from "%s";`, importPath)
-		fmt.Fprintf(codeBuf, `export * as default from "%s";`, importPath)
+		importIdentifier := identify(importPath)
+		meta := importMeta[importPath]
+		if meta.Module != "" {
+			if len(meta.Exports) > 0 {
+				fmt.Fprintf(codeBuf, `export * from "%s";`, importPath)
+				for _, name := range meta.Exports {
+					if name == "default" {
+						fmt.Fprintf(codeBuf, `export {default} from "%s";`, importPath)
+					}
+				}
+			} else {
+				fmt.Fprintf(codeBuf, `export {default} from "%s";`, importPath)
+			}
+		} else if meta.Main != "" {
+			fmt.Fprintf(codeBuf, `import %s from "%s";`, importIdentifier, importPath)
+			fmt.Fprintf(codeBuf, `export default %s;`, importIdentifier)
+		} else {
+			fmt.Fprintf(codeBuf, `export default null;`)
+		}
 	} else {
 		for _, pkg := range options.packages {
 			importPath := pkg.ImportPath()
-			fmt.Fprintf(codeBuf, `export * as %s from "%s";`, identify(importPath), importPath)
+			importIdentifier := identify(importPath)
+			meta := importMeta[importPath]
+			if meta.Module != "" {
+				fmt.Fprintf(codeBuf, `export * as %s from "%s";`, importIdentifier, importPath)
+			} else if meta.Main != "" {
+				fmt.Fprintf(codeBuf, `import %s_ from "%s";`, importIdentifier, importPath)
+				fmt.Fprintf(codeBuf, `export {%s_ as %s};`, importIdentifier, importIdentifier)
+			} else {
+				fmt.Fprintf(codeBuf, `export const %s = null;`, importIdentifier)
+			}
 		}
 	}
-	err = ioutil.WriteFile(path.Join(buildDir, "bundle.js"), codeBuf.Bytes(), 0644)
+	err = ioutil.WriteFile(path.Join(buildDir, "export.js"), codeBuf.Bytes(), 0644)
 	if err != nil {
 		return
 	}
@@ -338,7 +365,7 @@ esbuild:
 		"process.env.NODE_ENV": fmt.Sprintf(`"%s"`, env),
 	}
 	result := api.Build(api.BuildOptions{
-		EntryPoints:       []string{"bundle.js"},
+		EntryPoints:       []string{"export.js"},
 		Externals:         externals,
 		Bundle:            true,
 		Write:             false,
@@ -423,7 +450,7 @@ esbuild:
 
 	db.Put(
 		q.Alias(ret.buildID),
-		q.Tags("bundle"),
+		q.Tags("build"),
 		q.KV{
 			"importMeta": utils.MustEncodeJSON(importMeta),
 		},
