@@ -72,7 +72,8 @@ $ esm -h
 ```
 
 ## X-Typescript-Types
-**esm.sh** will response a custom HTTP header of `X-TypeScript-Types` if the types defined, that is useful for deno types check.
+**esm.sh** will response a custom HTTP header of `X-TypeScript-Types` if the types defined, that is useful for deno types check ([link](https://deno.land/manual/getting_started/typescript#x-typescript-types-custom-header)).
+
 ![figure #1](./assets/figure-1.png)
 
 ## Caveat
