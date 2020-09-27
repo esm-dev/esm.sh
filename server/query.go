@@ -5,23 +5,27 @@ import (
 	"fmt"
 	"path"
 	"strings"
+	"time"
 
 	"github.com/ije/gox/utils"
 	"github.com/ije/rex"
 )
 
 func registerAPI(storageDir string, cdnDomain string, isDev bool) {
+	start := time.Now()
+
 	rex.Query("*", func(ctx *rex.Context) interface{} {
 		pathname := utils.CleanPath(ctx.R.URL.Path)
 		switch pathname {
 		case "/":
-			return rex.HTML(indexHTML)
+			ctx.SetHeader("Cache-Control", fmt.Sprintf("private, max-age=%d", refreshDuration))
+			return rex.Content("index.html", start, bytes.NewReader([]byte(indexHTML)))
 		case "/readme.md":
 			if isDev {
 				return rex.File(readmemd)
 			}
-			ctx.SetHeader("Content-Type", "text/markdown; charset=utf-8")
-			return readmemd
+			ctx.SetHeader("Cache-Control", fmt.Sprintf("private, max-age=%d", refreshDuration))
+			return rex.Content("readme.md", start, bytes.NewReader([]byte(readmemd)))
 		case "/favicon.ico":
 			return 404
 		}

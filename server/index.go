@@ -660,13 +660,19 @@ const indexHTML = `<!DOCTYPE html>
         }
 
         /* esm.sh */
+        h1 {
+            color: #111;
+        }
+        h2, h3 {
+            color: #222;
+        }
         h1 a {
             position: relative;
             display: inline-block;
             width: 27px;
             height: 27px;
             margin-left: 18px;
-            color: #555;
+            color: #666;
         }
         h1 a svg {
             position: absolute;
