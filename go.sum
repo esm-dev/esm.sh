@@ -1,7 +1,7 @@
 github.com/andybalholm/brotli v1.0.0 h1:7UCwP93aiSfvWpapti8g88vVVGp2qqtGyePsSuDafo4=
 github.com/andybalholm/brotli v1.0.0/go.mod h1:loMXtMfwqflxFJPmdbJO0a3KNoPuLBgiu3qAvBg8x/Y=
-github.com/evanw/esbuild v0.7.5 h1:gvrXlPfKMzuw2c5/ySIFUUrEmanl/gl1/v47Xh5FAfg=
-github.com/evanw/esbuild v0.7.5/go.mod h1:mptxmSXIzBIKKCe4jo9A5SToEd1G+AKZ9JmY85dYRJ0=
+github.com/evanw/esbuild v0.7.6 h1:VQRwErIQXVsvj+WAJ2P0NqhvGbBVB1d0rpeub29u7H0=
+github.com/evanw/esbuild v0.7.6/go.mod h1:mptxmSXIzBIKKCe4jo9A5SToEd1G+AKZ9JmY85dYRJ0=
 github.com/ije/gox v0.5.6 h1:46DNSa7ZWIGYm1Rk4Xa23bWUrXy+k7kq0EbDqZUYyL0=
 github.com/ije/gox v0.5.6/go.mod h1:mjhU1hphPiRfw0u7WQX3Zo7X/p7SUS067WjBIP5T4uE=
 github.com/ije/puddle v1.1.2 h1:gtmEZa5lwFMbTdo6/+wgf8Zr26h3bI4LDvG4exbdzfU=
