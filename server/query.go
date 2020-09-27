@@ -11,7 +11,7 @@ import (
 	"github.com/ije/rex"
 )
 
-func registerAPI(storageDir string, cdnDomain string, isDev bool) {
+func registerAPI(storageDir string, cdnDomain string) {
 	start := time.Now()
 
 	rex.Query("*", func(ctx *rex.Context) interface{} {

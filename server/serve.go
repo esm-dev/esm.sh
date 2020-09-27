@@ -98,7 +98,7 @@ func Serve() {
 		}),
 	)
 
-	registerAPI(storageDir, cdnDomain, isDev)
+	registerAPI(storageDir, cdnDomain)
 
 	rex.Serve(rex.ServerConfig{
 		Port: uint16(port),

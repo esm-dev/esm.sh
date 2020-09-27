@@ -203,7 +203,7 @@ func build(storageDir string, options buildOptions) (ret buildResult, err error)
 	}
 
 	start = time.Now()
-	cmd := exec.Command("node", "peer.js")
+	cmd := exec.Command("node", "peer.js") // todo: peer es module
 	cmd.Env = append(os.Environ(), fmt.Sprintf(`NODE_ENV=%s`, env))
 	output, err := cmd.CombinedOutput()
 	if err != nil {

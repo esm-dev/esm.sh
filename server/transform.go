@@ -20,6 +20,7 @@ var (
 	reReferenceTag   = regexp.MustCompile(`^<reference\s+(path|types)\s*=\s*('|")([^'"]+)("|')\s*/>$`)
 )
 
+// todo: use esbuild plugin api to replace this transform
 func rewriteImportPath(code []byte, rewriteFn func(string) string) (output []byte) {
 	buf := bytes.NewBuffer(nil)
 	commentScope := false

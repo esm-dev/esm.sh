@@ -10,13 +10,14 @@ const indexHTML = `<!DOCTYPE html>
     <meta name="keywords" content="esm,npm,deno,global,cdn" />
     <style>
         /*
-        Name: Github ReadMe style for Mou app
-        Version: v1.1
-        Author: hzlzh(hzlzh.dev@gmail.com)
-        URL: https://github.com/hzlzh/Mou-Theme
-        */
+         * Name: Github ReadMe style for Mou app
+         * Version: v1.1
+         * Author: hzlzh(hzlzh.dev@gmail.com)
+         * URL: https://github.com/hzlzh/Mou-Theme
+         */
 
         @charset "UTF-8";
+
         html {
             font-family: sans-serif;
             -ms-text-size-adjust: 100%%;
@@ -27,11 +28,25 @@ const indexHTML = `<!DOCTYPE html>
             margin: 0
         }
 
-        article,aside,details,figcaption,figure,footer,header,hgroup,main,nav,section,summary {
+        article,
+        aside,
+        details,
+        figcaption,
+        figure,
+        footer,
+        header,
+        hgroup,
+        main,
+        nav,
+        section,
+        summary {
             display: block
         }
 
-        audio,canvas,progress,video {
+        audio,
+        canvas,
+        progress,
+        video {
             display: inline-block;
             vertical-align: baseline
         }
@@ -41,7 +56,8 @@ const indexHTML = `<!DOCTYPE html>
             height: 0
         }
 
-        [hidden],template {
+        [hidden],
+        template {
             display: none
         }
 
@@ -49,7 +65,8 @@ const indexHTML = `<!DOCTYPE html>
             background: transparent
         }
 
-        a:active,a:hover {
+        a:active,
+        a:hover {
             outline: 0
         }
 
@@ -57,7 +74,8 @@ const indexHTML = `<!DOCTYPE html>
             border-bottom: 1px dotted
         }
 
-        b,strong {
+        b,
+        strong {
             font-weight: bold
         }
 
@@ -79,7 +97,8 @@ const indexHTML = `<!DOCTYPE html>
             font-size: 80%%
         }
 
-        sub,sup {
+        sub,
+        sup {
             font-size: 75%%;
             line-height: 0;
             position: relative;
@@ -116,12 +135,19 @@ const indexHTML = `<!DOCTYPE html>
             overflow: auto
         }
 
-        code,kbd,pre,samp {
-            font-family: monospace, monospace;
+        code,
+        kbd,
+        pre,
+        samp {
+            font-family: 'source code pro', monospace;
             font-size: 1em
         }
 
-        button,input,optgroup,select,textarea {
+        button,
+        input,
+        optgroup,
+        select,
+        textarea {
             color: inherit;
             font: inherit;
             margin: 0
@@ -131,20 +157,26 @@ const indexHTML = `<!DOCTYPE html>
             overflow: visible
         }
 
-        button,select {
+        button,
+        select {
             text-transform: none
         }
 
-        button,html input[type="button"],input[type="reset"],input[type="submit"] {
+        button,
+        html input[type="button"],
+        input[type="reset"],
+        input[type="submit"] {
             -webkit-appearance: button;
             cursor: pointer
         }
 
-        button[disabled],html input[disabled] {
+        button[disabled],
+        html input[disabled] {
             cursor: default
         }
 
-        button::-moz-focus-inner,input::-moz-focus-inner {
+        button::-moz-focus-inner,
+        input::-moz-focus-inner {
             border: 0;
             padding: 0
         }
@@ -153,12 +185,14 @@ const indexHTML = `<!DOCTYPE html>
             line-height: normal
         }
 
-        input[type="checkbox"],input[type="radio"] {
+        input[type="checkbox"],
+        input[type="radio"] {
             box-sizing: border-box;
             padding: 0
         }
 
-        input[type="number"]::-webkit-inner-spin-button,input[type="number"]::-webkit-outer-spin-button {
+        input[type="number"]::-webkit-inner-spin-button,
+        input[type="number"]::-webkit-outer-spin-button {
             height: auto
         }
 
@@ -169,7 +203,8 @@ const indexHTML = `<!DOCTYPE html>
             box-sizing: content-box
         }
 
-        input[type="search"]::-webkit-search-cancel-button,input[type="search"]::-webkit-search-decoration {
+        input[type="search"]::-webkit-search-cancel-button,
+        input[type="search"]::-webkit-search-decoration {
             -webkit-appearance: none
         }
 
@@ -197,7 +232,8 @@ const indexHTML = `<!DOCTYPE html>
             border-spacing: 0
         }
 
-        td,th {
+        td,
+        th {
             padding: 0
         }
 
@@ -206,7 +242,10 @@ const indexHTML = `<!DOCTYPE html>
             box-sizing: border-box
         }
 
-        input,select,textarea,button {
+        input,
+        select,
+        textarea,
+        button {
             font: 13px/1.4 Helvetica, arial, freesans, clean, sans-serif, "Segoe UI Emoji", "Segoe UI Symbol"
         }
 
@@ -224,11 +263,14 @@ const indexHTML = `<!DOCTYPE html>
             text-decoration: none
         }
 
-        a:hover,a:focus,a:active {
+        a:hover,
+        a:focus,
+        a:active {
             text-decoration: underline
         }
 
-        hr,.rule {
+        hr,
+        .rule {
             height: 0;
             margin: 15px 0;
             overflow: hidden;
@@ -237,12 +279,14 @@ const indexHTML = `<!DOCTYPE html>
             border-bottom: 1px solid #ddd
         }
 
-        hr:before,.rule:before {
+        hr:before,
+        .rule:before {
             display: table;
             content: ""
         }
 
-        hr:after,.rule:after {
+        hr:after,
+        .rule:after {
             display: table;
             clear: both;
             content: ""
@@ -259,7 +303,14 @@ const indexHTML = `<!DOCTYPE html>
             font-weight: bold
         }
 
-        input[type="text"],#adv_code_search .search-page-label,input[type="password"],input[type="email"],input[type="number"],input[type="tel"],input[type="url"],textarea {
+        input[type="text"],
+        #adv_code_search .search-page-label,
+        input[type="password"],
+        input[type="email"],
+        input[type="number"],
+        input[type="tel"],
+        input[type="url"],
+        textarea {
             min-height: 34px;
             padding: 7px 8px;
             font-size: 13px;
@@ -271,23 +322,42 @@ const indexHTML = `<!DOCTYPE html>
             border: 1px solid #ccc;
             border-radius: 3px;
             outline: none;
-            box-shadow: inset 0 1px 2px rgba(0,0,0,0.075)
+            box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.075)
         }
 
-        input[type="text"].focus,#adv_code_search .focus.search-page-label,input[type="text"]:focus,.focused .drag-and-drop,#adv_code_search .search-page-label:focus,input[type="password"].focus,input[type="password"]:focus,input[type="email"].focus,input[type="email"]:focus,input[type="number"].focus,input[type="number"]:focus,input[type="tel"].focus,input[type="tel"]:focus,input[type="url"].focus,input[type="url"]:focus,textarea.focus,textarea:focus {
+        input[type="text"].focus,
+        #adv_code_search .focus.search-page-label,
+        input[type="text"]:focus,
+        .focused .drag-and-drop,
+        #adv_code_search .search-page-label:focus,
+        input[type="password"].focus,
+        input[type="password"]:focus,
+        input[type="email"].focus,
+        input[type="email"]:focus,
+        input[type="number"].focus,
+        input[type="number"]:focus,
+        input[type="tel"].focus,
+        input[type="tel"]:focus,
+        input[type="url"].focus,
+        input[type="url"]:focus,
+        textarea.focus,
+        textarea:focus {
             border-color: #51a7e8;
-            box-shadow: inset 0 1px 2px rgba(0,0,0,0.075),0 0 5px rgba(81,167,232,0.5)
+            box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.075), 0 0 5px rgba(81, 167, 232, 0.5)
         }
 
-        input.input-contrast,.input-contrast {
+        input.input-contrast,
+        .input-contrast {
             background-color: #fafafa
         }
 
-        input.input-contrast:focus,.input-contrast:focus {
+        input.input-contrast:focus,
+        .input-contrast:focus {
             background-color: #fff
         }
 
-        ::-webkit-input-placeholder,:-moz-placeholder {
+        ::-webkit-input-placeholder,
+        :-moz-placeholder {
             color: #aaa
         }
 
@@ -297,7 +367,7 @@ const indexHTML = `<!DOCTYPE html>
             background: #9c2400;
             border: 0;
             border-radius: 3px;
-            -webkit-box-shadow: 1px 1px 1px rgba(0,0,0,0.1)
+            -webkit-box-shadow: 1px 1px 1px rgba(0, 0, 0, 0.1)
         }
 
         input::-webkit-validation-bubble-icon {
@@ -307,10 +377,10 @@ const indexHTML = `<!DOCTYPE html>
         ::-webkit-validation-bubble-arrow {
             background-color: #9c2400;
             border: solid 1px #9c2400;
-            -webkit-box-shadow: 1px 1px 1px rgba(0,0,0,0.1)
+            -webkit-box-shadow: 1px 1px 1px rgba(0, 0, 0, 0.1)
         }
 
-        body{
+        body {
             font-family: "Helvetica Neue", Helvetica, "Segoe UI", Arial, freesans, sans-serif;
             font-size: 16px;
             line-height: 1.5;
@@ -344,7 +414,12 @@ const indexHTML = `<!DOCTYPE html>
             outline: none
         }
 
-        h1,h2,h3,h4,h5,h6 {
+        h1,
+        h2,
+        h3,
+        h4,
+        h5,
+        h6 {
             position: relative;
             margin-top: 1em;
             margin-bottom: 16px;
@@ -352,13 +427,23 @@ const indexHTML = `<!DOCTYPE html>
             line-height: 1.4
         }
 
-        h1 .octicon-link,h2 .octicon-link,h3 .octicon-link,h4 .octicon-link,h5 .octicon-link,h6 .octicon-link {
+        h1 .octicon-link,
+        h2 .octicon-link,
+        h3 .octicon-link,
+        h4 .octicon-link,
+        h5 .octicon-link,
+        h6 .octicon-link {
             display: none;
             color: #000;
             vertical-align: middle
         }
 
-        h1:hover .anchor,h2:hover .anchor,h3:hover .anchor,h4:hover .anchor,h5:hover .anchor,h6:hover .anchor {
+        h1:hover .anchor,
+        h2:hover .anchor,
+        h3:hover .anchor,
+        h4:hover .anchor,
+        h5:hover .anchor,
+        h6:hover .anchor {
             height: 1em;
             padding-left: 8px;
             margin-left: -30px;
@@ -366,11 +451,27 @@ const indexHTML = `<!DOCTYPE html>
             text-decoration: none
         }
 
-        h1:hover .anchor .octicon-link,h2:hover .anchor .octicon-link,h3:hover .anchor .octicon-link,h4:hover .anchor .octicon-link,h5:hover .anchor .octicon-link,h6:hover .anchor .octicon-link {
+        h1:hover .anchor .octicon-link,
+        h2:hover .anchor .octicon-link,
+        h3:hover .anchor .octicon-link,
+        h4:hover .anchor .octicon-link,
+        h5:hover .anchor .octicon-link,
+        h6:hover .anchor .octicon-link {
             display: inline-block
         }
 
-        h1 tt,h1 code,h2 tt,h2 code,h3 tt,h3 code,h4 tt,h4 code,h5 tt,h5 code,h6 tt,h6 code {
+        h1 tt,
+        h1 code,
+        h2 tt,
+        h2 code,
+        h3 tt,
+        h3 code,
+        h4 tt,
+        h4 code,
+        h5 tt,
+        h5 code,
+        h6 tt,
+        h6 code {
             font-size: inherit
         }
 
@@ -406,7 +507,13 @@ const indexHTML = `<!DOCTYPE html>
             color: #777
         }
 
-        p,blockquote,ul,ol,dl,table,pre {
+        p,
+        blockquote,
+        ul,
+        ol,
+        dl,
+        table,
+        pre {
             margin-top: 0;
             margin-bottom: 12px
         }
@@ -419,16 +526,21 @@ const indexHTML = `<!DOCTYPE html>
             border: 0 none
         }
 
-        ul,ol {
+        ul,
+        ol {
             padding-left: 2em
         }
 
-        ul.no-list,ol.no-list {
+        ul.no-list,
+        ol.no-list {
             padding: 0;
             list-style-type: none
         }
 
-        ul ul,ul ol,ol ol,ol ul {
+        ul ul,
+        ul ol,
+        ol ol,
+        ol ul {
             margin-top: 0;
             margin-bottom: 0
         }
@@ -460,11 +572,11 @@ const indexHTML = `<!DOCTYPE html>
             border-left: 4px solid #ddd
         }
 
-        blockquote>:first-child {
+        blockquote> :first-child {
             margin-top: 0
         }
 
-        blockquote>:last-child {
+        blockquote> :last-child {
             margin-bottom: 0
         }
 
@@ -480,7 +592,8 @@ const indexHTML = `<!DOCTYPE html>
             font-weight: bold
         }
 
-        table th,table td {
+        table th,
+        table td {
             padding: 6px 13px;
             border: 1px solid #ddd
         }
@@ -588,22 +701,27 @@ const indexHTML = `<!DOCTYPE html>
             text-align: right
         }
 
-        code,tt {
+        code,
+        tt {
             padding: 0;
             padding-top: 0.2em;
             padding-bottom: 0.2em;
             margin: 0;
             font-size: 85%%;
-            background-color: rgba(0,0,0,0.04);
+            background-color: rgba(0, 0, 0, 0.04);
             border-radius: 3px
         }
 
-        code:before,code:after,tt:before,tt:after {
+        code:before,
+        code:after,
+        tt:before,
+        tt:after {
             letter-spacing: -0.2em;
             content: "\00a0"
         }
 
-        code br,tt br {
+        code br,
+        tt br {
             display: none
         }
 
@@ -626,7 +744,8 @@ const indexHTML = `<!DOCTYPE html>
             margin-bottom: 16px
         }
 
-        .highlight pre,pre {
+        .highlight pre,
+        pre {
             padding: 16px;
             overflow: auto;
             font-size: 85%%;
@@ -644,7 +763,8 @@ const indexHTML = `<!DOCTYPE html>
             word-wrap: normal
         }
 
-        pre code,pre tt {
+        pre code,
+        pre tt {
             display: inline;
             max-width: initial;
             padding: 0;
@@ -656,21 +776,29 @@ const indexHTML = `<!DOCTYPE html>
             border: 0
         }
 
-        pre code:before,pre code:after,pre tt:before,pre tt:after {
+        pre code:before,
+        pre code:after,
+        pre tt:before,
+        pre tt:after {
             content: normal
         }
-
+    </style>
+    <style>
         /* esm.sh */
+
         h1 {
             color: #111;
         }
+
         h2, h3 {
             color: #222;
         }
+
         h1 strong {
             display: inline-block;
             vertical-align: middle;
         }
+
         h1 a {
             position: relative;
             display: inline-block;
@@ -680,6 +808,7 @@ const indexHTML = `<!DOCTYPE html>
             margin-left: 6px;
             color: #666;
         }
+
         h1 a svg {
             position: absolute;
             display: inline-block;
@@ -688,13 +817,16 @@ const indexHTML = `<!DOCTYPE html>
             width: 27px;
             height: 27px;
         }
+
         h1 a:hover {
            color: #000;
         }
-        #test {
+
+        .test {
             display: none;
         }
-        #test p {
+
+        .test p {
             display: inline-block;
         }
     </style>
@@ -713,7 +845,7 @@ const indexHTML = `<!DOCTYPE html>
     <main>
         <p><em style="color: #999;">Loading...</em></p>
     </main>
-    <div id="test">
+    <div class="test">
         <h2>Test</h2>
         <p><strong>React</strong>: <span id="react">❌</span></p>
         <p><strong>React(bundle)</strong>: <span id="reactb">❌</span></p>
@@ -737,7 +869,7 @@ const indexHTML = `<!DOCTYPE html>
         hljs.initHighlighting();
 
         if (location.hostname === 'localhost') {
-            document.querySelector('#test').style.display = "block";
+            document.querySelector('.test').style.display = "block";
         }
     </script>
     <script type="module">
