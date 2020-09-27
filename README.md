@@ -46,7 +46,7 @@ or your can define bundle list in the `import-map.json` ([import-maps proposal](
 import React from 'https://esm.sh/react' // actual from 'https://esm.sh/[react,react-dom]/react'
 ```
 
-⚠️ The packages in url are litmited up to **10**, to bundle more packages, please use esm client.
+⚠️ The bundling packages in URL are litmited up to **10**, to bundle more packages, please use esm client.
 
 
 ## ESM Client in Deno [WIP]
@@ -72,14 +72,12 @@ $ esm -h
 ```
 
 ## Caveat
-Different with [Skypack](https://skypack.dev) and [jspm](https://jspm.org), **esm.sh** will bundle all dependencies(exclude peerDependencies) for each packages, that means there may be redundant contents transmitted when you are importing multiple packages.
-
+Different with [Skypack](https://skypack.dev) and [jspm](https://jspm.org), **esm.sh** will bundle all dependencies(exclude peerDependencies) for each packages, that means there may be redundant contents transmitted when you are importing multiple packages.<br>
 This should be improved when the http/3(quic) is ready. For now the best practice is using the **bundle mode**.
 
 ## Self-Hosting
 
-You will need [Go](https://golang.org/dl) 1.14+ to compile the server, and ensure the [supervisor](http://supervisord.org/) installed on your host machine.
-
+You will need [Go](https://golang.org/dl) 1.14+ to compile the server, and ensure the [supervisor](http://supervisord.org/) installed on your host machine.<br>
 The server runtime will check the nodejs installation (12+) or install the latest LTS version automatically.
 
 ```bash
