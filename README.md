@@ -11,6 +11,11 @@ import React from 'https://esm.sh/react'
 import React from 'https://esm.sh/react@16.13.1'
 ```
 
+### Submodule
+```javascript
+import { renderToString } from 'https://esm.sh/react-dom/server'
+```
+
 ### Specify ESM target
 ```javascript
 import React from 'https://esm.sh/react?target=es2020'
@@ -19,11 +24,6 @@ import React from 'https://esm.sh/react?target=es2020'
 ### Development mode
 ```javascript
 import React from 'https://esm.sh/react?dev'
-```
-
-### Submodule
-```javascript
-import { renderToString } from 'https://esm.sh/react-dom/server'
 ```
 
 ### Bundle mode
