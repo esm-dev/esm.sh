@@ -46,6 +46,10 @@ func Serve() {
 		etcDir, _ = filepath.Abs(".dev")
 		logDir = path.Join(etcDir, "log")
 		logLevel = "debug"
+		wd, err := os.Getwd()
+		if err == nil {
+			readmemd = path.Join(wd, "README.md")
+		}
 	}
 
 	storageDir := path.Join(etcDir, "storage")

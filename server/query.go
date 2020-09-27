@@ -3,7 +3,6 @@ package server
 import (
 	"bytes"
 	"fmt"
-	"os"
 	"path"
 	"strings"
 
@@ -19,11 +18,7 @@ func registerAPI(storageDir string, cdnDomain string, isDev bool) {
 			return rex.HTML(indexHTML)
 		case "/readme.md":
 			if isDev {
-				wd, err := os.Getwd()
-				if err != nil {
-					return err
-				}
-				return rex.File(path.Join(wd, "README.md"))
+				return rex.File(readmemd)
 			}
 			ctx.SetHeader("Content-Type", "text/markdown; charset=utf-8")
 			return readmemd
