@@ -8,10 +8,9 @@ import (
 	"testing"
 )
 
-func TestToRequire(t *testing.T) {
+func TestRewriteImportPath(t *testing.T) {
 	raw := []string{
-		`// dts test`,
-		`/// <reference path="global.d.ts" />`,
+		`// rewriteImportPath`,
 		`  `,
 		`import {`,
 		`    ReactInstance, Component, ComponentState,`,
@@ -19,32 +18,37 @@ func TestToRequire(t *testing.T) {
 		`    DOMAttributes, DOMElement, ReactNode, ReactPortal`,
 		`} from 'react';`,
 		``,
-		`import { default as Anchor } from './anchor';`,
+		`import { default as Anchor /* anchor from './anchor' */ } from './anchor';`,
 		`import { default as AutoComplete } from './auto-complete';export { default as Alert , AlertOptions } from './alert';`,
 		`/* avatar */ import { default as Avatar } from '../avatar';`,
 		`export {a as b, c};`,
+		"const a = `  ",
+		`  blablabla  `,
+		"`;",
 	}
 	expect := []string{
-		`// dts test`,
-		`/// <reference path="global.d.ts" />`,
-		``,
+		`// rewriteImportPath`,
+		`  `,
 		`import {`,
 		`    ReactInstance, Component, ComponentState,`,
 		`    ReactElement, SFCElement, CElement as CE,`,
 		`    DOMAttributes, DOMElement, ReactNode, ReactPortal`,
 		`} from '/react@16.13.1/react.js';`,
 		``,
-		`import { default as Anchor } from './anchor';`,
-		`import { default as AutoComplete } from './auto-complete';export { default as Alert , AlertOptions } from './alert';`,
-		`/* avatar */ import { default as Avatar } from '../avatar';`,
+		`import { default as Anchor /* anchor from './anchor' */ } from './anchor.js';`,
+		`import { default as AutoComplete } from './auto-complete.js';export { default as Alert , AlertOptions } from './alert.js';`,
+		`/* avatar */ import { default as Avatar } from '../avatar.js';`,
 		`export {a as b, c};`,
+		"const a = `  ",
+		`  blablabla  `,
+		"`;",
 	}
 
 	data := rewriteImportPath([]byte(strings.Join(raw, "\n")), func(importPath string) string {
 		if importPath == "react" {
 			return "/react@16.13.1/react.js"
 		}
-		return importPath
+		return importPath + ".js"
 	})
 	if strings.TrimSpace(string(data)) != strings.Join(expect, "\n") {
 		t.Fatalf("unexpected index.d.ts\n%s", string(data))
@@ -87,7 +91,7 @@ func TestCopyDTS(t *testing.T) {
 	indexDTSExcept := []string{
 		`// dts test`,
 		`/// <reference path="./global.d.ts" />`,
-		``,
+		`  `,
 		`import {`,
 		`    ReactInstance, Component, ComponentState,`,
 		`    ReactElement, SFCElement, CElement,`,

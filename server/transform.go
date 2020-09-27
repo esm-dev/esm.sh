@@ -22,13 +22,14 @@ var (
 
 func rewriteImportPath(code []byte, rewriteFn func(string) string) (output []byte) {
 	buf := bytes.NewBuffer(nil)
-	scanner := bufio.NewScanner(bytes.NewReader(code))
 	commentScope := false
 	importExportScope := false
-	for scanner.Scan() {
-		text := scanner.Text()
+	for _, p := range bytes.Split(code, []byte{'\n'}) {
+		text := string(p)
 		pure := strings.TrimSpace(text)
-		buf.WriteString(text[:strings.Index(text, pure)])
+		spaceLeftWidth := strings.Index(text, pure)
+		spacesOnRight := text[spaceLeftWidth+len(pure):]
+		buf.WriteString(text[:spaceLeftWidth])
 	Re:
 		if commentScope || strings.HasPrefix(pure, "/*") {
 			commentScope = true
@@ -45,17 +46,24 @@ func rewriteImportPath(code []byte, rewriteFn func(string) string) (output []byt
 			} else {
 				buf.WriteString(pure)
 			}
+		} else if i := strings.Index(pure, "/*"); i > 0 {
+			if startsWith(pure, "import ", "export ", "import{", "export{") {
+				importExportScope = true
+			}
+			buf.WriteString(pure[:i])
+			pure = pure[i:]
+			goto Re
 		} else if strings.HasPrefix(pure, "//") {
 			buf.WriteString(pure)
 		} else {
-			scanner := bufio.NewScanner(strings.NewReader(pure))
-			scanner.Split(onSemicolon)
+			innerScanner := bufio.NewScanner(strings.NewReader(pure))
+			innerScanner.Split(onSemicolon)
 			var i int
-			for scanner.Scan() {
+			for innerScanner.Scan() {
 				if i > 0 {
 					buf.WriteByte(';')
 				}
-				text := scanner.Text()
+				text := innerScanner.Text()
 				exp := strings.TrimSpace(text)
 				buf.WriteString(text[:strings.Index(text, exp)])
 				if exp != "" {
@@ -92,6 +100,7 @@ func rewriteImportPath(code []byte, rewriteFn func(string) string) (output []byt
 				i++
 			}
 		}
+		buf.WriteString(spacesOnRight)
 		buf.WriteByte('\n')
 	}
 	return buf.Bytes()
@@ -184,7 +193,9 @@ func copyDTS(nodeModulesDir string, saveDir string, dts string) (err error) {
 	for scanner.Scan() {
 		text := scanner.Text()
 		pure := strings.TrimSpace(text)
-		buf.WriteString(text[:strings.Index(text, pure)])
+		spaceLeftWidth := strings.Index(text, pure)
+		spacesOnRight := text[spaceLeftWidth+len(pure):]
+		buf.WriteString(text[:spaceLeftWidth])
 	Re:
 		if commentScope || strings.HasPrefix(pure, "/*") {
 			commentScope = true
@@ -201,6 +212,13 @@ func copyDTS(nodeModulesDir string, saveDir string, dts string) (err error) {
 			} else {
 				buf.WriteString(pure)
 			}
+		} else if i := strings.Index(pure, "/*"); i > 0 {
+			if startsWith(pure, "import ", "export ", "import{", "export{") {
+				importExportScope = true
+			}
+			buf.WriteString(pure[:i])
+			pure = pure[i:]
+			goto Re
 		} else if strings.HasPrefix(pure, "///") {
 			s := strings.TrimSpace(strings.TrimPrefix(pure, "///"))
 			if reReferenceTag.MatchString(s) {
@@ -263,6 +281,7 @@ func copyDTS(nodeModulesDir string, saveDir string, dts string) (err error) {
 				i++
 			}
 		}
+		buf.WriteString(spacesOnRight)
 		buf.WriteByte('\n')
 	}
 	err = scanner.Err()
