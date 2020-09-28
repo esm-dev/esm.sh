@@ -1,4 +1,5 @@
 # ESM
+
 A fast, global content delivery network and package manager for ES Modules. All modules are transformed to ESM by [esbuild](https://github.com/evanw/esbuild) from [npm](http://npmjs.org/).
 
 ## Import from URL
@@ -31,7 +32,6 @@ import React from 'https://esm.sh/react?dev'
 import React from 'https://esm.sh/[react,react-dom]/react'
 import ReactDom from 'https://esm.sh/[react,react-dom]/react-dom'
 ```
-
 or your can define bundle list in the `import-map.json` ([import-maps proposal](https://github.com/WICG/import-maps))
 ```json
 {
@@ -41,15 +41,14 @@ or your can define bundle list in the `import-map.json` ([import-maps proposal](
     }
 }
 ```
-
 ```javascript
 import React from 'https://esm.sh/react' // actual from 'https://esm.sh/[react,react-dom]/react'
 ```
 
-⚠️ The bundling packages in URL are litmited up to **10**, to bundle more packages, please use esm client.
-
+⚠️ The bundling packages in URL are litmited up to **10**, to bundle more packages, please use the **esm** client.
 
 ## ESM Client in Deno [WIP]
+
 ```bash
 # install esm command
 deno install --allow-read --allow-write --allow-net -n esm https://deno.land/x/esm/cli.ts
@@ -72,11 +71,13 @@ $ esm -h
 ```
 
 ## X-Typescript-Types
-**esm.sh** will response a custom HTTP header of `X-TypeScript-Types` if the types defined, that is useful for deno types check ([link](https://deno.land/manual/getting_started/typescript#x-typescript-types-custom-header)).
+
+**esm.sh** will response a custom HTTP header of `X-TypeScript-Types` when the types(dts) defined, that is useful for deno types check ([link](https://deno.land/manual/getting_started/typescript#x-typescript-types-custom-header)).
 
 ![figure #1](./assets/figure-1.png)
 
 ## Caveat
+
 Different with [Skypack](https://skypack.dev) and [jspm](https://jspm.org), **esm.sh** will bundle all dependencies(exclude peerDependencies) for each packages, that means there may be redundant contents transmitted when you are importing multiple packages.<br>
 This should be improved when the http/3(quic) is ready. For now the best practice is using the **bundle mode**.
 
