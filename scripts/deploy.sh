@@ -14,13 +14,13 @@ if [ "$host" == "" ]; then
 fi
 
 user="root"
-read -p "please enter the host ssh user (default is 'root'): " u
+read -p "please enter the ssh login user (default is 'root'): " u
 if [ "$u" != "" ]; then
     user="$u"
 fi
 
 sshPort="22"
-read -p "please enter the host ssh port (default is 22): " p
+read -p "please enter the ssh port (default is 22): " p
 if [ "$p" != "" ]; then
     sshPort="$p"
 fi
