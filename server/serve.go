@@ -37,7 +37,7 @@ func Serve() {
 	flag.IntVar(&port, "port", 80, "http server port")
 	flag.IntVar(&httpsPort, "https-port", 443, "https server port")
 	flag.StringVar(&etcDir, "etc-dir", "/usr/local/etc/esmd", "etc dir")
-	flag.StringVar(&domain, "domain", "esm.sh", "main domain")
+	flag.StringVar(&domain, "domain", "esm.sh", "server domain")
 	flag.StringVar(&cdnDomain, "cdn-domain", "", "cdn domain")
 	flag.StringVar(&logLevel, "log", "info", "log level")
 	flag.BoolVar(&isDev, "dev", false, "run server in development mode")
@@ -82,9 +82,9 @@ func Serve() {
 	}
 	log.Debugf("nodejs v%s installed", nodeEnv.version)
 
-	db, err = postdb.Open(path.Join(etcDir, "esmd.db"), 0666)
+	db, err = postdb.Open(path.Join(etcDir, "esm.db"), 0666)
 	if err != nil {
-		log.Fatalf("initiate esmd.db: %v", err)
+		log.Fatalf("initiate esm.db: %v", err)
 	}
 
 	rex.Use(
@@ -99,7 +99,7 @@ func Serve() {
 		}),
 	)
 
-	registerAPI(storageDir, domain, cdnDomain)
+	registerAPI(storageDir, cdnDomain)
 
 	C := rex.Serve(rex.ServerConfig{
 		Port: uint16(port),
@@ -114,12 +114,12 @@ func Serve() {
 		},
 	})
 
+	c := make(chan os.Signal, 1)
+	signal.Notify(c, syscall.SIGTERM, syscall.SIGINT, syscall.SIGQUIT, syscall.SIGKILL, syscall.SIGHUP)
+
 	if isDev {
 		log.Debugf("Server ready on http://localhost:%d", port)
 	}
-
-	c := make(chan os.Signal, 1)
-	signal.Notify(c, syscall.SIGTERM, syscall.SIGINT, syscall.SIGQUIT, syscall.SIGKILL, syscall.SIGHUP)
 
 	select {
 	case err = <-C:

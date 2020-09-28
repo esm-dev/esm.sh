@@ -190,3 +190,16 @@ func installNodejs(dir string, version string) (err error) {
 	}
 	return
 }
+
+func yarnAdd(packages ...string) (err error) {
+	if len(packages) > 0 {
+		start := time.Now()
+		args := append([]string{"add", "--prefer-offline", "--silent", "--no-progress"}, packages...)
+		output, err := exec.Command("yarn", args...).CombinedOutput()
+		if err != nil {
+			return fmt.Errorf(string(output))
+		}
+		log.Debug("yarn add", strings.Join(packages, " "), "in", time.Now().Sub(start))
+	}
+	return
+}

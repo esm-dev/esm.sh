@@ -24,6 +24,10 @@ import (
 	"github.com/postui/postdb/q"
 )
 
+const (
+	jsCopyrightName = "esm.sh"
+)
+
 var targets = map[string]api.Target{
 	"es2015": api.ES2015,
 	"es2016": api.ES2016,
@@ -39,15 +43,14 @@ var buildLock sync.Mutex
 // ImportMeta defines import meta
 type ImportMeta struct {
 	NpmPackage
-	Exports   []string `json:"exports"`
-	TypesPath string   `json:"typespath"`
+	Exports []string `json:"exports"`
+	Types   string   `json:"types"`
 }
 
 type buildOptions struct {
 	packages moduleSlice
 	target   string
 	dev      bool
-	domain   string
 }
 
 type buildResult struct {
@@ -296,7 +299,7 @@ func build(storageDir string, options buildOptions) (ret buildResult, err error)
 			if err != nil {
 				return
 			}
-			meta.TypesPath = "/" + types
+			meta.Types = "/" + types
 		}
 	}
 	log.Debug("copy dts in", time.Now().Sub(start))
@@ -400,7 +403,7 @@ esbuild:
 	log.Debugf("esbuild bundle %s %s %s in %v", options.packages.String(), options.target, env, time.Now().Sub(start))
 
 	jsContentBuf := bytes.NewBuffer(nil)
-	fmt.Fprintf(jsContentBuf, `/* %s - esbuild bundle(%s) %s %s */%s`, options.domain, options.packages.String(), strings.ToLower(options.target), env, EOL)
+	fmt.Fprintf(jsContentBuf, `/* %s - esbuild bundle(%s) %s %s */%s`, jsCopyrightName, options.packages.String(), strings.ToLower(options.target), env, EOL)
 	if len(peerPackages) > 0 {
 		var esModules []string
 		var eol, indent string
@@ -458,19 +461,6 @@ esbuild:
 	)
 
 	ret.importMeta = importMeta
-	return
-}
-
-func yarnAdd(packages ...string) (err error) {
-	if len(packages) > 0 {
-		start := time.Now()
-		args := append([]string{"add"}, packages...)
-		output, err := exec.Command("yarn", args...).CombinedOutput()
-		if err != nil {
-			return fmt.Errorf(string(output))
-		}
-		log.Debug("yarn add", strings.Join(packages, " "), "in", time.Now().Sub(start))
-	}
 	return
 }
 
