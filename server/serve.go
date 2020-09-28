@@ -5,11 +5,12 @@ import (
 	"fmt"
 	"io/ioutil"
 	"os"
+	"os/signal"
 	"path"
 	"path/filepath"
+	"syscall"
 
 	logx "github.com/ije/gox/log"
-	"github.com/ije/gox/utils"
 	"github.com/ije/rex"
 	"github.com/postui/postdb"
 )
@@ -100,7 +101,7 @@ func Serve() {
 
 	registerAPI(storageDir, domain, cdnDomain)
 
-	rex.Serve(rex.ServerConfig{
+	C := rex.Serve(rex.ServerConfig{
 		Port: uint16(port),
 		TLS: rex.TLSConfig{
 			Port:         uint16(httpsPort),
@@ -113,11 +114,18 @@ func Serve() {
 		},
 	})
 
-	// wait exit signal
-	utils.WaitExitSignal(func(s os.Signal) bool {
-		if db != nil {
-			db.Close()
-		}
-		return true
-	})
+	if isDev {
+		log.Debugf("Server ready on http://localhost:%d", port)
+	}
+
+	c := make(chan os.Signal, 1)
+	signal.Notify(c, syscall.SIGTERM, syscall.SIGINT, syscall.SIGQUIT, syscall.SIGKILL, syscall.SIGHUP)
+
+	select {
+	case err = <-C:
+		log.Error(err)
+	case s := <-c:
+		log.Errorf("exit signal: %v", s)
+	}
+	db.Close()
 }
