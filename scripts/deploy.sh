@@ -13,16 +13,16 @@ if [ "$host" == "" ]; then
     exit
 fi
 
-loginUser="root"
-read -p "please enter the host ssh user (default is 'root'): " user
-if [ "$user" != "" ]; then
-    loginUser="$user"
+user="root"
+read -p "please enter the host ssh user (default is 'root'): " u
+if [ "$u" != "" ]; then
+    user="$u"
 fi
 
-hostSSHPort="22"
-read -p "please enter the host ssh port (default is 22): " port
-if [ "$port" != "" ]; then
-    hostSSHPort="$port"
+sshPort="22"
+read -p "please enter the host ssh port (default is 22): " p
+if [ "$p" != "" ]; then
+    sshPort="$p"
 fi
 
 init="no"
@@ -34,6 +34,7 @@ fi
 port="80"
 httpsPort="443"
 etcDir="/etc/esmd"
+domain="esm.sh"
 cdnDomain=""
 if [ "$init" == "yes" ]; then
     read -p "please enter the server http port (default is ${port}): " p
@@ -44,9 +45,13 @@ if [ "$init" == "yes" ]; then
     if [ "$p" != "" ]; then
         httpsPort="$p"
     fi
-    read -p "please enter the etc directory, user ${loginUser} must have r/w permission of it (default is ${etcDir}): " p
+    read -p "please enter the etc directory, user ${user} must have r/w permission of it (default is ${etcDir}): " p
     if [ "$p" != "" ]; then
         etcDir="$p"
+    fi
+    read -p "please enter the server domain (default is ${domain}): " p
+    if [ "$p" != "" ]; then
+        domain="$p"
     fi
     read -p "please enter the cdn domain (optional): " p
     if [ "$p" != "" ]; then
@@ -60,20 +65,20 @@ if [ "$?" != "0" ]; then
 fi
 
 echo "--- uploading..."
-scp -P $hostSSHPort esmd $loginUser@$host:/tmp/esmd
+scp -P $sshPort esmd $user@$host:/tmp/esmd
 if [ "$?" != "0" ]; then
     rm -f esmd
     exit
 fi
 
 echo "--- installing..."
-ssh -p $hostSSHPort $loginUser@$host << EOF
-    SV=\$(supervisorctl version)
+ssh -p $sshPort $user@$host << EOF
+    SVVer=\$(supervisorctl version)
     if [ "\$?" != "0" ]; then
         echo "error: missing supervisor!"
         exit
     fi
-    echo "supervisor \$SV"
+    echo "supervisor \$SVVer"
 
     writeSVConfLine () {
         echo "\$1" >> /etc/supervisor/conf.d/esmd.conf
@@ -88,9 +93,9 @@ ssh -p $hostSSHPort $loginUser@$host << EOF
         mkdir ${etcDir}
         rm -f /etc/supervisor/conf.d/esmd.conf
         writeSVConfLine "[program:esmd]"
-        writeSVConfLine "command=/usr/local/bin/esmd --port=${port} --https-port=${httpsPort} --etc-dir=${etcDir} --cdn-domain=${cdnDomain}"
+        writeSVConfLine "command=/usr/local/bin/esmd --port=${port} --https-port=${httpsPort} --etc-dir=${etcDir} --domain=${domain} --cdn-domain=${cdnDomain}"
         writeSVConfLine "directory=/tmp"
-        writeSVConfLine "user=$loginUser"
+        writeSVConfLine "user=$user"
         writeSVConfLine "autostart=true"
         writeSVConfLine "autorestart=true"
         supervisorctl reload
