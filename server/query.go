@@ -11,8 +11,17 @@ import (
 	"github.com/ije/rex"
 )
 
-func registerAPI(storageDir string, cdnDomain string) {
+func registerAPI(storageDir string, domain string, cdnDomain string) {
 	start := time.Now()
+	throwErrorJS := func(ctx *rex.Context, err error) interface{} {
+		buf := bytes.NewBuffer(nil)
+		fmt.Fprintf(buf, `/* %s - error */%s`, domain, EOL)
+		fmt.Fprintf(buf, `throw new Error("[%s] " + %s);%s`, domain, strings.TrimSpace(string(utils.MustEncodeJSON(err.Error()))), EOL)
+		fmt.Fprintf(buf, `export default null;%s`, EOL)
+		ctx.SetHeader("Cache-Control", "private, no-store, no-cache, must-revalidate")
+		ctx.SetHeader("Content-Type", "application/javascript; charset=utf-8")
+		return buf.String()
+	}
 
 	rex.Query("*", func(ctx *rex.Context) interface{} {
 		pathname := utils.CleanPath(ctx.R.URL.Path)
@@ -119,6 +128,7 @@ func registerAPI(storageDir string, cdnDomain string) {
 			packages: packages,
 			target:   target,
 			dev:      isDev,
+			domain:   domain,
 		})
 		if err != nil {
 			return throwErrorJS(ctx, err)
@@ -150,7 +160,7 @@ func registerAPI(storageDir string, cdnDomain string) {
 			importPrefix = fmt.Sprintf("https://%s/", cdnDomain)
 		}
 
-		fmt.Fprintf(buf, `/* esm.sh - %v */%s`, currentModule, EOL)
+		fmt.Fprintf(buf, `/* %s - %v */%s`, domain, currentModule, EOL)
 		var exported bool
 		if ret.single {
 			if importMeta.Module != "" {
@@ -200,14 +210,4 @@ func registerAPI(storageDir string, cdnDomain string) {
 		ctx.SetHeader("Content-Type", "application/javascript; charset=utf-8")
 		return buf.String()
 	})
-}
-
-func throwErrorJS(ctx *rex.Context, err error) interface{} {
-	buf := bytes.NewBuffer(nil)
-	fmt.Fprintf(buf, `/* esm.sh - error */%s`, EOL)
-	fmt.Fprintf(buf, `throw new Error("[esm.sh] " + %s);%s`, strings.TrimSpace(string(utils.MustEncodeJSON(err.Error()))), EOL)
-	fmt.Fprintf(buf, `export default null;%s`, EOL)
-	ctx.SetHeader("Cache-Control", "private, no-store, no-cache, must-revalidate")
-	ctx.SetHeader("Content-Type", "application/javascript; charset=utf-8")
-	return buf.String()
 }

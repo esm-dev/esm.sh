@@ -77,9 +77,9 @@ func Serve() {
 
 	nodeEnv, err = checkNodeEnv()
 	if err != nil {
-		log.Fatalf("check nodejs: %v", err)
+		log.Fatalf("check nodejs env: %v", err)
 	}
-	log.Debugf("nodejs installed: v%s", nodeEnv.version)
+	log.Debugf("nodejs v%s installed", nodeEnv.version)
 
 	db, err = postdb.Open(path.Join(etcDir, "esmd.db"), 0666)
 	if err != nil {
@@ -98,7 +98,7 @@ func Serve() {
 		}),
 	)
 
-	registerAPI(storageDir, cdnDomain)
+	registerAPI(storageDir, domain, cdnDomain)
 
 	rex.Serve(rex.ServerConfig{
 		Port: uint16(port),

@@ -47,6 +47,7 @@ type buildOptions struct {
 	packages moduleSlice
 	target   string
 	dev      bool
+	domain   string
 }
 
 type buildResult struct {
@@ -399,7 +400,7 @@ esbuild:
 	log.Debugf("esbuild bundle %s %s %s in %v", options.packages.String(), options.target, env, time.Now().Sub(start))
 
 	jsContentBuf := bytes.NewBuffer(nil)
-	fmt.Fprintf(jsContentBuf, `/* esm.sh - esbuild bundle(%s) %s %s */%s`, options.packages.String(), strings.ToLower(options.target), env, EOL)
+	fmt.Fprintf(jsContentBuf, `/* %s - esbuild bundle(%s) %s %s */%s`, options.domain, options.packages.String(), strings.ToLower(options.target), env, EOL)
 	if len(peerPackages) > 0 {
 		var esModules []string
 		var eol, indent string
