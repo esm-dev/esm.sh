@@ -122,10 +122,9 @@ func Serve() {
 	}
 
 	select {
+	case <-c:
 	case err = <-C:
 		log.Error(err)
-	case s := <-c:
-		log.Errorf("exit signal: %v", s)
 	}
 	db.Close()
 }
