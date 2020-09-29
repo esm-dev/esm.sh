@@ -165,7 +165,6 @@ func (env *NodeEnv) getPackageInfo(name string, version string) (info NpmPackage
 				if l > 1 {
 					sort.Sort(majorVerions)
 				}
-				fmt.Println(majorVerions)
 				info = state.Versions[majorVerions[0]]
 			}
 		}

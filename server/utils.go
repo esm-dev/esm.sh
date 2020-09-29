@@ -12,7 +12,7 @@ const (
 )
 
 func isValidatedESImportPath(importPath string) bool {
-	return strings.HasPrefix(importPath, "/") || strings.HasPrefix(importPath, "./") || strings.HasPrefix(importPath, "../")
+	return strings.HasPrefix(importPath, "/") || strings.HasPrefix(importPath, "./") || strings.HasPrefix(importPath, "../") || importPath == ".." || importPath == "."
 }
 
 func startsWith(s string, prefixs ...string) bool {

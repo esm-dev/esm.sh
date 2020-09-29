@@ -853,7 +853,7 @@ const indexHTML = `<!DOCTYPE html>
         <h2>Test</h2>
         <p><strong>React</strong>: <span id="react">❌</span></p>
         <p><strong>React(bundle)</strong>: <span id="reactb">❌</span></p>
-        <p><strong>Preact</strong>: <span id="preact">❌</span></p>
+        <p><strong>Preact</strong>: <span id="preact"><span className="x">❌</span></span></p>
         <p><strong>Vue2</strong>: <span id="vue">❌</span></p>
         <p><strong>Vue3</strong>: <span id="vue3">❌</span></p>
     </div>
@@ -897,9 +897,15 @@ const indexHTML = `<!DOCTYPE html>
     </script>
     <script type="module">
         import { h, render } from '/preact';
+        import { useEffect } from '/preact/hooks';
 
         const el = document.querySelector('#preact');
-        el.innerHTML = '';
+        function App() {
+            useEffect(() => {
+                el.removeChild(el.querySelector('.x'))
+            }, [])
+            return h('span', null, '✅')
+        }
         render(h('span', null, '✅'), el);
     </script>
     <script type="module">

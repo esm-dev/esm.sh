@@ -5,106 +5,42 @@ import (
 	"bytes"
 	"fmt"
 	"io"
+	"io/ioutil"
 	"os"
 	"path"
 	"regexp"
 	"strings"
 
+	"github.com/ije/esbuild-internal/config"
+	"github.com/ije/esbuild-internal/js_parser"
+	"github.com/ije/esbuild-internal/logger"
+	"github.com/ije/esbuild-internal/test"
 	"github.com/ije/gox/utils"
 )
 
 var (
 	reVersion        = regexp.MustCompile(`([^/])@[\d\.]+/`)
 	reFromExpression = regexp.MustCompile(`(\s|})from\s*("|')`)
-	reAsExpression   = regexp.MustCompile(`([0-9a-zA-Z\_\$])\s+as\s+([a-zA-Z\_\$])`)
 	reReferenceTag   = regexp.MustCompile(`^<reference\s+(path|types)\s*=\s*('|")([^'"]+)("|')\s*/>$`)
 )
 
-// todo: use esbuild plugin api to replace this transform
-func rewriteImportPath(code []byte, rewriteFn func(string) string) (output []byte) {
-	buf := bytes.NewBuffer(nil)
-	commentScope := false
-	importExportScope := false
-	for _, p := range bytes.Split(code, []byte{'\n'}) {
-		text := string(p)
-		pure := strings.TrimSpace(text)
-		spaceLeftWidth := strings.Index(text, pure)
-		spacesOnRight := text[spaceLeftWidth+len(pure):]
-		buf.WriteString(text[:spaceLeftWidth])
-	Re:
-		if commentScope || strings.HasPrefix(pure, "/*") {
-			commentScope = true
-			endIndex := strings.Index(pure, "*/")
-			if endIndex > -1 {
-				commentScope = false
-				buf.WriteString(pure[:endIndex])
-				buf.WriteString("*/")
-				if rest := pure[endIndex+2:]; rest != "" {
-					pure = strings.TrimSpace(rest)
-					buf.WriteString(rest[:strings.Index(rest, pure)])
-					goto Re
-				}
-			} else {
-				buf.WriteString(pure)
-			}
-		} else if i := strings.Index(pure, "/*"); i > 0 {
-			if startsWith(pure, "import ", "export ", "import{", "export{") {
-				importExportScope = true
-			}
-			buf.WriteString(pure[:i])
-			pure = pure[i:]
-			goto Re
-		} else if strings.HasPrefix(pure, "//") {
-			buf.WriteString(pure)
-		} else {
-			innerScanner := bufio.NewScanner(strings.NewReader(pure))
-			innerScanner.Split(onSemicolon)
-			var i int
-			for innerScanner.Scan() {
-				if i > 0 {
-					buf.WriteByte(';')
-				}
-				text := innerScanner.Text()
-				exp := strings.TrimSpace(text)
-				buf.WriteString(text[:strings.Index(text, exp)])
-				if exp != "" {
-					if importExportScope || startsWith(exp, "import ", "export ", "import{", "export{") {
-						importExportScope = true
-						end := reFromExpression.MatchString(exp)
-						if end {
-							importExportScope = false
-							q := "'"
-							a := strings.Split(exp, q)
-							if len(a) != 3 {
-								q = `"`
-								a = strings.Split(exp, q)
-							}
-							if len(a) == 3 {
-								buf.WriteString(a[0])
-								buf.WriteString(q)
-								buf.WriteString(rewriteFn(a[1]))
-								buf.WriteString(q)
-								buf.WriteString(a[2])
-							} else {
-								buf.WriteString(exp)
-							}
-						} else {
-							buf.WriteString(exp)
-						}
-					} else {
-						buf.WriteString(exp)
-					}
-				}
-				if i > 0 && importExportScope {
-					importExportScope = false
-				}
-				i++
+func parseModuleExports(filepath string) (exports []string, ok bool, err error) {
+	log := logger.NewDeferLog()
+	data, err := ioutil.ReadFile(filepath)
+	if err != nil {
+		return
+	}
+
+	ast, pass := js_parser.Parse(log, test.SourceForTest(string(data)), config.Options{})
+	if pass {
+		ok = ast.HasES6Exports
+		if ok {
+			for name := range ast.NamedExports {
+				exports = append(exports, name)
 			}
 		}
-		buf.WriteString(spacesOnRight)
-		buf.WriteByte('\n')
 	}
-	return buf.Bytes()
+	return
 }
 
 func copyDTS(nodeModulesDir string, saveDir string, dts string) (err error) {
@@ -136,7 +72,7 @@ func copyDTS(nodeModulesDir string, saveDir string, dts string) (err error) {
 
 	deps := map[string]struct{}{}
 	rewriteFn := func(importPath string) string {
-		if isValidatedESImportPath(importPath) && !strings.HasSuffix(importPath, ".d.ts") {
+		if (isValidatedESImportPath(importPath)) && !strings.HasSuffix(importPath, ".d.ts") {
 			if fileExists(path.Join(dtsDir, importPath, "index.d.ts")) {
 				importPath = strings.TrimSuffix(importPath, "/") + "/index.d.ts"
 			} else {
@@ -152,17 +88,21 @@ func copyDTS(nodeModulesDir string, saveDir string, dts string) (err error) {
 					}
 				}
 			}
-			importPath = ensureExt(importPath, ".d.ts")
+			importPath = ensureExt(strings.TrimSuffix(importPath, ".js"), ".d.ts")
 		} else {
-			maybePackage, subpath := utils.SplitByFirstByte(importPath, '/')
-			if strings.HasPrefix(maybePackage, "@") {
+			pkg, subpath := utils.SplitByFirstByte(importPath, '/')
+			if strings.HasPrefix(pkg, "@") {
 				n, s := utils.SplitByFirstByte(subpath, '/')
-				maybePackage = fmt.Sprintf("%s/%s", maybePackage, n)
+				pkg = fmt.Sprintf("%s/%s", pkg, n)
 				subpath = s
 			}
-			packageJSONFile := path.Join(nodeModulesDir, "@types", maybePackage, "package.json")
+			// self
+			if strings.HasPrefix(dts, pkg) {
+				return importPath
+			}
+			packageJSONFile := path.Join(nodeModulesDir, "@types", pkg, "package.json")
 			if !fileExists(packageJSONFile) {
-				packageJSONFile = path.Join(nodeModulesDir, maybePackage, "package.json")
+				packageJSONFile = path.Join(nodeModulesDir, pkg, "package.json")
 			}
 			if fileExists(packageJSONFile) {
 				var p NpmPackage
@@ -305,12 +245,12 @@ func copyDTS(nodeModulesDir string, saveDir string, dts string) (err error) {
 	for dep := range deps {
 		if isValidatedESImportPath(dep) {
 			if strings.HasPrefix(dep, "/") {
-				maybePackage, subpath := utils.SplitByFirstByte(dep, '/')
-				if strings.HasPrefix(maybePackage, "@") {
+				pkg, subpath := utils.SplitByFirstByte(dep, '/')
+				if strings.HasPrefix(pkg, "@") {
 					n, _ := utils.SplitByFirstByte(subpath, '/')
-					maybePackage = fmt.Sprintf("%s/%s", maybePackage, n)
+					pkg = fmt.Sprintf("%s/%s", pkg, n)
 				}
-				err = copyDTS(nodeModulesDir, saveDir, path.Join(maybePackage, dep))
+				err = copyDTS(nodeModulesDir, saveDir, path.Join(pkg, dep))
 			} else {
 				err = copyDTS(nodeModulesDir, saveDir, path.Join(path.Dir(dts), dep))
 			}

@@ -8,50 +8,30 @@ import (
 	"testing"
 )
 
-func TestRewriteImportPath(t *testing.T) {
+func TestParseModuleExports(t *testing.T) {
 	raw := []string{
-		`// rewriteImportPath`,
-		`  `,
-		`import {`,
-		`    ReactInstance, Component, ComponentState,`,
-		`    ReactElement, SFCElement, CElement as CE,`,
-		`    DOMAttributes, DOMElement, ReactNode, ReactPortal`,
+		`export {`,
+		`    Component, ReactNode`,
 		`} from 'react';`,
-		``,
-		`import { default as Anchor /* anchor from './anchor' */ } from './anchor';`,
-		`import { default as AutoComplete } from './auto-complete';export { default as Alert , AlertOptions } from './alert';`,
-		`/* avatar */ import { default as Avatar } from '../avatar';`,
-		`export {a as b, c};`,
-		"const a = `  ",
-		`  blablabla  `,
-		"`;",
 	}
-	expect := []string{
-		`// rewriteImportPath`,
-		`  `,
-		`import {`,
-		`    ReactInstance, Component, ComponentState,`,
-		`    ReactElement, SFCElement, CElement as CE,`,
-		`    DOMAttributes, DOMElement, ReactNode, ReactPortal`,
-		`} from '/react@16.13.1/react.js';`,
-		``,
-		`import { default as Anchor /* anchor from './anchor' */ } from './anchor.js';`,
-		`import { default as AutoComplete } from './auto-complete.js';export { default as Alert , AlertOptions } from './alert.js';`,
-		`/* avatar */ import { default as Avatar } from '../avatar.js';`,
-		`export {a as b, c};`,
-		"const a = `  ",
-		`  blablabla  `,
-		"`;",
+	expect := []string{"Component", "ReactNode"}
+
+	testDir := path.Join(os.TempDir(), "test")
+	ensureDir(testDir)
+
+	fp := path.Join(testDir, "exports.js")
+	err := ioutil.WriteFile(fp, []byte(strings.Join(raw, "\n")), 0644)
+	if err != nil {
+		t.Fatal(err)
 	}
 
-	data := rewriteImportPath([]byte(strings.Join(raw, "\n")), func(importPath string) string {
-		if importPath == "react" {
-			return "/react@16.13.1/react.js"
-		}
-		return importPath + ".js"
-	})
-	if strings.TrimSpace(string(data)) != strings.Join(expect, "\n") {
-		t.Fatalf("unexpected index.d.ts\n%s", string(data))
+	exports, _, err := parseModuleExports(fp)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if strings.Join(exports, ",") != strings.Join(expect, ",") {
+		t.Fatalf("unexpected exports.js: %s", strings.Join(exports, ","))
 	}
 }
 

@@ -154,43 +154,43 @@ func registerAPI(storageDir string, cdnDomain string) {
 		var exported bool
 		if ret.single {
 			if importMeta.Module != "" {
-				exported = true
-				if len(importMeta.Exports) > 0 {
-					fmt.Fprintf(buf, `export * from "%s%s.js";%s`, importPrefix, ret.buildID, EOL)
-					for _, name := range importMeta.Exports {
-						if name == "default" {
-							fmt.Fprintf(buf, `export {default} from "%s%s.js";%s`, importPrefix, ret.buildID, EOL)
-							break
-						}
+				fmt.Fprintf(buf, `export * from "%s%s.js";%s`, importPrefix, ret.buildID, EOL)
+				for _, name := range importMeta.Exports {
+					if name == "default" {
+						fmt.Fprintf(buf, `export {default} from "%s%s.js";%s`, importPrefix, ret.buildID, EOL)
+						break
 					}
-				} else {
-					fmt.Fprintf(buf, `export {default} from "%s%s.js";%s`, importPrefix, ret.buildID, EOL)
 				}
+				exported = true
 			} else {
-				fmt.Fprintf(buf, `import %s from "%s%s.js";%s`, importIdentifier, importPrefix, ret.buildID, EOL)
+				fmt.Fprintf(buf, `import %s_default from "%s%s.js";%s`, importIdentifier, importPrefix, ret.buildID, EOL)
 			}
 		} else {
-			fmt.Fprintf(buf, `import { %s } from "%s%s.js";%s`, importIdentifier, importPrefix, ret.buildID, EOL)
+			if importMeta.Module != "" {
+				fmt.Fprintf(buf, `import { %s_default, %s_star } from "%s%s.js";%s`, importIdentifier, importIdentifier, importPrefix, ret.buildID, EOL)
+			} else {
+				fmt.Fprintf(buf, `import { %s_default } from "%s%s.js";%s`, importIdentifier, importPrefix, ret.buildID, EOL)
+			}
 		}
 		if !exported {
 			var exports []string
 			var hasDefaultExport bool
 			for _, name := range importMeta.Exports {
-				if name != "import" {
-					exports = append(exports, name)
-				}
-				if importIdentifier == name {
-					importIdentifier += "_default"
-				}
 				if name == "default" {
 					hasDefaultExport = true
+				} else if name != "import" {
+					exports = append(exports, name)
 				}
 			}
 			if len(exports) > 0 {
-				fmt.Fprintf(buf, `export const { %s } = %s;%s`, strings.Join(exports, ","), importIdentifier, EOL)
+				if importMeta.Module != "" {
+					fmt.Fprintf(buf, `export const { %s } = %s_star;%s`, strings.Join(exports, ","), importIdentifier, EOL)
+				} else {
+					fmt.Fprintf(buf, `export const { %s } = %s_default;%s`, strings.Join(exports, ","), importIdentifier, EOL)
+				}
 			}
-			if !hasDefaultExport {
-				fmt.Fprintf(buf, `export default %s;%s`, importIdentifier, EOL)
+			if hasDefaultExport || (importMeta.Main != "" && importMeta.Module == "") {
+				fmt.Fprintf(buf, `export default %s_default;%s`, importIdentifier, EOL)
 			}
 		}
 		if importMeta.Types != "" {

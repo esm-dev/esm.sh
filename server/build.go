@@ -8,7 +8,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"os"
 	"os/exec"
 	"path"
@@ -118,7 +117,7 @@ func build(storageDir string, options buildOptions) (ret buildResult, err error)
 
 	start := time.Now()
 	importMeta := map[string]*ImportMeta{}
-	peerDependencies := map[string]struct{}{}
+	peerDependencies := map[string]string{}
 	for _, pkg := range options.packages {
 		var p NpmPackage
 		p, err = nodeEnv.getPackageInfo(pkg.name, pkg.version)
@@ -128,8 +127,8 @@ func build(storageDir string, options buildOptions) (ret buildResult, err error)
 		meta := &ImportMeta{
 			NpmPackage: p,
 		}
-		for name := range p.PeerDependencies {
-			peerDependencies[name] = struct{}{}
+		for name, version := range p.PeerDependencies {
+			peerDependencies[name] = version
 		}
 		if meta.Types == "" && meta.Typings == "" && !strings.HasPrefix(pkg.name, "@") {
 			var info NpmPackage
@@ -142,11 +141,15 @@ func build(storageDir string, options buildOptions) (ret buildResult, err error)
 				return
 			}
 		}
+		if pkg.submodule != "" {
+			meta.Main = pkg.ImportPath()
+			meta.Module = ""
+		}
 		importMeta[pkg.ImportPath()] = meta
 	}
 
-	peerPackages := map[string]string{}
-	for name := range peerDependencies {
+	peerPackages := map[string]NpmPackage{}
+	for name, version := range peerDependencies {
 		peer := true
 		for _, pkg := range options.packages {
 			if pkg.name == name {
@@ -165,8 +168,10 @@ func build(storageDir string, options buildOptions) (ret buildResult, err error)
 			}
 		}
 		if peer {
-			peerPackages[name] = "latest"
-			installList = append(installList, name)
+			peerPackages[name] = NpmPackage{
+				Name: name,
+			}
+			installList = append(installList, name+"@"+version)
 		}
 	}
 
@@ -186,50 +191,84 @@ func build(storageDir string, options buildOptions) (ret buildResult, err error)
 		return
 	}
 
-	codeBuf := bytes.NewBuffer(nil)
-	codeBuf.WriteString("const meta = {};")
-	codeBuf.WriteString("const isObject = v => typeof v === 'object' && v !== null;")
-	for _, m := range options.packages {
-		importPath := m.ImportPath()
-		importIdentifier := identify(importPath)
-		fmt.Fprintf(codeBuf, `const %s = require("%s");`, importIdentifier, importPath)
-		fmt.Fprintf(codeBuf, `meta["%s"] = {exports: isObject(%s) ? Object.keys(%s) : []};`, importPath, importIdentifier, importIdentifier)
-	}
-	codeBuf.WriteString("process.stdout.write(JSON.stringify(meta));")
-	err = ioutil.WriteFile(path.Join(buildDir, "peer.js"), codeBuf.Bytes(), 0644)
-	if err != nil {
-		return
-	}
-
 	env := "production"
 	if options.dev {
 		env = "development"
 	}
 
 	start = time.Now()
-	cmd := exec.Command("node", "peer.js") // todo: peer es module
+	codeBuf := bytes.NewBuffer(nil)
+	codeBuf.WriteString(`
+		const fs = require("fs");
+		const meta = {};
+		const isObject = v => typeof v === 'object' && v !== null;
+	`)
+	for _, pkg := range options.packages {
+		importPath := pkg.ImportPath()
+		meta := importMeta[importPath]
+		if pkg.submodule == "" && meta.Module != "" {
+			exports, pass, err := parseModuleExports(path.Join(buildDir, "node_modules", meta.Name, ensureExt(meta.Module, ".js")))
+			if err != nil && os.IsNotExist(err) {
+				exports, pass, err = parseModuleExports(path.Join(buildDir, "node_modules", meta.Name, meta.Module, "index.js"))
+			}
+			if pass {
+				meta.Exports = exports
+				continue
+			}
+			// fake module
+			meta.Module = ""
+		}
+		if pkg.submodule != "" {
+			exports, pass, err := parseModuleExports(path.Join(buildDir, "node_modules", meta.Name, ensureExt(meta.Main, ".js")))
+			if err != nil && os.IsNotExist(err) {
+				exports, pass, err = parseModuleExports(path.Join(buildDir, "node_modules", meta.Name, meta.Main, "index.js"))
+			}
+			if pass {
+				// submodule is esm
+				meta.Module = meta.Main
+				meta.Exports = exports
+				continue
+			}
+		}
+		// export commonjs exports
+		importIdentifier := identify(importPath)
+		fmt.Fprintf(codeBuf, `
+			try {
+				const %s = require("%s");
+				meta["%s"] = {exports: isObject(%s) ? Object.keys(%s) : ['default'] };
+			} catch(e) {}
+		`, importIdentifier, importPath, importPath, importIdentifier, importIdentifier)
+	}
+	codeBuf.WriteString(`
+		fs.writeFileSync('./peer.output.json', JSON.stringify(meta))
+		process.exit(0);
+	`)
+
+	cmd := exec.Command("node")
+	cmd.Stdin = codeBuf
 	cmd.Env = append(os.Environ(), fmt.Sprintf(`NODE_ENV=%s`, env))
 	output, err := cmd.CombinedOutput()
-	if err != nil {
-		err = errors.New(string(output))
+	if err == nil {
+		var m map[string]ImportMeta
+		err = utils.ParseJSONFile("./peer.output.json", &m)
+		if err != nil {
+			return
+		}
+		for name, meta := range m {
+			_meta, ok := importMeta[name]
+			if ok {
+				_meta.Exports = meta.Exports
+			}
+		}
+	} else {
+		err = fmt.Errorf("nodejs: %s", string(output))
 		return
 	}
+
 	log.Debug("node peer.js in", time.Now().Sub(start))
 
-	var m map[string]ImportMeta
-	err = json.Unmarshal(output, &m)
-	if err != nil {
-		return
-	}
-	for name, meta := range m {
-		_meta, ok := importMeta[name]
-		if ok {
-			_meta.Exports = meta.Exports
-		}
-	}
-
 	start = time.Now()
-	for i, pkg := range options.packages {
+	for _, pkg := range options.packages {
 		var types string
 		meta := importMeta[pkg.ImportPath()]
 		nv := fmt.Sprintf("%s@%s", meta.Name, meta.Version)
@@ -262,23 +301,10 @@ func build(storageDir string, options buildOptions) (ret buildResult, err error)
 					types = fmt.Sprintf("%s/%s", nv, ensureExt(path.Join(pkg.submodule, tp), ".d.ts"))
 				}
 				if p.PeerDependencies != nil {
-					_, ok := p.PeerDependencies[meta.Name]
-					if ok {
-						// copy submodule to node_modules dir since the esbuild external will ignore the submodule too
-						err = utils.CopyDir(
-							path.Join(buildDir, "node_modules", pkg.name, pkg.submodule),
-							path.Join(buildDir, "node_modules", identify(pkg.ImportPath())),
-						)
-						if err != nil {
-							return
-						}
-						options.packages[i] = module{
-							name:    identify(pkg.ImportPath()),
-							version: pkg.version,
-						}
-					}
 					for name := range p.PeerDependencies {
-						peerPackages[name] = "latest"
+						peerPackages[name] = NpmPackage{
+							Name: name,
+						}
 					}
 				}
 			}
@@ -297,56 +323,13 @@ func build(storageDir string, options buildOptions) (ret buildResult, err error)
 		if types != "" {
 			err = copyDTS(path.Join(buildDir, "node_modules"), path.Join(storageDir, "types"), types)
 			if err != nil {
+				err = fmt.Errorf("copyDTS: %s %v", types, err)
 				return
 			}
 			meta.Types = "/" + types
 		}
 	}
 	log.Debug("copy dts in", time.Now().Sub(start))
-
-	codeBuf = bytes.NewBuffer(nil)
-	// todo: has submodule
-	if ret.single {
-		pkg := options.packages[0]
-		importPath := pkg.ImportPath()
-		importIdentifier := identify(importPath)
-		meta := importMeta[importPath]
-		if meta.Module != "" {
-			if len(meta.Exports) > 0 {
-				fmt.Fprintf(codeBuf, `export * from "%s";`, importPath)
-				for _, name := range meta.Exports {
-					if name == "default" {
-						fmt.Fprintf(codeBuf, `export {default} from "%s";`, importPath)
-					}
-				}
-			} else {
-				fmt.Fprintf(codeBuf, `export {default} from "%s";`, importPath)
-			}
-		} else if meta.Main != "" {
-			fmt.Fprintf(codeBuf, `import %s from "%s";`, importIdentifier, importPath)
-			fmt.Fprintf(codeBuf, `export default %s;`, importIdentifier)
-		} else {
-			fmt.Fprintf(codeBuf, `export default null;`)
-		}
-	} else {
-		for _, pkg := range options.packages {
-			importPath := pkg.ImportPath()
-			importIdentifier := identify(importPath)
-			meta := importMeta[importPath]
-			if meta.Module != "" {
-				fmt.Fprintf(codeBuf, `export * as %s from "%s";`, importIdentifier, importPath)
-			} else if meta.Main != "" {
-				fmt.Fprintf(codeBuf, `import %s_ from "%s";`, importIdentifier, importPath)
-				fmt.Fprintf(codeBuf, `export {%s_ as %s};`, importIdentifier, importIdentifier)
-			} else {
-				fmt.Fprintf(codeBuf, `export const %s = null;`, importIdentifier)
-			}
-		}
-	}
-	err = ioutil.WriteFile(path.Join(buildDir, "export.js"), codeBuf.Bytes(), 0644)
-	if err != nil {
-		return
-	}
 
 	externals := make([]string, len(peerPackages))
 	i := 0
@@ -356,21 +339,82 @@ func build(storageDir string, options buildOptions) (ret buildResult, err error)
 		if err != nil {
 			return
 		}
-		peerPackages[name] = p.Version
+		peerPackages[name] = p
 		externals[i] = name
 		i++
 	}
 
-	missingResolved := map[string]struct{}{}
-esbuild:
-	start = time.Now()
+	codeBuf = bytes.NewBuffer(nil)
+	if ret.single {
+		pkg := options.packages[0]
+		importPath := pkg.ImportPath()
+		importIdentifier := identify(importPath)
+		meta := importMeta[importPath]
+		hasDefaultExport := false
+		for _, name := range meta.Exports {
+			if name == "default" {
+				hasDefaultExport = true
+				break
+			}
+		}
+		if meta.Module != "" {
+			fmt.Fprintf(codeBuf, `export * from "%s";%s`, importPath, EOL)
+			if hasDefaultExport {
+				fmt.Fprintf(codeBuf, `export {default} from "%s";`, importPath)
+			}
+		} else if meta.Main != "" {
+			if hasDefaultExport {
+				fmt.Fprintf(codeBuf, `import %s from "%s";%s`, importIdentifier, importPath, EOL)
+			} else {
+				fmt.Fprintf(codeBuf, `import * as %s from "%s";%s`, importIdentifier, importPath, EOL)
+			}
+			fmt.Fprintf(codeBuf, `export default %s;`, importIdentifier)
+		} else {
+			fmt.Fprintf(codeBuf, `export default null;`)
+		}
+	} else {
+		for _, pkg := range options.packages {
+			importPath := pkg.ImportPath()
+			importIdentifier := identify(importPath)
+			meta := importMeta[importPath]
+			hasDefaultExport := false
+			for _, name := range meta.Exports {
+				if name == "default" {
+					hasDefaultExport = true
+					break
+				}
+			}
+			if meta.Module != "" {
+				fmt.Fprintf(codeBuf, `export * as %s_star from "%s";%s`, importIdentifier, importPath, EOL)
+				if hasDefaultExport {
+					fmt.Fprintf(codeBuf, `export {default as %s_default} from "%s";`, importIdentifier, importPath)
+				}
+			} else if meta.Main != "" {
+				if hasDefaultExport {
+					fmt.Fprintf(codeBuf, `import %s from "%s";%s`, importIdentifier, importPath, EOL)
+				} else {
+					fmt.Fprintf(codeBuf, `import * as %s from "%s";%s`, importIdentifier, importPath, EOL)
+				}
+				fmt.Fprintf(codeBuf, `export {%s as %s_default};`, importIdentifier, importIdentifier)
+			} else {
+				fmt.Fprintf(codeBuf, `export const %s_default = null;`, importIdentifier)
+			}
+		}
+	}
+	input := &api.StdinOptions{
+		Contents:   codeBuf.String(),
+		ResolveDir: buildDir,
+		Sourcefile: "export.js",
+	}
 	minify := !options.dev
 	defines := map[string]string{
 		"process.env.NODE_ENV": fmt.Sprintf(`"%s"`, env),
 	}
+	missingResolved := map[string]struct{}{}
+esbuild:
+	start = time.Now()
 	result := api.Build(api.BuildOptions{
-		EntryPoints:       []string{"export.js"},
-		Externals:         externals,
+		Stdin:             input,
 		Bundle:            true,
 		Write:             false,
 		Target:            targets[options.target],
@@ -379,7 +423,34 @@ esbuild:
 		MinifyIdentifiers: minify,
 		MinifySyntax:      minify,
 		Defines:           defines,
+		Plugins: []func(api.Plugin){
+			func(plugin api.Plugin) {
+				plugin.SetName("rewrite-path")
+				plugin.AddResolver(
+					api.ResolverOptions{Filter: fmt.Sprintf("^(%s)$", strings.Join(externals, "|"))},
+					func(args api.ResolverArgs) (api.ResolverResult, error) {
+						p, ok := peerPackages[args.Path]
+						newPath := args.Path
+						// rewrite peer es moudule import path
+						if ok && p.Module != "" {
+							filename := path.Base(args.Path)
+							if options.dev {
+								filename += ".development"
+							}
+							newPath = fmt.Sprintf("/%s@%s/%s/%s", args.Path, p.Version, options.target, ensureExt(filename, ".js"))
+						}
+						return api.ResolverResult{Path: newPath, External: true, Namespace: "http"}, nil
+					},
+				)
+			},
+		},
 	})
+	for _, w := range result.Warnings {
+		if strings.HasPrefix(w.Text, `Indirect calls to "require" will not be bundled`) {
+			q := w.Location.LineText[w.Location.Column+7]
+			log.Debug(w.Text, string(q), w.Location.LineText[w.Location.Column:w.Location.Column+30])
+		}
+	}
 	if len(result.Errors) > 0 {
 		fe := result.Errors[0]
 		if strings.HasPrefix(fe.Text, `Could not resolve "`) {
@@ -392,7 +463,7 @@ esbuild:
 						return
 					}
 					missingResolved[missingModule] = struct{}{}
-					goto esbuild
+					goto esbuild // rebuild
 				}
 			}
 		}
@@ -401,6 +472,9 @@ esbuild:
 	}
 
 	log.Debugf("esbuild bundle %s %s %s in %v", options.packages.String(), options.target, env, time.Now().Sub(start))
+
+	saveFilePath := path.Join(storageDir, "builds", ret.buildID+".js")
+	ensureDir(path.Dir(saveFilePath))
 
 	jsContentBuf := bytes.NewBuffer(nil)
 	fmt.Fprintf(jsContentBuf, `/* %s - esbuild bundle(%s) %s %s */%s`, jsCopyrightName, options.packages.String(), strings.ToLower(options.target), env, EOL)
@@ -411,36 +485,26 @@ esbuild:
 			indent = "  "
 			eol = EOL
 		}
-		for name, version := range peerPackages {
-			identifier := identify(name)
-			filename := path.Base(name)
-			if options.dev {
-				filename += ".development"
-			}
-			esModules = append(esModules, fmt.Sprintf(`"%s": %s`, name, identifier))
-			fmt.Fprintf(jsContentBuf, `import %s from "/%s@%s/%s/%s";%s`, identifier, name, version, options.target, ensureExt(filename, ".js"), eol)
-		}
-		fmt.Fprintf(jsContentBuf, `var __esModules = {%s`, eol)
-		fmt.Fprintf(jsContentBuf, `%s%s%s`, indent, strings.Join(esModules, fmt.Sprintf(",%s%s", eol, indent)), eol)
-		fmt.Fprintf(jsContentBuf, `};%s`, eol)
-		fmt.Fprintf(jsContentBuf, `var require = name => __esModules[name];%s`, eol)
-		jsContentBuf.Write(rewriteImportPath(result.OutputFiles[0].Contents, func(importPath string) string {
-			version, ok := peerPackages[importPath]
-			if ok {
-				filename := path.Base(importPath)
+		for name, p := range peerPackages {
+			if p.Main != "" && p.Module == "" {
+				identifier := identify(name)
+				filename := path.Base(name)
 				if options.dev {
 					filename += ".development"
 				}
-				return fmt.Sprintf("/%s@%s/%s/%s", importPath, version, options.target, ensureExt(filename, ".js"))
+				esModules = append(esModules, fmt.Sprintf(`"%s": %s`, name, identifier))
+				fmt.Fprintf(jsContentBuf, `import %s from "/%s@%s/%s/%s";%s`, identifier, name, p.Version, options.target, ensureExt(filename, ".js"), eol)
 			}
-			return importPath
-		}))
-	} else {
-		jsContentBuf.Write(result.OutputFiles[0].Contents)
+		}
+		if len(esModules) > 0 {
+			fmt.Fprintf(jsContentBuf, `var __esModules = {%s`, eol)
+			fmt.Fprintf(jsContentBuf, `%s%s%s`, indent, strings.Join(esModules, fmt.Sprintf(",%s%s", eol, indent)), eol)
+			fmt.Fprintf(jsContentBuf, `};%s`, eol)
+			fmt.Fprintf(jsContentBuf, `var require = name => __esModules[name];%s`, eol)
+		}
 	}
+	jsContentBuf.Write(result.OutputFiles[0].Contents)
 
-	saveFilePath := path.Join(storageDir, "builds", ret.buildID+".js")
-	ensureDir(path.Dir(saveFilePath))
 	file, err := os.Create(saveFilePath)
 	if err != nil {
 		return
