@@ -11,6 +11,7 @@ import (
 	"os/exec"
 	"path"
 	"runtime"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -26,6 +27,12 @@ const (
 	nodejsDistURL    = "https://nodejs.org/dist/"
 	refreshDuration  = 10 * 60 // 10 minues
 )
+
+// NpmPackageState defines the package details of npm
+type NpmPackageState struct {
+	DistTags map[string]string     `json:"dist-tags"`
+	Versions map[string]NpmPackage `json:"versions"`
+}
 
 // NpmPackage defines the package of npm
 type NpmPackage struct {
@@ -99,9 +106,10 @@ CheckYarn:
 
 func (env *NodeEnv) getPackageInfo(name string, version string) (info NpmPackage, err error) {
 	key := name + "/" + version
+	isFullVersion := reFullVersion.MatchString(version)
 	p, err := db.Get(q.Alias(key), q.K("package"))
 	if err == nil {
-		if (version == "latest" || version == "next" || version == "experimental") && int64(p.Crtime)+refreshDuration < time.Now().Unix() {
+		if !isFullVersion && int64(p.Crtime)+refreshDuration < time.Now().Unix() {
 			_, err = db.Delete(q.Alias(key))
 		} else if json.Unmarshal(p.KV.Get("package"), &info) == nil {
 			return
@@ -111,7 +119,7 @@ func (env *NodeEnv) getPackageInfo(name string, version string) (info NpmPackage
 		return
 	}
 
-	resp, err := http.Get(env.npmRegistry + key)
+	resp, err := http.Get(env.npmRegistry + name)
 	if err != nil {
 		return
 	}
@@ -134,10 +142,41 @@ func (env *NodeEnv) getPackageInfo(name string, version string) (info NpmPackage
 		return
 	}
 
-	err = json.Unmarshal(data, &info)
-	if err == nil {
-		db.Put(q.Alias(key), q.Tags("package"), q.KV{"package": data})
+	var state NpmPackageState
+	err = json.Unmarshal(data, &state)
+	if err != nil {
+		return
 	}
+
+	if isFullVersion {
+		info = state.Versions[version]
+	} else {
+		distVersion, ok := state.DistTags[version]
+		if ok {
+			info = state.Versions[distVersion]
+		} else {
+			var majorVerions versionSlice
+			for key := range state.Versions {
+				if reFullVersion.MatchString(key) && strings.HasPrefix(key, version+".") {
+					majorVerions = append(majorVerions, key)
+				}
+			}
+			if l := len(majorVerions); l > 0 {
+				if l > 1 {
+					sort.Sort(majorVerions)
+				}
+				fmt.Println(majorVerions)
+				info = state.Versions[majorVerions[0]]
+			}
+		}
+	}
+
+	if info.Version == "" {
+		err = fmt.Errorf("npm: version '%s' not found", version)
+		return
+	}
+
+	db.Put(q.Alias(key), q.Tags("package"), q.KV{"package": utils.MustEncodeJSON(info)})
 	return
 }
 
@@ -202,4 +241,34 @@ func yarnAdd(packages ...string) (err error) {
 		log.Debug("yarn add", strings.Join(packages, " "), "in", time.Now().Sub(start))
 	}
 	return
+}
+
+// sortable version slice
+type versionSlice []string
+
+func (s versionSlice) Len() int {
+	return len(s)
+}
+
+func (s versionSlice) Less(i, j int) bool {
+	a := strings.Split(s[i], ".")
+	b := strings.Split(s[j], ".")
+	if len(a) != 3 || len(b) != 3 {
+		return s[i] > s[j]
+	}
+	a0 := mustAtoi(a[0])
+	b0 := mustAtoi(b[0])
+	if a0 == b0 {
+		a1 := mustAtoi(a[1])
+		b1 := mustAtoi(b[1])
+		if a1 == b1 {
+			return mustAtoi(a[2]) > mustAtoi(b[2])
+		}
+		return a1 > b1
+	}
+	return a0 > b0
+}
+
+func (s versionSlice) Swap(i, j int) {
+	s[i], s[j] = s[j], s[i]
 }

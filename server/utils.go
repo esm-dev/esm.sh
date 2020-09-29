@@ -2,6 +2,7 @@ package server
 
 import (
 	"os"
+	"strconv"
 	"strings"
 )
 
@@ -50,4 +51,12 @@ func ensureDir(dir string) (err error) {
 func fileExists(filepath string) bool {
 	fi, err := os.Lstat(filepath)
 	return err == nil && !fi.IsDir()
+}
+
+func mustAtoi(a string) int {
+	i, err := strconv.Atoi(a)
+	if err != nil {
+		panic(err)
+	}
+	return i
 }

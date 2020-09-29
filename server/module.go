@@ -1,6 +1,7 @@
 package server
 
 import (
+	"errors"
 	"regexp"
 	"strings"
 
@@ -34,14 +35,15 @@ func parseModule(pathname string) (*module, error) {
 	}
 	if name != "" {
 		if version == "" {
-			info, err := nodeEnv.getPackageInfo(name, "latest")
-			if err != nil {
-				return nil, err
-			}
-			version = info.Version
-		} else if !reFullVersion.MatchString(version) {
-			// todo: get real version
+			version = "latest"
 		}
+		info, err := nodeEnv.getPackageInfo(name, version)
+		if err != nil {
+			return nil, err
+		}
+		version = info.Version
+	} else {
+		return nil, errors.New("invalid path")
 	}
 	return &module{
 		name:      name,
