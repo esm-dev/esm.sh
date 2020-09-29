@@ -25,12 +25,11 @@ var (
 )
 
 func parseModuleExports(filepath string) (exports []string, ok bool, err error) {
-	log := logger.NewDeferLog()
 	data, err := ioutil.ReadFile(filepath)
 	if err != nil {
 		return
 	}
-
+	log := logger.NewDeferLog()
 	ast, pass := js_parser.Parse(log, test.SourceForTest(string(data)), config.Options{})
 	if pass {
 		ok = ast.HasES6Exports

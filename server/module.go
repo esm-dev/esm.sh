@@ -75,8 +75,8 @@ func (m module) String() string {
 type moduleSlice []module
 
 func (a moduleSlice) Len() int           { return len(a) }
-func (a moduleSlice) Less(i, j int) bool { return a[i].String() < a[j].String() }
 func (a moduleSlice) Swap(i, j int)      { a[i], a[j] = a[j], a[i] }
+func (a moduleSlice) Less(i, j int) bool { return a[i].String() < a[j].String() }
 
 func (a moduleSlice) String() string {
 	s := make([]string, a.Len())

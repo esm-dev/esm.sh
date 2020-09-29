@@ -28,8 +28,8 @@ const (
 	refreshDuration  = 10 * 60 // 10 minues
 )
 
-// NpmPackageState defines the package details of npm
-type NpmPackageState struct {
+// NpmPackageRecords defines version records of a npm package
+type NpmPackageRecords struct {
 	DistTags map[string]string     `json:"dist-tags"`
 	Versions map[string]NpmPackage `json:"versions"`
 }
@@ -142,21 +142,21 @@ func (env *NodeEnv) getPackageInfo(name string, version string) (info NpmPackage
 		return
 	}
 
-	var state NpmPackageState
-	err = json.Unmarshal(data, &state)
+	var h NpmPackageRecords
+	err = json.Unmarshal(data, &h)
 	if err != nil {
 		return
 	}
 
 	if isFullVersion {
-		info = state.Versions[version]
+		info = h.Versions[version]
 	} else {
-		distVersion, ok := state.DistTags[version]
+		distVersion, ok := h.DistTags[version]
 		if ok {
-			info = state.Versions[distVersion]
+			info = h.Versions[distVersion]
 		} else {
 			var majorVerions versionSlice
-			for key := range state.Versions {
+			for key := range h.Versions {
 				if reFullVersion.MatchString(key) && strings.HasPrefix(key, version+".") {
 					majorVerions = append(majorVerions, key)
 				}
@@ -165,7 +165,7 @@ func (env *NodeEnv) getPackageInfo(name string, version string) (info NpmPackage
 				if l > 1 {
 					sort.Sort(majorVerions)
 				}
-				info = state.Versions[majorVerions[0]]
+				info = h.Versions[majorVerions[0]]
 			}
 		}
 	}
@@ -245,9 +245,8 @@ func yarnAdd(packages ...string) (err error) {
 // sortable version slice
 type versionSlice []string
 
-func (s versionSlice) Len() int {
-	return len(s)
-}
+func (s versionSlice) Len() int      { return len(s) }
+func (s versionSlice) Swap(i, j int) { s[i], s[j] = s[j], s[i] }
 
 func (s versionSlice) Less(i, j int) bool {
 	a := strings.Split(s[i], ".")
@@ -266,8 +265,4 @@ func (s versionSlice) Less(i, j int) bool {
 		return a1 > b1
 	}
 	return a0 > b0
-}
-
-func (s versionSlice) Swap(i, j int) {
-	s[i], s[j] = s[j], s[i]
 }
