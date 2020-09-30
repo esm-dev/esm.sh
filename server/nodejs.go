@@ -232,7 +232,7 @@ func installNodejs(dir string, version string) (err error) {
 func yarnAdd(packages ...string) (err error) {
 	if len(packages) > 0 {
 		start := time.Now()
-		args := append([]string{"add", "--prefer-offline", "--silent", "--no-progress"}, packages...)
+		args := append([]string{"add", "--prefer-offline", "--silent", "--no-progress", "--ignore-scripts"}, packages...)
 		output, err := exec.Command("yarn", args...).CombinedOutput()
 		if err != nil {
 			return fmt.Errorf(string(output))
