@@ -447,8 +447,7 @@ esbuild:
 	})
 	for _, w := range result.Warnings {
 		if strings.HasPrefix(w.Text, `Indirect calls to "require" will not be bundled`) {
-			q := w.Location.LineText[w.Location.Column+7]
-			log.Debug(w.Text, string(q), w.Location.LineText[w.Location.Column:w.Location.Column+30])
+			log.Debug(w.Text)
 		}
 	}
 	if len(result.Errors) > 0 {
