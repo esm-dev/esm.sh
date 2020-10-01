@@ -71,23 +71,25 @@ func copyDTS(nodeModulesDir string, saveDir string, dts string) (err error) {
 
 	deps := map[string]struct{}{}
 	rewriteFn := func(importPath string) string {
-		if (isValidatedESImportPath(importPath)) && !strings.HasSuffix(importPath, ".d.ts") {
-			if fileExists(path.Join(dtsDir, importPath, "index.d.ts")) {
-				importPath = strings.TrimSuffix(importPath, "/") + "/index.d.ts"
-			} else {
-				packageJSONFile := path.Join(dtsDir, importPath, "package.json")
-				if fileExists(packageJSONFile) {
-					var p NpmPackage
-					if utils.ParseJSONFile(packageJSONFile, &p) == nil {
-						types := getTypesPath(p)
-						if types != "" {
-							_, typespath := utils.SplitByFirstByte(types, '/')
-							importPath = strings.TrimSuffix(importPath, "/") + "/" + typespath
+		if isValidatedESImportPath(importPath) {
+			if !strings.HasSuffix(importPath, ".d.ts") {
+				if fileExists(path.Join(dtsDir, importPath, "index.d.ts")) {
+					importPath = strings.TrimSuffix(importPath, "/") + "/index.d.ts"
+				} else {
+					packageJSONFile := path.Join(dtsDir, importPath, "package.json")
+					if fileExists(packageJSONFile) {
+						var p NpmPackage
+						if utils.ParseJSONFile(packageJSONFile, &p) == nil {
+							types := getTypesPath(p)
+							if types != "" {
+								_, typespath := utils.SplitByFirstByte(types, '/')
+								importPath = strings.TrimSuffix(importPath, "/") + "/" + typespath
+							}
 						}
 					}
 				}
+				importPath = ensureExt(strings.TrimSuffix(importPath, ".js"), ".d.ts")
 			}
-			importPath = ensureExt(strings.TrimSuffix(importPath, ".js"), ".d.ts")
 		} else {
 			pkg, subpath := utils.SplitByFirstByte(importPath, '/')
 			if strings.HasPrefix(pkg, "@") {
@@ -113,10 +115,22 @@ func copyDTS(nodeModulesDir string, saveDir string, dts string) (err error) {
 					}
 				}
 			} else {
-				if !isValidatedESImportPath(importPath) {
-					importPath = "./" + importPath
+				p, err := nodeEnv.getPackageInfo(importPath, "latest")
+				if err != nil && err.Error() == fmt.Sprintf("npm: package '%s' not found", importPath) {
+					p, err = nodeEnv.getPackageInfo("@types/"+importPath, "latest")
 				}
-				importPath = ensureExt(importPath, ".d.ts")
+				if err == nil {
+					if subpath != "" {
+						importPath = fmt.Sprintf("%s@%s%s", p.Name, p.Version, ensureExt(utils.CleanPath(subpath), ".d.ts"))
+					} else {
+						importPath = getTypesPath(p)
+					}
+				} else {
+					if !isValidatedESImportPath(importPath) {
+						importPath = "./" + importPath
+					}
+					importPath = ensureExt(importPath, ".d.ts")
+				}
 			}
 		}
 		deps[importPath] = struct{}{}
@@ -166,7 +180,7 @@ func copyDTS(nodeModulesDir string, saveDir string, dts string) (err error) {
 				format := a[0][1]
 				path := a[0][3]
 				if format == "path" {
-					if !strings.HasPrefix(path, ".") && !strings.HasPrefix(path, "/") {
+					if !isValidatedESImportPath(path) {
 						path = "./" + path
 					}
 				}
