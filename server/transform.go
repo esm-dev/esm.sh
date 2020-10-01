@@ -22,6 +22,7 @@ var (
 	reVersion        = regexp.MustCompile(`([^/])@[\d\.]+/`)
 	reFromExpression = regexp.MustCompile(`(\s|})from\s*("|')`)
 	reReferenceTag   = regexp.MustCompile(`^<reference\s+(path|types)\s*=\s*('|")([^'"]+)("|')\s*/>$`)
+	reDeclareModule  = regexp.MustCompile(`^declare\s+module\s*('|")([^'"]+)("|')`)
 )
 
 func parseModuleExports(filepath string) (exports []string, ok bool, err error) {
@@ -190,6 +191,22 @@ func copyDTS(nodeModulesDir string, saveDir string, dts string) (err error) {
 			}
 		} else if strings.HasPrefix(pure, "//") {
 			buf.WriteString(pure)
+		} else if strings.HasPrefix(pure, "declare") && reDeclareModule.MatchString(pure) {
+			q := "'"
+			a := strings.Split(pure, q)
+			if len(a) != 3 {
+				q = `"`
+				a = strings.Split(pure, q)
+			}
+			if len(a) == 3 && strings.HasPrefix(dts, a[1]) {
+				buf.WriteString(a[0])
+				buf.WriteString(q)
+				buf.WriteString("https://esm.sh/" + a[1])
+				buf.WriteString(q)
+				buf.WriteString(a[2])
+			} else {
+				buf.WriteString(pure)
+			}
 		} else {
 			scanner := bufio.NewScanner(strings.NewReader(pure))
 			scanner.Split(onSemicolon)
