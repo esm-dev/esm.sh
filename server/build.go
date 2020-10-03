@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net/url"
 	"os"
 	"os/exec"
 	"path"
@@ -224,7 +225,7 @@ func build(storageDir string, options buildOptions) (ret buildResult, err error)
 				exports, pass, err = parseModuleExports(path.Join(buildDir, "node_modules", meta.Name, meta.Main, "index.js"))
 			}
 			if pass {
-				// submodule is esm
+				// es submodule
 				meta.Module = meta.Main
 				meta.Exports = exports
 				continue
@@ -339,14 +340,25 @@ func build(storageDir string, options buildOptions) (ret buildResult, err error)
 		if err != nil {
 			return
 		}
-		peerPackages[name] = p
-		externals[i] = name
-		i++
+		if p.Main != "" || p.Module != "" {
+			peerPackages[name] = p
+			externals[i] = name
+			i++
+		}
 	}
 	for name := range builtInNodeModules {
-		externals[i] = name
-		i++
+		var self bool
+		for _, pkg := range options.packages {
+			if pkg.name == name {
+				self = true
+			}
+		}
+		if !self {
+			externals[i] = name
+			i++
+		}
 	}
+	externals = externals[:i]
 
 	codeBuf = bytes.NewBuffer(nil)
 	if ret.single {
@@ -417,7 +429,7 @@ func build(storageDir string, options buildOptions) (ret buildResult, err error)
 	missingResolved := map[string]struct{}{}
 esbuild:
 	start = time.Now()
-	hasAnyBuiltInNodeModule := false
+	peerCommonjsModules := map[string]string{}
 	result := api.Build(api.BuildOptions{
 		Stdin:             input,
 		Bundle:            true,
@@ -434,20 +446,39 @@ esbuild:
 				plugin.AddResolver(
 					api.ResolverOptions{Filter: fmt.Sprintf("^(%s)$", strings.Join(externals, "|"))},
 					func(args api.ResolverArgs) (api.ResolverResult, error) {
-						newPath := args.Path
-						p, ok := peerPackages[args.Path]
-						// rewrite peer es moudule import path
-						if ok && p.Module != "" {
-							filename := path.Base(args.Path)
+						_, esm, _ := parseModuleExports(args.Importer)
+						resolvePath := args.Path
+						p, ok := peerPackages[resolvePath]
+						if !ok {
+							polyfill, yes := polyfilledBuiltInNodeModules[resolvePath]
+							if yes {
+								var err error
+								p, err = nodeEnv.getPackageInfo(polyfill, "latest")
+								if err == nil {
+									resolvePath = polyfill
+									ok = true
+								}
+							}
+						}
+						if ok {
+							filename := path.Base(resolvePath)
 							if options.dev {
 								filename += ".development"
 							}
-							newPath = fmt.Sprintf("/%s@%s/%s/%s", args.Path, p.Version, options.target, ensureExt(filename, ".js"))
+							esmPath := fmt.Sprintf("/%s@%s/%s/%s", resolvePath, p.Version, options.target, ensureExt(filename, ".js"))
+							if esm {
+								resolvePath = esmPath
+							} else {
+								peerCommonjsModules[resolvePath] = esmPath
+							}
+						} else {
+							if esm {
+								resolvePath = fmt.Sprintf("/_error.js?type=resolve&name=%s", url.QueryEscape(resolvePath))
+							} else {
+								peerCommonjsModules[resolvePath] = ""
+							}
 						}
-						if !hasAnyBuiltInNodeModule {
-							hasAnyBuiltInNodeModule = builtInNodeModules[args.Path]
-						}
-						return api.ResolverResult{Path: newPath, External: true, Namespace: "http"}, nil
+						return api.ResolverResult{Path: resolvePath, External: true, Namespace: "http"}, nil
 					},
 				)
 			},
@@ -478,31 +509,26 @@ esbuild:
 		return
 	}
 
-	log.Debugf("esbuild bundle %s %s %s in %v", options.packages.String(), options.target, env, time.Now().Sub(start))
-
-	saveFilePath := path.Join(storageDir, "builds", ret.buildID+".js")
-	ensureDir(path.Dir(saveFilePath))
+	log.Debugf("esbuild %s %s %s in %v", options.packages.String(), options.target, env, time.Now().Sub(start))
 
 	jsContentBuf := bytes.NewBuffer(nil)
 	fmt.Fprintf(jsContentBuf, `/* %s - esbuild bundle(%s) %s %s */%s`, jsCopyrightName, options.packages.String(), strings.ToLower(options.target), env, EOL)
+
 	var peerModules []string
 	var eol, indent string
 	if options.dev {
 		indent = "  "
 		eol = EOL
 	}
-	for name, p := range peerPackages {
-		if p.Main != "" && p.Module == "" {
-			identifier := identify(name)
-			filename := path.Base(name)
-			if options.dev {
-				filename += ".development"
+
+	if len(peerCommonjsModules) > 0 {
+		for name, importPath := range peerCommonjsModules {
+			if importPath != "" {
+				identifier := identify(name)
+				peerModules = append(peerModules, fmt.Sprintf(`"%s": %s`, name, identifier))
+				fmt.Fprintf(jsContentBuf, `import %s from "%s";%s`, identifier, importPath, eol)
 			}
-			peerModules = append(peerModules, fmt.Sprintf(`"%s": %s`, name, identifier))
-			fmt.Fprintf(jsContentBuf, `import %s from "/%s@%s/%s/%s";%s`, identifier, name, p.Version, options.target, ensureExt(filename, ".js"), eol)
 		}
-	}
-	if len(peerModules) > 0 || hasAnyBuiltInNodeModule {
 		fmt.Fprintf(jsContentBuf, `var __peerModules = `)
 		if len(peerModules) > 0 {
 			fmt.Fprintf(jsContentBuf, `{%s`, eol)
@@ -518,8 +544,23 @@ esbuild:
 		fmt.Fprintf(jsContentBuf, `%sthrow new Error("[%s] Could not resolve \"" + name + "\"");%s`, indent, jsCopyrightName, eol)
 		fmt.Fprintf(jsContentBuf, `};%s`, eol)
 	}
-	jsContentBuf.Write(result.OutputFiles[0].Contents)
 
+	// nodejs compatibility
+	outputContent := result.OutputFiles[0].Contents
+	if containsExp(outputContent, "global.") || containsExp(outputContent, "global[") {
+		fmt.Fprintf(jsContentBuf, `if (typeof global === 'undefined') var global = window;%s`, eol)
+	}
+	if containsExp(outputContent, "process.") {
+		fmt.Fprintf(jsContentBuf, `import process from "/_process_browser.js?env=%s";%s`, env, eol)
+	}
+	if containsExp(outputContent, "Buffer.") {
+		fmt.Fprintf(jsContentBuf, `import Buffer from "/buffer";%s`, eol)
+	}
+
+	jsContentBuf.Write(outputContent)
+
+	saveFilePath := path.Join(storageDir, "builds", ret.buildID+".js")
+	ensureDir(path.Dir(saveFilePath))
 	file, err := os.Create(saveFilePath)
 	if err != nil {
 		return
@@ -541,6 +582,17 @@ esbuild:
 
 	ret.importMeta = importMeta
 	return
+}
+
+func containsExp(content []byte, exp string) bool {
+	i := bytes.Index(content, []byte(exp))
+	if i > 0 {
+		c := content[i-1]
+		if (c < 'a' || c > 'z') && (c < 'A' || c > 'Z') && c != '.' {
+			return true
+		}
+	}
+	return false
 }
 
 func identify(importPath string) string {

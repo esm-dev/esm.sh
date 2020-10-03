@@ -92,8 +92,16 @@ func copyDTS(nodeModulesDir string, saveDir string, dts string) (err error) {
 				importPath = ensureExt(strings.TrimSuffix(importPath, ".js"), ".d.ts")
 			}
 		} else {
-			// ignore builtin node  modules
-			if ok := builtInNodeModules[importPath]; ok {
+			// ignore builtin node modules
+			if _, ok := builtInNodeModules[importPath]; ok {
+				polyfill, ok := polyfilledBuiltInNodeModules[importPath]
+				if ok {
+					p, err := nodeEnv.getPackageInfo(polyfill, "latest")
+					if err == nil {
+						return getTypesPath(p)
+					}
+					return polyfill
+				}
 				return importPath
 			}
 			pkg, subpath := utils.SplitByFirstByte(importPath, '/')

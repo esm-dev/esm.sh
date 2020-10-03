@@ -22,6 +22,16 @@ func registerAPI(storageDir string, cdnDomain string) {
 			return rex.Content("index.html", start, bytes.NewReader([]byte(fmt.Sprintf(indexHTML, mdStr))))
 		case "/favicon.ico":
 			return 404
+		case "/_process_browser.js":
+			return rex.Content("process_browser.js", start, bytes.NewReader([]byte(fmt.Sprintf(processBrowserJS, ctx.Form.Value("env")))))
+		case "/_error.js":
+			t := ctx.Form.Value("type")
+			switch t {
+			case "resolve":
+				return throwErrorJS(ctx, fmt.Errorf(`Can't resolve "%s"`, ctx.Form.Value("name")))
+			default:
+				return throwErrorJS(ctx, fmt.Errorf("Unknown error"))
+			}
 		}
 
 		var storageType string
