@@ -28,6 +28,49 @@ const (
 	refreshDuration  = 10 * 60 // 10 minues
 )
 
+var builtInNodeModules = map[string]bool{
+	"assert":         true,
+	"async_hooks":    true,
+	"buffer":         true,
+	"child_process":  true,
+	"cluster":        true,
+	"console":        true,
+	"constants":      true,
+	"crypto":         true,
+	"dgram":          true,
+	"dns":            true,
+	"domain":         true,
+	"events":         true,
+	"fs":             true,
+	"http":           true,
+	"http2":          true,
+	"https":          true,
+	"inspector":      true,
+	"module":         true,
+	"net":            true,
+	"os":             true,
+	"path":           true,
+	"perf_hooks":     true,
+	"process":        true,
+	"punycode":       true,
+	"querystring":    true,
+	"readline":       true,
+	"repl":           true,
+	"stream":         true,
+	"string_decoder": true,
+	"sys":            true,
+	"timers":         true,
+	"tls":            true,
+	"trace_events":   true,
+	"tty":            true,
+	"url":            true,
+	"util":           true,
+	"v8":             true,
+	"vm":             true,
+	"worker_threads": true,
+	"zlib":           true,
+}
+
 // NpmPackageRecords defines version records of a npm package
 type NpmPackageRecords struct {
 	DistTags map[string]string     `json:"dist-tags"`

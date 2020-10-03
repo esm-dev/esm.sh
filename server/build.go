@@ -323,7 +323,7 @@ func build(storageDir string, options buildOptions) (ret buildResult, err error)
 		if types != "" {
 			err = copyDTS(path.Join(buildDir, "node_modules"), path.Join(storageDir, "types"), types)
 			if err != nil {
-				err = fmt.Errorf("copyDTS: %s %v", types, err)
+				err = fmt.Errorf("copyDTS(%s): %v", types, err)
 				return
 			}
 			meta.Types = "/" + types
@@ -331,7 +331,7 @@ func build(storageDir string, options buildOptions) (ret buildResult, err error)
 	}
 	log.Debug("copy dts in", time.Now().Sub(start))
 
-	externals := make([]string, len(peerPackages))
+	externals := make([]string, len(peerPackages)+len(builtInNodeModules))
 	i := 0
 	for name := range peerPackages {
 		var p NpmPackage
@@ -340,6 +340,10 @@ func build(storageDir string, options buildOptions) (ret buildResult, err error)
 			return
 		}
 		peerPackages[name] = p
+		externals[i] = name
+		i++
+	}
+	for name := range builtInNodeModules {
 		externals[i] = name
 		i++
 	}
@@ -413,6 +417,7 @@ func build(storageDir string, options buildOptions) (ret buildResult, err error)
 	missingResolved := map[string]struct{}{}
 esbuild:
 	start = time.Now()
+	hasAnyBuiltInNodeModule := false
 	result := api.Build(api.BuildOptions{
 		Stdin:             input,
 		Bundle:            true,
@@ -429,8 +434,8 @@ esbuild:
 				plugin.AddResolver(
 					api.ResolverOptions{Filter: fmt.Sprintf("^(%s)$", strings.Join(externals, "|"))},
 					func(args api.ResolverArgs) (api.ResolverResult, error) {
-						p, ok := peerPackages[args.Path]
 						newPath := args.Path
+						p, ok := peerPackages[args.Path]
 						// rewrite peer es moudule import path
 						if ok && p.Module != "" {
 							filename := path.Base(args.Path)
@@ -438,6 +443,9 @@ esbuild:
 								filename += ".development"
 							}
 							newPath = fmt.Sprintf("/%s@%s/%s/%s", args.Path, p.Version, options.target, ensureExt(filename, ".js"))
+						}
+						if !hasAnyBuiltInNodeModule {
+							hasAnyBuiltInNodeModule = builtInNodeModules[args.Path]
 						}
 						return api.ResolverResult{Path: newPath, External: true, Namespace: "http"}, nil
 					},
@@ -477,30 +485,38 @@ esbuild:
 
 	jsContentBuf := bytes.NewBuffer(nil)
 	fmt.Fprintf(jsContentBuf, `/* %s - esbuild bundle(%s) %s %s */%s`, jsCopyrightName, options.packages.String(), strings.ToLower(options.target), env, EOL)
-	if len(peerPackages) > 0 {
-		var esModules []string
-		var eol, indent string
-		if options.dev {
-			indent = "  "
-			eol = EOL
-		}
-		for name, p := range peerPackages {
-			if p.Main != "" && p.Module == "" {
-				identifier := identify(name)
-				filename := path.Base(name)
-				if options.dev {
-					filename += ".development"
-				}
-				esModules = append(esModules, fmt.Sprintf(`"%s": %s`, name, identifier))
-				fmt.Fprintf(jsContentBuf, `import %s from "/%s@%s/%s/%s";%s`, identifier, name, p.Version, options.target, ensureExt(filename, ".js"), eol)
+	var peerModules []string
+	var eol, indent string
+	if options.dev {
+		indent = "  "
+		eol = EOL
+	}
+	for name, p := range peerPackages {
+		if p.Main != "" && p.Module == "" {
+			identifier := identify(name)
+			filename := path.Base(name)
+			if options.dev {
+				filename += ".development"
 			}
+			peerModules = append(peerModules, fmt.Sprintf(`"%s": %s`, name, identifier))
+			fmt.Fprintf(jsContentBuf, `import %s from "/%s@%s/%s/%s";%s`, identifier, name, p.Version, options.target, ensureExt(filename, ".js"), eol)
 		}
-		if len(esModules) > 0 {
-			fmt.Fprintf(jsContentBuf, `var __esModules = {%s`, eol)
-			fmt.Fprintf(jsContentBuf, `%s%s%s`, indent, strings.Join(esModules, fmt.Sprintf(",%s%s", eol, indent)), eol)
+	}
+	if len(peerModules) > 0 || hasAnyBuiltInNodeModule {
+		fmt.Fprintf(jsContentBuf, `var __peerModules = `)
+		if len(peerModules) > 0 {
+			fmt.Fprintf(jsContentBuf, `{%s`, eol)
+			fmt.Fprintf(jsContentBuf, `%s%s%s`, indent, strings.Join(peerModules, fmt.Sprintf(",%s%s", eol, indent)), eol)
 			fmt.Fprintf(jsContentBuf, `};%s`, eol)
-			fmt.Fprintf(jsContentBuf, `var require = name => __esModules[name];%s`, eol)
+		} else {
+			fmt.Fprintf(jsContentBuf, `{};%s`, eol)
 		}
+		fmt.Fprintf(jsContentBuf, `var require = name => {%s`, eol)
+		fmt.Fprintf(jsContentBuf, `%sif (name in __peerModules) {%s`, indent, eol)
+		fmt.Fprintf(jsContentBuf, `%s%sreturn __peerModules[name];%s`, indent, indent, eol)
+		fmt.Fprintf(jsContentBuf, `%s}%s`, indent, eol)
+		fmt.Fprintf(jsContentBuf, `%sthrow new Error("[%s] Could not resolve \"" + name + "\"");%s`, indent, jsCopyrightName, eol)
+		fmt.Fprintf(jsContentBuf, `};%s`, eol)
 	}
 	jsContentBuf.Write(result.OutputFiles[0].Contents)
 

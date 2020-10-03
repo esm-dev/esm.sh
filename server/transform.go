@@ -50,10 +50,10 @@ func copyDTS(nodeModulesDir string, saveDir string, dts string) (err error) {
 	dtsFile, err := os.Open(dtsFilePath)
 	if err != nil {
 		if os.IsNotExist(err) {
-			log.Warn("copyDTS", dts, err)
+			log.Warnf("copyDTS(%s): %v", dts, err)
 			err = nil
 		} else if strings.HasSuffix(err.Error(), "is a directory") {
-			log.Warn("copyDTS", dts, err)
+			log.Warnf("copyDTS(%s): %v", dts, err)
 			err = nil
 		}
 		return
@@ -63,7 +63,7 @@ func copyDTS(nodeModulesDir string, saveDir string, dts string) (err error) {
 	fi, err := os.Lstat(saveFilePath)
 	if err == nil {
 		if fi.IsDir() {
-			os.RemoveAll(saveFilePath)
+			os.Remove(saveFilePath)
 		} else {
 			// do not repeat
 			return
@@ -92,6 +92,10 @@ func copyDTS(nodeModulesDir string, saveDir string, dts string) (err error) {
 				importPath = ensureExt(strings.TrimSuffix(importPath, ".js"), ".d.ts")
 			}
 		} else {
+			// ignore builtin node  modules
+			if ok := builtInNodeModules[importPath]; ok {
+				return importPath
+			}
 			pkg, subpath := utils.SplitByFirstByte(importPath, '/')
 			if strings.HasPrefix(pkg, "@") {
 				n, s := utils.SplitByFirstByte(subpath, '/')
@@ -185,7 +189,12 @@ func copyDTS(nodeModulesDir string, saveDir string, dts string) (err error) {
 						path = "./" + path
 					}
 				}
-				buf.WriteString(fmt.Sprintf(`/// <reference %s="%s" />`, format, rewriteFn(path)))
+				// ignore node types
+				if format == "types" && path == "node" {
+					buf.WriteString(`/// <reference types="node" />`)
+				} else {
+					buf.WriteString(fmt.Sprintf(`/// <reference %s="%s" />`, format, rewriteFn(path)))
+				}
 			} else {
 				buf.WriteString(pure)
 			}
@@ -288,7 +297,7 @@ func copyDTS(nodeModulesDir string, saveDir string, dts string) (err error) {
 			err = copyDTS(nodeModulesDir, saveDir, dep)
 		}
 		if err != nil {
-			os.RemoveAll(saveFilePath)
+			os.Remove(saveFilePath)
 			return
 		}
 	}
