@@ -366,11 +366,13 @@ func build(storageDir string, options buildOptions) (ret buildResult, err error)
 		importPath := pkg.ImportPath()
 		importIdentifier := identify(importPath)
 		meta := importMeta[importPath]
+		exports := []string{}
 		hasDefaultExport := false
 		for _, name := range meta.Exports {
 			if name == "default" {
 				hasDefaultExport = true
-				break
+			} else if name != "import" {
+				exports = append(exports, name)
 			}
 		}
 		if meta.Module != "" {
@@ -384,6 +386,7 @@ func build(storageDir string, options buildOptions) (ret buildResult, err error)
 			} else {
 				fmt.Fprintf(codeBuf, `import * as %s from "%s";%s`, importIdentifier, importPath, EOL)
 			}
+			fmt.Fprintf(codeBuf, `export const { %s } = %s;%s`, strings.Join(exports, ","), importIdentifier, EOL)
 			fmt.Fprintf(codeBuf, `export default %s;`, importIdentifier)
 		} else {
 			fmt.Fprintf(codeBuf, `export default null;`)
