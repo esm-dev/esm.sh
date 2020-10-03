@@ -31,11 +31,20 @@ if [ "$ok" == "yes" ]; then
     init="yes"
 fi
 
+rebuild="no"
+if [ "$init" == "no" ]; then
+    read -p "rebuild database ('yes' or 'no', default is 'no')? " ok
+    if [ "$ok" == "yes" ]; then
+        rebuild="yes"
+    fi
+fi
+
 port="80"
 httpsPort="443"
 etcDir="/etc/esmd"
 domain="esm.sh"
 cdnDomain=""
+
 if [ "$init" == "yes" ]; then
     read -p "please enter the server http port (default is ${port}): " p
     if [ "$p" != "" ]; then
@@ -56,6 +65,13 @@ if [ "$init" == "yes" ]; then
     read -p "please enter the cdn domain (optional): " p
     if [ "$p" != "" ]; then
         cdnDomain="$p"
+    fi
+fi
+
+if [ "$rebuild" == "yes" ]; then
+    read -p "please enter the etc directory, user ${user} must have r/w permission of it (default is ${etcDir}): " p
+    if [ "$p" != "" ]; then
+        etcDir="$p"
     fi
 fi
 
@@ -100,6 +116,10 @@ ssh -p $sshPort $user@$host << EOF
         writeSVConfLine "autorestart=true"
         supervisorctl reload
     else
+        if [ "$rebuild" == "yes" ]; then
+            rm -f ${etcDir}/esm.db
+            rm -rf ${etcDir}/storage
+        fi
         supervisorctl start esmd
     fi
 EOF
