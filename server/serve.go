@@ -16,8 +16,9 @@ import (
 )
 
 var (
-	nodeEnv *NodeEnv
-	db      *postdb.DB
+	readmeMD string
+	nodeEnv  *NodeEnv
+	db       *postdb.DB
 )
 
 var (

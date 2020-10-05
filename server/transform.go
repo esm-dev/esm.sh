@@ -197,9 +197,8 @@ func copyDTS(nodeModulesDir string, saveDir string, dts string) (err error) {
 						path = "./" + path
 					}
 				}
-				// ignore node types
 				if format == "types" && path == "node" {
-					buf.WriteString(`/// <reference types="node" />`)
+					buf.WriteString(nodeTypes)
 				} else {
 					buf.WriteString(fmt.Sprintf(`/// <reference %s="%s" />`, format, rewriteFn(path)))
 				}
