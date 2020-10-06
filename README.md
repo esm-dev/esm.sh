@@ -53,17 +53,17 @@ import React from 'https://esm.sh/react' // actual from 'https://esm.sh/[react,r
 # install esm command
 deno install --allow-read --allow-write --allow-net -f -n esm https://deno.land/x/esm/cli.ts
 
-# add some modules
+# add some packages
 $ esm add react react-dom
 
 # specify version or tag
 $ esm add react@16.13.1
 $ esm add react@next
 
-# remove some modules
+# remove some packages
 $ esm remove lodash
 
-# update installed modules to latest version
+# update installed packages to latest version
 $ esm update
 
 # help message
@@ -78,12 +78,12 @@ $ esm -h
 
 ## Caveat
 
-Different with [Skypack](https://skypack.dev) and [jspm](https://jspm.org), **esm.sh** will bundle all dependencies(exclude peerDependencies) for each packages, that means there may be redundant contents transmitted when you are importing multiple packages.<br>
+Different with [Skypack](https://skypack.dev) and [jspm](https://jspm.org), **esm.sh** will bundle all dependencies(exclude peerDependencies) for each package, that means there may be redundant contents transmitted when you are importing multiple packages.<br>
 This should be improved when the http/3(quic) is ready. For now the best practice is using the **bundle mode**.
 
 ## Self-Hosting
 
-You will need [Go](https://golang.org/dl) 1.14+ to compile the server, and ensure the [supervisor](http://supervisord.org/) installed on your host machine.<br>
+You will need [Go](https://golang.org/dl) 1.14+ to compile the server, and ensure [supervisor](http://supervisord.org/) installed on your host machine.<br>
 The server runtime will check the nodejs installation (12+) exists or install the latest LTS version automatically.
 
 ```bash
