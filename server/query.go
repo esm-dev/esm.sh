@@ -20,10 +20,9 @@ func registerAPI(storageDir string, cdnDomain string) {
 		case "/":
 			mdStr := strings.TrimSpace(string(utils.MustEncodeJSON(readmeMD)))
 			return rex.Content("index.html", start, bytes.NewReader([]byte(fmt.Sprintf(indexHTML, mdStr))))
-		case "/favicon.ico":
-			return 404
 		case "/_process_browser.js":
-			return rex.Content("process_browser.js", start, bytes.NewReader([]byte(fmt.Sprintf(processBrowserJS, ctx.Form.Value("env")))))
+			ctx.SetHeader("Cache-Control", "public, max-age=31536000, immutable")
+			return rex.Content("process/browser.js", start, bytes.NewReader([]byte(fmt.Sprintf(processBrowserJS, ctx.Form.Value("env")))))
 		case "/_error.js":
 			t := ctx.Form.Value("type")
 			switch t {
@@ -32,6 +31,8 @@ func registerAPI(storageDir string, cdnDomain string) {
 			default:
 				return throwErrorJS(ctx, fmt.Errorf("Unknown error"))
 			}
+		case "/favicon.ico":
+			return 404
 		}
 
 		var storageType string
@@ -218,6 +219,9 @@ func throwErrorJS(ctx *rex.Context, err error) interface{} {
 	fmt.Fprintf(buf, `throw new Error("[%s] " + %s);%s`, jsCopyrightName, strings.TrimSpace(string(utils.MustEncodeJSON(err.Error()))), EOL)
 	fmt.Fprintf(buf, `export default null;%s`, EOL)
 	ctx.SetHeader("Cache-Control", "private, no-store, no-cache, must-revalidate")
-	ctx.SetHeader("Content-Type", "application/javascript; charset=utf-8")
-	return buf.String()
+	return &rex.TypedContent{
+		Status:      500,
+		Content:     buf.Bytes(),
+		ContentType: "application/javascript; charset=utf-8",
+	}
 }

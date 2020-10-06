@@ -1121,7 +1121,7 @@ process.env.NODE_ENV = "%s";
 export default process;
 `
 
-const nodeTypes = `// node types
+const nodeTypes = `// nodejs types
 declare class Buffer extends Uint8Array {}
 declare namespace NodeJS {
 	type TypedArray = Uint8Array | Uint8ClampedArray | Uint16Array | Uint32Array | Int8Array | Int16Array | Int32Array | Float32Array | Float64Array;
