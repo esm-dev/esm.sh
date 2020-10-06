@@ -933,7 +933,7 @@ const indexHTML = `<!DOCTYPE html>
 
 // copy from https://github.com/defunctzombie/node-process/blob/master/browser.js
 const processBrowserJS = `// shim for using process in browser
-var process = {};
+var process = window.process = {};
 
 // cached from whatever global is present so that test runners that stub it
 // don't break things.  But we need to wrap it in a try catch in case it is
@@ -1088,7 +1088,7 @@ Item.prototype.run = function () {
 };
 process.title = 'browser';
 process.browser = true;
-process.env = {};
+process.env = { NODE_ENV: "%s" };
 process.argv = [];
 process.version = ''; // empty string to avoid regexp issues
 process.versions = {};
@@ -1117,7 +1117,6 @@ process.chdir = function (dir) {
 };
 process.umask = function() { return 0; };
 
-process.env.NODE_ENV = "%s";
 export default process;
 `
 
