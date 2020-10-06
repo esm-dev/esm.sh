@@ -119,6 +119,7 @@ ssh -p $sshPort $user@$host << EOF
         if [ "$rebuild" == "yes" ]; then
             rm -f ${etcDir}/esm.db
             rm -rf ${etcDir}/storage
+            echo "esmd: database rebuilt"
         fi
         supervisorctl start esmd
     fi
