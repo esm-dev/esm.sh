@@ -204,8 +204,8 @@ func registerAPI(storageDir string, cdnDomain string) {
 				fmt.Fprintf(buf, `export default %s_default;%s`, importIdentifier, EOL)
 			}
 		}
-		if importMeta.Types != "" {
-			ctx.SetHeader("X-TypeScript-Types", importMeta.Types)
+		if importMeta.Dts != "" {
+			ctx.SetHeader("X-TypeScript-Types", importMeta.Dts)
 		}
 		ctx.SetHeader("Cache-Control", fmt.Sprintf("private, max-age=%d", refreshDuration))
 		ctx.SetHeader("Content-Type", "application/javascript; charset=utf-8")

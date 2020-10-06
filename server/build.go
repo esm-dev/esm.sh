@@ -44,7 +44,7 @@ var buildLock sync.Mutex
 type ImportMeta struct {
 	NpmPackage
 	Exports []string `json:"exports"`
-	Types   string   `json:"types"`
+	Dts     string   `json:"dts"`
 }
 
 type buildOptions struct {
@@ -143,8 +143,10 @@ func build(storageDir string, options buildOptions) (ret buildResult, err error)
 			}
 		}
 		if pkg.submodule != "" {
-			meta.Main = pkg.ImportPath()
+			meta.Main = pkg.submodule
 			meta.Module = ""
+			meta.Types = ""
+			meta.Typings = ""
 		}
 		importMeta[pkg.ImportPath()] = meta
 	}
@@ -207,10 +209,42 @@ func build(storageDir string, options buildOptions) (ret buildResult, err error)
 	for _, pkg := range options.packages {
 		importPath := pkg.ImportPath()
 		meta := importMeta[importPath]
-		if pkg.submodule == "" && meta.Module != "" {
-			exports, pass, err := parseModuleExports(path.Join(buildDir, "node_modules", meta.Name, ensureExt(meta.Module, ".js")))
+		pkgDir := path.Join(buildDir, "node_modules", meta.Name)
+		if pkg.submodule != "" {
+			if fileExists(path.Join(pkgDir, pkg.submodule, "package.json")) {
+				var p NpmPackage
+				err = utils.ParseJSONFile(path.Join(pkgDir, pkg.submodule, "package.json"), &p)
+				if err != nil {
+					return
+				}
+				if p.Main != "" {
+					meta.Main = path.Join(pkg.submodule, p.Main)
+				}
+				if p.Module != "" {
+					meta.Module = path.Join(pkg.submodule, p.Module)
+				}
+				if p.Types != "" {
+					meta.Types = path.Join(pkg.submodule, p.Types)
+				}
+				if p.Typings != "" {
+					meta.Typings = path.Join(pkg.submodule, p.Typings)
+				}
+			} else {
+				exports, pass, err := parseModuleExports(path.Join(pkgDir, ensureExt(meta.Main, ".js")))
+				if err != nil && os.IsNotExist(err) {
+					exports, pass, err = parseModuleExports(path.Join(pkgDir, meta.Main, "index.js"))
+				}
+				if pass {
+					meta.Module = meta.Main
+					meta.Exports = exports
+					continue
+				}
+			}
+		}
+		if meta.Module != "" {
+			exports, pass, err := parseModuleExports(path.Join(pkgDir, ensureExt(meta.Module, ".js")))
 			if err != nil && os.IsNotExist(err) {
-				exports, pass, err = parseModuleExports(path.Join(buildDir, "node_modules", meta.Name, meta.Module, "index.js"))
+				exports, pass, err = parseModuleExports(path.Join(pkgDir, meta.Module, "index.js"))
 			}
 			if pass {
 				meta.Exports = exports
@@ -218,18 +252,6 @@ func build(storageDir string, options buildOptions) (ret buildResult, err error)
 			}
 			// fake module
 			meta.Module = ""
-		}
-		if pkg.submodule != "" {
-			exports, pass, err := parseModuleExports(path.Join(buildDir, "node_modules", meta.Name, ensureExt(meta.Main, ".js")))
-			if err != nil && os.IsNotExist(err) {
-				exports, pass, err = parseModuleExports(path.Join(buildDir, "node_modules", meta.Name, meta.Main, "index.js"))
-			}
-			if pass {
-				// es submodule
-				meta.Module = meta.Main
-				meta.Exports = exports
-				continue
-			}
 		}
 		// export commonjs exports
 		importIdentifier := identify(importPath)
@@ -273,8 +295,12 @@ func build(storageDir string, options buildOptions) (ret buildResult, err error)
 		var types string
 		meta := importMeta[pkg.ImportPath()]
 		nv := fmt.Sprintf("%s@%s", meta.Name, meta.Version)
-		if pkg.submodule == "" {
-			if meta.Types == "" && meta.Typings == "" && !strings.HasPrefix(pkg.name, "@") {
+		if meta.Types != "" || meta.Typings != "" {
+			types = getTypesPath(meta.NpmPackage)
+		} else if pkg.submodule == "" {
+			if fileExists(path.Join(buildDir, "node_modules", pkg.name, "index.d.ts")) {
+				types = fmt.Sprintf("%s/%s", nv, "index.d.ts")
+			} else if !strings.HasPrefix(pkg.name, "@") {
 				var info NpmPackage
 				err = utils.ParseJSONFile(path.Join(buildDir, "node_modules", "@types/"+pkg.name, "package.json"), &info)
 				if err == nil {
@@ -283,42 +309,15 @@ func build(storageDir string, options buildOptions) (ret buildResult, err error)
 					return
 				}
 			}
-			if types == "" {
-				types = getTypesPath(meta.NpmPackage)
-			}
 		} else {
-			var p NpmPackage
-			err = utils.ParseJSONFile(path.Join(buildDir, "node_modules", pkg.name, pkg.submodule, "package.json"), &p)
-			if err == nil {
-				var tp string
-				if p.Types != "" {
-					tp = p.Types
-				} else if p.Typings != "" {
-					tp = p.Typings
-				} else if p.Main != "" {
-					tp = strings.TrimSuffix(p.Main, ".js")
-				}
-				if tp != "" {
-					types = fmt.Sprintf("%s/%s", nv, ensureExt(path.Join(pkg.submodule, tp), ".d.ts"))
-				}
-				if p.PeerDependencies != nil {
-					for name := range p.PeerDependencies {
-						peerPackages[name] = NpmPackage{
-							Name: name,
-						}
-					}
-				}
-			}
-			if types == "" {
-				if fileExists(path.Join(buildDir, "node_modules", pkg.name, pkg.submodule, "index.d.ts")) {
-					types = fmt.Sprintf("%s/%s", nv, path.Join(pkg.submodule, "index.d.ts"))
-				} else if fileExists(path.Join(buildDir, "node_modules", pkg.name, ensureExt(pkg.submodule, ".d.ts"))) {
-					types = fmt.Sprintf("%s/%s", nv, ensureExt(pkg.submodule, ".d.ts"))
-				} else if fileExists(path.Join(buildDir, "node_modules/@types", pkg.name, pkg.submodule, "index.d.ts")) {
-					types = fmt.Sprintf("@types/%s/%s", nv, path.Join(pkg.submodule, "index.d.ts"))
-				} else if fileExists(path.Join(buildDir, "node_modules/@types", pkg.name, ensureExt(pkg.submodule, ".d.ts"))) {
-					types = fmt.Sprintf("@types/%s/%s", nv, ensureExt(pkg.submodule, ".d.ts"))
-				}
+			if fileExists(path.Join(buildDir, "node_modules", pkg.name, pkg.submodule, "index.d.ts")) {
+				types = fmt.Sprintf("%s/%s", nv, path.Join(pkg.submodule, "index.d.ts"))
+			} else if fileExists(path.Join(buildDir, "node_modules", pkg.name, ensureExt(pkg.submodule, ".d.ts"))) {
+				types = fmt.Sprintf("%s/%s", nv, ensureExt(pkg.submodule, ".d.ts"))
+			} else if fileExists(path.Join(buildDir, "node_modules/@types", pkg.name, pkg.submodule, "index.d.ts")) {
+				types = fmt.Sprintf("@types/%s/%s", nv, path.Join(pkg.submodule, "index.d.ts"))
+			} else if fileExists(path.Join(buildDir, "node_modules/@types", pkg.name, ensureExt(pkg.submodule, ".d.ts"))) {
+				types = fmt.Sprintf("@types/%s/%s", nv, ensureExt(pkg.submodule, ".d.ts"))
 			}
 		}
 		if types != "" {
@@ -327,7 +326,7 @@ func build(storageDir string, options buildOptions) (ret buildResult, err error)
 				err = fmt.Errorf("copyDTS(%s): %v", types, err)
 				return
 			}
-			meta.Types = "/" + types
+			meta.Dts = "/" + types
 		}
 	}
 	log.Debug("copy dts in", time.Now().Sub(start))
