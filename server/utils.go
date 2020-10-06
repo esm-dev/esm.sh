@@ -2,6 +2,7 @@ package server
 
 import (
 	"os"
+	"regexp"
 	"strconv"
 	"strings"
 )
@@ -9,6 +10,12 @@ import (
 const (
 	// EOL defines the char of end of line
 	EOL = "\n"
+)
+
+var (
+	regProcess = regexp.MustCompile(`[^a-zA-Z0-9_\.\$'"]process\.`)
+	regBuffer  = regexp.MustCompile(`[^a-zA-Z0-9_\.\$'"]Buffer\.`)
+	regGlobal  = regexp.MustCompile(`[^a-zA-Z0-9_\.\$'"]global(\.|\[)`)
 )
 
 func isValidatedESImportPath(importPath string) bool {

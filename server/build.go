@@ -428,7 +428,7 @@ func build(storageDir string, options buildOptions) (ret buildResult, err error)
 	missingResolved := map[string]struct{}{}
 esbuild:
 	start = time.Now()
-	peerESModules := map[string]string{}
+	peerModulesForCommonjs := map[string]string{}
 	result := api.Build(api.BuildOptions{
 		Stdin:             input,
 		Bundle:            true,
@@ -468,13 +468,13 @@ esbuild:
 							if esm {
 								resolvePath = esmPath
 							} else {
-								peerESModules[resolvePath] = esmPath
+								peerModulesForCommonjs[resolvePath] = esmPath
 							}
 						} else {
 							if esm {
 								resolvePath = fmt.Sprintf("/_error.js?type=resolve&name=%s", url.QueryEscape(resolvePath))
 							} else {
-								peerESModules[resolvePath] = ""
+								peerModulesForCommonjs[resolvePath] = ""
 							}
 						}
 						return api.ResolverResult{Path: resolvePath, External: true, Namespace: "http"}, nil
@@ -519,46 +519,40 @@ esbuild:
 		eol = EOL
 	}
 
-	if len(peerESModules) > 0 {
-		var commonjsKVs []string
-		for name, importPath := range peerESModules {
-			if importPath != "" {
-				identifier := identify(name)
-				commonjsKVs = append(commonjsKVs, fmt.Sprintf(`"%s": __%s`, name, identifier))
-				fmt.Fprintf(jsContentBuf, `import __%s from "%s";%s`, identifier, importPath, eol)
-			}
-		}
-		fmt.Fprintf(jsContentBuf, `var __esModules = `)
-		if len(commonjsKVs) > 0 {
-			fmt.Fprintf(jsContentBuf, `{%s`, eol)
-			fmt.Fprintf(jsContentBuf, `%s%s%s`, indent, strings.Join(commonjsKVs, fmt.Sprintf(",%s%s", eol, indent)), eol)
-			fmt.Fprintf(jsContentBuf, `};%s`, eol)
-		} else {
-			fmt.Fprintf(jsContentBuf, `{};%s`, eol)
-		}
-		fmt.Fprintf(jsContentBuf, `var require = name => {%s`, eol)
-		fmt.Fprintf(jsContentBuf, `%sif (name in __esModules) {%s`, indent, eol)
-		fmt.Fprintf(jsContentBuf, `%s%sreturn __esModules[name];%s`, indent, indent, eol)
-		fmt.Fprintf(jsContentBuf, `%s}%s`, indent, eol)
-		fmt.Fprintf(jsContentBuf, `%sthrow new Error("[%s] Could not resolve \"" + name + "\"");%s`, indent, jsCopyrightName, eol)
-		fmt.Fprintf(jsContentBuf, `};%s`, eol)
-	}
-
 	// nodejs compatibility
 	outputContent := result.OutputFiles[0].Contents
-	if containsExp(outputContent, "global.") || containsExp(outputContent, "global[") {
-		fmt.Fprintf(jsContentBuf, `if (typeof global === 'undefined') var global = window;%s`, eol)
-	}
-	if containsExp(outputContent, "process.") {
+	if regProcess.Match(outputContent) {
 		fmt.Fprintf(jsContentBuf, `import process from "/_process_browser.js?env=%s";%s`, env, eol)
 	}
-	if containsExp(outputContent, "Buffer.") {
+	if regBuffer.Match(outputContent) {
 		p, err := nodeEnv.getPackageInfo("buffer", "latest")
 		if err == nil {
 			fmt.Fprintf(jsContentBuf, `import Buffer from "/buffer@%s/%s/buffer.js";%s`, p.Version, options.target, eol)
 		} else {
 			fmt.Fprintf(jsContentBuf, `import Buffer from "/buffer";%s`, eol)
 		}
+	}
+	if len(peerModulesForCommonjs) > 0 {
+		var cases []string
+		for name, importPath := range peerModulesForCommonjs {
+			if importPath != "" {
+				identifier := identify(name)
+				cases = append(cases, fmt.Sprintf(`case "%s":%s%s%s%sreturn __%s;`, name, eol, indent, indent, indent, identifier))
+				fmt.Fprintf(jsContentBuf, `import __%s from "%s";%s`, identifier, importPath, eol)
+			}
+		}
+		fmt.Fprintf(jsContentBuf, `var require = name => {%s`, eol)
+		fmt.Fprintf(jsContentBuf, `%sswitch (name) {%s`, indent, eol)
+		for _, c := range cases {
+			fmt.Fprintf(jsContentBuf, `%s%s%s%s`, indent, indent, c, eol)
+		}
+		fmt.Fprintf(jsContentBuf, `%s%sdefault:%s`, indent, indent, eol)
+		fmt.Fprintf(jsContentBuf, `%s%s%sthrow new Error("[%s] Could not resolve \"" + name + "\"");%s`, indent, indent, indent, jsCopyrightName, eol)
+		fmt.Fprintf(jsContentBuf, `%s}%s`, indent, eol)
+		fmt.Fprintf(jsContentBuf, `};%s`, eol)
+	}
+	if regGlobal.Match(outputContent) {
+		fmt.Fprintf(jsContentBuf, `if (typeof global === "undefined") var global = window;%s`, eol)
 	}
 
 	jsContentBuf.Write(outputContent)
@@ -586,17 +580,6 @@ esbuild:
 
 	ret.importMeta = importMeta
 	return
-}
-
-func containsExp(content []byte, exp string) bool {
-	i := bytes.Index(content, []byte(exp))
-	if i > 0 {
-		c := content[i-1]
-		if (c < 'a' || c > 'z') && (c < 'A' || c > 'Z') && c != '_' && c != '.' {
-			return true
-		}
-	}
-	return false
 }
 
 func identify(importPath string) string {
