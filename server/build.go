@@ -340,11 +340,9 @@ func build(storageDir string, options buildOptions) (ret buildResult, err error)
 		if err != nil {
 			return
 		}
-		if p.Main != "" || p.Module != "" {
-			peerPackages[name] = p
-			externals[i] = name
-			i++
-		}
+		peerPackages[name] = p
+		externals[i] = name
+		i++
 	}
 	for name := range builtInNodeModules {
 		var self bool
@@ -380,7 +378,7 @@ func build(storageDir string, options buildOptions) (ret buildResult, err error)
 			if hasDefaultExport {
 				fmt.Fprintf(codeBuf, `export {default} from "%s";`, importPath)
 			}
-		} else if meta.Main != "" {
+		} else {
 			if hasDefaultExport {
 				fmt.Fprintf(codeBuf, `import %s from "%s";%s`, importIdentifier, importPath, EOL)
 			} else {
@@ -388,8 +386,6 @@ func build(storageDir string, options buildOptions) (ret buildResult, err error)
 			}
 			fmt.Fprintf(codeBuf, `export const { %s } = %s;%s`, strings.Join(exports, ","), importIdentifier, EOL)
 			fmt.Fprintf(codeBuf, `export default %s;`, importIdentifier)
-		} else {
-			fmt.Fprintf(codeBuf, `export default null;`)
 		}
 	} else {
 		for _, pkg := range options.packages {
@@ -432,7 +428,7 @@ func build(storageDir string, options buildOptions) (ret buildResult, err error)
 	missingResolved := map[string]struct{}{}
 esbuild:
 	start = time.Now()
-	peerCommonjsModules := map[string]string{}
+	peerESModules := map[string]string{}
 	result := api.Build(api.BuildOptions{
 		Stdin:             input,
 		Bundle:            true,
@@ -472,13 +468,13 @@ esbuild:
 							if esm {
 								resolvePath = esmPath
 							} else {
-								peerCommonjsModules[resolvePath] = esmPath
+								peerESModules[resolvePath] = esmPath
 							}
 						} else {
 							if esm {
 								resolvePath = fmt.Sprintf("/_error.js?type=resolve&name=%s", url.QueryEscape(resolvePath))
 							} else {
-								peerCommonjsModules[resolvePath] = ""
+								peerESModules[resolvePath] = ""
 							}
 						}
 						return api.ResolverResult{Path: resolvePath, External: true, Namespace: "http"}, nil
@@ -517,32 +513,32 @@ esbuild:
 	jsContentBuf := bytes.NewBuffer(nil)
 	fmt.Fprintf(jsContentBuf, `/* %s - esbuild bundle(%s) %s %s */%s`, jsCopyrightName, options.packages.String(), strings.ToLower(options.target), env, EOL)
 
-	var peerModules []string
 	var eol, indent string
 	if options.dev {
 		indent = "  "
 		eol = EOL
 	}
 
-	if len(peerCommonjsModules) > 0 {
-		for name, importPath := range peerCommonjsModules {
+	if len(peerESModules) > 0 {
+		var commonjsKVs []string
+		for name, importPath := range peerESModules {
 			if importPath != "" {
 				identifier := identify(name)
-				peerModules = append(peerModules, fmt.Sprintf(`"%s": %s`, name, identifier))
-				fmt.Fprintf(jsContentBuf, `import %s from "%s";%s`, identifier, importPath, eol)
+				commonjsKVs = append(commonjsKVs, fmt.Sprintf(`"%s": __%s`, name, identifier))
+				fmt.Fprintf(jsContentBuf, `import __%s from "%s";%s`, identifier, importPath, eol)
 			}
 		}
-		fmt.Fprintf(jsContentBuf, `var __peerModules = `)
-		if len(peerModules) > 0 {
+		fmt.Fprintf(jsContentBuf, `var __esModules = `)
+		if len(commonjsKVs) > 0 {
 			fmt.Fprintf(jsContentBuf, `{%s`, eol)
-			fmt.Fprintf(jsContentBuf, `%s%s%s`, indent, strings.Join(peerModules, fmt.Sprintf(",%s%s", eol, indent)), eol)
+			fmt.Fprintf(jsContentBuf, `%s%s%s`, indent, strings.Join(commonjsKVs, fmt.Sprintf(",%s%s", eol, indent)), eol)
 			fmt.Fprintf(jsContentBuf, `};%s`, eol)
 		} else {
 			fmt.Fprintf(jsContentBuf, `{};%s`, eol)
 		}
 		fmt.Fprintf(jsContentBuf, `var require = name => {%s`, eol)
-		fmt.Fprintf(jsContentBuf, `%sif (name in __peerModules) {%s`, indent, eol)
-		fmt.Fprintf(jsContentBuf, `%s%sreturn __peerModules[name];%s`, indent, indent, eol)
+		fmt.Fprintf(jsContentBuf, `%sif (name in __esModules) {%s`, indent, eol)
+		fmt.Fprintf(jsContentBuf, `%s%sreturn __esModules[name];%s`, indent, indent, eol)
 		fmt.Fprintf(jsContentBuf, `%s}%s`, indent, eol)
 		fmt.Fprintf(jsContentBuf, `%sthrow new Error("[%s] Could not resolve \"" + name + "\"");%s`, indent, jsCopyrightName, eol)
 		fmt.Fprintf(jsContentBuf, `};%s`, eol)
@@ -557,7 +553,12 @@ esbuild:
 		fmt.Fprintf(jsContentBuf, `import process from "/_process_browser.js?env=%s";%s`, env, eol)
 	}
 	if containsExp(outputContent, "Buffer.") {
-		fmt.Fprintf(jsContentBuf, `import Buffer from "/buffer";%s`, eol)
+		p, err := nodeEnv.getPackageInfo("buffer", "latest")
+		if err == nil {
+			fmt.Fprintf(jsContentBuf, `import Buffer from "/buffer@%s/%s/buffer.js";%s`, p.Version, options.target, eol)
+		} else {
+			fmt.Fprintf(jsContentBuf, `import Buffer from "/buffer";%s`, eol)
+		}
 	}
 
 	jsContentBuf.Write(outputContent)
@@ -591,7 +592,7 @@ func containsExp(content []byte, exp string) bool {
 	i := bytes.Index(content, []byte(exp))
 	if i > 0 {
 		c := content[i-1]
-		if (c < 'a' || c > 'z') && (c < 'A' || c > 'Z') && c != '.' {
+		if (c < 'a' || c > 'z') && (c < 'A' || c > 'Z') && c != '_' && c != '.' {
 			return true
 		}
 	}
