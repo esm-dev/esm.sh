@@ -186,7 +186,7 @@ CheckYarn:
 
 func (env *NodeEnv) getPackageInfo(name string, version string) (info NpmPackage, err error) {
 	key := name + "/" + version
-	isFullVersion := reFullVersion.MatchString(version)
+	isFullVersion := regFullVersion.MatchString(version)
 	p, err := db.Get(q.Alias(key), q.K("package"))
 	if err == nil {
 		if !isFullVersion && int64(p.Crtime)+refreshDuration < time.Now().Unix() {
@@ -237,7 +237,7 @@ func (env *NodeEnv) getPackageInfo(name string, version string) (info NpmPackage
 		} else {
 			var majorVerions versionSlice
 			for key := range h.Versions {
-				if reFullVersion.MatchString(key) && strings.HasPrefix(key, version+".") {
+				if regFullVersion.MatchString(key) && strings.HasPrefix(key, version+".") {
 					majorVerions = append(majorVerions, key)
 				}
 			}
@@ -327,7 +327,6 @@ type versionSlice []string
 
 func (s versionSlice) Len() int      { return len(s) }
 func (s versionSlice) Swap(i, j int) { s[i], s[j] = s[j], s[i] }
-
 func (s versionSlice) Less(i, j int) bool {
 	a := strings.Split(s[i], ".")
 	b := strings.Split(s[j], ".")

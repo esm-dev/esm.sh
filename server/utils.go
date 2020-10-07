@@ -13,9 +13,10 @@ const (
 )
 
 var (
-	regProcess = regexp.MustCompile(`[^a-zA-Z0-9_\.\$'"]process\.`)
-	regBuffer  = regexp.MustCompile(`[^a-zA-Z0-9_\.\$'"]Buffer\.`)
-	regGlobal  = regexp.MustCompile(`[^a-zA-Z0-9_\.\$'"]global(\.|\[)`)
+	regFullVersion = regexp.MustCompile(`^\d+\.\d+\.\d+$`)
+	regProcess     = regexp.MustCompile(`[^a-zA-Z0-9_\.\$'"]process\.`)
+	regBuffer      = regexp.MustCompile(`[^a-zA-Z0-9_\.\$'"]Buffer\.`)
+	regGlobal      = regexp.MustCompile(`[^a-zA-Z0-9_\.\$'"]global(\.|\[)`)
 )
 
 func isValidatedESImportPath(importPath string) bool {

@@ -2,7 +2,6 @@ package server
 
 import (
 	"errors"
-	"regexp"
 	"strings"
 
 	"github.com/ije/gox/utils"
@@ -13,8 +12,6 @@ type module struct {
 	version   string
 	submodule string
 }
-
-var reFullVersion = regexp.MustCompile(`^\d+\.\d+\.\d+$`)
 
 func parseModule(pathname string) (*module, error) {
 	a := strings.Split(strings.Trim(pathname, "/"), "/")

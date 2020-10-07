@@ -67,11 +67,11 @@ func registerAPI(storageDir string, cdnDomain string) {
 			}
 		}
 
+		isDev := !ctx.Form.IsNil("dev")
 		target := strings.ToLower(strings.TrimSpace(ctx.Form.Value("target")))
 		if _, ok := targets[target]; !ok {
 			target = "esnext"
 		}
-		isDev := !ctx.Form.IsNil("dev")
 
 		var currentModule *module
 		var isBare bool
@@ -129,7 +129,7 @@ func registerAPI(storageDir string, cdnDomain string) {
 		ret, err := build(storageDir, buildOptions{
 			packages: packages,
 			target:   target,
-			dev:      isDev,
+			isDev:    isDev,
 		})
 		if err != nil {
 			return throwErrorJS(ctx, err)
@@ -163,7 +163,7 @@ func registerAPI(storageDir string, cdnDomain string) {
 
 		fmt.Fprintf(buf, `/* %s - %v */%s`, jsCopyrightName, currentModule, EOL)
 		var exported bool
-		if ret.single {
+		if len(packages) == 1 {
 			if importMeta.Module != "" {
 				fmt.Fprintf(buf, `export * from "%s%s.js";%s`, importPrefix, ret.buildID, EOL)
 				for _, name := range importMeta.Exports {
