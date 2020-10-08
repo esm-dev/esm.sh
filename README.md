@@ -53,6 +53,12 @@ import React from 'https://esm.sh/react' // actual from 'https://esm.sh/[react,r
 # install esm command
 deno install --allow-read --allow-write --allow-net -f -n esm https://deno.land/x/esm/cli.ts
 
+# login
+$ esm user login
+
+# set mirror
+$ esm config mirror ems.sh.cn
+
 # add some packages
 $ esm add react react-dom
 
