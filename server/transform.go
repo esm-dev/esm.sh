@@ -19,10 +19,10 @@ import (
 )
 
 var (
-	reVersion        = regexp.MustCompile(`([^/])@[\d\.]+/`)
-	reFromExpression = regexp.MustCompile(`(\s|})from\s*("|')`)
-	reReferenceTag   = regexp.MustCompile(`^<reference\s+(path|types)\s*=\s*('|")([^'"]+)("|')\s*/>$`)
-	reDeclareModule  = regexp.MustCompile(`^declare\s+module\s*('|")([^'"]+)("|')`)
+	regVersionPath    = regexp.MustCompile(`([^/])@[\d\.]+/`)
+	regFromExpression = regexp.MustCompile(`(\s|})from\s*("|')`)
+	regReferenceTag   = regexp.MustCompile(`^<reference\s+(path|types)\s*=\s*('|")([^'"]+)("|')\s*/>$`)
+	regDeclareModule  = regexp.MustCompile(`^declare\s+module\s*('|")([^'"]+)("|')`)
 )
 
 func parseModuleExports(filepath string) (exports []string, ok bool, err error) {
@@ -45,7 +45,7 @@ func parseModuleExports(filepath string) (exports []string, ok bool, err error) 
 
 func copyDTS(nodeModulesDir string, saveDir string, dts string) (err error) {
 	saveFilePath := path.Join(saveDir, dts)
-	dtsFilePath := path.Join(nodeModulesDir, reVersion.ReplaceAllString(dts, "$1/"))
+	dtsFilePath := path.Join(nodeModulesDir, regVersionPath.ReplaceAllString(dts, "$1/"))
 	dtsDir := path.Dir(dtsFilePath)
 	dtsFile, err := os.Open(dtsFilePath)
 	if err != nil {
@@ -188,8 +188,8 @@ func copyDTS(nodeModulesDir string, saveDir string, dts string) (err error) {
 			goto Re
 		} else if strings.HasPrefix(pure, "///") {
 			s := strings.TrimSpace(strings.TrimPrefix(pure, "///"))
-			if reReferenceTag.MatchString(s) {
-				a := reReferenceTag.FindAllStringSubmatch(s, 1)
+			if regReferenceTag.MatchString(s) {
+				a := regReferenceTag.FindAllStringSubmatch(s, 1)
 				format := a[0][1]
 				path := a[0][3]
 				if format == "path" {
@@ -207,7 +207,7 @@ func copyDTS(nodeModulesDir string, saveDir string, dts string) (err error) {
 			}
 		} else if strings.HasPrefix(pure, "//") {
 			buf.WriteString(pure)
-		} else if strings.HasPrefix(pure, "declare") && reDeclareModule.MatchString(pure) {
+		} else if strings.HasPrefix(pure, "declare") && regDeclareModule.MatchString(pure) {
 			q := "'"
 			a := strings.Split(pure, q)
 			if len(a) != 3 {
@@ -237,7 +237,7 @@ func copyDTS(nodeModulesDir string, saveDir string, dts string) (err error) {
 				if exp != "" {
 					if importExportScope || startsWith(exp, "import ", "export ", "import{", "export{") {
 						importExportScope = true
-						end := reFromExpression.MatchString(exp)
+						end := regFromExpression.MatchString(exp)
 						if end {
 							importExportScope = false
 							q := "'"

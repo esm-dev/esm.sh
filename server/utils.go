@@ -13,7 +13,7 @@ const (
 )
 
 var (
-	regFullVersion = regexp.MustCompile(`^\d+\.\d+\.\d+$`)
+	regFullVersion = regexp.MustCompile(`^\d+\.\d+\.\d+(\-[a-zA-Z0-9\.]+)*$`)
 	regProcess     = regexp.MustCompile(`[^a-zA-Z0-9_\.\$'"]process\.`)
 	regBuffer      = regexp.MustCompile(`[^a-zA-Z0-9_\.\$'"]Buffer\.`)
 	regGlobal      = regexp.MustCompile(`[^a-zA-Z0-9_\.\$'"]global(\.|\[)`)
