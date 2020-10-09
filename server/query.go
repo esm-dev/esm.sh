@@ -59,23 +59,22 @@ func registerAPI(storageDir string, cdnDomain string) {
 			}
 		}
 
-		var bundleList string
-		if strings.HasPrefix(pathname, "/[") && strings.Contains(pathname, "]") {
-			bundleList, pathname = utils.SplitByFirstByte(strings.TrimPrefix(pathname, "/["), ']')
-			if pathname == "" {
-				pathname = "/"
-			}
-		}
-
 		isDev := !ctx.Form.IsNil("dev")
 		target := strings.ToLower(strings.TrimSpace(ctx.Form.Value("target")))
 		if _, ok := targets[target]; !ok {
 			target = "esnext"
 		}
 
-		var currentModule *module
+		var bundleList string
 		var isBare bool
+		var currentModule *module
 		var err error
+		if strings.HasPrefix(pathname, "/[") && strings.Contains(pathname, "]") {
+			bundleList, pathname = utils.SplitByFirstByte(strings.TrimPrefix(pathname, "/["), ']')
+			if pathname == "" {
+				pathname = "/"
+			}
+		}
 		if bundleList == "" && endsWith(pathname, ".js") {
 			currentModule, err = parseModule(pathname)
 			if err == nil && !endsWith(currentModule.name, ".js") {
