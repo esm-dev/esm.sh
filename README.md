@@ -87,7 +87,7 @@ $ esm -h
 
 ![figure #1](./assets/figure-1.png)
 
-## Caveat
+## Caveats
 
 Different with [Skypack](https://skypack.dev) and [jspm](https://jspm.org), **esm.sh** will bundle all dependencies(exclude peerDependencies) for each package, that means there may be redundant contents transmitted when you are importing multiple packages.<br>
 This should be improved when the http/3(quic) is ready. For now the best practice is using the **bundle mode**.
