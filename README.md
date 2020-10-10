@@ -27,7 +27,7 @@ import React from 'https://esm.sh/react?target=es2020'
 import React from 'https://esm.sh/react?dev'
 ```
 
-### Proxy deno.land [WIP]
+### Proxy deno.land
 ```javascript
 import { server } from 'https://esm.sh/deno.land/std/http/server.ts'
 ```
