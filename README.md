@@ -27,6 +27,11 @@ import React from 'https://esm.sh/react?target=es2020'
 import React from 'https://esm.sh/react?dev'
 ```
 
+### Proxy deno.land [WIP]
+```javascript
+import { server } from 'https://esm.sh/deno.land/std/http/server.ts'
+```
+
 ### Bundle mode
 ```javascript
 import React from 'https://esm.sh/[react,react-dom]/react'
