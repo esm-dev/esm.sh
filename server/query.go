@@ -3,6 +3,9 @@ package server
 import (
 	"bytes"
 	"fmt"
+	"io/ioutil"
+	"net"
+	"net/http"
 	"path"
 	"strings"
 	"time"
@@ -13,6 +16,22 @@ import (
 
 func registerAPI(storageDir string, cdnDomain string) {
 	start := time.Now()
+	client := &http.Client{
+		Transport: &http.Transport{
+			Dial: func(network, addr string) (conn net.Conn, err error) {
+				conn, err = net.DialTimeout(network, addr, 15*time.Second)
+				if err != nil {
+					return conn, err
+				}
+
+				// Set a one-time deadline for potential SSL handshaking
+				conn.SetDeadline(time.Now().Add(60 * time.Second))
+				return conn, nil
+			},
+			MaxIdleConnsPerHost:   5,
+			ResponseHeaderTimeout: 60 * time.Second,
+		},
+	}
 
 	rex.Query("*", func(ctx *rex.Context) interface{} {
 		pathname := utils.CleanPath(ctx.R.URL.Path)
@@ -33,6 +52,43 @@ func registerAPI(storageDir string, cdnDomain string) {
 			}
 		case "/favicon.ico":
 			return 404
+		}
+
+		if strings.HasPrefix(pathname, "/deno.land/") {
+			cacheFile := path.Join(storageDir, "proxy", pathname)
+			hasVersion := regVersionPath.MatchString(pathname)
+			if hasVersion && fileExists(cacheFile) {
+				if strings.HasSuffix(pathname, ".ts") {
+					ctx.SetHeader("Content-Type", "application/typescript; charset=utf-8")
+				}
+				ctx.SetHeader("Cache-Control", "public, max-age=31536000, immutable")
+				return rex.File(cacheFile)
+			}
+			resp, err := client.Get(fmt.Sprintf("https:/%s", pathname))
+			if err != nil {
+				return err
+			}
+			defer resp.Body.Close()
+			for key, values := range resp.Header {
+				for _, value := range values {
+					ctx.AddHeader(key, value)
+				}
+			}
+			data, err := ioutil.ReadAll(resp.Body)
+			if err != nil {
+				return err
+			}
+			if hasVersion {
+				err = ensureDir(path.Dir(cacheFile))
+				if err != nil {
+					return err
+				}
+				err = ioutil.WriteFile(cacheFile, data, 0644)
+				if err != nil {
+					return err
+				}
+			}
+			return data
 		}
 
 		var storageType string
