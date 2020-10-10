@@ -744,7 +744,8 @@ const indexHTML = `<!DOCTYPE html>
             font-size: 85%%;
             line-height: 1.45;
             background-color: #f8f8f8;
-            border-radius: 5px
+            border-radius: 5px;
+            -webkit-overflow-scrolling: touch;
         }
 
         .highlight pre {
