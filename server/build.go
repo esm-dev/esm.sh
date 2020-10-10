@@ -517,7 +517,23 @@ esbuild:
 
 	jsContentBuf := bytes.NewBuffer(nil)
 	fmt.Fprintf(jsContentBuf, `/* %s - esbuild bundle(%s) %s %s */%s`, jsCopyrightName, options.packages.String(), strings.ToLower(options.target), env, EOL)
-
+	if options.isDev {
+		for _, pkg := range options.packages {
+			importPath := pkg.ImportPath()
+			meta := importMeta[importPath]
+			if len(meta.Dependencies) > 0 {
+				if single {
+					fmt.Fprintf(jsContentBuf, `/*%s * bundled dependencies:%s`, EOL, EOL)
+				} else {
+					fmt.Fprintf(jsContentBuf, `/*%s * bundled dependencies of %s:%s`, EOL, pkg.name, EOL)
+				}
+				for name, version := range meta.Dependencies {
+					fmt.Fprintf(jsContentBuf, ` *   - %s: %s%s`, name, version, EOL)
+				}
+				fmt.Fprintf(jsContentBuf, ` */%s`, EOL)
+			}
+		}
+	}
 	// nodejs compatibility
 	outputContent := result.OutputFiles[0].Contents
 	if regProcess.Match(outputContent) {
