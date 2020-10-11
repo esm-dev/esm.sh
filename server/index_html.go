@@ -50,8 +50,9 @@ const indexHTML = `<!DOCTYPE html>
         }
 
         img {
-            width: 100%%;
+            max-width: 840px;
             height: auto;
+            border-radius: 6px;
         }
 
         strong, b {
@@ -146,7 +147,7 @@ const indexHTML = `<!DOCTYPE html>
             padding: 0.5rem 1rem;
             background: #fafafa;
             border: 1px solid #eaeaea;
-            border-radius: 3px;
+            border-radius: 6px;
         }
 
         details[open] {
@@ -163,7 +164,7 @@ const indexHTML = `<!DOCTYPE html>
             color: #666666;
             background: #fafafa;
             border: 1px solid #eaeaea;
-            border-radius: 3px;
+            border-radius: 6px;
             padding: 0 1.25rem;
             margin: 1.5rem 0;
         }
@@ -270,7 +271,7 @@ const indexHTML = `<!DOCTYPE html>
         mainEl.querySelectorAll('img').forEach(img => {
             const src = img.getAttribute('src')
             if (src.startsWith('./assets/')) {
-                img.src = 'https://raw.githubusercontent.com/postui/esm.sh/master/' + src.replace('./', '')
+                img.src = '/denopkg.com/postui/esm.sh/' + src.replace('./', '')
             }
         })
 
