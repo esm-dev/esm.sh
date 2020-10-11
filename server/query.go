@@ -16,7 +16,7 @@ import (
 
 func registerAPI(storageDir string, cdnDomain string) {
 	start := time.Now()
-	client := &http.Client{
+	httpClient := &http.Client{
 		Transport: &http.Transport{
 			Dial: func(network, addr string) (conn net.Conn, err error) {
 				conn, err = net.DialTimeout(network, addr, 15*time.Second)
@@ -54,31 +54,30 @@ func registerAPI(storageDir string, cdnDomain string) {
 			return 404
 		}
 
-		if strings.HasPrefix(pathname, "/deno.land/") {
+		switch strings.Split(pathname, "/")[1] {
+		case "deno.land", "nest.land", "x.nest.land", "denopkg.com":
+			cacheable := regVersionPath.MatchString(pathname)
 			cacheFile := path.Join(storageDir, "proxy", pathname)
-			hasVersion := regVersionPath.MatchString(pathname)
-			if hasVersion && fileExists(cacheFile) {
+			if cacheable && fileExists(cacheFile) {
 				if strings.HasSuffix(pathname, ".ts") {
-					ctx.SetHeader("Content-Type", "application/typescript; charset=utf-8")
+					ctx.SetHeader("Content-Type", "application/typescript")
 				}
 				ctx.SetHeader("Cache-Control", "public, max-age=31536000, immutable")
 				return rex.File(cacheFile)
 			}
-			resp, err := client.Get(fmt.Sprintf("https:/%s", pathname))
+			resp, err := httpClient.Get(fmt.Sprintf("https:/%s", pathname))
 			if err != nil {
 				return err
 			}
-			defer resp.Body.Close()
-			for key, values := range resp.Header {
-				for _, value := range values {
-					ctx.AddHeader(key, value)
-				}
+			if resp.StatusCode != 200 {
+				return http.StatusBadGateway
 			}
+			defer resp.Body.Close()
 			data, err := ioutil.ReadAll(resp.Body)
 			if err != nil {
 				return err
 			}
-			if hasVersion {
+			if cacheable {
 				err = ensureDir(path.Dir(cacheFile))
 				if err != nil {
 					return err
@@ -86,6 +85,11 @@ func registerAPI(storageDir string, cdnDomain string) {
 				err = ioutil.WriteFile(cacheFile, data, 0644)
 				if err != nil {
 					return err
+				}
+			}
+			for key, values := range resp.Header {
+				for _, value := range values {
+					ctx.AddHeader(key, value)
 				}
 			}
 			return data
