@@ -27,10 +27,11 @@ import React from 'https://esm.sh/react?target=es2020'
 import React from 'https://esm.sh/react?dev'
 ```
 
-### Proxy deno.land
+### Proxy mode
 ```javascript
-import { server } from 'https://esm.sh/deno.land/std/http/server.ts'
+import P from 'https://esm.sh/${provider}/name@version/file.ts'
 ```
+Avaiable `${provider}`: [deno.land](https://deno.land), [nest.land](https://nest.land), [x.nest.land](https://x.nest.land), [denopkg.com](https://denopkg.com)
 
 ### Bundle mode
 ```javascript
@@ -58,11 +59,8 @@ import React from 'https://esm.sh/react' // actual from 'https://esm.sh/[react,r
 # install esm command
 deno install --allow-read --allow-write --allow-net -f -n esm https://deno.land/x/esm/cli.ts
 
-# login
-$ esm user login
-
-# set mirror
-$ esm config mirror ems.sh.cn
+# set cdn
+$ esm config cdn cdn.ems.sh.cn
 
 # add some packages
 $ esm add react react-dom
