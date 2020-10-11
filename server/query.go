@@ -38,7 +38,7 @@ func registerAPI(storageDir string, cdnDomain string) {
 		switch pathname {
 		case "/":
 			mdStr := strings.TrimSpace(string(utils.MustEncodeJSON(readmeMD)))
-			return rex.Content("index.html", start, bytes.NewReader([]byte(fmt.Sprintf(indexHTML, mdStr))))
+			return rex.Content("index.html", start, bytes.NewReader([]byte(fmt.Sprintf(indexHTML, "`", mdStr))))
 		case "/_process_browser.js":
 			ctx.SetHeader("Cache-Control", "public, max-age=31536000, immutable")
 			return rex.Content("process/browser.js", start, bytes.NewReader([]byte(fmt.Sprintf(processBrowserJS, ctx.Form.Value("env")))))
