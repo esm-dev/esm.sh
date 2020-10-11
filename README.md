@@ -21,17 +21,12 @@ import { renderToString } from 'https://esm.sh/react-dom/server'
 ```javascript
 import React from 'https://esm.sh/react?target=es2020'
 ```
+Avaiable `target`: **es2015**-**es2020**, **esnext**
 
 ### Development mode
 ```javascript
 import React from 'https://esm.sh/react?dev'
 ```
-
-### Proxy mode
-```javascript
-import P from 'https://esm.sh/${provider}/name@version/file.ts'
-```
-Avaiable `${provider}`: [deno.land](https://deno.land), [nest.land](https://nest.land), [x.nest.land](https://x.nest.land), [denopkg.com](https://denopkg.com)
 
 ### Bundle mode
 ```javascript
@@ -52,6 +47,25 @@ import React from 'https://esm.sh/react' // actual from 'https://esm.sh/[react,r
 ```
 
 ⚠️ The bundling packages in URL are litmited up to **10**, to bundle more packages, please use the **esm** client.
+
+## Proxy mode
+```javascript
+import P from 'https://esm.sh/${provider}/name@version/path/to/file'
+```
+Avaiable `provider`: [deno.land](https://deno.land), [nest.land](https://nest.land), [x.nest.land](https://x.nest.land), [denopkg.com](https://denopkg.com)
+<br>
+Simply proxy all the providers in the `import-map.json`:
+```json
+{
+    "imports": {
+        "https://deno.land/":   "https://esm.sh/deno.land/",
+        "https://nest.land/":   "https://esm.sh/nest.land/",
+        "https://x.nest.land/": "https://esm.sh/x.nest.land/",
+        "https://denopkg.com/": "https://esm.sh/denopkg.com/",
+        ...
+    }
+}
+```
 
 ## ESM Client in Deno [WIP]
 
