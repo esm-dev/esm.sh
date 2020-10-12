@@ -49,7 +49,7 @@ const indexHTML = `<!DOCTYPE html>
         }
 
         img {
-            max-width: 840px;
+            max-width: 100%%;
             height: auto;
             border-radius: 6px;
         }
@@ -110,7 +110,7 @@ const indexHTML = `<!DOCTYPE html>
         }
 
         code {
-            font-family: 'Dank Mono', 'Source Code Pro', 'Courier Prime Code', 'Courier New', Courier, monospace;
+            font-family: 'Dank Mono', 'Source Code Pro', 'Courier Prime Code', 'Liberation Mono', Consolas, Menlo, monospace;
         }
 
         pre {
@@ -202,8 +202,8 @@ const indexHTML = `<!DOCTYPE html>
         h1 a {
             position: relative;
             display: inline-block;
-            width: 30px;
-            height: 30px;
+            width: 28px;
+            height: 28px;
             margin-left: 15px;
             color: #555;
             box-shadow: none;
@@ -214,8 +214,8 @@ const indexHTML = `<!DOCTYPE html>
             display: inline-block;
             top: 0;
             left: 0;
-            width: 30px;
-            height: 30px;
+            width: 28px;
+            height: 28px;
         }
 
         h1 a:hover {
