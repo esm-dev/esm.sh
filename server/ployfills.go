@@ -192,7 +192,7 @@ export default process;
 const nodeTypes = `// nodejs types
 declare class Buffer extends Uint8Array {}
 declare namespace NodeJS {
-	type TypedArray = Uint8Array | Uint8ClampedArray | Uint16Array | Uint32Array | Int8Array | Int16Array | Int32Array | Float32Array | Float64Array;
+    type TypedArray = Uint8Array | Uint8ClampedArray | Uint16Array | Uint32Array | Int8Array | Int16Array | Int32Array | Float32Array | Float64Array;
     type ArrayBufferView = TypedArray | DataView;
     interface EventEmitter {
         addListener(event: string | symbol, listener: (...args: any[]) => void): this;
@@ -212,8 +212,8 @@ declare namespace NodeJS {
         prependOnceListener(event: string | symbol, listener: (...args: any[]) => void): this;
         eventNames(): Array<string | symbol>;
     }
-	interface ReadableStream extends EventEmitter {}
-	interface WritableStream extends EventEmitter {}
-	interface ReadWriteStream extends ReadableStream, WritableStream {}
+    interface ReadableStream extends EventEmitter {}
+    interface WritableStream extends EventEmitter {}
+    interface ReadWriteStream extends ReadableStream, WritableStream {}
 }
 `
