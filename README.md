@@ -21,7 +21,7 @@ import { renderToString } from 'https://esm.sh/react-dom/server'
 ```javascript
 import React from 'https://esm.sh/react?target=es2020'
 ```
-Avaiable `target`: **es2015**-**es2020**, **esnext**
+Avaiable `target`: **es2015** - **es2020**, **esnext**
 
 ### Development mode
 ```javascript
