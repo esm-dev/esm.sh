@@ -71,7 +71,6 @@ func copyDTS(hostname string, nodeModulesDir string, saveDir string, dts string)
 	}
 
 	deps := newStringSet()
-	dmodules := newStringSet()
 	rewriteFn := func(importPath string) string {
 		if isValidatedESImportPath(importPath) {
 			if !strings.HasSuffix(importPath, ".d.ts") {
@@ -223,14 +222,13 @@ func copyDTS(hostname string, nodeModulesDir string, saveDir string, dts string)
 				buf.WriteString(q)
 				if hostname == "localhost" {
 					buf.WriteString("http://localhost/")
-					dmodules.Set(fmt.Sprintf("http://localhost/%s", a[1]))
 				} else {
 					buf.WriteString("https://")
 					buf.WriteString(hostname)
 					buf.WriteString("/")
-					dmodules.Set(fmt.Sprintf("https://%s/%s", hostname, a[1]))
 				}
 				buf.WriteString(a[1])
+				buf.WriteByte('*') // match any suffix (useful for versions)
 				buf.WriteString(q)
 				buf.WriteString(a[2])
 			} else {
@@ -287,17 +285,6 @@ func copyDTS(hostname string, nodeModulesDir string, saveDir string, dts string)
 	err = scanner.Err()
 	if err != nil {
 		return
-	}
-
-	if dmodules.Size() > 0 {
-		buf.WriteByte('\n')
-		for _, dm := range dmodules.Values() {
-			fmt.Fprintf(buf, `declare module "%s@*" {%s`, dm, EOL)
-			fmt.Fprintf(buf, `    export * from "%s";%s`, dm, EOL)
-			fmt.Fprintf(buf, `    export { default } from "%s";%s`, dm, EOL)
-			fmt.Fprintf(buf, `}%s`, EOL)
-		}
-		buf.WriteByte('\n')
 	}
 
 	ensureDir(path.Dir(saveFilePath))
