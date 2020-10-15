@@ -47,6 +47,8 @@ func Serve() {
 	logDir := "/var/log/esmd"
 	if isDev {
 		etcDir, _ = filepath.Abs(".dev")
+		domain = "localhost"
+		cdnDomain = ""
 		logDir = path.Join(etcDir, "log")
 		logLevel = "debug"
 		wd, err := os.Getwd()
@@ -100,7 +102,7 @@ func Serve() {
 		}),
 	)
 
-	registerAPI(storageDir, cdnDomain)
+	registerAPI(storageDir, domain, cdnDomain)
 
 	C := rex.Serve(rex.ServerConfig{
 		Port: uint16(port),

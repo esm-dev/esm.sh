@@ -58,7 +58,7 @@ type buildResult struct {
 	importMeta map[string]*ImportMeta
 }
 
-func build(storageDir string, options buildOptions) (ret buildResult, err error) {
+func build(hostname string, storageDir string, options buildOptions) (ret buildResult, err error) {
 	buildLock.Lock()
 	defer buildLock.Unlock()
 
@@ -320,7 +320,7 @@ func build(storageDir string, options buildOptions) (ret buildResult, err error)
 			}
 		}
 		if types != "" {
-			err = copyDTS(path.Join(buildDir, "node_modules"), path.Join(storageDir, "types"), types)
+			err = copyDTS(hostname, path.Join(buildDir, "node_modules"), path.Join(storageDir, "types"), types)
 			if err != nil {
 				err = fmt.Errorf("copyDTS(%s): %v", types, err)
 				return

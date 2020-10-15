@@ -14,7 +14,7 @@ import (
 	"github.com/ije/rex"
 )
 
-func registerAPI(storageDir string, cdnDomain string) {
+func registerAPI(storageDir string, domain string, cdnDomain string) {
 	start := time.Now()
 	httpClient := &http.Client{
 		Transport: &http.Transport{
@@ -46,9 +46,9 @@ func registerAPI(storageDir string, cdnDomain string) {
 			t := ctx.Form.Value("type")
 			switch t {
 			case "resolve":
-				return throwErrorJS(ctx, fmt.Errorf(`Can't resolve "%s"`, ctx.Form.Value("name")))
+				return throwErrorJS(ctx, 500, fmt.Errorf(`Can't resolve "%s"`, ctx.Form.Value("name")))
 			default:
-				return throwErrorJS(ctx, fmt.Errorf("Unknown error"))
+				return throwErrorJS(ctx, 500, fmt.Errorf("Unknown error"))
 			}
 		case "/favicon.ico":
 			return 404
@@ -159,7 +159,10 @@ func registerAPI(storageDir string, cdnDomain string) {
 			currentModule, err = parseModule(pathname)
 		}
 		if err != nil {
-			return throwErrorJS(ctx, err)
+			if strings.HasSuffix(err.Error(), "not found") {
+				return throwErrorJS(ctx, 404, err)
+			}
+			return throwErrorJS(ctx, 500, err)
 		}
 
 		var packages moduleSlice
@@ -168,7 +171,7 @@ func registerAPI(storageDir string, cdnDomain string) {
 			for _, dep := range strings.Split(bundleList, ",") {
 				m, err := parseModule(strings.TrimSpace(dep))
 				if err != nil {
-					return throwErrorJS(ctx, err)
+					return throwErrorJS(ctx, 500, err)
 				}
 				if !containsPackage && m.Equels(*currentModule) {
 					containsPackage = true
@@ -176,22 +179,22 @@ func registerAPI(storageDir string, cdnDomain string) {
 				packages = append(packages, *m)
 			}
 			if len(packages) > 10 {
-				return throwErrorJS(ctx, fmt.Errorf("too many packages in the bundle list, up to 10 but get %d", len(packages)))
+				return throwErrorJS(ctx, 400, fmt.Errorf("too many packages in the bundle list, up to 10 but get %d", len(packages)))
 			}
 			if !containsPackage {
-				return throwErrorJS(ctx, fmt.Errorf("package '%s' not found in the bundle list", currentModule.ImportPath()))
+				return throwErrorJS(ctx, 400, fmt.Errorf("package '%s' not found in the bundle list", currentModule.ImportPath()))
 			}
 		} else {
 			packages = moduleSlice{*currentModule}
 		}
 
-		ret, err := build(storageDir, buildOptions{
+		ret, err := build(domain, storageDir, buildOptions{
 			packages: packages,
 			target:   target,
 			isDev:    isDev,
 		})
 		if err != nil {
-			return throwErrorJS(ctx, err)
+			return throwErrorJS(ctx, 500, err)
 		}
 
 		if isBare {
@@ -210,7 +213,7 @@ func registerAPI(storageDir string, cdnDomain string) {
 		importPath := currentModule.ImportPath()
 		importMeta, ok := ret.importMeta[importPath]
 		if !ok {
-			return throwErrorJS(ctx, fmt.Errorf("package '%s' not found in bundle", importPath))
+			return throwErrorJS(ctx, 500, fmt.Errorf("package '%s' not found in bundle", importPath))
 		}
 
 		buf := bytes.NewBuffer(nil)
@@ -272,14 +275,14 @@ func registerAPI(storageDir string, cdnDomain string) {
 	})
 }
 
-func throwErrorJS(ctx *rex.Context, err error) interface{} {
+func throwErrorJS(ctx *rex.Context, status int, err error) interface{} {
 	buf := bytes.NewBuffer(nil)
 	fmt.Fprintf(buf, `/* %s - error */%s`, jsCopyrightName, EOL)
 	fmt.Fprintf(buf, `throw new Error("[%s] " + %s);%s`, jsCopyrightName, strings.TrimSpace(string(utils.MustEncodeJSON(err.Error()))), EOL)
 	fmt.Fprintf(buf, `export default null;%s`, EOL)
 	ctx.SetHeader("Cache-Control", "private, no-store, no-cache, must-revalidate")
 	return &rex.TypedContent{
-		Status:      500,
+		Status:      status,
 		Content:     buf.Bytes(),
 		ContentType: "application/javascript; charset=utf-8",
 	}

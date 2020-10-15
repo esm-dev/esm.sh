@@ -43,7 +43,7 @@ func parseModuleExports(filepath string) (exports []string, ok bool, err error) 
 	return
 }
 
-func copyDTS(nodeModulesDir string, saveDir string, dts string) (err error) {
+func copyDTS(hostname string, nodeModulesDir string, saveDir string, dts string) (err error) {
 	saveFilePath := path.Join(saveDir, dts)
 	dtsFilePath := path.Join(nodeModulesDir, regVersionPath.ReplaceAllString(dts, "$1/"))
 	dtsDir := path.Dir(dtsFilePath)
@@ -71,6 +71,7 @@ func copyDTS(nodeModulesDir string, saveDir string, dts string) (err error) {
 	}
 
 	deps := map[string]struct{}{}
+	dmodules := map[string]struct{}{}
 	rewriteFn := func(importPath string) string {
 		if isValidatedESImportPath(importPath) {
 			if !strings.HasSuffix(importPath, ".d.ts") {
@@ -104,19 +105,19 @@ func copyDTS(nodeModulesDir string, saveDir string, dts string) (err error) {
 				}
 				return importPath
 			}
-			pkg, subpath := utils.SplitByFirstByte(importPath, '/')
-			if strings.HasPrefix(pkg, "@") {
+			pkgName, subpath := utils.SplitByFirstByte(importPath, '/')
+			if strings.HasPrefix(pkgName, "@") {
 				n, s := utils.SplitByFirstByte(subpath, '/')
-				pkg = fmt.Sprintf("%s/%s", pkg, n)
+				pkgName = fmt.Sprintf("%s/%s", pkgName, n)
 				subpath = s
 			}
 			// self
-			if strings.HasPrefix(dts, pkg) {
+			if strings.HasPrefix(dts, pkgName) {
 				return importPath
 			}
-			packageJSONFile := path.Join(nodeModulesDir, "@types", pkg, "package.json")
+			packageJSONFile := path.Join(nodeModulesDir, "@types", pkgName, "package.json")
 			if !fileExists(packageJSONFile) {
-				packageJSONFile = path.Join(nodeModulesDir, pkg, "package.json")
+				packageJSONFile = path.Join(nodeModulesDir, pkgName, "package.json")
 			}
 			if fileExists(packageJSONFile) {
 				var p NpmPackage
@@ -148,7 +149,10 @@ func copyDTS(nodeModulesDir string, saveDir string, dts string) (err error) {
 		}
 		deps[importPath] = struct{}{}
 		if !isValidatedESImportPath(importPath) {
-			return "/" + importPath
+			if hostname == "localhost" {
+				return fmt.Sprintf("http://localhost/%s", importPath)
+			}
+			return fmt.Sprintf("https://%s/%s", hostname, importPath)
 		}
 		return importPath
 	}
@@ -200,7 +204,7 @@ func copyDTS(nodeModulesDir string, saveDir string, dts string) (err error) {
 				if format == "types" && path == "node" {
 					buf.WriteString(nodeTypes)
 				} else {
-					buf.WriteString(fmt.Sprintf(`/// <reference %s="%s" />`, format, rewriteFn(path)))
+					fmt.Fprintf(buf, `/// <reference %s="%s" />`, format, rewriteFn(path))
 				}
 			} else {
 				buf.WriteString(pure)
@@ -217,7 +221,16 @@ func copyDTS(nodeModulesDir string, saveDir string, dts string) (err error) {
 			if len(a) == 3 && strings.HasPrefix(dts, a[1]) {
 				buf.WriteString(a[0])
 				buf.WriteString(q)
-				buf.WriteString("https://esm.sh/" + a[1])
+				if hostname == "localhost" {
+					buf.WriteString("http://localhost/")
+					dmodules[fmt.Sprintf("http://localhost/%s", a[1])] = struct{}{}
+				} else {
+					buf.WriteString("https://")
+					buf.WriteString(hostname)
+					buf.WriteString("/")
+					dmodules[fmt.Sprintf("https://%s/%s", hostname, a[1])] = struct{}{}
+				}
+				buf.WriteString(a[1])
 				buf.WriteString(q)
 				buf.WriteString(a[2])
 			} else {
@@ -276,6 +289,17 @@ func copyDTS(nodeModulesDir string, saveDir string, dts string) (err error) {
 		return
 	}
 
+	if len(dmodules) > 0 {
+		buf.WriteByte('\n')
+		for dm := range dmodules {
+			fmt.Fprintf(buf, `declare module "%s@*" {%s`, dm, EOL)
+			fmt.Fprintf(buf, `    export * from "%s";%s`, dm, EOL)
+			fmt.Fprintf(buf, `    export { default } from "%s";%s`, dm, EOL)
+			fmt.Fprintf(buf, `}%s`, EOL)
+		}
+		buf.WriteByte('\n')
+	}
+
 	ensureDir(path.Dir(saveFilePath))
 	saveFile, err := os.Create(saveFilePath)
 	if err != nil {
@@ -296,12 +320,12 @@ func copyDTS(nodeModulesDir string, saveDir string, dts string) (err error) {
 					n, _ := utils.SplitByFirstByte(subpath, '/')
 					pkg = fmt.Sprintf("%s/%s", pkg, n)
 				}
-				err = copyDTS(nodeModulesDir, saveDir, path.Join(pkg, dep))
+				err = copyDTS(hostname, nodeModulesDir, saveDir, path.Join(pkg, dep))
 			} else {
-				err = copyDTS(nodeModulesDir, saveDir, path.Join(path.Dir(dts), dep))
+				err = copyDTS(hostname, nodeModulesDir, saveDir, path.Join(path.Dir(dts), dep))
 			}
 		} else {
-			err = copyDTS(nodeModulesDir, saveDir, dep)
+			err = copyDTS(hostname, nodeModulesDir, saveDir, dep)
 		}
 		if err != nil {
 			os.Remove(saveFilePath)
