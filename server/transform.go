@@ -9,6 +9,7 @@ import (
 	"os"
 	"path"
 	"regexp"
+	"strconv"
 	"strings"
 
 	"github.com/ije/esbuild-internal/config"
@@ -23,6 +24,7 @@ var (
 	regFromExpression = regexp.MustCompile(`(\s|})from\s*("|')`)
 	regReferenceTag   = regexp.MustCompile(`^<reference\s+(path|types)\s*=\s*('|")([^'"]+)("|')\s*/>$`)
 	regDeclareModule  = regexp.MustCompile(`^declare\s+module\s*('|")([^'"]+)("|')`)
+	regExportEqual    = regexp.MustCompile(`export\s*=`)
 )
 
 func parseModuleExports(filepath string) (exports []string, ok bool, err error) {
@@ -71,6 +73,7 @@ func copyDTS(hostname string, nodeModulesDir string, saveDir string, dts string)
 	}
 
 	deps := newStringSet()
+	dmodules := []string{}
 	rewriteFn := func(importPath string) string {
 		if isValidatedESImportPath(importPath) {
 			if !strings.HasSuffix(importPath, ".d.ts") {
@@ -148,10 +151,7 @@ func copyDTS(hostname string, nodeModulesDir string, saveDir string, dts string)
 		}
 		deps.Set(importPath)
 		if !isValidatedESImportPath(importPath) {
-			if hostname == "localhost" {
-				return fmt.Sprintf("http://localhost/%s", importPath)
-			}
-			return fmt.Sprintf("https://%s/%s", hostname, importPath)
+			return "/" + importPath
 		}
 		return importPath
 	}
@@ -200,10 +200,18 @@ func copyDTS(hostname string, nodeModulesDir string, saveDir string, dts string)
 						path = "./" + path
 					}
 				}
-				if format == "types" && path == "node" {
-					buf.WriteString(nodeTypes)
+				if format == "types" {
+					if path == "node" {
+						buf.WriteString(nodeTypes)
+					} else {
+						if hostname == "localhost" {
+							fmt.Fprintf(buf, `/// <reference types="http://localhost%s" />`, rewriteFn(path))
+						} else {
+							fmt.Fprintf(buf, `/// <reference types="https://%s%s" />`, hostname, rewriteFn(path))
+						}
+					}
 				} else {
-					fmt.Fprintf(buf, `/// <reference %s="%s" />`, format, rewriteFn(path))
+					fmt.Fprintf(buf, `/// <reference path="%s" />`, rewriteFn(path))
 				}
 			} else {
 				buf.WriteString(pure)
@@ -220,16 +228,13 @@ func copyDTS(hostname string, nodeModulesDir string, saveDir string, dts string)
 			if len(a) == 3 && strings.HasPrefix(dts, a[1]) {
 				buf.WriteString(a[0])
 				buf.WriteString(q)
+				newname := fmt.Sprintf("https://%s/%s", hostname, a[1])
 				if hostname == "localhost" {
-					buf.WriteString("http://localhost/")
-				} else {
-					buf.WriteString("https://")
-					buf.WriteString(hostname)
-					buf.WriteString("/")
+					newname = fmt.Sprintf("http://localhost/%s", a[1])
 				}
-				buf.WriteString(a[1])
-				buf.WriteByte('*') // match any suffix (useful for versions)
+				buf.WriteString(newname)
 				buf.WriteString(q)
+				dmodules = append(dmodules, fmt.Sprintf("%s:%d", newname, buf.Len()))
 				buf.WriteString(a[2])
 			} else {
 				buf.WriteString(pure)
@@ -285,6 +290,40 @@ func copyDTS(hostname string, nodeModulesDir string, saveDir string, dts string)
 	err = scanner.Err()
 	if err != nil {
 		return
+	}
+
+	dtsData := buf.Bytes()
+	dataLen := buf.Len()
+	if len(dmodules) > 0 {
+		for _, record := range dmodules {
+			name, istr := utils.SplitByLastByte(record, ':')
+			i, _ := strconv.Atoi(istr)
+			b := bytes.NewBuffer(nil)
+			open := false
+			internal := 0
+			for ; i < dataLen; i++ {
+				c := dtsData[i]
+				b.WriteByte(c)
+				if c == '{' {
+					if !open {
+						open = true
+					} else {
+						internal++
+					}
+				} else if c == '}' && open {
+					if internal > 0 {
+						internal--
+					} else {
+						open = false
+						break
+					}
+				}
+			}
+			if b.Len() > 0 {
+				fmt.Fprintf(buf, `%sdeclare module "%s@*" `, EOL, name)
+				fmt.Fprintf(buf, strings.TrimSpace(b.String()))
+			}
+		}
 	}
 
 	ensureDir(path.Dir(saveFilePath))
