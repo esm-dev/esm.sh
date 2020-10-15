@@ -70,8 +70,8 @@ func copyDTS(hostname string, nodeModulesDir string, saveDir string, dts string)
 		}
 	}
 
-	deps := map[string]struct{}{}
-	dmodules := map[string]struct{}{}
+	deps := newStringSet()
+	dmodules := newStringSet()
 	rewriteFn := func(importPath string) string {
 		if isValidatedESImportPath(importPath) {
 			if !strings.HasSuffix(importPath, ".d.ts") {
@@ -147,7 +147,7 @@ func copyDTS(hostname string, nodeModulesDir string, saveDir string, dts string)
 				}
 			}
 		}
-		deps[importPath] = struct{}{}
+		deps.Set(importPath)
 		if !isValidatedESImportPath(importPath) {
 			if hostname == "localhost" {
 				return fmt.Sprintf("http://localhost/%s", importPath)
@@ -223,12 +223,12 @@ func copyDTS(hostname string, nodeModulesDir string, saveDir string, dts string)
 				buf.WriteString(q)
 				if hostname == "localhost" {
 					buf.WriteString("http://localhost/")
-					dmodules[fmt.Sprintf("http://localhost/%s", a[1])] = struct{}{}
+					dmodules.Set(fmt.Sprintf("http://localhost/%s", a[1]))
 				} else {
 					buf.WriteString("https://")
 					buf.WriteString(hostname)
 					buf.WriteString("/")
-					dmodules[fmt.Sprintf("https://%s/%s", hostname, a[1])] = struct{}{}
+					dmodules.Set(fmt.Sprintf("https://%s/%s", hostname, a[1]))
 				}
 				buf.WriteString(a[1])
 				buf.WriteString(q)
@@ -289,9 +289,9 @@ func copyDTS(hostname string, nodeModulesDir string, saveDir string, dts string)
 		return
 	}
 
-	if len(dmodules) > 0 {
+	if dmodules.Size() > 0 {
 		buf.WriteByte('\n')
-		for dm := range dmodules {
+		for _, dm := range dmodules.Values() {
 			fmt.Fprintf(buf, `declare module "%s@*" {%s`, dm, EOL)
 			fmt.Fprintf(buf, `    export * from "%s";%s`, dm, EOL)
 			fmt.Fprintf(buf, `    export { default } from "%s";%s`, dm, EOL)
@@ -312,7 +312,7 @@ func copyDTS(hostname string, nodeModulesDir string, saveDir string, dts string)
 		return
 	}
 
-	for dep := range deps {
+	for _, dep := range deps.Values() {
 		if isValidatedESImportPath(dep) {
 			if strings.HasPrefix(dep, "/") {
 				pkg, subpath := utils.SplitByFirstByte(dep, '/')

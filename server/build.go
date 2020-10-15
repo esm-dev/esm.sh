@@ -424,10 +424,10 @@ func build(hostname string, storageDir string, options buildOptions) (ret buildR
 		"process.env.NODE_ENV":        fmt.Sprintf(`"%s"`, env),
 		"global.process.env.NODE_ENV": fmt.Sprintf(`"%s"`, env),
 	}
-	missingResolved := map[string]struct{}{}
+	missingResolved := newStringSet()
 esbuild:
 	start = time.Now()
-	peerModulesForCommonjs := map[string]string{}
+	peerModulesForCommonjs := newStringMap()
 	result := api.Build(api.BuildOptions{
 		Stdin:             input,
 		Bundle:            true,
@@ -467,13 +467,13 @@ esbuild:
 							if esm {
 								resolvePath = esmPath
 							} else {
-								peerModulesForCommonjs[resolvePath] = esmPath
+								peerModulesForCommonjs.Set(resolvePath, esmPath)
 							}
 						} else {
 							if esm {
 								resolvePath = fmt.Sprintf("/_error.js?type=resolve&name=%s", url.QueryEscape(resolvePath))
 							} else {
-								peerModulesForCommonjs[resolvePath] = ""
+								peerModulesForCommonjs.Set(resolvePath, "")
 							}
 						}
 						return api.ResolverResult{Path: resolvePath, External: true, Namespace: "http"}, nil
@@ -492,13 +492,12 @@ esbuild:
 		if strings.HasPrefix(fe.Text, `Could not resolve "`) {
 			missingModule := strings.Split(fe.Text, `"`)[1]
 			if missingModule != "" {
-				_, ok := missingResolved[missingModule]
-				if !ok {
+				if !missingResolved.Has(missingModule) {
 					err = yarnAdd(missingModule)
 					if err != nil {
 						return
 					}
-					missingResolved[missingModule] = struct{}{}
+					missingResolved.Set(missingModule)
 					goto esbuild // rebuild
 				}
 			}
@@ -547,9 +546,10 @@ esbuild:
 			fmt.Fprintf(jsContentBuf, `import Buffer from "/buffer";%s`, eol)
 		}
 	}
-	if len(peerModulesForCommonjs) > 0 {
+	if peerModulesForCommonjs.Size() > 0 {
 		var cases []string
-		for name, importPath := range peerModulesForCommonjs {
+		for _, entry := range peerModulesForCommonjs.Entries() {
+			name, importPath := entry[0], entry[1]
 			if importPath != "" {
 				identifier := identify(name)
 				cases = append(cases, fmt.Sprintf(`case "%s":%s%s%s%sreturn __%s;`, name, eol, indent, indent, indent, identifier))
