@@ -128,6 +128,9 @@ func build(storageDir string, options buildOptions) (ret buildResult, err error)
 			NpmPackage: &p,
 		}
 		for name, version := range p.PeerDependencies {
+			if name == "react" && p.Name == "react-dom" {
+				version = p.Version
+			}
 			peerDependencies[name] = version
 		}
 		if meta.Types == "" && meta.Typings == "" && !strings.HasPrefix(pkg.name, "@") {
