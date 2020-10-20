@@ -333,13 +333,15 @@ func (s versionSlice) Less(i, j int) bool {
 	if len(a) != 3 || len(b) != 3 {
 		return s[i] > s[j]
 	}
-	a0 := mustAtoi(a[0])
-	b0 := mustAtoi(b[0])
+	a0, _ := strconv.Atoi(a[0])
+	b0, _ := strconv.Atoi(b[0])
 	if a0 == b0 {
-		a1 := mustAtoi(a[1])
-		b1 := mustAtoi(b[1])
+		a1, _ := strconv.Atoi(a[1])
+		b1, _ := strconv.Atoi(b[1])
 		if a1 == b1 {
-			return mustAtoi(a[2]) > mustAtoi(b[2])
+			a2, _ := strconv.Atoi(a[2])
+			b2, _ := strconv.Atoi(b[2])
+			return a2 > b2
 		}
 		return a1 > b1
 	}

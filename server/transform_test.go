@@ -67,6 +67,13 @@ func TestCopyDTS(t *testing.T) {
 		`export { default as Anchor } from './anchor';`,
 		`export { default as AutoComplete } from './auto-complete';export { default as Alert } from './alert';`,
 		`/* avatar */ export { default as Avatar } from '../avatar';`,
+		`declare module "test" {`,
+		`    export = Component;`,
+		`}`,
+		`declare module 'test' {`,
+		`    export import ReactInstance = ReactInstance;`,
+		`    export import ReactElement = ReactElement;`,
+		`}`,
 	}
 	indexDTSExcept := []string{
 		`// dts test`,
@@ -81,6 +88,21 @@ func TestCopyDTS(t *testing.T) {
 		`export { default as Anchor } from './anchor.d.ts';`,
 		`export { default as AutoComplete } from './auto-complete.d.ts';export { default as Alert } from './alert.d.ts';`,
 		`/* avatar */ export { default as Avatar } from '../avatar.d.ts';`,
+		`declare module "https://esm.sh/test" {`,
+		`    export = Component;`,
+		`}`,
+		`declare module 'https://esm.sh/test' {`,
+		`    export import ReactInstance = ReactInstance;`,
+		`    export import ReactElement = ReactElement;`,
+		`}`,
+		``,
+		`declare module "https://esm.sh/test@*" {`,
+		`    export = Component;`,
+		`}`,
+		`declare module "https://esm.sh/test@*" {`,
+		`    export import ReactInstance = ReactInstance;`,
+		`    export import ReactElement = ReactElement;`,
+		`}`,
 	}
 	ensureDir(path.Join(nmDir, "test"))
 	dtsFils := map[string]string{
@@ -98,7 +120,7 @@ func TestCopyDTS(t *testing.T) {
 		}
 	}
 
-	err = copyDTS(nmDir, saveDir, "test/index.d.ts")
+	err = copyDTS("esm.sh", nmDir, saveDir, "test/index.d.ts")
 	if err != nil && os.IsExist(err) {
 		t.Fatal(err)
 	}

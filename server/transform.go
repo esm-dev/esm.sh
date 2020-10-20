@@ -9,6 +9,7 @@ import (
 	"os"
 	"path"
 	"regexp"
+	"strconv"
 	"strings"
 
 	"github.com/ije/esbuild-internal/config"
@@ -23,6 +24,7 @@ var (
 	regFromExpression = regexp.MustCompile(`(\s|})from\s*("|')`)
 	regReferenceTag   = regexp.MustCompile(`^<reference\s+(path|types)\s*=\s*('|")([^'"]+)("|')\s*/>$`)
 	regDeclareModule  = regexp.MustCompile(`^declare\s+module\s*('|")([^'"]+)("|')`)
+	regExportEqual    = regexp.MustCompile(`export\s*=`)
 )
 
 func parseModuleExports(filepath string) (exports []string, ok bool, err error) {
@@ -43,7 +45,7 @@ func parseModuleExports(filepath string) (exports []string, ok bool, err error) 
 	return
 }
 
-func copyDTS(nodeModulesDir string, saveDir string, dts string) (err error) {
+func copyDTS(hostname string, nodeModulesDir string, saveDir string, dts string) (err error) {
 	saveFilePath := path.Join(saveDir, dts)
 	dtsFilePath := path.Join(nodeModulesDir, regVersionPath.ReplaceAllString(dts, "$1/"))
 	dtsDir := path.Dir(dtsFilePath)
@@ -70,7 +72,8 @@ func copyDTS(nodeModulesDir string, saveDir string, dts string) (err error) {
 		}
 	}
 
-	deps := map[string]struct{}{}
+	deps := newStringSet()
+	dmodules := []string{}
 	rewriteFn := func(importPath string) string {
 		if isValidatedESImportPath(importPath) {
 			if !strings.HasSuffix(importPath, ".d.ts") {
@@ -104,19 +107,19 @@ func copyDTS(nodeModulesDir string, saveDir string, dts string) (err error) {
 				}
 				return importPath
 			}
-			pkg, subpath := utils.SplitByFirstByte(importPath, '/')
-			if strings.HasPrefix(pkg, "@") {
+			pkgName, subpath := utils.SplitByFirstByte(importPath, '/')
+			if strings.HasPrefix(pkgName, "@") {
 				n, s := utils.SplitByFirstByte(subpath, '/')
-				pkg = fmt.Sprintf("%s/%s", pkg, n)
+				pkgName = fmt.Sprintf("%s/%s", pkgName, n)
 				subpath = s
 			}
 			// self
-			if strings.HasPrefix(dts, pkg) {
+			if strings.HasPrefix(dts, pkgName) {
 				return importPath
 			}
-			packageJSONFile := path.Join(nodeModulesDir, "@types", pkg, "package.json")
+			packageJSONFile := path.Join(nodeModulesDir, "@types", pkgName, "package.json")
 			if !fileExists(packageJSONFile) {
-				packageJSONFile = path.Join(nodeModulesDir, pkg, "package.json")
+				packageJSONFile = path.Join(nodeModulesDir, pkgName, "package.json")
 			}
 			if fileExists(packageJSONFile) {
 				var p NpmPackage
@@ -146,7 +149,7 @@ func copyDTS(nodeModulesDir string, saveDir string, dts string) (err error) {
 				}
 			}
 		}
-		deps[importPath] = struct{}{}
+		deps.Set(importPath)
 		if !isValidatedESImportPath(importPath) {
 			return "/" + importPath
 		}
@@ -197,10 +200,18 @@ func copyDTS(nodeModulesDir string, saveDir string, dts string) (err error) {
 						path = "./" + path
 					}
 				}
-				if format == "types" && path == "node" {
-					buf.WriteString(nodeTypes)
+				if format == "types" {
+					if path == "node" {
+						buf.WriteString(nodeTypes)
+					} else {
+						if hostname == "localhost" {
+							fmt.Fprintf(buf, `/// <reference types="http://localhost%s" />`, rewriteFn(path))
+						} else {
+							fmt.Fprintf(buf, `/// <reference types="https://%s%s" />`, hostname, rewriteFn(path))
+						}
+					}
 				} else {
-					buf.WriteString(fmt.Sprintf(`/// <reference %s="%s" />`, format, rewriteFn(path)))
+					fmt.Fprintf(buf, `/// <reference path="%s" />`, rewriteFn(path))
 				}
 			} else {
 				buf.WriteString(pure)
@@ -217,8 +228,13 @@ func copyDTS(nodeModulesDir string, saveDir string, dts string) (err error) {
 			if len(a) == 3 && strings.HasPrefix(dts, a[1]) {
 				buf.WriteString(a[0])
 				buf.WriteString(q)
-				buf.WriteString("https://esm.sh/" + a[1])
+				newname := fmt.Sprintf("https://%s/%s", hostname, a[1])
+				if hostname == "localhost" {
+					newname = fmt.Sprintf("http://localhost/%s", a[1])
+				}
+				buf.WriteString(newname)
 				buf.WriteString(q)
+				dmodules = append(dmodules, fmt.Sprintf("%s:%d", newname, buf.Len()))
 				buf.WriteString(a[2])
 			} else {
 				buf.WriteString(pure)
@@ -276,6 +292,40 @@ func copyDTS(nodeModulesDir string, saveDir string, dts string) (err error) {
 		return
 	}
 
+	dtsData := buf.Bytes()
+	dataLen := buf.Len()
+	if len(dmodules) > 0 {
+		for _, record := range dmodules {
+			name, istr := utils.SplitByLastByte(record, ':')
+			i, _ := strconv.Atoi(istr)
+			b := bytes.NewBuffer(nil)
+			open := false
+			internal := 0
+			for ; i < dataLen; i++ {
+				c := dtsData[i]
+				b.WriteByte(c)
+				if c == '{' {
+					if !open {
+						open = true
+					} else {
+						internal++
+					}
+				} else if c == '}' && open {
+					if internal > 0 {
+						internal--
+					} else {
+						open = false
+						break
+					}
+				}
+			}
+			if b.Len() > 0 {
+				fmt.Fprintf(buf, `%sdeclare module "%s@*" `, EOL, name)
+				fmt.Fprintf(buf, strings.TrimSpace(b.String()))
+			}
+		}
+	}
+
 	ensureDir(path.Dir(saveFilePath))
 	saveFile, err := os.Create(saveFilePath)
 	if err != nil {
@@ -288,7 +338,7 @@ func copyDTS(nodeModulesDir string, saveDir string, dts string) (err error) {
 		return
 	}
 
-	for dep := range deps {
+	for _, dep := range deps.Values() {
 		if isValidatedESImportPath(dep) {
 			if strings.HasPrefix(dep, "/") {
 				pkg, subpath := utils.SplitByFirstByte(dep, '/')
@@ -296,12 +346,12 @@ func copyDTS(nodeModulesDir string, saveDir string, dts string) (err error) {
 					n, _ := utils.SplitByFirstByte(subpath, '/')
 					pkg = fmt.Sprintf("%s/%s", pkg, n)
 				}
-				err = copyDTS(nodeModulesDir, saveDir, path.Join(pkg, dep))
+				err = copyDTS(hostname, nodeModulesDir, saveDir, path.Join(pkg, dep))
 			} else {
-				err = copyDTS(nodeModulesDir, saveDir, path.Join(path.Dir(dts), dep))
+				err = copyDTS(hostname, nodeModulesDir, saveDir, path.Join(path.Dir(dts), dep))
 			}
 		} else {
-			err = copyDTS(nodeModulesDir, saveDir, dep)
+			err = copyDTS(hostname, nodeModulesDir, saveDir, dep)
 		}
 		if err != nil {
 			os.Remove(saveFilePath)
