@@ -1,6 +1,6 @@
 # ESM
 
-A fast, global content delivery network and package manager for ES Modules. All modules are transformed to ESM by [esbuild](https://github.com/evanw/esbuild) from [npm](http://npmjs.org/).
+A fast, global content delivery network and package manager for ES Modules. All modules are transformed to ESM by [esbuild](https://github.com/evanw/esbuild) in [npm](http://npmjs.org/).
 
 ## Import from URL
 ```javascript
@@ -79,26 +79,40 @@ Simply proxy all the providers in the `import-map.json`:
 deno install --allow-read --allow-write --allow-net -f -n esm https://deno.land/x/esm/cli.ts
 
 # set cdn
-$ esm config cdn cdn.ems.sh.cn
+esm config cdn cdn.ems.sh.cn
 
 # add some packages
-$ esm add react react-dom
+esm add react react-dom
 
 # specify version or tag
-$ esm add react@16.13.1
-$ esm add react@next
+esm add react@16.13.1
+esm add react@next
 
 # remove some packages
-$ esm remove lodash
+esm remove lodash
 
 # update installed packages to latest version
-$ esm update
+esm update
 
 # help message
-$ esm -h
+esm -h
 ```
 
-## X-Typescript-Types
+## Deno compatibility
+
+**esm.sh** will polyfill the node internal **fs**, **os**, etc modules in `deno/std/node` to support some modules to work in Deno, like `postcss`:
+
+```javascript
+import postcss from 'https://esm.sh/postcss'
+import autoprefixer from 'https://esm.sh/autoprefixer'
+
+const css = (await postcss([ autoprefixer]).process(`
+    backdrop-filter: blur(5px);
+    user-select: none;
+`).async()).content
+```
+
+### X-Typescript-Types
 
 **esm.sh** will response a custom HTTP header of `X-TypeScript-Types` when the types(dts) defined, that is useful for deno types check ([link](https://deno.land/manual/getting_started/typescript#x-typescript-types-custom-header)).
 
