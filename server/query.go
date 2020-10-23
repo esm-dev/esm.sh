@@ -144,6 +144,7 @@ func registerAPI(storageDir string, domain string, cdnDomain string) {
 		}
 		isDev := !ctx.Form.IsNil("dev")
 		isDeno := strings.HasPrefix(ctx.R.UserAgent(), "Deno/")
+		noCheck := !ctx.Form.IsNil("nocheck") || !ctx.Form.IsNil("no-check")
 
 		var bundleList string
 		var isBare bool
@@ -318,7 +319,7 @@ func registerAPI(storageDir string, domain string, cdnDomain string) {
 				fmt.Fprintf(buf, `export default %s_default;%s`, importIdentifier, EOL)
 			}
 		}
-		if importMeta.Dts != "" {
+		if importMeta.Dts != "" && !noCheck {
 			ctx.SetHeader("X-TypeScript-Types", importMeta.Dts)
 		}
 		ctx.SetHeader("Cache-Control", fmt.Sprintf("private, max-age=%d", refreshDuration))
