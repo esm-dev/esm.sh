@@ -1,5 +1,6 @@
 .DS_Store
 Thumbs.db
 .dev/
-readme_md.go
+server/auto_readme.go
+server/auto_polyfills.go
 esmd
