@@ -28,6 +28,11 @@ Avaiable `target`: **es2015** - **es2020**, **esnext**
 import React from 'https://esm.sh/react?dev'
 ```
 
+### Fix external
+```javascript
+import React from 'https://esm.sh/postcss-flexbugs-fixes?external=postcss'
+```
+
 ### Bundle mode
 ```javascript
 import React from 'https://esm.sh/[react,react-dom]/react'
