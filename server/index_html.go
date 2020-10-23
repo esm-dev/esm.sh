@@ -280,9 +280,6 @@ const indexHTML = `<!DOCTYPE html>
                 if (child.nodeName === '#text') {
                     const text = child.textContent
                     if (text == '$ ') {
-                        console.log(child)
-                        console.log(child.previousSibling)
-                        console.log(child.previousElementSibling)
                         block.insertBefore(bashPromptSpan(), child)
                         block.removeChild(child)
                     } else {
