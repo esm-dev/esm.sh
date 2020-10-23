@@ -52,6 +52,7 @@ type buildOptions struct {
 	external moduleSlice
 	target   string
 	isDev    bool
+	isDeno   bool
 }
 
 type buildResult struct {
@@ -80,6 +81,9 @@ func build(hostname string, storageDir string, options buildOptions) (ret buildR
 		if pkg.submodule != "" {
 			filename = pkg.submodule
 		}
+		if options.isDeno {
+			filename += ".deno"
+		}
 		if options.isDev {
 			filename += ".development"
 		}
@@ -88,7 +92,7 @@ func build(hostname string, storageDir string, options buildOptions) (ret buildR
 		hasher := sha1.New()
 		sort.Sort(options.packages)
 		sort.Sort(options.external)
-		fmt.Fprintf(hasher, "%s/%s/%s/%v", options.packages.String(), options.external.String(), options.target, options.isDev)
+		fmt.Fprintf(hasher, "%s/%s/%s/%v/%v", options.packages.String(), options.external.String(), options.target, options.isDev, options.isDeno)
 		ret.buildID = "bundle-" + strings.ToLower(base32.StdEncoding.EncodeToString(hasher.Sum(nil)))
 	}
 
@@ -494,14 +498,32 @@ esbuild:
 								} else {
 									return api.ResolverResult{Path: resolvePath}, err
 								}
+							} else if options.isDeno {
+								_, yes := polyfills[fmt.Sprintf("deno_node_%s.js", resolvePath)]
+								if yes {
+									pathname := fmt.Sprintf("/_deno_node_%s.js", resolvePath)
+									if esm {
+										resolvePath = pathname
+									} else {
+										peerModulesForCommonjs.Set(resolvePath, pathname)
+									}
+									return api.ResolverResult{Path: resolvePath, External: true, Namespace: "http"}, nil
+								}
 							}
 						}
 						if ok {
+							packageName := resolvePath
+							if !strings.HasPrefix(packageName, "@") {
+								packageName, _ = utils.SplitByFirstByte(packageName, '/')
+							}
 							filename := path.Base(resolvePath)
+							if options.isDeno {
+								filename += ".deno"
+							}
 							if options.isDev {
 								filename += ".development"
 							}
-							pathname := fmt.Sprintf("/%s@%s/%s/%s", resolvePath, version, options.target, ensureExt(filename, ".js"))
+							pathname := fmt.Sprintf("/%s@%s/%s/%s", packageName, version, options.target, ensureExt(filename, ".js"))
 							if esm {
 								resolvePath = pathname
 							} else {
@@ -579,9 +601,11 @@ esbuild:
 	if regBuffer.Match(outputContent) {
 		p, err := nodeEnv.getPackageInfo("buffer", "latest")
 		if err == nil {
-			fmt.Fprintf(jsContentBuf, `import Buffer from "/buffer@%s/%s/buffer.js";%s`, p.Version, options.target, eol)
-		} else {
-			fmt.Fprintf(jsContentBuf, `import Buffer from "/buffer";%s`, eol)
+			if options.isDeno {
+				fmt.Fprintf(jsContentBuf, `import Buffer from "/buffer@%s/%s/buffer.deno.js";%s`, p.Version, options.target, eol)
+			} else {
+				fmt.Fprintf(jsContentBuf, `import Buffer from "/buffer@%s/%s/buffer.js";%s`, p.Version, options.target, eol)
+			}
 		}
 	}
 	if peerModulesForCommonjs.Size() > 0 {

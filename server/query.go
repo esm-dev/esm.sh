@@ -37,11 +37,14 @@ func registerAPI(storageDir string, domain string, cdnDomain string) {
 		pathname := utils.CleanPath(ctx.R.URL.Path)
 		switch pathname {
 		case "/":
-			mdStr := strings.TrimSpace(string(utils.MustEncodeJSON(readmeMD)))
+			mdStr := strings.TrimSpace(string(utils.MustEncodeJSON(readme)))
 			return rex.Content("index.html", start, bytes.NewReader([]byte(fmt.Sprintf(indexHTML, "`", mdStr))))
 		case "/_process_browser.js":
 			ctx.SetHeader("Cache-Control", "public, max-age=31536000, immutable")
-			return rex.Content("process/browser.js", start, bytes.NewReader([]byte(fmt.Sprintf(processBrowserJS, ctx.Form.Value("env")))))
+			return rex.Content("process/browser.js", start, bytes.NewReader([]byte(fmt.Sprintf(polyfills["process_browser.js"], ctx.Form.Value("env")))))
+		case "/_deno_node_fs.js":
+			ctx.SetHeader("Cache-Control", fmt.Sprintf("private, max-age=%d", refreshDuration))
+			return rex.Content("deno/fs.js", start, bytes.NewReader([]byte(polyfills["deno_node_fs.js"])))
 		case "/_error.js":
 			t := ctx.Form.Value("type")
 			switch t {
@@ -119,7 +122,6 @@ func registerAPI(storageDir string, domain string, cdnDomain string) {
 			}
 		}
 
-		isDev := !ctx.Form.IsNil("dev")
 		target := strings.ToLower(strings.TrimSpace(ctx.Form.Value("target")))
 		if _, ok := targets[target]; !ok {
 			target = "esnext"
@@ -140,6 +142,8 @@ func registerAPI(storageDir string, domain string, cdnDomain string) {
 				}
 			}
 		}
+		isDev := !ctx.Form.IsNil("dev")
+		isDeno := strings.HasPrefix(ctx.R.UserAgent(), "Deno/")
 
 		var bundleList string
 		var isBare bool
@@ -185,6 +189,10 @@ func registerAPI(storageDir string, domain string, cdnDomain string) {
 						if endsWith(submodule, ".development") {
 							submodule = strings.TrimSuffix(submodule, ".development")
 							isDev = true
+						}
+						if endsWith(submodule, ".deno") {
+							submodule = strings.TrimSuffix(submodule, ".deno")
+							isDeno = true
 						}
 						if submodule == path.Base(currentModule.name) {
 							submodule = ""
@@ -235,6 +243,7 @@ func registerAPI(storageDir string, domain string, cdnDomain string) {
 			external: external,
 			target:   target,
 			isDev:    isDev,
+			isDeno:   isDeno,
 		})
 		if err != nil {
 			return throwErrorJS(ctx, 500, err)

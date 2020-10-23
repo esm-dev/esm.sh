@@ -16,13 +16,14 @@ import (
 )
 
 var (
-	readmeMD string
-	nodeEnv  *NodeEnv
-	db       *postdb.DB
+	readme  string
+	nodeEnv *NodeEnv
+	db      *postdb.DB
 )
 
 var (
-	log = &logx.Logger{}
+	log       = &logx.Logger{}
+	polyfills = map[string]string{}
 )
 
 // Serve serves esmd server
@@ -55,7 +56,19 @@ func Serve() {
 		if err == nil {
 			data, err := ioutil.ReadFile(path.Join(wd, "README.md"))
 			if err == nil {
-				readmeMD = string(data)
+				readme = string(data)
+			}
+			entries, err := ioutil.ReadDir(path.Join(wd, "polyfills"))
+			if err == nil {
+				for _, entry := range entries {
+					if !entry.IsDir() {
+						data, err := ioutil.ReadFile(path.Join(wd, "polyfills", entry.Name()))
+						if err == nil {
+							polyfills[entry.Name()] = string(data)
+							log.Debug("polyfill", entry.Name(), "loaded")
+						}
+					}
+				}
 			}
 		}
 	}
@@ -73,7 +86,7 @@ func Serve() {
 	}
 	log.SetLevelByName(logLevel)
 
-	accessLogger, err := logx.New(fmt.Sprintf("file:%s?buffer=32k", path.Join(logDir, "access.log")))
+	accessLogger, err := logx.New(fmt.Sprintf("file:%s?buffer=32k&fileDateFormat=20060102", path.Join(logDir, "access.log")))
 	if err != nil {
 		log.Fatalf("initiate access logger: %v", err)
 	}
@@ -129,5 +142,7 @@ func Serve() {
 	case err = <-C:
 		log.Error(err)
 	}
+	log.FlushBuffer()
+	accessLogger.FlushBuffer()
 	db.Close()
 }

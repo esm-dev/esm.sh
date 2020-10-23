@@ -185,6 +185,9 @@ CheckYarn:
 }
 
 func (env *NodeEnv) getPackageInfo(name string, version string) (info NpmPackage, err error) {
+	if !strings.HasPrefix(name, "@") {
+		name, _ = utils.SplitByFirstByte(name, '/')
+	}
 	key := name + "/" + version
 	isFullVersion := regFullVersion.MatchString(version)
 	p, err := db.Get(q.Alias(key), q.K("package"))
