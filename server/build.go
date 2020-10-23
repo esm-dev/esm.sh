@@ -52,7 +52,6 @@ type buildOptions struct {
 	external moduleSlice
 	target   string
 	isDev    bool
-	isDeno   bool
 }
 
 type buildResult struct {
@@ -81,9 +80,6 @@ func build(hostname string, storageDir string, options buildOptions) (ret buildR
 		if pkg.submodule != "" {
 			filename = pkg.submodule
 		}
-		if options.isDeno {
-			filename += ".deno"
-		}
 		if options.isDev {
 			filename += ".development"
 		}
@@ -92,7 +88,7 @@ func build(hostname string, storageDir string, options buildOptions) (ret buildR
 		hasher := sha1.New()
 		sort.Sort(options.packages)
 		sort.Sort(options.external)
-		fmt.Fprintf(hasher, "%s/%s/%s/%v/%v", options.packages.String(), options.external.String(), options.target, options.isDev, options.isDeno)
+		fmt.Fprintf(hasher, "%s/%s/%s/%v", options.packages.String(), options.external.String(), options.target, options.isDev)
 		ret.buildID = "bundle-" + strings.ToLower(base32.StdEncoding.EncodeToString(hasher.Sum(nil)))
 	}
 
@@ -498,10 +494,10 @@ esbuild:
 								} else {
 									return api.ResolverResult{Path: resolvePath}, err
 								}
-							} else if options.isDeno {
-								_, yes := polyfills[fmt.Sprintf("deno_node_%s.js", resolvePath)]
+							} else {
+								_, yes := polyfills[fmt.Sprintf("node_%s.js", resolvePath)]
 								if yes {
-									pathname := fmt.Sprintf("/_deno_node_%s.js", resolvePath)
+									pathname := fmt.Sprintf("/_node_%s.js", resolvePath)
 									if esm {
 										resolvePath = pathname
 									} else {
@@ -517,9 +513,6 @@ esbuild:
 								packageName, _ = utils.SplitByFirstByte(packageName, '/')
 							}
 							filename := path.Base(resolvePath)
-							if options.isDeno {
-								filename += ".deno"
-							}
 							if options.isDev {
 								filename += ".development"
 							}
@@ -601,11 +594,7 @@ esbuild:
 	if regBuffer.Match(outputContent) {
 		p, err := nodeEnv.getPackageInfo("buffer", "latest")
 		if err == nil {
-			if options.isDeno {
-				fmt.Fprintf(jsContentBuf, `import Buffer from "/buffer@%s/%s/buffer.deno.js";%s`, p.Version, options.target, eol)
-			} else {
-				fmt.Fprintf(jsContentBuf, `import Buffer from "/buffer@%s/%s/buffer.js";%s`, p.Version, options.target, eol)
-			}
+			fmt.Fprintf(jsContentBuf, `import Buffer from "/buffer@%s/%s/buffer.js";%s`, p.Version, options.target, eol)
 		}
 	}
 	if peerModulesForCommonjs.Size() > 0 {
