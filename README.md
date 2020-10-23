@@ -100,7 +100,7 @@ esm -h
 
 ## Deno compatibility
 
-**esm.sh** will polyfill the node internal **fs**, **os**, etc modules in `deno/std/node` to support some modules to work in Deno, like `postcss`:
+**esm.sh** will polyfill the node internal modules(**fs**,**os**,etc) with [`https://deno.land/std/node`](https://deno.land/std/node) to support some modules to work in Deno, like `postcss`:
 
 ```javascript
 import postcss from 'https://esm.sh/postcss'
@@ -114,9 +114,15 @@ const css = (await postcss([ autoprefixer]).process(`
 
 ### X-Typescript-Types
 
-**esm.sh** will response a custom HTTP header of `X-TypeScript-Types` when the types(dts) defined, that is useful for deno types check ([link](https://deno.land/manual/getting_started/typescript#x-typescript-types-custom-header)).
+By default, **esm.sh** will response a custom HTTP header of `X-TypeScript-Types` when the types(dts) defined, that is useful for deno types check ([link](https://deno.land/manual/getting_started/typescript#x-typescript-types-custom-header)).
 
 ![figure #1](./assets/figure-1.png)
+
+You can pass the `no-check` query to disable the `types` header since some types are incorrect:
+
+```javascript
+import unescape from 'https://esm.sh/lodash/unescape?no-check'
+```
 
 ## Caveats
 
