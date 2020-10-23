@@ -18,10 +18,38 @@ func main() {
 		fmt.Println(err)
 		return
 	}
-	err = ioutil.WriteFile(path.Join(root, "server", "readme_md.go"), []byte(strings.Join([]string{
+	err = ioutil.WriteFile(path.Join(root, "server", "auto_readme.go"), []byte(strings.Join([]string{
 		"package server",
 		"func init() {",
-		"    readmeMD = " + strings.TrimSpace(string(utils.MustEncodeJSON(string(readme)))),
+		"    readme = " + strings.TrimSpace(string(utils.MustEncodeJSON(string(readme)))),
+		"}",
+	}, "\n")), 0644)
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+	entries, err := ioutil.ReadDir(path.Join(root, "polyfills"))
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+	polyfills := map[string]string{}
+	for _, entry := range entries {
+		if !entry.IsDir() {
+			data, err := ioutil.ReadFile(path.Join(root, "polyfills", entry.Name()))
+			if err != nil {
+				fmt.Println(err)
+				return
+			}
+			if err == nil {
+				polyfills[entry.Name()] = string(data)
+			}
+		}
+	}
+	err = ioutil.WriteFile(path.Join(root, "server", "auto_polyfills.go"), []byte(strings.Join([]string{
+		"package server",
+		"func init() {",
+		"    polyfills = map[string]string" + strings.TrimSpace(string(utils.MustEncodeJSON(polyfills))),
 		"}",
 	}, "\n")), 0644)
 	if err != nil {

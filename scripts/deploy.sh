@@ -125,5 +125,6 @@ ssh -p $sshPort $user@$host << EOF
     fi
 EOF
 
-rm -f server/readme_md.go
+rm -f server/auto_polyfills.go
+rm -f server/auto_readme.go
 rm -f esmd
