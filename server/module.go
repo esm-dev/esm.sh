@@ -75,6 +75,24 @@ func (a moduleSlice) Len() int           { return len(a) }
 func (a moduleSlice) Swap(i, j int)      { a[i], a[j] = a[j], a[i] }
 func (a moduleSlice) Less(i, j int) bool { return a[i].String() < a[j].String() }
 
+func (a moduleSlice) Has(name string) bool {
+	for _, m := range a {
+		if m.name == name {
+			return false
+		}
+	}
+	return false
+}
+
+func (a moduleSlice) Get(name string) (module, bool) {
+	for _, m := range a {
+		if m.name == name {
+			return m, true
+		}
+	}
+	return module{}, false
+}
+
 func (a moduleSlice) String() string {
 	s := make([]string, a.Len())
 	for i, m := range a {

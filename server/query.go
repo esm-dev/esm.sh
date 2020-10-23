@@ -124,6 +124,22 @@ func registerAPI(storageDir string, domain string, cdnDomain string) {
 		if _, ok := targets[target]; !ok {
 			target = "esnext"
 		}
+		external := moduleSlice{}
+		for _, p := range strings.Split(ctx.Form.Value("external"), ",") {
+			p = strings.TrimSpace(p)
+			if p != "" {
+				m, err := parseModule(p)
+				if err != nil {
+					if strings.HasSuffix(err.Error(), "not found") {
+						continue
+					}
+					return throwErrorJS(ctx, 500, err)
+				}
+				if !external.Has(m.name) {
+					external = append(external, *m)
+				}
+			}
+		}
 
 		var bundleList string
 		var isBare bool
@@ -139,6 +155,30 @@ func registerAPI(storageDir string, domain string, cdnDomain string) {
 			currentModule, err = parseModule(pathname)
 			if err == nil && !endsWith(currentModule.name, ".js") {
 				a := strings.Split(currentModule.submodule, "/")
+				if len(a) > 1 {
+					if strings.HasPrefix(a[0], "external=") {
+						for _, p := range strings.Split(strings.TrimPrefix(a[0], "external="), ",") {
+							p = strings.TrimSpace(p)
+							if p != "" {
+								if strings.HasPrefix(p, "@") {
+									scope, name := utils.SplitByFirstByte(p, '_')
+									p = scope + "/" + name
+								}
+								m, err := parseModule(p)
+								if err != nil {
+									if strings.HasSuffix(err.Error(), "not found") {
+										continue
+									}
+									return throwErrorJS(ctx, 500, err)
+								}
+								if !external.Has(m.name) {
+									external = append(external, *m)
+								}
+							}
+						}
+						a = a[1:]
+					}
+				}
 				if len(a) > 1 {
 					if _, ok := targets[a[0]]; ok || a[0] == "esnext" {
 						submodule := strings.TrimSuffix(strings.Join(a[1:], "/"), ".js")
@@ -176,7 +216,9 @@ func registerAPI(storageDir string, domain string, cdnDomain string) {
 				if !containsPackage && m.Equels(*currentModule) {
 					containsPackage = true
 				}
-				packages = append(packages, *m)
+				if !packages.Has(m.name) {
+					packages = append(packages, *m)
+				}
 			}
 			if len(packages) > 10 {
 				return throwErrorJS(ctx, 400, fmt.Errorf("too many packages in the bundle list, up to 10 but get %d", len(packages)))
@@ -190,6 +232,7 @@ func registerAPI(storageDir string, domain string, cdnDomain string) {
 
 		ret, err := build(domain, storageDir, buildOptions{
 			packages: packages,
+			external: external,
 			target:   target,
 			isDev:    isDev,
 		})

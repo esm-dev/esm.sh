@@ -49,6 +49,7 @@ type ImportMeta struct {
 
 type buildOptions struct {
 	packages moduleSlice
+	external moduleSlice
 	target   string
 	isDev    bool
 }
@@ -72,17 +73,22 @@ func build(hostname string, storageDir string, options buildOptions) (ret buildR
 	if single {
 		pkg := options.packages[0]
 		filename := path.Base(pkg.name)
+		target := options.target
+		if len(options.external) > 0 {
+			target = fmt.Sprintf("external=%s/%s", strings.ReplaceAll(options.external.String(), "/", "_"), target)
+		}
 		if pkg.submodule != "" {
 			filename = pkg.submodule
 		}
 		if options.isDev {
 			filename += ".development"
 		}
-		ret.buildID = fmt.Sprintf("%s@%s/%s/%s", pkg.name, pkg.version, options.target, filename)
+		ret.buildID = fmt.Sprintf("%s@%s/%s/%s", pkg.name, pkg.version, target, filename)
 	} else {
 		hasher := sha1.New()
 		sort.Sort(options.packages)
-		fmt.Fprintf(hasher, "%s %s %v", options.packages.String(), options.target, options.isDev)
+		sort.Sort(options.external)
+		fmt.Fprintf(hasher, "%s/%s/%s/%v", options.packages.String(), options.external.String(), options.target, options.isDev)
 		ret.buildID = "bundle-" + strings.ToLower(base32.StdEncoding.EncodeToString(hasher.Sum(nil)))
 	}
 
@@ -333,7 +339,7 @@ func build(hostname string, storageDir string, options buildOptions) (ret buildR
 	}
 	log.Debug("copy dts in", time.Now().Sub(start))
 
-	externals := make([]string, len(peerPackages)+len(builtInNodeModules))
+	externals := make([]string, len(peerPackages)+len(builtInNodeModules)+len(options.external))
 	i := 0
 	for name := range peerPackages {
 		var p NpmPackage
@@ -354,6 +360,18 @@ func build(hostname string, storageDir string, options buildOptions) (ret buildR
 		}
 		if !self {
 			externals[i] = name
+			i++
+		}
+	}
+	for _, m := range options.external {
+		var self bool
+		for _, pkg := range options.packages {
+			if pkg.name == m.name {
+				self = true
+			}
+		}
+		if !self {
+			externals[i] = m.name
 			i++
 		}
 	}
@@ -449,15 +467,32 @@ esbuild:
 					func(args api.ResolverArgs) (api.ResolverResult, error) {
 						_, esm, _ := parseModuleExports(args.Importer)
 						resolvePath := args.Path
-						p, ok := peerPackages[resolvePath]
+						var version string
+						var ok bool
+						if !ok {
+							m, yes := options.external.Get(resolvePath)
+							if yes {
+								version = m.version
+								ok = true
+							}
+						}
+						if !ok {
+							p, yes := peerPackages[resolvePath]
+							if yes {
+								version = p.Version
+								ok = true
+							}
+						}
 						if !ok {
 							polyfill, yes := polyfilledBuiltInNodeModules[resolvePath]
 							if yes {
-								var err error
-								p, err = nodeEnv.getPackageInfo(polyfill, "latest")
+								p, err := nodeEnv.getPackageInfo(polyfill, "latest")
 								if err == nil {
 									resolvePath = polyfill
+									version = p.Version
 									ok = true
+								} else {
+									return api.ResolverResult{Path: resolvePath}, err
 								}
 							}
 						}
@@ -466,11 +501,11 @@ esbuild:
 							if options.isDev {
 								filename += ".development"
 							}
-							esmPath := fmt.Sprintf("/%s@%s/%s/%s", resolvePath, p.Version, options.target, ensureExt(filename, ".js"))
+							pathname := fmt.Sprintf("/%s@%s/%s/%s", resolvePath, version, options.target, ensureExt(filename, ".js"))
 							if esm {
-								resolvePath = esmPath
+								resolvePath = pathname
 							} else {
-								peerModulesForCommonjs.Set(resolvePath, esmPath)
+								peerModulesForCommonjs.Set(resolvePath, pathname)
 							}
 						} else {
 							if esm {
