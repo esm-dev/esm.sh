@@ -144,7 +144,7 @@ func registerAPI(storageDir string, domain string, cdnDomain string) {
 		}
 		isDev := !ctx.Form.IsNil("dev")
 		isDeno := strings.HasPrefix(ctx.R.UserAgent(), "Deno/")
-		noCheck := !ctx.Form.IsNil("nocheck") || !ctx.Form.IsNil("no-check")
+		noCheck := !ctx.Form.IsNil("nocheck") || !ctx.Form.IsNil("noCheck") || !ctx.Form.IsNil("no-check")
 
 		var bundleList string
 		var isBare bool
