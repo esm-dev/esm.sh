@@ -1,90 +1,94 @@
 # mmdb_china_ip_list
 
-[README](README.md) | [English Document](README_en.md)
+[README](README_en.md) | [中文说明](README.md)
 
 ![Daily Build](https://github.com/alecthw/mmdb_china_ip_list/workflows/Daily%20Build/badge.svg)  ![Release Build](https://github.com/alecthw/mmdb_china_ip_list/workflows/Release%20Build/badge.svg)
 
-将`china_ip_list`和`纯真CN`发布的中国IP列表叠加到`MaxMind`官方社区版数据库中。
+Overlap the Chinese IP list published by `china_ip_list` and `chunzhen CN` into the official community edition database of `MaxMind`.
 
-同时，这也是一个如何生成MaxMind数据库的示例。
+This is also an example of generating MaxMind Database!
 
-适合在网络分流工具中使用，对中国IP的匹配分流更为友好，兼容MaxMind DB的客户端！
+It's suitable for using in network offloading tools and compatible with MaxMind DB client!
+It is more friendly to Chinese IP matching and distribution.
 
-每周自动拉取新的MaxMind、china_ip_list和纯真CN数据库，并发布一个新的Release版本。
+Automatically pull new MaxMind, china_ip_list and Chunzhen CN databases every week, and release a new Release version.
 
 
-## 固定下载连接
+## Fixed download connection
 
-| 文件 | release分支 | 阿里云 |
+| File | release branch | Aliyun |
 | ------ | ------ | ------ |
-| Country.mmdb | [链接](https://raw.githubusercontent.com/alecthw/mmdb_china_ip_list/release/Country.mmdb) | [链接](http://www.ideame.top/mmdb/Country.mmdb) |
-| version | [链接](https://raw.githubusercontent.com/alecthw/mmdb_china_ip_list/release/version) | [链接](http://www.ideame.top/mmdb/version) |
+| Country.mmdb | [link](https://raw.githubusercontent.com/alecthw/mmdb_china_ip_list/release/Country.mmdb) | [link](http://www.ideame.top/mmdb/Country.mmdb) |
+| version | [link](https://raw.githubusercontent.com/alecthw/mmdb_china_ip_list/release/version) | [link](http://www.ideame.top/mmdb/version) |
 
-## 简介
+## Introduction
 
-在网络分流工具(例如Clash)中使用[MaxMind](https://www.maxmind.com/en/home)的`GeoLite2-Country`对中国IP的匹配不是很友好，实际使用中出现不少问题。
+ Is not very friendly to Chinese IP matching. So, there are many problems in actual using the `GeoLite2-Country` of [MaxMind](https://www.maxmind.com/en/home) in network tapping tools (such as Clash).
 
-此项目，在MaxMind数据库的基础上，加入了[china_ip_list](https://raw.githubusercontent.com/17mon/china_ip_list/master/china_ip_list.txt)和[纯真CN数据库](https://raw.githubusercontent.com/metowolf/iplist/master/data/country/CN.txt)，使得对中国IP匹配得更为友好。
+This project, on the basis of the MaxMind database, added [china_ip_list](https://raw.githubusercontent.com/17mon/china_ip_list/master/china_ip_list.txt) and [Pure CN Database](https://raw.githubusercontent .com/metowolf/iplist/master/data/country/CN.txt), making it more friendly to Chinese IP matching.
 
-## 使用
+## How to use
 
-从[Release](https://github.com/alecthw/mmdb_china_ip_list/releases)下载生成的`china_ip_list.mmdb`。
+Download the generated `china_ip_list.mmdb` from [Release](https://github.com/alecthw/mmdb_china_ip_list/releases).
 
-使用方式同MaxMind官方API，可参考[指导文档](http://maxmind.github.io/MaxMind-DB/)。
+The usage is the same as the official API of MaxMind, please refer to [Guide Document](http://maxmind.github.io/MaxMind-DB/).
 
-### OpenClash中使用
+### Using in OpenClash
 
-将`china_ip_list.mmdb`重命名为`Country.mmdb`，然后替换掉`/etc/openclash/Country.mmdb`，最后重启下clash即可。
+Rename `china_ip_list.mmdb` to `Country.mmdb`, then replace `/etc/openclash/Country.mmdb`, and finally restart clash.
 
-## 构建
+You can edit the `update url` in update script and enable auto update.
 
-需要`perl`环境，`MaxMind-DB-Writer-perl`的依赖和使用可以参考[官方文档](https://github.com/maxmind/MaxMind-DB-Writer-perl)。
+## Build mmdb
+
+The `perl` environment is required. For the dependency and use of `MaxMind-DB-Writer-perl`, please refer to [Official Document](https://github.com/maxmind/MaxMind-DB-Writer-perl).
 
 ``` bash
-# 下载mmdb writer
+# Download mmdb writer
 git clone https://github.com/maxmind/MaxMind-DB-Writer-perl.git writer
 cd writer
 
-# 安装依赖
+# Install dependencies
 curl -LO http://xrl.us/cpanm
 perl cpanm –installdeps .
 
-# 构建
+# Build
 ./Build manifest
 perl Build.PL
 ./Build install
 
-# 返回上级目录
+# Return to parent directory
 cd ..
 
-# 下载本项目
+# Clone this project
 git clone https://github.com/alecthw/mmdb_china_ip_list.git
 cd mmdb_china_ip_list
 
-# 下载GeoLite2-Country-CSV
+# Download GeoLite2-Country-CSV
 curl -LR -o GeoLite2-Country-CSV.zip "https://download.maxmind.com/app/geoip_download?edition_id=GeoLite2-Country-CSV&license_key=JvbzLLx7qBZT&suffix=zip"
 unzip GeoLite2-Country-CSV.zip
 rm -f GeoLite2-Country-CSV.zip
 mv GeoLite2* mindmax
 
-# 下载china_ip_list
+# Download china_ip_list
 curl -LR -o china_ip_list.txt "https://raw.githubusercontent.com/17mon/china_ip_list/master/china_ip_list.txt"
 
-# 下载纯真数据库的CN
+# Download Chunzhen CN
 curl -LR -o CN.txt "https://raw.githubusercontent.com/metowolf/iplist/master/data/special/china.txt"
 
-# 生成mmdb
+# Generate mmdb
 perl china_ip_list.pl
 ```
-生成的文件为`china_ip_list.mmdb`。
+The generated file is`china_ip_list.mmdb`。
 
-## MaxMind GeoIP 格式
+## MaxMind GeoIP Format
 
-官方对自己的数据库中的内容说明很少，都是自己一点点跟代码找出来的格式，然后据此生成的数据库。
+The official said little about the content of their own database.
+It's the format that I found out  with debugging the source code. And then generated the database.
 
-下面列出所有字段示例供参考。
+Examples of all fields are listed below for reference.
 
-头
+header
 ``` json
 {
     "database_type": "GeoLite2-Country",
@@ -110,7 +114,7 @@ perl china_ip_list.pl
 }
 ```
 
-network->字段
+network-field
 ``` json
 {
     "continent": {
@@ -177,7 +181,7 @@ network->字段
 }
 ```
 
-## 感谢
+## Thanks
 
 - [GeoIP MaxMind DB 生成指南](https://blog.csdn.net/openex/article/details/53487465)
 
@@ -187,6 +191,6 @@ network->字段
 
 - [Loyalsoldier提供的GeoLite2-Country-CSV下载链接](https://github.com/Loyalsoldier/v2ray-rules-dat)
 
-## 其他
+## Last
 
-摸索不易，引用整合或者二次发布还望留个名......
+It's not easy to find out. I hope to leave a name for citation integration or secondary release...
