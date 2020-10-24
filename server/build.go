@@ -26,6 +26,7 @@ import (
 
 const (
 	jsCopyrightName = "esm.sh"
+	buildID         = 1
 )
 
 var targets = map[string]api.Target{
@@ -83,12 +84,12 @@ func build(hostname string, storageDir string, options buildOptions) (ret buildR
 		if options.isDev {
 			filename += ".development"
 		}
-		ret.buildID = fmt.Sprintf("%s@%s/%s/%s", pkg.name, pkg.version, target, filename)
+		ret.buildID = fmt.Sprintf("v%d/%s@%s/%s/%s", buildID, pkg.name, pkg.version, target, filename)
 	} else {
 		hasher := sha1.New()
 		sort.Sort(options.packages)
 		sort.Sort(options.external)
-		fmt.Fprintf(hasher, "%s/%s/%s/%v", options.packages.String(), options.external.String(), options.target, options.isDev)
+		fmt.Fprintf(hasher, "v%d/%s/%s/%s/%v", buildID, options.packages.String(), options.external.String(), options.target, options.isDev)
 		ret.buildID = "bundle-" + strings.ToLower(base32.StdEncoding.EncodeToString(hasher.Sum(nil)))
 	}
 
@@ -516,7 +517,7 @@ esbuild:
 							if options.isDev {
 								filename += ".development"
 							}
-							pathname := fmt.Sprintf("/%s@%s/%s/%s", packageName, version, options.target, ensureExt(filename, ".js"))
+							pathname := fmt.Sprintf("/v%d/%s@%s/%s/%s", buildID, packageName, version, options.target, ensureExt(filename, ".js"))
 							if esm {
 								resolvePath = pathname
 							} else {
@@ -586,15 +587,16 @@ esbuild:
 			}
 		}
 	}
+
 	// nodejs compatibility
 	outputContent := result.OutputFiles[0].Contents
 	if regProcess.Match(outputContent) {
-		fmt.Fprintf(jsContentBuf, `import process from "/_process_browser.js?env=%s";%s`, env, eol)
+		fmt.Fprintf(jsContentBuf, `import process from "/_process_browser.js";%sprocess.env.NODE_ENV="%s";%s`, eol, env, eol)
 	}
 	if regBuffer.Match(outputContent) {
 		p, err := nodeEnv.getPackageInfo("buffer", "latest")
 		if err == nil {
-			fmt.Fprintf(jsContentBuf, `import Buffer from "/buffer@%s/%s/buffer.js";%s`, p.Version, options.target, eol)
+			fmt.Fprintf(jsContentBuf, `import Buffer from "/v%d/buffer@%s/%s/buffer.js";%s`, buildID, p.Version, options.target, eol)
 		}
 	}
 	if peerModulesForCommonjs.Size() > 0 {

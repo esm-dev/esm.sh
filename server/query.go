@@ -47,8 +47,8 @@ func registerAPI(storageDir string, domain string, cdnDomain string, cdnDomainCh
 			mdStr := strings.TrimSpace(string(utils.MustEncodeJSON(readme)))
 			return rex.Content("index.html", start, bytes.NewReader([]byte(fmt.Sprintf(indexHTML, "`", mdStr))))
 		case "/_process_browser.js":
-			ctx.SetHeader("Cache-Control", "public, max-age=31536000, immutable")
-			return rex.Content("process/browser.js", start, bytes.NewReader([]byte(fmt.Sprintf(polyfills["process_browser.js"], ctx.Form.Value("env")))))
+			ctx.SetHeader("Cache-Control", fmt.Sprintf("private, max-age=%d", refreshDuration))
+			return rex.Content("process/browser.js", start, bytes.NewReader([]byte(polyfills["process_browser.js"])))
 		case "/_node_fs.js":
 			ctx.SetHeader("Cache-Control", fmt.Sprintf("private, max-age=%d", refreshDuration))
 			return rex.Content("node/fs.js", start, bytes.NewReader([]byte(polyfills["node_fs.js"])))
@@ -163,7 +163,7 @@ func registerAPI(storageDir string, domain string, cdnDomain string, cdnDomainCh
 			}
 		}
 		if bundleList == "" && endsWith(pathname, ".js") {
-			currentModule, err = parseModule(pathname)
+			currentModule, err = parseModule(strings.TrimPrefix(pathname, fmt.Sprintf("/v%d", buildID)))
 			if err == nil && !endsWith(currentModule.name, ".js") {
 				a := strings.Split(currentModule.submodule, "/")
 				if len(a) > 1 {
@@ -207,7 +207,7 @@ func registerAPI(storageDir string, domain string, cdnDomain string, cdnDomainCh
 				}
 			}
 		} else {
-			currentModule, err = parseModule(pathname)
+			currentModule, err = parseModule(strings.TrimPrefix(pathname, fmt.Sprintf("/v%d", buildID)))
 		}
 		if err != nil {
 			if strings.HasSuffix(err.Error(), "not found") {

@@ -154,7 +154,7 @@ Item.prototype.run = function () {
 };
 process.title = 'browser';
 process.browser = true;
-process.env = { NODE_ENV: "%s" };
+process.env = {};
 process.argv = [];
 process.version = ''; // empty string to avoid regexp issues
 process.versions = {};
