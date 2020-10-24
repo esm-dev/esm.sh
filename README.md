@@ -9,7 +9,7 @@ import React from 'https://esm.sh/react'
 
 ### Specify version
 ```javascript
-import React from 'https://esm.sh/react@16.13.1'
+import React from 'https://esm.sh/react@17.0.1'
 ```
 
 ### Submodule
@@ -128,6 +128,11 @@ import unescape from 'https://esm.sh/lodash/unescape?no-check'
 
 Different with [Skypack](https://skypack.dev) and [jspm](https://jspm.org), **esm.sh** will bundle all dependencies(exclude peerDependencies) for each package, that means there may be redundant contents transmitted when you are importing multiple packages.<br>
 This should be improved when the http/3(quic) is ready. For now the best practice is using the **bundle mode**.
+
+## Network of esm.sh
+- Main server in HK
+- Global CDN by [cloudflare](https://cloudflare.com)
+- China CDN by [aliyun](https://aliyun.com)
 
 ## Self-Hosting
 
