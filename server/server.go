@@ -12,12 +12,14 @@ import (
 
 	logx "github.com/ije/gox/log"
 	"github.com/ije/rex"
+	"github.com/oschwald/maxminddb-golang"
 	"github.com/postui/postdb"
 )
 
 var (
 	readme  string
 	nodeEnv *NodeEnv
+	mmdbr   *maxminddb.Reader
 	db      *postdb.DB
 )
 
@@ -33,6 +35,7 @@ func Serve() {
 	var etcDir string
 	var domain string
 	var cdnDomain string
+	var cdnDomainChina string
 	var logLevel string
 	var isDev bool
 
@@ -41,6 +44,7 @@ func Serve() {
 	flag.StringVar(&etcDir, "etc-dir", "/usr/local/etc/esmd", "etc dir")
 	flag.StringVar(&domain, "domain", "esm.sh", "server domain")
 	flag.StringVar(&cdnDomain, "cdn-domain", "", "cdn domain")
+	flag.StringVar(&cdnDomainChina, "cdn-domain-china", "", "cdn domain for china")
 	flag.StringVar(&logLevel, "log", "info", "log level")
 	flag.BoolVar(&isDev, "dev", false, "run server in development mode")
 	flag.Parse()
@@ -50,26 +54,38 @@ func Serve() {
 		etcDir, _ = filepath.Abs(".dev")
 		domain = "localhost"
 		cdnDomain = ""
+		cdnDomainChina = ""
 		logDir = path.Join(etcDir, "log")
 		logLevel = "debug"
+
 		wd, err := os.Getwd()
+		if err != nil {
+			log.Fatal(err)
+		}
+
+		data, err := ioutil.ReadFile(path.Join(wd, "README.md"))
+		if err != nil {
+			log.Fatal(err)
+		}
+		readme = string(data)
+
+		entries, err := ioutil.ReadDir(path.Join(wd, "polyfills"))
 		if err == nil {
-			data, err := ioutil.ReadFile(path.Join(wd, "README.md"))
-			if err == nil {
-				readme = string(data)
-			}
-			entries, err := ioutil.ReadDir(path.Join(wd, "polyfills"))
-			if err == nil {
-				for _, entry := range entries {
-					if !entry.IsDir() {
-						data, err := ioutil.ReadFile(path.Join(wd, "polyfills", entry.Name()))
-						if err == nil {
-							polyfills[entry.Name()] = string(data)
-							log.Debug("polyfill", entry.Name(), "loaded")
-						}
+			for _, entry := range entries {
+				if !entry.IsDir() {
+					data, err := ioutil.ReadFile(path.Join(wd, "polyfills", entry.Name()))
+					if err != nil {
+						log.Fatal(err)
 					}
+					polyfills[entry.Name()] = string(data)
+					log.Debug("polyfill", entry.Name(), "loaded")
 				}
 			}
+		}
+
+		mmdbr, err = maxminddb.Open(path.Join(wd, "china_ip_list", "china_ip_list.mmdb"))
+		if err != nil {
+			log.Fatal(err)
 		}
 	}
 
@@ -115,7 +131,7 @@ func Serve() {
 		}),
 	)
 
-	registerAPI(storageDir, domain, cdnDomain)
+	registerAPI(storageDir, domain, cdnDomain, cdnDomainChina)
 
 	C := rex.Serve(rex.ServerConfig{
 		Port: uint16(port),

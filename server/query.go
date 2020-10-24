@@ -14,7 +14,14 @@ import (
 	"github.com/ije/rex"
 )
 
-func registerAPI(storageDir string, domain string, cdnDomain string) {
+// A Record of mmdb
+type Record struct {
+	Country struct {
+		ISOCode string `maxminddb:"iso_code"`
+	} `maxminddb:"country"`
+}
+
+func registerAPI(storageDir string, domain string, cdnDomain string, cdnDomainChina string) {
 	start := time.Now()
 	httpClient := &http.Client{
 		Transport: &http.Transport{
@@ -268,6 +275,13 @@ func registerAPI(storageDir string, domain string, cdnDomain string) {
 		importPrefix := "/"
 		if cdnDomain != "" {
 			importPrefix = fmt.Sprintf("https://%s/", cdnDomain)
+		}
+		if cdnDomainChina != "" {
+			var record Record
+			err = mmdbr.Lookup(net.ParseIP(ctx.RemoteIP()), &record)
+			if err == nil && record.Country.ISOCode == "CN" {
+				importPrefix = fmt.Sprintf("https://%s/", cdnDomainChina)
+			}
 		}
 
 		fmt.Fprintf(buf, `/* %s - %v */%s`, jsCopyrightName, currentModule, EOL)
