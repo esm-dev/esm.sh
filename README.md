@@ -1,6 +1,6 @@
 # ESM
 
-A fast, global content delivery network and package manager for ES Modules. All modules are transformed to ESM by [esbuild](https://github.com/evanw/esbuild) in [npm](http://npmjs.org/).
+A fast, global content delivery network for ES Modules. All modules are transformed to ESM by [esbuild](https://github.com/evanw/esbuild) in [npm](http://npmjs.org/).
 
 ## Import from URL
 ```javascript
@@ -55,7 +55,7 @@ import React from 'https://esm.sh/react' // actual from 'https://esm.sh/[react,r
 
 ## Proxy mode
 ```javascript
-import P from 'https://esm.sh/${provider}/name@version/path/to/file'
+import * from 'https://esm.sh/${provider}/name@version/path/to/file'
 ```
 Avaiable `provider`: [deno.land](https://deno.land), [nest.land](https://nest.land), [x.nest.land](https://x.nest.land), [denopkg.com](https://denopkg.com)
 <br>
