@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/base64"
 	"fmt"
 	"io/ioutil"
 	"os"
@@ -28,6 +29,7 @@ func main() {
 		fmt.Println(err)
 		return
 	}
+
 	entries, err := ioutil.ReadDir(path.Join(root, "polyfills"))
 	if err != nil {
 		fmt.Println(err)
@@ -50,6 +52,33 @@ func main() {
 		"package server",
 		"func init() {",
 		"    polyfills = map[string]string" + strings.TrimSpace(string(utils.MustEncodeJSON(polyfills))),
+		"}",
+	}, "\n")), 0644)
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+
+	mmdata, err := ioutil.ReadFile(path.Join(root, "china_ip_list/china_ip_list.mmdb"))
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+	mmdatastring := base64.StdEncoding.EncodeToString(mmdata)
+	err = ioutil.WriteFile(path.Join(root, "server", "auto_mmdbr.go"), []byte(strings.Join([]string{
+		"package server",
+		`import "encoding/base64"`,
+		`import "github.com/oschwald/maxminddb-golang"`,
+		"func init() {",
+		"    mmdataRaw := " + strings.TrimSpace(string(utils.MustEncodeJSON(mmdatastring))),
+		"    mmdata, err := base64.StdEncoding.DecodeString(mmdataRaw)",
+		"    if err != nil {",
+		"        panic(err)",
+		"    }",
+		"    mmdbr, err = maxminddb.FromBytes(mmdata)",
+		"    if err != nil {",
+		"        panic(err)",
+		"    }",
 		"}",
 	}, "\n")), 0644)
 	if err != nil {

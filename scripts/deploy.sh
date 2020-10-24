@@ -44,6 +44,7 @@ httpsPort="443"
 etcDir="/etc/esmd"
 domain="esm.sh"
 cdnDomain=""
+cdnDomainChina=""
 
 if [ "$init" == "yes" ]; then
     read -p "please enter the server http port (default is ${port}): " p
@@ -65,6 +66,10 @@ if [ "$init" == "yes" ]; then
     read -p "please enter the cdn domain (optional): " p
     if [ "$p" != "" ]; then
         cdnDomain="$p"
+    fi
+    read -p "please enter the cdn domain for China (optional): " p
+    if [ "$p" != "" ]; then
+        cdnDomainChina="$p"
     fi
 fi
 
@@ -109,7 +114,7 @@ ssh -p $sshPort $user@$host << EOF
         mkdir ${etcDir}
         rm -f /etc/supervisor/conf.d/esmd.conf
         writeSVConfLine "[program:esmd]"
-        writeSVConfLine "command=/usr/local/bin/esmd --port=${port} --https-port=${httpsPort} --etc-dir=${etcDir} --domain=${domain} --cdn-domain=${cdnDomain}"
+        writeSVConfLine "command=/usr/local/bin/esmd --port=${port} --https-port=${httpsPort} --etc-dir=${etcDir} --domain=${domain} --cdn-domain=${cdnDomain} --cdn-domain-china=${cdnDomainChina}"
         writeSVConfLine "directory=/tmp"
         writeSVConfLine "user=$user"
         writeSVConfLine "autostart=true"
@@ -125,6 +130,7 @@ ssh -p $sshPort $user@$host << EOF
     fi
 EOF
 
+rm -f server/auto_mmdbr.go
 rm -f server/auto_polyfills.go
 rm -f server/auto_readme.go
 rm -f esmd
