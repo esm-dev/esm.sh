@@ -51,7 +51,7 @@ or your can define bundle list in the `import-map.json` ([import-maps proposal](
 import React from 'https://esm.sh/react' // actual from 'https://esm.sh/[react,react-dom]/react'
 ```
 
-⚠️ The bundling packages in URL are litmited up to **10**, to bundle more packages, please use the **esm** client.
+⚠️ The bundling packages in URL are litmited up to **10**, to bundle more packages, please use the **esm** client(WIP).
 
 ## Proxy mode
 ```javascript
@@ -70,32 +70,6 @@ Simply proxy all the providers in the `import-map.json`:
         ...
     }
 }
-```
-
-## ESM Client in Deno [WIP]
-
-```bash
-# install esm command
-deno install --allow-read --allow-write --allow-net -f -n esm https://deno.land/x/esm/cli.ts
-
-# set cdn
-esm config cdn cdn.ems.sh.cn
-
-# add some packages
-esm add react react-dom
-
-# specify version or tag
-esm add react@16.13.1
-esm add react@next
-
-# remove some packages
-esm remove lodash
-
-# update installed packages to latest version
-esm update
-
-# help message
-esm -h
 ```
 
 ## Deno compatibility
