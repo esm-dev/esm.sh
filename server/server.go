@@ -71,11 +71,11 @@ func Serve() {
 		}
 		readme = string(data)
 
-		entries, err := ioutil.ReadDir(path.Join(wd, "polyfills"))
+		entries, err := ioutil.ReadDir(path.Join(wd, "third_party/polyfills"))
 		if err == nil {
 			for _, entry := range entries {
 				if !entry.IsDir() {
-					data, err := ioutil.ReadFile(path.Join(wd, "polyfills", entry.Name()))
+					data, err := ioutil.ReadFile(path.Join(wd, "third_party/polyfills", entry.Name()))
 					if err != nil {
 						log.Fatal(err)
 					}
@@ -85,7 +85,7 @@ func Serve() {
 			}
 		}
 
-		mmdbr, err = maxminddb.Open(path.Join(wd, "china_ip_list", "china_ip_list.mmdb"))
+		mmdbr, err = maxminddb.Open(path.Join(wd, "third_party/china_ip_list/china_ip_list.mmdb"))
 		if err != nil {
 			log.Fatal(err)
 		}

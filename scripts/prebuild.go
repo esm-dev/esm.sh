@@ -30,7 +30,7 @@ func main() {
 		return
 	}
 
-	entries, err := ioutil.ReadDir(path.Join(root, "polyfills"))
+	entries, err := ioutil.ReadDir(path.Join(root, "third_party/polyfills"))
 	if err != nil {
 		fmt.Println(err)
 		return
@@ -38,7 +38,7 @@ func main() {
 	polyfills := map[string]string{}
 	for _, entry := range entries {
 		if !entry.IsDir() {
-			data, err := ioutil.ReadFile(path.Join(root, "polyfills", entry.Name()))
+			data, err := ioutil.ReadFile(path.Join(root, "third_party/polyfills", entry.Name()))
 			if err != nil {
 				fmt.Println(err)
 				return
@@ -59,7 +59,7 @@ func main() {
 		return
 	}
 
-	mmdata, err := ioutil.ReadFile(path.Join(root, "china_ip_list/china_ip_list.mmdb"))
+	mmdata, err := ioutil.ReadFile(path.Join(root, "third_party/china_ip_list/china_ip_list.mmdb"))
 	if err != nil {
 		fmt.Println(err)
 		return
