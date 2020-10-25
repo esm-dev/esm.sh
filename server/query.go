@@ -21,7 +21,7 @@ type Record struct {
 	} `maxminddb:"country"`
 }
 
-func registerAPI(storageDir string, domain string, cdnDomain string, cdnDomainChina string) {
+func registerAPI(builderID int,storageDir string, domain string, cdnDomain string, cdnDomainChina string ) {
 	start := time.Now()
 	httpClient := &http.Client{
 		Transport: &http.Transport{
@@ -163,7 +163,7 @@ func registerAPI(storageDir string, domain string, cdnDomain string, cdnDomainCh
 			}
 		}
 		if bundleList == "" && endsWith(pathname, ".js") {
-			currentModule, err = parseModule(strings.TrimPrefix(pathname, fmt.Sprintf("/v%d", buildID)))
+			currentModule, err = parseModule(strings.TrimPrefix(pathname, fmt.Sprintf("/v%d", builderID)))
 			if err == nil && !endsWith(currentModule.name, ".js") {
 				a := strings.Split(currentModule.submodule, "/")
 				if len(a) > 1 {
@@ -207,7 +207,7 @@ func registerAPI(storageDir string, domain string, cdnDomain string, cdnDomainCh
 				}
 			}
 		} else {
-			currentModule, err = parseModule(strings.TrimPrefix(pathname, fmt.Sprintf("/v%d", buildID)))
+			currentModule, err = parseModule(strings.TrimPrefix(pathname, fmt.Sprintf("/v%d", builderID)))
 		}
 		if err != nil {
 			if strings.HasSuffix(err.Error(), "not found") {
@@ -241,7 +241,7 @@ func registerAPI(storageDir string, domain string, cdnDomain string, cdnDomainCh
 			packages = moduleSlice{*currentModule}
 		}
 
-		ret, err := build(domain, storageDir, buildOptions{
+		ret, err := build(builderID,storageDir, domain,  buildOptions{
 			packages: packages,
 			external: external,
 			target:   target,

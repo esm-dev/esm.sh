@@ -32,6 +32,7 @@ var (
 func Serve() {
 	var port int
 	var httpsPort int
+	var builderID int
 	var etcDir string
 	var domain string
 	var cdnDomain string
@@ -41,6 +42,7 @@ func Serve() {
 
 	flag.IntVar(&port, "port", 80, "http server port")
 	flag.IntVar(&httpsPort, "https-port", 443, "https server port")
+	flag.IntVar(&builderID, "builder-id", 1, "builder ID, useful for refresh cdn cache")
 	flag.StringVar(&etcDir, "etc-dir", "/usr/local/etc/esmd", "etc dir")
 	flag.StringVar(&domain, "domain", "esm.sh", "server domain")
 	flag.StringVar(&cdnDomain, "cdn-domain", "", "cdn domain")
@@ -131,7 +133,7 @@ func Serve() {
 		}),
 	)
 
-	registerAPI(storageDir, domain, cdnDomain, cdnDomainChina)
+	registerAPI(builderID, storageDir, domain, cdnDomain, cdnDomainChina)
 
 	C := rex.Serve(rex.ServerConfig{
 		Port: uint16(port),

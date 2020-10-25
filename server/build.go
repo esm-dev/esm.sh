@@ -26,7 +26,6 @@ import (
 
 const (
 	jsCopyrightName = "esm.sh"
-	buildID         = 1
 )
 
 var targets = map[string]api.Target{
@@ -60,7 +59,7 @@ type buildResult struct {
 	importMeta map[string]*ImportMeta
 }
 
-func build(hostname string, storageDir string, options buildOptions) (ret buildResult, err error) {
+func build(builderID int, storageDir string, hostname string, options buildOptions) (ret buildResult, err error) {
 	buildLock.Lock()
 	defer buildLock.Unlock()
 
@@ -84,12 +83,12 @@ func build(hostname string, storageDir string, options buildOptions) (ret buildR
 		if options.isDev {
 			filename += ".development"
 		}
-		ret.buildID = fmt.Sprintf("v%d/%s@%s/%s/%s", buildID, pkg.name, pkg.version, target, filename)
+		ret.buildID = fmt.Sprintf("v%d/%s@%s/%s/%s", builderID, pkg.name, pkg.version, target, filename)
 	} else {
 		hasher := sha1.New()
 		sort.Sort(options.packages)
 		sort.Sort(options.external)
-		fmt.Fprintf(hasher, "v%d/%s/%s/%s/%v", buildID, options.packages.String(), options.external.String(), options.target, options.isDev)
+		fmt.Fprintf(hasher, "v%d/%s/%s/%s/%v", builderID, options.packages.String(), options.external.String(), options.target, options.isDev)
 		ret.buildID = "bundle-" + strings.ToLower(base32.StdEncoding.EncodeToString(hasher.Sum(nil)))
 	}
 
@@ -498,7 +497,12 @@ esbuild:
 							} else {
 								_, yes := polyfills[fmt.Sprintf("node_%s.js", resolvePath)]
 								if yes {
-									pathname := fmt.Sprintf("/_node_%s.js", resolvePath)
+									var pathname string
+									if hostname != "localhost" {
+										pathname = fmt.Sprintf("https://%s/_node_%s.js", hostname, resolvePath)
+									} else {
+										pathname = fmt.Sprintf("/_node_%s.js", resolvePath)
+									}
 									if esm {
 										resolvePath = pathname
 									} else {
@@ -517,7 +521,7 @@ esbuild:
 							if options.isDev {
 								filename += ".development"
 							}
-							pathname := fmt.Sprintf("/v%d/%s@%s/%s/%s", buildID, packageName, version, options.target, ensureExt(filename, ".js"))
+							pathname := fmt.Sprintf("/v%d/%s@%s/%s/%s", builderID, packageName, version, options.target, ensureExt(filename, ".js"))
 							if esm {
 								resolvePath = pathname
 							} else {
@@ -525,7 +529,11 @@ esbuild:
 							}
 						} else {
 							if esm {
-								resolvePath = fmt.Sprintf("/_error.js?type=resolve&name=%s", url.QueryEscape(resolvePath))
+								if hostname != "localhost" {
+									resolvePath = fmt.Sprintf("https://%s/_error.js?type=resolve&name=%s", hostname, url.QueryEscape(resolvePath))
+								} else {
+									resolvePath = fmt.Sprintf("/_error.js?type=resolve&name=%s", url.QueryEscape(resolvePath))
+								}
 							} else {
 								peerModulesForCommonjs.Set(resolvePath, "")
 							}
@@ -591,12 +599,16 @@ esbuild:
 	// nodejs compatibility
 	outputContent := result.OutputFiles[0].Contents
 	if regProcess.Match(outputContent) {
-		fmt.Fprintf(jsContentBuf, `import process from "/_process_browser.js";%sprocess.env.NODE_ENV="%s";%s`, eol, env, eol)
+		if hostname != "localhost" {
+			fmt.Fprintf(jsContentBuf, `import process from "https://%s/_process_browser.js";%sprocess.env.NODE_ENV="%s";%s`, hostname, eol, env, eol)
+		} else {
+			fmt.Fprintf(jsContentBuf, `import process from "/_process_browser.js";%sprocess.env.NODE_ENV="%s";%s`, eol, env, eol)
+		}
 	}
 	if regBuffer.Match(outputContent) {
 		p, err := nodeEnv.getPackageInfo("buffer", "latest")
 		if err == nil {
-			fmt.Fprintf(jsContentBuf, `import Buffer from "/v%d/buffer@%s/%s/buffer.js";%s`, buildID, p.Version, options.target, eol)
+			fmt.Fprintf(jsContentBuf, `import Buffer from "/v%d/buffer@%s/%s/buffer.js";%s`, builderID, p.Version, options.target, eol)
 		}
 	}
 	if peerModulesForCommonjs.Size() > 0 {
