@@ -32,10 +32,15 @@ if [ "$ok" == "yes" ]; then
 fi
 
 rebuild="no"
+builderID="1"
 if [ "$init" == "no" ]; then
-    read -p "rebuild database ('yes' or 'no', default is 'no')? " ok
+    read -p "rebuild ('yes' or 'no', default is 'no')? " ok
     if [ "$ok" == "yes" ]; then
         rebuild="yes"
+        read -p "please enter the new builder id (default is 1): " p
+        if [ "$p" != "" ]; then
+            builderID="$p"
+        fi
     fi
 fi
 
@@ -111,7 +116,12 @@ ssh -p $sshPort $user@$host << EOF
     chmod +x /usr/local/bin/esmd
 
     if [ "$init" == "yes" ]; then
-        mkdir ${etcDir}
+        if [ -d "${etcDir}" ]; then
+            rm -f ${etcDir}/esm.db
+            rm -rf ${etcDir}/storage
+        else
+            mkdir ${etcDir}
+        fi
         rm -f /etc/supervisor/conf.d/esmd.conf
         writeSVConfLine "[program:esmd]"
         writeSVConfLine "command=/usr/local/bin/esmd --port=${port} --https-port=${httpsPort} --etc-dir=${etcDir} --domain=${domain} --cdn-domain=${cdnDomain} --cdn-domain-china=${cdnDomainChina}"
@@ -124,7 +134,8 @@ ssh -p $sshPort $user@$host << EOF
         if [ "$rebuild" == "yes" ]; then
             rm -f ${etcDir}/esm.db
             rm -rf ${etcDir}/storage
-            echo "esmd: database rebuilt"
+            echo "$builderID" > ${etcDir}/builder.id
+            echo "esmd: rebuilt"
         fi
         supervisorctl start esmd
     fi
