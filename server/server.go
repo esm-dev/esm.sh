@@ -8,6 +8,7 @@ import (
 	"os/signal"
 	"path"
 	"path/filepath"
+	"strconv"
 	"syscall"
 
 	logx "github.com/ije/gox/log"
@@ -32,7 +33,6 @@ var (
 func Serve() {
 	var port int
 	var httpsPort int
-	var builderID int
 	var etcDir string
 	var domain string
 	var cdnDomain string
@@ -42,7 +42,6 @@ func Serve() {
 
 	flag.IntVar(&port, "port", 80, "http server port")
 	flag.IntVar(&httpsPort, "https-port", 443, "https server port")
-	flag.IntVar(&builderID, "builder-id", 1, "builder ID, useful for refresh cdn cache")
 	flag.StringVar(&etcDir, "etc-dir", "/usr/local/etc/esmd", "etc dir")
 	flag.StringVar(&domain, "domain", "esm.sh", "server domain")
 	flag.StringVar(&cdnDomain, "cdn-domain", "", "cdn domain")
@@ -91,12 +90,19 @@ func Serve() {
 		}
 	}
 
+	data, err := ioutil.ReadFile(path.Join(etcDir, "builder.id"))
+	if err == nil {
+		i, err := strconv.Atoi(string(data))
+		if err == nil && i > 0 {
+			builderID = i
+		}
+	}
+
 	storageDir := path.Join(etcDir, "storage")
 	ensureDir(path.Join(storageDir, "builds"))
 	ensureDir(path.Join(storageDir, "types"))
 	ensureDir(path.Join(storageDir, "raw"))
 
-	var err error
 	log, err = logx.New(fmt.Sprintf("file:%s?buffer=32k", path.Join(logDir, "main.log")))
 	if err != nil {
 		fmt.Printf("initiate logger: %v", err)
@@ -133,7 +139,7 @@ func Serve() {
 		}),
 	)
 
-	registerAPI(builderID, storageDir, domain, cdnDomain, cdnDomainChina)
+	registerAPI(storageDir, domain, cdnDomain, cdnDomainChina)
 
 	C := rex.Serve(rex.ServerConfig{
 		Port: uint16(port),

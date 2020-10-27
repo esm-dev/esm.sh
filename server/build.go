@@ -28,6 +28,10 @@ const (
 	jsCopyrightName = "esm.sh"
 )
 
+var (
+	builderID = 1
+)
+
 var targets = map[string]api.Target{
 	"es2015": api.ES2015,
 	"es2016": api.ES2016,
@@ -59,7 +63,7 @@ type buildResult struct {
 	importMeta map[string]*ImportMeta
 }
 
-func build(builderID int, storageDir string, hostname string, options buildOptions) (ret buildResult, err error) {
+func build(storageDir string, hostname string, options buildOptions) (ret buildResult, err error) {
 	buildLock.Lock()
 	defer buildLock.Unlock()
 
@@ -497,12 +501,7 @@ esbuild:
 							} else {
 								_, yes := polyfills[fmt.Sprintf("node_%s.js", resolvePath)]
 								if yes {
-									var pathname string
-									if hostname != "localhost" {
-										pathname = fmt.Sprintf("https://%s/_node_%s.js", hostname, resolvePath)
-									} else {
-										pathname = fmt.Sprintf("/_node_%s.js", resolvePath)
-									}
+									pathname := fmt.Sprintf("/v%d/_node_%s.js", builderID, resolvePath)
 									if esm {
 										resolvePath = pathname
 									} else {
@@ -599,11 +598,7 @@ esbuild:
 	// nodejs compatibility
 	outputContent := result.OutputFiles[0].Contents
 	if regProcess.Match(outputContent) {
-		if hostname != "localhost" {
-			fmt.Fprintf(jsContentBuf, `import process from "https://%s/_process_browser.js";%sprocess.env.NODE_ENV="%s";%s`, hostname, eol, env, eol)
-		} else {
-			fmt.Fprintf(jsContentBuf, `import process from "/_process_browser.js";%sprocess.env.NODE_ENV="%s";%s`, eol, env, eol)
-		}
+		fmt.Fprintf(jsContentBuf, `import process from "/v%d/_process_browser.js";%sprocess.env.NODE_ENV="%s";%s`, builderID, eol, env, eol)
 	}
 	if regBuffer.Match(outputContent) {
 		p, err := nodeEnv.getPackageInfo("buffer", "latest")

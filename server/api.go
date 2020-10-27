@@ -21,7 +21,7 @@ type Record struct {
 	} `maxminddb:"country"`
 }
 
-func registerAPI(builderID int,storageDir string, domain string, cdnDomain string, cdnDomainChina string ) {
+func registerAPI(storageDir string, domain string, cdnDomain string, cdnDomainChina string) {
 	start := time.Now()
 	httpClient := &http.Client{
 		Transport: &http.Transport{
@@ -46,12 +46,8 @@ func registerAPI(builderID int,storageDir string, domain string, cdnDomain strin
 		case "/":
 			mdStr := strings.TrimSpace(string(utils.MustEncodeJSON(readme)))
 			return rex.Content("index.html", start, bytes.NewReader([]byte(fmt.Sprintf(indexHTML, "`", mdStr))))
-		case "/_process_browser.js":
-			ctx.SetHeader("Cache-Control", fmt.Sprintf("private, max-age=%d", refreshDuration))
-			return rex.Content("process/browser.js", start, bytes.NewReader([]byte(polyfills["process_browser.js"])))
-		case "/_node_fs.js":
-			ctx.SetHeader("Cache-Control", fmt.Sprintf("private, max-age=%d", refreshDuration))
-			return rex.Content("node/fs.js", start, bytes.NewReader([]byte(polyfills["node_fs.js"])))
+		case "/favicon.ico":
+			return 404
 		case "/_error.js":
 			t := ctx.Form.Value("type")
 			switch t {
@@ -60,8 +56,12 @@ func registerAPI(builderID int,storageDir string, domain string, cdnDomain strin
 			default:
 				return throwErrorJS(ctx, 500, fmt.Errorf("Unknown error"))
 			}
-		case "/favicon.ico":
-			return 404
+		case fmt.Sprintf("/v%d/_process_browser.js", builderID):
+			ctx.SetHeader("Cache-Control", "public, max-age=31536000, immutable")
+			return rex.Content("process/browser.js", start, bytes.NewReader([]byte(polyfills["process_browser.js"])))
+		case fmt.Sprintf("/v%d/_node_fs.js", builderID):
+			ctx.SetHeader("Cache-Control", "public, max-age=31536000, immutable")
+			return rex.Content("node/fs.js", start, bytes.NewReader([]byte(polyfills["node_fs.js"])))
 		}
 
 		switch strings.Split(pathname, "/")[1] {
@@ -241,7 +241,7 @@ func registerAPI(builderID int,storageDir string, domain string, cdnDomain strin
 			packages = moduleSlice{*currentModule}
 		}
 
-		ret, err := build(builderID,storageDir, domain,  buildOptions{
+		ret, err := build(storageDir, domain, buildOptions{
 			packages: packages,
 			external: external,
 			target:   target,
