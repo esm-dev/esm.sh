@@ -322,51 +322,59 @@ const indexHTML = `<!DOCTYPE html>
 
         if (location.hostname === 'localhost') {
             document.querySelector('.test').style.display = "block";
+
+            (async () => {
+                const { createElement } = await import('/react');
+                const { render } = await import('/react-dom');
+                render(createElement('span', null, '✅'), document.querySelector('#react'));
+            })();
+
+            (async () => {
+                const { createElement } = await import('/[react,react-dom]/react');
+                const { render } = await import('/[react,react-dom]/react-dom');
+
+                render(createElement('span', null, '✅'), document.querySelector('#reactb'));
+            })();
+
+            (async () => {
+                const { h, render } = await import('/preact');
+                const { useEffect } = await import('/preact/hooks');
+
+                const el = document.querySelector('#preact');
+                function App() {
+                    useEffect(() => {
+                        el.removeChild(el.querySelector('.x'))
+                    }, [])
+                    return h('span', null, '✅')
+                }
+                render(h('span', null, '✅'), el);
+            })();
+
+            (async () => {
+                const {default: Vue} = await import('/vue');
+
+                new Vue({
+                    el: '#vue',
+                    render(h) {
+                        return h('span', null, '✅')
+                    }
+                });
+            })();
+
+            (async () => {
+                const { createApp, h } = await import('/vue@3.0.0');
+
+                createApp({
+                    render() {
+                        return h('span', {}, '✅')
+                    }
+                }).mount('#vue3');
+            })();
         }
     </script>
-    <script type="module">
-        import { createElement } from '/react';
-        import { render } from '/react-dom';
-
-        render(createElement('span', null, '✅'), document.querySelector('#react'));
-    </script>
-    <script type="module">
-        import { createElement } from '/[react,react-dom]/react';
-        import { render } from '/[react,react-dom]/react-dom';
-
-        render(createElement('span', null, '✅'), document.querySelector('#reactb'));
-    </script>
-    <script type="module">
-        import { h, render } from '/preact';
-        import { useEffect } from '/preact/hooks';
-
-        const el = document.querySelector('#preact');
-        function App() {
-            useEffect(() => {
-                el.removeChild(el.querySelector('.x'))
-            }, [])
-            return h('span', null, '✅')
-        }
-        render(h('span', null, '✅'), el);
-    </script>
-    <script type="module">
-        import Vue from '/vue';
-
-        new Vue({
-            el: '#vue',
-            render(h) {
-                return h('span', null, '✅')
-            }
-        });
-    </script>
-    <script type="module">
-        import { createApp, h } from '/vue@3.0.0';
-
-        createApp({
-            render() {
-                return h('span', {}, '✅')
-            }
-        }).mount('#vue3');
+    <script type="nomodule">
+        const mainEl = document.querySelector('main');
+        mainEl.innerHTML = '<p><em style="color: #999;">nomodule, please upgrade your browser...</em></p>'
     </script>
 </body>
 </html>
