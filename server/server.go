@@ -9,6 +9,7 @@ import (
 	"path"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"syscall"
 
 	logx "github.com/ije/gox/log"
@@ -92,7 +93,7 @@ func Serve() {
 
 	data, err := ioutil.ReadFile(path.Join(etcDir, "builder.id"))
 	if err == nil {
-		i, err := strconv.Atoi(string(data))
+		i, err := strconv.Atoi(strings.TrimSpace(string(data)))
 		if err == nil && i > 0 {
 			builderID = i
 		}
