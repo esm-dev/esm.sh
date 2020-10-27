@@ -372,7 +372,7 @@ const indexHTML = `<!DOCTYPE html>
             })();
         }
     </script>
-    <script type="nomodule">
+    <script nomodule>
         const mainEl = document.querySelector('main');
         mainEl.innerHTML = '<p><em style="color: #999;">nomodule, please upgrade your browser...</em></p>'
     </script>
