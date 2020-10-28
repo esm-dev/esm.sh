@@ -3273,7 +3273,10 @@ const promises = function() {
         readFile
     }
 }();
-function realpath(path,callback) {
+function realpath(path, options, callback) {
+    if (typeof options === 'function') {
+        callback = options
+    }
     return Deno.realPath(path).then(rp => callback(null, rp)).catch(err => callback(err))
 }
 function realpathSync(path) {
