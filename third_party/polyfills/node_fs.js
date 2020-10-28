@@ -3166,20 +3166,13 @@ function convertFileInfoToStats(origin) {
         mtimeMs: origin.mtime?.getTime() || null,
         atimeMs: origin.atime?.getTime() || null,
         birthtimeMs: origin.birthtime?.getTime() || null,
-        isFile: ()=>origin.isFile
-        ,
-        isDirectory: ()=>origin.isDirectory
-        ,
-        isSymbolicLink: ()=>origin.isSymlink
-        ,
-        isBlockDevice: ()=>false
-        ,
-        isFIFO: ()=>false
-        ,
-        isCharacterDevice: ()=>false
-        ,
-        isSocket: ()=>false
-        ,
+        isFile: ()=>origin.isFile,
+        isDirectory: ()=>origin.isDirectory,
+        isSymbolicLink: ()=>origin.isSymlink,
+        isBlockDevice: ()=>false,
+        isFIFO: ()=>false,
+        isCharacterDevice: ()=>false,
+        isSocket: ()=>false,
         ctime: origin.mtime,
         ctimeMs: origin.mtime?.getTime() || null
     };
@@ -3209,20 +3202,13 @@ function convertFileInfoToBigIntStats(origin) {
         mtimeNs: origin.mtime ? BigInt(origin.mtime.getTime()) * 1000000n : null,
         atimeNs: origin.atime ? BigInt(origin.atime.getTime()) * 1000000n : null,
         birthtimeNs: origin.birthtime ? BigInt(origin.birthtime.getTime()) * 1000000n : null,
-        isFile: ()=>origin.isFile
-        ,
-        isDirectory: ()=>origin.isDirectory
-        ,
-        isSymbolicLink: ()=>origin.isSymlink
-        ,
-        isBlockDevice: ()=>false
-        ,
-        isFIFO: ()=>false
-        ,
-        isCharacterDevice: ()=>false
-        ,
-        isSocket: ()=>false
-        ,
+        isFile: ()=>origin.isFile,
+        isDirectory: ()=>origin.isDirectory,
+        isSymbolicLink: ()=>origin.isSymlink,
+        isBlockDevice: ()=>false,
+        isFIFO: ()=>false,
+        isCharacterDevice: ()=>false,
+        isSocket: ()=>false,
         ctime: origin.mtime,
         ctimeMs: origin.mtime ? BigInt(origin.mtime.getTime()) : null,
         ctimeNs: origin.mtime ? BigInt(origin.mtime.getTime()) * 1000000n : null
@@ -3287,5 +3273,11 @@ const promises = function() {
         readFile
     }
 }();
-export { access, accessSync, appendFile, appendFileSync, chmod, chmodSync, chown, chownSync, close, closeSync, constants, copyFile, copyFileSync, exists, existsSync, lstat, lstatSync, mkdir, mkdirSync, open, openSync, promises, readdir, readdirSync, readFile, readFileSync, readlink, readlinkSync, rename, renameSync, rmdir, rmdirSync, stat, statSync, unlink, unlinkSync, watch, writeFile, writeFileSync };
-export default { access, accessSync, appendFile, appendFileSync, chmod, chmodSync, chown, chownSync, close, closeSync, constants, copyFile, copyFileSync, exists, existsSync, lstat, lstatSync, mkdir, mkdirSync, open, openSync, promises, readdir, readdirSync, readFile, readFileSync, readlink, readlinkSync, rename, renameSync, rmdir, rmdirSync, stat, statSync, unlink, unlinkSync, watch, writeFile, writeFileSync };
+function realpath(path,callback) {
+    return Deno.realPath(path).then(rp => callback(null, rp)).catch(err => callback(err))
+}
+function realpathSync(path) {
+    return Deno.realPathSync(path)
+}
+export { access, accessSync, appendFile, appendFileSync, chmod, chmodSync, chown, chownSync, close, closeSync, constants, copyFile, copyFileSync, exists, existsSync, lstat, lstatSync, mkdir, mkdirSync, open, openSync, promises, readdir, readdirSync, readFile, readFileSync, readlink, readlinkSync, rename, realpath, realpathSync, renameSync, rmdir, rmdirSync, stat, statSync, unlink, unlinkSync, watch, writeFile, writeFileSync };
+export default { access, accessSync, appendFile, appendFileSync, chmod, chmodSync, chown, chownSync, close, closeSync, constants, copyFile, copyFileSync, exists, existsSync, lstat, lstatSync, mkdir, mkdirSync, open, openSync, promises, readdir, readdirSync, readFile, readFileSync, readlink, readlinkSync, rename, realpath, realpathSync, renameSync, rmdir, rmdirSync, stat, statSync, unlink, unlinkSync, watch, writeFile, writeFileSync };
