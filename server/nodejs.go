@@ -147,6 +147,11 @@ CheckNodejs:
 			os.Setenv("PATH", fmt.Sprintf("%s%c%s", nodeBinDir, os.PathListSeparator, PATH))
 			goto CheckNodejs
 		} else if !installed {
+			err = os.RemoveAll("/usr/local/nodejs")
+			if err != nil {
+				return
+			}
+			log.Debugf("downloading %sv%s/node-v%s-%s-x64.tar.xz", nodejsDistURL, version, version, runtime.GOOS)
 			err = installNodejs("/usr/local/nodejs", nodejsLatestLTS)
 			if err != nil {
 				return
