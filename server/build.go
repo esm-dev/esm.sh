@@ -445,7 +445,7 @@ func build(storageDir string, hostname string, options buildOptions) (ret buildR
 		Sourcefile: "export.js",
 	}
 	minify := !options.isDev
-	defines := map[string]string{
+	define := map[string]string{
 		"process.env.NODE_ENV":        fmt.Sprintf(`"%s"`, env),
 		"global.process.env.NODE_ENV": fmt.Sprintf(`"%s"`, env),
 	}
@@ -462,84 +462,86 @@ esbuild:
 		MinifyWhitespace:  minify,
 		MinifyIdentifiers: minify,
 		MinifySyntax:      minify,
-		Defines:           defines,
-		Plugins: []func(api.Plugin){
-			func(plugin api.Plugin) {
-				plugin.SetName("rewrite-external-path")
-				plugin.AddResolver(
-					api.ResolverOptions{Filter: fmt.Sprintf("^(%s)$", strings.Join(externals, "|"))},
-					func(args api.ResolverArgs) (api.ResolverResult, error) {
-						_, esm, _ := parseModuleExports(args.Importer)
-						resolvePath := args.Path
-						var version string
-						var ok bool
-						if !ok {
-							m, yes := options.external.Get(resolvePath)
-							if yes {
-								version = m.version
-								ok = true
+		Define:            define,
+		Plugins: []api.Plugin{
+			api.Plugin{
+				Name: "rewrite-external-path",
+				Setup: func(plugin api.PluginBuild) {
+					plugin.OnResolve(
+						api.OnResolveOptions{Filter: fmt.Sprintf("^(%s)$", strings.Join(externals, "|"))},
+						func(args api.OnResolveArgs) (api.OnResolveResult, error) {
+							_, esm, _ := parseModuleExports(args.Importer)
+							resolvePath := args.Path
+							var version string
+							var ok bool
+							if !ok {
+								m, yes := options.external.Get(resolvePath)
+								if yes {
+									version = m.version
+									ok = true
+								}
 							}
-						}
-						if !ok {
-							p, yes := peerPackages[resolvePath]
-							if yes {
-								version = p.Version
-								ok = true
-							}
-						}
-						if !ok {
-							polyfill, yes := polyfilledBuiltInNodeModules[resolvePath]
-							if yes {
-								p, err := nodeEnv.getPackageInfo(polyfill, "latest")
-								if err == nil {
-									resolvePath = polyfill
+							if !ok {
+								p, yes := peerPackages[resolvePath]
+								if yes {
 									version = p.Version
 									ok = true
-								} else {
-									return api.ResolverResult{Path: resolvePath}, err
 								}
-							} else {
-								_, yes := polyfills[fmt.Sprintf("node_%s.js", resolvePath)]
+							}
+							if !ok {
+								polyfill, yes := polyfilledBuiltInNodeModules[resolvePath]
 								if yes {
-									pathname := fmt.Sprintf("/v%d/_node_%s.js", builderID, resolvePath)
-									if esm {
-										resolvePath = pathname
+									p, err := nodeEnv.getPackageInfo(polyfill, "latest")
+									if err == nil {
+										resolvePath = polyfill
+										version = p.Version
+										ok = true
 									} else {
-										peerModulesForCommonjs.Set(resolvePath, pathname)
+										return api.OnResolveResult{Path: resolvePath}, err
 									}
-									return api.ResolverResult{Path: resolvePath, External: true, Namespace: "http"}, nil
-								}
-							}
-						}
-						if ok {
-							packageName := resolvePath
-							if !strings.HasPrefix(packageName, "@") {
-								packageName, _ = utils.SplitByFirstByte(packageName, '/')
-							}
-							filename := path.Base(resolvePath)
-							if options.isDev {
-								filename += ".development"
-							}
-							pathname := fmt.Sprintf("/v%d/%s@%s/%s/%s", builderID, packageName, version, options.target, ensureExt(filename, ".js"))
-							if esm {
-								resolvePath = pathname
-							} else {
-								peerModulesForCommonjs.Set(resolvePath, pathname)
-							}
-						} else {
-							if esm {
-								if hostname != "localhost" {
-									resolvePath = fmt.Sprintf("https://%s/_error.js?type=resolve&name=%s", hostname, url.QueryEscape(resolvePath))
 								} else {
-									resolvePath = fmt.Sprintf("/_error.js?type=resolve&name=%s", url.QueryEscape(resolvePath))
+									_, yes := polyfills[fmt.Sprintf("node_%s.js", resolvePath)]
+									if yes {
+										pathname := fmt.Sprintf("/v%d/_node_%s.js", builderID, resolvePath)
+										if esm {
+											resolvePath = pathname
+										} else {
+											peerModulesForCommonjs.Set(resolvePath, pathname)
+										}
+										return api.OnResolveResult{Path: resolvePath, External: true, Namespace: "http"}, nil
+									}
+								}
+							}
+							if ok {
+								packageName := resolvePath
+								if !strings.HasPrefix(packageName, "@") {
+									packageName, _ = utils.SplitByFirstByte(packageName, '/')
+								}
+								filename := path.Base(resolvePath)
+								if options.isDev {
+									filename += ".development"
+								}
+								pathname := fmt.Sprintf("/v%d/%s@%s/%s/%s", builderID, packageName, version, options.target, ensureExt(filename, ".js"))
+								if esm {
+									resolvePath = pathname
+								} else {
+									peerModulesForCommonjs.Set(resolvePath, pathname)
 								}
 							} else {
-								peerModulesForCommonjs.Set(resolvePath, "")
+								if esm {
+									if hostname != "localhost" {
+										resolvePath = fmt.Sprintf("https://%s/_error.js?type=resolve&name=%s", hostname, url.QueryEscape(resolvePath))
+									} else {
+										resolvePath = fmt.Sprintf("/_error.js?type=resolve&name=%s", url.QueryEscape(resolvePath))
+									}
+								} else {
+									peerModulesForCommonjs.Set(resolvePath, "")
+								}
 							}
-						}
-						return api.ResolverResult{Path: resolvePath, External: true, Namespace: "http"}, nil
-					},
-				)
+							return api.OnResolveResult{Path: resolvePath, External: true, Namespace: "http"}, nil
+						},
+					)
+				},
 			},
 		},
 	})
