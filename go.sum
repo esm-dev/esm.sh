@@ -1,8 +1,8 @@
 github.com/andybalholm/brotli v1.0.0 h1:7UCwP93aiSfvWpapti8g88vVVGp2qqtGyePsSuDafo4=
 github.com/andybalholm/brotli v1.0.0/go.mod h1:loMXtMfwqflxFJPmdbJO0a3KNoPuLBgiu3qAvBg8x/Y=
 github.com/davecgh/go-spew v1.1.0/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
-github.com/evanw/esbuild v0.7.22-0.20201026091909-427cf76c1223 h1:Ssz7WUNckC/qpE8cksqyMp4Cltjexh6TvWdgKYkGxzk=
-github.com/evanw/esbuild v0.7.22-0.20201026091909-427cf76c1223/go.mod h1:mptxmSXIzBIKKCe4jo9A5SToEd1G+AKZ9JmY85dYRJ0=
+github.com/evanw/esbuild v0.8.5 h1:57HP5ayIAXakltlBN9AVDEbNo3779aTHznYLzVlTUVA=
+github.com/evanw/esbuild v0.8.5/go.mod h1:mptxmSXIzBIKKCe4jo9A5SToEd1G+AKZ9JmY85dYRJ0=
 github.com/ije/esbuild-internal v0.7.14 h1:CrRqpv3DCcvHPySGtsAoDmAHTY7Cyv5hTjzNprMNsfA=
 github.com/ije/esbuild-internal v0.7.14/go.mod h1:t7eCRloob81P2dHEpd7k/l5wP1++jh8pwjI4tcqy4LI=
 github.com/ije/gox v0.5.6 h1:46DNSa7ZWIGYm1Rk4Xa23bWUrXy+k7kq0EbDqZUYyL0=
