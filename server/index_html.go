@@ -324,21 +324,21 @@ const indexHTML = `<!DOCTYPE html>
             document.querySelector('.test').style.display = "block";
 
             (async () => {
-                const { createElement } = await import('/react');
-                const { render } = await import('/react-dom');
+                const { createElement } = await import('/react?dev');
+                const { render } = await import('/react-dom?dev');
                 render(createElement('span', null, '✅'), document.querySelector('#react'));
             })();
 
             (async () => {
-                const { createElement } = await import('/[react,react-dom]/react');
-                const { render } = await import('/[react,react-dom]/react-dom');
+                const { createElement } = await import('/[react,react-dom]/react?dev');
+                const { render } = await import('/[react,react-dom]/react-dom?dev');
 
                 render(createElement('span', null, '✅'), document.querySelector('#reactb'));
             })();
 
             (async () => {
-                const { h, render } = await import('/preact');
-                const { useEffect } = await import('/preact/hooks');
+                const { h, render } = await import('/preact?dev');
+                const { useEffect } = await import('/preact/hooks?dev');
 
                 const el = document.querySelector('#preact');
                 function App() {
@@ -351,7 +351,7 @@ const indexHTML = `<!DOCTYPE html>
             })();
 
             (async () => {
-                const {default: Vue} = await import('/vue');
+                const {default: Vue} = await import('/vue?dev');
 
                 new Vue({
                     el: '#vue',
@@ -362,7 +362,7 @@ const indexHTML = `<!DOCTYPE html>
             })();
 
             (async () => {
-                const { createApp, h } = await import('/vue@3.0.0');
+                const { createApp, h } = await import('/vue@3.0.0?dev');
 
                 createApp({
                     render() {
