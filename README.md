@@ -1,6 +1,6 @@
 # ESM
 
-A fast, global content delivery network for ES Modules. All modules are transformed to ESM by [esbuild](https://github.com/evanw/esbuild) in [npm](http://npmjs.org/).
+A fast, global content delivery network for ES Modules. All modules are transformed to ESM by [esbuild](https://github.com/evanw/esbuild) in [NPM](http://npmjs.org/).
 
 ## Import from URL
 ```javascript
@@ -28,27 +28,22 @@ Avaiable `target`: **es2015** - **es2020**, **esnext**
 import React from 'https://esm.sh/react?dev'
 ```
 
-### External
-```javascript
-import React from 'https://esm.sh/postcss-flexbugs-fixes@5.0.1?external=postcss@8.1.6'
-```
-
 ### Bundle mode
 ```javascript
-import React from 'https://esm.sh/[react,react-dom]/react'
-import ReactDom from 'https://esm.sh/[react,react-dom]/react-dom'
+import React from 'https://esm.sh/[react,react-dom,swr]/react'
+import ReactDom from 'https://esm.sh/[react,react-dom,swr]/react-dom'
 ```
 or your can define bundle list in the `import-map.json` ([import-maps proposal](https://github.com/WICG/import-maps))
 ```json
 {
     "imports": {
-        "https://esm.sh/": "https://esm.sh/[react,react-dom]/",
+        "https://esm.sh/": "https://esm.sh/[react,react-dom,swr]/",
         ...
     }
 }
 ```
 ```javascript
-import React from 'https://esm.sh/react' // actual from 'https://esm.sh/[react,react-dom]/react'
+import React from 'https://esm.sh/react' // actual from 'https://esm.sh/[react,react-dom,swr]/react'
 ```
 
 ⚠️ The bundling packages in URL are litmited up to **10**, to bundle more packages, please use the **esm** client(WIP).
@@ -102,6 +97,12 @@ import unescape from 'https://esm.sh/lodash/unescape?no-check'
 
 Different with [Skypack](https://skypack.dev) and [jspm](https://jspm.org), **esm.sh** will bundle all dependencies(exclude peerDependencies) for each package, that means there may be redundant contents transmitted when you are importing multiple packages.<br>
 This should be improved when the http/3(quic) is ready. For now the best practice is using the **bundle mode**.
+
+As optional, you can split code manually with `external` query:
+
+```javascript
+import React from 'https://esm.sh/swr?external=react@16.14.0'
+```
 
 ## Network of esm.sh
 - Main server in HK
