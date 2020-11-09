@@ -28,9 +28,9 @@ Avaiable `target`: **es2015** - **es2020**, **esnext**
 import React from 'https://esm.sh/react?dev'
 ```
 
-### Fix external
+### External
 ```javascript
-import React from 'https://esm.sh/postcss-flexbugs-fixes?external=postcss'
+import React from 'https://esm.sh/postcss-flexbugs-fixes@5.0.1?external=postcss@8.1.6'
 ```
 
 ### Bundle mode
@@ -105,8 +105,8 @@ This should be improved when the http/3(quic) is ready. For now the best practic
 
 ## Network of esm.sh
 - Main server in HK
-- Global CDN by [cloudflare](https://cloudflare.com)
-- China CDN by [aliyun](https://aliyun.com)
+- Global CDN by [Cloudflare](https://cloudflare.com)
+- China CDN by [Aliyun](https://aliyun.com)
 
 ## Self-Hosting
 
