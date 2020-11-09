@@ -53,7 +53,7 @@ import React from 'https://esm.sh/react' // actual from 'https://esm.sh/[react,r
 
 ⚠️ The bundling packages in URL are litmited up to **10**, to bundle more packages, please use the **esm** client(WIP).
 
-## Proxy mode
+<!-- ## Proxy mode
 ```javascript
 import * from 'https://esm.sh/${provider}/name@version/path/to/file'
 ```
@@ -70,7 +70,7 @@ Simply proxy all the providers in the `import-map.json`:
         ...
     }
 }
-```
+``` -->
 
 ## Deno compatibility
 
