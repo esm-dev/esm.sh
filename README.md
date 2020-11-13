@@ -3,37 +3,46 @@
 A fast, global content delivery network for ES Modules. All modules are transformed to ESM by [esbuild](https://github.com/evanw/esbuild) in [NPM](http://npmjs.org/).
 
 ## Import from URL
+
 ```javascript
 import React from 'https://esm.sh/react'
 ```
 
 ### Specify version
+
 ```javascript
 import React from 'https://esm.sh/react@17.0.1'
 ```
 
 ### Submodule
+
 ```javascript
 import { renderToString } from 'https://esm.sh/react-dom/server'
 ```
 
 ### Specify ESM target
+
 ```javascript
 import React from 'https://esm.sh/react?target=es2020'
 ```
+
 Avaiable `target`: **es2015** - **es2020**, **esnext**
 
 ### Development mode
+
 ```javascript
 import React from 'https://esm.sh/react?dev'
 ```
 
 ### Bundle mode
+
 ```javascript
 import React from 'https://esm.sh/[react,react-dom,swr]/react'
 import ReactDom from 'https://esm.sh/[react,react-dom,swr]/react-dom'
 ```
-or your can define bundle list in the `import-map.json` ([import-maps proposal](https://github.com/WICG/import-maps))
+
+or your can define the bundle list in `import-map.json` ([import-maps proposal](https://github.com/WICG/import-maps))
+
 ```json
 {
     "imports": {
@@ -42,6 +51,7 @@ or your can define bundle list in the `import-map.json` ([import-maps proposal](
     }
 }
 ```
+
 ```javascript
 import React from 'https://esm.sh/react' // actual from 'https://esm.sh/[react,react-dom,swr]/react'
 ```
@@ -52,9 +62,11 @@ import React from 'https://esm.sh/react' // actual from 'https://esm.sh/[react,r
 ```javascript
 import * from 'https://esm.sh/${provider}/name@version/path/to/file'
 ```
+
 Avaiable `provider`: [deno.land](https://deno.land), [nest.land](https://nest.land), [x.nest.land](https://x.nest.land), [denopkg.com](https://denopkg.com)
 <br>
 Simply proxy all the providers in the `import-map.json`:
+
 ```json
 {
     "imports": {
