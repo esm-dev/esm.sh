@@ -67,68 +67,79 @@ func registerAPI(storageDir string, domain string, cdnDomain string, cdnDomainCh
 			return rex.Content("node/readline.js", start, bytes.NewReader([]byte(polyfills["node_readline.js"])))
 		}
 
-		switch strings.Split(pathname, "/")[1] {
-		case "deno.land", "nest.land", "x.nest.land", "denopkg.com":
-			cacheable := regVersionPath.MatchString(pathname)
-			cacheFile := path.Join(storageDir, "proxy", pathname)
-			if cacheable && fileExists(cacheFile) {
-				if strings.HasSuffix(pathname, ".ts") {
-					ctx.SetHeader("Content-Type", "application/typescript")
+		if len(strings.Split(pathname, "/")) > 2 || (strings.HasPrefix(pathname, "/bundle-") && strings.HasSuffix(pathname, ".js")) {
+			var storageType string
+			switch path.Ext(pathname) {
+			case ".js":
+				storageType = "builds"
+			case ".ts":
+				if strings.HasSuffix(pathname, ".d.ts") {
+					storageType = "types"
+				} else {
+					storageType = "raw"
 				}
-				ctx.SetHeader("Cache-Control", "public, max-age=31536000, immutable")
-				return rex.File(cacheFile)
-			}
-			resp, err := httpClient.Get(fmt.Sprintf("https:/%s", pathname))
-			if err != nil {
-				return err
-			}
-			if resp.StatusCode != 200 {
-				return http.StatusBadGateway
-			}
-			defer resp.Body.Close()
-			data, err := ioutil.ReadAll(resp.Body)
-			if err != nil {
-				return err
-			}
-			if cacheable {
-				err = ensureDir(path.Dir(cacheFile))
-				if err != nil {
-					return err
-				}
-				err = ioutil.WriteFile(cacheFile, data, 0644)
-				if err != nil {
-					return err
-				}
-			}
-			for key, values := range resp.Header {
-				for _, value := range values {
-					ctx.AddHeader(key, value)
-				}
-			}
-			return data
-		}
-
-		var storageType string
-		switch path.Ext(pathname) {
-		case ".js":
-			storageType = "builds"
-		case ".ts":
-			if strings.HasSuffix(pathname, ".d.ts") {
-				storageType = "types"
-			} else {
+			case ".json", ".jsx", ".tsx", ".css", ".less", ".sass", ".scss", ".stylus", ".styl", ".wasm":
 				storageType = "raw"
 			}
-		case ".json", ".jsx", ".tsx", ".css", ".less", ".sass", ".scss", ".stylus", ".styl", ".wasm":
-			storageType = "raw"
-		}
-		if storageType != "" {
-			fp := path.Join(storageDir, storageType, pathname)
-			if fileExists(fp) {
-				if storageType == "types" {
-					ctx.SetHeader("Content-Type", "application/typescript; charset=utf-8")
+			if storageType != "" {
+				if storageType == "raw" {
+					m, err := parseModule(pathname)
+					if err != nil {
+						return throwErrorJS(ctx, 500, err)
+					}
+					immutable := regVersionPath.MatchString(pathname)
+					cacheFile := path.Join(storageDir, "raw", m.String())
+					if fileExists(cacheFile) {
+						if strings.HasSuffix(pathname, ".ts") {
+							ctx.SetHeader("Content-Type", "application/typescript")
+						}
+						if immutable {
+							ctx.SetHeader("Cache-Control", "public, max-age=31536000, immutable")
+						} else {
+							ctx.SetHeader("Cache-Control", fmt.Sprintf("private, max-age=%d", refreshDuration))
+						}
+						return rex.File(cacheFile)
+					}
+					resp, err := httpClient.Get(fmt.Sprintf("https://unpkg.com/%s", m.String()))
+					if err != nil {
+						return err
+					}
+					if resp.StatusCode != 200 {
+						return http.StatusBadGateway
+					}
+					defer resp.Body.Close()
+					data, err := ioutil.ReadAll(resp.Body)
+					if err != nil {
+						return err
+					}
+					err = ensureDir(path.Dir(cacheFile))
+					if err != nil {
+						return err
+					}
+					err = ioutil.WriteFile(cacheFile, data, 0644)
+					if err != nil {
+						return err
+					}
+					for key, values := range resp.Header {
+						for _, value := range values {
+							ctx.AddHeader(key, value)
+						}
+					}
+					if immutable {
+						ctx.SetHeader("Cache-Control", "public, max-age=31536000, immutable")
+					} else {
+						ctx.SetHeader("Cache-Control", fmt.Sprintf("private, max-age=%d", refreshDuration))
+					}
+					return data
 				}
-				ctx.SetHeader("Cache-Control", "public, max-age=31536000, immutable")
-				return rex.File(fp)
+				fp := path.Join(storageDir, storageType, pathname)
+				if fileExists(fp) {
+					if storageType == "types" {
+						ctx.SetHeader("Content-Type", "application/typescript; charset=utf-8")
+					}
+					ctx.SetHeader("Cache-Control", "public, max-age=31536000, immutable")
+					return rex.File(fp)
+				}
 			}
 		}
 

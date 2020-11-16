@@ -20,7 +20,7 @@ import (
 )
 
 var (
-	regVersionPath    = regexp.MustCompile(`([^/])@v?[\d\.]+/`)
+	regVersionPath    = regexp.MustCompile(`([^/])@\d+\.\d+\.\d+([a-z0-9\.-]+)?/`)
 	regFromExpression = regexp.MustCompile(`(\s|})from\s*("|')`)
 	regReferenceTag   = regexp.MustCompile(`^<reference\s+(path|types)\s*=\s*('|")([^'"]+)("|')\s*/>$`)
 	regDeclareModule  = regexp.MustCompile(`^declare\s+module\s*('|")([^'"]+)("|')`)
