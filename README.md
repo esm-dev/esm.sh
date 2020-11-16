@@ -20,6 +20,12 @@ import React from 'https://esm.sh/react@17.0.1'
 import { renderToString } from 'https://esm.sh/react-dom/server'
 ```
 
+or import regular files:
+
+```javascript
+import 'https://esm.sh/tailwindcss/dist/tailwind.min.css'
+```
+
 ### Specify ESM target
 
 ```javascript
@@ -57,27 +63,6 @@ import React from 'https://esm.sh/react' // actual from 'https://esm.sh/[react,r
 ```
 
 ⚠️ The bundling packages in URL are litmited up to **10**, to bundle more packages, please use the **esm** client(WIP).
-
-<!-- ## Proxy mode
-```javascript
-import * from 'https://esm.sh/${provider}/name@version/path/to/file'
-```
-
-Avaiable `provider`: [deno.land](https://deno.land), [nest.land](https://nest.land), [x.nest.land](https://x.nest.land), [denopkg.com](https://denopkg.com)
-<br>
-Simply proxy all the providers in the `import-map.json`:
-
-```json
-{
-    "imports": {
-        "https://deno.land/":   "https://esm.sh/deno.land/",
-        "https://nest.land/":   "https://esm.sh/nest.land/",
-        "https://x.nest.land/": "https://esm.sh/x.nest.land/",
-        "https://denopkg.com/": "https://esm.sh/denopkg.com/",
-        ...
-    }
-}
-``` -->
 
 ## Deno compatibility
 
