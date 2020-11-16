@@ -88,13 +88,14 @@ func registerAPI(storageDir string, domain string, cdnDomain string, cdnDomainCh
 						return throwErrorJS(ctx, 500, err)
 					}
 					shouldRedirect := !regVersionPath.MatchString(pathname)
-					if shouldRedirect {
-						hostname := ctx.R.Host
-						proto := "http"
-						if ctx.R.TLS != nil {
-							proto = "https"
-						}
+					hostname := ctx.R.Host
+					proto := "http"
+					if ctx.R.TLS != nil {
+						proto = "https"
+					}
+					if hostname == domain {
 						if cdnDomain != "" {
+							shouldRedirect = true
 							hostname = cdnDomain
 							proto = "https"
 						}
@@ -102,10 +103,13 @@ func registerAPI(storageDir string, domain string, cdnDomain string, cdnDomainCh
 							var record Record
 							err = mmdbr.Lookup(net.ParseIP(ctx.RemoteIP()), &record)
 							if err == nil && record.Country.ISOCode == "CN" {
+								shouldRedirect = true
 								hostname = cdnDomainChina
 								proto = "https"
 							}
 						}
+					}
+					if shouldRedirect {
 						return rex.Redirect(fmt.Sprintf("%s://%s/%s", proto, hostname, m.String()), 302)
 					}
 					cacheFile := path.Join(storageDir, "raw", m.String())
