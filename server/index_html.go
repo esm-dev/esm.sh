@@ -316,7 +316,7 @@ const indexHTML = `<!DOCTYPE html>
         mainEl.querySelectorAll('img').forEach(img => {
             const src = img.getAttribute('src')
             if (src.startsWith('./assets/')) {
-                img.src = '/denopkg.com/postui/esm.sh/' + src.replace('./', '')
+                img.src = 'https://denopkg.com/postui/esm.sh/' + src.replace('./', '')
             }
         })
 
