@@ -87,17 +87,33 @@ func registerAPI(storageDir string, domain string, cdnDomain string, cdnDomainCh
 					if err != nil {
 						return throwErrorJS(ctx, 500, err)
 					}
-					immutable := regVersionPath.MatchString(pathname)
+					shouldRedirect := !regVersionPath.MatchString(pathname)
+					if shouldRedirect {
+						hostname := ctx.R.Host
+						proto := "http"
+						if ctx.R.TLS != nil {
+							proto = "https"
+						}
+						if cdnDomain != "" {
+							hostname = cdnDomain
+							proto = "https"
+						}
+						if cdnDomainChina != "" {
+							var record Record
+							err = mmdbr.Lookup(net.ParseIP(ctx.RemoteIP()), &record)
+							if err == nil && record.Country.ISOCode == "CN" {
+								hostname = cdnDomainChina
+								proto = "https"
+							}
+						}
+						return rex.Redirect(fmt.Sprintf("%s://%s/%s", proto, hostname, m.String()), 302)
+					}
 					cacheFile := path.Join(storageDir, "raw", m.String())
 					if fileExists(cacheFile) {
 						if strings.HasSuffix(pathname, ".ts") {
 							ctx.SetHeader("Content-Type", "application/typescript")
 						}
-						if immutable {
-							ctx.SetHeader("Cache-Control", "public, max-age=31536000, immutable")
-						} else {
-							ctx.SetHeader("Cache-Control", fmt.Sprintf("private, max-age=%d", refreshDuration))
-						}
+						ctx.SetHeader("Cache-Control", "public, max-age=31536000, immutable")
 						return rex.File(cacheFile)
 					}
 					resp, err := httpClient.Get(fmt.Sprintf("https://unpkg.com/%s", m.String()))
@@ -125,11 +141,7 @@ func registerAPI(storageDir string, domain string, cdnDomain string, cdnDomainCh
 							ctx.AddHeader(key, value)
 						}
 					}
-					if immutable {
-						ctx.SetHeader("Cache-Control", "public, max-age=31536000, immutable")
-					} else {
-						ctx.SetHeader("Cache-Control", fmt.Sprintf("private, max-age=%d", refreshDuration))
-					}
+					ctx.SetHeader("Cache-Control", "public, max-age=31536000, immutable")
 					return data
 				}
 				fp := path.Join(storageDir, storageType, pathname)
