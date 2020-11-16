@@ -6,10 +6,10 @@ const indexHTML = `<!DOCTYPE html>
     <meta charSet="utf-8" />
     <meta name="viewport" content="user-scalable=no,initial-scale=1.0,minimum-scale=1.0,maximum-scale=1.0" />
     <title>ESM</title>
-    <meta name="description" content="A fast, global content delivery network and package manager for ES Modules." />
-    <meta name="keywords" content="esm,npm,deno,global,cdn,proxy" />
+    <meta name="description" content="A fast, global content delivery network for ES Modules. All modules are transformed to ESM by esbuild in NPM." />
+    <meta name="keywords" content="esm,npm,deno,global,cdn,package,esbuild,transform" />
     <style>
-        // https://cdn.jsdelivr.net/gh/highlightjs/cdn-release@10.1.2/build/styles/github.min.css
+        // https://esm.sh/highlightjs@9.16.2/styles/github.css
         .hljs{display:block;overflow-x:auto;padding:.5em;color:#333;background:#f8f8f8}.hljs-comment,.hljs-quote{color:#998;font-style:italic}.hljs-keyword,.hljs-selector-tag,.hljs-subst{color:#333;font-weight:700}.hljs-literal,.hljs-number,.hljs-tag .hljs-attr,.hljs-template-variable,.hljs-variable{color:teal}.hljs-doctag,.hljs-string{color:#d63369}.hljs-section,.hljs-selector-id,.hljs-title{color:#d63369;font-weight:700}.hljs-subst{font-weight:400}.hljs-class .hljs-title,.hljs-type{color:#458;font-weight:700}.hljs-attribute,.hljs-name,.hljs-tag{color:teal;font-weight:400}.hljs-link,.hljs-regexp{color:#009926}.hljs-bullet,.hljs-symbol{color:#d63369}.hljs-built_in,.hljs-builtin-name{color:teal}.hljs-meta{color:#999;font-weight:700}.hljs-deletion{background:#fdd}.hljs-addition{background:#dfd}.hljs-emphasis{font-style:italic}.hljs-strong{font-weight:700}
 
         /* esm.sh */
