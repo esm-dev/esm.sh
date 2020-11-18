@@ -98,7 +98,8 @@ This should be improved when the http/3(quic) is ready. For now the best practic
 As optional, you can split code manually with `external` query:
 
 ```javascript
-import React from 'https://esm.sh/swr?external=react@16.14.0'
+import React from 'https://esm.sh/react@16.14.0'
+import useSWR from 'https://esm.sh/swr?external=react@16.14.0'
 ```
 
 ## Network of esm.sh
