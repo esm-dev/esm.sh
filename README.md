@@ -20,7 +20,7 @@ import React from 'https://esm.sh/react@17.0.1'
 import { renderToString } from 'https://esm.sh/react-dom/server'
 ```
 
-or import regular files:
+or import non-module(js) files:
 
 ```javascript
 import 'https://esm.sh/tailwindcss/dist/tailwind.min.css'
