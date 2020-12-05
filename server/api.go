@@ -315,28 +315,19 @@ func registerAPI(storageDir string, domain string, cdnDomain string, cdnDomainCh
 		}
 
 		fmt.Fprintf(buf, `/* %s - %v */%s`, jsCopyrightName, currentModule, EOL)
-		var exported bool
 		if len(packages) == 1 {
+			fmt.Fprintf(buf, `export * from "%s%s.js";%s`, importPrefix, ret.buildID, EOL)
 			if importMeta.Module != "" {
-				fmt.Fprintf(buf, `export * from "%s%s.js";%s`, importPrefix, ret.buildID, EOL)
 				for _, name := range importMeta.Exports {
 					if name == "default" {
-						fmt.Fprintf(buf, `export {default} from "%s%s.js";%s`, importPrefix, ret.buildID, EOL)
+						fmt.Fprintf(buf, `export { default } from "%s%s.js";%s`, importPrefix, ret.buildID, EOL)
 						break
 					}
 				}
-				exported = true
 			} else {
-				fmt.Fprintf(buf, `import %s_default from "%s%s.js";%s`, importIdentifier, importPrefix, ret.buildID, EOL)
+				fmt.Fprintf(buf, `export { default } from "%s%s.js";%s`, importPrefix, ret.buildID, EOL)
 			}
 		} else {
-			if importMeta.Module != "" {
-				fmt.Fprintf(buf, `import { %s_default, %s_star } from "%s%s.js";%s`, importIdentifier, importIdentifier, importPrefix, ret.buildID, EOL)
-			} else {
-				fmt.Fprintf(buf, `import { %s_default } from "%s%s.js";%s`, importIdentifier, importPrefix, ret.buildID, EOL)
-			}
-		}
-		if !exported {
 			var exports []string
 			var hasDefaultExport bool
 			for _, name := range importMeta.Exports {
@@ -346,19 +337,19 @@ func registerAPI(storageDir string, domain string, cdnDomain string, cdnDomainCh
 					exports = append(exports, name)
 				}
 			}
-			if len(exports) > 0 {
-				if importMeta.Module != "" {
-					fmt.Fprintf(buf, `export const { %s } = %s_star;%s`, strings.Join(exports, ","), importIdentifier, EOL)
-				} else {
-					fmt.Fprintf(buf, `export const { %s } = %s_default;%s`, strings.Join(exports, ","), importIdentifier, EOL)
-				}
+			if importMeta.Module != "" {
+				fmt.Fprintf(buf, `import { %s_default, %s_star } from "%s%s.js";%s`, importIdentifier, importIdentifier, importPrefix, ret.buildID, EOL)
+				fmt.Fprintf(buf, `export const { %s } = %s_star;%s`, strings.Join(exports, ","), importIdentifier, EOL)
+			} else {
+				fmt.Fprintf(buf, `import { %s_default } from "%s%s.js";%s`, importIdentifier, importPrefix, ret.buildID, EOL)
+				fmt.Fprintf(buf, `export const { %s } = %s_default;%s`, strings.Join(exports, ","), importIdentifier, EOL)
 			}
 			if hasDefaultExport || (importMeta.Main != "" && importMeta.Module == "") {
 				fmt.Fprintf(buf, `export default %s_default;%s`, importIdentifier, EOL)
 			}
 		}
 		if importMeta.Dts != "" && !noCheck {
-			ctx.SetHeader("X-TypeScript-Types", importMeta.Dts)
+			ctx.SetHeader("X-TypeScript-Types", path.Join(importPrefix, importMeta.Dts))
 		}
 		ctx.SetHeader("Cache-Control", fmt.Sprintf("private, max-age=%d", refreshDuration))
 		ctx.SetHeader("Content-Type", "application/javascript; charset=utf-8")
