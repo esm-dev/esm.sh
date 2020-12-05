@@ -89,11 +89,11 @@ func build(storageDir string, hostname string, options buildOptions) (ret buildR
 		}
 		ret.buildID = fmt.Sprintf("v%d/%s@%s/%s/%s", buildVersion, pkg.name, pkg.version, target, filename)
 	} else {
-		hasher := sha1.New()
+		hash := sha1.New()
 		sort.Sort(options.packages)
 		sort.Sort(options.external)
-		fmt.Fprintf(hasher, "v%d/%s/%s/%s/%v", buildVersion, options.packages.String(), options.external.String(), options.target, options.isDev)
-		ret.buildID = "bundle-" + strings.ToLower(base32.StdEncoding.EncodeToString(hasher.Sum(nil)))
+		fmt.Fprintf(hash, "v%d/%s/%s/%s/%v", buildVersion, options.packages.String(), options.external.String(), options.target, options.isDev)
+		ret.buildID = "bundle-" + strings.ToLower(base32.StdEncoding.EncodeToString(hash.Sum(nil)))
 	}
 
 	p, err := db.Get(q.Alias(ret.buildID), q.K("importMeta"))
@@ -108,6 +108,7 @@ func build(storageDir string, hostname string, options buildOptions) (ret buildR
 
 		_, err = os.Stat(path.Join(storageDir, "builds", ret.buildID+".js"))
 		if err == nil || os.IsExist(err) {
+			// built
 			return
 		}
 

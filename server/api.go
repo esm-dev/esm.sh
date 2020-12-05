@@ -70,100 +70,100 @@ func registerAPI(storageDir string, domain string, cdnDomain string, cdnDomainCh
 			return rex.Content("node/readline.js", start, bytes.NewReader([]byte(polyfills["node_readline.js"])))
 		}
 
-		if len(strings.Split(pathname, "/")) > 2 || (strings.HasPrefix(pathname, "/bundle-") && strings.HasSuffix(pathname, ".js")) {
-			var storageType string
-			switch path.Ext(pathname) {
-			case ".js":
+		var storageType string
+		switch path.Ext(pathname) {
+		case ".js":
+			if strings.HasPrefix(pathname, "/bundle-") && len(strings.Split(pathname, "/")) == 2 {
 				storageType = "builds"
-			case ".ts":
-				if strings.HasSuffix(pathname, ".d.ts") {
-					storageType = "types"
-				} else {
-					storageType = "raw"
-				}
-			case ".json", ".jsx", ".tsx", ".css", ".less", ".sass", ".scss", ".stylus", ".styl", ".wasm":
+			}
+		case ".ts":
+			if strings.HasSuffix(pathname, ".d.ts") {
+				storageType = "types"
+			} else {
 				storageType = "raw"
 			}
-			if storageType != "" {
-				if storageType == "raw" {
-					m, err := parseModule(pathname)
-					if err != nil {
-						return throwErrorJS(ctx, 500, err)
-					}
-					shouldRedirect := !regVersionPath.MatchString(pathname)
-					hostname := ctx.R.Host
-					proto := "http"
-					if ctx.R.TLS != nil {
+		case ".json", ".jsx", ".tsx", ".css", ".less", ".sass", ".scss", ".stylus", ".styl", ".wasm":
+			storageType = "raw"
+		}
+		if storageType != "" {
+			if storageType == "raw" {
+				m, err := parseModule(pathname)
+				if err != nil {
+					return throwErrorJS(ctx, 500, err)
+				}
+				shouldRedirect := !regVersionPath.MatchString(pathname)
+				hostname := ctx.R.Host
+				proto := "http"
+				if ctx.R.TLS != nil {
+					proto = "https"
+				}
+				if hostname == domain {
+					if cdnDomain != "" {
+						shouldRedirect = true
+						hostname = cdnDomain
 						proto = "https"
 					}
-					if hostname == domain {
-						if cdnDomain != "" {
+					if cdnDomainChina != "" {
+						var record Record
+						err = mmdbr.Lookup(net.ParseIP(ctx.RemoteIP()), &record)
+						if err == nil && record.Country.ISOCode == "CN" {
 							shouldRedirect = true
-							hostname = cdnDomain
+							hostname = cdnDomainChina
 							proto = "https"
 						}
-						if cdnDomainChina != "" {
-							var record Record
-							err = mmdbr.Lookup(net.ParseIP(ctx.RemoteIP()), &record)
-							if err == nil && record.Country.ISOCode == "CN" {
-								shouldRedirect = true
-								hostname = cdnDomainChina
-								proto = "https"
-							}
-						}
 					}
-					if shouldRedirect {
-						return rex.Redirect(fmt.Sprintf("%s://%s/%s", proto, hostname, m.String()), 302)
-					}
-					cacheFile := path.Join(storageDir, "raw", m.String())
-					if fileExists(cacheFile) {
-						if strings.HasSuffix(pathname, ".ts") {
-							ctx.SetHeader("Content-Type", "application/typescript")
-						}
-						ctx.SetHeader("Cache-Control", "public, max-age=31536000, immutable")
-						return rex.File(cacheFile)
-					}
-					resp, err := httpClient.Get(fmt.Sprintf("https://unpkg.com/%s", m.String()))
-					if err != nil {
-						return err
-					}
-					if resp.StatusCode != 200 {
-						return http.StatusBadGateway
-					}
-					defer resp.Body.Close()
-					data, err := ioutil.ReadAll(resp.Body)
-					if err != nil {
-						return err
-					}
-					err = ensureDir(path.Dir(cacheFile))
-					if err != nil {
-						return err
-					}
-					err = ioutil.WriteFile(cacheFile, data, 0644)
-					if err != nil {
-						return err
-					}
-					for key, values := range resp.Header {
-						for _, value := range values {
-							ctx.AddHeader(key, value)
-						}
+				}
+				if shouldRedirect {
+					return rex.Redirect(fmt.Sprintf("%s://%s/%s", proto, hostname, m.String()), 302)
+				}
+				cacheFile := path.Join(storageDir, "raw", m.String())
+				if fileExists(cacheFile) {
+					if strings.HasSuffix(pathname, ".ts") {
+						ctx.SetHeader("Content-Type", "application/typescript")
 					}
 					ctx.SetHeader("Cache-Control", "public, max-age=31536000, immutable")
-					return data
+					return rex.File(cacheFile)
 				}
-				var filepath string
-				if (storageType == "builds" && !strings.HasPrefix(pathname, "/bundle-")) || storageType == "types" {
-					filepath = path.Join(storageDir, storageType, fmt.Sprintf("v%d", buildVersion), pathname)
-				} else {
-					filepath = path.Join(storageDir, storageType, pathname)
+				resp, err := httpClient.Get(fmt.Sprintf("https://unpkg.com/%s", m.String()))
+				if err != nil {
+					return err
 				}
-				if fileExists(filepath) {
-					if storageType == "types" {
-						ctx.SetHeader("Content-Type", "application/typescript; charset=utf-8")
+				if resp.StatusCode != 200 {
+					return http.StatusBadGateway
+				}
+				defer resp.Body.Close()
+				data, err := ioutil.ReadAll(resp.Body)
+				if err != nil {
+					return err
+				}
+				err = ensureDir(path.Dir(cacheFile))
+				if err != nil {
+					return err
+				}
+				err = ioutil.WriteFile(cacheFile, data, 0644)
+				if err != nil {
+					return err
+				}
+				for key, values := range resp.Header {
+					for _, value := range values {
+						ctx.AddHeader(key, value)
 					}
-					ctx.SetHeader("Cache-Control", "public, max-age=31536000, immutable")
-					return rex.File(filepath)
 				}
+				ctx.SetHeader("Cache-Control", "public, max-age=31536000, immutable")
+				return data
+			}
+			var filepath string
+			if storageType == "types" {
+				filepath = path.Join(storageDir, storageType, fmt.Sprintf("v%d", buildVersion), pathname)
+			} else {
+				filepath = path.Join(storageDir, storageType, pathname)
+			}
+			if fileExists(filepath) {
+				if storageType == "types" {
+					ctx.SetHeader("Content-Type", "application/typescript; charset=utf-8")
+				}
+				ctx.SetHeader("Cache-Control", "public, max-age=31536000, immutable")
+				return rex.File(filepath)
 			}
 		}
 
@@ -202,7 +202,7 @@ func registerAPI(storageDir string, domain string, cdnDomain string, cdnDomainCh
 		}
 		if bundleList == "" && endsWith(pathname, ".js") {
 			currentModule, err = parseModule(pathname)
-			if err == nil && !endsWith(currentModule.name, ".js") {
+			if err == nil {
 				a := strings.Split(currentModule.submodule, "/")
 				if len(a) > 1 {
 					if strings.HasPrefix(a[0], "external=") {
@@ -289,15 +289,6 @@ func registerAPI(storageDir string, domain string, cdnDomain string, cdnDomainCh
 			return throwErrorJS(ctx, 500, err)
 		}
 
-		if isBare {
-			fp := path.Join(storageDir, "builds", pathname)
-			if fileExists(fp) {
-				ctx.SetHeader("Cache-Control", "public, max-age=31536000, immutable")
-				return rex.File(fp)
-			}
-			return 404
-		}
-
 		if bundleList != "" && currentModule.name == "" {
 			return ret.importMeta
 		}
@@ -306,6 +297,18 @@ func registerAPI(storageDir string, domain string, cdnDomain string, cdnDomainCh
 		importMeta, ok := ret.importMeta[importPath]
 		if !ok {
 			return throwErrorJS(ctx, 500, fmt.Errorf("package '%s' not found in bundle", importPath))
+		}
+
+		if isBare {
+			fp := path.Join(storageDir, "builds", fmt.Sprintf("v%d", buildVersion), pathname)
+			if fileExists(fp) {
+				ctx.SetHeader("Cache-Control", "public, max-age=31536000, immutable")
+				if importMeta.Dts != "" && !noCheck {
+					ctx.SetHeader("X-TypeScript-Types", importMeta.Dts)
+				}
+				return rex.File(fp)
+			}
+			return 404
 		}
 
 		buf := bytes.NewBuffer(nil)
