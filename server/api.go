@@ -314,6 +314,10 @@ func registerAPI(storageDir string, domain string, cdnDomain string, cdnDomainCh
 		buf := bytes.NewBuffer(nil)
 		importIdentifier := identify(importPath)
 		importPrefix := "/"
+		importSuffix := ".js"
+		if noCheck {
+			importSuffix += "?no-check"
+		}
 		if cdnDomain != "" {
 			importPrefix = fmt.Sprintf("https://%s/", cdnDomain)
 		}
@@ -327,16 +331,16 @@ func registerAPI(storageDir string, domain string, cdnDomain string, cdnDomainCh
 
 		fmt.Fprintf(buf, `/* %s - %v */%s`, jsCopyrightName, currentModule, EOL)
 		if len(packages) == 1 {
-			fmt.Fprintf(buf, `export * from "%s%s.js";%s`, importPrefix, ret.buildID, EOL)
+			fmt.Fprintf(buf, `export * from "%s%s%s";%s`, importPrefix, ret.buildID, importSuffix, EOL)
 			if importMeta.Module != "" {
 				for _, name := range importMeta.Exports {
 					if name == "default" {
-						fmt.Fprintf(buf, `export { default } from "%s%s.js";%s`, importPrefix, ret.buildID, EOL)
+						fmt.Fprintf(buf, `export { default } from "%s%s%s";%s`, importPrefix, ret.buildID, importSuffix, EOL)
 						break
 					}
 				}
 			} else {
-				fmt.Fprintf(buf, `export { default } from "%s%s.js";%s`, importPrefix, ret.buildID, EOL)
+				fmt.Fprintf(buf, `export { default } from "%s%s%s";%s`, importPrefix, ret.buildID, importSuffix, EOL)
 			}
 		} else {
 			var exports []string
@@ -349,10 +353,10 @@ func registerAPI(storageDir string, domain string, cdnDomain string, cdnDomainCh
 				}
 			}
 			if importMeta.Module != "" {
-				fmt.Fprintf(buf, `import { %s_default, %s_star } from "%s%s.js";%s`, importIdentifier, importIdentifier, importPrefix, ret.buildID, EOL)
+				fmt.Fprintf(buf, `import { %s_default, %s_star } from "%s%s%s";%s`, importIdentifier, importIdentifier, importPrefix, ret.buildID, importSuffix, EOL)
 				fmt.Fprintf(buf, `export const { %s } = %s_star;%s`, strings.Join(exports, ","), importIdentifier, EOL)
 			} else {
-				fmt.Fprintf(buf, `import { %s_default } from "%s%s.js";%s`, importIdentifier, importPrefix, ret.buildID, EOL)
+				fmt.Fprintf(buf, `import { %s_default } from "%s%s%s";%s`, importIdentifier, importPrefix, ret.buildID, importSuffix, EOL)
 				fmt.Fprintf(buf, `export const { %s } = %s_default;%s`, strings.Join(exports, ","), importIdentifier, EOL)
 			}
 			if hasDefaultExport || (importMeta.Main != "" && importMeta.Module == "") {
@@ -360,7 +364,7 @@ func registerAPI(storageDir string, domain string, cdnDomain string, cdnDomainCh
 			}
 		}
 		if importMeta.Dts != "" && !noCheck {
-			ctx.SetHeader("X-TypeScript-Types", path.Join(importPrefix, fmt.Sprintf("v%d", buildVersion), importMeta.Dts))
+			ctx.SetHeader("X-TypeScript-Types", fmt.Sprintf("%s%s", importPrefix, strings.TrimPrefix(path.Join("/", fmt.Sprintf("v%d", buildVersion), importMeta.Dts), "/")))
 		}
 		ctx.SetHeader("Cache-Control", fmt.Sprintf("private, max-age=%d", refreshDuration))
 		ctx.SetHeader("Content-Type", "application/javascript; charset=utf-8")

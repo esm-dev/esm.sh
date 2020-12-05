@@ -75,13 +75,13 @@ func copyDTS(hostname string, nodeModulesDir string, saveDir string, dts string)
 	deps := newStringSet()
 	dmodules := []string{}
 	rewriteFn := func(importPath string) string {
-		if importPath == "." {
-			importPath = "./index.d.ts"
-		}
-		if importPath == ".." {
-			importPath = "../index.d.ts"
-		}
 		if isValidatedESImportPath(importPath) {
+			if importPath == "." {
+				importPath = "./index.d.ts"
+			}
+			if importPath == ".." {
+				importPath = "../index.d.ts"
+			}
 			if !strings.HasSuffix(importPath, ".d.ts") {
 				if fileExists(path.Join(dtsDir, importPath, "index.d.ts")) {
 					importPath = strings.TrimSuffix(importPath, "/") + "/index.d.ts"
@@ -103,25 +103,13 @@ func copyDTS(hostname string, nodeModulesDir string, saveDir string, dts string)
 		} else {
 			// ignore builtin node modules
 			if _, ok := builtInNodeModules[importPath]; ok {
-				polyfill, ok := polyfilledBuiltInNodeModules[importPath]
-				if ok {
-					p, err := nodeEnv.getPackageInfo(polyfill, "latest")
-					if err == nil {
-						return getTypesPath(p)
-					}
-					return polyfill
-				}
-				return importPath
+				importPath = "@types/node/" + importPath
 			}
 			pkgName, subpath := utils.SplitByFirstByte(importPath, '/')
 			if strings.HasPrefix(pkgName, "@") {
 				n, s := utils.SplitByFirstByte(subpath, '/')
 				pkgName = fmt.Sprintf("%s/%s", pkgName, n)
 				subpath = s
-			}
-			// self
-			if strings.HasPrefix(dts, pkgName) {
-				return importPath
 			}
 			packageJSONFile := path.Join(nodeModulesDir, "@types", pkgName, "package.json")
 			if !fileExists(packageJSONFile) {
@@ -142,16 +130,14 @@ func copyDTS(hostname string, nodeModulesDir string, saveDir string, dts string)
 					p, err = nodeEnv.getPackageInfo("@types/"+importPath, "latest")
 				}
 				if err == nil {
+					err = yarnAdd(p.Name)
+				}
+				if err == nil {
 					if subpath != "" {
 						importPath = fmt.Sprintf("%s@%s%s", p.Name, p.Version, ensureExt(utils.CleanPath(subpath), ".d.ts"))
 					} else {
 						importPath = getTypesPath(p)
 					}
-				} else {
-					if !isValidatedESImportPath(importPath) {
-						importPath = "./" + importPath
-					}
-					importPath = ensureExt(importPath, ".d.ts")
 				}
 			}
 		}
@@ -192,7 +178,7 @@ func copyDTS(hostname string, nodeModulesDir string, saveDir string, dts string)
 				buf.WriteString(pure)
 			}
 		} else if i := strings.Index(pure, "/*"); i > 0 {
-			if startsWith(pure, "import ", "export ", "import{", "export{") {
+			if startsWith(pure, "import ", "export ", "import{", "export{", "import {", "export {") {
 				importExportScope = true
 			}
 			buf.WriteString(pure[:i])
@@ -260,7 +246,7 @@ func copyDTS(hostname string, nodeModulesDir string, saveDir string, dts string)
 				exp := strings.TrimSpace(text)
 				buf.WriteString(text[:strings.Index(text, exp)])
 				if exp != "" {
-					if importExportScope || startsWith(exp, "import ", "export ", "import{", "export{") {
+					if importExportScope || startsWith(exp, "import ", "export ", "import{", "export{", "import {", "export {") {
 						importExportScope = true
 						end := regFromExpression.MatchString(exp)
 						if end {
