@@ -304,7 +304,7 @@ func registerAPI(storageDir string, domain string, cdnDomain string, cdnDomainCh
 			if fileExists(fp) {
 				ctx.SetHeader("Cache-Control", "public, max-age=31536000, immutable")
 				if importMeta.Dts != "" && !noCheck {
-					ctx.SetHeader("X-TypeScript-Types", importMeta.Dts)
+					ctx.SetHeader("X-TypeScript-Types", path.Join("/", fmt.Sprintf("v%d", buildVersion), importMeta.Dts))
 				}
 				return rex.File(fp)
 			}
