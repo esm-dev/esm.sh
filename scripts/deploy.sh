@@ -32,14 +32,14 @@ if [ "$ok" == "yes" ]; then
 fi
 
 rebuild="no"
-builderID="1"
+buildVersion="1"
 if [ "$init" == "no" ]; then
     read -p "rebuild ('yes' or 'no', default is 'no')? " ok
     if [ "$ok" == "yes" ]; then
         rebuild="yes"
         read -p "please enter the new builder id (default is 1): " p
         if [ "$p" != "" ]; then
-            builderID="$p"
+            buildVersion="$p"
         fi
     fi
 fi
@@ -134,14 +134,14 @@ ssh -p $sshPort $user@$host << EOF
         if [ "$rebuild" == "yes" ]; then
             rm -f ${etcDir}/esm.db
             rm -rf ${etcDir}/storage
-            echo "$builderID" > ${etcDir}/builder.id
+            echo "$buildVersion" > ${etcDir}/build.ver
             echo "esmd: rebuilt"
         fi
         supervisorctl start esmd
     fi
 EOF
 
-rm -f server/auto_mmdbr.go
-rm -f server/auto_polyfills.go
-rm -f server/auto_readme.go
-rm -f esmd
+rm -f $(dirname $0)/../server/auto_mmdbr.go
+rm -f $(dirname $0)/../server/auto_polyfills.go
+rm -f $(dirname $0)/../server/auto_readme.go
+rm -f $(dirname $0)/esmd
