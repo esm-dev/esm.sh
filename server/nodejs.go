@@ -23,7 +23,7 @@ import (
 
 const (
 	minNodejsVersion = 14
-	nodejsLatestLTS  = "14.15.0"
+	nodejsLatestLTS  = "14.15.1"
 	nodejsDistURL    = "https://nodejs.org/dist/"
 	refreshDuration  = 10 * 60 // 10 minues
 )
@@ -151,7 +151,6 @@ CheckNodejs:
 			if err != nil {
 				return
 			}
-			log.Debugf("downloading %sv%s/node-v%s-%s-x64.tar.xz", nodejsDistURL, version, version, runtime.GOOS)
 			err = installNodejs("/usr/local/nodejs", nodejsLatestLTS)
 			if err != nil {
 				return
@@ -281,6 +280,7 @@ func getNodejsVersion() (version string, major int, err error) {
 
 func installNodejs(dir string, version string) (err error) {
 	dlURL := fmt.Sprintf("%sv%s/node-v%s-%s-x64.tar.xz", nodejsDistURL, version, version, runtime.GOOS)
+	log.Debugf("downloading %s", dlURL)
 	resp, err := http.Get(dlURL)
 	if err != nil {
 		err = fmt.Errorf("download nodejs: %v", err)
