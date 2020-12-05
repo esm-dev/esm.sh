@@ -75,6 +75,12 @@ func copyDTS(hostname string, nodeModulesDir string, saveDir string, dts string)
 	deps := newStringSet()
 	dmodules := []string{}
 	rewriteFn := func(importPath string) string {
+		if importPath == "." {
+			importPath = "./index.d.ts"
+		}
+		if importPath == ".." {
+			importPath = "../index.d.ts"
+		}
 		if isValidatedESImportPath(importPath) {
 			if !strings.HasSuffix(importPath, ".d.ts") {
 				if fileExists(path.Join(dtsDir, importPath, "index.d.ts")) {
@@ -151,7 +157,10 @@ func copyDTS(hostname string, nodeModulesDir string, saveDir string, dts string)
 		}
 		deps.Set(importPath)
 		if !isValidatedESImportPath(importPath) {
-			return "/" + importPath
+			importPath = "/" + importPath
+		}
+		if strings.HasPrefix(importPath, "/") {
+			importPath = fmt.Sprintf("/v%d%s", buildVersion, importPath)
 		}
 		return importPath
 	}

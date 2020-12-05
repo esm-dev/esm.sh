@@ -29,7 +29,7 @@ const (
 )
 
 var (
-	builderID = 1
+	buildVersion = 1
 )
 
 var targets = map[string]api.Target{
@@ -87,12 +87,12 @@ func build(storageDir string, hostname string, options buildOptions) (ret buildR
 		if options.isDev {
 			filename += ".development"
 		}
-		ret.buildID = fmt.Sprintf("v%d/%s@%s/%s/%s", builderID, pkg.name, pkg.version, target, filename)
+		ret.buildID = fmt.Sprintf("v%d/%s@%s/%s/%s", buildVersion, pkg.name, pkg.version, target, filename)
 	} else {
 		hasher := sha1.New()
 		sort.Sort(options.packages)
 		sort.Sort(options.external)
-		fmt.Fprintf(hasher, "v%d/%s/%s/%s/%v", builderID, options.packages.String(), options.external.String(), options.target, options.isDev)
+		fmt.Fprintf(hasher, "v%d/%s/%s/%s/%v", buildVersion, options.packages.String(), options.external.String(), options.target, options.isDev)
 		ret.buildID = "bundle-" + strings.ToLower(base32.StdEncoding.EncodeToString(hasher.Sum(nil)))
 	}
 
@@ -333,7 +333,7 @@ func build(storageDir string, hostname string, options buildOptions) (ret buildR
 			}
 		}
 		if types != "" {
-			err = copyDTS(hostname, path.Join(buildDir, "node_modules"), path.Join(storageDir, "types"), types)
+			err = copyDTS(hostname, path.Join(buildDir, "node_modules"), path.Join(storageDir, "types", fmt.Sprintf("v%d", buildVersion)), types)
 			if err != nil {
 				err = fmt.Errorf("copyDTS(%s): %v", types, err)
 				return
@@ -502,7 +502,7 @@ esbuild:
 								} else {
 									_, yes := polyfills[fmt.Sprintf("node_%s.js", resolvePath)]
 									if yes {
-										pathname := fmt.Sprintf("/v%d/_node_%s.js", builderID, resolvePath)
+										pathname := fmt.Sprintf("/v%d/_node_%s.js", buildVersion, resolvePath)
 										if esm {
 											resolvePath = pathname
 										} else {
@@ -521,7 +521,7 @@ esbuild:
 								if options.isDev {
 									filename += ".development"
 								}
-								pathname := fmt.Sprintf("/v%d/%s@%s/%s/%s", builderID, packageName, version, options.target, ensureExt(filename, ".js"))
+								pathname := fmt.Sprintf("/v%d/%s@%s/%s/%s", buildVersion, packageName, version, options.target, ensureExt(filename, ".js"))
 								if esm {
 									resolvePath = pathname
 								} else {
@@ -600,12 +600,12 @@ esbuild:
 	// nodejs compatibility
 	outputContent := result.OutputFiles[0].Contents
 	if regProcess.Match(outputContent) {
-		fmt.Fprintf(jsContentBuf, `import process from "/v%d/_process_browser.js";%sprocess.env.NODE_ENV="%s";%s`, builderID, eol, env, eol)
+		fmt.Fprintf(jsContentBuf, `import process from "/v%d/_process_browser.js";%sprocess.env.NODE_ENV="%s";%s`, buildVersion, eol, env, eol)
 	}
 	if regBuffer.Match(outputContent) {
 		p, err := nodeEnv.getPackageInfo("buffer", "latest")
 		if err == nil {
-			fmt.Fprintf(jsContentBuf, `import Buffer from "/v%d/buffer@%s/%s/buffer.js";%s`, builderID, p.Version, options.target, eol)
+			fmt.Fprintf(jsContentBuf, `import Buffer from "/v%d/buffer@%s/%s/buffer.js";%s`, buildVersion, p.Version, options.target, eol)
 		}
 	}
 	if peerModulesForCommonjs.Size() > 0 {

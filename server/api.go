@@ -42,6 +42,9 @@ func registerAPI(storageDir string, domain string, cdnDomain string, cdnDomainCh
 
 	rex.Query("*", func(ctx *rex.Context) interface{} {
 		pathname := utils.CleanPath(ctx.R.URL.Path)
+		if strings.HasPrefix(pathname, fmt.Sprintf("/v%d/", buildVersion)) {
+			pathname = strings.TrimPrefix(pathname, fmt.Sprintf("/v%d", buildVersion))
+		}
 		switch pathname {
 		case "/":
 			mdStr := strings.TrimSpace(string(utils.MustEncodeJSON(readme)))
@@ -56,13 +59,13 @@ func registerAPI(storageDir string, domain string, cdnDomain string, cdnDomainCh
 			default:
 				return throwErrorJS(ctx, 500, fmt.Errorf("Unknown error"))
 			}
-		case fmt.Sprintf("/v%d/_process_browser.js", builderID):
+		case "/_process_browser.js":
 			ctx.SetHeader("Cache-Control", "public, max-age=31536000, immutable")
 			return rex.Content("process/browser.js", start, bytes.NewReader([]byte(polyfills["process_browser.js"])))
-		case fmt.Sprintf("/v%d/_node_fs.js", builderID):
+		case "/_node_fs.js":
 			ctx.SetHeader("Cache-Control", "public, max-age=31536000, immutable")
 			return rex.Content("node/fs.js", start, bytes.NewReader([]byte(polyfills["node_fs.js"])))
-		case fmt.Sprintf("/v%d/_node_readline.js", builderID):
+		case "/_node_readline.js":
 			ctx.SetHeader("Cache-Control", "public, max-age=31536000, immutable")
 			return rex.Content("node/readline.js", start, bytes.NewReader([]byte(polyfills["node_readline.js"])))
 		}
@@ -148,13 +151,18 @@ func registerAPI(storageDir string, domain string, cdnDomain string, cdnDomainCh
 					ctx.SetHeader("Cache-Control", "public, max-age=31536000, immutable")
 					return data
 				}
-				fp := path.Join(storageDir, storageType, pathname)
-				if fileExists(fp) {
+				var filepath string
+				if (storageType == "builds" && !strings.HasPrefix(pathname, "/bundle-")) || storageType == "types" {
+					filepath = path.Join(storageDir, storageType, fmt.Sprintf("v%d", buildVersion), pathname)
+				} else {
+					filepath = path.Join(storageDir, storageType, pathname)
+				}
+				if fileExists(filepath) {
 					if storageType == "types" {
 						ctx.SetHeader("Content-Type", "application/typescript; charset=utf-8")
 					}
 					ctx.SetHeader("Cache-Control", "public, max-age=31536000, immutable")
-					return rex.File(fp)
+					return rex.File(filepath)
 				}
 			}
 		}
@@ -193,7 +201,7 @@ func registerAPI(storageDir string, domain string, cdnDomain string, cdnDomainCh
 			}
 		}
 		if bundleList == "" && endsWith(pathname, ".js") {
-			currentModule, err = parseModule(strings.TrimPrefix(pathname, fmt.Sprintf("/v%d", builderID)))
+			currentModule, err = parseModule(pathname)
 			if err == nil && !endsWith(currentModule.name, ".js") {
 				a := strings.Split(currentModule.submodule, "/")
 				if len(a) > 1 {
@@ -237,7 +245,7 @@ func registerAPI(storageDir string, domain string, cdnDomain string, cdnDomainCh
 				}
 			}
 		} else {
-			currentModule, err = parseModule(strings.TrimPrefix(pathname, fmt.Sprintf("/v%d", builderID)))
+			currentModule, err = parseModule(pathname)
 		}
 		if err != nil {
 			if strings.HasSuffix(err.Error(), "not found") {
@@ -349,7 +357,7 @@ func registerAPI(storageDir string, domain string, cdnDomain string, cdnDomainCh
 			}
 		}
 		if importMeta.Dts != "" && !noCheck {
-			ctx.SetHeader("X-TypeScript-Types", path.Join(importPrefix, importMeta.Dts))
+			ctx.SetHeader("X-TypeScript-Types", path.Join(importPrefix, fmt.Sprintf("v%d", buildVersion), importMeta.Dts))
 		}
 		ctx.SetHeader("Cache-Control", fmt.Sprintf("private, max-age=%d", refreshDuration))
 		ctx.SetHeader("Content-Type", "application/javascript; charset=utf-8")

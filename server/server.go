@@ -91,11 +91,11 @@ func Serve() {
 		}
 	}
 
-	data, err := ioutil.ReadFile(path.Join(etcDir, "builder.id"))
+	data, err := ioutil.ReadFile(path.Join(etcDir, "build.ver"))
 	if err == nil {
 		i, err := strconv.Atoi(strings.TrimSpace(string(data)))
 		if err == nil && i > 0 {
-			builderID = i
+			buildVersion = i
 		}
 	}
 
