@@ -110,7 +110,7 @@ import useSWR from 'https://esm.sh/swr?external=react@16.14.0'
 ## Self-Hosting
 
 You will need [Go](https://golang.org/dl) 1.14+ to compile the server, and ensure [supervisor](http://supervisord.org/) installed on your host machine.<br>
-The server runtime will install the latest nodejs (12+ LTS) automatically.
+The server runtime will install the latest nodejs (14+ LTS) automatically.
 
 ```bash
 $ git clone https://github.com/postui/esm.sh
