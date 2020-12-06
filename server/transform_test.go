@@ -83,7 +83,7 @@ func TestCopyDTS(t *testing.T) {
 		`    ReactInstance, Component, ComponentState,`,
 		`    ReactElement, SFCElement, CElement,`,
 		`    DOMAttributes, DOMElement, ReactNode, ReactPortal`,
-		`} from '/@types/react@16.9.49/index.d.ts';`,
+		`} from '/v1/@types/react@16.9.49/index.d.ts';`,
 		``,
 		`export { default as Anchor } from './anchor.d.ts';`,
 		`export { default as AutoComplete } from './auto-complete.d.ts';export { default as Alert } from './alert.d.ts';`,
@@ -120,7 +120,7 @@ func TestCopyDTS(t *testing.T) {
 		}
 	}
 
-	err = copyDTS("esm.sh", nmDir, saveDir, "test/index.d.ts")
+	err = copyDTS(moduleSlice{}, "esm.sh", nmDir, saveDir, "test/index.d.ts")
 	if err != nil && os.IsExist(err) {
 		t.Fatal(err)
 	}

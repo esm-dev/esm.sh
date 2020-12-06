@@ -45,7 +45,7 @@ func parseModuleExports(filepath string) (exports []string, ok bool, err error) 
 	return
 }
 
-func copyDTS(hostname string, nodeModulesDir string, saveDir string, dts string) (err error) {
+func copyDTS(external moduleSlice, hostname string, nodeModulesDir string, saveDir string, dts string) (err error) {
 	saveFilePath := path.Join(saveDir, dts)
 	dtsFilePath := path.Join(nodeModulesDir, regVersionPath.ReplaceAllString(dts, "$1/"))
 	dtsDir := path.Dir(dtsFilePath)
@@ -101,7 +101,7 @@ func copyDTS(hostname string, nodeModulesDir string, saveDir string, dts string)
 				importPath = ensureExt(strings.TrimSuffix(importPath, ".js"), ".d.ts")
 			}
 		} else {
-			// ignore builtin node modules
+			// nodejs builtin modules
 			if _, ok := builtInNodeModules[importPath]; ok {
 				importPath = "@types/node/" + importPath
 			}
@@ -125,12 +125,16 @@ func copyDTS(hostname string, nodeModulesDir string, saveDir string, dts string)
 					}
 				}
 			} else {
-				p, err := nodeEnv.getPackageInfo(importPath, "latest")
-				if err != nil && err.Error() == fmt.Sprintf("npm: package '%s' not found", importPath) {
-					p, err = nodeEnv.getPackageInfo("@types/"+importPath, "latest")
+				version := "latest"
+				for _, m := range external {
+					if m.name == pkgName {
+						version = m.version
+						break
+					}
 				}
-				if err == nil {
-					err = yarnAdd(p.Name)
+				p, err := nodeEnv.getPackageInfo(pkgName, version)
+				if err != nil && err.Error() == fmt.Sprintf("npm: package '%s' not found", pkgName) {
+					p, err = nodeEnv.getPackageInfo("@types/"+pkgName, "latest")
 				}
 				if err == nil {
 					if subpath != "" {
@@ -341,12 +345,12 @@ func copyDTS(hostname string, nodeModulesDir string, saveDir string, dts string)
 					n, _ := utils.SplitByFirstByte(subpath, '/')
 					pkg = fmt.Sprintf("%s/%s", pkg, n)
 				}
-				err = copyDTS(hostname, nodeModulesDir, saveDir, path.Join(pkg, dep))
+				err = copyDTS(external, hostname, nodeModulesDir, saveDir, path.Join(pkg, dep))
 			} else {
-				err = copyDTS(hostname, nodeModulesDir, saveDir, path.Join(path.Dir(dts), dep))
+				err = copyDTS(external, hostname, nodeModulesDir, saveDir, path.Join(path.Dir(dts), dep))
 			}
 		} else {
-			err = copyDTS(hostname, nodeModulesDir, saveDir, dep)
+			err = copyDTS(external, hostname, nodeModulesDir, saveDir, dep)
 		}
 		if err != nil {
 			os.Remove(saveFilePath)

@@ -187,6 +187,12 @@ func build(storageDir string, hostname string, options buildOptions) (ret buildR
 			peerPackages[name] = NpmPackage{
 				Name: name,
 			}
+			for _, m := range options.external {
+				if m.name == name {
+					version = m.version
+					break
+				}
+			}
 			installList = append(installList, name+"@"+version)
 		}
 	}
@@ -334,7 +340,7 @@ func build(storageDir string, hostname string, options buildOptions) (ret buildR
 			}
 		}
 		if types != "" {
-			err = copyDTS(hostname, path.Join(buildDir, "node_modules"), path.Join(storageDir, "types", fmt.Sprintf("v%d", buildVersion)), types)
+			err = copyDTS(options.external, hostname, path.Join(buildDir, "node_modules"), path.Join(storageDir, "types", fmt.Sprintf("v%d", buildVersion)), types)
 			if err != nil {
 				err = fmt.Errorf("copyDTS(%s): %v", types, err)
 				return
