@@ -42,7 +42,8 @@ func registerAPI(storageDir string, domain string, cdnDomain string, cdnDomainCh
 
 	rex.Query("*", func(ctx *rex.Context) interface{} {
 		pathname := utils.CleanPath(ctx.R.URL.Path)
-		if strings.HasPrefix(pathname, fmt.Sprintf("/v%d/", buildVersion)) {
+		hasBuildVerPrefix := strings.HasPrefix(pathname, fmt.Sprintf("/v%d/", buildVersion))
+		if hasBuildVerPrefix {
 			pathname = strings.TrimPrefix(pathname, fmt.Sprintf("/v%d", buildVersion))
 		}
 		switch pathname {
@@ -73,11 +74,11 @@ func registerAPI(storageDir string, domain string, cdnDomain string, cdnDomainCh
 		var storageType string
 		switch path.Ext(pathname) {
 		case ".js":
-			if strings.HasPrefix(pathname, "/bundle-") && len(strings.Split(pathname, "/")) == 2 {
+			if hasBuildVerPrefix || (strings.HasPrefix(pathname, "/bundle-") && len(strings.Split(pathname, "/")) == 2) {
 				storageType = "builds"
 			}
 		case ".ts":
-			if strings.HasSuffix(pathname, ".d.ts") {
+			if hasBuildVerPrefix && strings.HasSuffix(pathname, ".d.ts") {
 				storageType = "types"
 			} else {
 				storageType = "raw"
@@ -85,12 +86,12 @@ func registerAPI(storageDir string, domain string, cdnDomain string, cdnDomainCh
 		case ".json", ".jsx", ".tsx", ".css", ".less", ".sass", ".scss", ".stylus", ".styl", ".wasm":
 			storageType = "raw"
 		}
-		if storageType != "" {
-			if storageType == "raw" {
-				m, err := parseModule(pathname)
-				if err != nil {
-					return throwErrorJS(ctx, 500, err)
-				}
+		if storageType == "raw" {
+			m, err := parseModule(pathname)
+			if err != nil {
+				return throwErrorJS(ctx, 500, err)
+			}
+			if m.submodule != "" {
 				shouldRedirect := !regVersionPath.MatchString(pathname)
 				hostname := ctx.R.Host
 				proto := "http"
@@ -152,8 +153,11 @@ func registerAPI(storageDir string, domain string, cdnDomain string, cdnDomainCh
 				ctx.SetHeader("Cache-Control", "public, max-age=31536000, immutable")
 				return data
 			}
+			storageType = ""
+		}
+		if storageType != "" {
 			var filepath string
-			if storageType == "types" {
+			if hasBuildVerPrefix && (storageType == "builds" || storageType == "types") {
 				filepath = path.Join(storageDir, storageType, fmt.Sprintf("v%d", buildVersion), pathname)
 			} else {
 				filepath = path.Join(storageDir, storageType, pathname)
@@ -293,22 +297,19 @@ func registerAPI(storageDir string, domain string, cdnDomain string, cdnDomainCh
 			return ret.importMeta
 		}
 
-		importPath := currentModule.ImportPath()
-		importMeta, ok := ret.importMeta[importPath]
-		if !ok {
-			return throwErrorJS(ctx, 500, fmt.Errorf("package '%s' not found in bundle", importPath))
-		}
-
 		if isBare {
 			fp := path.Join(storageDir, "builds", fmt.Sprintf("v%d", buildVersion), pathname)
 			if fileExists(fp) {
 				ctx.SetHeader("Cache-Control", "public, max-age=31536000, immutable")
-				if importMeta.Dts != "" && !noCheck {
-					ctx.SetHeader("X-TypeScript-Types", path.Join("/", fmt.Sprintf("v%d", buildVersion), importMeta.Dts))
-				}
 				return rex.File(fp)
 			}
 			return 404
+		}
+
+		importPath := currentModule.ImportPath()
+		importMeta, ok := ret.importMeta[importPath]
+		if !ok {
+			return throwErrorJS(ctx, 500, fmt.Errorf("package '%s' not found in bundle", importPath))
 		}
 
 		buf := bytes.NewBuffer(nil)
