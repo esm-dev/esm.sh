@@ -21,7 +21,8 @@ import (
 
 var (
 	regVersionPath    = regexp.MustCompile(`([^/])@\d+\.\d+\.\d+([a-z0-9\.-]+)?/`)
-	regFromExpression = regexp.MustCompile(`(\s|})from\s*("|')`)
+	regFromExpr       = regexp.MustCompile(`(}|\s)from\s*("|')`)
+	regImportCallExpr = regexp.MustCompile(`import\((('[^']+')|("[^"]+"))\)`)
 	regReferenceTag   = regexp.MustCompile(`^<reference\s+(path|types)\s*=\s*('|")([^'"]+)("|')\s*/>$`)
 	regDeclareModule  = regexp.MustCompile(`^declare\s+module\s*('|")([^'"]+)("|')`)
 	regExportEqual    = regexp.MustCompile(`export\s*=`)
@@ -247,19 +248,18 @@ func copyDTS(external moduleSlice, hostname string, nodeModulesDir string, saveD
 					buf.WriteByte(';')
 				}
 				text := scanner.Text()
-				exp := strings.TrimSpace(text)
-				buf.WriteString(text[:strings.Index(text, exp)])
-				if exp != "" {
-					if importExportScope || startsWith(exp, "import ", "export ", "import{", "export{", "import {", "export {") {
+				expr := strings.TrimSpace(text)
+				buf.WriteString(text[:strings.Index(text, expr)])
+				if expr != "" {
+					if importExportScope || startsWith(expr, "import ", "export ", "import{", "export{", "import {", "export {") {
 						importExportScope = true
-						end := regFromExpression.MatchString(exp)
-						if end {
+						if regFromExpr.MatchString(expr) {
 							importExportScope = false
 							q := "'"
-							a := strings.Split(exp, q)
+							a := strings.Split(expr, q)
 							if len(a) != 3 {
 								q = `"`
-								a = strings.Split(exp, q)
+								a = strings.Split(expr, q)
 							}
 							if len(a) == 3 {
 								buf.WriteString(a[0])
@@ -268,13 +268,55 @@ func copyDTS(external moduleSlice, hostname string, nodeModulesDir string, saveD
 								buf.WriteString(q)
 								buf.WriteString(a[2])
 							} else {
-								buf.WriteString(exp)
+								buf.WriteString(expr)
 							}
 						} else {
-							buf.WriteString(exp)
+							if regImportCallExpr.MatchString(expr) {
+								buf.WriteString(regImportCallExpr.ReplaceAllStringFunc(expr, func(importCallExpr string) string {
+									q := "'"
+									a := strings.Split(importCallExpr, q)
+									if len(a) != 3 {
+										q = `"`
+										a = strings.Split(importCallExpr, q)
+									}
+									if len(a) == 3 {
+										buf := bytes.NewBuffer(nil)
+										buf.WriteString(a[0])
+										buf.WriteString(q)
+										buf.WriteString(rewriteFn(a[1]))
+										buf.WriteString(q)
+										buf.WriteString(a[2])
+										return buf.String()
+									}
+									return importCallExpr
+								}))
+							} else {
+								buf.WriteString(expr)
+							}
 						}
 					} else {
-						buf.WriteString(exp)
+						if regImportCallExpr.MatchString(expr) {
+							buf.WriteString(regImportCallExpr.ReplaceAllStringFunc(expr, func(importCallExpr string) string {
+								q := "'"
+								a := strings.Split(importCallExpr, q)
+								if len(a) != 3 {
+									q = `"`
+									a = strings.Split(importCallExpr, q)
+								}
+								if len(a) == 3 {
+									buf := bytes.NewBuffer(nil)
+									buf.WriteString(a[0])
+									buf.WriteString(q)
+									buf.WriteString(rewriteFn(a[1]))
+									buf.WriteString(q)
+									buf.WriteString(a[2])
+									return buf.String()
+								}
+								return importCallExpr
+							}))
+						} else {
+							buf.WriteString(expr)
+						}
 					}
 				}
 				if i > 0 && importExportScope {

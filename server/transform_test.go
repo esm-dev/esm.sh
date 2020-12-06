@@ -37,6 +37,7 @@ func TestParseModuleExports(t *testing.T) {
 
 func TestCopyDTS(t *testing.T) {
 	testDir := path.Join(os.TempDir(), "test")
+	os.RemoveAll(testDir)
 	ensureDir(testDir)
 
 	nmDir := path.Join(testDir, "node_modules")
@@ -49,7 +50,7 @@ func TestCopyDTS(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	err = yarnAdd("@types/react@16.9.49")
+	err = yarnAdd("@types/react@17.0.0")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -64,6 +65,7 @@ func TestCopyDTS(t *testing.T) {
 		`    DOMAttributes, DOMElement, ReactNode, ReactPortal`,
 		`} from 'react';`,
 		``,
+		`export type React = typeof import('react');`,
 		`export { default as Anchor } from './anchor';`,
 		`export { default as AutoComplete } from './auto-complete';export { default as Alert } from './alert';`,
 		`/* avatar */ export { default as Avatar } from '../avatar';`,
@@ -83,8 +85,9 @@ func TestCopyDTS(t *testing.T) {
 		`    ReactInstance, Component, ComponentState,`,
 		`    ReactElement, SFCElement, CElement,`,
 		`    DOMAttributes, DOMElement, ReactNode, ReactPortal`,
-		`} from '/v1/@types/react@16.9.49/index.d.ts';`,
+		`} from '/v1/@types/react@17.0.0/index.d.ts';`,
 		``,
+		`export type React = typeof import('/v1/@types/react@17.0.0/index.d.ts');`,
 		`export { default as Anchor } from './anchor.d.ts';`,
 		`export { default as AutoComplete } from './auto-complete.d.ts';export { default as Alert } from './alert.d.ts';`,
 		`/* avatar */ export { default as Avatar } from '../avatar.d.ts';`,
