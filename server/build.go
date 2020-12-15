@@ -200,6 +200,7 @@ func build(storageDir string, hostname string, options buildOptions) (ret buildR
 	log.Debugf("parse importMeta in %v", time.Now().Sub(start))
 
 	buildDir := path.Join(os.TempDir(), "esmd-build", rs.Hex.String(16))
+	nodeModulesDir := path.Join(buildDir, "node_modules")
 	ensureDir(buildDir)
 	defer os.RemoveAll(buildDir)
 
@@ -228,7 +229,7 @@ func build(storageDir string, hostname string, options buildOptions) (ret buildR
 	for _, pkg := range options.packages {
 		importPath := pkg.ImportPath()
 		meta := importMeta[importPath]
-		pkgDir := path.Join(buildDir, "node_modules", meta.Name)
+		pkgDir := path.Join(nodeModulesDir, meta.Name)
 		if pkg.submodule != "" {
 			if fileExists(path.Join(pkgDir, pkg.submodule, "package.json")) {
 				var p NpmPackage
@@ -315,32 +316,32 @@ func build(storageDir string, hostname string, options buildOptions) (ret buildR
 		meta := importMeta[pkg.ImportPath()]
 		nv := fmt.Sprintf("%s@%s", meta.Name, meta.Version)
 		if meta.Types != "" || meta.Typings != "" {
-			types = getTypesPath(*meta.NpmPackage)
+			types = getTypesPath(nodeModulesDir, *meta.NpmPackage, "")
 		} else if pkg.submodule == "" {
-			if fileExists(path.Join(buildDir, "node_modules", pkg.name, "index.d.ts")) {
+			if fileExists(path.Join(nodeModulesDir, pkg.name, "index.d.ts")) {
 				types = fmt.Sprintf("%s/%s", nv, "index.d.ts")
 			} else if !strings.HasPrefix(pkg.name, "@") {
 				var info NpmPackage
-				err = utils.ParseJSONFile(path.Join(buildDir, "node_modules", "@types/"+pkg.name, "package.json"), &info)
+				err = utils.ParseJSONFile(path.Join(nodeModulesDir, "@types", pkg.name, "package.json"), &info)
 				if err == nil {
-					types = getTypesPath(info)
+					types = getTypesPath(nodeModulesDir, info, "")
 				} else if !os.IsNotExist(err) {
 					return
 				}
 			}
 		} else {
-			if fileExists(path.Join(buildDir, "node_modules", pkg.name, pkg.submodule, "index.d.ts")) {
+			if fileExists(path.Join(nodeModulesDir, pkg.name, pkg.submodule, "index.d.ts")) {
 				types = fmt.Sprintf("%s/%s", nv, path.Join(pkg.submodule, "index.d.ts"))
-			} else if fileExists(path.Join(buildDir, "node_modules", pkg.name, ensureExt(pkg.submodule, ".d.ts"))) {
+			} else if fileExists(path.Join(nodeModulesDir, pkg.name, ensureExt(pkg.submodule, ".d.ts"))) {
 				types = fmt.Sprintf("%s/%s", nv, ensureExt(pkg.submodule, ".d.ts"))
-			} else if fileExists(path.Join(buildDir, "node_modules/@types", pkg.name, pkg.submodule, "index.d.ts")) {
+			} else if fileExists(path.Join(nodeModulesDir, "@types", pkg.name, pkg.submodule, "index.d.ts")) {
 				types = fmt.Sprintf("@types/%s/%s", nv, path.Join(pkg.submodule, "index.d.ts"))
-			} else if fileExists(path.Join(buildDir, "node_modules/@types", pkg.name, ensureExt(pkg.submodule, ".d.ts"))) {
+			} else if fileExists(path.Join(nodeModulesDir, "@types", pkg.name, ensureExt(pkg.submodule, ".d.ts"))) {
 				types = fmt.Sprintf("@types/%s/%s", nv, ensureExt(pkg.submodule, ".d.ts"))
 			}
 		}
 		if types != "" {
-			err = copyDTS(options.external, hostname, path.Join(buildDir, "node_modules"), path.Join(storageDir, "types", fmt.Sprintf("v%d", buildVersion)), types)
+			err = copyDTS(options.external, hostname, nodeModulesDir, path.Join(storageDir, "types", fmt.Sprintf("v%d", buildVersion)), types)
 			if err != nil {
 				err = fmt.Errorf("copyDTS(%s): %v", types, err)
 				return
@@ -354,7 +355,7 @@ func build(storageDir string, hostname string, options buildOptions) (ret buildR
 	i := 0
 	for name := range peerPackages {
 		var p NpmPackage
-		err = utils.ParseJSONFile(path.Join(buildDir, "node_modules", name, "package.json"), &p)
+		err = utils.ParseJSONFile(path.Join(nodeModulesDir, name, "package.json"), &p)
 		if err != nil {
 			return
 		}
@@ -680,14 +681,32 @@ func identify(importPath string) string {
 	return string(p)
 }
 
-func getTypesPath(p NpmPackage) string {
+func getTypesPath(nodeModulesDir string, p NpmPackage, subpath string) string {
 	types := ""
-	if p.Types != "" {
-		types = p.Types
-	} else if p.Typings != "" {
-		types = p.Typings
-	} else if p.Main != "" {
-		types = strings.TrimSuffix(p.Main, ".js")
+	if subpath != "" {
+		var subpkg NpmPackage
+		var subtypes string
+		subpkgJSONFile := path.Join(nodeModulesDir, p.Name, subpath, "package.json")
+		if fileExists(subpkgJSONFile) && utils.ParseJSONFile(subpkgJSONFile, &subpkg) == nil {
+			if subpkg.Types != "" {
+				subtypes = subpkg.Types
+			} else if subpkg.Typings != "" {
+				subtypes = subpkg.Typings
+			}
+		}
+		if subtypes != "" {
+			types = path.Join("/", subpath, subtypes)
+		} else {
+			types = subpath
+		}
+	} else {
+		if p.Types != "" {
+			types = p.Types
+		} else if p.Typings != "" {
+			types = p.Typings
+		} else if p.Main != "" {
+			types = strings.TrimSuffix(p.Main, ".js")
+		}
 	}
 	if types != "" {
 		return fmt.Sprintf("%s@%s%s", p.Name, p.Version, ensureExt(path.Join("/", types), ".d.ts"))

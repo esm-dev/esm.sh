@@ -91,7 +91,7 @@ func copyDTS(external moduleSlice, hostname string, nodeModulesDir string, saveD
 					if fileExists(packageJSONFile) {
 						var p NpmPackage
 						if utils.ParseJSONFile(packageJSONFile, &p) == nil {
-							types := getTypesPath(p)
+							types := getTypesPath(nodeModulesDir, p, "")
 							if types != "" {
 								_, typespath := utils.SplitByFirstByte(types, '/')
 								importPath = strings.TrimSuffix(importPath, "/") + "/" + typespath
@@ -99,7 +99,7 @@ func copyDTS(external moduleSlice, hostname string, nodeModulesDir string, saveD
 						}
 					}
 				}
-				importPath = ensureExt(strings.TrimSuffix(importPath, ".js"), ".d.ts")
+				importPath = ensureExt(importPath, ".d.ts")
 			}
 		} else {
 			// nodejs builtin modules
@@ -119,11 +119,7 @@ func copyDTS(external moduleSlice, hostname string, nodeModulesDir string, saveD
 			if fileExists(packageJSONFile) {
 				var p NpmPackage
 				if utils.ParseJSONFile(packageJSONFile, &p) == nil {
-					if subpath != "" {
-						importPath = fmt.Sprintf("%s@%s%s", p.Name, p.Version, ensureExt(utils.CleanPath(subpath), ".d.ts"))
-					} else {
-						importPath = getTypesPath(p)
-					}
+					importPath = getTypesPath(nodeModulesDir, p, subpath)
 				}
 			} else {
 				version := "latest"
@@ -138,11 +134,7 @@ func copyDTS(external moduleSlice, hostname string, nodeModulesDir string, saveD
 					p, err = nodeEnv.getPackageInfo("@types/"+pkgName, "latest")
 				}
 				if err == nil {
-					if subpath != "" {
-						importPath = fmt.Sprintf("%s@%s%s", p.Name, p.Version, ensureExt(utils.CleanPath(subpath), ".d.ts"))
-					} else {
-						importPath = getTypesPath(p)
-					}
+					importPath = getTypesPath(nodeModulesDir, p, subpath)
 				}
 			}
 		}
