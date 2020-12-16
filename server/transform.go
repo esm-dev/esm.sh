@@ -87,19 +87,20 @@ func copyDTS(external moduleSlice, hostname string, nodeModulesDir string, saveD
 				if fileExists(path.Join(dtsDir, importPath, "index.d.ts")) {
 					importPath = strings.TrimSuffix(importPath, "/") + "/index.d.ts"
 				} else {
+					var p NpmPackage
 					packageJSONFile := path.Join(dtsDir, importPath, "package.json")
-					if fileExists(packageJSONFile) {
-						var p NpmPackage
-						if utils.ParseJSONFile(packageJSONFile, &p) == nil {
-							types := getTypesPath(nodeModulesDir, p, "")
-							if types != "" {
-								_, typespath := utils.SplitByFirstByte(types, '/')
-								importPath = strings.TrimSuffix(importPath, "/") + "/" + typespath
-							}
+					if fileExists(packageJSONFile) && utils.ParseJSONFile(packageJSONFile, &p) == nil {
+						types := getTypesPath(nodeModulesDir, p, "")
+						if types != "" {
+							_, typespath := utils.SplitByFirstByte(types, '/')
+							importPath = strings.TrimSuffix(importPath, "/") + "/" + typespath
+						} else {
+							importPath = ensureExt(strings.TrimSuffix(importPath, ".js"), ".d.ts")
 						}
+					} else {
+						importPath = ensureExt(strings.TrimSuffix(importPath, ".js"), ".d.ts")
 					}
 				}
-				importPath = ensureExt(importPath, ".d.ts")
 			}
 		} else {
 			// nodejs builtin modules
