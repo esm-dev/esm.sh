@@ -611,10 +611,7 @@ esbuild:
 		fmt.Fprintf(jsContentBuf, `import process from "/v%d/_process_browser.js";%sprocess.env.NODE_ENV="%s";%s`, buildVersion, eol, env, eol)
 	}
 	if regBuffer.Match(outputContent) {
-		p, err := nodeEnv.getPackageInfo("buffer", "latest")
-		if err == nil {
-			fmt.Fprintf(jsContentBuf, `import Buffer from "/v%d/buffer@%s/%s/buffer.js";%s`, buildVersion, p.Version, options.target, eol)
-		}
+		fmt.Fprintf(jsContentBuf, `import { Buffer } from "/v%d/_node_buffer.js";%s`, buildVersion, eol)
 	}
 	if peerModulesForCommonjs.Size() > 0 {
 		var cases []string

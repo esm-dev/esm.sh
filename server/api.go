@@ -63,9 +63,9 @@ func registerAPI(storageDir string, domain string, cdnDomain string, cdnDomainCh
 		case "/_process_browser.js":
 			ctx.SetHeader("Cache-Control", "public, max-age=31536000, immutable")
 			return rex.Content("process/browser.js", start, bytes.NewReader([]byte(polyfills["process_browser.js"])))
-		case "/_node_fs.js":
+		case "/_node_fs.js", "/_node_buffer.js":
 			ctx.SetHeader("Cache-Control", "public, max-age=31536000, immutable")
-			return rex.Content("node/fs.js", start, bytes.NewReader([]byte(polyfills["node_fs.js"])))
+			return rex.Content(pathname, start, bytes.NewReader([]byte(polyfills[strings.TrimPrefix(pathname, "/_")])))
 		case "/_node_readline.js":
 			ctx.SetHeader("Cache-Control", "public, max-age=31536000, immutable")
 			return rex.Content("node/readline.js", start, bytes.NewReader([]byte(polyfills["node_readline.js"])))
