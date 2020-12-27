@@ -33,6 +33,7 @@ var builtInNodeModules = map[string]bool{
 	"async_hooks":         true,
 	"child_process":       true,
 	"cluster":             true,
+	"buffer":              true,
 	"console":             true,
 	"constants":           true,
 	"crypto":              true,
@@ -78,6 +79,7 @@ var builtInNodeModules = map[string]bool{
 // copy from https://github.com/webpack/webpack/blob/master/lib/ModuleNotFoundError.js#L13
 var polyfilledBuiltInNodeModules = map[string]string{
 	"assert":              "assert",
+	"buffer":              "buffer",
 	"console":             "console-browserify",
 	"constants":           "constants-browserify",
 	"crypto":              "crypto-browserify",
