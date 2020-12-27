@@ -142,15 +142,24 @@ func Serve() {
 
 	registerAPI(storageDir, domain, cdnDomain, cdnDomainChina)
 
+	var certFile string
+	var keyFile string
+	if fileExists(path.Join(etcDir, "esm.sh.cert")) && fileExists(path.Join(etcDir, "esm.sh.key")) {
+		certFile = path.Join(etcDir, "esm.sh.cert")
+		keyFile = path.Join(etcDir, "esm.sh.key")
+	}
+
 	C := rex.Serve(rex.ServerConfig{
 		Port: uint16(port),
 		TLS: rex.TLSConfig{
 			Port:         uint16(httpsPort),
 			AutoRedirect: !isDev,
+			CertFile:     certFile,
+			KeyFile:      keyFile,
 			AutoTLS: rex.AutoTLSConfig{
-				AcceptTOS: !isDev,
-				Hosts:     []string{"www." + domain, domain, cdnDomain},
-				CacheDir:  path.Join(etcDir, "/cache/autotls"),
+				AcceptTOS: !isDev && certFile == "",
+				Hosts:     []string{"www." + domain, domain, cdnDomain, cdnDomainChina},
+				CacheDir:  path.Join(etcDir, "autotls"),
 			},
 		},
 	})
