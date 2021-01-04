@@ -579,9 +579,8 @@ esbuild:
 
 	log.Debugf("esbuild %s %s %s in %v", options.packages.String(), options.target, env, time.Now().Sub(start))
 
-	var eol, indent string
+	var eol string
 	if options.isDev {
-		indent = "  "
 		eol = EOL
 	}
 
@@ -614,24 +613,14 @@ esbuild:
 		fmt.Fprintf(jsContentBuf, `import { Buffer } from "/v%d/_node_buffer.js";%s`, buildVersion, eol)
 	}
 	if peerModulesForCommonjs.Size() > 0 {
-		var cases []string
 		for _, entry := range peerModulesForCommonjs.Entries() {
 			name, importPath := entry[0], entry[1]
 			if importPath != "" {
 				identifier := identify(name)
-				cases = append(cases, fmt.Sprintf(`case "%s":%s%s%s%sreturn __%s;`, name, eol, indent, indent, indent, identifier))
-				fmt.Fprintf(jsContentBuf, `import __%s from "%s";%s`, identifier, importPath, eol)
+				fmt.Fprintf(jsContentBuf, `import __%s$ from "%s";%s`, identifier, importPath, eol)
+				outputContent = bytes.ReplaceAll(outputContent, []byte(fmt.Sprintf("require(\"%s\")", name)), []byte(fmt.Sprintf("__%s$", identifier)))
 			}
 		}
-		fmt.Fprintf(jsContentBuf, `var require = name => {%s`, eol)
-		fmt.Fprintf(jsContentBuf, `%sswitch (name) {%s`, indent, eol)
-		for _, c := range cases {
-			fmt.Fprintf(jsContentBuf, `%s%s%s%s`, indent, indent, c, eol)
-		}
-		fmt.Fprintf(jsContentBuf, `%s%sdefault:%s`, indent, indent, eol)
-		fmt.Fprintf(jsContentBuf, `%s%s%sthrow new Error("[%s] Could not resolve \"" + name + "\"");%s`, indent, indent, indent, jsCopyrightName, eol)
-		fmt.Fprintf(jsContentBuf, `%s}%s`, indent, eol)
-		fmt.Fprintf(jsContentBuf, `};%s`, eol)
 	}
 	if regGlobal.Match(outputContent) {
 		fmt.Fprintf(jsContentBuf, `if (typeof global === "undefined") var global = window;%s`, eol)
