@@ -3,6 +3,7 @@ package server
 import (
 	"os"
 	"regexp"
+	"strconv"
 	"strings"
 	"sync"
 )
@@ -133,6 +134,32 @@ func (s *stringMap) Set(key string, value string) {
 	s.m[key] = value
 }
 
+// sortable version slice
+type versionSlice []string
+
+func (s versionSlice) Len() int      { return len(s) }
+func (s versionSlice) Swap(i, j int) { s[i], s[j] = s[j], s[i] }
+func (s versionSlice) Less(i, j int) bool {
+	a := strings.Split(s[i], ".")
+	b := strings.Split(s[j], ".")
+	if len(a) != 3 || len(b) != 3 {
+		return s[i] > s[j]
+	}
+	a0, _ := strconv.Atoi(a[0])
+	b0, _ := strconv.Atoi(b[0])
+	if a0 == b0 {
+		a1, _ := strconv.Atoi(a[1])
+		b1, _ := strconv.Atoi(b[1])
+		if a1 == b1 {
+			a2, _ := strconv.Atoi(a[2])
+			b2, _ := strconv.Atoi(b[2])
+			return a2 > b2
+		}
+		return a1 > b1
+	}
+	return a0 > b0
+}
+
 func isValidatedESImportPath(importPath string) bool {
 	return strings.HasPrefix(importPath, "/") || strings.HasPrefix(importPath, "./") || strings.HasPrefix(importPath, "../") || importPath == "." || importPath == ".."
 }
@@ -155,6 +182,11 @@ func endsWith(s string, suffixs ...string) bool {
 	return false
 }
 
+func fileExists(filepath string) bool {
+	fi, err := os.Lstat(filepath)
+	return err == nil && !fi.IsDir()
+}
+
 func ensureExt(path string, ext string) string {
 	if !strings.HasSuffix(path, ext) {
 		return path + ext
@@ -168,9 +200,4 @@ func ensureDir(dir string) (err error) {
 		err = os.MkdirAll(dir, 0755)
 	}
 	return
-}
-
-func fileExists(filepath string) bool {
-	fi, err := os.Lstat(filepath)
-	return err == nil && !fi.IsDir()
 }

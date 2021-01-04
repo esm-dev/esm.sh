@@ -142,8 +142,7 @@ func Serve() {
 
 	registerAPI(storageDir, domain, cdnDomain, cdnDomainChina)
 
-	var certFile string
-	var keyFile string
+	var certFile, keyFile string
 	if fileExists(path.Join(etcDir, "esm.sh.cert")) && fileExists(path.Join(etcDir, "esm.sh.key")) {
 		certFile = path.Join(etcDir, "esm.sh.cert")
 		keyFile = path.Join(etcDir, "esm.sh.key")
