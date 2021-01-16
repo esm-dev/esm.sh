@@ -393,7 +393,7 @@ func build(storageDir string, hostname string, options buildOptions) (ret buildR
 	if single {
 		pkg := options.packages[0]
 		importPath := pkg.ImportPath()
-		importIdentifier := identify(importPath)
+		importIdentifier := "__" + identify(importPath)
 		meta := importMeta[importPath]
 		exports := []string{}
 		hasDefaultExport := false
@@ -407,7 +407,7 @@ func build(storageDir string, hostname string, options buildOptions) (ret buildR
 		if meta.Module != "" {
 			fmt.Fprintf(buf, `export * from "%s";%s`, importPath, EOL)
 			if hasDefaultExport {
-				fmt.Fprintf(buf, `export {default} from "%s";`, importPath)
+				fmt.Fprintf(buf, `export { default } from "%s";`, importPath)
 			}
 		} else {
 			if hasDefaultExport {
