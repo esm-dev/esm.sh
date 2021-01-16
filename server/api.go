@@ -81,7 +81,7 @@ func registerAPI(storageDir string, domain string, cdnDomain string, cdnDomainCh
 				storageType = "builds"
 			}
 		case ".ts":
-			if hasBuildVerPrefix && strings.HasSuffix(pathname, ".d.ts") && !strings.HasPrefix(pathname, "/@types/") {
+			if hasBuildVerPrefix && strings.HasSuffix(pathname, ".d.ts") {
 				storageType = "types"
 			} else {
 				storageType = "raw"
