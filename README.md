@@ -66,7 +66,7 @@ import React from 'https://esm.sh/react' // actual from 'https://esm.sh/[react,r
 
 ## Deno compatibility
 
-**esm.sh** will polyfill the node internal modules(**fs**,**os**,etc) with [`https://deno.land/std/node`](https://deno.land/std/node) to support some modules to work in Deno, like `postcss`:
+**esm.sh** will create polyfills for the node internal modules(**fs**, **os**, etc) with [`deno.land/std/node`](https://deno.land/std/node) to support some packagea working in Deno, like `postcss`:
 
 ```javascript
 import postcss from 'https://esm.sh/postcss'
