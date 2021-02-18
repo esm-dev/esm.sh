@@ -49,17 +49,19 @@ import ReactDom from 'https://esm.sh/[react,react-dom,swr]/react-dom'
 
 or your can define the bundle list in `import-map.json` ([import-maps proposal](https://github.com/WICG/import-maps))
 
-```json
+```
 {
     "imports": {
-        "https://esm.sh/": "https://esm.sh/[react,react-dom,swr]/",
+        "react": "https://esm.sh/[react,react-dom,swr]/react",
+        "react-dom": "https://esm.sh/[react,react-dom,swr]/react-dom",
+        "swr": "https://esm.sh/[react,react-dom,swr]/swr",
         ...
     }
 }
 ```
 
 ```javascript
-import React from 'https://esm.sh/react' // actual from 'https://esm.sh/[react,react-dom,swr]/react'
+import React from 'react' // actual from 'https://esm.sh/[react,react-dom,swr]/react'
 ```
 
 ⚠️ The bundling packages in URL are litmited up to **10**, to bundle more packages, please use the **esm** client(WIP).
