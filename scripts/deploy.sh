@@ -133,7 +133,6 @@ ssh -p $sshPort $user@$host << EOF
     else
         if [ "$rebuild" == "yes" ]; then
             rm -f ${etcDir}/esm.db
-            rm -rf ${etcDir}/storage
             echo "$buildVersion" > ${etcDir}/build.ver
             echo "esmd: rebuilt"
         fi

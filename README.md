@@ -49,24 +49,26 @@ import ReactDom from 'https://esm.sh/[react,react-dom,swr]/react-dom'
 
 or your can define the bundle list in `import-map.json` ([import-maps proposal](https://github.com/WICG/import-maps))
 
-```json
+```
 {
     "imports": {
-        "https://esm.sh/": "https://esm.sh/[react,react-dom,swr]/",
+        "react": "https://esm.sh/[react,react-dom,swr]/react",
+        "react-dom": "https://esm.sh/[react,react-dom,swr]/react-dom",
+        "swr": "https://esm.sh/[react,react-dom,swr]/swr",
         ...
     }
 }
 ```
 
 ```javascript
-import React from 'https://esm.sh/react' // actual from 'https://esm.sh/[react,react-dom,swr]/react'
+import React from 'react' // actual from 'https://esm.sh/[react,react-dom,swr]/react'
 ```
 
 ⚠️ The bundling packages in URL are litmited up to **10**, to bundle more packages, please use the **esm** client(WIP).
 
 ## Deno compatibility
 
-**esm.sh** will polyfill the node internal modules(**fs**,**os**,etc) with [`https://deno.land/std/node`](https://deno.land/std/node) to support some modules to work in Deno, like `postcss`:
+**esm.sh** provides polyfills for the node internal modules(**fs**, **os**, etc) with [`deno.land/std/node`](https://deno.land/std/node) to support some packages working in Deno, like `postcss`:
 
 ```javascript
 import postcss from 'https://esm.sh/postcss'
@@ -84,7 +86,7 @@ By default, **esm.sh** will response a custom HTTP header of `X-TypeScript-Types
 
 ![figure #1](./assets/figure-1.png)
 
-You can pass the `no-check` query to disable the `types` header since some types are incorrect:
+You can pass the `no-check` query to disable the `types` header if some types are incorrect:
 
 ```javascript
 import unescape from 'https://esm.sh/lodash/unescape?no-check'

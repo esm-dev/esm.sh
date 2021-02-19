@@ -43,8 +43,14 @@ func registerAPI(storageDir string, domain string, cdnDomain string, cdnDomainCh
 	rex.Query("*", func(ctx *rex.Context) interface{} {
 		pathname := utils.CleanPath(ctx.R.URL.Path)
 		hasBuildVerPrefix := strings.HasPrefix(pathname, fmt.Sprintf("/v%d/", buildVersion))
+		prevBuildVer := ""
 		if hasBuildVerPrefix {
 			pathname = strings.TrimPrefix(pathname, fmt.Sprintf("/v%d", buildVersion))
+		} else if regVerPath.MatchString(pathname) {
+			a := strings.Split(pathname, "/")
+			pathname = "/" + strings.Join(a[2:], "/")
+			hasBuildVerPrefix = true
+			prevBuildVer = a[1]
 		}
 		switch pathname {
 		case "/":
@@ -63,12 +69,9 @@ func registerAPI(storageDir string, domain string, cdnDomain string, cdnDomainCh
 		case "/_process_browser.js":
 			ctx.SetHeader("Cache-Control", "public, max-age=31536000, immutable")
 			return rex.Content("process/browser.js", start, bytes.NewReader([]byte(polyfills["process_browser.js"])))
-		case "/_node_fs.js", "/_node_buffer.js":
+		case "/_node_fs.js", "/_node_buffer.js", "/_node_readline.js":
 			ctx.SetHeader("Cache-Control", "public, max-age=31536000, immutable")
 			return rex.Content(pathname, start, bytes.NewReader([]byte(polyfills[strings.TrimPrefix(pathname, "/_")])))
-		case "/_node_readline.js":
-			ctx.SetHeader("Cache-Control", "public, max-age=31536000, immutable")
-			return rex.Content("node/readline.js", start, bytes.NewReader([]byte(polyfills["node_readline.js"])))
 		}
 
 		var storageType string
@@ -158,7 +161,11 @@ func registerAPI(storageDir string, domain string, cdnDomain string, cdnDomainCh
 		if storageType != "" {
 			var filepath string
 			if hasBuildVerPrefix && (storageType == "builds" || storageType == "types") {
-				filepath = path.Join(storageDir, storageType, fmt.Sprintf("v%d", buildVersion), pathname)
+				if prevBuildVer != "" {
+					filepath = path.Join(storageDir, storageType, prevBuildVer, pathname)
+				} else {
+					filepath = path.Join(storageDir, storageType, fmt.Sprintf("v%d", buildVersion), pathname)
+				}
 			} else {
 				filepath = path.Join(storageDir, storageType, pathname)
 			}
