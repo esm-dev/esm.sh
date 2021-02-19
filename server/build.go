@@ -472,7 +472,7 @@ esbuild:
 		MinifySyntax:      minify,
 		Define:            define,
 		Plugins: []api.Plugin{
-			api.Plugin{
+			{
 				Name: "rewrite-external-path",
 				Setup: func(plugin api.PluginBuild) {
 					plugin.OnResolve(
