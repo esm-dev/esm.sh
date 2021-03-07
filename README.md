@@ -32,7 +32,7 @@ import 'https://esm.sh/tailwindcss/dist/tailwind.min.css'
 import React from 'https://esm.sh/react?target=es2020'
 ```
 
-Avaiable `target`: **es2015** - **es2020**, **esnext**
+Avaiable `target`: **es2015** - **es2020**, **esnext**, and **deno**
 
 ### Development mode
 
@@ -51,12 +51,12 @@ or your can define the bundle list in `import-map.json` ([import-maps proposal](
 
 ```
 {
-    "imports": {
-        "react": "https://esm.sh/[react,react-dom,swr]/react",
-        "react-dom": "https://esm.sh/[react,react-dom,swr]/react-dom",
-        "swr": "https://esm.sh/[react,react-dom,swr]/swr",
-        ...
-    }
+  "imports": {
+    "react": "https://esm.sh/[react,react-dom,swr]/react",
+    "react-dom": "https://esm.sh/[react,react-dom,swr]/react-dom",
+    "swr": "https://esm.sh/[react,react-dom,swr]/swr",
+    ...
+  }
 }
 ```
 
@@ -64,20 +64,20 @@ or your can define the bundle list in `import-map.json` ([import-maps proposal](
 import React from 'react' // actual from 'https://esm.sh/[react,react-dom,swr]/react'
 ```
 
-⚠️ The bundling packages in URL are litmited up to **10**, to bundle more packages, please use the **esm** client(WIP).
+⚠️ The bundling packages in URL are litmited up to **10**, to bundle more packages, please use the **esm** client (WIP).
 
 ## Deno compatibility
 
-**esm.sh** provides polyfills for the node internal modules(**fs**, **os**, etc) with [`deno.land/std/node`](https://deno.land/std/node) to support some packages working in Deno, like `postcss`:
+**esm.sh** will replace the node internal modules (**fs**, **os**, etc) with [`deno.land/std/node`](https://deno.land/std/node) to support some packages working in Deno, like `postcss`:
 
 ```javascript
 import postcss from 'https://esm.sh/postcss'
 import autoprefixer from 'https://esm.sh/autoprefixer'
 
-const css = (await postcss([ autoprefixer]).process(`
-    backdrop-filter: blur(5px);
-    user-select: none;
-`).async()).content
+console.log(await postcss([ autoprefixer ]).process(`
+  backdrop-filter: blur(5px);
+  user-select: none;
+`).async())
 ```
 
 ### X-Typescript-Types
@@ -86,7 +86,7 @@ By default, **esm.sh** will response a custom HTTP header of `X-TypeScript-Types
 
 ![figure #1](./assets/figure-1.png)
 
-You can pass the `no-check` query to disable the `types` header if some types are incorrect:
+You can pass the `no-check` query to disable the `X-TypeScript-Types` header if some types are incorrect:
 
 ```javascript
 import unescape from 'https://esm.sh/lodash/unescape?no-check'
@@ -97,7 +97,7 @@ import unescape from 'https://esm.sh/lodash/unescape?no-check'
 Different with [Skypack](https://skypack.dev) and [jspm](https://jspm.org), **esm.sh** will bundle all dependencies(exclude peerDependencies) for each package, that means there may be redundant contents transmitted when you are importing multiple packages.<br>
 This should be improved when the http/3(quic) is ready. For now the best practice is using the **bundle mode**.
 
-As optional, you can split code manually with `external` query:
+As optional, you can split code manually with the `external` query:
 
 ```javascript
 import React from 'https://esm.sh/react@16.14.0'
