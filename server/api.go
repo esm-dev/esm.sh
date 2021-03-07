@@ -180,7 +180,11 @@ func registerAPI(storageDir string, domain string, cdnDomain string, cdnDomainCh
 
 		target := strings.ToLower(strings.TrimSpace(ctx.Form.Value("target")))
 		if _, ok := targets[target]; !ok {
-			target = "esnext"
+			if strings.HasPrefix(ctx.R.UserAgent(), "Deno/") {
+				target = "deno"
+			} else {
+				target = "esnext"
+			}
 		}
 		external := moduleSlice{}
 		for _, p := range strings.Split(ctx.Form.Value("external"), ",") {

@@ -33,6 +33,7 @@ var (
 )
 
 var targets = map[string]api.Target{
+	"deno":   api.ESNext,
 	"es2015": api.ES2015,
 	"es2016": api.ES2016,
 	"es2017": api.ES2017,
@@ -497,6 +498,19 @@ esbuild:
 								}
 							}
 							if !ok {
+								if options.target == "deno" {
+									_, yes := denoStdNodeModules[resolvePath]
+									if yes {
+										pathname := fmt.Sprintf("https://deno.land/std/node/%s.ts", resolvePath)
+										if esm {
+											resolvePath = pathname
+										} else {
+											peerModulesForCommonjs.Set(resolvePath, pathname)
+										}
+										return api.OnResolveResult{Path: resolvePath, External: true, Namespace: "http"}, nil
+									}
+								}
+
 								polyfill, yes := polyfilledBuiltInNodeModules[resolvePath]
 								if yes {
 									p, err := nodeEnv.getPackageInfo(polyfill, "latest")
@@ -610,10 +624,18 @@ esbuild:
 	// nodejs compatibility
 	outputContent := result.OutputFiles[0].Contents
 	if regProcess.Match(outputContent) {
-		fmt.Fprintf(jsContentBuf, `import process from "/v%d/_process_browser.js";%sprocess.env.NODE_ENV="%s";%s`, buildVersion, eol, env, eol)
+		if options.target == "deno" {
+			fmt.Fprintf(jsContentBuf, `import process from "https://deno.land/std/node/process.ts";%s`, eol)
+		} else {
+			fmt.Fprintf(jsContentBuf, `import process from "/v%d/_process_browser.js";%sprocess.env.NODE_ENV="%s";%s`, buildVersion, eol, env, eol)
+		}
 	}
 	if regBuffer.Match(outputContent) {
-		fmt.Fprintf(jsContentBuf, `import { Buffer } from "/v%d/_node_buffer.js";%s`, buildVersion, eol)
+		if options.target == "deno" {
+			fmt.Fprintf(jsContentBuf, `import { Buffer } from "https://deno.land/std/node/buffer.ts";%s`, eol)
+		} else {
+			fmt.Fprintf(jsContentBuf, `import { Buffer } from "/v%d/_node_buffer.js";%s`, buildVersion, eol)
+		}
 	}
 	if peerModulesForCommonjs.Size() > 0 {
 		for _, entry := range peerModulesForCommonjs.Entries() {
