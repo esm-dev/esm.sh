@@ -457,7 +457,7 @@ func build(storageDir string, hostname string, options buildOptions) (ret buildR
 		"process.env.NODE_ENV":        fmt.Sprintf(`"%s"`, env),
 		"global.process.env.NODE_ENV": fmt.Sprintf(`"%s"`, env),
 	}
-	missingResolved := newStringSet()
+	indirectRequires := newStringSet()
 esbuild:
 	start = time.Now()
 	peerModulesForCommonjs := newStringMap()
@@ -554,27 +554,30 @@ esbuild:
 		},
 	})
 	for _, w := range result.Warnings {
-		if strings.HasPrefix(w.Text, `Indirect calls to "require" will not be bundled`) {
+		if !strings.HasPrefix(w.Text, `Indirect calls to "require" will not be bundled`) {
 			log.Warn(w.Text)
 		}
 	}
 	if len(result.Errors) > 0 {
-		fe := result.Errors[0]
-		if strings.HasPrefix(fe.Text, `Could not resolve "`) {
-			missingModule := strings.Split(fe.Text, `"`)[1]
-			if missingModule != "" {
-				if !missingResolved.Has(missingModule) {
-					err = yarnAdd(missingModule)
-					if err != nil {
-						return
+		extraExternals := []string{}
+		for _, e := range result.Errors {
+			if strings.HasPrefix(e.Text, `Could not resolve "`) {
+				missingModule := strings.Split(e.Text, `"`)[1]
+				if missingModule != "" {
+					if !indirectRequires.Has(missingModule) {
+						indirectRequires.Set(missingModule)
+						extraExternals = append(extraExternals, missingModule)
 					}
-					missingResolved.Set(missingModule)
-					goto esbuild // rebuild
 				}
+			} else {
+				err = errors.New("esbuild: " + e.Text)
+				return
 			}
 		}
-		err = errors.New("esbuild: " + fe.Text)
-		return
+		if len(extraExternals) > 0 {
+			externals = append(externals, extraExternals...)
+			goto esbuild // rebuild
+		}
 	}
 
 	log.Debugf("esbuild %s %s %s in %v", options.packages.String(), options.target, env, time.Now().Sub(start))
