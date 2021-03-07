@@ -76,6 +76,7 @@ var builtInNodeModules = map[string]bool{
 	"zlib":                true,
 }
 
+// status: https://deno.land/std/node
 var denoStdNodeModules = map[string]bool{
 	"assert": true,
 	// "async_hooks":         true,
