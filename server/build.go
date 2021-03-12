@@ -460,8 +460,11 @@ func build(storageDir string, hostname string, options buildOptions) (ret buildR
 	}
 	minify := !options.isDev
 	define := map[string]string{
-		"__filename":                  fmt.Sprintf(`"https://%s/%s"`, hostname, ret.buildID),
+		"__filename":                  fmt.Sprintf(`"https://%s/%s.js"`, hostname, ret.buildID),
 		"__dirname":                   fmt.Sprintf(`"https://%s/%s"`, hostname, path.Dir(ret.buildID)),
+		"global":                      "__global$",
+		"process":                     "__process$",
+		"Buffer":                      "__Buffer$",
 		"process.env.NODE_ENV":        fmt.Sprintf(`"%s"`, env),
 		"global.process.env.NODE_ENV": fmt.Sprintf(`"%s"`, env),
 	}
@@ -634,18 +637,18 @@ esbuild:
 		outputContent := file.Contents
 		if strings.HasSuffix(file.Path, ".js") {
 			// add nodejs/deno compatibility
-			if regProcess.Match(outputContent) {
+			if bytes.Contains(outputContent, []byte("__process$")) {
 				if options.target == "deno" {
-					fmt.Fprintf(jsContentBuf, `import process from "https://deno.land/std/node/process.ts";%s`, eol)
+					fmt.Fprintf(jsContentBuf, `import __process$ from "https://deno.land/std/node/process.ts";%s`, eol)
 				} else {
-					fmt.Fprintf(jsContentBuf, `import process from "/v%d/_process_browser.js";%sprocess.env.NODE_ENV="%s";%s`, buildVersion, eol, env, eol)
+					fmt.Fprintf(jsContentBuf, `import __process$ from "/v%d/_process_browser.js";%s__process$.env.NODE_ENV="%s";%s`, buildVersion, eol, env, eol)
 				}
 			}
-			if regBuffer.Match(outputContent) {
+			if bytes.Contains(outputContent, []byte("__Buffer$")) {
 				if options.target == "deno" {
-					fmt.Fprintf(jsContentBuf, `import { Buffer } from "https://deno.land/std/node/buffer.ts";%s`, eol)
+					fmt.Fprintf(jsContentBuf, `import { Buffer as __Buffer$ } from "https://deno.land/std/node/buffer.ts";%s`, eol)
 				} else {
-					fmt.Fprintf(jsContentBuf, `import { Buffer } from "/v%d/_node_buffer.js";%s`, buildVersion, eol)
+					fmt.Fprintf(jsContentBuf, `import { Buffer as __Buffer$ } from "/v%d/_node_buffer.js";%s`, buildVersion, eol)
 				}
 			}
 			if peerModulesForCommonjs.Size() > 0 {
@@ -658,8 +661,9 @@ esbuild:
 					}
 				}
 			}
-			if regGlobal.Match(outputContent) {
-				fmt.Fprintf(jsContentBuf, `if (typeof global === "undefined") var global = window;%s`, eol)
+
+			if bytes.Contains(outputContent, []byte("__global$")) {
+				fmt.Fprintf(jsContentBuf, `if (typeof __global$ === "undefined") var __global$ = window;%s`, eol)
 			}
 
 			// esbuild output
