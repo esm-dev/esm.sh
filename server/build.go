@@ -62,6 +62,7 @@ type buildOptions struct {
 type buildResult struct {
 	buildID    string
 	importMeta map[string]*ImportMeta
+	hasCSS     bool
 }
 
 func build(storageDir string, hostname string, options buildOptions) (ret buildResult, err error) {
@@ -97,7 +98,7 @@ func build(storageDir string, hostname string, options buildOptions) (ret buildR
 		ret.buildID = "bundle-" + strings.ToLower(base32.StdEncoding.EncodeToString(hash.Sum(nil)))
 	}
 
-	p, err := db.Get(q.Alias(ret.buildID), q.K("importMeta"))
+	p, err := db.Get(q.Alias(ret.buildID), q.K("importMeta", "css"))
 	if err == nil {
 		err = json.Unmarshal(p.KV.Get("importMeta"), &ret.importMeta)
 		if err != nil {
@@ -107,9 +108,13 @@ func build(storageDir string, hostname string, options buildOptions) (ret buildR
 			}
 		}
 
+		if val := p.KV.Get("css"); len(val) == 1 && val[0] == 1 {
+			ret.hasCSS = true
+		}
+
 		_, err = os.Stat(path.Join(storageDir, "builds", ret.buildID+".js"))
 		if err == nil || os.IsExist(err) {
-			// built
+			// has built
 			return
 		}
 
@@ -455,6 +460,8 @@ func build(storageDir string, hostname string, options buildOptions) (ret buildR
 	}
 	minify := !options.isDev
 	define := map[string]string{
+		"__filename":                  fmt.Sprintf(`"https://%s/%s"`, hostname, ret.buildID),
+		"__dirname":                   fmt.Sprintf(`"https://%s/%s"`, hostname, path.Dir(ret.buildID)),
 		"process.env.NODE_ENV":        fmt.Sprintf(`"%s"`, env),
 		"global.process.env.NODE_ENV": fmt.Sprintf(`"%s"`, env),
 	}
@@ -472,6 +479,7 @@ esbuild:
 		MinifyIdentifiers: minify,
 		MinifySyntax:      minify,
 		Define:            define,
+		Outdir:            "/esbuild",
 		Plugins: []api.Plugin{
 			{
 				Name: "rewrite-external-path",
@@ -621,38 +629,58 @@ esbuild:
 		}
 	}
 
-	// nodejs compatibility
-	outputContent := result.OutputFiles[0].Contents
-	if regProcess.Match(outputContent) {
-		if options.target == "deno" {
-			fmt.Fprintf(jsContentBuf, `import process from "https://deno.land/std/node/process.ts";%s`, eol)
-		} else {
-			fmt.Fprintf(jsContentBuf, `import process from "/v%d/_process_browser.js";%sprocess.env.NODE_ENV="%s";%s`, buildVersion, eol, env, eol)
-		}
-	}
-	if regBuffer.Match(outputContent) {
-		if options.target == "deno" {
-			fmt.Fprintf(jsContentBuf, `import { Buffer } from "https://deno.land/std/node/buffer.ts";%s`, eol)
-		} else {
-			fmt.Fprintf(jsContentBuf, `import { Buffer } from "/v%d/_node_buffer.js";%s`, buildVersion, eol)
-		}
-	}
-	if peerModulesForCommonjs.Size() > 0 {
-		for _, entry := range peerModulesForCommonjs.Entries() {
-			name, importPath := entry[0], entry[1]
-			if importPath != "" {
-				identifier := identify(name)
-				fmt.Fprintf(jsContentBuf, `import __%s$ from "%s";%s`, identifier, importPath, eol)
-				outputContent = bytes.ReplaceAll(outputContent, []byte(fmt.Sprintf("require(\"%s\")", name)), []byte(fmt.Sprintf("__%s$", identifier)))
+	hasCSS := []byte{0}
+	for _, file := range result.OutputFiles {
+		outputContent := file.Contents
+		if strings.HasSuffix(file.Path, ".js") {
+			// add nodejs/deno compatibility
+			if regProcess.Match(outputContent) {
+				if options.target == "deno" {
+					fmt.Fprintf(jsContentBuf, `import process from "https://deno.land/std/node/process.ts";%s`, eol)
+				} else {
+					fmt.Fprintf(jsContentBuf, `import process from "/v%d/_process_browser.js";%sprocess.env.NODE_ENV="%s";%s`, buildVersion, eol, env, eol)
+				}
 			}
+			if regBuffer.Match(outputContent) {
+				if options.target == "deno" {
+					fmt.Fprintf(jsContentBuf, `import { Buffer } from "https://deno.land/std/node/buffer.ts";%s`, eol)
+				} else {
+					fmt.Fprintf(jsContentBuf, `import { Buffer } from "/v%d/_node_buffer.js";%s`, buildVersion, eol)
+				}
+			}
+			if peerModulesForCommonjs.Size() > 0 {
+				for _, entry := range peerModulesForCommonjs.Entries() {
+					name, importPath := entry[0], entry[1]
+					if importPath != "" {
+						identifier := identify(name)
+						fmt.Fprintf(jsContentBuf, `import __%s$ from "%s";%s`, identifier, importPath, eol)
+						outputContent = bytes.ReplaceAll(outputContent, []byte(fmt.Sprintf("require(\"%s\")", name)), []byte(fmt.Sprintf("__%s$", identifier)))
+					}
+				}
+			}
+			if regGlobal.Match(outputContent) {
+				fmt.Fprintf(jsContentBuf, `if (typeof global === "undefined") var global = window;%s`, eol)
+			}
+
+			// esbuild output
+			jsContentBuf.Write(outputContent)
+		} else if strings.HasSuffix(file.Path, ".css") {
+			saveFilePath := path.Join(storageDir, "builds", ret.buildID+".css")
+			ensureDir(path.Dir(saveFilePath))
+			file, e := os.Create(saveFilePath)
+			if e != nil {
+				err = e
+				return
+			}
+			defer file.Close()
+
+			_, err = io.Copy(file, bytes.NewReader(outputContent))
+			if err != nil {
+				return
+			}
+			hasCSS = []byte{1}
 		}
 	}
-	if regGlobal.Match(outputContent) {
-		fmt.Fprintf(jsContentBuf, `if (typeof global === "undefined") var global = window;%s`, eol)
-	}
-
-	// esbuild output
-	jsContentBuf.Write(outputContent)
 
 	saveFilePath := path.Join(storageDir, "builds", ret.buildID+".js")
 	ensureDir(path.Dir(saveFilePath))
@@ -672,6 +700,7 @@ esbuild:
 		q.Tags("build"),
 		q.KV{
 			"importMeta": utils.MustEncodeJSON(importMeta),
+			"css":        hasCSS,
 		},
 	)
 

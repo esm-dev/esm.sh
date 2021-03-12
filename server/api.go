@@ -69,7 +69,7 @@ func registerAPI(storageDir string, domain string, cdnDomain string, cdnDomainCh
 		case "/_process_browser.js":
 			ctx.SetHeader("Cache-Control", "public, max-age=31536000, immutable")
 			return rex.Content("process/browser.js", start, bytes.NewReader([]byte(polyfills["process_browser.js"])))
-		case "/_node_fs.js", "/_node_buffer.js", "/_node_readline.js":
+		case "/_node_buffer.js", "/_node_readline.js":
 			ctx.SetHeader("Cache-Control", "public, max-age=31536000, immutable")
 			return rex.Content(pathname, start, bytes.NewReader([]byte(polyfills[strings.TrimPrefix(pathname, "/_")])))
 		}
@@ -86,7 +86,13 @@ func registerAPI(storageDir string, domain string, cdnDomain string, cdnDomainCh
 			} else {
 				storageType = "raw"
 			}
-		case ".json", ".jsx", ".tsx", ".css", ".less", ".sass", ".scss", ".stylus", ".styl", ".wasm":
+		case ".css":
+			if hasBuildVerPrefix {
+				storageType = "builds"
+			} else {
+				storageType = "raw"
+			}
+		case ".json", ".jsx", ".tsx", ".less", ".sass", ".scss", ".stylus", ".styl", ".wasm":
 			storageType = "raw"
 		}
 		if storageType == "raw" {
@@ -203,6 +209,7 @@ func registerAPI(storageDir string, domain string, cdnDomain string, cdnDomainCh
 			}
 		}
 		isDev := !ctx.Form.IsNil("dev")
+		isCSS := !ctx.Form.IsNil("css")
 		noCheck := !ctx.Form.IsNil("nocheck") || !ctx.Form.IsNil("noCheck") || !ctx.Form.IsNil("no-check")
 
 		var bundleList string
@@ -302,6 +309,18 @@ func registerAPI(storageDir string, domain string, cdnDomain string, cdnDomainCh
 		})
 		if err != nil {
 			return throwErrorJS(ctx, 500, err)
+		}
+
+		if isCSS {
+			if ret.hasCSS {
+				hostname := ctx.R.Host
+				proto := "http"
+				if ctx.R.TLS != nil {
+					proto = "https"
+				}
+				return rex.Redirect(fmt.Sprintf("%s://%s/%s.css", proto, hostname, ret.buildID), 302)
+			}
+			return throwErrorJS(ctx, 404, fmt.Errorf("css not found"))
 		}
 
 		if bundleList != "" && currentModule.name == "" {
