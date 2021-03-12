@@ -40,6 +40,16 @@ Avaiable `target`: **es2015** - **es2020**, **esnext**, and **deno**
 import React from 'https://esm.sh/react?dev'
 ```
 
+### Package CSS
+
+```javascript
+import Daygrid from 'https://esm.sh/@fullcalendar/daygrid'
+```
+
+```html
+<link rel="styelsheet" href="https://esm.sh/@fullcalendar/daygrid?css">
+```
+
 ### Bundle mode
 
 ```javascript
