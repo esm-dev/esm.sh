@@ -42,7 +42,7 @@ func Serve(fs *embed.FS) {
 	flag.IntVar(&port, "port", 80, "http server port")
 	flag.IntVar(&httpsPort, "https-port", 443, "https server port")
 	flag.StringVar(&etcDir, "etc-dir", "/usr/local/etc/esmd", "etc dir")
-	flag.StringVar(&domain, "domain", "esm.sh", "server domain")
+	flag.StringVar(&domain, "domain", "esm.sh", "main domain")
 	flag.StringVar(&cdnDomain, "cdn-domain", "", "cdn domain")
 	flag.StringVar(&cdnDomainChina, "cdn-domain-china", "", "cdn domain for china")
 	flag.StringVar(&logLevel, "log", "info", "log level")
@@ -67,11 +67,11 @@ func Serve(fs *embed.FS) {
 	}
 	log.SetLevelByName(logLevel)
 
-	accessLogger, err := logx.New(fmt.Sprintf("file:%s?buffer=32k&fileDateFormat=20060102", path.Join(logDir, "access.log")))
+	nodeEnv, err = checkNodeEnv()
 	if err != nil {
-		log.Fatalf("initiate access logger: %v", err)
+		log.Fatalf("check nodejs env: %v", err)
 	}
-	accessLogger.SetQuite(true)
+	log.Debugf("nodejs v%s installed", nodeEnv.version)
 
 	data, err := ioutil.ReadFile(path.Join(etcDir, "build.ver"))
 	if err == nil {
@@ -91,9 +91,10 @@ func Serve(fs *embed.FS) {
 		log.Fatal(err)
 	}
 	for _, entry := range polyfills {
-		filename := path.Join(storageDir, fmt.Sprintf("builds/v%d/_%s", buildVersion, entry.Name()))
+		name := entry.Name()
+		filename := path.Join(storageDir, fmt.Sprintf("builds/v%d/_%s", buildVersion, name))
 		if !fileExists(filename) {
-			file, err := fs.Open(fmt.Sprintf("polyfills/%s", entry.Name()))
+			file, err := fs.Open(fmt.Sprintf("polyfills/%s", name))
 			if err != nil {
 				log.Fatal(err)
 			}
@@ -105,6 +106,7 @@ func Serve(fs *embed.FS) {
 			if err != nil {
 				log.Fatal(err)
 			}
+			log.Debugf("%s added", name)
 		}
 	}
 	types, err := fs.ReadDir("types")
@@ -112,9 +114,10 @@ func Serve(fs *embed.FS) {
 		log.Fatal(err)
 	}
 	for _, entry := range types {
-		filename := path.Join(storageDir, fmt.Sprintf("types/v%d/_%s", buildVersion, entry.Name()))
+		name := entry.Name()
+		filename := path.Join(storageDir, fmt.Sprintf("types/v%d/_%s", buildVersion, name))
 		if !fileExists(filename) {
-			file, err := fs.Open(fmt.Sprintf("types/%s", entry.Name()))
+			file, err := fs.Open(fmt.Sprintf("types/%s", name))
 			if err != nil {
 				log.Fatal(err)
 			}
@@ -126,20 +129,16 @@ func Serve(fs *embed.FS) {
 			if err != nil {
 				log.Fatal(err)
 			}
+			log.Debugf("%s added", name)
 		}
 	}
 	embedFS = fs
 
-	nodeEnv, err = checkNodeEnv()
+	accessLogger, err := logx.New(fmt.Sprintf("file:%s?buffer=32k&fileDateFormat=20060102", path.Join(logDir, "access.log")))
 	if err != nil {
-		log.Fatalf("check nodejs env: %v", err)
+		log.Fatalf("initiate access logger: %v", err)
 	}
-	log.Debugf("nodejs v%s installed", nodeEnv.version)
-
-	db, err = postdb.Open(path.Join(etcDir, "esm.db"), 0666)
-	if err != nil {
-		log.Fatalf("initiate esm.db: %v", err)
-	}
+	accessLogger.SetQuite(true)
 
 	rex.Use(
 		rex.ErrorLogger(log),
@@ -153,7 +152,12 @@ func Serve(fs *embed.FS) {
 		}),
 	)
 
-	registerRoute(storageDir, domain, cdnDomain, cdnDomainChina)
+	registerRoutes(storageDir, domain, cdnDomain, cdnDomainChina)
+
+	db, err = postdb.Open(path.Join(etcDir, "esm.db"), 0666)
+	if err != nil {
+		log.Fatalf("initiate esm.db: %v", err)
+	}
 
 	C := rex.Serve(rex.ServerConfig{
 		Port: uint16(port),
