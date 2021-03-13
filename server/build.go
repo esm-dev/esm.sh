@@ -67,9 +67,6 @@ type buildResult struct {
 }
 
 func build(storageDir string, hostname string, options buildOptions) (ret buildResult, err error) {
-	buildLock.Lock()
-	defer buildLock.Unlock()
-
 	n := len(options.packages)
 	if n == 0 {
 		err = fmt.Errorf("no packages")
@@ -110,11 +107,10 @@ func build(storageDir string, hostname string, options buildOptions) (ret buildR
 		}
 
 		if val := p.KV.Get("css"); len(val) == 1 && val[0] == 1 {
-			ret.hasCSS = true
+			ret.hasCSS = fileExists(path.Join(storageDir, "builds", ret.buildID+".css"))
 		}
 
-		_, err = os.Stat(path.Join(storageDir, "builds", ret.buildID+".js"))
-		if err == nil || os.IsExist(err) {
+		if fileExists(path.Join(storageDir, "builds", ret.buildID+".js")) {
 			// has built
 			return
 		}
@@ -127,6 +123,9 @@ func build(storageDir string, hostname string, options buildOptions) (ret buildR
 	if err != nil && err != postdb.ErrNotFound {
 		return
 	}
+
+	buildLock.Lock()
+	defer buildLock.Unlock()
 
 	installList := []string{}
 	for _, pkg := range options.packages {
