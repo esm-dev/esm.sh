@@ -26,16 +26,16 @@ if [ "$p" != "" ]; then
 fi
 
 init="no"
-read -p "initiate service ('yes' or 'no', default is 'no')? " ok
-if [ "$ok" == "yes" ]; then
+read -p "initiate supervisor service (y/n) ? " ok
+if [ "$ok" == "y" ]; then
     init="yes"
 fi
 
 rebuild="no"
 buildVersion="1"
 if [ "$init" == "no" ]; then
-    read -p "rebuild ('yes' or 'no', default is 'no')? " ok
-    if [ "$ok" == "yes" ]; then
+    read -p "rebuild (y/n) ? " ok
+    if [ "$ok" == "y" ]; then
         rebuild="yes"
         read -p "please enter the new builder id (default is 1): " p
         if [ "$p" != "" ]; then
