@@ -195,7 +195,7 @@ func copyDTS(external moduleSlice, hostname string, nodeModulesDir string, saveD
 				}
 				if format == "types" {
 					if path == "node" {
-						buf.WriteString(polyfills["simple_node.d.ts"])
+						buf.WriteString(polyfills["node.ns.d.ts"])
 					} else {
 						if hostname == "localhost" {
 							fmt.Fprintf(buf, `/// <reference types="http://localhost%s" />`, rewriteFn(path))

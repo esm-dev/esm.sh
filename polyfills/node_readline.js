@@ -1,12 +1,14 @@
 // https://nodejs.org/api/readline.html
-
-class Interface {
+class Interface extends A {
+    get line() { return '' }
+    get cursor() { return 0 }
     close() {}
     pause() {}
     prompt() {}
     question() {}
     resume() {}
     setPrompt() {}
+    getPrompt() {}
     write() {}
     getCursorPos() { return {rows: 0, cols: 0} }
 }

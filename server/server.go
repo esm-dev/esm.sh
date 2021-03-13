@@ -71,11 +71,11 @@ func Serve() {
 		}
 		readme = string(data)
 
-		entries, err := ioutil.ReadDir(path.Join(wd, "third_party/polyfills"))
+		entries, err := ioutil.ReadDir(path.Join(wd, "polyfills"))
 		if err == nil {
 			for _, entry := range entries {
 				if !entry.IsDir() {
-					data, err := ioutil.ReadFile(path.Join(wd, "third_party/polyfills", entry.Name()))
+					data, err := ioutil.ReadFile(path.Join(wd, "polyfills", entry.Name()))
 					if err != nil {
 						log.Fatal(err)
 					}

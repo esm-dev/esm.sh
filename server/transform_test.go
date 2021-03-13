@@ -56,7 +56,7 @@ func TestCopyDTS(t *testing.T) {
 	}
 
 	polyfills = map[string]string{
-		"simple_node.d.ts": "/// node",
+		"node.ns.d.ts": "/// node",
 	}
 	indexDTSRaw := []string{
 		`// dts test`,

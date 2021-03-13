@@ -66,10 +66,7 @@ func registerAPI(storageDir string, domain string, cdnDomain string, cdnDomainCh
 			default:
 				return throwErrorJS(ctx, 500, fmt.Errorf("Unknown error"))
 			}
-		case "/_process_browser.js":
-			ctx.SetHeader("Cache-Control", "public, max-age=31536000, immutable")
-			return rex.Content("process/browser.js", start, bytes.NewReader([]byte(polyfills["process_browser.js"])))
-		case "/_node_buffer.js", "/_node_readline.js":
+		case "/_node_process.js", "/_node_buffer.js", "/_node_readline.js":
 			ctx.SetHeader("Cache-Control", "public, max-age=31536000, immutable")
 			return rex.Content(pathname, start, bytes.NewReader([]byte(polyfills[strings.TrimPrefix(pathname, "/_")])))
 		}

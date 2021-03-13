@@ -642,7 +642,7 @@ esbuild:
 				if options.target == "deno" {
 					fmt.Fprintf(jsContentBuf, `import __process$ from "https://deno.land/std@%s/node/process.ts";%s`, denoStdNodeVersion, eol)
 				} else {
-					fmt.Fprintf(jsContentBuf, `import __process$ from "/v%d/_process_browser.js";%s__process$.env.NODE_ENV="%s";%s`, buildVersion, eol, env, eol)
+					fmt.Fprintf(jsContentBuf, `import __process$ from "/v%d/_node_process.js";%s__process$.env.NODE_ENV="%s";%s`, buildVersion, eol, env, eol)
 				}
 			}
 			if bytes.Contains(outputContent, []byte("__Buffer$")) {
