@@ -25,7 +25,8 @@ import (
 )
 
 const (
-	jsCopyrightName = "esm.sh"
+	jsCopyrightName    = "esm.sh"
+	denoStdNodeVersion = "0.90.0"
 )
 
 var (
@@ -512,7 +513,7 @@ esbuild:
 								if options.target == "deno" {
 									_, yes := denoStdNodeModules[resolvePath]
 									if yes {
-										pathname := fmt.Sprintf("https://deno.land/std/node/%s.ts", resolvePath)
+										pathname := fmt.Sprintf("https://deno.land/std@%s/node/%s.ts", denoStdNodeVersion, resolvePath)
 										if esm {
 											resolvePath = pathname
 										} else {
@@ -639,14 +640,14 @@ esbuild:
 			// add nodejs/deno compatibility
 			if bytes.Contains(outputContent, []byte("__process$")) {
 				if options.target == "deno" {
-					fmt.Fprintf(jsContentBuf, `import __process$ from "https://deno.land/std/node/process.ts";%s`, eol)
+					fmt.Fprintf(jsContentBuf, `import __process$ from "https://deno.land/std@%s/node/process.ts";%s`, denoStdNodeVersion, eol)
 				} else {
 					fmt.Fprintf(jsContentBuf, `import __process$ from "/v%d/_process_browser.js";%s__process$.env.NODE_ENV="%s";%s`, buildVersion, eol, env, eol)
 				}
 			}
 			if bytes.Contains(outputContent, []byte("__Buffer$")) {
 				if options.target == "deno" {
-					fmt.Fprintf(jsContentBuf, `import { Buffer as __Buffer$ } from "https://deno.land/std/node/buffer.ts";%s`, eol)
+					fmt.Fprintf(jsContentBuf, `import { Buffer as __Buffer$ } from "https://deno.land/std@%s/node/buffer.ts";%s`, denoStdNodeVersion, eol)
 				} else {
 					fmt.Fprintf(jsContentBuf, `import { Buffer as __Buffer$ } from "/v%d/_node_buffer.js";%s`, buildVersion, eol)
 				}

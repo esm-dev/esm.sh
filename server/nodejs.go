@@ -89,8 +89,8 @@ var denoStdNodeModules = map[string]bool{
 	// "dgram":               true,
 	// "dns":                 true,
 	// "domain":              true,
-	"events": true,
-	"fs":     true,
+	// "events":              true,  // disable for https://github.com/postui/esm.sh/issues/27
+	"fs": true,
 	// "http":                true,
 	// "http2":               true,
 	// "https":               true,
