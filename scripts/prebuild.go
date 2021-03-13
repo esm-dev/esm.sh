@@ -86,7 +86,7 @@ func main() {
 		return
 	}
 
-	if len(os.Args) < 2 || os.Args[2] != "--china-ip" {
+	if len(os.Args) < 3 || os.Args[2] != "--china-ip" {
 		return
 	}
 

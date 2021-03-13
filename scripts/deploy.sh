@@ -85,11 +85,12 @@ if [ "$rebuild" == "yes" ]; then
     fi
 fi
 
+scriptsDir=$(dirname $0)
 read -p "split China traffic ('yes' or 'no', default is 'no')? " p
 if [ "$p" == "yes" ]; then
-    sh $(dirname $0)/build.sh --china-ip
+    sh $scriptsDir/build.sh --china-ip
 else
-     sh $(dirname $0)/build.sh
+    sh $scriptsDir/build.sh
 fi
 
 if [ "$?" != "0" ]; then
@@ -97,9 +98,9 @@ if [ "$?" != "0" ]; then
 fi
 
 echo "--- uploading..."
-scp -P $sshPort esmd $user@$host:/tmp/esmd
+scp -P $sshPort $scriptsDir/esmd $user@$host:/tmp/esmd
 if [ "$?" != "0" ]; then
-    rm -f esmd
+    rm -f $scriptsDir/esmd
     exit
 fi
 
@@ -146,7 +147,7 @@ ssh -p $sshPort $user@$host << EOF
     fi
 EOF
 
-rm -f $(dirname $0)/../server/auto_mmdbr.go
-rm -f $(dirname $0)/../server/auto_polyfills.go
-rm -f $(dirname $0)/../server/auto_readme.go
-rm -f $(dirname $0)/esmd
+rm -f $scriptsDir/../server/auto_mmdbr.go
+rm -f $scriptsDir/../server/auto_polyfills.go
+rm -f $scriptsDir/../server/auto_readme.go
+rm -f $scriptsDir/esmd

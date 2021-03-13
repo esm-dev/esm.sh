@@ -21,4 +21,4 @@ fi
 echo "--- building(${goos}_$goarch)..."
 export GOOS=$goos
 export GOARCH=$goarch
-go build -o esmd $(dirname $0)/../main.go
+go build -o $(dirname $0)/esmd $(dirname $0)/../main.go
