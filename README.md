@@ -84,10 +84,10 @@ import React from 'react' // actual from 'https://esm.sh/[react,react-dom,swr]/r
 import postcss from 'https://esm.sh/postcss'
 import autoprefixer from 'https://esm.sh/autoprefixer'
 
-console.log(await postcss([ autoprefixer ]).process(`
+console.log((await postcss([ autoprefixer ]).process(`
   backdrop-filter: blur(5px);
   user-select: none;
-`).async())
+`).async()).css)
 ```
 
 ### X-Typescript-Types
