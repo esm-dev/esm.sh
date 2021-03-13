@@ -195,7 +195,12 @@ func copyDTS(external moduleSlice, hostname string, nodeModulesDir string, saveD
 				}
 				if format == "types" {
 					if path == "node" {
-						buf.WriteString(polyfills["node.ns.d.ts"])
+						dts, err := embedFS.ReadFile("types/node.ns.d.ts")
+						if err == nil {
+							buf.Write(dts)
+						} else {
+							buf.WriteString("// missing types/node.ns.d.ts")
+						}
 					} else {
 						if hostname == "localhost" {
 							fmt.Fprintf(buf, `/// <reference types="http://localhost%s" />`, rewriteFn(path))

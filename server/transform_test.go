@@ -55,9 +55,6 @@ func TestCopyDTS(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	polyfills = map[string]string{
-		"node.ns.d.ts": "/// node",
-	}
 	indexDTSRaw := []string{
 		`// dts test`,
 		`/// <reference path="global.d.ts" />`,
@@ -84,7 +81,7 @@ func TestCopyDTS(t *testing.T) {
 	indexDTSExcept := []string{
 		`// dts test`,
 		`/// <reference path="./global.d.ts" />`,
-		`/// node`,
+		`// missing types/node.ns.d.ts`,
 		`  `,
 		`import {`,
 		`    ReactInstance, Component, ComponentState,`,

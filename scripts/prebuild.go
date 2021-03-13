@@ -41,58 +41,8 @@ func main() {
 		return
 	}
 
-	readme, err := ioutil.ReadFile(path.Join(root, "README.md"))
-	if err != nil {
-		fmt.Println(err)
-		return
-	}
-	err = ioutil.WriteFile(path.Join(root, "server", "auto_readme.go"), []byte(strings.Join([]string{
-		"package server",
-		"func init() {",
-		"    readme = " + strings.TrimSpace(string(utils.MustEncodeJSON(string(readme)))),
-		"}",
-	}, "\n")), 0644)
-	if err != nil {
-		fmt.Println(err)
-		return
-	}
-
-	entries, err := ioutil.ReadDir(path.Join(root, "polyfills"))
-	if err != nil {
-		fmt.Println(err)
-		return
-	}
-	polyfills := map[string]string{}
-	for _, entry := range entries {
-		if !entry.IsDir() {
-			data, err := ioutil.ReadFile(path.Join(root, "polyfills", entry.Name()))
-			if err != nil {
-				fmt.Println(err)
-				return
-			}
-			if err == nil {
-				polyfills[entry.Name()] = string(data)
-			}
-		}
-	}
-	err = ioutil.WriteFile(path.Join(root, "server", "auto_polyfills.go"), []byte(strings.Join([]string{
-		"package server",
-		"func init() {",
-		"    polyfills = map[string]string" + strings.TrimSpace(string(utils.MustEncodeJSON(polyfills))),
-		"}",
-	}, "\n")), 0644)
-	if err != nil {
-		fmt.Println(err)
-		return
-	}
-
-	if len(os.Args) < 3 || os.Args[2] != "--china-ip" {
-		return
-	}
-
-	saveFilename := path.Join(root, ".dev", fmt.Sprintf("china_ip_list_%s.mmdb", mmdb_china_ip_list_tag))
-
 	var mmdata []byte
+	saveFilename := path.Join(root, ".dev", fmt.Sprintf("china_ip_list_%s.mmdb", mmdb_china_ip_list_tag))
 	if fi, e := os.Lstat(saveFilename); e == nil && !fi.IsDir() {
 		mmdata, err = ioutil.ReadFile(saveFilename)
 	} else {
@@ -115,7 +65,7 @@ func main() {
 	}
 
 	mmdataString := base64.StdEncoding.EncodeToString(mmdata)
-	err = ioutil.WriteFile(path.Join(root, "server", "auto_mmdbr.go"), []byte(strings.Join([]string{
+	err = ioutil.WriteFile(path.Join(root, "server", "mmdb_china_ip_list.go"), []byte(strings.Join([]string{
 		"package server",
 		`import "encoding/base64"`,
 		`import "github.com/oschwald/maxminddb-golang"`,

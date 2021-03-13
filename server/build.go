@@ -534,8 +534,8 @@ esbuild:
 										return api.OnResolveResult{Path: resolvePath}, err
 									}
 								} else {
-									_, yes := polyfills[fmt.Sprintf("node_%s.js", resolvePath)]
-									if yes {
+									_, err := embedFS.Open(fmt.Sprintf("polyfills/node_%s.js", resolvePath))
+									if err == nil {
 										pathname := fmt.Sprintf("/v%d/_node_%s.js", buildVersion, resolvePath)
 										if esm {
 											resolvePath = pathname

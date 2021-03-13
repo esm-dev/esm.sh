@@ -14,8 +14,8 @@ const (
 )
 
 var (
-	regVerPath     = regexp.MustCompile(`^/v\d+/`)
-	regFullVersion = regexp.MustCompile(`^\d+\.\d+\.\d+(\-[a-zA-Z0-9\.]+)*$`)
+	regBuildVerPath = regexp.MustCompile(`^/v\d+/`)
+	regFullVersion  = regexp.MustCompile(`^\d+\.\d+\.\d+(\-[a-zA-Z0-9\.]+)*$`)
 )
 
 type stringSet struct {

@@ -86,12 +86,7 @@ if [ "$rebuild" == "yes" ]; then
 fi
 
 scriptsDir=$(dirname $0)
-read -p "split China traffic ('yes' or 'no', default is 'no')? " p
-if [ "$p" == "yes" ]; then
-    sh $scriptsDir/build.sh --china-ip
-else
-    sh $scriptsDir/build.sh
-fi
+sh $scriptsDir/build.sh
 
 if [ "$?" != "0" ]; then
     exit
@@ -147,7 +142,5 @@ ssh -p $sshPort $user@$host << EOF
     fi
 EOF
 
-rm -f $scriptsDir/../server/auto_mmdbr.go
-rm -f $scriptsDir/../server/auto_polyfills.go
-rm -f $scriptsDir/../server/auto_readme.go
+rm -f $scriptsDir/../server/mmdb_china_ip_list.go
 rm -f $scriptsDir/esmd

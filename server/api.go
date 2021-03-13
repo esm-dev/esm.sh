@@ -42,33 +42,39 @@ func registerAPI(storageDir string, domain string, cdnDomain string, cdnDomainCh
 
 	rex.Query("*", func(ctx *rex.Context) interface{} {
 		pathname := utils.CleanPath(ctx.R.URL.Path)
-		hasBuildVerPrefix := strings.HasPrefix(pathname, fmt.Sprintf("/v%d/", buildVersion))
-		prevBuildVer := ""
-		if hasBuildVerPrefix {
-			pathname = strings.TrimPrefix(pathname, fmt.Sprintf("/v%d", buildVersion))
-		} else if regVerPath.MatchString(pathname) {
-			a := strings.Split(pathname, "/")
-			pathname = "/" + strings.Join(a[2:], "/")
-			hasBuildVerPrefix = true
-			prevBuildVer = a[1]
-		}
 		switch pathname {
 		case "/":
-			mdStr := strings.TrimSpace(string(utils.MustEncodeJSON(readme)))
-			return rex.Content("index.html", start, bytes.NewReader([]byte(fmt.Sprintf(indexHTML, "`", mdStr))))
+			readme, err := embedFS.ReadFile("README.md")
+			if err != nil {
+				return err
+			}
+			indexHTML, err := embedFS.ReadFile("assets/index.html")
+			if err != nil {
+				return err
+			}
+			readmeStr := utils.MustEncodeJSON(string(readme))
+			html := bytes.Replace(indexHTML, []byte("'# README'"), readmeStr, -1)
+			return rex.Content("index.html", start, bytes.NewReader(html))
 		case "/favicon.ico":
 			return 404
 		case "/_error.js":
-			t := ctx.Form.Value("type")
-			switch t {
+			switch ctx.Form.Value("type") {
 			case "resolve":
 				return throwErrorJS(ctx, 500, fmt.Errorf(`Can't resolve "%s"`, ctx.Form.Value("name")))
 			default:
 				return throwErrorJS(ctx, 500, fmt.Errorf("Unknown error"))
 			}
-		case "/_node_process.js", "/_node_buffer.js", "/_node_readline.js":
-			ctx.SetHeader("Cache-Control", "public, max-age=31536000, immutable")
-			return rex.Content(pathname, start, bytes.NewReader([]byte(polyfills[strings.TrimPrefix(pathname, "/_")])))
+		}
+
+		hasBuildVerPrefix := strings.HasPrefix(pathname, fmt.Sprintf("/v%d/", buildVersion))
+		prevBuildVer := ""
+		if hasBuildVerPrefix {
+			pathname = strings.TrimPrefix(pathname, fmt.Sprintf("/v%d", buildVersion))
+		} else if regBuildVerPath.MatchString(pathname) {
+			a := strings.Split(pathname, "/")
+			pathname = "/" + strings.Join(a[2:], "/")
+			hasBuildVerPrefix = true
+			prevBuildVer = a[1]
 		}
 
 		var storageType string
@@ -80,17 +86,19 @@ func registerAPI(storageDir string, domain string, cdnDomain string, cdnDomainCh
 		case ".ts":
 			if hasBuildVerPrefix && strings.HasSuffix(pathname, ".d.ts") {
 				storageType = "types"
-			} else {
+			} else if len(strings.Split(pathname, "/")) > 2 {
 				storageType = "raw"
 			}
 		case ".css":
 			if hasBuildVerPrefix {
 				storageType = "builds"
-			} else {
+			} else if len(strings.Split(pathname, "/")) > 2 {
 				storageType = "raw"
 			}
-		case ".json", ".jsx", ".tsx", ".less", ".sass", ".scss", ".stylus", ".styl", ".wasm":
-			storageType = "raw"
+		case ".json", ".xml", ".yaml", ".jsx", ".tsx", ".less", ".sass", ".scss", ".stylus", ".styl", ".wasm":
+			if len(strings.Split(pathname, "/")) > 2 {
+				storageType = "raw"
+			}
 		}
 		if storageType == "raw" {
 			m, err := parseModule(pathname)
@@ -205,8 +213,8 @@ func registerAPI(storageDir string, domain string, cdnDomain string, cdnDomainCh
 				}
 			}
 		}
-		isDev := !ctx.Form.IsNil("dev")
 		isCSS := !ctx.Form.IsNil("css")
+		isDev := !ctx.Form.IsNil("dev")
 		noCheck := !ctx.Form.IsNil("nocheck") || !ctx.Form.IsNil("noCheck") || !ctx.Form.IsNil("no-check")
 
 		var bundleList string

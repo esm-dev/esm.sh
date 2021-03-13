@@ -1,8 +1,10 @@
 package server
 
 import (
+	"embed"
 	"flag"
 	"fmt"
+	"io"
 	"io/ioutil"
 	"os"
 	"os/signal"
@@ -19,19 +21,15 @@ import (
 )
 
 var (
-	readme  string
 	nodeEnv *NodeEnv
 	mmdbr   *maxminddb.Reader
 	db      *postdb.DB
-)
-
-var (
-	log       = &logx.Logger{}
-	polyfills = map[string]string{}
+	log     *logx.Logger
+	embedFS *embed.FS
 )
 
 // Serve serves esmd server
-func Serve() {
+func Serve(fs *embed.FS) {
 	var port int
 	var httpsPort int
 	var etcDir string
@@ -59,32 +57,21 @@ func Serve() {
 		cdnDomainChina = ""
 		logDir = path.Join(etcDir, "log")
 		logLevel = "debug"
-
-		wd, err := os.Getwd()
-		if err != nil {
-			log.Fatal(err)
-		}
-
-		data, err := ioutil.ReadFile(path.Join(wd, "README.md"))
-		if err != nil {
-			log.Fatal(err)
-		}
-		readme = string(data)
-
-		entries, err := ioutil.ReadDir(path.Join(wd, "polyfills"))
-		if err == nil {
-			for _, entry := range entries {
-				if !entry.IsDir() {
-					data, err := ioutil.ReadFile(path.Join(wd, "polyfills", entry.Name()))
-					if err != nil {
-						log.Fatal(err)
-					}
-					polyfills[entry.Name()] = string(data)
-					log.Debug("polyfill", entry.Name(), "loaded")
-				}
-			}
-		}
 	}
+
+	var err error
+	log, err = logx.New(fmt.Sprintf("file:%s?buffer=32k", path.Join(logDir, "main.log")))
+	if err != nil {
+		fmt.Printf("initiate logger: %v\n", err)
+		os.Exit(1)
+	}
+	log.SetLevelByName(logLevel)
+
+	accessLogger, err := logx.New(fmt.Sprintf("file:%s?buffer=32k&fileDateFormat=20060102", path.Join(logDir, "access.log")))
+	if err != nil {
+		log.Fatalf("initiate access logger: %v", err)
+	}
+	accessLogger.SetQuite(true)
 
 	data, err := ioutil.ReadFile(path.Join(etcDir, "build.ver"))
 	if err == nil {
@@ -95,22 +82,32 @@ func Serve() {
 	}
 
 	storageDir := path.Join(etcDir, "storage")
-	ensureDir(path.Join(storageDir, "builds"))
+	ensureDir(path.Join(storageDir, fmt.Sprintf("builds/v%d", buildVersion)))
 	ensureDir(path.Join(storageDir, "types"))
 	ensureDir(path.Join(storageDir, "raw"))
 
-	log, err = logx.New(fmt.Sprintf("file:%s?buffer=32k", path.Join(logDir, "main.log")))
+	polyfills, err := fs.ReadDir("polyfills")
 	if err != nil {
-		fmt.Printf("initiate logger: %v", err)
-		os.Exit(1)
+		log.Fatal(err)
 	}
-	log.SetLevelByName(logLevel)
-
-	accessLogger, err := logx.New(fmt.Sprintf("file:%s?buffer=32k&fileDateFormat=20060102", path.Join(logDir, "access.log")))
-	if err != nil {
-		log.Fatalf("initiate access logger: %v", err)
+	for _, entry := range polyfills {
+		filename := path.Join(storageDir, fmt.Sprintf("builds/v%d/_%s", buildVersion, entry.Name()))
+		if !fileExists(filename) {
+			file, err := fs.Open(fmt.Sprintf("polyfills/%s", entry.Name()))
+			if err != nil {
+				log.Fatal(err)
+			}
+			f, err := os.Create(filename)
+			if err != nil {
+				log.Fatal(err)
+			}
+			_, err = io.Copy(f, file)
+			if err != nil {
+				log.Fatal(err)
+			}
+		}
 	}
-	accessLogger.SetQuite(true)
+	embedFS = fs
 
 	nodeEnv, err = checkNodeEnv()
 	if err != nil {
@@ -165,4 +162,9 @@ func Serve() {
 	log.FlushBuffer()
 	accessLogger.FlushBuffer()
 	db.Close()
+}
+
+func init() {
+	log = &logx.Logger{}
+	embedFS = &embed.FS{}
 }
