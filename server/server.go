@@ -84,11 +84,6 @@ func Serve() {
 				}
 			}
 		}
-
-		mmdbr, err = maxminddb.Open(path.Join(wd, "third_party/china_ip_list/china_ip_list.mmdb"))
-		if err != nil {
-			log.Fatal(err)
-		}
 	}
 
 	data, err := ioutil.ReadFile(path.Join(etcDir, "build.ver"))

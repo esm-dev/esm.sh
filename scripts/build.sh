@@ -13,7 +13,7 @@ if [ "$val" != "" ]; then
 fi
 
 echo "--- prebuild..."
-go run $(dirname $0)/prebuild.go $(dirname $0)
+go run $(dirname $0)/prebuild.go $(dirname $0) $1
 if [ "$?" != "0" ]; then
     exit
 fi

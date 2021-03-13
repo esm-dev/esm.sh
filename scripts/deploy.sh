@@ -85,7 +85,13 @@ if [ "$rebuild" == "yes" ]; then
     fi
 fi
 
-sh $(dirname $0)/build.sh
+read -p "split China traffic ('yes' or 'no', default is 'no')? " p
+if [ "$p" == "yes" ]; then
+    sh $(dirname $0)/build.sh --china-ip
+else
+     sh $(dirname $0)/build.sh
+fi
+
 if [ "$?" != "0" ]; then
     exit
 fi
