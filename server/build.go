@@ -727,7 +727,7 @@ func identify(importPath string) string {
 }
 
 func getTypesPath(nodeModulesDir string, p NpmPackage, subpath string) string {
-	types := ""
+	var types string
 	if subpath != "" {
 		var subpkg NpmPackage
 		var subtypes string
@@ -751,10 +751,9 @@ func getTypesPath(nodeModulesDir string, p NpmPackage, subpath string) string {
 			types = p.Typings
 		} else if p.Main != "" {
 			types = strings.TrimSuffix(p.Main, ".js")
+		} else {
+			types = "index.d.ts"
 		}
 	}
-	if types != "" {
-		return fmt.Sprintf("%s@%s%s", p.Name, p.Version, ensureExt(path.Join("/", types), ".d.ts"))
-	}
-	return ""
+	return fmt.Sprintf("%s@%s%s", p.Name, p.Version, ensureExt(path.Join("/", types), ".d.ts"))
 }

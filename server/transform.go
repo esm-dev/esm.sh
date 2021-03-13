@@ -113,15 +113,19 @@ func copyDTS(external moduleSlice, hostname string, nodeModulesDir string, saveD
 				pkgName = fmt.Sprintf("%s/%s", pkgName, n)
 				subpath = s
 			}
-			packageJSONFile := path.Join(nodeModulesDir, "@types", pkgName, "package.json")
-			if !fileExists(packageJSONFile) {
-				packageJSONFile = path.Join(nodeModulesDir, pkgName, "package.json")
-			}
+			var p NpmPackage
+			packageJSONFile := path.Join(nodeModulesDir, pkgName, "package.json")
 			if fileExists(packageJSONFile) {
-				var p NpmPackage
-				if utils.ParseJSONFile(packageJSONFile, &p) == nil {
-					importPath = getTypesPath(nodeModulesDir, p, subpath)
+				utils.ParseJSONFile(packageJSONFile, &p)
+			}
+			if p.Name == "" || (p.Types == "" && p.Typings == "") {
+				packageJSONFile = path.Join(nodeModulesDir, "@types", pkgName, "package.json")
+				if fileExists(packageJSONFile) {
+					utils.ParseJSONFile(packageJSONFile, &p)
 				}
+			}
+			if p.Name != "" {
+				importPath = getTypesPath(nodeModulesDir, p, subpath)
 			} else {
 				version := "latest"
 				for _, m := range external {
@@ -135,7 +139,10 @@ func copyDTS(external moduleSlice, hostname string, nodeModulesDir string, saveD
 					p, err = nodeEnv.getPackageInfo("@types/"+pkgName, "latest")
 				}
 				if err == nil {
-					importPath = getTypesPath(nodeModulesDir, p, subpath)
+					err = yarnAdd(fmt.Sprintf("%s@%s", p.Name, p.Version))
+					if err == nil {
+						importPath = getTypesPath(nodeModulesDir, p, subpath)
+					}
 				}
 			}
 		}
