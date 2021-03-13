@@ -117,7 +117,7 @@ import useSWR from 'https://esm.sh/swr?external=react@16.14.0'
 ## Network of esm.sh
 - Main server in HK
 - Global CDN by [Cloudflare](https://cloudflare.com)
-- China CDN by [Aliyun](https://aliyun.com)
+- China CDN by [Aliyun](https://aliyun.com) (using [mmdb_china_ip_list](https://github.com/alecthw/mmdb_china_ip_list) to split traffic)
 
 ## Self-Hosting
 
