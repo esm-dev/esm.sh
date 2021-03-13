@@ -121,7 +121,7 @@ import useSWR from 'https://esm.sh/swr?external=react@16.14.0'
 
 ## Self-Hosting
 
-You will need [Go](https://golang.org/dl) 1.15+ to compile the server, and ensure [supervisor](http://supervisord.org/) installed on your host machine.<br>
+You will need [Go](https://golang.org/dl) 1.16+ to compile the server, and ensure [supervisor](http://supervisord.org/) installed on your host machine.<br>
 The server runtime will install the latest nodejs (14+ LTS) automatically.
 
 ```bash
