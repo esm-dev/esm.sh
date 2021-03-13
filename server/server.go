@@ -153,7 +153,7 @@ func Serve(fs *embed.FS) {
 		}),
 	)
 
-	registerAPI(storageDir, domain, cdnDomain, cdnDomainChina)
+	registerRoute(storageDir, domain, cdnDomain, cdnDomainChina)
 
 	C := rex.Serve(rex.ServerConfig{
 		Port: uint16(port),

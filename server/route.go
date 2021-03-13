@@ -21,7 +21,7 @@ type Record struct {
 	} `maxminddb:"country"`
 }
 
-func registerAPI(storageDir string, domain string, cdnDomain string, cdnDomainChina string) {
+func registerRoute(storageDir string, domain string, cdnDomain string, cdnDomainChina string) {
 	start := time.Now()
 	httpClient := &http.Client{
 		Transport: &http.Transport{
