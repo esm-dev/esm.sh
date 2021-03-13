@@ -1,6 +1,7 @@
 package server
 
 import (
+	"fmt"
 	"io/ioutil"
 	"os"
 	"path"
@@ -81,7 +82,7 @@ func TestCopyDTS(t *testing.T) {
 	indexDTSExcept := []string{
 		`// dts test`,
 		`/// <reference path="./global.d.ts" />`,
-		`// missing types/node.ns.d.ts`,
+		fmt.Sprintf(`/// <reference path="/v%d/_node.ns.d.ts" />`, buildVersion),
 		`  `,
 		`import {`,
 		`    ReactInstance, Component, ComponentState,`,

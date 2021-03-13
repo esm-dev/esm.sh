@@ -83,7 +83,7 @@ func Serve(fs *embed.FS) {
 
 	storageDir := path.Join(etcDir, "storage")
 	ensureDir(path.Join(storageDir, fmt.Sprintf("builds/v%d", buildVersion)))
-	ensureDir(path.Join(storageDir, "types"))
+	ensureDir(path.Join(storageDir, fmt.Sprintf("types/v%d", buildVersion)))
 	ensureDir(path.Join(storageDir, "raw"))
 
 	polyfills, err := fs.ReadDir("polyfills")
@@ -94,6 +94,27 @@ func Serve(fs *embed.FS) {
 		filename := path.Join(storageDir, fmt.Sprintf("builds/v%d/_%s", buildVersion, entry.Name()))
 		if !fileExists(filename) {
 			file, err := fs.Open(fmt.Sprintf("polyfills/%s", entry.Name()))
+			if err != nil {
+				log.Fatal(err)
+			}
+			f, err := os.Create(filename)
+			if err != nil {
+				log.Fatal(err)
+			}
+			_, err = io.Copy(f, file)
+			if err != nil {
+				log.Fatal(err)
+			}
+		}
+	}
+	types, err := fs.ReadDir("types")
+	if err != nil {
+		log.Fatal(err)
+	}
+	for _, entry := range types {
+		filename := path.Join(storageDir, fmt.Sprintf("types/v%d/_%s", buildVersion, entry.Name()))
+		if !fileExists(filename) {
+			file, err := fs.Open(fmt.Sprintf("types/%s", entry.Name()))
 			if err != nil {
 				log.Fatal(err)
 			}
