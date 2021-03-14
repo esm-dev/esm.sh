@@ -82,7 +82,7 @@ func TestCopyDTS(t *testing.T) {
 	indexDTSExcept := []string{
 		`// dts test`,
 		`/// <reference path="./global.d.ts" />`,
-		fmt.Sprintf(`/// <reference path="/v%d/_node.ns.d.ts" />`, buildVersion),
+		fmt.Sprintf(`/// <reference path="https://cdn.esm.sh/v%d/_node.ns.d.ts" />`, buildVersion),
 		`  `,
 		`import {`,
 		`    ReactInstance, Component, ComponentState,`,
@@ -94,18 +94,18 @@ func TestCopyDTS(t *testing.T) {
 		`export { default as Anchor } from './anchor.d.ts';`,
 		`export { default as AutoComplete } from './auto-complete.d.ts';export { default as Alert } from './alert.d.ts';`,
 		`/* avatar */ export { default as Avatar } from '../avatar.d.ts';`,
-		`declare module "https://esm.sh/test" {`,
+		`declare module "https://cdn.esm.sh/test" {`,
 		`    export = Component;`,
 		`}`,
-		`declare module 'https://esm.sh/test' {`,
+		`declare module 'https://cdn.esm.sh/test' {`,
 		`    export import ReactInstance = ReactInstance;`,
 		`    export import ReactElement = ReactElement;`,
 		`}`,
 		``,
-		`declare module "https://esm.sh/test@*" {`,
+		`declare module "https://cdn.esm.sh/test@*" {`,
 		`    export = Component;`,
 		`}`,
-		`declare module "https://esm.sh/test@*" {`,
+		`declare module "https://cdn.esm.sh/test@*" {`,
 		`    export import ReactInstance = ReactInstance;`,
 		`    export import ReactElement = ReactElement;`,
 		`}`,
@@ -126,7 +126,7 @@ func TestCopyDTS(t *testing.T) {
 		}
 	}
 
-	err = copyDTS(moduleSlice{}, "esm.sh", nmDir, saveDir, "test/index.d.ts")
+	err = copyDTS(moduleSlice{}, "cdn.esm.sh", nmDir, saveDir, "test/index.d.ts")
 	if err != nil && os.IsExist(err) {
 		t.Fatal(err)
 	}

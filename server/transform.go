@@ -202,14 +202,15 @@ func copyDTS(external moduleSlice, hostname string, nodeModulesDir string, saveD
 				}
 				if format == "types" {
 					if path == "node" {
-						fmt.Fprintf(buf, `/// <reference path="/v%d/_node.ns.d.ts" />`, buildVersion)
+						path = fmt.Sprintf("/v%d/_node.ns.d.ts", buildVersion)
 					} else {
-						if hostname == "localhost" {
-							fmt.Fprintf(buf, `/// <reference types="http://localhost%s" />`, rewriteFn(path))
-						} else {
-							fmt.Fprintf(buf, `/// <reference types="https://%s%s" />`, hostname, rewriteFn(path))
-						}
+						path = rewriteFn(path)
 					}
+					protocol := "https:"
+					if hostname == "localhost" {
+						protocol = "http:"
+					}
+					fmt.Fprintf(buf, `/// <reference path="%s//%s%s" />`, protocol, hostname, path)
 				} else {
 					fmt.Fprintf(buf, `/// <reference path="%s" />`, rewriteFn(path))
 				}
