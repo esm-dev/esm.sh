@@ -55,7 +55,7 @@ func (s *stringSet) Values() []string {
 	return a
 }
 
-func (s *stringSet) Set(key string) {
+func (s *stringSet) Add(key string) {
 	s.lock.Lock()
 	defer s.lock.Unlock()
 
