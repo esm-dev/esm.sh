@@ -284,9 +284,16 @@ func build(storageDir string, hostname string, options buildOptions) (ret buildR
 		fmt.Fprintf(buf, `
 			try {
 				const %s = require("%s");
-				meta["%s"] = {exports: isObject(%s) ? Object.keys(%s) : ['default'] };
+				if (isObject(%s)) {
+					// remove some keywords which running error in strict mode
+					const keys = Object.keys(%s).filter(d => !["arguments"].includes(d));
+					meta["%s"] = {exports: keys };
+				} else {
+					meta["%s"] = {exports: ['default'] };
+				}
+
 			} catch(e) {}
-		`, importIdentifier, importPath, importPath, importIdentifier, importIdentifier)
+		`, importIdentifier, importPath, importIdentifier, importIdentifier, importPath, importPath)
 	}
 	buf.WriteString(`
 		fs.writeFileSync('./peer.output.json', JSON.stringify(meta))
