@@ -66,6 +66,14 @@ func registerRoutes(storageDir string, domain string, cdnDomain string, cdnDomai
 			}
 		}
 
+		if strings.HasPrefix(pathname, "/assets/") {
+			data, err := embedFS.ReadFile(pathname[1:])
+			if err != nil {
+				return err
+			}
+			return rex.Content(pathname, start, bytes.NewReader(data))
+		}
+
 		hasBuildVerPrefix := strings.HasPrefix(pathname, fmt.Sprintf("/v%d/", buildVersion))
 		prevBuildVer := ""
 		if hasBuildVerPrefix {
