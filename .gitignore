@@ -1,5 +1,5 @@
 .DS_Store
 Thumbs.db
 .dev/
-server/mmdb_china_ip_list.go
+assets/china_ip_list.mmdb
 scripts/esmd
