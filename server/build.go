@@ -451,7 +451,11 @@ func build(storageDir string, hostname string, options buildOptions) (ret buildR
 
 			fmt.Fprintf(buf, `export const { %s } = %s;%s`, strings.Join(exports, ","), importIdentifier, EOL)
 
-			fmt.Fprintf(buf, `export const { %s } = %s.default;%s`, strings.Join(exportsFromDefault, ","), importIdentifier, EOL)
+			if hasDefaultExport {
+				if len(exportsFromDefault) > 0 {
+					fmt.Fprintf(buf, `export const { %s } = %s.default;%s`, strings.Join(exportsFromDefault, ","), importIdentifier, EOL)
+				}
+			}
 
 			fmt.Fprintf(buf, `export default %s.default;`, importIdentifier)
 		}
