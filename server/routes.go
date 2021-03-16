@@ -41,7 +41,7 @@ func registerRoutes(storageDir string, domain string, cdnDomain string, cdnDomai
 	}
 
 	rex.Query("*", func(ctx *rex.Context) interface{} {
-		pathname := utils.CleanPath(ctx.R.URL.Path)
+		pathname := utils.CleanPath(ctx.URL.Path)
 		switch pathname {
 		case "/":
 			readme, err := embedFS.ReadFile("README.md")
@@ -422,9 +422,6 @@ func throwErrorJS(ctx *rex.Context, status int, err error) interface{} {
 	fmt.Fprintf(buf, `throw new Error("[%s] " + %s);%s`, jsCopyrightName, strings.TrimSpace(string(utils.MustEncodeJSON(err.Error()))), EOL)
 	fmt.Fprintf(buf, `export default null;%s`, EOL)
 	ctx.SetHeader("Cache-Control", "private, no-store, no-cache, must-revalidate")
-	return &rex.TypedContent{
-		Status:      status,
-		Content:     buf.Bytes(),
-		ContentType: "application/javascript; charset=utf-8",
-	}
+	ctx.SetHeader("Content-Type", "application/javascript; charset=utf-8")
+	return rex.Status(status, buf.Bytes())
 }
