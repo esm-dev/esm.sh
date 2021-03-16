@@ -290,15 +290,25 @@ func build(storageDir string, hostname string, options buildOptions) (ret buildR
 			fmt.Fprintf(buf, `
 				try {
 					const %s = require("%s");
+
 					if (isObject(%s)) {
-						// remove some keywords which running error in strict mode
-						const keys = Object.keys(%s).filter(d => !["arguments"].includes(d));
-						meta["%s"] = {exports: keys };
+						if (isObject(%s.default)) {
+							const exports = Object.keys(%s).filter(d => !["arguments"].includes(d));
+							const exportsFromDefault = Object.keys(%s.default).filter(d => !["arguments"].includes(d));
+							const onlyExportsFromDefault = exportsFromDefault.filter(d => exports.includes(d));
+							
+							meta["%s"] = { exports, exportsFromDefault: onlyExportsFromDefault };
+						} else if (%s.default || !%s.default) {
+							// x.default is function or x.default is undefined
+							const exportsFromDefault = ['];
+							const exports = Object.keys(%s).filter(d => !["arguments"].includes(d));
+							meta["%s"] = { exports, exportsFromDefault };
+						}
 					} else {
-						meta["%s"] = {exports: ['default'] };
+						meta["%s"] = { exports: ['default'] };
 					}
 				} catch(e) {}
-			`, importIdentifier, importPath, importIdentifier, importIdentifier, importPath, importPath)
+			`, importIdentifier, importPath, importIdentifier, importIdentifier, importIdentifier, importIdentifier, importPath, importIdentifier, importIdentifier,importIdentifier, importPath, importPath)
 		}
 		buf.WriteString(`
 			fs.writeFileSync('./peer.output.json', JSON.stringify(meta))
@@ -430,13 +440,13 @@ func build(storageDir string, hostname string, options buildOptions) (ret buildR
 				fmt.Fprintf(buf, `export { default } from "%s";`, importPath)
 			}
 		} else {
-			if hasDefaultExport {
-				fmt.Fprintf(buf, `import %s from "%s";%s`, importIdentifier, importPath, EOL)
-			} else {
-				fmt.Fprintf(buf, `import * as %s from "%s";%s`, importIdentifier, importPath, EOL)
-			}
+			fmt.Fprintf(buf, `import * as %s from "%s";%s`, importIdentifier, importPath, EOL)
+
 			fmt.Fprintf(buf, `export const { %s } = %s;%s`, strings.Join(exports, ","), importIdentifier, EOL)
-			fmt.Fprintf(buf, `export default %s;`, importIdentifier)
+
+			fmt.Fprintf(buf, `export const { %s } = %s.default;%s`, strings.Join(exportsFromDefault, ","), importIdentifier, EOL)
+
+			fmt.Fprintf(buf, `export default %s.default;`, importIdentifier)
 		}
 	} else {
 		for _, pkg := range options.packages {
