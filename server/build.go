@@ -225,13 +225,7 @@ func build(storageDir string, hostname string, options buildOptions) (ret buildR
 		env = "development"
 	}
 
-	start = time.Now()
-	buf := bytes.NewBuffer(nil)
-	buf.WriteString(`
-		const fs = require("fs");
-		const meta = {};
-		const isObject = v => typeof v === 'object' && v !== null;
-	`)
+	commonjsModules := newStringSet()
 	for _, pkg := range options.packages {
 		importPath := pkg.ImportPath()
 		meta := importMeta[importPath]
@@ -256,11 +250,11 @@ func build(storageDir string, hostname string, options buildOptions) (ret buildR
 					meta.Typings = path.Join(pkg.submodule, p.Typings)
 				}
 			} else {
-				exports, pass, err := parseModuleExports(path.Join(pkgDir, ensureExt(meta.Main, ".js")))
+				exports, esm, err := parseModuleExports(path.Join(pkgDir, ensureExt(meta.Main, ".js")))
 				if err != nil && os.IsNotExist(err) {
-					exports, pass, err = parseModuleExports(path.Join(pkgDir, meta.Main, "index.js"))
+					exports, esm, err = parseModuleExports(path.Join(pkgDir, meta.Main, "index.js"))
 				}
-				if pass {
+				if esm {
 					meta.Module = meta.Main
 					meta.Exports = exports
 					continue
@@ -268,60 +262,73 @@ func build(storageDir string, hostname string, options buildOptions) (ret buildR
 			}
 		}
 		if meta.Module != "" {
-			exports, pass, err := parseModuleExports(path.Join(pkgDir, ensureExt(meta.Module, ".js")))
+			exports, esm, err := parseModuleExports(path.Join(pkgDir, ensureExt(meta.Module, ".js")))
 			if err != nil && os.IsNotExist(err) {
-				exports, pass, err = parseModuleExports(path.Join(pkgDir, meta.Module, "index.js"))
+				exports, esm, err = parseModuleExports(path.Join(pkgDir, meta.Module, "index.js"))
 			}
-			if pass {
+			if esm {
 				meta.Exports = exports
 				continue
 			}
 			// fake module
 			meta.Module = ""
 		}
-		// export commonjs exports
-		importIdentifier := identify(importPath)
-		fmt.Fprintf(buf, `
-			try {
-				const %s = require("%s");
-				if (isObject(%s)) {
-					// remove some keywords which running error in strict mode
-					const keys = Object.keys(%s).filter(d => !["arguments"].includes(d));
-					meta["%s"] = {exports: keys };
-				} else {
-					meta["%s"] = {exports: ['default'] };
-				}
-
-			} catch(e) {}
-		`, importIdentifier, importPath, importIdentifier, importIdentifier, importPath, importPath)
+		commonjsModules.Add(importPath)
 	}
-	buf.WriteString(`
-		fs.writeFileSync('./peer.output.json', JSON.stringify(meta))
-		process.exit(0);
-	`)
 
-	cmd := exec.Command("node")
-	cmd.Stdin = buf
-	cmd.Env = append(os.Environ(), fmt.Sprintf(`NODE_ENV=%s`, env))
-	output, err := cmd.CombinedOutput()
-	if err == nil {
-		var m map[string]ImportMeta
-		err = utils.ParseJSONFile("./peer.output.json", &m)
-		if err != nil {
+	if commonjsModules.Size() > 0 {
+		start := time.Now()
+		buf := bytes.NewBuffer(nil)
+		buf.WriteString(`
+			const fs = require("fs");
+			const meta = {};
+			const isObject = v => typeof v === 'object' && v !== null;
+		`)
+		for _, importPath := range commonjsModules.Values() {
+			// export commonjs exports
+			importIdentifier := identify(importPath)
+			fmt.Fprintf(buf, `
+				try {
+					const %s = require("%s");
+					if (isObject(%s)) {
+						// remove some keywords which running error in strict mode
+						const keys = Object.keys(%s).filter(d => !["arguments"].includes(d));
+						meta["%s"] = {exports: keys };
+					} else {
+						meta["%s"] = {exports: ['default'] };
+					}
+				} catch(e) {}
+			`, importIdentifier, importPath, importIdentifier, importIdentifier, importPath, importPath)
+		}
+		buf.WriteString(`
+			fs.writeFileSync('./peer.output.json', JSON.stringify(meta))
+			process.exit(0);
+		`)
+
+		cmd := exec.Command("node")
+		cmd.Stdin = buf
+		cmd.Env = append(os.Environ(), fmt.Sprintf(`NODE_ENV=%s`, env))
+		var output []byte
+		output, err = cmd.CombinedOutput()
+		if err == nil {
+			var m map[string]ImportMeta
+			err = utils.ParseJSONFile("./peer.output.json", &m)
+			if err != nil {
+				return
+			}
+			for name, meta := range m {
+				_meta, ok := importMeta[name]
+				if ok {
+					_meta.Exports = meta.Exports
+				}
+			}
+		} else {
+			err = fmt.Errorf("nodejs: %s", string(output))
 			return
 		}
-		for name, meta := range m {
-			_meta, ok := importMeta[name]
-			if ok {
-				_meta.Exports = meta.Exports
-			}
-		}
-	} else {
-		err = fmt.Errorf("nodejs: %s", string(output))
-		return
-	}
 
-	log.Debug("node peer.js in", time.Now().Sub(start))
+		log.Debug("node peer.js in", time.Now().Sub(start))
+	}
 
 	start = time.Now()
 	for _, pkg := range options.packages {
@@ -402,7 +409,7 @@ func build(storageDir string, hostname string, options buildOptions) (ret buildR
 	}
 	externals = externals[:i]
 
-	buf = bytes.NewBuffer(nil)
+	buf := bytes.NewBuffer(nil)
 	if single {
 		pkg := options.packages[0]
 		importPath := pkg.ImportPath()
@@ -597,7 +604,7 @@ esbuild:
 				missingModule := strings.Split(e.Text, `"`)[1]
 				if missingModule != "" {
 					if !indirectRequires.Has(missingModule) {
-						indirectRequires.Set(missingModule)
+						indirectRequires.Add(missingModule)
 						extraExternals = append(extraExternals, missingModule)
 					}
 				}

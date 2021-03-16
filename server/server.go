@@ -73,14 +73,6 @@ func Serve(fs *embed.FS) {
 	}
 	log.Debugf("nodejs v%s installed", nodeEnv.version)
 
-	data, err := ioutil.ReadFile(path.Join(etcDir, "build.ver"))
-	if err == nil {
-		i, err := strconv.Atoi(strings.TrimSpace(string(data)))
-		if err == nil && i > 0 {
-			buildVersion = i
-		}
-	}
-
 	storageDir := path.Join(etcDir, "storage")
 	ensureDir(path.Join(storageDir, fmt.Sprintf("builds/v%d", buildVersion)))
 	ensureDir(path.Join(storageDir, fmt.Sprintf("types/v%d", buildVersion)))
@@ -132,7 +124,23 @@ func Serve(fs *embed.FS) {
 			log.Debugf("%s added", name)
 		}
 	}
+	mmdata, err := fs.ReadFile("assets/china_ip_list.mmdb")
+	if err == nil {
+		mmdbr, err = maxminddb.FromBytes(mmdata)
+		if err != nil {
+			log.Fatal(err)
+		}
+		log.Debugf("china_ip_list.mmdb applied: %+v", mmdbr.Metadata)
+	}
 	embedFS = fs
+
+	v, err := ioutil.ReadFile(path.Join(etcDir, "build.ver"))
+	if err == nil {
+		i, err := strconv.Atoi(strings.TrimSpace(string(v)))
+		if err == nil && i > 0 {
+			buildVersion = i
+		}
+	}
 
 	accessLogger, err := logx.New(fmt.Sprintf("file:%s?buffer=32k&fileDateFormat=20060102", path.Join(logDir, "access.log")))
 	if err != nil {

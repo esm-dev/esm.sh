@@ -387,12 +387,6 @@
     mainEl.querySelectorAll('code.language-bash').forEach(block => {
       block.innerHTML = block.innerHTML.replace(/(^|\n)\$ /g, '$1');
     })
-    mainEl.querySelectorAll('img').forEach(img => {
-      const src = img.getAttribute('src')
-      if (src.startsWith('./assets/')) {
-        img.src = 'https://raw.githubusercontent.com/postui/esm.sh/master/' + src.replace('./', '')
-      }
-    })
 
     hljs.registerLanguage('javascript', javascript);
     hljs.registerLanguage('json', json);

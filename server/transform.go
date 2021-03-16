@@ -28,7 +28,7 @@ var (
 	regExportEqual    = regexp.MustCompile(`export\s*=`)
 )
 
-func parseModuleExports(filepath string) (exports []string, ok bool, err error) {
+func parseModuleExports(filepath string) (exports []string, esm bool, err error) {
 	data, err := ioutil.ReadFile(filepath)
 	if err != nil {
 		return
@@ -36,8 +36,8 @@ func parseModuleExports(filepath string) (exports []string, ok bool, err error) 
 	log := logger.NewDeferLog()
 	ast, pass := js_parser.Parse(log, test.SourceForTest(string(data)), config.Options{})
 	if pass {
-		ok = ast.HasES6Exports
-		if ok {
+		esm = ast.HasES6Exports
+		if esm {
 			for name := range ast.NamedExports {
 				exports = append(exports, name)
 			}
@@ -146,7 +146,7 @@ func copyDTS(external moduleSlice, hostname string, nodeModulesDir string, saveD
 				}
 			}
 		}
-		deps.Set(importPath)
+		deps.Add(importPath)
 		if !isValidatedESImportPath(importPath) {
 			importPath = "/" + importPath
 		}
