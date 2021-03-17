@@ -5,7 +5,6 @@ import (
 	"flag"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"os"
 	"os/signal"
 	"path"
@@ -73,12 +72,17 @@ func Serve(fs *embed.FS) {
 	}
 	log.Debugf("nodejs v%s installed", nodeEnv.version)
 
-	v, err := ioutil.ReadFile(path.Join(etcDir, "build.ver"))
+	data, err := fs.ReadFile("assets/build.ver")
 	if err == nil {
-		i, err := strconv.Atoi(strings.TrimSpace(string(v)))
+		i, err := strconv.Atoi(strings.TrimSpace(string(data)))
 		if err == nil && i > 0 {
 			buildVersion = i
 		}
+	}
+
+	db, err = postdb.Open(path.Join(etcDir, fmt.Sprintf("esm.v%d.db", buildVersion)), 0666)
+	if err != nil {
+		log.Fatalf("initiate esm.db: %v", err)
 	}
 
 	storageDir := path.Join(etcDir, "storage")
@@ -161,11 +165,6 @@ func Serve(fs *embed.FS) {
 	)
 
 	registerRoutes(storageDir, domain, cdnDomain, cdnDomainChina)
-
-	db, err = postdb.Open(path.Join(etcDir, "esm.db"), 0666)
-	if err != nil {
-		log.Fatalf("initiate esm.db: %v", err)
-	}
 
 	C := rex.Serve(rex.ServerConfig{
 		Port: uint16(port),
