@@ -746,6 +746,7 @@ esbuild:
 	)
 
 	ret.importMeta = importMeta
+	ret.hasCSS = hasCSS[0] == 1
 	return
 }
 
