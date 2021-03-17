@@ -49,9 +49,8 @@ var buildLock sync.Mutex
 // ImportMeta defines import meta
 type ImportMeta struct {
 	*NpmPackage
-	Exports            []string `json:"exports"`
-	ExportsFromDefault []string `json:"exportsFromDefault"`
-	Dts                string   `json:"dts"`
+	Exports []string `json:"exports"`
+	Dts     string   `json:"dts"`
 }
 
 type buildOptions struct {
@@ -287,29 +286,19 @@ func build(storageDir string, hostname string, options buildOptions) (ret buildR
 		`)
 		for _, importPath := range commonjsModules.Values() {
 			// export commonjs exports
-			js := `
+			importIdentifier := identify(importPath)
+			fmt.Fprintf(buf, `
 				try {
-					const $MOD = require("$PATH");
-					const safe = name => !["arguments"].includes(name)
-					
-					if (isObject($MOD)) {
-						if (isObject($MOD.default)) {
-							const exports = Object.keys($MOD).filter(safe);
-							const exportsFromDefault = Object.keys($MOD.default).filter(safe);
-							const onlyExportsFromDefault = exportsFromDefault.filter(d => exports.includes(d));
-							meta["$PATH"] = { exports, exportsFromDefault: onlyExportsFromDefault };
-						} else {
-							const exports = Object.keys($MOD).filter(safe);
-							meta["$PATH"] = { exports };
-						}
+					const %s = require("%s");
+					if (isObject(%s)) {
+						// remove some keywords which running error in strict mode
+						const keys = Object.keys(%s).filter(d => !["arguments"].includes(d));
+						meta["%s"] = {exports: keys };
 					} else {
-						meta["$PATH"] = { exports: ['default'] };
+						meta["%s"] = {exports: ['default'] };
 					}
 				} catch(e) {}
-			`
-			js = strings.ReplaceAll(js, "$PATH", importPath)
-			js = strings.ReplaceAll(js, "$MOD", identify(importPath))
-			buf.WriteString(js)
+			`, importIdentifier, importPath, importIdentifier, importIdentifier, importPath, importPath)
 		}
 		buf.WriteString(`
 			fs.writeFileSync('./peer.output.json', JSON.stringify(meta))
@@ -427,7 +416,6 @@ func build(storageDir string, hostname string, options buildOptions) (ret buildR
 		importIdentifier := "__" + identify(importPath)
 		meta := importMeta[importPath]
 		exports := []string{}
-		exportsFromDefault := []string{}
 		hasDefaultExport := false
 		for _, name := range meta.Exports {
 			if name == "default" {
@@ -436,30 +424,19 @@ func build(storageDir string, hostname string, options buildOptions) (ret buildR
 				exports = append(exports, name)
 			}
 		}
-
-		for _, name := range meta.ExportsFromDefault {
-			if name != "import" {
-				exportsFromDefault = append(exportsFromDefault, name)
-			}
-		}
-
 		if meta.Module != "" {
 			fmt.Fprintf(buf, `export * from "%s";%s`, importPath, EOL)
 			if hasDefaultExport {
 				fmt.Fprintf(buf, `export { default } from "%s";`, importPath)
 			}
 		} else {
-			fmt.Fprintf(buf, `import * as %s from "%s";%s`, importIdentifier, importPath, EOL)
-
-			fmt.Fprintf(buf, `export const { %s } = %s;%s`, strings.Join(exports, ","), importIdentifier, EOL)
-
 			if hasDefaultExport {
-				if len(exportsFromDefault) > 0 {
-					fmt.Fprintf(buf, `export const { %s } = %s.default;%s`, strings.Join(exportsFromDefault, ","), importIdentifier, EOL)
-				}
+				fmt.Fprintf(buf, `import %s from "%s";%s`, importIdentifier, importPath, EOL)
+			} else {
+				fmt.Fprintf(buf, `import * as %s from "%s";%s`, importIdentifier, importPath, EOL)
 			}
-
-			fmt.Fprintf(buf, `export default %s.default;`, importIdentifier)
+			fmt.Fprintf(buf, `export const { %s } = %s;%s`, strings.Join(exports, ","), importIdentifier, EOL)
+			fmt.Fprintf(buf, `export default %s;`, importIdentifier)
 		}
 	} else {
 		for _, pkg := range options.packages {
