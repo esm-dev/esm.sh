@@ -9,7 +9,7 @@ if [ "$host" == "" ]; then
 fi
 
 if [ "$host" == "" ]; then
-    echo "invalid host"
+    echo "missing host"
     exit
 fi
 
@@ -31,18 +31,17 @@ if [ "$ok" == "y" ]; then
     init="yes"
 fi
 
-rebuild="no"
-buildVersion="1"
-if [ "$init" == "no" ]; then
-    read -p "rebuild y/N? " ok
-    if [ "$ok" == "y" ]; then
-        rebuild="yes"
-        read -p "please enter the new builder id (default is 1): " p
-        if [ "$p" != "" ]; then
-            buildVersion="$p"
-        fi
-    fi
+read -p "build version: " ver
+if [ "$ver" == "" ]; then
+    echo "missing build version!"
+    exit
 fi
+read -p "repeat the build version: " ver2
+if [ "$ver" != "$ver2" ]; then
+    echo "build version not matched!"
+    exit
+fi
+echo "$ver" > $(dirname $0)/../assets/build.ver
 
 port="80"
 httpsPort="443"
@@ -75,13 +74,6 @@ if [ "$init" == "yes" ]; then
     read -p "cdn domain for China (optional): " p
     if [ "$p" != "" ]; then
         cdnDomainChina="$p"
-    fi
-fi
-
-if [ "$rebuild" == "yes" ]; then
-    read -p "etc directory (user '${user}' must have the r/w permission of it, default is ${etcDir}): " p
-    if [ "$p" != "" ]; then
-        etcDir="$p"
     fi
 fi
 
@@ -133,14 +125,8 @@ ssh -p $sshPort $user@$host << EOF
         writeSVConfLine "autorestart=true"
         supervisorctl reload
     else
-        if [ "$rebuild" == "yes" ]; then
-            rm -f ${etcDir}/esm.db
-            echo "$buildVersion" > ${etcDir}/build.ver
-            echo "esmd: rebuilt"
-        fi
         supervisorctl start esmd
     fi
 EOF
 
-rm -f $scriptsDir/../server/mmdb_china_ip_list.go
 rm -f $scriptsDir/esmd
