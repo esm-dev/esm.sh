@@ -283,25 +283,24 @@ func build(storageDir string, hostname string, options buildOptions) (ret buildR
 		buf.WriteString(`
 			const fs = require("fs");
 			const meta = {};
-			const isObject = v => typeof v === 'object' && v !== null;
+			const isObject = v => typeof v === 'object' && v !== null && !Array.isArray(v);
 		`)
 		for _, importPath := range commonjsModules.Values() {
 			// export commonjs exports
 			js := `
 				try {
 					const $MOD = require("$PATH");
+					const safe = name => !["arguments"].includes(name)
 					
 					if (isObject($MOD)) {
 						if (isObject($MOD.default)) {
-							const exports = Object.keys($MOD).filter(d => !["arguments"].includes(d));
-							const exportsFromDefault = Object.keys($MOD.default).filter(d => !["arguments"].includes(d));
+							const exports = Object.keys($MOD).filter(safe);
+							const exportsFromDefault = Object.keys($MOD.default).filter(safe);
 							const onlyExportsFromDefault = exportsFromDefault.filter(d => exports.includes(d));
 							meta["$PATH"] = { exports, exportsFromDefault: onlyExportsFromDefault };
-						} else if ($MOD.default || !$MOD.default) {
-							// x.default is function or x.default is undefined
-								const exportsFromDefault = [];
-							const exports = Object.keys($MOD).filter(d => !["arguments"].includes(d));
-							meta["$PATH"] = { exports, exportsFromDefault };
+						} else {
+							const exports = Object.keys($MOD).filter(safe);
+							meta["$PATH"] = { exports };
 						}
 					} else {
 						meta["$PATH"] = { exports: ['default'] };
