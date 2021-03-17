@@ -129,3 +129,7 @@ $ git clone https://github.com/postui/esm.sh
 $ cd esm.sh
 $ sh ./scripts/deploy.sh
 ```
+
+## Special Thanks
+
+- [wleonardo](https://github.com/wleonardo)
