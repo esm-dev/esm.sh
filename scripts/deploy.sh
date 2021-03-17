@@ -2,7 +2,7 @@
 
 host="$1"
 if [ "$host" == "" ]; then
-    read -p "please enter the host address: " h
+    read -p "deploy to (domain or IP): " h
     if [ "$h" != "" ]; then
         host="$h"
     fi
@@ -14,19 +14,19 @@ if [ "$host" == "" ]; then
 fi
 
 user="root"
-read -p "please enter the ssh login user (default is 'root'): " u
+read -p "login user (default is 'root'): " u
 if [ "$u" != "" ]; then
     user="$u"
 fi
 
 sshPort="22"
-read -p "please enter the ssh port (default is 22): " p
+read -p "ssh port (default is 22): " p
 if [ "$p" != "" ]; then
     sshPort="$p"
 fi
 
 init="no"
-read -p "initiate supervisor service (y/n) ? " ok
+read -p "initiate supervisor service y/N? " ok
 if [ "$ok" == "y" ]; then
     init="yes"
 fi
@@ -34,7 +34,7 @@ fi
 rebuild="no"
 buildVersion="1"
 if [ "$init" == "no" ]; then
-    read -p "rebuild (y/n) ? " ok
+    read -p "rebuild y/N? " ok
     if [ "$ok" == "y" ]; then
         rebuild="yes"
         read -p "please enter the new builder id (default is 1): " p
@@ -52,34 +52,34 @@ cdnDomain=""
 cdnDomainChina=""
 
 if [ "$init" == "yes" ]; then
-    read -p "please enter the server http port (default is ${port}): " p
+    read -p "server http port (default is ${port}): " p
     if [ "$p" != "" ]; then
         port="$p"
     fi
-    read -p "please enter the server https port (default is ${httpsPort}): " p
+    read -p "server https port (default is ${httpsPort}): " p
     if [ "$p" != "" ]; then
         httpsPort="$p"
     fi
-    read -p "please enter the etc directory, user ${user} must have r/w permission of it (default is ${etcDir}): " p
+    read -p "etc directory (user '${user}' must have the r/w permission of it, default is ${etcDir}): " p
     if [ "$p" != "" ]; then
         etcDir="$p"
     fi
-    read -p "please enter the server domain (default is ${domain}): " p
+    read -p "server domain (default is ${domain}): " p
     if [ "$p" != "" ]; then
         domain="$p"
     fi
-    read -p "please enter the cdn domain (optional): " p
+    read -p "cdn domain (optional): " p
     if [ "$p" != "" ]; then
         cdnDomain="$p"
     fi
-    read -p "please enter the cdn domain for China (optional): " p
+    read -p "cdn domain for China (optional): " p
     if [ "$p" != "" ]; then
         cdnDomainChina="$p"
     fi
 fi
 
 if [ "$rebuild" == "yes" ]; then
-    read -p "please enter the etc directory, user ${user} must have r/w permission of it (default is ${etcDir}): " p
+    read -p "etc directory (user '${user}' must have the r/w permission of it, default is ${etcDir}): " p
     if [ "$p" != "" ]; then
         etcDir="$p"
     fi

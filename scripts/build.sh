@@ -4,13 +4,13 @@ mmdb_china_ip_list_tag="20210308"
 dataUrl="https://github.com/alecthw/mmdb_china_ip_list/releases/download/$mmdb_china_ip_list_tag/china_ip_list.mmdb"
 saveAs="$(dirname $0)/../assets/china_ip_list.mmdb"
 
-read -p "split China traffic (y/n) ? " split_china_traffic
-read -p "please enter the deploy GOOS(default is 'linux'): " goos
-read -p "please enter the deploy GOARCH(default is 'amd64'): " goarch
+read -p "split China traffic y/N? " split_china_traffic
+read -p "build GOOS (default is 'linux'): " goos
+read -p "build GOARCH (default is 'amd64'): " goarch
 
 if [ "$split_china_traffic" == "y" ]; then
-  echo "--- building china_ip_list.mmdb..."
   if [ ! -f "$saveAs" ]; then
+    echo "--- download china_ip_list.mmdb..."
     curl --fail --location --progress-bar --output "$saveAs" "$dataUrl"
     if [ "$?" != "0" ]; then
       exit
