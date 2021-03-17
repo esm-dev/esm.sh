@@ -14,11 +14,14 @@ import (
 	"github.com/ije/rex"
 )
 
-// A Record of mmdb
+// A Country of mmdb record.
+type Country struct {
+	ISOCode string `maxminddb:"iso_code"`
+}
+
+// A Record of mmdb.
 type Record struct {
-	Country struct {
-		ISOCode string `maxminddb:"iso_code"`
-	} `maxminddb:"country"`
+	Country Country `maxminddb:"country"`
 }
 
 func registerRoutes(storageDir string, domain string, cdnDomain string, cdnDomainChina string) {
@@ -41,7 +44,7 @@ func registerRoutes(storageDir string, domain string, cdnDomain string, cdnDomai
 	}
 
 	rex.Query("*", func(ctx *rex.Context) interface{} {
-		pathname := utils.CleanPath(ctx.URL.Path)
+		pathname := ctx.Path.String()
 		switch pathname {
 		case "/":
 			readme, err := embedFS.ReadFile("README.md")
@@ -202,9 +205,11 @@ func registerRoutes(storageDir string, domain string, cdnDomain string, cdnDomai
 			if strings.HasPrefix(ctx.R.UserAgent(), "Deno/") {
 				target = "deno"
 			} else {
+				// todo: check browser ua
 				target = "esnext"
 			}
 		}
+
 		external := moduleSlice{}
 		for _, p := range strings.Split(ctx.Form.Value("external"), ",") {
 			p = strings.TrimSpace(p)
@@ -221,14 +226,18 @@ func registerRoutes(storageDir string, domain string, cdnDomain string, cdnDomai
 				}
 			}
 		}
+
 		isCSS := !ctx.Form.IsNil("css")
 		isDev := !ctx.Form.IsNil("dev")
-		noCheck := !ctx.Form.IsNil("nocheck") || !ctx.Form.IsNil("noCheck") || !ctx.Form.IsNil("no-check")
+		noCheck := !ctx.Form.IsNil("no-check")
 
-		var bundleList string
-		var isBare bool
-		var currentModule *module
-		var err error
+		var (
+			bundleList    string
+			isBare        bool
+			currentModule *module
+			err           error
+		)
+
 		if strings.HasPrefix(pathname, "/[") && strings.Contains(pathname, "]") {
 			bundleList, pathname = utils.SplitByFirstByte(strings.TrimPrefix(pathname, "/["), ']')
 			if pathname == "" {
@@ -423,5 +432,5 @@ func throwErrorJS(ctx *rex.Context, status int, err error) interface{} {
 	fmt.Fprintf(buf, `export default null;%s`, EOL)
 	ctx.SetHeader("Cache-Control", "private, no-store, no-cache, must-revalidate")
 	ctx.SetHeader("Content-Type", "application/javascript; charset=utf-8")
-	return rex.Status(status, buf.Bytes())
+	return rex.Status(status, buf)
 }
