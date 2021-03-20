@@ -652,18 +652,10 @@ esbuild:
 		if strings.HasSuffix(file.Path, ".js") {
 			// add nodejs/deno compatibility
 			if bytes.Contains(outputContent, []byte("__process$")) {
-				if options.target == "deno" {
-					fmt.Fprintf(jsContentBuf, `import __process$ from "https://deno.land/std@%s/node/process.ts";%s`, denoStdNodeVersion, eol)
-				} else {
-					fmt.Fprintf(jsContentBuf, `import __process$ from "/v%d/_node_process.js";%s__process$.env.NODE_ENV="%s";%s`, buildVersion, eol, env, eol)
-				}
+				fmt.Fprintf(jsContentBuf, `import __process$ from "/v%d/_node_process.js";%s__process$.env.NODE_ENV="%s";%s`, buildVersion, eol, env, eol)
 			}
 			if bytes.Contains(outputContent, []byte("__Buffer$")) {
-				if options.target == "deno" {
-					fmt.Fprintf(jsContentBuf, `import { Buffer as __Buffer$ } from "https://deno.land/std@%s/node/buffer.ts";%s`, denoStdNodeVersion, eol)
-				} else {
-					fmt.Fprintf(jsContentBuf, `import { Buffer as __Buffer$ } from "/v%d/_node_buffer.js";%s`, buildVersion, eol)
-				}
+				fmt.Fprintf(jsContentBuf, `import { Buffer as __Buffer$ } from "/v%d/_node_buffer.js";%s`, buildVersion, eol)
 			}
 			if peerModulesForCommonjs.Size() > 0 {
 				for _, entry := range peerModulesForCommonjs.Entries() {
