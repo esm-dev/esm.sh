@@ -170,7 +170,7 @@ func Serve(fs *embed.FS) {
 		Port: uint16(port),
 		TLS: rex.TLSConfig{
 			Port:         uint16(httpsPort),
-			AutoRedirect: !isDev,
+			AutoRedirect: false,
 			AutoTLS: rex.AutoTLSConfig{
 				AcceptTOS: !isDev,
 				Hosts:     []string{"www." + domain, domain},
