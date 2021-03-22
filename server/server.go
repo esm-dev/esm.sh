@@ -80,15 +80,16 @@ func Serve(fs *embed.FS) {
 		}
 	}
 
-	db, err = postdb.Open(path.Join(etcDir, fmt.Sprintf("esm.v%d.db", buildVersion)), 0666)
-	if err != nil {
-		log.Fatalf("initiate esm.db: %v", err)
-	}
-
 	storageDir := path.Join(etcDir, "storage")
 	ensureDir(path.Join(storageDir, fmt.Sprintf("builds/v%d", buildVersion)))
 	ensureDir(path.Join(storageDir, fmt.Sprintf("types/v%d", buildVersion)))
 	ensureDir(path.Join(storageDir, "raw"))
+
+	ensureDir(path.Join(etcDir, "database"))
+	db, err = postdb.Open(path.Join(etcDir, "database", fmt.Sprintf("esm.v%d.db", buildVersion)), 0666)
+	if err != nil {
+		log.Fatalf("initiate esm.db: %v", err)
+	}
 
 	polyfills, err := fs.ReadDir("polyfills")
 	if err != nil {
