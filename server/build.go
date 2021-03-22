@@ -26,7 +26,7 @@ import (
 
 const (
 	jsCopyrightName    = "esm.sh"
-	denoStdNodeVersion = "0.90.0"
+	denoStdNodeVersion = "0.91.0"
 )
 
 var (
@@ -477,6 +477,7 @@ func build(storageDir string, hostname string, options buildOptions) (ret buildR
 		"__filename":                  fmt.Sprintf(`"https://%s/%s.js"`, hostname, ret.buildID),
 		"__dirname":                   fmt.Sprintf(`"https://%s/%s"`, hostname, path.Dir(ret.buildID)),
 		"global":                      "__global$",
+		"require.resolve":             "__rResolve$",
 		"process":                     "__process$",
 		"Buffer":                      "__Buffer$",
 		"process.env.NODE_ENV":        fmt.Sprintf(`"%s"`, env),
@@ -663,13 +664,21 @@ esbuild:
 					if importPath != "" {
 						identifier := identify(name)
 						fmt.Fprintf(jsContentBuf, `import __%s$ from "%s";%s`, identifier, importPath, eol)
-						outputContent = bytes.ReplaceAll(outputContent, []byte(fmt.Sprintf("require(\"%s\")", name)), []byte(fmt.Sprintf("__%s$", identifier)))
+						outputContent = bytes.ReplaceAll(
+							outputContent,
+							[]byte(fmt.Sprintf("require(\"%s\")", name)),
+							[]byte(fmt.Sprintf("__%s$", identifier)),
+						)
 					}
 				}
 			}
 
 			if bytes.Contains(outputContent, []byte("__global$")) {
 				fmt.Fprintf(jsContentBuf, `if (typeof __global$ === "undefined") var __global$ = window;%s`, eol)
+			}
+
+			if bytes.Contains(outputContent, []byte("__rResolve$")) {
+				fmt.Fprintf(jsContentBuf, `var __rResolve$ = v => v;%s`, eol)
 			}
 
 			// esbuild output
