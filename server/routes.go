@@ -368,9 +368,6 @@ func registerRoutes(storageDir string, domain string, cdnDomain string, cdnDomai
 		importIdentifier := identify(importPath)
 		importPrefix := "/"
 		importSuffix := ".js"
-		if noCheck {
-			importSuffix += "?no-check"
-		}
 		if cdnDomain != "" {
 			importPrefix = fmt.Sprintf("https://%s/", cdnDomain)
 		}
