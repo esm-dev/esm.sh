@@ -25,8 +25,7 @@ import (
 )
 
 const (
-	jsCopyrightName    = "esm.sh"
-	denoStdNodeVersion = "0.91.0"
+	jsCopyrightName = "esm.sh"
 )
 
 var (
@@ -476,11 +475,18 @@ func build(storageDir string, hostname string, options buildOptions) (ret buildR
 	define := map[string]string{
 		"__filename":                  fmt.Sprintf(`"https://%s/%s.js"`, hostname, ret.buildID),
 		"__dirname":                   fmt.Sprintf(`"https://%s/%s"`, hostname, path.Dir(ret.buildID)),
-		"global":                      "__global$",
-		"require.resolve":             "__rResolve$",
 		"process":                     "__process$",
 		"Buffer":                      "__Buffer$",
+		"setImmediate":                "__setImmediate$",
+		"clearImmediate":              "clearTimeout",
+		"require.resolve":             "__rResolve$",
 		"process.env.NODE_ENV":        fmt.Sprintf(`"%s"`, env),
+		"global":                      "__global$",
+		"global.process":              "__process$",
+		"global.Buffer":               "__Buffer$",
+		"global.setImmediate":         "__setImmediate$",
+		"global.clearImmediate":       "clearTimeout",
+		"global.require.resolve":      "__rResolve$",
 		"global.process.env.NODE_ENV": fmt.Sprintf(`"%s"`, env),
 	}
 	indirectRequires := newStringSet()
@@ -527,7 +533,7 @@ esbuild:
 								if options.target == "deno" {
 									_, yes := denoStdNodeModules[resolvePath]
 									if yes {
-										pathname := fmt.Sprintf("https://deno.land/std@%s/node/%s.ts", denoStdNodeVersion, resolvePath)
+										pathname := fmt.Sprintf("/v%d/_deno_std_node_%s.js", buildVersion, resolvePath)
 										if esm {
 											resolvePath = pathname
 										} else {
@@ -675,6 +681,10 @@ esbuild:
 
 			if bytes.Contains(outputContent, []byte("__global$")) {
 				fmt.Fprintf(jsContentBuf, `if (typeof __global$ === "undefined") var __global$ = window;%s`, eol)
+			}
+
+			if bytes.Contains(outputContent, []byte("__setImmediate$$")) {
+				fmt.Fprintf(jsContentBuf, `__setImmediate$ = (cb, args) => setTimeout(cb, 0, ...args);%s`, eol)
 			}
 
 			if bytes.Contains(outputContent, []byte("__rResolve$")) {
