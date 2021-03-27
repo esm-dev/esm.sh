@@ -140,7 +140,8 @@ func registerRoutes(storageDir string, domain string, cdnDomain string, cdnDomai
 					}
 				}
 				if shouldRedirect {
-					return rex.Redirect(fmt.Sprintf("%s://%s/%s", proto, hostname, m.String()), 302)
+					url := fmt.Sprintf("%s://%s/%s", proto, hostname, m.String())
+					return rex.Redirect(url, http.StatusTemporaryRedirect)
 				}
 				cacheFile := path.Join(storageDir, "raw", m.String())
 				if fileExists(cacheFile) {
@@ -340,7 +341,8 @@ func registerRoutes(storageDir string, domain string, cdnDomain string, cdnDomai
 				if ctx.R.TLS != nil {
 					proto = "https"
 				}
-				return rex.Redirect(fmt.Sprintf("%s://%s/%s.css", proto, hostname, ret.buildID), 302)
+				url := fmt.Sprintf("%s://%s/%s.css", proto, hostname, ret.buildID)
+				return rex.Redirect(url, http.StatusTemporaryRedirect)
 			}
 			return throwErrorJS(ctx, 404, fmt.Errorf("css not found"))
 		}

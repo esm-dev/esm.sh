@@ -45,7 +45,7 @@ func parseModule(pathname string) (*module, error) {
 	return &module{
 		name:      name,
 		version:   version,
-		submodule: submodule,
+		submodule: strings.TrimSuffix(submodule, ".js"),
 	}, nil
 }
 
