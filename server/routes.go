@@ -342,7 +342,11 @@ func registerRoutes(storageDir string, domain string, cdnDomain string, cdnDomai
 					proto = "https"
 				}
 				url := fmt.Sprintf("%s://%s/%s.css", proto, hostname, ret.buildID)
-				return rex.Redirect(url, http.StatusTemporaryRedirect)
+				code := http.StatusTemporaryRedirect
+				if regVersionPath.MatchString(pathname) {
+					code = http.StatusPermanentRedirect
+				}
+				return rex.Redirect(url, code)
 			}
 			return throwErrorJS(ctx, 404, fmt.Errorf("css not found"))
 		}
