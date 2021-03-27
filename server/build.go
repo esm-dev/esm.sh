@@ -249,12 +249,12 @@ func build(storageDir string, hostname string, options buildOptions) (ret buildR
 					meta.Typings = path.Join(pkg.submodule, p.Typings)
 				}
 			} else {
-				exports, esm, err := parseModuleExports(path.Join(pkgDir, ensureExt(meta.Main, ".js")))
+				exports, esm, err := parseModuleExports(path.Join(pkgDir, ensureExt(pkg.submodule, ".js")))
 				if err != nil && os.IsNotExist(err) {
-					exports, esm, err = parseModuleExports(path.Join(pkgDir, meta.Main, "index.js"))
+					exports, esm, err = parseModuleExports(path.Join(pkgDir, pkg.submodule, "index.js"))
 				}
 				if esm {
-					meta.Module = meta.Main
+					meta.Module = pkg.submodule
 					meta.Exports = exports
 					continue
 				}
@@ -330,6 +330,7 @@ func build(storageDir string, hostname string, options buildOptions) (ret buildR
 	}
 
 	start = time.Now()
+	hasTypes := false
 	for _, pkg := range options.packages {
 		var types string
 		meta := importMeta[pkg.ImportPath()]
@@ -366,9 +367,12 @@ func build(storageDir string, hostname string, options buildOptions) (ret buildR
 				return
 			}
 			meta.Dts = "/" + types
+			hasTypes = true
 		}
 	}
-	log.Debug("copy dts in", time.Now().Sub(start))
+	if hasTypes {
+		log.Debug("copy dts in", time.Now().Sub(start))
+	}
 
 	externals := make([]string, len(peerPackages)+len(builtInNodeModules)+len(options.external))
 	i := 0
@@ -424,17 +428,21 @@ func build(storageDir string, hostname string, options buildOptions) (ret buildR
 			}
 		}
 		if meta.Module != "" {
-			fmt.Fprintf(buf, `export * from "%s";%s`, importPath, EOL)
+			if len(exports) > 0 {
+				fmt.Fprintf(buf, `export * from "%s";%s`, importPath, EOL)
+			}
 			if hasDefaultExport {
 				fmt.Fprintf(buf, `export { default } from "%s";`, importPath)
 			}
 		} else {
 			if hasDefaultExport {
 				fmt.Fprintf(buf, `import %s from "%s";%s`, importIdentifier, importPath, EOL)
-			} else {
+			} else if len(exports) > 0 {
 				fmt.Fprintf(buf, `import * as %s from "%s";%s`, importIdentifier, importPath, EOL)
 			}
-			fmt.Fprintf(buf, `export const { %s } = %s;%s`, strings.Join(exports, ","), importIdentifier, EOL)
+			if len(exports) > 0 {
+				fmt.Fprintf(buf, `export const { %s } = %s;%s`, strings.Join(exports, ","), importIdentifier, EOL)
+			}
 			fmt.Fprintf(buf, `export default %s;`, importIdentifier)
 		}
 	} else {
@@ -511,6 +519,21 @@ esbuild:
 					plugin.OnResolve(
 						api.OnResolveOptions{Filter: fmt.Sprintf("^(%s)$", strings.Join(externals, "|"))},
 						func(args api.OnResolveArgs) (api.OnResolveResult, error) {
+							if single {
+								pkg := options.packages[0]
+								importPath := pkg.ImportPath()
+								if args.Path == importPath {
+									meta := importMeta[importPath]
+									resolvePath := path.Join(nodeModulesDir, meta.Name, ensureExt(meta.Main, ".js"))
+									if !fileExists(resolvePath) {
+										resolvePath = path.Join(nodeModulesDir, meta.Name, meta.Main, "index.js")
+									}
+									if fileExists(resolvePath) {
+										return api.OnResolveResult{Path: resolvePath}, nil
+									}
+									return api.OnResolveResult{Path: args.Path, External: true}, nil
+								}
+							}
 							_, esm, _ := parseModuleExports(args.Importer)
 							resolvePath := args.Path
 							var version string
@@ -539,7 +562,7 @@ esbuild:
 										} else {
 											peerModulesForCommonjs.Set(resolvePath, pathname)
 										}
-										return api.OnResolveResult{Path: resolvePath, External: true, Namespace: "http"}, nil
+										return api.OnResolveResult{Path: resolvePath, External: true}, nil
 									}
 								}
 
@@ -562,7 +585,7 @@ esbuild:
 										} else {
 											peerModulesForCommonjs.Set(resolvePath, pathname)
 										}
-										return api.OnResolveResult{Path: resolvePath, External: true, Namespace: "http"}, nil
+										return api.OnResolveResult{Path: resolvePath, External: true}, nil
 									}
 								}
 							}
@@ -592,7 +615,7 @@ esbuild:
 									peerModulesForCommonjs.Set(resolvePath, "")
 								}
 							}
-							return api.OnResolveResult{Path: resolvePath, External: true, Namespace: "http"}, nil
+							return api.OnResolveResult{Path: resolvePath, External: true}, nil
 						},
 					)
 				},
