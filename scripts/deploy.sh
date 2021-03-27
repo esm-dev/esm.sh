@@ -26,7 +26,7 @@ if [ "$p" != "" ]; then
 fi
 
 init="no"
-read -p "initiate supervisor service y/N? " ok
+read -p "initiate supervisor service? y/N " ok
 if [ "$ok" == "y" ]; then
     init="yes"
 fi

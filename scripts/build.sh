@@ -1,21 +1,23 @@
 #!/bin/bash
 
-mmdb_china_ip_list_tag="20210308"
-dataUrl="https://github.com/alecthw/mmdb_china_ip_list/releases/download/$mmdb_china_ip_list_tag/china_ip_list.mmdb"
+mmdb_china_ip_list_tag="20210322"
+dataUrl="https://github.com/alecthw/mmdb_china_ip_list/releases/download/${mmdb_china_ip_list_tag}/china_ip_list.mmdb"
 saveAs="$(dirname $0)/../assets/china_ip_list.mmdb"
+cacheTo="/tmp/china_ip_list.${mmdb_china_ip_list_tag}.mmdb"
 
-read -p "split China traffic y/N? " split_china_traffic
+read -p "split China traffic? y/N " split_china_traffic
 read -p "build GOOS (default is 'linux'): " goos
 read -p "build GOARCH (default is 'amd64'): " goarch
 
 if [ "$split_china_traffic" == "y" ]; then
-  if [ ! -f "$saveAs" ]; then
+  if [ ! -f "$cacheTo" ]; then
     echo "--- download china_ip_list.mmdb..."
-    curl --fail --location --progress-bar --output "$saveAs" "$dataUrl"
+    curl --fail --location --progress-bar --output "$cacheTo" "$dataUrl"
     if [ "$?" != "0" ]; then
       exit
     fi
   fi
+  cp -f $cacheTo $saveAs
 else
   if [ -f "$saveAs" ]; then
     rm "$saveAs"
