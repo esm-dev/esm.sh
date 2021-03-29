@@ -10,7 +10,10 @@ import (
 )
 
 func TestParseModuleExports(t *testing.T) {
-	raw := []string{
+	exportRaw := []string{
+		`export * from './react.js';`,
+	}
+	reactRaw := []string{
 		`export {`,
 		`    Component, ReactNode`,
 		`} from 'react';`,
@@ -20,13 +23,18 @@ func TestParseModuleExports(t *testing.T) {
 	testDir := path.Join(os.TempDir(), "test")
 	ensureDir(testDir)
 
-	fp := path.Join(testDir, "exports.js")
-	err := ioutil.WriteFile(fp, []byte(strings.Join(raw, "\n")), 0644)
+	err := ioutil.WriteFile(path.Join(testDir, "react.js"), []byte(strings.Join(reactRaw, "\n")), 0644)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	exports, _, err := parseModuleExports(fp)
+	fp := path.Join(testDir, "exports.js")
+	err = ioutil.WriteFile(fp, []byte(strings.Join(exportRaw, "\n")), 0644)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	exports, _, err := parseModuleExports(".", fp)
 	if err != nil {
 		t.Fatal(err)
 	}

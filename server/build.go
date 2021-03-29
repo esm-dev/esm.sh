@@ -249,9 +249,9 @@ func build(storageDir string, hostname string, options buildOptions) (ret buildR
 					meta.Typings = path.Join(pkg.submodule, p.Typings)
 				}
 			} else {
-				exports, esm, err := parseModuleExports(path.Join(pkgDir, ensureExt(pkg.submodule, ".js")))
+				exports, esm, err := parseModuleExports(nodeModulesDir, path.Join(pkgDir, ensureExt(pkg.submodule, ".js")))
 				if err != nil && os.IsNotExist(err) {
-					exports, esm, err = parseModuleExports(path.Join(pkgDir, pkg.submodule, "index.js"))
+					exports, esm, err = parseModuleExports(nodeModulesDir, path.Join(pkgDir, pkg.submodule, "index.js"))
 				}
 				if esm {
 					meta.Module = pkg.submodule
@@ -261,9 +261,9 @@ func build(storageDir string, hostname string, options buildOptions) (ret buildR
 			}
 		}
 		if meta.Module != "" {
-			exports, esm, err := parseModuleExports(path.Join(pkgDir, ensureExt(meta.Module, ".js")))
+			exports, esm, err := parseModuleExports(nodeModulesDir, path.Join(pkgDir, ensureExt(meta.Module, ".js")))
 			if err != nil && os.IsNotExist(err) {
-				exports, esm, err = parseModuleExports(path.Join(pkgDir, meta.Module, "index.js"))
+				exports, esm, err = parseModuleExports(nodeModulesDir, path.Join(pkgDir, meta.Module, "index.js"))
 			}
 			if esm {
 				meta.Exports = exports
@@ -534,24 +534,24 @@ esbuild:
 									return api.OnResolveResult{Path: args.Path, External: true}, nil
 								}
 							}
-							_, esm, _ := parseModuleExports(args.Importer)
-							resolvePath := args.Path
 							var version string
 							var ok bool
 							if !ok {
-								m, yes := options.external.Get(resolvePath)
+								m, yes := options.external.Get(args.Path)
 								if yes {
 									version = m.version
 									ok = true
 								}
 							}
 							if !ok {
-								p, yes := peerPackages[resolvePath]
+								p, yes := peerPackages[args.Path]
 								if yes {
 									version = p.Version
 									ok = true
 								}
 							}
+							resolvePath := args.Path
+							_, esm, _ := parseModuleExports(nodeModulesDir, args.Importer)
 							if !ok {
 								if options.target == "deno" {
 									_, yes := denoStdNodeModules[resolvePath]

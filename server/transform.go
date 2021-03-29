@@ -12,7 +12,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/ije/esbuild-internal/config"
+	"github.com/ije/esbuild-internal/js_ast"
 	"github.com/ije/esbuild-internal/js_parser"
 	"github.com/ije/esbuild-internal/logger"
 	"github.com/ije/esbuild-internal/test"
@@ -28,16 +28,50 @@ var (
 	regExportEqual    = regexp.MustCompile(`export\s*=`)
 )
 
-func parseModuleExports(filepath string) (exports []string, esm bool, err error) {
+func parseModuleExports(nmDir string, filepath string) (exports []string, esm bool, err error) {
 	data, err := ioutil.ReadFile(filepath)
 	if err != nil {
 		return
 	}
 	log := logger.NewDeferLog()
-	ast, pass := js_parser.Parse(log, test.SourceForTest(string(data)), config.Options{})
+	ast, pass := js_parser.Parse(log, test.SourceForTest(string(data)), js_parser.Options{})
 	if pass {
-		esm = ast.HasES6Exports
+		esm = ast.ExportsKind == js_ast.ExportsESM
 		if esm {
+			for _, i := range ast.ExportStarImportRecords {
+				src := ast.ImportRecords[i].Path.Text
+				if strings.HasPrefix(src, "./") || strings.HasPrefix(src, "../") {
+					fp := path.Join(path.Dir(filepath), ensureExt(src, ".js"))
+					a, ok, e := parseModuleExports(nmDir, fp)
+					if e != nil {
+						err = e
+						return
+					}
+					if ok {
+						exports = append(exports, a...)
+					}
+				} else {
+					pkgFile := path.Join(nmDir, src, "package.json")
+					if fileExists(pkgFile) {
+						var p NpmPackage
+						err = utils.ParseJSONFile(pkgFile, &p)
+						if err != nil {
+							return
+						}
+						if p.Module != "" {
+							fp := path.Join(nmDir, src, ensureExt(p.Module, ".js"))
+							a, ok, e := parseModuleExports(nmDir, fp)
+							if e != nil {
+								err = e
+								return
+							}
+							if ok {
+								exports = append(exports, a...)
+							}
+						}
+					}
+				}
+			}
 			for name := range ast.NamedExports {
 				exports = append(exports, name)
 			}
