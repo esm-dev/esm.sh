@@ -36,68 +36,61 @@ func parseCJSModuleExports(buildDir string, importPath string) (exports []string
 	start := time.Now()
 	buf := bytes.NewBuffer(nil)
 	buf.WriteString(fmt.Sprintf(`
-			const fs = require('fs')
-			const { dirname, join } = require('path')
-			const { promisify } = require('util')
-			const enhancedResolve = require('enhanced-resolve')
-			const moduleLexer = require('cjs-module-lexer')
-			const tasks = []
-			const meta = {}
-			
-			const resolve = promisify(
-				enhancedResolve.create({
-					mainFields: ['browser', 'module', 'main']
-				})
-			)
-		
-			let lexerInitialized = false
+		const fs = require('fs')
+		const { dirname, join } = require('path')
+		const { promisify } = require('util')
+		const moduleLexer = require('cjs-module-lexer')
+		const enhancedResolve = require('enhanced-resolve')
 
-			// the function 'getExports' copied from https://github.com/evanw/esbuild/issues/442#issuecomment-739340295
-			async function getExports () {
-				if (!lexerInitialized) {
-					await moduleLexer.init()
-					lexerInitialized = true
-				}
+		const resolve = promisify(enhancedResolve.create({
+			mainFields: ['browser', 'module', 'main']
+		}))
 
-				const exports = []
-				const paths = []
+		// the function 'getExports' is copied from https://github.com/evanw/esbuild/issues/442#issuecomment-739340295
+		async function getExports () {
+			await moduleLexer.init()
 
-				try {
-					paths.push(await resolve('%s', '%s')) 
-					while (paths.length > 0) {
-						const currentPath = paths.pop()
-						const code = fs.readFileSync(currentPath).toString()
-						const results = moduleLexer.parse(code)
-						exports.push(...results.exports)
-						for (const reexport of results.reexports) {
-							paths.push(await resolve(dirname(currentPath), reexport))
-						}
+			const exports = []
+			const paths = []
+
+			try {
+				paths.push(await resolve('%s', '%s')) 
+				while (paths.length > 0) {
+					const currentPath = paths.pop()
+					const code = fs.readFileSync(currentPath).toString()
+					const results = moduleLexer.parse(code)
+					exports.push(...results.exports)
+					for (const reexport of results.reexports) {
+						paths.push(await resolve(dirname(currentPath), reexport))
 					}
-					return exports
-				} catch(e) {
-					return []
 				}
+				return exports
+			} catch(e) {
+				return []
 			}
+		}
 
-			getExports().then(exports => {
-				const saveDir = join('%s', '%s')
-				if (!fs.existsSync(saveDir)){
-					fs.mkdirSync(saveDir, {recursive: true});
-				}
-				fs.writeFileSync(join(saveDir, '__exports.json'), JSON.stringify(exports))
-				process.exit(0)
-			})
-		`, buildDir, importPath, buildDir, importPath))
+		getExports().then(exports => {
+			const saveDir = join('%s', '%s')
+			if (!fs.existsSync(saveDir)){
+				fs.mkdirSync(saveDir, {recursive: true});
+			}
+			fs.writeFileSync(join(saveDir, '__exports.json'), JSON.stringify(exports))
+			process.exit(0)
+		})
+	`, buildDir, importPath, buildDir, importPath))
 
-	var output []byte
 	cmd := exec.Command("node")
 	cmd.Stdin = buf
 	cmd.Dir = cjsModuleLexerAppDir
-	output, err = cmd.CombinedOutput()
-	if err == nil {
-		err = utils.ParseJSONFile(path.Join(buildDir, importPath, "__exports.json"), &exports)
-	} else {
+	output, e := cmd.CombinedOutput()
+	if e != nil {
 		err = fmt.Errorf("nodejs: %s", string(output))
+		return
+	}
+
+	err = utils.ParseJSONFile(path.Join(buildDir, importPath, "__exports.json"), &exports)
+	if err != nil {
 		return
 	}
 
