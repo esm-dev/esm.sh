@@ -128,6 +128,7 @@ type NpmPackage struct {
 	Type             string            `json:"type,omitempty"`
 	Types            string            `json:"types,omitempty"`
 	Typings          string            `json:"typings,omitempty"`
+	DefinedExports   map[string]string `json:"exports,omitempty"`
 	Dependencies     map[string]string `json:"dependencies,omitempty"`
 	PeerDependencies map[string]string `json:"peerDependencies,omitempty"`
 }
