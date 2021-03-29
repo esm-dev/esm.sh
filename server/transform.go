@@ -48,7 +48,11 @@ func parseESModuleExports(nmDir string, filepath string) (exports []string, esm 
 						return
 					}
 					if ok {
-						exports = append(exports, a...)
+						for _, name := range a {
+							if name != "default" {
+								exports = append(exports, name)
+							}
+						}
 					}
 				} else {
 					pkgFile := path.Join(nmDir, src, "package.json")
@@ -66,7 +70,11 @@ func parseESModuleExports(nmDir string, filepath string) (exports []string, esm 
 								return
 							}
 							if ok {
-								exports = append(exports, a...)
+								for _, name := range a {
+									if name != "default" {
+										exports = append(exports, name)
+									}
+								}
 							}
 						}
 					}
