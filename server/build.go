@@ -10,7 +10,6 @@ import (
 	"io"
 	"net/url"
 	"os"
-	"os/exec"
 	"path"
 	"sort"
 	"strings"
@@ -126,6 +125,7 @@ func build(storageDir string, hostname string, options buildOptions) (ret buildR
 	buildLock.Lock()
 	defer buildLock.Unlock()
 
+	// todo: add stand-alone cjs-module-lexer service
 	installList := []string{}
 	for _, pkg := range options.packages {
 		installList = append(installList, pkg.name+"@"+pkg.version)
@@ -227,7 +227,6 @@ func build(storageDir string, hostname string, options buildOptions) (ret buildR
 		env = "development"
 	}
 
-	commonjsModules := newStringSet()
 	for _, pkg := range options.packages {
 		importPath := pkg.ImportPath()
 		meta := importMeta[importPath]
@@ -254,9 +253,13 @@ func build(storageDir string, hostname string, options buildOptions) (ret buildR
 					meta.Typings = path.Join(pkg.submodule, p.Typings)
 				}
 			} else {
-				exports, esm, err := parseESModuleExports(nodeModulesDir, path.Join(pkgDir, ensureExt(pkg.submodule, ".js")))
-				if err != nil && os.IsNotExist(err) {
-					exports, esm, err = parseESModuleExports(nodeModulesDir, path.Join(pkgDir, pkg.submodule, "index.js"))
+				exports, esm, e := parseESModuleExports(nodeModulesDir, path.Join(pkgDir, ensureExt(pkg.submodule, ".js")))
+				if e != nil && os.IsNotExist(err) {
+					exports, esm, e = parseESModuleExports(nodeModulesDir, path.Join(pkgDir, pkg.submodule, "index.js"))
+				}
+				if e != nil {
+					err = e
+					return
 				}
 				if esm {
 					meta.Module = pkg.submodule
@@ -277,61 +280,12 @@ func build(storageDir string, hostname string, options buildOptions) (ret buildR
 			// fake module
 			meta.Module = ""
 		}
-		commonjsModules.Add(importPath)
-	}
 
-	if commonjsModules.Size() > 0 {
-		start := time.Now()
-		buf := bytes.NewBuffer(nil)
-		buf.WriteString(`
-			const fs = require("fs");
-			const meta = {};
-			const isObject = v => typeof v === 'object' && v !== null && !Array.isArray(v);
-		`)
-		for _, importPath := range commonjsModules.Values() {
-			// export commonjs exports
-			importIdentifier := identify(importPath)
-			fmt.Fprintf(buf, `
-				try {
-					const %s = require("%s");
-					if (isObject(%s)) {
-						// remove some keywords which running error in strict mode
-						const keys = Object.keys(%s).filter(d => !["arguments"].includes(d));
-						meta["%s"] = {exports: keys };
-					} else {
-						meta["%s"] = {exports: ['default'] };
-					}
-				} catch(e) {}
-			`, importIdentifier, importPath, importIdentifier, importIdentifier, importPath, importPath)
-		}
-		buf.WriteString(`
-			fs.writeFileSync('./peer.output.json', JSON.stringify(meta))
-			process.exit(0);
-		`)
-
-		cmd := exec.Command("node")
-		cmd.Stdin = buf
-		cmd.Env = append(os.Environ(), fmt.Sprintf(`NODE_ENV=%s`, env))
-		var output []byte
-		output, err = cmd.CombinedOutput()
-		if err == nil {
-			var m map[string]ImportMeta
-			err = utils.ParseJSONFile("./peer.output.json", &m)
-			if err != nil {
-				return
-			}
-			for name, meta := range m {
-				_meta, ok := importMeta[name]
-				if ok {
-					_meta.Exports = meta.Exports
-				}
-			}
-		} else {
-			err = fmt.Errorf("nodejs: %s", string(output))
+		fmt.Println(buildDir, importPath)
+		meta.Exports, err = parseCJSModuleExports(buildDir, importPath)
+		if err != nil {
 			return
 		}
-
-		log.Debug("node peer.js in", time.Now().Sub(start))
 	}
 
 	start = time.Now()
@@ -440,15 +394,12 @@ func build(storageDir string, hostname string, options buildOptions) (ret buildR
 				fmt.Fprintf(buf, `export { default } from "%s";`, importPath)
 			}
 		} else {
-			if hasDefaultExport {
-				fmt.Fprintf(buf, `import %s from "%s";%s`, importIdentifier, importPath, EOL)
-			} else if len(exports) > 0 {
-				fmt.Fprintf(buf, `import * as %s from "%s";%s`, importIdentifier, importPath, EOL)
-			}
+			fmt.Fprintf(buf, `import %s_default from "%s";%s`, importIdentifier, importPath, EOL)
 			if len(exports) > 0 {
-				fmt.Fprintf(buf, `export const { %s } = %s;%s`, strings.Join(exports, ","), importIdentifier, EOL)
+				fmt.Fprintf(buf, `import * as %s_star from "%s";%s`, importIdentifier, importPath, EOL)
+				fmt.Fprintf(buf, `export const { %s } = %s_star;%s`, strings.Join(exports, ","), importIdentifier, EOL)
 			}
-			fmt.Fprintf(buf, `export default %s;`, importIdentifier)
+			fmt.Fprintf(buf, `export default %s_default;`, importIdentifier)
 		}
 	} else {
 		for _, pkg := range options.packages {

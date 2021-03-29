@@ -5,17 +5,12 @@ import (
 	"bytes"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"os"
 	"path"
 	"regexp"
 	"strconv"
 	"strings"
 
-	"github.com/ije/esbuild-internal/js_ast"
-	"github.com/ije/esbuild-internal/js_parser"
-	"github.com/ije/esbuild-internal/logger"
-	"github.com/ije/esbuild-internal/test"
 	"github.com/ije/gox/utils"
 )
 
@@ -25,68 +20,7 @@ var (
 	regImportCallExpr = regexp.MustCompile(`import\((('[^']+')|("[^"]+"))\)`)
 	regReferenceTag   = regexp.MustCompile(`^<reference\s+(path|types)\s*=\s*('|")([^'"]+)("|')\s*/>$`)
 	regDeclareModule  = regexp.MustCompile(`^declare\s+module\s*('|")([^'"]+)("|')`)
-	regExportEqual    = regexp.MustCompile(`export\s*=`)
 )
-
-func parseESModuleExports(nmDir string, filepath string) (exports []string, esm bool, err error) {
-	data, err := ioutil.ReadFile(filepath)
-	if err != nil {
-		return
-	}
-	log := logger.NewDeferLog()
-	ast, pass := js_parser.Parse(log, test.SourceForTest(string(data)), js_parser.Options{})
-	if pass {
-		esm = ast.ExportsKind == js_ast.ExportsESM
-		if esm {
-			for _, i := range ast.ExportStarImportRecords {
-				src := ast.ImportRecords[i].Path.Text
-				if strings.HasPrefix(src, "./") || strings.HasPrefix(src, "../") {
-					fp := path.Join(path.Dir(filepath), ensureExt(src, ".js"))
-					a, ok, e := parseESModuleExports(nmDir, fp)
-					if e != nil {
-						err = e
-						return
-					}
-					if ok {
-						for _, name := range a {
-							if name != "default" {
-								exports = append(exports, name)
-							}
-						}
-					}
-				} else {
-					pkgFile := path.Join(nmDir, src, "package.json")
-					if fileExists(pkgFile) {
-						var p NpmPackage
-						err = utils.ParseJSONFile(pkgFile, &p)
-						if err != nil {
-							return
-						}
-						if p.Module != "" {
-							fp := path.Join(nmDir, src, ensureExt(p.Module, ".js"))
-							a, ok, e := parseESModuleExports(nmDir, fp)
-							if e != nil {
-								err = e
-								return
-							}
-							if ok {
-								for _, name := range a {
-									if name != "default" {
-										exports = append(exports, name)
-									}
-								}
-							}
-						}
-					}
-				}
-			}
-			for name := range ast.NamedExports {
-				exports = append(exports, name)
-			}
-		}
-	}
-	return
-}
 
 func copyDTS(external moduleSlice, hostname string, nodeModulesDir string, saveDir string, dts string) (err error) {
 	saveFilePath := path.Join(saveDir, dts)

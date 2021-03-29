@@ -9,41 +9,6 @@ import (
 	"testing"
 )
 
-func TestParseESModuleExports(t *testing.T) {
-	exportRaw := []string{
-		`export * from './react.js';`,
-	}
-	reactRaw := []string{
-		`export {`,
-		`    Component, ReactNode`,
-		`} from 'react';`,
-	}
-	expect := []string{"Component", "ReactNode"}
-
-	testDir := path.Join(os.TempDir(), "test")
-	ensureDir(testDir)
-
-	err := ioutil.WriteFile(path.Join(testDir, "react.js"), []byte(strings.Join(reactRaw, "\n")), 0644)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	fp := path.Join(testDir, "exports.js")
-	err = ioutil.WriteFile(fp, []byte(strings.Join(exportRaw, "\n")), 0644)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	exports, _, err := parseESModuleExports(".", fp)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	if strings.Join(exports, ",") != strings.Join(expect, ",") {
-		t.Fatalf("unexpected exports.js: %s", strings.Join(exports, ","))
-	}
-}
-
 func TestCopyDTS(t *testing.T) {
 	testDir := path.Join(os.TempDir(), "test")
 	os.RemoveAll(testDir)

@@ -139,10 +139,6 @@ type NodeEnv struct {
 }
 
 func checkNodeEnv() (env *NodeEnv, err error) {
-	env = &NodeEnv{
-		npmRegistry: "https://registry.npmjs.org/",
-	}
-
 	var installed bool
 CheckNodejs:
 	version, major, err := getNodejsVersion()
@@ -166,12 +162,16 @@ CheckNodejs:
 			goto CheckNodejs
 		} else {
 			if err == nil {
-				err = fmt.Errorf("bad nodejs version %s need %d+", env.version, minNodejsVersion)
+				err = fmt.Errorf("bad nodejs version %s need %d+", version, minNodejsVersion)
 			}
 			return
 		}
 	}
-	env.version = version
+
+	env = &NodeEnv{
+		version:     version,
+		npmRegistry: "https://registry.npmjs.org/",
+	}
 
 	output, err := exec.Command("npm", "config", "get", "registry").CombinedOutput()
 	if err == nil {
