@@ -281,7 +281,6 @@ func build(storageDir string, hostname string, options buildOptions) (ret buildR
 			meta.Module = ""
 		}
 
-		fmt.Println(buildDir, importPath)
 		meta.Exports, err = parseCJSModuleExports(buildDir, importPath)
 		if err != nil {
 			return
