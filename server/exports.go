@@ -108,9 +108,15 @@ func parseESModuleExports(buildDir string, importPath string) (exports []string,
 		fi, e := os.Lstat(path.Join(nmDir, importPath))
 		isImportDir = e == nil && fi.IsDir()
 		if isImportDir {
-			filepath = path.Join(nmDir, importPath, "index.js")
+			filepath = path.Join(nmDir, importPath, "index.mjs")
+			if !fileExists(filepath) {
+				filepath = path.Join(nmDir, importPath, "index.js")
+			}
 		} else {
-			filepath = path.Join(nmDir, ensureExt(importPath, ".js"))
+			filepath = path.Join(nmDir, importPath)
+			if !strings.HasSuffix(filepath, ".js") && !strings.HasSuffix(filepath, ".mjs") {
+				filepath = filepath + ".js"
+			}
 		}
 	}
 	data, err := ioutil.ReadFile(filepath)
