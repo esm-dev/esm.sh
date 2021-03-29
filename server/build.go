@@ -160,6 +160,9 @@ func build(storageDir string, hostname string, options buildOptions) (ret buildR
 				return
 			}
 		}
+		if meta.Module == "" && meta.Type == "module" {
+			meta.Module = meta.Main
+		}
 		if pkg.submodule != "" {
 			meta.Main = pkg.submodule
 			meta.Module = ""
@@ -241,6 +244,8 @@ func build(storageDir string, hostname string, options buildOptions) (ret buildR
 				}
 				if p.Module != "" {
 					meta.Module = path.Join(pkg.submodule, p.Module)
+				} else if meta.Type == "module" && p.Main != "" {
+					meta.Module = path.Join(pkg.submodule, p.Main)
 				}
 				if p.Types != "" {
 					meta.Types = path.Join(pkg.submodule, p.Types)

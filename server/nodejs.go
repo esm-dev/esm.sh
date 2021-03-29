@@ -125,6 +125,7 @@ type NpmPackage struct {
 	Version          string            `json:"version"`
 	Main             string            `json:"main,omitempty"`
 	Module           string            `json:"module,omitempty"`
+	Type             string            `json:"type,omitempty"`
 	Types            string            `json:"types,omitempty"`
 	Typings          string            `json:"typings,omitempty"`
 	Dependencies     map[string]string `json:"dependencies,omitempty"`
