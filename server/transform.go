@@ -28,7 +28,7 @@ var (
 	regExportEqual    = regexp.MustCompile(`export\s*=`)
 )
 
-func parseModuleExports(nmDir string, filepath string) (exports []string, esm bool, err error) {
+func parseESModuleExports(nmDir string, filepath string) (exports []string, esm bool, err error) {
 	data, err := ioutil.ReadFile(filepath)
 	if err != nil {
 		return
@@ -42,7 +42,7 @@ func parseModuleExports(nmDir string, filepath string) (exports []string, esm bo
 				src := ast.ImportRecords[i].Path.Text
 				if strings.HasPrefix(src, "./") || strings.HasPrefix(src, "../") {
 					fp := path.Join(path.Dir(filepath), ensureExt(src, ".js"))
-					a, ok, e := parseModuleExports(nmDir, fp)
+					a, ok, e := parseESModuleExports(nmDir, fp)
 					if e != nil {
 						err = e
 						return
@@ -60,7 +60,7 @@ func parseModuleExports(nmDir string, filepath string) (exports []string, esm bo
 						}
 						if p.Module != "" {
 							fp := path.Join(nmDir, src, ensureExt(p.Module, ".js"))
-							a, ok, e := parseModuleExports(nmDir, fp)
+							a, ok, e := parseESModuleExports(nmDir, fp)
 							if e != nil {
 								err = e
 								return

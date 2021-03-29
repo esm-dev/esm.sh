@@ -254,9 +254,9 @@ func build(storageDir string, hostname string, options buildOptions) (ret buildR
 					meta.Typings = path.Join(pkg.submodule, p.Typings)
 				}
 			} else {
-				exports, esm, err := parseModuleExports(nodeModulesDir, path.Join(pkgDir, ensureExt(pkg.submodule, ".js")))
+				exports, esm, err := parseESModuleExports(nodeModulesDir, path.Join(pkgDir, ensureExt(pkg.submodule, ".js")))
 				if err != nil && os.IsNotExist(err) {
-					exports, esm, err = parseModuleExports(nodeModulesDir, path.Join(pkgDir, pkg.submodule, "index.js"))
+					exports, esm, err = parseESModuleExports(nodeModulesDir, path.Join(pkgDir, pkg.submodule, "index.js"))
 				}
 				if esm {
 					meta.Module = pkg.submodule
@@ -266,9 +266,9 @@ func build(storageDir string, hostname string, options buildOptions) (ret buildR
 			}
 		}
 		if meta.Module != "" {
-			exports, esm, err := parseModuleExports(nodeModulesDir, path.Join(pkgDir, ensureExt(meta.Module, ".js")))
+			exports, esm, err := parseESModuleExports(nodeModulesDir, path.Join(pkgDir, ensureExt(meta.Module, ".js")))
 			if err != nil && os.IsNotExist(err) {
-				exports, esm, err = parseModuleExports(nodeModulesDir, path.Join(pkgDir, meta.Module, "index.js"))
+				exports, esm, err = parseESModuleExports(nodeModulesDir, path.Join(pkgDir, meta.Module, "index.js"))
 			}
 			if esm {
 				meta.Exports = exports
@@ -556,7 +556,7 @@ esbuild:
 								}
 							}
 							resolvePath := args.Path
-							_, esm, _ := parseModuleExports(nodeModulesDir, args.Importer)
+							_, esm, _ := parseESModuleExports(nodeModulesDir, args.Importer)
 							if !ok {
 								if options.target == "deno" {
 									_, yes := denoStdNodeModules[resolvePath]

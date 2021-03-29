@@ -9,7 +9,7 @@ import (
 	"testing"
 )
 
-func TestParseModuleExports(t *testing.T) {
+func TestParseESModuleExports(t *testing.T) {
 	exportRaw := []string{
 		`export * from './react.js';`,
 	}
@@ -34,7 +34,7 @@ func TestParseModuleExports(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	exports, _, err := parseModuleExports(".", fp)
+	exports, _, err := parseESModuleExports(".", fp)
 	if err != nil {
 		t.Fatal(err)
 	}

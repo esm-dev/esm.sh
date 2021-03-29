@@ -180,16 +180,16 @@ func endsWith(s string, suffixs ...string) bool {
 	return false
 }
 
-func fileExists(filepath string) bool {
-	fi, err := os.Lstat(filepath)
-	return err == nil && !fi.IsDir()
-}
-
 func ensureExt(path string, ext string) string {
 	if !strings.HasSuffix(path, ext) {
 		return path + ext
 	}
 	return path
+}
+
+func fileExists(filepath string) bool {
+	fi, err := os.Lstat(filepath)
+	return err == nil && !fi.IsDir()
 }
 
 func ensureDir(dir string) (err error) {
