@@ -43,18 +43,19 @@ func TestParseESModuleExports(t *testing.T) {
 	expect := []string{"Component", "ReactNode", "useState"}
 
 	tmpDir := os.TempDir()
-	err := ioutil.WriteFile(path.Join(tmpDir, "react.js"), []byte(strings.Join(reactRaw, "\n")), 0644)
+	ensureDir(path.Join(tmpDir, "node_modules"))
+	err := ioutil.WriteFile(path.Join(tmpDir, "node_modules", "react.js"), []byte(strings.Join(reactRaw, "\n")), 0644)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	fp := path.Join(tmpDir, "exports.js")
+	fp := path.Join(tmpDir, "node_modules", "exports.js")
 	err = ioutil.WriteFile(fp, []byte(strings.Join(exportRaw, "\n")), 0644)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	exports, _, err := parseESModuleExports(".", fp)
+	exports, _, err := parseESModuleExports(tmpDir, "exports")
 	if err != nil {
 		t.Fatal(err)
 	}

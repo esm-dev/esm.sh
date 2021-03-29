@@ -98,7 +98,21 @@ func parseCJSModuleExports(buildDir string, importPath string) (exports []string
 	return
 }
 
-func parseESModuleExports(nmDir string, filepath string) (exports []string, esm bool, err error) {
+func parseESModuleExports(buildDir string, importPath string) (exports []string, esm bool, err error) {
+	nmDir := path.Join(buildDir, "node_modules")
+	var filepath string
+	var isImportDir bool
+	if path.IsAbs(importPath) {
+		filepath = importPath
+	} else {
+		fi, e := os.Lstat(path.Join(nmDir, importPath))
+		isImportDir = e == nil && fi.IsDir()
+		if isImportDir {
+			filepath = path.Join(nmDir, importPath, "index.js")
+		} else {
+			filepath = path.Join(nmDir, ensureExt(importPath, ".js"))
+		}
+	}
 	data, err := ioutil.ReadFile(filepath)
 	if err != nil {
 		return
@@ -111,8 +125,13 @@ func parseESModuleExports(nmDir string, filepath string) (exports []string, esm 
 			for _, i := range ast.ExportStarImportRecords {
 				src := ast.ImportRecords[i].Path.Text
 				if strings.HasPrefix(src, "./") || strings.HasPrefix(src, "../") {
-					fp := path.Join(path.Dir(filepath), ensureExt(src, ".js"))
-					a, ok, e := parseESModuleExports(nmDir, fp)
+					var p string
+					if isImportDir {
+						p = path.Join(importPath, src)
+					} else {
+						p = path.Join(path.Dir(importPath), src)
+					}
+					a, ok, e := parseESModuleExports(buildDir, p)
 					if e != nil {
 						err = e
 						return
@@ -133,8 +152,7 @@ func parseESModuleExports(nmDir string, filepath string) (exports []string, esm 
 							return
 						}
 						if p.Module != "" {
-							fp := path.Join(nmDir, src, ensureExt(p.Module, ".js"))
-							a, ok, e := parseESModuleExports(nmDir, fp)
+							a, ok, e := parseESModuleExports(buildDir, path.Join(src, p.Module))
 							if e != nil {
 								err = e
 								return
