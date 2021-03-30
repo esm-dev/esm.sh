@@ -163,8 +163,17 @@ func build(storageDir string, hostname string, options buildOptions) (ret buildR
 		if meta.Module == "" && meta.Type == "module" {
 			meta.Module = meta.Main
 		}
-		if meta.Module == "" && meta.DefinedExports["import"] != "" {
-			meta.Module = meta.DefinedExports["import"]
+		if meta.Module == "" && meta.DefinedExports != nil {
+			v, ok := meta.DefinedExports.(map[string]interface{})
+			if ok {
+				m, ok := v["import"]
+				if ok {
+					s, ok := m.(string)
+					if ok && s != "" {
+						meta.Module = s
+					}
+				}
+			}
 		}
 		if pkg.submodule != "" {
 			meta.Main = pkg.submodule
