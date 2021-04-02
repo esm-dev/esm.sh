@@ -673,7 +673,7 @@ esbuild:
 			}
 
 			if bytes.Contains(outputContent, []byte("__setImmediate$$")) {
-				fmt.Fprintf(jsContentBuf, `__setImmediate$ = (cb, args) => setTimeout(cb, 0, ...args);%s`, eol)
+				fmt.Fprintf(jsContentBuf, `var __setImmediate$ = (cb, args) => setTimeout(cb, 0, ...args);%s`, eol)
 			}
 
 			if bytes.Contains(outputContent, []byte("__rResolve$")) {
