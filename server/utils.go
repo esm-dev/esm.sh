@@ -18,6 +18,16 @@ var (
 	regFullVersion  = regexp.MustCompile(`^\d+\.\d+\.\d+(\-[a-zA-Z0-9\.]+)*$`)
 )
 
+// A Country of mmdb record.
+type Country struct {
+	ISOCode string `maxminddb:"iso_code"`
+}
+
+// A Record of mmdb.
+type Record struct {
+	Country Country `maxminddb:"country"`
+}
+
 type stringSet struct {
 	lock sync.RWMutex
 	m    map[string]struct{}

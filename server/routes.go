@@ -14,17 +14,7 @@ import (
 	"github.com/ije/rex"
 )
 
-// A Country of mmdb record.
-type Country struct {
-	ISOCode string `maxminddb:"iso_code"`
-}
-
-// A Record of mmdb.
-type Record struct {
-	Country Country `maxminddb:"country"`
-}
-
-func registerRoutes(storageDir string, domain string, cdnDomain string, cdnDomainChina string) {
+func registerRoutes(storageDir string, domain string, cdnDomain string, cdnDomainChina string, unpkgDomain string) {
 	start := time.Now()
 	httpClient := &http.Client{
 		Transport: &http.Transport{
@@ -47,11 +37,11 @@ func registerRoutes(storageDir string, domain string, cdnDomain string, cdnDomai
 		pathname := ctx.Path.String()
 		switch pathname {
 		case "/":
-			readme, err := embedFS.ReadFile("README.md")
+			indexHTML, err := embedFS.ReadFile("embed/index.html")
 			if err != nil {
 				return err
 			}
-			indexHTML, err := embedFS.ReadFile("embed/index.html")
+			readme, err := embedFS.ReadFile("README.md")
 			if err != nil {
 				return err
 			}
@@ -59,6 +49,7 @@ func registerRoutes(storageDir string, domain string, cdnDomain string, cdnDomai
 			html := bytes.Replace(indexHTML, []byte("'# README'"), readmeStr, -1)
 			return rex.Content("index.html", start, bytes.NewReader(html))
 		case "/favicon.ico":
+			// todo: add esm.sh logo
 			return 404
 		case "/_error.js":
 			switch ctx.Form.Value("type") {
@@ -69,7 +60,8 @@ func registerRoutes(storageDir string, domain string, cdnDomain string, cdnDomai
 			}
 		}
 
-		if strings.HasPrefix(pathname, "/embed/") {
+		// serve embed/assest files
+		if strings.HasPrefix(pathname, "/embed/assest/") {
 			data, err := embedFS.ReadFile(pathname[1:])
 			if err != nil {
 				return err
@@ -151,7 +143,7 @@ func registerRoutes(storageDir string, domain string, cdnDomain string, cdnDomai
 					ctx.SetHeader("Cache-Control", "public, max-age=31536000, immutable")
 					return rex.File(cacheFile)
 				}
-				resp, err := httpClient.Get(fmt.Sprintf("https://unpkg.com/%s", m.String()))
+				resp, err := httpClient.Get(fmt.Sprintf("https://%s/%s", unpkgDomain, m.String()))
 				if err != nil {
 					return err
 				}

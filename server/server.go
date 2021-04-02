@@ -35,6 +35,7 @@ func Serve(fs *embed.FS) {
 	var domain string
 	var cdnDomain string
 	var cdnDomainChina string
+	var unpkgDomain string
 	var logLevel string
 	var isDev bool
 
@@ -44,6 +45,7 @@ func Serve(fs *embed.FS) {
 	flag.StringVar(&domain, "domain", "esm.sh", "main domain")
 	flag.StringVar(&cdnDomain, "cdn-domain", "", "cdn domain")
 	flag.StringVar(&cdnDomainChina, "cdn-domain-china", "", "cdn domain for china")
+	flag.StringVar(&unpkgDomain, "unpkg-domain", "unpkg.com", "unpkg domain")
 	flag.StringVar(&logLevel, "log", "info", "log level")
 	flag.BoolVar(&isDev, "dev", false, "run server in development mode")
 	flag.Parse()
@@ -166,7 +168,7 @@ func Serve(fs *embed.FS) {
 		}),
 	)
 
-	registerRoutes(storageDir, domain, cdnDomain, cdnDomainChina)
+	registerRoutes(storageDir, domain, cdnDomain, cdnDomainChina, unpkgDomain)
 
 	C := rex.Serve(rex.ServerConfig{
 		Port: uint16(port),
