@@ -61,7 +61,7 @@ func registerRoutes(storageDir string, domain string, cdnDomain string, cdnDomai
 		}
 
 		// serve embed/assest files
-		if strings.HasPrefix(pathname, "/embed/assest/") {
+		if strings.HasPrefix(pathname, "/embed/assets/") {
 			data, err := embedFS.ReadFile(pathname[1:])
 			if err != nil {
 				return err
