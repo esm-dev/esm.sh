@@ -23,10 +23,6 @@ import (
 	"github.com/postui/postdb/q"
 )
 
-const (
-	jsCopyrightName = "esm.sh"
-)
-
 var (
 	buildVersion = 1
 )
@@ -625,7 +621,7 @@ esbuild:
 	}
 
 	jsContentBuf := bytes.NewBuffer(nil)
-	fmt.Fprintf(jsContentBuf, `/* %s - esbuild bundle(%s) %s %s */%s`, jsCopyrightName, options.packages.String(), strings.ToLower(options.target), env, EOL)
+	fmt.Fprintf(jsContentBuf, `/* esm.sh - esbuild bundle(%s) %s %s */%s`, options.packages.String(), strings.ToLower(options.target), env, EOL)
 	if options.isDev {
 		deps := map[string]string{}
 		for _, pkg := range options.packages {

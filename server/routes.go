@@ -385,7 +385,7 @@ func registerRoutes(storageDir string, domain string, cdnDomain string, cdnDomai
 			}
 		}
 
-		fmt.Fprintf(buf, `/* %s - %v */%s`, jsCopyrightName, currentModule, EOL)
+		fmt.Fprintf(buf, `/* esm.sh - %v */%s`, currentModule, EOL)
 		if len(packages) == 1 {
 			fmt.Fprintf(buf, `export * from "%s%s%s";%s`, importPrefix, ret.buildID, importSuffix, EOL)
 			if importMeta.Module != "" {
@@ -430,8 +430,8 @@ func registerRoutes(storageDir string, domain string, cdnDomain string, cdnDomai
 
 func throwErrorJS(ctx *rex.Context, status int, err error) interface{} {
 	buf := bytes.NewBuffer(nil)
-	fmt.Fprintf(buf, `/* %s - error */%s`, jsCopyrightName, EOL)
-	fmt.Fprintf(buf, `throw new Error("[%s] " + %s);%s`, jsCopyrightName, strings.TrimSpace(string(utils.MustEncodeJSON(err.Error()))), EOL)
+	fmt.Fprintf(buf, `/* esm.sh - error */%s`, EOL)
+	fmt.Fprintf(buf, `throw new Error("[esm.sh] " + %s);%s`, strings.TrimSpace(string(utils.MustEncodeJSON(err.Error()))), EOL)
 	fmt.Fprintf(buf, `export default null;%s`, EOL)
 	ctx.SetHeader("Cache-Control", "private, no-store, no-cache, must-revalidate")
 	ctx.SetHeader("Content-Type", "application/javascript; charset=utf-8")

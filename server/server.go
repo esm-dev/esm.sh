@@ -99,7 +99,7 @@ func Serve(fs *embed.FS) {
 		name := entry.Name()
 		filename := path.Join(storageDir, fmt.Sprintf("builds/v%d/_%s", buildVersion, name))
 		if !fileExists(filename) {
-			file, err := fs.Open(fmt.Sprintf("polyfills/%s", name))
+			file, err := fs.Open(fmt.Sprintf("embed/polyfills/%s", name))
 			if err != nil {
 				log.Fatal(err)
 			}
@@ -123,7 +123,7 @@ func Serve(fs *embed.FS) {
 		name := entry.Name()
 		filename := path.Join(storageDir, fmt.Sprintf("types/v%d/_%s", buildVersion, name))
 		if !fileExists(filename) {
-			file, err := fs.Open(fmt.Sprintf("types/%s", name))
+			file, err := fs.Open(fmt.Sprintf("embed/types/%s", name))
 			if err != nil {
 				log.Fatal(err)
 			}
