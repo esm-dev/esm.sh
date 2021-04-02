@@ -41,7 +41,7 @@ if [ "$ver" != "$ver2" ]; then
     echo "build version not matched!"
     exit
 fi
-echo "$ver" > $(dirname $0)/../assets/build.ver
+echo "$ver" > $(dirname $0)/../embed/build.ver
 
 port="80"
 httpsPort="443"

@@ -2,7 +2,7 @@
 
 mmdb_china_ip_list_tag="20210322"
 dataUrl="https://github.com/alecthw/mmdb_china_ip_list/releases/download/${mmdb_china_ip_list_tag}/china_ip_list.mmdb"
-saveAs="$(dirname $0)/../assets/china_ip_list.mmdb"
+saveAs="$(dirname $0)/../embed/china_ip_list.mmdb"
 cacheTo="/tmp/china_ip_list.${mmdb_china_ip_list_tag}.mmdb"
 
 read -p "split China traffic? y/N " split_china_traffic

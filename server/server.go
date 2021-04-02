@@ -72,7 +72,7 @@ func Serve(fs *embed.FS) {
 	}
 	log.Debugf("nodejs v%s installed", nodeEnv.version)
 
-	data, err := fs.ReadFile("assets/build.ver")
+	data, err := fs.ReadFile("embed/build.ver")
 	if err == nil {
 		i, err := strconv.Atoi(strings.TrimSpace(string(data)))
 		if err == nil && i > 0 {
@@ -91,7 +91,7 @@ func Serve(fs *embed.FS) {
 		log.Fatalf("initiate esm.db: %v", err)
 	}
 
-	polyfills, err := fs.ReadDir("polyfills")
+	polyfills, err := fs.ReadDir("embed/polyfills")
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -114,7 +114,8 @@ func Serve(fs *embed.FS) {
 			log.Debugf("%s added", name)
 		}
 	}
-	types, err := fs.ReadDir("types")
+
+	types, err := fs.ReadDir("embed/types")
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -137,7 +138,7 @@ func Serve(fs *embed.FS) {
 			log.Debugf("%s added", name)
 		}
 	}
-	mmdata, err := fs.ReadFile("assets/china_ip_list.mmdb")
+	mmdata, err := fs.ReadFile("embed/china_ip_list.mmdb")
 	if err == nil {
 		mmdbr, err = maxminddb.FromBytes(mmdata)
 		if err != nil {

@@ -51,7 +51,7 @@ func registerRoutes(storageDir string, domain string, cdnDomain string, cdnDomai
 			if err != nil {
 				return err
 			}
-			indexHTML, err := embedFS.ReadFile("assets/index.html")
+			indexHTML, err := embedFS.ReadFile("embed/index.html")
 			if err != nil {
 				return err
 			}
@@ -69,7 +69,7 @@ func registerRoutes(storageDir string, domain string, cdnDomain string, cdnDomai
 			}
 		}
 
-		if strings.HasPrefix(pathname, "/assets/") {
+		if strings.HasPrefix(pathname, "/embed/") {
 			data, err := embedFS.ReadFile(pathname[1:])
 			if err != nil {
 				return err
