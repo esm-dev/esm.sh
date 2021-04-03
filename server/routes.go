@@ -48,7 +48,8 @@ func registerRoutes() {
 				return err
 			}
 			readmeStr := utils.MustEncodeJSON(string(readme))
-			html := bytes.Replace(indexHTML, []byte("'# README'"), readmeStr, -1)
+			html := bytes.ReplaceAll(indexHTML, []byte("'# README'"), readmeStr)
+			html = bytes.ReplaceAll(html, []byte("{VERSION}"), []byte(fmt.Sprintf("%d", VERSION)))
 			return rex.Content("index.html", startTime, bytes.NewReader(html))
 		case "/favicon.ico":
 			// todo: add esm.sh logo
@@ -297,7 +298,6 @@ func registerRoutes() {
 
 		// todo: wait 1 second then down to previous build version
 		output := <-task.C
-		close(task.C)
 		if output.err != nil {
 			return throwErrorJS(ctx, 500, output.err)
 		}
