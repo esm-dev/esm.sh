@@ -289,21 +289,28 @@ func registerRoutes() {
 			return throwErrorJS(ctx, 500, err)
 		}
 
-		task := queue.Add(&buildTask{
+		// todo: wait 1 second then down to previous build version
+		task := &buildTask{
 			pkg:    *reqPkg,
 			deps:   deps,
 			target: target,
 			isDev:  isDev,
-		})
+		}
 
-		// todo: wait 1 second then down to previous build version
-		output := <-task.C
-		if output.err != nil {
-			return throwErrorJS(ctx, 500, output.err)
+		esm, packageCSS, ok := findESM(task.ID())
+		if !ok {
+			output := <-queue.Add(task)
+			if output.err != nil {
+				return throwErrorJS(ctx, 500, output.err)
+			}
+			esm = output.esm
+			packageCSS = output.packageCSS
+		} else {
+			log.Debugf("esm %s,%s found", reqPkg, target)
 		}
 
 		if isCSS {
-			if output.packageCSS {
+			if packageCSS {
 				hostname := ctx.R.Host
 				proto := "http"
 				if ctx.R.TLS != nil {
@@ -350,7 +357,6 @@ func registerRoutes() {
 		fmt.Fprintf(buf, `/* esm.sh - %v */%s`, reqPkg, "\n")
 		fmt.Fprintf(buf, `export * from "%s%s%s";%s`, importPrefix, task.ID(), importSuffix, "\n")
 
-		esm := output.esm
 		if esm.Module != "" {
 			for _, name := range esm.Exports {
 				if name == "default" {

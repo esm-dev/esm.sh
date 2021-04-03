@@ -27,7 +27,7 @@ type task struct {
 	el         *list.Element
 	createTime time.Time
 	startTime  time.Time
-	C          chan *buildOutput
+	consumers  []chan *buildOutput
 }
 
 func newBuildQueue(maxProcesses int) *buildQueue {
@@ -57,19 +57,21 @@ func (q *buildQueue) Has(id string) (ok bool) {
 }
 
 // Has checks a task is exist.
-func (q *buildQueue) Add(build *buildTask) (t *task) {
+func (q *buildQueue) Add(build *buildTask) chan *buildOutput {
 	q.lock.Lock()
 	defer q.lock.Unlock()
 
+	c := make(chan *buildOutput, 1)
 	t, ok := q.tasks[build.ID()]
 	if ok {
-		return
+		t.consumers = append(t.consumers, c)
+		return c
 	}
 
 	t = &task{
 		buildTask:  build,
 		createTime: time.Now(),
-		C:          make(chan *buildOutput, 1),
+		consumers:  []chan *buildOutput{c},
 	}
 	t.el = q.queue.PushBack(t)
 	q.tasks[build.ID()] = t
@@ -77,7 +79,8 @@ func (q *buildQueue) Add(build *buildTask) (t *task) {
 	q.lock.Unlock()
 	q.next()
 	q.lock.Lock()
-	return
+
+	return c
 }
 
 func (q *buildQueue) next() {
@@ -109,12 +112,19 @@ func (q *buildQueue) next() {
 func (q *buildQueue) wait(t *task) {
 	t.startTime = time.Now()
 	esm, packageCSS, err := t.buildESM()
-	t.C <- &buildOutput{
-		esm:        esm,
-		packageCSS: packageCSS,
-		err:        err,
+	for _, c := range t.consumers {
+		c <- &buildOutput{
+			esm:        esm,
+			packageCSS: packageCSS,
+			err:        err,
+		}
 	}
-	log.Debug("[queue]", t.ID(), "done in ", time.Now().Sub(t.startTime))
+	log.Debugf(
+		"queue(%s,%s) done in %s",
+		t.pkg.String(),
+		t.target,
+		time.Now().Sub(t.startTime),
+	)
 
 	var p []*task
 	q.lock.Lock()

@@ -58,35 +58,29 @@ func (task *buildTask) ID() string {
 	return task._id
 }
 
-func (task *buildTask) buildESM() (esm *ESMeta, packageCSS bool, err error) {
-	post, err := db.Get(q.Alias(task.ID()), q.K("esmeta", "css"))
+func findESM(id string) (esm *ESMeta, packageCSS bool, ok bool) {
+	post, err := db.Get(q.Alias(id), q.K("esmeta", "css"))
 	if err == nil {
 		err = json.Unmarshal(post.KV.Get("esmeta"), &esm)
 		if err != nil {
-			_, err = db.Delete(q.Alias(task.ID()))
-			if err != nil {
-				return
-			}
+			db.Delete(q.Alias(id))
+			return
+		}
+
+		if !fileExists(path.Join(config.storageDir, "builds", id+".js")) {
+			db.Delete(q.Alias(id))
+			return
 		}
 
 		if val := post.KV.Get("css"); len(val) == 1 && val[0] == 1 {
-			packageCSS = fileExists(path.Join(config.storageDir, "builds", task.ID()+".css"))
+			packageCSS = fileExists(path.Join(config.storageDir, "builds", id+".css"))
 		}
-
-		if fileExists(path.Join(config.storageDir, "builds", task.ID()+".js")) {
-			// has built
-			return
-		}
-
-		_, err = db.Delete(q.Alias(task.ID()))
-		if err != nil {
-			return
-		}
+		ok = true
 	}
-	if err != nil && err != postdb.ErrNotFound {
-		return
-	}
+	return
+}
 
+func (task *buildTask) buildESM() (esm *ESMeta, packageCSS bool, err error) {
 	hasher := sha1.New()
 	hasher.Write([]byte(task.ID()))
 	task._wd = path.Join(os.TempDir(), "esm-build-"+hex.EncodeToString(hasher.Sum(nil)))
