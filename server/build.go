@@ -20,18 +20,9 @@ import (
 	"github.com/postui/postdb/q"
 )
 
-var targets = map[string]api.Target{
-	"deno":   api.ESNext,
-	"es2015": api.ES2015,
-	"es2016": api.ES2016,
-	"es2017": api.ES2017,
-	"es2018": api.ES2018,
-	"es2019": api.ES2019,
-	"es2020": api.ES2020,
-}
-
 type buildTask struct {
 	_id    string
+	_wd    string
 	pkg    pkg
 	deps   pkgSlice
 	target string
@@ -96,27 +87,22 @@ func (task *buildTask) buildESM() (esm *ESMeta, packageCSS bool, err error) {
 		return
 	}
 
-	return task.build()
-}
-
-func (task *buildTask) build() (esm *ESMeta, packageCSS bool, err error) {
-	start := time.Now()
-	pkg := task.pkg
-	importPath := pkg.ImportPath()
 	hasher := sha1.New()
 	hasher.Write([]byte(task.ID()))
-	buildDir := path.Join(os.TempDir(), "esm-build-"+hex.EncodeToString(hasher.Sum(nil)))
-	ensureDir(buildDir)
-	defer os.RemoveAll(buildDir)
+	task._wd = path.Join(os.TempDir(), "esm-build-"+hex.EncodeToString(hasher.Sum(nil)))
+	ensureDir(task._wd)
+	defer os.RemoveAll(task._wd)
 
-	esmeta, err := initBuild(buildDir, pkg, true)
+	esmeta, err := initBuild(task._wd, task.pkg, true)
 	if err != nil {
 		return
 	}
 
+	start := time.Now()
 	buf := bytes.NewBuffer(nil)
 	exports := newStringSet()
 	hasDefaultExport := false
+	importPath := task.pkg.ImportPath()
 	env := "production"
 	if task.isDev {
 		env = "development"
@@ -144,7 +130,7 @@ func (task *buildTask) build() (esm *ESMeta, packageCSS bool, err error) {
 	}
 	input := &api.StdinOptions{
 		Contents:   buf.String(),
-		ResolveDir: buildDir,
+		ResolveDir: task._wd,
 		Sourcefile: "export.js",
 	}
 	minify := !task.isDev
@@ -173,9 +159,9 @@ func (task *buildTask) build() (esm *ESMeta, packageCSS bool, err error) {
 				api.OnResolveOptions{Filter: ".*"},
 				func(args api.OnResolveArgs) (api.OnResolveResult, error) {
 					p := args.Path
-					importName := pkg.name
-					if pkg.submodule != "" {
-						importName += "/" + pkg.submodule
+					importName := task.pkg.name
+					if smod := task.pkg.submodule; smod != "" {
+						importName += "/" + smod
 					}
 					// bundle modules:
 					// 1. the package self
@@ -273,7 +259,7 @@ func (task *buildTask) build() (esm *ESMeta, packageCSS bool, err error) {
 					}
 				}
 				if importPath == "" {
-					packageFile := path.Join(buildDir, "node_modules", name, "package.json")
+					packageFile := path.Join(task._wd, "node_modules", name, "package.json")
 					if fileExists(packageFile) {
 						var p NpmPackage
 						if utils.ParseJSONFile(packageFile, &p) == nil {
@@ -359,7 +345,7 @@ func (task *buildTask) build() (esm *ESMeta, packageCSS bool, err error) {
 								if err == nil {
 									// here the submodule should be always empty
 									pkg.submodule = ""
-									esmeta, err := initBuild(buildDir, *pkg, false)
+									esmeta, err := initBuild(task._wd, *pkg, false)
 									if err == nil {
 										hasDefaultExport := false
 										if len(esmeta.Exports) > 0 {
@@ -455,7 +441,7 @@ func (task *buildTask) build() (esm *ESMeta, packageCSS bool, err error) {
 
 	log.Debugf("esbuild %s %s %s in %v", task.pkg.String(), task.target, env, time.Now().Sub(start))
 
-	err = task.handleDTS(buildDir, esmeta)
+	err = task.handleDTS(esmeta)
 	if err != nil {
 		return
 	}
@@ -479,18 +465,18 @@ func (task *buildTask) build() (esm *ESMeta, packageCSS bool, err error) {
 	return
 }
 
-func (task *buildTask) handleDTS(buildDir string, esmeta *ESMeta) (err error) {
+func (task *buildTask) handleDTS(esmeta *ESMeta) (err error) {
 	start := time.Now()
 	pkg := task.pkg
-	nodeModulesDir := path.Join(buildDir, "node_modules")
-	nv := fmt.Sprintf("%s@%s", esmeta.Name, esmeta.Version)
+	nodeModulesDir := path.Join(task._wd, "node_modules")
+	versionedName := fmt.Sprintf("%s@%s", esmeta.Name, esmeta.Version)
 
 	var types string
 	if esmeta.Types != "" || esmeta.Typings != "" {
 		types = getTypesPath(nodeModulesDir, *esmeta.NpmPackage, "")
 	} else if pkg.submodule == "" {
 		if fileExists(path.Join(nodeModulesDir, pkg.name, "index.d.ts")) {
-			types = fmt.Sprintf("%s/%s", nv, "index.d.ts")
+			types = fmt.Sprintf("%s/%s", versionedName, "index.d.ts")
 		} else if !strings.HasPrefix(pkg.name, "@") {
 			packageFile := path.Join(nodeModulesDir, "@types", pkg.name, "package.json")
 			if fileExists(packageFile) {
@@ -503,13 +489,13 @@ func (task *buildTask) handleDTS(buildDir string, esmeta *ESMeta) (err error) {
 		}
 	} else {
 		if fileExists(path.Join(nodeModulesDir, pkg.name, pkg.submodule, "index.d.ts")) {
-			types = fmt.Sprintf("%s/%s", nv, path.Join(pkg.submodule, "index.d.ts"))
+			types = fmt.Sprintf("%s/%s", versionedName, path.Join(pkg.submodule, "index.d.ts"))
 		} else if fileExists(path.Join(nodeModulesDir, pkg.name, ensureExt(pkg.submodule, ".d.ts"))) {
-			types = fmt.Sprintf("%s/%s", nv, ensureExt(pkg.submodule, ".d.ts"))
+			types = fmt.Sprintf("%s/%s", versionedName, ensureExt(pkg.submodule, ".d.ts"))
 		} else if fileExists(path.Join(nodeModulesDir, "@types", pkg.name, pkg.submodule, "index.d.ts")) {
-			types = fmt.Sprintf("@types/%s/%s", nv, path.Join(pkg.submodule, "index.d.ts"))
+			types = fmt.Sprintf("@types/%s/%s", versionedName, path.Join(pkg.submodule, "index.d.ts"))
 		} else if fileExists(path.Join(nodeModulesDir, "@types", pkg.name, ensureExt(pkg.submodule, ".d.ts"))) {
-			types = fmt.Sprintf("@types/%s/%s", nv, ensureExt(pkg.submodule, ".d.ts"))
+			types = fmt.Sprintf("@types/%s/%s", versionedName, ensureExt(pkg.submodule, ".d.ts"))
 		}
 	}
 	if types != "" {

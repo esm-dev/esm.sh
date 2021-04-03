@@ -16,7 +16,7 @@ import (
 )
 
 func registerRoutes() {
-	start := time.Now()
+	startTime := time.Now()
 	httpClient := &http.Client{
 		Transport: &http.Transport{
 			Dial: func(network, addr string) (conn net.Conn, err error) {
@@ -49,7 +49,7 @@ func registerRoutes() {
 			}
 			readmeStr := utils.MustEncodeJSON(string(readme))
 			html := bytes.Replace(indexHTML, []byte("'# README'"), readmeStr, -1)
-			return rex.Content("index.html", start, bytes.NewReader(html))
+			return rex.Content("index.html", startTime, bytes.NewReader(html))
 		case "/favicon.ico":
 			// todo: add esm.sh logo
 			return 404
@@ -68,7 +68,7 @@ func registerRoutes() {
 			if err != nil {
 				return err
 			}
-			return rex.Content(pathname, start, bytes.NewReader(data))
+			return rex.Content(pathname, startTime, bytes.NewReader(data))
 		}
 
 		hasBuildVerPrefix := strings.HasPrefix(pathname, fmt.Sprintf("/v%d/", VERSION))

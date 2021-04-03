@@ -7,13 +7,6 @@ import (
 	"github.com/ije/gox/utils"
 )
 
-// ESMeta defines the es module meta
-type ESMeta struct {
-	*NpmPackage
-	Exports []string `json:"exports"`
-	Dts     string   `json:"dts"`
-}
-
 type pkg struct {
 	name      string
 	version   string
