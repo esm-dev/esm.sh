@@ -22,8 +22,7 @@ var (
 	regDeclareModule  = regexp.MustCompile(`^declare\s+module\s*('|")([^'"]+)("|')`)
 )
 
-func copyDTS(external moduleSlice, hostname string, nodeModulesDir string, saveDir string, dts string) (err error) {
-	saveFilePath := path.Join(saveDir, dts)
+func copyDTS(config config, nodeModulesDir string, dts string) (err error) {
 	dtsFilePath := path.Join(nodeModulesDir, regVersionPath.ReplaceAllString(dts, "$1/"))
 	dtsDir := path.Dir(dtsFilePath)
 	dtsFile, err := os.Open(dtsFilePath)
@@ -39,6 +38,7 @@ func copyDTS(external moduleSlice, hostname string, nodeModulesDir string, saveD
 	}
 	defer dtsFile.Close()
 
+	saveFilePath := path.Join(config.storageDir, fmt.Sprintf("types/v%d", VERSION), dts)
 	fi, err := os.Lstat(saveFilePath)
 	if err == nil {
 		if fi.IsDir() {
@@ -52,7 +52,7 @@ func copyDTS(external moduleSlice, hostname string, nodeModulesDir string, saveD
 	deps := newStringSet()
 	dmodules := []string{}
 	rewriteFn := func(importPath string) string {
-		if isValidatedESImportPath(importPath) {
+		if isFileImportPath(importPath) {
 			if importPath == "." {
 				importPath = "./index.d.ts"
 			}
@@ -83,6 +83,9 @@ func copyDTS(external moduleSlice, hostname string, nodeModulesDir string, saveD
 			if _, ok := builtInNodeModules[importPath]; ok {
 				importPath = "@types/node/" + importPath
 			}
+			if _, ok := builtInNodeModules["node:"+importPath]; ok {
+				importPath = "@types/node/" + strings.TrimPrefix(importPath, "node:")
+			}
 			pkgName, subpath := utils.SplitByFirstByte(importPath, '/')
 			if strings.HasPrefix(pkgName, "@") {
 				n, s := utils.SplitByFirstByte(subpath, '/')
@@ -103,16 +106,9 @@ func copyDTS(external moduleSlice, hostname string, nodeModulesDir string, saveD
 			if p.Name != "" {
 				importPath = getTypesPath(nodeModulesDir, p, subpath)
 			} else {
-				version := "latest"
-				for _, m := range external {
-					if m.name == pkgName {
-						version = m.version
-						break
-					}
-				}
-				p, err := nodeEnv.getPackageInfo(pkgName, version)
+				p, _, err := nodeEnv.getPackageInfo("@types/"+pkgName, "latest")
 				if err != nil && err.Error() == fmt.Sprintf("npm: package '%s' not found", pkgName) {
-					p, err = nodeEnv.getPackageInfo("@types/"+pkgName, "latest")
+					p, _, err = nodeEnv.getPackageInfo(pkgName, "latest")
 				}
 				if err == nil {
 					err = yarnAdd(fmt.Sprintf("%s@%s", p.Name, p.Version))
@@ -123,11 +119,11 @@ func copyDTS(external moduleSlice, hostname string, nodeModulesDir string, saveD
 			}
 		}
 		deps.Add(importPath)
-		if !isValidatedESImportPath(importPath) {
+		if !isFileImportPath(importPath) {
 			importPath = "/" + importPath
 		}
 		if strings.HasPrefix(importPath, "/") {
-			importPath = fmt.Sprintf("/v%d%s", buildVersion, importPath)
+			importPath = fmt.Sprintf("/v%d%s", VERSION, importPath)
 		}
 		return importPath
 	}
@@ -172,21 +168,21 @@ func copyDTS(external moduleSlice, hostname string, nodeModulesDir string, saveD
 				format := a[0][1]
 				path := a[0][3]
 				if format == "path" {
-					if !isValidatedESImportPath(path) {
+					if !isFileImportPath(path) {
 						path = "./" + path
 					}
 				}
 				if format == "types" {
 					if path == "node" {
-						path = fmt.Sprintf("/v%d/_node.ns.d.ts", buildVersion)
+						path = fmt.Sprintf("/v%d/_node.ns.d.ts", VERSION)
 					} else {
 						path = rewriteFn(path)
 					}
 					protocol := "https:"
-					if hostname == "localhost" {
+					if config.domain == "localhost" {
 						protocol = "http:"
 					}
-					fmt.Fprintf(buf, `/// <reference path="%s//%s%s" />`, protocol, hostname, path)
+					fmt.Fprintf(buf, `/// <reference path="%s//%s%s" />`, protocol, config.domain, path)
 				} else {
 					fmt.Fprintf(buf, `/// <reference path="%s" />`, rewriteFn(path))
 				}
@@ -205,8 +201,8 @@ func copyDTS(external moduleSlice, hostname string, nodeModulesDir string, saveD
 			if len(a) == 3 && strings.HasPrefix(dts, a[1]) {
 				buf.WriteString(a[0])
 				buf.WriteString(q)
-				newname := fmt.Sprintf("https://%s/%s", hostname, a[1])
-				if hostname == "localhost" {
+				newname := fmt.Sprintf("https://%s/%s", config.domain, a[1])
+				if config.domain == "localhost" {
 					newname = fmt.Sprintf("http://localhost/%s", a[1])
 				}
 				buf.WriteString(newname)
@@ -338,7 +334,7 @@ func copyDTS(external moduleSlice, hostname string, nodeModulesDir string, saveD
 				}
 			}
 			if b.Len() > 0 {
-				fmt.Fprintf(buf, `%sdeclare module "%s@*" `, EOL, name)
+				fmt.Fprintf(buf, `%sdeclare module "%s@*" `, "\n", name)
 				fmt.Fprintf(buf, strings.TrimSpace(b.String()))
 			}
 		}
@@ -357,19 +353,19 @@ func copyDTS(external moduleSlice, hostname string, nodeModulesDir string, saveD
 	}
 
 	for _, dep := range deps.Values() {
-		if isValidatedESImportPath(dep) {
+		if isFileImportPath(dep) {
 			if strings.HasPrefix(dep, "/") {
 				pkg, subpath := utils.SplitByFirstByte(dep, '/')
 				if strings.HasPrefix(pkg, "@") {
 					n, _ := utils.SplitByFirstByte(subpath, '/')
 					pkg = fmt.Sprintf("%s/%s", pkg, n)
 				}
-				err = copyDTS(external, hostname, nodeModulesDir, saveDir, path.Join(pkg, dep))
+				err = copyDTS(config, nodeModulesDir, path.Join(pkg, dep))
 			} else {
-				err = copyDTS(external, hostname, nodeModulesDir, saveDir, path.Join(path.Dir(dts), dep))
+				err = copyDTS(config, nodeModulesDir, path.Join(path.Dir(dts), dep))
 			}
 		} else {
-			err = copyDTS(external, hostname, nodeModulesDir, saveDir, dep)
+			err = copyDTS(config, nodeModulesDir, dep)
 		}
 		if err != nil {
 			os.Remove(saveFilePath)
@@ -378,6 +374,38 @@ func copyDTS(external moduleSlice, hostname string, nodeModulesDir string, saveD
 	}
 
 	return
+}
+
+func getTypesPath(nodeModulesDir string, p NpmPackage, subpath string) string {
+	var types string
+	if subpath != "" {
+		var subpkg NpmPackage
+		var subtypes string
+		subpkgJSONFile := path.Join(nodeModulesDir, p.Name, subpath, "package.json")
+		if fileExists(subpkgJSONFile) && utils.ParseJSONFile(subpkgJSONFile, &subpkg) == nil {
+			if subpkg.Types != "" {
+				subtypes = subpkg.Types
+			} else if subpkg.Typings != "" {
+				subtypes = subpkg.Typings
+			}
+		}
+		if subtypes != "" {
+			types = path.Join("/", subpath, subtypes)
+		} else {
+			types = subpath
+		}
+	} else {
+		if p.Types != "" {
+			types = p.Types
+		} else if p.Typings != "" {
+			types = p.Typings
+		} else if p.Main != "" {
+			types = strings.TrimSuffix(p.Main, ".js")
+		} else {
+			types = "index.d.ts"
+		}
+	}
+	return fmt.Sprintf("%s@%s%s", p.Name, p.Version, ensureExt(path.Join("/", types), ".d.ts"))
 }
 
 func onSemicolon(data []byte, atEOF bool) (advance int, token []byte, err error) {

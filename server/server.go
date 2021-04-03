@@ -9,8 +9,6 @@ import (
 	"os/signal"
 	"path"
 	"path/filepath"
-	"strconv"
-	"strings"
 	"syscall"
 
 	logx "github.com/ije/gox/log"
@@ -26,6 +24,14 @@ var (
 	log     *logx.Logger
 	embedFS *embed.FS
 )
+
+type config struct {
+	storageDir     string
+	domain         string
+	cdnDomain      string
+	cdnDomainChina string
+	unpkgDomain    string
+}
 
 // Serve serves esmd server
 func Serve(fs *embed.FS) {
@@ -45,7 +51,7 @@ func Serve(fs *embed.FS) {
 	flag.StringVar(&domain, "domain", "esm.sh", "main domain")
 	flag.StringVar(&cdnDomain, "cdn-domain", "", "cdn domain")
 	flag.StringVar(&cdnDomainChina, "cdn-domain-china", "", "cdn domain for china")
-	flag.StringVar(&unpkgDomain, "unpkg-domain", "unpkg.com", "unpkg domain")
+	flag.StringVar(&unpkgDomain, "unpkg-domain", "", "proxy domain for unpkg.com")
 	flag.StringVar(&logLevel, "log", "info", "log level")
 	flag.BoolVar(&isDev, "dev", false, "run server in development mode")
 	flag.Parse()
@@ -74,21 +80,20 @@ func Serve(fs *embed.FS) {
 	}
 	log.Debugf("nodejs v%s installed", nodeEnv.version)
 
-	data, err := fs.ReadFile("embed/build.ver")
-	if err == nil {
-		i, err := strconv.Atoi(strings.TrimSpace(string(data)))
-		if err == nil && i > 0 {
-			buildVersion = i
-		}
+	config := config{
+		storageDir:     path.Join(etcDir, "storage"),
+		domain:         domain,
+		cdnDomain:      cdnDomain,
+		cdnDomainChina: cdnDomainChina,
+		unpkgDomain:    unpkgDomain,
 	}
 
-	storageDir := path.Join(etcDir, "storage")
-	ensureDir(path.Join(storageDir, fmt.Sprintf("builds/v%d", buildVersion)))
-	ensureDir(path.Join(storageDir, fmt.Sprintf("types/v%d", buildVersion)))
-	ensureDir(path.Join(storageDir, "raw"))
-
 	ensureDir(path.Join(etcDir, "database"))
-	db, err = postdb.Open(path.Join(etcDir, "database", fmt.Sprintf("esm.v%d.db", buildVersion)), 0666)
+	ensureDir(path.Join(config.storageDir, fmt.Sprintf("builds/v%d", VERSION)))
+	ensureDir(path.Join(config.storageDir, fmt.Sprintf("types/v%d", VERSION)))
+	ensureDir(path.Join(config.storageDir, "raw"))
+
+	db, err = postdb.Open(path.Join(etcDir, "database", fmt.Sprintf("esm.v%d.db", VERSION)), 0666)
 	if err != nil {
 		log.Fatalf("initiate esm.db: %v", err)
 	}
@@ -99,7 +104,7 @@ func Serve(fs *embed.FS) {
 	}
 	for _, entry := range polyfills {
 		name := entry.Name()
-		filename := path.Join(storageDir, fmt.Sprintf("builds/v%d/_%s", buildVersion, name))
+		filename := path.Join(config.storageDir, fmt.Sprintf("builds/v%d/_%s", VERSION, name))
 		if !fileExists(filename) {
 			file, err := fs.Open(fmt.Sprintf("embed/polyfills/%s", name))
 			if err != nil {
@@ -123,7 +128,7 @@ func Serve(fs *embed.FS) {
 	}
 	for _, entry := range types {
 		name := entry.Name()
-		filename := path.Join(storageDir, fmt.Sprintf("types/v%d/_%s", buildVersion, name))
+		filename := path.Join(config.storageDir, fmt.Sprintf("types/v%d/_%s", VERSION, name))
 		if !fileExists(filename) {
 			file, err := fs.Open(fmt.Sprintf("embed/types/%s", name))
 			if err != nil {
@@ -168,7 +173,7 @@ func Serve(fs *embed.FS) {
 		}),
 	)
 
-	registerRoutes(storageDir, domain, cdnDomain, cdnDomainChina, unpkgDomain)
+	registerRoutes(config)
 
 	C := rex.Serve(rex.ServerConfig{
 		Port: uint16(port),

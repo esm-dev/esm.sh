@@ -19,7 +19,12 @@ import (
 
 var cjsModuleLexerAppDir string
 
-func parseCJSModuleExports(buildDir string, importPath string) (exports []string, err error) {
+type cjsModuleLexerResult struct {
+	Exports []string `json:"exports"`
+	Error   string   `json:"error"`
+}
+
+func parseCJSModuleExports(buildDir string, importPath string) (ret cjsModuleLexerResult, err error) {
 	if cjsModuleLexerAppDir == "" {
 		cjsModuleLexerAppDir = path.Join(os.TempDir(), "esmd-cjs-module-lexer")
 		ensureDir(cjsModuleLexerAppDir)
@@ -64,9 +69,9 @@ func parseCJSModuleExports(buildDir string, importPath string) (exports []string
 						paths.push(await resolve(dirname(currentPath), reexport))
 					}
 				}
-				return exports
+				return { exports }
 			} catch(e) {
-				return []
+				return { error: e.message }
 			}
 		}
 
@@ -89,7 +94,7 @@ func parseCJSModuleExports(buildDir string, importPath string) (exports []string
 		return
 	}
 
-	err = utils.ParseJSONFile(path.Join(buildDir, importPath, "__exports.json"), &exports)
+	err = utils.ParseJSONFile(path.Join(buildDir, importPath, "__exports.json"), &ret)
 	if err != nil {
 		return
 	}

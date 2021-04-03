@@ -196,12 +196,28 @@ CheckYarn:
 	return
 }
 
-func (env *NodeEnv) getPackageInfo(name string, version string) (info NpmPackage, err error) {
-	if !strings.HasPrefix(name, "@") {
-		name, _ = utils.SplitByFirstByte(name, '/')
+func (env *NodeEnv) getPackageInfo(name string, version string) (info NpmPackage, submodule string, err error) {
+	slice := strings.Split(name, "/")
+	if l := len(slice); strings.HasPrefix(name, "@") && l > 1 {
+		name = strings.Join(slice[:2], "/")
+		if l > 2 {
+			submodule = strings.Join(slice[2:], "/")
+		}
+	} else {
+		name = slice[0]
+		if l > 1 {
+			submodule = strings.Join(slice[1:], "/")
+		}
 	}
-	key := name + "/" + version
+	if strings.HasPrefix(version, "^") {
+		version, _ = utils.SplitByFirstByte(version[1:], '.')
+	} else if strings.HasPrefix(version, "~") {
+		major, rest := utils.SplitByFirstByte(version[1:], '.')
+		minor, _ := utils.SplitByFirstByte(rest, '.')
+		version = major + "." + minor
+	}
 	isFullVersion := regFullVersion.MatchString(version)
+	key := fmt.Sprintf("npm:%s@%s", name, version)
 	p, err := db.Get(q.Alias(key), q.K("package"))
 	if err == nil {
 		if !isFullVersion && int64(p.Crtime)+refreshDuration < time.Now().Unix() {
@@ -214,6 +230,7 @@ func (env *NodeEnv) getPackageInfo(name string, version string) (info NpmPackage
 		return
 	}
 
+	start := time.Now()
 	resp, err := http.Get(env.npmRegistry + name)
 	if err != nil {
 		return
@@ -270,7 +287,10 @@ func (env *NodeEnv) getPackageInfo(name string, version string) (info NpmPackage
 		return
 	}
 
-	db.Put(q.Alias(key), q.Tags("package"), q.KV{"package": utils.MustEncodeJSON(info)})
+	// cache
+	db.Put(q.Alias(key), q.KV{"package": utils.MustEncodeJSON(info)})
+
+	log.Debugf("get npm package(%s@%s) info in %v", name, info.Version, time.Now().Sub(start))
 	return
 }
 
@@ -325,11 +345,13 @@ func installNodejs(dir string, version string) (err error) {
 	return
 }
 
-func yarnAdd(packages ...string) (err error) {
+func yarnAdd(wd string, packages ...string) (err error) {
 	if len(packages) > 0 {
 		start := time.Now()
 		args := append([]string{"add", "--silent", "--no-progress", "--ignore-scripts"}, packages...)
-		output, err := exec.Command("yarn", args...).CombinedOutput()
+		cmd := exec.Command("yarn", args...)
+		cmd.Dir = wd
+		output, err := cmd.CombinedOutput()
 		if err != nil {
 			return fmt.Errorf("yarn: %s", string(output))
 		}

@@ -14,7 +14,7 @@ import (
 	"github.com/ije/rex"
 )
 
-func registerRoutes(storageDir string, domain string, cdnDomain string, cdnDomainChina string, unpkgDomain string) {
+func registerRoutes(config config) {
 	start := time.Now()
 	httpClient := &http.Client{
 		Transport: &http.Transport{
@@ -69,10 +69,10 @@ func registerRoutes(storageDir string, domain string, cdnDomain string, cdnDomai
 			return rex.Content(pathname, start, bytes.NewReader(data))
 		}
 
-		hasBuildVerPrefix := strings.HasPrefix(pathname, fmt.Sprintf("/v%d/", buildVersion))
+		hasBuildVerPrefix := strings.HasPrefix(pathname, fmt.Sprintf("/v%d/", VERSION))
 		prevBuildVer := ""
 		if hasBuildVerPrefix {
-			pathname = strings.TrimPrefix(pathname, fmt.Sprintf("/v%d", buildVersion))
+			pathname = strings.TrimPrefix(pathname, fmt.Sprintf("/v%d", VERSION))
 		} else if regBuildVerPath.MatchString(pathname) {
 			a := strings.Split(pathname, "/")
 			pathname = "/" + strings.Join(a[2:], "/")
@@ -104,7 +104,7 @@ func registerRoutes(storageDir string, domain string, cdnDomain string, cdnDomai
 			}
 		}
 		if storageType == "raw" {
-			m, err := parseModule(pathname)
+			m, err := parsePkg(pathname)
 			if err != nil {
 				return throwErrorJS(ctx, 500, err)
 			}
@@ -115,18 +115,18 @@ func registerRoutes(storageDir string, domain string, cdnDomain string, cdnDomai
 				if ctx.R.TLS != nil {
 					proto = "https"
 				}
-				if hostname == domain {
-					if cdnDomain != "" {
+				if hostname == config.domain {
+					if config.cdnDomain != "" {
 						shouldRedirect = true
-						hostname = cdnDomain
+						hostname = config.cdnDomain
 						proto = "https"
 					}
-					if cdnDomainChina != "" {
+					if config.cdnDomainChina != "" {
 						var record Record
 						err = mmdbr.Lookup(net.ParseIP(ctx.RemoteIP()), &record)
 						if err == nil && record.Country.ISOCode == "CN" {
 							shouldRedirect = true
-							hostname = cdnDomainChina
+							hostname = config.cdnDomainChina
 							proto = "https"
 						}
 					}
@@ -135,13 +135,17 @@ func registerRoutes(storageDir string, domain string, cdnDomain string, cdnDomai
 					url := fmt.Sprintf("%s://%s/%s", proto, hostname, m.String())
 					return rex.Redirect(url, http.StatusTemporaryRedirect)
 				}
-				cacheFile := path.Join(storageDir, "raw", m.String())
+				cacheFile := path.Join(config.storageDir, "raw", m.String())
 				if fileExists(cacheFile) {
 					if strings.HasSuffix(pathname, ".ts") {
 						ctx.SetHeader("Content-Type", "application/typescript")
 					}
 					ctx.SetHeader("Cache-Control", "public, max-age=31536000, immutable")
 					return rex.File(cacheFile)
+				}
+				unpkgDomain := "unpkg.com"
+				if config.unpkgDomain != "" {
+					unpkgDomain = config.unpkgDomain
 				}
 				resp, err := httpClient.Get(fmt.Sprintf("https://%s/%s", unpkgDomain, m.String()))
 				if err != nil {
@@ -177,12 +181,12 @@ func registerRoutes(storageDir string, domain string, cdnDomain string, cdnDomai
 			var filepath string
 			if hasBuildVerPrefix && (storageType == "builds" || storageType == "types") {
 				if prevBuildVer != "" {
-					filepath = path.Join(storageDir, storageType, prevBuildVer, pathname)
+					filepath = path.Join(config.storageDir, storageType, prevBuildVer, pathname)
 				} else {
-					filepath = path.Join(storageDir, storageType, fmt.Sprintf("v%d", buildVersion), pathname)
+					filepath = path.Join(config.storageDir, storageType, fmt.Sprintf("v%d", VERSION), pathname)
 				}
 			} else {
-				filepath = path.Join(storageDir, storageType, pathname)
+				filepath = path.Join(config.storageDir, storageType, pathname)
 			}
 			if fileExists(filepath) {
 				if storageType == "types" {
@@ -203,19 +207,19 @@ func registerRoutes(storageDir string, domain string, cdnDomain string, cdnDomai
 			}
 		}
 
-		external := moduleSlice{}
-		for _, p := range strings.Split(ctx.Form.Value("external"), ",") {
+		deps := pkgSlice{}
+		for _, p := range strings.Split(ctx.Form.Value("deps"), ",") {
 			p = strings.TrimSpace(p)
 			if p != "" {
-				m, err := parseModule(p)
+				m, err := parsePkg(p)
 				if err != nil {
 					if strings.HasSuffix(err.Error(), "not found") {
 						continue
 					}
 					return throwErrorJS(ctx, 500, err)
 				}
-				if !external.Has(m.name) {
-					external = append(external, *m)
+				if !deps.Has(m.name) {
+					deps = append(deps, *m)
 				}
 			}
 		}
@@ -225,40 +229,33 @@ func registerRoutes(storageDir string, domain string, cdnDomain string, cdnDomai
 		noCheck := !ctx.Form.IsNil("no-check")
 
 		var (
-			bundleList    string
-			isBare        bool
-			currentModule *module
-			err           error
+			currentPkg *pkg
+			isBare     bool
+			err        error
 		)
 
-		if strings.HasPrefix(pathname, "/[") && strings.Contains(pathname, "]") {
-			bundleList, pathname = utils.SplitByFirstByte(strings.TrimPrefix(pathname, "/["), ']')
-			if pathname == "" {
-				pathname = "/"
-			}
-		}
-		if bundleList == "" && endsWith(pathname, ".js") {
-			currentModule, err = parseModule(pathname)
+		if endsWith(pathname, ".js") {
+			currentPkg, err = parsePkg(pathname)
 			if err == nil {
-				a := strings.Split(currentModule.submodule, "/")
+				a := strings.Split(currentPkg.submodule, "/")
 				if len(a) > 1 {
-					if strings.HasPrefix(a[0], "external=") {
-						for _, p := range strings.Split(strings.TrimPrefix(a[0], "external="), ",") {
+					if strings.HasPrefix(a[0], "deps=") {
+						for _, p := range strings.Split(strings.TrimPrefix(a[0], "deps="), ",") {
 							p = strings.TrimSpace(p)
 							if p != "" {
 								if strings.HasPrefix(p, "@") {
 									scope, name := utils.SplitByFirstByte(p, '_')
 									p = scope + "/" + name
 								}
-								m, err := parseModule(p)
+								m, err := parsePkg(p)
 								if err != nil {
 									if strings.HasSuffix(err.Error(), "not found") {
 										continue
 									}
 									return throwErrorJS(ctx, 500, err)
 								}
-								if !external.Has(m.name) {
-									external = append(external, *m)
+								if !deps.Has(m.name) {
+									deps = append(deps, *m)
 								}
 							}
 						}
@@ -272,17 +269,17 @@ func registerRoutes(storageDir string, domain string, cdnDomain string, cdnDomai
 							submodule = strings.TrimSuffix(submodule, ".development")
 							isDev = true
 						}
-						if submodule == path.Base(currentModule.name) {
+						if submodule == path.Base(currentPkg.name) {
 							submodule = ""
 						}
-						currentModule.submodule = submodule
+						currentPkg.submodule = submodule
 						target = a[0]
 						isBare = true
 					}
 				}
 			}
 		} else {
-			currentModule, err = parseModule(pathname)
+			currentPkg, err = parsePkg(pathname)
 		}
 		if err != nil {
 			if strings.HasSuffix(err.Error(), "not found") {
@@ -291,36 +288,12 @@ func registerRoutes(storageDir string, domain string, cdnDomain string, cdnDomai
 			return throwErrorJS(ctx, 500, err)
 		}
 
-		var packages moduleSlice
-		if bundleList != "" {
-			containsPackage := currentModule.name == ""
-			for _, dep := range strings.Split(bundleList, ",") {
-				m, err := parseModule(strings.TrimSpace(dep))
-				if err != nil {
-					return throwErrorJS(ctx, 500, err)
-				}
-				if !containsPackage && m.Equels(*currentModule) {
-					containsPackage = true
-				}
-				if !packages.Has(m.name) {
-					packages = append(packages, *m)
-				}
-			}
-			if len(packages) > 10 {
-				return throwErrorJS(ctx, 400, fmt.Errorf("too many packages in the bundle list, up to 10 but get %d", len(packages)))
-			}
-			if !containsPackage {
-				return throwErrorJS(ctx, 400, fmt.Errorf("package '%s' not found in the bundle list", currentModule.ImportPath()))
-			}
-		} else {
-			packages = moduleSlice{*currentModule}
-		}
-
-		ret, err := build(storageDir, domain, buildOptions{
-			packages: packages,
-			external: external,
-			target:   target,
-			isDev:    isDev,
+		ret, err := buildESM(buildOptions{
+			config: config,
+			pkg:    *currentPkg,
+			deps:   deps,
+			target: target,
+			isDev:  isDev,
 		})
 		if err != nil {
 			return throwErrorJS(ctx, 500, err)
@@ -343,12 +316,13 @@ func registerRoutes(storageDir string, domain string, cdnDomain string, cdnDomai
 			return throwErrorJS(ctx, 404, fmt.Errorf("css not found"))
 		}
 
-		if bundleList != "" && currentModule.name == "" {
-			return ret.importMeta
-		}
-
 		if isBare {
-			fp := path.Join(storageDir, "builds", fmt.Sprintf("v%d", buildVersion), pathname)
+			fp := path.Join(
+				config.storageDir,
+				"builds",
+				fmt.Sprintf("v%d", VERSION),
+				pathname,
+			)
 			if fileExists(fp) {
 				ctx.SetHeader("Cache-Control", "public, max-age=31536000, immutable")
 				return rex.File(fp)
@@ -356,75 +330,74 @@ func registerRoutes(storageDir string, domain string, cdnDomain string, cdnDomai
 			return 404
 		}
 
-		importPath := currentModule.ImportPath()
-		importMeta, ok := ret.importMeta[importPath]
-		if !ok {
-			return throwErrorJS(ctx, 500, fmt.Errorf("package '%s' not found in bundle", importPath))
-		}
-
 		buf := bytes.NewBuffer(nil)
-		importIdentifier := identify(importPath)
 		importPrefix := "/"
 		importSuffix := ".js"
-		if cdnDomain != "" {
-			importPrefix = fmt.Sprintf("https://%s/", cdnDomain)
+		if config.cdnDomain != "" {
+			importPrefix = fmt.Sprintf("https://%s/", config.cdnDomain)
 		}
-		if cdnDomainChina != "" {
+		if config.cdnDomainChina != "" {
 			var record Record
 			err = mmdbr.Lookup(net.ParseIP(ctx.RemoteIP()), &record)
 			if err == nil && record.Country.ISOCode == "CN" {
-				importPrefix = fmt.Sprintf("https://%s/", cdnDomainChina)
+				importPrefix = fmt.Sprintf("https://%s/", config.cdnDomainChina)
 			}
 		}
 
-		fmt.Fprintf(buf, `/* esm.sh - %v */%s`, currentModule, EOL)
-		if len(packages) == 1 {
-			fmt.Fprintf(buf, `export * from "%s%s%s";%s`, importPrefix, ret.buildID, importSuffix, EOL)
-			if importMeta.Module != "" {
-				for _, name := range importMeta.Exports {
-					if name == "default" {
-						fmt.Fprintf(buf, `export { default } from "%s%s%s";%s`, importPrefix, ret.buildID, importSuffix, EOL)
-						break
-					}
+		esmate := ret.esmeta
+		fmt.Fprintf(buf, `/* esm.sh - %v */%s`, currentPkg, "\n")
+		fmt.Fprintf(buf, `export * from "%s%s%s";%s`, importPrefix, ret.buildID, importSuffix, "\n")
+		if esmate.Module != "" {
+			for _, name := range esmate.Exports {
+				if name == "default" {
+					fmt.Fprintf(
+						buf,
+						`export { default } from "%s%s%s";%s`,
+						importPrefix,
+						ret.buildID,
+						importSuffix,
+						"\n",
+					)
+					break
 				}
-			} else {
-				fmt.Fprintf(buf, `export { default } from "%s%s%s";%s`, importPrefix, ret.buildID, importSuffix, EOL)
 			}
 		} else {
-			var exports []string
-			var hasDefaultExport bool
-			for _, name := range importMeta.Exports {
-				if name == "default" {
-					hasDefaultExport = true
-				} else if name != "import" {
-					exports = append(exports, name)
-				}
-			}
-			if importMeta.Module != "" {
-				fmt.Fprintf(buf, `import { %s_default, %s_star } from "%s%s%s";%s`, importIdentifier, importIdentifier, importPrefix, ret.buildID, importSuffix, EOL)
-				fmt.Fprintf(buf, `export const { %s } = %s_star;%s`, strings.Join(exports, ","), importIdentifier, EOL)
-			} else {
-				fmt.Fprintf(buf, `import { %s_default } from "%s%s%s";%s`, importIdentifier, importPrefix, ret.buildID, importSuffix, EOL)
-				fmt.Fprintf(buf, `export const { %s } = %s_default;%s`, strings.Join(exports, ","), importIdentifier, EOL)
-			}
-			if hasDefaultExport || (importMeta.Main != "" && importMeta.Module == "") {
-				fmt.Fprintf(buf, `export default %s_default;%s`, importIdentifier, EOL)
-			}
+			fmt.Fprintf(
+				buf,
+				`export { default } from "%s%s%s";%s`,
+				importPrefix,
+				ret.buildID,
+				importSuffix,
+				"\n",
+			)
 		}
-		if importMeta.Dts != "" && !noCheck {
-			ctx.SetHeader("X-TypeScript-Types", fmt.Sprintf("%s%s", importPrefix, strings.TrimPrefix(path.Join("/", fmt.Sprintf("v%d", buildVersion), importMeta.Dts), "/")))
+		if esmate.Dts != "" && !noCheck {
+			value := fmt.Sprintf(
+				"%s%s",
+				importPrefix,
+				strings.TrimPrefix(
+					path.Join("/", fmt.Sprintf("v%d", VERSION), esmate.Dts),
+					"/",
+				),
+			)
+			ctx.SetHeader("X-TypeScript-Types", value)
 		}
 		ctx.SetHeader("Cache-Control", fmt.Sprintf("private, max-age=%d", refreshDuration))
 		ctx.SetHeader("Content-Type", "application/javascript; charset=utf-8")
-		return buf.String()
+		return buf
 	})
 }
 
 func throwErrorJS(ctx *rex.Context, status int, err error) interface{} {
 	buf := bytes.NewBuffer(nil)
-	fmt.Fprintf(buf, `/* esm.sh - error */%s`, EOL)
-	fmt.Fprintf(buf, `throw new Error("[esm.sh] " + %s);%s`, strings.TrimSpace(string(utils.MustEncodeJSON(err.Error()))), EOL)
-	fmt.Fprintf(buf, `export default null;%s`, EOL)
+	fmt.Fprintf(buf, "/* esm.sh - error */\n")
+	fmt.Fprintf(
+		buf,
+		`throw new Error("[esm.sh] " + %s);%s`,
+		strings.TrimSpace(string(utils.MustEncodeJSON(err.Error()))),
+		"\n",
+	)
+	fmt.Fprintf(buf, "export default null;\n")
 	ctx.SetHeader("Cache-Control", "private, no-store, no-cache, must-revalidate")
 	ctx.SetHeader("Content-Type", "application/javascript; charset=utf-8")
 	return rex.Status(status, buf)

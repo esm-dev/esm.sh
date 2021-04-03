@@ -10,21 +10,12 @@ import (
 )
 
 func TestCopyDTS(t *testing.T) {
-	testDir := path.Join(os.TempDir(), "test")
+	testDir := path.Join(os.TempDir(), "testcopydts")
+	nmDir := path.Join(testDir, "node_modules")
 	os.RemoveAll(testDir)
 	ensureDir(testDir)
 
-	nmDir := path.Join(testDir, "node_modules")
-	saveDir := path.Join(testDir, "types")
-	os.RemoveAll(saveDir)
-	ensureDir(saveDir)
-
-	err := os.Chdir(testDir)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	err = yarnAdd("@types/react@17.0.0")
+	err := yarnAdd(testDir, "@types/react@17.0.0")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -55,15 +46,15 @@ func TestCopyDTS(t *testing.T) {
 	indexDTSExcept := []string{
 		`// dts test`,
 		`/// <reference path="./global.d.ts" />`,
-		fmt.Sprintf(`/// <reference path="https://cdn.esm.sh/v%d/_node.ns.d.ts" />`, buildVersion),
+		fmt.Sprintf(`/// <reference path="https://cdn.esm.sh/v%d/_node.ns.d.ts" />`, VERSION),
 		`  `,
 		`import {`,
 		`    ReactInstance, Component, ComponentState,`,
 		`    ReactElement, SFCElement, CElement,`,
 		`    DOMAttributes, DOMElement, ReactNode, ReactPortal`,
-		`} from '/v1/@types/react@17.0.0/index.d.ts';`,
+		fmt.Sprintf(`} from '/v%d/@types/react@17.0.0/index.d.ts';`, VERSION),
 		``,
-		`export type React = typeof import('/v1/@types/react@17.0.0/index.d.ts');`,
+		fmt.Sprintf(`export type React = typeof import('/v%d/@types/react@17.0.0/index.d.ts');`, VERSION),
 		`export { default as Anchor } from './anchor.d.ts';`,
 		`export { default as AutoComplete } from './auto-complete.d.ts';export { default as Alert } from './alert.d.ts';`,
 		`/* avatar */ export { default as Avatar } from '../avatar.d.ts';`,
@@ -99,12 +90,15 @@ func TestCopyDTS(t *testing.T) {
 		}
 	}
 
-	err = copyDTS(moduleSlice{}, "cdn.esm.sh", nmDir, saveDir, "test/index.d.ts")
+	err = copyDTS(config{
+		storageDir: testDir,
+		domain:     "cdn.esm.sh",
+	}, nmDir, "test/index.d.ts")
 	if err != nil && os.IsExist(err) {
 		t.Fatal(err)
 	}
 
-	data, err := ioutil.ReadFile(path.Join(saveDir, "test/index.d.ts"))
+	data, err := ioutil.ReadFile(path.Join(testDir, fmt.Sprintf("types/v%d/test/index.d.ts", VERSION)))
 	if err != nil {
 		t.Fatal(err)
 	}
