@@ -391,7 +391,7 @@
     if (location.search === '?test') {
       document.querySelector('main').innerHTML = ''
       document.querySelector('.test').style.display = 'block';
-      const { test } = await import('/embed/assets/testing.js');
+      const { test } = await import('/embed/test/testing.js');
       test(document.querySelector('.test > ul'))
     } else {
       const mainEl = document.querySelector('main');

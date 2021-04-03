@@ -64,7 +64,7 @@ func registerRoutes() {
 		}
 
 		// serve embed/assest files
-		if strings.HasPrefix(pathname, "/embed/assets/") {
+		if strings.HasPrefix(pathname, "/embed/assets/") || strings.HasPrefix(pathname, "/embed/test/") {
 			data, err := embedFS.ReadFile(pathname[1:])
 			if err != nil {
 				return err
