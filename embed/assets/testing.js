@@ -50,7 +50,7 @@ export function start(ul) {
                 createElement('span', {
                     onClick: () => setCount(n => n + 1),
                     style: { cursor: 'pointer', userSelect: 'none' },
-                }, ' ⏱ ' + count) ,
+                }, ' ⏱ ', createElement('samp', null, count)),
             )
         }
         render(createElement(App), t.span)
@@ -70,7 +70,7 @@ export function start(ul) {
                 createElement('span', {
                     onClick: () => setCount(n => n + 1),
                     style: { cursor: 'pointer', userSelect: 'none' },
-                }, ' ⏱ ' + count) ,
+                }, ' ⏱ ', createElement('samp', null, count)),
             )
         }
         render(createElement(App), t.span)
@@ -100,7 +100,7 @@ export function start(ul) {
                 createElement('span', {
                     onClick: () => dispatch({ type: '+' }),
                     style: { cursor: 'pointer', userSelect: 'none' },
-                }, ' ⏱ ' + count) ,
+                }, ' ⏱ ', createElement('samp', null, count)),
             )
         }
         render(createElement(Provider, { store }, createElement(App)), t.span)
@@ -125,7 +125,7 @@ export function start(ul) {
                 createElement('span', {
                     onClick: () => store.count++,
                     style: { cursor: 'pointer', userSelect: 'none' },
-                }, ' ⏱ ' + store.count)
+                }, ' ⏱ ', createElement('samp', null, store.count))
             )
         })
         render(createElement(App, { store }), t.span)
@@ -150,7 +150,7 @@ export function start(ul) {
                 h('span', {
                     onClick: () => setCount(n => n + 1),
                     style: { cursor: 'pointer', userSelect: 'none' },
-                }, ' ⏱ ' + count)
+                }, ' ⏱ ', h('samp', null, count))
             )
         }
         render(h(App), t.span)
