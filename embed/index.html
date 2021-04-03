@@ -174,7 +174,7 @@
       font-size: 2.4rem;
       font-weight: 800;
     }
-    
+
     h2 {
       margin-top: 2.4rem;
       font-size: 1.8rem;
@@ -391,8 +391,8 @@
     if (location.search === '?test') {
       document.querySelector('main').innerHTML = ''
       document.querySelector('.test').style.display = 'block';
-      const { start } = await import('/embed/assets/testing.js');
-      start(document.querySelector('.test > ul'))
+      const { test } = await import('/embed/assets/testing.js');
+      test(document.querySelector('.test > ul'))
     } else {
       const mainEl = document.querySelector('main');
       mainEl.innerHTML = marked.parse('# README');

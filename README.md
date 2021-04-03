@@ -75,7 +75,7 @@ console.log((await postcss([ autoprefixer ]).process(`
 
 By default, **esm.sh** will response a custom HTTP header of `X-TypeScript-Types` when the types(dts) defined, that is useful for deno types check ([link](https://deno.land/manual/getting_started/typescript#x-typescript-types-custom-header)).
 
-![figure #1](./embed/assets/figure-1.png)
+![figure #1](./embed/assets/sceenshot-deno-types.png)
 
 You can pass the `no-check` query to disable the `X-TypeScript-Types` header if some types are incorrect:
 

@@ -1,4 +1,4 @@
-export function start(ul) {
+export function test(ul) {
     const _esm = async (name, testFn) => {
         const li = document.createElement('li')
         const strong = document.createElement('strong')
