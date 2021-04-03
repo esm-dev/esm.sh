@@ -31,24 +31,13 @@ if [ "$ok" == "y" ]; then
     init="yes"
 fi
 
-read -p "build version: " ver
-if [ "$ver" == "" ]; then
-    echo "missing build version!"
-    exit
-fi
-read -p "repeat the build version: " ver2
-if [ "$ver" != "$ver2" ]; then
-    echo "build version not matched!"
-    exit
-fi
-echo "$ver" > $(dirname $0)/../embed/build.ver
-
 port="80"
 httpsPort="443"
 etcDir="/etc/esmd"
 domain="esm.sh"
 cdnDomain=""
 cdnDomainChina=""
+unpkgDomain=""
 
 if [ "$init" == "yes" ]; then
     read -p "server http port (default is ${port}): " p
@@ -74,6 +63,10 @@ if [ "$init" == "yes" ]; then
     read -p "cdn domain for China (optional): " p
     if [ "$p" != "" ]; then
         cdnDomainChina="$p"
+    fi
+     read -p "proxy domain for unpkg.com (optional): " p
+    if [ "$p" != "" ]; then
+        unpkgDomain="$p"
     fi
 fi
 
@@ -118,7 +111,7 @@ ssh -p $sshPort $user@$host << EOF
         fi
         rm -f /etc/supervisor/conf.d/esmd.conf
         writeSVConfLine "[program:esmd]"
-        writeSVConfLine "command=/usr/local/bin/esmd --port=${port} --https-port=${httpsPort} --etc-dir=${etcDir} --domain=${domain} --cdn-domain=${cdnDomain} --cdn-domain-china=${cdnDomainChina}"
+        writeSVConfLine "command=/usr/local/bin/esmd --port=${port} --https-port=${httpsPort} --etc-dir=${etcDir} --domain=${domain} --cdn-domain=${cdnDomain} --cdn-domain-china=${cdnDomainChina} --unpkg-domain=${unpkgDomain}"
         writeSVConfLine "directory=/tmp"
         writeSVConfLine "user=$user"
         writeSVConfLine "autostart=true"
