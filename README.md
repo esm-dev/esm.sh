@@ -11,7 +11,7 @@ import React from 'https://esm.sh/react'
 ### Specify version
 
 ```javascript
-import React from 'https://esm.sh/react@17.0.1'
+import React from 'https://esm.sh/react@17.0.2'
 ```
 
 ### Submodule
@@ -40,6 +40,13 @@ Avaiable `target`: **es2015** - **es2020**, **esnext**, and **deno**
 import React from 'https://esm.sh/react?dev'
 ```
 
+### Specify external deps
+
+```javascript
+import React from 'https://esm.sh/react@16.14.0'
+import useSWR from 'https://esm.sh/swr?deps=react@16.14.0'
+```
+
 ### Package CSS
 
 ```javascript
@@ -49,32 +56,6 @@ import Daygrid from 'https://esm.sh/@fullcalendar/daygrid'
 ```html
 <link rel="styelsheet" href="https://esm.sh/@fullcalendar/daygrid?css">
 ```
-
-### Bundle mode
-
-```javascript
-import React from 'https://esm.sh/[react,react-dom,swr]/react'
-import ReactDom from 'https://esm.sh/[react,react-dom,swr]/react-dom'
-```
-
-or your can define the bundle list in `import-map.json` ([import-maps proposal](https://github.com/WICG/import-maps))
-
-```
-{
-  "imports": {
-    "react": "https://esm.sh/[react,react-dom,swr]/react",
-    "react-dom": "https://esm.sh/[react,react-dom,swr]/react-dom",
-    "swr": "https://esm.sh/[react,react-dom,swr]/swr",
-    ...
-  }
-}
-```
-
-```javascript
-import React from 'react' // actual from 'https://esm.sh/[react,react-dom,swr]/react'
-```
-
-⚠️ The bundling packages in URL are litmited up to **10**, to bundle more packages, please use the **esm** client (WIP).
 
 ## Deno compatibility
 
@@ -102,18 +83,6 @@ You can pass the `no-check` query to disable the `X-TypeScript-Types` header if 
 import unescape from 'https://esm.sh/lodash/unescape?no-check'
 ```
 
-## Caveats
-
-Different with [Skypack](https://skypack.dev) and [jspm](https://jspm.org), **esm.sh** will bundle all dependencies(exclude peerDependencies) for each package, that means there may be redundant contents transmitted when you are importing multiple packages.<br>
-This should be improved when the http/3(quic) is ready. For now the best practice is using the **bundle mode**.
-
-As optional, you can split code manually with the `external` query:
-
-```javascript
-import React from 'https://esm.sh/react@16.14.0'
-import useSWR from 'https://esm.sh/swr?external=react@16.14.0'
-```
-
 ## Network of esm.sh
 - Main server in HK
 - Global CDN by [Cloudflare](https://cloudflare.com)
@@ -129,7 +98,3 @@ $ git clone https://github.com/postui/esm.sh
 $ cd esm.sh
 $ sh ./scripts/deploy.sh
 ```
-
-## Special Thanks
-
-- [wleonardo](https://github.com/wleonardo)
