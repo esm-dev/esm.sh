@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"crypto/sha1"
 	"encoding/hex"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -21,8 +20,8 @@ import (
 )
 
 type buildTask struct {
-	_id    string
-	_wd    string
+	id     string
+	wd     string
 	pkg    pkg
 	deps   pkgSlice
 	target string
@@ -30,8 +29,8 @@ type buildTask struct {
 }
 
 func (task *buildTask) ID() string {
-	if task._id != "" {
-		return task._id
+	if task.id != "" {
+		return task.id
 	}
 
 	pkg := task.pkg
@@ -47,7 +46,7 @@ func (task *buildTask) ID() string {
 		sort.Sort(task.deps)
 		target = fmt.Sprintf("deps=%s/%s", strings.ReplaceAll(task.deps.String(), "/", "_"), target)
 	}
-	task._id = fmt.Sprintf(
+	task.id = fmt.Sprintf(
 		"v%d/%s@%s/%s/%s",
 		VERSION,
 		pkg.name,
@@ -55,39 +54,17 @@ func (task *buildTask) ID() string {
 		target,
 		filename,
 	)
-	return task._id
-}
-
-func findESM(id string) (esm *ESMeta, packageCSS bool, ok bool) {
-	post, err := db.Get(q.Alias(id), q.K("esmeta", "css"))
-	if err == nil {
-		err = json.Unmarshal(post.KV.Get("esmeta"), &esm)
-		if err != nil {
-			db.Delete(q.Alias(id))
-			return
-		}
-
-		if !fileExists(path.Join(config.storageDir, "builds", id+".js")) {
-			db.Delete(q.Alias(id))
-			return
-		}
-
-		if val := post.KV.Get("css"); len(val) == 1 && val[0] == 1 {
-			packageCSS = fileExists(path.Join(config.storageDir, "builds", id+".css"))
-		}
-		ok = true
-	}
-	return
+	return task.id
 }
 
 func (task *buildTask) buildESM() (esm *ESMeta, packageCSS bool, err error) {
 	hasher := sha1.New()
 	hasher.Write([]byte(task.ID()))
-	task._wd = path.Join(os.TempDir(), "esm-build-"+hex.EncodeToString(hasher.Sum(nil)))
-	ensureDir(task._wd)
-	defer os.RemoveAll(task._wd)
+	task.wd = path.Join(os.TempDir(), "esm-build-"+hex.EncodeToString(hasher.Sum(nil)))
+	ensureDir(task.wd)
+	defer os.RemoveAll(task.wd)
 
-	esmeta, err := initBuild(task._wd, task.pkg, true)
+	esmeta, err := initBuild(task.wd, task.pkg, true)
 	if err != nil {
 		return
 	}
@@ -124,7 +101,7 @@ func (task *buildTask) buildESM() (esm *ESMeta, packageCSS bool, err error) {
 	}
 	input := &api.StdinOptions{
 		Contents:   buf.String(),
-		ResolveDir: task._wd,
+		ResolveDir: task.wd,
 		Sourcefile: "export.js",
 	}
 	minify := !task.isDev
@@ -253,7 +230,7 @@ func (task *buildTask) buildESM() (esm *ESMeta, packageCSS bool, err error) {
 					}
 				}
 				if importPath == "" {
-					packageFile := path.Join(task._wd, "node_modules", name, "package.json")
+					packageFile := path.Join(task.wd, "node_modules", name, "package.json")
 					if fileExists(packageFile) {
 						var p NpmPackage
 						if utils.ParseJSONFile(packageFile, &p) == nil {
@@ -339,7 +316,7 @@ func (task *buildTask) buildESM() (esm *ESMeta, packageCSS bool, err error) {
 								if err == nil {
 									// here the submodule should be always empty
 									pkg.submodule = ""
-									esmeta, err := initBuild(task._wd, *pkg, false)
+									esmeta, err := initBuild(task.wd, *pkg, false)
 									if err == nil {
 										hasDefaultExport := false
 										if len(esmeta.Exports) > 0 {
@@ -462,7 +439,7 @@ func (task *buildTask) buildESM() (esm *ESMeta, packageCSS bool, err error) {
 func (task *buildTask) handleDTS(esmeta *ESMeta) (err error) {
 	start := time.Now()
 	pkg := task.pkg
-	nodeModulesDir := path.Join(task._wd, "node_modules")
+	nodeModulesDir := path.Join(task.wd, "node_modules")
 	versionedName := fmt.Sprintf("%s@%s", esmeta.Name, esmeta.Version)
 
 	var types string
