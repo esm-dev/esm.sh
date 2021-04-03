@@ -93,8 +93,9 @@ ssh -p $sshPort $user@$host << EOF
     fi
     echo "supervisor \$SVVer"
 
+    SVCF=/etc/supervisor/conf.d/esmd.conf
     writeSVConfLine () {
-        echo "\$1" >> /etc/supervisor/conf.d/esmd.conf
+        echo "\$1" >> \$SVCF
     }
 
     supervisorctl stop esmd
@@ -103,13 +104,9 @@ ssh -p $sshPort $user@$host << EOF
     chmod +x /usr/local/bin/esmd
 
     if [ "$init" == "yes" ]; then
-        if [ -d "${etcDir}" ]; then
-            rm -f ${etcDir}/esm.db
-            rm -rf ${etcDir}/storage
-        else
-            mkdir ${etcDir}
+        if [ -f \$SVCF ]; then
+            rm -f \$SVCF
         fi
-        rm -f /etc/supervisor/conf.d/esmd.conf
         writeSVConfLine "[program:esmd]"
         writeSVConfLine "command=/usr/local/bin/esmd --port=${port} --https-port=${httpsPort} --etc-dir=${etcDir} --domain=${domain} --cdn-domain=${cdnDomain} --cdn-domain-china=${cdnDomainChina} --unpkg-domain=${unpkgDomain}"
         writeSVConfLine "directory=/tmp"
