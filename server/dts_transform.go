@@ -22,7 +22,7 @@ var (
 	regDeclareModule  = regexp.MustCompile(`^declare\s+module\s*('|")([^'"]+)("|')`)
 )
 
-func copyDTS(config config, nodeModulesDir string, dts string) (err error) {
+func copyDTS(nodeModulesDir string, dts string) (err error) {
 	dtsFilePath := path.Join(nodeModulesDir, regVersionPath.ReplaceAllString(dts, "$1/"))
 	dtsDir := path.Dir(dtsFilePath)
 	dtsFile, err := os.Open(dtsFilePath)
@@ -106,9 +106,9 @@ func copyDTS(config config, nodeModulesDir string, dts string) (err error) {
 			if p.Name != "" {
 				importPath = getTypesPath(nodeModulesDir, p, subpath)
 			} else {
-				p, _, err := nodeEnv.getPackageInfo("@types/"+pkgName, "latest")
+				p, _, err := node.getPackageInfo("@types/"+pkgName, "latest")
 				if err != nil && err.Error() == fmt.Sprintf("npm: package '%s' not found", pkgName) {
-					p, _, err = nodeEnv.getPackageInfo(pkgName, "latest")
+					p, _, err = node.getPackageInfo(pkgName, "latest")
 				}
 				if err == nil {
 					err = yarnAdd(fmt.Sprintf("%s@%s", p.Name, p.Version))
@@ -360,12 +360,12 @@ func copyDTS(config config, nodeModulesDir string, dts string) (err error) {
 					n, _ := utils.SplitByFirstByte(subpath, '/')
 					pkg = fmt.Sprintf("%s/%s", pkg, n)
 				}
-				err = copyDTS(config, nodeModulesDir, path.Join(pkg, dep))
+				err = copyDTS(nodeModulesDir, path.Join(pkg, dep))
 			} else {
-				err = copyDTS(config, nodeModulesDir, path.Join(path.Dir(dts), dep))
+				err = copyDTS(nodeModulesDir, path.Join(path.Dir(dts), dep))
 			}
 		} else {
-			err = copyDTS(config, nodeModulesDir, dep)
+			err = copyDTS(nodeModulesDir, dep)
 		}
 		if err != nil {
 			os.Remove(saveFilePath)

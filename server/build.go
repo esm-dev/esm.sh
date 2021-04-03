@@ -12,7 +12,6 @@ import (
 	"path"
 	"sort"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/evanw/esbuild/pkg/api"
@@ -31,38 +30,33 @@ var targets = map[string]api.Target{
 	"es2020": api.ES2020,
 }
 
-// todo: use queue instead of lock
-var buildLock sync.Mutex
-
-type buildOptions struct {
-	config
+type buildTask struct {
+	_id    string
 	pkg    pkg
 	deps   pkgSlice
 	target string
 	isDev  bool
 }
 
-type buildResult struct {
-	buildID string
-	esmeta  *ESMeta
-	hasCSS  bool
-}
+func (task *buildTask) ID() string {
+	if task._id != "" {
+		return task._id
+	}
 
-func buildESM(options buildOptions) (ret buildResult, err error) {
-	pkg := options.pkg
-	target := options.target
+	pkg := task.pkg
+	target := task.target
 	filename := path.Base(pkg.name)
 	if pkg.submodule != "" {
 		filename = pkg.submodule
 	}
-	if options.isDev {
+	if task.isDev {
 		filename += ".development"
 	}
-	if len(options.deps) > 0 {
-		sort.Sort(options.deps)
-		target = fmt.Sprintf("deps=%s/%s", strings.ReplaceAll(options.deps.String(), "/", "_"), target)
+	if len(task.deps) > 0 {
+		sort.Sort(task.deps)
+		target = fmt.Sprintf("deps=%s/%s", strings.ReplaceAll(task.deps.String(), "/", "_"), target)
 	}
-	buildID := fmt.Sprintf(
+	task._id = fmt.Sprintf(
 		"v%d/%s@%s/%s/%s",
 		VERSION,
 		pkg.name,
@@ -70,28 +64,30 @@ func buildESM(options buildOptions) (ret buildResult, err error) {
 		target,
 		filename,
 	)
+	return task._id
+}
 
-	post, err := db.Get(q.Alias(buildID), q.K("esmeta", "css"))
+func (task *buildTask) buildESM() (esm *ESMeta, packageCSS bool, err error) {
+	post, err := db.Get(q.Alias(task.ID()), q.K("esmeta", "css"))
 	if err == nil {
-		err = json.Unmarshal(post.KV.Get("esmeta"), &ret.esmeta)
+		err = json.Unmarshal(post.KV.Get("esmeta"), &esm)
 		if err != nil {
-			_, err = db.Delete(q.Alias(buildID))
+			_, err = db.Delete(q.Alias(task.ID()))
 			if err != nil {
 				return
 			}
 		}
 
 		if val := post.KV.Get("css"); len(val) == 1 && val[0] == 1 {
-			ret.hasCSS = fileExists(path.Join(options.storageDir, "builds", buildID+".css"))
+			packageCSS = fileExists(path.Join(config.storageDir, "builds", task.ID()+".css"))
 		}
 
-		if fileExists(path.Join(options.storageDir, "builds", buildID+".js")) {
-			ret.buildID = buildID
+		if fileExists(path.Join(config.storageDir, "builds", task.ID()+".js")) {
 			// has built
 			return
 		}
 
-		_, err = db.Delete(q.Alias(buildID))
+		_, err = db.Delete(q.Alias(task.ID()))
 		if err != nil {
 			return
 		}
@@ -100,23 +96,20 @@ func buildESM(options buildOptions) (ret buildResult, err error) {
 		return
 	}
 
-	return build(buildID, options)
+	return task.build()
 }
 
-func build(buildID string, options buildOptions) (ret buildResult, err error) {
-	buildLock.Lock()
-	defer buildLock.Unlock()
-
+func (task *buildTask) build() (esm *ESMeta, packageCSS bool, err error) {
 	start := time.Now()
-	pkg := options.pkg
+	pkg := task.pkg
 	importPath := pkg.ImportPath()
 	hasher := sha1.New()
-	hasher.Write([]byte(buildID))
+	hasher.Write([]byte(task.ID()))
 	buildDir := path.Join(os.TempDir(), "esm-build-"+hex.EncodeToString(hasher.Sum(nil)))
 	ensureDir(buildDir)
 	defer os.RemoveAll(buildDir)
 
-	esmeta, err := initBuild(buildDir, pkg)
+	esmeta, err := initBuild(buildDir, pkg, true)
 	if err != nil {
 		return
 	}
@@ -125,7 +118,7 @@ func build(buildID string, options buildOptions) (ret buildResult, err error) {
 	exports := newStringSet()
 	hasDefaultExport := false
 	env := "production"
-	if options.isDev {
+	if task.isDev {
 		env = "development"
 	}
 	for _, name := range esmeta.Exports {
@@ -154,10 +147,10 @@ func build(buildID string, options buildOptions) (ret buildResult, err error) {
 		ResolveDir: buildDir,
 		Sourcefile: "export.js",
 	}
-	minify := !options.isDev
+	minify := !task.isDev
 	define := map[string]string{
-		"__filename":                  fmt.Sprintf(`"https://%s/%s.js"`, options.domain, buildID),
-		"__dirname":                   fmt.Sprintf(`"https://%s/%s"`, options.domain, path.Dir(buildID)),
+		"__filename":                  fmt.Sprintf(`"https://%s/%s.js"`, config.domain, task.ID()),
+		"__dirname":                   fmt.Sprintf(`"https://%s/%s"`, config.domain, path.Dir(task.ID())),
 		"process":                     "__process$",
 		"Buffer":                      "__Buffer$",
 		"setImmediate":                "__setImmediate$",
@@ -205,7 +198,7 @@ func build(buildID string, options buildOptions) (ret buildResult, err error) {
 		Outdir:            "/esbuild",
 		Write:             false,
 		Bundle:            true,
-		Target:            targets[options.target],
+		Target:            targets[task.target],
 		Format:            api.FormatESModule,
 		MinifyWhitespace:  minify,
 		MinifyIdentifiers: minify,
@@ -221,25 +214,25 @@ func build(buildID string, options buildOptions) (ret buildResult, err error) {
 		log.Warn(w.Text)
 	}
 
-	hasCSS := []byte{0}
+	cssMark := []byte{0}
 	for _, file := range result.OutputFiles {
 		outputContent := file.Contents
 		if strings.HasSuffix(file.Path, ".js") {
 			jsHeader := bytes.NewBufferString(fmt.Sprintf(
 				"/* esm.sh - esbuild bundle(%s) %s %s */\n",
-				options.pkg.String(),
-				strings.ToLower(options.target),
+				task.pkg.String(),
+				strings.ToLower(task.target),
 				env,
 			))
 			eol := "\n"
-			if !options.isDev {
+			if !task.isDev {
 				eol = ""
 			}
 
 			// replace external imports/requires
 			for _, name := range external.Values() {
 				var importPath string
-				if options.target == "deno" {
+				if task.target == "deno" {
 					_, yes := denoStdNodeModules[name]
 					if yes {
 						importPath = fmt.Sprintf("/v%d/_deno_std_node_%s.js", VERSION, name)
@@ -251,13 +244,13 @@ func build(buildID string, options buildOptions) (ret buildResult, err error) {
 				if importPath == "" {
 					polyfill, ok := polyfilledBuiltInNodeModules[name]
 					if ok {
-						p, submodule, e := nodeEnv.getPackageInfo(polyfill, "latest")
+						p, submodule, e := node.getPackageInfo(polyfill, "latest")
 						if e == nil {
 							filename := path.Base(p.Name)
 							if submodule != "" {
 								filename = submodule
 							}
-							if options.isDev {
+							if task.isDev {
 								filename += ".development"
 							}
 							importPath = fmt.Sprintf(
@@ -265,7 +258,7 @@ func build(buildID string, options buildOptions) (ret buildResult, err error) {
 								VERSION,
 								p.Name,
 								p.Version,
-								options.target,
+								task.target,
 								filename,
 							)
 						} else {
@@ -285,7 +278,7 @@ func build(buildID string, options buildOptions) (ret buildResult, err error) {
 						var p NpmPackage
 						if utils.ParseJSONFile(packageFile, &p) == nil {
 							suffix := ".js"
-							if options.isDev {
+							if task.isDev {
 								suffix = ".development.js"
 							}
 							importPath = fmt.Sprintf(
@@ -293,7 +286,7 @@ func build(buildID string, options buildOptions) (ret buildResult, err error) {
 								VERSION,
 								p.Name,
 								p.Version,
-								options.target,
+								task.target,
 								path.Base(p.Name),
 								suffix,
 							)
@@ -302,7 +295,7 @@ func build(buildID string, options buildOptions) (ret buildResult, err error) {
 				}
 				if importPath == "" {
 					version := "latest"
-					for _, dep := range options.deps {
+					for _, dep := range task.deps {
 						if name == dep.name {
 							version = dep.version
 							break
@@ -324,13 +317,13 @@ func build(buildID string, options buildOptions) (ret buildResult, err error) {
 							}
 						}
 					}
-					p, submodule, e := nodeEnv.getPackageInfo(name, version)
+					p, submodule, e := node.getPackageInfo(name, version)
 					if e == nil {
 						filename := path.Base(p.Name)
 						if submodule != "" {
 							filename = submodule
 						}
-						if options.isDev {
+						if task.isDev {
 							filename += ".development"
 						}
 						importPath = fmt.Sprintf(
@@ -338,7 +331,7 @@ func build(buildID string, options buildOptions) (ret buildResult, err error) {
 							VERSION,
 							p.Name,
 							p.Version,
-							options.target,
+							task.target,
 							filename,
 						)
 					}
@@ -366,20 +359,11 @@ func build(buildID string, options buildOptions) (ret buildResult, err error) {
 								if err == nil {
 									// here the submodule should be always empty
 									pkg.submodule = ""
-
-									buildLock.Unlock()
-									esm, err := buildESM(buildOptions{
-										config: options.config,
-										pkg:    *pkg,
-										target: options.target,
-										isDev:  options.isDev,
-									})
-									buildLock.Lock()
-
+									esmeta, err := initBuild(buildDir, *pkg, false)
 									if err == nil {
 										hasDefaultExport := false
-										if len(esm.esmeta.Exports) > 0 {
-											for _, name := range esm.esmeta.Exports {
+										if len(esmeta.Exports) > 0 {
+											for _, name := range esmeta.Exports {
 												if name == "default" || name == "__esModule" {
 													hasDefaultExport = true
 													break
@@ -432,7 +416,7 @@ func build(buildID string, options buildOptions) (ret buildResult, err error) {
 				fmt.Fprintf(jsHeader, `var __rResolve$ = p => p;%s`, eol)
 			}
 
-			saveFilePath := path.Join(options.storageDir, "builds", buildID+".js")
+			saveFilePath := path.Join(config.storageDir, "builds", task.ID()+".js")
 			ensureDir(path.Dir(saveFilePath))
 
 			var file *os.File
@@ -452,7 +436,7 @@ func build(buildID string, options buildOptions) (ret buildResult, err error) {
 				return
 			}
 		} else if strings.HasSuffix(file.Path, ".css") {
-			saveFilePath := path.Join(options.storageDir, "builds", buildID+".css")
+			saveFilePath := path.Join(config.storageDir, "builds", task.ID()+".css")
 			ensureDir(path.Dir(saveFilePath))
 			file, e := os.Create(saveFilePath)
 			if e != nil {
@@ -465,37 +449,88 @@ func build(buildID string, options buildOptions) (ret buildResult, err error) {
 			if err != nil {
 				return
 			}
-			hasCSS = []byte{1}
+			cssMark = []byte{1}
 		}
 	}
 
-	log.Debugf("esbuild %s %s %s in %v", options.pkg.String(), options.target, env, time.Now().Sub(start))
+	log.Debugf("esbuild %s %s %s in %v", task.pkg.String(), task.target, env, time.Now().Sub(start))
 
-	err = handleDTS(buildDir, esmeta, options)
+	err = task.handleDTS(buildDir, esmeta)
 	if err != nil {
 		return
 	}
 
 	_, err = db.Put(
-		q.Alias(buildID),
+		q.Alias(task.ID()),
 		q.KV{
 			"esmeta": utils.MustEncodeJSON(esmeta),
-			"css":    hasCSS,
+			"css":    cssMark,
 		},
 	)
+	if err != nil && err == postdb.ErrDuplicateAlias {
+		err = nil
+	}
 	if err != nil {
 		return
 	}
 
-	ret.buildID = buildID
-	ret.esmeta = esmeta
-	ret.hasCSS = hasCSS[0] == 1
+	esm = esmeta
+	packageCSS = cssMark[0] == 1
 	return
 }
 
-func initBuild(buildDir string, pkg pkg) (esmeta *ESMeta, err error) {
+func (task *buildTask) handleDTS(buildDir string, esmeta *ESMeta) (err error) {
+	start := time.Now()
+	pkg := task.pkg
+	nodeModulesDir := path.Join(buildDir, "node_modules")
+	nv := fmt.Sprintf("%s@%s", esmeta.Name, esmeta.Version)
+
+	var types string
+	if esmeta.Types != "" || esmeta.Typings != "" {
+		types = getTypesPath(nodeModulesDir, *esmeta.NpmPackage, "")
+	} else if pkg.submodule == "" {
+		if fileExists(path.Join(nodeModulesDir, pkg.name, "index.d.ts")) {
+			types = fmt.Sprintf("%s/%s", nv, "index.d.ts")
+		} else if !strings.HasPrefix(pkg.name, "@") {
+			packageFile := path.Join(nodeModulesDir, "@types", pkg.name, "package.json")
+			if fileExists(packageFile) {
+				var p NpmPackage
+				err := utils.ParseJSONFile(path.Join(nodeModulesDir, "@types", pkg.name, "package.json"), &p)
+				if err == nil {
+					types = getTypesPath(nodeModulesDir, p, "")
+				}
+			}
+		}
+	} else {
+		if fileExists(path.Join(nodeModulesDir, pkg.name, pkg.submodule, "index.d.ts")) {
+			types = fmt.Sprintf("%s/%s", nv, path.Join(pkg.submodule, "index.d.ts"))
+		} else if fileExists(path.Join(nodeModulesDir, pkg.name, ensureExt(pkg.submodule, ".d.ts"))) {
+			types = fmt.Sprintf("%s/%s", nv, ensureExt(pkg.submodule, ".d.ts"))
+		} else if fileExists(path.Join(nodeModulesDir, "@types", pkg.name, pkg.submodule, "index.d.ts")) {
+			types = fmt.Sprintf("@types/%s/%s", nv, path.Join(pkg.submodule, "index.d.ts"))
+		} else if fileExists(path.Join(nodeModulesDir, "@types", pkg.name, ensureExt(pkg.submodule, ".d.ts"))) {
+			types = fmt.Sprintf("@types/%s/%s", nv, ensureExt(pkg.submodule, ".d.ts"))
+		}
+	}
+	if types != "" {
+		err = copyDTS(
+			nodeModulesDir,
+			types,
+		)
+		if err != nil {
+			err = fmt.Errorf("copyDTS(%s): %v", types, err)
+			return
+		}
+		esmeta.Dts = "/" + types
+		log.Debug("copy dts in", time.Now().Sub(start))
+	}
+
+	return
+}
+
+func initBuild(buildDir string, pkg pkg, install bool) (esmeta *ESMeta, err error) {
 	var p NpmPackage
-	p, _, err = nodeEnv.getPackageInfo(pkg.name, pkg.version)
+	p, _, err = node.getPackageInfo(pkg.name, pkg.version)
 	if err != nil {
 		return
 	}
@@ -509,7 +544,7 @@ func initBuild(buildDir string, pkg pkg) (esmeta *ESMeta, err error) {
 	pkgDir := path.Join(buildDir, "node_modules", esmeta.Name)
 	if esmeta.Types == "" && esmeta.Typings == "" && !strings.HasPrefix(pkg.name, "@") {
 		var info NpmPackage
-		info, _, err = nodeEnv.getPackageInfo("@types/"+pkg.name, "latest")
+		info, _, err = node.getPackageInfo("@types/"+pkg.name, "latest")
 		if err == nil {
 			if info.Types != "" || info.Typings != "" || info.Main != "" {
 				installList = append(installList, fmt.Sprintf("%s@%s", info.Name, info.Version))
@@ -540,9 +575,14 @@ func initBuild(buildDir string, pkg pkg) (esmeta *ESMeta, err error) {
 		esmeta.Typings = ""
 	}
 
-	err = yarnAdd(buildDir, installList...)
-	if err != nil {
-		return
+	if install {
+		for n, v := range esmeta.PeerDependencies {
+			installList = append(installList, fmt.Sprintf("%s@%s", n, v))
+		}
+		err = yarnAdd(buildDir, installList...)
+		if err != nil {
+			return
+		}
 	}
 
 	if pkg.submodule != "" {
@@ -602,55 +642,5 @@ func initBuild(buildDir string, pkg pkg) (esmeta *ESMeta, err error) {
 		}
 		esmeta.Exports = ret.Exports
 	}
-	return
-}
-
-func handleDTS(buildDir string, esmeta *ESMeta, options buildOptions) (err error) {
-	start := time.Now()
-	pkg := options.pkg
-	nodeModulesDir := path.Join(buildDir, "node_modules")
-	nv := fmt.Sprintf("%s@%s", esmeta.Name, esmeta.Version)
-
-	var types string
-	if esmeta.Types != "" || esmeta.Typings != "" {
-		types = getTypesPath(nodeModulesDir, *esmeta.NpmPackage, "")
-	} else if pkg.submodule == "" {
-		if fileExists(path.Join(nodeModulesDir, pkg.name, "index.d.ts")) {
-			types = fmt.Sprintf("%s/%s", nv, "index.d.ts")
-		} else if !strings.HasPrefix(pkg.name, "@") {
-			packageFile := path.Join(nodeModulesDir, "@types", pkg.name, "package.json")
-			if fileExists(packageFile) {
-				var p NpmPackage
-				err := utils.ParseJSONFile(path.Join(nodeModulesDir, "@types", pkg.name, "package.json"), &p)
-				if err == nil {
-					types = getTypesPath(nodeModulesDir, p, "")
-				}
-			}
-		}
-	} else {
-		if fileExists(path.Join(nodeModulesDir, pkg.name, pkg.submodule, "index.d.ts")) {
-			types = fmt.Sprintf("%s/%s", nv, path.Join(pkg.submodule, "index.d.ts"))
-		} else if fileExists(path.Join(nodeModulesDir, pkg.name, ensureExt(pkg.submodule, ".d.ts"))) {
-			types = fmt.Sprintf("%s/%s", nv, ensureExt(pkg.submodule, ".d.ts"))
-		} else if fileExists(path.Join(nodeModulesDir, "@types", pkg.name, pkg.submodule, "index.d.ts")) {
-			types = fmt.Sprintf("@types/%s/%s", nv, path.Join(pkg.submodule, "index.d.ts"))
-		} else if fileExists(path.Join(nodeModulesDir, "@types", pkg.name, ensureExt(pkg.submodule, ".d.ts"))) {
-			types = fmt.Sprintf("@types/%s/%s", nv, ensureExt(pkg.submodule, ".d.ts"))
-		}
-	}
-	if types != "" {
-		err = copyDTS(
-			options.config,
-			nodeModulesDir,
-			types,
-		)
-		if err != nil {
-			err = fmt.Errorf("copyDTS(%s): %v", types, err)
-			return
-		}
-		esmeta.Dts = "/" + types
-		log.Debug("copy dts in", time.Now().Sub(start))
-	}
-
 	return
 }

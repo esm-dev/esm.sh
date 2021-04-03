@@ -18,14 +18,16 @@ import (
 )
 
 var (
-	nodeEnv *NodeEnv
+	config  *Config
+	node    *NodeEnv
 	mmdbr   *maxminddb.Reader
 	db      *postdb.DB
 	log     *logx.Logger
 	embedFS *embed.FS
 )
 
-type config struct {
+// Server Config
+type Config struct {
 	storageDir     string
 	domain         string
 	cdnDomain      string
@@ -66,6 +68,14 @@ func Serve(fs *embed.FS) {
 		logLevel = "debug"
 	}
 
+	config = &Config{
+		storageDir:     path.Join(etcDir, "storage"),
+		domain:         domain,
+		cdnDomain:      cdnDomain,
+		cdnDomainChina: cdnDomainChina,
+		unpkgDomain:    unpkgDomain,
+	}
+
 	var err error
 	log, err = logx.New(fmt.Sprintf("file:%s?buffer=32k", path.Join(logDir, "main.log")))
 	if err != nil {
@@ -74,19 +84,11 @@ func Serve(fs *embed.FS) {
 	}
 	log.SetLevelByName(logLevel)
 
-	nodeEnv, err = checkNodeEnv()
+	node, err = checkNodeEnv()
 	if err != nil {
 		log.Fatalf("check nodejs env: %v", err)
 	}
-	log.Debugf("nodejs v%s installed", nodeEnv.version)
-
-	config := config{
-		storageDir:     path.Join(etcDir, "storage"),
-		domain:         domain,
-		cdnDomain:      cdnDomain,
-		cdnDomainChina: cdnDomainChina,
-		unpkgDomain:    unpkgDomain,
-	}
+	log.Debugf("nodejs v%s installed", node.version)
 
 	ensureDir(path.Join(etcDir, "database"))
 	ensureDir(path.Join(config.storageDir, fmt.Sprintf("builds/v%d", VERSION)))
@@ -173,7 +175,7 @@ func Serve(fs *embed.FS) {
 		}),
 	)
 
-	registerRoutes(config)
+	registerRoutes()
 
 	C := rex.Serve(rex.ServerConfig{
 		Port: uint16(port),

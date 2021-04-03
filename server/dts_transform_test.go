@@ -90,10 +90,11 @@ func TestCopyDTS(t *testing.T) {
 		}
 	}
 
-	err = copyDTS(config{
+	config = &Config{
 		storageDir: testDir,
 		domain:     "cdn.esm.sh",
-	}, nmDir, "test/index.d.ts")
+	}
+	err = copyDTS(nmDir, "test/index.d.ts")
 	if err != nil && os.IsExist(err) {
 		t.Fatal(err)
 	}

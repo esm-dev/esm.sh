@@ -7,6 +7,7 @@ import (
 	"net"
 	"net/http"
 	"path"
+	"runtime"
 	"strings"
 	"time"
 
@@ -14,7 +15,7 @@ import (
 	"github.com/ije/rex"
 )
 
-func registerRoutes(config config) {
+func registerRoutes() {
 	start := time.Now()
 	httpClient := &http.Client{
 		Transport: &http.Transport{
@@ -32,6 +33,7 @@ func registerRoutes(config config) {
 			ResponseHeaderTimeout: 60 * time.Second,
 		},
 	}
+	queue := newBuildQueue(runtime.NumCPU())
 
 	rex.Query("*", func(ctx *rex.Context) interface{} {
 		pathname := ctx.Path.String()
@@ -228,16 +230,14 @@ func registerRoutes(config config) {
 		isDev := !ctx.Form.IsNil("dev")
 		noCheck := !ctx.Form.IsNil("no-check")
 
-		var (
-			currentPkg *pkg
-			isBare     bool
-			err        error
-		)
+		var reqPkg *pkg
+		var isBare bool
+		var err error
 
 		if endsWith(pathname, ".js") {
-			currentPkg, err = parsePkg(pathname)
+			reqPkg, err = parsePkg(pathname)
 			if err == nil {
-				a := strings.Split(currentPkg.submodule, "/")
+				a := strings.Split(reqPkg.submodule, "/")
 				if len(a) > 1 {
 					if strings.HasPrefix(a[0], "deps=") {
 						for _, p := range strings.Split(strings.TrimPrefix(a[0], "deps="), ",") {
@@ -269,17 +269,17 @@ func registerRoutes(config config) {
 							submodule = strings.TrimSuffix(submodule, ".development")
 							isDev = true
 						}
-						if submodule == path.Base(currentPkg.name) {
+						if submodule == path.Base(reqPkg.name) {
 							submodule = ""
 						}
-						currentPkg.submodule = submodule
+						reqPkg.submodule = submodule
 						target = a[0]
 						isBare = true
 					}
 				}
 			}
 		} else {
-			currentPkg, err = parsePkg(pathname)
+			reqPkg, err = parsePkg(pathname)
 		}
 		if err != nil {
 			if strings.HasSuffix(err.Error(), "not found") {
@@ -288,25 +288,28 @@ func registerRoutes(config config) {
 			return throwErrorJS(ctx, 500, err)
 		}
 
-		ret, err := buildESM(buildOptions{
-			config: config,
-			pkg:    *currentPkg,
+		task := queue.Add(&buildTask{
+			pkg:    *reqPkg,
 			deps:   deps,
 			target: target,
 			isDev:  isDev,
 		})
-		if err != nil {
-			return throwErrorJS(ctx, 500, err)
+
+		// todo: wait 1 second then down to previous build version
+		output := <-task.C
+		close(task.C)
+		if output.err != nil {
+			return throwErrorJS(ctx, 500, output.err)
 		}
 
 		if isCSS {
-			if ret.hasCSS {
+			if output.packageCSS {
 				hostname := ctx.R.Host
 				proto := "http"
 				if ctx.R.TLS != nil {
 					proto = "https"
 				}
-				url := fmt.Sprintf("%s://%s/%s.css", proto, hostname, ret.buildID)
+				url := fmt.Sprintf("%s://%s/%s.css", proto, hostname, task.ID())
 				code := http.StatusTemporaryRedirect
 				if regVersionPath.MatchString(pathname) {
 					code = http.StatusPermanentRedirect
@@ -344,17 +347,18 @@ func registerRoutes(config config) {
 			}
 		}
 
-		esmate := ret.esmeta
-		fmt.Fprintf(buf, `/* esm.sh - %v */%s`, currentPkg, "\n")
-		fmt.Fprintf(buf, `export * from "%s%s%s";%s`, importPrefix, ret.buildID, importSuffix, "\n")
-		if esmate.Module != "" {
-			for _, name := range esmate.Exports {
+		fmt.Fprintf(buf, `/* esm.sh - %v */%s`, reqPkg, "\n")
+		fmt.Fprintf(buf, `export * from "%s%s%s";%s`, importPrefix, task.ID(), importSuffix, "\n")
+
+		esm := output.esm
+		if esm.Module != "" {
+			for _, name := range esm.Exports {
 				if name == "default" {
 					fmt.Fprintf(
 						buf,
 						`export { default } from "%s%s%s";%s`,
 						importPrefix,
-						ret.buildID,
+						task.ID(),
 						importSuffix,
 						"\n",
 					)
@@ -366,17 +370,17 @@ func registerRoutes(config config) {
 				buf,
 				`export { default } from "%s%s%s";%s`,
 				importPrefix,
-				ret.buildID,
+				task.ID(),
 				importSuffix,
 				"\n",
 			)
 		}
-		if esmate.Dts != "" && !noCheck {
+		if esm.Dts != "" && !noCheck {
 			value := fmt.Sprintf(
 				"%s%s",
 				importPrefix,
 				strings.TrimPrefix(
-					path.Join("/", fmt.Sprintf("v%d", VERSION), esmate.Dts),
+					path.Join("/", fmt.Sprintf("v%d", VERSION), esm.Dts),
 					"/",
 				),
 			)
