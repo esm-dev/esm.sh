@@ -122,7 +122,7 @@ func build(buildID string, options buildOptions) (ret buildResult, err error) {
 	}
 
 	buf := bytes.NewBuffer(nil)
-	exports := []string{}
+	exports := newStringSet()
 	hasDefaultExport := false
 	env := "production"
 	if options.isDev {
@@ -132,19 +132,19 @@ func build(buildID string, options buildOptions) (ret buildResult, err error) {
 		if name == "default" {
 			hasDefaultExport = true
 		} else if name != "import" {
-			exports = append(exports, name)
+			exports.Add(name)
 		}
 	}
 	if esmeta.Module != "" {
-		if len(exports) > 0 {
-			fmt.Fprintf(buf, `export {%s} from "%s";%s`, strings.Join(exports, ","), importPath, "\n")
+		if exports.Size() > 0 {
+			fmt.Fprintf(buf, `export {%s} from "%s";%s`, strings.Join(exports.Values(), ","), importPath, "\n")
 		}
 		if hasDefaultExport {
 			fmt.Fprintf(buf, `export {default} from "%s";`, importPath)
 		}
 	} else {
-		if len(exports) > 0 {
-			fmt.Fprintf(buf, `export {%s,default} from "%s";%s`, strings.Join(exports, ","), importPath, "\n")
+		if exports.Size() > 0 {
+			fmt.Fprintf(buf, `export {%s,default} from "%s";%s`, strings.Join(exports.Values(), ","), importPath, "\n")
 		} else {
 			fmt.Fprintf(buf, `export {default} from "%s";`, importPath)
 		}
@@ -184,7 +184,14 @@ func build(buildID string, options buildOptions) (ret buildResult, err error) {
 					if pkg.submodule != "" {
 						importName += "/" + pkg.submodule
 					}
-					if p == importName || isFileImportPath(p) {
+					// bundle modules:
+					// 1. the package self
+					// 2. submodules of the package
+					// 3. submodules of other packages
+					if p == importName ||
+						isFileImportPath(p) ||
+						(!strings.HasPrefix(p, "@") && len(strings.Split(p, "/")) > 1) ||
+						(strings.HasPrefix(p, "@") && len(strings.Split(p, "/")) > 2) {
 						return api.OnResolveResult{}, nil
 					}
 					external.Add(p)
@@ -352,7 +359,47 @@ func build(buildID string, options buildOptions) (ret buildResult, err error) {
 					if commonjs {
 						p = bytes.TrimSuffix(p, []byte("require("))
 						if !commonjsImported {
-							fmt.Fprintf(jsHeader, `import __%s$ from "%s";%s`, identifier, importPath, eol)
+							wrote := false
+							versionPrefx := fmt.Sprintf("/v%d/", VERSION)
+							if strings.HasPrefix(importPath, versionPrefx) {
+								pkg, err := parsePkg(strings.TrimPrefix(importPath, versionPrefx))
+								if err == nil {
+									// here the submodule should be always empty
+									pkg.submodule = ""
+
+									buildLock.Unlock()
+									esm, err := buildESM(buildOptions{
+										config: options.config,
+										pkg:    *pkg,
+										target: options.target,
+										isDev:  options.isDev,
+									})
+									buildLock.Lock()
+
+									if err == nil {
+										hasDefaultExport := false
+										if len(esm.esmeta.Exports) > 0 {
+											for _, name := range esm.esmeta.Exports {
+												if name == "default" || name == "__esModule" {
+													hasDefaultExport = true
+													break
+												}
+											}
+										} else {
+											hasDefaultExport = true
+										}
+										if hasDefaultExport {
+											fmt.Fprintf(jsHeader, `import __%s$ from "%s";%s`, identifier, importPath, eol)
+										} else {
+											fmt.Fprintf(jsHeader, `import * as __%s$ from "%s";%s`, identifier, importPath, eol)
+										}
+										wrote = true
+									}
+								}
+							}
+							if !wrote {
+								fmt.Fprintf(jsHeader, `import __%s$ from "%s";%s`, identifier, importPath, eol)
+							}
 							commonjsImported = true
 						}
 					}
@@ -499,9 +546,10 @@ func initBuild(buildDir string, pkg pkg) (esmeta *ESMeta, err error) {
 	}
 
 	if pkg.submodule != "" {
-		if fileExists(path.Join(pkgDir, pkg.submodule, "package.json")) {
+		packageFile := path.Join(pkgDir, pkg.submodule, "package.json")
+		if fileExists(packageFile) {
 			var p NpmPackage
-			err = utils.ParseJSONFile(path.Join(pkgDir, pkg.submodule, "package.json"), &p)
+			err = utils.ParseJSONFile(packageFile, &p)
 			if err != nil {
 				return
 			}
@@ -548,10 +596,9 @@ func initBuild(buildDir string, pkg pkg) (esmeta *ESMeta, err error) {
 	}
 
 	if esmeta.Module == "" {
-		ret, e := parseCJSModuleExports(buildDir, pkg.ImportPath())
-		if e != nil {
-			err = e
-			return
+		ret, err := parseCJSModuleExports(buildDir, pkg.ImportPath())
+		if err != nil {
+			log.Warn(err)
 		}
 		esmeta.Exports = ret.Exports
 	}
@@ -571,12 +618,13 @@ func handleDTS(buildDir string, esmeta *ESMeta, options buildOptions) (err error
 		if fileExists(path.Join(nodeModulesDir, pkg.name, "index.d.ts")) {
 			types = fmt.Sprintf("%s/%s", nv, "index.d.ts")
 		} else if !strings.HasPrefix(pkg.name, "@") {
-			var info NpmPackage
-			err = utils.ParseJSONFile(path.Join(nodeModulesDir, "@types", pkg.name, "package.json"), &info)
-			if err == nil {
-				types = getTypesPath(nodeModulesDir, info, "")
-			} else if !os.IsNotExist(err) {
-				return
+			packageFile := path.Join(nodeModulesDir, "@types", pkg.name, "package.json")
+			if fileExists(packageFile) {
+				var p NpmPackage
+				err := utils.ParseJSONFile(path.Join(nodeModulesDir, "@types", pkg.name, "package.json"), &p)
+				if err == nil {
+					types = getTypesPath(nodeModulesDir, p, "")
+				}
 			}
 		}
 	} else {

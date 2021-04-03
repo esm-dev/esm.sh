@@ -104,9 +104,9 @@ func parseCJSModuleExports(buildDir string, importPath string) (ret cjsModuleLex
 }
 
 func parseESModuleExports(buildDir string, importPath string) (exports []string, esm bool, err error) {
-	nmDir := path.Join(buildDir, "node_modules")
 	var filepath string
 	var isImportDir bool
+	nmDir := path.Join(buildDir, "node_modules")
 	if path.IsAbs(importPath) {
 		filepath = importPath
 	} else {
@@ -135,7 +135,7 @@ func parseESModuleExports(buildDir string, importPath string) (exports []string,
 		if esm {
 			for _, i := range ast.ExportStarImportRecords {
 				src := ast.ImportRecords[i].Path.Text
-				if strings.HasPrefix(src, "./") || strings.HasPrefix(src, "../") {
+				if isFileImportPath(src) {
 					var p string
 					if isImportDir {
 						p = path.Join(importPath, src)
@@ -161,6 +161,21 @@ func parseESModuleExports(buildDir string, importPath string) (exports []string,
 						err = utils.ParseJSONFile(pkgFile, &p)
 						if err != nil {
 							return
+						}
+						if p.Module == "" && p.Type == "module" {
+							p.Module = p.Main
+						}
+						if p.Module == "" && p.DefinedExports != nil {
+							v, ok := p.DefinedExports.(map[string]interface{})
+							if ok {
+								m, ok := v["import"]
+								if ok {
+									s, ok := m.(string)
+									if ok && s != "" {
+										p.Module = s
+									}
+								}
+							}
 						}
 						if p.Module != "" {
 							a, ok, e := parseESModuleExports(buildDir, path.Join(src, p.Module))
