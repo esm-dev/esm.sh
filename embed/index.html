@@ -332,8 +332,15 @@
       display: none;
     }
 
-    .test p {
-      margin: 6px 0;
+    .test ul li>span {
+      display: inline-block;
+      margin-left: 6px;
+    }
+
+    .test ul li>em {
+      display: inline-block;
+      margin-left: 6px;
+      color: #999;
     }
   </style>
 </head>
@@ -354,24 +361,8 @@
     <p><em style="color: #999;">Loading...</em></p>
   </main>
   <div class="test">
-    <h2>Test</h2>
-    <div>
-      <p>
-        <strong>React</strong>: <span id="react">❌</span>
-      </p>
-      <p>
-        <strong>React(bundle)</strong>: <span id="reactb">❌</span>
-      </p>
-      <p>
-        <strong>Preact</strong>: <span id="preact"><span className="x">❌</span></span>
-      </p>
-      <p>
-        <strong>Vue2</strong>: <span id="vue">❌</span>
-      </p>
-      <p>
-        <strong>Vue3</strong>: <span id="vue3">❌</span>
-      </p>
-    </div>
+    <h2>Testing</h2>
+    <ul></ul>
   </div>
   <script type="module">
     import marked from '/marked';
@@ -381,73 +372,28 @@
     import xml from '/highlight.js/lib/languages/xml';
     import bash from '/highlight.js/lib/languages/bash';
 
-    const mainEl = document.querySelector('main');
-    mainEl.innerHTML = marked.parse('# README');
-    mainEl.removeChild(mainEl.querySelector('h1'));
-    mainEl.querySelectorAll('code.language-bash').forEach(block => {
-      block.innerHTML = block.innerHTML.replace(/(^|\n)\$ /g, '$1');
-    })
-
-    hljs.registerLanguage('javascript', javascript);
-    hljs.registerLanguage('json', json);
-    hljs.registerLanguage('xml', xml);
-    hljs.registerLanguage('bash', hljs => {
-      const l = bash(hljs)
-      l.keywords.built_in = 'cd git sh'
-      return l
-    });
-    hljs.highlightAll();
-
-    if (location.hostname === 'localhost') {
+    if (location.search === '?test') {
+      document.querySelector('main').innerHTML = ''
       document.querySelector('.test').style.display = 'block';
+      const { start } = await import('/embed/assets/testing.js');
+      start(document.querySelector('.test > ul'))
+    } else {
+      const mainEl = document.querySelector('main');
+      mainEl.innerHTML = marked.parse('# README');
+      mainEl.removeChild(mainEl.querySelector('h1'));
+      mainEl.querySelectorAll('code.language-bash').forEach(block => {
+        block.innerHTML = block.innerHTML.replace(/(^|\n)\$ /g, '$1');
+      })
 
-      (async () => {
-        const { createElement } = await import('/react?dev');
-        const { render } = await import('/react-dom?dev');
-        render(createElement('span', null, '✅'), document.querySelector('#react'));
-      })();
-
-      (async () => {
-        const { createElement } = await import('/[react,react-dom]/react?dev');
-        const { render } = await import('/[react,react-dom]/react-dom?dev');
-
-        render(createElement('span', null, '✅'), document.querySelector('#reactb'));
-      })();
-
-      (async () => {
-        const { h, render } = await import('/preact?dev');
-        const { useEffect } = await import('/preact/hooks?dev');
-
-        const el = document.querySelector('#preact');
-        function App() {
-          useEffect(() => {
-            el.removeChild(el.querySelector('.x'))
-          }, [])
-          return h('span', null, '✅')
-        }
-        render(h('span', null, '✅'), el);
-      })();
-
-      (async () => {
-        const { default: Vue } = await import('/vue?dev');
-
-        new Vue({
-          el: '#vue',
-          render(h) {
-            return h('span', null, '✅')
-          }
-        });
-      })();
-
-      (async () => {
-        const { createApp, h } = await import('/vue@3.0.0?dev');
-
-        createApp({
-          render() {
-            return h('span', {}, '✅')
-          }
-        }).mount('#vue3');
-      })();
+      hljs.registerLanguage('javascript', javascript);
+      hljs.registerLanguage('json', json);
+      hljs.registerLanguage('xml', xml);
+      hljs.registerLanguage('bash', hljs => {
+        const l = bash(hljs)
+        l.keywords.built_in = 'cd git sh'
+        return l
+      });
+      hljs.highlightAll();
     }
   </script>
   <script nomodule>
