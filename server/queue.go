@@ -8,7 +8,7 @@ import (
 
 // A Queue for esbuild
 type buildQueue struct {
-	lock         sync.RWMutex
+	lock         sync.Mutex
 	queue        *list.List
 	current      []*task
 	tasks        map[string]*task
@@ -16,9 +16,9 @@ type buildQueue struct {
 }
 
 type buildOutput struct {
-	esm        *ESMeta
-	packageCSS bool
-	err        error
+	esm    *ESMeta
+	pkgCSS bool
+	err    error
 }
 
 type task struct {
@@ -39,24 +39,15 @@ func newBuildQueue(maxProcesses int) *buildQueue {
 	return q
 }
 
-// Len returns the number of tasks of queue.
+// Len returns the number of tasks of the queue.
 func (q *buildQueue) Len() int {
-	q.lock.RLock()
-	defer q.lock.RUnlock()
+	q.lock.Lock()
+	defer q.lock.Unlock()
 
 	return q.queue.Len()
 }
 
-// Has checks a task is exist.
-func (q *buildQueue) Has(id string) (ok bool) {
-	q.lock.RLock()
-	defer q.lock.RUnlock()
-
-	_, ok = q.tasks[id]
-	return
-}
-
-// Has checks a task is exist.
+// Add adds a new build task.
 func (q *buildQueue) Add(build *buildTask) chan *buildOutput {
 	q.lock.Lock()
 	defer q.lock.Unlock()
@@ -111,12 +102,12 @@ func (q *buildQueue) next() {
 
 func (q *buildQueue) wait(t *task) {
 	t.startTime = time.Now()
-	esm, packageCSS, err := t.buildESM()
+	esm, pkgCSS, err := t.buildESM()
 	for _, c := range t.consumers {
 		c <- &buildOutput{
-			esm:        esm,
-			packageCSS: packageCSS,
-			err:        err,
+			esm:    esm,
+			pkgCSS: pkgCSS,
+			err:    err,
 		}
 	}
 	log.Debugf(

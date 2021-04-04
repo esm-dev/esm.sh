@@ -57,7 +57,7 @@ func (task *buildTask) ID() string {
 	return task.id
 }
 
-func (task *buildTask) buildESM() (esm *ESMeta, packageCSS bool, err error) {
+func (task *buildTask) buildESM() (esm *ESMeta, pkgCSS bool, err error) {
 	hasher := sha1.New()
 	hasher.Write([]byte(task.ID()))
 	task.wd = path.Join(os.TempDir(), "esm-build-"+hex.EncodeToString(hasher.Sum(nil)))
@@ -432,7 +432,7 @@ func (task *buildTask) buildESM() (esm *ESMeta, packageCSS bool, err error) {
 	}
 
 	esm = esmeta
-	packageCSS = cssMark[0] == 1
+	pkgCSS = cssMark[0] == 1
 	return
 }
 

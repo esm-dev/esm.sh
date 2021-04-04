@@ -63,7 +63,7 @@ func registerRoutes() {
 			}
 		}
 
-		// serve embed/assest files
+		// serve embed files
 		if strings.HasPrefix(pathname, "/embed/assets/") || strings.HasPrefix(pathname, "/embed/test/") {
 			data, err := embedFS.ReadFile(pathname[1:])
 			if err != nil {
@@ -227,7 +227,7 @@ func registerRoutes() {
 			}
 		}
 
-		isCSS := !ctx.Form.IsNil("css")
+		isPkgCSS := !ctx.Form.IsNil("css")
 		isDev := !ctx.Form.IsNil("dev")
 		noCheck := !ctx.Form.IsNil("no-check")
 
@@ -297,20 +297,20 @@ func registerRoutes() {
 			isDev:  isDev,
 		}
 
-		esm, packageCSS, ok := findESM(task.ID())
+		esm, pkgCSS, ok := findESM(task.ID())
 		if !ok {
 			output := <-queue.Add(task)
 			if output.err != nil {
 				return throwErrorJS(ctx, 500, output.err)
 			}
 			esm = output.esm
-			packageCSS = output.packageCSS
+			pkgCSS = output.pkgCSS
 		} else {
 			log.Debugf("esm %s,%s found", reqPkg, target)
 		}
 
-		if isCSS {
-			if packageCSS {
+		if isPkgCSS {
+			if pkgCSS {
 				hostname := ctx.R.Host
 				proto := "http"
 				if ctx.R.TLS != nil {
