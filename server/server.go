@@ -117,6 +117,7 @@ func Serve(fs *embed.FS) {
 				log.Fatal(err)
 			}
 			_, err = io.Copy(f, file)
+			f.Close()
 			if err != nil {
 				log.Fatal(err)
 			}
@@ -141,6 +142,7 @@ func Serve(fs *embed.FS) {
 				log.Fatal(err)
 			}
 			_, err = io.Copy(f, file)
+			f.Close()
 			if err != nil {
 				log.Fatal(err)
 			}
