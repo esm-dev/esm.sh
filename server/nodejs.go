@@ -231,7 +231,7 @@ func (env *NodeEnv) getPackageInfo(name string, version string) (info NpmPackage
 	}
 
 	start := time.Now()
-	resp, err := http.Get(env.npmRegistry + name)
+	resp, err := httpClient.Get(env.npmRegistry + name)
 	if err != nil {
 		return
 	}
@@ -240,7 +240,8 @@ func (env *NodeEnv) getPackageInfo(name string, version string) (info NpmPackage
 	if resp.StatusCode == 404 || resp.StatusCode == 401 {
 		err = fmt.Errorf("npm: package '%s' not found", name)
 		return
-	} else if resp.StatusCode != 200 {
+	}
+	if resp.StatusCode != 200 {
 		ret, _ := ioutil.ReadAll(resp.Body)
 		err = fmt.Errorf("npm: can't get metadata of package '%s' (%s: %s)", name, resp.Status, string(ret))
 		return

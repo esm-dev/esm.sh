@@ -27,7 +27,7 @@ var httpClient = &http.Client{
 			conn.SetDeadline(time.Now().Add(60 * time.Second))
 			return conn, nil
 		},
-		MaxIdleConnsPerHost:   5,
+		MaxIdleConnsPerHost:   6,
 		ResponseHeaderTimeout: 60 * time.Second,
 	},
 }
@@ -156,10 +156,10 @@ func query() rex.Handle {
 				if err != nil {
 					return err
 				}
+				defer resp.Body.Close()
 				if resp.StatusCode != 200 {
 					return rex.Err(http.StatusBadGateway)
 				}
-				defer resp.Body.Close()
 				data, err := ioutil.ReadAll(resp.Body)
 				if err != nil {
 					return err
