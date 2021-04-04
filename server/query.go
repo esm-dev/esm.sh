@@ -15,27 +15,29 @@ import (
 	"github.com/ije/rex"
 )
 
-func registerRoutes() {
-	startTime := time.Now()
-	httpClient := &http.Client{
-		Transport: &http.Transport{
-			Dial: func(network, addr string) (conn net.Conn, err error) {
-				conn, err = net.DialTimeout(network, addr, 15*time.Second)
-				if err != nil {
-					return conn, err
-				}
+var httpClient = &http.Client{
+	Transport: &http.Transport{
+		Dial: func(network, addr string) (conn net.Conn, err error) {
+			conn, err = net.DialTimeout(network, addr, 15*time.Second)
+			if err != nil {
+				return conn, err
+			}
 
-				// Set a one-time deadline for potential SSL handshaking
-				conn.SetDeadline(time.Now().Add(60 * time.Second))
-				return conn, nil
-			},
-			MaxIdleConnsPerHost:   5,
-			ResponseHeaderTimeout: 60 * time.Second,
+			// Set a one-time deadline for potential SSL handshaking
+			conn.SetDeadline(time.Now().Add(60 * time.Second))
+			return conn, nil
 		},
-	}
+		MaxIdleConnsPerHost:   5,
+		ResponseHeaderTimeout: 60 * time.Second,
+	},
+}
+
+// esm query middleware
+func query() rex.Handle {
+	startTime := time.Now()
 	queue := newBuildQueue(runtime.NumCPU())
 
-	rex.Query("*", func(ctx *rex.Context) interface{} {
+	return func(ctx *rex.Context) interface{} {
 		pathname := ctx.Path.String()
 		switch pathname {
 		case "/":
@@ -53,7 +55,7 @@ func registerRoutes() {
 			return rex.Content("index.html", startTime, bytes.NewReader(html))
 		case "/favicon.ico":
 			// todo: add esm.sh logo
-			return 404
+			return rex.Err(404)
 		case "/_error.js":
 			switch ctx.Form.Value("type") {
 			case "resolve":
@@ -155,7 +157,7 @@ func registerRoutes() {
 					return err
 				}
 				if resp.StatusCode != 200 {
-					return http.StatusBadGateway
+					return rex.Err(http.StatusBadGateway)
 				}
 				defer resp.Body.Close()
 				data, err := ioutil.ReadAll(resp.Body)
@@ -337,7 +339,7 @@ func registerRoutes() {
 				ctx.SetHeader("Cache-Control", "public, max-age=31536000, immutable")
 				return rex.File(fp)
 			}
-			return 404
+			return rex.Err(404)
 		}
 
 		buf := bytes.NewBuffer(nil)
@@ -395,7 +397,7 @@ func registerRoutes() {
 		ctx.SetHeader("Cache-Control", fmt.Sprintf("private, max-age=%d", refreshDuration))
 		ctx.SetHeader("Content-Type", "application/javascript; charset=utf-8")
 		return buf
-	})
+	}
 }
 
 func throwErrorJS(ctx *rex.Context, status int, err error) interface{} {
@@ -410,6 +412,8 @@ func throwErrorJS(ctx *rex.Context, status int, err error) interface{} {
 	fmt.Fprintf(buf, "export default null;\n")
 	ctx.SetHeader("Cache-Control", "private, no-store, no-cache, must-revalidate")
 	ctx.SetHeader("Content-Type", "application/javascript; charset=utf-8")
-	log.Error(err)
+	if status >= 500 {
+		log.Error(err)
+	}
 	return rex.Status(status, buf)
 }

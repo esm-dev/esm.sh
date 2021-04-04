@@ -169,19 +169,17 @@ func Serve(fs *embed.FS) {
 		rex.Header("Server", domain),
 		rex.Cors(rex.CORS{
 			AllowAllOrigins: true,
-			AllowMethods:    []string{"GET", "POST"},
-			AllowHeaders:    []string{"Origin", "Content-Type", "Content-Length", "Accept-Encoding", "Authorization"},
+			AllowMethods:    []string{"GET"},
+			AllowHeaders:    []string{"Origin", "Content-Type", "Content-Length", "Accept-Encoding"},
 			MaxAge:          3600,
 		}),
+		query(),
 	)
-
-	registerRoutes()
 
 	C := rex.Serve(rex.ServerConfig{
 		Port: uint16(port),
 		TLS: rex.TLSConfig{
-			Port:         uint16(httpsPort),
-			AutoRedirect: false,
+			Port: uint16(httpsPort),
 			AutoTLS: rex.AutoTLSConfig{
 				AcceptTOS: !isDev,
 				Hosts:     []string{"www." + domain, domain},
@@ -202,6 +200,8 @@ func Serve(fs *embed.FS) {
 	case err = <-C:
 		log.Error(err)
 	}
+
+	// release resource
 	log.FlushBuffer()
 	accessLogger.FlushBuffer()
 	db.Close()
