@@ -4,18 +4,8 @@ import (
 	"encoding/json"
 	"path"
 
-	"github.com/evanw/esbuild/pkg/api"
 	"github.com/postui/postdb/q"
 )
-
-var targets = map[string]api.Target{
-	"deno":   api.ESNext,
-	"es2016": api.ES2016,
-	"es2017": api.ES2017,
-	"es2018": api.ES2018,
-	"es2019": api.ES2019,
-	"es2020": api.ES2020,
-}
 
 // ESMeta defines the ES Module meta
 type ESMeta struct {

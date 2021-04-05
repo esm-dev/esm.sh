@@ -11,8 +11,10 @@ import (
 	"strings"
 	"time"
 
+	"github.com/evanw/esbuild/pkg/api"
 	"github.com/ije/gox/utils"
 	"github.com/ije/rex"
+	"github.com/mssola/user_agent"
 )
 
 var httpClient = &http.Client{
@@ -78,7 +80,7 @@ func query() rex.Handle {
 		prevBuildVer := ""
 		if hasBuildVerPrefix {
 			pathname = strings.TrimPrefix(pathname, fmt.Sprintf("/v%d", VERSION))
-		} else if regBuildVerPath.MatchString(pathname) {
+		} else if regBuildVersionPath.MatchString(pathname) {
 			a := strings.Split(pathname, "/")
 			pathname = "/" + strings.Join(a[2:], "/")
 			hasBuildVerPrefix = true
@@ -207,8 +209,31 @@ func query() rex.Handle {
 			if strings.HasPrefix(ctx.R.UserAgent(), "Deno/") {
 				target = "deno"
 			} else {
-				// todo: check browser ua
-				target = "esnext"
+				target = "es2015"
+				name, version := user_agent.New(ctx.R.UserAgent()).Browser()
+				if engine, ok := engines[strings.ToLower(name)]; ok {
+					a := strings.Split(version, ".")
+					if len(a) > 3 {
+						version = strings.Join(a[:3], ".")
+					}
+					unspportEngineFeatures := validateEngineFeatures(api.Engine{
+						Name:    engine,
+						Version: version,
+					})
+					for _, t := range []string{
+						"es2020",
+						"es2019",
+						"es2018",
+						"es2017",
+						"es2016",
+					} {
+						unspportESMAFeatures := validateESMAFeatures(targets[t])
+						if unspportEngineFeatures <= unspportESMAFeatures {
+							target = t
+							break
+						}
+					}
+				}
 			}
 		}
 
@@ -233,62 +258,56 @@ func query() rex.Handle {
 		isDev := !ctx.Form.IsNil("dev")
 		noCheck := !ctx.Form.IsNil("no-check")
 
-		var reqPkg *pkg
-		var isBare bool
-		var err error
-
-		if endsWith(pathname, ".js") {
-			reqPkg, err = parsePkg(pathname)
-			if err == nil {
-				a := strings.Split(reqPkg.submodule, "/")
-				if len(a) > 1 {
-					if strings.HasPrefix(a[0], "deps=") {
-						for _, p := range strings.Split(strings.TrimPrefix(a[0], "deps="), ",") {
-							p = strings.TrimSpace(p)
-							if p != "" {
-								if strings.HasPrefix(p, "@") {
-									scope, name := utils.SplitByFirstByte(p, '_')
-									p = scope + "/" + name
-								}
-								m, err := parsePkg(p)
-								if err != nil {
-									if strings.HasSuffix(err.Error(), "not found") {
-										continue
-									}
-									return throwErrorJS(ctx, 500, err)
-								}
-								if !deps.Has(m.name) {
-									deps = append(deps, *m)
-								}
-							}
-						}
-						a = a[1:]
-					}
-				}
-				if len(a) > 1 {
-					if _, ok := targets[a[0]]; ok || a[0] == "esnext" {
-						submodule := strings.TrimSuffix(strings.Join(a[1:], "/"), ".js")
-						if endsWith(submodule, ".development") {
-							submodule = strings.TrimSuffix(submodule, ".development")
-							isDev = true
-						}
-						if submodule == path.Base(reqPkg.name) {
-							submodule = ""
-						}
-						reqPkg.submodule = submodule
-						target = a[0]
-						isBare = true
-					}
-				}
-			}
-		} else {
-			reqPkg, err = parsePkg(pathname)
-		}
+		reqPkg, err := parsePkg(pathname)
 		if err != nil {
 			if strings.HasSuffix(err.Error(), "not found") {
 				return throwErrorJS(ctx, 404, err)
 			}
 			return throwErrorJS(ctx, 500, err)
+		}
+
+		isBare := false
+		if endsWith(pathname, ".js") {
+			a := strings.Split(reqPkg.submodule, "/")
+			if len(a) > 1 {
+				if strings.HasPrefix(a[0], "deps=") {
+					for _, p := range strings.Split(strings.TrimPrefix(a[0], "deps="), ",") {
+						p = strings.TrimSpace(p)
+						if p != "" {
+							if strings.HasPrefix(p, "@") {
+								scope, name := utils.SplitByFirstByte(p, '_')
+								p = scope + "/" + name
+							}
+							m, err := parsePkg(p)
+							if err != nil {
+								if strings.HasSuffix(err.Error(), "not found") {
+									continue
+								}
+								return throwErrorJS(ctx, 500, err)
+							}
+							if !deps.Has(m.name) {
+								deps = append(deps, *m)
+							}
+						}
+					}
+					a = a[1:]
+				}
+			}
+			if len(a) > 1 {
+				if _, ok := targets[a[0]]; ok || a[0] == "esnext" {
+					submodule := strings.TrimSuffix(strings.Join(a[1:], "/"), ".js")
+					if endsWith(submodule, ".development") {
+						submodule = strings.TrimSuffix(submodule, ".development")
+						isDev = true
+					}
+					if submodule == path.Base(reqPkg.name) {
+						submodule = ""
+					}
+					reqPkg.submodule = submodule
+					target = a[0]
+					isBare = true
+				}
+			}
 		}
 
 		// todo: wait 1 second then down to previous build version

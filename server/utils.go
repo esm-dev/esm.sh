@@ -11,8 +11,8 @@ import (
 )
 
 var (
-	regBuildVerPath = regexp.MustCompile(`^/v\d+/`)
-	regFullVersion  = regexp.MustCompile(`^\d+\.\d+\.\d+(\-[a-zA-Z0-9\.]+)*$`)
+	regFullVersion      = regexp.MustCompile(`^\d+\.\d+\.\d+(\-[a-zA-Z0-9\.]+)*$`)
+	regBuildVersionPath = regexp.MustCompile(`^/v\d+/`)
 )
 
 // A Country of mmdb record.

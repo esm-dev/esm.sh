@@ -354,7 +354,7 @@ func yarnAdd(wd string, packages ...string) (err error) {
 		cmd.Dir = wd
 		output, err := cmd.CombinedOutput()
 		if err != nil {
-			return fmt.Errorf("yarn: %s", string(output))
+			return fmt.Errorf("yarn add %s: %s", strings.Join(packages, " "), string(output))
 		}
 		log.Debug("yarn add", strings.Join(packages, " "), "in", time.Now().Sub(start))
 	}
