@@ -461,12 +461,12 @@ func (task *buildTask) handleDTS(esmeta *ESMeta) (err error) {
 	} else {
 		if fileExists(path.Join(nodeModulesDir, pkg.name, pkg.submodule, "index.d.ts")) {
 			types = fmt.Sprintf("%s/%s", versionedName, path.Join(pkg.submodule, "index.d.ts"))
-		} else if fileExists(path.Join(nodeModulesDir, pkg.name, ensureExt(pkg.submodule, ".d.ts"))) {
-			types = fmt.Sprintf("%s/%s", versionedName, ensureExt(pkg.submodule, ".d.ts"))
+		} else if fileExists(path.Join(nodeModulesDir, pkg.name, ensureSuffix(pkg.submodule, ".d.ts"))) {
+			types = fmt.Sprintf("%s/%s", versionedName, ensureSuffix(pkg.submodule, ".d.ts"))
 		} else if fileExists(path.Join(nodeModulesDir, "@types", pkg.name, pkg.submodule, "index.d.ts")) {
 			types = fmt.Sprintf("@types/%s/%s", versionedName, path.Join(pkg.submodule, "index.d.ts"))
-		} else if fileExists(path.Join(nodeModulesDir, "@types", pkg.name, ensureExt(pkg.submodule, ".d.ts"))) {
-			types = fmt.Sprintf("@types/%s/%s", versionedName, ensureExt(pkg.submodule, ".d.ts"))
+		} else if fileExists(path.Join(nodeModulesDir, "@types", pkg.name, ensureSuffix(pkg.submodule, ".d.ts"))) {
+			types = fmt.Sprintf("@types/%s/%s", versionedName, ensureSuffix(pkg.submodule, ".d.ts"))
 		}
 	}
 	if types != "" {

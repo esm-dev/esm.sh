@@ -71,10 +71,10 @@ func copyDTS(nodeModulesDir string, dts string) (err error) {
 							_, typespath := utils.SplitByFirstByte(types, '/')
 							importPath = strings.TrimSuffix(importPath, "/") + "/" + typespath
 						} else {
-							importPath = ensureExt(strings.TrimSuffix(importPath, ".js"), ".d.ts")
+							importPath = ensureSuffix(strings.TrimSuffix(importPath, ".js"), ".d.ts")
 						}
 					} else {
-						importPath = ensureExt(strings.TrimSuffix(importPath, ".js"), ".d.ts")
+						importPath = ensureSuffix(strings.TrimSuffix(importPath, ".js"), ".d.ts")
 					}
 				}
 			}
@@ -405,7 +405,7 @@ func getTypesPath(nodeModulesDir string, p NpmPackage, subpath string) string {
 			types = "index.d.ts"
 		}
 	}
-	return fmt.Sprintf("%s@%s%s", p.Name, p.Version, ensureExt(path.Join("/", types), ".d.ts"))
+	return fmt.Sprintf("%s@%s%s", p.Name, p.Version, ensureSuffix(path.Join("/", types), ".d.ts"))
 }
 
 func onSemicolon(data []byte, atEOF bool) (advance int, token []byte, err error) {

@@ -32,7 +32,7 @@ var httpClient = &http.Client{
 	},
 }
 
-// esm query middleware
+// esm query middleware for rex
 func query() rex.Handle {
 	startTime := time.Now()
 	queue := newBuildQueue(runtime.NumCPU())

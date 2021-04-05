@@ -41,12 +41,11 @@ func (s *stringSet) Size() int {
 	return len(s.m)
 }
 
-func (s *stringSet) Has(key string) bool {
-	s.lock.RLock()
-	defer s.lock.RUnlock()
+func (s *stringSet) Add(key string) {
+	s.lock.Lock()
+	defer s.lock.Unlock()
 
-	_, ok := s.m[key]
-	return ok
+	s.m[key] = struct{}{}
 }
 
 func (s *stringSet) Values() []string {
@@ -60,13 +59,6 @@ func (s *stringSet) Values() []string {
 		i++
 	}
 	return a
-}
-
-func (s *stringSet) Add(key string) {
-	s.lock.Lock()
-	defer s.lock.Unlock()
-
-	s.m[key] = struct{}{}
 }
 
 // sortable version slice
@@ -100,6 +92,19 @@ func (s versionSlice) Less(i, j int) bool {
 	return a0 > b0
 }
 
+func identify(importPath string) string {
+	p := []byte(importPath)
+	for i, c := range p {
+		switch c {
+		case '/', '-', '@', '.':
+			p[i] = '_'
+		default:
+			p[i] = c
+		}
+	}
+	return string(p)
+}
+
 func isFileImportPath(importPath string) bool {
 	return strings.HasPrefix(importPath, "/") || strings.HasPrefix(importPath, "./") || strings.HasPrefix(importPath, "../") || importPath == "." || importPath == ".."
 }
@@ -122,7 +127,7 @@ func endsWith(s string, suffixs ...string) bool {
 	return false
 }
 
-func ensureExt(path string, ext string) string {
+func ensureSuffix(path string, ext string) string {
 	if !strings.HasSuffix(path, ext) {
 		return path + ext
 	}
@@ -145,17 +150,4 @@ func ensureDir(dir string) (err error) {
 		err = os.MkdirAll(dir, 0755)
 	}
 	return
-}
-
-func identify(importPath string) string {
-	p := []byte(importPath)
-	for i, c := range p {
-		switch c {
-		case '/', '-', '@', '.':
-			p[i] = '_'
-		default:
-			p[i] = c
-		}
-	}
-	return string(p)
 }
