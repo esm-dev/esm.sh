@@ -347,14 +347,21 @@
       display: none;
     }
 
-    .test ul li>span {
+    .test ul li>span,
+    .test ul li>em,
+    .test ul li>strong,
+    .test ul li::before {
       display: inline-block;
-      margin-left: 6px;
+      height: 24px;
+      line-height: 24px;
+    }
+
+    .test ul li>span {
+      margin-left: 8px;
     }
 
     .test ul li>em {
-      display: inline-block;
-      margin-left: 6px;
+      margin-left: 8px;
       color: #999;
     }
   </style>
@@ -363,7 +370,7 @@
 <body>
   <h1>
     <strong>ESM</strong>
-    <em>v{VERSION}</em>
+    <em>V{VERSION}</em>
     <a href="https://github.com/postui/esm.sh">
       <svg fill="currentColor" viewBox="0 0 24 24">
         <title>Github</title>
@@ -376,10 +383,7 @@
   <main>
     <p><em style="color: #999;">Loading...</em></p>
   </main>
-  <div class="test">
-    <h2>Testing</h2>
-    <ul></ul>
-  </div>
+  <div class="test"></div>
   <script type="module">
     import marked from '/marked';
     import hljs from '/highlight.js/lib/core';
@@ -389,10 +393,15 @@
     import bash from '/highlight.js/lib/languages/bash';
 
     if (location.search === '?test') {
-      document.querySelector('main').innerHTML = ''
-      document.querySelector('.test').style.display = 'block';
       const { test } = await import('/embed/test/testing.js');
-      test(document.querySelector('.test > ul'))
+      const mainEl = document.querySelector('main');
+      const testEl = document.querySelector('.test')
+      const ulEl = document.createElement('ul')
+      testEl.style.display = 'block';
+      testEl.appendChild(ulEl)
+      mainEl.parentNode.removeChild(mainEl)
+      document.querySelector('h1 > em').appendChild(document.createTextNode(' · Testing'))
+      test(ulEl)
     } else {
       const mainEl = document.querySelector('main');
       mainEl.innerHTML = marked.parse('# README');
