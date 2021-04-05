@@ -75,6 +75,7 @@ func Serve(fs *embed.FS) {
 		cdnDomainChina: cdnDomainChina,
 		unpkgDomain:    unpkgDomain,
 	}
+	embedFS = fs
 
 	var err error
 	log, err = logx.New(fmt.Sprintf("file:%s?buffer=32k", path.Join(logDir, "main.log")))
@@ -90,17 +91,16 @@ func Serve(fs *embed.FS) {
 	}
 	log.Debugf("nodejs v%s installed", node.version)
 
-	ensureDir(path.Join(etcDir, "database"))
 	ensureDir(path.Join(config.storageDir, fmt.Sprintf("builds/v%d", VERSION)))
 	ensureDir(path.Join(config.storageDir, fmt.Sprintf("types/v%d", VERSION)))
 	ensureDir(path.Join(config.storageDir, "raw"))
 
-	db, err = postdb.Open(path.Join(etcDir, "database", fmt.Sprintf("esm.v%d.db", VERSION)), 0666)
+	db, err = postdb.Open(path.Join(etcDir, "esm.db"), 0666)
 	if err != nil {
 		log.Fatalf("initiate esm.db: %v", err)
 	}
 
-	polyfills, err := fs.ReadDir("embed/polyfills")
+	polyfills, err := embedFS.ReadDir("embed/polyfills")
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -108,7 +108,7 @@ func Serve(fs *embed.FS) {
 		name := entry.Name()
 		filename := path.Join(config.storageDir, fmt.Sprintf("builds/v%d/_%s", VERSION, name))
 		if !fileExists(filename) {
-			file, err := fs.Open(fmt.Sprintf("embed/polyfills/%s", name))
+			file, err := embedFS.Open(fmt.Sprintf("embed/polyfills/%s", name))
 			if err != nil {
 				log.Fatal(err)
 			}
@@ -125,7 +125,7 @@ func Serve(fs *embed.FS) {
 		}
 	}
 
-	types, err := fs.ReadDir("embed/types")
+	types, err := embedFS.ReadDir("embed/types")
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -133,7 +133,7 @@ func Serve(fs *embed.FS) {
 		name := entry.Name()
 		filename := path.Join(config.storageDir, fmt.Sprintf("types/v%d/_%s", VERSION, name))
 		if !fileExists(filename) {
-			file, err := fs.Open(fmt.Sprintf("embed/types/%s", name))
+			file, err := embedFS.Open(fmt.Sprintf("embed/types/%s", name))
 			if err != nil {
 				log.Fatal(err)
 			}
@@ -149,7 +149,8 @@ func Serve(fs *embed.FS) {
 			log.Debugf("%s added", name)
 		}
 	}
-	mmdata, err := fs.ReadFile("embed/china_ip_list.mmdb")
+
+	mmdata, err := embedFS.ReadFile("embed/china_ip_list.mmdb")
 	if err == nil {
 		mmdbr, err = maxminddb.FromBytes(mmdata)
 		if err != nil {
@@ -157,7 +158,6 @@ func Serve(fs *embed.FS) {
 		}
 		log.Debugf("china_ip_list.mmdb applied: %+v", mmdbr.Metadata)
 	}
-	embedFS = fs
 
 	accessLogger, err := logx.New(fmt.Sprintf("file:%s?buffer=32k&fileDateFormat=20060102", path.Join(logDir, "access.log")))
 	if err != nil {
