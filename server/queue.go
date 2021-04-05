@@ -66,18 +66,12 @@ func (q *buildQueue) Add(build *buildTask) chan *buildOutput {
 	}
 	t.el = q.queue.PushBack(t)
 	q.tasks[build.ID()] = t
-
-	q.lock.Unlock()
 	q.next()
-	q.lock.Lock()
 
 	return c
 }
 
 func (q *buildQueue) next() {
-	q.lock.Lock()
-	defer q.lock.Unlock()
-
 	var nextTask *task
 	if len(q.current) < q.maxProcesses {
 		for el := q.queue.Front(); el != nil; el = el.Next() {
@@ -103,13 +97,6 @@ func (q *buildQueue) next() {
 func (q *buildQueue) wait(t *task) {
 	t.startTime = time.Now()
 	esm, pkgCSS, err := t.buildESM()
-	for _, c := range t.consumers {
-		c <- &buildOutput{
-			esm:    esm,
-			pkgCSS: pkgCSS,
-			err:    err,
-		}
-	}
 	log.Debugf(
 		"queue(%s,%s) done in %s",
 		t.pkg.String(),
@@ -117,8 +104,18 @@ func (q *buildQueue) wait(t *task) {
 		time.Now().Sub(t.startTime),
 	)
 
-	var p []*task
 	q.lock.Lock()
+	defer q.lock.Unlock()
+
+	for _, c := range t.consumers {
+		c <- &buildOutput{
+			esm:    esm,
+			pkgCSS: pkgCSS,
+			err:    err,
+		}
+	}
+
+	var p []*task
 	for _, _t := range q.current {
 		if _t != t {
 			p = append(p, _t)
@@ -127,7 +124,6 @@ func (q *buildQueue) wait(t *task) {
 	q.current = p
 	q.queue.Remove(t.el)
 	delete(q.tasks, t.ID())
-	q.lock.Unlock()
 
 	q.next()
 }
