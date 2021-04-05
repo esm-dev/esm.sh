@@ -1,5 +1,9 @@
 # Change Log
 
+## V35
+
+- Set build `target` by `user-agent` of the browser automaticlly
+
 ## V34
 
 - **&middot; Breaking** Remove bundle mode
