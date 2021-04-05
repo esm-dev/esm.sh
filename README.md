@@ -32,7 +32,9 @@ import 'https://esm.sh/tailwindcss/dist/tailwind.min.css'
 import React from 'https://esm.sh/react?target=es2020'
 ```
 
-Avaiable `target`: **es2015**-**es2020**, **esnext**, and **deno**
+By default, esm.sh will check the `User Agent` of browser to get the build **target**, or set it by the `target` query.
+
+Avaiable `target`: **es2015**-**es2020**, **esnext**, and **deno**.
 
 ### Development mode
 
