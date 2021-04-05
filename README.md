@@ -1,6 +1,6 @@
 # ESM
 
-A fast, global content delivery network for ES Modules. All modules in [NPM](http://npmjs.org/) are transformed to ESM by [esbuild](https://github.com/evanw/esbuild) .
+A fast, global content delivery network for ES Modules. All modules in [NPM](http://npmjs.org/) are transformed to ESM by [esbuild](https://github.com/evanw/esbuild).
 
 ## Import from URL
 
@@ -32,7 +32,7 @@ import 'https://esm.sh/tailwindcss/dist/tailwind.min.css'
 import React from 'https://esm.sh/react?target=es2020'
 ```
 
-Avaiable `target`: **es2015** - **es2020**, **esnext**, and **deno**
+Avaiable `target`: **es2015**-**es2020**, **esnext**, and **deno**
 
 ### Development mode
 
@@ -59,21 +59,22 @@ import Daygrid from 'https://esm.sh/@fullcalendar/daygrid'
 
 ## Deno compatibility
 
-**esm.sh** will replace the node internal modules (**fs**, **os**, etc) with [`deno.land/std/node`](https://deno.land/std/node) to support some packages working in Deno, like `postcss`:
+**esm.sh** will resolve the node internal modules (**fs**, **os**, etc) with [`deno.land/std/node`](https://deno.land/std/node) to support some packages working in Deno, like `postcss`:
 
 ```javascript
 import postcss from 'https://esm.sh/postcss'
 import autoprefixer from 'https://esm.sh/autoprefixer'
 
-console.log((await postcss([ autoprefixer ]).process(`
+const { css } = await postcss([ autoprefixer ]).process(`
   backdrop-filter: blur(5px);
   user-select: none;
-`).async()).css)
+`).async() 
+console.log(css)
 ```
 
 ### X-Typescript-Types
 
-By default, **esm.sh** will response a custom HTTP header of `X-TypeScript-Types` when the types(dts) defined, that is useful for deno types check ([link](https://deno.land/manual/getting_started/typescript#x-typescript-types-custom-header)).
+By default, **esm.sh** will response a custom HTTP header that is `X-TypeScript-Types` when the types(dts) is defined, this is useful for deno types check ([link](https://deno.land/manual/getting_started/typescript#x-typescript-types-custom-header)).
 
 ![figure #1](./embed/assets/sceenshot-deno-types.png)
 
@@ -86,12 +87,12 @@ import unescape from 'https://esm.sh/lodash/unescape?no-check'
 ## Network of esm.sh
 - Main server in HK
 - Global CDN by [Cloudflare](https://cloudflare.com)
-- China CDN by [Aliyun](https://aliyun.com) (using [mmdb_china_ip_list](https://github.com/alecthw/mmdb_china_ip_list) to split traffic)
+- China CDN by [Aliyun](https://aliyun.com) (use [mmdb_china_ip_list](https://github.com/alecthw/mmdb_china_ip_list) to split traffic)
 
 ## Self-Hosting
 
 You will need [Go](https://golang.org/dl) 1.16+ to compile the server, and ensure [supervisor](http://supervisord.org/) installed on your host machine.<br>
-The server runtime will install the latest nodejs (14+ LTS) automatically.
+The server runtime will install the nodejs (14 LTS) automatically.
 
 ```bash
 $ git clone https://github.com/postui/esm.sh
