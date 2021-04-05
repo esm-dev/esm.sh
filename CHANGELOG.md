@@ -2,7 +2,7 @@
 
 ## V35
 
-- Set build `target` by `user-agent` of the browser automaticlly
+- Set build `target` by the `user-agent` of browser automaticlly
 
 ## V34
 
