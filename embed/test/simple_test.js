@@ -1,6 +1,4 @@
 export default [
-
-
   /* UI Library */
   {
     name: 'antd@4',
@@ -18,7 +16,6 @@ export default [
     name: '@alist/antd@1',
     namedExport: ['List', 'Table'],
   },
-
   {
     name: '@alifd/next@1',
     namedExport: ['Button', 'Card'],

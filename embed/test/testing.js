@@ -2,16 +2,16 @@ import simpleTest from './simple_test.js';
 
 const assert = {
     hasNamedExport: (mod, name) => {
-        if (mod[name]=== undefined) throw new Error(`[namedExport] ${name} is not exist`);
+        if (mod[name] === undefined) throw new Error(`[namedExport] ${name} is not exist`);
     },
     hasDefault: (mod, name) => {
-        if (mod[name]=== undefined) throw new Error(`[default] ${name} is not exist`);
+        if (mod[name] === undefined) throw new Error(`[default] ${name} is not exist`);
     },
 }
 
-export function test(ul, match) {
+export async function test(ul, match) {
     const _esm = async (name, testFn) => {
-        if (match !== 'all' && !(Array.isArray(name) && name.some(n => n.includes(match))) && !name.includes(match)) {
+        if (!['all', 'export-names'].includes(match) && !(Array.isArray(name) && name.some(n => n.includes(match))) && !name.includes(match)) {
             return
         }
         const li = document.createElement('li')
@@ -45,7 +45,7 @@ export function test(ul, match) {
 
             try {
                 await testFn({ mod, span })
-            } catch(err) {
+            } catch (err) {
                 span.innerText = `❌ ${err.message}`;
             }
 
@@ -58,29 +58,29 @@ export function test(ul, match) {
     }
 
     if (match === 'export-names') {
-      simpleTest.forEach(st => {
-          _esm(st.name, async (t) => {
-              t.span.id = st.name;
-              if (st.namedExport) {
-                  for (let i = 0; i < st.namedExport.length; i++) {
-                      assert.hasNamedExport(t.mod, st.namedExport[i])
-                  }
-              }
-              if (st.default) {
-                  for (let i = 0; i < st.default.length; i++) {
-                      assert.hasDefault(t.mod.default, st.default[i])
-                  }
-              }
+        for (const st of simpleTest) {
+            await _esm(st.name, async (t) => {
+                t.span.id = st.name;
+                if (st.namedExport) {
+                    for (let i = 0; i < st.namedExport.length; i++) {
+                        assert.hasNamedExport(t.mod, st.namedExport[i])
+                    }
+                }
+                if (st.default) {
+                    for (let i = 0; i < st.default.length; i++) {
+                        assert.hasDefault(t.mod.default, st.default[i])
+                    }
+                }
+                if (st.defaultIs) {
+                    if (typeof t.mod.default !== st.defaultIs) {
+                        throw new Error(`default is not ${st.defaultIs}`);
+                    }
+                }
 
-              if (st.defaultIs) {
-                  if (typeof t.mod.default !== st.defaultIs) {
-                      throw new Error(`default is not ${st.defaultIs}`);
-                  }
-              }
-
-              t.span.innerText = '✅';
-          })
-      })
+                t.span.innerText = '✅';
+            })
+        }
+        return
     }
 
     _esm(['react@16', 'react-dom@16'], async (t) => {
