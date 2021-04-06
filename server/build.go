@@ -26,6 +26,7 @@ type buildTask struct {
 	deps   pkgSlice
 	target string
 	isDev  bool
+	bundle bool
 }
 
 func (task *buildTask) ID() string {
@@ -42,6 +43,9 @@ func (task *buildTask) ID() string {
 	}
 	if task.isDev {
 		name += ".development"
+	}
+	if task.bundle {
+		name += ".bundle"
 	}
 	if len(task.deps) > 0 {
 		sort.Sort(task.deps)
@@ -136,7 +140,7 @@ func (task *buildTask) buildESM() (esm *ESMeta, pkgCSS bool, err error) {
 					if smod := task.pkg.submodule; smod != "" {
 						importName += "/" + smod
 					}
-					// bundling modules:
+					// should bundle list:
 					// 1. the package itself
 					// 2. submodules of the package
 					// 3. submodules of other packages
@@ -145,6 +149,15 @@ func (task *buildTask) buildESM() (esm *ESMeta, pkgCSS bool, err error) {
 						(!strings.HasPrefix(p, "@") && len(strings.Split(p, "/")) > 1) ||
 						(strings.HasPrefix(p, "@") && len(strings.Split(p, "/")) > 2) {
 						return api.OnResolveResult{}, nil
+					}
+					// bundle all deps except peer deps in bundle mode
+					if task.bundle && !builtInNodeModules[p] {
+						_, ok := esmeta.PeerDependencies[p]
+						if !ok {
+							if fileExists(path.Join(task.wd, "node_modules", p, "package.json")) {
+								return api.OnResolveResult{}, nil
+							}
+						}
 					}
 					external.Add(p)
 					return api.OnResolveResult{Path: "esm_sh_external://" + p, External: true}, nil
@@ -219,6 +232,9 @@ func (task *buildTask) buildESM() (esm *ESMeta, pkgCSS bool, err error) {
 							if task.isDev {
 								filename += ".development"
 							}
+							if task.bundle {
+								filename += ".bundle"
+							}
 							importPath = fmt.Sprintf(
 								"/v%d/%s@%s/%s/%s.js",
 								VERSION,
@@ -245,10 +261,14 @@ func (task *buildTask) buildESM() (esm *ESMeta, pkgCSS bool, err error) {
 					if fileExists(packageFile) {
 						var p NpmPackage
 						if utils.ParseJSONFile(packageFile, &p) == nil {
-							suffix := ".js"
+							suffix := ""
 							if task.isDev {
-								suffix = ".development.js"
+								suffix = ".development"
 							}
+							if task.bundle {
+								suffix = ".bundle"
+							}
+							suffix += ".js"
 							importPath = fmt.Sprintf(
 								"/v%d/%s@%s/%s/%s%s",
 								VERSION,
@@ -294,6 +314,9 @@ func (task *buildTask) buildESM() (esm *ESMeta, pkgCSS bool, err error) {
 						if task.isDev {
 							filename += ".development"
 						}
+						if task.bundle {
+							filename += ".bundle"
+						}
 						importPath = fmt.Sprintf(
 							"/v%d/%s@%s/%s/%s.js",
 							VERSION,
@@ -332,24 +355,20 @@ func (task *buildTask) buildESM() (esm *ESMeta, pkgCSS bool, err error) {
 										_, installed = esmeta.PeerDependencies[name]
 									}
 									meta, err := initBuild(task.wd, *pkg, !installed)
-									if err == nil {
+									if err == nil && meta.Module != "" {
 										hasDefaultExport := false
 										if len(meta.Exports) > 0 {
 											for _, name := range meta.Exports {
-												if name == "default" || name == "__esModule" {
+												if name == "default" {
 													hasDefaultExport = true
 													break
 												}
 											}
-										} else {
-											hasDefaultExport = true
 										}
-										if hasDefaultExport {
-											fmt.Fprintf(jsHeader, `import __%s$ from "%s";%s`, identifier, importPath, eol)
-										} else {
+										if !hasDefaultExport {
 											fmt.Fprintf(jsHeader, `import * as __%s$ from "%s";%s`, identifier, importPath, eol)
+											wrote = true
 										}
-										wrote = true
 									}
 								}
 							}

@@ -259,6 +259,7 @@ func query() rex.Handle {
 
 		isPkgCSS := !ctx.Form.IsNil("css")
 		isDev := !ctx.Form.IsNil("dev")
+		bundleMode := !ctx.Form.IsNil("bundle") || !ctx.Form.IsNil("b")
 		noCheck := !ctx.Form.IsNil("no-check")
 
 		reqPkg, err := parsePkg(pathname)
@@ -299,6 +300,10 @@ func query() rex.Handle {
 			if len(a) > 1 {
 				if _, ok := targets[a[0]]; ok || a[0] == "esnext" {
 					submodule := strings.TrimSuffix(strings.Join(a[1:], "/"), ".js")
+					if endsWith(submodule, ".bundle") {
+						submodule = strings.TrimSuffix(submodule, ".bundle")
+						bundleMode = true
+					}
 					if endsWith(submodule, ".development") {
 						submodule = strings.TrimSuffix(submodule, ".development")
 						isDev = true
@@ -314,16 +319,17 @@ func query() rex.Handle {
 			}
 		}
 
-		// todo: wait 1 second then down to previous build version
 		task := &buildTask{
 			pkg:    *reqPkg,
 			deps:   deps,
 			target: target,
 			isDev:  isDev,
+			bundle: bundleMode,
 		}
 
 		esm, pkgCSS, ok := findESM(task.ID())
 		if !ok {
+			// todo: wait 3 second then down to previous build version
 			output := <-queue.Add(task)
 			if output.err != nil {
 				return throwErrorJS(ctx, output.err)
