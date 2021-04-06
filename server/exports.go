@@ -48,7 +48,7 @@ func parseCJSModuleExports(buildDir string, importPath string) (ret cjsModuleLex
 		const enhancedResolve = require('enhanced-resolve')
 
 		const resolve = promisify(enhancedResolve.create({
-			mainFields: ['browser', 'module', 'main']
+			mainFields: ['main']
 		}))
 
 		// the function 'getExports' is copied from https://github.com/evanw/esbuild/issues/442#issuecomment-739340295
@@ -59,7 +59,8 @@ func parseCJSModuleExports(buildDir string, importPath string) (ret cjsModuleLex
 			const paths = []
 
 			try {
-				paths.push(await resolve('%s', '%s')) 
+				const jsFile = await resolve('%s', '%s')
+				paths.push(jsFile) 
 				while (paths.length > 0) {
 					const currentPath = paths.pop()
 					const code = fs.readFileSync(currentPath).toString()
@@ -67,6 +68,16 @@ func parseCJSModuleExports(buildDir string, importPath string) (ret cjsModuleLex
 					exports.push(...results.exports)
 					for (const reexport of results.reexports) {
 						paths.push(await resolve(dirname(currentPath), reexport))
+					}
+				}
+				if ([
+					'caniuse-lite'
+				].includes('%s')) {
+					const mod = require(jsFile)
+					for (const key of Object.keys(mod)) {
+						if (!exports.includes(key)) {
+							exports.push(key)
+						}
 					}
 				}
 				return { exports }
@@ -83,7 +94,7 @@ func parseCJSModuleExports(buildDir string, importPath string) (ret cjsModuleLex
 			fs.writeFileSync(join(saveDir, '__exports.json'), JSON.stringify(exports))
 			process.exit(0)
 		})
-	`, buildDir, importPath, buildDir, importPath))
+	`, buildDir, importPath, importPath, buildDir, importPath))
 
 	cmd := exec.Command("node")
 	cmd.Stdin = buf

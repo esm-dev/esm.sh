@@ -600,7 +600,7 @@ func initBuild(buildDir string, pkg pkg, install bool) (esmeta *ESMeta, err erro
 			}
 		} else {
 			exports, esm, e := parseESModuleExports(buildDir, path.Join(esmeta.Name, pkg.submodule))
-			if e != nil {
+			if e != nil && os.IsExist(e) {
 				err = e
 				return
 			}
@@ -613,7 +613,7 @@ func initBuild(buildDir string, pkg pkg, install bool) (esmeta *ESMeta, err erro
 
 	if esmeta.Module != "" {
 		exports, esm, e := parseESModuleExports(buildDir, path.Join(esmeta.Name, esmeta.Module))
-		if e != nil {
+		if e != nil && os.IsExist(e) {
 			err = e
 			return
 		}
