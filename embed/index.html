@@ -392,44 +392,46 @@
   </main>
   <div class="test"></div>
   <script type="module">
-    import marked from '/marked';
-    import hljs from '/highlight.js/lib/core';
-    import javascript from '/highlight.js/lib/languages/javascript';
-    import json from '/highlight.js/lib/languages/json';
-    import xml from '/highlight.js/lib/languages/xml';
-    import bash from '/highlight.js/lib/languages/bash';
+    import marked from '/marked'
+    import hljs from '/highlight.js/lib/core'
+    import javascript from '/highlight.js/lib/languages/javascript'
+    import json from '/highlight.js/lib/languages/json'
+    import xml from '/highlight.js/lib/languages/xml'
+    import bash from '/highlight.js/lib/languages/bash'
 
-    if (location.search === '?test') {
-      const { test } = await import('/embed/test/testing.js');
-      const mainEl = document.querySelector('main');
+    const query = new URLSearchParams(location.search)
+
+    if (query.has('test')) {
+      const { test } = await import('/embed/test/testing.js')
+      const mainEl = document.querySelector('main')
       const testEl = document.querySelector('.test')
       const ulEl = document.createElement('ul')
-      testEl.style.display = 'block';
+      testEl.style.display = 'block'
       testEl.appendChild(ulEl)
       mainEl.parentNode.removeChild(mainEl)
       document.querySelector('h1 > em').appendChild(document.createTextNode(' · Testing'))
-      test(ulEl)
+      test(ulEl, query.get('test'))
     } else {
-      const mainEl = document.querySelector('main');
-      mainEl.innerHTML = marked.parse('# README');
-      mainEl.removeChild(mainEl.querySelector('h1'));
+      const mainEl = document.querySelector('main')
+      mainEl.innerHTML = marked.parse('# README')
+      mainEl.removeChild(mainEl.querySelector('h1'))
       mainEl.querySelectorAll('code.language-bash').forEach(block => {
-        block.innerHTML = block.innerHTML.replace(/(^|\n)\$ /g, '$1');
+        block.innerHTML = block.innerHTML.replace(/(^|\n)\$ /g, '$1')
       })
 
-      hljs.registerLanguage('javascript', javascript);
-      hljs.registerLanguage('json', json);
-      hljs.registerLanguage('xml', xml);
+      hljs.registerLanguage('javascript', javascript)
+      hljs.registerLanguage('json', json)
+      hljs.registerLanguage('xml', xml)
       hljs.registerLanguage('bash', hljs => {
         const l = bash(hljs)
         l.keywords.built_in = 'cd git sh'
         return l
       });
-      hljs.highlightAll();
+      hljs.highlightAll()
     }
   </script>
   <script nomodule>
-    const mainEl = document.querySelector('main');
+    const mainEl = document.querySelector('main')
     mainEl.innerHTML = '<p><em style="color: #999;">nomodule, please upgrade your browser...</em></p>'
   </script>
 </body>

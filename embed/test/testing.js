@@ -1,5 +1,8 @@
-export function test(ul) {
+export function test(ul, match) {
     const _esm = async (name, testFn) => {
+        if (match !== 'all' && !(Array.isArray(name) && name.some(n => n.includes(match))) && !name.includes(match)) {
+            return
+        }
         const li = document.createElement('li')
         const strong = document.createElement('strong')
         const span = document.createElement('span')
