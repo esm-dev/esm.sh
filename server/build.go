@@ -34,25 +34,27 @@ func (task *buildTask) ID() string {
 	}
 
 	pkg := task.pkg
+	deps := ""
 	target := task.target
-	filename := path.Base(pkg.name)
+	name := path.Base(pkg.name)
 	if pkg.submodule != "" {
-		filename = pkg.submodule
+		name = pkg.submodule
 	}
 	if task.isDev {
-		filename += ".development"
+		name += ".development"
 	}
 	if len(task.deps) > 0 {
 		sort.Sort(task.deps)
-		target = fmt.Sprintf("deps=%s/%s", strings.ReplaceAll(task.deps.String(), "/", "_"), target)
+		deps = fmt.Sprintf("deps=%s/", strings.ReplaceAll(task.deps.String(), "/", "_"))
 	}
 	task.id = fmt.Sprintf(
-		"v%d/%s@%s/%s/%s",
+		"v%d/%s@%s/%s%s/%s",
 		VERSION,
 		pkg.name,
 		pkg.version,
+		deps,
 		target,
-		filename,
+		name,
 	)
 	return task.id
 }
@@ -134,8 +136,8 @@ func (task *buildTask) buildESM() (esm *ESMeta, pkgCSS bool, err error) {
 					if smod := task.pkg.submodule; smod != "" {
 						importName += "/" + smod
 					}
-					// bundle modules:
-					// 1. the package self
+					// bundling modules:
+					// 1. the package itself
 					// 2. submodules of the package
 					// 3. submodules of other packages
 					if p == importName ||
@@ -150,6 +152,11 @@ func (task *buildTask) buildESM() (esm *ESMeta, pkgCSS bool, err error) {
 			)
 		},
 	}
+	for name := range builtInNodeModules {
+		if name != task.pkg.name {
+			external.Add(name)
+		}
+	}
 	result := api.Build(api.BuildOptions{
 		Stdin:             input,
 		Outdir:            "/esbuild",
@@ -157,9 +164,11 @@ func (task *buildTask) buildESM() (esm *ESMeta, pkgCSS bool, err error) {
 		Bundle:            true,
 		Target:            targets[task.target],
 		Format:            api.FormatESModule,
+		Platform:          api.PlatformBrowser,
 		MinifyWhitespace:  minify,
 		MinifyIdentifiers: minify,
 		MinifySyntax:      minify,
+		External:          external.Values(),
 		Define:            define,
 		Plugins:           []api.Plugin{esmResolverPlugin},
 	})
@@ -198,7 +207,7 @@ func (task *buildTask) buildESM() (esm *ESMeta, pkgCSS bool, err error) {
 				if name == "buffer" {
 					importPath = fmt.Sprintf("/v%d/_node_buffer.js", VERSION)
 				}
-				if importPath == "" {
+				if importPath == "" && builtInNodeModules[name] {
 					polyfill, ok := polyfilledBuiltInNodeModules[name]
 					if ok {
 						p, submodule, e := node.getPackageInfo(polyfill, "latest")
@@ -226,6 +235,8 @@ func (task *buildTask) buildESM() (esm *ESMeta, pkgCSS bool, err error) {
 						_, err := embedFS.Open(fmt.Sprintf("polyfills/node_%s.js", name))
 						if err == nil {
 							importPath = fmt.Sprintf("/v%d/_node_%s.js", VERSION, name)
+						} else {
+							importPath = fmt.Sprintf("/_error.js?type=unsupported-nodejs-builtin-module&name=%s", name)
 						}
 					}
 				}
@@ -316,11 +327,15 @@ func (task *buildTask) buildESM() (esm *ESMeta, pkgCSS bool, err error) {
 								if err == nil {
 									// here the submodule should be always empty
 									pkg.submodule = ""
-									esmeta, err := initBuild(task.wd, *pkg, false)
+									_, installed := esmeta.Dependencies[name]
+									if !installed {
+										_, installed = esmeta.PeerDependencies[name]
+									}
+									meta, err := initBuild(task.wd, *pkg, !installed)
 									if err == nil {
 										hasDefaultExport := false
-										if len(esmeta.Exports) > 0 {
-											for _, name := range esmeta.Exports {
+										if len(meta.Exports) > 0 {
+											for _, name := range meta.Exports {
 												if name == "default" || name == "__esModule" {
 													hasDefaultExport = true
 													break
@@ -585,7 +600,6 @@ func initBuild(buildDir string, pkg pkg, install bool) (esmeta *ESMeta, err erro
 		}
 		if esm {
 			esmeta.Exports = exports
-
 		} else {
 			// fake module
 			esmeta.Module = ""

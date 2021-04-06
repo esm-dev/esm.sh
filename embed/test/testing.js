@@ -9,8 +9,11 @@ const assert = {
     },
 }
 
-export function test(ul) {
+export function test(ul, match) {
     const _esm = async (name, testFn) => {
+        if (match !== 'all' && !(Array.isArray(name) && name.some(n => n.includes(match))) && !name.includes(match)) {
+            return
+        }
         const li = document.createElement('li')
         const strong = document.createElement('strong')
         const span = document.createElement('span')
@@ -52,6 +55,32 @@ export function test(ul) {
         } catch (e) {
             span.innerText = '❌ ' + e.message
         }
+    }
+
+    if (match === 'export-names') {
+      simpleTest.forEach(st => {
+          _esm(st.name, async (t) => {
+              t.span.id = st.name;
+              if (st.namedExport) {
+                  for (let i = 0; i < st.namedExport.length; i++) {
+                      assert.hasNamedExport(t.mod, st.namedExport[i])
+                  }
+              }
+              if (st.default) {
+                  for (let i = 0; i < st.default.length; i++) {
+                      assert.hasDefault(t.mod.default, st.default[i])
+                  }
+              }
+
+              if (st.defaultIs) {
+                  if (typeof t.mod.default !== st.defaultIs) {
+                      throw new Error(`default is not ${st.defaultIs}`);
+                  }
+              }
+
+              t.span.innerText = '✅';
+          })
+      })
     }
 
     _esm(['react@16', 'react-dom@16'], async (t) => {
@@ -210,27 +239,4 @@ export function test(ul) {
         d3.select('#d3-span').text('✅')
     })
 
-    simpleTest.forEach(st => {
-        _esm(st.name, async (t) => {
-            t.span.id = st.name;
-            if (st.namedExport) {
-                for (let i = 0; i < st.namedExport.length; i++) {
-                    assert.hasNamedExport(t.mod, st.namedExport[i])
-                }
-            }
-            if (st.default) {
-                for (let i = 0; i < st.default.length; i++) {
-                    assert.hasDefault(t.mod.default, st.default[i])
-                }
-            }
-
-            if (st.defaultIs) {
-                if (typeof t.mod.default !== st.defaultIs) {
-                    throw new Error(`default is not ${st.defaultIs}`);
-                }
-            }
-
-            t.span.innerText = '✅';
-        })
-    })
 }
