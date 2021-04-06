@@ -1,5 +1,16 @@
 # Change Log
 
+## V37
+
+- Add **bundle** mode
+- Fix module exports parsing
+
+## V36
+
+- Fix esm build for some edge cases
+- Add simple test (thanks @zhoukekestar)
+- Upgrade esbuild to 0.11.5
+
 ## V35
 
 - Set build `target` by the `user-agent` of browser automaticlly
