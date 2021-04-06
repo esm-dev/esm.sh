@@ -1,13 +1,4 @@
-import simpleTest from './simple_test.js';
-
-const assert = {
-    hasNamedExport: (mod, name) => {
-        if (mod[name] === undefined) throw new Error(`[namedExport] ${name} is not exist`);
-    },
-    hasDefault: (mod, name) => {
-        if (mod[name] === undefined) throw new Error(`[default] ${name} is not exist`);
-    },
-}
+import exportNameTests, { assert } from './export_names_test.js'
 
 export async function test(ul, match) {
     const _esm = async (name, testFn) => {
@@ -53,14 +44,17 @@ export async function test(ul, match) {
             em.innerText = `· import in ${Math.round(t2 - t1)}ms, run in ${Math.round(t3 - t2)}ms`
             em.style.display = 'inline-block'
         } catch (e) {
-            span.innerText = '❌ ' + e.message
+            if (e.message.startsWith('[esm.sh] Unsupported nodejs builtin module')) {
+                span.innerText = '⚠️ ' + e.message
+            } else {
+                span.innerText = '❌ ' + e.message
+            }
         }
     }
 
     if (match === 'export-names') {
-        for (const st of simpleTest) {
-            await _esm(st.name, async (t) => {
-                t.span.id = st.name;
+        for (const st of exportNameTests) {
+            _esm(st.name, async (t) => {
                 if (st.namedExport) {
                     for (let i = 0; i < st.namedExport.length; i++) {
                         assert.hasNamedExport(t.mod, st.namedExport[i])
@@ -76,7 +70,7 @@ export async function test(ul, match) {
                         throw new Error(`default is not ${st.defaultIs}`);
                     }
                 }
-
+                t.span.id = st.name;
                 t.span.innerText = '✅';
             })
         }

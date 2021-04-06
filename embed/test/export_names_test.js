@@ -262,4 +262,13 @@ export default [
     name: 'single-spa@5',
     namedExport: ['start', 'getAppNames'],
   },
-];
+]
+
+export const assert = {
+  hasNamedExport: (mod, name) => {
+    if (mod[name] === undefined) throw new Error(`[namedExport] ${name} is not exist`);
+  },
+  hasDefault: (mod, name) => {
+    if (mod[name] === undefined) throw new Error(`[default] ${name} is not exist`);
+  },
+}
