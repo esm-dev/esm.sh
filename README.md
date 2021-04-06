@@ -34,6 +34,15 @@ import React from 'https://esm.sh/react?target=es2020'
 
 By default, esm.sh will check the `User Agent` of browser to get the build **target**, or set it by the `target` query. Avaiable `target`: **es2015**-**es2020**, **esnext**, and **deno**.
 
+
+### Bundle mode
+
+```javascript
+import React from 'https://esm.sh/antd?bundle'
+```
+
+In **bundle** mode, all dependencies will be bundled into the package js file.
+
 ### Development mode
 
 ```javascript
