@@ -1,3 +1,14 @@
+import simpleTest from './simple_test.js';
+
+const assert = {
+    hasNamedExport: (mod, name) => {
+        if (mod[name]=== undefined) throw new Error(`[namedExport] ${name} is not exist`);
+    },
+    hasDefault: (mod, name) => {
+        if (mod[name]=== undefined) throw new Error(`[default] ${name} is not exist`);
+    },
+}
+
 export function test(ul, match) {
     const _esm = async (name, testFn) => {
         if (match !== 'all' && !(Array.isArray(name) && name.some(n => n.includes(match))) && !name.includes(match)) {
@@ -25,18 +36,51 @@ export function test(ul, match) {
         li.appendChild(em)
         ul.appendChild(li)
         try {
+            const domain = localStorage.importDomain || '';
             const t1 = Date.now()
             const mod = Array.isArray(name) ? await Promise.all(name.map(n => {
-                return import(`/${n}${n.includes('?') ? '&' : '?'}dev`)
-            })) : await import(`/${name}${name.includes('?') ? '&' : '?'}dev`)
+                return import(`${domain}/${n}${n.includes('?') ? '&' : '?'}dev`)
+            })) : await import(`${domain}/${name}${name.includes('?') ? '&' : '?'}dev`)
             const t2 = Date.now()
-            await testFn({ mod, span })
+
+            try {
+                await testFn({ mod, span })
+            } catch(err) {
+                span.innerText = `❌ ${err.message}`;
+            }
+
             const t3 = Date.now()
             em.innerText = `· import in ${Math.round(t2 - t1)}ms, run in ${Math.round(t3 - t2)}ms`
             em.style.display = 'inline-block'
         } catch (e) {
             span.innerText = '❌ ' + e.message
         }
+    }
+
+    if (match === 'export-names') {
+      simpleTest.forEach(st => {
+          _esm(st.name, async (t) => {
+              t.span.id = st.name;
+              if (st.namedExport) {
+                  for (let i = 0; i < st.namedExport.length; i++) {
+                      assert.hasNamedExport(t.mod, st.namedExport[i])
+                  }
+              }
+              if (st.default) {
+                  for (let i = 0; i < st.default.length; i++) {
+                      assert.hasDefault(t.mod.default, st.default[i])
+                  }
+              }
+
+              if (st.defaultIs) {
+                  if (typeof t.mod.default !== st.defaultIs) {
+                      throw new Error(`default is not ${st.defaultIs}`);
+                  }
+              }
+
+              t.span.innerText = '✅';
+          })
+      })
     }
 
     _esm(['react@16', 'react-dom@16'], async (t) => {
@@ -194,4 +238,5 @@ export function test(ul, match) {
         t.span.id = 'd3-span'
         d3.select('#d3-span').text('✅')
     })
+
 }
