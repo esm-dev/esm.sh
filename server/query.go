@@ -61,9 +61,11 @@ func query() rex.Handle {
 		case "/_error.js":
 			switch ctx.Form.Value("type") {
 			case "resolve":
-				return throwErrorJS(ctx, 500, fmt.Errorf(`Can't resolve "%s"`, ctx.Form.Value("name")))
+				return throwErrorJS(ctx, fmt.Errorf(`Can't resolve "%s"`, ctx.Form.Value("name")))
+			case "unsupported-nodejs-builtin-module":
+				return throwErrorJS(ctx, fmt.Errorf(`Unsupported nodejs builtin module "%s"`, ctx.Form.Value("name")))
 			default:
-				return throwErrorJS(ctx, 500, fmt.Errorf("Unknown error"))
+				return throwErrorJS(ctx, fmt.Errorf("Unknown error"))
 			}
 		}
 
@@ -90,7 +92,7 @@ func query() rex.Handle {
 		var storageType string
 		switch path.Ext(pathname) {
 		case ".js":
-			if hasBuildVerPrefix || (strings.HasPrefix(pathname, "/bundle-") && len(strings.Split(pathname, "/")) == 2) {
+			if hasBuildVerPrefix {
 				storageType = "builds"
 			}
 		case ".ts":
@@ -105,7 +107,7 @@ func query() rex.Handle {
 			} else if len(strings.Split(pathname, "/")) > 2 {
 				storageType = "raw"
 			}
-		case ".json", ".xml", ".yaml", ".jsx", ".tsx", ".less", ".sass", ".scss", ".stylus", ".styl", ".wasm":
+		case ".json", ".jsx", ".tsx", ".less", ".sass", ".scss", ".stylus", ".styl", ".wasm", ".xml", ".yaml", ".svg":
 			if len(strings.Split(pathname, "/")) > 2 {
 				storageType = "raw"
 			}
@@ -113,7 +115,7 @@ func query() rex.Handle {
 		if storageType == "raw" {
 			m, err := parsePkg(pathname)
 			if err != nil {
-				return throwErrorJS(ctx, 500, err)
+				return throwErrorJS(ctx, err)
 			}
 			if m.submodule != "" {
 				shouldRedirect := !regVersionPath.MatchString(pathname)
@@ -206,11 +208,12 @@ func query() rex.Handle {
 
 		target := strings.ToLower(strings.TrimSpace(ctx.Form.Value("target")))
 		if _, ok := targets[target]; !ok {
-			if strings.HasPrefix(ctx.R.UserAgent(), "Deno/") {
+			ua := ctx.R.UserAgent()
+			if strings.HasPrefix(ua, "Deno/") {
 				target = "deno"
 			} else {
 				target = "es2015"
-				name, version := user_agent.New(ctx.R.UserAgent()).Browser()
+				name, version := user_agent.New(ua).Browser()
 				if engine, ok := engines[strings.ToLower(name)]; ok {
 					a := strings.Split(version, ".")
 					if len(a) > 3 {
@@ -246,7 +249,7 @@ func query() rex.Handle {
 					if strings.HasSuffix(err.Error(), "not found") {
 						continue
 					}
-					return throwErrorJS(ctx, 500, err)
+					return throwErrorJS(ctx, err)
 				}
 				if !deps.Has(m.name) {
 					deps = append(deps, *m)
@@ -261,13 +264,13 @@ func query() rex.Handle {
 		reqPkg, err := parsePkg(pathname)
 		if err != nil {
 			if strings.HasSuffix(err.Error(), "not found") {
-				return throwErrorJS(ctx, 404, err)
+				return throwErrorJS(ctx, err)
 			}
-			return throwErrorJS(ctx, 500, err)
+			return throwErrorJS(ctx, err)
 		}
 
 		isBare := false
-		if endsWith(pathname, ".js") {
+		if hasBuildVerPrefix && endsWith(pathname, ".js") {
 			a := strings.Split(reqPkg.submodule, "/")
 			if len(a) > 1 {
 				if strings.HasPrefix(a[0], "deps=") {
@@ -283,7 +286,7 @@ func query() rex.Handle {
 								if strings.HasSuffix(err.Error(), "not found") {
 									continue
 								}
-								return throwErrorJS(ctx, 500, err)
+								return throwErrorJS(ctx, err)
 							}
 							if !deps.Has(m.name) {
 								deps = append(deps, *m)
@@ -300,7 +303,8 @@ func query() rex.Handle {
 						submodule = strings.TrimSuffix(submodule, ".development")
 						isDev = true
 					}
-					if submodule == path.Base(reqPkg.name) {
+					pkgName := path.Base(reqPkg.name)
+					if submodule == pkgName || (strings.HasSuffix(pkgName, ".js") && submodule+".js" == pkgName) {
 						submodule = ""
 					}
 					reqPkg.submodule = submodule
@@ -322,7 +326,7 @@ func query() rex.Handle {
 		if !ok {
 			output := <-queue.Add(task)
 			if output.err != nil {
-				return throwErrorJS(ctx, 500, output.err)
+				return throwErrorJS(ctx, output.err)
 			}
 			esm = output.esm
 			pkgCSS = output.pkgCSS
@@ -344,7 +348,7 @@ func query() rex.Handle {
 				}
 				return rex.Redirect(url, code)
 			}
-			return throwErrorJS(ctx, 404, fmt.Errorf("css not found"))
+			return throwErrorJS(ctx, fmt.Errorf("css not found"))
 		}
 
 		if isBare {
@@ -419,7 +423,7 @@ func query() rex.Handle {
 	}
 }
 
-func throwErrorJS(ctx *rex.Context, status int, err error) interface{} {
+func throwErrorJS(ctx *rex.Context, err error) interface{} {
 	buf := bytes.NewBuffer(nil)
 	fmt.Fprintf(buf, "/* esm.sh - error */\n")
 	fmt.Fprintf(
@@ -431,8 +435,5 @@ func throwErrorJS(ctx *rex.Context, status int, err error) interface{} {
 	fmt.Fprintf(buf, "export default null;\n")
 	ctx.SetHeader("Cache-Control", "private, no-store, no-cache, must-revalidate")
 	ctx.SetHeader("Content-Type", "application/javascript; charset=utf-8")
-	if status >= 500 {
-		log.Error(err)
-	}
-	return rex.Status(status, buf)
+	return buf
 }
