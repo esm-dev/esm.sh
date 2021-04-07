@@ -18,7 +18,7 @@ func TestParseCJSModuleExports(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	exports, err := parseCJSModuleExports(testDir, "react")
+	exports, err := parseCJSModuleExports(testDir, "react", "development")
 	if err != nil {
 		t.Fatal(err)
 	}

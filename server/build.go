@@ -70,7 +70,11 @@ func (task *buildTask) buildESM() (esm *ESMeta, pkgCSS bool, err error) {
 	ensureDir(task.wd)
 	defer os.RemoveAll(task.wd)
 
-	esmeta, err := initBuild(task.wd, task.pkg, true)
+	env := "production"
+	if task.isDev {
+		env = "development"
+	}
+	esmeta, err := initBuild(task.wd, task.pkg, true, env)
 	if err != nil {
 		return
 	}
@@ -78,10 +82,6 @@ func (task *buildTask) buildESM() (esm *ESMeta, pkgCSS bool, err error) {
 	start := time.Now()
 	buf := bytes.NewBuffer(nil)
 	importPath := task.pkg.ImportPath()
-	env := "production"
-	if task.isDev {
-		env = "development"
-	}
 	exports := newStringSet()
 	hasDefaultExport := false
 	for _, name := range esmeta.Exports {
@@ -347,7 +347,7 @@ func (task *buildTask) buildESM() (esm *ESMeta, pkgCSS bool, err error) {
 									if !installed {
 										_, installed = esmeta.PeerDependencies[name]
 									}
-									meta, err := initBuild(task.wd, *pkg, !installed)
+									meta, err := initBuild(task.wd, *pkg, !installed, env)
 									if err == nil && meta.Module != "" {
 										hasDefaultExport := false
 										if len(meta.Exports) > 0 {
@@ -512,7 +512,7 @@ func (task *buildTask) handleDTS(esmeta *ESMeta) (err error) {
 	return
 }
 
-func initBuild(buildDir string, pkg pkg, install bool) (esmeta *ESMeta, err error) {
+func initBuild(buildDir string, pkg pkg, install bool, env string) (esmeta *ESMeta, err error) {
 	var p NpmPackage
 	p, _, err = node.getPackageInfo(pkg.name, pkg.version)
 	if err != nil {
@@ -619,7 +619,7 @@ func initBuild(buildDir string, pkg pkg, install bool) (esmeta *ESMeta, err erro
 	}
 
 	if esmeta.Module == "" {
-		ret, err := parseCJSModuleExports(buildDir, pkg.ImportPath())
+		ret, err := parseCJSModuleExports(buildDir, pkg.ImportPath(), env)
 		if err != nil {
 			log.Warn(err)
 		}

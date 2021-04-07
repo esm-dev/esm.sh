@@ -24,7 +24,7 @@ type cjsModuleLexerResult struct {
 	Error   string   `json:"error"`
 }
 
-func parseCJSModuleExports(buildDir string, importPath string) (ret cjsModuleLexerResult, err error) {
+func parseCJSModuleExports(buildDir string, importPath string, env string) (ret cjsModuleLexerResult, err error) {
 	if cjsModuleLexerAppDir == "" {
 		cjsModuleLexerAppDir = path.Join(os.TempDir(), "esmd-cjs-module-lexer")
 		ensureDir(cjsModuleLexerAppDir)
@@ -118,6 +118,7 @@ func parseCJSModuleExports(buildDir string, importPath string) (ret cjsModuleLex
 	cmd := exec.Command("node")
 	cmd.Stdin = buf
 	cmd.Dir = cjsModuleLexerAppDir
+	cmd.Env = append(os.Environ(), fmt.Sprintf(`NODE_ENV=%s`, env))
 	output, e := cmd.CombinedOutput()
 	if e != nil {
 		err = fmt.Errorf("nodejs: %s", string(output))
