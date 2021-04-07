@@ -1,5 +1,12 @@
 # Change Log
 
+## V38
+
+- Fix build for packages with `module` type ([#48](https://github.com/postui/esm.sh/issues/48))
+- Improve `parseCJSModuleExports` function (use cjs-module-lexer and nodejs eval both to parse cjs exports)
+- Pass `NODE_ENV` to `parseCJSModuleExports` function
+- Upgrade **esbuild** to **0.11.6**
+
 ## V37
 
 - Add **bundle** mode
