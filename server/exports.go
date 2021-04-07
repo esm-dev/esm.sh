@@ -78,21 +78,27 @@ func parseCJSModuleExports(buildDir string, importPath string, env string) (ret 
 
 			try {
 				const jsFile = await resolve('%s', '%s')
-				paths.push(jsFile) 
+				if (!jsFile.endsWith('.json')) {
+					paths.push(jsFile) 
+				}
 				while (paths.length > 0) {
 					const currentPath = paths.pop()
 					const code = fs.readFileSync(currentPath).toString()
 					const results = moduleLexer.parse(code)
 					exports.push(...results.exports)
 					for (const reexport of results.reexports) {
-						paths.push(await resolve(dirname(currentPath), reexport))
+						if (!reexport.endsWith('.json')) {
+							paths.push(await resolve(dirname(currentPath), reexport))
+						}
 					}
 				}
-				const mod = require(jsFile)
-				if (typeof mod === 'object' && mod !== null) {
-					for (const key of Object.keys(mod)) {
-						if (!exports.includes(key)) {
-							exports.push(key)
+				if (!jsFile.endsWith('.json')) {
+					const mod = require(jsFile)
+					if (typeof mod === 'object' && mod !== null && !Array.isArray(mod)) {
+						for (const key of Object.keys(mod)) {
+							if (typeof key === 'string' && key !== '' && !exports.includes(key)) {
+								exports.push(key)
+							}
 						}
 					}
 				}
