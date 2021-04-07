@@ -1,8 +1,8 @@
-import exportNameTests, { assert } from './export_names_test.js'
+import exportTests, { assert } from './exports_test.js'
 
 export async function test(ul, match) {
     const _esm = async (name, testFn) => {
-        if (!['all', 'export-names'].includes(match) && !(Array.isArray(name) && name.some(n => n.includes(match))) && !name.includes(match)) {
+        if (!['.', '*', 'all', 'exports'].includes(match) && !(Array.isArray(name) && name.some(n => n.includes(match))) && !name.includes(match)) {
             return
         }
         const li = document.createElement('li')
@@ -12,8 +12,8 @@ export async function test(ul, match) {
         const names = [name].flat()
         names.forEach((name, i) => {
             const a = document.createElement('a')
-            a.innerText = `${Array.isArray(name) ? name[0] : name}`
-            a.href = `/${Array.isArray(name) ? name[0] : name}${name.includes('?') ? '&' : '?'}dev`
+            a.innerText = name.split('?')[0]
+            a.href = `/${name}${name.includes('?') ? '&' : '?'}dev`
             strong.appendChild(a)
             if (i < names.length - 1) {
                 strong.appendChild(document.createTextNode(', '))
@@ -52,9 +52,9 @@ export async function test(ul, match) {
         }
     }
 
-    if (match === 'export-names') {
-        for (const st of exportNameTests) {
-            _esm(st.name, async (t) => {
+    if (match === 'exports') {
+        for (const st of exportTests) {
+            _esm(st.name + '?bundle', async (t) => {
                 if (st.namedExport) {
                     for (let i = 0; i < st.namedExport.length; i++) {
                         assert.hasNamedExport(t.mod, st.namedExport[i])
@@ -99,22 +99,22 @@ export async function test(ul, match) {
 
     _esm(['react@17', 'react-dom@17'], async (t) => {
         const [
-            { createElement, Fragment, useState },
+            { Fragment, useState, default: React },
             { render }
         ] = t.mod
         const App = () => {
             const [count, setCount] = useState(0)
-            return createElement(
+            return React.createElement(
                 Fragment,
                 null,
-                createElement('span', null, '✅'),
-                createElement('span', {
+                React.createElement('span', null, '✅'),
+                React.createElement('span', {
                     onClick: () => setCount(n => n + 1),
                     style: { cursor: 'pointer', userSelect: 'none' },
-                }, ' ⏱ ', createElement('samp', null, count)),
+                }, ' ⏱ ', React.createElement('samp', null, count)),
             )
         }
-        render(createElement(App), t.span)
+        render(React.createElement(App), t.span)
     })
 
     _esm(['react@17', 'react-dom@17', 'react-redux?deps=react@17', 'redux'], async (t) => {
@@ -232,5 +232,4 @@ export async function test(ul, match) {
         t.span.id = 'd3-span'
         d3.select('#d3-span').text('✅')
     })
-
 }
