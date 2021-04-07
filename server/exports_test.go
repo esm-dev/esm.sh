@@ -13,12 +13,12 @@ func TestParseCJSModuleExports(t *testing.T) {
 	os.RemoveAll(testDir)
 	ensureDir(testDir)
 
-	err := yarnAdd(testDir, "caniuse-lite")
+	err := yarnAdd(testDir, "react")
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	exports, err := parseCJSModuleExports(testDir, "caniuse-lite")
+	exports, err := parseCJSModuleExports(testDir, "react")
 	if err != nil {
 		t.Fatal(err)
 	}

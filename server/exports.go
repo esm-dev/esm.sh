@@ -50,6 +50,24 @@ func parseCJSModuleExports(buildDir string, importPath string) (ret cjsModuleLex
 		const resolve = promisify(enhancedResolve.create({
 			mainFields: ['main']
 		}))
+		const reservedWords = [
+			'abstract*', 'arguments', 'await', 'boolean',
+			'break', 'byte', 'case', 'catch',
+			'char', 'class', 'const', 'continue',
+			'debugger', 'default', 'delete', 'do',
+			'double', 'else', 'enum', 'eval',
+			'export', 'extends', 'false', 'final',
+			'finally', 'float', 'for', 'function',
+			'goto', 'if', 'implements', 'import',
+			'in', 'instanceof', 'int', 'interface*',
+			'let', 'long', 'native', 'new',
+			'null', 'package*', 'private', 'protected',
+			'public', 'return', 'short', 'static',
+			'super', 'switch', 'synchronized', 'this',
+			'throw', 'throws', 'transient', 'true',
+			'try', 'typeof', 'var', 'void',
+			'volatile', 'while', 'with', 'yield',
+		]
 
 		// the function 'getExports' is copied from https://github.com/evanw/esbuild/issues/442#issuecomment-739340295
 		async function getExports () {
@@ -70,10 +88,8 @@ func parseCJSModuleExports(buildDir string, importPath string) (ret cjsModuleLex
 						paths.push(await resolve(dirname(currentPath), reexport))
 					}
 				}
-				if ([
-					'caniuse-lite'
-				].includes('%s')) {
-					const mod = require(jsFile)
+				const mod = require(jsFile)
+				if (typeof mod === 'object' && mod !== null) {
 					for (const key of Object.keys(mod)) {
 						if (!exports.includes(key)) {
 							exports.push(key)
@@ -86,15 +102,18 @@ func parseCJSModuleExports(buildDir string, importPath string) (ret cjsModuleLex
 			}
 		}
 
-		getExports().then(exports => {
+		getExports().then(ret => {
 			const saveDir = join('%s', '%s')
 			if (!fs.existsSync(saveDir)){
 				fs.mkdirSync(saveDir, {recursive: true});
 			}
-			fs.writeFileSync(join(saveDir, '__exports.json'), JSON.stringify(exports))
+			if (Array.isArray(ret.exports)) {
+				ret.exports = Array.from(new Set(ret.exports)).filter(name => !reservedWords.includes(name))
+			}
+			fs.writeFileSync(join(saveDir, '__exports.json'), JSON.stringify(ret))
 			process.exit(0)
 		})
-	`, buildDir, importPath, importPath, buildDir, importPath))
+	`, buildDir, importPath, buildDir, importPath))
 
 	cmd := exec.Command("node")
 	cmd.Stdin = buf
