@@ -77,13 +77,13 @@ func (task *buildTask) buildESM() (esm *ESMeta, pkgCSS bool, err error) {
 
 	start := time.Now()
 	buf := bytes.NewBuffer(nil)
-	exports := newStringSet()
-	hasDefaultExport := false
 	importPath := task.pkg.ImportPath()
 	env := "production"
 	if task.isDev {
 		env = "development"
 	}
+	exports := newStringSet()
+	hasDefaultExport := false
 	for _, name := range esmeta.Exports {
 		if name == "default" {
 			hasDefaultExport = true
@@ -91,19 +91,12 @@ func (task *buildTask) buildESM() (esm *ESMeta, pkgCSS bool, err error) {
 			exports.Add(name)
 		}
 	}
-	if esmeta.Module != "" {
-		if exports.Size() > 0 {
-			fmt.Fprintf(buf, `export {%s} from "%s";%s`, strings.Join(exports.Values(), ","), importPath, "\n")
-		}
-		if hasDefaultExport {
-			fmt.Fprintf(buf, `export {default} from "%s";`, importPath)
-		}
-	} else {
-		if exports.Size() > 0 {
-			fmt.Fprintf(buf, `export {%s,default} from "%s";%s`, strings.Join(exports.Values(), ","), importPath, "\n")
-		} else {
-			fmt.Fprintf(buf, `export {default} from "%s";`, importPath)
-		}
+	if exports.Size() > 0 {
+		fmt.Fprintf(buf, `import * as __star from "%s";%s`, importPath, "\n")
+		fmt.Fprintf(buf, `export const { %s } = __star;%s`, strings.Join(exports.Values(), ","), "\n")
+	}
+	if esmeta.Module == "" || hasDefaultExport {
+		fmt.Fprintf(buf, `export { default } from "%s";`, importPath)
 	}
 	input := &api.StdinOptions{
 		Contents:   buf.String(),
@@ -135,10 +128,10 @@ func (task *buildTask) buildESM() (esm *ESMeta, pkgCSS bool, err error) {
 			plugin.OnResolve(
 				api.OnResolveOptions{Filter: ".*"},
 				func(args api.OnResolveArgs) (api.OnResolveResult, error) {
-					p := args.Path
+					p := strings.TrimSuffix(args.Path, "/")
 					importName := task.pkg.name
-					if smod := task.pkg.submodule; smod != "" {
-						importName += "/" + smod
+					if s := task.pkg.submodule; s != "" {
+						importName += "/" + s
 					}
 					// should bundle list:
 					// 1. the package itself
