@@ -26,15 +26,6 @@ or import non-module(js) files:
 import 'https://esm.sh/tailwindcss/dist/tailwind.min.css'
 ```
 
-### Specify ESM target
-
-```javascript
-import React from 'https://esm.sh/react?target=es2020'
-```
-
-By default, esm.sh will check the `User Agent` of browser to get the build **target**, or set it by the `target` query. Avaiable `target`: **es2015**-**es2020**, **esnext**, and **deno**.
-
-
 ### Bundle mode
 
 ```javascript
@@ -65,6 +56,14 @@ import Daygrid from 'https://esm.sh/@fullcalendar/daygrid'
 ```html
 <link rel="styelsheet" href="https://esm.sh/@fullcalendar/daygrid?css">
 ```
+
+### Specify ESM target
+
+```javascript
+import React from 'https://esm.sh/react?target=es2020'
+```
+
+By default, esm.sh will check the `User Agent` of browser to get the build target, or set it by the `target` query. Avaiable `target`: **es2015** - **es2020**, **esnext**, and **deno**.
 
 ## Deno compatibility
 
