@@ -16,8 +16,8 @@ github.com/oschwald/maxminddb-golang v1.8.0 h1:Uh/DSnGoxsyp/KYbY1AuP0tYEwfs0sCph
 github.com/oschwald/maxminddb-golang v1.8.0/go.mod h1:RXZtst0N6+FY/3qCNmZMBApR19cdQj43/NM9VkrNAis=
 github.com/pmezard/go-difflib v1.0.0 h1:4DBwDE0NGyQoBHbLQYPwSUPoCMWR5BEzIk/f1lZbAQM=
 github.com/pmezard/go-difflib v1.0.0/go.mod h1:iKH77koFhYxTK1pcRnkKkqfTogsbg7gZNVY4sRDYZ/4=
-github.com/postui/postdb v0.7.0 h1:832meZVdJthECFjfbDF2jn7DA0WaTOYHDNApONFwnXs=
-github.com/postui/postdb v0.7.0/go.mod h1:rSIJVuQN6kYyxYCOxEZXILV7Sk2XHbxmvjBov2kfVBI=
+github.com/postui/postdb v0.6.1 h1:m8q2UDlyF3aUWLL8wkdlxaA6Xx2LabukCB5tbHlgYCM=
+github.com/postui/postdb v0.6.1/go.mod h1:rSIJVuQN6kYyxYCOxEZXILV7Sk2XHbxmvjBov2kfVBI=
 github.com/rs/xid v1.2.1 h1:mhH9Nq+C1fY2l1XIpgxIiUOfNpRBYH1kKcr+qfKgjRc=
 github.com/rs/xid v1.2.1/go.mod h1:+uKXf+4Djp6Md1KODXJxgGQPKngRmWyn10oCKFzNHOQ=
 github.com/stretchr/objx v0.1.0/go.mod h1:HFkY916IF+rwdDfMAkV7OtwuqBVzrE8GR6GFx+wExME=
