@@ -218,11 +218,11 @@ func (env *NodeEnv) getPackageInfo(name string, version string) (info NpmPackage
 	}
 	isFullVersion := regFullVersion.MatchString(version)
 	key := fmt.Sprintf("npm:%s@%s", name, version)
-	p, err := db.Get(q.Alias(key), q.K("package"))
+	p, err := db.Get(q.Alias(key), q.Select("package"))
 	if err == nil {
 		if !isFullVersion && int64(p.Modtime)+refreshDuration < time.Now().Unix() {
 			_, err = db.Delete(q.Alias(key))
-		} else if json.Unmarshal(p.KV.Get("package"), &info) == nil {
+		} else if json.Unmarshal(p.KV["package"], &info) == nil {
 			return
 		}
 	}

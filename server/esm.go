@@ -15,9 +15,9 @@ type ESMeta struct {
 }
 
 func findESM(id string) (esm *ESMeta, pkgCSS bool, ok bool) {
-	post, err := db.Get(q.Alias(id), q.K("esmeta", "css"))
+	post, err := db.Get(q.Alias(id), q.Select("esmeta", "css"))
 	if err == nil {
-		err = json.Unmarshal(post.KV.Get("esmeta"), &esm)
+		err = json.Unmarshal(post.KV["esmeta"], &esm)
 		if err != nil {
 			db.Delete(q.Alias(id))
 			return
@@ -28,7 +28,7 @@ func findESM(id string) (esm *ESMeta, pkgCSS bool, ok bool) {
 			return
 		}
 
-		if val := post.KV.Get("css"); len(val) == 1 && val[0] == 1 {
+		if val := post.KV["css"]; len(val) == 1 && val[0] == 1 {
 			pkgCSS = fileExists(path.Join(config.storageDir, "builds", id+".css"))
 		}
 		ok = true
