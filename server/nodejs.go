@@ -220,7 +220,7 @@ func (env *NodeEnv) getPackageInfo(name string, version string) (info NpmPackage
 	key := fmt.Sprintf("npm:%s@%s", name, version)
 	p, err := db.Get(q.Alias(key), q.K("package"))
 	if err == nil {
-		if !isFullVersion && int64(p.Crtime)+refreshDuration < time.Now().Unix() {
+		if !isFullVersion && int64(p.Modtime)+refreshDuration < time.Now().Unix() {
 			_, err = db.Delete(q.Alias(key))
 		} else if json.Unmarshal(p.KV.Get("package"), &info) == nil {
 			return
@@ -289,7 +289,11 @@ func (env *NodeEnv) getPackageInfo(name string, version string) (info NpmPackage
 	}
 
 	// cache
-	db.Put(q.Alias(key), q.KV{"package": utils.MustEncodeJSON(info)})
+	if _, err := db.Get(q.Alias(key)); err == nil {
+		db.Update(q.Alias(key), q.KV{"package": utils.MustEncodeJSON(info)})
+	} else {
+		db.Put(q.Alias(key), q.KV{"package": utils.MustEncodeJSON(info)})
+	}
 
 	log.Debugf("get npm package(%s@%s) info in %v", name, info.Version, time.Now().Sub(start))
 	return

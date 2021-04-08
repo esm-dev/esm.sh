@@ -61,9 +61,17 @@ func query() rex.Handle {
 		case "/_error.js":
 			switch ctx.Form.Value("type") {
 			case "resolve":
-				return throwErrorJS(ctx, fmt.Errorf(`Can't resolve "%s"`, ctx.Form.Value("name")))
+				return throwErrorJS(ctx, fmt.Errorf(
+					`Can't resolve "%s" (Imported by "%s")`,
+					ctx.Form.Value("name"),
+					ctx.Form.Value("importer"),
+				))
 			case "unsupported-nodejs-builtin-module":
-				return throwErrorJS(ctx, fmt.Errorf(`Unsupported nodejs builtin module "%s"`, ctx.Form.Value("name")))
+				return throwErrorJS(ctx, fmt.Errorf(
+					`Unsupported nodejs builtin module "%s" (Imported by "%s")`,
+					ctx.Form.Value("name"),
+					ctx.Form.Value("importer"),
+				))
 			default:
 				return throwErrorJS(ctx, fmt.Errorf("Unknown error"))
 			}

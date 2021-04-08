@@ -245,7 +245,11 @@ func (task *buildTask) buildESM() (esm *ESMeta, pkgCSS bool, err error) {
 						if err == nil {
 							importPath = fmt.Sprintf("/v%d/_node_%s.js", VERSION, name)
 						} else {
-							importPath = fmt.Sprintf("/_error.js?type=unsupported-nodejs-builtin-module&name=%s", name)
+							importPath = fmt.Sprintf(
+								"/_error.js?type=unsupported-nodejs-builtin-module&name=%s&importer=%s",
+								name,
+								task.pkg.name,
+							)
 						}
 					}
 				}
@@ -321,7 +325,11 @@ func (task *buildTask) buildESM() (esm *ESMeta, pkgCSS bool, err error) {
 					}
 				}
 				if importPath == "" {
-					importPath = fmt.Sprintf("/_error.js?type=resolve&name=%s", name)
+					importPath = fmt.Sprintf(
+						"/_error.js?type=resolve&name=%s&importer=%s",
+						name,
+						task.pkg.name,
+					)
 				}
 				buf := bytes.NewBuffer(nil)
 				identifier := identify(name)
