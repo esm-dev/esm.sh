@@ -9,5 +9,5 @@ require (
 	github.com/ije/rex v1.3.2
 	github.com/mssola/user_agent v0.5.2
 	github.com/oschwald/maxminddb-golang v1.8.0
-	github.com/postui/postdb v0.6.1
+	github.com/postui/postdb v0.6.2
 )
