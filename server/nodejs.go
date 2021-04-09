@@ -220,10 +220,10 @@ func (env *NodeEnv) getPackageInfo(name string, version string) (info NpmPackage
 	key := fmt.Sprintf("npm:%s@%s", name, version)
 	p, err := db.Get(q.Alias(key), q.Select("package"))
 	if err == nil {
-		if !isFullVersion && int64(p.Modtime)+refreshDuration < time.Now().Unix() {
-			_, err = db.Delete(q.Alias(key))
-		} else if json.Unmarshal(p.KV["package"], &info) == nil {
-			return
+		if isFullVersion || int64(p.Modtime)+refreshDuration > time.Now().Unix() {
+			if json.Unmarshal(p.KV["package"], &info) == nil {
+				return
+			}
 		}
 	}
 	if err != nil && err != postdb.ErrNotFound {
@@ -288,7 +288,7 @@ func (env *NodeEnv) getPackageInfo(name string, version string) (info NpmPackage
 		return
 	}
 
-	// cache
+	// update cache
 	if _, err := db.Get(q.Alias(key)); err == nil {
 		db.Update(q.Alias(key), q.KV{"package": utils.MustEncodeJSON(info)})
 	} else {
