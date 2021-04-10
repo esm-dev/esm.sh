@@ -1,5 +1,13 @@
 # Change Log
 
+## V39
+
+- Imporve `parseCJSModuleExports` to support json module
+- Pass `NODE_ENV` to `parseCJSModuleExports`
+- Update node buffer polyfill
+- Upgrade esbuild to **v0.11.6**
+- Upgrade postdb to **v0.6.2**
+
 ## V38
 
 - Fix build for packages with `module` type ([#48](https://github.com/postui/esm.sh/issues/48))
