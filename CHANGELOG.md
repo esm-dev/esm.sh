@@ -5,7 +5,6 @@
 - Imporve `parseCJSModuleExports` to support json module
 - Pass `NODE_ENV` to `parseCJSModuleExports`
 - Update node buffer polyfill
-- Upgrade esbuild to **v0.11.6**
 - Upgrade postdb to **v0.6.2**
 
 ## V38
