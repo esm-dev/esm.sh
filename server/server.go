@@ -89,7 +89,7 @@ func Serve(fs *embed.FS) {
 	if err != nil {
 		log.Fatalf("check nodejs env: %v", err)
 	}
-	log.Debugf("nodejs v%s installed", node.version)
+	log.Debugf("nodejs v%s installed, registry: %s", node.version, node.npmRegistry)
 
 	ensureDir(path.Join(config.storageDir, fmt.Sprintf("builds/v%d", VERSION)))
 	ensureDir(path.Join(config.storageDir, fmt.Sprintf("types/v%d", VERSION)))
@@ -106,7 +106,7 @@ func Serve(fs *embed.FS) {
 	}
 	for _, entry := range polyfills {
 		name := entry.Name()
-		filename := path.Join(config.storageDir, fmt.Sprintf("builds/v%d/_%s", VERSION, name))
+		filename := path.Join(config.storageDir, fmt.Sprintf("builds/v%d/%s", VERSION, name))
 		if !fileExists(filename) {
 			file, err := embedFS.Open(fmt.Sprintf("embed/polyfills/%s", name))
 			if err != nil {
@@ -131,7 +131,7 @@ func Serve(fs *embed.FS) {
 	}
 	for _, entry := range types {
 		name := entry.Name()
-		filename := path.Join(config.storageDir, fmt.Sprintf("types/v%d/_%s", VERSION, name))
+		filename := path.Join(config.storageDir, fmt.Sprintf("types/v%d/%s", VERSION, name))
 		if !fileExists(filename) {
 			file, err := embedFS.Open(fmt.Sprintf("embed/types/%s", name))
 			if err != nil {

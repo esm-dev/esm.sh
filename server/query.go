@@ -58,7 +58,7 @@ func query() rex.Handle {
 		case "/favicon.ico":
 			// todo: add esm.sh logo
 			return rex.Err(404)
-		case "/_error.js":
+		case "/error.js":
 			switch ctx.Form.Value("type") {
 			case "resolve":
 				return throwErrorJS(ctx, fmt.Errorf(

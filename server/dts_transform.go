@@ -174,7 +174,7 @@ func copyDTS(nodeModulesDir string, dts string) (err error) {
 				}
 				if format == "types" {
 					if path == "node" {
-						path = fmt.Sprintf("/v%d/_node.ns.d.ts", VERSION)
+						path = fmt.Sprintf("/v%d/node.ns.d.ts", VERSION)
 					} else {
 						path = rewriteFn(path)
 					}

@@ -43,16 +43,23 @@ export class Interface {
 export function clearLine() {
   notImplemented('clearLine')
 }
+
 export function clearScreenDown() {
   notImplemented('clearScreenDown')
 }
-export function createInterface() { return new Interface() }
+
+export function createInterface() { 
+  return new Interface()
+}
+
 export function cursorTo() {
   notImplemented('cursorTo')
 }
+
 export function emitKeypressEvents() {
   notImplemented('emitKeypressEvents')
 }
+
 export function moveCursor() {
   notImplemented('moveCursor')
 }

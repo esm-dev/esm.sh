@@ -204,20 +204,20 @@ func (task *buildTask) buildESM() (esm *ESMeta, pkgCSS bool, err error) {
 			// replace external imports/requires
 			for _, name := range external.Values() {
 				var importPath string
-				if task.target == "deno" {
-					_, yes := denoStdNodeModules[name]
-					if yes {
-						importPath = fmt.Sprintf("/v%d/_deno_std_node_%s.js", VERSION, name)
-					}
-				}
 				if name == "buffer" {
-					importPath = fmt.Sprintf("/v%d/_node_buffer.js", VERSION)
+					importPath = fmt.Sprintf("/v%d/node_buffer.js", VERSION)
 				}
 				if importPath == "" && builtInNodeModules[name] {
-					polyfill, ok := polyfilledBuiltInNodeModules[name]
-					if ok {
-						p, submodule, e := node.getPackageInfo(polyfill, "latest")
-						if e == nil {
+					if task.target == "deno" && denoStdNodeModules[name] {
+						importPath = fmt.Sprintf("/v%d/deno_std_node_%s.js", VERSION, name)
+					} else {
+						polyfill, ok := polyfilledBuiltInNodeModules[name]
+						if ok {
+							p, submodule, e := node.getPackageInfo(polyfill, "latest")
+							if e != nil {
+								err = e
+								return
+							}
 							filename := path.Base(p.Name)
 							if submodule != "" {
 								filename = submodule
@@ -237,19 +237,16 @@ func (task *buildTask) buildESM() (esm *ESMeta, pkgCSS bool, err error) {
 								filename,
 							)
 						} else {
-							err = e
-							return
-						}
-					} else {
-						_, err := embedFS.Open(fmt.Sprintf("polyfills/node_%s.js", name))
-						if err == nil {
-							importPath = fmt.Sprintf("/v%d/_node_%s.js", VERSION, name)
-						} else {
-							importPath = fmt.Sprintf(
-								"/_error.js?type=unsupported-nodejs-builtin-module&name=%s&importer=%s",
-								name,
-								task.pkg.name,
-							)
+							_, err := embedFS.Open(fmt.Sprintf("embed/polyfills/node_%s.js", name))
+							if err == nil {
+								importPath = fmt.Sprintf("/v%d/node_%s.js", VERSION, name)
+							} else {
+								importPath = fmt.Sprintf(
+									"/error.js?type=unsupported-nodejs-builtin-module&name=%s&importer=%s",
+									name,
+									task.pkg.name,
+								)
+							}
 						}
 					}
 				}
@@ -326,7 +323,7 @@ func (task *buildTask) buildESM() (esm *ESMeta, pkgCSS bool, err error) {
 				}
 				if importPath == "" {
 					importPath = fmt.Sprintf(
-						"/_error.js?type=resolve&name=%s&importer=%s",
+						"/error.js?type=resolve&name=%s&importer=%s",
 						name,
 						task.pkg.name,
 					)
@@ -393,10 +390,10 @@ func (task *buildTask) buildESM() (esm *ESMeta, pkgCSS bool, err error) {
 
 			// add nodejs/deno compatibility
 			if bytes.Contains(outputContent, []byte("__process$")) {
-				fmt.Fprintf(jsHeader, `import __process$ from "/v%d/_node_process.js";%s__process$.env.NODE_ENV="%s";%s`, VERSION, eol, env, eol)
+				fmt.Fprintf(jsHeader, `import __process$ from "/v%d/node_process.js";%s__process$.env.NODE_ENV="%s";%s`, VERSION, eol, env, eol)
 			}
 			if bytes.Contains(outputContent, []byte("__Buffer$")) {
-				fmt.Fprintf(jsHeader, `import { Buffer as __Buffer$ } from "/v%d/_node_buffer.js";%s`, VERSION, eol)
+				fmt.Fprintf(jsHeader, `import { Buffer as __Buffer$ } from "/v%d/node_buffer.js";%s`, VERSION, eol)
 			}
 			if bytes.Contains(outputContent, []byte("__global$")) {
 				fmt.Fprintf(jsHeader, `var __global$ = window;%s`, eol)
