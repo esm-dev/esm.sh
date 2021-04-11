@@ -1,23 +1,23 @@
 /* esbuild bundle
  * file: deno.land/std/node/fs.ts
- * version: 0.91.0
+ * version: 0.92.0
  *
  *   $ git clone https://github.com/denoland/deno_std
- *   $ cd node
- *   $ esbuild fs.ts --target=es2020 --format=esm --bundle --outfile=deno_std_node_fs.js
+ *   $ cd deno_std/node
+ *   $ esbuild fs.ts --target=esnext --format=esm --bundle --outfile=deno_std_node_fs.js
  */
 
 var __defProp = Object.defineProperty;
 var __export = (target, all) => {
   for (var name in all)
-    __defProp(target, name, {get: all[name], enumerable: true});
+    __defProp(target, name, { get: all[name], enumerable: true });
 };
 
 // ../async/deferred.ts
 function deferred() {
   let methods;
   const promise = new Promise((resolve4, reject) => {
-    methods = {resolve: resolve4, reject};
+    methods = { resolve: resolve4, reject };
   });
   return Object.assign(promise, methods);
 }
@@ -36,11 +36,11 @@ var MuxAsyncIterator = class {
   }
   async callIteratorNext(iterator) {
     try {
-      const {value, done} = await iterator.next();
+      const { value, done } = await iterator.next();
       if (done) {
         --this.iteratorCount;
       } else {
-        this.yields.push({iterator, value});
+        this.yields.push({ iterator, value });
       }
     } catch (e) {
       this.throws.push(e);
@@ -51,7 +51,7 @@ var MuxAsyncIterator = class {
     while (this.iteratorCount > 0) {
       await this.signal;
       for (let i = 0; i < this.yields.length; i++) {
-        const {iterator, value} = this.yields[i];
+        const { iterator, value } = this.yields[i];
         yield value;
         this.callIteratorNext(iterator);
       }
@@ -79,7 +79,7 @@ var ANSI_PATTERN = new RegExp([
 
 // ../testing/_diff.ts
 var DiffType;
-(function(DiffType2) {
+(function (DiffType2) {
   DiffType2["removed"] = "removed";
   DiffType2["common"] = "common";
   DiffType2["added"] = "added";
@@ -94,6 +94,184 @@ var AssertionError = class extends Error {
 };
 function unreachable() {
   throw new AssertionError("unreachable");
+}
+
+// ../_util/assert.ts
+var DenoStdInternalError = class extends Error {
+  constructor(message) {
+    super(message);
+    this.name = "DenoStdInternalError";
+  }
+};
+function assert(expr, msg = "") {
+  if (!expr) {
+    throw new DenoStdInternalError(msg);
+  }
+}
+
+// ../io/buffer.ts
+var MIN_READ = 32 * 1024;
+var MAX_SIZE = 2 ** 32 - 2;
+function copyBytes(src, dst, off = 0) {
+  const r = dst.byteLength - off;
+  if (src.byteLength > r) {
+    src = src.subarray(0, r);
+  }
+  dst.set(src, off);
+  return src.byteLength;
+}
+var Buffer2 = class {
+  #buf;
+  #off = 0;
+  constructor(ab) {
+    if (ab === void 0) {
+      this.#buf = new Uint8Array(0);
+      return;
+    }
+    this.#buf = new Uint8Array(ab);
+  }
+  bytes(options = { copy: true }) {
+    if (options.copy === false)
+      return this.#buf.subarray(this.#off);
+    return this.#buf.slice(this.#off);
+  }
+  empty() {
+    return this.#buf.byteLength <= this.#off;
+  }
+  get length() {
+    return this.#buf.byteLength - this.#off;
+  }
+  get capacity() {
+    return this.#buf.buffer.byteLength;
+  }
+  truncate(n) {
+    if (n === 0) {
+      this.reset();
+      return;
+    }
+    if (n < 0 || n > this.length) {
+      throw Error("bytes.Buffer: truncation out of range");
+    }
+    this.#reslice(this.#off + n);
+  }
+  reset() {
+    this.#reslice(0);
+    this.#off = 0;
+  }
+  #tryGrowByReslice = (n) => {
+    const l = this.#buf.byteLength;
+    if (n <= this.capacity - l) {
+      this.#reslice(l + n);
+      return l;
+    }
+    return -1;
+  };
+  #reslice = (len) => {
+    assert(len <= this.#buf.buffer.byteLength);
+    this.#buf = new Uint8Array(this.#buf.buffer, 0, len);
+  };
+  readSync(p) {
+    if (this.empty()) {
+      this.reset();
+      if (p.byteLength === 0) {
+        return 0;
+      }
+      return null;
+    }
+    const nread = copyBytes(this.#buf.subarray(this.#off), p);
+    this.#off += nread;
+    return nread;
+  }
+  read(p) {
+    const rr = this.readSync(p);
+    return Promise.resolve(rr);
+  }
+  writeSync(p) {
+    const m = this.#grow(p.byteLength);
+    return copyBytes(p, this.#buf, m);
+  }
+  write(p) {
+    const n = this.writeSync(p);
+    return Promise.resolve(n);
+  }
+  #grow = (n) => {
+    const m = this.length;
+    if (m === 0 && this.#off !== 0) {
+      this.reset();
+    }
+    const i = this.#tryGrowByReslice(n);
+    if (i >= 0) {
+      return i;
+    }
+    const c = this.capacity;
+    if (n <= Math.floor(c / 2) - m) {
+      copyBytes(this.#buf.subarray(this.#off), this.#buf);
+    } else if (c + n > MAX_SIZE) {
+      throw new Error("The buffer cannot be grown beyond the maximum size.");
+    } else {
+      const buf = new Uint8Array(Math.min(2 * c + n, MAX_SIZE));
+      copyBytes(this.#buf.subarray(this.#off), buf);
+      this.#buf = buf;
+    }
+    this.#off = 0;
+    this.#reslice(Math.min(m + n, MAX_SIZE));
+    return m;
+  };
+  grow(n) {
+    if (n < 0) {
+      throw Error("Buffer.grow: negative count");
+    }
+    const m = this.#grow(n);
+    this.#reslice(m);
+  }
+  async readFrom(r) {
+    let n = 0;
+    const tmp = new Uint8Array(MIN_READ);
+    while (true) {
+      const shouldGrow = this.capacity - this.length < MIN_READ;
+      const buf = shouldGrow ? tmp : new Uint8Array(this.#buf.buffer, this.length);
+      const nread = await r.read(buf);
+      if (nread === null) {
+        return n;
+      }
+      if (shouldGrow)
+        this.writeSync(buf.subarray(0, nread));
+      else
+        this.#reslice(this.length + nread);
+      n += nread;
+    }
+  }
+  readFromSync(r) {
+    let n = 0;
+    const tmp = new Uint8Array(MIN_READ);
+    while (true) {
+      const shouldGrow = this.capacity - this.length < MIN_READ;
+      const buf = shouldGrow ? tmp : new Uint8Array(this.#buf.buffer, this.length);
+      const nread = r.readSync(buf);
+      if (nread === null) {
+        return n;
+      }
+      if (shouldGrow)
+        this.writeSync(buf.subarray(0, nread));
+      else
+        this.#reslice(this.length + nread);
+      n += nread;
+    }
+  }
+};
+
+// ../io/util.ts
+async function writeAll(w, arr) {
+  let nwritten = 0;
+  while (nwritten < arr.length) {
+    nwritten += await w.write(arr.subarray(nwritten));
+  }
+}
+function writeAllSync(w, arr) {
+  let nwritten = 0;
+  while (nwritten < arr.length) {
+    nwritten += w.writeSync(arr.subarray(nwritten));
+  }
 }
 
 // _utils.ts
@@ -228,60 +406,60 @@ function checkEncoding(encoding) {
 }
 function getOpenOptions(flag) {
   if (!flag) {
-    return {create: true, append: true};
+    return { create: true, append: true };
   }
   let openOptions;
   switch (flag) {
     case "a": {
-      openOptions = {create: true, append: true};
+      openOptions = { create: true, append: true };
       break;
     }
     case "ax": {
-      openOptions = {createNew: true, write: true, append: true};
+      openOptions = { createNew: true, write: true, append: true };
       break;
     }
     case "a+": {
-      openOptions = {read: true, create: true, append: true};
+      openOptions = { read: true, create: true, append: true };
       break;
     }
     case "ax+": {
-      openOptions = {read: true, createNew: true, append: true};
+      openOptions = { read: true, createNew: true, append: true };
       break;
     }
     case "r": {
-      openOptions = {read: true};
+      openOptions = { read: true };
       break;
     }
     case "r+": {
-      openOptions = {read: true, write: true};
+      openOptions = { read: true, write: true };
       break;
     }
     case "w": {
-      openOptions = {create: true, write: true, truncate: true};
+      openOptions = { create: true, write: true, truncate: true };
       break;
     }
     case "wx": {
-      openOptions = {createNew: true, write: true};
+      openOptions = { createNew: true, write: true };
       break;
     }
     case "w+": {
-      openOptions = {create: true, write: true, truncate: true, read: true};
+      openOptions = { create: true, write: true, truncate: true, read: true };
       break;
     }
     case "wx+": {
-      openOptions = {createNew: true, write: true, read: true};
+      openOptions = { createNew: true, write: true, read: true };
       break;
     }
     case "as": {
-      openOptions = {create: true, append: true};
+      openOptions = { create: true, append: true };
       break;
     }
     case "as+": {
-      openOptions = {create: true, read: true, append: true};
+      openOptions = { create: true, read: true, append: true };
       break;
     }
     case "rs+": {
-      openOptions = {create: true, read: true, write: true};
+      openOptions = { create: true, read: true, write: true };
       break;
     }
     default: {
@@ -461,19 +639,6 @@ function encodeWhitespace(string) {
   return string.replaceAll(/[\s]/g, (c) => {
     return WHITESPACE_ENCODINGS[c] ?? c;
   });
-}
-
-// ../_util/assert.ts
-var DenoStdInternalError = class extends Error {
-  constructor(message) {
-    super(message);
-    this.name = "DenoStdInternalError";
-  }
-};
-function assert2(expr, msg = "") {
-  if (!expr) {
-    throw new DenoStdInternalError(msg);
-  }
 }
 
 // ../path/win32.ts
@@ -703,7 +868,7 @@ function join(...paths) {
     return ".";
   let needsReplace = true;
   let slashCount = 0;
-  assert2(firstPart != null);
+  assert(firstPart != null);
   if (isPathSeparator(firstPart.charCodeAt(0))) {
     ++slashCount;
     const firstLen = firstPart.length;
@@ -1022,7 +1187,7 @@ function format(pathObject) {
 }
 function parse(path2) {
   assertPath(path2);
-  const ret = {root: "", dir: "", base: "", ext: "", name: ""};
+  const ret = { root: "", dir: "", base: "", ext: "", name: "" };
   const len = path2.length;
   if (len === 0)
     return ret;
@@ -1436,7 +1601,7 @@ function format2(pathObject) {
 }
 function parse2(path2) {
   assertPath(path2);
-  const ret = {root: "", dir: "", base: "", ext: "", name: ""};
+  const ret = { root: "", dir: "", base: "", ext: "", name: "" };
   if (path2.length === 0)
     return ret;
   const isAbsolute4 = path2.charCodeAt(0) === CHAR_FORWARD_SLASH;
@@ -1545,7 +1710,7 @@ function common(paths, sep4 = SEP) {
 // ../path/glob.ts
 var regExpEscapeChars = ["!", "$", "(", ")", "*", "+", ".", "=", "?", "[", "\\", "^", "{", "|"];
 var rangeEscapeChars = ["-", "\\", "]"];
-function globToRegExp(glob, {extended = true, globstar: globstarOption = true, os: os2 = osType} = {}) {
+function globToRegExp(glob, { extended = true, globstar: globstarOption = true, os: os2 = osType } = {}) {
   if (glob == "") {
     return /(?!)/;
   }
@@ -1560,7 +1725,7 @@ function globToRegExp(glob, {extended = true, globstar: globstarOption = true, o
     ;
   glob = glob.slice(0, newLength);
   let regExpString = "";
-  for (let j = 0; j < glob.length; ) {
+  for (let j = 0; j < glob.length;) {
     let segment = "";
     const groupStack = [];
     let inRange = false;
@@ -1747,7 +1912,7 @@ function globToRegExp(glob, {extended = true, globstar: globstarOption = true, o
   return new RegExp(regExpString);
 }
 function isGlob(str) {
-  const chars = {"{": "}", "(": ")", "[": "]"};
+  const chars = { "{": "}", "(": ")", "[": "]" };
   const regex = /\\(.)|(^!|\*|[\].+)]\?|\[[^\\\]]+\]|\{[^\\}]+\}|\(\?[:!=][^\\)]+\)|\([^|]+\|[^\\)]+\))/;
   if (str === "") {
     return false;
@@ -1769,7 +1934,7 @@ function isGlob(str) {
   }
   return false;
 }
-function normalizeGlob(glob, {globstar = false} = {}) {
+function normalizeGlob(glob, { globstar = false } = {}) {
   if (glob.match(/\0/g)) {
     throw new Error(`Glob contains invalid characters: "${glob}"`);
   }
@@ -1780,7 +1945,7 @@ function normalizeGlob(glob, {globstar = false} = {}) {
   const badParentPattern = new RegExp(`(?<=(${s}|^)\\*\\*${s})\\.\\.(?=${s}|$)`, "g");
   return normalize3(glob.replace(badParentPattern, "\0")).replace(/\0/g, "..");
 }
-function joinGlobs(globs, {extended = false, globstar = false} = {}) {
+function joinGlobs(globs, { extended = false, globstar = false } = {}) {
   if (!globstar || globs.length == 0) {
     return join3(...globs);
   }
@@ -1798,7 +1963,7 @@ function joinGlobs(globs, {extended = false, globstar = false} = {}) {
   }
   if (!joined)
     return ".";
-  return normalizeGlob(joined, {extended, globstar});
+  return normalizeGlob(joined, { extended, globstar });
 }
 
 // ../path/mod.ts
@@ -1824,7 +1989,7 @@ var {
 } = path;
 
 // path.ts
-var path_default = {...mod_exports};
+var path_default = { ...mod_exports };
 
 // _fs/_fs_appendFile.ts
 function appendFile(pathOrRid, data, optionsOrCallback, callback) {
@@ -1847,7 +2012,7 @@ function appendFile(pathOrRid, data, optionsOrCallback, callback) {
       if (mode) {
         notImplemented("Deno does not yet support setting mode on create");
       }
-      Deno.open(pathOrRid, getOpenOptions(flag)).then(({rid: openedFileRid}) => {
+      Deno.open(pathOrRid, getOpenOptions(flag)).then(({ rid: openedFileRid }) => {
         rid = openedFileRid;
         return Deno.write(openedFileRid, buffer);
       }).then(resolve4, reject);
@@ -2181,12 +2346,12 @@ function base64ByteLength(str, bytes) {
     bytes--;
   return bytes * 3 >>> 2;
 }
-var Buffer2 = class extends Uint8Array {
+var Buffer3 = class extends Uint8Array {
   static alloc(size, fill, encoding = "utf8") {
     if (typeof size !== "number") {
       throw new TypeError(`The "size" argument must be of type number. Received type ${typeof size}`);
     }
-    const buf = new Buffer2(size);
+    const buf = new Buffer3(size);
     if (size === 0)
       return buf;
     let bufFill;
@@ -2195,7 +2360,7 @@ var Buffer2 = class extends Uint8Array {
       if (typeof fill === "string" && fill.length === 1 && clearEncoding === "utf8") {
         buf.fill(fill.charCodeAt(0));
       } else
-        bufFill = Buffer2.from(fill, clearEncoding);
+        bufFill = Buffer3.from(fill, clearEncoding);
     } else if (typeof fill === "number") {
       buf.fill(fill);
     } else if (fill instanceof Uint8Array) {
@@ -2222,7 +2387,7 @@ var Buffer2 = class extends Uint8Array {
     return buf;
   }
   static allocUnsafe(size) {
-    return new Buffer2(size);
+    return new Buffer3(size);
   }
   static byteLength(string, encoding = "utf8") {
     if (typeof string != "string")
@@ -2237,12 +2402,12 @@ var Buffer2 = class extends Uint8Array {
         totalLength += buf.length;
       }
     }
-    const buffer = Buffer2.allocUnsafe(totalLength);
+    const buffer = Buffer3.allocUnsafe(totalLength);
     let pos = 0;
     for (const item of list) {
       let buf;
-      if (!(item instanceof Buffer2)) {
-        buf = Buffer2.from(item);
+      if (!(item instanceof Buffer3)) {
+        buf = Buffer3.from(item);
       } else {
         buf = item;
       }
@@ -2257,15 +2422,15 @@ var Buffer2 = class extends Uint8Array {
     if (typeof value == "string") {
       encoding = checkEncoding2(encoding, false);
       if (encoding === "hex")
-        return new Buffer2(decodeString(value).buffer);
+        return new Buffer3(decodeString(value).buffer);
       if (encoding === "base64")
-        return new Buffer2(decode2(value).buffer);
-      return new Buffer2(new TextEncoder().encode(value).buffer);
+        return new Buffer3(decode2(value).buffer);
+      return new Buffer3(new TextEncoder().encode(value).buffer);
     }
-    return new Buffer2(value, offset, length);
+    return new Buffer3(value, offset, length);
   }
   static isBuffer(obj) {
-    return obj instanceof Buffer2;
+    return obj instanceof Buffer3;
   }
   static isEncoding(encoding) {
     return typeof encoding === "string" && encoding.length !== 0 && normalizeEncoding(encoding) !== void 0;
@@ -2349,7 +2514,7 @@ var Buffer2 = class extends Uint8Array {
     return this.subarray(begin, end);
   }
   toJSON() {
-    return {type: "Buffer", data: Array.from(this)};
+    return { type: "Buffer", data: Array.from(this) };
   }
   toString(encoding = "utf8", start = 0, end = this.length) {
     encoding = checkEncoding2(encoding);
@@ -2439,7 +2604,7 @@ var Buffer2 = class extends Uint8Array {
 
 // _fs/_fs_readFile.ts
 function maybeDecode(data, encoding) {
-  const buffer = new Buffer2(data.buffer, data.byteOffset, data.byteLength);
+  const buffer = new Buffer3(data.buffer, data.byteOffset, data.byteLength);
   if (encoding && encoding !== "binary")
     return buffer.toString(encoding);
   return buffer;
@@ -2554,7 +2719,7 @@ function mkdir(path2, options, callback) {
   if (typeof recursive !== "boolean") {
     throw new Deno.errors.InvalidData("invalid recursive option , must be a boolean");
   }
-  Deno.mkdir(path2, {recursive, mode}).then(() => {
+  Deno.mkdir(path2, { recursive, mode }).then(() => {
     if (typeof callback === "function") {
       callback(null);
     }
@@ -2581,7 +2746,7 @@ function mkdirSync(path2, options) {
   if (typeof recursive !== "boolean") {
     throw new Deno.errors.InvalidData("invalid recursive option , must be a boolean");
   }
-  Deno.mkdirSync(path2, {recursive, mode});
+  Deno.mkdirSync(path2, { recursive, mode });
 }
 
 // _util/_util_promisify.ts
@@ -2657,7 +2822,7 @@ var DEFAULT_INSPECT_OPTIONS = {
 inspect.defaultOptions = DEFAULT_INSPECT_OPTIONS;
 inspect.custom = Deno.customInspect;
 function inspect(object, ...opts) {
-  opts = {...DEFAULT_INSPECT_OPTIONS, ...opts};
+  opts = { ...DEFAULT_INSPECT_OPTIONS, ...opts };
   return Deno.inspect(object, {
     depth: opts.depth,
     iterableLimit: opts.maxArrayLength,
@@ -2931,7 +3096,7 @@ var linux = [
   [-4028, ["EFTYPE", "inappropriate file type or format"]],
   [-84, ["EILSEQ", "illegal byte sequence"]]
 ];
-var {os} = Deno.build;
+var { os } = Deno.build;
 var errorMap = new Map(os === "windows" ? windows : os === "darwin" ? darwin : os === "linux" ? linux : unreachable());
 var ERR_INVALID_CALLBACK = class extends NodeTypeError {
   constructor(object) {
@@ -2951,7 +3116,7 @@ function mkdtemp(prefix, optionsOrCallback, maybeCallback) {
     throw new ERR_INVALID_CALLBACK(callback);
   const encoding = parseEncoding(optionsOrCallback);
   const path2 = tempDirPath(prefix);
-  mkdir(path2, {recursive: false, mode: 448}, (err) => {
+  mkdir(path2, { recursive: false, mode: 448 }, (err) => {
     if (err)
       callback(err);
     else
@@ -2961,7 +3126,7 @@ function mkdtemp(prefix, optionsOrCallback, maybeCallback) {
 function mkdtempSync(prefix, options) {
   const encoding = parseEncoding(options);
   const path2 = tempDirPath(prefix);
-  mkdirSync(path2, {recursive: false, mode: 448});
+  mkdirSync(path2, { recursive: false, mode: 448 });
   return decode3(path2, encoding);
 }
 function parseEncoding(optionsOrCallback) {
@@ -3025,7 +3190,7 @@ function writeFile(pathOrRid, data, optOrCallback, callback) {
   const encoding = checkEncoding(getEncoding(options)) || "utf8";
   const openOptions = getOpenOptions(flag || "w");
   if (typeof data === "string")
-    data = Buffer2.from(data, encoding);
+    data = Buffer3.from(data, encoding);
   const isRid = typeof pathOrRid === "number";
   let file;
   let error = null;
@@ -3037,7 +3202,7 @@ function writeFile(pathOrRid, data, optOrCallback, callback) {
           notImplemented(`"mode" on Windows`);
         await Deno.chmod(pathOrRid, mode);
       }
-      await Deno.writeAll(file, data);
+      await writeAll(file, data);
     } catch (e) {
       error = e;
     } finally {
@@ -3054,7 +3219,7 @@ function writeFileSync(pathOrRid, data, options) {
   const encoding = checkEncoding(getEncoding(options)) || "utf8";
   const openOptions = getOpenOptions(flag || "w");
   if (typeof data === "string")
-    data = Buffer2.from(data, encoding);
+    data = Buffer3.from(data, encoding);
   const isRid = typeof pathOrRid === "number";
   let file;
   let error = null;
@@ -3065,7 +3230,7 @@ function writeFileSync(pathOrRid, data, options) {
         notImplemented(`"mode" on Windows`);
       Deno.chmodSync(pathOrRid, mode);
     }
-    Deno.writeAllSync(file, data);
+    writeAllSync(file, data);
   } catch (e) {
     error = e;
   } finally {
@@ -3078,7 +3243,7 @@ function writeFileSync(pathOrRid, data, options) {
 
 // events.ts
 function createIterResult(value, done) {
-  return {value, done};
+  return { value, done };
 }
 var defaultMaxListeners = 10;
 var _EventEmitter = class {
@@ -3187,7 +3352,7 @@ var _EventEmitter = class {
     return this;
   }
   onceWrap(eventName, listener) {
-    const wrapper = function(...args) {
+    const wrapper = function (...args) {
       this.context.removeListener(this.eventName, this.rawListener);
       this.listener.apply(this.context, args);
     };
@@ -3233,7 +3398,7 @@ var _EventEmitter = class {
   removeListener(eventName, listener) {
     if (this._events.has(eventName)) {
       const arr = this._events.get(eventName);
-      assert2(arr);
+      assert(arr);
       let listenerIndex = -1;
       for (let i = arr.length - 1; i >= 0; i--) {
         if (arr[i] == listener || arr[i] && arr[i]["listener"] == listener) {
@@ -3267,7 +3432,7 @@ var _EventEmitter = class {
       if (emitter instanceof EventTarget) {
         emitter.addEventListener(name, (...args) => {
           resolve4(args);
-        }, {once: true, passive: false, capture: false});
+        }, { once: true, passive: false, capture: false });
         return;
       } else if (emitter instanceof _EventEmitter) {
         const eventListener = (...args) => {
@@ -3308,8 +3473,8 @@ var _EventEmitter = class {
         if (finished) {
           return Promise.resolve(createIterResult(void 0, true));
         }
-        return new Promise(function(resolve4, reject) {
-          unconsumedPromises.push({resolve: resolve4, reject});
+        return new Promise(function (resolve4, reject) {
+          unconsumedPromises.push({ resolve: resolve4, reject });
         });
       },
       return() {
@@ -3356,7 +3521,7 @@ var _EventEmitter = class {
 var EventEmitter = _EventEmitter;
 EventEmitter.captureRejectionSymbol = Symbol.for("nodejs.rejection");
 EventEmitter.errorMonitor = Symbol("events.errorMonitor");
-var events_default = Object.assign(EventEmitter, {EventEmitter});
+var events_default = Object.assign(EventEmitter, { EventEmitter });
 var captureRejectionSymbol = EventEmitter.captureRejectionSymbol;
 var errorMonitor = EventEmitter.errorMonitor;
 var listenerCount = EventEmitter.listenerCount;
@@ -3558,10 +3723,10 @@ function rmdir(path2, optionsOrCallback, maybeCallback) {
   const options = typeof optionsOrCallback === "object" ? optionsOrCallback : void 0;
   if (!callback)
     throw new Error("No callback function supplied");
-  Deno.remove(path2, {recursive: options?.recursive}).then((_) => callback(), callback);
+  Deno.remove(path2, { recursive: options?.recursive }).then((_) => callback(), callback);
 }
 function rmdirSync(path2, options) {
-  Deno.removeSync(path2, {recursive: options?.recursive});
+  Deno.removeSync(path2, { recursive: options?.recursive });
 }
 
 // _fs/_fs_unlink.ts
@@ -3592,8 +3757,8 @@ function convertFlagAndModeToOptions(flag, mode) {
   if (!flag && !mode)
     return void 0;
   if (!flag && mode)
-    return {mode};
-  return {...getOpenOptions(flag), mode};
+    return { mode };
+  return { ...getOpenOptions(flag), mode };
 }
 function open(path2, flagsOrCallback, callbackOrMode, maybeCallback) {
   const flags = typeof flagsOrCallback === "string" ? flagsOrCallback : void 0;
@@ -3708,12 +3873,12 @@ function CFISBIS(fileInfo, bigInt) {
 }
 function stat(path2, optionsOrCallback, maybeCallback) {
   const callback = typeof optionsOrCallback === "function" ? optionsOrCallback : maybeCallback;
-  const options = typeof optionsOrCallback === "object" ? optionsOrCallback : {bigint: false};
+  const options = typeof optionsOrCallback === "object" ? optionsOrCallback : { bigint: false };
   if (!callback)
     throw new Error("No callback function supplied");
   Deno.stat(path2).then((stat2) => callback(null, CFISBIS(stat2, options.bigint)), (err) => callback(err));
 }
-function statSync(path2, options = {bigint: false}) {
+function statSync(path2, options = { bigint: false }) {
   const origin = Deno.statSync(path2);
   return CFISBIS(origin, options.bigint);
 }
@@ -3721,7 +3886,7 @@ function statSync(path2, options = {bigint: false}) {
 // _fs/_fs_lstat.ts
 function lstat(path2, optionsOrCallback, maybeCallback) {
   const callback = typeof optionsOrCallback === "function" ? optionsOrCallback : maybeCallback;
-  const options = typeof optionsOrCallback === "object" ? optionsOrCallback : {bigint: false};
+  const options = typeof optionsOrCallback === "object" ? optionsOrCallback : { bigint: false };
   if (!callback)
     throw new Error("No callback function supplied");
   Deno.lstat(path2).then((stat2) => callback(null, CFISBIS(stat2, options.bigint)), (err) => callback(err));
