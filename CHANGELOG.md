@@ -1,5 +1,9 @@
 # Change Log
 
+## V40
+
+- Update polyfills for node builtin modules
+
 ## V39
 
 - Imporve `parseCJSModuleExports` to support json module
