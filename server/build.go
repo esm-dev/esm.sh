@@ -133,6 +133,7 @@ func (task *buildTask) buildESM() (esm *ESMeta, pkgCSS bool, err error) {
 					if s := task.pkg.submodule; s != "" {
 						importName += "/" + s
 					}
+
 					// should bundle list:
 					// 1. the package itself
 					// 2. submodules of the package
@@ -143,6 +144,7 @@ func (task *buildTask) buildESM() (esm *ESMeta, pkgCSS bool, err error) {
 						(strings.HasPrefix(p, "@") && len(strings.Split(p, "/")) > 2) {
 						return api.OnResolveResult{}, nil
 					}
+
 					// bundle all deps except peer deps in bundle mode
 					if task.bundle && !builtInNodeModules[p] {
 						_, ok := esmeta.PeerDependencies[p]
@@ -152,6 +154,7 @@ func (task *buildTask) buildESM() (esm *ESMeta, pkgCSS bool, err error) {
 							}
 						}
 					}
+
 					external.Add(p)
 					return api.OnResolveResult{Path: "esm_sh_external://" + p, External: true}, nil
 				},
