@@ -3,6 +3,7 @@
 ## V40
 
 - Update polyfills for node builtin modules
+- Upgrade **esbuild** to **0.11.9**
 
 ## V39
 
