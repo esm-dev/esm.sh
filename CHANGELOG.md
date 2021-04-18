@@ -1,5 +1,10 @@
 # Change Log
 
+## V41
+
+- Fix `bundle` mode
+- Upgrade **esbuild** to **0.11.12**
+
 ## V40
 
 - Update polyfills for node builtin modules
