@@ -134,7 +134,7 @@ func (task *buildTask) buildESM() (esm *ESMeta, pkgCSS bool, err error) {
 						importName += "/" + s
 					}
 
-					// should bundle list:
+					// bundling:
 					// 1. the package itself
 					// 2. submodules of the package
 					// 3. submodules of other packages
@@ -149,9 +149,7 @@ func (task *buildTask) buildESM() (esm *ESMeta, pkgCSS bool, err error) {
 					if task.bundle && !builtInNodeModules[p] {
 						_, ok := esmeta.PeerDependencies[p]
 						if !ok {
-							if fileExists(path.Join(task.wd, "node_modules", p, "package.json")) {
-								return api.OnResolveResult{}, nil
-							}
+							return api.OnResolveResult{}, nil
 						}
 					}
 
@@ -166,6 +164,7 @@ func (task *buildTask) buildESM() (esm *ESMeta, pkgCSS bool, err error) {
 			external.Add(name)
 		}
 	}
+esbuild:
 	result := api.Build(api.BuildOptions{
 		Stdin:             input,
 		Outdir:            "/esbuild",
@@ -182,6 +181,11 @@ func (task *buildTask) buildESM() (esm *ESMeta, pkgCSS bool, err error) {
 		Plugins:           []api.Plugin{esmResolverPlugin},
 	})
 	if len(result.Errors) > 0 {
+		// mark the missing module as external to exclude it from the bundle
+		if strings.HasPrefix(result.Errors[0].Text, "Could not resolve \"") {
+			external.Add(strings.Split(result.Errors[0].Text, "\"")[1])
+			goto esbuild
+		}
 		err = errors.New("esbuild: " + result.Errors[0].Text)
 		return
 	}
