@@ -2,8 +2,9 @@
 
 ## V41
 
+- Add `timeout` (30 seconds) for new build request, and use lower build version instead if it exists
 - Fix `bundle` mode
-- Add `timeout` (30 seconds) for new build request, use lower build version instead if it exists
+- Fix build dead loop
 - Upgrade **esbuild** to **0.11.12**
 
 ## V40
