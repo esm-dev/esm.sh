@@ -195,6 +195,7 @@ func Serve(fs *embed.FS) {
 
 	if isDev {
 		log.Debugf("Server ready on http://localhost:%d", port)
+		log.Debugf("Testing page at http://localhost:%d?test", port)
 	}
 
 	select {
