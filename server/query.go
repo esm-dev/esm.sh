@@ -337,15 +337,27 @@ func query() rex.Handle {
 
 		esm, pkgCSS, ok := findESM(task.ID())
 		if !ok {
-			// todo: wait 3 second then down to previous build version
-			output := <-queue.Add(task)
-			if output.err != nil {
-				return throwErrorJS(ctx, output.err)
+			select {
+			case output := <-queue.Add(task):
+				if output.err != nil {
+					return throwErrorJS(ctx, output.err)
+				}
+				esm = output.esm
+				pkgCSS = output.pkgCSS
+			case <-time.After(6 * time.Second):
+				// if the build queue didn't return a build result after 6 seconds,
+				// then use the lower build version.
+				id := strings.TrimPrefix(task.ID(), fmt.Sprintf("v%d/", VERSION))
+				for i := 0; i < 10; i++ {
+					esm, pkgCSS, ok = findESM(fmt.Sprintf("v%d/%s", VERSION-(i+1), id))
+					if ok {
+						break
+					}
+				}
+				if !ok {
+					return rex.Err(500, "timeout")
+				}
 			}
-			esm = output.esm
-			pkgCSS = output.pkgCSS
-		} else {
-			log.Debugf("esm %s,%s found", reqPkg, target)
 		}
 
 		if isPkgCSS {
