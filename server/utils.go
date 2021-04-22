@@ -41,6 +41,14 @@ func (s *stringSet) Size() int {
 	return len(s.m)
 }
 
+func (s *stringSet) Has(key string) bool {
+	s.lock.RLock()
+	defer s.lock.RUnlock()
+
+	_, ok := s.m[key]
+	return ok
+}
+
 func (s *stringSet) Add(key string) {
 	s.lock.Lock()
 	defer s.lock.Unlock()

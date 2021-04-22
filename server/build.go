@@ -122,6 +122,7 @@ func (task *buildTask) buildESM() (esm *ESMeta, pkgCSS bool, err error) {
 		"global.process.env.NODE_ENV": fmt.Sprintf(`"%s"`, env),
 	}
 	external := newStringSet()
+	extraExternal := newStringSet()
 	esmResolverPlugin := api.Plugin{
 		Name: "esm-resolver",
 		Setup: func(plugin api.PluginBuild) {
@@ -183,7 +184,11 @@ esbuild:
 	if len(result.Errors) > 0 {
 		// mark the missing module as external to exclude it from the bundle
 		if strings.HasPrefix(result.Errors[0].Text, "Could not resolve \"") {
-			external.Add(strings.Split(result.Errors[0].Text, "\"")[1])
+			name := strings.Split(result.Errors[0].Text, "\"")[1]
+			if !extraExternal.Has(name) {
+				external.Add(name)
+				extraExternal.Add(name)
+			}
 			goto esbuild
 		}
 		err = errors.New("esbuild: " + result.Errors[0].Text)
