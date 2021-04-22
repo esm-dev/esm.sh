@@ -345,8 +345,8 @@ func query() rex.Handle {
 					break
 				}
 			}
-			// if found the lower build version, then build it in backgound for next request
-			// or and and wait the new build task for 30 sconds
+			// if found a lower build version, then build current module in backgound for the next request
+			// or wait the current build task for 30 seconds
 			if ok {
 				queue.Add(task)
 			} else {
