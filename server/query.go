@@ -344,8 +344,8 @@ func query() rex.Handle {
 				}
 				esm = output.esm
 				pkgCSS = output.pkgCSS
-			case <-time.After(6 * time.Second):
-				// if the build queue didn't return a build result after 6 seconds,
+			case <-time.After(30 * time.Second):
+				// if the build queue didn't return a build result after 15 seconds,
 				// then use the lower build version.
 				id := strings.TrimPrefix(task.ID(), fmt.Sprintf("v%d/", VERSION))
 				for i := 0; i < 10; i++ {
@@ -355,7 +355,7 @@ func query() rex.Handle {
 					}
 				}
 				if !ok {
-					return rex.Err(500, "timeout")
+					return rex.Err(http.StatusRequestTimeout, "build timeout")
 				}
 			}
 		}
