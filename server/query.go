@@ -337,24 +337,27 @@ func query() rex.Handle {
 
 		esm, pkgCSS, ok := findESM(task.ID())
 		if !ok {
-			select {
-			case output := <-queue.Add(task):
-				if output.err != nil {
-					return throwErrorJS(ctx, output.err)
+			// find lower build version
+			id := strings.TrimPrefix(task.ID(), fmt.Sprintf("v%d/", VERSION))
+			for i := 0; i < 10; i++ {
+				esm, pkgCSS, ok = findESM(fmt.Sprintf("v%d/%s", VERSION-(i+1), id))
+				if ok {
+					break
 				}
-				esm = output.esm
-				pkgCSS = output.pkgCSS
-			case <-time.After(30 * time.Second):
-				// if the build queue didn't return a build result after 15 seconds,
-				// then use the lower build version.
-				id := strings.TrimPrefix(task.ID(), fmt.Sprintf("v%d/", VERSION))
-				for i := 0; i < 10; i++ {
-					esm, pkgCSS, ok = findESM(fmt.Sprintf("v%d/%s", VERSION-(i+1), id))
-					if ok {
-						break
+			}
+			// if found the lower build version, then build it in backgound for next request
+			// or and and wait the new build task for 30 sconds
+			if ok {
+				queue.Add(task)
+			} else {
+				select {
+				case output := <-queue.Add(task):
+					if output.err != nil {
+						return throwErrorJS(ctx, output.err)
 					}
-				}
-				if !ok {
+					esm = output.esm
+					pkgCSS = output.pkgCSS
+				case <-time.After(30 * time.Second):
 					return rex.Err(http.StatusRequestTimeout, "build timeout")
 				}
 			}
