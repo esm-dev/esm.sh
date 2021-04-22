@@ -184,18 +184,19 @@ esbuild:
 	if len(result.Errors) > 0 {
 		// mark the missing module as external to exclude it from the bundle
 		if strings.HasPrefix(result.Errors[0].Text, "Could not resolve \"") {
+			log.Warnf("esbuild(%s): %s", task.ID(), result.Errors[0].Text)
 			name := strings.Split(result.Errors[0].Text, "\"")[1]
 			if !extraExternal.Has(name) {
 				external.Add(name)
 				extraExternal.Add(name)
+				goto esbuild
 			}
-			goto esbuild
 		}
 		err = errors.New("esbuild: " + result.Errors[0].Text)
 		return
 	}
 	for _, w := range result.Warnings {
-		log.Warn(w.Text)
+		log.Warnf("esbuild(%s): %s", task.ID(), w.Text)
 	}
 
 	cssMark := []byte{0}
@@ -629,6 +630,7 @@ func initBuild(buildDir string, pkg pkg, install bool, env string) (esmeta *ESMe
 		}
 		if esm {
 			esmeta.Exports = exports
+			log.Debug(p.Name, len(esmeta.Exports), "exports as es moudle")
 		} else {
 			// fake module
 			esmeta.Module = ""
@@ -641,6 +643,7 @@ func initBuild(buildDir string, pkg pkg, install bool, env string) (esmeta *ESMe
 			log.Warn(err)
 		}
 		esmeta.Exports = ret.Exports
+		log.Debug(p.Name, len(esmeta.Exports), "exports as cjs")
 	}
 	return
 }
