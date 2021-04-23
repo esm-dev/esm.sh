@@ -135,10 +135,10 @@ func (task *buildTask) buildESM() (esm *ESMeta, pkgCSS bool, err error) {
 						importName += "/" + s
 					}
 
-					// bundling:
-					// 1. the package itself
-					// 2. submodules of the package
-					// 3. submodules of other packages
+					// should resolve:
+					// 1. current package itself
+					// 2. sub-modules of current package
+					// 3. sub-modules of other packages
 					if p == importName ||
 						isFileImportPath(p) ||
 						(!strings.HasPrefix(p, "@") && len(strings.Split(p, "/")) > 1) ||
@@ -165,6 +165,7 @@ func (task *buildTask) buildESM() (esm *ESMeta, pkgCSS bool, err error) {
 			external.Add(name)
 		}
 	}
+
 esbuild:
 	result := api.Build(api.BuildOptions{
 		Stdin:             input,
@@ -181,20 +182,23 @@ esbuild:
 		Define:            define,
 		Plugins:           []api.Plugin{esmResolverPlugin},
 	})
+
 	if len(result.Errors) > 0 {
 		// mark the missing module as external to exclude it from the bundle
-		if strings.HasPrefix(result.Errors[0].Text, "Could not resolve \"") {
-			log.Warnf("esbuild(%s): %s", task.ID(), result.Errors[0].Text)
-			name := strings.Split(result.Errors[0].Text, "\"")[1]
+		msg := result.Errors[0].Text
+		if strings.HasPrefix(msg, "Could not resolve \"") && strings.Contains(msg, "mark it as external to exclude it from the bundle") {
+			log.Warnf("esbuild(%s): %s", task.ID(), msg)
+			name := strings.Split(msg, "\"")[1]
 			if !extraExternal.Has(name) {
 				external.Add(name)
 				extraExternal.Add(name)
 				goto esbuild
 			}
 		}
-		err = errors.New("esbuild: " + result.Errors[0].Text)
+		err = errors.New("esbuild: " + msg)
 		return
 	}
+
 	for _, w := range result.Warnings {
 		log.Warnf("esbuild(%s): %s", task.ID(), w.Text)
 	}
