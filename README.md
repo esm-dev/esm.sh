@@ -54,7 +54,7 @@ import Daygrid from 'https://esm.sh/@fullcalendar/daygrid'
 ```
 
 ```html
-<link rel="styelsheet" href="https://esm.sh/@fullcalendar/daygrid?css">
+<link rel="stylesheet" href="https://esm.sh/@fullcalendar/daygrid?css">
 ```
 
 ### Specify ESM target
