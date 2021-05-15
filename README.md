@@ -54,7 +54,7 @@ import Daygrid from 'https://esm.sh/@fullcalendar/daygrid'
 ```
 
 ```html
-<link rel="styelsheet" href="https://esm.sh/@fullcalendar/daygrid?css">
+<link rel="stylesheet" href="https://esm.sh/@fullcalendar/daygrid?css">
 ```
 
 ### Specify ESM target
@@ -63,11 +63,11 @@ import Daygrid from 'https://esm.sh/@fullcalendar/daygrid'
 import React from 'https://esm.sh/react?target=es2020'
 ```
 
-By default, esm.sh will check the `User Agent` of browser to get the build target, or set it by the `target` query. Avaiable `target`: **es2015** - **es2020**, **esnext**, and **deno**.
+By default, esm.sh will check the browser's `User-Agent` to get the build target, or set it based on the `target` query. Available targets: **es2015** - **es2020**, **esnext**, and **deno**.
 
 ## Deno compatibility
 
-**esm.sh** will resolve the node internal modules (**fs**, **os**, etc) with [`deno.land/std/node`](https://deno.land/std/node) to support some packages working in Deno, like `postcss`:
+**esm.sh** will resolve the node internal modules (**fs**, **os**, etc.) with [`deno.land/std/node`](https://deno.land/std/node) to support some packages working in Deno, like `postcss`:
 
 ```javascript
 import postcss from 'https://esm.sh/postcss'
@@ -82,7 +82,7 @@ console.log(css)
 
 ### X-Typescript-Types
 
-By default, **esm.sh** will response a custom HTTP header that is `X-TypeScript-Types` when the types(dts) is defined, this is useful for deno types check ([link](https://deno.land/manual/getting_started/typescript#x-typescript-types-custom-header)).
+By default, **esm.sh** will respond with a custom `X-TypeScript-Types` HTTP header when types (`.d.ts`) are defined. This is useful for deno type checks ([link](https://deno.land/manual/getting_started/typescript#x-typescript-types-custom-header)).
 
 ![figure #1](./embed/assets/sceenshot-deno-types.png)
 
