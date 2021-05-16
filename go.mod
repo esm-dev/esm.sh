@@ -3,7 +3,7 @@ module esm.sh
 go 1.16
 
 require (
-	github.com/evanw/esbuild v0.11.12
+	github.com/evanw/esbuild v0.11.22
 	github.com/ije/esbuild-internal v0.11.0
 	github.com/ije/gox v0.5.6
 	github.com/ije/rex v1.3.2
