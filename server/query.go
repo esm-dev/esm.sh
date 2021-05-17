@@ -445,6 +445,7 @@ func query() rex.Handle {
 				),
 			)
 			ctx.SetHeader("X-TypeScript-Types", value)
+			ctx.SetHeader("Access-Control-Expose-Headers", "X-TypeScript-Types")
 		}
 		ctx.SetHeader("Cache-Control", fmt.Sprintf("private, max-age=%d", refreshDuration))
 		ctx.SetHeader("Content-Type", "application/javascript; charset=utf-8")
