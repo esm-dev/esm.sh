@@ -29,7 +29,7 @@ import 'https://esm.sh/tailwindcss/dist/tailwind.min.css'
 ### Bundle mode
 
 ```javascript
-import React from 'https://esm.sh/antd?bundle'
+import { Button } from 'https://esm.sh/antd?bundle'
 ```
 
 In **bundle** mode, all dependencies will be bundled into one JS file.
