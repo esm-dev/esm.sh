@@ -416,7 +416,7 @@ esbuild:
 				fmt.Fprintf(jsHeader, `var __global$ = window;%s`, eol)
 			}
 			if bytes.Contains(outputContent, []byte("__setImmediate$")) {
-				fmt.Fprintf(jsHeader, `var __setImmediate$ = (cb, args) => setTimeout(cb, 0, ...args);%s`, eol)
+				fmt.Fprintf(jsHeader, `var __setImmediate$ = (cb, ...args) => setTimeout(cb, 0, ...args);%s`, eol)
 			}
 			if bytes.Contains(outputContent, []byte("__rResolve$")) {
 				fmt.Fprintf(jsHeader, `var __rResolve$ = p => p;%s`, eol)
