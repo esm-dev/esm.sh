@@ -82,7 +82,7 @@ console.log(css)
 
 ### X-Typescript-Types
 
-By default, **esm.sh** will respond with a custom `X-TypeScript-Types` HTTP header when types (`.d.ts`) are defined. This is useful for deno type checks ([link](https://deno.land/manual/getting_started/typescript#x-typescript-types-custom-header)).
+By default, **esm.sh** will respond with a custom `X-TypeScript-Types` HTTP header when types (`.d.ts`) are defined. This is useful for deno type checks ([link](https://deno.land/manual/typescript/types#using-x-typescript-types-header)).
 
 ![figure #1](./embed/assets/sceenshot-deno-types.png)
 
