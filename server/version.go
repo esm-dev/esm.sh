@@ -1,3 +1,3 @@
 package server
 
-const VERSION = 42
+const VERSION = 43
