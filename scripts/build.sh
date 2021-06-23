@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # mmdb_china_ip_list: https://github.com/alecthw/mmdb_china_ip_list
-mmdb_china_ip_list_tag="20210517"
+mmdb_china_ip_list_tag="20210621"
 dataUrl="https://github.com/alecthw/mmdb_china_ip_list/releases/download/${mmdb_china_ip_list_tag}/china_ip_list.mmdb"
 saveAs="$(dirname $0)/../embed/china_ip_list.mmdb"
 cacheTo="/tmp/china_ip_list.${mmdb_china_ip_list_tag}.mmdb"
