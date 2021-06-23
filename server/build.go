@@ -207,6 +207,19 @@ esbuild:
 	for _, file := range result.OutputFiles {
 		outputContent := file.Contents
 		if strings.HasSuffix(file.Path, ".js") {
+			// ingore unexpected build
+			if len(outputContent) < 512 {
+				s := task.pkg.name
+				if task.pkg.submodule != "" {
+					s += "/" + task.pkg.submodule
+				}
+				if (!task.isDev && bytes.Contains(outputContent, []byte(fmt.Sprintf("}from\"%s\"", s)))) ||
+					(task.isDev && bytes.Contains(outputContent, []byte(fmt.Sprintf("} from \"%s\"", s)))) {
+					err = errors.New("unexpected esbuild output")
+					return
+				}
+			}
+
 			jsHeader := bytes.NewBufferString(fmt.Sprintf(
 				"/* esm.sh - esbuild bundle(%s) %s %s */\n",
 				task.pkg.String(),
