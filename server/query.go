@@ -465,5 +465,5 @@ func throwErrorJS(ctx *rex.Context, err error) interface{} {
 	fmt.Fprintf(buf, "export default null;\n")
 	ctx.SetHeader("Cache-Control", "private, no-store, no-cache, must-revalidate")
 	ctx.SetHeader("Content-Type", "application/javascript; charset=utf-8")
-	return buf
+	return rex.Status(500, buf)
 }
