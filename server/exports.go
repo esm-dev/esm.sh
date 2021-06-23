@@ -67,6 +67,7 @@ func parseCJSModuleExports(buildDir string, importPath string, env string) (ret 
 			'throw', 'throws', 'transient', 'true',
 			'try', 'typeof', 'var', 'void',
 			'volatile', 'while', 'with', 'yield',
+			'__esModule'
 		]
 
 		// the function 'getExports' is copied from https://github.com/evanw/esbuild/issues/442#issuecomment-739340295
