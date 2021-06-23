@@ -335,17 +335,19 @@ func query() rex.Handle {
 			bundle: bundleMode,
 		}
 
-		esm, pkgCSS, ok := findESM(task.ID())
+		taskID := task.ID()
+		esm, pkgCSS, ok := findESM(taskID)
 		if !ok {
-			// find lower build version
-			id := strings.TrimPrefix(task.ID(), fmt.Sprintf("v%d/", VERSION))
-			for i := 0; i < 10; i++ {
-				esm, pkgCSS, ok = findESM(fmt.Sprintf("v%d/%s", VERSION-(i+1), id))
+			// find previous build version
+			for i := 0; i < VERSION; i++ {
+				id := fmt.Sprintf("v%d/%s", VERSION-(i+1), taskID[len(fmt.Sprintf("v%d/", VERSION)):])
+				esm, pkgCSS, ok = findESM(id)
 				if ok {
+					taskID = id
 					break
 				}
 			}
-			// if found a lower build version, then build current module in backgound for the next request
+			// if found a previous build version, then build current module in backgound for the next request
 			// or wait the current build task for 30 seconds
 			if ok {
 				queue.Add(task)
@@ -370,7 +372,7 @@ func query() rex.Handle {
 				if ctx.R.TLS != nil {
 					proto = "https"
 				}
-				url := fmt.Sprintf("%s://%s/%s.css", proto, hostname, task.ID())
+				url := fmt.Sprintf("%s://%s/%s.css", proto, hostname, taskID)
 				code := http.StatusTemporaryRedirect
 				if regVersionPath.MatchString(pathname) {
 					code = http.StatusPermanentRedirect
@@ -384,8 +386,7 @@ func query() rex.Handle {
 			fp := path.Join(
 				config.storageDir,
 				"builds",
-				fmt.Sprintf("v%d", VERSION),
-				pathname,
+				taskID+".js",
 			)
 			if fileExists(fp) {
 				ctx.SetHeader("Cache-Control", "public, max-age=31536000, immutable")
@@ -409,7 +410,7 @@ func query() rex.Handle {
 		}
 
 		fmt.Fprintf(buf, `/* esm.sh - %v */%s`, reqPkg, "\n")
-		fmt.Fprintf(buf, `export * from "%s%s%s";%s`, importPrefix, task.ID(), importSuffix, "\n")
+		fmt.Fprintf(buf, `export * from "%s%s%s";%s`, importPrefix, taskID, importSuffix, "\n")
 
 		if esm.Module != "" {
 			for _, name := range esm.Exports {
@@ -418,7 +419,7 @@ func query() rex.Handle {
 						buf,
 						`export { default } from "%s%s%s";%s`,
 						importPrefix,
-						task.ID(),
+						taskID,
 						importSuffix,
 						"\n",
 					)
@@ -430,7 +431,7 @@ func query() rex.Handle {
 				buf,
 				`export { default } from "%s%s%s";%s`,
 				importPrefix,
-				task.ID(),
+				taskID,
 				importSuffix,
 				"\n",
 			)
