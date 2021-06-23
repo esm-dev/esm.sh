@@ -267,6 +267,33 @@ esbuild:
 						}
 					}
 				}
+				// get package info via `deps` query
+				if importPath == "" {
+					for _, dep := range task.deps {
+						if name == dep.name {
+							filename := path.Base(dep.name)
+							if dep.submodule != "" {
+								filename = dep.submodule
+							}
+							if task.isDev {
+								filename += ".development"
+							}
+							if task.bundle {
+								filename += ".bundle"
+							}
+							importPath = fmt.Sprintf(
+								"/v%d/%s@%s/%s/%s.js",
+								VERSION,
+								dep.name,
+								dep.version,
+								task.target,
+								filename,
+							)
+							break
+						}
+					}
+				}
+				// get package info from package.json
 				if importPath == "" {
 					packageFile := path.Join(task.wd, "node_modules", name, "package.json")
 					if fileExists(packageFile) {
@@ -292,20 +319,13 @@ esbuild:
 						}
 					}
 				}
+				// get package info from network
 				if importPath == "" {
 					version := "latest"
-					for _, dep := range task.deps {
-						if name == dep.name {
-							version = dep.version
+					for n, v := range esmeta.Dependencies {
+						if name == n {
+							version = v
 							break
-						}
-					}
-					if version == "latest" {
-						for n, v := range esmeta.Dependencies {
-							if name == n {
-								version = v
-								break
-							}
 						}
 					}
 					if version == "latest" {
