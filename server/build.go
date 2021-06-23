@@ -155,7 +155,7 @@ func (task *buildTask) buildESM() (esm *ESMeta, pkgCSS bool, err error) {
 					}
 
 					external.Add(p)
-					return api.OnResolveResult{Path: "esm_sh_external://" + p, External: true}, nil
+					return api.OnResolveResult{Path: "__ESM_SH_EXTERNAL__:" + p, External: true}, nil
 				},
 			)
 		},
@@ -347,16 +347,27 @@ esbuild:
 				}
 				buf := bytes.NewBuffer(nil)
 				identifier := identify(name)
-				slice := bytes.Split(outputContent, []byte(fmt.Sprintf("\"esm_sh_external://%s\"", name)))
-				commonjs := false
+				slice := bytes.Split(outputContent, []byte(fmt.Sprintf("\"__ESM_SH_EXTERNAL__:%s\"", name)))
+				commonjsContext := false
 				commonjsImported := false
 				for i, p := range slice {
-					if commonjs {
+					if commonjsContext {
 						p = bytes.TrimPrefix(p, []byte{')'})
 					}
-					commonjs = bytes.HasSuffix(p, []byte("require("))
-					if commonjs {
-						p = bytes.TrimSuffix(p, []byte("require("))
+					commonjsContext = bytes.HasSuffix(p, []byte{'('})
+					if commonjsContext {
+						shift := 0
+						for i := len(p) - 2; i >= 0; i-- {
+							c := p[i]
+							if (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '_' || c == '$' {
+								shift++
+							} else {
+								break
+							}
+						}
+						if shift > 0 {
+							p = p[0 : len(p)-(shift+1)]
+						}
 						if !commonjsImported {
 							wrote := false
 							versionPrefx := fmt.Sprintf("/v%d/", VERSION)
@@ -395,7 +406,7 @@ esbuild:
 					}
 					buf.Write(p)
 					if i < len(slice)-1 {
-						if commonjs {
+						if commonjsContext {
 							buf.WriteString(fmt.Sprintf("__%s$", identifier))
 						} else {
 							buf.WriteString(fmt.Sprintf("\"%s\"", importPath))
