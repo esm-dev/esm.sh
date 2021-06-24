@@ -103,6 +103,9 @@ func (q *buildQueue) wait(t *task) {
 		t.target,
 		time.Now().Sub(t.startTime),
 	)
+	if err != nil {
+		log.Errorf("buildESM: %v", err)
+	}
 
 	q.lock.Lock()
 	defer q.lock.Unlock()

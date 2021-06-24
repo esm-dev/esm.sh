@@ -58,6 +58,29 @@ func query() rex.Handle {
 		case "/favicon.ico":
 			// todo: add esm.sh logo
 			return rex.Err(404)
+		case "/~queue":
+			queue.lock.Lock()
+			q := make([]map[string]interface{}, queue.queue.Len())
+			i := 0
+			for el := queue.queue.Front(); el != nil; el = el.Next() {
+				t, ok := el.Value.(*task)
+				if ok {
+					q[i] = map[string]interface{}{
+						"createTime": t.createTime.Unix(),
+						"startTime":  t.startTime.Unix(),
+						"consumers":  len(t.consumers),
+						"pkg":        t.pkg.String(),
+						"deps":       t.deps.String(),
+						"target":     t.target,
+						"inProcess":  t.inProcess,
+						"isDev":      t.isDev,
+						"bundle":     t.bundle,
+					}
+					i++
+				}
+			}
+			queue.lock.Unlock()
+			return q[0:i]
 		case "/error.js":
 			switch ctx.Form.Value("type") {
 			case "resolve":
