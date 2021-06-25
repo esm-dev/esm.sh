@@ -1,8 +1,21 @@
 # Change Log
 
+## V43
+
+- Add `/status.json` api
+- Use previous build instead of waiting/404 (fix #74)
+- Fix deps query (#71)
+
+# V42
+
+- Add `__esModule` reserved word
+- Align require change for esbuild 0.12
+- Fix setImmediate polyfill args (#75)
+- Upgrade **esbuild** to **0.11.12**
+
 ## V41
 
-- Add `timeout` (30 seconds) for new build request, and use lower build version instead if it exists
+- Add `timeout` (30 seconds) for new build request, or use previous build version instead if it exists
 - Fix `bundle` mode
 - Fix build dead loop
 - Upgrade **esbuild** to **0.11.12**
