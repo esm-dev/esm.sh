@@ -58,7 +58,7 @@ func query() rex.Handle {
 		case "/favicon.ico":
 			// todo: add esm.sh logo
 			return rex.Err(404)
-		case "/~queue":
+		case "/status.json":
 			queue.lock.Lock()
 			q := make([]map[string]interface{}, queue.queue.Len())
 			i := 0
@@ -80,7 +80,9 @@ func query() rex.Handle {
 				}
 			}
 			queue.lock.Unlock()
-			return q[0:i]
+			return map[string]interface{}{
+				"queue": q[0:i],
+			}
 		case "/error.js":
 			switch ctx.Form.Value("type") {
 			case "resolve":
@@ -143,6 +145,8 @@ func query() rex.Handle {
 				storageType = "raw"
 			}
 		}
+
+		// serve raw dist files like css that fetch from unpkg.com
 		if storageType == "raw" {
 			m, err := parsePkg(pathname)
 			if err != nil {
@@ -217,6 +221,8 @@ func query() rex.Handle {
 			}
 			storageType = ""
 		}
+
+		// serve build files
 		if storageType != "" {
 			var filepath string
 			if hasBuildVerPrefix && (storageType == "builds" || storageType == "types") {
@@ -237,6 +243,7 @@ func query() rex.Handle {
 			}
 		}
 
+		// determine build target
 		target := strings.ToLower(strings.TrimSpace(ctx.Form.Value("target")))
 		if _, ok := targets[target]; !ok {
 			ua := ctx.R.UserAgent()
@@ -271,6 +278,7 @@ func query() rex.Handle {
 			}
 		}
 
+		// check deps query
 		deps := pkgSlice{}
 		for _, p := range strings.Split(ctx.Form.Value("deps"), ",") {
 			p = strings.TrimSpace(p)
@@ -361,16 +369,18 @@ func query() rex.Handle {
 		taskID := task.ID()
 		esm, pkgCSS, ok := findESM(taskID)
 		if !ok {
-			// find previous build version
-			for i := 0; i < VERSION; i++ {
-				id := fmt.Sprintf("v%d/%s", VERSION-(i+1), taskID[len(fmt.Sprintf("v%d/", VERSION)):])
-				esm, pkgCSS, ok = findESM(id)
-				if ok {
-					taskID = id
-					break
+			if !isBare {
+				// find previous build version
+				for i := 0; i < VERSION; i++ {
+					id := fmt.Sprintf("v%d/%s", VERSION-(i+1), taskID[len(fmt.Sprintf("v%d/", VERSION)):])
+					esm, pkgCSS, ok = findESM(id)
+					if ok {
+						taskID = id
+						break
+					}
 				}
 			}
-			// if found a previous build version, then build current module in backgound for the next request
+			// if the previous build exists and not in bare mode, then build current module in backgound,
 			// or wait the current build task for 30 seconds
 			if ok {
 				queue.Add(task)
@@ -383,7 +393,7 @@ func query() rex.Handle {
 					esm = output.esm
 					pkgCSS = output.pkgCSS
 				case <-time.After(30 * time.Second):
-					return rex.Err(http.StatusRequestTimeout, "build timeout")
+					return rex.Err(http.StatusRequestTimeout, "timeout, please try later")
 				}
 			}
 		}
