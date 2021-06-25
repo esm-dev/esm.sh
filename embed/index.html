@@ -391,6 +391,11 @@
     <p><em style="color: #999;">Loading...</em></p>
   </main>
   <div class="test"></div>
+  <script>
+    if (location.origin === 'http://esm.sh') {
+      location.href = 'https://esm.sh' + location.pathname + location.search
+    }
+  </script>
   <script type="module">
     import marked from '/marked'
     import hljs from '/highlight.js/lib/core'
