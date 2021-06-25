@@ -6,7 +6,7 @@
 - Use previous build instead of waiting/404 (fix #74)
 - Fix deps query (#71)
 
-# V42
+## V42
 
 - Add `__esModule` reserved word
 - Align require change for esbuild 0.12
