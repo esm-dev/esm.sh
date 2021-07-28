@@ -23,7 +23,7 @@ import (
 
 const (
 	minNodejsVersion = 14
-	nodejsLatestLTS  = "14.15.2"
+	nodejsLatestLTS  = "14.17.3"
 	nodejsDistURL    = "https://nodejs.org/dist/"
 	refreshDuration  = 10 * 60 // 10 minues
 )
