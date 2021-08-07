@@ -12,12 +12,14 @@ var regBrowserVersion = regexp.MustCompile(`^([0-9]+)(?:\.([0-9]+))?(?:\.([0-9]+
 
 var targets = map[string]api.Target{
 	"deno":   api.ESNext,
+	"esnext": api.ESNext,
 	"es2015": api.ES2015,
 	"es2016": api.ES2016,
 	"es2017": api.ES2017,
 	"es2018": api.ES2018,
 	"es2019": api.ES2019,
 	"es2020": api.ES2020,
+	"es2021": api.ES2021,
 }
 
 var engines = map[string]api.EngineName{
@@ -85,6 +87,8 @@ func validateESMAFeatures(target api.Target) int {
 		constraints[compat.ES] = []int{2019}
 	case api.ES2020:
 		constraints[compat.ES] = []int{2020}
+	case api.ES2021:
+		constraints[compat.ES] = []int{2021}
 	case api.ESNext:
 	default:
 		panic("invalid target")
