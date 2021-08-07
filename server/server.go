@@ -49,7 +49,7 @@ func Serve(fs *embed.FS) {
 
 	flag.IntVar(&port, "port", 80, "http server port")
 	flag.IntVar(&httpsPort, "https-port", 443, "https server port")
-	flag.StringVar(&etcDir, "etc-dir", "/usr/local/etc/esmd", "etc dir")
+	flag.StringVar(&etcDir, "etc-dir", "/usr/local/etc/esmd", "the etc dir to store data")
 	flag.StringVar(&domain, "domain", "esm.sh", "main domain")
 	flag.StringVar(&cdnDomain, "cdn-domain", "", "cdn domain")
 	flag.StringVar(&cdnDomainChina, "cdn-domain-china", "", "cdn domain for china")
@@ -168,7 +168,7 @@ func Serve(fs *embed.FS) {
 	rex.Use(
 		rex.ErrorLogger(log),
 		rex.AccessLogger(accessLogger),
-		rex.Header("Server", domain),
+		rex.Header("Server", "esm.sh"),
 		rex.Cors(rex.CORS{
 			AllowAllOrigins: true,
 			AllowMethods:    []string{"GET"},
@@ -205,9 +205,9 @@ func Serve(fs *embed.FS) {
 	}
 
 	// release resource
-	log.FlushBuffer()
-	accessLogger.FlushBuffer()
 	db.Close()
+	accessLogger.FlushBuffer()
+	log.FlushBuffer()
 }
 
 func init() {
