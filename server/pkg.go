@@ -26,25 +26,26 @@ func parsePkg(pathname string) (*pkg, error) {
 		packageName = a[1]
 		submodule = strings.Join(a[2:], "/")
 	}
+
 	name, version := utils.SplitByLastByte(packageName, '@')
 	if scope != "" {
 		name = scope + "/" + name
 	}
-	if name != "" {
-		if version == "" {
-			version = "latest"
-		}
-		info, _, err := node.getPackageInfo(name, version)
-		if err != nil {
-			return nil, err
-		}
-		version = info.Version
-	} else {
+	if name == "" {
 		return nil, errors.New("invalid path")
 	}
+
+	if version == "" {
+		version = "latest"
+	}
+	info, _, err := node.getPackageInfo(name, version)
+	if err != nil {
+		return nil, err
+	}
+
 	return &pkg{
 		name:      name,
-		version:   version,
+		version:   info.Version,
 		submodule: strings.TrimSuffix(submodule, ".js"),
 	}, nil
 }

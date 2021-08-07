@@ -1,6 +1,7 @@
 package server
 
 import (
+	"encoding/base64"
 	"os"
 	"regexp"
 	"strconv"
@@ -113,7 +114,7 @@ func identify(importPath string) string {
 	return string(p)
 }
 
-func isFileImportPath(importPath string) bool {
+func isLocalImport(importPath string) bool {
 	return strings.HasPrefix(importPath, "/") || strings.HasPrefix(importPath, "./") || strings.HasPrefix(importPath, "../") || importPath == "." || importPath == ".."
 }
 
@@ -158,4 +159,19 @@ func ensureDir(dir string) (err error) {
 		err = os.MkdirAll(dir, 0755)
 	}
 	return
+}
+
+func btoaUrl(s string) string {
+	return strings.TrimRight(base64.URLEncoding.EncodeToString([]byte(s)), "=")
+}
+
+func atobUrl(s string) (string, error) {
+	if l := len(s) % 4; l > 0 {
+		s += strings.Repeat("=", 4-l)
+	}
+	data, err := base64.URLEncoding.DecodeString(s)
+	if err != nil {
+		return "", err
+	}
+	return string(data), nil
 }

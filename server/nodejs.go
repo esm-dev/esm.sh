@@ -209,13 +209,7 @@ func (env *NodeEnv) getPackageInfo(name string, version string) (info NpmPackage
 			submodule = strings.Join(slice[1:], "/")
 		}
 	}
-	if strings.HasPrefix(version, "^") {
-		version, _ = utils.SplitByFirstByte(version[1:], '.')
-	} else if strings.HasPrefix(version, "~") {
-		major, rest := utils.SplitByFirstByte(version[1:], '.')
-		minor, _ := utils.SplitByFirstByte(rest, '.')
-		version = major + "." + minor
-	}
+	version = resoveVersion(version)
 	isFullVersion := regFullVersion.MatchString(version)
 	key := fmt.Sprintf("npm:%s@%s", name, version)
 	p, err := db.Get(q.Alias(key), q.Select("package"))
@@ -299,6 +293,37 @@ func (env *NodeEnv) getPackageInfo(name string, version string) (info NpmPackage
 	return
 }
 
+func resoveVersion(version string) string {
+	if version == "*" {
+		return "latest"
+	}
+	if strings.ContainsRune(version, '>') || strings.ContainsRune(version, '<') {
+		return "latest"
+	}
+	for _, p := range []string{"||", " - "} {
+		if strings.Contains(version, p) {
+			a := sort.StringSlice(strings.Split(version, p))
+			vs := make(versionSlice, len(a))
+			for i, v := range a {
+				version := resoveVersion(strings.TrimSpace(v))
+				vs[i] = version
+			}
+			sort.Sort(vs)
+			version = vs[0]
+		}
+	}
+	if strings.HasPrefix(version, "=") {
+		version = strings.TrimPrefix(version, "=")
+	} else if strings.HasPrefix(version, "^") {
+		version, _ = utils.SplitByFirstByte(version[1:], '.')
+	} else if strings.HasPrefix(version, "~") {
+		major, rest := utils.SplitByFirstByte(version[1:], '.')
+		minor, _ := utils.SplitByFirstByte(rest, '.')
+		version = major + "." + minor
+	}
+	return version
+}
+
 func getNodejsVersion() (version string, major int, err error) {
 	output, err := exec.Command("node", "--version").CombinedOutput()
 	if err != nil {
@@ -309,6 +334,62 @@ func getNodejsVersion() (version string, major int, err error) {
 	s, _ := utils.SplitByFirstByte(version, '.')
 	major, err = strconv.Atoi(s)
 	return
+}
+
+func useDefinedExports(p *NpmPackage, define interface{}) {
+	m, ok := define.(map[string]interface{})
+	if ok {
+		for _, key := range []string{"browser", "import", "module"} {
+			value, ok := m[key]
+			if ok {
+				s, ok := value.(string)
+				if ok && s != "" {
+					p.Module = s
+					break
+				}
+			}
+		}
+		for _, key := range []string{"require", "main"} {
+			value, ok := m[key]
+			if ok {
+				s, ok := value.(string)
+				if ok && s != "" {
+					p.Main = s
+					break
+				}
+			}
+		}
+		for key, value := range m {
+			s, ok := value.(string)
+			if ok && s != "" {
+				switch key {
+				case "types":
+					p.Types = s
+				case "typings":
+					p.Typings = s
+				}
+			}
+		}
+	}
+}
+
+func fixNpmPackage(p NpmPackage) *NpmPackage {
+	np := &p
+
+	if p.Module == "" && p.DefinedExports != nil {
+		useDefinedExports(np, p.DefinedExports)
+		if m, ok := p.DefinedExports.(map[string]interface{}); ok {
+			v, ok := m["."]
+			if ok {
+				useDefinedExports(np, v)
+			}
+		}
+	}
+
+	if p.Module == "" && p.Type == "module" {
+		p.Module = p.Main
+	}
+	return np
 }
 
 func installNodejs(dir string, version string) (err error) {

@@ -28,17 +28,19 @@ var (
 
 // Server Config
 type Config struct {
-	storageDir     string
-	domain         string
-	cdnDomain      string
-	cdnDomainChina string
-	unpkgDomain    string
+	storageDir         string
+	domain             string
+	cdnDomain          string
+	cdnDomainChina     string
+	unpkgDomain        string
+	cjsLexerServerPort uint16
 }
 
 // Serve serves esmd server
 func Serve(fs *embed.FS) {
 	var port int
 	var httpsPort int
+	var cjsLexerServerPort int
 	var etcDir string
 	var domain string
 	var cdnDomain string
@@ -49,6 +51,7 @@ func Serve(fs *embed.FS) {
 
 	flag.IntVar(&port, "port", 80, "http server port")
 	flag.IntVar(&httpsPort, "https-port", 443, "https server port")
+	flag.IntVar(&cjsLexerServerPort, "cjs-lexer-server-port", 8088, "cjs lexer server port")
 	flag.StringVar(&etcDir, "etc-dir", "/usr/local/etc/esmd", "the etc dir to store data")
 	flag.StringVar(&domain, "domain", "esm.sh", "main domain")
 	flag.StringVar(&cdnDomain, "cdn-domain", "", "cdn domain")
@@ -69,11 +72,12 @@ func Serve(fs *embed.FS) {
 	}
 
 	config = &Config{
-		storageDir:     path.Join(etcDir, "storage"),
-		domain:         domain,
-		cdnDomain:      cdnDomain,
-		cdnDomainChina: cdnDomainChina,
-		unpkgDomain:    unpkgDomain,
+		cjsLexerServerPort: uint16(cjsLexerServerPort),
+		storageDir:         path.Join(etcDir, "storage"),
+		domain:             domain,
+		cdnDomain:          cdnDomain,
+		cdnDomainChina:     cdnDomainChina,
+		unpkgDomain:        unpkgDomain,
 	}
 	embedFS = fs
 
@@ -164,6 +168,15 @@ func Serve(fs *embed.FS) {
 		log.Fatalf("initiate access logger: %v", err)
 	}
 	accessLogger.SetQuite(true)
+
+	go func() {
+		for {
+			err := startCJSLexerServer(config.cjsLexerServerPort, isDev)
+			if err != nil {
+				log.Errorf("cjs lexer srever: %v", err)
+			}
+		}
+	}()
 
 	rex.Use(
 		rex.ErrorLogger(log),

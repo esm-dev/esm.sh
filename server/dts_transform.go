@@ -52,7 +52,7 @@ func copyDTS(nodeModulesDir string, dts string) (err error) {
 	deps := newStringSet()
 	dmodules := []string{}
 	rewriteFn := func(importPath string) string {
-		if isFileImportPath(importPath) {
+		if isLocalImport(importPath) {
 			if importPath == "." {
 				importPath = "./index.d.ts"
 			}
@@ -119,7 +119,7 @@ func copyDTS(nodeModulesDir string, dts string) (err error) {
 			}
 		}
 		deps.Add(importPath)
-		if !isFileImportPath(importPath) {
+		if !isLocalImport(importPath) {
 			importPath = "/" + importPath
 		}
 		if strings.HasPrefix(importPath, "/") {
@@ -168,7 +168,7 @@ func copyDTS(nodeModulesDir string, dts string) (err error) {
 				format := a[0][1]
 				path := a[0][3]
 				if format == "path" {
-					if !isFileImportPath(path) {
+					if !isLocalImport(path) {
 						path = "./" + path
 					}
 				}
@@ -353,7 +353,7 @@ func copyDTS(nodeModulesDir string, dts string) (err error) {
 	}
 
 	for _, dep := range deps.Values() {
-		if isFileImportPath(dep) {
+		if isLocalImport(dep) {
 			if strings.HasPrefix(dep, "/") {
 				pkg, subpath := utils.SplitByFirstByte(dep, '/')
 				if strings.HasPrefix(pkg, "@") {

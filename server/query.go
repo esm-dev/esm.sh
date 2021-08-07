@@ -55,12 +55,14 @@ func query() rex.Handle {
 			html := bytes.ReplaceAll(indexHTML, []byte("'# README'"), readmeStr)
 			html = bytes.ReplaceAll(html, []byte("{VERSION}"), []byte(fmt.Sprintf("%d", VERSION)))
 			return rex.Content("index.html", startTime, bytes.NewReader(html))
+
 		case "/favicon.svg":
 			data, err := embedFS.ReadFile("embed/favicon.svg")
 			if err != nil {
 				return err
 			}
 			return rex.Content("favicon.svg", startTime, bytes.NewReader(data))
+
 		case "/status.json":
 			queue.lock.Lock()
 			q := make([]map[string]interface{}, queue.queue.Len())
@@ -86,6 +88,7 @@ func query() rex.Handle {
 			return map[string]interface{}{
 				"queue": q[0:i],
 			}
+
 		case "/error.js":
 			switch ctx.Form.Value("type") {
 			case "resolve":
@@ -100,6 +103,7 @@ func query() rex.Handle {
 					ctx.Form.Value("name"),
 					ctx.Form.Value("importer"),
 				))
+
 			default:
 				return throwErrorJS(ctx, fmt.Errorf("Unknown error"))
 			}
@@ -131,19 +135,19 @@ func query() rex.Handle {
 			if hasBuildVerPrefix {
 				storageType = "builds"
 			}
-		case ".ts":
-			if hasBuildVerPrefix && strings.HasSuffix(pathname, ".d.ts") {
-				storageType = "types"
-			} else if len(strings.Split(pathname, "/")) > 2 {
-				storageType = "raw"
-			}
-		case ".css":
+
+		case ".ts", ".jsx", ".tsx", ".css":
 			if hasBuildVerPrefix {
-				storageType = "builds"
+				if strings.HasSuffix(pathname, ".d.ts") {
+					storageType = "types"
+				} else {
+					storageType = "builds"
+				}
 			} else if len(strings.Split(pathname, "/")) > 2 {
 				storageType = "raw"
 			}
-		case ".json", ".jsx", ".tsx", ".less", ".sass", ".scss", ".stylus", ".styl", ".wasm", ".xml", ".yaml", ".svg":
+
+		case ".json", ".less", ".sass", ".scss", ".stylus", ".styl", ".wasm", ".xml", ".yaml", ".svg":
 			if len(strings.Split(pathname, "/")) > 2 {
 				storageType = "raw"
 			}
@@ -265,6 +269,7 @@ func query() rex.Handle {
 						Version: version,
 					})
 					for _, t := range []string{
+						"es2021",
 						"es2020",
 						"es2019",
 						"es2018",
@@ -281,7 +286,21 @@ func query() rex.Handle {
 			}
 		}
 
-		// check deps query
+		// check `alias` query
+		alias := map[string]string{}
+		for _, p := range strings.Split(ctx.Form.Value("alias"), ",") {
+			p = strings.TrimSpace(p)
+			if p != "" {
+				name, to := utils.SplitByFirstByte(p, ':')
+				name = strings.TrimSpace(name)
+				to = strings.TrimSpace(to)
+				if name != "" && to != "" {
+					alias[name] = to
+				}
+			}
+		}
+
+		// check `deps` query
 		deps := pkgSlice{}
 		for _, p := range strings.Split(ctx.Form.Value("deps"), ",") {
 			p = strings.TrimSpace(p)
@@ -315,29 +334,46 @@ func query() rex.Handle {
 		isBare := false
 		if hasBuildVerPrefix && endsWith(pathname, ".js") {
 			a := strings.Split(reqPkg.submodule, "/")
-			if len(a) > 1 {
-				if strings.HasPrefix(a[0], "deps=") {
-					for _, p := range strings.Split(strings.TrimPrefix(a[0], "deps="), ",") {
-						p = strings.TrimSpace(p)
-						if p != "" {
-							if strings.HasPrefix(p, "@") {
-								scope, name := utils.SplitByFirstByte(p, '_')
-								p = scope + "/" + name
-							}
-							m, err := parsePkg(p)
-							if err != nil {
-								if strings.HasSuffix(err.Error(), "not found") {
-									continue
+			if len(a) > 1 && strings.HasPrefix(a[0], "X-") {
+				s, err := atobUrl(strings.TrimPrefix(a[0], "X-"))
+				if err == nil {
+					for _, p := range strings.Split(s, ",") {
+						if strings.HasPrefix(p, "alias:") {
+							for _, p := range strings.Split(strings.TrimPrefix(p, "alias:"), ",") {
+								p = strings.TrimSpace(p)
+								if p != "" {
+									name, to := utils.SplitByFirstByte(p, ':')
+									name = strings.TrimSpace(name)
+									to = strings.TrimSpace(to)
+									if name != "" && to != "" {
+										alias[name] = to
+									}
 								}
-								return throwErrorJS(ctx, err)
 							}
-							if !deps.Has(m.name) {
-								deps = append(deps, *m)
+						} else if strings.HasPrefix(p, "deps:") {
+							for _, p := range strings.Split(strings.TrimPrefix(p, "deps:"), ",") {
+								p = strings.TrimSpace(p)
+								if p != "" {
+									if strings.HasPrefix(p, "@") {
+										scope, name := utils.SplitByFirstByte(p, '_')
+										p = scope + "/" + name
+									}
+									m, err := parsePkg(p)
+									if err != nil {
+										if strings.HasSuffix(err.Error(), "not found") {
+											continue
+										}
+										return throwErrorJS(ctx, err)
+									}
+									if !deps.Has(m.name) {
+										deps = append(deps, *m)
+									}
+								}
 							}
 						}
 					}
-					a = a[1:]
 				}
+				a = a[1:]
 			}
 			if len(a) > 1 {
 				if _, ok := targets[a[0]]; ok || a[0] == "esnext" {
@@ -364,6 +400,7 @@ func query() rex.Handle {
 		task := &buildTask{
 			pkg:    *reqPkg,
 			deps:   deps,
+			alias:  alias,
 			target: target,
 			isDev:  isDev,
 			bundle: bundleMode,
@@ -422,7 +459,7 @@ func query() rex.Handle {
 			fp := path.Join(
 				config.storageDir,
 				"builds",
-				taskID+".js",
+				taskID,
 			)
 			if fileExists(fp) {
 				ctx.SetHeader("Cache-Control", "public, max-age=31536000, immutable")
@@ -433,7 +470,6 @@ func query() rex.Handle {
 
 		buf := bytes.NewBuffer(nil)
 		importPrefix := "/"
-		importSuffix := ".js"
 		if config.cdnDomain != "" {
 			importPrefix = fmt.Sprintf("https://%s/", config.cdnDomain)
 		}
@@ -446,32 +482,17 @@ func query() rex.Handle {
 		}
 
 		fmt.Fprintf(buf, `/* esm.sh - %v */%s`, reqPkg, "\n")
-		fmt.Fprintf(buf, `export * from "%s%s%s";%s`, importPrefix, taskID, importSuffix, "\n")
-
-		if esm.Module != "" {
-			for _, name := range esm.Exports {
-				if name == "default" {
-					fmt.Fprintf(
-						buf,
-						`export { default } from "%s%s%s";%s`,
-						importPrefix,
-						taskID,
-						importSuffix,
-						"\n",
-					)
-					break
-				}
-			}
-		} else {
+		fmt.Fprintf(buf, `export * from "%s%s";%s`, importPrefix, taskID, "\n")
+		if esm.ExportDefault {
 			fmt.Fprintf(
 				buf,
-				`export { default } from "%s%s%s";%s`,
+				`export { default } from "%s%s";%s`,
 				importPrefix,
 				taskID,
-				importSuffix,
 				"\n",
 			)
 		}
+
 		if esm.Dts != "" && !noCheck {
 			value := fmt.Sprintf(
 				"%s%s",

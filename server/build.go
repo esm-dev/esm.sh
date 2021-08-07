@@ -23,6 +23,7 @@ type buildTask struct {
 	id     string
 	wd     string
 	pkg    pkg
+	alias  map[string]string
 	deps   pkgSlice
 	target string
 	isDev  bool
@@ -35,11 +36,14 @@ func (task *buildTask) ID() string {
 	}
 
 	pkg := task.pkg
-	deps := ""
-	target := task.target
 	name := path.Base(pkg.name)
+	query := ""
+	qs := []string{}
 	if pkg.submodule != "" {
 		name = pkg.submodule
+	}
+	if strings.HasSuffix(name, ".js") {
+		name = strings.TrimSuffix(name, ".js")
 	}
 	if task.isDev {
 		name += ".development"
@@ -47,23 +51,65 @@ func (task *buildTask) ID() string {
 	if task.bundle {
 		name += ".bundle"
 	}
-	if len(task.deps) > 0 {
-		sort.Sort(task.deps)
-		deps = fmt.Sprintf("deps=%s/", strings.ReplaceAll(task.deps.String(), "/", "_"))
+	if len(task.alias) > 0 {
+		var ss sort.StringSlice
+		for name, to := range task.alias {
+			ss = append(ss, fmt.Sprintf("%s:%s", name, to))
+		}
+		ss.Sort()
+		qs = append(qs, fmt.Sprintf("alias:%s", strings.Join(ss, ",")))
+
 	}
+	if len(task.deps) > 0 {
+		var ss sort.StringSlice
+		for _, pkg := range task.deps {
+			ss = append(ss, fmt.Sprintf("%s@%s", pkg.name, pkg.version))
+		}
+		ss.Sort()
+		qs = append(qs, fmt.Sprintf("deps:%s", strings.Join(ss, ",")))
+	}
+	if len(qs) > 0 {
+		query = fmt.Sprintf("X-%s/", btoaUrl(strings.Join(qs, ",")))
+	}
+
 	task.id = fmt.Sprintf(
-		"v%d/%s@%s/%s%s/%s",
+		"v%d/%s@%s/%s%s/%s.js",
 		VERSION,
 		pkg.name,
 		pkg.version,
-		deps,
-		target,
+		query,
+		task.target,
 		name,
 	)
 	return task.id
 }
 
-func (task *buildTask) buildESM() (esm *ESMeta, pkgCSS bool, err error) {
+func (task *buildTask) getImportPath(pkg pkg) string {
+	name := path.Base(pkg.name)
+	if pkg.submodule != "" {
+		name = pkg.submodule
+	}
+	if strings.HasSuffix(name, ".js") {
+		name = strings.TrimSuffix(name, ".js")
+	}
+	if task.isDev {
+		name += ".development"
+	}
+	if task.bundle {
+		name += ".bundle"
+	}
+
+	return fmt.Sprintf(
+		"/v%d/%s@%s/%s/%s.js",
+		VERSION,
+		pkg.name,
+		pkg.version,
+		task.target,
+		name,
+	)
+}
+
+func (task *buildTask) build() (esm *ESM, pkgCSS bool, err error) {
 	hasher := sha1.New()
 	hasher.Write([]byte(task.ID()))
 	task.wd = path.Join(os.TempDir(), "esm-build-"+hex.EncodeToString(hasher.Sum(nil)))
@@ -74,39 +120,42 @@ func (task *buildTask) buildESM() (esm *ESMeta, pkgCSS bool, err error) {
 	if task.isDev {
 		env = "development"
 	}
-	esmeta, err := initBuild(task.wd, task.pkg, true, env)
+
+	esm, err = initESM(task.wd, task.pkg, true, task.alias)
 	if err != nil {
+		log.Warn("init ESM:", err)
 		return
 	}
-
-	start := time.Now()
-	buf := bytes.NewBuffer(nil)
-	importPath := task.pkg.ImportPath()
-	exports := newStringSet()
-	hasDefaultExport := false
-	for _, name := range esmeta.Exports {
-		if name == "default" {
-			hasDefaultExport = true
-		} else if name != "import" {
-			exports.Add(name)
+	defer func() {
+		if err != nil {
+			esm = nil
 		}
-	}
-	if exports.Size() > 0 {
-		fmt.Fprintf(buf, `import * as __star from "%s";%s`, importPath, "\n")
-		fmt.Fprintf(buf, `export const { %s } = __star;%s`, strings.Join(exports.Values(), ","), "\n")
-	}
-	if esmeta.Module == "" || hasDefaultExport {
+	}()
+
+	cjs := esm.Module == ""
+
+	var entryPoint string
+	var input *api.StdinOptions
+	if cjs {
+		buf := bytes.NewBuffer(nil)
+		importPath := task.pkg.ImportPath()
+		if len(esm.Exports) > 0 {
+			fmt.Fprintf(buf, `import * as __star from "%s";%s`, importPath, "\n")
+			fmt.Fprintf(buf, `export const { %s } = __star;%s`, strings.Join(esm.Exports, ","), "\n")
+		}
 		fmt.Fprintf(buf, `export { default } from "%s";`, importPath)
-	}
-	input := &api.StdinOptions{
-		Contents:   buf.String(),
-		ResolveDir: task.wd,
-		Sourcefile: "export.js",
+		input = &api.StdinOptions{
+			Contents:   buf.String(),
+			ResolveDir: task.wd,
+			Sourcefile: "export.js",
+		}
+	} else {
+		entryPoint = path.Join(task.wd, "node_modules", task.pkg.name, esm.Module)
 	}
 	minify := !task.isDev
 	define := map[string]string{
-		"__filename":                  fmt.Sprintf(`"https://%s/%s.js"`, config.domain, task.ID()),
-		"__dirname":                   fmt.Sprintf(`"https://%s/%s"`, config.domain, path.Dir(task.ID())),
+		"__filename":                  fmt.Sprintf(`"https://%s/%s"`, config.cdnDomain, task.ID()),
+		"__dirname":                   fmt.Sprintf(`"https://%s/%s"`, config.cdnDomain, path.Dir(task.ID())),
 		"process":                     "__process$",
 		"Buffer":                      "__Buffer$",
 		"setImmediate":                "__setImmediate$",
@@ -129,46 +178,47 @@ func (task *buildTask) buildESM() (esm *ESMeta, pkgCSS bool, err error) {
 			plugin.OnResolve(
 				api.OnResolveOptions{Filter: ".*"},
 				func(args api.OnResolveArgs) (api.OnResolveResult, error) {
-					p := strings.TrimSuffix(args.Path, "/")
-					importName := task.pkg.name
-					if s := task.pkg.submodule; s != "" {
-						importName += "/" + s
+					specifier := strings.TrimSuffix(args.Path, "/")
+					if alias, ok := task.alias[specifier]; ok {
+						specifier = alias
+					}
+
+					// should resolve entryPoint
+					if strings.HasPrefix(specifier, task.wd) {
+						return api.OnResolveResult{}, nil
 					}
 
 					// should resolve:
-					// 1. current package itself
-					// 2. sub-modules of current package
-					// 3. sub-modules of other packages
-					if p == importName ||
-						isFileImportPath(p) ||
-						(!strings.HasPrefix(p, "@") && len(strings.Split(p, "/")) > 1) ||
-						(strings.HasPrefix(p, "@") && len(strings.Split(p, "/")) > 2) {
+					// 1. current package/module itself
+					// 2. local imports
+					// 3. sub-modules of deps (cjs)
+					if specifier == task.pkg.ImportPath() ||
+						isLocalImport(specifier) ||
+						(cjs &&
+							((!strings.HasPrefix(specifier, "@") && len(strings.Split(specifier, "/")) > 1) ||
+								(strings.HasPrefix(specifier, "@") && len(strings.Split(specifier, "/")) > 2))) {
 						return api.OnResolveResult{}, nil
 					}
 
 					// bundle all deps except peer deps in bundle mode
-					if task.bundle && !builtInNodeModules[p] {
-						_, ok := esmeta.PeerDependencies[p]
+					if task.bundle && !builtInNodeModules[specifier] {
+						_, ok := esm.PeerDependencies[specifier]
 						if !ok {
 							return api.OnResolveResult{}, nil
 						}
 					}
 
-					external.Add(p)
-					return api.OnResolveResult{Path: "__ESM_SH_EXTERNAL__:" + p, External: true}, nil
+					// external
+					external.Add(specifier)
+					return api.OnResolveResult{Path: "__ESM_SH_EXTERNAL__:" + specifier, External: true}, nil
 				},
 			)
 		},
 	}
-	for name := range builtInNodeModules {
-		if name != task.pkg.name {
-			external.Add(name)
-		}
-	}
 
 esbuild:
-	result := api.Build(api.BuildOptions{
-		Stdin:             input,
+	start := time.Now()
+	options := api.BuildOptions{
 		Outdir:            "/esbuild",
 		Write:             false,
 		Bundle:            true,
@@ -178,20 +228,40 @@ esbuild:
 		MinifyWhitespace:  minify,
 		MinifyIdentifiers: minify,
 		MinifySyntax:      minify,
-		External:          external.Values(),
-		Define:            define,
 		Plugins:           []api.Plugin{esmResolverPlugin},
-	})
-
+	}
+	if task.target != "node" {
+		options.Define = define
+	}
+	if entryPoint != "" {
+		options.EntryPoints = []string{entryPoint}
+	} else {
+		options.Stdin = input
+	}
+	result := api.Build(options)
 	if len(result.Errors) > 0 {
 		// mark the missing module as external to exclude it from the bundle
 		msg := result.Errors[0].Text
 		if strings.HasPrefix(msg, "Could not resolve \"") && strings.Contains(msg, "mark it as external to exclude it from the bundle") {
+			// but current package/module can not mark as external
+			if strings.Contains(msg, fmt.Sprintf("Could not resolve \"%s\"", task.pkg.ImportPath())) {
+				err = fmt.Errorf("Could not resolve \"%s\"", task.pkg.ImportPath())
+				return
+			}
 			log.Warnf("esbuild(%s): %s", task.ID(), msg)
 			name := strings.Split(msg, "\"")[1]
 			if !extraExternal.Has(name) {
 				external.Add(name)
 				extraExternal.Add(name)
+				goto esbuild
+			}
+		} else if strings.HasPrefix(msg, "No matching export in \"") && strings.Contains(msg, "for import \"default\"") {
+			if cjs {
+				input = &api.StdinOptions{
+					Contents:   fmt.Sprintf(`import "%s";`, task.pkg.ImportPath()),
+					ResolveDir: task.wd,
+					Sourcefile: "export.js",
+				}
 				goto esbuild
 			}
 		}
@@ -207,19 +277,6 @@ esbuild:
 	for _, file := range result.OutputFiles {
 		outputContent := file.Contents
 		if strings.HasSuffix(file.Path, ".js") {
-			// ingore unexpected build
-			if len(outputContent) < 512 {
-				s := task.pkg.name
-				if task.pkg.submodule != "" {
-					s += "/" + task.pkg.submodule
-				}
-				if (!task.isDev && bytes.Contains(outputContent, []byte(fmt.Sprintf("}from\"%s\"", s)))) ||
-					(task.isDev && bytes.Contains(outputContent, []byte(fmt.Sprintf("} from \"%s\"", s)))) {
-					err = errors.New("unexpected esbuild output")
-					return
-				}
-			}
-
 			jsHeader := bytes.NewBufferString(fmt.Sprintf(
 				"/* esm.sh - esbuild bundle(%s) %s %s */\n",
 				task.pkg.String(),
@@ -234,11 +291,27 @@ esbuild:
 			// replace external imports/requires
 			for _, name := range external.Values() {
 				var importPath string
-				if name == "buffer" {
-					importPath = fmt.Sprintf("/v%d/node_buffer.js", VERSION)
+				// is local imports
+				if isLocalImport(name) {
+					filename := name
+					if path.Ext(filename) == "" {
+						filename += ".js"
+					}
+					importPath = "/" + path.Join(path.Dir(task.ID()), filename)
 				}
+				// is builtin `buffer` module
+				if importPath == "" && name == "buffer" {
+					if task.target == "node" {
+						importPath = "buffer"
+					} else {
+						importPath = fmt.Sprintf("/v%d/node_buffer.js", VERSION)
+					}
+				}
+				// is builtin node module
 				if importPath == "" && builtInNodeModules[name] {
-					if task.target == "deno" && denoStdNodeModules[name] {
+					if task.target == "node" {
+						importPath = name
+					} else if task.target == "deno" && denoStdNodeModules[name] {
 						importPath = fmt.Sprintf("/v%d/deno_std_node_%s.js", VERSION, name)
 					} else {
 						polyfill, ok := polyfilledBuiltInNodeModules[name]
@@ -248,24 +321,11 @@ esbuild:
 								err = e
 								return
 							}
-							filename := path.Base(p.Name)
-							if submodule != "" {
-								filename = submodule
-							}
-							if task.isDev {
-								filename += ".development"
-							}
-							if task.bundle {
-								filename += ".bundle"
-							}
-							importPath = fmt.Sprintf(
-								"/v%d/%s@%s/%s/%s.js",
-								VERSION,
-								p.Name,
-								p.Version,
-								task.target,
-								filename,
-							)
+							importPath = task.getImportPath(pkg{
+								name:      p.Name,
+								version:   p.Version,
+								submodule: submodule,
+							})
 						} else {
 							_, err := embedFS.Open(fmt.Sprintf("embed/polyfills/node_%s.js", name))
 							if err == nil {
@@ -283,112 +343,53 @@ esbuild:
 				// get package info via `deps` query
 				if importPath == "" {
 					for _, dep := range task.deps {
-						if name == dep.name {
-							filename := path.Base(dep.name)
-							if dep.submodule != "" {
-								filename = dep.submodule
-							}
-							if task.isDev {
-								filename += ".development"
-							}
-							if task.bundle {
-								filename += ".bundle"
-							}
-							importPath = fmt.Sprintf(
-								"/v%d/%s@%s/%s/%s.js",
-								VERSION,
-								dep.name,
-								dep.version,
-								task.target,
-								filename,
-							)
+						if name == dep.ImportPath() {
+							importPath = task.getImportPath(dep)
 							break
 						}
 					}
 				}
-				// get package info from package.json
-				if importPath == "" {
-					packageFile := path.Join(task.wd, "node_modules", name, "package.json")
-					if fileExists(packageFile) {
-						var p NpmPackage
-						if utils.ParseJSONFile(packageFile, &p) == nil {
-							suffix := ""
-							if task.isDev {
-								suffix = ".development"
-							}
-							if task.bundle {
-								suffix = ".bundle"
-							}
-							suffix += ".js"
-							importPath = fmt.Sprintf(
-								"/v%d/%s@%s/%s/%s%s",
-								VERSION,
-								p.Name,
-								p.Version,
-								task.target,
-								path.Base(p.Name),
-								suffix,
-							)
-						}
-					}
+				// is sub-module
+				if importPath == "" && strings.HasPrefix(name, task.pkg.name+"/") {
+					submodule := strings.TrimPrefix(name, task.pkg.name+"/")
+					importPath = task.getImportPath(pkg{
+						name:      task.pkg.name,
+						version:   task.pkg.version,
+						submodule: submodule,
+					})
 				}
-				// get package info from network
+				// get package info from NPM
 				if importPath == "" {
 					version := "latest"
-					for n, v := range esmeta.Dependencies {
-						if name == n {
-							version = v
-							break
-						}
-					}
-					if version == "latest" {
-						for n, v := range esmeta.PeerDependencies {
-							if name == n {
-								version = v
-								break
-							}
-						}
+					if v, ok := esm.Dependencies[name]; ok {
+						version = v
+					} else if v, ok := esm.PeerDependencies[name]; ok {
+						version = v
 					}
 					p, submodule, e := node.getPackageInfo(name, version)
 					if e == nil {
-						filename := path.Base(p.Name)
-						if submodule != "" {
-							filename = submodule
-						}
-						if task.isDev {
-							filename += ".development"
-						}
-						if task.bundle {
-							filename += ".bundle"
-						}
-						importPath = fmt.Sprintf(
-							"/v%d/%s@%s/%s/%s.js",
-							VERSION,
-							p.Name,
-							p.Version,
-							task.target,
-							filename,
-						)
+						importPath = task.getImportPath(pkg{
+							name:      p.Name,
+							version:   p.Version,
+							submodule: submodule,
+						})
 					}
 				}
 				if importPath == "" {
-					importPath = fmt.Sprintf(
-						"/error.js?type=resolve&name=%s&importer=%s",
-						name,
-						task.pkg.name,
-					)
+					err = fmt.Errorf("Could not resolve \"%s\"  (Imported by \"%s\")", name, task.pkg.name)
+					return
 				}
 				buf := bytes.NewBuffer(nil)
 				identifier := identify(name)
 				slice := bytes.Split(outputContent, []byte(fmt.Sprintf("\"__ESM_SH_EXTERNAL__:%s\"", name)))
-				commonjsContext := false
-				commonjsImported := false
+				cjsContext := false
+				cjsImported := false
 				for i, p := range slice {
-					if commonjsContext {
+					if cjsContext {
 						p = bytes.TrimPrefix(p, []byte{')'})
 					}
-					commonjsContext = bytes.HasSuffix(p, []byte{'('})
-					if commonjsContext {
+					cjsContext = bytes.HasSuffix(p, []byte{'('})
+					if cjsContext {
 						shift := 0
 						for i := len(p) - 2; i >= 0; i-- {
 							c := p[i]
@@ -401,7 +402,7 @@ esbuild:
 						if shift > 0 {
 							p = p[0 : len(p)-(shift+1)]
 						}
-						if !commonjsImported {
+						if !cjsImported {
 							wrote := false
 							versionPrefx := fmt.Sprintf("/v%d/", VERSION)
 							if strings.HasPrefix(importPath, versionPrefx) {
@@ -409,22 +410,13 @@ esbuild:
 								if err == nil {
 									// here the submodule should be always empty
 									pkg.submodule = ""
-									_, installed := esmeta.Dependencies[name]
+									_, installed := esm.Dependencies[name]
 									if !installed {
-										_, installed = esmeta.PeerDependencies[name]
+										_, installed = esm.PeerDependencies[name]
 									}
-									meta, err := initBuild(task.wd, *pkg, !installed, env)
+									meta, err := initESM(task.wd, *pkg, !installed, nil)
 									if err == nil && meta.Module != "" {
-										hasDefaultExport := false
-										if len(meta.Exports) > 0 {
-											for _, name := range meta.Exports {
-												if name == "default" {
-													hasDefaultExport = true
-													break
-												}
-											}
-										}
-										if !hasDefaultExport {
+										if !meta.ExportDefault {
 											fmt.Fprintf(jsHeader, `import * as __%s$ from "%s";%s`, identifier, importPath, eol)
 											wrote = true
 										}
@@ -434,12 +426,12 @@ esbuild:
 							if !wrote {
 								fmt.Fprintf(jsHeader, `import __%s$ from "%s";%s`, identifier, importPath, eol)
 							}
-							commonjsImported = true
+							cjsImported = true
 						}
 					}
 					buf.Write(p)
 					if i < len(slice)-1 {
-						if commonjsContext {
+						if cjsContext {
 							buf.WriteString(fmt.Sprintf("__%s$", identifier))
 						} else {
 							buf.WriteString(fmt.Sprintf("\"%s\"", importPath))
@@ -450,23 +442,25 @@ esbuild:
 			}
 
 			// add nodejs/deno compatibility
-			if bytes.Contains(outputContent, []byte("__process$")) {
-				fmt.Fprintf(jsHeader, `import __process$ from "/v%d/node_process.js";%s__process$.env.NODE_ENV="%s";%s`, VERSION, eol, env, eol)
-			}
-			if bytes.Contains(outputContent, []byte("__Buffer$")) {
-				fmt.Fprintf(jsHeader, `import { Buffer as __Buffer$ } from "/v%d/node_buffer.js";%s`, VERSION, eol)
-			}
-			if bytes.Contains(outputContent, []byte("__global$")) {
-				fmt.Fprintf(jsHeader, `var __global$ = window;%s`, eol)
-			}
-			if bytes.Contains(outputContent, []byte("__setImmediate$")) {
-				fmt.Fprintf(jsHeader, `var __setImmediate$ = (cb, ...args) => setTimeout(cb, 0, ...args);%s`, eol)
-			}
-			if bytes.Contains(outputContent, []byte("__rResolve$")) {
-				fmt.Fprintf(jsHeader, `var __rResolve$ = p => p;%s`, eol)
+			if task.target != "node" {
+				if bytes.Contains(outputContent, []byte("__process$")) {
+					fmt.Fprintf(jsHeader, `import __process$ from "/v%d/node_process.js";%s__process$.env.NODE_ENV="%s";%s`, VERSION, eol, env, eol)
+				}
+				if bytes.Contains(outputContent, []byte("__Buffer$")) {
+					fmt.Fprintf(jsHeader, `import { Buffer as __Buffer$ } from "/v%d/node_buffer.js";%s`, VERSION, eol)
+				}
+				if bytes.Contains(outputContent, []byte("__global$")) {
+					fmt.Fprintf(jsHeader, `var __global$ = window;%s`, eol)
+				}
+				if bytes.Contains(outputContent, []byte("__setImmediate$")) {
+					fmt.Fprintf(jsHeader, `var __setImmediate$ = (cb, ...args) => setTimeout(cb, 0, ...args);%s`, eol)
+				}
+				if bytes.Contains(outputContent, []byte("__rResolve$")) {
+					fmt.Fprintf(jsHeader, `var __rResolve$ = p => p;%s`, eol)
+				}
 			}
 
-			saveFilePath := path.Join(config.storageDir, "builds", task.ID()+".js")
+			saveFilePath := path.Join(config.storageDir, "builds", task.ID())
 			ensureDir(path.Dir(saveFilePath))
 
 			var file *os.File
@@ -486,7 +480,7 @@ esbuild:
 				return
 			}
 		} else if strings.HasSuffix(file.Path, ".css") {
-			saveFilePath := path.Join(config.storageDir, "builds", task.ID()+".css")
+			saveFilePath := path.Join(config.storageDir, "builds", strings.TrimSuffix(task.ID(), ".js")+".css")
 			ensureDir(path.Dir(saveFilePath))
 			file, e := os.Create(saveFilePath)
 			if e != nil {
@@ -505,7 +499,7 @@ esbuild:
 
 	log.Debugf("esbuild %s %s %s in %v", task.pkg.String(), task.target, env, time.Now().Sub(start))
 
-	err = task.handleDTS(esmeta)
+	err = task.handleDTS(esm)
 	if err != nil {
 		return
 	}
@@ -513,8 +507,8 @@ esbuild:
 	_, err = db.Put(
 		q.Alias(task.ID()),
 		q.KV{
-			"esmeta": utils.MustEncodeJSON(esmeta),
-			"css":    cssMark,
+			"esm": utils.MustEncodeJSON(esm),
+			"css": cssMark,
 		},
 	)
 	if err != nil && err == postdb.ErrDuplicateAlias {
@@ -524,20 +518,19 @@ esbuild:
 		return
 	}
 
-	esm = esmeta
 	pkgCSS = cssMark[0] == 1
 	return
 }
 
-func (task *buildTask) handleDTS(esmeta *ESMeta) (err error) {
+func (task *buildTask) handleDTS(esm *ESM) (err error) {
 	start := time.Now()
 	pkg := task.pkg
 	nodeModulesDir := path.Join(task.wd, "node_modules")
-	versionedName := fmt.Sprintf("%s@%s", esmeta.Name, esmeta.Version)
+	versionedName := fmt.Sprintf("%s@%s", esm.Name, esm.Version)
 
 	var types string
-	if esmeta.Types != "" || esmeta.Typings != "" {
-		types = getTypesPath(nodeModulesDir, *esmeta.NpmPackage, "")
+	if esm.Types != "" || esm.Typings != "" {
+		types = getTypesPath(nodeModulesDir, *esm.NpmPackage, "")
 	} else if pkg.submodule == "" {
 		if fileExists(path.Join(nodeModulesDir, pkg.name, "index.d.ts")) {
 			types = fmt.Sprintf("%s/%s", versionedName, "index.d.ts")
@@ -571,127 +564,9 @@ func (task *buildTask) handleDTS(esmeta *ESMeta) (err error) {
 			err = fmt.Errorf("copyDTS(%s): %v", types, err)
 			return
 		}
-		esmeta.Dts = "/" + types
+		esm.Dts = "/" + types
 		log.Debug("copy dts in", time.Now().Sub(start))
 	}
 
-	return
-}
-
-func initBuild(buildDir string, pkg pkg, install bool, env string) (esmeta *ESMeta, err error) {
-	var p NpmPackage
-	p, _, err = node.getPackageInfo(pkg.name, pkg.version)
-	if err != nil {
-		return
-	}
-
-	esmeta = &ESMeta{
-		NpmPackage: &p,
-	}
-	installList := []string{
-		fmt.Sprintf("%s@%s", pkg.name, pkg.version),
-	}
-	pkgDir := path.Join(buildDir, "node_modules", esmeta.Name)
-	if esmeta.Types == "" && esmeta.Typings == "" && !strings.HasPrefix(pkg.name, "@") {
-		var info NpmPackage
-		info, _, err = node.getPackageInfo("@types/"+pkg.name, "latest")
-		if err == nil {
-			if info.Types != "" || info.Typings != "" || info.Main != "" {
-				installList = append(installList, fmt.Sprintf("%s@%s", info.Name, info.Version))
-			}
-		} else if err.Error() != fmt.Sprintf("npm: package '@types/%s' not found", pkg.name) {
-			return
-		}
-	}
-	if esmeta.Module == "" && esmeta.Type == "module" {
-		esmeta.Module = esmeta.Main
-	}
-	if esmeta.Module == "" && esmeta.DefinedExports != nil {
-		v, ok := esmeta.DefinedExports.(map[string]interface{})
-		if ok {
-			m, ok := v["import"]
-			if ok {
-				s, ok := m.(string)
-				if ok && s != "" {
-					esmeta.Module = s
-				}
-			}
-		}
-	}
-	if pkg.submodule != "" {
-		esmeta.Main = pkg.submodule
-		esmeta.Module = ""
-		esmeta.Types = ""
-		esmeta.Typings = ""
-	}
-
-	if install {
-		for n, v := range esmeta.PeerDependencies {
-			installList = append(installList, fmt.Sprintf("%s@%s", n, v))
-		}
-		err = yarnAdd(buildDir, installList...)
-		if err != nil {
-			return
-		}
-	}
-
-	if pkg.submodule != "" {
-		packageFile := path.Join(pkgDir, pkg.submodule, "package.json")
-		if fileExists(packageFile) {
-			var p NpmPackage
-			err = utils.ParseJSONFile(packageFile, &p)
-			if err != nil {
-				return
-			}
-			if p.Main != "" {
-				esmeta.Main = path.Join(pkg.submodule, p.Main)
-			}
-			if p.Module != "" {
-				esmeta.Module = path.Join(pkg.submodule, p.Module)
-			} else if esmeta.Type == "module" && p.Main != "" {
-				esmeta.Module = path.Join(pkg.submodule, p.Main)
-			}
-			if p.Types != "" {
-				esmeta.Types = path.Join(pkg.submodule, p.Types)
-			}
-			if p.Typings != "" {
-				esmeta.Typings = path.Join(pkg.submodule, p.Typings)
-			}
-		} else {
-			exports, esm, e := parseESModuleExports(buildDir, path.Join(esmeta.Name, pkg.submodule))
-			if e != nil && os.IsExist(e) {
-				err = e
-				return
-			}
-			if esm {
-				esmeta.Module = pkg.submodule
-				esmeta.Exports = exports
-			}
-		}
-	}
-
-	if esmeta.Module != "" {
-		exports, esm, e := parseESModuleExports(buildDir, path.Join(esmeta.Name, esmeta.Module))
-		if e != nil && os.IsExist(e) {
-			err = e
-			return
-		}
-		if esm {
-			esmeta.Exports = exports
-			log.Debug(p.Name, len(esmeta.Exports), "exports as es moudle")
-		} else {
-			// fake module
-			esmeta.Module = ""
-		}
-	}
-
-	if esmeta.Module == "" {
-		ret, err := parseCJSModuleExports(buildDir, pkg.ImportPath(), env)
-		if err != nil {
-			log.Warn(err)
-		}
-		esmeta.Exports = ret.Exports
-		log.Debug(p.Name, len(esmeta.Exports), "exports as cjs")
-	}
 	return
 }

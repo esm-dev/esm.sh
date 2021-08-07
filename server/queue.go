@@ -16,7 +16,7 @@ type buildQueue struct {
 }
 
 type buildOutput struct {
-	esm    *ESMeta
+	esm    *ESM
 	pkgCSS bool
 	err    error
 }
@@ -96,7 +96,7 @@ func (q *buildQueue) next() {
 
 func (q *buildQueue) wait(t *task) {
 	t.startTime = time.Now()
-	esm, pkgCSS, err := t.buildESM()
+	esm, pkgCSS, err := t.build()
 	log.Debugf(
 		"queue(%s,%s) done in %s",
 		t.pkg.String(),
