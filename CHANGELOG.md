@@ -1,5 +1,26 @@
 # Change Log
 
+## V44
+
+- Add `Alias` feature (#89)
+  ```javascript
+  import useSWR from 'https://esm.sh/swr?alias=react:preact/compat'
+  ```
+
+  in combination with `?deps`:
+
+  ```javascript
+  import useSWR from 'https://esm.sh/swr?alias=react:preact/compat&deps=preact@10.5.14'
+  ```
+
+  This idea was from [@lucacasonato](https://github.com/lucacasonato).
+- Add `node` build target (#84)
+- Add `es2021` build target
+- Check `exports` field to get entry point in `package.json`
+- Run cjs-lexer as a server
+- Upgrade **esbuild** to **0.11.18**
+- Bugfixs for #90, #85, #83, #77, #65, #57, #48, #41
+
 ## V43
 
 - Add `/status.json` api
