@@ -55,9 +55,12 @@ func query() rex.Handle {
 			html := bytes.ReplaceAll(indexHTML, []byte("'# README'"), readmeStr)
 			html = bytes.ReplaceAll(html, []byte("{VERSION}"), []byte(fmt.Sprintf("%d", VERSION)))
 			return rex.Content("index.html", startTime, bytes.NewReader(html))
-		case "/favicon.ico":
-			// todo: add esm.sh logo
-			return rex.Err(404)
+		case "/favicon.svg":
+			data, err := embedFS.ReadFile("embed/favicon.svg")
+			if err != nil {
+				return err
+			}
+			return rex.Content("favicon.svg", startTime, bytes.NewReader(data))
 		case "/status.json":
 			queue.lock.Lock()
 			q := make([]map[string]interface{}, queue.queue.Len())
