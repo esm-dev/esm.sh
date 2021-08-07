@@ -55,7 +55,7 @@ import useSWR from 'https://esm.sh/swr?deps=react@16.14.0'
 
 Separate multiple deps with commas: `?deps=react@16.14.0,react-dom@16.14.0`
 
-### Alias deps
+### Aliasing dependencies
 
 ```javascript
 import useSWR from 'https://esm.sh/swr?alias=react:preact/compat'
