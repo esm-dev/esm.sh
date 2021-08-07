@@ -14,6 +14,12 @@ import React from 'https://esm.sh/react'
 import React from 'https://esm.sh/react@17.0.2'
 ```
 
+or use a major version:
+
+```javascript
+import React from 'https://esm.sh/react@17'
+```
+
 ### Submodule
 
 ```javascript
@@ -47,6 +53,30 @@ import React from 'https://esm.sh/react@16.14.0'
 import useSWR from 'https://esm.sh/swr?deps=react@16.14.0'
 ```
 
+Separate multiple deps with commas: `?deps=react@16.14.0,react-dom@16.14.0`
+
+### Alias dependencies
+
+```javascript
+import useSWR from 'https://esm.sh/swr?alias=react:preact/compat'
+```
+
+in combination with `?deps`:
+
+```javascript
+import useSWR from 'https://esm.sh/swr?alias=react:preact/compat&deps=preact@10.5.14'
+```
+
+This idea was from [@lucacasonato](https://github.com/lucacasonato).
+
+### Specify ESM target
+
+```javascript
+import React from 'https://esm.sh/react?target=es2020'
+```
+
+By default, esm.sh will check the browser's `User-Agent` to get the build target automatically. You also can specify it with the `target` query. Available targets: **es2015** - **es2021**, **esnext**, **node**, and **deno**.
+
 ### Package CSS
 
 ```javascript
@@ -57,13 +87,7 @@ import Daygrid from 'https://esm.sh/@fullcalendar/daygrid'
 <link rel="stylesheet" href="https://esm.sh/@fullcalendar/daygrid?css">
 ```
 
-### Specify ESM target
-
-```javascript
-import React from 'https://esm.sh/react?target=es2020'
-```
-
-By default, esm.sh will check the browser's `User-Agent` to get the build target, or set it based on the `target` query. Available targets: **es2015** - **es2020**, **esnext**, and **deno**.
+Only works when you import a NPM package that imports css files directly.
 
 ## Deno compatibility
 
