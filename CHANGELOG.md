@@ -2,36 +2,39 @@
 
 ## V44
 
-- Add `Alias` feature (#89)
+- Add `Alias` feature ([#89](https://github.com/postui/esm.sh/issues/89))
   ```javascript
   import useSWR from 'https://esm.sh/swr?alias=react:preact/compat'
   ```
-
   in combination with `?deps`:
-
   ```javascript
   import useSWR from 'https://esm.sh/swr?alias=react:preact/compat&deps=preact@10.5.14'
   ```
-
-  This idea was from [@lucacasonato](https://github.com/lucacasonato).
-- Add `node` build target (#84)
-- Add `es2021` build target
+  The origin idea was came from [@lucacasonato](https://github.com/lucacasonato).
+- Add `node` build target ([#84](https://github.com/postui/esm.sh/issues/84))
 - Check `exports` field to get entry point in `package.json`
 - Run cjs-lexer as a server
-- Upgrade **esbuild** to **0.11.18**
-- Bugfixs for #90, #85, #83, #77, #65, #57, #48, #41
+- Upgrade **esbuild** to **0.11.18** with `es2021` build target
+- Bugfixs for
+[#90](https://github.com/postui/esm.sh/issues/90),
+[#85](https://github.com/postui/esm.sh/issues/85),
+[#83](https://github.com/postui/esm.sh/issues/83),
+[#77](https://github.com/postui/esm.sh/issues/77),
+[#65](https://github.com/postui/esm.sh/issues/65),
+[#48](https://github.com/postui/esm.sh/issues/48),
+[#41](https://github.com/postui/esm.sh/issues/41).
 
 ## V43
 
 - Add `/status.json` api
-- Use previous build instead of waiting/404 (fix #74)
-- Fix deps query (#71)
+- Use previous build instead of waiting/404 (fix [#74](https://github.com/postui/esm.sh/issues/74))
+- Fix deps query ([#71](https://github.com/postui/esm.sh/issues/71))
 
 ## V42
 
 - Add `__esModule` reserved word
 - Align require change for esbuild 0.12
-- Fix setImmediate polyfill args (#75)
+- Fix setImmediate polyfill args ([#75](https://github.com/postui/esm.sh/issues/75))
 - Upgrade **esbuild** to **0.11.12**
 
 ## V41
@@ -84,6 +87,6 @@
 - Fix `__setImmediate$` is not defined
 - Support exports define in package.json
 - Support mjs extension
-- Improve NpmPackage resolve (**fix** #41)
+- Improve NpmPackage resolve (**fix** [#41](https://github.com/postui/esm.sh/issues/41))
 - Upgrade esbuild to **0.11.4**
 - Upgrade rex to **1.3.0**
