@@ -6,18 +6,7 @@ dataUrl="https://github.com/alecthw/mmdb_china_ip_list/releases/download/${mmdb_
 saveAs="$(dirname $0)/../embed/china_ip_list.mmdb"
 cacheTo="/tmp/china_ip_list.${mmdb_china_ip_list_tag}.mmdb"
 
-read -p "build GOOS (default is 'linux'): " goos
-read -p "build GOARCH (default is 'amd64'): " goarch
 read -p "split China traffic? y/N " split_china_traffic
-
-if [ "$goos" == "" ]; then
-  goos="linux"
-fi
-
-if [ "$goarch" == "" ]; then
-  goarch="amd64"
-fi
-
 if [ "$split_china_traffic" == "y" ]; then
   if [ ! -f "$cacheTo" ]; then
     echo "--- download china_ip_list.mmdb..."
@@ -32,6 +21,16 @@ else
     rm "$saveAs"
   fi
 fi
+
+read -p "build GOOS (default is 'linux'): " goos
+read -p "build GOARCH (default is 'amd64'): " goarch
+if [ "$goos" == "" ]; then
+  goos="linux"
+fi
+if [ "$goarch" == "" ]; then
+  goarch="amd64"
+fi
+
 
 echo "--- building(${goos}_$goarch)..."
 export GOOS=$goos
