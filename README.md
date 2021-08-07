@@ -55,7 +55,7 @@ import useSWR from 'https://esm.sh/swr?deps=react@16.14.0'
 
 Separate multiple deps with commas: `?deps=react@16.14.0,react-dom@16.14.0`
 
-### Alias dependencies
+### Alias deps
 
 ```javascript
 import useSWR from 'https://esm.sh/swr?alias=react:preact/compat'
@@ -67,7 +67,7 @@ in combination with `?deps`:
 import useSWR from 'https://esm.sh/swr?alias=react:preact/compat&deps=preact@10.5.14'
 ```
 
-This idea was from [@lucacasonato](https://github.com/lucacasonato).
+The origin idea was came from [@lucacasonato](https://github.com/lucacasonato).
 
 ### Specify ESM target
 
@@ -75,7 +75,7 @@ This idea was from [@lucacasonato](https://github.com/lucacasonato).
 import React from 'https://esm.sh/react?target=es2020'
 ```
 
-By default, esm.sh will check the browser's `User-Agent` to get the build target automatically. You also can specify it with the `target` query. Available targets: **es2015** - **es2021**, **esnext**, **node**, and **deno**.
+By default, esm.sh will check the `User-Agent` header to get the build target automatically. You can specify it with the `?target` query. Available targets: **es2015** - **es2021**, **esnext**, **node**, and **deno**.
 
 ### Package CSS
 
@@ -87,7 +87,7 @@ import Daygrid from 'https://esm.sh/@fullcalendar/daygrid'
 <link rel="stylesheet" href="https://esm.sh/@fullcalendar/daygrid?css">
 ```
 
-Only works when you import a NPM package that imports css files directly.
+Only works when the NPM package imports css files in JS.
 
 ## Deno compatibility
 
