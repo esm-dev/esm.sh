@@ -408,6 +408,7 @@ func query() rex.Handle {
 
 		taskID := task.ID()
 		esm, pkgCSS, ok := findESM(taskID)
+		fmt.Println("---", ok, taskID)
 		if !ok {
 			if !isBare {
 				// find previous build version
@@ -420,6 +421,7 @@ func query() rex.Handle {
 					}
 				}
 			}
+
 			// if the previous build exists and not in bare mode, then build current module in backgound,
 			// or wait the current build task for 30 seconds
 			if ok {

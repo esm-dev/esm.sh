@@ -35,6 +35,7 @@ func parseCJSModuleExports(buildDir string, importPath string) (ret cjsModuleLex
 	return
 }
 
+/* start a cjs lexer http server instead of child process */
 func startCJSLexerServer(port uint16, isDev bool) (err error) {
 	wd := path.Join(os.TempDir(), fmt.Sprintf("esmd-%d-cjs-module-lexer-%s", VERSION, cjsModuleLexerVersion))
 	ensureDir(wd)
@@ -129,17 +130,17 @@ func startCJSLexerServer(port uint16, isDev bool) (err error) {
 			const buildDir = req.headers['build-dir']
 			const importPath = req.headers['import-path']
 			if (!buildDir || !importPath) {
-				resp.write("Bad request");
-				resp.end();
+				resp.write('Bad request')
+				resp.end()
 				return
 			}
 			getExports(buildDir, importPath).then(ret => {
-				resp.write(JSON.stringify(ret));
-				resp.end();
+				resp.write(JSON.stringify(ret))
+				resp.end()
 			})
-		});
+		})
 		
-		server.listen(%d);
+		server.listen(%d)
 
 		if (process.env.NODE_ENV === 'development') {
 			console.log(' '.repeat(20) + '[debug] cjs lexer server ready on http://localhost:%d')

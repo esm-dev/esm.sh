@@ -16,7 +16,7 @@ var (
 	regBuildVersionPath = regexp.MustCompile(`^/v\d+/`)
 )
 
-// A Country of mmdb record.
+// A Country record of mmdb.
 type Country struct {
 	ISOCode string `maxminddb:"iso_code"`
 }

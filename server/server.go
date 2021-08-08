@@ -26,7 +26,7 @@ var (
 	embedFS *embed.FS
 )
 
-// Server Config
+// The config for ESM Server
 type Config struct {
 	storageDir         string
 	domain             string
@@ -36,7 +36,7 @@ type Config struct {
 	cjsLexerServerPort uint16
 }
 
-// Serve serves esmd server
+// Serve serves ESM server
 func Serve(fs *embed.FS) {
 	var port int
 	var httpsPort int
@@ -169,11 +169,12 @@ func Serve(fs *embed.FS) {
 	}
 	accessLogger.SetQuite(true)
 
+	// start cjs lexer server
 	go func() {
 		for {
 			err := startCJSLexerServer(config.cjsLexerServerPort, isDev)
 			if err != nil {
-				log.Errorf("cjs lexer srever: %v", err)
+				log.Errorf("cjs lexer server: %v", err)
 			}
 		}
 	}()
