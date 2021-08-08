@@ -121,7 +121,7 @@ func (task *buildTask) build() (esm *ESM, pkgCSS bool, err error) {
 		env = "development"
 	}
 
-	esm, err = initESM(task.wd, task.pkg, true, task.alias)
+	esm, err = initESM(task.wd, task.pkg, true, task.deps)
 	if err != nil {
 		log.Warn("init ESM:", err)
 		return
@@ -414,7 +414,7 @@ esbuild:
 									if !installed {
 										_, installed = esm.PeerDependencies[name]
 									}
-									meta, err := initESM(task.wd, *pkg, !installed, nil)
+									meta, err := initESM(task.wd, *pkg, !installed, task.deps)
 									if err == nil && meta.Module != "" {
 										if !meta.ExportDefault {
 											fmt.Fprintf(jsHeader, `import * as __%s$ from "%s";%s`, identifier, importPath, eol)
@@ -556,16 +556,26 @@ func (task *buildTask) handleDTS(esm *ESM) (err error) {
 		}
 	}
 	if types != "" {
+		var prefix string
+		if len(task.deps) > 0 {
+			var ss sort.StringSlice
+			for _, pkg := range task.deps {
+				ss = append(ss, fmt.Sprintf("%s@%s", pkg.name, pkg.version))
+			}
+			ss.Sort()
+			prefix = fmt.Sprintf("deps=%s/", strings.Join(ss, ","))
+		}
 		err = copyDTS(
 			nodeModulesDir,
+			prefix,
 			types,
 		)
 		if err != nil {
 			err = fmt.Errorf("copyDTS(%s): %v", types, err)
 			return
 		}
-		esm.Dts = "/" + types
-		log.Debug("copy dts in", time.Now().Sub(start))
+		esm.Dts = fmt.Sprintf("/%s%s", prefix, types)
+		log.Debugf("copy dts %s in %v", esm.Dts, time.Now().Sub(start))
 	}
 
 	return

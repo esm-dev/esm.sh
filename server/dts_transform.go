@@ -22,7 +22,7 @@ var (
 	regDeclareModule  = regexp.MustCompile(`^declare\s+module\s*('|")([^'"]+)("|')`)
 )
 
-func copyDTS(nodeModulesDir string, dts string) (err error) {
+func copyDTS(nodeModulesDir string, prefix string, dts string) (err error) {
 	dtsFilePath := path.Join(nodeModulesDir, regVersionPath.ReplaceAllString(dts, "$1/"))
 	dtsDir := path.Dir(dtsFilePath)
 	dtsFile, err := os.Open(dtsFilePath)
@@ -38,7 +38,7 @@ func copyDTS(nodeModulesDir string, dts string) (err error) {
 	}
 	defer dtsFile.Close()
 
-	saveFilePath := path.Join(config.storageDir, fmt.Sprintf("types/v%d", VERSION), dts)
+	saveFilePath := path.Join(config.storageDir, "types", fmt.Sprintf("v%d", VERSION), prefix, dts)
 	fi, err := os.Lstat(saveFilePath)
 	if err == nil {
 		if fi.IsDir() {
@@ -123,7 +123,7 @@ func copyDTS(nodeModulesDir string, dts string) (err error) {
 			importPath = "/" + importPath
 		}
 		if strings.HasPrefix(importPath, "/") {
-			importPath = fmt.Sprintf("/v%d%s", VERSION, importPath)
+			importPath = fmt.Sprintf("/v%d/%s%s", VERSION, prefix, importPath[1:])
 		}
 		return importPath
 	}
@@ -360,12 +360,12 @@ func copyDTS(nodeModulesDir string, dts string) (err error) {
 					n, _ := utils.SplitByFirstByte(subpath, '/')
 					pkg = fmt.Sprintf("%s/%s", pkg, n)
 				}
-				err = copyDTS(nodeModulesDir, path.Join(pkg, dep))
+				err = copyDTS(nodeModulesDir, prefix, path.Join(pkg, dep))
 			} else {
-				err = copyDTS(nodeModulesDir, path.Join(path.Dir(dts), dep))
+				err = copyDTS(nodeModulesDir, prefix, path.Join(path.Dir(dts), dep))
 			}
 		} else {
-			err = copyDTS(nodeModulesDir, dep)
+			err = copyDTS(nodeModulesDir, prefix, dep)
 		}
 		if err != nil {
 			os.Remove(saveFilePath)

@@ -46,7 +46,7 @@ func TestCopyDTS(t *testing.T) {
 	indexDTSExcept := []string{
 		`// dts test`,
 		`/// <reference path="./global.d.ts" />`,
-		fmt.Sprintf(`/// <reference path="https://cdn.esm.sh/v%d/_node.ns.d.ts" />`, VERSION),
+		fmt.Sprintf(`/// <reference path="https://cdn.esm.sh/v%d/node.ns.d.ts" />`, VERSION),
 		`  `,
 		`import {`,
 		`    ReactInstance, Component, ComponentState,`,
@@ -94,7 +94,7 @@ func TestCopyDTS(t *testing.T) {
 		storageDir: testDir,
 		domain:     "cdn.esm.sh",
 	}
-	err = copyDTS(nmDir, "test/index.d.ts")
+	err = copyDTS(nmDir, "", "test/index.d.ts")
 	if err != nil && os.IsExist(err) {
 		t.Fatal(err)
 	}
@@ -105,6 +105,6 @@ func TestCopyDTS(t *testing.T) {
 	}
 
 	if strings.TrimSpace(string(data)) != strings.Join(indexDTSExcept, "\n") {
-		t.Fatal("unexpected index.d.ts", string(data))
+		t.Fatalf("unexpected index.d.ts:\n%s", string(data))
 	}
 }

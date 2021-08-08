@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"io/ioutil"
-	"os"
 	"path"
 	"strings"
 
@@ -25,11 +24,16 @@ type ESM struct {
 	Dts           string   `json:"dts"`
 }
 
-func initESM(wd string, pkg pkg, install bool, alias map[string]string) (esm *ESM, err error) {
+func initESM(wd string, pkg pkg, install bool, deps pkgSlice) (esm *ESM, err error) {
 	var p NpmPackage
 	p, _, err = node.getPackageInfo(pkg.name, pkg.version)
 	if err != nil {
 		return
+	}
+
+	versions := map[string]string{}
+	for _, dep := range deps {
+		versions[dep.name] = dep.version
 	}
 
 	esm = &ESM{
@@ -43,20 +47,27 @@ func initESM(wd string, pkg pkg, install bool, alias map[string]string) (esm *ES
 		if esm.Types == "" && esm.Typings == "" && !strings.HasPrefix(pkg.name, "@") {
 			var info NpmPackage
 			info, _, err = node.getPackageInfo("@types/"+pkg.name, "latest")
-			if err == nil {
-				if info.Types != "" || info.Typings != "" || info.Main != "" {
-					installList = append(installList, fmt.Sprintf("%s@%s", info.Name, info.Version))
-				}
-			} else if err.Error() != fmt.Sprintf("npm: package '@types/%s' not found", pkg.name) {
+			if err != nil && err.Error() != fmt.Sprintf("npm: package '@types/%s' not found", pkg.name) {
 				return
 			}
+			if info.Types != "" || info.Typings != "" || info.Main != "" {
+				if version, ok := versions[info.Name]; ok {
+					installList = append(installList, fmt.Sprintf("%s@%s", info.Name, version))
+				} else {
+					installList = append(installList, fmt.Sprintf("%s@%s", info.Name, info.Version))
+				}
+			}
 		}
-		for n, v := range esm.PeerDependencies {
-			v = resoveVersion(v)
-			if v == "latest" {
-				installList = append(installList, n)
+		for name, v := range esm.PeerDependencies {
+			if version, ok := versions[name]; ok {
+				installList = append(installList, fmt.Sprintf("%s@%s", name, version))
 			} else {
-				installList = append(installList, fmt.Sprintf("%s@%s", n, v))
+				version := resoveVersion(v)
+				if version == "latest" {
+					installList = append(installList, name)
+				} else {
+					installList = append(installList, fmt.Sprintf("%s@%s", name, version))
+				}
 			}
 		}
 		err = yarnAdd(wd, installList...)
@@ -215,8 +226,7 @@ func findESM(id string) (esm *ESM, pkgCSS bool, ok bool) {
 
 func checkESM(wd string, packageName string, moduleSpecifier string) (resolveName string, exportDefault bool, err error) {
 	pkgDir := path.Join(wd, "node_modules", packageName)
-	fi, e := os.Lstat(path.Join(pkgDir, moduleSpecifier))
-	if e == nil && fi.IsDir() {
+	if dirExists(path.Join(pkgDir, moduleSpecifier)) {
 		f := path.Join(moduleSpecifier, "index.mjs")
 		if !fileExists(path.Join(pkgDir, f)) {
 			f = path.Join(moduleSpecifier, "index.js")
