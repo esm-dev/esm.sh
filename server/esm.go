@@ -122,7 +122,6 @@ func initESM(wd string, pkg pkg, install bool, deps pkgSlice) (esm *ESM, err err
 							useDefinedExports(esm.NpmPackage, v)
 							defined = true
 							break
-
 							/**
 							exports: {
 								"./lib/languages/*": {
@@ -203,21 +202,21 @@ func initESM(wd string, pkg pkg, install bool, deps pkgSlice) (esm *ESM, err err
 }
 
 func findESM(id string) (esm *ESM, pkgCSS bool, ok bool) {
-	post, err := db.Get(q.Alias(id), q.Select("esmeta", "css"))
+	post, err := db.Get(q.Alias(id), q.Select("esm", "css"))
 	if err == nil {
-		err = json.Unmarshal(post.KV["esmeta"], &esm)
+		err = json.Unmarshal(post.KV["esm"], &esm)
 		if err != nil {
 			db.Delete(q.Alias(id))
 			return
 		}
 
-		if !fileExists(path.Join(config.storageDir, "builds", id+".js")) {
+		if !fileExists(path.Join(config.storageDir, "builds", id)) {
 			db.Delete(q.Alias(id))
 			return
 		}
 
 		if val := post.KV["css"]; len(val) == 1 && val[0] == 1 {
-			pkgCSS = fileExists(path.Join(config.storageDir, "builds", id+".css"))
+			pkgCSS = fileExists(path.Join(config.storageDir, "builds", strings.TrimSuffix(id, ".js")+".css"))
 		}
 		ok = true
 	}

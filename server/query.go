@@ -408,7 +408,6 @@ func query() rex.Handle {
 
 		taskID := task.ID()
 		esm, pkgCSS, ok := findESM(taskID)
-		fmt.Println("---", ok, taskID)
 		if !ok {
 			if !isBare {
 				// find previous build version
