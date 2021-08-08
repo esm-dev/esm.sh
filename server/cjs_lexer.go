@@ -35,7 +35,7 @@ func parseCJSModuleExports(buildDir string, importPath string) (ret cjsModuleLex
 	return
 }
 
-/* start a cjs lexer http server instead of child process */
+/* use a cjs-module-lexer http server instead of child process */
 func startCJSLexerServer(port uint16, isDev bool) (err error) {
 	wd := path.Join(os.TempDir(), fmt.Sprintf("esmd-%d-cjs-module-lexer-%s", VERSION, cjsModuleLexerVersion))
 	ensureDir(wd)
@@ -160,13 +160,9 @@ func startCJSLexerServer(port uint16, isDev bool) (err error) {
 
 	err = cmd.Start()
 	if err != nil {
-		err = fmt.Errorf("start cjs-module-lexer service: %s", string(output))
 		return
 	}
 
 	err = cmd.Wait()
-	if err != nil {
-		err = fmt.Errorf("cjs-module-lexer service exit: %s", string(output))
-	}
 	return
 }
