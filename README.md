@@ -132,4 +132,4 @@ $ cd esm.sh
 $ sh ./scripts/deploy.sh
 ```
 
-**Deploying with Docker:** An example Dockerfile is found in the root of this project
+**Deploying with Docker:** An example [Dockerfile](./Dockerfile) is found in the root of this project.
