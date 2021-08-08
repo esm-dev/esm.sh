@@ -3,11 +3,13 @@ package server
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"os"
 	"os/exec"
 	"path"
+	"strings"
 )
 
 const cjsModuleLexerVersion = "1.2.2"
@@ -47,114 +49,122 @@ func startCJSLexerServer(port uint16, isDev bool) (err error) {
 		return
 	}
 
-	buf := bytes.NewBufferString(fmt.Sprintf(`
-		const fs = require('fs')
-		const { dirname, join } = require('path')
-		const http = require('http')
-		const { promisify } = require('util')
-		const cjsLexer = require('cjs-module-lexer')
-		const enhancedResolve = require('enhanced-resolve')
+	errBuf := bytes.NewBuffer(nil)
+	jsBuf := bytes.NewBufferString(fmt.Sprintf(`
+	const fs = require('fs')
+	const { dirname, join } = require('path')
+	const http = require('http')
+	const { promisify } = require('util')
+	const cjsLexer = require('cjs-module-lexer')
+	const enhancedResolve = require('enhanced-resolve')
 
-		const resolve = promisify(enhancedResolve.create({
-			mainFields: ['main']
-		}))
-		const reservedWords = [
-			'abstract*', 'arguments', 'await', 'boolean',
-			'break', 'byte*', 'case', 'catch',
-			'char', 'class', 'const', 'continue',
-			'debugger', 'default', 'delete', 'do',
-			'double', 'else', 'enum', 'eval',
-			'export', 'extends', 'false', 'final',
-			'finally', 'float', 'for', 'function',
-			'goto', 'if', 'implements', 'import',
-			'in', 'instanceof', 'int', 'interface*',
-			'let', 'long', 'native', 'new',
-			'null', 'package*', 'private', 'protected',
-			'public', 'return', 'short', 'static',
-			'super', 'switch', 'synchronized', 'this',
-			'throw', 'throws', 'transient', 'true',
-			'try', 'typeof', 'var', 'void',
-			'volatile', 'while', 'with', 'yield',
-			'__esModule'
-		]
+	const resolve = promisify(enhancedResolve.create({
+		mainFields: ['main']
+	}))
+	const reservedWords = [
+		'abstract*', 'arguments', 'await', 'boolean',
+		'break', 'byte*', 'case', 'catch',
+		'char', 'class', 'const', 'continue',
+		'debugger', 'default', 'delete', 'do',
+		'double', 'else', 'enum', 'eval',
+		'export', 'extends', 'false', 'final',
+		'finally', 'float', 'for', 'function',
+		'goto', 'if', 'implements', 'import',
+		'in', 'instanceof', 'int', 'interface*',
+		'let', 'long', 'native', 'new',
+		'null', 'package*', 'private', 'protected',
+		'public', 'return', 'short', 'static',
+		'super', 'switch', 'synchronized', 'this',
+		'throw', 'throws', 'transient', 'true',
+		'try', 'typeof', 'var', 'void',
+		'volatile', 'while', 'with', 'yield',
+		'__esModule'
+	]
 
-		let cjsLexerReady = false
+	let cjsLexerReady = false
 
-		// the function 'getExports' was stolen from https://github.com/evanw/esbuild/issues/442#issuecomment-739340295
-		async function getExports (buildDir, importPath) {
-			if (!cjsLexerReady) {
-				await cjsLexer.init()
-				cjsLexerReady = true
-			}
-
-			const exports = []
-			const paths = []
-
-			try {
-				const jsFile = await resolve(buildDir, importPath)
-				if (!jsFile.endsWith('.json')) {
-					paths.push(jsFile) 
-				}
-				while (paths.length > 0) {
-					const currentPath = paths.pop()
-					const code = fs.readFileSync(currentPath).toString()
-					const results = cjsLexer.parse(code)
-					exports.push(...results.exports)
-					for (const reexport of results.reexports) {
-						if (!reexport.endsWith('.json')) {
-							paths.push(await resolve(dirname(currentPath), reexport))
-						}
-					}
-				}
-			} catch(e) {
-				return { error: e.message }
-			}
-
-			try {
-				if (!jsFile.endsWith('.json')) {
-					const mod = require(jsFile)
-					if (typeof mod === 'object' && mod !== null && !Array.isArray(mod)) {
-						for (const key of Object.keys(mod)) {
-							if (typeof key === 'string' && key !== '' && !exports.includes(key)) {
-								exports.push(key)
-							}
-						}
-					}
-				}
-			} catch(e) {}
-			
-			return { exports: Array.from(new Set(exports)).filter(name => !reservedWords.includes(name)) }
+	// the function 'getExports' was stolen from https://github.com/evanw/esbuild/issues/442#issuecomment-739340295
+	async function getExports (buildDir, importPath) {
+		if (!cjsLexerReady) {
+			await cjsLexer.init()
+			cjsLexerReady = true
 		}
 
-		const server = http.createServer(function (req, resp) {
-			const buildDir = req.headers['build-dir']
-			const importPath = req.headers['import-path']
-			if (!buildDir || !importPath) {
-				resp.write('Bad request')
-				resp.end()
-				return
+		const exports = []
+		const paths = []
+
+		try {
+			const jsFile = await resolve(buildDir, importPath)
+			if (!jsFile.endsWith('.json')) {
+				paths.push(jsFile) 
 			}
-			getExports(buildDir, importPath).then(ret => {
-				resp.write(JSON.stringify(ret))
-				resp.end()
-			})
-		})
+			while (paths.length > 0) {
+				const currentPath = paths.pop()
+				const code = fs.readFileSync(currentPath).toString()
+				const results = cjsLexer.parse(code)
+				exports.push(...results.exports)
+				for (const reexport of results.reexports) {
+				if (!reexport.endsWith('.json')) {
+					paths.push(await resolve(dirname(currentPath), reexport))
+				}
+				}
+			}
+		} catch(e) {
+			return { error: e.message }
+		}
+
+		try {
+			if (!jsFile.endsWith('.json')) {
+				const mod = require(jsFile)
+				if (typeof mod === 'object' && mod !== null && !Array.isArray(mod)) {
+					for (const key of Object.keys(mod)) {
+						if (typeof key === 'string' && key !== '' && !exports.includes(key)) {
+						exports.push(key)
+						}
+					}
+				}
+			}
+		} catch(e) {}
 		
-		server.listen(%d)
+		return { exports: Array.from(new Set(exports)).filter(name => !reservedWords.includes(name)) }
+	}
 
-		if (process.env.NODE_ENV === 'development') {
-			console.log(' '.repeat(20) + '[debug] cjs lexer server ready on http://localhost:%d')
+	const server = http.createServer(function (req, resp) {
+		const buildDir = req.headers['build-dir']
+		const importPath = req.headers['import-path']
+		if (!buildDir || !importPath) {
+			resp.write('Bad request')
+			resp.end()
+			return
 		}
-	`, port, port))
+		getExports(buildDir, importPath).then(ret => {
+			resp.write(JSON.stringify(ret))
+			resp.end()
+		})
+	})
+	
+	server.on('error', (e) => {
+		if (e.code === 'EADDRINUSE') {
+			console.error('EADDRINUSE')
+			process.exit(1)
+		}
+	})
+
+	server.listen(%d, () => {
+		if (process.env.NODE_ENV === 'development') {
+			console.log('[debug] cjs lexer server ready on http://localhost:%d')
+		}
+	})
+`, port, port))
 
 	cmd = exec.Command("node")
-	cmd.Stdin = buf
+	cmd.Stdin = jsBuf
 	cmd.Dir = wd
+	cmd.Stderr = errBuf
 	env := "production"
 	if isDev {
 		env = "development"
 		cmd.Stdout = os.Stdout
-		cmd.Stderr = os.Stderr
 	}
 	cmd.Env = append(os.Environ(), fmt.Sprintf(`NODE_ENV=%s`, env))
 
@@ -163,6 +173,10 @@ func startCJSLexerServer(port uint16, isDev bool) (err error) {
 		return
 	}
 
-	err = cmd.Wait()
+	cmd.Wait()
+
+	if errBuf.Len() > 0 {
+		err = errors.New(strings.TrimSpace(errBuf.String()))
+	}
 	return
 }
