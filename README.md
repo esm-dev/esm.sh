@@ -131,3 +131,5 @@ $ git clone https://github.com/postui/esm.sh
 $ cd esm.sh
 $ sh ./scripts/deploy.sh
 ```
+
+**Deploying with Docker:** An example Dockerfile is found in the root of this project
