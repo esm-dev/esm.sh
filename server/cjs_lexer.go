@@ -25,6 +25,7 @@ func parseCJSModuleExports(buildDir string, importPath string) (ret cjsModuleLex
 	if err != nil {
 		return
 	}
+
 	req.Header.Add("build-dir", buildDir)
 	req.Header.Add("import-path", importPath)
 	resp, err := http.DefaultClient.Do(req)
@@ -32,6 +33,11 @@ func parseCJSModuleExports(buildDir string, importPath string) (ret cjsModuleLex
 		return
 	}
 	defer resp.Body.Close()
+
+	if resp.StatusCode != 200 {
+		err = errors.New(resp.Status)
+		return
+	}
 
 	err = json.NewDecoder(resp.Body).Decode(&ret)
 	return
@@ -41,11 +47,13 @@ func parseCJSModuleExports(buildDir string, importPath string) (ret cjsModuleLex
 func startCJSLexerServer(port uint16, isDev bool) (err error) {
 	wd := path.Join(os.TempDir(), fmt.Sprintf("esmd-%d-cjs-module-lexer-%s", VERSION, cjsModuleLexerVersion))
 	ensureDir(wd)
+
+	// install cjs-module-lexer
 	cmd := exec.Command("yarn", "add", fmt.Sprintf("cjs-module-lexer@%s", cjsModuleLexerVersion), "enhanced-resolve")
 	cmd.Dir = wd
 	output, err := cmd.CombinedOutput()
 	if err != nil {
-		err = fmt.Errorf("start cjs-module-lexer service: %s", string(output))
+		err = fmt.Errorf("install cjs-module-lexer: %s", string(output))
 		return
 	}
 
@@ -61,29 +69,28 @@ func startCJSLexerServer(port uint16, isDev bool) (err error) {
 	const resolve = promisify(enhancedResolve.create({
 		mainFields: ['main']
 	}))
-	const reservedWords = [
-		'abstract*', 'arguments', 'await', 'boolean',
-		'break', 'byte*', 'case', 'catch',
+	const reservedWords = new Set([
+		'abstract', 'arguments', 'await', 'boolean',
+		'break', 'byte', 'case', 'catch',
 		'char', 'class', 'const', 'continue',
 		'debugger', 'default', 'delete', 'do',
 		'double', 'else', 'enum', 'eval',
 		'export', 'extends', 'false', 'final',
 		'finally', 'float', 'for', 'function',
 		'goto', 'if', 'implements', 'import',
-		'in', 'instanceof', 'int', 'interface*',
+		'in', 'instanceof', 'int', 'interface',
 		'let', 'long', 'native', 'new',
-		'null', 'package*', 'private', 'protected',
+		'null', 'package', 'private', 'protected',
 		'public', 'return', 'short', 'static',
 		'super', 'switch', 'synchronized', 'this',
 		'throw', 'throws', 'transient', 'true',
 		'try', 'typeof', 'var', 'void',
 		'volatile', 'while', 'with', 'yield',
 		'__esModule'
-	]
+	])
 
 	let cjsLexerReady = false
 
-	// the function 'getExports' was stolen from https://github.com/evanw/esbuild/issues/442#issuecomment-739340295
 	async function getExports (buildDir, importPath) {
 		if (!cjsLexerReady) {
 			await cjsLexer.init()
@@ -94,6 +101,7 @@ func startCJSLexerServer(port uint16, isDev bool) (err error) {
 		const paths = []
 
 		try {
+			// the below code was stolen from https://github.com/evanw/esbuild/issues/442#issuecomment-739340295
 			const jsFile = await resolve(buildDir, importPath)
 			if (!jsFile.endsWith('.json')) {
 				paths.push(jsFile) 
@@ -126,7 +134,9 @@ func startCJSLexerServer(port uint16, isDev bool) (err error) {
 			}
 		} catch(e) {}
 		
-		return { exports: Array.from(new Set(exports)).filter(name => !reservedWords.includes(name)) }
+		return { 
+			exports: Array.from(new Set(exports.filter(name => !reservedWords.has(name)).map(name => name.replace(/\s/g, '_'))))
+		}
 	}
 
 	const server = http.createServer(function (req, resp) {
