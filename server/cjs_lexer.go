@@ -69,6 +69,7 @@ func startCJSLexerServer(port uint16, isDev bool) (err error) {
 	const resolve = promisify(enhancedResolve.create({
 		mainFields: ['main']
 	}))
+	const identRegexp = /^[a-zA-Z_\$][a-zA-Z0-9_\$]+$/
 	const reservedWords = new Set([
 		'abstract', 'arguments', 'await', 'boolean',
 		'break', 'byte', 'case', 'catch',
@@ -135,7 +136,7 @@ func startCJSLexerServer(port uint16, isDev bool) (err error) {
 		} catch(e) {}
 		
 		return { 
-			exports: Array.from(new Set(exports.filter(name => !reservedWords.has(name)).map(name => name.replace(/\s/g, '_'))))
+			exports: Array.from(new Set(exports.filter(name => identRegexp.test(name) && !reservedWords.has(name))))
 		}
 	}
 
