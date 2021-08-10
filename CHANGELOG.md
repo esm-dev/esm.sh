@@ -3,7 +3,9 @@
 ## V45
 
 - Improve build performance
-- Update testing page
+- Filter `cjs-moudle-lexer` server invalid exports output
+- Improve `resolveVersion` function to support format like **4.x** (fix [#93](https://github.com/postui/esm.sh/issues/93))
+- Improve **dts** transform (fix [#95](https://github.com/postui/esm.sh/issues/95))
 
 ## V44
 
