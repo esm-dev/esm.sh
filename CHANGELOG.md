@@ -1,5 +1,10 @@
 # Change Log
 
+## V45
+
+- Improve build performance
+- Update testing page
+
 ## V44
 
 - Add `Alias` feature ([#89](https://github.com/postui/esm.sh/issues/89))
