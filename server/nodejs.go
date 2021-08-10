@@ -209,7 +209,7 @@ func (env *NodeEnv) getPackageInfo(name string, version string) (info NpmPackage
 			submodule = strings.Join(slice[1:], "/")
 		}
 	}
-	version = resoveVersion(version)
+	version = resolveVersion(version)
 	isFullVersion := regFullVersion.MatchString(version)
 	key := fmt.Sprintf("npm:%s@%s", name, version)
 	p, err := db.Get(q.Alias(key), q.Select("package"))
@@ -293,7 +293,7 @@ func (env *NodeEnv) getPackageInfo(name string, version string) (info NpmPackage
 	return
 }
 
-func resoveVersion(version string) string {
+func resolveVersion(version string) string {
 	if version == "*" {
 		return "latest"
 	}
@@ -305,12 +305,16 @@ func resoveVersion(version string) string {
 			a := sort.StringSlice(strings.Split(version, p))
 			vs := make(versionSlice, len(a))
 			for i, v := range a {
-				version := resoveVersion(strings.TrimSpace(v))
+				version := resolveVersion(strings.TrimSpace(v))
 				vs[i] = version
 			}
 			sort.Sort(vs)
 			version = vs[0]
 		}
+	}
+
+	if strings.HasSuffix(version, ".x") {
+		version = strings.TrimSuffix(version, ".x")
 	}
 	if strings.HasPrefix(version, "=") {
 		version = strings.TrimPrefix(version, "=")
