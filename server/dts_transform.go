@@ -413,7 +413,12 @@ func getTypesPath(wd string, p NpmPackage, subpath string) string {
 			types = "index.d.ts"
 		}
 	}
-	return fmt.Sprintf("%s@%s%s", p.Name, p.Version, ensureSuffix(path.Join("/", types), ".d.ts"))
+
+	if !strings.HasSuffix(types, ".d.ts") && fileExists(path.Join(wd, "node_modules", p.Name, types, "index.d.ts")) {
+		types = types + "/index.d.ts"
+	}
+
+	return fmt.Sprintf("%s@%s/%s", p.Name, p.Version, strings.TrimPrefix(ensureSuffix(types, ".d.ts"), "/"))
 }
 
 func onSemicolon(data []byte, atEOF bool) (advance int, token []byte, err error) {
