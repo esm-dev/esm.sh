@@ -21,7 +21,7 @@ export async function test(el) {
       } catch (err) {
         span.innerText = `❌ ${err.message}`;
       }
-      
+
       em.innerHTML = `&middot; import in <strong>${Math.round(t2 - t1)}</strong>ms`
       em.style.display = 'inline-block'
     } catch (e) {
@@ -56,6 +56,22 @@ export async function test(el) {
     el.appendChild(li)
     q.push({ name, testFn, li, span, })
   }
+
+  _esm('canvas-confetti', async (t) => {
+    const { default: confetti } = t.imports
+
+    const statusEl = document.createElement('span')
+    statusEl.innerText = '✅'
+    const confettiEl = document.createElement('span')
+    confettiEl.innerText = ' 🎉 '
+    confettiEl.style.userSelect = 'none'
+    confettiEl.style.cursor = 'pointer'
+    confettiEl.addEventListener('click', () => confetti())
+
+    t.span.innerHTML = ''
+    t.span.appendChild(statusEl)
+    t.span.appendChild(confettiEl)
+  })
 
   _esm(['react@16', 'react-dom@16'], async (t) => {
     const [
