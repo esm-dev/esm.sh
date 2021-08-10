@@ -328,7 +328,7 @@
       color: #999;
     }
 
-    h1 a {
+    h1 .github {
       position: relative;
       display: inline-block;
       width: 30px;
@@ -338,7 +338,11 @@
       box-shadow: none;
     }
 
-    h1 a svg {
+    h1 a.github:hover {
+      color: #000;
+    }
+
+    h1 .github svg {
       position: absolute;
       display: inline-block;
       top: 0;
@@ -347,8 +351,9 @@
       height: 30px;
     }
 
-    h1 a:hover {
-      color: #000;
+    p.link {
+      font-size: 16px;
+      margin-top: 60px;
     }
 
     .test {
@@ -379,7 +384,7 @@
   <h1>
     <strong>ESM</strong>
     <em>V{VERSION}</em>
-    <a href="https://github.com/postui/esm.sh">
+    <a class="github" href="https://github.com/postui/esm.sh">
       <svg fill="currentColor" viewBox="0 0 24 24">
         <title>Github</title>
         <path fill-rule="evenodd"
@@ -412,19 +417,23 @@
       const mainEl = document.querySelector('main')
       const testEl = document.querySelector('.test')
       const ulEl = document.createElement('ul')
+      const pEl = document.createElement('p')
       testEl.style.display = 'block'
       testEl.appendChild(ulEl)
+      pEl.className = 'link'
+      pEl.innerHTML = '<a href="/">&larr; Back </a>'
+      testEl.appendChild(pEl)
       mainEl.parentNode.removeChild(mainEl)
       document.querySelector('h1 > em').appendChild(document.createTextNode(' · Testing'))
-      test(ulEl, query.get('test'))
+      test(ulEl)
     } else {
       const mainEl = document.querySelector('main')
-      mainEl.innerHTML = marked.parse('# README')
+      mainEl.innerHTML = marked.parse('# README') + `<p class="link"><a href="/?test">Testing &rarr; </a></p>`
       mainEl.removeChild(mainEl.querySelector('h1'))
       mainEl.querySelectorAll('code.language-bash').forEach(block => {
         block.innerHTML = block.innerHTML.replace(/(^|\n)\$ /g, '$1')
       })
-
+      
       hljs.registerLanguage('javascript', javascript)
       hljs.registerLanguage('json', json)
       hljs.registerLanguage('xml', xml)
