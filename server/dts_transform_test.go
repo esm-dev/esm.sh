@@ -11,7 +11,6 @@ import (
 
 func TestCopyDTS(t *testing.T) {
 	testDir := path.Join(os.TempDir(), "testcopydts")
-	nmDir := path.Join(testDir, "node_modules")
 	os.RemoveAll(testDir)
 	ensureDir(testDir)
 
@@ -74,7 +73,7 @@ func TestCopyDTS(t *testing.T) {
 		`    export import ReactElement = ReactElement;`,
 		`}`,
 	}
-	ensureDir(path.Join(nmDir, "test"))
+	ensureDir(path.Join(testDir, "node_modules", "test"))
 	dtsFils := map[string]string{
 		"global.d.ts":        `declear interface Event { }`,
 		"anchor.d.ts":        `export default interface Anchor { }`,
@@ -84,7 +83,7 @@ func TestCopyDTS(t *testing.T) {
 		"index.d.ts":         strings.Join(indexDTSRaw, "\n"),
 	}
 	for name, content := range dtsFils {
-		err = ioutil.WriteFile(path.Join(nmDir, "test", name), []byte(content), 0644)
+		err = ioutil.WriteFile(path.Join(testDir, "node_modules", "test", name), []byte(content), 0644)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -94,7 +93,7 @@ func TestCopyDTS(t *testing.T) {
 		storageDir: testDir,
 		domain:     "cdn.esm.sh",
 	}
-	err = copyDTS(nmDir, "", "test/index.d.ts")
+	err = CopyDTS(testDir, "", "test/index.d.ts")
 	if err != nil && os.IsExist(err) {
 		t.Fatal(err)
 	}

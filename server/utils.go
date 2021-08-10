@@ -114,8 +114,12 @@ func identify(importPath string) string {
 	return string(p)
 }
 
+func isRemoteImport(importPath string) bool {
+	return strings.HasPrefix(importPath, "https://") || strings.HasPrefix(importPath, "http://")
+}
+
 func isLocalImport(importPath string) bool {
-	return strings.HasPrefix(importPath, "/") || strings.HasPrefix(importPath, "./") || strings.HasPrefix(importPath, "../") || importPath == "." || importPath == ".."
+	return strings.HasPrefix(importPath, "file://") || strings.HasPrefix(importPath, "/") || strings.HasPrefix(importPath, "./") || strings.HasPrefix(importPath, "../") || importPath == "." || importPath == ".."
 }
 
 func startsWith(s string, prefixs ...string) bool {

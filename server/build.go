@@ -95,9 +95,6 @@ func (task *buildTask) getImportPath(pkg pkg) string {
 	if task.isDev {
 		name += ".development"
 	}
-	if task.bundle {
-		name += ".bundle"
-	}
 
 	return fmt.Sprintf(
 		"/v%d/%s@%s/%s/%s.js",
@@ -109,19 +106,23 @@ func (task *buildTask) getImportPath(pkg pkg) string {
 	)
 }
 
-func (task *buildTask) build() (esm *ESM, pkgCSS bool, err error) {
+func (task *buildTask) Build() (esm *ESM, pkgCSS bool, err error) {
 	hasher := sha1.New()
 	hasher.Write([]byte(task.ID()))
 	task.wd = path.Join(os.TempDir(), "esm-build-"+hex.EncodeToString(hasher.Sum(nil)))
 	ensureDir(task.wd)
 	defer os.RemoveAll(task.wd)
 
+	return task.build()
+}
+
+func (task *buildTask) build() (esm *ESM, pkgCSS bool, err error) {
 	env := "production"
 	if task.isDev {
 		env = "development"
 	}
 
-	esm, err = initESM(task.wd, task.pkg, true, task.deps)
+	esm, err = initESM(task.wd, task.pkg, task.deps)
 	if err != nil {
 		log.Warn("init ESM:", err)
 		return
@@ -132,11 +133,10 @@ func (task *buildTask) build() (esm *ESM, pkgCSS bool, err error) {
 		}
 	}()
 
-	cjs := esm.Module == ""
-
 	var entryPoint string
 	var input *api.StdinOptions
-	if cjs {
+
+	if esm.Module == "" {
 		buf := bytes.NewBuffer(nil)
 		importPath := task.pkg.ImportPath()
 		if len(esm.Exports) > 0 {
@@ -147,7 +147,7 @@ func (task *buildTask) build() (esm *ESM, pkgCSS bool, err error) {
 		input = &api.StdinOptions{
 			Contents:   buf.String(),
 			ResolveDir: task.wd,
-			Sourcefile: "export.js",
+			Sourcefile: "mod.js",
 		}
 	} else {
 		entryPoint = path.Join(task.wd, "node_modules", task.pkg.name, esm.Module)
@@ -179,38 +179,37 @@ func (task *buildTask) build() (esm *ESM, pkgCSS bool, err error) {
 				api.OnResolveOptions{Filter: ".*"},
 				func(args api.OnResolveArgs) (api.OnResolveResult, error) {
 					specifier := strings.TrimSuffix(args.Path, "/")
-					if alias, ok := task.alias[specifier]; ok {
-						specifier = alias
-					}
-
-					// should resolve entryPoint
-					if strings.HasPrefix(specifier, task.wd) {
-						return api.OnResolveResult{}, nil
+					if len(task.alias) > 0 {
+						if alias, ok := task.alias[specifier]; ok {
+							specifier = alias
+						}
 					}
 
 					// should resolve:
-					// 1. current package/module itself
-					// 2. local imports
-					// 3. sub-modules of deps (cjs)
-					if specifier == task.pkg.ImportPath() ||
-						isLocalImport(specifier) ||
-						(cjs &&
-							((!strings.HasPrefix(specifier, "@") && len(strings.Split(specifier, "/")) > 1) ||
-								(strings.HasPrefix(specifier, "@") && len(strings.Split(specifier, "/")) > 2))) {
+					// 1. locale imports include absolute path
+					// 2. current package/module it self
+					if isLocalImport(specifier) || specifier == task.pkg.ImportPath() {
 						return api.OnResolveResult{}, nil
 					}
 
-					// bundle all deps except peer deps in bundle mode
-					if task.bundle && !builtInNodeModules[specifier] {
-						_, ok := esm.PeerDependencies[specifier]
-						if !ok {
-							return api.OnResolveResult{}, nil
+					// bundle all deps except peer deps in `bundle` mode
+					if task.bundle {
+						a := strings.Split(specifier, "/")
+						pkgName := a[0]
+						if len(a) > 1 && specifier[0] == '@' {
+							pkgName = a[1]
+						}
+						if !builtInNodeModules[pkgName] {
+							_, ok := esm.PeerDependencies[pkgName]
+							if !ok {
+								return api.OnResolveResult{}, nil
+							}
 						}
 					}
 
 					// external
 					external.Add(specifier)
-					return api.OnResolveResult{Path: "__ESM_SH_EXTERNAL__:" + specifier, External: true}, nil
+					return api.OnResolveResult{Path: "ESM_SH_EXTERNAL:" + specifier, External: true}, nil
 				},
 			)
 		},
@@ -256,14 +255,12 @@ esbuild:
 				goto esbuild
 			}
 		} else if strings.HasPrefix(msg, "No matching export in \"") && strings.Contains(msg, "for import \"default\"") {
-			if cjs {
-				input = &api.StdinOptions{
-					Contents:   fmt.Sprintf(`import "%s";`, task.pkg.ImportPath()),
-					ResolveDir: task.wd,
-					Sourcefile: "export.js",
-				}
-				goto esbuild
+			input = &api.StdinOptions{
+				Contents:   fmt.Sprintf(`import "%s";export default null;`, task.pkg.ImportPath()),
+				ResolveDir: task.wd,
+				Sourcefile: "mod.js",
 			}
+			goto esbuild
 		}
 		err = errors.New("esbuild: " + msg)
 		return
@@ -291,13 +288,27 @@ esbuild:
 			// replace external imports/requires
 			for _, name := range external.Values() {
 				var importPath string
-				// is local imports
-				if isLocalImport(name) {
-					filename := name
-					if path.Ext(filename) == "" {
-						filename += ".js"
-					}
-					importPath = "/" + path.Join(path.Dir(task.ID()), filename)
+				// remote imports
+				if isRemoteImport(name) {
+					importPath = name
+				}
+				// is relative imports
+				if importPath == "" && (strings.HasPrefix(name, "./") || strings.HasPrefix(name, "../")) {
+					submodule := path.Join(task.pkg.submodule, name)
+					importPath = task.getImportPath(pkg{
+						name:      task.pkg.name,
+						version:   task.pkg.version,
+						submodule: submodule,
+					})
+				}
+				// is sub-module
+				if importPath == "" && strings.HasPrefix(name, task.pkg.name+"/") {
+					submodule := strings.TrimPrefix(name, task.pkg.name+"/")
+					importPath = task.getImportPath(pkg{
+						name:      task.pkg.name,
+						version:   task.pkg.version,
+						submodule: submodule,
+					})
 				}
 				// is builtin `buffer` module
 				if importPath == "" && name == "buffer" {
@@ -343,20 +354,59 @@ esbuild:
 				// get package info via `deps` query
 				if importPath == "" {
 					for _, dep := range task.deps {
-						if name == dep.ImportPath() {
-							importPath = task.getImportPath(dep)
+						if name == dep.name || strings.HasPrefix(name, dep.name+"/") {
+							var submodule string
+							if name != dep.name {
+								submodule = strings.TrimPrefix(name, dep.name+"/")
+							}
+							importPath = task.getImportPath(pkg{
+								name:      dep.name,
+								version:   dep.version,
+								submodule: submodule,
+							})
 							break
 						}
 					}
 				}
-				// is sub-module
-				if importPath == "" && strings.HasPrefix(name, task.pkg.name+"/") {
-					submodule := strings.TrimPrefix(name, task.pkg.name+"/")
-					importPath = task.getImportPath(pkg{
-						name:      task.pkg.name,
-						version:   task.pkg.version,
-						submodule: submodule,
-					})
+				if importPath == "" {
+					var pkgName string
+					var submodule string
+					if a := strings.Split(name, "/"); strings.HasPrefix(name, "@") {
+						if len(a) >= 2 {
+							pkgName = strings.Join(a[:2], "/")
+							submodule = strings.Join(a[2:], "/")
+						}
+					} else {
+						pkgName = a[0]
+						submodule = strings.Join(a[1:], "/")
+					}
+
+					packageFile := path.Join(task.wd, "node_modules", pkgName, "package.json")
+					if fileExists(packageFile) {
+						var p NpmPackage
+						err = utils.ParseJSONFile(path.Join(task.wd, "node_modules", pkgName, "package.json"), &p)
+						if err != nil {
+							return
+						}
+						subTask := buildTask{
+							wd: task.wd,
+							pkg: pkg{
+								name:      pkgName,
+								version:   p.Version,
+								submodule: submodule,
+							},
+							target: task.target,
+							isDev:  task.isDev,
+						}
+						_, _, e := subTask.build()
+						if e == nil {
+							importPath = task.getImportPath(pkg{
+								name:      p.Name,
+								version:   p.Version,
+								submodule: submodule,
+							})
+						}
+					}
 				}
 				// get package info from NPM
 				if importPath == "" {
@@ -381,7 +431,7 @@ esbuild:
 				}
 				buf := bytes.NewBuffer(nil)
 				identifier := identify(name)
-				slice := bytes.Split(outputContent, []byte(fmt.Sprintf("\"__ESM_SH_EXTERNAL__:%s\"", name)))
+				slice := bytes.Split(outputContent, []byte(fmt.Sprintf("\"ESM_SH_EXTERNAL:%s\"", name)))
 				cjsContext := false
 				cjsImported := false
 				for i, p := range slice {
@@ -410,16 +460,11 @@ esbuild:
 								if err == nil {
 									// here the submodule should be always empty
 									pkg.submodule = ""
-									_, installed := esm.Dependencies[name]
-									if !installed {
-										_, installed = esm.PeerDependencies[name]
-									}
-									meta, err := initESM(task.wd, *pkg, !installed, task.deps)
-									if err == nil && meta.Module != "" {
-										if !meta.ExportDefault {
-											fmt.Fprintf(jsHeader, `import * as __%s$ from "%s";%s`, identifier, importPath, eol)
-											wrote = true
-										}
+									meta, err := initESM(task.wd, *pkg, task.deps)
+									// if the dependency is an es module without `default` export, then import star
+									if err == nil && meta.Module != "" && !meta.ExportDefault {
+										fmt.Fprintf(jsHeader, `import * as __%s$ from "%s";%s`, identifier, importPath, eol)
+										wrote = true
 									}
 								}
 							}
@@ -524,59 +569,60 @@ esbuild:
 
 func (task *buildTask) handleDTS(esm *ESM) (err error) {
 	start := time.Now()
-	pkg := task.pkg
-	nodeModulesDir := path.Join(task.wd, "node_modules")
+	name, submodule := task.pkg.name, task.pkg.submodule
 	versionedName := fmt.Sprintf("%s@%s", esm.Name, esm.Version)
+	nodeModulesDir := path.Join(task.wd, "node_modules")
 
 	var types string
 	if esm.Types != "" || esm.Typings != "" {
-		types = getTypesPath(nodeModulesDir, *esm.NpmPackage, "")
-	} else if pkg.submodule == "" {
-		if fileExists(path.Join(nodeModulesDir, pkg.name, "index.d.ts")) {
+		types = getTypesPath(task.wd, *esm.NpmPackage, "")
+	} else if submodule == "" {
+		if fileExists(path.Join(nodeModulesDir, name, "index.d.ts")) {
 			types = fmt.Sprintf("%s/%s", versionedName, "index.d.ts")
-		} else if !strings.HasPrefix(pkg.name, "@") {
-			packageFile := path.Join(nodeModulesDir, "@types", pkg.name, "package.json")
+		} else if !strings.HasPrefix(name, "@") {
+			packageFile := path.Join(nodeModulesDir, "@types", name, "package.json")
 			if fileExists(packageFile) {
 				var p NpmPackage
-				err := utils.ParseJSONFile(path.Join(nodeModulesDir, "@types", pkg.name, "package.json"), &p)
+				err := utils.ParseJSONFile(path.Join(nodeModulesDir, "@types", name, "package.json"), &p)
 				if err == nil {
-					types = getTypesPath(nodeModulesDir, p, "")
+					types = getTypesPath(task.wd, p, "")
 				}
 			}
 		}
 	} else {
-		if fileExists(path.Join(nodeModulesDir, pkg.name, pkg.submodule, "index.d.ts")) {
-			types = fmt.Sprintf("%s/%s", versionedName, path.Join(pkg.submodule, "index.d.ts"))
-		} else if fileExists(path.Join(nodeModulesDir, pkg.name, ensureSuffix(pkg.submodule, ".d.ts"))) {
-			types = fmt.Sprintf("%s/%s", versionedName, ensureSuffix(pkg.submodule, ".d.ts"))
-		} else if fileExists(path.Join(nodeModulesDir, "@types", pkg.name, pkg.submodule, "index.d.ts")) {
-			types = fmt.Sprintf("@types/%s/%s", versionedName, path.Join(pkg.submodule, "index.d.ts"))
-		} else if fileExists(path.Join(nodeModulesDir, "@types", pkg.name, ensureSuffix(pkg.submodule, ".d.ts"))) {
-			types = fmt.Sprintf("@types/%s/%s", versionedName, ensureSuffix(pkg.submodule, ".d.ts"))
+		if fileExists(path.Join(nodeModulesDir, name, submodule, "index.d.ts")) {
+			types = fmt.Sprintf("%s/%s", versionedName, path.Join(submodule, "index.d.ts"))
+		} else if fileExists(path.Join(nodeModulesDir, name, ensureSuffix(submodule, ".d.ts"))) {
+			types = fmt.Sprintf("%s/%s", versionedName, ensureSuffix(submodule, ".d.ts"))
+		} else if fileExists(path.Join(nodeModulesDir, "@types", name, submodule, "index.d.ts")) {
+			types = fmt.Sprintf("@types/%s/%s", versionedName, path.Join(submodule, "index.d.ts"))
+		} else if fileExists(path.Join(nodeModulesDir, "@types", name, ensureSuffix(submodule, ".d.ts"))) {
+			types = fmt.Sprintf("@types/%s/%s", versionedName, ensureSuffix(submodule, ".d.ts"))
 		}
 	}
-	if types != "" {
-		var prefix string
-		if len(task.deps) > 0 {
-			var ss sort.StringSlice
-			for _, pkg := range task.deps {
-				ss = append(ss, fmt.Sprintf("%s@%s", pkg.name, pkg.version))
-			}
-			ss.Sort()
-			prefix = fmt.Sprintf("deps=%s/", strings.Join(ss, ","))
-		}
-		err = copyDTS(
-			nodeModulesDir,
-			prefix,
-			types,
-		)
-		if err != nil {
-			err = fmt.Errorf("copyDTS(%s): %v", types, err)
-			return
-		}
-		esm.Dts = fmt.Sprintf("/%s%s", prefix, types)
-		log.Debugf("copy dts %s in %v", esm.Dts, time.Now().Sub(start))
+	if types == "" {
+		return
 	}
 
+	var prefix string
+	if len(task.deps) > 0 {
+		var ss sort.StringSlice
+		for _, pkg := range task.deps {
+			ss = append(ss, fmt.Sprintf("%s@%s", pkg.name, pkg.version))
+		}
+		ss.Sort()
+		prefix = fmt.Sprintf("deps=%s/", strings.Join(ss, ","))
+	}
+	err = CopyDTS(
+		task.wd,
+		prefix,
+		types,
+	)
+	if err != nil {
+		err = fmt.Errorf("copyDTS(%s:%s): %v", esm.Name, types, err)
+		return
+	}
+	esm.Dts = fmt.Sprintf("/%s%s", prefix, types)
+	log.Debugf("copy dts %s in %v", esm.Dts, time.Now().Sub(start))
 	return
 }

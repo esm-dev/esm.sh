@@ -24,27 +24,19 @@ type ESM struct {
 	Dts           string   `json:"dts"`
 }
 
-func initESM(wd string, pkg pkg, install bool, deps pkgSlice) (esm *ESM, err error) {
-	var p NpmPackage
-	p, _, err = node.getPackageInfo(pkg.name, pkg.version)
-	if err != nil {
-		return
-	}
-
+func initESM(wd string, pkg pkg, deps pkgSlice) (esm *ESM, err error) {
 	versions := map[string]string{}
 	for _, dep := range deps {
 		versions[dep.name] = dep.version
 	}
 
-	esm = &ESM{
-		NpmPackage: fixNpmPackage(p),
-	}
-
+	packageFile := path.Join(wd, "node_modules", pkg.name, "package.json")
+	install := !fileExists(packageFile)
 	if install {
 		installList := []string{
 			fmt.Sprintf("%s@%s", pkg.name, pkg.version),
 		}
-		if esm.Types == "" && esm.Typings == "" && !strings.HasPrefix(pkg.name, "@") {
+		if !strings.HasPrefix(pkg.name, "@") {
 			var info NpmPackage
 			info, _, err = node.getPackageInfo("@types/"+pkg.name, "latest")
 			if err != nil && err.Error() != fmt.Sprintf("npm: package '@types/%s' not found", pkg.name) {
@@ -58,22 +50,20 @@ func initESM(wd string, pkg pkg, install bool, deps pkgSlice) (esm *ESM, err err
 				}
 			}
 		}
-		for name, v := range esm.PeerDependencies {
-			if version, ok := versions[name]; ok {
-				installList = append(installList, fmt.Sprintf("%s@%s", name, version))
-			} else {
-				version := resoveVersion(v)
-				if version == "latest" {
-					installList = append(installList, name)
-				} else {
-					installList = append(installList, fmt.Sprintf("%s@%s", name, version))
-				}
-			}
-		}
 		err = yarnAdd(wd, installList...)
 		if err != nil {
 			return
 		}
+	}
+
+	var p NpmPackage
+	err = utils.ParseJSONFile(packageFile, &p)
+	if err != nil {
+		return
+	}
+
+	esm = &ESM{
+		NpmPackage: fixNpmPackage(p),
 	}
 
 	if pkg.submodule != "" {

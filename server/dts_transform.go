@@ -22,8 +22,18 @@ var (
 	regDeclareModule  = regexp.MustCompile(`^declare\s+module\s*('|")([^'"]+)("|')`)
 )
 
-func copyDTS(nodeModulesDir string, prefix string, dts string) (err error) {
-	dtsFilePath := path.Join(nodeModulesDir, regVersionPath.ReplaceAllString(dts, "$1/"))
+func CopyDTS(wd string, prefix string, dts string) (err error) {
+	return copyDTS(wd, prefix, dts, newStringSet())
+}
+
+func copyDTS(wd string, prefix string, dts string, tracing *stringSet) (err error) {
+	// don't repeat
+	if tracing.Has(prefix + "/" + dts) {
+		return
+	}
+	tracing.Add(prefix + "/" + dts)
+
+	dtsFilePath := path.Join(wd, "node_modules", regVersionPath.ReplaceAllString(dts, "$1/"))
 	dtsDir := path.Dir(dtsFilePath)
 	dtsFile, err := os.Open(dtsFilePath)
 	if err != nil {
@@ -49,7 +59,7 @@ func copyDTS(nodeModulesDir string, prefix string, dts string) (err error) {
 		}
 	}
 
-	deps := newStringSet()
+	imports := newStringSet()
 	dmodules := []string{}
 	rewriteFn := func(importPath string) string {
 		if isLocalImport(importPath) {
@@ -66,7 +76,7 @@ func copyDTS(nodeModulesDir string, prefix string, dts string) (err error) {
 					var p NpmPackage
 					packageJSONFile := path.Join(dtsDir, importPath, "package.json")
 					if fileExists(packageJSONFile) && utils.ParseJSONFile(packageJSONFile, &p) == nil {
-						types := getTypesPath(nodeModulesDir, p, "")
+						types := getTypesPath(wd, p, "")
 						if types != "" {
 							_, typespath := utils.SplitByFirstByte(types, '/')
 							importPath = strings.TrimSuffix(importPath, "/") + "/" + typespath
@@ -79,7 +89,6 @@ func copyDTS(nodeModulesDir string, prefix string, dts string) (err error) {
 				}
 			}
 		} else {
-			// nodejs builtin modules
 			if _, ok := builtInNodeModules[importPath]; ok {
 				importPath = "@types/node/" + importPath
 			}
@@ -93,32 +102,32 @@ func copyDTS(nodeModulesDir string, prefix string, dts string) (err error) {
 				subpath = s
 			}
 			var p NpmPackage
-			packageJSONFile := path.Join(nodeModulesDir, pkgName, "package.json")
+			packageJSONFile := path.Join(wd, "node_modules", pkgName, "package.json")
 			if fileExists(packageJSONFile) {
 				utils.ParseJSONFile(packageJSONFile, &p)
 			}
 			if p.Name == "" || (p.Types == "" && p.Typings == "") {
-				packageJSONFile = path.Join(nodeModulesDir, "@types", pkgName, "package.json")
+				packageJSONFile = path.Join(wd, "node_modules", "@types", pkgName, "package.json")
 				if fileExists(packageJSONFile) {
 					utils.ParseJSONFile(packageJSONFile, &p)
 				}
 			}
 			if p.Name != "" {
-				importPath = getTypesPath(nodeModulesDir, p, subpath)
+				importPath = getTypesPath(wd, p, subpath)
 			} else {
 				p, _, err := node.getPackageInfo("@types/"+pkgName, "latest")
 				if err != nil && err.Error() == fmt.Sprintf("npm: package '%s' not found", pkgName) {
 					p, _, err = node.getPackageInfo(pkgName, "latest")
 				}
 				if err == nil {
-					err = yarnAdd(fmt.Sprintf("%s@%s", p.Name, p.Version))
+					err = yarnAdd(wd, fmt.Sprintf("%s@%s", p.Name, p.Version))
 					if err == nil {
-						importPath = getTypesPath(nodeModulesDir, p, subpath)
+						importPath = getTypesPath(wd, p, subpath)
 					}
 				}
 			}
 		}
-		deps.Add(importPath)
+		imports.Add(importPath)
 		if !isLocalImport(importPath) {
 			importPath = "/" + importPath
 		}
@@ -352,36 +361,35 @@ func copyDTS(nodeModulesDir string, prefix string, dts string) (err error) {
 		return
 	}
 
-	for _, dep := range deps.Values() {
-		if isLocalImport(dep) {
-			if strings.HasPrefix(dep, "/") {
-				pkg, subpath := utils.SplitByFirstByte(dep, '/')
+	for _, importDts := range imports.Values() {
+		if isLocalImport(importDts) {
+			if strings.HasPrefix(importDts, "/") {
+				pkg, subpath := utils.SplitByFirstByte(importDts, '/')
 				if strings.HasPrefix(pkg, "@") {
 					n, _ := utils.SplitByFirstByte(subpath, '/')
 					pkg = fmt.Sprintf("%s/%s", pkg, n)
 				}
-				err = copyDTS(nodeModulesDir, prefix, path.Join(pkg, dep))
+				importDts = path.Join(pkg, importDts)
 			} else {
-				err = copyDTS(nodeModulesDir, prefix, path.Join(path.Dir(dts), dep))
+				importDts = path.Join(path.Dir(dts), importDts)
 			}
-		} else {
-			err = copyDTS(nodeModulesDir, prefix, dep)
 		}
+		err = copyDTS(wd, prefix, importDts, tracing)
 		if err != nil {
 			os.Remove(saveFilePath)
-			return
+			break
 		}
 	}
 
 	return
 }
 
-func getTypesPath(nodeModulesDir string, p NpmPackage, subpath string) string {
+func getTypesPath(wd string, p NpmPackage, subpath string) string {
 	var types string
 	if subpath != "" {
 		var subpkg NpmPackage
 		var subtypes string
-		subpkgJSONFile := path.Join(nodeModulesDir, p.Name, subpath, "package.json")
+		subpkgJSONFile := path.Join(wd, "node_modules", p.Name, subpath, "package.json")
 		if fileExists(subpkgJSONFile) && utils.ParseJSONFile(subpkgJSONFile, &subpkg) == nil {
 			if subpkg.Types != "" {
 				subtypes = subpkg.Types
