@@ -136,18 +136,15 @@ func query() rex.Handle {
 				storageType = "builds"
 			}
 
-		case ".ts", ".jsx", ".tsx", ".css":
-			if hasBuildVerPrefix {
-				if strings.HasSuffix(pathname, ".d.ts") {
-					storageType = "types"
-				} else {
-					storageType = "builds"
-				}
+		// todo: transform ts/jsx/tsx for browser
+		case ".ts", ".jsx", ".tsx":
+			if hasBuildVerPrefix && strings.HasSuffix(pathname, ".d.ts") {
+				storageType = "types"
 			} else if len(strings.Split(pathname, "/")) > 2 {
 				storageType = "raw"
 			}
 
-		case ".json", ".less", ".sass", ".scss", ".stylus", ".styl", ".wasm", ".xml", ".yaml", ".svg":
+		case ".json", ".css", ".less", ".sass", ".scss", ".stylus", ".styl", ".wasm", ".xml", ".yaml", ".svg", ".png", ".eot", ".ttf", ".woff", ".woff2":
 			if len(strings.Split(pathname, "/")) > 2 {
 				storageType = "raw"
 			}
@@ -157,7 +154,7 @@ func query() rex.Handle {
 		if storageType == "raw" {
 			m, err := parsePkg(pathname)
 			if err != nil {
-				return throwErrorJS(ctx, err)
+				return err
 			}
 			if m.submodule != "" {
 				shouldRedirect := !regVersionPath.MatchString(pathname)
