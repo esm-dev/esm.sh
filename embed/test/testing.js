@@ -1,118 +1,119 @@
 import queue from '/async/queue'
 
-export async function test(el) {
+export async function test($el) {
   const q = queue(async (task, callback) => {
-    const { name, testFn, li, span } = task
-    const em = document.createElement('em')
-    em.style.display = 'none'
-    span.innerText = 'importing...'
-    li.appendChild(em)
+    const { imports, testFn, $li, $status } = task
+
+    $status.innerText = 'importing...'
 
     try {
       const domain = localStorage.importDomain || '';
       const t1 = Date.now()
-      const imports = Array.isArray(name) ? await Promise.all(name.map(n => {
+      const modules = Array.isArray(imports) ? await Promise.all(imports.map(n => {
         return import(`${domain}/${n}${n.includes('?') ? '&' : '?'}dev`)
-      })) : await import(`${domain}/${name}${name.includes('?') ? '&' : '?'}dev`)
+      })) : await import(`${domain}/${imports}${imports.includes('?') ? '&' : '?'}dev`)
       const t2 = Date.now()
 
+      // create span element
+      const $span = document.createElement('span')
+      $li.appendChild($span)
+
       try {
-        await testFn({ imports, span })
+        await testFn({ modules: modules, $span, ok: () => $status.innerText = '✅ ' })
       } catch (err) {
-        span.innerText = `❌ ${err.message}`;
+        $status.innerText = `❌ ${err.message}`;
       }
 
-      em.innerHTML = `&middot; import in <strong>${Math.round(t2 - t1)}</strong>ms`
-      em.style.display = 'inline-block'
+      const $t = document.createElement('em')
+      $t.innerHTML = `&middot; import in <strong>${Math.round(t2 - t1)}</strong>ms`
+      $li.appendChild($t)
     } catch (e) {
       if (e.message.startsWith('[esm.sh] Unsupported nodejs builtin module')) {
-        span.innerText = '⚠️ ' + e.message
+        $status.innerText = '⚠️ ' + e.message
       } else {
-        span.innerText = '❌ ' + e.message
+        $status.innerText = '❌ ' + e.message
       }
     }
 
     callback() // invoke next task
   }, navigator.hardwareConcurrency || 1)
 
-  const _esm = async (name, testFn) => {
-    const li = document.createElement('li')
-    const strong = document.createElement('strong')
-    const span = document.createElement('span')
-    const names = [name].flat()
-    names.forEach((name, i) => {
+  const _esm = async (imports, testFn) => {
+    const $li = document.createElement('li')
+    const $imports = document.createElement('strong')
+    const $status = document.createElement('span')
+    const a = [imports].flat()
+    a.forEach((name, i) => {
       const a = document.createElement('a')
       a.innerText = name.split('?')[0]
       a.href = `/${name}${name.includes('?') ? '&' : '?'}dev`
-      strong.appendChild(a)
-      if (i < names.length - 1) {
-        strong.appendChild(document.createTextNode(', '))
+      $imports.appendChild(a)
+      if (i < a.length - 1) {
+        $imports.appendChild(document.createTextNode(', '))
       }
     })
-    strong.appendChild(document.createTextNode(':'))
-    span.innerText = 'wait...'
-    li.appendChild(strong)
-    li.appendChild(span)
-    el.appendChild(li)
-    q.push({ name, testFn, li, span, })
+    $imports.appendChild(document.createTextNode(':'))
+    $status.innerText = 'wait...'
+    $li.appendChild($imports)
+    $li.appendChild($status)
+    $el.appendChild($li)
+    q.push({ imports, testFn, $li, $status })
   }
 
   _esm('canvas-confetti', async (t) => {
-    const { default: confetti } = t.imports
+    const { default: confetti } = t.modules
 
-    const statusEl = document.createElement('span')
-    statusEl.innerText = '✅'
-    const confettiEl = document.createElement('span')
-    confettiEl.innerText = ' 🎉 '
-    confettiEl.style.userSelect = 'none'
-    confettiEl.style.cursor = 'pointer'
-    confettiEl.addEventListener('click', () => confetti())
+    t.$span.innerText = ' 🎉 '
+    t.$span.style.userSelect = 'none'
+    t.$span.style.cursor = 'pointer'
+    t.$span.addEventListener('click', () => confetti())
+    confetti()
 
-    t.span.innerHTML = ''
-    t.span.appendChild(statusEl)
-    t.span.appendChild(confettiEl)
+    t.ok()
   })
 
   _esm(['react@16', 'react-dom@16'], async (t) => {
     const [
       { createElement, Fragment, useState },
       { render }
-    ] = t.imports
+    ] = t.modules
 
     const App = () => {
       const [count, setCount] = useState(0)
       return createElement(
         Fragment,
         null,
-        createElement('span', null, '✅'),
         createElement('span', {
           onClick: () => setCount(n => n + 1),
           style: { cursor: 'pointer', userSelect: 'none' },
         }, ' ⏱ ', createElement('samp', null, count)),
       )
     }
-    render(createElement(App), t.span)
+    render(createElement(App), t.$span)
+
+    t.ok()
   })
 
   _esm(['react@17', 'react-dom@17'], async (t) => {
     const [
       { Fragment, useState, default: React },
       { render }
-    ] = t.imports
+    ] = t.modules
 
     const App = () => {
       const [count, setCount] = useState(0)
       return React.createElement(
         Fragment,
         null,
-        React.createElement('span', null, '✅'),
         React.createElement('span', {
           onClick: () => setCount(n => n + 1),
           style: { cursor: 'pointer', userSelect: 'none' },
         }, ' ⏱ ', React.createElement('samp', null, count)),
       )
     }
-    render(React.createElement(App), t.span)
+    render(React.createElement(App), t.$span)
+
+    t.ok()
   })
 
   _esm(['react@17', 'react-dom@17', 'react-redux?deps=react@17', 'redux'], async (t) => {
@@ -121,29 +122,29 @@ export async function test(el) {
       { render },
       { Provider, useDispatch, useSelector },
       { createStore }
-    ] = t.imports
+    ] = t.modules
 
-    const store = createStore((state = { ok: '✅', count: 0 }, action) => {
+    const store = createStore((state = { count: 0 }, action) => {
       if (action.type === '+') {
         return { ...state, count: state.count + 1 }
       }
       return state
     })
     const App = () => {
-      const ok = useSelector(state => state.ok)
       const count = useSelector(state => state.count)
       const dispatch = useDispatch()
       return createElement(
         Fragment,
         null,
-        createElement('span', null, ok),
         createElement('span', {
           onClick: () => dispatch({ type: '+' }),
           style: { cursor: 'pointer', userSelect: 'none' },
         }, ' ⏱ ', createElement('samp', null, count)),
       )
     }
-    render(createElement(Provider, { store }, createElement(App)), t.span)
+    render(createElement(Provider, { store }, createElement(App)), t.$span)
+
+    t.ok()
   })
 
   _esm(['react@17', 'react-dom@17', 'mobx-react-lite?deps=react@17', 'mobx'], async (t) => {
@@ -152,24 +153,24 @@ export async function test(el) {
       { render },
       { observer },
       { makeAutoObservable }
-    ] = t.imports
+    ] = t.modules
 
     const store = makeAutoObservable({
-      ok: '✅',
       count: 0,
     })
     const App = observer(({ store }) => {
       return createElement(
         Fragment,
         null,
-        createElement('span', null, store.ok),
         createElement('span', {
           onClick: () => store.count++,
           style: { cursor: 'pointer', userSelect: 'none' },
         }, ' ⏱ ', createElement('samp', null, store.count))
       )
     })
-    render(createElement(App, { store }), t.span)
+    render(createElement(App, { store }), t.$span)
+
+    t.ok()
   })
 
   _esm(['react@17', 'react-dom@17', 'antd?bundle'], async (t) => {
@@ -177,7 +178,7 @@ export async function test(el) {
       { createElement, Fragment },
       { render },
       { Spin }
-    ] = t.imports
+    ] = t.modules
 
     // spin style
     const styleEl = document.createElement('style')
@@ -188,36 +189,30 @@ export async function test(el) {
       return createElement(
         Fragment,
         null,
-        createElement('span', null, '✅'),
-        ' ',
         createElement(Spin, { size: 'small' }),
       )
     }
-    render(createElement(App), t.span)
+    render(createElement(App), t.$span)
+
+    t.ok()
   })
 
   _esm(['preact', 'preact/hooks'], async (t) => {
     const [
-      { Fragment, h, render },
-      { useEffect, useState }
-    ] = t.imports
+      { h, render },
+      { useState }
+    ] = t.modules
 
     const App = () => {
       const [count, setCount] = useState(0)
-      useEffect(() => {
-        t.span.removeChild(t.span.lastChild)
-      }, [])
-      return h(
-        Fragment,
-        null,
-        h('span', null, '✅'),
-        h('span', {
-          onClick: () => setCount(n => n + 1),
-          style: { cursor: 'pointer', userSelect: 'none' },
-        }, ' ⏱ ', h('samp', null, count))
-      )
+      return h('span', {
+        onClick: () => setCount(n => n + 1),
+        style: { cursor: 'pointer', userSelect: 'none' },
+      }, ' ⏱ ', h('samp', null, count))
     }
-    render(h(App), t.span)
+    render(h(App), t.$span)
+
+    t.ok()
   })
 
   _esm(['preact', 'preact/hooks', 'swr?alias=react:preact/compat'], async (t) => {
@@ -225,29 +220,31 @@ export async function test(el) {
       { Fragment, h, render },
       { useEffect },
       { default: useSWR }
-    ] = t.imports
+    ] = t.modules
 
     const App = () => {
       const { data, error } = useSWR('/status.json')
       useEffect(() => {
-        t.span.removeChild(t.span.lastChild)
+        t.$span.removeChild(t.$span.lastChild)
       }, [])
       return h(
         Fragment,
         null,
         error && h('span', null, 'failed to load'),
         !data && h('span', null, 'loading...'),
-        data && h('span', null, '✅', ' data: ', h('code', null, JSON.stringify(Object.keys(data)))),
+        data && h('span', null, 'data: ', h('code', null, JSON.stringify(Object.keys(data)))),
       )
     }
-    render(h(App), t.span)
+    render(h(App), t.$span)
+
+    t.ok()
   })
 
   _esm('vue@2', async (t) => {
-    const { default: Vue } = t.imports
+    const { default: Vue } = t.modules
 
     new Vue({
-      el: t.span,
+      el: t.$span,
       data: { count: 0 },
       methods: {
         onClick() {
@@ -259,7 +256,6 @@ export async function test(el) {
           'span',
           {},
           [
-            h('span', {}, '✅'),
             h(
               'span',
               {
@@ -272,10 +268,12 @@ export async function test(el) {
         )
       }
     })
+
+    t.ok()
   })
 
   _esm('vue@3', async (t) => {
-    const { createApp, h } = t.imports
+    const { createApp, h } = t.modules
 
     createApp({
       data() {
@@ -287,39 +285,45 @@ export async function test(el) {
         }
       },
       render() {
-        return [
-          h('span', {}, '✅'),
-          h(
-            'span',
-            {
-              style: { cursor: 'pointer', userSelect: 'none' },
-              onClick: this.onClick,
-            },
-            ' ⏱ ',
-            h('samp', {}, this.count),
-          )
-        ]
+        return h(
+          'span',
+          {
+            style: { cursor: 'pointer', userSelect: 'none' },
+            onClick: this.onClick,
+          },
+          ' ⏱ ',
+          h('samp', {}, this.count),
+        )
       }
-    }).mount(t.span)
+    }).mount(t.$span)
+
+    t.ok()
   })
 
   _esm('jquery', async (t) => {
-    const { default: $ } = t.imports
+    const { default: $ } = t.modules
 
-    $(t.span).text('✅')
+    $(t.$span).css({color: 'gray'}).text('$')
+
+    t.ok()
   })
 
   _esm('lodash', async (t) => {
-    const { default: _ } = t.imports
+    const { default: _ } = t.modules
 
-    const defaults = _.defaults({ ok: '✅' }, { ok: '❌' })
-    t.span.innerText = defaults.ok
+    const defaults = _.defaults({ lodash: '_' }, { lodash: 'lodash' })
+    t.$span.style.color = 'gray'
+    t.$span.innerText = defaults.lodash
+
+    t.ok()
   })
 
   _esm('d3', async (t) => {
-    const d3 = t.imports
+    const d3 = t.modules
 
-    t.span.id = 'd3-span'
-    d3.select('#d3-span').text('✅')
+    t.$span.id = 'd3-span'
+    d3.select('#d3-span').style('color','gray').text('d3')
+
+    t.ok()
   })
 }
