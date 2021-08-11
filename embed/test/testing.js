@@ -44,10 +44,10 @@ export async function test($el) {
     const $status = document.createElement('span')
     const a = [imports].flat()
     a.forEach((name, i) => {
-      const a = document.createElement('a')
-      a.innerText = name.split('?')[0]
-      a.href = `/${name}${name.includes('?') ? '&' : '?'}dev`
-      $imports.appendChild(a)
+      const $a = document.createElement('a')
+      $a.innerText = name.split('?')[0]
+      $a.href = `/${name}${name.includes('?') ? '&' : '?'}dev`
+      $imports.appendChild($a)
       if (i < a.length - 1) {
         $imports.appendChild(document.createTextNode(', '))
       }
@@ -232,7 +232,7 @@ export async function test($el) {
         null,
         error && h('span', null, 'failed to load'),
         !data && h('span', null, 'loading...'),
-        data && h('span', null, 'data: ', h('code', null, JSON.stringify(Object.keys(data)))),
+        data && h('span', null, 'build queue: ', h('strong', null, `${data.queue.length}`), ' ', 'task', data.queue.length !== 1 && 's'),
       )
     }
     render(h(App), t.$span)
@@ -303,7 +303,7 @@ export async function test($el) {
   _esm('jquery', async (t) => {
     const { default: $ } = t.modules
 
-    $(t.$span).css({color: 'gray'}).text('$')
+    $(t.$span).css({ color: 'gray' }).text('$')
 
     t.ok()
   })
@@ -322,7 +322,7 @@ export async function test($el) {
     const d3 = t.modules
 
     t.$span.id = 'd3-span'
-    d3.select('#d3-span').style('color','gray').text('d3')
+    d3.select('#d3-span').style('color', 'gray').text('d3')
 
     t.ok()
   })
