@@ -1,22 +1,19 @@
 import queue from '/async/queue'
 
 export async function test($el) {
-  const q = queue(async (task, callback) => {
-    const { imports, testFn, $li, $status } = task
+  const q = queue(async ({ imports, testFn, $li, $status }, callback) => {
+    const domain = localStorage.importDomain || ''
+    const $span = document.createElement('span')
+    const $t = document.createElement('em')
+    const start = Date.now()
 
     $status.innerText = 'importing...'
+    $li.appendChild($span)
 
     try {
-      const domain = localStorage.importDomain || '';
-      const t1 = Date.now()
       const modules = Array.isArray(imports) ? await Promise.all(imports.map(n => {
         return import(`${domain}/${n}${n.includes('?') ? '&' : '?'}dev`)
       })) : await import(`${domain}/${imports}${imports.includes('?') ? '&' : '?'}dev`)
-      const t2 = Date.now()
-
-      // create span element
-      const $span = document.createElement('span')
-      $li.appendChild($span)
 
       try {
         await testFn({ modules: modules, $span, ok: () => $status.innerText = '✅ ' })
@@ -24,8 +21,7 @@ export async function test($el) {
         $status.innerText = `❌ ${err.message}`;
       }
 
-      const $t = document.createElement('em')
-      $t.innerHTML = `&middot; import in <strong>${Math.round(t2 - t1)}</strong>ms`
+      $t.innerHTML = `&middot; import in <strong>${Math.round(Date.now() - start)}</strong>ms`
       $li.appendChild($t)
     } catch (e) {
       if (e.message.startsWith('[esm.sh] Unsupported nodejs builtin module')) {
@@ -43,6 +39,7 @@ export async function test($el) {
     const $imports = document.createElement('strong')
     const $status = document.createElement('span')
     const a = [imports].flat()
+
     a.forEach((name, i) => {
       const $a = document.createElement('a')
       $a.innerText = name.split('?')[0]
