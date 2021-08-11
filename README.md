@@ -1,6 +1,6 @@
 # ESM
 
-A fast, global content delivery network for ES Modules. All modules in [NPM](http://npmjs.org/) are transformed to ESM by [esbuild](https://github.com/evanw/esbuild).
+A fast, global content delivery network to transform [NPM](http://npmjs.org/) packges to standard **ES Modules** by [esbuild](https://github.com/evanw/esbuild).
 
 ## Import from URL
 
