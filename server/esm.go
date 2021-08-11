@@ -151,6 +151,17 @@ func initESM(wd string, pkg pkg, deps pkgSlice) (esm *ESM, err error) {
 		}
 	}
 
+	if esm.Main == "" && esm.Module == "" {
+		s, ok := esm.DefinedExports.(string)
+		if ok {
+			if esm.Type == "module" {
+				esm.Module = s
+			} else {
+				esm.Main = s
+			}
+		}
+	}
+
 	if esm.Module == "" && strings.HasSuffix(esm.Main, ".mjs") {
 		esm.Module = esm.Main
 	}
