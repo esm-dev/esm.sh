@@ -16,7 +16,7 @@ export async function test($el) {
       })) : await import(`${domain}/${imports}${imports.includes('?') ? '&' : '?'}dev`)
 
       try {
-        await testFn({ modules: modules, $span, ok: () => $status.innerText = '✅ ' })
+        await testFn({ $span, modules, ok: () => $status.innerText = '✅ ' })
       } catch (err) {
         $status.innerText = `❌ ${err.message}`;
       }
@@ -59,11 +59,11 @@ export async function test($el) {
 
   _esm('canvas-confetti', async (t) => {
     const { default: confetti } = t.modules
-
-    t.$span.innerText = ' 🎉 '
-    t.$span.style.userSelect = 'none'
+    
     t.$span.style.cursor = 'pointer'
+    t.$span.style.userSelect = 'none'
     t.$span.addEventListener('click', () => confetti())
+    t.$span.innerText = ' 🎉 '
     confetti()
 
     t.ok()
