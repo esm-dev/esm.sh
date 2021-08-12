@@ -24,7 +24,7 @@ type ESM struct {
 	Dts           string   `json:"dts"`
 }
 
-func initESM(wd string, pkg pkg, deps pkgSlice) (esm *ESM, err error) {
+func initESM(wd string, pkg pkg, deps pkgSlice, nodeEnv string) (esm *ESM, err error) {
 	versions := map[string]string{}
 	for _, dep := range deps {
 		versions[dep.name] = dep.version
@@ -151,21 +151,6 @@ func initESM(wd string, pkg pkg, deps pkgSlice) (esm *ESM, err error) {
 		}
 	}
 
-	if esm.Main == "" && esm.Module == "" {
-		s, ok := esm.DefinedExports.(string)
-		if ok {
-			if esm.Type == "module" {
-				esm.Module = s
-			} else {
-				esm.Main = s
-			}
-		}
-	}
-
-	if esm.Module == "" && strings.HasSuffix(esm.Main, ".mjs") {
-		esm.Module = esm.Main
-	}
-
 	if esm.Module != "" {
 		resolved, exportDefault, err := checkESM(wd, esm.Name, esm.Module)
 		if err != nil {
@@ -178,7 +163,7 @@ func initESM(wd string, pkg pkg, deps pkgSlice) (esm *ESM, err error) {
 	}
 
 	if esm.Module == "" {
-		ret, err := parseCJSModuleExports(wd, pkg.ImportPath())
+		ret, err := parseCJSModuleExports(wd, pkg.ImportPath(), nodeEnv)
 		if err != nil {
 			return nil, fmt.Errorf("parseCJSModuleExports: %v", err)
 		}

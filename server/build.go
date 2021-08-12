@@ -117,12 +117,12 @@ func (task *buildTask) Build() (esm *ESM, pkgCSS bool, err error) {
 }
 
 func (task *buildTask) build() (esm *ESM, pkgCSS bool, err error) {
-	env := "production"
+	nodeEnv := "production"
 	if task.isDev {
-		env = "development"
+		nodeEnv = "development"
 	}
 
-	esm, err = initESM(task.wd, task.pkg, task.deps)
+	esm, err = initESM(task.wd, task.pkg, task.deps, nodeEnv)
 	if err != nil {
 		log.Warn("init ESM:", err)
 		return
@@ -161,14 +161,14 @@ func (task *buildTask) build() (esm *ESM, pkgCSS bool, err error) {
 		"setImmediate":                "__setImmediate$",
 		"clearImmediate":              "clearTimeout",
 		"require.resolve":             "__rResolve$",
-		"process.env.NODE_ENV":        fmt.Sprintf(`"%s"`, env),
+		"process.env.NODE_ENV":        fmt.Sprintf(`"%s"`, nodeEnv),
 		"global":                      "__global$",
 		"global.process":              "__process$",
 		"global.Buffer":               "__Buffer$",
 		"global.setImmediate":         "__setImmediate$",
 		"global.clearImmediate":       "clearTimeout",
 		"global.require.resolve":      "__rResolve$",
-		"global.process.env.NODE_ENV": fmt.Sprintf(`"%s"`, env),
+		"global.process.env.NODE_ENV": fmt.Sprintf(`"%s"`, nodeEnv),
 	}
 	external := newStringSet()
 	extraExternal := newStringSet()
@@ -250,8 +250,8 @@ esbuild:
 			log.Warnf("esbuild(%s): %s", task.ID(), msg)
 			name := strings.Split(msg, "\"")[1]
 			if !extraExternal.Has(name) {
-				external.Add(name)
 				extraExternal.Add(name)
+				external.Add(name)
 				goto esbuild
 			}
 		} else if strings.HasPrefix(msg, "No matching export in \"") && strings.Contains(msg, "for import \"default\"") {
@@ -278,7 +278,7 @@ esbuild:
 				"/* esm.sh - esbuild bundle(%s) %s %s */\n",
 				task.pkg.String(),
 				strings.ToLower(task.target),
-				env,
+				nodeEnv,
 			))
 			eol := "\n"
 			if !task.isDev {
@@ -460,7 +460,7 @@ esbuild:
 								if err == nil {
 									// here the submodule should be always empty
 									pkg.submodule = ""
-									meta, err := initESM(task.wd, *pkg, task.deps)
+									meta, err := initESM(task.wd, *pkg, task.deps, nodeEnv)
 									// if the dependency is an es module without `default` export, then import star
 									if err == nil && meta.Module != "" && !meta.ExportDefault {
 										fmt.Fprintf(jsHeader, `import * as __%s$ from "%s";%s`, identifier, importPath, eol)
@@ -489,7 +489,7 @@ esbuild:
 			// add nodejs/deno compatibility
 			if task.target != "node" {
 				if bytes.Contains(outputContent, []byte("__process$")) {
-					fmt.Fprintf(jsHeader, `import __process$ from "/v%d/node_process.js";%s__process$.env.NODE_ENV="%s";%s`, VERSION, eol, env, eol)
+					fmt.Fprintf(jsHeader, `import __process$ from "/v%d/node_process.js";%s__process$.env.NODE_ENV="%s";%s`, VERSION, eol, nodeEnv, eol)
 				}
 				if bytes.Contains(outputContent, []byte("__Buffer$")) {
 					fmt.Fprintf(jsHeader, `import { Buffer as __Buffer$ } from "/v%d/node_buffer.js";%s`, VERSION, eol)
@@ -542,7 +542,7 @@ esbuild:
 		}
 	}
 
-	log.Debugf("esbuild %s %s %s in %v", task.pkg.String(), task.target, env, time.Now().Sub(start))
+	log.Debugf("esbuild %s %s %s in %v", task.pkg.String(), task.target, nodeEnv, time.Now().Sub(start))
 
 	err = task.handleDTS(esm)
 	if err != nil {

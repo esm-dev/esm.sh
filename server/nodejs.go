@@ -340,8 +340,18 @@ func getNodejsVersion() (version string, major int, err error) {
 	return
 }
 
-func useDefinedExports(p *NpmPackage, define interface{}) {
-	m, ok := define.(map[string]interface{})
+func useDefinedExports(p *NpmPackage, exports interface{}) {
+	s, ok := exports.(string)
+	if ok {
+		if p.Type == "module" && p.Module == "" {
+			p.Module = s
+		} else if p.Main == "" {
+			p.Main = s
+		}
+		return
+	}
+
+	m, ok := exports.(map[string]interface{})
 	if ok {
 		for _, key := range []string{"browser", "import", "module"} {
 			value, ok := m[key]
@@ -390,9 +400,10 @@ func fixNpmPackage(p NpmPackage) *NpmPackage {
 		}
 	}
 
-	if p.Module == "" && p.Type == "module" {
+	if p.Module == "" && p.Main != "" && (p.Type == "module" || strings.HasSuffix(p.Main, ".mjs")) {
 		p.Module = p.Main
 	}
+
 	return np
 }
 

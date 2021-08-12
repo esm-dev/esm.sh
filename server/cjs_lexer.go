@@ -19,7 +19,7 @@ type cjsModuleLexerResult struct {
 	Error   string   `json:"error"`
 }
 
-func parseCJSModuleExports(buildDir string, importPath string) (ret cjsModuleLexerResult, err error) {
+func parseCJSModuleExports(buildDir string, importPath string, nodeEnv string) (ret cjsModuleLexerResult, err error) {
 	url := fmt.Sprintf("http://0.0.0.0:%d", config.cjsLexerServerPort)
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
@@ -28,6 +28,7 @@ func parseCJSModuleExports(buildDir string, importPath string) (ret cjsModuleLex
 
 	req.Header.Add("build-dir", buildDir)
 	req.Header.Add("import-path", importPath)
+	req.Header.Add("node-env", nodeEnv)
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		return
@@ -92,7 +93,7 @@ func startCJSLexerServer(port uint16, isDev bool) (err error) {
 
 	let cjsLexerReady = false
 
-	async function getExports (buildDir, importPath) {
+	async function getExports (buildDir, importPath, nodeEnv = 'production') {
 		if (!cjsLexerReady) {
 			await cjsLexer.init()
 			cjsLexerReady = true
@@ -113,9 +114,9 @@ func startCJSLexerServer(port uint16, isDev bool) (err error) {
 				const results = cjsLexer.parse(code)
 				exports.push(...results.exports)
 				for (const reexport of results.reexports) {
-				if (!reexport.endsWith('.json')) {
-					paths.push(await resolve(dirname(currentPath), reexport))
-				}
+					if (!reexport.endsWith('.json')) {
+						paths.push(await resolve(dirname(currentPath), reexport))
+					}
 				}
 			}
 		} catch(e) {
@@ -124,11 +125,12 @@ func startCJSLexerServer(port uint16, isDev bool) (err error) {
 
 		try {
 			if (!jsFile.endsWith('.json')) {
+				process.env.NODE_ENV = nodeEnv
 				const mod = require(jsFile)
 				if (typeof mod === 'object' && mod !== null && !Array.isArray(mod)) {
 					for (const key of Object.keys(mod)) {
 						if (typeof key === 'string' && key !== '' && !exports.includes(key)) {
-						exports.push(key)
+							exports.push(key)
 						}
 					}
 				}
@@ -143,12 +145,13 @@ func startCJSLexerServer(port uint16, isDev bool) (err error) {
 	const server = http.createServer(function (req, resp) {
 		const buildDir = req.headers['build-dir']
 		const importPath = req.headers['import-path']
+		const nodeEnv = req.headers['node-env']
 		if (!buildDir || !importPath) {
 			resp.write('Bad request')
 			resp.end()
 			return
 		}
-		getExports(buildDir, importPath).then(ret => {
+		getExports(buildDir, importPath, nodeEnv).then(ret => {
 			resp.write(JSON.stringify(ret))
 			resp.end()
 		})
