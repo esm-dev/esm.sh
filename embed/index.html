@@ -361,21 +361,24 @@
       display: none;
     }
 
+    .test ul li {
+      height: 24px;
+    }
+
     .test ul li>span,
     .test ul li>em,
     .test ul li>strong,
     .test ul li::before {
-      display: inline-block;
       height: 24px;
       line-height: 24px;
     }
 
-    .test ul li>span {
-      margin-left: 8px;
-    }
-
+    .test ul li>span,
     .test ul li>em {
-      margin-left: 8px;
+      padding-left: 8px;
+    }
+    
+    .test ul li em { 
       color: #999;
     }
   </style>
@@ -434,7 +437,7 @@
       mainEl.querySelectorAll('code.language-bash').forEach(block => {
         block.innerHTML = block.innerHTML.replace(/(^|\n)\$ /g, '$1')
       })
-      
+
       hljs.registerLanguage('javascript', javascript)
       hljs.registerLanguage('json', json)
       hljs.registerLanguage('xml', xml)

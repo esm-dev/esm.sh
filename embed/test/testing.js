@@ -1,13 +1,13 @@
 import queue from '/async/queue'
 
 export async function test($el) {
-  const q = queue(async ({ imports, testFn, $li, $status }, callback) => {
+  const q = queue(async ({ imports, testFn, $li, $status }) => {
     const domain = localStorage.importDomain || ''
     const $span = document.createElement('span')
     const $t = document.createElement('em')
     const start = Date.now()
 
-    $status.innerText = 'importing...'
+    $status.innerHTML = 'importing...'
     $li.appendChild($span)
 
     try {
@@ -16,7 +16,7 @@ export async function test($el) {
       })) : await import(`${domain}/${imports}${imports.includes('?') ? '&' : '?'}dev`)
 
       try {
-        await testFn({ $span, modules, ok: () => $status.innerText = '✅ ' })
+        await testFn({ $span, modules, ok: () => $status.innerText = '✅' })
       } catch (err) {
         $status.innerText = `❌ ${err.message}`;
       }
@@ -30,8 +30,6 @@ export async function test($el) {
         $status.innerText = '❌ ' + e.message
       }
     }
-
-    callback() // invoke next task
   }, navigator.hardwareConcurrency || 1)
 
   const _esm = async (imports, testFn) => {
@@ -50,7 +48,7 @@ export async function test($el) {
       }
     })
     $imports.appendChild(document.createTextNode(':'))
-    $status.innerText = 'wait...'
+    $status.innerHTML = '<em>waiting...</em>'
     $li.appendChild($imports)
     $li.appendChild($status)
     $el.appendChild($li)
@@ -59,7 +57,7 @@ export async function test($el) {
 
   _esm('canvas-confetti', async (t) => {
     const { default: confetti } = t.modules
-    
+
     t.$span.style.cursor = 'pointer'
     t.$span.style.userSelect = 'none'
     t.$span.addEventListener('click', () => confetti())
@@ -83,7 +81,7 @@ export async function test($el) {
         createElement('span', {
           onClick: () => setCount(n => n + 1),
           style: { cursor: 'pointer', userSelect: 'none' },
-        }, ' ⏱ ', createElement('samp', null, count)),
+        }, '⏱ ', createElement('samp', null, count)),
       )
     }
     render(createElement(App), t.$span)
@@ -105,7 +103,7 @@ export async function test($el) {
         React.createElement('span', {
           onClick: () => setCount(n => n + 1),
           style: { cursor: 'pointer', userSelect: 'none' },
-        }, ' ⏱ ', React.createElement('samp', null, count)),
+        }, '⏱ ', React.createElement('samp', null, count)),
       )
     }
     render(React.createElement(App), t.$span)
@@ -136,7 +134,7 @@ export async function test($el) {
         createElement('span', {
           onClick: () => dispatch({ type: '+' }),
           style: { cursor: 'pointer', userSelect: 'none' },
-        }, ' ⏱ ', createElement('samp', null, count)),
+        }, '⏱ ', createElement('samp', null, count)),
       )
     }
     render(createElement(Provider, { store }, createElement(App)), t.$span)
@@ -162,7 +160,7 @@ export async function test($el) {
         createElement('span', {
           onClick: () => store.count++,
           style: { cursor: 'pointer', userSelect: 'none' },
-        }, ' ⏱ ', createElement('samp', null, store.count))
+        }, '⏱ ', createElement('samp', null, store.count))
       )
     })
     render(createElement(App, { store }), t.$span)
@@ -186,6 +184,8 @@ export async function test($el) {
       return createElement(
         Fragment,
         null,
+        createElement('code', null, '<Spin />'),
+        createElement('em', { style: { padding: '0 10px' } }, '→'),
         createElement(Spin, { size: 'small' }),
       )
     }
@@ -205,7 +205,7 @@ export async function test($el) {
       return h('span', {
         onClick: () => setCount(n => n + 1),
         style: { cursor: 'pointer', userSelect: 'none' },
-      }, ' ⏱ ', h('samp', null, count))
+      }, '⏱ ', h('samp', null, count))
     }
     render(h(App), t.$span)
 
@@ -259,7 +259,7 @@ export async function test($el) {
                 style: { cursor: 'pointer', userSelect: 'none' },
                 on: { click: this.onClick },
               },
-              [' ⏱ ', h('samp', {}, this.count)]
+              ['⏱ ', h('samp', {}, this.count)]
             )
           ]
         )
@@ -288,7 +288,7 @@ export async function test($el) {
             style: { cursor: 'pointer', userSelect: 'none' },
             onClick: this.onClick,
           },
-          ' ⏱ ',
+          '⏱ ',
           h('samp', {}, this.count),
         )
       }
@@ -323,4 +323,22 @@ export async function test($el) {
 
     t.ok()
   })
+
+  /*
+    test example:
+    ```
+      // single module
+      _esm('packageName', async (t) => {
+        const mod = t.modules          // imported module
+        t.$span.innterText = ':)'      // render testing content
+        t.ok()                         // render '✅' and import timing
+      })
+      // mulitple modules
+      _esm(['packageName1', 'packageName2'], async (t) => {
+        const [mod1, mod2] = t.modules // imported modules
+        t.$span.innterText = ':)'      // render testing content
+        t.ok()                         // render '✅' and import timing
+      })
+    ```
+  */
 }
