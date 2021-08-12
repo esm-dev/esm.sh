@@ -193,7 +193,7 @@ func (task *buildTask) build() (esm *ESM, pkgCSS bool, err error) {
 					}
 
 					// bundle all deps except peer deps in `bundle` mode
-					if task.bundle {
+					if task.bundle && !extraExternal.Has(specifier) {
 						a := strings.Split(specifier, "/")
 						pkgName := a[0]
 						if len(a) > 1 && specifier[0] == '@' {
