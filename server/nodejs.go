@@ -23,7 +23,7 @@ import (
 
 const (
 	minNodejsVersion = 14
-	nodejsLatestLTS  = "14.17.3"
+	nodejsLatestLTS  = "14.17.5"
 	nodejsDistURL    = "https://nodejs.org/dist/"
 	refreshDuration  = 10 * 60 // 10 minues
 )
@@ -449,7 +449,7 @@ func installNodejs(dir string, version string) (err error) {
 func yarnAdd(wd string, packages ...string) (err error) {
 	if len(packages) > 0 {
 		start := time.Now()
-		args := append([]string{"add", "--silent", "--no-progress", "--ignore-scripts"}, packages...)
+		args := append([]string{"add", "--silent", "--no-progress", "--non-interactive", "--ignore-scripts", "--cache-folder", config.yarnCacheDir}, packages...)
 		cmd := exec.Command("yarn", args...)
 		cmd.Dir = wd
 		output, err := cmd.CombinedOutput()
