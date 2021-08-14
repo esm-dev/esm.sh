@@ -46,14 +46,16 @@ In **bundle** mode, all dependencies will be bundled into one JS file.
 import React from 'https://esm.sh/react?dev'
 ```
 
-### Specify external deps
+The `?dev` mode builds code with `NODE_ENV` equals to `development`, that is useful to build modules like **React** to allow you get more development warn/error messages.
+
+### Specify external dependencies
 
 ```javascript
 import React from 'https://esm.sh/react@16.14.0'
 import useSWR from 'https://esm.sh/swr?deps=react@16.14.0'
 ```
 
-Separate multiple deps with commas: `?deps=react@16.14.0,react-dom@16.14.0`
+By default, esm.sh rewrites import specifier based on the package's dependency statement. To specify version of dependencies you can use the `?deps=PACKAGE@VERSION` query, separate multiple dependencies with commas: `?deps=react@16.14.0,react-dom@16.14.0`.
 
 ### Aliasing dependencies
 
@@ -87,7 +89,7 @@ import Daygrid from 'https://esm.sh/@fullcalendar/daygrid'
 <link rel="stylesheet" href="https://esm.sh/@fullcalendar/daygrid?css">
 ```
 
-Only works when the NPM package imports css files in JS.
+This only works when the NPM module imports css files in JS directly.
 
 ## Deno compatibility
 
