@@ -29,6 +29,7 @@ var (
 // The config for ESM Server
 type Config struct {
 	storageDir         string
+	yarnCacheDir       string
 	domain             string
 	cdnDomain          string
 	cdnDomainChina     string
@@ -42,6 +43,7 @@ func Serve(fs *embed.FS) {
 	var httpsPort int
 	var cjsLexerServerPort int
 	var etcDir string
+	var yarnCacheDir string
 	var domain string
 	var cdnDomain string
 	var cdnDomainChina string
@@ -51,8 +53,9 @@ func Serve(fs *embed.FS) {
 
 	flag.IntVar(&port, "port", 80, "http server port")
 	flag.IntVar(&httpsPort, "https-port", 443, "https server port")
-	flag.IntVar(&cjsLexerServerPort, "cjs-lexer-server-port", 8088, "cjs lexer server port")
+	flag.IntVar(&cjsLexerServerPort, "cjs-lexer-server-port", 2022, "cjs lexer server port")
 	flag.StringVar(&etcDir, "etc-dir", "/usr/local/etc/esmd", "the etc dir to store data")
+	flag.StringVar(&yarnCacheDir, "yarn-cache-dir", "/usr/local/share/.cache/yarn", "the cache dir for `yarn add`")
 	flag.StringVar(&domain, "domain", "esm.sh", "main domain")
 	flag.StringVar(&cdnDomain, "cdn-domain", "", "cdn domain")
 	flag.StringVar(&cdnDomainChina, "cdn-domain-china", "", "cdn domain for china")
@@ -64,20 +67,22 @@ func Serve(fs *embed.FS) {
 	logDir := "/var/log/esmd"
 	if isDev {
 		etcDir, _ = filepath.Abs(".dev")
+		yarnCacheDir = path.Join(etcDir, "yarn")
+		logDir = path.Join(etcDir, "log")
+		logLevel = "debug"
 		domain = "localhost"
 		cdnDomain = ""
 		cdnDomainChina = ""
-		logDir = path.Join(etcDir, "log")
-		logLevel = "debug"
 	}
 
 	config = &Config{
-		cjsLexerServerPort: uint16(cjsLexerServerPort),
 		storageDir:         path.Join(etcDir, "storage"),
+		yarnCacheDir:       yarnCacheDir,
 		domain:             domain,
 		cdnDomain:          cdnDomain,
 		cdnDomainChina:     cdnDomainChina,
 		unpkgDomain:        unpkgDomain,
+		cjsLexerServerPort: uint16(cjsLexerServerPort),
 	}
 	embedFS = fs
 
@@ -229,6 +234,12 @@ func Serve(fs *embed.FS) {
 }
 
 func init() {
+	config = &Config{
+		storageDir:         "/usr/local/etc/esmd/storage",
+		yarnCacheDir:       "/usr/local/share/.cache/yarn",
+		domain:             "esm.sh",
+		cjsLexerServerPort: 2022,
+	}
 	log = &logx.Logger{}
 	embedFS = &embed.FS{}
 }
