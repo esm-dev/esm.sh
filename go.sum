@@ -6,8 +6,9 @@ github.com/evanw/esbuild v0.12.20 h1:cDvP8vtNwlSt+ebXOKIUImWAWXk+2MSByOKEXFxc4rs
 github.com/evanw/esbuild v0.12.20/go.mod h1:y2AFBAGVelPqPodpdtxWWqe6n2jYf5FrsJbligmRmuw=
 github.com/ije/esbuild-internal v0.11.0 h1:UZjHESquMPluy1XUtd+FpYIzST6A4nvgkr3Nn3h+390=
 github.com/ije/esbuild-internal v0.11.0/go.mod h1:1SwqRSgvXFcLgL1ZvDhLrBhusM70s0LiGWMvz1XCxpY=
-github.com/ije/gox v0.5.6 h1:46DNSa7ZWIGYm1Rk4Xa23bWUrXy+k7kq0EbDqZUYyL0=
 github.com/ije/gox v0.5.6/go.mod h1:mjhU1hphPiRfw0u7WQX3Zo7X/p7SUS067WjBIP5T4uE=
+github.com/ije/gox v0.6.1 h1:GGWzuAb5EugWYXqwgFrWDJah3tFZGgG8hA8Hl5Dgj8E=
+github.com/ije/gox v0.6.1/go.mod h1:HeDdgw2DUqWKHUyRjy9pdS4ESVxxv+0N5iOufd1JGRs=
 github.com/ije/rex v1.3.2 h1:FdjwFZtZWyKXWh0aDxR5unTGcqTr0OU56jjSAhtgRpA=
 github.com/ije/rex v1.3.2/go.mod h1:1AttqJCjFDcR77O2+KlFFtUgHDOUj7HpNbs6lrRCmzE=
 github.com/mssola/user_agent v0.5.2 h1:CZkTUahjL1+OcZ5zv3kZr8QiJ8jy2H08vZIEkBeRbxo=
