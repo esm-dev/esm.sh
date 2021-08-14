@@ -119,7 +119,7 @@ type NpmPackageRecords struct {
 	Versions map[string]NpmPackage `json:"versions"`
 }
 
-// NpmPackage defines the package of npm
+// NpmPackage defines the package.json of npm
 type NpmPackage struct {
 	Name             string            `json:"name"`
 	Version          string            `json:"version"`
@@ -130,17 +130,16 @@ type NpmPackage struct {
 	Typings          string            `json:"typings,omitempty"`
 	Dependencies     map[string]string `json:"dependencies,omitempty"`
 	PeerDependencies map[string]string `json:"peerDependencies,omitempty"`
-	// https://nodejs.org/api/esm.html#esm_resolver_algorithm_specification
-	DefinedExports interface{} `json:"exports,omitempty"`
+	DefinedExports   interface{}       `json:"exports,omitempty"`
 }
 
-// NodeEnv defines the nodejs env
-type NodeEnv struct {
+// Node defines the nodejs info
+type Node struct {
 	version     string
 	npmRegistry string
 }
 
-func checkNodeEnv() (env *NodeEnv, err error) {
+func checkNode() (node *Node, err error) {
 	var installed bool
 CheckNodejs:
 	version, major, err := getNodejsVersion()
@@ -170,14 +169,14 @@ CheckNodejs:
 		}
 	}
 
-	env = &NodeEnv{
+	node = &Node{
 		version:     version,
 		npmRegistry: "https://registry.npmjs.org/",
 	}
 
 	output, err := exec.Command("npm", "config", "get", "registry").CombinedOutput()
 	if err == nil {
-		env.npmRegistry = strings.TrimRight(strings.TrimSpace(string(output)), "/") + "/"
+		node.npmRegistry = strings.TrimRight(strings.TrimSpace(string(output)), "/") + "/"
 	}
 
 CheckYarn:
@@ -196,7 +195,7 @@ CheckYarn:
 	return
 }
 
-func (env *NodeEnv) getPackageInfo(name string, version string) (info NpmPackage, submodule string, err error) {
+func (node *Node) getPackageInfo(name string, version string) (info NpmPackage, submodule string, err error) {
 	slice := strings.Split(name, "/")
 	if l := len(slice); strings.HasPrefix(name, "@") && l > 1 {
 		name = strings.Join(slice[:2], "/")
@@ -225,7 +224,7 @@ func (env *NodeEnv) getPackageInfo(name string, version string) (info NpmPackage
 	}
 
 	start := time.Now()
-	resp, err := httpClient.Get(env.npmRegistry + name)
+	resp, err := httpClient.Get(node.npmRegistry + name)
 	if err != nil {
 		return
 	}
@@ -340,6 +339,7 @@ func getNodejsVersion() (version string, major int, err error) {
 	return
 }
 
+// see https://nodejs.org/api/packages.html
 func useDefinedExports(p *NpmPackage, exports interface{}) {
 	s, ok := exports.(string)
 	if ok {
@@ -353,7 +353,7 @@ func useDefinedExports(p *NpmPackage, exports interface{}) {
 
 	m, ok := exports.(map[string]interface{})
 	if ok {
-		for _, key := range []string{"browser", "import", "module"} {
+		for _, key := range []string{"import", "module", "browser"} {
 			value, ok := m[key]
 			if ok {
 				s, ok := value.(string)
@@ -363,7 +363,7 @@ func useDefinedExports(p *NpmPackage, exports interface{}) {
 				}
 			}
 		}
-		for _, key := range []string{"require", "main"} {
+		for _, key := range []string{"require", "node", "default"} {
 			value, ok := m[key]
 			if ok {
 				s, ok := value.(string)
@@ -449,8 +449,11 @@ func installNodejs(dir string, version string) (err error) {
 func yarnAdd(wd string, packages ...string) (err error) {
 	if len(packages) > 0 {
 		start := time.Now()
-		args := append([]string{"add", "--silent", "--no-progress", "--non-interactive", "--ignore-scripts", "--cache-folder", config.yarnCacheDir}, packages...)
-		cmd := exec.Command("yarn", args...)
+		args := []string{"add", "--silent", "--no-progress", "--ignore-scripts"}
+		if config.yarnCacheDir != "" {
+			args = append(args, "--cache-folder", config.yarnCacheDir)
+		}
+		cmd := exec.Command("yarn", append(args, packages...)...)
 		cmd.Dir = wd
 		output, err := cmd.CombinedOutput()
 		if err != nil {

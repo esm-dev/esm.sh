@@ -19,7 +19,7 @@ import (
 
 var (
 	config  *Config
-	node    *NodeEnv
+	node    *Node
 	mmdbr   *maxminddb.Reader
 	db      *postdb.DB
 	log     *logx.Logger
@@ -55,7 +55,7 @@ func Serve(fs *embed.FS) {
 	flag.IntVar(&httpsPort, "https-port", 443, "https server port")
 	flag.IntVar(&cjsLexerServerPort, "cjs-lexer-server-port", 2022, "cjs lexer server port")
 	flag.StringVar(&etcDir, "etc-dir", "/usr/local/etc/esmd", "the etc dir to store data")
-	flag.StringVar(&yarnCacheDir, "yarn-cache-dir", "/usr/local/share/.cache/yarn", "the cache dir for `yarn add`")
+	flag.StringVar(&yarnCacheDir, "yarn-cache-dir", "", "the cache dir for `yarn add`")
 	flag.StringVar(&domain, "domain", "esm.sh", "main domain")
 	flag.StringVar(&cdnDomain, "cdn-domain", "", "cdn domain")
 	flag.StringVar(&cdnDomainChina, "cdn-domain-china", "", "cdn domain for china")
@@ -67,7 +67,6 @@ func Serve(fs *embed.FS) {
 	logDir := "/var/log/esmd"
 	if isDev {
 		etcDir, _ = filepath.Abs(".dev")
-		yarnCacheDir = path.Join(etcDir, "yarn")
 		logDir = path.Join(etcDir, "log")
 		logLevel = "debug"
 		domain = "localhost"
@@ -94,7 +93,7 @@ func Serve(fs *embed.FS) {
 	}
 	log.SetLevelByName(logLevel)
 
-	node, err = checkNodeEnv()
+	node, err = checkNode()
 	if err != nil {
 		log.Fatalf("check nodejs env: %v", err)
 	}
@@ -236,7 +235,7 @@ func Serve(fs *embed.FS) {
 func init() {
 	config = &Config{
 		storageDir:         "/usr/local/etc/esmd/storage",
-		yarnCacheDir:       "/usr/local/share/.cache/yarn",
+		yarnCacheDir:       "",
 		domain:             "esm.sh",
 		cjsLexerServerPort: 2022,
 	}

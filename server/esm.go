@@ -187,7 +187,7 @@ func initESM(wd string, pkg pkg, deps pkgSlice, nodeEnv string) (esm *ESM, err e
 	return
 }
 
-func findESM(id string) (esm *ESM, pkgCSS bool, ok bool) {
+func findESM(id string) (esm *ESM, pkgCSS bool, err error) {
 	post, err := db.Get(q.Alias(id), q.Select("esm", "css"))
 	if err == nil {
 		err = json.Unmarshal(post.KV["esm"], &esm)
@@ -204,7 +204,6 @@ func findESM(id string) (esm *ESM, pkgCSS bool, ok bool) {
 		if val := post.KV["css"]; len(val) == 1 && val[0] == 1 {
 			pkgCSS = fileExists(path.Join(config.storageDir, "builds", strings.TrimSuffix(id, ".js")+".css"))
 		}
-		ok = true
 	}
 	return
 }

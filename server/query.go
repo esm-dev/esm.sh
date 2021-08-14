@@ -404,14 +404,14 @@ func query() rex.Handle {
 		}
 
 		taskID := task.ID()
-		esm, pkgCSS, ok := findESM(taskID)
-		if !ok {
+		esm, pkgCSS, err := findESM(taskID)
+		if err != nil {
 			if !isBare {
 				// find previous build version
 				for i := 0; i < VERSION; i++ {
 					id := fmt.Sprintf("v%d/%s", VERSION-(i+1), taskID[len(fmt.Sprintf("v%d/", VERSION)):])
-					esm, pkgCSS, ok = findESM(id)
-					if ok {
+					esm, pkgCSS, err = findESM(id)
+					if err == nil {
 						taskID = id
 						break
 					}
@@ -420,7 +420,7 @@ func query() rex.Handle {
 
 			// if the previous build exists and not in bare mode, then build current module in backgound,
 			// or wait the current build task for 30 seconds
-			if ok {
+			if err == nil {
 				queue.Add(task)
 			} else {
 				select {

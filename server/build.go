@@ -113,10 +113,15 @@ func (task *buildTask) Build() (esm *ESM, pkgCSS bool, err error) {
 	ensureDir(task.wd)
 	defer os.RemoveAll(task.wd)
 
-	return task.build()
+	return task.build(newStringSet())
 }
 
-func (task *buildTask) build() (esm *ESM, pkgCSS bool, err error) {
+func (task *buildTask) build(tracing *stringSet) (esm *ESM, pkgCSS bool, err error) {
+	if tracing.Has(task.ID()) {
+		return findESM(task.ID())
+	}
+	tracing.Add(task.ID())
+
 	nodeEnv := "production"
 	if task.isDev {
 		nodeEnv = "development"
@@ -150,8 +155,9 @@ func (task *buildTask) build() (esm *ESM, pkgCSS bool, err error) {
 			Sourcefile: "mod.js",
 		}
 	} else {
-		entryPoint = path.Join(task.wd, "node_modules", task.pkg.name, esm.Module)
+		entryPoint = path.Join(task.wd, "node_modules", esm.Name, esm.Module)
 	}
+
 	minify := !task.isDev
 	define := map[string]string{
 		"__filename":                  fmt.Sprintf(`"https://%s/%s"`, config.cdnDomain, task.ID()),
@@ -180,19 +186,12 @@ func (task *buildTask) build() (esm *ESM, pkgCSS bool, err error) {
 				func(args api.OnResolveArgs) (api.OnResolveResult, error) {
 					specifier := strings.TrimSuffix(args.Path, "/")
 					if len(task.alias) > 0 {
-						if alias, ok := task.alias[specifier]; ok {
-							specifier = alias
+						if name, ok := task.alias[specifier]; ok {
+							specifier = name
 						}
 					}
 
-					// should resolve:
-					// 1. locale imports include absolute path
-					// 2. current package/module it self
-					if isLocalImport(specifier) || specifier == task.pkg.ImportPath() {
-						return api.OnResolveResult{}, nil
-					}
-
-					// bundle all deps except peer deps in `bundle` mode
+					// bundles all dependencies except in `bundle` mode, apart from peer dependencies
 					if task.bundle && !extraExternal.Has(specifier) {
 						a := strings.Split(specifier, "/")
 						pkgName := a[0]
@@ -205,6 +204,58 @@ func (task *buildTask) build() (esm *ESM, pkgCSS bool, err error) {
 								return api.OnResolveResult{}, nil
 							}
 						}
+					}
+
+					// splits modules based on the `exports` defines in package.json,
+					// see https://nodejs.org/api/packages.html
+					if strings.HasPrefix(specifier, "./") || strings.HasPrefix(specifier, "../") || specifier == ".." {
+						resolvedPath := path.Join(path.Dir(args.Importer), specifier)
+						// in macOS, the dir `/private/var/` is equal to `/var/`
+						if strings.HasPrefix(resolvedPath, "/private/var/") {
+							resolvedPath = strings.TrimPrefix(resolvedPath, "/private")
+						}
+						resolved := "." + strings.TrimPrefix(resolvedPath, path.Join(task.wd, "node_modules", esm.Name))
+						m, ok := esm.DefinedExports.(map[string]interface{})
+						if ok {
+							for export, paths := range m {
+								m, ok := paths.(map[string]interface{})
+								if ok && export != "." {
+									for _, value := range m {
+										s, ok := value.(string)
+										if ok && s != "" {
+											match := resolved == s || resolved+".js" == s || resolved+".mjs" == s
+											if !match {
+												if a := strings.Split(s, "*"); len(a) == 2 {
+													prefix := a[0]
+													suffix := a[1]
+													if (strings.HasPrefix(resolved, prefix)) &&
+														(strings.HasSuffix(resolved, suffix) ||
+															strings.HasSuffix(resolved+".js", suffix) ||
+															strings.HasSuffix(resolved+".mjs", suffix)) {
+														matchName := strings.TrimPrefix(strings.TrimSuffix(resolved, suffix), prefix)
+														export = strings.Replace(export, "*", matchName, -1)
+														match = true
+													}
+												}
+											}
+											if match {
+												url := path.Join(esm.Name, export)
+												if url == task.pkg.ImportPath() {
+													return api.OnResolveResult{}, nil
+												}
+												external.Add(url)
+												return api.OnResolveResult{Path: "ESM_SH_EXTERNAL:" + url, External: true}, nil
+											}
+										}
+									}
+								}
+							}
+						}
+					}
+
+					// bundles undefiend relative imports or the package/module it self
+					if isLocalImport(specifier) || specifier == task.pkg.ImportPath() {
+						return api.OnResolveResult{}, nil
 					}
 
 					// external
@@ -292,23 +343,24 @@ esbuild:
 				if isRemoteImport(name) {
 					importPath = name
 				}
-				// is relative imports
-				if importPath == "" && (strings.HasPrefix(name, "./") || strings.HasPrefix(name, "../")) {
-					submodule := path.Join(task.pkg.submodule, name)
-					importPath = task.getImportPath(pkg{
-						name:      task.pkg.name,
-						version:   task.pkg.version,
-						submodule: submodule,
-					})
-				}
 				// is sub-module
 				if importPath == "" && strings.HasPrefix(name, task.pkg.name+"/") {
 					submodule := strings.TrimPrefix(name, task.pkg.name+"/")
-					importPath = task.getImportPath(pkg{
+					subPkg := pkg{
 						name:      task.pkg.name,
 						version:   task.pkg.version,
 						submodule: submodule,
-					})
+					}
+					subTask := buildTask{
+						wd:     task.wd,
+						pkg:    subPkg,
+						target: task.target,
+						isDev:  task.isDev,
+					}
+					_, _, e := subTask.build(tracing)
+					if e == nil {
+						importPath = task.getImportPath(subPkg)
+					}
 				}
 				// is builtin `buffer` module
 				if importPath == "" && name == "buffer" {
@@ -368,6 +420,7 @@ esbuild:
 						}
 					}
 				}
+				// prer-build dependency
 				if importPath == "" {
 					var pkgName string
 					var submodule string
@@ -398,7 +451,7 @@ esbuild:
 							target: task.target,
 							isDev:  task.isDev,
 						}
-						_, _, e := subTask.build()
+						_, _, e := subTask.build(tracing)
 						if e == nil {
 							importPath = task.getImportPath(pkg{
 								name:      p.Name,
