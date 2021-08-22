@@ -6,7 +6,7 @@ require (
 	github.com/evanw/esbuild v0.12.20
 	github.com/ije/esbuild-internal v0.11.0
 	github.com/ije/gox v0.6.1
-	github.com/ije/rex v1.3.2
+	github.com/ije/rex v1.4.1
 	github.com/mssola/user_agent v0.5.2
 	github.com/oschwald/maxminddb-golang v1.8.0
 	github.com/postui/postdb v0.6.2
