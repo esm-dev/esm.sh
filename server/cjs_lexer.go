@@ -5,10 +5,12 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io/ioutil"
 	"net/http"
 	"os"
 	"os/exec"
 	"path"
+	"strconv"
 	"strings"
 )
 
@@ -45,7 +47,7 @@ func parseCJSModuleExports(buildDir string, importPath string, nodeEnv string) (
 }
 
 /* use a cjs-module-lexer http server instead of child process */
-func startCJSLexerServer(port uint16, isDev bool) (err error) {
+func startCJSLexerServer(port uint16, pidFile string, isDev bool) (err error) {
 	wd := path.Join(os.TempDir(), fmt.Sprintf("esmd-%d-cjs-module-lexer-%s", VERSION, cjsModuleLexerVersion))
 	ensureDir(wd)
 
@@ -171,6 +173,15 @@ func startCJSLexerServer(port uint16, isDev bool) (err error) {
 	})
 `, port, port))
 
+	// kill previous node process if exists
+	if data, err := ioutil.ReadFile(pidFile); err == nil {
+		if i, err := strconv.Atoi(string(data)); err == nil {
+			if p, err := os.FindProcess(i); err == nil {
+				p.Kill()
+			}
+		}
+	}
+
 	cmd = exec.Command("node")
 	cmd.Stdin = jsBuf
 	cmd.Dir = wd
@@ -187,6 +198,10 @@ func startCJSLexerServer(port uint16, isDev bool) (err error) {
 		return
 	}
 
+	// store node process pid
+	ioutil.WriteFile(pidFile, []byte(strconv.Itoa(cmd.Process.Pid)), 0644)
+
+	// wait the process to exit
 	cmd.Wait()
 
 	if errBuf.Len() > 0 {

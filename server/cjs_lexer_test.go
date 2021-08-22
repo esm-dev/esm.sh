@@ -20,7 +20,7 @@ func TestParseCJSExports(t *testing.T) {
 	config = &Config{
 		cjsLexerServerPort: 8088,
 	}
-	go startCJSLexerServer(config.cjsLexerServerPort, true)
+	go startCJSLexerServer(config.cjsLexerServerPort, path.Join(testDir, "test.pid"), true)
 
 	time.Sleep(time.Second)
 
