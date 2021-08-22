@@ -390,8 +390,9 @@ esbuild:
 								submodule: submodule,
 							})
 						} else {
-							_, err := embedFS.Open(fmt.Sprintf("embed/polyfills/node_%s.js", name))
+							f, err := embedFS.Open(fmt.Sprintf("embed/polyfills/node_%s.js", name))
 							if err == nil {
+								f.Close()
 								importPath = fmt.Sprintf("/v%d/node_%s.js", VERSION, name)
 							} else {
 								importPath = fmt.Sprintf(
