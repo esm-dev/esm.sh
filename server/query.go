@@ -251,6 +251,7 @@ func query() rex.Handle {
 		target := strings.ToLower(strings.TrimSpace(ctx.Form.Value("target")))
 		if _, ok := targets[target]; !ok {
 			ua := ctx.R.UserAgent()
+			// todo: support nodejs
 			if strings.HasPrefix(ua, "Deno/") {
 				target = "deno"
 			} else {

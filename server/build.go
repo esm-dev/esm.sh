@@ -191,6 +191,11 @@ func (task *buildTask) build(tracing *stringSet) (esm *ESM, pkgCSS bool, err err
 						}
 					}
 
+					// support nodejs builtin modules like `node:path`
+					if strings.HasPrefix(specifier, "node:") {
+						specifier = strings.TrimPrefix(specifier, "node:")
+					}
+
 					// bundles all dependencies except in `bundle` mode, apart from peer dependencies
 					if task.bundle && !extraExternal.Has(specifier) {
 						a := strings.Split(specifier, "/")
@@ -280,7 +285,9 @@ esbuild:
 		MinifySyntax:      minify,
 		Plugins:           []api.Plugin{esmResolverPlugin},
 	}
-	if task.target != "node" {
+	if task.target == "node" {
+		options.Platform = api.PlatformNode
+	} else {
 		options.Define = define
 	}
 	if entryPoint != "" {

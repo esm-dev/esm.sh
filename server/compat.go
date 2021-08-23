@@ -11,6 +11,7 @@ import (
 var regBrowserVersion = regexp.MustCompile(`^([0-9]+)(?:\.([0-9]+))?(?:\.([0-9]+))?$`)
 
 var targets = map[string]api.Target{
+	"node":   api.ESNext,
 	"deno":   api.ESNext,
 	"esnext": api.ESNext,
 	"es2015": api.ES2015,
