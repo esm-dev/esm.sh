@@ -650,34 +650,34 @@ func (task *buildTask) handleDTS(esm *ESM) (err error) {
 	versionedName := fmt.Sprintf("%s@%s", esm.Name, esm.Version)
 	nodeModulesDir := path.Join(task.wd, "node_modules")
 
-	var types string
+	var dts string
 	if esm.Types != "" || esm.Typings != "" {
-		types = getTypesPath(task.wd, *esm.NpmPackage, "")
+		dts = getTypesPath(task.wd, *esm.NpmPackage, "")
 	} else if submodule == "" {
 		if fileExists(path.Join(nodeModulesDir, name, "index.d.ts")) {
-			types = fmt.Sprintf("%s/%s", versionedName, "index.d.ts")
+			dts = fmt.Sprintf("%s/%s", versionedName, "index.d.ts")
 		} else if !strings.HasPrefix(name, "@") {
 			packageFile := path.Join(nodeModulesDir, "@types", name, "package.json")
 			if fileExists(packageFile) {
 				var p NpmPackage
 				err := utils.ParseJSONFile(path.Join(nodeModulesDir, "@types", name, "package.json"), &p)
 				if err == nil {
-					types = getTypesPath(task.wd, p, "")
+					dts = getTypesPath(task.wd, p, "")
 				}
 			}
 		}
 	} else {
 		if fileExists(path.Join(nodeModulesDir, name, submodule, "index.d.ts")) {
-			types = fmt.Sprintf("%s/%s", versionedName, path.Join(submodule, "index.d.ts"))
+			dts = fmt.Sprintf("%s/%s", versionedName, path.Join(submodule, "index.d.ts"))
 		} else if fileExists(path.Join(nodeModulesDir, name, ensureSuffix(submodule, ".d.ts"))) {
-			types = fmt.Sprintf("%s/%s", versionedName, ensureSuffix(submodule, ".d.ts"))
+			dts = fmt.Sprintf("%s/%s", versionedName, ensureSuffix(submodule, ".d.ts"))
 		} else if fileExists(path.Join(nodeModulesDir, "@types", name, submodule, "index.d.ts")) {
-			types = fmt.Sprintf("@types/%s/%s", versionedName, path.Join(submodule, "index.d.ts"))
+			dts = fmt.Sprintf("@types/%s/%s", versionedName, path.Join(submodule, "index.d.ts"))
 		} else if fileExists(path.Join(nodeModulesDir, "@types", name, ensureSuffix(submodule, ".d.ts"))) {
-			types = fmt.Sprintf("@types/%s/%s", versionedName, ensureSuffix(submodule, ".d.ts"))
+			dts = fmt.Sprintf("@types/%s/%s", versionedName, ensureSuffix(submodule, ".d.ts"))
 		}
 	}
-	if types == "" {
+	if dts == "" {
 		return
 	}
 
@@ -685,13 +685,13 @@ func (task *buildTask) handleDTS(esm *ESM) (err error) {
 	err = CopyDTS(
 		task.wd,
 		aliasPrefix,
-		types,
+		dts,
 	)
 	if err != nil {
-		err = fmt.Errorf("copyDTS(%s:%s): %v", esm.Name, types, err)
+		err = fmt.Errorf("copyDTS(%s:%s): %v", esm.Name, dts, err)
 		return
 	}
-	esm.Dts = fmt.Sprintf("/%s%s", aliasPrefix, types)
+	esm.Dts = fmt.Sprintf("/%s%s", aliasPrefix, dts)
 	log.Debugf("copy dts %s in %v", esm.Dts, time.Now().Sub(start))
 	return
 }
