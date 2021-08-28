@@ -30,6 +30,31 @@ type buildTask struct {
 	bundle bool
 }
 
+func (task *buildTask) aliasPrefix() string {
+	alias := []string{}
+	if len(task.alias) > 0 {
+		var ss sort.StringSlice
+		for name, to := range task.alias {
+			ss = append(ss, fmt.Sprintf("%s:%s", name, to))
+		}
+		ss.Sort()
+		alias = append(alias, fmt.Sprintf("alias:%s", strings.Join(ss, ",")))
+
+	}
+	if len(task.deps) > 0 {
+		var ss sort.StringSlice
+		for _, pkg := range task.deps {
+			ss = append(ss, fmt.Sprintf("%s@%s", pkg.name, pkg.version))
+		}
+		ss.Sort()
+		alias = append(alias, fmt.Sprintf("deps:%s", strings.Join(ss, ",")))
+	}
+	if len(alias) > 0 {
+		return fmt.Sprintf("X-%s/", btoaUrl(strings.Join(alias, ",")))
+	}
+	return ""
+}
+
 func (task *buildTask) ID() string {
 	if task.id != "" {
 		return task.id
@@ -37,8 +62,7 @@ func (task *buildTask) ID() string {
 
 	pkg := task.pkg
 	name := path.Base(pkg.name)
-	query := ""
-	qs := []string{}
+
 	if pkg.submodule != "" {
 		name = pkg.submodule
 	}
@@ -51,40 +75,20 @@ func (task *buildTask) ID() string {
 	if task.bundle {
 		name += ".bundle"
 	}
-	if len(task.alias) > 0 {
-		var ss sort.StringSlice
-		for name, to := range task.alias {
-			ss = append(ss, fmt.Sprintf("%s:%s", name, to))
-		}
-		ss.Sort()
-		qs = append(qs, fmt.Sprintf("alias:%s", strings.Join(ss, ",")))
-
-	}
-	if len(task.deps) > 0 {
-		var ss sort.StringSlice
-		for _, pkg := range task.deps {
-			ss = append(ss, fmt.Sprintf("%s@%s", pkg.name, pkg.version))
-		}
-		ss.Sort()
-		qs = append(qs, fmt.Sprintf("deps:%s", strings.Join(ss, ",")))
-	}
-	if len(qs) > 0 {
-		query = fmt.Sprintf("X-%s/", btoaUrl(strings.Join(qs, ",")))
-	}
 
 	task.id = fmt.Sprintf(
 		"v%d/%s@%s/%s%s/%s.js",
 		VERSION,
 		pkg.name,
 		pkg.version,
-		query,
+		task.aliasPrefix(),
 		task.target,
 		name,
 	)
 	return task.id
 }
 
-func (task *buildTask) getImportPath(pkg pkg) string {
+func (task *buildTask) getImportPath(pkg pkg, extendsAlias bool) string {
 	name := path.Base(pkg.name)
 	if pkg.submodule != "" {
 		name = pkg.submodule
@@ -96,11 +100,17 @@ func (task *buildTask) getImportPath(pkg pkg) string {
 		name += ".development"
 	}
 
+	var aliasPrefix string
+	if extendsAlias {
+		aliasPrefix = task.aliasPrefix()
+	}
+
 	return fmt.Sprintf(
-		"/v%d/%s@%s/%s/%s.js",
+		"/v%d/%s@%s/%s%s/%s.js",
 		VERSION,
 		pkg.name,
 		pkg.version,
+		aliasPrefix,
 		task.target,
 		name,
 	)
@@ -363,12 +373,14 @@ esbuild:
 					subTask := buildTask{
 						wd:     task.wd,
 						pkg:    subPkg,
+						alias:  task.alias,
+						deps:   task.deps,
 						target: task.target,
 						isDev:  task.isDev,
 					}
 					_, _, e := subTask.build(tracing)
 					if e == nil {
-						importPath = task.getImportPath(subPkg)
+						importPath = task.getImportPath(subPkg, true)
 					}
 				}
 				// is builtin `buffer` module
@@ -397,7 +409,7 @@ esbuild:
 								name:      p.Name,
 								version:   p.Version,
 								submodule: submodule,
-							})
+							}, false)
 						} else {
 							f, err := embedFS.Open(fmt.Sprintf("embed/polyfills/node_%s.js", name))
 							if err == nil {
@@ -425,7 +437,7 @@ esbuild:
 								name:      dep.name,
 								version:   dep.version,
 								submodule: submodule,
-							})
+							}, false)
 							break
 						}
 					}
@@ -458,6 +470,8 @@ esbuild:
 								version:   p.Version,
 								submodule: submodule,
 							},
+							alias:  task.alias,
+							deps:   task.deps,
 							target: task.target,
 							isDev:  task.isDev,
 						}
@@ -467,7 +481,7 @@ esbuild:
 								name:      p.Name,
 								version:   p.Version,
 								submodule: submodule,
-							})
+							}, false)
 						}
 					}
 				}
@@ -485,7 +499,7 @@ esbuild:
 							name:      p.Name,
 							version:   p.Version,
 							submodule: submodule,
-						})
+						}, false)
 					}
 				}
 				if importPath == "" {
@@ -667,25 +681,17 @@ func (task *buildTask) handleDTS(esm *ESM) (err error) {
 		return
 	}
 
-	var prefix string
-	if len(task.deps) > 0 {
-		var ss sort.StringSlice
-		for _, pkg := range task.deps {
-			ss = append(ss, fmt.Sprintf("%s@%s", pkg.name, pkg.version))
-		}
-		ss.Sort()
-		prefix = fmt.Sprintf("deps=%s/", strings.Join(ss, ","))
-	}
+	aliasPrefix := task.aliasPrefix()
 	err = CopyDTS(
 		task.wd,
-		prefix,
+		aliasPrefix,
 		types,
 	)
 	if err != nil {
 		err = fmt.Errorf("copyDTS(%s:%s): %v", esm.Name, types, err)
 		return
 	}
-	esm.Dts = fmt.Sprintf("/%s%s", prefix, types)
+	esm.Dts = fmt.Sprintf("/%s%s", aliasPrefix, types)
 	log.Debugf("copy dts %s in %v", esm.Dts, time.Now().Sub(start))
 	return
 }
