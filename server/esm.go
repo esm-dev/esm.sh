@@ -227,7 +227,7 @@ func checkESM(wd string, packageName string, moduleSpecifier string) (resolveNam
 	if err != nil {
 		return
 	}
-	log := logger.NewDeferLog()
+	log := logger.NewDeferLog(logger.DeferLogNoVerboseOrDebug)
 	ast, pass := js_parser.Parse(log, test.SourceForTest(string(data)), js_parser.Options{})
 	if pass {
 		esm := ast.ExportsKind == js_ast.ExportsESM

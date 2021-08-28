@@ -2,10 +2,10 @@ github.com/andybalholm/brotli v1.0.3 h1:fpcw+r1N1h0Poc1F/pHbW40cUm/lMEQslZtCkBQ0
 github.com/andybalholm/brotli v1.0.3/go.mod h1:fO7iG3H7G2nSZ7m0zPUDn85XEX2GTukHGRSepvi9Eig=
 github.com/davecgh/go-spew v1.1.0 h1:ZDRjVQ15GmhC3fiQ8ni8+OwkZQO4DARzQgrnXU1Liz8=
 github.com/davecgh/go-spew v1.1.0/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
-github.com/evanw/esbuild v0.12.20 h1:cDvP8vtNwlSt+ebXOKIUImWAWXk+2MSByOKEXFxc4rs=
-github.com/evanw/esbuild v0.12.20/go.mod h1:y2AFBAGVelPqPodpdtxWWqe6n2jYf5FrsJbligmRmuw=
-github.com/ije/esbuild-internal v0.11.0 h1:UZjHESquMPluy1XUtd+FpYIzST6A4nvgkr3Nn3h+390=
-github.com/ije/esbuild-internal v0.11.0/go.mod h1:1SwqRSgvXFcLgL1ZvDhLrBhusM70s0LiGWMvz1XCxpY=
+github.com/evanw/esbuild v0.12.24 h1:AlNPVfiY7tc6Di54tm6MngT2MpWVUleBc/Rg3wlr8rI=
+github.com/evanw/esbuild v0.12.24/go.mod h1:y2AFBAGVelPqPodpdtxWWqe6n2jYf5FrsJbligmRmuw=
+github.com/ije/esbuild-internal v0.12.24 h1:NuA+hoh4wuSqeRjkuBFCGn4IlP6+PYcpk32fL/lAUeU=
+github.com/ije/esbuild-internal v0.12.24/go.mod h1:LYiIOR1m+P//ppgT3igIY5wVa0FacVRLVDR+sm/lLow=
 github.com/ije/gox v0.6.1 h1:GGWzuAb5EugWYXqwgFrWDJah3tFZGgG8hA8Hl5Dgj8E=
 github.com/ije/gox v0.6.1/go.mod h1:HeDdgw2DUqWKHUyRjy9pdS4ESVxxv+0N5iOufd1JGRs=
 github.com/ije/rex v1.4.1 h1:NShBDV98mUTFRuopzillgRMcAlRvgYhfrtsgIgb7eTM=
@@ -33,7 +33,6 @@ golang.org/x/sys v0.0.0-20191224085550-c709ea063b76/go.mod h1:h1NjWce9XRLGQEsW7w
 golang.org/x/sys v0.0.0-20200202164722-d101bd2416d5/go.mod h1:h1NjWce9XRLGQEsW7wpKNCjG9DtNlClVuFLEZdDNbEs=
 golang.org/x/sys v0.0.0-20200501145240-bc7a7d42d5c3/go.mod h1:h1NjWce9XRLGQEsW7wpKNCjG9DtNlClVuFLEZdDNbEs=
 golang.org/x/sys v0.0.0-20201119102817-f84b799fce68/go.mod h1:h1NjWce9XRLGQEsW7wpKNCjG9DtNlClVuFLEZdDNbEs=
-golang.org/x/sys v0.0.0-20210326220804-49726bf1d181/go.mod h1:h1NjWce9XRLGQEsW7wpKNCjG9DtNlClVuFLEZdDNbEs=
 golang.org/x/sys v0.0.0-20210615035016-665e8c7367d1 h1:SrN+KX8Art/Sf4HNj6Zcz06G7VEz+7w9tdXTPOZ7+l4=
 golang.org/x/sys v0.0.0-20210615035016-665e8c7367d1/go.mod h1:oPkhp1MJrh7nUepCBck5+mAzfO9JrbApNNgaTdGDITg=
 golang.org/x/term v0.0.0-20201126162022-7de9c90e9dd1/go.mod h1:bj7SfCRtBDWHUb9snDiAeCFNEtKQo2Wmx5Cou7ajbmo=

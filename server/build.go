@@ -185,6 +185,8 @@ func (task *buildTask) build(tracing *stringSet) (esm *ESM, pkgCSS bool, err err
 				api.OnResolveOptions{Filter: ".*"},
 				func(args api.OnResolveArgs) (api.OnResolveResult, error) {
 					specifier := strings.TrimSuffix(args.Path, "/")
+
+					// resolve `?alias` parameter
 					if len(task.alias) > 0 {
 						if name, ok := task.alias[specifier]; ok {
 							specifier = name
