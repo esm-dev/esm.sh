@@ -1,5 +1,22 @@
 import queue from '/async/queue'
 
+/*
+  test example:
+  ```
+    // single module
+    _esm('packageName', async (t) => {
+      const mod = t.modules          // imported module
+      t.$span.innterText = ':)'      // render testing content
+      t.ok()                         // display '✅' and import timing
+    })
+    // mulitple modules
+    _esm(['packageName1', 'packageName2'], async (t) => {
+      const [mod1, mod2] = t.modules // imported modules
+      t.$span.innterText = ':)'      // render testing content
+      t.ok()                         // display '✅' and import timing
+    })
+  ```
+*/
 export async function test($el) {
   const q = queue(async ({ imports, testFn, $li, $status }) => {
     const domain = localStorage.importDomain || ''
@@ -324,22 +341,4 @@ export async function test($el) {
 
     t.ok()
   })
-
-  /*
-    test example:
-    ```
-      // single module
-      _esm('packageName', async (t) => {
-        const mod = t.modules          // imported module
-        t.$span.innterText = ':)'      // render testing content
-        t.ok()                         // render '✅' and import timing
-      })
-      // mulitple modules
-      _esm(['packageName1', 'packageName2'], async (t) => {
-        const [mod1, mod2] = t.modules // imported modules
-        t.$span.innterText = ':)'      // render testing content
-        t.ok()                         // render '✅' and import timing
-      })
-    ```
-  */
 }
