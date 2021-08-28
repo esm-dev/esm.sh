@@ -1,5 +1,18 @@
 # Change Log
 
+## v46
+
+- Split modules based on exports defines (ref [#78](https://github.com/postui/esm.sh/issues/78))
+- Add `cache-folder` config for `yarn add`
+- Improve `resolveVersion` to support format 4.x (fix [#93](https://github.com/postui/esm.sh/issues/93))
+- Import initESM to support bare exports in package.json (fix [#97](https://github.com/postui/esm.sh/issues/97))
+- Bundle mode should respect the extra external (fix [#98](https://github.com/postui/esm.sh/issues/98))
+- Support node:path importing (fix [#100](https://github.com/postui/esm.sh/issues/100))
+- Pass `?alias` and `?deps` to deps (fix [#101](https://github.com/postui/esm.sh/issues/101))
+- Improve `cjs-lexer` sever (fix [#103](https://github.com/postui/esm.sh/issues/103))
+- Upgrade **rex** to **1.4.1**
+- Upgrade **esbuild** to **0.12.24**
+
 ## V45
 
 - Improve build performance
