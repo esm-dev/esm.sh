@@ -46,7 +46,7 @@ func parseCJSModuleExports(buildDir string, importPath string, nodeEnv string) (
 	return
 }
 
-/* use a cjs-module-lexer http server instead of child process */
+/** use a cjs-module-lexer http server instead of child process */
 func startCJSLexerServer(port uint16, pidFile string, isDev bool) (err error) {
 	wd := path.Join(os.TempDir(), fmt.Sprintf("esmd-%d-cjs-module-lexer-%s", VERSION, cjsModuleLexerVersion))
 	ensureDir(wd)
@@ -62,116 +62,146 @@ func startCJSLexerServer(port uint16, pidFile string, isDev bool) (err error) {
 
 	errBuf := bytes.NewBuffer(nil)
 	jsBuf := bytes.NewBufferString(fmt.Sprintf(`
-	const fs = require('fs')
-	const { dirname, join } = require('path')
-	const http = require('http')
-	const { promisify } = require('util')
-	const cjsLexer = require('cjs-module-lexer')
-	const enhancedResolve = require('enhanced-resolve')
+		const fs = require('fs')
+		const { dirname, join } = require('path')
+		const http = require('http')
+		const { promisify } = require('util')
+		const cjsLexer = require('cjs-module-lexer')
+		const enhancedResolve = require('enhanced-resolve')
 
-	const resolve = promisify(enhancedResolve.create({
-		mainFields: ['main']
-	}))
-	const identRegexp = /^[a-zA-Z_\$][a-zA-Z0-9_\$]+$/
-	const reservedWords = new Set([
-		'abstract', 'arguments', 'await', 'boolean',
-		'break', 'byte', 'case', 'catch',
-		'char', 'class', 'const', 'continue',
-		'debugger', 'default', 'delete', 'do',
-		'double', 'else', 'enum', 'eval',
-		'export', 'extends', 'false', 'final',
-		'finally', 'float', 'for', 'function',
-		'goto', 'if', 'implements', 'import',
-		'in', 'instanceof', 'int', 'interface',
-		'let', 'long', 'native', 'new',
-		'null', 'package', 'private', 'protected',
-		'public', 'return', 'short', 'static',
-		'super', 'switch', 'synchronized', 'this',
-		'throw', 'throws', 'transient', 'true',
-		'try', 'typeof', 'var', 'void',
-		'volatile', 'while', 'with', 'yield',
-		'__esModule'
-	])
+		const identRegexp = /^[a-zA-Z_\$][a-zA-Z0-9_\$]+$/
+		const resolve = promisify(enhancedResolve.create({
+			mainFields: ['browser', 'module', 'main']
+		}))
+		const reservedWords = new Set([
+			'abstract', 'arguments', 'await', 'boolean',
+			'break', 'byte', 'case', 'catch',
+			'char', 'class', 'const', 'continue',
+			'debugger', 'default', 'delete', 'do',
+			'double', 'else', 'enum', 'eval',
+			'export', 'extends', 'false', 'final',
+			'finally', 'float', 'for', 'function',
+			'goto', 'if', 'implements', 'import',
+			'in', 'instanceof', 'int', 'interface',
+			'let', 'long', 'native', 'new',
+			'null', 'package', 'private', 'protected',
+			'public', 'return', 'short', 'static',
+			'super', 'switch', 'synchronized', 'this',
+			'throw', 'throws', 'transient', 'true',
+			'try', 'typeof', 'var', 'void',
+			'volatile', 'while', 'with', 'yield',
+			'__esModule'
+		])
 
-	let cjsLexerReady = false
+		let cjsLexerReady = false
 
-	async function getExports (buildDir, importPath, nodeEnv = 'production') {
-		if (!cjsLexerReady) {
-			await cjsLexer.init()
-			cjsLexerReady = true
+		function isObject(v) {
+			return typeof v === 'object' && v !== null && !Array.isArray(v)
 		}
 
-		const exports = []
-		const paths = []
+		function verifyExports(exports) {
+			return Array.from(new Set(exports.filter(name => identRegexp.test(name) && !reservedWords.has(name))))
+		}
 
-		try {
-			// the below code was stolen from https://github.com/evanw/esbuild/issues/442#issuecomment-739340295
-			const jsFile = await resolve(buildDir, importPath)
-			if (!jsFile.endsWith('.json')) {
-				paths.push(jsFile) 
+		async function getExports (buildDir, importPath, nodeEnv = 'production') {
+			process.env.NODE_ENV = nodeEnv
+
+			if (!cjsLexerReady) {
+				await cjsLexer.init()
+				cjsLexerReady = true
 			}
-			while (paths.length > 0) {
-				const currentPath = paths.pop()
-				const code = fs.readFileSync(currentPath).toString()
-				const results = cjsLexer.parse(code)
-				exports.push(...results.exports)
-				for (const reexport of results.reexports) {
-					if (!reexport.endsWith('.json')) {
-						paths.push(await resolve(dirname(currentPath), reexport))
+
+			const entry = await resolve(buildDir, importPath)
+			const exports = []
+
+			/* handle entry ends with '.json' */
+			if (entry.endsWith('.json')) {
+				try {
+					const content = fs.readFileSync(entry).toString()
+					const mod = JSON.parse(content)
+					if (isObject(mod)) {
+						exports.push(...Object.keys(mod))
 					}
+					return { 
+						exports: verifyExports(exports) 
+					}
+				} catch(e) {
+					return { error: e.message }
 				}
 			}
-		} catch(e) {
-			return { error: e.message }
-		}
 
-		try {
-			if (!jsFile.endsWith('.json')) {
-				process.env.NODE_ENV = nodeEnv
-				const mod = require(jsFile)
-				if (typeof mod === 'object' && mod !== null && !Array.isArray(mod)) {
-					for (const key of Object.keys(mod)) {
-						if (typeof key === 'string' && key !== '' && !exports.includes(key)) {
-							exports.push(key)
+			/* the below code was stolen from https://github.com/evanw/esbuild/issues/442#issuecomment-739340295 */
+			try {
+				const paths = []
+				paths.push(entry)
+				while (paths.length > 0) {
+					const currentPath = paths.pop()
+					const code = fs.readFileSync(currentPath).toString()
+					const results = cjsLexer.parse(code)
+					exports.push(...results.exports)
+					for (const reexport of results.reexports) {
+						if (!reexport.endsWith('.json')) {
+							paths.push(await resolve(dirname(currentPath), reexport))
 						}
 					}
 				}
+			} catch(e) {
+				return { error: e.message }
 			}
-		} catch(e) {}
-		
-		return { 
-			exports: Array.from(new Set(exports.filter(name => identRegexp.test(name) && !reservedWords.has(name))))
-		}
-	}
 
-	const server = http.createServer(function (req, resp) {
-		const buildDir = req.headers['build-dir']
-		const importPath = req.headers['import-path']
-		const nodeEnv = req.headers['node-env']
-		if (!buildDir || !importPath) {
-			resp.write('Bad request')
-			resp.end()
-			return
+			/* the workaround when the cjsLexer didn't get any exports */
+			if (exports.length === 0) {
+				try {
+					const entry = await resolve(buildDir, importPath)
+					const mod = require(entry) 
+					if (isObject(mod)) {
+						for (const key of Object.keys(mod)) {
+							if (typeof key === 'string' && key !== '') {
+								exports.push(key)
+							}
+						}
+					}
+				} catch(e) {
+					return { error: e.message }
+				}
+			}
+
+			return { 
+				exports: verifyExports(exports)
+			}
 		}
-		getExports(buildDir, importPath, nodeEnv).then(ret => {
-			resp.write(JSON.stringify(ret))
+
+		const server = http.createServer(async function (req, resp) {
+			const buildDir = req.headers['build-dir']
+			const importPath = req.headers['import-path']
+			const nodeEnv = req.headers['node-env']
+			if (!buildDir || !importPath) {
+				resp.write('Bad request')
+				resp.end()
+				return
+			}
+			try {
+				const ret = await getExports(buildDir, importPath, nodeEnv)
+				resp.write(JSON.stringify(ret))
+			} catch(e) {
+				resp.write(JSON.stringify({ error: e.message }))
+			}
 			resp.end()
 		})
-	})
-	
-	server.on('error', (e) => {
-		if (e.code === 'EADDRINUSE') {
-			console.error('EADDRINUSE')
-			process.exit(1)
-		}
-	})
 
-	server.listen(%d, () => {
-		if (process.env.NODE_ENV === 'development') {
-			console.log('[debug] cjs lexer server ready on http://localhost:%d')
-		}
-	})
-`, port, port))
+		server.on('error', (e) => {
+			if (e.code === 'EADDRINUSE') {
+				console.error('EADDRINUSE')
+				process.exit(1)
+			}
+		})
+
+		server.listen(%d, () => {
+			if (process.env.NODE_ENV === 'development') {
+				console.log('[debug] cjs lexer server ready on http://localhost:%d')
+			}
+		})
+	`, port, port))
 
 	// kill previous node process if exists
 	if data, err := ioutil.ReadFile(pidFile); err == nil {
