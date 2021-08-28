@@ -219,8 +219,9 @@ export async function test($el) {
       { default: useSWR }
     ] = t.modules
 
+    const fetcher = (url) => fetch(url).then((res) => res.json());
     const App = () => {
-      const { data, error } = useSWR('/status.json')
+      const { data, error } = useSWR('/status.json', fetcher)
       useEffect(() => {
         t.$span.removeChild(t.$span.lastChild)
       }, [])
