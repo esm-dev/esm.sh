@@ -188,10 +188,10 @@ func copyDTS(wd string, prefix string, dts string, tracing *stringSet) (err erro
 						path = rewriteFn(path)
 					}
 					protocol := "https:"
-					if config.domain == "localhost" {
+					if config.cdnDomain == "localhost" {
 						protocol = "http:"
 					}
-					fmt.Fprintf(buf, `/// <reference path="%s//%s%s" />`, protocol, config.domain, path)
+					fmt.Fprintf(buf, `/// <reference path="%s//%s%s" />`, protocol, config.cdnDomain, path)
 				} else {
 					fmt.Fprintf(buf, `/// <reference path="%s" />`, rewriteFn(path))
 				}
@@ -210,8 +210,8 @@ func copyDTS(wd string, prefix string, dts string, tracing *stringSet) (err erro
 			if len(a) == 3 && strings.HasPrefix(dts, a[1]) {
 				buf.WriteString(a[0])
 				buf.WriteString(q)
-				newname := fmt.Sprintf("https://%s/%s", config.domain, a[1])
-				if config.domain == "localhost" {
+				newname := fmt.Sprintf("https://%s/%s", config.cdnDomain, a[1])
+				if config.cdnDomain == "localhost" {
 					newname = fmt.Sprintf("http://localhost/%s", a[1])
 				}
 				buf.WriteString(newname)
