@@ -78,7 +78,8 @@ var builtInNodeModules = map[string]bool{
 
 // status: https://deno.land/std/node
 var denoStdNodeModules = map[string]bool{
-	"fs": true,
+	"fs":            true,
+	"child_process": true,
 }
 
 // copy from https://github.com/webpack/webpack/blob/master/lib/ModuleNotFoundError.js#L13

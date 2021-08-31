@@ -1,12 +1,11 @@
 /* deno mod bundle
  * entry: deno.land/std/node/fs.ts
- * version: 0.103.0
+ * version: 0.106.0
  *
  *   $ git clone https://github.com/denoland/deno_std
  *   $ cd deno_std/node
  *   $ esbuild fs.ts --target=esnext --format=esm --bundle --outfile=deno_std_node_fs.js
  */
-
 var __defProp = Object.defineProperty;
 var __markAsModule = (target) => __defProp(target, "__esModule", { value: true });
 var __export = (target, all) => {
@@ -1762,18 +1761,18 @@ var rangeEscapeChars = ["-", "\\", "]"];
 function globToRegExp(glob, {
   extended = true,
   globstar: globstarOption = true,
-  os: os2 = osType,
+  os = osType,
   caseInsensitive = false
 } = {}) {
   if (glob == "") {
     return /(?!)/;
   }
-  const sep4 = os2 == "windows" ? "(?:\\\\|/)+" : "/+";
-  const sepMaybe = os2 == "windows" ? "(?:\\\\|/)*" : "/*";
-  const seps = os2 == "windows" ? ["\\", "/"] : ["/"];
-  const globstar = os2 == "windows" ? "(?:[^\\\\/]*(?:\\\\|/|$)+)*" : "(?:[^/]*(?:/|$)+)*";
-  const wildcard = os2 == "windows" ? "[^\\\\/]*" : "[^/]*";
-  const escapePrefix = os2 == "windows" ? "`" : "\\";
+  const sep4 = os == "windows" ? "(?:\\\\|/)+" : "/+";
+  const sepMaybe = os == "windows" ? "(?:\\\\|/)*" : "/*";
+  const seps = os == "windows" ? ["\\", "/"] : ["/"];
+  const globstar = os == "windows" ? "(?:[^\\\\/]*(?:\\\\|/|$)+)*" : "(?:[^/]*(?:/|$)+)*";
+  const wildcard = os == "windows" ? "[^\\\\/]*" : "[^/]*";
+  const escapePrefix = os == "windows" ? "`" : "\\";
   let newLength = glob.length;
   for (; newLength > 1 && seps.includes(glob[newLength - 1]); newLength--)
     ;
@@ -3009,8 +3008,7 @@ var linux = [
   [-4028, ["EFTYPE", "inappropriate file type or format"]],
   [-84, ["EILSEQ", "illegal byte sequence"]]
 ];
-var { os } = Deno.build;
-var errorMap = new Map(os === "windows" ? windows : os === "darwin" ? darwin : os === "linux" ? linux : unreachable());
+var errorMap = new Map(osType === "windows" ? windows : osType === "darwin" ? darwin : osType === "linux" ? linux : unreachable());
 var ERR_INVALID_CALLBACK = class extends NodeTypeError {
   constructor(object) {
     super("ERR_INVALID_CALLBACK", `Callback must be a function. Received ${JSON.stringify(object)}`);
@@ -3140,6 +3138,9 @@ function openSync(path3, flagsOrMode, maybeMode) {
 }
 
 // events.ts
+function ensureArray(maybeArray) {
+  return Array.isArray(maybeArray) ? maybeArray : [maybeArray];
+}
 function createIterResult(value, done) {
   return { value, done };
 }
@@ -3158,20 +3159,24 @@ var _EventEmitter = class {
     defaultMaxListeners = value;
   }
   constructor() {
-    this._events = new Map();
+    this._events = Object.create(null);
   }
   _addListener(eventName, listener, prepend) {
     this.checkListenerArgument(listener);
     this.emit("newListener", eventName, this.unwrapListener(listener));
-    if (this._events.has(eventName)) {
-      const listeners = this._events.get(eventName);
+    if (this.hasListeners(eventName)) {
+      let listeners = this._events[eventName];
+      if (!Array.isArray(listeners)) {
+        listeners = [listeners];
+        this._events[eventName] = listeners;
+      }
       if (prepend) {
         listeners.unshift(listener);
       } else {
         listeners.push(listener);
       }
     } else {
-      this._events.set(eventName, [listener]);
+      this._events[eventName] = listener;
     }
     const max = this.getMaxListeners();
     if (max > 0 && this.listenerCount(eventName) > max) {
@@ -3184,11 +3189,11 @@ var _EventEmitter = class {
     return this._addListener(eventName, listener, false);
   }
   emit(eventName, ...args) {
-    if (this._events.has(eventName)) {
-      if (eventName === "error" && this._events.get(_EventEmitter.errorMonitor)) {
+    if (this.hasListeners(eventName)) {
+      if (eventName === "error" && this.hasListeners(_EventEmitter.errorMonitor)) {
         this.emit(_EventEmitter.errorMonitor, ...args);
       }
-      const listeners = this._events.get(eventName).slice();
+      const listeners = ensureArray(this._events[eventName]).slice();
       for (const listener of listeners) {
         try {
           listener.apply(this, args);
@@ -3198,7 +3203,7 @@ var _EventEmitter = class {
       }
       return true;
     } else if (eventName === "error") {
-      if (this._events.get(_EventEmitter.errorMonitor)) {
+      if (this.hasListeners(_EventEmitter.errorMonitor)) {
         this.emit(_EventEmitter.errorMonitor, ...args);
       }
       const errMsg = args.length > 0 ? args[0] : Error("Unhandled error.");
@@ -3207,14 +3212,15 @@ var _EventEmitter = class {
     return false;
   }
   eventNames() {
-    return Array.from(this._events.keys());
+    return Reflect.ownKeys(this._events);
   }
   getMaxListeners() {
     return this.maxListeners == null ? _EventEmitter.defaultMaxListeners : this.maxListeners;
   }
   listenerCount(eventName) {
-    if (this._events.has(eventName)) {
-      return this._events.get(eventName).length;
+    if (this.hasListeners(eventName)) {
+      const maybeListeners = this._events[eventName];
+      return Array.isArray(maybeListeners) ? maybeListeners.length : 1;
     } else {
       return 0;
     }
@@ -3223,11 +3229,17 @@ var _EventEmitter = class {
     return emitter.listenerCount(eventName);
   }
   _listeners(target, eventName, unwrap) {
-    if (!target._events?.has(eventName)) {
+    if (!target.hasListeners(eventName)) {
       return [];
     }
-    const eventListeners = target._events.get(eventName);
-    return unwrap ? this.unwrapListeners(eventListeners) : eventListeners.slice(0);
+    const eventListeners = target._events[eventName];
+    if (Array.isArray(eventListeners)) {
+      return unwrap ? this.unwrapListeners(eventListeners) : eventListeners.slice(0);
+    } else {
+      return [
+        unwrap ? this.unwrapListener(eventListeners) : eventListeners
+      ];
+    }
   }
   unwrapListeners(arr) {
     const unwrappedListeners = new Array(arr.length);
@@ -3260,7 +3272,7 @@ var _EventEmitter = class {
       if (this.isCalled) {
         return;
       }
-      this.context.removeListener(this.eventName, this.rawListener);
+      this.context.removeListener(this.eventName, this.listener);
       this.isCalled = true;
       return this.listener.apply(this.context, args);
     };
@@ -3288,25 +3300,29 @@ var _EventEmitter = class {
       return this;
     }
     if (eventName) {
-      if (this._events.has(eventName)) {
-        const listeners = this._events.get(eventName).slice().reverse();
+      if (this.hasListeners(eventName)) {
+        const listeners = ensureArray(this._events[eventName]).slice().reverse();
         for (const listener of listeners) {
           this.removeListener(eventName, this.unwrapListener(listener));
         }
       }
     } else {
       const eventList = this.eventNames();
-      eventList.forEach((value) => {
-        this.removeAllListeners(value);
+      eventList.forEach((eventName2) => {
+        if (eventName2 === "removeListener")
+          return;
+        this.removeAllListeners(eventName2);
       });
+      this.removeAllListeners("removeListener");
     }
     return this;
   }
   removeListener(eventName, listener) {
     this.checkListenerArgument(listener);
-    if (this._events.has(eventName)) {
-      const arr = this._events.get(eventName);
-      assert(arr);
+    if (this.hasListeners(eventName)) {
+      const maybeArr = this._events[eventName];
+      assert(maybeArr);
+      const arr = ensureArray(maybeArr);
       let listenerIndex = -1;
       for (let i = arr.length - 1; i >= 0; i--) {
         if (arr[i] == listener || arr[i] && arr[i]["listener"] == listener) {
@@ -3316,9 +3332,13 @@ var _EventEmitter = class {
       }
       if (listenerIndex >= 0) {
         arr.splice(listenerIndex, 1);
-        this.emit("removeListener", eventName, listener);
         if (arr.length === 0) {
-          this._events.delete(eventName);
+          delete this._events[eventName];
+        } else if (arr.length === 1) {
+          this._events[eventName] = arr[0];
+        }
+        if (this._events.removeListener) {
+          this.emit("removeListener", eventName, listener);
         }
       }
     }
@@ -3427,16 +3447,19 @@ var _EventEmitter = class {
     }
   }
   warnIfNeeded(eventName, warning) {
-    _EventEmitter._alreadyWarnedEvents ||= new Set();
-    if (_EventEmitter._alreadyWarnedEvents.has(eventName)) {
+    const listeners = this._events[eventName];
+    if (listeners.warned) {
       return;
     }
-    _EventEmitter._alreadyWarnedEvents.add(eventName);
+    listeners.warned = true;
     console.warn(warning);
     const maybeProcess = globalThis.process;
     if (maybeProcess instanceof _EventEmitter) {
       maybeProcess.emit("warning", warning);
     }
+  }
+  hasListeners(eventName) {
+    return this._events && Boolean(this._events[eventName]);
   }
 };
 var EventEmitter = _EventEmitter;
@@ -4023,6 +4046,8 @@ var Buffer3 = class extends Uint8Array {
     return offset + 4;
   }
 };
+var atob2 = globalThis.atob;
+var btoa = globalThis.btoa;
 
 // _fs/_fs_readFile.ts
 function maybeDecode(data, encoding) {
@@ -4231,7 +4256,7 @@ function writeFile(pathOrRid, data, optOrCallback, callback) {
     try {
       file = isRid ? new Deno.File(pathOrRid) : await Deno.open(pathOrRid, openOptions);
       if (!isRid && mode) {
-        if (Deno.build.os === "windows")
+        if (isWindows)
           notImplemented(`"mode" on Windows`);
         await Deno.chmod(pathOrRid, mode);
       }
@@ -4259,7 +4284,7 @@ function writeFileSync(pathOrRid, data, options) {
   try {
     file = isRid ? new Deno.File(pathOrRid) : Deno.openSync(pathOrRid, openOptions);
     if (!isRid && mode) {
-      if (Deno.build.os === "windows")
+      if (isWindows)
         notImplemented(`"mode" on Windows`);
       Deno.chmodSync(pathOrRid, mode);
     }
