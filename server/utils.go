@@ -12,7 +12,7 @@ import (
 )
 
 var (
-	regFullVersion      = regexp.MustCompile(`^\d+\.\d+\.\d+(\-[a-zA-Z0-9\.]+)*$`)
+	regFullVersion      = regexp.MustCompile(`^\d+\.\d+\.\d+[a-zA-Z0-9\.\-]*$`)
 	regBuildVersionPath = regexp.MustCompile(`^/v\d+/`)
 )
 
