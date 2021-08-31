@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # mmdb_china_ip_list: https://github.com/alecthw/mmdb_china_ip_list
-mmdb_china_ip_list_tag="20210803"
+mmdb_china_ip_list_tag="202108181710"
 dataUrl="https://github.com/alecthw/mmdb_china_ip_list/releases/download/${mmdb_china_ip_list_tag}/china_ip_list.mmdb"
 saveAs="$(dirname $0)/../embed/china_ip_list.mmdb"
 cacheTo="/tmp/china_ip_list.${mmdb_china_ip_list_tag}.mmdb"
@@ -30,7 +30,6 @@ fi
 if [ "$goarch" == "" ]; then
   goarch="amd64"
 fi
-
 
 echo "--- building(${goos}_$goarch)..."
 export GOOS=$goos
