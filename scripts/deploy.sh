@@ -77,6 +77,12 @@ if [ "$?" != "0" ]; then
   exit
 fi
 
+cleanYarnCache="no"
+read -p "clean yarn cache? y/N " ok
+if [ "$ok" == "y" ]; then
+  cleanYarnCache="yes"
+fi
+
 echo "--- uploading..."
 scp -P $sshPort $scriptsDir/esmd $user@$host:/tmp/esmd
 if [ "$?" != "0" ]; then
@@ -102,6 +108,10 @@ ssh -p $sshPort $user@$host << EOF
   rm -f /usr/local/bin/esmd
   mv -f /tmp/esmd /usr/local/bin/esmd
   chmod +x /usr/local/bin/esmd
+
+  if [ "$cleanYarnCache" == "yes" ]; then
+    rm -rf /usr/local/share/.cache/yarn
+  fi
 
   if [ "$init" == "yes" ]; then
     if [ -f \$SVCF ]; then
