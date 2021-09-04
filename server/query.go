@@ -37,7 +37,7 @@ var httpClient = &http.Client{
 // esm query middleware for rex
 func query() rex.Handle {
 	startTime := time.Now()
-	queue := newBuildQueue(runtime.NumCPU())
+	queue := newBuildQueue(2 * runtime.NumCPU())
 
 	return func(ctx *rex.Context) interface{} {
 		pathname := ctx.Path.String()
@@ -308,7 +308,7 @@ func query() rex.Handle {
 					if strings.HasSuffix(err.Error(), "not found") {
 						continue
 					}
-					return throwErrorJS(ctx, err)
+					return rex.Status(400, fmt.Sprintf("Invalid deps query: %v not found", p))
 				}
 				if !deps.Has(m.name) {
 					deps = append(deps, *m)
@@ -323,10 +323,11 @@ func query() rex.Handle {
 
 		reqPkg, err := parsePkg(pathname)
 		if err != nil {
+			status := 500
 			if strings.HasSuffix(err.Error(), "not found") {
-				return throwErrorJS(ctx, err)
+				status = 404
 			}
-			return throwErrorJS(ctx, err)
+			return rex.Status(status, err.Error())
 		}
 
 		isBare := false
@@ -431,8 +432,8 @@ func query() rex.Handle {
 					}
 					esm = output.esm
 					pkgCSS = output.pkgCSS
-				case <-time.After(30 * time.Second):
-					return rex.Err(http.StatusRequestTimeout, "timeout, please try later")
+				case <-time.After(time.Minute):
+					return rex.Status(http.StatusRequestTimeout, "timeout, we are building the package hardly, please try later!")
 				}
 			}
 		}
@@ -451,7 +452,7 @@ func query() rex.Handle {
 				}
 				return rex.Redirect(url, code)
 			}
-			return throwErrorJS(ctx, fmt.Errorf("css not found"))
+			return rex.Status(404, "Package CSS not found")
 		}
 
 		if isBare {
@@ -460,11 +461,11 @@ func query() rex.Handle {
 				"builds",
 				taskID,
 			)
-			if fileExists(fp) {
-				ctx.SetHeader("Cache-Control", "public, max-age=31536000, immutable")
-				return rex.File(fp)
+			if !fileExists(fp) {
+				return rex.Status(404, "File not found")
 			}
-			return rex.Err(404)
+			ctx.SetHeader("Cache-Control", "public, max-age=31536000, immutable")
+			return rex.File(fp)
 		}
 
 		buf := bytes.NewBuffer(nil)
