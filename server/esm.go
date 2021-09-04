@@ -13,7 +13,6 @@ import (
 	"github.com/ije/esbuild-internal/logger"
 	"github.com/ije/esbuild-internal/test"
 	"github.com/ije/gox/utils"
-	"github.com/postui/postdb/q"
 )
 
 // ESM defines the ES Module meta
@@ -188,21 +187,23 @@ func initESM(wd string, pkg pkg, deps pkgSlice, nodeEnv string) (esm *ESM, err e
 }
 
 func findESM(id string) (esm *ESM, pkgCSS bool, err error) {
-	post, err := db.Get(q.Alias(id), q.Select("esm", "css"))
+	store, _, err := db.Get(id)
 	if err == nil {
-		err = json.Unmarshal(post.KV["esm"], &esm)
+		err = json.Unmarshal([]byte(store["esm"]), &esm)
 		if err != nil {
-			db.Delete(q.Alias(id))
+			db.Delete(id)
 			return
 		}
 
-		if !fileExists(path.Join(config.storageDir, "builds", id)) {
-			db.Delete(q.Alias(id))
+		var exists bool
+		exists, err = fs.Exists(path.Join("builds", id))
+		if !exists {
+			db.Delete(id)
 			return
 		}
 
-		if val := post.KV["css"]; len(val) == 1 && val[0] == 1 {
-			pkgCSS = fileExists(path.Join(config.storageDir, "builds", strings.TrimSuffix(id, ".js")+".css"))
+		if val := store["css"]; len(val) == 1 && val[0] == 1 {
+			pkgCSS, err = fs.Exists(path.Join("builds", strings.TrimSuffix(id, ".js")+".css"))
 		}
 	}
 	return

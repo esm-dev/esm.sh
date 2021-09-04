@@ -37,10 +37,14 @@ var httpClient = &http.Client{
 // esm query middleware for rex
 func query() rex.Handle {
 	startTime := time.Now()
-	queue := newBuildQueue(runtime.NumCPU())
+	queue := newBuildQueue(2 * runtime.NumCPU())
 
 	return func(ctx *rex.Context) interface{} {
 		pathname := ctx.Path.String()
+		if strings.HasPrefix(pathname, ".") {
+			return rex.Status(400, "Bad Request")
+		}
+
 		switch pathname {
 		case "/":
 			indexHTML, err := embedFS.ReadFile("embed/index.html")
@@ -154,7 +158,7 @@ func query() rex.Handle {
 		if storageType == "raw" {
 			m, err := parsePkg(pathname)
 			if err != nil {
-				return err
+				return rex.Status(500, err.Error())
 			}
 			if m.submodule != "" {
 				shouldRedirect := !regVersionPath.MatchString(pathname)
@@ -183,13 +187,21 @@ func query() rex.Handle {
 					url := fmt.Sprintf("%s://%s/%s", proto, hostname, m.String())
 					return rex.Redirect(url, http.StatusTemporaryRedirect)
 				}
-				cacheFile := path.Join(config.storageDir, "raw", m.String())
-				if fileExists(cacheFile) {
+				savePath := path.Join("raw", m.String())
+				exits, err := fs.Exists(savePath)
+				if err != nil {
+					return rex.Status(500, err.Error())
+				}
+				if exits {
+					r, modtime, err := fs.ReadFile(savePath)
+					if err != nil {
+						return rex.Status(500, err.Error())
+					}
 					if strings.HasSuffix(pathname, ".ts") {
 						ctx.SetHeader("Content-Type", "application/typescript")
 					}
 					ctx.SetHeader("Cache-Control", "public, max-age=31536000, immutable")
-					return rex.File(cacheFile)
+					return rex.Content(savePath, modtime, r)
 				}
 				unpkgDomain := "unpkg.com"
 				if config.unpkgDomain != "" {
@@ -207,11 +219,7 @@ func query() rex.Handle {
 				if err != nil {
 					return err
 				}
-				err = ensureDir(path.Dir(cacheFile))
-				if err != nil {
-					return err
-				}
-				err = ioutil.WriteFile(cacheFile, data, 0644)
+				err = fs.WriteFile(savePath, bytes.NewReader(data))
 				if err != nil {
 					return err
 				}
@@ -226,24 +234,92 @@ func query() rex.Handle {
 			storageType = ""
 		}
 
-		// serve build files
-		if storageType != "" {
-			var filepath string
-			if hasBuildVerPrefix && (storageType == "builds" || storageType == "types") {
-				if prevBuildVer != "" {
-					filepath = path.Join(config.storageDir, storageType, prevBuildVer, pathname)
-				} else {
-					filepath = path.Join(config.storageDir, storageType, fmt.Sprintf("v%d", VERSION), pathname)
+		// use embed content
+		if hasBuildVerPrefix {
+			if storageType == "types" {
+				data, err := embedFS.ReadFile("embed/types" + pathname)
+				if err == nil {
+					ctx.SetHeader("Content-Type", "application/typescript; charset=utf-8")
+					ctx.SetHeader("Cache-Control", "public, max-age=31536000, immutable")
+					return rex.Content(pathname, startTime, bytes.NewReader(data))
 				}
 			} else {
-				filepath = path.Join(config.storageDir, storageType, pathname)
+				data, err := embedFS.ReadFile("embed/polyfills" + pathname)
+				if err == nil {
+					ctx.SetHeader("Cache-Control", "public, max-age=31536000, immutable")
+					return rex.Content(pathname, startTime, bytes.NewReader(data))
+				}
 			}
-			if fileExists(filepath) {
+		}
+
+		// serve build files
+		if hasBuildVerPrefix && (storageType == "builds" || storageType == "types") {
+			var savePath string
+			if prevBuildVer != "" {
+				savePath = path.Join(storageType, prevBuildVer, pathname)
+			} else {
+				savePath = path.Join(storageType, fmt.Sprintf("v%d", VERSION), pathname)
+			}
+
+			exits, err := fs.Exists(savePath)
+			if err != nil {
+				return rex.Status(500, err.Error())
+			}
+			if exits {
+				r, modtime, err := fs.ReadFile(savePath)
+				if err != nil {
+					return rex.Status(500, err.Error())
+				}
 				if storageType == "types" {
 					ctx.SetHeader("Content-Type", "application/typescript; charset=utf-8")
 				}
 				ctx.SetHeader("Cache-Control", "public, max-age=31536000, immutable")
-				return rex.File(filepath)
+				return rex.Content(savePath, modtime, r)
+			}
+		}
+
+		// get package info
+		reqPkg, err := parsePkg(pathname)
+		if err != nil {
+			status := 500
+			message := err.Error()
+			if message == "invalid path" {
+				status = 400
+			} else if strings.HasSuffix(message, "not found") {
+				status = 404
+			}
+			return rex.Status(status, message)
+		}
+
+		// check `deps` query
+		deps := pkgSlice{}
+		for _, p := range strings.Split(ctx.Form.Value("deps"), ",") {
+			p = strings.TrimSpace(p)
+			if p != "" {
+				m, err := parsePkg(p)
+				if err != nil {
+					if strings.HasSuffix(err.Error(), "not found") {
+						continue
+					}
+					return rex.Status(400, fmt.Sprintf("Invalid deps query: %v not found", p))
+				}
+				if !deps.Has(m.name) {
+					deps = append(deps, *m)
+				}
+			}
+		}
+
+		// check `alias` query
+		alias := map[string]string{}
+		for _, p := range strings.Split(ctx.Form.Value("alias"), ",") {
+			p = strings.TrimSpace(p)
+			if p != "" {
+				name, to := utils.SplitByFirstByte(p, ':')
+				name = strings.TrimSpace(name)
+				to = strings.TrimSpace(to)
+				if name != "" && to != "" {
+					alias[name] = to
+				}
 			}
 		}
 
@@ -251,7 +327,7 @@ func query() rex.Handle {
 		target := strings.ToLower(strings.TrimSpace(ctx.Form.Value("target")))
 		if _, ok := targets[target]; !ok {
 			ua := ctx.R.UserAgent()
-			// todo: support nodejs
+			// todo: check nodejs
 			if strings.HasPrefix(ua, "Deno/") {
 				target = "deno"
 			} else {
@@ -284,52 +360,12 @@ func query() rex.Handle {
 			}
 		}
 
-		// check `alias` query
-		alias := map[string]string{}
-		for _, p := range strings.Split(ctx.Form.Value("alias"), ",") {
-			p = strings.TrimSpace(p)
-			if p != "" {
-				name, to := utils.SplitByFirstByte(p, ':')
-				name = strings.TrimSpace(name)
-				to = strings.TrimSpace(to)
-				if name != "" && to != "" {
-					alias[name] = to
-				}
-			}
-		}
-
-		// check `deps` query
-		deps := pkgSlice{}
-		for _, p := range strings.Split(ctx.Form.Value("deps"), ",") {
-			p = strings.TrimSpace(p)
-			if p != "" {
-				m, err := parsePkg(p)
-				if err != nil {
-					if strings.HasSuffix(err.Error(), "not found") {
-						continue
-					}
-					return throwErrorJS(ctx, err)
-				}
-				if !deps.Has(m.name) {
-					deps = append(deps, *m)
-				}
-			}
-		}
-
 		isPkgCSS := !ctx.Form.IsNil("css")
 		isDev := !ctx.Form.IsNil("dev")
 		bundleMode := !ctx.Form.IsNil("bundle") || !ctx.Form.IsNil("b")
 		noCheck := !ctx.Form.IsNil("no-check")
-
-		reqPkg, err := parsePkg(pathname)
-		if err != nil {
-			if strings.HasSuffix(err.Error(), "not found") {
-				return throwErrorJS(ctx, err)
-			}
-			return throwErrorJS(ctx, err)
-		}
-
 		isBare := false
+
 		if hasBuildVerPrefix && endsWith(pathname, ".js") {
 			a := strings.Split(reqPkg.submodule, "/")
 			if len(a) > 1 && strings.HasPrefix(a[0], "X-") {
@@ -431,8 +467,8 @@ func query() rex.Handle {
 					}
 					esm = output.esm
 					pkgCSS = output.pkgCSS
-				case <-time.After(30 * time.Second):
-					return rex.Err(http.StatusRequestTimeout, "timeout, please try later")
+				case <-time.After(time.Minute):
+					return rex.Status(http.StatusRequestTimeout, "timeout, we are building the package hardly, please try later!")
 				}
 			}
 		}
@@ -451,20 +487,27 @@ func query() rex.Handle {
 				}
 				return rex.Redirect(url, code)
 			}
-			return throwErrorJS(ctx, fmt.Errorf("css not found"))
+			return rex.Status(404, "Package CSS not found")
 		}
 
 		if isBare {
-			fp := path.Join(
-				config.storageDir,
+			savePath := path.Join(
 				"builds",
 				taskID,
 			)
-			if fileExists(fp) {
-				ctx.SetHeader("Cache-Control", "public, max-age=31536000, immutable")
-				return rex.File(fp)
+			exits, err := fs.Exists(savePath)
+			if err != nil {
+				return rex.Status(500, err.Error())
 			}
-			return rex.Err(404)
+			if !exits {
+				return rex.Status(404, "File not found")
+			}
+			r, modtime, err := fs.ReadFile(savePath)
+			if err != nil {
+				return rex.Status(500, err.Error())
+			}
+			ctx.SetHeader("Cache-Control", "public, max-age=31536000, immutable")
+			return rex.Content(savePath, modtime, r)
 		}
 
 		buf := bytes.NewBuffer(nil)

@@ -27,6 +27,10 @@ func parsePkg(pathname string) (*pkg, error) {
 		submodule = strings.Join(a[2:], "/")
 	}
 
+	if strings.HasSuffix(submodule, ".d.ts") {
+		return nil, errors.New("invalid path")
+	}
+
 	name, version := utils.SplitByLastByte(packageName, '@')
 	if scope != "" {
 		name = scope + "/" + name

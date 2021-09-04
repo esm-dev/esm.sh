@@ -1,6 +1,6 @@
 # ESM
 
-A fast, global content delivery network to transform [NPM](http://npmjs.org/) packges to standard **ES Modules** by [esbuild](https://github.com/evanw/esbuild).
+A fast, global content delivery network to transform [NPM](http://npmjs.org/) packages to standard **ES Modules** by [esbuild](https://github.com/evanw/esbuild).
 
 ## Import from URL
 
@@ -14,7 +14,7 @@ import React from 'https://esm.sh/react'
 import React from 'https://esm.sh/react@17.0.2'
 ```
 
-or use a major version:
+or import a major version:
 
 ```javascript
 import React from 'https://esm.sh/react@17'
@@ -38,7 +38,7 @@ import 'https://esm.sh/tailwindcss/dist/tailwind.min.css'
 import { Button } from 'https://esm.sh/antd?bundle'
 ```
 
-In **bundle** mode, all dependencies will be bundled into one JS file.
+In **bundle** mode, all dependencies will be bundled into a single JS file.
 
 ### Development mode
 
@@ -46,7 +46,7 @@ In **bundle** mode, all dependencies will be bundled into one JS file.
 import React from 'https://esm.sh/react?dev'
 ```
 
-The `?dev` mode builds code with `NODE_ENV` equals to `development`, that is useful to build modules like **React** to allow you get more development warn/error messages.
+The `?dev` mode builds code with `process.env.NODE_ENV` equals to `development`, that is useful to build modules like **React** to allow you get more development warn/error details.
 
 ### Specify external dependencies
 
@@ -55,7 +55,7 @@ import React from 'https://esm.sh/react@16.14.0'
 import useSWR from 'https://esm.sh/swr?deps=react@16.14.0'
 ```
 
-By default, esm.sh rewrites import specifier based on the package's dependency statement. To specify version of dependencies you can use the `?deps=PACKAGE@VERSION` query, separate multiple dependencies with commas: `?deps=react@16.14.0,react-dom@16.14.0`.
+By default, esm.sh rewrites import specifier based on the package's dependency statement. To specify version of dependencies you can use the `?deps=PACKAGE@VERSION` query. You can separate multiple dependencies with commas: `?deps=react@16.14.0,react-dom@16.14.0`.
 
 ### Aliasing dependencies
 
@@ -93,7 +93,7 @@ This only works when the NPM module imports css files in JS directly.
 
 ## Deno compatibility
 
-**esm.sh** will resolve the node internal modules (**fs**, **os**, etc.) with [`deno.land/std/node`](https://deno.land/std/node) to support some packages working in Deno, like `postcss`:
+**esm.sh** will resolve the node internal modules (**fs**, **child_process**, etc.) with [`deno.land/std/node`](https://deno.land/std/node) to support some packages working in Deno, like `postcss`:
 
 ```javascript
 import postcss from 'https://esm.sh/postcss'
@@ -102,13 +102,12 @@ import autoprefixer from 'https://esm.sh/autoprefixer'
 const { css } = await postcss([ autoprefixer ]).process(`
   backdrop-filter: blur(5px);
   user-select: none;
-`).async() 
-console.log(css)
+`).async()
 ```
 
 ### X-Typescript-Types
 
-By default, **esm.sh** will respond with a custom `X-TypeScript-Types` HTTP header when types (`.d.ts`) are defined. This is useful for deno type checks ([link](https://deno.land/manual/typescript/types#using-x-typescript-types-header)).
+By default, **esm.sh** will respond with a custom `X-TypeScript-Types` HTTP header when the types (`.d.ts`) is defined. This is useful for deno type checks ([link](https://deno.land/manual/typescript/types#using-x-typescript-types-header)).
 
 ![figure #1](./embed/assets/sceenshot-deno-types.png)
 

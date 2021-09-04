@@ -4,31 +4,31 @@ import (
 	"embed"
 	"flag"
 	"fmt"
-	"io"
 	"os"
 	"os/signal"
 	"path"
 	"path/filepath"
 	"syscall"
 
+	"esm.sh/server/storage"
+
 	logx "github.com/ije/gox/log"
 	"github.com/ije/rex"
 	"github.com/oschwald/maxminddb-golang"
-	"github.com/postui/postdb"
 )
 
 var (
 	config  *Config
 	node    *Node
 	mmdbr   *maxminddb.Reader
-	db      *postdb.DB
+	db      storage.DBConn
+	fs      storage.FSConn
 	log     *logx.Logger
 	embedFS *embed.FS
 )
 
 // The config for ESM Server
 type Config struct {
-	storageDir         string
 	yarnCacheDir       string
 	domain             string
 	cdnDomain          string
@@ -38,11 +38,13 @@ type Config struct {
 }
 
 // Serve serves ESM server
-func Serve(fs *embed.FS) {
+func Serve(efs *embed.FS) {
 	var port int
 	var httpsPort int
 	var cjsLexerServerPort int
 	var etcDir string
+	var dbUrl string
+	var fsUrl string
 	var yarnCacheDir string
 	var domain string
 	var cdnDomain string
@@ -55,11 +57,13 @@ func Serve(fs *embed.FS) {
 	flag.IntVar(&httpsPort, "https-port", 443, "https server port")
 	flag.IntVar(&cjsLexerServerPort, "cjs-lexer-server-port", 2022, "cjs lexer server port")
 	flag.StringVar(&etcDir, "etc-dir", "/usr/local/etc/esmd", "the etc dir to store data")
-	flag.StringVar(&yarnCacheDir, "yarn-cache-dir", "", "the cache dir for `yarn add`")
+	flag.StringVar(&dbUrl, "db", "", "database connection Url")
+	flag.StringVar(&fsUrl, "fs", "", "file system connection Url")
 	flag.StringVar(&domain, "domain", "esm.sh", "main domain")
 	flag.StringVar(&cdnDomain, "cdn-domain", "", "cdn domain")
 	flag.StringVar(&cdnDomainChina, "cdn-domain-china", "", "cdn domain for china")
 	flag.StringVar(&unpkgDomain, "unpkg-domain", "", "proxy domain for unpkg.com")
+	flag.StringVar(&yarnCacheDir, "yarn-cache-dir", "", "the cache dir for `yarn add`")
 	flag.StringVar(&logLevel, "log", "info", "log level")
 	flag.BoolVar(&isDev, "dev", false, "run server in development mode")
 	flag.Parse()
@@ -73,9 +77,14 @@ func Serve(fs *embed.FS) {
 		cdnDomain = ""
 		cdnDomainChina = ""
 	}
+	if dbUrl == "" {
+		dbUrl = fmt.Sprintf("postdb:%s", path.Join(etcDir, "esm.db"))
+	}
+	if fsUrl == "" {
+		fsUrl = fmt.Sprintf("local:%s", path.Join(etcDir, "storage"))
+	}
 
 	config = &Config{
-		storageDir:         path.Join(etcDir, "storage"),
 		yarnCacheDir:       yarnCacheDir,
 		domain:             domain,
 		cdnDomain:          cdnDomain,
@@ -83,7 +92,7 @@ func Serve(fs *embed.FS) {
 		unpkgDomain:        unpkgDomain,
 		cjsLexerServerPort: uint16(cjsLexerServerPort),
 	}
-	embedFS = fs
+	embedFS = efs
 
 	var err error
 	log, err = logx.New(fmt.Sprintf("file:%s?buffer=32k", path.Join(logDir, "main.log")))
@@ -99,63 +108,14 @@ func Serve(fs *embed.FS) {
 	}
 	log.Debugf("nodejs v%s installed, registry: %s", node.version, node.npmRegistry)
 
-	ensureDir(path.Join(config.storageDir, fmt.Sprintf("builds/v%d", VERSION)))
-	ensureDir(path.Join(config.storageDir, fmt.Sprintf("types/v%d", VERSION)))
-	ensureDir(path.Join(config.storageDir, "raw"))
-
-	db, err = postdb.Open(path.Join(etcDir, "esm.db"), 0666)
+	fs, err = storage.OpenFS(fsUrl)
 	if err != nil {
-		log.Fatalf("initiate esm.db: %v", err)
+		log.Fatalf("storage: %v", err)
 	}
 
-	polyfills, err := embedFS.ReadDir("embed/polyfills")
+	db, err = storage.OpenDB(dbUrl)
 	if err != nil {
-		log.Fatal(err)
-	}
-	for _, entry := range polyfills {
-		name := entry.Name()
-		filename := path.Join(config.storageDir, fmt.Sprintf("builds/v%d/%s", VERSION, name))
-		if !fileExists(filename) {
-			file, err := embedFS.Open(fmt.Sprintf("embed/polyfills/%s", name))
-			if err != nil {
-				log.Fatal(err)
-			}
-			f, err := os.Create(filename)
-			if err != nil {
-				log.Fatal(err)
-			}
-			_, err = io.Copy(f, file)
-			f.Close()
-			if err != nil {
-				log.Fatal(err)
-			}
-			log.Debugf("%s added", name)
-		}
-	}
-
-	types, err := embedFS.ReadDir("embed/types")
-	if err != nil {
-		log.Fatal(err)
-	}
-	for _, entry := range types {
-		name := entry.Name()
-		filename := path.Join(config.storageDir, fmt.Sprintf("types/v%d/%s", VERSION, name))
-		if !fileExists(filename) {
-			file, err := embedFS.Open(fmt.Sprintf("embed/types/%s", name))
-			if err != nil {
-				log.Fatal(err)
-			}
-			f, err := os.Create(filename)
-			if err != nil {
-				log.Fatal(err)
-			}
-			_, err = io.Copy(f, file)
-			f.Close()
-			if err != nil {
-				log.Fatal(err)
-			}
-			log.Debugf("%s added", name)
-		}
+		log.Fatalf("storage: %v", err)
 	}
 
 	mmdata, err := embedFS.ReadFile("embed/china_ip_list.mmdb")
@@ -234,7 +194,6 @@ func Serve(fs *embed.FS) {
 
 func init() {
 	config = &Config{
-		storageDir:         "/usr/local/etc/esmd/storage",
 		yarnCacheDir:       "",
 		domain:             "esm.sh",
 		cjsLexerServerPort: 2022,

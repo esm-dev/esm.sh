@@ -6,17 +6,16 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
-	"io"
 	"os"
 	"path"
 	"sort"
 	"strings"
 	"time"
 
+	"esm.sh/server/storage"
+
 	"github.com/evanw/esbuild/pkg/api"
 	"github.com/ije/gox/utils"
-	"github.com/postui/postdb"
-	"github.com/postui/postdb/q"
 )
 
 type buildTask struct {
@@ -340,11 +339,11 @@ esbuild:
 		log.Warnf("esbuild(%s): %s", task.ID(), w.Text)
 	}
 
-	cssMark := []byte{0}
+	cssMark := "true"
 	for _, file := range result.OutputFiles {
 		outputContent := file.Contents
 		if strings.HasSuffix(file.Path, ".js") {
-			jsHeader := bytes.NewBufferString(fmt.Sprintf(
+			buf := bytes.NewBufferString(fmt.Sprintf(
 				"/* esm.sh - esbuild bundle(%s) %s %s */\n",
 				task.pkg.String(),
 				strings.ToLower(task.target),
@@ -540,13 +539,13 @@ esbuild:
 									meta, err := initESM(task.wd, *pkg, task.deps, nodeEnv)
 									// if the dependency is an es module without `default` export, then import star
 									if err == nil && meta.Module != "" && !meta.ExportDefault {
-										fmt.Fprintf(jsHeader, `import * as __%s$ from "%s";%s`, identifier, importPath, eol)
+										fmt.Fprintf(buf, `import * as __%s$ from "%s";%s`, identifier, importPath, eol)
 										wrote = true
 									}
 								}
 							}
 							if !wrote {
-								fmt.Fprintf(jsHeader, `import __%s$ from "%s";%s`, identifier, importPath, eol)
+								fmt.Fprintf(buf, `import __%s$ from "%s";%s`, identifier, importPath, eol)
 							}
 							cjsImported = true
 						}
@@ -566,56 +565,37 @@ esbuild:
 			// add nodejs/deno compatibility
 			if task.target != "node" {
 				if bytes.Contains(outputContent, []byte("__process$")) {
-					fmt.Fprintf(jsHeader, `import __process$ from "/v%d/node_process.js";%s__process$.env.NODE_ENV="%s";%s`, VERSION, eol, nodeEnv, eol)
+					fmt.Fprintf(buf, `import __process$ from "/v%d/node_process.js";%s__process$.env.NODE_ENV="%s";%s`, VERSION, eol, nodeEnv, eol)
 				}
 				if bytes.Contains(outputContent, []byte("__Buffer$")) {
-					fmt.Fprintf(jsHeader, `import { Buffer as __Buffer$ } from "/v%d/node_buffer.js";%s`, VERSION, eol)
+					fmt.Fprintf(buf, `import { Buffer as __Buffer$ } from "/v%d/node_buffer.js";%s`, VERSION, eol)
 				}
 				if bytes.Contains(outputContent, []byte("__global$")) {
-					fmt.Fprintf(jsHeader, `var __global$ = window;%s`, eol)
+					fmt.Fprintf(buf, `var __global$ = window;%s`, eol)
 				}
 				if bytes.Contains(outputContent, []byte("__setImmediate$")) {
-					fmt.Fprintf(jsHeader, `var __setImmediate$ = (cb, ...args) => setTimeout(cb, 0, ...args);%s`, eol)
+					fmt.Fprintf(buf, `var __setImmediate$ = (cb, ...args) => setTimeout(cb, 0, ...args);%s`, eol)
 				}
 				if bytes.Contains(outputContent, []byte("__rResolve$")) {
-					fmt.Fprintf(jsHeader, `var __rResolve$ = p => p;%s`, eol)
+					fmt.Fprintf(buf, `var __rResolve$ = p => p;%s`, eol)
 				}
 			}
 
-			saveFilePath := path.Join(config.storageDir, "builds", task.ID())
-			ensureDir(path.Dir(saveFilePath))
-
-			var file *os.File
-			file, err = os.Create(saveFilePath)
-			if err != nil {
-				return
-			}
-			defer file.Close()
-
-			_, err = io.Copy(file, jsHeader)
+			_, err = buf.Write(outputContent)
 			if err != nil {
 				return
 			}
 
-			_, err = io.Copy(file, bytes.NewReader(outputContent))
+			err = fs.WriteFile(path.Join("builds", task.ID()), buf)
 			if err != nil {
 				return
 			}
 		} else if strings.HasSuffix(file.Path, ".css") {
-			saveFilePath := path.Join(config.storageDir, "builds", strings.TrimSuffix(task.ID(), ".js")+".css")
-			ensureDir(path.Dir(saveFilePath))
-			file, e := os.Create(saveFilePath)
-			if e != nil {
-				err = e
-				return
-			}
-			defer file.Close()
-
-			_, err = io.Copy(file, bytes.NewReader(outputContent))
+			err = fs.WriteFile(path.Join("builds", strings.TrimSuffix(task.ID(), ".js")+".css"), bytes.NewReader(outputContent))
 			if err != nil {
 				return
 			}
-			cssMark = []byte{1}
+			cssMark = "false"
 		}
 	}
 
@@ -626,14 +606,14 @@ esbuild:
 		return
 	}
 
-	_, err = db.Put(
-		q.Alias(task.ID()),
-		q.KV{
-			"esm": utils.MustEncodeJSON(esm),
+	err = db.Put(
+		task.ID(),
+		storage.Store{
+			"esm": string(utils.MustEncodeJSON(esm)),
 			"css": cssMark,
 		},
 	)
-	if err != nil && err == postdb.ErrDuplicateAlias {
+	if err != nil {
 		err = nil
 	}
 	if err != nil {

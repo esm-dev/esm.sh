@@ -4,7 +4,6 @@ import (
 	"bufio"
 	"bytes"
 	"fmt"
-	"io"
 	"os"
 	"path"
 	"regexp"
@@ -48,15 +47,14 @@ func copyDTS(wd string, prefix string, dts string, tracing *stringSet) (err erro
 	}
 	defer dtsFile.Close()
 
-	saveFilePath := path.Join(config.storageDir, "types", fmt.Sprintf("v%d", VERSION), prefix, dts)
-	fi, err := os.Lstat(saveFilePath)
-	if err == nil {
-		if fi.IsDir() {
-			os.Remove(saveFilePath)
-		} else {
-			// do not repeat
-			return
-		}
+	savePath := path.Join("types", fmt.Sprintf("v%d", VERSION), prefix, dts)
+	exists, err := fs.Exists(savePath)
+	if err != nil {
+		return nil
+	}
+	if exists {
+		// do not repeat
+		return
 	}
 
 	imports := newStringSet()
@@ -349,14 +347,7 @@ func copyDTS(wd string, prefix string, dts string, tracing *stringSet) (err erro
 		}
 	}
 
-	ensureDir(path.Dir(saveFilePath))
-	saveFile, err := os.Create(saveFilePath)
-	if err != nil {
-		return
-	}
-
-	_, err = io.Copy(saveFile, buf)
-	saveFile.Close()
+	err = fs.WriteFile(savePath, buf)
 	if err != nil {
 		return
 	}
@@ -376,7 +367,6 @@ func copyDTS(wd string, prefix string, dts string, tracing *stringSet) (err erro
 		}
 		err = copyDTS(wd, prefix, importDts, tracing)
 		if err != nil {
-			os.Remove(saveFilePath)
 			break
 		}
 	}
