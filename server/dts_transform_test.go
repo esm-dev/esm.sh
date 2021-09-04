@@ -7,6 +7,8 @@ import (
 	"path"
 	"strings"
 	"testing"
+
+	"esm.sh/server/storage"
 )
 
 func TestCopyDTS(t *testing.T) {
@@ -90,16 +92,25 @@ func TestCopyDTS(t *testing.T) {
 	}
 
 	config = &Config{
-		storageDir: testDir,
-		domain:     "esm.sh",
-		cdnDomain:  "cdn.esm.sh",
+		domain:    "esm.sh",
+		cdnDomain: "cdn.esm.sh",
+	}
+	fs, err = storage.OpenFS(fmt.Sprintf("local:%s", testDir))
+	if err != nil {
+		t.Fatal(err)
 	}
 	err = CopyDTS(testDir, "", "test/index.d.ts")
 	if err != nil && os.IsExist(err) {
 		t.Fatal(err)
 	}
 
-	data, err := ioutil.ReadFile(path.Join(testDir, fmt.Sprintf("types/v%d/test/index.d.ts", VERSION)))
+	file, _, err := fs.ReadFile(fmt.Sprintf("types/v%d/test/index.d.ts", VERSION))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer file.Close()
+
+	data, err := ioutil.ReadAll(file)
 	if err != nil {
 		t.Fatal(err)
 	}

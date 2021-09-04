@@ -16,7 +16,7 @@ type DB interface {
 
 type DBConn interface {
 	Get(id string) (store Store, modtime time.Time, err error)
-	Update(id string, store Store) error // should update the `modtime` field to current time
+	Put(id string, store Store) error
 	Delete(id string) error
 	Close() error
 }

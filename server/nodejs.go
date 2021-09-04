@@ -16,9 +16,10 @@ import (
 	"strings"
 	"time"
 
+	"esm.sh/server/storage"
+
 	"github.com/ije/gox/utils"
 	"github.com/postui/postdb"
-	"github.com/postui/postdb/q"
 )
 
 const (
@@ -212,10 +213,10 @@ func (node *Node) getPackageInfo(name string, version string) (info NpmPackage, 
 	version = resolveVersion(version)
 	isFullVersion := regFullVersion.MatchString(version)
 	key := fmt.Sprintf("npm:%s@%s", name, version)
-	p, err := db.Get(q.Alias(key), q.Select("package"))
+	store, modtime, err := db.Get(key)
 	if err == nil {
-		if isFullVersion || int64(p.Modtime)+refreshDuration > time.Now().Unix() {
-			if json.Unmarshal(p.KV["package"], &info) == nil {
+		if isFullVersion || int64(modtime.Unix())+refreshDuration > time.Now().Unix() {
+			if json.Unmarshal([]byte(store["package"]), &info) == nil {
 				return
 			}
 		}
@@ -283,11 +284,7 @@ func (node *Node) getPackageInfo(name string, version string) (info NpmPackage, 
 	}
 
 	// update cache
-	if _, err := db.Get(q.Alias(key)); err == nil {
-		db.Update(q.Alias(key), q.KV{"package": utils.MustEncodeJSON(info)})
-	} else {
-		db.Put(q.Alias(key), q.KV{"package": utils.MustEncodeJSON(info)})
-	}
+	db.Put(key, storage.Store{"package": string(utils.MustEncodeJSON(info))})
 
 	log.Debugf("get npm package(%s@%s) info in %v", name, info.Version, time.Now().Sub(start))
 	return

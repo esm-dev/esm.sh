@@ -158,7 +158,7 @@ func query() rex.Handle {
 		if storageType == "raw" {
 			m, err := parsePkg(pathname)
 			if err != nil {
-				return err
+				return rex.Status(500, err.Error())
 			}
 			if m.submodule != "" {
 				shouldRedirect := !regVersionPath.MatchString(pathname)
@@ -187,13 +187,21 @@ func query() rex.Handle {
 					url := fmt.Sprintf("%s://%s/%s", proto, hostname, m.String())
 					return rex.Redirect(url, http.StatusTemporaryRedirect)
 				}
-				cacheFile := path.Join(config.storageDir, "raw", m.String())
-				if fileExists(cacheFile) {
+				savePath := path.Join("raw", m.String())
+				exits, err := fs.Exists(savePath)
+				if err != nil {
+					return rex.Status(500, err.Error())
+				}
+				if exits {
+					r, modtime, err := fs.ReadFile(savePath)
+					if err != nil {
+						return rex.Status(500, err.Error())
+					}
 					if strings.HasSuffix(pathname, ".ts") {
 						ctx.SetHeader("Content-Type", "application/typescript")
 					}
 					ctx.SetHeader("Cache-Control", "public, max-age=31536000, immutable")
-					return rex.File(cacheFile)
+					return rex.Content(savePath, modtime, r)
 				}
 				unpkgDomain := "unpkg.com"
 				if config.unpkgDomain != "" {
@@ -211,11 +219,7 @@ func query() rex.Handle {
 				if err != nil {
 					return err
 				}
-				err = ensureDir(path.Dir(cacheFile))
-				if err != nil {
-					return err
-				}
-				err = ioutil.WriteFile(cacheFile, data, 0644)
+				err = fs.WriteFile(savePath, bytes.NewReader(data))
 				if err != nil {
 					return err
 				}
@@ -230,24 +234,47 @@ func query() rex.Handle {
 			storageType = ""
 		}
 
-		// serve build files
-		if storageType != "" {
-			var filepath string
-			if hasBuildVerPrefix && (storageType == "builds" || storageType == "types") {
-				if prevBuildVer != "" {
-					filepath = path.Join(config.storageDir, storageType, prevBuildVer, pathname)
-				} else {
-					filepath = path.Join(config.storageDir, storageType, fmt.Sprintf("v%d", VERSION), pathname)
+		// use embed content
+		if hasBuildVerPrefix {
+			if storageType == "types" {
+				data, err := embedFS.ReadFile("embed/types" + pathname)
+				if err == nil {
+					ctx.SetHeader("Content-Type", "application/typescript; charset=utf-8")
+					ctx.SetHeader("Cache-Control", "public, max-age=31536000, immutable")
+					return rex.Content(pathname, startTime, bytes.NewReader(data))
 				}
 			} else {
-				filepath = path.Join(config.storageDir, storageType, pathname)
+				data, err := embedFS.ReadFile("embed/polyfills" + pathname)
+				if err == nil {
+					ctx.SetHeader("Cache-Control", "public, max-age=31536000, immutable")
+					return rex.Content(pathname, startTime, bytes.NewReader(data))
+				}
 			}
-			if fileExists(filepath) {
+		}
+
+		// serve build files
+		if hasBuildVerPrefix && (storageType == "builds" || storageType == "types") {
+			var savePath string
+			if prevBuildVer != "" {
+				savePath = path.Join(storageType, prevBuildVer, pathname)
+			} else {
+				savePath = path.Join(storageType, fmt.Sprintf("v%d", VERSION), pathname)
+			}
+
+			exits, err := fs.Exists(savePath)
+			if err != nil {
+				return rex.Status(500, err.Error())
+			}
+			if exits {
+				r, modtime, err := fs.ReadFile(savePath)
+				if err != nil {
+					return rex.Status(500, err.Error())
+				}
 				if storageType == "types" {
 					ctx.SetHeader("Content-Type", "application/typescript; charset=utf-8")
 				}
 				ctx.SetHeader("Cache-Control", "public, max-age=31536000, immutable")
-				return rex.File(filepath)
+				return rex.Content(savePath, modtime, r)
 			}
 		}
 
@@ -464,16 +491,23 @@ func query() rex.Handle {
 		}
 
 		if isBare {
-			fp := path.Join(
-				config.storageDir,
+			savePath := path.Join(
 				"builds",
 				taskID,
 			)
-			if !fileExists(fp) {
+			exits, err := fs.Exists(savePath)
+			if err != nil {
+				return rex.Status(500, err.Error())
+			}
+			if !exits {
 				return rex.Status(404, "File not found")
 			}
+			r, modtime, err := fs.ReadFile(savePath)
+			if err != nil {
+				return rex.Status(500, err.Error())
+			}
 			ctx.SetHeader("Cache-Control", "public, max-age=31536000, immutable")
-			return rex.File(fp)
+			return rex.Content(savePath, modtime, r)
 		}
 
 		buf := bytes.NewBuffer(nil)

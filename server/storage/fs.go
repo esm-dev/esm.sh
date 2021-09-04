@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io"
 	"sync"
+	"time"
 
 	"github.com/ije/gox/utils"
 )
@@ -14,7 +15,7 @@ type FS interface {
 
 type FSConn interface {
 	Exists(path string) (bool, error)
-	ReadFile(path string) (io.Reader, error)
+	ReadFile(path string) (content io.ReadSeekCloser, modtime time.Time, err error)
 	WriteFile(path string, r io.Reader) error
 }
 
