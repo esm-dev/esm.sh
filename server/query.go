@@ -41,6 +41,10 @@ func query() rex.Handle {
 
 	return func(ctx *rex.Context) interface{} {
 		pathname := ctx.Path.String()
+		if strings.HasPrefix(pathname, ".") {
+			return rex.Status(400, "Bad Request")
+		}
+
 		switch pathname {
 		case "/":
 			indexHTML, err := embedFS.ReadFile("embed/index.html")
@@ -247,11 +251,56 @@ func query() rex.Handle {
 			}
 		}
 
+		// get package info
+		reqPkg, err := parsePkg(pathname)
+		if err != nil {
+			status := 500
+			message := err.Error()
+			if message == "invalid path" {
+				status = 400
+			} else if strings.HasSuffix(message, "not found") {
+				status = 404
+			}
+			return rex.Status(status, message)
+		}
+
+		// check `deps` query
+		deps := pkgSlice{}
+		for _, p := range strings.Split(ctx.Form.Value("deps"), ",") {
+			p = strings.TrimSpace(p)
+			if p != "" {
+				m, err := parsePkg(p)
+				if err != nil {
+					if strings.HasSuffix(err.Error(), "not found") {
+						continue
+					}
+					return rex.Status(400, fmt.Sprintf("Invalid deps query: %v not found", p))
+				}
+				if !deps.Has(m.name) {
+					deps = append(deps, *m)
+				}
+			}
+		}
+
+		// check `alias` query
+		alias := map[string]string{}
+		for _, p := range strings.Split(ctx.Form.Value("alias"), ",") {
+			p = strings.TrimSpace(p)
+			if p != "" {
+				name, to := utils.SplitByFirstByte(p, ':')
+				name = strings.TrimSpace(name)
+				to = strings.TrimSpace(to)
+				if name != "" && to != "" {
+					alias[name] = to
+				}
+			}
+		}
+
 		// determine build target
 		target := strings.ToLower(strings.TrimSpace(ctx.Form.Value("target")))
 		if _, ok := targets[target]; !ok {
 			ua := ctx.R.UserAgent()
-			// todo: support nodejs
+			// todo: check nodejs
 			if strings.HasPrefix(ua, "Deno/") {
 				target = "deno"
 			} else {
@@ -284,53 +333,12 @@ func query() rex.Handle {
 			}
 		}
 
-		// check `alias` query
-		alias := map[string]string{}
-		for _, p := range strings.Split(ctx.Form.Value("alias"), ",") {
-			p = strings.TrimSpace(p)
-			if p != "" {
-				name, to := utils.SplitByFirstByte(p, ':')
-				name = strings.TrimSpace(name)
-				to = strings.TrimSpace(to)
-				if name != "" && to != "" {
-					alias[name] = to
-				}
-			}
-		}
-
-		// check `deps` query
-		deps := pkgSlice{}
-		for _, p := range strings.Split(ctx.Form.Value("deps"), ",") {
-			p = strings.TrimSpace(p)
-			if p != "" {
-				m, err := parsePkg(p)
-				if err != nil {
-					if strings.HasSuffix(err.Error(), "not found") {
-						continue
-					}
-					return rex.Status(400, fmt.Sprintf("Invalid deps query: %v not found", p))
-				}
-				if !deps.Has(m.name) {
-					deps = append(deps, *m)
-				}
-			}
-		}
-
 		isPkgCSS := !ctx.Form.IsNil("css")
 		isDev := !ctx.Form.IsNil("dev")
 		bundleMode := !ctx.Form.IsNil("bundle") || !ctx.Form.IsNil("b")
 		noCheck := !ctx.Form.IsNil("no-check")
-
-		reqPkg, err := parsePkg(pathname)
-		if err != nil {
-			status := 500
-			if strings.HasSuffix(err.Error(), "not found") {
-				status = 404
-			}
-			return rex.Status(status, err.Error())
-		}
-
 		isBare := false
+
 		if hasBuildVerPrefix && endsWith(pathname, ".js") {
 			a := strings.Split(reqPkg.submodule, "/")
 			if len(a) > 1 && strings.HasPrefix(a[0], "X-") {
