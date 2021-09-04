@@ -1,5 +1,9 @@
 # Change Log
 
+## v47
+- Improve dts transformer to use cdn domain (fix #104](https://github.com/postui/esm.sh/issues/104))
+- Update polyfills (fix #105](https://github.com/postui/esm.sh/issues/105))
+
 ## v46
 
 - Split modules based on exports defines (ref [#78](https://github.com/postui/esm.sh/issues/78))
