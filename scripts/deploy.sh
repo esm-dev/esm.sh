@@ -32,29 +32,34 @@ if [ "$v" == "y" ]; then
 fi
 
 port="80"
-httpsPort="443"
-etcDir="/etc/esmd"
-domain="esm.sh"
+httpsPort="0"
+etcDir="/usr/local/etc/esmd"
+fsUrl=""
+dbUrl=""
 cdnDomain=""
 cdnDomainChina=""
 unpkgDomain=""
 
 if [ "$init" == "yes" ]; then
-  read -p "server http port (default is ${port}): " v
+  read -p "http server  port (default is ${port}): " v
   if [ "$v" != "" ]; then
     port="$v"
   fi
-  read -p "server https port (default is ${httpsPort}): " v
+  read -p "https(autotls) server port (default is disabled): " v
   if [ "$v" != "" ]; then
     httpsPort="$v"
   fi
-  read -p "etc directory (user '${user}' must have the r/w permission of it, default is ${etcDir}): " v
+  read -p "etc directory (ensure user '${user}' have the r/w permission of it, default is '${etcDir}'): " v
   if [ "$v" != "" ]; then
     etcDir="$v"
   fi
-  read -p "server domain (default is ${domain}): " v
+	read -p "fs config (default is 'local:${etcDir}/storage'): " v
   if [ "$v" != "" ]; then
-    domain="$v"
+    fsUrl="$v"
+  fi
+	read -p "db config (default is 'postdb:${etcDir}/esm.db'): " v
+  if [ "$v" != "" ]; then
+    dbUrl="$v"
   fi
   read -p "cdn domain (optional): " v
   if [ "$v" != "" ]; then
@@ -118,7 +123,7 @@ ssh -p $sshPort $user@$host << EOF
       rm -f \$SVCF
     fi
     writeSVConfLine "[program:esmd]"
-    writeSVConfLine "command=/usr/local/bin/esmd --port=${port} --https-port=${httpsPort} --etc-dir=${etcDir} --domain=${domain} --cdn-domain=${cdnDomain} --cdn-domain-china=${cdnDomainChina} --unpkg-domain=${unpkgDomain}"
+    writeSVConfLine "command=/usr/local/bin/esmd --port=${port} --https-port=${httpsPort} --etc-dir=${etcDir} --fs=${fsUrl} --db=${dbUrl} --cdn-domain=${cdnDomain} --cdn-domain-china=${cdnDomainChina} --unpkg-domain=${unpkgDomain}"
     writeSVConfLine "directory=/tmp"
     writeSVConfLine "user=$user"
     writeSVConfLine "autostart=true"
