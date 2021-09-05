@@ -54,7 +54,7 @@ func Serve(efs *embed.FS) {
 		isDev          bool
 	)
 	flag.IntVar(&port, "port", 80, "http server port")
-	flag.IntVar(&httpsPort, "https-port", 0, "https(autotls) server port, default is disable")
+	flag.IntVar(&httpsPort, "https-port", 0, "https(autotls) server port, default is disabled")
 	flag.StringVar(&dbUrl, "db", "", "database connection Url")
 	flag.StringVar(&fsUrl, "fs", "", "file system connection Url")
 	flag.StringVar(&cdnDomain, "cdn-domain", "", "cdn domain")
