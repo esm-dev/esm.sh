@@ -10,6 +10,6 @@ RUN git clone https://github.com/postui/esm.sh
 
 WORKDIR /esm.sh
 
-RUN sh ./scripts/build.sh
+RUN go build -o esmd main.go
 
-CMD ["./scripts/esmd", "-dev", "-domain", "localhost"]
+CMD ["esmd", "--etc-dir", "/esm.sh", "--db", $DB, "--fs", $FS "--cdn-domain", $CDN_DOMAIN, "--cdn-domain-china", $CDN_DOMAIN_CHINA]
