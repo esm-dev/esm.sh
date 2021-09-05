@@ -30,7 +30,6 @@ var (
 // The config for ESM Server
 type Config struct {
 	yarnCacheDir       string
-	domain             string
 	cdnDomain          string
 	cdnDomainChina     string
 	unpkgDomain        string
@@ -39,30 +38,29 @@ type Config struct {
 
 // Serve serves ESM server
 func Serve(efs *embed.FS) {
-	var port int
-	var httpsPort int
-	var cjsLexerServerPort int
-	var etcDir string
-	var dbUrl string
-	var fsUrl string
-	var yarnCacheDir string
-	var domain string
-	var cdnDomain string
-	var cdnDomainChina string
-	var unpkgDomain string
-	var logLevel string
-	var isDev bool
+	embedFS = efs
 
+	var (
+		port           int
+		httpsPort      int
+		dbUrl          string
+		fsUrl          string
+		cdnDomain      string
+		cdnDomainChina string
+		unpkgDomain    string
+		etcDir         string
+		yarnCacheDir   string
+		logLevel       string
+		isDev          bool
+	)
 	flag.IntVar(&port, "port", 80, "http server port")
-	flag.IntVar(&httpsPort, "https-port", 443, "https server port")
-	flag.IntVar(&cjsLexerServerPort, "cjs-lexer-server-port", 2022, "cjs lexer server port")
-	flag.StringVar(&etcDir, "etc-dir", "/usr/local/etc/esmd", "the etc dir to store data")
+	flag.IntVar(&httpsPort, "https-port", 0, "https(autotls) server port, default is disable")
 	flag.StringVar(&dbUrl, "db", "", "database connection Url")
 	flag.StringVar(&fsUrl, "fs", "", "file system connection Url")
-	flag.StringVar(&domain, "domain", "esm.sh", "main domain")
 	flag.StringVar(&cdnDomain, "cdn-domain", "", "cdn domain")
 	flag.StringVar(&cdnDomainChina, "cdn-domain-china", "", "cdn domain for china")
 	flag.StringVar(&unpkgDomain, "unpkg-domain", "", "proxy domain for unpkg.com")
+	flag.StringVar(&etcDir, "etc-dir", "/usr/local/etc/esmd", "the etc dir to store data")
 	flag.StringVar(&yarnCacheDir, "yarn-cache-dir", "", "the cache dir for `yarn add`")
 	flag.StringVar(&logLevel, "log", "info", "log level")
 	flag.BoolVar(&isDev, "dev", false, "run server in development mode")
@@ -73,7 +71,6 @@ func Serve(efs *embed.FS) {
 		etcDir, _ = filepath.Abs(".dev")
 		logDir = path.Join(etcDir, "log")
 		logLevel = "debug"
-		domain = "localhost"
 		cdnDomain = ""
 		cdnDomainChina = ""
 	}
@@ -86,13 +83,11 @@ func Serve(efs *embed.FS) {
 
 	config = &Config{
 		yarnCacheDir:       yarnCacheDir,
-		domain:             domain,
 		cdnDomain:          cdnDomain,
 		cdnDomainChina:     cdnDomainChina,
 		unpkgDomain:        unpkgDomain,
-		cjsLexerServerPort: uint16(cjsLexerServerPort),
+		cjsLexerServerPort: uint16(8088),
 	}
-	embedFS = efs
 
 	var err error
 	log, err = logx.New(fmt.Sprintf("file:%s?buffer=32k", path.Join(logDir, "main.log")))
@@ -166,7 +161,6 @@ func Serve(efs *embed.FS) {
 			Port: uint16(httpsPort),
 			AutoTLS: rex.AutoTLSConfig{
 				AcceptTOS: !isDev,
-				Hosts:     []string{"www." + domain, domain},
 				CacheDir:  path.Join(etcDir, "autotls"),
 			},
 		},
@@ -195,8 +189,7 @@ func Serve(efs *embed.FS) {
 func init() {
 	config = &Config{
 		yarnCacheDir:       "",
-		domain:             "esm.sh",
-		cjsLexerServerPort: 2022,
+		cjsLexerServerPort: 8088,
 	}
 	log = &logx.Logger{}
 	embedFS = &embed.FS{}

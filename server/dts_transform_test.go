@@ -92,7 +92,6 @@ func TestCopyDTS(t *testing.T) {
 	}
 
 	config = &Config{
-		domain:    "esm.sh",
 		cdnDomain: "cdn.esm.sh",
 	}
 	fs, err = storage.OpenFS(fmt.Sprintf("local:%s", testDir))

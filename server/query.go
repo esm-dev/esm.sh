@@ -167,21 +167,18 @@ func query() rex.Handle {
 				if ctx.R.TLS != nil {
 					proto = "https"
 				}
-				if hostname == config.domain {
-					if config.cdnDomain != "" {
+				if config.cdnDomainChina != "" && hostname != config.cdnDomainChina {
+					var record Record
+					err = mmdbr.Lookup(net.ParseIP(ctx.RemoteIP()), &record)
+					if err == nil && record.Country.ISOCode == "CN" {
 						shouldRedirect = true
-						hostname = config.cdnDomain
+						hostname = config.cdnDomainChina
 						proto = "https"
 					}
-					if config.cdnDomainChina != "" {
-						var record Record
-						err = mmdbr.Lookup(net.ParseIP(ctx.RemoteIP()), &record)
-						if err == nil && record.Country.ISOCode == "CN" {
-							shouldRedirect = true
-							hostname = config.cdnDomainChina
-							proto = "https"
-						}
-					}
+				} else if config.cdnDomain != "" && hostname != config.cdnDomain {
+					shouldRedirect = true
+					hostname = config.cdnDomain
+					proto = "https"
 				}
 				if shouldRedirect {
 					url := fmt.Sprintf("%s://%s/%s", proto, hostname, m.String())
