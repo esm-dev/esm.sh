@@ -2,9 +2,9 @@
 
 host="$1"
 if [ "$host" == "" ]; then
-  read -p "deploy to (domain or IP): " h
-  if [ "$h" != "" ]; then
-    host="$h"
+  read -p "deploy to (domain or IP): " v
+  if [ "$v" != "" ]; then
+    host="$v"
   fi
 fi
 
@@ -14,20 +14,20 @@ if [ "$host" == "" ]; then
 fi
 
 user="root"
-read -p "login user (default is 'root'): " u
-if [ "$u" != "" ]; then
-  user="$u"
+read -p "login user (default is 'root'): " v
+if [ "$v" != "" ]; then
+  user="$v"
 fi
 
 sshPort="22"
-read -p "ssh port (default is 22): " p
-if [ "$p" != "" ]; then
-  sshPort="$p"
+read -p "ssh port (default is 22): " v
+if [ "$v" != "" ]; then
+  sshPort="$v"
 fi
 
 init="no"
-read -p "initiate supervisor service? y/N " ok
-if [ "$ok" == "y" ]; then
+read -p "initiate supervisor service? y/N " v
+if [ "$v" == "y" ]; then
   init="yes"
 fi
 
@@ -40,33 +40,33 @@ cdnDomainChina=""
 unpkgDomain=""
 
 if [ "$init" == "yes" ]; then
-  read -p "server http port (default is ${port}): " p
-  if [ "$p" != "" ]; then
-    port="$p"
+  read -p "server http port (default is ${port}): " v
+  if [ "$v" != "" ]; then
+    port="$v"
   fi
-  read -p "server https port (default is ${httpsPort}): " p
-  if [ "$p" != "" ]; then
-    httpsPort="$p"
+  read -p "server https port (default is ${httpsPort}): " v
+  if [ "$v" != "" ]; then
+    httpsPort="$v"
   fi
-  read -p "etc directory (user '${user}' must have the r/w permission of it, default is ${etcDir}): " p
-  if [ "$p" != "" ]; then
-    etcDir="$p"
+  read -p "etc directory (user '${user}' must have the r/w permission of it, default is ${etcDir}): " v
+  if [ "$v" != "" ]; then
+    etcDir="$v"
   fi
-  read -p "server domain (default is ${domain}): " p
-  if [ "$p" != "" ]; then
-    domain="$p"
+  read -p "server domain (default is ${domain}): " v
+  if [ "$v" != "" ]; then
+    domain="$v"
   fi
-  read -p "cdn domain (optional): " p
-  if [ "$p" != "" ]; then
-    cdnDomain="$p"
+  read -p "cdn domain (optional): " v
+  if [ "$v" != "" ]; then
+    cdnDomain="$v"
   fi
-  read -p "cdn domain for China (optional): " p
-  if [ "$p" != "" ]; then
-    cdnDomainChina="$p"
+  read -p "cdn domain for China (optional): " v
+  if [ "$v" != "" ]; then
+    cdnDomainChina="$v"
   fi
-   read -p "proxy domain for unpkg.com (optional): " p
-  if [ "$p" != "" ]; then
-    unpkgDomain="$p"
+  read -p "proxy domain for unpkg.com (optional): " v
+  if [ "$v" != "" ]; then
+    unpkgDomain="$v"
   fi
 fi
 
@@ -78,8 +78,8 @@ if [ "$?" != "0" ]; then
 fi
 
 cleanYarnCache="no"
-read -p "clean yarn cache? y/N " ok
-if [ "$ok" == "y" ]; then
+read -p "clean yarn cache? y/N " v
+if [ "$v" == "y" ]; then
   cleanYarnCache="yes"
 fi
 
