@@ -324,13 +324,13 @@ func query() rex.Handle {
 		}
 
 		// determine build target
-		target := strings.ToLower(strings.TrimSpace(ctx.Form.Value("target")))
-		if _, ok := targets[target]; !ok {
-			ua := ctx.R.UserAgent()
-			// todo: check nodejs
-			if strings.HasPrefix(ua, "Deno/") {
-				target = "deno"
-			} else {
+		var target string
+		ua := ctx.R.UserAgent()
+		if strings.HasPrefix(ua, "Deno/") {
+			target = "deno"
+		} else {
+			target = strings.ToLower(ctx.Form.Value("target"))
+			if _, ok := targets[target]; !ok {
 				target = "es2015"
 				name, version := user_agent.New(ua).Browser()
 				if engine, ok := engines[strings.ToLower(name)]; ok {
