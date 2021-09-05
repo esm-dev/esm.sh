@@ -505,7 +505,7 @@ esbuild:
 					err = fmt.Errorf("Could not resolve \"%s\"  (Imported by \"%s\")", name, task.pkg.name)
 					return
 				}
-				buf := bytes.NewBuffer(nil)
+				buffer := bytes.NewBuffer(nil)
 				identifier := identify(name)
 				slice := bytes.Split(outputContent, []byte(fmt.Sprintf("\"ESM_SH_EXTERNAL:%s\"", name)))
 				cjsContext := false
@@ -539,27 +539,27 @@ esbuild:
 									meta, err := initESM(task.wd, *pkg, task.deps, nodeEnv)
 									// if the dependency is an es module without `default` export, then import star
 									if err == nil && meta.Module != "" && !meta.ExportDefault {
-										fmt.Fprintf(buf, `import * as __%s$ from "%s";%s`, identifier, importPath, eol)
+										fmt.Fprintf(buffer, `import * as __%s$ from "%s";%s`, identifier, importPath, eol)
 										wrote = true
 									}
 								}
 							}
 							if !wrote {
-								fmt.Fprintf(buf, `import __%s$ from "%s";%s`, identifier, importPath, eol)
+								fmt.Fprintf(buffer, `import __%s$ from "%s";%s`, identifier, importPath, eol)
 							}
 							cjsImported = true
 						}
 					}
-					buf.Write(p)
+					buffer.Write(p)
 					if i < len(slice)-1 {
 						if cjsContext {
-							buf.WriteString(fmt.Sprintf("__%s$", identifier))
+							buffer.WriteString(fmt.Sprintf("__%s$", identifier))
 						} else {
-							buf.WriteString(fmt.Sprintf("\"%s\"", importPath))
+							buffer.WriteString(fmt.Sprintf("\"%s\"", importPath))
 						}
 					}
 				}
-				outputContent = buf.Bytes()
+				outputContent = buffer.Bytes()
 			}
 
 			// add nodejs/deno compatibility
