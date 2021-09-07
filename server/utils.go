@@ -9,11 +9,13 @@ import (
 	"sync"
 
 	"github.com/ije/gox/utils"
+	"github.com/ije/gox/valid"
 )
 
 var (
 	regFullVersion      = regexp.MustCompile(`^\d+\.\d+\.\d+[a-zA-Z0-9\.\-]*$`)
 	regBuildVersionPath = regexp.MustCompile(`^/v\d+/`)
+	npmNaming           = valid.Validator{valid.FromTo{'a', 'z'}, valid.FromTo{'0', '9'}, valid.Eq('.'), valid.Eq('_'), valid.Eq('-')}
 )
 
 // A Country record of mmdb.
