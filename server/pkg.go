@@ -2,6 +2,7 @@ package server
 
 import (
 	"errors"
+	"fmt"
 	"strings"
 
 	"github.com/ije/gox/utils"
@@ -21,24 +22,29 @@ func parsePkg(pathname string) (*pkg, error) {
 	scope := ""
 	packageName := a[0]
 	submodule := strings.Join(a[1:], "/")
-	if strings.HasPrefix(a[0], "@") && len(a) > 1 {
-		scope = a[0]
+	if strings.HasPrefix(packageName, "@") && len(a) > 1 {
+		scope = packageName[1:]
 		packageName = a[1]
 		submodule = strings.Join(a[2:], "/")
+	}
+
+	// ref https://github.com/npm/validate-npm-package-name
+	if scope != "" && (len(scope) > 214 || !npmNaming.Is(scope)) {
+		return nil, fmt.Errorf("invalid scope '%s'", scope)
+	}
+
+	name, version := utils.SplitByLastByte(packageName, '@')
+	if name != "" && (len(name) > 214 || !npmNaming.Is(name)) {
+		return nil, fmt.Errorf("invalid package name '%s'", name)
 	}
 
 	if strings.HasSuffix(submodule, ".d.ts") {
 		return nil, errors.New("invalid path")
 	}
 
-	name, version := utils.SplitByLastByte(packageName, '@')
 	if scope != "" {
-		name = scope + "/" + name
+		name = fmt.Sprintf("@%s/%s", scope, name)
 	}
-	if name == "" {
-		return nil, errors.New("invalid path")
-	}
-
 	if version == "" {
 		version = "latest"
 	}
