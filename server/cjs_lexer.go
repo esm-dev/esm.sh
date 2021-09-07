@@ -154,7 +154,7 @@ func startCJSLexerServer(port uint16, pidFile string, isDev bool) (err error) {
 				try {
 					const entry = await resolve(buildDir, importPath)
 					const mod = require(entry) 
-					if (isObject(mod)) {
+					if (isObject(mod) || typeof mod === 'function') {
 						for (const key of Object.keys(mod)) {
 							if (typeof key === 'string' && key !== '') {
 								exports.push(key)
