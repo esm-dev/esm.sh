@@ -1,5 +1,25 @@
 # Change Log
 
+## v48
+
+- Improve **cjs-lexer** service to handle a edge case is shown below:
+	```js
+	// cjs
+
+	function debounce() {};
+	debounce.debounce = debounce;
+	module.exports = debounce;
+	```
+	esm output:
+	```js
+	// esm
+
+	export { debounce } // this was missed
+	export default debounce
+	```
+- Ignore `?target` in Deno (fix [#109](https://github.com/postui/esm.sh/issues/109))
+- Add **Storage Interface** to store data to anywhere (currently only support [postdb](https://github.com/postui/postdb) + local FS)
+
 ## v47
 
 - Improve dts transformer to use cdn domain (fix [#104](https://github.com/postui/esm.sh/issues/104))
