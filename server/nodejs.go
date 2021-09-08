@@ -82,6 +82,9 @@ var denoStdNodeModules = map[string]bool{
 	"fs":            true,
 	"child_process": true,
 	"path":          true,
+	"querystring":   true,
+	"timers":        true,
+	"url":           true,
 }
 
 // copy from https://github.com/webpack/webpack/blob/master/lib/ModuleNotFoundError.js#L13
@@ -98,7 +101,6 @@ var polyfilledBuiltInNodeModules = map[string]string{
 	"os":                  "os-browserify/browser",
 	"punycode":            "punycode",
 	"process":             "process/browser",
-	"querystring":         "querystring-es3",
 	"stream":              "stream-browserify",
 	"_stream_duplex":      "readable-stream/duplex",
 	"_stream_passthrough": "readable-stream/passthrough",
@@ -107,9 +109,7 @@ var polyfilledBuiltInNodeModules = map[string]string{
 	"_stream_writable":    "readable-stream/writable",
 	"string_decoder":      "string_decoder",
 	"sys":                 "util",
-	"timers":              "timers-browserify",
 	"tty":                 "tty-browserify",
-	"url":                 "url",
 	"util":                "util",
 	"vm":                  "vm-browserify",
 	"zlib":                "browserify-zlib",
