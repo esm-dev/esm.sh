@@ -51,6 +51,7 @@ func Serve(efs *embed.FS) {
 		etcDir         string
 		yarnCacheDir   string
 		logLevel       string
+		logDir         string
 		isDev          bool
 	)
 	flag.IntVar(&port, "port", 80, "http server port")
@@ -62,11 +63,11 @@ func Serve(efs *embed.FS) {
 	flag.StringVar(&unpkgDomain, "unpkg-domain", "", "proxy domain for unpkg.com")
 	flag.StringVar(&etcDir, "etc-dir", "/usr/local/etc/esmd", "the etc dir to store data")
 	flag.StringVar(&yarnCacheDir, "yarn-cache-dir", "", "the cache dir for `yarn add`")
+	flag.StringVar(&logDir, "log-dir", "/var/log/esmd", "the log dir to store server logs")
 	flag.StringVar(&logLevel, "log", "info", "log level")
 	flag.BoolVar(&isDev, "dev", false, "run server in development mode")
 	flag.Parse()
 
-	logDir := "/var/log/esmd"
 	if isDev {
 		etcDir, _ = filepath.Abs(".dev")
 		logDir = path.Join(etcDir, "log")
