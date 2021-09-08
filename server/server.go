@@ -52,8 +52,10 @@ func Serve(efs *embed.FS) {
 		yarnCacheDir   string
 		logLevel       string
 		logDir         string
+		noCompress     bool
 		isDev          bool
 	)
+
 	flag.IntVar(&port, "port", 80, "http server port")
 	flag.IntVar(&httpsPort, "https-port", 0, "https(autotls) server port, default is disabled")
 	flag.StringVar(&dbUrl, "db", "", "database connection Url")
@@ -63,8 +65,9 @@ func Serve(efs *embed.FS) {
 	flag.StringVar(&unpkgDomain, "unpkg-domain", "", "proxy domain for unpkg.com")
 	flag.StringVar(&etcDir, "etc-dir", "/usr/local/etc/esmd", "the etc dir to store data")
 	flag.StringVar(&yarnCacheDir, "yarn-cache-dir", "", "the cache dir for `yarn add`")
+	flag.StringVar(&logLevel, "log-level", "info", "log level")
 	flag.StringVar(&logDir, "log-dir", "/var/log/esmd", "the log dir to store server logs")
-	flag.StringVar(&logLevel, "log", "info", "log level")
+	flag.BoolVar(&noCompress, "no-compress", false, "disable compression for text content")
 	flag.BoolVar(&isDev, "dev", false, "run server in development mode")
 	flag.Parse()
 
@@ -143,6 +146,9 @@ func Serve(efs *embed.FS) {
 		}
 	}()
 
+	if !noCompress {
+		rex.Use(rex.AutoCompress())
+	}
 	rex.Use(
 		rex.ErrorLogger(log),
 		rex.AccessLogger(accessLogger),
