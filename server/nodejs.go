@@ -81,6 +81,10 @@ var builtInNodeModules = map[string]bool{
 var denoStdNodeModules = map[string]bool{
 	"fs":            true,
 	"child_process": true,
+	"path":          true,
+	"querystring":   true,
+	"timers":        true,
+	"url":           true,
 }
 
 // copy from https://github.com/webpack/webpack/blob/master/lib/ModuleNotFoundError.js#L13
