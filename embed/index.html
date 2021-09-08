@@ -2,7 +2,7 @@
 <html>
 
 <head>
-  <meta charSet="utf-8" />
+  <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width" />
   <title>ESM.SH</title>
   <link rel="icon" type="image/svg+xml" href="/favicon.svg">
@@ -390,7 +390,7 @@
   <h1>
     <strong>ESM</strong>
     <em>V{VERSION}</em>
-    <a class="github" href="https://github.com/postui/esm.sh">
+    <a class="github" href="https://github.com/alephjs/esm.sh">
       <svg fill="currentColor" viewBox="0 0 24 24">
         <title>Github</title>
         <path fill-rule="evenodd"
@@ -404,8 +404,8 @@
   </main>
   <div class="test"></div>
   <script>
-    if (location.origin === 'http://esm.sh') {
-      location.href = 'https://esm.sh' + location.pathname + location.search
+    if (location.protocol === 'http') {
+      location.href = 'https://' + location.host + location.pathname + location.search
     }
   </script>
   <script type="module">
@@ -434,7 +434,7 @@
       test(ulEl)
     } else {
       const mainEl = document.querySelector('main')
-      mainEl.innerHTML = marked.parse('# README') + `<p class="link"><a href="/?test">Testing &rarr; </a></p>`
+      mainEl.innerHTML = marked.parse('# README').replaceAll('https://esm.sh', window.origin) + `<p class="link"><a href="/?test">Testing &rarr; </a></p>`
       mainEl.removeChild(mainEl.querySelector('h1'))
       mainEl.querySelectorAll('code.language-bash').forEach(block => {
         block.innerHTML = block.innerHTML.replace(/(^|\n)\$ /g, '$1')
