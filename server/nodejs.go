@@ -151,7 +151,7 @@ CheckNodejs:
 	version, major, err := getNodejsVersion()
 	if err != nil || major < minNodejsVersion {
 		PATH := os.Getenv("PATH")
-		nodeBinDir := fmt.Sprintf("%s/bin", nodePrefix)
+		nodeBinDir := path.Join(nodePrefix, "bin")
 		if !strings.Contains(PATH, nodeBinDir) {
 			os.Setenv("PATH", fmt.Sprintf("%s%c%s", nodeBinDir, os.PathListSeparator, PATH))
 			goto CheckNodejs
