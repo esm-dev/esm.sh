@@ -167,7 +167,7 @@ func Serve(efs *embed.FS) {
 		TLS: rex.TLSConfig{
 			Port: uint16(httpsPort),
 			AutoTLS: rex.AutoTLSConfig{
-				AcceptTOS: !isDev,
+				AcceptTOS: httpsPort > 0 && !isDev,
 				CacheDir:  path.Join(etcDir, "autotls"),
 			},
 		},
