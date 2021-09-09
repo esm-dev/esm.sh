@@ -188,12 +188,12 @@ func query() rex.Handle {
 					return rex.Redirect(url, http.StatusTemporaryRedirect)
 				}
 				savePath := path.Join("raw", m.String())
-				exits, err := fs.Exists(savePath)
+				exists, modtime, err := fs.Exists(savePath)
 				if err != nil {
 					return rex.Status(500, err.Error())
 				}
-				if exits {
-					r, modtime, err := fs.ReadFile(savePath)
+				if exists {
+					r, err := fs.ReadFile(savePath)
 					if err != nil {
 						return rex.Status(500, err.Error())
 					}
@@ -219,7 +219,7 @@ func query() rex.Handle {
 				if err != nil {
 					return err
 				}
-				err = fs.WriteFile(savePath, bytes.NewReader(data))
+				err = fs.WriteData(savePath, data)
 				if err != nil {
 					return err
 				}
@@ -258,13 +258,13 @@ func query() rex.Handle {
 				savePath = path.Join(storageType, fmt.Sprintf("v%d", VERSION), pathname)
 			}
 
-			exits, err := fs.Exists(savePath)
+			exists, modtime, err := fs.Exists(savePath)
 			if err != nil {
 				return rex.Status(500, err.Error())
 			}
 
-			if exits {
-				r, modtime, err := fs.ReadFile(savePath)
+			if exists {
+				r, err := fs.ReadFile(savePath)
 				if err != nil {
 					return rex.Status(500, err.Error())
 				}
@@ -452,7 +452,7 @@ func query() rex.Handle {
 			), reqPkg.submodule)
 			if strings.HasSuffix(savePath, "...d.ts") {
 				savePath = strings.TrimSuffix(savePath, "...d.ts")
-				ok, err := fs.Exists(path.Join(savePath, "index.d.ts"))
+				ok, _, err := fs.Exists(path.Join(savePath, "index.d.ts"))
 				if err != nil {
 					return rex.Status(500, err.Error())
 				}
@@ -462,7 +462,7 @@ func query() rex.Handle {
 					savePath += ".d.ts"
 				}
 			}
-			exits, err := fs.Exists(savePath)
+			exits, modtime, err := fs.Exists(savePath)
 			if err != nil {
 				return rex.Status(500, err.Error())
 			}
@@ -480,7 +480,7 @@ func query() rex.Handle {
 			if !exits {
 				return rex.Status(404, "File not found")
 			}
-			r, modtime, err := fs.ReadFile(savePath)
+			r, err := fs.ReadFile(savePath)
 			if err != nil {
 				return rex.Status(500, err.Error())
 			}
@@ -554,14 +554,14 @@ func query() rex.Handle {
 				"builds",
 				taskID,
 			)
-			exits, err := fs.Exists(savePath)
+			exists, modtime, err := fs.Exists(savePath)
 			if err != nil {
 				return rex.Status(500, err.Error())
 			}
-			if !exits {
+			if !exists {
 				return rex.Status(404, "File not found")
 			}
-			r, modtime, err := fs.ReadFile(savePath)
+			r, err := fs.ReadFile(savePath)
 			if err != nil {
 				return rex.Status(500, err.Error())
 			}

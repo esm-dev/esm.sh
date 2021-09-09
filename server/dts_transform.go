@@ -46,7 +46,7 @@ func copyDTS(wd string, resolvePrefix string, dts string, tracing *stringSet) (e
 		resolvePrefix,
 	}, subPath...), "/"))
 	savePath := "types" + dtsPath
-	exists, err := fs.Exists(savePath)
+	exists, _, err := fs.Exists(savePath)
 	if err != nil || exists {
 		return
 	}
@@ -250,7 +250,7 @@ func copyDTS(wd string, resolvePrefix string, dts string, tracing *stringSet) (e
 		buf = bytes.NewBuffer(dtsData)
 	}
 
-	err = fs.WriteFile(savePath, buf)
+	err = fs.WriteData(savePath, buf.Bytes())
 	if err != nil {
 		return
 	}

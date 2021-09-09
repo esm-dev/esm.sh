@@ -87,7 +87,7 @@ func Serve(efs *embed.FS) {
 		dbUrl = fmt.Sprintf("postdb:%s", path.Join(etcDir, "esm.db"))
 	}
 	if fsUrl == "" {
-		fsUrl = fmt.Sprintf("local:%s", path.Join(etcDir, "storage"))
+		fsUrl = fmt.Sprintf("localLRU:%s?maxCost=10gb", path.Join(etcDir, "storage"))
 	}
 
 	config = &Config{
@@ -115,12 +115,12 @@ func Serve(efs *embed.FS) {
 	}
 	log.Debugf("nodejs v%s installed, registry: %s", node.version, node.npmRegistry)
 
-	fs, err = storage.OpenFS(fsUrl)
+	fs, err = storage.OpenFS(fsUrl, log, isDev)
 	if err != nil {
 		log.Fatalf("storage: %v", err)
 	}
 
-	db, err = storage.OpenDB(dbUrl)
+	db, err = storage.OpenDB(dbUrl, log, isDev)
 	if err != nil {
 		log.Fatalf("storage: %v", err)
 	}

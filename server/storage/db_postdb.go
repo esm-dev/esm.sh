@@ -3,13 +3,14 @@ package storage
 import (
 	"time"
 
+	logx "github.com/ije/gox/log"
 	"github.com/postui/postdb"
 	"github.com/postui/postdb/q"
 )
 
 type postDB struct{}
 
-func (fs *postDB) Open(path string) (DBConn, error) {
+func (fs *postDB) Open(path string, log *logx.Logger, isDev bool) (DBConn, error) {
 	db, err := postdb.Open(path, 0644)
 	if err != nil {
 		return nil, err
