@@ -145,22 +145,22 @@ type Node struct {
 	npmRegistry string
 }
 
-func checkNode() (node *Node, err error) {
+func checkNode(nodePrefix string) (node *Node, err error) {
 	var installed bool
 CheckNodejs:
 	version, major, err := getNodejsVersion()
 	if err != nil || major < minNodejsVersion {
 		PATH := os.Getenv("PATH")
-		nodeBinDir := "/usr/local/nodejs/bin"
+		nodeBinDir := path.Join(nodePrefix, "bin")
 		if !strings.Contains(PATH, nodeBinDir) {
 			os.Setenv("PATH", fmt.Sprintf("%s%c%s", nodeBinDir, os.PathListSeparator, PATH))
 			goto CheckNodejs
 		} else if !installed {
-			err = os.RemoveAll("/usr/local/nodejs")
+			err = os.RemoveAll(nodePrefix)
 			if err != nil {
 				return
 			}
-			err = installNodejs("/usr/local/nodejs", nodejsLatestLTS)
+			err = installNodejs(nodePrefix, nodejsLatestLTS)
 			if err != nil {
 				return
 			}

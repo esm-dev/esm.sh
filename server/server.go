@@ -49,6 +49,7 @@ func Serve(efs *embed.FS) {
 		cdnDomainChina string
 		unpkgDomain    string
 		etcDir         string
+		nodejsPrefix   string
 		yarnCacheDir   string
 		logLevel       string
 		logDir         string
@@ -63,6 +64,7 @@ func Serve(efs *embed.FS) {
 	flag.StringVar(&cdnDomain, "cdn-domain", "", "cdn domain")
 	flag.StringVar(&cdnDomainChina, "cdn-domain-china", "", "cdn domain for china")
 	flag.StringVar(&unpkgDomain, "unpkg-domain", "", "proxy domain for unpkg.com")
+	flag.StringVar(&nodejsPrefix, "nodejs-prefix", "", "nodejs installation dir (default: [etc-dir]/nodejs)")
 	flag.StringVar(&etcDir, "etc-dir", "/usr/local/etc/esmd", "the etc dir to store data")
 	flag.StringVar(&yarnCacheDir, "yarn-cache-dir", "", "the cache dir for `yarn add`")
 	flag.StringVar(&logLevel, "log-level", "info", "log level")
@@ -101,7 +103,10 @@ func Serve(efs *embed.FS) {
 	}
 	log.SetLevelByName(logLevel)
 
-	node, err = checkNode()
+	if nodejsPrefix == "" {
+		nodejsPrefix = path.Join(etcDir, "nodejs")
+	}
+	node, err = checkNode(nodejsPrefix)
 	if err != nil {
 		log.Fatalf("check nodejs env: %v", err)
 	}
