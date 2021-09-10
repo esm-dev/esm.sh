@@ -9,12 +9,12 @@
 	esm (v48) output:
 	```js
 	import htmlparser2 from '/v48/htmlparser2@5.0.0/es2021/htmlparser2.js'
-	const parser = htmlparser2.Parser; // Parser is undefined
+	const parser = htmlparser2.Parser; // parser is undefined
 	```
 	the expected output was fixed in v49:
 	```js
-	import { Parser as htmlparser2_Parser } from '/v48/htmlparser2@5.0.0/es2021/htmlparser2.js'
-	const parser = Parser; // Parser is a class
+	import { Parser as htmlparser2Parser } from '/v48/htmlparser2@5.0.0/es2021/htmlparser2.js'
+	const parser = htmlparser2Parser; // parser is a class
 	```
 - Add more polyfills for Deno, huge thanks to @talentlessguy ([#117](https://github.com/postui/esm.sh/issues/117))
   - path
