@@ -1,19 +1,39 @@
 # Change Log
 
+## v49
+
+- Improve the build process to fix an edge case reported in [#118](https://github.com/postui/esm.sh/issues/118)
+	```js
+	const parser = require('htmlparser').Parser;
+	```
+	esm (v48) output:
+	```js
+	import htmlparser2 from '/v48/htmlparser2@5.0.0/es2021/htmlparser2.js'
+	const parser = htmlparser2.Parser; // Parser is undefined
+	```
+	the expected output was fixed in v49:
+	```js
+	import { Parser as htmlparser2_Parser } from '/v48/htmlparser2@5.0.0/es2021/htmlparser2.js'
+	const parser = Parser; // Parser is a class
+	```
+- Add more polyfills for Deno, huge thanks to @talentlessguy ([#117](https://github.com/postui/esm.sh/issues/117))
+  - path
+  - querystring
+  - url
+  - timers
+-	Better self-hosting options improved by @imisaacs, super! ([#116](https://github.com/postui/esm.sh/issues/116), [#119](https://github.com/postui/esm.sh/issues/116), [#120](https://github.com/postui/esm.sh/issues/120), [#122](https://github.com/postui/esm.sh/issues/122))
+- Add **Unlimted(max 1PB) Storage** to store builds and cache via NFS on esm.sh back server behind Cloudflare
+
 ## v48
 
-- Improve **cjs-lexer** service to handle a edge case is shown below:
+- Improve **cjs-lexer** service to handle the edge case is shown below:
 	```js
-	// cjs
-
 	function debounce() {};
 	debounce.debounce = debounce;
 	module.exports = debounce;
 	```
 	esm output:
 	```js
-	// esm
-
 	export { debounce } // this was missed
 	export default debounce
 	```
