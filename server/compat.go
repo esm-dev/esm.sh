@@ -11,9 +11,6 @@ import (
 var regBrowserVersion = regexp.MustCompile(`^([0-9]+)(?:\.([0-9]+))?(?:\.([0-9]+))?$`)
 
 var targets = map[string]api.Target{
-	"node":   api.ESNext,
-	"deno":   api.ESNext,
-	"esnext": api.ESNext,
 	"es2015": api.ES2015,
 	"es2016": api.ES2016,
 	"es2017": api.ES2017,
@@ -21,6 +18,9 @@ var targets = map[string]api.Target{
 	"es2019": api.ES2019,
 	"es2020": api.ES2020,
 	"es2021": api.ES2021,
+	"esnext": api.ESNext,
+	"node":   api.ESNext,
+	"deno":   api.ESNext,
 }
 
 var engines = map[string]api.EngineName{

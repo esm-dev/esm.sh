@@ -1,7 +1,6 @@
 package server
 
 import (
-	"errors"
 	"fmt"
 	"strings"
 
@@ -38,17 +37,13 @@ func parsePkg(pathname string) (*pkg, error) {
 		return nil, fmt.Errorf("invalid package name '%s'", name)
 	}
 
-	if strings.HasSuffix(submodule, ".d.ts") {
-		return nil, errors.New("invalid path")
-	}
-
 	if scope != "" {
 		name = fmt.Sprintf("@%s/%s", scope, name)
 	}
 	if version == "" {
 		version = "latest"
 	}
-	info, _, err := node.getPackageInfo(name, version)
+	info, _, _, err := node.getPackageInfo("", name, version)
 	if err != nil {
 		return nil, err
 	}

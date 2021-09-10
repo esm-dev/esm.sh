@@ -201,7 +201,7 @@ CheckYarn:
 	return
 }
 
-func (node *Node) getPackageInfo(name string, version string) (info NpmPackage, submodule string, err error) {
+func (node *Node) getPackageInfo(wd string, name string, version string) (info NpmPackage, submodule string, formPackageJSON bool, err error) {
 	slice := strings.Split(name, "/")
 	if l := len(slice); strings.HasPrefix(name, "@") && l > 1 {
 		name = strings.Join(slice[:2], "/")
@@ -214,6 +214,18 @@ func (node *Node) getPackageInfo(name string, version string) (info NpmPackage, 
 			submodule = strings.Join(slice[1:], "/")
 		}
 	}
+
+	if wd != "" {
+		pkgJsonPath := path.Join(wd, "node_modules", name, "package.json")
+		if fileExists(pkgJsonPath) {
+			err = utils.ParseJSONFile(pkgJsonPath, &info)
+			if err == nil {
+				formPackageJSON = true
+				return
+			}
+		}
+	}
+
 	version = resolveVersion(version)
 	isFullVersion := regFullVersion.MatchString(version)
 	key := fmt.Sprintf("npm:%s@%s", name, version)
@@ -287,10 +299,10 @@ func (node *Node) getPackageInfo(name string, version string) (info NpmPackage, 
 		return
 	}
 
-	// update cache
-	db.Put(key, storage.Store{"package": string(utils.MustEncodeJSON(info))})
-
 	log.Debugf("get npm package(%s@%s) info in %v", name, info.Version, time.Now().Sub(start))
+
+	// cache data
+	db.Put(key, storage.Store{"package": string(utils.MustEncodeJSON(info))})
 	return
 }
 
@@ -451,7 +463,15 @@ func installNodejs(dir string, version string) (err error) {
 func yarnAdd(wd string, packages ...string) (err error) {
 	if len(packages) > 0 {
 		start := time.Now()
-		args := []string{"add", "--silent", "--no-progress", "--ignore-scripts"}
+		args := []string{
+			"add",
+			"--non-interactive",
+			"--no-progress",
+			"--no-bin-links",
+			"--ignore-scripts",
+			"--ignore-platform",
+			"--ignore-engines",
+		}
 		if config.yarnCacheDir != "" {
 			args = append(args, "--cache-folder", config.yarnCacheDir)
 		}

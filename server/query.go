@@ -75,6 +75,7 @@ func query() rex.Handle {
 				t, ok := el.Value.(*task)
 				if ok {
 					q[i] = map[string]interface{}{
+						"stage":      t.stage,
 						"createTime": t.createTime.Unix(),
 						"startTime":  t.startTime.Unix(),
 						"consumers":  len(t.consumers),
@@ -154,7 +155,7 @@ func query() rex.Handle {
 			}
 		}
 
-		// serve raw dist files like css that fetch from unpkg.com
+		// serve raw dist files like CSS that is fetching from unpkg.com
 		if storageType == "raw" {
 			m, err := parsePkg(pathname)
 			if err != nil {
@@ -233,8 +234,8 @@ func query() rex.Handle {
 			storageType = ""
 		}
 
-		// use embed content
-		if hasBuildVerPrefix {
+		// serve build files
+		if hasBuildVerPrefix && (storageType == "builds" || storageType == "types") {
 			if storageType == "types" {
 				data, err := embedFS.ReadFile("embed/types" + pathname)
 				if err == nil {
@@ -249,10 +250,7 @@ func query() rex.Handle {
 					return rex.Content(pathname, startTime, bytes.NewReader(data))
 				}
 			}
-		}
 
-		// serve build files
-		if hasBuildVerPrefix && (storageType == "builds" || storageType == "types") {
 			var savePath string
 			if prevBuildVer != "" {
 				savePath = path.Join(storageType, prevBuildVer, pathname)
@@ -264,6 +262,7 @@ func query() rex.Handle {
 			if err != nil {
 				return rex.Status(500, err.Error())
 			}
+
 			if exits {
 				r, modtime, err := fs.ReadFile(savePath)
 				if err != nil {
@@ -365,7 +364,8 @@ func query() rex.Handle {
 		noCheck := !ctx.Form.IsNil("no-check")
 		isBare := false
 
-		if hasBuildVerPrefix && endsWith(pathname, ".js") {
+		// parse `resolvePrefix`
+		if hasBuildVerPrefix {
 			a := strings.Split(reqPkg.submodule, "/")
 			if len(a) > 1 && strings.HasPrefix(a[0], "X-") {
 				s, err := atobUrl(strings.TrimPrefix(a[0], "X-"))
@@ -406,10 +406,15 @@ func query() rex.Handle {
 						}
 					}
 				}
-				a = a[1:]
+				reqPkg.submodule = strings.Join(a[1:], "/")
 			}
+		}
+
+		// check whether it is `bare` mode, this is for CDN fetching
+		if hasBuildVerPrefix && endsWith(pathname, ".js") {
+			a := strings.Split(reqPkg.submodule, "/")
 			if len(a) > 1 {
-				if _, ok := targets[a[0]]; ok || a[0] == "esnext" {
+				if _, ok := targets[a[0]]; ok {
 					submodule := strings.TrimSuffix(strings.Join(a[1:], "/"), ".js")
 					if endsWith(submodule, ".bundle") {
 						submodule = strings.TrimSuffix(submodule, ".bundle")
@@ -431,12 +436,61 @@ func query() rex.Handle {
 		}
 
 		task := &buildTask{
+			stage:  "init",
 			pkg:    *reqPkg,
 			deps:   deps,
 			alias:  alias,
 			target: target,
 			isDev:  isDev,
 			bundle: bundleMode,
+		}
+
+		if hasBuildVerPrefix && storageType == "types" {
+			savePath := path.Join(fmt.Sprintf(
+				"types/v%d/%s@%s/%s",
+				VERSION,
+				reqPkg.name,
+				reqPkg.version,
+				task.resolvePrefix(),
+			), reqPkg.submodule)
+			if strings.HasSuffix(savePath, "...d.ts") {
+				savePath = strings.TrimSuffix(savePath, "...d.ts")
+				ok, err := fs.Exists(path.Join(savePath, "index.d.ts"))
+				if err != nil {
+					return rex.Status(500, err.Error())
+				}
+				if ok {
+					savePath = path.Join(savePath, "index.d.ts")
+				} else {
+					savePath += ".d.ts"
+				}
+			}
+			exits, err := fs.Exists(savePath)
+			if err != nil {
+				return rex.Status(500, err.Error())
+			}
+			if !exits {
+				task.typesOnly = true
+				select {
+				case output := <-queue.Add(task):
+					if output.err != nil {
+						return rex.Status(500, "types: "+err.Error())
+					}
+					exits = true
+				case <-time.After(time.Minute):
+					return rex.Status(http.StatusRequestTimeout, "timeout, we are transforming the types hardly, please try later!")
+				}
+			}
+			if !exits {
+				return rex.Status(404, "File not found")
+			}
+			r, modtime, err := fs.ReadFile(savePath)
+			if err != nil {
+				return rex.Status(500, err.Error())
+			}
+			ctx.SetHeader("Content-Type", "application/typescript; charset=utf-8")
+			ctx.SetHeader("Cache-Control", "public, max-age=31536000, immutable")
+			return rex.Content(savePath, modtime, r)
 		}
 
 		taskID := task.ID()
@@ -466,7 +520,7 @@ func query() rex.Handle {
 					}
 					esm = output.esm
 					pkgCSS = output.pkgCSS
-				case <-time.After(time.Minute):
+				case <-time.After(time.Minute / 2):
 					return rex.Status(http.StatusRequestTimeout, "timeout, we are building the package hardly, please try later!")
 				}
 			}
@@ -538,10 +592,7 @@ func query() rex.Handle {
 			value := fmt.Sprintf(
 				"%s%s",
 				importPrefix,
-				strings.TrimPrefix(
-					path.Join("/", fmt.Sprintf("v%d", VERSION), esm.Dts),
-					"/",
-				),
+				strings.TrimPrefix(esm.Dts, "/"),
 			)
 			ctx.SetHeader("X-TypeScript-Types", value)
 			ctx.SetHeader("Access-Control-Expose-Headers", "X-TypeScript-Types")

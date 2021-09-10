@@ -12,7 +12,7 @@ import (
 )
 
 func TestCopyDTS(t *testing.T) {
-	testDir := path.Join(os.TempDir(), "testcopydts")
+	testDir := path.Join(os.TempDir(), "esmd-testing")
 	os.RemoveAll(testDir)
 	ensureDir(testDir)
 
@@ -53,9 +53,9 @@ func TestCopyDTS(t *testing.T) {
 		`    ReactInstance, Component, ComponentState,`,
 		`    ReactElement, SFCElement, CElement,`,
 		`    DOMAttributes, DOMElement, ReactNode, ReactPortal`,
-		fmt.Sprintf(`} from '/v%d/@types/react@17.0.0/index.d.ts';`, VERSION),
+		fmt.Sprintf(`} from '/v%d/@types/react@17.0.0/X-ESM/index.d.ts';`, VERSION),
 		``,
-		fmt.Sprintf(`export type React = typeof import('/v%d/@types/react@17.0.0/index.d.ts');`, VERSION),
+		fmt.Sprintf(`export type React = typeof import('/v%d/@types/react@17.0.0/X-ESM/index.d.ts');`, VERSION),
 		`export { default as Anchor } from './anchor.d.ts';`,
 		`export { default as AutoComplete } from './auto-complete.d.ts';export { default as Alert } from './alert.d.ts';`,
 		`/* avatar */ export { default as Avatar } from '../avatar.d.ts';`,
@@ -85,7 +85,7 @@ func TestCopyDTS(t *testing.T) {
 		"index.d.ts":         strings.Join(indexDTSRaw, "\n"),
 	}
 	for name, content := range dtsFils {
-		err = ioutil.WriteFile(path.Join(testDir, "node_modules", "test", name), []byte(content), 0644)
+		err := ioutil.WriteFile(path.Join(testDir, "node_modules", "test", name), []byte(content), 0644)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -94,16 +94,26 @@ func TestCopyDTS(t *testing.T) {
 	config = &Config{
 		cdnDomain: "cdn.esm.sh",
 	}
+
 	fs, err = storage.OpenFS(fmt.Sprintf("local:%s", testDir))
 	if err != nil {
 		t.Fatal(err)
 	}
-	err = CopyDTS(testDir, "", "test/index.d.ts")
+	db, err = storage.OpenDB(fmt.Sprintf("postdb:%s/test.db", testDir))
+	if err != nil {
+		t.Fatal(err)
+	}
+	node, err = checkNode(testDir)
+	if err != nil {
+		log.Fatalf("check nodejs env: %v", err)
+	}
+
+	_, err = CopyDTS(testDir, "X-ESM/", "test/index.d.ts")
 	if err != nil && os.IsExist(err) {
 		t.Fatal(err)
 	}
 
-	file, _, err := fs.ReadFile(fmt.Sprintf("types/v%d/test/index.d.ts", VERSION))
+	file, _, err := fs.ReadFile(fmt.Sprintf("types/v%d/test/X-ESM/index.d.ts", VERSION))
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -23,37 +23,8 @@ type ESM struct {
 	Dts           string   `json:"dts"`
 }
 
-func initESM(wd string, pkg pkg, deps pkgSlice, nodeEnv string) (esm *ESM, err error) {
-	versions := map[string]string{}
-	for _, dep := range deps {
-		versions[dep.name] = dep.version
-	}
-
+func initESM(wd string, pkg pkg, checkExports bool, isDev bool) (esm *ESM, err error) {
 	packageFile := path.Join(wd, "node_modules", pkg.name, "package.json")
-	install := !fileExists(packageFile)
-	if install {
-		installList := []string{
-			fmt.Sprintf("%s@%s", pkg.name, pkg.version),
-		}
-		if !strings.HasPrefix(pkg.name, "@") {
-			var info NpmPackage
-			info, _, err = node.getPackageInfo("@types/"+pkg.name, "latest")
-			if err != nil && err.Error() != fmt.Sprintf("npm: package '@types/%s' not found", pkg.name) {
-				return
-			}
-			if info.Types != "" || info.Typings != "" || info.Main != "" {
-				if version, ok := versions[info.Name]; ok {
-					installList = append(installList, fmt.Sprintf("%s@%s", info.Name, version))
-				} else {
-					installList = append(installList, fmt.Sprintf("%s@%s", info.Name, info.Version))
-				}
-			}
-		}
-		err = yarnAdd(wd, installList...)
-		if err != nil {
-			return
-		}
-	}
 
 	var p NpmPackage
 	err = utils.ParseJSONFile(packageFile, &p)
@@ -147,6 +118,10 @@ func initESM(wd string, pkg pkg, deps pkgSlice, nodeEnv string) (esm *ESM, err e
 		}
 	}
 
+	if !checkExports {
+		return
+	}
+
 	if esm.Module != "" {
 		resolved, exportDefault, err := checkESM(wd, esm.Name, esm.Module)
 		if err != nil {
@@ -159,6 +134,10 @@ func initESM(wd string, pkg pkg, deps pkgSlice, nodeEnv string) (esm *ESM, err e
 	}
 
 	if esm.Module == "" {
+		nodeEnv := "production"
+		if isDev {
+			nodeEnv = "development"
+		}
 		ret, err := parseCJSModuleExports(wd, pkg.ImportPath(), nodeEnv)
 		if err != nil {
 			return nil, fmt.Errorf("parseCJSModuleExports: %v", err)
