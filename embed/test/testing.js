@@ -185,6 +185,22 @@ export async function test($el) {
     t.ok()
   })
 
+  _esm(['react@17', 'react-dom@17', 'html-to-react?deps=react@17'], async (t) => {
+    const [
+      { default: React },
+      { render },
+      { Parser }
+    ] = t.modules
+
+    const h = new Parser()
+    const App = () => {
+      return h.parse(`<span>html to react is amzing</span>`)
+    }
+    render(React.createElement(App), t.$span)
+
+    t.ok()
+  })
+
   _esm(['react@17', 'react-dom@17', 'antd?bundle'], async (t) => {
     const [
       { createElement, Fragment },
