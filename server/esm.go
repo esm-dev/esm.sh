@@ -136,13 +136,10 @@ func initESM(wd string, pkg pkg, deps pkgSlice, nodeEnv string) (esm *ESM, err e
 				}
 			}
 			if !defined {
-				if esm.Main != "" {
-					esm.Main = path.Join(path.Dir(esm.Main), pkg.submodule)
-				} else {
-					esm.Main = "./" + pkg.submodule
-				}
 				if esm.Module != "" {
-					esm.Module = path.Join(path.Dir(esm.Module), pkg.submodule)
+					esm.Module = pkg.submodule
+				} else {
+					esm.Main = pkg.submodule
 				}
 				esm.Types = ""
 				esm.Typings = ""
@@ -233,7 +230,7 @@ func checkESM(wd string, packageName string, moduleSpecifier string) (resolveNam
 	if pass {
 		esm := ast.ExportsKind == js_ast.ExportsESM
 		if !esm {
-			err = errors.New("not module")
+			err = errors.New("not a module")
 			return
 		}
 		for name := range ast.NamedExports {
