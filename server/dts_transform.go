@@ -55,8 +55,8 @@ func copyDTS(wd string, resolvePrefix string, dts string, tracing *stringSet) (d
 	}
 
 	dtsBuffer := bytes.NewBuffer(nil)
-	err = walkDts(dtsFile, dtsBuffer, func(importPath string, declaredModule bool, position int) string {
-		if declaredModule {
+	err = walkDts(dtsFile, dtsBuffer, func(importPath string, kind string, position int) string {
+		if kind == "declare module" {
 			allDeclareModules.Add(importPath)
 		}
 		return importPath
@@ -68,8 +68,8 @@ func copyDTS(wd string, resolvePrefix string, dts string, tracing *stringSet) (d
 	}
 
 	buf := bytes.NewBuffer(nil)
-	err = walkDts(dtsBuffer, buf, func(importPath string, declaredModule bool, position int) string {
-		if declaredModule {
+	err = walkDts(dtsBuffer, buf, func(importPath string, kind string, position int) string {
+		if kind == "declare module" {
 			// resove `declare module "xxx" {}`, and the "xxx" must equal to the `pkgName`
 			if importPath == pkgName {
 				origin := ""
@@ -88,6 +88,7 @@ func copyDTS(wd string, resolvePrefix string, dts string, tracing *stringSet) (d
 		if allDeclareModules.Has(importPath) {
 			return importPath
 		}
+
 		if isLocalImport(importPath) {
 			if importPath == "." {
 				importPath = "./index.d.ts"
@@ -117,63 +118,75 @@ func copyDTS(wd string, resolvePrefix string, dts string, tracing *stringSet) (d
 			imports.Add(importPath)
 		} else {
 			if importPath == "node" {
-				return fmt.Sprintf("/v%d/node.ns.d.ts", VERSION)
-			}
-			if _, ok := builtInNodeModules[importPath]; ok {
-				importPath = "@types/node/" + importPath
-			}
-			if _, ok := builtInNodeModules["node:"+importPath]; ok {
-				importPath = "@types/node/" + strings.TrimPrefix(importPath, "node:")
-			}
-			info, subpath, formPackageJSON, err := node.getPackageInfo(wd, importPath, "latest")
-			if err != nil {
-				return importPath
-			}
-			if !strings.HasPrefix(info.Name, "@types/") && info.Types == "" && info.Typings == "" {
-				p, _, b, e := node.getPackageInfo(wd, path.Join("@types", info.Name), "latest")
-				if e == nil {
-					info = p
-					formPackageJSON = b
+				importPath = fmt.Sprintf("/v%d/node.ns.d.ts", VERSION)
+			} else {
+				if _, ok := builtInNodeModules[importPath]; ok {
+					importPath = "@types/node/" + importPath
 				}
-			}
-			if info.Types != "" || info.Typings != "" {
-				versioned := info.Name + "@" + info.Version
-				// copy dependent dts files in the node_modules directory in current build context
-				if formPackageJSON {
-					dts := subpath
-					if dts == "" {
-						if info.Types != "" {
-							dts = info.Types
-						} else if info.Typings != "" {
-							dts = info.Typings
+				if _, ok := builtInNodeModules["node:"+importPath]; ok {
+					importPath = "@types/node/" + strings.TrimPrefix(importPath, "node:")
+				}
+				info, subpath, formPackageJSON, err := node.getPackageInfo(wd, importPath, "latest")
+				if err == nil {
+					if !strings.HasPrefix(info.Name, "@types/") && info.Types == "" && info.Typings == "" {
+						p, _, b, e := node.getPackageInfo(wd, path.Join("@types", info.Name), "latest")
+						if e == nil {
+							info = p
+							formPackageJSON = b
 						}
 					}
-					if dts != "" {
-						if !strings.HasSuffix(dts, ".d.ts") {
-							if fileExists(path.Join(wd, "node_modules", info.Name, dts, "index.d.ts")) {
-								dts = path.Join(dts, "index.d.ts")
-							} else if fileExists(path.Join(wd, "node_modules", info.Name, dts+".d.ts")) {
-								dts = dts + ".d.ts"
+					if info.Types != "" || info.Typings != "" {
+						versioned := info.Name + "@" + info.Version
+						// copy dependent dts files in the node_modules directory in current build context
+						if formPackageJSON {
+							dts := subpath
+							if dts == "" {
+								if info.Types != "" {
+									dts = info.Types
+								} else if info.Typings != "" {
+									dts = info.Typings
+								}
+							}
+							if dts != "" {
+								if !strings.HasSuffix(dts, ".d.ts") {
+									if fileExists(path.Join(wd, "node_modules", info.Name, dts, "index.d.ts")) {
+										dts = path.Join(dts, "index.d.ts")
+									} else if fileExists(path.Join(wd, "node_modules", info.Name, dts+".d.ts")) {
+										dts = dts + ".d.ts"
+									}
+								}
+								imports.Add(path.Join(versioned, dts))
 							}
 						}
-						imports.Add(path.Join(versioned, dts))
+						if subpath == "" {
+							if info.Types != "" {
+								importPath = path.Join(versioned, resolvePrefix, utils.CleanPath(info.Types))
+							} else if info.Typings != "" {
+								importPath = path.Join(versioned, resolvePrefix, utils.CleanPath(info.Typings))
+							}
+						} else {
+							importPath = path.Join(versioned, resolvePrefix, utils.CleanPath(subpath))
+						}
+						importPath = fmt.Sprintf("/v%d/%s", VERSION, importPath)
+						if !strings.HasSuffix(importPath, ".d.ts") {
+							importPath += "...d.ts"
+						}
 					}
-				}
-				if subpath == "" {
-					if info.Types != "" {
-						importPath = path.Join(versioned, resolvePrefix, utils.CleanPath(info.Types))
-					} else if info.Typings != "" {
-						importPath = path.Join(versioned, resolvePrefix, utils.CleanPath(info.Typings))
-					}
-				} else {
-					importPath = path.Join(versioned, resolvePrefix, utils.CleanPath(subpath))
-				}
-				importPath = fmt.Sprintf("/v%d/%s", VERSION, importPath)
-				if !strings.HasSuffix(importPath, ".d.ts") {
-					importPath += "...d.ts"
 				}
 			}
+
+			// `<reference types="..." />` should be a full URL in deno.
+			if kind == "reference types" && (!strings.HasPrefix(importPath, "https://") || !strings.HasPrefix(importPath, "http://")) {
+				origin := ""
+				if config.cdnDomain == "localhost" || strings.HasPrefix(config.cdnDomain, "localhost:") {
+					origin = fmt.Sprintf("http://%s", config.cdnDomain)
+				} else if config.cdnDomain != "" {
+					origin = fmt.Sprintf("https://%s", config.cdnDomain)
+				}
+				importPath = origin + importPath
+			}
 		}
+
 		return importPath
 	})
 	if err != nil {

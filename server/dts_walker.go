@@ -17,7 +17,7 @@ var (
 	regReferenceTag      = regexp.MustCompile(`<reference\s+(path|types)\s*=\s*('|")([^'"]+)("|')\s*/?>`)
 )
 
-func walkDts(r io.Reader, buf *bytes.Buffer, resolve func(path string, declaredModule bool, position int) string) (err error) {
+func walkDts(r io.Reader, buf *bytes.Buffer, resolve func(path string, kind string, position int) string) (err error) {
 	var commentScope bool
 	var importExportScope bool
 	scanner := bufio.NewScanner(r)
@@ -60,7 +60,7 @@ func walkDts(r io.Reader, buf *bytes.Buffer, resolve func(path string, declaredM
 					if format == "path" && !isLocalImport(path) {
 						path = "./" + path
 					}
-					res := resolve(path, false, buf.Len())
+					res := resolve(path, "reference "+format, buf.Len())
 					if format == "types" && res != path {
 						format = "path"
 					}
@@ -83,7 +83,7 @@ func walkDts(r io.Reader, buf *bytes.Buffer, resolve func(path string, declaredM
 			if len(a) == 3 {
 				buf.WriteString(a[0])
 				buf.WriteString(q)
-				buf.WriteString(resolve(a[1], true, buf.Len()))
+				buf.WriteString(resolve(a[1], "declare module", buf.Len()))
 				buf.WriteString(q)
 				buf.WriteString(a[2])
 			} else {
@@ -114,7 +114,7 @@ func walkDts(r io.Reader, buf *bytes.Buffer, resolve func(path string, declaredM
 							if len(a) == 3 {
 								buf.WriteString(a[0])
 								buf.WriteString(q)
-								buf.WriteString(resolve(a[1], false, buf.Len()))
+								buf.WriteString(resolve(a[1], "import", buf.Len()))
 								buf.WriteString(q)
 								buf.WriteString(a[2])
 							} else {
@@ -132,7 +132,7 @@ func walkDts(r io.Reader, buf *bytes.Buffer, resolve func(path string, declaredM
 									buf := bytes.NewBuffer(nil)
 									buf.WriteString(a[0])
 									buf.WriteString(q)
-									buf.WriteString(resolve(a[1], false, buf.Len()))
+									buf.WriteString(resolve(a[1], "import", buf.Len()))
 									buf.WriteString(q)
 									buf.WriteString(a[2])
 									return buf.String()
@@ -155,7 +155,7 @@ func walkDts(r io.Reader, buf *bytes.Buffer, resolve func(path string, declaredM
 									buf := bytes.NewBuffer(nil)
 									buf.WriteString(a[0])
 									buf.WriteString(q)
-									buf.WriteString(resolve(a[1], false, buf.Len()))
+									buf.WriteString(resolve(a[1], "import", buf.Len()))
 									buf.WriteString(q)
 									buf.WriteString(a[2])
 									return buf.String()

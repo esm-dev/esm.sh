@@ -51,7 +51,7 @@ func TestCopyDTS(t *testing.T) {
 	indexDTSExpect := []string{
 		`// test/index.d.ts`,
 		`/// <reference path="./global.d.ts" />`,
-		fmt.Sprintf(`/// <reference path="/v%d/node.ns.d.ts" />`, VERSION),
+		fmt.Sprintf(`/// <reference path="https://cdn.esm.sh/v%d/node.ns.d.ts" />`, VERSION),
 		`  `,
 		`import {`,
 		`  ReactInstance, Component, ComponentState,`,
