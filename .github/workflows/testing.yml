@@ -18,21 +18,21 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v2
 
-			- name: Setup Node.js
-				uses: actions/setup-node@v2
-				with:
-					node-version: 14.x
-					cache: 'npm'
+      - name: Setup Node.js
+        uses: actions/setup-node@v2
+        with:
+          node-version: 14.x
+          cache: 'npm'
 
       - name: Setup deno
         uses: denolib/setup-deno@v2
         with:
           deno-version: v1.x
 
-			- name: Install Go
-				uses: actions/setup-go@v2
-				with:
-					go-version: 1.16.x
+      - name: Install Go
+        uses: actions/setup-go@v2
+        with:
+          go-version: 1.16.x
 
       - name: Go test
         run: go test esm.sh/server -v
