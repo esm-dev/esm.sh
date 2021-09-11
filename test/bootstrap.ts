@@ -1,6 +1,6 @@
 async function startServer(onReady: (p: any) => void) {
 	const p = Deno.run({
-		cmd: ['go', 'run', 'main.go', '-dev'],
+		cmd: ['go', 'run', 'main.go', '-dev', '-port', '8080'],
 		stdout: 'piped',
 		stderr: 'inherit'
 	})
