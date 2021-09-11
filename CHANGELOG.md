@@ -1,6 +1,6 @@
 # Change Log
 
-## v49
+## v50
 
 - Improve build performance to burn the server CPU cores! Before, to build a module to ESM which has heavy deps maybe very slow since the single build task only uses one CPU core.
 - Rewrite the **dts transformer** to get better deno types compatibility and faster transpile speed, but still lot of types are not working in deno.
