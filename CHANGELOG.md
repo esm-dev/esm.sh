@@ -2,6 +2,12 @@
 
 ## v49
 
+- Improve build performance to burn the server CPU cores! Before, to build a module to ESM which has heavy deps maybe very slow since the single build task only uses one CPU core.
+- Rewrite the **dts transformer** to get better deno types compatibility and faster transpile speed, but still lot of types are not working in deno.
+- Add Deno **testing CI** on Github.
+
+## v49
+
 - Improve the build process to fix an edge case reported in [#118](https://github.com/postui/esm.sh/issues/118)
 	```js
 	const parser = require('htmlparser').Parser;
