@@ -21,6 +21,7 @@ type ESM struct {
 	ExportDefault bool     `json:"exportDefault"`
 	Exports       []string `json:"exports"`
 	Dts           string   `json:"dts"`
+	PackageCSS    bool     `json:"packageCSS"`
 }
 
 func initESM(wd string, pkg pkg, checkExports bool, isDev bool) (esm *ESM, err error) {
@@ -162,7 +163,7 @@ func initESM(wd string, pkg pkg, checkExports bool, isDev bool) (esm *ESM, err e
 	return
 }
 
-func findESM(id string) (esm *ESM, pkgCSS bool, err error) {
+func findESM(id string) (esm *ESM, err error) {
 	store, _, err := db.Get(id)
 	if err == nil {
 		err = json.Unmarshal([]byte(store["esm"]), &esm)
@@ -176,10 +177,6 @@ func findESM(id string) (esm *ESM, pkgCSS bool, err error) {
 		if !exists {
 			db.Delete(id)
 			return
-		}
-
-		if val := store["css"]; len(val) == 1 && val[0] == 1 {
-			pkgCSS, err = fs.Exists(path.Join("builds", strings.TrimSuffix(id, ".js")+".css"))
 		}
 	}
 	return

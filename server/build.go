@@ -119,7 +119,7 @@ func (task *buildTask) getImportPath(pkg pkg, extendsAlias bool) string {
 	)
 }
 
-func (task *buildTask) Build() (esm *ESM, pkgCSS bool, err error) {
+func (task *buildTask) Build() (esm *ESM, err error) {
 	hasher := sha1.New()
 	hasher.Write([]byte(task.ID()))
 	task.wd = path.Join(os.TempDir(), "esm-build-"+hex.EncodeToString(hasher.Sum(nil)))
@@ -129,7 +129,7 @@ func (task *buildTask) Build() (esm *ESM, pkgCSS bool, err error) {
 	return task.build(newStringSet())
 }
 
-func (task *buildTask) build(tracing *stringSet) (esm *ESM, pkgCSS bool, err error) {
+func (task *buildTask) build(tracing *stringSet) (esm *ESM, err error) {
 	if tracing.Has(task.ID()) {
 		return findESM(task.ID())
 	}
@@ -359,7 +359,6 @@ esbuild:
 		log.Warnf("esbuild(%s): %s", task.ID(), w.Text)
 	}
 
-	cssMark := "true"
 	for _, file := range result.OutputFiles {
 		outputContent := file.Contents
 		if strings.HasSuffix(file.Path, ".js") {
@@ -397,7 +396,7 @@ esbuild:
 						target: task.target,
 						isDev:  task.isDev,
 					}
-					_, _, e := subTask.build(tracing)
+					_, e := subTask.build(tracing)
 					if e == nil {
 						importPath = task.getImportPath(subPkg, true)
 					}
@@ -494,7 +493,7 @@ esbuild:
 							target: task.target,
 							isDev:  task.isDev,
 						}
-						_, _, e := subTask.build(tracing)
+						_, e := subTask.build(tracing)
 						if e == nil {
 							importPath = task.getImportPath(pkg{
 								name:      p.Name,
@@ -646,7 +645,7 @@ esbuild:
 			if err != nil {
 				return
 			}
-			cssMark = "false"
+			esm.PackageCSS = true
 		}
 	}
 
@@ -659,14 +658,12 @@ esbuild:
 		task.ID(),
 		storage.Store{
 			"esm": string(utils.MustEncodeJSON(esm)),
-			"css": cssMark,
 		},
 	)
 	if dbErr != nil {
 		log.Errorf("db: %v", dbErr)
 	}
 
-	pkgCSS = cssMark[0] == 1
 	return
 }
 

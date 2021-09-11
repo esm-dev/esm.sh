@@ -16,9 +16,8 @@ type buildQueue struct {
 }
 
 type buildOutput struct {
-	esm    *ESM
-	pkgCSS bool
-	err    error
+	esm *ESM
+	err error
 }
 
 type task struct {
@@ -96,7 +95,7 @@ func (q *buildQueue) next() {
 
 func (q *buildQueue) wait(t *task) {
 	t.startTime = time.Now()
-	esm, pkgCSS, err := t.Build()
+	esm, err := t.Build()
 	log.Debugf(
 		"queue(%s,%s) done in %s",
 		t.pkg.String(),
@@ -112,9 +111,8 @@ func (q *buildQueue) wait(t *task) {
 
 	for _, c := range t.consumers {
 		c <- &buildOutput{
-			esm:    esm,
-			pkgCSS: pkgCSS,
-			err:    err,
+			esm: esm,
+			err: err,
 		}
 	}
 

@@ -1,25 +1,14 @@
 package server
 
 import (
-	"bufio"
 	"bytes"
 	"fmt"
-	"io/ioutil"
+	"os"
 	"path"
-	"regexp"
 	"strconv"
 	"strings"
 
 	"github.com/ije/gox/utils"
-)
-
-var (
-	regVersionPath     = regexp.MustCompile(`([^/])@\d+\.\d+\.\d+([a-z0-9\.-]+)?/`)
-	regFromExpr        = regexp.MustCompile(`(}|\s)from\s*("|')`)
-	regImportPlainExpr = regexp.MustCompile(`import\s*("|')`)
-	regImportCallExpr  = regexp.MustCompile(`import\((('[^']+')|("[^"]+"))\)`)
-	regReferenceTag    = regexp.MustCompile(`^<reference\s+(path|types)\s*=\s*('|")([^'"]+)("|')\s*/>$`)
-	regDeclareModule   = regexp.MustCompile(`declare\s+module\s*('|")([^'"]+)("|')`)
 )
 
 func CopyDTS(wd string, resolvePrefix string, dts string) (dtsPath string, err error) {
@@ -32,13 +21,6 @@ func copyDTS(wd string, resolvePrefix string, dts string, tracing *stringSet) (d
 		return
 	}
 	tracing.Add(resolvePrefix + dts)
-
-	dtsFilePath := path.Join(wd, "node_modules", regVersionPath.ReplaceAllString(dts, "$1/"))
-	dtsDir := path.Dir(dtsFilePath)
-	dtsContent, err := ioutil.ReadFile(dtsFilePath)
-	if err != nil {
-		return
-	}
 
 	a := strings.Split(utils.CleanPath(dts)[1:], "/")
 	versionedName := a[0]
@@ -63,8 +45,46 @@ func copyDTS(wd string, resolvePrefix string, dts string, tracing *stringSet) (d
 
 	imports := newStringSet()
 	allDeclareModules := newStringSet()
-	mainDeclareModules := []string{}
-	rewriteFn := func(importPath string) string {
+	entryDeclareModules := []string{}
+
+	dtsFilePath := path.Join(wd, "node_modules", regVersionPath.ReplaceAllString(dts, "$1/"))
+	dtsDir := path.Dir(dtsFilePath)
+	dtsFile, err := os.Open(dtsFilePath)
+	if err != nil {
+		return
+	}
+
+	dtsBuffer := bytes.NewBuffer(nil)
+	err = walkDts(dtsFile, dtsBuffer, func(importPath string, declaredModule bool, position int) string {
+		if declaredModule {
+			allDeclareModules.Add(importPath)
+		}
+		return importPath
+	})
+	// close the opened dts file
+	dtsFile.Close()
+	if err != nil {
+		return
+	}
+
+	buf := bytes.NewBuffer(nil)
+	err = walkDts(dtsBuffer, buf, func(importPath string, declaredModule bool, position int) string {
+		if declaredModule {
+			// resove `declare module "xxx" {}`, and the "xxx" must equal to the `pkgName`
+			if importPath == pkgName {
+				origin := ""
+				if config.cdnDomain == "localhost" || strings.HasPrefix(config.cdnDomain, "localhost:") {
+					origin = fmt.Sprintf("http://%s", config.cdnDomain)
+				} else if config.cdnDomain != "" {
+					origin = fmt.Sprintf("https://%s", config.cdnDomain)
+				}
+				res := fmt.Sprintf("%s/%s", origin, pkgName)
+				entryDeclareModules = append(entryDeclareModules, fmt.Sprintf("%s:%d", res, position+len(res)+1))
+				return res
+			}
+			return importPath
+		}
+
 		if allDeclareModules.Has(importPath) {
 			return importPath
 		}
@@ -96,6 +116,9 @@ func copyDTS(wd string, resolvePrefix string, dts string, tracing *stringSet) (d
 			}
 			imports.Add(importPath)
 		} else {
+			if importPath == "node" {
+				return fmt.Sprintf("/v%d/node.ns.d.ts", VERSION)
+			}
 			if _, ok := builtInNodeModules[importPath]; ok {
 				importPath = "@types/node/" + importPath
 			}
@@ -152,193 +175,15 @@ func copyDTS(wd string, resolvePrefix string, dts string, tracing *stringSet) (d
 			}
 		}
 		return importPath
-	}
-
-	for _, a := range regDeclareModule.FindAllSubmatch(dtsContent, -1) {
-		allDeclareModules.Add(string(a[2]))
-	}
-
-	buf := bytes.NewBuffer(nil)
-	scanner := bufio.NewScanner(bytes.NewReader(dtsContent))
-	commentScope := false
-	importExportScope := false
-	for scanner.Scan() {
-		text := scanner.Text()
-		pure := strings.TrimSpace(text)
-		spaceLeftWidth := strings.Index(text, pure)
-		spacesOnRight := text[spaceLeftWidth+len(pure):]
-		buf.WriteString(text[:spaceLeftWidth])
-	Re:
-		if commentScope || strings.HasPrefix(pure, "/*") {
-			commentScope = true
-			endIndex := strings.Index(pure, "*/")
-			if endIndex > -1 {
-				commentScope = false
-				buf.WriteString(pure[:endIndex])
-				buf.WriteString("*/")
-				if rest := pure[endIndex+2:]; rest != "" {
-					pure = strings.TrimSpace(rest)
-					buf.WriteString(rest[:strings.Index(rest, pure)])
-					goto Re
-				}
-			} else {
-				buf.WriteString(pure)
-			}
-		} else if i := strings.Index(pure, "/*"); i > 0 {
-			if startsWith(pure, "import ", "import\"", "import'", "import{", "export ", "export{") {
-				importExportScope = true
-			}
-			buf.WriteString(pure[:i])
-			pure = pure[i:]
-			goto Re
-		} else if strings.HasPrefix(pure, "///") {
-			s := strings.TrimSpace(strings.TrimPrefix(pure, "///"))
-			if regReferenceTag.MatchString(s) {
-				a := regReferenceTag.FindAllStringSubmatch(s, 1)
-				format := a[0][1]
-				path := a[0][3]
-				if format == "path" {
-					if !isLocalImport(path) {
-						path = "./" + path
-					}
-				}
-				if format == "types" {
-					if path == "node" {
-						path = fmt.Sprintf("/v%d/node.ns.d.ts", VERSION)
-					} else {
-						path = rewriteFn(path)
-					}
-					origin := ""
-					if config.cdnDomain != "" {
-						origin = fmt.Sprintf("https://%s", config.cdnDomain)
-					}
-					fmt.Fprintf(buf, `/// <reference path="%s%s" />`, origin, path)
-				} else {
-					fmt.Fprintf(buf, `/// <reference path="%s" />`, rewriteFn(path))
-				}
-			} else {
-				buf.WriteString(pure)
-			}
-		} else if strings.HasPrefix(pure, "//") {
-			buf.WriteString(pure)
-		} else if strings.HasPrefix(pure, "declare") && regDeclareModule.MatchString(pure) {
-			q := "'"
-			a := strings.Split(pure, q)
-			if len(a) != 3 {
-				q = `"`
-				a = strings.Split(pure, q)
-			}
-			// resove `declare module "xxx" {}`, and the "xxx" must equal to the `pkgName`
-			if len(a) == 3 && a[1] == pkgName {
-				buf.WriteString(a[0])
-				buf.WriteString(q)
-				newname := fmt.Sprintf("/%s", a[1])
-				if config.cdnDomain != "" {
-					newname = fmt.Sprintf("https://%s/%s", config.cdnDomain, a[1])
-				}
-				buf.WriteString(newname)
-				buf.WriteString(q)
-				mainDeclareModules = append(mainDeclareModules, fmt.Sprintf("%s:%d", newname, buf.Len()))
-				buf.WriteString(a[2])
-			} else {
-				buf.WriteString(pure)
-			}
-		} else {
-			scanner := bufio.NewScanner(strings.NewReader(pure))
-			scanner.Split(onSemicolon)
-			var i int
-			for scanner.Scan() {
-				if i > 0 {
-					buf.WriteByte(';')
-				}
-				text := scanner.Text()
-				expr := strings.TrimSpace(text)
-				buf.WriteString(text[:strings.Index(text, expr)])
-				if expr != "" {
-					if importExportScope || startsWith(expr, "import ", "import\"", "import'", "import{", "export ", "export{") {
-						importExportScope = true
-						if regFromExpr.MatchString(expr) || regImportPlainExpr.MatchString(expr) {
-							importExportScope = false
-							q := "'"
-							a := strings.Split(expr, q)
-							if len(a) != 3 {
-								q = `"`
-								a = strings.Split(expr, q)
-							}
-							if len(a) == 3 {
-								buf.WriteString(a[0])
-								buf.WriteString(q)
-								buf.WriteString(rewriteFn(a[1]))
-								buf.WriteString(q)
-								buf.WriteString(a[2])
-							} else {
-								buf.WriteString(expr)
-							}
-						} else if regImportCallExpr.MatchString(expr) {
-							buf.WriteString(regImportCallExpr.ReplaceAllStringFunc(expr, func(importCallExpr string) string {
-								q := "'"
-								a := strings.Split(importCallExpr, q)
-								if len(a) != 3 {
-									q = `"`
-									a = strings.Split(importCallExpr, q)
-								}
-								if len(a) == 3 {
-									buf := bytes.NewBuffer(nil)
-									buf.WriteString(a[0])
-									buf.WriteString(q)
-									buf.WriteString(rewriteFn(a[1]))
-									buf.WriteString(q)
-									buf.WriteString(a[2])
-									return buf.String()
-								}
-								return importCallExpr
-							}))
-						} else {
-							buf.WriteString(expr)
-						}
-					} else {
-						if regImportCallExpr.MatchString(expr) {
-							buf.WriteString(regImportCallExpr.ReplaceAllStringFunc(expr, func(importCallExpr string) string {
-								q := "'"
-								a := strings.Split(importCallExpr, q)
-								if len(a) != 3 {
-									q = `"`
-									a = strings.Split(importCallExpr, q)
-								}
-								if len(a) == 3 {
-									buf := bytes.NewBuffer(nil)
-									buf.WriteString(a[0])
-									buf.WriteString(q)
-									buf.WriteString(rewriteFn(a[1]))
-									buf.WriteString(q)
-									buf.WriteString(a[2])
-									return buf.String()
-								}
-								return importCallExpr
-							}))
-						} else {
-							buf.WriteString(expr)
-						}
-					}
-				}
-				if i > 0 && importExportScope {
-					importExportScope = false
-				}
-				i++
-			}
-		}
-		buf.WriteString(spacesOnRight)
-		buf.WriteByte('\n')
-	}
-	err = scanner.Err()
+	})
 	if err != nil {
 		return
 	}
 
 	dtsData := buf.Bytes()
 	dataLen := buf.Len()
-	if len(mainDeclareModules) > 0 {
-		for _, record := range mainDeclareModules {
+	if len(entryDeclareModules) > 0 {
+		for _, record := range entryDeclareModules {
 			name, istr := utils.SplitByLastByte(record, ':')
 			i, _ := strconv.Atoi(istr)
 			b := bytes.NewBuffer(nil)
@@ -435,19 +280,4 @@ func getTypesPath(wd string, p NpmPackage, subpath string) string {
 	}
 
 	return fmt.Sprintf("%s@%s/%s", p.Name, p.Version, strings.TrimPrefix(ensureSuffix(types, ".d.ts"), "/"))
-}
-
-func onSemicolon(data []byte, atEOF bool) (advance int, token []byte, err error) {
-	for i := 0; i < len(data); i++ {
-		if data[i] == ';' {
-			return i + 1, data[:i], nil
-		}
-	}
-	if !atEOF {
-		return 0, nil, nil
-	}
-	// There is one final token to be delivered, which may be the empty string.
-	// Returning bufio.ErrFinalToken here tells Scan there are no more tokens after this
-	// but does not trigger an error to be returned from Scan itself.
-	return 0, data, bufio.ErrFinalToken
 }

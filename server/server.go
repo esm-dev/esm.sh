@@ -77,7 +77,10 @@ func Serve(efs *embed.FS) {
 		etcDir, _ = filepath.Abs(".dev")
 		logDir = path.Join(etcDir, "log")
 		logLevel = "debug"
-		cdnDomain = ""
+		cdnDomain = "localhost"
+		if port != 80 {
+			cdnDomain = fmt.Sprintf("localhost:%d", port)
+		}
 		cdnDomainChina = ""
 	}
 	if dbUrl == "" {

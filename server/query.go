@@ -494,13 +494,13 @@ func query() rex.Handle {
 		}
 
 		taskID := task.ID()
-		esm, pkgCSS, err := findESM(taskID)
+		esm, err := findESM(taskID)
 		if err != nil {
 			if !isBare {
 				// find previous build version
 				for i := 0; i < VERSION; i++ {
 					id := fmt.Sprintf("v%d/%s", VERSION-(i+1), taskID[len(fmt.Sprintf("v%d/", VERSION)):])
-					esm, pkgCSS, err = findESM(id)
+					esm, err = findESM(id)
 					if err == nil {
 						taskID = id
 						break
@@ -519,15 +519,14 @@ func query() rex.Handle {
 						return throwErrorJS(ctx, output.err)
 					}
 					esm = output.esm
-					pkgCSS = output.pkgCSS
-				case <-time.After(time.Minute / 2):
+				case <-time.After(time.Minute):
 					return rex.Status(http.StatusRequestTimeout, "timeout, we are building the package hardly, please try later!")
 				}
 			}
 		}
 
 		if isPkgCSS {
-			if pkgCSS {
+			if esm.PackageCSS {
 				hostname := ctx.R.Host
 				proto := "http"
 				if ctx.R.TLS != nil {
@@ -564,25 +563,27 @@ func query() rex.Handle {
 		}
 
 		buf := bytes.NewBuffer(nil)
-		importPrefix := "/"
-		if config.cdnDomain != "" {
-			importPrefix = fmt.Sprintf("https://%s/", config.cdnDomain)
+		origin := "/"
+		if config.cdnDomain == "localhost" || strings.HasPrefix(config.cdnDomain, "localhost:") {
+			origin = fmt.Sprintf("http://%s/", config.cdnDomain)
+		} else if config.cdnDomain != "" {
+			origin = fmt.Sprintf("https://%s/", config.cdnDomain)
 		}
 		if config.cdnDomainChina != "" {
 			var record Record
 			err = mmdbr.Lookup(net.ParseIP(ctx.RemoteIP()), &record)
 			if err == nil && record.Country.ISOCode == "CN" {
-				importPrefix = fmt.Sprintf("https://%s/", config.cdnDomainChina)
+				origin = fmt.Sprintf("https://%s/", config.cdnDomainChina)
 			}
 		}
 
 		fmt.Fprintf(buf, `/* esm.sh - %v */%s`, reqPkg, "\n")
-		fmt.Fprintf(buf, `export * from "%s%s";%s`, importPrefix, taskID, "\n")
+		fmt.Fprintf(buf, `export * from "%s%s";%s`, origin, taskID, "\n")
 		if esm.ExportDefault {
 			fmt.Fprintf(
 				buf,
 				`export { default } from "%s%s";%s`,
-				importPrefix,
+				origin,
 				taskID,
 				"\n",
 			)
@@ -591,7 +592,7 @@ func query() rex.Handle {
 		if esm.Dts != "" && !noCheck {
 			value := fmt.Sprintf(
 				"%s%s",
-				importPrefix,
+				origin,
 				strings.TrimPrefix(esm.Dts, "/"),
 			)
 			ctx.SetHeader("X-TypeScript-Types", value)
