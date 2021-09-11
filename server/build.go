@@ -8,8 +8,10 @@ import (
 	"fmt"
 	"os"
 	"path"
+	"runtime"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	"esm.sh/server/storage"
@@ -17,6 +19,10 @@ import (
 	"github.com/evanw/esbuild/pkg/api"
 	"github.com/ije/gox/utils"
 )
+
+var wdRefLock sync.Mutex
+var wdRefCounter = map[string]int{}
+var buildQueue = newBuildQueue(2 * runtime.NumCPU())
 
 type buildTask struct {
 	id        string
@@ -26,9 +32,10 @@ type buildTask struct {
 	alias     map[string]string
 	deps      pkgSlice
 	target    string
-	isDev     bool
 	bundle    bool
+	isDev     bool
 	typesOnly bool
+	noInstall bool
 }
 
 func (task *buildTask) resolvePrefix() string {
@@ -119,27 +126,46 @@ func (task *buildTask) getImportPath(pkg pkg, extendsAlias bool) string {
 	)
 }
 
-func (task *buildTask) Build() (esm *ESM, err error) {
-	hasher := sha1.New()
-	hasher.Write([]byte(task.ID()))
-	task.wd = path.Join(os.TempDir(), "esm-build-"+hex.EncodeToString(hasher.Sum(nil)))
-	ensureDir(task.wd)
-	defer os.RemoveAll(task.wd)
+func (task *buildTask) beforeBuild() {
+	if task.wd == "" {
+		hasher := sha1.New()
+		hasher.Write([]byte(task.ID()))
+		task.wd = path.Join(os.TempDir(), "esm-build-"+hex.EncodeToString(hasher.Sum(nil)))
+		ensureDir(task.wd)
+	}
 
-	return task.build(newStringSet())
+	wdRefLock.Lock()
+	wdRefCounter[task.wd] = wdRefCounter[task.wd] + 1
+	wdRefLock.Unlock()
 }
 
-func (task *buildTask) build(tracing *stringSet) (esm *ESM, err error) {
-	if tracing.Has(task.ID()) {
-		return findESM(task.ID())
-	}
-	tracing.Add(task.ID())
+func (task *buildTask) Build() (esm *ESM, err error) {
+	defer func() {
+		wdRefLock.Lock()
+		n := wdRefCounter[task.wd] - 1
+		if n <= 0 {
+			delete(wdRefCounter, task.wd)
+		} else {
+			wdRefCounter[task.wd] = n
+		}
+		wdRefLock.Unlock()
+		if n <= 0 {
+			os.RemoveAll(task.wd)
+		}
+	}()
 
-	task.stage = "install deps"
-	err = task.installDeps()
-	if err != nil {
-		log.Error("install deps:", err)
-		return
+	prev, err := findESM(task.ID())
+	if err == nil {
+		return prev, nil
+	}
+
+	if !task.noInstall {
+		task.stage = "install deps"
+		err = task.installDeps()
+		if err != nil {
+			log.Error("install deps:", err)
+			return
+		}
 	}
 
 	task.stage = "init"
@@ -388,18 +414,17 @@ esbuild:
 						version:   task.pkg.version,
 						submodule: submodule,
 					}
-					subTask := buildTask{
-						wd:     task.wd,
-						pkg:    subPkg,
-						alias:  task.alias,
-						deps:   task.deps,
-						target: task.target,
-						isDev:  task.isDev,
+					subTask := &buildTask{
+						wd:        task.wd, // reuse current wd
+						pkg:       subPkg,
+						alias:     task.alias,
+						deps:      task.deps,
+						target:    task.target,
+						isDev:     task.isDev,
+						noInstall: true,
 					}
-					_, e := subTask.build(tracing)
-					if e == nil {
-						importPath = task.getImportPath(subPkg, true)
-					}
+					buildQueue.Add(subTask)
+					importPath = task.getImportPath(subPkg, true)
 				}
 				// is builtin `buffer` module
 				if importPath == "" && name == "buffer" {
@@ -460,7 +485,7 @@ esbuild:
 						}
 					}
 				}
-				// prer-build dependency
+				// pre-build dependency
 				if importPath == "" {
 					var pkgName string
 					var submodule string
@@ -481,8 +506,8 @@ esbuild:
 						if err != nil {
 							return
 						}
-						subTask := buildTask{
-							wd: task.wd,
+						t := &buildTask{
+							wd: task.wd, // reuse current wd
 							pkg: pkg{
 								name:      pkgName,
 								version:   p.Version,
@@ -493,14 +518,12 @@ esbuild:
 							target: task.target,
 							isDev:  task.isDev,
 						}
-						_, e := subTask.build(tracing)
-						if e == nil {
-							importPath = task.getImportPath(pkg{
-								name:      p.Name,
-								version:   p.Version,
-								submodule: submodule,
-							}, false)
-						}
+						buildQueue.Add(t)
+						importPath = task.getImportPath(pkg{
+							name:      p.Name,
+							version:   p.Version,
+							submodule: submodule,
+						}, false)
 					}
 				}
 				// get package info from NPM

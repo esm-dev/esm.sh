@@ -7,7 +7,6 @@ import (
 	"net"
 	"net/http"
 	"path"
-	"runtime"
 	"strings"
 	"time"
 
@@ -37,7 +36,6 @@ var httpClient = &http.Client{
 // esm query middleware for rex
 func query() rex.Handle {
 	startTime := time.Now()
-	queue := newBuildQueue(2 * runtime.NumCPU())
 
 	return func(ctx *rex.Context) interface{} {
 		pathname := ctx.Path.String()
@@ -68,10 +66,10 @@ func query() rex.Handle {
 			return rex.Content("favicon.svg", startTime, bytes.NewReader(data))
 
 		case "/status.json":
-			queue.lock.Lock()
-			q := make([]map[string]interface{}, queue.queue.Len())
+			buildQueue.lock.Lock()
+			q := make([]map[string]interface{}, buildQueue.list.Len())
 			i := 0
-			for el := queue.queue.Front(); el != nil; el = el.Next() {
+			for el := buildQueue.list.Front(); el != nil; el = el.Next() {
 				t, ok := el.Value.(*task)
 				if ok {
 					q[i] = map[string]interface{}{
@@ -89,7 +87,7 @@ func query() rex.Handle {
 					i++
 				}
 			}
-			queue.lock.Unlock()
+			buildQueue.lock.Unlock()
 			return map[string]interface{}{
 				"queue": q[0:i],
 			}
@@ -472,7 +470,7 @@ func query() rex.Handle {
 			if !exits {
 				task.typesOnly = true
 				select {
-				case output := <-queue.Add(task):
+				case output := <-buildQueue.Add(task):
 					if output.err != nil {
 						return rex.Status(500, "types: "+err.Error())
 					}
@@ -511,10 +509,10 @@ func query() rex.Handle {
 			// if the previous build exists and not in bare mode, then build current module in backgound,
 			// or wait the current build task for 30 seconds
 			if err == nil {
-				queue.Add(task)
+				buildQueue.Add(task)
 			} else {
 				select {
-				case output := <-queue.Add(task):
+				case output := <-buildQueue.Add(task):
 					if output.err != nil {
 						return throwErrorJS(ctx, output.err)
 					}

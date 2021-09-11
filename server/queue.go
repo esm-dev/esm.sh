@@ -7,9 +7,9 @@ import (
 )
 
 // A Queue for esbuild
-type buildQueue struct {
+type BuildQueue struct {
 	lock         sync.Mutex
-	queue        *list.List
+	list         *list.List
 	current      []*task
 	tasks        map[string]*task
 	maxProcesses int
@@ -29,9 +29,9 @@ type task struct {
 	consumers  []chan *buildOutput
 }
 
-func newBuildQueue(maxProcesses int) *buildQueue {
-	q := &buildQueue{
-		queue:        list.New(),
+func newBuildQueue(maxProcesses int) *BuildQueue {
+	q := &BuildQueue{
+		list:         list.New(),
 		tasks:        map[string]*task{},
 		maxProcesses: maxProcesses,
 	}
@@ -39,15 +39,17 @@ func newBuildQueue(maxProcesses int) *buildQueue {
 }
 
 // Len returns the number of tasks of the queue.
-func (q *buildQueue) Len() int {
+func (q *BuildQueue) Len() int {
 	q.lock.Lock()
 	defer q.lock.Unlock()
 
-	return q.queue.Len()
+	return q.list.Len()
 }
 
 // Add adds a new build task.
-func (q *buildQueue) Add(build *buildTask) chan *buildOutput {
+func (q *BuildQueue) Add(build *buildTask) chan *buildOutput {
+	build.beforeBuild()
+
 	q.lock.Lock()
 	defer q.lock.Unlock()
 
@@ -63,17 +65,17 @@ func (q *buildQueue) Add(build *buildTask) chan *buildOutput {
 		createTime: time.Now(),
 		consumers:  []chan *buildOutput{c},
 	}
-	t.el = q.queue.PushBack(t)
+	t.el = q.list.PushBack(t)
 	q.tasks[build.ID()] = t
 	q.next()
 
 	return c
 }
 
-func (q *buildQueue) next() {
+func (q *BuildQueue) next() {
 	var nextTask *task
 	if len(q.current) < q.maxProcesses {
-		for el := q.queue.Front(); el != nil; el = el.Next() {
+		for el := q.list.Front(); el != nil; el = el.Next() {
 			t, ok := el.Value.(*task)
 			if ok && !t.inProcess {
 				nextTask = t
@@ -93,7 +95,7 @@ func (q *buildQueue) next() {
 	q.lock.Lock()
 }
 
-func (q *buildQueue) wait(t *task) {
+func (q *BuildQueue) wait(t *task) {
 	t.startTime = time.Now()
 	esm, err := t.Build()
 	log.Debugf(
@@ -123,7 +125,7 @@ func (q *buildQueue) wait(t *task) {
 		}
 	}
 	q.current = p
-	q.queue.Remove(t.el)
+	q.list.Remove(t.el)
 	delete(q.tasks, t.ID())
 
 	q.next()
