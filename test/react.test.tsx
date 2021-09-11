@@ -1,5 +1,7 @@
-import React from 'http://localhost/react'
-import { renderToString } from 'http://localhost/react-dom/server'
+import React from 'http://localhost:8080/react'
+import { renderToString } from 'http://localhost:8080/react-dom/server'
 
-const html = renderToString(<h1>Hi :)</h1>)
-console.log(html) 
+Deno.test("check react server rendering", async () => {
+	const html = renderToString(<h1>Hi :)</h1>)
+	console.log(html)
+})
