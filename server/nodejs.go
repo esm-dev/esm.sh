@@ -485,3 +485,11 @@ func yarnAdd(wd string, packages ...string) (err error) {
 	}
 	return
 }
+
+// provided by @jimisaacs
+func transformPackageNameToTypesPackage(pkgName string) string {
+	if strings.HasPrefix(pkgName, "@") {
+		pkgName = strings.Replace(pkgName[1:], "/", "__", 1)
+	}
+	return path.Join("@types", pkgName)
+}

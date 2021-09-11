@@ -702,10 +702,17 @@ func (task *buildTask) handleDTS(esm *ESM, submodule string) {
 			dts = fmt.Sprintf("%s/%s", versionedName, path.Join(submodule, "index.d.ts"))
 		} else if fileExists(path.Join(nodeModulesDir, name, ensureSuffix(submodule, ".d.ts"))) {
 			dts = fmt.Sprintf("%s/%s", versionedName, ensureSuffix(submodule, ".d.ts"))
-		} else if fileExists(path.Join(nodeModulesDir, "@types", name, submodule, "index.d.ts")) {
-			dts = fmt.Sprintf("@types/%s/%s", versionedName, path.Join(submodule, "index.d.ts"))
-		} else if fileExists(path.Join(nodeModulesDir, "@types", name, ensureSuffix(submodule, ".d.ts"))) {
-			dts = fmt.Sprintf("@types/%s/%s", versionedName, ensureSuffix(submodule, ".d.ts"))
+		} else {
+			var p NpmPackage
+			typesPkgName := transformPackageNameToTypesPackage(name)
+			err := utils.ParseJSONFile(path.Join(nodeModulesDir, typesPkgName, "package.json"), &p)
+			if err == nil {
+				if fileExists(path.Join(nodeModulesDir, typesPkgName, submodule, "index.d.ts")) {
+					dts = fmt.Sprintf("%s@%s/%s", typesPkgName, p.Version, path.Join(submodule, "index.d.ts"))
+				} else if fileExists(path.Join(nodeModulesDir, typesPkgName, ensureSuffix(submodule, ".d.ts"))) {
+					dts = fmt.Sprintf("%s@%s/%s", typesPkgName, p.Version, ensureSuffix(submodule, ".d.ts"))
+				}
+			}
 		}
 	} else {
 		if esm.Types != "" || esm.Typings != "" {
@@ -713,14 +720,12 @@ func (task *buildTask) handleDTS(esm *ESM, submodule string) {
 		} else {
 			if fileExists(path.Join(nodeModulesDir, name, "index.d.ts")) {
 				dts = fmt.Sprintf("%s/%s", versionedName, "index.d.ts")
-			} else if !strings.HasPrefix(name, "@") {
-				packageFile := path.Join(nodeModulesDir, "@types", name, "package.json")
-				if fileExists(packageFile) {
-					var p NpmPackage
-					err := utils.ParseJSONFile(path.Join(nodeModulesDir, "@types", name, "package.json"), &p)
-					if err == nil {
-						dts = getTypesPath(task.wd, p, "")
-					}
+			} else {
+				var p NpmPackage
+				typesPkgName := transformPackageNameToTypesPackage(name)
+				err := utils.ParseJSONFile(path.Join(nodeModulesDir, typesPkgName, "package.json"), &p)
+				if err == nil {
+					dts = getTypesPath(task.wd, p, "")
 				}
 			}
 		}
@@ -771,13 +776,14 @@ func (task *buildTask) installDeps() (err error) {
 	extraDeps := []string{}
 
 	// check @types/{package}
-	if p.Types == "" && p.Typings == "" && !strings.HasPrefix(pkg.name, "@") {
-		info, _, fromPackJSON, e := node.getPackageInfo(wd, "@types/"+pkg.name, "latest")
-		if e != nil && e.Error() != fmt.Sprintf("npm: package '@types/%s' not found", pkg.name) {
+	if p.Types == "" && p.Typings == "" {
+		typesPkgName := transformPackageNameToTypesPackage(pkg.name)
+		info, _, fromPackageJSON, e := node.getPackageInfo(wd, typesPkgName, "latest")
+		if e != nil && e.Error() != fmt.Sprintf("npm: package '%s' not found", typesPkgName) {
 			err = e
 			return
 		}
-		if !fromPackJSON && (info.Types != "" || info.Typings != "" || info.Main != "") {
+		if !fromPackageJSON && (info.Types != "" || info.Typings != "" || info.Main != "") {
 			if version, ok := versions[info.Name]; ok {
 				extraDeps = append(extraDeps, fmt.Sprintf("%s@%s", info.Name, version))
 			} else {

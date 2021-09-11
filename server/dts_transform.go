@@ -129,10 +129,10 @@ func copyDTS(wd string, resolvePrefix string, dts string, tracing *stringSet) (d
 				info, subpath, formPackageJSON, err := node.getPackageInfo(wd, importPath, "latest")
 				if err == nil {
 					if !strings.HasPrefix(info.Name, "@types/") && info.Types == "" && info.Typings == "" {
-						p, _, b, e := node.getPackageInfo(wd, path.Join("@types", info.Name), "latest")
+						i, _, f, e := node.getPackageInfo(wd, transformPackageNameToTypesPackage(info.Name), "latest")
 						if e == nil {
-							info = p
-							formPackageJSON = b
+							info = i
+							formPackageJSON = f
 						}
 					}
 					if info.Types != "" || info.Typings != "" {
