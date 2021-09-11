@@ -471,7 +471,6 @@ func yarnAdd(wd string, packages ...string) (err error) {
 			"--ignore-scripts",
 			"--ignore-platform",
 			"--ignore-engines",
-			"--skip-integrity-check",
 		}
 		if config.yarnCacheDir != "" {
 			args = append(args, "--cache-folder", config.yarnCacheDir)

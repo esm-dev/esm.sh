@@ -754,8 +754,7 @@ func (task *buildTask) installDeps() (err error) {
 	wd := task.wd
 	pkg := task.pkg
 	packageFile := path.Join(wd, "node_modules", pkg.name, "package.json")
-	install := !fileExists(packageFile)
-	if install {
+	if !fileExists(packageFile) {
 		task.stage = "install deps"
 		err = yarnAdd(wd, fmt.Sprintf("%s@%s", pkg.name, pkg.version))
 		if err != nil {
@@ -770,20 +769,19 @@ func (task *buildTask) installDeps() (err error) {
 	}
 
 	extraDeps := []string{}
+
 	// check @types/{package}
-	if p.Types == "" && p.Typings == "" {
-		if !strings.HasPrefix(pkg.name, "@") {
-			var info NpmPackage
-			info, _, _, err = node.getPackageInfo(wd, "@types/"+pkg.name, "latest")
-			if err != nil && err.Error() != fmt.Sprintf("npm: package '@types/%s' not found", pkg.name) {
-				return
-			}
-			if info.Types != "" || info.Typings != "" || info.Main != "" {
-				if version, ok := versions[info.Name]; ok {
-					extraDeps = append(extraDeps, fmt.Sprintf("%s@%s", info.Name, version))
-				} else {
-					extraDeps = append(extraDeps, fmt.Sprintf("%s@%s", info.Name, info.Version))
-				}
+	if p.Types == "" && p.Typings == "" && !strings.HasPrefix(pkg.name, "@") {
+		info, _, fromPackJSON, e := node.getPackageInfo(wd, "@types/"+pkg.name, "latest")
+		if e != nil && e.Error() != fmt.Sprintf("npm: package '@types/%s' not found", pkg.name) {
+			err = e
+			return
+		}
+		if !fromPackJSON && (info.Types != "" || info.Typings != "" || info.Main != "") {
+			if version, ok := versions[info.Name]; ok {
+				extraDeps = append(extraDeps, fmt.Sprintf("%s@%s", info.Name, version))
+			} else {
+				extraDeps = append(extraDeps, fmt.Sprintf("%s@%s", info.Name, info.Version))
 			}
 		}
 	}
