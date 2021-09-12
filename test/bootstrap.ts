@@ -13,7 +13,7 @@ async function startServer(onReady: (p: any) => void) {
 		}
 		output += new TextDecoder().decode(buf.slice(0, n))
 		if (output.includes('cjs lexer server ready')) {
-			onReady(p)
+			Promise.resolve().then(() => onReady(p))
 			break
 		}
 	}
@@ -28,8 +28,6 @@ startServer(async (pp) => {
 		stderr: 'inherit'
 	})
 	await p.status()
+	pp.kill(Deno.Signal.SIGKILL)
 	p.close()
-	Promise.resolve().then(()=>{
-		pp.kill(Deno.Signal.SIGKILL)
-	})
 })
