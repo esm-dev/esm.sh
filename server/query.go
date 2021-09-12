@@ -462,22 +462,22 @@ func query() rex.Handle {
 					savePath += ".d.ts"
 				}
 			}
-			exits, modtime, err := fs.Exists(savePath)
+			exists, modtime, err := fs.Exists(savePath)
 			if err != nil {
 				return rex.Status(500, err.Error())
 			}
-			if !exits {
+			if !exists {
 				select {
 				case output := <-buildQueue.Add(task).C:
 					if output.err != nil {
 						return rex.Status(500, "types: "+err.Error())
 					}
-					exits = true
+					exists = true
 				case <-time.After(time.Minute):
 					return rex.Status(http.StatusRequestTimeout, "timeout, we are transforming the types hardly, please try later!")
 				}
 			}
-			if !exits {
+			if !exists {
 				return rex.Status(404, "File not found")
 			}
 			r, err := fs.ReadFile(savePath)

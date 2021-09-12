@@ -26,14 +26,17 @@ type localFSLayer struct {
 	root string
 }
 
-func (fs *localFSLayer) Exists(name string) (found bool, modtime time.Time, err error) {
+func (fs *localFSLayer) Exists(name string) (bool, time.Time, error) {
 	fullPath := path.Join(fs.root, name)
 	fi, err := os.Stat(fullPath)
-	found = err != nil && os.IsNotExist(err)
-	if found {
-		modtime = fi.ModTime()
+	if err != nil {
+		var modtime time.Time
+		if os.IsNotExist(err) {
+			err = nil
+		}
+		return false, modtime, err
 	}
-	return
+	return true, fi.ModTime(), nil
 }
 
 func (fs *localFSLayer) ReadFile(name string) (file io.ReadSeekCloser, err error) {
