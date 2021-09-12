@@ -98,12 +98,6 @@ func (q *BuildQueue) next() {
 func (q *BuildQueue) wait(t *task) {
 	t.startTime = time.Now()
 	esm, err := t.Build()
-	log.Debugf(
-		"queue(%s,%s) done in %s",
-		t.pkg.String(),
-		t.target,
-		time.Now().Sub(t.startTime),
-	)
 	if err != nil {
 		log.Errorf("buildESM: %v", err)
 	}
@@ -128,5 +122,11 @@ func (q *BuildQueue) wait(t *task) {
 	q.list.Remove(t.el)
 	delete(q.tasks, t.ID())
 
+	log.Debugf(
+		"BuildQueue(%s,%s) done in %s",
+		t.pkg.String(),
+		t.target,
+		time.Now().Sub(t.startTime),
+	)
 	q.next()
 }

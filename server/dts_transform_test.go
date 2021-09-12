@@ -57,9 +57,9 @@ func TestCopyDTS(t *testing.T) {
 		`  ReactInstance, Component, ComponentState,`,
 		`  ReactElement, SFCElement, CElement,`,
 		`  DOMAttributes, DOMElement, ReactNode, ReactPortal`,
-		fmt.Sprintf(`} from '/v%d/@types/react@17.0.0/X-ESM/index.d.ts';`, VERSION),
+		fmt.Sprintf(`} from 'https://cdn.esm.sh/v%d/@types/react@17.0.0/X-ESM/index.d.ts';`, VERSION),
 		``,
-		fmt.Sprintf(`export type React = typeof import('/v%d/@types/react@17.0.0/X-ESM/index.d.ts');`, VERSION),
+		fmt.Sprintf(`export type React = typeof import('https://cdn.esm.sh/v%d/@types/react@17.0.0/X-ESM/index.d.ts');`, VERSION),
 		`export { default as Anchor } from './anchor.d.ts';`,
 		`export { default as AutoComplete } from './auto-complete.d.ts';export { default as Alert } from './alert.d.ts';`,
 		`/* avatar */ export { default as Avatar } from '../avatar.d.ts';`,
@@ -117,7 +117,7 @@ func TestCopyDTS(t *testing.T) {
 		log.Fatalf("check nodejs env: %v", err)
 	}
 
-	_, err = CopyDTS(testDir, "X-ESM/", "test/index.d.ts")
+	err = CopyDTS(testDir, "X-ESM/", "test/index.d.ts")
 	if err != nil && os.IsExist(err) {
 		t.Fatal(err)
 	}

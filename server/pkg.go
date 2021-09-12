@@ -43,7 +43,7 @@ func parsePkg(pathname string) (*pkg, error) {
 	if version == "" {
 		version = "latest"
 	}
-	info, _, _, err := node.getPackageInfo("", name, version)
+	info, _, _, err := getPackageInfo("", name, version)
 	if err != nil {
 		return nil, err
 	}

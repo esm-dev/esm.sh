@@ -435,17 +435,14 @@ func query() rex.Handle {
 			}
 		}
 
-		task := &buildTask{
-			stage:  "init",
-			pkg:    *reqPkg,
-			deps:   deps,
-			alias:  alias,
-			target: target,
-			isDev:  isDev,
-			bundle: bundleMode,
-		}
-
 		if hasBuildVerPrefix && storageType == "types" {
+			task := &buildTask{
+				stage:  "init",
+				pkg:    *reqPkg,
+				deps:   deps,
+				alias:  alias,
+				target: "types",
+			}
 			savePath := path.Join(fmt.Sprintf(
 				"types/v%d/%s@%s/%s",
 				VERSION,
@@ -470,7 +467,6 @@ func query() rex.Handle {
 				return rex.Status(500, err.Error())
 			}
 			if !exits {
-				task.typesOnly = true
 				select {
 				case output := <-buildQueue.Add(task):
 					if output.err != nil {
@@ -493,6 +489,15 @@ func query() rex.Handle {
 			return rex.Content(savePath, modtime, r)
 		}
 
+		task := &buildTask{
+			stage:  "init",
+			pkg:    *reqPkg,
+			deps:   deps,
+			alias:  alias,
+			target: target,
+			isDev:  isDev,
+			bundle: bundleMode,
+		}
 		taskID := task.ID()
 		esm, err := findESM(taskID)
 		if err != nil {
