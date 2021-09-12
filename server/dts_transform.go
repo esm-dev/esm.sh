@@ -84,7 +84,12 @@ func copyDTS(wd string, resolvePrefix string, dts string, tracing *stringSet) (e
 			// resove `declare module "xxx" {}`, and the "xxx" must equal to the `moduleName`
 			moduleName := pkgName
 			if len(subPath) > 0 {
-				moduleName += "/" + strings.TrimSuffix(strings.Join(subPath, "/"), ".d.ts")
+				moduleName += "/" + strings.Join(subPath, "/")
+				if strings.HasSuffix(moduleName, "/index.d.ts") {
+					moduleName = strings.TrimSuffix(moduleName, "/index.d.ts")
+				} else if strings.HasSuffix(moduleName, ".d.ts") {
+					moduleName = strings.TrimSuffix(moduleName, ".d.ts")
+				}
 			}
 			if strings.HasPrefix(importPath, "node:") {
 				importPath = "@types/node/" + strings.TrimPrefix(importPath, "node:")
@@ -94,7 +99,7 @@ func copyDTS(wd string, resolvePrefix string, dts string, tracing *stringSet) (e
 					return fmt.Sprintf("%s/v%d/%s.d.ts", origin, VERSION, moduleName)
 				} else {
 					res := fmt.Sprintf("%s/%s", origin, moduleName)
-					entryDeclareModules = append(entryDeclareModules, fmt.Sprintf("%s:%d", res, position+len(res)+1))
+					entryDeclareModules = append(entryDeclareModules, fmt.Sprintf("%s:%d", moduleName, position+len(res)+1))
 					return res
 				}
 			}
@@ -112,6 +117,7 @@ func copyDTS(wd string, resolvePrefix string, dts string, tracing *stringSet) (e
 			if importPath == ".." {
 				importPath = "../index.d.ts"
 			}
+			// some types is using `.js` extname
 			if strings.HasSuffix(importPath, ".js") {
 				importPath = strings.TrimSuffix(importPath, ".js")
 			}
@@ -152,22 +158,24 @@ func copyDTS(wd string, resolvePrefix string, dts string, tracing *stringSet) (e
 				}
 
 				if info.Types != "" || info.Typings != "" {
+					versioned := info.Name + "@" + info.Version
+					prefix := versioned + "/" + resolvePrefix
 					// copy dependent dts files in the node_modules directory in current build context
 					if formPackageJSON {
 						importPath = toTypesPath(wd, info, subpath)
 						if strings.HasSuffix(importPath, ".d.ts") && !strings.HasSuffix(importPath, "...d.ts") {
 							imports.Add(importPath)
 						}
+						importPath = prefix + strings.TrimPrefix(importPath, versioned+"/")
 					} else {
-						versioned := info.Name + "@" + info.Version
 						if subpath == "" {
 							if info.Types != "" {
-								importPath = path.Join(versioned, resolvePrefix, utils.CleanPath(info.Types))
+								importPath = prefix + utils.CleanPath(info.Types)[1:]
 							} else if info.Typings != "" {
-								importPath = path.Join(versioned, resolvePrefix, utils.CleanPath(info.Typings))
+								importPath = prefix + utils.CleanPath(info.Typings)[1:]
 							}
 						} else {
-							importPath = path.Join(versioned, resolvePrefix, utils.CleanPath(subpath))
+							importPath = prefix + utils.CleanPath(subpath)[1:]
 						}
 						if !strings.HasSuffix(importPath, ".d.ts") {
 							importPath += "...d.ts"
@@ -191,9 +199,8 @@ func copyDTS(wd string, resolvePrefix string, dts string, tracing *stringSet) (e
 		dtsData := buf.Bytes()
 		dataLen := buf.Len()
 		for _, record := range entryDeclareModules {
-			name, rest := utils.SplitByLastByte(record, ':')
-			subpath, importPath := utils.SplitByLastByte(rest, ':')
-			i, _ := strconv.Atoi(importPath)
+			name, pos := utils.SplitByLastByte(record, ':')
+			i, _ := strconv.Atoi(pos)
 			b := bytes.NewBuffer(nil)
 			open := false
 			internal := 0
@@ -216,7 +223,20 @@ func copyDTS(wd string, resolvePrefix string, dts string, tracing *stringSet) (e
 				}
 			}
 			if b.Len() > 0 {
-				fmt.Fprintf(buf, `%sdeclare module "%s@*%s" `, "\n", name, subpath)
+				slice := strings.Split(name, "/")
+				subpath := ""
+				if l := len(slice); strings.HasPrefix(name, "@") && l > 1 {
+					name = strings.Join(slice[:2], "/")
+					if l > 2 {
+						subpath = "/" + strings.Join(slice[2:], "/")
+					}
+				} else {
+					name = slice[0]
+					if l > 1 {
+						subpath = "/" + strings.Join(slice[1:], "/")
+					}
+				}
+				fmt.Fprintf(buf, `%sdeclare module "%s/%s@*%s" `, "\n", origin, name, subpath)
 				fmt.Fprintf(buf, strings.TrimSpace(b.String()))
 			}
 		}

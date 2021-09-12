@@ -158,7 +158,7 @@ func (task *buildTask) Build() (esm *ESM, err error) {
 		return prev, nil
 	}
 
-	if !task.noInstall {
+	if !task.noInstall && (!fileExists(path.Join(task.wd, "node_modules", task.pkg.name, "package.json"))) {
 		task.stage = "install deps"
 		err = yarnAdd(task.wd, fmt.Sprintf("%s@%s", task.pkg.name, task.pkg.version))
 		if err != nil {
