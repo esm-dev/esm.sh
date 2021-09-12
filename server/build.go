@@ -704,7 +704,7 @@ func (task *buildTask) handleDTS(esm *ESM, submodule string) {
 			dts = fmt.Sprintf("%s/%s", versionedName, ensureSuffix(submodule, ".d.ts"))
 		} else {
 			var p NpmPackage
-			typesPkgName := transformPackageNameToTypesPackage(name)
+			typesPkgName := toTypesPackageName(name)
 			err := utils.ParseJSONFile(path.Join(nodeModulesDir, typesPkgName, "package.json"), &p)
 			if err == nil {
 				if fileExists(path.Join(nodeModulesDir, typesPkgName, submodule, "index.d.ts")) {
@@ -722,7 +722,7 @@ func (task *buildTask) handleDTS(esm *ESM, submodule string) {
 				dts = fmt.Sprintf("%s/%s", versionedName, "index.d.ts")
 			} else {
 				var p NpmPackage
-				typesPkgName := transformPackageNameToTypesPackage(name)
+				typesPkgName := toTypesPackageName(name)
 				err := utils.ParseJSONFile(path.Join(nodeModulesDir, typesPkgName, "package.json"), &p)
 				if err == nil {
 					dts = getTypesPath(task.wd, p, "")
@@ -777,7 +777,7 @@ func (task *buildTask) installDeps() (err error) {
 
 	// check @types/{package}
 	if p.Types == "" && p.Typings == "" {
-		typesPkgName := transformPackageNameToTypesPackage(pkg.name)
+		typesPkgName := toTypesPackageName(pkg.name)
 		info, _, fromPackageJSON, e := node.getPackageInfo(wd, typesPkgName, "latest")
 		if e != nil && e.Error() != fmt.Sprintf("npm: package '%s' not found", typesPkgName) {
 			err = e
