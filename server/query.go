@@ -64,6 +64,8 @@ func query() rex.Handle {
 				return err
 			}
 			return rex.Content("favicon.svg", startTime, bytes.NewReader(data))
+		case "/favicon.ico":
+			return rex.Redirect("/favicon.svg", http.StatusPermanentRedirect)
 
 		case "/status.json":
 			buildQueue.lock.Lock()
