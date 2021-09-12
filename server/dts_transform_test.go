@@ -117,7 +117,7 @@ func TestCopyDTS(t *testing.T) {
 		log.Fatalf("check nodejs env: %v", err)
 	}
 
-	_, err = CopyDTS(testDir, "X-ESM/", "test/index.d.ts")
+	err = CopyDTS(testDir, "X-ESM/", "test/index.d.ts")
 	if err != nil && os.IsExist(err) {
 		t.Fatal(err)
 	}

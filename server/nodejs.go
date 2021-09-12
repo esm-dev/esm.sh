@@ -19,14 +19,14 @@ import (
 	"esm.sh/server/storage"
 
 	"github.com/ije/gox/utils"
-	"github.com/postui/postdb"
 )
 
 const (
 	minNodejsVersion = 14
 	nodejsLatestLTS  = "14.17.5"
+	nodeTypesVersion = "16.9.1"
 	nodejsDistURL    = "https://nodejs.org/dist/"
-	refreshDuration  = 10 * 60 // 10 minues
+	refreshDuration  = 5 * 60 // 5 minues
 )
 
 var builtInNodeModules = map[string]bool{
@@ -77,16 +77,6 @@ var builtInNodeModules = map[string]bool{
 	"zlib":                true,
 }
 
-// status: https://deno.land/std/node
-var denoStdNodeModules = map[string]bool{
-	"fs":            true,
-	"child_process": true,
-	"path":          true,
-	"querystring":   true,
-	"timers":        true,
-	"url":           true,
-}
-
 // copy from https://github.com/webpack/webpack/blob/master/lib/ModuleNotFoundError.js#L13
 var polyfilledBuiltInNodeModules = map[string]string{
 	"assert":              "assert",
@@ -117,6 +107,16 @@ var polyfilledBuiltInNodeModules = map[string]string{
 	"util":                "util",
 	"vm":                  "vm-browserify",
 	"zlib":                "browserify-zlib",
+}
+
+// status: https://deno.land/std/node
+var denoStdNodeModules = map[string]bool{
+	"fs":            true,
+	"child_process": true,
+	"path":          true,
+	"querystring":   true,
+	"timers":        true,
+	"url":           true,
 }
 
 // NpmPackageRecords defines version records of a npm package
@@ -201,7 +201,7 @@ CheckYarn:
 	return
 }
 
-func (node *Node) getPackageInfo(wd string, name string, version string) (info NpmPackage, submodule string, formPackageJSON bool, err error) {
+func getPackageInfo(wd string, name string, version string) (info NpmPackage, submodule string, formPackageJSON bool, err error) {
 	slice := strings.Split(name, "/")
 	if l := len(slice); strings.HasPrefix(name, "@") && l > 1 {
 		name = strings.Join(slice[:2], "/")
@@ -213,6 +213,15 @@ func (node *Node) getPackageInfo(wd string, name string, version string) (info N
 		if l > 1 {
 			submodule = strings.Join(slice[1:], "/")
 		}
+	}
+
+	if name == "@types/node" {
+		info = NpmPackage{
+			Name:    "@types/node",
+			Version: nodeTypesVersion,
+			Types:   "index.d.ts",
+		}
+		return
 	}
 
 	if wd != "" {
@@ -228,19 +237,25 @@ func (node *Node) getPackageInfo(wd string, name string, version string) (info N
 
 	version = resolveVersion(version)
 	isFullVersion := regFullVersion.MatchString(version)
-	key := fmt.Sprintf("npm:%s@%s", name, version)
-	store, modtime, err := db.Get(key)
+
+	store, modtime, err := db.Get(fmt.Sprintf("npm:%s@%s", name, version))
 	if err == nil {
-		if isFullVersion || int64(modtime.Unix())+refreshDuration > time.Now().Unix() {
-			if json.Unmarshal([]byte(store["package"]), &info) == nil {
-				return
+		if json.Unmarshal([]byte(store["package"]), &info) == nil {
+			if !isFullVersion && int64(modtime.Unix())+refreshDuration <= time.Now().Unix() {
+				go cachePackageInfo(name, version) // async update cache
 			}
+			return
 		}
 	}
-	if err != nil && err != postdb.ErrNotFound {
-		return
+	if err != nil && err != storage.ErrorNotFound {
+		log.Error("db:", err)
 	}
 
+	info, err = cachePackageInfo(name, version)
+	return
+}
+
+func cachePackageInfo(name string, version string) (info NpmPackage, err error) {
 	start := time.Now()
 	resp, err := httpClient.Get(node.npmRegistry + name)
 	if err != nil {
@@ -272,6 +287,7 @@ func (node *Node) getPackageInfo(wd string, name string, version string) (info N
 		return
 	}
 
+	isFullVersion := regFullVersion.MatchString(version)
 	if isFullVersion {
 		info = h.Versions[version]
 	} else {
@@ -299,10 +315,13 @@ func (node *Node) getPackageInfo(wd string, name string, version string) (info N
 		return
 	}
 
-	log.Debugf("get npm package(%s@%s) info in %v", name, info.Version, time.Now().Sub(start))
+	log.Debugf("get npm package(%s@%s) info from %s in %v", name, info.Version, node.npmRegistry, time.Now().Sub(start))
 
 	// cache data
-	db.Put(key, storage.Store{"package": string(utils.MustEncodeJSON(info))})
+	db.Put(
+		fmt.Sprintf("npm:%s@%s", name, version),
+		storage.Store{"package": string(utils.MustEncodeJSON(info))},
+	)
 	return
 }
 
@@ -354,7 +373,7 @@ func getNodejsVersion() (version string, major int, err error) {
 }
 
 // see https://nodejs.org/api/packages.html
-func useDefinedExports(p *NpmPackage, exports interface{}) {
+func resolveDefinedExports(p *NpmPackage, exports interface{}) {
 	s, ok := exports.(string)
 	if ok {
 		if p.Type == "module" && p.Module == "" {
@@ -405,11 +424,11 @@ func fixNpmPackage(p NpmPackage) *NpmPackage {
 	np := &p
 
 	if p.Module == "" && p.DefinedExports != nil {
-		useDefinedExports(np, p.DefinedExports)
+		resolveDefinedExports(np, p.DefinedExports)
 		if m, ok := p.DefinedExports.(map[string]interface{}); ok {
 			v, ok := m["."]
 			if ok {
-				useDefinedExports(np, v)
+				resolveDefinedExports(np, v)
 			}
 		}
 	}

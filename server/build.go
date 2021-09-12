@@ -34,7 +34,6 @@ type buildTask struct {
 	target    string
 	bundle    bool
 	isDev     bool
-	typesOnly bool
 	noInstall bool
 }
 
@@ -92,8 +91,8 @@ func (task *buildTask) ID() string {
 		task.target,
 		name,
 	)
-	if task.typesOnly {
-		task.id += "-types"
+	if task.target == "types" {
+		task.id = strings.TrimSuffix(task.id, ".js")
 	}
 	return task.id
 }
@@ -161,7 +160,7 @@ func (task *buildTask) Build() (esm *ESM, err error) {
 
 	if !task.noInstall {
 		task.stage = "install deps"
-		err = task.installDeps()
+		err = yarnAdd(task.wd, fmt.Sprintf("%s@%s", task.pkg.name, task.pkg.version))
 		if err != nil {
 			log.Error("install deps:", err)
 			return
@@ -169,15 +168,15 @@ func (task *buildTask) Build() (esm *ESM, err error) {
 	}
 
 	task.stage = "init"
-	esm, err = initESM(task.wd, task.pkg, !task.typesOnly, task.isDev)
+	esm, err = initESM(task.wd, task.pkg, task.target != "types", task.isDev)
 	if err != nil {
 		log.Error("init ESM:", err)
 		return
 	}
 
-	if task.typesOnly {
+	if task.target == "types" {
 		task.stage = "copy dts"
-		task.handleDTS(esm, task.pkg.submodule)
+		task.handleDTS(esm)
 		return
 	}
 
@@ -443,7 +442,7 @@ esbuild:
 					} else {
 						polyfill, ok := polyfilledBuiltInNodeModules[name]
 						if ok {
-							p, submodule, _, e := node.getPackageInfo(task.wd, polyfill, "latest")
+							p, submodule, _, e := getPackageInfo(task.wd, polyfill, "latest")
 							if e != nil {
 								err = e
 								return
@@ -534,7 +533,7 @@ esbuild:
 					} else if v, ok := esm.PeerDependencies[name]; ok {
 						version = v
 					}
-					p, submodule, _, e := node.getPackageInfo(task.wd, name, version)
+					p, submodule, _, e := getPackageInfo(task.wd, name, version)
 					if e == nil {
 						importPath = task.getImportPath(pkg{
 							name:      p.Name,
@@ -675,7 +674,7 @@ esbuild:
 	log.Debugf("esbuild %s %s %s in %v", task.pkg.String(), task.target, nodeEnv, time.Now().Sub(start))
 
 	task.stage = "copy dts"
-	task.handleDTS(esm, task.pkg.submodule)
+	task.handleDTS(esm)
 
 	dbErr := db.Put(
 		task.ID(),
@@ -690,109 +689,42 @@ esbuild:
 	return
 }
 
-func (task *buildTask) handleDTS(esm *ESM, submodule string) {
-	start := time.Now()
+func (task *buildTask) handleDTS(esm *ESM) {
 	name := task.pkg.name
-	versionedName := fmt.Sprintf("%s@%s", esm.Name, esm.Version)
-	nodeModulesDir := path.Join(task.wd, "node_modules")
+	submodule := task.pkg.submodule
 
 	var dts string
-	if submodule != "" {
-		if fileExists(path.Join(nodeModulesDir, name, submodule, "index.d.ts")) {
-			dts = fmt.Sprintf("%s/%s", versionedName, path.Join(submodule, "index.d.ts"))
-		} else if fileExists(path.Join(nodeModulesDir, name, ensureSuffix(submodule, ".d.ts"))) {
-			dts = fmt.Sprintf("%s/%s", versionedName, ensureSuffix(submodule, ".d.ts"))
-		} else {
-			var p NpmPackage
-			typesPkgName := toTypesPackageName(name)
-			err := utils.ParseJSONFile(path.Join(nodeModulesDir, typesPkgName, "package.json"), &p)
-			if err == nil {
-				if fileExists(path.Join(nodeModulesDir, typesPkgName, submodule, "index.d.ts")) {
-					dts = fmt.Sprintf("%s@%s/%s", typesPkgName, p.Version, path.Join(submodule, "index.d.ts"))
-				} else if fileExists(path.Join(nodeModulesDir, typesPkgName, ensureSuffix(submodule, ".d.ts"))) {
-					dts = fmt.Sprintf("%s@%s/%s", typesPkgName, p.Version, ensureSuffix(submodule, ".d.ts"))
-				}
-			}
+	if task.target == "types" {
+		if strings.HasSuffix(submodule, "...d.ts") {
+			submodule = strings.TrimSuffix(submodule, "...d.ts")
 		}
-	} else {
-		if esm.Types != "" || esm.Typings != "" {
-			dts = getTypesPath(task.wd, *esm.NpmPackage, "")
-		} else {
-			if fileExists(path.Join(nodeModulesDir, name, "index.d.ts")) {
-				dts = fmt.Sprintf("%s/%s", versionedName, "index.d.ts")
-			} else {
-				var p NpmPackage
-				typesPkgName := toTypesPackageName(name)
-				err := utils.ParseJSONFile(path.Join(nodeModulesDir, typesPkgName, "package.json"), &p)
-				if err == nil {
-					dts = getTypesPath(task.wd, p, "")
-				}
-			}
+		dts = toTypesPath(task.wd, *esm.NpmPackage, submodule)
+	} else if esm.Types != "" || esm.Typings != "" {
+		dts = toTypesPath(task.wd, *esm.NpmPackage, submodule)
+	} else if !strings.HasPrefix(name, "@types/") {
+		typesPkgName := toTypesPackageName(name)
+		p, _, _, err := getPackageInfo(task.wd, typesPkgName, "latest")
+		if err == nil {
+			dts = toTypesPath(task.wd, p, submodule)
 		}
 	}
-	if dts == "" {
-		return
-	}
 
-	resolvePrefix := task.resolvePrefix()
-	dtsPath, err := CopyDTS(
-		task.wd,
-		resolvePrefix,
-		dts,
-	)
-	if err != nil {
-		log.Warnf("copyDTS(%s): %v", dts, err)
-		return
-	}
-
-	log.Debugf("copy dts %s in %v", dtsPath, time.Now().Sub(start))
-	esm.Dts = dtsPath
-	return
-}
-
-func (task *buildTask) installDeps() (err error) {
-	versions := map[string]string{}
-	for _, dep := range task.deps {
-		versions[dep.name] = dep.version
-	}
-
-	wd := task.wd
-	pkg := task.pkg
-	packageFile := path.Join(wd, "node_modules", pkg.name, "package.json")
-	if !fileExists(packageFile) {
-		task.stage = "install deps"
-		err = yarnAdd(wd, fmt.Sprintf("%s@%s", pkg.name, pkg.version))
-		if err != nil {
+	if strings.HasSuffix(dts, ".d.ts") && !strings.HasSuffix(dts, "...d.ts") {
+		start := time.Now()
+		err := CopyDTS(
+			task.wd,
+			task.resolvePrefix(),
+			dts,
+		)
+		if err != nil && os.IsExist(err) {
+			log.Errorf("copyDTS(%s): %v", dts, err)
 			return
 		}
+		log.Debugf("copy dts '%s' in %v", dts, time.Now().Sub(start))
 	}
 
-	var p NpmPackage
-	err = utils.ParseJSONFile(packageFile, &p)
-	if err != nil {
-		return
+	if dts != "" {
+		esm.Dts = fmt.Sprintf("/v%d/%s", VERSION, dts)
 	}
-
-	extraDeps := []string{}
-
-	// check @types/{package}
-	if p.Types == "" && p.Typings == "" {
-		typesPkgName := toTypesPackageName(pkg.name)
-		info, _, fromPackageJSON, e := node.getPackageInfo(wd, typesPkgName, "latest")
-		if e != nil && e.Error() != fmt.Sprintf("npm: package '%s' not found", typesPkgName) {
-			err = e
-			return
-		}
-		if !fromPackageJSON && (info.Types != "" || info.Typings != "" || info.Main != "") {
-			if version, ok := versions[info.Name]; ok {
-				extraDeps = append(extraDeps, fmt.Sprintf("%s@%s", info.Name, version))
-			} else {
-				extraDeps = append(extraDeps, fmt.Sprintf("%s@%s", info.Name, info.Version))
-			}
-		}
-	}
-
-	// install extra dependencies
-	err = yarnAdd(wd, extraDeps...)
 	return
 }
