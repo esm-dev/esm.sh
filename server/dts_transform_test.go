@@ -107,7 +107,7 @@ func TestCopyDTS(t *testing.T) {
 
 	log, _ := logx.New("file:main.log?buffer=32k")
 
-	fs, err = storage.OpenFS(fmt.Sprintf("local:%s", testDir), log, true)
+	fs, err = storage.OpenFS(fmt.Sprintf("localLRU:%s?maxCost=10mb", testDir), log, true)
 	if err != nil {
 		t.Fatal(err)
 	}
