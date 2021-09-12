@@ -109,14 +109,15 @@ ssh -p $sshPort $user@$host << EOF
     echo "\$1" >> \$SVCF
   }
 
+  if [ "$cleanYarnCache" == "yes" ]; then
+		echo "cleaning yarn cache..."
+    rm -rf /usr/local/share/.cache/yarn
+  fi
+
   supervisorctl stop esmd
   rm -f /usr/local/bin/esmd
   mv -f /tmp/esmd /usr/local/bin/esmd
   chmod +x /usr/local/bin/esmd
-
-  if [ "$cleanYarnCache" == "yes" ]; then
-    rm -rf /usr/local/share/.cache/yarn
-  fi
 
   if [ "$init" == "yes" ]; then
     if [ -f \$SVCF ]; then
