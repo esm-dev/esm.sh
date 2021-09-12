@@ -2,6 +2,7 @@ package server
 
 import (
 	"container/list"
+	"fmt"
 	"sync"
 	"time"
 )
@@ -15,7 +16,11 @@ type BuildQueue struct {
 	maxProcesses int
 }
 
-type buildOutput struct {
+type BuildQueueConsumer struct {
+	C chan BuildOutput
+}
+
+type BuildOutput struct {
 	esm *ESM
 	err error
 }
@@ -26,7 +31,7 @@ type task struct {
 	el         *list.Element
 	createTime time.Time
 	startTime  time.Time
-	consumers  []chan *buildOutput
+	consumers  []*BuildQueueConsumer
 }
 
 func newBuildQueue(maxProcesses int) *BuildQueue {
@@ -47,13 +52,13 @@ func (q *BuildQueue) Len() int {
 }
 
 // Add adds a new build task.
-func (q *BuildQueue) Add(build *buildTask) chan *buildOutput {
+func (q *BuildQueue) Add(build *buildTask) *BuildQueueConsumer {
 	build.beforeBuild()
 
 	q.lock.Lock()
 	defer q.lock.Unlock()
 
-	c := make(chan *buildOutput, 1)
+	c := &BuildQueueConsumer{make(chan BuildOutput, 1)}
 	t, ok := q.tasks[build.ID()]
 	if ok {
 		t.consumers = append(t.consumers, c)
@@ -63,13 +68,31 @@ func (q *BuildQueue) Add(build *buildTask) chan *buildOutput {
 	t = &task{
 		buildTask:  build,
 		createTime: time.Now(),
-		consumers:  []chan *buildOutput{c},
+		consumers:  []*BuildQueueConsumer{c},
 	}
 	t.el = q.list.PushBack(t)
 	q.tasks[build.ID()] = t
 	q.next()
 
 	return c
+}
+
+func (q *BuildQueue) RemoveConsumer(build *buildTask, c *BuildQueueConsumer) {
+	q.lock.Lock()
+	defer q.lock.Unlock()
+
+	t, ok := q.tasks[build.ID()]
+	if ok {
+		consumers := make([]*BuildQueueConsumer, len(t.consumers))
+		i := 0
+		for _, _c := range t.consumers {
+			if _c != c {
+				consumers[i] = c
+				i++
+			}
+		}
+		t.consumers = consumers[0:i]
+	}
 }
 
 func (q *BuildQueue) next() {
@@ -95,21 +118,34 @@ func (q *BuildQueue) next() {
 	q.lock.Lock()
 }
 
+func (t *task) wait() chan BuildOutput {
+	c := make(chan BuildOutput, 1)
+	go func(c chan BuildOutput) {
+		esm, err := t.Build()
+		c <- BuildOutput{esm, err}
+	}(c)
+	return c
+}
+
 func (q *BuildQueue) wait(t *task) {
 	t.startTime = time.Now()
-	esm, err := t.Build()
-	if err != nil {
-		log.Errorf("buildESM: %v", err)
+
+	var output BuildOutput
+	select {
+	case output = <-t.wait():
+		if output.err != nil {
+			log.Errorf("buildESM: %v", output.err)
+		}
+	case <-time.After(15 * time.Minute):
+		output = BuildOutput{err: fmt.Errorf("build timeout")}
+		log.Errorf("buildESM(%s): timeout", t.ID())
 	}
 
 	q.lock.Lock()
 	defer q.lock.Unlock()
 
 	for _, c := range t.consumers {
-		c <- &buildOutput{
-			esm: esm,
-			err: err,
-		}
+		c.C <- output
 	}
 
 	var p []*task

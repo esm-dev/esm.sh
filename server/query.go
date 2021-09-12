@@ -468,7 +468,7 @@ func query() rex.Handle {
 			}
 			if !exits {
 				select {
-				case output := <-buildQueue.Add(task):
+				case output := <-buildQueue.Add(task).C:
 					if output.err != nil {
 						return rex.Status(500, "types: "+err.Error())
 					}
@@ -514,17 +514,19 @@ func query() rex.Handle {
 			}
 
 			// if the previous build exists and not in bare mode, then build current module in backgound,
-			// or wait the current build task for 30 seconds
+			// or wait the current build task for 60 seconds
 			if err == nil {
 				buildQueue.Add(task)
 			} else {
+				c := buildQueue.Add(task)
 				select {
-				case output := <-buildQueue.Add(task):
+				case output := <-c.C:
 					if output.err != nil {
 						return throwErrorJS(ctx, output.err)
 					}
 					esm = output.esm
 				case <-time.After(time.Minute):
+					buildQueue.RemoveConsumer(task, c)
 					return rex.Status(http.StatusRequestTimeout, "timeout, we are building the package hardly, please try later!")
 				}
 			}
