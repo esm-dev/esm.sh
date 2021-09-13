@@ -227,6 +227,26 @@ export async function test($el) {
     t.ok()
   })
 
+  _esm(['react@17', 'react-dom@17', '@material-ui/core'], async (t) => {
+    const [
+      { createElement, useState },
+      { render },
+      { Button },
+    ] = t.modules
+
+    const App = () => {
+      const [count, setCount] = useState(0)
+      return createElement(
+          Button,
+          { size: 'small', variant: 'outlined', color: 'secondary', onClick: () => setCount(count + 1) },
+          `Clicked ${count}`
+        )
+    }
+    render(createElement(App), t.$span)
+  
+    t.ok()
+  })
+
   _esm(['preact', 'preact/hooks'], async (t) => {
     const [
       { h, render },
