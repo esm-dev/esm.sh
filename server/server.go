@@ -100,11 +100,16 @@ func Serve(efs *embed.FS) {
 	}
 
 	var err error
+	var log *logx.Logger
+	if logDir == "" {
+		log = &logx.Logger{}
+	} else {
 		log, err = logx.New(fmt.Sprintf("file:%s?buffer=32k", path.Join(logDir, "main.log")))
 		if err != nil {
 			fmt.Printf("initiate logger: %v\n", err)
 			os.Exit(1)
 		}
+	}
 	log.SetLevelByName(logLevel)
 
 	if nodejsPrefix == "" {
@@ -138,10 +143,15 @@ func Serve(efs *embed.FS) {
 		log.Debugf("china_ip_list.mmdb applied: %+v", mmdbr.Metadata)
 	}
 
-	accessLogger, err := logx.New(fmt.Sprintf("file:%s?buffer=32k&fileDateFormat=20060102", path.Join(logDir, "access.log")))
+	var accessLogger *logx.Logger
+	if logDir == "" {
+		accessLogger = &logx.Logger{}
+	} else {
+		accessLogger, err = logx.New(fmt.Sprintf("file:%s?buffer=32k&fileDateFormat=20060102", path.Join(logDir, "access.log")))
 		if err != nil {
 			log.Fatalf("initiate access logger: %v", err)
 		}
+	}
 	accessLogger.SetQuite(true)
 
 	// start cjs lexer server
