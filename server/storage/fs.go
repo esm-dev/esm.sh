@@ -24,9 +24,9 @@ var fss = sync.Map{}
 
 func OpenFS(fsUrl string) (FSConn, error) {
 	name, config := utils.SplitByFirstByte(fsUrl, ':')
-	db, ok := fss.Load(name)
+	fs, ok := fss.Load(name)
 	if ok {
-		return db.(FS).Open(config)
+		return fs.(FS).Open(config)
 	}
 	return nil, fmt.Errorf("unregistered fs '%s'", name)
 }
@@ -34,7 +34,7 @@ func OpenFS(fsUrl string) (FSConn, error) {
 func RegisterFS(name string, fs FS) error {
 	_, ok := fss.Load(name)
 	if ok {
-		return fmt.Errorf("db '%s' has been registered", name)
+		return fmt.Errorf("fs '%s' has been registered", name)
 	}
 
 	fss.Store(name, fs)
