@@ -87,7 +87,8 @@ func Serve(efs *embed.FS) {
 		dbUrl = fmt.Sprintf("postdb:%s", path.Join(etcDir, "esm.db"))
 	}
 	if fsUrl == "" {
-		fsUrl = fmt.Sprintf("localLRU:%s?maxCost=10gb", path.Join(etcDir, "storage"))
+		fsUrl = fmt.Sprintf("local:%s", path.Join(etcDir, "storage"))
+		// fsUrl = fmt.Sprintf("localLRU:%s?maxCost=10gb", path.Join(etcDir, "storage"))
 	}
 
 	config = &Config{
