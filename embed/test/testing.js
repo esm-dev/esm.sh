@@ -357,4 +357,61 @@ export async function test($el) {
 
     t.ok()
   })
+
+  _esm('pixi.js', async (t) => {
+    const { Application, Sprite } = t.modules
+
+    const app = new Application({ width: 32, height: 32, transparent: true });
+    t.$span.appendChild(app.view);
+    app.loader.add('bunny', 'https://pixijs.io/examples/examples/assets/bunny.png').load((loader, resources) => {
+        const bunny = new Sprite(resources.bunny.texture);
+        bunny.scale.x = bunny.scale.y = 0.75;
+
+        bunny.anchor.set(0.5);
+
+        bunny.x = app.screen.width / 2;
+        bunny.y = app.screen.height / 2;
+        
+        app.stage.addChild(bunny);
+        
+        app.ticker.add(() => {
+          bunny.rotation += 0.05;
+        });
+
+        t.ok()
+    });
+  })
+
+  _esm('three', async (t) => {
+    const { Scene, PerspectiveCamera, WebGLRenderer, BoxGeometry, MeshBasicMaterial, Mesh } = t.modules
+
+    const scene = new Scene();
+    const width = 50
+    const height = 50
+    const camera = new PerspectiveCamera( 75, width / height, 0.1, 1000 );
+
+    const renderer = new WebGLRenderer({ alpha: true });
+    renderer.setSize( width, height );
+    t.$span.appendChild( renderer.domElement );
+
+    const geometry = new BoxGeometry();
+    const material = new MeshBasicMaterial( { color: 0x000000, wireframe: true } );
+    const cube = new Mesh( geometry, material );
+    scene.add( cube );
+
+    camera.position.z = 2;
+
+    const animate = function () {
+      requestAnimationFrame( animate );
+
+      cube.rotation.x += 0.05;
+      cube.rotation.y += 0.05;
+
+      renderer.render( scene, camera );
+    };
+
+    animate();
+
+    t.ok()
+  })
 }
