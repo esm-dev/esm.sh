@@ -104,7 +104,7 @@ func TestCopyDTS(t *testing.T) {
 		cdnDomain: "cdn.esm.sh",
 	}
 
-	fs, err = storage.OpenFS(fmt.Sprintf("local:%s", testDir))
+	fs, err = storage.OpenFS(fmt.Sprintf("localLRU:%s?maxCost=10mb", testDir))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -122,7 +122,7 @@ func TestCopyDTS(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	file, _, err := fs.ReadFile(fmt.Sprintf("types/v%d/test/X-ESM/index.d.ts", VERSION))
+	file, err := fs.ReadFile(fmt.Sprintf("types/v%d/test/X-ESM/index.d.ts", VERSION))
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -195,7 +195,7 @@ func findESM(id string) (esm *ESM, err error) {
 		}
 
 		var exists bool
-		exists, err = fs.Exists(path.Join("builds", id))
+		exists, _, err = fs.Exists(path.Join("builds", id))
 		if !exists {
 			db.Delete(id)
 			return

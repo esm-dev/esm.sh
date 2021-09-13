@@ -88,6 +88,7 @@ func Serve(efs *embed.FS) {
 	}
 	if fsUrl == "" {
 		fsUrl = fmt.Sprintf("local:%s", path.Join(etcDir, "storage"))
+		// fsUrl = fmt.Sprintf("localLRU:%s?maxCost=10gb", path.Join(etcDir, "storage"))
 	}
 
 	config = &Config{
@@ -99,10 +100,15 @@ func Serve(efs *embed.FS) {
 	}
 
 	var err error
-	log, err = logx.New(fmt.Sprintf("file:%s?buffer=32k", path.Join(logDir, "main.log")))
-	if err != nil {
-		fmt.Printf("initiate logger: %v\n", err)
-		os.Exit(1)
+	var log *logx.Logger
+	if logDir == "" {
+		log = &logx.Logger{}
+	} else {
+		log, err = logx.New(fmt.Sprintf("file:%s?buffer=32k", path.Join(logDir, "main.log")))
+		if err != nil {
+			fmt.Printf("initiate logger: %v\n", err)
+			os.Exit(1)
+		}
 	}
 	log.SetLevelByName(logLevel)
 
@@ -114,6 +120,9 @@ func Serve(efs *embed.FS) {
 		log.Fatalf("check nodejs env: %v", err)
 	}
 	log.Debugf("nodejs v%s installed, registry: %s", node.version, node.npmRegistry)
+
+	storage.SetLogger(log)
+	storage.SetIsDev(isDev)
 
 	fs, err = storage.OpenFS(fsUrl)
 	if err != nil {
@@ -134,9 +143,14 @@ func Serve(efs *embed.FS) {
 		log.Debugf("china_ip_list.mmdb applied: %+v", mmdbr.Metadata)
 	}
 
-	accessLogger, err := logx.New(fmt.Sprintf("file:%s?buffer=32k&fileDateFormat=20060102", path.Join(logDir, "access.log")))
-	if err != nil {
-		log.Fatalf("initiate access logger: %v", err)
+	var accessLogger *logx.Logger
+	if logDir == "" {
+		accessLogger = &logx.Logger{}
+	} else {
+		accessLogger, err = logx.New(fmt.Sprintf("file:%s?buffer=32k&fileDateFormat=20060102", path.Join(logDir, "access.log")))
+		if err != nil {
+			log.Fatalf("initiate access logger: %v", err)
+		}
 	}
 	accessLogger.SetQuite(true)
 

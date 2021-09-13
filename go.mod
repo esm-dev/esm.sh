@@ -3,6 +3,7 @@ module esm.sh
 go 1.16
 
 require (
+	github.com/dgraph-io/ristretto v0.1.0
 	github.com/evanw/esbuild v0.12.24
 	github.com/ije/esbuild-internal v0.12.24
 	github.com/ije/gox v0.6.1

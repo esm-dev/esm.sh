@@ -658,12 +658,12 @@ esbuild:
 				return
 			}
 
-			err = fs.WriteFile(path.Join("builds", task.ID()), buf)
+			err = fs.WriteData(path.Join("builds", task.ID()), buf.Bytes())
 			if err != nil {
 				return
 			}
 		} else if strings.HasSuffix(file.Path, ".css") {
-			err = fs.WriteFile(path.Join("builds", strings.TrimSuffix(task.ID(), ".js")+".css"), bytes.NewReader(outputContent))
+			err = fs.WriteData(path.Join("builds", strings.TrimSuffix(task.ID(), ".js")+".css"), outputContent)
 			if err != nil {
 				return
 			}
