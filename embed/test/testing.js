@@ -357,4 +357,28 @@ export async function test($el) {
 
     t.ok()
   })
+
+  _esm('pixi.js', async (t) => {
+    const { Application, Sprite } = t.modules
+
+    const app = new Application({ width: 32, height: 32, transparent: true });
+    t.$span.appendChild(app.view);
+    app.loader.add('bunny', 'https://pixijs.io/examples/examples/assets/bunny.png').load((loader, resources) => {
+        const bunny = new Sprite(resources.bunny.texture);
+        bunny.scale.x = bunny.scale.y = 0.75;
+
+        bunny.anchor.set(0.5);
+
+        bunny.x = app.screen.width / 2;
+        bunny.y = app.screen.height / 2;
+        
+        app.stage.addChild(bunny);
+        
+        app.ticker.add(() => {
+          bunny.rotation += 0.05;
+        });
+
+        t.ok()
+    });
+  })
 }
