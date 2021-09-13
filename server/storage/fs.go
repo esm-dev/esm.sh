@@ -6,12 +6,11 @@ import (
 	"sync"
 	"time"
 
-	logx "github.com/ije/gox/log"
 	"github.com/ije/gox/utils"
 )
 
 type FS interface {
-	Open(config string, log *logx.Logger, isDev bool) (conn FSConn, err error)
+	Open(config string) (conn FSConn, err error)
 }
 
 type FSConn interface {
@@ -23,11 +22,11 @@ type FSConn interface {
 
 var fss = sync.Map{}
 
-func OpenFS(fsUrl string, log *logx.Logger, isDev bool) (FSConn, error) {
+func OpenFS(fsUrl string) (FSConn, error) {
 	name, config := utils.SplitByFirstByte(fsUrl, ':')
 	db, ok := fss.Load(name)
 	if ok {
-		return db.(FS).Open(config, log, isDev)
+		return db.(FS).Open(config)
 	}
 	return nil, fmt.Errorf("unregistered fs '%s'", name)
 }

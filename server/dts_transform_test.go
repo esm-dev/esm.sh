@@ -9,7 +9,6 @@ import (
 	"testing"
 
 	"esm.sh/server/storage"
-	logx "github.com/ije/gox/log"
 )
 
 func TestCopyDTS(t *testing.T) {
@@ -105,13 +104,11 @@ func TestCopyDTS(t *testing.T) {
 		cdnDomain: "cdn.esm.sh",
 	}
 
-	log, _ := logx.New("file:main.log?buffer=32k")
-
-	fs, err = storage.OpenFS(fmt.Sprintf("localLRU:%s?maxCost=10mb", testDir), log, true)
+	fs, err = storage.OpenFS(fmt.Sprintf("localLRU:%s?maxCost=10mb", testDir))
 	if err != nil {
 		t.Fatal(err)
 	}
-	db, err = storage.OpenDB(fmt.Sprintf("postdb:%s/test.db", testDir), log, true)
+	db, err = storage.OpenDB(fmt.Sprintf("postdb:%s/test.db", testDir))
 	if err != nil {
 		t.Fatal(err)
 	}

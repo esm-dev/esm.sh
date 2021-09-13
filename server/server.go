@@ -99,11 +99,11 @@ func Serve(efs *embed.FS) {
 	}
 
 	var err error
-	log, err = logx.New(fmt.Sprintf("file:%s?buffer=32k", path.Join(logDir, "main.log")))
-	if err != nil {
-		fmt.Printf("initiate logger: %v\n", err)
-		os.Exit(1)
-	}
+		log, err = logx.New(fmt.Sprintf("file:%s?buffer=32k", path.Join(logDir, "main.log")))
+		if err != nil {
+			fmt.Printf("initiate logger: %v\n", err)
+			os.Exit(1)
+		}
 	log.SetLevelByName(logLevel)
 
 	if nodejsPrefix == "" {
@@ -115,12 +115,15 @@ func Serve(efs *embed.FS) {
 	}
 	log.Debugf("nodejs v%s installed, registry: %s", node.version, node.npmRegistry)
 
-	fs, err = storage.OpenFS(fsUrl, log, isDev)
+	storage.SetLogger(log)
+	storage.SetIsDev(isDev)
+
+	fs, err = storage.OpenFS(fsUrl)
 	if err != nil {
 		log.Fatalf("storage: %v", err)
 	}
 
-	db, err = storage.OpenDB(dbUrl, log, isDev)
+	db, err = storage.OpenDB(dbUrl)
 	if err != nil {
 		log.Fatalf("storage: %v", err)
 	}
@@ -135,9 +138,9 @@ func Serve(efs *embed.FS) {
 	}
 
 	accessLogger, err := logx.New(fmt.Sprintf("file:%s?buffer=32k&fileDateFormat=20060102", path.Join(logDir, "access.log")))
-	if err != nil {
-		log.Fatalf("initiate access logger: %v", err)
-	}
+		if err != nil {
+			log.Fatalf("initiate access logger: %v", err)
+		}
 	accessLogger.SetQuite(true)
 
 	// start cjs lexer server

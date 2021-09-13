@@ -6,23 +6,21 @@ import (
 	"path"
 	"time"
 
-	logx "github.com/ije/gox/log"
 	"github.com/ije/gox/utils"
 )
 
 type localFS struct{}
 
-func (fs *localFS) Open(root string, log *logx.Logger, isDev bool) (FSConn, error) {
+func (fs *localFS) Open(root string) (FSConn, error) {
 	root = utils.CleanPath(root)
 	err := ensureDir(root)
 	if err != nil {
 		return nil, err
 	}
-	return &localFSLayer{root: root, log: log}, nil
+	return &localFSLayer{root}, nil
 }
 
 type localFSLayer struct {
-	log  *logx.Logger
 	root string
 }
 

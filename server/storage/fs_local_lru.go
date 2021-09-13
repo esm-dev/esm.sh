@@ -10,7 +10,6 @@ import (
 	"time"
 
 	"github.com/dgraph-io/ristretto"
-	logx "github.com/ije/gox/log"
 	"github.com/ije/gox/utils"
 )
 
@@ -24,7 +23,7 @@ func maxCostValueFrom(query url.Values) (int64, error) {
 	return 1 << 30, nil // Default maximum cost of cache is 1GB
 }
 
-func (fs *LocalLRUFS) Open(fsUrl string, log *logx.Logger, isDev bool) (FSConn, error) {
+func (fs *LocalLRUFS) Open(fsUrl string) (FSConn, error) {
 	config, err := url.Parse(fsUrl)
 	if err != nil {
 		return nil, err
@@ -33,7 +32,7 @@ func (fs *LocalLRUFS) Open(fsUrl string, log *logx.Logger, isDev bool) (FSConn, 
 	if err != nil {
 		return nil, err
 	}
-	backing, err := OpenFS("local:"+config.Path, log, isDev)
+	backing, err := OpenFS("local:" + config.Path)
 	if err != nil {
 		return nil, err
 	}
@@ -101,7 +100,6 @@ func (fs *LocalLRUFS) Open(fsUrl string, log *logx.Logger, isDev bool) (FSConn, 
 	}
 
 	return &localLRUFSLayer{
-		log:     log,
 		backing: backing,
 		cache:   cache,
 		remove:  remove,
@@ -110,7 +108,6 @@ func (fs *LocalLRUFS) Open(fsUrl string, log *logx.Logger, isDev bool) (FSConn, 
 }
 
 type localLRUFSLayer struct {
-	log     *logx.Logger
 	backing FSConn
 	cache   *ristretto.Cache
 	remove  func(string)
@@ -156,7 +153,7 @@ func (fs *localLRUFSLayer) WriteFile(name string, content io.Reader) (written in
 		fs.remove(name)
 		return 0, fmt.Errorf("rejected storing %s", name)
 	}
-	fs.log.Debugf("localLRU accepted %s, cost %d", name, written)
+	log.Debugf("localLRU accepted %s, cost %d", name, written)
 	return
 }
 
@@ -171,7 +168,7 @@ func (fs *localLRUFSLayer) WriteData(name string, data []byte) (err error) {
 		fs.cache.Del(name)
 		return err
 	}
-	fs.log.Debugf("localLRU accepted %s, cost %d", name, cost)
+	log.Debugf("localLRU accepted %s, cost %d", name, cost)
 	return
 }
 
