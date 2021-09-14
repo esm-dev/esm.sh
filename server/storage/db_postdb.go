@@ -25,7 +25,7 @@ func (i *postDBInstance) Get(id string) (store Store, modtime time.Time, err err
 	post, err := i.db.Get(q.Alias(id), q.Select("*"))
 	if err != nil {
 		if err == postdb.ErrNotFound {
-			err = ErrorNotFound
+			err = ErrNotFound
 		}
 		return
 	}

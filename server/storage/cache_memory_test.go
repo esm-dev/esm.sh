@@ -6,7 +6,7 @@ import (
 )
 
 func TestMemCache(t *testing.T) {
-	cache, err := New("memory?gcInterval=3s")
+	cache, err := OpenCache("memory:test?gcInterval=3s")
 	if err != nil {
 		t.Error(err)
 		return
@@ -20,7 +20,7 @@ func TestMemCache(t *testing.T) {
 		t.Fatalf("invalid gc interval %v, should be %v", mc.gcInterval, 3*time.Second)
 	}
 
-	cache.Set("key", []byte("hello world"))
+	cache.Set("key", []byte("hello world"), 0)
 	value, err := cache.Get("key")
 	if err != nil {
 		t.Fatal(err)
@@ -29,7 +29,7 @@ func TestMemCache(t *testing.T) {
 		t.Fatalf("invalid value(%v), shoud be 'hello world'", value)
 	}
 
-	cache.SetTTL("key2", []byte("hello world"), 3*time.Second)
+	cache.Set("key2", []byte("hello world"), 3*time.Second)
 	_, err = cache.Get("key2")
 	if err != nil {
 		t.Fatal(err)

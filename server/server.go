@@ -21,6 +21,7 @@ var (
 	config  *Config
 	node    *Node
 	mmdbr   *maxminddb.Reader
+	cache   storage.Cache
 	db      storage.DBConn
 	fs      storage.FSConn
 	log     *logx.Logger
@@ -43,6 +44,7 @@ func Serve(efs *embed.FS) {
 	var (
 		port           int
 		httpsPort      int
+		cacheUrl       string
 		dbUrl          string
 		fsUrl          string
 		cdnDomain      string
@@ -59,6 +61,7 @@ func Serve(efs *embed.FS) {
 
 	flag.IntVar(&port, "port", 80, "http server port")
 	flag.IntVar(&httpsPort, "https-port", 0, "https(autotls) server port, default is disabled")
+	flag.StringVar(&cacheUrl, "cache", "", "cache connection Url")
 	flag.StringVar(&dbUrl, "db", "", "database connection Url")
 	flag.StringVar(&fsUrl, "fs", "", "file system connection Url")
 	flag.StringVar(&cdnDomain, "cdn-domain", "", "cdn domain")
@@ -82,6 +85,9 @@ func Serve(efs *embed.FS) {
 			cdnDomain = fmt.Sprintf("localhost:%d", port)
 		}
 		cdnDomainChina = ""
+	}
+	if cacheUrl == "" {
+		cacheUrl = "memory:main"
 	}
 	if dbUrl == "" {
 		dbUrl = fmt.Sprintf("postdb:%s", path.Join(etcDir, "esm.db"))
@@ -124,12 +130,17 @@ func Serve(efs *embed.FS) {
 	storage.SetLogger(log)
 	storage.SetIsDev(isDev)
 
-	fs, err = storage.OpenFS(fsUrl)
+	cache, err = storage.OpenCache(cacheUrl)
 	if err != nil {
 		log.Fatalf("storage: %v", err)
 	}
 
 	db, err = storage.OpenDB(dbUrl)
+	if err != nil {
+		log.Fatalf("storage: %v", err)
+	}
+
+	fs, err = storage.OpenFS(fsUrl)
 	if err != nil {
 		log.Fatalf("storage: %v", err)
 	}

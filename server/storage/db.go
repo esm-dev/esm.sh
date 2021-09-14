@@ -1,15 +1,12 @@
 package storage
 
 import (
-	"errors"
 	"fmt"
 	"sync"
 	"time"
 
 	"github.com/ije/gox/utils"
 )
-
-var ErrorNotFound = errors.New("record not found")
 
 type Store map[string]string
 

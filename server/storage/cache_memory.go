@@ -50,7 +50,7 @@ func (mc *mCache) Get(key string) (value []byte, err error) {
 	}
 
 	if s.isExpired() {
-		go mc.Delete(key)
+		mc.Delete(key)
 		err = ErrExpired
 		return
 	}
@@ -59,20 +59,14 @@ func (mc *mCache) Get(key string) (value []byte, err error) {
 	return
 }
 
-func (mc *mCache) Set(key string, value []byte) error {
-	mc.lock.Lock()
-	defer mc.lock.Unlock()
-
-	mc.storage[key] = mItem{value, 0}
-	return nil
-}
-
-func (mc *mCache) SetTTL(key string, value []byte, ttl time.Duration) error {
+func (mc *mCache) Set(key string, value []byte, ttl time.Duration) error {
 	mc.lock.Lock()
 	defer mc.lock.Unlock()
 
 	if ttl > 0 {
 		mc.storage[key] = mItem{value, time.Now().Add(ttl).UnixNano()}
+	} else {
+		mc.storage[key] = mItem{value, 0}
 	}
 	return nil
 }

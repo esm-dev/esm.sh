@@ -11,8 +11,7 @@ import (
 type Cache interface {
 	Has(key string) (bool, error)
 	Get(key string) ([]byte, error)
-	Set(key string, value []byte) error
-	SetTTL(key string, value []byte, ttl time.Duration) error
+	Set(key string, value []byte, ttl time.Duration) error
 	Delete(key string) error
 	Flush() error
 	Notify(name string, args ...string) error
@@ -21,7 +20,7 @@ type Cache interface {
 var drivers = map[string]CacheDriver{}
 
 // New returns a new cache by url
-func New(url string) (cache Cache, err error) {
+func OpenCache(url string) (cache Cache, err error) {
 	if url == "" {
 		err = fmt.Errorf("invalid url")
 		return
