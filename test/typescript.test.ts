@@ -1,5 +1,7 @@
-import * as TS from 'http://localhost:8080/typescript'
+import * as ts from 'http://localhost:8080/typescript'
+import { assert } from 'https://deno.land/std@0.106.0/testing/asserts.ts'
 
 Deno.test('check offical typescript', async () => {
-	console.log(TS)
+	assert(typeof ts.version === 'string')
+	assert(typeof ts.transpileModule === 'function')
 })
