@@ -68,7 +68,7 @@ func query() rex.Handle {
 			return rex.Redirect("/favicon.svg", http.StatusPermanentRedirect)
 
 		case "/status.json":
-			buildQueue.lock.Lock()
+			buildQueue.lock.RLock()
 			q := make([]map[string]interface{}, buildQueue.list.Len())
 			i := 0
 			for el := buildQueue.list.Front(); el != nil; el = el.Next() {
@@ -89,9 +89,9 @@ func query() rex.Handle {
 					i++
 				}
 			}
-			buildQueue.lock.Unlock()
+			buildQueue.lock.RUnlock()
 			return map[string]interface{}{
-				"queue": q[0:i],
+				"queue": q[:i],
 			}
 
 		case "/error.js":
@@ -467,13 +467,15 @@ func query() rex.Handle {
 				return rex.Status(500, err.Error())
 			}
 			if !exists {
+				c := buildQueue.Add(task)
 				select {
-				case output := <-buildQueue.Add(task).C:
+				case output := <-c.C:
 					if output.err != nil {
 						return rex.Status(500, "types: "+err.Error())
 					}
 					exists = true
 				case <-time.After(time.Minute):
+					buildQueue.RemoveConsumer(task, c)
 					return rex.Status(http.StatusRequestTimeout, "timeout, we are transforming the types hardly, please try later!")
 				}
 			}
@@ -516,6 +518,7 @@ func query() rex.Handle {
 			// if the previous build exists and not in bare mode, then build current module in backgound,
 			// or wait the current build task for 60 seconds
 			if err == nil {
+				// todo: maybe don't build
 				buildQueue.Add(task)
 			} else {
 				c := buildQueue.Add(task)
