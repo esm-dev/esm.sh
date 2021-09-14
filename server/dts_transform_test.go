@@ -104,11 +104,15 @@ func TestCopyDTS(t *testing.T) {
 		cdnDomain: "cdn.esm.sh",
 	}
 
+	cache, err = storage.OpenCache("memory:main")
+	if err != nil {
+		t.Fatal(err)
+	}
 	fs, err = storage.OpenFS(fmt.Sprintf("localLRU:%s?maxCost=10mb", testDir))
 	if err != nil {
 		t.Fatal(err)
 	}
-	db, err = storage.OpenDB(fmt.Sprintf("postdb:%s/test.db", testDir))
+	db, err = storage.OpenDB(fmt.Sprintf("postdb:%s", path.Join(testDir, "test.db")))
 	if err != nil {
 		t.Fatal(err)
 	}
