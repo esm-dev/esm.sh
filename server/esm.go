@@ -44,7 +44,7 @@ func initESM(wd string, pkg pkg, checkExports bool, isDev bool) (esm *ESM, err e
 				submodule := strings.TrimSuffix(pkg.submodule, "...d.ts")
 				subDir := path.Join(wd, "node_modules", esm.Name, submodule)
 				if fileExists(path.Join(subDir, "index.d.ts")) {
-					esm.Types = strings.TrimSuffix(submodule, "/") + "/index.d.ts"
+					esm.Types = path.Join(submodule, "index.d.ts")
 				} else if fileExists(path.Join(subDir + ".d.ts")) {
 					esm.Types = submodule + ".d.ts"
 				}
@@ -62,23 +62,23 @@ func initESM(wd string, pkg pkg, checkExports bool, isDev bool) (esm *ESM, err e
 				}
 				np := fixNpmPackage(p)
 				if np.Module != "" {
-					esm.Module = strings.TrimSuffix(pkg.submodule, "/") + utils.CleanPath(np.Module)
+					esm.Module = path.Join(pkg.submodule, np.Module)
 				} else {
 					esm.Module = ""
 				}
 				if p.Main != "" {
-					esm.Main = strings.TrimSuffix(pkg.submodule, "/") + utils.CleanPath(p.Main)
+					esm.Main = path.Join(pkg.submodule, p.Main)
 				} else {
-					esm.Main = strings.TrimSuffix(pkg.submodule, "/") + "/index.js"
+					esm.Main = path.Join(pkg.submodule, "index.js")
 				}
 				esm.Types = ""
 				esm.Typings = ""
 				if p.Types != "" {
-					esm.Types = strings.TrimSuffix(pkg.submodule, "/") + utils.CleanPath(p.Types)
+					esm.Types = path.Join(pkg.submodule, p.Types)
 				} else if p.Typings != "" {
-					esm.Typings = strings.TrimSuffix(pkg.submodule, "/") + utils.CleanPath(p.Typings)
+					esm.Typings = path.Join(pkg.submodule, p.Typings)
 				} else if fileExists(path.Join(subDir, "index.d.ts")) {
-					esm.Types = strings.TrimSuffix(pkg.submodule, "/") + "/index.d.ts"
+					esm.Types = path.Join(pkg.submodule, "index.d.ts")
 				} else if fileExists(path.Join(subDir + ".d.ts")) {
 					esm.Types = pkg.submodule + ".d.ts"
 				}
@@ -132,7 +132,7 @@ func initESM(wd string, pkg pkg, checkExports bool, isDev bool) (esm *ESM, err e
 					esm.Types = ""
 					esm.Typings = ""
 					if fileExists(path.Join(subDir, "index.d.ts")) {
-						esm.Types = strings.TrimSuffix(pkg.submodule, "/") + "/index.d.ts"
+						esm.Types = path.Join(pkg.submodule, "index.d.ts")
 					} else if fileExists(path.Join(subDir + ".d.ts")) {
 						esm.Types = pkg.submodule + ".d.ts"
 					}
@@ -148,7 +148,7 @@ func initESM(wd string, pkg pkg, checkExports bool, isDev bool) (esm *ESM, err e
 	if esm.Module != "" {
 		resolved, exportDefault, err := checkESM(wd, esm.Name, esm.Module)
 		if err != nil {
-			log.Warnf("fake module from '%s' of %s: %v", esm.Module, esm.Name, err)
+			log.Warnf("fake module from '%s' of '%s': %v", esm.Module, esm.Name, err)
 			esm.Module = ""
 		} else {
 			esm.Module = resolved

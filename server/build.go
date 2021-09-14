@@ -170,7 +170,7 @@ func (task *buildTask) Build() (esm *ESM, err error) {
 	task.stage = "init"
 	esm, err = initESM(task.wd, task.pkg, task.target != "types", task.isDev)
 	if err != nil {
-		log.Error("init ESM:", err)
+		err = fmt.Errorf("init ESM: %v", err)
 		return
 	}
 
@@ -553,33 +553,40 @@ esbuild:
 				cjsImports := newStringSet()
 				for i, p := range slice {
 					if cjsContext {
-						var marked bool
 						p = bytes.TrimPrefix(p, []byte{')'})
-						if bytes.HasPrefix(p, []byte{'.'}) {
-							// right shift to strip the object `key`
-							shift := 0
-							for i, l := 1, len(p); i < l; i++ {
-								c := p[i]
-								if (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '_' || c == '$' {
-									shift++
-								} else {
-									break
-								}
-							}
-							if shift > 0 {
-								cjsImports.Add(string(p[1 : shift+1]))
-								marked = true
-								p = p[1:]
-							}
-						}
-
-						if !marked {
-							if pkg, err := parsePkg(name); err == nil {
+						var marked bool
+						if _, ok := builtInNodeModules[name]; !ok {
+							pkg, err := parsePkg(name)
+							if err == nil {
 								meta, err := initESM(task.wd, *pkg, true, task.isDev)
-								// if the dependency is an es module without `default` export, then use star import
-								if err == nil && meta.Module != "" && !meta.ExportDefault {
-									cjsImports.Add("*")
-									marked = true
+								if err == nil {
+									if bytes.HasPrefix(p, []byte{'.'}) {
+										// right shift to strip the object `key`
+										shift := 0
+										for i, l := 1, len(p); i < l; i++ {
+											c := p[i]
+											if (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '_' || c == '$' {
+												shift++
+											} else {
+												break
+											}
+										}
+										// support edge case like `require('htmlparser').Parser`
+										importName := string(p[1 : shift+1])
+										for _, v := range meta.Exports {
+											if v == importName {
+												cjsImports.Add(importName)
+												marked = true
+												p = p[1:]
+												break
+											}
+										}
+									}
+									// if the dependency is an es module without `default` export, then use star import
+									if !marked && meta.Module != "" && !meta.ExportDefault {
+										cjsImports.Add("*")
+										marked = true
+									}
 								}
 							}
 						}
