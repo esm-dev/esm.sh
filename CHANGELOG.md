@@ -1,26 +1,34 @@
 # Change Log
 
+## v51
+
+- Fix build breaking change in v50 (fix [#131](https://github.com/postui/esm.sh/issues/131)).
+- Add `localLRU` **FS** layer ([#126](https://github.com/postui/esm.sh/issues/126))
+- Add a `Cache Interface` that is using to store temporary data like npm packages info.
+- Do not try to build `/favicon.ico` ([#132](https://github.com/postui/esm.sh/issues/132))
+- Add lovely `pixi.js`, `three.js` and `@material-ui/core` testing by @imisaacs ([#134](https://github.com/postui/esm.sh/issues/134), [#139](https://github.com/postui/esm.sh/issuGes/139)).
+
 ## v50
 
-- Improve build performance to burn the server CPU cores! Before, to build a module to ESM which has heavy deps maybe very slow since the single build task only uses one CPU core.
-- Rewrite the **dts transformer** to get better deno types compatibility and faster transpile speed, but still lot of types are not working in deno.
+- Improve build performance to burn the server CPU cores! Before this, to build a module to ESM which has heavy deps maybe very slow since the single build task only uses one CPU core.
+- Rewrite the **dts transformer** to get better deno types compatibility and faster transpile speed.
 - Add Deno **testing CI** on Github.
 
 ## v49
 
 - Improve the build process to fix an edge case reported in [#118](https://github.com/postui/esm.sh/issues/118)
 	```js
-	const parser = require('htmlparser').Parser;
+	const Parser = require('htmlparser').Parser;
 	```
 	esm (v48) output:
 	```js
 	import htmlparser2 from '/v48/htmlparser2@5.0.0/es2021/htmlparser2.js'
-	const parser = htmlparser2.Parser; // parser is undefined
+	const Parser = htmlparser2.Parser; // parser is undefined
 	```
 	the expected output was fixed in v49:
 	```js
 	import { Parser as htmlparser2Parser } from '/v48/htmlparser2@5.0.0/es2021/htmlparser2.js'
-	const parser = htmlparser2Parser; // parser is a class
+	const Parser = htmlparser2Parser; // parser is a class
 	```
 - Add more polyfills for Deno, huge thanks to @talentlessguy ([#117](https://github.com/postui/esm.sh/issues/117))
   - path
