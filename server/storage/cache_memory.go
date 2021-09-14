@@ -87,10 +87,6 @@ func (mc *mCache) Flush() error {
 	return nil
 }
 
-func (mc *mCache) Notify(name string, value ...string) error {
-	return nil
-}
-
 func (mc *mCache) setGCInterval(interval time.Duration) {
 	if interval > 0 && interval != mc.gcInterval {
 		if mc.gcTimer != nil {

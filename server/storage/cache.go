@@ -14,7 +14,6 @@ type Cache interface {
 	Set(key string, value []byte, ttl time.Duration) error
 	Delete(key string) error
 	Flush() error
-	Notify(name string, args ...string) error
 }
 
 var drivers = map[string]CacheDriver{}
