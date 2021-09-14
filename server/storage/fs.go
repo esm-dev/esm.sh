@@ -3,6 +3,7 @@ package storage
 import (
 	"fmt"
 	"io"
+	"net/url"
 	"sync"
 	"time"
 
@@ -10,7 +11,7 @@ import (
 )
 
 type FS interface {
-	Open(config string) (conn FSConn, err error)
+	Open(root string, options url.Values) (conn FSConn, err error)
 }
 
 type FSConn interface {
@@ -23,10 +24,13 @@ type FSConn interface {
 var fss = sync.Map{}
 
 func OpenFS(fsUrl string) (FSConn, error) {
-	name, config := utils.SplitByFirstByte(fsUrl, ':')
+	name, addr := utils.SplitByFirstByte(fsUrl, ':')
 	fs, ok := fss.Load(name)
 	if ok {
-		return fs.(FS).Open(config)
+		root, options, err := parseConfigUrl(addr)
+		if err == nil {
+			return fs.(FS).Open(root, options)
+		}
 	}
 	return nil, fmt.Errorf("unregistered fs '%s'", name)
 }

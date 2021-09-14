@@ -2,6 +2,7 @@ package storage
 
 import (
 	"fmt"
+	"net/url"
 	"strings"
 	"time"
 
@@ -25,28 +26,23 @@ func OpenCache(url string) (cache Cache, err error) {
 		return
 	}
 
-	path, query := utils.SplitByFirstByte(url, '?')
-	name, addr := utils.SplitByFirstByte(path, ':')
+	name, addr := utils.SplitByFirstByte(url, ':')
 	driver, ok := drivers[strings.ToLower(name)]
 	if !ok {
 		err = fmt.Errorf("Unknown driver '%s'", name)
 		return
 	}
-
-	args := map[string]string{}
-	for _, q := range strings.Split(query, "&") {
-		k, v := utils.SplitByFirstByte(q, '=')
-		if len(k) > 0 {
-			args[k] = v
-		}
+	path, options, err := parseConfigUrl(addr)
+	if err != nil {
+		return
 	}
 
-	cache, err = driver.Open(addr, args)
+	cache, err = driver.Open(path, options)
 	return
 }
 
 type CacheDriver interface {
-	Open(addr string, args map[string]string) (cache Cache, err error)
+	Open(addr string, args url.Values) (cache Cache, err error)
 }
 
 func RegisterCache(name string, driver CacheDriver) {

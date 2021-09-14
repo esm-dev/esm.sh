@@ -1,6 +1,7 @@
 package storage
 
 import (
+	"net/url"
 	"time"
 
 	"github.com/postui/postdb"
@@ -9,7 +10,7 @@ import (
 
 type postDB struct{}
 
-func (fs *postDB) Open(path string) (DBConn, error) {
+func (fs *postDB) Open(path string, options url.Values) (DBConn, error) {
 	db, err := postdb.Open(path, 0644)
 	if err != nil {
 		return nil, err
