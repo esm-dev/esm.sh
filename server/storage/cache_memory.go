@@ -24,17 +24,17 @@ type mCache struct {
 	gcTimer    *time.Timer
 }
 
-func (mc *mCache) Has(key string) bool {
+func (mc *mCache) Has(key string) (bool, error) {
 	mc.lock.RLock()
 	s, ok := mc.storage[key]
 	mc.lock.RUnlock()
 
 	if ok && s.isExpired() {
 		go mc.Delete(key)
-		ok = false
+		return false, nil
 	}
 
-	return ok
+	return ok, nil
 }
 
 func (mc *mCache) Get(key string) (value []byte, err error) {

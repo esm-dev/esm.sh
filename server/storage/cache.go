@@ -10,7 +10,7 @@ import (
 )
 
 type Cache interface {
-	Has(key string) bool
+	Has(key string) (bool, error)
 	Get(key string) ([]byte, error)
 	Set(key string, value []byte, ttl time.Duration) error
 	Delete(key string) error

@@ -12,9 +12,9 @@ type mLRUCache struct {
 	cache *ristretto.Cache
 }
 
-func (mc *mLRUCache) Has(key string) bool {
+func (mc *mLRUCache) Has(key string) (bool, error) {
 	_, ok := mc.cache.Get(key)
-	return ok
+	return ok, nil
 }
 
 func (mc *mLRUCache) Get(key string) ([]byte, error) {
