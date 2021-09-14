@@ -237,13 +237,13 @@ export async function test($el) {
     const App = () => {
       const [count, setCount] = useState(0)
       return createElement(
-          Button,
-          { size: 'small', variant: 'outlined', color: 'secondary', onClick: () => setCount(count + 1) },
-          `Clicked ${count}`
-        )
+        Button,
+        { size: 'small', variant: 'outlined', color: 'secondary', onClick: () => setCount(count + 1) },
+        `Clicked ${count}`
+      )
     }
     render(createElement(App), t.$span)
-  
+
     t.ok()
   })
 
@@ -381,57 +381,63 @@ export async function test($el) {
   _esm('pixi.js', async (t) => {
     const { Application, Sprite } = t.modules
 
-    const app = new Application({ width: 32, height: 32, backgroundAlpha: 0 });
-    t.$span.appendChild(app.view);
-    app.loader.add('bunny', 'https://pixijs.io/examples/examples/assets/bunny.png').load((_loader, resources) => {
-        const bunny = new Sprite(resources.bunny.texture);
-        bunny.scale.x = bunny.scale.y = 0.75;
+    const app = new Application({ width: 30, height: 30, resolution: 2, backgroundAlpha: 0 });
+    app.loader.add('bunny', 'https://pixijs.io/examples/examples/assets/bunny.png').load((_, resources) => {
+      const bunny = new Sprite(resources.bunny.texture);
+      bunny.anchor.set(0.5);
+      bunny.scale.x = bunny.scale.y = 0.5;
+      bunny.x = app.screen.width / 2;
+      bunny.y = app.screen.height / 2;
 
-        bunny.anchor.set(0.5);
-
-        bunny.x = app.screen.width / 2;
-        bunny.y = app.screen.height / 2;
-        
-        app.stage.addChild(bunny);
-        
-        app.ticker.add(() => {
-          bunny.rotation += 0.05;
-        });
-
-        t.ok()
+      app.ticker.add(() => {
+        bunny.rotation += 0.05;
+      });
+      
+      app.stage.addChild(bunny);
+      t.ok()
     });
+
+    app.view.style.width = '30px'
+    app.view.style.height = '30px'
+    t.$span.appendChild(app.view);
   })
 
   _esm('three', async (t) => {
-    const { Scene, PerspectiveCamera, WebGLRenderer, BoxGeometry, MeshBasicMaterial, Mesh } = t.modules
+    const {
+      Scene,
+      PerspectiveCamera,
+      WebGLRenderer,
+      BoxGeometry,
+      MeshBasicMaterial,
+      Mesh,
+    } = t.modules
 
+    const width = 30
+    const height = 30
     const scene = new Scene();
-    const width = 50
-    const height = 50
-    const camera = new PerspectiveCamera( 75, width / height, 0.1, 1000 );
-
+    const camera = new PerspectiveCamera(75, width / height, 0.1, 1000);
     const renderer = new WebGLRenderer({ alpha: true });
-    renderer.setSize( width, height );
-    t.$span.appendChild( renderer.domElement );
-
     const geometry = new BoxGeometry();
-    const material = new MeshBasicMaterial( { color: 0x000000, wireframe: true } );
-    const cube = new Mesh( geometry, material );
-    scene.add( cube );
+    const material = new MeshBasicMaterial({ color: 0x000000, wireframe: true });
+    const cube = new Mesh(geometry, material);
 
+    renderer.setSize(width, height);
+    renderer.setPixelRatio(window.devicePixelRatio);
     camera.position.z = 2;
+    scene.add(cube);
 
-    const animate = function () {
-      requestAnimationFrame( animate );
+    const update = function () {
+      requestAnimationFrame(update);
 
       cube.rotation.x += 0.05;
       cube.rotation.y += 0.05;
 
-      renderer.render( scene, camera );
+      renderer.render(scene, camera);
     };
 
-    animate();
+    update();
 
+    t.$span.appendChild(renderer.domElement);
     t.ok()
   })
 }
