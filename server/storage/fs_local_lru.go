@@ -1,6 +1,7 @@
 package storage
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"net/url"
@@ -10,35 +11,22 @@ import (
 	"time"
 
 	"github.com/dgraph-io/ristretto"
-	"github.com/ije/gox/utils"
 )
 
 type LocalLRUFS struct{}
 
-func maxCostValueFrom(query url.Values) (int64, error) {
-	maxCostString := query.Get("maxCost")
-	if maxCostString != "" {
-		return utils.ParseBytes(maxCostString)
-	}
-	return 1 << 30, nil // Default maximum cost of cache is 1GB
-}
-
-func (fs *LocalLRUFS) Open(fsUrl string) (FSConn, error) {
-	config, err := url.Parse(fsUrl)
+func (fs *LocalLRUFS) Open(root string, options url.Values) (FSConn, error) {
+	maxCost, err := parseBytesValue(options.Get("maxCost"), 1<<30) // Default maximum cost of cache is 1GB
 	if err != nil {
-		return nil, err
+		return nil, errors.New("invalid maxCost value")
 	}
-	maxCost, err := maxCostValueFrom(config.Query())
-	if err != nil {
-		return nil, err
-	}
-	backing, err := OpenFS("local:" + config.Path)
+	backingFS, err := OpenFS("local:" + root)
 	if err != nil {
 		return nil, err
 	}
 
 	remove := func(name string) {
-		go os.Remove(path.Join(config.Path, name))
+		go os.Remove(path.Join(root, name))
 	}
 
 	cache, err := ristretto.NewCache(&ristretto.Config{
@@ -59,6 +47,18 @@ func (fs *LocalLRUFS) Open(fsUrl string) (FSConn, error) {
 			log.Debugf("localLRU OnReject %s", cached.name)
 			remove(cached.name)
 		},
+		/**
+		 * Determine cost automatically when cost is zero when set.
+		 * This is skipped entirely if the cost is not zero when set.
+		 */
+		Cost: func(value interface{}) int64 {
+			cached := value.(*localLRUFSCachedValue)
+			fi, err := os.Stat(cached.name)
+			if err != nil {
+				return maxCost + 1
+			}
+			return fi.Size()
+		},
 		Metrics: isDev,
 	})
 	if err != nil {
@@ -69,8 +69,8 @@ func (fs *LocalLRUFS) Open(fsUrl string) (FSConn, error) {
 	const TTL time.Duration = 0 * time.Second //time.Duration(30) * time.Minute,
 
 	// Hydrate the cache on Open
-	log.Debugf("localLRU root %s, maxCost %d, hydrating...", config.Path, maxCost)
-	filepath.WalkDir(config.Path,
+	log.Debugf("localLRU root %s, maxCost %d, hydrating...", root, maxCost)
+	filepath.WalkDir(root,
 		func(path string, entry os.DirEntry, err error) error {
 			if err != nil {
 				return err
@@ -79,7 +79,7 @@ func (fs *LocalLRUFS) Open(fsUrl string) (FSConn, error) {
 			if err != nil {
 				return err
 			}
-			name, err := filepath.Rel(config.Path, path)
+			name, err := filepath.Rel(root, path)
 			if err != nil {
 				return err
 			}
@@ -100,18 +100,18 @@ func (fs *LocalLRUFS) Open(fsUrl string) (FSConn, error) {
 	}
 
 	return &localLRUFSLayer{
-		backing: backing,
-		cache:   cache,
-		remove:  remove,
-		TTL:     TTL,
+		backingFS: backingFS,
+		cache:     cache,
+		remove:    remove,
+		TTL:       TTL,
 	}, nil
 }
 
 type localLRUFSLayer struct {
-	backing FSConn
-	cache   *ristretto.Cache
-	remove  func(string)
-	TTL     time.Duration
+	backingFS FSConn
+	cache     *ristretto.Cache
+	remove    func(string)
+	TTL       time.Duration
 }
 
 type localLRUFSCachedValue struct {
@@ -121,22 +121,33 @@ type localLRUFSCachedValue struct {
 
 func (fs *localLRUFSLayer) Exists(name string) (found bool, modtime time.Time, err error) {
 	fs.cache.Wait()
-	value, found := fs.cache.Get(name)
-	if found {
-		cached := value.(*localLRUFSCachedValue)
-		modtime = cached.modtime
+	value, itemFound := fs.cache.Get(name)
+	if itemFound {
+		_, ttlFound := fs.cache.GetTTL(name)
+		if ttlFound {
+			cached := value.(*localLRUFSCachedValue)
+			modtime = cached.modtime
+		} else {
+			fs.cache.Del(name)
+			fs.remove(name)
+		}
 	}
 	return
 }
 
 func (fs *localLRUFSLayer) ReadFile(name string) (file io.ReadSeekCloser, err error) {
-	_, found := fs.cache.Get(name)
-	if found {
-		file, err = fs.backing.ReadFile(name)
-		if err == nil {
-			return
+	_, itemFound := fs.cache.Get(name)
+	if itemFound {
+		_, ttlFound := fs.cache.GetTTL(name)
+		if ttlFound {
+			file, err = fs.backingFS.ReadFile(name)
+			if err == nil {
+				return
+			}
+		} else {
+			fs.remove(name)
 		}
-		// If for some reason we can't read the backing store, make sure we remove from cache
+		// If expired or for some reason we can't read the backing store, make sure we remove from cache
 		fs.cache.Del(name)
 	}
 	err = fmt.Errorf("%s unexpectedly missing", name)
@@ -144,7 +155,7 @@ func (fs *localLRUFSLayer) ReadFile(name string) (file io.ReadSeekCloser, err er
 }
 
 func (fs *localLRUFSLayer) WriteFile(name string, content io.Reader) (written int64, err error) {
-	written, err = fs.backing.WriteFile(name, content)
+	written, err = fs.backingFS.WriteFile(name, content)
 	if err != nil {
 		return
 	}
@@ -163,7 +174,7 @@ func (fs *localLRUFSLayer) WriteData(name string, data []byte) (err error) {
 		return fmt.Errorf("rejected storing %s", name)
 	}
 
-	err = fs.backing.WriteData(name, data)
+	err = fs.backingFS.WriteData(name, data)
 	if err != nil {
 		fs.cache.Del(name)
 		return err

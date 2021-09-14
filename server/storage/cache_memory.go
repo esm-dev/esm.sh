@@ -2,6 +2,7 @@ package storage
 
 import (
 	"errors"
+	"net/url"
 	"runtime"
 	"sync"
 	"time"
@@ -23,21 +24,17 @@ type mCache struct {
 	gcTimer    *time.Timer
 }
 
-func (mc *mCache) Has(key string) (ok bool, err error) {
+func (mc *mCache) Has(key string) bool {
 	mc.lock.RLock()
 	s, ok := mc.storage[key]
 	mc.lock.RUnlock()
-	if !ok {
-		return
-	}
 
-	if s.isExpired() {
+	if ok && s.isExpired() {
 		go mc.Delete(key)
 		ok = false
-		return
 	}
 
-	return
+	return ok
 }
 
 func (mc *mCache) Get(key string) (value []byte, err error) {
@@ -119,14 +116,10 @@ func (mc *mCache) gc() {
 
 type mcDriver struct{}
 
-func (mcd *mcDriver) Open(region string, args map[string]string) (cache Cache, err error) {
-	gcInterval := 30 * time.Minute
-	if s, ok := args["gcInterval"]; ok && len(s) > 0 {
-		gcInterval, err = time.ParseDuration(s)
-		if err != nil {
-			err = errors.New("invalid GC interval")
-			return
-		}
+func (mcd *mcDriver) Open(region string, options url.Values) (Cache, error) {
+	gcInterval, err := parseDurationValue(options.Get("gcInterval"), 30*time.Minute)
+	if err != nil {
+		return nil, errors.New("invalid gcInterval value")
 	}
 
 	c := &mCache{
