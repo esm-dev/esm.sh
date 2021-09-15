@@ -125,17 +125,17 @@ func Serve(efs *embed.FS) {
 
 	cache, err = storage.OpenCache(cacheUrl)
 	if err != nil {
-		log.Fatalf("storage: %v", err)
+		log.Fatalf("init storage(cache,%s): %v", cacheUrl, err)
 	}
 
 	db, err = storage.OpenDB(dbUrl)
 	if err != nil {
-		log.Fatalf("storage: %v", err)
+		log.Fatalf("init storage(db,%s): %v", dbUrl, err)
 	}
 
 	fs, err = storage.OpenFS(fsUrl)
 	if err != nil {
-		log.Fatalf("storage: %v", err)
+		log.Fatalf("init storage(fs,%s): %v", fsUrl, err)
 	}
 
 	var accessLogger *logx.Logger
