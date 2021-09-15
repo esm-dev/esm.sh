@@ -4,7 +4,7 @@ You will need [Go](https://golang.org/dl) 1.16+ to compile the server, and ensur
 The server runtime will install the nodejs (14 LTS) automatically.
 
 ```bash
-$ git clone https://github.com/postui/esm.sh
+$ git clone https://github.com/alephjs/esm.sh
 $ cd esm.sh
 $ sh ./scripts/deploy.sh
 ```
