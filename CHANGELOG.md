@@ -6,7 +6,7 @@
 - Add `localLRU` **FS** layer ([#126](https://github.com/postui/esm.sh/issues/126))
 - Add a `Cache Interface` that is using to store temporary data like npm packages info.
 - Do not try to build `/favicon.ico` ([#132](https://github.com/postui/esm.sh/issues/132))
-- Add lovely `pixi.js`, `three.js` and `@material-ui/core` testing by @imisaacs ([#134](https://github.com/postui/esm.sh/issues/134), [#139](https://github.com/postui/esm.sh/issuGes/139)).
+- Add lovely `pixi.js`, `three.js` and `@material-ui/core` testing by @jimisaacs ([#134](https://github.com/postui/esm.sh/issues/134), [#139](https://github.com/postui/esm.sh/issuGes/139)).
 
 ## v50
 
