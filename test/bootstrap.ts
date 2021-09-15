@@ -28,6 +28,6 @@ startServer(async (pp) => {
 		stderr: 'inherit'
 	})
 	await p.status()
-	pp.kill(Deno.Signal.SIGKILL)
 	p.close()
+	pp.kill('SIGTERM')
 })
