@@ -118,19 +118,10 @@ import unescape from 'https://esm.sh/lodash/unescape?no-check'
 ```
 
 ## Network of esm.sh
+
 - Main server in HK
 - Global CDN by [Cloudflare](https://cloudflare.com)
-- China CDN by [Aliyun](https://aliyun.com) (use [mmdb_china_ip_list](https://github.com/alecthw/mmdb_china_ip_list) to split traffic)
 
 ## Self-Hosting
 
-You will need [Go](https://golang.org/dl) 1.16+ to compile the server, and ensure [supervisor](http://supervisord.org/) installed on your host machine.<br>
-The server runtime will install the nodejs (14 LTS) automatically.
-
-```bash
-$ git clone https://github.com/postui/esm.sh
-$ cd esm.sh
-$ sh ./scripts/deploy.sh
-```
-
-**Deploying with Docker:** An example [Dockerfile](./Dockerfile) is found in the root of this project.
+To host esm.sh by yourself, check [hosting](./HOSTING.md) documentation.
