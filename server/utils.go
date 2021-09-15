@@ -2,6 +2,8 @@ package server
 
 import (
 	"encoding/base64"
+	"fmt"
+	"net/http"
 	"os"
 	"regexp"
 	"strconv"
@@ -18,16 +20,6 @@ var (
 	regBuildVersionPath = regexp.MustCompile(`^/v\d+/`)
 	npmNaming           = valid.Validator{valid.FromTo{'a', 'z'}, valid.FromTo{'0', '9'}, valid.Eq('.'), valid.Eq('_'), valid.Eq('-')}
 )
-
-// A Country record of mmdb.
-type Country struct {
-	ISOCode string `maxminddb:"iso_code"`
-}
-
-// A Record of mmdb.
-type Record struct {
-	Country Country `maxminddb:"country"`
-}
 
 type stringSet struct {
 	lock sync.RWMutex
@@ -117,6 +109,19 @@ func identify(importPath string) string {
 	return string(p)
 }
 
+func resolveOrigin(r *http.Request) string {
+	cdnDomain := config.cdnDomain
+	if cdnDomain == "localhost" || strings.HasPrefix(cdnDomain, "localhost:") {
+		return fmt.Sprintf("http://%s/", cdnDomain)
+	} else if cdnDomain != "" {
+		if strings.ContainsRune(cdnDomain, '*') {
+			return fmt.Sprintf("https://%s/", strings.Replace(cdnDomain, "*", r.Host, 1))
+		}
+		return fmt.Sprintf("https://%s/", cdnDomain)
+	}
+	return "/"
+}
+
 func isRemoteImport(importPath string) bool {
 	return strings.HasPrefix(importPath, "https://") || strings.HasPrefix(importPath, "http://")
 }
@@ -143,21 +148,14 @@ func endsWith(s string, suffixs ...string) bool {
 	return false
 }
 
-func ensureSuffix(path string, ext string) string {
-	if !strings.HasSuffix(path, ext) {
-		return path + ext
-	}
-	return path
+func dirExists(filepath string) bool {
+	fi, err := os.Lstat(filepath)
+	return err == nil && fi.IsDir()
 }
 
 func fileExists(filepath string) bool {
 	fi, err := os.Lstat(filepath)
 	return err == nil && !fi.IsDir()
-}
-
-func dirExists(filepath string) bool {
-	fi, err := os.Lstat(filepath)
-	return err == nil && fi.IsDir()
 }
 
 func ensureDir(dir string) (err error) {
