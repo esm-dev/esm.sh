@@ -1,3 +1,5 @@
+import { existsSync } from 'https://deno.land/std@0.106.0/fs/exists.ts'
+
 async function startServer(onReady: (p: any) => void) {
 	const p = Deno.run({
 		cmd: ['go', 'run', 'main.go', '-dev', '-port', '8080'],
@@ -22,12 +24,23 @@ async function startServer(onReady: (p: any) => void) {
 }
 
 startServer(async (pp) => {
+ 	await test('test/deno/common/')
+ 	await test('test/deno/react/')
+ 	await test('test/deno/preact/')
+	pp.kill('SIGTERM')
+})
+
+async function test(dir: string) {
+	const cmd = [Deno.execPath(), 'test', '-A', '--unstable', '--location=http://0.0.0.0/']
+	if (existsSync(dir + 'tsconfig.json')) {
+		cmd.push('--config', dir + 'tsconfig.json')
+	}
+	cmd.push(dir)
 	const p = Deno.run({
-		cmd: [Deno.execPath(), 'test', '-A', '--unstable', '--location=http://0.0.0.0/'],
+		cmd,
 		stdout: 'inherit',
 		stderr: 'inherit'
 	})
 	await p.status()
 	p.close()
-	pp.kill('SIGTERM')
-})
+}

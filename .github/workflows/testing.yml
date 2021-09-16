@@ -32,4 +32,4 @@ jobs:
         run: go test esm.sh/server -v
 
       - name: Deno test
-        run: deno run -A --unstable test/bootstrap.ts
+        run: deno run -A --unstable test/deno/bootstrap.ts
