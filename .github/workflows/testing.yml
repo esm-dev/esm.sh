@@ -18,7 +18,12 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v2
 
-      - name: Setup deno
+			- name: Setup Node.js
+				uses: actions/setup-node@v2
+				with:
+					node-version: '14'
+
+      - name: Setup Deno
         uses: denolib/setup-deno@v2
         with:
           deno-version: v1.x
