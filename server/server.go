@@ -19,8 +19,8 @@ import (
 var (
 	cdnDomain string
 	cache     storage.Cache
-	db        storage.DBConn
-	fs        storage.FSConn
+	db        storage.DB
+	fs        storage.FS
 	embedFS   *embed.FS
 	log       *logx.Logger
 	node      *Node
