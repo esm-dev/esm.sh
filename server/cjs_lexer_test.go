@@ -14,13 +14,9 @@ import (
 func TestParseCJSExports(t *testing.T) {
 	testDir := path.Join(os.TempDir(), "test")
 	pidFile := path.Join(testDir, "cjs-lexer.pid")
-	ensureDir(testDir)
 
-	config = &Config{
-		cjsLexerServerPort: 8088,
-	}
 	go func() {
-		err := startCJSLexerServer(config.cjsLexerServerPort, pidFile, true)
+		err := startCJSLexerServer(pidFile, true)
 		if err != nil {
 			fmt.Println("startCJSLexerServer:", err)
 		}

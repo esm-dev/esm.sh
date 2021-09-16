@@ -2,8 +2,6 @@ package server
 
 import (
 	"encoding/base64"
-	"fmt"
-	"net/http"
 	"os"
 	"regexp"
 	"strconv"
@@ -107,19 +105,6 @@ func identify(importPath string) string {
 		}
 	}
 	return string(p)
-}
-
-func resolveOrigin(r *http.Request) string {
-	cdnDomain := config.cdnDomain
-	if cdnDomain == "localhost" || strings.HasPrefix(cdnDomain, "localhost:") {
-		return fmt.Sprintf("http://%s/", cdnDomain)
-	} else if cdnDomain != "" {
-		if strings.ContainsRune(cdnDomain, '*') {
-			return fmt.Sprintf("https://%s/", strings.Replace(cdnDomain, "*", r.Host, 1))
-		}
-		return fmt.Sprintf("https://%s/", cdnDomain)
-	}
-	return "/"
 }
 
 func isRemoteImport(importPath string) bool {

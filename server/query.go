@@ -169,9 +169,9 @@ func query() rex.Handle {
 				if isTLS {
 					proto = "https"
 				}
-				if isTLS && config.cdnDomain != "" && hostname != config.cdnDomain {
+				if isTLS && cdnDomain != "" && hostname != cdnDomain {
 					shouldRedirect = true
-					hostname = config.cdnDomain
+					hostname = cdnDomain
 					proto = "https"
 				}
 				if shouldRedirect {
@@ -194,11 +194,7 @@ func query() rex.Handle {
 					ctx.SetHeader("Cache-Control", "public, max-age=31536000, immutable")
 					return rex.Content(savePath, modtime, r)
 				}
-				unpkgDomain := "unpkg.com"
-				if config.unpkgDomain != "" {
-					unpkgDomain = config.unpkgDomain
-				}
-				resp, err := httpClient.Get(fmt.Sprintf("https://%s/%s", unpkgDomain, m.String()))
+				resp, err := httpClient.Get(fmt.Sprintf("https://unpkg.com/%s", m.String()))
 				if err != nil {
 					return err
 				}
@@ -565,10 +561,10 @@ func query() rex.Handle {
 
 		buf := bytes.NewBuffer(nil)
 		origin := "/"
-		if config.cdnDomain == "localhost" || strings.HasPrefix(config.cdnDomain, "localhost:") {
-			origin = fmt.Sprintf("http://%s/", config.cdnDomain)
-		} else if config.cdnDomain != "" {
-			origin = fmt.Sprintf("https://%s/", config.cdnDomain)
+		if cdnDomain == "localhost" || strings.HasPrefix(cdnDomain, "localhost:") {
+			origin = fmt.Sprintf("http://%s/", cdnDomain)
+		} else if cdnDomain != "" {
+			origin = fmt.Sprintf("https://%s/", cdnDomain)
 		}
 
 		fmt.Fprintf(buf, `/* esm.sh - %v */%s`, reqPkg, "\n")

@@ -212,8 +212,8 @@ func (task *buildTask) Build() (esm *ESM, err error) {
 		nodeEnv = "development"
 	}
 	define := map[string]string{
-		"__filename":                  fmt.Sprintf(`"https://%s/%s"`, config.cdnDomain, task.ID()),
-		"__dirname":                   fmt.Sprintf(`"https://%s/%s"`, config.cdnDomain, path.Dir(task.ID())),
+		"__filename":                  fmt.Sprintf(`"https://%s/%s"`, cdnDomain, task.ID()),
+		"__dirname":                   fmt.Sprintf(`"https://%s/%s"`, cdnDomain, path.Dir(task.ID())),
 		"process":                     "__process$",
 		"Buffer":                      "__Buffer$",
 		"setImmediate":                "__setImmediate$",

@@ -14,7 +14,8 @@ import (
 	"strings"
 )
 
-const cjsModuleLexerVersion = "1.2.2"
+var cjsLexerServerPort = uint16(8088)
+var cjsModuleLexerVersion = "1.2.2"
 
 type cjsModuleLexerResult struct {
 	Exports []string `json:"exports"`
@@ -22,7 +23,7 @@ type cjsModuleLexerResult struct {
 }
 
 func parseCJSModuleExports(buildDir string, importPath string, nodeEnv string) (ret cjsModuleLexerResult, err error) {
-	url := fmt.Sprintf("http://0.0.0.0:%d", config.cjsLexerServerPort)
+	url := fmt.Sprintf("http://0.0.0.0:%d", cjsLexerServerPort)
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
 		return
@@ -47,7 +48,7 @@ func parseCJSModuleExports(buildDir string, importPath string, nodeEnv string) (
 }
 
 /** use a cjs-module-lexer http server instead of child process */
-func startCJSLexerServer(port uint16, pidFile string, isDev bool) (err error) {
+func startCJSLexerServer(pidFile string, isDev bool) (err error) {
 	wd := path.Join(os.TempDir(), fmt.Sprintf("esmd-%d-cjs-module-lexer-%s", VERSION, cjsModuleLexerVersion))
 	ensureDir(wd)
 
@@ -201,7 +202,7 @@ func startCJSLexerServer(port uint16, pidFile string, isDev bool) (err error) {
 				console.log('[debug] cjs lexer server ready on http://localhost:%d')
 			}
 		})
-	`, port, port))
+	`, cjsLexerServerPort, cjsLexerServerPort))
 
 	// kill previous node process if exists
 	if data, err := ioutil.ReadFile(pidFile); err == nil {

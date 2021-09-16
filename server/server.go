@@ -17,42 +17,30 @@ import (
 )
 
 var (
-	config  *Config
-	node    *Node
-	cache   storage.Cache
-	db      storage.DBConn
-	fs      storage.FSConn
-	log     *logx.Logger
-	embedFS *embed.FS
+	cdnDomain string
+	cache     storage.Cache
+	db        storage.DBConn
+	fs        storage.FSConn
+	embedFS   *embed.FS
+	log       *logx.Logger
+	node      *Node
 )
-
-// The config for ESM Server
-type Config struct {
-	yarnCacheDir       string
-	cdnDomain          string
-	unpkgDomain        string
-	cjsLexerServerPort uint16
-}
 
 // Serve serves ESM server
 func Serve(efs *embed.FS) {
 	embedFS = efs
 
 	var (
-		port             int
-		httpsPort        int
-		cacheUrl         string
-		dbUrl            string
-		fsUrl            string
-		cdnDomain        string
-		unpkgDomain      string
-		etcDir           string
-		nodejsInstallDir string
-		yarnCacheDir     string
-		logLevel         string
-		logDir           string
-		noCompress       bool
-		isDev            bool
+		port       int
+		httpsPort  int
+		cacheUrl   string
+		dbUrl      string
+		fsUrl      string
+		etcDir     string
+		logLevel   string
+		logDir     string
+		noCompress bool
+		isDev      bool
 	)
 
 	flag.IntVar(&port, "port", 80, "http server port")
@@ -61,10 +49,7 @@ func Serve(efs *embed.FS) {
 	flag.StringVar(&dbUrl, "db", "", "database connection Url")
 	flag.StringVar(&fsUrl, "fs", "", "file system connection Url")
 	flag.StringVar(&cdnDomain, "cdn-domain", "", "cdn domain")
-	flag.StringVar(&unpkgDomain, "unpkg-domain", "", "proxy domain for unpkg.com")
 	flag.StringVar(&etcDir, "etc-dir", "/usr/local/etc/esmd", "the etc dir to store data")
-	flag.StringVar(&nodejsInstallDir, "nodejs-install-dir", "", "nodejs installation dir (default: [etc-dir]/nodejs)")
-	flag.StringVar(&yarnCacheDir, "yarn-cache-dir", "", "the cache dir for `yarn add`")
 	flag.StringVar(&logLevel, "log-level", "info", "log level")
 	flag.StringVar(&logDir, "log-dir", "/var/log/esmd", "the log dir to store server logs")
 	flag.BoolVar(&noCompress, "no-compress", false, "disable compression for text content")
@@ -88,14 +73,6 @@ func Serve(efs *embed.FS) {
 	}
 	if fsUrl == "" {
 		fsUrl = fmt.Sprintf("local:%s", path.Join(etcDir, "storage"))
-		// fsUrl = fmt.Sprintf("localLRU:%s?maxCost=10gb", path.Join(etcDir, "storage"))
-	}
-
-	config = &Config{
-		yarnCacheDir:       yarnCacheDir,
-		cdnDomain:          cdnDomain,
-		unpkgDomain:        unpkgDomain,
-		cjsLexerServerPort: uint16(8088),
 	}
 
 	var err error
@@ -111,10 +88,11 @@ func Serve(efs *embed.FS) {
 	}
 	log.SetLevelByName(logLevel)
 
-	if nodejsInstallDir == "" {
-		nodejsInstallDir = path.Join(etcDir, "nodejs")
+	nodeInstallDir := os.Getenv("NODE_INSTALL_DIR")
+	if nodeInstallDir == "" {
+		nodeInstallDir = path.Join(etcDir, "nodejs")
 	}
-	node, err = checkNode(nodejsInstallDir)
+	node, err = checkNode(nodeInstallDir)
 	if err != nil {
 		log.Fatalf("check nodejs env: %v", err)
 	}
@@ -152,10 +130,10 @@ func Serve(efs *embed.FS) {
 	// start cjs lexer server
 	go func() {
 		for {
-			err := startCJSLexerServer(config.cjsLexerServerPort, path.Join(etcDir, "cjx-lexer.pid"), isDev)
+			err := startCJSLexerServer(path.Join(etcDir, "cjx-lexer.pid"), isDev)
 			if err != nil {
 				if err.Error() == "EADDRINUSE" {
-					config.cjsLexerServerPort++
+					cjsLexerServerPort++
 				} else {
 					log.Errorf("cjs lexer server: %v", err)
 				}
@@ -211,10 +189,6 @@ func Serve(efs *embed.FS) {
 }
 
 func init() {
-	config = &Config{
-		yarnCacheDir:       "",
-		cjsLexerServerPort: 8088,
-	}
 	log = &logx.Logger{}
 	embedFS = &embed.FS{}
 }

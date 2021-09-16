@@ -100,9 +100,7 @@ func TestCopyDTS(t *testing.T) {
 		}
 	}
 
-	config = &Config{
-		cdnDomain: "cdn.esm.sh",
-	}
+	cdnDomain = "cdn.esm.sh"
 
 	cache, err = storage.OpenCache("memory:main")
 	if err != nil {

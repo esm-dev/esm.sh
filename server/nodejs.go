@@ -492,8 +492,9 @@ func yarnAdd(wd string, packages ...string) (err error) {
 			"--ignore-platform",
 			"--ignore-engines",
 		}
-		if config.yarnCacheDir != "" {
-			args = append(args, "--cache-folder", config.yarnCacheDir)
+		yarnCacheDir := os.Getenv("YARN_CACHE_DIR")
+		if yarnCacheDir != "" {
+			args = append(args, "--cache-folder", yarnCacheDir)
 		}
 		cmd := exec.Command("yarn", append(args, packages...)...)
 		cmd.Dir = wd

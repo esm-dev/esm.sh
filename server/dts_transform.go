@@ -34,10 +34,10 @@ func copyDTS(wd string, resolvePrefix string, dts string, tracing *stringSet) (e
 		pkgName = versionedName
 	}
 	origin := ""
-	if config.cdnDomain == "localhost" || strings.HasPrefix(config.cdnDomain, "localhost:") {
-		origin = fmt.Sprintf("http://%s", config.cdnDomain)
-	} else if config.cdnDomain != "" {
-		origin = fmt.Sprintf("https://%s", config.cdnDomain)
+	if cdnDomain == "localhost" || strings.HasPrefix(cdnDomain, "localhost:") {
+		origin = fmt.Sprintf("http://%s", cdnDomain)
+	} else if cdnDomain != "" {
+		origin = fmt.Sprintf("https://%s", cdnDomain)
 	}
 
 	dtsPath := utils.CleanPath(strings.Join(append([]string{
