@@ -3,7 +3,6 @@ package storage
 import (
 	"fmt"
 	"net/url"
-	"strings"
 	"time"
 
 	"github.com/ije/gox/utils"
@@ -27,7 +26,7 @@ func OpenCache(url string) (cache Cache, err error) {
 	}
 
 	name, addr := utils.SplitByFirstByte(url, ':')
-	driver, ok := drivers[strings.ToLower(name)]
+	driver, ok := drivers[name]
 	if !ok {
 		err = fmt.Errorf("Unknown driver '%s'", name)
 		return
