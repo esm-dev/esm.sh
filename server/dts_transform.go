@@ -281,6 +281,17 @@ func toTypesPath(wd string, p NpmPackage, subpath string) string {
 	var types string
 	if subpath != "" {
 		types = subpath
+		packageJSONFile := path.Join(wd, "node_modules", p.Name, subpath, "package.json")
+		if fileExists(packageJSONFile) {
+			var sp NpmPackage
+			if utils.ParseJSONFile(packageJSONFile, &sp) == nil {
+				if sp.Types != "" {
+					types = path.Join(subpath, sp.Types)
+				} else if sp.Typings != "" {
+					types = path.Join(subpath, sp.Typings)
+				}
+			}
+		}
 	} else if p.Types != "" {
 		types = p.Types
 	} else if p.Typings != "" {

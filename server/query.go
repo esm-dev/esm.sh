@@ -460,7 +460,10 @@ func query() rex.Handle {
 					if output.err != nil {
 						return rex.Status(500, "types: "+err.Error())
 					}
-					exists = true
+					if output.esm.Dts != "" {
+						savePath = path.Join("types", output.esm.Dts)
+						exists = true
+					}
 				case <-time.After(time.Minute):
 					buildQueue.RemoveConsumer(task, c)
 					return rex.Status(http.StatusRequestTimeout, "timeout, we are transforming the types hardly, please try later!")

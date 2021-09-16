@@ -700,13 +700,12 @@ func (task *buildTask) handleDTS(esm *ESM) {
 	name := task.pkg.name
 	submodule := task.pkg.submodule
 
+	if task.target == "types" && strings.HasSuffix(submodule, "...d.ts") {
+		submodule = strings.TrimSuffix(submodule, "...d.ts")
+	}
+
 	var dts string
-	if task.target == "types" {
-		if strings.HasSuffix(submodule, "...d.ts") {
-			submodule = strings.TrimSuffix(submodule, "...d.ts")
-		}
-		dts = toTypesPath(task.wd, *esm.NpmPackage, submodule)
-	} else if esm.Types != "" || esm.Typings != "" {
+	if esm.Types != "" || esm.Typings != "" {
 		dts = toTypesPath(task.wd, *esm.NpmPackage, submodule)
 	} else if !strings.HasPrefix(name, "@types/") {
 		typesPkgName := toTypesPackageName(name)
