@@ -15,6 +15,13 @@ func TestParseCJSExports(t *testing.T) {
 	testDir := path.Join(os.TempDir(), "test")
 	pidFile := path.Join(testDir, "cjs-lexer.pid")
 
+	var err error
+	node, err = checkNode(testDir + "/node.js")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Logf("nodejs v%s installed, registry: %s", node.version, node.npmRegistry)
+
 	go func() {
 		err := startCJSLexerServer(pidFile, true)
 		if err != nil {
@@ -22,7 +29,7 @@ func TestParseCJSExports(t *testing.T) {
 		}
 	}()
 
-	err := yarnAdd(testDir, "react@17", "path-browserify")
+	err = yarnAdd(testDir, "react@17", "path-browserify")
 	if err != nil {
 		t.Fatal(err)
 	}
