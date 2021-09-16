@@ -12,7 +12,7 @@ import (
 
 type localFS struct{}
 
-func (fs *localFS) Open(root string, options url.Values) (FSConn, error) {
+func (fs *localFS) Open(root string, options url.Values) (FS, error) {
 	root = utils.CleanPath(root)
 	err := ensureDir(root)
 	if err != nil {

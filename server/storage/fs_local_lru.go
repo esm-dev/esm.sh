@@ -15,7 +15,7 @@ import (
 
 type LocalLRUFS struct{}
 
-func (fs *LocalLRUFS) Open(root string, options url.Values) (FSConn, error) {
+func (fs *LocalLRUFS) Open(root string, options url.Values) (FS, error) {
 	maxCost, err := parseBytesValue(options.Get("maxCost"), 1<<30) // Default maximum cost of cache is 1GB
 	if err != nil {
 		return nil, errors.New("invalid maxCost value")
@@ -108,7 +108,7 @@ func (fs *LocalLRUFS) Open(root string, options url.Values) (FSConn, error) {
 }
 
 type localLRUFSLayer struct {
-	backingFS FSConn
+	backingFS FS
 	cache     *ristretto.Cache
 	remove    func(string)
 	TTL       time.Duration

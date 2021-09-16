@@ -3,6 +3,7 @@ package storage
 import (
 	"fmt"
 	"net/url"
+	"sync"
 	"time"
 
 	"github.com/ije/gox/utils"
@@ -16,7 +17,7 @@ type Cache interface {
 	Flush() error
 }
 
-var drivers = map[string]CacheDriver{}
+var cacheDrivers sync.Map
 
 // New returns a new cache by url
 func OpenCache(url string) (cache Cache, err error) {
@@ -26,17 +27,18 @@ func OpenCache(url string) (cache Cache, err error) {
 	}
 
 	name, addr := utils.SplitByFirstByte(url, ':')
-	driver, ok := drivers[name]
+	driver, ok := cacheDrivers.Load(name)
 	if !ok {
 		err = fmt.Errorf("Unknown driver '%s'", name)
 		return
 	}
+	
 	path, options, err := parseConfigUrl(addr)
 	if err != nil {
 		return
 	}
 
-	cache, err = driver.Open(path, options)
+	cache, err = driver.(CacheDriver).Open(path, options)
 	return
 }
 
@@ -44,12 +46,12 @@ type CacheDriver interface {
 	Open(addr string, args url.Values) (cache Cache, err error)
 }
 
-func RegisterCache(name string, driver CacheDriver) {
-	if driver == nil {
-		panic("cache: Register driver is nil")
+func RegisterCache(name string, driver CacheDriver) error {
+	_, ok := cacheDrivers.Load(name)
+	if ok {
+		return fmt.Errorf("driver '%s' has been registered", name)
 	}
-	if _, dup := drivers[name]; dup {
-		panic("cache: Register called twice for driver " + name)
-	}
-	drivers[name] = driver
+
+	cacheDrivers.Store(name, driver)
+	return nil
 }
