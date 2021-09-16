@@ -121,8 +121,8 @@ type localLRUFSCachedValue struct {
 
 func (fs *localLRUFSLayer) Exists(name string) (found bool, modtime time.Time, err error) {
 	fs.cache.Wait()
-	value, itemFound := fs.cache.Get(name)
-	if itemFound {
+	value, found := fs.cache.Get(name)
+	if found {
 		_, ttlFound := fs.cache.GetTTL(name)
 		if ttlFound {
 			cached := value.(*localLRUFSCachedValue)
@@ -130,19 +130,20 @@ func (fs *localLRUFSLayer) Exists(name string) (found bool, modtime time.Time, e
 		} else {
 			fs.cache.Del(name)
 			fs.remove(name)
+			found = false
 		}
 	}
 	return
 }
 
-func (fs *localLRUFSLayer) ReadFile(name string) (file io.ReadSeekCloser, err error) {
+func (fs *localLRUFSLayer) ReadFile(name string) (io.ReadSeekCloser, error) {
 	_, itemFound := fs.cache.Get(name)
 	if itemFound {
 		_, ttlFound := fs.cache.GetTTL(name)
 		if ttlFound {
-			file, err = fs.backingFS.ReadFile(name)
+			file, err := fs.backingFS.ReadFile(name)
 			if err == nil {
-				return
+				return file, nil
 			}
 		} else {
 			fs.remove(name)
@@ -150,8 +151,7 @@ func (fs *localLRUFSLayer) ReadFile(name string) (file io.ReadSeekCloser, err er
 		// If expired or for some reason we can't read the backing store, make sure we remove from cache
 		fs.cache.Del(name)
 	}
-	err = fmt.Errorf("%s unexpectedly missing", name)
-	return
+	return nil, fmt.Errorf("%s unexpectedly missing", name)
 }
 
 func (fs *localLRUFSLayer) WriteFile(name string, content io.Reader) (written int64, err error) {
