@@ -1,5 +1,10 @@
 # Change Log
 
+
+## v52
+
+todo
+
 ## v51
 
 - Fix build breaking change in v50 (fix [#131](https://github.com/postui/esm.sh/issues/131)).
