@@ -116,9 +116,9 @@ var denoStdNodeModules = map[string]bool{
 	"path":          true,
 	"querystring":   true,
 	"timers":        true,
-	"url":           true,
 	"stream":        true,
 	"events":        true,
+	// "url":           true, // format is missing
 }
 
 // NpmPackageRecords defines version records of a npm package
