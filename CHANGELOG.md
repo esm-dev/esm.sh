@@ -1,13 +1,20 @@
 # Change Log
 
+## v53
+
+- Add `Cache-Tag` header for CDN purge
+- Add **s3** storage support ([#153](https://github.com/postui/esm.sh/issues/153))
+- Fix `require` replacement ([#154](https://github.com/postui/esm.sh/issues/154))
 
 ## v52
 
-todo
+- Fix types build ([#149](https://github.com/postui/esm.sh/issues/149))
+- Use `stream` and `events` from deno std/node ([#136](https://github.com/postui/esm.sh/issues/148)) @talentlessguy
+- Fix `localLRU` and allow for `memoryLRU` ([#148](https://github.com/postui/esm.sh/issues/148)) @jimisaacs
 
 ## v51
 
-- Fix build breaking change in v50 (fix [#131](https://github.com/postui/esm.sh/issues/131)).
+- Fix build breaking change in v50 ([#131](https://github.com/postui/esm.sh/issues/131)).
 - Add `localLRU` **FS** layer ([#126](https://github.com/postui/esm.sh/issues/126))
 - Add a `Cache Interface` that is using to store temporary data like npm packages info.
 - Do not try to build `/favicon.ico` ([#132](https://github.com/postui/esm.sh/issues/132))
@@ -40,7 +47,7 @@ todo
   - querystring
   - url
   - timers
--	Better self-hosting options improved by @imisaacs, super! ([#116](https://github.com/postui/esm.sh/issues/116), [#119](https://github.com/postui/esm.sh/issues/116), [#120](https://github.com/postui/esm.sh/issues/120), [#122](https://github.com/postui/esm.sh/issues/122))
+-	Better self-hosting options improved by @jimisaacs, super! ([#116](https://github.com/postui/esm.sh/issues/116), [#119](https://github.com/postui/esm.sh/issues/116), [#120](https://github.com/postui/esm.sh/issues/120), [#122](https://github.com/postui/esm.sh/issues/122))
 - Add **Unlimted(max 1PB) Storage** to store builds and cache via NFS on esm.sh back server behind Cloudflare
 
 ## v48
