@@ -6,7 +6,6 @@ import (
 	"net/url"
 	"time"
 
-	"esm.sh/server/client"
 	"github.com/aws/aws-sdk-go/aws"
 )
 
@@ -15,7 +14,7 @@ type s3FS struct{}
 func (fs *s3FS) Open(bucket string, options url.Values) (FS, error) {
 	accountId := options.Get("accountId")
 	region := options.Get("region")
-	s3Client, err := client.NewS3Client(&client.SimpleS3ClientConfig{
+	s3Client, err := NewS3Client(&SimpleS3ClientConfig{
 		Bucket:    &bucket,
 		AccountId: &accountId,
 		Region:    &region,
@@ -28,7 +27,7 @@ func (fs *s3FS) Open(bucket string, options url.Values) (FS, error) {
 }
 
 type s3FSLayer struct {
-	s3Client client.SimpleS3Client
+	s3Client SimpleS3Client
 }
 
 func (fs *s3FSLayer) Exists(name string) (found bool, modtime time.Time, err error) {
