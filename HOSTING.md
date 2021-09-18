@@ -1,6 +1,7 @@
 # Self-Hosting
 
-[esm.sh](https://esm.sh) provides a fast, global content delivery network pulicly, but you also can deploy your own CDN for ES Modules. You will need [Go](https://golang.org/dl) 1.16+ to compile the server. The server runtime will install the nodejs (14 LTS) automatically.
+[esm.sh](https://esm.sh) provides a fast, global content delivery network pulicly, but you also can deploy your own CDN for ES Modules.<br>
+You will need [Go](https://golang.org/dl) 1.16+ to compile the server. The server runtime will install the nodejs (14 LTS) automatically.
 
 ## Clone code
 
