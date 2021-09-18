@@ -18,7 +18,7 @@ go run main.go --port=8080 --dev
 
 then you can import `React` from http://localhost:8080/react
 
-## Depoly to single host
+## Deploy to single host
 
 Please ensure the [supervisor](http://supervisord.org/) installed on your host machine.
 
@@ -26,13 +26,13 @@ Please ensure the [supervisor](http://supervisord.org/) installed on your host m
 sh ./scripts/deploy.sh
 ```
 
-## Depoly to multiple hosts
+## Deploy to multiple hosts
 
 - deploy manually
 - deploy automatically
 
 _We are working on it._
 
-## Deploying with Docker
+## Deploy with Docker
 
 An example [Dockerfile](./Dockerfile) is found in the root of this project.
