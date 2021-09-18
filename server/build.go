@@ -542,6 +542,9 @@ esbuild:
 						var marked bool
 						if _, ok := builtInNodeModules[name]; !ok {
 							pkg, err := parsePkg(name)
+							if err == nil && !fileExists(path.Join(task.wd, "node_modules", pkg.name, "package.json")) {
+								err = yarnAdd(task.wd, fmt.Sprintf("%s@%s", pkg.name, pkg.version))
+							}
 							if err == nil {
 								meta, err := initESM(task.wd, *pkg, true, task.isDev)
 								if err == nil {
