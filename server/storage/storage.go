@@ -28,12 +28,15 @@ func SetIsDev(isDevValue bool) {
 	isDev = isDevValue
 }
 
-func parseConfigUrl(configUrl string) (path string, query url.Values, err error) {
-	parsed, err := url.Parse(configUrl)
-	if err != nil {
-		return "", nil, err
+func parseConfigUrl(configUrl string) (root string, options url.Values, err error) {
+	root, query := utils.SplitByFirstByte(configUrl, '?')
+	if query != "" {
+		options, err = url.ParseQuery(query)
+		if err != nil {
+			return root, nil, err
+		}
 	}
-	return parsed.Path, parsed.Query(), nil
+	return root, options, nil
 }
 
 func parseBytesValue(str string, defaultValue int64) (int64, error) {
