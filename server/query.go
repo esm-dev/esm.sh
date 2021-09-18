@@ -191,7 +191,6 @@ func query() rex.Handle {
 					if strings.HasSuffix(pathname, ".ts") {
 						ctx.SetHeader("Content-Type", "application/typescript")
 					}
-					ctx.SetHeader("Cache-Tag", fmt.Sprintf("types,v%d", VERSION))
 					ctx.SetHeader("Cache-Control", "public, max-age=31536000, immutable")
 					return rex.Content(savePath, modtime, r)
 				}
@@ -228,14 +227,12 @@ func query() rex.Handle {
 				data, err := embedFS.ReadFile("embed/types" + pathname)
 				if err == nil {
 					ctx.SetHeader("Content-Type", "application/typescript; charset=utf-8")
-					ctx.SetHeader("Cache-Tag", fmt.Sprintf("types,v%d", VERSION))
 					ctx.SetHeader("Cache-Control", "public, max-age=31536000, immutable")
 					return rex.Content(pathname, startTime, bytes.NewReader(data))
 				}
 			} else {
 				data, err := embedFS.ReadFile("embed/polyfills" + pathname)
 				if err == nil {
-					ctx.SetHeader("Cache-Tag", fmt.Sprintf("module,v%d", VERSION))
 					ctx.SetHeader("Cache-Control", "public, max-age=31536000, immutable")
 					return rex.Content(pathname, startTime, bytes.NewReader(data))
 				}
@@ -260,9 +257,6 @@ func query() rex.Handle {
 				}
 				if storageType == "types" {
 					ctx.SetHeader("Content-Type", "application/typescript; charset=utf-8")
-					ctx.SetHeader("Cache-Tag", fmt.Sprintf("types,v%d", VERSION))
-				} else {
-					ctx.SetHeader("Cache-Tag", fmt.Sprintf("module,v%d", VERSION))
 				}
 				ctx.SetHeader("Cache-Control", "public, max-age=31536000, immutable")
 				return rex.Content(savePath, modtime, r)
@@ -483,7 +477,6 @@ func query() rex.Handle {
 				return rex.Status(500, err.Error())
 			}
 			ctx.SetHeader("Content-Type", "application/typescript; charset=utf-8")
-			ctx.SetHeader("Cache-Tag", fmt.Sprintf("types,v%d", VERSION))
 			ctx.SetHeader("Cache-Control", "public, max-age=31536000, immutable")
 			return rex.Content(savePath, modtime, r)
 		}
@@ -565,7 +558,6 @@ func query() rex.Handle {
 			if err != nil {
 				return rex.Status(500, err.Error())
 			}
-			ctx.SetHeader("Cache-Tag", fmt.Sprintf("esm,v%d", VERSION))
 			ctx.SetHeader("Cache-Control", "public, max-age=31536000, immutable")
 			return rex.Content(savePath, modtime, r)
 		}
@@ -599,7 +591,7 @@ func query() rex.Handle {
 			ctx.SetHeader("X-TypeScript-Types", value)
 			ctx.SetHeader("Access-Control-Expose-Headers", "X-TypeScript-Types")
 		}
-		ctx.SetHeader("Cache-Tag", fmt.Sprintf("entry,v%d", VERSION))
+		ctx.SetHeader("Cache-Tag", "entry")
 		ctx.SetHeader("Cache-Control", fmt.Sprintf("public, max-age=%d", refreshDuration))
 		ctx.SetHeader("Content-Type", "application/javascript; charset=utf-8")
 		return buf
