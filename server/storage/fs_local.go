@@ -5,15 +5,14 @@ import (
 	"net/url"
 	"os"
 	"path"
+	"path/filepath"
 	"time"
-
-	"github.com/ije/gox/utils"
 )
 
 type localFS struct{}
 
 func (fs *localFS) Open(root string, options url.Values) (FS, error) {
-	root = utils.CleanPath(root)
+	root = filepath.Clean(root)
 	err := ensureDir(root)
 	if err != nil {
 		return nil, err
