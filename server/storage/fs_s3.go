@@ -7,6 +7,8 @@ import (
 	"time"
 
 	"github.com/aws/aws-sdk-go/aws"
+	"github.com/aws/aws-sdk-go/aws/awserr"
+	"github.com/aws/aws-sdk-go/service/s3"
 )
 
 type s3FS struct{}
@@ -30,9 +32,17 @@ type s3FSLayer struct {
 	s3Client SimpleS3Client
 }
 
-func (fs *s3FSLayer) Exists(name string) (found bool, modtime time.Time, err error) {
+func (fs *s3FSLayer) Exists(name string) (bool, time.Time, error) {
+	var modtime time.Time
 	result, err := fs.s3Client.Head(&name)
 	if err != nil {
+		// http://docs.aws.amazon.com/AmazonS3/latest/API/ErrorResponses.html
+		// https://github.com/awsdocs/aws-doc-sdk-examples/blob/master/go/example_code/extending_sdk/handleServiceErrorCodes.go
+		if awsErr, ok := err.(awserr.Error); ok {
+			if awsErr.Code() == s3.ErrCodeNoSuchKey {
+				return false, modtime, nil
+			}
+		}
 		return false, modtime, err
 	}
 	modtime = *result.LastModified
@@ -45,7 +55,11 @@ func (fs *s3FSLayer) ReadFile(name string) (io.ReadSeekCloser, error) {
 	if err != nil {
 		return nil, err
 	}
-	return aws.ReadSeekCloser(result.Body), nil
+	data, err := io.ReadAll(result.Body)
+	if err != nil {
+		return nil, err
+	}
+	return aws.ReadSeekCloser(bytes.NewReader(data)), nil
 }
 
 func (fs *s3FSLayer) WriteFile(name string, content io.Reader) (int64, error) {
