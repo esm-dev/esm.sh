@@ -12,39 +12,38 @@ type mLRUCache struct {
 	cache *ristretto.Cache
 }
 
-func (mc *mLRUCache) Has(key string) (bool, error) {
-	_, ok := mc.cache.Get(key)
+func (i *mLRUCache) Has(key string) (bool, error) {
+	i.cache.Wait()
+	_, ok := i.cache.Get(key)
 	return ok, nil
 }
 
-func (mc *mLRUCache) Get(key string) ([]byte, error) {
-	item, itemFound := mc.cache.Get(key)
+func (i *mLRUCache) Get(key string) ([]byte, error) {
+	i.cache.Wait()
+	item, itemFound := i.cache.Get(key)
 	if itemFound {
-		_, ttlFound := mc.cache.GetTTL(key)
+		_, ttlFound := i.cache.GetTTL(key)
 		if ttlFound {
 			return item.([]byte), nil
 		}
-		mc.cache.Del(key)
+		i.cache.Del(key)
 		return nil, ErrExpired
 	}
 	return nil, ErrNotFound
 }
 
-func (mc *mLRUCache) Set(key string, value []byte, ttl time.Duration) error {
-	ok := mc.cache.SetWithTTL(key, value, 0, ttl)
-	if ok {
-		mc.cache.Wait()
-	}
+func (i *mLRUCache) Set(key string, value []byte, ttl time.Duration) error {
+	i.cache.SetWithTTL(key, value, 0, ttl)
 	return nil
 }
 
-func (mc *mLRUCache) Delete(key string) error {
-	mc.cache.Del(key)
+func (i *mLRUCache) Delete(key string) error {
+	i.cache.Del(key)
 	return nil
 }
 
-func (mc *mLRUCache) Flush() error {
-	mc.cache.Clear()
+func (i *mLRUCache) Flush() error {
+	i.cache.Clear()
 	return nil
 }
 
