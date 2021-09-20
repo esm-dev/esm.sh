@@ -496,6 +496,10 @@ func yarnAdd(wd string, packages ...string) (err error) {
 		if yarnCacheDir != "" {
 			args = append(args, "--cache-folder", yarnCacheDir)
 		}
+		yarnMutex := os.Getenv("YARN_MUTEX")
+		if yarnMutex != "" {
+			args = append(args, "--mutex", yarnMutex)
+		}
 		cmd := exec.Command("yarn", append(args, packages...)...)
 		cmd.Dir = wd
 		output, err := cmd.CombinedOutput()
