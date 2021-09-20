@@ -164,7 +164,7 @@ func (fs *localLRUFSLayer) WriteFile(name string, content io.Reader) (written in
 		fs.remove(name)
 		return 0, fmt.Errorf("rejected storing %s", name)
 	}
-	log.Debugf("localLRU accepted %s, cost %d", name, written)
+	// log.Debugf("localLRU accepted %s, cost %d", name, written)
 	return
 }
 
@@ -179,7 +179,7 @@ func (fs *localLRUFSLayer) WriteData(name string, data []byte) (err error) {
 		fs.cache.Del(name)
 		return err
 	}
-	log.Debugf("localLRU accepted %s, cost %d", name, cost)
+	// log.Debugf("localLRU accepted %s, cost %d", name, cost)
 	return
 }
 

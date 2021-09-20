@@ -7,11 +7,25 @@ import (
 	"time"
 
 	"github.com/aws/aws-sdk-go/aws"
+	"github.com/aws/aws-sdk-go/aws/awserr"
+	"github.com/aws/aws-sdk-go/service/s3"
 )
 
 type s3FS struct{}
 
+func getBackingFS(options url.Values) (FS, error) {
+	url := options.Get("backingFS")
+	if url != "" {
+		return OpenFS(url)
+	}
+	return nil, nil
+}
+
 func (fs *s3FS) Open(bucket string, options url.Values) (FS, error) {
+	backingFS, err := getBackingFS(options)
+	if err != nil {
+		return nil, err
+	}
 	accountId := options.Get("accountId")
 	region := options.Get("region")
 	s3Client, err := NewS3Client(&SimpleS3ClientConfig{
@@ -23,16 +37,31 @@ func (fs *s3FS) Open(bucket string, options url.Values) (FS, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &s3FSLayer{s3Client}, nil
+	return &s3FSLayer{backingFS, s3Client}, nil
 }
 
 type s3FSLayer struct {
-	s3Client SimpleS3Client
+	backingFS FS
+	s3Client  SimpleS3Client
 }
 
-func (fs *s3FSLayer) Exists(name string) (found bool, modtime time.Time, err error) {
+func (fs *s3FSLayer) Exists(name string) (bool, time.Time, error) {
+	var modtime time.Time
+	if fs.backingFS != nil {
+		found, modtime, err := fs.backingFS.Exists(name)
+		if found && err == nil {
+			return true, modtime, nil
+		}
+	}
 	result, err := fs.s3Client.Head(&name)
 	if err != nil {
+		// http://docs.aws.amazon.com/AmazonS3/latest/API/ErrorResponses.html
+		// https://github.com/awsdocs/aws-doc-sdk-examples/blob/master/go/example_code/extending_sdk/handleServiceErrorCodes.go
+		if awsErr, ok := err.(awserr.Error); ok {
+			if awsErr.Code() == s3.ErrCodeNoSuchKey {
+				return false, modtime, nil
+			}
+		}
 		return false, modtime, err
 	}
 	modtime = *result.LastModified
@@ -40,18 +69,36 @@ func (fs *s3FSLayer) Exists(name string) (found bool, modtime time.Time, err err
 }
 
 func (fs *s3FSLayer) ReadFile(name string) (io.ReadSeekCloser, error) {
-	// Create a file to write the S3 Object contents to.
+	if fs.backingFS != nil {
+		if found, _, _ := fs.backingFS.Exists(name); found {
+			file, err := fs.backingFS.ReadFile(name)
+			if file != nil && err == nil {
+				return file, err
+			}
+		}
+	}
 	result, err := fs.s3Client.Get(&name)
 	if err != nil {
 		return nil, err
 	}
-	return aws.ReadSeekCloser(result.Body), nil
+	if fs.backingFS != nil {
+		fs.backingFS.WriteFile(name, result.Body)
+		return fs.backingFS.ReadFile(name)
+	}
+	data, err := io.ReadAll(result.Body)
+	if err != nil {
+		return nil, err
+	}
+	return aws.ReadSeekCloser(bytes.NewReader(data)), nil
 }
 
 func (fs *s3FSLayer) WriteFile(name string, content io.Reader) (int64, error) {
 	_, err := fs.s3Client.Put(&name, aws.ReadSeekCloser(content))
 	if err != nil {
 		return 0, err
+	}
+	if fs.backingFS != nil {
+		go fs.backingFS.WriteFile(name, content)
 	}
 	result, err := fs.s3Client.Head(&name)
 	if err != nil {
@@ -61,9 +108,13 @@ func (fs *s3FSLayer) WriteFile(name string, content io.Reader) (int64, error) {
 }
 
 func (fs *s3FSLayer) WriteData(name string, data []byte) error {
-	_, err := fs.s3Client.Put(&name, bytes.NewReader(data))
+	content := bytes.NewReader(data)
+	_, err := fs.s3Client.Put(&name, content)
 	if err != nil {
 		return err
+	}
+	if fs.backingFS != nil {
+		go fs.backingFS.WriteData(name, data)
 	}
 	return nil
 }
