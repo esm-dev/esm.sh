@@ -94,6 +94,7 @@ var polyfilledBuiltInNodeModules = map[string]string{
 	"process":             "process/browser",
 	"querystring":         "querystring-es3",
 	"stream":              "stream-browserify",
+	"stream/web":          "web-streams-polyfill",
 	"_stream_duplex":      "readable-stream/duplex",
 	"_stream_passthrough": "readable-stream/passthrough",
 	"_stream_readable":    "readable-stream/readable",
@@ -118,6 +119,7 @@ var denoStdNodeModules = map[string]bool{
 	"timers":        true,
 	"stream":        true,
 	"events":        true,
+	"module":        true,
 	// "url":           true, // format is missing
 }
 
