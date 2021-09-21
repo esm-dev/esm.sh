@@ -135,7 +135,7 @@ func (task *buildTask) Build() (esm *ESM, err error) {
 	}
 	defer os.RemoveAll(task.wd)
 
-	task.stage = "install deps"
+	task.stage = "install-deps"
 	err = yarnAdd(task.wd, fmt.Sprintf("%s@%s", task.pkg.name, task.pkg.version))
 	if err != nil {
 		log.Error("install deps:", err)
@@ -159,7 +159,7 @@ func (task *buildTask) build(tracing *stringSet) (esm *ESM, err error) {
 	}
 
 	if task.target == "types" {
-		task.stage = "copy dts"
+		task.stage = "copy-dts"
 		task.handleDTS(esm)
 		return
 	}
@@ -668,7 +668,7 @@ esbuild:
 
 	log.Debugf("esbuild %s %s %s in %v", task.pkg.String(), task.target, nodeEnv, time.Now().Sub(start))
 
-	task.stage = "copy dts"
+	task.stage = "copy-dts"
 	task.handleDTS(esm)
 
 	dbErr := db.Put(
