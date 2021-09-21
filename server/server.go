@@ -33,10 +33,10 @@ func Serve(efs *embed.FS) {
 	var (
 		port       int
 		httpsPort  int
+		etcDir     string
 		cacheUrl   string
 		dbUrl      string
 		fsUrl      string
-		etcDir     string
 		logLevel   string
 		logDir     string
 		noCompress bool
@@ -45,26 +45,24 @@ func Serve(efs *embed.FS) {
 
 	flag.IntVar(&port, "port", 80, "http server port")
 	flag.IntVar(&httpsPort, "https-port", 0, "https(autotls) server port, default is disabled")
-	flag.StringVar(&cacheUrl, "cache", "", "cache connection Url")
-	flag.StringVar(&dbUrl, "db", "", "database connection Url")
-	flag.StringVar(&fsUrl, "fs", "", "file system connection Url")
+	flag.StringVar(&cacheUrl, "cache", "", "cache config, default is 'memory:main'")
+	flag.StringVar(&dbUrl, "db", "", "database config, default is 'postdb:[etc-dir]/esm.db'")
+	flag.StringVar(&fsUrl, "fs", "", "filesystem config, default is 'local:[etc-dir]/storage/'")
 	flag.StringVar(&cdnDomain, "cdn-domain", "", "cdn domain")
-	flag.StringVar(&etcDir, "etc-dir", "/usr/local/etc/esmd", "the etc dir to store data")
+	flag.StringVar(&etcDir, "etc-dir", ".esmd", "the etc dir to store common data")
+	flag.StringVar(&logDir, "log-dir", "", "the log dir to store server logs")
 	flag.StringVar(&logLevel, "log-level", "info", "log level")
-	flag.StringVar(&logDir, "log-dir", "/var/log/esmd", "the log dir to store server logs")
 	flag.BoolVar(&noCompress, "no-compress", false, "disable compression for text content")
 	flag.BoolVar(&isDev, "dev", false, "run server in development mode")
 	flag.Parse()
 
-	if isDev {
-		etcDir, _ = filepath.Abs(".dev")
-		logDir = path.Join(etcDir, "log")
-		logLevel = "debug"
-		cdnDomain = "localhost"
-		if port != 80 {
-			cdnDomain = fmt.Sprintf("localhost:%d", port)
-		}
+	var err error
+	etcDir, err = filepath.Abs(etcDir)
+	if err != nil {
+		fmt.Printf("bad etc dir: %v\n", err)
+		os.Exit(1)
 	}
+
 	if cacheUrl == "" {
 		cacheUrl = "memory:main"
 	}
@@ -74,17 +72,22 @@ func Serve(efs *embed.FS) {
 	if fsUrl == "" {
 		fsUrl = fmt.Sprintf("local:%s", path.Join(etcDir, "storage"))
 	}
-
-	var err error
-	var log *logx.Logger
 	if logDir == "" {
-		log = &logx.Logger{}
-	} else {
-		log, err = logx.New(fmt.Sprintf("file:%s?buffer=32k", path.Join(logDir, "main.log")))
-		if err != nil {
-			fmt.Printf("initiate logger: %v\n", err)
-			os.Exit(1)
+		logDir = path.Join(etcDir, "log")
+	}
+
+	if isDev {
+		logLevel = "debug"
+		cdnDomain = "localhost"
+		if port != 80 {
+			cdnDomain = fmt.Sprintf("localhost:%d", port)
 		}
+	}
+
+	log, err := logx.New(fmt.Sprintf("file:%s?buffer=32k", path.Join(logDir, "main.log")))
+	if err != nil {
+		fmt.Printf("initiate logger: %v\n", err)
+		os.Exit(1)
 	}
 	log.SetLevelByName(logLevel)
 
@@ -96,7 +99,7 @@ func Serve(efs *embed.FS) {
 	if err != nil {
 		log.Fatalf("check nodejs env: %v", err)
 	}
-	log.Debugf("nodejs v%s installed, registry: %s", node.version, node.npmRegistry)
+	log.Debugf("nodejs v%s installed, registry: %s, yarn: %s", node.version, node.npmRegistry, node.yarn)
 
 	storage.SetLogger(log)
 	storage.SetIsDev(isDev)

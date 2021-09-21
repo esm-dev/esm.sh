@@ -145,6 +145,7 @@ type NpmPackage struct {
 type Node struct {
 	version     string
 	npmRegistry string
+	yarn        string
 }
 
 func checkNode(installDir string) (node *Node, err error) {
@@ -193,12 +194,15 @@ CheckYarn:
 		if errors.Is(err, exec.ErrNotFound) {
 			output, err = exec.Command("npm", "install", "yarn", "-g").CombinedOutput()
 			if err != nil {
-				err = errors.New("install yarn: " + strings.TrimSpace(string(output)))
+				err = fmt.Errorf("install yarn: %s", strings.TrimSpace(string(output)))
 				return
 			}
 			goto CheckYarn
 		}
-		err = errors.New("bad yarn version")
+		err = fmt.Errorf("bad yarn version: %s", strings.TrimSpace(string(output)))
+	}
+	if err == nil {
+		node.yarn = strings.TrimSpace(string(output))
 	}
 	return
 }
