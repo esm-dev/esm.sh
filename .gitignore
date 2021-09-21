@@ -2,4 +2,5 @@
 Thumbs.db
 .esmd/
 node_modules/
+target/
 scripts/esmd
