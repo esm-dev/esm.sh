@@ -64,6 +64,7 @@ func query() rex.Handle {
 				return err
 			}
 			return rex.Content("favicon.svg", startTime, bytes.NewReader(data))
+
 		case "/favicon.ico":
 			return rex.Redirect("/favicon.svg", http.StatusPermanentRedirect)
 
@@ -134,91 +135,99 @@ func query() rex.Handle {
 			prevBuildVer = a[1]
 		}
 
+		// get package info
+		reqPkg, err := parsePkg(pathname)
+		if err != nil {
+			status := 500
+			message := err.Error()
+			if message == "invalid path" {
+				status = 400
+			} else if strings.HasSuffix(message, "not found") {
+				status = 404
+			}
+			return rex.Status(status, message)
+		}
+
 		var storageType string
-		switch path.Ext(pathname) {
-		case ".js":
-			if hasBuildVerPrefix {
-				storageType = "builds"
-			}
+		if reqPkg.submodule != "" {
+			switch path.Ext(pathname) {
+			case ".js":
+				if hasBuildVerPrefix {
+					storageType = "builds"
+				}
 
-		// todo: transform ts/jsx/tsx for browser
-		case ".ts", ".jsx", ".tsx":
-			if hasBuildVerPrefix && strings.HasSuffix(pathname, ".d.ts") {
-				storageType = "types"
-			} else if len(strings.Split(pathname, "/")) > 2 {
-				storageType = "raw"
-			}
+			// todo: transform ts/jsx/tsx for browser
+			case ".ts", ".jsx", ".tsx":
+				if hasBuildVerPrefix && strings.HasSuffix(pathname, ".d.ts") {
+					storageType = "types"
+				} else if len(strings.Split(pathname, "/")) > 2 {
+					storageType = "raw"
+				}
 
-		case ".json", ".css", ".pcss", "postcss", ".less", ".sass", ".scss", ".stylus", ".styl", ".wasm", ".xml", ".yaml", ".svg", ".png", ".eot", ".ttf", ".woff", ".woff2":
-			if len(strings.Split(pathname, "/")) > 2 {
-				storageType = "raw"
+			case ".json", ".css", ".pcss", "postcss", ".less", ".sass", ".scss", ".stylus", ".styl", ".wasm", ".xml", ".yaml", ".svg", ".png", ".eot", ".ttf", ".woff", ".woff2":
+				if len(strings.Split(pathname, "/")) > 2 {
+					storageType = "raw"
+				}
 			}
 		}
 
 		// serve raw dist files like CSS that is fetching from unpkg.com
 		if storageType == "raw" {
-			m, err := parsePkg(pathname)
+			shouldRedirect := !regVersionPath.MatchString(pathname)
+			isTLS := ctx.R.TLS != nil
+			hostname := ctx.R.Host
+			proto := "http"
+			if isTLS {
+				proto = "https"
+			}
+			if isTLS && cdnDomain != "" && hostname != cdnDomain {
+				shouldRedirect = true
+				hostname = cdnDomain
+				proto = "https"
+			}
+			if shouldRedirect {
+				url := fmt.Sprintf("%s://%s/%s", proto, hostname, reqPkg.String())
+				return rex.Redirect(url, http.StatusTemporaryRedirect)
+			}
+			savePath := path.Join("raw", reqPkg.String())
+			exists, modtime, err := fs.Exists(savePath)
 			if err != nil {
 				return rex.Status(500, err.Error())
 			}
-			if m.submodule != "" {
-				shouldRedirect := !regVersionPath.MatchString(pathname)
-				isTLS := ctx.R.TLS != nil
-				hostname := ctx.R.Host
-				proto := "http"
-				if isTLS {
-					proto = "https"
-				}
-				if isTLS && cdnDomain != "" && hostname != cdnDomain {
-					shouldRedirect = true
-					hostname = cdnDomain
-					proto = "https"
-				}
-				if shouldRedirect {
-					url := fmt.Sprintf("%s://%s/%s", proto, hostname, m.String())
-					return rex.Redirect(url, http.StatusTemporaryRedirect)
-				}
-				savePath := path.Join("raw", m.String())
-				exists, modtime, err := fs.Exists(savePath)
+			if exists {
+				r, err := fs.ReadFile(savePath)
 				if err != nil {
 					return rex.Status(500, err.Error())
 				}
-				if exists {
-					r, err := fs.ReadFile(savePath)
-					if err != nil {
-						return rex.Status(500, err.Error())
-					}
-					if strings.HasSuffix(pathname, ".ts") {
-						ctx.SetHeader("Content-Type", "application/typescript")
-					}
-					ctx.SetHeader("Cache-Control", "public, max-age=31536000, immutable")
-					return rex.Content(savePath, modtime, r)
-				}
-				resp, err := httpClient.Get(fmt.Sprintf("https://unpkg.com/%s", m.String()))
-				if err != nil {
-					return err
-				}
-				defer resp.Body.Close()
-				if resp.StatusCode != 200 {
-					return rex.Err(http.StatusBadGateway)
-				}
-				data, err := ioutil.ReadAll(resp.Body)
-				if err != nil {
-					return err
-				}
-				err = fs.WriteData(savePath, data)
-				if err != nil {
-					return err
-				}
-				for key, values := range resp.Header {
-					for _, value := range values {
-						ctx.AddHeader(key, value)
-					}
+				if strings.HasSuffix(pathname, ".ts") {
+					ctx.SetHeader("Content-Type", "application/typescript")
 				}
 				ctx.SetHeader("Cache-Control", "public, max-age=31536000, immutable")
-				return data
+				return rex.Content(savePath, modtime, r)
 			}
-			storageType = ""
+			resp, err := httpClient.Get(fmt.Sprintf("https://unpkg.com/%s", reqPkg.String()))
+			if err != nil {
+				return err
+			}
+			defer resp.Body.Close()
+			if resp.StatusCode != 200 {
+				return rex.Err(http.StatusBadGateway)
+			}
+			data, err := ioutil.ReadAll(resp.Body)
+			if err != nil {
+				return err
+			}
+			err = fs.WriteData(savePath, data)
+			if err != nil {
+				return err
+			}
+			for key, values := range resp.Header {
+				for _, value := range values {
+					ctx.AddHeader(key, value)
+				}
+			}
+			ctx.SetHeader("Cache-Control", "public, max-age=31536000, immutable")
+			return data
 		}
 
 		// serve build files
@@ -261,19 +270,6 @@ func query() rex.Handle {
 				ctx.SetHeader("Cache-Control", "public, max-age=31536000, immutable")
 				return rex.Content(savePath, modtime, r)
 			}
-		}
-
-		// get package info
-		reqPkg, err := parsePkg(pathname)
-		if err != nil {
-			status := 500
-			message := err.Error()
-			if message == "invalid path" {
-				status = 400
-			} else if strings.HasSuffix(message, "not found") {
-				status = 404
-			}
-			return rex.Status(status, message)
 		}
 
 		// check `deps` query
@@ -397,7 +393,7 @@ func query() rex.Handle {
 			}
 		}
 
-		// check whether it is `bare` mode, this is for CDN fetching
+		// check whether it is `bare` mode
 		if hasBuildVerPrefix && endsWith(pathname, ".js") {
 			a := strings.Split(reqPkg.submodule, "/")
 			if len(a) > 1 {
