@@ -18,8 +18,13 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v2
 
+      - name: Setup Node.js
+        uses: actions/setup-node@v2
+        with:
+          node-version: '14'
+
       - name: Setup deno
-        uses: denolib/setup-deno@v2
+        uses: denoland/setup-deno@main
         with:
           deno-version: v1.x
 
@@ -32,4 +37,4 @@ jobs:
         run: go test esm.sh/server -v
 
       - name: Deno test
-        run: deno run -A --unstable test/bootstrap.ts
+        run: deno run -A --unstable test/deno/bootstrap.ts

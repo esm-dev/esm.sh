@@ -456,7 +456,10 @@ func query() rex.Handle {
 					if output.err != nil {
 						return rex.Status(500, "types: "+err.Error())
 					}
-					exists = true
+					if output.esm.Dts != "" {
+						savePath = path.Join("types", output.esm.Dts)
+						exists = true
+					}
 				case <-time.After(time.Minute):
 					buildQueue.RemoveConsumer(task, c)
 					return rex.Status(http.StatusRequestTimeout, "timeout, we are transforming the types hardly, please try later!")
@@ -584,7 +587,8 @@ func query() rex.Handle {
 			ctx.SetHeader("X-TypeScript-Types", value)
 			ctx.SetHeader("Access-Control-Expose-Headers", "X-TypeScript-Types")
 		}
-		ctx.SetHeader("Cache-Control", fmt.Sprintf("private, max-age=%d", refreshDuration))
+		ctx.SetHeader("Cache-Tag", "entry")
+		ctx.SetHeader("Cache-Control", fmt.Sprintf("public, max-age=%d", refreshDuration))
 		ctx.SetHeader("Content-Type", "application/javascript; charset=utf-8")
 		return buf
 	}

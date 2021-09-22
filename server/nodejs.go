@@ -94,6 +94,7 @@ var polyfilledBuiltInNodeModules = map[string]string{
 	"process":             "process/browser",
 	"querystring":         "querystring-es3",
 	"stream":              "stream-browserify",
+	"stream/web":          "web-streams-polyfill",
 	"_stream_duplex":      "readable-stream/duplex",
 	"_stream_passthrough": "readable-stream/passthrough",
 	"_stream_readable":    "readable-stream/readable",
@@ -116,9 +117,10 @@ var denoStdNodeModules = map[string]bool{
 	"path":          true,
 	"querystring":   true,
 	"timers":        true,
-	"url":           true,
 	"stream":        true,
 	"events":        true,
+	"module":        true,
+	// "url":           true, // format is missing
 }
 
 // NpmPackageRecords defines version records of a npm package
@@ -499,6 +501,10 @@ func yarnAdd(wd string, packages ...string) (err error) {
 		yarnCacheDir := os.Getenv("YARN_CACHE_DIR")
 		if yarnCacheDir != "" {
 			args = append(args, "--cache-folder", yarnCacheDir)
+		}
+		yarnMutex := os.Getenv("YARN_MUTEX")
+		if yarnMutex != "" {
+			args = append(args, "--mutex", yarnMutex)
 		}
 		cmd := exec.Command("yarn", append(args, packages...)...)
 		cmd.Dir = wd

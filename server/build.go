@@ -11,7 +11,6 @@ import (
 	"runtime"
 	"sort"
 	"strings"
-	"sync"
 	"time"
 
 	"esm.sh/server/storage"
@@ -20,21 +19,18 @@ import (
 	"github.com/ije/gox/utils"
 )
 
-var wdRefLock sync.Mutex
-var wdRefCounter = map[string]int{}
 var buildQueue = newBuildQueue(2 * runtime.NumCPU())
 
 type buildTask struct {
-	id        string
-	wd        string
-	stage     string
-	pkg       pkg
-	alias     map[string]string
-	deps      pkgSlice
-	target    string
-	bundle    bool
-	isDev     bool
-	noInstall bool
+	id     string
+	wd     string
+	stage  string
+	pkg    pkg
+	alias  map[string]string
+	deps   pkgSlice
+	target string
+	bundle bool
+	isDev  bool
 }
 
 func (task *buildTask) resolvePrefix() string {
@@ -125,47 +121,35 @@ func (task *buildTask) getImportPath(pkg pkg, extendsAlias bool) string {
 	)
 }
 
-func (task *buildTask) beforeBuild() {
+func (task *buildTask) Build() (esm *ESM, err error) {
+	prev, err := findESM(task.ID())
+	if err == nil {
+		return prev, nil
+	}
+
 	if task.wd == "" {
 		hasher := sha1.New()
 		hasher.Write([]byte(task.ID()))
 		task.wd = path.Join(os.TempDir(), "esm-build-"+hex.EncodeToString(hasher.Sum(nil)))
 		ensureDir(task.wd)
 	}
+	defer os.RemoveAll(task.wd)
 
-	wdRefLock.Lock()
-	wdRefCounter[task.wd] = wdRefCounter[task.wd] + 1
-	wdRefLock.Unlock()
+	task.stage = "install-deps"
+	err = yarnAdd(task.wd, fmt.Sprintf("%s@%s", task.pkg.name, task.pkg.version))
+	if err != nil {
+		log.Error("install deps:", err)
+		return
+	}
+
+	return task.build(newStringSet())
 }
 
-func (task *buildTask) Build() (esm *ESM, err error) {
-	defer func() {
-		wdRefLock.Lock()
-		n := wdRefCounter[task.wd] - 1
-		if n <= 0 {
-			delete(wdRefCounter, task.wd)
-		} else {
-			wdRefCounter[task.wd] = n
-		}
-		wdRefLock.Unlock()
-		if n <= 0 {
-			os.RemoveAll(task.wd)
-		}
-	}()
-
-	prev, err := findESM(task.ID())
-	if err == nil {
-		return prev, nil
+func (task *buildTask) build(tracing *stringSet) (esm *ESM, err error) {
+	if tracing.Has(task.ID()) {
+		return
 	}
-
-	if !task.noInstall && (!fileExists(path.Join(task.wd, "node_modules", task.pkg.name, "package.json"))) {
-		task.stage = "install deps"
-		err = yarnAdd(task.wd, fmt.Sprintf("%s@%s", task.pkg.name, task.pkg.version))
-		if err != nil {
-			log.Error("install deps:", err)
-			return
-		}
-	}
+	tracing.Add(task.ID())
 
 	task.stage = "init"
 	esm, err = initESM(task.wd, task.pkg, task.target != "types", task.isDev)
@@ -175,7 +159,7 @@ func (task *buildTask) Build() (esm *ESM, err error) {
 	}
 
 	if task.target == "types" {
-		task.stage = "copy dts"
+		task.stage = "copy-dts"
 		task.handleDTS(esm)
 		return
 	}
@@ -414,15 +398,17 @@ esbuild:
 						submodule: submodule,
 					}
 					subTask := &buildTask{
-						wd:        task.wd, // reuse current wd
-						pkg:       subPkg,
-						alias:     task.alias,
-						deps:      task.deps,
-						target:    task.target,
-						isDev:     task.isDev,
-						noInstall: true,
+						wd:     task.wd, // reuse current wd
+						pkg:    subPkg,
+						alias:  task.alias,
+						deps:   task.deps,
+						target: task.target,
+						isDev:  task.isDev,
 					}
-					buildQueue.Add(subTask)
+					subTask.build(tracing)
+					if err != nil {
+						return
+					}
 					importPath = task.getImportPath(subPkg, true)
 				}
 				// is builtin `buffer` module
@@ -506,7 +492,6 @@ esbuild:
 							return
 						}
 						t := &buildTask{
-							wd: task.wd, // reuse current wd
 							pkg: pkg{
 								name:      pkgName,
 								version:   p.Version,
@@ -557,6 +542,9 @@ esbuild:
 						var marked bool
 						if _, ok := builtInNodeModules[name]; !ok {
 							pkg, err := parsePkg(name)
+							if err == nil && !fileExists(path.Join(task.wd, "node_modules", pkg.name, "package.json")) {
+								err = yarnAdd(task.wd, fmt.Sprintf("%s@%s", pkg.name, pkg.version))
+							}
 							if err == nil {
 								meta, err := initESM(task.wd, *pkg, true, task.isDev)
 								if err == nil {
@@ -680,7 +668,7 @@ esbuild:
 
 	log.Debugf("esbuild %s %s %s in %v", task.pkg.String(), task.target, nodeEnv, time.Now().Sub(start))
 
-	task.stage = "copy dts"
+	task.stage = "copy-dts"
 	task.handleDTS(esm)
 
 	dbErr := db.Put(
@@ -700,13 +688,12 @@ func (task *buildTask) handleDTS(esm *ESM) {
 	name := task.pkg.name
 	submodule := task.pkg.submodule
 
+	if task.target == "types" && strings.HasSuffix(submodule, "...d.ts") {
+		submodule = strings.TrimSuffix(submodule, "...d.ts")
+	}
+
 	var dts string
-	if task.target == "types" {
-		if strings.HasSuffix(submodule, "...d.ts") {
-			submodule = strings.TrimSuffix(submodule, "...d.ts")
-		}
-		dts = toTypesPath(task.wd, *esm.NpmPackage, submodule)
-	} else if esm.Types != "" || esm.Typings != "" {
+	if esm.Types != "" || esm.Typings != "" {
 		dts = toTypesPath(task.wd, *esm.NpmPackage, submodule)
 	} else if !strings.HasPrefix(name, "@types/") {
 		typesPkgName := toTypesPackageName(name)

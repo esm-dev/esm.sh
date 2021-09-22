@@ -86,7 +86,6 @@ func (q *BuildQueue) Add(build *buildTask) *BuildQueueConsumer {
 		return c
 	}
 
-	build.beforeBuild()
 	t = &task{
 		buildTask:  build,
 		createTime: time.Now(),
