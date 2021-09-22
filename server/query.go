@@ -135,6 +135,21 @@ func query() rex.Handle {
 			prevBuildVer = a[1]
 		}
 
+		// serve embed files
+		if hasBuildVerPrefix {
+			data, err := embedFS.ReadFile("embed/polyfills" + pathname)
+			if err == nil {
+				ctx.SetHeader("Cache-Control", "public, max-age=31536000, immutable")
+				return rex.Content(pathname, startTime, bytes.NewReader(data))
+			}
+			data, err = embedFS.ReadFile("embed/types" + pathname)
+			if err == nil {
+				ctx.SetHeader("Content-Type", "application/typescript; charset=utf-8")
+				ctx.SetHeader("Cache-Control", "public, max-age=31536000, immutable")
+				return rex.Content(pathname, startTime, bytes.NewReader(data))
+			}
+		}
+
 		// get package info
 		reqPkg, err := parsePkg(pathname)
 		if err != nil {
@@ -232,21 +247,6 @@ func query() rex.Handle {
 
 		// serve build files
 		if hasBuildVerPrefix && (storageType == "builds" || storageType == "types") {
-			if storageType == "types" {
-				data, err := embedFS.ReadFile("embed/types" + pathname)
-				if err == nil {
-					ctx.SetHeader("Content-Type", "application/typescript; charset=utf-8")
-					ctx.SetHeader("Cache-Control", "public, max-age=31536000, immutable")
-					return rex.Content(pathname, startTime, bytes.NewReader(data))
-				}
-			} else {
-				data, err := embedFS.ReadFile("embed/polyfills" + pathname)
-				if err == nil {
-					ctx.SetHeader("Cache-Control", "public, max-age=31536000, immutable")
-					return rex.Content(pathname, startTime, bytes.NewReader(data))
-				}
-			}
-
 			var savePath string
 			if prevBuildVer != "" {
 				savePath = path.Join(storageType, prevBuildVer, pathname)
