@@ -6,7 +6,7 @@ WORKDIR /
 
 RUN apt-get update -y && apt-get install -y xz-utils git
 
-RUN git clone https://github.com/postui/esm.sh
+RUN git clone https://github.com/alephjs/esm.sh
 
 WORKDIR /esm.sh
 
