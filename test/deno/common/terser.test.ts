@@ -1,7 +1,7 @@
 import { minify } from 'http://localhost:8080/terser'
 import { assert } from 'https://deno.land/std@0.106.0/testing/asserts.ts'
 
-Deno.test('check offical typescript', async () => {
+Deno.test('check terser minifiy', async () => {
 	var code = "function add(first, second) { return first + second; }";
 	var result = await minify(code, { sourceMap: true });
 	assert(result.code === 'function add(n,d){return n+d}')
