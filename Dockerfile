@@ -12,4 +12,4 @@ WORKDIR /esm.sh
 
 RUN go build -o esmd main.go
 
-CMD ["esmd", "--etc-dir", "/esm.sh", "--cache", $CACHE, "--db", $DB, "--fs", $FS "--cdn-domain", $CDN_DOMAIN]
+CMD ["esmd", "--etc-dir", "/esm.sh", "--cache", "$CACHE", "--db", "$DB", "--fs", "$FS" "--cdn-domain", "$CDN_DOMAIN"]
