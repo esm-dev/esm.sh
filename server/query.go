@@ -115,7 +115,7 @@ func query() rex.Handle {
 			}
 		}
 
-		// serve embed files
+		// serve embed assets
 		if strings.HasPrefix(pathname, "/embed/assets/") || strings.HasPrefix(pathname, "/embed/test/") {
 			data, err := embedFS.ReadFile(pathname[1:])
 			if err != nil {
@@ -135,7 +135,7 @@ func query() rex.Handle {
 			prevBuildVer = a[1]
 		}
 
-		// serve embed files
+		// serve embed polyfills/types
 		if hasBuildVerPrefix {
 			data, err := embedFS.ReadFile("embed/polyfills" + pathname)
 			if err == nil {
@@ -173,14 +173,20 @@ func query() rex.Handle {
 
 			// todo: transform ts/jsx/tsx for browser
 			case ".ts", ".jsx", ".tsx":
-				if hasBuildVerPrefix && strings.HasSuffix(pathname, ".d.ts") {
-					storageType = "types"
+				if hasBuildVerPrefix {
+					if strings.HasSuffix(pathname, ".d.ts") {
+						storageType = "types"
+					}
 				} else if len(strings.Split(pathname, "/")) > 2 {
 					storageType = "raw"
 				}
 
 			case ".json", ".css", ".pcss", "postcss", ".less", ".sass", ".scss", ".stylus", ".styl", ".wasm", ".xml", ".yaml", ".svg", ".png", ".eot", ".ttf", ".woff", ".woff2":
-				if len(strings.Split(pathname, "/")) > 2 {
+				if hasBuildVerPrefix {
+					if strings.HasSuffix(pathname, ".css") {
+						storageType = "builds"
+					}
+				} else if len(strings.Split(pathname, "/")) > 2 {
 					storageType = "raw"
 				}
 			}
@@ -341,10 +347,10 @@ func query() rex.Handle {
 			}
 		}
 
-		isPkgCSS := !ctx.Form.IsNil("css")
-		isDev := !ctx.Form.IsNil("dev")
 		bundleMode := !ctx.Form.IsNil("bundle") || !ctx.Form.IsNil("b")
 		noCheck := !ctx.Form.IsNil("no-check")
+		isDev := !ctx.Form.IsNil("dev")
+		isPkgCSS := !ctx.Form.IsNil("css")
 		isBare := false
 
 		// parse `resolvePrefix`
@@ -528,7 +534,7 @@ func query() rex.Handle {
 				if ctx.R.TLS != nil {
 					proto = "https"
 				}
-				url := fmt.Sprintf("%s://%s/%s.css", proto, hostname, taskID)
+				url := fmt.Sprintf("%s://%s/%s.css", proto, hostname, strings.TrimSuffix(taskID, ".js"))
 				code := http.StatusTemporaryRedirect
 				if regVersionPath.MatchString(pathname) {
 					code = http.StatusPermanentRedirect

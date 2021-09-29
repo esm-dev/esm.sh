@@ -40,9 +40,15 @@ func parsePkg(pathname string) (*pkg, error) {
 	if scope != "" {
 		name = fmt.Sprintf("@%s/%s", scope, name)
 	}
-	if version == "" {
-		version = "latest"
+
+	if regFullVersion.MatchString(version) {
+		return &pkg{
+			name:      name,
+			version:   version,
+			submodule: strings.TrimSuffix(submodule, ".js"),
+		}, nil
 	}
+
 	info, _, _, err := getPackageInfo("", name, version)
 	if err != nil {
 		return nil, err

@@ -333,7 +333,7 @@ func cachePackageInfo(name string, version string) (info NpmPackage, err error) 
 }
 
 func resolveVersion(version string) string {
-	if version == "*" {
+	if version == "" || version == "*" {
 		return "latest"
 	}
 	if strings.ContainsRune(version, '>') || strings.ContainsRune(version, '<') {
