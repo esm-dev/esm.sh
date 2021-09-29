@@ -220,6 +220,10 @@ func (task *buildTask) build(tracing *stringSet) (esm *ESM, err error) {
 			plugin.OnResolve(
 				api.OnResolveOptions{Filter: ".*"},
 				func(args api.OnResolveArgs) (api.OnResolveResult, error) {
+					if strings.HasPrefix(args.Path, "data:") {
+						return api.OnResolveResult{External: true}, nil
+					}
+
 					specifier := strings.TrimSuffix(args.Path, "/")
 
 					// resolve `?alias` query
@@ -324,6 +328,13 @@ esbuild:
 		MinifyIdentifiers: !task.isDev,
 		MinifySyntax:      !task.isDev,
 		Plugins:           []api.Plugin{esmResolverPlugin},
+		Loader: map[string]api.Loader{
+			".ttf":   api.LoaderDataURL,
+			".woff":  api.LoaderDataURL,
+			".woff2": api.LoaderDataURL,
+			".png":   api.LoaderDataURL,
+			".svg":   api.LoaderDataURL,
+		},
 	}
 	if task.target == "node" {
 		options.Platform = api.PlatformNode
