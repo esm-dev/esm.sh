@@ -5,38 +5,8 @@ function notImplemented(name) {
 }
 
 export class Interface {
-  line
-  cursor
   constructor() {
-    this.line = ''
-    this.cursor = 0
-  }
-  close() {
-    notImplemented('Interface.close')
-  }
-  pause() {
-    notImplemented('Interface.pause')
-  }
-  prompt() {
-    notImplemented('Interface.prompt')
-  }
-  question() {
-    notImplemented('Interface.question')
-  }
-  resume() {
-    notImplemented('Interface.resume')
-  }
-  setPrompt() {
-    notImplemented('Interface.setPrompt')
-  }
-  getPrompt() {
-    notImplemented('Interface.getPrompt')
-  }
-  write() {
-    notImplemented('Interface.write')
-  }
-  getCursorPos() {
-    notImplemented('Interface.getCursorPos')
+    notImplemented('Interface')
   }
 }
 
