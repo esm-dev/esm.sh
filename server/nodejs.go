@@ -118,6 +118,7 @@ var denoStdNodeModules = map[string]bool{
 	"querystring":   true,
 	"timers":        true,
 	"stream":        true,
+	"stream/web":    true,
 	"events":        true,
 	"module":        true,
 	// "url":           true, // format is missing
