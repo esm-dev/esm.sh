@@ -22,36 +22,27 @@ func walkDts(r io.Reader, buf *bytes.Buffer, resolve func(path string, kind stri
 	var importExportScope bool
 	scanner := bufio.NewScanner(r)
 	for scanner.Scan() {
-		text := scanner.Text()
-		pure := strings.TrimSpace(text)
-		spaceLeftWidth := strings.Index(text, pure)
-		spacesOnRight := text[spaceLeftWidth+len(pure):]
-		buf.WriteString(text[:spaceLeftWidth])
+		line := scanner.Text()
+		token := strings.TrimSpace(line)
+		spacesOnLeftSize := strings.Index(line, token)
+		buf.WriteString(line[:spacesOnLeftSize])
 	Re:
-		if commentScope || strings.HasPrefix(pure, "/*") {
+		if commentScope || strings.HasPrefix(token, "/*") {
 			commentScope = true
-			endIndex := strings.Index(pure, "*/")
+			endIndex := strings.Index(token, "*/")
 			if endIndex > -1 {
 				commentScope = false
-				buf.WriteString(pure[:endIndex])
-				buf.WriteString("*/")
-				if rest := pure[endIndex+2:]; rest != "" {
-					pure = strings.TrimSpace(rest)
-					buf.WriteString(rest[:strings.Index(rest, pure)])
+				buf.WriteString(token[:endIndex+2])
+				if rest := token[endIndex+2:]; rest != "" {
+					token = strings.TrimSpace(rest)
+					buf.WriteString(rest[:strings.Index(rest, token)])
 					goto Re
 				}
 			} else {
-				buf.WriteString(pure)
+				buf.WriteString(token)
 			}
-		} else if i := strings.Index(pure, "/*"); i > 0 {
-			if startsWith(pure, "import ", "import\"", "import'", "import{", "export ", "export{") {
-				importExportScope = true
-			}
-			buf.WriteString(pure[:i])
-			pure = pure[i:]
-			goto Re
-		} else if strings.HasPrefix(pure, "///") {
-			rest := strings.TrimPrefix(pure, "///")
+		} else if strings.HasPrefix(token, "///") {
+			rest := strings.TrimPrefix(token, "///")
 			if regReferenceTag.MatchString(rest) {
 				a := regReferenceTag.FindAllStringSubmatch(rest, 1)
 				format := a[0][1]
@@ -66,19 +57,19 @@ func walkDts(r io.Reader, buf *bytes.Buffer, resolve func(path string, kind stri
 					}
 					fmt.Fprintf(buf, `/// <reference %s="%s" />`, format, res)
 				} else {
-					buf.WriteString(pure)
+					buf.WriteString(token)
 				}
 			} else {
-				buf.WriteString(pure)
+				buf.WriteString(token)
 			}
-		} else if strings.HasPrefix(pure, "//") {
-			buf.WriteString(pure)
-		} else if strings.HasPrefix(pure, "declare") && regDeclareModuleExpr.MatchString(pure) {
+		} else if strings.HasPrefix(token, "//") {
+			buf.WriteString(token)
+		} else if strings.HasPrefix(token, "declare") && regDeclareModuleExpr.MatchString(token) {
 			q := "'"
-			a := strings.Split(pure, q)
+			a := strings.Split(token, q)
 			if len(a) != 3 {
 				q = `"`
-				a = strings.Split(pure, q)
+				a = strings.Split(token, q)
 			}
 			if len(a) == 3 {
 				buf.WriteString(a[0])
@@ -87,29 +78,34 @@ func walkDts(r io.Reader, buf *bytes.Buffer, resolve func(path string, kind stri
 				buf.WriteString(q)
 				buf.WriteString(a[2])
 			} else {
-				buf.WriteString(pure)
+				buf.WriteString(token)
 			}
+		} else if i := strings.Index(token, "/*"); i > 0 {
+			if startsWith(token, "import ", "import\"", "import'", "import{", "export ", "export{") {
+				importExportScope = true
+			}
+			buf.WriteString(token[:i])
+			commentScope = true
+			token = token[i:]
+			goto Re
 		} else {
-			scanner := bufio.NewScanner(strings.NewReader(pure))
-			scanner.Split(onSemicolon)
-			var i int
-			for scanner.Scan() {
+			tokens := strings.Split(token, ";")
+			for i, text := range tokens {
 				if i > 0 {
 					buf.WriteByte(';')
 				}
-				text := scanner.Text()
-				expr := strings.TrimSpace(text)
-				buf.WriteString(text[:strings.Index(text, expr)])
-				if expr != "" {
-					if importExportScope || startsWith(expr, "import ", "import\"", "import'", "import{", "export ", "export{") {
+				inlineToken := strings.TrimSpace(text)
+				buf.WriteString(text[:strings.Index(text, inlineToken)])
+				if inlineToken != "" {
+					if importExportScope || startsWith(inlineToken, "import ", "import\"", "import'", "import{", "export ", "export{") {
 						importExportScope = true
-						if regFromExpr.MatchString(expr) || regImportPlainExpr.MatchString(expr) {
+						if regFromExpr.MatchString(inlineToken) || regImportPlainExpr.MatchString(inlineToken) {
 							importExportScope = false
 							q := "'"
-							a := strings.Split(expr, q)
+							a := strings.Split(inlineToken, q)
 							if len(a) != 3 {
 								q = `"`
-								a = strings.Split(expr, q)
+								a = strings.Split(inlineToken, q)
 							}
 							if len(a) == 3 {
 								buf.WriteString(a[0])
@@ -118,10 +114,10 @@ func walkDts(r io.Reader, buf *bytes.Buffer, resolve func(path string, kind stri
 								buf.WriteString(q)
 								buf.WriteString(a[2])
 							} else {
-								buf.WriteString(expr)
+								buf.WriteString(inlineToken)
 							}
-						} else if regImportCallExpr.MatchString(expr) {
-							buf.WriteString(regImportCallExpr.ReplaceAllStringFunc(expr, func(importCallExpr string) string {
+						} else if regImportCallExpr.MatchString(inlineToken) {
+							buf.WriteString(regImportCallExpr.ReplaceAllStringFunc(inlineToken, func(importCallExpr string) string {
 								q := "'"
 								a := strings.Split(importCallExpr, q)
 								if len(a) != 3 {
@@ -140,11 +136,11 @@ func walkDts(r io.Reader, buf *bytes.Buffer, resolve func(path string, kind stri
 								return importCallExpr
 							}))
 						} else {
-							buf.WriteString(expr)
+							buf.WriteString(inlineToken)
 						}
 					} else {
-						if regImportCallExpr.MatchString(expr) {
-							buf.WriteString(regImportCallExpr.ReplaceAllStringFunc(expr, func(importCallExpr string) string {
+						if regImportCallExpr.MatchString(inlineToken) {
+							buf.WriteString(regImportCallExpr.ReplaceAllStringFunc(inlineToken, func(importCallExpr string) string {
 								q := "'"
 								a := strings.Split(importCallExpr, q)
 								if len(a) != 3 {
@@ -163,34 +159,17 @@ func walkDts(r io.Reader, buf *bytes.Buffer, resolve func(path string, kind stri
 								return importCallExpr
 							}))
 						} else {
-							buf.WriteString(expr)
+							buf.WriteString(inlineToken)
 						}
 					}
 				}
 				if i > 0 && importExportScope {
 					importExportScope = false
 				}
-				i++
 			}
 		}
-		buf.WriteString(spacesOnRight)
 		buf.WriteByte('\n')
 	}
 	err = scanner.Err()
 	return
-}
-
-func onSemicolon(data []byte, atEOF bool) (advance int, token []byte, err error) {
-	for i := 0; i < len(data); i++ {
-		if data[i] == ';' {
-			return i + 1, data[:i], nil
-		}
-	}
-	if !atEOF {
-		return 0, nil, nil
-	}
-	// There is one final token to be delivered, which may be the empty string.
-	// Returning bufio.ErrFinalToken here tells Scan there are no more tokens after this
-	// but does not trigger an error to be returned from Scan itself.
-	return 0, data, bufio.ErrFinalToken
 }

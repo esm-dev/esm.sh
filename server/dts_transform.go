@@ -62,8 +62,8 @@ func copyDTS(wd string, resolvePrefix string, dts string, tracing *stringSet) (e
 		return
 	}
 
-	dtsBuffer := bytes.NewBuffer(nil)
-	err = walkDts(dtsFile, dtsBuffer, func(importPath string, kind string, position int) string {
+	pass1stBuf := bytes.NewBuffer(nil)
+	err = walkDts(dtsFile, pass1stBuf, func(importPath string, kind string, position int) string {
 		if kind == "declare module" {
 			allDeclareModules.Add(importPath)
 		}
@@ -79,7 +79,7 @@ func copyDTS(wd string, resolvePrefix string, dts string, tracing *stringSet) (e
 	if pkgName == "@types/node" {
 		fmt.Fprintf(buf, "/// <reference path=\"%s/v%d/node.ns.d.ts\" />\n", origin, VERSION)
 	}
-	err = walkDts(dtsBuffer, buf, func(importPath string, kind string, position int) string {
+	err = walkDts(pass1stBuf, buf, func(importPath string, kind string, position int) string {
 		if kind == "declare module" {
 			// resove `declare module "xxx" {}`, and the "xxx" must equal to the `moduleName`
 			moduleName := pkgName
