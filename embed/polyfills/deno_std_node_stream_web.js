@@ -1,10 +1,10 @@
 /* deno mod bundle
- * entry: deno.land/std/node/path.ts
+ * entry: deno.land/std/node/stream/web.ts
  * version: 0.109.0
  *
  *   $ git clone https://github.com/denoland/deno_std
  *   $ cd deno_std/node
- *   $ esbuild stream/web.ts --target=esnext --format=esm --bundle --outfile=deno_std_node_web_stream.js
+ *   $ esbuild stream/web.ts --target=esnext --format=esm --bundle --outfile=deno_std_node_stream_web.js
  */
 
 // stream/web.ts
