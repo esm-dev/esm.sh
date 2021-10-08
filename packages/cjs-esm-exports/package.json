@@ -2,13 +2,13 @@
 	"name": "cjs-esm-exports",
 	"version": "0.0.0",
 	"description": "Parse commonjs exports for ESM, powered by swc.",
-	"main": "index.js",
+	"main": "pkg/cjs_esm_exports.js",
+	"types": "pkg/cjs_esm_exports.d.ts",
 	"scripts": {
 		"prepublish": "wasm-pack build --target nodejs"
 	},
 	"files": [
-		"pkg/",
-		"index.js"
+		"pkg/"
 	],
 	"repository": "https://github.com/alephjs/esm.sh",
 	"license": "MIT"
