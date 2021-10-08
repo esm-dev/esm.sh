@@ -14,23 +14,20 @@ crate-type = ["cdylib", "rlib"]
 default = ["console_error_panic_hook"]
 
 [dependencies]
-anyhow = "1.0.43"
-base64 = "0.13.0" 
+anyhow = "1.0.44"
 serde = { version = "1.0.130", features = ["derive"] }
 
 # swc
 # docs: https://swc.rs
 # crate: https://crates.io/search?q=swc
-swc_atoms = "0.2.7"
-swc_common = { version = "0.12.1", features = ["sourcemap"] }
-swc_ecmascript = { version = "0.63.1", features = ["parser", "visit"] }
-swc_ecma_ast = "0.52.0"
-swc_ecma_visit = "0.38.1"
-swc_ecma_utils = "0.44.2"
+swc_common = { version = "0.13.3", features = ["sourcemap"] }
+swc_ecmascript = { version = "0.72.0", features = ["parser", "visit"] }
+swc_ecma_ast = "0.54.3"
+swc_ecma_visit = "0.40.0" 
 
 # wasm-bindgen
 # docs: https://rustwasm.github.io/docs/wasm-bindgen
-wasm-bindgen = {version = "0.2.76", features = ["serde-serialize"]}
+wasm-bindgen = {version = "0.2.78", features = ["serde-serialize"]}
 console_error_panic_hook = { version = "0.1.6", optional = true }
 
 [profile.release]
