@@ -1,8 +1,15 @@
 {
-  "name": "cjs-esm-exports",
-  "version": "0.0.0",
-  "description": "Parse cjs exports for ESM with swc ast-walker.",
-  "main": "dist/index.js",
-  "repository": "https://github.com/alephjs/esm.sh",
-  "license": "MIT"
+	"name": "cjs-esm-exports",
+	"version": "0.0.0",
+	"description": "Parse commonjs exports for ESM, powered by swc.",
+	"main": "index.js",
+	"scripts": {
+		"prepublish": "wasm-pack build --target nodejs"
+	},
+	"files": [
+		"pkg/",
+		"index.js"
+	],
+	"repository": "https://github.com/alephjs/esm.sh",
+	"license": "MIT"
 }

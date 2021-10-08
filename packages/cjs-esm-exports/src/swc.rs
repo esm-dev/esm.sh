@@ -31,7 +31,7 @@ impl SWC {
 		);
 		let sm = &source_map;
 		let error_buffer = ErrorBuffer::new(specifier);
-		let syntax = Syntax::Es(get_es_config(false));
+		let syntax = Syntax::Es(get_es_config());
 		let input = StringInput::from(&*source_file);
 		let comments = SingleThreadedComments::default();
 		let lexer = Lexer::new(syntax, JscTarget::Es2020, input, Some(&comments));
@@ -73,21 +73,21 @@ impl SWC {
 	}
 }
 
-fn get_es_config(jsx: bool) -> EsConfig {
+fn get_es_config() -> EsConfig {
 	EsConfig {
 		class_private_methods: true,
 		class_private_props: true,
 		class_props: true,
-		dynamic_import: true,
-		export_default_from: true,
-		export_namespace_from: true,
+		dynamic_import: false,
+		export_default_from: false,
+		export_namespace_from: false,
 		num_sep: true,
 		nullish_coalescing: true,
 		optional_chaining: true,
 		top_level_await: true,
-		import_meta: true,
-		import_assertions: true,
-		jsx,
+		import_meta: false,
+		import_assertions: false,
+		jsx: false,
 		..EsConfig::default()
 	}
 }

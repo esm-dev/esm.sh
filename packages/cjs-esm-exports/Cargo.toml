@@ -1,7 +1,7 @@
 [package]
-name = "cjs-lexer"
+name = "cjs-esm-exports"
 version = "0.0.0"
-description = "Parse cjs exports for ESM."
+description = "Parse commonjs exports for ESM."
 repository = "https://github.com/alephjs/esm.sh"
 license = "MIT"
 authors = ["The Aleph.js authors"]

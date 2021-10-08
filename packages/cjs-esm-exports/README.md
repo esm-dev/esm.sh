@@ -1,6 +1,6 @@
-# cjs-lexer
+# cjs-esm-exports
 
-Parse cjs exports for ESM, powered by [swc](https://github.com/swc-project/swc).
+Parse commonjs exports for ESM, powered by [swc](https://github.com/swc-project/swc).
 
 ## Development Setup
 
@@ -9,7 +9,7 @@ You will need [rust](https://www.rust-lang.org/tools/install) 1.30+ and [wasm-pa
 ## Build
 
 ```bash
-wasm-pack build --target web
+wasm-pack build --target nodejs
 ```
 
 ## Run tests
