@@ -1,4 +1,4 @@
-mod cjs_lexer;
+mod cjs;
 mod error;
 mod swc;
 
@@ -8,18 +8,22 @@ use wasm_bindgen::prelude::{wasm_bindgen, JsValue};
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
-pub struct CJXLexerOutput {
+pub struct Output {
 	pub exports: Vec<String>,
 	pub reexports: Vec<String>,
 }
 
 #[wasm_bindgen(js_name = "parseCjsExportsSync")]
-pub fn parse_cjs_exports_sync(specifier: &str, code: &str) -> Result<JsValue, JsValue> {
+pub fn parse_cjs_exports_sync(
+	specifier: &str,
+	code: &str,
+	node_env: &str,
+) -> Result<JsValue, JsValue> {
 	console_error_panic_hook::set_once();
 
 	let swc = SWC::parse(specifier, code).expect("could not parse module");
-	let (exports, reexports) = swc.parse_cjs_exports().unwrap();
-	let output = &CJXLexerOutput {
+	let (exports, reexports) = swc.parse_cjs_exports(node_env).unwrap();
+	let output = &Output {
 		exports: exports,
 		reexports: reexports,
 	};

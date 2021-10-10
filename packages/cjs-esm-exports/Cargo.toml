@@ -15,6 +15,7 @@ default = ["console_error_panic_hook"]
 
 [dependencies]
 anyhow = "1.0.44"
+indexmap = "1.7.0"
 serde = { version = "1.0.130", features = ["derive"] }
 
 # swc
