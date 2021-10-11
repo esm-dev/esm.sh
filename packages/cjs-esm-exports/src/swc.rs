@@ -131,19 +131,19 @@ mod tests {
 		assert_eq!(exports.join(","), "a,b,c,d,e,__esModule")
 	}
 
-	// #[test]
-	// fn parse_cjs_exports_case_2() {
-	// 	let source = r#"
-	// 		const obj = { bar: 123 }
-	// 		Object.defineProperty(module, 'exports', { value: { foo: 'bar', ...obj, ...require('a'), ...require('b') } })
-	//   "#;
-	// 	let swc = SWC::parse("index.cjs", source).expect("could not parse module");
-	// 	let (exports, reexports) = swc
-	// 		.parse_cjs_exports("development")
-	// 		.expect("could not parse exports");
-	// 	assert_eq!(exports.join(","), "foo,bar");
-	// 	assert_eq!(reexports.join(","), "a,b");
-	// }
+	#[test]
+	fn parse_cjs_exports_case_2() {
+		let source = r#"
+			const obj = { bar: 123 }
+			Object.defineProperty(module, 'exports', { value: { foo: 'bar', ...obj, ...require('a'), ...require('b') } })
+	  "#;
+		let swc = SWC::parse("index.cjs", source).expect("could not parse module");
+		let (exports, reexports) = swc
+			.parse_cjs_exports("development")
+			.expect("could not parse exports");
+		assert_eq!(exports.join(","), "foo,bar");
+		assert_eq!(reexports.join(","), "a,b");
+	}
 
 	// #[test]
 	// fn parse_cjs_exports_case_3() {

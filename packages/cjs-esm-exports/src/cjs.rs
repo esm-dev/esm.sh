@@ -6,8 +6,9 @@ use swc_ecma_visit::{noop_fold_type, Fold};
 #[derive(Debug)]
 pub enum IdentKind {
 	Lit(Lit),
-	Alias(Ident),
+	Alias(String),
 	Object(Vec<PropOrSpread>),
+	Function(Vec<PropOrSpread>),
 	Require(String),
 	Unkonwn,
 }
@@ -26,7 +27,7 @@ impl IdentRecorder {
 			Expr::Ident(id) => {
 				let conflict = if let Some(val) = self.idents.get(id.sym.as_ref().into()) {
 					if let IdentKind::Alias(rename) = val {
-						rename.sym.eq(name)
+						rename.eq(name)
 					} else {
 						false
 					}
@@ -36,7 +37,7 @@ impl IdentRecorder {
 				if !conflict {
 					self
 						.idents
-						.insert(name.into(), IdentKind::Alias(id.clone()));
+						.insert(name.into(), IdentKind::Alias(id.sym.as_ref().into()));
 				}
 			}
 			Expr::Call(call) => {
@@ -48,6 +49,33 @@ impl IdentRecorder {
 				self
 					.idents
 					.insert(name.into(), IdentKind::Object(obj.props.clone()));
+			}
+			Expr::Class(ClassExpr { class, .. }) => {
+				class
+					.body
+					.iter()
+					.filter(|&member| match member {
+						ClassMember::Method(method) => method.is_static,
+						ClassMember::ClassProp(prop) => prop.is_static,
+						_ => false,
+					})
+					.map(|member| match member {
+						ClassMember::Method(method) => {
+							if let PropName::Ident(id) = &method.key  {
+								id.sym.as_ref()
+							} else {
+								""
+							}
+						}
+						ClassMember::ClassProp(prop) => {
+							if let Expr::Ident(id) = prop.key.as_ref() {
+								id.sym.as_ref()
+							} else {
+								""
+							}
+						}
+						_ => "",
+					});
 			}
 			_ => {
 				self.idents.insert(name.into(), IdentKind::Unkonwn);
@@ -85,7 +113,7 @@ impl Fold for IdentRecorder {
 									if key.eq("NODE_ENV") {
 										self.idents.insert(
 											key.to_owned(),
-											IdentKind::Lit(Lit::Str(new_str(self.node_env.as_str()))),
+											IdentKind::Lit(Lit::Str(quote_str(self.node_env.as_str()))),
 										);
 									}
 								}
@@ -95,7 +123,7 @@ impl Fold for IdentRecorder {
 										if let Pat::Ident(rename) = value.as_ref() {
 											self.idents.insert(
 												rename.id.sym.as_ref().to_owned(),
-												IdentKind::Lit(Lit::Str(new_str(self.node_env.as_str()))),
+												IdentKind::Lit(Lit::Str(quote_str(self.node_env.as_str()))),
 											);
 										}
 									}
@@ -140,7 +168,7 @@ impl ExportsParser {
 				if let Some(value) = self.idents.get(id.sym.as_ref().into()) {
 					match value {
 						IdentKind::Lit(Lit::Str(Str { value, .. })) => return value.as_ref().into(),
-						IdentKind::Alias(id) => return self.get_str(&Expr::Ident(id.clone())),
+						IdentKind::Alias(id) => return self.get_str(&Expr::Ident(quote_ident(id))),
 						_ => {}
 					}
 				}
@@ -157,13 +185,29 @@ impl ExportsParser {
 				if let Some(value) = self.idents.get(id.sym.as_ref().into()) {
 					match value {
 						IdentKind::Object(props) => return Some(props.clone()),
-						IdentKind::Alias(id) => return self.get_obj(&Expr::Ident(id.clone())),
+						IdentKind::Alias(id) => return self.get_obj(&Expr::Ident(quote_ident(id))),
 						_ => {}
 					}
 				}
 				None
 			}
 			_ => None,
+		}
+	}
+
+	fn use_object_as_exports(&mut self, props: Vec<PropOrSpread>) {
+		for prop in props {
+			match prop {
+				PropOrSpread::Prop(prop) => {
+					let name = match prop.as_ref() {
+						Prop::Shorthand(id) => self.get_str(&Expr::Ident(id.clone())),
+						Prop::KeyValue(KeyValueProp { key, .. }) => stringify_prop_name(key),
+						Prop::Method(MethodProp { key, .. }) => stringify_prop_name(key),
+						_ => "".to_owned(),
+					};
+				}
+				PropOrSpread::Spread(spread) => {}
+			}
 		}
 	}
 }
@@ -208,35 +252,36 @@ impl Fold for ExportsParser {
 			let arg2 = &call.args[2];
 			let (is_module, is_exports) = is_module_exports_expr(arg0.expr.as_ref());
 			let name = self.get_str(arg1.expr.as_ref());
-			println!("{}", name);
 			let mut with_value_or_getter = false;
 			let mut with_value_as_object: Option<Vec<PropOrSpread>> = None;
-			match arg2.expr.as_ref() {
-				Expr::Object(ObjectLit { props, .. }) => {
-					for prop in props {
-						if let PropOrSpread::Prop(prop) = prop {
-							let key = match prop.as_ref() {
-								Prop::KeyValue(KeyValueProp { key, value, .. }) => {
-									let key = stringify_prop_name(key);
-									if key.eq("value") {
-										with_value_as_object = self.get_obj(value.as_ref());
-									}
-									key
+			if let Some(props) = self.get_obj(arg2.expr.as_ref()) {
+				for prop in props {
+					if let PropOrSpread::Prop(prop) = prop {
+						let key = match prop.as_ref() {
+							Prop::KeyValue(KeyValueProp { key, value, .. }) => {
+								let key = stringify_prop_name(key);
+								if key.eq("value") {
+									with_value_as_object = self.get_obj(value.as_ref());
 								}
-								Prop::Method(MethodProp { key, .. }) => stringify_prop_name(key),
-								_ => "".to_owned(),
-							};
-							if key.eq("value") || key.eq("get") {
-								with_value_or_getter = true;
-								break;
+								key
 							}
+							Prop::Method(MethodProp { key, .. }) => stringify_prop_name(key),
+							_ => "".to_owned(),
+						};
+						if key.eq("value") || key.eq("get") {
+							with_value_or_getter = true;
+							break;
 						}
 					}
 				}
-				_ => {}
-			};
+			}
 			if is_exports && !name.is_empty() && with_value_or_getter {
 				self.exports.push(name.to_owned());
+			}
+			if is_module {
+				if let Some(props) = with_value_as_object {
+					self.use_object_as_exports(props)
+				}
 			}
 		} else if is_object_static_mothod_call(&call, "assign") && call.args.len() >= 2 {
 			// Object.assign(...)
@@ -324,13 +369,21 @@ fn is_object_static_mothod_call(call: &CallExpr, method: &str) -> bool {
 
 fn stringify_prop_name(name: &PropName) -> String {
 	match name {
-		PropName::Ident(id) => id.sym.as_ref().to_owned(),
-		PropName::Str(Str { value, .. }) => value.as_ref().to_owned(),
-		_ => "".into(),
+		PropName::Ident(id) => id.sym.as_ref().into(),
+		PropName::Str(Str { value, .. }) => value.as_ref().into(),
+		_ => "".to_owned(),
 	}
 }
 
-fn new_str(value: &str) -> Str {
+fn quote_ident(value: &str) -> Ident {
+	Ident {
+		span: DUMMY_SP,
+		sym: value.into(),
+		optional: false,
+	}
+}
+
+fn quote_str(value: &str) -> Str {
 	Str {
 		span: DUMMY_SP,
 		value: value.into(),
