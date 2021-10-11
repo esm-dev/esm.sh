@@ -1,5 +1,10 @@
 # Change Log
 
+## v54
+
+- Update deno polyfills from 0.106.0 to 0.110.0 ([#190](https://github.com/postui/esm.sh/issues/190))
+- Fix (storage/fs_local) file path portability bug ([#158](https://github.com/postui/esm.sh/issues/158))
+
 ## v53
 
 - Add `Cache-Tag` header for CDN purge
