@@ -1,3 +1,26 @@
+/* deno mod bundle
+ * entry: deno.land/std/node/events.ts
+ * version: 0.110.0
+ *
+ *   $ git clone https://github.com/denoland/deno_std
+ *   $ cd deno_std/node
+ *   $ esbuild events.ts --target=esnext --format=esm --bundle --outfile=deno_std_node_child_process.js
+ */
+
+var __accessCheck = (obj, member, msg) => {
+  if (!member.has(obj)) throw TypeError("Cannot " + msg);
+};
+var __privateAdd = (obj, member, value) => {
+  if (member.has(obj)) {
+    throw TypeError("Cannot add the same private member more than once");
+  }
+  member instanceof WeakSet ? member.add(obj) : member.set(obj, value);
+};
+var __privateMethod = (obj, member, method) => {
+  __accessCheck(obj, member, "access private method");
+  return method;
+};
+
 // ../_util/assert.ts
 var DenoStdInternalError = class extends Error {
   constructor(message) {
@@ -14,14 +37,17 @@ function assert(expr, msg = "") {
 // ../fmt/colors.ts
 var { Deno: Deno2 } = globalThis;
 var noColor = typeof Deno2?.noColor === "boolean" ? Deno2.noColor : true;
-var ANSI_PATTERN = new RegExp([
-  "[\\u001B\\u009B][[\\]()#;?]*(?:(?:(?:[a-zA-Z\\d]*(?:;[-a-zA-Z\\d\\/#&.:=?%@~_]*)*)?\\u0007)",
-  "(?:(?:\\d{1,4}(?:;\\d{0,4})*)?[\\dA-PR-TZcf-ntqry=><~]))"
-].join("|"), "g");
+var ANSI_PATTERN = new RegExp(
+  [
+    "[\\u001B\\u009B][[\\]()#;?]*(?:(?:(?:[a-zA-Z\\d]*(?:;[-a-zA-Z\\d\\/#&.:=?%@~_]*)*)?\\u0007)",
+    "(?:(?:\\d{1,4}(?:;\\d{0,4})*)?[\\dA-PR-TZcf-ntqry=><~]))",
+  ].join("|"),
+  "g",
+);
 
 // ../testing/_diff.ts
 var DiffType;
-(function(DiffType2) {
+(function (DiffType2) {
   DiffType2["removed"] = "removed";
   DiffType2["common"] = "common";
   DiffType2["added"] = "added";
@@ -56,7 +82,9 @@ var kCustomPromisifiedSymbol = Symbol.for("nodejs.util.promisify.custom");
 var kCustomPromisifyArgsSymbol = Symbol.for("nodejs.util.promisify.customArgs");
 var NodeInvalidArgTypeError = class extends TypeError {
   constructor(argumentName, type, received) {
-    super(`The "${argumentName}" argument must be of type ${type}. Received ${typeof received}`);
+    super(
+      `The "${argumentName}" argument must be of type ${type}. Received ${typeof received}`,
+    );
     this.code = "ERR_INVALID_ARG_TYPE";
   }
 };
@@ -67,13 +95,17 @@ function promisify(original) {
   if (original[kCustomPromisifiedSymbol]) {
     const fn2 = original[kCustomPromisifiedSymbol];
     if (typeof fn2 !== "function") {
-      throw new NodeInvalidArgTypeError("util.promisify.custom", "Function", fn2);
+      throw new NodeInvalidArgTypeError(
+        "util.promisify.custom",
+        "Function",
+        fn2,
+      );
     }
     return Object.defineProperty(fn2, kCustomPromisifiedSymbol, {
       value: fn2,
       enumerable: false,
       writable: false,
-      configurable: true
+      configurable: true,
     });
   }
   const argumentNames = original[kCustomPromisifyArgsSymbol];
@@ -100,9 +132,12 @@ function promisify(original) {
     value: fn,
     enumerable: false,
     writable: false,
-    configurable: true
+    configurable: true,
   });
-  return Object.defineProperties(fn, Object.getOwnPropertyDescriptors(original));
+  return Object.defineProperties(
+    fn,
+    Object.getOwnPropertyDescriptors(original),
+  );
 }
 promisify.custom = kCustomPromisifiedSymbol;
 
@@ -120,7 +155,7 @@ function deferred() {
       reject(reason) {
         state = "rejected";
         reject(reason);
-      }
+      },
     };
   });
   Object.defineProperty(promise, "state", { get: () => state });
@@ -176,8 +211,7 @@ var MuxAsyncIterator = class {
 };
 
 // ../async/tee.ts
-var noop = () => {
-};
+var noop = () => {};
 var AsyncIterableClone = class {
   constructor() {
     this.resolveCurrent = noop;
@@ -226,15 +260,14 @@ function copy(src, dst, off = 0) {
 // ../io/buffer.ts
 var MIN_READ = 32 * 1024;
 var MAX_SIZE = 2 ** 32 - 2;
-var Buffer = class {
+var Buffer2 = class {
   #buf;
   #off = 0;
   constructor(ab) {
     this.#buf = ab === void 0 ? new Uint8Array(0) : new Uint8Array(ab);
   }
   bytes(options = { copy: true }) {
-    if (options.copy === false)
-      return this.#buf.subarray(this.#off);
+    if (options.copy === false) return this.#buf.subarray(this.#off);
     return this.#buf.slice(this.#off);
   }
   empty() {
@@ -331,15 +364,15 @@ var Buffer = class {
     const tmp = new Uint8Array(MIN_READ);
     while (true) {
       const shouldGrow = this.capacity - this.length < MIN_READ;
-      const buf = shouldGrow ? tmp : new Uint8Array(this.#buf.buffer, this.length);
+      const buf = shouldGrow
+        ? tmp
+        : new Uint8Array(this.#buf.buffer, this.length);
       const nread = await r.read(buf);
       if (nread === null) {
         return n;
       }
-      if (shouldGrow)
-        this.writeSync(buf.subarray(0, nread));
-      else
-        this.#reslice(this.length + nread);
+      if (shouldGrow) this.writeSync(buf.subarray(0, nread));
+      else this.#reslice(this.length + nread);
       n += nread;
     }
   }
@@ -348,21 +381,23 @@ var Buffer = class {
     const tmp = new Uint8Array(MIN_READ);
     while (true) {
       const shouldGrow = this.capacity - this.length < MIN_READ;
-      const buf = shouldGrow ? tmp : new Uint8Array(this.#buf.buffer, this.length);
+      const buf = shouldGrow
+        ? tmp
+        : new Uint8Array(this.#buf.buffer, this.length);
       const nread = r.readSync(buf);
       if (nread === null) {
         return n;
       }
-      if (shouldGrow)
-        this.writeSync(buf.subarray(0, nread));
-      else
-        this.#reslice(this.length + nread);
+      if (shouldGrow) this.writeSync(buf.subarray(0, nread));
+      else this.#reslice(this.length + nread);
       n += nread;
     }
   }
 };
+var CR = "\r".charCodeAt(0);
+var LF = "\n".charCodeAt(0);
 
-// ../io/util.ts
+// ../io/streams.ts
 var DEFAULT_BUFFER_SIZE = 32 * 1024;
 
 // util.ts
@@ -378,7 +413,7 @@ var DEFAULT_INSPECT_OPTIONS = {
   breakLength: 80,
   compact: 3,
   sorted: false,
-  getters: false
+  getters: false,
 };
 inspect.defaultOptions = DEFAULT_INSPECT_OPTIONS;
 inspect.custom = Symbol.for("nodejs.util.inspect.custom");
@@ -392,7 +427,7 @@ function inspect(object, ...opts) {
     iterableLimit: opts.maxArrayLength,
     compact: !!opts.compact,
     sorted: !!opts.sorted,
-    showProxy: !!opts.showProxy
+    showProxy: !!opts.showProxy,
   });
 }
 
@@ -407,7 +442,7 @@ var kTypes = [
   "Object",
   "boolean",
   "bigint",
-  "symbol"
+  "symbol",
 ];
 var NodeErrorAbstraction = class extends Error {
   constructor(name, code, message) {
@@ -520,7 +555,9 @@ function invalidArgTypeHelper(input) {
 }
 var ERR_OUT_OF_RANGE = class extends RangeError {
   constructor(str, range, received) {
-    super(`The value of "${str}" is out of range. It must be ${range}. Received ${received}`);
+    super(
+      `The value of "${str}" is out of range. It must be ${range}. Received ${received}`,
+    );
     this.code = "ERR_OUT_OF_RANGE";
     const { name } = this;
     this.name = `${name} [${this.code}]`;
@@ -608,7 +645,7 @@ var windows = [
   [-4030, ["EREMOTEIO", "remote I/O error"]],
   [-4029, ["ENOTTY", "inappropriate ioctl for device"]],
   [-4028, ["EFTYPE", "inappropriate file type or format"]],
-  [-4027, ["EILSEQ", "illegal byte sequence"]]
+  [-4027, ["EILSEQ", "illegal byte sequence"]],
 ];
 var darwin = [
   [-7, ["E2BIG", "argument list too long"]],
@@ -690,7 +727,7 @@ var darwin = [
   [-4030, ["EREMOTEIO", "remote I/O error"]],
   [-25, ["ENOTTY", "inappropriate ioctl for device"]],
   [-79, ["EFTYPE", "inappropriate file type or format"]],
-  [-92, ["EILSEQ", "illegal byte sequence"]]
+  [-92, ["EILSEQ", "illegal byte sequence"]],
 ];
 var linux = [
   [-7, ["E2BIG", "argument list too long"]],
@@ -772,9 +809,17 @@ var linux = [
   [-121, ["EREMOTEIO", "remote I/O error"]],
   [-25, ["ENOTTY", "inappropriate ioctl for device"]],
   [-4028, ["EFTYPE", "inappropriate file type or format"]],
-  [-84, ["EILSEQ", "illegal byte sequence"]]
+  [-84, ["EILSEQ", "illegal byte sequence"]],
 ];
-var errorMap = new Map(osType === "windows" ? windows : osType === "darwin" ? darwin : osType === "linux" ? linux : unreachable());
+var errorMap = new Map(
+  osType === "windows"
+    ? windows
+    : osType === "darwin"
+    ? darwin
+    : osType === "linux"
+    ? linux
+    : unreachable(),
+);
 
 // events.ts
 function ensureArray(maybeArray) {
@@ -789,6 +834,7 @@ function validateMaxListeners(n, name) {
     throw new ERR_OUT_OF_RANGE(name, "a non-negative number", inspect(n));
   }
 }
+var _init, init_fn;
 var _EventEmitter = class {
   static get defaultMaxListeners() {
     return defaultMaxListeners;
@@ -798,9 +844,11 @@ var _EventEmitter = class {
     defaultMaxListeners = value;
   }
   constructor() {
-    this._events = Object.create(null);
+    var _a;
+    __privateMethod((_a = _EventEmitter), _init, init_fn).call(_a, this);
   }
   _addListener(eventName, listener, prepend) {
+    var _a;
     this.checkListenerArgument(listener);
     this.emit("newListener", eventName, this.unwrapListener(listener));
     if (this.hasListeners(eventName)) {
@@ -814,7 +862,10 @@ var _EventEmitter = class {
       } else {
         listeners.push(listener);
       }
+    } else if (this._events) {
+      this._events[eventName] = listener;
     } else {
+      __privateMethod((_a = _EventEmitter), _init, init_fn).call(_a, this);
       this._events[eventName] = listener;
     }
     const max = this.getMaxListeners();
@@ -829,7 +880,9 @@ var _EventEmitter = class {
   }
   emit(eventName, ...args) {
     if (this.hasListeners(eventName)) {
-      if (eventName === "error" && this.hasListeners(_EventEmitter.errorMonitor)) {
+      if (
+        eventName === "error" && this.hasListeners(_EventEmitter.errorMonitor)
+      ) {
         this.emit(_EventEmitter.errorMonitor, ...args);
       }
       const listeners = ensureArray(this._events[eventName]).slice();
@@ -854,7 +907,9 @@ var _EventEmitter = class {
     return Reflect.ownKeys(this._events);
   }
   getMaxListeners() {
-    return this.maxListeners == null ? _EventEmitter.defaultMaxListeners : this.maxListeners;
+    return this.maxListeners == null
+      ? _EventEmitter.defaultMaxListeners
+      : this.maxListeners;
   }
   listenerCount(eventName) {
     if (this.hasListeners(eventName)) {
@@ -873,11 +928,11 @@ var _EventEmitter = class {
     }
     const eventListeners = target._events[eventName];
     if (Array.isArray(eventListeners)) {
-      return unwrap ? this.unwrapListeners(eventListeners) : eventListeners.slice(0);
+      return unwrap
+        ? this.unwrapListeners(eventListeners)
+        : eventListeners.slice(0);
     } else {
-      return [
-        unwrap ? this.unwrapListener(eventListeners) : eventListeners
-      ];
+      return [unwrap ? this.unwrapListener(eventListeners) : eventListeners];
     }
   }
   unwrapListeners(arr) {
@@ -896,10 +951,8 @@ var _EventEmitter = class {
   rawListeners(eventName) {
     return this._listeners(this, eventName, false);
   }
-  off(eventName, listener) {
-  }
-  on(eventName, listener) {
-  }
+  off(eventName, listener) {}
+  on(eventName, listener) {}
   once(eventName, listener) {
     const wrapped = this.onceWrap(eventName, listener);
     this.on(eventName, wrapped);
@@ -907,7 +960,7 @@ var _EventEmitter = class {
   }
   onceWrap(eventName, listener) {
     this.checkListenerArgument(listener);
-    const wrapper = function(...args) {
+    const wrapper = function (...args) {
       if (this.isCalled) {
         return;
       }
@@ -919,7 +972,7 @@ var _EventEmitter = class {
       eventName,
       listener,
       rawListener: wrapper,
-      context: this
+      context: this,
     };
     const wrapped = wrapper.bind(wrapperContext);
     wrapperContext.rawListener = wrapped;
@@ -940,7 +993,8 @@ var _EventEmitter = class {
     }
     if (eventName) {
       if (this.hasListeners(eventName)) {
-        const listeners = ensureArray(this._events[eventName]).slice().reverse();
+        const listeners = ensureArray(this._events[eventName]).slice()
+          .reverse();
         for (const listener of listeners) {
           this.removeListener(eventName, this.unwrapListener(listener));
         }
@@ -948,8 +1002,7 @@ var _EventEmitter = class {
     } else {
       const eventList = this.eventNames();
       eventList.forEach((eventName2) => {
-        if (eventName2 === "removeListener")
-          return;
+        if (eventName2 === "removeListener") return;
         this.removeAllListeners(eventName2);
       });
       this.removeAllListeners("removeListener");
@@ -964,7 +1017,7 @@ var _EventEmitter = class {
       const arr = ensureArray(maybeArr);
       let listenerIndex = -1;
       for (let i = arr.length - 1; i >= 0; i--) {
-        if (arr[i] == listener || arr[i] && arr[i]["listener"] == listener) {
+        if (arr[i] == listener || (arr[i] && arr[i]["listener"] == listener)) {
           listenerIndex = i;
           break;
         }
@@ -993,9 +1046,13 @@ var _EventEmitter = class {
   static once(emitter, name) {
     return new Promise((resolve, reject) => {
       if (emitter instanceof EventTarget) {
-        emitter.addEventListener(name, (...args) => {
-          resolve(args);
-        }, { once: true, passive: false, capture: false });
+        emitter.addEventListener(
+          name,
+          (...args) => {
+            resolve(args);
+          },
+          { once: true, passive: false, capture: false },
+        );
         return;
       } else if (emitter instanceof _EventEmitter) {
         const eventListener = (...args) => {
@@ -1036,7 +1093,7 @@ var _EventEmitter = class {
         if (finished) {
           return Promise.resolve(createIterResult(void 0, true));
         }
-        return new Promise(function(resolve, reject) {
+        return new Promise(function (resolve, reject) {
           unconsumedPromises.push({ resolve, reject });
         });
       },
@@ -1056,7 +1113,7 @@ var _EventEmitter = class {
       },
       [Symbol.asyncIterator]() {
         return this;
-      }
+      },
     };
     emitter.on(event, eventHandler);
     emitter.on("error", errorHandler);
@@ -1102,14 +1159,31 @@ var _EventEmitter = class {
   }
 };
 var EventEmitter = _EventEmitter;
+_init = new WeakSet();
+init_fn = function (emitter) {
+  if (
+    emitter._events == null ||
+    emitter._events === Object.getPrototypeOf(emitter)._events
+  ) {
+    emitter._events = Object.create(null);
+  }
+};
+__privateAdd(EventEmitter, _init);
 EventEmitter.captureRejectionSymbol = Symbol.for("nodejs.rejection");
 EventEmitter.errorMonitor = Symbol("events.errorMonitor");
+EventEmitter.call = function call(thisArg) {
+  var _a;
+  __privateMethod((_a = _EventEmitter), _init, init_fn).call(_a, thisArg);
+};
 EventEmitter.prototype.on = EventEmitter.prototype.addListener;
 EventEmitter.prototype.off = EventEmitter.prototype.removeListener;
 var MaxListenersExceededWarning = class extends Error {
   constructor(emitter, type) {
     const listenerCount2 = emitter.listenerCount(type);
-    const message = `Possible EventEmitter memory leak detected. ${listenerCount2} ${type == null ? "null" : type.toString()} listeners added to [${emitter.constructor.name}].  Use emitter.setMaxListeners() to increase limit`;
+    const message =
+      `Possible EventEmitter memory leak detected. ${listenerCount2} ${
+        type == null ? "null" : type.toString()
+      } listeners added to [${emitter.constructor.name}].  Use emitter.setMaxListeners() to increase limit`;
     super(message);
     this.emitter = emitter;
     this.type = type;
@@ -1124,12 +1198,12 @@ var listenerCount = EventEmitter.listenerCount;
 var on = EventEmitter.on;
 var once = EventEmitter.once;
 export {
-  EventEmitter,
   captureRejectionSymbol,
-  events_default as default,
   defaultMaxListeners,
   errorMonitor,
+  EventEmitter,
+  events_default as default,
   listenerCount,
   on,
-  once
+  once,
 };
