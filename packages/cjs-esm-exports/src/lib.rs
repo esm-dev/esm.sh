@@ -1,6 +1,7 @@
 mod cjs;
 mod error;
 mod swc;
+mod test;
 
 use serde::Serialize;
 use swc::SWC;
@@ -27,5 +28,6 @@ pub fn parse_cjs_exports_sync(
 		exports: exports,
 		reexports: reexports,
 	};
+
 	Ok(JsValue::from_serde(output).unwrap())
 }

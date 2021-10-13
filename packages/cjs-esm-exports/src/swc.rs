@@ -1,7 +1,7 @@
-use crate::cjs::{ExportsParser, IdentRecorder};
+use crate::cjs::ExportsParser;
 use crate::error::{DiagnosticBuffer, ErrorBuffer};
 
-use indexmap::IndexMap;
+use indexmap::{IndexMap, IndexSet};
 use std::{path::Path, rc::Rc};
 use swc_common::{
 	comments::SingleThreadedComments,
@@ -60,32 +60,23 @@ impl SWC {
 			comments,
 		})
 	}
-}
-
-impl SWC {
-	/// parse export names in the module.
+	/// parse export names in the cjs module.
 	pub fn parse_cjs_exports(
 		&self,
 		node_env: &str,
 	) -> Result<(Vec<String>, Vec<String>), anyhow::Error> {
-		// pass 1: record idents
-		let mut recoder = IdentRecorder {
+		let mut parser = ExportsParser {
 			node_env: node_env.into(),
 			idents: IndexMap::new(),
-		};
-		let program = Program::Module(self.module.clone());
-		program.fold_with(&mut recoder);
-
-		// pass 2: parse exprots/reexports
-		let mut parser = ExportsParser {
-			idents: recoder.idents,
-			exports: vec![],
-			reexports: vec![],
+			exports: IndexSet::new(),
+			reexports: IndexSet::new(),
 		};
 		let program = Program::Module(self.module.clone());
 		program.fold_with(&mut parser);
-
-		Ok((parser.exports, parser.reexports))
+		Ok((
+			parser.exports.into_iter().collect(),
+			parser.reexports.into_iter().collect(),
+		))
 	}
 }
 
@@ -106,85 +97,4 @@ fn get_es_config() -> EsConfig {
 		jsx: false,
 		..EsConfig::default()
 	}
-}
-
-#[cfg(test)]
-mod tests {
-	use super::*;
-
-	#[test]
-	fn parse_cjs_exports_case_1() {
-		let source = r#"
-			const c = 'c'
-		  Object.defineProperty(exports, 'a', { value: true })
-		  Object.defineProperty(exports, 'b', { get: () => true })
-		  Object.defineProperty(exports, c, { get() { return true } })
-		  Object.defineProperty(exports, 'd', { "value": true })
-		  Object.defineProperty(exports, 'e', { "get": () => true })
-		  Object.defineProperty(exports, 'f', {})
-		  Object.defineProperty(module.exports, '__esModule', { value: true })
-    "#;
-		let swc = SWC::parse("index.cjs", source).expect("could not parse module");
-		let (exports, _) = swc
-			.parse_cjs_exports("development")
-			.expect("could not parse exports");
-		assert_eq!(exports.join(","), "a,b,c,d,e,__esModule")
-	}
-
-	#[test]
-	fn parse_cjs_exports_case_2() {
-		let source = r#"
-			const obj = { bar: 123 }
-			Object.defineProperty(module, 'exports', { value: { foo: 'bar', ...obj, ...require('a'), ...require('b') } })
-	  "#;
-		let swc = SWC::parse("index.cjs", source).expect("could not parse module");
-		let (exports, reexports) = swc
-			.parse_cjs_exports("development")
-			.expect("could not parse exports");
-		assert_eq!(exports.join(","), "foo,bar");
-		assert_eq!(reexports.join(","), "a,b");
-	}
-
-	// #[test]
-	// fn parse_cjs_exports_case_3() {
-	// 	let source = r#"
-	// 		module.exports = function() {}
-	// 		module.exports.foo = 'bar';
-	// 	"#;
-	// 	let swc = SWC::parse("index.cjs", source).expect("could not parse module");
-	// 	let (exports, _) = swc
-	// 		.parse_cjs_exports("development")
-	// 		.expect("could not parse exports");
-	// 	assert_eq!(exports.join(","), "foo");
-	// }
-
-	// #[test]
-	// fn parse_cjs_exports_case_4() {
-	// 	let source = r#"
-	// 		function Module() {
-
-	// 		}
-	// 		Module.foo = 'bar'
-	// 		module.exports = Module
-	// 	"#;
-	// 	let swc = SWC::parse("index.cjs", source).expect("could not parse module");
-	// 	let (exports, _) = swc
-	// 		.parse_cjs_exports("development")
-	// 		.expect("could not parse exports");
-	// 	assert_eq!(exports.join(","), "foo");
-	// }
-
-	// #[test]
-	// fn parse_cjs_exports_case_5() {
-	// 	let source = r#"
-	// 		exports.foo = 'bar'
-	// 		exports.bar = 123
-	// 		module.exports = {}
-	// 	"#;
-	// 	let swc = SWC::parse("index.cjs", source).expect("could not parse module");
-	// 	let (exports, _) = swc
-	// 		.parse_cjs_exports("development")
-	// 		.expect("could not parse exports");
-	// 	assert_eq!(exports.join(","), "");
-	// }
 }
