@@ -80,46 +80,74 @@ mod tests {
 		assert_eq!(exports.join(","), "foo,bar");
 	}
 
-	// #[test]
-	// fn parse_cjs_exports_case_3() {
-	// 	let source = r#"
-	// 		module.exports = function() {}
-	// 		module.exports.foo = 'bar';
-	// 	"#;
-	// 	let swc = SWC::parse("index.cjs", source).expect("could not parse module");
-	// 	let (exports, _) = swc
-	// 		.parse_cjs_exports("development")
-	// 		.expect("could not parse exports");
-	// 	assert_eq!(exports.join(","), "foo");
-	// }
+	#[test]
+	fn parse_cjs_exports_case_6() {
+		let source = r#"
+			const alas = true
+			const obj = { boom: 1 }
+			obj.coco = 1
+			exports.foo = 'bar'
+			module.exports.bar = 123
+			module.exports = { alas,  ...obj, ...require('a'), ...require('b') }
+		"#;
+		let swc = SWC::parse("index.cjs", source).expect("could not parse module");
+		let (exports, reexports) = swc
+			.parse_cjs_exports("development")
+			.expect("could not parse exports");
+		assert_eq!(exports.join(","), "alas,boom,coco");
+		assert_eq!(reexports.join(","), "a,b");
+	}
 
-	// #[test]
-	// fn parse_cjs_exports_case_4() {
-	// 	let source = r#"
-	// 		function Module() {
+	#[test]
+	fn parse_cjs_exports_case_7() {
+		let source = r#"
+			exports['foo'] = 'bar'
+			module['exports']['bar'] = 123
+		"#;
+		let swc = SWC::parse("index.cjs", source).expect("could not parse module");
+		let (exports, _) = swc
+			.parse_cjs_exports("development")
+			.expect("could not parse exports");
+		assert_eq!(exports.join(","), "foo,bar");
+	}
 
-	// 		}
-	// 		Module.foo = 'bar'
-	// 		module.exports = Module
-	// 	"#;
-	// 	let swc = SWC::parse("index.cjs", source).expect("could not parse module");
-	// 	let (exports, _) = swc
-	// 		.parse_cjs_exports("development")
-	// 		.expect("could not parse exports");
-	// 	assert_eq!(exports.join(","), "foo");
-	// }
+	#[test]
+	fn parse_cjs_exports_case_8() {
+		let source = r#"
+			module.exports = function() {}
+			module.exports.foo = 'bar';
+		"#;
+		let swc = SWC::parse("index.cjs", source).expect("could not parse module");
+		let (exports, _) = swc
+			.parse_cjs_exports("development")
+			.expect("could not parse exports");
+		assert_eq!(exports.join(","), "foo");
+	}
 
-	// #[test]
-	// fn parse_cjs_exports_case_5() {
-	// 	let source = r#"
-	// 		exports.foo = 'bar'
-	// 		exports.bar = 123
-	// 		module.exports = {}
-	// 	"#;
-	// 	let swc = SWC::parse("index.cjs", source).expect("could not parse module");
-	// 	let (exports, _) = swc
-	// 		.parse_cjs_exports("development")
-	// 		.expect("could not parse exports");
-	// 	assert_eq!(exports.join(","), "");
-	// }
+	#[test]
+	fn parse_cjs_exports_case_9() {
+		let source = r#"
+			function Module() {}
+			Module.foo = 'bar'
+			module.exports = Module
+		"#;
+		let swc = SWC::parse("index.cjs", source).expect("could not parse module");
+		let (exports, _) = swc
+			.parse_cjs_exports("development")
+			.expect("could not parse exports");
+		assert_eq!(exports.join(","), "foo");
+	}
+
+
+	#[test]
+	fn parse_cjs_exports_case_10() {
+		let source = r#"
+			module.exports = require("lib")
+		"#;
+		let swc = SWC::parse("index.cjs", source).expect("could not parse module");
+		let (_, reexports) = swc
+			.parse_cjs_exports("development")
+			.expect("could not parse exports");
+		assert_eq!(reexports.join(","), "lib");
+	}
 }

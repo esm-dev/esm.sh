@@ -60,6 +60,7 @@ impl SWC {
 			comments,
 		})
 	}
+
 	/// parse export names in the cjs module.
 	pub fn parse_cjs_exports(
 		&self,

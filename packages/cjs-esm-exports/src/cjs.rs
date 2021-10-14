@@ -21,9 +21,24 @@ pub struct ExportsParser {
 }
 
 impl ExportsParser {
-	fn reset(&mut self) {
+	fn clear(&mut self) {
 		self.exports.clear();
 		self.reexports.clear();
+	}
+
+	fn reset(&mut self, expr: &Expr) {
+		if let Some(props) = self.as_obj(&expr) {
+			self.clear();
+			self.use_object_as_exports(props);
+		} else if let Some(reexport) = self.as_reexport(&expr) {
+			self.clear();
+			self.reexports.insert(reexport);
+		} else if let Some(fields) = self.as_function(&expr) {
+			self.clear();
+			for field in fields {
+				self.exports.insert(field);
+			}
+		}
 	}
 
 	fn record_ident(&mut self, name: &str, expr: &Expr) {
@@ -121,6 +136,24 @@ impl ExportsParser {
 		}
 	}
 
+	fn as_function(&self, expr: &Expr) -> Option<Vec<String>> {
+		match expr {
+			Expr::Class(ClassExpr { class, .. }) => Some(get_class_static_names(&class)),
+			Expr::Fn(_) => Some(vec![]),
+			Expr::Ident(id) => {
+				if let Some(value) = self.idents.get(id.sym.as_ref().into()) {
+					match value {
+						IdentKind::Function(fields) => return Some(fields.clone()),
+						IdentKind::Alias(id) => return self.as_function(&Expr::Ident(quote_ident(id))),
+						_ => {}
+					}
+				}
+				None
+			}
+			_ => None,
+		}
+	}
+
 	fn use_object_as_exports(&mut self, props: Vec<PropOrSpread>) {
 		for prop in props {
 			match prop {
@@ -159,79 +192,87 @@ impl ExportsParser {
 		// record idents
 		for item in &items {
 			match item {
-				Stmt::Decl(Decl::Var(var)) => {
-					for decl in &var.decls {
-						match &decl.name {
-							Pat::Ident(BindingIdent { id, .. }) => {
-								let id = id.sym.as_ref();
-								if let Some(init) = &decl.init {
-									self.record_ident(id, init);
-								} else {
-									self.idents.insert(id.into(), IdentKind::Unkonwn);
+				Stmt::Decl(decl) => match decl {
+					Decl::Var(var) => {
+						for decl in &var.decls {
+							match &decl.name {
+								Pat::Ident(BindingIdent { id, .. }) => {
+									let id = id.sym.as_ref();
+									if let Some(init) = &decl.init {
+										self.record_ident(id, init);
+									} else {
+										self.idents.insert(id.into(), IdentKind::Unkonwn);
+									}
 								}
-							}
-							Pat::Object(ObjectPat { props, .. }) => {
-								let mut process_env_init = false;
-								if let Some(init) = &decl.init {
-									process_env_init = is_member(init.as_ref(), "process", "env");
-								};
-								if process_env_init {
-									for prop in props {
-										match prop {
-											ObjectPatProp::Assign(AssignPatProp { key, .. }) => {
-												let key = key.sym.as_ref();
-												if key.eq("NODE_ENV") {
-													self.idents.insert(
-														key.to_owned(),
-														IdentKind::Lit(Lit::Str(quote_str(self.node_env.as_str()))),
-													);
-												}
-											}
-											ObjectPatProp::KeyValue(KeyValuePatProp { key, value, .. }) => {
-												let key = stringify_prop_name(&key);
-												if let (Some(key), Pat::Ident(rename)) = (key, value.as_ref()) {
+								Pat::Object(ObjectPat { props, .. }) => {
+									let mut process_env_init = false;
+									if let Some(init) = &decl.init {
+										process_env_init = is_member(init.as_ref(), "process", "env");
+									};
+									if process_env_init {
+										for prop in props {
+											match prop {
+												ObjectPatProp::Assign(AssignPatProp { key, .. }) => {
+													let key = key.sym.as_ref();
 													if key.eq("NODE_ENV") {
 														self.idents.insert(
-															rename.id.sym.as_ref().to_owned(),
+															key.to_owned(),
 															IdentKind::Lit(Lit::Str(quote_str(self.node_env.as_str()))),
 														);
 													}
 												}
+												ObjectPatProp::KeyValue(KeyValuePatProp { key, value, .. }) => {
+													let key = stringify_prop_name(&key);
+													if let (Some(key), Pat::Ident(rename)) = (key, value.as_ref()) {
+														if key.eq("NODE_ENV") {
+															self.idents.insert(
+																rename.id.sym.as_ref().to_owned(),
+																IdentKind::Lit(Lit::Str(quote_str(self.node_env.as_str()))),
+															);
+														}
+													}
+												}
+												_ => {}
 											}
-											_ => {}
 										}
 									}
 								}
+								_ => {}
 							}
-							_ => {}
 						}
 					}
-				}
+					Decl::Fn(FnDecl {
+						ident, function, ..
+					}) => {
+						self.record_ident(
+							ident.sym.as_ref(),
+							&Expr::Fn(FnExpr {
+								ident: Some(ident.clone()),
+								function: function.clone(),
+							}),
+						);
+					}
+					Decl::Class(ClassDecl { ident, class, .. }) => {
+						self.record_ident(
+							ident.sym.as_ref(),
+							&Expr::Class(ClassExpr {
+								ident: Some(ident.clone()),
+								class: class.clone(),
+							}),
+						);
+					}
+					_ => {}
+				},
 				Stmt::Expr(ExprStmt { expr, .. }) => {
 					match expr.as_ref() {
-						Expr::Fn(FnExpr { ident, .. }) => {
-							if let Some(id) = ident {
-								self.record_ident(id.sym.as_ref(), expr);
-							}
-						}
-						Expr::Class(ClassExpr { ident, .. }) => {
-							if let Some(id) = ident {
-								self.record_ident(id.sym.as_ref(), expr);
-							}
-						}
 						Expr::Assign(assign) => {
 							if assign.op == AssignOp::Assign {
 								let left_expr = match &assign.left {
-									// var foo = 'boo'
-									// foo = 'bar'
 									PatOrExpr::Expr(expr) => Some(expr.as_ref()),
-									// var foo = {}
-									// foo.bar = 'bar'
 									PatOrExpr::Pat(pat) => match pat.as_ref() {
 										Pat::Expr(expr) => Some(expr.as_ref()),
 										_ => None,
 									},
-									_ => None,
 								};
 								if let Some(expr) = left_expr {
 									match expr {
@@ -250,13 +291,15 @@ impl ExportsParser {
 											prop,
 											..
 										}) => {
-											if let Expr::Ident(obj_id) = obj.as_ref() {
-												if let Some(mut props) = self.as_obj(obj) {
-													if let Some(key) = match prop.as_ref() {
-														Expr::Ident(id) => Some(id.sym.as_ref()),
-														Expr::Lit(Lit::Str(Str { value, .. })) => Some(value.as_ref()),
-														_ => None,
-													} {
+											let key = match prop.as_ref() {
+												Expr::Ident(id) => Some(id.sym.as_ref()),
+												Expr::Lit(Lit::Str(Str { value, .. })) => Some(value.as_ref()),
+												_ => None,
+											};
+											if let Some(key) = key {
+												if let Expr::Ident(obj_id) = obj.as_ref() {
+													let obj_name = obj_id.sym.as_ref();
+													if let Some(mut props) = self.as_obj(obj) {
 														props.push(PropOrSpread::Prop(Box::new(Prop::KeyValue(
 															KeyValueProp {
 																key: PropName::Ident(quote_ident(key)),
@@ -268,7 +311,12 @@ impl ExportsParser {
 														))));
 														self
 															.idents
-															.insert(obj_id.sym.as_ref().into(), IdentKind::Object(props));
+															.insert(obj_name.into(), IdentKind::Object(props));
+													} else if let Some(mut fields) = self.as_function(obj) {
+														fields.push(key.to_owned());
+														self
+															.idents
+															.insert(obj_name.into(), IdentKind::Function(fields));
 													}
 												}
 											}
@@ -284,6 +332,8 @@ impl ExportsParser {
 				_ => {}
 			}
 		}
+		println!("{:?}", self.idents);
+
 		// parse exports
 		for item in &items {
 			if let Stmt::Expr(ExprStmt { expr, .. }) = item {
@@ -291,22 +341,46 @@ impl ExportsParser {
 					// exports.foo = 'bar'
 					// module.exports.foo = 'bar'
 					// module.exports = { foo: 'bar' }
-					// module.exports = require('lib')
 					// module.exports = { ...require('a'), ...require('b') }
+					// module.exports = require('lib')
 					Expr::Assign(assign) => {
 						if assign.op == AssignOp::Assign {
-							if let PatOrExpr::Expr(expr) = &assign.left {
-								match expr.as_ref() {
-									Expr::Member(MemberExpr { obj, prop, .. }) => {}
-									// Expr::MetaProp(MetaPropExpr { meta, prop }) => {
-									// 	let meta = meta.sym.as_ref();
-									// 	let prop = prop.sym.as_ref();
-									// 	if meta.eq("exports") {
-									// 		self.exports.insert(prop.to_owned());
-									// 	} else if (meta.eq("module") && prop.eq("exports")) {
-									// 	}
-									// }
-									_ => {}
+							let left_expr = match &assign.left {
+								PatOrExpr::Expr(expr) => Some(expr.as_ref()),
+								PatOrExpr::Pat(pat) => match pat.as_ref() {
+									Pat::Expr(expr) => Some(expr.as_ref()),
+									_ => None,
+								},
+							};
+							if let Some(Expr::Member(MemberExpr {
+								obj: ExprOrSuper::Expr(obj),
+								prop,
+								..
+							})) = left_expr
+							{
+								let prop = match prop.as_ref() {
+									Expr::Ident(prop) => Some(prop.sym.as_ref().to_owned()),
+									Expr::Lit(Lit::Str(Str { value, .. })) => Some(value.as_ref().to_owned()),
+									_ => None,
+								};
+								if let Some(prop) = prop {
+									match obj.as_ref() {
+										Expr::Ident(obj) => {
+											let obj_name = obj.sym.as_ref();
+											if obj_name.eq("exports") {
+												self.exports.insert(prop);
+											} else if obj_name.eq("module") && prop.eq("exports") {
+												let right_expr = assign.right.as_ref();
+												self.reset(right_expr)
+											}
+										}
+										Expr::Member(_) => {
+											if is_member(obj, "module", "exports") {
+												self.exports.insert(prop);
+											}
+										}
+										_ => {}
+									}
 								}
 							}
 						}
@@ -317,15 +391,16 @@ impl ExportsParser {
 					// Object.assign(exports, { foo: 'bar' })
 					// Object.assign(module.exports, { foo: 'bar' }, { ...require('a') }, require('b'))
 					// Object.assign(module, { exports: { foo: 'bar' } })
+					// Object.assign(module, { exports: require('lib') })
 					Expr::Call(call) => {
 						if is_object_static_mothod_call(&call, "defineProperty") && call.args.len() >= 3 {
 							let arg0 = &call.args[0];
 							let arg1 = &call.args[1];
 							let arg2 = &call.args[2];
-							let (is_module, is_exports) = is_module_exports_expr(arg0.expr.as_ref());
+							let (is_module, is_exports) = is_module_exports(arg0.expr.as_ref());
 							let name = self.as_str(arg1.expr.as_ref());
 							let mut with_value_or_getter = false;
-							let mut with_value_as_object: Option<Vec<PropOrSpread>> = None;
+							let mut with_value: Option<Expr> = None;
 							if let Some(props) = self.as_obj(arg2.expr.as_ref()) {
 								for prop in props {
 									if let PropOrSpread::Prop(prop) = prop {
@@ -334,7 +409,7 @@ impl ExportsParser {
 												let key = stringify_prop_name(key);
 												if let Some(key) = &key {
 													if key.eq("value") {
-														with_value_as_object = self.as_obj(value.as_ref());
+														with_value = Some(value.as_ref().clone());
 													}
 												}
 												key
@@ -357,39 +432,39 @@ impl ExportsParser {
 								}
 							}
 							if is_module {
-								if let Some(props) = with_value_as_object {
-									self.reset();
-									self.use_object_as_exports(props);
+								if let Some(expr) = with_value {
+									self.reset(&expr);
 								}
 							}
 						} else if is_object_static_mothod_call(&call, "assign") && call.args.len() >= 2 {
-							let (is_module, is_exports) = is_module_exports_expr(call.args[0].expr.as_ref());
+							let (is_module, is_exports) = is_module_exports(call.args[0].expr.as_ref());
 							for arg in &call.args[1..] {
 								if let Some(props) = self.as_obj(arg.expr.as_ref()) {
 									if is_module {
-										let mut with_exports_as_object: Option<Vec<PropOrSpread>> = None;
+										let mut with_exports: Option<Expr> = None;
 										for prop in props {
 											if let PropOrSpread::Prop(prop) = prop {
 												if let Prop::KeyValue(KeyValueProp { key, value, .. }) = prop.as_ref() {
 													let key = stringify_prop_name(key);
 													if let Some(key) = &key {
 														if key.eq("exports") {
-															with_exports_as_object = self.as_obj(value.as_ref());
+															with_exports = Some(value.as_ref().clone());
 															break;
 														}
 													}
 												};
 											}
 										}
-										if let Some(props) = with_exports_as_object {
-											self.reset();
-											self.use_object_as_exports(props);
+										if let Some(exports_expr) = with_exports {
+											self.reset(&exports_expr);
 										}
 									} else if is_exports {
 										self.use_object_as_exports(props);
 									}
-								} else if let Some(reexports) = self.as_reexport(arg.expr.as_ref()) {
-									self.reexports.insert(reexports);
+								} else if let Some(reexport) = self.as_reexport(arg.expr.as_ref()) {
+									if is_exports {
+										self.reexports.insert(reexport);
+									}
 								}
 							}
 						}
@@ -422,18 +497,12 @@ impl Fold for ExportsParser {
 }
 
 // module | exports | module.exports
-fn is_module_exports_expr(expr: &Expr) -> (bool, bool) {
+fn is_module_exports(expr: &Expr) -> (bool, bool) {
 	match expr {
 		Expr::Ident(id) => {
 			let id = id.sym.as_ref();
 			return (id.eq("module"), id.eq("exports"));
 		}
-		// Expr::MetaProp(MetaPropExpr { meta, prop }) => {
-		// 	return (
-		// 		false,
-		// 		meta.sym.as_ref().eq("module") && prop.sym.as_ref().eq("exports"),
-		// 	)
-		// }
 		Expr::Member(_) => return (false, is_member(expr, "module", "exports")),
 		_ => {}
 	}
@@ -450,10 +519,8 @@ fn is_member(expr: &Expr, obj_name: &str, prop_name: &str) -> bool {
 		if let Expr::Ident(obj) = obj.as_ref() {
 			if obj.sym.as_ref().eq(obj_name) {
 				return match prop.as_ref() {
-					Expr::Ident(prop) => prop_name == "*" || prop.sym.as_ref().eq(prop_name),
-					Expr::Lit(Lit::Str(Str { value, .. })) => {
-						prop_name == "*" || value.as_ref().eq(prop_name)
-					}
+					Expr::Ident(prop) => prop.sym.as_ref().eq(prop_name),
+					Expr::Lit(Lit::Str(Str { value, .. })) => value.as_ref().eq(prop_name),
 					_ => false,
 				};
 			}
