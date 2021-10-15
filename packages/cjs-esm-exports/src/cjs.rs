@@ -3,7 +3,7 @@ use swc_common::DUMMY_SP;
 use swc_ecma_ast::*;
 use swc_ecma_visit::{noop_fold_type, Fold};
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub enum IdentKind {
 	Lit(Lit),
 	Alias(String),
@@ -75,6 +75,9 @@ impl ExportsParser {
 			Expr::Class(ClassExpr { class, .. }) => {
 				let names = get_class_static_names(&class);
 				self.idents.insert(name.into(), IdentKind::Function(names));
+			}
+			Expr::Arrow(_) => {
+				self.idents.insert(name.into(), IdentKind::Function(vec![]));
 			}
 			Expr::Fn(_) => {
 				self.idents.insert(name.into(), IdentKind::Function(vec![]));
@@ -332,12 +335,11 @@ impl ExportsParser {
 				_ => {}
 			}
 		}
-		println!("{:?}", self.idents);
 
 		// parse exports
 		for item in &items {
-			if let Stmt::Expr(ExprStmt { expr, .. }) = item {
-				match expr.as_ref() {
+			match item {
+				Stmt::Expr(ExprStmt { expr, .. }) => match expr.as_ref() {
 					// exports.foo = 'bar'
 					// module.exports.foo = 'bar'
 					// module.exports = { foo: 'bar' }
@@ -392,6 +394,7 @@ impl ExportsParser {
 					// Object.assign(module.exports, { foo: 'bar' }, { ...require('a') }, require('b'))
 					// Object.assign(module, { exports: { foo: 'bar' } })
 					// Object.assign(module, { exports: require('lib') })
+					// (function() { ... })()
 					Expr::Call(call) => {
 						if is_object_static_mothod_call(&call, "defineProperty") && call.args.len() >= 3 {
 							let arg0 = &call.args[0];
@@ -467,12 +470,38 @@ impl ExportsParser {
 									}
 								}
 							}
+						} else if let Some(body) = is_iife_call(&call) {
+							self.dep_parse(body)
+						}
+					}
+					Expr::Unary(UnaryExpr { op, arg, .. }) => {
+						if let UnaryOp::Minus | UnaryOp::Plus | UnaryOp::Bang | UnaryOp::Tilde | UnaryOp::Void =
+							op
+						{
+							if let Expr::Call(call) = arg.as_ref() {
+								if let Some(body) = is_iife_call(&call) {
+									self.dep_parse(body)
+								}
+							}
 						}
 					}
 					_ => {}
-				}
+				},
+				_ => {}
 			}
 		}
+	}
+
+	fn dep_parse(&mut self, body: Vec<Stmt>) {
+		let mut dep_parser = ExportsParser {
+			node_env: self.node_env.to_owned(),
+			idents: self.idents.clone(),
+			exports: self.exports.clone(),
+			reexports: self.reexports.clone(),
+		};
+		dep_parser.parse(body);
+		self.exports = dep_parser.exports;
+		self.reexports = dep_parser.reexports;
 	}
 }
 
@@ -558,6 +587,35 @@ fn is_object_static_mothod_call(call: &CallExpr, method: &str) -> bool {
 		ExprOrSuper::Expr(callee) => callee.as_ref(),
 	};
 	is_member(callee, "Object", method)
+}
+
+fn is_iife_call(call: &CallExpr) -> Option<Vec<Stmt>> {
+	let callee = match &call.callee {
+		ExprOrSuper::Super(_) => return None,
+		ExprOrSuper::Expr(callee) => callee.as_ref(),
+	};
+	let expr = match callee {
+		Expr::Paren(ParenExpr { expr, .. }) => expr.as_ref(),
+		_ => callee,
+	};
+	match expr {
+		Expr::Fn(func) => {
+			if let Some(BlockStmt { stmts, .. }) = &func.function.body {
+				return Some(stmts.clone());
+			}
+		}
+		Expr::Arrow(arrow) => match &arrow.body {
+			BlockStmtOrExpr::BlockStmt(BlockStmt { stmts, .. }) => return Some(stmts.clone()),
+			BlockStmtOrExpr::Expr(expr) => {
+				return Some(vec![Stmt::Expr(ExprStmt {
+					span: DUMMY_SP,
+					expr: expr.clone(),
+				})])
+			}
+		},
+		_ => {}
+	}
+	None
 }
 
 fn get_class_static_names(class: &Class) -> Vec<String> {
