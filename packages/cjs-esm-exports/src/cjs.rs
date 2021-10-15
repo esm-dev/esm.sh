@@ -82,6 +82,14 @@ impl ExportsParser {
 			Expr::Fn(_) => {
 				self.idents.insert(name.into(), IdentKind::Function(vec![]));
 			}
+			Expr::Member(_) => {
+				if is_member_member(expr, "process", "env", "NODE_ENV") {
+					self.idents.insert(
+						name.into(),
+						IdentKind::Lit(Lit::Str(quote_str(self.node_env.as_str()))),
+					);
+				}
+			}
 			_ => {
 				self.idents.insert(name.into(), IdentKind::Unkonwn);
 			}
@@ -96,6 +104,62 @@ impl ExportsParser {
 					match value {
 						IdentKind::Lit(Lit::Str(Str { value, .. })) => return Some(value.as_ref().into()),
 						IdentKind::Alias(id) => return self.as_str(&Expr::Ident(quote_ident(id))),
+						_ => {}
+					}
+				}
+			}
+			Expr::Member(_) => {
+				if is_member_member(expr, "process", "env", "NODE_ENV") {
+					return Some(self.node_env.to_owned());
+				}
+			}
+			_ => {}
+		};
+		None
+	}
+
+	fn as_num(&self, expr: &Expr) -> Option<f64> {
+		match expr {
+			Expr::Lit(Lit::Num(Number { value, .. })) => return Some(*value),
+			Expr::Ident(id) => {
+				if let Some(value) = self.idents.get(id.sym.as_ref().into()) {
+					match value {
+						IdentKind::Lit(Lit::Num(Number { value, .. })) => return Some(*value),
+						IdentKind::Alias(id) => return self.as_num(&Expr::Ident(quote_ident(id))),
+						_ => {}
+					}
+				}
+			}
+			_ => {}
+		};
+		None
+	}
+
+	fn as_bool(&self, expr: &Expr) -> Option<bool> {
+		match expr {
+			Expr::Lit(Lit::Bool(Bool { value, .. })) => return Some(*value),
+			Expr::Ident(id) => {
+				if let Some(value) = self.idents.get(id.sym.as_ref().into()) {
+					match value {
+						IdentKind::Lit(Lit::Bool(Bool { value, .. })) => return Some(*value),
+						IdentKind::Alias(id) => return self.as_bool(&Expr::Ident(quote_ident(id))),
+						_ => {}
+					}
+				}
+			}
+			_ => {}
+		};
+		None
+	}
+
+	fn as_null(&self, expr: &Expr) -> Option<bool> {
+		match expr {
+			Expr::Lit(Lit::Null(_)) => return Some(true),
+			Expr::Ident(id) => {
+				if let Some(value) = self.idents.get(id.sym.as_ref().into()) {
+					match value {
+						IdentKind::Lit(Lit::Null(_)) => return Some(true),
+						IdentKind::Alias(id) => return self.as_null(&Expr::Ident(quote_ident(id))),
 						_ => {}
 					}
 				}
@@ -189,6 +253,61 @@ impl ExportsParser {
 				},
 			}
 		}
+	}
+
+	fn eqeq(&self, left: &Expr, right: &Expr) -> bool {
+		if let Some(left) = self.as_str(left) {
+			if let Some(right) = self.as_str(right) {
+				return left == right;
+			}
+		} else if let Some(left) = self.as_num(left) {
+			if let Some(right) = self.as_num(right) {
+				return left == right;
+			}
+		} else if let Some(left) = self.as_bool(left) {
+			if let Some(right) = self.as_bool(right) {
+				return left == right;
+			}
+		} else if let Some(left) = self.as_null(left) {
+			if let Some(right) = self.as_null(right) {
+				return left == right;
+			}
+		}
+		false
+	}
+
+	fn is_true(&self, expr: &Expr) -> bool {
+		match expr {
+			Expr::Ident(id) => {
+				if let Some(value) = self.idents.get(id.sym.as_ref().into()) {
+					match value {
+						IdentKind::Lit(lit) => return self.is_true(&Expr::Lit(lit.clone())),
+						IdentKind::Alias(id) => return self.is_true(&Expr::Ident(quote_ident(id))),
+						_ => {}
+					}
+				}
+			}
+			Expr::Lit(lit) => {
+				return match lit {
+					Lit::Bool(Bool { value, .. }) => *value,
+					Lit::Str(Str { value, .. }) => !value.as_ref().is_empty(),
+					Lit::Null(_) => false,
+					Lit::Num(Number { value, .. }) => *value != 0.0,
+					_ => false,
+				}
+			}
+			Expr::Bin(BinExpr {
+				op, left, right, ..
+			}) => {
+				if matches!(op, BinaryOp::EqEq | BinaryOp::EqEqEq) {
+					return self.eqeq(left, right);
+				} else if matches!(op, BinaryOp::NotEq | BinaryOp::NotEqEq) {
+					return !self.eqeq(left, right);
+				}
+			}
+			_ => {}
+		}
+		false
 	}
 
 	fn parse(&mut self, items: Vec<Stmt>) {
@@ -487,6 +606,18 @@ impl ExportsParser {
 					}
 					_ => {}
 				},
+				Stmt::Block(BlockStmt { stmts, .. }) => {
+					self.dep_parse(stmts.clone());
+				}
+				Stmt::If(IfStmt {
+					test, cons, alt, ..
+				}) => {
+					if self.is_true(test) {
+						self.dep_parse(vec![cons.as_ref().clone()]);
+					} else if let Some(alt) = alt {
+						self.dep_parse(vec![alt.as_ref().clone()]);
+					}
+				}
 				_ => {}
 			}
 		}
@@ -553,6 +684,24 @@ fn is_member(expr: &Expr, obj_name: &str, prop_name: &str) -> bool {
 					_ => false,
 				};
 			}
+		}
+	}
+	false
+}
+
+fn is_member_member(expr: &Expr, obj_name: &str, middle_obj_name: &str, prop_name: &str) -> bool {
+	if let Expr::Member(MemberExpr {
+		obj: ExprOrSuper::Expr(obj),
+		prop,
+		..
+	}) = expr
+	{
+		if is_member(obj, obj_name, middle_obj_name) {
+			return match prop.as_ref() {
+				Expr::Ident(prop) => prop.sym.as_ref().eq(prop_name),
+				Expr::Lit(Lit::Str(Str { value, .. })) => value.as_ref().eq(prop_name),
+				_ => false,
+			};
 		}
 	}
 	false

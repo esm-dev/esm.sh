@@ -239,7 +239,7 @@ mod tests {
 	}
 	
 	#[test]
-	fn parse_cjs_exports_case_12_4() {
+	fn parse_cjs_exports_case_12_3() {
 		let source = r#"
 			let es = { foo: 'bar' };
 			(function() {
@@ -251,5 +251,127 @@ mod tests {
 			.parse_cjs_exports("development")
 			.expect("could not parse exports");
 		assert_eq!(exports.join(","), "foo");
+	}
+
+	#[test]
+	fn parse_cjs_exports_case_13() {
+		let source = r#"
+			{
+				module.exports = { foo: 'bar' }
+			}
+		"#;
+		let swc = SWC::parse("index.cjs", source).expect("could not parse module");
+		let (exports, _) = swc
+			.parse_cjs_exports("development")
+			.expect("could not parse exports");
+		assert_eq!(exports.join(","), "foo");
+	}
+
+	#[test]
+	fn parse_cjs_exports_case_13_1() {
+		let source = r#"
+			const obj1 = { foo: 'bar' }
+			{
+				const obj2 = { bar: 123 }
+				module.exports = { ...obj1, ...obj2 }
+			}
+		"#;
+		let swc = SWC::parse("index.cjs", source).expect("could not parse module");
+		let (exports, _) = swc
+			.parse_cjs_exports("development")
+			.expect("could not parse exports");
+		assert_eq!(exports.join(","), "foo,bar");
+	}
+
+	#[test]
+	fn parse_cjs_exports_case_14() {
+		let source = r#"
+			if (process.env.NODE_ENV === 'development') {
+				module.exports = { foo: 'bar' }
+			}
+		"#;
+		let swc = SWC::parse("index.cjs", source).expect("could not parse module");
+		let (exports, _) = swc
+			.parse_cjs_exports("development")
+			.expect("could not parse exports");
+		assert_eq!(exports.join(","), "foo");
+	}
+
+	#[test]
+	fn parse_cjs_exports_case_14_1() {
+		let source = r#"
+		  const { NODE_ENV } = process.env
+			if (NODE_ENV === 'development') {
+				module.exports = { foo: 'bar' }
+			}
+		"#;
+		let swc = SWC::parse("index.cjs", source).expect("could not parse module");
+		let (exports, _) = swc
+			.parse_cjs_exports("development")
+			.expect("could not parse exports");
+		assert_eq!(exports.join(","), "foo");
+	}
+
+	#[test]
+	fn parse_cjs_exports_case_14_2() {
+		let source = r#"
+		  const { NODE_ENV: denv } = process.env
+			if (denv === 'development') {
+				module.exports = { foo: 'bar' }
+			}
+		"#;
+		let swc = SWC::parse("index.cjs", source).expect("could not parse module");
+		let (exports, _) = swc
+			.parse_cjs_exports("development")
+			.expect("could not parse exports");
+		assert_eq!(exports.join(","), "foo");
+	}
+
+	#[test]
+	fn parse_cjs_exports_case_14_3() {
+		let source = r#"
+		  const denv = process.env.NODE_ENV
+			if (denv === 'development') {
+				module.exports = { foo: 'bar' }
+			}
+		"#;
+		let swc = SWC::parse("index.cjs", source).expect("could not parse module");
+		let (exports, _) = swc
+			.parse_cjs_exports("development")
+			.expect("could not parse exports");
+		assert_eq!(exports.join(","), "foo");
+	}
+
+	#[test]
+	fn parse_cjs_exports_case_14_4() {
+		let source = r#"
+			if (process.env.NODE_ENV !== 'development') {
+				module.exports = { foo: 'bar' }
+			}
+		"#;
+		let swc = SWC::parse("index.cjs", source).expect("could not parse module");
+		let (exports, _) = swc
+			.parse_cjs_exports("development")
+			.expect("could not parse exports");
+		assert_eq!(exports.join(","), "");
+	}
+
+	#[test]
+	fn parse_cjs_exports_case_15() {
+		let source = r#"
+			let es = { foo: 'bar' };
+			(function() {
+				const { NODE_ENV } = process.env
+				es.bar = 123
+				if (NODE_ENV === 'development') {
+					module.exports = es
+				}
+			})()
+		"#;
+		let swc = SWC::parse("index.cjs", source).expect("could not parse module");
+		let (exports, _) = swc
+			.parse_cjs_exports("development")
+			.expect("could not parse exports");
+		assert_eq!(exports.join(","), "foo,bar");
 	}
 }
