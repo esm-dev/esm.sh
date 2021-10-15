@@ -96,7 +96,7 @@ checksum = "baf1de4339761588bc0619e3cbc0120ee582ebb74b53b4efbf79117bd2da40fd"
 
 [[package]]
 name = "cjs-esm-exports"
-version = "0.0.0"
+version = "0.1.0"
 dependencies = [
  "anyhow",
  "console_error_panic_hook",
@@ -697,9 +697,9 @@ dependencies = [
 
 [[package]]
 name = "swc_common"
-version = "0.13.3"
+version = "0.13.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8e9e0973dafd2027bc5bc0b3d57f684459f141ab2262f758589db7b99680b746"
+checksum = "26b29348e57e178d86c23bedf0b8aaa6673a2d395e4e3d63ce3b54762d32b7f3"
 dependencies = [
  "ahash",
  "ast_node",
@@ -771,9 +771,9 @@ dependencies = [
 
 [[package]]
 name = "swc_ecmascript"
-version = "0.72.0"
+version = "0.76.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b36f5cc7103f4080e0f51a4e5436bc625b0b3172643f427cf70971235f9b34a9"
+checksum = "213322f169cc62195e5a2532a294819c602f3241d8c4bc02c455cb866fb815df"
 dependencies = [
  "swc_ecma_ast",
  "swc_ecma_parser",

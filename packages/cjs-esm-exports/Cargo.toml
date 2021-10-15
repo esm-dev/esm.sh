@@ -1,6 +1,6 @@
 [package]
 name = "cjs-esm-exports"
-version = "0.0.0"
+version = "0.1.0"
 description = "Parse commonjs exports for ESM."
 repository = "https://github.com/alephjs/esm.sh"
 license = "MIT"
@@ -21,8 +21,8 @@ serde = { version = "1.0.130", features = ["derive"] }
 # swc
 # docs: https://swc.rs
 # crate: https://crates.io/search?q=swc
-swc_common = { version = "0.13.3", features = ["sourcemap"] }
-swc_ecmascript = { version = "0.72.0", features = ["parser", "visit"] }
+swc_common = { version = "0.13.5", features = ["sourcemap"] }
+swc_ecmascript = { version = "0.76.0", features = ["parser", "visit"] }
 swc_ecma_ast = "0.54.3"
 swc_ecma_visit = "0.40.0" 
 
