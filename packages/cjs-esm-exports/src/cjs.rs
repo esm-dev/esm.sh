@@ -8,13 +8,22 @@ pub enum IdentKind {
 	Lit(Lit),
 	Alias(String),
 	Object(Vec<PropOrSpread>),
-	Function(Vec<String>),
+	Class(Class),
+	Fn(FnDesc),
 	Reexport(String),
 	Unkonwn,
 }
 
+#[derive(Clone, Debug)]
+pub struct FnDesc {
+	stmts: Vec<Stmt>,
+	extends: Vec<String>,
+}
+
 pub struct ExportsParser {
 	pub node_env: String,
+	pub call_mode: bool,
+	pub returned: bool,
 	pub idents: IndexMap<String, IdentKind>,
 	pub exports: IndexSet<String>,
 	pub reexports: IndexSet<String>,
@@ -27,21 +36,47 @@ impl ExportsParser {
 	}
 
 	fn reset(&mut self, expr: &Expr) {
-		if let Some(props) = self.as_obj(&expr) {
-			self.clear();
-			self.use_object_as_exports(props);
-		} else if let Some(reexport) = self.as_reexport(&expr) {
+		if let Expr::Paren(ParenExpr { expr, .. }) = expr {
+			self.reset(expr);
+			return;
+		}
+		if let Some(reexport) = self.as_reexport(expr) {
 			self.clear();
 			self.reexports.insert(reexport);
-		} else if let Some(fields) = self.as_function(&expr) {
+		} else if let Some(props) = self.as_obj(expr) {
 			self.clear();
-			for field in fields {
-				self.exports.insert(field);
+			self.use_object_as_exports(props);
+		} else if let Some(class) = self.as_class(expr) {
+			self.clear();
+			for name in get_class_static_names(&class) {
+				self.exports.insert(name);
+			}
+		} else if let Some(FnDesc { stmts, extends }) = self.as_function(expr) {
+			self.clear();
+			if self.call_mode {
+				self.dep_parse(stmts, true);
+			} else {
+				for name in extends {
+					self.exports.insert(name);
+				}
+			}
+		} else if let Expr::Call(call) = expr {
+			if let Some(callee) = with_expr_callee(call) {
+				if let Some(reexport) = self.as_reexport(callee) {
+					self.clear();
+					self.reexports.insert(format!("{}()", reexport));
+				} else if let Some(FnDesc { stmts, .. }) = self.as_function(callee) {
+					self.dep_parse(stmts, true);
+				}
 			}
 		}
 	}
 
 	fn record_ident(&mut self, name: &str, expr: &Expr) {
+		if let Expr::Paren(ParenExpr { expr, .. }) = expr {
+			self.record_ident(name, expr);
+			return;
+		}
 		match expr {
 			Expr::Lit(lit) => {
 				self.idents.insert(name.into(), IdentKind::Lit(lit.clone()));
@@ -73,14 +108,32 @@ impl ExportsParser {
 					.insert(name.into(), IdentKind::Object(obj.props.clone()));
 			}
 			Expr::Class(ClassExpr { class, .. }) => {
-				let names = get_class_static_names(&class);
-				self.idents.insert(name.into(), IdentKind::Function(names));
+				self
+					.idents
+					.insert(name.into(), IdentKind::Class(class.clone()));
 			}
-			Expr::Arrow(_) => {
-				self.idents.insert(name.into(), IdentKind::Function(vec![]));
+			Expr::Arrow(arrow) => {
+				self.idents.insert(
+					name.into(),
+					IdentKind::Fn(FnDesc {
+						stmts: arrow_stmts(&arrow),
+						extends: vec![],
+					}),
+				);
 			}
-			Expr::Fn(_) => {
-				self.idents.insert(name.into(), IdentKind::Function(vec![]));
+			Expr::Fn(FnExpr {
+				function: Function {
+					body: Some(body), ..
+				},
+				..
+			}) => {
+				self.idents.insert(
+					name.into(),
+					IdentKind::Fn(FnDesc {
+						stmts: body.stmts.clone(),
+						extends: vec![],
+					}),
+				);
 			}
 			Expr::Member(_) => {
 				if is_member_member(expr, "process", "env", "NODE_ENV") {
@@ -98,6 +151,7 @@ impl ExportsParser {
 
 	fn as_str(&self, expr: &Expr) -> Option<String> {
 		match expr {
+			Expr::Paren(ParenExpr { expr, .. }) => return self.as_str(expr),
 			Expr::Lit(Lit::Str(Str { value, .. })) => return Some(value.as_ref().into()),
 			Expr::Ident(id) => {
 				if let Some(value) = self.idents.get(id.sym.as_ref().into()) {
@@ -120,6 +174,7 @@ impl ExportsParser {
 
 	fn as_num(&self, expr: &Expr) -> Option<f64> {
 		match expr {
+			Expr::Paren(ParenExpr { expr, .. }) => return self.as_num(expr),
 			Expr::Lit(Lit::Num(Number { value, .. })) => return Some(*value),
 			Expr::Ident(id) => {
 				if let Some(value) = self.idents.get(id.sym.as_ref().into()) {
@@ -137,6 +192,7 @@ impl ExportsParser {
 
 	fn as_bool(&self, expr: &Expr) -> Option<bool> {
 		match expr {
+			Expr::Paren(ParenExpr { expr, .. }) => return self.as_bool(expr),
 			Expr::Lit(Lit::Bool(Bool { value, .. })) => return Some(*value),
 			Expr::Ident(id) => {
 				if let Some(value) = self.idents.get(id.sym.as_ref().into()) {
@@ -154,6 +210,7 @@ impl ExportsParser {
 
 	fn as_null(&self, expr: &Expr) -> Option<bool> {
 		match expr {
+			Expr::Paren(ParenExpr { expr, .. }) => return self.as_null(expr),
 			Expr::Lit(Lit::Null(_)) => return Some(true),
 			Expr::Ident(id) => {
 				if let Some(value) = self.idents.get(id.sym.as_ref().into()) {
@@ -171,6 +228,7 @@ impl ExportsParser {
 
 	fn as_obj(&self, expr: &Expr) -> Option<Vec<PropOrSpread>> {
 		match expr {
+			Expr::Paren(ParenExpr { expr, .. }) => return self.as_obj(expr),
 			Expr::Object(ObjectLit { props, .. }) => Some(props.to_vec()),
 			Expr::Ident(id) => {
 				if let Some(value) = self.idents.get(id.sym.as_ref().into()) {
@@ -188,6 +246,7 @@ impl ExportsParser {
 
 	fn as_reexport(&self, expr: &Expr) -> Option<String> {
 		match expr {
+			Expr::Paren(ParenExpr { expr, .. }) => return self.as_reexport(expr),
 			Expr::Call(call) => is_require_call(&call),
 			Expr::Ident(id) => {
 				if let Some(value) = self.idents.get(id.sym.as_ref().into()) {
@@ -203,14 +262,40 @@ impl ExportsParser {
 		}
 	}
 
-	fn as_function(&self, expr: &Expr) -> Option<Vec<String>> {
+	fn as_class(&self, expr: &Expr) -> Option<Class> {
 		match expr {
-			Expr::Class(ClassExpr { class, .. }) => Some(get_class_static_names(&class)),
-			Expr::Fn(_) => Some(vec![]),
+			Expr::Paren(ParenExpr { expr, .. }) => return self.as_class(expr),
+			Expr::Class(ClassExpr { class, .. }) => Some(class.clone()),
 			Expr::Ident(id) => {
 				if let Some(value) = self.idents.get(id.sym.as_ref().into()) {
 					match value {
-						IdentKind::Function(fields) => return Some(fields.clone()),
+						IdentKind::Class(class) => return Some(class.clone()),
+						IdentKind::Alias(id) => return self.as_class(&Expr::Ident(quote_ident(id))),
+						_ => {}
+					}
+				}
+				None
+			}
+			_ => None,
+		}
+	}
+
+	fn as_function(&self, expr: &Expr) -> Option<FnDesc> {
+		match expr {
+			Expr::Paren(ParenExpr { expr, .. }) => return self.as_function(expr),
+			Expr::Fn(FnExpr {
+				function: Function {
+					body: Some(body), ..
+				},
+				..
+			}) => Some(FnDesc {
+				stmts: body.stmts.clone(),
+				extends: vec![],
+			}),
+			Expr::Ident(id) => {
+				if let Some(value) = self.idents.get(id.sym.as_ref().into()) {
+					match value {
+						IdentKind::Fn(desc) => return Some(desc.clone()),
 						IdentKind::Alias(id) => return self.as_function(&Expr::Ident(quote_ident(id))),
 						_ => {}
 					}
@@ -278,6 +363,7 @@ impl ExportsParser {
 
 	fn is_true(&self, expr: &Expr) -> bool {
 		match expr {
+			Expr::Paren(ParenExpr { expr, .. }) => return self.is_true(expr),
 			Expr::Ident(id) => {
 				if let Some(value) = self.idents.get(id.sym.as_ref().into()) {
 					match value {
@@ -310,10 +396,10 @@ impl ExportsParser {
 		false
 	}
 
-	fn parse(&mut self, items: Vec<Stmt>) {
+	fn parse(&mut self, stmts: Vec<Stmt>, as_fn: bool) {
 		// record idents
-		for item in &items {
-			match item {
+		for stmt in &stmts {
+			match stmt {
 				Stmt::Decl(decl) => match decl {
 					Decl::Var(var) => {
 						for decl in &var.decls {
@@ -434,11 +520,16 @@ impl ExportsParser {
 														self
 															.idents
 															.insert(obj_name.into(), IdentKind::Object(props));
-													} else if let Some(mut fields) = self.as_function(obj) {
-														fields.push(key.to_owned());
-														self
-															.idents
-															.insert(obj_name.into(), IdentKind::Function(fields));
+													} else if let Some(FnDesc { stmts, mut extends }) = self.as_function(obj)
+													{
+														extends.push(key.to_owned());
+														self.idents.insert(
+															obj_name.into(),
+															IdentKind::Fn(FnDesc {
+																stmts: stmts,
+																extends: extends,
+															}),
+														);
 													}
 												}
 											}
@@ -455,9 +546,43 @@ impl ExportsParser {
 			}
 		}
 
+		// parse exports (as function)
+		if as_fn {
+			for stmt in &stmts {
+				match stmt {
+					Stmt::Block(BlockStmt { stmts, .. }) => {
+						if self.dep_parse(stmts.clone(), true) {
+							break;
+						}
+					}
+					Stmt::If(IfStmt {
+						test, cons, alt, ..
+					}) => {
+						let mut returned = false;
+						if self.is_true(test) {
+							returned = self.dep_parse(vec![cons.as_ref().clone()], true);
+						} else if let Some(alt) = alt {
+							returned = self.dep_parse(vec![alt.as_ref().clone()], true);
+						}
+						if returned {
+							break;
+						}
+					}
+					Stmt::Return(ReturnStmt { arg, .. }) => {
+						if let Some(arg) = arg {
+							self.reset(arg);
+							break;
+						}
+					}
+					_ => {}
+				}
+			}
+			return;
+		}
+
 		// parse exports
-		for item in &items {
-			match item {
+		for stmt in &stmts {
+			match stmt {
 				Stmt::Expr(ExprStmt { expr, .. }) => match expr.as_ref() {
 					// exports.foo = 'bar'
 					// module.exports.foo = 'bar'
@@ -590,7 +715,7 @@ impl ExportsParser {
 								}
 							}
 						} else if let Some(body) = is_iife_call(&call) {
-							self.dep_parse(body)
+							self.dep_parse(body, false);
 						}
 					}
 					Expr::Unary(UnaryExpr { op, arg, .. }) => {
@@ -599,7 +724,7 @@ impl ExportsParser {
 						{
 							if let Expr::Call(call) = arg.as_ref() {
 								if let Some(body) = is_iife_call(&call) {
-									self.dep_parse(body)
+									self.dep_parse(body, false);
 								}
 							}
 						}
@@ -607,15 +732,15 @@ impl ExportsParser {
 					_ => {}
 				},
 				Stmt::Block(BlockStmt { stmts, .. }) => {
-					self.dep_parse(stmts.clone());
+					self.dep_parse(stmts.clone(), false);
 				}
 				Stmt::If(IfStmt {
 					test, cons, alt, ..
 				}) => {
 					if self.is_true(test) {
-						self.dep_parse(vec![cons.as_ref().clone()]);
+						self.dep_parse(vec![cons.as_ref().clone()], false);
 					} else if let Some(alt) = alt {
-						self.dep_parse(vec![alt.as_ref().clone()]);
+						self.dep_parse(vec![alt.as_ref().clone()], false);
 					}
 				}
 				_ => {}
@@ -623,16 +748,19 @@ impl ExportsParser {
 		}
 	}
 
-	fn dep_parse(&mut self, body: Vec<Stmt>) {
+	fn dep_parse(&mut self, body: Vec<Stmt>, as_fn: bool) -> bool {
 		let mut dep_parser = ExportsParser {
 			node_env: self.node_env.to_owned(),
+			call_mode: false,
+			returned: false,
 			idents: self.idents.clone(),
 			exports: self.exports.clone(),
 			reexports: self.reexports.clone(),
 		};
-		dep_parser.parse(body);
+		dep_parser.parse(body, as_fn);
 		self.exports = dep_parser.exports;
 		self.reexports = dep_parser.reexports;
+		dep_parser.returned
 	}
 }
 
@@ -651,7 +779,7 @@ impl Fold for ExportsParser {
 				_ => Stmt::Empty(EmptyStmt { span: DUMMY_SP }),
 			})
 			.collect::<Vec<Stmt>>();
-		self.parse(stmts);
+		self.parse(stmts, false);
 		items
 	}
 }
@@ -707,45 +835,43 @@ fn is_member_member(expr: &Expr, obj_name: &str, middle_obj_name: &str, prop_nam
 	false
 }
 
+fn with_expr_callee(call: &CallExpr) -> Option<&Expr> {
+	match &call.callee {
+		ExprOrSuper::Super(_) => None,
+		ExprOrSuper::Expr(callee) => Some(callee.as_ref()),
+	}
+}
+
 // require('lib')
 fn is_require_call(call: &CallExpr) -> Option<String> {
-	let callee = match &call.callee {
-		ExprOrSuper::Super(_) => return None,
-		ExprOrSuper::Expr(callee) => callee.as_ref(),
-	};
-	match callee {
-		Expr::Ident(id) => {
-			if id.sym.as_ref().eq("require") && call.args.len() > 0 {
-				match call.args[0].expr.as_ref() {
-					Expr::Lit(Lit::Str(Str { value, .. })) => Some(value.as_ref().to_owned()),
-					_ => None,
-				}
-			} else {
-				None
-			}
+	if let Some(Expr::Ident(id)) = with_expr_callee(call) {
+		if id.sym.as_ref().eq("require") && call.args.len() > 0 {
+			return match call.args[0].expr.as_ref() {
+				Expr::Lit(Lit::Str(Str { value, .. })) => Some(value.as_ref().to_owned()),
+				_ => None,
+			};
 		}
-		_ => None,
-	}
+	};
+	None
 }
 
 // Object.defineProperty()
 // Object.assgin()
 fn is_object_static_mothod_call(call: &CallExpr, method: &str) -> bool {
-	let callee = match &call.callee {
-		ExprOrSuper::Super(_) => return false,
-		ExprOrSuper::Expr(callee) => callee.as_ref(),
-	};
-	is_member(callee, "Object", method)
+	if let Some(callee) = with_expr_callee(call) {
+		return is_member(callee, "Object", method);
+	}
+	false
 }
 
 fn is_iife_call(call: &CallExpr) -> Option<Vec<Stmt>> {
-	let callee = match &call.callee {
-		ExprOrSuper::Super(_) => return None,
-		ExprOrSuper::Expr(callee) => callee.as_ref(),
-	};
-	let expr = match callee {
-		Expr::Paren(ParenExpr { expr, .. }) => expr.as_ref(),
-		_ => callee,
+	let expr = if let Some(callee) = with_expr_callee(call) {
+		match callee {
+			Expr::Paren(ParenExpr { expr, .. }) => expr.as_ref(),
+			_ => callee,
+		}
+	} else {
+		return None;
 	};
 	match expr {
 		Expr::Fn(func) => {
@@ -753,18 +879,20 @@ fn is_iife_call(call: &CallExpr) -> Option<Vec<Stmt>> {
 				return Some(stmts.clone());
 			}
 		}
-		Expr::Arrow(arrow) => match &arrow.body {
-			BlockStmtOrExpr::BlockStmt(BlockStmt { stmts, .. }) => return Some(stmts.clone()),
-			BlockStmtOrExpr::Expr(expr) => {
-				return Some(vec![Stmt::Expr(ExprStmt {
-					span: DUMMY_SP,
-					expr: expr.clone(),
-				})])
-			}
-		},
+		Expr::Arrow(arrow) => return Some(arrow_stmts(arrow)),
 		_ => {}
 	}
 	None
+}
+
+fn arrow_stmts(arrow: &ArrowExpr) -> Vec<Stmt> {
+	match &arrow.body {
+		BlockStmtOrExpr::BlockStmt(BlockStmt { stmts, .. }) => stmts.clone(),
+		BlockStmtOrExpr::Expr(expr) => vec![Stmt::Return(ReturnStmt {
+			span: DUMMY_SP,
+			arg: Some(expr.clone()),
+		})],
+	}
 }
 
 fn get_class_static_names(class: &Class) -> Vec<String> {

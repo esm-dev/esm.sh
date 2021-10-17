@@ -16,7 +16,7 @@ mod tests {
     "#;
 		let swc = SWC::parse("index.cjs", source).expect("could not parse module");
 		let (exports, _) = swc
-			.parse_cjs_exports("development")
+			.parse_cjs_exports("development", false)
 			.expect("could not parse exports");
 		assert_eq!(exports.join(","), "a,b,c,d,e,__esModule")
 	}
@@ -31,7 +31,7 @@ mod tests {
 	  "#;
 		let swc = SWC::parse("index.cjs", source).expect("could not parse module");
 		let (exports, reexports) = swc
-			.parse_cjs_exports("development")
+			.parse_cjs_exports("development", false)
 			.expect("could not parse exports");
 		assert_eq!(exports.join(","), "alas,foo,bar");
 		assert_eq!(reexports.join(","), "a,b");
@@ -47,7 +47,7 @@ mod tests {
 	  "#;
 		let swc = SWC::parse("index.cjs", source).expect("could not parse module");
 		let (exports, reexports) = swc
-			.parse_cjs_exports("development")
+			.parse_cjs_exports("development", false)
 			.expect("could not parse exports");
 		assert_eq!(exports.join(","), "alas,foo,bar,meta");
 		assert_eq!(reexports.join(","), "a,b");
@@ -61,7 +61,7 @@ mod tests {
 	  "#;
 		let swc = SWC::parse("index.cjs", source).expect("could not parse module");
 		let (exports, reexports) = swc
-			.parse_cjs_exports("development")
+			.parse_cjs_exports("development", false)
 			.expect("could not parse exports");
 		assert_eq!(exports.join(","), "nope");
 		assert_eq!(reexports.join(","), "");
@@ -75,7 +75,7 @@ mod tests {
 		"#;
 		let swc = SWC::parse("index.cjs", source).expect("could not parse module");
 		let (exports, _) = swc
-			.parse_cjs_exports("development")
+			.parse_cjs_exports("development", false)
 			.expect("could not parse exports");
 		assert_eq!(exports.join(","), "foo,bar");
 	}
@@ -92,7 +92,7 @@ mod tests {
 		"#;
 		let swc = SWC::parse("index.cjs", source).expect("could not parse module");
 		let (exports, reexports) = swc
-			.parse_cjs_exports("development")
+			.parse_cjs_exports("development", false)
 			.expect("could not parse exports");
 		assert_eq!(exports.join(","), "alas,boom,coco");
 		assert_eq!(reexports.join(","), "a,b");
@@ -106,7 +106,7 @@ mod tests {
 		"#;
 		let swc = SWC::parse("index.cjs", source).expect("could not parse module");
 		let (exports, _) = swc
-			.parse_cjs_exports("development")
+			.parse_cjs_exports("development", false)
 			.expect("could not parse exports");
 		assert_eq!(exports.join(","), "foo,bar");
 	}
@@ -119,7 +119,7 @@ mod tests {
 		"#;
 		let swc = SWC::parse("index.cjs", source).expect("could not parse module");
 		let (exports, _) = swc
-			.parse_cjs_exports("development")
+			.parse_cjs_exports("development", false)
 			.expect("could not parse exports");
 		assert_eq!(exports.join(","), "foo");
 	}
@@ -131,7 +131,7 @@ mod tests {
 		"#;
 		let swc = SWC::parse("index.cjs", source).expect("could not parse module");
 		let (_, reexports) = swc
-			.parse_cjs_exports("development")
+			.parse_cjs_exports("development", false)
 			.expect("could not parse exports");
 		assert_eq!(reexports.join(","), "lib");
 	}
@@ -145,7 +145,7 @@ mod tests {
 		"#;
 		let swc = SWC::parse("index.cjs", source).expect("could not parse module");
 		let (exports, _) = swc
-			.parse_cjs_exports("development")
+			.parse_cjs_exports("development", false)
 			.expect("could not parse exports");
 		assert_eq!(exports.join(","), "foo");
 	}
@@ -159,7 +159,7 @@ mod tests {
 		"#;
 		let swc = SWC::parse("index.cjs", source).expect("could not parse module");
 		let (exports, _) = swc
-			.parse_cjs_exports("development")
+			.parse_cjs_exports("development", false)
 			.expect("could not parse exports");
 		assert_eq!(exports.join(","), "foo");
 	}
@@ -173,7 +173,7 @@ mod tests {
 		"#;
 		let swc = SWC::parse("index.cjs", source).expect("could not parse module");
 		let (exports, _) = swc
-			.parse_cjs_exports("development")
+			.parse_cjs_exports("development", false)
 			.expect("could not parse exports");
 		assert_eq!(exports.join(","), "foo");
 	}
@@ -191,7 +191,7 @@ mod tests {
 		"#;
 		let swc = SWC::parse("index.cjs", source).expect("could not parse module");
 		let (exports, _) = swc
-			.parse_cjs_exports("development")
+			.parse_cjs_exports("development", false)
 			.expect("could not parse exports");
 		assert_eq!(exports.join(","), "foo,greet");
 	}
@@ -205,7 +205,7 @@ mod tests {
 		"#;
 		let swc = SWC::parse("index.cjs", source).expect("could not parse module");
 		let (exports, _) = swc
-			.parse_cjs_exports("development")
+			.parse_cjs_exports("development", false)
 			.expect("could not parse exports");
 		assert_eq!(exports.join(","), "foo");
 	}
@@ -219,7 +219,7 @@ mod tests {
 		"#;
 		let swc = SWC::parse("index.cjs", source).expect("could not parse module");
 		let (exports, _) = swc
-			.parse_cjs_exports("development")
+			.parse_cjs_exports("development", false)
 			.expect("could not parse exports");
 		assert_eq!(exports.join(","), "foo");
 	}
@@ -233,11 +233,10 @@ mod tests {
 		"#;
 		let swc = SWC::parse("index.cjs", source).expect("could not parse module");
 		let (exports, _) = swc
-			.parse_cjs_exports("development")
+			.parse_cjs_exports("development", false)
 			.expect("could not parse exports");
 		assert_eq!(exports.join(","), "foo");
 	}
-	
 	#[test]
 	fn parse_cjs_exports_case_12_3() {
 		let source = r#"
@@ -248,7 +247,7 @@ mod tests {
 		"#;
 		let swc = SWC::parse("index.cjs", source).expect("could not parse module");
 		let (exports, _) = swc
-			.parse_cjs_exports("development")
+			.parse_cjs_exports("development", false)
 			.expect("could not parse exports");
 		assert_eq!(exports.join(","), "foo");
 	}
@@ -262,7 +261,7 @@ mod tests {
 		"#;
 		let swc = SWC::parse("index.cjs", source).expect("could not parse module");
 		let (exports, _) = swc
-			.parse_cjs_exports("development")
+			.parse_cjs_exports("development", false)
 			.expect("could not parse exports");
 		assert_eq!(exports.join(","), "foo");
 	}
@@ -278,7 +277,7 @@ mod tests {
 		"#;
 		let swc = SWC::parse("index.cjs", source).expect("could not parse module");
 		let (exports, _) = swc
-			.parse_cjs_exports("development")
+			.parse_cjs_exports("development", false)
 			.expect("could not parse exports");
 		assert_eq!(exports.join(","), "foo,bar");
 	}
@@ -292,7 +291,7 @@ mod tests {
 		"#;
 		let swc = SWC::parse("index.cjs", source).expect("could not parse module");
 		let (exports, _) = swc
-			.parse_cjs_exports("development")
+			.parse_cjs_exports("development", false)
 			.expect("could not parse exports");
 		assert_eq!(exports.join(","), "foo");
 	}
@@ -307,7 +306,7 @@ mod tests {
 		"#;
 		let swc = SWC::parse("index.cjs", source).expect("could not parse module");
 		let (exports, _) = swc
-			.parse_cjs_exports("development")
+			.parse_cjs_exports("development", false)
 			.expect("could not parse exports");
 		assert_eq!(exports.join(","), "foo");
 	}
@@ -322,7 +321,7 @@ mod tests {
 		"#;
 		let swc = SWC::parse("index.cjs", source).expect("could not parse module");
 		let (exports, _) = swc
-			.parse_cjs_exports("development")
+			.parse_cjs_exports("development", false)
 			.expect("could not parse exports");
 		assert_eq!(exports.join(","), "foo");
 	}
@@ -337,7 +336,7 @@ mod tests {
 		"#;
 		let swc = SWC::parse("index.cjs", source).expect("could not parse module");
 		let (exports, _) = swc
-			.parse_cjs_exports("development")
+			.parse_cjs_exports("development", false)
 			.expect("could not parse exports");
 		assert_eq!(exports.join(","), "foo");
 	}
@@ -351,7 +350,7 @@ mod tests {
 		"#;
 		let swc = SWC::parse("index.cjs", source).expect("could not parse module");
 		let (exports, _) = swc
-			.parse_cjs_exports("development")
+			.parse_cjs_exports("development", false)
 			.expect("could not parse exports");
 		assert_eq!(exports.join(","), "");
 	}
@@ -370,7 +369,112 @@ mod tests {
 		"#;
 		let swc = SWC::parse("index.cjs", source).expect("could not parse module");
 		let (exports, _) = swc
-			.parse_cjs_exports("development")
+			.parse_cjs_exports("development", false)
+			.expect("could not parse exports");
+		assert_eq!(exports.join(","), "foo,bar");
+	}
+
+	#[test]
+	fn parse_cjs_exports_case_16() {
+		let source = r#"
+			function fn() { return { foo: 'bar' } };
+			module.exports = fn()
+		"#;
+		let swc = SWC::parse("index.cjs", source).expect("could not parse module");
+		let (exports, _) = swc
+			.parse_cjs_exports("development", false)
+			.expect("could not parse exports");
+		assert_eq!(exports.join(","), "foo");
+	}
+
+	#[test]
+	fn parse_cjs_exports_case_16_1() {
+		let source = r#"
+			let fn = () => ({ foo: 'bar' });
+			module.exports = fn()
+		"#;
+		let swc = SWC::parse("index.cjs", source).expect("could not parse module");
+		let (exports, _) = swc
+			.parse_cjs_exports("development", false)
+			.expect("could not parse exports");
+		assert_eq!(exports.join(","), "foo");
+	}
+
+	#[test]
+	fn parse_cjs_exports_case_16_2() {
+		let source = r#"
+			function fn() {
+				const mod = { foo: 'bar' }
+				mod.bar = 123
+				return mod
+			};
+			module.exports = fn()
+		"#;
+		let swc = SWC::parse("index.cjs", source).expect("could not parse module");
+		let (exports, _) = swc
+			.parse_cjs_exports("development", false)
+			.expect("could not parse exports");
+		assert_eq!(exports.join(","), "foo,bar");
+	}
+
+	#[test]
+	fn parse_cjs_exports_case_17() {
+		let source = r#"
+			module.exports = require("lib")()
+		"#;
+		let swc = SWC::parse("index.cjs", source).expect("could not parse module");
+		let (_, reexports) = swc
+			.parse_cjs_exports("development", false)
+			.expect("could not parse exports");
+		assert_eq!(reexports.join(","), "lib()");
+	}
+
+	#[test]
+	fn parse_cjs_exports_case_18() {
+		let source = r#"
+			module.exports = function () {
+				const mod = { foo: 'bar' }
+				mod.bar = 123
+				return mod
+			};
+		"#;
+		let swc = SWC::parse("index.cjs", source).expect("could not parse module");
+		let (exports, _) = swc
+			.parse_cjs_exports("development", true)
+			.expect("could not parse exports");
+		assert_eq!(exports.join(","), "foo,bar");
+	}
+
+	#[test]
+	fn parse_cjs_exports_case_18_1() {
+		let source = r#"
+			function fn() {
+				const mod = { foo: 'bar' }
+				mod.bar = 123
+				return mod
+			}
+			module.exports = fn;
+		"#;
+		let swc = SWC::parse("index.cjs", source).expect("could not parse module");
+		let (exports, _) = swc
+			.parse_cjs_exports("development", true)
+			.expect("could not parse exports");
+		assert_eq!(exports.join(","), "foo,bar");
+	}
+
+	#[test]
+	fn parse_cjs_exports_case_18_2() {
+		let source = r#"
+			const fn = () => {
+				const mod = { foo: 'bar' }
+				mod.bar = 123
+				return mod
+			}
+			module.exports = fn;
+		"#;
+		let swc = SWC::parse("index.cjs", source).expect("could not parse module");
+		let (exports, _) = swc
+			.parse_cjs_exports("development", true)
 			.expect("could not parse exports");
 		assert_eq!(exports.join(","), "foo,bar");
 	}

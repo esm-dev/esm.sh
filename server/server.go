@@ -134,7 +134,7 @@ func Serve(efs *embed.FS) {
 	go func() {
 		for {
 			err := startCJSLexerServer(path.Join(etcDir, "cjx-lexer.pid"), isDev)
-			if err != nil {
+			 if err != nil {
 				if err.Error() == "EADDRINUSE" {
 					cjsLexerServerPort++
 				} else {

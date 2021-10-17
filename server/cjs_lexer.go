@@ -15,7 +15,6 @@ import (
 )
 
 var cjsLexerServerPort = uint16(8088)
-var cjsModuleLexerVersion = "1.2.2"
 
 type cjsModuleLexerResult struct {
 	Exports []string `json:"exports"`
@@ -47,17 +46,17 @@ func parseCJSModuleExports(buildDir string, importPath string, nodeEnv string) (
 	return
 }
 
-/** use a cjs-module-lexer http server instead of child process */
+/** use a deps http server instead of child process */
 func startCJSLexerServer(pidFile string, isDev bool) (err error) {
-	wd := path.Join(os.TempDir(), fmt.Sprintf("esmd-%d-cjs-module-lexer-%s", VERSION, cjsModuleLexerVersion))
+	wd := path.Join(os.TempDir(), fmt.Sprintf("esmd-%d-cjs-esm-exports", VERSION))
 	ensureDir(wd)
 
-	// install cjs-module-lexer
-	cmd := exec.Command("yarn", "add", fmt.Sprintf("cjs-module-lexer@%s", cjsModuleLexerVersion), "enhanced-resolve")
+	// install deps
+	cmd := exec.Command("yarn", "add", "cjs-esm-exports", "enhanced-resolve")
 	cmd.Dir = wd
 	output, err := cmd.CombinedOutput()
 	if err != nil {
-		err = fmt.Errorf("install cjs-module-lexer: %s", string(output))
+		err = fmt.Errorf("install deps: %s", string(output))
 		return
 	}
 
@@ -67,7 +66,7 @@ func startCJSLexerServer(pidFile string, isDev bool) (err error) {
 		const { dirname, join } = require('path')
 		const http = require('http')
 		const { promisify } = require('util')
-		const cjsLexer = require('cjs-module-lexer')
+		const { parseCjsExportsSync } = require('cjs-esm-exports')
 		const enhancedResolve = require('enhanced-resolve')
 
 		const identRegexp = /^[a-zA-Z_\$][a-zA-Z0-9_\$]+$/
@@ -94,8 +93,6 @@ func startCJSLexerServer(pidFile string, isDev bool) (err error) {
 			'__esModule'
 		])
 
-		let cjsLexerReady = false
-
 		function isObject(v) {
 			return typeof v === 'object' && v !== null && !Array.isArray(v)
 		}
@@ -105,13 +102,6 @@ func startCJSLexerServer(pidFile string, isDev bool) (err error) {
 		}
 
 		async function getExports (buildDir, importPath, nodeEnv = 'production') {
-			process.env.NODE_ENV = nodeEnv
-
-			if (!cjsLexerReady) {
-				await cjsLexer.init()
-				cjsLexerReady = true
-			}
-
 			const entry = await resolve(buildDir, importPath)
 			const exports = []
 
@@ -138,7 +128,7 @@ func startCJSLexerServer(pidFile string, isDev bool) (err error) {
 				while (paths.length > 0) {
 					const currentPath = paths.pop()
 					const code = fs.readFileSync(currentPath).toString()
-					const results = cjsLexer.parse(code)
+					const results = parseCjsExportsSync(currentPath, code, nodeEnv)
 					exports.push(...results.exports)
 					for (const reexport of results.reexports) {
 						if (!reexport.endsWith('.json')) {
@@ -148,23 +138,6 @@ func startCJSLexerServer(pidFile string, isDev bool) (err error) {
 				}
 			} catch(e) {
 				return { error: e.message }
-			}
-
-			/* the workaround when the cjsLexer didn't get any exports */
-			if (exports.length === 0) {
-				try {
-					const entry = await resolve(buildDir, importPath)
-					const mod = require(entry) 
-					if (isObject(mod) || typeof mod === 'function') {
-						for (const key of Object.keys(mod)) {
-							if (typeof key === 'string' && key !== '') {
-								exports.push(key)
-							}
-						}
-					}
-				} catch(e) {
-					return { error: e.message }
-				}
 			}
 
 			return { 

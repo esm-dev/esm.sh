@@ -19,11 +19,12 @@ pub fn parse_cjs_exports_sync(
 	specifier: &str,
 	code: &str,
 	node_env: &str,
+	call_mode: bool,
 ) -> Result<JsValue, JsValue> {
 	console_error_panic_hook::set_once();
 
 	let swc = SWC::parse(specifier, code).expect("could not parse module");
-	let (exports, reexports) = swc.parse_cjs_exports(node_env).unwrap();
+	let (exports, reexports) = swc.parse_cjs_exports(node_env, call_mode).unwrap();
 	let output = &Output {
 		exports: exports,
 		reexports: reexports,

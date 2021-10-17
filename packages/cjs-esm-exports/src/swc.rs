@@ -65,9 +65,12 @@ impl SWC {
 	pub fn parse_cjs_exports(
 		&self,
 		node_env: &str,
+		call_mode: bool,
 	) -> Result<(Vec<String>, Vec<String>), anyhow::Error> {
 		let mut parser = ExportsParser {
-			node_env: node_env.into(),
+			node_env: node_env.to_owned(),
+			call_mode: call_mode,
+			returned: false,
 			idents: IndexMap::new(),
 			exports: IndexSet::new(),
 			reexports: IndexSet::new(),
