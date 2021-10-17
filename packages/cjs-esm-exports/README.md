@@ -19,13 +19,13 @@ yarn add cjs-esm-exports
 Types:
 ```ts
 export function parse(
-	specifier: string,
-	code: string,
-	node_env?: string,
-	call_mode?: boolean,
+  specifier: string,
+  code: string,
+  node_env?: 'development' | 'production',
+  call_mode?: boolean,
 ): {
-	exports: string[],
-	reexports: string[],
+  exports: string[],
+  reexports: string[],
 };
 ```
 
@@ -120,13 +120,13 @@ const { reexports } = parse('index.cjs', `
   module.exports = require("./lib")()
 `);
 
-// apply function exports
+// apply function exports (call mode)
 // exports: ['foo']
-const { reexports } = parse('lib.cjs()', `
+const { reexports } = parse('lib.cjs', `
   module.exports = function() {
     return { foo: 'bar' }
   }
-`);
+`, 'production', true);
 ```
 
 ## Development Setup
