@@ -23,7 +23,7 @@ pub struct FnDesc {
 pub struct ExportsParser {
 	pub node_env: String,
 	pub call_mode: bool,
-	pub returned: bool,
+	pub fn_returned: bool,
 	pub idents: IndexMap<String, IdentKind>,
 	pub exports: IndexSet<String>,
 	pub reexports: IndexSet<String>,
@@ -396,9 +396,9 @@ impl ExportsParser {
 		false
 	}
 
-	fn parse(&mut self, stmts: Vec<Stmt>, as_fn: bool) {
-		// record idents
-		for stmt in &stmts {
+	// walk and record idents
+	fn walk_stmts(&mut self, stmts: &Vec<Stmt>) -> bool {
+		for stmt in stmts {
 			match stmt {
 				Stmt::Decl(decl) => match decl {
 					Decl::Var(var) => {
@@ -542,36 +542,58 @@ impl ExportsParser {
 						_ => {}
 					};
 				}
+				Stmt::Block(BlockStmt { stmts, .. }) => {
+					let returned = self.walk_stmts(&stmts);
+					if returned {
+						return true;
+					}
+				}
+				Stmt::If(IfStmt {
+					test, cons, alt, ..
+				}) => {
+					let mut returned = false;
+					if self.is_true(test) {
+						returned = self.walk_stmts(&vec![cons.as_ref().clone()])
+					} else if let Some(alt) = alt {
+						returned = self.walk_stmts(&vec![alt.as_ref().clone()])
+					}
+					if returned {
+						return true;
+					}
+				}
+				Stmt::Return(_) => return true,
 				_ => {}
 			}
 		}
+		false
+	}
+
+	fn parse(&mut self, stmts: Vec<Stmt>, as_fn: bool) {
+		self.walk_stmts(&stmts);
 
 		// parse exports (as function)
 		if as_fn {
 			for stmt in &stmts {
+				if self.fn_returned {
+					break;
+				}
 				match stmt {
 					Stmt::Block(BlockStmt { stmts, .. }) => {
-						if self.dep_parse(stmts.clone(), true) {
-							break;
-						}
+						self.dep_parse(stmts.clone(), true);
 					}
 					Stmt::If(IfStmt {
 						test, cons, alt, ..
 					}) => {
-						let mut returned = false;
 						if self.is_true(test) {
-							returned = self.dep_parse(vec![cons.as_ref().clone()], true);
+							self.dep_parse(vec![cons.as_ref().clone()], true);
 						} else if let Some(alt) = alt {
-							returned = self.dep_parse(vec![alt.as_ref().clone()], true);
-						}
-						if returned {
-							break;
+							self.dep_parse(vec![alt.as_ref().clone()], true);
 						}
 					}
 					Stmt::Return(ReturnStmt { arg, .. }) => {
+						self.fn_returned = true;
 						if let Some(arg) = arg {
 							self.reset(arg);
-							break;
 						}
 					}
 					_ => {}
@@ -718,6 +740,7 @@ impl ExportsParser {
 							self.dep_parse(body, false);
 						}
 					}
+					// ~function(){...}()
 					Expr::Unary(UnaryExpr { op, arg, .. }) => {
 						if let UnaryOp::Minus | UnaryOp::Plus | UnaryOp::Bang | UnaryOp::Tilde | UnaryOp::Void =
 							op
@@ -748,19 +771,19 @@ impl ExportsParser {
 		}
 	}
 
-	fn dep_parse(&mut self, body: Vec<Stmt>, as_fn: bool) -> bool {
+	fn dep_parse(&mut self, body: Vec<Stmt>, as_fn: bool) {
 		let mut dep_parser = ExportsParser {
 			node_env: self.node_env.to_owned(),
 			call_mode: false,
-			returned: false,
+			fn_returned: false,
 			idents: self.idents.clone(),
 			exports: self.exports.clone(),
 			reexports: self.reexports.clone(),
 		};
 		dep_parser.parse(body, as_fn);
+		self.fn_returned = dep_parser.fn_returned;
 		self.exports = dep_parser.exports;
 		self.reexports = dep_parser.reexports;
-		dep_parser.returned
 	}
 }
 

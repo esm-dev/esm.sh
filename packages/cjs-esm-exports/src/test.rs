@@ -478,4 +478,46 @@ mod tests {
 			.expect("could not parse exports");
 		assert_eq!(exports.join(","), "foo,bar");
 	}
+
+	#[test]
+	fn parse_cjs_exports_case_18_3() {
+		let source = r#"
+			function fn() {
+				const { NODE_ENV } = process.env
+				const mod = { foo: 'bar' }
+				if (NODE_ENV === 'production') {
+					return mod
+				}
+				mod.bar = 123
+				return mod
+			}
+			module.exports = fn;
+		"#;
+		let swc = SWC::parse("index.cjs", source).expect("could not parse module");
+		let (exports, _) = swc
+			.parse_cjs_exports("production", true)
+			.expect("could not parse exports");
+		assert_eq!(exports.join(","), "foo");
+	}
+
+	#[test]
+	fn parse_cjs_exports_case_18_4() {
+		let source = r#"
+			function fn() {
+				const { NODE_ENV } = process.env
+				const mod = { foo: 'bar' }
+				if (NODE_ENV === 'development') {
+					return mod
+				}
+				mod.bar = 123
+				return mod
+			}
+			module.exports = fn;
+		"#;
+		let swc = SWC::parse("index.cjs", source).expect("could not parse module");
+		let (exports, _) = swc
+			.parse_cjs_exports("production", true)
+			.expect("could not parse exports");
+		assert_eq!(exports.join(","), "foo,bar");
+	}
 }

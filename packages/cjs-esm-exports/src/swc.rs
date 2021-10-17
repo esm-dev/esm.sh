@@ -70,7 +70,7 @@ impl SWC {
 		let mut parser = ExportsParser {
 			node_env: node_env.to_owned(),
 			call_mode: call_mode,
-			returned: false,
+			fn_returned: false,
 			idents: IndexMap::new(),
 			exports: IndexSet::new(),
 			reexports: IndexSet::new(),
