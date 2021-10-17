@@ -66,7 +66,7 @@ func startCJSLexerServer(pidFile string, isDev bool) (err error) {
 		const { dirname, join } = require('path')
 		const http = require('http')
 		const { promisify } = require('util')
-		const { parseCjsExportsSync } = require('cjs-esm-exports')
+		const { parse } = require('cjs-esm-exports')
 		const enhancedResolve = require('enhanced-resolve')
 
 		const identRegexp = /^[a-zA-Z_\$][a-zA-Z0-9_\$]+$/
@@ -121,18 +121,24 @@ func startCJSLexerServer(pidFile string, isDev bool) (err error) {
 				}
 			}
 
-			/* the below code was stolen from https://github.com/evanw/esbuild/issues/442#issuecomment-739340295 */
 			try {
-				const paths = []
-				paths.push(entry)
-				while (paths.length > 0) {
-					const currentPath = paths.pop()
-					const code = fs.readFileSync(currentPath).toString()
-					const results = parseCjsExportsSync(currentPath, code, nodeEnv)
+				const requires = []
+				requires.push({path: entry, callMode: false})
+				while (requires.length > 0) {
+					const p = requires.pop()
+					const code = fs.readFileSync(p.path).toString()
+					const results = parse(p.path, code, nodeEnv, p.callMode)
 					exports.push(...results.exports)
-					for (const reexport of results.reexports) {
+					for (let reexport of results.reexports) {
+						const callMode = reexport.endsWith('()')
+						if (callMode) {
+							reexport = reexport.slice(0, -2)
+						}
 						if (!reexport.endsWith('.json')) {
-							paths.push(await resolve(dirname(currentPath), reexport))
+							requires.push({
+								path: await resolve(dirname(p.path), reexport),
+								callMode
+							})
 						}
 					}
 				}
