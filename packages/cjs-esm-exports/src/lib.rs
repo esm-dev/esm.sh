@@ -14,17 +14,23 @@ pub struct Output {
 	pub reexports: Vec<String>,
 }
 
-#[wasm_bindgen(js_name = "parseCjsExportsSync")]
-pub fn parse_cjs_exports_sync(
+#[wasm_bindgen(js_name = "parse")]
+pub fn parse(
 	specifier: &str,
 	code: &str,
-	node_env: &str,
-	call_mode: bool,
+	node_env: Option<String>,
+	call_mode: Option<bool>,
 ) -> Result<JsValue, JsValue> {
 	console_error_panic_hook::set_once();
 
 	let swc = SWC::parse(specifier, code).expect("could not parse module");
-	let (exports, reexports) = swc.parse_cjs_exports(node_env, call_mode).unwrap();
+	let node_env = if let Some(env) = node_env {
+		env
+	} else {
+		"production".to_owned()
+	};
+	let call_mode = if let Some(ok) = call_mode { ok } else { false };
+	let (exports, reexports) = swc.parse_cjs_exports(node_env.as_str(), call_mode).unwrap();
 	let output = &Output {
 		exports: exports,
 		reexports: reexports,
