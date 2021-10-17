@@ -1,6 +1,6 @@
 [package]
 name = "cjs-esm-exports"
-version = "0.3.1"
+version = "0.3.2"
 description = "A WASM module to parse commonjs exports for ESM."
 repository = "https://github.com/alephjs/esm.sh"
 license = "MIT"
