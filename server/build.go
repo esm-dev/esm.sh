@@ -329,11 +329,13 @@ esbuild:
 		MinifySyntax:      !task.isDev,
 		Plugins:           []api.Plugin{esmResolverPlugin},
 		Loader: map[string]api.Loader{
+			".svg":   api.LoaderDataURL,
+			".png":   api.LoaderDataURL,
+			".webp":  api.LoaderDataURL,
 			".ttf":   api.LoaderDataURL,
+			".eot":   api.LoaderDataURL,
 			".woff":  api.LoaderDataURL,
 			".woff2": api.LoaderDataURL,
-			".png":   api.LoaderDataURL,
-			".svg":   api.LoaderDataURL,
 		},
 	}
 	if task.target == "node" {
