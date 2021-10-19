@@ -2,6 +2,7 @@ package server
 
 import (
 	"encoding/json"
+	"fmt"
 	"testing"
 	"time"
 )
@@ -12,10 +13,14 @@ func TestNodeServices(t *testing.T) {
 	qs := make(chan bool, 1)
 	go startNodeServices(qs, testDir, nil)
 
+	t.Cleanup(func() {
+		qs <- true
+		fmt.Println(t.Name(), "Cleanup")
+	})
+
 	time.Sleep(time.Second / 2)
 
 	data := <-invokeNodeService("test", map[string]interface{}{"foo": "bar"})
-	qs <- true
 
 	var ret map[string]interface{}
 	err := json.Unmarshal(data, &ret)
