@@ -161,7 +161,7 @@ func initESM(wd string, pkg pkg, checkExports bool, isDev bool) (esm *ESM, err e
 		if isDev {
 			nodeEnv = "development"
 		}
-		ret, err := parseCJSModuleExports(wd, pkg.ImportPath(), nodeEnv)
+		ret, err := parseCJSModuleExports(path.Join(wd, pkg.ImportPath()), nodeEnv)
 		if err != nil {
 			return nil, fmt.Errorf("parseCJSModuleExports: %v", err)
 		}

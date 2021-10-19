@@ -8,6 +8,7 @@ import (
 	"os/signal"
 	"path"
 	"path/filepath"
+	"strings"
 	"syscall"
 
 	"esm.sh/server/storage"
@@ -31,25 +32,27 @@ func Serve(efs *embed.FS) {
 	embedFS = efs
 
 	var (
-		port       int
-		httpsPort  int
-		etcDir     string
-		cacheUrl   string
-		dbUrl      string
-		fsUrl      string
-		logLevel   string
-		logDir     string
-		noCompress bool
-		isDev      bool
+		port         int
+		httpsPort    int
+		etcDir       string
+		cacheUrl     string
+		dbUrl        string
+		fsUrl        string
+		nodeServices string
+		logLevel     string
+		logDir       string
+		noCompress   bool
+		isDev        bool
 	)
 
 	flag.IntVar(&port, "port", 80, "http server port")
 	flag.IntVar(&httpsPort, "https-port", 0, "https(autotls) server port, default is disabled")
-	flag.StringVar(&cacheUrl, "cache", "", "cache config, default is 'memory:main'")
-	flag.StringVar(&dbUrl, "db", "", "database config, default is 'postdb:[etc-dir]/esm.db'")
-	flag.StringVar(&fsUrl, "fs", "", "filesystem config, default is 'local:[etc-dir]/storage/'")
 	flag.StringVar(&cdnDomain, "cdn-domain", "", "cdn domain")
 	flag.StringVar(&etcDir, "etc-dir", ".esmd", "the etc dir to store common data")
+	flag.StringVar(&cacheUrl, "cache", "", "cache config, default is 'memory:main'")
+	flag.StringVar(&dbUrl, "db", "", "database config, default is 'postdb:[etc-dir]/esm.db'")
+	flag.StringVar(&fsUrl, "fs", "", "filesystem config, default is 'local:[etc-dir]/storage'")
+	flag.StringVar(&nodeServices, "node-services", "", "node services")
 	flag.StringVar(&logDir, "log-dir", "", "the log dir to store server logs")
 	flag.StringVar(&logLevel, "log-level", "info", "log level")
 	flag.BoolVar(&noCompress, "no-compress", false, "disable compression for text content")
@@ -132,14 +135,14 @@ func Serve(efs *embed.FS) {
 
 	// start cjs lexer server
 	go func() {
+		services := []string{"esm-ns-cjs-exports"}
+		if len(nodeServices) > 0 {
+			services = append(services, strings.Split(nodeServices, ",")...)
+		}
 		for {
-			err := startCJSLexerServer(path.Join(etcDir, "cjx-lexer.pid"), isDev)
-			 if err != nil {
-				if err.Error() == "EADDRINUSE" {
-					cjsLexerServerPort++
-				} else {
-					log.Errorf("cjs lexer server: %v", err)
-				}
+			err := startNodeServices(nil, path.Join(etcDir, "ns"), services)
+			if err != nil {
+				log.Errorf("start node services: %v", err)
 			}
 		}
 	}()
