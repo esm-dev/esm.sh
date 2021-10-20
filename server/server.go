@@ -137,10 +137,15 @@ func Serve(efs *embed.FS) {
 	go func() {
 		services := []string{"esm-ns-cjs-exports"}
 		if len(nodeServices) > 0 {
-			services = append(services, strings.Split(nodeServices, ",")...)
+			for _, v := range strings.Split(nodeServices, ",") {
+				v = strings.TrimSpace(v)
+				if len(v) > 0 {
+					services = append(services, v)
+				}
+			}
 		}
 		for {
-			err := startNodeServices(nil, path.Join(etcDir, "ns"), services)
+			err := startNodeServices(path.Join(etcDir, "ns"), services)
 			if err != nil {
 				log.Errorf("start node services: %v", err)
 			}
@@ -174,18 +179,17 @@ func Serve(efs *embed.FS) {
 		},
 	})
 
-	c := make(chan os.Signal, 1)
-	signal.Notify(c, syscall.SIGTERM, syscall.SIGINT, syscall.SIGQUIT, syscall.SIGKILL, syscall.SIGHUP)
-
 	if isDev {
 		log.Debugf("Server ready on http://localhost:%d", port)
 		log.Debugf("Testing page at http://localhost:%d?test", port)
 	}
 
+	c := make(chan os.Signal, 1)
+	signal.Notify(c, syscall.SIGTERM, syscall.SIGINT, syscall.SIGQUIT, syscall.SIGKILL, syscall.SIGHUP)
 	select {
-	case <-c:
 	case err = <-C:
 		log.Error(err)
+	case <-c:
 	}
 
 	// release resource

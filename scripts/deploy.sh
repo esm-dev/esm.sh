@@ -56,11 +56,11 @@ if [ "$init" == "yes" ]; then
   if [ "$v" != "" ]; then
     cacheUrl="$v"
   fi
-	read -p "fs config (default is 'local:.esmd/storage'): " v
+	read -p "fs config (default is 'local:\$etcDir/storage'): " v
   if [ "$v" != "" ]; then
     fsUrl="$v"
   fi
-	read -p "db config (default is 'postdb:.esmd/esm.db'): " v
+	read -p "db config (default is 'postdb:\$etcDir/esm.db'): " v
   if [ "$v" != "" ]; then
     dbUrl="$v"
   fi

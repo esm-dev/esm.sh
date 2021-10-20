@@ -2,32 +2,32 @@ package server
 
 import (
 	"encoding/json"
-	"fmt"
+	"path"
 	"testing"
 	"time"
+
+	"github.com/ije/gox/crypto/rs"
 )
 
 func TestNodeServices(t *testing.T) {
 	testDir := t.TempDir()
 
-	qs := make(chan bool, 1)
-	go startNodeServices(qs, testDir, nil)
+	go startNodeServices(testDir, nil)
 
-	t.Cleanup(func() {
-		qs <- true
-		fmt.Println(t.Name(), "Cleanup")
-	})
+	for i := 0; i < 100; i++ {
+		secret := rs.Hex.String(64)
+		data := <-invokeNodeService("test", map[string]interface{}{"secret": secret})
 
-	time.Sleep(time.Second / 2)
-
-	data := <-invokeNodeService("test", map[string]interface{}{"foo": "bar"})
-
-	var ret map[string]interface{}
-	err := json.Unmarshal(data, &ret)
-	if err != nil {
-		t.Error(err)
+		var ret map[string]interface{}
+		err := json.Unmarshal(data, &ret)
+		if err != nil {
+			t.Error(err)
+		}
+		if ret["secret"] != secret {
+			t.Error("bad return")
+		}
 	}
-	if ret["foo"] != "bar" {
-		t.Error("bad return")
-	}
+
+	kill(path.Join(testDir, "ns.pid"))
+	time.Sleep(100 * time.Millisecond)
 }

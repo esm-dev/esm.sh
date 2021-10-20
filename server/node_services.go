@@ -9,13 +9,13 @@ import (
 	"errors"
 	"fmt"
 	"io/ioutil"
-	"os"
 	"os/exec"
 	"path"
 	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
+	"time"
 )
 
 const nsApp = `
@@ -27,7 +27,7 @@ const nsApp = `
 		terminal: false,
 	})
 	const services = {
-		test: async input => ({ foo: input.foo })
+		test: async input => ({ ...input })
 	}
 	const register = %s
 
@@ -58,6 +58,10 @@ const nsApp = `
 			} catch(e) {}
 		}
 	})
+
+	setTimeout(() => {
+		process.stdout.write('READY\n')
+	}, 0)
 `
 
 type NSTask struct {
@@ -79,11 +83,12 @@ func invokeNodeService(serviceName string, input map[string]interface{}) chan []
 	return task.output
 }
 
-func startNodeServices(quiteSignal chan bool, wd string, services []string) (err error) {
-	ensureDir(wd)
+func startNodeServices(wd string, services []string) (err error) {
+	pidFile := path.Join(wd, "ns.pid")
+	errBuf := bytes.NewBuffer(nil)
+	servicesInject := "[]"
 
 	// install services
-	servicesInject := "[]"
 	if len(services) > 0 {
 		cmd := exec.Command("yarn", append([]string{"add"}, services...)...)
 		cmd.Dir = wd
@@ -109,16 +114,8 @@ func startNodeServices(quiteSignal chan bool, wd string, services []string) (err
 	}
 
 	// kill previous node process if exists
-	pidFile := path.Join(wd, "ns.pid")
-	if data, err := ioutil.ReadFile(pidFile); err == nil {
-		if i, err := strconv.Atoi(string(data)); err == nil {
-			if p, err := os.FindProcess(i); err == nil {
-				p.Kill()
-			}
-		}
-	}
+	kill(pidFile)
 
-	errBuf := bytes.NewBuffer(nil)
 	cmd := exec.Command("node", "ns.js")
 	cmd.Dir = wd
 	cmd.Stderr = errBuf
@@ -139,36 +136,40 @@ func startNodeServices(quiteSignal chan bool, wd string, services []string) (err
 	if err != nil {
 		return
 	}
-
 	log.Debug("node services process started, pid is", cmd.Process.Pid)
 
 	// store node process pid
 	ioutil.WriteFile(pidFile, []byte(strconv.Itoa(cmd.Process.Pid)), 0644)
 
 	var tasks sync.Map
+	var ready bool
 
 	go func() {
 		for {
-			nsTask := <-nsChannel
-			invokeId := atomic.AddUint32(&invokeIndex, 1)
-			buf := make([]byte, 4)
-			binary.LittleEndian.PutUint32(buf, invokeId)
-			invokeIdHex := hex.EncodeToString(buf)
-			data, err := json.Marshal(map[string]interface{}{
-				"invokeId": invokeIdHex,
-				"service":  nsTask.service,
-				"input":    nsTask.input,
-			})
-			if err == nil {
-				tasks.Store(invokeIdHex, nsTask.output)
-				_, err = in.Write(data)
-				if err != nil {
-					tasks.Delete(invokeId)
+			if ready {
+				nsTask := <-nsChannel
+				invokeId := atomic.AddUint32(&invokeIndex, 1)
+				buf := make([]byte, 4)
+				binary.LittleEndian.PutUint32(buf, invokeId)
+				invokeIdHex := hex.EncodeToString(buf)
+				data, err := json.Marshal(map[string]interface{}{
+					"invokeId": invokeIdHex,
+					"service":  nsTask.service,
+					"input":    nsTask.input,
+				})
+				if err == nil {
+					tasks.Store(invokeIdHex, nsTask.output)
+					_, err = in.Write(data)
+					if err != nil {
+						tasks.Delete(invokeId)
+					}
+					_, err = in.Write([]byte{'\n'})
+					if err != nil {
+						tasks.Delete(invokeId)
+					}
 				}
-				_, err = in.Write([]byte{'\n'})
-				if err != nil {
-					tasks.Delete(invokeId)
-				}
+			} else {
+				time.Sleep(50 * time.Millisecond)
 			}
 		}
 	}()
@@ -177,7 +178,6 @@ func startNodeServices(quiteSignal chan bool, wd string, services []string) (err
 		scanner := bufio.NewScanner(out)
 		for scanner.Scan() {
 			line := scanner.Bytes()
-			llen := len(line)
 			// if llen == 9 && line[0] == '$' {
 			// 	invokeId := string(line[1:])
 			// 	v, ok := tasks.LoadAndDelete(invokeId)
@@ -185,7 +185,9 @@ func startNodeServices(quiteSignal chan bool, wd string, services []string) (err
 			// 		v.(chan []byte) <- nil // end
 			// 	}
 			// }
-			if llen > 8 {
+			if string(line) == "READY" {
+				ready = true
+			} else if llen := len(line); llen > 8 {
 				invokeId := string(line[:8])
 				v, ok := tasks.Load(invokeId)
 				if ok {
@@ -195,16 +197,8 @@ func startNodeServices(quiteSignal chan bool, wd string, services []string) (err
 		}
 	}()
 
-	if quiteSignal != nil {
-		go func() {
-			<-quiteSignal
-			cmd.Process.Kill()
-		}()
-	}
-
 	// wait the process to exit
-	cmd.Wait()
-
+	err = cmd.Wait()
 	if errBuf.Len() > 0 {
 		err = errors.New(strings.TrimSpace(errBuf.String()))
 	}
