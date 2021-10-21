@@ -148,9 +148,11 @@ func Serve(efs *embed.FS) {
 				}
 			}
 		}
-		err := startNodeServices(wd, services)
-		if err != nil {
-			log.Errorf("start node services: %v", err)
+		for {
+			err := startNodeServices(wd, services)
+			if err != nil {
+				log.Errorf("start node services: %v", err)
+			}
 		}
 	}()
 

@@ -1,8 +1,13 @@
 import { existsSync } from 'https://deno.land/std@0.106.0/fs/exists.ts'
 
 async function startServer(onReady: (p: any) => void) {
+	await Deno.run({
+		cmd: ['go', 'build', 'main.go'],
+		stdout: 'inherit',
+		stderr: 'inherit'
+	}).status()
 	const p = Deno.run({
-		cmd: ['go', 'run', 'main.go', '-dev', '-port', '8080'],
+		cmd: ['./main', '-dev', '-port', '8080'],
 		stdout: 'piped',
 		stderr: 'inherit'
 	})
@@ -15,19 +20,21 @@ async function startServer(onReady: (p: any) => void) {
 		}
 		output += new TextDecoder().decode(buf.slice(0, n))
 		if (output.includes('node services process started')) {
-			Promise.resolve().then(() => onReady(p))
+			onReady(p)
 			break
 		}
 	}
 	await p.status()
-	p.close()
 }
 
 startServer(async (p) => {
- 	await test('test/deno/common/')
- 	await test('test/deno/preact/')
- 	await test('test/deno/react/')
-	p.kill('SIGTERM')
+	await test('test/deno/common/')
+	await test('test/deno/preact/')
+	await test('test/deno/react/')
+	p.kill('SIGINT') 
+}).then(() => {
+	Deno.removeSync('./main')
+	console.log('Done')
 })
 
 async function test(dir: string) {
@@ -42,5 +49,4 @@ async function test(dir: string) {
 		stderr: 'inherit'
 	})
 	await p.status()
-	p.close()
 }
