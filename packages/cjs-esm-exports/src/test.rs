@@ -354,6 +354,20 @@ mod tests {
 			.expect("could not parse exports");
 		assert_eq!(exports.join(","), "");
 	}
+	
+	#[test]
+	fn parse_cjs_exports_case_14_5() {
+		let source = r#"
+			if (typeof module !== 'undefined' && module.exports) {
+				module.exports = { foo: 'bar' }
+			}
+		"#;
+		let swc = SWC::parse("index.cjs", source).expect("could not parse module");
+		let (exports, _) = swc
+			.parse_cjs_exports("development", false)
+			.expect("could not parse exports");
+		assert_eq!(exports.join(","), "foo");
+	}
 
 	#[test]
 	fn parse_cjs_exports_case_15() {

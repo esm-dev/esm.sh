@@ -371,6 +371,8 @@ impl ExportsParser {
 						IdentKind::Alias(id) => return self.is_true(&Expr::Ident(quote_ident(id))),
 						_ => {}
 					}
+				} else {
+					return false // undefined
 				}
 			}
 			Expr::Lit(lit) => {
@@ -385,15 +387,22 @@ impl ExportsParser {
 			Expr::Bin(BinExpr {
 				op, left, right, ..
 			}) => {
+				if matches!(op, BinaryOp::LogicalAnd) {
+					return self.is_true(left) && self.is_true(right);
+				}
+				if matches!(op, BinaryOp::LogicalOr) {
+					return self.is_true(left) || self.is_true(right);
+				}
 				if matches!(op, BinaryOp::EqEq | BinaryOp::EqEqEq) {
 					return self.eqeq(left, right);
-				} else if matches!(op, BinaryOp::NotEq | BinaryOp::NotEqEq) {
+				}
+				if matches!(op, BinaryOp::NotEq | BinaryOp::NotEqEq) {
 					return !self.eqeq(left, right);
 				}
 			}
 			_ => {}
 		}
-		false
+		true
 	}
 
 	// walk and record idents
