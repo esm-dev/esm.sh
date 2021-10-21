@@ -1,11 +1,7 @@
 import { existsSync } from 'https://deno.land/std@0.106.0/fs/exists.ts'
 
 async function startServer(onReady: (p: any) => void) {
-	await Deno.run({
-		cmd: ['go', 'build', 'main.go'],
-		stdout: 'inherit',
-		stderr: 'inherit'
-	}).status()
+	await run('go', 'build', 'main.go')
 	const p = Deno.run({
 		cmd: ['./main', '-dev', '-port', '8080'],
 		stdout: 'piped',
@@ -31,7 +27,7 @@ startServer(async (p) => {
 	await test('test/deno/common/')
 	await test('test/deno/preact/')
 	await test('test/deno/react/')
-	p.kill('SIGINT') 
+	p.kill('SIGINT')
 }).then(() => {
 	Deno.removeSync('./main')
 	console.log('Done')
@@ -43,10 +39,13 @@ async function test(dir: string) {
 		cmd.push('--config', dir + 'tsconfig.json')
 	}
 	cmd.push(dir)
-	const p = Deno.run({
+	await run(...cmd)
+}
+
+async function run(...cmd: string[]) {
+	await Deno.run({
 		cmd,
 		stdout: 'inherit',
 		stderr: 'inherit'
-	})
-	await p.status()
+	}).status()
 }
