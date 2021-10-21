@@ -47,21 +47,22 @@ async function getJSONKeys(jsonFile) {
 
 exports.serviceName = 'cjsExports'
 exports.main = async input => {
-  const { cjsFile, nodeEnv = 'production' } = input
+  const { buildDir, importPath, nodeEnv = 'production' } = input
+  const entry = await resolve(buildDir, importPath)
   const exports = []
 
-  const requires = [{ path: cjsFile, callMode: false }]
+  const requires = [{ path: entry, callMode: false }]
   while (requires.length > 0) {
-    const p = requires.pop()
-    const code = fs.readFileSync(p.path).toString()
-    const results = parse(p.path, code, nodeEnv, p.callMode)
+    const req = requires.pop()
+    const code = fs.readFileSync(req.path).toString()
+    const results = parse(req.path, code, nodeEnv, req.callMode)
     exports.push(...results.exports)
     for (let reexport of results.reexports) {
       const callMode = reexport.endsWith('()')
       if (callMode) {
         reexport = reexport.slice(0, -2)
       }
-      const path = await resolve(dirname(p.path), reexport)
+      const path = await resolve(dirname(req.path), reexport)
       if (path.endsWith('.json')) {
         exports.push(...getJSONKeys(path))
       } else {

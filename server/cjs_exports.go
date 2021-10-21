@@ -2,6 +2,7 @@ package server
 
 import (
 	"encoding/json"
+	"fmt"
 )
 
 type cjsExportsResult struct {
@@ -9,12 +10,14 @@ type cjsExportsResult struct {
 	Error   string   `json:"error"`
 }
 
-func parseCJSModuleExports(cjsFile string, nodeEnv string) (ret cjsExportsResult, err error) {
+func parseCJSModuleExports(buildDir string, importPath string, nodeEnv string) (ret cjsExportsResult, err error) {
 	data := <-invokeNodeService("cjsExports", map[string]interface{}{
-		"cjsFile": cjsFile,
-		"nodeEnv": nodeEnv,
+		"buildDir":   buildDir,
+		"importPath": importPath,
+		"nodeEnv":    nodeEnv,
 	})
 
 	err = json.Unmarshal(data, &ret)
+	fmt.Println(ret)
 	return
 }
