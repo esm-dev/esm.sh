@@ -14,7 +14,7 @@ async function startServer(onReady: (p: any) => void) {
       break
     }
     output += new TextDecoder().decode(buf.slice(0, n))
-    if (output.includes('cjs lexer server ready')) {
+    if (output.includes('node services process started')) {
       Promise.resolve().then(() => onReady(p))
       break
     }
@@ -27,7 +27,7 @@ startServer(async (pp) => {
   await test('test/deno/common/')
   await test('test/deno/react/')
   await test('test/deno/preact/')
-  pp.kill('SIGTERM')
+  pp.kill('SIGINT')
 })
 
 async function test(dir: string) {
