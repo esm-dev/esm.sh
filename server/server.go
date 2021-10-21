@@ -135,6 +135,10 @@ func Serve(efs *embed.FS) {
 
 	// start cjs lexer server
 	go func() {
+		wd := path.Join(etcDir, "ns")
+		if err := ensureDir(wd); err != nil {
+			log.Fatal(err)
+		}
 		services := []string{"esm-ns-cjs-exports"}
 		if len(nodeServices) > 0 {
 			for _, v := range strings.Split(nodeServices, ",") {
@@ -145,7 +149,7 @@ func Serve(efs *embed.FS) {
 			}
 		}
 		for {
-			err := startNodeServices(path.Join(etcDir, "ns"), services)
+			err := startNodeServices(wd, services)
 			if err != nil {
 				log.Errorf("start node services: %v", err)
 			}
