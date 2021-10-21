@@ -95,7 +95,7 @@ func startNodeServices(wd string, services []string) (err error) {
 		var output []byte
 		output, err = cmd.CombinedOutput()
 		if err != nil {
-			err = fmt.Errorf("install services: %s", string(output))
+			err = fmt.Errorf("install services: %v %s", err, string(output))
 			return
 		}
 		data, _ := json.Marshal(services)
