@@ -22,11 +22,12 @@ import (
 )
 
 const (
-	minNodejsVersion = 14
-	nodejsLatestLTS  = "14.17.5"
-	nodeTypesVersion = "16.9.1"
-	nodejsDistURL    = "https://nodejs.org/dist/"
-	refreshDuration  = 5 * 60 // 5 minues
+	minNodejsVersion   = 14
+	nodejsLatestLTS    = "14.17.5"
+	nodeTypesVersion   = "16.9.1"
+	nodejsDistURL      = "https://nodejs.org/dist/"
+	denoStdNodeVersion = "0.112.0"
+	refreshDuration    = 5 * 60 // 5 minues
 )
 
 var builtInNodeModules = map[string]bool{
@@ -120,6 +121,7 @@ var denoStdNodeModules = map[string]bool{
 	"stream":        true,
 	"events":        true,
 	"module":        true,
+	"stream/web":    true,
 	// "url":           true, // format is missing
 }
 

@@ -437,7 +437,7 @@ esbuild:
 					if task.target == "node" {
 						importPath = name
 					} else if task.target == "deno" && denoStdNodeModules[name] {
-						importPath = fmt.Sprintf("/v%d/deno_std_node_%s.js", VERSION, name)
+						importPath = fmt.Sprintf("https://deno.land/std@%s/node/%s.ts", denoStdNodeVersion, name)
 					} else {
 						polyfill, ok := polyfilledBuiltInNodeModules[name]
 						if ok {
