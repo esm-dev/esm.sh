@@ -25,8 +25,8 @@ async function startServer(onReady: (p: any) => void) {
 
 startServer(async (p) => {
  	await test('test/deno/common/')
- 	await test('test/deno/react/')
  	await test('test/deno/preact/')
+ 	await test('test/deno/react/')
 	p.kill('SIGTERM')
 })
 

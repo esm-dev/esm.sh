@@ -23,8 +23,7 @@ const nsApp = `
 	const rl = readline.createInterface({
 		input: process.stdin,
 		historySize: 0,
-		crlfDelay: Infinity,
-		terminal: false,
+		crlfDelay: Infinity
 	})
 	const services = {
 		test: async input => ({ ...input })

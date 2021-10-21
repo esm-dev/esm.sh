@@ -148,11 +148,9 @@ func Serve(efs *embed.FS) {
 				}
 			}
 		}
-		for {
-			err := startNodeServices(wd, services)
-			if err != nil {
-				log.Errorf("start node services: %v", err)
-			}
+		err := startNodeServices(wd, services)
+		if err != nil {
+			log.Errorf("start node services: %v", err)
 		}
 	}()
 
@@ -191,9 +189,9 @@ func Serve(efs *embed.FS) {
 	c := make(chan os.Signal, 1)
 	signal.Notify(c, syscall.SIGTERM, syscall.SIGINT, syscall.SIGQUIT, syscall.SIGKILL, syscall.SIGHUP)
 	select {
+	case <-c:
 	case err = <-C:
 		log.Error(err)
-	case <-c:
 	}
 
 	// release resource

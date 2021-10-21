@@ -8,7 +8,6 @@ import (
 	"strconv"
 	"strings"
 	"sync"
-	"syscall"
 
 	"github.com/ije/gox/utils"
 	"github.com/ije/gox/valid"
@@ -181,5 +180,5 @@ func kill(pidFile string) (err error) {
 	if err != nil {
 		return
 	}
-	return process.Signal(syscall.SIGINT)
+	return process.Kill()
 }
