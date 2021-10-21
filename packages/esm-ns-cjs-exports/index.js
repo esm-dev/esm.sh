@@ -27,6 +27,9 @@ const reservedWords = new Set([
   'volatile', 'while', 'with', 'yield',
   '__esModule'
 ])
+const requireModeAllowList = [
+  'typescript'
+]
 
 function isObject(v) {
   return typeof v === 'object' && v !== null && !Array.isArray(v)
@@ -67,6 +70,26 @@ exports.main = async input => {
         exports.push(...getJSONKeys(path))
       } else {
         requires.push({ path, callMode })
+      }
+    }
+  }
+
+  /* the workaround when the cjsLexer didn't get any exports */
+  if (exports.length === 0) {
+    let allow = false
+    for (const name of requireModeAllowList) {
+      if (allow = (importPath === name || importPath.startsWith(name + '/'))) {
+        break
+      }
+    }
+    if (allow) {
+      const mod = require(entry)
+      if (isObject(mod) || typeof mod === 'function') {
+        for (const key of Object.keys(mod)) {
+          if (typeof key === 'string' && key !== '') {
+            exports.push(key)
+          }
+        }
       }
     }
   }
