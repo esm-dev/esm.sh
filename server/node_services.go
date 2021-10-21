@@ -22,7 +22,7 @@ const nsApp = `
 	const readline = require('readline')
 	const rl = readline.createInterface({
 		input: process.stdin,
-		history: 0,
+		historySize: 0,
 		crlfDelay: Infinity,
 		terminal: false,
 	})
