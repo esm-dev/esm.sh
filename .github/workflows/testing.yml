@@ -34,7 +34,7 @@ jobs:
           go-version: 1.16.x
 
       - name: Go test
-        run: go test esm.sh/server -v
+        run: CI=true go test esm.sh/server -v
 
       - name: Deno test
         run: deno run -A --unstable test/deno/bootstrap.ts

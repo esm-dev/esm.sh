@@ -2,6 +2,7 @@ package server
 
 import (
 	"encoding/json"
+	"os"
 	"path"
 	"testing"
 	"time"
@@ -11,6 +12,10 @@ import (
 
 func TestNodeServices(t *testing.T) {
 	testDir := t.TempDir()
+
+	if os.Getenv("CI") == "true" {
+		t.SkipNow()
+	}
 
 	go startNodeServices(testDir, nil)
 
