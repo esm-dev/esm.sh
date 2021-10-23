@@ -17,7 +17,8 @@ type DBDriver interface {
 
 type DB interface {
 	Get(id string) (store Store, modtime time.Time, err error)
-	Put(id string, store Store) error
+	Put(id string, category string, store Store) error
+	List(category string) ([]Store, error)
 	Delete(id string) error
 	Close() error
 }
@@ -39,7 +40,7 @@ func OpenDB(url string) (DB, error) {
 func RegisterDB(name string, driver DBDriver) error {
 	_, ok := dbDrivers.Load(name)
 	if ok {
-		return fmt.Errorf("driver '%s' has been registered", name)
+		return fmt.Errorf("db driver '%s' has been registered", name)
 	}
 
 	dbDrivers.Store(name, driver)

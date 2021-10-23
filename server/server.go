@@ -8,6 +8,7 @@ import (
 	"os/signal"
 	"path"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"syscall"
 
@@ -18,13 +19,14 @@ import (
 )
 
 var (
-	cdnDomain string
-	cache     storage.Cache
-	db        storage.DB
-	fs        storage.FS
-	embedFS   *embed.FS
-	log       *logx.Logger
-	node      *Node
+	cdnDomain  string
+	cache      storage.Cache
+	db         storage.DB
+	fs         storage.FS
+	buildQueue storage.Queue
+	embedFS    *embed.FS
+	log        *logx.Logger
+	node       *Node
 )
 
 // Serve serves ESM server
@@ -32,26 +34,30 @@ func Serve(efs *embed.FS) {
 	embedFS = efs
 
 	var (
-		port         int
-		httpsPort    int
-		etcDir       string
-		cacheUrl     string
-		dbUrl        string
-		fsUrl        string
-		nodeServices string
-		logLevel     string
-		logDir       string
-		noCompress   bool
-		isDev        bool
+		port             int
+		httpsPort        int
+		buildConcurrency int
+		etcDir           string
+		cacheUrl         string
+		dbUrl            string
+		fsUrl            string
+		queueUrl         string
+		nodeServices     string
+		logLevel         string
+		logDir           string
+		noCompress       bool
+		isDev            bool
 	)
 
 	flag.IntVar(&port, "port", 80, "http server port")
 	flag.IntVar(&httpsPort, "https-port", 0, "https(autotls) server port, default is disabled")
 	flag.StringVar(&cdnDomain, "cdn-domain", "", "cdn domain")
 	flag.StringVar(&etcDir, "etc-dir", ".esmd", "the etc dir to store common data")
-	flag.StringVar(&cacheUrl, "cache", "", "cache config, default is 'memory:main'")
+	flag.StringVar(&cacheUrl, "cache", "", "cache config, default is 'memory:default'")
 	flag.StringVar(&dbUrl, "db", "", "database config, default is 'postdb:[etc-dir]/esm.db'")
 	flag.StringVar(&fsUrl, "fs", "", "filesystem config, default is 'local:[etc-dir]/storage'")
+	flag.StringVar(&queueUrl, "queue", "", "bulid queue config, default is 'chan:memory'")
+	flag.IntVar(&buildConcurrency, "build-concurrency", runtime.NumCPU(), "maximum number of concurrent build task")
 	flag.StringVar(&nodeServices, "node-services", "", "node services")
 	flag.StringVar(&logDir, "log-dir", "", "the log dir to store server logs")
 	flag.StringVar(&logLevel, "log-level", "info", "log level")
@@ -67,13 +73,16 @@ func Serve(efs *embed.FS) {
 	}
 
 	if cacheUrl == "" {
-		cacheUrl = "memory:main"
+		cacheUrl = "memory:default"
 	}
 	if dbUrl == "" {
 		dbUrl = fmt.Sprintf("postdb:%s", path.Join(etcDir, "esm.db"))
 	}
 	if fsUrl == "" {
 		fsUrl = fmt.Sprintf("local:%s", path.Join(etcDir, "storage"))
+	}
+	if queueUrl == "" {
+		queueUrl = "chan:memory"
 	}
 	if logDir == "" {
 		logDir = path.Join(etcDir, "log")
@@ -122,6 +131,11 @@ func Serve(efs *embed.FS) {
 		log.Fatalf("init storage(fs,%s): %v", fsUrl, err)
 	}
 
+	buildQueue, err = storage.OpenQueue(queueUrl)
+	if err != nil {
+		log.Fatalf("init storage(queue,%s): %v", fsUrl, err)
+	}
+
 	var accessLogger *logx.Logger
 	if logDir == "" {
 		accessLogger = &logx.Logger{}
@@ -155,6 +169,10 @@ func Serve(efs *embed.FS) {
 			}
 		}
 	}()
+
+	for i := 0; i < buildConcurrency; i++ {
+		go build()
+	}
 
 	if !noCompress {
 		rex.Use(rex.AutoCompress())

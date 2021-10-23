@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"esm.sh/server/storage"
 	"github.com/evanw/esbuild/pkg/api"
 	"github.com/ije/gox/utils"
 	"github.com/ije/rex"
@@ -67,33 +68,6 @@ func query() rex.Handle {
 
 		case "/favicon.ico":
 			return rex.Redirect("/favicon.svg", http.StatusPermanentRedirect)
-
-		case "/status.json":
-			buildQueue.lock.RLock()
-			q := make([]map[string]interface{}, buildQueue.list.Len())
-			i := 0
-			for el := buildQueue.list.Front(); el != nil; el = el.Next() {
-				t, ok := el.Value.(*task)
-				if ok {
-					q[i] = map[string]interface{}{
-						"stage":      t.stage,
-						"createTime": t.createTime.Unix(),
-						"startTime":  t.startTime.Unix(),
-						"consumers":  len(t.consumers),
-						"pkg":        t.pkg.String(),
-						"deps":       t.deps.String(),
-						"target":     t.target,
-						"inProcess":  t.inProcess,
-						"isDev":      t.isDev,
-						"bundle":     t.bundle,
-					}
-					i++
-				}
-			}
-			buildQueue.lock.RUnlock()
-			return map[string]interface{}{
-				"queue": q[:i],
-			}
 
 		case "/error.js":
 			switch ctx.Form.Value("type") {
@@ -164,7 +138,7 @@ func query() rex.Handle {
 		}
 
 		var storageType string
-		if reqPkg.submodule != "" {
+		if reqPkg.Submodule != "" {
 			switch path.Ext(pathname) {
 			case ".js":
 				if hasBuildVerPrefix {
@@ -279,7 +253,7 @@ func query() rex.Handle {
 		}
 
 		// check `deps` query
-		deps := pkgSlice{}
+		deps := PkgSlice{}
 		for _, p := range strings.Split(ctx.Form.Value("deps"), ",") {
 			p = strings.TrimSpace(p)
 			if p != "" {
@@ -290,7 +264,7 @@ func query() rex.Handle {
 					}
 					return rex.Status(400, fmt.Sprintf("Invalid deps query: %v not found", p))
 				}
-				if !deps.Has(m.name) {
+				if !deps.Has(m.Name) {
 					deps = append(deps, *m)
 				}
 			}
@@ -355,7 +329,7 @@ func query() rex.Handle {
 
 		// parse `resolvePrefix`
 		if hasBuildVerPrefix {
-			a := strings.Split(reqPkg.submodule, "/")
+			a := strings.Split(reqPkg.Submodule, "/")
 			if len(a) > 1 && strings.HasPrefix(a[0], "X-") {
 				s, err := atobUrl(strings.TrimPrefix(a[0], "X-"))
 				if err == nil {
@@ -387,7 +361,7 @@ func query() rex.Handle {
 										}
 										return throwErrorJS(ctx, err)
 									}
-									if !deps.Has(m.name) {
+									if !deps.Has(m.Name) {
 										deps = append(deps, *m)
 									}
 								}
@@ -395,13 +369,13 @@ func query() rex.Handle {
 						}
 					}
 				}
-				reqPkg.submodule = strings.Join(a[1:], "/")
+				reqPkg.Submodule = strings.Join(a[1:], "/")
 			}
 		}
 
 		// check whether it is `bare` mode
 		if hasBuildVerPrefix && endsWith(pathname, ".js") {
-			a := strings.Split(reqPkg.submodule, "/")
+			a := strings.Split(reqPkg.Submodule, "/")
 			if len(a) > 1 {
 				if _, ok := targets[a[0]]; ok {
 					submodule := strings.TrimSuffix(strings.Join(a[1:], "/"), ".js")
@@ -413,11 +387,11 @@ func query() rex.Handle {
 						submodule = strings.TrimSuffix(submodule, ".development")
 						isDev = true
 					}
-					pkgName := path.Base(reqPkg.name)
+					pkgName := path.Base(reqPkg.Name)
 					if submodule == pkgName || (strings.HasSuffix(pkgName, ".js") && submodule+".js" == pkgName) {
 						submodule = ""
 					}
-					reqPkg.submodule = submodule
+					reqPkg.Submodule = submodule
 					target = a[0]
 					isBare = true
 				}
@@ -425,50 +399,57 @@ func query() rex.Handle {
 		}
 
 		if hasBuildVerPrefix && storageType == "types" {
-			task := &buildTask{
+			task := &BuildTask{
+				Pkg:    *reqPkg,
+				Deps:   deps,
+				Alias:  alias,
+				Target: "types",
 				stage:  "init",
-				pkg:    *reqPkg,
-				deps:   deps,
-				alias:  alias,
-				target: "types",
 			}
-			savePath := path.Join(fmt.Sprintf(
-				"types/v%d/%s@%s/%s",
-				VERSION,
-				reqPkg.name,
-				reqPkg.version,
-				task.resolvePrefix(),
-			), reqPkg.submodule)
-			if strings.HasSuffix(savePath, "...d.ts") {
-				savePath = strings.TrimSuffix(savePath, "...d.ts")
-				ok, _, err := fs.Exists(path.Join(savePath, "index.d.ts"))
-				if err != nil {
-					return rex.Status(500, err.Error())
+			var savePath string
+			findTypesFile := func() (bool, time.Time, error) {
+				savePath = path.Join(fmt.Sprintf(
+					"types/v%d/%s@%s/%s",
+					VERSION,
+					reqPkg.Name,
+					reqPkg.Version,
+					task.resolvePrefix(),
+				), reqPkg.Submodule)
+				if strings.HasSuffix(savePath, "~.d.ts") {
+					savePath = strings.TrimSuffix(savePath, "~.d.ts")
+					ok, _, err := fs.Exists(path.Join(savePath, "index.d.ts"))
+					if err != nil {
+						return false, time.Time{}, err
+					}
+					if ok {
+						savePath = path.Join(savePath, "index.d.ts")
+					} else {
+						savePath += ".d.ts"
+					}
 				}
-				if ok {
-					savePath = path.Join(savePath, "index.d.ts")
-				} else {
-					savePath += ".d.ts"
-				}
+				return fs.Exists(savePath)
 			}
-			exists, modtime, err := fs.Exists(savePath)
+			exists, modtime, err := findTypesFile()
 			if err != nil {
 				return rex.Status(500, err.Error())
 			}
 			if !exists {
-				c := buildQueue.Add(task)
-				select {
-				case output := <-c.C:
-					if output.err != nil {
-						return rex.Status(500, "types: "+err.Error())
+				err := buildQueue.Push(utils.MustEncodeJSON(task))
+				if err != nil {
+					return rex.Status(500, err.Error())
+				}
+				for i := 0; i < 100; i++ {
+					exists, modtime, err = findTypesFile()
+					if err != nil {
+						return rex.Status(500, err.Error())
 					}
-					if output.esm.Dts != "" {
-						savePath = path.Join("types", output.esm.Dts)
-						exists = true
+					if exists {
+						break
 					}
-				case <-time.After(time.Minute):
-					buildQueue.RemoveConsumer(task, c)
-					return rex.Status(http.StatusRequestTimeout, "timeout, we are transforming the types hardly, please try later!")
+					if i == 99 {
+						return rex.Status(http.StatusRequestTimeout, "timeout, we are transforming the types hardly, please try later!")
+					}
+					time.Sleep(300 * time.Millisecond)
 				}
 			}
 			if !exists {
@@ -483,23 +464,29 @@ func query() rex.Handle {
 			return rex.Content(savePath, modtime, r)
 		}
 
-		task := &buildTask{
-			stage:  "init",
-			pkg:    *reqPkg,
-			deps:   deps,
-			alias:  alias,
-			target: target,
-			isDev:  isDev,
-			bundle: bundleMode,
+		task := &BuildTask{
+			Pkg:        *reqPkg,
+			Deps:       deps,
+			Alias:      alias,
+			Target:     target,
+			BundleMode: bundleMode,
+			IsDev:      isDev,
+			stage:      "init",
 		}
 		taskID := task.ID()
 		esm, err := findESM(taskID)
-		if err != nil {
+		if err != nil && err != storage.ErrNotFound {
+			return rex.Status(500, err.Error())
+		}
+		if err == storage.ErrNotFound {
 			if !isBare {
 				// find previous build version
 				for i := 0; i < VERSION; i++ {
 					id := fmt.Sprintf("v%d/%s", VERSION-(i+1), taskID[len(fmt.Sprintf("v%d/", VERSION)):])
 					esm, err = findESM(id)
+					if err != nil && err != storage.ErrNotFound {
+						return rex.Status(500, err.Error())
+					}
 					if err == nil {
 						taskID = id
 						break
@@ -509,20 +496,27 @@ func query() rex.Handle {
 
 			// if the previous build exists and not in bare mode, then build current module in backgound,
 			// or wait the current build task for 60 seconds
-			if err == nil {
+			if esm != nil {
 				// todo: maybe don't build
-				buildQueue.Add(task)
+				buildQueue.Push(utils.MustEncodeJSON(task))
 			} else {
-				c := buildQueue.Add(task)
-				select {
-				case output := <-c.C:
-					if output.err != nil {
-						return throwErrorJS(ctx, output.err)
+				err := buildQueue.Push(utils.MustEncodeJSON(task))
+				if err != nil {
+					return rex.Status(500, err.Error())
+				}
+				// wait for 30s
+				for i := 0; i < 300; i++ {
+					esm, err = findESM(taskID)
+					if err == nil {
+						break
 					}
-					esm = output.esm
-				case <-time.After(time.Minute):
-					buildQueue.RemoveConsumer(task, c)
-					return rex.Status(http.StatusRequestTimeout, "timeout, we are building the package hardly, please try later!")
+					if err != storage.ErrNotFound {
+						return rex.Status(500, err.Error())
+					}
+					if i == 99 {
+						return rex.Status(http.StatusRequestTimeout, "timeout, we are transforming the types hardly, please try later!")
+					}
+					time.Sleep(100 * time.Millisecond)
 				}
 			}
 		}

@@ -69,7 +69,8 @@ type NSTask struct {
 	output  chan []byte
 }
 
-var invokeIndex uint32 = 0
+var nsReady = false
+var nsInvokeIndex uint32 = 0
 var nsChannel = make(chan *NSTask, 64)
 
 func invokeNodeService(serviceName string, input map[string]interface{}) chan []byte {
@@ -135,6 +136,8 @@ func startNodeServices(wd string, services []string) (err error) {
 	if err != nil {
 		return
 	}
+
+	nsReady = true
 	log.Debug("node services process started, pid is", cmd.Process.Pid)
 
 	// store node process pid
@@ -147,7 +150,7 @@ func startNodeServices(wd string, services []string) (err error) {
 		for {
 			if ready {
 				nsTask := <-nsChannel
-				invokeId := atomic.AddUint32(&invokeIndex, 1)
+				invokeId := atomic.AddUint32(&nsInvokeIndex, 1)
 				buf := make([]byte, 4)
 				binary.LittleEndian.PutUint32(buf, invokeId)
 				invokeIdHex := hex.EncodeToString(buf)

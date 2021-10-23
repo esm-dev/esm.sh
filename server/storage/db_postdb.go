@@ -8,21 +8,21 @@ import (
 	"github.com/postui/postdb/q"
 )
 
-type postDB struct{}
+type postDBDriver struct{}
 
-func (fs *postDB) Open(path string, options url.Values) (DB, error) {
+func (driver *postDBDriver) Open(path string, options url.Values) (DB, error) {
 	db, err := postdb.Open(path, 0644)
 	if err != nil {
 		return nil, err
 	}
-	return &postDBInstance{db}, nil
+	return &postDB{db}, nil
 }
 
-type postDBInstance struct {
+type postDB struct {
 	db *postdb.DB
 }
 
-func (i *postDBInstance) Get(id string) (store Store, modtime time.Time, err error) {
+func (i *postDB) Get(id string) (store Store, modtime time.Time, err error) {
 	post, err := i.db.Get(q.Alias(id), q.Select("*"))
 	if err != nil {
 		if err == postdb.ErrNotFound {
@@ -39,7 +39,7 @@ func (i *postDBInstance) Get(id string) (store Store, modtime time.Time, err err
 	return
 }
 
-func (i *postDBInstance) Put(id string, store Store) (err error) {
+func (i *postDB) Put(id string, category string, store Store) (err error) {
 	_, err = i.db.Get(q.Alias(id))
 	if err == nil {
 		kv := q.KV{}
@@ -52,20 +52,35 @@ func (i *postDBInstance) Put(id string, store Store) (err error) {
 		for key, value := range store {
 			kv[key] = []byte(value)
 		}
-		_, err = i.db.Put(q.Alias(id), kv)
+		_, err = i.db.Put(q.Alias(id), kv, q.Tags(category))
 	}
 	return
 }
 
-func (i *postDBInstance) Delete(id string) error {
+func (i *postDB) List(category string) (list []Store, err error) {
+	posts, err := i.db.List(q.Tags(category), q.Select("*"))
+	if err != nil {
+		return
+	}
+	for _, post := range posts {
+		store := Store{}
+		for key, value := range post.KV {
+			store[key] = string(value)
+		}
+		list = append(list, store)
+	}
+	return
+}
+
+func (i *postDB) Delete(id string) error {
 	_, err := i.db.Delete(q.Alias(id))
 	return err
 }
 
-func (i *postDBInstance) Close() error {
+func (i *postDB) Close() error {
 	return i.db.Close()
 }
 
 func init() {
-	RegisterDB("postdb", &postDB{})
+	RegisterDB("postdb", &postDBDriver{})
 }

@@ -8,6 +8,7 @@ import (
 	"path"
 	"strings"
 
+	"esm.sh/server/storage"
 	"github.com/ije/esbuild-internal/js_ast"
 	"github.com/ije/esbuild-internal/js_parser"
 	"github.com/ije/esbuild-internal/logger"
@@ -24,8 +25,8 @@ type ESM struct {
 	PackageCSS    bool     `json:"packageCSS"`
 }
 
-func initESM(wd string, pkg pkg, checkExports bool, isDev bool) (esm *ESM, err error) {
-	packageFile := path.Join(wd, "node_modules", pkg.name, "package.json")
+func initESM(wd string, pkg Pkg, checkExports bool, isDev bool) (esm *ESM, err error) {
+	packageFile := path.Join(wd, "node_modules", pkg.Name, "package.json")
 
 	var p NpmPackage
 	err = utils.ParseJSONFile(packageFile, &p)
@@ -37,11 +38,11 @@ func initESM(wd string, pkg pkg, checkExports bool, isDev bool) (esm *ESM, err e
 		NpmPackage: fixNpmPackage(p),
 	}
 
-	if pkg.submodule != "" {
-		if strings.HasSuffix(pkg.submodule, ".d.ts") {
+	if pkg.Submodule != "" {
+		if strings.HasSuffix(pkg.Submodule, ".d.ts") {
 			esm.Typings = ""
-			if strings.HasSuffix(pkg.submodule, "...d.ts") {
-				submodule := strings.TrimSuffix(pkg.submodule, "...d.ts")
+			if strings.HasSuffix(pkg.Submodule, "~.d.ts") {
+				submodule := strings.TrimSuffix(pkg.Submodule, "~.d.ts")
 				subDir := path.Join(wd, "node_modules", esm.Name, submodule)
 				if fileExists(path.Join(subDir, "index.d.ts")) {
 					esm.Types = path.Join(submodule, "index.d.ts")
@@ -49,10 +50,10 @@ func initESM(wd string, pkg pkg, checkExports bool, isDev bool) (esm *ESM, err e
 					esm.Types = submodule + ".d.ts"
 				}
 			} else {
-				esm.Types = pkg.submodule
+				esm.Types = pkg.Submodule
 			}
 		} else {
-			subDir := path.Join(wd, "node_modules", esm.Name, pkg.submodule)
+			subDir := path.Join(wd, "node_modules", esm.Name, pkg.Submodule)
 			packageFile := path.Join(subDir, "package.json")
 			if fileExists(packageFile) {
 				var p NpmPackage
@@ -62,25 +63,25 @@ func initESM(wd string, pkg pkg, checkExports bool, isDev bool) (esm *ESM, err e
 				}
 				np := fixNpmPackage(p)
 				if np.Module != "" {
-					esm.Module = path.Join(pkg.submodule, np.Module)
+					esm.Module = path.Join(pkg.Submodule, np.Module)
 				} else {
 					esm.Module = ""
 				}
 				if p.Main != "" {
-					esm.Main = path.Join(pkg.submodule, p.Main)
+					esm.Main = path.Join(pkg.Submodule, p.Main)
 				} else {
-					esm.Main = path.Join(pkg.submodule, "index.js")
+					esm.Main = path.Join(pkg.Submodule, "index.js")
 				}
 				esm.Types = ""
 				esm.Typings = ""
 				if p.Types != "" {
-					esm.Types = path.Join(pkg.submodule, p.Types)
+					esm.Types = path.Join(pkg.Submodule, p.Types)
 				} else if p.Typings != "" {
-					esm.Typings = path.Join(pkg.submodule, p.Typings)
+					esm.Typings = path.Join(pkg.Submodule, p.Typings)
 				} else if fileExists(path.Join(subDir, "index.d.ts")) {
-					esm.Types = path.Join(pkg.submodule, "index.d.ts")
+					esm.Types = path.Join(pkg.Submodule, "index.d.ts")
 				} else if fileExists(path.Join(subDir + ".d.ts")) {
-					esm.Types = pkg.submodule + ".d.ts"
+					esm.Types = pkg.Submodule + ".d.ts"
 				}
 			} else {
 				var defined bool
@@ -95,7 +96,7 @@ func initESM(wd string, pkg pkg, checkExports bool, isDev bool) (esm *ESM, err e
 								}
 							}
 							*/
-							if name == "./"+pkg.submodule {
+							if name == "./"+pkg.Submodule {
 								resolveDefinedExports(esm.NpmPackage, v)
 								defined = true
 								break
@@ -107,8 +108,8 @@ func initESM(wd string, pkg pkg, checkExports bool, isDev bool) (esm *ESM, err e
 									},
 								}
 								*/
-							} else if strings.HasSuffix(name, "/*") && strings.HasPrefix("./"+pkg.submodule, strings.TrimSuffix(name, "*")) {
-								suffix := strings.TrimPrefix("./"+pkg.submodule, strings.TrimSuffix(name, "*"))
+							} else if strings.HasSuffix(name, "/*") && strings.HasPrefix("./"+pkg.Submodule, strings.TrimSuffix(name, "*")) {
+								suffix := strings.TrimPrefix("./"+pkg.Submodule, strings.TrimSuffix(name, "*"))
 								if m, ok := v.(map[string]interface{}); ok {
 									for key, value := range m {
 										s, ok := value.(string)
@@ -125,16 +126,16 @@ func initESM(wd string, pkg pkg, checkExports bool, isDev bool) (esm *ESM, err e
 				}
 				if !defined {
 					if esm.Module != "" {
-						esm.Module = pkg.submodule
+						esm.Module = pkg.Submodule
 					} else {
-						esm.Main = pkg.submodule
+						esm.Main = pkg.Submodule
 					}
 					esm.Types = ""
 					esm.Typings = ""
 					if fileExists(path.Join(subDir, "index.d.ts")) {
-						esm.Types = path.Join(pkg.submodule, "index.d.ts")
+						esm.Types = path.Join(pkg.Submodule, "index.d.ts")
 					} else if fileExists(path.Join(subDir + ".d.ts")) {
-						esm.Types = pkg.submodule + ".d.ts"
+						esm.Types = pkg.Submodule + ".d.ts"
 					}
 				}
 			}
@@ -166,8 +167,8 @@ func initESM(wd string, pkg pkg, checkExports bool, isDev bool) (esm *ESM, err e
 			return nil, fmt.Errorf("parseCJSModuleExports: %v", err)
 		}
 		if strings.Contains(ret.Error, "Unexpected export statement in CJS module") {
-			if pkg.submodule != "" {
-				esm.Module = pkg.submodule
+			if pkg.Submodule != "" {
+				esm.Module = pkg.Submodule
 			} else {
 				esm.Module = esm.Main
 			}
@@ -191,13 +192,16 @@ func findESM(id string) (esm *ESM, err error) {
 		err = json.Unmarshal([]byte(store["esm"]), &esm)
 		if err != nil {
 			db.Delete(id)
+			err = storage.ErrNotFound
 			return
 		}
 
 		var exists bool
 		exists, _, err = fs.Exists(path.Join("builds", id))
-		if !exists {
+		if err == nil && !exists {
 			db.Delete(id)
+			esm = nil
+			err = storage.ErrNotFound
 			return
 		}
 	}
