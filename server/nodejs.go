@@ -22,12 +22,10 @@ import (
 )
 
 const (
-	minNodejsVersion   = 14
-	nodejsLatestLTS    = "14.17.5"
-	nodeTypesVersion   = "16.9.1"
-	nodejsDistURL      = "https://nodejs.org/dist/"
-	denoStdNodeVersion = "0.112.0"
-	refreshDuration    = 5 * 60 // 5 minues
+	nodejsMinVersion = 14
+	nodejsLatestLTS  = "14.17.5"
+	nodeTypesVersion = "16.9.1"
+	nodejsDistURL    = "https://nodejs.org/dist/"
 )
 
 var builtInNodeModules = map[string]bool{
@@ -156,7 +154,7 @@ func checkNode(installDir string) (node *Node, err error) {
 	var installed bool
 CheckNodejs:
 	version, major, err := getNodejsVersion()
-	if err != nil || major < minNodejsVersion {
+	if err != nil || major < nodejsMinVersion {
 		PATH := os.Getenv("PATH")
 		nodeBinDir := path.Join(installDir, "bin")
 		if !strings.Contains(PATH, nodeBinDir) {
@@ -176,7 +174,7 @@ CheckNodejs:
 			goto CheckNodejs
 		} else {
 			if err == nil {
-				err = fmt.Errorf("bad nodejs version %s need %d+", version, minNodejsVersion)
+				err = fmt.Errorf("bad nodejs version %s need %d+", version, nodejsMinVersion)
 			}
 			return
 		}
@@ -324,7 +322,7 @@ func cachePackageInfo(name string, version string) (info NpmPackage, err error) 
 	// cache data
 	var ttl time.Duration = 0
 	if !isFullVersion {
-		ttl = refreshDuration * time.Second
+		ttl = pkgCacheTimeout * time.Second
 	}
 	cache.Set(
 		fmt.Sprintf("npm:%s@%s", name, version),

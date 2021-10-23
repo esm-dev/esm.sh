@@ -438,7 +438,8 @@ func query() rex.Handle {
 				if err != nil {
 					return rex.Status(500, err.Error())
 				}
-				for i := 0; i < 100; i++ {
+				n := pkgRequstTimeout * 10
+				for i := 0; i < n; i++ {
 					exists, modtime, err = findTypesFile()
 					if err != nil {
 						return rex.Status(500, err.Error())
@@ -446,10 +447,10 @@ func query() rex.Handle {
 					if exists {
 						break
 					}
-					if i == 99 {
+					if i == n-1 {
 						return rex.Status(http.StatusRequestTimeout, "timeout, we are transforming the types hardly, please try later!")
 					}
-					time.Sleep(300 * time.Millisecond)
+					time.Sleep(time.Millisecond)
 				}
 			}
 			if !exists {
@@ -588,7 +589,7 @@ func query() rex.Handle {
 			ctx.SetHeader("Access-Control-Expose-Headers", "X-TypeScript-Types")
 		}
 		ctx.SetHeader("Cache-Tag", "entry")
-		ctx.SetHeader("Cache-Control", fmt.Sprintf("public, max-age=%d", refreshDuration))
+		ctx.SetHeader("Cache-Control", fmt.Sprintf("public, max-age=%d", pkgCacheTimeout))
 		ctx.SetHeader("Content-Type", "application/javascript; charset=utf-8")
 		return buf
 	}
