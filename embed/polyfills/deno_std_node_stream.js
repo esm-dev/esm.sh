@@ -1,9 +1,33 @@
+/* deno mod bundle
+ * entry: deno.land/std/node/stream.ts
+ * version: 0.110.0
+ *
+ *   $ git clone https://github.com/denoland/deno_std
+ *   $ cd deno_std/node
+ *   $ esbuild stream.ts --target=esnext --format=esm --bundle --outfile=deno_std_node_stream.js
+ */
+
 var __defProp = Object.defineProperty;
-var __markAsModule = (target) => __defProp(target, "__esModule", { value: true });
+var __markAsModule = (target) =>
+  __defProp(target, "__esModule", { value: true });
 var __export = (target, all) => {
   __markAsModule(target);
-  for (var name in all)
+  for (var name in all) {
     __defProp(target, name, { get: all[name], enumerable: true });
+  }
+};
+var __accessCheck = (obj, member, msg) => {
+  if (!member.has(obj)) throw TypeError("Cannot " + msg);
+};
+var __privateAdd = (obj, member, value) => {
+  if (member.has(obj)) {
+    throw TypeError("Cannot add the same private member more than once");
+  }
+  member instanceof WeakSet ? member.add(obj) : member.set(obj, value);
+};
+var __privateMethod = (obj, member, method) => {
+  __accessCheck(obj, member, "access private method");
+  return method;
 };
 
 // ../_util/assert.ts
@@ -22,14 +46,17 @@ function assert(expr, msg = "") {
 // ../fmt/colors.ts
 var { Deno: Deno2 } = globalThis;
 var noColor = typeof Deno2?.noColor === "boolean" ? Deno2.noColor : true;
-var ANSI_PATTERN = new RegExp([
-  "[\\u001B\\u009B][[\\]()#;?]*(?:(?:(?:[a-zA-Z\\d]*(?:;[-a-zA-Z\\d\\/#&.:=?%@~_]*)*)?\\u0007)",
-  "(?:(?:\\d{1,4}(?:;\\d{0,4})*)?[\\dA-PR-TZcf-ntqry=><~]))"
-].join("|"), "g");
+var ANSI_PATTERN = new RegExp(
+  [
+    "[\\u001B\\u009B][[\\]()#;?]*(?:(?:(?:[a-zA-Z\\d]*(?:;[-a-zA-Z\\d\\/#&.:=?%@~_]*)*)?\\u0007)",
+    "(?:(?:\\d{1,4}(?:;\\d{0,4})*)?[\\dA-PR-TZcf-ntqry=><~]))",
+  ].join("|"),
+  "g",
+);
 
 // ../testing/_diff.ts
 var DiffType;
-(function(DiffType2) {
+(function (DiffType2) {
   DiffType2["removed"] = "removed";
   DiffType2["common"] = "common";
   DiffType2["added"] = "added";
@@ -64,7 +91,9 @@ var kCustomPromisifiedSymbol = Symbol.for("nodejs.util.promisify.custom");
 var kCustomPromisifyArgsSymbol = Symbol.for("nodejs.util.promisify.customArgs");
 var NodeInvalidArgTypeError = class extends TypeError {
   constructor(argumentName, type, received) {
-    super(`The "${argumentName}" argument must be of type ${type}. Received ${typeof received}`);
+    super(
+      `The "${argumentName}" argument must be of type ${type}. Received ${typeof received}`,
+    );
     this.code = "ERR_INVALID_ARG_TYPE";
   }
 };
@@ -75,13 +104,17 @@ function promisify(original) {
   if (original[kCustomPromisifiedSymbol]) {
     const fn2 = original[kCustomPromisifiedSymbol];
     if (typeof fn2 !== "function") {
-      throw new NodeInvalidArgTypeError("util.promisify.custom", "Function", fn2);
+      throw new NodeInvalidArgTypeError(
+        "util.promisify.custom",
+        "Function",
+        fn2,
+      );
     }
     return Object.defineProperty(fn2, kCustomPromisifiedSymbol, {
       value: fn2,
       enumerable: false,
       writable: false,
-      configurable: true
+      configurable: true,
     });
   }
   const argumentNames = original[kCustomPromisifyArgsSymbol];
@@ -108,9 +141,12 @@ function promisify(original) {
     value: fn,
     enumerable: false,
     writable: false,
-    configurable: true
+    configurable: true,
   });
-  return Object.defineProperties(fn, Object.getOwnPropertyDescriptors(original));
+  return Object.defineProperties(
+    fn,
+    Object.getOwnPropertyDescriptors(original),
+  );
 }
 promisify.custom = kCustomPromisifiedSymbol;
 
@@ -154,13 +190,17 @@ __export(util_types_exports, {
   isUint8Array: () => isUint8Array,
   isUint8ClampedArray: () => isUint8ClampedArray,
   isWeakMap: () => isWeakMap,
-  isWeakSet: () => isWeakSet
+  isWeakSet: () => isWeakSet,
 });
 var _toString = Object.prototype.toString;
 var _isObjectLike = (value) => value !== null && typeof value === "object";
 var _isFunctionLike = (value) => value !== null && typeof value === "function";
 function isAnyArrayBuffer(value) {
-  return _isObjectLike(value) && (_toString.call(value) === "[object ArrayBuffer]" || _toString.call(value) === "[object SharedArrayBuffer]");
+  return (
+    _isObjectLike(value) &&
+    (_toString.call(value) === "[object ArrayBuffer]" ||
+      _toString.call(value) === "[object SharedArrayBuffer]")
+  );
 }
 function isArrayBufferView(value) {
   return ArrayBuffer.isView(value);
@@ -169,22 +209,32 @@ function isArgumentsObject(value) {
   return _isObjectLike(value) && _toString.call(value) === "[object Arguments]";
 }
 function isArrayBuffer(value) {
-  return _isObjectLike(value) && _toString.call(value) === "[object ArrayBuffer]";
+  return _isObjectLike(value) &&
+    _toString.call(value) === "[object ArrayBuffer]";
 }
 function isAsyncFunction(value) {
-  return _isFunctionLike(value) && _toString.call(value) === "[object AsyncFunction]";
+  return _isFunctionLike(value) &&
+    _toString.call(value) === "[object AsyncFunction]";
 }
 function isBigInt64Array(value) {
-  return _isObjectLike(value) && _toString.call(value) === "[object BigInt64Array]";
+  return _isObjectLike(value) &&
+    _toString.call(value) === "[object BigInt64Array]";
 }
 function isBigUint64Array(value) {
-  return _isObjectLike(value) && _toString.call(value) === "[object BigUint64Array]";
+  return _isObjectLike(value) &&
+    _toString.call(value) === "[object BigUint64Array]";
 }
 function isBooleanObject(value) {
   return _isObjectLike(value) && _toString.call(value) === "[object Boolean]";
 }
 function isBoxedPrimitive(value) {
-  return isBooleanObject(value) || isStringObject(value) || isNumberObject(value) || isSymbolObject(value) || isBigIntObject(value);
+  return (
+    isBooleanObject(value) ||
+    isStringObject(value) ||
+    isNumberObject(value) ||
+    isSymbolObject(value) ||
+    isBigIntObject(value)
+  );
 }
 function isDataView(value) {
   return _isObjectLike(value) && _toString.call(value) === "[object DataView]";
@@ -193,13 +243,16 @@ function isDate(value) {
   return _isObjectLike(value) && _toString.call(value) === "[object Date]";
 }
 function isFloat32Array(value) {
-  return _isObjectLike(value) && _toString.call(value) === "[object Float32Array]";
+  return _isObjectLike(value) &&
+    _toString.call(value) === "[object Float32Array]";
 }
 function isFloat64Array(value) {
-  return _isObjectLike(value) && _toString.call(value) === "[object Float64Array]";
+  return _isObjectLike(value) &&
+    _toString.call(value) === "[object Float64Array]";
 }
 function isGeneratorFunction(value) {
-  return _isFunctionLike(value) && _toString.call(value) === "[object GeneratorFunction]";
+  return _isFunctionLike(value) &&
+    _toString.call(value) === "[object GeneratorFunction]";
 }
 function isGeneratorObject(value) {
   return _isObjectLike(value) && _toString.call(value) === "[object Generator]";
@@ -208,16 +261,19 @@ function isInt8Array(value) {
   return _isObjectLike(value) && _toString.call(value) === "[object Int8Array]";
 }
 function isInt16Array(value) {
-  return _isObjectLike(value) && _toString.call(value) === "[object Int16Array]";
+  return _isObjectLike(value) &&
+    _toString.call(value) === "[object Int16Array]";
 }
 function isInt32Array(value) {
-  return _isObjectLike(value) && _toString.call(value) === "[object Int32Array]";
+  return _isObjectLike(value) &&
+    _toString.call(value) === "[object Int32Array]";
 }
 function isMap(value) {
   return _isObjectLike(value) && _toString.call(value) === "[object Map]";
 }
 function isMapIterator(value) {
-  return _isObjectLike(value) && _toString.call(value) === "[object Map Iterator]";
+  return _isObjectLike(value) &&
+    _toString.call(value) === "[object Map Iterator]";
 }
 function isModuleNamespaceObject(value) {
   return _isObjectLike(value) && _toString.call(value) === "[object Module]";
@@ -241,10 +297,12 @@ function isSet(value) {
   return _isObjectLike(value) && _toString.call(value) === "[object Set]";
 }
 function isSetIterator(value) {
-  return _isObjectLike(value) && _toString.call(value) === "[object Set Iterator]";
+  return _isObjectLike(value) &&
+    _toString.call(value) === "[object Set Iterator]";
 }
 function isSharedArrayBuffer(value) {
-  return _isObjectLike(value) && _toString.call(value) === "[object SharedArrayBuffer]";
+  return _isObjectLike(value) &&
+    _toString.call(value) === "[object SharedArrayBuffer]";
 }
 function isStringObject(value) {
   return _isObjectLike(value) && _toString.call(value) === "[object String]";
@@ -253,20 +311,25 @@ function isSymbolObject(value) {
   return _isObjectLike(value) && _toString.call(value) === "[object Symbol]";
 }
 function isTypedArray(value) {
-  const reTypedTag = /^\[object (?:Float(?:32|64)|(?:Int|Uint)(?:8|16|32)|Uint8Clamped)Array\]$/;
+  const reTypedTag =
+    /^\[object (?:Float(?:32|64)|(?:Int|Uint)(?:8|16|32)|Uint8Clamped)Array\]$/;
   return _isObjectLike(value) && reTypedTag.test(_toString.call(value));
 }
 function isUint8Array(value) {
-  return _isObjectLike(value) && _toString.call(value) === "[object Uint8Array]";
+  return _isObjectLike(value) &&
+    _toString.call(value) === "[object Uint8Array]";
 }
 function isUint8ClampedArray(value) {
-  return _isObjectLike(value) && _toString.call(value) === "[object Uint8ClampedArray]";
+  return _isObjectLike(value) &&
+    _toString.call(value) === "[object Uint8ClampedArray]";
 }
 function isUint16Array(value) {
-  return _isObjectLike(value) && _toString.call(value) === "[object Uint16Array]";
+  return _isObjectLike(value) &&
+    _toString.call(value) === "[object Uint16Array]";
 }
 function isUint32Array(value) {
-  return _isObjectLike(value) && _toString.call(value) === "[object Uint32Array]";
+  return _isObjectLike(value) &&
+    _toString.call(value) === "[object Uint32Array]";
 }
 function isWeakMap(value) {
   return _isObjectLike(value) && _toString.call(value) === "[object WeakMap]";
@@ -289,7 +352,7 @@ function deferred() {
       reject(reason) {
         state = "rejected";
         reject(reason);
-      }
+      },
     };
   });
   Object.defineProperty(promise, "state", { get: () => state });
@@ -345,8 +408,7 @@ var MuxAsyncIterator = class {
 };
 
 // ../async/tee.ts
-var noop = () => {
-};
+var noop = () => {};
 var AsyncIterableClone = class {
   constructor() {
     this.resolveCurrent = noop;
@@ -402,8 +464,7 @@ var Buffer2 = class {
     this.#buf = ab === void 0 ? new Uint8Array(0) : new Uint8Array(ab);
   }
   bytes(options = { copy: true }) {
-    if (options.copy === false)
-      return this.#buf.subarray(this.#off);
+    if (options.copy === false) return this.#buf.subarray(this.#off);
     return this.#buf.slice(this.#off);
   }
   empty() {
@@ -500,15 +561,15 @@ var Buffer2 = class {
     const tmp = new Uint8Array(MIN_READ);
     while (true) {
       const shouldGrow = this.capacity - this.length < MIN_READ;
-      const buf = shouldGrow ? tmp : new Uint8Array(this.#buf.buffer, this.length);
+      const buf = shouldGrow
+        ? tmp
+        : new Uint8Array(this.#buf.buffer, this.length);
       const nread = await r.read(buf);
       if (nread === null) {
         return n;
       }
-      if (shouldGrow)
-        this.writeSync(buf.subarray(0, nread));
-      else
-        this.#reslice(this.length + nread);
+      if (shouldGrow) this.writeSync(buf.subarray(0, nread));
+      else this.#reslice(this.length + nread);
       n += nread;
     }
   }
@@ -517,21 +578,23 @@ var Buffer2 = class {
     const tmp = new Uint8Array(MIN_READ);
     while (true) {
       const shouldGrow = this.capacity - this.length < MIN_READ;
-      const buf = shouldGrow ? tmp : new Uint8Array(this.#buf.buffer, this.length);
+      const buf = shouldGrow
+        ? tmp
+        : new Uint8Array(this.#buf.buffer, this.length);
       const nread = r.readSync(buf);
       if (nread === null) {
         return n;
       }
-      if (shouldGrow)
-        this.writeSync(buf.subarray(0, nread));
-      else
-        this.#reslice(this.length + nread);
+      if (shouldGrow) this.writeSync(buf.subarray(0, nread));
+      else this.#reslice(this.length + nread);
       n += nread;
     }
   }
 };
+var CR = "\r".charCodeAt(0);
+var LF = "\n".charCodeAt(0);
 
-// ../io/util.ts
+// ../io/streams.ts
 var DEFAULT_BUFFER_SIZE = 32 * 1024;
 
 // _utils.ts
@@ -540,22 +603,17 @@ function notImplemented(msg) {
   throw new Error(message);
 }
 function normalizeEncoding(enc) {
-  if (enc == null || enc === "utf8" || enc === "utf-8")
-    return "utf8";
+  if (enc == null || enc === "utf8" || enc === "utf-8") return "utf8";
   return slowCases(enc);
 }
 function slowCases(enc) {
   switch (enc.length) {
     case 4:
-      if (enc === "UTF8")
-        return "utf8";
-      if (enc === "ucs2" || enc === "UCS2")
-        return "utf16le";
+      if (enc === "UTF8") return "utf8";
+      if (enc === "ucs2" || enc === "UCS2") return "utf16le";
       enc = `${enc}`.toLowerCase();
-      if (enc === "utf8")
-        return "utf8";
-      if (enc === "ucs2")
-        return "utf16le";
+      if (enc === "utf8") return "utf8";
+      if (enc === "ucs2") return "utf16le";
       break;
     case 3:
       if (enc === "hex" || enc === "HEX" || `${enc}`.toLowerCase() === "hex") {
@@ -563,59 +621,49 @@ function slowCases(enc) {
       }
       break;
     case 5:
-      if (enc === "ascii")
-        return "ascii";
-      if (enc === "ucs-2")
-        return "utf16le";
-      if (enc === "UTF-8")
-        return "utf8";
-      if (enc === "ASCII")
-        return "ascii";
-      if (enc === "UCS-2")
-        return "utf16le";
+      if (enc === "ascii") return "ascii";
+      if (enc === "ucs-2") return "utf16le";
+      if (enc === "UTF-8") return "utf8";
+      if (enc === "ASCII") return "ascii";
+      if (enc === "UCS-2") return "utf16le";
       enc = `${enc}`.toLowerCase();
-      if (enc === "utf-8")
-        return "utf8";
-      if (enc === "ascii")
-        return "ascii";
-      if (enc === "ucs-2")
-        return "utf16le";
+      if (enc === "utf-8") return "utf8";
+      if (enc === "ascii") return "ascii";
+      if (enc === "ucs-2") return "utf16le";
       break;
     case 6:
-      if (enc === "base64")
-        return "base64";
-      if (enc === "latin1" || enc === "binary")
-        return "latin1";
-      if (enc === "BASE64")
-        return "base64";
-      if (enc === "LATIN1" || enc === "BINARY")
-        return "latin1";
+      if (enc === "base64") return "base64";
+      if (enc === "latin1" || enc === "binary") return "latin1";
+      if (enc === "BASE64") return "base64";
+      if (enc === "LATIN1" || enc === "BINARY") return "latin1";
       enc = `${enc}`.toLowerCase();
-      if (enc === "base64")
-        return "base64";
-      if (enc === "latin1" || enc === "binary")
-        return "latin1";
+      if (enc === "base64") return "base64";
+      if (enc === "latin1" || enc === "binary") return "latin1";
       break;
     case 7:
-      if (enc === "utf16le" || enc === "UTF16LE" || `${enc}`.toLowerCase() === "utf16le") {
+      if (
+        enc === "utf16le" || enc === "UTF16LE" ||
+        `${enc}`.toLowerCase() === "utf16le"
+      ) {
         return "utf16le";
       }
       break;
     case 8:
-      if (enc === "utf-16le" || enc === "UTF-16LE" || `${enc}`.toLowerCase() === "utf-16le") {
+      if (
+        enc === "utf-16le" || enc === "UTF-16LE" ||
+        `${enc}`.toLowerCase() === "utf-16le"
+      ) {
         return "utf16le";
       }
       break;
     default:
-      if (enc === "")
-        return "utf8";
+      if (enc === "") return "utf8";
   }
 }
 function once(callback) {
   let called = false;
-  return function(...args) {
-    if (called)
-      return;
+  return function (...args) {
+    if (called) return;
     called = true;
     callback.apply(this, args);
   };
@@ -634,7 +682,7 @@ var DEFAULT_INSPECT_OPTIONS = {
   breakLength: 80,
   compact: 3,
   sorted: false,
-  getters: false
+  getters: false,
 };
 inspect.defaultOptions = DEFAULT_INSPECT_OPTIONS;
 inspect.custom = Symbol.for("nodejs.util.inspect.custom");
@@ -648,7 +696,7 @@ function inspect(object, ...opts) {
     iterableLimit: opts.maxArrayLength,
     compact: !!opts.compact,
     sorted: !!opts.sorted,
-    showProxy: !!opts.showProxy
+    showProxy: !!opts.showProxy,
   });
 }
 
@@ -663,7 +711,7 @@ var kTypes = [
   "Object",
   "boolean",
   "bigint",
-  "symbol"
+  "symbol",
 ];
 var NodeErrorAbstraction = class extends Error {
   constructor(name, code, message) {
@@ -679,6 +727,12 @@ var NodeErrorAbstraction = class extends Error {
 var NodeError = class extends NodeErrorAbstraction {
   constructor(code, message) {
     super(Error.prototype.name, code, message);
+  }
+};
+var NodeRangeError = class extends NodeErrorAbstraction {
+  constructor(code, message) {
+    super(RangeError.prototype.name, code, message);
+    Object.setPrototypeOf(this, RangeError.prototype);
   }
 };
 var NodeTypeError = class extends NodeErrorAbstraction {
@@ -781,12 +835,24 @@ function invalidArgTypeHelper(input) {
 }
 var ERR_OUT_OF_RANGE = class extends RangeError {
   constructor(str, range, received) {
-    super(`The value of "${str}" is out of range. It must be ${range}. Received ${received}`);
+    super(
+      `The value of "${str}" is out of range. It must be ${range}. Received ${received}`,
+    );
     this.code = "ERR_OUT_OF_RANGE";
     const { name } = this;
     this.name = `${name} [${this.code}]`;
     this.stack;
     this.name = name;
+  }
+};
+var ERR_BUFFER_OUT_OF_BOUNDS = class extends NodeRangeError {
+  constructor(name) {
+    super(
+      "ERR_BUFFER_OUT_OF_BOUNDS",
+      name
+        ? `"${name}" is outside of buffer bounds`
+        : "Attempt to access memory outside buffer bounds",
+    );
   }
 };
 var windows = [
@@ -869,7 +935,7 @@ var windows = [
   [-4030, ["EREMOTEIO", "remote I/O error"]],
   [-4029, ["ENOTTY", "inappropriate ioctl for device"]],
   [-4028, ["EFTYPE", "inappropriate file type or format"]],
-  [-4027, ["EILSEQ", "illegal byte sequence"]]
+  [-4027, ["EILSEQ", "illegal byte sequence"]],
 ];
 var darwin = [
   [-7, ["E2BIG", "argument list too long"]],
@@ -951,7 +1017,7 @@ var darwin = [
   [-4030, ["EREMOTEIO", "remote I/O error"]],
   [-25, ["ENOTTY", "inappropriate ioctl for device"]],
   [-79, ["EFTYPE", "inappropriate file type or format"]],
-  [-92, ["EILSEQ", "illegal byte sequence"]]
+  [-92, ["EILSEQ", "illegal byte sequence"]],
 ];
 var linux = [
   [-7, ["E2BIG", "argument list too long"]],
@@ -1033,12 +1099,23 @@ var linux = [
   [-121, ["EREMOTEIO", "remote I/O error"]],
   [-25, ["ENOTTY", "inappropriate ioctl for device"]],
   [-4028, ["EFTYPE", "inappropriate file type or format"]],
-  [-84, ["EILSEQ", "illegal byte sequence"]]
+  [-84, ["EILSEQ", "illegal byte sequence"]],
 ];
-var errorMap = new Map(osType === "windows" ? windows : osType === "darwin" ? darwin : osType === "linux" ? linux : unreachable());
+var errorMap = new Map(
+  osType === "windows"
+    ? windows
+    : osType === "darwin"
+    ? darwin
+    : osType === "linux"
+    ? linux
+    : unreachable(),
+);
 var ERR_INVALID_CALLBACK = class extends NodeTypeError {
   constructor(object) {
-    super("ERR_INVALID_CALLBACK", `Callback must be a function. Received ${JSON.stringify(object)}`);
+    super(
+      "ERR_INVALID_CALLBACK",
+      `Callback must be a function. Received ${JSON.stringify(object)}`,
+    );
   }
 };
 var ERR_METHOD_NOT_IMPLEMENTED = class extends NodeError {
@@ -1072,7 +1149,10 @@ var ERR_MULTIPLE_CALLBACK = class extends NodeError {
 };
 var ERR_STREAM_ALREADY_FINISHED = class extends NodeError {
   constructor(x) {
-    super("ERR_STREAM_ALREADY_FINISHED", `Cannot call ${x} after a stream was finished`);
+    super(
+      "ERR_STREAM_ALREADY_FINISHED",
+      `Cannot call ${x} after a stream was finished`,
+    );
   }
 };
 var ERR_STREAM_CANNOT_PIPE = class extends NodeError {
@@ -1082,7 +1162,10 @@ var ERR_STREAM_CANNOT_PIPE = class extends NodeError {
 };
 var ERR_STREAM_DESTROYED = class extends NodeError {
   constructor(x) {
-    super("ERR_STREAM_DESTROYED", `Cannot call ${x} after a stream was destroyed`);
+    super(
+      "ERR_STREAM_DESTROYED",
+      `Cannot call ${x} after a stream was destroyed`,
+    );
   }
 };
 var ERR_STREAM_NULL_VALUES = class extends NodeTypeError {
@@ -1102,7 +1185,10 @@ var ERR_STREAM_PUSH_AFTER_EOF = class extends NodeError {
 };
 var ERR_STREAM_UNSHIFT_AFTER_END_EVENT = class extends NodeError {
   constructor() {
-    super("ERR_STREAM_UNSHIFT_AFTER_END_EVENT", `stream.unshift() after end event`);
+    super(
+      "ERR_STREAM_UNSHIFT_AFTER_END_EVENT",
+      `stream.unshift() after end event`,
+    );
   }
 };
 var ERR_STREAM_WRITE_AFTER_END = class extends NodeError {
@@ -1117,7 +1203,10 @@ var ERR_UNKNOWN_ENCODING = class extends NodeTypeError {
 };
 var ERR_INVALID_OPT_VALUE = class extends NodeTypeError {
   constructor(name, value) {
-    super("ERR_INVALID_OPT_VALUE", `The value "${value}" is invalid for option "${name}"`);
+    super(
+      "ERR_INVALID_OPT_VALUE",
+      `The value "${value}" is invalid for option "${name}"`,
+    );
   }
 };
 function buildReturnPropertyType(value) {
@@ -1129,7 +1218,12 @@ function buildReturnPropertyType(value) {
 }
 var ERR_INVALID_RETURN_VALUE = class extends NodeTypeError {
   constructor(input, name, value) {
-    super("ERR_INVALID_RETURN_VALUE", `Expected ${input} to be returned from the "${name}" function but got ${buildReturnPropertyType(value)}.`);
+    super(
+      "ERR_INVALID_RETURN_VALUE",
+      `Expected ${input} to be returned from the "${name}" function but got ${
+        buildReturnPropertyType(value)
+      }.`,
+    );
   }
 };
 
@@ -1146,6 +1240,7 @@ function validateMaxListeners(n, name) {
     throw new ERR_OUT_OF_RANGE(name, "a non-negative number", inspect(n));
   }
 }
+var _init, init_fn;
 var _EventEmitter = class {
   static get defaultMaxListeners() {
     return defaultMaxListeners;
@@ -1155,9 +1250,11 @@ var _EventEmitter = class {
     defaultMaxListeners = value;
   }
   constructor() {
-    this._events = Object.create(null);
+    var _a4;
+    __privateMethod((_a4 = _EventEmitter), _init, init_fn).call(_a4, this);
   }
   _addListener(eventName, listener, prepend) {
+    var _a4;
     this.checkListenerArgument(listener);
     this.emit("newListener", eventName, this.unwrapListener(listener));
     if (this.hasListeners(eventName)) {
@@ -1171,7 +1268,10 @@ var _EventEmitter = class {
       } else {
         listeners.push(listener);
       }
+    } else if (this._events) {
+      this._events[eventName] = listener;
     } else {
+      __privateMethod((_a4 = _EventEmitter), _init, init_fn).call(_a4, this);
       this._events[eventName] = listener;
     }
     const max = this.getMaxListeners();
@@ -1186,7 +1286,9 @@ var _EventEmitter = class {
   }
   emit(eventName, ...args) {
     if (this.hasListeners(eventName)) {
-      if (eventName === "error" && this.hasListeners(_EventEmitter.errorMonitor)) {
+      if (
+        eventName === "error" && this.hasListeners(_EventEmitter.errorMonitor)
+      ) {
         this.emit(_EventEmitter.errorMonitor, ...args);
       }
       const listeners = ensureArray(this._events[eventName]).slice();
@@ -1211,7 +1313,9 @@ var _EventEmitter = class {
     return Reflect.ownKeys(this._events);
   }
   getMaxListeners() {
-    return this.maxListeners == null ? _EventEmitter.defaultMaxListeners : this.maxListeners;
+    return this.maxListeners == null
+      ? _EventEmitter.defaultMaxListeners
+      : this.maxListeners;
   }
   listenerCount(eventName) {
     if (this.hasListeners(eventName)) {
@@ -1230,11 +1334,11 @@ var _EventEmitter = class {
     }
     const eventListeners = target._events[eventName];
     if (Array.isArray(eventListeners)) {
-      return unwrap ? this.unwrapListeners(eventListeners) : eventListeners.slice(0);
+      return unwrap
+        ? this.unwrapListeners(eventListeners)
+        : eventListeners.slice(0);
     } else {
-      return [
-        unwrap ? this.unwrapListener(eventListeners) : eventListeners
-      ];
+      return [unwrap ? this.unwrapListener(eventListeners) : eventListeners];
     }
   }
   unwrapListeners(arr) {
@@ -1253,10 +1357,8 @@ var _EventEmitter = class {
   rawListeners(eventName) {
     return this._listeners(this, eventName, false);
   }
-  off(eventName, listener) {
-  }
-  on(eventName, listener) {
-  }
+  off(eventName, listener) {}
+  on(eventName, listener) {}
   once(eventName, listener) {
     const wrapped = this.onceWrap(eventName, listener);
     this.on(eventName, wrapped);
@@ -1264,7 +1366,7 @@ var _EventEmitter = class {
   }
   onceWrap(eventName, listener) {
     this.checkListenerArgument(listener);
-    const wrapper = function(...args) {
+    const wrapper = function (...args) {
       if (this.isCalled) {
         return;
       }
@@ -1276,7 +1378,7 @@ var _EventEmitter = class {
       eventName,
       listener,
       rawListener: wrapper,
-      context: this
+      context: this,
     };
     const wrapped = wrapper.bind(wrapperContext);
     wrapperContext.rawListener = wrapped;
@@ -1297,7 +1399,8 @@ var _EventEmitter = class {
     }
     if (eventName) {
       if (this.hasListeners(eventName)) {
-        const listeners = ensureArray(this._events[eventName]).slice().reverse();
+        const listeners = ensureArray(this._events[eventName]).slice()
+          .reverse();
         for (const listener of listeners) {
           this.removeListener(eventName, this.unwrapListener(listener));
         }
@@ -1305,8 +1408,7 @@ var _EventEmitter = class {
     } else {
       const eventList = this.eventNames();
       eventList.forEach((eventName2) => {
-        if (eventName2 === "removeListener")
-          return;
+        if (eventName2 === "removeListener") return;
         this.removeAllListeners(eventName2);
       });
       this.removeAllListeners("removeListener");
@@ -1321,7 +1423,7 @@ var _EventEmitter = class {
       const arr = ensureArray(maybeArr);
       let listenerIndex = -1;
       for (let i = arr.length - 1; i >= 0; i--) {
-        if (arr[i] == listener || arr[i] && arr[i]["listener"] == listener) {
+        if (arr[i] == listener || (arr[i] && arr[i]["listener"] == listener)) {
           listenerIndex = i;
           break;
         }
@@ -1350,9 +1452,13 @@ var _EventEmitter = class {
   static once(emitter, name) {
     return new Promise((resolve, reject) => {
       if (emitter instanceof EventTarget) {
-        emitter.addEventListener(name, (...args) => {
-          resolve(args);
-        }, { once: true, passive: false, capture: false });
+        emitter.addEventListener(
+          name,
+          (...args) => {
+            resolve(args);
+          },
+          { once: true, passive: false, capture: false },
+        );
         return;
       } else if (emitter instanceof _EventEmitter) {
         const eventListener = (...args) => {
@@ -1393,7 +1499,7 @@ var _EventEmitter = class {
         if (finished2) {
           return Promise.resolve(createIterResult(void 0, true));
         }
-        return new Promise(function(resolve, reject) {
+        return new Promise(function (resolve, reject) {
           unconsumedPromises.push({ resolve, reject });
         });
       },
@@ -1413,7 +1519,7 @@ var _EventEmitter = class {
       },
       [Symbol.asyncIterator]() {
         return this;
-      }
+      },
     };
     emitter.on(event, eventHandler);
     emitter.on("error", errorHandler);
@@ -1459,14 +1565,31 @@ var _EventEmitter = class {
   }
 };
 var EventEmitter = _EventEmitter;
+_init = new WeakSet();
+init_fn = function (emitter) {
+  if (
+    emitter._events == null ||
+    emitter._events === Object.getPrototypeOf(emitter)._events
+  ) {
+    emitter._events = Object.create(null);
+  }
+};
+__privateAdd(EventEmitter, _init);
 EventEmitter.captureRejectionSymbol = Symbol.for("nodejs.rejection");
 EventEmitter.errorMonitor = Symbol("events.errorMonitor");
+EventEmitter.call = function call(thisArg) {
+  var _a4;
+  __privateMethod((_a4 = _EventEmitter), _init, init_fn).call(_a4, thisArg);
+};
 EventEmitter.prototype.on = EventEmitter.prototype.addListener;
 EventEmitter.prototype.off = EventEmitter.prototype.removeListener;
 var MaxListenersExceededWarning = class extends Error {
   constructor(emitter, type) {
     const listenerCount2 = emitter.listenerCount(type);
-    const message = `Possible EventEmitter memory leak detected. ${listenerCount2} ${type == null ? "null" : type.toString()} listeners added to [${emitter.constructor.name}].  Use emitter.setMaxListeners() to increase limit`;
+    const message =
+      `Possible EventEmitter memory leak detected. ${listenerCount2} ${
+        type == null ? "null" : type.toString()
+      } listeners added to [${emitter.constructor.name}].  Use emitter.setMaxListeners() to increase limit`;
     super(message);
     this.emitter = emitter;
     this.type = type;
@@ -1490,12 +1613,9 @@ function errLength() {
   return new RangeError("Odd length hex string");
 }
 function fromHexChar(byte) {
-  if (48 <= byte && byte <= 57)
-    return byte - 48;
-  if (97 <= byte && byte <= 102)
-    return byte - 97 + 10;
-  if (65 <= byte && byte <= 70)
-    return byte - 65 + 10;
+  if (48 <= byte && byte <= 57) return byte - 48;
+  if (97 <= byte && byte <= 102) return byte - 97 + 10;
+  if (65 <= byte && byte <= 70) return byte - 65 + 10;
   throw errInvalidByte(byte);
 }
 function encode(src) {
@@ -1512,7 +1632,7 @@ function decode(src) {
   for (let i = 0; i < dst.length; i++) {
     const a = fromHexChar(src[i * 2]);
     const b = fromHexChar(src[i * 2 + 1]);
-    dst[i] = a << 4 | b;
+    dst[i] = (a << 4) | b;
   }
   if (src.length % 2 == 1) {
     fromHexChar(src[dst.length * 2]);
@@ -1586,16 +1706,21 @@ var base64abc = [
   "8",
   "9",
   "+",
-  "/"
+  "/",
 ];
 function encode2(data) {
-  const uint8 = typeof data === "string" ? new TextEncoder().encode(data) : data instanceof Uint8Array ? data : new Uint8Array(data);
-  let result = "", i;
+  const uint8 = typeof data === "string"
+    ? new TextEncoder().encode(data)
+    : data instanceof Uint8Array
+    ? data
+    : new Uint8Array(data);
+  let result = "",
+    i;
   const l = uint8.length;
   for (i = 2; i < l; i += 3) {
     result += base64abc[uint8[i - 2] >> 2];
-    result += base64abc[(uint8[i - 2] & 3) << 4 | uint8[i - 1] >> 4];
-    result += base64abc[(uint8[i - 1] & 15) << 2 | uint8[i] >> 6];
+    result += base64abc[((uint8[i - 2] & 3) << 4) | (uint8[i - 1] >> 4)];
+    result += base64abc[((uint8[i - 1] & 15) << 2) | (uint8[i] >> 6)];
     result += base64abc[uint8[i] & 63];
   }
   if (i === l + 1) {
@@ -1605,7 +1730,7 @@ function encode2(data) {
   }
   if (i === l) {
     result += base64abc[uint8[i - 2] >> 2];
-    result += base64abc[(uint8[i - 2] & 3) << 4 | uint8[i - 1] >> 4];
+    result += base64abc[((uint8[i - 2] & 3) << 4) | (uint8[i - 1] >> 4)];
     result += base64abc[(uint8[i - 1] & 15) << 2];
     result += "=";
   }
@@ -1622,17 +1747,10 @@ function decode2(b64) {
 }
 
 // buffer.ts
-var notImplementedEncodings = [
-  "ascii",
-  "binary",
-  "latin1",
-  "ucs2",
-  "utf16le"
-];
+var notImplementedEncodings = ["ascii", "binary", "latin1", "ucs2", "utf16le"];
 function checkEncoding(encoding = "utf8", strict = true) {
-  if (typeof encoding !== "string" || strict && encoding === "") {
-    if (!strict)
-      return "utf8";
+  if (typeof encoding !== "string" || (strict && encoding === "")) {
+    if (!strict) return "utf8";
     throw new TypeError(`Unknown encoding: ${encoding}`);
   }
   const normalized = normalizeEncoding(encoding);
@@ -1646,54 +1764,57 @@ function checkEncoding(encoding = "utf8", strict = true) {
 }
 var encodingOps = {
   utf8: {
-    byteLength: (string) => new TextEncoder().encode(string).byteLength
+    byteLength: (string) => new TextEncoder().encode(string).byteLength,
   },
   ucs2: {
-    byteLength: (string) => string.length * 2
+    byteLength: (string) => string.length * 2,
   },
   utf16le: {
-    byteLength: (string) => string.length * 2
+    byteLength: (string) => string.length * 2,
   },
   latin1: {
-    byteLength: (string) => string.length
+    byteLength: (string) => string.length,
   },
   ascii: {
-    byteLength: (string) => string.length
+    byteLength: (string) => string.length,
   },
   base64: {
-    byteLength: (string) => base64ByteLength(string, string.length)
+    byteLength: (string) => base64ByteLength(string, string.length),
   },
   hex: {
-    byteLength: (string) => string.length >>> 1
-  }
+    byteLength: (string) => string.length >>> 1,
+  },
 };
 function base64ByteLength(str, bytes) {
-  if (str.charCodeAt(bytes - 1) === 61)
-    bytes--;
-  if (bytes > 1 && str.charCodeAt(bytes - 1) === 61)
-    bytes--;
-  return bytes * 3 >>> 2;
+  if (str.charCodeAt(bytes - 1) === 61) bytes--;
+  if (bytes > 1 && str.charCodeAt(bytes - 1) === 61) bytes--;
+  return (bytes * 3) >>> 2;
 }
 var Buffer3 = class extends Uint8Array {
   static alloc(size, fill, encoding = "utf8") {
     if (typeof size !== "number") {
-      throw new TypeError(`The "size" argument must be of type number. Received type ${typeof size}`);
+      throw new TypeError(
+        `The "size" argument must be of type number. Received type ${typeof size}`,
+      );
     }
     const buf = new Buffer3(size);
-    if (size === 0)
-      return buf;
+    if (size === 0) return buf;
     let bufFill;
     if (typeof fill === "string") {
       const clearEncoding = checkEncoding(encoding);
-      if (typeof fill === "string" && fill.length === 1 && clearEncoding === "utf8") {
+      if (
+        typeof fill === "string" && fill.length === 1 &&
+        clearEncoding === "utf8"
+      ) {
         buf.fill(fill.charCodeAt(0));
-      } else
-        bufFill = Buffer3.from(fill, clearEncoding);
+      } else bufFill = Buffer3.from(fill, clearEncoding);
     } else if (typeof fill === "number") {
       buf.fill(fill);
     } else if (fill instanceof Uint8Array) {
       if (fill.length === 0) {
-        throw new TypeError(`The argument "value" is invalid. Received ${fill.constructor.name} []`);
+        throw new TypeError(
+          `The argument "value" is invalid. Received ${fill.constructor.name} []`,
+        );
       }
       bufFill = fill;
     }
@@ -1705,8 +1826,7 @@ var Buffer3 = class extends Uint8Array {
       while (offset < size) {
         buf.set(bufFill, offset);
         offset += bufFill.length;
-        if (offset + bufFill.length >= size)
-          break;
+        if (offset + bufFill.length >= size) break;
       }
       if (offset !== size) {
         buf.set(bufFill.subarray(0, size - offset), offset);
@@ -1718,8 +1838,7 @@ var Buffer3 = class extends Uint8Array {
     return new Buffer3(size);
   }
   static byteLength(string, encoding = "utf8") {
-    if (typeof string != "string")
-      return string.byteLength;
+    if (typeof string != "string") return string.byteLength;
     encoding = normalizeEncoding(encoding) || "utf8";
     return encodingOps[encoding].byteLength(string);
   }
@@ -1745,15 +1864,18 @@ var Buffer3 = class extends Uint8Array {
     return buffer;
   }
   static from(value, offsetOrEncoding, length) {
-    const offset = typeof offsetOrEncoding === "string" ? void 0 : offsetOrEncoding;
-    let encoding = typeof offsetOrEncoding === "string" ? offsetOrEncoding : void 0;
+    const offset = typeof offsetOrEncoding === "string"
+      ? void 0
+      : offsetOrEncoding;
+    let encoding = typeof offsetOrEncoding === "string"
+      ? offsetOrEncoding
+      : void 0;
     if (typeof value == "string") {
       encoding = checkEncoding(encoding, false);
       if (encoding === "hex") {
         return new Buffer3(decode(new TextEncoder().encode(value)).buffer);
       }
-      if (encoding === "base64")
-        return new Buffer3(decode2(value).buffer);
+      if (encoding === "base64") return new Buffer3(decode2(value).buffer);
       return new Buffer3(new TextEncoder().encode(value).buffer);
     }
     return new Buffer3(value, offset, length);
@@ -1762,82 +1884,144 @@ var Buffer3 = class extends Uint8Array {
     return obj instanceof Buffer3;
   }
   static isEncoding(encoding) {
-    return typeof encoding === "string" && encoding.length !== 0 && normalizeEncoding(encoding) !== void 0;
+    return typeof encoding === "string" && encoding.length !== 0 &&
+      normalizeEncoding(encoding) !== void 0;
   }
-  copy(targetBuffer, targetStart = 0, sourceStart = 0, sourceEnd = this.length) {
-    const sourceBuffer = this.subarray(sourceStart, sourceEnd).subarray(0, Math.max(0, targetBuffer.length - targetStart));
-    if (sourceBuffer.length === 0)
-      return 0;
+  boundsError(value, length, type) {
+    if (Math.floor(value) !== value) {
+      throw new ERR_OUT_OF_RANGE(type || "offset", "an integer", value);
+    }
+    if (length < 0) throw new ERR_BUFFER_OUT_OF_BOUNDS();
+    throw new ERR_OUT_OF_RANGE(
+      type || "offset",
+      `>= ${type ? 1 : 0} and <= ${length}`,
+      value,
+    );
+  }
+  readUIntBE(offset = 0, byteLength) {
+    if (byteLength === 3 || byteLength === 5 || byteLength === 6) {
+      notImplemented(`byteLength ${byteLength}`);
+    }
+    if (byteLength === 4) return this.readUInt32BE(offset);
+    if (byteLength === 2) return this.readUInt16BE(offset);
+    if (byteLength === 1) return this.readUInt8(offset);
+    this.boundsError(byteLength, 4, "byteLength");
+  }
+  readUIntLE(offset = 0, byteLength) {
+    if (byteLength === 3 || byteLength === 5 || byteLength === 6) {
+      notImplemented(`byteLength ${byteLength}`);
+    }
+    if (byteLength === 4) return this.readUInt32LE(offset);
+    if (byteLength === 2) return this.readUInt16LE(offset);
+    if (byteLength === 1) return this.readUInt8(offset);
+    this.boundsError(byteLength, 4, "byteLength");
+  }
+  copy(
+    targetBuffer,
+    targetStart = 0,
+    sourceStart = 0,
+    sourceEnd = this.length,
+  ) {
+    const sourceBuffer = this.subarray(sourceStart, sourceEnd).subarray(
+      0,
+      Math.max(0, targetBuffer.length - targetStart),
+    );
+    if (sourceBuffer.length === 0) return 0;
     targetBuffer.set(sourceBuffer, targetStart);
     return sourceBuffer.length;
   }
   equals(otherBuffer) {
     if (!(otherBuffer instanceof Uint8Array)) {
-      throw new TypeError(`The "otherBuffer" argument must be an instance of Buffer or Uint8Array. Received type ${typeof otherBuffer}`);
+      throw new TypeError(
+        `The "otherBuffer" argument must be an instance of Buffer or Uint8Array. Received type ${typeof otherBuffer}`,
+      );
     }
-    if (this === otherBuffer)
-      return true;
-    if (this.byteLength !== otherBuffer.byteLength)
-      return false;
+    if (this === otherBuffer) return true;
+    if (this.byteLength !== otherBuffer.byteLength) return false;
     for (let i = 0; i < this.length; i++) {
-      if (this[i] !== otherBuffer[i])
-        return false;
+      if (this[i] !== otherBuffer[i]) return false;
     }
     return true;
   }
   readBigInt64BE(offset = 0) {
-    return new DataView(this.buffer, this.byteOffset, this.byteLength).getBigInt64(offset);
+    return new DataView(this.buffer, this.byteOffset, this.byteLength)
+      .getBigInt64(offset);
   }
   readBigInt64LE(offset = 0) {
-    return new DataView(this.buffer, this.byteOffset, this.byteLength).getBigInt64(offset, true);
+    return new DataView(this.buffer, this.byteOffset, this.byteLength)
+      .getBigInt64(offset, true);
   }
   readBigUInt64BE(offset = 0) {
-    return new DataView(this.buffer, this.byteOffset, this.byteLength).getBigUint64(offset);
+    return new DataView(this.buffer, this.byteOffset, this.byteLength)
+      .getBigUint64(offset);
   }
   readBigUInt64LE(offset = 0) {
-    return new DataView(this.buffer, this.byteOffset, this.byteLength).getBigUint64(offset, true);
+    return new DataView(this.buffer, this.byteOffset, this.byteLength)
+      .getBigUint64(offset, true);
   }
   readDoubleBE(offset = 0) {
-    return new DataView(this.buffer, this.byteOffset, this.byteLength).getFloat64(offset);
+    return new DataView(this.buffer, this.byteOffset, this.byteLength)
+      .getFloat64(offset);
   }
   readDoubleLE(offset = 0) {
-    return new DataView(this.buffer, this.byteOffset, this.byteLength).getFloat64(offset, true);
+    return new DataView(this.buffer, this.byteOffset, this.byteLength)
+      .getFloat64(offset, true);
   }
   readFloatBE(offset = 0) {
-    return new DataView(this.buffer, this.byteOffset, this.byteLength).getFloat32(offset);
+    return new DataView(this.buffer, this.byteOffset, this.byteLength)
+      .getFloat32(offset);
   }
   readFloatLE(offset = 0) {
-    return new DataView(this.buffer, this.byteOffset, this.byteLength).getFloat32(offset, true);
+    return new DataView(this.buffer, this.byteOffset, this.byteLength)
+      .getFloat32(offset, true);
   }
   readInt8(offset = 0) {
-    return new DataView(this.buffer, this.byteOffset, this.byteLength).getInt8(offset);
+    return new DataView(this.buffer, this.byteOffset, this.byteLength).getInt8(
+      offset,
+    );
   }
   readInt16BE(offset = 0) {
-    return new DataView(this.buffer, this.byteOffset, this.byteLength).getInt16(offset);
+    return new DataView(this.buffer, this.byteOffset, this.byteLength).getInt16(
+      offset,
+    );
   }
   readInt16LE(offset = 0) {
-    return new DataView(this.buffer, this.byteOffset, this.byteLength).getInt16(offset, true);
+    return new DataView(this.buffer, this.byteOffset, this.byteLength).getInt16(
+      offset,
+      true,
+    );
   }
   readInt32BE(offset = 0) {
-    return new DataView(this.buffer, this.byteOffset, this.byteLength).getInt32(offset);
+    return new DataView(this.buffer, this.byteOffset, this.byteLength).getInt32(
+      offset,
+    );
   }
   readInt32LE(offset = 0) {
-    return new DataView(this.buffer, this.byteOffset, this.byteLength).getInt32(offset, true);
+    return new DataView(this.buffer, this.byteOffset, this.byteLength).getInt32(
+      offset,
+      true,
+    );
   }
   readUInt8(offset = 0) {
-    return new DataView(this.buffer, this.byteOffset, this.byteLength).getUint8(offset);
+    return new DataView(this.buffer, this.byteOffset, this.byteLength).getUint8(
+      offset,
+    );
   }
   readUInt16BE(offset = 0) {
-    return new DataView(this.buffer, this.byteOffset, this.byteLength).getUint16(offset);
+    return new DataView(this.buffer, this.byteOffset, this.byteLength)
+      .getUint16(offset);
   }
   readUInt16LE(offset = 0) {
-    return new DataView(this.buffer, this.byteOffset, this.byteLength).getUint16(offset, true);
+    return new DataView(this.buffer, this.byteOffset, this.byteLength)
+      .getUint16(offset, true);
   }
   readUInt32BE(offset = 0) {
-    return new DataView(this.buffer, this.byteOffset, this.byteLength).getUint32(offset);
+    return new DataView(this.buffer, this.byteOffset, this.byteLength)
+      .getUint32(offset);
   }
   readUInt32LE(offset = 0) {
-    return new DataView(this.buffer, this.byteOffset, this.byteLength).getUint32(offset, true);
+    return new DataView(this.buffer, this.byteOffset, this.byteLength)
+      .getUint32(offset, true);
   }
   slice(begin = 0, end = this.length) {
     return this.subarray(begin, end);
@@ -1848,85 +2032,148 @@ var Buffer3 = class extends Uint8Array {
   toString(encoding = "utf8", start = 0, end = this.length) {
     encoding = checkEncoding(encoding);
     const b = this.subarray(start, end);
-    if (encoding === "hex")
-      return new TextDecoder().decode(encode(b));
-    if (encoding === "base64")
-      return encode2(b.buffer);
+    if (encoding === "hex") return new TextDecoder().decode(encode(b));
+    if (encoding === "base64") return encode2(b);
     return new TextDecoder(encoding).decode(b);
   }
   write(string, offset = 0, length = this.length) {
-    return new TextEncoder().encodeInto(string, this.subarray(offset, offset + length)).written;
+    return new TextEncoder().encodeInto(
+      string,
+      this.subarray(offset, offset + length),
+    ).written;
   }
   writeBigInt64BE(value, offset = 0) {
-    new DataView(this.buffer, this.byteOffset, this.byteLength).setBigInt64(offset, value);
+    new DataView(this.buffer, this.byteOffset, this.byteLength).setBigInt64(
+      offset,
+      value,
+    );
     return offset + 4;
   }
   writeBigInt64LE(value, offset = 0) {
-    new DataView(this.buffer, this.byteOffset, this.byteLength).setBigInt64(offset, value, true);
+    new DataView(this.buffer, this.byteOffset, this.byteLength).setBigInt64(
+      offset,
+      value,
+      true,
+    );
     return offset + 4;
   }
   writeBigUInt64BE(value, offset = 0) {
-    new DataView(this.buffer, this.byteOffset, this.byteLength).setBigUint64(offset, value);
+    new DataView(this.buffer, this.byteOffset, this.byteLength).setBigUint64(
+      offset,
+      value,
+    );
     return offset + 4;
   }
   writeBigUInt64LE(value, offset = 0) {
-    new DataView(this.buffer, this.byteOffset, this.byteLength).setBigUint64(offset, value, true);
+    new DataView(this.buffer, this.byteOffset, this.byteLength).setBigUint64(
+      offset,
+      value,
+      true,
+    );
     return offset + 4;
   }
   writeDoubleBE(value, offset = 0) {
-    new DataView(this.buffer, this.byteOffset, this.byteLength).setFloat64(offset, value);
+    new DataView(this.buffer, this.byteOffset, this.byteLength).setFloat64(
+      offset,
+      value,
+    );
     return offset + 8;
   }
   writeDoubleLE(value, offset = 0) {
-    new DataView(this.buffer, this.byteOffset, this.byteLength).setFloat64(offset, value, true);
+    new DataView(this.buffer, this.byteOffset, this.byteLength).setFloat64(
+      offset,
+      value,
+      true,
+    );
     return offset + 8;
   }
   writeFloatBE(value, offset = 0) {
-    new DataView(this.buffer, this.byteOffset, this.byteLength).setFloat32(offset, value);
+    new DataView(this.buffer, this.byteOffset, this.byteLength).setFloat32(
+      offset,
+      value,
+    );
     return offset + 4;
   }
   writeFloatLE(value, offset = 0) {
-    new DataView(this.buffer, this.byteOffset, this.byteLength).setFloat32(offset, value, true);
+    new DataView(this.buffer, this.byteOffset, this.byteLength).setFloat32(
+      offset,
+      value,
+      true,
+    );
     return offset + 4;
   }
   writeInt8(value, offset = 0) {
-    new DataView(this.buffer, this.byteOffset, this.byteLength).setInt8(offset, value);
+    new DataView(this.buffer, this.byteOffset, this.byteLength).setInt8(
+      offset,
+      value,
+    );
     return offset + 1;
   }
   writeInt16BE(value, offset = 0) {
-    new DataView(this.buffer, this.byteOffset, this.byteLength).setInt16(offset, value);
+    new DataView(this.buffer, this.byteOffset, this.byteLength).setInt16(
+      offset,
+      value,
+    );
     return offset + 2;
   }
   writeInt16LE(value, offset = 0) {
-    new DataView(this.buffer, this.byteOffset, this.byteLength).setInt16(offset, value, true);
+    new DataView(this.buffer, this.byteOffset, this.byteLength).setInt16(
+      offset,
+      value,
+      true,
+    );
     return offset + 2;
   }
   writeInt32BE(value, offset = 0) {
-    new DataView(this.buffer, this.byteOffset, this.byteLength).setUint32(offset, value);
+    new DataView(this.buffer, this.byteOffset, this.byteLength).setUint32(
+      offset,
+      value,
+    );
     return offset + 4;
   }
   writeInt32LE(value, offset = 0) {
-    new DataView(this.buffer, this.byteOffset, this.byteLength).setInt32(offset, value, true);
+    new DataView(this.buffer, this.byteOffset, this.byteLength).setInt32(
+      offset,
+      value,
+      true,
+    );
     return offset + 4;
   }
   writeUInt8(value, offset = 0) {
-    new DataView(this.buffer, this.byteOffset, this.byteLength).setUint8(offset, value);
+    new DataView(this.buffer, this.byteOffset, this.byteLength).setUint8(
+      offset,
+      value,
+    );
     return offset + 1;
   }
   writeUInt16BE(value, offset = 0) {
-    new DataView(this.buffer, this.byteOffset, this.byteLength).setUint16(offset, value);
+    new DataView(this.buffer, this.byteOffset, this.byteLength).setUint16(
+      offset,
+      value,
+    );
     return offset + 2;
   }
   writeUInt16LE(value, offset = 0) {
-    new DataView(this.buffer, this.byteOffset, this.byteLength).setUint16(offset, value, true);
+    new DataView(this.buffer, this.byteOffset, this.byteLength).setUint16(
+      offset,
+      value,
+      true,
+    );
     return offset + 2;
   }
   writeUInt32BE(value, offset = 0) {
-    new DataView(this.buffer, this.byteOffset, this.byteLength).setUint32(offset, value);
+    new DataView(this.buffer, this.byteOffset, this.byteLength).setUint32(
+      offset,
+      value,
+    );
     return offset + 4;
   }
   writeUInt32LE(value, offset = 0) {
-    new DataView(this.buffer, this.byteOffset, this.byteLength).setUint32(offset, value, true);
+    new DataView(this.buffer, this.byteOffset, this.byteLength).setUint32(
+      offset,
+      value,
+      true,
+    );
     return offset + 4;
   }
 };
@@ -1946,17 +2193,14 @@ var Stream = class extends events_default {
     }
     let didOnEnd = false;
     function onend() {
-      if (didOnEnd)
-        return;
+      if (didOnEnd) return;
       didOnEnd = true;
       dest.end();
     }
     function onclose() {
-      if (didOnEnd)
-        return;
+      if (didOnEnd) return;
       didOnEnd = true;
-      if (typeof dest.destroy === "function")
-        dest.destroy();
+      if (typeof dest.destroy === "function") dest.destroy();
     }
     function onerror(er) {
       cleanup();
@@ -2146,58 +2390,46 @@ var BufferList = class {
 
 // string_decoder.ts
 var NotImplemented;
-(function(NotImplemented2) {
-  NotImplemented2[NotImplemented2["ascii"] = 0] = "ascii";
-  NotImplemented2[NotImplemented2["latin1"] = 1] = "latin1";
-  NotImplemented2[NotImplemented2["utf16le"] = 2] = "utf16le";
+(function (NotImplemented2) {
+  NotImplemented2[(NotImplemented2["ascii"] = 0)] = "ascii";
+  NotImplemented2[(NotImplemented2["latin1"] = 1)] = "latin1";
+  NotImplemented2[(NotImplemented2["utf16le"] = 2)] = "utf16le";
 })(NotImplemented || (NotImplemented = {}));
 function normalizeEncoding2(enc) {
   const encoding = normalizeEncoding(enc ?? null);
-  if (encoding && encoding in NotImplemented)
-    notImplemented(encoding);
+  if (encoding && encoding in NotImplemented) notImplemented(encoding);
   if (!encoding && typeof enc === "string" && enc.toLowerCase() !== "raw") {
     throw new Error(`Unknown encoding: ${enc}`);
   }
   return String(encoding);
 }
 function utf8CheckByte(byte) {
-  if (byte <= 127)
-    return 0;
-  else if (byte >> 5 === 6)
-    return 2;
-  else if (byte >> 4 === 14)
-    return 3;
-  else if (byte >> 3 === 30)
-    return 4;
+  if (byte <= 127) return 0;
+  else if (byte >> 5 === 6) return 2;
+  else if (byte >> 4 === 14) return 3;
+  else if (byte >> 3 === 30) return 4;
   return byte >> 6 === 2 ? -1 : -2;
 }
 function utf8CheckIncomplete(self, buf, i) {
   let j = buf.length - 1;
-  if (j < i)
-    return 0;
+  if (j < i) return 0;
   let nb = utf8CheckByte(buf[j]);
   if (nb >= 0) {
-    if (nb > 0)
-      self.lastNeed = nb - 1;
+    if (nb > 0) self.lastNeed = nb - 1;
     return nb;
   }
-  if (--j < i || nb === -2)
-    return 0;
+  if (--j < i || nb === -2) return 0;
   nb = utf8CheckByte(buf[j]);
   if (nb >= 0) {
-    if (nb > 0)
-      self.lastNeed = nb - 2;
+    if (nb > 0) self.lastNeed = nb - 2;
     return nb;
   }
-  if (--j < i || nb === -2)
-    return 0;
+  if (--j < i || nb === -2) return 0;
   nb = utf8CheckByte(buf[j]);
   if (nb >= 0) {
     if (nb > 0) {
-      if (nb === 2)
-        nb = 0;
-      else
-        self.lastNeed = nb - 3;
+      if (nb === 2) nb = 0;
+      else self.lastNeed = nb - 3;
     }
     return nb;
   }
@@ -2224,8 +2456,7 @@ function utf8CheckExtraBytes(self, buf) {
 function utf8FillLastComplete(buf) {
   const p = this.lastTotal - this.lastNeed;
   const r = utf8CheckExtraBytes(this, buf);
-  if (r !== void 0)
-    return r;
+  if (r !== void 0) return r;
   if (this.lastNeed <= buf.length) {
     buf.copy(this.lastChar, p, 0, this.lastNeed);
     return this.lastChar.toString(this.encoding, 0, this.lastTotal);
@@ -2243,8 +2474,7 @@ function utf8FillLastIncomplete(buf) {
 }
 function utf8Text(buf, i) {
   const total = utf8CheckIncomplete(this, buf, i);
-  if (!this.lastNeed)
-    return buf.toString("utf8", i);
+  if (!this.lastNeed) return buf.toString("utf8", i);
   this.lastTotal = total;
   const end = buf.length - (total - this.lastNeed);
   buf.copy(this.lastChar, 0, end);
@@ -2252,35 +2482,30 @@ function utf8Text(buf, i) {
 }
 function utf8End(buf) {
   const r = buf && buf.length ? this.write(buf) : "";
-  if (this.lastNeed)
-    return r + "\uFFFD";
+  if (this.lastNeed) return r + "\uFFFD";
   return r;
 }
 function utf8Write(buf) {
   if (typeof buf === "string") {
     return buf;
   }
-  if (buf.length === 0)
-    return "";
+  if (buf.length === 0) return "";
   let r;
   let i;
   if (this.lastNeed) {
     r = this.fillLast(buf);
-    if (r === void 0)
-      return "";
+    if (r === void 0) return "";
     i = this.lastNeed;
     this.lastNeed = 0;
   } else {
     i = 0;
   }
-  if (i < buf.length)
-    return r ? r + this.text(buf, i) : this.text(buf, i);
+  if (i < buf.length) return r ? r + this.text(buf, i) : this.text(buf, i);
   return r || "";
 }
 function base64Text(buf, i) {
   const n = (buf.length - i) % 3;
-  if (n === 0)
-    return buf.toString("base64", i);
+  if (n === 0) return buf.toString("base64", i);
   this.lastNeed = 3 - n;
   this.lastTotal = 3;
   if (n === 1) {
@@ -2368,28 +2593,25 @@ var StringDecoder = class {
 
 // _stream/end_of_stream.ts
 function isReadable(stream) {
-  return typeof stream.readable === "boolean" || typeof stream.readableEnded === "boolean" || !!stream._readableState;
+  return typeof stream.readable === "boolean" ||
+    typeof stream.readableEnded === "boolean" || !!stream._readableState;
 }
 function isWritable(stream) {
-  return typeof stream.writable === "boolean" || typeof stream.writableEnded === "boolean" || !!stream._writableState;
+  return typeof stream.writable === "boolean" ||
+    typeof stream.writableEnded === "boolean" || !!stream._writableState;
 }
 function isWritableFinished(stream) {
-  if (stream.writableFinished)
-    return true;
+  if (stream.writableFinished) return true;
   const wState = stream._writableState;
-  if (!wState || wState.errored)
-    return false;
-  return wState.finished || wState.ended && wState.length === 0;
+  if (!wState || wState.errored) return false;
+  return wState.finished || (wState.ended && wState.length === 0);
 }
-function nop() {
-}
+function nop() {}
 function isReadableEnded(stream) {
-  if (stream.readableEnded)
-    return true;
+  if (stream.readableEnded) return true;
   const rState = stream._readableState;
-  if (!rState || rState.errored)
-    return false;
-  return rState.endEmitted || rState.ended && rState.length === 0;
+  if (!rState || rState.errored) return false;
+  return rState.endEmitted || (rState.ended && rState.length === 0);
 }
 function eos(stream, x, y) {
   let opts;
@@ -2421,7 +2643,11 @@ function eos(stream, x, y) {
       onfinish();
     }
   };
-  let willEmitClose = validState?.autoDestroy && validState?.emitClose && validState?.closed === false && isReadable(stream) === readable && isWritable(stream) === writable;
+  let willEmitClose = validState?.autoDestroy &&
+    validState?.emitClose &&
+    validState?.closed === false &&
+    isReadable(stream) === readable &&
+    isWritable(stream) === writable;
   let writableFinished = stream.writableFinished || wState?.finished;
   const onfinish = () => {
     writableFinished = true;
@@ -2470,14 +2696,17 @@ function eos(stream, x, y) {
   }
   stream.on("end", onend);
   stream.on("finish", onfinish);
-  if (opts.error !== false)
-    stream.on("error", onerror);
+  if (opts.error !== false) stream.on("error", onerror);
   stream.on("close", onclose);
-  const closed = wState?.closed || rState?.closed || wState?.errorEmitted || rState?.errorEmitted || (!writable || wState?.finished) && (!readable || rState?.endEmitted);
+  const closed = wState?.closed ||
+    rState?.closed ||
+    wState?.errorEmitted ||
+    rState?.errorEmitted ||
+    ((!writable || wState?.finished) && (!readable || rState?.endEmitted));
   if (closed) {
     queueMicrotask(callback);
   }
-  return function() {
+  return function () {
     callback = nop;
     stream.removeListener("aborted", onclose);
     stream.removeListener("complete", onfinish);
@@ -2515,7 +2744,7 @@ function initIteratorSymbols(o, symbols) {
     properties[sym] = {
       configurable: false,
       enumerable: false,
-      writable: true
+      writable: true,
     };
   }
   Object.defineProperties(o, properties);
@@ -2562,8 +2791,9 @@ function finish(self, err) {
     destroyer(stream, err);
   });
 }
-var AsyncIteratorPrototype = Object.getPrototypeOf(Object.getPrototypeOf(async function* () {
-}).prototype);
+var AsyncIteratorPrototype = Object.getPrototypeOf(
+  Object.getPrototypeOf(async function* () {}).prototype,
+);
 var _a, _b, _c, _d, _e;
 var ReadableStreamAsyncIterator = class {
   constructor(stream) {
@@ -2592,7 +2822,7 @@ var ReadableStreamAsyncIterator = class {
       kLastPromise,
       kLastReject,
       kLastResolve,
-      kStream
+      kStream,
     ]);
   }
   get stream() {
@@ -2644,7 +2874,14 @@ var ReadableStreamAsyncIterator = class {
     return finish(this, err);
   }
 };
-kEnded, _a = kError, _b = kHandlePromise, kLastPromise, _c = kLastReject, _d = kLastResolve, kStream, _e = Symbol.asyncIterator;
+kEnded,
+  (_a = kError),
+  (_b = kHandlePromise),
+  kLastPromise,
+  (_c = kLastReject),
+  (_d = kLastResolve),
+  kStream,
+  (_e = Symbol.asyncIterator);
 var createReadableStreamAsyncIterator = (stream) => {
   if (typeof stream.read !== "function") {
     const src = stream;
@@ -2689,7 +2926,7 @@ function from(iterable, opts) {
       read() {
         this.push(iterable);
         this.push(null);
-      }
+      },
     });
   }
   if (Symbol.asyncIterator in iterable) {
@@ -2702,20 +2939,23 @@ function from(iterable, opts) {
   const readable = new readable_default({
     objectMode: true,
     highWaterMark: 1,
-    ...opts
+    ...opts,
   });
   let reading = false;
   let needToClose = false;
-  readable._read = function() {
+  readable._read = function () {
     if (!reading) {
       reading = true;
       next();
     }
   };
-  readable._destroy = function(error, cb) {
+  readable._destroy = function (error, cb) {
     if (needToClose) {
       needToClose = false;
-      close().then(() => queueMicrotask(() => cb(error)), (e) => queueMicrotask(() => cb(error || e)));
+      close().then(
+        () => queueMicrotask(() => cb(error)),
+        (e) => queueMicrotask(() => cb(error || e)),
+      );
     } else {
       cb(error);
     }
@@ -2845,7 +3085,8 @@ function emitReadable_(stream) {
     stream.emit("readable");
     state.emittedReadable = false;
   }
-  state.needReadable = !state.flowing && !state.ended && state.length <= state.highWaterMark;
+  state.needReadable = !state.flowing && !state.ended &&
+    state.length <= state.highWaterMark;
   flow(stream);
 }
 function endReadable(stream) {
@@ -2856,7 +3097,10 @@ function endReadable(stream) {
   }
 }
 function endReadableNT(state, stream) {
-  if (!state.errorEmitted && !state.closeEmitted && !state.endEmitted && state.length === 0) {
+  if (
+    !state.errorEmitted && !state.closeEmitted && !state.endEmitted &&
+    state.length === 0
+  ) {
     state.endEmitted = true;
     stream.emit("end");
     if (state.autoDestroy) {
@@ -2891,8 +3135,7 @@ function errorOrDestroy(stream, err, sync = false) {
 }
 function flow(stream) {
   const state = stream._readableState;
-  while (state.flowing && stream.read() !== null)
-    ;
+  while (state.flowing && stream.read() !== null);
 }
 function fromList(n, state) {
   if (state.length === 0) {
@@ -2916,7 +3159,7 @@ function fromList(n, state) {
   return ret;
 }
 function howMuchToRead(n, state) {
-  if (n <= 0 || state.length === 0 && state.ended) {
+  if (n <= 0 || (state.length === 0 && state.ended)) {
     return 0;
   }
   if (state.objectMode) {
@@ -2940,7 +3183,12 @@ function maybeReadMore(stream, state) {
   }
 }
 function maybeReadMore_(stream, state) {
-  while (!state.reading && !state.ended && (state.length < state.highWaterMark || state.flowing && state.length === 0)) {
+  while (
+    !state.reading &&
+    !state.ended &&
+    (state.length < state.highWaterMark ||
+      (state.flowing && state.length === 0))
+  ) {
     const len = state.length;
     stream.read(0);
     if (len === state.length) {
@@ -2953,8 +3201,7 @@ function nReadingNextTick(self) {
   self.read(0);
 }
 function onEofChunk(stream, state) {
-  if (state.ended)
-    return;
+  if (state.ended) return;
   if (state.decoder) {
     const chunk = state.decoder.end();
     if (chunk && chunk.length) {
@@ -2979,7 +3226,10 @@ function pipeOnDrain(src, dest) {
     } else if (state.multiAwaitDrain) {
       state.awaitDrainWriters.delete(dest);
     }
-    if ((!state.awaitDrainWriters || state.awaitDrainWriters.size === 0) && src.listenerCount("data")) {
+    if (
+      (!state.awaitDrainWriters || state.awaitDrainWriters.size === 0) &&
+      src.listenerCount("data")
+    ) {
       state.flowing = true;
       flow(src);
     }
@@ -3048,7 +3298,8 @@ function readableAddChunk(stream, chunk, encoding = void 0, addToFront) {
     state.reading = false;
     maybeReadMore(stream, state);
   }
-  return !state.ended && (state.length < state.highWaterMark || state.length === 0);
+  return !state.ended &&
+    (state.length < state.highWaterMark || state.length === 0);
 }
 function resume(stream, state) {
   if (!state.resumeScheduled) {
@@ -3116,7 +3367,8 @@ function _destroy2(self, err, cb) {
   });
 }
 function afterWrite(stream, state, count, cb) {
-  const needDrain = !state.ending && !stream.destroyed && state.length === 0 && state.needDrain;
+  const needDrain = !state.ending && !stream.destroyed && state.length === 0 &&
+    state.needDrain;
   if (needDrain) {
     state.needDrain = false;
     stream.emit("drain");
@@ -3130,17 +3382,15 @@ function afterWrite(stream, state, count, cb) {
   }
   finishMaybe(stream, state);
 }
-function afterWriteTick({
-  cb,
-  count,
-  state,
-  stream
-}) {
+function afterWriteTick({ cb, count, state, stream }) {
   state.afterWriteTickInfo = null;
   return afterWrite(stream, state, count, cb);
 }
 function clearBuffer(stream, state) {
-  if (state.corked || state.bufferProcessing || state.destroyed || !state.constructed) {
+  if (
+    state.corked || state.bufferProcessing || state.destroyed ||
+    !state.constructed
+  ) {
     return;
   }
   const { buffered, bufferedIndex, objectMode } = state;
@@ -3287,10 +3537,17 @@ function finishMaybe(stream, state, sync) {
   }
 }
 function needFinish(state) {
-  return state.ending && state.constructed && state.length === 0 && !state.errored && state.buffered.length === 0 && !state.finished && !state.writing;
+  return (
+    state.ending &&
+    state.constructed &&
+    state.length === 0 &&
+    !state.errored &&
+    state.buffered.length === 0 &&
+    !state.finished &&
+    !state.writing
+  );
 }
-function nop2() {
-}
+function nop2() {}
 function resetBuffer(state) {
   state.buffered = [];
   state.bufferedIndex = 0;
@@ -3330,14 +3587,16 @@ function onwrite(stream, er) {
       clearBuffer(stream, state);
     }
     if (sync) {
-      if (state.afterWriteTickInfo !== null && state.afterWriteTickInfo.cb === cb) {
+      if (
+        state.afterWriteTickInfo !== null && state.afterWriteTickInfo.cb === cb
+      ) {
         state.afterWriteTickInfo.count++;
       } else {
         state.afterWriteTickInfo = {
           count: 1,
           cb,
           stream,
-          state
+          state,
         };
         queueMicrotask(() => afterWriteTick(state.afterWriteTickInfo));
       }
@@ -3428,7 +3687,8 @@ var ReadableState = class {
     this.resumeScheduled = false;
     this.sync = true;
     this.objectMode = !!options?.objectMode;
-    this.highWaterMark = options?.highWaterMark ?? (this.objectMode ? 16 : 16 * 1024);
+    this.highWaterMark = options?.highWaterMark ??
+      (this.objectMode ? 16 : 16 * 1024);
     if (Number.isInteger(this.highWaterMark) && this.highWaterMark >= 0) {
       this.highWaterMark = Math.floor(this.highWaterMark);
     } else {
@@ -3474,7 +3734,13 @@ var Readable = class extends stream_default {
     if (n !== 0) {
       state.emittedReadable = false;
     }
-    if (n === 0 && state.needReadable && ((state.highWaterMark !== 0 ? state.length >= state.highWaterMark : state.length > 0) || state.ended)) {
+    if (
+      n === 0 &&
+      state.needReadable &&
+      ((state.highWaterMark !== 0
+        ? state.length >= state.highWaterMark
+        : state.length > 0) || state.ended)
+    ) {
       if (state.length === 0 && state.ended) {
         endReadable(this);
       } else {
@@ -3493,7 +3759,10 @@ var Readable = class extends stream_default {
     if (state.length === 0 || state.length - n < state.highWaterMark) {
       doRead = true;
     }
-    if (state.ended || state.reading || state.destroyed || state.errored || !state.constructed) {
+    if (
+      state.ended || state.reading || state.destroyed || state.errored ||
+      !state.constructed
+    ) {
       doRead = false;
     } else if (doRead) {
       state.reading = true;
@@ -3546,7 +3815,9 @@ var Readable = class extends stream_default {
     if (state.pipes.length === 1) {
       if (!state.multiAwaitDrain) {
         state.multiAwaitDrain = true;
-        state.awaitDrainWriters = new Set(state.awaitDrainWriters ? [state.awaitDrainWriters] : []);
+        state.awaitDrainWriters = new Set(
+          state.awaitDrainWriters ? [state.awaitDrainWriters] : [],
+        );
       }
     }
     state.pipes.push(dest);
@@ -3583,7 +3854,10 @@ var Readable = class extends stream_default {
       src.removeListener("end", unpipe);
       src.removeListener("data", ondata);
       cleanedUp = true;
-      if (ondrain && state.awaitDrainWriters && (!dest._writableState || dest._writableState.needDrain)) {
+      if (
+        ondrain && state.awaitDrainWriters &&
+        (!dest._writableState || dest._writableState.needDrain)
+      ) {
         ondrain();
       }
     }
@@ -3643,7 +3917,8 @@ var Readable = class extends stream_default {
     return dest;
   }
   isPaused() {
-    return this._readableState[kPaused] === true || this._readableState.flowing === false;
+    return this._readableState[kPaused] === true ||
+      this._readableState.flowing === false;
   }
   setEncoding(enc) {
     const decoder = new StringDecoder(enc);
@@ -3817,11 +4092,11 @@ var Readable = class extends stream_default {
     });
     for (const i in stream) {
       if (this[i] === void 0 && typeof stream[i] === "function") {
-        this[i] = function methodWrap(method) {
+        this[i] = (function methodWrap(method) {
           return function methodWrapReturnFunction() {
             return stream[method].apply(stream);
           };
-        }(i);
+        })(i);
       }
     }
     stream.on("error", (err) => {
@@ -3851,7 +4126,12 @@ var Readable = class extends stream_default {
     return async_iterator_default(this);
   }
   get readable() {
-    return this._readableState?.readable && !this._readableState?.destroyed && !this._readableState?.errorEmitted && !this._readableState?.endEmitted;
+    return (
+      this._readableState?.readable &&
+      !this._readableState?.destroyed &&
+      !this._readableState?.errorEmitted &&
+      !this._readableState?.endEmitted
+    );
   }
   set readable(val) {
     if (this._readableState) {
@@ -3908,7 +4188,7 @@ Object.defineProperties(Readable, {
   readableFlowing: { enumerable: false },
   readableHighWaterMark: { enumerable: false },
   readableLength: { enumerable: false },
-  readableObjectMode: { enumerable: false }
+  readableObjectMode: { enumerable: false },
 });
 var readable_default = Readable;
 
@@ -3943,7 +4223,8 @@ var WritableState = class {
     this.writelen = 0;
     this.writing = false;
     this.objectMode = !!options?.objectMode;
-    this.highWaterMark = options?.highWaterMark ?? (this.objectMode ? 16 : 16 * 1024);
+    this.highWaterMark = options?.highWaterMark ??
+      (this.objectMode ? 16 : 16 * 1024);
     if (Number.isInteger(this.highWaterMark) && this.highWaterMark >= 0) {
       this.highWaterMark = Math.floor(this.highWaterMark);
     } else {
@@ -4143,7 +4424,11 @@ var Writable = class extends stream_default {
         chunk = stream_default._uint8ArrayToBuffer(chunk);
         encoding = "buffer";
       } else {
-        throw new ERR_INVALID_ARG_TYPE("chunk", ["string", "Buffer", "Uint8Array"], chunk);
+        throw new ERR_INVALID_ARG_TYPE("chunk", [
+          "string",
+          "Buffer",
+          "Uint8Array",
+        ], chunk);
       }
     }
     let err;
@@ -4195,14 +4480,18 @@ function endDuplex(stream) {
   }
 }
 function endReadableNT2(state, stream) {
-  if (!state.errorEmitted && !state.closeEmitted && !state.endEmitted && state.length === 0) {
+  if (
+    !state.errorEmitted && !state.closeEmitted && !state.endEmitted &&
+    state.length === 0
+  ) {
     state.endEmitted = true;
     stream.emit("end");
     if (stream.writable && stream.allowHalfOpen === false) {
       queueMicrotask(() => endWritableNT(state, stream));
     } else if (state.autoDestroy) {
       const wState = stream._writableState;
-      const autoDestroy = !wState || wState.autoDestroy && (wState.finished || wState.writable === false);
+      const autoDestroy = !wState ||
+        (wState.autoDestroy && (wState.finished || wState.writable === false));
       if (autoDestroy) {
         stream.destroy();
       }
@@ -4210,7 +4499,8 @@ function endReadableNT2(state, stream) {
   }
 }
 function endWritableNT(_state, stream) {
-  const writable = stream.writable && !stream.writableEnded && !stream.destroyed;
+  const writable = stream.writable && !stream.writableEnded &&
+    !stream.destroyed;
   if (writable) {
     stream.end();
   }
@@ -4307,14 +4597,16 @@ function onwrite2(stream, er) {
       clearBuffer(stream, state);
     }
     if (sync) {
-      if (state.afterWriteTickInfo !== null && state.afterWriteTickInfo.cb === cb) {
+      if (
+        state.afterWriteTickInfo !== null && state.afterWriteTickInfo.cb === cb
+      ) {
         state.afterWriteTickInfo.count++;
       } else {
         state.afterWriteTickInfo = {
           count: 1,
           cb,
           stream,
-          state
+          state,
         };
         queueMicrotask(() => afterWriteTick(state.afterWriteTickInfo));
       }
@@ -4381,7 +4673,8 @@ function readableAddChunk2(stream, chunk, encoding = void 0, addToFront) {
     state.reading = false;
     maybeReadMore(stream, state);
   }
-  return !state.ended && (state.length < state.highWaterMark || state.length === 0);
+  return !state.ended &&
+    (state.length < state.highWaterMark || state.length === 0);
 }
 
 // _stream/duplex.ts
@@ -4437,7 +4730,7 @@ var Duplex = class extends stream_default {
       encoding: options?.encoding,
       highWaterMark: options?.highWaterMark ?? options?.readableHighWaterMark,
       objectMode: options?.objectMode ?? options?.readableObjectMode,
-      read: options?.read
+      read: options?.read,
     };
     const writableOptions = {
       autoDestroy: options?.autoDestroy,
@@ -4449,7 +4742,7 @@ var Duplex = class extends stream_default {
       highWaterMark: options?.highWaterMark ?? options?.writableHighWaterMark,
       objectMode: options?.objectMode ?? options?.writableObjectMode,
       write: options?.write,
-      writev: options?.writev
+      writev: options?.writev,
     };
     this._readableState = new ReadableState(readableOptions);
     this._writableState = new WritableState(writableOptions, this);
@@ -4563,7 +4856,13 @@ var Duplex = class extends stream_default {
     if (n !== 0) {
       state.emittedReadable = false;
     }
-    if (n === 0 && state.needReadable && ((state.highWaterMark !== 0 ? state.length >= state.highWaterMark : state.length > 0) || state.ended)) {
+    if (
+      n === 0 &&
+      state.needReadable &&
+      ((state.highWaterMark !== 0
+        ? state.length >= state.highWaterMark
+        : state.length > 0) || state.ended)
+    ) {
       if (state.length === 0 && state.ended) {
         endDuplex(this);
       } else {
@@ -4582,7 +4881,10 @@ var Duplex = class extends stream_default {
     if (state.length === 0 || state.length - n < state.highWaterMark) {
       doRead = true;
     }
-    if (state.ended || state.reading || state.destroyed || state.errored || !state.constructed) {
+    if (
+      state.ended || state.reading || state.destroyed || state.errored ||
+      !state.constructed
+    ) {
       doRead = false;
     } else if (doRead) {
       state.reading = true;
@@ -4644,7 +4946,12 @@ var Duplex = class extends stream_default {
     return readableAddChunk2(this, chunk, encoding, true);
   }
   get readable() {
-    return this._readableState?.readable && !this._readableState?.destroyed && !this._readableState?.errorEmitted && !this._readableState?.endEmitted;
+    return (
+      this._readableState?.readable &&
+      !this._readableState?.destroyed &&
+      !this._readableState?.errorEmitted &&
+      !this._readableState?.endEmitted
+    );
   }
   set readable(val) {
     if (this._readableState) {
@@ -4802,7 +5109,10 @@ var Transform = class extends duplex_default {
         if (val != null) {
           this.push(val);
         }
-        if (wState.ended || length === rState.length || rState.length < rState.highWaterMark || rState.length === 0) {
+        if (
+          wState.ended || length === rState.length ||
+          rState.length < rState.highWaterMark || rState.length === 0
+        ) {
           callback();
         } else {
           this[kCallback] = callback;
@@ -4819,7 +5129,7 @@ var Transform = class extends duplex_default {
         this._flush = options.flush;
       }
     }
-    this.on("prefinish", function() {
+    this.on("prefinish", function () {
       if (typeof this._flush === "function" && !this.destroyed) {
         this._flush((er, data) => {
           if (er) {
@@ -4862,15 +5172,21 @@ function destroyer2(stream, reading, writing, callback) {
   eos(stream, { readable: reading, writable: writing }, (err) => {
     finished2 = !err;
     const rState = stream?._readableState;
-    if (err && err.code === "ERR_STREAM_PREMATURE_CLOSE" && reading && (rState?.ended && !rState?.errored && !rState?.errorEmitted)) {
+    if (
+      err &&
+      err.code === "ERR_STREAM_PREMATURE_CLOSE" &&
+      reading &&
+      rState?.ended &&
+      !rState?.errored &&
+      !rState?.errorEmitted
+    ) {
       stream.once("end", callback).once("error", callback);
     } else {
       callback(err);
     }
   });
   return (err) => {
-    if (finished2)
-      return;
+    if (finished2) return;
     finished2 = true;
     destroyer(stream, err);
     callback(err || new ERR_STREAM_DESTROYED("pipe"));
@@ -4892,13 +5208,11 @@ function isStream(obj) {
   return isReadable2(obj) || isWritable2(obj);
 }
 function isIterable(obj, isAsync) {
-  if (!obj)
-    return false;
-  if (isAsync === true)
-    return typeof obj[Symbol.asyncIterator] === "function";
-  if (isAsync === false)
-    return typeof obj[Symbol.iterator] === "function";
-  return typeof obj[Symbol.asyncIterator] === "function" || typeof obj[Symbol.iterator] === "function";
+  if (!obj) return false;
+  if (isAsync === true) return typeof obj[Symbol.asyncIterator] === "function";
+  if (isAsync === false) return typeof obj[Symbol.iterator] === "function";
+  return typeof obj[Symbol.asyncIterator] === "function" ||
+    typeof obj[Symbol.iterator] === "function";
 }
 function makeAsyncIterable(val) {
   if (isIterable(val)) {
@@ -4906,7 +5220,11 @@ function makeAsyncIterable(val) {
   } else if (isReadable2(val)) {
     return fromReadable(val);
   }
-  throw new ERR_INVALID_ARG_TYPE("val", ["Readable", "Iterable", "AsyncIterable"], val);
+  throw new ERR_INVALID_ARG_TYPE("val", [
+    "Readable",
+    "Iterable",
+    "AsyncIterable",
+  ], val);
 }
 async function* fromReadable(val) {
   yield* async_iterator_default(val);
@@ -4916,8 +5234,7 @@ async function pump(iterable, writable, finish4) {
   try {
     for await (const chunk of iterable) {
       if (!writable.write(chunk)) {
-        if (writable.destroyed)
-          return;
+        if (writable.destroyed) return;
         await once2(writable, "drain");
       }
     }
@@ -4970,36 +5287,56 @@ function pipeline(...args) {
       if (typeof stream === "function") {
         ret = stream();
         if (!isIterable(ret)) {
-          throw new ERR_INVALID_RETURN_VALUE("Iterable, AsyncIterable or Stream", "source", ret);
+          throw new ERR_INVALID_RETURN_VALUE(
+            "Iterable, AsyncIterable or Stream",
+            "source",
+            ret,
+          );
         }
       } else if (isIterable(stream) || isReadable2(stream)) {
         ret = stream;
       } else {
-        throw new ERR_INVALID_ARG_TYPE("source", ["Stream", "Iterable", "AsyncIterable", "Function"], stream);
+        throw new ERR_INVALID_ARG_TYPE("source", [
+          "Stream",
+          "Iterable",
+          "AsyncIterable",
+          "Function",
+        ], stream);
       }
     } else if (typeof stream === "function") {
       ret = makeAsyncIterable(ret);
       ret = stream(ret);
       if (reading) {
         if (!isIterable(ret, true)) {
-          throw new ERR_INVALID_RETURN_VALUE("AsyncIterable", `transform[${i - 1}]`, ret);
+          throw new ERR_INVALID_RETURN_VALUE(
+            "AsyncIterable",
+            `transform[${i - 1}]`,
+            ret,
+          );
         }
       } else {
         const pt = new PassThrough({
-          objectMode: true
+          objectMode: true,
         });
         if (ret instanceof Promise) {
-          ret.then((val) => {
-            value = val;
-            pt.end(val);
-          }, (err) => {
-            pt.destroy(err);
-          });
+          ret.then(
+            (val) => {
+              value = val;
+              pt.end(val);
+            },
+            (err) => {
+              pt.destroy(err);
+            },
+          );
         } else if (isIterable(ret, true)) {
           finishCount++;
           pump(ret, pt, finish4);
         } else {
-          throw new ERR_INVALID_RETURN_VALUE("AsyncIterable or Promise", "destination", ret);
+          throw new ERR_INVALID_RETURN_VALUE(
+            "AsyncIterable or Promise",
+            "destination",
+            ret,
+          );
         }
         ret = pt;
         finishCount++;
@@ -5026,7 +5363,7 @@ function pipeline(...args) {
 var promises_exports = {};
 __export(promises_exports, {
   finished: () => finished,
-  pipeline: () => pipeline2
+  pipeline: () => pipeline2,
 });
 function pipeline2(...streams) {
   return new Promise((resolve, reject) => {
@@ -5064,16 +5401,16 @@ stream_default.Stream = stream_default;
 var stream_default2 = stream_default;
 var { _isUint8Array, _uint8ArrayToBuffer } = stream_default;
 export {
-  duplex_default as Duplex,
-  PassThrough,
-  readable_default as Readable,
-  stream_default as Stream,
-  Transform,
-  writable_default as Writable,
   _isUint8Array,
   _uint8ArrayToBuffer,
-  stream_default2 as default,
+  duplex_default as Duplex,
   eos as finished,
+  PassThrough,
   pipeline,
-  promises_exports as promises
+  promises_exports as promises,
+  readable_default as Readable,
+  stream_default as Stream,
+  stream_default2 as default,
+  Transform,
+  writable_default as Writable,
 };
