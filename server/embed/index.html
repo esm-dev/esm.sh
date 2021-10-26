@@ -419,19 +419,20 @@
     const query = new URLSearchParams(location.search)
 
     if (query.has('test')) {
-      const { test } = await import('/embed/test/testing.js')
-      const mainEl = document.querySelector('main')
-      const testEl = document.querySelector('.test')
-      const ulEl = document.createElement('ul')
-      const pEl = document.createElement('p')
-      testEl.style.display = 'block'
-      testEl.appendChild(ulEl)
-      pEl.className = 'link'
-      pEl.innerHTML = '<a href="/">&larr; Back </a>'
-      testEl.appendChild(pEl)
-      mainEl.parentNode.removeChild(mainEl)
-      document.querySelector('h1 > em').appendChild(document.createTextNode(' · Testing'))
-      test(ulEl)
+      import('/embed/test/browser/testing.js').then(({ test }) => {
+				const mainEl = document.querySelector('main')
+				const testEl = document.querySelector('.test')
+				const ulEl = document.createElement('ul')
+				const pEl = document.createElement('p')
+				testEl.style.display = 'block'
+				testEl.appendChild(ulEl)
+				pEl.className = 'link'
+				pEl.innerHTML = '<a href="/">&larr; Back </a>'
+				testEl.appendChild(pEl)
+				mainEl.parentNode.removeChild(mainEl)
+				document.querySelector('h1 > em').appendChild(document.createTextNode(' · Testing'))
+				test(ulEl)
+			})
     } else {
       const mainEl = document.querySelector('main')
       mainEl.innerHTML = marked.parse('# README').replaceAll('https://esm.sh', window.origin) + `<p class="link"><a href="/?test">Testing &rarr; </a></p>`

@@ -50,12 +50,14 @@ func query() rex.Handle {
 			if err != nil {
 				return err
 			}
-			readme, err := embedFS.ReadFile("embed/README.md")
+			readme, err := externalFS.ReadFile("README.md")
 			if err != nil {
 				return err
 			}
-			readmeStr := utils.MustEncodeJSON(string(readme))
-			html := bytes.ReplaceAll(indexHTML, []byte("'# README'"), readmeStr)
+			readme = bytes.ReplaceAll(readme, []byte("./server/embed/"), []byte("/embed/"))
+			readme = bytes.ReplaceAll(readme, []byte("./HOSTING.md"), []byte("https://github.com/alephjs/esm.sh/blob/master/HOSTING.md"))
+			readmeStrLit := utils.MustEncodeJSON(string(readme))
+			html := bytes.ReplaceAll(indexHTML, []byte("'# README'"), readmeStrLit)
 			html = bytes.ReplaceAll(html, []byte("{VERSION}"), []byte(fmt.Sprintf("%d", VERSION)))
 			return rex.Content("index.html", startTime, bytes.NewReader(html))
 
@@ -89,12 +91,15 @@ func query() rex.Handle {
 		}
 
 		// serve embed assets
-		if strings.HasPrefix(pathname, "/embed/assets/") || strings.HasPrefix(pathname, "/embed/test/") {
+		if strings.HasPrefix(pathname, "/embed/") {
 			data, err := embedFS.ReadFile(pathname[1:])
-			if err != nil {
-				return err
+			if err == nil {
+				return rex.Content(pathname, startTime, bytes.NewReader(data))
 			}
-			return rex.Content(pathname, startTime, bytes.NewReader(data))
+			data, err = externalFS.ReadFile(pathname[7:])
+			if err == nil {
+				return rex.Content(pathname, startTime, bytes.NewReader(data))
+			}
 		}
 
 		hasBuildVerPrefix := strings.HasPrefix(pathname, fmt.Sprintf("/v%d/", VERSION))
