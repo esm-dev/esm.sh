@@ -50,7 +50,7 @@ func query() rex.Handle {
 			if err != nil {
 				return err
 			}
-			readme, err := embedFS.ReadFile("README.md")
+			readme, err := embedFS.ReadFile("embed/README.md")
 			if err != nil {
 				return err
 			}

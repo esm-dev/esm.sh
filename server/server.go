@@ -27,14 +27,15 @@ var (
 	db         storage.DB
 	fs         storage.FS
 	buildQueue storage.Queue
-	embedFS    *embed.FS
 	log        *logx.Logger
 	node       *Node
 )
 
+//go:embed embed
+var embedFS embed.FS
+
 // Serve serves ESM server
-func Serve(efs *embed.FS) {
-	embedFS = efs
+func Serve() {
 
 	var (
 		port             int
@@ -269,5 +270,4 @@ func serveBuild() {
 
 func init() {
 	log = &logx.Logger{}
-	embedFS = &embed.FS{}
 }
