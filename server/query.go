@@ -83,7 +83,6 @@ func query() rex.Handle {
 					ctx.Form.Value("name"),
 					ctx.Form.Value("importer"),
 				))
-
 			default:
 				return throwErrorJS(ctx, fmt.Errorf("Unknown error"))
 			}
@@ -450,7 +449,7 @@ func query() rex.Handle {
 					if i == n-1 {
 						return rex.Status(http.StatusRequestTimeout, "timeout, we are transforming the types hardly, please try later!")
 					}
-					time.Sleep(time.Millisecond)
+					time.Sleep(100 * time.Millisecond)
 				}
 			}
 			if !exists {
@@ -505,8 +504,8 @@ func query() rex.Handle {
 				if err != nil {
 					return rex.Status(500, err.Error())
 				}
-				// wait for 30s
-				for i := 0; i < 300; i++ {
+				n := pkgRequstTimeout * 10
+				for i := 0; i < n; i++ {
 					esm, err = findESM(taskID)
 					if err == nil {
 						break
@@ -514,7 +513,7 @@ func query() rex.Handle {
 					if err != storage.ErrNotFound {
 						return rex.Status(500, err.Error())
 					}
-					if i == 99 {
+					if i == n-1 {
 						return rex.Status(http.StatusRequestTimeout, "timeout, we are transforming the types hardly, please try later!")
 					}
 					time.Sleep(100 * time.Millisecond)
