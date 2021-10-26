@@ -32,7 +32,7 @@ func OpenCache(url string) (cache Cache, err error) {
 		err = fmt.Errorf("Unknown driver '%s'", name)
 		return
 	}
-	
+
 	path, options, err := parseConfigUrl(addr)
 	if err != nil {
 		return
@@ -49,7 +49,7 @@ type CacheDriver interface {
 func RegisterCache(name string, driver CacheDriver) error {
 	_, ok := cacheDrivers.Load(name)
 	if ok {
-		return fmt.Errorf("driver '%s' has been registered", name)
+		return fmt.Errorf("cache driver '%s' has been registered", name)
 	}
 
 	cacheDrivers.Store(name, driver)

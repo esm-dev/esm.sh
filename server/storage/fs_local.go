@@ -9,9 +9,9 @@ import (
 	"time"
 )
 
-type localFS struct{}
+type localFSDriver struct{}
 
-func (fs *localFS) Open(root string, options url.Values) (FS, error) {
+func (driver *localFSDriver) Open(root string, options url.Values) (FS, error) {
 	root = filepath.Clean(root)
 	err := ensureDir(root)
 	if err != nil {
@@ -70,14 +70,14 @@ func (fs *localFSLayer) WriteData(name string, data []byte) error {
 	return os.WriteFile(fullPath, data, 0666)
 }
 
-func init() {
-	RegisterFS("local", &localFS{})
-}
-
 func ensureDir(dir string) (err error) {
 	_, err = os.Stat(dir)
 	if err != nil && os.IsNotExist(err) {
 		err = os.MkdirAll(dir, 0755)
 	}
 	return
+}
+
+func init() {
+	RegisterFS("local", &localFSDriver{})
 }

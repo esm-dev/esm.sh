@@ -24,7 +24,7 @@
 */
 
 // shim for using process in browser
-var process = window.process = {};
+var process = {};
 
 // cached from whatever global is present so that test runners that stub it
 // don't break things.  But we need to wrap it in a try catch in case it is

@@ -1,6 +1,7 @@
 package server
 
 import (
+	"bytes"
 	"fmt"
 	"io/ioutil"
 	"os"
@@ -22,9 +23,9 @@ func TestCopyDTS(t *testing.T) {
 	}
 
 	indexDTSRaw := []string{
-		`// test/index.d.ts`,
-		`/// <reference path="global.d.ts" />`,
-		`/// <reference types="node" />`,
+		`// test/index.d.ts `,
+		`/// <reference path="global.d.ts" /> `,
+		`/// <reference types="node" /> `,
 		`  `,
 		`import {`,
 		`  ReactInstance, Component, ComponentState,`,
@@ -33,9 +34,13 @@ func TestCopyDTS(t *testing.T) {
 		`} from 'react';`,
 		``,
 		`export type React = typeof import('react');`,
-		`export { default as Anchor } from './anchor';`,
+		`export { default as Anchor /* anchor */ } from './anchor';`,
 		`export { default as AutoComplete } from './auto-complete';export { default as Alert } from './alert';`,
-		`/* avatar */ export { default as Avatar } from '../avatar';`,
+		`/* export Avatar start */ export { default as Avatar /*`,
+		`	* export Avatar as default`,
+		`	*/ } from '../avatar'; /* export Avatar end */`,
+		`/* export Form */ export { default as Form } from '../form';`,
+		`/* export Uploader start */ export { default as Uploader } from '../uploader'; /* export Uploader end */`,
 		`declare module "test/private" {`,
 		`  export const privateValue: any;`,
 		`}`,
@@ -60,9 +65,13 @@ func TestCopyDTS(t *testing.T) {
 		fmt.Sprintf(`} from 'https://cdn.esm.sh/v%d/@types/react@17.0.0/X-ESM/index.d.ts';`, VERSION),
 		``,
 		fmt.Sprintf(`export type React = typeof import('https://cdn.esm.sh/v%d/@types/react@17.0.0/X-ESM/index.d.ts');`, VERSION),
-		`export { default as Anchor } from './anchor.d.ts';`,
+		`export { default as Anchor /* anchor */ } from './anchor.d.ts';`,
 		`export { default as AutoComplete } from './auto-complete.d.ts';export { default as Alert } from './alert.d.ts';`,
-		`/* avatar */ export { default as Avatar } from '../avatar.d.ts';`,
+		`/* export Avatar start */ export { default as Avatar /*`,
+		`	* export Avatar as default`,
+		`	*/ } from '../avatar.d.ts'; /* export Avatar end */`,
+		`/* export Form */ export { default as Form } from '../form.d.ts';`,
+		`/* export Uploader start */ export { default as Uploader } from '../uploader.d.ts'; /* export Uploader end */`,
 		`declare module "test/private" {`,
 		`  export const privateValue: any;`,
 		`}`,
@@ -91,6 +100,8 @@ func TestCopyDTS(t *testing.T) {
 		"auto-complete.d.ts": `export default interface AutoComplete { }`,
 		"alert.d.ts":         `export default interface Alert { }`,
 		"../avatar.d.ts":     `export default interface Avatar { }`,
+		"../form.d.ts":       `export default interface Form { }`,
+		"../uploader.d.ts":   `export default interface Uploader { }`,
 		"index.d.ts":         strings.Join(indexDTSRaw, "\n"),
 	}
 	for name, content := range dtsFils {
@@ -106,7 +117,7 @@ func TestCopyDTS(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	fs, err = storage.OpenFS(fmt.Sprintf("localLRU:%s?maxCost=10mb", testDir))
+	fs, err = storage.OpenFS(fmt.Sprintf("local:%s", testDir))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -134,8 +145,13 @@ func TestCopyDTS(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	data = bytes.TrimSpace(data)
 
-	if strings.TrimSpace(string(data)) != strings.Join(indexDTSExpect, "\n") {
-		t.Fatalf("unexpected index.d.ts:\n%s", string(data))
+	expectDts := strings.Join(indexDTSExpect, "\n")
+	for i, c := range data {
+		e := expectDts[i]
+		if e != c {
+			t.Fatalf("unexpected index.d.ts at %d: %s<<<>>>%s", i, data[:i], data[i:])
+		}
 	}
 }

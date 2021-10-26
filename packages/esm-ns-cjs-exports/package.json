@@ -1,0 +1,19 @@
+{
+	"name": "esm-ns-cjs-exports",
+	"version": "0.3.1",
+	"description": "esm.sh node service - cjs exports parser.",
+	"main": "index.js",
+	"scripts": {
+		"test": "node test.js",
+		"prepublish": "node test.js"
+	},
+	"files": [
+		"index.js"
+	],
+	"dependencies": {
+		"cjs-esm-exports": "^0.3.2",
+		"enhanced-resolve": "^5.8.3"
+	},
+	"repository": "https://github.com/alephjs/esm.sh",
+	"license": "MIT"
+}

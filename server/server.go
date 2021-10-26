@@ -2,28 +2,34 @@ package server
 
 import (
 	"embed"
+	"encoding/json"
 	"flag"
 	"fmt"
 	"os"
 	"os/signal"
 	"path"
 	"path/filepath"
+	"runtime"
+	"strings"
 	"syscall"
+	"time"
 
 	"esm.sh/server/storage"
 
 	logx "github.com/ije/gox/log"
+	"github.com/ije/gox/utils"
 	"github.com/ije/rex"
 )
 
 var (
-	cdnDomain string
-	cache     storage.Cache
-	db        storage.DB
-	fs        storage.FS
-	embedFS   *embed.FS
-	log       *logx.Logger
-	node      *Node
+	cdnDomain  string
+	cache      storage.Cache
+	db         storage.DB
+	fs         storage.FS
+	buildQueue storage.Queue
+	embedFS    *embed.FS
+	log        *logx.Logger
+	node       *Node
 )
 
 // Serve serves ESM server
@@ -31,42 +37,46 @@ func Serve(efs *embed.FS) {
 	embedFS = efs
 
 	var (
-		port       int
-		httpsPort  int
-		cacheUrl   string
-		dbUrl      string
-		fsUrl      string
-		etcDir     string
-		logLevel   string
-		logDir     string
-		noCompress bool
-		isDev      bool
+		port             int
+		httpsPort        int
+		buildConcurrency int
+		etcDir           string
+		cacheUrl         string
+		dbUrl            string
+		fsUrl            string
+		queueUrl         string
+		nodeServices     string
+		logLevel         string
+		logDir           string
+		noCompress       bool
+		isDev            bool
 	)
 
 	flag.IntVar(&port, "port", 80, "http server port")
 	flag.IntVar(&httpsPort, "https-port", 0, "https(autotls) server port, default is disabled")
-	flag.StringVar(&cacheUrl, "cache", "", "cache connection Url")
-	flag.StringVar(&dbUrl, "db", "", "database connection Url")
-	flag.StringVar(&fsUrl, "fs", "", "file system connection Url")
 	flag.StringVar(&cdnDomain, "cdn-domain", "", "cdn domain")
-	flag.StringVar(&etcDir, "etc-dir", "/usr/local/etc/esmd", "the etc dir to store data")
+	flag.StringVar(&etcDir, "etc-dir", ".esmd", "the etc dir to store common data")
+	flag.StringVar(&cacheUrl, "cache", "", "cache config, default is 'memory:default'")
+	flag.StringVar(&dbUrl, "db", "", "database config, default is 'postdb:[etc-dir]/esm.db'")
+	flag.StringVar(&fsUrl, "fs", "", "filesystem config, default is 'local:[etc-dir]/storage'")
+	flag.StringVar(&queueUrl, "queue", "", "bulid queue config, default is 'chan:memory'")
+	flag.IntVar(&buildConcurrency, "build-concurrency", runtime.NumCPU(), "maximum number of concurrent build task")
+	flag.StringVar(&nodeServices, "node-services", "", "node services")
+	flag.StringVar(&logDir, "log-dir", "", "the log dir to store server logs")
 	flag.StringVar(&logLevel, "log-level", "info", "log level")
-	flag.StringVar(&logDir, "log-dir", "/var/log/esmd", "the log dir to store server logs")
 	flag.BoolVar(&noCompress, "no-compress", false, "disable compression for text content")
 	flag.BoolVar(&isDev, "dev", false, "run server in development mode")
 	flag.Parse()
 
-	if isDev {
-		etcDir, _ = filepath.Abs(".dev")
-		logDir = path.Join(etcDir, "log")
-		logLevel = "debug"
-		cdnDomain = "localhost"
-		if port != 80 {
-			cdnDomain = fmt.Sprintf("localhost:%d", port)
-		}
+	var err error
+	etcDir, err = filepath.Abs(etcDir)
+	if err != nil {
+		fmt.Printf("bad etc dir: %v\n", err)
+		os.Exit(1)
 	}
+
 	if cacheUrl == "" {
-		cacheUrl = "memory:main"
+		cacheUrl = "memory:default"
 	}
 	if dbUrl == "" {
 		dbUrl = fmt.Sprintf("postdb:%s", path.Join(etcDir, "esm.db"))
@@ -74,17 +84,25 @@ func Serve(efs *embed.FS) {
 	if fsUrl == "" {
 		fsUrl = fmt.Sprintf("local:%s", path.Join(etcDir, "storage"))
 	}
-
-	var err error
-	var log *logx.Logger
+	if queueUrl == "" {
+		queueUrl = "chan:memory"
+	}
 	if logDir == "" {
-		log = &logx.Logger{}
-	} else {
-		log, err = logx.New(fmt.Sprintf("file:%s?buffer=32k", path.Join(logDir, "main.log")))
-		if err != nil {
-			fmt.Printf("initiate logger: %v\n", err)
-			os.Exit(1)
+		logDir = path.Join(etcDir, "log")
+	}
+
+	if isDev {
+		logLevel = "debug"
+		cdnDomain = "localhost"
+		if port != 80 {
+			cdnDomain = fmt.Sprintf("localhost:%d", port)
 		}
+	}
+
+	log, err := logx.New(fmt.Sprintf("file:%s?buffer=32k", path.Join(logDir, "main.log")))
+	if err != nil {
+		fmt.Printf("initiate logger: %v\n", err)
+		os.Exit(1)
 	}
 	log.SetLevelByName(logLevel)
 
@@ -96,7 +114,7 @@ func Serve(efs *embed.FS) {
 	if err != nil {
 		log.Fatalf("check nodejs env: %v", err)
 	}
-	log.Debugf("nodejs v%s installed, registry: %s", node.version, node.npmRegistry)
+	log.Debugf("nodejs v%s installed, registry: %s, yarn: %s", node.version, node.npmRegistry, node.yarn)
 
 	storage.SetLogger(log)
 	storage.SetIsDev(isDev)
@@ -116,6 +134,11 @@ func Serve(efs *embed.FS) {
 		log.Fatalf("init storage(fs,%s): %v", fsUrl, err)
 	}
 
+	buildQueue, err = storage.OpenQueue(queueUrl)
+	if err != nil {
+		log.Fatalf("init storage(queue,%s): %v", fsUrl, err)
+	}
+
 	var accessLogger *logx.Logger
 	if logDir == "" {
 		accessLogger = &logx.Logger{}
@@ -129,17 +152,30 @@ func Serve(efs *embed.FS) {
 
 	// start cjs lexer server
 	go func() {
-		for {
-			err := startCJSLexerServer(path.Join(etcDir, "cjx-lexer.pid"), isDev)
-			if err != nil {
-				if err.Error() == "EADDRINUSE" {
-					cjsLexerServerPort++
-				} else {
-					log.Errorf("cjs lexer server: %v", err)
+		wd := path.Join(etcDir, "ns")
+		if err := ensureDir(wd); err != nil {
+			log.Fatal(err)
+		}
+		services := []string{"esm-ns-cjs-exports"}
+		if len(nodeServices) > 0 {
+			for _, v := range strings.Split(nodeServices, ",") {
+				v = strings.TrimSpace(v)
+				if len(v) > 0 {
+					services = append(services, v)
 				}
 			}
 		}
+		for {
+			err := startNodeServices(wd, services)
+			if err != nil {
+				log.Errorf("start node services: %v", err)
+			}
+		}
 	}()
+
+	for i := 0; i < buildConcurrency; i++ {
+		go serveBuild()
+	}
 
 	if !noCompress {
 		rex.Use(rex.AutoCompress())
@@ -168,14 +204,13 @@ func Serve(efs *embed.FS) {
 		},
 	})
 
-	c := make(chan os.Signal, 1)
-	signal.Notify(c, syscall.SIGTERM, syscall.SIGINT, syscall.SIGQUIT, syscall.SIGKILL, syscall.SIGHUP)
-
 	if isDev {
 		log.Debugf("Server ready on http://localhost:%d", port)
-		log.Debugf("Testing page at http://localhost:%d?test", port)
+		log.Debugf("Test page at http://localhost:%d?test", port)
 	}
 
+	c := make(chan os.Signal, 1)
+	signal.Notify(c, syscall.SIGTERM, syscall.SIGINT, syscall.SIGQUIT, syscall.SIGKILL, syscall.SIGHUP)
 	select {
 	case <-c:
 	case err = <-C:
@@ -186,6 +221,50 @@ func Serve(efs *embed.FS) {
 	db.Close()
 	accessLogger.FlushBuffer()
 	log.FlushBuffer()
+}
+
+func pushBuild(task *BuildTask) (err error) {
+	if task == nil {
+		return
+	}
+	exists, err := cache.Has(task.ID())
+	if err != nil {
+		return
+	}
+	if buildQueue != nil && !exists {
+		err = cache.Set(task.ID(), []byte{'1'}, 30*time.Minute)
+		if err != nil {
+			return
+		}
+		err = buildQueue.Push(utils.MustEncodeJSON(task))
+		if err != nil {
+			cache.Delete(task.ID())
+		}
+	}
+	return
+}
+
+func serveBuild() {
+	for {
+		if nsReady {
+			data, err := buildQueue.Pull()
+			if err != nil {
+				log.Error("buildQueue.Pull:", err)
+				continue
+			}
+			var task BuildTask
+			if json.Unmarshal(data, &task) == nil {
+				t := time.Now()
+				_, err := task.Build()
+				if err != nil {
+					log.Error("build:", err)
+				} else {
+					log.Debugf("build %s in %v", task.ID(), time.Now().Sub(t))
+				}
+				cache.Delete(task.ID())
+			}
+		}
+	}
 }
 
 func init() {

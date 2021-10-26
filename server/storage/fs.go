@@ -38,7 +38,7 @@ func OpenFS(fsUrl string) (FS, error) {
 func RegisterFS(name string, driver FSDriver) error {
 	_, ok := fsDrivers.Load(name)
 	if ok {
-		return fmt.Errorf("driver '%s' has been registered", name)
+		return fmt.Errorf("fs driver '%s' has been registered", name)
 	}
 
 	fsDrivers.Store(name, driver)

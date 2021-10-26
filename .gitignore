@@ -1,5 +1,7 @@
 .DS_Store
 Thumbs.db
-embed/china_ip_list.mmdb
+.esmd/
 scripts/esmd
-.dev/
+node_modules/
+target/
+pkg/

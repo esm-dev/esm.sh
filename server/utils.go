@@ -2,6 +2,7 @@ package server
 
 import (
 	"encoding/base64"
+	"io/ioutil"
 	"os"
 	"regexp"
 	"strconv"
@@ -164,4 +165,20 @@ func atobUrl(s string) (string, error) {
 		return "", err
 	}
 	return string(data), nil
+}
+
+func kill(pidFile string) (err error) {
+	data, err := ioutil.ReadFile(pidFile)
+	if err != nil {
+		return
+	}
+	pid, err := strconv.Atoi(string(data))
+	if err != nil {
+		return
+	}
+	process, err := os.FindProcess(pid)
+	if err != nil {
+		return
+	}
+	return process.Kill()
 }

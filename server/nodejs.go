@@ -22,11 +22,10 @@ import (
 )
 
 const (
-	minNodejsVersion = 14
+	nodejsMinVersion = 14
 	nodejsLatestLTS  = "14.17.5"
-	nodeTypesVersion = "16.9.1"
+	nodeTypesVersion = "16.11.6"
 	nodejsDistURL    = "https://nodejs.org/dist/"
-	refreshDuration  = 5 * 60 // 5 minues
 )
 
 var builtInNodeModules = map[string]bool{
@@ -43,6 +42,7 @@ var builtInNodeModules = map[string]bool{
 	"domain":              true,
 	"events":              true,
 	"fs":                  true,
+	"fs/promises":         true,
 	"http":                true,
 	"http2":               true,
 	"https":               true,
@@ -51,6 +51,8 @@ var builtInNodeModules = map[string]bool{
 	"net":                 true,
 	"os":                  true,
 	"path":                true,
+	"path/posix":          true,
+	"path/win32":          true,
 	"perf_hooks":          true,
 	"process":             true,
 	"punycode":            true,
@@ -58,6 +60,8 @@ var builtInNodeModules = map[string]bool{
 	"readline":            true,
 	"repl":                true,
 	"stream":              true,
+	"stream/promises":     true,
+	"stream/web":          true,
 	"_stream_duplex":      true,
 	"_stream_passthrough": true,
 	"_stream_readable":    true,
@@ -112,14 +116,32 @@ var polyfilledBuiltInNodeModules = map[string]string{
 
 // status: https://deno.land/std/node
 var denoStdNodeModules = map[string]bool{
-	"fs":            true,
-	"child_process": true,
-	"path":          true,
-	"querystring":   true,
-	"timers":        true,
-	"stream":        true,
-	"events":        true,
-	"module":        true,
+	"assert":          true,
+	"buffer":          true,
+	"child_process":   true,
+	"console":         true,
+	"constants":       true,
+	"crypto":          true,
+	"dns":             true,
+	"events":          true,
+	"fs":              true,
+	"fs/promises":     true,
+	"module":          true,
+	"net":             true,
+	"os":              true,
+	"path":            true,
+	"path/posix":      true,
+	"path/win32":      true,
+	"perf_hooks":      true,
+	"querystring":     true,
+	"stream":          true,
+	"stream/promises": true,
+	"stream/web":      true,
+	"string_decoder":  true,
+	"sys":             true,
+	"timers":          true,
+	"timers/promises": true,
+	"tty":             true,
 	// "url":           true, // format is missing
 }
 
@@ -147,13 +169,14 @@ type NpmPackage struct {
 type Node struct {
 	version     string
 	npmRegistry string
+	yarn        string
 }
 
 func checkNode(installDir string) (node *Node, err error) {
 	var installed bool
 CheckNodejs:
 	version, major, err := getNodejsVersion()
-	if err != nil || major < minNodejsVersion {
+	if err != nil || major < nodejsMinVersion {
 		PATH := os.Getenv("PATH")
 		nodeBinDir := path.Join(installDir, "bin")
 		if !strings.Contains(PATH, nodeBinDir) {
@@ -173,7 +196,7 @@ CheckNodejs:
 			goto CheckNodejs
 		} else {
 			if err == nil {
-				err = fmt.Errorf("bad nodejs version %s need %d+", version, minNodejsVersion)
+				err = fmt.Errorf("bad nodejs version %s need %d+", version, nodejsMinVersion)
 			}
 			return
 		}
@@ -195,12 +218,15 @@ CheckYarn:
 		if errors.Is(err, exec.ErrNotFound) {
 			output, err = exec.Command("npm", "install", "yarn", "-g").CombinedOutput()
 			if err != nil {
-				err = errors.New("install yarn: " + strings.TrimSpace(string(output)))
+				err = fmt.Errorf("install yarn: %s", strings.TrimSpace(string(output)))
 				return
 			}
 			goto CheckYarn
 		}
-		err = errors.New("bad yarn version")
+		err = fmt.Errorf("bad yarn version: %s", strings.TrimSpace(string(output)))
+	}
+	if err == nil {
+		node.yarn = strings.TrimSpace(string(output))
 	}
 	return
 }
@@ -318,7 +344,7 @@ func cachePackageInfo(name string, version string) (info NpmPackage, err error) 
 	// cache data
 	var ttl time.Duration = 0
 	if !isFullVersion {
-		ttl = refreshDuration * time.Second
+		ttl = pkgCacheTimeout * time.Second
 	}
 	cache.Set(
 		fmt.Sprintf("npm:%s@%s", name, version),
@@ -329,7 +355,7 @@ func cachePackageInfo(name string, version string) (info NpmPackage, err error) 
 }
 
 func resolveVersion(version string) string {
-	if version == "*" {
+	if version == "" || version == "*" {
 		return "latest"
 	}
 	if strings.ContainsRune(version, '>') || strings.ContainsRune(version, '<') {

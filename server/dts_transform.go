@@ -62,8 +62,8 @@ func copyDTS(wd string, resolvePrefix string, dts string, tracing *stringSet) (e
 		return
 	}
 
-	dtsBuffer := bytes.NewBuffer(nil)
-	err = walkDts(dtsFile, dtsBuffer, func(importPath string, kind string, position int) string {
+	pass1stBuf := bytes.NewBuffer(nil)
+	err = walkDts(dtsFile, pass1stBuf, func(importPath string, kind string, position int) string {
 		if kind == "declare module" {
 			allDeclareModules.Add(importPath)
 		}
@@ -79,7 +79,7 @@ func copyDTS(wd string, resolvePrefix string, dts string, tracing *stringSet) (e
 	if pkgName == "@types/node" {
 		fmt.Fprintf(buf, "/// <reference path=\"%s/v%d/node.ns.d.ts\" />\n", origin, VERSION)
 	}
-	err = walkDts(dtsBuffer, buf, func(importPath string, kind string, position int) string {
+	err = walkDts(pass1stBuf, buf, func(importPath string, kind string, position int) string {
 		if kind == "declare module" {
 			// resove `declare module "xxx" {}`, and the "xxx" must equal to the `moduleName`
 			moduleName := pkgName
@@ -138,7 +138,7 @@ func copyDTS(wd string, resolvePrefix string, dts string, tracing *stringSet) (e
 					}
 				}
 			}
-			if strings.HasSuffix(dts, ".d.ts") && !strings.HasSuffix(dts, "...d.ts") {
+			if strings.HasSuffix(dts, ".d.ts") && !strings.HasSuffix(dts, "~.d.ts") {
 				imports.Add(importPath)
 			}
 		} else {
@@ -163,7 +163,7 @@ func copyDTS(wd string, resolvePrefix string, dts string, tracing *stringSet) (e
 					// copy dependent dts files in the node_modules directory in current build context
 					if formPackageJSON {
 						importPath = toTypesPath(wd, info, subpath)
-						if strings.HasSuffix(importPath, ".d.ts") && !strings.HasSuffix(importPath, "...d.ts") {
+						if strings.HasSuffix(importPath, ".d.ts") && !strings.HasSuffix(importPath, "~.d.ts") {
 							imports.Add(importPath)
 						}
 						importPath = prefix + strings.TrimPrefix(importPath, versioned+"/")
@@ -178,7 +178,7 @@ func copyDTS(wd string, resolvePrefix string, dts string, tracing *stringSet) (e
 							importPath = prefix + utils.CleanPath(subpath)[1:]
 						}
 						if !strings.HasSuffix(importPath, ".d.ts") {
-							importPath += "...d.ts"
+							importPath += "~.d.ts"
 						}
 					}
 					importPath = fmt.Sprintf("/v%d/%s", VERSION, importPath)
@@ -307,7 +307,7 @@ func toTypesPath(wd string, p NpmPackage, subpath string) string {
 		} else if fileExists(path.Join(pkgDir, types+".d.ts")) {
 			types = types + ".d.ts"
 		} else {
-			types = types + "...d.ts" // dynamic
+			types = types + "~.d.ts" // dynamic
 		}
 	}
 

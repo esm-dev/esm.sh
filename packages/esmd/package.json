@@ -1,0 +1,8 @@
+{
+  "name": "esmd",
+  "version": "0.0.0",
+  "description": "Build web apps with ESM.",
+  "main": "dist/index.js",
+  "repository": "https://github.com/alephjs/esm.sh",
+  "license": "MIT"
+}

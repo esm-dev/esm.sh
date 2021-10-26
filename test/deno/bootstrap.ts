@@ -1,8 +1,9 @@
 import { existsSync } from 'https://deno.land/std@0.106.0/fs/exists.ts'
 
 async function startServer(onReady: (p: any) => void) {
+	await run('go', 'build', 'main.go')
 	const p = Deno.run({
-		cmd: ['go', 'run', 'main.go', '-dev', '-port', '8080'],
+		cmd: ['./main', '-dev', '-port', '8080'],
 		stdout: 'piped',
 		stderr: 'inherit'
 	})
@@ -14,20 +15,22 @@ async function startServer(onReady: (p: any) => void) {
 			break
 		}
 		output += new TextDecoder().decode(buf.slice(0, n))
-		if (output.includes('cjs lexer server ready')) {
-			Promise.resolve().then(() => onReady(p))
+		if (output.includes('node services process started')) {
+			onReady(p)
 			break
 		}
 	}
 	await p.status()
-	p.close()
 }
 
-startServer(async (pp) => {
- 	await test('test/deno/common/')
- 	await test('test/deno/react/')
- 	await test('test/deno/preact/')
-	pp.kill('SIGTERM')
+startServer(async (p) => {
+	await test('test/deno/common/')
+	await test('test/deno/preact/')
+	await test('test/deno/react/')
+	p.kill('SIGINT')
+}).then(() => {
+	Deno.removeSync('./main')
+	console.log('Done')
 })
 
 async function test(dir: string) {
@@ -36,11 +39,13 @@ async function test(dir: string) {
 		cmd.push('--config', dir + 'tsconfig.json')
 	}
 	cmd.push(dir)
-	const p = Deno.run({
+	await run(...cmd)
+}
+
+async function run(...cmd: string[]) {
+	await Deno.run({
 		cmd,
 		stdout: 'inherit',
 		stderr: 'inherit'
-	})
-	await p.status()
-	p.close()
+	}).status()
 }

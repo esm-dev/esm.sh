@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"io"
 	"regexp"
-	"strings"
 )
 
 var (
@@ -17,45 +16,45 @@ var (
 	regReferenceTag      = regexp.MustCompile(`<reference\s+(path|types)\s*=\s*('|")([^'"]+)("|')\s*/?>`)
 )
 
+var (
+	bytesSigleQoute   = []byte{'\''}
+	bytesDoubleQoute  = []byte{'"'}
+	bytesCommentStart = []byte{'/', '*'}
+	bytesCommentEnd   = []byte{'*', '/'}
+	bytesDoubleSlash  = []byte{'/', '/'}
+	bytesStripleSlash = []byte{'/', '/', '/'}
+)
+
 func walkDts(r io.Reader, buf *bytes.Buffer, resolve func(path string, kind string, position int) string) (err error) {
 	var commentScope bool
 	var importExportScope bool
 	scanner := bufio.NewScanner(r)
 	for scanner.Scan() {
-		text := scanner.Text()
-		pure := strings.TrimSpace(text)
-		spaceLeftWidth := strings.Index(text, pure)
-		spacesOnRight := text[spaceLeftWidth+len(pure):]
-		buf.WriteString(text[:spaceLeftWidth])
+		token, leftSpaces := trimSpace(scanner.Bytes())
+		buf.Write(leftSpaces)
 	Re:
-		if commentScope || strings.HasPrefix(pure, "/*") {
+		if !commentScope && bytes.HasPrefix(token, bytesCommentStart) {
 			commentScope = true
-			endIndex := strings.Index(pure, "*/")
+		}
+		if commentScope {
+			endIndex := bytes.Index(token, bytesCommentEnd)
 			if endIndex > -1 {
 				commentScope = false
-				buf.WriteString(pure[:endIndex])
-				buf.WriteString("*/")
-				if rest := pure[endIndex+2:]; rest != "" {
-					pure = strings.TrimSpace(rest)
-					buf.WriteString(rest[:strings.Index(rest, pure)])
+				buf.Write(token[:endIndex+2])
+				if rest := token[endIndex+2:]; len(rest) > 0 {
+					token, leftSpaces = trimSpace(rest)
+					buf.Write(leftSpaces)
 					goto Re
 				}
 			} else {
-				buf.WriteString(pure)
+				buf.Write(token)
 			}
-		} else if i := strings.Index(pure, "/*"); i > 0 {
-			if startsWith(pure, "import ", "import\"", "import'", "import{", "export ", "export{") {
-				importExportScope = true
-			}
-			buf.WriteString(pure[:i])
-			pure = pure[i:]
-			goto Re
-		} else if strings.HasPrefix(pure, "///") {
-			rest := strings.TrimPrefix(pure, "///")
-			if regReferenceTag.MatchString(rest) {
-				a := regReferenceTag.FindAllStringSubmatch(rest, 1)
-				format := a[0][1]
-				path := a[0][3]
+		} else if bytes.HasPrefix(token, bytesStripleSlash) {
+			rest := bytes.TrimPrefix(token, bytesStripleSlash)
+			if regReferenceTag.Match(rest) {
+				a := regReferenceTag.FindAllSubmatch(rest, 1)
+				format := string(a[0][1])
+				path := string(a[0][3])
 				if format == "path" || format == "types" {
 					if format == "path" && !isLocalImport(path) {
 						path = "./" + path
@@ -66,105 +65,104 @@ func walkDts(r io.Reader, buf *bytes.Buffer, resolve func(path string, kind stri
 					}
 					fmt.Fprintf(buf, `/// <reference %s="%s" />`, format, res)
 				} else {
-					buf.WriteString(pure)
+					buf.Write(token)
 				}
 			} else {
-				buf.WriteString(pure)
+				buf.Write(token)
 			}
-		} else if strings.HasPrefix(pure, "//") {
-			buf.WriteString(pure)
-		} else if strings.HasPrefix(pure, "declare") && regDeclareModuleExpr.MatchString(pure) {
-			q := "'"
-			a := strings.Split(pure, q)
-			if len(a) != 3 {
-				q = `"`
-				a = strings.Split(pure, q)
-			}
-			if len(a) == 3 {
-				buf.WriteString(a[0])
-				buf.WriteString(q)
-				buf.WriteString(resolve(a[1], "declare module", buf.Len()))
-				buf.WriteString(q)
-				buf.WriteString(a[2])
-			} else {
-				buf.WriteString(pure)
-			}
+		} else if bytes.HasPrefix(token, bytesDoubleSlash) {
+			buf.Write(token)
 		} else {
-			scanner := bufio.NewScanner(strings.NewReader(pure))
-			scanner.Split(onSemicolon)
 			var i int
-			for scanner.Scan() {
+			inlineScanner := bufio.NewScanner(bytes.NewReader(token))
+			inlineScanner.Split(splitInlineToken)
+			for inlineScanner.Scan() {
 				if i > 0 {
 					buf.WriteByte(';')
 				}
-				text := scanner.Text()
-				expr := strings.TrimSpace(text)
-				buf.WriteString(text[:strings.Index(text, expr)])
-				if expr != "" {
-					if importExportScope || startsWith(expr, "import ", "import\"", "import'", "import{", "export ", "export{") {
+				inlineToken, leftSpaces := trimSpace(inlineScanner.Bytes())
+				buf.Write(leftSpaces)
+				if len(inlineToken) > 0 {
+					if !importExportScope && startsWith(string(inlineToken), "import ", "import\"", "import'", "import{", "export ", "export{") {
 						importExportScope = true
-						if regFromExpr.MatchString(expr) || regImportPlainExpr.MatchString(expr) {
+					}
+					if importExportScope {
+						if regFromExpr.Match(inlineToken) || regImportPlainExpr.Match(inlineToken) {
 							importExportScope = false
-							q := "'"
-							a := strings.Split(expr, q)
+							q := bytesSigleQoute
+							a := bytes.Split(inlineToken, q)
 							if len(a) != 3 {
-								q = `"`
-								a = strings.Split(expr, q)
+								q = bytesDoubleQoute
+								a = bytes.Split(inlineToken, q)
 							}
 							if len(a) == 3 {
-								buf.WriteString(a[0])
-								buf.WriteString(q)
-								buf.WriteString(resolve(a[1], "import", buf.Len()))
-								buf.WriteString(q)
-								buf.WriteString(a[2])
+								buf.Write(a[0])
+								buf.Write(q)
+								buf.WriteString(resolve(string(a[1]), "import", buf.Len()))
+								buf.Write(q)
+								buf.Write(a[2])
 							} else {
-								buf.WriteString(expr)
+								buf.Write(inlineToken)
 							}
-						} else if regImportCallExpr.MatchString(expr) {
-							buf.WriteString(regImportCallExpr.ReplaceAllStringFunc(expr, func(importCallExpr string) string {
-								q := "'"
-								a := strings.Split(importCallExpr, q)
+						} else if regImportCallExpr.Match(inlineToken) {
+							buf.Write(regImportCallExpr.ReplaceAllFunc(inlineToken, func(importCallExpr []byte) []byte {
+								q := bytesSigleQoute
+								a := bytes.Split(importCallExpr, q)
 								if len(a) != 3 {
-									q = `"`
-									a = strings.Split(importCallExpr, q)
+									q = bytesDoubleQoute
+									a = bytes.Split(importCallExpr, q)
 								}
 								if len(a) == 3 {
 									buf := bytes.NewBuffer(nil)
-									buf.WriteString(a[0])
-									buf.WriteString(q)
-									buf.WriteString(resolve(a[1], "import", buf.Len()))
-									buf.WriteString(q)
-									buf.WriteString(a[2])
-									return buf.String()
+									buf.Write(a[0])
+									buf.Write(q)
+									buf.WriteString(resolve(string(a[1]), "import", buf.Len()))
+									buf.Write(q)
+									buf.Write(a[2])
+									return buf.Bytes()
 								}
 								return importCallExpr
 							}))
 						} else {
-							buf.WriteString(expr)
+							buf.Write(inlineToken)
 						}
+					} else if bytes.HasPrefix(inlineToken, []byte("declare")) && regDeclareModuleExpr.Match(token) {
+						q := bytesSigleQoute
+						a := bytes.Split(inlineToken, q)
+						if len(a) != 3 {
+							q = bytesDoubleQoute
+							a = bytes.Split(inlineToken, q)
+						}
+						if len(a) == 3 {
+							buf.Write(a[0])
+							buf.Write(q)
+							buf.WriteString(resolve(string(a[1]), "declare module", buf.Len()))
+							buf.Write(q)
+							buf.Write(a[2])
+						} else {
+							buf.Write(inlineToken)
+						}
+					} else if regImportCallExpr.Match(inlineToken) {
+						buf.Write(regImportCallExpr.ReplaceAllFunc(inlineToken, func(importCallExpr []byte) []byte {
+							q := bytesSigleQoute
+							a := bytes.Split(importCallExpr, q)
+							if len(a) != 3 {
+								q = bytesDoubleQoute
+								a = bytes.Split(importCallExpr, q)
+							}
+							if len(a) == 3 {
+								buf := bytes.NewBuffer(nil)
+								buf.Write(a[0])
+								buf.Write(q)
+								buf.WriteString(resolve(string(a[1]), "import", buf.Len()))
+								buf.Write(q)
+								buf.Write(a[2])
+								return buf.Bytes()
+							}
+							return importCallExpr
+						}))
 					} else {
-						if regImportCallExpr.MatchString(expr) {
-							buf.WriteString(regImportCallExpr.ReplaceAllStringFunc(expr, func(importCallExpr string) string {
-								q := "'"
-								a := strings.Split(importCallExpr, q)
-								if len(a) != 3 {
-									q = `"`
-									a = strings.Split(importCallExpr, q)
-								}
-								if len(a) == 3 {
-									buf := bytes.NewBuffer(nil)
-									buf.WriteString(a[0])
-									buf.WriteString(q)
-									buf.WriteString(resolve(a[1], "import", buf.Len()))
-									buf.WriteString(q)
-									buf.WriteString(a[2])
-									return buf.String()
-								}
-								return importCallExpr
-							}))
-						} else {
-							buf.WriteString(expr)
-						}
+						buf.Write(inlineToken)
 					}
 				}
 				if i > 0 && importExportScope {
@@ -172,18 +170,52 @@ func walkDts(r io.Reader, buf *bytes.Buffer, resolve func(path string, kind stri
 				}
 				i++
 			}
+			err = inlineScanner.Err()
+			if err != nil {
+				return
+			}
 		}
-		buf.WriteString(spacesOnRight)
 		buf.WriteByte('\n')
 	}
 	err = scanner.Err()
 	return
 }
 
-func onSemicolon(data []byte, atEOF bool) (advance int, token []byte, err error) {
+func splitInlineToken(data []byte, atEOF bool) (advance int, token []byte, err error) {
+	var commentScope bool
+	var stringScope byte
 	for i := 0; i < len(data); i++ {
-		if data[i] == ';' {
-			return i + 1, data[:i], nil
+		var prev, next byte
+		if i > 0 {
+			prev = data[i-1]
+		}
+		if i+1 < len(data) {
+			next = data[i+1]
+		}
+		c := data[i]
+		switch c {
+		case '/':
+			if stringScope == 0 {
+				if commentScope {
+					if prev == '*' {
+						commentScope = false
+					}
+				} else if next == '*' {
+					commentScope = true
+				}
+			}
+		case '\'', '"', '`':
+			if !commentScope {
+				if stringScope == 0 {
+					stringScope = c
+				} else if stringScope == c && prev != '\\' {
+					stringScope = 0
+				}
+			}
+		case ';':
+			if stringScope == 0 && !commentScope {
+				return i + 1, data[:i], nil
+			}
 		}
 	}
 	if !atEOF {
@@ -193,4 +225,25 @@ func onSemicolon(data []byte, atEOF bool) (advance int, token []byte, err error)
 	// Returning bufio.ErrFinalToken here tells Scan there are no more tokens after this
 	// but does not trigger an error to be returned from Scan itself.
 	return 0, data, bufio.ErrFinalToken
+}
+
+func trimSpace(line []byte) ([]byte, []byte) {
+	s := 0
+	l := len(line)
+	for i := 0; i < l; i++ {
+		c := line[i]
+		if c != ' ' && c != '\t' && c != '\n' && c != '\r' {
+			break
+		}
+		s++
+	}
+	e := l
+	for i := l - 1; i >= s; i-- {
+		c := line[i]
+		if c != ' ' && c != '\t' && c != '\n' && c != '\r' {
+			break
+		}
+		e--
+	}
+	return line[s:e], line[:s]
 }

@@ -1,0 +1,36 @@
+[package]
+name = "cjs-esm-exports"
+version = "0.3.3"
+description = "A WASM module to parse commonjs exports for ESM."
+repository = "https://github.com/alephjs/esm.sh"
+license = "MIT"
+authors = ["The Aleph.js authors"]
+edition = "2018"
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[features]
+default = ["console_error_panic_hook"]
+
+[dependencies]
+anyhow = "1.0.44"
+indexmap = "1.7.0"
+serde = { version = "1.0.130", features = ["derive"] }
+
+# swc
+# docs: https://swc.rs
+# crate: https://crates.io/search?q=swc
+swc_common = { version = "0.13.5", features = ["sourcemap"] }
+swc_ecmascript = { version = "0.76.0", features = ["parser", "visit"] }
+swc_ecma_ast = "0.54.3"
+swc_ecma_visit = "0.40.0" 
+
+# wasm-bindgen
+# docs: https://rustwasm.github.io/docs/wasm-bindgen
+wasm-bindgen = {version = "0.2.78", features = ["serde-serialize"]}
+console_error_panic_hook = { version = "0.1.6", optional = true }
+
+[profile.release]
+# Tell `rustc` to optimize for speed and size
+lto = true

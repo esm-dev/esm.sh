@@ -7,13 +7,13 @@ import (
 	"github.com/ije/gox/utils"
 )
 
-type pkg struct {
-	name      string
-	version   string
-	submodule string
+type Pkg struct {
+	Name      string `json:"name"`
+	Version   string `json:"version"`
+	Submodule string `json:"submodule"`
 }
 
-func parsePkg(pathname string) (*pkg, error) {
+func parsePkg(pathname string) (*Pkg, error) {
 	a := strings.Split(strings.Trim(pathname, "/"), "/")
 	for i, s := range a {
 		a[i] = strings.TrimSpace(s)
@@ -40,57 +40,63 @@ func parsePkg(pathname string) (*pkg, error) {
 	if scope != "" {
 		name = fmt.Sprintf("@%s/%s", scope, name)
 	}
-	if version == "" {
-		version = "latest"
+
+	if regFullVersion.MatchString(version) {
+		return &Pkg{
+			Name:      name,
+			Version:   version,
+			Submodule: strings.TrimSuffix(submodule, ".js"),
+		}, nil
 	}
+
 	info, _, _, err := getPackageInfo("", name, version)
 	if err != nil {
 		return nil, err
 	}
 
-	return &pkg{
-		name:      name,
-		version:   info.Version,
-		submodule: strings.TrimSuffix(submodule, ".js"),
+	return &Pkg{
+		Name:      name,
+		Version:   info.Version,
+		Submodule: strings.TrimSuffix(submodule, ".js"),
 	}, nil
 }
 
-func (m pkg) Equels(other pkg) bool {
-	return m.name == other.name && m.version == other.version && m.submodule == other.submodule
+func (m Pkg) Equels(other Pkg) bool {
+	return m.Name == other.Name && m.Version == other.Version && m.Submodule == other.Submodule
 }
 
-func (m pkg) ImportPath() string {
-	if m.submodule != "" {
-		return m.name + "/" + m.submodule
+func (m Pkg) ImportPath() string {
+	if m.Submodule != "" {
+		return m.Name + "/" + m.Submodule
 	}
-	return m.name
+	return m.Name
 }
 
-func (m pkg) String() string {
-	s := m.name + "@" + m.version
-	if m.submodule != "" {
-		s += "/" + m.submodule
+func (m Pkg) String() string {
+	s := m.Name + "@" + m.Version
+	if m.Submodule != "" {
+		s += "/" + m.Submodule
 	}
 	return s
 }
 
 // sortable pkg slice
-type pkgSlice []pkg
+type PkgSlice []Pkg
 
-func (a pkgSlice) Len() int           { return len(a) }
-func (a pkgSlice) Swap(i, j int)      { a[i], a[j] = a[j], a[i] }
-func (a pkgSlice) Less(i, j int) bool { return a[i].String() < a[j].String() }
+func (a PkgSlice) Len() int           { return len(a) }
+func (a PkgSlice) Swap(i, j int)      { a[i], a[j] = a[j], a[i] }
+func (a PkgSlice) Less(i, j int) bool { return a[i].String() < a[j].String() }
 
-func (a pkgSlice) Has(name string) bool {
+func (a PkgSlice) Has(name string) bool {
 	for _, m := range a {
-		if m.name == name {
+		if m.Name == name {
 			return false
 		}
 	}
 	return false
 }
 
-func (a pkgSlice) String() string {
+func (a PkgSlice) String() string {
 	s := make([]string, a.Len())
 	for i, m := range a {
 		s[i] = m.String()
