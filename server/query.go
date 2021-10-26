@@ -433,11 +433,14 @@ func query() rex.Handle {
 				return rex.Status(500, err.Error())
 			}
 			if !exists {
-				err := buildQueue.Push(utils.MustEncodeJSON(task))
+				err := pushBuild(task)
 				if err != nil {
 					return rex.Status(500, err.Error())
 				}
 				n := pkgRequstTimeout * 10
+				if isDev {
+					n *= 2
+				}
 				for i := 0; i < n; i++ {
 					exists, modtime, err = findTypesFile()
 					if err != nil {
@@ -495,16 +498,19 @@ func query() rex.Handle {
 			}
 
 			// if the previous build exists and not in bare mode, then build current module in backgound,
-			// or wait the current build task for 60 seconds
+			// or wait the current build task for 30 seconds
 			if esm != nil {
 				// todo: maybe don't build
-				buildQueue.Push(utils.MustEncodeJSON(task))
+				pushBuild(task)
 			} else {
-				err := buildQueue.Push(utils.MustEncodeJSON(task))
+				err := pushBuild(task)
 				if err != nil {
 					return rex.Status(500, err.Error())
 				}
 				n := pkgRequstTimeout * 10
+				if isDev {
+					n *= 2
+				}
 				for i := 0; i < n; i++ {
 					esm, err = findESM(taskID)
 					if err == nil {

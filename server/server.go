@@ -2,6 +2,7 @@ package server
 
 import (
 	"embed"
+	"encoding/json"
 	"flag"
 	"fmt"
 	"os"
@@ -11,10 +12,12 @@ import (
 	"runtime"
 	"strings"
 	"syscall"
+	"time"
 
 	"esm.sh/server/storage"
 
 	logx "github.com/ije/gox/log"
+	"github.com/ije/gox/utils"
 	"github.com/ije/rex"
 )
 
@@ -171,7 +174,7 @@ func Serve(efs *embed.FS) {
 	}()
 
 	for i := 0; i < buildConcurrency; i++ {
-		go build()
+		go serveBuild()
 	}
 
 	if !noCompress {
@@ -218,6 +221,50 @@ func Serve(efs *embed.FS) {
 	db.Close()
 	accessLogger.FlushBuffer()
 	log.FlushBuffer()
+}
+
+func pushBuild(task *BuildTask) (err error) {
+	if task == nil {
+		return
+	}
+	exists, err := cache.Has(task.ID())
+	if err != nil {
+		return
+	}
+	if buildQueue != nil && !exists {
+		err = cache.Set(task.ID(), []byte{'1'}, 30*time.Minute)
+		if err != nil {
+			return
+		}
+		err = buildQueue.Push(utils.MustEncodeJSON(task))
+		if err != nil {
+			cache.Delete(task.ID())
+		}
+	}
+	return
+}
+
+func serveBuild() {
+	for {
+		if nsReady {
+			data, err := buildQueue.Pull()
+			if err != nil {
+				log.Error("buildQueue.Pull:", err)
+				continue
+			}
+			var task BuildTask
+			if json.Unmarshal(data, &task) == nil {
+				t := time.Now()
+				_, err := task.Build()
+				if err != nil {
+					log.Error("build:", err)
+				} else {
+					log.Debugf("build %s in %v", task.ID(), time.Now().Sub(t))
+				}
+				cache.Delete(task.ID())
+			}
+		}
+	}
 }
 
 func init() {

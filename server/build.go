@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"crypto/sha1"
 	"encoding/hex"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
@@ -451,6 +450,7 @@ esbuild:
 								Version:   p.Version,
 								Submodule: submodule,
 							}, false)
+							importPath = strings.TrimSuffix(importPath, ".js") + ".bundle.js"
 						} else {
 							f, err := embedFS.Open(fmt.Sprintf("embed/polyfills/node_%s.js", name))
 							if err == nil {
@@ -737,26 +737,4 @@ func (task *BuildTask) handleDTS(esm *ESM) {
 		esm.Dts = fmt.Sprintf("/v%d/%s", VERSION, dts)
 	}
 	return
-}
-
-func build() {
-	for {
-		if nsReady {
-			data, err := buildQueue.Pull()
-			if err != nil {
-				log.Error("buildQueue.Pull:", err)
-				continue
-			}
-			var task BuildTask
-			if json.Unmarshal(data, &task) == nil {
-				t := time.Now()
-				_, err := task.Build()
-				if err != nil {
-					log.Error("build:", err)
-				} else {
-					log.Debugf("build %s in %v", task.ID(), time.Now().Sub(t))
-				}
-			}
-		}
-	}
 }
