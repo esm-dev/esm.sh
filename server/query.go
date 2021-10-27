@@ -61,6 +61,12 @@ func query() rex.Handle {
 			html = bytes.ReplaceAll(html, []byte("{VERSION}"), []byte(fmt.Sprintf("%d", VERSION)))
 			return rex.Content("index.html", startTime, bytes.NewReader(html))
 
+		case "/status.json":
+			return map[string]interface{}{
+				"version": VERSION,
+				"uptime":  time.Now().Sub(startTime).Milliseconds(),
+			}
+
 		case "/favicon.svg":
 			data, err := embedFS.ReadFile("embed/favicon.svg")
 			if err != nil {

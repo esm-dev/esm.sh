@@ -2,19 +2,20 @@ import queue from '/async/queue'
 
 /*
   test example:
-  ```
-    // single module
-    _esm('packageName', async (t) => {
-      const mod = t.modules          // imported module
-      t.$span.innterText = ':)'      // render testing content
-      t.ok()                         // display '✅' and import timing
-    })
-    // mulitple modules
-    _esm(['packageName1', 'packageName2'], async (t) => {
-      const [mod1, mod2] = t.modules // imported modules
-      t.$span.innterText = ':)'      // render testing content
-      t.ok()                         // display '✅' and import timing
-    })
+  ```js
+  // single module
+  _esm('packageName', async (t) => {
+    const mod = t.module           // imported module
+    t.$span.innterText = ':)'      // render testing content
+    t.ok()                         // display '✅' and timing
+  })
+
+  // mulitple modules
+  _esm(['packageName1', 'packageName2'], async (t) => {
+    const [mod1, mod2] = t.modules // imported modules
+    t.$span.innterText = ':)'      // render testing content
+    t.ok()                         // display '✅' and timing
+  })
   ```
 */
 export async function test($el) {
@@ -30,10 +31,11 @@ export async function test($el) {
     try {
       const modules = Array.isArray(imports) ? await Promise.all(imports.map(n => {
         return import(`${domain}/${n}${n.includes('?') ? '&' : '?'}dev`)
-      })) : await import(`${domain}/${imports}${imports.includes('?') ? '&' : '?'}dev`)
+      })) : []
+      const module = typeof imports === 'string' ? await import(`${domain}/${imports}${imports.includes('?') ? '&' : '?'}dev`) : undefined
 
       try {
-        await testFn({ $span, modules, ok: () => $status.innerText = '✅' })
+        await testFn({ $span, modules, module, ok: () => $status.innerText = '✅' })
       } catch (err) {
         $status.innerText = `❌ ${err.message}`;
       }
@@ -73,7 +75,7 @@ export async function test($el) {
   }
 
   _esm('canvas-confetti', async (t) => {
-    const { default: confetti } = t.modules
+    const { default: confetti } = t.module
 
     t.$span.style.cursor = 'pointer'
     t.$span.style.userSelect = 'none'
@@ -283,7 +285,7 @@ export async function test($el) {
         null,
         error && h('span', null, 'failed to load'),
         !data && h('span', null, 'loading...'),
-        data && h('span', null, 'build queue: ', h('strong', null, `${data.queue.length}`), ' ', 'task', data.queue.length !== 1 && 's'),
+        data && h('span', null, 'uptime: ', h('strong', null, `${data.uptime / 1000}s`)),
       )
     }
     render(h(App), t.$span)
@@ -292,7 +294,7 @@ export async function test($el) {
   })
 
   _esm('vue@2', async (t) => {
-    const { default: Vue } = t.modules
+    const { default: Vue } = t.module
 
     new Vue({
       el: t.$span,
@@ -324,7 +326,7 @@ export async function test($el) {
   })
 
   _esm('vue@3', async (t) => {
-    const { createApp, h } = t.modules
+    const { createApp, h } = t.module
 
     createApp({
       data() {
@@ -352,7 +354,7 @@ export async function test($el) {
   })
 
   _esm('jquery', async (t) => {
-    const { default: $ } = t.modules
+    const { default: $ } = t.module
 
     $(t.$span).css({ color: 'gray' }).text('$')
 
@@ -360,7 +362,7 @@ export async function test($el) {
   })
 
   _esm('lodash', async (t) => {
-    const { default: _ } = t.modules
+    const { default: _ } = t.module
 
     const defaults = _.defaults({ lodash: '_' }, { lodash: 'lodash' })
     t.$span.style.color = 'gray'
@@ -370,7 +372,7 @@ export async function test($el) {
   })
 
   _esm('d3', async (t) => {
-    const d3 = t.modules
+    const d3 = t.module
 
     t.$span.id = 'd3-span'
     d3.select('#d3-span').style('color', 'gray').text('d3')
@@ -379,7 +381,7 @@ export async function test($el) {
   })
 
   _esm('pixi.js', async (t) => {
-    const { Application, Sprite } = t.modules
+    const { Application, Sprite } = t.module
 
     const app = new Application({ width: 30, height: 30, resolution: 2, backgroundAlpha: 0 });
     app.loader.add('bunny', 'https://pixijs.io/examples/examples/assets/bunny.png').load((_, resources) => {
@@ -392,7 +394,7 @@ export async function test($el) {
       app.ticker.add(() => {
         bunny.rotation += 0.05;
       });
-      
+
       app.stage.addChild(bunny);
       t.ok()
     });
@@ -410,7 +412,7 @@ export async function test($el) {
       BoxGeometry,
       MeshBasicMaterial,
       Mesh,
-    } = t.modules
+    } = t.module
 
     const width = 30
     const height = 30
