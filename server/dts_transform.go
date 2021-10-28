@@ -55,7 +55,7 @@ func copyDTS(wd string, resolvePrefix string, dts string, tracing *stringSet) (e
 	allDeclareModules := newStringSet()
 	entryDeclareModules := []string{}
 
-	dtsFilePath := path.Join(wd, "node_modules", regVersionPath.ReplaceAllString(dts, "$1/"))
+	dtsFilePath := path.Join(wd, "node_modules", regFullVersionPath.ReplaceAllString(dts, "$1/"))
 	dtsDir := path.Dir(dtsFilePath)
 	dtsFile, err := os.Open(dtsFilePath)
 	if err != nil {

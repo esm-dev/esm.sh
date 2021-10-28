@@ -45,7 +45,7 @@ func query() rex.Handle {
 		}
 
 		switch pathname {
-		case "/":
+		case "/": 
 			indexHTML, err := embedFS.ReadFile("embed/index.html")
 			if err != nil {
 				return err
@@ -178,7 +178,7 @@ func query() rex.Handle {
 
 		// serve raw dist files like CSS that is fetching from unpkg.com
 		if storageType == "raw" {
-			shouldRedirect := !regVersionPath.MatchString(pathname)
+			shouldRedirect := !regFullVersionPath.MatchString(pathname)
 			isTLS := ctx.R.TLS != nil
 			hostname := ctx.R.Host
 			proto := "http"
@@ -547,7 +547,7 @@ func query() rex.Handle {
 				}
 				url := fmt.Sprintf("%s://%s/%s.css", proto, hostname, strings.TrimSuffix(taskID, ".js"))
 				code := http.StatusTemporaryRedirect
-				if regVersionPath.MatchString(pathname) {
+				if regFullVersionPath.MatchString(pathname) {
 					code = http.StatusPermanentRedirect
 				}
 				return rex.Redirect(url, code)
