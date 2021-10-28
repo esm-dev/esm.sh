@@ -45,7 +45,7 @@ func query() rex.Handle {
 		}
 
 		switch pathname {
-		case "/": 
+		case "/":
 			indexHTML, err := embedFS.ReadFile("embed/index.html")
 			if err != nil {
 				return err
@@ -67,15 +67,8 @@ func query() rex.Handle {
 				"uptime":  time.Now().Sub(startTime).Milliseconds(),
 			}
 
-		case "/favicon.svg":
-			data, err := embedFS.ReadFile("embed/favicon.svg")
-			if err != nil {
-				return err
-			}
-			return rex.Content("favicon.svg", startTime, bytes.NewReader(data))
-
 		case "/favicon.ico":
-			return rex.Redirect("/favicon.svg", http.StatusPermanentRedirect)
+			return rex.Status(404, "not found")
 
 		case "/error.js":
 			switch ctx.Form.Value("type") {

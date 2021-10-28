@@ -5,7 +5,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width" />
   <title>ESM>CDN</title>
-  <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+  <link rel="icon" type="image/svg+xml" href="/embed/assets/favicon.svg">
   <meta name="description"
     content="A fast, global content delivery network to transform NPM packges to standard ES Modules by esbuild." />
   <meta name="keywords" content="js,javascript,esm,npm,deno,global,fast,cdn,package,module,esbuild,transform" />
@@ -110,8 +110,7 @@
     .hljs-strong {
       font-weight: 700
     }
-  </style>
-  <style>
+
     * {
       margin: 0;
       padding: 0;
@@ -356,11 +355,10 @@
       font-size: 16px;
       font-weight: 500;
     }
-
-    .test {
-      display: none;
+    p.link + p.link {
+      margin-top: 10px;
     }
-
+    
     .test ul li {
       min-height: 30px;
     }
@@ -379,8 +377,8 @@
     .test ul li>em {
       margin-left: 10px;
     }
-    
-    .test ul li em { 
+
+    .test ul li em {
       color: #999;
     }
   </style>
@@ -402,59 +400,23 @@
   <main>
     <p><em style="color: #999;">Loading...</em></p>
   </main>
-  <div class="test"></div>
   <script>
-    if (location.protocol === 'http') {
+    if (location.protocol === 'http:' && location.hostname !== 'localhost') {
       location.href = 'https://' + location.host + location.pathname + location.search
     }
   </script>
   <script type="module">
-    import marked from '/marked'
-    import hljs from '/highlight.js/lib/core'
-    import javascript from '/highlight.js/lib/languages/javascript'
-    import json from '/highlight.js/lib/languages/json'
-    import xml from '/highlight.js/lib/languages/xml'
-    import bash from '/highlight.js/lib/languages/bash'
-
     const query = new URLSearchParams(location.search)
-
-    if (query.has('test')) {
-      import('/embed/test/browser/testing.js').then(({ test }) => {
-				const mainEl = document.querySelector('main')
-				const testEl = document.querySelector('.test')
-				const ulEl = document.createElement('ul')
-				const pEl = document.createElement('p')
-				testEl.style.display = 'block'
-				testEl.appendChild(ulEl)
-				pEl.className = 'link'
-				pEl.innerHTML = '<a href="/">&larr; Back </a>'
-				testEl.appendChild(pEl)
-				mainEl.parentNode.removeChild(mainEl)
-				document.querySelector('h1 > em').appendChild(document.createTextNode(' · Testing'))
-				test(ulEl)
-			})
+    if (query.has('playground')) {
+      import('/embed/playground.js')
+    } else if (query.has('test')) {
+      import('/embed/test/browser/testing.js')
     } else {
-      const mainEl = document.querySelector('main')
-      mainEl.innerHTML = marked.parse('# README').replaceAll('https://esm.sh', window.origin) + `<p class="link"><a href="/?test">Testing &rarr; </a></p>`
-      mainEl.removeChild(mainEl.querySelector('h1'))
-      mainEl.querySelectorAll('code.language-bash').forEach(block => {
-        block.innerHTML = block.innerHTML.replace(/(^|\n)\$ /g, '$1')
-      })
-
-      hljs.registerLanguage('javascript', javascript)
-      hljs.registerLanguage('json', json)
-      hljs.registerLanguage('xml', xml)
-      hljs.registerLanguage('bash', hljs => {
-        const l = bash(hljs)
-        l.keywords.built_in = 'cd git sh'
-        return l
-      });
-      hljs.highlightAll()
+      import('/embed/index.js').then(({render}) => render('# README'))
     }
   </script>
   <script nomodule>
-    const mainEl = document.querySelector('main')
-    mainEl.innerHTML = '<p><em style="color: #999;">nomodule, please upgrade your browser...</em></p>'
+    document.querySelector('main').innerHTML = '<p><em style="color: #999;">nomodule, please upgrade your browser...</em></p>'
   </script>
 </body>
 
