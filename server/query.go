@@ -273,9 +273,8 @@ if (!document.querySelector("[data-module-url=\"" + id + "\"]")) {
 	el.appendChild(document.createTextNode(css))
 	document.head.appendChild(el)
 }`, strings.TrimPrefix(savePath, "builds"), cssStr)
-					ctx.SetHeader("Content-Type", "application/javascript; charset=utf-8")
 					ctx.SetHeader("Cache-Control", "public, max-age=31536000, immutable")
-					return jsCode
+					return rex.Content(savePath+".js", modtime, bytes.NewReader([]byte(jsCode)))
 				}
 				if storageType == "types" {
 					ctx.SetHeader("Content-Type", "application/typescript; charset=utf-8")

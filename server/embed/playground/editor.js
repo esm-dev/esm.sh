@@ -1,4 +1,4 @@
-import * as monaco from '/monaco-editor'
+import { Uri, editor } from '/monaco-editor'
 import editorWorker from '/monaco-editor/esm/vs/editor/editor.worker?worker'
 import jsonWorker from '/monaco-editor/esm/vs/language/json/json.worker?worker'
 import cssWorker from '/monaco-editor/esm/vs/language/css/css.worker?worker'
@@ -24,9 +24,45 @@ self.MonacoEnvironment = {
   }
 }
 
+export function createModel(name, source) {
+  const uri = Uri.parse(`file:///src/${name}`)
+  return editor.createModel(source, getLanguage(name), uri)
+}
+
 export function createEditor(container) {
-  monaco.editor.create(container, {
-    value: "function hello() {\n\talert('Hello world!');\n}",
-    language: 'javascript'
+  return editor.create(container, {
+    automaticLayout: true,
+    contextmenu: true,
+    fontFamily: '"Dank Mono", "Source Code Pro", monospace',
+    fontLigatures: true,
+    fontSize: 14,
+    lineHeight: 18,
+    minimap: { enabled: false },
+    scrollBeyondLastLine: false,
+    smoothScrolling: true,
+    scrollbar: {
+      useShadows: false,
+      verticalScrollbarSize: 10,
+      horizontalScrollbarSize: 10
+    },
+    overviewRulerLanes: 0,
   })
+}
+
+export function getLanguage(name) {
+  switch (name.slice(name.lastIndexOf('.') + 1).toLowerCase()) {
+    case 'ts':
+    case 'tsx':
+      return 'typescript'
+    case 'js':
+    case 'jsx':
+      return 'javascript'
+    case 'json':
+      return 'json'
+    case 'css':
+      return 'css'
+    case 'html':
+      return 'html'
+  }
+  return ''
 }

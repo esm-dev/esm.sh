@@ -157,7 +157,7 @@
     i {
       font-style: italic;
     }
-    
+
     .readme {
       width: 90%;
       max-width: 720px;
@@ -383,13 +383,72 @@
       color: #999;
     }
 
-		.playground {
-			width: 100vw;
-			height: 100vh;
-		}
-		.editor {
-			height: 100vh;
-		}
+    .playground {
+      position: relative;
+      width: 100vw;
+      height: 100vh;
+    }
+
+    .sider,
+    .editor,
+    .preview {
+      position: absolute;
+      top: 0;
+      height: 100vh;
+    }
+
+    .sider>em {
+      padding-left: 10px;
+      margin-top: 6px;
+      color: #999;
+    }
+
+    .sider .file-item {
+      display: flex;
+      align-items: center;
+      padding-left: 12px;
+      margin-top: 6px;
+      font-size: 14px;
+      color: #454545;
+      cursor: pointer;
+    }
+
+    .sider .file-item.loading {
+      color: #999;
+      cursor: default;
+    }
+
+    .sider .file-item.active {
+      color: #000000;
+      font-weight: 600;
+    }
+
+    .sider .file-item.add {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      position: absolute;
+      bottom: 20px;
+      left: 20px;
+      width: 32px;
+      height: 32px;
+      padding: 0;
+      font-size: 14px;
+      overflow: hidden;
+      border-radius: 20px;
+      color: #666;
+      background-color: #eee;
+      transition: all 0.2s ease;
+    }
+
+    .sider .file-item.add:hover {
+      color: #333;
+      background-color: #ddd;
+    }
+
+    .editor {
+      border-right: 1px solid #eee;
+    }
   </style>
 </head>
 
@@ -422,7 +481,15 @@
       const rootEl = document.querySelector('#root')
       rootEl.className = 'playground'
       rootEl.innerHTML = ''
-      import('/embed/playground/index.jsx')
+      if ('serviceWorker' in navigator) {
+        addEventListener('load', () => {
+          navigator.serviceWorker.register('/embed/playground/sw.js', { type: 'module' }).then(() => {
+            import('/embed/playground/index.jsx')
+          }, (err) => {
+            console.error('ServiceWorker:', err);
+          });
+        });
+      }
     } else if (query.has('test')) {
       import('/embed/test/browser/testing.js')
     } else {
