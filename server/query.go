@@ -2,6 +2,7 @@ package server
 
 import (
 	"bytes"
+	"encoding/json"
 	"fmt"
 	"io/ioutil"
 	"net"
@@ -95,8 +96,11 @@ func query(devMode bool) rex.Handle {
 			}
 			if err == nil {
 				switch path.Ext(pathname) {
-				case ".jsx", ".ts", ".tsx":
-					data, err = build(pathname, string(data), getTargetByUA(ctx.R.UserAgent()), !devMode)
+				case ".js", ".jsx", ".ts", ".tsx":
+					data, err = buildSync(pathname, string(data), buildOptions{
+						target: getTargetByUA(ctx.R.UserAgent()),
+						cache:  !devMode,
+					})
 					if err != nil {
 						return rex.Status(500, err.Error())
 					}
@@ -253,6 +257,26 @@ func query(devMode bool) rex.Handle {
 				if err != nil {
 					return rex.Status(500, err.Error())
 				}
+				if strings.HasSuffix(savePath, ".css") && !ctx.Form.IsNil("module") {
+					data, err := ioutil.ReadAll(r)
+					if err != nil {
+						return rex.Status(500, err.Error())
+					}
+					cssStr, _ := json.Marshal(string(data))
+					jsCode := fmt.Sprintf(`
+const id = "%s"
+const css = %s
+if (!document.querySelector("[data-module-url=\"" + id + "\"]")) {
+	const el = document.createElement('style')
+	el.type = 'text/css'
+	el.setAttribute('data-module-url', id)
+	el.appendChild(document.createTextNode(css))
+	document.head.appendChild(el)
+}`, strings.TrimPrefix(savePath, "builds"), cssStr)
+					ctx.SetHeader("Content-Type", "application/javascript; charset=utf-8")
+					ctx.SetHeader("Cache-Control", "public, max-age=31536000, immutable")
+					return jsCode
+				}
 				if storageType == "types" {
 					ctx.SetHeader("Content-Type", "application/typescript; charset=utf-8")
 				}
@@ -305,12 +329,13 @@ func query(devMode bool) rex.Handle {
 			}
 		}
 
+		css := !ctx.Form.IsNil("css")
+		cssAsModule := css && !ctx.Form.IsNil("module")
+		isBare := false
 		isBundleMode := !ctx.Form.IsNil("bundle") || !ctx.Form.IsNil("b")
 		isDev := !ctx.Form.IsNil("dev")
-		isPkgCSS := !ctx.Form.IsNil("css")
 		isWorkder := !ctx.Form.IsNil("worker")
 		noCheck := !ctx.Form.IsNil("no-check")
-		isBare := false
 
 		// parse `resolvePrefix`
 		if hasBuildVerPrefix {
@@ -513,7 +538,7 @@ func query(devMode bool) rex.Handle {
 			}
 		}
 
-		if isPkgCSS {
+		if css {
 			if esm.PackageCSS {
 				hostname := ctx.R.Host
 				proto := "http"
@@ -521,6 +546,9 @@ func query(devMode bool) rex.Handle {
 					proto = "https"
 				}
 				url := fmt.Sprintf("%s://%s/%s.css", proto, hostname, strings.TrimSuffix(taskID, ".js"))
+				if cssAsModule {
+					url += "?module"
+				}
 				code := http.StatusTemporaryRedirect
 				if regFullVersionPath.MatchString(pathname) {
 					code = http.StatusPermanentRedirect
