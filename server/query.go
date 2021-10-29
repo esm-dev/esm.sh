@@ -11,10 +11,8 @@ import (
 	"time"
 
 	"esm.sh/server/storage"
-	"github.com/evanw/esbuild/pkg/api"
 	"github.com/ije/gox/utils"
 	"github.com/ije/rex"
-	"github.com/mssola/user_agent"
 )
 
 var httpClient = &http.Client{
@@ -92,12 +90,20 @@ func query() rex.Handle {
 		// serve embed assets
 		if strings.HasPrefix(pathname, "/embed/") {
 			data, err := embedFS.ReadFile(pathname[1:])
-			if err == nil {
-				return rex.Content(pathname, startTime, bytes.NewReader(data))
+			if err != nil {
+				data, err = externalFS.ReadFile(pathname[7:])
 			}
-			data, err = externalFS.ReadFile(pathname[7:])
 			if err == nil {
-				return rex.Content(pathname, startTime, bytes.NewReader(data))
+				switch path.Ext(pathname) {
+				case ".jsx", ".ts", ".tsx":
+					data, err = build(pathname, string(data), getTargetByUA(ctx.R.UserAgent()), true)
+					if err != nil {
+						return rex.Status(500, err.Error())
+					}
+					return rex.Content(pathname+".js", startTime, bytes.NewReader(data))
+				default:
+					return rex.Content(pathname, startTime, bytes.NewReader(data))
+				}
 			}
 		}
 
@@ -295,32 +301,7 @@ func query() rex.Handle {
 		} else {
 			target = strings.ToLower(ctx.Form.Value("target"))
 			if _, ok := targets[target]; !ok {
-				target = "es2015"
-				name, version := user_agent.New(ua).Browser()
-				if engine, ok := engines[strings.ToLower(name)]; ok {
-					a := strings.Split(version, ".")
-					if len(a) > 3 {
-						version = strings.Join(a[:3], ".")
-					}
-					unspportEngineFeatures := validateEngineFeatures(api.Engine{
-						Name:    engine,
-						Version: version,
-					})
-					for _, t := range []string{
-						"es2021",
-						"es2020",
-						"es2019",
-						"es2018",
-						"es2017",
-						"es2016",
-					} {
-						unspportESMAFeatures := validateESMAFeatures(targets[t])
-						if unspportEngineFeatures <= unspportESMAFeatures {
-							target = t
-							break
-						}
-					}
-				}
+				target = getTargetByUA(ua)
 			}
 		}
 

@@ -10,6 +10,7 @@ import (
 	"path"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	"esm.sh/server/storage"
@@ -737,4 +738,48 @@ func (task *BuildTask) handleDTS(esm *ESM) {
 		esm.Dts = fmt.Sprintf("/v%d/%s", VERSION, dts)
 	}
 	return
+}
+
+var buildCache sync.Map
+var loaders = map[string]api.Loader{
+	".jsx": api.LoaderJSX,
+	".ts":  api.LoaderTS,
+	".tsx": api.LoaderJSX,
+}
+
+func build(filename string, source string, target string, cache bool) ([]byte, error) {
+	if cache {
+		data, ok := buildCache.Load(filename)
+		if ok {
+			return data.([]byte), nil
+		}
+	}
+	options := api.BuildOptions{
+		Outdir:   "/esbuild",
+		Write:    false,
+		Bundle:   false,
+		Target:   targets[target],
+		Format:   api.FormatESModule,
+		Platform: api.PlatformBrowser,
+		JSXMode:  api.JSXModeTransform,
+		Stdin: &api.StdinOptions{
+			Sourcefile: filename,
+			Loader:     loaders[path.Ext(filename)],
+			Contents:   source,
+		},
+	}
+	result := api.Build(options)
+	if len(result.Errors) > 0 {
+		log.Error(filename)
+		return nil, fmt.Errorf(result.Errors[0].Text)
+	}
+	for _, file := range result.OutputFiles {
+		if strings.HasSuffix(file.Path, ".js") {
+			if cache {
+				buildCache.Store(filename, file.Contents)
+			}
+			return file.Contents, nil
+		}
+	}
+	return nil, fmt.Errorf("JS not found")
 }

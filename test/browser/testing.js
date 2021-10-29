@@ -70,17 +70,17 @@ const _esm = async (imports, testFn) => {
   $status.innerHTML = '<em>waiting...</em>'
   $li.appendChild($imports)
   $li.appendChild($status)
-  $root.firstChild.appendChild($li)
+  $container.firstChild.appendChild($li)
   q.push({ imports, testFn, $li, $status })
 }
 
-// init
-const $root = document.createElement('div')
-$root.className = 'test'
-$root.innerHTML = '<ul></ul><p class="link"><a href="/">&larr; Back </a></p>'
-document.body.appendChild($root)
+// init dom
+const $container = document.createElement('div')
+$container.className = 'test'
+$container.innerHTML = '<ul></ul><p class="link"><a href="/">&larr; Back </a></p>'
 document.querySelector('h1 > em').appendChild(document.createTextNode(' · Testing'))
 document.querySelector('main').remove()
+document.querySelector('#root').appendChild($container)
 
 _esm('canvas-confetti', async (t) => {
   const { default: confetti } = t.module
@@ -293,7 +293,7 @@ _esm(['preact', 'preact/hooks', 'swr?alias=react:preact/compat'], async (t) => {
       null,
       error && h('span', null, 'failed to load'),
       !data && h('span', null, 'loading...'),
-      data && h('span', null, 'uptime: ', h('strong', null, `${data.uptime / 1000}s`)),
+      data && h('span', null, 'server uptime: ', h('strong', null, `${data.uptime / 1000}s`)),
     )
   }
   render(h(App), t.$span)

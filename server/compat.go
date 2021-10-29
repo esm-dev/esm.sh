@@ -3,9 +3,11 @@ package server
 import (
 	"regexp"
 	"strconv"
+	"strings"
 
 	"github.com/evanw/esbuild/pkg/api"
 	"github.com/ije/esbuild-internal/compat"
+	"github.com/mssola/user_agent"
 )
 
 var regBrowserVersion = regexp.MustCompile(`^([0-9]+)(?:\.([0-9]+))?(?:\.([0-9]+))?$`)
@@ -145,4 +147,34 @@ func countFeatures(feature compat.JSFeature) int {
 		}
 	}
 	return n
+}
+
+func getTargetByUA(ua string) string {
+	target := "es2015"
+	name, version := user_agent.New(ua).Browser()
+	if engine, ok := engines[strings.ToLower(name)]; ok {
+		a := strings.Split(version, ".")
+		if len(a) > 3 {
+			version = strings.Join(a[:3], ".")
+		}
+		unspportEngineFeatures := validateEngineFeatures(api.Engine{
+			Name:    engine,
+			Version: version,
+		})
+		for _, t := range []string{
+			"es2021",
+			"es2020",
+			"es2019",
+			"es2018",
+			"es2017",
+			"es2016",
+		} {
+			unspportESMAFeatures := validateESMAFeatures(targets[t])
+			if unspportEngineFeatures <= unspportESMAFeatures {
+				target = t
+				break
+			}
+		}
+	}
+	return target
 }

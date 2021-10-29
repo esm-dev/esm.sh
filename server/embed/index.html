@@ -127,12 +127,8 @@
     }
 
     body {
-      width: 90%;
-      max-width: 720px;
-      margin: 0 auto;
-      padding: 120px 0 60px;
       font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Helvetica Neue', Helvetica, Roboto, Ubuntu, Tahoma, Arial, 'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol', 'PingFang SC', 'Hiragino Sans GB', 'Heiti SC', 'Microsoft YaHei', 'WenQuanYi Micro Hei', sans-serif;
-      color: #333;
+      color: #232323;
       text-rendering: optimizeLegibility;
     }
 
@@ -161,70 +157,74 @@
     i {
       font-style: italic;
     }
+    
+    .readme {
+      width: 90%;
+      max-width: 720px;
+      margin: 0 auto;
+      padding: 120px 0 60px;
+    }
 
-    h1,
-    h2,
-    h3,
-    h4,
-    h5 {
+    .readme h1,
+    .readme h2,
+    .readme h3,
+    .readme h4,
+    .readme h5 {
       font-weight: 500;
       line-height: 1.27;
     }
 
-    h1 {
+    .readme h1 {
       padding-bottom: 9px;
       border-bottom: 1px solid #eee;
-    }
-
-    h1 {
       margin-top: 0.6rem;
       font-size: 2.4rem;
       font-weight: 800;
     }
 
-    h2 {
+    .readme h2 {
       margin-top: 2.4rem;
       font-size: 1.8rem;
     }
 
-    h3 {
+    .readme h3 {
       margin-top: 2rem;
       font-size: 1.5rem;
     }
 
-    h4 {
+    .readme h4 {
       font-size: 1.2rem;
     }
 
-    h5 {
+    .readme h5 {
       font-size: 1rem;
     }
 
-    p {
+    .readme p {
       margin-top: 1.27rem;
       line-height: 1.5;
     }
 
-    a {
+    .readme a {
       color: #d63369;
       box-shadow: 0 1px 0 0 currentColor;
     }
 
-    a:hover {
+    .readme a:hover {
       box-shadow: none;
     }
 
-    samp,
-    code {
+    .readme samp,
+    .readme code {
       font-family: 'Dank Mono', 'Source Code Pro', 'Courier Prime Code', 'Liberation Mono', Consolas, Menlo, monospace;
     }
 
-    samp {
+    .readme samp {
       font-weight: bold;
       color: #333;
     }
 
-    pre {
+    .readme pre {
       box-sizing: border-box;
       overflow-x: auto;
       width: 100%;
@@ -237,29 +237,29 @@
       -webkit-overflow-scrolling: touch;
     }
 
-    pre>code {
+    .readme pre>code {
       display: block;
       padding: 1.2rem !important;
     }
 
-    :not(pre)>code {
+    .readme :not(pre)>code {
       display: inline;
       white-space: pre-wrap;
       color: #d63369;
     }
 
-    :not(pre)>code::before,
-    :not(pre)>code::after {
+    .readme :not(pre)>code::before,
+    .readme :not(pre)>code::after {
       color: currentColor;
       content: '`'
     }
 
-    pre>code.language-bash .hljs-built_in::before {
+    .readme pre>code.language-bash .hljs-built_in::before {
       color: #bbb;
       content: '$ ';
     }
 
-    details {
+    .readme details {
       margin: 1.5rem 0;
       padding: 0.5rem 1rem;
       background: #fafafa;
@@ -267,17 +267,17 @@
       border-radius: 6px;
     }
 
-    details[open] {
+    .readme details[open] {
       overflow: hidden;
     }
 
-    details>summary {
+    .readme details>summary {
       font-weight: 500;
       outline: none;
       cursor: pointer;
     }
 
-    blockquote {
+    .readme blockquote {
       color: #666666;
       background: #fafafa;
       border: 1px solid #eaeaea;
@@ -286,39 +286,39 @@
       margin: 1.5rem 0;
     }
 
-    hr {
+    .readme hr {
       border: 0;
       border-top: 1px solid #eaeaea;
       margin: 1.25rem 0;
     }
 
-    ul,
-    ol {
+    .readme ul,
+    .readme ol {
       padding-left: 1.5rem;
       margin-top: 1.27rem;
     }
 
-    ol {
+    .readme ol {
       list-style-type: decimal;
     }
 
-    li {
+    .readme li {
       margin-top: 0.6rem;
     }
 
-    ul li:before {
+    .readme ul li:before {
       position: absolute;
       margin-left: -1rem;
       color: #aaa;
       content: '-';
     }
 
-    h1 {
+    .readme h1 {
       display: flex;
       align-items: center;
     }
 
-    h1 em {
+    .readme h1 em {
       position: relative;
       top: -6px;
       margin-left: 9px;
@@ -327,7 +327,7 @@
       color: #999;
     }
 
-    h1 .github {
+    .readme h1 .github {
       position: relative;
       display: inline-block;
       width: 30px;
@@ -337,11 +337,11 @@
       box-shadow: none;
     }
 
-    h1 a.github:hover {
+    .readme h1 a.github:hover {
       color: #000;
     }
 
-    h1 .github svg {
+    .readme h1 .github svg {
       position: absolute;
       display: inline-block;
       top: 0;
@@ -350,15 +350,16 @@
       height: 30px;
     }
 
-    p.link {
+    .readme p.link {
       margin-top: 60px;
       font-size: 16px;
       font-weight: 500;
     }
-    p.link + p.link {
+
+    .readme p.link+p.link {
       margin-top: 10px;
     }
-    
+
     .test ul li {
       min-height: 30px;
     }
@@ -385,21 +386,23 @@
 </head>
 
 <body>
-  <h1>
-    <strong>ESM</strong>
-    <em>V{VERSION}</em>
-    <a class="github" href="https://github.com/alephjs/esm.sh">
-      <svg fill="currentColor" viewBox="0 0 24 24">
-        <title>Github</title>
-        <path fill-rule="evenodd"
-          d="M12 2C6.477 2 2 6.484 2 12.017c0 4.425 2.865 8.18 6.839 9.504.5.092.682-.217.682-.483 0-.237-.008-.868-.013-1.703-2.782.605-3.369-1.343-3.369-1.343-.454-1.158-1.11-1.466-1.11-1.466-.908-.62.069-.608.069-.608 1.003.07 1.531 1.032 1.531 1.032.892 1.53 2.341 1.088 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.113-4.555-4.951 0-1.093.39-1.988 1.029-2.688-.103-.253-.446-1.272.098-2.65 0 0 .84-.27 2.75 1.026A9.564 9.564 0 0112 6.844c.85.004 1.705.115 2.504.337 1.909-1.296 2.747-1.027 2.747-1.027.546 1.379.202 2.398.1 2.651.64.7 1.028 1.595 1.028 2.688 0 3.848-2.339 4.695-4.566 4.943.359.309.678.92.678 1.855 0 1.338-.012 2.419-.012 2.747 0 .268.18.58.688.482A10.019 10.019 0 0022 12.017C22 6.484 17.522 2 12 2z"
-          clip-rule="evenodd"></path>
-      </svg>
-    </a>
-  </h1>
-  <main>
-    <p><em style="color: #999;">Loading...</em></p>
-  </main>
+  <div class="readme" id="root">
+    <h1>
+      <strong>ESM</strong>
+      <em>V{VERSION}</em>
+      <a class="github" href="https://github.com/alephjs/esm.sh">
+        <svg fill="currentColor" viewBox="0 0 24 24">
+          <title>Github</title>
+          <path fill-rule="evenodd"
+            d="M12 2C6.477 2 2 6.484 2 12.017c0 4.425 2.865 8.18 6.839 9.504.5.092.682-.217.682-.483 0-.237-.008-.868-.013-1.703-2.782.605-3.369-1.343-3.369-1.343-.454-1.158-1.11-1.466-1.11-1.466-.908-.62.069-.608.069-.608 1.003.07 1.531 1.032 1.531 1.032.892 1.53 2.341 1.088 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.113-4.555-4.951 0-1.093.39-1.988 1.029-2.688-.103-.253-.446-1.272.098-2.65 0 0 .84-.27 2.75 1.026A9.564 9.564 0 0112 6.844c.85.004 1.705.115 2.504.337 1.909-1.296 2.747-1.027 2.747-1.027.546 1.379.202 2.398.1 2.651.64.7 1.028 1.595 1.028 2.688 0 3.848-2.339 4.695-4.566 4.943.359.309.678.92.678 1.855 0 1.338-.012 2.419-.012 2.747 0 .268.18.58.688.482A10.019 10.019 0 0022 12.017C22 6.484 17.522 2 12 2z"
+            clip-rule="evenodd"></path>
+        </svg>
+      </a>
+    </h1>
+    <main>
+      <p><em style="color: #999;">Loading...</em></p>
+    </main>
+  </div>
   <script>
     if (location.protocol === 'http:' && location.hostname !== 'localhost') {
       location.href = 'https://' + location.host + location.pathname + location.search
@@ -408,11 +411,14 @@
   <script type="module">
     const query = new URLSearchParams(location.search)
     if (query.has('playground')) {
-      import('/embed/playground.js')
+      const rootEl = document.querySelector('#root')
+      rootEl.className = 'playground'
+      rootEl.innerHTML = ''
+      import('/embed/playground.jsx')
     } else if (query.has('test')) {
       import('/embed/test/browser/testing.js')
     } else {
-      import('/embed/index.js').then(({render}) => render('# README'))
+      import('/embed/index.js').then(({ render }) => render('# README'))
     }
   </script>
   <script nomodule>
