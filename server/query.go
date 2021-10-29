@@ -33,7 +33,7 @@ var httpClient = &http.Client{
 }
 
 // esm query middleware for rex
-func query() rex.Handle {
+func query(devMode bool) rex.Handle {
 	startTime := time.Now()
 
 	return func(ctx *rex.Context) interface{} {
@@ -44,11 +44,11 @@ func query() rex.Handle {
 
 		switch pathname {
 		case "/":
-			indexHTML, err := embedFS.ReadFile("embed/index.html")
+			indexHTML, err := embedFS.ReadFile("server/embed/index.html")
 			if err != nil {
 				return err
 			}
-			readme, err := externalFS.ReadFile("README.md")
+			readme, err := embedFS.ReadFile("README.md")
 			if err != nil {
 				return err
 			}
@@ -89,14 +89,14 @@ func query() rex.Handle {
 
 		// serve embed assets
 		if strings.HasPrefix(pathname, "/embed/") {
-			data, err := embedFS.ReadFile(pathname[1:])
+			data, err := embedFS.ReadFile("server" + pathname)
 			if err != nil {
-				data, err = externalFS.ReadFile(pathname[7:])
+				data, err = embedFS.ReadFile(pathname[7:]) // /embed/test/**/*
 			}
 			if err == nil {
 				switch path.Ext(pathname) {
 				case ".jsx", ".ts", ".tsx":
-					data, err = build(pathname, string(data), getTargetByUA(ctx.R.UserAgent()), true)
+					data, err = build(pathname, string(data), getTargetByUA(ctx.R.UserAgent()), !devMode)
 					if err != nil {
 						return rex.Status(500, err.Error())
 					}
@@ -120,12 +120,12 @@ func query() rex.Handle {
 
 		// serve embed polyfills/types
 		if hasBuildVerPrefix {
-			data, err := embedFS.ReadFile("embed/polyfills" + pathname)
+			data, err := embedFS.ReadFile("server/embed/polyfills" + pathname)
 			if err == nil {
 				ctx.SetHeader("Cache-Control", "public, max-age=31536000, immutable")
 				return rex.Content(pathname, startTime, bytes.NewReader(data))
 			}
-			data, err = embedFS.ReadFile("embed/types" + pathname)
+			data, err = embedFS.ReadFile("server/embed/types" + pathname)
 			if err == nil {
 				ctx.SetHeader("Content-Type", "application/typescript; charset=utf-8")
 				ctx.SetHeader("Cache-Control", "public, max-age=31536000, immutable")
@@ -305,10 +305,11 @@ func query() rex.Handle {
 			}
 		}
 
-		bundleMode := !ctx.Form.IsNil("bundle") || !ctx.Form.IsNil("b")
-		noCheck := !ctx.Form.IsNil("no-check")
+		isBundleMode := !ctx.Form.IsNil("bundle") || !ctx.Form.IsNil("b")
 		isDev := !ctx.Form.IsNil("dev")
 		isPkgCSS := !ctx.Form.IsNil("css")
+		isWorkder := !ctx.Form.IsNil("worker")
+		noCheck := !ctx.Form.IsNil("no-check")
 		isBare := false
 
 		// parse `resolvePrefix`
@@ -365,7 +366,7 @@ func query() rex.Handle {
 					submodule := strings.TrimSuffix(strings.Join(a[1:], "/"), ".js")
 					if endsWith(submodule, ".bundle") {
 						submodule = strings.TrimSuffix(submodule, ".bundle")
-						bundleMode = true
+						isBundleMode = true
 					}
 					if endsWith(submodule, ".development") {
 						submodule = strings.TrimSuffix(submodule, ".development")
@@ -457,8 +458,8 @@ func query() rex.Handle {
 			Deps:       deps,
 			Alias:      alias,
 			Target:     target,
-			BundleMode: bundleMode,
-			IsDev:      isDev,
+			BundleMode: isBundleMode,
+			DevMode:    isDev,
 			stage:      "init",
 		}
 		taskID := task.ID()
@@ -558,18 +559,22 @@ func query() rex.Handle {
 		}
 
 		fmt.Fprintf(buf, `/* esm.sh - %v */%s`, reqPkg, "\n")
-		fmt.Fprintf(buf, `export * from "%s%s";%s`, origin, taskID, "\n")
-		if esm.ExportDefault {
-			fmt.Fprintf(
-				buf,
-				`export { default } from "%s%s";%s`,
-				origin,
-				taskID,
-				"\n",
-			)
+		if isWorkder {
+			fmt.Fprintf(buf, `export default function WorkerWrapper() {%s  return new Worker('%s%s', { type: 'module' })%s}`, "\n", origin, taskID, "\n")
+		} else {
+			fmt.Fprintf(buf, `export * from "%s%s";%s`, origin, taskID, "\n")
+			if esm.ExportDefault {
+				fmt.Fprintf(
+					buf,
+					`export { default } from "%s%s";%s`,
+					origin,
+					taskID,
+					"\n",
+				)
+			}
 		}
 
-		if esm.Dts != "" && !noCheck {
+		if esm.Dts != "" && !noCheck && !isWorkder {
 			value := fmt.Sprintf(
 				"%s%s",
 				origin,

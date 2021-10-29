@@ -4,6 +4,7 @@ import (
 	"encoding/base64"
 	"io/ioutil"
 	"os"
+	"path"
 	"regexp"
 	"strconv"
 	"strings"
@@ -132,6 +133,14 @@ func endsWith(s string, suffixs ...string) bool {
 		}
 	}
 	return false
+}
+
+type devFS struct {
+	cwd string
+}
+
+func (fs devFS) ReadFile(name string) ([]byte, error) {
+	return ioutil.ReadFile(path.Join(fs.cwd, name))
 }
 
 func dirExists(filepath string) bool {

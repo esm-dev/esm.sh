@@ -7,6 +7,7 @@ import (
 )
 
 //go:embed README.md
+//go:embed server/embed
 //go:embed test/browser
 var fs embed.FS
 

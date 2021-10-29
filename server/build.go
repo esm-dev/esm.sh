@@ -25,7 +25,7 @@ type BuildTask struct {
 	Deps       PkgSlice          `json:"deps"`
 	Target     string            `json:"target"`
 	BundleMode bool              `json:"bundle"`
-	IsDev      bool              `json:"dev"`
+	DevMode    bool              `json:"dev"`
 
 	// state
 	id    string
@@ -71,7 +71,7 @@ func (task *BuildTask) ID() string {
 	if strings.HasSuffix(name, ".js") {
 		name = strings.TrimSuffix(name, ".js")
 	}
-	if task.IsDev {
+	if task.DevMode {
 		name += ".development"
 	}
 	if task.BundleMode {
@@ -101,7 +101,7 @@ func (task *BuildTask) getImportPath(pkg Pkg, extendsAlias bool) string {
 	if strings.HasSuffix(name, ".js") {
 		name = strings.TrimSuffix(name, ".js")
 	}
-	if task.IsDev {
+	if task.DevMode {
 		name += ".development"
 	}
 
@@ -152,7 +152,7 @@ func (task *BuildTask) build(tracing *stringSet) (esm *ESM, err error) {
 	tracing.Add(task.ID())
 
 	task.stage = "init"
-	esm, err = initESM(task.wd, task.Pkg, task.Target != "types", task.IsDev)
+	esm, err = initESM(task.wd, task.Pkg, task.Target != "types", task.DevMode)
 	if err != nil {
 		err = fmt.Errorf("init ESM: %v", err)
 		return
@@ -192,7 +192,7 @@ func (task *BuildTask) build(tracing *stringSet) (esm *ESM, err error) {
 	}
 
 	nodeEnv := "production"
-	if task.IsDev {
+	if task.DevMode {
 		nodeEnv = "development"
 	}
 	define := map[string]string{
@@ -324,9 +324,9 @@ esbuild:
 		Target:            targets[task.Target],
 		Format:            api.FormatESModule,
 		Platform:          api.PlatformBrowser,
-		MinifyWhitespace:  !task.IsDev,
-		MinifyIdentifiers: !task.IsDev,
-		MinifySyntax:      !task.IsDev,
+		MinifyWhitespace:  !task.DevMode,
+		MinifyIdentifiers: !task.DevMode,
+		MinifySyntax:      !task.DevMode,
 		Plugins:           []api.Plugin{esmResolverPlugin},
 		Loader: map[string]api.Loader{
 			".svg":   api.LoaderDataURL,
@@ -391,7 +391,7 @@ esbuild:
 				nodeEnv,
 			))
 			eol := "\n"
-			if !task.IsDev {
+			if !task.DevMode {
 				eol = ""
 			}
 
@@ -411,12 +411,12 @@ esbuild:
 						Submodule: submodule,
 					}
 					subTask := &BuildTask{
-						wd:     task.wd, // reuse current wd
-						Pkg:    subPkg,
-						Alias:  task.Alias,
-						Deps:   task.Deps,
-						Target: task.Target,
-						IsDev:  task.IsDev,
+						wd:      task.wd, // reuse current wd
+						Pkg:     subPkg,
+						Alias:   task.Alias,
+						Deps:    task.Deps,
+						Target:  task.Target,
+						DevMode: task.DevMode,
 					}
 					subTask.build(tracing)
 					if err != nil {
@@ -453,9 +453,8 @@ esbuild:
 							}, false)
 							importPath = strings.TrimSuffix(importPath, ".js") + ".bundle.js"
 						} else {
-							f, err := embedFS.Open(fmt.Sprintf("embed/polyfills/node_%s.js", name))
+							_, err := embedFS.ReadFile(fmt.Sprintf("server/embed/polyfills/node_%s.js", name))
 							if err == nil {
-								f.Close()
 								importPath = fmt.Sprintf("/v%d/node_%s.js", VERSION, name)
 							} else {
 								importPath = fmt.Sprintf(
@@ -511,10 +510,10 @@ esbuild:
 								Version:   p.Version,
 								Submodule: submodule,
 							},
-							Alias:  task.Alias,
-							Deps:   task.Deps,
-							Target: task.Target,
-							IsDev:  task.IsDev,
+							Alias:   task.Alias,
+							Deps:    task.Deps,
+							Target:  task.Target,
+							DevMode: task.DevMode,
 						}
 						buildQueue.Push(utils.MustEncodeJSON(t))
 						importPath = task.getImportPath(Pkg{
@@ -560,7 +559,7 @@ esbuild:
 								err = yarnAdd(task.wd, fmt.Sprintf("%s@%s", pkg.Name, pkg.Version))
 							}
 							if err == nil {
-								meta, err := initESM(task.wd, *pkg, true, task.IsDev)
+								meta, err := initESM(task.wd, *pkg, true, task.DevMode)
 								if err == nil {
 									if bytes.HasPrefix(p, []byte{'.'}) {
 										// right shift to strip the object `key`

@@ -29,16 +29,15 @@ var (
 	buildQueue storage.Queue
 	log        *logx.Logger
 	node       *Node
-	externalFS *embed.FS
+	embedFS    EmbedFS
 )
 
-//go:embed embed
-var embedFS embed.FS
+type EmbedFS interface {
+	ReadFile(name string) ([]byte, error)
+}
 
 // Serve serves ESM server
-func Serve(efs *embed.FS) {
-	externalFS = efs
-
+func Serve(efs EmbedFS) {
 	var (
 		port             int
 		httpsPort        int
@@ -100,6 +99,14 @@ func Serve(efs *embed.FS) {
 		if port != 80 {
 			cdnDomain = fmt.Sprintf("localhost:%d", port)
 		}
+		cwd, err := os.Getwd()
+		if err != nil {
+			fmt.Println(err)
+			os.Exit(1)
+		}
+		embedFS = &devFS{cwd}
+	} else {
+		embedFS = efs
 	}
 
 	log, err := logx.New(fmt.Sprintf("file:%s?buffer=32k", path.Join(logDir, "main.log")))
@@ -193,7 +200,7 @@ func Serve(efs *embed.FS) {
 			AllowHeaders:    []string{"Origin", "Content-Type", "Content-Length", "Accept-Encoding"},
 			MaxAge:          3600,
 		}),
-		query(),
+		query(isDev),
 	)
 
 	C := rex.Serve(rex.ServerConfig{
@@ -271,6 +278,6 @@ func serveBuild() {
 }
 
 func init() {
-	externalFS = &embed.FS{}
+	embedFS = &embed.FS{}
 	log = &logx.Logger{}
 }
