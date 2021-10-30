@@ -82,7 +82,7 @@ function App() {
         </div>
       </div>
       <div className="editor" style={{ left: siderWidth, width: `${editorWidth * 100}vw` }} ref={editorContainerRef} />
-      <div className="preview" style={{ right: 0, width: `cacl(${(1 - editorWidth) * 100}vw - ${siderWidth}px)` }} >
+      <div className="preview" style={{ right: 0, width: `calc(${(1 - editorWidth) * 100}vw - ${siderWidth}px)` }} >
         <iframe src={"/embed/playground/index.html"}></iframe>
       </div>
     </>

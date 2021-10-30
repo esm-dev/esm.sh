@@ -9,8 +9,8 @@ export default {
   <script type="module" src="./app.jsx"></script>
 </body>
 </html>`,
-  'app.jsx': `import React from 'https://esm.sh/react'
-import ReactDom from 'https://esm.sh/react-dom'
+  'app.jsx': `import React from '${location.origin}/react'
+import ReactDom from '${location.origin}/react-dom'
   
 ReactDom.render(<p>Hello World!</p>, document.getElementById('root'))`
 }

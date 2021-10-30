@@ -166,7 +166,7 @@ func Serve(efs EmbedFS) {
 		if err := ensureDir(wd); err != nil {
 			log.Fatal(err)
 		}
-		services := []string{"esm-ns-cjs-exports"}
+		services := []string{"esm-ns-cjs-exports-parser"}
 		if len(nodeServices) > 0 {
 			for _, v := range strings.Split(nodeServices, ",") {
 				v = strings.TrimSpace(v)

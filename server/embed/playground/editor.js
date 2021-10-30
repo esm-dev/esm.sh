@@ -1,4 +1,5 @@
 import { Uri, editor } from '/monaco-editor'
+import localforage from '/localforage'
 import editorWorker from '/monaco-editor/esm/vs/editor/editor.worker?worker'
 import jsonWorker from '/monaco-editor/esm/vs/language/json/json.worker?worker'
 import cssWorker from '/monaco-editor/esm/vs/language/css/css.worker?worker'
@@ -26,7 +27,12 @@ self.MonacoEnvironment = {
 
 export function createModel(name, source) {
   const uri = Uri.parse(`file:///src/${name}`)
-  return editor.createModel(source, getLanguage(name), uri)
+  const model = editor.createModel(source, getLanguage(name), uri)
+  model.onDidChangeContent(e=>{
+    localforage.setItem(`file-${name}`,model.getValue())
+    console.log(e)
+  })
+  return model
 }
 
 export function createEditor(container) {
