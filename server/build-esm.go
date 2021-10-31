@@ -1,7 +1,9 @@
 package server
 
 import (
+	"errors"
 	"fmt"
+	"io/ioutil"
 	"path"
 	"strings"
 	"sync"
@@ -23,6 +25,8 @@ type buildOptions struct {
 	target string
 	minify bool
 	cache  bool
+	bundle bool
+	origin string
 }
 
 func buildSync(filename string, source string, opts buildOptions) ([]byte, error) {
@@ -34,30 +38,69 @@ func buildSync(filename string, source string, opts buildOptions) ([]byte, error
 	}
 	var resolverPlugin = api.Plugin{
 		Name: "esm-resolver",
-		Setup: func(plugin api.PluginBuild) {
-			plugin.OnResolve(
+		Setup: func(build api.PluginBuild) {
+			build.OnResolve(
 				api.OnResolveOptions{Filter: ".*"},
 				func(args api.OnResolveArgs) (api.OnResolveResult, error) {
-					path, qs := utils.SplitByFirstByte(args.Path, '?')
+					pathname, qs := utils.SplitByFirstByte(args.Path, '?')
 					if args.Path == filename ||
 						(strings.HasSuffix(filename, ".css") && strings.HasSuffix(args.Path, ".css")) ||
 						(strings.HasSuffix(filename, "?css") && strings.HasSuffix(args.Path, "?css")) {
 						return api.OnResolveResult{}, nil
 					}
-					if strings.HasSuffix(path, ".css") {
-						path = path + "?module"
+					if strings.HasSuffix(pathname, ".css") {
+						pathname = pathname + "?module"
 						if qs != "" {
-							path += "&" + qs
+							pathname += "&" + qs
 						}
-						return api.OnResolveResult{Path: path, External: true}, nil
+						return api.OnResolveResult{Path: pathname, External: true}, nil
 					}
 					if qs == "css" {
-						path = path + "?css&module"
-						return api.OnResolveResult{Path: path, External: true}, nil
+						pathname = pathname + "?css&module"
+						return api.OnResolveResult{Path: pathname, External: true}, nil
+					}
+					if opts.bundle {
+						if strings.HasPrefix(pathname, "http://") || strings.HasPrefix(pathname, "https://") {
+							return api.OnResolveResult{
+								Path:      pathname,
+								Namespace: "http",
+							}, nil
+						}
+						if strings.HasPrefix(pathname, "/") {
+							return api.OnResolveResult{
+								Path:      opts.origin + pathname,
+								Namespace: "http",
+							}, nil
+						}
+						return api.OnResolveResult{
+							Path:      opts.origin + path.Join(path.Dir(filename), pathname),
+							Namespace: "http",
+						}, nil
 					}
 					return api.OnResolveResult{External: true}, nil
 				},
 			)
+			build.OnLoad(
+				api.OnLoadOptions{Filter: ".*", Namespace: "http"},
+				func(args api.OnLoadArgs) (api.OnLoadResult, error) {
+					resp, err := httpClient.Get(args.Path)
+					if err != nil {
+						return api.OnLoadResult{}, err
+					}
+					defer resp.Body.Close()
+					if resp.StatusCode != 200 {
+						return api.OnLoadResult{}, errors.New("bad gateway")
+					}
+					data, err := ioutil.ReadAll(resp.Body)
+					if err != nil {
+						return api.OnLoadResult{}, err
+					}
+					code := string(data)
+					return api.OnLoadResult{
+						Contents: &code,
+						Loader:   loaders[path.Ext(filename)],
+					}, nil
+				})
 		},
 	}
 	options := api.BuildOptions{

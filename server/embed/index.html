@@ -490,7 +490,7 @@
       rootEl.className = 'playground'
       rootEl.innerHTML = ''
       if ('serviceWorker' in navigator) {
-        navigator.serviceWorker.register('/embed/playground/sw.js', { type: 'module' }).then(() => {
+        navigator.serviceWorker.register('/embed/playground/sw.js?bundle&minify', { type: 'module' }).then(() => {
 					console.log('sw.js registered')
 				}).catch(err => {
 					console.error('ServiceWorker:', err);

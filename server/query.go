@@ -97,10 +97,22 @@ func query(devMode bool) rex.Handle {
 			if err == nil {
 				switch path.Ext(pathname) {
 				case ".js", ".jsx", ".ts", ".tsx":
-					data, err = buildSync(pathname, string(data), buildOptions{
+					opts := buildOptions{
 						target: getTargetByUA(ctx.R.UserAgent()),
 						cache:  !devMode,
-					})
+						minify: !ctx.Form.IsNil("minify"),
+					}
+					if !ctx.Form.IsNil("bundle") {
+						hostname := ctx.R.Host
+						isLocalHost := hostname == "localhost" || strings.HasPrefix(hostname, "localhost:")
+						proto := "https"
+						if isLocalHost {
+							proto = "http"
+						}
+						opts.bundle = true
+						opts.origin = proto + "://" + hostname
+					}
+					data, err = buildSync(pathname, string(data), opts)
 					if err != nil {
 						return rex.Status(500, err.Error())
 					}
