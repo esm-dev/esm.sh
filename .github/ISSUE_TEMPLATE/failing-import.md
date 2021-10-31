@@ -25,5 +25,5 @@ After running `deno run` I get this:
 
 ## Additional info
 
-- **esm.sh version**: v47
-- **Deno version**: 1.13.2
+- **esm.sh version**: v55
+- **Deno version**: 1.15.3
