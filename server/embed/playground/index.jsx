@@ -54,12 +54,13 @@ function App() {
 				}))
 				currentFile = await localforage.getItem('current-file')
 			} else {
-				Object.entries(preset).forEach(([name, content]) => {
+				await Promise.all(Object.entries(preset).map(async ([name, content]) => {
 					files.push({ name, model: createModel(name, content) })
-					localforage.setItem(`file-${name}`, content)
-				})
+					await localforage.setItem(`file-${name}`, content)
+				}))
 				currentFile = 'index.html'
-				localforage.setItem('current-file', currentFile)
+				await localforage.setItem('current-file', currentFile)
+				refresh()
 			}
 			editorRef.current = createEditor(editorContainerRef.current)
 			setFiles(files.filter(Boolean))
