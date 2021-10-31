@@ -1,7 +1,7 @@
 {
-	"name": "esm-ns-cjs-exports-parser",
+	"name": "esm-cjs-exports",
 	"version": "0.3.3",
-	"description": "esm.sh node service: cjs exports parser",
+	"description": "Node service for esm.sh: cjs exports parser",
 	"main": "index.js",
 	"scripts": {
 		"test": "node test.js",
