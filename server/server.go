@@ -217,7 +217,8 @@ func Serve(efs EmbedFS) {
 
 	if isDev {
 		log.Debugf("Server ready on http://localhost:%d", port)
-		log.Debugf("Test page at http://localhost:%d?test", port)
+		log.Debugf("Testing page at http://localhost:%d?test", port)
+		log.Debugf("Playground at http://localhost:%d?playground", port)
 	}
 
 	c := make(chan os.Signal, 1)

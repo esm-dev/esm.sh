@@ -587,6 +587,15 @@ func query(devMode bool) rex.Handle {
 		if cdnDomain != "" && cdnDomain != "localhost" && !strings.HasPrefix(cdnDomain, "localhost:") && !isWorkder {
 			origin = fmt.Sprintf("https://%s/", cdnDomain)
 		}
+		if isWorkder {
+			hostname := ctx.R.Host
+			isLocalHost := hostname == "localhost" || strings.HasPrefix(hostname, "localhost:")
+			proto := "https"
+			if isLocalHost {
+				proto = "http"
+			}
+			origin = fmt.Sprintf("%s://%s/", proto, hostname)
+		}
 
 		fmt.Fprintf(buf, `/* esm.sh - %v */%s`, reqPkg, "\n")
 		if isWorkder {
