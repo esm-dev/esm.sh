@@ -531,9 +531,9 @@ func query(devMode bool) rex.Handle {
 		if css {
 			if esm.PackageCSS {
 				hostname := ctx.R.Host
-				proto := "http"
-				if ctx.R.TLS != nil {
-					proto = "https"
+				proto := "https"
+				if hostname == "localhost" {
+					proto = "http"
 				}
 				url := fmt.Sprintf("%s://%s/%s.css", proto, hostname, strings.TrimSuffix(taskID, ".js"))
 				if cssAsModule {
