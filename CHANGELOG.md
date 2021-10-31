@@ -1,5 +1,20 @@
 # Change Log
 
+## v55
+
+- Add playground to write esm app online, try it on https://esm.sh?playground
+- Add a better **cjs exports parser**: [cjs-esm-exports](https://www.npmjs.com/package/cjs-esm-exports)
+- Support web worker
+  ```js
+  import editorWorker from '/monaco-editor/esm/vs/editor/editor.worker?worker'
+  
+	const worker = new editorWorker()
+	```
+-	Add `queue` interface
+- Support **dataurl**, **.wasm** import
+- Import deno polyfills from https://deno.land/std@0.113.0/node
+- Fix package CSS
+
 ## v54
 
 - Update deno polyfills from 0.106.0 to 0.110.0 ([#190](https://github.com/postui/esm.sh/issues/190))
