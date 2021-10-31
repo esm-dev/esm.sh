@@ -440,11 +440,11 @@
       color: #666;
       background-color: #eee;
       transition: all 0.2s ease;
-			user-select: none;
+      user-select: none;
     }
 
     .sider .file-item.add:hover,
-		.preview .refresh:hover {
+    .preview .refresh:hover {
       color: #333;
       background-color: #ddd;
     }
@@ -453,10 +453,10 @@
       border-right: 1px solid #eee;
     }
 
-		.preview iframe {
-			width: 100%;
-			height: 100%;
-		} 
+    .preview iframe {
+      width: 100%;
+      height: 100%;
+    }
   </style>
 </head>
 
@@ -491,14 +491,14 @@
       rootEl.innerHTML = ''
       if ('serviceWorker' in navigator) {
         navigator.serviceWorker.register('/embed/playground/sw.js?bundle&minify', { type: 'module' }).then(() => {
-					console.log('sw.js registered')
-				}).catch(err => {
-					console.error('ServiceWorker:', err);
-				});
-				import('/embed/playground/index.jsx')
+          console.log('sw.js registered')
+        }).catch(err => {
+          console.error('ServiceWorker:', err);
+        });
+        import('/embed/playground/index.jsx')
       } else {
-				alert('Please upgrade your brower!')
-			}
+        alert('Please upgrade your brower!')
+      }
     } else if (query.has('test')) {
       import('/embed/test/browser/testing.js')
     } else {

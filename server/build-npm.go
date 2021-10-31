@@ -651,7 +651,7 @@ esbuild:
 					fmt.Fprintf(buf, `import { Buffer as __Buffer$ } from "/v%d/node_buffer.js";%s`, VERSION, eol)
 				}
 				if bytes.Contains(outputContent, []byte("__global$")) {
-					fmt.Fprintf(buf, `var __global$ = globalThis || window;%s`, eol)
+					fmt.Fprintf(buf, `var __global$ = globalThis || (typeof window !== "undefined" ? window : self);%s`, eol)
 				}
 				if bytes.Contains(outputContent, []byte("__setImmediate$")) {
 					fmt.Fprintf(buf, `var __setImmediate$ = (cb, ...args) => setTimeout(cb, 0, ...args);%s`, eol)

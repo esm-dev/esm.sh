@@ -16,7 +16,7 @@ self.addEventListener('install', e => {
 
 self.addEventListener('fetch', e => {
   const { pathname } = new URL(e.request.url)
-  if (pathname.startsWith('/embed/playground/')) {
+  if (pathname.startsWith('/embed/playground/') && pathname !== "/embed/playground/sw.js") {
     e.respondWith(esmWorker.fetch(e.request))
   }
 })
