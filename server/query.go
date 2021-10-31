@@ -104,8 +104,10 @@ func query(devMode bool) rex.Handle {
 					if err != nil {
 						return rex.Status(500, err.Error())
 					}
+					ctx.SetHeader("Cache-Control", fmt.Sprintf("public, max-age=%d", pkgCacheTimeout))
 					return rex.Content(pathname+".js", startTime, bytes.NewReader(data))
 				default:
+					ctx.SetHeader("Cache-Control", fmt.Sprintf("public, max-age=%d", pkgCacheTimeout))
 					return rex.Content(pathname, startTime, bytes.NewReader(data))
 				}
 			}
@@ -182,13 +184,13 @@ func query(devMode bool) rex.Handle {
 		// serve raw dist files like CSS that is fetching from unpkg.com
 		if storageType == "raw" {
 			shouldRedirect := !regFullVersionPath.MatchString(pathname)
-			isTLS := ctx.R.TLS != nil
 			hostname := ctx.R.Host
-			proto := "http"
-			if isTLS {
-				proto = "https"
+			isLocalHost := hostname == "localhost" || strings.HasPrefix(hostname, "localhost:")
+			proto := "https"
+			if isLocalHost {
+				proto = "http"
 			}
-			if isTLS && cdnDomain != "" && hostname != cdnDomain {
+			if !isLocalHost && cdnDomain != "" && hostname != cdnDomain {
 				shouldRedirect = true
 				hostname = cdnDomain
 				proto = "https"
@@ -322,7 +324,7 @@ func query(devMode bool) rex.Handle {
 		css := !ctx.Form.IsNil("css")
 		cssAsModule := css && !ctx.Form.IsNil("module")
 		isBare := false
-		isBundleMode := !ctx.Form.IsNil("bundle") || !ctx.Form.IsNil("b")
+		isBundleMode := !ctx.Form.IsNil("bundle")
 		isDev := !ctx.Form.IsNil("dev")
 		isWorkder := !ctx.Form.IsNil("worker")
 		noCheck := !ctx.Form.IsNil("no-check")
@@ -532,7 +534,7 @@ func query(devMode bool) rex.Handle {
 			if esm.PackageCSS {
 				hostname := ctx.R.Host
 				proto := "https"
-				if hostname == "localhost" {
+				if hostname == "localhost" || strings.HasPrefix(hostname, "localhost:") {
 					proto = "http"
 				}
 				url := fmt.Sprintf("%s://%s/%s.css", proto, hostname, strings.TrimSuffix(taskID, ".js"))

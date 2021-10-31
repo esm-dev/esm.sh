@@ -490,14 +490,15 @@
       rootEl.className = 'playground'
       rootEl.innerHTML = ''
       if ('serviceWorker' in navigator) {
-        addEventListener('load', () => {
-          navigator.serviceWorker.register('/embed/playground/sw.js', { type: 'module' }).then(() => {
-            import('/embed/playground/index.jsx')
-          }, (err) => {
-            console.error('ServiceWorker:', err);
-          });
-        });
-      }
+        navigator.serviceWorker.register('/embed/playground/sw.js', { type: 'module' }).then(() => {
+					console.log('sw.js registered')
+				}).catch(err => {
+					console.error('ServiceWorker:', err);
+				});
+				import('/embed/playground/index.jsx')
+      } else {
+				alert('Please upgrade your brower!')
+			}
     } else if (query.has('test')) {
       import('/embed/test/browser/testing.js')
     } else {

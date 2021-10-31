@@ -15,7 +15,7 @@ export default {
 }`,
   'app.jsx': `import React from '${location.origin}/react'
 import ReactDom from '${location.origin}/react-dom'
-  
+
 ReactDom.render(
   <h1>Hello World!</h1>,
   document.getElementById('root')

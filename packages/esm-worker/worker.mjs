@@ -1,11 +1,9 @@
 import init, { transformSync } from './compiler/pkg/esm_worker_compiler.mjs'
-import WASM from './compiler/pkg/esm_worker_compiler_bg.wasm'
 import { getContentType } from './mime.mjs'
 
-init(WASM)
-
-export default function createESMWorker(fs) {
+export default function createESMWorker({ fs, compilerWasm }) {
 	const decoder = new TextDecoder()
+	let wasmInited = init(compilerWasm).then(() => wasmInited = true)
 
 	return {
 		async fetch(request) {
@@ -21,6 +19,9 @@ export default function createESMWorker(fs) {
 							importMap = v
 						}
 					} catch (e) { }
+					if (wasmInited instanceof Promise) {
+						await wasmInited
+					}
 					const options = { importMap }
 					const { code } = transformSync(pathname, typeof content === 'string' ? content : decoder.decode(content), options)
 					return new Response(code, {

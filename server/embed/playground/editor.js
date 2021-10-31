@@ -35,7 +35,6 @@ export function createModel(name, source) {
   const model = editor.createModel(source, lang, uri)
   model.onDidChangeContent(e => {
     localforage.setItem(`file-${name}`, model.getValue())
-    console.log(e)
   })
   return model
 }
