@@ -1,8 +1,17 @@
 {
-  "name": "esmd",
-  "version": "0.0.0",
-  "description": "Build Web Apps with ESM.",
-  "main": "dist/index.js",
-  "repository": "https://github.com/alephjs/esm.sh",
-  "license": "MIT"
+	"name": "esm-worker",
+	"version": "0.0.1",
+	"description": "ESM Worker runs in V8.",
+	"module": "worker.mjs",
+	"scripts": {
+		"prepublish": "node compiler/build.js"
+	},
+	"files": [
+		"worker.mjs",
+		"mime.mjs",
+		"compiler/pkg/esm_worker_compiler.mjs",
+		"compiler/pkg/esm_worker_compiler_bg.wasm"
+	],
+	"repository": "https://github.com/alephjs/esm.sh",
+	"license": "MIT"
 }
