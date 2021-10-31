@@ -17,7 +17,7 @@ export default {
 import ReactDom from '${location.origin}/react-dom'
   
 ReactDom.render(
-  <p>Hello World!</p>,
+  <h1>Hello World!</h1>,
   document.getElementById('root')
 )`
 }
