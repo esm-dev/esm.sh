@@ -1,6 +1,6 @@
 {
 	"name": "esm-worker",
-	"version": "0.0.1",
+	"version": "0.0.5",
 	"description": "ESM Worker runs in V8.",
 	"module": "worker.mjs",
 	"scripts": {

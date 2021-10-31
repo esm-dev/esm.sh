@@ -14,7 +14,7 @@ ls.on('close', code => {
     writeFileSync(
       jsFile.replace(/\.js$/, '.mjs'),
       jsCode.replace(`import * as __wbg_star0 from 'env';`, '')
-        .replace(`imports['env'] = __wbg_star0;`, '')
+        .replace(`imports['env'] = __wbg_star0;`, `imports['env'] = { now: () => Date.now() };`)
     )
     rmSync(jsFile)
   }

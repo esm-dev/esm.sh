@@ -423,13 +423,14 @@
       font-weight: 600;
     }
 
-    .sider .file-item.add {
+    .sider .file-item.add,
+    .preview .refresh {
       display: flex;
       align-items: center;
       justify-content: center;
       position: absolute;
-      bottom: 20px;
-      left: 20px;
+      bottom: 15px;
+      left: 15px;
       width: 32px;
       height: 32px;
       padding: 0;
@@ -439,9 +440,11 @@
       color: #666;
       background-color: #eee;
       transition: all 0.2s ease;
+			user-select: none;
     }
 
-    .sider .file-item.add:hover {
+    .sider .file-item.add:hover,
+		.preview .refresh:hover {
       color: #333;
       background-color: #ddd;
     }

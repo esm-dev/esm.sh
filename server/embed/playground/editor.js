@@ -26,10 +26,15 @@ self.MonacoEnvironment = {
 }
 
 export function createModel(name, source) {
+  const lang = getLanguage(name)
+  if (!lang) {
+    return null
+  }
+
   const uri = Uri.parse(`file:///src/${name}`)
-  const model = editor.createModel(source, getLanguage(name), uri)
-  model.onDidChangeContent(e=>{
-    localforage.setItem(`file-${name}`,model.getValue())
+  const model = editor.createModel(source, lang, uri)
+  model.onDidChangeContent(e => {
+    localforage.setItem(`file-${name}`, model.getValue())
     console.log(e)
   })
   return model
@@ -55,7 +60,7 @@ export function createEditor(container) {
   })
 }
 
-export function getLanguage(name) {
+function getLanguage(name) {
   switch (name.slice(name.lastIndexOf('.') + 1).toLowerCase()) {
     case 'ts':
     case 'tsx':
@@ -70,5 +75,5 @@ export function getLanguage(name) {
     case 'html':
       return 'html'
   }
-  return ''
+  return null
 }
