@@ -9,9 +9,14 @@ const esmWorker = createESMWorker({
 })
 
 self.addEventListener('install', e => {
+  console.log('install' )
   if (location.hostname === 'localhost') {
     e.waitUntil(self.skipWaiting())
   }
+})
+
+self.addEventListener('activate', e => {
+  console.log('activate')
 })
 
 self.addEventListener('fetch', e => {

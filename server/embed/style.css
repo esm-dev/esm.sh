@@ -395,7 +395,7 @@ i {
 	align-items: center;
 	padding-left: 15px;
 	font-size: 14px;
-	line-height: 1.6;
+	line-height: 24px;
 	color: #454545;
 	cursor: pointer;
 }
@@ -412,14 +412,23 @@ i {
 
 .sider .file-item.active:before {
 	position: absolute;
-	top: 10px;
-	left: 5px;
+	top: 11px;
+	left: 6px;
 	display: inline-block;
-	width: 5px;
-	height: 5px;
+	width: 4px;
+	height: 4px;
 	border-radius: 50%;
 	background-color: #454545;
 	content: '';		
+}
+
+.sider .file-name {
+  display: inline-block;
+	width: 100%;
+	height: 24px;
+	text-overflow: ellipsis;
+  white-space: nowrap;
+	overflow: hidden;
 }
 
 .sider .file-item.add,

@@ -527,6 +527,8 @@ func yarnAdd(wd string, packages ...string) (err error) {
 		yarnMutex := os.Getenv("YARN_MUTEX")
 		if yarnMutex != "" {
 			args = append(args, "--mutex", yarnMutex)
+		} else {
+			args = append(args, "--mutex", "network")
 		}
 		cmd := exec.Command("yarn", append(args, packages...)...)
 		cmd.Dir = wd
