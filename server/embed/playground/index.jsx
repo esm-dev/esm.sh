@@ -4,6 +4,8 @@ import React, { useCallback, useEffect, useRef, useState } from '/react@17'
 import { createEditor, createModel } from './editor.js'
 import preset from './preset.js'
 
+document.title = 'ESM>CDN Playground'
+
 localforage.getItem('file-index.html').then(value => {
 	if (!value) {
 		localforage.setItem('current-file', 'app.jsx')
@@ -80,6 +82,13 @@ function App() {
 	return (
 		<>
 			<div className="sider" style={{ width: siderWidth }} >
+				<div className="logo">
+				<svg width="21" height="19" viewBox="0 0 21 19" fill="none" xmlns="http://www.w3.org/2000/svg">
+						<path d="M14 2H7.54131C4.48093 2 2 4.23858 2 7C2 9.76142 4.48093 12 7.54131 12H14" stroke="#333333" stroke-width="2.5" stroke-linecap="round" />
+						<path d="M7 7H13.4587C16.5191 7 19 9.23858 19 12C19 14.7614 16.5191 17 13.4587 17H7.35294" stroke="#333333" stroke-width="2.5" stroke-linecap="round" />
+					</svg>
+					Playgroud
+				</div>
 				{!files && <div className="file-item loading"><em>loading...</em></div>}
 				{files && files.map(file => {
 					return (

@@ -397,18 +397,24 @@
       height: 100vh;
     }
 
-    .sider>em {
-      padding-left: 10px;
-      margin-top: 6px;
-      color: #999;
-    }
+		.sider .logo {
+			display: flex;
+      align-items: center;
+			gap: 5px;
+			padding-left: 15px;
+      margin: 15px 0;
+			font-size: 11px;
+			font-weight: 500;
+			color: #999;
+		}
 
     .sider .file-item {
+			position: relative;
       display: flex;
       align-items: center;
-      padding-left: 12px;
-      margin-top: 6px;
+      padding-left: 15px;
       font-size: 14px;
+			line-height: 1.6;
       color: #454545;
       cursor: pointer;
     }
@@ -422,6 +428,18 @@
       color: #000000;
       font-weight: 600;
     }
+
+		.sider .file-item.active:before {
+			position: absolute;
+			top: 10px;
+			left: 5px;
+			display: inline-block;
+			width: 5px;
+			height: 5px;
+			border-radius: 50%;
+			background-color: #333;
+			content: '';		
+		}
 
     .sider .file-item.add,
     .preview .refresh {
@@ -494,7 +512,7 @@
           console.log('sw.js registered')
         }).catch(err => {
           console.error('ServiceWorker:', err);
-        });
+        }); 
         import('/embed/playground/index.jsx')
       } else {
         alert('Please upgrade your brower!')
