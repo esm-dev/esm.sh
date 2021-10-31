@@ -187,7 +187,16 @@ func initESM(wd string, pkg Pkg, checkExports bool, isDev bool) (esm *ESM, err e
 }
 
 func findESM(id string) (esm *ESM, err error) {
-	store, _, err := db.Get(id)
+	store, _, err := db.Get("error-" + id)
+	if err != nil && err != storage.ErrNotFound {
+		return
+	}
+	if err == nil {
+		err = errors.New(store["error"])
+		return
+	}
+
+	store, _, err = db.Get(id)
 	if err == nil {
 		err = json.Unmarshal([]byte(store["esm"]), &esm)
 		if err != nil {

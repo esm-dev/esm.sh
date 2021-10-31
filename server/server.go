@@ -3,6 +3,7 @@ package server
 import (
 	"embed"
 	"encoding/json"
+	"errors"
 	"flag"
 	"fmt"
 	"os"
@@ -237,18 +238,26 @@ func pushBuild(task *BuildTask) (err error) {
 	if task == nil {
 		return
 	}
-	exists, err := cache.Has(task.ID())
+
+	taskID := task.ID()
+	store, _, err := db.Get("error-" + taskID)
+	if err == nil {
+		return errors.New(store["error"])
+	}
+
+	exists, err := cache.Has(taskID)
 	if err != nil {
 		return
 	}
+
 	if buildQueue != nil && !exists {
-		err = cache.Set(task.ID(), []byte{'1'}, 30*time.Minute)
+		err = cache.Set(taskID, []byte{'1'}, 30*time.Minute)
 		if err != nil {
 			return
 		}
 		err = buildQueue.Push(utils.MustEncodeJSON(task))
 		if err != nil {
-			cache.Delete(task.ID())
+			cache.Delete(taskID)
 		}
 	}
 	return
@@ -267,6 +276,9 @@ func serveBuild() {
 				t := time.Now()
 				_, err := task.Build()
 				if err != nil {
+					if !strings.HasPrefix(err.Error(), "yarn add ") {
+						db.Put("error-"+task.ID(), "error", storage.Store{"error": err.Error()})
+					}
 					log.Error("build:", err)
 				} else {
 					log.Debugf("build %s in %v", task.ID(), time.Now().Sub(t))

@@ -1,4 +1,9 @@
 import localforage from '/localforage';
+import createESMWorker from '/esm-worker';
+
+const worker = createESMWorker({
+  readFile: name => localforage.getItem(`file-${name.replace('/embed/playground/', '')}`)
+})
 
 self.addEventListener('install', e => {
   e.waitUntil(self.skipWaiting());
@@ -9,25 +14,8 @@ self.addEventListener('activate', e => {
 });
 
 self.addEventListener('fetch', e => {
-  e.respondWith(serve(e.request))
-});
-
-async function serve(request) {
-  const url = new URL(request.url)
-  const file = url.pathname.replace('/embed/playground/', '')
-  const content = await localforage.getItem(`file-${file}`)
-  if (content) {
-    if (file.endsWith('.html')) {
-      return new Response(content, {
-        headers: {
-          'content-type': 'text/html',
-        },
-      })
-    } else if (/\.(js|jsx|ts|tsx)$/.test(file)) {
-
-    } else if (/\.(css)$/.test(file)) {
-
-    }
+  const { pathname } = new URL(e.request.url)
+  if (pathname.startsWith('/embed/playground/')) {
+    e.respondWith(worker.fetch(e.request))
   }
-  return new Response(`not found`, { status: 404 })
-}
+});

@@ -263,16 +263,7 @@ func query(devMode bool) rex.Handle {
 						return rex.Status(500, err.Error())
 					}
 					cssStr, _ := json.Marshal(string(data))
-					jsCode := fmt.Sprintf(`
-const id = "%s"
-const css = %s
-if (!document.querySelector("[data-module-url=\"" + id + "\"]")) {
-	const el = document.createElement('style')
-	el.type = 'text/css'
-	el.setAttribute('data-module-url', id)
-	el.appendChild(document.createTextNode(css))
-	document.head.appendChild(el)
-}`, strings.TrimPrefix(savePath, "builds"), cssStr)
+					jsCode := fmt.Sprintf(cssLoaderTpl, strings.TrimPrefix(savePath, "builds"), cssStr)
 					ctx.SetHeader("Cache-Control", "public, max-age=31536000, immutable")
 					return rex.Content(savePath+".js", modtime, bytes.NewReader([]byte(jsCode)))
 				}
@@ -513,7 +504,7 @@ if (!document.querySelector("[data-module-url=\"" + id + "\"]")) {
 				// todo: maybe don't build
 				pushBuild(task)
 			} else {
-				err := pushBuild(task)
+				err = pushBuild(task)
 				if err != nil {
 					return rex.Status(500, err.Error())
 				}
