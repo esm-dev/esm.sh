@@ -570,9 +570,7 @@ func query(devMode bool) rex.Handle {
 
 		buf := bytes.NewBuffer(nil)
 		origin := "/"
-		if cdnDomain == "localhost" || strings.HasPrefix(cdnDomain, "localhost:") {
-			origin = fmt.Sprintf("http://%s/", cdnDomain)
-		} else if cdnDomain != "" {
+		if cdnDomain != "" && cdnDomain != "localhost" && !strings.HasPrefix(cdnDomain, "localhost:") && !isWorkder {
 			origin = fmt.Sprintf("https://%s/", cdnDomain)
 		}
 
