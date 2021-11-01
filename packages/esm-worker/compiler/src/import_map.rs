@@ -124,8 +124,8 @@ mod tests {
     imports.insert("react".into(), "https://esm.sh/react".into());
     imports.insert("react-dom/".into(), "https://esm.sh/react-dom/".into());
     imports.insert(
-      "https://deno.land/x/aleph/".into(),
-      "http://localhost:2020/".into(),
+      "https://cdn.skypack.dev/".into(),
+      "https://esm.sh/".into(),
     );
     scope_imports.insert("react".into(), "https://esm.sh/react@16.4.0".into());
     scopes.insert("/scope/".into(), scope_imports);
@@ -148,8 +148,8 @@ mod tests {
       "https://esm.sh/react"
     );
     assert_eq!(
-      import_map.resolve("/app.tsx", "https://deno.land/x/aleph/mod.ts"),
-      "http://localhost:2020/mod.ts"
+      import_map.resolve("/app.tsx", "https://cdn.skypack.dev/mod.ts"),
+      "https://esm.sh/mod.ts"
     );
     assert_eq!(
       import_map.resolve("/framework/react/renderer.ts", "react-dom/server"),

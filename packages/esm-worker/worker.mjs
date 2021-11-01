@@ -1,9 +1,11 @@
 import init, { transformSync } from './compiler/pkg/esm_worker_compiler.mjs'
 import { getContentType } from './mime.mjs'
 
-export default function createESMWorker({ fs, compilerWasm }) {
+export default function createESMWorker(options) {
+	const { fs, getCompilerWasm, isDev } = options
 	const decoder = new TextDecoder()
-	let wasmInited = init(compilerWasm).then(() => wasmInited = true)
+
+	let wasmReady = false
 
 	return {
 		async fetch(request) {
@@ -13,26 +15,27 @@ export default function createESMWorker({ fs, compilerWasm }) {
 				if (/\.(js|jsx|ts|tsx)$/.test(pathname)) {
 					let importMap = {}
 					try {
-						const data = await fs.readFile('import-map.json')
-						const v = JSON.parse(typeof data === 'string' ? data : decoder.decode(data))
-						if (v.imports) {
-							importMap = v
+						for (const name of ['import-map.json', 'import_map.json', 'importmap.json']) {
+							const data = await fs.readFile(name)
+							const v = JSON.parse(typeof data === 'string' ? data : decoder.decode(data))
+							if (v.imports) {
+								importMap = v
+								break
+							}
 						}
 					} catch (e) { }
-					if (wasmInited instanceof Promise) {
-						await wasmInited
+					if (wasmReady === false) {
+						wasmReady = init(getCompilerWasm()).then(() => wasmReady = true)
 					}
-					const options = { importMap }
-					const { code } = transformSync(pathname, typeof content === 'string' ? content : decoder.decode(content), options)
+					if (wasmReady instanceof Promise) {
+						await wasmReady
+					}
+					const transformOptions = { importMap, isDev }
+					const rawCode = typeof content === 'string' ? content : decoder.decode(content)
+					const { code } = transformSync(pathname, rawCode, transformOptions)
 					return new Response(code, {
 						headers: {
 							'content-type': 'application/javascript',
-						},
-					})
-				} else if (/\.(css)$/.test(pathname)) {
-					return new Response(content, {
-						headers: {
-							'content-type': 'text/css',
 						},
 					})
 				} else {

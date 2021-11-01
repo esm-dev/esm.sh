@@ -1,6 +1,7 @@
 use swc_ecma_ast::*;
 use swc_ecma_visit::{noop_fold_type, Fold};
 
+// in `bundle` mode, we need to know what export names are in the start export
 pub struct ExportParser {
   pub names: Vec<String>,
 }

@@ -39,14 +39,14 @@ pub struct Resolver {
 	pub specifier_is_remote: bool,
 	/// a ordered dependencies of the module
 	pub deps: Vec<DependencyDescriptor>,
-	/// parsed jsx inline styles
-	pub inline_styles: HashMap<String, InlineStyle>,
+	/// all star exports of the module
+	pub star_exports: Vec<String>,
 	/// bundle mode
 	pub bundle_mode: bool,
 	/// externals for bundle mode
 	pub bundle_externals: IndexSet<String>,
-	/// all star exports of the module
-	pub star_exports: Vec<String>,
+	/// parsed jsx inline styles
+	pub jsx_inline_styles: HashMap<String, InlineStyle>,
 	/// jsx static class names
 	pub jsx_static_class_names: IndexSet<String>,
 
@@ -71,10 +71,10 @@ impl Resolver {
 			specifier: specifier.into(),
 			specifier_is_remote: is_remote_url(specifier),
 			deps: Vec::new(),
-			inline_styles: HashMap::new(),
+			star_exports: Vec::new(),
 			bundle_mode,
 			bundle_externals: tmp,
-			star_exports: Vec::new(),
+			jsx_inline_styles: HashMap::new(),
 			jsx_static_class_names: IndexSet::new(),
 			import_map: ImportMap::from_hashmap(import_map),
 			react,

@@ -79,11 +79,12 @@ pub struct TransformOutput {
 	#[serde(skip_serializing_if = "Vec::is_empty")]
 	pub deps: Vec<DependencyDescriptor>,
 
-	#[serde(skip_serializing_if = "HashMap::is_empty")]
-	pub inline_styles: HashMap<String, InlineStyle>,
 
 	#[serde(skip_serializing_if = "Vec::is_empty")]
 	pub star_exports: Vec<String>,
+
+	#[serde(skip_serializing_if = "HashMap::is_empty")]
+	pub jsx_inline_styles: HashMap<String, InlineStyle>,
 
 	#[serde(skip_serializing_if = "Vec::is_empty")]
 	pub jsx_static_class_names: Vec<String>,
@@ -145,8 +146,8 @@ pub fn transform_sync(specifier: &str, code: &str, options: JsValue) -> Result<J
 		JsValue::from_serde(&TransformOutput {
 			code,
 			deps: r.deps.clone(),
-			inline_styles: r.inline_styles.clone(),
 			star_exports: r.star_exports.clone(),
+			jsx_inline_styles: r.jsx_inline_styles.clone(),
 			jsx_static_class_names: r.jsx_static_class_names.clone().into_iter().collect(),
 			map,
 		})

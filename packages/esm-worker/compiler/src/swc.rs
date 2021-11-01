@@ -1,11 +1,10 @@
 use crate::error::{DiagnosticBuffer, ErrorBuffer};
 use crate::export_names::ExportParser;
-use crate::import_map::ImportHashMap;
 use crate::resolve_fold::resolve_fold;
 use crate::resolver::{DependencyDescriptor, Resolver};
 use crate::source_type::SourceType;
 
-use std::{cell::RefCell, cmp::min, path::Path, rc::Rc};
+use std::{cell::RefCell, path::Path, rc::Rc};
 use swc_common::{
 	chain,
 	comments::SingleThreadedComments,
@@ -112,12 +111,6 @@ impl SWC {
 	}
 
 	/// transform a JS/TS/JSX/TSX file into a JS file, based on the supplied options.
-	///
-	/// ### Arguments
-	///
-	/// - `resolver` - a resolver to resolve import/export url.
-	/// - `options`  - the options for emit code.
-	///
 	pub fn transform(
 		self,
 		resolver: Rc<RefCell<Resolver>>,
@@ -161,7 +154,7 @@ impl SWC {
 					),
 					jsx
 				),
-				resolve_fold(resolver.clone(),   options.is_dev),
+				resolve_fold(resolver.clone(), options.is_dev),
 				decorators::decorators(decorators::Config {
 					legacy: true,
 					emit_metadata: false
@@ -288,51 +281,26 @@ fn to_str_lit(sub_text: &str) -> String {
 	s.push('"');
 	s
 }
-
-#[allow(dead_code)]
-pub fn t<T: Fold>(specifier: &str, source: &str, tr: T, expect: &str) -> bool {
-	let module = SWC::parse(specifier, source, None).expect("could not parse module");
-	let (code, _) =
-		swc_common::GLOBALS.set(&Globals::new(), || module.apply_fold(tr, false).unwrap());
-	let matched = code.as_str().trim().eq(expect.trim());
-
-	if !matched {
-		let mut p: usize = 0;
-		for i in 0..min(code.len(), expect.len()) {
-			if code.get(i..i + 1) != expect.get(i..i + 1) {
-				p = i;
-				break;
-			}
-		}
-		println!(
-			"{}\x1b[0;31m{}\x1b[0m",
-			code.get(0..p).unwrap(),
-			code.get(p..).unwrap()
-		);
-	}
-	matched
-}
-
-#[allow(dead_code)]
-pub fn st(specifer: &str, source: &str, bundle_mode: bool) -> (String, Rc<RefCell<Resolver>>) {
-	let module = SWC::parse(specifer, source, None).expect("could not parse module");
-	let resolver = Rc::new(RefCell::new(Resolver::new(
-		specifer,
-		ImportHashMap::default(),
-		bundle_mode,
-		vec![],
-		None,
-	)));
-	let (code, _) = module
-		.transform(resolver.clone(), &EmitOptions::default())
-		.unwrap();
-	println!("{}", code);
-	(code, resolver)
-}
-
 #[cfg(test)]
 mod tests {
 	use super::*;
+	use crate::import_map::ImportHashMap;
+
+	fn st(specifer: &str, source: &str, bundle_mode: bool) -> (String, Rc<RefCell<Resolver>>) {
+		let module = SWC::parse(specifer, source, None).expect("could not parse module");
+		let resolver = Rc::new(RefCell::new(Resolver::new(
+			specifer,
+			ImportHashMap::default(),
+			bundle_mode,
+			vec![],
+			None,
+		)));
+		let (code, _) = module
+			.transform(resolver.clone(), &EmitOptions::default())
+			.unwrap();
+		println!("{}", code);
+		(code, resolver)
+	}
 
 	#[test]
 	fn typescript() {
