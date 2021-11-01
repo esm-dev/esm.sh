@@ -11,7 +11,7 @@
 		"index.js"
 	],
 	"dependencies": {
-		"cjs-esm-exports": "^0.3.3",
+		"cjs-esm-exports": "^0.4.0",
 		"enhanced-resolve": "^5.8.3"
 	},
 	"repository": "https://github.com/alephjs/esm.sh",
