@@ -28,7 +28,8 @@ const reservedWords = new Set([
   '__esModule'
 ])
 const requireModeAllowList = [
-  'typescript'
+  'typescript',
+  'he'
 ]
 
 function isObject(v) {
