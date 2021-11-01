@@ -232,12 +232,15 @@ func query(devMode bool) rex.Handle {
 				return err
 			}
 			defer resp.Body.Close()
-			if resp.StatusCode != 200 {
+			if resp.StatusCode >= 500 {
 				return rex.Err(http.StatusBadGateway)
 			}
 			data, err := ioutil.ReadAll(resp.Body)
 			if err != nil {
 				return err
+			}
+			if resp.StatusCode >= 400 {
+				return rex.Status(resp.StatusCode, string(data))
 			}
 			err = fs.WriteData(savePath, data)
 			if err != nil {

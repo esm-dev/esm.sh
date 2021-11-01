@@ -1,8 +1,9 @@
 import init, { transformSync } from './compiler/pkg/esm_worker_compiler.mjs'
 import { getContentType } from './mime.mjs'
+import "style.css"
 
 export default function createESMWorker(options) {
-	const { fs, getCompilerWasm, isDev } = options
+	const { appWorker, fs, getCompilerWasm, isDev } = options
 	const decoder = new TextDecoder()
 
 	let wasmReady = false
@@ -45,6 +46,9 @@ export default function createESMWorker(options) {
 						},
 					})
 				}
+			}
+			if (appWorker && typeof appWorker.fetch === 'function') {
+				return await appWorker.fetch(request)
 			}
 			return new Response(`not found`, { status: 404 })
 		}

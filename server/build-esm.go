@@ -14,10 +14,12 @@ import (
 
 var buildCache sync.Map
 var loaders = map[string]api.Loader{
-	".js":  api.LoaderJS,
-	".jsx": api.LoaderJSX,
-	".ts":  api.LoaderTS,
-	".tsx": api.LoaderJSX,
+	".js":   api.LoaderJS,
+	".jsx":  api.LoaderJSX,
+	".ts":   api.LoaderTS,
+	".tsx":  api.LoaderJSX,
+	".css":  api.LoaderCSS,
+	".wasm": api.LoaderBinary,
 }
 
 type buildOptions struct {

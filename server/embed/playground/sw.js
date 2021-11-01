@@ -1,5 +1,9 @@
 import localforage from '/localforage'
 import createESMWorker from '/esm-worker'
+import init, { HTMLRewriter } from '/lol-html-wasm'
+
+init(fetch('https://esm.sh/lol-html-wasm/lol_html_wasm_bg.wasm', { mode: 'cors' }))
+self.HTMLRewriter = HTMLRewriter
 
 const esmWorker = createESMWorker({
   fs: {
@@ -20,10 +24,12 @@ self.addEventListener('activate', e => {
   console.log('sw->activate')
 })
 
+let fetchCounter = 0
+
 self.addEventListener('fetch', e => {
-  console.log('sw->fetch', e.request.url)
+  console.log(`sw->fetch [${++fetchCounter}]`, e.request.url)
   const { pathname } = new URL(e.request.url)
-  if (pathname !== '/embed/playground/sw.js') {
+  if (pathname.startsWith('/embed/playground/') && pathname !== '/embed/playground/sw.js') {
     e.respondWith(esmWorker.fetch(e.request))
   }
 })
