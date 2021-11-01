@@ -197,15 +197,15 @@ func (task *BuildTask) build(tracing *stringSet) (esm *ESM, err error) {
 	define := map[string]string{
 		"__filename":                  fmt.Sprintf(`"https://%s/%s"`, cdnDomain, task.ID()),
 		"__dirname":                   fmt.Sprintf(`"https://%s/%s"`, cdnDomain, path.Dir(task.ID())),
-		"process":                     "__process$",
 		"Buffer":                      "__Buffer$",
+		"process":                     "__Process$",
 		"setImmediate":                "__setImmediate$",
 		"clearImmediate":              "clearTimeout",
 		"require.resolve":             "__rResolve$",
 		"process.env.NODE_ENV":        fmt.Sprintf(`"%s"`, nodeEnv),
 		"global":                      "__global$",
-		"global.process":              "__process$",
 		"global.Buffer":               "__Buffer$",
+		"global.process":              "__Process$",
 		"global.setImmediate":         "__setImmediate$",
 		"global.clearImmediate":       "clearTimeout",
 		"global.require.resolve":      "__rResolve$",
@@ -644,8 +644,8 @@ esbuild:
 
 			// add nodejs/deno compatibility
 			if task.Target != "node" {
-				if bytes.Contains(outputContent, []byte("__process$")) {
-					fmt.Fprintf(buf, `import __process$ from "/v%d/node_process.js";%s__process$.env.NODE_ENV="%s";%s`, VERSION, eol, nodeEnv, eol)
+				if bytes.Contains(outputContent, []byte("__Process$")) {
+					fmt.Fprintf(buf, `import __Process$ from "/v%d/node_process.js";%s__Process$.env.NODE_ENV="%s";%s`, VERSION, eol, nodeEnv, eol)
 				}
 				if bytes.Contains(outputContent, []byte("__Buffer$")) {
 					fmt.Fprintf(buf, `import { Buffer as __Buffer$ } from "/v%d/node_buffer.js";%s`, VERSION, eol)
