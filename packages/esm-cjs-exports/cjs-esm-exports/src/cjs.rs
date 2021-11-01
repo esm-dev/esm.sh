@@ -372,7 +372,7 @@ impl ExportsParser {
 						_ => {}
 					}
 				} else {
-					return false // undefined
+					return false; // undefined
 				}
 			}
 			Expr::Lit(lit) => {
@@ -670,6 +670,7 @@ impl ExportsParser {
 					// Object.assign(module, { exports: { foo: 'bar' } })
 					// Object.assign(module, { exports: require('lib') })
 					// (function() { ... })()
+					// require("tslib").__exportStar(..., exports)
 					Expr::Call(call) => {
 						if is_object_static_mothod_call(&call, "defineProperty") && call.args.len() >= 3 {
 							let arg0 = &call.args[0];
@@ -743,6 +744,15 @@ impl ExportsParser {
 									if is_exports {
 										self.reexports.insert(reexport);
 									}
+								}
+							}
+						} else if is_tslib_export_star_call(&call) && call.args.len() >= 2 {
+							let (_, is_exports) = is_module_exports(call.args[1].expr.as_ref());
+							if is_exports {
+								if let Some(props) = self.as_obj(call.args[0].expr.as_ref()) {
+									self.use_object_as_exports(props);
+								} else if let Some(reexport) = self.as_reexport(call.args[0].expr.as_ref()) {
+									self.reexports.insert(reexport);
 								}
 							}
 						} else if let Some(body) = is_iife_call(&call) {
@@ -915,6 +925,51 @@ fn is_iife_call(call: &CallExpr) -> Option<Vec<Stmt>> {
 		_ => {}
 	}
 	None
+}
+
+// require("tslib").__exportStar(..., exports)
+// (0, require("tslib").__exportStar)(..., exports)
+// const tslib = require("tslib"); (0, tslib.__exportStar)(..., exports)
+// const {__exportStar} = require("tslib"); (0, __exportStar)(..., exports)
+fn is_tslib_export_star_call(call: &CallExpr) -> bool {
+	println!("{:?}", call);
+	if let Some(callee) = with_expr_callee(call) {
+		match callee {
+			Expr::Member(MemberExpr { prop, .. }) => {
+				if let Expr::Ident(prop) = prop.as_ref() {
+					return prop.sym.as_ref().eq("__exportStar");
+				}
+			}
+			Expr::Paren(ParenExpr { expr, .. }) => match expr.as_ref() {
+				Expr::Member(MemberExpr { prop, .. }) => {
+					if let Expr::Ident(prop) = prop.as_ref() {
+						return prop.sym.as_ref().eq("__exportStar");
+					}
+				}
+				Expr::Ident(id) => {
+					return id.sym.as_ref().eq("__exportStar");
+				}
+				Expr::Seq(SeqExpr { exprs, .. }) => {
+					if let Some(last) = exprs.last() {
+						match last.as_ref() {
+							Expr::Member(MemberExpr { prop, .. }) => {
+								if let Expr::Ident(prop) = prop.as_ref() {
+									return prop.sym.as_ref().eq("__exportStar");
+								}
+							}
+							Expr::Ident(id) => {
+								return id.sym.as_ref().eq("__exportStar");
+							}
+							_=>{}
+						}
+					}
+				}
+				_ => {}
+			},
+			_ => {}
+		}
+	}
+	false
 }
 
 fn arrow_stmts(arrow: &ArrowExpr) -> Vec<Stmt> {
