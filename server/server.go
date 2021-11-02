@@ -3,7 +3,6 @@ package server
 import (
 	"embed"
 	"encoding/json"
-	"errors"
 	"flag"
 	"fmt"
 	"os"
@@ -18,7 +17,6 @@ import (
 	"esm.sh/server/storage"
 
 	logx "github.com/ije/gox/log"
-	"github.com/ije/gox/utils"
 	"github.com/ije/rex"
 )
 
@@ -235,35 +233,6 @@ func Serve(efs EmbedFS) {
 	log.FlushBuffer()
 }
 
-func pushBuild(task *BuildTask) (err error) {
-	if task == nil {
-		return
-	}
-
-	taskID := task.ID()
-	store, _, err := db.Get("error-" + taskID)
-	if err == nil {
-		return errors.New(store["error"])
-	}
-
-	exists, err := cache.Has(taskID)
-	if err != nil {
-		return
-	}
-
-	if buildQueue != nil && !exists {
-		err = cache.Set(taskID, []byte{'1'}, 30*time.Minute)
-		if err != nil {
-			return
-		}
-		err = buildQueue.Push(utils.MustEncodeJSON(task))
-		if err != nil {
-			cache.Delete(taskID)
-		}
-	}
-	return
-}
-
 func serveBuild() {
 	for {
 		if nsReady {
@@ -274,15 +243,24 @@ func serveBuild() {
 			}
 			var task BuildTask
 			if json.Unmarshal(data, &task) == nil {
-				t := time.Now()
-				_, err := task.Build()
-				if err != nil {
-					if !strings.HasPrefix(err.Error(), "yarn add ") {
-						db.Put("error-"+task.ID(), "error", storage.Store{"error": err.Error()})
+				wc := make(chan struct{}, 1)
+				go func() {
+					t := time.Now()
+					_, err := task.Build()
+					if err != nil {
+						if !strings.HasPrefix(err.Error(), "yarn add ") {
+							db.Put("error-"+task.ID(), "error", storage.Store{"error": err.Error()})
+						}
+						log.Errorf("build %s: %v", task.ID(), err)
+					} else {
+						log.Debugf("build %s in %v", task.ID(), time.Now().Sub(t))
 					}
-					log.Error("build:", err)
-				} else {
-					log.Debugf("build %s in %v", task.ID(), time.Now().Sub(t))
+					wc <- struct{}{}
+				}()
+				select {
+				case <-wc:
+				case <-time.After(5 * time.Minute):
+					log.Errorf("build %s: time out", task.ID())
 				}
 				cache.Delete(task.ID())
 			}

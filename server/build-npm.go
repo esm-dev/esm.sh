@@ -15,6 +15,7 @@ import (
 	"esm.sh/server/storage"
 
 	"github.com/evanw/esbuild/pkg/api"
+	"github.com/ije/gox/crypto/rs"
 	"github.com/ije/gox/utils"
 )
 
@@ -129,7 +130,7 @@ func (task *BuildTask) Build() (esm *ESM, err error) {
 	if task.wd == "" {
 		hasher := sha1.New()
 		hasher.Write([]byte(task.ID()))
-		task.wd = path.Join(os.TempDir(), "esm-build-"+hex.EncodeToString(hasher.Sum(nil)))
+		task.wd = path.Join(os.TempDir(), fmt.Sprintf("esm-build-%s-%s", hex.EncodeToString(hasher.Sum(nil)), rs.Hex.String(8)))
 		ensureDir(task.wd)
 	}
 	defer os.RemoveAll(task.wd)
@@ -515,7 +516,7 @@ esbuild:
 							Target:  task.Target,
 							DevMode: task.DevMode,
 						}
-						buildQueue.Push(utils.MustEncodeJSON(t))
+						pushBuildTask(t)
 						importPath = task.getImportPath(Pkg{
 							Name:      p.Name,
 							Version:   p.Version,
@@ -735,6 +736,35 @@ func (task *BuildTask) handleDTS(esm *ESM) {
 
 	if dts != "" {
 		esm.Dts = fmt.Sprintf("/v%d/%s", VERSION, dts)
+	}
+	return
+}
+
+func pushBuildTask(task *BuildTask) (err error) {
+	if task == nil {
+		return
+	}
+
+	taskID := task.ID()
+	store, _, err := db.Get("error-" + taskID)
+	if err == nil {
+		return errors.New(store["error"])
+	}
+
+	exists, err := cache.Has(taskID)
+	if err != nil {
+		return
+	}
+
+	if buildQueue != nil && !exists {
+		err = cache.Set(taskID, []byte{'1'}, 30*time.Minute)
+		if err != nil {
+			return
+		}
+		err = buildQueue.Push(utils.MustEncodeJSON(task))
+		if err != nil {
+			cache.Delete(taskID)
+		}
 	}
 	return
 }

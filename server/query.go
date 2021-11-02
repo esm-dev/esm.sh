@@ -451,13 +451,13 @@ func query(devMode bool) rex.Handle {
 				return rex.Status(500, err.Error())
 			}
 			if !exists {
-				err := pushBuild(task)
+				err := pushBuildTask(task)
 				if err != nil {
 					return rex.Status(500, err.Error())
 				}
 				n := pkgRequstTimeout * 10
 				if isDev {
-					n *= 2
+					n *= 10
 				}
 				for i := 0; i < n; i++ {
 					exists, modtime, err = findTypesFile()
@@ -519,15 +519,15 @@ func query(devMode bool) rex.Handle {
 			// or wait the current build task for 30 seconds
 			if esm != nil {
 				// todo: maybe don't build
-				pushBuild(task)
+				pushBuildTask(task)
 			} else {
-				err = pushBuild(task)
+				err = pushBuildTask(task)
 				if err != nil {
 					return rex.Status(500, err.Error())
 				}
 				n := pkgRequstTimeout * 10
 				if isDev {
-					n *= 2
+					n *= 10
 				}
 				for i := 0; i < n; i++ {
 					esm, err = findESM(taskID)
