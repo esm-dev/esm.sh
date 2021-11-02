@@ -26,15 +26,17 @@ async function startServer(onReady: (p: any) => void) {
 startServer(async (p) => {
 	await test('test/deno/common/')
 	await test('test/deno/preact/')
+	await test('test/deno/prismjs/')
 	await test('test/deno/react/')
 	p.kill('SIGINT')
 }).then(() => {
-	Deno.removeSync('./main')
 	console.log('Done')
+}).finally(() => {
+	Deno.removeSync('./main')
 })
 
 async function test(dir: string) {
-	const cmd = [Deno.execPath(), 'test', '-A', '--unstable', '--location=http://0.0.0.0/']
+	const cmd = [Deno.execPath(), 'test', '-A', '--unstable', '-r', '--location=http://0.0.0.0/']
 	if (existsSync(dir + 'tsconfig.json')) {
 		cmd.push('--config', dir + 'tsconfig.json')
 	}
