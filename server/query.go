@@ -8,6 +8,7 @@ import (
 	"net"
 	"net/http"
 	"path"
+	"strconv"
 	"strings"
 	"time"
 
@@ -336,6 +337,15 @@ func query(devMode bool) rex.Handle {
 			}
 		}
 
+		buildVersion := VERSION
+		value := ctx.Form.Value("pin")
+		if strings.HasPrefix(value, "v") {
+			i, err := strconv.Atoi(value[1:])
+			if err == nil && i > 0 && i < VERSION {
+				buildVersion = i
+			}
+		}
+
 		css := !ctx.Form.IsNil("css")
 		cssAsModule := css && !ctx.Form.IsNil("module")
 		isBare := false
@@ -417,11 +427,12 @@ func query(devMode bool) rex.Handle {
 
 		if hasBuildVerPrefix && storageType == "types" {
 			task := &BuildTask{
-				Pkg:    *reqPkg,
-				Deps:   deps,
-				Alias:  alias,
-				Target: "types",
-				stage:  "init",
+				BuildVersion: buildVersion,
+				Pkg:          *reqPkg,
+				Deps:         deps,
+				Alias:        alias,
+				Target:       "types",
+				stage:        "init",
 			}
 			var savePath string
 			findTypesFile := func() (bool, time.Time, error) {
@@ -447,34 +458,17 @@ func query(devMode bool) rex.Handle {
 				return fs.Exists(savePath)
 			}
 			exists, modtime, err := findTypesFile()
+			if err == nil && !exists {
+				_, err = task.Build()
+				if err == nil {
+					exists, modtime, err = findTypesFile()
+				}
+			}
 			if err != nil {
 				return rex.Status(500, err.Error())
 			}
 			if !exists {
-				err := pushBuildTask(task)
-				if err != nil {
-					return rex.Status(500, err.Error())
-				}
-				n := pkgRequstTimeout * 10
-				if isDev {
-					n *= 10
-				}
-				for i := 0; i < n; i++ {
-					exists, modtime, err = findTypesFile()
-					if err != nil {
-						return rex.Status(500, err.Error())
-					}
-					if exists {
-						break
-					}
-					if i == n-1 {
-						return rex.Status(http.StatusRequestTimeout, "timeout, we are transforming the types hardly, please try later!")
-					}
-					time.Sleep(100 * time.Millisecond)
-				}
-			}
-			if !exists {
-				return rex.Status(404, "File not found")
+				return rex.Status(404, "Types not found")
 			}
 			r, err := fs.ReadFile(savePath)
 			if err != nil {
@@ -486,13 +480,14 @@ func query(devMode bool) rex.Handle {
 		}
 
 		task := &BuildTask{
-			Pkg:        *reqPkg,
-			Deps:       deps,
-			Alias:      alias,
-			Target:     target,
-			BundleMode: isBundleMode,
-			DevMode:    isDev,
-			stage:      "init",
+			BuildVersion: buildVersion,
+			Pkg:          *reqPkg,
+			Deps:         deps,
+			Alias:        alias,
+			Target:       target,
+			BundleMode:   isBundleMode,
+			DevMode:      isDev,
+			stage:        "init",
 		}
 		taskID := task.ID()
 		esm, err := findESM(taskID)

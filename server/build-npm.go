@@ -20,12 +20,13 @@ import (
 )
 
 type BuildTask struct {
-	Pkg        Pkg               `json:"pkg"`
-	Alias      map[string]string `json:"alias"`
-	Deps       PkgSlice          `json:"deps"`
-	Target     string            `json:"target"`
-	BundleMode bool              `json:"bundle"`
-	DevMode    bool              `json:"dev"`
+	BuildVersion int               `json:"buildVersion"`
+	Pkg          Pkg               `json:"pkg"`
+	Alias        map[string]string `json:"alias"`
+	Deps         PkgSlice          `json:"deps"`
+	Target       string            `json:"target"`
+	BundleMode   bool              `json:"bundle"`
+	DevMode      bool              `json:"dev"`
 
 	// state
 	id    string
@@ -80,7 +81,7 @@ func (task *BuildTask) ID() string {
 
 	task.id = fmt.Sprintf(
 		"v%d/%s@%s/%s%s/%s.js",
-		VERSION,
+		task.BuildVersion,
 		pkg.Name,
 		pkg.Version,
 		task.resolvePrefix(),
@@ -112,7 +113,7 @@ func (task *BuildTask) getImportPath(pkg Pkg, extendsAlias bool) string {
 
 	return fmt.Sprintf(
 		"/v%d/%s@%s/%s%s/%s.js",
-		VERSION,
+		task.BuildVersion,
 		pkg.Name,
 		pkg.Version,
 		resolvePrefix,
@@ -412,12 +413,13 @@ esbuild:
 						Submodule: submodule,
 					}
 					subTask := &BuildTask{
-						wd:      task.wd, // reuse current wd
-						Pkg:     subPkg,
-						Alias:   task.Alias,
-						Deps:    task.Deps,
-						Target:  task.Target,
-						DevMode: task.DevMode,
+						BuildVersion: task.BuildVersion,
+						wd:           task.wd, // reuse current wd
+						Pkg:          subPkg,
+						Alias:        task.Alias,
+						Deps:         task.Deps,
+						Target:       task.Target,
+						DevMode:      task.DevMode,
 					}
 					subTask.build(tracing)
 					if err != nil {
@@ -430,7 +432,7 @@ esbuild:
 					if task.Target == "node" {
 						importPath = "buffer"
 					} else {
-						importPath = fmt.Sprintf("/v%d/node_buffer.js", VERSION)
+						importPath = fmt.Sprintf("/v%d/node_buffer.js", task.BuildVersion)
 					}
 				}
 				// is builtin node module
@@ -456,7 +458,7 @@ esbuild:
 						} else {
 							_, err := embedFS.ReadFile(fmt.Sprintf("server/embed/polyfills/node_%s.js", name))
 							if err == nil {
-								importPath = fmt.Sprintf("/v%d/node_%s.js", VERSION, name)
+								importPath = fmt.Sprintf("/v%d/node_%s.js", task.BuildVersion, name)
 							} else {
 								importPath = fmt.Sprintf(
 									"/error.js?type=unsupported-nodejs-builtin-module&name=%s&importer=%s",
@@ -506,6 +508,7 @@ esbuild:
 							return
 						}
 						t := &BuildTask{
+							BuildVersion: task.BuildVersion,
 							Pkg: Pkg{
 								Name:      pkgName,
 								Version:   p.Version,
@@ -646,10 +649,10 @@ esbuild:
 			// add nodejs/deno compatibility
 			if task.Target != "node" {
 				if bytes.Contains(outputContent, []byte("__Process$")) {
-					fmt.Fprintf(buf, `import __Process$ from "/v%d/node_process.js";%s__Process$.env.NODE_ENV="%s";%s`, VERSION, eol, nodeEnv, eol)
+					fmt.Fprintf(buf, `import __Process$ from "/v%d/node_process.js";%s__Process$.env.NODE_ENV="%s";%s`, task.BuildVersion, eol, nodeEnv, eol)
 				}
 				if bytes.Contains(outputContent, []byte("__Buffer$")) {
-					fmt.Fprintf(buf, `import { Buffer as __Buffer$ } from "/v%d/node_buffer.js";%s`, VERSION, eol)
+					fmt.Fprintf(buf, `import { Buffer as __Buffer$ } from "/v%d/node_buffer.js";%s`, task.BuildVersion, eol)
 				}
 				if bytes.Contains(outputContent, []byte("__global$")) {
 					fmt.Fprintf(buf, `var __global$ = globalThis || (typeof window !== "undefined" ? window : self);%s`, eol)
@@ -735,7 +738,7 @@ func (task *BuildTask) handleDTS(esm *ESM) {
 	}
 
 	if dts != "" {
-		esm.Dts = fmt.Sprintf("/v%d/%s", VERSION, dts)
+		esm.Dts = fmt.Sprintf("/v%d/%s", task.BuildVersion, dts)
 	}
 	return
 }
