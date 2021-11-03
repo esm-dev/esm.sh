@@ -10,7 +10,7 @@ type cjsExportsResult struct {
 }
 
 func parseCJSModuleExports(buildDir string, importPath string, nodeEnv string) (ret cjsExportsResult, err error) {
-	data := <-invokeNodeService("cjsExports", map[string]interface{}{
+	data := invokeNodeService("parseCjsExports", map[string]interface{}{
 		"buildDir":   buildDir,
 		"importPath": importPath,
 		"nodeEnv":    nodeEnv,

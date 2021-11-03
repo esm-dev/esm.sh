@@ -31,8 +31,7 @@ const nsApp = `
 	const register = %s
 
 	for (const name of register) {
-		const { serviceName, main } = require(name)
-		services[serviceName] = main
+		Object.assign(services, require(name))
 	}
 
 	rl.on('line', async line => {
@@ -73,14 +72,14 @@ var nsReady = false
 var nsInvokeIndex uint32 = 0
 var nsChannel = make(chan *NSTask, 64)
 
-func invokeNodeService(serviceName string, input map[string]interface{}) chan []byte {
+func invokeNodeService(serviceName string, input map[string]interface{}) []byte {
 	task := &NSTask{
 		service: serviceName,
 		input:   input,
 		output:  make(chan []byte, 1),
 	}
 	nsChannel <- task
-	return task.output
+	return <-task.output
 }
 
 func startNodeServices(wd string, services []string) (err error) {
@@ -180,16 +179,9 @@ func startNodeServices(wd string, services []string) (err error) {
 		scanner := bufio.NewScanner(out)
 		for scanner.Scan() {
 			line := scanner.Bytes()
-			// if llen == 9 && line[0] == '$' {
-			// 	invokeId := string(line[1:])
-			// 	v, ok := tasks.LoadAndDelete(invokeId)
-			// 	if ok {
-			// 		v.(chan []byte) <- nil // end
-			// 	}
-			// }
 			if string(line) == "READY" {
 				ready = true
-			} else if llen := len(line); llen > 8 {
+			} else if len(line) > 8 {
 				invokeId := string(line[:8])
 				v, ok := tasks.Load(invokeId)
 				if ok {

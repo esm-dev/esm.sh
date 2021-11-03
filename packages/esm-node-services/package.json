@@ -1,13 +1,13 @@
 {
-	"name": "esm-cjs-exports",
-	"version": "0.4.0",
-	"description": "Node service for esm.sh: cjs exports parser",
+	"name": "esm-node-services",
+	"version": "0.4.1",
+	"description": "Node services for esm.sh",
 	"main": "index.js",
 	"scripts": {
-		"test": "node test.js",
-		"prepublish": "node test.js"
+		"test": "node test.js"
 	},
 	"files": [
+		"cjs-esm-exports.js",
 		"index.js"
 	],
 	"dependencies": {

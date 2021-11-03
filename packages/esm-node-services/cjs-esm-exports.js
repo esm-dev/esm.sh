@@ -49,8 +49,7 @@ async function getJSONKeys(jsonFile) {
   return []
 }
 
-exports.serviceName = 'cjsExports'
-exports.main = async input => {
+exports.parseCjsExports = async input => {
   const { buildDir, importPath, nodeEnv = 'production' } = input
   const entry = await resolve(buildDir, importPath)
   const exports = []

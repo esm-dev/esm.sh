@@ -21,7 +21,7 @@ func TestNodeServices(t *testing.T) {
 
 	for i := 0; i < 100; i++ {
 		secret := rs.Hex.String(64)
-		data := <-invokeNodeService("test", map[string]interface{}{"secret": secret})
+		data := invokeNodeService("test", map[string]interface{}{"secret": secret})
 
 		var ret map[string]interface{}
 		err := json.Unmarshal(data, &ret)
