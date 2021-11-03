@@ -1,7 +1,7 @@
 package server
 
 // ems.sh version
-const VERSION = 56
+const VERSION = 57
 
 const (
 	pkgCacheTimeout    = 5 * 60 // 5 minutes
