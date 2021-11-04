@@ -1,5 +1,21 @@
 # Change Log
 
+## v57
+
+- Add `?pin` mode 
+- Improve build stability
+- Fix `marked@4` import
+- Fix invalid types hangs forever (close close [#201](https://github.com/postui/esm.sh/issues/201))
+
+## v56
+- `cjs-esm-exports` supports tslib `__exportStar` (close [#197](https://github.com/postui/esm.sh/issues/197))
+- Improve node `perf_hooks` polyfill
+- Fix redeclared process polyfill (close [#195](https://github.com/postui/esm.sh/issues/195))
+- Fix `?worker` mode on deno ([#198](https://github.com/postui/esm.sh/issues/198))
+- Add `he` to `cjs-esm-exports` require mode allow list (close [#200](https://github.com/postui/esm.sh/issues/200))
+- Fix package css redirect link
+- Upgrade **esbuild** to v0.13.12
+
 ## v55
 
 - Add playground to write esm app online, try it on https://esm.sh?playground
