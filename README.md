@@ -91,6 +91,17 @@ import Daygrid from 'https://esm.sh/@fullcalendar/daygrid'
 
 This only works when the NPM module imports css files in JS directly.
 
+
+## Web Worker
+
+esm.sh supports `?worker` mode to load modules as web worker:
+
+```javascript
+import editorWorker from '/monaco-editor/esm/vs/editor/editor.worker?worker'
+  
+const worker = new editorWorker()
+```
+
 ## Deno compatibility
 
 **esm.sh** will resolve the node internal modules (**fs**, **child_process**, etc.) with [`deno.land/std/node`](https://deno.land/std/node) to support some packages working in Deno, like `postcss`:
@@ -115,6 +126,14 @@ You can pass the `no-check` query to disable the `X-TypeScript-Types` header if 
 
 ```javascript
 import unescape from 'https://esm.sh/lodash/unescape?no-check'
+```
+
+## Pin the build version
+
+Since we update esm.sh server very frequently, sometime we may break some packages that work fine previously by mistake, because we need to rebuild all modules when the patch pushed. To avoid this, you can pin the build version by the `?pin=BUILD_VERSON` query. 
+
+```javascript
+import React from 'https://esm.sh/react@17.0.2?pin=v57'
 ```
 
 ## Network of esm.sh
