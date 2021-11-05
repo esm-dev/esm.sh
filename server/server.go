@@ -243,26 +243,26 @@ func serveBuild() {
 			}
 			var task BuildTask
 			if json.Unmarshal(data, &task) == nil {
+				taskId := task.ID()
 				wc := make(chan struct{}, 1)
 				go func() {
 					t := time.Now()
 					_, err := task.Build()
 					if err != nil {
-						if !strings.HasPrefix(err.Error(), "yarn add ") {
-							db.Put("error-"+task.ID(), "error", storage.Store{"error": err.Error()})
-						}
-						log.Errorf("build %s: %v", task.ID(), err)
+						db.Put("error-"+taskId, "error", storage.Store{"error": err.Error()})
+						log.Errorf("build %s: %v", taskId, err)
 					} else {
-						log.Debugf("build %s in %v", task.ID(), time.Now().Sub(t))
+						db.Delete("error-" + taskId)
+						log.Debugf("build %s in %v", taskId, time.Now().Sub(t))
 					}
 					wc <- struct{}{}
 				}()
 				select {
 				case <-wc:
-				case <-time.After(5 * time.Minute):
-					log.Errorf("build %s: time out", task.ID())
+				case <-time.After(10 * time.Minute):
+					log.Errorf("build %s: timeout", taskId)
 				}
-				cache.Delete(task.ID())
+				cache.Delete(taskId)
 			}
 		}
 	}

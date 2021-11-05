@@ -749,11 +749,6 @@ func pushBuildTask(task *BuildTask) (err error) {
 	}
 
 	taskID := task.ID()
-	store, _, err := db.Get("error-" + taskID)
-	if err == nil {
-		return errors.New(store["error"])
-	}
-
 	exists, err := cache.Has(taskID)
 	if err != nil {
 		return

@@ -62,9 +62,14 @@ func query(devMode bool) rex.Handle {
 			return rex.Content("index.html", startTime, bytes.NewReader(html))
 
 		case "/status.json":
+			list, err := db.List("error")
+			if err != nil {
+				return rex.Status(500, err.Error())
+			}
 			return map[string]interface{}{
 				"version": VERSION,
 				"uptime":  time.Now().Sub(startTime).Milliseconds(),
+				"errors":  list,
 			}
 
 		case "/favicon.ico":
@@ -351,6 +356,7 @@ func query(devMode bool) rex.Handle {
 		isBare := false
 		isBundleMode := !ctx.Form.IsNil("bundle")
 		isDev := !ctx.Form.IsNil("dev")
+		isPined := !ctx.Form.IsNil("pin")
 		isWorkder := !ctx.Form.IsNil("worker")
 		noCheck := !ctx.Form.IsNil("no-check")
 
@@ -495,7 +501,7 @@ func query(devMode bool) rex.Handle {
 			return rex.Status(500, err.Error())
 		}
 		if err == storage.ErrNotFound {
-			if !isBare {
+			if !isBare && !isPined {
 				// find previous build version
 				for i := 0; i < VERSION; i++ {
 					id := fmt.Sprintf("v%d/%s", VERSION-(i+1), taskID[len(fmt.Sprintf("v%d/", VERSION)):])
@@ -510,7 +516,7 @@ func query(devMode bool) rex.Handle {
 				}
 			}
 
-			// if the previous build exists and not in bare mode, then build current module in backgound,
+			// if the previous build exists and is not pin/bare mode, then build current module in backgound,
 			// or wait the current build task for 30 seconds
 			if esm != nil {
 				// todo: maybe don't build

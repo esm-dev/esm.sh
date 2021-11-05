@@ -11,6 +11,11 @@ import (
 
 type Store map[string]string
 
+type ListItem struct {
+	Store  map[string]string `json:"store"`
+	Motime uint32            `json:"modtime"`
+}
+
 type DBDriver interface {
 	Open(config string, options url.Values) (conn DB, err error)
 }
@@ -18,7 +23,7 @@ type DBDriver interface {
 type DB interface {
 	Get(id string) (store Store, modtime time.Time, err error)
 	Put(id string, category string, store Store) error
-	List(category string) ([]Store, error)
+	List(category string) ([]ListItem, error)
 	Delete(id string) error
 	Close() error
 }

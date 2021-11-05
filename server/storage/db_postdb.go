@@ -40,24 +40,20 @@ func (i *postDB) Get(id string) (store Store, modtime time.Time, err error) {
 }
 
 func (i *postDB) Put(id string, category string, store Store) (err error) {
+	kv := q.KV{}
+	for key, value := range store {
+		kv[key] = []byte(value)
+	}
 	_, err = i.db.Get(q.Alias(id))
 	if err == nil {
-		kv := q.KV{}
-		for key, value := range store {
-			kv[key] = []byte(value)
-		}
 		err = i.db.Update(q.Alias(id), kv)
 	} else if err == postdb.ErrNotFound {
-		kv := q.KV{}
-		for key, value := range store {
-			kv[key] = []byte(value)
-		}
 		_, err = i.db.Put(q.Alias(id), kv, q.Tags(category))
 	}
 	return
 }
 
-func (i *postDB) List(category string) (list []Store, err error) {
+func (i *postDB) List(category string) (list []ListItem, err error) {
 	posts, err := i.db.List(q.Tags(category), q.Select("*"))
 	if err != nil {
 		return
@@ -67,7 +63,7 @@ func (i *postDB) List(category string) (list []Store, err error) {
 		for key, value := range post.KV {
 			store[key] = string(value)
 		}
-		list = append(list, store)
+		list = append(list, ListItem{Store: store, Motime: post.Modtime})
 	}
 	return
 }
