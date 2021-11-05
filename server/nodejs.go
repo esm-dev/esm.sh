@@ -339,7 +339,7 @@ func cachePackageInfo(name string, version string) (info NpmPackage, err error) 
 		return
 	}
 
-	log.Debugf("get npm package(%s@%s) info from %s in %v", name, info.Version, node.npmRegistry, time.Now().Sub(start))
+	log.Debugf("lookup package(%s@%s) in %v", name, info.Version, time.Now().Sub(start))
 
 	// cache data
 	var ttl time.Duration = 0
