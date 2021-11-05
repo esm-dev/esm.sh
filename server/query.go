@@ -40,8 +40,11 @@ func query(devMode bool) rex.Handle {
 
 	return func(ctx *rex.Context) interface{} {
 		pathname := ctx.Path.String()
-		if strings.HasPrefix(pathname, ".") {
+		if strings.HasPrefix(pathname, ".") || strings.HasSuffix(pathname, ".php") {
 			return rex.Status(400, "Bad Request")
+		}
+		if strings.ContainsRune(pathname, ':') {
+			pathname = regLocPath.ReplaceAllString(pathname, "$1")
 		}
 
 		switch pathname {
@@ -72,9 +75,6 @@ func query(devMode bool) rex.Handle {
 				"errors":  list,
 			}
 
-		case "/favicon.ico":
-			return rex.Status(404, "not found")
-
 		case "/error.js":
 			switch ctx.Form.Value("type") {
 			case "resolve":
@@ -92,6 +92,9 @@ func query(devMode bool) rex.Handle {
 			default:
 				return throwErrorJS(ctx, fmt.Errorf("Unknown error"))
 			}
+
+		case "/favicon.ico":
+			return rex.Status(404, "not found")
 		}
 
 		// serve embed assets
@@ -531,6 +534,13 @@ func query(devMode bool) rex.Handle {
 					n *= 10
 				}
 				for i := 0; i < n; i++ {
+					store, _, err := db.Get("error-" + taskID)
+					if err != nil && err != storage.ErrNotFound {
+						return rex.Status(500, err.Error())
+					}
+					if err == nil {
+						return rex.Status(500, store["error"])
+					}
 					esm, err = findESM(taskID)
 					if err == nil {
 						break
