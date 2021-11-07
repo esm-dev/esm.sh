@@ -69,10 +69,17 @@ func query(devMode bool) rex.Handle {
 			if err != nil {
 				return rex.Status(500, err.Error())
 			}
+			errors := make([]map[string]interface{}, len(list))
+			for index, item := range list {
+				errors[index] = map[string]interface{}{
+					"message": item.Store["error"],
+					"time":    time.Unix(int64(item.Motime), 0).Format(http.TimeFormat),
+				}
+			}
 			return map[string]interface{}{
 				"version": VERSION,
-				"uptime":  time.Now().Sub(startTime).Milliseconds(),
-				"errors":  list,
+				"uptime":  time.Now().Sub(startTime).String(),
+				"errors":  errors,
 			}
 
 		case "/error.js":

@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"io/ioutil"
+	"net/url"
 	"path"
 	"strings"
 	"sync"
@@ -14,9 +15,11 @@ import (
 
 var buildCache sync.Map
 var loaders = map[string]api.Loader{
+	".mjs":  api.LoaderJS,
 	".js":   api.LoaderJS,
 	".jsx":  api.LoaderJSX,
 	".ts":   api.LoaderTS,
+	".mts":  api.LoaderTS,
 	".tsx":  api.LoaderJSX,
 	".css":  api.LoaderCSS,
 	".wasm": api.LoaderBinary,
@@ -45,21 +48,28 @@ func buildSync(filename string, source string, opts buildOptions) ([]byte, error
 				api.OnResolveOptions{Filter: ".*"},
 				func(args api.OnResolveArgs) (api.OnResolveResult, error) {
 					pathname, qs := utils.SplitByFirstByte(args.Path, '?')
+					q, err := url.ParseQuery(qs)
+					if err != nil {
+						q = make(url.Values)
+					}
 					if args.Path == filename ||
 						(strings.HasSuffix(filename, ".css") && strings.HasSuffix(args.Path, ".css")) ||
 						(strings.HasSuffix(filename, "?css") && strings.HasSuffix(args.Path, "?css")) {
 						return api.OnResolveResult{}, nil
 					}
-					if strings.HasSuffix(pathname, ".css") {
-						pathname = pathname + "?module"
-						if qs != "" {
-							pathname += "&" + qs
+					if q.Has("css") && !q.Has("module") {
+						q.Add("module", "")
+						pathname += q.Encode()
+						if !opts.bundle {
+							return api.OnResolveResult{Path: pathname, External: true}, nil
 						}
-						return api.OnResolveResult{Path: pathname, External: true}, nil
 					}
-					if qs == "css" {
-						pathname = pathname + "?css&module"
-						return api.OnResolveResult{Path: pathname, External: true}, nil
+					if (strings.HasSuffix(pathname, ".css") || strings.HasSuffix(pathname, ".wasm")) && !q.Has("module") {
+						q.Add("module", "")
+						pathname += q.Encode()
+						if !opts.bundle {
+							return api.OnResolveResult{Path: pathname, External: true}, nil
+						}
 					}
 					if opts.bundle {
 						if strings.HasPrefix(pathname, "http://") || strings.HasPrefix(pathname, "https://") {

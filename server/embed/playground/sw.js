@@ -1,16 +1,19 @@
 import localforage from '/localforage'
 import createESMWorker from '/esm-worker'
 import init, { HTMLRewriter } from '/lol-html-wasm'
+import lolHtmlWasm from '/lol-html-wasm/lol_html_wasm_bg.wasm?module'
+import compilerWasm from '/esm-worker/compiler/pkg/esm_worker_compiler_bg.wasm?module'
 
-init(fetch('https://esm.sh/lol-html-wasm/lol_html_wasm_bg.wasm', { mode: 'cors' }))
+init(lolHtmlWasm)
 self.HTMLRewriter = HTMLRewriter
 
+self.appStorage = {
+  readFile: name => localforage.getItem(`file-${name.replace('/embed/playground/', '')}`)
+}
+
 const esmWorker = createESMWorker({
-  fs: {
-    readFile: name => localforage.getItem(`file-${name.replace('/embed/playground/', '')}`)
-  },
   isDev: true,
-  getCompilerWasm: () => fetch('https://esm.sh/esm-worker/compiler/pkg/esm_worker_compiler_bg.wasm', { mode: 'cors' })
+  compilerWasm
 })
 
 self.addEventListener('install', e => {
