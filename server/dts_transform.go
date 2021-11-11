@@ -237,7 +237,7 @@ func copyDTS(wd string, resolvePrefix string, dts string, tracing *stringSet) (e
 					}
 				}
 				fmt.Fprintf(buf, `%sdeclare module "%s/%s@*%s" `, "\n", origin, name, subpath)
-				fmt.Fprintf(buf, strings.TrimSpace(b.String()))
+				buf.WriteString(strings.TrimSpace(b.String()))
 			}
 		}
 	}

@@ -78,7 +78,7 @@ func query(devMode bool) rex.Handle {
 			}
 			return map[string]interface{}{
 				"version": VERSION,
-				"uptime":  time.Now().Sub(startTime).String(),
+				"uptime":  time.Since(startTime).String(),
 				"errors":  errors,
 			}
 
@@ -249,7 +249,7 @@ func query(devMode bool) rex.Handle {
 			}
 			defer resp.Body.Close()
 			if resp.StatusCode >= 500 {
-				return rex.Err(http.StatusBadGateway)
+				return rex.Status(http.StatusBadGateway, "Bad Gateway")
 			}
 			data, err := ioutil.ReadAll(resp.Body)
 			if err != nil {

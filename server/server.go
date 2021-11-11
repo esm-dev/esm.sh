@@ -56,14 +56,14 @@ func Serve(efs EmbedFS) {
 	flag.IntVar(&port, "port", 80, "http server port")
 	flag.IntVar(&httpsPort, "https-port", 0, "https(autotls) server port, default is disabled")
 	flag.StringVar(&cdnDomain, "cdn-domain", "", "cdn domain")
-	flag.StringVar(&etcDir, "etc-dir", ".esmd", "the etc dir to store common data")
+	flag.StringVar(&etcDir, "etc-dir", ".esmd", "etc dir")
 	flag.StringVar(&cacheUrl, "cache", "", "cache config, default is 'memory:default'")
 	flag.StringVar(&dbUrl, "db", "", "database config, default is 'postdb:[etc-dir]/esm.db'")
 	flag.StringVar(&fsUrl, "fs", "", "filesystem config, default is 'local:[etc-dir]/storage'")
 	flag.StringVar(&queueUrl, "queue", "", "bulid queue config, default is 'chan:memory'")
 	flag.IntVar(&buildConcurrency, "build-concurrency", runtime.NumCPU(), "maximum number of concurrent build task")
 	flag.StringVar(&nodeServices, "node-services", "", "node services")
-	flag.StringVar(&logDir, "log-dir", "", "the log dir to store server logs")
+	flag.StringVar(&logDir, "log-dir", "", "log dir")
 	flag.StringVar(&logLevel, "log-level", "info", "log level")
 	flag.BoolVar(&noCompress, "no-compress", false, "disable compression for text content")
 	flag.BoolVar(&isDev, "dev", false, "run server in development mode")
@@ -114,6 +114,7 @@ func Serve(efs EmbedFS) {
 		os.Exit(1)
 	}
 	log.SetLevelByName(logLevel)
+	log.SetQuite(!isDev)
 
 	nodeInstallDir := os.Getenv("NODE_INSTALL_DIR")
 	if nodeInstallDir == "" {
@@ -220,7 +221,7 @@ func Serve(efs EmbedFS) {
 	}
 
 	c := make(chan os.Signal, 1)
-	signal.Notify(c, syscall.SIGTERM, syscall.SIGINT, syscall.SIGQUIT, syscall.SIGKILL, syscall.SIGHUP)
+	signal.Notify(c, syscall.SIGTERM, syscall.SIGINT, syscall.SIGQUIT, syscall.SIGHUP)
 	select {
 	case <-c:
 	case err = <-C:
@@ -253,7 +254,7 @@ func serveBuild() {
 						log.Errorf("build %s: %v", taskId, err)
 					} else {
 						db.Delete("error-" + taskId)
-						log.Debugf("build %s in %v", taskId, time.Now().Sub(t))
+						log.Infof("build %s in %v", taskId, time.Since(t))
 					}
 					wc <- struct{}{}
 				}()
