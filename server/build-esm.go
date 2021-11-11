@@ -59,14 +59,14 @@ func buildSync(filename string, source string, opts buildOptions) ([]byte, error
 					}
 					if q.Has("css") && !q.Has("module") {
 						q.Add("module", "")
-						pathname += q.Encode()
+						pathname += "?" + q.Encode()
 						if !opts.bundle {
 							return api.OnResolveResult{Path: pathname, External: true}, nil
 						}
 					}
 					if (strings.HasSuffix(pathname, ".css") || strings.HasSuffix(pathname, ".wasm")) && !q.Has("module") {
 						q.Add("module", "")
-						pathname += q.Encode()
+						pathname += "?" + q.Encode()
 						if !opts.bundle {
 							return api.OnResolveResult{Path: pathname, External: true}, nil
 						}
