@@ -134,7 +134,12 @@ func (task *BuildTask) Build() (esm *ESM, err error) {
 		task.wd = path.Join(os.TempDir(), fmt.Sprintf("esm-build-%s-%s", hex.EncodeToString(hasher.Sum(nil)), rs.Hex.String(8)))
 		ensureDir(task.wd)
 	}
-	defer os.RemoveAll(task.wd)
+	defer func() {
+		err := os.RemoveAll(task.wd)
+		if err != nil {
+			log.Warnf("clean build(%s) dir: %v", task.ID(), err)
+		}
+	}()
 
 	task.stage = "install-deps"
 	err = yarnAdd(task.wd, fmt.Sprintf("%s@%s", task.Pkg.Name, task.Pkg.Version))
@@ -734,13 +739,12 @@ func (task *BuildTask) handleDTS(esm *ESM) {
 			log.Errorf("copyDTS(%s): %v", dts, err)
 			return
 		}
-		log.Debugf("copy dts '%s' in %v", dts, time.Now().Sub(start))
+		log.Debugf("copy dts '%s' in %v", dts, time.Since(start))
 	}
 
 	if dts != "" {
 		esm.Dts = fmt.Sprintf("/v%d/%s", task.BuildVersion, dts)
 	}
-	return
 }
 
 func pushBuildTask(task *BuildTask) (err error) {
@@ -749,19 +753,19 @@ func pushBuildTask(task *BuildTask) (err error) {
 	}
 
 	taskID := task.ID()
-	exists, err := cache.Has(taskID)
+	exists, err := cache.Has("build-task:" + taskID)
 	if err != nil {
 		return
 	}
 
-	if buildQueue != nil && !exists {
-		err = cache.Set(taskID, []byte{'1'}, 30*time.Minute)
+	if !exists && buildQueue != nil {
+		err = cache.Set("build-task:"+taskID, []byte{'1'}, time.Hour)
 		if err != nil {
 			return
 		}
 		err = buildQueue.Push(utils.MustEncodeJSON(task))
 		if err != nil {
-			cache.Delete(taskID)
+			cache.Delete("build-task:" + taskID)
 		}
 	}
 	return

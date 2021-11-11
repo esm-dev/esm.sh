@@ -263,9 +263,10 @@ func serveBuild() {
 				case <-time.After(10 * time.Minute):
 					log.Errorf("build %s: timeout", taskId)
 				}
-				cache.Delete(taskId)
+				cache.Delete("build-task:" + taskId)
 			}
 		}
+		time.Sleep(50 * time.Millisecond)
 	}
 }
 
