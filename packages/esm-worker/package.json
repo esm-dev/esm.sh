@@ -1,16 +1,15 @@
 {
 	"name": "esm-worker",
-	"version": "0.0.9",
+	"version": "0.0.11",
 	"description": "ESM Worker runs in V8.",
 	"module": "worker.mjs",
+	"types": "types.d.ts",
 	"scripts": {
 		"prepublish": "node compiler/build.js"
 	},
 	"files": [
 		"worker.mjs",
-		"mime.mjs",
-		"compiler/pkg/esm_worker_compiler.mjs",
-		"compiler/pkg/esm_worker_compiler_bg.wasm"
+		"mime.mjs"
 	],
 	"repository": "https://github.com/alephjs/esm.sh",
 	"license": "MIT"

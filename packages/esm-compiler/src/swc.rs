@@ -1,5 +1,4 @@
 use crate::error::{DiagnosticBuffer, ErrorBuffer};
-use crate::export_names::ExportParser;
 use crate::resolve_fold::resolve_fold;
 use crate::resolver::{DependencyDescriptor, Resolver};
 use crate::source_type::SourceType;
@@ -14,9 +13,9 @@ use swc_common::{
 use swc_ecma_transforms_proposal::decorators;
 use swc_ecma_transforms_typescript::strip;
 use swc_ecmascript::{
-	ast::{Module, Program},
+	ast::{EsVersion, Module, Program},
 	codegen::{text_writer::JsWriter, Node},
-	parser::{lexer::Lexer, EsConfig, JscTarget, StringInput, Syntax, TsConfig},
+	parser::{lexer::Lexer, EsConfig, StringInput, Syntax, TsConfig},
 	transforms::{fixer, helpers, hygiene, pass::Optional, react, resolver_with_mark},
 	visit::{Fold, FoldWith},
 };
@@ -24,19 +23,19 @@ use swc_ecmascript::{
 /// Options for transpiling a module.
 #[derive(Debug, Clone)]
 pub struct EmitOptions {
+	pub jsx_import_source: Option<String>,
 	pub jsx_factory: String,
 	pub jsx_fragment_factory: String,
-	pub source_map: bool,
 	pub is_dev: bool,
 }
 
 impl Default for EmitOptions {
 	fn default() -> Self {
 		EmitOptions {
+			jsx_import_source: None,
 			jsx_factory: "React.createElement".into(),
 			jsx_fragment_factory: "React.Fragment".into(),
 			is_dev: false,
-			source_map: false,
 		}
 	}
 }
@@ -74,7 +73,7 @@ impl SWC {
 		let syntax = get_syntax(&source_type);
 		let input = StringInput::from(&*source_file);
 		let comments = SingleThreadedComments::default();
-		let lexer = Lexer::new(syntax, JscTarget::Es2020, input, Some(&comments));
+		let lexer = Lexer::new(syntax, EsVersion::Es2020, input, Some(&comments));
 		let mut parser = swc_ecmascript::parser::Parser::new_from(lexer);
 		let handler = Handler::with_emitter_and_flags(
 			Box::new(error_buffer.clone()),
@@ -102,14 +101,6 @@ impl SWC {
 		})
 	}
 
-	/// parse export names in the module.
-	pub fn parse_export_names(&self) -> Result<Vec<String>, anyhow::Error> {
-		let program = Program::Module(self.module.clone());
-		let mut parser = ExportParser { names: vec![] };
-		program.fold_with(&mut parser);
-		Ok(parser.names)
-	}
-
 	/// transform a JS/TS/JSX/TSX file into a JS file, based on the supplied options.
 	pub fn transform(
 		self,
@@ -119,15 +110,35 @@ impl SWC {
 		swc_common::GLOBALS.set(&Globals::new(), || {
 			let top_level_mark = Mark::fresh(Mark::root());
 			let specifier_is_remote = resolver.borrow().specifier_is_remote;
-			let jsx = match self.source_type {
+			let is_jsx = match self.source_type {
 				SourceType::JSX => true,
 				SourceType::TSX => true,
 				_ => false,
 			};
 			let passes = chain!(
+				resolver_with_mark(top_level_mark),
+				resolve_fold(resolver.clone()),
+				decorators::decorators(decorators::Config {
+					legacy: true,
+					emit_metadata: false
+				}),
+				helpers::inject_helpers(),
+				Optional::new(
+					strip::strip_with_config(strip_config_from_emit_options(&options)),
+					!is_jsx
+				),
+				Optional::new(
+					strip::strip_with_jsx(
+						self.source_map.clone(),
+						strip_config_from_emit_options(&options),
+						&self.comments,
+						top_level_mark
+					),
+					is_jsx
+				),
 				Optional::new(
 					react::refresh(
-						true,
+						options.is_dev,
 						Some(react::RefreshOptions {
 							refresh_reg: "$RefreshReg$".into(),
 							refresh_sig: "$RefreshSig$".into(),
@@ -136,39 +147,35 @@ impl SWC {
 						self.source_map.clone(),
 						Some(&self.comments),
 					),
-					options.is_dev && !specifier_is_remote
+					!specifier_is_remote
 				),
-				Optional::new(resolver_with_mark(top_level_mark), jsx),
 				Optional::new(
 					react::jsx(
 						self.source_map.clone(),
 						Some(&self.comments),
 						react::Options {
+							runtime: if options.jsx_import_source.is_some() {
+								Some(react::Runtime::Automatic)
+							} else {
+								None
+							},
+							import_source: options.jsx_import_source.clone().unwrap_or_default(),
 							pragma: options.jsx_factory.clone(),
 							pragma_frag: options.jsx_fragment_factory.clone(),
 							// this will use `Object.assign()` instead of the `_extends` helper when spreading props.
 							use_builtins: true,
+							development: options.is_dev,
 							..Default::default()
 						},
 						top_level_mark
 					),
-					jsx
+					is_jsx
 				),
-				resolve_fold(resolver.clone(), options.is_dev),
-				decorators::decorators(decorators::Config {
-					legacy: true,
-					emit_metadata: false
-				}),
-				helpers::inject_helpers(),
-				strip::strip_with_config(strip::Config {
-					use_define_for_class_fields: true,
-					..Default::default()
-				}),
 				fixer(Some(&self.comments)),
 				hygiene()
 			);
 
-			let (code, map) = self.apply_fold(passes, options.source_map).unwrap();
+			let (code, map) = self.apply_fold(passes, options.is_dev).unwrap();
 			let mut resolver = resolver.borrow_mut();
 
 			// remove unused deps by tree-shaking
@@ -212,7 +219,7 @@ impl SWC {
 			));
 			let mut emitter = swc_ecmascript::codegen::Emitter {
 				cfg: swc_ecmascript::codegen::Config {
-					minify: false, // todo: use swc minify in the future, currently use terser
+					minify: false,
 				},
 				comments: Some(&self.comments),
 				cm: self.source_map.clone(),
@@ -271,7 +278,19 @@ fn get_syntax(source_type: &SourceType) -> Syntax {
 		SourceType::JSX => Syntax::Es(get_es_config(true)),
 		SourceType::TS => Syntax::Typescript(get_ts_config(false)),
 		SourceType::TSX => Syntax::Typescript(get_ts_config(true)),
-		_ => Syntax::Es(get_es_config(false)),
+		_ => Syntax::Typescript(get_ts_config(true)),
+	}
+}
+
+fn strip_config_from_emit_options(options: &EmitOptions) -> strip::Config {
+	strip::Config {
+		pragma: Some(options.jsx_factory.clone()),
+		pragma_frag: Some(options.jsx_fragment_factory.clone()),
+		import_not_used_as_values: strip::ImportsNotUsedAsValues::Remove,
+		use_define_for_class_fields: true,
+		// TODO(bartlomieju): this could be changed to `false` to provide `export {}`
+		// in Typescript files without manual changes
+		no_empty_export: true,
 	}
 }
 
@@ -280,130 +299,4 @@ fn to_str_lit(sub_text: &str) -> String {
 	s.push_str(sub_text);
 	s.push('"');
 	s
-}
-#[cfg(test)]
-mod tests {
-	use super::*;
-	use crate::import_map::ImportHashMap;
-
-	fn st(specifer: &str, source: &str, bundle_mode: bool) -> (String, Rc<RefCell<Resolver>>) {
-		let module = SWC::parse(specifer, source, None).expect("could not parse module");
-		let resolver = Rc::new(RefCell::new(Resolver::new(
-			specifer,
-			ImportHashMap::default(),
-			bundle_mode,
-			vec![],
-			None,
-		)));
-		let (code, _) = module
-			.transform(resolver.clone(), &EmitOptions::default())
-			.unwrap();
-		println!("{}", code);
-		(code, resolver)
-	}
-
-	#[test]
-	fn typescript() {
-		let source = r#"
-      enum D {
-        A,
-        B,
-        C,
-      }
-
-      function enumerable(value: boolean) {
-        return function (
-          _target: any,
-          _propertyKey: string,
-          descriptor: PropertyDescriptor,
-        ) {
-          descriptor.enumerable = value;
-        };
-      }
-
-      export class A {
-        private b: string;
-        protected c: number = 1;
-        e: "foo";
-        constructor (public d = D.A) {
-          const e = "foo" as const;
-          this.e = e;
-        }
-        @enumerable(false)
-        bar() {}
-      }
-    "#;
-		let (code, _) = st("https://deno.land/x/mod.ts", source, false);
-		assert!(code.contains("var D;\n(function(D) {\n"));
-		assert!(code.contains("_applyDecoratedDescriptor("));
-	}
-
-	#[test]
-	fn react_jsx() {
-		let source = r#"
-      import React from "https://esm.sh/react"
-      export default function App() {
-        return (
-          <>
-            <h1 className="title">Hello World</h1>
-          </>
-        )
-      }
-    "#;
-		let (code, _) = st("app.tsx", source, false);
-		assert!(code.contains("React.createElement(React.Fragment, null"));
-		assert!(code.contains("React.createElement(\"h1\", {"));
-		assert!(code.contains("className: \"title\""));
-	}
-
-	#[test]
-	fn parse_export_names() {
-		let source = r#"
-      export const name = "alephjs"
-      export const version = "1.0.1"
-      const start = () => {}
-      export default start
-      export const { build } = { build: () => {} }
-      export function dev() {}
-      export class Server {}
-      export const { a: { a1, a2 }, 'b': [ b1, b2 ], c, ...rest } = { a: { a1: 0, a2: 0 }, b: [ 0, 0 ], c: 0, d: 0 }
-      export const [ d, e, ...{f, g, rest3} ] = [0, 0, {f:0,g:0,h:0}]
-      let i
-      export const j = i = [0, 0]
-      export { exists, existsSync } from "https://deno.land/std/fs/exists.ts"
-      export * as DenoStdServer from "https://deno.land/std/http/sever.ts"
-      export * from "https://deno.land/std/http/sever.ts"
-    "#;
-		let module = SWC::parse("/app.ts", source, None).expect("could not parse module");
-		assert_eq!(
-			module.parse_export_names().unwrap(),
-			vec![
-				"name",
-				"version",
-				"default",
-				"build",
-				"dev",
-				"Server",
-				"a1",
-				"a2",
-				"b1",
-				"b2",
-				"c",
-				"rest",
-				"d",
-				"e",
-				"f",
-				"g",
-				"rest3",
-				"j",
-				"exists",
-				"existsSync",
-				"DenoStdServer",
-				"{https://deno.land/std/http/sever.ts}",
-			]
-			.into_iter()
-			.map(|s| s.to_owned())
-			.collect::<Vec<String>>()
-		)
-	}
 }

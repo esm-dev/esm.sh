@@ -1,5 +1,4 @@
 use crate::import_map::{ImportHashMap, ImportMap};
-use indexmap::IndexSet;
 use path_slash::PathBufExt;
 use regex::Regex;
 use relative_path::RelativePath;
@@ -39,16 +38,10 @@ pub struct Resolver {
 	pub specifier_is_remote: bool,
 	/// a ordered dependencies of the module
 	pub deps: Vec<DependencyDescriptor>,
-	/// all star exports of the module
+	/// star exports of the module
 	pub star_exports: Vec<String>,
-	/// bundle mode
-	pub bundle_mode: bool,
-	/// externals for bundle mode
-	pub bundle_externals: IndexSet<String>,
 	/// parsed jsx inline styles
 	pub jsx_inline_styles: HashMap<String, InlineStyle>,
-	/// jsx static class names
-	pub jsx_static_class_names: IndexSet<String>,
 
 	// internal
 	import_map: ImportMap,
@@ -56,26 +49,13 @@ pub struct Resolver {
 }
 
 impl Resolver {
-	pub fn new(
-		specifier: &str,
-		import_map: ImportHashMap,
-		bundle_mode: bool,
-		bundle_externals: Vec<String>,
-		react: Option<ReactOptions>,
-	) -> Self {
-		let mut tmp = IndexSet::<String>::new();
-		for url in bundle_externals {
-			tmp.insert(url);
-		}
+	pub fn new(specifier: &str, import_map: ImportHashMap, react: Option<ReactOptions>) -> Self {
 		Resolver {
 			specifier: specifier.into(),
 			specifier_is_remote: is_remote_url(specifier),
 			deps: Vec::new(),
 			star_exports: Vec::new(),
-			bundle_mode,
-			bundle_externals: tmp,
 			jsx_inline_styles: HashMap::new(),
-			jsx_static_class_names: IndexSet::new(),
 			import_map: ImportMap::from_hashmap(import_map),
 			react,
 		}

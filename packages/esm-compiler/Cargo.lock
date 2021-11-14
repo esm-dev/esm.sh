@@ -34,9 +34,9 @@ dependencies = [
 
 [[package]]
 name = "anyhow"
-version = "1.0.44"
+version = "1.0.45"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "61604a8f862e1d5c3229fdd78f8b02c68dcf73a4c4b05fd636d12240aaa242c1"
+checksum = "ee10e43ae4a853c0a3591d4e2ada1719e553be18199d9da9d4a83f5927c2f5c7"
 
 [[package]]
 name = "arrayvec"
@@ -201,8 +201,8 @@ dependencies = [
 ]
 
 [[package]]
-name = "esm-worker-compiler"
-version = "0.0.0"
+name = "esm-compiler"
+version = "0.0.5"
 dependencies = [
  "anyhow",
  "console_error_panic_hook",
@@ -898,9 +898,9 @@ dependencies = [
 
 [[package]]
 name = "swc_common"
-version = "0.14.2"
+version = "0.14.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7d0ebf30bbbc54bd2e2115f9bf9f3226b8e6039ed1a076992af4c09c49de7947"
+checksum = "1b4bae4ba78f7e0f82b85e1cb4b331ccc4473f1db38464ef4b9f13c8ac21e2dd"
 dependencies = [
  "ahash",
  "ast_node",
@@ -924,9 +924,9 @@ dependencies = [
 
 [[package]]
 name = "swc_ecma_ast"
-version = "0.56.0"
+version = "0.58.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a3a8d411060714c3fe2abbb15cddab1f78929d34409f47495eea77490694a52f"
+checksum = "3aca91ea5f5bc51155c1f86e83fa7483821c13d3719488ab75d99e2638b0ac22"
 dependencies = [
  "is-macro",
  "num-bigint",
@@ -938,9 +938,9 @@ dependencies = [
 
 [[package]]
 name = "swc_ecma_codegen"
-version = "0.78.0"
+version = "0.80.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b18d7e0862e169acd3f613cd11ba7ae7ac4ffc0326049128162b426ae2423b70"
+checksum = "0c00f3932d286865ae2784cd4da1926d7668032b156360831103fc2a24c5ff18"
 dependencies = [
  "bitflags",
  "memchr",
@@ -970,9 +970,9 @@ dependencies = [
 
 [[package]]
 name = "swc_ecma_parser"
-version = "0.76.1"
+version = "0.78.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ac8152df12d464428bae3088bd15c3815837055daaef74c61f61d3f30d38bbf4"
+checksum = "081f5d63975902f266c8f15705071aaed0a3872e1bb4d89be298d2d8c50d0146"
 dependencies = [
  "either",
  "enum_kind",
@@ -991,9 +991,9 @@ dependencies = [
 
 [[package]]
 name = "swc_ecma_transforms"
-version = "0.91.0"
+version = "0.94.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0cf60ed2f162385b466cd1d2238ae235d81d859d63024daf8fa157aadd35fdfe"
+checksum = "de94108f9807e229067f5b160e6021fdaff3fcf19b09e6c5fdfab8086514bcdc"
 dependencies = [
  "swc_atoms",
  "swc_common",
@@ -1008,9 +1008,9 @@ dependencies = [
 
 [[package]]
 name = "swc_ecma_transforms_base"
-version = "0.41.3"
+version = "0.44.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "838a852c41dcfb0c35a75bb343f743a0bd39e3f8998e044be7137e15c8691e41"
+checksum = "9d9d453fc5025563ea75c2a40154cef06583d44e41df22284286719c4f1c52b4"
 dependencies = [
  "once_cell",
  "phf",
@@ -1027,9 +1027,9 @@ dependencies = [
 
 [[package]]
 name = "swc_ecma_transforms_classes"
-version = "0.27.0"
+version = "0.30.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ee98c433c43d32ee269acdebdd2c5615f8f57934e90f65d60502f5d9a3e6d4a8"
+checksum = "07a73afb9f2760dab0a7a23181691cb0b785058e3fcf75e8da25fed45208ec84"
 dependencies = [
  "swc_atoms",
  "swc_common",
@@ -1041,9 +1041,9 @@ dependencies = [
 
 [[package]]
 name = "swc_ecma_transforms_macros"
-version = "0.2.3"
+version = "0.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "063ad8426598df1aad8cdb9e9994a54cecb07fe902190c467bf195f5f553ed8d"
+checksum = "18712e4aab969c6508dff3540ade6358f1e013464aa58b3d30da2ab2d9fcbbed"
 dependencies = [
  "pmutil",
  "proc-macro2",
@@ -1054,9 +1054,9 @@ dependencies = [
 
 [[package]]
 name = "swc_ecma_transforms_proposal"
-version = "0.54.0"
+version = "0.57.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "742878426185a4365b8bcc8333116a6abf0d0417a98db1fd5817ff0a34276d14"
+checksum = "983b29596ded27f6a0742019442a732deaf045e51382c8fb612cba6450b85362"
 dependencies = [
  "either",
  "serde",
@@ -1074,9 +1074,9 @@ dependencies = [
 
 [[package]]
 name = "swc_ecma_transforms_react"
-version = "0.56.1"
+version = "0.59.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5e9291e184940e23e17eb29d89899a95fa163f6f932b803f183932e5e80d3c07"
+checksum = "ab47c27e38a9d0e16b352472a0879de9776913b4278c7449b5e8f6b0f39b856b"
 dependencies = [
  "ahash",
  "base64 0.13.0",
@@ -1099,9 +1099,9 @@ dependencies = [
 
 [[package]]
 name = "swc_ecma_transforms_typescript"
-version = "0.57.0"
+version = "0.60.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d2698634fbfc7dbed01e516ef4610507e39dd81373de3b687d453e1b1e80f456"
+checksum = "cfba8f8da29ea1efbd5dbd5e2cd2336a4ecd17b516625595619aa61f51b1e4a4"
 dependencies = [
  "serde",
  "swc_atoms",
@@ -1116,12 +1116,11 @@ dependencies = [
 
 [[package]]
 name = "swc_ecma_utils"
-version = "0.49.0"
+version = "0.52.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "dd6fb4da9a465ebab9dd213022ed7039ac98f938d8be3e38e3e2a68d85825603"
+checksum = "bc871840407f0303e0b93e0a2517d885892e1da8a11a0e344ca06b70b4ecd68f"
 dependencies = [
  "once_cell",
- "scoped-tls",
  "swc_atoms",
  "swc_common",
  "swc_ecma_ast",
@@ -1131,9 +1130,9 @@ dependencies = [
 
 [[package]]
 name = "swc_ecma_visit"
-version = "0.42.0"
+version = "0.44.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3839eb1dfad16550140d59462187de81fc536c53c53035a25fc40cbf01cc5042"
+checksum = "4406ee81ef55497c0f9c24cd37080228b5b70d8a847aa7181f9ca3c532e39439"
 dependencies = [
  "num-bigint",
  "swc_atoms",
@@ -1144,9 +1143,9 @@ dependencies = [
 
 [[package]]
 name = "swc_ecmascript"
-version = "0.83.0"
+version = "0.86.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "79dca2ffcbed1a4a5a0b90265bb4b484c7540437549dcf0c807c3f30d180a79f"
+checksum = "469e941abb9efcd594710d3b4bc4fcde75d462459a764c19e8ca17bf8bac846c"
 dependencies = [
  "swc_ecma_ast",
  "swc_ecma_codegen",
