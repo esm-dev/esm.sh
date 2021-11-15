@@ -36,10 +36,6 @@ function isObject(v) {
   return typeof v === 'object' && v !== null && !Array.isArray(v)
 }
 
-function verifyExports(exports) {
-  return Array.from(new Set(exports.filter(name => identRegexp.test(name) && !reservedWords.has(name))))
-}
-
 async function getJSONKeys(jsonFile) {
   const content = fs.readFileSync(jsonFile).toString()
   const v = JSON.parse(content)
@@ -49,10 +45,24 @@ async function getJSONKeys(jsonFile) {
   return []
 }
 
+function verifyExports(exports) {
+  return Array.from(new Set(exports.filter(name => identRegexp.test(name) && !reservedWords.has(name))))
+}
+
 exports.parseCjsExports = async input => {
   const { buildDir, importPath, nodeEnv = 'production' } = input
   const entry = await resolve(buildDir, importPath)
   const exports = []
+
+  if (entry.endsWith('.json')) {
+    return {
+      exports: verifyExports(getJSONKeys(entry))
+    }
+  }
+
+  if (!entry.endsWith('.js') && !entry.endsWith('.cjs')) {
+    return { exports }
+  }
 
   const requires = [{ path: entry, callMode: false }]
   while (requires.length > 0) {
