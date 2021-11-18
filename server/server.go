@@ -178,7 +178,7 @@ func Serve(efs EmbedFS) {
 		for {
 			err := startNodeServices(wd, services)
 			if err != nil && err.Error() != "signal: interrupt" {
-				log.Errorf("start node services: %v", err)
+				log.Warnf("node services exit: %v", err)
 			}
 		}
 	}()

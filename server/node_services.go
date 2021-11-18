@@ -40,14 +40,14 @@ const nsApp = `
 				const { service, invokeId, input } = JSON.parse(line)
 				if (typeof invokeId === 'string') {
 					let output = null
-					try {
-						if (typeof service === 'string' && service in services) {
+					if (typeof service === 'string' && service in services) {
+						try {
 							output = await services[service](input)
-						} else {
-							output = { error: 'service not found' }
+						} catch(e) {
+							output = { error: e.message }
 						}
-					} catch(e) {
-						output = { error: e.message }
+					} else {
+						output = { error: 'service not found' }
 					}
 					process.stdout.write(invokeId)
 					process.stdout.write(JSON.stringify(output))

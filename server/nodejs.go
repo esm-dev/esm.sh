@@ -22,8 +22,8 @@ import (
 )
 
 const (
-	nodejsMinVersion = 14
-	nodejsLatestLTS  = "14.17.5"
+	nodejsMinVersion = 16
+	nodejsLatestLTS  = "16.13.0"
 	nodeTypesVersion = "16.11.6"
 	nodejsDistURL    = "https://nodejs.org/dist/"
 )
