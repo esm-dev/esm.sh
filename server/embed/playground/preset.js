@@ -15,9 +15,16 @@ export default {
 }`,
   'app.jsx': `import React from '${location.origin}/react'
 import ReactDom from '${location.origin}/react-dom'
+import Hello from './Hello.tsx'
 
 ReactDom.render(
-  <h1>Hello World!</h1>,
+  <Hello />,
   document.getElementById('root')
-)`
+)`,
+  'Hello.tsx': `import React from '${location.origin}/react'
+
+export default function() {
+  return <h1>Hello World!</h1>
+}
+`
 }

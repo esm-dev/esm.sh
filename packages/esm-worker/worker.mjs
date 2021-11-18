@@ -2,6 +2,14 @@ import { getContentType } from './mime.mjs'
 
 const decoder = new TextDecoder()
 const isObject = v => typeof v === 'object' && v !== null && !Array.isArray(v)
+const concatArrayBuffers = (...bufs) => {
+	const array = new Uint8Array(bufs.reduce((totalSize, buf) => totalSize + buf.byteLength, 0));
+	bufs.reduce((offset, buf) => {
+		array.set(buf, offset)
+		return offset + buf.byteLength
+	}, 0)
+	return array.buffer
+}
 
 export default function createESMWorker(options) {
 	const { appFileSystem, appStorage, compileWorker, loadWorker, ssrWorker, isDev } = options
@@ -9,26 +17,23 @@ export default function createESMWorker(options) {
 	return {
 		async fetch(request) {
 			const { pathname, searchParams } = new URL(request.url)
-			const importMap = { imports: {}, scope: {}, jsx: null, loaders: null }
-			const indexHtmlFile = '/index.html'
-			const indexHtml = await appFileSystem.readFile(indexHtmlFile)
+			const importMap = { imports: {}, scope: {}, jsx: {} }
+			const indexHtmlFile = '/index.html' // todo: support MPA
+
+			let indexHtml = await appFileSystem.readFile(indexHtmlFile)
+			let importMapFile = null
 			let ssr = false
 
 			// check and load importMap
 			if (indexHtml) {
-				const wr = new HTMLRewriter()
+				const chunks = []
+				const wr = new HTMLRewriter('utf-8', chunk => chunks.push(chunk))
 				wr.on('script[type="importmap"]', {
 					element(el) {
-						const src = el.getAttribute('src')
+						importMapFile = el.getAttribute('src')
 						if (src) {
-							const url = new URL(src, `http://ws${indexHtmlFile}`)
-							const data = await appFileSystem.readFile(url.pathname)
-							try {
-								const v = JSON.parse(decoder.decode(data))
-								if (isObject(v)) {
-									Object.assign(importMap, v)
-								}
-							} catch (e) { }
+							el.removeAttribute('src')
+							el.setInnerContent('$IMPORTMAP')
 						}
 					},
 					text(text) {
@@ -47,6 +52,18 @@ export default function createESMWorker(options) {
 				})
 				wr.write(indexHtml)
 				wr.end()
+				indexHtml = concatArrayBuffers(chunks)
+			}
+
+			if (importMapFile) {
+				const url = new URL(importMapFile, `http://ws${indexHtmlFile}`)
+				const data = await appFileSystem.readFile(url.pathname)
+				try {
+					const v = JSON.parse(decoder.decode(data))
+					if (isObject(v)) {
+						Object.assign(importMap, v)
+					}
+				} catch (e) { }
 			}
 
 			// serve static
@@ -54,17 +71,19 @@ export default function createESMWorker(options) {
 				let content = await appFileSystem.readFile(pathname)
 				if (content) {
 					// apply loaders 
-					if (importMap.loaders) {
-						for (const pattern of Object.keys(importMap.loaders)) {
-							const reg = new RegExp(pattern)
-							if (reg.test(pathname)) {
-								const resp = await loadWorker.fetch(new Request("", {
-									body: content,
-									headers: new Headers({ 'loader': pattern })
-								}))
-								content = resp.arrray
-								break
-							}
+					for (const [pattern, src] of Object.entries(importMap.imports)) {
+						if (src.endsWith('!loader')) {
+							try {
+								const reg = new RegExp(pattern)
+								if (reg.test(pathname)) {
+									const resp = await loadWorker.fetch(new Request("", {
+										headers: new Headers({ pattern }),
+										body: content,
+									}))
+									content = resp.arrayBuffer()
+									break
+								}
+							} catch (e) { }
 						}
 					}
 
@@ -104,7 +123,7 @@ export default function createESMWorker(options) {
 
 			// fallback to the index.html
 			if (indexHtml) {
-				return new Response(indexHtml || e404Html || '<p><b>404</b> - not found</p>', {
+				return new Response(indexHtml, {
 					headers: { 'content-type': 'text/html' }
 				})
 			}
