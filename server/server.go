@@ -108,13 +108,15 @@ func Serve(efs EmbedFS) {
 		embedFS = efs
 	}
 
-	log, err := logx.New(fmt.Sprintf("file:%s?buffer=32k", path.Join(logDir, "main.log")))
+	log, err = logx.New(fmt.Sprintf("file:%s?buffer=32k", path.Join(logDir, fmt.Sprintf("main-v%d.log", VERSION))))
 	if err != nil {
 		fmt.Printf("initiate logger: %v\n", err)
 		os.Exit(1)
 	}
 	log.SetLevelByName(logLevel)
-	log.SetQuite(!isDev)
+	if !isDev {
+		os.Setenv("NO_COLOR", "1") // disable color in production
+	}
 
 	nodeInstallDir := os.Getenv("NODE_INSTALL_DIR")
 	if nodeInstallDir == "" {
@@ -158,7 +160,7 @@ func Serve(efs EmbedFS) {
 			log.Fatalf("initiate access logger: %v", err)
 		}
 	}
-	accessLogger.SetQuite(true)
+	accessLogger.SetQuite(true) // quite in terminal
 
 	// start cjs lexer server
 	go func() {
@@ -245,7 +247,7 @@ func serveBuild() {
 			var task BuildTask
 			if json.Unmarshal(data, &task) == nil {
 				taskId := task.ID()
-				wc := make(chan struct{}, 1)
+				done := make(chan struct{}, 1)
 				go func() {
 					t := time.Now()
 					_, err := task.Build()
@@ -256,11 +258,12 @@ func serveBuild() {
 						db.Delete("error-" + taskId)
 						log.Infof("build %s in %v", taskId, time.Since(t))
 					}
-					wc <- struct{}{}
+					done <- struct{}{}
 				}()
 				select {
-				case <-wc:
+				case <-done:
 				case <-time.After(10 * time.Minute):
+					os.RemoveAll(task.wd) // clean up
 					log.Errorf("build %s: timeout", taskId)
 				}
 				cache.Delete("build-task:" + taskId)
