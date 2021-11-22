@@ -556,7 +556,7 @@ func query(devMode bool) rex.Handle {
 						return rex.Status(500, err.Error())
 					}
 					if i == n-1 {
-						return rex.Status(http.StatusRequestTimeout, "timeout, we are transforming the types hardly, please try later!")
+						return rex.Status(http.StatusRequestTimeout, "timeout, please try again later!")
 					}
 					time.Sleep(100 * time.Millisecond)
 				}
