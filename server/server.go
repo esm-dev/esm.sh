@@ -2,7 +2,6 @@ package server
 
 import (
 	"embed"
-	"encoding/json"
 	"flag"
 	"fmt"
 	"os"
@@ -12,7 +11,6 @@ import (
 	"runtime"
 	"strings"
 	"syscall"
-	"time"
 
 	"esm.sh/server/storage"
 
@@ -25,7 +23,7 @@ var (
 	cache      storage.Cache
 	db         storage.DB
 	fs         storage.FS
-	buildQueue storage.Queue
+	buildQueue *BuildQueue
 	log        *logx.Logger
 	node       *Node
 	embedFS    EmbedFS
@@ -146,10 +144,7 @@ func Serve(efs EmbedFS) {
 		log.Fatalf("init storage(fs,%s): %v", fsUrl, err)
 	}
 
-	buildQueue, err = storage.OpenQueue(queueUrl)
-	if err != nil {
-		log.Fatalf("init storage(queue,%s): %v", fsUrl, err)
-	}
+	buildQueue = newBuildQueue(buildConcurrency)
 
 	var accessLogger *logx.Logger
 	if logDir == "" {
@@ -184,10 +179,6 @@ func Serve(efs EmbedFS) {
 			}
 		}
 	}()
-
-	for i := 0; i < buildConcurrency; i++ {
-		go serveBuild()
-	}
 
 	if !noCompress {
 		rex.Use(rex.AutoCompress())
@@ -234,43 +225,6 @@ func Serve(efs EmbedFS) {
 	db.Close()
 	accessLogger.FlushBuffer()
 	log.FlushBuffer()
-}
-
-func serveBuild() {
-	for {
-		if nsReady {
-			data, err := buildQueue.Pull()
-			if err != nil {
-				log.Error("buildQueue.Pull:", err)
-				continue
-			}
-			var task BuildTask
-			if json.Unmarshal(data, &task) == nil {
-				taskId := task.ID()
-				done := make(chan struct{}, 1)
-				go func() {
-					t := time.Now()
-					_, err := task.Build()
-					if err != nil {
-						db.Put("error-"+taskId, "error", storage.Store{"error": err.Error()})
-						log.Errorf("build %s: %v", taskId, err)
-					} else {
-						db.Delete("error-" + taskId)
-						log.Infof("build %s in %v", taskId, time.Since(t))
-					}
-					done <- struct{}{}
-				}()
-				select {
-				case <-done:
-				case <-time.After(10 * time.Minute):
-					os.RemoveAll(task.wd) // clean up
-					log.Errorf("build %s: timeout", taskId)
-				}
-				cache.Delete("build-task:" + taskId)
-			}
-		}
-		time.Sleep(50 * time.Millisecond)
-	}
 }
 
 func init() {

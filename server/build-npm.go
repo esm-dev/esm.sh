@@ -524,7 +524,7 @@ esbuild:
 							Target:  task.Target,
 							DevMode: task.DevMode,
 						}
-						pushBuildTask(t)
+						buildQueue.Add(t)
 						importPath = task.getImportPath(Pkg{
 							Name:      p.Name,
 							Version:   p.Version,
@@ -745,28 +745,4 @@ func (task *BuildTask) handleDTS(esm *ESM) {
 	if dts != "" {
 		esm.Dts = fmt.Sprintf("/v%d/%s", task.BuildVersion, dts)
 	}
-}
-
-func pushBuildTask(task *BuildTask) (err error) {
-	if task == nil {
-		return
-	}
-
-	taskID := task.ID()
-	exists, err := cache.Has("build-task:" + taskID)
-	if err != nil {
-		return
-	}
-
-	if !exists && buildQueue != nil {
-		err = cache.Set("build-task:"+taskID, []byte{'1'}, time.Hour)
-		if err != nil {
-			return
-		}
-		err = buildQueue.Push(utils.MustEncodeJSON(task))
-		if err != nil {
-			cache.Delete("build-task:" + taskID)
-		}
-	}
-	return
 }

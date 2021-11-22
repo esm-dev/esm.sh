@@ -293,7 +293,7 @@ _esm(['preact', 'preact/hooks', 'swr?alias=react:preact/compat'], async (t) => {
       null,
       error && h('span', null, 'failed to load'),
       !data && h('span', null, 'loading...'),
-      data && h('span', null, 'server uptime: ', h('strong', null, `${data.uptime / 1000}s`)),
+      data && h('span', null, 'server uptime: ', h('strong', null, data.uptime)),
     )
   }
   render(h(App), t.$span)
