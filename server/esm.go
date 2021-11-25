@@ -166,22 +166,24 @@ func initESM(wd string, pkg Pkg, checkExports bool, isDev bool) (esm *ESM, err e
 		if err != nil {
 			return nil, fmt.Errorf("parseCJSModuleExports: %v", err)
 		}
-		if strings.Contains(ret.Error, "Unexpected export statement in CJS module") {
-			if pkg.Submodule != "" {
-				esm.Module = pkg.Submodule
-			} else {
-				esm.Module = esm.Main
-			}
-			resolved, exportDefault, err := checkESM(wd, esm.Name, esm.Module)
-			if err != nil {
-				return nil, err
-			}
-			esm.Module = resolved
-			esm.ExportDefault = exportDefault
-		} else {
-			esm.Exports = ret.Exports
-			esm.ExportDefault = true
+		if ret.Error != "" {
+			return nil, fmt.Errorf("parseCJSModuleExports: %s", ret.Error)
 		}
+		esm.Exports = ret.Exports
+		esm.ExportDefault = true
+		// if ret.Error != "" && strings.Contains(ret.Error, "Unexpected export statement in CJS module") {
+		// 	if pkg.Submodule != "" {
+		// 		esm.Module = pkg.Submodule
+		// 	} else {
+		// 		esm.Module = esm.Main
+		// 	}
+		// 	resolved, exportDefault, err := checkESM(wd, esm.Name, esm.Module)
+		// 	if err != nil {
+		// 		return nil, err
+		// 	}
+		// 	esm.Module = resolved
+		// 	esm.ExportDefault = exportDefault
+		// }
 	}
 	return
 }

@@ -16,6 +16,8 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"github.com/ije/gox/utils"
 )
 
 const nsApp = `
@@ -68,17 +70,24 @@ type NSTask struct {
 	output  chan []byte
 }
 
-var nsReady = false
 var nsInvokeIndex uint32 = 0
-var nsChannel = make(chan *NSTask, 64)
+var nsChannel = make(chan *NSTask, 1000)
 
-func invokeNodeService(serviceName string, input map[string]interface{}) []byte {
+func invokeNodeService(serviceName string, input map[string]interface{}, timeout time.Duration) []byte {
 	task := &NSTask{
 		service: serviceName,
 		input:   input,
 		output:  make(chan []byte, 1),
 	}
 	nsChannel <- task
+	if timeout > 0 {
+		select {
+		case out := <-task.output:
+			return out
+		case <-time.After(timeout):
+			return utils.MustEncodeJSON(map[string]interface{}{"error": "timeout"})
+		}
+	}
 	return <-task.output
 }
 
@@ -136,7 +145,6 @@ func startNodeServices(wd string, services []string) (err error) {
 		return
 	}
 
-	nsReady = true
 	log.Debug("node services process started, pid is", cmd.Process.Pid)
 
 	// store node process pid

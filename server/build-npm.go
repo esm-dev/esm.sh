@@ -69,9 +69,7 @@ func (task *BuildTask) ID() string {
 	if pkg.Submodule != "" {
 		name = pkg.Submodule
 	}
-	if strings.HasSuffix(name, ".js") {
-		name = strings.TrimSuffix(name, ".js")
-	}
+	name = strings.TrimSuffix(name, ".js")
 	if task.DevMode {
 		name += ".development"
 	}
@@ -99,9 +97,7 @@ func (task *BuildTask) getImportPath(pkg Pkg, extendsAlias bool) string {
 	if pkg.Submodule != "" {
 		name = pkg.Submodule
 	}
-	if strings.HasSuffix(name, ".js") {
-		name = strings.TrimSuffix(name, ".js")
-	}
+	name = strings.TrimSuffix(name, ".js")
 	if task.DevMode {
 		name += ".development"
 	}
@@ -240,9 +236,7 @@ func (task *BuildTask) build(tracing *stringSet) (esm *ESM, err error) {
 					}
 
 					// resolve nodejs builtin modules like `node:path`
-					if strings.HasPrefix(specifier, "node:") {
-						specifier = strings.TrimPrefix(specifier, "node:")
-					}
+					specifier = strings.TrimPrefix(specifier, "node:")
 
 					// bundles all dependencies except in `bundle` mode, apart from peer dependencies
 					if task.BundleMode && !extraExternal.Has(specifier) {
@@ -688,7 +682,7 @@ esbuild:
 		}
 	}
 
-	log.Debugf("esbuild %s %s %s in %v", task.Pkg.String(), task.Target, nodeEnv, time.Now().Sub(start))
+	log.Debugf("esbuild %s %s %s in %v", task.Pkg.String(), task.Target, nodeEnv, time.Since(start))
 
 	task.stage = "copy-dts"
 	task.handleDTS(esm)

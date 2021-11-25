@@ -2,6 +2,7 @@ package server
 
 import (
 	"encoding/json"
+	"time"
 )
 
 type cjsExportsResult struct {
@@ -14,7 +15,7 @@ func parseCJSModuleExports(buildDir string, importPath string, nodeEnv string) (
 		"buildDir":   buildDir,
 		"importPath": importPath,
 		"nodeEnv":    nodeEnv,
-	})
+	}, 10*time.Second)
 
 	err = json.Unmarshal(data, &ret)
 	return

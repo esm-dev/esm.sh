@@ -71,18 +71,23 @@ func query(devMode bool) rex.Handle {
 			for el := buildQueue.list.Front(); el != nil; el = el.Next() {
 				t, ok := el.Value.(*queueTask)
 				if ok {
-					q[i] = map[string]interface{}{
+					m := map[string]interface{}{
 						"stage":      t.stage,
-						"createTime": t.createTime.Unix(),
-						"startTime":  t.startTime.Unix(),
+						"createTime": t.createTime.Format(http.TimeFormat),
 						"consumers":  len(t.consumers),
 						"pkg":        t.Pkg.String(),
-						"deps":       t.Deps.String(),
 						"target":     t.Target,
 						"inProcess":  t.inProcess,
 						"devMode":    t.DevMode,
 						"bundleMode": t.BundleMode,
 					}
+					if !t.startTime.IsZero() {
+						m["startTime"] = t.startTime.Format(http.TimeFormat)
+					}
+					if len(t.Deps) > 0 {
+						m["deps"] = t.Deps.String()
+					}
+					q[i] = m
 					i++
 				}
 			}
@@ -458,7 +463,7 @@ func query(devMode bool) rex.Handle {
 				Deps:         deps,
 				Alias:        alias,
 				Target:       "types",
-				stage:        "init",
+				stage:        "-",
 			}
 			var savePath string
 			findTypesFile := func() (bool, time.Time, error) {
