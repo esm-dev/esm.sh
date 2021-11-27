@@ -45,12 +45,12 @@ func (t *queueTask) run() BuildOutput {
 	select {
 	case output = <-c:
 		if output.err == nil {
-			log.Infof("build %s in %v", t.ID(), time.Since(t.startTime))
+			log.Infof("build %s done in %v", t.ID(), time.Since(t.startTime))
 		} else {
-			log.Errorf("build %s: %v", t.ID(), output.err)
+			log.Errorf("build %s error: %v", t.ID(), output.err)
 		}
-	case <-time.After(15 * time.Minute):
-		log.Errorf("build %s: timeout", t.ID())
+	case <-time.After(5 * time.Minute):
+		log.Errorf("build %s: timeout(%v)", t.ID(), time.Since(t.startTime))
 		output = BuildOutput{err: fmt.Errorf("build ")}
 	}
 
@@ -166,12 +166,7 @@ func (q *BuildQueue) wait(t *queueTask) {
 	delete(q.tasks, t.ID())
 	q.lock.Unlock()
 
-	log.Debugf(
-		"BuildQueue(%s,%s) done in %s",
-		t.Pkg.String(),
-		t.Target,
-		time.Now().Sub(t.startTime),
-	)
+	// call next task
 	q.next()
 
 	for _, c := range t.consumers {

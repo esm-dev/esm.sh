@@ -156,13 +156,12 @@ func (task *BuildTask) build(tracing *stringSet) (esm *ESM, err error) {
 	task.stage = "init"
 	esm, err = initESM(task.wd, task.Pkg, task.Target != "types", task.DevMode)
 	if err != nil {
-		err = fmt.Errorf("init ESM: %v", err)
 		return
 	}
 
 	if task.Target == "types" {
 		task.stage = "copy-dts"
-		task.handleDTS(esm)
+		task.transformDTS(esm)
 		return
 	}
 
@@ -685,7 +684,7 @@ esbuild:
 	log.Debugf("esbuild %s %s %s in %v", task.Pkg.String(), task.Target, nodeEnv, time.Since(start))
 
 	task.stage = "copy-dts"
-	task.handleDTS(esm)
+	task.transformDTS(esm)
 	task.storeToDB(esm)
 	return
 }
@@ -703,7 +702,7 @@ func (task *BuildTask) storeToDB(esm *ESM) {
 	}
 }
 
-func (task *BuildTask) handleDTS(esm *ESM) {
+func (task *BuildTask) transformDTS(esm *ESM) {
 	name := task.Pkg.Name
 	submodule := task.Pkg.Submodule
 
