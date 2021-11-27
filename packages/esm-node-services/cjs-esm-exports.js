@@ -66,21 +66,25 @@ exports.parseCjsExports = async input => {
 
   const requires = [{ path: entry, callMode: false }]
   while (requires.length > 0) {
-    const req = requires.pop()
-    const code = fs.readFileSync(req.path).toString()
-    const results = parse(req.path, code, nodeEnv, req.callMode)
-    exports.push(...results.exports)
-    for (let reexport of results.reexports) {
-      const callMode = reexport.endsWith('()')
-      if (callMode) {
-        reexport = reexport.slice(0, -2)
+    try {
+      const req = requires.pop()
+      const code = fs.readFileSync(req.path).toString()
+      const results = parse(req.path, code, nodeEnv, req.callMode)
+      exports.push(...results.exports)
+      for (let reexport of results.reexports) {
+        const callMode = reexport.endsWith('()')
+        if (callMode) {
+          reexport = reexport.slice(0, -2)
+        }
+        const path = await resolve(dirname(req.path), reexport)
+        if (path.endsWith('.json')) {
+          exports.push(...getJSONKeys(path))
+        } else {
+          requires.push({ path, callMode })
+        }
       }
-      const path = await resolve(dirname(req.path), reexport)
-      if (path.endsWith('.json')) {
-        exports.push(...getJSONKeys(path))
-      } else {
-        requires.push({ path, callMode })
-      }
+    } catch (error) {
+      return Promise.reject(err)
     }
   }
 
