@@ -12,7 +12,7 @@ const concatArrayBuffers = (...bufs) => {
 }
 
 export default function createESMWorker(options) {
-	const { appFileSystem, appStorage, compileWorker, loadWorker, ssrWorker, isDev } = options
+	const { appFileSystem, appStorage, compileWorker, appWorker, isDev } = options
 
 	return {
 		async fetch(request) {
@@ -22,7 +22,7 @@ export default function createESMWorker(options) {
 
 			let indexHtml = await appFileSystem.readFile(indexHtmlFile)
 			let importMapFile = null
-			let ssr = false
+			let ssrEntry = null
 
 			// check and load importMap
 			if (indexHtml) {
@@ -32,8 +32,7 @@ export default function createESMWorker(options) {
 					element(el) {
 						importMapFile = el.getAttribute('src')
 						if (src) {
-							el.removeAttribute('src')
-							el.setInnerContent('$IMPORTMAP')
+							el.remove()
 						}
 					},
 					text(text) {
@@ -47,16 +46,20 @@ export default function createESMWorker(options) {
 				})
 				wr.on('script[type="ssr"]', {
 					element() {
-						ssr = true
+						const src = el.getAttribute('src')
+						if (src) {
+							const url = new URL(src, `http://void${indexHtmlFile}`)
+							ssrEntry = url.pathname
+						}
+						el.remove()
 					}
 				})
 				wr.write(indexHtml)
 				wr.end()
 				indexHtml = concatArrayBuffers(chunks)
 			}
-
 			if (importMapFile) {
-				const url = new URL(importMapFile, `http://ws${indexHtmlFile}`)
+				const url = new URL(importMapFile, `http://void${indexHtmlFile}`)
 				const data = await appFileSystem.readFile(url.pathname)
 				try {
 					const v = JSON.parse(decoder.decode(data))
@@ -76,8 +79,8 @@ export default function createESMWorker(options) {
 							try {
 								const reg = new RegExp(pattern)
 								if (reg.test(pathname)) {
-									const resp = await loadWorker.fetch(new Request("", {
-										headers: new Headers({ pattern }),
+									const resp = await appWorker.fetch(new Request('/', {
+										headers: { 'esm-load-pattern': pattern },
 										body: content,
 									}))
 									content = resp.arrayBuffer()
@@ -93,7 +96,8 @@ export default function createESMWorker(options) {
 							/\.(js|jsx|mjs|ts|tsx|mts|vue|svelte|mdx)$/.test(pathname) ||
 							(/\.(md|css)$/.test(pathname) && searchParams.has('module'))
 						) {
-							return compileWorker.fetch(new Request("", {
+							return compileWorker.fetch(new Request('/', {
+								headers: { 'content-type': 'application/json' },
 								body: JSON.stringify({
 									name: pathname,
 									code: decoder.decode(content),
@@ -101,8 +105,7 @@ export default function createESMWorker(options) {
 										importMap,
 										isDev
 									}
-								}),
-								headers: new Headers({ 'content-type': 'application/json' })
+								})
 							}))
 						}
 					}
@@ -117,8 +120,9 @@ export default function createESMWorker(options) {
 			}
 
 			// ssr
-			if (ssr && ssrWorker && typeof ssrWorker.fetch === 'function') {
-				return await ssrWorker.fetch(request)
+			if (ssrEntry && appWorker && typeof appWorker.fetch === 'function') {
+				request.headers.append('esm-ssr-entry', ssrEntry)
+				return await appWorker.fetch(request)
 			}
 
 			// fallback to the index.html
