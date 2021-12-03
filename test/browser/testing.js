@@ -49,7 +49,7 @@ const q = queue(async ({ imports, testFn, $li, $status }) => {
       $status.innerText = '❌ ' + e.message
     }
   }
-}, navigator.hardwareConcurrency || 1)
+}, 4)
 
 const _esm = async (imports, testFn) => {
   const $li = document.createElement('li')
