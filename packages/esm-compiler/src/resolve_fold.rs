@@ -30,7 +30,7 @@ impl Fold for ResolveFold {
 								ModuleItem::ModuleDecl(ModuleDecl::Import(import_decl))
 							} else {
 								let mut resolver = self.resolver.borrow_mut();
-								let fixed_url = resolver.resolve(import_decl.src.value.as_ref(), false);
+								let fixed_url = resolver.resolve(import_decl.src.value.as_ref(), false, false);
 								ModuleItem::ModuleDecl(ModuleDecl::Import(ImportDecl {
 									src: new_str(fixed_url),
 									..import_decl
@@ -56,7 +56,7 @@ impl Fold for ResolveFold {
 								}))
 							} else {
 								let mut resolver = self.resolver.borrow_mut();
-								let fixed_url = resolver.resolve(src.value.as_ref(), false);
+								let fixed_url = resolver.resolve(src.value.as_ref(), false, false);
 								ModuleItem::ModuleDecl(ModuleDecl::ExportNamed(NamedExport {
 									span: DUMMY_SP,
 									specifiers,
@@ -69,7 +69,7 @@ impl Fold for ResolveFold {
 						// match: export * from "https://esm.sh/react"
 						ModuleDecl::ExportAll(ExportAll { src, .. }) => {
 							let mut resolver = self.resolver.borrow_mut();
-							let fixed_url = resolver.resolve(src.value.as_ref(), false);
+							let fixed_url = resolver.resolve(src.value.as_ref(), false, true);
 							ModuleItem::ModuleDecl(ModuleDecl::ExportAll(ExportAll {
 								span: DUMMY_SP,
 								src: new_str(fixed_url.into()),
@@ -103,7 +103,7 @@ impl Fold for ResolveFold {
 				_ => return call,
 			};
 			let mut resolver = self.resolver.borrow_mut();
-			let fixed_url = resolver.resolve(url, true);
+			let fixed_url = resolver.resolve(url, true, false);
 			call.args = vec![ExprOrSpread {
 				spread: None,
 				expr: Box::new(Expr::Lit(Lit::Str(new_str(fixed_url)))),

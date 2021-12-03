@@ -11,6 +11,7 @@ use url::Url;
 pub struct DependencyDescriptor {
 	pub specifier: String,
 	pub is_dynamic: bool,
+	pub is_star_export: bool,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]
@@ -27,19 +28,17 @@ pub struct ReactOptions {
 	#[serde(default)]
 	pub version: String,
 	#[serde(default)]
-	pub esm_sh_build_version: usize,
+	pub esm_sh_version: usize,
 }
 
-/// A Resolver to resolve aleph.js import/export URL.
+/// A Resolver to resolve esm import/export URL.
 pub struct Resolver {
 	/// the text specifier associated with the import/export statement.
 	pub specifier: String,
 	/// a flag indicating if the specifier is a remote(http) url.
 	pub specifier_is_remote: bool,
 	/// a ordered dependencies of the module
-	pub deps: Vec<DependencyDescriptor>,
-	/// star exports of the module
-	pub star_exports: Vec<String>,
+	pub deps: Vec<DependencyDescriptor>, 
 	/// parsed jsx inline styles
 	pub jsx_inline_styles: HashMap<String, InlineStyle>,
 
@@ -53,17 +52,16 @@ impl Resolver {
 		Resolver {
 			specifier: specifier.into(),
 			specifier_is_remote: is_remote_url(specifier),
-			deps: Vec::new(),
-			star_exports: Vec::new(),
+			deps: Vec::new(), 
 			jsx_inline_styles: HashMap::new(),
 			import_map: ImportMap::from_hashmap(import_map),
 			react,
 		}
 	}
 
-	/// resolve import/export url.
-	pub fn resolve(&mut self, url: &str, is_dynamic: bool) -> String {
-		// apply import map
+	/// Resolve import/export URLs.
+	pub fn resolve(&mut self, url: &str, is_dynamic: bool,is_star_export:bool) -> String {
+		// apply import maps
 		let url = self.import_map.resolve(self.specifier.as_str(), url);
 		let mut fixed_url: String = if is_remote_url(url.as_str()) {
 			url.into()
@@ -98,7 +96,7 @@ impl Resolver {
 			}
 		};
 
-		// fix react/react-dom url
+		// fix react/react-dom URL
 		if let Some(react) = &self.react {
 			let re_react_url =
 				Regex::new(r"^https?://(esm\.sh|cdn\.esm\.sh)(/v\d+)?/react(\-dom)?(@[^/]+)?(/.*)?$")
@@ -113,10 +111,10 @@ impl Resolver {
 				let ver = caps.get(4).map_or("", |m| m.as_str());
 				let path = caps.get(5).map_or("", |m| m.as_str());
 				let (target_build_version, should_replace_build_version) = if build_version != ""
-					&& react.esm_sh_build_version > 0
-					&& !build_version.eq(react.esm_sh_build_version.to_string().as_str())
+					&& react.esm_sh_version > 0
+					&& !build_version.eq(react.esm_sh_version.to_string().as_str())
 				{
-					(react.esm_sh_build_version.to_string(), true)
+					(react.esm_sh_version.to_string(), true)
 				} else {
 					("".to_owned(), false)
 				};
@@ -145,10 +143,13 @@ impl Resolver {
 			}
 		}
 
+		// push to dep graph
 		self.deps.push(DependencyDescriptor {
 			specifier: fixed_url.clone(),
 			is_dynamic,
-		});
+			is_star_export
+		}); 
+
 		fixed_url
 	}
 }

@@ -181,9 +181,7 @@ impl SWC {
 			// remove unused deps by tree-shaking
 			let mut deps: Vec<DependencyDescriptor> = Vec::new();
 			for dep in resolver.deps.clone() {
-				if resolver.star_exports.contains(&dep.specifier)
-					|| code.contains(to_str_lit(dep.specifier.as_str()).as_str())
-				{
+				if dep.is_star_export || code.contains(to_str_lit(dep.specifier.as_str()).as_str()) {
 					deps.push(dep);
 				}
 			}
@@ -218,9 +216,7 @@ impl SWC {
 				src_map,
 			));
 			let mut emitter = swc_ecmascript::codegen::Emitter {
-				cfg: swc_ecmascript::codegen::Config {
-					minify: false,
-				},
+				cfg: swc_ecmascript::codegen::Config { minify: false },
 				comments: Some(&self.comments),
 				cm: self.source_map.clone(),
 				wr: writer,

@@ -1,4 +1,4 @@
-mod error; 
+mod error;
 mod import_map;
 mod resolve_fold;
 mod resolver;
@@ -76,9 +76,6 @@ pub struct TransformOutput {
 	#[serde(skip_serializing_if = "Vec::is_empty")]
 	pub deps: Vec<DependencyDescriptor>,
 
-	#[serde(skip_serializing_if = "Vec::is_empty")]
-	pub star_exports: Vec<String>,
-
 	#[serde(skip_serializing_if = "HashMap::is_empty")]
 	pub jsx_inline_styles: HashMap<String, InlineStyle>,
 
@@ -118,7 +115,6 @@ pub fn transform_sync(specifier: &str, code: &str, options: JsValue) -> Result<J
 		JsValue::from_serde(&TransformOutput {
 			code,
 			deps: r.deps.clone(),
-			star_exports: r.star_exports.clone(),
 			jsx_inline_styles: r.jsx_inline_styles.clone(),
 			map,
 		})

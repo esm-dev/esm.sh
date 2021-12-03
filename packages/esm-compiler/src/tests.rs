@@ -14,7 +14,7 @@ fn st(specifer: &str, source: &str, options: &EmitOptions) -> (String, Rc<RefCel
 		},
 		Some(ReactOptions {
 			version: "17.0.2".into(),
-			esm_sh_build_version: 57,
+			esm_sh_version: 60,
 		}),
 	)));
 	let (code, _) = module.transform(resolver.clone(), options).unwrap();
