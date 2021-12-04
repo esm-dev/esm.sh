@@ -1,6 +1,6 @@
 [package]
 name = "esm-compiler"
-version = "0.0.6"
+version = "0.0.7"
 description = "A WASM module to compiler code for esm-worker."
 repository = "https://github.com/alephjs/aleph.js"
 authors = ["The Aleph.js authors"]

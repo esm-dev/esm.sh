@@ -23,18 +23,14 @@ use swc_ecmascript::{
 /// Options for transpiling a module.
 #[derive(Debug, Clone)]
 pub struct EmitOptions {
-	pub jsx_import_source: Option<String>,
-	pub jsx_factory: String,
-	pub jsx_fragment_factory: String,
+	pub jsx_import_source: String,
 	pub is_dev: bool,
 }
 
 impl Default for EmitOptions {
 	fn default() -> Self {
 		EmitOptions {
-			jsx_import_source: None,
-			jsx_factory: "React.createElement".into(),
-			jsx_fragment_factory: "React.Fragment".into(),
+			jsx_import_source: "https://esm.sh/react".into(),
 			is_dev: false,
 		}
 	}
@@ -51,11 +47,7 @@ pub struct SWC {
 
 impl SWC {
 	/// parse source code.
-	pub fn parse(
-		specifier: &str,
-		source: &str,
-		source_type: Option<SourceType>,
-	) -> Result<Self, anyhow::Error> {
+	pub fn parse(specifier: &str, source: &str) -> Result<Self, anyhow::Error> {
 		let source_map = SourceMap::default();
 		let source_file = source_map.new_source_file(
 			FileName::Real(Path::new(specifier).to_path_buf()),
@@ -63,13 +55,7 @@ impl SWC {
 		);
 		let sm = &source_map;
 		let error_buffer = ErrorBuffer::new(specifier);
-		let source_type = match source_type {
-			Some(source_type) => match source_type {
-				SourceType::Unknown => SourceType::from(Path::new(specifier)),
-				_ => source_type,
-			},
-			None => SourceType::from(Path::new(specifier)),
-		};
+		let source_type = SourceType::from(Path::new(specifier));
 		let syntax = get_syntax(&source_type);
 		let input = StringInput::from(&*source_file);
 		let comments = SingleThreadedComments::default();
@@ -124,13 +110,13 @@ impl SWC {
 				}),
 				helpers::inject_helpers(),
 				Optional::new(
-					strip::strip_with_config(strip_config_from_emit_options(&options)),
+					strip::strip_with_config(strip_config_from_emit_options()),
 					!is_jsx
 				),
 				Optional::new(
 					strip::strip_with_jsx(
 						self.source_map.clone(),
-						strip_config_from_emit_options(&options),
+						strip_config_from_emit_options(),
 						&self.comments,
 						top_level_mark
 					),
@@ -154,14 +140,8 @@ impl SWC {
 						self.source_map.clone(),
 						Some(&self.comments),
 						react::Options {
-							runtime: if options.jsx_import_source.is_some() {
-								Some(react::Runtime::Automatic)
-							} else {
-								None
-							},
-							import_source: options.jsx_import_source.clone().unwrap_or_default(),
-							pragma: options.jsx_factory.clone(),
-							pragma_frag: options.jsx_fragment_factory.clone(),
+							runtime: Some(react::Runtime::Automatic),
+							import_source: options.jsx_import_source.clone(),
 							// this will use `Object.assign()` instead of the `_extends` helper when spreading props.
 							use_builtins: true,
 							development: options.is_dev,
@@ -278,15 +258,12 @@ fn get_syntax(source_type: &SourceType) -> Syntax {
 	}
 }
 
-fn strip_config_from_emit_options(options: &EmitOptions) -> strip::Config {
+fn strip_config_from_emit_options() -> strip::Config {
 	strip::Config {
-		pragma: Some(options.jsx_factory.clone()),
-		pragma_frag: Some(options.jsx_fragment_factory.clone()),
 		import_not_used_as_values: strip::ImportsNotUsedAsValues::Remove,
 		use_define_for_class_fields: true,
-		// TODO(bartlomieju): this could be changed to `false` to provide `export {}`
-		// in Typescript files without manual changes
 		no_empty_export: true,
+		..Default::default()
 	}
 }
 

@@ -1,16 +1,17 @@
 use super::*;
 use std::collections::HashMap;
 
-fn st(specifer: &str, source: &str, options: &EmitOptions) -> (String, Rc<RefCell<Resolver>>) {
+fn transform(specifer: &str, source: &str, options: &EmitOptions) -> (String, Rc<RefCell<Resolver>>) {
 	let mut imports: HashMap<String, String> = HashMap::new();
 	imports.insert("~/".into(), "./".into());
 	imports.insert("react".into(), "https://esm.sh/react".into());
-	let module = SWC::parse(specifer, source, None).expect("could not parse module");
+	let module = SWC::parse(specifer, source).expect("could not parse module");
 	let resolver = Rc::new(RefCell::new(Resolver::new(
 		specifer,
 		ImportHashMap {
 			imports,
 			scopes: HashMap::new(),
+			jsx: "react".into(),
 		},
 		Some(ReactOptions {
 			version: "17.0.2".into(),
@@ -53,7 +54,7 @@ fn typescript() {
         bar() {}
       }
     "#;
-	let (code, _) = st(
+	let (code, _) = transform(
 		"https://deno.land/x/mod.ts",
 		source,
 		&EmitOptions::default(),
@@ -65,7 +66,6 @@ fn typescript() {
 #[test]
 fn react_jsx() {
 	let source = r#"
-      import React from "https://esm.sh/react"
       export default function App() {
         return (
           <>
@@ -74,29 +74,11 @@ fn react_jsx() {
         )
       }
     "#;
-	let (code, _) = st("app.tsx", source, &EmitOptions::default());
-	assert!(code.contains("https://esm.sh/react@17.0.2"));
-	assert!(code.contains("React.createElement(React.Fragment, null"));
-	assert!(code.contains("React.createElement(\"h1\", {"));
-	assert!(code.contains("className: \"title\""));
-}
-
-#[test]
-fn react_jsx_automatic() {
-	let source = r#"
-      export default function App() {
-        return (
-          <>
-            <h1 className="title">Hello world!</h1>
-          </>
-        )
-      }
-    "#;
-	let (code, _) = st(
+	let (code, _) = transform(
 		"app.tsx",
 		source,
 		&EmitOptions {
-			jsx_import_source: Some("https://esm.sh/react@17.0.2".into()),
+			jsx_import_source: "https://esm.sh/react@17.0.2".into(),
 			..Default::default()
 		},
 	);
@@ -109,7 +91,7 @@ fn react_jsx_automatic() {
 #[test]
 fn react_jsx_dev() {
 	let source = r#"
-      import React, { useState } from "https://esm.sh/react"
+      import { useState } from "https://esm.sh/react"
       export default function App() {
 				const [ msg ] = useState('Hello world!')
         return ( 
@@ -117,7 +99,7 @@ fn react_jsx_dev() {
         )
       }
     "#;
-	let (code, _) = st(
+	let (code, _) = transform(
 		"/app.tsx",
 		source,
 		&EmitOptions {
