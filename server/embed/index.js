@@ -7,7 +7,7 @@ import bash from '/highlight.js/lib/languages/bash'
 
 export function render(md) {
   const mainEl = document.querySelector('main')
-  mainEl.innerHTML = marked.parse(md).replaceAll('https://esm.sh', window.origin) + `<p class="link"><a href="/?playground">Playground &rarr; </a></p><p class="link"><a href="/?test">Testing &rarr; </a></p>`
+  mainEl.innerHTML = marked.parse(md).replaceAll('https://esm.sh', window.origin) + `<p class="link"><a href="/?test">Testing &rarr; </a></p>`
   mainEl.removeChild(mainEl.querySelector('h1'))
   mainEl.querySelectorAll('code.language-bash').forEach(block => {
     block.innerHTML = block.innerHTML.replace(/(^|\n)\$ /g, '$1')
