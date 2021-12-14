@@ -36,7 +36,7 @@ function isObject(v) {
   return typeof v === 'object' && v !== null && !Array.isArray(v)
 }
 
-async function getJSONKeys(jsonFile) {
+function getJSONKeys(jsonFile) {
   const content = fs.readFileSync(jsonFile).toString()
   const v = JSON.parse(content)
   if (isObject(v)) {
