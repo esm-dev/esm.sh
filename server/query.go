@@ -65,21 +65,36 @@ func query(devMode bool) rex.Handle {
 			return rex.Content("index.html", startTime, bytes.NewReader(html))
 
 		case "/status.json":
-			list, err := db.List("error")
-			if err != nil {
-				return rex.Status(500, err.Error())
-			}
-			errors := make([]map[string]interface{}, len(list))
-			for index, item := range list {
-				errors[index] = map[string]interface{}{
-					"message": item.Store["error"],
-					"time":    time.Unix(int64(item.Motime), 0).Format(http.TimeFormat),
+			buildQueue.lock.RLock()
+			q := make([]map[string]interface{}, buildQueue.list.Len())
+			i := 0
+			for el := buildQueue.list.Front(); el != nil; el = el.Next() {
+				t, ok := el.Value.(*queueTask)
+				if ok {
+					m := map[string]interface{}{
+						"stage":      t.stage,
+						"createTime": t.createTime.Format(http.TimeFormat),
+						"consumers":  len(t.consumers),
+						"pkg":        t.Pkg.String(),
+						"target":     t.Target,
+						"inProcess":  t.inProcess,
+						"devMode":    t.DevMode,
+						"bundleMode": t.BundleMode,
+					}
+					if !t.startTime.IsZero() {
+						m["startTime"] = t.startTime.Format(http.TimeFormat)
+					}
+					if len(t.Deps) > 0 {
+						m["deps"] = t.Deps.String()
+					}
+					q[i] = m
+					i++
 				}
 			}
+			buildQueue.lock.RUnlock()
 			return map[string]interface{}{
-				"version": VERSION,
-				"uptime":  time.Since(startTime).String(),
-				"errors":  errors,
+				"uptime": time.Since(startTime).String(),
+				"queue":  q[:i],
 			}
 
 		case "/error.js":
@@ -448,7 +463,7 @@ func query(devMode bool) rex.Handle {
 				Deps:         deps,
 				Alias:        alias,
 				Target:       "types",
-				stage:        "init",
+				stage:        "-",
 			}
 			var savePath string
 			findTypesFile := func() (bool, time.Time, error) {
@@ -475,9 +490,19 @@ func query(devMode bool) rex.Handle {
 			}
 			exists, modtime, err := findTypesFile()
 			if err == nil && !exists {
-				_, err = task.Build()
-				if err == nil {
-					exists, modtime, err = findTypesFile()
+				c := buildQueue.Add(task)
+				select {
+				case output := <-c.C:
+					if output.err != nil {
+						return rex.Status(500, "types: "+err.Error())
+					}
+					if output.esm.Dts != "" {
+						savePath = path.Join("types", output.esm.Dts)
+						exists = true
+					}
+				case <-time.After(time.Minute):
+					buildQueue.RemoveConsumer(task, c)
+					return rex.Status(http.StatusRequestTimeout, "timeout, we are transforming the types hardly, please try again later!")
 				}
 			}
 			if err != nil {
@@ -529,36 +554,19 @@ func query(devMode bool) rex.Handle {
 			// if the previous build exists and is not pin/bare mode, then build current module in backgound,
 			// or wait the current build task for 30 seconds
 			if esm != nil {
-				// todo: maybe don't build
-				pushBuildTask(task)
+				// todo: maybe don't build?
+				buildQueue.Add(task)
 			} else {
-				err = pushBuildTask(task)
-				if err != nil {
-					return rex.Status(500, err.Error())
-				}
-				n := pkgRequstTimeout * 10
-				if isDev {
-					n *= 10
-				}
-				for i := 0; i < n; i++ {
-					store, _, err := db.Get("error-" + taskID)
-					if err != nil && err != storage.ErrNotFound {
-						return rex.Status(500, err.Error())
+				c := buildQueue.Add(task)
+				select {
+				case output := <-c.C:
+					if output.err != nil {
+						return throwErrorJS(ctx, output.err)
 					}
-					if err == nil {
-						return rex.Status(500, store["error"])
-					}
-					esm, err = findESM(taskID)
-					if err == nil {
-						break
-					}
-					if err != storage.ErrNotFound {
-						return rex.Status(500, err.Error())
-					}
-					if i == n-1 {
-						return rex.Status(http.StatusRequestTimeout, "timeout, please try again later!")
-					}
-					time.Sleep(100 * time.Millisecond)
+					esm = output.esm
+				case <-time.After(time.Minute):
+					buildQueue.RemoveConsumer(task, c)
+					return rex.Status(http.StatusRequestTimeout, "timeout, we are building the package hardly, please try again later!")
 				}
 			}
 		}

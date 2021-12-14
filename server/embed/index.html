@@ -44,19 +44,7 @@
   </script>
   <script type="module">
     const query = new URLSearchParams(location.search)
-    if (query.has('playground')) {
-      const rootEl = document.querySelector('#root')
-      rootEl.className = 'playground'
-      rootEl.innerHTML = ''
-      if ('serviceWorker' in navigator) {
-        navigator.serviceWorker.register('/embed/playground/sw.js?bundle&minify', { type: 'module' })
-          .then(() => console.log('sw.js registered'))
-          .catch(err => console.error('register sw.js failed:', err));
-        import('/embed/playground/index.jsx')
-      } else {
-        alert('Please upgrade your brower!')
-      }
-    } else if (query.has('test')) {
+    if (query.has('test')) {
       import('/embed/test/browser/testing.js')
     } else {
       import('/embed/index.js').then(({ render }) => render('# README'))

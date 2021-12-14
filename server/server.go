@@ -2,7 +2,6 @@ package server
 
 import (
 	"embed"
-	"encoding/json"
 	"flag"
 	"fmt"
 	"os"
@@ -12,7 +11,6 @@ import (
 	"runtime"
 	"strings"
 	"syscall"
-	"time"
 
 	"esm.sh/server/storage"
 
@@ -25,7 +23,7 @@ var (
 	cache      storage.Cache
 	db         storage.DB
 	fs         storage.FS
-	buildQueue storage.Queue
+	buildQueue *BuildQueue
 	log        *logx.Logger
 	node       *Node
 	embedFS    EmbedFS
@@ -108,13 +106,15 @@ func Serve(efs EmbedFS) {
 		embedFS = efs
 	}
 
-	log, err := logx.New(fmt.Sprintf("file:%s?buffer=32k", path.Join(logDir, "main.log")))
+	log, err = logx.New(fmt.Sprintf("file:%s?buffer=32k", path.Join(logDir, fmt.Sprintf("main-v%d.log", VERSION))))
 	if err != nil {
 		fmt.Printf("initiate logger: %v\n", err)
 		os.Exit(1)
 	}
 	log.SetLevelByName(logLevel)
-	log.SetQuite(!isDev)
+	if !isDev {
+		os.Setenv("NO_COLOR", "1") // disable color in production
+	}
 
 	nodeInstallDir := os.Getenv("NODE_INSTALL_DIR")
 	if nodeInstallDir == "" {
@@ -144,10 +144,7 @@ func Serve(efs EmbedFS) {
 		log.Fatalf("init storage(fs,%s): %v", fsUrl, err)
 	}
 
-	buildQueue, err = storage.OpenQueue(queueUrl)
-	if err != nil {
-		log.Fatalf("init storage(queue,%s): %v", fsUrl, err)
-	}
+	buildQueue = newBuildQueue(buildConcurrency)
 
 	var accessLogger *logx.Logger
 	if logDir == "" {
@@ -158,7 +155,7 @@ func Serve(efs EmbedFS) {
 			log.Fatalf("initiate access logger: %v", err)
 		}
 	}
-	accessLogger.SetQuite(true)
+	accessLogger.SetQuite(true) // quite in terminal
 
 	// start cjs lexer server
 	go func() {
@@ -178,14 +175,10 @@ func Serve(efs EmbedFS) {
 		for {
 			err := startNodeServices(wd, services)
 			if err != nil && err.Error() != "signal: interrupt" {
-				log.Errorf("start node services: %v", err)
+				log.Warnf("node services exit: %v", err)
 			}
 		}
 	}()
-
-	for i := 0; i < buildConcurrency; i++ {
-		go serveBuild()
-	}
 
 	if !noCompress {
 		rex.Use(rex.AutoCompress())
@@ -232,42 +225,6 @@ func Serve(efs EmbedFS) {
 	db.Close()
 	accessLogger.FlushBuffer()
 	log.FlushBuffer()
-}
-
-func serveBuild() {
-	for {
-		if nsReady {
-			data, err := buildQueue.Pull()
-			if err != nil {
-				log.Error("buildQueue.Pull:", err)
-				continue
-			}
-			var task BuildTask
-			if json.Unmarshal(data, &task) == nil {
-				taskId := task.ID()
-				wc := make(chan struct{}, 1)
-				go func() {
-					t := time.Now()
-					_, err := task.Build()
-					if err != nil {
-						db.Put("error-"+taskId, "error", storage.Store{"error": err.Error()})
-						log.Errorf("build %s: %v", taskId, err)
-					} else {
-						db.Delete("error-" + taskId)
-						log.Infof("build %s in %v", taskId, time.Since(t))
-					}
-					wc <- struct{}{}
-				}()
-				select {
-				case <-wc:
-				case <-time.After(10 * time.Minute):
-					log.Errorf("build %s: timeout", taskId)
-				}
-				cache.Delete("build-task:" + taskId)
-			}
-		}
-		time.Sleep(50 * time.Millisecond)
-	}
 }
 
 func init() {

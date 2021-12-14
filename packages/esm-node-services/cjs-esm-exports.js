@@ -36,11 +36,7 @@ function isObject(v) {
   return typeof v === 'object' && v !== null && !Array.isArray(v)
 }
 
-function verifyExports(exports) {
-  return Array.from(new Set(exports.filter(name => identRegexp.test(name) && !reservedWords.has(name))))
-}
-
-async function getJSONKeys(jsonFile) {
+function getJSONKeys(jsonFile) {
   const content = fs.readFileSync(jsonFile).toString()
   const v = JSON.parse(content)
   if (isObject(v)) {
@@ -49,28 +45,46 @@ async function getJSONKeys(jsonFile) {
   return []
 }
 
+function verifyExports(exports) {
+  return Array.from(new Set(exports.filter(name => identRegexp.test(name) && !reservedWords.has(name))))
+}
+
 exports.parseCjsExports = async input => {
   const { buildDir, importPath, nodeEnv = 'production' } = input
   const entry = await resolve(buildDir, importPath)
   const exports = []
 
+  if (entry.endsWith('.json')) {
+    return {
+      exports: verifyExports(getJSONKeys(entry))
+    }
+  }
+
+  if (!entry.endsWith('.js') && !entry.endsWith('.cjs')) {
+    return { exports }
+  }
+
   const requires = [{ path: entry, callMode: false }]
   while (requires.length > 0) {
-    const req = requires.pop()
-    const code = fs.readFileSync(req.path).toString()
-    const results = parse(req.path, code, nodeEnv, req.callMode)
-    exports.push(...results.exports)
-    for (let reexport of results.reexports) {
-      const callMode = reexport.endsWith('()')
-      if (callMode) {
-        reexport = reexport.slice(0, -2)
+    try {
+      const req = requires.pop()
+      const code = fs.readFileSync(req.path).toString()
+      const results = parse(req.path, code, nodeEnv, req.callMode)
+      exports.push(...results.exports)
+      for (let reexport of results.reexports) {
+        const callMode = reexport.endsWith('()')
+        if (callMode) {
+          reexport = reexport.slice(0, -2)
+        }
+        const path = await resolve(dirname(req.path), reexport)
+        if (path.endsWith('.json')) {
+          exports.push(...getJSONKeys(path))
+        } else {
+          requires.push({ path, callMode })
+        }
       }
-      const path = await resolve(dirname(req.path), reexport)
-      if (path.endsWith('.json')) {
-        exports.push(...getJSONKeys(path))
-      } else {
-        requires.push({ path, callMode })
-      }
+    } catch (err) {
+      return Promise.reject(err)
     }
   }
 

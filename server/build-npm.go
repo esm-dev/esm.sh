@@ -69,9 +69,7 @@ func (task *BuildTask) ID() string {
 	if pkg.Submodule != "" {
 		name = pkg.Submodule
 	}
-	if strings.HasSuffix(name, ".js") {
-		name = strings.TrimSuffix(name, ".js")
-	}
+	name = strings.TrimSuffix(name, ".js")
 	if task.DevMode {
 		name += ".development"
 	}
@@ -99,9 +97,7 @@ func (task *BuildTask) getImportPath(pkg Pkg, extendsAlias bool) string {
 	if pkg.Submodule != "" {
 		name = pkg.Submodule
 	}
-	if strings.HasSuffix(name, ".js") {
-		name = strings.TrimSuffix(name, ".js")
-	}
+	name = strings.TrimSuffix(name, ".js")
 	if task.DevMode {
 		name += ".development"
 	}
@@ -160,13 +156,12 @@ func (task *BuildTask) build(tracing *stringSet) (esm *ESM, err error) {
 	task.stage = "init"
 	esm, err = initESM(task.wd, task.Pkg, task.Target != "types", task.DevMode)
 	if err != nil {
-		err = fmt.Errorf("init ESM: %v", err)
 		return
 	}
 
 	if task.Target == "types" {
 		task.stage = "copy-dts"
-		task.handleDTS(esm)
+		task.transformDTS(esm)
 		return
 	}
 
@@ -240,9 +235,7 @@ func (task *BuildTask) build(tracing *stringSet) (esm *ESM, err error) {
 					}
 
 					// resolve nodejs builtin modules like `node:path`
-					if strings.HasPrefix(specifier, "node:") {
-						specifier = strings.TrimPrefix(specifier, "node:")
-					}
+					specifier = strings.TrimPrefix(specifier, "node:")
 
 					// bundles all dependencies except in `bundle` mode, apart from peer dependencies
 					if task.BundleMode && !extraExternal.Has(specifier) {
@@ -524,7 +517,7 @@ esbuild:
 							Target:  task.Target,
 							DevMode: task.DevMode,
 						}
-						pushBuildTask(t)
+						buildQueue.Add(t)
 						importPath = task.getImportPath(Pkg{
 							Name:      p.Name,
 							Version:   p.Version,
@@ -688,10 +681,10 @@ esbuild:
 		}
 	}
 
-	log.Debugf("esbuild %s %s %s in %v", task.Pkg.String(), task.Target, nodeEnv, time.Now().Sub(start))
+	log.Debugf("esbuild %s %s %s in %v", task.Pkg.String(), task.Target, nodeEnv, time.Since(start))
 
 	task.stage = "copy-dts"
-	task.handleDTS(esm)
+	task.transformDTS(esm)
 	task.storeToDB(esm)
 	return
 }
@@ -709,7 +702,7 @@ func (task *BuildTask) storeToDB(esm *ESM) {
 	}
 }
 
-func (task *BuildTask) handleDTS(esm *ESM) {
+func (task *BuildTask) transformDTS(esm *ESM) {
 	name := task.Pkg.Name
 	submodule := task.Pkg.Submodule
 
@@ -745,28 +738,4 @@ func (task *BuildTask) handleDTS(esm *ESM) {
 	if dts != "" {
 		esm.Dts = fmt.Sprintf("/v%d/%s", task.BuildVersion, dts)
 	}
-}
-
-func pushBuildTask(task *BuildTask) (err error) {
-	if task == nil {
-		return
-	}
-
-	taskID := task.ID()
-	exists, err := cache.Has("build-task:" + taskID)
-	if err != nil {
-		return
-	}
-
-	if !exists && buildQueue != nil {
-		err = cache.Set("build-task:"+taskID, []byte{'1'}, time.Hour)
-		if err != nil {
-			return
-		}
-		err = buildQueue.Push(utils.MustEncodeJSON(task))
-		if err != nil {
-			cache.Delete("build-task:" + taskID)
-		}
-	}
-	return
 }

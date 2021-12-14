@@ -59,14 +59,14 @@ func buildSync(filename string, source string, opts buildOptions) ([]byte, error
 					}
 					if q.Has("css") && !q.Has("module") {
 						q.Add("module", "")
-						pathname += "?" + q.Encode()
+						pathname = pathname + "?" + q.Encode()
 						if !opts.bundle {
 							return api.OnResolveResult{Path: pathname, External: true}, nil
 						}
 					}
 					if (strings.HasSuffix(pathname, ".css") || strings.HasSuffix(pathname, ".wasm")) && !q.Has("module") {
 						q.Add("module", "")
-						pathname += "?" + q.Encode()
+						pathname = pathname + "?" + q.Encode()
 						if !opts.bundle {
 							return api.OnResolveResult{Path: pathname, External: true}, nil
 						}
@@ -95,6 +95,10 @@ func buildSync(filename string, source string, opts buildOptions) ([]byte, error
 			build.OnLoad(
 				api.OnLoadOptions{Filter: ".*", Namespace: "http"},
 				func(args api.OnLoadArgs) (api.OnLoadResult, error) {
+					url, err := url.Parse(args.Path)
+					if err != nil {
+						return api.OnLoadResult{}, err
+					}
 					resp, err := httpClient.Get(args.Path)
 					if err != nil {
 						return api.OnLoadResult{}, err
@@ -110,7 +114,7 @@ func buildSync(filename string, source string, opts buildOptions) ([]byte, error
 					code := string(data)
 					return api.OnLoadResult{
 						Contents: &code,
-						Loader:   loaders[path.Ext(filename)],
+						Loader:   loaders[path.Ext(url.Path)],
 					}, nil
 				})
 		},
@@ -139,7 +143,6 @@ func buildSync(filename string, source string, opts buildOptions) ([]byte, error
 	}
 	result := api.Build(options)
 	if len(result.Errors) > 0 {
-		log.Error(filename)
 		return nil, fmt.Errorf(result.Errors[0].Text)
 	}
 	for _, file := range result.OutputFiles {
