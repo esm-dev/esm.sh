@@ -83,7 +83,7 @@ exports.parseCjsExports = async input => {
           requires.push({ path, callMode })
         }
       }
-    } catch (error) {
+    } catch (err) {
       return Promise.reject(err)
     }
   }
