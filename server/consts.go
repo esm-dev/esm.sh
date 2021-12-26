@@ -6,7 +6,7 @@ const VERSION = 58
 const (
 	pkgCacheTimeout    = 5 * 60 // 5 minutes
 	pkgRequstTimeout   = 30     // 30 seconds
-	denoStdNodeVersion = "0.115.0"
+	denoStdNodeVersion = "0.119.0"
 )
 
 const cssLoaderTpl = `const id = "%s"
