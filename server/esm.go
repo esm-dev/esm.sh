@@ -26,7 +26,8 @@ type ESM struct {
 }
 
 func initESM(wd string, pkg Pkg, checkExports bool, isDev bool) (esm *ESM, err error) {
-	packageFile := path.Join(wd, "node_modules", pkg.Name, "package.json")
+	packageDir := path.Join(wd, "node_modules", pkg.Name)
+	packageFile := path.Join(packageDir, "package.json")
 
 	var p NpmPackage
 	err = utils.ParseJSONFile(packageFile, &p)
@@ -185,6 +186,15 @@ func initESM(wd string, pkg Pkg, checkExports bool, isDev bool) (esm *ESM, err e
 		// 	esm.ExportDefault = exportDefault
 		// }
 	}
+
+	if (path.Dir(esm.Main) != "" && esm.Types == "" && esm.Typings == "") {
+		typesPath := path.Join(path.Dir(esm.Main), "index.d.ts")
+
+		if (fileExists(path.Join(packageDir, typesPath))) {
+			esm.Types = typesPath
+		}
+	}
+
 	return
 }
 
