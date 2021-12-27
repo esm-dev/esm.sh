@@ -231,7 +231,7 @@ CheckYarn:
 	return
 }
 
-func getPackageInfo(wd string, name string, version string) (info NpmPackage, submodule string, formPackageJSON bool, err error) {
+func getPackageInfo(wd string, name string, version string) (info NpmPackage, submodule string, fromPackageJSON bool, err error) {
 	slice := strings.Split(name, "/")
 	if l := len(slice); strings.HasPrefix(name, "@") && l > 1 {
 		name = strings.Join(slice[:2], "/")
@@ -259,7 +259,7 @@ func getPackageInfo(wd string, name string, version string) (info NpmPackage, su
 		if fileExists(pkgJsonPath) {
 			err = utils.ParseJSONFile(pkgJsonPath, &info)
 			if err == nil {
-				formPackageJSON = true
+				fromPackageJSON = true
 				return
 			}
 		}

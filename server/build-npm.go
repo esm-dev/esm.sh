@@ -719,13 +719,15 @@ func (task *BuildTask) transformDTS(esm *ESM) {
 	if esm.Types != "" || esm.Typings != "" {
 		dts = toTypesPath(task.wd, *esm.NpmPackage, submodule)
 	} else if !strings.HasPrefix(name, "@types/") && submodule == "" {
-		typesPkgName := toTypesPackageName(name)
-		versionParts := strings.Split(esm.Version, ".")
-		versions := []string{
-			strings.Join(versionParts[:2], "."), // minor
-			versionParts[0],                     // major
-			"latest",
+		versions := []string{"latest"}
+		versionParts := strings.Split(task.Pkg.Version, ".")
+		if len(versionParts) > 2 {
+			versions = append([]string{
+				strings.Join(versionParts[:2], "."), // minor
+				versionParts[0],                     // major
+			}, versions...)
 		}
+		typesPkgName := toTypesPackageName(name)
 		pkg, ok := task.Deps.Get(typesPkgName)
 		if ok {
 			versions = append([]string{pkg.Version}, versions...)
@@ -741,11 +743,7 @@ func (task *BuildTask) transformDTS(esm *ESM) {
 
 	if strings.HasSuffix(dts, ".d.ts") && !strings.HasSuffix(dts, "~.d.ts") {
 		start := time.Now()
-		err := CopyDTS(
-			task.wd,
-			task.resolvePrefix(),
-			dts,
-		)
+		err := task.CopyDTS(dts)
 		if err != nil && os.IsExist(err) {
 			log.Errorf("copyDTS(%s): %v", dts, err)
 			return

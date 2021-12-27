@@ -11,11 +11,12 @@ import (
 	"github.com/ije/gox/utils"
 )
 
-func CopyDTS(wd string, resolvePrefix string, dts string) (err error) {
-	return copyDTS(wd, resolvePrefix, dts, newStringSet())
+func (task *BuildTask) CopyDTS(dts string) (err error) {
+	resolvePrefix := task.resolvePrefix()
+	return task.copyDTS(resolvePrefix, dts, newStringSet())
 }
 
-func copyDTS(wd string, resolvePrefix string, dts string, tracing *stringSet) (err error) {
+func (task *BuildTask) copyDTS(resolvePrefix string, dts string, tracing *stringSet) (err error) {
 	// don't copy repeatly
 	if tracing.Has(resolvePrefix + dts) {
 		return
@@ -55,7 +56,7 @@ func copyDTS(wd string, resolvePrefix string, dts string, tracing *stringSet) (e
 	allDeclareModules := newStringSet()
 	entryDeclareModules := []string{}
 
-	dtsFilePath := path.Join(wd, "node_modules", regFullVersionPath.ReplaceAllString(dts, "$1/"))
+	dtsFilePath := path.Join(task.wd, "node_modules", regFullVersionPath.ReplaceAllString(dts, "$1/"))
 	dtsDir := path.Dir(dtsFilePath)
 	dtsFile, err := os.Open(dtsFilePath)
 	if err != nil {
@@ -118,9 +119,7 @@ func copyDTS(wd string, resolvePrefix string, dts string, tracing *stringSet) (e
 				importPath = "../index.d.ts"
 			}
 			// some types is using `.js` extname
-			if strings.HasSuffix(importPath, ".js") {
-				importPath = strings.TrimSuffix(importPath, ".js")
-			}
+			importPath = strings.TrimSuffix(importPath, ".js")
 			if !strings.HasSuffix(importPath, ".d.ts") {
 				if fileExists(path.Join(dtsDir, importPath, "index.d.ts")) {
 					importPath = strings.TrimSuffix(importPath, "/") + "/index.d.ts"
@@ -149,9 +148,32 @@ func copyDTS(wd string, resolvePrefix string, dts string, tracing *stringSet) (e
 			} else if _, ok := builtInNodeModules[importPath]; ok {
 				importPath = fmt.Sprintf("/v%d/@types/node/%s.d.ts", VERSION, importPath)
 			} else {
-				info, subpath, formPackageJSON, err := getPackageInfo(wd, importPath, "latest")
-				if err != nil || ((info.Types == "" && info.Typings == "") && !strings.HasPrefix(info.Name, "@types/")) {
-					info, _, formPackageJSON, err = getPackageInfo(wd, toTypesPackageName(importPath), "latest")
+				var (
+					info            NpmPackage
+					subpath         string
+					fromPackageJSON bool
+				)
+				versions := []string{"latest"}
+				versionParts := strings.Split(task.Pkg.Version, ".")
+				if len(versionParts) > 2 {
+					versions = append([]string{
+						strings.Join(versionParts[:2], "."), // minor
+						versionParts[0],                     // major
+					}, versions...)
+				}
+				typesPkgName := toTypesPackageName(importPath)
+				pkg, ok := task.Deps.Get(typesPkgName)
+				if ok {
+					versions = append([]string{pkg.Version}, versions...)
+				}
+				for _, version := range versions {
+					info, subpath, fromPackageJSON, err = getPackageInfo(task.wd, importPath, version)
+					if err != nil || ((info.Types == "" && info.Typings == "") && !strings.HasPrefix(info.Name, "@types/")) {
+						info, _, fromPackageJSON, err = getPackageInfo(task.wd, typesPkgName, version)
+					}
+					if err == nil {
+						break
+					}
 				}
 				if err != nil {
 					return importPath
@@ -161,8 +183,8 @@ func copyDTS(wd string, resolvePrefix string, dts string, tracing *stringSet) (e
 					versioned := info.Name + "@" + info.Version
 					prefix := versioned + "/" + resolvePrefix
 					// copy dependent dts files in the node_modules directory in current build context
-					if formPackageJSON {
-						importPath = toTypesPath(wd, info, subpath)
+					if fromPackageJSON {
+						importPath = toTypesPath(task.wd, info, subpath)
 						if strings.HasSuffix(importPath, ".d.ts") && !strings.HasSuffix(importPath, "~.d.ts") {
 							imports.Add(importPath)
 						}
@@ -268,7 +290,7 @@ func copyDTS(wd string, resolvePrefix string, dts string, tracing *stringSet) (e
 				importDts = path.Join(path.Dir(dts), importDts)
 			}
 		}
-		err = copyDTS(wd, resolvePrefix, importDts, tracing)
+		err = task.copyDTS(resolvePrefix, importDts, tracing)
 		if err != nil {
 			break
 		}
