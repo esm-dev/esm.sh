@@ -96,6 +96,15 @@ func (a PkgSlice) Has(name string) bool {
 	return false
 }
 
+func (a PkgSlice) Get(name string) (Pkg, bool) {
+	for _, m := range a {
+		if m.Name == name {
+			return m, true
+		}
+	}
+	return Pkg{}, false
+}
+
 func (a PkgSlice) String() string {
 	s := make([]string, a.Len())
 	for i, m := range a {

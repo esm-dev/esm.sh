@@ -178,11 +178,16 @@ func (task *BuildTask) build(tracing *stringSet) (esm *ESM, err error) {
 	if esm.Module == "" {
 		buf := bytes.NewBuffer(nil)
 		importPath := task.Pkg.ImportPath()
+		fmt.Fprintf(buf, `import __default from "%s";`, importPath)
 		if len(esm.Exports) > 0 {
 			fmt.Fprintf(buf, `import * as __star from "%s";%s`, importPath, "\n")
 			fmt.Fprintf(buf, `export const { %s } = __star;%s`, strings.Join(esm.Exports, ","), "\n")
 		}
-		fmt.Fprintf(buf, `export { default } from "%s";`, importPath)
+		if len(esm.Exports) > 0 {
+			fmt.Fprintf(buf, "export default __default || __star")
+		} else {
+			fmt.Fprintf(buf, "export default __default")
+		}
 		input = &api.StdinOptions{
 			Contents:   buf.String(),
 			ResolveDir: task.wd,
@@ -715,9 +720,22 @@ func (task *BuildTask) transformDTS(esm *ESM) {
 		dts = toTypesPath(task.wd, *esm.NpmPackage, submodule)
 	} else if !strings.HasPrefix(name, "@types/") && submodule == "" {
 		typesPkgName := toTypesPackageName(name)
-		p, _, _, err := getPackageInfo(task.wd, typesPkgName, "latest")
-		if err == nil {
-			dts = toTypesPath(task.wd, p, submodule)
+		versionParts := strings.Split(esm.Version, ".")
+		versions := []string{
+			strings.Join(versionParts[:2], "."), // minor
+			versionParts[0],                     // major
+			"latest",
+		}
+		pkg, ok := task.Deps.Get(typesPkgName)
+		if ok {
+			versions = append([]string{pkg.Version}, versions...)
+		}
+		for _, version := range versions {
+			p, _, _, err := getPackageInfo(task.wd, typesPkgName, version)
+			if err == nil {
+				dts = toTypesPath(task.wd, p, submodule)
+				break
+			}
 		}
 	}
 

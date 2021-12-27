@@ -187,10 +187,10 @@ func initESM(wd string, pkg Pkg, checkExports bool, isDev bool) (esm *ESM, err e
 		// }
 	}
 
-	if (path.Dir(esm.Main) != "" && esm.Types == "" && esm.Typings == "") {
+	if path.Dir(esm.Main) != "" && esm.Types == "" && esm.Typings == "" {
 		typesPath := path.Join(path.Dir(esm.Main), "index.d.ts")
 
-		if (fileExists(path.Join(packageDir, typesPath))) {
+		if fileExists(path.Join(packageDir, typesPath)) {
 			esm.Types = typesPath
 		}
 	}
