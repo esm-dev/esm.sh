@@ -62,6 +62,7 @@ func query(devMode bool) rex.Handle {
 			readmeStrLit := utils.MustEncodeJSON(string(readme))
 			html := bytes.ReplaceAll(indexHTML, []byte("'# README'"), readmeStrLit)
 			html = bytes.ReplaceAll(html, []byte("{VERSION}"), []byte(fmt.Sprintf("%d", VERSION)))
+			ctx.SetHeader("Cache-Control", fmt.Sprintf("public, max-age=%d", pkgCacheTimeout))
 			return rex.Content("index.html", startTime, bytes.NewReader(html))
 
 		case "/status.json":

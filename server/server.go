@@ -11,6 +11,7 @@ import (
 	"runtime"
 	"strings"
 	"syscall"
+	"time"
 
 	"esm.sh/server/storage"
 
@@ -175,6 +176,7 @@ func Serve(efs EmbedFS) {
 			if err != nil && err.Error() != "signal: interrupt" {
 				log.Warnf("node services exit: %v", err)
 			}
+			time.Sleep(time.Second / 10)
 		}
 	}()
 

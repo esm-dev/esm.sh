@@ -88,7 +88,7 @@ func initESM(wd string, pkg Pkg, checkExports bool, isDev bool) (esm *ESM, err e
 				var defined bool
 				if p.DefinedExports != nil {
 					if m, ok := p.DefinedExports.(map[string]interface{}); ok {
-						for name, v := range m {
+						for name, defines := range m {
 							/**
 							exports: {
 								"./lib/core": {
@@ -98,8 +98,7 @@ func initESM(wd string, pkg Pkg, checkExports bool, isDev bool) (esm *ESM, err e
 							}
 							*/
 							if name == "./"+pkg.Submodule {
-								resolveDefinedExports(esm.NpmPackage, v)
-								defined = true
+								resolvePackageExports(esm.NpmPackage, defines)
 								break
 								/**
 								exports: {
@@ -110,8 +109,9 @@ func initESM(wd string, pkg Pkg, checkExports bool, isDev bool) (esm *ESM, err e
 								}
 								*/
 							} else if strings.HasSuffix(name, "/*") && strings.HasPrefix("./"+pkg.Submodule, strings.TrimSuffix(name, "*")) {
+								fmt.Println("2 ---- ", name, defines)
 								suffix := strings.TrimPrefix("./"+pkg.Submodule, strings.TrimSuffix(name, "*"))
-								if m, ok := v.(map[string]interface{}); ok {
+								if m, ok := defines.(map[string]interface{}); ok {
 									for key, value := range m {
 										s, ok := value.(string)
 										if ok {
@@ -119,14 +119,15 @@ func initESM(wd string, pkg Pkg, checkExports bool, isDev bool) (esm *ESM, err e
 										}
 									}
 								}
-								resolveDefinedExports(esm.NpmPackage, v)
+								resolvePackageExports(esm.NpmPackage, defines)
 								defined = true
 							}
 						}
 					}
 				}
 				if !defined {
-					if esm.Module != "" {
+					if esm.Type == "module" || esm.Module != "" {
+						// follow main module type
 						esm.Module = pkg.Submodule
 					} else {
 						esm.Main = pkg.Submodule
@@ -145,6 +146,10 @@ func initESM(wd string, pkg Pkg, checkExports bool, isDev bool) (esm *ESM, err e
 
 	if !checkExports {
 		return
+	}
+
+	if esm.Module == "" && (strings.Contains(esm.Main, "/esm/") || strings.Contains(esm.Main, "/es/")) {
+		esm.Module = esm.Main
 	}
 
 	if esm.Module != "" {

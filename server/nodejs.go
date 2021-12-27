@@ -402,12 +402,12 @@ func getNodejsVersion() (version string, major int, err error) {
 }
 
 // see https://nodejs.org/api/packages.html
-func resolveDefinedExports(p *NpmPackage, exports interface{}) {
+func resolvePackageExports(p *NpmPackage, exports interface{}) {
 	s, ok := exports.(string)
 	if ok {
-		if p.Type == "module" && p.Module == "" {
+		if p.Type == "module" || p.Module != "" {
 			p.Module = s
-		} else if p.Main == "" {
+		} else {
 			p.Main = s
 		}
 		return
@@ -453,11 +453,30 @@ func fixNpmPackage(p NpmPackage) *NpmPackage {
 	np := &p
 
 	if p.Module == "" && p.DefinedExports != nil {
-		resolveDefinedExports(np, p.DefinedExports)
 		if m, ok := p.DefinedExports.(map[string]interface{}); ok {
 			v, ok := m["."]
 			if ok {
-				resolveDefinedExports(np, v)
+				/*
+					exports: {
+						".": {
+							"require": "./cjs/index.js",
+							"import": "./esm/index.js"
+						}
+					}
+
+					exports: {
+						".": "./esm/index.js"
+					}
+				*/
+				resolvePackageExports(np, v)
+			} else {
+				/*
+					exports: {
+						"require": "./cjs/index.js",
+						"import": "./esm/index.js"
+					}
+				*/
+				resolvePackageExports(np, m)
 			}
 		}
 	}
