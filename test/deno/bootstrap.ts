@@ -24,14 +24,16 @@ async function startServer(onReady: (p: any) => void) {
 }
 
 startServer(async (p) => {
-	await test('test/deno/common/')
-	await test('test/deno/preact/')
-	await test('test/deno/prismjs/')
-	await test('test/deno/react/')
+	try {
+		await test('test/deno/common/')
+		await test('test/deno/preact/')
+		await test('test/deno/prismjs/')
+		await test('test/deno/react/')
+		console.log('Done')
+	} catch (error) {	
+		console.error(error)
+	}
 	p.kill('SIGINT')
-}).then(() => {
-	console.log('Done')
-}).finally(() => {
 	Deno.removeSync('./main')
 })
 
