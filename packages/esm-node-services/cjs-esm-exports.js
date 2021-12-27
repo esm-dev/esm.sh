@@ -27,9 +27,62 @@ const reservedWords = new Set([
   'volatile', 'while', 'with', 'yield',
   '__esModule'
 ])
+const builtInNodeModules = new Set([
+  "assert",
+  "async_hooks",
+  "child_process",
+  "cluster",
+  "buffer",
+  "console",
+  "constants",
+  "crypto",
+  "dgram",
+  "dns",
+  "domain",
+  "events",
+  "fs",
+  "fs/promises",
+  "http",
+  "http2",
+  "https",
+  "inspector",
+  "module",
+  "net",
+  "os",
+  "path",
+  "path/posix",
+  "path/win32",
+  "perf_hooks",
+  "process",
+  "punycode",
+  "querystring",
+  "readline",
+  "repl",
+  "stream",
+  "stream/promises",
+  "stream/web",
+  "_stream_duplex",
+  "_stream_passthrough",
+  "_stream_readable",
+  "_stream_transform",
+  "_stream_writable",
+  "string_decoder",
+  "sys",
+  "timers",
+  "tls",
+  "trace_events",
+  "tty",
+  "url",
+  "util",
+  "v8",
+  "vm",
+  "worker_threads",
+  "zlib",
+])
 const requireModeAllowList = [
   'typescript',
-  'he'
+  'he',
+  'safe-buffer'
 ]
 
 function isObject(v) {
@@ -54,6 +107,22 @@ exports.parseCjsExports = async input => {
   const entry = await resolve(buildDir, importPath)
   const exports = []
 
+  /* workaround for edge cases that can't be parsed by cjsLexer correctly */
+  for (const name of requireModeAllowList) {
+    if (importPath === name || importPath.startsWith(name + '/')) {
+      process.env.NODE_ENV = nodeEnv
+      const mod = require(entry)
+      if (isObject(mod) || typeof mod === 'function') {
+        for (const key of Object.keys(mod)) {
+          if (typeof key === 'string' && key !== '') {
+            exports.push(key)
+          }
+        }
+      }
+      return { exports }
+    }
+  }
+
   if (entry.endsWith('.json')) {
     return {
       exports: verifyExports(getJSONKeys(entry))
@@ -76,35 +145,20 @@ exports.parseCjsExports = async input => {
         if (callMode) {
           reexport = reexport.slice(0, -2)
         }
-        const path = await resolve(dirname(req.path), reexport)
-        if (path.endsWith('.json')) {
-          exports.push(...getJSONKeys(path))
+        if (builtInNodeModules.has(reexport)) {
+          const mod = require(reexport)
+          exports.push(...Object.keys(mod))
         } else {
-          requires.push({ path, callMode })
+          const path = await resolve(dirname(req.path), reexport)
+          if (path.endsWith('.json')) {
+            exports.push(...getJSONKeys(path))
+          } else {
+            requires.push({ path, callMode })
+          }
         }
       }
     } catch (err) {
       return Promise.reject(err)
-    }
-  }
-
-  /* the workaround when the cjsLexer didn't get any exports */
-  if (exports.length === 0) {
-    let allow = false
-    for (const name of requireModeAllowList) {
-      if (allow = (importPath === name || importPath.startsWith(name + '/'))) {
-        break
-      }
-    }
-    if (allow) {
-      const mod = require(entry)
-      if (isObject(mod) || typeof mod === 'function') {
-        for (const key of Object.keys(mod)) {
-          if (typeof key === 'string' && key !== '') {
-            exports.push(key)
-          }
-        }
-      }
     }
   }
 
