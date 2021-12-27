@@ -6,7 +6,7 @@ const enhancedResolve = require('enhanced-resolve')
 
 const identRegexp = /^[a-zA-Z_\$][a-zA-Z0-9_\$]*$/
 const resolve = promisify(enhancedResolve.create({
-  mainFields: ['browser', 'module', 'main']
+  mainFields: ['main', 'module', 'browser']
 }))
 const reservedWords = new Set([
   'abstract', 'arguments', 'await', 'boolean',
