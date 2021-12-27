@@ -1,4 +1,4 @@
-import { existsSync } from 'https://deno.land/std@0.106.0/fs/exists.ts'
+import { existsSync } from 'https://deno.land/std@0.119.0/fs/exists.ts'
 
 async function startServer(onReady: (p: any) => void) {
 	await run('go', 'build', 'main.go')
