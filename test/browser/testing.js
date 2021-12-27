@@ -46,6 +46,7 @@ const q = queue(async ({ imports, testFn, $li, $status }) => {
     if (e.message.startsWith('[esm.sh] Unsupported nodejs builtin module')) {
       $status.innerText = '⚠️ ' + e.message
     } else {
+      console.error(e.stack)
       $status.innerText = '❌ ' + e.message
     }
   }
@@ -204,7 +205,7 @@ _esm(['react@17', 'react-dom@17', 'html-to-react?deps=react@17'], async (t) => {
 
   const h = new Parser()
   const App = () => {
-    return h.parse(`<span>html to react is amzing</span>`)
+    return h.parse(`<span>html to <strong>react</strong> is amzing</span>`)
   }
   render(React.createElement(App), t.$span)
 

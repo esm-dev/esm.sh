@@ -1,9 +1,10 @@
 {
 	"name": "esm-node-services",
-	"version": "0.5.0",
+	"version": "0.5.3",
 	"description": "Node services for esm.sh",
 	"main": "index.js",
 	"scripts": {
+		"prepublishOnly": "node test.js",
 		"test": "node test.js"
 	},
 	"files": [
