@@ -8,9 +8,10 @@ use swc_common::{
 	errors::{Handler, HandlerFlags},
 	FileName, SourceMap,
 };
+use swc_ecma_ast::EsVersion;
 use swc_ecmascript::{
 	ast::{Module, Program},
-	parser::{lexer::Lexer, EsConfig, JscTarget, StringInput, Syntax},
+	parser::{lexer::Lexer, EsConfig, StringInput, Syntax},
 	visit::FoldWith,
 };
 
@@ -34,7 +35,7 @@ impl SWC {
 		let syntax = Syntax::Es(get_es_config());
 		let input = StringInput::from(&*source_file);
 		let comments = SingleThreadedComments::default();
-		let lexer = Lexer::new(syntax, JscTarget::Es2020, input, Some(&comments));
+		let lexer = Lexer::new(syntax, EsVersion::Es2020, input, Some(&comments));
 		let mut parser = swc_ecmascript::parser::Parser::new_from(lexer);
 		let handler = Handler::with_emitter_and_flags(
 			Box::new(error_buffer.clone()),
@@ -86,17 +87,7 @@ impl SWC {
 
 fn get_es_config() -> EsConfig {
 	EsConfig {
-		class_private_methods: true,
-		class_private_props: true,
-		class_props: true,
-		dynamic_import: false,
 		export_default_from: false,
-		export_namespace_from: false,
-		num_sep: true,
-		nullish_coalescing: true,
-		optional_chaining: true,
-		top_level_await: true,
-		import_meta: false,
 		import_assertions: false,
 		jsx: false,
 		..EsConfig::default()

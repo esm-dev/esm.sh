@@ -578,13 +578,42 @@ mod tests {
 	#[test]
 	fn parse_cjs_exports_case_19_4() {
 		let source = r#"
-		var tslib_1 = require("tslib");
-		(0, tslib_1.__exportStar)(require("./crossPlatformSha256"), exports);
+			var tslib_1 = require("tslib");
+			(0, tslib_1.__exportStar)(require("./crossPlatformSha256"), exports);
 		"#;
 		let swc = SWC::parse("index.cjs", source).expect("could not parse module");
 		let (_, reexorts) = swc
 			.parse_cjs_exports("production", true)
 			.expect("could not parse exports");
 		assert_eq!(reexorts.join(","), "./crossPlatformSha256");
+	}
+
+	#[test]
+	fn parse_cjs_exports_case_20_1() {
+		let source = r#"
+			var foo;
+			foo = exports.foo || (exports.foo = {});
+		  var	bar = exports.bar || (exports.bar = {});
+			exports.greet = 123;
+		"#;
+		let swc = SWC::parse("index.cjs", source).expect("could not parse module");
+		let (exports, _) = swc
+			.parse_cjs_exports("production", true)
+			.expect("could not parse exports");
+		assert_eq!(exports.join(","), "foo,bar,greet");
+	}
+
+	#[test]
+	fn parse_cjs_exports_case_20_2() {
+		let source = r#"
+			var bar;
+			((foo, bar) => { })(exports.foo || (exports.foo = {}), bar = exports.bar || (exports.bar = {}));
+			exports.greet = 123;
+		"#;
+		let swc = SWC::parse("index.cjs", source).expect("could not parse module");
+		let (exports, _) = swc
+			.parse_cjs_exports("production", true)
+			.expect("could not parse exports");
+		assert_eq!(exports.join(","), "foo,bar,greet");
 	}
 }

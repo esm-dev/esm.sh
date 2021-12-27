@@ -614,12 +614,23 @@ impl ExportsParser {
 		// parse exports
 		for stmt in &stmts {
 			match stmt {
+				// var foo = exports.foo || (exports.foo = {})
+				Stmt::Decl(Decl::Var(VarDecl { decls, .. })) => {
+					for decl in decls {
+						if let Some(init_expr) = &decl.init {
+							if let Some(bare_export_name) = get_bare_export_name(init_expr) {
+								self.exports.insert(bare_export_name);
+							}
+						}
+					}
+				}
 				Stmt::Expr(ExprStmt { expr, .. }) => match expr.as_ref() {
 					// exports.foo = 'bar'
 					// module.exports.foo = 'bar'
 					// module.exports = { foo: 'bar' }
 					// module.exports = { ...require('a'), ...require('b') }
 					// module.exports = require('lib')
+					// foo = exports.foo || (exports.foo = {})
 					Expr::Assign(assign) => {
 						if assign.op == AssignOp::Assign {
 							let left_expr = match &assign.left {
@@ -658,6 +669,10 @@ impl ExportsParser {
 										}
 										_ => {}
 									}
+								}
+							} else {
+								if let Some(bare_export_name) = get_bare_export_name(assign.right.as_ref()) {
+									self.exports.insert(bare_export_name);
 								}
 							}
 						}
@@ -756,6 +771,14 @@ impl ExportsParser {
 								}
 							}
 						} else if let Some(body) = is_iife_call(&call) {
+							// (function() { ... })(exports.foo || (exports.foo = {}))
+							for arg in &call.args {
+								if arg.spread.is_none() {
+									if let Some(bare_export_name) = get_bare_export_name(arg.expr.as_ref()) {
+										self.exports.insert(bare_export_name);
+									}
+								}
+							}
 							self.dep_parse(body, false);
 						}
 					}
@@ -766,6 +789,14 @@ impl ExportsParser {
 						{
 							if let Expr::Call(call) = arg.as_ref() {
 								if let Some(body) = is_iife_call(&call) {
+									// (function() { ... })(exports.foo || (exports.foo = {}))
+									for arg in &call.args {
+										if arg.spread.is_none() {
+											if let Some(bare_export_name) = get_bare_export_name(arg.expr.as_ref()) {
+												self.exports.insert(bare_export_name);
+											}
+										}
+									}
 									self.dep_parse(body, false);
 								}
 							}
@@ -840,21 +871,8 @@ fn is_module_exports(expr: &Expr) -> (bool, bool) {
 }
 
 fn is_member(expr: &Expr, obj_name: &str, prop_name: &str) -> bool {
-	if let Expr::Member(MemberExpr {
-		obj: ExprOrSuper::Expr(obj),
-		prop,
-		..
-	}) = expr
-	{
-		if let Expr::Ident(obj) = obj.as_ref() {
-			if obj.sym.as_ref().eq(obj_name) {
-				return match prop.as_ref() {
-					Expr::Ident(prop) => prop.sym.as_ref().eq(prop_name),
-					Expr::Lit(Lit::Str(Str { value, .. })) => value.as_ref().eq(prop_name),
-					_ => false,
-				};
-			}
-		}
+	if let Some(member_prop_name) = get_member_prop_name(expr, obj_name) {
+		return member_prop_name.eq(prop_name);
 	}
 	false
 }
@@ -897,6 +915,7 @@ fn is_require_call(call: &CallExpr) -> Option<String> {
 	None
 }
 
+// match:
 // Object.defineProperty()
 // Object.assgin()
 fn is_object_static_mothod_call(call: &CallExpr, method: &str) -> bool {
@@ -927,12 +946,12 @@ fn is_iife_call(call: &CallExpr) -> Option<Vec<Stmt>> {
 	None
 }
 
+// match:
 // require("tslib").__exportStar(..., exports)
 // (0, require("tslib").__exportStar)(..., exports)
 // const tslib = require("tslib"); (0, tslib.__exportStar)(..., exports)
 // const {__exportStar} = require("tslib"); (0, __exportStar)(..., exports)
 fn is_tslib_export_star_call(call: &CallExpr) -> bool {
-	println!("{:?}", call);
 	if let Some(callee) = with_expr_callee(call) {
 		match callee {
 			Expr::Member(MemberExpr { prop, .. }) => {
@@ -960,7 +979,7 @@ fn is_tslib_export_star_call(call: &CallExpr) -> bool {
 							Expr::Ident(id) => {
 								return id.sym.as_ref().eq("__exportStar");
 							}
-							_=>{}
+							_ => {}
 						}
 					}
 				}
@@ -982,6 +1001,26 @@ fn arrow_stmts(arrow: &ArrowExpr) -> Vec<Stmt> {
 	}
 }
 
+fn get_member_prop_name(expr: &Expr, obj_name: &str) -> Option<String> {
+	if let Expr::Member(MemberExpr {
+		obj: ExprOrSuper::Expr(obj),
+		prop,
+		..
+	}) = expr
+	{
+		if let Expr::Ident(obj) = obj.as_ref() {
+			if obj.sym.as_ref().eq(obj_name) {
+				return match prop.as_ref() {
+					Expr::Ident(prop) => Some(prop.sym.as_ref().into()),
+					Expr::Lit(Lit::Str(Str { value, .. })) => Some(value.as_ref().into()),
+					_ => None,
+				};
+			}
+		}
+	}
+	None
+}
+
 fn get_class_static_names(class: &Class) -> Vec<String> {
 	class
 		.body
@@ -994,7 +1033,7 @@ fn get_class_static_names(class: &Class) -> Vec<String> {
 		.map(|member| {
 			match member {
 				ClassMember::ClassProp(prop) => {
-					if let Expr::Ident(id) = prop.key.as_ref() {
+					if let PropName::Ident(id) = &prop.key {
 						return id.sym.as_ref().into();
 					}
 				}
@@ -1008,6 +1047,40 @@ fn get_class_static_names(class: &Class) -> Vec<String> {
 			"".to_owned()
 		})
 		.collect()
+}
+
+// exports.foo || (exports.foo = {})
+// foo = exports.foo || (exports.foo = {})
+fn get_bare_export_name(expr: &Expr) -> Option<String> {
+	if let Expr::Assign(assign) = expr {
+		return get_bare_export_name(assign.right.as_ref());
+	}
+
+	if let Expr::Bin(bin) = expr {
+		if bin.op == BinaryOp::LogicalOr {
+			if let Some(member_prop_name) = get_member_prop_name(bin.left.as_ref(), "exports") {
+				if let Expr::Paren(ParenExpr { expr, .. }) = bin.right.as_ref() {
+					if let Expr::Assign(assign) = expr.as_ref() {
+						let left_expr = match &assign.left {
+							PatOrExpr::Expr(expr) => Some(expr.as_ref()),
+							PatOrExpr::Pat(pat) => match pat.as_ref() {
+								Pat::Expr(expr) => Some(expr.as_ref()),
+								_ => None,
+							},
+						};
+						if let Some(left_expr) = left_expr {
+							if assign.op == AssignOp::Assign
+								&& is_member(left_expr, "exports", member_prop_name.as_str())
+							{
+								return Some(member_prop_name);
+							}
+						}
+					}
+				}
+			}
+		}
+	}
+	None
 }
 
 fn stringify_prop_name(name: &PropName) -> Option<String> {
