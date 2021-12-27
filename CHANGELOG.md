@@ -1,11 +1,31 @@
 # Change Log
 
+## v59
+
+- improve `cjs-esm-exports` to support some edge cases:
+  ```js
+	var foo = exports.foo || (exports.foo = {});
+	((bar) => { ... })(exports.bar || (exports.bar = {}));
+	```
+- Fix `@types` verisoning:
+  - `marked` -> `@types/marked@4.0.1`
+  - `marked@2` -> `@types/marked@2.0.5`
+  - `marked?dep=@types/marked@4.0.0` -> `@types/marked@4.0.0`
+- Upgrade `deno.land/std/node` polyfill to **0.119.0**
+- Upgrade `esbuild` to **v0.14.8**
+
+## v58
+
+- Recover the stable queue
+- Filter invalid pathnames like `/wp-admin/login.php`
+- Fix `?pin` mode when build failed (close [#206](https://github.com/postui/esm.sh/issues/206))
+
 ## v57
 
 - Add `?pin` mode 
 - Improve build stability
 - Fix `marked@4` import
-- Fix invalid types hangs forever (close close [#201](https://github.com/postui/esm.sh/issues/201))
+- Fix invalid types hangs forever (close [#201](https://github.com/postui/esm.sh/issues/201))
 
 ## v56
 - `cjs-esm-exports` supports tslib `__exportStar` (close [#197](https://github.com/postui/esm.sh/issues/197))
