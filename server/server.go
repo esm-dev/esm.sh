@@ -104,6 +104,7 @@ func Serve(efs EmbedFS) {
 		embedFS = &devFS{cwd}
 	} else {
 		embedFS = efs
+		os.Setenv("NO_COLOR", "1") // disable log color in production
 	}
 
 	log, err = logx.New(fmt.Sprintf("file:%s?buffer=32k", path.Join(logDir, fmt.Sprintf("main-v%d.log", VERSION))))
@@ -112,9 +113,6 @@ func Serve(efs EmbedFS) {
 		os.Exit(1)
 	}
 	log.SetLevelByName(logLevel)
-	if !isDev {
-		os.Setenv("NO_COLOR", "1") // disable color in production
-	}
 
 	nodeInstallDir := os.Getenv("NODE_INSTALL_DIR")
 	if nodeInstallDir == "" {
@@ -210,7 +208,6 @@ func Serve(efs EmbedFS) {
 	if isDev {
 		log.Debugf("Server ready on http://localhost:%d", port)
 		log.Debugf("Testing page at http://localhost:%d?test", port)
-		log.Debugf("Playground at http://localhost:%d?playground", port)
 	}
 
 	c := make(chan os.Signal, 1)

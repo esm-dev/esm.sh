@@ -275,11 +275,11 @@ func getPackageInfo(wd string, name string, version string) (info NpmPackage, su
 		log.Error("db:", err)
 	}
 
-	info, err = cachePackageInfo(name, version)
+	info, err = fetchPackageInfo(name, version)
 	return
 }
 
-func cachePackageInfo(name string, version string) (info NpmPackage, err error) {
+func fetchPackageInfo(name string, version string) (info NpmPackage, err error) {
 	start := time.Now()
 	resp, err := httpClient.Get(node.npmRegistry + name)
 	if err != nil {
