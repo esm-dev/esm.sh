@@ -21,10 +21,10 @@ serde = { version = "1.0.130", features = ["derive"] }
 # swc
 # docs: https://swc.rs
 # crate: https://crates.io/search?q=swc
-swc_common = { version = "0.13.5", features = ["sourcemap"] }
-swc_ecmascript = { version = "0.76.0", features = ["parser", "visit"] }
-swc_ecma_ast = "0.54.3"
-swc_ecma_visit = "0.40.0" 
+swc_common = { version = "0.15.1", features = ["sourcemap"] }
+swc_ecmascript = { version = "0.99.5", features = ["parser", "visit"] }
+swc_ecma_ast = "0.60.3"
+swc_ecma_visit = "0.46.0" 
 
 # wasm-bindgen
 # docs: https://rustwasm.github.io/docs/wasm-bindgen
