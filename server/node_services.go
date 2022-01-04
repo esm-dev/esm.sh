@@ -16,8 +16,6 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
-
-	"github.com/ije/gox/utils"
 )
 
 const nsApp = `
@@ -65,19 +63,30 @@ const nsApp = `
 `
 
 type NSTask struct {
-	service string
-	input   map[string]interface{}
-	output  chan []byte
+	invokeId string
+	service  string
+	input    map[string]interface{}
+	output   chan []byte
 }
 
+var nsTasks sync.Map
+var nsReady bool
 var nsInvokeIndex uint32 = 0
-var nsChannel = make(chan *NSTask, 1000)
+var nsChannel = make(chan *NSTask, 10000)
+
+func newInvokeId() string {
+	i := atomic.AddUint32(&nsInvokeIndex, 1)
+	buf := make([]byte, 4)
+	binary.LittleEndian.PutUint32(buf, i)
+	return hex.EncodeToString(buf)
+}
 
 func invokeNodeService(serviceName string, input map[string]interface{}, timeout time.Duration) []byte {
 	task := &NSTask{
-		service: serviceName,
-		input:   input,
-		output:  make(chan []byte, 1),
+		invokeId: newInvokeId(),
+		service:  serviceName,
+		input:    input,
+		output:   make(chan []byte, 1),
 	}
 	nsChannel <- task
 	if timeout > 0 {
@@ -85,7 +94,8 @@ func invokeNodeService(serviceName string, input map[string]interface{}, timeout
 		case out := <-task.output:
 			return out
 		case <-time.After(timeout):
-			return utils.MustEncodeJSON(map[string]interface{}{"error": "timeout"})
+			nsTasks.Delete(task.invokeId)
+			return []byte(`{"error": "timeout"}`)
 		}
 	}
 	return <-task.output
@@ -111,7 +121,7 @@ func startNodeServices(wd string, services []string) (err error) {
 		log.Debug("node services", services, "installed")
 	}
 
-	// create ns app js
+	// create ns script
 	err = ioutil.WriteFile(
 		path.Join(wd, "ns.js"),
 		[]byte(fmt.Sprintf(nsApp, servicesInject)),
@@ -150,31 +160,25 @@ func startNodeServices(wd string, services []string) (err error) {
 	// store node process pid
 	ioutil.WriteFile(pidFile, []byte(strconv.Itoa(cmd.Process.Pid)), 0644)
 
-	var tasks sync.Map
-	var ready bool
-
 	go func() {
 		for {
-			if ready {
+			if nsReady {
 				nsTask := <-nsChannel
-				invokeId := atomic.AddUint32(&nsInvokeIndex, 1)
-				buf := make([]byte, 4)
-				binary.LittleEndian.PutUint32(buf, invokeId)
-				invokeIdHex := hex.EncodeToString(buf)
+				invokeId := nsTask.invokeId
 				data, err := json.Marshal(map[string]interface{}{
-					"invokeId": invokeIdHex,
+					"invokeId": invokeId,
 					"service":  nsTask.service,
 					"input":    nsTask.input,
 				})
 				if err == nil {
-					tasks.Store(invokeIdHex, nsTask.output)
+					nsTasks.Store(invokeId, nsTask.output)
 					_, err = in.Write(data)
 					if err != nil {
-						tasks.Delete(invokeId)
+						nsTasks.Delete(invokeId)
 					}
 					_, err = in.Write([]byte{'\n'})
 					if err != nil {
-						tasks.Delete(invokeId)
+						nsTasks.Delete(invokeId)
 					}
 				}
 			} else {
@@ -188,10 +192,10 @@ func startNodeServices(wd string, services []string) (err error) {
 		for scanner.Scan() {
 			line := scanner.Bytes()
 			if string(line) == "READY" {
-				ready = true
+				nsReady = true
 			} else if len(line) > 8 {
 				invokeId := string(line[:8])
-				v, ok := tasks.Load(invokeId)
+				v, ok := nsTasks.LoadAndDelete(invokeId)
 				if ok {
 					v.(chan []byte) <- line[8:]
 				}
