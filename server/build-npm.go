@@ -714,7 +714,7 @@ func (task *BuildTask) transformDTS(esm *ESM) {
 	var dts string
 	if esm.Types != "" || esm.Typings != "" {
 		dts = toTypesPath(task.wd, *esm.NpmPackage, submodule)
-	} else if !strings.HasPrefix(name, "@types/") && submodule == "" {
+	} else if !strings.HasPrefix(name, "@types/") {
 		versions := []string{"latest"}
 		versionParts := strings.Split(task.Pkg.Version, ".")
 		if len(versionParts) > 2 {
