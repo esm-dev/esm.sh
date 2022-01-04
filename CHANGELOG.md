@@ -1,5 +1,9 @@
 # Change Log
 
+## v60
+
+- bugfixs for [#244](https://github.com/postui/esm.sh/issues/244),[#245](https://github.com/postui/esm.sh/issues/245),[#246](https://github.com/postui/esm.sh/issues/246)
+
 ## v59
 
 - improve `cjs-esm-exports` to support some edge cases:
