@@ -1,7 +1,7 @@
 .DS_Store
 Thumbs.db
+esmd
 .esmd/
-scripts/esmd
 node_modules/
 target/
 pkg/
