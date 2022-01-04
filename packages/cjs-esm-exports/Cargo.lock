@@ -34,9 +34,9 @@ dependencies = [
 
 [[package]]
 name = "anyhow"
-version = "1.0.44"
+version = "1.0.52"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "61604a8f862e1d5c3229fdd78f8b02c68dcf73a4c4b05fd636d12240aaa242c1"
+checksum = "84450d0b4a8bd1ba4144ce8ce718fbc5d071358b1e5384bace6536b3d1f2d5b3"
 
 [[package]]
 name = "arrayvec"
@@ -46,9 +46,9 @@ checksum = "23b62fc65de8e4e7f52534fb52b0f3ed04746ae267519eef2a83941e8085068b"
 
 [[package]]
 name = "ast_node"
-version = "0.7.3"
+version = "0.7.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f93f52ce8fac3d0e6720a92b0576d737c01b1b5db4dd786e962e5925f00bf755"
+checksum = "82b2dd56b7c509b3a0bb47a97a066cba459983470d3b8a3c20428737270f70bd"
 dependencies = [
  "darling",
  "pmutil",
@@ -96,7 +96,7 @@ checksum = "baf1de4339761588bc0619e3cbc0120ee582ebb74b53b4efbf79117bd2da40fd"
 
 [[package]]
 name = "cjs-esm-exports"
-version = "0.5.0"
+version = "0.5.6"
 dependencies = [
  "anyhow",
  "console_error_panic_hook",
@@ -111,11 +111,11 @@ dependencies = [
 
 [[package]]
 name = "console_error_panic_hook"
-version = "0.1.6"
+version = "0.1.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b8d976903543e0c48546a91908f21588a680a8c8f984df9a5d69feccb2b2a211"
+checksum = "a06aeb73f470f66dcdbf7223caeebb85984942f22f1adb2a088cf9668146bbbc"
 dependencies = [
- "cfg-if 0.1.10",
+ "cfg-if 1.0.0",
  "wasm-bindgen",
 ]
 
@@ -581,18 +581,18 @@ checksum = "388a1df253eca08550bef6c72392cfe7c30914bf41df5269b68cbd6ff8f570a3"
 
 [[package]]
 name = "serde"
-version = "1.0.130"
+version = "1.0.133"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f12d06de37cf59146fbdecab66aa99f9fe4f78722e3607577a5375d66bd0c913"
+checksum = "97565067517b60e2d1ea8b268e59ce036de907ac523ad83a0475da04e818989a"
 dependencies = [
  "serde_derive",
 ]
 
 [[package]]
 name = "serde_derive"
-version = "1.0.130"
+version = "1.0.133"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d7bc1a1ab1961464eae040d96713baa5a724a8152c1222492465b54322ec508b"
+checksum = "ed201699328568d8d08208fdd080e3ff594e6c422e438b6705905da01005d537"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -706,9 +706,9 @@ dependencies = [
 
 [[package]]
 name = "swc_common"
-version = "0.15.1"
+version = "0.15.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "bf33ac965b9ce43b653baa35a5de6ecfd96b9bbab9547a5fb4ce33c46a36fe75"
+checksum = "d4fddfb7dab63a97481d9d912411405c2f8a9f91c38e98c687e7f2359f73e35f"
 dependencies = [
  "ahash",
  "ast_node",
@@ -733,9 +733,9 @@ dependencies = [
 
 [[package]]
 name = "swc_ecma_ast"
-version = "0.60.3"
+version = "0.61.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "70ab2356281c38cf629f3cdb165c4d34e17b2757b020dab914bae477ee0fb373"
+checksum = "f5e6de328d8235366f1d490ae935dd4977af7663eabba6ae77db9f1349165833"
 dependencies = [
  "is-macro",
  "num-bigint",
@@ -748,9 +748,9 @@ dependencies = [
 
 [[package]]
 name = "swc_ecma_parser"
-version = "0.82.5"
+version = "0.83.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e190566aa3fa22c7253d1d2a01854895072903ffdf7337c9d4fcb1869720d460"
+checksum = "4048e9040e9f360cb6037d13114948fde95a213f330de197086fd3f751a3fbe2"
 dependencies = [
  "either",
  "enum_kind",
@@ -768,9 +768,9 @@ dependencies = [
 
 [[package]]
 name = "swc_ecma_visit"
-version = "0.46.0"
+version = "0.47.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "38c03856f785763e50019ebd70281e9490c5b019f93cfc1dda180d49e30fcb4c"
+checksum = "ea38a32d5148df7666fe5a075216e7e800784a122fc15544a3aa44e7f8fbb37e"
 dependencies = [
  "num-bigint",
  "swc_atoms",
@@ -782,9 +782,9 @@ dependencies = [
 
 [[package]]
 name = "swc_ecmascript"
-version = "0.99.5"
+version = "0.102.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "91a7548a924148c795125e0f8571f4d0b4ed33f477cc1070b27e5b0940fcf151"
+checksum = "afb84fffb04f352b83f346a0e908c6c13db674b111937a7e6e0d741c73c6e87f"
 dependencies = [
  "swc_ecma_ast",
  "swc_ecma_parser",

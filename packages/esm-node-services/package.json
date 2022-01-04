@@ -1,6 +1,6 @@
 {
 	"name": "esm-node-services",
-	"version": "0.5.5",
+	"version": "0.5.6",
 	"description": "Node services for esm.sh",
 	"main": "index.js",
 	"scripts": {
@@ -12,7 +12,7 @@
 		"index.js"
 	],
 	"dependencies": {
-		"cjs-esm-exports": "^0.5.0",
+		"cjs-esm-exports": "^0.5.6",
 		"enhanced-resolve": "^5.8.3"
 	},
 	"repository": "https://github.com/alephjs/esm.sh",
