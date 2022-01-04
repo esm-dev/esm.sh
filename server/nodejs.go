@@ -538,6 +538,7 @@ func yarnAdd(wd string, packages ...string) (err error) {
 		start := time.Now()
 		args := []string{
 			"add",
+			"--no-lockfile",
 			"--non-interactive",
 			"--no-progress",
 			"--no-bin-links",
@@ -547,7 +548,7 @@ func yarnAdd(wd string, packages ...string) (err error) {
 		}
 		yarnCacheDir := os.Getenv("YARN_CACHE_DIR")
 		if yarnCacheDir != "" {
-			args = append(args, "--cache-folder", yarnCacheDir)
+			args = append(args, "--cache-folder", path.Join(yarnCacheDir, fmt.Sprintf("v%v", VERSION)))
 		}
 		yarnMutex := os.Getenv("YARN_MUTEX")
 		if yarnMutex != "" {
@@ -559,7 +560,7 @@ func yarnAdd(wd string, packages ...string) (err error) {
 		if err != nil {
 			return fmt.Errorf("yarn add %s: %s", strings.Join(packages, " "), string(output))
 		}
-		log.Debug("yarn add", strings.Join(packages, " "), "in", time.Since(start))
+		log.Debug("yarn add", strings.Join(packages, ","), "in", time.Since(start))
 	}
 	return
 }
