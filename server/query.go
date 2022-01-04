@@ -4,9 +4,11 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"io"
 	"io/ioutil"
 	"net"
 	"net/http"
+	"os"
 	"path"
 	"strconv"
 	"strings"
@@ -495,7 +497,7 @@ func query(devMode bool) rex.Handle {
 				select {
 				case output := <-c.C:
 					if output.err != nil {
-						return rex.Status(500, "types: "+err.Error())
+						return rex.Status(500, "types: "+output.err.Error())
 					}
 					if output.esm.Dts != "" {
 						savePath = path.Join("types", output.esm.Dts)
@@ -512,13 +514,17 @@ func query(devMode bool) rex.Handle {
 			if !exists {
 				return rex.Status(404, "Types not found")
 			}
-			r, err := fs.ReadFile(savePath)
+			var r io.ReadSeeker
+			r, err = fs.ReadFile(savePath)
 			if err != nil {
-				return rex.Status(500, err.Error())
+				if os.IsExist(err) {
+					return rex.Status(500, err.Error())
+				}
+				r = bytes.NewReader([]byte("/* fake(empty) types */"))
 			}
 			ctx.SetHeader("Content-Type", "application/typescript; charset=utf-8")
 			ctx.SetHeader("Cache-Control", "public, max-age=31536000, immutable")
-			return rex.Content(savePath, modtime, r)
+			return rex.Content(savePath, modtime, r) // auto close
 		}
 
 		task := &BuildTask{
