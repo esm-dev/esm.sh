@@ -159,7 +159,8 @@ func Serve(efs EmbedFS) {
 	// start cjs lexer server
 	go func() {
 		wd := path.Join(etcDir, "ns")
-		if err := ensureDir(wd); err != nil {
+		err := clearDir(wd)
+		if err != nil {
 			log.Fatal(err)
 		}
 		services := []string{"esm-node-services"}
