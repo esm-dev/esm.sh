@@ -99,6 +99,7 @@ func initESM(wd string, pkg Pkg, checkExports bool, isDev bool) (esm *ESM, err e
 							*/
 							if name == "./"+pkg.Submodule {
 								resolvePackageExports(esm.NpmPackage, defines)
+								defined = true
 								break
 								/**
 								exports: {
@@ -109,7 +110,6 @@ func initESM(wd string, pkg Pkg, checkExports bool, isDev bool) (esm *ESM, err e
 								}
 								*/
 							} else if strings.HasSuffix(name, "/*") && strings.HasPrefix("./"+pkg.Submodule, strings.TrimSuffix(name, "*")) {
-								fmt.Println("2 ---- ", name, defines)
 								suffix := strings.TrimPrefix("./"+pkg.Submodule, strings.TrimSuffix(name, "*"))
 								if m, ok := defines.(map[string]interface{}); ok {
 									for key, value := range m {
@@ -148,7 +148,7 @@ func initESM(wd string, pkg Pkg, checkExports bool, isDev bool) (esm *ESM, err e
 		return
 	}
 
-	if esm.Module == "" && (strings.Contains(esm.Main, "/esm/") || strings.Contains(esm.Main, "/es/")) {
+	if esm.Module == "" && (strings.Contains(esm.Main, "/esm/") || strings.Contains(esm.Main, "/es/") || strings.HasSuffix(esm.Main, ".mjs")) {
 		esm.Module = esm.Main
 	}
 
