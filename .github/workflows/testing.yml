@@ -21,7 +21,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v2
         with:
-          node-version: '14'
+          node-version: '16'
 
       - name: Setup deno
         uses: denoland/setup-deno@main
@@ -32,9 +32,6 @@ jobs:
         uses: actions/setup-go@v2
         with:
           go-version: 1.17.x
-
-      - name: Go test
-        run: CI=true go test esm.sh/server -v
 
       - name: Deno test
         run: deno run -A --unstable test/deno/bootstrap.ts
