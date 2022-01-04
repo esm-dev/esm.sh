@@ -23,7 +23,7 @@ import (
 
 const (
 	nodejsMinVersion = 16
-	nodejsLatestLTS  = "16.13.0"
+	nodejsLatestLTS  = "16.13.1"
 	nodeTypesVersion = "16.11.6"
 	nodejsDistURL    = "https://nodejs.org/dist/"
 )
@@ -450,10 +450,11 @@ func resolvePackageExports(p *NpmPackage, exports interface{}) {
 }
 
 func fixNpmPackage(p NpmPackage) *NpmPackage {
+	exports := p.DefinedExports
 	np := &p
 
-	if p.Module == "" && p.DefinedExports != nil {
-		if m, ok := p.DefinedExports.(map[string]interface{}); ok {
+	if exports != nil {
+		if m, ok := exports.(map[string]interface{}); ok {
 			v, ok := m["."]
 			if ok {
 				/*
@@ -478,6 +479,11 @@ func fixNpmPackage(p NpmPackage) *NpmPackage {
 				*/
 				resolvePackageExports(np, m)
 			}
+		} else if _, ok := exports.(string); ok {
+			/*
+				exports: "./esm/index.js"
+			*/
+			resolvePackageExports(np, exports)
 		}
 	}
 
@@ -553,7 +559,7 @@ func yarnAdd(wd string, packages ...string) (err error) {
 		if err != nil {
 			return fmt.Errorf("yarn add %s: %s", strings.Join(packages, " "), string(output))
 		}
-		log.Debug("yarn add", strings.Join(packages, " "), "in", time.Now().Sub(start))
+		log.Debug("yarn add", strings.Join(packages, " "), "in", time.Since(start))
 	}
 	return
 }

@@ -179,15 +179,11 @@ func (task *BuildTask) build(tracing *stringSet) (esm *ESM, err error) {
 		buf := bytes.NewBuffer(nil)
 		importPath := task.Pkg.ImportPath()
 		fmt.Fprintf(buf, `import __default from "%s";`, importPath)
+		fmt.Fprintf(buf, `import * as __star from "%s";%s`, importPath, "\n")
 		if len(esm.Exports) > 0 {
-			fmt.Fprintf(buf, `import * as __star from "%s";%s`, importPath, "\n")
 			fmt.Fprintf(buf, `export const { %s } = __star;%s`, strings.Join(esm.Exports, ","), "\n")
 		}
-		if len(esm.Exports) > 0 {
-			fmt.Fprintf(buf, "export default __default || __star")
-		} else {
-			fmt.Fprintf(buf, "export default __default")
-		}
+		fmt.Fprintf(buf, "export default __default || __star")
 		input = &api.StdinOptions{
 			Contents:   buf.String(),
 			ResolveDir: task.wd,
