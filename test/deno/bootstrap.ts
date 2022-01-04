@@ -2,15 +2,17 @@ import { existsSync } from 'https://deno.land/std@0.119.0/fs/exists.ts'
 
 const [select] = Deno.args
 if (select) {
-	await test(`test/deno/${select}/`)
+	await test(select)
 	Deno.exit(0)
 } else {
 	startServer(async (p) => {
 		try {
-			await test('test/deno/common/', p)
-			await test('test/deno/preact/', p)
-			await test('test/deno/prismjs/', p)
-			await test('test/deno/react/', p)
+			await test('common', p)
+			await test('preact', p)
+			await test('preact-jsx-runtime', p)
+			await test('prismjs', p)
+			await test('react', p)
+			await test('react-jsx-runtime', p)
 			console.log('Done')
 		} catch (error) {
 			console.error(error)
@@ -42,8 +44,9 @@ async function startServer(onReady: (p: any) => void) {
 	await p.status()
 }
 
-async function test(dir: string, p?: any) {
-	const cmd = [Deno.execPath(), 'test', '-A', '--unstable', '-r', '--location=http://0.0.0.0/']
+async function test(name: string, p?: any) {
+	const cmd = [Deno.execPath(), 'test', '-A', '--unstable', '--reload=http://localhost:8080', '--location=http://0.0.0.0/']
+	const dir = `test/deno/${name}/`
 	if (existsSync(dir + 'tsconfig.json')) {
 		cmd.push('--config', dir + 'tsconfig.json')
 	}
