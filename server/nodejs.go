@@ -24,7 +24,7 @@ import (
 const (
 	nodejsMinVersion = 16
 	nodejsLatestLTS  = "16.13.1"
-	nodeTypesVersion = "16.11.6"
+	nodeTypesVersion = "16.11.9"
 	nodejsDistURL    = "https://nodejs.org/dist/"
 )
 
@@ -545,6 +545,7 @@ func yarnAdd(wd string, packages ...string) (err error) {
 			"--ignore-scripts",
 			"--ignore-platform",
 			"--ignore-engines",
+			"--silent",
 		}
 		yarnCacheDir := os.Getenv("YARN_CACHE_DIR")
 		if yarnCacheDir != "" {
