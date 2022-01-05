@@ -137,10 +137,14 @@ func (task *BuildTask) Build() (esm *ESM, err error) {
 		}
 	}()
 
-	task.stage = "install-deps"
-	err = yarnAdd(task.wd, fmt.Sprintf("%s@%s", task.Pkg.Name, task.Pkg.Version))
+	task.stage = "install"
+	for i := 0; i < 3; i++ {
+		err = yarnAdd(task.wd, fmt.Sprintf("%s@%s", task.Pkg.Name, task.Pkg.Version))
+		if err == nil {
+			break
+		}
+	}
 	if err != nil {
-		log.Error("install deps:", err)
 		return
 	}
 
