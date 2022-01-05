@@ -46,7 +46,7 @@ In **bundle** mode, all dependencies will be bundled into a single JS file.
 import React from 'https://esm.sh/react?dev'
 ```
 
-The `?dev` mode builds code with `process.env.NODE_ENV` equals to `development`, that is useful to build modules like **React** to allow you get more development warn/error details.
+The `?dev` mode builds code with `process.env.NODE_ENV` equals to `development`, that is useful to build modules like **React** to allow you to get more development warn/error details.
 
 ### Specify external dependencies
 
@@ -55,7 +55,7 @@ import React from 'https://esm.sh/react@16.14.0'
 import useSWR from 'https://esm.sh/swr?deps=react@16.14.0'
 ```
 
-By default, esm.sh rewrites import specifier based on the package's dependency statement. To specify version of dependencies you can use the `?deps=PACKAGE@VERSION` query. You can separate multiple dependencies with commas: `?deps=react@16.14.0,react-dom@16.14.0`.
+By default, esm.sh rewrites import specifier based on the package's dependency statement. To specify version of dependencies, you can use the `?deps=PACKAGE@VERSION` query. You can separate multiple dependencies with commas: `?deps=react@16.14.0,react-dom@16.14.0`.
 
 ### Aliasing dependencies
 
@@ -69,7 +69,7 @@ in combination with `?deps`:
 import useSWR from 'https://esm.sh/swr?alias=react:preact/compat&deps=preact@10.5.14'
 ```
 
-The origin idea was came from [@lucacasonato](https://github.com/lucacasonato).
+The origin idea was coming from [@lucacasonato](https://github.com/lucacasonato).
 
 ### Specify ESM target
 
@@ -89,7 +89,7 @@ import Daygrid from 'https://esm.sh/@fullcalendar/daygrid'
 <link rel="stylesheet" href="https://esm.sh/@fullcalendar/daygrid?css">
 ```
 
-This only works when the NPM module imports css files in JS directly.
+This only works when the NPM module imports CSS files in JS directly.
 
 
 ## Web Worker
@@ -120,7 +120,7 @@ const { css } = await postcss([ autoprefixer ]).process(`
 
 By default, **esm.sh** will respond with a custom `X-TypeScript-Types` HTTP header when the types (`.d.ts`) is defined. This is useful for deno type checks ([link](https://deno.land/manual/typescript/types#using-x-typescript-types-header)).
 
-![figure #1](./server/embed/assets/sceenshot-deno-types.png)
+![Figure #1](./server/embed/assets/sceenshot-deno-types.png)
 
 You can pass the `no-check` query to disable the `X-TypeScript-Types` header if some types are incorrect:
 
@@ -130,7 +130,7 @@ import unescape from 'https://esm.sh/lodash/unescape?no-check'
 
 ## Pin the build version
 
-Since we update esm.sh server very frequently, sometime we may break some packages that work fine previously by mistake, because we need to rebuild all modules when the patch pushed. To avoid this, you can pin the build version by the `?pin=BUILD_VERSON` query. 
+Since we update esm.sh server very frequently, sometime we may break packages that work fine previously by mistake, the server will rebuild modules you imported when the patch pushed. To avoid this, you can pin the build version by the `?pin=BUILD_VERSON` query. 
 
 ```javascript
 import React from 'https://esm.sh/react@17.0.2?pin=v61'
