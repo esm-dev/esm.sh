@@ -1,8 +1,8 @@
 {
-	"compilerOptions": {
-		"lib": [
-			"dom",
-			"deno.ns"
-		]
-	}
+  "compilerOptions": {
+    "lib": [
+      "dom",
+      "deno.ns"
+    ]
+  }
 }
