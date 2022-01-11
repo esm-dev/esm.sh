@@ -233,15 +233,15 @@ func (task *BuildTask) build(tracing *stringSet) (esm *ESM, err error) {
 
 					specifier := strings.TrimSuffix(args.Path, "/")
 
+					// resolve nodejs builtin modules like `node:path`
+					specifier = strings.TrimPrefix(specifier, "node:")
+
 					// resolve `?alias` query
 					if len(task.Alias) > 0 {
 						if name, ok := task.Alias[specifier]; ok {
 							specifier = name
 						}
 					}
-
-					// resolve nodejs builtin modules like `node:path`
-					specifier = strings.TrimPrefix(specifier, "node:")
 
 					// bundles all dependencies except in `bundle` mode, apart from peer dependencies
 					if task.BundleMode && !extraExternal.Has(specifier) {
@@ -305,7 +305,7 @@ func (task *BuildTask) build(tracing *stringSet) (esm *ESM, err error) {
 						}
 					}
 
-					// bundles undefiend relative imports or the package/module it self
+					// bundles undefined relative imports or the package/module it self
 					if isLocalImport(specifier) || specifier == task.Pkg.ImportPath() {
 						return api.OnResolveResult{}, nil
 					}
