@@ -60,7 +60,7 @@ func query(devMode bool) rex.Handle {
 				return err
 			}
 			readme = bytes.ReplaceAll(readme, []byte("./server/embed/"), []byte("/embed/"))
-			readme = bytes.ReplaceAll(readme, []byte("./HOSTING.md"), []byte("https://github.com/alephjs/esm.sh/blob/master/HOSTING.md"))
+			readme = bytes.ReplaceAll(readme, []byte("./HOSTING.md"), []byte("https://github.com/esm-dev/esm.sh/blob/master/HOSTING.md"))
 			readmeStrLit := utils.MustEncodeJSON(string(readme))
 			html := bytes.ReplaceAll(indexHTML, []byte("'# README'"), readmeStrLit)
 			html = bytes.ReplaceAll(html, []byte("{VERSION}"), []byte(fmt.Sprintf("%d", VERSION)))

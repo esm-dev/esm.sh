@@ -6,7 +6,7 @@ You will need [Go](https://golang.org/dl) 1.16+ to compile the server. The serve
 ## Clone code
 
 ```baseh
-git clone https://github.com/alephjs/esm.sh
+git clone https://github.com/esm-dev/esm.sh
 cd esm.sh
 ```
 
