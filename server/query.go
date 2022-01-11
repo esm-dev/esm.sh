@@ -363,6 +363,8 @@ func query(devMode bool) rex.Handle {
 		ua := ctx.R.UserAgent()
 		if strings.HasPrefix(ua, "Deno/") {
 			target = "deno"
+		} else if strings.HasPrefix(ua, "Node/") {
+			target = "node"
 		} else {
 			target = strings.ToLower(ctx.Form.Value("target"))
 			if _, ok := targets[target]; !ok {
