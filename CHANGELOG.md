@@ -1,5 +1,10 @@
 # Change Log
 
+## v62
+
+- bugfixs for [#240](https://github.com/postui/esm.sh/issues/240),[#242](https://github.com/postui/esm.sh/issues/242),[#248](https://github.com/postui/esm.sh/issues/248)
+
+
 ## v61
 
 - Support **React new JSX transforms** in Deno(1.16+) (close [#225](https://github.com/alephjs/esm.sh/issues/225))
