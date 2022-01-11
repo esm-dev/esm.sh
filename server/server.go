@@ -60,7 +60,7 @@ func Serve(efs EmbedFS) {
 	flag.StringVar(&dbUrl, "db", "", "database config, default is 'postdb:[etc-dir]/esm.db'")
 	flag.StringVar(&fsUrl, "fs", "", "filesystem config, default is 'local:[etc-dir]/storage'")
 	flag.StringVar(&queueUrl, "queue", "", "bulid queue config, default is 'chan:memory'")
-	flag.IntVar(&buildConcurrency, "build-concurrency", runtime.NumCPU(), "maximum number of concurrent build task")
+	flag.IntVar(&buildConcurrency, "build-concurrency", 2*runtime.NumCPU(), "maximum number of concurrent build task")
 	flag.StringVar(&nodeServices, "node-services", "", "node services")
 	flag.StringVar(&logDir, "log-dir", "", "log dir")
 	flag.StringVar(&logLevel, "log-level", "info", "log level")
