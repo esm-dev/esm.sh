@@ -82,7 +82,8 @@ const builtInNodeModules = new Set([
 const requireModeAllowList = [
   'typescript',
   'he',
-  'safe-buffer'
+  'safe-buffer',
+  'lz-string',
 ]
 
 function isObject(v) {
