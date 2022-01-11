@@ -111,16 +111,22 @@ func initESM(wd string, pkg Pkg, checkExports bool, isDev bool) (esm *ESM, err e
 								*/
 							} else if strings.HasSuffix(name, "/*") && strings.HasPrefix("./"+pkg.Submodule, strings.TrimSuffix(name, "*")) {
 								suffix := strings.TrimPrefix("./"+pkg.Submodule, strings.TrimSuffix(name, "*"))
+								replaced := false
 								if m, ok := defines.(map[string]interface{}); ok {
 									for key, value := range m {
-										s, ok := value.(string)
-										if ok {
+										if s, ok := value.(string); ok && s != name {
 											m[key] = strings.Replace(s, "*", suffix, -1)
+											replaced = true
 										}
 									}
+								} else if s, ok := defines.(string); ok && name != s {
+									defines = strings.Replace(s, "*", suffix, -1)
+									replaced = true
 								}
-								resolvePackageExports(esm.NpmPackage, defines)
-								defined = true
+								if replaced {
+									resolvePackageExports(esm.NpmPackage, defines)
+									defined = true
+								}
 							}
 						}
 					}
@@ -152,6 +158,7 @@ func initESM(wd string, pkg Pkg, checkExports bool, isDev bool) (esm *ESM, err e
 		esm.Module = esm.Main
 	}
 
+	fmt.Println(esm.Module)
 	if esm.Module != "" {
 		resolved, exportDefault, err := checkESM(wd, esm.Name, esm.Module)
 		if err != nil {
