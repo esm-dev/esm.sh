@@ -1,6 +1,7 @@
 package server
 
 import (
+	"context"
 	"encoding/json"
 	"os"
 	"path"
@@ -17,11 +18,11 @@ func TestNodeServices(t *testing.T) {
 		t.SkipNow()
 	}
 
-	go startNodeServices(testDir, nil)
+	go startNodeServices(context.Background(), testDir, nil)
 
 	for i := 0; i < 100; i++ {
 		secret := rs.Hex.String(64)
-		data := invokeNodeService("test", map[string]interface{}{"secret": secret}, 0)
+		data := invokeNodeService("test", map[string]interface{}{"secret": secret})
 
 		var ret map[string]interface{}
 		err := json.Unmarshal(data, &ret)

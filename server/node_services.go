@@ -3,6 +3,7 @@ package server
 import (
 	"bufio"
 	"bytes"
+	"context"
 	"encoding/binary"
 	"encoding/hex"
 	"encoding/json"
@@ -72,7 +73,8 @@ type NSTask struct {
 var nsTasks sync.Map
 var nsReady bool
 var nsInvokeIndex uint32 = 0
-var nsChannel = make(chan *NSTask, 10000)
+var nsChannel = make(chan *NSTask, 4096)
+var stopNS = func() {}
 
 func newInvokeId() string {
 	i := atomic.AddUint32(&nsInvokeIndex, 1)
@@ -81,7 +83,7 @@ func newInvokeId() string {
 	return hex.EncodeToString(buf)
 }
 
-func invokeNodeService(serviceName string, input map[string]interface{}, timeout time.Duration) []byte {
+func invokeNodeService(serviceName string, input map[string]interface{}) []byte {
 	task := &NSTask{
 		invokeId: newInvokeId(),
 		service:  serviceName,
@@ -89,19 +91,17 @@ func invokeNodeService(serviceName string, input map[string]interface{}, timeout
 		output:   make(chan []byte, 1),
 	}
 	nsChannel <- task
-	if timeout > 0 {
-		select {
-		case out := <-task.output:
-			return out
-		case <-time.After(timeout):
-			nsTasks.Delete(task.invokeId)
-			return []byte(`{"error": "timeout"}`)
-		}
+	select {
+	case out := <-task.output:
+		return out
+	case <-time.After(30 * time.Second):
+		stopNS() // restart node service
+		nsTasks.Delete(task.invokeId)
+		return []byte(`{"error": "timeout"}`)
 	}
-	return <-task.output
 }
 
-func startNodeServices(wd string, services []string) (err error) {
+func startNodeServices(ctx context.Context, wd string, services []string) (err error) {
 	pidFile := path.Join(wd, "ns.pid")
 	errBuf := bytes.NewBuffer(nil)
 	servicesInject := "[]"
@@ -161,24 +161,30 @@ func startNodeServices(wd string, services []string) (err error) {
 	ioutil.WriteFile(pidFile, []byte(strconv.Itoa(cmd.Process.Pid)), 0644)
 
 	go func() {
+	loop:
 		for {
 			if nsReady {
-				nsTask := <-nsChannel
-				invokeId := nsTask.invokeId
-				data, err := json.Marshal(map[string]interface{}{
-					"invokeId": invokeId,
-					"service":  nsTask.service,
-					"input":    nsTask.input,
-				})
-				if err == nil {
-					nsTasks.Store(invokeId, nsTask.output)
-					_, err = in.Write(data)
-					if err != nil {
-						nsTasks.Delete(invokeId)
-					}
-					_, err = in.Write([]byte{'\n'})
-					if err != nil {
-						nsTasks.Delete(invokeId)
+				select {
+				case <-ctx.Done():
+					cmd.Process.Kill()
+					break loop
+				case nsTask := <-nsChannel:
+					invokeId := nsTask.invokeId
+					data, err := json.Marshal(map[string]interface{}{
+						"invokeId": invokeId,
+						"service":  nsTask.service,
+						"input":    nsTask.input,
+					})
+					if err == nil {
+						nsTasks.Store(invokeId, nsTask.output)
+						_, err = in.Write(data)
+						if err != nil {
+							nsTasks.Delete(invokeId)
+						}
+						_, err = in.Write([]byte{'\n'})
+						if err != nil {
+							nsTasks.Delete(invokeId)
+						}
 					}
 				}
 			} else {

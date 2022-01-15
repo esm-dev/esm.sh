@@ -1,6 +1,7 @@
 package server
 
 import (
+	"context"
 	"embed"
 	"flag"
 	"fmt"
@@ -173,7 +174,9 @@ func Serve(efs EmbedFS) {
 			}
 		}
 		for {
-			err := startNodeServices(wd, services)
+			ctx, cancel := context.WithCancel(context.Background())
+			stopNS = cancel
+			err := startNodeServices(ctx, wd, services)
 			if err != nil && err.Error() != "signal: interrupt" {
 				log.Warnf("node services exit: %v", err)
 			}

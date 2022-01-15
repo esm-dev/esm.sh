@@ -95,9 +95,16 @@ func query(devMode bool) rex.Handle {
 				}
 			}
 			buildQueue.lock.RUnlock()
+			n := 0
+			nsTasks.Range(func(key, value interface{}) bool {
+				n++
+				return false
+			})
 			return map[string]interface{}{
-				"uptime": time.Since(startTime).String(),
-				"queue":  q[:i],
+				"nsTasks":   n,
+				"nsChannel": fmt.Sprintf("%d/%d", len(nsChannel), cap(nsChannel)),
+				"uptime":    time.Since(startTime).String(),
+				"queue":     q[:i],
 			}
 
 		case "/error.js":
