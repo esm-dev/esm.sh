@@ -4,8 +4,8 @@ import (
 	"net/url"
 	"time"
 
-	"github.com/postui/postdb"
-	"github.com/postui/postdb/q"
+	"github.com/ije/postdb"
+	"github.com/ije/postdb/q"
 )
 
 type postDBDriver struct{}
