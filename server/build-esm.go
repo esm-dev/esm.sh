@@ -13,6 +13,16 @@ import (
 	"github.com/ije/gox/utils"
 )
 
+const cssLoaderTpl = `const id = "%s"
+const css = %s
+if (!document.querySelector("[data-module-url=\"" + id + "\"]")) {
+	const el = document.createElement('style')
+	el.type = 'text/css'
+	el.setAttribute('data-module-url', id)
+	el.appendChild(document.createTextNode(css))
+	document.head.appendChild(el)
+}`
+
 var buildCache sync.Map
 var loaders = map[string]api.Loader{
 	".mjs":  api.LoaderJS,

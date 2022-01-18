@@ -4,17 +4,9 @@ package server
 const VERSION = 62
 
 const (
-	pkgCacheTimeout    = 5 * 60 // 5 minutes
-	pkgRequstTimeout   = 30     // 30 seconds
-	denoStdNodeVersion = "0.119.0"
+	pkgCacheTimeout    = 10 * 60 // 10 minutes
+	denoStdNodeVersion = "0.121.0"
+	nodejsMinVersion   = 16
+	nodejsLatestLTS    = "16.13.1"
+	nodeTypesVersion   = "16.11.9"
 )
-
-const cssLoaderTpl = `const id = "%s"
-const css = %s
-if (!document.querySelector("[data-module-url=\"" + id + "\"]")) {
-	const el = document.createElement('style')
-	el.type = 'text/css'
-	el.setAttribute('data-module-url', id)
-	el.appendChild(document.createTextNode(css))
-	document.head.appendChild(el)
-}`

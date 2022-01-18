@@ -21,13 +21,6 @@ import (
 	"github.com/ije/gox/utils"
 )
 
-const (
-	nodejsMinVersion = 16
-	nodejsLatestLTS  = "16.13.1"
-	nodeTypesVersion = "16.11.9"
-	nodejsDistURL    = "https://nodejs.org/dist/"
-)
-
 var builtInNodeModules = map[string]bool{
 	"assert":              true,
 	"async_hooks":         true,
@@ -142,7 +135,10 @@ var denoStdNodeModules = map[string]bool{
 	"timers":          true,
 	"timers/promises": true,
 	"tty":             true,
-	// "url":           true, // format is missing
+	"url":             true,
+	"util":            true,
+	"util/types":      true,
+	"wasi":            true,
 }
 
 // NpmPackageRecords defines version records of a npm package
@@ -495,7 +491,7 @@ func fixNpmPackage(p NpmPackage) *NpmPackage {
 }
 
 func installNodejs(dir string, version string) (err error) {
-	dlURL := fmt.Sprintf("%sv%s/node-v%s-%s-x64.tar.xz", nodejsDistURL, version, version, runtime.GOOS)
+	dlURL := fmt.Sprintf("https://nodejs.org/dist/v%s/node-v%s-%s-x64.tar.xz", version, version, runtime.GOOS)
 	log.Debugf("downloading %s", dlURL)
 	resp, err := http.Get(dlURL)
 	if err != nil {
