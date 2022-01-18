@@ -133,7 +133,7 @@ import unescape from 'https://esm.sh/lodash/unescape?no-check'
 Since we update esm.sh server very frequently, sometime we may break packages that work fine previously by mistake, the server will rebuild modules you imported when the patch pushed. To avoid this, you can pin the build version by the `?pin=BUILD_VERSON` query. 
 
 ```javascript
-import React from 'https://esm.sh/react@17.0.2?pin=v61'
+import React from 'https://esm.sh/react@17.0.2?pin=v63'
 ```
 
 ## Network of esm.sh
