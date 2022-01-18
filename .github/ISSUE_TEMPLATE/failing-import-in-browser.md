@@ -1,6 +1,6 @@
 ---
 name: A failing module import in Browser
-about: Submit a report if a module fails to import in Browser
+about: Submit a report if a module fails to import in Browser.
 title: 'Failed to import -'
 labels: browser
 assignees: ''

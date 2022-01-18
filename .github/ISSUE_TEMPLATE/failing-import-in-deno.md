@@ -1,6 +1,6 @@
 ---
 name: A failing module import in Deno
-about: Submit a report if a module fails to import in Deno
+about: Submit a report if a module fails to import in Deno.
 title: 'Failed to import -'
 labels: deno
 assignees: ''
