@@ -1,8 +1,8 @@
 ---
-name: A failing module import
-about: Submit a report if a module fails to import
+name: A failing module import in Browser
+about: Submit a report if a module fails to import in Browser
 title: 'Failed to import -'
-labels: bug
+labels: browser
 assignees: ''
 ---
 
@@ -17,7 +17,7 @@ import { something } from 'https://esm.sh/my_module'
 
 ## Error message
 
-After running `deno run` I get this:
+After `onload` I got this:
 
 ```
 /* your error log here */
@@ -25,5 +25,5 @@ After running `deno run` I get this:
 
 ## Additional info
 
-- **esm.sh version**: v55
-- **Deno version**: 1.15.3
+- **esm.sh version**:
+- **Browser version**: 
