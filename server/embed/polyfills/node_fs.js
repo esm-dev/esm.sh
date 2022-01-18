@@ -81,7 +81,7 @@ export let writeSync = () => _e("writeSync");
 export let writeFile = () => _e("writeFile");
 export let writeFileSync = () => _e("writeFileSync");
 
-export {
+export default {
   access,
   accessSync,
   appendFile,
