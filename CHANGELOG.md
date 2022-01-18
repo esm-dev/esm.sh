@@ -1,5 +1,10 @@
 # Change Log
 
+## v63
+
+- Add fs polyfill(fake) for browsers (close [#250](https://github.com/esm-dev/esm.sh/issues/250))
+- Upgrade `deno.land/std/node` polyfill to **0.121.0**
+
 ## v62
 
 - bugfixs for [#240](https://github.com/esm-dev/esm.sh/issues/240),[#242](https://github.com/esm-dev/esm.sh/issues/242),[#248](https://github.com/esm-dev/esm.sh/issues/248)
