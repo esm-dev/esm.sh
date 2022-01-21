@@ -1,5 +1,10 @@
 # Change Log
 
+## v64
+
+- Fix Node.js `process` compatibility (close [#253](https://github.com/esm-dev/esm.sh/issues/253))
+- Upgrade `deno.land/std/node` polyfill to **0.122.0**
+
 ## v63
 
 - Add fs polyfill(fake) for browsers (close [#250](https://github.com/esm-dev/esm.sh/issues/250))
