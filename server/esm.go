@@ -158,7 +158,6 @@ func initESM(wd string, pkg Pkg, checkExports bool, isDev bool) (esm *ESM, err e
 		esm.Module = esm.Main
 	}
 
-	fmt.Println(esm.Module)
 	if esm.Module != "" {
 		resolved, exportDefault, err := checkESM(wd, esm.Name, esm.Module)
 		if err != nil {
