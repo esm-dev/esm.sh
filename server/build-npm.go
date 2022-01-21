@@ -653,10 +653,18 @@ esbuild:
 			// add nodejs/deno compatibility
 			if task.Target != "node" {
 				if bytes.Contains(outputContent, []byte("__Process$")) {
-					fmt.Fprintf(buf, `import __Process$ from "/v%d/node_process.js";%s__Process$.env.NODE_ENV="%s";%s`, task.BuildVersion, eol, nodeEnv, eol)
+					if task.Target == "deno" {
+						fmt.Fprintf(buf, `import __Process$ from "https://deno.land/std@%s/node/process.ts";%s__Process$.env.NODE_ENV="%s";%s`, denoStdNodeVersion, eol, nodeEnv, eol)
+					} else {
+						fmt.Fprintf(buf, `import __Process$ from "/v%d/node_process.js";%s__Process$.env.NODE_ENV="%s";%s`, task.BuildVersion, eol, nodeEnv, eol)
+					}
 				}
 				if bytes.Contains(outputContent, []byte("__Buffer$")) {
-					fmt.Fprintf(buf, `import { Buffer as __Buffer$ } from "/v%d/node_buffer.js";%s`, task.BuildVersion, eol)
+					if task.Target == "deno" {
+						fmt.Fprintf(buf, `import  { Buffer as __Buffer$ } from "https://deno.land/std@%s/node/buffer.ts";%s`, denoStdNodeVersion, eol)
+					} else {
+						fmt.Fprintf(buf, `import { Buffer as __Buffer$ } from "/v%d/node_buffer.js";%s`, task.BuildVersion, eol)
+					}
 				}
 				if bytes.Contains(outputContent, []byte("__global$")) {
 					fmt.Fprintf(buf, `var __global$ = globalThis || (typeof window !== "undefined" ? window : self);%s`, eol)

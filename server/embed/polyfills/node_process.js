@@ -181,8 +181,10 @@ process.title = 'browser';
 process.browser = true;
 process.env = {};
 process.argv = [];
-process.version = ''; // empty string to avoid regexp issues
-process.versions = {};
+process.version = 'v16.13.1';
+process.versions = {
+  node: '16.13.1'
+};
 
 function noop() { }
 
