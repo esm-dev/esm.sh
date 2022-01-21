@@ -5,7 +5,7 @@ const VERSION = 63
 
 const (
 	pkgCacheTimeout    = 10 * 60 // 10 minutes
-	denoStdNodeVersion = "0.121.0"
+	denoStdNodeVersion = "0.122.0"
 	nodejsMinVersion   = 16
 	nodejsLatestLTS    = "16.13.1"
 	nodeTypesVersion   = "16.11.9"
