@@ -1,6 +1,6 @@
 # Self-Hosting
 
-[esm.sh](https://esm.sh) provides a fast, global content delivery network publicly using cloudflare, but you also can deploy your own CDN.<br>
+[esm.sh](https://esm.sh) provides a fast, global content delivery network publicly using Cloudflare, but you also can deploy your own CDN.<br>
 You will need [Go](https://golang.org/dl) 1.16+ to compile the server. The server runtime will install the nodejs (14 LTS) automatically.
 
 ## Clone code
@@ -18,20 +18,17 @@ go run main.go --port=8080 --dev
 
 then you can import `React` from http://localhost:8080/react
 
-## Deploy to single host
+## Deploy to single machine
 
 Please ensure the [supervisor](http://supervisord.org/) installed on your host machine.
 
 ```bash
-sh ./scripts/deploy.sh
+./scripts/deploy.sh
 ```
 
-## Deploy to multiple hosts
+## Deploy to multiple machines
 
-- deploy manually
-- deploy automatically
-
-_We are working on it._
+_WIP_
 
 ## Deploy with Docker
 
