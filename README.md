@@ -137,12 +137,16 @@ Since we update esm.sh server very frequently, sometime we may break packages th
 import React from "https://esm.sh/react@17.0.2?pin=v64"
 ```
 
+<br>
+
 ## Global CDN
 
 The Global CDN is provided by [Cloudflare](https://cloudflare.com), one of the world's largest and fastest cloud network platforms.
 
 <img width="150" src="./server/embed/assets/cf.svg">
 
+<br>
+
 ## Self-Hosting
 
-To host esm.sh by yourself, check [hosting](./HOSTING.md) documentation.
+To host esm.sh by yourself, check the [hosting](./HOSTING.md) documentation.
