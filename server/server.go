@@ -194,7 +194,8 @@ func Serve(efs EmbedFS) {
 		rex.Cors(rex.CORS{
 			AllowAllOrigins: true,
 			AllowMethods:    []string{"GET"},
-			AllowHeaders:    []string{"Origin", "Content-Type", "Content-Length", "Accept-Encoding"},
+			AllowHeaders:    []string{"Origin", "Content-Type", "Content-Length", "Accept-Encoding", "User-Agent", "Connection"},
+			ExposeHeaders:   []string{"X-TypeScript-Types"},
 			MaxAge:          3600,
 		}),
 		query(isDev),
