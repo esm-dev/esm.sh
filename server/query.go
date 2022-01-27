@@ -133,36 +133,12 @@ func query(devMode bool) rex.Handle {
 		if strings.HasPrefix(pathname, "/embed/") {
 			data, err := embedFS.ReadFile("server" + pathname)
 			if err != nil {
-				data, err = embedFS.ReadFile(pathname[7:]) // /embed/test/**/*
+				// try `/embed/test/**/*`
+				data, err = embedFS.ReadFile(pathname[7:])
 			}
 			if err == nil {
-				switch path.Ext(pathname) {
-				case ".js", ".jsx", ".ts", ".tsx":
-					opts := buildOptions{
-						target: getTargetByUA(ctx.R.UserAgent()),
-						cache:  !devMode,
-						minify: !ctx.Form.IsNil("minify"),
-					}
-					if !ctx.Form.IsNil("bundle") {
-						hostname := ctx.R.Host
-						isLocalHost := hostname == "localhost" || strings.HasPrefix(hostname, "localhost:")
-						proto := "https"
-						if isLocalHost {
-							proto = "http"
-						}
-						opts.bundle = true
-						opts.origin = proto + "://" + hostname
-					}
-					data, err = buildSync(pathname, string(data), opts)
-					if err != nil {
-						return rex.Status(500, err.Error())
-					}
-					ctx.SetHeader("Cache-Control", fmt.Sprintf("public, max-age=%d", pkgCacheTimeout))
-					return rex.Content(pathname+".js", startTime, bytes.NewReader(data))
-				default:
-					ctx.SetHeader("Cache-Control", fmt.Sprintf("public, max-age=%d", pkgCacheTimeout))
-					return rex.Content(pathname, startTime, bytes.NewReader(data))
-				}
+				ctx.SetHeader("Cache-Control", fmt.Sprintf("public, max-age=%d", pkgCacheTimeout))
+				return rex.Content(pathname, startTime, bytes.NewReader(data))
 			}
 		}
 
@@ -650,7 +626,7 @@ func query(devMode bool) rex.Handle {
 			}
 		}
 
-		if esm.Dts != "" && !noCheck && !isWorkder {
+		if target == "deno" && esm.Dts != "" && !noCheck && !isWorkder {
 			value := fmt.Sprintf(
 				"%s%s",
 				origin,
@@ -658,7 +634,6 @@ func query(devMode bool) rex.Handle {
 			)
 			ctx.SetHeader("X-TypeScript-Types", value)
 		}
-		ctx.SetHeader("Cache-Tag", "entry")
 		ctx.SetHeader("Cache-Control", fmt.Sprintf("public, max-age=%d", pkgCacheTimeout))
 		ctx.SetHeader("Content-Type", "application/javascript; charset=utf-8")
 		return buf
