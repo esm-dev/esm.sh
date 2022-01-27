@@ -366,17 +366,9 @@ func query(devMode bool) rex.Handle {
 		}
 
 		// determine build target
-		var target string
-		ua := ctx.R.UserAgent()
-		if strings.HasPrefix(ua, "Deno/") {
-			target = "deno"
-		} else if strings.HasPrefix(ua, "Node/") {
-			target = "node"
-		} else {
-			target = strings.ToLower(ctx.Form.Value("target"))
-			if _, ok := targets[target]; !ok {
-				target = getTargetByUA(ua)
-			}
+		target := strings.ToLower(ctx.Form.Value("target"))
+		if _, ok := targets[target]; !ok {
+			target = getTargetByUA(ctx.R.UserAgent())
 		}
 
 		buildVersion := VERSION
@@ -665,7 +657,6 @@ func query(devMode bool) rex.Handle {
 				strings.TrimPrefix(esm.Dts, "/"),
 			)
 			ctx.SetHeader("X-TypeScript-Types", value)
-			ctx.SetHeader("Access-Control-Expose-Headers", "X-TypeScript-Types")
 		}
 		ctx.SetHeader("Cache-Tag", "entry")
 		ctx.SetHeader("Cache-Control", fmt.Sprintf("public, max-age=%d", pkgCacheTimeout))

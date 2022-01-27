@@ -150,7 +150,12 @@ func countFeatures(feature compat.JSFeature) int {
 }
 
 func getTargetByUA(ua string) string {
-	target := "es2015"
+	if strings.HasPrefix(ua, "Deno/") {
+		return "deno"
+	}
+	if strings.HasPrefix(ua, "Node/") {
+		return "node"
+	}
 	name, version := user_agent.New(ua).Browser()
 	if engine, ok := engines[strings.ToLower(name)]; ok {
 		a := strings.Split(version, ".")
@@ -161,7 +166,7 @@ func getTargetByUA(ua string) string {
 			Name:    engine,
 			Version: version,
 		})
-		for _, t := range []string{
+		for _, target := range []string{
 			"es2021",
 			"es2020",
 			"es2019",
@@ -169,12 +174,11 @@ func getTargetByUA(ua string) string {
 			"es2017",
 			"es2016",
 		} {
-			unspportESMAFeatures := validateESMAFeatures(targets[t])
+			unspportESMAFeatures := validateESMAFeatures(targets[target])
 			if unspportEngineFeatures <= unspportESMAFeatures {
-				target = t
-				break
+				return target
 			}
 		}
 	}
-	return target
+	return "es2015"
 }
