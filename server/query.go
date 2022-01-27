@@ -626,7 +626,7 @@ func query(devMode bool) rex.Handle {
 			}
 		}
 
-		if target == "deno" && esm.Dts != "" && !noCheck && !isWorkder {
+		if esm.Dts != "" && !noCheck && !isWorkder {
 			value := fmt.Sprintf(
 				"%s%s",
 				origin,
