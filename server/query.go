@@ -181,6 +181,10 @@ func query(devMode bool) rex.Handle {
 			return rex.Status(status, message)
 		}
 
+		if v := ctx.Form.Value("path"); v != "" {
+			reqPkg.Submodule = utils.CleanPath(v)[1:]
+		}
+
 		var storageType string
 		if reqPkg.Submodule != "" {
 			switch path.Ext(pathname) {
