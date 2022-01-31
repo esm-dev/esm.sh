@@ -33,6 +33,21 @@ or import non-module(js) files:
 import "https://esm.sh/react/package.json" assert { type: "json" }
 ```
 
+You can also use the `?path` to specify the `submodule`, this is friendly for **import maps**:
+
+```jsonc
+// import-map.json
+{
+  imports: {
+    "react-dom/": "https://esm.sh/react-dom?target=es2015&path=/"
+  }
+}
+```
+
+```javascript
+import { renderToString } from "react-dom/server" // https://esm.sh/react-dom?target=es2015&path=/server
+```
+
 ### Bundle mode
 
 ```javascript
