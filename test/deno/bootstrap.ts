@@ -1,4 +1,4 @@
-import { existsSync } from 'https://deno.land/std@0.119.0/fs/exists.ts'
+import { existsSync } from 'https://deno.land/std@0.120.0/fs/exists.ts'
 
 const [select] = Deno.args
 if (select) {

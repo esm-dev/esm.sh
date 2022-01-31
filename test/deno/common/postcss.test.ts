@@ -1,6 +1,6 @@
 import postcss from 'http://localhost:8080/postcss'
 import autoprefixer from 'http://localhost:8080/autoprefixer'
-import { assert } from 'https://deno.land/std@0.119.0/testing/asserts.ts'
+import { assert } from 'https://deno.land/std@0.120.0/testing/asserts.ts'
 
 Deno.test('check postcss wth autoprefixer plugin', async () => {
 	const { css } = await postcss([autoprefixer]).process(`
