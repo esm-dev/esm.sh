@@ -153,15 +153,12 @@ Since we update esm.sh server very frequently, sometime we may break packages th
 import React from "https://esm.sh/react@17.0.2?pin=v65"
 ```
 
-<br>
-
 ## Global CDN
+
+<img width="150" align="right" src="./server/embed/assets/cf.svg">
 
 The Global CDN is provided by [Cloudflare](https://cloudflare.com), one of the world's largest and fastest cloud network platforms.
 
-<img width="150" src="./server/embed/assets/cf.svg">
-
-<br>
 
 ## Self-Hosting
 
