@@ -15,10 +15,9 @@
 	// equals to https://esm.sh/react-dom/server?target=es2015
 	import { renderToString } from "react-dom/server"
 	```
-- bugfixs for [#251](https://github.com/esm-dev/esm.sh/issues/251), [#256](https://github.com/esm-dev/esm.sh/issues/256), [#261](https://github.com/esm-dev/esm.sh/issues/261)
-,[#262](https://github.com/esm-dev/esm.sh/issues/262)
 - Upgrade `deno.land/std/node` polyfill to **0.125.0**
 - Upgrade `esbuild` to **v0.14.18**
+- bugfixs for [#251](https://github.com/esm-dev/esm.sh/issues/251), [#256](https://github.com/esm-dev/esm.sh/issues/256), [#261](https://github.com/esm-dev/esm.sh/issues/261),[#262](https://github.com/esm-dev/esm.sh/issues/262)
 
 ## v64
 
