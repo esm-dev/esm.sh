@@ -619,7 +619,7 @@ func query(devMode bool) rex.Handle {
 			fmt.Fprintf(buf, `export default function WorkerWrapper() {%s  return new Worker('%s%s', { type: 'module' })%s}`, "\n", origin, taskID, "\n")
 		} else {
 			fmt.Fprintf(buf, `export * from "%s%s";%s`, origin, taskID, "\n")
-			if esm.ExportDefault {
+			if esm.Module == "" || esm.ExportDefault {
 				fmt.Fprintf(
 					buf,
 					`export { default } from "%s%s";%s`,

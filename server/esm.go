@@ -181,8 +181,8 @@ func initESM(wd string, pkg Pkg, target string, isDev bool) (esm *ESM, err error
 		if ret.Error != "" {
 			return nil, fmt.Errorf("parseCJSModuleExports: %s", ret.Error)
 		}
+		esm.ExportDefault = ret.ExportDefault
 		esm.Exports = ret.Exports
-		esm.ExportDefault = true
 		// if ret.Error != "" && strings.Contains(ret.Error, "Unexpected export statement in CJS module") {
 		// 	if pkg.Submodule != "" {
 		// 		esm.Module = pkg.Submodule

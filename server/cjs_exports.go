@@ -5,8 +5,9 @@ import (
 )
 
 type cjsExportsResult struct {
-	Exports []string `json:"exports"`
-	Error   string   `json:"error"`
+	ExportDefault bool     `json:"exportDefault"`
+	Exports       []string `json:"exports"`
+	Error         string   `json:"error"`
 }
 
 func parseCJSModuleExports(buildDir string, importPath string, nodeEnv string) (ret cjsExportsResult, err error) {

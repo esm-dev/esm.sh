@@ -334,7 +334,7 @@ esbuild:
 		MinifySyntax:      !task.DevMode,
 		Plugins:           []api.Plugin{esmResolverPlugin},
 		Loader: map[string]api.Loader{
-			".wasm":  api.LoaderBinary,
+			".wasm":  api.LoaderDataURL,
 			".svg":   api.LoaderDataURL,
 			".png":   api.LoaderDataURL,
 			".webp":  api.LoaderDataURL,
@@ -567,7 +567,7 @@ esbuild:
 								err = yarnAdd(task.wd, fmt.Sprintf("%s@%s", pkg.Name, pkg.Version))
 							}
 							if err == nil {
-								meta, err := initESM(task.wd, *pkg, task.Target, task.DevMode)
+								dep, err := initESM(task.wd, *pkg, task.Target, task.DevMode)
 								if err == nil {
 									if bytes.HasPrefix(p, []byte{'.'}) {
 										// right shift to strip the object `key`
@@ -582,7 +582,7 @@ esbuild:
 										}
 										// support edge case like `require('htmlparser').Parser`
 										importName := string(p[1 : shift+1])
-										for _, v := range meta.Exports {
+										for _, v := range dep.Exports {
 											if v == importName {
 												cjsImports.Add(importName)
 												marked = true
@@ -592,8 +592,13 @@ esbuild:
 										}
 									}
 									// if the dependency is an es module without `default` export, then use star import
-									if !marked && meta.Module != "" && !meta.ExportDefault {
+									if !marked && dep.Module != "" && !dep.ExportDefault {
 										cjsImports.Add("*")
+										marked = true
+									}
+									// if the dependency is an cjs module with `default` export, then use star import
+									if !marked && dep.Module == "" && dep.ExportDefault {
+										cjsImports.Add("__esModule")
 										marked = true
 									}
 								}
@@ -638,6 +643,8 @@ esbuild:
 							fmt.Fprintf(buf, `import __%s$ from "%s";%s`, identifier, importPath, eol)
 						case "*":
 							fmt.Fprintf(buf, `import * as __%s$ from "%s";%s`, identifier, importPath, eol)
+						case "__esModule":
+							fmt.Fprintf(buf, `import * as __%s$$ from "%s";const __%s$=Object.assign({__esModule:true},__%s$$);%s`, identifier, importPath, identifier, identifier, eol)
 						default:
 							fmt.Fprintf(buf, `import { %s as __%s$%s } from "%s";%s`, name, identifier, name, importPath, eol)
 						}
