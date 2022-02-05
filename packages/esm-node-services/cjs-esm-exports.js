@@ -80,11 +80,12 @@ const builtInNodeModules = new Set([
   "zlib",
 ])
 const requireModeAllowList = [
-  'typescript',
+  'domhandler',
   'he',
+  'lz-string',
   'safe-buffer',
   'stream-http',
-  'lz-string',
+  'typescript',
 ]
 
 function isObject(v) {
@@ -100,8 +101,11 @@ function getJSONKeys(jsonFile) {
   return []
 }
 
-function verifyExports(exports) {
-  return Array.from(new Set(exports.filter(name => identRegexp.test(name) && !reservedWords.has(name))))
+function verifyExports(names) {
+  return {
+    exportDefault: names.includes('default'),
+    exports: Array.from(new Set(names.filter(name => identRegexp.test(name) && !reservedWords.has(name))))
+  }
 }
 
 exports.parseCjsExports = async input => {
@@ -121,18 +125,16 @@ exports.parseCjsExports = async input => {
           }
         }
       }
-      return { exports }
+      return verifyExports(exports)
     }
   }
 
   if (entry.endsWith('.json')) {
-    return {
-      exports: verifyExports(getJSONKeys(entry))
-    }
+    return verifyExports(getJSONKeys(entry))
   }
 
   if (!entry.endsWith('.js') && !entry.endsWith('.cjs')) {
-    return { exports }
+    return verifyExports(exports)
   }
 
   const requires = [{ path: entry, callMode: false }]
@@ -164,7 +166,5 @@ exports.parseCjsExports = async input => {
     }
   }
 
-  return {
-    exports: verifyExports(exports)
-  }
+  return verifyExports(exports)
 }
