@@ -1,6 +1,6 @@
 import Prism from 'http://localhost:8080/prismjs'
 import 'http://localhost:8080/prismjs/components/prism-bash'
-import { assert } from 'https://deno.land/std@0.120.0/testing/asserts.ts'
+import { assert } from 'https://deno.land/std@0.125.0/testing/asserts.ts'
 
 Deno.test('check prism', async () => {
 	const code = `var data = 1;`;
