@@ -83,6 +83,7 @@ const requireModeAllowList = [
   'typescript',
   'he',
   'safe-buffer',
+  'stream-http',
   'lz-string',
 ]
 
