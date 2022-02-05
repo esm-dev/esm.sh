@@ -25,7 +25,7 @@ type ESM struct {
 	PackageCSS    bool     `json:"packageCSS"`
 }
 
-func initESM(wd string, pkg Pkg, checkExports bool, isDev bool) (esm *ESM, err error) {
+func initESM(wd string, pkg Pkg, target string, isDev bool) (esm *ESM, err error) {
 	packageDir := path.Join(wd, "node_modules", pkg.Name)
 	packageFile := path.Join(packageDir, "package.json")
 
@@ -36,7 +36,7 @@ func initESM(wd string, pkg Pkg, checkExports bool, isDev bool) (esm *ESM, err e
 	}
 
 	esm = &ESM{
-		NpmPackage: fixNpmPackage(p),
+		NpmPackage: fixNpmPackage(p, target),
 	}
 
 	if pkg.Submodule != "" {
@@ -62,7 +62,7 @@ func initESM(wd string, pkg Pkg, checkExports bool, isDev bool) (esm *ESM, err e
 				if err != nil {
 					return
 				}
-				np := fixNpmPackage(p)
+				np := fixNpmPackage(p, target)
 				if np.Module != "" {
 					esm.Module = path.Join(pkg.Submodule, np.Module)
 				} else {
@@ -98,7 +98,7 @@ func initESM(wd string, pkg Pkg, checkExports bool, isDev bool) (esm *ESM, err e
 							}
 							*/
 							if name == "./"+pkg.Submodule {
-								resolvePackageExports(esm.NpmPackage, defines)
+								resolvePackageExports(esm.NpmPackage, defines, target)
 								defined = true
 								break
 								/**
@@ -124,7 +124,7 @@ func initESM(wd string, pkg Pkg, checkExports bool, isDev bool) (esm *ESM, err e
 									replaced = true
 								}
 								if replaced {
-									resolvePackageExports(esm.NpmPackage, defines)
+									resolvePackageExports(esm.NpmPackage, defines, target)
 									defined = true
 								}
 							}
@@ -150,7 +150,7 @@ func initESM(wd string, pkg Pkg, checkExports bool, isDev bool) (esm *ESM, err e
 		}
 	}
 
-	if !checkExports {
+	if target == "types" {
 		return
 	}
 

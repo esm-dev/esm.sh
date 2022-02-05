@@ -398,7 +398,7 @@ func getNodejsVersion() (version string, major int, err error) {
 }
 
 // see https://nodejs.org/api/packages.html
-func resolvePackageExports(p *NpmPackage, exports interface{}) {
+func resolvePackageExports(p *NpmPackage, exports interface{}, target string) {
 	s, ok := exports.(string)
 	if ok {
 		if p.Type == "module" || p.Module != "" {
@@ -411,8 +411,12 @@ func resolvePackageExports(p *NpmPackage, exports interface{}) {
 
 	m, ok := exports.(map[string]interface{})
 	if ok {
-		for _, key := range []string{"import", "module", "browser"} {
-			value, ok := m[key]
+		names := []string{"import", "module", "browser"}
+		if target == "deno" {
+			names = []string{"deno", "import", "module", "browser"}
+		}
+		for _, name := range names {
+			value, ok := m[name]
 			if ok {
 				s, ok := value.(string)
 				if ok && s != "" {
@@ -421,8 +425,9 @@ func resolvePackageExports(p *NpmPackage, exports interface{}) {
 				}
 			}
 		}
-		for _, key := range []string{"require", "node", "default"} {
-			value, ok := m[key]
+		names = []string{"require", "node", "default"}
+		for _, name := range names {
+			value, ok := m[name]
 			if ok {
 				s, ok := value.(string)
 				if ok && s != "" {
@@ -445,7 +450,7 @@ func resolvePackageExports(p *NpmPackage, exports interface{}) {
 	}
 }
 
-func fixNpmPackage(p NpmPackage) *NpmPackage {
+func fixNpmPackage(p NpmPackage, target string) *NpmPackage {
 	exports := p.DefinedExports
 	np := &p
 
@@ -465,7 +470,7 @@ func fixNpmPackage(p NpmPackage) *NpmPackage {
 						".": "./esm/index.js"
 					}
 				*/
-				resolvePackageExports(np, v)
+				resolvePackageExports(np, v, target)
 			} else {
 				/*
 					exports: {
@@ -473,13 +478,13 @@ func fixNpmPackage(p NpmPackage) *NpmPackage {
 						"import": "./esm/index.js"
 					}
 				*/
-				resolvePackageExports(np, m)
+				resolvePackageExports(np, m, target)
 			}
 		} else if _, ok := exports.(string); ok {
 			/*
 				exports: "./esm/index.js"
 			*/
-			resolvePackageExports(np, exports)
+			resolvePackageExports(np, exports, target)
 		}
 	}
 

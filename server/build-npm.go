@@ -158,7 +158,7 @@ func (task *BuildTask) build(tracing *stringSet) (esm *ESM, err error) {
 	tracing.Add(task.ID())
 
 	task.stage = "init"
-	esm, err = initESM(task.wd, task.Pkg, task.Target != "types", task.DevMode)
+	esm, err = initESM(task.wd, task.Pkg, task.Target, task.DevMode)
 	if err != nil {
 		return
 	}
@@ -567,7 +567,7 @@ esbuild:
 								err = yarnAdd(task.wd, fmt.Sprintf("%s@%s", pkg.Name, pkg.Version))
 							}
 							if err == nil {
-								meta, err := initESM(task.wd, *pkg, true, task.DevMode)
+								meta, err := initESM(task.wd, *pkg, task.Target, task.DevMode)
 								if err == nil {
 									if bytes.HasPrefix(p, []byte{'.'}) {
 										// right shift to strip the object `key`
