@@ -739,8 +739,8 @@ func (task *BuildTask) transformDTS(esm *ESM) {
 		versionParts := strings.Split(task.Pkg.Version, ".")
 		if len(versionParts) > 2 {
 			versions = append([]string{
-				strings.Join(versionParts[:2], "."), // minor
-				versionParts[0],                     // major
+				"~" + strings.Join(versionParts[:2], "."), // minor
+				"^" + versionParts[0],                     // major
 			}, versions...)
 		}
 		typesPkgName := toTypesPackageName(name)
