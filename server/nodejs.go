@@ -18,6 +18,7 @@ import (
 
 	"esm.sh/server/storage"
 
+	"github.com/Masterminds/semver"
 	"github.com/ije/gox/utils"
 )
 
@@ -261,21 +262,22 @@ func getPackageInfo(wd string, name string, version string) (info NpmPackage, su
 		}
 	}
 
-	version = resolveVersion(version)
-
-	data, err := cache.Get(fmt.Sprintf("npm:%s@%s", name, version))
-	if err == nil && json.Unmarshal(data, &info) == nil {
-		return
-	}
-	if err != nil && err != storage.ErrNotFound && err != storage.ErrExpired {
-		log.Error("db:", err)
-	}
-
 	info, err = fetchPackageInfo(name, version)
 	return
 }
 
 func fetchPackageInfo(name string, version string) (info NpmPackage, err error) {
+	if version == "" {
+		version = "latest"
+	}
+	data, err := cache.Get(fmt.Sprintf("npm:%s@%s", name, version))
+	if err == nil && json.Unmarshal(data, &info) == nil {
+		return
+	}
+	if err != nil && err != storage.ErrNotFound && err != storage.ErrExpired {
+		log.Error("cache:", err)
+	}
+
 	start := time.Now()
 	resp, err := httpClient.Get(node.npmRegistry + name)
 	if err != nil {
@@ -293,7 +295,7 @@ func fetchPackageInfo(name string, version string) (info NpmPackage, err error) 
 		return
 	}
 
-	data, err := ioutil.ReadAll(resp.Body)
+	data, err = ioutil.ReadAll(resp.Body)
 	if err == io.EOF {
 		err = nil
 	}
@@ -315,17 +317,34 @@ func fetchPackageInfo(name string, version string) (info NpmPackage, err error) 
 		if ok {
 			info = h.Versions[distVersion]
 		} else {
-			var majorVerions versionSlice
-			for key := range h.Versions {
-				if regFullVersion.MatchString(key) && strings.HasPrefix(key, version+".") {
-					majorVerions = append(majorVerions, key)
+			var c *semver.Constraints
+			c, err = semver.NewConstraint(version)
+			if err != nil {
+				return
+			}
+			vs := make([]*semver.Version, len(h.Versions))
+			i := 0
+			for v := range h.Versions {
+				// ignore prerelease versions
+				if strings.ContainsRune(v, '-') {
+					continue
+				}
+				var ver *semver.Version
+				ver, err = semver.NewVersion(v)
+				if err != nil {
+					return
+				}
+				if c.Check(ver) {
+					vs[i] = ver
+					i++
 				}
 			}
-			if l := len(majorVerions); l > 0 {
-				if l > 1 {
-					sort.Sort(majorVerions)
+			if i > 0 {
+				vs = vs[:i]
+				if i > 1 {
+					sort.Sort(semver.Collection(vs))
 				}
-				info = h.Versions[majorVerions[0]]
+				info = h.Versions[vs[i-1].String()]
 			}
 		}
 	}
@@ -348,41 +367,6 @@ func fetchPackageInfo(name string, version string) (info NpmPackage, err error) 
 		ttl,
 	)
 	return
-}
-
-func resolveVersion(version string) string {
-	if version == "" || version == "*" {
-		return "latest"
-	}
-	if strings.ContainsRune(version, '>') || strings.ContainsRune(version, '<') {
-		return "latest"
-	}
-	for _, p := range []string{"||", " - "} {
-		if strings.Contains(version, p) {
-			a := sort.StringSlice(strings.Split(version, p))
-			vs := make(versionSlice, len(a))
-			for i, v := range a {
-				version := resolveVersion(strings.TrimSpace(v))
-				vs[i] = version
-			}
-			sort.Sort(vs)
-			version = vs[0]
-		}
-	}
-
-	if strings.HasSuffix(version, ".x") {
-		version = strings.TrimSuffix(version, ".x")
-	}
-	if strings.HasPrefix(version, "=") {
-		version = strings.TrimPrefix(version, "=")
-	} else if strings.HasPrefix(version, "^") {
-		version, _ = utils.SplitByFirstByte(version[1:], '.')
-	} else if strings.HasPrefix(version, "~") {
-		major, rest := utils.SplitByFirstByte(version[1:], '.')
-		minor, _ := utils.SplitByFirstByte(rest, '.')
-		version = major + "." + minor
-	}
-	return version
 }
 
 func getNodejsVersion() (version string, major int, err error) {
