@@ -45,7 +45,8 @@ You can also use the `?path` to specify the `submodule`, this is friendly for **
 ```
 
 ```javascript
-import { renderToString } from "react-dom/server" // https://esm.sh/react-dom?target=es2015&path=/server
+// equals to https://esm.sh/react-dom/server?target=es2015
+import { renderToString } from "react-dom/server" 
 ```
 
 ### Bundle mode
