@@ -25,7 +25,6 @@ const reservedWords = new Set([
   'throw', 'throws', 'transient', 'true',
   'try', 'typeof', 'var', 'void',
   'volatile', 'while', 'with', 'yield',
-  '__esModule'
 ])
 const builtInNodeModules = new Set([
   "assert",
