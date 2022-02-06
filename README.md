@@ -37,7 +37,7 @@ You can also use the `?path` to specify the `submodule`, this is friendly for **
 
 ```json
 {
-  imports: {
+  "imports": {
     "react-dom/": "https://esm.sh/react-dom?target=es2015&path=/"
   }
 }
