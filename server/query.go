@@ -2,7 +2,6 @@ package server
 
 import (
 	"bytes"
-	"encoding/json"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -295,16 +294,6 @@ func query(devMode bool) rex.Handle {
 				if err != nil {
 					return rex.Status(500, err.Error())
 				}
-				if strings.HasSuffix(savePath, ".css") && !ctx.Form.IsNil("module") {
-					data, err := ioutil.ReadAll(r)
-					if err != nil {
-						return rex.Status(500, err.Error())
-					}
-					cssStr, _ := json.Marshal(string(data))
-					jsCode := fmt.Sprintf(cssLoaderTpl, strings.TrimPrefix(savePath, "builds"), cssStr)
-					ctx.SetHeader("Cache-Control", "public, max-age=31536000, immutable")
-					return rex.Content(savePath+".js", modtime, bytes.NewReader([]byte(jsCode)))
-				}
 				if storageType == "types" {
 					ctx.SetHeader("Content-Type", "application/typescript; charset=utf-8")
 				}
@@ -519,7 +508,7 @@ func query(devMode bool) rex.Handle {
 			stage:        "init",
 		}
 		taskID := task.ID()
-		esm, err := findESM(taskID)
+		esm, err := findModule(taskID)
 		if err != nil && err != storage.ErrNotFound {
 			return rex.Status(500, err.Error())
 		}
@@ -528,7 +517,7 @@ func query(devMode bool) rex.Handle {
 				// find previous build version
 				for i := 0; i < VERSION; i++ {
 					id := fmt.Sprintf("v%d/%s", VERSION-(i+1), taskID[len(fmt.Sprintf("v%d/", VERSION)):])
-					esm, err = findESM(id)
+					esm, err = findModule(id)
 					if err != nil && err != storage.ErrNotFound {
 						return rex.Status(500, err.Error())
 					}

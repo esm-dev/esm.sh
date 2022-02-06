@@ -142,8 +142,8 @@ var denoStdNodeModules = map[string]bool{
 	"wasi":            true,
 }
 
-// NpmPackageRecords defines version records of a npm package
-type NpmPackageRecords struct {
+// NpmPackageVerions defines versions of a npm package
+type NpmPackageVerions struct {
 	DistTags map[string]string     `json:"dist-tags"`
 	Versions map[string]NpmPackage `json:"versions"`
 }
@@ -303,7 +303,7 @@ func fetchPackageInfo(name string, version string) (info NpmPackage, err error) 
 		return
 	}
 
-	var h NpmPackageRecords
+	var h NpmPackageVerions
 	err = json.Unmarshal(data, &h)
 	if err != nil {
 		return
@@ -449,7 +449,6 @@ func fixNpmPackage(p NpmPackage, target string) *NpmPackage {
 							"import": "./esm/index.js"
 						}
 					}
-
 					exports: {
 						".": "./esm/index.js"
 					}

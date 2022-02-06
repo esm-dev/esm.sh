@@ -118,8 +118,8 @@ func (task *BuildTask) getImportPath(pkg Pkg, extendsAlias bool) string {
 	)
 }
 
-func (task *BuildTask) Build() (esm *ESM, err error) {
-	prev, err := findESM(task.ID())
+func (task *BuildTask) Build() (esm *Module, err error) {
+	prev, err := findModule(task.ID())
 	if err == nil {
 		return prev, nil
 	}
@@ -151,14 +151,14 @@ func (task *BuildTask) Build() (esm *ESM, err error) {
 	return task.build(newStringSet())
 }
 
-func (task *BuildTask) build(tracing *stringSet) (esm *ESM, err error) {
+func (task *BuildTask) build(tracing *stringSet) (esm *Module, err error) {
 	if tracing.Has(task.ID()) {
 		return
 	}
 	tracing.Add(task.ID())
 
 	task.stage = "init"
-	esm, err = initESM(task.wd, task.Pkg, task.Target, task.DevMode)
+	esm, err = initModule(task.wd, task.Pkg, task.Target, task.DevMode)
 	if err != nil {
 		return
 	}
@@ -567,7 +567,7 @@ esbuild:
 								err = yarnAdd(task.wd, fmt.Sprintf("%s@%s", pkg.Name, pkg.Version))
 							}
 							if err == nil {
-								dep, err := initESM(task.wd, *pkg, task.Target, task.DevMode)
+								dep, err := initModule(task.wd, *pkg, task.Target, task.DevMode)
 								if err == nil {
 									if bytes.HasPrefix(p, []byte{'.'}) {
 										// right shift to strip the object `key`
@@ -710,7 +710,7 @@ esbuild:
 	return
 }
 
-func (task *BuildTask) storeToDB(esm *ESM) {
+func (task *BuildTask) storeToDB(esm *Module) {
 	dbErr := db.Put(
 		task.ID(),
 		"build",
@@ -723,7 +723,7 @@ func (task *BuildTask) storeToDB(esm *ESM) {
 	}
 }
 
-func (task *BuildTask) transformDTS(esm *ESM) {
+func (task *BuildTask) transformDTS(esm *Module) {
 	name := task.Pkg.Name
 	submodule := task.Pkg.Submodule
 

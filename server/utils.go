@@ -10,7 +10,6 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/ije/gox/utils"
 	"github.com/ije/gox/valid"
 )
 
@@ -64,37 +63,6 @@ func (s *stringSet) Values() []string {
 		i++
 	}
 	return a
-}
-
-// sortable version slice
-type versionSlice []string
-
-func (s versionSlice) Len() int      { return len(s) }
-func (s versionSlice) Swap(i, j int) { s[i], s[j] = s[j], s[i] }
-func (s versionSlice) Less(i, j int) bool {
-	avs, aStage := utils.SplitByFirstByte(s[i], '-')
-	bvs, bStage := utils.SplitByFirstByte(s[j], '-')
-	av := strings.Split(avs, ".")
-	bv := strings.Split(bvs, ".")
-	if len(av) != 3 || len(bv) != 3 {
-		return avs > bvs
-	}
-	if av[0] == bv[0] {
-		if av[1] == bv[1] {
-			if av[2] == bv[2] {
-				return aStage > bStage
-			}
-			a2, _ := strconv.Atoi(av[2])
-			b2, _ := strconv.Atoi(bv[2])
-			return a2 > b2
-		}
-		a1, _ := strconv.Atoi(av[1])
-		b1, _ := strconv.Atoi(bv[1])
-		return a1 > b1
-	}
-	a0, _ := strconv.Atoi(av[0])
-	b0, _ := strconv.Atoi(bv[0])
-	return a0 > b0
 }
 
 func identify(importPath string) string {

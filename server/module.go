@@ -17,7 +17,7 @@ import (
 )
 
 // ESM defines the ES Module meta
-type ESM struct {
+type Module struct {
 	*NpmPackage
 	ExportDefault bool     `json:"exportDefault"`
 	Exports       []string `json:"exports"`
@@ -25,7 +25,7 @@ type ESM struct {
 	PackageCSS    bool     `json:"packageCSS"`
 }
 
-func initESM(wd string, pkg Pkg, target string, isDev bool) (esm *ESM, err error) {
+func initModule(wd string, pkg Pkg, target string, isDev bool) (esm *Module, err error) {
 	packageDir := path.Join(wd, "node_modules", pkg.Name)
 	packageFile := path.Join(packageDir, "package.json")
 
@@ -35,7 +35,7 @@ func initESM(wd string, pkg Pkg, target string, isDev bool) (esm *ESM, err error
 		return
 	}
 
-	esm = &ESM{
+	esm = &Module{
 		NpmPackage: fixNpmPackage(p, target),
 	}
 
@@ -209,7 +209,7 @@ func initESM(wd string, pkg Pkg, target string, isDev bool) (esm *ESM, err error
 	return
 }
 
-func findESM(id string) (esm *ESM, err error) {
+func findModule(id string) (esm *Module, err error) {
 	store, _, err := db.Get(id)
 	if err == nil {
 		err = json.Unmarshal([]byte(store["esm"]), &esm)

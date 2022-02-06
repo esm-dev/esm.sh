@@ -52,7 +52,6 @@ func Serve(efs EmbedFS) {
 		noCompress       bool
 		isDev            bool
 	)
-
 	flag.IntVar(&port, "port", 80, "http server port")
 	flag.IntVar(&httpsPort, "https-port", 0, "https(autotls) server port, default is disabled")
 	flag.StringVar(&cdnDomain, "cdn-domain", "", "cdn domain")
@@ -225,10 +224,10 @@ func Serve(efs EmbedFS) {
 		log.Error(err)
 	}
 
-	// release resource
+	// release resources
 	db.Close()
-	accessLogger.FlushBuffer()
 	log.FlushBuffer()
+	accessLogger.FlushBuffer()
 }
 
 func init() {

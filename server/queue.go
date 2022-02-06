@@ -21,7 +21,7 @@ type BuildQueueConsumer struct {
 }
 
 type BuildOutput struct {
-	esm *ESM
+	esm *Module
 	err error
 }
 

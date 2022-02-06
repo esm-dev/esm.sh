@@ -32,6 +32,7 @@ var engines = map[string]api.EngineName{
 	"firefox": api.EngineFirefox,
 	"ios":     api.EngineIOS,
 	"safari":  api.EngineSafari,
+	"opera":   api.EngineOpera,
 }
 
 var jsFeatures = []compat.JSFeature{
