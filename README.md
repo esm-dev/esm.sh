@@ -35,8 +35,7 @@ import "https://esm.sh/react/package.json" assert { type: "json" }
 
 You can also use the `?path` to specify the `submodule`, this is friendly for **import maps**:
 
-```jsonc
-// import-map.json
+```json
 {
   imports: {
     "react-dom/": "https://esm.sh/react-dom?target=es2015&path=/"
@@ -147,7 +146,7 @@ import unescape from "https://esm.sh/lodash/unescape?no-check"
 
 ## Pin the build version
 
-Since we update esm.sh server very frequently, sometime we may break packages that work fine previously by mistake, the server will rebuild modules you imported when the patch pushed. To avoid this, you can pin the build version by the `?pin=BUILD_VERSON` query. 
+Since we update esm.sh server frequently, sometime we may break packages that work fine previously by mistake, the server will rebuild all modules when the patch pushed. To avoid this, you can **pin** the build version by the `?pin=BUILD_VERSON` query. This will give you an **immutable** cached module.
 
 ```javascript
 import React from "https://esm.sh/react@17.0.2?pin=v65"
@@ -157,8 +156,7 @@ import React from "https://esm.sh/react@17.0.2?pin=v65"
 
 <img width="150" align="right" src="./server/embed/assets/cf.svg">
 
-The Global CDN is provided by [Cloudflare](https://cloudflare.com), one of the world's largest and fastest cloud network platforms.
-
+The Global CDN of esm.sh is provided by [Cloudflare](https://cloudflare.com), one of the world's largest and fastest cloud network platforms.
 
 ## Self-Hosting
 
