@@ -310,8 +310,6 @@ func (task *BuildTask) build(tracing *stringSet) (esm *Module, err error) {
 						return api.OnResolveResult{}, nil
 					}
 
-					// todo: bundles sub-modules of deps that are not in `exports`
-
 					// dynamic external
 					external.Add(specifier)
 					return api.OnResolveResult{Path: "__ESM_SH_EXTERNAL:" + specifier, External: true}, nil
