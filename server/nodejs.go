@@ -382,7 +382,7 @@ func getNodejsVersion() (version string, major int, err error) {
 }
 
 // see https://nodejs.org/api/packages.html
-func resolvePackageExports(p *NpmPackage, exports interface{}, target string) {
+func resolvePackageExports(p *NpmPackage, exports interface{}, target string, isDev bool) {
 	s, ok := exports.(string)
 	if ok {
 		if p.Type == "module" || p.Module != "" {
@@ -395,9 +395,16 @@ func resolvePackageExports(p *NpmPackage, exports interface{}, target string) {
 
 	m, ok := exports.(map[string]interface{})
 	if ok {
-		names := []string{"import", "module", "browser"}
+		names := []string{"browser", "import", "module"}
 		if target == "deno" {
-			names = []string{"deno", "import", "module", "browser"}
+			names = []string{"deno", "browser", "import", "module"}
+		}
+		if p.Type == "module" {
+			if isDev {
+				names = append(names, "development", "default")
+			} else {
+				names = append(names, "production", "default")
+			}
 		}
 		for _, name := range names {
 			value, ok := m[name]
@@ -409,8 +416,7 @@ func resolvePackageExports(p *NpmPackage, exports interface{}, target string) {
 				}
 			}
 		}
-		names = []string{"require", "node", "default"}
-		for _, name := range names {
+		for _, name := range []string{"require", "node", "default"} {
 			value, ok := m[name]
 			if ok {
 				s, ok := value.(string)
@@ -434,7 +440,7 @@ func resolvePackageExports(p *NpmPackage, exports interface{}, target string) {
 	}
 }
 
-func fixNpmPackage(p NpmPackage, target string) *NpmPackage {
+func fixNpmPackage(p NpmPackage, target string, isDev bool) *NpmPackage {
 	exports := p.DefinedExports
 	np := &p
 
@@ -453,7 +459,7 @@ func fixNpmPackage(p NpmPackage, target string) *NpmPackage {
 						".": "./esm/index.js"
 					}
 				*/
-				resolvePackageExports(np, v, target)
+				resolvePackageExports(np, v, target, isDev)
 			} else {
 				/*
 					exports: {
@@ -461,13 +467,13 @@ func fixNpmPackage(p NpmPackage, target string) *NpmPackage {
 						"import": "./esm/index.js"
 					}
 				*/
-				resolvePackageExports(np, m, target)
+				resolvePackageExports(np, m, target, isDev)
 			}
 		} else if _, ok := exports.(string); ok {
 			/*
 				exports: "./esm/index.js"
 			*/
-			resolvePackageExports(np, exports, target)
+			resolvePackageExports(np, exports, target, isDev)
 		}
 	}
 

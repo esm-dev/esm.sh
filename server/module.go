@@ -36,7 +36,7 @@ func initModule(wd string, pkg Pkg, target string, isDev bool) (esm *Module, err
 	}
 
 	esm = &Module{
-		NpmPackage: fixNpmPackage(p, target),
+		NpmPackage: fixNpmPackage(p, target, isDev),
 	}
 
 	if pkg.Submodule != "" {
@@ -62,7 +62,7 @@ func initModule(wd string, pkg Pkg, target string, isDev bool) (esm *Module, err
 				if err != nil {
 					return
 				}
-				np := fixNpmPackage(p, target)
+				np := fixNpmPackage(p, target, isDev)
 				if np.Module != "" {
 					esm.Module = path.Join(pkg.Submodule, np.Module)
 				} else {
@@ -89,18 +89,19 @@ func initModule(wd string, pkg Pkg, target string, isDev bool) (esm *Module, err
 				if p.DefinedExports != nil {
 					if m, ok := p.DefinedExports.(map[string]interface{}); ok {
 						for name, defines := range m {
-							/**
-							exports: {
-								"./lib/core": {
-									"require": "./lib/core.js",
-									"import": "./es/core.js"
-								}
-							}
-							*/
 							if name == "./"+pkg.Submodule {
-								resolvePackageExports(esm.NpmPackage, defines, target)
+								/**
+								exports: {
+									"./lib/core": {
+										"require": "./lib/core.js",
+										"import": "./es/core.js"
+									}
+								}
+								*/
+								resolvePackageExports(esm.NpmPackage, defines, target, isDev)
 								defined = true
 								break
+							} else if strings.HasSuffix(name, "/*") && strings.HasPrefix("./"+pkg.Submodule, strings.TrimSuffix(name, "*")) {
 								/**
 								exports: {
 									"./lib/languages/*": {
@@ -109,7 +110,6 @@ func initModule(wd string, pkg Pkg, target string, isDev bool) (esm *Module, err
 									},
 								}
 								*/
-							} else if strings.HasSuffix(name, "/*") && strings.HasPrefix("./"+pkg.Submodule, strings.TrimSuffix(name, "*")) {
 								suffix := strings.TrimPrefix("./"+pkg.Submodule, strings.TrimSuffix(name, "*"))
 								replaced := false
 								if m, ok := defines.(map[string]interface{}); ok {
@@ -124,7 +124,7 @@ func initModule(wd string, pkg Pkg, target string, isDev bool) (esm *Module, err
 									replaced = true
 								}
 								if replaced {
-									resolvePackageExports(esm.NpmPackage, defines, target)
+									resolvePackageExports(esm.NpmPackage, defines, target, isDev)
 									defined = true
 								}
 							}
