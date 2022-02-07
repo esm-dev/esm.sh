@@ -1,5 +1,9 @@
 # Change Log
 
+## v66
+
+- Improve `exports` resloving of `package.json` (close [#179](https://github.com/esm-dev/esm.sh/issues/179))
+
 ## v65
 
 - **Feature**: Support `?path` query to specify the `submodule`, this is friendly for **import maps** with options (close [#260](https://github.com/esm-dev/esm.sh/issues/260))
