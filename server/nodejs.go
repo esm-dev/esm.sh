@@ -395,15 +395,15 @@ func resolvePackageExports(p *NpmPackage, exports interface{}, target string, is
 
 	m, ok := exports.(map[string]interface{})
 	if ok {
-		names := []string{"browser", "import", "module"}
+		names := []string{"import", "module"}
 		if target == "deno" {
-			names = []string{"deno", "browser", "import", "module"}
+			names = []string{"deno", "import", "module"}
 		}
 		if p.Type == "module" {
 			if isDev {
-				names = append(names, "development", "default")
+				names = append(names, "development", "browser", "default")
 			} else {
-				names = append(names, "production", "default")
+				names = append(names, "production", "browser", "default")
 			}
 		}
 		for _, name := range names {
