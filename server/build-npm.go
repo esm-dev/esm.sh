@@ -321,7 +321,6 @@ func (task *BuildTask) build(tracing *stringSet) (esm *Module, err error) {
 	}
 
 esbuild:
-	start := time.Now()
 	options := api.BuildOptions{
 		Outdir:            "/esbuild",
 		Write:             false,
@@ -663,7 +662,7 @@ esbuild:
 					if task.Target == "deno" {
 						fmt.Fprintf(buf, `import __Process$ from "https://deno.land/std@%s/node/process.ts";%s`, denoStdNodeVersion, eol)
 					} else {
-						fmt.Fprintf(buf, `import __Process$ from "/v%d/node_process.js";%s__Process$.env.NODE_ENV="%s";%s`, task.BuildVersion, eol, nodeEnv, eol)
+						fmt.Fprintf(buf, `import __Process$ from "/v%d/node_process.js";%s`, task.BuildVersion, eol)
 					}
 				}
 				if bytes.Contains(outputContent, []byte("__Buffer$")) {
@@ -701,8 +700,6 @@ esbuild:
 			esm.PackageCSS = true
 		}
 	}
-
-	log.Debugf("esbuild %s %s %s in %v", task.Pkg.String(), task.Target, nodeEnv, time.Since(start))
 
 	task.stage = "copy-dts"
 	task.transformDTS(esm)

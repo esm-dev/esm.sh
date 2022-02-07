@@ -23,16 +23,13 @@
   SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 */
 
-// shim for using process in browser
-var process = {};
-
 // cached from whatever global is present so that test runners that stub it
-// don't break things.  But we need to wrap it in a try catch in case it is
-// wrapped in strict mode code which doesn't define any globals.  It's inside a
+// don't break things. But we need to wrap it in a try catch in case it is
+// wrapped in strict mode code which doesn't define any globals. It's inside a
 // function because try/catches deoptimize in certain engines.
 
-var cachedSetTimeout;
-var cachedClearTimeout;
+let cachedSetTimeout;
+let cachedClearTimeout;
 
 function defaultSetTimeout() {
   throw new Error('setTimeout has not been defined');
@@ -41,6 +38,8 @@ function defaultSetTimeout() {
 function defaultClearTimeout() {
   throw new Error('clearTimeout has not been defined');
 }
+
+function noop() { }
 
 (function () {
   try {
@@ -63,26 +62,26 @@ function defaultClearTimeout() {
   }
 }())
 
-function runTimeout(fun) {
+function runTimeout(fn) {
   if (cachedSetTimeout === setTimeout) {
     //normal enviroments in sane situations
-    return setTimeout(fun, 0);
+    return setTimeout(fn, 0);
   }
   // if setTimeout wasn't available but was latter defined
   if ((cachedSetTimeout === defaultSetTimeout || !cachedSetTimeout) && setTimeout) {
     cachedSetTimeout = setTimeout;
-    return setTimeout(fun, 0);
+    return setTimeout(fn, 0);
   }
   try {
     // when when somebody has screwed with setTimeout but no I.E. maddness
-    return cachedSetTimeout(fun, 0);
+    return cachedSetTimeout(fn, 0);
   } catch (e) {
     try {
       // When we are in I.E. but the script has been evaled so I.E. doesn't trust the global object when called normally
-      return cachedSetTimeout.call(null, fun, 0);
+      return cachedSetTimeout.call(null, fn, 0);
     } catch (e) {
       // same as above but when it's a version of I.E. that must have the global object for 'this', hopfully our context correct otherwise it will throw a global error
-      return cachedSetTimeout.call(this, fun, 0);
+      return cachedSetTimeout.call(this, fn, 0);
     }
   }
 }
@@ -112,10 +111,10 @@ function runClearTimeout(marker) {
   }
 }
 
-var queue = [];
-var draining = false;
-var currentQueue;
-var queueIndex = -1;
+let queue = [];
+let queueIndex = -1;
+let currentQueue;
+let draining = false;
 
 function cleanUpNextTick() {
   if (!draining || !currentQueue) {
@@ -136,10 +135,10 @@ function drainQueue() {
   if (draining) {
     return;
   }
-  var timeout = runTimeout(cleanUpNextTick);
+  let timeout = runTimeout(cleanUpNextTick);
   draining = true;
 
-  var len = queue.length;
+  let len = queue.length;
   while (len) {
     currentQueue = queue;
     queue = [];
@@ -156,59 +155,92 @@ function drainQueue() {
   runClearTimeout(timeout);
 }
 
-process.nextTick = function (fun) {
-  var args = new Array(arguments.length - 1);
-  if (arguments.length > 1) {
-    for (var i = 1; i < arguments.length; i++) {
-      args[i - 1] = arguments[i];
-    }
+class Item {
+  constructor(fn, array) {
+    this.fn = fn;
+    this.array = array;
   }
-  queue.push(new Item(fun, args));
-  if (queue.length === 1 && !draining) {
-    runTimeout(drainQueue);
+  run() {
+    this.fn.apply(null, this.array);
   }
-};
-
-// v8 likes predictible objects
-function Item(fun, array) {
-  this.fun = fun;
-  this.array = array;
 }
-Item.prototype.run = function () {
-  this.fun.apply(null, this.array);
+
+const isDeno = Boolean(window.Deno && Deno.version && Deno.version.deno);
+
+export default {
+  title: 'browser',
+  browser: true,
+  env: isDeno ? new Proxy({}, {
+    get(_target, prop) {
+      return Deno.env.get(String(prop));
+    },
+    ownKeys: () => Reflect.ownKeys(Deno.env.toObject()),
+    getOwnPropertyDescriptor: (_target, name) => {
+      const e = Deno.env.toObject();
+      if (name in Deno.env.toObject()) {
+        const o = { enumerable: true, configurable: true };
+        if (typeof name === "string") {
+          o.value = e[name];
+        }
+        return o;
+      }
+    },
+    set(_target, prop, value) {
+      Deno.env.set(String(prop), String(value));
+      return value;
+    },
+  }) : {},
+  argv: isDeno ? Deno.args : [],
+  pid: isDeno ? Deno.pid : 0,
+  version: 'v16.13.1',
+  versions: {
+    node: '16.13.1',
+    v8: '9.4.146.24-node.14',
+    uv: '1.42.0',
+    zlib: '1.2.11',
+    brotli: '1.0.9',
+    ares: '1.18.1',
+    modules: '93',
+    nghttp2: '1.45.1',
+    napi: '8',
+    llhttp: '6.0.4',
+    openssl: '1.1.1l+quic',
+    cldr: '39.0',
+    icu: '69.1',
+    tz: '2021a',
+    unicode: '13.0',
+  },
+  on: noop,
+  addListener: noop,
+  once: noop,
+  off: noop,
+  removeListener: noop,
+  removeAllListeners: noop,
+  emit: noop,
+  prependListener: noop,
+  prependOnceListener: noop,
+  emitWarning: noop,
+  listeners: () => [],
+  binding: () => { throw new Error('process.binding is not supported') },
+  cwd: () => isDeno ? Deno.cwd() : '/',
+  chdir: (path) => {
+    if (isDeno) {
+      Deno.chdir(path)
+    } else {
+      throw new Error('process.chdir is not supported')
+    }
+  },
+  umask: () => isDeno ? Deno.umask : 0,
+  nextTick: (fn) => {
+    let args = new Array(arguments.length - 1);
+    if (arguments.length > 1) {
+      for (let i = 1; i < arguments.length; i++) {
+        args[i - 1] = arguments[i];
+      }
+    }
+    queue.push(new Item(fn, args));
+    if (queue.length === 1 && !draining) {
+      runTimeout(drainQueue);
+    }
+  },
 };
-process.title = 'browser';
-process.browser = true;
-process.env = {};
-process.argv = [];
-process.version = 'v16.13.1';
-process.versions = {
-  node: '16.13.1'
-};
-
-function noop() { }
-
-process.on = noop;
-process.addListener = noop;
-process.once = noop;
-process.off = noop;
-process.removeListener = noop;
-process.removeAllListeners = noop;
-process.emit = noop;
-process.prependListener = noop;
-process.prependOnceListener = noop;
-process.emitWarning = noop;
-
-process.listeners = function (name) { return [] }
-
-process.binding = function (name) {
-  throw new Error('process.binding is not supported');
-};
-
-process.cwd = function () { return '/' };
-process.chdir = function (dir) {
-  throw new Error('process.chdir is not supported');
-};
-process.umask = function () { return 0; };
-
-export default process;
