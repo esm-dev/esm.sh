@@ -1,5 +1,3 @@
-import { existsSync } from 'https://deno.land/std@0.125.0/fs/exists.ts'
-
 const [select] = Deno.args
 if (select) {
 	await test(select)
@@ -47,7 +45,7 @@ async function startServer(onReady: (p: any) => void) {
 async function test(name: string, p?: any) {
 	const cmd = [Deno.execPath(), 'test', '-A', '--unstable', '--reload=http://localhost:8080', '--location=http://0.0.0.0/']
 	const dir = `test/deno/${name}/`
-	if (existsSync(dir + 'tsconfig.json')) {
+	if (await existsFile(dir + 'tsconfig.json')) {
 		cmd.push('--config', dir + 'tsconfig.json')
 	}
 	cmd.push(dir)
@@ -60,4 +58,17 @@ async function test(name: string, p?: any) {
 
 async function run(...cmd: string[]) {
 	return await Deno.run({ cmd, stdout: 'inherit', stderr: 'inherit' }).status()
+}
+
+/* check whether or not the given path exists as regular file. */
+export async function existsFile(path: string): Promise<boolean> {
+  try {
+    const fi = await Deno.lstat(path)
+    return fi.isFile
+  } catch (err) {
+    if (err instanceof Deno.errors.NotFound) {
+      return false
+    }
+    throw err
+  }
 }
