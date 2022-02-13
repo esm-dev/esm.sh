@@ -358,6 +358,12 @@ func query(devMode bool) rex.Handle {
 		isWorkder := !ctx.Form.IsNil("worker")
 		noCheck := !ctx.Form.IsNil("no-check")
 
+		if !isDev {
+			if (reqPkg.Name == "react" && reqPkg.Submodule == "jsx-dev-runtime") || reqPkg.Name == "react-refresh" {
+				isDev = true
+			}
+		}
+
 		// parse `resolvePrefix`
 		if hasBuildVerPrefix {
 			a := strings.Split(reqPkg.Submodule, "/")
