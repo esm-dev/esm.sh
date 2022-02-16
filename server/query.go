@@ -202,7 +202,7 @@ func query(devMode bool) rex.Handle {
 					storageType = "raw"
 				}
 
-			case ".json", ".css", ".pcss", "postcss", ".less", ".sass", ".scss", ".stylus", ".styl", ".wasm", ".xml", ".yaml", ".svg", ".png", ".eot", ".ttf", ".woff", ".woff2":
+			case ".json", ".css", ".pcss", ".postcss", ".less", ".sass", ".scss", ".stylus", ".styl", ".wasm", ".xml", ".yaml", ".svg", ".png", ".jpg", ".webp", ".gif", ".eot", ".ttf", ".otf", ".woff", ".woff2":
 				if hasBuildVerPrefix {
 					if strings.HasSuffix(pathname, ".css") {
 						storageType = "builds"
