@@ -634,16 +634,20 @@ esbuild:
 				if cjsImports.Size() > 0 {
 					buf := bytes.NewBuffer(nil)
 					// todo: spread `?alias` and `?deps`
-					for _, name := range cjsImports.Values() {
-						switch name {
-						case "default":
-							fmt.Fprintf(buf, `import __%s$ from "%s";%s`, identifier, importPath, eol)
-						case "*":
-							fmt.Fprintf(buf, `import * as __%s$ from "%s";%s`, identifier, importPath, eol)
-						case "__esModule":
-							fmt.Fprintf(buf, `import * as __%s$$ from "%s";const __%s$=Object.assign({__esModule:true},__%s$$);%s`, identifier, importPath, identifier, identifier, eol)
-						default:
-							fmt.Fprintf(buf, `import { %s as __%s$%s } from "%s";%s`, name, identifier, name, importPath, eol)
+					for _, importName := range cjsImports.Values() {
+						if name == "object-assign" {
+							fmt.Fprintf(buf, `const __%s$ = Object.assign;%s`, identifier, eol)
+						} else {
+							switch importName {
+							case "default":
+								fmt.Fprintf(buf, `import __%s$ from "%s";%s`, identifier, importPath, eol)
+							case "*":
+								fmt.Fprintf(buf, `import * as __%s$ from "%s";%s`, identifier, importPath, eol)
+							case "__esModule":
+								fmt.Fprintf(buf, `import * as __%s$$ from "%s";const __%s$=Object.assign({__esModule:true},__%s$$);%s`, identifier, importPath, identifier, identifier, eol)
+							default:
+								fmt.Fprintf(buf, `import { %s as __%s$%s } from "%s";%s`, importName, identifier, importName, importPath, eol)
+							}
 						}
 					}
 					outputContent = make([]byte, buf.Len()+buffer.Len())
