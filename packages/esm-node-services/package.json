@@ -1,6 +1,6 @@
 {
 	"name": "esm-node-services",
-	"version": "0.5.12",
+	"version": "0.5.13",
 	"description": "Node services for esm.sh",
 	"main": "index.js",
 	"scripts": {
@@ -13,7 +13,7 @@
 	],
 	"dependencies": {
 		"cjs-esm-exports": "^0.5.6",
-		"enhanced-resolve": "^5.8.3"
+		"enhanced-resolve": "^5.9.1"
 	},
 	"repository": "https://github.com/esm-dev/esm.sh",
 	"license": "MIT"
