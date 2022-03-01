@@ -179,6 +179,7 @@ func initModule(wd string, pkg Pkg, target string, isDev bool) (esm *Module, err
 			return nil, fmt.Errorf("parseCJSModuleExports: %v", err)
 		}
 		if ret.Error != "" {
+			//	todo: handle "can't resolve" issue
 			return nil, fmt.Errorf("parseCJSModuleExports: %s", ret.Error)
 		}
 		esm.ExportDefault = ret.ExportDefault

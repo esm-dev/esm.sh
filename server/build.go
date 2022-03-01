@@ -139,7 +139,7 @@ func (task *BuildTask) Build() (esm *Module, err error) {
 
 	task.stage = "install"
 	for i := 0; i < 3; i++ {
-		err = yarnAdd(task.wd, fmt.Sprintf("%s@%s", task.Pkg.Name, task.Pkg.Version))
+		err = yarnAdd(task.wd, false, fmt.Sprintf("%s@%s", task.Pkg.Name, task.Pkg.Version))
 		if err == nil {
 			break
 		}
@@ -561,7 +561,7 @@ esbuild:
 						if _, ok := builtInNodeModules[name]; !ok {
 							pkg, err := parsePkg(name)
 							if err == nil && !fileExists(path.Join(task.wd, "node_modules", pkg.Name, "package.json")) {
-								err = yarnAdd(task.wd, fmt.Sprintf("%s@%s", pkg.Name, pkg.Version))
+								err = yarnAdd(task.wd, false, fmt.Sprintf("%s@%s", pkg.Name, pkg.Version))
 							}
 							if err == nil {
 								dep, err := initModule(task.wd, *pkg, task.Target, task.DevMode)
