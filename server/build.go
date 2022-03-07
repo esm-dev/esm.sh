@@ -685,6 +685,14 @@ esbuild:
 				}
 			}
 
+			if task.Target == "deno" {
+				if task.DevMode {
+					outputContent = bytes.Replace(outputContent, []byte("typeof window !== \"undefined\""), []byte("typeof document !== \"undefined\""), -1)
+				} else {
+					outputContent = bytes.Replace(outputContent, []byte("typeof window<\"u\""), []byte("typeof document<\"u\""), -1)
+				}
+			}
+
 			_, err = buf.Write(outputContent)
 			if err != nil {
 				return
