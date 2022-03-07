@@ -1,5 +1,12 @@
 # Change Log
 
+## v67
+
+- Force `react/jsx-dev-runtime` and `react-refresh` into **dev** mode
+- Replace `typeof window !== undefined` to `typeof document !== undefined` for `deno` target
+- Replace `object-assign` with `Object.assign`
+- Upgrade `esbuild` to **0.14.25**
+
 ## v66
 
 - Improve `exports` resloving of `package.json` (close [#179](https://github.com/esm-dev/esm.sh/issues/179))
