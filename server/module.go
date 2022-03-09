@@ -91,24 +91,24 @@ func initModule(wd string, pkg Pkg, target string, isDev bool) (esm *Module, err
 						for name, defines := range m {
 							if name == "./"+pkg.Submodule {
 								/**
-								exports: {
-									"./lib/core": {
-										"require": "./lib/core.js",
-										"import": "./es/core.js"
-									}
-								}
+								  exports: {
+								    "./lib/core": {
+								      "require": "./lib/core.js",
+								      "import": "./es/core.js"
+								    }
+								  }
 								*/
 								resolvePackageExports(esm.NpmPackage, defines, target, isDev)
 								defined = true
 								break
 							} else if strings.HasSuffix(name, "/*") && strings.HasPrefix("./"+pkg.Submodule, strings.TrimSuffix(name, "*")) {
 								/**
-								exports: {
-									"./lib/languages/*": {
-										"require": "./lib/languages/*.js",
-										"import": "./es/languages/*.js"
-									},
-								}
+								  exports: {
+								    "./lib/languages/*": {
+								      "require": "./lib/languages/*.js",
+								      "import": "./es/languages/*.js"
+								    },
+								  }
 								*/
 								suffix := strings.TrimPrefix("./"+pkg.Submodule, strings.TrimSuffix(name, "*"))
 								replaced := false
@@ -179,23 +179,23 @@ func initModule(wd string, pkg Pkg, target string, isDev bool) (esm *Module, err
 			return nil, fmt.Errorf("parseCJSModuleExports: %v", err)
 		}
 		if ret.Error != "" {
-			//	todo: handle "can't resolve" issue
+			//  todo: handle "can't resolve" issue
 			return nil, fmt.Errorf("parseCJSModuleExports: %s", ret.Error)
 		}
 		esm.ExportDefault = ret.ExportDefault
 		esm.Exports = ret.Exports
 		// if ret.Error != "" && strings.Contains(ret.Error, "Unexpected export statement in CJS module") {
-		// 	if pkg.Submodule != "" {
-		// 		esm.Module = pkg.Submodule
-		// 	} else {
-		// 		esm.Module = esm.Main
-		// 	}
-		// 	resolved, exportDefault, err := checkESM(wd, esm.Name, esm.Module)
-		// 	if err != nil {
-		// 		return nil, err
-		// 	}
-		// 	esm.Module = resolved
-		// 	esm.ExportDefault = exportDefault
+		//   if pkg.Submodule != "" {
+		//     esm.Module = pkg.Submodule
+		//   } else {
+		//     esm.Module = esm.Main
+		//   }
+		//   resolved, exportDefault, err := checkESM(wd, esm.Name, esm.Module)
+		//   if err != nil {
+		//     return nil, err
+		//   }
+		//   esm.Module = resolved
+		//   esm.ExportDefault = exportDefault
 		// }
 	}
 

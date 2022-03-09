@@ -20,47 +20,47 @@ import (
 )
 
 const nsApp = `
-	const readline = require('readline')
-	const rl = readline.createInterface({
-		input: process.stdin,
-		historySize: 0,
-		crlfDelay: Infinity
-	})
-	const services = {
-		test: async input => ({ ...input })
-	}
-	const register = %s
+  const readline = require('readline')
+  const rl = readline.createInterface({
+    input: process.stdin,
+    historySize: 0,
+    crlfDelay: Infinity
+  })
+  const services = {
+    test: async input => ({ ...input })
+  }
+  const register = %s
 
-	for (const name of register) {
-		Object.assign(services, require(name))
-	}
+  for (const name of register) {
+    Object.assign(services, require(name))
+  }
 
-	rl.on('line', async line => {
-		if (line.charAt(0) === '{' && line.charAt(line.length-1) === '}') {
-			try {
-				const { service, invokeId, input } = JSON.parse(line)
-				if (typeof invokeId === 'string') {
-					let output = null
-					if (typeof service === 'string' && service in services) {
-						try {
-							output = await services[service](input)
-						} catch(e) {
-							output = { error: e.message }
-						}
-					} else {
-						output = { error: 'service not found' }
-					}
-					process.stdout.write(invokeId)
-					process.stdout.write(JSON.stringify(output))
-					process.stdout.write('\n')
-				}
-			} catch(e) {}
-		}
-	})
+  rl.on('line', async line => {
+    if (line.charAt(0) === '{' && line.charAt(line.length-1) === '}') {
+      try {
+        const { service, invokeId, input } = JSON.parse(line)
+        if (typeof invokeId === 'string') {
+          let output = null
+          if (typeof service === 'string' && service in services) {
+            try {
+              output = await services[service](input)
+            } catch(e) {
+              output = { error: e.message }
+            }
+          } else {
+            output = { error: 'service not found' }
+          }
+          process.stdout.write(invokeId)
+          process.stdout.write(JSON.stringify(output))
+          process.stdout.write('\n')
+        }
+      } catch(e) {}
+    }
+  })
 
-	setTimeout(() => {
-		process.stdout.write('READY\n')
-	}, 0)
+  setTimeout(() => {
+    process.stdout.write('READY\n')
+  }, 0)
 `
 
 type NSTask struct {
