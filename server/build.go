@@ -139,7 +139,7 @@ func (task *BuildTask) Build() (esm *Module, err error) {
 
 	task.stage = "install"
 	for i := 0; i < 3; i++ {
-		err = yarnAdd(task.wd, false, fmt.Sprintf("%s@%s", task.Pkg.Name, task.Pkg.Version))
+		err = yarnAdd(task.wd, fmt.Sprintf("%s@%s", task.Pkg.Name, task.Pkg.Version))
 		if err == nil {
 			break
 		}
@@ -164,8 +164,11 @@ func (task *BuildTask) build(tracing *stringSet) (esm *Module, err error) {
 	}
 
 	if task.Target == "types" {
-		task.stage = "copy-dts"
-		task.transformDTS(esm)
+		if esm.Types != "" {
+			dts := esm.Name + "@" + esm.Version + "/" + esm.Types
+			task.stage = "transform-dts"
+			task.transformDTS(dts)
+		}
 		return
 	}
 
@@ -561,7 +564,7 @@ esbuild:
 						if _, ok := builtInNodeModules[name]; !ok {
 							pkg, err := parsePkg(name)
 							if err == nil && !fileExists(path.Join(task.wd, "node_modules", pkg.Name, "package.json")) {
-								err = yarnAdd(task.wd, false, fmt.Sprintf("%s@%s", pkg.Name, pkg.Version))
+								err = yarnAdd(task.wd, fmt.Sprintf("%s@%s", pkg.Name, pkg.Version))
 							}
 							if err == nil {
 								dep, err := initModule(task.wd, *pkg, task.Target, task.DevMode)
@@ -711,8 +714,7 @@ esbuild:
 		}
 	}
 
-	task.stage = "copy-dts"
-	task.transformDTS(esm)
+	task.findDTS(esm)
 	task.storeToDB(esm)
 	return
 }
@@ -730,13 +732,9 @@ func (task *BuildTask) storeToDB(esm *Module) {
 	}
 }
 
-func (task *BuildTask) transformDTS(esm *Module) {
+func (task *BuildTask) findDTS(esm *Module) {
 	name := task.Pkg.Name
 	submodule := task.Pkg.Submodule
-
-	if task.Target == "types" && strings.HasSuffix(submodule, "~.d.ts") {
-		submodule = strings.TrimSuffix(submodule, "~.d.ts")
-	}
 
 	var dts string
 	if esm.Types != "" || esm.Typings != "" {
@@ -763,18 +761,17 @@ func (task *BuildTask) transformDTS(esm *Module) {
 			}
 		}
 	}
-
-	if strings.HasSuffix(dts, ".d.ts") && !strings.HasSuffix(dts, "~.d.ts") {
-		start := time.Now()
-		err := task.CopyDTS(dts)
-		if err != nil && os.IsExist(err) {
-			log.Errorf("copyDTS(%s): %v", dts, err)
-			return
-		}
-		log.Debugf("copy dts '%s' in %v", dts, time.Since(start))
-	}
-
 	if dts != "" {
 		esm.Dts = fmt.Sprintf("/v%d/%s", task.BuildVersion, dts)
 	}
+}
+
+func (task *BuildTask) transformDTS(dts string) {
+	start := time.Now()
+	err := task.CopyDTS(dts)
+	if err != nil && os.IsExist(err) {
+		log.Errorf("copyDTS(%s): %v", dts, err)
+		return
+	}
+	log.Debugf("copy dts '%s' in %v", dts, time.Since(start))
 }

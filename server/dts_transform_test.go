@@ -17,7 +17,7 @@ func TestCopyDTS(t *testing.T) {
 	os.RemoveAll(testDir)
 	ensureDir(testDir)
 
-	err := yarnAdd(testDir, false, "@types/react@17.0.0")
+	err := yarnAdd(testDir, "@types/react@17.0.0")
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -475,10 +475,6 @@ func query(devMode bool) rex.Handle {
 					if output.err != nil {
 						return rex.Status(500, "types: "+output.err.Error())
 					}
-					if output.esm.Dts != "" {
-						savePath = path.Join("types", output.esm.Dts)
-						exists = true
-					}
 				case <-time.After(time.Minute):
 					buildQueue.RemoveConsumer(task, c)
 					return rex.Status(http.StatusRequestTimeout, "timeout, we are transforming the types hardly, please try again later!")
@@ -486,9 +482,6 @@ func query(devMode bool) rex.Handle {
 			}
 			if err != nil {
 				return rex.Status(500, err.Error())
-			}
-			if !exists {
-				return rex.Status(404, "Types not found")
 			}
 			var r io.ReadSeeker
 			r, err = fs.ReadFile(savePath)

@@ -19,7 +19,6 @@ import (
 	"esm.sh/server/storage"
 
 	"github.com/Masterminds/semver"
-	"github.com/ije/gox/crypto/rs"
 	"github.com/ije/gox/utils"
 )
 
@@ -527,7 +526,7 @@ func installNodejs(dir string, version string) (err error) {
 	return
 }
 
-func yarnAdd(wd string, noCache bool, packages ...string) (err error) {
+func yarnAdd(wd string, packages ...string) (err error) {
 	if len(packages) > 0 {
 		start := time.Now()
 		args := []string{
@@ -543,9 +542,6 @@ func yarnAdd(wd string, noCache bool, packages ...string) (err error) {
 			"--silent",
 		}
 		yarnCacheDir := os.Getenv("YARN_CACHE_DIR")
-		if noCache {
-			yarnCacheDir = path.Join(os.TempDir(), fmt.Sprintf("yarn-cache-%s", rs.Hex.String(16)))
-		}
 		if yarnCacheDir != "" {
 			args = append(args, "--cache-folder", yarnCacheDir)
 		}

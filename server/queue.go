@@ -45,7 +45,7 @@ func (t *queueTask) run() BuildOutput {
 	select {
 	case output = <-c:
 		if output.err == nil {
-			log.Infof("build %s done in %v", t.ID(), time.Since(t.startTime))
+			log.Infof("build '%s'(%s) done in %v", t.Pkg, t.Target, time.Since(t.startTime))
 		} else {
 			log.Errorf("build %s: %v", t.ID(), output.err)
 		}

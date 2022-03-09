@@ -78,7 +78,7 @@ func initModule(wd string, pkg Pkg, target string, isDev bool) (esm *Module, err
 				if p.Types != "" {
 					esm.Types = path.Join(pkg.Submodule, p.Types)
 				} else if p.Typings != "" {
-					esm.Typings = path.Join(pkg.Submodule, p.Typings)
+					esm.Types = path.Join(pkg.Submodule, p.Typings)
 				} else if fileExists(path.Join(subDir, "index.d.ts")) {
 					esm.Types = path.Join(pkg.Submodule, "index.d.ts")
 				} else if fileExists(path.Join(subDir + ".d.ts")) {
