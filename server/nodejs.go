@@ -14,6 +14,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"esm.sh/server/storage"
@@ -265,17 +266,33 @@ func getPackageInfo(wd string, name string, version string) (info NpmPackage, su
 	return
 }
 
+var lock sync.Map
+
 func fetchPackageInfo(name string, version string) (info NpmPackage, err error) {
 	if version == "" {
 		version = "latest"
 	}
-	data, err := cache.Get(fmt.Sprintf("npm:%s@%s", name, version))
+	id := fmt.Sprintf("npm:%s@%s", name, version)
+
+	// wait lock release
+	for {
+		_, ok := lock.Load(id)
+		if !ok {
+			break
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+
+	data, err := cache.Get(id)
 	if err == nil && json.Unmarshal(data, &info) == nil {
 		return
 	}
 	if err != nil && err != storage.ErrNotFound && err != storage.ErrExpired {
 		log.Error("cache:", err)
 	}
+
+	lock.Store(id, struct{}{})
+	defer lock.Delete(id)
 
 	start := time.Now()
 	resp, err := httpClient.Get(node.npmRegistry + name)
@@ -360,11 +377,7 @@ func fetchPackageInfo(name string, version string) (info NpmPackage, err error) 
 	if !isFullVersion {
 		ttl = pkgCacheTimeout * time.Second
 	}
-	cache.Set(
-		fmt.Sprintf("npm:%s@%s", name, version),
-		utils.MustEncodeJSON(info),
-		ttl,
-	)
+	cache.Set(id, utils.MustEncodeJSON(info), ttl)
 	return
 }
 
