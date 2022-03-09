@@ -1,5 +1,7 @@
 {
   "compilerOptions": {
+    "jsx": "react-jsx",
+    "jsxImportSource": "http://localhost:8080/preact",
     "lib": [
       "dom",
       "deno.ns"
