@@ -635,14 +635,14 @@ mod tests {
   #[test]
   fn parse_cjs_exports_case_21_1() {
     let source = r#"
-		(function (global, factory) {
-			typeof exports === 'object' && typeof module !== 'undefined' ? factory(exports) :
-			typeof define === 'function' && define.amd ? define(['exports'], factory) :
-			(factory((global.MMDParser = global.MMDParser || {})));
-		}(this, function (exports) {
-			exports.foo = "bar";
-			Object.defineProperty(exports, '__esModule', { value: true });
-		}))
+      (function (global, factory) {
+        typeof exports === 'object' && typeof module !== 'undefined' ? factory(exports) :
+        typeof define === 'function' && define.amd ? define(['exports'], factory) :
+        (factory((global.MMDParser = global.MMDParser || {})));
+      }(this, function (exports) {
+        exports.foo = "bar";
+        Object.defineProperty(exports, '__esModule', { value: true });
+      }))
 		"#;
     let swc = SWC::parse("index.cjs", source).expect("could not parse module");
     let (exports, _) = swc
@@ -654,14 +654,14 @@ mod tests {
   #[test]
   fn parse_cjs_exports_case_21_2() {
     let source = r#"
-		(function (global, factory) {
-			typeof exports === 'object' && typeof module !== 'undefined' ? factory(exports) :
-			typeof define === 'function' && define.amd ? define(['exports'], factory) :
-			(factory((global.MMDParser = global.MMDParser || {})));
-		}(this, (function (exports) {
-			exports.foo = "bar";
-			Object.defineProperty(exports, '__esModule', { value: true });
-		})))
+      (function (global, factory) {
+        typeof exports === 'object' && typeof module !== 'undefined' ? factory(exports) :
+        typeof define === 'function' && define.amd ? define(['exports'], factory) :
+        (factory((global.MMDParser = global.MMDParser || {})));
+      }(this, (function (exports) {
+        exports.foo = "bar";
+        Object.defineProperty(exports, '__esModule', { value: true });
+      })))
 		"#;
     let swc = SWC::parse("index.cjs", source).expect("could not parse module");
     let (exports, _) = swc

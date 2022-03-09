@@ -114,6 +114,18 @@ const { exports } = parse('index.cjs', `
   module.exports = Fn()
 `);
 
+// UMD format
+// exports: ['foo']
+const { exports } = parse('index.cjs', `
+  (function (global, factory) {
+    typeof exports === 'object' && typeof module !== 'undefined' ? factory(exports) :
+    typeof define === 'function' && define.amd ? define(['exports'], factory) :
+    (factory((global.MMDParser = global.MMDParser || {})));
+  }(this, function (exports) {
+    exports.foo = "bar";
+  }))
+`);
+
 // function reexports
 // reexports: ['./lib()']
 const { reexports } = parse('index.cjs', `
