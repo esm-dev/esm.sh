@@ -7,13 +7,19 @@ import (
 	"path"
 	"strconv"
 	"strings"
+	"sync"
 
 	"github.com/ije/gox/utils"
 )
 
-func (task *BuildTask) CopyDTS(dts string) (err error) {
+func (task *BuildTask) CopyDTS(dts string) (n int, err error) {
 	resolvePrefix := task.resolvePrefix()
-	return task.copyDTS(resolvePrefix, dts, newStringSet())
+	tracing := newStringSet()
+	err = task.copyDTS(resolvePrefix, dts, tracing)
+	if err == nil {
+		n = tracing.Size()
+	}
+	return
 }
 
 func (task *BuildTask) copyDTS(resolvePrefix string, dts string, tracing *stringSet) (err error) {
@@ -88,7 +94,7 @@ func (task *BuildTask) copyDTS(resolvePrefix string, dts string, tracing *string
 				moduleName += "/" + strings.Join(subPath, "/")
 				if strings.HasSuffix(moduleName, "/index.d.ts") {
 					moduleName = strings.TrimSuffix(moduleName, "/index.d.ts")
-				} else if strings.HasSuffix(moduleName, ".d.ts") {
+				} else {
 					moduleName = strings.TrimSuffix(moduleName, ".d.ts")
 				}
 			}
@@ -277,6 +283,8 @@ func (task *BuildTask) copyDTS(resolvePrefix string, dts string, tracing *string
 		return
 	}
 
+	var wg sync.WaitGroup
+	var errors []error
 	for _, importDts := range imports.Values() {
 		if isLocalImport(importDts) {
 			if strings.HasPrefix(importDts, "/") {
@@ -290,10 +298,19 @@ func (task *BuildTask) copyDTS(resolvePrefix string, dts string, tracing *string
 				importDts = path.Join(path.Dir(dts), importDts)
 			}
 		}
-		err = task.copyDTS(resolvePrefix, importDts, tracing)
-		if err != nil {
-			break
-		}
+		wg.Add(1)
+		go func(importDts string) {
+			err := task.copyDTS(resolvePrefix, importDts, tracing)
+			if err != nil {
+				errors = append(errors, err)
+			}
+			wg.Done()
+		}(importDts)
+	}
+	wg.Wait()
+
+	if len(errors) > 0 {
+		err = errors[0]
 	}
 
 	return
