@@ -358,7 +358,7 @@ esbuild:
 	if len(result.Errors) > 0 {
 		// mark the missing module as external to exclude it from the bundle
 		msg := result.Errors[0].Text
-		if strings.HasPrefix(msg, "Could not resolve \"") && strings.Contains(msg, "mark it as external to exclude it from the bundle") {
+		if strings.HasPrefix(msg, "Could not resolve \"") {
 			// but current package/module can not mark as external
 			if strings.Contains(msg, fmt.Sprintf("Could not resolve \"%s\"", task.Pkg.ImportPath())) {
 				err = fmt.Errorf("Could not resolve \"%s\"", task.Pkg.ImportPath())
@@ -384,7 +384,9 @@ esbuild:
 	}
 
 	for _, w := range result.Warnings {
-		log.Warnf("esbuild(%s): %s", task.ID(), w.Text)
+		if strings.HasPrefix(w.Text, "Could not resolve \"") {
+			log.Warnf("esbuild(%s): %s", task.ID(), w.Text)
+		}
 	}
 
 	for _, file := range result.OutputFiles {
@@ -768,10 +770,10 @@ func (task *BuildTask) findDTS(esm *Module) {
 
 func (task *BuildTask) transformDTS(dts string) {
 	start := time.Now()
-	err := task.CopyDTS(dts)
+	n, err := task.CopyDTS(dts)
 	if err != nil && os.IsExist(err) {
 		log.Errorf("copyDTS(%s): %v", dts, err)
 		return
 	}
-	log.Debugf("copy dts '%s' in %v", dts, time.Since(start))
+	log.Debugf("copy dts '%s' (%d files copied) in %v", dts, n, time.Since(start))
 }
