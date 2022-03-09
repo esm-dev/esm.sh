@@ -22,11 +22,7 @@ impl ErrorBuffer {
 
 impl Emitter for ErrorBuffer {
   fn emit(&mut self, diagnostic_builder: &DiagnosticBuilder) {
-    self
-      .diagnostics
-      .write()
-      .unwrap()
-      .push((**diagnostic_builder).clone());
+    self.diagnostics.write().unwrap().push((**diagnostic_builder).clone());
   }
 }
 
