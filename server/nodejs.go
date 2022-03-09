@@ -152,6 +152,7 @@ type NpmPackage struct {
 	Name             string            `json:"name"`
 	Version          string            `json:"version"`
 	Main             string            `json:"main,omitempty"`
+	JsnextMain       string            `json:"jsnext:main,omitempty"`
 	Module           string            `json:"module,omitempty"`
 	Type             string            `json:"type,omitempty"`
 	Types            string            `json:"types,omitempty"`
@@ -470,14 +471,18 @@ func fixNpmPackage(p NpmPackage, target string, isDev bool) *NpmPackage {
 			}
 		} else if _, ok := exports.(string); ok {
 			/*
-				exports: "./esm/index.js"
+			  exports: "./esm/index.js"
 			*/
 			resolvePackageExports(np, exports, target, isDev)
 		}
 	}
 
-	if p.Module == "" && p.Main != "" && (p.Type == "module" || strings.HasSuffix(p.Main, ".mjs")) {
-		p.Module = p.Main
+	if p.Module == "" {
+		if p.JsnextMain != "" {
+			p.Module = p.JsnextMain
+		} else if p.Main != "" && (p.Type == "module" || strings.Contains(p.Main, "/esm/") || strings.Contains(p.Main, "/es/") || strings.HasSuffix(p.Main, ".mjs")) {
+			p.Module = p.Main
+		}
 	}
 
 	return np
