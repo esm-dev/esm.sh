@@ -1,20 +1,20 @@
 {
-	"name": "esm-node-services",
-	"version": "0.6.2",
-	"description": "Node services for esm.sh",
-	"main": "index.js",
-	"scripts": {
-		"prepublishOnly": "node test.js",
-		"test": "node test.js"
-	},
-	"files": [
-		"cjs-lexer.js",
-		"index.js"
-	],
-	"dependencies": {
-		"esm-cjs-lexer": "^0.6.2",
-		"enhanced-resolve": "^5.9.2"
-	},
-	"repository": "https://github.com/esm-dev/esm.sh",
-	"license": "MIT"
+  "name": "esm-node-services",
+  "version": "0.6.2",
+  "description": "Node services for esm.sh",
+  "main": "index.js",
+  "scripts": {
+    "prepublishOnly": "node test.js",
+    "test": "node test.js"
+  },
+  "files": [
+    "cjs-lexer.js",
+    "index.js"
+  ],
+  "dependencies": {
+    "esm-cjs-lexer": "^0.6.2",
+    "enhanced-resolve": "^5.9.2"
+  },
+  "repository": "https://github.com/esm-dev/esm.sh",
+  "license": "MIT"
 }
