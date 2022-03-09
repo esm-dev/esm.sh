@@ -1,6 +1,6 @@
 {
 	"name": "esm-node-services",
-	"version": "0.6.0",
+	"version": "0.6.2",
 	"description": "Node services for esm.sh",
 	"main": "index.js",
 	"scripts": {
@@ -8,11 +8,11 @@
 		"test": "node test.js"
 	},
 	"files": [
-		"cjs-esm-exports.js",
+		"cjs-lexer.js",
 		"index.js"
 	],
 	"dependencies": {
-		"cjs-esm-exports": "^0.6.1",
+		"esm-cjs-lexer": "^0.6.2",
 		"enhanced-resolve": "^5.9.2"
 	},
 	"repository": "https://github.com/esm-dev/esm.sh",

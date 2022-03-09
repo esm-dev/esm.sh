@@ -1,4 +1,4 @@
-const { parseCjsExports } = require('./cjs-esm-exports')
+const { parseCjsExports } = require('./cjs-lexer')
 
 module.exports = {
   parseCjsExports

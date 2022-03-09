@@ -1,7 +1,7 @@
 const fs = require('fs')
 const { dirname } = require('path')
 const { promisify } = require('util')
-const { parse } = require('cjs-esm-exports')
+const { parse } = require('esm-cjs-lexer')
 const enhancedResolve = require('enhanced-resolve')
 
 const identRegexp = /^[a-zA-Z_\$][a-zA-Z0-9_\$]*$/

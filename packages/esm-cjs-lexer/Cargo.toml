@@ -1,6 +1,6 @@
 [package]
-name = "cjs-esm-exports"
-version = "0.6.1"
+name = "esm-cjs-lexer"
+version = "0.6.2"
 description = "A WASM module to parse commonjs exports for ESM."
 repository = "https://github.com/esm-dev/esm.sh"
 license = "MIT"
