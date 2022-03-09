@@ -1,5 +1,24 @@
 # Change Log
 
+## v68
+
+- Fix `bundle` mode (close [#271](https://github.com/esm-dev/esm.sh/issues/271))
+- Support `jsnext:main` in package.json (close [#272](https://github.com/esm-dev/esm.sh/issues/272))
+- Improve `cjs-esm-exports` to support `UMD` format
+  ```
+  // exports: ['foo']
+  const { exports } = parse('index.cjs', `
+    (function (global, factory) {
+      typeof exports === 'object' && typeof module !== 'undefined' ? factory(exports) :
+      typeof define === 'function' && define.amd ? define(['exports'], factory) :
+      (factory((global.MMDParser = global.MMDParser || {})));
+    }(this, function (exports) {
+      exports.foo = "bar";
+    }))
+  `);
+  ```
+- Upgrade deno node polyfill to **0.128.0**
+
 ## v67
 
 - Force `react/jsx-dev-runtime` and `react-refresh` into **dev** mode
