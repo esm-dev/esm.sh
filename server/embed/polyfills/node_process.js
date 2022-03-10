@@ -165,12 +165,12 @@ class Item {
   }
 }
 
-const isDeno = Boolean(window.Deno && Deno.version && Deno.version.deno);
+const deno = typeof Deno !== 'undefined';
 
 export default {
   title: 'browser',
   browser: true,
-  env: isDeno ? new Proxy({}, {
+  env: deno ? new Proxy({}, {
     get(_target, prop) {
       return Deno.env.get(String(prop));
     },
@@ -190,13 +190,13 @@ export default {
       return value;
     },
   }) : {},
-  argv: isDeno ? Deno.args : [],
-  pid: isDeno ? Deno.pid : 0,
-  version: 'v16.13.1',
+  argv: deno ? Deno.args ?? [] : [],
+  pid: deno ? Deno.pid ?? 0 : 0,
+  version: 'v16.14.0',
   versions: {
-    node: '16.13.1',
-    v8: '9.4.146.24-node.14',
-    uv: '1.42.0',
+    node: '16.14.0',
+    v8: '9.4.146.24-node.20',
+    uv: '1.43.0',
     zlib: '1.2.11',
     brotli: '1.0.9',
     ares: '1.18.1',
@@ -204,11 +204,11 @@ export default {
     nghttp2: '1.45.1',
     napi: '8',
     llhttp: '6.0.4',
-    openssl: '1.1.1l+quic',
-    cldr: '39.0',
-    icu: '69.1',
-    tz: '2021a',
-    unicode: '13.0',
+    openssl: '1.1.1m+quic',
+    cldr: '40.0',
+    icu: '70.1',
+    tz: '2021a3',
+    unicode: '14.0',
   },
   on: noop,
   addListener: noop,
@@ -222,15 +222,15 @@ export default {
   emitWarning: noop,
   listeners: () => [],
   binding: () => { throw new Error('process.binding is not supported') },
-  cwd: () => isDeno ? Deno.cwd() : '/',
+  cwd: () => deno ? Deno.cwd?.() ?? '/' : '/',
   chdir: (path) => {
-    if (isDeno) {
+    if (deno) {
       Deno.chdir(path)
     } else {
       throw new Error('process.chdir is not supported')
     }
   },
-  umask: () => isDeno ? Deno.umask : 0,
+  umask: () => deno ? Deno.umask ?? 0 : 0,
   nextTick: (fn) => {
     let args = new Array(arguments.length - 1);
     if (arguments.length > 1) {
