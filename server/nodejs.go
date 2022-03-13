@@ -342,7 +342,7 @@ func fetchPackageInfo(name string, version string) (info NpmPackage, err error) 
 			i := 0
 			for v := range h.Versions {
 				// ignore prerelease versions
-				if strings.ContainsRune(v, '-') {
+				if !strings.ContainsRune(version, '-') && strings.ContainsRune(v, '-') {
 					continue
 				}
 				var ver *semver.Version
