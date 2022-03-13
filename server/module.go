@@ -187,14 +187,11 @@ func initModule(wd string, pkg Pkg, target string, isDev bool) (esm *Module, err
 				break
 			}
 			err = fmt.Errorf("parseCJSModuleExports: %s", ret.Error)
-			if !strings.Contains(ret.Error, "Can't resolve") {
+			if i == 2 || !strings.Contains(ret.Error, "Can't resolve") {
 				return
 			}
 			// retry after 50ms
 			time.Sleep(50 * time.Millisecond)
-		}
-		if err != nil {
-			return
 		}
 		// if ret.Error != "" && strings.Contains(ret.Error, "Unexpected export statement in CJS module") {
 		//   if pkg.Submodule != "" {
