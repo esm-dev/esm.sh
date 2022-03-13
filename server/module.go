@@ -7,6 +7,7 @@ import (
 	"io/ioutil"
 	"path"
 	"strings"
+	"time"
 
 	"esm.sh/server/storage"
 	"github.com/ije/esbuild-internal/js_ast"
@@ -174,16 +175,27 @@ func initModule(wd string, pkg Pkg, target string, isDev bool) (esm *Module, err
 		if isDev {
 			nodeEnv = "development"
 		}
-		ret, err := parseCJSModuleExports(wd, pkg.ImportPath(), nodeEnv)
+		for i := 0; i < 3; i++ {
+			var ret cjsExportsResult
+			ret, err = parseCJSModuleExports(wd, pkg.ImportPath(), nodeEnv)
+			if err != nil {
+				return
+			}
+			if ret.Error == "" {
+				esm.ExportDefault = ret.ExportDefault
+				esm.Exports = ret.Exports
+				break
+			}
+			err = fmt.Errorf("parseCJSModuleExports: %s", ret.Error)
+			if !strings.Contains(ret.Error, "Can't resolve") {
+				return
+			}
+			// retry after 50ms
+			time.Sleep(50 * time.Millisecond)
+		}
 		if err != nil {
-			return nil, fmt.Errorf("parseCJSModuleExports: %v", err)
+			return
 		}
-		if ret.Error != "" {
-			//  todo: handle "can't resolve" issue
-			return nil, fmt.Errorf("parseCJSModuleExports: %s", ret.Error)
-		}
-		esm.ExportDefault = ret.ExportDefault
-		esm.Exports = ret.Exports
 		// if ret.Error != "" && strings.Contains(ret.Error, "Unexpected export statement in CJS module") {
 		//   if pkg.Submodule != "" {
 		//     esm.Module = pkg.Submodule
