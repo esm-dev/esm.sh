@@ -533,6 +533,13 @@ esbuild:
 						}, false)
 					}
 				}
+				// force the dependency version of `react` equals to react-dom's version
+				if importPath == "" && task.Pkg.Name == "react-dom" && name == "react" {
+					importPath = task.getImportPath(Pkg{
+						Name:    name,
+						Version: task.Pkg.Version,
+					}, false)
+				}
 				// get package info from NPM
 				if importPath == "" {
 					version := "latest"
