@@ -4,14 +4,14 @@ import queue from '/async/queue'
   test example:
   ```js
   // single module
-  _esm('packageName', async (t) => {
+  test('packageName', async (t) => {
     const mod = t.module           // imported module
     t.$span.innterText = ':)'      // render testing content
     t.ok()                         // display '✅' and timing
   })
 
   // mulitple modules
-  _esm(['packageName1', 'packageName2'], async (t) => {
+  test(['packageName1', 'packageName2'], async (t) => {
     const [mod1, mod2] = t.modules // imported modules
     t.$span.innterText = ':)'      // render testing content
     t.ok()                         // display '✅' and timing
@@ -52,7 +52,7 @@ const q = queue(async ({ imports, testFn, $li, $status }) => {
   }
 }, 4)
 
-const _esm = async (imports, testFn) => {
+const test = async (imports, testFn) => {
   const $li = document.createElement('li')
   const $imports = document.createElement('strong')
   const $status = document.createElement('span')
@@ -83,7 +83,7 @@ document.querySelector('h1 > em').appendChild(document.createTextNode(' · Testi
 document.querySelector('main').remove()
 document.querySelector('#root').appendChild($container)
 
-_esm('canvas-confetti', async (t) => {
+test('canvas-confetti', async (t) => {
   const { default: confetti } = t.module
 
   t.$span.style.cursor = 'pointer'
@@ -95,7 +95,7 @@ _esm('canvas-confetti', async (t) => {
   t.ok()
 })
 
-_esm(['react@16', 'react-dom@16'], async (t) => {
+test(['react@16', 'react-dom@16'], async (t) => {
   const [
     { createElement, Fragment, useState },
     { render }
@@ -117,16 +117,16 @@ _esm(['react@16', 'react-dom@16'], async (t) => {
   t.ok()
 })
 
-_esm(['react@17', 'react-dom@17'], async (t) => {
+test(['react@17', 'react-dom@17'], async (t) => {
   const [
-    { Fragment, useState, default: React },
+    { useState, default: React },
     { render }
   ] = t.modules
 
   const App = () => {
     const [count, setCount] = useState(0)
     return React.createElement(
-      Fragment,
+      React.Fragment,
       null,
       React.createElement('span', {
         onClick: () => setCount(n => n + 1),
@@ -139,7 +139,7 @@ _esm(['react@17', 'react-dom@17'], async (t) => {
   t.ok()
 })
 
-_esm(['react@17', 'react-dom@17', 'react-redux?deps=react@17', 'redux'], async (t) => {
+test(['react@17', 'react-dom@17', 'react-redux?deps=react@17', 'redux'], async (t) => {
   const [
     { createElement, Fragment },
     { render },
@@ -170,7 +170,7 @@ _esm(['react@17', 'react-dom@17', 'react-redux?deps=react@17', 'redux'], async (
   t.ok()
 })
 
-_esm(['react@17', 'react-dom@17', 'mobx-react-lite?deps=react@17', 'mobx'], async (t) => {
+test(['react@17', 'react-dom@17', 'mobx-react-lite?deps=react@17', 'mobx'], async (t) => {
   const [
     { createElement, Fragment },
     { render },
@@ -196,9 +196,56 @@ _esm(['react@17', 'react-dom@17', 'mobx-react-lite?deps=react@17', 'mobx'], asyn
   t.ok()
 })
 
-_esm(['react@17', 'react-dom@17', 'html-to-react?deps=react@17'], async (t) => {
+test(['react@17', 'react-dom@17', '@emotion/styled?deps=react@17', '@emotion/react?deps=react@17'], async (t) => {
   const [
-    { default: React },
+    { createElement, Fragment, useState },
+    { render },
+    { default: styled },
+    { Global, css }
+  ] = t.modules
+
+  const globalStyles = css`
+    @keyframes breathing {
+      0% {
+        transform: scale(0.8);
+      }
+      25% {
+        transform: scale(1.1);
+      }
+      60% {
+        transform: scale(0.8);
+      }
+      100% {
+        transform: scale(0.8);
+      }
+    }
+  `
+  const Span = styled.span`
+    display: inline-block;
+    animation: breathing 5s ease-out infinite normal;
+    cursor: pointer;
+    user-select: none;
+  `
+
+  const App = () => {
+    const [count, setCount] = useState(0)
+    return createElement(
+      Fragment,
+      null,
+      createElement(Global, { styles: globalStyles }),
+      createElement(Span, {
+        onClick: () => setCount(n => n + 1),
+      }, '⏱ ', createElement('samp', null, count)),
+    )
+  }
+  render(createElement(App), t.$span)
+
+  t.ok()
+})
+
+test(['react@17', 'react-dom@17', 'html-to-react?deps=react@17'], async (t) => {
+  const [
+    { createElement },
     { render },
     { Parser }
   ] = t.modules
@@ -207,12 +254,12 @@ _esm(['react@17', 'react-dom@17', 'html-to-react?deps=react@17'], async (t) => {
   const App = () => {
     return h.parse(`<span>html to <strong>react</strong> is amzing</span>`)
   }
-  render(React.createElement(App), t.$span)
+  render(createElement(App), t.$span)
 
   t.ok()
 })
 
-_esm(['react@17', 'react-dom@17', 'antd?bundle'], async (t) => {
+test(['react@17', 'react-dom@17', 'antd?bundle'], async (t) => {
   const [
     { createElement, Fragment },
     { render },
@@ -238,7 +285,7 @@ _esm(['react@17', 'react-dom@17', 'antd?bundle'], async (t) => {
   t.ok()
 })
 
-_esm(['react@17', 'react-dom@17', '@material-ui/core'], async (t) => {
+test(['react@17', 'react-dom@17', '@material-ui/core'], async (t) => {
   const [
     { createElement, useState },
     { render },
@@ -258,7 +305,7 @@ _esm(['react@17', 'react-dom@17', '@material-ui/core'], async (t) => {
   t.ok()
 })
 
-_esm(['preact', 'preact/hooks'], async (t) => {
+test(['preact', 'preact/hooks'], async (t) => {
   const [
     { h, render },
     { useState }
@@ -276,7 +323,7 @@ _esm(['preact', 'preact/hooks'], async (t) => {
   t.ok()
 })
 
-_esm(['preact', 'preact/hooks', 'swr?alias=react:preact/compat'], async (t) => {
+test(['preact', 'preact/hooks', 'swr?alias=react:preact/compat'], async (t) => {
   const [
     { Fragment, h, render },
     { useEffect },
@@ -302,7 +349,7 @@ _esm(['preact', 'preact/hooks', 'swr?alias=react:preact/compat'], async (t) => {
   t.ok()
 })
 
-_esm('vue@2', async (t) => {
+test('vue@2', async (t) => {
   const { default: Vue } = t.module
 
   new Vue({
@@ -334,7 +381,7 @@ _esm('vue@2', async (t) => {
   t.ok()
 })
 
-_esm('vue@3', async (t) => {
+test('vue@3', async (t) => {
   const { createApp, h } = t.module
 
   createApp({
@@ -362,7 +409,7 @@ _esm('vue@3', async (t) => {
   t.ok()
 })
 
-_esm('jquery', async (t) => {
+test('jquery', async (t) => {
   const { default: $ } = t.module
 
   $(t.$span).css({ color: 'gray' }).text('$')
@@ -370,7 +417,7 @@ _esm('jquery', async (t) => {
   t.ok()
 })
 
-_esm('lodash', async (t) => {
+test('lodash', async (t) => {
   const { default: _ } = t.module
 
   const defaults = _.defaults({ lodash: '_' }, { lodash: 'lodash' })
@@ -380,7 +427,7 @@ _esm('lodash', async (t) => {
   t.ok()
 })
 
-_esm('d3', async (t) => {
+test('d3', async (t) => {
   const d3 = t.module
 
   t.$span.id = 'd3-span'
@@ -389,7 +436,7 @@ _esm('d3', async (t) => {
   t.ok()
 })
 
-_esm('pixi.js', async (t) => {
+test('pixi.js', async (t) => {
   const { Application, Sprite } = t.module
 
   const app = new Application({ width: 30, height: 30, resolution: 2, backgroundAlpha: 0 });
@@ -413,7 +460,7 @@ _esm('pixi.js', async (t) => {
   t.$span.appendChild(app.view);
 })
 
-_esm('three', async (t) => {
+test('three', async (t) => {
   const {
     Scene,
     PerspectiveCamera,
