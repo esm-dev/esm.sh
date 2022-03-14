@@ -8,7 +8,7 @@
   now: react-dom@18-rc.2 -> react@18-rc.2
   ```
 - Fix version check for prerelease (can't resolve `react` in `react-dom@rc`)
-- Improve cjs module transform (can handle more edge cases, for example react-18-rc defines non-esm for browsers and denp)
+- Improve cjs module transform (can handle more edge cases, for example react-18-rc defines non-esm for browsers and deno)
 
 ## v68
 
