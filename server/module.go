@@ -161,12 +161,13 @@ func initModule(wd string, pkg Pkg, target string, isDev bool) (esm *Module, err
 
 	if esm.Module != "" {
 		resolved, exportDefault, err := checkESM(wd, esm.Name, esm.Module)
-		if err != nil {
-			log.Warnf("fake module from '%s' of '%s': %v", esm.Module, esm.Name, err)
-			esm.Module = ""
-		} else {
+		if err == nil {
 			esm.Module = resolved
 			esm.ExportDefault = exportDefault
+		} else {
+			log.Warnf("fake module from '%s' of '%s': %v", esm.Module, esm.Name, err)
+			esm.Main = esm.Module
+			esm.Module = ""
 		}
 	}
 
@@ -177,7 +178,7 @@ func initModule(wd string, pkg Pkg, target string, isDev bool) (esm *Module, err
 		}
 		for i := 0; i < 3; i++ {
 			var ret cjsExportsResult
-			ret, err = parseCJSModuleExports(wd, pkg.ImportPath(), nodeEnv)
+			ret, err = parseCJSModuleExports(wd, pkg.Name, esm.Main, nodeEnv)
 			if err != nil {
 				return
 			}

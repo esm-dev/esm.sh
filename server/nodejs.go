@@ -397,7 +397,7 @@ func getNodejsVersion() (version string, major int, err error) {
 func resolvePackageExports(p *NpmPackage, exports interface{}, target string, isDev bool) {
 	s, ok := exports.(string)
 	if ok {
-		if p.Type == "module" || p.Module != "" {
+		if p.Type == "module" {
 			p.Module = s
 		} else {
 			p.Main = s
@@ -407,15 +407,15 @@ func resolvePackageExports(p *NpmPackage, exports interface{}, target string, is
 
 	m, ok := exports.(map[string]interface{})
 	if ok {
-		names := []string{"import", "module"}
+		names := []string{"import", "module", "browser", "worker"}
 		if target == "deno" {
-			names = []string{"deno", "import", "module"}
+			names = []string{"deno", "import", "module", "browser", "worker"}
 		}
 		if p.Type == "module" {
 			if isDev {
-				names = append(names, "development", "browser", "default")
+				names = append(names, "development", "default")
 			} else {
-				names = append(names, "production", "browser", "default")
+				names = append(names, "production", "default")
 			}
 		}
 		for _, name := range names {
