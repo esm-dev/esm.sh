@@ -110,8 +110,18 @@ function verifyExports(names) {
 
 exports.parseCjsExports = async input => {
   const { buildDir, pkgName, importPath, nodeEnv = 'production' } = input
-  const entry = await resolve(buildDir, join(pkgName, importPath))
   const exports = []
+
+  let entry
+  try {
+    entry = await resolve(buildDir, join(pkgName, importPath))
+  } catch (error) {
+    if (importPath.endsWith(".js") || importPath.endsWith(".cjs") || importPath.endsWith(".json")) {
+      entry = join(buildDir, "node_modules", pkgName, importPath)
+    } else {
+      throw error
+    }
+  }
 
   /* workaround for edge cases that can't be parsed by cjsLexer correctly */
   if (requireModeAllowList.includes(pkgName)) {
@@ -151,7 +161,16 @@ exports.parseCjsExports = async input => {
           const mod = require(reexport)
           exports.push(...Object.keys(mod))
         } else {
-          const path = await resolve(buildDir, join(pkgName, dirname(importPath), reexport))
+          let path
+          try {
+            path = await resolve(buildDir, join(pkgName, dirname(importPath), reexport))
+          } catch (error) {
+            if (reexport.endsWith(".js") || reexport.endsWith(".cjs") || reexport.endsWith(".json")) {
+              path = join(dirname(req.path), reexport)
+            } else {
+              throw error
+            }
+          }
           if (path.endsWith('.json')) {
             exports.push(...getJSONKeys(path))
           } else {
