@@ -275,7 +275,7 @@ i {
 
 .readme ul,
 .readme ol {
-  padding-left: 1.5rem;
+  padding-left: 0;
   margin-top: 1.27rem;
 }
 
@@ -285,13 +285,6 @@ i {
 
 .readme li {
   margin-top: 0.6rem;
-}
-
-.readme ul li:before {
-  position: absolute;
-  margin-left: -1rem;
-  color: #aaa;
-  content: '-';
 }
 
 .readme h1 {
@@ -362,106 +355,4 @@ i {
 
 .test ul li em {
   color: #999;
-}
-
-.playground {
-  position: relative;
-  width: 100vw;
-  height: 100vh;
-}
-
-.sider,
-.editor,
-.preview {
-  position: absolute;
-  top: 0;
-  height: 100vh;
-}
-
-.sider .logo {
-  display: flex;
-  align-items: center;
-  gap: 5px;
-  padding-left: 15px;
-  margin: 15px 0 10px;
-  font-size: 11px;
-  font-weight: 500;
-  color: #999;
-}
-
-.sider .file-item {
-  position: relative;
-  display: flex;
-  align-items: center;
-  padding-left: 15px;
-  font-size: 14px;
-  line-height: 24px;
-  color: #454545;
-  cursor: pointer;
-}
-
-.sider .file-item.loading {
-  color: #999;
-  cursor: default;
-}
-
-.sider .file-item.active {
-  color: #000000;
-  font-weight: 600;
-}
-
-.sider .file-item.active:before {
-  position: absolute;
-  top: 11px;
-  left: 6px;
-  display: inline-block;
-  width: 4px;
-  height: 4px;
-  border-radius: 50%;
-  background-color: #454545;
-  content: '';    
-}
-
-.sider .file-name {
-  display: inline-block;
-  width: 100%;
-  height: 24px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  overflow: hidden;
-}
-
-.sider .file-item.add,
-.preview .refresh {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  position: absolute;
-  bottom: 15px;
-  left: 15px;
-  width: 32px;
-  height: 32px;
-  padding: 0;
-  font-size: 14px;
-  overflow: hidden;
-  border-radius: 20px;
-  color: #666;
-  background-color: #eee;
-  transition: all 0.2s ease;
-  user-select: none;
-}
-
-.sider .file-item.add:hover,
-.preview .refresh:hover {
-  color: #333;
-  background-color: #ddd;
-}
-
-.editor {
-  border-right: 1px solid #eee;
-}
-
-.preview iframe {
-  width: 100%;
-  height: 100%;
 }
