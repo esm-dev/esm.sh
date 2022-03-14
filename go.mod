@@ -10,6 +10,6 @@ require (
 	github.com/ije/esbuild-internal v0.12.24
 	github.com/ije/gox v0.6.1
 	github.com/ije/postdb v0.7.1
-	github.com/ije/rex v1.5.0
+	github.com/ije/rex v1.6.0
 	github.com/mssola/user_agent v0.5.3
 )

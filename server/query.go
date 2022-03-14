@@ -350,13 +350,12 @@ func query(devMode bool) rex.Handle {
 			}
 		}
 
-		css := !ctx.Form.IsNil("css")
-		cssAsModule := css && !ctx.Form.IsNil("module")
-		isBundleMode := !ctx.Form.IsNil("bundle")
-		isDev := !ctx.Form.IsNil("dev")
-		isPined := !ctx.Form.IsNil("pin")
-		isWorkder := !ctx.Form.IsNil("worker")
-		noCheck := !ctx.Form.IsNil("no-check")
+		css := ctx.Form.Has("css")
+		isBundleMode := ctx.Form.Has("bundle")
+		isDev := ctx.Form.Has("dev")
+		isPined := ctx.Form.Has("pin")
+		isWorkder := ctx.Form.Has("worker")
+		noCheck := ctx.Form.Has("no-check")
 		isBare := isPined && targetFlag
 
 		if !isDev {
@@ -556,9 +555,6 @@ func query(devMode bool) rex.Handle {
 					proto = "http"
 				}
 				url := fmt.Sprintf("%s://%s/%s.css", proto, hostname, strings.TrimSuffix(taskID, ".js"))
-				if cssAsModule {
-					url += "?module"
-				}
 				code := http.StatusTemporaryRedirect
 				if regFullVersionPath.MatchString(pathname) {
 					code = http.StatusPermanentRedirect
