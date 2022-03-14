@@ -134,7 +134,7 @@ const { reexports } = parse('index.cjs', `
 
 // apply function exports (call mode)
 // exports: ['foo']
-const { reexports } = parse('lib.cjs', `
+const { exports } = parse('lib.cjs', `
   module.exports = function() {
     return { foo: 'bar' }
   }
