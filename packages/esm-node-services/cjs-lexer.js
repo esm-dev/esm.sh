@@ -79,6 +79,7 @@ const builtInNodeModules = new Set([
   "zlib",
 ])
 const requireModeAllowList = [
+  'graceful-fs',
   'domhandler',
   'he',
   'lz-string',
@@ -108,8 +109,8 @@ function verifyExports(names) {
 }
 
 exports.parseCjsExports = async input => {
-  const { buildDir, importPath, nodeEnv = 'production' } = input
-  const entry = join(buildDir, importPath)
+  const { buildDir, pkgName, importPath, nodeEnv = 'production' } = input
+  const entry = join(buildDir, "node_modules", pkgName, importPath)
   const exports = []
 
   /* workaround for edge cases that can't be parsed by cjsLexer correctly */
