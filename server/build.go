@@ -143,6 +143,9 @@ func (task *BuildTask) Build() (esm *Module, err error) {
 		if err == nil {
 			break
 		}
+		if i < 2 {
+			time.Sleep(100 * time.Millisecond)
+		}
 	}
 	if err != nil {
 		return
@@ -573,7 +576,15 @@ esbuild:
 						if _, ok := builtInNodeModules[name]; !ok {
 							pkg, err := parsePkg(name)
 							if err == nil && !fileExists(path.Join(task.wd, "node_modules", pkg.Name, "package.json")) {
-								err = yarnAdd(task.wd, fmt.Sprintf("%s@%s", pkg.Name, pkg.Version))
+								for i := 0; i < 3; i++ {
+									err = yarnAdd(task.wd, fmt.Sprintf("%s@%s", pkg.Name, pkg.Version))
+									if err == nil {
+										break
+									}
+									if i < 2 {
+										time.Sleep(100 * time.Millisecond)
+									}
+								}
 							}
 							if err == nil {
 								dep, err := initModule(task.wd, *pkg, task.Target, task.DevMode)
