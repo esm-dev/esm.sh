@@ -62,7 +62,7 @@ In **bundle** mode, all dependencies will be bundled into a single JS file.
 import React from "https://esm.sh/react?dev"
 ```
 
-The `?dev` mode builds code with `process.env.NODE_ENV` equals to `development`, that is useful to build modules like **React** to allow you to get more development warn/error details.
+The `?dev` mode builds modules with `process.env.NODE_ENV` equals to `development`, that is useful to build modules like **React** to allow you to get more development warn/error details.
 
 ### Specify external dependencies
 
@@ -71,7 +71,7 @@ import React from "https://esm.sh/react@16.14.0"
 import useSWR from "https://esm.sh/swr?deps=react@16.14.0"
 ```
 
-By default, esm.sh rewrites import specifier based on the package"s dependency statement. To specify version of dependencies, you can use the `?deps=PACKAGE@VERSION` query. You can separate multiple dependencies with commas: `?deps=react@16.14.0,react-dom@16.14.0`.
+By default, esm.sh rewrites import specifier based on the package's dependency statement. To specify version of dependencies, you can use the `?deps=PACKAGE@VERSION` query. You can separate multiple dependencies with commas: `?deps=react@16.14.0,react-dom@16.14.0`.
 
 ### Aliasing dependencies
 
@@ -113,9 +113,9 @@ This only works when the NPM module imports CSS files in JS directly.
 esm.sh supports `?worker` mode to load modules as web worker:
 
 ```javascript
-import editorWorker from "/monaco-editor/esm/vs/editor/editor.worker?worker"
+import editorWorker from "https://esm.sh/monaco-editor/esm/vs/editor/editor.worker?worker"
   
-const worker = new editorWorker()
+const worker = editorWorker()
 ```
 
 ## Deno compatibility
@@ -138,7 +138,7 @@ By default, **esm.sh** will respond with a custom `X-TypeScript-Types` HTTP head
 
 ![Figure #1](./server/embed/assets/sceenshot-deno-types.png)
 
-You can pass the `no-check` query to disable the `X-TypeScript-Types` header if some types are incorrect:
+You can pass the `?no-check` query to disable the `X-TypeScript-Types` header if some types are incorrect:
 
 ```javascript
 import unescape from "https://esm.sh/lodash/unescape?no-check"
