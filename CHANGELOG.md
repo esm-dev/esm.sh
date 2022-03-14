@@ -1,5 +1,15 @@
 # Change Log
 
+## v69
+
+- Force the dependency version of react equals to react-dom's version
+  ```
+  before: react-dom@18-rc.2 -> react@18-rc.2-next.xxxx
+  now: react-dom@18-rc.2 -> react@18-rc.2
+  ```
+- Fix version check for prerelease (can't resolve `react` in `react-dom@rc`)
+- Improve cjs module transform (can handle more edge cases, for example react-18-rc defines non-esm for browsers and denp)
+
 ## v68
 
 - Fix `bundle` mode (close [#271](https://github.com/esm-dev/esm.sh/issues/271))
