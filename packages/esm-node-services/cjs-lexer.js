@@ -1,5 +1,5 @@
 const fs = require('fs')
-const { dirname } = require('path')
+const { join } = require('path')
 const { promisify } = require('util')
 const { parse } = require('esm-cjs-lexer')
 const enhancedResolve = require('enhanced-resolve')
@@ -109,7 +109,7 @@ function verifyExports(names) {
 
 exports.parseCjsExports = async input => {
   const { buildDir, importPath, nodeEnv = 'production' } = input
-  const entry = await resolve(buildDir, importPath)
+  const entry = join(buildDir, importPath)
   const exports = []
 
   /* workaround for edge cases that can't be parsed by cjsLexer correctly */
@@ -152,7 +152,7 @@ exports.parseCjsExports = async input => {
           const mod = require(reexport)
           exports.push(...Object.keys(mod))
         } else {
-          const path = await resolve(dirname(req.path), reexport)
+          const path = await resolve(buildDir, reexport)
           if (path.endsWith('.json')) {
             exports.push(...getJSONKeys(path))
           } else {
