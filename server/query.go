@@ -336,7 +336,8 @@ func query(devMode bool) rex.Handle {
 
 		// determine build target
 		target := strings.ToLower(ctx.Form.Value("target"))
-		if _, ok := targets[target]; !ok {
+		_, targetFlag := targets[target]
+		if !targetFlag {
 			target = getTargetByUA(ctx.R.UserAgent())
 		}
 
@@ -351,12 +352,12 @@ func query(devMode bool) rex.Handle {
 
 		css := !ctx.Form.IsNil("css")
 		cssAsModule := css && !ctx.Form.IsNil("module")
-		isBare := false
 		isBundleMode := !ctx.Form.IsNil("bundle")
 		isDev := !ctx.Form.IsNil("dev")
 		isPined := !ctx.Form.IsNil("pin")
 		isWorkder := !ctx.Form.IsNil("worker")
 		noCheck := !ctx.Form.IsNil("no-check")
+		isBare := isPined && targetFlag
 
 		if !isDev {
 			if (reqPkg.Name == "react" && reqPkg.Submodule == "jsx-dev-runtime") || reqPkg.Name == "react-refresh" {
@@ -567,6 +568,11 @@ func query(devMode bool) rex.Handle {
 			return rex.Status(404, "Package CSS not found")
 		}
 
+		origin := "/"
+		if cdnDomain != "" && cdnDomain != "localhost" && !strings.HasPrefix(cdnDomain, "localhost:") && !isWorkder {
+			origin = fmt.Sprintf("https://%s/", cdnDomain)
+		}
+
 		if isBare {
 			savePath := path.Join(
 				"builds",
@@ -583,15 +589,19 @@ func query(devMode bool) rex.Handle {
 			if err != nil {
 				return rex.Status(500, err.Error())
 			}
+			if !hasBuildVerPrefix && esm.Dts != "" && !noCheck && !isWorkder {
+				value := fmt.Sprintf(
+					"%s%s",
+					origin,
+					strings.TrimPrefix(esm.Dts, "/"),
+				)
+				ctx.SetHeader("X-TypeScript-Types", value)
+			}
 			ctx.SetHeader("Cache-Control", "public, max-age=31536000, immutable")
 			return rex.Content(savePath, modtime, r)
 		}
 
 		buf := bytes.NewBuffer(nil)
-		origin := "/"
-		if cdnDomain != "" && cdnDomain != "localhost" && !strings.HasPrefix(cdnDomain, "localhost:") && !isWorkder {
-			origin = fmt.Sprintf("https://%s/", cdnDomain)
-		}
 		if isWorkder {
 			hostname := ctx.R.Host
 			isLocalHost := hostname == "localhost" || strings.HasPrefix(hostname, "localhost:")
@@ -604,7 +614,7 @@ func query(devMode bool) rex.Handle {
 
 		fmt.Fprintf(buf, `/* esm.sh - %v */%s`, reqPkg, "\n")
 		if isWorkder {
-			fmt.Fprintf(buf, `export default function WorkerWrapper() {%s  return new Worker('%s%s', { type: 'module' })%s}`, "\n", origin, taskID, "\n")
+			fmt.Fprintf(buf, `export default function workerFactory() {%s  return new Worker('%s%s', { type: 'module' })%s}`, "\n", origin, taskID, "\n")
 		} else {
 			fmt.Fprintf(buf, `export * from "%s%s";%s`, origin, taskID, "\n")
 			if esm.Module == "" || esm.ExportDefault {
