@@ -1,25 +1,24 @@
-const [select] = Deno.args
-if (select) {
-	await test(select)
-	Deno.exit(0)
-} else {
-	startServer(async (p) => {
-		try {
-			await test('common', p)
-			await test('preact', p)
-			await test('preact-jsx-runtime', p)
-			await test('prismjs', p)
-			await test('react', p)
-			await test('react-jsx-runtime', p)
-			console.log('Done')
-		} catch (error) {
-			console.error(error)
-		}
-		p.kill('SIGINT')
-	})
-}
+const [dir] = Deno.args
 
-async function startServer(onReady: (p: any) => void) {
+startEsmServer(async (p) => {
+	try {
+		if (dir) {
+			await test(dir, p)
+		} else {
+			for await (const entry of Deno.readDir('test/deno')) {
+				if (entry.isDirectory) {
+					await test(entry.name, p)
+				}
+			}
+		}
+		console.log('Done')
+	} catch (error) {
+		console.error(error)
+	}
+	p.kill('SIGINT')
+})
+
+async function startEsmServer(onReady: (p: any) => void) {
 	await run('go', 'build', '-o', 'esmd', 'main.go')
 	const p = Deno.run({
 		cmd: ['./esmd', '-dev', '-port', '8080'],
@@ -62,13 +61,13 @@ async function run(...cmd: string[]) {
 
 /* check whether or not the given path exists as regular file. */
 export async function existsFile(path: string): Promise<boolean> {
-  try {
-    const fi = await Deno.lstat(path)
-    return fi.isFile
-  } catch (err) {
-    if (err instanceof Deno.errors.NotFound) {
-      return false
-    }
-    throw err
-  }
+	try {
+		const fi = await Deno.lstat(path)
+		return fi.isFile
+	} catch (err) {
+		if (err instanceof Deno.errors.NotFound) {
+			return false
+		}
+		throw err
+	}
 }
