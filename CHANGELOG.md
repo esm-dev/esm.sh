@@ -1,5 +1,20 @@
 # Change Log
 
+## v70
+
+- Return `bare` code when `target` and `pin` provided to reduce requests
+  ```js
+  // https://esm.sh/react@17.0.2
+  export * from "https://cdn.esm.sh/v69/react@17.0.2/es2021/react.js";
+  ```
+  ```js
+  // https://esm.sh/react@17.0.2?target=es2020&pin=v70
+  {content just from https://cdn.esm.sh/v69/react@17.0.2/es2021/react.js}
+  ```
+- Rollback `parseCJSModuleExports` function to v68 (close [#277](https://github.com/esm-dev/esm.sh/issues/277), [#279](https://github.com/esm-dev/esm.sh/issues/279))
+- Fix `exports` resolving in package.json (close [#278](https://github.com/esm-dev/esm.sh/issues/278), [#280](https://github.com/esm-dev/esm.sh/issues/280))
+- Upgrade deno `std/node` to **0.130.0**
+
 ## v69
 
 - Force the dependency version of react equals to react-dom's version
