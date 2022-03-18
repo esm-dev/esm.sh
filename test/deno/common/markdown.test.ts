@@ -1,6 +1,6 @@
 import marked from 'http://localhost:8080/marked@2?deps=@types/marked@2.0.0'
 import { safeLoadFront } from 'http://localhost:8080/yaml-front-matter@4.1.1'
-import { assert, assertEquals } from 'https://deno.land/std@0.128.0/testing/asserts.ts'
+import { assert, assertEquals } from 'https://deno.land/std@0.130.0/testing/asserts.ts'
 
 const md = `---
 title: esm.sh

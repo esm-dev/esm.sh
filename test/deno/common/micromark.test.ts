@@ -1,7 +1,7 @@
 import { micromark } from 'http://localhost:8080/micromark'
 import { frontmatter, frontmatterHtml } from 'http://localhost:8080/micromark-extension-frontmatter'
 import { mdxjs } from 'http://localhost:8080/micromark-extension-mdxjs'
-import { assertEquals } from 'https://deno.land/std@0.128.0/testing/asserts.ts'
+import { assertEquals } from 'https://deno.land/std@0.130.0/testing/asserts.ts'
 
 const md = `---
 title: esm.sh
