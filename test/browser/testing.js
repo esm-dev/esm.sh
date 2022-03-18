@@ -37,6 +37,7 @@ const q = queue(async ({ imports, testFn, $li, $status }) => {
     try {
       await testFn({ $span, modules, module, ok: () => $status.innerText = '✅' })
     } catch (err) {
+      console.error(err.stack)  
       $status.innerText = `❌ ${err.message}`;
     }
 
@@ -259,7 +260,7 @@ test(['react@17', 'react-dom@17', 'html-to-react?deps=react@17'], async (t) => {
   t.ok()
 })
 
-test(['react@17', 'react-dom@17', 'antd?bundle'], async (t) => {
+test(['react@17', 'react-dom@17', 'antd?deps=react@17,react-dom@17&bundle'], async (t) => {
   const [
     { createElement, Fragment },
     { render },
@@ -405,6 +406,23 @@ test('vue@3', async (t) => {
       )
     }
   }).mount(t.$span)
+
+  t.ok()
+})
+
+
+test(['rxjs@7', 'rxjs@7/operators'], async (t) => {
+  const [{ fromEvent }, { throttleTime, scan }] = t.modules
+ 
+  t.$span.innerText = '⏱ 0'
+  t.$span.style.cursor = 'pointer'
+  t.$span.style.userSelect = 'none'
+  fromEvent(t.$span, 'click')
+    .pipe(
+      throttleTime(1000),
+      scan(count => count + 1, 0)
+    )
+    .subscribe(count => t.$span.innerText = `⏱ ${count}`);
 
   t.ok()
 })
