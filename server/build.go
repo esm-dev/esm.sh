@@ -528,12 +528,15 @@ esbuild:
 							Target:  task.Target,
 							DevMode: task.DevMode,
 						}
-						buildQueue.Add(t)
-						importPath = task.getImportPath(Pkg{
-							Name:      p.Name,
-							Version:   p.Version,
-							Submodule: submodule,
-						}, false)
+						_, err = findModule(t.ID())
+						if err == storage.ErrNotFound {
+							buildQueue.Add(t)
+							importPath = task.getImportPath(Pkg{
+								Name:      p.Name,
+								Version:   p.Version,
+								Submodule: submodule,
+							}, false)
+						}
 					}
 				}
 				// force the dependency version of `react` equals to react-dom's version
