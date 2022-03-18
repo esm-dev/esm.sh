@@ -152,8 +152,9 @@ type NpmPackage struct {
 	Name             string            `json:"name"`
 	Version          string            `json:"version"`
 	Main             string            `json:"main,omitempty"`
-	JsnextMain       string            `json:"jsnext:main,omitempty"`
 	Module           string            `json:"module,omitempty"`
+	JsnextMain       string            `json:"jsnext:main,omitempty"`
+	Es2015           string            `json:"es2015,omitempty"`
 	Type             string            `json:"type,omitempty"`
 	Types            string            `json:"types,omitempty"`
 	Typings          string            `json:"typings,omitempty"`
@@ -407,9 +408,9 @@ func resolvePackageExports(p *NpmPackage, exports interface{}, target string, is
 
 	m, ok := exports.(map[string]interface{})
 	if ok {
-		names := []string{"import", "module", "browser", "worker"}
+		names := []string{"es2015", "module", "import", "browser", "worker"}
 		if target == "deno" {
-			names = []string{"deno", "import", "module", "browser", "worker"}
+			names = []string{"deno", "es2015", "module", "import", "worker", "browser"}
 		}
 		if p.Type == "module" {
 			if isDev {
@@ -492,6 +493,8 @@ func fixNpmPackage(p NpmPackage, target string, isDev bool) *NpmPackage {
 	if p.Module == "" {
 		if p.JsnextMain != "" {
 			p.Module = p.JsnextMain
+		} else if p.Es2015 != "" {
+			p.Module = p.Es2015
 		} else if p.Main != "" && (p.Type == "module" || strings.Contains(p.Main, "/esm/") || strings.Contains(p.Main, "/es/") || strings.HasSuffix(p.Main, ".mjs")) {
 			p.Module = p.Main
 		}

@@ -86,7 +86,7 @@ func initModule(wd string, pkg Pkg, target string, isDev bool) (esm *Module, err
 					esm.Types = pkg.Submodule + ".d.ts"
 				}
 			} else {
-				var defined bool
+				var resolved bool
 				if p.DefinedExports != nil {
 					if m, ok := p.DefinedExports.(map[string]interface{}); ok {
 						for name, defines := range m {
@@ -100,7 +100,7 @@ func initModule(wd string, pkg Pkg, target string, isDev bool) (esm *Module, err
 								  }
 								*/
 								resolvePackageExports(esm.NpmPackage, defines, target, isDev)
-								defined = true
+								resolved = true
 								break
 							} else if strings.HasSuffix(name, "/*") && strings.HasPrefix("./"+pkg.Submodule, strings.TrimSuffix(name, "*")) {
 								/**
@@ -112,27 +112,29 @@ func initModule(wd string, pkg Pkg, target string, isDev bool) (esm *Module, err
 								  }
 								*/
 								suffix := strings.TrimPrefix("./"+pkg.Submodule, strings.TrimSuffix(name, "*"))
-								replaced := false
+								hasDefines := false
 								if m, ok := defines.(map[string]interface{}); ok {
+									newDefines := map[string]interface{}{}
 									for key, value := range m {
 										if s, ok := value.(string); ok && s != name {
-											m[key] = strings.Replace(s, "*", suffix, -1)
-											replaced = true
+											newDefines[key] = strings.Replace(s, "*", suffix, -1)
+											hasDefines = true
 										}
 									}
+									defines = newDefines
 								} else if s, ok := defines.(string); ok && name != s {
 									defines = strings.Replace(s, "*", suffix, -1)
-									replaced = true
+									hasDefines = true
 								}
-								if replaced {
+								if hasDefines {
 									resolvePackageExports(esm.NpmPackage, defines, target, isDev)
-									defined = true
+									resolved = true
 								}
 							}
 						}
 					}
 				}
-				if !defined {
+				if !resolved {
 					if esm.Type == "module" || esm.Module != "" {
 						// follow main module type
 						esm.Module = pkg.Submodule
@@ -160,9 +162,9 @@ func initModule(wd string, pkg Pkg, target string, isDev bool) (esm *Module, err
 	}
 
 	if esm.Module != "" {
-		resolved, exportDefault, err := checkESM(wd, esm.Name, esm.Module)
+		modulePath, exportDefault, err := checkESM(wd, esm.Name, esm.Module)
 		if err == nil {
-			esm.Module = resolved
+			esm.Module = modulePath
 			esm.ExportDefault = exportDefault
 		} else {
 			log.Warnf("fake module from '%s' of '%s': %v", esm.Module, esm.Name, err)

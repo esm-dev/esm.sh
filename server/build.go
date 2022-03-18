@@ -249,7 +249,7 @@ func (task *BuildTask) build(tracing *stringSet) (esm *Module, err error) {
 						}
 					}
 
-					// bundles all dependencies except in `bundle` mode, apart from peer dependencies
+					// bundles all dependencies in `bundle` mode, apart from peer dependencies
 					if task.BundleMode && !extraExternal.Has(specifier) {
 						a := strings.Split(specifier, "/")
 						pkgName := a[0]
@@ -272,25 +272,25 @@ func (task *BuildTask) build(tracing *stringSet) (esm *Module, err error) {
 						if strings.HasPrefix(resolvedPath, "/private/var/") {
 							resolvedPath = strings.TrimPrefix(resolvedPath, "/private")
 						}
-						resolved := "." + strings.TrimPrefix(resolvedPath, path.Join(task.wd, "node_modules", esm.Name))
-						m, ok := esm.DefinedExports.(map[string]interface{})
+						modulePath := "." + strings.TrimPrefix(resolvedPath, path.Join(task.wd, "node_modules", esm.Name))
+						v, ok := esm.DefinedExports.(map[string]interface{})
 						if ok {
-							for export, paths := range m {
+							for export, paths := range v {
 								m, ok := paths.(map[string]interface{})
 								if ok && export != "." {
 									for _, value := range m {
 										s, ok := value.(string)
 										if ok && s != "" {
-											match := resolved == s || resolved+".js" == s || resolved+".mjs" == s
+											match := modulePath == s || modulePath+".js" == s || modulePath+".mjs" == s
 											if !match {
 												if a := strings.Split(s, "*"); len(a) == 2 {
 													prefix := a[0]
 													suffix := a[1]
-													if (strings.HasPrefix(resolved, prefix)) &&
-														(strings.HasSuffix(resolved, suffix) ||
-															strings.HasSuffix(resolved+".js", suffix) ||
-															strings.HasSuffix(resolved+".mjs", suffix)) {
-														matchName := strings.TrimPrefix(strings.TrimSuffix(resolved, suffix), prefix)
+													if (strings.HasPrefix(modulePath, prefix)) &&
+														(strings.HasSuffix(modulePath, suffix) ||
+															strings.HasSuffix(modulePath+".js", suffix) ||
+															strings.HasSuffix(modulePath+".mjs", suffix)) {
+														matchName := strings.TrimPrefix(strings.TrimSuffix(modulePath, suffix), prefix)
 														export = strings.Replace(export, "*", matchName, -1)
 														match = true
 													}
@@ -422,8 +422,8 @@ esbuild:
 						Submodule: submodule,
 					}
 					subTask := &BuildTask{
+						wd:           task.wd, // use current wd to avoid reinstall
 						BuildVersion: task.BuildVersion,
-						wd:           task.wd, // reuse current wd
 						Pkg:          subPkg,
 						Alias:        task.Alias,
 						Deps:         task.Deps,
