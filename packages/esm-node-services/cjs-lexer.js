@@ -1,5 +1,5 @@
 const fs = require('fs')
-const { join, dirname } = require('path')
+const { dirname } = require('path')
 const { promisify } = require('util')
 const { parse } = require('esm-cjs-lexer')
 const enhancedResolve = require('enhanced-resolve')
@@ -79,7 +79,6 @@ const builtInNodeModules = new Set([
   "zlib",
 ])
 const requireModeAllowList = [
-  'graceful-fs',
   'domhandler',
   'he',
   'lz-string',
@@ -109,32 +108,24 @@ function verifyExports(names) {
 }
 
 exports.parseCjsExports = async input => {
-  const { buildDir, pkgName, importPath, nodeEnv = 'production' } = input
+  const { buildDir, importPath, nodeEnv = 'production' } = input
+  const entry = await resolve(buildDir, importPath)
   const exports = []
 
-  let entry
-  try {
-    entry = await resolve(buildDir, join(pkgName, importPath))
-  } catch (error) {
-    if (importPath.endsWith(".js") || importPath.endsWith(".cjs") || importPath.endsWith(".json")) {
-      entry = join(buildDir, "node_modules", pkgName, importPath)
-    } else {
-      throw error
-    }
-  }
-
   /* workaround for edge cases that can't be parsed by cjsLexer correctly */
-  if (requireModeAllowList.includes(pkgName)) {
-    process.env.NODE_ENV = nodeEnv
-    const mod = require(entry)
-    if (isObject(mod) || typeof mod === 'function') {
-      for (const key of Object.keys(mod)) {
-        if (typeof key === 'string' && key !== '') {
-          exports.push(key)
+  for (const name of requireModeAllowList) {
+    if (importPath === name || importPath.startsWith(name + '/')) {
+      process.env.NODE_ENV = nodeEnv
+      const mod = require(entry)
+      if (isObject(mod) || typeof mod === 'function') {
+        for (const key of Object.keys(mod)) {
+          if (typeof key === 'string' && key !== '') {
+            exports.push(key)
+          }
         }
       }
+      return verifyExports(exports)
     }
-    return verifyExports(exports)
   }
 
   if (entry.endsWith('.json')) {
@@ -161,16 +152,7 @@ exports.parseCjsExports = async input => {
           const mod = require(reexport)
           exports.push(...Object.keys(mod))
         } else {
-          let path
-          try {
-            path = await resolve(buildDir, join(pkgName, dirname(importPath), reexport))
-          } catch (error) {
-            if (reexport.endsWith(".js") || reexport.endsWith(".cjs") || reexport.endsWith(".json")) {
-              path = join(dirname(req.path), reexport)
-            } else {
-              throw error
-            }
-          }
+          const path = await resolve(dirname(req.path), reexport)
           if (path.endsWith('.json')) {
             exports.push(...getJSONKeys(path))
           } else {

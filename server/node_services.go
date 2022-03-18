@@ -223,10 +223,9 @@ type cjsExportsResult struct {
 	Error         string   `json:"error"`
 }
 
-func parseCJSModuleExports(buildDir string, pkgName, importPath string, nodeEnv string) (ret cjsExportsResult, err error) {
+func parseCJSModuleExports(buildDir string, importPath string, nodeEnv string) (ret cjsExportsResult, err error) {
 	data := invokeNodeService("parseCjsExports", map[string]interface{}{
 		"buildDir":   buildDir,
-		"pkgName":    pkgName,
 		"importPath": importPath,
 		"nodeEnv":    nodeEnv,
 	})

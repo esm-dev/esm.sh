@@ -180,11 +180,7 @@ func initModule(wd string, pkg Pkg, target string, isDev bool) (esm *Module, err
 		}
 		for i := 0; i < 3; i++ {
 			var ret cjsExportsResult
-			importPath := pkg.Submodule
-			if esm.Main != "" {
-				importPath = esm.Main
-			}
-			ret, err = parseCJSModuleExports(wd, pkg.Name, importPath, nodeEnv)
+			ret, err = parseCJSModuleExports(wd, pkg.ImportPath(), nodeEnv)
 			if err != nil {
 				return
 			}
