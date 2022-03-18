@@ -13,7 +13,7 @@ type Pkg struct {
 	Submodule string `json:"submodule"`
 }
 
-func parsePkg(pathname string) (*Pkg, error) {
+func parsePkg(pathname string) (*Pkg, bool, error) {
 	a := strings.Split(strings.Trim(pathname, "/"), "/")
 	for i, s := range a {
 		a[i] = strings.TrimSpace(s)
@@ -29,12 +29,12 @@ func parsePkg(pathname string) (*Pkg, error) {
 
 	// ref https://github.com/npm/validate-npm-package-name
 	if scope != "" && (len(scope) > 214 || !npmNaming.Is(scope)) {
-		return nil, fmt.Errorf("invalid scope '%s'", scope)
+		return nil, false, fmt.Errorf("invalid scope '%s'", scope)
 	}
 
 	name, version := utils.SplitByLastByte(packageName, '@')
 	if name != "" && (len(name) > 214 || !npmNaming.Is(name)) {
-		return nil, fmt.Errorf("invalid package name '%s'", name)
+		return nil, false, fmt.Errorf("invalid package name '%s'", name)
 	}
 
 	if scope != "" {
@@ -46,19 +46,19 @@ func parsePkg(pathname string) (*Pkg, error) {
 			Name:      name,
 			Version:   version,
 			Submodule: strings.TrimSuffix(submodule, ".js"),
-		}, nil
+		}, true, nil
 	}
 
 	info, _, _, err := getPackageInfo("", name, version)
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
 
 	return &Pkg{
 		Name:      name,
 		Version:   info.Version,
 		Submodule: strings.TrimSuffix(submodule, ".js"),
-	}, nil
+	}, false, nil
 }
 
 func (m Pkg) Equels(other Pkg) bool {

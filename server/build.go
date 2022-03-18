@@ -577,7 +577,7 @@ esbuild:
 						p = bytes.TrimPrefix(p, []byte{')'})
 						var marked bool
 						if _, ok := builtInNodeModules[name]; !ok {
-							pkg, err := parsePkg(name)
+							pkg, _, err := parsePkg(name)
 							if err == nil && !fileExists(path.Join(task.wd, "node_modules", pkg.Name, "package.json")) {
 								for i := 0; i < 3; i++ {
 									err = yarnAdd(task.wd, fmt.Sprintf("%s@%s", pkg.Name, pkg.Version))

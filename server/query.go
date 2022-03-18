@@ -168,7 +168,7 @@ func query(devMode bool) rex.Handle {
 		}
 
 		// get package info
-		reqPkg, err := parsePkg(pathname)
+		reqPkg, fixedVersion, err := parsePkg(pathname)
 		if err != nil {
 			status := 500
 			message := err.Error()
@@ -307,7 +307,7 @@ func query(devMode bool) rex.Handle {
 		for _, p := range strings.Split(ctx.Form.Value("deps"), ",") {
 			p = strings.TrimSpace(p)
 			if p != "" {
-				m, err := parsePkg(p)
+				m, _, err := parsePkg(p)
 				if err != nil {
 					if strings.HasSuffix(err.Error(), "not found") {
 						continue
@@ -356,7 +356,7 @@ func query(devMode bool) rex.Handle {
 		isPined := ctx.Form.Has("pin")
 		isWorkder := ctx.Form.Has("worker")
 		noCheck := ctx.Form.Has("no-check")
-		isBare := isPined && targetFlag
+		isBare := isPined && targetFlag && fixedVersion
 
 		if !isDev {
 			if (reqPkg.Name == "react" && reqPkg.Submodule == "jsx-dev-runtime") || reqPkg.Name == "react-refresh" {
@@ -391,7 +391,7 @@ func query(devMode bool) rex.Handle {
 										scope, name := utils.SplitByFirstByte(p, '_')
 										p = scope + "/" + name
 									}
-									m, err := parsePkg(p)
+									m, _, err := parsePkg(p)
 									if err != nil {
 										if strings.HasSuffix(err.Error(), "not found") {
 											continue
