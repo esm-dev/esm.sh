@@ -1,5 +1,9 @@
 # Change Log
 
+## v71
+
+- Fix version resolving of dts transformer (close [#274](https://github.com/esm-dev/esm.sh/issues/274))
+
 ## v70
 
 - Return `bare` code when `target` and `pin` provided to reduce requests
