@@ -1,5 +1,6 @@
-import { minify } from 'http://localhost:8080/terser'
 import { assert } from 'https://deno.land/std@0.130.0/testing/asserts.ts'
+
+import { minify } from 'http://localhost:8080/terser'
 
 Deno.test('check terser minifiy', async () => {
 	var code = 'function add(first, second) { return first + second; }';
