@@ -547,11 +547,14 @@ func yarnAdd(wd string, packages ...string) (err error) {
 		start := time.Now()
 		args := []string{
 			"add",
-			"--force",
+			"--check-files",
 			"--ignore-engines",
 			"--ignore-platform",
 			"--ignore-scripts",
+			"--ignore-workspace-root-check",
 			"--no-bin-links",
+			"--no-default-rc",
+			"--no-lockfile",
 			"--no-node-version-check",
 			"--no-progress",
 			"--non-interactive",
