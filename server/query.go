@@ -547,6 +547,25 @@ func query(devMode bool) rex.Handle {
 			}
 		}
 
+		origin := "/"
+		if cdnDomain != "" && cdnDomain != "localhost" && !strings.HasPrefix(cdnDomain, "localhost:") && !isWorkder {
+			origin = fmt.Sprintf("https://%s/", cdnDomain)
+		}
+
+		if esm.Main == "" && esm.Module == "" && esm.Types != "" {
+			if esm.Dts != "" && !noCheck {
+				value := fmt.Sprintf(
+					"%s%s",
+					origin,
+					strings.TrimPrefix(esm.Dts, "/"),
+				)
+				ctx.SetHeader("X-TypeScript-Types", value)
+			}
+			ctx.SetHeader("Cache-Control", "private, no-store, no-cache, must-revalidate")
+			ctx.SetHeader("Content-Type", "application/javascript; charset=utf-8")
+			return []byte("export default null;\n")
+		}
+
 		if css {
 			if esm.PackageCSS {
 				hostname := ctx.R.Host
@@ -562,11 +581,6 @@ func query(devMode bool) rex.Handle {
 				return rex.Redirect(url, code)
 			}
 			return rex.Status(404, "Package CSS not found")
-		}
-
-		origin := "/"
-		if cdnDomain != "" && cdnDomain != "localhost" && !strings.HasPrefix(cdnDomain, "localhost:") && !isWorkder {
-			origin = fmt.Sprintf("https://%s/", cdnDomain)
 		}
 
 		if isBare {

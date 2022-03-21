@@ -500,12 +500,15 @@ func fixNpmPackage(p NpmPackage, target string, isDev bool) *NpmPackage {
 		}
 	}
 
+	if p.Types == "" && p.Typings != "" {
+		p.Types = p.Typings
+	}
+
 	return np
 }
 
 func installNodejs(dir string, version string) (err error) {
 	dlURL := fmt.Sprintf("https://nodejs.org/dist/v%s/node-v%s-%s-x64.tar.xz", version, version, runtime.GOOS)
-	log.Debugf("downloading %s", dlURL)
 	resp, err := http.Get(dlURL)
 	if err != nil {
 		err = fmt.Errorf("download nodejs: %v", err)

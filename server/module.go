@@ -42,7 +42,6 @@ func initModule(wd string, pkg Pkg, target string, isDev bool) (esm *Module, err
 
 	if pkg.Submodule != "" {
 		if strings.HasSuffix(pkg.Submodule, ".d.ts") {
-			esm.Typings = ""
 			if strings.HasSuffix(pkg.Submodule, "~.d.ts") {
 				submodule := strings.TrimSuffix(pkg.Submodule, "~.d.ts")
 				subDir := path.Join(wd, "node_modules", esm.Name, submodule)
@@ -75,7 +74,6 @@ func initModule(wd string, pkg Pkg, target string, isDev bool) (esm *Module, err
 					esm.Main = path.Join(pkg.Submodule, "index.js")
 				}
 				esm.Types = ""
-				esm.Typings = ""
 				if p.Types != "" {
 					esm.Types = path.Join(pkg.Submodule, p.Types)
 				} else if p.Typings != "" {
@@ -142,7 +140,6 @@ func initModule(wd string, pkg Pkg, target string, isDev bool) (esm *Module, err
 						esm.Main = pkg.Submodule
 					}
 					esm.Types = ""
-					esm.Typings = ""
 					if fileExists(path.Join(subDir, "index.d.ts")) {
 						esm.Types = path.Join(pkg.Submodule, "index.d.ts")
 					} else if fileExists(path.Join(subDir + ".d.ts")) {
@@ -157,7 +154,20 @@ func initModule(wd string, pkg Pkg, target string, isDev bool) (esm *Module, err
 		return
 	}
 
-	if esm.Module == "" && (strings.Contains(esm.Main, "/esm/") || strings.Contains(esm.Main, "/es/") || strings.HasSuffix(esm.Main, ".mjs")) {
+	if esm.Main == "" && esm.Module == "" {
+		if fileExists(path.Join(packageDir, "index.mjs")) {
+			esm.Module = "./index.mjs"
+		} else if fileExists(path.Join(packageDir, "index.js")) {
+			esm.Main = "./index.js"
+		}
+	}
+
+	// for pure types packages
+	if esm.Main == "" && esm.Module == "" && esm.Types != "" {
+		return
+	}
+
+	if esm.Module == "" && esm.Main != "" && (strings.Contains(esm.Main, "/esm/") || strings.Contains(esm.Main, "/es/") || strings.HasSuffix(esm.Main, ".mjs")) {
 		esm.Module = esm.Main
 	}
 
@@ -173,7 +183,7 @@ func initModule(wd string, pkg Pkg, target string, isDev bool) (esm *Module, err
 		}
 	}
 
-	if esm.Module == "" {
+	if esm.Module == "" && esm.Main != "" {
 		nodeEnv := "production"
 		if isDev {
 			nodeEnv = "development"
@@ -211,9 +221,8 @@ func initModule(wd string, pkg Pkg, target string, isDev bool) (esm *Module, err
 		// }
 	}
 
-	if path.Dir(esm.Main) != "" && esm.Types == "" && esm.Typings == "" {
+	if path.Dir(esm.Main) != "" && esm.Types == "" {
 		typesPath := path.Join(path.Dir(esm.Main), "index.d.ts")
-
 		if fileExists(path.Join(packageDir, typesPath)) {
 			esm.Types = typesPath
 		}

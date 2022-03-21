@@ -175,6 +175,15 @@ func (task *BuildTask) build(tracing *stringSet) (esm *Module, err error) {
 		return
 	}
 
+	if esm.Main == "" && esm.Module == "" && esm.Types != "" {
+		dts := esm.Name + "@" + esm.Version + "/" + esm.Types
+		task.stage = "transform-dts"
+		task.transformDTS(dts)
+		task.findDTS(esm)
+		task.storeToDB(esm)
+		return
+	}
+
 	task.stage = "build"
 	defer func() {
 		if err != nil {
@@ -760,7 +769,7 @@ func (task *BuildTask) findDTS(esm *Module) {
 	submodule := task.Pkg.Submodule
 
 	var dts string
-	if esm.Types != "" || esm.Typings != "" {
+	if esm.Types != "" {
 		dts = toTypesPath(task.wd, *esm.NpmPackage, submodule)
 	} else if !strings.HasPrefix(name, "@types/") {
 		versions := []string{"latest"}
