@@ -180,6 +180,12 @@ func query(devMode bool) rex.Handle {
 			return rex.Status(status, message)
 		}
 
+		if (reqPkg.Name == "react" || reqPkg.Name == "preact") && strings.HasSuffix(ctx.R.URL.RawQuery, "/jsx-runtime") {
+			ctx.R.URL.RawQuery = strings.TrimSuffix(ctx.R.URL.RawQuery, "/jsx-runtime")
+			pathname = fmt.Sprintf("/%s/jsx-runtime", reqPkg.Name)
+			reqPkg.Submodule = "jsx-runtime"
+		}
+
 		if v := ctx.Form.Value("path"); v != "" {
 			reqPkg.Submodule = utils.CleanPath(v)[1:]
 		}
