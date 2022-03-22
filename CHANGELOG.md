@@ -1,5 +1,10 @@
 # Change Log
 
+## v72
+
+- Support `jsx-runtime` with query: `https://esm.sh/react?pin=v72/jsx-runtime` -> `https://esm.sh/react/jsx-runtime?pin=v72`
+- Support pure types package (close [#284](https://github.com/esm-dev/esm.sh/issues/284))
+
 ## v71
 
 - Fix version resolving of dts transformer (close [#274](https://github.com/esm-dev/esm.sh/issues/274))
