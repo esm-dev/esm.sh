@@ -227,11 +227,8 @@ func (task *BuildTask) copyDTS(resolvePrefix string, dts string, tracing *string
 					info, _, fromPackageJSON, err = getPackageInfo(task.wd, depTypePkgName, version)
 				}
 			}
-			if err != nil {
-				return importPath
-			}
 
-			if info.Types != "" || info.Typings != "" {
+			if err == nil && (info.Types != "" || info.Typings != "") {
 				versioned := info.Name + "@" + info.Version
 				prefix := versioned + "/" + resolvePrefix
 				// copy dependent dts files in the node_modules directory in current build context
@@ -255,6 +252,8 @@ func (task *BuildTask) copyDTS(resolvePrefix string, dts string, tracing *string
 						importPath += "~.d.ts"
 					}
 				}
+				importPath = fmt.Sprintf("/v%d/%s", VERSION, importPath)
+			} else {
 				importPath = fmt.Sprintf("/v%d/%s", VERSION, importPath)
 			}
 
