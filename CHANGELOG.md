@@ -1,5 +1,9 @@
 # Change Log
 
+## v73
+
+- Fix types dependency path (close [#287](https://github.com/esm-dev/esm.sh/issues/287))
+
 ## v72
 
 - Support `jsx-runtime` with query: `https://esm.sh/react?pin=v72/jsx-runtime` -> `https://esm.sh/react/jsx-runtime?pin=v72`
