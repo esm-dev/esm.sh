@@ -222,7 +222,6 @@ func (task *BuildTask) copyDTS(resolvePrefix string, dts string, tracing *string
 						importPath += "~.d.ts"
 					}
 				}
-				importPath = fmt.Sprintf("/v%d/%s", VERSION, importPath)
 				info, subpath, fromPackageJSON, err = getPackageInfo(task.wd, importPath, version)
 				if err != nil || ((info.Types == "" && info.Typings == "") && !strings.HasPrefix(info.Name, "@types/")) {
 					info, _, fromPackageJSON, err = getPackageInfo(task.wd, depTypePkgName, version)
