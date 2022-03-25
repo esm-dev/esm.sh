@@ -446,6 +446,7 @@ esbuild:
 						Alias:        task.Alias,
 						Deps:         task.Deps,
 						Target:       task.Target,
+						NoRequire:    task.NoRequire,
 						DevMode:      task.DevMode,
 					}
 					subTask.build(tracing)
@@ -541,10 +542,11 @@ esbuild:
 								Version:   p.Version,
 								Submodule: submodule,
 							},
-							Alias:   task.Alias,
-							Deps:    task.Deps,
-							Target:  task.Target,
-							DevMode: task.DevMode,
+							Alias:     task.Alias,
+							Deps:      task.Deps,
+							Target:    task.Target,
+							NoRequire: task.NoRequire,
+							DevMode:   task.DevMode,
 						}
 						_, _err := findModule(t.ID())
 						if _err == storage.ErrNotFound {
