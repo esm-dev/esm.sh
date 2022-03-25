@@ -221,19 +221,13 @@ func query(devMode bool) rex.Handle {
 
 		// serve raw dist files like CSS that is fetching from unpkg.com
 		if storageType == "raw" {
-			shouldRedirect := !regFullVersionPath.MatchString(pathname)
 			hostname := ctx.R.Host
 			isLocalHost := hostname == "localhost" || strings.HasPrefix(hostname, "localhost:")
 			proto := "https"
 			if isLocalHost {
 				proto = "http"
 			}
-			if !isLocalHost && cdnDomain != "" && hostname != cdnDomain {
-				shouldRedirect = true
-				hostname = cdnDomain
-				proto = "https"
-			}
-			if shouldRedirect {
+			if !regFullVersionPath.MatchString(pathname) {
 				url := fmt.Sprintf("%s://%s/%s", proto, hostname, reqPkg.String())
 				return rex.Redirect(url, http.StatusTemporaryRedirect)
 			}
