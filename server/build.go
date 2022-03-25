@@ -102,6 +102,9 @@ func (task *BuildTask) getImportPath(pkg Pkg, extendsAlias bool) string {
 		name = pkg.Submodule
 	}
 	name = strings.TrimSuffix(name, ".js")
+	if task.NoRequire {
+		name += ".nr"
+	}
 	if task.DevMode {
 		name += ".development"
 	}
