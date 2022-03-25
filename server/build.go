@@ -26,6 +26,7 @@ type BuildTask struct {
 	Deps         PkgSlice          `json:"deps"`
 	Target       string            `json:"target"`
 	BundleMode   bool              `json:"bundle"`
+	NoRequire    bool              `json:"noRequire"`
 	DevMode      bool              `json:"dev"`
 
 	// state
@@ -70,6 +71,9 @@ func (task *BuildTask) ID() string {
 		name = pkg.Submodule
 	}
 	name = strings.TrimSuffix(name, ".js")
+	if task.NoRequire {
+		name += ".nr"
+	}
 	if task.DevMode {
 		name += ".development"
 	}
@@ -323,6 +327,11 @@ func (task *BuildTask) build(tracing *stringSet) (esm *Module, err error) {
 					// bundles undefined relative imports or the package/module it self
 					if isLocalImport(specifier) || specifier == task.Pkg.ImportPath() {
 						return api.OnResolveResult{}, nil
+					}
+
+					// ignore `require()` of esm package
+					if task.NoRequire && (args.Kind == api.ResolveJSRequireCall || args.Kind == api.ResolveJSRequireResolve) {
+						return api.OnResolveResult{Path: specifier, External: true}, nil
 					}
 
 					// dynamic external

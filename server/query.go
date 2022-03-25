@@ -362,6 +362,7 @@ func query(devMode bool) rex.Handle {
 		isPined := ctx.Form.Has("pin")
 		isWorkder := ctx.Form.Has("worker")
 		noCheck := ctx.Form.Has("no-check")
+		noRequire := ctx.Form.Has("no-require")
 		isBare := isPined && targetFlag && fixedVersion
 
 		if !isDev {
@@ -509,6 +510,7 @@ func query(devMode bool) rex.Handle {
 			Alias:        alias,
 			Target:       target,
 			BundleMode:   isBundleMode,
+			NoRequire:    noRequire,
 			DevMode:      isDev,
 			stage:        "init",
 		}
