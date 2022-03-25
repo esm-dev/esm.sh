@@ -1,0 +1,28 @@
+import { assert } from 'https://deno.land/std@0.130.0/testing/asserts.ts'
+
+import { createGenerator } from 'http://localhost:8080/@unocss/core@0.30.3';
+import presetUno from 'http://localhost:8080/@unocss/preset-uno@0.30.3';
+import presetIcons from 'http://localhost:8080/@unocss/preset-icons@0.30.3?no-require';
+import carbonIcons from 'http://localhost:8080/@iconify-json/carbon@1.1.2/icons.json' assert { type: 'json' };
+
+const html = `
+<span class="text-gray-600 i-carbon-logo-github"></span>
+<span class="i-carbon-nonono"></span>
+`
+
+Deno.test('check common modules', async () => {
+  const uno = createGenerator({
+    presets: [
+      presetUno(),
+      presetIcons({
+        collections: {
+          carbon: () => carbonIcons,
+        },
+      })
+    ]
+  });
+  const { css } = await uno.generate(html, { id: 'index.html' }); 
+  assert(css.includes(".text-gray-600"))
+  assert(css.includes(".i-carbon-logo-github"))
+  assert(!css.includes(".i-carbon-nonono"))
+})
