@@ -102,9 +102,6 @@ func (task *BuildTask) getImportPath(pkg Pkg, extendsAlias bool) string {
 		name = pkg.Submodule
 	}
 	name = strings.TrimSuffix(name, ".js")
-	if task.NoRequire {
-		name += ".nr"
-	}
 	if task.DevMode {
 		name += ".development"
 	}
@@ -449,7 +446,6 @@ esbuild:
 						Alias:        task.Alias,
 						Deps:         task.Deps,
 						Target:       task.Target,
-						NoRequire:    task.NoRequire,
 						DevMode:      task.DevMode,
 					}
 					subTask.build(tracing)
@@ -545,11 +541,10 @@ esbuild:
 								Version:   p.Version,
 								Submodule: submodule,
 							},
-							Alias:     task.Alias,
-							Deps:      task.Deps,
-							Target:    task.Target,
-							NoRequire: task.NoRequire,
-							DevMode:   task.DevMode,
+							Alias:   task.Alias,
+							Deps:    task.Deps,
+							Target:  task.Target,
+							DevMode: task.DevMode,
 						}
 						_, _err := findModule(t.ID())
 						if _err == storage.ErrNotFound {

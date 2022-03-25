@@ -431,6 +431,10 @@ func query(devMode bool) rex.Handle {
 						submodule = strings.TrimSuffix(submodule, ".development")
 						isDev = true
 					}
+					if endsWith(submodule, ".nr") {
+						submodule = strings.TrimSuffix(submodule, ".nr")
+						noRequire = true
+					}
 					pkgName := path.Base(reqPkg.Name)
 					if submodule == pkgName || (strings.HasSuffix(pkgName, ".js") && submodule+".js" == pkgName) {
 						submodule = ""
