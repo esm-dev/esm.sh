@@ -6,6 +6,7 @@ import presetIcons from 'http://localhost:8080/@unocss/preset-icons@0.30.3?no-re
 import carbonIcons from 'http://localhost:8080/@iconify-json/carbon@1.1.2/icons.json' assert { type: 'json' };
 
 const html = `
+<div class="p-2 m-2 flex items-center justify-center"></div>
 <span class="text-gray-600 i-carbon-logo-github"></span>
 <span class="i-carbon-nonono"></span>
 `
@@ -21,7 +22,12 @@ Deno.test('check common modules', async () => {
       })
     ]
   });
-  const { css } = await uno.generate(html, { id: 'index.html' }); 
+  const { css } = await uno.generate(html, { id: 'index.html' });
+  assert(css.includes(".p-2"))
+  assert(css.includes(".m-2"))
+  assert(css.includes(".flex"))
+  assert(css.includes(".items-center"))
+  assert(css.includes(".justify-center"))
   assert(css.includes(".text-gray-600"))
   assert(css.includes(".i-carbon-logo-github"))
   assert(!css.includes(".i-carbon-nonono"))
