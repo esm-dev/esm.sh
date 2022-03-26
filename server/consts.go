@@ -1,6 +1,6 @@
 package server
 
-// ems.sh version
+// esm.sh version
 const VERSION = 74
 
 const (
