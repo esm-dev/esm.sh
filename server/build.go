@@ -144,6 +144,9 @@ func (task *BuildTask) Build() (esm *Module, err error) {
 	task.stage = "install"
 	for i := 0; i < 3; i++ {
 		err = yarnAdd(task.wd, fmt.Sprintf("%s@%s", task.Pkg.Name, task.Pkg.Version))
+		if err == nil && !fileExists(path.Join(task.wd, "node_modules", task.Pkg.Name, "package.json")) {
+			err = fmt.Errorf("yarnAdd(%s): package.json not found", task.Pkg)
+		}
 		if err == nil {
 			break
 		}
@@ -599,6 +602,9 @@ esbuild:
 							if err == nil && !fileExists(path.Join(task.wd, "node_modules", pkg.Name, "package.json")) {
 								for i := 0; i < 3; i++ {
 									err = yarnAdd(task.wd, fmt.Sprintf("%s@%s", pkg.Name, pkg.Version))
+									if err == nil && !fileExists(path.Join(task.wd, "node_modules", pkg.Name, "package.json")) {
+										err = fmt.Errorf("yarnAdd(%s): package.json not found", pkg)
+									}
 									if err == nil {
 										break
 									}
