@@ -1,5 +1,20 @@
 # Change Log
 
+## v74
+
+- Support `?no-require` flag, with this option you can ignore the `require(...)` call in ESM packages. To support logic like below:
+  ```ts
+  // index.mjs
+
+  let depMod;
+  try {
+    depMod = await import("/path")
+  } finally {
+    // `?no-require` will skip next line when resolving
+    depMod = require("/path")
+  }
+  ```
+
 ## v73
 
 - Fix types dependency path (close [#287](https://github.com/esm-dev/esm.sh/issues/287))
