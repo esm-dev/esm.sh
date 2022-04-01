@@ -578,6 +578,8 @@ func query(devMode bool) rex.Handle {
 				proto := "https"
 				if hostname == "localhost" || strings.HasPrefix(hostname, "localhost:") {
 					proto = "http"
+				} else {
+					hostname = cdnDomain
 				}
 				url := fmt.Sprintf("%s://%s/%s.css", proto, hostname, strings.TrimSuffix(taskID, ".js"))
 				code := http.StatusTemporaryRedirect
@@ -624,6 +626,8 @@ func query(devMode bool) rex.Handle {
 			proto := "https"
 			if isLocalHost {
 				proto = "http"
+			} else {
+				hostname = cdnDomain
 			}
 			origin = fmt.Sprintf("%s://%s/", proto, hostname)
 		}
