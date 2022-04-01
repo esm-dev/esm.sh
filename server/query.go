@@ -508,7 +508,7 @@ func query(devMode bool) rex.Handle {
 			Deps:         deps,
 			Alias:        alias,
 			Target:       target,
-			BundleMode:   isBundleMode,
+			BundleMode:   isBundleMode || isWorkder,
 			NoRequire:    noRequire,
 			DevMode:      isDev,
 			stage:        "init",
