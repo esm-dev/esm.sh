@@ -350,7 +350,7 @@ func query(devMode bool) rex.Handle {
 			}
 		}
 
-		css := ctx.Form.Has("css")
+		isPkgCss := ctx.Form.Has("css")
 		isBundleMode := ctx.Form.Has("bundle")
 		isDev := ctx.Form.Has("dev")
 		isPined := ctx.Form.Has("pin")
@@ -359,6 +359,7 @@ func query(devMode bool) rex.Handle {
 		noRequire := ctx.Form.Has("no-require")
 		isBare := isPined && targetFlag && fixedVersion
 
+		// force react/jsx-dev-runtime and react-refresh into `dev` mode
 		if !isDev {
 			if (reqPkg.Name == "react" && reqPkg.Submodule == "jsx-dev-runtime") || reqPkg.Name == "react-refresh" {
 				isDev = true
@@ -572,8 +573,12 @@ func query(devMode bool) rex.Handle {
 			return []byte("export default null;\n")
 		}
 
-		if css {
-			if esm.PackageCSS {
+		if isPkgCss {
+			if !esm.PackageCSS {
+				return rex.Status(404, "Package CSS not found")
+			}
+
+			if !regFullVersionPath.MatchString(pathname) || !isPined {
 				hostname := ctx.R.Host
 				proto := "https"
 				if hostname == "localhost" || strings.HasPrefix(hostname, "localhost:") {
@@ -582,13 +587,11 @@ func query(devMode bool) rex.Handle {
 					hostname = cdnDomain
 				}
 				url := fmt.Sprintf("%s://%s/%s.css", proto, hostname, strings.TrimSuffix(taskID, ".js"))
-				code := http.StatusTemporaryRedirect
-				if regFullVersionPath.MatchString(pathname) {
-					code = http.StatusPermanentRedirect
-				}
-				return rex.Redirect(url, code)
+				return rex.Redirect(url, http.StatusTemporaryRedirect)
 			}
-			return rex.Status(404, "Package CSS not found")
+
+			taskID = fmt.Sprintf("%s.css", strings.TrimSuffix(taskID, ".js"))
+			isBare = true
 		}
 
 		if isBare {
