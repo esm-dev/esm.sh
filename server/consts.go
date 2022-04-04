@@ -1,7 +1,7 @@
 package server
 
 // esm.sh version
-const VERSION = 74
+const VERSION = 75
 
 const (
 	pkgCacheTimeout    = 10 * 60 // 10 minutes

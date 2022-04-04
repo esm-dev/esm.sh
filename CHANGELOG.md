@@ -1,5 +1,14 @@
 # Change Log
 
+## v75
+
+- Fix types build version ignore `?pin` (close [#292](https://github.com/esm-dev/esm.sh/issues/292))
+- Infect `?deps` and `?alias` to dependencies (close [#235](https://github.com/esm-dev/esm.sh/issues/235))
+- Bundle `?worker` by default
+- Upgrade semver to **v3** (close [#297](https://github.com/esm-dev/esm.sh/issues/297))
+- Upgrade esbuild to **0.14.31**
+- Upgrade deno std to **0.133.0** (close [#298](https://github.com/esm-dev/esm.sh/issues/298))
+
 ## v74
 
 - Support `?no-require` flag, with this option you can ignore the `require(...)` call in ESM packages. To support logic like below:
