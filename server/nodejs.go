@@ -19,7 +19,7 @@ import (
 
 	"esm.sh/server/storage"
 
-	"github.com/Masterminds/semver"
+	"github.com/Masterminds/semver/v3"
 	"github.com/ije/gox/utils"
 )
 
@@ -337,7 +337,7 @@ func fetchPackageInfo(name string, version string) (info NpmPackage, err error) 
 			var c *semver.Constraints
 			c, err = semver.NewConstraint(version)
 			if err != nil {
-				return
+				return fetchPackageInfo(name, "latest")
 			}
 			vs := make([]*semver.Version, len(h.Versions))
 			i := 0

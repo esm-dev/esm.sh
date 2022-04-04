@@ -3,7 +3,7 @@ module esm.sh
 go 1.16
 
 require (
-	github.com/Masterminds/semver v1.5.0
+	github.com/Masterminds/semver/v3 v3.1.1
 	github.com/aws/aws-sdk-go v1.42.53
 	github.com/dgraph-io/ristretto v0.1.0
 	github.com/evanw/esbuild v0.14.25
