@@ -168,7 +168,7 @@ func query(devMode bool) rex.Handle {
 		}
 
 		// get package info
-		reqPkg, fixedVersion, err := parsePkg(pathname)
+		reqPkg, _, err := parsePkg(pathname)
 		if err != nil {
 			status := 500
 			message := err.Error()
@@ -357,7 +357,7 @@ func query(devMode bool) rex.Handle {
 		isWorkder := ctx.Form.Has("worker")
 		noCheck := ctx.Form.Has("no-check")
 		noRequire := ctx.Form.Has("no-require")
-		isBare := isPined && targetFlag && fixedVersion
+		isBare := false
 
 		// force react/jsx-dev-runtime and react-refresh into `dev` mode
 		if !isDev {

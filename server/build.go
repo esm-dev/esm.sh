@@ -96,7 +96,21 @@ func (task *BuildTask) ID() string {
 	return task.id
 }
 
-func (task *BuildTask) getImportPath(pkg Pkg, extendsAlias bool) string {
+func (task *BuildTask) getImportPath(pkg Pkg, prefix string, infectDeps bool) string {
+	if infectDeps && task.Deps.Len() > 0 {
+		path := fmt.Sprintf(
+			"/%s?target=%s&pin=v%d&deps=%s",
+			pkg.String(),
+			task.Target,
+			task.BuildVersion,
+			task.Deps.String(),
+		)
+		if task.DevMode {
+			path += "&dev"
+		}
+		return path
+	}
+
 	name := path.Base(pkg.Name)
 	if pkg.Submodule != "" {
 		name = pkg.Submodule
@@ -106,17 +120,12 @@ func (task *BuildTask) getImportPath(pkg Pkg, extendsAlias bool) string {
 		name += ".development"
 	}
 
-	var resolvePrefix string
-	if extendsAlias {
-		resolvePrefix = task.resolvePrefix()
-	}
-
 	return fmt.Sprintf(
 		"/v%d/%s@%s/%s%s/%s.js",
 		task.BuildVersion,
 		pkg.Name,
 		pkg.Version,
-		resolvePrefix,
+		prefix,
 		task.Target,
 		name,
 	)
@@ -455,7 +464,7 @@ esbuild:
 					if err != nil {
 						return
 					}
-					importPath = task.getImportPath(subPkg, true)
+					importPath = task.getImportPath(subPkg, task.resolvePrefix(), false)
 				}
 				// is builtin `buffer` module
 				if importPath == "" && name == "buffer" {
@@ -483,7 +492,7 @@ esbuild:
 								Name:      p.Name,
 								Version:   p.Version,
 								Submodule: submodule,
-							}, false)
+							}, "", false)
 							importPath = strings.TrimSuffix(importPath, ".js") + ".bundle.js"
 						} else {
 							_, err := embedFS.ReadFile(fmt.Sprintf("server/embed/polyfills/node_%s.js", name))
@@ -499,7 +508,7 @@ esbuild:
 						}
 					}
 				}
-				// get package info via `deps` query
+				// use version defined by `?deps` query
 				if importPath == "" {
 					for _, dep := range task.Deps {
 						if name == dep.Name || strings.HasPrefix(name, dep.Name+"/") {
@@ -511,53 +520,9 @@ esbuild:
 								Name:      dep.Name,
 								Version:   dep.Version,
 								Submodule: submodule,
-							}, false)
+							}, "", false)
 							break
 						}
-					}
-				}
-				// pre-build dependency
-				if importPath == "" {
-					var pkgName string
-					var submodule string
-					if a := strings.Split(name, "/"); strings.HasPrefix(name, "@") {
-						if len(a) >= 2 {
-							pkgName = strings.Join(a[:2], "/")
-							submodule = strings.Join(a[2:], "/")
-						}
-					} else {
-						pkgName = a[0]
-						submodule = strings.Join(a[1:], "/")
-					}
-
-					packageFile := path.Join(task.wd, "node_modules", pkgName, "package.json")
-					if fileExists(packageFile) {
-						var p NpmPackage
-						err = utils.ParseJSONFile(path.Join(task.wd, "node_modules", pkgName, "package.json"), &p)
-						if err != nil {
-							return
-						}
-						t := &BuildTask{
-							BuildVersion: task.BuildVersion,
-							Pkg: Pkg{
-								Name:      pkgName,
-								Version:   p.Version,
-								Submodule: submodule,
-							},
-							Alias:   task.Alias,
-							Deps:    task.Deps,
-							Target:  task.Target,
-							DevMode: task.DevMode,
-						}
-						_, _err := findModule(t.ID())
-						if _err == storage.ErrNotFound {
-							buildQueue.Add(t)
-						}
-						importPath = task.getImportPath(Pkg{
-							Name:      p.Name,
-							Version:   p.Version,
-							Submodule: submodule,
-						}, true)
 					}
 				}
 				// force the dependency version of `react` equals to react-dom's version
@@ -565,9 +530,9 @@ esbuild:
 					importPath = task.getImportPath(Pkg{
 						Name:    name,
 						Version: task.Pkg.Version,
-					}, false)
+					}, "", false)
 				}
-				// get package info from NPM
+				// common npm dependency
 				if importPath == "" {
 					version := "latest"
 					if v, ok := esm.Dependencies[name]; ok {
@@ -576,13 +541,31 @@ esbuild:
 						version = v
 					}
 					p, submodule, _, e := getPackageInfo(task.wd, name, version)
-					if e == nil {
-						importPath = task.getImportPath(Pkg{
-							Name:      p.Name,
-							Version:   p.Version,
-							Submodule: submodule,
-						}, true)
+					if e != nil {
+						err = e
+						return
 					}
+
+					pkg := Pkg{
+						Name:      p.Name,
+						Version:   p.Version,
+						Submodule: submodule,
+					}
+					t := &BuildTask{
+						BuildVersion: task.BuildVersion,
+						Pkg:          pkg,
+						Alias:        task.Alias,
+						Deps:         task.Deps,
+						Target:       task.Target,
+						DevMode:      task.DevMode,
+					}
+
+					_, _err := findModule(t.ID())
+					if _err == storage.ErrNotFound {
+						buildQueue.Add(t)
+					}
+
+					importPath = task.getImportPath(pkg, "", true)
 				}
 				if importPath == "" {
 					err = fmt.Errorf("Could not resolve \"%s\" (Imported by \"%s\")", name, task.Pkg.Name)
