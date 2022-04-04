@@ -135,7 +135,7 @@ func TestCopyDTS(t *testing.T) {
 		Deps: PkgSlice{},
 		wd:   testDir,
 	}
-	err = task.copyDTS("X-ESM/", "test/index.d.ts", newStringSet())
+	err = task.copyDTS("test/index.d.ts", VERSION, "X-ESM/", newStringSet())
 	if err != nil && os.IsExist(err) {
 		t.Fatal(err)
 	}

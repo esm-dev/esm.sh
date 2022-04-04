@@ -454,7 +454,7 @@ func query(devMode bool) rex.Handle {
 			findTypesFile := func() (bool, time.Time, error) {
 				savePath = path.Join(fmt.Sprintf(
 					"types/v%d/%s@%s/%s",
-					VERSION,
+					buildVersion,
 					reqPkg.Name,
 					reqPkg.Version,
 					task.resolvePrefix(),

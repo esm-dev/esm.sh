@@ -815,7 +815,7 @@ func (task *BuildTask) findDTS(esm *Module) {
 
 func (task *BuildTask) transformDTS(dts string) {
 	start := time.Now()
-	n, err := task.CopyDTS(dts)
+	n, err := task.CopyDTS(dts, task.BuildVersion)
 	if err != nil && os.IsExist(err) {
 		log.Errorf("copyDTS(%s): %v", dts, err)
 		return
