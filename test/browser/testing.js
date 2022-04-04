@@ -171,7 +171,7 @@ test(['react@17', 'react-dom@17', 'react-redux?deps=react@17', 'redux'], async (
   t.ok()
 })
 
-test(['react@17', 'react-dom@17', 'mobx-react-lite?deps=react@17', 'mobx'], async (t) => {
+test(['react@17', 'react-dom@17', 'mobx-react-lite?deps=react@17,react-dom@17', 'mobx'], async (t) => {
   const [
     { createElement, Fragment },
     { render },
@@ -286,7 +286,7 @@ test(['react@17', 'react-dom@17', 'antd?deps=react@17,react-dom@17&bundle'], asy
   t.ok()
 })
 
-test(['react@17', 'react-dom@17', '@material-ui/core'], async (t) => {
+test(['react@17', 'react-dom@17', '@material-ui/core?deps=react@17,react-dom@17'], async (t) => {
   const [
     { createElement, useState },
     { render },
