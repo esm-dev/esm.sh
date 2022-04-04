@@ -552,12 +552,12 @@ esbuild:
 						_, _err := findModule(t.ID())
 						if _err == storage.ErrNotFound {
 							buildQueue.Add(t)
-							importPath = task.getImportPath(Pkg{
-								Name:      p.Name,
-								Version:   p.Version,
-								Submodule: submodule,
-							}, false)
 						}
+						importPath = task.getImportPath(Pkg{
+							Name:      p.Name,
+							Version:   p.Version,
+							Submodule: submodule,
+						}, true)
 					}
 				}
 				// force the dependency version of `react` equals to react-dom's version
@@ -581,7 +581,7 @@ esbuild:
 							Name:      p.Name,
 							Version:   p.Version,
 							Submodule: submodule,
-						}, false)
+						}, true)
 					}
 				}
 				if importPath == "" {
