@@ -1,5 +1,9 @@
 # Change Log
 
+## v76
+
+- Fix `?deps` mode
+
 ## v75
 
 - Fix types build version ignore `?pin` (close [#292](https://github.com/esm-dev/esm.sh/issues/292))
