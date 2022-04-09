@@ -2,8 +2,8 @@
 
 ## v77
 
-- Use latest version of `deno/std/node` from `cdn.deno.land` automatically
-- Add `es2022` taraget
+- Use the latest version of `deno/std/node` from `cdn.deno.land` automatically
+- Add `es2022` target
 - Upgrade esbuild to **0.14.34**
 
 ## v76
