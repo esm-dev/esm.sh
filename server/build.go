@@ -479,7 +479,7 @@ esbuild:
 					if task.Target == "node" {
 						importPath = name
 					} else if task.Target == "deno" && denoStdNodeModules[name] {
-						importPath = fmt.Sprintf("https://deno.land/std@%s/node/%s.ts", denoStdNodeVersion, name)
+						importPath = fmt.Sprintf("https://deno.land/std@%s/node/%s.ts", denoStdVersion, name)
 					} else {
 						polyfill, ok := polyfilledBuiltInNodeModules[name]
 						if ok {
@@ -695,14 +695,14 @@ esbuild:
 			if task.Target != "node" {
 				if bytes.Contains(outputContent, []byte("__Process$")) {
 					if task.Target == "deno" {
-						fmt.Fprintf(buf, `import __Process$ from "https://deno.land/std@%s/node/process.ts";%s`, denoStdNodeVersion, eol)
+						fmt.Fprintf(buf, `import __Process$ from "https://deno.land/std@%s/node/process.ts";%s`, denoStdVersion, eol)
 					} else {
 						fmt.Fprintf(buf, `import __Process$ from "/v%d/node_process.js";%s`, task.BuildVersion, eol)
 					}
 				}
 				if bytes.Contains(outputContent, []byte("__Buffer$")) {
 					if task.Target == "deno" {
-						fmt.Fprintf(buf, `import  { Buffer as __Buffer$ } from "https://deno.land/std@%s/node/buffer.ts";%s`, denoStdNodeVersion, eol)
+						fmt.Fprintf(buf, `import  { Buffer as __Buffer$ } from "https://deno.land/std@%s/node/buffer.ts";%s`, denoStdVersion, eol)
 					} else {
 						fmt.Fprintf(buf, `import { Buffer as __Buffer$ } from "/v%d/node_buffer.js";%s`, task.BuildVersion, eol)
 					}

@@ -21,14 +21,15 @@ import (
 )
 
 var (
-	cdnDomain  string
-	cache      storage.Cache
-	db         storage.DB
-	fs         storage.FS
-	buildQueue *BuildQueue
-	log        *logx.Logger
-	node       *Node
-	embedFS    EmbedFS
+	cdnDomain      string
+	cache          storage.Cache
+	db             storage.DB
+	fs             storage.FS
+	buildQueue     *BuildQueue
+	log            *logx.Logger
+	node           *Node
+	denoStdVersion string
+	embedFS        EmbedFS
 )
 
 type EmbedFS interface {
@@ -124,6 +125,12 @@ func Serve(efs EmbedFS) {
 		log.Fatalf("check nodejs env: %v", err)
 	}
 	log.Debugf("nodejs v%s installed, registry: %s, yarn: %s", node.version, node.npmRegistry, node.yarn)
+
+	denoStdVersion, err = getDenoStdVersion()
+	if err != nil {
+		log.Fatalf("getDenoStdVersion: %v", err)
+	}
+	log.Debugf("https://deno.land/std@%s found", denoStdVersion)
 
 	storage.SetLogger(log)
 	storage.SetIsDev(isDev)
@@ -233,4 +240,12 @@ func Serve(efs EmbedFS) {
 func init() {
 	embedFS = &embed.FS{}
 	log = &logx.Logger{}
+	go gogogo(time.Hour, func() {
+		version, err := getDenoStdVersion()
+		if err != nil {
+			log.Warn("getDenoStdVersion: %v", err)
+			return
+		}
+		denoStdVersion = version
+	})
 }

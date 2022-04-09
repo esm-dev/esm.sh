@@ -9,6 +9,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/ije/gox/valid"
 )
@@ -165,4 +166,12 @@ func kill(pidFile string) (err error) {
 		return
 	}
 	return process.Kill()
+}
+
+func gogogo(d time.Duration, task func()) {
+	ticker := time.NewTicker(d)
+	for {
+		<-ticker.C
+		task()
+	}
 }
