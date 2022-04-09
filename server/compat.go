@@ -20,6 +20,7 @@ var targets = map[string]api.Target{
 	"es2019": api.ES2019,
 	"es2020": api.ES2020,
 	"es2021": api.ES2021,
+	"es2022": api.ES2022,
 	"esnext": api.ESNext,
 	"node":   api.ESNext,
 	"deno":   api.ESNext,
@@ -98,6 +99,8 @@ func validateESMAFeatures(target api.Target) int {
 		constraints[compat.ES] = []int{2020}
 	case api.ES2021:
 		constraints[compat.ES] = []int{2021}
+	case api.ES2022:
+		constraints[compat.ES] = []int{2022}
 	case api.ESNext:
 	default:
 		panic("invalid target")
@@ -168,6 +171,7 @@ func getTargetByUA(ua string) string {
 			Version: version,
 		})
 		for _, target := range []string{
+			"es2022",
 			"es2021",
 			"es2020",
 			"es2019",
