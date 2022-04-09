@@ -1,5 +1,11 @@
 # Change Log
 
+## v77
+
+- Use latest version of `deno/std/node` from `cdn.deno.land` automatically
+- Add `es2022` taraget
+- Upgrade esbuild to **0.14.34**
+
 ## v76
 
 - Fix `?deps` mode
