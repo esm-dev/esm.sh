@@ -176,26 +176,27 @@ func (task *BuildTask) build(tracing *stringSet) (esm *Module, err error) {
 	}
 	tracing.Add(task.ID())
 
+	var npm *NpmPackage
 	task.stage = "init"
-	esm, err = initModule(task.wd, task.Pkg, task.Target, task.DevMode)
+	esm, npm, err = initModule(task.wd, task.Pkg, task.Target, task.DevMode)
 	if err != nil {
 		return
 	}
 
 	if task.Target == "types" {
-		if esm.Types != "" {
-			dts := esm.Name + "@" + esm.Version + "/" + esm.Types
+		if npm.Types != "" {
+			dts := esm.Name + "@" + esm.Version + "/" + npm.Types
 			task.stage = "transform-dts"
 			task.transformDTS(dts)
 		}
 		return
 	}
 
-	if esm.Main == "" && esm.Module == "" && esm.Types != "" {
-		dts := esm.Name + "@" + esm.Version + "/" + esm.Types
+	if npm.Main == "" && npm.Module == "" && npm.Types != "" {
+		dts := npm.Name + "@" + npm.Version + "/" + npm.Types
 		task.stage = "transform-dts"
 		task.transformDTS(dts)
-		task.findDTS(esm)
+		task.checkDTS(esm, npm)
 		task.storeToDB(esm)
 		return
 	}
@@ -210,7 +211,7 @@ func (task *BuildTask) build(tracing *stringSet) (esm *Module, err error) {
 	var entryPoint string
 	var input *api.StdinOptions
 
-	if esm.Module == "" {
+	if npm.Module == "" {
 		buf := bytes.NewBuffer(nil)
 		importPath := task.Pkg.ImportPath()
 		fmt.Fprintf(buf, `import $default from "%s";`, importPath)
@@ -226,7 +227,7 @@ func (task *BuildTask) build(tracing *stringSet) (esm *Module, err error) {
 			Sourcefile: "mod.js",
 		}
 	} else {
-		entryPoint = path.Join(task.wd, "node_modules", esm.Name, esm.Module)
+		entryPoint = path.Join(task.wd, "node_modules", esm.Name, npm.Module)
 	}
 
 	nodeEnv := "production"
@@ -282,7 +283,7 @@ func (task *BuildTask) build(tracing *stringSet) (esm *Module, err error) {
 							pkgName = a[1]
 						}
 						if !builtInNodeModules[pkgName] {
-							_, ok := esm.PeerDependencies[pkgName]
+							_, ok := npm.PeerDependencies[pkgName]
 							if !ok {
 								return api.OnResolveResult{}, nil
 							}
@@ -298,7 +299,7 @@ func (task *BuildTask) build(tracing *stringSet) (esm *Module, err error) {
 							resolvedPath = strings.TrimPrefix(resolvedPath, "/private")
 						}
 						modulePath := "." + strings.TrimPrefix(resolvedPath, path.Join(task.wd, "node_modules", esm.Name))
-						v, ok := esm.DefinedExports.(map[string]interface{})
+						v, ok := npm.DefinedExports.(map[string]interface{})
 						if ok {
 							for export, paths := range v {
 								m, ok := paths.(map[string]interface{})
@@ -535,9 +536,9 @@ esbuild:
 				// common npm dependency
 				if importPath == "" {
 					version := "latest"
-					if v, ok := esm.Dependencies[name]; ok {
+					if v, ok := npm.Dependencies[name]; ok {
 						version = v
-					} else if v, ok := esm.PeerDependencies[name]; ok {
+					} else if v, ok := npm.PeerDependencies[name]; ok {
 						version = v
 					}
 					p, submodule, _, e := getPackageInfo(task.wd, name, version)
@@ -597,7 +598,7 @@ esbuild:
 								}
 							}
 							if err == nil {
-								dep, err := initModule(task.wd, *pkg, task.Target, task.DevMode)
+								dep, depNpm, err := initModule(task.wd, *pkg, task.Target, task.DevMode)
 								if err == nil {
 									if bytes.HasPrefix(p, []byte{'.'}) {
 										// right shift to strip the object `key`
@@ -622,12 +623,12 @@ esbuild:
 										}
 									}
 									// if the dependency is an es module without `default` export, then use star import
-									if !marked && dep.Module != "" && !dep.ExportDefault {
+									if !marked && depNpm.Module != "" && !dep.ExportDefault {
 										cjsImports.Add("*")
 										marked = true
 									}
 									// if the dependency is an cjs module with `default` export, then use star import
-									if !marked && dep.Module == "" && dep.ExportDefault {
+									if !marked && depNpm.Module == "" && dep.ExportDefault {
 										cjsImports.Add("__esModule")
 										marked = true
 									}
@@ -744,7 +745,7 @@ esbuild:
 		}
 	}
 
-	task.findDTS(esm)
+	task.checkDTS(esm, npm)
 	task.storeToDB(esm)
 	return
 }
@@ -762,13 +763,13 @@ func (task *BuildTask) storeToDB(esm *Module) {
 	}
 }
 
-func (task *BuildTask) findDTS(esm *Module) {
+func (task *BuildTask) checkDTS(esm *Module, npm *NpmPackage) {
 	name := task.Pkg.Name
 	submodule := task.Pkg.Submodule
 
 	var dts string
-	if esm.Types != "" {
-		dts = toTypesPath(task.wd, *esm.NpmPackage, submodule)
+	if npm.Types != "" {
+		dts = toTypesPath(task.wd, npm, submodule)
 	} else if !strings.HasPrefix(name, "@types/") {
 		versions := []string{"latest"}
 		versionParts := strings.Split(task.Pkg.Version, ".")
@@ -786,7 +787,7 @@ func (task *BuildTask) findDTS(esm *Module) {
 		for _, version := range versions {
 			p, _, _, err := getPackageInfo(task.wd, typesPkgName, version)
 			if err == nil {
-				dts = toTypesPath(task.wd, p, submodule)
+				dts = toTypesPath(task.wd, &p, submodule)
 				break
 			}
 		}

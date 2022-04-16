@@ -17,8 +17,7 @@ import (
 	"github.com/ije/gox/utils"
 )
 
-// ESM defines the ES Module meta
-type Module struct {
+type OldModule struct {
 	*NpmPackage
 	ExportDefault bool     `json:"exportDefault"`
 	Exports       []string `json:"exports"`
@@ -26,7 +25,19 @@ type Module struct {
 	PackageCSS    bool     `json:"packageCSS"`
 }
 
-func initModule(wd string, pkg Pkg, target string, isDev bool) (esm *Module, err error) {
+// ESM defines the ES Module meta
+type Module struct {
+	Name          string   `json:"n"`
+	Version       string   `json:"v"`
+	CJS           bool     `json:"c"`
+	ExportDefault bool     `json:"d"`
+	Exports       []string `json:"e"`
+	TypesOnly     bool     `json:"o"`
+	Dts           string   `json:"t"`
+	PackageCSS    bool     `json:"s"`
+}
+
+func initModule(wd string, pkg Pkg, target string, isDev bool) (esm *Module, npm *NpmPackage, err error) {
 	packageDir := path.Join(wd, "node_modules", pkg.Name)
 	packageFile := path.Join(packageDir, "package.json")
 
@@ -36,9 +47,16 @@ func initModule(wd string, pkg Pkg, target string, isDev bool) (esm *Module, err
 		return
 	}
 
+	npm = fixNpmPackage(p, target, isDev)
 	esm = &Module{
-		NpmPackage: fixNpmPackage(p, target, isDev),
+		Name:    npm.Name,
+		Version: npm.Version,
 	}
+
+	defer func() {
+		esm.CJS = npm.Module == ""
+		esm.TypesOnly = npm.Module == "" && npm.Main == "" && npm.Types != ""
+	}()
 
 	if pkg.Submodule != "" {
 		if strings.HasSuffix(pkg.Submodule, ".d.ts") {
@@ -46,12 +64,12 @@ func initModule(wd string, pkg Pkg, target string, isDev bool) (esm *Module, err
 				submodule := strings.TrimSuffix(pkg.Submodule, "~.d.ts")
 				subDir := path.Join(wd, "node_modules", esm.Name, submodule)
 				if fileExists(path.Join(subDir, "index.d.ts")) {
-					esm.Types = path.Join(submodule, "index.d.ts")
+					npm.Types = path.Join(submodule, "index.d.ts")
 				} else if fileExists(path.Join(subDir + ".d.ts")) {
-					esm.Types = submodule + ".d.ts"
+					npm.Types = submodule + ".d.ts"
 				}
 			} else {
-				esm.Types = pkg.Submodule
+				npm.Types = pkg.Submodule
 			}
 		} else {
 			subDir := path.Join(wd, "node_modules", esm.Name, pkg.Submodule)
@@ -64,24 +82,24 @@ func initModule(wd string, pkg Pkg, target string, isDev bool) (esm *Module, err
 				}
 				np := fixNpmPackage(p, target, isDev)
 				if np.Module != "" {
-					esm.Module = path.Join(pkg.Submodule, np.Module)
+					npm.Module = path.Join(pkg.Submodule, np.Module)
 				} else {
-					esm.Module = ""
+					npm.Module = ""
 				}
 				if p.Main != "" {
-					esm.Main = path.Join(pkg.Submodule, p.Main)
+					npm.Main = path.Join(pkg.Submodule, p.Main)
 				} else {
-					esm.Main = path.Join(pkg.Submodule, "index.js")
+					npm.Main = path.Join(pkg.Submodule, "index.js")
 				}
-				esm.Types = ""
+				npm.Types = ""
 				if p.Types != "" {
-					esm.Types = path.Join(pkg.Submodule, p.Types)
+					npm.Types = path.Join(pkg.Submodule, p.Types)
 				} else if p.Typings != "" {
-					esm.Types = path.Join(pkg.Submodule, p.Typings)
+					npm.Types = path.Join(pkg.Submodule, p.Typings)
 				} else if fileExists(path.Join(subDir, "index.d.ts")) {
-					esm.Types = path.Join(pkg.Submodule, "index.d.ts")
+					npm.Types = path.Join(pkg.Submodule, "index.d.ts")
 				} else if fileExists(path.Join(subDir + ".d.ts")) {
-					esm.Types = pkg.Submodule + ".d.ts"
+					npm.Types = pkg.Submodule + ".d.ts"
 				}
 			} else {
 				var resolved bool
@@ -97,7 +115,7 @@ func initModule(wd string, pkg Pkg, target string, isDev bool) (esm *Module, err
 								    }
 								  }
 								*/
-								resolvePackageExports(esm.NpmPackage, defines, target, isDev)
+								resolvePackageExports(npm, defines, target, isDev)
 								resolved = true
 								break
 							} else if strings.HasSuffix(name, "/*") && strings.HasPrefix("./"+pkg.Submodule, strings.TrimSuffix(name, "*")) {
@@ -125,7 +143,7 @@ func initModule(wd string, pkg Pkg, target string, isDev bool) (esm *Module, err
 									hasDefines = true
 								}
 								if hasDefines {
-									resolvePackageExports(esm.NpmPackage, defines, target, isDev)
+									resolvePackageExports(npm, defines, target, isDev)
 									resolved = true
 								}
 							}
@@ -133,17 +151,17 @@ func initModule(wd string, pkg Pkg, target string, isDev bool) (esm *Module, err
 					}
 				}
 				if !resolved {
-					if esm.Type == "module" || esm.Module != "" {
+					if npm.Type == "module" || npm.Module != "" {
 						// follow main module type
-						esm.Module = pkg.Submodule
+						npm.Module = pkg.Submodule
 					} else {
-						esm.Main = pkg.Submodule
+						npm.Main = pkg.Submodule
 					}
-					esm.Types = ""
+					npm.Types = ""
 					if fileExists(path.Join(subDir, "index.d.ts")) {
-						esm.Types = path.Join(pkg.Submodule, "index.d.ts")
+						npm.Types = path.Join(pkg.Submodule, "index.d.ts")
 					} else if fileExists(path.Join(subDir + ".d.ts")) {
-						esm.Types = pkg.Submodule + ".d.ts"
+						npm.Types = pkg.Submodule + ".d.ts"
 					}
 				}
 			}
@@ -154,36 +172,36 @@ func initModule(wd string, pkg Pkg, target string, isDev bool) (esm *Module, err
 		return
 	}
 
-	if esm.Main == "" && esm.Module == "" {
+	if npm.Main == "" && npm.Module == "" {
 		if fileExists(path.Join(packageDir, "index.mjs")) {
-			esm.Module = "./index.mjs"
+			npm.Module = "./index.mjs"
 		} else if fileExists(path.Join(packageDir, "index.js")) {
-			esm.Main = "./index.js"
+			npm.Main = "./index.js"
 		}
 	}
 
 	// for pure types packages
-	if esm.Main == "" && esm.Module == "" && esm.Types != "" {
+	if npm.Main == "" && npm.Module == "" && npm.Types != "" {
 		return
 	}
 
-	if esm.Module == "" && esm.Main != "" && (strings.Contains(esm.Main, "/esm/") || strings.Contains(esm.Main, "/es/") || strings.HasSuffix(esm.Main, ".mjs")) {
-		esm.Module = esm.Main
+	if npm.Module == "" && npm.Main != "" && (strings.Contains(npm.Main, "/npm/") || strings.Contains(npm.Main, "/es/") || strings.HasSuffix(npm.Main, ".mjs")) {
+		npm.Module = npm.Main
 	}
 
-	if esm.Module != "" {
-		modulePath, exportDefault, err := checkESM(wd, esm.Name, esm.Module)
+	if npm.Module != "" {
+		modulePath, exportDefault, err := checkESM(wd, npm.Name, npm.Module)
 		if err == nil {
-			esm.Module = modulePath
+			npm.Module = modulePath
 			esm.ExportDefault = exportDefault
 		} else {
-			log.Warnf("fake module from '%s' of '%s': %v", esm.Module, esm.Name, err)
-			esm.Main = esm.Module
-			esm.Module = ""
+			log.Warnf("fake module from '%s' of '%s': %v", npm.Module, npm.Name, err)
+			npm.Main = npm.Module
+			npm.Module = ""
 		}
 	}
 
-	if esm.Module == "" && esm.Main != "" {
+	if npm.Module == "" && npm.Main != "" {
 		nodeEnv := "production"
 		if isDev {
 			nodeEnv = "development"
@@ -221,10 +239,10 @@ func initModule(wd string, pkg Pkg, target string, isDev bool) (esm *Module, err
 		// }
 	}
 
-	if path.Dir(esm.Main) != "" && esm.Types == "" {
-		typesPath := path.Join(path.Dir(esm.Main), "index.d.ts")
+	if path.Dir(npm.Main) != "" && npm.Types == "" {
+		typesPath := path.Join(path.Dir(npm.Main), "index.d.ts")
 		if fileExists(path.Join(packageDir, typesPath)) {
-			esm.Types = typesPath
+			npm.Types = typesPath
 		}
 	}
 
@@ -235,7 +253,27 @@ func findModule(id string) (esm *Module, err error) {
 	store, _, err := db.Get(id)
 	if err == nil {
 		err = json.Unmarshal([]byte(store["esm"]), &esm)
-		if err != nil {
+		if err == nil && esm.Name == "" {
+			var old OldModule
+			err = json.Unmarshal([]byte(store["esm"]), &old)
+			if err == nil {
+				esm = &Module{
+					Name:          old.Name,
+					Version:       old.Version,
+					CJS:           old.Module == "" && old.Main != "",
+					ExportDefault: old.ExportDefault,
+					Exports:       old.Exports,
+					TypesOnly:     old.Module == "" && old.Main == "" && old.Types != "",
+					Dts:           old.Dts,
+					PackageCSS:    old.PackageCSS,
+				}
+				// update db
+				// db.Put(id, "build", storage.Store{
+				// 	"esm": string(utils.MustEncodeJSON(esm)),
+				// })
+			}
+		}
+		if err != nil || esm.Name == "" {
 			db.Delete(id)
 			err = storage.ErrNotFound
 			return

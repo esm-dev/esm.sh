@@ -559,7 +559,7 @@ func query(devMode bool) rex.Handle {
 			origin = fmt.Sprintf("https://%s/", cdnDomain)
 		}
 
-		if esm.Main == "" && esm.Module == "" && esm.Types != "" {
+		if esm.TypesOnly {
 			if esm.Dts != "" && !noCheck {
 				value := fmt.Sprintf(
 					"%s%s",
@@ -640,7 +640,7 @@ func query(devMode bool) rex.Handle {
 			fmt.Fprintf(buf, `export default function workerFactory() {%s  return new Worker('%s%s', { type: 'module' })%s}`, "\n", origin, taskID, "\n")
 		} else {
 			fmt.Fprintf(buf, `export * from "%s%s";%s`, origin, taskID, "\n")
-			if esm.Module == "" || esm.ExportDefault {
+			if esm.CJS || esm.ExportDefault {
 				fmt.Fprintf(
 					buf,
 					`export { default } from "%s%s";%s`,

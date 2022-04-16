@@ -145,6 +145,16 @@ func Serve(efs EmbedFS) {
 		log.Fatalf("init storage(db,%s): %v", dbUrl, err)
 	}
 
+	items, err := db.List("build")
+	if err == nil {
+		for id, item := range items {
+			esm := item.Store["esm"]
+			if esm != "" {
+				fmt.Println(id, esm)
+			}
+		}
+	}
+
 	fs, err = storage.OpenFS(fsUrl)
 	if err != nil {
 		log.Fatalf("init storage(fs,%s): %v", fsUrl, err)
