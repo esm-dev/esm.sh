@@ -263,7 +263,6 @@ func findModule(id string) (esm *ModuleMeta, err error) {
 				db.Put(id, "build", storage.Store{
 					"meta": string(utils.MustEncodeJSON(esm)),
 				})
-				fmt.Println("update", id)
 			}
 		} else {
 			err = fmt.Errorf("bad data")
