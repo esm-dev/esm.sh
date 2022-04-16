@@ -353,7 +353,7 @@ func fetchPackageInfo(name string, version string) (info NpmPackage, err error) 
 			info = h.Versions[distVersion]
 		} else {
 			var c *semver.Constraints
-			c, err = semver.NewConstraint(version)``
+			c, err = semver.NewConstraint(version)
 			if err != nil && version != "latest" {
 				return fetchPackageInfo(name, "latest")
 			}
