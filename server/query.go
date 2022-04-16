@@ -546,7 +546,7 @@ func query(devMode bool) rex.Handle {
 					if output.err != nil {
 						return throwErrorJS(ctx, output.err)
 					}
-					esm = output.esm
+					esm = output.meta
 				case <-time.After(time.Minute):
 					buildQueue.RemoveConsumer(task, c)
 					return rex.Status(http.StatusRequestTimeout, "timeout, we are building the package hardly, please try again later!")

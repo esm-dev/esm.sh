@@ -131,7 +131,7 @@ func (task *BuildTask) getImportPath(pkg Pkg, prefix string, infectDeps bool) st
 	)
 }
 
-func (task *BuildTask) Build() (esm *Module, err error) {
+func (task *BuildTask) Build() (esm *ModuleMeta, err error) {
 	prev, err := findModule(task.ID())
 	if err == nil {
 		return prev, nil
@@ -170,7 +170,7 @@ func (task *BuildTask) Build() (esm *Module, err error) {
 	return task.build(newStringSet())
 }
 
-func (task *BuildTask) build(tracing *stringSet) (esm *Module, err error) {
+func (task *BuildTask) build(tracing *stringSet) (esm *ModuleMeta, err error) {
 	if tracing.Has(task.ID()) {
 		return
 	}
@@ -185,7 +185,7 @@ func (task *BuildTask) build(tracing *stringSet) (esm *Module, err error) {
 
 	if task.Target == "types" {
 		if npm.Types != "" {
-			dts := esm.Name + "@" + esm.Version + "/" + npm.Types
+			dts := npm.Name + "@" + npm.Version + "/" + npm.Types
 			task.stage = "transform-dts"
 			task.transformDTS(dts)
 		}
@@ -227,7 +227,7 @@ func (task *BuildTask) build(tracing *stringSet) (esm *Module, err error) {
 			Sourcefile: "mod.js",
 		}
 	} else {
-		entryPoint = path.Join(task.wd, "node_modules", esm.Name, npm.Module)
+		entryPoint = path.Join(task.wd, "node_modules", npm.Name, npm.Module)
 	}
 
 	nodeEnv := "production"
@@ -298,7 +298,7 @@ func (task *BuildTask) build(tracing *stringSet) (esm *Module, err error) {
 						if strings.HasPrefix(resolvedPath, "/private/var/") {
 							resolvedPath = strings.TrimPrefix(resolvedPath, "/private")
 						}
-						modulePath := "." + strings.TrimPrefix(resolvedPath, path.Join(task.wd, "node_modules", esm.Name))
+						modulePath := "." + strings.TrimPrefix(resolvedPath, path.Join(task.wd, "node_modules", npm.Name))
 						v, ok := npm.DefinedExports.(map[string]interface{})
 						if ok {
 							for export, paths := range v {
@@ -323,7 +323,7 @@ func (task *BuildTask) build(tracing *stringSet) (esm *Module, err error) {
 												}
 											}
 											if match {
-												url := path.Join(esm.Name, export)
+												url := path.Join(npm.Name, export)
 												if url == task.Pkg.ImportPath() {
 													return api.OnResolveResult{}, nil
 												}
@@ -750,12 +750,12 @@ esbuild:
 	return
 }
 
-func (task *BuildTask) storeToDB(esm *Module) {
+func (task *BuildTask) storeToDB(esm *ModuleMeta) {
 	dbErr := db.Put(
 		task.ID(),
 		"build",
 		storage.Store{
-			"esm": string(utils.MustEncodeJSON(esm)),
+			"meta": string(utils.MustEncodeJSON(esm)),
 		},
 	)
 	if dbErr != nil {
@@ -763,7 +763,7 @@ func (task *BuildTask) storeToDB(esm *Module) {
 	}
 }
 
-func (task *BuildTask) checkDTS(esm *Module, npm *NpmPackage) {
+func (task *BuildTask) checkDTS(esm *ModuleMeta, npm *NpmPackage) {
 	name := task.Pkg.Name
 	submodule := task.Pkg.Submodule
 

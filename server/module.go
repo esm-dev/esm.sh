@@ -17,7 +17,7 @@ import (
 	"github.com/ije/gox/utils"
 )
 
-type OldModule struct {
+type OldMeta struct {
 	*NpmPackage
 	ExportDefault bool     `json:"exportDefault"`
 	Exports       []string `json:"exports"`
@@ -26,18 +26,16 @@ type OldModule struct {
 }
 
 // ESM defines the ES Module meta
-type Module struct {
-	Name          string   `json:"n"`
-	Version       string   `json:"v"`
-	CJS           bool     `json:"c"`
-	ExportDefault bool     `json:"d"`
+type ModuleMeta struct {
 	Exports       []string `json:"-"`
+	ExportDefault bool     `json:"d"`
+	CJS           bool     `json:"c"`
 	TypesOnly     bool     `json:"o"`
 	Dts           string   `json:"t"`
 	PackageCSS    bool     `json:"s"`
 }
 
-func initModule(wd string, pkg Pkg, target string, isDev bool) (esm *Module, npm *NpmPackage, err error) {
+func initModule(wd string, pkg Pkg, target string, isDev bool) (esm *ModuleMeta, npm *NpmPackage, err error) {
 	packageDir := path.Join(wd, "node_modules", pkg.Name)
 	packageFile := path.Join(packageDir, "package.json")
 
@@ -48,10 +46,7 @@ func initModule(wd string, pkg Pkg, target string, isDev bool) (esm *Module, npm
 	}
 
 	npm = fixNpmPackage(p, target, isDev)
-	esm = &Module{
-		Name:    npm.Name,
-		Version: npm.Version,
-	}
+	esm = &ModuleMeta{}
 
 	defer func() {
 		esm.CJS = npm.Module == ""
@@ -62,7 +57,7 @@ func initModule(wd string, pkg Pkg, target string, isDev bool) (esm *Module, npm
 		if strings.HasSuffix(pkg.Submodule, ".d.ts") {
 			if strings.HasSuffix(pkg.Submodule, "~.d.ts") {
 				submodule := strings.TrimSuffix(pkg.Submodule, "~.d.ts")
-				subDir := path.Join(wd, "node_modules", esm.Name, submodule)
+				subDir := path.Join(wd, "node_modules", npm.Name, submodule)
 				if fileExists(path.Join(subDir, "index.d.ts")) {
 					npm.Types = path.Join(submodule, "index.d.ts")
 				} else if fileExists(path.Join(subDir + ".d.ts")) {
@@ -72,7 +67,7 @@ func initModule(wd string, pkg Pkg, target string, isDev bool) (esm *Module, npm
 				npm.Types = pkg.Submodule
 			}
 		} else {
-			subDir := path.Join(wd, "node_modules", esm.Name, pkg.Submodule)
+			subDir := path.Join(wd, "node_modules", npm.Name, pkg.Submodule)
 			packageFile := path.Join(subDir, "package.json")
 			if fileExists(packageFile) {
 				var p NpmPackage
@@ -249,17 +244,15 @@ func initModule(wd string, pkg Pkg, target string, isDev bool) (esm *Module, npm
 	return
 }
 
-func findModule(id string) (esm *Module, err error) {
+func findModule(id string) (esm *ModuleMeta, err error) {
 	store, _, err := db.Get(id)
 	if err == nil {
-		err = json.Unmarshal([]byte(store["esm"]), &esm)
-		if err == nil && esm.Name == "" {
-			var old OldModule
-			err = json.Unmarshal([]byte(store["esm"]), &old)
-			if err == nil && old.Name != "" {
-				esm = &Module{
-					Name:          old.Name,
-					Version:       old.Version,
+		if v, ok := store["meta"]; ok {
+			err = json.Unmarshal([]byte(v), &esm)
+		} else if v, ok := store["esm"]; ok {
+			var old OldMeta
+			if json.Unmarshal([]byte(v), &old) == nil {
+				esm = &ModuleMeta{
 					CJS:           old.Module == "" && old.Main != "",
 					ExportDefault: old.ExportDefault,
 					TypesOnly:     old.Module == "" && old.Main == "" && old.Types != "",
@@ -268,11 +261,14 @@ func findModule(id string) (esm *Module, err error) {
 				}
 				// update db
 				db.Put(id, "build", storage.Store{
-					"esm": string(utils.MustEncodeJSON(esm)),
+					"meta": string(utils.MustEncodeJSON(esm)),
 				})
+				fmt.Println("update", id)
 			}
+		} else {
+			err = fmt.Errorf("bad data")
 		}
-		if err != nil || esm.Name == "" {
+		if err != nil {
 			db.Delete(id)
 			err = storage.ErrNotFound
 			return

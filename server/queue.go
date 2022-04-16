@@ -21,8 +21,8 @@ type BuildQueueConsumer struct {
 }
 
 type BuildOutput struct {
-	esm *Module
-	err error
+	meta *ModuleMeta
+	err  error
 }
 
 type queueTask struct {
@@ -37,8 +37,8 @@ type queueTask struct {
 func (t *queueTask) run() BuildOutput {
 	c := make(chan BuildOutput, 1)
 	go func(c chan BuildOutput) {
-		esm, err := t.Build()
-		c <- BuildOutput{esm, err}
+		mate, err := t.Build()
+		c <- BuildOutput{mate, err}
 	}(c)
 
 	var output BuildOutput
