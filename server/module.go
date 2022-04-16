@@ -256,7 +256,7 @@ func findModule(id string) (esm *Module, err error) {
 		if err == nil && esm.Name == "" {
 			var old OldModule
 			err = json.Unmarshal([]byte(store["esm"]), &old)
-			if err == nil {
+			if err == nil && old.Name != "" {
 				esm = &Module{
 					Name:          old.Name,
 					Version:       old.Version,
@@ -268,9 +268,9 @@ func findModule(id string) (esm *Module, err error) {
 					PackageCSS:    old.PackageCSS,
 				}
 				// update db
-				// db.Put(id, "build", storage.Store{
-				// 	"esm": string(utils.MustEncodeJSON(esm)),
-				// })
+				db.Put(id, "build", storage.Store{
+					"esm": string(utils.MustEncodeJSON(esm)),
+				})
 			}
 		}
 		if err != nil || esm.Name == "" {
