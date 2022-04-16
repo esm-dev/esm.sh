@@ -1,0 +1,18 @@
+{
+  "name": "es-compat",
+  "version": "0.0.0",
+  "description": "ES compat",
+  "main": "index.js",
+  "types": "index.d.ts",
+  "scripts": {
+     
+  },
+  "files": [
+    "index.js",
+    "index.d.js"
+  ],
+  "dependencies": {
+  },
+  "repository": "https://github.com/esm-dev/esm.sh",
+  "license": "MIT"
+}

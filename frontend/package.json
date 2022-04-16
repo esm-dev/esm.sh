@@ -1,0 +1,13 @@
+{
+  "name": "frontend",
+  "version": "0.0.0",
+  "description": "The frontend of esm.sh deployed to Cloudfleare Worker.",
+  "private":"true",
+  "scripts": {
+     
+  }, 
+  "dependencies": {
+  },
+  "repository": "https://github.com/esm-dev/esm.sh",
+  "license": "MIT"
+}
