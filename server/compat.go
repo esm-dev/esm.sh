@@ -52,6 +52,7 @@ var jsFeatures = []compat.JSFeature{
 	compat.ClassPrivateStaticAccessor,
 	compat.ClassPrivateStaticField,
 	compat.ClassPrivateStaticMethod,
+	compat.ClassStaticBlocks,
 	compat.ClassStaticField,
 	compat.Const,
 	compat.DefaultArgument,
@@ -69,6 +70,8 @@ var jsFeatures = []compat.JSFeature{
 	compat.LogicalAssignment,
 	compat.NestedRestBinding,
 	compat.NewTarget,
+	compat.NodeColonPrefixImport,
+	compat.NodeColonPrefixRequire,
 	compat.NullishCoalescing,
 	compat.ObjectAccessors,
 	compat.ObjectExtensions,
@@ -78,6 +81,7 @@ var jsFeatures = []compat.JSFeature{
 	compat.RestArgument,
 	compat.TemplateLiteral,
 	compat.TopLevelAwait,
+	compat.TypeofExoticObjectIsObject,
 	compat.UnicodeEscapes,
 }
 
