@@ -17,14 +17,6 @@ import (
 	"github.com/ije/gox/utils"
 )
 
-type OldMeta struct {
-	*NpmPackage
-	ExportDefault bool     `json:"exportDefault"`
-	Exports       []string `json:"exports"`
-	Dts           string   `json:"dts"`
-	PackageCSS    bool     `json:"packageCSS"`
-}
-
 // ESM defines the ES Module meta
 type ModuleMeta struct {
 	Exports       []string `json:"-"`
@@ -244,6 +236,14 @@ func initModule(wd string, pkg Pkg, target string, isDev bool) (esm *ModuleMeta,
 	return
 }
 
+type OldMeta struct {
+	*NpmPackage
+	ExportDefault bool     `json:"exportDefault"`
+	Exports       []string `json:"exports"`
+	Dts           string   `json:"dts"`
+	PackageCSS    bool     `json:"packageCSS"`
+}
+
 func findModule(id string) (esm *ModuleMeta, err error) {
 	store, _, err := db.Get(id)
 	if err == nil {
@@ -251,7 +251,8 @@ func findModule(id string) (esm *ModuleMeta, err error) {
 			err = json.Unmarshal([]byte(v), &esm)
 		} else if v, ok := store["esm"]; ok {
 			var old OldMeta
-			if json.Unmarshal([]byte(v), &old) == nil {
+			err = json.Unmarshal([]byte(v), &old)
+			if err == nil {
 				esm = &ModuleMeta{
 					CJS:           old.Module == "" && old.Main != "",
 					ExportDefault: old.ExportDefault,
@@ -259,10 +260,6 @@ func findModule(id string) (esm *ModuleMeta, err error) {
 					Dts:           old.Dts,
 					PackageCSS:    old.PackageCSS,
 				}
-				// update db
-				db.Put(id, "build", storage.Store{
-					"meta": string(utils.MustEncodeJSON(esm)),
-				})
 			}
 		} else {
 			err = fmt.Errorf("bad data")

@@ -196,7 +196,6 @@ func (task *BuildTask) build(tracing *stringSet) (esm *ModuleMeta, err error) {
 		dts := npm.Name + "@" + npm.Version + "/" + npm.Types
 		task.stage = "transform-dts"
 		task.transformDTS(dts)
-		task.checkDTS(esm, npm)
 		task.storeToDB(esm)
 		return
 	}
