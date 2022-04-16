@@ -31,7 +31,7 @@ type Module struct {
 	Version       string   `json:"v"`
 	CJS           bool     `json:"c"`
 	ExportDefault bool     `json:"d"`
-	Exports       []string `json:"e"`
+	Exports       []string `json:"-"`
 	TypesOnly     bool     `json:"o"`
 	Dts           string   `json:"t"`
 	PackageCSS    bool     `json:"s"`
@@ -262,7 +262,6 @@ func findModule(id string) (esm *Module, err error) {
 					Version:       old.Version,
 					CJS:           old.Module == "" && old.Main != "",
 					ExportDefault: old.ExportDefault,
-					Exports:       old.Exports,
 					TypesOnly:     old.Module == "" && old.Main == "" && old.Types != "",
 					Dts:           old.Dts,
 					PackageCSS:    old.PackageCSS,
