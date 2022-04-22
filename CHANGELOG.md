@@ -1,5 +1,12 @@
 # Change Log
 
+## v78
+
+- Fix missed `renderToReadableStream` export of `react/server` in deno
+- Reduce database store structure
+- Fix fetchPackageInfo dead loop (close [#301](https://github.com/esm-dev/esm.sh/issues/301))
+- Upgrade esbuild to **0.14.36**
+
 ## v77
 
 - Use the latest version of `deno/std/node` from `cdn.deno.land` automatically
