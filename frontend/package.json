@@ -1,7 +1,7 @@
 {
   "name": "frontend",
   "version": "0.0.0",
-  "description": "The frontend of esm.sh deployed to Cloudfleare Worker.",
+  "description": "The frontend of esm.sh deployed to Cloudflare Worker.",
   "private":"true",
   "scripts": {
      
