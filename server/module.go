@@ -7,7 +7,6 @@ import (
 	"io/ioutil"
 	"path"
 	"strings"
-	"time"
 
 	"esm.sh/server/storage"
 	"github.com/ije/esbuild-internal/js_ast"
@@ -44,6 +43,11 @@ func initModule(wd string, pkg Pkg, target string, isDev bool) (esm *ModuleMeta,
 		esm.CJS = npm.Module == ""
 		esm.TypesOnly = npm.Module == "" && npm.Main == "" && npm.Types != ""
 	}()
+
+	nodeEnv := "production"
+	if isDev {
+		nodeEnv = "development"
+	}
 
 	if pkg.Submodule != "" {
 		if strings.HasSuffix(pkg.Submodule, ".d.ts") {
@@ -164,6 +168,8 @@ func initModule(wd string, pkg Pkg, target string, isDev bool) (esm *ModuleMeta,
 			npm.Module = "./index.mjs"
 		} else if fileExists(path.Join(packageDir, "index.js")) {
 			npm.Main = "./index.js"
+		} else if fileExists(path.Join(packageDir, "index.cjs")) {
+			npm.Main = "./index.cjs"
 		}
 	}
 
@@ -177,40 +183,39 @@ func initModule(wd string, pkg Pkg, target string, isDev bool) (esm *ModuleMeta,
 	}
 
 	if npm.Module != "" {
-		modulePath, exportDefault, err := checkESM(wd, npm.Name, npm.Module)
-		if err == nil {
+		modulePath, exportDefault, reason := checkESM(wd, npm.Name, npm.Module)
+		if reason == nil {
 			npm.Module = modulePath
 			esm.ExportDefault = exportDefault
-		} else {
-			log.Warnf("fake module from '%s' of '%s': %v", npm.Module, npm.Name, err)
-			npm.Main = npm.Module
-			npm.Module = ""
-		}
-	}
-
-	if npm.Module == "" && npm.Main != "" {
-		nodeEnv := "production"
-		if isDev {
-			nodeEnv = "development"
-		}
-		for i := 0; i < 3; i++ {
+		} else if reason.Error() == "not a module" {
 			var ret cjsExportsResult
-			ret, err = parseCJSModuleExports(wd, pkg.ImportPath(), nodeEnv)
+			ret, err = parseCJSModuleExports(wd, path.Join(pkg.Name, strings.TrimSuffix(npm.Module, ".js")), nodeEnv)
+			if err == nil && ret.Error != "" {
+				err = fmt.Errorf(ret.Error)
+			}
 			if err != nil {
 				return
 			}
-			if ret.Error == "" {
-				esm.ExportDefault = ret.ExportDefault
-				esm.Exports = ret.Exports
-				break
-			}
-			err = fmt.Errorf("parseCJSModuleExports: %s", ret.Error)
-			if i == 2 || !strings.Contains(ret.Error, "Can't resolve") {
-				return
-			}
-			// retry after 50ms
-			time.Sleep(50 * time.Millisecond)
+			npm.Main = npm.Module
+			npm.Module = ""
+			esm.ExportDefault = ret.ExportDefault
+			esm.Exports = ret.Exports
+			log.Warnf("fake module from '%s' of '%s': %v", npm.Main, npm.Name, err)
+		} else {
+			err = reason
+			return
 		}
+	} else if npm.Main != "" {
+		var ret cjsExportsResult
+		ret, err = parseCJSModuleExports(wd, pkg.ImportPath(), nodeEnv)
+		if err == nil && ret.Error != "" {
+			err = fmt.Errorf(ret.Error)
+		}
+		if err != nil {
+			return
+		}
+		esm.ExportDefault = ret.ExportDefault
+		esm.Exports = ret.Exports
 		// if ret.Error != "" && strings.Contains(ret.Error, "Unexpected export statement in CJS module") {
 		//   if pkg.Submodule != "" {
 		//     esm.Module = pkg.Submodule
