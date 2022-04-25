@@ -21,7 +21,11 @@ import (
 )
 
 var (
+	basePath       string
+	baseRedirect   bool
 	cdnDomain      string
+	typesCdnDomain string
+	cdnBasePath    string
 	cache          storage.Cache
 	db             storage.DB
 	fs             storage.FS
@@ -55,7 +59,11 @@ func Serve(efs EmbedFS) {
 	)
 	flag.IntVar(&port, "port", 80, "http server port")
 	flag.IntVar(&httpsPort, "https-port", 0, "https(autotls) server port, default is disabled")
+	flag.StringVar(&basePath, "basepath", "", "base path")
+	flag.BoolVar(&baseRedirect, "base-redirect", false, "http redrect for URLs not from basepath")
 	flag.StringVar(&cdnDomain, "cdn-domain", "", "cdn domain")
+	flag.StringVar(&typesCdnDomain, "types-cdn-domain", "", "cdn domain for only types, default is the cdn domain value")
+	flag.StringVar(&cdnBasePath, "cdn-basepath", "", "cdn base path, default is the basepath value")
 	flag.StringVar(&etcDir, "etc-dir", ".esmd", "etc dir")
 	flag.StringVar(&cacheUrl, "cache", "", "cache config, default is 'memory:default'")
 	flag.StringVar(&dbUrl, "db", "", "database config, default is 'postdb:[etc-dir]/esm.db'")
@@ -107,6 +115,13 @@ func Serve(efs EmbedFS) {
 	} else {
 		embedFS = efs
 		os.Setenv("NO_COLOR", "1") // disable log color in production
+	}
+
+	if typesCdnDomain == "" {
+		typesCdnDomain = cdnDomain
+	}
+	if cdnBasePath == "" {
+		cdnBasePath = basePath
 	}
 
 	log, err = logx.New(fmt.Sprintf("file:%s?buffer=32k", path.Join(logDir, fmt.Sprintf("main-v%d.log", VERSION))))

@@ -2,6 +2,7 @@ package server
 
 import (
 	"encoding/base64"
+	"fmt"
 	"io/ioutil"
 	"os"
 	"path"
@@ -174,4 +175,21 @@ func gogogo(d time.Duration, task func()) {
 		<-ticker.C
 		task()
 	}
+}
+
+func proto(host string) string {
+	if host == "localhost" || strings.HasPrefix(host, "localhost:") {
+		return "http"
+	}
+	return "https"
+}
+
+func origin(requestedHost string, configuredDomain string, defaultToRequestedHost bool) string {
+	if configuredDomain != "" && configuredDomain != requestedHost {
+		return fmt.Sprintf("%s://%s", proto(configuredDomain), configuredDomain)
+	}
+	if defaultToRequestedHost {
+		return fmt.Sprintf("%s://%s", proto(requestedHost), requestedHost)
+	}
+	return ""
 }

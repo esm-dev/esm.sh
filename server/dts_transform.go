@@ -48,15 +48,12 @@ func (task *BuildTask) copyDTS(dts string, buildVersion int, resolvePrefix strin
 		pkgName = versionedName
 	}
 
-	cdnOrigin := ""
-	if cdnDomain == "localhost" || strings.HasPrefix(cdnDomain, "localhost:") {
-		cdnOrigin = fmt.Sprintf("http://%s", cdnDomain)
-	} else if cdnDomain != "" {
-		cdnOrigin = fmt.Sprintf("https://%s", cdnDomain)
-	}
+	buildBasePath := fmt.Sprintf("/v%d", buildVersion)
+	cdnOriginAndBasePath := task.CdnOrigin + cdnBasePath
+	cdnOriginAndBuildBasePath := task.CdnOrigin + cdnBasePath + buildBasePath
 
 	dtsPath := utils.CleanPath(strings.Join(append([]string{
-		fmt.Sprintf("/v%d", buildVersion),
+		buildBasePath,
 		versionedName,
 		resolvePrefix,
 	}, subPath...), "/"))
@@ -92,7 +89,7 @@ func (task *BuildTask) copyDTS(dts string, buildVersion int, resolvePrefix strin
 
 	buf := bytes.NewBuffer(nil)
 	if pkgName == "@types/node" {
-		fmt.Fprintf(buf, "/// <reference path=\"%s/v%d/node.ns.d.ts\" />\n", cdnOrigin, buildVersion)
+		fmt.Fprintf(buf, "/// <reference path=\"%s/node.ns.d.ts\" />\n", cdnOriginAndBuildBasePath)
 	}
 	err = walkDts(pass1Buf, buf, func(importPath string, kind string, position int) string {
 		if kind == "declare module" {
@@ -111,9 +108,9 @@ func (task *BuildTask) copyDTS(dts string, buildVersion int, resolvePrefix strin
 			}
 			if importPath == moduleName {
 				if strings.HasPrefix(moduleName, "@types/node/") {
-					return fmt.Sprintf("%s/v%d/%s.d.ts", cdnOrigin, buildVersion, moduleName)
+					return fmt.Sprintf("%s/%s.d.ts", cdnOriginAndBuildBasePath, moduleName)
 				}
-				res := fmt.Sprintf("%s/%s", cdnOrigin, moduleName)
+				res := fmt.Sprintf("%s/%s", cdnOriginAndBasePath, moduleName)
 				entryDeclareModules = append(entryDeclareModules, fmt.Sprintf("%s:%d", moduleName, position+len(res)+1))
 				return res
 			}
@@ -155,15 +152,15 @@ func (task *BuildTask) copyDTS(dts string, buildVersion int, resolvePrefix strin
 			}
 		} else {
 			if importPath == "node" {
-				importPath = fmt.Sprintf("%s/v%d/node.ns.d.ts", cdnOrigin, buildVersion)
+				importPath = fmt.Sprintf("%s/node.ns.d.ts", cdnOriginAndBuildBasePath)
 				return importPath
 			}
 			if strings.HasPrefix(importPath, "node:") {
-				importPath = fmt.Sprintf("%s/v%d/@types/node/%s.d.ts", cdnOrigin, buildVersion, strings.TrimPrefix(importPath, "node:"))
+				importPath = fmt.Sprintf("%s/@types/node/%s.d.ts", cdnOriginAndBuildBasePath, strings.TrimPrefix(importPath, "node:"))
 				return importPath
 			}
 			if _, ok := builtInNodeModules[importPath]; ok {
-				importPath = fmt.Sprintf("%s/v%d/@types/node/%s.d.ts", cdnOrigin, buildVersion, importPath)
+				importPath = fmt.Sprintf("%s/@types/node/%s.d.ts", cdnOriginAndBuildBasePath, importPath)
 				return importPath
 			}
 
@@ -252,13 +249,10 @@ func (task *BuildTask) copyDTS(dts string, buildVersion int, resolvePrefix strin
 						importPath += "~.d.ts"
 					}
 				}
-				importPath = fmt.Sprintf("/v%d/%s", buildVersion, importPath)
-			} else {
-				importPath = fmt.Sprintf("/v%d/%s", buildVersion, importPath)
 			}
 
 			// CDN URL
-			importPath = cdnOrigin + importPath
+			importPath = fmt.Sprintf("%s/%s", cdnOriginAndBuildBasePath, importPath)
 		}
 
 		return importPath
@@ -308,7 +302,7 @@ func (task *BuildTask) copyDTS(dts string, buildVersion int, resolvePrefix strin
 						subpath = "/" + strings.Join(slice[1:], "/")
 					}
 				}
-				fmt.Fprintf(buf, `%sdeclare module "%s/%s@*%s" `, "\n", cdnOrigin, name, subpath)
+				fmt.Fprintf(buf, `%sdeclare module "%s/%s@*%s" `, "\n", cdnOriginAndBasePath, name, subpath)
 				buf.WriteString(strings.TrimSpace(b.String()))
 			}
 		}
