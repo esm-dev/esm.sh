@@ -580,6 +580,7 @@ func yarnAdd(wd string, packages ...string) (err error) {
 			"--no-progress",
 			"--non-interactive",
 			"--silent",
+			"--registry=" + node.npmRegistry,
 		}
 		yarnCacheDir := os.Getenv("YARN_CACHE_DIR")
 		if yarnCacheDir != "" {
