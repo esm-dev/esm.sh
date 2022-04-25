@@ -61,31 +61,17 @@ async function test(name: string, p: any, retryTimes = 0) {
   console.log("");
   console.log(`[testing ${name}]`);
 
-  const process = Deno.run({
-    cmd,
-    stdout: "piped",
-    stderr: "piped",
-  });
-  const stdout = await new Response(process.stdout.readable).arrayBuffer();
-  const stderr = await new Response(process.stderr.readable).arrayBuffer();
-  const print = async () => {
-    await Deno.stdout.write(new Uint8Array(stdout));
-    await Deno.stderr.write(new Uint8Array(stderr));
-  };
-  const { code, success } = await process.status();
-
+  const { code, success } = await run(...cmd);
   if (!success) {
     if (retryTimes < 3) {
       console.log("something wrong, retry...");
       await new Promise((resolve) => setTimeout(resolve, 100));
       await test(name, p, retryTimes + 1);
     } else {
-      await print();
       p.kill("SIGINT");
       Deno.exit(code);
     }
   }
-  await print();
 }
 
 async function run(...cmd: string[]) {
