@@ -232,12 +232,12 @@ func query(devMode bool) rex.Handle {
 				return rex.Redirect(url, http.StatusTemporaryRedirect)
 			}
 			savePath := path.Join("raw", reqPkg.String())
-			exists, modtime, err := fs.Exists(savePath)
+			exists, size, modtime, err := fs.Exists(savePath)
 			if err != nil {
 				return rex.Status(500, err.Error())
 			}
 			if exists {
-				r, err := fs.ReadFile(savePath)
+				r, err := fs.ReadFile(savePath, size)
 				if err != nil {
 					return rex.Status(500, err.Error())
 				}
@@ -284,13 +284,13 @@ func query(devMode bool) rex.Handle {
 				savePath = path.Join(storageType, fmt.Sprintf("v%d", VERSION), pathname)
 			}
 
-			exists, modtime, err := fs.Exists(savePath)
+			exists, size, modtime, err := fs.Exists(savePath)
 			if err != nil {
 				return rex.Status(500, err.Error())
 			}
 
 			if exists {
-				r, err := fs.ReadFile(savePath)
+				r, err := fs.ReadFile(savePath, size)
 				if err != nil {
 					return rex.Status(500, err.Error())
 				}
@@ -451,7 +451,7 @@ func query(devMode bool) rex.Handle {
 				stage:        "-",
 			}
 			var savePath string
-			findTypesFile := func() (bool, time.Time, error) {
+			findTypesFile := func() (bool, int64, time.Time, error) {
 				savePath = path.Join(fmt.Sprintf(
 					"types/v%d/%s@%s/%s",
 					buildVersion,
@@ -461,9 +461,9 @@ func query(devMode bool) rex.Handle {
 				), reqPkg.Submodule)
 				if strings.HasSuffix(savePath, "~.d.ts") {
 					savePath = strings.TrimSuffix(savePath, "~.d.ts")
-					ok, _, err := fs.Exists(path.Join(savePath, "index.d.ts"))
+					ok, _, _, err := fs.Exists(path.Join(savePath, "index.d.ts"))
 					if err != nil {
-						return false, time.Time{}, err
+						return false, 0, time.Time{}, err
 					}
 					if ok {
 						savePath = path.Join(savePath, "index.d.ts")
@@ -473,7 +473,7 @@ func query(devMode bool) rex.Handle {
 				}
 				return fs.Exists(savePath)
 			}
-			exists, modtime, err := findTypesFile()
+			exists, size, modtime, err := findTypesFile()
 			if err == nil && !exists {
 				c := buildQueue.Add(task)
 				select {
@@ -490,7 +490,7 @@ func query(devMode bool) rex.Handle {
 				return rex.Status(500, err.Error())
 			}
 			var r io.ReadSeeker
-			r, err = fs.ReadFile(savePath)
+			r, err = fs.ReadFile(savePath, size)
 			if err != nil {
 				if os.IsExist(err) {
 					return rex.Status(500, err.Error())
@@ -599,14 +599,14 @@ func query(devMode bool) rex.Handle {
 				"builds",
 				taskID,
 			)
-			exists, modtime, err := fs.Exists(savePath)
+			exists, size, modtime, err := fs.Exists(savePath)
 			if err != nil {
 				return rex.Status(500, err.Error())
 			}
 			if !exists {
 				return rex.Status(404, "File not found")
 			}
-			r, err := fs.ReadFile(savePath)
+			r, err := fs.ReadFile(savePath, size)
 			if err != nil {
 				return rex.Status(500, err.Error())
 			}

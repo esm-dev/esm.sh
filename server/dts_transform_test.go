@@ -140,7 +140,7 @@ func TestCopyDTS(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	file, err := fs.ReadFile(fmt.Sprintf("types/v%d/test/X-ESM/index.d.ts", VERSION))
+	file, err := fs.ReadFile(fmt.Sprintf("types/v%d/test/X-ESM/index.d.ts", VERSION), 0)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -15,8 +15,8 @@ type FSDriver interface {
 }
 
 type FS interface {
-	Exists(path string) (found bool, modtime time.Time, err error)
-	ReadFile(path string) (content io.ReadSeekCloser, err error)
+	Exists(path string) (found bool, size int64, modtime time.Time, err error)
+	ReadFile(path string, size int64) (content io.ReadSeekCloser, err error)
 	WriteFile(path string, r io.Reader) (written int64, err error)
 	WriteData(path string, data []byte) error
 }

@@ -61,7 +61,7 @@ func (task *BuildTask) copyDTS(dts string, buildVersion int, resolvePrefix strin
 		resolvePrefix,
 	}, subPath...), "/"))
 	savePath := "types" + dtsPath
-	exists, _, err := fs.Exists(savePath)
+	exists, _, _, err := fs.Exists(savePath)
 	if err != nil || exists {
 		return
 	}
