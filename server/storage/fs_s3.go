@@ -45,12 +45,12 @@ type s3FSLayer struct {
 	s3Client  SimpleS3Client
 }
 
-func (fs *s3FSLayer) Exists(name string) (bool, time.Time, error) {
+func (fs *s3FSLayer) Exists(name string) (bool, int64, time.Time, error) {
 	var modtime time.Time
 	if fs.backingFS != nil {
-		found, modtime, err := fs.backingFS.Exists(name)
+		found, size, modtime, err := fs.backingFS.Exists(name)
 		if found && err == nil {
-			return true, modtime, nil
+			return true, size, modtime, nil
 		}
 	}
 	result, err := fs.s3Client.Head(&name)
@@ -59,19 +59,19 @@ func (fs *s3FSLayer) Exists(name string) (bool, time.Time, error) {
 		// https://github.com/awsdocs/aws-doc-sdk-examples/blob/master/go/example_code/extending_sdk/handleServiceErrorCodes.go
 		if awsErr, ok := err.(awserr.Error); ok {
 			if awsErr.Code() == s3.ErrCodeNoSuchKey {
-				return false, modtime, nil
+				return false, 0, modtime, nil
 			}
 		}
-		return false, modtime, err
+		return false, 0, modtime, err
 	}
 	modtime = *result.LastModified
-	return true, modtime, nil
+	return true, *result.ContentLength, modtime, nil
 }
 
-func (fs *s3FSLayer) ReadFile(name string) (io.ReadSeekCloser, error) {
+func (fs *s3FSLayer) ReadFile(name string, size int64) (io.ReadSeekCloser, error) {
 	if fs.backingFS != nil {
-		if found, _, _ := fs.backingFS.Exists(name); found {
-			file, err := fs.backingFS.ReadFile(name)
+		if found, _, _, _ := fs.backingFS.Exists(name); found {
+			file, err := fs.backingFS.ReadFile(name, size)
 			if file != nil && err == nil {
 				return file, err
 			}
@@ -83,7 +83,7 @@ func (fs *s3FSLayer) ReadFile(name string) (io.ReadSeekCloser, error) {
 	}
 	if fs.backingFS != nil {
 		fs.backingFS.WriteFile(name, result.Body)
-		return fs.backingFS.ReadFile(name)
+		return fs.backingFS.ReadFile(name, size)
 	}
 	data, err := io.ReadAll(result.Body)
 	if err != nil {

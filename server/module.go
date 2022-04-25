@@ -276,7 +276,7 @@ func findModule(id string) (esm *ModuleMeta, err error) {
 		}
 
 		var exists bool
-		exists, _, err = fs.Exists(path.Join("builds", id))
+		exists, _, _, err = fs.Exists(path.Join("builds", id))
 		if err == nil && !exists {
 			db.Delete(id)
 			esm = nil
