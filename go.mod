@@ -15,5 +15,4 @@ require (
 	github.com/ije/postdb v0.7.1
 	github.com/ije/rex v1.6.0
 	github.com/mssola/user_agent v0.5.3
-	golang.org/x/net v0.0.0-20220127200216-cd36cc0744dd // indirect
 )
