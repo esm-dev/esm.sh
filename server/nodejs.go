@@ -601,6 +601,29 @@ func yarnAdd(wd string, packages ...string) (err error) {
 	return
 }
 
+func yarnCacheClean(wd string, packages ...string) {
+	if len(packages) > 0 {
+		args := []string{"cache", "clean"}
+		yarnCacheDir := os.Getenv("YARN_CACHE_DIR")
+		if yarnCacheDir != "" {
+			args = append(args, "--cache-folder", yarnCacheDir)
+		}
+		yarnMutex := os.Getenv("YARN_MUTEX")
+		if yarnMutex != "" {
+			args = append(args, "--mutex", yarnMutex)
+		}
+		cmd := exec.Command("yarn", append(args, packages...)...)
+		cmd.Dir = wd
+		output, err := cmd.CombinedOutput()
+		if err != nil {
+			log.Warnf("yarn cache clean %s: %s", strings.Join(packages, ","), err)
+		} else {
+			log.Debug("yarn cache clean %s: %s", strings.Join(packages, ","), string(output))
+		}
+	}
+	return
+}
+
 // added by @jimisaacs
 func toTypesPackageName(pkgName string) string {
 	if strings.HasPrefix(pkgName, "@") {
