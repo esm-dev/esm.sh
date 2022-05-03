@@ -394,7 +394,7 @@ func fetchPackageInfo(name string, version string) (info NpmPackage, err error) 
 	// cache data
 	var ttl time.Duration = 0
 	if !isFullVersion {
-		ttl = pkgCacheTimeout * time.Second
+		ttl = 10 * time.Minute
 	}
 	cache.Set(id, utils.MustEncodeJSON(info), ttl)
 	return

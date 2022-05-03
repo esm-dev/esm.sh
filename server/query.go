@@ -41,13 +41,18 @@ func query(devMode bool) rex.Handle {
 
 	return func(ctx *rex.Context) interface{} {
 		pathname := ctx.Path.String()
+
+		// ban malicious requests
 		if strings.HasPrefix(pathname, ".") || strings.HasSuffix(pathname, ".php") {
 			return rex.Status(400, "Bad Request")
 		}
+
+		// strip loc
 		if strings.ContainsRune(pathname, ':') {
 			pathname = regLocPath.ReplaceAllString(pathname, "$1")
 		}
 
+		// match staic routes
 		switch pathname {
 		case "/":
 			indexHTML, err := embedFS.ReadFile("server/embed/index.html")
@@ -63,7 +68,7 @@ func query(devMode bool) rex.Handle {
 			readmeStrLit := utils.MustEncodeJSON(string(readme))
 			html := bytes.ReplaceAll(indexHTML, []byte("'# README'"), readmeStrLit)
 			html = bytes.ReplaceAll(html, []byte("{VERSION}"), []byte(fmt.Sprintf("%d", VERSION)))
-			ctx.SetHeader("Cache-Control", fmt.Sprintf("public, max-age=%d", pkgCacheTimeout))
+			ctx.SetHeader("Cache-Control", fmt.Sprintf("public, max-age=%d", 10*60))
 			return rex.Content("index.html", startTime, bytes.NewReader(html))
 
 		case "/status.json":
@@ -136,7 +141,7 @@ func query(devMode bool) rex.Handle {
 				data, err = embedFS.ReadFile(pathname[7:])
 			}
 			if err == nil {
-				ctx.SetHeader("Cache-Control", fmt.Sprintf("public, max-age=%d", pkgCacheTimeout))
+				ctx.SetHeader("Cache-Control", fmt.Sprintf("public, max-age=%d", 10*60))
 				return rex.Content(pathname, startTime, bytes.NewReader(data))
 			}
 		}
@@ -336,8 +341,8 @@ func query(devMode bool) rex.Handle {
 
 		// determine build target
 		target := strings.ToLower(ctx.Form.Value("target"))
-		_, targetFlag := targets[target]
-		if !targetFlag {
+		_, targeted := targets[target]
+		if !targeted {
 			target = getTargetByUA(ctx.R.UserAgent())
 		}
 
@@ -350,6 +355,7 @@ func query(devMode bool) rex.Handle {
 			}
 		}
 
+		isBare := false
 		isPkgCss := ctx.Form.Has("css")
 		isBundleMode := ctx.Form.Has("bundle")
 		isDev := ctx.Form.Has("dev")
@@ -357,7 +363,6 @@ func query(devMode bool) rex.Handle {
 		isWorkder := ctx.Form.Has("worker")
 		noCheck := ctx.Form.Has("no-check")
 		noRequire := ctx.Form.Has("no-require")
-		isBare := false
 
 		// force react/jsx-dev-runtime and react-refresh into `dev` mode
 		if !isDev {
@@ -659,7 +664,15 @@ func query(devMode bool) rex.Handle {
 			)
 			ctx.SetHeader("X-TypeScript-Types", value)
 		}
-		ctx.SetHeader("Cache-Control", fmt.Sprintf("public, max-age=%d", pkgCacheTimeout))
+		if regFullVersionPath.MatchString(pathname) {
+			if isPined {
+				ctx.SetHeader("Cache-Control", "public, max-age=31536000, immutable")
+			} else {
+				ctx.SetHeader("Cache-Control", fmt.Sprintf("public, max-age=%d", 24*3600)) // cache for 24 hours
+			}
+		} else {
+			ctx.SetHeader("Cache-Control", fmt.Sprintf("public, max-age=%d", 10*60)) // cache for 10 minutes
+		}
 		ctx.SetHeader("Content-Type", "application/javascript; charset=utf-8")
 		return buf
 	}
