@@ -20,6 +20,7 @@ import (
 )
 
 type BuildTask struct {
+	CdnOrigin    string            `json:"cdnOrigin"`
 	BuildVersion int               `json:"buildVersion"`
 	Pkg          Pkg               `json:"pkg"`
 	Alias        map[string]string `json:"alias"`
@@ -99,7 +100,8 @@ func (task *BuildTask) ID() string {
 func (task *BuildTask) getImportPath(pkg Pkg, prefix string, infectDeps bool) string {
 	if infectDeps && task.Deps.Len() > 0 {
 		path := fmt.Sprintf(
-			"/%s?target=%s&pin=v%d&deps=%s",
+			"%s/%s?target=%s&pin=v%d&deps=%s",
+			basePath,
 			pkg.String(),
 			task.Target,
 			task.BuildVersion,
@@ -121,7 +123,8 @@ func (task *BuildTask) getImportPath(pkg Pkg, prefix string, infectDeps bool) st
 	}
 
 	return fmt.Sprintf(
-		"/v%d/%s@%s/%s%s/%s.js",
+		"%s/v%d/%s@%s/%s%s/%s.js",
+		cdnBasePath,
 		task.BuildVersion,
 		pkg.Name,
 		pkg.Version,
@@ -235,8 +238,8 @@ func (task *BuildTask) build(tracing *stringSet) (esm *ModuleMeta, err error) {
 		nodeEnv = "development"
 	}
 	define := map[string]string{
-		"__filename":                  fmt.Sprintf(`"https://%s/%s"`, cdnDomain, task.ID()),
-		"__dirname":                   fmt.Sprintf(`"https://%s/%s"`, cdnDomain, path.Dir(task.ID())),
+		"__filename":                  fmt.Sprintf(`"%s%s/%s"`, task.CdnOrigin, cdnBasePath, task.ID()),
+		"__dirname":                   fmt.Sprintf(`"%s%s/%s"`, task.CdnOrigin, cdnBasePath, path.Dir(task.ID())),
 		"Buffer":                      "__Buffer$",
 		"process":                     "__Process$",
 		"setImmediate":                "__setImmediate$",
@@ -454,6 +457,7 @@ esbuild:
 					}
 					subTask := &BuildTask{
 						wd:           task.wd, // use current wd to avoid reinstall
+						CdnOrigin:    task.CdnOrigin,
 						BuildVersion: task.BuildVersion,
 						Pkg:          subPkg,
 						Alias:        task.Alias,
@@ -472,7 +476,7 @@ esbuild:
 					if task.Target == "node" {
 						importPath = "buffer"
 					} else {
-						importPath = fmt.Sprintf("/v%d/node_buffer.js", task.BuildVersion)
+						importPath = fmt.Sprintf("%s/v%d/node_buffer.js", cdnBasePath, task.BuildVersion)
 					}
 				}
 				// is builtin node module
@@ -498,10 +502,11 @@ esbuild:
 						} else {
 							_, err := embedFS.ReadFile(fmt.Sprintf("server/embed/polyfills/node_%s.js", name))
 							if err == nil {
-								importPath = fmt.Sprintf("/v%d/node_%s.js", task.BuildVersion, name)
+								importPath = fmt.Sprintf("%s/v%d/node_%s.js", cdnBasePath, task.BuildVersion, name)
 							} else {
 								importPath = fmt.Sprintf(
-									"/error.js?type=unsupported-nodejs-builtin-module&name=%s&importer=%s",
+									"%s/error.js?type=unsupported-nodejs-builtin-module&name=%s&importer=%s",
+									basePath,
 									name,
 									task.Pkg.Name,
 								)
@@ -553,6 +558,7 @@ esbuild:
 						Submodule: submodule,
 					}
 					t := &BuildTask{
+						CdnOrigin:    task.CdnOrigin,
 						BuildVersion: task.BuildVersion,
 						Pkg:          pkg,
 						Alias:        task.Alias,
@@ -699,14 +705,14 @@ esbuild:
 					if task.Target == "deno" {
 						fmt.Fprintf(buf, `import __Process$ from "https://deno.land/std@%s/node/process.ts";%s`, denoStdVersion, eol)
 					} else {
-						fmt.Fprintf(buf, `import __Process$ from "/v%d/node_process.js";%s`, task.BuildVersion, eol)
+						fmt.Fprintf(buf, `import __Process$ from "%s/v%d/node_process.js";%s`, cdnBasePath, task.BuildVersion, eol)
 					}
 				}
 				if bytes.Contains(outputContent, []byte("__Buffer$")) {
 					if task.Target == "deno" {
 						fmt.Fprintf(buf, `import  { Buffer as __Buffer$ } from "https://deno.land/std@%s/node/buffer.ts";%s`, denoStdVersion, eol)
 					} else {
-						fmt.Fprintf(buf, `import { Buffer as __Buffer$ } from "/v%d/node_buffer.js";%s`, task.BuildVersion, eol)
+						fmt.Fprintf(buf, `import { Buffer as __Buffer$ } from "%s/v%d/node_buffer.js";%s`, cdnBasePath, task.BuildVersion, eol)
 					}
 				}
 				if bytes.Contains(outputContent, []byte("__global$")) {

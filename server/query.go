@@ -52,7 +52,38 @@ func query(devMode bool) rex.Handle {
 			pathname = regLocPath.ReplaceAllString(pathname, "$1")
 		}
 
-		// match staic routes
+		// match static routes
+		hasBuildVerPrefix := false
+		prevBuildVer := ""
+
+		// Build prefix may only be served from "${cdnBasePath}/${buildPrefix}/..."
+		if strings.HasPrefix(pathname, cdnBasePath+"/") {
+			pathname = strings.TrimPrefix(pathname, cdnBasePath)
+			// Check current version
+			buildBasePath := fmt.Sprintf("/v%d", VERSION)
+			if strings.HasPrefix(pathname, buildBasePath+"/") {
+				pathname = strings.TrimPrefix(pathname, buildBasePath)
+				hasBuildVerPrefix = true
+				// Otheerwise check possible pinned version
+			} else if regBuildVersionPath.MatchString(pathname) {
+				a := strings.Split(pathname, "/")
+				pathname = "/" + strings.Join(a[2:], "/")
+				hasBuildVerPrefix = true
+				prevBuildVer = a[1]
+			}
+		} else if basePath != "" {
+			if strings.HasPrefix(pathname, basePath+"/") {
+				pathname = strings.TrimPrefix(pathname, basePath)
+			} else if baseRedirect {
+				url := strings.TrimPrefix(ctx.R.URL.String(), basePath)
+				url = fmt.Sprintf("%s/%s", basePath, url)
+				return rex.Redirect(url, http.StatusTemporaryRedirect)
+			} else {
+				return rex.Status(404, "not found")
+			}
+		}
+
+		// match static routess
 		switch pathname {
 		case "/":
 			indexHTML, err := embedFS.ReadFile("server/embed/index.html")
@@ -63,11 +94,13 @@ func query(devMode bool) rex.Handle {
 			if err != nil {
 				return err
 			}
-			readme = bytes.ReplaceAll(readme, []byte("./server/embed/"), []byte("/embed/"))
+			readme = bytes.ReplaceAll(readme, []byte("./server/embed/"), []byte(basePath+"/embed/"))
 			readme = bytes.ReplaceAll(readme, []byte("./HOSTING.md"), []byte("https://github.com/esm-dev/esm.sh/blob/master/HOSTING.md"))
+			readme = bytes.ReplaceAll(readme, []byte("https://esm.sh"), []byte("{origin}"+basePath))
 			readmeStrLit := utils.MustEncodeJSON(string(readme))
 			html := bytes.ReplaceAll(indexHTML, []byte("'# README'"), readmeStrLit)
 			html = bytes.ReplaceAll(html, []byte("{VERSION}"), []byte(fmt.Sprintf("%d", VERSION)))
+			html = bytes.ReplaceAll(html, []byte("{basePath}"), []byte(basePath))
 			ctx.SetHeader("Cache-Control", fmt.Sprintf("public, max-age=%d", 10*60))
 			return rex.Content("index.html", startTime, bytes.NewReader(html))
 
@@ -146,17 +179,6 @@ func query(devMode bool) rex.Handle {
 			}
 		}
 
-		hasBuildVerPrefix := strings.HasPrefix(pathname, fmt.Sprintf("/v%d/", VERSION))
-		prevBuildVer := ""
-		if hasBuildVerPrefix {
-			pathname = strings.TrimPrefix(pathname, fmt.Sprintf("/v%d", VERSION))
-		} else if regBuildVersionPath.MatchString(pathname) {
-			a := strings.Split(pathname, "/")
-			pathname = "/" + strings.Join(a[2:], "/")
-			hasBuildVerPrefix = true
-			prevBuildVer = a[1]
-		}
-
 		// serve embed polyfills/types
 		if hasBuildVerPrefix {
 			data, err := embedFS.ReadFile("server/embed/polyfills" + pathname)
@@ -224,16 +246,12 @@ func query(devMode bool) rex.Handle {
 			}
 		}
 
+		redirectOrWorkerOrigin := origin(ctx.R.Host, cdnDomain, true)
+
 		// serve raw dist files like CSS that is fetching from unpkg.com
 		if storageType == "raw" {
-			hostname := ctx.R.Host
-			isLocalHost := hostname == "localhost" || strings.HasPrefix(hostname, "localhost:")
-			proto := "https"
-			if isLocalHost {
-				proto = "http"
-			}
 			if !regFullVersionPath.MatchString(pathname) {
-				url := fmt.Sprintf("%s://%s/%s", proto, hostname, reqPkg.String())
+				url := fmt.Sprintf("%s/%s", redirectOrWorkerOrigin, reqPkg.String())
 				return rex.Redirect(url, http.StatusTemporaryRedirect)
 			}
 			savePath := path.Join("raw", reqPkg.String())
@@ -360,7 +378,7 @@ func query(devMode bool) rex.Handle {
 		isBundleMode := ctx.Form.Has("bundle")
 		isDev := ctx.Form.Has("dev")
 		isPined := ctx.Form.Has("pin")
-		isWorkder := ctx.Form.Has("worker")
+		isWorker := ctx.Form.Has("worker")
 		noCheck := ctx.Form.Has("no-check")
 		noRequire := ctx.Form.Has("no-require")
 
@@ -446,8 +464,11 @@ func query(devMode bool) rex.Handle {
 			}
 		}
 
+		typesCdnOrigin := origin(ctx.R.Host, typesCdnDomain, true)
+
 		if hasBuildVerPrefix && storageType == "types" {
 			task := &BuildTask{
+				CdnOrigin:    typesCdnOrigin,
 				BuildVersion: buildVersion,
 				Pkg:          *reqPkg,
 				Deps:         deps,
@@ -507,13 +528,16 @@ func query(devMode bool) rex.Handle {
 			return rex.Content(savePath, modtime, r) // auto close
 		}
 
+		buildsCdnOrigin := origin(ctx.R.Host, cdnDomain, false)
+
 		task := &BuildTask{
+			CdnOrigin:    buildsCdnOrigin,
 			BuildVersion: buildVersion,
 			Pkg:          *reqPkg,
 			Deps:         deps,
 			Alias:        alias,
 			Target:       target,
-			BundleMode:   isBundleMode || isWorkder,
+			BundleMode:   isBundleMode || isWorker,
 			NoRequire:    noRequire,
 			DevMode:      isDev,
 			stage:        "init",
@@ -559,16 +583,12 @@ func query(devMode bool) rex.Handle {
 			}
 		}
 
-		origin := "/"
-		if cdnDomain != "" && cdnDomain != "localhost" && !strings.HasPrefix(cdnDomain, "localhost:") && !isWorkder {
-			origin = fmt.Sprintf("https://%s/", cdnDomain)
-		}
-
 		if esm.TypesOnly {
 			if esm.Dts != "" && !noCheck {
 				value := fmt.Sprintf(
-					"%s%s",
-					origin,
+					"%s%s/%s",
+					typesCdnOrigin,
+					cdnBasePath,
 					strings.TrimPrefix(esm.Dts, "/"),
 				)
 				ctx.SetHeader("X-TypeScript-Types", value)
@@ -584,14 +604,7 @@ func query(devMode bool) rex.Handle {
 			}
 
 			if !regFullVersionPath.MatchString(pathname) || !isPined {
-				hostname := ctx.R.Host
-				proto := "https"
-				if hostname == "localhost" || strings.HasPrefix(hostname, "localhost:") {
-					proto = "http"
-				} else {
-					hostname = cdnDomain
-				}
-				url := fmt.Sprintf("%s://%s/%s.css", proto, hostname, strings.TrimSuffix(taskID, ".js"))
+				url := fmt.Sprintf("%s/%s.css", redirectOrWorkerOrigin, strings.TrimSuffix(taskID, ".js"))
 				return rex.Redirect(url, http.StatusTemporaryRedirect)
 			}
 
@@ -615,10 +628,11 @@ func query(devMode bool) rex.Handle {
 			if err != nil {
 				return rex.Status(500, err.Error())
 			}
-			if !hasBuildVerPrefix && esm.Dts != "" && !noCheck && !isWorkder {
+			if !hasBuildVerPrefix && esm.Dts != "" && !noCheck && !isWorker {
 				value := fmt.Sprintf(
-					"%s%s",
-					origin,
+					"%s%s/%s",
+					typesCdnOrigin,
+					cdnBasePath,
 					strings.TrimPrefix(esm.Dts, "/"),
 				)
 				ctx.SetHeader("X-TypeScript-Types", value)
@@ -628,38 +642,29 @@ func query(devMode bool) rex.Handle {
 		}
 
 		buf := bytes.NewBuffer(nil)
-		if isWorkder {
-			hostname := ctx.R.Host
-			isLocalHost := hostname == "localhost" || strings.HasPrefix(hostname, "localhost:")
-			proto := "https"
-			if isLocalHost {
-				proto = "http"
-			} else {
-				hostname = cdnDomain
-			}
-			origin = fmt.Sprintf("%s://%s/", proto, hostname)
-		}
 
 		fmt.Fprintf(buf, `/* esm.sh - %v */%s`, reqPkg, "\n")
-		if isWorkder {
-			fmt.Fprintf(buf, `export default function workerFactory() {%s  return new Worker('%s%s', { type: 'module' })%s}`, "\n", origin, taskID, "\n")
+		if isWorker {
+			fmt.Fprintf(buf, `export default function workerFactory() {%s  return new Worker('%s/%s', { type: 'module' })%s}`, "\n", redirectOrWorkerOrigin, taskID, "\n")
 		} else {
-			fmt.Fprintf(buf, `export * from "%s%s";%s`, origin, taskID, "\n")
+			fmt.Fprintf(buf, `export * from "%s%s/%s";%s`, buildsCdnOrigin, cdnBasePath, taskID, "\n")
 			if esm.CJS || esm.ExportDefault {
 				fmt.Fprintf(
 					buf,
-					`export { default } from "%s%s";%s`,
-					origin,
+					`export { default } from "%s%s/%s";%s`,
+					buildsCdnOrigin,
+					cdnBasePath,
 					taskID,
 					"\n",
 				)
 			}
 		}
 
-		if esm.Dts != "" && !noCheck && !isWorkder {
+		if esm.Dts != "" && !noCheck && !isWorker {
 			value := fmt.Sprintf(
-				"%s%s",
-				origin,
+				"%s%s/%s",
+				typesCdnOrigin,
+				cdnBasePath,
 				strings.TrimPrefix(esm.Dts, "/"),
 			)
 			ctx.SetHeader("X-TypeScript-Types", value)
