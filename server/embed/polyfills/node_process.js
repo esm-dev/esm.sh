@@ -231,7 +231,8 @@ export default {
     }
   },
   umask: () => deno ? Deno.umask ?? 0 : 0,
-  nextTick: (fn) => {
+  // arrow function don't have `arguments`
+  nextTick: function(fn) {
     let args = new Array(arguments.length - 1);
     if (arguments.length > 1) {
       for (let i = 1; i < arguments.length; i++) {
