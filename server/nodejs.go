@@ -633,7 +633,7 @@ func toTypesPackageName(pkgName string) string {
 }
 
 func getDenoStdVersion() (version string, err error) {
-	resp, err := httpClient.Get("https://cdn.deno.land/std/meta/versions.json")
+	resp, err := http.Get("https://cdn.deno.land/std/meta/versions.json")
 	if err != nil {
 		return
 	}

@@ -143,7 +143,7 @@ func Serve(efs EmbedFS) {
 
 	denoStdVersion, err = getDenoStdVersion()
 	if err != nil {
-		log.Fatalf("getDenoStdVersion: %v", err)
+		log.Warnf("getDenoStdVersion: %v", err)
 	}
 	log.Debugf("https://deno.land/std@%s found", denoStdVersion)
 
