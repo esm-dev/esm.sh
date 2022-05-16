@@ -3,14 +3,14 @@ package main
 import (
 	"embed"
 
-	"esm.sh/server"
+	"github.com/esm-dev/esmd"
 )
 
 //go:embed README.md
 //go:embed server/embed
 //go:embed test/browser
-var fs embed.FS
+var frontendEmbedFS embed.FS
 
 func main() {
-	server.Serve(&fs)
+	esmd.New(esmd.WithFrontendEmbedFS(frontendEmbedFS))
 }
