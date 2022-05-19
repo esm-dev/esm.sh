@@ -18,6 +18,10 @@ import (
 	"github.com/ije/rex"
 )
 
+var banList = map[string]bool{
+	"@withfig/autocomplete": true,
+}
+
 var httpClient = &http.Client{
 	Transport: &http.Transport{
 		Dial: func(network, addr string) (conn net.Conn, err error) {
@@ -206,6 +210,11 @@ func query(devMode bool) rex.Handle {
 				status = 404
 			}
 			return rex.Status(status, message)
+		}
+
+		if banList[reqPkg.Name] {
+			ctx.SetHeader("Cache-Control", "public, max-age=86400")
+			return rex.Status(403, "forbidden")
 		}
 
 		if (reqPkg.Name == "react" || reqPkg.Name == "preact") && strings.HasSuffix(ctx.R.URL.RawQuery, "/jsx-runtime") {
