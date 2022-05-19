@@ -32,6 +32,7 @@ var httpClient = &http.Client{
 		},
 		MaxIdleConnsPerHost:   6,
 		ResponseHeaderTimeout: 60 * time.Second,
+		Proxy:                 http.ProxyFromEnvironment,
 	},
 }
 
