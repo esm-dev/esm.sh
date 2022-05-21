@@ -38,8 +38,8 @@ type queueTask struct {
 func (t *queueTask) run() BuildOutput {
 	c := make(chan BuildOutput, 1)
 	go func(c chan BuildOutput) {
-		mate, err := t.Build()
-		c <- BuildOutput{mate, err}
+		meta, err := t.Build()
+		c <- BuildOutput{meta, err}
 	}(c)
 
 	var output BuildOutput
