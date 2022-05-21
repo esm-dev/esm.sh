@@ -324,7 +324,7 @@ test(['preact', 'preact/hooks'], async (t) => {
   t.ok()
 })
 
-test(['preact', 'preact/hooks', 'swr?alias=react:preact/compat'], async (t) => {
+test(['preact@10.7.2', 'preact@10.7.2/hooks', 'swr?alias=react:preact/compat&deps=preact@10.7.2'], async (t) => {
   const [
     { Fragment, h, render },
     { useEffect },
