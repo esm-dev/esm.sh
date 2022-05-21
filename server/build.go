@@ -554,7 +554,7 @@ esbuild:
 
 					_, _err := findModule(t.ID())
 					if _err == storage.ErrNotFound {
-						buildQueue.Add(t)
+						buildQueue.Add(t, "")
 					}
 
 					importPath = task.getImportPath(pkg, task.resolvePrefix())

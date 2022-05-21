@@ -11,7 +11,6 @@ import (
 	"path"
 	"path/filepath"
 	"runtime"
-	"strings"
 	"syscall"
 	"time"
 
@@ -55,8 +54,6 @@ func Serve(efs EmbedFS) {
 		cacheUrl         string
 		dbUrl            string
 		fsUrl            string
-		queueUrl         string
-		nodeServices     string
 		logLevel         string
 		logDir           string
 		noCompress       bool
@@ -70,9 +67,7 @@ func Serve(efs EmbedFS) {
 	flag.StringVar(&cacheUrl, "cache", "", "cache config, default is 'memory:default'")
 	flag.StringVar(&dbUrl, "db", "", "database config, default is 'postdb:[etc-dir]/esm.db'")
 	flag.StringVar(&fsUrl, "fs", "", "filesystem config, default is 'local:[etc-dir]/storage'")
-	flag.StringVar(&queueUrl, "queue", "", "bulid queue config, default is 'chan:memory'")
-	flag.IntVar(&buildConcurrency, "build-concurrency", 2*runtime.NumCPU(), "maximum number of concurrent build task")
-	flag.StringVar(&nodeServices, "node-services", "", "node services")
+	flag.IntVar(&buildConcurrency, "build-concurrency", runtime.NumCPU(), "maximum number of concurrent build task")
 	flag.StringVar(&logDir, "log-dir", "", "log dir")
 	flag.StringVar(&logLevel, "log-level", "info", "log level")
 	flag.BoolVar(&noCompress, "no-compress", false, "disable compression for text content")
@@ -94,9 +89,6 @@ func Serve(efs EmbedFS) {
 	}
 	if fsUrl == "" {
 		fsUrl = fmt.Sprintf("local:%s", path.Join(etcDir, "storage"))
-	}
-	if queueUrl == "" {
-		queueUrl = "chan:memory"
 	}
 	if logDir == "" {
 		logDir = path.Join(etcDir, "log")
@@ -177,14 +169,6 @@ func Serve(efs EmbedFS) {
 			log.Fatal(err)
 		}
 		services := []string{"esm-node-services"}
-		if len(nodeServices) > 0 {
-			for _, v := range strings.Split(nodeServices, ",") {
-				v = strings.TrimSpace(v)
-				if len(v) > 0 {
-					services = append(services, v)
-				}
-			}
-		}
 		for {
 			ctx, cancel := context.WithCancel(context.Background())
 			stopNS = cancel

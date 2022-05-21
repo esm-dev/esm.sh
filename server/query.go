@@ -118,7 +118,7 @@ func query(devMode bool) rex.Handle {
 					m := map[string]interface{}{
 						"stage":      t.stage,
 						"createTime": t.createTime.Format(http.TimeFormat),
-						"consumers":  len(t.consumers),
+						"consumers":  t.consumers,
 						"pkg":        t.Pkg.String(),
 						"target":     t.Target,
 						"inProcess":  t.inProcess,
@@ -136,16 +136,9 @@ func query(devMode bool) rex.Handle {
 				}
 			}
 			buildQueue.lock.RUnlock()
-			n := 0
-			nsTasks.Range(func(key, value interface{}) bool {
-				n++
-				return false
-			})
 			return map[string]interface{}{
-				"nsTasks":   n,
-				"nsChannel": fmt.Sprintf("%d/%d", len(nsChannel), cap(nsChannel)),
-				"uptime":    time.Since(startTime).String(),
-				"queue":     q[:i],
+				"uptime": time.Since(startTime).String(),
+				"queue":  q[:i],
 			}
 
 		case "/error.js":
@@ -515,7 +508,7 @@ func query(devMode bool) rex.Handle {
 			}
 			exists, size, modtime, err := findTypesFile()
 			if err == nil && !exists {
-				c := buildQueue.Add(task)
+				c := buildQueue.Add(task, ctx.RemoteIP())
 				select {
 				case output := <-c.C:
 					if output.err != nil {
@@ -579,9 +572,9 @@ func query(devMode bool) rex.Handle {
 			// or wait the current build task for 30 seconds
 			if esm != nil {
 				// todo: maybe don't build?
-				buildQueue.Add(task)
+				buildQueue.Add(task, "")
 			} else {
-				c := buildQueue.Add(task)
+				c := buildQueue.Add(task, ctx.RemoteIP())
 				select {
 				case output := <-c.C:
 					if output.err != nil {

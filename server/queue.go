@@ -17,7 +17,8 @@ type BuildQueue struct {
 }
 
 type BuildQueueConsumer struct {
-	C chan BuildOutput
+	IP string           `json:"ip"`
+	C  chan BuildOutput `json:"-"`
 }
 
 type BuildOutput struct {
@@ -75,11 +76,11 @@ func (q *BuildQueue) Len() int {
 }
 
 // Add adds a new build task.
-func (q *BuildQueue) Add(task *BuildTask) *BuildQueueConsumer {
-	c := &BuildQueueConsumer{make(chan BuildOutput, 1)}
+func (q *BuildQueue) Add(task *BuildTask, consumerIp string) *BuildQueueConsumer {
+	c := &BuildQueueConsumer{consumerIp, make(chan BuildOutput, 1)}
 	q.lock.Lock()
 	t, ok := q.tasks[task.ID()]
-	if ok {
+	if ok && consumerIp != "" {
 		t.consumers = append(t.consumers, c)
 	}
 	q.lock.Unlock()
@@ -91,7 +92,10 @@ func (q *BuildQueue) Add(task *BuildTask) *BuildQueueConsumer {
 	t = &queueTask{
 		BuildTask:  task,
 		createTime: time.Now(),
-		consumers:  []*BuildQueueConsumer{c},
+		consumers:  []*BuildQueueConsumer{},
+	}
+	if consumerIp != "" {
+		t.consumers = []*BuildQueueConsumer{c}
 	}
 	q.lock.Lock()
 	t.el = q.list.PushBack(t)
