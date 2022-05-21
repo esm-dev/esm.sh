@@ -275,7 +275,7 @@ func getPackageInfo(wd string, name string, version string) (info NpmPackage, su
 		if !fileExists(pkgJsonPath) {
 			pkgJsonPath = path.Join(wd, "node_modules", name, "package.json")
 		}
-		if !fileExists(pkgJsonPath) {
+		if fileExists(pkgJsonPath) {
 			err = utils.ParseJSONFile(pkgJsonPath, &info)
 			if err == nil {
 				fromPackageJSON = true
