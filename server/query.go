@@ -674,18 +674,22 @@ func query(devMode bool) rex.Handle {
 			)
 			ctx.SetHeader("X-TypeScript-Types", value)
 		}
+
 		if regFullVersionPath.MatchString(pathname) {
 			if isPined {
 				if targeted {
 					ctx.SetHeader("Cache-Control", "public, max-age=31536000, immutable")
 				} else {
-					ctx.SetHeader("Cache-Control", "private, max-age=31536000, immutable")
+					ctx.SetHeader("Cache-Control", "public, max-age=31536000, immutable")
+					ctx.SetHeader("Vary", "User-Agent")
 				}
 			} else {
-				ctx.SetHeader("Cache-Control", fmt.Sprintf("private, max-age=%d", 24*3600)) // cache for 24 hours
+				ctx.SetHeader("Cache-Control", fmt.Sprintf("public, max-age=%d", 24*3600)) // cache for 24 hours
+				ctx.SetHeader("Vary", "User-Agent")
 			}
 		} else {
-			ctx.SetHeader("Cache-Control", fmt.Sprintf("private, max-age=%d", 10*60)) // cache for 10 minutes
+			ctx.SetHeader("Cache-Control", fmt.Sprintf("public, max-age=%d", 10*60)) // cache for 10 minutes
+			ctx.SetHeader("Vary", "User-Agent")
 		}
 		ctx.SetHeader("Content-Type", "application/javascript; charset=utf-8")
 		return buf
