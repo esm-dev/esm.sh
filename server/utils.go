@@ -7,11 +7,13 @@ import (
 	"os"
 	"path"
 	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
 	"time"
 
+	"github.com/ije/gox/utils"
 	"github.com/ije/gox/valid"
 )
 
@@ -169,12 +171,79 @@ func kill(pidFile string) (err error) {
 	return process.Kill()
 }
 
-func gogogo(d time.Duration, task func()) {
+func cron(d time.Duration, task func()) {
 	ticker := time.NewTicker(d)
 	for {
 		<-ticker.C
 		task()
 	}
+}
+
+func decodeAliasPrefix(raw string) (alias map[string]string, deps PkgSlice, err error) {
+	s, err := atobUrl(strings.TrimPrefix(raw, "X-"))
+	if err == nil {
+		for _, p := range strings.Split(s, ",") {
+			if strings.HasPrefix(p, "a:") || strings.HasPrefix(p, "alias:") {
+				alias = map[string]string{}
+				for _, p := range strings.Split(strings.TrimPrefix(strings.TrimPrefix(p, "a:"), "alias:"), ",") {
+					p = strings.TrimSpace(p)
+					if p != "" {
+						name, to := utils.SplitByFirstByte(p, ':')
+						name = strings.TrimSpace(name)
+						to = strings.TrimSpace(to)
+						if name != "" && to != "" {
+							alias[name] = to
+						}
+					}
+				}
+			} else if strings.HasPrefix(p, "d:") || strings.HasPrefix(p, "deps:") {
+				for _, p := range strings.Split(strings.TrimPrefix(strings.TrimPrefix(p, "d:"), "deps:"), ",") {
+					p = strings.TrimSpace(p)
+					if p != "" {
+						if strings.HasPrefix(p, "@") {
+							scope, name := utils.SplitByFirstByte(p, '_')
+							p = scope + "/" + name
+						}
+						m, _, err := parsePkg(p)
+						if err != nil {
+							if strings.HasSuffix(err.Error(), "not found") {
+								continue
+							}
+							return nil, nil, err
+						}
+						if !deps.Has(m.Name) {
+							deps = append(deps, *m)
+						}
+					}
+				}
+			}
+		}
+	}
+	return
+}
+
+func encodeAliasPrefix(alias map[string]string, deps PkgSlice) string {
+	args := []string{}
+	if len(alias) > 0 {
+		var ss sort.StringSlice
+		for name, to := range alias {
+			ss = append(ss, fmt.Sprintf("%s:%s", name, to))
+		}
+		ss.Sort()
+		args = append(args, fmt.Sprintf("a:%s", strings.Join(ss, ",")))
+	}
+	if len(deps) > 0 {
+		var ss sort.StringSlice
+		for _, pkg := range deps {
+			ss = append(ss, fmt.Sprintf("%s@%s", pkg.Name, pkg.Version))
+		}
+		ss.Sort()
+		args = append(args, fmt.Sprintf("d:%s", strings.Join(ss, ",")))
+	}
+	if len(args) > 0 {
+		return fmt.Sprintf("X-%s/", btoaUrl(strings.Join(args, ",")))
+	}
+	return ""
 }
 
 func getOrigin(host string) string {

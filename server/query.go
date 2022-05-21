@@ -58,7 +58,7 @@ func query(devMode bool) rex.Handle {
 
 		// match static routes
 		hasBuildVerPrefix := false
-		prevBuildVer := ""
+		outdatedBuildVer := ""
 
 		// Build prefix may only be served from "${cdnBasePath}/${buildPrefix}/..."
 		if strings.HasPrefix(pathname, basePath+"/") {
@@ -73,7 +73,7 @@ func query(devMode bool) rex.Handle {
 				a := strings.Split(pathname, "/")
 				pathname = "/" + strings.Join(a[2:], "/")
 				hasBuildVerPrefix = true
-				prevBuildVer = a[1]
+				outdatedBuildVer = a[1]
 			}
 		} else if basePath != "" {
 			if strings.HasPrefix(pathname, basePath+"/") {
@@ -185,7 +185,7 @@ func query(devMode bool) rex.Handle {
 			}
 			data, err = embedFS.ReadFile("server/embed/types" + pathname)
 			if err == nil {
-				ctx.SetHeader("Content-Type", "application/typescript; charset=utf-8")
+				ctx.SetHeader("Content-Type", "text/typescript; charset=utf-8")
 				ctx.SetHeader("Cache-Control", "public, max-age=31536000, immutable")
 				return rex.Content(pathname, startTime, bytes.NewReader(data))
 			}
@@ -204,11 +204,30 @@ func query(devMode bool) rex.Handle {
 			return rex.Status(status, message)
 		}
 
+		origin := getOrigin(ctx.R.Host)
+		if (!hasBuildVerPrefix || strings.HasSuffix(pathname, ".d.ts")) && !strings.HasPrefix(pathname, fmt.Sprintf("/%s@%s", reqPkg.Name, reqPkg.Version)) {
+			prefix := ""
+			if hasBuildVerPrefix {
+				if outdatedBuildVer != "" {
+					prefix = fmt.Sprintf("/v%s", outdatedBuildVer)
+				} else {
+					prefix = fmt.Sprintf("/v%d", VERSION)
+				}
+			}
+			query := ctx.R.URL.RawQuery
+			if query != "" {
+				query = "?" + query
+			}
+			return rex.Redirect(fmt.Sprintf("%s%s/%s%s", origin, prefix, reqPkg.String(), query), http.StatusTemporaryRedirect)
+		}
+
 		if banList[reqPkg.Name] {
 			ctx.SetHeader("Cache-Control", "public, max-age=86400")
 			return rex.Status(403, "forbidden")
 		}
 
+		// since most transformers handle `jsxSource` by concating string "/jsx-runtime"
+		// we need to support url like `https://esm.sh/react?dev&target=esnext/jsx-runtime`
 		if (reqPkg.Name == "react" || reqPkg.Name == "preact") && strings.HasSuffix(ctx.R.URL.RawQuery, "/jsx-runtime") {
 			ctx.R.URL.RawQuery = strings.TrimSuffix(ctx.R.URL.RawQuery, "/jsx-runtime")
 			pathname = fmt.Sprintf("/%s/jsx-runtime", reqPkg.Name)
@@ -248,8 +267,6 @@ func query(devMode bool) rex.Handle {
 			}
 		}
 
-		origin := getOrigin(ctx.R.Host)
-
 		// serve raw dist files like CSS that is fetching from unpkg.com
 		if storageType == "raw" {
 			return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -274,7 +291,7 @@ func query(devMode bool) rex.Handle {
 					}
 					defer f.Close()
 					if strings.HasSuffix(pathname, ".ts") {
-						w.Header().Set("Content-Type", "application/typescript")
+						w.Header().Set("Content-Type", "text/typescript")
 					}
 					w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
 					http.ServeContent(w, r, savePath, modtime, f)
@@ -310,8 +327,8 @@ func query(devMode bool) rex.Handle {
 		// serve build files
 		if hasBuildVerPrefix && (storageType == "builds" || storageType == "types") {
 			var savePath string
-			if prevBuildVer != "" {
-				savePath = path.Join(storageType, prevBuildVer, pathname)
+			if outdatedBuildVer != "" {
+				savePath = path.Join(storageType, outdatedBuildVer, pathname)
 			} else {
 				savePath = path.Join(storageType, fmt.Sprintf("v%d", VERSION), pathname)
 			}
@@ -327,7 +344,7 @@ func query(devMode bool) rex.Handle {
 					return rex.Status(500, err.Error())
 				}
 				if storageType == "types" {
-					ctx.SetHeader("Content-Type", "application/typescript; charset=utf-8")
+					ctx.SetHeader("Content-Type", "text/typescript; charset=utf-8")
 				}
 				ctx.SetHeader("Cache-Control", "public, max-age=31536000, immutable")
 				return rex.Content(savePath, modtime, r)
@@ -398,49 +415,23 @@ func query(devMode bool) rex.Handle {
 			}
 		}
 
-		// parse `resolvePrefix`
+		// parse `aliasPrefix`
 		if hasBuildVerPrefix {
 			a := strings.Split(reqPkg.Submodule, "/")
 			if len(a) > 1 && strings.HasPrefix(a[0], "X-") {
-				s, err := atobUrl(strings.TrimPrefix(a[0], "X-"))
-				if err == nil {
-					for _, p := range strings.Split(s, ",") {
-						if strings.HasPrefix(p, "alias:") {
-							for _, p := range strings.Split(strings.TrimPrefix(p, "alias:"), ",") {
-								p = strings.TrimSpace(p)
-								if p != "" {
-									name, to := utils.SplitByFirstByte(p, ':')
-									name = strings.TrimSpace(name)
-									to = strings.TrimSpace(to)
-									if name != "" && to != "" {
-										alias[name] = to
-									}
-								}
-							}
-						} else if strings.HasPrefix(p, "deps:") {
-							for _, p := range strings.Split(strings.TrimPrefix(p, "deps:"), ",") {
-								p = strings.TrimSpace(p)
-								if p != "" {
-									if strings.HasPrefix(p, "@") {
-										scope, name := utils.SplitByFirstByte(p, '_')
-										p = scope + "/" + name
-									}
-									m, _, err := parsePkg(p)
-									if err != nil {
-										if strings.HasSuffix(err.Error(), "not found") {
-											continue
-										}
-										return throwErrorJS(ctx, err)
-									}
-									if !deps.Has(m.Name) {
-										deps = append(deps, *m)
-									}
-								}
-							}
-						}
+				reqPkg.Submodule = strings.Join(a[1:], "/")
+				_alias, _deps, err := decodeAliasPrefix(a[0])
+				if err != nil {
+					return throwErrorJS(ctx, err)
+				}
+				for k, v := range _alias {
+					alias[k] = v
+				}
+				for _, p := range _deps {
+					if !deps.Has(p.Name) {
+						deps = append(deps, p)
 					}
 				}
-				reqPkg.Submodule = strings.Join(a[1:], "/")
 			}
 		}
 
@@ -490,7 +481,7 @@ func query(devMode bool) rex.Handle {
 					buildVersion,
 					reqPkg.Name,
 					reqPkg.Version,
-					task.resolvePrefix(),
+					task.aliasPrefix(),
 				), reqPkg.Submodule)
 				if strings.HasSuffix(savePath, "~.d.ts") {
 					savePath = strings.TrimSuffix(savePath, "~.d.ts")
@@ -530,7 +521,7 @@ func query(devMode bool) rex.Handle {
 				}
 				r = bytes.NewReader([]byte("/* fake(empty) types */"))
 			}
-			ctx.SetHeader("Content-Type", "application/typescript; charset=utf-8")
+			ctx.SetHeader("Content-Type", "text/typescript; charset=utf-8")
 			ctx.SetHeader("Cache-Control", "public, max-age=31536000, immutable")
 			return rex.Content(savePath, modtime, r) // auto close
 		}

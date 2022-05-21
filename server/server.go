@@ -231,7 +231,7 @@ func Serve(efs EmbedFS) {
 func init() {
 	embedFS = &embed.FS{}
 	log = &logx.Logger{}
-	go gogogo(time.Hour, func() {
+	go cron(time.Hour, func() {
 		version, err := getDenoStdVersion()
 		if err != nil {
 			log.Warn("getDenoStdVersion: %v", err)

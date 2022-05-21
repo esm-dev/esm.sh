@@ -13,21 +13,21 @@ import (
 )
 
 func (task *BuildTask) CopyDTS(dts string, buildVersion int) (n int, err error) {
-	resolvePrefix := task.resolvePrefix()
+	aliasPrefix := task.aliasPrefix()
 	tracing := newStringSet()
-	err = task.copyDTS(dts, buildVersion, resolvePrefix, tracing)
+	err = task.copyDTS(dts, buildVersion, aliasPrefix, tracing)
 	if err == nil {
 		n = tracing.Size()
 	}
 	return
 }
 
-func (task *BuildTask) copyDTS(dts string, buildVersion int, resolvePrefix string, tracing *stringSet) (err error) {
+func (task *BuildTask) copyDTS(dts string, buildVersion int, aliasPrefix string, tracing *stringSet) (err error) {
 	// don't copy repeatly
-	if tracing.Has(resolvePrefix + dts) {
+	if tracing.Has(aliasPrefix + dts) {
 		return
 	}
-	tracing.Add(resolvePrefix + dts)
+	tracing.Add(aliasPrefix + dts)
 
 	var taskPkgInfo NpmPackage
 	taskPkgJsonPath := path.Join(task.wd, "node_modules", task.Pkg.Name, "package.json")
@@ -55,7 +55,7 @@ func (task *BuildTask) copyDTS(dts string, buildVersion int, resolvePrefix strin
 	dtsPath := utils.CleanPath(strings.Join(append([]string{
 		buildBasePath,
 		versionedName,
-		resolvePrefix,
+		aliasPrefix,
 	}, subPath...), "/"))
 	savePath := "types" + dtsPath
 	exists, _, _, err := fs.Exists(savePath)
@@ -92,8 +92,8 @@ func (task *BuildTask) copyDTS(dts string, buildVersion int, resolvePrefix strin
 		fmt.Fprintf(buf, "/// <reference path=\"%s/node.ns.d.ts\" />\n", cdnOriginAndBuildBasePath)
 	}
 	err = walkDts(pass1Buf, buf, func(importPath string, kind string, position int) string {
+		// resove `declare module "xxx" {}`, and the "xxx" must equal to the `moduleName`
 		if kind == "declare module" {
-			// resove `declare module "xxx" {}`, and the "xxx" must equal to the `moduleName`
 			moduleName := pkgName
 			if len(subPath) > 0 {
 				moduleName += "/" + strings.Join(subPath, "/")
@@ -164,6 +164,11 @@ func (task *BuildTask) copyDTS(dts string, buildVersion int, resolvePrefix strin
 				return importPath
 			}
 
+			alias, ok := task.Alias[importPath]
+			if ok {
+				importPath = alias
+			}
+
 			parts := strings.Split(importPath, "/")
 			depTypePkgName := parts[0]
 			if strings.HasPrefix(depTypePkgName, "@") && len(parts) >= 2 {
@@ -188,62 +193,73 @@ func (task *BuildTask) copyDTS(dts string, buildVersion int, resolvePrefix strin
 			)
 			info, subpath, fromPackageJSON, err = getPackageInfo(task.wd, importPath, version)
 			if err != nil || ((info.Types == "" && info.Typings == "") && !strings.HasPrefix(info.Name, "@types/")) {
-				typesPkgName := toTypesPackageName(importPath)
-				info, _, fromPackageJSON, err = getPackageInfo(task.wd, typesPkgName, version)
+				typesPath := toTypesPackageName(importPath)
+				if subpath != "" {
+					typesPath = typesPath + "/" + subpath
+				}
+				info, _, fromPackageJSON, err = getPackageInfo(task.wd, typesPath, version)
 			}
 			if err != nil {
 				return importPath
 			}
 
+			versioned := info.Name + "@" + info.Version
+			prefix := versioned + "/" + aliasPrefix
+
 			if info.Types != "" || info.Typings != "" {
-				versioned := info.Name + "@" + info.Version
-				prefix := versioned + "/" + resolvePrefix
 				// copy dependent dts files in the node_modules directory in current build context
 				if fromPackageJSON {
-					importPath = toTypesPath(task.wd, &info, subpath)
+					importPath = toTypesPath(task.wd, &info, "", "", subpath)
 					if strings.HasSuffix(importPath, ".d.ts") && !strings.HasSuffix(importPath, "~.d.ts") {
 						imports.Add(importPath)
 					}
-					importPath = prefix + strings.TrimPrefix(importPath, versioned+"/")
+					importPath = strings.TrimPrefix(importPath, versioned+"/")
 				} else {
-					if subpath == "" {
-						if info.Types != "" {
-							importPath = prefix + utils.CleanPath(info.Types)[1:]
-						} else if info.Typings != "" {
-							importPath = prefix + utils.CleanPath(info.Typings)[1:]
+					if info.Types != "" {
+						if subpath != "" && strings.HasSuffix(info.Types, ".d.ts") {
+							info.Types = path.Join(subpath, info.Types)
 						}
+						importPath = utils.CleanPath(info.Types)[1:]
+					} else if info.Typings != "" {
+						if subpath != "" && strings.HasSuffix(info.Typings, ".d.ts") {
+							info.Typings = path.Join(subpath, info.Typings)
+						}
+						importPath = utils.CleanPath(info.Typings)[1:]
 					} else {
-						importPath = prefix + utils.CleanPath(subpath)[1:]
-					}
-					if !strings.HasSuffix(importPath, ".d.ts") {
-						importPath += "~.d.ts"
+						importPath = utils.CleanPath(subpath)[1:]
 					}
 				}
 				info, subpath, fromPackageJSON, err = getPackageInfo(task.wd, importPath, version)
 				if err != nil || ((info.Types == "" && info.Typings == "") && !strings.HasPrefix(info.Name, "@types/")) {
-					info, _, fromPackageJSON, err = getPackageInfo(task.wd, depTypePkgName, version)
+					typesPath := toTypesPackageName(importPath)
+					if subpath != "" {
+						typesPath = typesPath + "/" + subpath
+					}
+					info, _, fromPackageJSON, err = getPackageInfo(task.wd, typesPath, version)
 				}
 			}
 
 			if err == nil && (info.Types != "" || info.Typings != "") {
-				versioned := info.Name + "@" + info.Version
-				prefix := versioned + "/" + resolvePrefix
 				// copy dependent dts files in the node_modules directory in current build context
 				if fromPackageJSON {
-					importPath = toTypesPath(task.wd, &info, subpath)
+					importPath = toTypesPath(task.wd, &info, "", "", subpath)
 					if strings.HasSuffix(importPath, ".d.ts") && !strings.HasSuffix(importPath, "~.d.ts") {
 						imports.Add(importPath)
 					}
-					importPath = prefix + strings.TrimPrefix(importPath, versioned+"/")
+					importPath = strings.TrimPrefix(importPath, versioned+"/")
 				} else {
-					if subpath == "" {
-						if info.Types != "" {
-							importPath = prefix + utils.CleanPath(info.Types)[1:]
-						} else if info.Typings != "" {
-							importPath = prefix + utils.CleanPath(info.Typings)[1:]
+					if info.Types != "" {
+						if subpath != "" && strings.HasSuffix(info.Types, ".d.ts") {
+							info.Types = path.Join(subpath, info.Types)
 						}
+						importPath = utils.CleanPath(info.Types)[1:]
+					} else if info.Typings != "" {
+						if subpath != "" && strings.HasSuffix(info.Typings, ".d.ts") {
+							info.Typings = path.Join(subpath, info.Typings)
+						}
+						importPath = utils.CleanPath(info.Typings)[1:]
 					} else {
-						importPath = prefix + utils.CleanPath(subpath)[1:]
+						importPath = utils.CleanPath(subpath)[1:]
 					}
 					if !strings.HasSuffix(importPath, ".d.ts") {
 						importPath += "~.d.ts"
@@ -252,7 +268,7 @@ func (task *BuildTask) copyDTS(dts string, buildVersion int, resolvePrefix strin
 			}
 
 			// CDN URL
-			importPath = fmt.Sprintf("%s/%s", cdnOriginAndBuildBasePath, importPath)
+			importPath = fmt.Sprintf("%s/%s", cdnOriginAndBuildBasePath, prefix+importPath)
 		}
 
 		return importPath
@@ -338,7 +354,7 @@ func (task *BuildTask) copyDTS(dts string, buildVersion int, resolvePrefix strin
 		}
 		wg.Add(1)
 		go func(importDts string) {
-			err := task.copyDTS(importDts, buildVersion, resolvePrefix, tracing)
+			err := task.copyDTS(importDts, buildVersion, aliasPrefix, tracing)
 			if err != nil {
 				errors = append(errors, err)
 			}
@@ -354,7 +370,7 @@ func (task *BuildTask) copyDTS(dts string, buildVersion int, resolvePrefix strin
 	return
 }
 
-func toTypesPath(wd string, p *NpmPackage, subpath string) string {
+func toTypesPath(wd string, p *NpmPackage, version string, prefix string, subpath string) string {
 	var types string
 	if subpath != "" {
 		types = subpath
@@ -388,5 +404,8 @@ func toTypesPath(wd string, p *NpmPackage, subpath string) string {
 		}
 	}
 
-	return fmt.Sprintf("%s@%s%s", p.Name, p.Version, utils.CleanPath(types))
+	if version == "" {
+		version = p.Version
+	}
+	return fmt.Sprintf("%s@%s/%s%s", p.Name, version, prefix, utils.CleanPath(types)[1:])
 }

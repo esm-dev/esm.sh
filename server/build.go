@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"os"
 	"path"
-	"sort"
 	"strings"
 	"time"
 
@@ -36,28 +35,9 @@ type BuildTask struct {
 	stage string
 }
 
-func (task *BuildTask) resolvePrefix() string {
-	alias := []string{}
-	if len(task.Alias) > 0 {
-		var ss sort.StringSlice
-		for name, to := range task.Alias {
-			ss = append(ss, fmt.Sprintf("%s:%s", name, to))
-		}
-		ss.Sort()
-		alias = append(alias, fmt.Sprintf("alias:%s", strings.Join(ss, ",")))
-	}
-	if len(task.Deps) > 0 {
-		var ss sort.StringSlice
-		for _, pkg := range task.Deps {
-			ss = append(ss, fmt.Sprintf("%s@%s", pkg.Name, pkg.Version))
-		}
-		ss.Sort()
-		alias = append(alias, fmt.Sprintf("deps:%s", strings.Join(ss, ",")))
-	}
-	if len(alias) > 0 {
-		return fmt.Sprintf("X-%s/", btoaUrl(strings.Join(alias, ",")))
-	}
-	return ""
+// aliasPrefix returns the prefix for `?alias` and `?deps`
+func (task *BuildTask) aliasPrefix() string {
+	return encodeAliasPrefix(task.Alias, task.Deps)
 }
 
 func (task *BuildTask) ID() string {
@@ -87,7 +67,7 @@ func (task *BuildTask) ID() string {
 		task.BuildVersion,
 		pkg.Name,
 		pkg.Version,
-		task.resolvePrefix(),
+		task.aliasPrefix(),
 		task.Target,
 		name,
 	)
@@ -454,7 +434,7 @@ esbuild:
 					if err != nil {
 						return
 					}
-					importPath = task.getImportPath(subPkg, task.resolvePrefix())
+					importPath = task.getImportPath(subPkg, task.aliasPrefix())
 				}
 				// is builtin `buffer` module
 				if importPath == "" && name == "buffer" {
@@ -557,7 +537,7 @@ esbuild:
 						buildQueue.Add(t, "")
 					}
 
-					importPath = task.getImportPath(pkg, task.resolvePrefix())
+					importPath = task.getImportPath(pkg, task.aliasPrefix())
 				}
 				if importPath == "" {
 					err = fmt.Errorf("Could not resolve \"%s\" (Imported by \"%s\")", name, task.Pkg.Name)
@@ -761,25 +741,27 @@ func (task *BuildTask) checkDTS(esm *ModuleMeta, npm *NpmPackage) {
 
 	var dts string
 	if npm.Types != "" {
-		dts = toTypesPath(task.wd, npm, submodule)
+		dts = toTypesPath(task.wd, npm, "", task.aliasPrefix(), submodule)
 	} else if !strings.HasPrefix(name, "@types/") {
 		versions := []string{"latest"}
 		versionParts := strings.Split(task.Pkg.Version, ".")
 		if len(versionParts) > 2 {
-			versions = append([]string{
+			versions = []string{
 				"~" + strings.Join(versionParts[:2], "."), // minor
 				"^" + versionParts[0],                     // major
-			}, versions...)
+				"latest",
+			}
 		}
 		typesPkgName := toTypesPackageName(name)
 		pkg, ok := task.Deps.Get(typesPkgName)
 		if ok {
+			// use the version of the `?deps` query if it exists
 			versions = append([]string{pkg.Version}, versions...)
 		}
 		for _, version := range versions {
 			p, _, _, err := getPackageInfo(task.wd, typesPkgName, version)
 			if err == nil {
-				dts = toTypesPath(task.wd, &p, submodule)
+				dts = toTypesPath(task.wd, &p, version, task.aliasPrefix(), submodule)
 				break
 			}
 		}
