@@ -97,22 +97,7 @@ func (task *BuildTask) ID() string {
 	return task.id
 }
 
-func (task *BuildTask) getImportPath(pkg Pkg, prefix string, infectDeps bool) string {
-	if infectDeps && task.Deps.Len() > 0 {
-		path := fmt.Sprintf(
-			"%s/%s?target=%s&pin=v%d&deps=%s",
-			basePath,
-			pkg.String(),
-			task.Target,
-			task.BuildVersion,
-			task.Deps.String(),
-		)
-		if task.DevMode {
-			path += "&dev"
-		}
-		return path
-	}
-
+func (task *BuildTask) getImportPath(pkg Pkg, prefix string) string {
 	name := path.Base(pkg.Name)
 	if pkg.Submodule != "" {
 		name = pkg.Submodule
@@ -469,7 +454,7 @@ esbuild:
 					if err != nil {
 						return
 					}
-					importPath = task.getImportPath(subPkg, task.resolvePrefix(), false)
+					importPath = task.getImportPath(subPkg, task.resolvePrefix())
 				}
 				// is builtin `buffer` module
 				if importPath == "" && name == "buffer" {
@@ -497,7 +482,7 @@ esbuild:
 								Name:      p.Name,
 								Version:   p.Version,
 								Submodule: submodule,
-							}, "", false)
+							}, "")
 							importPath = strings.TrimSuffix(importPath, ".js") + ".bundle.js"
 						} else {
 							_, err := embedFS.ReadFile(fmt.Sprintf("server/embed/polyfills/node_%s.js", name))
@@ -514,7 +499,7 @@ esbuild:
 						}
 					}
 				}
-				// use version defined by `?deps` query
+				// use version defined in `?deps` query
 				if importPath == "" {
 					for _, dep := range task.Deps {
 						if name == dep.Name || strings.HasPrefix(name, dep.Name+"/") {
@@ -526,17 +511,17 @@ esbuild:
 								Name:      dep.Name,
 								Version:   dep.Version,
 								Submodule: submodule,
-							}, "", false)
+							}, "")
 							break
 						}
 					}
 				}
-				// force the dependency version of `react` equals to react-dom's version
+				// force the dependency version of `react` equals to react-dom
 				if importPath == "" && task.Pkg.Name == "react-dom" && name == "react" {
 					importPath = task.getImportPath(Pkg{
 						Name:    name,
 						Version: task.Pkg.Version,
-					}, "", false)
+					}, "")
 				}
 				// common npm dependency
 				if importPath == "" {
@@ -572,7 +557,7 @@ esbuild:
 						buildQueue.Add(t)
 					}
 
-					importPath = task.getImportPath(pkg, "", true)
+					importPath = task.getImportPath(pkg, task.resolvePrefix())
 				}
 				if importPath == "" {
 					err = fmt.Errorf("Could not resolve \"%s\" (Imported by \"%s\")", name, task.Pkg.Name)
