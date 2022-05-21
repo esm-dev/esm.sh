@@ -15,5 +15,4 @@ require (
 	github.com/ije/postdb v0.7.1
 	github.com/ije/rex v1.8.1
 	github.com/mssola/user_agent v0.5.3
-	github.com/rs/cors v1.8.2
 )
