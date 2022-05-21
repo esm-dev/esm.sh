@@ -18,7 +18,6 @@ import (
 
 	logx "github.com/ije/gox/log"
 	"github.com/ije/rex"
-	"github.com/rs/cors"
 )
 
 var (
@@ -181,13 +180,13 @@ func Serve(efs EmbedFS) {
 	}()
 
 	if !noCompress {
-		rex.Use(rex.AutoCompress())
+		rex.Use(rex.Compression())
 	}
 	rex.Use(
 		rex.ErrorLogger(log),
 		rex.AccessLogger(accessLogger),
 		rex.Header("Server", "esm.sh"),
-		rex.Cors(cors.New(cors.Options{
+		rex.Cors(rex.CORS{
 			AllowedOrigins: []string{"*"},
 			AllowedMethods: []string{
 				http.MethodGet,
@@ -195,7 +194,7 @@ func Serve(efs EmbedFS) {
 			AllowedHeaders:   []string{"*"},
 			ExposedHeaders:   []string{"X-TypeScript-Types"},
 			AllowCredentials: false,
-		})),
+		}),
 		query(isDev),
 	)
 
