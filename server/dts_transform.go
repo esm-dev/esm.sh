@@ -49,8 +49,8 @@ func (task *BuildTask) copyDTS(dts string, buildVersion int, resolvePrefix strin
 	}
 
 	buildBasePath := fmt.Sprintf("/v%d", buildVersion)
-	cdnOriginAndBasePath := task.CdnOrigin + cdnBasePath
-	cdnOriginAndBuildBasePath := task.CdnOrigin + cdnBasePath + buildBasePath
+	cdnOriginAndBasePath := task.CdnOrigin + basePath
+	cdnOriginAndBuildBasePath := task.CdnOrigin + basePath + buildBasePath
 
 	dtsPath := utils.CleanPath(strings.Join(append([]string{
 		buildBasePath,

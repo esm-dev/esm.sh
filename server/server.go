@@ -5,6 +5,7 @@ import (
 	"embed"
 	"flag"
 	"fmt"
+	"net/http"
 	"os"
 	"os/signal"
 	"path"
@@ -18,22 +19,26 @@ import (
 
 	logx "github.com/ije/gox/log"
 	"github.com/ije/rex"
+	"github.com/rs/cors"
 )
 
 var (
-	basePath       string
-	baseRedirect   bool
-	cdnDomain      string
-	typesCdnDomain string
-	cdnBasePath    string
-	cache          storage.Cache
-	db             storage.DB
-	fs             storage.FS
-	buildQueue     *BuildQueue
-	log            *logx.Logger
-	node           *Node
+	cache      storage.Cache
+	db         storage.DB
+	fs         storage.FS
+	buildQueue *BuildQueue
+	log        *logx.Logger
+	node       *Node
+	embedFS    EmbedFS
+)
+
+var (
+	// base path for requests
+	basePath string
+	// http redrect for URLs not from basepath
+	baseRedirect bool
+	// the deno std version from https://deno.land/std/version.ts
 	denoStdVersion string
-	embedFS        EmbedFS
 )
 
 type EmbedFS interface {
@@ -61,9 +66,6 @@ func Serve(efs EmbedFS) {
 	flag.IntVar(&httpsPort, "https-port", 0, "https(autotls) server port, default is disabled")
 	flag.StringVar(&basePath, "basepath", "", "base path")
 	flag.BoolVar(&baseRedirect, "base-redirect", false, "http redrect for URLs not from basepath")
-	flag.StringVar(&cdnDomain, "cdn-domain", "", "cdn domain")
-	flag.StringVar(&typesCdnDomain, "types-cdn-domain", "", "cdn domain for only types, default is the cdn domain value")
-	flag.StringVar(&cdnBasePath, "cdn-basepath", "", "cdn base path, default is the basepath value")
 	flag.StringVar(&etcDir, "etc-dir", ".esmd", "etc dir")
 	flag.StringVar(&cacheUrl, "cache", "", "cache config, default is 'memory:default'")
 	flag.StringVar(&dbUrl, "db", "", "database config, default is 'postdb:[etc-dir]/esm.db'")
@@ -102,10 +104,6 @@ func Serve(efs EmbedFS) {
 
 	if isDev {
 		logLevel = "debug"
-		cdnDomain = "localhost"
-		if port != 80 {
-			cdnDomain = fmt.Sprintf("localhost:%d", port)
-		}
 		cwd, err := os.Getwd()
 		if err != nil {
 			fmt.Println(err)
@@ -115,13 +113,6 @@ func Serve(efs EmbedFS) {
 	} else {
 		embedFS = efs
 		os.Setenv("NO_COLOR", "1") // disable log color in production
-	}
-
-	if typesCdnDomain == "" {
-		typesCdnDomain = cdnDomain
-	}
-	if cdnBasePath == "" {
-		cdnBasePath = basePath
 	}
 
 	log, err = logx.New(fmt.Sprintf("file:%s?buffer=32k", path.Join(logDir, fmt.Sprintf("main-v%d.log", VERSION))))
@@ -212,13 +203,15 @@ func Serve(efs EmbedFS) {
 		rex.ErrorLogger(log),
 		rex.AccessLogger(accessLogger),
 		rex.Header("Server", "esm.sh"),
-		rex.Cors(rex.CORS{
-			AllowAllOrigins: true,
-			AllowMethods:    []string{"GET"},
-			AllowHeaders:    []string{"Origin", "Content-Type", "Content-Length", "Accept-Encoding", "User-Agent", "Connection"},
-			ExposeHeaders:   []string{"X-TypeScript-Types"},
-			MaxAge:          3600,
-		}),
+		rex.Cors(cors.New(cors.Options{
+			AllowedOrigins: []string{"*"},
+			AllowedMethods: []string{
+				http.MethodGet,
+			},
+			AllowedHeaders:   []string{"*"},
+			ExposedHeaders:   []string{"X-TypeScript-Types"},
+			AllowCredentials: false,
+		})),
 		query(isDev),
 	)
 
