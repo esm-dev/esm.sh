@@ -1,5 +1,9 @@
 # Change Log
 
+## v80
+
+- Fix build error in v79
+
 ## v79
 
 - Use `esm.sh` instead of `cdn.esm.sh`
