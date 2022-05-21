@@ -621,7 +621,6 @@ func yarnCacheClean(wd string, packages ...string) {
 			log.Debug("yarn cache clean %s: %s", strings.Join(packages, ","), string(output))
 		}
 	}
-	return
 }
 
 // added by @jimisaacs
