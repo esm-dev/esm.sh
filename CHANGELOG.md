@@ -1,5 +1,13 @@
 # Change Log
 
+## v79
+
+- Use `esm.sh` instead of `cdn.esm.sh`
+- User semver versioning for the `x-typescript-types` header
+- Fix aliasing dependencies doesn't affect typescript declaration (close [#102](https://github.com/esm-dev/esm.sh/issues/102))
+- Fix using arguments in arrow function [#322](https://github.com/esm-dev/esm.sh/pull/322)
+- Fix Deno check precluding esm.sh to start [#327](https://github.com/esm-dev/esm.sh/pull/327)
+
 ## v78
 
 - Reduce database store structure
