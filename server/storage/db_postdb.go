@@ -63,7 +63,7 @@ func (i *postDB) List(category string) (list []ListItem, err error) {
 		for key, value := range post.KV {
 			store[key] = string(value)
 		}
-		list = append(list, ListItem{Store: store, Motime: post.Modtime})
+		list = append(list, ListItem{Store: store, Modtime: post.Modtime})
 	}
 	return
 }
