@@ -363,7 +363,7 @@ func query(devMode bool) rex.Handle {
 					}
 					return rex.Status(400, fmt.Sprintf("Invalid deps query: %v not found", p))
 				}
-				if !deps.Has(m.Name) {
+				if !deps.Has(m.Name) && m.Name != reqPkg.Name {
 					deps = append(deps, *m)
 				}
 			}
@@ -428,7 +428,7 @@ func query(devMode bool) rex.Handle {
 					alias[k] = v
 				}
 				for _, p := range _deps {
-					if !deps.Has(p.Name) {
+					if !deps.Has(p.Name) && p.Name != reqPkg.Name {
 						deps = append(deps, p)
 					}
 				}
@@ -481,7 +481,7 @@ func query(devMode bool) rex.Handle {
 					buildVersion,
 					reqPkg.Name,
 					reqPkg.Version,
-					task.aliasPrefix(),
+					encodeAliasPrefix(alias, deps),
 				), reqPkg.Submodule)
 				if strings.HasSuffix(savePath, "~.d.ts") {
 					savePath = strings.TrimSuffix(savePath, "~.d.ts")

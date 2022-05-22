@@ -35,11 +35,6 @@ type BuildTask struct {
 	stage string
 }
 
-// aliasPrefix returns the prefix for `?alias` and `?deps`
-func (task *BuildTask) aliasPrefix() string {
-	return encodeAliasPrefix(task.Alias, task.Deps)
-}
-
 func (task *BuildTask) ID() string {
 	if task.id != "" {
 		return task.id
@@ -67,7 +62,7 @@ func (task *BuildTask) ID() string {
 		task.BuildVersion,
 		pkg.Name,
 		pkg.Version,
-		task.aliasPrefix(),
+		encodeAliasPrefix(task.Alias, task.Deps),
 		task.Target,
 		name,
 	)
@@ -434,7 +429,7 @@ esbuild:
 					if err != nil {
 						return
 					}
-					importPath = task.getImportPath(subPkg, task.aliasPrefix())
+					importPath = task.getImportPath(subPkg, encodeAliasPrefix(task.Alias, task.Deps))
 				}
 				// is builtin `buffer` module
 				if importPath == "" && name == "buffer" {
@@ -537,7 +532,7 @@ esbuild:
 						buildQueue.Add(t, "")
 					}
 
-					importPath = task.getImportPath(pkg, task.aliasPrefix())
+					importPath = task.getImportPath(pkg, encodeAliasPrefix(task.Alias, task.Deps))
 				}
 				if importPath == "" {
 					err = fmt.Errorf("Could not resolve \"%s\" (Imported by \"%s\")", name, task.Pkg.Name)
@@ -738,10 +733,11 @@ func (task *BuildTask) storeToDB(esm *ModuleMeta) {
 func (task *BuildTask) checkDTS(esm *ModuleMeta, npm *NpmPackage) {
 	name := task.Pkg.Name
 	submodule := task.Pkg.Submodule
+	aliasPrefix := encodeAliasPrefix(task.Alias, task.Deps)
 
 	var dts string
 	if npm.Types != "" {
-		dts = toTypesPath(task.wd, npm, "", task.aliasPrefix(), submodule)
+		dts = toTypesPath(task.wd, npm, "", aliasPrefix, submodule)
 	} else if !strings.HasPrefix(name, "@types/") {
 		versions := []string{"latest"}
 		versionParts := strings.Split(task.Pkg.Version, ".")
@@ -761,7 +757,7 @@ func (task *BuildTask) checkDTS(esm *ModuleMeta, npm *NpmPackage) {
 		for _, version := range versions {
 			p, _, _, err := getPackageInfo(task.wd, typesPkgName, version)
 			if err == nil {
-				dts = toTypesPath(task.wd, &p, version, task.aliasPrefix(), submodule)
+				dts = toTypesPath(task.wd, &p, version, aliasPrefix, submodule)
 				break
 			}
 		}
