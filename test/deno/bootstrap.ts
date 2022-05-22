@@ -1,10 +1,10 @@
-const [dir] = Deno.args;
+const [testDir] = Deno.args;
 
 startEsmServer(async (p) => {
   console.log("esm.sh server started");
   try {
-    if (dir) {
-      await test(dir, p);
+    if (testDir) {
+      await test(testDir, p);
     } else {
       for await (const entry of Deno.readDir("test/deno")) {
         if (entry.isDirectory) {
@@ -12,7 +12,6 @@ startEsmServer(async (p) => {
         }
       }
     }
-    console.log("");
     console.log("Done!");
   } catch (error) {
     console.error(error);
@@ -57,9 +56,8 @@ async function test(name: string, p: any, retryTimes = 0) {
     cmd.push("--config", dir + "tsconfig.json");
   }
   cmd.push(dir);
-
-  console.log("");
-  console.log(`[testing ${name}]`);
+ 
+  console.log(`\n[testing ${name}]`);
 
   const { code, success } = await run(...cmd);
   if (!success) {
