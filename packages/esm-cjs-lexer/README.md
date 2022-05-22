@@ -1,17 +1,17 @@
-# cjs-esm-exports
+# esm-cjs-lexer
 
 A **WASM** module to parse commonjs exports for **ESM**, powered by [swc](https://github.com/swc-project/swc) in **rust**.
 
 ## Installation
 
 ```bash
-npm install cjs-esm-exports
+npm install esm-cjs-lexer
 ```
 
 for `yarn` users:
 
 ```bash
-yarn add cjs-esm-exports
+yarn add esm-cjs-lexer
 ```
 
 ## Usage
@@ -31,7 +31,7 @@ export function parse(
 
 Example: 
 ```js
-const { parse } = require('cjs-esm-exports');
+const { parse } = require('esm-cjs-lexer');
 
 // named exports
 // exports: ['a', 'b', 'c', '__esModule', 'foo']
@@ -55,7 +55,7 @@ const { reexports } = parse('index.cjs', `
 // object exports(spread supported)
 // exports: ['foo', 'baz']
 // reexports: ['./lib']
-const { reexports } = parse('index.cjs', `
+const { exports, reexports } = parse('index.cjs', `
   const foo = 'bar'
   const obj = { baz: 123 }
   module.exports = { foo, ...obj, ...require("./lib") };
@@ -143,7 +143,7 @@ const { exports } = parse('lib.cjs', `
 
 ## Development Setup
 
-You will need [rust](https://www.rust-lang.org/tools/install) 1.30+ and [wasm-pack](https://rustwasm.github.io/wasm-pack/installer/).
+You will need [rust](https://www.rust-lang.org/tools/install) 1.56+ and [wasm-pack](https://rustwasm.github.io/wasm-pack/installer/).
 
 ## Build
 
