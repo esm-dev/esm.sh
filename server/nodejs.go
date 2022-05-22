@@ -618,7 +618,7 @@ func yarnCacheClean(wd string, packages ...string) {
 		if err != nil {
 			log.Warnf("yarn cache clean %s: %s", strings.Join(packages, ","), err)
 		} else {
-			log.Debug("yarn cache clean %s: %s", strings.Join(packages, ","), string(output))
+			log.Debugf("yarn cache clean %s: %s", strings.Join(packages, ","), string(output))
 		}
 	}
 }

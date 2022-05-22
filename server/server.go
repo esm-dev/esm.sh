@@ -234,7 +234,7 @@ func init() {
 	go cron(time.Hour, func() {
 		version, err := getDenoStdVersion()
 		if err != nil {
-			log.Warn("getDenoStdVersion: %v", err)
+			log.Warnf("getDenoStdVersion: %v", err)
 			return
 		}
 		denoStdVersion = version
