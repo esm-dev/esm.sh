@@ -4,13 +4,13 @@ import (
 	"testing"
 )
 
-func TestAliasPrefix(t *testing.T) {
-	prefix := encodeAliasPrefix(map[string]string{"a": "b"}, PkgSlice{
+func TestAliasDepsPrefix(t *testing.T) {
+	prefix := encodeAliasDepsPrefix(map[string]string{"a": "b"}, PkgSlice{
 		Pkg{Name: "b", Version: "1.0.0"},
 		Pkg{Name: "d", Version: "1.0.0"},
 		Pkg{Name: "c", Version: "1.0.0"},
 	})
-	a, d, e := decodeAliasPrefix(prefix)
+	a, d, e := decodeAliasDepsPrefix(prefix)
 	if e != nil {
 		t.Fatal(e)
 	}

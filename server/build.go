@@ -62,7 +62,7 @@ func (task *BuildTask) ID() string {
 		task.BuildVersion,
 		pkg.Name,
 		pkg.Version,
-		encodeAliasPrefix(task.Alias, task.Deps),
+		encodeAliasDepsPrefix(task.Alias, task.Deps),
 		task.Target,
 		name,
 	)
@@ -429,7 +429,7 @@ esbuild:
 					if err != nil {
 						return
 					}
-					importPath = task.getImportPath(subPkg, encodeAliasPrefix(task.Alias, task.Deps))
+					importPath = task.getImportPath(subPkg, encodeAliasDepsPrefix(task.Alias, task.Deps))
 				}
 				// is builtin `buffer` module
 				if importPath == "" && name == "buffer" {
@@ -486,7 +486,7 @@ esbuild:
 								Name:      dep.Name,
 								Version:   dep.Version,
 								Submodule: submodule,
-							}, "")
+							}, encodeAliasDepsPrefix(fixAliasDeps(task.Alias, task.Deps, dep.Name)))
 							break
 						}
 					}
@@ -532,7 +532,7 @@ esbuild:
 						buildQueue.Add(t, "")
 					}
 
-					importPath = task.getImportPath(pkg, encodeAliasPrefix(task.Alias, task.Deps))
+					importPath = task.getImportPath(pkg, encodeAliasDepsPrefix(task.Alias, task.Deps))
 				}
 				if importPath == "" {
 					err = fmt.Errorf("Could not resolve \"%s\" (Imported by \"%s\")", name, task.Pkg.Name)
@@ -733,11 +733,11 @@ func (task *BuildTask) storeToDB(esm *ModuleMeta) {
 func (task *BuildTask) checkDTS(esm *ModuleMeta, npm *NpmPackage) {
 	name := task.Pkg.Name
 	submodule := task.Pkg.Submodule
-	aliasPrefix := encodeAliasPrefix(task.Alias, task.Deps)
+	aliasDepsPrefix := encodeAliasDepsPrefix(task.Alias, task.Deps)
 
 	var dts string
 	if npm.Types != "" {
-		dts = toTypesPath(task.wd, npm, "", aliasPrefix, submodule)
+		dts = toTypesPath(task.wd, npm, "", aliasDepsPrefix, submodule)
 	} else if !strings.HasPrefix(name, "@types/") {
 		versions := []string{"latest"}
 		versionParts := strings.Split(task.Pkg.Version, ".")
@@ -757,7 +757,7 @@ func (task *BuildTask) checkDTS(esm *ModuleMeta, npm *NpmPackage) {
 		for _, version := range versions {
 			p, _, _, err := getPackageInfo(task.wd, typesPkgName, version)
 			if err == nil {
-				dts = toTypesPath(task.wd, &p, version, aliasPrefix, submodule)
+				dts = toTypesPath(task.wd, &p, version, aliasDepsPrefix, submodule)
 				break
 			}
 		}

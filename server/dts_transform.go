@@ -13,21 +13,21 @@ import (
 )
 
 func (task *BuildTask) CopyDTS(dts string, buildVersion int) (n int, err error) {
-	aliasPrefix := encodeAliasPrefix(task.Alias, task.Deps)
+	aliasDepsPrefix := encodeAliasDepsPrefix(task.Alias, task.Deps)
 	tracing := newStringSet()
-	err = task.copyDTS(dts, buildVersion, aliasPrefix, tracing)
+	err = task.copyDTS(dts, buildVersion, aliasDepsPrefix, tracing)
 	if err == nil {
 		n = tracing.Size()
 	}
 	return
 }
 
-func (task *BuildTask) copyDTS(dts string, buildVersion int, aliasPrefix string, tracing *stringSet) (err error) {
+func (task *BuildTask) copyDTS(dts string, buildVersion int, aliasDepsPrefix string, tracing *stringSet) (err error) {
 	// don't copy repeatly
-	if tracing.Has(aliasPrefix + dts) {
+	if tracing.Has(aliasDepsPrefix + dts) {
 		return
 	}
-	tracing.Add(aliasPrefix + dts)
+	tracing.Add(aliasDepsPrefix + dts)
 
 	var taskPkgInfo NpmPackage
 	taskPkgJsonPath := path.Join(task.wd, "node_modules", task.Pkg.Name, "package.json")
@@ -55,7 +55,7 @@ func (task *BuildTask) copyDTS(dts string, buildVersion int, aliasPrefix string,
 	dtsPath := utils.CleanPath(strings.Join(append([]string{
 		buildBasePath,
 		versionedName,
-		aliasPrefix,
+		aliasDepsPrefix,
 	}, subPath...), "/"))
 	savePath := "types" + dtsPath
 	exists, _, _, err := fs.Exists(savePath)
@@ -227,19 +227,7 @@ func (task *BuildTask) copyDTS(dts string, buildVersion int, aliasPrefix string,
 				}
 			}
 
-			alias := map[string]string{}
-			pkgs := PkgSlice{}
-			for k, v := range task.Alias {
-				if info.Name != v && !strings.HasPrefix(v, info.Name+"/") {
-					alias[k] = v
-				}
-			}
-			for _, pkg := range task.Deps {
-				if pkg.Name != info.Name {
-					pkgs = append(pkgs, pkg)
-				}
-			}
-			pkgBasePath := pkgBase + encodeAliasPrefix(alias, pkgs)
+			pkgBasePath := pkgBase + encodeAliasDepsPrefix(fixAliasDeps(task.Alias, task.Deps, info.Name))
 
 			// CDN URL
 			importPath = fmt.Sprintf("%s/%s", cdnOriginAndBuildBasePath, pkgBasePath+importPath)
@@ -328,7 +316,7 @@ func (task *BuildTask) copyDTS(dts string, buildVersion int, aliasPrefix string,
 		}
 		wg.Add(1)
 		go func(importDts string) {
-			err := task.copyDTS(importDts, buildVersion, aliasPrefix, tracing)
+			err := task.copyDTS(importDts, buildVersion, aliasDepsPrefix, tracing)
 			if err != nil {
 				errors = append(errors, err)
 			}

@@ -351,6 +351,20 @@ func query(devMode bool) rex.Handle {
 			}
 		}
 
+		// check `alias` query
+		alias := map[string]string{}
+		for _, p := range strings.Split(ctx.Form.Value("alias"), ",") {
+			p = strings.TrimSpace(p)
+			if p != "" {
+				name, to := utils.SplitByFirstByte(p, ':')
+				name = strings.TrimSpace(name)
+				to = strings.TrimSpace(to)
+				if name != "" && to != "" {
+					alias[name] = to
+				}
+			}
+		}
+
 		// check `deps` query
 		deps := PkgSlice{}
 		for _, p := range strings.Split(ctx.Form.Value("deps"), ",") {
@@ -363,22 +377,8 @@ func query(devMode bool) rex.Handle {
 					}
 					return rex.Status(400, fmt.Sprintf("Invalid deps query: %v not found", p))
 				}
-				if !deps.Has(m.Name) && m.Name != reqPkg.Name {
+				if !deps.Has(m.Name) {
 					deps = append(deps, *m)
-				}
-			}
-		}
-
-		// check `alias` query
-		alias := map[string]string{}
-		for _, p := range strings.Split(ctx.Form.Value("alias"), ",") {
-			p = strings.TrimSpace(p)
-			if p != "" {
-				name, to := utils.SplitByFirstByte(p, ':')
-				name = strings.TrimSpace(name)
-				to = strings.TrimSpace(to)
-				if name != "" && to != "" {
-					alias[name] = to
 				}
 			}
 		}
@@ -415,12 +415,12 @@ func query(devMode bool) rex.Handle {
 			}
 		}
 
-		// parse `aliasPrefix`
+		// parse `aliasDepsPrefix`
 		if hasBuildVerPrefix {
 			a := strings.Split(reqPkg.Submodule, "/")
 			if len(a) > 1 && strings.HasPrefix(a[0], "X-") {
 				reqPkg.Submodule = strings.Join(a[1:], "/")
-				_alias, _deps, err := decodeAliasPrefix(a[0])
+				_alias, _deps, err := decodeAliasDepsPrefix(a[0])
 				if err != nil {
 					return throwErrorJS(ctx, err)
 				}
@@ -428,12 +428,15 @@ func query(devMode bool) rex.Handle {
 					alias[k] = v
 				}
 				for _, p := range _deps {
-					if !deps.Has(p.Name) && p.Name != reqPkg.Name {
+					if !deps.Has(p.Name) {
 						deps = append(deps, p)
 					}
 				}
 			}
 		}
+
+		// fix alias and deps
+		alias, deps = fixAliasDeps(alias, deps, reqPkg.Name)
 
 		// check whether it is `bare` mode
 		if hasBuildVerPrefix && endsWith(pathname, ".js") {
@@ -469,8 +472,8 @@ func query(devMode bool) rex.Handle {
 				CdnOrigin:    origin,
 				BuildVersion: buildVersion,
 				Pkg:          *reqPkg,
-				Deps:         deps,
 				Alias:        alias,
+				Deps:         deps,
 				Target:       "types",
 				stage:        "-",
 			}
@@ -481,7 +484,7 @@ func query(devMode bool) rex.Handle {
 					buildVersion,
 					reqPkg.Name,
 					reqPkg.Version,
-					encodeAliasPrefix(alias, deps),
+					encodeAliasDepsPrefix(alias, deps),
 				), reqPkg.Submodule)
 				if strings.HasSuffix(savePath, "~.d.ts") {
 					savePath = strings.TrimSuffix(savePath, "~.d.ts")
@@ -530,8 +533,8 @@ func query(devMode bool) rex.Handle {
 			CdnOrigin:    origin,
 			BuildVersion: buildVersion,
 			Pkg:          *reqPkg,
-			Deps:         deps,
 			Alias:        alias,
+			Deps:         deps,
 			Target:       target,
 			BundleMode:   isBundleMode || isWorker,
 			NoRequire:    noRequire,

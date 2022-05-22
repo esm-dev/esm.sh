@@ -179,7 +179,23 @@ func cron(d time.Duration, task func()) {
 	}
 }
 
-func decodeAliasPrefix(raw string) (alias map[string]string, deps PkgSlice, err error) {
+func fixAliasDeps(alias map[string]string, deps PkgSlice, pkgName string) (map[string]string, PkgSlice) {
+	_alias := map[string]string{}
+	_pkgs := PkgSlice{}
+	for k, v := range alias {
+		if pkgName != v && !strings.HasPrefix(v, pkgName+"/") {
+			_alias[k] = v
+		}
+	}
+	for _, pkg := range deps {
+		if pkg.Name != pkgName {
+			_pkgs = append(_pkgs, pkg)
+		}
+	}
+	return _alias, _pkgs
+}
+
+func decodeAliasDepsPrefix(raw string) (alias map[string]string, deps PkgSlice, err error) {
 	s, err := atobUrl(strings.TrimPrefix(strings.TrimSuffix(raw, "/"), "X-"))
 	if err == nil {
 		for _, p := range strings.Split(s, "\n") {
@@ -218,7 +234,7 @@ func decodeAliasPrefix(raw string) (alias map[string]string, deps PkgSlice, err 
 	return
 }
 
-func encodeAliasPrefix(alias map[string]string, deps PkgSlice) string {
+func encodeAliasDepsPrefix(alias map[string]string, deps PkgSlice) string {
 	args := []string{}
 	if len(alias) > 0 {
 		var ss sort.StringSlice
