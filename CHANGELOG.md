@@ -1,8 +1,12 @@
 # Change Log
 
+## v82
+
+- fix types with `?deps` query (close [#333](https://github.com/esm-dev/esm.sh/issues/333))
+
 ## v81
 
-- fix `?deps` and `?alias` options broadcast
+- fix `?deps` and `?alias` depth query
 
 ## v80
 
