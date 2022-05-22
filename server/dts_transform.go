@@ -164,9 +164,9 @@ func (task *BuildTask) copyDTS(dts string, buildVersion int, aliasPrefix string,
 				return importPath
 			}
 
-			alias, ok := task.Alias[importPath]
+			to, ok := task.Alias[importPath]
 			if ok {
-				importPath = alias
+				importPath = to
 			}
 
 			parts := strings.Split(importPath, "/")
@@ -227,13 +227,19 @@ func (task *BuildTask) copyDTS(dts string, buildVersion int, aliasPrefix string,
 				}
 			}
 
+			alias := map[string]string{}
 			pkgs := PkgSlice{}
+			for k, v := range task.Alias {
+				if info.Name != v && !strings.HasPrefix(v, info.Name+"/") {
+					alias[k] = v
+				}
+			}
 			for _, pkg := range task.Deps {
 				if pkg.Name != info.Name {
 					pkgs = append(pkgs, pkg)
 				}
 			}
-			pkgBasePath := pkgBase + encodeAliasPrefix(task.Alias, pkgs)
+			pkgBasePath := pkgBase + encodeAliasPrefix(alias, pkgs)
 
 			// CDN URL
 			importPath = fmt.Sprintf("%s/%s", cdnOriginAndBuildBasePath, pkgBasePath+importPath)
