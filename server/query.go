@@ -185,7 +185,7 @@ func query(devMode bool) rex.Handle {
 			}
 			data, err = embedFS.ReadFile("server/embed/types" + pathname)
 			if err == nil {
-				ctx.SetHeader("Content-Type", "text/typescript; charset=utf-8")
+				ctx.SetHeader("Content-Type", "application/typescript; charset=utf-8")
 				ctx.SetHeader("Cache-Control", "public, max-age=31536000, immutable")
 				return rex.Content(pathname, startTime, bytes.NewReader(data))
 			}
@@ -291,7 +291,7 @@ func query(devMode bool) rex.Handle {
 					}
 					defer f.Close()
 					if strings.HasSuffix(pathname, ".ts") {
-						w.Header().Set("Content-Type", "text/typescript")
+						w.Header().Set("Content-Type", "application/typescript")
 					}
 					w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
 					http.ServeContent(w, r, savePath, modtime, f)
@@ -344,7 +344,7 @@ func query(devMode bool) rex.Handle {
 					return rex.Status(500, err.Error())
 				}
 				if storageType == "types" {
-					ctx.SetHeader("Content-Type", "text/typescript; charset=utf-8")
+					ctx.SetHeader("Content-Type", "application/typescript; charset=utf-8")
 				}
 				ctx.SetHeader("Cache-Control", "public, max-age=31536000, immutable")
 				return rex.Content(savePath, modtime, r)
@@ -521,7 +521,7 @@ func query(devMode bool) rex.Handle {
 				}
 				r = bytes.NewReader([]byte("/* fake(empty) types */"))
 			}
-			ctx.SetHeader("Content-Type", "text/typescript; charset=utf-8")
+			ctx.SetHeader("Content-Type", "application/typescript; charset=utf-8")
 			ctx.SetHeader("Cache-Control", "public, max-age=31536000, immutable")
 			return rex.Content(savePath, modtime, r) // auto close
 		}
