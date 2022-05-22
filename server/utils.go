@@ -180,12 +180,12 @@ func cron(d time.Duration, task func()) {
 }
 
 func decodeAliasPrefix(raw string) (alias map[string]string, deps PkgSlice, err error) {
-	s, err := atobUrl(strings.TrimPrefix(raw, "X-"))
+	s, err := atobUrl(strings.TrimPrefix(strings.TrimSuffix(raw, "/"), "X-"))
 	if err == nil {
-		for _, p := range strings.Split(s, ",") {
-			if strings.HasPrefix(p, "a:") || strings.HasPrefix(p, "alias:") {
+		for _, p := range strings.Split(s, "\n") {
+			if strings.HasPrefix(p, "a/") || strings.HasPrefix(p, "alias:") {
 				alias = map[string]string{}
-				for _, p := range strings.Split(strings.TrimPrefix(strings.TrimPrefix(p, "a:"), "alias:"), ",") {
+				for _, p := range strings.Split(strings.TrimPrefix(strings.TrimPrefix(p, "a/"), "alias:"), ",") {
 					p = strings.TrimSpace(p)
 					if p != "" {
 						name, to := utils.SplitByFirstByte(p, ':')
@@ -196,14 +196,10 @@ func decodeAliasPrefix(raw string) (alias map[string]string, deps PkgSlice, err 
 						}
 					}
 				}
-			} else if strings.HasPrefix(p, "d:") || strings.HasPrefix(p, "deps:") {
-				for _, p := range strings.Split(strings.TrimPrefix(strings.TrimPrefix(p, "d:"), "deps:"), ",") {
+			} else if strings.HasPrefix(p, "d/") || strings.HasPrefix(p, "deps:") {
+				for _, p := range strings.Split(strings.TrimPrefix(strings.TrimPrefix(p, "d/"), "deps:"), ",") {
 					p = strings.TrimSpace(p)
 					if p != "" {
-						if strings.HasPrefix(p, "@") {
-							scope, name := utils.SplitByFirstByte(p, '_')
-							p = scope + "/" + name
-						}
 						m, _, err := parsePkg(p)
 						if err != nil {
 							if strings.HasSuffix(err.Error(), "not found") {
@@ -230,7 +226,7 @@ func encodeAliasPrefix(alias map[string]string, deps PkgSlice) string {
 			ss = append(ss, fmt.Sprintf("%s:%s", name, to))
 		}
 		ss.Sort()
-		args = append(args, fmt.Sprintf("a:%s", strings.Join(ss, ",")))
+		args = append(args, fmt.Sprintf("a/%s", strings.Join(ss, ",")))
 	}
 	if len(deps) > 0 {
 		var ss sort.StringSlice
@@ -238,10 +234,10 @@ func encodeAliasPrefix(alias map[string]string, deps PkgSlice) string {
 			ss = append(ss, fmt.Sprintf("%s@%s", pkg.Name, pkg.Version))
 		}
 		ss.Sort()
-		args = append(args, fmt.Sprintf("d:%s", strings.Join(ss, ",")))
+		args = append(args, fmt.Sprintf("d/%s", strings.Join(ss, ",")))
 	}
 	if len(args) > 0 {
-		return fmt.Sprintf("X-%s/", btoaUrl(strings.Join(args, ",")))
+		return fmt.Sprintf("X-%s/", btoaUrl(strings.Join(args, "\n")))
 	}
 	return ""
 }
