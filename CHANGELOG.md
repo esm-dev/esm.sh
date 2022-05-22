@@ -1,5 +1,9 @@
 # Change Log
 
+## v81
+
+- fix `?deps` and `?alias` options broadcast
+
 ## v80
 
 - Fix build error in v79
