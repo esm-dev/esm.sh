@@ -1,5 +1,11 @@
 # Change Log
 
+## v83
+
+- Replace `node-fetch` dep to `node-fetch-native`  (close [#336](https://github.com/esm-dev/esm.sh/issues/336))
+- Add `--keep-names` option for esbuild by default (close [#335](https://github.com/esm-dev/esm.sh/issues/335))
+- Fix incorrect types with `?alias` query
+
 ## v82
 
 - fix types with `?deps` query (close [#333](https://github.com/esm-dev/esm.sh/issues/333))
