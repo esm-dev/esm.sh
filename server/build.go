@@ -440,6 +440,13 @@ esbuild:
 						importPath = fmt.Sprintf("%s/v%d/node_buffer.js", basePath, task.BuildVersion)
 					}
 				}
+				// use `node-fetch-naitve` instead of `node-fetch`
+				if importPath == "" && name == "node-fetch" && task.Target != "node" {
+					importPath = task.getImportPath(Pkg{
+						Name:    "node-fetch-native",
+						Version: "0.1.3",
+					}, "")
+				}
 				// is builtin node module
 				if importPath == "" && builtInNodeModules[name] {
 					if task.Target == "node" {
@@ -595,7 +602,12 @@ esbuild:
 										cjsImports.Add("*")
 										marked = true
 									}
-									// if the dependency is an cjs module with `default` export, then use star import
+									// if the dependency is an es module with `default` export, then use all import
+									if !marked && depNpm.Module != "" && dep.ExportDefault {
+										cjsImports.Add("all")
+										marked = true
+									}
+									// if the dependency is an cjs module with `default` export, then use star import with `__esModule`
 									if !marked && depNpm.Module == "" && dep.ExportDefault {
 										cjsImports.Add("__esModule")
 										marked = true
@@ -635,7 +647,6 @@ esbuild:
 
 				if cjsImports.Size() > 0 {
 					buf := bytes.NewBuffer(nil)
-					// todo: spread `?alias` and `?deps`
 					for _, importName := range cjsImports.Values() {
 						if name == "object-assign" {
 							fmt.Fprintf(buf, `const __%s$ = Object.assign;%s`, identifier, eol)
@@ -645,8 +656,12 @@ esbuild:
 								fmt.Fprintf(buf, `import __%s$ from "%s";%s`, identifier, importPath, eol)
 							case "*":
 								fmt.Fprintf(buf, `import * as __%s$ from "%s";%s`, identifier, importPath, eol)
+							case "all":
+								fmt.Fprintf(buf, `import __%s$$ from "%s";`, identifier, importPath)
+								fmt.Fprintf(buf, `import * as __%s$$$ from "%s";`, identifier, importPath)
+								fmt.Fprintf(buf, `const __%s$ = Object.assign({ default: __%s$$ }, __%s$$$);%s`, identifier, identifier, identifier, eol)
 							case "__esModule":
-								fmt.Fprintf(buf, `import * as __%s$$ from "%s";const __%s$=Object.assign({__esModule:true},__%s$$);%s`, identifier, importPath, identifier, identifier, eol)
+								fmt.Fprintf(buf, `import * as __%s$$ from "%s";const __%s$ = Object.assign({ __esModule: true }, __%s$$);%s`, identifier, importPath, identifier, identifier, eol)
 							default:
 								fmt.Fprintf(buf, `import { %s as __%s$%s } from "%s";%s`, importName, identifier, importName, importPath, eol)
 							}

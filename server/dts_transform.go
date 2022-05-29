@@ -168,6 +168,9 @@ func (task *BuildTask) copyDTS(dts string, buildVersion int, aliasDepsPrefix str
 			if ok {
 				importPath = to
 			}
+			if importPath == "node-fetch" {
+				importPath = "node-fetch-native"
+			}
 
 			parts := strings.Split(importPath, "/")
 			depTypePkgName := parts[0]
