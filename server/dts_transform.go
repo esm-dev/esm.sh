@@ -178,15 +178,23 @@ func (task *BuildTask) copyDTS(dts string, buildVersion int, aliasDepsPrefix str
 				depTypePkgName = strings.Join(parts[:2], "/")
 			}
 
-			version := "latest"
+			versions := []string{"latest"}
 			if v, ok := taskPkgInfo.Dependencies[depTypePkgName]; ok {
-				version = v
+				versions = []string{v, "latest"}
 			} else if v, ok := taskPkgInfo.PeerDependencies[depTypePkgName]; ok {
-				version = v
+				versions = []string{v, "latest"}
 			}
-			// use version defined in `?deps=*`
+
+			// use version defined in `?deps`
 			if pkg, ok := task.Deps.Get(depTypePkgName); ok {
-				version = pkg.Version
+				versionParts := strings.Split(pkg.Version, ".")
+				if len(versionParts) > 2 {
+					versions = []string{
+						"~" + strings.Join(versionParts[:2], "."), // minor
+						"^" + versionParts[0],                     // major
+						"latest",
+					}
+				}
 			}
 
 			var (
@@ -194,9 +202,14 @@ func (task *BuildTask) copyDTS(dts string, buildVersion int, aliasDepsPrefix str
 				subpath         string
 				fromPackageJSON bool
 			)
-			info, subpath, fromPackageJSON, err = getPackageInfo(task.wd, importPath, version)
-			if err != nil || ((info.Types == "" && info.Typings == "") && !strings.HasPrefix(info.Name, "@types/")) {
-				info, _, fromPackageJSON, err = getPackageInfo(task.wd, toTypesPackageName(importPath), version)
+			for _, version := range versions {
+				info, subpath, fromPackageJSON, err = getPackageInfo(task.wd, importPath, version)
+				if err != nil || ((info.Types == "" && info.Typings == "") && !strings.HasPrefix(info.Name, "@types/")) {
+					info, _, fromPackageJSON, err = getPackageInfo(task.wd, toTypesPackageName(importPath), version)
+				}
+				if err == nil {
+					break
+				}
 			}
 			if err != nil {
 				return importPath
