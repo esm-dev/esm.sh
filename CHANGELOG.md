@@ -2,8 +2,8 @@
 
 ## v84
 
-- Fix types version resloving with `?deps`  (close [#338](https://github.com/esm-dev/esm.sh/issues/338))
-- Fix URL redirect with outdated build verison prefix
+- Fix types version resolving with `?deps`  (close [#338](https://github.com/esm-dev/esm.sh/issues/338))
+- Fix URL redirect with outdated build version prefix
 
 ## v83
 
