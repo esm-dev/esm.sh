@@ -205,11 +205,13 @@ func query(devMode bool) rex.Handle {
 		}
 
 		origin := getOrigin(ctx.R.Host)
+
+		// redirect to the url with full package version
 		if (!hasBuildVerPrefix || strings.HasSuffix(pathname, ".d.ts")) && !strings.HasPrefix(pathname, fmt.Sprintf("/%s@%s", reqPkg.Name, reqPkg.Version)) {
 			prefix := ""
 			if hasBuildVerPrefix {
 				if outdatedBuildVer != "" {
-					prefix = fmt.Sprintf("/v%s", outdatedBuildVer)
+					prefix = fmt.Sprintf("/%s", outdatedBuildVer)
 				} else {
 					prefix = fmt.Sprintf("/v%d", VERSION)
 				}
