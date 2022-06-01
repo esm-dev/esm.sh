@@ -1,5 +1,9 @@
 # Change Log
 
+## v85
+
+- Fix `fixAliasDeps` function that imports multiple React when using `?deps=react@18,react-dom@18`
+
 ## v84
 
 - Fix types version resolving with `?deps`  (close [#338](https://github.com/esm-dev/esm.sh/issues/338))
