@@ -182,6 +182,10 @@ func cron(d time.Duration, task func()) {
 func fixAliasDeps(alias map[string]string, deps PkgSlice, pkgName string) (map[string]string, PkgSlice) {
 	_alias := map[string]string{}
 	_pkgs := PkgSlice{}
+	switch pkgName {
+	case "react", "react-dom", "preact", "vue":
+		return _alias, _pkgs
+	}
 	for k, v := range alias {
 		if pkgName != v && !strings.HasPrefix(v, pkgName+"/") {
 			_alias[k] = v
