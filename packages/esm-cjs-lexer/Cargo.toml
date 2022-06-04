@@ -14,9 +14,9 @@ crate-type = ["cdylib", "rlib"]
 default = ["console_error_panic_hook"]
 
 [dependencies]
-anyhow = "1.0.56"
-indexmap = "1.8.0"
-serde = { version = "1.0.136", features = ["derive"] }
+anyhow = "1.0.57"
+indexmap = "1.8.2"
+serde = { version = "1.0.137", features = ["derive"] }
 
 # swc
 # docs: https://swc.rs
@@ -28,7 +28,7 @@ swc_ecma_visit = "0.47.0"
 
 # wasm-bindgen
 # docs: https://rustwasm.github.io/docs/wasm-bindgen
-wasm-bindgen = {version = "0.2.79", features = ["serde-serialize"]}
+wasm-bindgen = {version = "0.2.80", features = ["serde-serialize"]}
 console_error_panic_hook = { version = "0.1.7", optional = true }
 
 [profile.release]
