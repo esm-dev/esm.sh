@@ -669,4 +669,29 @@ mod tests {
       .expect("could not parse exports");
     assert_eq!(exports.join(","), "foo,__esModule");
   }
+
+  #[test]
+  fn parse_cjs_exports_case_22() {
+    let source = r#"
+      var url = module.exports = {};
+      url.foo = 'bar';
+		"#;
+    let swc = SWC::parse("index.cjs", source).expect("could not parse module");
+    let (exports, _) = swc
+      .parse_cjs_exports("production", true)
+      .expect("could not parse exports");
+    assert_eq!(exports.join(","), "foo");
+  }
+
+  #[test]
+  fn parse_cjs_exports_case_22_2() {
+    let source = r#"
+      exports.i18n = exports.use = exports.t = undefined;
+		"#;
+    let swc = SWC::parse("index.cjs", source).expect("could not parse module");
+    let (exports, _) = swc
+      .parse_cjs_exports("production", true)
+      .expect("could not parse exports");
+    assert_eq!(exports.join(","), "i18n,use,t");
+  }
 }
