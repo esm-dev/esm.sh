@@ -1,9 +1,9 @@
 {
   "[rust]": {
-    "editor.defaultFormatter": "matklad.rust-analyzer",
+    "editor.defaultFormatter": "rust-lang.rust-analyzer",
     "editor.formatOnSave": true
   },
   "rust-analyzer.linkedProjects": [
-    "packages/cjs-esm-exports/Cargo.toml"
+    "packages/esm-cjs-lexer/Cargo.toml"
   ]
 }
