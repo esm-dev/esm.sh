@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"net"
 	"net/http"
 	"os"
@@ -17,6 +16,10 @@ import (
 	"github.com/ije/gox/utils"
 	"github.com/ije/rex"
 )
+
+var banList = map[string]bool{
+	"@withfig/autocomplete": true,
+}
 
 var httpClient = &http.Client{
 	Transport: &http.Transport{
@@ -32,6 +35,7 @@ var httpClient = &http.Client{
 		},
 		MaxIdleConnsPerHost:   6,
 		ResponseHeaderTimeout: 60 * time.Second,
+		Proxy:                 http.ProxyFromEnvironment,
 	},
 }
 
@@ -41,13 +45,49 @@ func query(devMode bool) rex.Handle {
 
 	return func(ctx *rex.Context) interface{} {
 		pathname := ctx.Path.String()
+
+		// ban malicious requests
 		if strings.HasPrefix(pathname, ".") || strings.HasSuffix(pathname, ".php") {
 			return rex.Status(400, "Bad Request")
 		}
+
+		// strip loc
 		if strings.ContainsRune(pathname, ':') {
 			pathname = regLocPath.ReplaceAllString(pathname, "$1")
 		}
 
+		// match static routes
+		hasBuildVerPrefix := false
+		outdatedBuildVer := ""
+
+		// Build prefix may only be served from "${cdnBasePath}/${buildPrefix}/..."
+		if strings.HasPrefix(pathname, basePath+"/") {
+			pathname = strings.TrimPrefix(pathname, basePath)
+			// Check current version
+			buildBasePath := fmt.Sprintf("/v%d", VERSION)
+			if strings.HasPrefix(pathname, buildBasePath+"/") {
+				pathname = strings.TrimPrefix(pathname, buildBasePath)
+				hasBuildVerPrefix = true
+				// Otheerwise check possible pinned version
+			} else if regBuildVersionPath.MatchString(pathname) {
+				a := strings.Split(pathname, "/")
+				pathname = "/" + strings.Join(a[2:], "/")
+				hasBuildVerPrefix = true
+				outdatedBuildVer = a[1]
+			}
+		} else if basePath != "" {
+			if strings.HasPrefix(pathname, basePath+"/") {
+				pathname = strings.TrimPrefix(pathname, basePath)
+			} else if baseRedirect {
+				url := strings.TrimPrefix(ctx.R.URL.String(), basePath)
+				url = fmt.Sprintf("%s/%s", basePath, url)
+				return rex.Redirect(url, http.StatusTemporaryRedirect)
+			} else {
+				return rex.Status(404, "not found")
+			}
+		}
+
+		// match static routess
 		switch pathname {
 		case "/":
 			indexHTML, err := embedFS.ReadFile("server/embed/index.html")
@@ -58,12 +98,14 @@ func query(devMode bool) rex.Handle {
 			if err != nil {
 				return err
 			}
-			readme = bytes.ReplaceAll(readme, []byte("./server/embed/"), []byte("/embed/"))
+			readme = bytes.ReplaceAll(readme, []byte("./server/embed/"), []byte(basePath+"/embed/"))
 			readme = bytes.ReplaceAll(readme, []byte("./HOSTING.md"), []byte("https://github.com/esm-dev/esm.sh/blob/master/HOSTING.md"))
+			readme = bytes.ReplaceAll(readme, []byte("https://esm.sh"), []byte("{origin}"+basePath))
 			readmeStrLit := utils.MustEncodeJSON(string(readme))
 			html := bytes.ReplaceAll(indexHTML, []byte("'# README'"), readmeStrLit)
 			html = bytes.ReplaceAll(html, []byte("{VERSION}"), []byte(fmt.Sprintf("%d", VERSION)))
-			ctx.SetHeader("Cache-Control", fmt.Sprintf("public, max-age=%d", pkgCacheTimeout))
+			html = bytes.ReplaceAll(html, []byte("{basePath}"), []byte(basePath))
+			ctx.SetHeader("Cache-Control", fmt.Sprintf("public, max-age=%d", 10*60))
 			return rex.Content("index.html", startTime, bytes.NewReader(html))
 
 		case "/status.json":
@@ -76,7 +118,7 @@ func query(devMode bool) rex.Handle {
 					m := map[string]interface{}{
 						"stage":      t.stage,
 						"createTime": t.createTime.Format(http.TimeFormat),
-						"consumers":  len(t.consumers),
+						"consumers":  t.consumers,
 						"pkg":        t.Pkg.String(),
 						"target":     t.Target,
 						"inProcess":  t.inProcess,
@@ -94,16 +136,9 @@ func query(devMode bool) rex.Handle {
 				}
 			}
 			buildQueue.lock.RUnlock()
-			n := 0
-			nsTasks.Range(func(key, value interface{}) bool {
-				n++
-				return false
-			})
 			return map[string]interface{}{
-				"nsTasks":   n,
-				"nsChannel": fmt.Sprintf("%d/%d", len(nsChannel), cap(nsChannel)),
-				"uptime":    time.Since(startTime).String(),
-				"queue":     q[:i],
+				"uptime": time.Since(startTime).String(),
+				"queue":  q[:i],
 			}
 
 		case "/error.js":
@@ -136,20 +171,9 @@ func query(devMode bool) rex.Handle {
 				data, err = embedFS.ReadFile(pathname[7:])
 			}
 			if err == nil {
-				ctx.SetHeader("Cache-Control", fmt.Sprintf("public, max-age=%d", pkgCacheTimeout))
+				ctx.SetHeader("Cache-Control", fmt.Sprintf("public, max-age=%d", 10*60))
 				return rex.Content(pathname, startTime, bytes.NewReader(data))
 			}
-		}
-
-		hasBuildVerPrefix := strings.HasPrefix(pathname, fmt.Sprintf("/v%d/", VERSION))
-		prevBuildVer := ""
-		if hasBuildVerPrefix {
-			pathname = strings.TrimPrefix(pathname, fmt.Sprintf("/v%d", VERSION))
-		} else if regBuildVersionPath.MatchString(pathname) {
-			a := strings.Split(pathname, "/")
-			pathname = "/" + strings.Join(a[2:], "/")
-			hasBuildVerPrefix = true
-			prevBuildVer = a[1]
 		}
 
 		// serve embed polyfills/types
@@ -180,6 +204,32 @@ func query(devMode bool) rex.Handle {
 			return rex.Status(status, message)
 		}
 
+		origin := getOrigin(ctx.R.Host)
+
+		// redirect to the url with full package version
+		if (!hasBuildVerPrefix || strings.HasSuffix(pathname, ".d.ts")) && !strings.HasPrefix(pathname, fmt.Sprintf("/%s@%s", reqPkg.Name, reqPkg.Version)) {
+			prefix := ""
+			if hasBuildVerPrefix {
+				if outdatedBuildVer != "" {
+					prefix = fmt.Sprintf("/%s", outdatedBuildVer)
+				} else {
+					prefix = fmt.Sprintf("/v%d", VERSION)
+				}
+			}
+			query := ctx.R.URL.RawQuery
+			if query != "" {
+				query = "?" + query
+			}
+			return rex.Redirect(fmt.Sprintf("%s%s/%s%s", origin, prefix, reqPkg.String(), query), http.StatusTemporaryRedirect)
+		}
+
+		if banList[reqPkg.Name] {
+			ctx.SetHeader("Cache-Control", "public, max-age=86400")
+			return rex.Status(403, "forbidden")
+		}
+
+		// since most transformers handle `jsxSource` by concating string "/jsx-runtime"
+		// we need to support url like `https://esm.sh/react?dev&target=esnext/jsx-runtime`
 		if (reqPkg.Name == "react" || reqPkg.Name == "preact") && strings.HasSuffix(ctx.R.URL.RawQuery, "/jsx-runtime") {
 			ctx.R.URL.RawQuery = strings.TrimSuffix(ctx.R.URL.RawQuery, "/jsx-runtime")
 			pathname = fmt.Sprintf("/%s/jsx-runtime", reqPkg.Name)
@@ -208,7 +258,7 @@ func query(devMode bool) rex.Handle {
 					storageType = "raw"
 				}
 
-			case ".json", ".css", ".pcss", ".postcss", ".less", ".sass", ".scss", ".stylus", ".styl", ".wasm", ".xml", ".yaml", ".svg", ".png", ".jpg", ".webp", ".gif", ".eot", ".ttf", ".otf", ".woff", ".woff2":
+			case ".json", ".css", ".pcss", ".postcss", ".less", ".sass", ".scss", ".stylus", ".styl", ".wasm", ".xml", ".yaml", ".md", ".svg", ".png", ".jpg", ".webp", ".gif", ".eot", ".ttf", ".otf", ".woff", ".woff2":
 				if hasBuildVerPrefix {
 					if strings.HasSuffix(pathname, ".css") {
 						storageType = "builds"
@@ -221,76 +271,77 @@ func query(devMode bool) rex.Handle {
 
 		// serve raw dist files like CSS that is fetching from unpkg.com
 		if storageType == "raw" {
-			hostname := ctx.R.Host
-			isLocalHost := hostname == "localhost" || strings.HasPrefix(hostname, "localhost:")
-			proto := "https"
-			if isLocalHost {
-				proto = "http"
-			}
-			if !regFullVersionPath.MatchString(pathname) {
-				url := fmt.Sprintf("%s://%s/%s", proto, hostname, reqPkg.String())
-				return rex.Redirect(url, http.StatusTemporaryRedirect)
-			}
-			savePath := path.Join("raw", reqPkg.String())
-			exists, modtime, err := fs.Exists(savePath)
-			if err != nil {
-				return rex.Status(500, err.Error())
-			}
-			if exists {
-				r, err := fs.ReadFile(savePath)
-				if err != nil {
-					return rex.Status(500, err.Error())
+			return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if !regFullVersionPath.MatchString(pathname) {
+					url := fmt.Sprintf("%s/%s", origin, reqPkg.String())
+					http.Redirect(w, r, url, http.StatusTemporaryRedirect)
+					return
 				}
-				if strings.HasSuffix(pathname, ".ts") {
-					ctx.SetHeader("Content-Type", "application/typescript")
+				savePath := path.Join("raw", reqPkg.String())
+				exists, size, modtime, err := fs.Exists(savePath)
+				if err != nil {
+					w.WriteHeader(500)
+					w.Write([]byte(err.Error()))
+					return
+				}
+				if exists {
+					f, err := fs.ReadFile(savePath, size)
+					if err != nil {
+						w.WriteHeader(500)
+						w.Write([]byte(err.Error()))
+						return
+					}
+					defer f.Close()
+					if strings.HasSuffix(pathname, ".ts") {
+						w.Header().Set("Content-Type", "application/typescript")
+					}
+					w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
+					http.ServeContent(w, r, savePath, modtime, f)
+					return
+				}
+				resp, err := httpClient.Get(fmt.Sprintf("https://unpkg.com/%s", reqPkg.String()))
+				if err != nil {
+					w.WriteHeader(500)
+					w.Write([]byte(err.Error()))
+					return
+				}
+				defer resp.Body.Close()
+				if resp.StatusCode >= 500 {
+					w.WriteHeader(http.StatusBadGateway)
+					w.Write([]byte("Bad Gateway"))
+					return
+				}
+				for key, values := range resp.Header {
+					for _, value := range values {
+						ctx.AddHeader(key, value)
+					}
+				}
+				if resp.StatusCode >= 400 {
+					w.WriteHeader(http.StatusBadGateway)
+					io.Copy(w, resp.Body)
+					return
 				}
 				ctx.SetHeader("Cache-Control", "public, max-age=31536000, immutable")
-				return rex.Content(savePath, modtime, r)
-			}
-			resp, err := httpClient.Get(fmt.Sprintf("https://unpkg.com/%s", reqPkg.String()))
-			if err != nil {
-				return err
-			}
-			defer resp.Body.Close()
-			if resp.StatusCode >= 500 {
-				return rex.Status(http.StatusBadGateway, "Bad Gateway")
-			}
-			data, err := ioutil.ReadAll(resp.Body)
-			if err != nil {
-				return err
-			}
-			if resp.StatusCode >= 400 {
-				return rex.Status(resp.StatusCode, string(data))
-			}
-			err = fs.WriteData(savePath, data)
-			if err != nil {
-				return err
-			}
-			for key, values := range resp.Header {
-				for _, value := range values {
-					ctx.AddHeader(key, value)
-				}
-			}
-			ctx.SetHeader("Cache-Control", "public, max-age=31536000, immutable")
-			return data
+				fs.WriteFile(savePath, io.TeeReader(resp.Body, w))
+			})
 		}
 
 		// serve build files
 		if hasBuildVerPrefix && (storageType == "builds" || storageType == "types") {
 			var savePath string
-			if prevBuildVer != "" {
-				savePath = path.Join(storageType, prevBuildVer, pathname)
+			if outdatedBuildVer != "" {
+				savePath = path.Join(storageType, outdatedBuildVer, pathname)
 			} else {
 				savePath = path.Join(storageType, fmt.Sprintf("v%d", VERSION), pathname)
 			}
 
-			exists, modtime, err := fs.Exists(savePath)
+			exists, size, modtime, err := fs.Exists(savePath)
 			if err != nil {
 				return rex.Status(500, err.Error())
 			}
 
 			if exists {
-				r, err := fs.ReadFile(savePath)
+				r, err := fs.ReadFile(savePath, size)
 				if err != nil {
 					return rex.Status(500, err.Error())
 				}
@@ -299,6 +350,20 @@ func query(devMode bool) rex.Handle {
 				}
 				ctx.SetHeader("Cache-Control", "public, max-age=31536000, immutable")
 				return rex.Content(savePath, modtime, r)
+			}
+		}
+
+		// check `alias` query
+		alias := map[string]string{}
+		for _, p := range strings.Split(ctx.Form.Value("alias"), ",") {
+			p = strings.TrimSpace(p)
+			if p != "" {
+				name, to := utils.SplitByFirstByte(p, ':')
+				name = strings.TrimSpace(name)
+				to = strings.TrimSpace(to)
+				if name != "" && to != "" {
+					alias[name] = to
+				}
 			}
 		}
 
@@ -320,24 +385,10 @@ func query(devMode bool) rex.Handle {
 			}
 		}
 
-		// check `alias` query
-		alias := map[string]string{}
-		for _, p := range strings.Split(ctx.Form.Value("alias"), ",") {
-			p = strings.TrimSpace(p)
-			if p != "" {
-				name, to := utils.SplitByFirstByte(p, ':')
-				name = strings.TrimSpace(name)
-				to = strings.TrimSpace(to)
-				if name != "" && to != "" {
-					alias[name] = to
-				}
-			}
-		}
-
 		// determine build target
 		target := strings.ToLower(ctx.Form.Value("target"))
-		_, targetFlag := targets[target]
-		if !targetFlag {
+		_, targeted := targets[target]
+		if !targeted {
 			target = getTargetByUA(ctx.R.UserAgent())
 		}
 
@@ -350,14 +401,15 @@ func query(devMode bool) rex.Handle {
 			}
 		}
 
+		isBare := false
 		isPkgCss := ctx.Form.Has("css")
 		isBundleMode := ctx.Form.Has("bundle")
 		isDev := ctx.Form.Has("dev")
 		isPined := ctx.Form.Has("pin")
-		isWorkder := ctx.Form.Has("worker")
+		isWorker := ctx.Form.Has("worker")
 		noCheck := ctx.Form.Has("no-check")
 		noRequire := ctx.Form.Has("no-require")
-		isBare := false
+		keepNames := ctx.Form.Has("keep-names")
 
 		// force react/jsx-dev-runtime and react-refresh into `dev` mode
 		if !isDev {
@@ -366,51 +418,28 @@ func query(devMode bool) rex.Handle {
 			}
 		}
 
-		// parse `resolvePrefix`
+		// parse `aliasDepsPrefix`
 		if hasBuildVerPrefix {
 			a := strings.Split(reqPkg.Submodule, "/")
 			if len(a) > 1 && strings.HasPrefix(a[0], "X-") {
-				s, err := atobUrl(strings.TrimPrefix(a[0], "X-"))
-				if err == nil {
-					for _, p := range strings.Split(s, ",") {
-						if strings.HasPrefix(p, "alias:") {
-							for _, p := range strings.Split(strings.TrimPrefix(p, "alias:"), ",") {
-								p = strings.TrimSpace(p)
-								if p != "" {
-									name, to := utils.SplitByFirstByte(p, ':')
-									name = strings.TrimSpace(name)
-									to = strings.TrimSpace(to)
-									if name != "" && to != "" {
-										alias[name] = to
-									}
-								}
-							}
-						} else if strings.HasPrefix(p, "deps:") {
-							for _, p := range strings.Split(strings.TrimPrefix(p, "deps:"), ",") {
-								p = strings.TrimSpace(p)
-								if p != "" {
-									if strings.HasPrefix(p, "@") {
-										scope, name := utils.SplitByFirstByte(p, '_')
-										p = scope + "/" + name
-									}
-									m, _, err := parsePkg(p)
-									if err != nil {
-										if strings.HasSuffix(err.Error(), "not found") {
-											continue
-										}
-										return throwErrorJS(ctx, err)
-									}
-									if !deps.Has(m.Name) {
-										deps = append(deps, *m)
-									}
-								}
-							}
-						}
+				reqPkg.Submodule = strings.Join(a[1:], "/")
+				_alias, _deps, err := decodeAliasDepsPrefix(a[0])
+				if err != nil {
+					return throwErrorJS(ctx, err)
+				}
+				for k, v := range _alias {
+					alias[k] = v
+				}
+				for _, p := range _deps {
+					if !deps.Has(p.Name) {
+						deps = append(deps, p)
 					}
 				}
-				reqPkg.Submodule = strings.Join(a[1:], "/")
 			}
 		}
+
+		// fix alias and deps
+		alias, deps = fixAliasDeps(alias, deps, reqPkg.Name)
 
 		// check whether it is `bare` mode
 		if hasBuildVerPrefix && endsWith(pathname, ".js") {
@@ -425,6 +454,10 @@ func query(devMode bool) rex.Handle {
 					if endsWith(submodule, ".development") {
 						submodule = strings.TrimSuffix(submodule, ".development")
 						isDev = true
+					}
+					if endsWith(submodule, ".kn") {
+						submodule = strings.TrimSuffix(submodule, ".kn")
+						keepNames = true
 					}
 					if endsWith(submodule, ".nr") {
 						submodule = strings.TrimSuffix(submodule, ".nr")
@@ -443,27 +476,28 @@ func query(devMode bool) rex.Handle {
 
 		if hasBuildVerPrefix && storageType == "types" {
 			task := &BuildTask{
+				CdnOrigin:    origin,
 				BuildVersion: buildVersion,
 				Pkg:          *reqPkg,
-				Deps:         deps,
 				Alias:        alias,
+				Deps:         deps,
 				Target:       "types",
 				stage:        "-",
 			}
 			var savePath string
-			findTypesFile := func() (bool, time.Time, error) {
+			findTypesFile := func() (bool, int64, time.Time, error) {
 				savePath = path.Join(fmt.Sprintf(
 					"types/v%d/%s@%s/%s",
 					buildVersion,
 					reqPkg.Name,
 					reqPkg.Version,
-					task.resolvePrefix(),
+					encodeAliasDepsPrefix(alias, deps),
 				), reqPkg.Submodule)
 				if strings.HasSuffix(savePath, "~.d.ts") {
 					savePath = strings.TrimSuffix(savePath, "~.d.ts")
-					ok, _, err := fs.Exists(path.Join(savePath, "index.d.ts"))
+					ok, _, _, err := fs.Exists(path.Join(savePath, "index.d.ts"))
 					if err != nil {
-						return false, time.Time{}, err
+						return false, 0, time.Time{}, err
 					}
 					if ok {
 						savePath = path.Join(savePath, "index.d.ts")
@@ -473,9 +507,9 @@ func query(devMode bool) rex.Handle {
 				}
 				return fs.Exists(savePath)
 			}
-			exists, modtime, err := findTypesFile()
+			exists, size, modtime, err := findTypesFile()
 			if err == nil && !exists {
-				c := buildQueue.Add(task)
+				c := buildQueue.Add(task, ctx.RemoteIP())
 				select {
 				case output := <-c.C:
 					if output.err != nil {
@@ -490,7 +524,7 @@ func query(devMode bool) rex.Handle {
 				return rex.Status(500, err.Error())
 			}
 			var r io.ReadSeeker
-			r, err = fs.ReadFile(savePath)
+			r, err = fs.ReadFile(savePath, size)
 			if err != nil {
 				if os.IsExist(err) {
 					return rex.Status(500, err.Error())
@@ -503,14 +537,16 @@ func query(devMode bool) rex.Handle {
 		}
 
 		task := &BuildTask{
+			CdnOrigin:    origin,
 			BuildVersion: buildVersion,
 			Pkg:          *reqPkg,
-			Deps:         deps,
 			Alias:        alias,
+			Deps:         deps,
 			Target:       target,
-			BundleMode:   isBundleMode || isWorkder,
-			NoRequire:    noRequire,
 			DevMode:      isDev,
+			BundleMode:   isBundleMode || isWorker,
+			NoRequire:    noRequire,
+			KeepNames:    keepNames,
 			stage:        "init",
 		}
 		taskID := task.ID()
@@ -538,9 +574,9 @@ func query(devMode bool) rex.Handle {
 			// or wait the current build task for 30 seconds
 			if esm != nil {
 				// todo: maybe don't build?
-				buildQueue.Add(task)
+				buildQueue.Add(task, "")
 			} else {
-				c := buildQueue.Add(task)
+				c := buildQueue.Add(task, ctx.RemoteIP())
 				select {
 				case output := <-c.C:
 					if output.err != nil {
@@ -554,16 +590,12 @@ func query(devMode bool) rex.Handle {
 			}
 		}
 
-		origin := "/"
-		if cdnDomain != "" && cdnDomain != "localhost" && !strings.HasPrefix(cdnDomain, "localhost:") && !isWorkder {
-			origin = fmt.Sprintf("https://%s/", cdnDomain)
-		}
-
 		if esm.TypesOnly {
 			if esm.Dts != "" && !noCheck {
 				value := fmt.Sprintf(
-					"%s%s",
+					"%s%s/%s",
 					origin,
+					basePath,
 					strings.TrimPrefix(esm.Dts, "/"),
 				)
 				ctx.SetHeader("X-TypeScript-Types", value)
@@ -579,14 +611,7 @@ func query(devMode bool) rex.Handle {
 			}
 
 			if !regFullVersionPath.MatchString(pathname) || !isPined {
-				hostname := ctx.R.Host
-				proto := "https"
-				if hostname == "localhost" || strings.HasPrefix(hostname, "localhost:") {
-					proto = "http"
-				} else {
-					hostname = cdnDomain
-				}
-				url := fmt.Sprintf("%s://%s/%s.css", proto, hostname, strings.TrimSuffix(taskID, ".js"))
+				url := fmt.Sprintf("%s/%s.css", origin, strings.TrimSuffix(taskID, ".js"))
 				return rex.Redirect(url, http.StatusTemporaryRedirect)
 			}
 
@@ -599,21 +624,22 @@ func query(devMode bool) rex.Handle {
 				"builds",
 				taskID,
 			)
-			exists, modtime, err := fs.Exists(savePath)
+			exists, size, modtime, err := fs.Exists(savePath)
 			if err != nil {
 				return rex.Status(500, err.Error())
 			}
 			if !exists {
 				return rex.Status(404, "File not found")
 			}
-			r, err := fs.ReadFile(savePath)
+			r, err := fs.ReadFile(savePath, size)
 			if err != nil {
 				return rex.Status(500, err.Error())
 			}
-			if !hasBuildVerPrefix && esm.Dts != "" && !noCheck && !isWorkder {
+			if !hasBuildVerPrefix && esm.Dts != "" && !noCheck && !isWorker {
 				value := fmt.Sprintf(
-					"%s%s",
+					"%s%s/%s",
 					origin,
+					basePath,
 					strings.TrimPrefix(esm.Dts, "/"),
 				)
 				ctx.SetHeader("X-TypeScript-Types", value)
@@ -623,43 +649,50 @@ func query(devMode bool) rex.Handle {
 		}
 
 		buf := bytes.NewBuffer(nil)
-		if isWorkder {
-			hostname := ctx.R.Host
-			isLocalHost := hostname == "localhost" || strings.HasPrefix(hostname, "localhost:")
-			proto := "https"
-			if isLocalHost {
-				proto = "http"
-			} else {
-				hostname = cdnDomain
-			}
-			origin = fmt.Sprintf("%s://%s/", proto, hostname)
-		}
 
 		fmt.Fprintf(buf, `/* esm.sh - %v */%s`, reqPkg, "\n")
-		if isWorkder {
-			fmt.Fprintf(buf, `export default function workerFactory() {%s  return new Worker('%s%s', { type: 'module' })%s}`, "\n", origin, taskID, "\n")
+		if isWorker {
+			fmt.Fprintf(buf, `export default function workerFactory() {%s  return new Worker('%s/%s', { type: 'module' })%s}`, "\n", origin, taskID, "\n")
 		} else {
-			fmt.Fprintf(buf, `export * from "%s%s";%s`, origin, taskID, "\n")
+			fmt.Fprintf(buf, `export * from "%s%s/%s";%s`, origin, basePath, taskID, "\n")
 			if esm.CJS || esm.ExportDefault {
 				fmt.Fprintf(
 					buf,
-					`export { default } from "%s%s";%s`,
+					`export { default } from "%s%s/%s";%s`,
 					origin,
+					basePath,
 					taskID,
 					"\n",
 				)
 			}
 		}
 
-		if esm.Dts != "" && !noCheck && !isWorkder {
+		if esm.Dts != "" && !noCheck && !isWorker {
 			value := fmt.Sprintf(
-				"%s%s",
+				"%s%s/%s",
 				origin,
+				basePath,
 				strings.TrimPrefix(esm.Dts, "/"),
 			)
 			ctx.SetHeader("X-TypeScript-Types", value)
 		}
-		ctx.SetHeader("Cache-Control", fmt.Sprintf("public, max-age=%d", pkgCacheTimeout))
+
+		if regFullVersionPath.MatchString(pathname) {
+			if isPined {
+				if targeted {
+					ctx.SetHeader("Cache-Control", "public, max-age=31536000, immutable")
+				} else {
+					ctx.SetHeader("Cache-Control", "public, max-age=31536000, immutable")
+					ctx.SetHeader("Vary", "User-Agent")
+				}
+			} else {
+				ctx.SetHeader("Cache-Control", fmt.Sprintf("public, max-age=%d", 24*3600)) // cache for 24 hours
+				ctx.SetHeader("Vary", "User-Agent")
+			}
+		} else {
+			ctx.SetHeader("Cache-Control", fmt.Sprintf("public, max-age=%d", 10*60)) // cache for 10 minutes
+			ctx.SetHeader("Vary", "User-Agent")
+		}
 		ctx.SetHeader("Content-Type", "application/javascript; charset=utf-8")
 		return buf
 	}

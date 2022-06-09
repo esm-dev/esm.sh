@@ -1,4 +1,4 @@
-import queue from '/async/queue'
+import queue from '../../../async/queue'
 
 /*
   test example:
@@ -20,7 +20,7 @@ import queue from '/async/queue'
 */
 
 const q = queue(async ({ imports, testFn, $li, $status }) => {
-  const domain = localStorage.importDomain || ''
+  const domain = localStorage.importDomain || '../../..'
   const $span = document.createElement('span')
   const $t = document.createElement('em')
   const start = Date.now()
@@ -62,7 +62,7 @@ const test = async (imports, testFn) => {
   a.forEach((name, i) => {
     const $a = document.createElement('a')
     $a.innerText = name.split('?')[0]
-    $a.href = `/${name}${name.includes('?') ? '&' : '?'}dev`
+    $a.href = `./${name}${name.includes('?') ? '&' : '?'}dev`
     $imports.appendChild($a)
     if (i < a.length - 1) {
       $imports.appendChild(document.createTextNode(', '))
@@ -79,7 +79,7 @@ const test = async (imports, testFn) => {
 // init dom
 const $container = document.createElement('div')
 $container.className = 'test'
-$container.innerHTML = '<ul></ul><p class="link"><a href="/">&larr; Back </a></p>'
+$container.innerHTML = '<ul></ul><p class="link"><a href="./">&larr; Back </a></p>'
 document.querySelector('h1 > em').appendChild(document.createTextNode(' · Testing'))
 document.querySelector('main').remove()
 document.querySelector('#root').appendChild($container)
@@ -324,7 +324,7 @@ test(['preact', 'preact/hooks'], async (t) => {
   t.ok()
 })
 
-test(['preact', 'preact/hooks', 'swr?alias=react:preact/compat'], async (t) => {
+test(['preact@10.7.2', 'preact@10.7.2/hooks', 'swr?alias=react:preact/compat&deps=preact@10.7.2'], async (t) => {
   const [
     { Fragment, h, render },
     { useEffect },
@@ -333,7 +333,7 @@ test(['preact', 'preact/hooks', 'swr?alias=react:preact/compat'], async (t) => {
 
   const fetcher = (url) => fetch(url).then((res) => res.json());
   const App = () => {
-    const { data, error } = useSWR('/status.json', fetcher)
+    const { data, error } = useSWR('./status.json', fetcher)
     useEffect(() => {
       t.$span.removeChild(t.$span.lastChild)
     }, [])

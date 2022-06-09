@@ -5,12 +5,12 @@ import (
 	"embed"
 	"flag"
 	"fmt"
+	"net/http"
 	"os"
 	"os/signal"
 	"path"
 	"path/filepath"
 	"runtime"
-	"strings"
 	"syscall"
 	"time"
 
@@ -21,15 +21,22 @@ import (
 )
 
 var (
-	cdnDomain      string
-	cache          storage.Cache
-	db             storage.DB
-	fs             storage.FS
-	buildQueue     *BuildQueue
-	log            *logx.Logger
-	node           *Node
+	cache      storage.Cache
+	db         storage.DB
+	fs         storage.FS
+	buildQueue *BuildQueue
+	log        *logx.Logger
+	node       *Node
+	embedFS    EmbedFS
+)
+
+var (
+	// base path for requests
+	basePath string
+	// http redrect for URLs not from basepath
+	baseRedirect bool
+	// the deno std version from https://deno.land/std/version.ts
 	denoStdVersion string
-	embedFS        EmbedFS
 )
 
 type EmbedFS interface {
@@ -46,8 +53,6 @@ func Serve(efs EmbedFS) {
 		cacheUrl         string
 		dbUrl            string
 		fsUrl            string
-		queueUrl         string
-		nodeServices     string
 		logLevel         string
 		logDir           string
 		noCompress       bool
@@ -55,14 +60,13 @@ func Serve(efs EmbedFS) {
 	)
 	flag.IntVar(&port, "port", 80, "http server port")
 	flag.IntVar(&httpsPort, "https-port", 0, "https(autotls) server port, default is disabled")
-	flag.StringVar(&cdnDomain, "cdn-domain", "", "cdn domain")
+	flag.StringVar(&basePath, "basepath", "", "base path")
+	flag.BoolVar(&baseRedirect, "base-redirect", false, "http redrect for URLs not from basepath")
 	flag.StringVar(&etcDir, "etc-dir", ".esmd", "etc dir")
 	flag.StringVar(&cacheUrl, "cache", "", "cache config, default is 'memory:default'")
 	flag.StringVar(&dbUrl, "db", "", "database config, default is 'postdb:[etc-dir]/esm.db'")
 	flag.StringVar(&fsUrl, "fs", "", "filesystem config, default is 'local:[etc-dir]/storage'")
-	flag.StringVar(&queueUrl, "queue", "", "bulid queue config, default is 'chan:memory'")
-	flag.IntVar(&buildConcurrency, "build-concurrency", 2*runtime.NumCPU(), "maximum number of concurrent build task")
-	flag.StringVar(&nodeServices, "node-services", "", "node services")
+	flag.IntVar(&buildConcurrency, "build-concurrency", runtime.NumCPU(), "maximum number of concurrent build task")
 	flag.StringVar(&logDir, "log-dir", "", "log dir")
 	flag.StringVar(&logLevel, "log-level", "info", "log level")
 	flag.BoolVar(&noCompress, "no-compress", false, "disable compression for text content")
@@ -85,19 +89,12 @@ func Serve(efs EmbedFS) {
 	if fsUrl == "" {
 		fsUrl = fmt.Sprintf("local:%s", path.Join(etcDir, "storage"))
 	}
-	if queueUrl == "" {
-		queueUrl = "chan:memory"
-	}
 	if logDir == "" {
 		logDir = path.Join(etcDir, "log")
 	}
 
 	if isDev {
 		logLevel = "debug"
-		cdnDomain = "localhost"
-		if port != 80 {
-			cdnDomain = fmt.Sprintf("localhost:%d", port)
-		}
 		cwd, err := os.Getwd()
 		if err != nil {
 			fmt.Println(err)
@@ -128,7 +125,7 @@ func Serve(efs EmbedFS) {
 
 	denoStdVersion, err = getDenoStdVersion()
 	if err != nil {
-		log.Fatalf("getDenoStdVersion: %v", err)
+		log.Warnf("getDenoStdVersion: %v", err)
 	}
 	log.Debugf("https://deno.land/std@%s found", denoStdVersion)
 
@@ -171,14 +168,6 @@ func Serve(efs EmbedFS) {
 			log.Fatal(err)
 		}
 		services := []string{"esm-node-services"}
-		if len(nodeServices) > 0 {
-			for _, v := range strings.Split(nodeServices, ",") {
-				v = strings.TrimSpace(v)
-				if len(v) > 0 {
-					services = append(services, v)
-				}
-			}
-		}
 		for {
 			ctx, cancel := context.WithCancel(context.Background())
 			stopNS = cancel
@@ -191,18 +180,20 @@ func Serve(efs EmbedFS) {
 	}()
 
 	if !noCompress {
-		rex.Use(rex.AutoCompress())
+		rex.Use(rex.Compression())
 	}
 	rex.Use(
 		rex.ErrorLogger(log),
 		rex.AccessLogger(accessLogger),
 		rex.Header("Server", "esm.sh"),
 		rex.Cors(rex.CORS{
-			AllowAllOrigins: true,
-			AllowMethods:    []string{"GET"},
-			AllowHeaders:    []string{"Origin", "Content-Type", "Content-Length", "Accept-Encoding", "User-Agent", "Connection"},
-			ExposeHeaders:   []string{"X-TypeScript-Types"},
-			MaxAge:          3600,
+			AllowedOrigins: []string{"*"},
+			AllowedMethods: []string{
+				http.MethodGet,
+			},
+			AllowedHeaders:   []string{"*"},
+			ExposedHeaders:   []string{"X-TypeScript-Types"},
+			AllowCredentials: false,
 		}),
 		query(isDev),
 	)
@@ -240,10 +231,10 @@ func Serve(efs EmbedFS) {
 func init() {
 	embedFS = &embed.FS{}
 	log = &logx.Logger{}
-	go gogogo(time.Hour, func() {
+	go cron(time.Hour, func() {
 		version, err := getDenoStdVersion()
 		if err != nil {
-			log.Warn("getDenoStdVersion: %v", err)
+			log.Warnf("getDenoStdVersion: %v", err)
 			return
 		}
 		denoStdVersion = version

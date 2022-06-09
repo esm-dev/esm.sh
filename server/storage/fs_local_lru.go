@@ -116,16 +116,18 @@ type localLRUFSLayer struct {
 
 type localLRUFSCachedValue struct {
 	name    string
+	size    int64
 	modtime time.Time
 }
 
-func (fs *localLRUFSLayer) Exists(name string) (found bool, modtime time.Time, err error) {
+func (fs *localLRUFSLayer) Exists(name string) (found bool, size int64, modtime time.Time, err error) {
 	fs.cache.Wait()
 	value, found := fs.cache.Get(name)
 	if found {
 		_, ttlFound := fs.cache.GetTTL(name)
 		if ttlFound {
 			cached := value.(*localLRUFSCachedValue)
+			size = cached.size
 			modtime = cached.modtime
 		} else {
 			fs.cache.Del(name)
@@ -136,12 +138,12 @@ func (fs *localLRUFSLayer) Exists(name string) (found bool, modtime time.Time, e
 	return
 }
 
-func (fs *localLRUFSLayer) ReadFile(name string) (io.ReadSeekCloser, error) {
+func (fs *localLRUFSLayer) ReadFile(name string, size int64) (io.ReadSeekCloser, error) {
 	_, itemFound := fs.cache.Get(name)
 	if itemFound {
 		_, ttlFound := fs.cache.GetTTL(name)
 		if ttlFound {
-			file, err := fs.backingFS.ReadFile(name)
+			file, err := fs.backingFS.ReadFile(name, size)
 			if err == nil {
 				return file, nil
 			}

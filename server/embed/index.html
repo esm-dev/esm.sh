@@ -5,7 +5,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width" />
   <title>ESM>CDN</title>
-  <link rel="icon" type="image/svg+xml" href="/embed/assets/favicon.svg">
+  <link rel="icon" type="image/svg+xml" href="./embed/assets/favicon.svg">
   <meta name="description"
     content="A fast, global content delivery network to transform NPM packges to standard ES Modules by esbuild." />
   <meta name="keywords" content="js,javascript,esm,npm,deno,global,fast,cdn,package,module,esbuild,transform" />
@@ -16,7 +16,8 @@
   <meta name="og:image" content="https://esm.sh/embed/assets/sceenshot-deno-types.png" />
   <meta name="twitter:image" content="https://esm.sh/embed/assets/sceenshot-deno-types.png" />
   <meta name="twitter:card" content="summary_large_image" />
-  <link rel="stylesheet" href="/embed/style.css">
+  <link rel="stylesheet" href="./embed/style.css">
+  <base href="{basePath}/" />
 </head>
 
 <body>
@@ -42,12 +43,12 @@
       location.href = 'https://' + location.host + location.pathname + location.search
     }
   </script>
-  <script type="module">
+  <script type="module" crossorigin="use-credentials">
     const query = new URLSearchParams(location.search)
     if (query.has('test')) {
-      import('/embed/test/browser/testing.js')
+      import('./embed/test/browser/testing.js')
     } else {
-      import('/embed/index.js').then(({ render }) => render('# README'))
+      import('./embed/index.js').then(({ render }) => render('# README'))
     }
   </script>
   <script nomodule>

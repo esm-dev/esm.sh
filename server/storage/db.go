@@ -12,8 +12,8 @@ import (
 type Store map[string]string
 
 type ListItem struct {
-	Store  map[string]string `json:"store"`
-	Motime uint32            `json:"modtime"`
+	Store   map[string]string `json:"store"`
+	Modtime uint32            `json:"modtime"`
 }
 
 type DBDriver interface {

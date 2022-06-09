@@ -26,6 +26,7 @@ pub struct ExportsParser {
   pub call_mode: bool,
   pub fn_returned: bool,
   pub idents: IndexMap<String, IdentKind>,
+  pub exports_alias: IndexSet<String>,
   pub exports: IndexSet<String>,
   pub reexports: IndexSet<String>,
 }
@@ -395,6 +396,148 @@ impl ExportsParser {
     true
   }
 
+  // var foo = module.exports = {};
+  // foo.bar = function() {};
+  fn mark_exports_alias(&mut self, decl: &VarDeclarator) {
+    if let Pat::Ident(id) = &decl.name {
+      if let Some(init) = &decl.init {
+        if is_member(init, "module", "exports") {
+          self.exports_alias.insert(id.id.sym.as_ref().to_owned());
+        } else if let Expr::Assign(assign) = init.as_ref() {
+          if let Some(expr) = get_expr_from_pat_or_expr(&assign.left) {
+            if is_member(expr, "module", "exports") {
+              self.exports_alias.insert(id.id.sym.as_ref().to_owned());
+            }
+          }
+        }
+      }
+    }
+  }
+
+  fn is_exports_ident(&self, id: &str) -> bool {
+    return id.eq("exports") || self.exports_alias.contains(id);
+  }
+
+  fn is_exports_expr(&self, expr: &Expr) -> bool {
+    match expr {
+      Expr::Ident(id) => {
+        let id = id.sym.as_ref();
+        self.is_exports_ident(id)
+      }
+      Expr::Member(_) => is_member(expr, "module", "exports"),
+      _ => false,
+    }
+  }
+
+  fn get_exports_prop_name(&self, expr: &Expr) -> Option<String> {
+    if let Expr::Member(MemberExpr {
+      obj: ExprOrSuper::Expr(obj),
+      prop,
+      ..
+    }) = expr
+    {
+      if let Expr::Ident(obj) = obj.as_ref() {
+        if self.is_exports_ident(obj.sym.as_ref()) {
+          return match prop.as_ref() {
+            Expr::Ident(prop) => Some(prop.sym.as_ref().into()),
+            Expr::Lit(Lit::Str(Str { value, .. })) => Some(value.as_ref().into()),
+            _ => None,
+          };
+        }
+      }
+    }
+    None
+  }
+
+  // exports.foo || (exports.foo = {})
+  // foo = exports.foo || (exports.foo = {})
+  fn get_bare_export_names(&mut self, expr: &Expr) -> Option<String> {
+    if let Expr::Assign(assign) = expr {
+      return self.get_bare_export_names(assign.right.as_ref());
+    }
+
+    if let Expr::Bin(bin) = expr {
+      if bin.op == BinaryOp::LogicalOr {
+        if let Some(member_prop_name) = self.get_exports_prop_name(bin.left.as_ref()) {
+          if let Expr::Paren(ParenExpr { expr, .. }) = bin.right.as_ref() {
+            if let Expr::Assign(assign) = expr.as_ref() {
+              let left_expr = match &assign.left {
+                PatOrExpr::Expr(expr) => Some(expr.as_ref()),
+                PatOrExpr::Pat(pat) => match pat.as_ref() {
+                  Pat::Expr(expr) => Some(expr.as_ref()),
+                  _ => None,
+                },
+              };
+              if let Some(left_expr) = left_expr {
+                if assign.op == AssignOp::Assign {
+                  if let Some(prop_name) = self.get_exports_prop_name(left_expr) {
+                    if prop_name.eq(&member_prop_name) {
+                      return Some(member_prop_name);
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+
+    None
+  }
+
+  fn get_exports_from_assign(&mut self, assign: &AssignExpr) {
+    if assign.op == AssignOp::Assign {
+      let left_expr = match &assign.left {
+        PatOrExpr::Expr(expr) => Some(expr.as_ref()),
+        PatOrExpr::Pat(pat) => match pat.as_ref() {
+          Pat::Expr(expr) => Some(expr.as_ref()),
+          _ => None,
+        },
+      };
+      if let Some(Expr::Member(MemberExpr {
+        obj: ExprOrSuper::Expr(obj),
+        prop,
+        ..
+      })) = left_expr
+      {
+        let prop = match prop.as_ref() {
+          Expr::Ident(prop) => Some(prop.sym.as_ref().to_owned()),
+          Expr::Lit(Lit::Str(Str { value, .. })) => Some(value.as_ref().to_owned()),
+          _ => None,
+        };
+        if let Some(prop) = prop {
+          match obj.as_ref() {
+            Expr::Ident(obj) => {
+              let obj_name = obj.sym.as_ref();
+              if self.is_exports_ident(obj_name) {
+                // exports.foo = 'bar'
+                self.exports.insert(prop);
+                if let Expr::Assign(dep_assign) = assign.right.as_ref() {
+                  self.get_exports_from_assign(dep_assign);
+                }
+              } else if obj_name.eq("module") && self.is_exports_ident(&prop) {
+                // module.exports = ??
+                let right_expr = assign.right.as_ref();
+                self.reset(right_expr)
+              }
+            }
+            Expr::Member(_) => {
+              if is_member(obj, "module", "exports") {
+                self.exports.insert(prop);
+              }
+            }
+            _ => {}
+          }
+        }
+      } else {
+        for bare_export_name in self.get_bare_export_names(assign.right.as_ref()) {
+          self.exports.insert(bare_export_name);
+        }
+      }
+    }
+  }
+
   // walk and mark idents
   fn walk_stmts(&mut self, stmts: &Vec<Stmt>) -> bool {
     for stmt in stmts {
@@ -402,6 +545,7 @@ impl ExportsParser {
         Stmt::Decl(decl) => match decl {
           Decl::Var(var) => {
             for decl in &var.decls {
+              self.mark_exports_alias(decl);
               match &decl.name {
                 Pat::Ident(BindingIdent { id, .. }) => {
                   let id = id.sym.as_ref();
@@ -596,8 +740,9 @@ impl ExportsParser {
         // var foo = exports.foo || (exports.foo = {})
         Stmt::Decl(Decl::Var(VarDecl { decls, .. })) => {
           for decl in decls {
+            self.mark_exports_alias(decl);
             if let Some(init_expr) = &decl.init {
-              if let Some(bare_export_name) = get_bare_export_name(init_expr) {
+              for bare_export_name in self.get_bare_export_names(init_expr) {
                 self.exports.insert(bare_export_name);
               }
             }
@@ -611,50 +756,7 @@ impl ExportsParser {
           // module.exports = require('lib')
           // foo = exports.foo || (exports.foo = {})
           Expr::Assign(assign) => {
-            if assign.op == AssignOp::Assign {
-              let left_expr = match &assign.left {
-                PatOrExpr::Expr(expr) => Some(expr.as_ref()),
-                PatOrExpr::Pat(pat) => match pat.as_ref() {
-                  Pat::Expr(expr) => Some(expr.as_ref()),
-                  _ => None,
-                },
-              };
-              if let Some(Expr::Member(MemberExpr {
-                obj: ExprOrSuper::Expr(obj),
-                prop,
-                ..
-              })) = left_expr
-              {
-                let prop = match prop.as_ref() {
-                  Expr::Ident(prop) => Some(prop.sym.as_ref().to_owned()),
-                  Expr::Lit(Lit::Str(Str { value, .. })) => Some(value.as_ref().to_owned()),
-                  _ => None,
-                };
-                if let Some(prop) = prop {
-                  match obj.as_ref() {
-                    Expr::Ident(obj) => {
-                      let obj_name = obj.sym.as_ref();
-                      if obj_name.eq("exports") {
-                        self.exports.insert(prop);
-                      } else if obj_name.eq("module") && prop.eq("exports") {
-                        let right_expr = assign.right.as_ref();
-                        self.reset(right_expr)
-                      }
-                    }
-                    Expr::Member(_) => {
-                      if is_member(obj, "module", "exports") {
-                        self.exports.insert(prop);
-                      }
-                    }
-                    _ => {}
-                  }
-                }
-              } else {
-                if let Some(bare_export_name) = get_bare_export_name(assign.right.as_ref()) {
-                  self.exports.insert(bare_export_name);
-                }
-              }
-            }
+            self.get_exports_from_assign(assign);
           }
           // Object.defineProperty(exports, 'foo', { value: 'bar' })
           // Object.defineProperty(module.exports, 'foo', { value: 'bar' })
@@ -670,7 +772,9 @@ impl ExportsParser {
               let arg0 = &call.args[0];
               let arg1 = &call.args[1];
               let arg2 = &call.args[2];
-              let (is_module, is_exports) = is_module_exports(arg0.expr.as_ref());
+              let is_module = is_module_ident(arg0.expr.as_ref());
+              let is_exports = self.is_exports_expr(arg0.expr.as_ref());
+
               let name = self.as_str(arg1.expr.as_ref());
               let mut with_value_or_getter = false;
               let mut with_value: Option<Expr> = None;
@@ -710,7 +814,8 @@ impl ExportsParser {
                 }
               }
             } else if is_object_static_mothod_call(&call, "assign") && call.args.len() >= 2 {
-              let (is_module, is_exports) = is_module_exports(call.args[0].expr.as_ref());
+              let is_module = is_module_ident(call.args[0].expr.as_ref());
+              let is_exports = self.is_exports_expr(call.args[0].expr.as_ref());
               for arg in &call.args[1..] {
                 if let Some(props) = self.as_obj(arg.expr.as_ref()) {
                   if is_module {
@@ -720,7 +825,7 @@ impl ExportsParser {
                         if let Prop::KeyValue(KeyValueProp { key, value, .. }) = prop.as_ref() {
                           let key = stringify_prop_name(key);
                           if let Some(key) = &key {
-                            if key.eq("exports") {
+                            if self.is_exports_ident(key) {
                               with_exports = Some(value.as_ref().clone());
                               break;
                             }
@@ -741,7 +846,7 @@ impl ExportsParser {
                 }
               }
             } else if is_tslib_export_star_call(&call) && call.args.len() >= 2 {
-              let (_, is_exports) = is_module_exports(call.args[1].expr.as_ref());
+              let is_exports = self.is_exports_expr(call.args[1].expr.as_ref());
               if is_exports {
                 if let Some(props) = self.as_obj(call.args[0].expr.as_ref()) {
                   self.use_object_as_exports(props);
@@ -755,7 +860,7 @@ impl ExportsParser {
               for arg in &call.args {
                 if arg.spread.is_none() {
                   // (function() { ... })(exports.foo || (exports.foo = {}))
-                  if let Some(bare_export_name) = get_bare_export_name(arg.expr.as_ref()) {
+                  for bare_export_name in self.get_bare_export_names(arg.expr.as_ref()) {
                     self.exports.insert(bare_export_name);
                   }
                 }
@@ -771,7 +876,7 @@ impl ExportsParser {
                   // (function() { ... })(exports.foo || (exports.foo = {}))
                   for arg in &call.args {
                     if arg.spread.is_none() {
-                      if let Some(bare_export_name) = get_bare_export_name(arg.expr.as_ref()) {
+                      for bare_export_name in self.get_bare_export_names(arg.expr.as_ref()) {
                         self.exports.insert(bare_export_name);
                       }
                     }
@@ -814,6 +919,7 @@ impl ExportsParser {
       call_mode: false,
       fn_returned: false,
       idents: self.idents.clone(),
+      exports_alias: self.exports_alias.clone(),
       exports: self.exports.clone(),
       reexports: self.reexports.clone(),
     };
@@ -845,17 +951,14 @@ impl Fold for ExportsParser {
   }
 }
 
-// module | exports | module.exports
-fn is_module_exports(expr: &Expr) -> (bool, bool) {
+fn is_module_ident(expr: &Expr) -> bool {
   match expr {
     Expr::Ident(id) => {
       let id = id.sym.as_ref();
-      return (id.eq("module"), id.eq("exports"));
+      id.eq("module")
     }
-    Expr::Member(_) => return (false, is_member(expr, "module", "exports")),
-    _ => {}
+    _ => false,
   }
-  (false, false)
 }
 
 fn is_member(expr: &Expr, obj_name: &str, prop_name: &str) -> bool {
@@ -1036,6 +1139,19 @@ fn is_tslib_export_star_call(call: &CallExpr) -> bool {
   false
 }
 
+fn get_expr_from_pat_or_expr(v: &PatOrExpr) -> Option<&Expr> {
+  match v {
+    PatOrExpr::Expr(left_expr) => Some(left_expr),
+    PatOrExpr::Pat(pat) => {
+      if let Pat::Expr(left_expr) = pat.as_ref() {
+        Some(left_expr)
+      } else {
+        None
+      }
+    }
+  }
+}
+
 fn get_arrow_body_as_stmts(arrow: &ArrowExpr) -> Vec<Stmt> {
   match &arrow.body {
     BlockStmtOrExpr::BlockStmt(BlockStmt { stmts, .. }) => stmts.clone(),
@@ -1092,38 +1208,6 @@ fn get_class_static_names(class: &Class) -> Vec<String> {
       "".to_owned()
     })
     .collect()
-}
-
-// exports.foo || (exports.foo = {})
-// foo = exports.foo || (exports.foo = {})
-fn get_bare_export_name(expr: &Expr) -> Option<String> {
-  if let Expr::Assign(assign) = expr {
-    return get_bare_export_name(assign.right.as_ref());
-  }
-
-  if let Expr::Bin(bin) = expr {
-    if bin.op == BinaryOp::LogicalOr {
-      if let Some(member_prop_name) = get_member_prop_name(bin.left.as_ref(), "exports") {
-        if let Expr::Paren(ParenExpr { expr, .. }) = bin.right.as_ref() {
-          if let Expr::Assign(assign) = expr.as_ref() {
-            let left_expr = match &assign.left {
-              PatOrExpr::Expr(expr) => Some(expr.as_ref()),
-              PatOrExpr::Pat(pat) => match pat.as_ref() {
-                Pat::Expr(expr) => Some(expr.as_ref()),
-                _ => None,
-              },
-            };
-            if let Some(left_expr) = left_expr {
-              if assign.op == AssignOp::Assign && is_member(left_expr, "exports", member_prop_name.as_str()) {
-                return Some(member_prop_name);
-              }
-            }
-          }
-        }
-      }
-    }
-  }
-  None
 }
 
 fn stringify_prop_name(name: &PropName) -> Option<String> {

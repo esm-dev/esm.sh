@@ -28,22 +28,24 @@
 // wrapped in strict mode code which doesn't define any globals. It's inside a
 // function because try/catches deoptimize in certain engines.
 
+import { EventEmitter } from "./node_events.js"
+const events = new EventEmitter()
+events.setMaxListeners(1 << 10) // 1024
+
 let cachedSetTimeout;
 let cachedClearTimeout;
 
 function defaultSetTimeout() {
-  throw new Error('setTimeout has not been defined');
+  throw new Error("setTimeout has not been defined");
 }
 
 function defaultClearTimeout() {
-  throw new Error('clearTimeout has not been defined');
+  throw new Error("clearTimeout has not been defined");
 }
-
-function noop() { }
 
 (function () {
   try {
-    if (typeof setTimeout === 'function') {
+    if (typeof setTimeout === "function") {
       cachedSetTimeout = setTimeout;
     } else {
       cachedSetTimeout = defaultSetTimeout;
@@ -52,7 +54,7 @@ function noop() { }
     cachedSetTimeout = defaultSetTimeout;
   }
   try {
-    if (typeof clearTimeout === 'function') {
+    if (typeof clearTimeout === "function") {
       cachedClearTimeout = clearTimeout;
     } else {
       cachedClearTimeout = defaultClearTimeout;
@@ -165,10 +167,10 @@ class Item {
   }
 }
 
-const deno = typeof Deno !== 'undefined';
+const deno = typeof Deno !== "undefined";
 
 export default {
-  title: 'browser',
+  title: deno ? "deno" : "browser",
   browser: true,
   env: deno ? new Proxy({}, {
     get(_target, prop) {
@@ -192,46 +194,48 @@ export default {
   }) : {},
   argv: deno ? Deno.args ?? [] : [],
   pid: deno ? Deno.pid ?? 0 : 0,
-  version: 'v16.14.0',
+  version: "v16.14.0",
   versions: {
-    node: '16.14.0',
-    v8: '9.4.146.24-node.20',
-    uv: '1.43.0',
-    zlib: '1.2.11',
-    brotli: '1.0.9',
-    ares: '1.18.1',
-    modules: '93',
-    nghttp2: '1.45.1',
-    napi: '8',
-    llhttp: '6.0.4',
-    openssl: '1.1.1m+quic',
-    cldr: '40.0',
-    icu: '70.1',
-    tz: '2021a3',
-    unicode: '14.0',
+    node: "16.14.0",
+    v8: "9.4.146.24-node.20",
+    uv: "1.43.0",
+    zlib: "1.2.11",
+    brotli: "1.0.9",
+    ares: "1.18.1",
+    modules: "93",
+    nghttp2: "1.45.1",
+    napi: "8",
+    llhttp: "6.0.4",
+    openssl: "1.1.1m+quic",
+    cldr: "40.0",
+    icu: "70.1",
+    tz: "2021a3",
+    unicode: "14.0",
+    ...(deno ? Deno.version ?? { deno: "1.0.0-denodeploy.beta-4" } : {})
   },
-  on: noop,
-  addListener: noop,
-  once: noop,
-  off: noop,
-  removeListener: noop,
-  removeAllListeners: noop,
-  emit: noop,
-  prependListener: noop,
-  prependOnceListener: noop,
-  emitWarning: noop,
+  on: (...args) => events.on(...args),
+  addListener: (...args) => events.addListener(...args),
+  once: (...args) => events.once(...args),
+  off: (...args) => events.off(...args),
+  removeListener: (...args) => events.removeListener(...args),
+  removeAllListeners: (...args) => events.removeAllListeners(...args),
+  emit: (...args) => events.emit(...args),
+  prependListener: (...args) => events.prependListener(...args),
+  prependOnceListener: (...args) => events.prependOnceListener(...args),
   listeners: () => [],
-  binding: () => { throw new Error('process.binding is not supported') },
-  cwd: () => deno ? Deno.cwd?.() ?? '/' : '/',
+  emitWarning: () => { throw new Error("process.emitWarning is not supported") },
+  binding: () => { throw new Error("process.binding is not supported") },
+  cwd: () => deno ? Deno.cwd?.() ?? "/" : "/",
   chdir: (path) => {
     if (deno) {
       Deno.chdir(path)
     } else {
-      throw new Error('process.chdir is not supported')
+      throw new Error("process.chdir is not supported")
     }
   },
   umask: () => deno ? Deno.umask ?? 0 : 0,
-  nextTick: (fn) => {
+  // arrow function don't have `arguments`
+  nextTick: function (fn) {
     let args = new Array(arguments.length - 1);
     if (arguments.length > 1) {
       for (let i = 1; i < arguments.length; i++) {

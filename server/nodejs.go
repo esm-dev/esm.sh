@@ -394,7 +394,7 @@ func fetchPackageInfo(name string, version string) (info NpmPackage, err error) 
 	// cache data
 	var ttl time.Duration = 0
 	if !isFullVersion {
-		ttl = pkgCacheTimeout * time.Second
+		ttl = 10 * time.Minute
 	}
 	cache.Set(id, utils.MustEncodeJSON(info), ttl)
 	return
@@ -580,6 +580,7 @@ func yarnAdd(wd string, packages ...string) (err error) {
 			"--no-progress",
 			"--non-interactive",
 			"--silent",
+			"--registry=" + node.npmRegistry,
 		}
 		yarnCacheDir := os.Getenv("YARN_CACHE_DIR")
 		if yarnCacheDir != "" {
@@ -598,6 +599,28 @@ func yarnAdd(wd string, packages ...string) (err error) {
 		log.Debug("yarn add", strings.Join(packages, ","), "in", time.Since(start))
 	}
 	return
+}
+
+func yarnCacheClean(wd string, packages ...string) {
+	if len(packages) > 0 {
+		args := []string{"cache", "clean"}
+		yarnCacheDir := os.Getenv("YARN_CACHE_DIR")
+		if yarnCacheDir != "" {
+			args = append(args, "--cache-folder", yarnCacheDir)
+		}
+		yarnMutex := os.Getenv("YARN_MUTEX")
+		if yarnMutex != "" {
+			args = append(args, "--mutex", yarnMutex)
+		}
+		cmd := exec.Command("yarn", append(args, packages...)...)
+		cmd.Dir = wd
+		output, err := cmd.CombinedOutput()
+		if err != nil {
+			log.Warnf("yarn cache clean %s: %s", strings.Join(packages, ","), err)
+		} else {
+			log.Debugf("yarn cache clean %s: %s", strings.Join(packages, ","), string(output))
+		}
+	}
 }
 
 // added by @jimisaacs

@@ -33,16 +33,19 @@ func (i *mLRUCache) Get(key string) ([]byte, error) {
 }
 
 func (i *mLRUCache) Set(key string, value []byte, ttl time.Duration) error {
+	i.cache.Wait()
 	i.cache.SetWithTTL(key, value, 0, ttl)
 	return nil
 }
 
 func (i *mLRUCache) Delete(key string) error {
+	i.cache.Wait()
 	i.cache.Del(key)
 	return nil
 }
 
 func (i *mLRUCache) Flush() error {
+	i.cache.Wait()
 	i.cache.Clear()
 	return nil
 }

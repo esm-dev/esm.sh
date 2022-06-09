@@ -344,7 +344,7 @@ i {
 .test ul li::before {
   display: inline-block;
   vertical-align: middle;
-  height: 30px;
+  min-height: 30px;
   line-height: 30px;
 }
 

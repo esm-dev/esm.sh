@@ -70,6 +70,7 @@ impl SWC {
       call_mode: call_mode,
       fn_returned: false,
       idents: IndexMap::new(),
+      exports_alias: IndexSet::new(),
       exports: IndexSet::new(),
       reexports: IndexSet::new(),
     };

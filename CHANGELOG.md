@@ -1,5 +1,44 @@
 # Change Log
 
+## v86
+
+- Support `?keep-names` query for esbuild (close [#345](https://github.com/esm-dev/esm.sh/issues/345))
+
+## v85
+
+- Fix `fixAliasDeps` function that imports multiple React when using `?deps=react@18,react-dom@18`
+
+## v84
+
+- Fix types version resolving with `?deps` query(close [#338](https://github.com/esm-dev/esm.sh/issues/338))
+- Fix URL redirect with outdated build version prefix
+
+## v83
+
+- Replace `node-fetch` dep to `node-fetch-native` (close [#336](https://github.com/esm-dev/esm.sh/issues/336))
+- Add `--keep-names` option for esbuild by default (close [#335](https://github.com/esm-dev/esm.sh/issues/335))
+- Fix incorrect types with `?alias` query
+
+## v82
+
+- fix types with `?deps` query (close [#333](https://github.com/esm-dev/esm.sh/issues/333))
+
+## v81
+
+- fix `?deps` and `?alias` depth query
+
+## v80
+
+- Fix build error in v79
+
+## v79
+
+- Use `esm.sh` instead of `cdn.esm.sh`
+- User semver versioning for the `x-typescript-types` header
+- Fix aliasing dependencies doesn't affect typescript declaration (close [#102](https://github.com/esm-dev/esm.sh/issues/102))
+- Fix using arguments in arrow function [#322](https://github.com/esm-dev/esm.sh/pull/322)
+- Fix Deno check precluding esm.sh to start [#327](https://github.com/esm-dev/esm.sh/pull/327)
+
 ## v78
 
 - Reduce database store structure
