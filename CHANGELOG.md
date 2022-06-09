@@ -1,17 +1,21 @@
 # Change Log
 
+## v68
+
+- Support `?keep-names` query for esbuild (close [#345](https://github.com/esm-dev/esm.sh/issues/345))
+
 ## v85
 
 - Fix `fixAliasDeps` function that imports multiple React when using `?deps=react@18,react-dom@18`
 
 ## v84
 
-- Fix types version resolving with `?deps`  (close [#338](https://github.com/esm-dev/esm.sh/issues/338))
+- Fix types version resolving with `?deps` query(close [#338](https://github.com/esm-dev/esm.sh/issues/338))
 - Fix URL redirect with outdated build version prefix
 
 ## v83
 
-- Replace `node-fetch` dep to `node-fetch-native`  (close [#336](https://github.com/esm-dev/esm.sh/issues/336))
+- Replace `node-fetch` dep to `node-fetch-native` (close [#336](https://github.com/esm-dev/esm.sh/issues/336))
 - Add `--keep-names` option for esbuild by default (close [#335](https://github.com/esm-dev/esm.sh/issues/335))
 - Fix incorrect types with `?alias` query
 
