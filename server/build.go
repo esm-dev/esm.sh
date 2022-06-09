@@ -25,9 +25,10 @@ type BuildTask struct {
 	Alias        map[string]string `json:"alias"`
 	Deps         PkgSlice          `json:"deps"`
 	Target       string            `json:"target"`
+	DevMode      bool              `json:"dev"`
 	BundleMode   bool              `json:"bundle"`
 	NoRequire    bool              `json:"noRequire"`
-	DevMode      bool              `json:"dev"`
+	KeepNames    bool              `json:"keepNames"`
 
 	// state
 	id    string
@@ -49,6 +50,9 @@ func (task *BuildTask) ID() string {
 	name = strings.TrimSuffix(name, ".js")
 	if task.NoRequire {
 		name += ".nr"
+	}
+	if task.KeepNames {
+		name += ".kn"
 	}
 	if task.DevMode {
 		name += ".development"
@@ -329,7 +333,7 @@ esbuild:
 		MinifyWhitespace:  !task.DevMode,
 		MinifyIdentifiers: !task.DevMode,
 		MinifySyntax:      !task.DevMode,
-		KeepNames:         true, // prevent class/function names erasing
+		KeepNames:         task.KeepNames, // prevent class/function names erasing
 		Plugins:           []api.Plugin{esmResolverPlugin},
 		Loader: map[string]api.Loader{
 			".wasm":  api.LoaderDataURL,

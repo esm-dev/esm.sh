@@ -409,6 +409,7 @@ func query(devMode bool) rex.Handle {
 		isWorker := ctx.Form.Has("worker")
 		noCheck := ctx.Form.Has("no-check")
 		noRequire := ctx.Form.Has("no-require")
+		keepNames := ctx.Form.Has("keep-names")
 
 		// force react/jsx-dev-runtime and react-refresh into `dev` mode
 		if !isDev {
@@ -453,6 +454,10 @@ func query(devMode bool) rex.Handle {
 					if endsWith(submodule, ".development") {
 						submodule = strings.TrimSuffix(submodule, ".development")
 						isDev = true
+					}
+					if endsWith(submodule, ".kn") {
+						submodule = strings.TrimSuffix(submodule, ".kn")
+						keepNames = true
 					}
 					if endsWith(submodule, ".nr") {
 						submodule = strings.TrimSuffix(submodule, ".nr")
@@ -538,9 +543,10 @@ func query(devMode bool) rex.Handle {
 			Alias:        alias,
 			Deps:         deps,
 			Target:       target,
+			DevMode:      isDev,
 			BundleMode:   isBundleMode || isWorker,
 			NoRequire:    noRequire,
-			DevMode:      isDev,
+			KeepNames:    keepNames,
 			stage:        "init",
 		}
 		taskID := task.ID()
