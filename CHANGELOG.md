@@ -1,6 +1,6 @@
 # Change Log
 
-## v68
+## v86
 
 - Support `?keep-names` query for esbuild (close [#345](https://github.com/esm-dev/esm.sh/issues/345))
 
