@@ -138,6 +138,8 @@ func validateEngineFeatures(engine api.Engine) int {
 				constraints[compat.IOS] = version
 			case api.EngineSafari:
 				constraints[compat.Safari] = version
+			case api.EngineOpera:
+				constraints[compat.Opera] = version
 			default:
 				panic("invalid engine name")
 			}
