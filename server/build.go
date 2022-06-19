@@ -19,16 +19,17 @@ import (
 )
 
 type BuildTask struct {
-	CdnOrigin    string            `json:"cdnOrigin"`
-	BuildVersion int               `json:"buildVersion"`
-	Pkg          Pkg               `json:"pkg"`
-	Alias        map[string]string `json:"alias"`
-	Deps         PkgSlice          `json:"deps"`
-	Target       string            `json:"target"`
-	DevMode      bool              `json:"dev"`
-	BundleMode   bool              `json:"bundle"`
-	NoRequire    bool              `json:"noRequire"`
-	KeepNames    bool              `json:"keepNames"`
+	CdnOrigin         string            `json:"cdnOrigin"`
+	BuildVersion      int               `json:"buildVersion"`
+	Pkg               Pkg               `json:"pkg"`
+	Alias             map[string]string `json:"alias"`
+	Deps              PkgSlice          `json:"deps"`
+	Target            string            `json:"target"`
+	DevMode           bool              `json:"dev"`
+	BundleMode        bool              `json:"bundle"`
+	NoRequire         bool              `json:"noRequire"`
+	KeepNames         bool              `json:"keepNames"`
+	IgnoreAnnotations bool              `json:"ignoreAnnotations"`
 
 	// state
 	id    string
@@ -53,6 +54,9 @@ func (task *BuildTask) ID() string {
 	}
 	if task.KeepNames {
 		name += ".kn"
+	}
+	if task.IgnoreAnnotations {
+		name += ".ia"
 	}
 	if task.DevMode {
 		name += ".development"
@@ -333,7 +337,8 @@ esbuild:
 		MinifyWhitespace:  !task.DevMode,
 		MinifyIdentifiers: !task.DevMode,
 		MinifySyntax:      !task.DevMode,
-		KeepNames:         task.KeepNames, // prevent class/function names erasing
+		KeepNames:         task.KeepNames,         // prevent class/function names erasing
+		IgnoreAnnotations: task.IgnoreAnnotations, // some libs maybe use wrong side-effect annotations
 		Plugins:           []api.Plugin{esmResolverPlugin},
 		Loader: map[string]api.Loader{
 			".wasm":  api.LoaderDataURL,

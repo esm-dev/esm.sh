@@ -410,6 +410,7 @@ func query(devMode bool) rex.Handle {
 		noCheck := ctx.Form.Has("no-check")
 		noRequire := ctx.Form.Has("no-require")
 		keepNames := ctx.Form.Has("keep-names")
+		ignoreAnnotations := ctx.Form.Has("ignore-annotations")
 
 		// force react/jsx-dev-runtime and react-refresh into `dev` mode
 		if !isDev {
@@ -454,6 +455,10 @@ func query(devMode bool) rex.Handle {
 					if endsWith(submodule, ".development") {
 						submodule = strings.TrimSuffix(submodule, ".development")
 						isDev = true
+					}
+					if endsWith(submodule, ".ia") {
+						submodule = strings.TrimSuffix(submodule, ".ia")
+						ignoreAnnotations = true
 					}
 					if endsWith(submodule, ".kn") {
 						submodule = strings.TrimSuffix(submodule, ".kn")
@@ -537,17 +542,18 @@ func query(devMode bool) rex.Handle {
 		}
 
 		task := &BuildTask{
-			CdnOrigin:    origin,
-			BuildVersion: buildVersion,
-			Pkg:          *reqPkg,
-			Alias:        alias,
-			Deps:         deps,
-			Target:       target,
-			DevMode:      isDev,
-			BundleMode:   isBundleMode || isWorker,
-			NoRequire:    noRequire,
-			KeepNames:    keepNames,
-			stage:        "init",
+			CdnOrigin:         origin,
+			BuildVersion:      buildVersion,
+			Pkg:               *reqPkg,
+			Alias:             alias,
+			Deps:              deps,
+			Target:            target,
+			DevMode:           isDev,
+			BundleMode:        isBundleMode || isWorker,
+			NoRequire:         noRequire,
+			KeepNames:         keepNames,
+			IgnoreAnnotations: ignoreAnnotations,
+			stage:             "init",
 		}
 		taskID := task.ID()
 		esm, err := findModule(taskID)
