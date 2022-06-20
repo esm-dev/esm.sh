@@ -87,13 +87,24 @@ import useSWR from "https://esm.sh/swr?alias=react:preact/compat&deps=preact@10.
 
 The origin idea was coming from [@lucacasonato](https://github.com/lucacasonato).
 
-### Specify ESM target
+### ESBuild options
+
+By default, esm.sh will check the `User-Agent` header to get the build target automatically. You can specify it with the `?target` query. Available targets: **es2015** - **es2022**, **esnext**, **node**, and **deno**.
 
 ```javascript
 import React from "https://esm.sh/react?target=es2020"
 ```
 
-By default, esm.sh will check the `User-Agent` header to get the build target automatically. You can specify it with the `?target` query. Available targets: **es2015** - **es2022**, **esnext**, **node**, and **deno**.
+Other supported options of [esbuild](https://esbuild.github.io/):
+
+- [Keep names](https://esbuild.github.io/api/#keep-names)
+  ```javascript
+  import React from "https://esm.sh/react?keep-names"
+  ```
+- [Ignore annotations](https://esbuild.github.io/api/#ignore-annotations)
+  ```javascript
+  import React from "https://esm.sh/react?ignore-annotations"
+  ```
 
 ### Package CSS
 
