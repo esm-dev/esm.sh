@@ -8,6 +8,8 @@ import (
 	"fmt"
 	"os"
 	"path"
+	"path/filepath"
+	"reflect"
 	"strings"
 	"time"
 
@@ -308,9 +310,33 @@ func (task *BuildTask) build(tracing *stringSet) (esm *ModuleMeta, err error) {
 						}
 					}
 
-					// bundles undefined relative imports or the package/module it self
-					if isLocalImport(specifier) || specifier == task.Pkg.ImportPath() {
+					// bundle the package/module it self and the entrypoint
+					if specifier == task.Pkg.ImportPath() || specifier == entryPoint {
 						return api.OnResolveResult{}, nil
+					}
+
+					// for local modules
+					if isLocalImport(specifier) {
+						// bundle if the entry pkg is not a submodule
+						if task.Pkg.Submodule == "" {
+							return api.OnResolveResult{}, nil
+						}
+
+						// bundle if this pkg has 'exports' definitions but the local module is not in 'exports'
+						if npm.DefinedExports != nil && !reflect.ValueOf(npm.DefinedExports).IsNil() {
+							return api.OnResolveResult{}, nil
+						}
+
+						// otherwise do not bundle its local dependencies
+						var dirpath = args.ResolveDir
+						if strings.HasPrefix(dirpath, "/private/var/") {
+							dirpath = strings.TrimPrefix(dirpath, "/private")
+						}
+						fullFilepath := filepath.Join(dirpath, specifier)
+						// convert: full filepath --> package name + submodule path
+						specifier = strings.TrimPrefix(fullFilepath, filepath.Join(task.wd, "node_modules")+"/")
+						external.Add(specifier)
+						return api.OnResolveResult{Path: "__ESM_SH_EXTERNAL:" + specifier, External: true}, nil
 					}
 
 					// ignore `require()` of esm package
