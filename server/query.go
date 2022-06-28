@@ -306,23 +306,40 @@ func query(devMode bool) rex.Handle {
 					return
 				}
 				defer resp.Body.Close()
+
 				if resp.StatusCode >= 500 {
 					w.WriteHeader(http.StatusBadGateway)
 					w.Write([]byte("Bad Gateway"))
 					return
 				}
-				for key, values := range resp.Header {
-					for _, value := range values {
-						ctx.AddHeader(key, value)
-					}
-				}
+
 				if resp.StatusCode >= 400 {
 					w.WriteHeader(http.StatusBadGateway)
 					io.Copy(w, resp.Body)
 					return
 				}
+
+				n, err := fs.WriteFile(savePath, resp.Body)
+				if err != nil {
+					w.WriteHeader(500)
+					w.Write([]byte(err.Error()))
+					return
+				}
+
+				f, err := fs.ReadFile(savePath, n)
+				if err != nil {
+					w.WriteHeader(500)
+					w.Write([]byte(err.Error()))
+					return
+				}
+
+				for key, values := range resp.Header {
+					for _, value := range values {
+						ctx.AddHeader(key, value)
+					}
+				}
 				ctx.SetHeader("Cache-Control", "public, max-age=31536000, immutable")
-				fs.WriteFile(savePath, io.TeeReader(resp.Body, w))
+				io.Copy(w, f)
 			})
 		}
 
