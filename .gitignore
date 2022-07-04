@@ -6,3 +6,4 @@ node_modules/
 target/
 pkg/
 .vscode/launch.json
+esm.sh.exe

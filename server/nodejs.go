@@ -222,10 +222,15 @@ CheckNodejs:
 		version:     version,
 		npmRegistry: "https://registry.npmjs.org/",
 	}
-
-	output, err := exec.Command("npm", "config", "get", "registry").CombinedOutput()
-	if err == nil {
-		node.npmRegistry = strings.TrimRight(strings.TrimSpace(string(output)), "/") + "/"
+	var output []byte
+	if registry == "" {
+		log.Infof("try to read npm registry config: npm config get registry", nodejsLatestLTS)
+		output, err := exec.Command("npm", "config", "get", "registry").CombinedOutput()
+		if err == nil {
+			node.npmRegistry = strings.TrimRight(strings.TrimSpace(string(output)), "/") + "/"
+		}
+	} else {
+		node.npmRegistry = registry
 	}
 
 CheckYarn:
