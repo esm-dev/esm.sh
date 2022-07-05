@@ -37,6 +37,8 @@ var (
 	baseRedirect bool
 	// the deno std version from https://deno.land/std/version.ts
 	denoStdVersion string
+	// npm registry
+	registry string
 )
 
 type EmbedFS interface {
@@ -71,6 +73,8 @@ func Serve(efs EmbedFS) {
 	flag.StringVar(&logLevel, "log-level", "info", "log level")
 	flag.BoolVar(&noCompress, "no-compress", false, "disable compression for text content")
 	flag.BoolVar(&isDev, "dev", false, "run server in development mode")
+	flag.StringVar(&registry, "npm-registry", "", "npm registry")
+
 	flag.Parse()
 
 	var err error
