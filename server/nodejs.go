@@ -224,7 +224,7 @@ CheckNodejs:
 	}
 	var output []byte
 	if registry == "" {
-		log.Infof("try to read npm registry config: npm config get registry", nodejsLatestLTS)
+		log.Infof("try to read npm registry config: npm config get registry")
 		output, err := exec.Command("npm", "config", "get", "registry").CombinedOutput()
 		if err == nil {
 			node.npmRegistry = strings.TrimRight(strings.TrimSpace(string(output)), "/") + "/"
@@ -232,6 +232,7 @@ CheckNodejs:
 	} else {
 		node.npmRegistry = registry
 	}
+	log.Infof("use npm registry %s", node.npmRegistry)
 
 CheckYarn:
 	output, err = exec.Command("yarn", "-v").CombinedOutput()
