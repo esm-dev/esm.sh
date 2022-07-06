@@ -39,6 +39,8 @@ var (
 	denoStdVersion string
 	// npm registry
 	registry string
+	// unpkg site
+	unpkg = "https://unpkg.com/"
 )
 
 type EmbedFS interface {
@@ -74,6 +76,7 @@ func Serve(efs EmbedFS) {
 	flag.BoolVar(&noCompress, "no-compress", false, "disable compression for text content")
 	flag.BoolVar(&isDev, "dev", false, "run server in development mode")
 	flag.StringVar(&registry, "npm-registry", "", "npm registry")
+	flag.StringVar(&unpkg, "unpkg-site", unpkg, "unpkg api site")
 
 	flag.Parse()
 
