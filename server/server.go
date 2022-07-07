@@ -41,6 +41,8 @@ var (
 	registry string
 	// public address
 	publicAddress string
+	// unpkg site
+	unpkg = "https://unpkg.com/"
 )
 
 type EmbedFS interface {
@@ -77,6 +79,7 @@ func Serve(efs EmbedFS) {
 	flag.BoolVar(&isDev, "dev", false, "run server in development mode")
 	flag.StringVar(&registry, "npm-registry", "", "npm registry")
 	flag.StringVar(&publicAddress, "public-address", "", "the server public address: http://esm.sh")
+	flag.StringVar(&unpkg, "unpkg-site", unpkg, "unpkg api site")
 
 	flag.Parse()
 

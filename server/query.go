@@ -299,7 +299,10 @@ func query(devMode bool) rex.Handle {
 					http.ServeContent(w, r, savePath, modtime, f)
 					return
 				}
-				resp, err := httpClient.Get(fmt.Sprintf("https://unpkg.com/%s", reqPkg.String()))
+				if !strings.HasSuffix(unpkg, "/") {
+					unpkg += "/"
+				}
+				resp, err := httpClient.Get(fmt.Sprintf("%s%s", unpkg, reqPkg.String()))
 				if err != nil {
 					w.WriteHeader(500)
 					w.Write([]byte(err.Error()))
