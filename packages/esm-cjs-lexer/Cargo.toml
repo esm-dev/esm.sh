@@ -2,7 +2,7 @@
 name = "esm-cjs-lexer"
 version = "0.7.0"
 description = "A WASM module to parse commonjs exports for ESM."
-repository = "https://github.com/esm-dev/esm.sh"
+repository = "https://github.com/ije/esm.sh"
 license = "MIT"
 authors = ["The Aleph.js authors"]
 edition = "2021"
@@ -24,7 +24,7 @@ serde = { version = "1.0.137", features = ["derive"] }
 swc_common = { version = "0.15.3", features = ["sourcemap"] }
 swc_ecmascript = { version = "0.102.0", features = ["parser", "visit"] }
 swc_ecma_ast = "0.61.0"
-swc_ecma_visit = "0.47.0" 
+swc_ecma_visit = "0.47.0"
 
 # wasm-bindgen
 # docs: https://rustwasm.github.io/docs/wasm-bindgen
