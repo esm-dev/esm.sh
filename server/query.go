@@ -18,7 +18,7 @@ import (
 )
 
 var banList = map[string]bool{
-	"@withfig/autocomplete": true,
+	"/@withfig/autocomplete": true,
 }
 
 var httpClient = &http.Client{
@@ -49,6 +49,13 @@ func query(devMode bool) rex.Handle {
 		// ban malicious requests
 		if strings.HasPrefix(pathname, ".") || strings.HasSuffix(pathname, ".php") {
 			return rex.Status(400, "Bad Request")
+		}
+
+		// ban malicious requests by banList
+		for prefix := range banList {
+			if strings.HasPrefix(pathname, prefix) {
+				return rex.Status(403, "forbidden")
+			}
 		}
 
 		// strip loc
@@ -223,11 +230,6 @@ func query(devMode bool) rex.Handle {
 			return rex.Redirect(fmt.Sprintf("%s%s/%s%s", origin, prefix, reqPkg.String(), query), http.StatusTemporaryRedirect)
 		}
 
-		if banList[reqPkg.Name] {
-			ctx.SetHeader("Cache-Control", "public, max-age=86400")
-			return rex.Status(403, "forbidden")
-		}
-
 		// since most transformers handle `jsxSource` by concating string "/jsx-runtime"
 		// we need to support url like `https://esm.sh/react?dev&target=esnext/jsx-runtime`
 		if (reqPkg.Name == "react" || reqPkg.Name == "preact") && strings.HasSuffix(ctx.R.URL.RawQuery, "/jsx-runtime") {
@@ -299,10 +301,10 @@ func query(devMode bool) rex.Handle {
 					http.ServeContent(w, r, savePath, modtime, f)
 					return
 				}
-				if !strings.HasSuffix(unpkg, "/") {
-					unpkg += "/"
+				if !strings.HasSuffix(unpkgOrigin, "/") {
+					unpkgOrigin += "/"
 				}
-				resp, err := httpClient.Get(fmt.Sprintf("%s%s", unpkg, reqPkg.String()))
+				resp, err := httpClient.Get(fmt.Sprintf("%s%s", unpkgOrigin, reqPkg.String()))
 				if err != nil {
 					w.WriteHeader(500)
 					w.Write([]byte(err.Error()))

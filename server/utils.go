@@ -263,8 +263,8 @@ func encodeAliasDepsPrefix(alias map[string]string, deps PkgSlice) string {
 }
 
 func getOrigin(host string) string {
-	if publicAddress != "" {
-		return strings.TrimSuffix(publicAddress, "/")
+	if origin != "" {
+		return strings.TrimSuffix(origin, "/")
 	}
 	proto := "https"
 	if host == "localhost" || strings.HasPrefix(host, "localhost:") {

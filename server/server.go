@@ -38,11 +38,11 @@ var (
 	// the deno std version from https://deno.land/std/version.ts
 	denoStdVersion string
 	// npm registry
-	registry string
-	// public address
-	publicAddress string
-	// unpkg site
-	unpkg = "https://unpkg.com/"
+	npmRegistry string
+	// server origin
+	origin string
+	// unpkg.com origin
+	unpkgOrigin string
 )
 
 type EmbedFS interface {
@@ -77,9 +77,9 @@ func Serve(efs EmbedFS) {
 	flag.StringVar(&logLevel, "log-level", "info", "log level")
 	flag.BoolVar(&noCompress, "no-compress", false, "disable compression for text content")
 	flag.BoolVar(&isDev, "dev", false, "run server in development mode")
-	flag.StringVar(&registry, "npm-registry", "", "npm registry")
-	flag.StringVar(&publicAddress, "public-address", "", "the server public address: http://esm.sh")
-	flag.StringVar(&unpkg, "unpkg-site", unpkg, "unpkg api site")
+	flag.StringVar(&npmRegistry, "npm-registry", "", "npm registry")
+	flag.StringVar(&origin, "origin", "", "the server origin, default is the request host")
+	flag.StringVar(&unpkgOrigin, "unpkg-origin", "https://unpkg.com/", "unpkg.com origin")
 
 	flag.Parse()
 

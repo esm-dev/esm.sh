@@ -223,14 +223,14 @@ CheckNodejs:
 		npmRegistry: "https://registry.npmjs.org/",
 	}
 	var output []byte
-	if registry == "" {
+	if npmRegistry == "" {
 		log.Infof("try to read npm registry config: npm config get registry")
 		output, err := exec.Command("npm", "config", "get", "registry").CombinedOutput()
 		if err == nil {
 			node.npmRegistry = strings.TrimRight(strings.TrimSpace(string(output)), "/") + "/"
 		}
 	} else {
-		node.npmRegistry = registry
+		node.npmRegistry = npmRegistry
 	}
 	log.Infof("use npm registry %s", node.npmRegistry)
 
