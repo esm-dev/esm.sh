@@ -39,6 +39,8 @@ var (
 	denoStdVersion string
 	// npm registry
 	registry string
+	// public address
+	publicAddress string
 	// unpkg site
 	unpkg = "https://unpkg.com/"
 )
@@ -76,6 +78,7 @@ func Serve(efs EmbedFS) {
 	flag.BoolVar(&noCompress, "no-compress", false, "disable compression for text content")
 	flag.BoolVar(&isDev, "dev", false, "run server in development mode")
 	flag.StringVar(&registry, "npm-registry", "", "npm registry")
+	flag.StringVar(&publicAddress, "public-address", "", "the server public address: http://esm.sh")
 	flag.StringVar(&unpkg, "unpkg-site", unpkg, "unpkg api site")
 
 	flag.Parse()
