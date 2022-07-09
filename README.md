@@ -45,7 +45,7 @@ You can also use the `?path` to specify the `submodule`, this is friendly for **
 
 ```javascript
 // equals to https://esm.sh/react-dom/server?target=es2015
-import { renderToString } from "react-dom/server" 
+import { renderToString } from "react-dom/server"
 ```
 
 ### Bundle mode
@@ -125,7 +125,7 @@ esm.sh supports `?worker` mode to load modules as web worker:
 
 ```javascript
 import editorWorker from "https://esm.sh/monaco-editor/esm/vs/editor/editor.worker?worker"
-  
+
 const worker = editorWorker()
 ```
 
@@ -149,10 +149,10 @@ By default, **esm.sh** will respond with a custom `X-TypeScript-Types` HTTP head
 
 ![Figure #1](./server/embed/assets/sceenshot-deno-types.png)
 
-You can pass the `?no-check` query to disable the `X-TypeScript-Types` header if some types are incorrect:
+You can pass the `?no-dts` query to disable the `X-TypeScript-Types` header if some types are incorrect:
 
 ```javascript
-import unescape from "https://esm.sh/lodash/unescape?no-check"
+import unescape from "https://esm.sh/lodash/unescape?no-dts"
 ```
 
 ## Pin the build version

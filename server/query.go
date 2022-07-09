@@ -429,7 +429,7 @@ func query(devMode bool) rex.Handle {
 		isDev := ctx.Form.Has("dev")
 		isPined := ctx.Form.Has("pin")
 		isWorker := ctx.Form.Has("worker")
-		noCheck := ctx.Form.Has("no-check")
+		noCheck := ctx.Form.Has("no-check") || ctx.Form.Has("no-dts")
 		noRequire := ctx.Form.Has("no-require")
 		keepNames := ctx.Form.Has("keep-names")
 		ignoreAnnotations := ctx.Form.Has("ignore-annotations")
