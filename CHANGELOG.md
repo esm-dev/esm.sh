@@ -1,5 +1,22 @@
 # Change Log
 
+## v87
+
+- Support `?external` query, this will give you better user experience when you are using **import maps**.
+  ```jsonc
+  // import_map.json
+  {
+    "imports": {
+      "preact": "https://esm.sh/preact@10.7.2",
+      "preact-render-to-string": "https://esm.sh/preact-render-to-string@5.2.0&external=preact",
+    }
+  }
+  ```
+- Support `?no-dts` (equals to `?no-check`) query
+- Add the 'ignore-annotations' option for esbuild ([#349](https://github.com/ije/esm.sh/issues/349))
+- Prevent submodules bundling their local dependencies ([#354](https://github.com/ije/esm.sh/issues/354))
+- Don't panic in Opera
+
 ## v86
 
 - Support `?keep-names` query for esbuild (close [#345](https://github.com/ije/esm.sh/issues/345))
