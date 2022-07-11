@@ -1,4 +1,4 @@
-import { assertEquals } from "https://deno.land/std@0.130.0/testing/asserts.ts";
+import { assertEquals } from "https://deno.land/std@0.145.0/testing/asserts.ts";
 
 import { micromark } from "http://localhost:8080/micromark";
 import {

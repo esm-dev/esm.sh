@@ -1,4 +1,4 @@
-import { assert } from "https://deno.land/std@0.130.0/testing/asserts.ts";
+import { assert } from "https://deno.land/std@0.145.0/testing/asserts.ts";
 
 import { minify } from "http://localhost:8080/terser";
 
