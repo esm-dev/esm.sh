@@ -8,7 +8,7 @@
   {
     "imports": {
       "preact": "https://esm.sh/preact@10.7.2",
-      "preact-render-to-string": "https://esm.sh/preact-render-to-string@5.2.0&external=preact",
+      "preact-render-to-string": "https://esm.sh/preact-render-to-string@5.2.0?external=preact",
     }
   }
   ```
