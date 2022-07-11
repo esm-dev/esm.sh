@@ -1,0 +1,10 @@
+{
+  "compilerOptions": {
+    "lib": [
+      "dom",
+      "deno.ns"
+    ],
+    "jsxFactory": "h"
+  },
+  "importMap": "./import_map.json"
+}

@@ -4,11 +4,11 @@ startEsmServer(async (p) => {
   console.log("esm.sh server started");
   try {
     if (testDir) {
-      await test(testDir, p);
+      await runTest(testDir, p);
     } else {
       for await (const entry of Deno.readDir("test/deno")) {
         if (entry.isDirectory) {
-          await test(entry.name, p);
+          await runTest(entry.name, p);
         }
       }
     }
@@ -42,7 +42,7 @@ async function startEsmServer(onReady: (p: any) => void) {
   await p.status();
 }
 
-async function test(name: string, p: any, retryTimes = 0) {
+async function runTest(name: string, p: any, retryTimes = 0) {
   const cmd = [
     Deno.execPath(),
     "test",
@@ -52,11 +52,11 @@ async function test(name: string, p: any, retryTimes = 0) {
     "--location=http://0.0.0.0/",
   ];
   const dir = `test/deno/${name}/`;
-  if (await existsFile(dir + "tsconfig.json")) {
-    cmd.push("--config", dir + "tsconfig.json");
+  if (await existsFile(dir + "deno.json")) {
+    cmd.push("--config", dir + "deno.json");
   }
   cmd.push(dir);
- 
+
   console.log(`\n[testing ${name}]`);
 
   const { code, success } = await run(...cmd);
@@ -64,7 +64,7 @@ async function test(name: string, p: any, retryTimes = 0) {
     if (retryTimes < 3) {
       console.log("something wrong, retry...");
       await new Promise((resolve) => setTimeout(resolve, 100));
-      await test(name, p, retryTimes + 1);
+      await runTest(name, p, retryTimes + 1);
     } else {
       p.kill("SIGINT");
       Deno.exit(code);
