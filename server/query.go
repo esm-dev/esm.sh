@@ -407,6 +407,15 @@ func query(devMode bool) rex.Handle {
 			}
 		}
 
+		// check `external` query
+		external := newStringSet()
+		for _, p := range strings.Split(ctx.Form.Value("external"), ",") {
+			p = strings.TrimSpace(p)
+			if p != "" {
+				external.Add(p)
+			}
+		}
+
 		// determine build target
 		target := strings.ToLower(ctx.Form.Value("target"))
 		_, targeted := targets[target]
@@ -441,12 +450,12 @@ func query(devMode bool) rex.Handle {
 			}
 		}
 
-		// parse `aliasDepsPrefix`
+		// parse `ResolveArgsPrefix`
 		if hasBuildVerPrefix {
 			a := strings.Split(reqPkg.Submodule, "/")
 			if len(a) > 1 && strings.HasPrefix(a[0], "X-") {
 				reqPkg.Submodule = strings.Join(a[1:], "/")
-				_alias, _deps, err := decodeAliasDepsPrefix(a[0])
+				_alias, _deps, _external, err := decodeResolveArgsPrefix(a[0])
 				if err != nil {
 					return throwErrorJS(ctx, err)
 				}
@@ -458,11 +467,14 @@ func query(devMode bool) rex.Handle {
 						deps = append(deps, p)
 					}
 				}
+				for _, p := range _external {
+					external.Add(p)
+				}
 			}
 		}
 
 		// fix alias and deps
-		alias, deps = fixAliasDeps(alias, deps, reqPkg.Name)
+		alias, deps = fixResolveArgs(alias, deps, reqPkg.Name)
 
 		// check whether it is `bare` mode
 		if hasBuildVerPrefix && endsWith(pathname, ".js") {
@@ -508,6 +520,7 @@ func query(devMode bool) rex.Handle {
 				Pkg:          *reqPkg,
 				Alias:        alias,
 				Deps:         deps,
+				External:     external,
 				Target:       "types",
 				stage:        "-",
 			}
@@ -518,7 +531,7 @@ func query(devMode bool) rex.Handle {
 					buildVersion,
 					reqPkg.Name,
 					reqPkg.Version,
-					encodeAliasDepsPrefix(alias, deps),
+					encodeResolveArgsPrefix(alias, deps, external),
 				), reqPkg.Submodule)
 				if strings.HasSuffix(savePath, "~.d.ts") {
 					savePath = strings.TrimSuffix(savePath, "~.d.ts")
@@ -569,6 +582,7 @@ func query(devMode bool) rex.Handle {
 			Pkg:               *reqPkg,
 			Alias:             alias,
 			Deps:              deps,
+			External:          external,
 			Target:            target,
 			DevMode:           isDev,
 			BundleMode:        isBundleMode || isWorker,

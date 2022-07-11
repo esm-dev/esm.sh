@@ -179,12 +179,12 @@ func cron(d time.Duration, task func()) {
 	}
 }
 
-func fixAliasDeps(alias map[string]string, deps PkgSlice, pkgName string) (map[string]string, PkgSlice) {
+func fixResolveArgs(alias map[string]string, deps PkgSlice, pkgName string) (map[string]string, PkgSlice) {
 	_alias := map[string]string{}
-	_pkgs := PkgSlice{}
+	_deps := PkgSlice{}
 	switch pkgName {
 	case "react", "react-dom", "preact", "vue":
-		return _alias, _pkgs
+		return _alias, _deps
 	}
 	for k, v := range alias {
 		if pkgName != v && !strings.HasPrefix(v, pkgName+"/") {
@@ -193,44 +193,42 @@ func fixAliasDeps(alias map[string]string, deps PkgSlice, pkgName string) (map[s
 	}
 	for _, pkg := range deps {
 		if pkg.Name != pkgName {
-			_pkgs = append(_pkgs, pkg)
+			_deps = append(_deps, pkg)
 		}
 	}
-	return _alias, _pkgs
+	return _alias, _deps
 }
 
-func decodeAliasDepsPrefix(raw string) (alias map[string]string, deps PkgSlice, err error) {
+func decodeResolveArgsPrefix(raw string) (alias map[string]string, deps PkgSlice, external []string, err error) {
 	s, err := atobUrl(strings.TrimPrefix(strings.TrimSuffix(raw, "/"), "X-"))
 	if err == nil {
 		for _, p := range strings.Split(s, "\n") {
 			if strings.HasPrefix(p, "a/") || strings.HasPrefix(p, "alias:") {
 				alias = map[string]string{}
 				for _, p := range strings.Split(strings.TrimPrefix(strings.TrimPrefix(p, "a/"), "alias:"), ",") {
-					p = strings.TrimSpace(p)
-					if p != "" {
-						name, to := utils.SplitByFirstByte(p, ':')
-						name = strings.TrimSpace(name)
-						to = strings.TrimSpace(to)
-						if name != "" && to != "" {
-							alias[name] = to
-						}
+					name, to := utils.SplitByFirstByte(p, ':')
+					name = strings.TrimSpace(name)
+					to = strings.TrimSpace(to)
+					if name != "" && to != "" {
+						alias[name] = to
 					}
 				}
 			} else if strings.HasPrefix(p, "d/") || strings.HasPrefix(p, "deps:") {
 				for _, p := range strings.Split(strings.TrimPrefix(strings.TrimPrefix(p, "d/"), "deps:"), ",") {
-					p = strings.TrimSpace(p)
-					if p != "" {
-						m, _, err := parsePkg(p)
-						if err != nil {
-							if strings.HasSuffix(err.Error(), "not found") {
-								continue
-							}
-							return nil, nil, err
+					m, _, err := parsePkg(p)
+					if err != nil {
+						if strings.HasSuffix(err.Error(), "not found") {
+							continue
 						}
-						if !deps.Has(m.Name) {
-							deps = append(deps, *m)
-						}
+						return nil, nil, nil, err
 					}
+					if !deps.Has(m.Name) {
+						deps = append(deps, *m)
+					}
+				}
+			} else if strings.HasPrefix(p, "e/") {
+				for _, name := range strings.Split(strings.TrimPrefix(p, "e/"), ",") {
+					external = append(external, name)
 				}
 			}
 		}
@@ -238,7 +236,7 @@ func decodeAliasDepsPrefix(raw string) (alias map[string]string, deps PkgSlice, 
 	return
 }
 
-func encodeAliasDepsPrefix(alias map[string]string, deps PkgSlice) string {
+func encodeResolveArgsPrefix(alias map[string]string, deps PkgSlice, external *stringSet) string {
 	args := []string{}
 	if len(alias) > 0 {
 		var ss sort.StringSlice
@@ -255,6 +253,14 @@ func encodeAliasDepsPrefix(alias map[string]string, deps PkgSlice) string {
 		}
 		ss.Sort()
 		args = append(args, fmt.Sprintf("d/%s", strings.Join(ss, ",")))
+	}
+	if external.Size() > 0 {
+		var ss sort.StringSlice
+		for _, name := range external.Values() {
+			ss = append(ss, name)
+		}
+		ss.Sort()
+		args = append(args, fmt.Sprintf("e/%s", strings.Join(ss, ",")))
 	}
 	if len(args) > 0 {
 		return fmt.Sprintf("X-%s/", btoaUrl(strings.Join(args, "\n")))

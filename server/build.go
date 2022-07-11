@@ -21,17 +21,18 @@ import (
 )
 
 type BuildTask struct {
-	CdnOrigin         string            `json:"cdnOrigin"`
-	BuildVersion      int               `json:"buildVersion"`
-	Pkg               Pkg               `json:"pkg"`
-	Alias             map[string]string `json:"alias"`
-	Deps              PkgSlice          `json:"deps"`
-	Target            string            `json:"target"`
-	DevMode           bool              `json:"dev"`
-	BundleMode        bool              `json:"bundle"`
-	NoRequire         bool              `json:"noRequire"`
-	KeepNames         bool              `json:"keepNames"`
-	IgnoreAnnotations bool              `json:"ignoreAnnotations"`
+	CdnOrigin         string
+	BuildVersion      int
+	Pkg               Pkg
+	Alias             map[string]string
+	Deps              PkgSlice
+	External          *stringSet
+	Target            string
+	DevMode           bool
+	BundleMode        bool
+	NoRequire         bool
+	KeepNames         bool
+	IgnoreAnnotations bool
 
 	// state
 	id    string
@@ -72,7 +73,7 @@ func (task *BuildTask) ID() string {
 		task.BuildVersion,
 		pkg.Name,
 		pkg.Version,
-		encodeAliasDepsPrefix(task.Alias, task.Deps),
+		encodeResolveArgsPrefix(task.Alias, task.Deps, task.External),
 		task.Target,
 		name,
 	)
@@ -224,7 +225,7 @@ func (task *BuildTask) build(tracing *stringSet) (esm *ModuleMeta, err error) {
 		"global.require.resolve":      "__rResolve$",
 		"global.process.env.NODE_ENV": fmt.Sprintf(`"%s"`, nodeEnv),
 	}
-	external := newStringSet()
+	externalDeps := newStringSet()
 	extraExternal := newStringSet()
 	esmResolverPlugin := api.Plugin{
 		Name: "esm.sh-resolver",
@@ -236,10 +237,17 @@ func (task *BuildTask) build(tracing *stringSet) (esm *ModuleMeta, err error) {
 						return api.OnResolveResult{External: true}, nil
 					}
 
+					// strip the tailing slash
 					specifier := strings.TrimSuffix(args.Path, "/")
 
 					// resolve nodejs builtin modules like `node:path`
 					specifier = strings.TrimPrefix(specifier, "node:")
+
+					// use `?external` query
+					if task.External.Has(specifier) {
+						externalDeps.Add(specifier)
+						return api.OnResolveResult{Path: "__ESM_SH_EXTERNAL:" + specifier, External: true}, nil
+					}
 
 					// resolve `?alias` query
 					if len(task.Alias) > 0 {
@@ -300,7 +308,7 @@ func (task *BuildTask) build(tracing *stringSet) (esm *ModuleMeta, err error) {
 												if url == task.Pkg.ImportPath() {
 													return api.OnResolveResult{}, nil
 												}
-												external.Add(url)
+												externalDeps.Add(url)
 												return api.OnResolveResult{Path: "__ESM_SH_EXTERNAL:" + url, External: true}, nil
 											}
 										}
@@ -335,7 +343,7 @@ func (task *BuildTask) build(tracing *stringSet) (esm *ModuleMeta, err error) {
 						fullFilepath := filepath.Join(dirpath, specifier)
 						// convert: full filepath --> package name + submodule path
 						specifier = strings.TrimPrefix(fullFilepath, filepath.Join(task.wd, "node_modules")+"/")
-						external.Add(specifier)
+						externalDeps.Add(specifier)
 						return api.OnResolveResult{Path: "__ESM_SH_EXTERNAL:" + specifier, External: true}, nil
 					}
 
@@ -345,7 +353,7 @@ func (task *BuildTask) build(tracing *stringSet) (esm *ModuleMeta, err error) {
 					}
 
 					// dynamic external
-					external.Add(specifier)
+					externalDeps.Add(specifier)
 					return api.OnResolveResult{Path: "__ESM_SH_EXTERNAL:" + specifier, External: true}, nil
 				},
 			)
@@ -401,7 +409,7 @@ esbuild:
 			name := strings.Split(msg, "\"")[1]
 			if !extraExternal.Has(name) {
 				extraExternal.Add(name)
-				external.Add(name)
+				externalDeps.Add(name)
 				goto esbuild
 			}
 		} else if strings.HasPrefix(msg, "No matching export in \"") && strings.Contains(msg, "for import \"default\"") {
@@ -437,10 +445,10 @@ esbuild:
 			}
 
 			// replace external imports/requires
-			for _, name := range external.Values() {
+			for _, name := range externalDeps.Values() {
 				var importPath string
 				// remote imports
-				if isRemoteImport(name) {
+				if isRemoteImport(name) || task.External.Has(name) {
 					importPath = name
 				}
 				// is sub-module
@@ -457,6 +465,7 @@ esbuild:
 						BuildVersion: task.BuildVersion,
 						Pkg:          subPkg,
 						Alias:        task.Alias,
+						External:     task.External,
 						Deps:         task.Deps,
 						Target:       task.Target,
 						DevMode:      task.DevMode,
@@ -465,7 +474,7 @@ esbuild:
 					if err != nil {
 						return
 					}
-					importPath = task.getImportPath(subPkg, encodeAliasDepsPrefix(task.Alias, task.Deps))
+					importPath = task.getImportPath(subPkg, encodeResolveArgsPrefix(task.Alias, task.Deps, task.External))
 				}
 				// is builtin `buffer` module
 				if importPath == "" && name == "buffer" {
@@ -525,11 +534,12 @@ esbuild:
 							if name != dep.Name {
 								submodule = strings.TrimPrefix(name, dep.Name+"/")
 							}
+							alias, deps := fixResolveArgs(task.Alias, task.Deps, dep.Name)
 							importPath = task.getImportPath(Pkg{
 								Name:      dep.Name,
 								Version:   dep.Version,
 								Submodule: submodule,
-							}, encodeAliasDepsPrefix(fixAliasDeps(task.Alias, task.Deps, dep.Name)))
+							}, encodeResolveArgsPrefix(alias, deps, task.External))
 							break
 						}
 					}
@@ -565,6 +575,7 @@ esbuild:
 						BuildVersion: task.BuildVersion,
 						Pkg:          pkg,
 						Alias:        task.Alias,
+						External:     task.External,
 						Deps:         task.Deps,
 						Target:       task.Target,
 						DevMode:      task.DevMode,
@@ -575,7 +586,7 @@ esbuild:
 						buildQueue.Add(t, "")
 					}
 
-					importPath = task.getImportPath(pkg, encodeAliasDepsPrefix(task.Alias, task.Deps))
+					importPath = task.getImportPath(pkg, encodeResolveArgsPrefix(task.Alias, task.Deps, task.External))
 				}
 				if importPath == "" {
 					err = fmt.Errorf("Could not resolve \"%s\" (Imported by \"%s\")", name, task.Pkg.Name)
@@ -784,11 +795,11 @@ func (task *BuildTask) storeToDB(esm *ModuleMeta) {
 func (task *BuildTask) checkDTS(esm *ModuleMeta, npm *NpmPackage) {
 	name := task.Pkg.Name
 	submodule := task.Pkg.Submodule
-	aliasDepsPrefix := encodeAliasDepsPrefix(task.Alias, task.Deps)
+	ResolveArgsPrefix := encodeResolveArgsPrefix(task.Alias, task.Deps, task.External)
 
 	var dts string
 	if npm.Types != "" {
-		dts = toTypesPath(task.wd, npm, "", aliasDepsPrefix, submodule)
+		dts = toTypesPath(task.wd, npm, "", ResolveArgsPrefix, submodule)
 	} else if !strings.HasPrefix(name, "@types/") {
 		versions := []string{"latest"}
 		versionParts := strings.Split(task.Pkg.Version, ".")
@@ -808,7 +819,7 @@ func (task *BuildTask) checkDTS(esm *ModuleMeta, npm *NpmPackage) {
 		for _, version := range versions {
 			p, _, _, err := getPackageInfo(task.wd, typesPkgName, version)
 			if err == nil {
-				dts = toTypesPath(task.wd, &p, version, aliasDepsPrefix, submodule)
+				dts = toTypesPath(task.wd, &p, version, ResolveArgsPrefix, submodule)
 				break
 			}
 		}

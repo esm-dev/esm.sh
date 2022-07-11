@@ -5,14 +5,16 @@ import (
 )
 
 func TestAliasDepsPrefix(t *testing.T) {
-	prefix := encodeAliasDepsPrefix(map[string]string{"a": "b"}, PkgSlice{
+	external := newStringSet()
+	external.Add("foo")
+	prefix := encodeResolveArgsPrefix(map[string]string{"a": "b"}, PkgSlice{
 		Pkg{Name: "b", Version: "1.0.0"},
 		Pkg{Name: "d", Version: "1.0.0"},
 		Pkg{Name: "c", Version: "1.0.0"},
-	})
-	a, d, e := decodeAliasDepsPrefix(prefix)
-	if e != nil {
-		t.Fatal(e)
+	}, external)
+	a, d, e, err := decodeResolveArgsPrefix(prefix)
+	if err != nil {
+		t.Fatal(err)
 	}
 	if len(a) != 1 || a["a"] != "b" {
 		t.Fatal("invalid alias")
@@ -20,5 +22,8 @@ func TestAliasDepsPrefix(t *testing.T) {
 	if len(d) != 3 {
 		t.Fatal("invalid deps")
 	}
-	t.Log(a, d)
+	if len(e) != 1 {
+		t.Fatal("invalid external")
+	}
+	t.Log(a, d, e)
 }

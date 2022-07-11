@@ -33,7 +33,7 @@ or import non-module(js) files:
 import "https://esm.sh/react/package.json" assert { type: "json" }
 ```
 
-You can also use the `?path` to specify the `submodule`, this is friendly for **import maps**:
+You can also use the `?path` to specify the `submodule`, this is friendly for ****import maps****:
 
 ```json
 {
@@ -64,7 +64,7 @@ import React from "https://esm.sh/react?dev"
 
 The `?dev` mode builds modules with `process.env.NODE_ENV` equals to `development`, that is useful to build modules like **React** to allow you to get more development warn/error details.
 
-### Specify external dependencies
+### Specify dependencies
 
 ```javascript
 import React from "https://esm.sh/react@16.14.0"
@@ -72,6 +72,20 @@ import useSWR from "https://esm.sh/swr?deps=react@16.14.0"
 ```
 
 By default, esm.sh rewrites import specifier based on the package's dependency statement. To specify version of dependencies, you can use the `?deps=PACKAGE@VERSION` query. You can separate multiple dependencies with commas: `?deps=react@16.14.0,react-dom@16.14.0`.
+
+### Specify external
+
+```jsonc
+// import_map.json
+{
+  "imports": {
+    "preact": "https://esm.sh/preact@10.7.2",
+    "preact-render-to-string": "https://esm.sh/preact-render-to-string@5.2.0&external=preact",
+  }
+}
+```
+
+You also can use the `?external=PACKAGE` query to specify external dependencies. Then you need to use **import maps** to specify the finally ESM import path.
 
 ### Aliasing dependencies
 
