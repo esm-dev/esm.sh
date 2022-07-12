@@ -73,10 +73,9 @@ import useSWR from "https://esm.sh/swr?deps=react@16.14.0"
 
 By default, esm.sh rewrites import specifier based on the package's dependency statement. To specify version of dependencies, you can use the `?deps=PACKAGE@VERSION` query. You can separate multiple dependencies with commas: `?deps=react@16.14.0,react-dom@16.14.0`.
 
-### Specify external
+### Specify external dependencies
 
-```jsonc
-// import_map.json
+```json
 {
   "imports": {
     "preact": "https://esm.sh/preact@10.7.2",
@@ -85,7 +84,7 @@ By default, esm.sh rewrites import specifier based on the package's dependency s
 }
 ```
 
-You also can use the `?external=PACKAGE` query to specify external dependencies. Then you need to use **import maps** to specify the finally ESM import path.
+You can use the `?external=PACKAGE` query to specify external dependencies. These dependencies will not be bundled with the code. You can then use [**import maps**](https://github.com/WICG/import-maps) to specify a different location for the package.
 
 ### Aliasing dependencies
 
