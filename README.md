@@ -84,7 +84,7 @@ By default, esm.sh rewrites import specifier based on the package's dependency s
 }
 ```
 
-You can use the `?external=PACKAGE` query to specify external dependencies. These dependencies will not be bundled with the code. You can then use [**import maps**](https://github.com/WICG/import-maps) to specify a different location for the package.
+You can use the `?external=PACKAGE` query to specify external dependencies. These dependencies will not be resolved with the code. You need to use [**import maps**](https://github.com/WICG/import-maps) to specify the location for these dependencies.
 
 ### Aliasing dependencies
 
