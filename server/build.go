@@ -33,6 +33,7 @@ type BuildTask struct {
 	NoRequire         bool
 	KeepNames         bool
 	IgnoreAnnotations bool
+	Sourcemap         bool
 
 	// state
 	id    string
@@ -60,6 +61,9 @@ func (task *BuildTask) ID() string {
 	}
 	if task.IgnoreAnnotations {
 		name += ".ia"
+	}
+	if task.Sourcemap {
+		name += ".sm"
 	}
 	if task.DevMode {
 		name += ".development"
@@ -389,6 +393,9 @@ esbuild:
 		options.Platform = api.PlatformNode
 	} else {
 		options.Define = define
+	}
+	if (task.Sourcemap) {
+		options.Sourcemap = 1
 	}
 	if entryPoint != "" {
 		options.EntryPoints = []string{entryPoint}
