@@ -12,7 +12,6 @@ import (
 	"github.com/ije/esbuild-internal/js_ast"
 	"github.com/ije/esbuild-internal/js_parser"
 	"github.com/ije/esbuild-internal/logger"
-	"github.com/ije/esbuild-internal/test"
 	"github.com/ije/gox/utils"
 )
 
@@ -307,7 +306,13 @@ func checkESM(wd string, packageName string, moduleSpecifier string) (resolveNam
 		return
 	}
 	log := logger.NewDeferLog(logger.DeferLogNoVerboseOrDebug)
-	ast, pass := js_parser.Parse(log, test.SourceForTest(string(data)), js_parser.Options{})
+	ast, pass := js_parser.Parse(log, logger.Source{
+		Index:          0,
+		KeyPath:        logger.Path{Text: "<stdin>"},
+		PrettyPath:     "<stdin>",
+		Contents:       string(data),
+		IdentifierName: "stdin",
+	}, js_parser.Options{})
 	if pass {
 		esm := ast.ExportsKind == js_ast.ExportsESM
 		if !esm {
