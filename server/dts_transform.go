@@ -36,13 +36,9 @@ func (task *BuildTask) copyDTS(dts string, buildVersion int, aliasDepsPrefix str
 		return
 	}
 
-	a := strings.Split(utils.CleanPath(dts)[1:], "/")
-	versionedName := a[0]
-	subPath := a[1:]
-	if strings.HasPrefix(versionedName, "@") {
-		versionedName = strings.Join(a[0:2], "/")
-		subPath = a[2:]
-	}
+	pkgNameInfo := parsePkgNameInfo(utils.CleanPath(dts)[1:])
+	versionedName := pkgNameInfo.Fullname
+	subPath := strings.Split(pkgNameInfo.Submodule, "/")
 	pkgName, _ := utils.SplitByLastByte(versionedName, '@')
 	if pkgName == "" {
 		pkgName = versionedName
@@ -172,12 +168,8 @@ func (task *BuildTask) copyDTS(dts string, buildVersion int, aliasDepsPrefix str
 				importPath = "node-fetch-native"
 			}
 
-			parts := strings.Split(importPath, "/")
-			depTypePkgName := parts[0]
-			if strings.HasPrefix(depTypePkgName, "@") && len(parts) >= 2 {
-				depTypePkgName = strings.Join(parts[:2], "/")
-			}
-
+			pkgNameInfo := parsePkgNameInfo(importPath)
+			depTypePkgName := pkgNameInfo.Fullname
 			versions := []string{"latest"}
 			if v, ok := taskPkgInfo.Dependencies[depTypePkgName]; ok {
 				versions = []string{v, "latest"}
@@ -284,19 +276,13 @@ func (task *BuildTask) copyDTS(dts string, buildVersion int, aliasDepsPrefix str
 				}
 			}
 			if b.Len() > 0 {
-				slice := strings.Split(name, "/")
+				pkgNameInfo := parsePkgNameInfo(name)
+				name = pkgNameInfo.Fullname
 				subpath := ""
-				if l := len(slice); strings.HasPrefix(name, "@") && l > 1 {
-					name = strings.Join(slice[:2], "/")
-					if l > 2 {
-						subpath = "/" + strings.Join(slice[2:], "/")
-					}
-				} else {
-					name = slice[0]
-					if l > 1 {
-						subpath = "/" + strings.Join(slice[1:], "/")
-					}
+				if pkgNameInfo.Submodule != "" {
+					subpath = "/" + pkgNameInfo.Submodule
 				}
+
 				fmt.Fprintf(buf, `%sdeclare module "%s/%s@*%s" `, "\n", cdnOriginAndBasePath, name, subpath)
 				buf.WriteString(strings.TrimSpace(b.String()))
 			}

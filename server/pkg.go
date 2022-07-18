@@ -13,19 +13,43 @@ type Pkg struct {
 	Submodule string `json:"submodule"`
 }
 
-func parsePkg(pathname string) (*Pkg, bool, error) {
+type PkgNameInfo struct {
+	Fullname  string `json:"fullname"`
+	Name      string `json:"name"`
+	Scope     string `json:"scope"`
+	Submodule string `json:"submodule"`
+}
+
+func parsePkgNameInfo(pathname string) *PkgNameInfo {
 	a := strings.Split(strings.Trim(pathname, "/"), "/")
 	for i, s := range a {
 		a[i] = strings.TrimSpace(s)
 	}
+
 	scope := ""
 	packageName := a[0]
 	submodule := strings.Join(a[1:], "/")
+	fullname := a[0]
 	if strings.HasPrefix(packageName, "@") && len(a) > 1 {
 		scope = packageName[1:]
 		packageName = a[1]
 		submodule = strings.Join(a[2:], "/")
+		fullname = "@" + scope + "/" + packageName
 	}
+
+	return &PkgNameInfo{
+		Scope:     scope,
+		Name:      packageName,
+		Submodule: submodule,
+		Fullname:  fullname,
+	}
+}
+
+func parsePkg(pathname string) (*Pkg, bool, error) {
+	pkgNameInfo := parsePkgNameInfo(pathname)
+	scope := pkgNameInfo.Scope
+	packageName := pkgNameInfo.Name
+	submodule := pkgNameInfo.Submodule
 
 	// ref https://github.com/npm/validate-npm-package-name
 	if scope != "" && (len(scope) > 214 || !npmNaming.Is(scope)) {
