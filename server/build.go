@@ -262,13 +262,9 @@ func (task *BuildTask) build(tracing *stringSet) (esm *ModuleMeta, err error) {
 
 					// bundles all dependencies in `bundle` mode, apart from peer dependencies
 					if task.BundleMode && !extraExternal.Has(specifier) {
-						a := strings.Split(specifier, "/")
-						pkgName := a[0]
-						if len(a) > 1 && specifier[0] == '@' {
-							pkgName = a[1]
-						}
-						if !builtInNodeModules[pkgName] {
-							_, ok := npm.PeerDependencies[pkgName]
+						pkgNameInfo := parsePkgNameInfo(specifier)
+						if !builtInNodeModules[pkgNameInfo.Name] {
+							_, ok := npm.PeerDependencies[pkgNameInfo.Name]
 							if !ok {
 								return api.OnResolveResult{}, nil
 							}
@@ -394,7 +390,7 @@ esbuild:
 	} else {
 		options.Define = define
 	}
-	if (task.Sourcemap) {
+	if task.Sourcemap {
 		options.Sourcemap = 1
 	}
 	if entryPoint != "" {
@@ -561,9 +557,10 @@ esbuild:
 				// common npm dependency
 				if importPath == "" {
 					version := "latest"
-					if v, ok := npm.Dependencies[name]; ok {
+					pkgNameInfo := parsePkgNameInfo(name)
+					if v, ok := npm.Dependencies[pkgNameInfo.Name]; ok {
 						version = v
-					} else if v, ok := npm.PeerDependencies[name]; ok {
+					} else if v, ok := npm.PeerDependencies[pkgNameInfo.Name]; ok {
 						version = v
 					}
 					p, submodule, _, e := getPackageInfo(task.wd, name, version)
