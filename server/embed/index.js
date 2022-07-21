@@ -13,7 +13,12 @@ export function render(md) {
   mainEl.querySelectorAll('code.language-bash').forEach(block => {
     block.innerHTML = block.innerHTML.replace(/(^|\n)\$ /g, '$1')
   })
-  
+
+  const fragment = document.getElementById(location.hash.slice(1))
+  if (fragment) {
+    fragment.scrollIntoView()
+  }
+
   hljs.registerLanguage('javascript', javascript)
   hljs.registerLanguage('json', json)
   hljs.registerLanguage('xml', xml)
