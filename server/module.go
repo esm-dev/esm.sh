@@ -305,7 +305,7 @@ func checkESM(wd string, packageName string, moduleSpecifier string) (resolveNam
 	if err != nil {
 		return
 	}
-	log := logger.NewDeferLog(logger.DeferLogNoVerboseOrDebug)
+	log := logger.NewDeferLog(logger.DeferLogNoVerboseOrDebug, nil)
 	ast, pass := js_parser.Parse(log, logger.Source{
 		Index:          0,
 		KeyPath:        logger.Path{Text: "<stdin>"},
