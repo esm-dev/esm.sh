@@ -105,7 +105,7 @@ func initModule(wd string, pkg Pkg, target string, isDev bool) (esm *ModuleMeta,
 								    }
 								  }
 								*/
-								resolvePackageExports(npm, defines, target, isDev)
+								resolvePackageExports(npm, defines, target, isDev, npm.Type)
 								resolved = true
 								break
 							} else if strings.HasSuffix(name, "/*") && strings.HasPrefix("./"+pkg.Submodule, strings.TrimSuffix(name, "*")) {
@@ -133,7 +133,7 @@ func initModule(wd string, pkg Pkg, target string, isDev bool) (esm *ModuleMeta,
 									hasDefines = true
 								}
 								if hasDefines {
-									resolvePackageExports(npm, defines, target, isDev)
+									resolvePackageExports(npm, defines, target, isDev, npm.Type)
 									resolved = true
 								}
 							}
