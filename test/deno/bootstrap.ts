@@ -6,7 +6,7 @@ startEsmServer(async (p) => {
     if (testDir) {
       await runTest(testDir, p);
     } else {
-      for await (const entry of Deno.readDir("test/deno")) {
+      for await (const entry of Deno.readDir("./test/deno")) {
         if (entry.isDirectory) {
           await runTest(entry.name, p);
         }
@@ -42,7 +42,7 @@ async function startEsmServer(onReady: (p: any) => void) {
   await p.status();
 }
 
-async function runTest(name: string, p: any, retryTimes = 0) {
+async function runTest(name: string, p: any, retry?: boolean) {
   const cmd = [
     Deno.execPath(),
     "test",
@@ -61,10 +61,10 @@ async function runTest(name: string, p: any, retryTimes = 0) {
 
   const { code, success } = await run(...cmd);
   if (!success) {
-    if (retryTimes < 3) {
+    if (!retry) {
       console.log("something wrong, retry...");
       await new Promise((resolve) => setTimeout(resolve, 100));
-      await runTest(name, p, retryTimes + 1);
+      await runTest(name, p, true);
     } else {
       p.kill("SIGINT");
       Deno.exit(code);
