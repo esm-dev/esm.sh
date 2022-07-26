@@ -437,8 +437,11 @@ func resolvePackageExports(p *NpmPackage, exports interface{}, target string, is
 		if target == "deno" {
 			names = []string{"deno", "es2015", "module", "import", "worker", "browser"}
 		}
-		if isDev {
-			names = append([]string{"development"}, names...)
+		if p.Type == "module" {
+			if isDev {
+				names = append([]string{"development"}, names...)
+			}
+			names = append(names, "default")
 		}
 		// support solid.js ssr in deno
 		if p.Name == "solid-js/web" && target == "deno" {
