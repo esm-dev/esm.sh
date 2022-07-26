@@ -1,4 +1,4 @@
-import queue from '../../../async/queue'
+import queue from '/async/queue'
 
 /*
   test example:
@@ -20,7 +20,6 @@ import queue from '../../../async/queue'
 */
 
 const q = queue(async ({ imports, testFn, $li, $status }) => {
-  const domain = localStorage.importDomain || '../../..'
   const $span = document.createElement('span')
   const $t = document.createElement('em')
   const start = Date.now()
@@ -30,14 +29,14 @@ const q = queue(async ({ imports, testFn, $li, $status }) => {
 
   try {
     const modules = Array.isArray(imports) ? await Promise.all(imports.map(n => {
-      return import(`${domain}/${n}${n.includes('?') ? '&' : '?'}dev`)
+      return import(`/${n}`)
     })) : []
-    const module = typeof imports === 'string' ? await import(`${domain}/${imports}${imports.includes('?') ? '&' : '?'}dev`) : undefined
+    const module = typeof imports === 'string' ? await import(`/${imports}`) : undefined
 
     try {
       await testFn({ $span, modules, module, ok: () => $status.innerText = '✅' })
     } catch (err) {
-      console.error(err.stack)  
+      console.error(err.stack)
       $status.innerText = `❌ ${err.message}`;
     }
 
@@ -413,7 +412,7 @@ test('vue@3', async (t) => {
 
 test(['rxjs@7', 'rxjs@7/operators'], async (t) => {
   const [{ fromEvent }, { throttleTime, scan }] = t.modules
- 
+
   t.$span.innerText = '⏱ 0'
   t.$span.style.cursor = 'pointer'
   t.$span.style.userSelect = 'none'
