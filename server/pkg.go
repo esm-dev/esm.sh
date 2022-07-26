@@ -15,8 +15,8 @@ type Pkg struct {
 
 type PkgNameInfo struct {
 	Fullname  string `json:"fullname"`
-	Name      string `json:"name"`
 	Scope     string `json:"scope"`
+	Name      string `json:"name"`
 	Submodule string `json:"submodule"`
 }
 

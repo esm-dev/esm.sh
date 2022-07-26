@@ -224,7 +224,6 @@ CheckNodejs:
 	}
 	var output []byte
 	if npmRegistry == "" {
-		log.Infof("try to read npm registry config: npm config get registry")
 		output, err := exec.Command("npm", "config", "get", "registry").CombinedOutput()
 		if err == nil {
 			node.npmRegistry = strings.TrimRight(strings.TrimSpace(string(output)), "/") + "/"
@@ -232,7 +231,6 @@ CheckNodejs:
 	} else {
 		node.npmRegistry = npmRegistry
 	}
-	log.Infof("use npm registry %s", node.npmRegistry)
 
 CheckYarn:
 	output, err = exec.Command("yarn", "-v").CombinedOutput()
@@ -380,6 +378,9 @@ func fetchPackageInfo(name string, version string) (info NpmPackage, err error) 
 					i++
 				}
 			}
+			if i == 0 {
+				return fetchPackageInfo(name, "latest")
+			}
 			if i > 0 {
 				vs = vs[:i]
 				if i > 1 {
@@ -391,7 +392,7 @@ func fetchPackageInfo(name string, version string) (info NpmPackage, err error) 
 	}
 
 	if info.Version == "" {
-		err = fmt.Errorf("npm: version '%s' not found", version)
+		err = fmt.Errorf("npm: version '%s' of %s not found", version, name)
 		return
 	}
 

@@ -192,13 +192,22 @@ func (task *BuildTask) build(tracing *stringSet) (esm *ModuleMeta, err error) {
 	if npm.Module == "" {
 		buf := bytes.NewBuffer(nil)
 		importPath := task.Pkg.ImportPath()
-		fmt.Fprintf(buf, `import $default from "%s";`, importPath)
 		fmt.Fprintf(buf, `import * as $module from "%s";`, importPath)
 		if len(esm.Exports) > 0 {
-			fmt.Fprintf(buf, `export const { %s } = $module;`, strings.Join(esm.Exports, ","))
+			var exports []string
+			for _, k := range esm.Exports {
+				if k == "__esModule" {
+					fmt.Fprintf(buf, "export const __esModule = true;")
+				} else {
+					exports = append(exports, k)
+				}
+			}
+			if len(exports) > 0 {
+				fmt.Fprintf(buf, `export const { %s } = $module;`, strings.Join(exports, ","))
+			}
 		}
 		fmt.Fprintf(buf, "const { default: $def, ...$rest } = $module;")
-		fmt.Fprintf(buf, "export default $default ?? $def ?? $rest;")
+		fmt.Fprintf(buf, "export default ($def !== undefined ? $def : $rest);")
 		input = &api.StdinOptions{
 			Contents:   buf.String(),
 			ResolveDir: task.wd,
@@ -558,9 +567,9 @@ esbuild:
 				if importPath == "" {
 					version := "latest"
 					pkgNameInfo := parsePkgNameInfo(name)
-					if v, ok := npm.Dependencies[pkgNameInfo.Name]; ok {
+					if v, ok := npm.Dependencies[pkgNameInfo.Fullname]; ok {
 						version = v
-					} else if v, ok := npm.PeerDependencies[pkgNameInfo.Name]; ok {
+					} else if v, ok := npm.PeerDependencies[pkgNameInfo.Fullname]; ok {
 						version = v
 					}
 					p, submodule, _, e := getPackageInfo(task.wd, name, version)
@@ -711,7 +720,7 @@ esbuild:
 								fmt.Fprintf(buf, `import * as __%s$$$ from "%s";`, identifier, importPath)
 								fmt.Fprintf(buf, `const __%s$ = Object.assign({ default: __%s$$ }, __%s$$$);%s`, identifier, identifier, identifier, eol)
 							case "__esModule":
-								fmt.Fprintf(buf, `import * as __%s$$ from "%s";const __%s$ = Object.assign({ __esModule: true }, __%s$$);%s`, identifier, importPath, identifier, identifier, eol)
+								fmt.Fprintf(buf, `import * as __%s$ from "%s";%s`, identifier, importPath, eol)
 							default:
 								fmt.Fprintf(buf, `import { %s as __%s$%s } from "%s";%s`, importName, identifier, importName, importPath, eol)
 							}
