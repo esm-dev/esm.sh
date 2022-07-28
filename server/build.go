@@ -93,6 +93,18 @@ func (task *BuildTask) getImportPath(pkg Pkg, prefix string) string {
 		name = pkg.Submodule
 	}
 	name = strings.TrimSuffix(name, ".js")
+	if task.NoRequire {
+		name += ".nr"
+	}
+	if task.KeepNames {
+		name += ".kn"
+	}
+	if task.IgnoreAnnotations {
+		name += ".ia"
+	}
+	if task.Sourcemap {
+		name += ".sm"
+	}
 	if task.DevMode {
 		name += ".development"
 	}
@@ -400,7 +412,7 @@ esbuild:
 		options.Define = define
 	}
 	if task.Sourcemap {
-		options.Sourcemap = 1
+		options.Sourcemap = api.SourceMapInline
 	}
 	if entryPoint != "" {
 		options.EntryPoints = []string{entryPoint}
@@ -472,15 +484,18 @@ esbuild:
 						Submodule: submodule,
 					}
 					subTask := &BuildTask{
-						wd:           task.wd, // use current wd to avoid reinstall
-						CdnOrigin:    task.CdnOrigin,
-						BuildVersion: task.BuildVersion,
-						Pkg:          subPkg,
-						Alias:        task.Alias,
-						External:     task.External,
-						Deps:         task.Deps,
-						Target:       task.Target,
-						DevMode:      task.DevMode,
+						wd:                task.wd, // use current wd to avoid reinstall
+						CdnOrigin:         task.CdnOrigin,
+						BuildVersion:      task.BuildVersion,
+						Pkg:               subPkg,
+						Alias:             task.Alias,
+						External:          task.External,
+						Deps:              task.Deps,
+						Target:            task.Target,
+						DevMode:           task.DevMode,
+						KeepNames:         task.KeepNames,
+						IgnoreAnnotations: task.IgnoreAnnotations,
+						Sourcemap:         task.Sourcemap,
 					}
 					subTask.build(tracing)
 					if err != nil {
@@ -584,14 +599,17 @@ esbuild:
 						Submodule: submodule,
 					}
 					t := &BuildTask{
-						CdnOrigin:    task.CdnOrigin,
-						BuildVersion: task.BuildVersion,
-						Pkg:          pkg,
-						Alias:        task.Alias,
-						External:     task.External,
-						Deps:         task.Deps,
-						Target:       task.Target,
-						DevMode:      task.DevMode,
+						CdnOrigin:         task.CdnOrigin,
+						BuildVersion:      task.BuildVersion,
+						Pkg:               pkg,
+						Alias:             task.Alias,
+						External:          task.External,
+						Deps:              task.Deps,
+						Target:            task.Target,
+						DevMode:           task.DevMode,
+						KeepNames:         task.KeepNames,
+						IgnoreAnnotations: task.IgnoreAnnotations,
+						Sourcemap:         task.Sourcemap,
 					}
 
 					_, _err := findModule(t.ID())
