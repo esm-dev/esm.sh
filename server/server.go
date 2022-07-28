@@ -64,7 +64,7 @@ func Serve(efs EmbedFS) {
 	)
 	flag.IntVar(&port, "port", 80, "http server port")
 	flag.IntVar(&httpsPort, "https-port", 0, "https(autotls) server port, default is disabled")
-	flag.StringVar(&basePath, "basepath", "", "base path")
+	flag.StringVar(&basePath, "base-path", "", "base path")
 	flag.BoolVar(&baseRedirect, "base-redirect", false, "http redrect for URLs not from basepath")
 	flag.StringVar(&etcDir, "etc-dir", ".esmd", "etc dir")
 	flag.StringVar(&cacheUrl, "cache", "", "cache config, default is 'memory:default'")
