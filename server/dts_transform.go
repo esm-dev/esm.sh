@@ -123,6 +123,10 @@ func (task *BuildTask) copyDTS(dts string, buildVersion int, aliasDepsPrefix str
 		switch importPath {
 		case "node-fetch":
 			importPath = "node-fetch-native"
+		case "estree":
+			importPath = "@types/estree"
+		case "estree-jsx":
+			importPath = "@types/estree-jsx"
 		case "unist":
 			importPath = "@types/unist"
 		}
