@@ -439,7 +439,7 @@ func query(unpkgOrigin string, devMode bool) rex.Handle {
 		isPined := ctx.Form.Has("pin")
 		isWorker := ctx.Form.Has("worker")
 		noCheck := ctx.Form.Has("no-check") || ctx.Form.Has("no-dts")
-		noRequire := ctx.Form.Has("no-require")
+		ignoreRequire := ctx.Form.Has("ignore-require") || ctx.Form.Has("no-require")
 		keepNames := ctx.Form.Has("keep-names")
 		ignoreAnnotations := ctx.Form.Has("ignore-annotations")
 		sourcemap := ctx.Form.Has("sourcemap")
@@ -505,7 +505,7 @@ func query(unpkgOrigin string, devMode bool) rex.Handle {
 					}
 					if endsWith(submodule, ".nr") {
 						submodule = strings.TrimSuffix(submodule, ".nr")
-						noRequire = true
+						ignoreRequire = true
 					}
 					pkgName := path.Base(reqPkg.Name)
 					if submodule == pkgName || (strings.HasSuffix(pkgName, ".js") && submodule+".js" == pkgName) {
@@ -591,7 +591,7 @@ func query(unpkgOrigin string, devMode bool) rex.Handle {
 			Target:            target,
 			DevMode:           isDev,
 			BundleMode:        isBundleMode || isWorker,
-			NoRequire:         noRequire,
+			IgnoreRequire:     ignoreRequire,
 			KeepNames:         keepNames,
 			IgnoreAnnotations: ignoreAnnotations,
 			Sourcemap:         sourcemap,

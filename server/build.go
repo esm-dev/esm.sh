@@ -30,12 +30,12 @@ type BuildTask struct {
 	Target            string
 	DevMode           bool
 	BundleMode        bool
-	NoRequire         bool
+	IgnoreRequire     bool
 	KeepNames         bool
 	IgnoreAnnotations bool
 	Sourcemap         bool
 
-	// state
+	// internal
 	id    string
 	wd    string
 	stage string
@@ -53,7 +53,7 @@ func (task *BuildTask) ID() string {
 		name = pkg.Submodule
 	}
 	name = strings.TrimSuffix(name, ".js")
-	if task.NoRequire {
+	if task.IgnoreRequire {
 		name += ".nr"
 	}
 	if task.KeepNames {
@@ -93,7 +93,7 @@ func (task *BuildTask) getImportPath(pkg Pkg, prefix string) string {
 		name = pkg.Submodule
 	}
 	name = strings.TrimSuffix(name, ".js")
-	if task.NoRequire {
+	if task.IgnoreRequire {
 		name += ".nr"
 	}
 	if task.KeepNames {
@@ -225,6 +225,9 @@ func (task *BuildTask) build(tracing *stringSet) (esm *ModuleMeta, err error) {
 			ResolveDir: task.wd,
 			Sourcefile: "mod.js",
 		}
+		// resolve `require()` of cjs module
+		task.IgnoreRequire = false
+		task.id = ""
 	} else {
 		entryPoint = path.Join(task.wd, "node_modules", npm.Name, npm.Module)
 	}
@@ -368,8 +371,8 @@ func (task *BuildTask) build(tracing *stringSet) (esm *ModuleMeta, err error) {
 						return api.OnResolveResult{Path: "__ESM_SH_EXTERNAL:" + specifier, External: true}, nil
 					}
 
-					// ignore `require()` of esm package
-					if task.NoRequire && (args.Kind == api.ResolveJSRequireCall || args.Kind == api.ResolveJSRequireResolve) {
+					// ignore `require()` of esm module
+					if task.IgnoreRequire && (args.Kind == api.ResolveJSRequireCall || args.Kind == api.ResolveJSRequireResolve) && npm.Module != "" {
 						return api.OnResolveResult{Path: specifier, External: true}, nil
 					}
 
