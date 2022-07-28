@@ -18,17 +18,13 @@ go run main.go --port=8080 --dev
 
 then you can import `React` from http://localhost:8080/react
 
-## Deploy to single machine
+## Deploy to remote server
 
 Please ensure the [supervisor](http://supervisord.org/) installed on your host machine.
 
 ```bash
 ./scripts/deploy.sh
 ```
-
-## Deploy to multiple machines
-
-_WIP_
 
 ## Deploy with Docker
 
