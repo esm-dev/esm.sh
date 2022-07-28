@@ -178,7 +178,7 @@ func Serve(efs EmbedFS) {
 		services := []string{"esm-node-services"}
 		for {
 			ctx, cancel := context.WithCancel(context.Background())
-			stopNS = cancel
+			stopNodeServices = cancel
 			err := startNodeServices(ctx, wd, services)
 			if err != nil && err.Error() != "signal: interrupt" {
 				log.Warnf("node services exit: %v", err)

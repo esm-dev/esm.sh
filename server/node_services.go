@@ -12,6 +12,7 @@ import (
 	"io/ioutil"
 	"os/exec"
 	"path"
+	"runtime"
 	"strconv"
 	"strings"
 	"sync"
@@ -20,6 +21,7 @@ import (
 )
 
 const nsApp = `
+	const queue = require('async/queue')
   const readline = require('readline')
   const rl = readline.createInterface({
     input: process.stdin,
@@ -30,6 +32,21 @@ const nsApp = `
     test: async input => ({ ...input })
   }
   const register = %s
+	const q = queue(async ({ service, invokeId, input }) => {
+		let output = null
+		if (typeof service === 'string' && service in services) {
+			try {
+				output = await services[service](input)
+			} catch(e) {
+				output = { error: e.message }
+			}
+		} else {
+			output = { error: 'service not found' }
+		}
+		process.stdout.write(invokeId)
+		process.stdout.write(JSON.stringify(output))
+		process.stdout.write('\n')
+	}, %d)
 
   for (const name of register) {
     Object.assign(services, require(name))
@@ -40,21 +57,9 @@ const nsApp = `
       try {
         const { service, invokeId, input } = JSON.parse(line)
         if (typeof invokeId === 'string') {
-          let output = null
-          if (typeof service === 'string' && service in services) {
-            try {
-              output = await services[service](input)
-            } catch(e) {
-              output = { error: e.message }
-            }
-          } else {
-            output = { error: 'service not found' }
-          }
-          process.stdout.write(invokeId)
-          process.stdout.write(JSON.stringify(output))
-          process.stdout.write('\n')
+					q.push({ service, invokeId, input })
         }
-      } catch(e) {}
+      } catch(_) {}
     }
   })
 
@@ -73,8 +78,8 @@ type NSTask struct {
 var nsTasks sync.Map
 var nsReady bool
 var nsInvokeIndex uint32 = 0
-var nsChannel = make(chan *NSTask, 4096)
-var stopNS = func() {}
+var nsChannel = make(chan *NSTask, 5120)
+var stopNodeServices = func() {}
 
 func newInvokeId() string {
 	i := atomic.AddUint32(&nsInvokeIndex, 1)
@@ -94,10 +99,11 @@ func invokeNodeService(serviceName string, input map[string]interface{}) []byte 
 	select {
 	case out := <-task.output:
 		return out
-	case <-time.After(30 * time.Second):
-		stopNS() // restart node service
+	case <-time.After(time.Minute):
+		log.Warn("restart node services since timeout")
+		stopNodeServices() // restart node service
 		nsTasks.Delete(task.invokeId)
-		return []byte(`{"error": "timeout"}`)
+		return []byte(`{"error": "ns timeout"}`)
 	}
 }
 
@@ -108,7 +114,7 @@ func startNodeServices(ctx context.Context, wd string, services []string) (err e
 
 	// install services
 	if len(services) > 0 {
-		cmd := exec.Command("yarn", append([]string{"add"}, services...)...)
+		cmd := exec.Command("yarn", append([]string{"add", "async"}, services...)...)
 		cmd.Dir = wd
 		var output []byte
 		output, err = cmd.CombinedOutput()
@@ -124,7 +130,7 @@ func startNodeServices(ctx context.Context, wd string, services []string) (err e
 	// create ns script
 	err = ioutil.WriteFile(
 		path.Join(wd, "ns.js"),
-		[]byte(fmt.Sprintf(nsApp, servicesInject)),
+		[]byte(fmt.Sprintf(nsApp, servicesInject, runtime.NumCPU())),
 		0644,
 	)
 	if err != nil {
@@ -250,7 +256,6 @@ func parseCJSModuleExports(buildDir string, importPath string, nodeEnv string) (
 		}
 	}
 	data := invokeNodeService("parseCjsExports", args)
-
 	err = json.Unmarshal(data, &ret)
 	return
 }

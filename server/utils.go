@@ -69,6 +69,15 @@ func (s *stringSet) Values() []string {
 	return a
 }
 
+func mapLen(m sync.Map) int {
+	n := 0
+	m.Range(func(key, value interface{}) bool {
+		n++
+		return true
+	})
+	return n
+}
+
 func identify(importPath string) string {
 	p := []byte(importPath)
 	for i, c := range p {
