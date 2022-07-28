@@ -1,5 +1,14 @@
 # Change Log
 
+## v88
+
+- Respect `exports.development` conditions in `package.json` (close [#375](https://github.com/ije/esm.sh/issues/375))
+- Fix `solid-js/web?target=deno` strip ssr functions
+- Fix `@types/node` types transforming (close [#363](https://github.com/ije/esm.sh/issues/363))
+- Fix `?external` doesn't support `.dts` files (close [#374](h`ttps://github.com/ije/esm.sh/issues/374))
+- Fix invalid export names of `keycode`, `vscode-oniguruma` & `lru_map` (close [#362](https://github.com/ije/esm.sh/issues/362), [#369](https://github.com/ije/esm.sh/issues/369))
+- Fix esm resolving before build (close [#377](https://github.com/ije/esm.sh/issues/377))
+
 ## v87
 
 - Support `?external` query, this will give you better user experience when you are using **import maps**.

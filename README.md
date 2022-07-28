@@ -122,7 +122,7 @@ Other supported options of [esbuild](https://esbuild.github.io/):
   ```javascript
   import React from "https://esm.sh/react?sourcemap"
   ```
-  
+
   This only supports the `inline` mode.
 
 ### Package CSS
@@ -179,7 +179,7 @@ import unescape from "https://esm.sh/lodash/unescape?no-dts"
 Since we update esm.sh server frequently, sometime we may break packages that work fine previously by mistake, the server will rebuild all modules when the patch pushed. To avoid this, you can **pin** the build version by the `?pin=BUILD_VERSON` query. This will give you an **immutable** cached module.
 
 ```javascript
-import React from "https://esm.sh/react@17.0.2?pin=v86"
+import React from "https://esm.sh/react@17.0.2?pin=v88"
 ```
 
 ## Global CDN
