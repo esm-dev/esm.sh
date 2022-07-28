@@ -223,12 +223,30 @@ type cjsExportsResult struct {
 	Error         string   `json:"error"`
 }
 
+var requireModeAllowList = []string{
+	"domhandler",
+	"he",
+	"lz-string",
+	"safe-buffer",
+	"stream-http",
+	"typescript",
+	"seedrandom",
+}
+
 func parseCJSModuleExports(buildDir string, importPath string, nodeEnv string) (ret cjsExportsResult, err error) {
-	data := invokeNodeService("parseCjsExports", map[string]interface{}{
+	args := map[string]interface{}{
 		"buildDir":   buildDir,
 		"importPath": importPath,
 		"nodeEnv":    nodeEnv,
-	})
+	}
+	/* workaround for edge cases that can't be parsed by cjsLexer correctly */
+	for _, name := range requireModeAllowList {
+		if importPath == name || strings.HasPrefix(importPath, name+"/") {
+			args["requireMode"] = 1
+			break
+		}
+	}
+	data := invokeNodeService("parseCjsExports", args)
 
 	err = json.Unmarshal(data, &ret)
 	return

@@ -1,6 +1,6 @@
 {
   "name": "esm-node-services",
-  "version": "0.7.0",
+  "version": "0.7.1",
   "description": "Node services for esm.sh",
   "main": "index.js",
   "scripts": {
