@@ -93,9 +93,6 @@ func (task *BuildTask) getImportPath(pkg Pkg, prefix string) string {
 		name = pkg.Submodule
 	}
 	name = strings.TrimSuffix(name, ".js")
-	if task.IgnoreRequire {
-		name += ".nr"
-	}
 	if task.KeepNames {
 		name += ".kn"
 	}
@@ -225,9 +222,6 @@ func (task *BuildTask) build(tracing *stringSet) (esm *ModuleMeta, err error) {
 			ResolveDir: task.wd,
 			Sourcefile: "mod.js",
 		}
-		// resolve `require()` of cjs module
-		task.IgnoreRequire = false
-		task.id = ""
 	} else {
 		entryPoint = path.Join(task.wd, "node_modules", npm.Name, npm.Module)
 	}
