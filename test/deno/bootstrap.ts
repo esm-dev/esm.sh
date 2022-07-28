@@ -22,22 +22,21 @@ startEsmServer(async (p) => {
 async function startEsmServer(onReady: (p: any) => void) {
   await run("go", "build", "-o", "esmd", "main.go");
   const p = Deno.run({
-    cmd: ["./esmd", "-dev", "-port", "8080"],
-    stdout: "piped",
+    cmd: ["./esmd", "--port", "8080"],
+    stdout: "inherit",
     stderr: "inherit",
   });
-  let output = "";
-  const buf = new Uint8Array(32);
-  for (let index = 0; index < 1000; index++) {
-    const n = await p.stdout?.read(buf);
-    if (!n) {
-      break;
-    }
-    output += new TextDecoder().decode(buf.slice(0, n));
-    if (output.includes("node services process started")) {
-      onReady(p);
-      break;
-    }
+  while (true) {
+    try {
+      await new Promise((resolve) => setTimeout(resolve, 500));
+      const { ns } = await fetch(`http://localhost:8080/status.json`).then((
+        res,
+      ) => res.json());
+      if (ns?.ready) {
+        onReady(p);
+        break;
+      }
+    } catch (_) {}
   }
   await p.status();
 }
