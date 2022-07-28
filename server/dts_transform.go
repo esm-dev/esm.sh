@@ -118,8 +118,13 @@ func (task *BuildTask) copyDTS(dts string, buildVersion int, aliasDepsPrefix str
 		if ok {
 			importPath = to
 		}
-		if importPath == "node-fetch" {
+
+		// fix types
+		switch importPath {
+		case "node-fetch":
 			importPath = "node-fetch-native"
+		case "unist":
+			importPath = "@types/unist"
 		}
 
 		if allDeclareModules.Has(importPath) || task.External.Has(importPath) {
