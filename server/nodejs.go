@@ -188,7 +188,7 @@ type Node struct {
 	yarn        string
 }
 
-func checkNode(installDir string) (node *Node, err error) {
+func checkNode(installDir string, npmRegistry string) (node *Node, err error) {
 	var installed bool
 CheckNodejs:
 	version, major, err := getNodejsVersion()
@@ -223,13 +223,13 @@ CheckNodejs:
 		npmRegistry: "https://registry.npmjs.org/",
 	}
 	var output []byte
-	if npmRegistry == "" {
+	if npmRegistry != "" {
+		node.npmRegistry = npmRegistry
+	} else {
 		output, err := exec.Command("npm", "config", "get", "registry").CombinedOutput()
 		if err == nil {
 			node.npmRegistry = strings.TrimRight(strings.TrimSpace(string(output)), "/") + "/"
 		}
-	} else {
-		node.npmRegistry = npmRegistry
 	}
 
 CheckYarn:

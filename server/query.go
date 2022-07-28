@@ -39,8 +39,8 @@ var httpClient = &http.Client{
 	},
 }
 
-// esm query middleware for rex
-func query(devMode bool) rex.Handle {
+// esm.sh query middleware for rex
+func query(unpkgOrigin string, devMode bool) rex.Handle {
 	startTime := time.Now()
 
 	return func(ctx *rex.Context) interface{} {

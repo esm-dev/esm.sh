@@ -37,12 +37,8 @@ var (
 	baseRedirect bool
 	// the deno std version from https://deno.land/std/version.ts
 	denoStdVersion string
-	// npm registry
-	npmRegistry string
 	// server origin
 	origin string
-	// unpkg.com origin
-	unpkgOrigin string
 )
 
 type EmbedFS interface {
@@ -61,6 +57,8 @@ func Serve(efs EmbedFS) {
 		fsUrl            string
 		logLevel         string
 		logDir           string
+		npmRegistry      string
+		unpkgOrigin      string
 		noCompress       bool
 		isDev            bool
 	)
@@ -77,8 +75,8 @@ func Serve(efs EmbedFS) {
 	flag.StringVar(&logLevel, "log-level", "info", "log level")
 	flag.BoolVar(&noCompress, "no-compress", false, "disable compression for text content")
 	flag.BoolVar(&isDev, "dev", false, "run server in development mode")
-	flag.StringVar(&npmRegistry, "npm-registry", "", "npm registry")
 	flag.StringVar(&origin, "origin", "", "the server origin, default is the request host")
+	flag.StringVar(&npmRegistry, "npm-registry", "", "npm registry")
 	flag.StringVar(&unpkgOrigin, "unpkg-origin", "https://unpkg.com/", "unpkg.com origin")
 
 	flag.Parse()
@@ -127,7 +125,7 @@ func Serve(efs EmbedFS) {
 	if nodeInstallDir == "" {
 		nodeInstallDir = path.Join(etcDir, "nodejs")
 	}
-	node, err = checkNode(nodeInstallDir)
+	node, err = checkNode(nodeInstallDir, npmRegistry)
 	if err != nil {
 		log.Fatalf("check nodejs env: %v", err)
 	}
@@ -205,7 +203,7 @@ func Serve(efs EmbedFS) {
 			ExposedHeaders:   []string{"X-TypeScript-Types"},
 			AllowCredentials: false,
 		}),
-		query(isDev),
+		query(unpkgOrigin, isDev),
 	)
 
 	C := rex.Serve(rex.ServerConfig{
