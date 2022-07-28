@@ -232,6 +232,8 @@ var requireModeAllowList = []string{
 	"typescript",
 	"seedrandom",
 	"lru_map",
+	"keycode",
+	"vscode-oniguruma",
 }
 
 func parseCJSModuleExports(buildDir string, importPath string, nodeEnv string) (ret cjsExportsResult, err error) {
