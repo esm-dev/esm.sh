@@ -288,14 +288,22 @@ func findModule(id string) (esm *ModuleMeta, err error) {
 
 func checkESM(wd string, packageName string, moduleSpecifier string) (resolveName string, exportDefault bool, err error) {
 	pkgDir := path.Join(wd, "node_modules", packageName)
-	if dirExists(path.Join(pkgDir, moduleSpecifier)) {
-		f := path.Join(moduleSpecifier, "index.mjs")
-		if !fileExists(path.Join(pkgDir, f)) {
-			f = path.Join(moduleSpecifier, "index.js")
+	resolveName = moduleSpecifier
+	switch path.Ext(moduleSpecifier) {
+	case ".js", ".jsx", ".ts", ".tsx", ".mjs":
+	default:
+		resolveName = moduleSpecifier + ".js"
+		if !fileExists(path.Join(pkgDir, resolveName)) {
+			resolveName = moduleSpecifier + ".mjs"
 		}
-		moduleSpecifier = f
 	}
-	filename := path.Join(pkgDir, moduleSpecifier)
+	if !fileExists(path.Join(pkgDir, resolveName)) && dirExists(path.Join(pkgDir, moduleSpecifier)) {
+		resolveName = path.Join(moduleSpecifier, "index.js")
+		if !fileExists(path.Join(pkgDir, resolveName)) {
+			resolveName = path.Join(moduleSpecifier, "index.mjs")
+		}
+	}
+	filename := path.Join(pkgDir, resolveName)
 	switch path.Ext(filename) {
 	case ".js", ".jsx", ".ts", ".tsx", ".mjs":
 	default:
@@ -326,6 +334,5 @@ func checkESM(wd string, packageName string, moduleSpecifier string) (resolveNam
 			}
 		}
 	}
-	resolveName = moduleSpecifier
 	return
 }
