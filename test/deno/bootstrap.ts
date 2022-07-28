@@ -4,7 +4,7 @@ startEsmServer(async (p) => {
   console.log("esm.sh server started");
   try {
     if (testDir) {
-      await runTest(testDir, p);
+      await runTest(testDir, p, true);
     } else {
       for await (const entry of Deno.readDir("./test/deno")) {
         if (entry.isDirectory) {
@@ -47,6 +47,7 @@ async function runTest(name: string, p: any, retry?: boolean) {
     Deno.execPath(),
     "test",
     "-A",
+    "--check=all",
     "--unstable",
     "--reload=http://localhost:8080",
     "--location=http://0.0.0.0/",
