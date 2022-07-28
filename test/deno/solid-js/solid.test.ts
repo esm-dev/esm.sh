@@ -18,7 +18,8 @@ function transformSolid(rawCode: string): string {
   if (!code) {
     throw new Error("code is empty");
   }
-  return code.replaceAll(`"solid-js"`, `"http://localhost:8080/solid-js@1.4.7"`)
+  return code
+    .replaceAll(`"solid-js"`, `"http://localhost:8080/solid-js@1.4.7"`)
     .replaceAll(`"solid-js/web"`, `"http://localhost:8080/solid-js@1.4.7/web"`);
 }
 
