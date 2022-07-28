@@ -114,21 +114,18 @@ func (task *BuildTask) copyDTS(dts string, buildVersion int, aliasDepsPrefix str
 			return importPath
 		}
 
-		to, ok := task.Alias[importPath]
-		if ok {
-			importPath = to
-		}
-
 		// fix types
 		switch importPath {
 		case "node-fetch":
 			importPath = "node-fetch-native"
-		case "estree":
-			importPath = "@types/estree"
-		case "estree-jsx":
-			importPath = "@types/estree-jsx"
-		case "unist":
-			importPath = "@types/unist"
+		case "estree", "estree-jsx", "unist", "react", "react-dom":
+			importPath = fmt.Sprintf("@types/%s", importPath)
+		}
+
+		// apply `?alias`
+		to, ok := task.Alias[importPath]
+		if ok {
+			importPath = to
 		}
 
 		if allDeclareModules.Has(importPath) || task.External.Has(importPath) {
@@ -189,13 +186,9 @@ func (task *BuildTask) copyDTS(dts string, buildVersion int, aliasDepsPrefix str
 
 			// use version defined in `?deps`
 			if pkg, ok := task.Deps.Get(depTypePkgName); ok {
-				versionParts := strings.Split(pkg.Version, ".")
-				if len(versionParts) > 2 {
-					versions = []string{
-						"~" + strings.Join(versionParts[:2], "."), // minor
-						"^" + versionParts[0],                     // major
-						"latest",
-					}
+				versions = []string{
+					pkg.Version,
+					"latest",
 				}
 			}
 

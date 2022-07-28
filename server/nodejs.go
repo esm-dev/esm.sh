@@ -348,6 +348,11 @@ func fetchPackageInfo(name string, version string) (info NpmPackage, err error) 
 		return
 	}
 
+	if len(h.Versions) == 0 {
+		err = fmt.Errorf("npm: versions of %s not found", name)
+		return
+	}
+
 	isFullVersion := regFullVersion.MatchString(version)
 	if isFullVersion {
 		info = h.Versions[version]
