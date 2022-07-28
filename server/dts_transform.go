@@ -113,7 +113,15 @@ func (task *BuildTask) copyDTS(dts string, buildVersion int, aliasDepsPrefix str
 			return importPath
 		}
 
-		if allDeclareModules.Has(importPath) {
+		to, ok := task.Alias[importPath]
+		if ok {
+			importPath = to
+		}
+		if importPath == "node-fetch" {
+			importPath = "node-fetch-native"
+		}
+
+		if allDeclareModules.Has(importPath) || task.External.Has(importPath) {
 			return importPath
 		}
 
@@ -158,14 +166,6 @@ func (task *BuildTask) copyDTS(dts string, buildVersion int, aliasDepsPrefix str
 			if _, ok := builtInNodeModules[importPath]; ok {
 				importPath = fmt.Sprintf("%s/@types/node/%s.d.ts", cdnOriginAndBuildBasePath, importPath)
 				return importPath
-			}
-
-			to, ok := task.Alias[importPath]
-			if ok {
-				importPath = to
-			}
-			if importPath == "node-fetch" {
-				importPath = "node-fetch-native"
 			}
 
 			pkgNameInfo := parsePkgNameInfo(importPath)
