@@ -2,6 +2,7 @@ package server
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"os"
 	"path"
@@ -294,6 +295,15 @@ func (task *BuildTask) copyDTS(dts string, buildVersion int, aliasDepsPrefix str
 		dtsData := buf.Bytes()
 		dtsData = bytes.ReplaceAll(dtsData, []byte(" implements NodeJS.ReadableStream"), []byte{})
 		dtsData = bytes.ReplaceAll(dtsData, []byte(" implements NodeJS.WritableStream"), []byte{})
+		if strings.HasSuffix(savePath, "/buffer.d.ts") {
+			dtsData = bytes.ReplaceAll(dtsData, []byte(" export { Buffer };"), []byte(" export const Buffer: Buffer;"))
+		}
+		if strings.HasSuffix(savePath, "/url.d.ts") || strings.HasSuffix(savePath, "/buffer.d.ts") {
+			dtsData, err = removeGlobalBlob(dtsData)
+			if err != nil {
+				return
+			}
+		}
 		buf = bytes.NewBuffer(dtsData)
 	}
 
@@ -333,6 +343,27 @@ func (task *BuildTask) copyDTS(dts string, buildVersion int, aliasDepsPrefix str
 	}
 
 	return
+}
+
+// remove `global { ... }`
+func removeGlobalBlob(input []byte) (output []byte, err error) {
+	start := bytes.Index(input, []byte("global {"))
+	if start == -1 {
+		return input, nil
+	}
+	dep := 1
+	for i := start + 8; i < len(input); i++ {
+		c := input[i]
+		if c == '{' {
+			dep++
+		} else if c == '}' {
+			dep--
+		}
+		if dep == 0 {
+			return bytes.Join([][]byte{input[:start], input[i+1:]}, nil), nil
+		}
+	}
+	return nil, errors.New("removeGlobalBlob: global block not end")
 }
 
 func toTypesPath(wd string, p *NpmPackage, version string, prefix string, subpath string) string {
