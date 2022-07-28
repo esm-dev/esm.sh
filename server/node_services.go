@@ -231,6 +231,7 @@ var requireModeAllowList = []string{
 	"stream-http",
 	"typescript",
 	"seedrandom",
+	"lru_map",
 }
 
 func parseCJSModuleExports(buildDir string, importPath string, nodeEnv string) (ret cjsExportsResult, err error) {
