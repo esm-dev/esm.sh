@@ -99,9 +99,7 @@ func invokeNodeService(serviceName string, input map[string]interface{}) []byte 
 	select {
 	case out := <-task.output:
 		return out
-	case <-time.After(time.Minute):
-		log.Warn("restart node services since timeout")
-		stopNodeServices() // restart node service
+	case <-time.After(15 * time.Second):
 		nsTasks.Delete(task.invokeId)
 		return []byte(`{"error": "ns timeout"}`)
 	}
