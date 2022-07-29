@@ -68,9 +68,31 @@ func esmHandler(options esmHandlerOptions) rex.Handle {
 			pathname = regLocPath.ReplaceAllString(pathname, "$1")
 		}
 
-		// match static routes
-		hasBuildVerPrefix := false
-		outdatedBuildVer := ""
+		var origin string
+		var hasBuildVerPrefix bool
+		var outdatedBuildVer string
+
+		if options.origin != "" {
+			origin = strings.TrimSuffix(options.origin, "/")
+		} else {
+			proto := "http"
+			if ctx.R.TLS != nil {
+				proto = "https"
+			}
+			origin = fmt.Sprintf("%s://%s", proto, ctx.R.Host)
+		}
+		// force to use https for esm.sh
+		if origin == "http://esm.sh" {
+			origin = "https://esm.sh"
+		}
+
+		if strings.HasPrefix(pathname, "/@types/") {
+			url := fmt.Sprintf("%s/v%d%s", origin, VERSION, pathname)
+			if !strings.HasSuffix(url, ".d.ts") {
+				url += "~.d.ts"
+			}
+			return rex.Redirect(url, http.StatusTemporaryRedirect)
+		}
 
 		// Build prefix may only be served from "${cdnBasePath}/${buildPrefix}/..."
 		if strings.HasPrefix(pathname, basePath+"/") {
@@ -220,21 +242,6 @@ func esmHandler(options esmHandlerOptions) rex.Handle {
 			return rex.Status(status, message)
 		}
 
-		var origin string
-		if options.origin != "" {
-			origin = strings.TrimSuffix(options.origin, "/")
-		} else {
-			proto := "http"
-			if ctx.R.TLS != nil {
-				proto = "https"
-			}
-			origin = fmt.Sprintf("%s://%s", proto, ctx.R.Host)
-		}
-		// force to use https for esm.sh
-		if origin == "http://esm.sh" {
-			origin = "https://esm.sh"
-		}
-
 		// redirect to the url with full package version
 		if (!hasBuildVerPrefix || strings.HasSuffix(pathname, ".d.ts")) && !strings.HasPrefix(pathname, fmt.Sprintf("/%s@%s", reqPkg.Name, reqPkg.Version)) {
 			prefix := ""
@@ -260,6 +267,7 @@ func esmHandler(options esmHandlerOptions) rex.Handle {
 			reqPkg.Submodule = "jsx-runtime"
 		}
 
+		// or use `?path=$PATH` query to override the pathname
 		if v := ctx.Form.Value("path"); v != "" {
 			reqPkg.Submodule = utils.CleanPath(v)[1:]
 		}
