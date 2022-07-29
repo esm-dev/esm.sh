@@ -35,8 +35,6 @@ var (
 	basePath string
 	// http redrect for URLs not from basepath
 	baseRedirect bool
-	// server origin
-	origin string
 )
 
 type EmbedFS interface {
@@ -56,6 +54,7 @@ func Serve(efs EmbedFS) {
 		logLevel         string
 		logDir           string
 		npmRegistry      string
+		origin           string
 		unpkgOrigin      string
 		noCompress       bool
 		isDev            bool
@@ -75,7 +74,7 @@ func Serve(efs EmbedFS) {
 	flag.BoolVar(&isDev, "dev", false, "run server in development mode")
 	flag.StringVar(&origin, "origin", "", "the server origin, default is the request host")
 	flag.StringVar(&npmRegistry, "npm-registry", "", "npm registry")
-	flag.StringVar(&unpkgOrigin, "unpkg-origin", "https://unpkg.com/", "unpkg.com origin")
+	flag.StringVar(&unpkgOrigin, "unpkg-origin", "https://unpkg.com", "unpkg.com origin")
 
 	flag.Parse()
 
@@ -195,7 +194,7 @@ func Serve(efs EmbedFS) {
 			ExposedHeaders:   []string{"X-TypeScript-Types"},
 			AllowCredentials: false,
 		}),
-		query(unpkgOrigin, isDev),
+		esmHandler(esmHandlerOptions{origin, unpkgOrigin}),
 	)
 
 	C := rex.Serve(rex.ServerConfig{

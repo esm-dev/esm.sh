@@ -39,8 +39,13 @@ var httpClient = &http.Client{
 	},
 }
 
+type esmHandlerOptions = struct {
+	origin      string
+	unpkgOrigin string
+}
+
 // esm.sh query middleware for rex
-func query(unpkgOrigin string, devMode bool) rex.Handle {
+func esmHandler(options esmHandlerOptions) rex.Handle {
 	startTime := time.Now()
 
 	return func(ctx *rex.Context) interface{} {
@@ -215,7 +220,14 @@ func query(unpkgOrigin string, devMode bool) rex.Handle {
 			return rex.Status(status, message)
 		}
 
-		origin := getOrigin(ctx.R.Host)
+		origin := ctx.R.Header.Get("origin")
+		if options.origin != "" {
+			origin = options.origin
+		}
+		// force to use https for esm.sh
+		if origin == "http://esm.sh" {
+			origin = "https://esm.sh"
+		}
 
 		// redirect to the url with full package version
 		if (!hasBuildVerPrefix || strings.HasSuffix(pathname, ".d.ts")) && !strings.HasPrefix(pathname, fmt.Sprintf("/%s@%s", reqPkg.Name, reqPkg.Version)) {
@@ -305,10 +317,7 @@ func query(unpkgOrigin string, devMode bool) rex.Handle {
 					http.ServeContent(w, r, savePath, modtime, f)
 					return
 				}
-				if !strings.HasSuffix(unpkgOrigin, "/") {
-					unpkgOrigin += "/"
-				}
-				resp, err := httpClient.Get(fmt.Sprintf("%s%s", unpkgOrigin, reqPkg.String()))
+				resp, err := httpClient.Get(fmt.Sprintf("%s/%s", strings.TrimSuffix(options.unpkgOrigin, "/"), reqPkg.String()))
 				if err != nil {
 					w.WriteHeader(500)
 					w.Write([]byte(err.Error()))
