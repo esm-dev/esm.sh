@@ -46,7 +46,7 @@
   <script type="module" crossorigin="use-credentials">
     const query = new URLSearchParams(location.search)
     if (query.has('test')) {
-      import('./embed/test/browser/testing.js')
+      import('./embed/testing.js')
     } else {
       import('./embed/index.js').then(({ render }) => render('# README'))
     }

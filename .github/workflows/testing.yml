@@ -31,4 +31,4 @@ jobs:
           deno-version: v1.23.4
 
       - name: Deno test
-        run: deno run -A --unstable test/deno/bootstrap.ts
+        run: deno run -A --unstable test/bootstrap.ts

@@ -1,4 +1,4 @@
-import queue from '/async/queue'
+import queue from '../async/queue'
 
 /*
   test example:
@@ -29,9 +29,9 @@ const q = queue(async ({ imports, testFn, $li, $status }) => {
 
   try {
     const modules = Array.isArray(imports) ? await Promise.all(imports.map(n => {
-      return import(`/${n}`)
+      return import(`../${n}`)
     })) : []
-    const module = typeof imports === 'string' ? await import(`/${imports}`) : undefined
+    const module = typeof imports === 'string' ? await import(`../${imports}`) : undefined
 
     try {
       await testFn({ $span, modules, module, ok: () => $status.innerText = '✅' })
