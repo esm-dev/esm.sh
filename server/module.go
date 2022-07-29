@@ -190,7 +190,6 @@ func initModule(wd string, pkg Pkg, target string, isDev bool) (esm *ModuleMeta,
 			var ret cjsExportsResult
 			ret, err = parseCJSModuleExports(wd, path.Join(pkg.Name, strings.TrimSuffix(npm.Module, ".js")), nodeEnv)
 			if err == nil && ret.Error != "" {
-				log.Errorf("[ns] parseCJSModuleExports: %s\n---\n%s\n---", ret.Error, ret.Stack)
 				err = fmt.Errorf("parseCJSModuleExports: %s", ret.Error)
 			}
 			if err != nil {
@@ -200,7 +199,7 @@ func initModule(wd string, pkg Pkg, target string, isDev bool) (esm *ModuleMeta,
 			npm.Module = ""
 			esm.ExportDefault = ret.ExportDefault
 			esm.Exports = ret.Exports
-			log.Warnf("fake module from '%s' of '%s': %v", npm.Main, npm.Name, err)
+			log.Warnf("fake module from '%s' of '%s'", npm.Main, npm.Name)
 		} else {
 			err = fmt.Errorf("checkESM: %s", reason)
 			return
@@ -209,7 +208,6 @@ func initModule(wd string, pkg Pkg, target string, isDev bool) (esm *ModuleMeta,
 		var ret cjsExportsResult
 		ret, err = parseCJSModuleExports(wd, pkg.ImportPath(), nodeEnv)
 		if err == nil && ret.Error != "" {
-			log.Errorf("[ns] parseCJSModuleExports: %s\n---\n%s\n---", ret.Error, ret.Stack)
 			err = fmt.Errorf("parseCJSModuleExports: %s", ret.Error)
 		}
 		if err != nil {

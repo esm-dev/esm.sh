@@ -247,6 +247,7 @@ func parseCJSModuleExports(buildDir string, importPath string, nodeEnv string) (
 		"importPath": importPath,
 		"nodeEnv":    nodeEnv,
 	}
+
 	/* workaround for edge cases that can't be parsed by cjsLexer correctly */
 	for _, name := range requireModeAllowList {
 		if importPath == name || strings.HasPrefix(importPath, name+"/") {
@@ -254,7 +255,15 @@ func parseCJSModuleExports(buildDir string, importPath string, nodeEnv string) (
 			break
 		}
 	}
+
 	data := invokeNodeService("parseCjsExports", args)
 	err = json.Unmarshal(data, &ret)
+	if err == nil && ret.Error != "" {
+		if ret.Stack != "" {
+			log.Errorf("[ns] parseCJSModuleExports: %s\n---\n%s\n---", ret.Error, ret.Stack)
+		} else {
+			log.Errorf("[ns] parseCJSModuleExports: %s", ret.Error)
+		}
+	}
 	return
 }
