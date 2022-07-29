@@ -126,7 +126,7 @@ func Serve(efs EmbedFS) {
 	if err != nil {
 		log.Fatalf("check nodejs env: %v", err)
 	}
-	log.Debugf("nodejs v%s installed, registry: %s, yarn: %s", node.version, node.npmRegistry, node.yarn)
+	log.Infof("nodejs v%s installed, registry: %s, yarn: %s", node.version, node.npmRegistry, node.yarn)
 
 	storage.SetLogger(log)
 	storage.SetIsDev(isDev)
@@ -209,8 +209,10 @@ func Serve(efs EmbedFS) {
 	})
 
 	if isDev {
-		log.Debugf("Server ready on http://localhost:%d", port)
+		log.Debugf("Server is ready on http://localhost:%d", port)
 		log.Debugf("Testing page at http://localhost:%d?test", port)
+	} else {
+		log.Info("Server is ready")
 	}
 
 	c := make(chan os.Signal, 1)

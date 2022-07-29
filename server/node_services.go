@@ -38,7 +38,7 @@ const nsApp = `
 			try {
 				output = await services[service](input)
 			} catch(e) {
-				output = { error: e.message }
+				output = { error: e.message, stack: e.stack }
 			}
 		} else {
 			output = { error: 'service not found' }
@@ -225,6 +225,7 @@ type cjsExportsResult struct {
 	ExportDefault bool     `json:"exportDefault"`
 	Exports       []string `json:"exports"`
 	Error         string   `json:"error"`
+	Stack         string   `json:"stack"`
 }
 
 var requireModeAllowList = []string{

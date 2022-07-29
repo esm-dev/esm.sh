@@ -190,6 +190,7 @@ func initModule(wd string, pkg Pkg, target string, isDev bool) (esm *ModuleMeta,
 			var ret cjsExportsResult
 			ret, err = parseCJSModuleExports(wd, path.Join(pkg.Name, strings.TrimSuffix(npm.Module, ".js")), nodeEnv)
 			if err == nil && ret.Error != "" {
+				log.Errorf("[ns] parseCJSModuleExports: %s\n---\n%s\n---", ret.Error, ret.Stack)
 				err = fmt.Errorf("parseCJSModuleExports: %s", ret.Error)
 			}
 			if err != nil {
@@ -208,17 +209,14 @@ func initModule(wd string, pkg Pkg, target string, isDev bool) (esm *ModuleMeta,
 		var ret cjsExportsResult
 		ret, err = parseCJSModuleExports(wd, pkg.ImportPath(), nodeEnv)
 		if err == nil && ret.Error != "" {
+			log.Errorf("[ns] parseCJSModuleExports: %s\n---\n%s\n---", ret.Error, ret.Stack)
 			err = fmt.Errorf("parseCJSModuleExports: %s", ret.Error)
 		}
 		if err != nil {
 			return
 		}
-		fmt.Println(ret.Exports, ret.ExportDefault)
 		esm.ExportDefault = ret.ExportDefault
 		esm.Exports = ret.Exports
-		if ret.ExportDefault {
-
-		}
 		// if ret.Error != "" && strings.Contains(ret.Error, "Unexpected export statement in CJS module") {
 		//   if pkg.Submodule != "" {
 		//     esm.Module = pkg.Submodule
