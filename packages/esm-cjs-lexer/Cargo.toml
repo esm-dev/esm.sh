@@ -1,6 +1,6 @@
 [package]
 name = "esm-cjs-lexer"
-version = "0.7.0"
+version = "0.7.3"
 description = "A WASM module to parse commonjs exports for ESM."
 repository = "https://github.com/ije/esm.sh"
 license = "MIT"
@@ -14,9 +14,9 @@ crate-type = ["cdylib", "rlib"]
 default = ["console_error_panic_hook"]
 
 [dependencies]
-anyhow = "1.0.57"
+anyhow = "1.0.58"
 indexmap = "1.8.2"
-serde = { version = "1.0.137", features = ["derive"] }
+serde = { version = "1.0.139", features = ["derive"] }
 
 # swc
 # docs: https://swc.rs
@@ -28,9 +28,17 @@ swc_ecma_visit = "0.47.0"
 
 # wasm-bindgen
 # docs: https://rustwasm.github.io/docs/wasm-bindgen
-wasm-bindgen = {version = "0.2.80", features = ["serde-serialize"]}
+wasm-bindgen = {version = "0.2.81", features = ["serde-serialize"]}
 console_error_panic_hook = { version = "0.1.7", optional = true }
 
 [profile.release]
-# Tell `rustc` to optimize for speed and size
+# less code to include into binary
+panic = 'abort'
+# optimization over all codebase (better optimization, slower build)
+codegen-units = 1
+# optimization for size (more aggressive)
+opt-level = 'z'
+# optimization for size
+# opt-level = 's'
+# link time optimization using using whole-program analysis
 lto = true
