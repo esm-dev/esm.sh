@@ -1,5 +1,10 @@
 # Change Log
 
+## v89
+
+- support `?deno-std=$VER` to specify the [deno std](https://deno.land/std) version for deno node polyfills
+- fix missed `__esModule` export
+
 ## v88
 
 - Respect `exports.development` conditions in `package.json` (close [#375](https://github.com/ije/esm.sh/issues/375))
