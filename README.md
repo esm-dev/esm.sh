@@ -162,6 +162,12 @@ const { css } = await postcss([ autoprefixer ]).process(`
 `).async()
 ```
 
+By default esm.sh will use a fixed version of `deno.land/std/node` to support Deno. You can use the `?deno-std=$VER` query to specify a different version:
+
+```javascript
+import postcss from "https://esm.sh/postcss?deno-std=0.128.0"
+```
+
 ### X-Typescript-Types
 
 By default, **esm.sh** will respond with a custom `X-TypeScript-Types` HTTP header when the types (`.d.ts`) is defined. This is useful for deno type checks ([link](https://deno.land/manual/typescript/types#using-x-typescript-types-header)).
