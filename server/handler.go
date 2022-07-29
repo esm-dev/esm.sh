@@ -220,9 +220,15 @@ func esmHandler(options esmHandlerOptions) rex.Handle {
 			return rex.Status(status, message)
 		}
 
-		origin := ctx.R.Header.Get("origin")
+		var origin string
 		if options.origin != "" {
-			origin = options.origin
+			origin = strings.TrimSuffix(options.origin, "/")
+		} else {
+			proto := "http"
+			if ctx.R.TLS != nil {
+				proto = "https"
+			}
+			origin = fmt.Sprintf("%s://%s", proto, ctx.R.Host)
 		}
 		// force to use https for esm.sh
 		if origin == "http://esm.sh" {
