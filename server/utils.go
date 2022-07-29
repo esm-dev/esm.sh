@@ -278,14 +278,3 @@ func encodeResolveArgsPrefix(alias map[string]string, deps PkgSlice, external *s
 	}
 	return ""
 }
-
-func getOrigin(host string) string {
-	if origin != "" {
-		return strings.TrimSuffix(origin, "/")
-	}
-	proto := "https"
-	if host == "localhost" || strings.HasPrefix(host, "localhost:") {
-		proto = "http"
-	}
-	return fmt.Sprintf("%s://%s", proto, host)
-}
