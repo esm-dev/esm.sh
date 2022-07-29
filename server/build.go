@@ -23,6 +23,7 @@ import (
 type BuildTask struct {
 	CdnOrigin         string
 	BuildVersion      int
+	DenoStdVersion    string
 	Pkg               Pkg
 	Alias             map[string]string
 	Deps              PkgSlice
@@ -77,7 +78,7 @@ func (task *BuildTask) ID() string {
 		task.BuildVersion,
 		pkg.Name,
 		pkg.Version,
-		encodeResolveArgsPrefix(task.Alias, task.Deps, task.External),
+		encodeResolveArgsPrefix(task.Alias, task.Deps, task.External, task.DenoStdVersion),
 		task.Target,
 		name,
 	)
@@ -484,6 +485,7 @@ esbuild:
 						wd:                task.wd, // use current wd to avoid reinstall
 						CdnOrigin:         task.CdnOrigin,
 						BuildVersion:      task.BuildVersion,
+						DenoStdVersion:    task.DenoStdVersion,
 						Pkg:               subPkg,
 						Alias:             task.Alias,
 						External:          task.External,
@@ -498,7 +500,7 @@ esbuild:
 					if err != nil {
 						return
 					}
-					importPath = task.getImportPath(subPkg, encodeResolveArgsPrefix(task.Alias, task.Deps, task.External))
+					importPath = task.getImportPath(subPkg, encodeResolveArgsPrefix(task.Alias, task.Deps, task.External, task.DenoStdVersion))
 				}
 				// is builtin `buffer` module
 				if importPath == "" && name == "buffer" {
@@ -520,7 +522,7 @@ esbuild:
 					if task.Target == "node" {
 						importPath = name
 					} else if task.Target == "deno" && denoStdNodeModules[name] {
-						importPath = fmt.Sprintf("https://deno.land/std@%s/node/%s.ts", denoStdVersion, name)
+						importPath = fmt.Sprintf("https://deno.land/std@%s/node/%s.ts", task.DenoStdVersion, name)
 					} else {
 						polyfill, ok := polyfilledBuiltInNodeModules[name]
 						if ok {
@@ -563,7 +565,7 @@ esbuild:
 								Name:      dep.Name,
 								Version:   dep.Version,
 								Submodule: submodule,
-							}, encodeResolveArgsPrefix(alias, deps, task.External))
+							}, encodeResolveArgsPrefix(alias, deps, task.External, task.DenoStdVersion))
 							break
 						}
 					}
@@ -598,6 +600,7 @@ esbuild:
 					t := &BuildTask{
 						CdnOrigin:         task.CdnOrigin,
 						BuildVersion:      task.BuildVersion,
+						DenoStdVersion:    task.DenoStdVersion,
 						Pkg:               pkg,
 						Alias:             task.Alias,
 						External:          task.External,
@@ -614,7 +617,7 @@ esbuild:
 						buildQueue.Add(t, "")
 					}
 
-					importPath = task.getImportPath(pkg, encodeResolveArgsPrefix(task.Alias, task.Deps, task.External))
+					importPath = task.getImportPath(pkg, encodeResolveArgsPrefix(task.Alias, task.Deps, task.External, task.DenoStdVersion))
 				}
 				if importPath == "" {
 					err = fmt.Errorf("Could not resolve \"%s\" (Imported by \"%s\")", name, task.Pkg.Name)
@@ -753,14 +756,14 @@ esbuild:
 			if task.Target != "node" {
 				if bytes.Contains(outputContent, []byte("__Process$")) {
 					if task.Target == "deno" {
-						fmt.Fprintf(buf, `import __Process$ from "https://deno.land/std@%s/node/process.ts";%s`, denoStdVersion, eol)
+						fmt.Fprintf(buf, `import __Process$ from "https://deno.land/std@%s/node/process.ts";%s`, task.DenoStdVersion, eol)
 					} else {
 						fmt.Fprintf(buf, `import __Process$ from "%s/v%d/node_process.js";%s`, basePath, task.BuildVersion, eol)
 					}
 				}
 				if bytes.Contains(outputContent, []byte("__Buffer$")) {
 					if task.Target == "deno" {
-						fmt.Fprintf(buf, `import  { Buffer as __Buffer$ } from "https://deno.land/std@%s/node/buffer.ts";%s`, denoStdVersion, eol)
+						fmt.Fprintf(buf, `import  { Buffer as __Buffer$ } from "https://deno.land/std@%s/node/buffer.ts";%s`, task.DenoStdVersion, eol)
 					} else {
 						fmt.Fprintf(buf, `import { Buffer as __Buffer$ } from "%s/v%d/node_buffer.js";%s`, basePath, task.BuildVersion, eol)
 					}
@@ -823,7 +826,7 @@ func (task *BuildTask) storeToDB(esm *ModuleMeta) {
 func (task *BuildTask) checkDTS(esm *ModuleMeta, npm *NpmPackage) {
 	name := task.Pkg.Name
 	submodule := task.Pkg.Submodule
-	ResolveArgsPrefix := encodeResolveArgsPrefix(task.Alias, task.Deps, task.External)
+	ResolveArgsPrefix := encodeResolveArgsPrefix(task.Alias, task.Deps, task.External, task.DenoStdVersion)
 
 	var dts string
 	if npm.Types != "" {

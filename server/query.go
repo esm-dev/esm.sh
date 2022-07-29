@@ -427,13 +427,21 @@ func query(unpkgOrigin string, devMode bool) rex.Handle {
 			target = getTargetByUA(ctx.R.UserAgent())
 		}
 
+		// build version
 		buildVersion := VERSION
-		value := ctx.Form.Value("pin")
-		if strings.HasPrefix(value, "v") {
-			i, err := strconv.Atoi(value[1:])
+		pv := ctx.Form.Value("pin")
+		if strings.HasPrefix(pv, "v") {
+			i, err := strconv.Atoi(pv[1:])
 			if err == nil && i > 0 && i < VERSION {
 				buildVersion = i
 			}
+		}
+
+		// deno std version
+		dsv := denoStdVersion
+		fv := ctx.Form.Value("deno-std")
+		if regFullVersion.MatchString(fv) {
+			dsv = fv
 		}
 
 		isBare := false
@@ -460,7 +468,7 @@ func query(unpkgOrigin string, devMode bool) rex.Handle {
 			a := strings.Split(reqPkg.Submodule, "/")
 			if len(a) > 1 && strings.HasPrefix(a[0], "X-") {
 				reqPkg.Submodule = strings.Join(a[1:], "/")
-				_alias, _deps, _external, err := decodeResolveArgsPrefix(a[0])
+				_alias, _deps, _external, _dsv, err := decodeResolveArgsPrefix(a[0])
 				if err != nil {
 					return throwErrorJS(ctx, err)
 				}
@@ -474,6 +482,9 @@ func query(unpkgOrigin string, devMode bool) rex.Handle {
 				}
 				for _, p := range _external {
 					external.Add(p)
+				}
+				if _dsv != "" {
+					dsv = _dsv
 				}
 			}
 		}
@@ -524,14 +535,15 @@ func query(unpkgOrigin string, devMode bool) rex.Handle {
 
 		if hasBuildVerPrefix && storageType == "types" {
 			task := &BuildTask{
-				CdnOrigin:    origin,
-				BuildVersion: buildVersion,
-				Pkg:          *reqPkg,
-				Alias:        alias,
-				Deps:         deps,
-				External:     external,
-				Target:       "types",
-				stage:        "-",
+				CdnOrigin:      origin,
+				BuildVersion:   buildVersion,
+				DenoStdVersion: dsv,
+				Pkg:            *reqPkg,
+				Alias:          alias,
+				Deps:           deps,
+				External:       external,
+				Target:         "types",
+				stage:          "-",
 			}
 			var savePath string
 			findTypesFile := func() (bool, int64, time.Time, error) {
@@ -540,7 +552,7 @@ func query(unpkgOrigin string, devMode bool) rex.Handle {
 					buildVersion,
 					reqPkg.Name,
 					reqPkg.Version,
-					encodeResolveArgsPrefix(alias, deps, external),
+					encodeResolveArgsPrefix(alias, deps, external, dsv),
 				), reqPkg.Submodule)
 				if strings.HasSuffix(savePath, "~.d.ts") {
 					savePath = strings.TrimSuffix(savePath, "~.d.ts")
@@ -588,6 +600,7 @@ func query(unpkgOrigin string, devMode bool) rex.Handle {
 		task := &BuildTask{
 			CdnOrigin:         origin,
 			BuildVersion:      buildVersion,
+			DenoStdVersion:    dsv,
 			Pkg:               *reqPkg,
 			Alias:             alias,
 			Deps:              deps,

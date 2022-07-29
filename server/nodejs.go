@@ -639,27 +639,3 @@ func toTypesPackageName(pkgName string) string {
 	}
 	return "@types/" + pkgName
 }
-
-func getDenoStdVersion() (version string, err error) {
-	resp, err := httpClient.Get("https://cdn.deno.land/std/meta/versions.json")
-	if err != nil {
-		return
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode >= 404 {
-		err = fmt.Errorf(resp.Status)
-		return
-	}
-
-	var v struct {
-		Latest string `json:"latest"`
-	}
-	err = json.NewDecoder(resp.Body).Decode(&v)
-	if err != nil {
-		return
-	}
-
-	version = v.Latest
-	return
-}

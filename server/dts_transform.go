@@ -14,7 +14,7 @@ import (
 )
 
 func (task *BuildTask) CopyDTS(dts string, buildVersion int) (n int, err error) {
-	resolveArgsPrefix := encodeResolveArgsPrefix(task.Alias, task.Deps, task.External)
+	resolveArgsPrefix := encodeResolveArgsPrefix(task.Alias, task.Deps, task.External, task.DenoStdVersion)
 	tracing := newStringSet()
 	err = task.copyDTS(dts, buildVersion, resolveArgsPrefix, tracing)
 	if err == nil {
@@ -239,7 +239,7 @@ func (task *BuildTask) copyDTS(dts string, buildVersion int, aliasDepsPrefix str
 			}
 
 			alias, deps := fixResolveArgs(task.Alias, task.Deps, info.Name)
-			pkgBasePath := pkgBase + encodeResolveArgsPrefix(alias, deps, task.External)
+			pkgBasePath := pkgBase + encodeResolveArgsPrefix(alias, deps, task.External, task.DenoStdVersion)
 
 			// CDN URL
 			importPath = fmt.Sprintf("%s/%s", cdnOriginAndBuildBasePath, pkgBasePath+importPath)

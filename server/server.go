@@ -35,8 +35,6 @@ var (
 	basePath string
 	// http redrect for URLs not from basepath
 	baseRedirect bool
-	// the deno std version from https://deno.land/std/version.ts
-	denoStdVersion string
 	// server origin
 	origin string
 )
@@ -130,12 +128,6 @@ func Serve(efs EmbedFS) {
 		log.Fatalf("check nodejs env: %v", err)
 	}
 	log.Debugf("nodejs v%s installed, registry: %s, yarn: %s", node.version, node.npmRegistry, node.yarn)
-
-	denoStdVersion, err = getDenoStdVersion()
-	if err != nil {
-		log.Warnf("getDenoStdVersion: %v", err)
-	}
-	log.Debugf("https://deno.land/std@%s found", denoStdVersion)
 
 	storage.SetLogger(log)
 	storage.SetIsDev(isDev)
@@ -239,12 +231,4 @@ func Serve(efs EmbedFS) {
 func init() {
 	embedFS = &embed.FS{}
 	log = &logx.Logger{}
-	go cron(time.Hour, func() {
-		version, err := getDenoStdVersion()
-		if err != nil {
-			log.Warnf("getDenoStdVersion: %v", err)
-			return
-		}
-		denoStdVersion = version
-	})
 }

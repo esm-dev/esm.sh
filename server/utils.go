@@ -11,7 +11,6 @@ import (
 	"strconv"
 	"strings"
 	"sync"
-	"time"
 
 	"github.com/ije/gox/utils"
 	"github.com/ije/gox/valid"
@@ -180,13 +179,13 @@ func kill(pidFile string) (err error) {
 	return process.Kill()
 }
 
-func cron(d time.Duration, task func()) {
-	ticker := time.NewTicker(d)
-	for {
-		<-ticker.C
-		task()
-	}
-}
+// func cron(d time.Duration, task func()) {
+// 	ticker := time.NewTicker(d)
+// 	for {
+// 		<-ticker.C
+// 		task()
+// 	}
+// }
 
 func fixResolveArgs(alias map[string]string, deps PkgSlice, pkgName string) (map[string]string, PkgSlice) {
 	_alias := map[string]string{}
@@ -208,7 +207,7 @@ func fixResolveArgs(alias map[string]string, deps PkgSlice, pkgName string) (map
 	return _alias, _deps
 }
 
-func decodeResolveArgsPrefix(raw string) (alias map[string]string, deps PkgSlice, external []string, err error) {
+func decodeResolveArgsPrefix(raw string) (alias map[string]string, deps PkgSlice, external []string, dsv string, err error) {
 	s, err := atobUrl(strings.TrimPrefix(strings.TrimSuffix(raw, "/"), "X-"))
 	if err == nil {
 		for _, p := range strings.Split(s, "\n") {
@@ -229,23 +228,23 @@ func decodeResolveArgsPrefix(raw string) (alias map[string]string, deps PkgSlice
 						if strings.HasSuffix(err.Error(), "not found") {
 							continue
 						}
-						return nil, nil, nil, err
+						return nil, nil, nil, "", err
 					}
 					if !deps.Has(m.Name) {
 						deps = append(deps, *m)
 					}
 				}
 			} else if strings.HasPrefix(p, "e/") {
-				for _, name := range strings.Split(strings.TrimPrefix(p, "e/"), ",") {
-					external = append(external, name)
-				}
+				external = append(external, strings.Split(strings.TrimPrefix(p, "e/"), ",")...)
+			} else if strings.HasPrefix(p, "dsv/") {
+				dsv = strings.TrimPrefix(p, "dsv/")
 			}
 		}
 	}
 	return
 }
 
-func encodeResolveArgsPrefix(alias map[string]string, deps PkgSlice, external *stringSet) string {
+func encodeResolveArgsPrefix(alias map[string]string, deps PkgSlice, external *stringSet, dsv string) string {
 	args := []string{}
 	if len(alias) > 0 {
 		var ss sort.StringSlice
@@ -270,6 +269,9 @@ func encodeResolveArgsPrefix(alias map[string]string, deps PkgSlice, external *s
 		}
 		ss.Sort()
 		args = append(args, fmt.Sprintf("e/%s", strings.Join(ss, ",")))
+	}
+	if dsv != "" && dsv != denoStdVersion {
+		args = append(args, fmt.Sprintf("dsv/%s", dsv))
 	}
 	if len(args) > 0 {
 		return fmt.Sprintf("X-%s/", btoaUrl(strings.Join(args, "\n")))
