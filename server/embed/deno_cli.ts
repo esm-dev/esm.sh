@@ -17,14 +17,15 @@ async function add(args: string[]) {
   const pkgs = await Promise.all(args.map(fetchPkgInfo));
   const importMap: ImportMap = { imports: {}, scopes: {} };
   try {
-    const { imports, scopes } = JSON.parse(
-      await Deno.readTextFile("import_map.json"),
-    );
-    if (imports) {
-      Object.assign(importMap.imports, imports);
-    }
-    if (scopes) {
-      Object.assign(importMap.scopes, scopes);
+    const raw = (await Deno.readTextFile("import_map.json")).trim();
+    if (raw.startsWith("{") && raw.endsWith("}")) {
+      const { imports, scopes } = JSON.parse(raw);
+      if (imports) {
+        Object.assign(importMap.imports, imports);
+      }
+      if (scopes) {
+        Object.assign(importMap.scopes, scopes);
+      }
     }
   } catch (err) {
     if (!(err instanceof Deno.errors.NotFound)) {
@@ -75,9 +76,15 @@ async function add(args: string[]) {
     }
   }
 
+  const sortedImports = sortImports(importMap.imports);
+  const sortedScopes = Object.fromEntries(
+    Object.entries(importMap.scopes).sort(sortByKey).map((
+      [key, scope],
+    ) => [key, sortImports(scope)]),
+  );
   await Deno.writeTextFile(
     "import_map.json",
-    JSON.stringify(importMap, null, 2),
+    JSON.stringify({ imports: sortedImports, scopes: sortedScopes }, null, 2),
   );
   console.log(`Added ${pkgs.length} packages to import map.`);
   console.log(
@@ -114,6 +121,24 @@ async function fetchPkgInfo(name: string): Promise<Package> {
 
   cache.set(name, pkg);
   return pkg;
+}
+
+function sortImports(imports: Record<string, string>) {
+  return Object.fromEntries(
+    Object.entries(imports).sort(sortByKey),
+  );
+}
+
+function sortByKey(a: [string, unknown], b: [string, unknown]) {
+  const [aName] = a;
+  const [bName] = b;
+  if (aName < bName) {
+    return -1;
+  }
+  if (aName > bName) {
+    return 1;
+  }
+  return 0;
 }
 
 if (import.meta.main) {
