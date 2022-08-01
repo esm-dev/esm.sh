@@ -467,14 +467,6 @@ esbuild:
 				if isRemoteImport(name) || task.External.Has(name) {
 					importPath = name
 				}
-				// when `?external=*`
-				if importPath == "" && task.External.Has("*") {
-					_, isDep := npm.Dependencies[name]
-					_, isPeerDep := npm.PeerDependencies[name]
-					if isDep || isPeerDep || name == npm.Name {
-						importPath = name
-					}
-				}
 				// is sub-module
 				if importPath == "" && strings.HasPrefix(name, task.Pkg.Name+"/") {
 					submodule := strings.TrimPrefix(name, task.Pkg.Name+"/")
@@ -504,7 +496,7 @@ esbuild:
 					}
 					importPath = task.getImportPath(subPkg, encodeResolveArgsPrefix(task.Alias, task.Deps, task.External, task.DenoStdVersion))
 				}
-				// is builtin `buffer` module
+				// is node builtin `buffer` module
 				if importPath == "" && name == "buffer" {
 					if task.Target == "node" {
 						importPath = "buffer"
@@ -512,14 +504,7 @@ esbuild:
 						importPath = fmt.Sprintf("%s/v%d/node_buffer.js", basePath, task.BuildVersion)
 					}
 				}
-				// use `node-fetch-naitve` instead of `node-fetch`
-				if importPath == "" && name == "node-fetch" && task.Target != "node" {
-					importPath = task.getImportPath(Pkg{
-						Name:    "node-fetch-native",
-						Version: "0.1.3",
-					}, "")
-				}
-				// is builtin node module
+				// is node builtin module
 				if importPath == "" && builtInNodeModules[name] {
 					if task.Target == "node" {
 						importPath = name
@@ -553,6 +538,17 @@ esbuild:
 							}
 						}
 					}
+				}
+				// when `?external=*`
+				if importPath == "" && task.External.Has("*") {
+					importPath = name
+				}
+				// use `node-fetch-naitve` instead of `node-fetch`
+				if importPath == "" && name == "node-fetch" && task.Target != "node" {
+					importPath = task.getImportPath(Pkg{
+						Name:    "node-fetch-native",
+						Version: "0.1.3",
+					}, "")
 				}
 				// use version defined in `?deps` query
 				if importPath == "" {
