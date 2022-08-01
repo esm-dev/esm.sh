@@ -8,6 +8,7 @@ export type Package = {
   readonly version: string;
   readonly dependencies?: Record<string, string>;
   readonly peerDependencies?: Record<string, string>;
+  readonly exports?: Record<string, unknown> | string;
 };
 
 const VERSION = "v{VERSION}";
@@ -38,16 +39,26 @@ async function add(args: string[]) {
     url.searchParams.set("pin", VERSION);
     url.searchParams.sort();
     importMap.imports[name] = url.href;
-    if (dependencies) {
-      importMap.scopes[name] = {};
-      for (const [depName, depVersion] of Object.entries(dependencies)) {
-        const dep = `${depName}@${depVersion}`;
-        const depPkg = await fetchPkgInfo(dep);
-        const depUrl = new URL(
-          `https://esm.sh/${depPkg.name}@${depPkg.version}`,
-        );
-        depUrl.searchParams.set("pin", VERSION);
-        importMap.scopes[name][depName] = depUrl.href;
+    if (
+      typeof pkg.exports === "object" &&
+      Object.keys(pkg.exports).some((key) =>
+        key.length >= 3 && key.startsWith("./")
+      )
+    ) {
+      importMap.imports[name + "/"] = `${url.href}&path=/`;
+    }
+    if (pkg) {
+      if (dependencies) {
+        importMap.scopes[name] = {};
+        for (const [depName, depVersion] of Object.entries(dependencies)) {
+          const dep = `${depName}@${depVersion}`;
+          const depPkg = await fetchPkgInfo(dep);
+          const depUrl = new URL(
+            `https://esm.sh/${depPkg.name}@${depPkg.version}`,
+          );
+          depUrl.searchParams.set("pin", VERSION);
+          importMap.scopes[name][depName] = depUrl.href;
+        }
       }
     }
   }

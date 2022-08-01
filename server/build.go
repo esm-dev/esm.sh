@@ -471,7 +471,7 @@ esbuild:
 				if importPath == "" && task.External.Has("*") {
 					_, isDep := npm.Dependencies[name]
 					_, isPeerDep := npm.PeerDependencies[name]
-					if isDep || isPeerDep {
+					if isDep || isPeerDep || name == npm.Name {
 						importPath = name
 					}
 				}
