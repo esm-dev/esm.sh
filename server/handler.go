@@ -124,6 +124,14 @@ func esmHandler(options esmHandlerOptions) rex.Handle {
 		// match static routess
 		switch pathname {
 		case "/":
+			if strings.HasPrefix(ctx.R.UserAgent(), "Deno/") {
+				cliTs, err := embedFS.ReadFile("server/embed/deno_cli.ts")
+				if err != nil {
+					return err
+				}
+				ctx.SetHeader("Content-Type", "application/typescript; charset=utf-8")
+				return bytes.ReplaceAll(cliTs, []byte("{VERSION}"), []byte(strconv.Itoa(VERSION)))
+			}
 			indexHTML, err := embedFS.ReadFile("server/embed/index.html")
 			if err != nil {
 				return err

@@ -24,11 +24,11 @@ type BuildTask struct {
 	CdnOrigin         string
 	BuildVersion      int
 	DenoStdVersion    string
+	Target            string
 	Pkg               Pkg
 	Alias             map[string]string
 	Deps              PkgSlice
 	External          *stringSet
-	Target            string
 	DevMode           bool
 	BundleMode        bool
 	IgnoreRequire     bool
@@ -266,13 +266,7 @@ func (task *BuildTask) build(tracing *stringSet) (esm *ModuleMeta, err error) {
 					// resolve nodejs builtin modules like `node:path`
 					specifier = strings.TrimPrefix(specifier, "node:")
 
-					// use `?external` query
-					if task.External.Has(specifier) {
-						externalDeps.Add(specifier)
-						return api.OnResolveResult{Path: "__ESM_SH_EXTERNAL:" + specifier, External: true}, nil
-					}
-
-					// resolve `?alias` query
+					// use `?alias` query
 					if len(task.Alias) > 0 {
 						if name, ok := task.Alias[specifier]; ok {
 							specifier = name
@@ -472,6 +466,14 @@ esbuild:
 				// remote imports
 				if isRemoteImport(name) || task.External.Has(name) {
 					importPath = name
+				}
+				// when `?external=*`
+				if importPath == "" && task.External.Has("*") {
+					_, isDep := npm.Dependencies[name]
+					_, isPeerDep := npm.PeerDependencies[name]
+					if isDep || isPeerDep {
+						importPath = name
+					}
 				}
 				// is sub-module
 				if importPath == "" && strings.HasPrefix(name, task.Pkg.Name+"/") {
