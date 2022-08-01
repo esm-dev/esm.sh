@@ -6,7 +6,7 @@ startEsmServer(async (p) => {
     if (testDir) {
       await runTest(testDir, p, true);
     } else {
-      for await (const entry of Deno.readDir("./test/deno")) {
+      for await (const entry of Deno.readDir("./test")) {
         if (entry.isDirectory) {
           await runTest(entry.name, p);
         }
@@ -51,7 +51,7 @@ async function runTest(name: string, p: any, retry?: boolean) {
     "--reload=http://localhost:8080",
     "--location=http://0.0.0.0/",
   ];
-  const dir = `test/deno/${name}/`;
+  const dir = `test/${name}/`;
   if (await existsFile(dir + "deno.json")) {
     cmd.push("--config", dir + "deno.json");
   }
