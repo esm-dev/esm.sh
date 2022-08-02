@@ -11,7 +11,7 @@ export type Package = {
   readonly exports?: Record<string, unknown> | string;
 };
 
-let VERSION = "v{VERSION}";
+const VERSION = "v{VERSION}";
 
 async function add(args: string[], options: string[]) {
   const pkgs = await Promise.all(args.map(fetchPkgInfo));
@@ -157,9 +157,6 @@ async function loadImportMap(): Promise<ImportMap> {
       }
       if (scopes) {
         Object.assign(importMap.scopes, scopes);
-        if (scopes["cdn.config.esm.sh"]?.VERSION) {
-          VERSION = scopes["cdn.config.esm.sh"].VERSION;
-        }
       }
     }
   } catch (err) {
@@ -183,9 +180,6 @@ async function saveImportMap(importMap: ImportMap): Promise<void> {
     }
   }
 
-  // update config
-  importMap.scopes["cdn.config.esm.sh"] = { VERSION };
-
   // sort
   const sortedImports = sortImports(importMap.imports);
   const sortedScopes = Object.fromEntries(
@@ -205,49 +199,50 @@ async function addPkgToImportMap(
   pkg: Package,
   importMap: ImportMap,
 ): Promise<boolean> {
-  const [pkgUrl, pkgSubUri] = getPkgUrl(pkg);
+  const [pkgUrl, hasSubModules] = getPkgUrl(pkg);
   if (importMap.imports[pkg.name] === pkgUrl) {
     return false;
   }
   importMap.imports[pkg.name] = pkgUrl;
-  if (pkgSubUri) {
-    importMap.imports[pkg.name + "/"] = pkgSubUri;
+  if (hasSubModules) {
+    importMap.imports[pkg.name + "/"] = pkgUrl + "/";
   } else {
     Reflect.deleteProperty(importMap.imports, pkg.name + "/");
   }
   if (pkg.dependencies) {
     importMap.scopes[pkg.name] = {};
-    if (pkgSubUri) {
+    if (hasSubModules) {
       importMap.scopes[pkg.name + "/"] = {};
     }
     for (const [depName, depVersion] of Object.entries(pkg.dependencies)) {
       const dep = `${depName}@${depVersion}`;
       const depPkg = await fetchPkgInfo(dep);
-      const depUrl = new URL(
-        `https://esm.sh/${depPkg.name}@${depPkg.version}`,
-      );
-      depUrl.searchParams.set("pin", VERSION);
-      importMap.scopes[pkg.name][depName] = depUrl.href;
-      if (pkgSubUri) {
-        importMap.scopes[pkg.name + "/"][depName] = depUrl.href;
+      const depUrl =
+        `https://esm.sh/${VERSION}/${depPkg.name}@${depPkg.version}`;
+      importMap.scopes[pkg.name][depName] = depUrl;
+      if (hasSubModules) {
+        importMap.scopes[pkg.name + "/"][depName] = depUrl;
       }
     }
   }
   return true;
 }
 
-function getPkgUrl(pkg: Package): [string, string | null] {
-  const { name, version, exports } = pkg;
+function getPkgUrl(pkg: Package): [string, boolean] {
+  const { name, version, exports, dependencies, peerDependencies } = pkg;
   const hasSubModules = typeof exports === "object" &&
     Object.keys(exports).some((key) => key.length >= 3 && key.startsWith("./"));
-  const url = new URL(`https://esm.sh/${name}@${version}`);
-  url.searchParams.set("external", "*");
-  url.searchParams.set("pin", VERSION);
-  url.searchParams.sort();
-  if (hasSubModules) {
-    return [url.href, `${url.href}&path=/`];
+
+  if (
+    (dependencies && Object.keys(dependencies).length > 0) ||
+    (peerDependencies && Object.keys(peerDependencies).length > 0)
+  ) {
+    return [
+      `https://esm.sh/${VERSION}/*${name}@${version}`,
+      hasSubModules,
+    ];
   }
-  return [url.href, null];
+  return [`https://esm.sh/${VERSION}/${name}@${version}`, hasSubModules];
 }
 
 function sortImports(imports: Record<string, string>) {

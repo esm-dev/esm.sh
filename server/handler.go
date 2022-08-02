@@ -101,7 +101,7 @@ func esmHandler(options esmHandlerOptions) rex.Handle {
 					return err
 				}
 				ctx.SetHeader("Content-Type", "application/typescript; charset=utf-8")
-				return bytes.ReplaceAll(cliTs, []byte("{VERSION}"), []byte(strconv.Itoa(VERSION)))
+				return bytes.ReplaceAll(cliTs, []byte("v{VERSION}"), []byte(fmt.Sprintf("v%d", VERSION)))
 			}
 			indexHTML, err := embedFS.ReadFile("server/embed/index.html")
 			if err != nil {
@@ -224,13 +224,10 @@ func esmHandler(options esmHandlerOptions) rex.Handle {
 		}
 
 		external := newStringSet()
-		// check `/external=*/pathname`
-		if strings.HasPrefix(pathname, "/external=") {
-			names, rest := utils.SplitByFirstByte(strings.TrimPrefix(pathname, "/external="), '/')
-			for _, s := range strings.Split(names, ",") {
-				external.Add(s)
-			}
-			pathname = "/" + rest
+		// check `/*pathname`
+		if strings.HasPrefix(pathname, "/*") {
+			external.Add("*")
+			pathname = "/" + pathname[2:]
 		}
 		// check `external` query
 		for _, p := range strings.Split(ctx.Form.Value("external"), ",") {
