@@ -69,9 +69,6 @@ func esmHandler(options esmHandlerOptions) rex.Handle {
 		}
 
 		var origin string
-		var hasBuildVerPrefix bool
-		var outdatedBuildVer string
-
 		if options.origin != "" {
 			origin = strings.TrimSuffix(options.origin, "/")
 		} else {
@@ -86,39 +83,13 @@ func esmHandler(options esmHandlerOptions) rex.Handle {
 			origin = "https://esm.sh"
 		}
 
+		// redirect `/@types/` to `.d.ts` files
 		if strings.HasPrefix(pathname, "/@types/") {
 			url := fmt.Sprintf("%s/v%d%s", origin, VERSION, pathname)
 			if !strings.HasSuffix(url, ".d.ts") {
 				url += "~.d.ts"
 			}
 			return rex.Redirect(url, http.StatusTemporaryRedirect)
-		}
-
-		// Build prefix may only be served from "${cdnBasePath}/${buildPrefix}/..."
-		if strings.HasPrefix(pathname, basePath+"/") {
-			pathname = strings.TrimPrefix(pathname, basePath)
-			// Check current version
-			buildBasePath := fmt.Sprintf("/v%d", VERSION)
-			if strings.HasPrefix(pathname, buildBasePath+"/") {
-				pathname = strings.TrimPrefix(pathname, buildBasePath)
-				hasBuildVerPrefix = true
-				// Otheerwise check possible pinned version
-			} else if regBuildVersionPath.MatchString(pathname) {
-				a := strings.Split(pathname, "/")
-				pathname = "/" + strings.Join(a[2:], "/")
-				hasBuildVerPrefix = true
-				outdatedBuildVer = a[1]
-			}
-		} else if basePath != "" {
-			if strings.HasPrefix(pathname, basePath+"/") {
-				pathname = strings.TrimPrefix(pathname, basePath)
-			} else if baseRedirect {
-				url := strings.TrimPrefix(ctx.R.URL.String(), basePath)
-				url = fmt.Sprintf("%s/%s", basePath, url)
-				return rex.Redirect(url, http.StatusTemporaryRedirect)
-			} else {
-				return rex.Status(404, "not found")
-			}
 		}
 
 		// match static routess
@@ -219,6 +190,53 @@ func esmHandler(options esmHandlerOptions) rex.Handle {
 			if err == nil {
 				ctx.SetHeader("Cache-Control", fmt.Sprintf("public, max-age=%d", 10*60))
 				return rex.Content(pathname, startTime, bytes.NewReader(data))
+			}
+		}
+
+		var hasBuildVerPrefix bool
+		var outdatedBuildVer string
+
+		// Build prefix may only be served from "${cdnBasePath}/${buildPrefix}/..."
+		if strings.HasPrefix(pathname, basePath+"/") {
+			pathname = strings.TrimPrefix(pathname, basePath)
+			// Check current version
+			buildBasePath := fmt.Sprintf("/v%d", VERSION)
+			if strings.HasPrefix(pathname, buildBasePath+"/") {
+				pathname = strings.TrimPrefix(pathname, buildBasePath)
+				hasBuildVerPrefix = true
+				// Otherwise check possible pinned version
+			} else if regBuildVersionPath.MatchString(pathname) {
+				a := strings.Split(pathname, "/")
+				pathname = "/" + strings.Join(a[2:], "/")
+				hasBuildVerPrefix = true
+				outdatedBuildVer = a[1]
+			}
+		} else if basePath != "" {
+			if strings.HasPrefix(pathname, basePath+"/") {
+				pathname = strings.TrimPrefix(pathname, basePath)
+			} else if baseRedirect {
+				url := strings.TrimPrefix(ctx.R.URL.String(), basePath)
+				url = fmt.Sprintf("%s/%s", basePath, url)
+				return rex.Redirect(url, http.StatusTemporaryRedirect)
+			} else {
+				return rex.Status(404, "not found")
+			}
+		}
+
+		external := newStringSet()
+		// check `/external=*/pathname`
+		if strings.HasPrefix(pathname, "/external=") {
+			names, rest := utils.SplitByFirstByte(strings.TrimPrefix(pathname, "/external="), '/')
+			for _, s := range strings.Split(names, ",") {
+				external.Add(s)
+			}
+			pathname = "/" + rest
+		}
+		// check `external` query
+		for _, p := range strings.Split(ctx.Form.Value("external"), ",") {
+			p = strings.TrimSpace(p)
+			if p != "" {
+				external.Add(p)
 			}
 		}
 
@@ -442,15 +460,6 @@ func esmHandler(options esmHandlerOptions) rex.Handle {
 			}
 		}
 
-		// check `external` query
-		external := newStringSet()
-		for _, p := range strings.Split(ctx.Form.Value("external"), ",") {
-			p = strings.TrimSpace(p)
-			if p != "" {
-				external.Add(p)
-			}
-		}
-
 		// determine build target
 		target := strings.ToLower(ctx.Form.Value("target"))
 		_, targeted := targets[target]
@@ -460,8 +469,11 @@ func esmHandler(options esmHandlerOptions) rex.Handle {
 
 		// build version
 		buildVersion := VERSION
-		pv := ctx.Form.Value("pin")
-		if strings.HasPrefix(pv, "v") {
+		pv := outdatedBuildVer
+		if outdatedBuildVer == "" {
+			pv = ctx.Form.Value("pin")
+		}
+		if pv != "" && strings.HasPrefix(pv, "v") {
 			i, err := strconv.Atoi(pv[1:])
 			if err == nil && i > 0 && i < VERSION {
 				buildVersion = i
