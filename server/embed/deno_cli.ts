@@ -11,7 +11,7 @@ export type Package = {
   readonly exports?: Record<string, unknown> | string;
 };
 
-const VERSION = "v{VERSION}";
+let VERSION = "v{VERSION}";
 
 async function add(args: string[], options: string[]) {
   const pkgs = await Promise.all(args.map(fetchPkgInfo));
@@ -157,6 +157,9 @@ async function loadImportMap(): Promise<ImportMap> {
       }
       if (scopes) {
         Object.assign(importMap.scopes, scopes);
+        if (scopes["cdn.config.esm.sh"]?.VERSION) {
+          VERSION = scopes["cdn.config.esm.sh"].VERSION;
+        }
       }
     }
   } catch (err) {
@@ -179,6 +182,9 @@ async function saveImportMap(importMap: ImportMap): Promise<void> {
       }
     }
   }
+
+  // update config
+  importMap.scopes["cdn.config.esm.sh"] = { VERSION };
 
   // sort
   const sortedImports = sortImports(importMap.imports);
