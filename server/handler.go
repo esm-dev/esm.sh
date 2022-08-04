@@ -484,7 +484,7 @@ func esmHandler(options esmHandlerOptions) rex.Handle {
 		isPkgCss := ctx.Form.Has("css")
 		isBundleMode := ctx.Form.Has("bundle")
 		isDev := ctx.Form.Has("dev")
-		isPined := ctx.Form.Has("pin")
+		isPined := ctx.Form.Has("pin") || hasBuildVerPrefix
 		isWorker := ctx.Form.Has("worker")
 		noCheck := ctx.Form.Has("no-check") || ctx.Form.Has("no-dts")
 		ignoreRequire := ctx.Form.Has("ignore-require") || ctx.Form.Has("no-require")
@@ -784,15 +784,15 @@ func esmHandler(options esmHandlerOptions) rex.Handle {
 					ctx.SetHeader("Cache-Control", "public, max-age=31536000, immutable")
 				} else {
 					ctx.SetHeader("Cache-Control", "public, max-age=31536000, immutable")
-					ctx.SetHeader("Vary", "User-Agent")
+					ctx.SetHeader("Vary", "Origin, Accept-Encoding, User-Agent")
 				}
 			} else {
-				ctx.SetHeader("Cache-Control", fmt.Sprintf("public, max-age=%d", 24*3600)) // cache for 24 hours
-				ctx.SetHeader("Vary", "User-Agent")
+				ctx.SetHeader("Cache-Control", fmt.Sprintf("public, max-age=%d", 3600)) // cache for 1 hours
+				ctx.SetHeader("Vary", "Origin, Accept-Encoding, User-Agent")
 			}
 		} else {
-			ctx.SetHeader("Cache-Control", fmt.Sprintf("public, max-age=%d", 10*60)) // cache for 10 minutes
-			ctx.SetHeader("Vary", "User-Agent")
+			ctx.SetHeader("Cache-Control", fmt.Sprintf("public, max-age=%d", 5*60)) // cache for 5 minutes
+			ctx.SetHeader("Vary", "Origin, Accept-Encoding, User-Agent")
 		}
 		ctx.SetHeader("Content-Type", "application/javascript; charset=utf-8")
 		return buf
