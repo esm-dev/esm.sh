@@ -14,49 +14,49 @@ import (
 )
 
 const nsApp = `
-	const http = require('http');
+const http = require('http');
 
-	const services = {
-    test: async input => ({ ...input })
+const services = {
+  test: async input => ({ ...input })
+}
+const register = ["esm-node-services"]
+for (const name of register) {
+  Object.assign(services, require(name))
+}
+
+const requestListener = function (req, res) {
+  if (req.method === "GET") {
+    res.writeHead(200);
+    res.end("READY");
+  } else if (req.method === "POST") {
+    let data = '';
+    req.on('data', chunk => {
+      data += chunk;
+    });
+    req.on('end', async () => {
+      try {
+        const { service, input } = JSON.parse(data);
+        let output = null
+        if (typeof service === 'string' && service in services) {
+          output = await services[service](input)
+        } else {
+          output = { error: 'service "' + service + '" not found' }
+        }
+        res.writeHead(output.error ? 400 : 200);
+        res.end(JSON.stringify(output));
+      } catch (e) {
+        res.writeHead(500);
+        res.end(JSON.stringify({ error: e.message, stack: e.stack }));
+      }
+    });
+  } else {
+    res.writeHead(405);
+    res.end("Method not allowed");
   }
-  const register = %s
-	for (const name of register) {
-    Object.assign(services, require(name))
-  }
+}
 
-	const requestListener = function (req, res) {
-		if (req.method === "GET") {
-			res.writeHead(200);
-			res.end("READY");
-		} else if (req.method === "POST") {
-			let data = '';
-			req.on('data', chunk => {
-				data += chunk;
-			});
-			req.on('end', async () => {
-				try {
-					const { service, input } = JSON.parse(data);
-					let output = null
-					if (typeof service === 'string' && service in services) {
-						output = await services[service](input)
-					} else {
-						output = { error: 'service "' + service + '" not found' }
-					}
-					res.writeHead(output.error ? 400 : 200);
-					res.end(JSON.stringify(output));
-				} catch (e) {
-					res.writeHead(500);
-					res.end(JSON.stringify({ error: e.message, stack: e.stack }));
-				}
-			});
-		} else {
-			res.writeHead(405);
-			res.end("Method not allowed");
-		}
-	}
-
-	const server = http.createServer(requestListener);
-	server.listen(%d);
+const server = http.createServer(requestListener);
+server.listen(8088);
 `
 
 var nsPort int
