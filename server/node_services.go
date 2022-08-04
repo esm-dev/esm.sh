@@ -19,7 +19,7 @@ const http = require('http');
 const services = {
   test: async input => ({ ...input })
 }
-const register = ["esm-node-services"]
+const register = %s
 for (const name of register) {
   Object.assign(services, require(name))
 }
@@ -56,7 +56,7 @@ const requestListener = function (req, res) {
 }
 
 const server = http.createServer(requestListener);
-server.listen(8088);
+server.listen(%d);
 `
 
 var nsPort int
