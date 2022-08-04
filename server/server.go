@@ -1,7 +1,6 @@
 package server
 
 import (
-	"context"
 	"embed"
 	"flag"
 	"fmt"
@@ -46,6 +45,7 @@ func Serve(efs EmbedFS) {
 	var (
 		port             int
 		httpsPort        int
+		nsPort           int
 		buildConcurrency int
 		etcDir           string
 		cacheUrl         string
@@ -61,6 +61,7 @@ func Serve(efs EmbedFS) {
 	)
 	flag.IntVar(&port, "port", 80, "http server port")
 	flag.IntVar(&httpsPort, "https-port", 0, "https(autotls) server port, default is disabled")
+	flag.IntVar(&nsPort, "ns-port", 8088, "node services server port")
 	flag.StringVar(&basePath, "base-path", "", "base path")
 	flag.BoolVar(&baseRedirect, "base-redirect", false, "http redrect for URLs not from basepath")
 	flag.StringVar(&etcDir, "etc-dir", ".esmd", "etc dir")
@@ -168,9 +169,7 @@ func Serve(efs EmbedFS) {
 		}
 		services := []string{"esm-node-services"}
 		for {
-			ctx, cancel := context.WithCancel(context.Background())
-			stopNodeServices = cancel
-			err := startNodeServices(ctx, wd, services)
+			err := startNodeServices(wd, nsPort, services)
 			if err != nil && err.Error() != "signal: interrupt" {
 				log.Warnf("node services exit: %v", err)
 			}

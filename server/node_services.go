@@ -1,118 +1,100 @@
 package server
 
 import (
-	"bufio"
 	"bytes"
-	"context"
-	"encoding/binary"
-	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io/ioutil"
+	"net/http"
 	"os/exec"
 	"path"
-	"runtime"
 	"strconv"
 	"strings"
-	"sync"
-	"sync/atomic"
-	"time"
 )
 
 const nsApp = `
-	const queue = require('async/queue')
-  const readline = require('readline')
-  const rl = readline.createInterface({
-    input: process.stdin,
-    historySize: 0,
-    crlfDelay: Infinity
-  })
-  const services = {
+	const http = require('http');
+
+	const services = {
     test: async input => ({ ...input })
   }
   const register = %s
-	const q = queue(async ({ service, invokeId, input }) => {
-		let output = null
-		if (typeof service === 'string' && service in services) {
-			try {
-				output = await services[service](input)
-			} catch(e) {
-				output = { error: e.message, stack: e.stack }
-			}
-		} else {
-			output = { error: 'service not found' }
-		}
-		process.stdout.write(invokeId)
-		process.stdout.write(JSON.stringify(output))
-		process.stdout.write('\n')
-	}, %d)
-
-  for (const name of register) {
+	for (const name of register) {
     Object.assign(services, require(name))
   }
 
-  rl.on('line', async line => {
-    if (line.charAt(0) === '{' && line.charAt(line.length-1) === '}') {
-      try {
-        const { service, invokeId, input } = JSON.parse(line)
-        if (typeof invokeId === 'string') {
-					q.push({ service, invokeId, input })
-        }
-      } catch(_) {}
-    }
-  })
+	const requestListener = function (req, res) {
+		if (req.method === "GET") {
+			res.writeHead(200);
+			res.end("READY");
+		} else if (req.method === "POST") {
+			let data = '';
+			req.on('data', chunk => {
+				data += chunk;
+			});
+			req.on('end', async () => {
+				try {
+					const { service, input } = JSON.parse(data);
+					let output = null
+					if (typeof service === 'string' && service in services) {
+						output = await services[service](input)
+					} else {
+						output = { error: 'service "' + service + '" not found' }
+					}
+					res.writeHead(output.error ? 400 : 200);
+					res.end(JSON.stringify(output));
+				} catch (e) {
+					res.writeHead(500);
+					res.end(JSON.stringify({ error: e.message, stack: e.stack }));
+				}
+			});
+		} else {
+			res.writeHead(405);
+			res.end("Method not allowed");
+		}
+	}
 
-  setTimeout(() => {
-    process.stdout.write('READY\n')
-  }, 0)
+	const server = http.createServer(requestListener);
+	server.listen(%d);
 `
 
-type NSTask struct {
-	invokeId string
-	service  string
-	input    map[string]interface{}
-	output   chan []byte
+var nsPort int
+var nsPidFile string
+
+type NSPlayload struct {
+	Service string                 `json:"service"`
+	Input   map[string]interface{} `json:"input"`
 }
 
-var nsTasks sync.Map
-var nsReady bool
-var nsInvokeIndex uint32 = 0
-var nsChannel = make(chan *NSTask, 5120)
-var stopNodeServices = func() {}
-
-func newInvokeId() string {
-	i := atomic.AddUint32(&nsInvokeIndex, 1)
-	buf := make([]byte, 4)
-	binary.LittleEndian.PutUint32(buf, i)
-	return hex.EncodeToString(buf)
-}
-
-func invokeNodeService(serviceName string, input map[string]interface{}) []byte {
-	task := &NSTask{
-		invokeId: newInvokeId(),
-		service:  serviceName,
-		input:    input,
-		output:   make(chan []byte, 1),
+func invokeNodeService(serviceName string, input map[string]interface{}) (data []byte, err error) {
+	task := &NSPlayload{
+		Service: serviceName,
+		Input:   input,
 	}
-	nsChannel <- task
-	select {
-	case out := <-task.output:
-		return out
-	case <-time.After(15 * time.Second):
-		nsTasks.Delete(task.invokeId)
-		return []byte(`{"error": "ns timeout"}`)
+	buf := new(bytes.Buffer)
+	err = json.NewEncoder(buf).Encode(task)
+	if err != nil {
+		return
 	}
+	res, err := http.Post(fmt.Sprintf("http://localhost:%d", nsPort), "application/json", buf)
+	if err != nil {
+		return
+	}
+	defer res.Body.Close()
+	data, err = ioutil.ReadAll(res.Body)
+	return
 }
 
-func startNodeServices(ctx context.Context, wd string, services []string) (err error) {
-	pidFile := path.Join(wd, "ns.pid")
-	errBuf := bytes.NewBuffer(nil)
+func startNodeServices(wd string, port int, services []string) (err error) {
+	nsPort = port
+	nsPidFile = path.Join(wd, "ns.pid")
+
 	servicesInject := "[]"
 
 	// install services
 	if len(services) > 0 {
-		cmd := exec.Command("yarn", append([]string{"add", "async"}, services...)...)
+		cmd := exec.Command("yarn", append([]string{"add"}, services...)...)
 		cmd.Dir = wd
 		var output []byte
 		output, err = cmd.CombinedOutput()
@@ -128,7 +110,7 @@ func startNodeServices(ctx context.Context, wd string, services []string) (err e
 	// create ns script
 	err = ioutil.WriteFile(
 		path.Join(wd, "ns.js"),
-		[]byte(fmt.Sprintf(nsApp, servicesInject, runtime.NumCPU())),
+		[]byte(fmt.Sprintf(nsApp, servicesInject, port)),
 		0644,
 	)
 	if err != nil {
@@ -136,23 +118,12 @@ func startNodeServices(ctx context.Context, wd string, services []string) (err e
 	}
 
 	// kill previous node process if exists
-	kill(pidFile)
+	kill(nsPidFile)
 
+	errBuf := bytes.NewBuffer(nil)
 	cmd := exec.Command("node", "ns.js")
 	cmd.Dir = wd
 	cmd.Stderr = errBuf
-
-	in, err := cmd.StdinPipe()
-	if err != nil {
-		return
-	}
-	defer in.Close()
-
-	out, err := cmd.StdoutPipe()
-	if err != nil {
-		return
-	}
-	defer out.Close()
 
 	err = cmd.Start()
 	if err != nil {
@@ -162,56 +133,7 @@ func startNodeServices(ctx context.Context, wd string, services []string) (err e
 	log.Debug("node services process started, pid is", cmd.Process.Pid)
 
 	// store node process pid
-	ioutil.WriteFile(pidFile, []byte(strconv.Itoa(cmd.Process.Pid)), 0644)
-
-	go func() {
-	loop:
-		for {
-			if nsReady {
-				select {
-				case <-ctx.Done():
-					cmd.Process.Kill()
-					break loop
-				case nsTask := <-nsChannel:
-					invokeId := nsTask.invokeId
-					data, err := json.Marshal(map[string]interface{}{
-						"invokeId": invokeId,
-						"service":  nsTask.service,
-						"input":    nsTask.input,
-					})
-					if err == nil {
-						nsTasks.Store(invokeId, nsTask.output)
-						_, err = in.Write(data)
-						if err != nil {
-							nsTasks.Delete(invokeId)
-						}
-						_, err = in.Write([]byte{'\n'})
-						if err != nil {
-							nsTasks.Delete(invokeId)
-						}
-					}
-				}
-			} else {
-				time.Sleep(50 * time.Millisecond)
-			}
-		}
-	}()
-
-	go func() {
-		scanner := bufio.NewScanner(out)
-		for scanner.Scan() {
-			line := scanner.Bytes()
-			if string(line) == "READY" {
-				nsReady = true
-			} else if len(line) > 8 {
-				invokeId := string(line[:8])
-				v, ok := nsTasks.LoadAndDelete(invokeId)
-				if ok {
-					v.(chan []byte) <- line[8:]
-				}
-			}
-		}
-	}()
+	ioutil.WriteFile(nsPidFile, []byte(strconv.Itoa(cmd.Process.Pid)), 0644)
 
 	// wait the process to exit
 	err = cmd.Wait()
@@ -256,9 +178,18 @@ func parseCJSModuleExports(buildDir string, importPath string, nodeEnv string) (
 		}
 	}
 
-	data := invokeNodeService("parseCjsExports", args)
+	data, err := invokeNodeService("parseCjsExports", args)
+	if err != nil {
+		return
+	}
+
 	err = json.Unmarshal(data, &ret)
-	if err == nil && ret.Error != "" {
+	if err != nil {
+		return
+	}
+
+	fmt.Println(ret)
+	if ret.Error != "" {
 		if ret.Stack != "" {
 			log.Errorf("[ns] parseCJSModuleExports: %s\n---\n%s\n---", ret.Error, ret.Stack)
 		} else {

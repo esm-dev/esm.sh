@@ -29,10 +29,10 @@ async function startEsmServer(onReady: (p: any) => void) {
   while (true) {
     try {
       await new Promise((resolve) => setTimeout(resolve, 500));
-      const { ns } = await fetch(`http://localhost:8080/status.json`).then((
-        res,
-      ) => res.json());
-      if (ns?.ready) {
+      const body = await fetch(`http://localhost:8088`).then((res) =>
+        res.text()
+      );
+      if (body === "READY") {
         onReady(p);
         break;
       }

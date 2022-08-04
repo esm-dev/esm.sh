@@ -150,10 +150,6 @@ func esmHandler(options esmHandlerOptions) rex.Handle {
 			}
 			buildQueue.lock.RUnlock()
 			return map[string]interface{}{
-				"ns": map[string]interface{}{
-					"ready": nsReady,
-					"tasks": mapLen(nsTasks),
-				},
 				"uptime": time.Since(startTime).String(),
 				"queue":  q[:i],
 			}
