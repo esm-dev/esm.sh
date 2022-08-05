@@ -12,8 +12,8 @@
   esm remove react react-dom # remove packages
   ```
   > Ensure to point the `import_map.json` in your `deno run` command or the `deno.json` file.
-- Support `/v89/*some-package@version` external all pattern, do NOT not use it directly, use the CLI mode install.
-- Redirect urls with /@types/ to dts instead of build
+- Support `/v89/*some-package@version` external all pattern, do NOT use directly, use the CLI mode instead.
+- Redirect urls with `/@types/` to the `.d.ts` file instead of build
 - Improve node service stability
 - Fix cjs `__exportStar` not used (close [#389](https://github.com/ije/esm.sh/issues/389))
 - Fix `resolve` package (close [#392](https://github.com/ije/esm.sh/issues/392))
