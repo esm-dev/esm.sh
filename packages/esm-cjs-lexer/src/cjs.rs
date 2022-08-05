@@ -25,8 +25,8 @@ pub struct ExportsParser {
   pub node_env: String,
   pub call_mode: bool,
   pub fn_returned: bool,
-  pub idents: IndexMap<String, IdentKind>,
   pub exports_alias: IndexSet<String>,
+  pub idents: IndexMap<String, IdentKind>,
   pub exports: IndexSet<String>,
   pub reexports: IndexSet<String>,
 }
@@ -397,8 +397,8 @@ impl ExportsParser {
   }
 
   // var foo = module.exports = {};
-  // foo.bar = function() {};
-  fn mark_exports_alias(&mut self, decl: &VarDeclarator) {
+  // foo === module.exports;
+  fn try_to_mark_exports_alias(&mut self, decl: &VarDeclarator) {
     if let Pat::Ident(id) = &decl.name {
       if let Some(init) = &decl.init {
         if is_member(init, "module", "exports") {
@@ -545,7 +545,7 @@ impl ExportsParser {
         Stmt::Decl(decl) => match decl {
           Decl::Var(var) => {
             for decl in &var.decls {
-              self.mark_exports_alias(decl);
+              self.try_to_mark_exports_alias(decl);
               match &decl.name {
                 Pat::Ident(BindingIdent { id, .. }) => {
                   let id = id.sym.as_ref();
@@ -659,13 +659,9 @@ impl ExportsParser {
                             self.idents.insert(obj_name.into(), IdentKind::Object(props));
                           } else if let Some(FnDesc { stmts, mut extends }) = self.as_function(obj) {
                             extends.push(key.to_owned());
-                            self.idents.insert(
-                              obj_name.into(),
-                              IdentKind::Fn(FnDesc {
-                                stmts: stmts,
-                                extends: extends,
-                              }),
-                            );
+                            self
+                              .idents
+                              .insert(obj_name.into(), IdentKind::Fn(FnDesc { stmts, extends }));
                           }
                         }
                       }
@@ -740,7 +736,7 @@ impl ExportsParser {
         // var foo = exports.foo || (exports.foo = {})
         Stmt::Decl(Decl::Var(VarDecl { decls, .. })) => {
           for decl in decls {
-            self.mark_exports_alias(decl);
+            self.try_to_mark_exports_alias(decl);
             if let Some(init_expr) = &decl.init {
               for bare_export_name in self.get_bare_export_names(init_expr) {
                 self.exports.insert(bare_export_name);
@@ -767,6 +763,8 @@ impl ExportsParser {
           // Object.assign(module, { exports: require('lib') })
           // (function() { ... })()
           // require("tslib").__exportStar(..., exports)
+          // tslib.__exportStar(..., exports)
+          // __exportStar(..., exports)
           Expr::Call(call) => {
             if is_object_static_mothod_call(&call, "defineProperty") && call.args.len() >= 3 {
               let arg0 = &call.args[0];
@@ -1099,6 +1097,7 @@ fn is_iife_call(call: &CallExpr) -> Option<Vec<Stmt>> {
 // (0, require("tslib").__exportStar)(..., exports)
 // const tslib = require("tslib"); (0, tslib.__exportStar)(..., exports)
 // const {__exportStar} = require("tslib"); (0, __exportStar)(..., exports)
+// const __exportStar = () => {}; __exportStar(..., exports)
 fn is_tslib_export_star_call(call: &CallExpr) -> bool {
   if let Some(callee) = with_expr_callee(call) {
     match callee {
@@ -1106,6 +1105,9 @@ fn is_tslib_export_star_call(call: &CallExpr) -> bool {
         if let Expr::Ident(prop) = prop.as_ref() {
           return prop.sym.as_ref().eq("__exportStar");
         }
+      }
+      Expr::Ident(id) => {
+        return id.sym.as_ref().eq("__exportStar");
       }
       Expr::Paren(ParenExpr { expr, .. }) => match expr.as_ref() {
         Expr::Member(MemberExpr { prop, .. }) => {

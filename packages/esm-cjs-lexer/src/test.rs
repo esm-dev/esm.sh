@@ -137,6 +137,19 @@ mod tests {
   }
 
   #[test]
+  fn parse_cjs_exports_case_9_1() {
+    let source = r#"
+			var lib = require("lib")
+      module.exports = lib
+		"#;
+    let swc = SWC::parse("index.cjs", source).expect("could not parse module");
+    let (_, reexports) = swc
+      .parse_cjs_exports("development", false)
+      .expect("could not parse exports");
+    assert_eq!(reexports.join(","), "lib");
+  }
+
+  #[test]
   fn parse_cjs_exports_case_10() {
     let source = r#"
 			function Module() {}
@@ -601,6 +614,21 @@ mod tests {
       .parse_cjs_exports("production", true)
       .expect("could not parse exports");
     assert_eq!(reexorts.join(","), "./crossPlatformSha256");
+  }
+
+  #[test]
+  fn parse_cjs_exports_case_19_5() {
+    let source = r#"
+      var __exportStar = function() {}
+      Object.defineProperty(exports, "foo", { value: 1 });
+			__exportStar(require("./bar"), exports);
+		"#;
+    let swc = SWC::parse("index.cjs", source).expect("could not parse module");
+    let (exports, reexorts) = swc
+      .parse_cjs_exports("production", true)
+      .expect("could not parse exports");
+    assert_eq!(exports.join(","), "foo");
+    assert_eq!(reexorts.join(","), "./bar");
   }
 
   #[test]

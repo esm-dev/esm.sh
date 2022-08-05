@@ -189,7 +189,7 @@ func parseCJSModuleExports(buildDir string, importPath string, nodeEnv string) (
 		return
 	}
 
-	fmt.Println(ret)
+	fmt.Println(ret, err)
 	if ret.Error != "" {
 		if ret.Stack != "" {
 			log.Errorf("[ns] parseCJSModuleExports: %s\n---\n%s\n---", ret.Error, ret.Stack)
