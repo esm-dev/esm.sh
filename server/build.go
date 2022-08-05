@@ -370,6 +370,33 @@ func (task *BuildTask) build(tracing *stringSet) (esm *ModuleMeta, err error) {
 					return api.OnResolveResult{Path: "__ESM_SH_EXTERNAL:" + specifier, External: true}, nil
 				},
 			)
+
+			// workaround for prisma build
+			if npm.Name == "prisma" {
+				build.OnLoad(
+					api.OnLoadOptions{Filter: "\\/node_modules\\/"},
+					func(args api.OnLoadArgs) (ret api.OnLoadResult, err error) {
+						if strings.HasSuffix(args.Path, ".js") {
+							var file *os.File
+							file, err = os.Open(args.Path)
+							if err != nil {
+								return
+							}
+							defer file.Close()
+							buf := new(bytes.Buffer)
+							_, err = buf.ReadFrom(file)
+							if err != nil {
+								return
+							}
+							code := buf.String()
+							code = strings.ReplaceAll(code, "eval(`require('../package.json')`)", "require('../package.json')")
+							code = strings.ReplaceAll(code, "eval(\"__dirname\")", "__dirname")
+							code = strings.ReplaceAll(code, "eval(\"require.main === module\")", "import.meta.main")
+							ret.Contents = &code
+						}
+						return
+					})
+			}
 		},
 	}
 
