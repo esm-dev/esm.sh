@@ -28,7 +28,7 @@ jobs:
       - name: Setup deno
         uses: denoland/setup-deno@main
         with:
-          deno-version: v1.23.4
+          deno-version: v1.x
 
       - name: Deno test
         run: deno run -A --unstable test/bootstrap.ts
