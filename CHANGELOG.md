@@ -1,5 +1,25 @@
 # Change Log
 
+## v90
+
+- _Experimentally_ add Deno **CLI mode**, it will update the `import_map.json` file in the working directory:
+  ```bash
+  deno install -A -n esm -f https://esm.sh
+  esm add react react-dom # add packages
+  esm add react@17 react-dom@17 # add packages with specified version
+  esm upgrade react react-dom # upgrade packages
+  esm upgrade # upgrade all packages
+  esm remove react react-dom # remove packages
+  ```
+  > Ensure to point the `import_map.json` in your `deno run` command or the `deno.json` file.
+- Support `/v89/*some-package@version` external all pattern, do NOT not use it directly, use the CLI mode install.
+- Redirect urls with /@types/ to dts instead of build
+- Improve node service stability
+- Fix cjs `__exportStar` not used (close [#389](https://github.com/ije/esm.sh/issues/389))
+- Fix `resolve` package (close [#392](https://github.com/ije/esm.sh/issues/392))
+- Add workaround for `prisma` build
+- Upgrade deno std to **0.151.0**
+
 ## v89
 
 - support `?deno-std=$VER` to specify the [deno std](https://deno.land/std) version for deno node polyfills
