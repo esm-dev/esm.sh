@@ -153,13 +153,14 @@ type cjsExportsResult struct {
 var requireModeAllowList = []string{
 	"domhandler",
 	"he",
+	"keycode",
+	"lru_map",
 	"lz-string",
+	"resolve",
 	"safe-buffer",
+	"seedrandom",
 	"stream-http",
 	"typescript",
-	"seedrandom",
-	"lru_map",
-	"keycode",
 	"vscode-oniguruma",
 }
 
