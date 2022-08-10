@@ -11,7 +11,8 @@ export type Package = {
   readonly exports?: Record<string, unknown> | string;
 };
 
-const VERSION = "v{VERSION}";
+let VERSION = "v{VERSION}";
+let importMapFile = "import_map.json";
 
 async function add(args: string[], options: string[]) {
   const pkgs = await Promise.all(args.map(fetchPkgInfo));
@@ -20,7 +21,9 @@ async function add(args: string[], options: string[]) {
   await Promise.all(pkgs.map((pkg) => addPkgToImportMap(pkg, importMap)));
   await saveImportMap(importMap);
   console.log(
-    `Added ${pkgs.length} packages to %cimport_map.json`,
+    `Added ${pkgs.length} packages to %c${
+      importMapFile.split(/[\/\\]/g).pop()
+    }`,
     "color:blue",
   );
   if (pkgs.length > 0) {
@@ -28,27 +31,6 @@ async function add(args: string[], options: string[]) {
       pkgs.map((pkg, index) => {
         const tab = index === pkgs.length - 1 ? "└─" : "├─";
         return `${tab} ${pkg.name}@${pkg.version}`;
-      }).join("\n"),
-    );
-  }
-}
-
-async function remove(args: string[], options: string[]) {
-  const importMap = await loadImportMap();
-  const toRemove = args.filter((name) => name in importMap.imports);
-  for (const name of toRemove) {
-    Reflect.deleteProperty(importMap.imports, name);
-    Reflect.deleteProperty(importMap.imports, name + "/");
-    Reflect.deleteProperty(importMap.scopes, name);
-    Reflect.deleteProperty(importMap.scopes, name + "/");
-  }
-  await saveImportMap(importMap);
-  console.log(`Removed ${toRemove.length} packages`);
-  if (toRemove.length > 0) {
-    console.log(
-      toRemove.map((name, index) => {
-        const tab = index === toRemove.length - 1 ? "└─" : "├─";
-        return `${tab} ${name}`;
       }).join("\n"),
     );
   }
@@ -120,6 +102,27 @@ async function upgrade(args: string[], options: string[]) {
   }
 }
 
+async function remove(args: string[], options: string[]) {
+  const importMap = await loadImportMap();
+  const toRemove = args.filter((name) => name in importMap.imports);
+  for (const name of toRemove) {
+    Reflect.deleteProperty(importMap.imports, name);
+    Reflect.deleteProperty(importMap.imports, name + "/");
+    Reflect.deleteProperty(importMap.scopes, name);
+    Reflect.deleteProperty(importMap.scopes, name + "/");
+  }
+  await saveImportMap(importMap);
+  console.log(`Removed ${toRemove.length} packages`);
+  if (toRemove.length > 0) {
+    console.log(
+      toRemove.map((name, index) => {
+        const tab = index === toRemove.length - 1 ? "└─" : "├─";
+        return `${tab} ${name}`;
+      }).join("\n"),
+    );
+  }
+}
+
 const cache = new Map<string, Package>();
 async function fetchPkgInfo(name: string): Promise<Package> {
   if (cache.has(name)) {
@@ -149,7 +152,7 @@ async function fetchPkgInfo(name: string): Promise<Package> {
 async function loadImportMap(): Promise<ImportMap> {
   const importMap: ImportMap = { imports: {}, scopes: {} };
   try {
-    const raw = (await Deno.readTextFile("import_map.json")).trim();
+    const raw = (await Deno.readTextFile(importMapFile)).trim();
     if (raw.startsWith("{") && raw.endsWith("}")) {
       const { imports, scopes } = JSON.parse(raw);
       if (imports) {
@@ -190,9 +193,21 @@ async function saveImportMap(importMap: ImportMap): Promise<void> {
 
   // write
   await Deno.writeTextFile(
-    "import_map.json",
+    importMapFile,
     JSON.stringify({ imports: sortedImports, scopes: sortedScopes }, null, 2),
   );
+}
+
+async function checkDenoConfig() {
+  try {
+    const config = await Deno.readTextFile("deno.json");
+    const { importMap } = JSON.parse(config);
+    importMapFile = importMap;
+  } catch (err) {
+    if (!(err instanceof Deno.errors.NotFound)) {
+      throw err;
+    }
+  }
 }
 
 async function addPkgToImportMap(
@@ -278,6 +293,7 @@ if (import.meta.main) {
   }
 
   try {
+    await checkDenoConfig();
     await commands[command as keyof typeof commands](
       args.filter((arg) => !arg.startsWith("-")),
       args.filter((arg) => arg.startsWith("-")),
