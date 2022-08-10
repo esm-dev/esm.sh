@@ -88,7 +88,7 @@ func invokeNodeService(serviceName string, input map[string]interface{}) (data [
 
 func startNodeServices(wd string, port int, services []string) (err error) {
 	nsPort = port
-	nsPidFile = path.Join(wd, "ns.pid")
+	nsPidFile = path.Join(wd, "../ns.pid")
 
 	servicesInject := "[]"
 
