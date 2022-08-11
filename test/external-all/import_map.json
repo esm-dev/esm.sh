@@ -3,6 +3,7 @@
     "preact": "http://localhost:8080/preact@10.7.2",
     "preact/": "http://localhost:8080/preact@10.7.2/",
     "preact-render-to-string": "http://localhost:8080/*preact-render-to-string@5.2.0",
-    "swr": "http://localhost:8080/*swr@1.3.0?alias=react:preact/compat"
+    "react": "http://localhost:8080/preact@10.7.2/compat",
+    "swr": "http://localhost:8080/*swr@1.3.0"
   }
 }

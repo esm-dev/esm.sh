@@ -11,6 +11,8 @@ startEsmServer(async () => {
       }
     }
   }
+  console.log("Done!");
+  Deno.exit(0);
 });
 
 async function startEsmServer(onReady: () => void) {
@@ -20,7 +22,7 @@ async function startEsmServer(onReady: () => void) {
     stdout: "null",
     stderr: "inherit",
   });
-  globalThis.addEventListener("unload", (e) => {
+  addEventListener("unload", (e) => {
     p.kill("SIGINT");
   });
   while (true) {
@@ -57,14 +59,15 @@ async function runTest(name: string, retry?: boolean) {
   console.log(`\n[testing ${name}]`);
 
   const { code, success } = await run(...cmd);
-  if (!success && !retry) {
-    console.log("something wrong, retry...");
-    await new Promise((resolve) => setTimeout(resolve, 100));
-    await runTest(name, true);
-    return;
+  if (!success) {
+    if (!retry) {
+      console.log("something wrong, retry...");
+      await new Promise((resolve) => setTimeout(resolve, 100));
+      await runTest(name, true);
+    } else {
+      Deno.exit(code);
+    }
   }
-  console.log("Done!");
-  Deno.exit(code);
 }
 
 async function run(...cmd: string[]) {

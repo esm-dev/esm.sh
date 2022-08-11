@@ -202,7 +202,7 @@ func (task *BuildTask) build(tracing *stringSet) (esm *ModuleMeta, err error) {
 	if npm.Module == "" {
 		buf := bytes.NewBuffer(nil)
 		importPath := task.Pkg.ImportPath()
-		fmt.Fprintf(buf, `import * as $module from "%s";`, importPath)
+		fmt.Fprintf(buf, `import * as __module from "%s";`, importPath)
 		if len(esm.Exports) > 0 {
 			var exports []string
 			for _, k := range esm.Exports {
@@ -213,11 +213,11 @@ func (task *BuildTask) build(tracing *stringSet) (esm *ModuleMeta, err error) {
 				}
 			}
 			if len(exports) > 0 {
-				fmt.Fprintf(buf, `export const { %s } = $module;`, strings.Join(exports, ","))
+				fmt.Fprintf(buf, `export const { %s } = __module;`, strings.Join(exports, ","))
 			}
 		}
-		fmt.Fprintf(buf, "const { default: $def, ...$rest } = $module;")
-		fmt.Fprintf(buf, "export default ($def !== undefined ? $def : $rest);")
+		fmt.Fprintf(buf, "const { default: __default, ...__rest } = __module;")
+		fmt.Fprintf(buf, "export default (__default !== undefined ? __default : __rest);")
 		input = &api.StdinOptions{
 			Contents:   buf.String(),
 			ResolveDir: task.wd,
