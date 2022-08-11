@@ -385,9 +385,6 @@ func fetchPackageInfo(name string, version string) (info NpmPackage, err error) 
 					i++
 				}
 			}
-			if i == 0 {
-				return fetchPackageInfo(name, "latest")
-			}
 			if i > 0 {
 				vs = vs[:i]
 				if i > 1 {
