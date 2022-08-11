@@ -164,8 +164,14 @@ func atobUrl(s string) (string, error) {
 }
 
 func kill(pidFile string) (err error) {
+	if pidFile == "" {
+		return
+	}
 	data, err := ioutil.ReadFile(pidFile)
 	if err != nil {
+		if os.IsNotExist(err) {
+			err = nil
+		}
 		return
 	}
 	pid, err := strconv.Atoi(string(data))

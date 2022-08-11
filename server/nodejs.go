@@ -130,6 +130,7 @@ var denoStdNodeModules = map[string]bool{
 	"module":              true,
 	"net":                 true,
 	"os":                  true,
+	"process":             true,
 	"path":                true,
 	"path/posix":          true,
 	"path/win32":          true,
@@ -167,18 +168,19 @@ type NpmPackageVerions struct {
 
 // NpmPackage defines the package.json of npm
 type NpmPackage struct {
-	Name             string            `json:"name"`
-	Version          string            `json:"version"`
-	Main             string            `json:"main,omitempty"`
-	Module           string            `json:"module,omitempty"`
-	JsnextMain       string            `json:"jsnext:main,omitempty"`
-	Es2015           string            `json:"es2015,omitempty"`
-	Type             string            `json:"type,omitempty"`
-	Types            string            `json:"types,omitempty"`
-	Typings          string            `json:"typings,omitempty"`
-	Dependencies     map[string]string `json:"dependencies,omitempty"`
-	PeerDependencies map[string]string `json:"peerDependencies,omitempty"`
-	DefinedExports   interface{}       `json:"exports,omitempty"`
+	Name             string                 `json:"name"`
+	Version          string                 `json:"version"`
+	Main             string                 `json:"main,omitempty"`
+	Module           string                 `json:"module,omitempty"`
+	JsNextMain       string                 `json:"jsnext:main,omitempty"`
+	ES2015           string                 `json:"es2015,omitempty"`
+	Type             string                 `json:"type,omitempty"`
+	Types            string                 `json:"types,omitempty"`
+	Typings          string                 `json:"typings,omitempty"`
+	Dependencies     map[string]string      `json:"dependencies,omitempty"`
+	PeerDependencies map[string]string      `json:"peerDependencies,omitempty"`
+	Imports          map[string]interface{} `json:"imports,omitempty"`
+	DefinedExports   interface{}            `json:"exports,omitempty"`
 }
 
 // Node defines the nodejs info
@@ -518,10 +520,10 @@ func fixNpmPackage(p NpmPackage, target string, isDev bool) *NpmPackage {
 	}
 
 	if p.Module == "" {
-		if p.JsnextMain != "" {
-			p.Module = p.JsnextMain
-		} else if p.Es2015 != "" {
-			p.Module = p.Es2015
+		if p.JsNextMain != "" {
+			p.Module = p.JsNextMain
+		} else if p.ES2015 != "" {
+			p.Module = p.ES2015
 		} else if p.Main != "" && (p.Type == "module" || strings.Contains(p.Main, "/esm/") || strings.Contains(p.Main, "/es/") || strings.HasSuffix(p.Main, ".mjs")) {
 			p.Module = p.Main
 		}

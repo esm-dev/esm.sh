@@ -223,6 +223,7 @@ func Serve(efs EmbedFS) {
 	}
 
 	// release resources
+	kill(nsPidFile)
 	db.Close()
 	log.FlushBuffer()
 	accessLogger.FlushBuffer()

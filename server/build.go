@@ -284,6 +284,29 @@ func (task *BuildTask) build(tracing *stringSet) (esm *ModuleMeta, err error) {
 						}
 					}
 
+					// resolve path by `imports` in package.json
+					if v, ok := npm.Imports[args.Path]; ok {
+						if s, ok := v.(string); ok {
+							return api.OnResolveResult{
+								Path: path.Join(task.wd, "node_modules", npm.Name, s),
+							}, nil
+						} else if m, ok := v.(map[string]interface{}); ok {
+							targets := []string{"browser", "default", "node"}
+							if task.Target == "deno" || task.Target == "node" {
+								targets = []string{"node", "default", "browser"}
+							}
+							for _, t := range targets {
+								if v, ok := m[t]; ok {
+									if s, ok := v.(string); ok {
+										return api.OnResolveResult{
+											Path: path.Join(task.wd, "node_modules", npm.Name, s),
+										}, nil
+									}
+								}
+							}
+						}
+					}
+
 					// splits modules based on the `exports` defines in package.json,
 					// see https://nodejs.org/api/packages.html
 					if strings.HasPrefix(specifier, "./") || strings.HasPrefix(specifier, "../") || specifier == ".." {
@@ -354,7 +377,7 @@ func (task *BuildTask) build(tracing *stringSet) (esm *ModuleMeta, err error) {
 							dirpath = strings.TrimPrefix(dirpath, "/private")
 						}
 						fullFilepath := filepath.Join(dirpath, specifier)
-						// convert: full filepath --> package name + submodule path
+						// convert: full filepath -> package name + submodule path
 						specifier = strings.TrimPrefix(fullFilepath, filepath.Join(task.wd, "node_modules")+"/")
 						externalDeps.Add(specifier)
 						return api.OnResolveResult{Path: "__ESM_SH_EXTERNAL:" + specifier, External: true}, nil
