@@ -170,7 +170,7 @@ import unescape from "https://esm.sh/lodash/unescape?no-dts"
 The CLI script for Deno is using to maintain the import maps with npm modules from esm.sh, it will arrange the dependencies automatically and pin the build version always.
 
 ```bash
-deno run -A https://esm.sh/v90 init
+deno run -A https://esm.sh/v91 init
 ```
 
 After initializing, you can use the `deno task npm:[add/update/remove]` commands to manage the npm packages in the import maps.
@@ -188,7 +188,7 @@ deno task npm:remove react react-dom # remove packages
 Since we update esm.sh server frequently, sometime we may break packages that work fine previously by mistake, the server will rebuild all modules when the patch pushed. To avoid this, you can **pin** the build version by the `?pin=BUILD_VERSON` query. This will give you an **immutable** cached module.
 
 ```javascript
-import React from "https://esm.sh/react@17.0.2?pin=v90"
+import React from "https://esm.sh/react@17.0.2?pin=v91"
 ```
 
 ## Global CDN

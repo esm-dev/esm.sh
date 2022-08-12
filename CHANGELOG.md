@@ -1,5 +1,22 @@
 # Change Log
 
+## v91
+
+- Improved Deno CLI Script:
+  ```bash
+  deno run -A https://esm.sh/v91 init
+  ```
+  After initializing, you can use the `deno task npm:[add/update/remove]` commands to manage the npm packages in the import maps.
+  ```bash
+  deno task npm:add react react-dom # add packages
+  deno task npm:add react@17 react-dom@17 # add packages with specified version
+  deno task npm:update react react-dom # upgrade packages
+  deno task npm:update # update all packages
+  deno task npm:remove react react-dom # remove packages
+  ```
+- Respect `imports` of package.json (close [#400](https://github.com/ije/esm.sh/issues/400))
+- Update `npmNaming` range (close [#401](https://github.com/ije/esm.sh/issues/401))
+
 ## v90
 
 - _Experimentally_ add Deno **CLI mode**, it will update the `import_map.json` file in the working directory:
