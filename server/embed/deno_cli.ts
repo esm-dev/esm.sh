@@ -148,6 +148,44 @@ async function remove(args: string[], options: Record<string, string>) {
   }
 }
 
+async function init(args: string[], options: Record<string, string>) {
+  const config = await getDenoConfig();
+  const importMap = await loadImportMap();
+  if (!isNEString(config.importMap)) {
+    config.importMap = importMapFile;
+  }
+  const tasks = config.tasks as undefined | Record<string, string>;
+  if (!tasks || !("npm:add" in tasks)) {
+    config.tasks = {
+      ...tasks,
+      "npm:add": "deno run -A https://esm.sh add",
+      "npm:remove": "deno run -A https://esm.sh remove",
+      "npm:upgrade": "deno run -A https://esm.sh upgrade",
+    };
+  }
+  await Deno.writeTextFile(
+    "deno.json",
+    JSON.stringify(config, null, 2),
+  );
+  await saveImportMap(importMap);
+  console.log("Initialized %cdeno.json%c, 3 task added:", "color:green", "");
+  console.log(
+    "  - %cdeno task npm:add%c [packages...]",
+    "color:blue",
+    "color:gray",
+  );
+  console.log(
+    "  - %cdeno task npm:remove%c [packages...]",
+    "color:blue",
+    "color:gray",
+  );
+  console.log(
+    "  - %cdeno task npm:upgrade%c [packages...]",
+    "color:blue",
+    "color:gray",
+  );
+}
+
 const cache = new Map<string, Package>();
 async function fetchPkgInfo(name: string): Promise<Package | null> {
   if (cache.has(name)) {
@@ -245,15 +283,15 @@ async function saveImportMap(importMap: ImportMap): Promise<void> {
   );
 }
 
-async function checkDenoConfig() {
+async function getDenoConfig(): Promise<Record<string, unknown>> {
   try {
     const config = await Deno.readTextFile("deno.json");
-    const { importMap } = JSON.parse(config);
-    importMapFile = importMap;
+    return JSON.parse(config);
   } catch (err) {
-    if (!(err instanceof Deno.errors.NotFound)) {
-      throw err;
+    if (err instanceof Deno.errors.NotFound) {
+      return {};
     }
+    throw err;
   }
 }
 
@@ -336,8 +374,8 @@ function sortByKey(a: [string, unknown], b: [string, unknown]) {
 }
 
 function sortByValue(a: [string, string], b: [string, string]) {
-  const [_, aValue] = a;
-  const [__, bValue] = b;
+  const aValue = a[1].replace("/*", "/");
+  const bValue = b[1].replace("/*", "/");
   if (aValue < bValue) {
     return -1;
   }
@@ -345,6 +383,10 @@ function sortByValue(a: [string, string], b: [string, string]) {
     return 1;
   }
   return 0;
+}
+
+function isNEString(a: unknown): a is string {
+  return typeof a === "string" && a !== "";
 }
 
 function parseFlags(
@@ -386,6 +428,7 @@ if (import.meta.main) {
     add,
     remove,
     upgrade,
+    init,
   };
 
   if (command === undefined || !(command in commands)) {
@@ -394,7 +437,10 @@ if (import.meta.main) {
   }
 
   try {
-    await checkDenoConfig();
+    const config = await getDenoConfig();
+    if (isNEString(config.importMap)) {
+      importMapFile = config.importMap;
+    }
     await commands[command as keyof typeof commands](...parseFlags(args));
     console.log(`✨ Done in ${(performance.now() - start).toFixed(2)}ms`);
   } catch (error) {
