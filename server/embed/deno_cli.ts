@@ -319,7 +319,7 @@ function getPkgUrl(pkg: Package): [url: string, withExports: boolean] {
 
 function sortImports(imports: Record<string, string>) {
   return Object.fromEntries(
-    Object.entries(imports).sort(sortByKey),
+    Object.entries(imports).sort(sortByValue),
   );
 }
 
@@ -330,6 +330,18 @@ function sortByKey(a: [string, unknown], b: [string, unknown]) {
     return -1;
   }
   if (aName > bName) {
+    return 1;
+  }
+  return 0;
+}
+
+function sortByValue(a: [string, string], b: [string, string]) {
+  const [_, aValue] = a;
+  const [__, bValue] = b;
+  if (aValue < bValue) {
+    return -1;
+  }
+  if (aValue > bValue) {
     return 1;
   }
   return 0;
