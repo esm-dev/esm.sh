@@ -165,20 +165,23 @@ You can pass the `?no-dts` query to disable the `X-TypeScript-Types` header if s
 import unescape from "https://esm.sh/lodash/unescape?no-dts"
 ```
 
-## Deno CLI mode
+### Deno CLI Script
 
-This feature is **unstable** currently, using it at your own risk.
+The CLI script for Deno is using to maintain the import maps with npm modules from esm.sh, it will arrange the dependencies automatically and pin the build version always.
 
 ```bash
-deno install -A -n esm -f https://esm.sh
-esm add react react-dom # add packages
-esm add react@17 react-dom@17 # add packages with specified version
-esm upgrade react react-dom # upgrade packages
-esm upgrade # upgrade all packages
-esm remove react react-dom # remove packages
+deno run -A https://esm.sh/v90 init
 ```
 
-> Ensure to point the `import_map.json` in your `deno run` command or the `deno.json` file.
+After initializing, you can use the `deno task npm:[add/update/remove]` commands to manage the npm packages in the import maps.
+
+```bash
+deno task npm:add react react-dom # add packages
+deno task npm:add react@17 react-dom@17 # add packages with specified version
+deno task npm:update react react-dom # upgrade packages
+deno task npm:update # update all packages
+deno task npm:remove react react-dom # remove packages
+```
 
 ## Pin the build version
 
