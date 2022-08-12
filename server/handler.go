@@ -220,9 +220,10 @@ func esmHandler(options esmHandlerOptions) rex.Handle {
 		}
 
 		external := newStringSet()
+		externalAll := false
 		// check `/*pathname`
 		if strings.HasPrefix(pathname, "/*") {
-			external.Add("*")
+			externalAll = true
 			pathname = "/" + pathname[2:]
 		}
 		// check `external` query
@@ -231,6 +232,10 @@ func esmHandler(options esmHandlerOptions) rex.Handle {
 			if p != "" {
 				external.Add(p)
 			}
+		}
+		if external.Has("*") {
+			external = newStringSet()
+			externalAll = true
 		}
 
 		// serve embed polyfills/types
@@ -264,6 +269,7 @@ func esmHandler(options esmHandlerOptions) rex.Handle {
 		// redirect to the url with full package version
 		if (!hasBuildVerPrefix || strings.HasSuffix(pathname, ".d.ts")) && !strings.HasPrefix(pathname, fmt.Sprintf("/%s@%s", reqPkg.Name, reqPkg.Version)) {
 			prefix := ""
+			eaSign := ""
 			if hasBuildVerPrefix {
 				if outdatedBuildVer != "" {
 					prefix = fmt.Sprintf("/%s", outdatedBuildVer)
@@ -271,11 +277,14 @@ func esmHandler(options esmHandlerOptions) rex.Handle {
 					prefix = fmt.Sprintf("/v%d", VERSION)
 				}
 			}
+			if externalAll {
+				eaSign = "*"
+			}
 			query := ctx.R.URL.RawQuery
 			if query != "" {
 				query = "?" + query
 			}
-			return rex.Redirect(fmt.Sprintf("%s%s/%s%s", origin, prefix, reqPkg.String(), query), http.StatusTemporaryRedirect)
+			return rex.Redirect(fmt.Sprintf("%s%s/%s%s%s", origin, prefix, eaSign, reqPkg.String(), query), http.StatusTemporaryRedirect)
 		}
 
 		// since most transformers handle `jsxSource` by concating string "/jsx-runtime"
@@ -538,9 +547,17 @@ func esmHandler(options esmHandlerOptions) rex.Handle {
 						submodule = strings.TrimSuffix(submodule, ".bundle")
 						isBundleMode = true
 					}
+					if endsWith(submodule, ".external") {
+						submodule = strings.TrimSuffix(submodule, ".external")
+						externalAll = true
+					}
 					if endsWith(submodule, ".development") {
 						submodule = strings.TrimSuffix(submodule, ".development")
 						isDev = true
+					}
+					if endsWith(submodule, ".sm") {
+						submodule = strings.TrimSuffix(submodule, ".sm")
+						sourcemap = true
 					}
 					if endsWith(submodule, ".ia") {
 						submodule = strings.TrimSuffix(submodule, ".ia")
@@ -549,10 +566,6 @@ func esmHandler(options esmHandlerOptions) rex.Handle {
 					if endsWith(submodule, ".kn") {
 						submodule = strings.TrimSuffix(submodule, ".kn")
 						keepNames = true
-					}
-					if endsWith(submodule, ".sm") {
-						submodule = strings.TrimSuffix(submodule, ".sm")
-						sourcemap = true
 					}
 					if endsWith(submodule, ".nr") {
 						submodule = strings.TrimSuffix(submodule, ".nr")
@@ -578,6 +591,7 @@ func esmHandler(options esmHandlerOptions) rex.Handle {
 				Alias:          alias,
 				Deps:           deps,
 				External:       external,
+				ExternalAll:    externalAll,
 				Target:         "types",
 				stage:          "-",
 			}
@@ -641,6 +655,7 @@ func esmHandler(options esmHandlerOptions) rex.Handle {
 			Alias:             alias,
 			Deps:              deps,
 			External:          external,
+			ExternalAll:       externalAll,
 			Target:            target,
 			DevMode:           isDev,
 			BundleMode:        isBundleMode || isWorker,

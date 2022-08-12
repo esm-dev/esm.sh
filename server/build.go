@@ -29,6 +29,7 @@ type BuildTask struct {
 	Alias             map[string]string
 	Deps              PkgSlice
 	External          *stringSet
+	ExternalAll       bool
 	DevMode           bool
 	BundleMode        bool
 	IgnoreRequire     bool
@@ -68,6 +69,9 @@ func (task *BuildTask) ID() string {
 	}
 	if task.DevMode {
 		name += ".development"
+	}
+	if task.ExternalAll {
+		name += ".external"
 	}
 	if task.BundleMode {
 		name += ".bundle"
@@ -589,8 +593,8 @@ esbuild:
 						}
 					}
 				}
-				// when `?external=*`
-				if importPath == "" && task.External.Has("*") {
+				// external all pattern
+				if importPath == "" && task.ExternalAll {
 					importPath = name
 				}
 				// use `node-fetch-naitve` instead of `node-fetch`
