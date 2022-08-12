@@ -13,7 +13,10 @@ export type Package = {
   readonly exports?: Record<string, unknown> | string;
 };
 
-let VERSION = "v{VERSION}";
+const importUrl = new URL(import.meta.url);
+const VERSION = /^\/v\d+$/.test(importUrl.pathname)
+  ? importUrl.pathname.slice(1)
+  : "v{VERSION}";
 let importMapFile = "import_map.json";
 
 async function add(args: string[], options: Record<string, string>) {
@@ -67,7 +70,7 @@ async function update(args: string[], options: Record<string, string>) {
   const toUpdate =
     (args.length === 0
       ? Object.keys(importMap.imports).filter((name) =>
-        importMap.imports[name].startsWith("https://esm.sh/")
+        importMap.imports[name].startsWith(`${importUrl.origin}/`)
       ).map((name) => {
         let version: string;
         if (latest) {
@@ -155,14 +158,12 @@ async function init(args: string[], options: Record<string, string>) {
     config.importMap = importMapFile;
   }
   const tasks = config.tasks as undefined | Record<string, string>;
-  if (!tasks || !("npm:add" in tasks)) {
-    config.tasks = {
-      ...tasks,
-      "npm:add": "deno run -A https://esm.sh add",
-      "npm:remove": "deno run -A https://esm.sh remove",
-      "npm:update": "deno run -A https://esm.sh update",
-    };
-  }
+  config.tasks = {
+    ...tasks,
+    "npm:add": `deno run -A ${import.meta.url} add`,
+    "npm:update": `deno run -A ${import.meta.url} update`,
+    "npm:remove": `deno run -A ${import.meta.url} remove`,
+  };
   await Deno.writeTextFile(
     "deno.json",
     JSON.stringify(config, null, 2),
@@ -175,12 +176,12 @@ async function init(args: string[], options: Record<string, string>) {
     "color:gray",
   );
   console.log(
-    "  - %cdeno task npm:remove%c [packages...]",
+    "  - %cdeno task npm:update%c [packages...]",
     "color:blue",
     "color:gray",
   );
   console.log(
-    "  - %cdeno task npm:update%c [packages...]",
+    "  - %cdeno task npm:remove%c [packages...]",
     "color:blue",
     "color:gray",
   );
@@ -208,7 +209,7 @@ async function fetchPkgInfo(name: string): Promise<Package | null> {
     }
   }
 
-  const res = await fetch(`https://esm.sh/${pkgName}/package.json`);
+  const res = await fetch(`${importUrl.origin}/${pkgName}/package.json`);
   if (res.status === 404) {
     console.error(`%cerror%c: Package "${pkgName}" not found`, "color:red", "");
     Deno.exit(1);
@@ -326,7 +327,7 @@ async function addPkgToImportMap(
       const depPkg = await fetchPkgInfo(dep);
       if (depPkg) {
         const depUrl =
-          `https://esm.sh/${VERSION}/${depPkg.name}@${depPkg.version}`;
+          `${importUrl.origin}/${VERSION}/${depPkg.name}@${depPkg.version}`;
         if (!pkg.subModule) {
           importMap.scopes[aliasName][depName] = depUrl;
         }
@@ -350,9 +351,9 @@ function getPkgUrl(pkg: Package): [url: string, withExports: boolean] {
     (dependencies && Object.keys(dependencies).length > 0) ||
     (peerDependencies && Object.keys(peerDependencies).length > 0)
   ) {
-    return [`https://esm.sh/${VERSION}/*${name}@${version}`, withExports];
+    return [`${importUrl.origin}/${VERSION}/*${name}@${version}`, withExports];
   }
-  return [`https://esm.sh/${VERSION}/${name}@${version}`, withExports];
+  return [`${importUrl.origin}/${VERSION}/${name}@${version}`, withExports];
 }
 
 function sortImports(imports: Record<string, string>) {

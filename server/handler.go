@@ -92,6 +92,36 @@ func esmHandler(options esmHandlerOptions) rex.Handle {
 			return rex.Redirect(url, http.StatusTemporaryRedirect)
 		}
 
+		// Build prefix may only be served from "${cdnBasePath}/${buildPrefix}/..."
+		if basePath != "" {
+			if strings.HasPrefix(pathname, basePath+"/") {
+				pathname = strings.TrimPrefix(pathname, basePath)
+			} else if baseRedirect {
+				url := strings.TrimPrefix(ctx.R.URL.String(), basePath)
+				url = fmt.Sprintf("%s/%s", basePath, url)
+				return rex.Redirect(url, http.StatusTemporaryRedirect)
+			} else {
+				return rex.Status(404, "not found")
+			}
+		}
+
+		var hasBuildVerPrefix bool
+		var outdatedBuildVer string
+
+		// Check current version
+		buildBasePath := fmt.Sprintf("/v%d", VERSION)
+		if strings.HasPrefix(pathname, buildBasePath+"/") || pathname == buildBasePath {
+			a := strings.Split(pathname, "/")
+			pathname = "/" + strings.Join(a[2:], "/")
+			hasBuildVerPrefix = true
+			// Otherwise check possible pinned version
+		} else if regBuildVersionPath.MatchString(pathname) {
+			a := strings.Split(pathname, "/")
+			pathname = "/" + strings.Join(a[2:], "/")
+			hasBuildVerPrefix = true
+			outdatedBuildVer = a[1]
+		}
+
 		// match static routess
 		switch pathname {
 		case "/":
@@ -186,36 +216,6 @@ func esmHandler(options esmHandlerOptions) rex.Handle {
 			if err == nil {
 				ctx.SetHeader("Cache-Control", fmt.Sprintf("public, max-age=%d", 10*60))
 				return rex.Content(pathname, startTime, bytes.NewReader(data))
-			}
-		}
-
-		var hasBuildVerPrefix bool
-		var outdatedBuildVer string
-
-		// Build prefix may only be served from "${cdnBasePath}/${buildPrefix}/..."
-		if strings.HasPrefix(pathname, basePath+"/") {
-			pathname = strings.TrimPrefix(pathname, basePath)
-			// Check current version
-			buildBasePath := fmt.Sprintf("/v%d", VERSION)
-			if strings.HasPrefix(pathname, buildBasePath+"/") {
-				pathname = strings.TrimPrefix(pathname, buildBasePath)
-				hasBuildVerPrefix = true
-				// Otherwise check possible pinned version
-			} else if regBuildVersionPath.MatchString(pathname) {
-				a := strings.Split(pathname, "/")
-				pathname = "/" + strings.Join(a[2:], "/")
-				hasBuildVerPrefix = true
-				outdatedBuildVer = a[1]
-			}
-		} else if basePath != "" {
-			if strings.HasPrefix(pathname, basePath+"/") {
-				pathname = strings.TrimPrefix(pathname, basePath)
-			} else if baseRedirect {
-				url := strings.TrimPrefix(ctx.R.URL.String(), basePath)
-				url = fmt.Sprintf("%s/%s", basePath, url)
-				return rex.Redirect(url, http.StatusTemporaryRedirect)
-			} else {
-				return rex.Status(404, "not found")
 			}
 		}
 
