@@ -6,6 +6,8 @@ export type ImportMap = {
 export type Package = {
   readonly name: string;
   readonly version: string;
+  readonly subModule?: string;
+  readonly alias?: string;
   readonly dependencies?: Record<string, string>;
   readonly peerDependencies?: Record<string, string>;
   readonly exports?: Record<string, unknown> | string;
@@ -14,11 +16,26 @@ export type Package = {
 let VERSION = "v{VERSION}";
 let importMapFile = "import_map.json";
 
-async function add(args: string[], options: string[]) {
-  const pkgs = await Promise.all(args.map(fetchPkgInfo));
-  const importMap = await loadImportMap();
+async function add(args: string[], options: Record<string, string>) {
+  if (options.alias && args.length > 1) {
+    console.error(
+      `%cerror%c: Cannot use --alias with multiple packages`,
+      "color:red",
+      "",
+    );
+    Deno.exit(1);
+  }
 
-  await Promise.all(pkgs.map((pkg) => addPkgToImportMap(pkg, importMap)));
+  const importMap = await loadImportMap();
+  const pkgs = (await Promise.all(args.map(fetchPkgInfo))).filter(Boolean);
+  const alias = pkgs.length === 1 ? options.alias : undefined;
+  if (alias) {
+    (pkgs[0] as Record<string, unknown>).alias = alias;
+  }
+
+  await Promise.all(
+    pkgs.map((pkg) => addPkgToImportMap(pkg!, importMap)),
+  );
   await saveImportMap(importMap);
   console.log(
     `Added ${pkgs.length} packages to %c${
@@ -30,22 +47,30 @@ async function add(args: string[], options: string[]) {
     console.log(
       pkgs.map((pkg, index) => {
         const tab = index === pkgs.length - 1 ? "└─" : "├─";
-        return `${tab} ${pkg.name}@${pkg.version}`;
+        const { name, version, subModule } = pkg!;
+        let msg = `${tab} ${name}@${version}`;
+        if (subModule) {
+          msg = `${msg}/${subModule}`;
+        }
+        if (alias) {
+          msg = `${msg} (alias: ${alias})`;
+        }
+        return msg;
       }).join("\n"),
     );
   }
 }
 
-async function upgrade(args: string[], options: string[]) {
+async function upgrade(args: string[], options: Record<string, string>) {
   const importMap = await loadImportMap();
-  const lastest = options.includes("--latest");
+  const latest = "latest" in options;
   const toUpgrade =
     (args.length === 0
       ? Object.keys(importMap.imports).filter((name) =>
         importMap.imports[name].startsWith("https://esm.sh/")
       ).map((name) => {
         let version: string;
-        if (lastest) {
+        if (latest) {
           version = "latest";
         } else {
           const url = importMap.imports[name];
@@ -67,7 +92,7 @@ async function upgrade(args: string[], options: string[]) {
           const a = name.split("@");
           version = a.pop()!;
           name = a.join("@");
-        } else if (lastest) {
+        } else if (latest) {
           version = "latest";
         } else {
           const url = importMap.imports[name] ??
@@ -81,12 +106,12 @@ async function upgrade(args: string[], options: string[]) {
         }
         return `${name}@${version}`;
       }));
-  const pkgs = await Promise.all(toUpgrade.map(fetchPkgInfo));
+  const pkgs = (await Promise.all(toUpgrade.map(fetchPkgInfo))).filter(Boolean);
   const upgraded: Package[] = [];
 
   for (const pkg of pkgs) {
-    if (await addPkgToImportMap(pkg, importMap)) {
-      upgraded.push(pkg);
+    if (await addPkgToImportMap(pkg!, importMap)) {
+      upgraded.push(pkg!);
     }
   }
 
@@ -102,7 +127,7 @@ async function upgrade(args: string[], options: string[]) {
   }
 }
 
-async function remove(args: string[], options: string[]) {
+async function remove(args: string[], options: Record<string, string>) {
   const importMap = await loadImportMap();
   const toRemove = args.filter((name) => name in importMap.imports);
   for (const name of toRemove) {
@@ -124,27 +149,49 @@ async function remove(args: string[], options: string[]) {
 }
 
 const cache = new Map<string, Package>();
-async function fetchPkgInfo(name: string): Promise<Package> {
+async function fetchPkgInfo(name: string): Promise<Package | null> {
   if (cache.has(name)) {
     return Promise.resolve(cache.get(name)!);
   }
 
-  const res = await fetch(`https://esm.sh/${name}/package.json`);
+  let pkgName: string;
+  let subModule: string | undefined;
+  const a = name.split("/");
+  if (name.startsWith("@")) {
+    if (a.length < 2) {
+      return null;
+    }
+    pkgName = a[0] + "/" + a[1];
+    subModule = a[2];
+  } else {
+    pkgName = a[0];
+    if (a.length > 1) {
+      subModule = a.slice(1).join("/");
+    }
+  }
+
+  const res = await fetch(`https://esm.sh/${pkgName}/package.json`);
   if (res.status === 404) {
-    console.error(`%cerror%c: Package "${name}" not found`, "color:red", "");
+    console.error(`%cerror%c: Package "${pkgName}" not found`, "color:red", "");
     Deno.exit(1);
   }
+
   if (!res.ok) {
-    throw new Error(
-      `Failed to fetch "${name}": ${res.status} ${res.statusText}`,
-    );
+    console.error(`%cerror%c: Failed to fetch "${pkgName}"`, "color:red", "");
+    Deno.exit(1);
   }
 
   const pkg = await res.json();
   if (!pkg.name || !pkg.version) {
-    throw new Error(`Invalid package.json of "${name}"`);
+    console.error(
+      `%cerror%c: Invalid package.json of "${pkgName}"`,
+      "color:red",
+      "",
+    );
+    Deno.exit(1);
   }
 
+  pkg.subModule = subModule;
   cache.set(name, pkg);
   return pkg;
 }
@@ -214,50 +261,60 @@ async function addPkgToImportMap(
   pkg: Package,
   importMap: ImportMap,
 ): Promise<boolean> {
-  const [pkgUrl, hasSubModules] = getPkgUrl(pkg);
-  if (importMap.imports[pkg.name] === pkgUrl) {
+  let [pkgUrl, withExports] = getPkgUrl(pkg);
+  let aliasName = pkg.alias ?? pkg.name;
+  if (pkg.subModule) {
+    if (!pkg.alias) {
+      aliasName += "/" + pkg.subModule;
+    }
+    pkgUrl += "/" + pkg.subModule;
+  }
+  if (importMap.imports[aliasName] === pkgUrl) {
     return false;
   }
-  importMap.imports[pkg.name] = pkgUrl;
-  if (hasSubModules) {
-    importMap.imports[pkg.name + "/"] = pkgUrl + "/";
-  } else {
-    Reflect.deleteProperty(importMap.imports, pkg.name + "/");
+  importMap.imports[aliasName] = pkgUrl;
+  if (withExports && !pkg.subModule) {
+    importMap.imports[aliasName + "/"] = pkgUrl + "/";
   }
   if (pkg.dependencies) {
-    importMap.scopes[pkg.name] = {};
-    if (hasSubModules) {
+    if (!pkg.subModule) {
+      importMap.scopes[aliasName] = {};
+    }
+    if (withExports || pkg.subModule) {
       importMap.scopes[pkg.name + "/"] = {};
     }
     for (const [depName, depVersion] of Object.entries(pkg.dependencies)) {
       const dep = `${depName}@${depVersion}`;
       const depPkg = await fetchPkgInfo(dep);
-      const depUrl =
-        `https://esm.sh/${VERSION}/${depPkg.name}@${depPkg.version}`;
-      importMap.scopes[pkg.name][depName] = depUrl;
-      if (hasSubModules) {
-        importMap.scopes[pkg.name + "/"][depName] = depUrl;
+      if (depPkg) {
+        const depUrl =
+          `https://esm.sh/${VERSION}/${depPkg.name}@${depPkg.version}`;
+        if (!pkg.subModule) {
+          importMap.scopes[aliasName][depName] = depUrl;
+        }
+        if (withExports || pkg.subModule) {
+          importMap.scopes[pkg.name + "/"][depName] = depUrl;
+        }
       }
     }
   }
   return true;
 }
 
-function getPkgUrl(pkg: Package): [string, boolean] {
+function getPkgUrl(pkg: Package): [url: string, withExports: boolean] {
   const { name, version, exports, dependencies, peerDependencies } = pkg;
-  const hasSubModules = typeof exports === "object" &&
-    Object.keys(exports).some((key) => key.length >= 3 && key.startsWith("./"));
+  const withExports = typeof exports === "object" &&
+    Object.keys(exports).some((key) =>
+      key.length >= 3 && key.startsWith("./") && key !== "./package.json"
+    );
 
   if (
     (dependencies && Object.keys(dependencies).length > 0) ||
     (peerDependencies && Object.keys(peerDependencies).length > 0)
   ) {
-    return [
-      `https://esm.sh/${VERSION}/*${name}@${version}`,
-      hasSubModules,
-    ];
+    return [`https://esm.sh/${VERSION}/*${name}@${version}`, withExports];
   }
-  return [`https://esm.sh/${VERSION}/${name}@${version}`, hasSubModules];
+  return [`https://esm.sh/${VERSION}/${name}@${version}`, withExports];
 }
 
 function sortImports(imports: Record<string, string>) {
@@ -278,6 +335,38 @@ function sortByKey(a: [string, unknown], b: [string, unknown]) {
   return 0;
 }
 
+function parseFlags(
+  raw: string[],
+): [args: string[], options: Record<string, string>] {
+  const args: string[] = [];
+  const options: Record<string, string> = {};
+  let argCur: string | null = null;
+  for (const arg of raw) {
+    if (arg.startsWith("--")) {
+      if (argCur) {
+        options[argCur] = "";
+        argCur = null;
+      }
+      if (arg.includes("=")) {
+        const [name, value] = arg.slice(2).split("=");
+        options[name] = value;
+      } else {
+        argCur = arg.slice(2);
+      }
+    } else if (argCur) {
+      options[argCur] = arg;
+      argCur = null;
+    } else {
+      args.push(arg);
+    }
+  }
+  if (argCur) {
+    options[argCur] = "";
+    argCur = null;
+  }
+  return [args, options];
+}
+
 if (import.meta.main) {
   const start = performance.now();
   const [command, ...args] = Deno.args;
@@ -294,10 +383,7 @@ if (import.meta.main) {
 
   try {
     await checkDenoConfig();
-    await commands[command as keyof typeof commands](
-      args.filter((arg) => !arg.startsWith("-")),
-      args.filter((arg) => arg.startsWith("-")),
-    );
+    await commands[command as keyof typeof commands](...parseFlags(args));
     console.log(`✨ Done in ${(performance.now() - start).toFixed(2)}ms`);
   } catch (error) {
     throw error;
