@@ -61,10 +61,10 @@ async function add(args: string[], options: Record<string, string>) {
   }
 }
 
-async function upgrade(args: string[], options: Record<string, string>) {
+async function update(args: string[], options: Record<string, string>) {
   const importMap = await loadImportMap();
   const latest = "latest" in options;
-  const toUpgrade =
+  const toUpdate =
     (args.length === 0
       ? Object.keys(importMap.imports).filter((name) =>
         importMap.imports[name].startsWith("https://esm.sh/")
@@ -106,20 +106,20 @@ async function upgrade(args: string[], options: Record<string, string>) {
         }
         return `${name}@${version}`;
       }));
-  const pkgs = (await Promise.all(toUpgrade.map(fetchPkgInfo))).filter(Boolean);
-  const upgraded: Package[] = [];
+  const pkgs = (await Promise.all(toUpdate.map(fetchPkgInfo))).filter(Boolean);
+  const updates: Package[] = [];
 
   for (const pkg of pkgs) {
     if (await addPkgToImportMap(pkg!, importMap)) {
-      upgraded.push(pkg!);
+      updates.push(pkg!);
     }
   }
 
   await saveImportMap(importMap);
-  console.log(`Upgraded ${upgraded.length} packages`);
-  if (upgraded.length > 0) {
+  console.log(`updates ${updates.length} packages`);
+  if (updates.length > 0) {
     console.log(
-      upgraded.map((pkg, index) => {
+      updates.map((pkg, index) => {
         const tab = index === pkgs.length - 1 ? "└─" : "├─";
         return `${tab} ${pkg.name}@${pkg.version}`;
       }).join("\n"),
@@ -160,7 +160,7 @@ async function init(args: string[], options: Record<string, string>) {
       ...tasks,
       "npm:add": "deno run -A https://esm.sh add",
       "npm:remove": "deno run -A https://esm.sh remove",
-      "npm:upgrade": "deno run -A https://esm.sh upgrade",
+      "npm:update": "deno run -A https://esm.sh update",
     };
   }
   await Deno.writeTextFile(
@@ -180,7 +180,7 @@ async function init(args: string[], options: Record<string, string>) {
     "color:gray",
   );
   console.log(
-    "  - %cdeno task npm:upgrade%c [packages...]",
+    "  - %cdeno task npm:update%c [packages...]",
     "color:blue",
     "color:gray",
   );
@@ -427,7 +427,7 @@ if (import.meta.main) {
   const commands = {
     add,
     remove,
-    upgrade,
+    update,
     init,
   };
 
