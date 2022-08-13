@@ -167,13 +167,13 @@ import unescape from "https://esm.sh/lodash/unescape?no-dts"
 
 ### Deno CLI Script
 
-The CLI script for Deno is using to maintain the import maps with npm modules from esm.sh, it will arrange the dependencies automatically and pin the build version always.
+The CLI script for Deno is using to manage the **import maps** with npm modules from _esm.sh_, it will arrange the dependencies automatically and pin the build version always.
 
 ```bash
 deno run -A https://esm.sh/v91 init
 ```
 
-After initializing, you can use the `deno task npm:[add/update/remove]` commands to manage the npm packages in the import maps.
+After initializing, you can use the `deno task npm:[add/update/remove]` commands to manage the npm modules in the import maps.
 
 ```bash
 deno task npm:add react react-dom # add packages
