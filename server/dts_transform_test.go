@@ -123,7 +123,7 @@ func TestCopyDTS(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	node, err = checkNode(testDir)
+	node, err = checkNode(testDir, "")
 	if err != nil {
 		log.Fatalf("check nodejs env: %v", err)
 	}

@@ -1,5 +1,56 @@
 # Change Log
 
+## v91
+
+- Improved Deno CLI Script:
+  ```bash
+  deno run -A https://esm.sh/v91 init
+  ```
+  After initializing, you can use the `deno task npm:[add/update/remove]` commands to manage the npm packages in the import maps.
+  ```bash
+  deno task npm:add react react-dom # add packages
+  deno task npm:add react@17 react-dom@17 # add packages with specified version
+  deno task npm:update react react-dom # upgrade packages
+  deno task npm:update # update all packages
+  deno task npm:remove react react-dom # remove packages
+  ```
+- Respect `imports` of package.json (close [#400](https://github.com/ije/esm.sh/issues/400))
+- Update `npmNaming` range (close [#401](https://github.com/ije/esm.sh/issues/401))
+
+## v90
+
+- _Experimentally_ add Deno **CLI mode**, it will update the `import_map.json` file in the working directory:
+  ```bash
+  deno install -A -n esm -f https://esm.sh
+  esm add react react-dom # add packages
+  esm add react@17 react-dom@17 # add packages with specified version
+  esm upgrade react react-dom # upgrade packages
+  esm upgrade # upgrade all packages
+  esm remove react react-dom # remove packages
+  ```
+  > Ensure to point the `import_map.json` in your `deno run` command or the `deno.json` file.
+- Support `/v89/*some-package@version` external all pattern, do NOT use directly, use the CLI mode instead.
+- Redirect urls with `/@types/` to the `.d.ts` file instead of build
+- Improve node service stability
+- Fix cjs `__exportStar` not used (close [#389](https://github.com/ije/esm.sh/issues/389))
+- Fix `resolve` package (close [#392](https://github.com/ije/esm.sh/issues/392))
+- Add workaround for `prisma` build
+- Upgrade deno std to **0.151.0**
+
+## v89
+
+- support `?deno-std=$VER` to specify the [deno std](https://deno.land/std) version for deno node polyfills
+- fix missed `__esModule` export
+
+## v88
+
+- Respect `exports.development` conditions in `package.json` (close [#375](https://github.com/ije/esm.sh/issues/375))
+- Fix `solid-js/web?target=deno` strip ssr functions
+- Fix `@types/node` types transforming (close [#363](https://github.com/ije/esm.sh/issues/363))
+- Fix `?external` doesn't support `.dts` files (close [#374](h`ttps://github.com/ije/esm.sh/issues/374))
+- Fix invalid export names of `keycode`, `vscode-oniguruma` & `lru_map` (close [#362](https://github.com/ije/esm.sh/issues/362), [#369](https://github.com/ije/esm.sh/issues/369))
+- Fix esm resolving before build (close [#377](https://github.com/ije/esm.sh/issues/377))
+
 ## v87
 
 - Support `?external` query, this will give you better user experience when you are using **import maps**.

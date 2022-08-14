@@ -11,7 +11,6 @@ import (
 	"strconv"
 	"strings"
 	"sync"
-	"time"
 
 	"github.com/ije/gox/utils"
 	"github.com/ije/gox/valid"
@@ -20,9 +19,9 @@ import (
 var (
 	regFullVersion      = regexp.MustCompile(`^\d+\.\d+\.\d+[a-zA-Z0-9\.\+\-_]*$`)
 	regFullVersionPath  = regexp.MustCompile(`([^/])@\d+\.\d+\.\d+[a-zA-Z0-9\.\+\-_]*(/|$)`)
-	regBuildVersionPath = regexp.MustCompile(`^/v\d+/`)
+	regBuildVersionPath = regexp.MustCompile(`^/v\d+(/|$)`)
 	regLocPath          = regexp.MustCompile(`(\.[a-z]+):\d+:\d+$`)
-	npmNaming           = valid.Validator{valid.FromTo{'a', 'z'}, valid.FromTo{'0', '9'}, valid.Eq('.'), valid.Eq('_'), valid.Eq('-')}
+	npmNaming           = valid.Validator{valid.FromTo{'a', 'z'}, valid.FromTo{'A', 'Z'}, valid.FromTo{'0', '9'}, valid.Eq('.'), valid.Eq('_'), valid.Eq('-')}
 )
 
 type stringSet struct {
@@ -67,6 +66,15 @@ func (s *stringSet) Values() []string {
 		i++
 	}
 	return a
+}
+
+func mapLen(m sync.Map) int {
+	n := 0
+	m.Range(func(key, value interface{}) bool {
+		n++
+		return true
+	})
+	return n
 }
 
 func identify(importPath string) string {
@@ -156,8 +164,14 @@ func atobUrl(s string) (string, error) {
 }
 
 func kill(pidFile string) (err error) {
+	if pidFile == "" {
+		return
+	}
 	data, err := ioutil.ReadFile(pidFile)
 	if err != nil {
+		if os.IsNotExist(err) {
+			err = nil
+		}
 		return
 	}
 	pid, err := strconv.Atoi(string(data))
@@ -171,13 +185,13 @@ func kill(pidFile string) (err error) {
 	return process.Kill()
 }
 
-func cron(d time.Duration, task func()) {
-	ticker := time.NewTicker(d)
-	for {
-		<-ticker.C
-		task()
-	}
-}
+// func cron(d time.Duration, task func()) {
+// 	ticker := time.NewTicker(d)
+// 	for {
+// 		<-ticker.C
+// 		task()
+// 	}
+// }
 
 func fixResolveArgs(alias map[string]string, deps PkgSlice, pkgName string) (map[string]string, PkgSlice) {
 	_alias := map[string]string{}
@@ -199,7 +213,7 @@ func fixResolveArgs(alias map[string]string, deps PkgSlice, pkgName string) (map
 	return _alias, _deps
 }
 
-func decodeResolveArgsPrefix(raw string) (alias map[string]string, deps PkgSlice, external []string, err error) {
+func decodeResolveArgsPrefix(raw string) (alias map[string]string, deps PkgSlice, external []string, dsv string, err error) {
 	s, err := atobUrl(strings.TrimPrefix(strings.TrimSuffix(raw, "/"), "X-"))
 	if err == nil {
 		for _, p := range strings.Split(s, "\n") {
@@ -220,23 +234,23 @@ func decodeResolveArgsPrefix(raw string) (alias map[string]string, deps PkgSlice
 						if strings.HasSuffix(err.Error(), "not found") {
 							continue
 						}
-						return nil, nil, nil, err
+						return nil, nil, nil, "", err
 					}
 					if !deps.Has(m.Name) {
 						deps = append(deps, *m)
 					}
 				}
 			} else if strings.HasPrefix(p, "e/") {
-				for _, name := range strings.Split(strings.TrimPrefix(p, "e/"), ",") {
-					external = append(external, name)
-				}
+				external = append(external, strings.Split(strings.TrimPrefix(p, "e/"), ",")...)
+			} else if strings.HasPrefix(p, "dsv/") {
+				dsv = strings.TrimPrefix(p, "dsv/")
 			}
 		}
 	}
 	return
 }
 
-func encodeResolveArgsPrefix(alias map[string]string, deps PkgSlice, external *stringSet) string {
+func encodeResolveArgsPrefix(alias map[string]string, deps PkgSlice, external *stringSet, dsv string) string {
 	args := []string{}
 	if len(alias) > 0 {
 		var ss sort.StringSlice
@@ -262,19 +276,11 @@ func encodeResolveArgsPrefix(alias map[string]string, deps PkgSlice, external *s
 		ss.Sort()
 		args = append(args, fmt.Sprintf("e/%s", strings.Join(ss, ",")))
 	}
+	if dsv != "" && dsv != denoStdVersion {
+		args = append(args, fmt.Sprintf("dsv/%s", dsv))
+	}
 	if len(args) > 0 {
 		return fmt.Sprintf("X-%s/", btoaUrl(strings.Join(args, "\n")))
 	}
 	return ""
-}
-
-func getOrigin(host string) string {
-	if origin != "" {
-		return strings.TrimSuffix(origin, "/")
-	}
-	proto := "https"
-	if host == "localhost" || strings.HasPrefix(host, "localhost:") {
-		proto = "http"
-	}
-	return fmt.Sprintf("%s://%s", proto, host)
 }

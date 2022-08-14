@@ -37,7 +37,8 @@ etcDir=""
 cacheUrl=""
 fsUrl=""
 dbUrl=""
-cdnDomain=""
+origin=""
+npmRegistry=""
 
 if [ "$init" == "yes" ]; then
   read -p "http server  port (default is ${port}): " v
@@ -52,22 +53,26 @@ if [ "$init" == "yes" ]; then
   if [ "$v" != "" ]; then
     etcDir="$v"
   fi
-	read -p "cache config (default is 'memory:main'): " v
+  read -p "cache config (default is 'memory:main'): " v
   if [ "$v" != "" ]; then
     cacheUrl="$v"
   fi
-	read -p "fs config (default is 'local:\$etcDir/storage'): " v
+  read -p "fs config (default is 'local:\$etcDir/storage'): " v
   if [ "$v" != "" ]; then
     fsUrl="$v"
   fi
-	read -p "db config (default is 'postdb:\$etcDir/esm.db'): " v
+  read -p "db config (default is 'postdb:\$etcDir/esm.db'): " v
   if [ "$v" != "" ]; then
     dbUrl="$v"
   fi
-  read -p "cdn domain (optional): " v
+  read -p "server origin (optional): " v
   if [ "$v" != "" ]; then
-    cdnDomain="$v"
-  fi 
+    origin="$v"
+  fi
+  read -p "npm registry (optional): " v
+  if [ "$v" != "" ]; then
+    origin="$v"
+  fi
 fi
 
 scriptsDir=$(dirname $0)
@@ -108,7 +113,7 @@ ssh -p $sshPort $user@$host << EOF
       rm -f \$SVCF
     fi
     writeSVConfLine "[program:esmd]"
-    writeSVConfLine "command=/usr/local/bin/esmd --port=${port} --https-port=${httpsPort} --etc-dir=${etcDir} --cache=${cacheUrl} --fs=${fsUrl} --db=${dbUrl} --cdn-domain=${cdnDomain}"
+    writeSVConfLine "command=/usr/local/bin/esmd --port=${port} --https-port=${httpsPort} --etc-dir=${etcDir} --cache=${cacheUrl} --fs=${fsUrl} --db=${dbUrl} --origin=${origin} --npm-registry=${npmRegistry}"
     writeSVConfLine "directory=/tmp"
     writeSVConfLine "user=$user"
     writeSVConfLine "autostart=true"

@@ -2,6 +2,7 @@ package server
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"os"
 	"path"
@@ -13,7 +14,7 @@ import (
 )
 
 func (task *BuildTask) CopyDTS(dts string, buildVersion int) (n int, err error) {
-	resolveArgsPrefix := encodeResolveArgsPrefix(task.Alias, task.Deps, task.External)
+	resolveArgsPrefix := encodeResolveArgsPrefix(task.Alias, task.Deps, task.External, task.DenoStdVersion)
 	tracing := newStringSet()
 	err = task.copyDTS(dts, buildVersion, resolveArgsPrefix, tracing)
 	if err == nil {
@@ -104,16 +105,30 @@ func (task *BuildTask) copyDTS(dts string, buildVersion int, aliasDepsPrefix str
 			}
 			if importPath == moduleName {
 				if strings.HasPrefix(moduleName, "@types/node/") {
-					return fmt.Sprintf("%s/%s.d.ts", cdnOriginAndBuildBasePath, moduleName)
+					return fmt.Sprintf("%s/@types/node@%s/%s.d.ts", cdnOriginAndBuildBasePath, nodeTypesVersion, strings.TrimPrefix(moduleName, "@types/node/"))
 				}
-				res := fmt.Sprintf("%s/%s", cdnOriginAndBasePath, moduleName)
-				entryDeclareModules = append(entryDeclareModules, fmt.Sprintf("%s:%d", moduleName, position+len(res)+1))
-				return res
+				url := fmt.Sprintf("%s/%s", cdnOriginAndBasePath, moduleName)
+				entryDeclareModules = append(entryDeclareModules, fmt.Sprintf("%s:%d", moduleName, position+len(url)+1))
+				return url
 			}
 			return importPath
 		}
 
-		if allDeclareModules.Has(importPath) {
+		// fix types
+		switch importPath {
+		case "node-fetch":
+			importPath = "node-fetch-native"
+		case "estree", "estree-jsx", "unist", "react", "react-dom":
+			importPath = fmt.Sprintf("@types/%s", importPath)
+		}
+
+		// apply `?alias`
+		to, ok := task.Alias[importPath]
+		if ok {
+			importPath = to
+		}
+
+		if allDeclareModules.Has(importPath) || task.External.Has(importPath) {
 			return importPath
 		}
 
@@ -152,20 +167,12 @@ func (task *BuildTask) copyDTS(dts string, buildVersion int, aliasDepsPrefix str
 				return importPath
 			}
 			if strings.HasPrefix(importPath, "node:") {
-				importPath = fmt.Sprintf("%s/@types/node/%s.d.ts", cdnOriginAndBuildBasePath, strings.TrimPrefix(importPath, "node:"))
+				importPath = fmt.Sprintf("%s/@types/node@%s/%s.d.ts", cdnOriginAndBuildBasePath, nodeTypesVersion, strings.TrimPrefix(importPath, "node:"))
 				return importPath
 			}
 			if _, ok := builtInNodeModules[importPath]; ok {
-				importPath = fmt.Sprintf("%s/@types/node/%s.d.ts", cdnOriginAndBuildBasePath, importPath)
+				importPath = fmt.Sprintf("%s/@types/node@%s/%s.d.ts", cdnOriginAndBuildBasePath, nodeTypesVersion, importPath)
 				return importPath
-			}
-
-			to, ok := task.Alias[importPath]
-			if ok {
-				importPath = to
-			}
-			if importPath == "node-fetch" {
-				importPath = "node-fetch-native"
 			}
 
 			pkgNameInfo := parsePkgNameInfo(importPath)
@@ -179,13 +186,9 @@ func (task *BuildTask) copyDTS(dts string, buildVersion int, aliasDepsPrefix str
 
 			// use version defined in `?deps`
 			if pkg, ok := task.Deps.Get(depTypePkgName); ok {
-				versionParts := strings.Split(pkg.Version, ".")
-				if len(versionParts) > 2 {
-					versions = []string{
-						"~" + strings.Join(versionParts[:2], "."), // minor
-						"^" + versionParts[0],                     // major
-						"latest",
-					}
+				versions = []string{
+					pkg.Version,
+					"latest",
 				}
 			}
 
@@ -236,7 +239,7 @@ func (task *BuildTask) copyDTS(dts string, buildVersion int, aliasDepsPrefix str
 			}
 
 			alias, deps := fixResolveArgs(task.Alias, task.Deps, info.Name)
-			pkgBasePath := pkgBase + encodeResolveArgsPrefix(alias, deps, task.External)
+			pkgBasePath := pkgBase + encodeResolveArgsPrefix(alias, deps, task.External, task.DenoStdVersion)
 
 			// CDN URL
 			importPath = fmt.Sprintf("%s/%s", cdnOriginAndBuildBasePath, pkgBasePath+importPath)
@@ -294,6 +297,15 @@ func (task *BuildTask) copyDTS(dts string, buildVersion int, aliasDepsPrefix str
 		dtsData := buf.Bytes()
 		dtsData = bytes.ReplaceAll(dtsData, []byte(" implements NodeJS.ReadableStream"), []byte{})
 		dtsData = bytes.ReplaceAll(dtsData, []byte(" implements NodeJS.WritableStream"), []byte{})
+		if strings.HasSuffix(savePath, "/buffer.d.ts") {
+			dtsData = bytes.ReplaceAll(dtsData, []byte(" export { Buffer };"), []byte(" export const Buffer: Buffer;"))
+		}
+		if strings.HasSuffix(savePath, "/url.d.ts") || strings.HasSuffix(savePath, "/buffer.d.ts") {
+			dtsData, err = removeGlobalBlob(dtsData)
+			if err != nil {
+				return
+			}
+		}
 		buf = bytes.NewBuffer(dtsData)
 	}
 
@@ -333,6 +345,27 @@ func (task *BuildTask) copyDTS(dts string, buildVersion int, aliasDepsPrefix str
 	}
 
 	return
+}
+
+// remove `global { ... }`
+func removeGlobalBlob(input []byte) (output []byte, err error) {
+	start := bytes.Index(input, []byte("global {"))
+	if start == -1 {
+		return input, nil
+	}
+	dep := 1
+	for i := start + 8; i < len(input); i++ {
+		c := input[i]
+		if c == '{' {
+			dep++
+		} else if c == '}' {
+			dep--
+		}
+		if dep == 0 {
+			return bytes.Join([][]byte{input[:start], input[i+1:]}, nil), nil
+		}
+	}
+	return nil, errors.New("removeGlobalBlob: global block not end")
 }
 
 func toTypesPath(wd string, p *NpmPackage, version string, prefix string, subpath string) string {

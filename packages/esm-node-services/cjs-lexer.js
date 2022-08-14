@@ -78,21 +78,13 @@ const builtInNodeModules = new Set([
   "worker_threads",
   "zlib",
 ])
-const requireModeAllowList = [
-  'domhandler',
-  'he',
-  'lz-string',
-  'safe-buffer',
-  'stream-http',
-  'typescript',
-]
 
 function isObject(v) {
   return typeof v === 'object' && v !== null && !Array.isArray(v)
 }
 
 function getJSONKeys(jsonFile) {
-  const content = fs.readFileSync(jsonFile).toString()
+  const content = fs.readFileSync(jsonFile, "utf-8")
   const v = JSON.parse(content)
   if (isObject(v)) {
     return Object.keys(v)
@@ -101,31 +93,33 @@ function getJSONKeys(jsonFile) {
 }
 
 function verifyExports(names) {
+  const exportDefault = names.includes('default')
+  const exports = Array.from(new Set(names.filter(name => identRegexp.test(name) && !reservedWords.has(name))))
+  if (exportDefault && !exports.includes('__esModule')) {
+    exports.push('__esModule')
+  }
   return {
-    exportDefault: names.includes('default'),
-    exports: Array.from(new Set(names.filter(name => identRegexp.test(name) && !reservedWords.has(name))))
+    exportDefault,
+    exports
   }
 }
 
 exports.parseCjsExports = async input => {
-  const { buildDir, importPath, nodeEnv = 'production' } = input
+  const { buildDir, importPath, nodeEnv = 'production', requireMode } = input
   const entry = await resolve(buildDir, importPath)
   const exports = []
 
-  /* workaround for edge cases that can't be parsed by cjsLexer correctly */
-  for (const name of requireModeAllowList) {
-    if (importPath === name || importPath.startsWith(name + '/')) {
-      process.env.NODE_ENV = nodeEnv
-      const mod = require(entry)
-      if (isObject(mod) || typeof mod === 'function') {
-        for (const key of Object.keys(mod)) {
-          if (typeof key === 'string' && key !== '') {
-            exports.push(key)
-          }
+  if (requireMode) {
+    process.env.NODE_ENV = nodeEnv
+    const mod = require(entry)
+    if (isObject(mod) || typeof mod === 'function') {
+      for (const key of Object.keys(mod)) {
+        if (typeof key === 'string' && key !== '') {
+          exports.push(key)
         }
       }
-      return verifyExports(exports)
     }
+    return verifyExports(exports)
   }
 
   if (entry.endsWith('.json')) {
@@ -140,7 +134,7 @@ exports.parseCjsExports = async input => {
   while (requires.length > 0) {
     try {
       const req = requires.pop()
-      const code = fs.readFileSync(req.path).toString()
+      const code = fs.readFileSync(req.path, "utf-8")
       const results = parse(req.path, code, nodeEnv, req.callMode)
       exports.push(...results.exports)
       for (let reexport of results.reexports) {

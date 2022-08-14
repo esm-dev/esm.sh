@@ -105,7 +105,7 @@ func initModule(wd string, pkg Pkg, target string, isDev bool) (esm *ModuleMeta,
 								    }
 								  }
 								*/
-								resolvePackageExports(npm, defines, target, isDev)
+								resolvePackageExports(npm, defines, target, isDev, npm.Type)
 								resolved = true
 								break
 							} else if strings.HasSuffix(name, "/*") && strings.HasPrefix("./"+pkg.Submodule, strings.TrimSuffix(name, "*")) {
@@ -133,7 +133,7 @@ func initModule(wd string, pkg Pkg, target string, isDev bool) (esm *ModuleMeta,
 									hasDefines = true
 								}
 								if hasDefines {
-									resolvePackageExports(npm, defines, target, isDev)
+									resolvePackageExports(npm, defines, target, isDev, npm.Type)
 									resolved = true
 								}
 							}
@@ -190,7 +190,7 @@ func initModule(wd string, pkg Pkg, target string, isDev bool) (esm *ModuleMeta,
 			var ret cjsExportsResult
 			ret, err = parseCJSModuleExports(wd, path.Join(pkg.Name, strings.TrimSuffix(npm.Module, ".js")), nodeEnv)
 			if err == nil && ret.Error != "" {
-				err = fmt.Errorf(ret.Error)
+				err = fmt.Errorf("parseCJSModuleExports: %s", ret.Error)
 			}
 			if err != nil {
 				return
@@ -199,16 +199,16 @@ func initModule(wd string, pkg Pkg, target string, isDev bool) (esm *ModuleMeta,
 			npm.Module = ""
 			esm.ExportDefault = ret.ExportDefault
 			esm.Exports = ret.Exports
-			log.Warnf("fake module from '%s' of '%s': %v", npm.Main, npm.Name, err)
+			log.Warnf("fake module from '%s' of '%s'", npm.Main, npm.Name)
 		} else {
-			err = reason
+			err = fmt.Errorf("checkESM: %s", reason)
 			return
 		}
 	} else if npm.Main != "" {
 		var ret cjsExportsResult
 		ret, err = parseCJSModuleExports(wd, pkg.ImportPath(), nodeEnv)
 		if err == nil && ret.Error != "" {
-			err = fmt.Errorf(ret.Error)
+			err = fmt.Errorf("parseCJSModuleExports: %s", ret.Error)
 		}
 		if err != nil {
 			return
@@ -288,14 +288,22 @@ func findModule(id string) (esm *ModuleMeta, err error) {
 
 func checkESM(wd string, packageName string, moduleSpecifier string) (resolveName string, exportDefault bool, err error) {
 	pkgDir := path.Join(wd, "node_modules", packageName)
-	if dirExists(path.Join(pkgDir, moduleSpecifier)) {
-		f := path.Join(moduleSpecifier, "index.mjs")
-		if !fileExists(path.Join(pkgDir, f)) {
-			f = path.Join(moduleSpecifier, "index.js")
+	resolveName = moduleSpecifier
+	switch path.Ext(moduleSpecifier) {
+	case ".js", ".jsx", ".ts", ".tsx", ".mjs":
+	default:
+		resolveName = moduleSpecifier + ".js"
+		if !fileExists(path.Join(pkgDir, resolveName)) {
+			resolveName = moduleSpecifier + ".mjs"
 		}
-		moduleSpecifier = f
 	}
-	filename := path.Join(pkgDir, moduleSpecifier)
+	if !fileExists(path.Join(pkgDir, resolveName)) && dirExists(path.Join(pkgDir, moduleSpecifier)) {
+		resolveName = path.Join(moduleSpecifier, "index.js")
+		if !fileExists(path.Join(pkgDir, resolveName)) {
+			resolveName = path.Join(moduleSpecifier, "index.mjs")
+		}
+	}
+	filename := path.Join(pkgDir, resolveName)
 	switch path.Ext(filename) {
 	case ".js", ".jsx", ".ts", ".tsx", ".mjs":
 	default:
@@ -305,7 +313,7 @@ func checkESM(wd string, packageName string, moduleSpecifier string) (resolveNam
 	if err != nil {
 		return
 	}
-	log := logger.NewDeferLog(logger.DeferLogNoVerboseOrDebug)
+	log := logger.NewDeferLog(logger.DeferLogNoVerboseOrDebug, nil)
 	ast, pass := js_parser.Parse(log, logger.Source{
 		Index:          0,
 		KeyPath:        logger.Path{Text: "<stdin>"},
@@ -326,6 +334,5 @@ func checkESM(wd string, packageName string, moduleSpecifier string) (resolveNam
 			}
 		}
 	}
-	resolveName = moduleSpecifier
 	return
 }

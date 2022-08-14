@@ -1,7 +1,6 @@
 package server
 
 import (
-	"context"
 	"embed"
 	"flag"
 	"fmt"
@@ -35,14 +34,6 @@ var (
 	basePath string
 	// http redrect for URLs not from basepath
 	baseRedirect bool
-	// the deno std version from https://deno.land/std/version.ts
-	denoStdVersion string
-	// npm registry
-	npmRegistry string
-	// server origin
-	origin string
-	// unpkg.com origin
-	unpkgOrigin string
 )
 
 type EmbedFS interface {
@@ -54,6 +45,7 @@ func Serve(efs EmbedFS) {
 	var (
 		port             int
 		httpsPort        int
+		nsPort           int
 		buildConcurrency int
 		etcDir           string
 		cacheUrl         string
@@ -61,12 +53,16 @@ func Serve(efs EmbedFS) {
 		fsUrl            string
 		logLevel         string
 		logDir           string
+		npmRegistry      string
+		origin           string
+		unpkgOrigin      string
 		noCompress       bool
 		isDev            bool
 	)
 	flag.IntVar(&port, "port", 80, "http server port")
 	flag.IntVar(&httpsPort, "https-port", 0, "https(autotls) server port, default is disabled")
-	flag.StringVar(&basePath, "basepath", "", "base path")
+	flag.IntVar(&nsPort, "ns-port", 8088, "node services server port")
+	flag.StringVar(&basePath, "base-path", "", "base path")
 	flag.BoolVar(&baseRedirect, "base-redirect", false, "http redrect for URLs not from basepath")
 	flag.StringVar(&etcDir, "etc-dir", ".esmd", "etc dir")
 	flag.StringVar(&cacheUrl, "cache", "", "cache config, default is 'memory:default'")
@@ -77,9 +73,9 @@ func Serve(efs EmbedFS) {
 	flag.StringVar(&logLevel, "log-level", "info", "log level")
 	flag.BoolVar(&noCompress, "no-compress", false, "disable compression for text content")
 	flag.BoolVar(&isDev, "dev", false, "run server in development mode")
-	flag.StringVar(&npmRegistry, "npm-registry", "", "npm registry")
 	flag.StringVar(&origin, "origin", "", "the server origin, default is the request host")
-	flag.StringVar(&unpkgOrigin, "unpkg-origin", "https://unpkg.com/", "unpkg.com origin")
+	flag.StringVar(&npmRegistry, "npm-registry", "", "npm registry")
+	flag.StringVar(&unpkgOrigin, "unpkg-origin", "https://unpkg.com", "unpkg.com origin")
 
 	flag.Parse()
 
@@ -127,17 +123,11 @@ func Serve(efs EmbedFS) {
 	if nodeInstallDir == "" {
 		nodeInstallDir = path.Join(etcDir, "nodejs")
 	}
-	node, err = checkNode(nodeInstallDir)
+	node, err = checkNode(nodeInstallDir, npmRegistry)
 	if err != nil {
 		log.Fatalf("check nodejs env: %v", err)
 	}
-	log.Debugf("nodejs v%s installed, registry: %s, yarn: %s", node.version, node.npmRegistry, node.yarn)
-
-	denoStdVersion, err = getDenoStdVersion()
-	if err != nil {
-		log.Warnf("getDenoStdVersion: %v", err)
-	}
-	log.Debugf("https://deno.land/std@%s found", denoStdVersion)
+	log.Infof("nodejs v%s installed, registry: %s, yarn: %s", node.version, node.npmRegistry, node.yarn)
 
 	storage.SetLogger(log)
 	storage.SetIsDev(isDev)
@@ -179,9 +169,7 @@ func Serve(efs EmbedFS) {
 		}
 		services := []string{"esm-node-services"}
 		for {
-			ctx, cancel := context.WithCancel(context.Background())
-			stopNS = cancel
-			err := startNodeServices(ctx, wd, services)
+			err := startNodeServices(wd, nsPort, services)
 			if err != nil && err.Error() != "signal: interrupt" {
 				log.Warnf("node services exit: %v", err)
 			}
@@ -205,7 +193,7 @@ func Serve(efs EmbedFS) {
 			ExposedHeaders:   []string{"X-TypeScript-Types"},
 			AllowCredentials: false,
 		}),
-		query(isDev),
+		esmHandler(esmHandlerOptions{origin, unpkgOrigin}),
 	)
 
 	C := rex.Serve(rex.ServerConfig{
@@ -220,8 +208,10 @@ func Serve(efs EmbedFS) {
 	})
 
 	if isDev {
-		log.Debugf("Server ready on http://localhost:%d", port)
+		log.Debugf("Server is ready on http://localhost:%d", port)
 		log.Debugf("Testing page at http://localhost:%d?test", port)
+	} else {
+		log.Info("Server is ready")
 	}
 
 	c := make(chan os.Signal, 1)
@@ -233,6 +223,7 @@ func Serve(efs EmbedFS) {
 	}
 
 	// release resources
+	kill(nsPidFile)
 	db.Close()
 	log.FlushBuffer()
 	accessLogger.FlushBuffer()
@@ -241,12 +232,4 @@ func Serve(efs EmbedFS) {
 func init() {
 	embedFS = &embed.FS{}
 	log = &logx.Logger{}
-	go cron(time.Hour, func() {
-		version, err := getDenoStdVersion()
-		if err != nil {
-			log.Warnf("getDenoStdVersion: %v", err)
-			return
-		}
-		denoStdVersion = version
-	})
 }

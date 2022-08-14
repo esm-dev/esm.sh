@@ -39,8 +39,13 @@ var httpClient = &http.Client{
 	},
 }
 
-// esm query middleware for rex
-func query(devMode bool) rex.Handle {
+type esmHandlerOptions = struct {
+	origin      string
+	unpkgOrigin string
+}
+
+// esm.sh query middleware for rex
+func esmHandler(options esmHandlerOptions) rex.Handle {
 	startTime := time.Now()
 
 	return func(ctx *rex.Context) interface{} {
@@ -63,26 +68,32 @@ func query(devMode bool) rex.Handle {
 			pathname = regLocPath.ReplaceAllString(pathname, "$1")
 		}
 
-		// match static routes
-		hasBuildVerPrefix := false
-		outdatedBuildVer := ""
+		var origin string
+		if options.origin != "" {
+			origin = strings.TrimSuffix(options.origin, "/")
+		} else {
+			proto := "http"
+			if ctx.R.TLS != nil {
+				proto = "https"
+			}
+			origin = fmt.Sprintf("%s://%s", proto, ctx.R.Host)
+		}
+		// force to use https for esm.sh
+		if origin == "http://esm.sh" {
+			origin = "https://esm.sh"
+		}
+
+		// redirect `/@types/` to `.d.ts` files
+		if strings.HasPrefix(pathname, "/@types/") {
+			url := fmt.Sprintf("%s/v%d%s", origin, VERSION, pathname)
+			if !strings.HasSuffix(url, ".d.ts") {
+				url += "~.d.ts"
+			}
+			return rex.Redirect(url, http.StatusTemporaryRedirect)
+		}
 
 		// Build prefix may only be served from "${cdnBasePath}/${buildPrefix}/..."
-		if strings.HasPrefix(pathname, basePath+"/") {
-			pathname = strings.TrimPrefix(pathname, basePath)
-			// Check current version
-			buildBasePath := fmt.Sprintf("/v%d", VERSION)
-			if strings.HasPrefix(pathname, buildBasePath+"/") {
-				pathname = strings.TrimPrefix(pathname, buildBasePath)
-				hasBuildVerPrefix = true
-				// Otheerwise check possible pinned version
-			} else if regBuildVersionPath.MatchString(pathname) {
-				a := strings.Split(pathname, "/")
-				pathname = "/" + strings.Join(a[2:], "/")
-				hasBuildVerPrefix = true
-				outdatedBuildVer = a[1]
-			}
-		} else if basePath != "" {
+		if basePath != "" {
 			if strings.HasPrefix(pathname, basePath+"/") {
 				pathname = strings.TrimPrefix(pathname, basePath)
 			} else if baseRedirect {
@@ -94,9 +105,34 @@ func query(devMode bool) rex.Handle {
 			}
 		}
 
+		var hasBuildVerPrefix bool
+		var outdatedBuildVer string
+
+		// Check current version
+		buildBasePath := fmt.Sprintf("/v%d", VERSION)
+		if strings.HasPrefix(pathname, buildBasePath+"/") || pathname == buildBasePath {
+			a := strings.Split(pathname, "/")
+			pathname = "/" + strings.Join(a[2:], "/")
+			hasBuildVerPrefix = true
+			// Otherwise check possible pinned version
+		} else if regBuildVersionPath.MatchString(pathname) {
+			a := strings.Split(pathname, "/")
+			pathname = "/" + strings.Join(a[2:], "/")
+			hasBuildVerPrefix = true
+			outdatedBuildVer = a[1]
+		}
+
 		// match static routess
 		switch pathname {
 		case "/":
+			if strings.HasPrefix(ctx.R.UserAgent(), "Deno/") {
+				cliTs, err := embedFS.ReadFile("server/embed/deno_cli.ts")
+				if err != nil {
+					return err
+				}
+				ctx.SetHeader("Content-Type", "application/typescript; charset=utf-8")
+				return bytes.ReplaceAll(cliTs, []byte("v{VERSION}"), []byte(fmt.Sprintf("v%d", VERSION)))
+			}
 			indexHTML, err := embedFS.ReadFile("server/embed/index.html")
 			if err != nil {
 				return err
@@ -183,6 +219,25 @@ func query(devMode bool) rex.Handle {
 			}
 		}
 
+		external := newStringSet()
+		externalAll := false
+		// check `/*pathname`
+		if strings.HasPrefix(pathname, "/*") {
+			externalAll = true
+			pathname = "/" + pathname[2:]
+		}
+		// check `external` query
+		for _, p := range strings.Split(ctx.Form.Value("external"), ",") {
+			p = strings.TrimSpace(p)
+			if p != "" {
+				external.Add(p)
+			}
+		}
+		if external.Has("*") {
+			external = newStringSet()
+			externalAll = true
+		}
+
 		// serve embed polyfills/types
 		if hasBuildVerPrefix {
 			data, err := embedFS.ReadFile("server/embed/polyfills" + pathname)
@@ -211,11 +266,10 @@ func query(devMode bool) rex.Handle {
 			return rex.Status(status, message)
 		}
 
-		origin := getOrigin(ctx.R.Host)
-
 		// redirect to the url with full package version
 		if (!hasBuildVerPrefix || strings.HasSuffix(pathname, ".d.ts")) && !strings.HasPrefix(pathname, fmt.Sprintf("/%s@%s", reqPkg.Name, reqPkg.Version)) {
 			prefix := ""
+			eaSign := ""
 			if hasBuildVerPrefix {
 				if outdatedBuildVer != "" {
 					prefix = fmt.Sprintf("/%s", outdatedBuildVer)
@@ -223,11 +277,14 @@ func query(devMode bool) rex.Handle {
 					prefix = fmt.Sprintf("/v%d", VERSION)
 				}
 			}
+			if externalAll {
+				eaSign = "*"
+			}
 			query := ctx.R.URL.RawQuery
 			if query != "" {
 				query = "?" + query
 			}
-			return rex.Redirect(fmt.Sprintf("%s%s/%s%s", origin, prefix, reqPkg.String(), query), http.StatusTemporaryRedirect)
+			return rex.Redirect(fmt.Sprintf("%s%s/%s%s%s", origin, prefix, eaSign, reqPkg.String(), query), http.StatusTemporaryRedirect)
 		}
 
 		// since most transformers handle `jsxSource` by concating string "/jsx-runtime"
@@ -238,6 +295,7 @@ func query(devMode bool) rex.Handle {
 			reqPkg.Submodule = "jsx-runtime"
 		}
 
+		// or use `?path=$PATH` query to override the pathname
 		if v := ctx.Form.Value("path"); v != "" {
 			reqPkg.Submodule = utils.CleanPath(v)[1:]
 		}
@@ -301,10 +359,7 @@ func query(devMode bool) rex.Handle {
 					http.ServeContent(w, r, savePath, modtime, f)
 					return
 				}
-				if !strings.HasSuffix(unpkgOrigin, "/") {
-					unpkgOrigin += "/"
-				}
-				resp, err := httpClient.Get(fmt.Sprintf("%s%s", unpkgOrigin, reqPkg.String()))
+				resp, err := httpClient.Get(fmt.Sprintf("%s/%s", strings.TrimSuffix(options.unpkgOrigin, "/"), reqPkg.String()))
 				if err != nil {
 					w.WriteHeader(500)
 					w.Write([]byte(err.Error()))
@@ -407,15 +462,6 @@ func query(devMode bool) rex.Handle {
 			}
 		}
 
-		// check `external` query
-		external := newStringSet()
-		for _, p := range strings.Split(ctx.Form.Value("external"), ",") {
-			p = strings.TrimSpace(p)
-			if p != "" {
-				external.Add(p)
-			}
-		}
-
 		// determine build target
 		target := strings.ToLower(ctx.Form.Value("target"))
 		_, targeted := targets[target]
@@ -423,23 +469,34 @@ func query(devMode bool) rex.Handle {
 			target = getTargetByUA(ctx.R.UserAgent())
 		}
 
+		// build version
 		buildVersion := VERSION
-		value := ctx.Form.Value("pin")
-		if strings.HasPrefix(value, "v") {
-			i, err := strconv.Atoi(value[1:])
+		pv := outdatedBuildVer
+		if outdatedBuildVer == "" {
+			pv = ctx.Form.Value("pin")
+		}
+		if pv != "" && strings.HasPrefix(pv, "v") {
+			i, err := strconv.Atoi(pv[1:])
 			if err == nil && i > 0 && i < VERSION {
 				buildVersion = i
 			}
+		}
+
+		// deno std version
+		dsv := denoStdVersion
+		fv := ctx.Form.Value("deno-std")
+		if regFullVersion.MatchString(fv) {
+			dsv = fv
 		}
 
 		isBare := false
 		isPkgCss := ctx.Form.Has("css")
 		isBundleMode := ctx.Form.Has("bundle")
 		isDev := ctx.Form.Has("dev")
-		isPined := ctx.Form.Has("pin")
+		isPined := ctx.Form.Has("pin") || hasBuildVerPrefix
 		isWorker := ctx.Form.Has("worker")
 		noCheck := ctx.Form.Has("no-check") || ctx.Form.Has("no-dts")
-		noRequire := ctx.Form.Has("no-require")
+		ignoreRequire := ctx.Form.Has("ignore-require") || ctx.Form.Has("no-require")
 		keepNames := ctx.Form.Has("keep-names")
 		ignoreAnnotations := ctx.Form.Has("ignore-annotations")
 		sourcemap := ctx.Form.Has("sourcemap")
@@ -456,7 +513,7 @@ func query(devMode bool) rex.Handle {
 			a := strings.Split(reqPkg.Submodule, "/")
 			if len(a) > 1 && strings.HasPrefix(a[0], "X-") {
 				reqPkg.Submodule = strings.Join(a[1:], "/")
-				_alias, _deps, _external, err := decodeResolveArgsPrefix(a[0])
+				_alias, _deps, _external, _dsv, err := decodeResolveArgsPrefix(a[0])
 				if err != nil {
 					return throwErrorJS(ctx, err)
 				}
@@ -470,6 +527,9 @@ func query(devMode bool) rex.Handle {
 				}
 				for _, p := range _external {
 					external.Add(p)
+				}
+				if _dsv != "" {
+					dsv = _dsv
 				}
 			}
 		}
@@ -487,9 +547,17 @@ func query(devMode bool) rex.Handle {
 						submodule = strings.TrimSuffix(submodule, ".bundle")
 						isBundleMode = true
 					}
+					if endsWith(submodule, ".external") {
+						submodule = strings.TrimSuffix(submodule, ".external")
+						externalAll = true
+					}
 					if endsWith(submodule, ".development") {
 						submodule = strings.TrimSuffix(submodule, ".development")
 						isDev = true
+					}
+					if endsWith(submodule, ".sm") {
+						submodule = strings.TrimSuffix(submodule, ".sm")
+						sourcemap = true
 					}
 					if endsWith(submodule, ".ia") {
 						submodule = strings.TrimSuffix(submodule, ".ia")
@@ -499,13 +567,9 @@ func query(devMode bool) rex.Handle {
 						submodule = strings.TrimSuffix(submodule, ".kn")
 						keepNames = true
 					}
-					if endsWith(submodule, ".sm") {
-						submodule = strings.TrimSuffix(submodule, ".sm")
-						sourcemap = true
-					}
 					if endsWith(submodule, ".nr") {
 						submodule = strings.TrimSuffix(submodule, ".nr")
-						noRequire = true
+						ignoreRequire = true
 					}
 					pkgName := path.Base(reqPkg.Name)
 					if submodule == pkgName || (strings.HasSuffix(pkgName, ".js") && submodule+".js" == pkgName) {
@@ -520,14 +584,16 @@ func query(devMode bool) rex.Handle {
 
 		if hasBuildVerPrefix && storageType == "types" {
 			task := &BuildTask{
-				CdnOrigin:    origin,
-				BuildVersion: buildVersion,
-				Pkg:          *reqPkg,
-				Alias:        alias,
-				Deps:         deps,
-				External:     external,
-				Target:       "types",
-				stage:        "-",
+				CdnOrigin:      origin,
+				BuildVersion:   buildVersion,
+				DenoStdVersion: dsv,
+				Pkg:            *reqPkg,
+				Alias:          alias,
+				Deps:           deps,
+				External:       external,
+				ExternalAll:    externalAll,
+				Target:         "types",
+				stage:          "-",
 			}
 			var savePath string
 			findTypesFile := func() (bool, int64, time.Time, error) {
@@ -536,7 +602,7 @@ func query(devMode bool) rex.Handle {
 					buildVersion,
 					reqPkg.Name,
 					reqPkg.Version,
-					encodeResolveArgsPrefix(alias, deps, external),
+					encodeResolveArgsPrefix(alias, deps, external, dsv),
 				), reqPkg.Submodule)
 				if strings.HasSuffix(savePath, "~.d.ts") {
 					savePath = strings.TrimSuffix(savePath, "~.d.ts")
@@ -584,14 +650,16 @@ func query(devMode bool) rex.Handle {
 		task := &BuildTask{
 			CdnOrigin:         origin,
 			BuildVersion:      buildVersion,
+			DenoStdVersion:    dsv,
 			Pkg:               *reqPkg,
 			Alias:             alias,
 			Deps:              deps,
 			External:          external,
+			ExternalAll:       externalAll,
 			Target:            target,
 			DevMode:           isDev,
 			BundleMode:        isBundleMode || isWorker,
-			NoRequire:         noRequire,
+			IgnoreRequire:     ignoreRequire,
 			KeepNames:         keepNames,
 			IgnoreAnnotations: ignoreAnnotations,
 			Sourcemap:         sourcemap,
@@ -731,15 +799,15 @@ func query(devMode bool) rex.Handle {
 					ctx.SetHeader("Cache-Control", "public, max-age=31536000, immutable")
 				} else {
 					ctx.SetHeader("Cache-Control", "public, max-age=31536000, immutable")
-					ctx.SetHeader("Vary", "User-Agent")
+					ctx.SetHeader("Vary", "Origin, Accept-Encoding, User-Agent")
 				}
 			} else {
-				ctx.SetHeader("Cache-Control", fmt.Sprintf("public, max-age=%d", 24*3600)) // cache for 24 hours
-				ctx.SetHeader("Vary", "User-Agent")
+				ctx.SetHeader("Cache-Control", fmt.Sprintf("public, max-age=%d", 3600)) // cache for 1 hours
+				ctx.SetHeader("Vary", "Origin, Accept-Encoding, User-Agent")
 			}
 		} else {
-			ctx.SetHeader("Cache-Control", fmt.Sprintf("public, max-age=%d", 10*60)) // cache for 10 minutes
-			ctx.SetHeader("Vary", "User-Agent")
+			ctx.SetHeader("Cache-Control", fmt.Sprintf("public, max-age=%d", 5*60)) // cache for 5 minutes
+			ctx.SetHeader("Vary", "Origin, Accept-Encoding, User-Agent")
 		}
 		ctx.SetHeader("Content-Type", "application/javascript; charset=utf-8")
 		return buf

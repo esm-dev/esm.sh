@@ -130,6 +130,7 @@ var denoStdNodeModules = map[string]bool{
 	"module":              true,
 	"net":                 true,
 	"os":                  true,
+	"process":             true,
 	"path":                true,
 	"path/posix":          true,
 	"path/win32":          true,
@@ -167,18 +168,19 @@ type NpmPackageVerions struct {
 
 // NpmPackage defines the package.json of npm
 type NpmPackage struct {
-	Name             string            `json:"name"`
-	Version          string            `json:"version"`
-	Main             string            `json:"main,omitempty"`
-	Module           string            `json:"module,omitempty"`
-	JsnextMain       string            `json:"jsnext:main,omitempty"`
-	Es2015           string            `json:"es2015,omitempty"`
-	Type             string            `json:"type,omitempty"`
-	Types            string            `json:"types,omitempty"`
-	Typings          string            `json:"typings,omitempty"`
-	Dependencies     map[string]string `json:"dependencies,omitempty"`
-	PeerDependencies map[string]string `json:"peerDependencies,omitempty"`
-	DefinedExports   interface{}       `json:"exports,omitempty"`
+	Name             string                 `json:"name"`
+	Version          string                 `json:"version"`
+	Main             string                 `json:"main,omitempty"`
+	Module           string                 `json:"module,omitempty"`
+	JsNextMain       string                 `json:"jsnext:main,omitempty"`
+	ES2015           string                 `json:"es2015,omitempty"`
+	Type             string                 `json:"type,omitempty"`
+	Types            string                 `json:"types,omitempty"`
+	Typings          string                 `json:"typings,omitempty"`
+	Dependencies     map[string]string      `json:"dependencies,omitempty"`
+	PeerDependencies map[string]string      `json:"peerDependencies,omitempty"`
+	Imports          map[string]interface{} `json:"imports,omitempty"`
+	DefinedExports   interface{}            `json:"exports,omitempty"`
 }
 
 // Node defines the nodejs info
@@ -188,7 +190,7 @@ type Node struct {
 	yarn        string
 }
 
-func checkNode(installDir string) (node *Node, err error) {
+func checkNode(installDir string, npmRegistry string) (node *Node, err error) {
 	var installed bool
 CheckNodejs:
 	version, major, err := getNodejsVersion()
@@ -223,16 +225,14 @@ CheckNodejs:
 		npmRegistry: "https://registry.npmjs.org/",
 	}
 	var output []byte
-	if npmRegistry == "" {
-		log.Infof("try to read npm registry config: npm config get registry")
+	if npmRegistry != "" {
+		node.npmRegistry = npmRegistry
+	} else {
 		output, err := exec.Command("npm", "config", "get", "registry").CombinedOutput()
 		if err == nil {
 			node.npmRegistry = strings.TrimRight(strings.TrimSpace(string(output)), "/") + "/"
 		}
-	} else {
-		node.npmRegistry = npmRegistry
 	}
-	log.Infof("use npm registry %s", node.npmRegistry)
 
 CheckYarn:
 	output, err = exec.Command("yarn", "-v").CombinedOutput()
@@ -350,6 +350,11 @@ func fetchPackageInfo(name string, version string) (info NpmPackage, err error) 
 		return
 	}
 
+	if len(h.Versions) == 0 {
+		err = fmt.Errorf("npm: versions of %s not found", name)
+		return
+	}
+
 	isFullVersion := regFullVersion.MatchString(version)
 	if isFullVersion {
 		info = h.Versions[version]
@@ -391,7 +396,7 @@ func fetchPackageInfo(name string, version string) (info NpmPackage, err error) 
 	}
 
 	if info.Version == "" {
-		err = fmt.Errorf("npm: version '%s' not found", version)
+		err = fmt.Errorf("npm: version '%s' of %s not found", version, name)
 		return
 	}
 
@@ -419,10 +424,10 @@ func getNodejsVersion() (version string, major int, err error) {
 }
 
 // see https://nodejs.org/api/packages.html
-func resolvePackageExports(p *NpmPackage, exports interface{}, target string, isDev bool) {
+func resolvePackageExports(p *NpmPackage, exports interface{}, target string, isDev bool, pType string) {
 	s, ok := exports.(string)
 	if ok {
-		if p.Type == "module" {
+		if pType == "module" {
 			p.Module = s
 		} else {
 			p.Main = s
@@ -438,29 +443,26 @@ func resolvePackageExports(p *NpmPackage, exports interface{}, target string, is
 		}
 		if p.Type == "module" {
 			if isDev {
-				names = append(names, "development", "default")
-			} else {
-				names = append(names, "production", "default")
+				names = append([]string{"development"}, names...)
 			}
+			names = append(names, "default")
+		}
+		// support solid.js ssr in deno
+		if p.Name == "solid-js/web" && target == "deno" {
+			names = append([]string{"node"}, names...)
 		}
 		for _, name := range names {
 			value, ok := m[name]
 			if ok {
-				s, ok := value.(string)
-				if ok && s != "" {
-					p.Module = s
-					break
-				}
+				resolvePackageExports(p, value, target, isDev, "module")
+				break
 			}
 		}
 		for _, name := range []string{"require", "node", "default"} {
 			value, ok := m[name]
 			if ok {
-				s, ok := value.(string)
-				if ok && s != "" {
-					p.Main = s
-					break
-				}
+				resolvePackageExports(p, value, target, isDev, "")
+				break
 			}
 		}
 		for key, value := range m {
@@ -496,7 +498,7 @@ func fixNpmPackage(p NpmPackage, target string, isDev bool) *NpmPackage {
 						".": "./esm/index.js"
 					}
 				*/
-				resolvePackageExports(np, v, target, isDev)
+				resolvePackageExports(np, v, target, isDev, np.Type)
 			} else {
 				/*
 					exports: {
@@ -504,21 +506,21 @@ func fixNpmPackage(p NpmPackage, target string, isDev bool) *NpmPackage {
 						"import": "./esm/index.js"
 					}
 				*/
-				resolvePackageExports(np, m, target, isDev)
+				resolvePackageExports(np, m, target, isDev, np.Type)
 			}
 		} else if _, ok := exports.(string); ok {
 			/*
 			  exports: "./esm/index.js"
 			*/
-			resolvePackageExports(np, exports, target, isDev)
+			resolvePackageExports(np, exports, target, isDev, np.Type)
 		}
 	}
 
 	if p.Module == "" {
-		if p.JsnextMain != "" {
-			p.Module = p.JsnextMain
-		} else if p.Es2015 != "" {
-			p.Module = p.Es2015
+		if p.JsNextMain != "" {
+			p.Module = p.JsNextMain
+		} else if p.ES2015 != "" {
+			p.Module = p.ES2015
 		} else if p.Main != "" && (p.Type == "module" || strings.Contains(p.Main, "/esm/") || strings.Contains(p.Main, "/es/") || strings.HasSuffix(p.Main, ".mjs")) {
 			p.Module = p.Main
 		}
@@ -635,28 +637,4 @@ func toTypesPackageName(pkgName string) string {
 		pkgName = strings.Replace(pkgName[1:], "/", "__", 1)
 	}
 	return "@types/" + pkgName
-}
-
-func getDenoStdVersion() (version string, err error) {
-	resp, err := httpClient.Get("https://cdn.deno.land/std/meta/versions.json")
-	if err != nil {
-		return
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode >= 404 {
-		err = fmt.Errorf(resp.Status)
-		return
-	}
-
-	var v struct {
-		Latest string `json:"latest"`
-	}
-	err = json.NewDecoder(resp.Body).Decode(&v)
-	if err != nil {
-		return
-	}
-
-	version = v.Latest
-	return
 }

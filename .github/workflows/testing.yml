@@ -2,9 +2,9 @@ name: esm.sh ci
 
 on:
   push:
-    branches: [master]
+    branches: [main]
   pull_request:
-    branches: [master]
+    branches: [main]
 
 jobs:
   test:
@@ -18,12 +18,12 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v2
         with:
-          node-version: '16'
+          node-version: 16.16
 
       - name: Install Go
         uses: actions/setup-go@v2
         with:
-          go-version: 1.17.x
+          go-version: 1.18.x
 
       - name: Setup deno
         uses: denoland/setup-deno@main
@@ -31,4 +31,4 @@ jobs:
           deno-version: v1.x
 
       - name: Deno test
-        run: deno run -A --unstable test/deno/bootstrap.ts
+        run: deno run -A --unstable test/bootstrap.ts

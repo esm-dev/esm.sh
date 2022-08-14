@@ -33,21 +33,6 @@ or import non-module(js) files:
 import "https://esm.sh/react/package.json" assert { type: "json" }
 ```
 
-You can also use the `?path` to specify the `submodule`, this is friendly for ****import maps****:
-
-```json
-{
-  "imports": {
-    "react-dom/": "https://esm.sh/react-dom?target=es2015&path=/"
-  }
-}
-```
-
-```javascript
-// equals to https://esm.sh/react-dom/server?target=es2015
-import { renderToString } from "react-dom/server"
-```
-
 ### Bundle mode
 
 ```javascript
@@ -122,7 +107,7 @@ Other supported options of [esbuild](https://esbuild.github.io/):
   ```javascript
   import React from "https://esm.sh/react?sourcemap"
   ```
-  
+
   This only supports the `inline` mode.
 
 ### Package CSS
@@ -162,6 +147,12 @@ const { css } = await postcss([ autoprefixer ]).process(`
 `).async()
 ```
 
+By default esm.sh will use a fixed version of `deno.land/std/node` to support Deno. You can use the `?deno-std=$VER` query to specify a different version:
+
+```javascript
+import postcss from "https://esm.sh/postcss?deno-std=0.128.0"
+```
+
 ### X-Typescript-Types
 
 By default, **esm.sh** will respond with a custom `X-TypeScript-Types` HTTP header when the types (`.d.ts`) is defined. This is useful for deno type checks ([link](https://deno.land/manual/typescript/types#using-x-typescript-types-header)).
@@ -174,12 +165,30 @@ You can pass the `?no-dts` query to disable the `X-TypeScript-Types` header if s
 import unescape from "https://esm.sh/lodash/unescape?no-dts"
 ```
 
+### Deno CLI Script
+
+The CLI script for Deno is using to manage the **import maps** with npm modules from _esm.sh_, it will arrange the dependencies automatically and pin the build version always.
+
+```bash
+deno run -A https://esm.sh/v91 init
+```
+
+After initializing, you can use the `deno task npm:[add/update/remove]` commands to manage the npm modules in the import maps.
+
+```bash
+deno task npm:add react react-dom # add packages
+deno task npm:add react@17 react-dom@17 # add packages with specified version
+deno task npm:update react react-dom # upgrade packages
+deno task npm:update # update all packages
+deno task npm:remove react react-dom # remove packages
+```
+
 ## Pin the build version
 
 Since we update esm.sh server frequently, sometime we may break packages that work fine previously by mistake, the server will rebuild all modules when the patch pushed. To avoid this, you can **pin** the build version by the `?pin=BUILD_VERSON` query. This will give you an **immutable** cached module.
 
 ```javascript
-import React from "https://esm.sh/react@17.0.2?pin=v86"
+import React from "https://esm.sh/react@17.0.2?pin=v91"
 ```
 
 ## Global CDN

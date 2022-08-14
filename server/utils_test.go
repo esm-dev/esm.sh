@@ -11,8 +11,8 @@ func TestAliasDepsPrefix(t *testing.T) {
 		Pkg{Name: "b", Version: "1.0.0"},
 		Pkg{Name: "d", Version: "1.0.0"},
 		Pkg{Name: "c", Version: "1.0.0"},
-	}, external)
-	a, d, e, err := decodeResolveArgsPrefix(prefix)
+	}, external, "0.128.0")
+	a, d, e, dsv, err := decodeResolveArgsPrefix(prefix)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -24,6 +24,9 @@ func TestAliasDepsPrefix(t *testing.T) {
 	}
 	if len(e) != 1 {
 		t.Fatal("invalid external")
+	}
+	if dsv != "0.128.0" {
+		t.Fatal("invalid denoStdVersion")
 	}
 	t.Log(a, d, e)
 }
