@@ -14,9 +14,9 @@ import (
 )
 
 func (task *BuildTask) CopyDTS(dts string, buildVersion int) (n int, err error) {
-	resolveArgsPrefix := encodeResolveArgsPrefix(task.Alias, task.Deps, task.External, task.DenoStdVersion)
+	buildArgsPrefix := encodeBuildArgsPrefix(task.Alias, task.Deps, task.External, task.DenoStdVersion)
 	tracing := newStringSet()
-	err = task.copyDTS(dts, buildVersion, resolveArgsPrefix, tracing)
+	err = task.copyDTS(dts, buildVersion, buildArgsPrefix, tracing)
 	if err == nil {
 		n = tracing.Size()
 	}
@@ -238,8 +238,8 @@ func (task *BuildTask) copyDTS(dts string, buildVersion int, aliasDepsPrefix str
 				}
 			}
 
-			alias, deps := fixResolveArgs(task.Alias, task.Deps, info.Name)
-			pkgBasePath := pkgBase + encodeResolveArgsPrefix(alias, deps, task.External, task.DenoStdVersion)
+			alias, deps := fixBuildArgs(task.Alias, task.Deps, info.Name)
+			pkgBasePath := pkgBase + encodeBuildArgsPrefix(alias, deps, task.External, task.DenoStdVersion)
 
 			// CDN URL
 			importPath = fmt.Sprintf("%s/%s", cdnOriginAndBuildBasePath, pkgBasePath+importPath)
@@ -368,7 +368,7 @@ func removeGlobalBlob(input []byte) (output []byte, err error) {
 	return nil, errors.New("removeGlobalBlob: global block not end")
 }
 
-func toTypesPath(wd string, p *NpmPackage, version string, prefix string, subpath string) string {
+func toTypesPath(wd string, p *NpmPackage, version string, buildArgsPrefix string, subpath string) string {
 	var types string
 	if subpath != "" {
 		types = subpath
@@ -405,5 +405,5 @@ func toTypesPath(wd string, p *NpmPackage, version string, prefix string, subpat
 	if version == "" {
 		version = p.Version
 	}
-	return fmt.Sprintf("%s@%s/%s%s", p.Name, version, prefix, utils.CleanPath(types)[1:])
+	return fmt.Sprintf("%s@%s/%s%s", p.Name, version, buildArgsPrefix, utils.CleanPath(types)[1:])
 }

@@ -511,12 +511,12 @@ func esmHandler(options esmHandlerOptions) rex.Handle {
 			}
 		}
 
-		// parse `ResolveArgsPrefix`
+		// parse `BuildArgsPrefix`
 		if hasBuildVerPrefix {
 			a := strings.Split(reqPkg.Submodule, "/")
 			if len(a) > 1 && strings.HasPrefix(a[0], "X-") {
 				reqPkg.Submodule = strings.Join(a[1:], "/")
-				_alias, _deps, _external, _dsv, err := decodeResolveArgsPrefix(a[0])
+				_alias, _deps, _external, _dsv, err := decodeBuildArgsPrefix(a[0])
 				if err != nil {
 					return throwErrorJS(ctx, err)
 				}
@@ -538,7 +538,7 @@ func esmHandler(options esmHandlerOptions) rex.Handle {
 		}
 
 		// fix alias and deps
-		alias, deps = fixResolveArgs(alias, deps, reqPkg.Name)
+		alias, deps = fixBuildArgs(alias, deps, reqPkg.Name)
 
 		// check whether it is `bare` mode
 		if hasBuildVerPrefix && endsWith(pathname, ".js") {
@@ -605,7 +605,7 @@ func esmHandler(options esmHandlerOptions) rex.Handle {
 					buildVersion,
 					reqPkg.Name,
 					reqPkg.Version,
-					encodeResolveArgsPrefix(alias, deps, external, dsv),
+					encodeBuildArgsPrefix(alias, deps, external, dsv),
 				), reqPkg.Submodule)
 				if strings.HasSuffix(savePath, "~.d.ts") {
 					savePath = strings.TrimSuffix(savePath, "~.d.ts")

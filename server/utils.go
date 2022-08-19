@@ -193,7 +193,7 @@ func kill(pidFile string) (err error) {
 // 	}
 // }
 
-func fixResolveArgs(alias map[string]string, deps PkgSlice, pkgName string) (map[string]string, PkgSlice) {
+func fixBuildArgs(alias map[string]string, deps PkgSlice, pkgName string) (map[string]string, PkgSlice) {
 	_alias := map[string]string{}
 	_deps := PkgSlice{}
 	switch pkgName {
@@ -213,7 +213,7 @@ func fixResolveArgs(alias map[string]string, deps PkgSlice, pkgName string) (map
 	return _alias, _deps
 }
 
-func decodeResolveArgsPrefix(raw string) (alias map[string]string, deps PkgSlice, external []string, dsv string, err error) {
+func decodeBuildArgsPrefix(raw string) (alias map[string]string, deps PkgSlice, external []string, dsv string, err error) {
 	s, err := atobUrl(strings.TrimPrefix(strings.TrimSuffix(raw, "/"), "X-"))
 	if err == nil {
 		for _, p := range strings.Split(s, "\n") {
@@ -250,7 +250,7 @@ func decodeResolveArgsPrefix(raw string) (alias map[string]string, deps PkgSlice
 	return
 }
 
-func encodeResolveArgsPrefix(alias map[string]string, deps PkgSlice, external *stringSet, dsv string) string {
+func encodeBuildArgsPrefix(alias map[string]string, deps PkgSlice, external *stringSet, dsv string) string {
 	args := []string{}
 	if len(alias) > 0 {
 		var ss sort.StringSlice

@@ -89,7 +89,7 @@ func (task *BuildTask) ID() string {
 		task.getBuildVersion(task.Pkg),
 		pkg.Name,
 		pkg.Version,
-		encodeResolveArgsPrefix(task.Alias, task.Deps, task.External, task.DenoStdVersion),
+		encodeBuildArgsPrefix(task.Alias, task.Deps, task.External, task.DenoStdVersion),
 		task.Target,
 		name,
 	)
@@ -562,7 +562,7 @@ esbuild:
 					if err != nil {
 						return
 					}
-					importPath = task.getImportPath(subPkg, encodeResolveArgsPrefix(task.Alias, task.Deps, task.External, task.DenoStdVersion))
+					importPath = task.getImportPath(subPkg, encodeBuildArgsPrefix(task.Alias, task.Deps, task.External, task.DenoStdVersion))
 				}
 				// is node builtin `buffer` module
 				if importPath == "" && name == "buffer" {
@@ -626,12 +626,12 @@ esbuild:
 							if name != dep.Name {
 								submodule = strings.TrimPrefix(name, dep.Name+"/")
 							}
-							alias, deps := fixResolveArgs(task.Alias, task.Deps, dep.Name)
+							alias, deps := fixBuildArgs(task.Alias, task.Deps, dep.Name)
 							importPath = task.getImportPath(Pkg{
 								Name:      dep.Name,
 								Version:   dep.Version,
 								Submodule: submodule,
-							}, encodeResolveArgsPrefix(alias, deps, task.External, task.DenoStdVersion))
+							}, encodeBuildArgsPrefix(alias, deps, task.External, task.DenoStdVersion))
 							break
 						}
 					}
@@ -683,7 +683,7 @@ esbuild:
 						buildQueue.Add(t, "")
 					}
 
-					importPath = task.getImportPath(pkg, encodeResolveArgsPrefix(task.Alias, task.Deps, task.External, task.DenoStdVersion))
+					importPath = task.getImportPath(pkg, encodeBuildArgsPrefix(task.Alias, task.Deps, task.External, task.DenoStdVersion))
 				}
 				if importPath == "" {
 					err = fmt.Errorf("Could not resolve \"%s\" (Imported by \"%s\")", name, task.Pkg.Name)
@@ -892,11 +892,11 @@ func (task *BuildTask) storeToDB(esm *ModuleMeta) {
 func (task *BuildTask) checkDTS(esm *ModuleMeta, npm *NpmPackage) {
 	name := task.Pkg.Name
 	submodule := task.Pkg.Submodule
-	ResolveArgsPrefix := encodeResolveArgsPrefix(task.Alias, task.Deps, task.External, task.DenoStdVersion)
+	buildArgsPrefix := encodeBuildArgsPrefix(task.Alias, task.Deps, task.External, task.DenoStdVersion)
 
 	var dts string
 	if npm.Types != "" {
-		dts = toTypesPath(task.wd, npm, "", ResolveArgsPrefix, submodule)
+		dts = toTypesPath(task.wd, npm, "", buildArgsPrefix, submodule)
 	} else if !strings.HasPrefix(name, "@types/") {
 		versions := []string{"latest"}
 		versionParts := strings.Split(task.Pkg.Version, ".")
@@ -916,7 +916,7 @@ func (task *BuildTask) checkDTS(esm *ModuleMeta, npm *NpmPackage) {
 		for _, version := range versions {
 			p, _, _, err := getPackageInfo(task.wd, typesPkgName, version)
 			if err == nil {
-				dts = toTypesPath(task.wd, &p, version, ResolveArgsPrefix, submodule)
+				dts = toTypesPath(task.wd, &p, version, buildArgsPrefix, submodule)
 				break
 			}
 		}
