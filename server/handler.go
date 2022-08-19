@@ -110,7 +110,10 @@ func esmHandler(options esmHandlerOptions) rex.Handle {
 
 		// Check current version
 		buildBasePath := fmt.Sprintf("/v%d", VERSION)
-		if strings.HasPrefix(pathname, buildBasePath+"/") || pathname == buildBasePath {
+		if strings.HasPrefix(pathname, "/stable/") {
+			pathname = strings.TrimPrefix(pathname, "/stable")
+			hasBuildVerPrefix = true
+		} else if strings.HasPrefix(pathname, buildBasePath+"/") || pathname == buildBasePath {
 			a := strings.Split(pathname, "/")
 			pathname = "/" + strings.Join(a[2:], "/")
 			hasBuildVerPrefix = true

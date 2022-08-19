@@ -20,6 +20,13 @@ import (
 	"github.com/ije/gox/utils"
 )
 
+// stable build for UI libraries like react, to make sure the runtime is single copy
+var stableBuild = map[string]bool{
+	"react":  true,
+	"preact": true,
+	"vue":    true,
+}
+
 type BuildTask struct {
 	CdnOrigin         string
 	BuildVersion      int
@@ -78,8 +85,8 @@ func (task *BuildTask) ID() string {
 	}
 
 	task.id = fmt.Sprintf(
-		"v%d/%s@%s/%s%s/%s.js",
-		task.BuildVersion,
+		"%s/%s@%s/%s%s/%s.js",
+		task.getBuildVersion(task.Pkg),
 		pkg.Name,
 		pkg.Version,
 		encodeResolveArgsPrefix(task.Alias, task.Deps, task.External, task.DenoStdVersion),
@@ -112,15 +119,22 @@ func (task *BuildTask) getImportPath(pkg Pkg, prefix string) string {
 	}
 
 	return fmt.Sprintf(
-		"%s/v%d/%s@%s/%s%s/%s.js",
+		"%s/%s/%s@%s/%s%s/%s.js",
 		basePath,
-		task.BuildVersion,
+		task.getBuildVersion(pkg),
 		pkg.Name,
 		pkg.Version,
 		prefix,
 		task.Target,
 		name,
 	)
+}
+
+func (task *BuildTask) getBuildVersion(pkg Pkg) string {
+	if stableBuild[pkg.Name] {
+		return "stable"
+	}
+	return fmt.Sprintf("v%d", task.BuildVersion)
 }
 
 func (task *BuildTask) Build() (esm *ModuleMeta, err error) {
@@ -916,7 +930,7 @@ func (task *BuildTask) transformDTS(dts string) {
 	start := time.Now()
 	n, err := task.CopyDTS(dts, task.BuildVersion)
 	if err != nil && os.IsExist(err) {
-		log.Errorf("copyDTS(%s): %v", dts, err)
+		log.Errorf("transformDTS(%s): %v", dts, err)
 		return
 	}
 	log.Debugf("copy dts '%s' (%d files copied) in %v", dts, n, time.Since(start))
