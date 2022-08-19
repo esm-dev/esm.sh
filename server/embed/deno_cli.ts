@@ -160,9 +160,9 @@ async function init(args: string[], options: Record<string, string>) {
   const tasks = config.tasks as undefined | Record<string, string>;
   config.tasks = {
     ...tasks,
-    "npm:add": `deno run -A ${import.meta.url} add`,
-    "npm:update": `deno run -A ${import.meta.url} update`,
-    "npm:remove": `deno run -A ${import.meta.url} remove`,
+    "npm:add": `deno run -A ${importUrl.origin}/${VERSION} add`,
+    "npm:update": `deno run -A ${importUrl.origin}/${VERSION} update`,
+    "npm:remove": `deno run -A ${importUrl.origin}/${VERSION} remove`,
   };
   await Deno.writeTextFile(
     "deno.json",
