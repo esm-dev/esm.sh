@@ -223,22 +223,22 @@ func esmHandler(options esmHandlerOptions) rex.Handle {
 		}
 
 		external := newStringSet()
-		externalAll := false
 		// check `/*pathname`
 		if strings.HasPrefix(pathname, "/*") {
-			externalAll = true
+			external.Add("*")
 			pathname = "/" + pathname[2:]
 		}
 		// check `external` query
 		for _, p := range strings.Split(ctx.Form.Value("external"), ",") {
 			p = strings.TrimSpace(p)
+			if p == "*" {
+				external.Reset()
+				external.Add("*")
+				break
+			}
 			if p != "" {
 				external.Add(p)
 			}
-		}
-		if external.Has("*") {
-			external = newStringSet()
-			externalAll = true
 		}
 
 		// serve embed polyfills/types
@@ -280,7 +280,7 @@ func esmHandler(options esmHandlerOptions) rex.Handle {
 					prefix = fmt.Sprintf("/v%d", VERSION)
 				}
 			}
-			if externalAll {
+			if external.Has("*") {
 				eaSign = "*"
 			}
 			query := ctx.R.URL.RawQuery
@@ -552,7 +552,8 @@ func esmHandler(options esmHandlerOptions) rex.Handle {
 					}
 					if endsWith(submodule, ".external") {
 						submodule = strings.TrimSuffix(submodule, ".external")
-						externalAll = true
+						external.Reset()
+						external.Add("*")
 					}
 					if endsWith(submodule, ".development") {
 						submodule = strings.TrimSuffix(submodule, ".development")
@@ -594,7 +595,6 @@ func esmHandler(options esmHandlerOptions) rex.Handle {
 				Alias:          alias,
 				Deps:           deps,
 				External:       external,
-				ExternalAll:    externalAll,
 				Target:         "types",
 				stage:          "-",
 			}
@@ -658,7 +658,6 @@ func esmHandler(options esmHandlerOptions) rex.Handle {
 			Alias:             alias,
 			Deps:              deps,
 			External:          external,
-			ExternalAll:       externalAll,
 			Target:            target,
 			DevMode:           isDev,
 			BundleMode:        isBundleMode || isWorker,

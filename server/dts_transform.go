@@ -14,7 +14,7 @@ import (
 )
 
 func (task *BuildTask) CopyDTS(dts string, buildVersion int) (n int, err error) {
-	buildArgsPrefix := encodeBuildArgsPrefix(task.Alias, task.Deps, task.External, task.DenoStdVersion)
+	buildArgsPrefix := encodeBuildArgsPrefix(task.Alias, task.Deps, task.External, "")
 	tracing := newStringSet()
 	err = task.copyDTS(dts, buildVersion, buildArgsPrefix, tracing)
 	if err == nil {
@@ -61,7 +61,7 @@ func (task *BuildTask) copyDTS(dts string, buildVersion int, aliasDepsPrefix str
 	}
 
 	imports := newStringSet()
-	allDeclareModules := newStringSet()
+	globalDeclareModules := newStringSet()
 	entryDeclareModules := []string{}
 
 	dtsFilePath := path.Join(task.wd, "node_modules", regFullVersionPath.ReplaceAllString(dts, "$1/"))
@@ -74,7 +74,7 @@ func (task *BuildTask) copyDTS(dts string, buildVersion int, aliasDepsPrefix str
 	pass1Buf := bytes.NewBuffer(nil)
 	err = walkDts(dtsFile, pass1Buf, func(importPath string, kind string, position int) string {
 		if kind == "declare module" {
-			allDeclareModules.Add(importPath)
+			globalDeclareModules.Add(importPath)
 		}
 		return importPath
 	})
@@ -114,6 +114,10 @@ func (task *BuildTask) copyDTS(dts string, buildVersion int, aliasDepsPrefix str
 			return importPath
 		}
 
+		if task.External.Has("*") && !isLocalImport(importPath) {
+			return importPath
+		}
+
 		// fix types
 		switch importPath {
 		case "node-fetch":
@@ -128,7 +132,7 @@ func (task *BuildTask) copyDTS(dts string, buildVersion int, aliasDepsPrefix str
 			importPath = to
 		}
 
-		if allDeclareModules.Has(importPath) || task.External.Has(importPath) {
+		if globalDeclareModules.Has(importPath) || task.External.Has(importPath) {
 			return importPath
 		}
 
@@ -239,7 +243,7 @@ func (task *BuildTask) copyDTS(dts string, buildVersion int, aliasDepsPrefix str
 			}
 
 			alias, deps := fixBuildArgs(task.Alias, task.Deps, info.Name)
-			pkgBasePath := pkgBase + encodeBuildArgsPrefix(alias, deps, task.External, task.DenoStdVersion)
+			pkgBasePath := pkgBase + encodeBuildArgsPrefix(alias, deps, task.External, "")
 
 			// CDN URL
 			importPath = fmt.Sprintf("%s/%s", cdnOriginAndBuildBasePath, pkgBasePath+importPath)
@@ -306,6 +310,17 @@ func (task *BuildTask) copyDTS(dts string, buildVersion int, aliasDepsPrefix str
 				return
 			}
 		}
+		buf = bytes.NewBuffer(dtsData)
+	}
+
+	// fix preact/compat types
+	if pkgName == "preact" && strings.HasSuffix(savePath, "/compat/src/index.d.ts") {
+		dtsData := buf.Bytes()
+		dtsData = bytes.ReplaceAll(
+			dtsData,
+			[]byte("export import ComponentProps = preact.ComponentProps;"),
+			[]byte("export import ComponentProps = preact.ComponentProps;\n\n// added by esm.sh\nexport type PropsWithChildren<P = unknown> = P & { children?: preact.ComponentChildren };"),
+		)
 		buf = bytes.NewBuffer(dtsData)
 	}
 

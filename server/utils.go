@@ -55,6 +55,13 @@ func (s *stringSet) Add(key string) {
 	s.m[key] = struct{}{}
 }
 
+func (s *stringSet) Reset() {
+	s.lock.Lock()
+	defer s.lock.Unlock()
+
+	s.m = map[string]struct{}{}
+}
+
 func (s *stringSet) Values() []string {
 	s.lock.RLock()
 	defer s.lock.RUnlock()
