@@ -83,6 +83,26 @@ func esmHandler(options esmHandlerOptions) rex.Handle {
 			origin = "https://esm.sh"
 		}
 
+		var hasBuildVerPrefix bool
+		var outdatedBuildVer string
+
+		// Check current version
+		buildBasePath := fmt.Sprintf("/v%d", VERSION)
+		if strings.HasPrefix(pathname, "/stable/") {
+			pathname = strings.TrimPrefix(pathname, "/stable")
+			hasBuildVerPrefix = true
+		} else if strings.HasPrefix(pathname, buildBasePath+"/") || pathname == buildBasePath {
+			a := strings.Split(pathname, "/")
+			pathname = "/" + strings.Join(a[2:], "/")
+			hasBuildVerPrefix = true
+			// Otherwise check possible pinned version
+		} else if regBuildVersionPath.MatchString(pathname) {
+			a := strings.Split(pathname, "/")
+			pathname = "/" + strings.Join(a[2:], "/")
+			hasBuildVerPrefix = true
+			outdatedBuildVer = a[1]
+		}
+
 		// redirect `/@types/` to `.d.ts` files
 		if strings.HasPrefix(pathname, "/@types/") {
 			url := fmt.Sprintf("%s/v%d%s", origin, VERSION, pathname)
@@ -103,26 +123,6 @@ func esmHandler(options esmHandlerOptions) rex.Handle {
 			} else {
 				return rex.Status(404, "not found")
 			}
-		}
-
-		var hasBuildVerPrefix bool
-		var outdatedBuildVer string
-
-		// Check current version
-		buildBasePath := fmt.Sprintf("/v%d", VERSION)
-		if strings.HasPrefix(pathname, "/stable/") {
-			pathname = strings.TrimPrefix(pathname, "/stable")
-			hasBuildVerPrefix = true
-		} else if strings.HasPrefix(pathname, buildBasePath+"/") || pathname == buildBasePath {
-			a := strings.Split(pathname, "/")
-			pathname = "/" + strings.Join(a[2:], "/")
-			hasBuildVerPrefix = true
-			// Otherwise check possible pinned version
-		} else if regBuildVersionPath.MatchString(pathname) {
-			a := strings.Split(pathname, "/")
-			pathname = "/" + strings.Join(a[2:], "/")
-			hasBuildVerPrefix = true
-			outdatedBuildVer = a[1]
 		}
 
 		// match static routess
