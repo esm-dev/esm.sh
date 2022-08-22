@@ -15,13 +15,11 @@ import (
 
 const nsApp = `
 const http = require('http');
+const ns = require('esm-node-services');
 
 const services = {
-  test: async input => ({ ...input })
-}
-const register = %s
-for (const name of register) {
-  Object.assign(services, require(name))
+  test: async input => ({ ...input }),
+	...ns
 }
 
 const requestListener = function (req, res) {
@@ -79,6 +77,8 @@ func invokeNodeService(serviceName string, input map[string]interface{}) (data [
 	}
 	res, err := http.Post(fmt.Sprintf("http://localhost:%d", nsPort), "application/json", buf)
 	if err != nil {
+		// kill current ns process
+		kill(nsPidFile)
 		return
 	}
 	defer res.Body.Close()
@@ -86,42 +86,41 @@ func invokeNodeService(serviceName string, input map[string]interface{}) (data [
 	return
 }
 
-func startNodeServices(wd string, port int, services []string) (err error) {
-	nsPort = port
-	nsPidFile = path.Join(wd, "../ns.pid")
+func startNodeServices(etcDir string, port int) (err error) {
+	wd := path.Join(etcDir, "ns")
+	err = clearDir(wd)
+	if err != nil {
+		return
+	}
 
-	servicesInject := "[]"
+	nsPort = port
+	nsPidFile = path.Join(etcDir, "ns.pid")
 
 	// install services
-	if len(services) > 0 {
-		cmd := exec.Command("yarn", append([]string{"add"}, services...)...)
-		cmd.Dir = wd
-		var output []byte
-		output, err = cmd.CombinedOutput()
-		if err != nil {
-			err = fmt.Errorf("install services: %v %s", err, string(output))
-			return
-		}
-		data, _ := json.Marshal(services)
-		servicesInject = string(data)
-		log.Debug("node services", services, "installed")
+	cmd := exec.Command("yarn", "add", "esm-node-services")
+	cmd.Dir = wd
+	var output []byte
+	output, err = cmd.CombinedOutput()
+	if err != nil {
+		err = fmt.Errorf("install services: %v %s", err, string(output))
+		return
 	}
 
 	// create ns script
 	err = ioutil.WriteFile(
 		path.Join(wd, "ns.js"),
-		[]byte(fmt.Sprintf(nsApp, servicesInject, port)),
+		[]byte(fmt.Sprintf(nsApp, port)),
 		0644,
 	)
 	if err != nil {
 		return
 	}
 
-	// kill previous node process if exists
+	// kill previous ns process if exists
 	kill(nsPidFile)
 
 	errBuf := bytes.NewBuffer(nil)
-	cmd := exec.Command("node", "ns.js")
+	cmd = exec.Command("node", "ns.js")
 	cmd.Dir = wd
 	cmd.Stderr = errBuf
 

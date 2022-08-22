@@ -162,14 +162,8 @@ func Serve(efs EmbedFS) {
 
 	// start cjs lexer server
 	go func() {
-		wd := path.Join(etcDir, "ns")
-		err := clearDir(wd)
-		if err != nil {
-			log.Fatal(err)
-		}
-		services := []string{"esm-node-services"}
 		for {
-			err := startNodeServices(wd, nsPort, services)
+			err := startNodeServices(etcDir, nsPort)
 			if err != nil && err.Error() != "signal: interrupt" {
 				log.Warnf("node services exit: %v", err)
 			}
