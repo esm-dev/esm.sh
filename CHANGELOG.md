@@ -1,5 +1,14 @@
 # Change Log
 
+## v92
+
+- Add `stable` channel for UI libraries like react, to avoid multiple copies of runtime by cache
+  ```
+  https://esm.sh/v92/react@18.2.0/deno/react.js -> https://esm.sh/stable/react@18.2.0/deno/react.js
+  ```
+- Respect `external all` arg in types build
+- Upgrade `deno/std` to **0.152.0**
+
 ## v91
 
 - Improved Deno CLI Script:
