@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"io"
+	"io/ioutil"
 	"net"
 	"net/http"
 	"os"
@@ -182,7 +183,18 @@ func esmHandler(options esmHandlerOptions) rex.Handle {
 				}
 			}
 			buildQueue.lock.RUnlock()
+			res, err := http.Get(fmt.Sprintf("http://localhost:%d", nsPort))
+			if err != nil {
+				kill(nsPidFile)
+				return err
+			}
+			defer res.Body.Close()
+			out, err := ioutil.ReadAll(res.Body)
+			if err != nil {
+				return err
+			}
 			return map[string]interface{}{
+				"ns":         string(out),
 				"uptime":     time.Since(startTime).String(),
 				"buildQueue": q[:i],
 			}
