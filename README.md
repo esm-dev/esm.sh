@@ -47,7 +47,7 @@ In **bundle** mode, all dependencies will be bundled into a single JS file.
 import React from "https://esm.sh/react?dev"
 ```
 
-The `?dev` mode builds modules with `process.env.NODE_ENV` equals to `development`, that is useful to build modules like **React** to allow you to get more development warn/error details.
+The `?dev` query builds modules with `process.env.NODE_ENV` equals to `development`, that is useful to build modules like **React** to allow you to get more development warn/error details.
 
 ### Specify dependencies
 
