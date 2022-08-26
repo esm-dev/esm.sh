@@ -183,8 +183,8 @@ func esmHandler(options esmHandlerOptions) rex.Handle {
 			}
 			buildQueue.lock.RUnlock()
 			return map[string]interface{}{
-				"uptime": time.Since(startTime).String(),
-				"queue":  q[:i],
+				"uptime":     time.Since(startTime).String(),
+				"buildQueue": q[:i],
 			}
 
 		case "/error.js":
