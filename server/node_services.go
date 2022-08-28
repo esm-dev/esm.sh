@@ -161,6 +161,7 @@ var requireModeAllowList = []string{
 	"stream-http",
 	"typescript",
 	"vscode-oniguruma",
+	"postcss-selector-parser",
 }
 
 func parseCJSModuleExports(buildDir string, importPath string, nodeEnv string) (ret cjsExportsResult, err error) {
