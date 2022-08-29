@@ -1,8 +1,8 @@
-import { equal } from "https://deno.land/std@0.145.0/testing/asserts.ts";
+import { assertEquals } from "https://deno.land/std@0.145.0/testing/asserts.ts";
 
 import { transform } from "http://localhost:8080/@babel/standalone@7.18.9";
-import babelPresetSolid from "http://localhost:8080/babel-preset-solid@1.4.6";
-import { renderToString } from "http://localhost:8080/solid-js@1.4.7/web";
+import babelPresetSolid from "http://localhost:8080/babel-preset-solid@1.5.1";
+import { renderToString } from "http://localhost:8080/solid-js@1.5.1/web";
 
 function transformSolid(rawCode: string): string {
   const { code } = transform(rawCode, {
@@ -19,8 +19,8 @@ function transformSolid(rawCode: string): string {
     throw new Error("code is empty");
   }
   return code
-    .replaceAll(`"solid-js"`, `"http://localhost:8080/solid-js@1.4.7"`)
-    .replaceAll(`"solid-js/web"`, `"http://localhost:8080/solid-js@1.4.7/web"`);
+    .replaceAll(`"solid-js"`, `"http://localhost:8080/solid-js@1.5.1"`)
+    .replaceAll(`"solid-js/web"`, `"http://localhost:8080/solid-js@1.5.1/web"`);
 }
 
 Deno.test("solid.js ssr", async () => {
@@ -45,5 +45,5 @@ Deno.test("solid.js ssr", async () => {
     `data:application/javascript,${encodeURIComponent(transformSolid(code))}`
   );
   const html = renderToString(App);
-  equal(html, "<button>0</button>");
+  assertEquals(html, `<button type="button">0</button>`);
 });
