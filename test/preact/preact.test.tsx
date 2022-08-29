@@ -1,4 +1,4 @@
-import { equal } from "https://deno.land/std@0.145.0/testing/asserts.ts";
+import { assertEquals } from "https://deno.land/std@0.145.0/testing/asserts.ts";
 
 import { h } from "http://localhost:8080/preact";
 import { useState } from "http://localhost:8080/preact/hooks";
@@ -14,5 +14,5 @@ Deno.test("preact", () => {
     );
   };
   const html = render(<App />);
-  equal(html, "<main><h1>Hi :)</h1></main>");
+  assertEquals(html, "<main><h1>Hi :)</h1></main>");
 });

@@ -1,4 +1,4 @@
-import { equal } from "https://deno.land/std@0.145.0/testing/asserts.ts";
+import { assertEquals } from "https://deno.land/std@0.145.0/testing/asserts.ts";
 
 import sanitizeHtml from "http://localhost:8080/sanitize-html@2.7.0?dev";
 
@@ -9,7 +9,7 @@ Deno.test("sanitize-html", async () => {
     allowedTags: sanitizeHtml.defaults.allowedTags,
     allowedAttributes: sanitizeHtml.defaults.allowedAttributes,
   });
-  equal(
+  assertEquals(
     html,
     `<h1>Hello world!</h1>`,
   );

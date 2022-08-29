@@ -1,6 +1,6 @@
 // @ts-nocheck
 
-import { equal } from "https://deno.land/std@0.145.0/testing/asserts.ts";
+import { assertEquals } from "https://deno.land/std@0.145.0/testing/asserts.ts";
 import * as tf from "http://localhost:8080/@tensorflow/tfjs?no-dts";
 
 Deno.test("tensorflow", async () => {
@@ -23,6 +23,6 @@ Deno.test("tensorflow", async () => {
   const output = model.predict(tf.tensor2d([5], [1, 1]));
   const values = output.arraySync();
 
-  equal(output.shape, [1, 1]);
-  equal(typeof values[0][0], "number");
+  assertEquals(output.shape, [1, 1]);
+  assertEquals(typeof values[0][0], "number");
 });
