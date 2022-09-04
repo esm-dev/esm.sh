@@ -746,9 +746,9 @@ esbuild:
 										cjsImports.Add("all")
 										marked = true
 									}
-									// if the dependency is an cjs module with `default` export, then use star import with `__esModule`
-									if !marked && depNpm.Module == "" && dep.ExportDefault {
-										cjsImports.Add("__esModule")
+									// if the dependency is an cjs module with `__esModule` and `default` export, then use star import
+									if !marked && depNpm.Module == "" && dep.ExportDefault && includes(dep.Exports, "__esModule") {
+										cjsImports.Add("*")
 										marked = true
 									}
 								}
@@ -799,8 +799,6 @@ esbuild:
 								fmt.Fprintf(buf, `import __%s$$ from "%s";`, identifier, importPath)
 								fmt.Fprintf(buf, `import * as __%s$$$ from "%s";`, identifier, importPath)
 								fmt.Fprintf(buf, `const __%s$ = Object.assign({ default: __%s$$ }, __%s$$$);%s`, identifier, identifier, identifier, eol)
-							case "__esModule":
-								fmt.Fprintf(buf, `import * as __%s$ from "%s";%s`, identifier, importPath, eol)
 							default:
 								fmt.Fprintf(buf, `import { %s as __%s$%s } from "%s";%s`, importName, identifier, importName, importPath, eol)
 							}

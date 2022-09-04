@@ -95,9 +95,6 @@ function getJSONKeys(jsonFile) {
 function verifyExports(names) {
   const exportDefault = names.includes('default')
   const exports = Array.from(new Set(names.filter(name => identRegexp.test(name) && !reservedWords.has(name))))
-  if (exportDefault && !exports.includes('__esModule')) {
-    exports.push('__esModule')
-  }
   return {
     exportDefault,
     exports

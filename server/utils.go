@@ -105,6 +105,15 @@ func isLocalImport(importPath string) bool {
 	return strings.HasPrefix(importPath, "file://") || strings.HasPrefix(importPath, "/") || strings.HasPrefix(importPath, "./") || strings.HasPrefix(importPath, "../") || importPath == "." || importPath == ".."
 }
 
+func includes(a []string, s string) bool {
+	for _, v := range a {
+		if v == s {
+			return true
+		}
+	}
+	return false
+}
+
 func startsWith(s string, prefixs ...string) bool {
 	for _, prefix := range prefixs {
 		if strings.HasPrefix(s, prefix) {
