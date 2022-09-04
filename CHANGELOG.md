@@ -1,5 +1,13 @@
 # Change Log
 
+## v93
+
+- Fix `@types/react` version (close [#331](https://github.com/ije/esm.sh/issues/331))
+- Fix cjs `__esModule` resolving (close [#410](https://github.com/ije/esm.sh/issues/410))
+- Fix `postcss-selector-parser` cjs exports (close [#411](https://github.com/ije/esm.sh/issues/411))
+- Fix `solid-js/web` of `deno` target
+- Upgrade `deno/std` to **0.154.0**
+
 ## v92
 
 - Add `stable` channel for UI libraries like react, to avoid multiple copies of runtime by cache
