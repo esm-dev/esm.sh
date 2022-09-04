@@ -181,19 +181,19 @@ func (task *BuildTask) copyDTS(dts string, buildVersion int, aliasDepsPrefix str
 
 			pkgNameInfo := parsePkgNameInfo(importPath)
 			depTypePkgName := pkgNameInfo.Fullname
-			maybeVersion := []string{"latest"}
-			definiteVersion := false
-
-			// use version defined in `?deps` or `dependencies` in package.json
-			if pkg, ok := task.Deps.Get(depTypePkgName); ok {
-				maybeVersion = []string{pkg.Version, "latest"}
-				definiteVersion = regFullVersion.MatchString(pkg.Version)
-			} else if v, ok := taskPkgInfo.Dependencies[depTypePkgName]; ok {
-				maybeVersion = []string{v, "latest"}
-				definiteVersion = regFullVersion.MatchString(v)
+			versions := []string{"latest"}
+			if v, ok := taskPkgInfo.Dependencies[depTypePkgName]; ok {
+				versions = []string{v, "latest"}
 			} else if v, ok := taskPkgInfo.PeerDependencies[depTypePkgName]; ok {
-				maybeVersion = []string{v, "latest"}
-				definiteVersion = regFullVersion.MatchString(v)
+				versions = []string{v, "latest"}
+			}
+
+			// use version defined in `?deps`
+			if pkg, ok := task.Deps.Get(depTypePkgName); ok {
+				versions = []string{
+					pkg.Version,
+					"latest",
+				}
 			}
 
 			var (
@@ -201,7 +201,7 @@ func (task *BuildTask) copyDTS(dts string, buildVersion int, aliasDepsPrefix str
 				subpath         string
 				fromPackageJSON bool
 			)
-			for _, version := range maybeVersion {
+			for _, version := range versions {
 				info, subpath, fromPackageJSON, err = getPackageInfo(task.wd, importPath, version)
 				if err != nil || ((info.Types == "" && info.Typings == "") && !strings.HasPrefix(info.Name, "@types/")) {
 					info, _, fromPackageJSON, err = getPackageInfo(task.wd, toTypesPackageName(importPath), version)
@@ -214,19 +214,12 @@ func (task *BuildTask) copyDTS(dts string, buildVersion int, aliasDepsPrefix str
 				return importPath
 			}
 
-			fuzzyVersion := info.Version
-			if !definiteVersion {
-				versionParts := strings.Split(info.Version, ".")
-				if len(versionParts) > 2 {
-					fuzzyVersion = "~" + strings.Join(versionParts[:2], ".")
-				}
-			}
-			pkgBase := info.Name + "@" + fuzzyVersion + "/"
+			pkgBase := info.Name + "@" + info.Version + "/"
 
 			if info.Types != "" || info.Typings != "" {
 				// copy dependent dts files in the node_modules directory in current build context
 				if fromPackageJSON {
-					typesPath := toTypesPath(task.wd, &info, fuzzyVersion, "", subpath)
+					typesPath := toTypesPath(task.wd, &info, "", "", subpath)
 					if strings.HasSuffix(typesPath, ".d.ts") && !strings.HasSuffix(typesPath, "~.d.ts") {
 						imports.Add(typesPath)
 					}
