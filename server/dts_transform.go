@@ -181,16 +181,16 @@ func (task *BuildTask) copyDTS(dts string, buildVersion int, aliasDepsPrefix str
 
 			pkgNameInfo := parsePkgNameInfo(importPath)
 			depTypePkgName := pkgNameInfo.Fullname
-			versions := []string{"latest"}
+			maybeVersion := []string{"latest"}
 			if v, ok := taskPkgInfo.Dependencies[depTypePkgName]; ok {
-				versions = []string{v, "latest"}
+				maybeVersion = []string{v, "latest"}
 			} else if v, ok := taskPkgInfo.PeerDependencies[depTypePkgName]; ok {
-				versions = []string{v, "latest"}
+				maybeVersion = []string{v, "latest"}
 			}
 
 			// use version defined in `?deps`
 			if pkg, ok := task.Deps.Get(depTypePkgName); ok {
-				versions = []string{
+				maybeVersion = []string{
 					pkg.Version,
 					"latest",
 				}
@@ -201,7 +201,7 @@ func (task *BuildTask) copyDTS(dts string, buildVersion int, aliasDepsPrefix str
 				subpath         string
 				fromPackageJSON bool
 			)
-			for _, version := range versions {
+			for _, version := range maybeVersion {
 				info, subpath, fromPackageJSON, err = getPackageInfo(task.wd, importPath, version)
 				if err != nil || ((info.Types == "" && info.Typings == "") && !strings.HasPrefix(info.Name, "@types/")) {
 					info, _, fromPackageJSON, err = getPackageInfo(task.wd, toTypesPackageName(importPath), version)
