@@ -278,8 +278,8 @@ func getPackageInfo(wd string, name string, version string) (info NpmPackage, su
 
 	if wd != "" {
 		pkgJsonPath := path.Join(wd, "node_modules", name, "package.json")
-		if fileExists(pkgJsonPath) {
-			err = utils.ParseJSONFile(pkgJsonPath, &info)
+		if fileExists(pkgJsonPath) && utils.ParseJSONFile(pkgJsonPath, &info) == nil {
+			info, err = fixPkgVersion(info)
 			if err == nil {
 				fromPackageJSON = true
 				return
@@ -288,6 +288,9 @@ func getPackageInfo(wd string, name string, version string) (info NpmPackage, su
 	}
 
 	info, err = fetchPackageInfo(name, version)
+	if err == nil {
+		info, err = fixPkgVersion(info)
+	}
 	return
 }
 
@@ -305,7 +308,7 @@ func fetchPackageInfo(name string, version string) (info NpmPackage, err error) 
 		if !ok {
 			break
 		}
-		time.Sleep(10 * time.Millisecond)
+		time.Sleep(50 * time.Millisecond)
 	}
 
 	data, err := cache.Get(id)
@@ -637,4 +640,18 @@ func toTypesPackageName(pkgName string) string {
 		pkgName = strings.Replace(pkgName[1:], "/", "__", 1)
 	}
 	return "@types/" + pkgName
+}
+
+var fixedPkgVersions = map[string]string{
+	"@types/react@17": "17.0.49",
+	"@types/react@18": "18.0.18",
+}
+
+func fixPkgVersion(info NpmPackage) (NpmPackage, error) {
+	for prefix, ver := range fixedPkgVersions {
+		if strings.HasPrefix(info.Name+"@"+info.Version, prefix) {
+			return fetchPackageInfo(info.Name, ver)
+		}
+	}
+	return info, nil
 }
