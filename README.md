@@ -188,7 +188,7 @@ deno task npm:remove react react-dom # remove packages
 Since we update esm.sh server frequently, sometime we may break packages that work fine previously by mistake, the server will rebuild all modules when the patch pushed. To avoid this, you can **pin** the build version by the `?pin=BUILD_VERSON` query. This will give you an **immutable** cached module.
 
 ```javascript
-import React from "https://esm.sh/react@17.0.2?pin=v93"
+import React from "https://esm.sh/react@17.0.2?pin=v94"
 ```
 
 ## Global CDN
