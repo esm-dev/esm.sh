@@ -720,6 +720,7 @@ func esmHandler(options esmHandlerOptions) rex.Handle {
 			}
 		}
 
+		// todo: redirect to .d.ts
 		if esm.TypesOnly {
 			if esm.Dts != "" && !noCheck {
 				value := fmt.Sprintf(
@@ -766,21 +767,21 @@ func esmHandler(options esmHandlerOptions) rex.Handle {
 				return rex.Status(500, err.Error())
 			}
 			if !hasBuildVerPrefix && esm.Dts != "" && !noCheck && !isWorker {
-				value := fmt.Sprintf(
+				url := fmt.Sprintf(
 					"%s%s/%s",
 					origin,
 					basePath,
 					strings.TrimPrefix(esm.Dts, "/"),
 				)
-				ctx.SetHeader("X-TypeScript-Types", value)
+				ctx.SetHeader("X-TypeScript-Types", url)
 			}
 			ctx.SetHeader("Cache-Control", "public, max-age=31536000, immutable")
 			return rex.Content(savePath, modtime, r)
 		}
 
 		buf := bytes.NewBuffer(nil)
-
 		fmt.Fprintf(buf, `/* esm.sh - %v */%s`, reqPkg, "\n")
+
 		if isWorker {
 			fmt.Fprintf(buf, `export default function workerFactory() {%s  return new Worker('%s/%s', { type: 'module' })%s}`, "\n", origin, taskID, "\n")
 		} else {
@@ -798,13 +799,13 @@ func esmHandler(options esmHandlerOptions) rex.Handle {
 		}
 
 		if esm.Dts != "" && !noCheck && !isWorker {
-			value := fmt.Sprintf(
+			url := fmt.Sprintf(
 				"%s%s/%s",
 				origin,
 				basePath,
 				strings.TrimPrefix(esm.Dts, "/"),
 			)
-			ctx.SetHeader("X-TypeScript-Types", value)
+			ctx.SetHeader("X-TypeScript-Types", url)
 		}
 
 		if regFullVersionPath.MatchString(pathname) {
