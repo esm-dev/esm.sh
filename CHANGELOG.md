@@ -1,5 +1,9 @@
 # Change Log
 
+## v94
+
+- Downgrade `deno/std` to **0.153.0**.
+
 ## v93
 
 - Fix `@types/react` version (close [#331](https://github.com/ije/esm.sh/issues/331))
