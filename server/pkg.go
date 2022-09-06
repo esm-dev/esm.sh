@@ -45,7 +45,7 @@ func parsePkgNameInfo(pathname string) *PkgNameInfo {
 	}
 }
 
-func parsePkg(pathname string) (*Pkg, bool, error) {
+func parsePkg(pathname string) (*Pkg, string, error) {
 	pkgNameInfo := parsePkgNameInfo(pathname)
 	scope := pkgNameInfo.Scope
 	packageName := pkgNameInfo.Name
@@ -53,12 +53,13 @@ func parsePkg(pathname string) (*Pkg, bool, error) {
 
 	// ref https://github.com/npm/validate-npm-package-name
 	if scope != "" && (len(scope) > 214 || !npmNaming.Is(scope)) {
-		return nil, false, fmt.Errorf("invalid scope '%s'", scope)
+		return nil, "", fmt.Errorf("invalid scope '%s'", scope)
 	}
 
-	name, version := utils.SplitByLastByte(packageName, '@')
+	name, maybeVersion := utils.SplitByLastByte(packageName, '@')
+	version, q := utils.SplitByFirstByte(maybeVersion, '&')
 	if name != "" && (len(name) > 214 || !npmNaming.Is(name)) {
-		return nil, false, fmt.Errorf("invalid package name '%s'", name)
+		return nil, "", fmt.Errorf("invalid package name '%s'", name)
 	}
 
 	if scope != "" {
@@ -70,19 +71,19 @@ func parsePkg(pathname string) (*Pkg, bool, error) {
 			Name:      name,
 			Version:   version,
 			Submodule: strings.TrimSuffix(submodule, ".js"),
-		}, true, nil
+		}, q, nil
 	}
 
 	info, _, _, err := getPackageInfo("", name, version)
 	if err != nil {
-		return nil, false, err
+		return nil, "", err
 	}
 
 	return &Pkg{
 		Name:      name,
 		Version:   info.Version,
 		Submodule: strings.TrimSuffix(submodule, ".js"),
-	}, false, nil
+	}, q, nil
 }
 
 func (m Pkg) Equels(other Pkg) bool {

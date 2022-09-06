@@ -240,18 +240,6 @@ func esmHandler(options esmHandlerOptions) rex.Handle {
 			external.Add("*")
 			pathname = "/" + pathname[2:]
 		}
-		// check `external` query
-		for _, p := range strings.Split(ctx.Form.Value("external"), ",") {
-			p = strings.TrimSpace(p)
-			if p == "*" {
-				external.Reset()
-				external.Add("*")
-				break
-			}
-			if p != "" {
-				external.Add(p)
-			}
-		}
 
 		// serve embed polyfills/types
 		if hasBuildVerPrefix {
@@ -269,7 +257,7 @@ func esmHandler(options esmHandlerOptions) rex.Handle {
 		}
 
 		// get package info
-		reqPkg, _, err := parsePkg(pathname)
+		reqPkg, query, err := parsePkg(pathname)
 		if err != nil {
 			status := 500
 			message := err.Error()
@@ -308,6 +296,28 @@ func esmHandler(options esmHandlerOptions) rex.Handle {
 			ctx.R.URL.RawQuery = strings.TrimSuffix(ctx.R.URL.RawQuery, "/jsx-runtime")
 			pathname = fmt.Sprintf("/%s/jsx-runtime", reqPkg.Name)
 			reqPkg.Submodule = "jsx-runtime"
+		}
+
+		// support `/react-dom@18.2.0&external=react&dev/client` with query `external=react&dev`
+		if query != "" {
+			qs := []string{query}
+			if ctx.R.URL.RawQuery != "" {
+				qs = append(qs, ctx.R.URL.RawQuery)
+			}
+			ctx.R.URL.RawQuery = strings.Join(qs, "&")
+		}
+
+		// check `?external` query
+		for _, p := range strings.Split(ctx.Form.Value("external"), ",") {
+			p = strings.TrimSpace(p)
+			if p == "*" {
+				external.Reset()
+				external.Add("*")
+				break
+			}
+			if p != "" {
+				external.Add(p)
+			}
 		}
 
 		// or use `?path=$PATH` query to override the pathname
