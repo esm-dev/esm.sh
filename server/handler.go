@@ -257,7 +257,7 @@ func esmHandler(options esmHandlerOptions) rex.Handle {
 		}
 
 		// get package info
-		reqPkg, query, err := parsePkg(pathname)
+		reqPkg, unQuery, err := parsePkg(pathname)
 		if err != nil {
 			status := 500
 			message := err.Error()
@@ -269,10 +269,20 @@ func esmHandler(options esmHandlerOptions) rex.Handle {
 			return rex.Status(status, message)
 		}
 
+		// support `/react-dom@18.2.0&external=react&dev/client` with query `external=react&dev`
+		if unQuery != "" {
+			qs := []string{unQuery}
+			if ctx.R.URL.RawQuery != "" {
+				qs = append(qs, ctx.R.URL.RawQuery)
+			}
+			ctx.R.URL.RawQuery = strings.Join(qs, "&")
+		}
+
 		// redirect to the url with full package version
 		if (!hasBuildVerPrefix || strings.HasSuffix(pathname, ".d.ts")) && !strings.HasPrefix(pathname, fmt.Sprintf("/%s@%s", reqPkg.Name, reqPkg.Version)) {
 			prefix := ""
 			eaSign := ""
+			query := ""
 			if hasBuildVerPrefix {
 				if outdatedBuildVer != "" {
 					prefix = fmt.Sprintf("/%s", outdatedBuildVer)
@@ -283,9 +293,19 @@ func esmHandler(options esmHandlerOptions) rex.Handle {
 			if external.Has("*") {
 				eaSign = "*"
 			}
-			query := ctx.R.URL.RawQuery
-			if query != "" {
-				query = "?" + query
+			if unQuery != "" {
+				submodule := ""
+				if reqPkg.Submodule != "" {
+					submodule = "/" + reqPkg.Submodule
+				}
+				if ctx.R.URL.RawQuery != "" {
+					query = "&" + ctx.R.URL.RawQuery
+				}
+				return rex.Redirect(fmt.Sprintf("%s%s/%s%s@%s%s%s", origin, prefix, eaSign, reqPkg.Name, reqPkg.Version, query, submodule), http.StatusTemporaryRedirect)
+
+			}
+			if ctx.R.URL.RawQuery != "" {
+				query = "?" + ctx.R.URL.RawQuery
 			}
 			return rex.Redirect(fmt.Sprintf("%s%s/%s%s%s", origin, prefix, eaSign, reqPkg.String(), query), http.StatusTemporaryRedirect)
 		}
@@ -296,28 +316,6 @@ func esmHandler(options esmHandlerOptions) rex.Handle {
 			ctx.R.URL.RawQuery = strings.TrimSuffix(ctx.R.URL.RawQuery, "/jsx-runtime")
 			pathname = fmt.Sprintf("/%s/jsx-runtime", reqPkg.Name)
 			reqPkg.Submodule = "jsx-runtime"
-		}
-
-		// support `/react-dom@18.2.0&external=react&dev/client` with query `external=react&dev`
-		if query != "" {
-			qs := []string{query}
-			if ctx.R.URL.RawQuery != "" {
-				qs = append(qs, ctx.R.URL.RawQuery)
-			}
-			ctx.R.URL.RawQuery = strings.Join(qs, "&")
-		}
-
-		// check `?external` query
-		for _, p := range strings.Split(ctx.Form.Value("external"), ",") {
-			p = strings.TrimSpace(p)
-			if p == "*" {
-				external.Reset()
-				external.Add("*")
-				break
-			}
-			if p != "" {
-				external.Add(p)
-			}
 		}
 
 		// or use `?path=$PATH` query to override the pathname
@@ -525,6 +523,19 @@ func esmHandler(options esmHandlerOptions) rex.Handle {
 		keepNames := ctx.Form.Has("keep-names")
 		ignoreAnnotations := ctx.Form.Has("ignore-annotations")
 		sourcemap := ctx.Form.Has("sourcemap")
+
+		// check `?external` query
+		for _, p := range strings.Split(ctx.Form.Value("external"), ",") {
+			p = strings.TrimSpace(p)
+			if p == "*" {
+				external.Reset()
+				external.Add("*")
+				break
+			}
+			if p != "" {
+				external.Add(p)
+			}
+		}
 
 		// force react/jsx-dev-runtime and react-refresh into `dev` mode
 		if !isDev {
