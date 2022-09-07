@@ -1,7 +1,8 @@
 const [testDir] = Deno.args;
 
 startEsmServer(async () => {
-  console.log("esm.sh server started");
+  console.log("esm.sh server started.");
+  await runCli();
   if (testDir) {
     await runTest(testDir, true);
   } else {
@@ -56,7 +57,7 @@ async function runTest(name: string, retry?: boolean) {
   }
   cmd.push(dir);
 
-  console.log(`\n[testing ${name}]`);
+  console.log(`\n[test ${name}]`);
 
   const { code, success } = await run(...cmd);
   if (!success) {
@@ -67,6 +68,43 @@ async function runTest(name: string, retry?: boolean) {
     } else {
       Deno.exit(code);
     }
+  }
+}
+
+async function runCli() {
+  const cmd = [
+    Deno.execPath(),
+    "run",
+    "-A",
+    "-r",
+    "http://localhost:8080/v94",
+    "add",
+    "react@18.2.0",
+    "react-dom@18.2.0",
+    "swr@1.3.0",
+  ];
+  console.log(`\n[test CLI]`);
+
+  const cwd = await Deno.makeTempDir();
+  const { code, success } = await Deno.run({
+    cmd,
+    cwd,
+    stdout: "inherit",
+    stderr: "inherit",
+  }).status();
+  if (!success) {
+    Deno.exit(code);
+  }
+  const imRaw = await Deno.readTextFile(cwd + "/import_map.json");
+  const im = JSON.parse(imRaw);
+  if (
+    im.imports["react-dom"] !==
+      "http://localhost:8080/v94/react-dom@18.2.0&external=react" ||
+    im.imports["react"] !== "http://localhost:8080/v94/react@18.2.0" ||
+    im.imports["swr"] !== "http://localhost:8080/v94/swr@1.3.0&external=react"
+  ) {
+    console.log(im);
+    throw new Error("Invalid import maps generated");
   }
 }
 
