@@ -30,15 +30,15 @@ async function add(args: string[], options: Record<string, string>) {
   }
 
   const importMap = await loadImportMap();
-  const pkgs = (await Promise.all(args.map(fetchPkgInfo))).filter(Boolean);
+  const pkgs = (await Promise.all(args.map(fetchPkgInfo))).filter(
+    Boolean,
+  ) as Package[];
   const alias = pkgs.length === 1 ? options.alias : undefined;
   if (alias) {
     (pkgs[0] as Record<string, unknown>).alias = alias;
   }
 
-  await Promise.all(
-    pkgs.map((pkg) => addPkgToImportMap(pkg!, importMap)),
-  );
+  pkgs.map((_, i) => addPkgToImportMap(pkgs, i, importMap));
   await saveImportMap(importMap);
   console.log(
     `Added ${pkgs.length} packages to %c${
@@ -109,12 +109,14 @@ async function update(args: string[], options: Record<string, string>) {
         }
         return `${name}@${version}`;
       }));
-  const pkgs = (await Promise.all(toUpdate.map(fetchPkgInfo))).filter(Boolean);
+  const pkgs = (await Promise.all(toUpdate.map(fetchPkgInfo))).filter(
+    Boolean,
+  ) as Package[];
   const updates: Package[] = [];
 
-  for (const pkg of pkgs) {
-    if (await addPkgToImportMap(pkg!, importMap)) {
-      updates.push(pkg!);
+  for (let i = 0; i < pkgs.length; i++) {
+    if (addPkgToImportMap(pkgs, i, importMap)) {
+      updates.push(pkgs[i]);
     }
   }
 
@@ -257,18 +259,6 @@ async function loadImportMap(): Promise<ImportMap> {
 }
 
 async function saveImportMap(importMap: ImportMap): Promise<void> {
-  // clean up
-  for (const importName in importMap.imports) {
-    for (const [scopeName, scope] of Object.entries(importMap.scopes)) {
-      if (importName in scope) {
-        Reflect.deleteProperty(scope, importName);
-        if (Object.keys(scope).length === 0) {
-          Reflect.deleteProperty(importMap.scopes, scopeName);
-        }
-      }
-    }
-  }
-
   // sort
   const sortedImports = sortImports(importMap.imports);
   const sortedScopes = Object.fromEntries(
@@ -296,12 +286,32 @@ async function getDenoConfig(): Promise<Record<string, unknown>> {
   }
 }
 
-async function addPkgToImportMap(
-  pkg: Package,
+function addPkgToImportMap(
+  pkgs: Package[],
+  index: number,
   importMap: ImportMap,
-): Promise<boolean> {
+): boolean {
+  const pkg = pkgs[index];
+  const allPkgNames = [
+    ...pkgs.map((pkg) => pkg.name),
+    ...Object.keys(importMap.imports).filter((name) => !name.endsWith("/")),
+  ];
+  const external: string[] = [];
   let [pkgUrl, withExports] = getPkgUrl(pkg);
   let aliasName = pkg.alias ?? pkg.name;
+  for (
+    const depName of [
+      ...Object.keys(pkg.dependencies ?? {}),
+      ...Object.keys(pkg.peerDependencies ?? {}),
+    ]
+  ) {
+    if (allPkgNames.includes(depName)) {
+      external.push(depName);
+    }
+  }
+  if (external.length > 0) {
+    pkgUrl += "&external=" + external.join(",");
+  }
   if (pkg.subModule) {
     if (!pkg.alias) {
       aliasName += "/" + pkg.subModule;
@@ -315,44 +325,15 @@ async function addPkgToImportMap(
   if (withExports && !pkg.subModule) {
     importMap.imports[aliasName + "/"] = pkgUrl + "/";
   }
-  if (pkg.dependencies) {
-    if (!pkg.subModule) {
-      importMap.scopes[aliasName] = {};
-    }
-    if (withExports || pkg.subModule) {
-      importMap.scopes[pkg.name + "/"] = {};
-    }
-    for (const [depName, depVersion] of Object.entries(pkg.dependencies)) {
-      const dep = `${depName}@${depVersion}`;
-      const depPkg = await fetchPkgInfo(dep);
-      if (depPkg) {
-        const depUrl =
-          `${importUrl.origin}/${VERSION}/${depPkg.name}@${depPkg.version}`;
-        if (!pkg.subModule) {
-          importMap.scopes[aliasName][depName] = depUrl;
-        }
-        if (withExports || pkg.subModule) {
-          importMap.scopes[pkg.name + "/"][depName] = depUrl;
-        }
-      }
-    }
-  }
   return true;
 }
 
 function getPkgUrl(pkg: Package): [url: string, withExports: boolean] {
-  const { name, version, exports, dependencies, peerDependencies } = pkg;
+  const { name, version, exports } = pkg;
   const withExports = typeof exports === "object" &&
     Object.keys(exports).some((key) =>
       key.length >= 3 && key.startsWith("./") && key !== "./package.json"
     );
-
-  if (
-    (dependencies && Object.keys(dependencies).length > 0) ||
-    (peerDependencies && Object.keys(peerDependencies).length > 0)
-  ) {
-    return [`${importUrl.origin}/${VERSION}/*${name}@${version}`, withExports];
-  }
   return [`${importUrl.origin}/${VERSION}/${name}@${version}`, withExports];
 }
 
