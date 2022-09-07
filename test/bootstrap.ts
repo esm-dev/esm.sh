@@ -1,21 +1,3 @@
-const [testDir] = Deno.args;
-
-startEsmServer(async () => {
-  console.log("esm.sh server started.");
-  await runCli();
-  if (testDir) {
-    await runTest(testDir, true);
-  } else {
-    for await (const entry of Deno.readDir("./test")) {
-      if (entry.isDirectory) {
-        await runTest(entry.name);
-      }
-    }
-  }
-  console.log("Done!");
-  Deno.exit(0);
-});
-
 async function startEsmServer(onReady: () => void) {
   await run("go", "build", "-o", "esmd", "main.go");
   const p = Deno.run({
@@ -33,6 +15,7 @@ async function startEsmServer(onReady: () => void) {
         res.text()
       );
       if (body === "READY") {
+        console.log("esm.sh server started.");
         onReady();
         break;
       }
@@ -71,7 +54,7 @@ async function runTest(name: string, retry?: boolean) {
   }
 }
 
-async function runCli() {
+async function runCliTest() {
   const cmd = [
     Deno.execPath(),
     "run",
@@ -123,4 +106,22 @@ export async function existsFile(path: string): Promise<boolean> {
     }
     throw err;
   }
+}
+
+if (import.meta.main) {
+  startEsmServer(async () => {
+    const [testDir] = Deno.args;
+    await runCliTest();
+    if (testDir) {
+      await runTest(testDir, true);
+    } else {
+      for await (const entry of Deno.readDir("./test")) {
+        if (entry.isDirectory) {
+          await runTest(entry.name);
+        }
+      }
+    }
+    console.log("Done!");
+    Deno.exit(0);
+  });
 }
