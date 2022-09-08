@@ -177,7 +177,8 @@ After initializing, you can use the `deno task npm:[add/update/remove]` commands
 
 ```bash
 deno task npm:add react react-dom # add packages
-deno task npm:add react@17 react-dom@17 # add packages with specified version
+deno task npm:add react@17 # add packages with specified version
+deno task npm:add react:preact/compat # add packages with alias
 deno task npm:update react react-dom # upgrade packages
 deno task npm:update # update all packages
 deno task npm:remove react react-dom # remove packages
