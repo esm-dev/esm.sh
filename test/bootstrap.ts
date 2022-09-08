@@ -55,22 +55,27 @@ async function runTest(name: string, retry?: boolean) {
 }
 
 async function runCliTest() {
-  const cmd = [
-    Deno.execPath(),
-    "run",
-    "-A",
-    "-r",
-    "http://localhost:8080/v94",
-    "add",
-    "react@18.2.0",
-    "react-dom@18.2.0",
-    "swr@1.3.0",
-  ];
   console.log(`\n[test CLI]`);
 
   const cwd = await Deno.makeTempDir();
+  await Deno.writeTextFile(
+    cwd + "/deno.json",
+    `{"importMap": "import-map.json"}`,
+  );
+
   const { code, success } = await Deno.run({
-    cmd,
+    cmd: [
+      Deno.execPath(),
+      "run",
+      "-A",
+      "-r",
+      "http://localhost:8080/v94",
+      "add",
+      "preact@10.10.6",
+      "preact-render-to-string@5.2.3",
+      "react:preact@10.10.6/compat",
+      "swr@1.3.0",
+    ],
     cwd,
     stdout: "inherit",
     stderr: "inherit",
@@ -78,13 +83,31 @@ async function runCliTest() {
   if (!success) {
     Deno.exit(code);
   }
-  const imRaw = await Deno.readTextFile(cwd + "/import_map.json");
+
+  const imRaw = await Deno.readTextFile(cwd + "/import-map.json");
   const im = JSON.parse(imRaw);
   if (
-    im.imports["react-dom"] !==
-      "http://localhost:8080/v94/react-dom@18.2.0&external=react" ||
-    im.imports["react"] !== "http://localhost:8080/v94/react@18.2.0" ||
-    im.imports["swr"] !== "http://localhost:8080/v94/swr@1.3.0&external=react"
+    JSON.stringify(im) !== JSON.stringify({
+      imports: {
+        "preact-render-to-string":
+          "http://localhost:8080/v94/*preact-render-to-string@5.2.3",
+        "preact-render-to-string/":
+          "http://localhost:8080/v94/*preact-render-to-string@5.2.3/",
+        preact: "http://localhost:8080/v94/preact@10.10.6",
+        "preact/": "http://localhost:8080/v94/preact@10.10.6/",
+        react: "http://localhost:8080/v94/preact@10.10.6/compat",
+        swr: "http://localhost:8080/v94/*swr@1.3.0",
+        "swr/": "http://localhost:8080/v94/*swr@1.3.0/",
+      },
+      scopes: {
+        "preact-render-to-string": {
+          "pretty-format": "http://localhost:8080/v94/pretty-format@3.8.0",
+        },
+        "preact-render-to-string/": {
+          "pretty-format": "http://localhost:8080/v94/pretty-format@3.8.0",
+        },
+      },
+    })
   ) {
     console.log(im);
     throw new Error("Invalid import maps generated");
