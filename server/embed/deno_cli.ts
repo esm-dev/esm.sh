@@ -17,7 +17,8 @@ const importUrl = new URL(import.meta.url);
 const VERSION = /^\/v\d+$/.test(importUrl.pathname)
   ? importUrl.pathname.slice(1)
   : "v{VERSION}";
-let importMapFile = "import_map.json";
+
+let importMapFilepath = "import_map.json";
 
 async function add(args: string[], options: Record<string, string>) {
   if (options.alias && args.length > 1) {
@@ -38,11 +39,13 @@ async function add(args: string[], options: Record<string, string>) {
     (pkgs[0] as Record<string, unknown>).alias = alias;
   }
 
-  pkgs.map((_, i) => addPkgToImportMap(pkgs, i, importMap));
+  await Promise.all(
+    pkgs.map((pkg) => addPkgToImportMap(pkg, importMap)),
+  );
   await saveImportMap(importMap);
   console.log(
     `Added ${pkgs.length} packages to %c${
-      importMapFile.split(/[\/\\]/g).pop()
+      importMapFilepath.split(/[\/\\]/g).pop()
     }`,
     "color:blue",
   );
@@ -50,7 +53,7 @@ async function add(args: string[], options: Record<string, string>) {
     console.log(
       pkgs.map((pkg, index) => {
         const tab = index === pkgs.length - 1 ? "└─" : "├─";
-        const { name, version, subModule } = pkg!;
+        const { name, version, subModule } = pkg;
         let msg = `${tab} ${name}@${version}`;
         if (subModule) {
           msg = `${msg}/${subModule}`;
@@ -114,9 +117,9 @@ async function update(args: string[], options: Record<string, string>) {
   ) as Package[];
   const updates: Package[] = [];
 
-  for (let i = 0; i < pkgs.length; i++) {
-    if (addPkgToImportMap(pkgs, i, importMap)) {
-      updates.push(pkgs[i]);
+  for (const pkg of pkgs) {
+    if (await addPkgToImportMap(pkg, importMap)) {
+      updates.push(pkg);
     }
   }
 
@@ -157,7 +160,7 @@ async function init(args: string[], options: Record<string, string>) {
   const config = await getDenoConfig();
   const importMap = await loadImportMap();
   if (!isNEString(config.importMap)) {
-    config.importMap = importMapFile;
+    config.importMap = importMapFilepath;
   }
   const tasks = config.tasks as undefined | Record<string, string>;
   config.tasks = {
@@ -190,20 +193,28 @@ async function init(args: string[], options: Record<string, string>) {
 }
 
 const cache = new Map<string, Package>();
-async function fetchPkgInfo(name: string): Promise<Package | null> {
-  if (cache.has(name)) {
-    return Promise.resolve(cache.get(name)!);
+async function fetchPkgInfo(query: string): Promise<Package | null> {
+  if (cache.has(query)) {
+    return Promise.resolve(cache.get(query)!);
   }
 
+  let name = query;
   let pkgName: string;
+  let alias: string | undefined;
   let subModule: string | undefined;
-  const a = name.split("/");
+  const r = query.split(":").filter(Boolean);
+  if (r.length > 1) {
+    [alias, name] = r;
+  }
+  const a = name.split("/").filter(Boolean);
   if (name.startsWith("@")) {
     if (a.length < 2) {
       return null;
     }
     pkgName = a[0] + "/" + a[1];
-    subModule = a[2];
+    if (a.length > 2) {
+      subModule = a.slice(2).join("/");
+    }
   } else {
     pkgName = a[0];
     if (a.length > 1) {
@@ -232,15 +243,16 @@ async function fetchPkgInfo(name: string): Promise<Package | null> {
     Deno.exit(1);
   }
 
+  pkg.alias = alias;
   pkg.subModule = subModule;
-  cache.set(name, pkg);
+  cache.set(query, pkg);
   return pkg;
 }
 
 async function loadImportMap(): Promise<ImportMap> {
   const importMap: ImportMap = { imports: {}, scopes: {} };
   try {
-    const raw = (await Deno.readTextFile(importMapFile)).trim();
+    const raw = (await Deno.readTextFile(importMapFilepath)).trim();
     if (raw.startsWith("{") && raw.endsWith("}")) {
       const { imports, scopes } = JSON.parse(raw);
       if (imports) {
@@ -259,6 +271,18 @@ async function loadImportMap(): Promise<ImportMap> {
 }
 
 async function saveImportMap(importMap: ImportMap): Promise<void> {
+  // clean up
+  for (const importName in importMap.imports) {
+    for (const [scopeName, scope] of Object.entries(importMap.scopes)) {
+      if (importName in scope) {
+        Reflect.deleteProperty(scope, importName);
+        if (Object.keys(scope).length === 0) {
+          Reflect.deleteProperty(importMap.scopes, scopeName);
+        }
+      }
+    }
+  }
+
   // sort
   const sortedImports = sortImports(importMap.imports);
   const sortedScopes = Object.fromEntries(
@@ -269,7 +293,7 @@ async function saveImportMap(importMap: ImportMap): Promise<void> {
 
   // write
   await Deno.writeTextFile(
-    importMapFile,
+    importMapFilepath,
     JSON.stringify({ imports: sortedImports, scopes: sortedScopes }, null, 2),
   );
 }
@@ -286,32 +310,12 @@ async function getDenoConfig(): Promise<Record<string, unknown>> {
   }
 }
 
-function addPkgToImportMap(
-  pkgs: Package[],
-  index: number,
+async function addPkgToImportMap(
+  pkg: Package,
   importMap: ImportMap,
-): boolean {
-  const pkg = pkgs[index];
-  const allPkgNames = [
-    ...pkgs.map((pkg) => pkg.name),
-    ...Object.keys(importMap.imports).filter((name) => !name.endsWith("/")),
-  ];
-  const external: string[] = [];
+): Promise<boolean> {
   let [pkgUrl, withExports] = getPkgUrl(pkg);
   let aliasName = pkg.alias ?? pkg.name;
-  for (
-    const depName of [
-      ...Object.keys(pkg.dependencies ?? {}),
-      ...Object.keys(pkg.peerDependencies ?? {}),
-    ]
-  ) {
-    if (allPkgNames.includes(depName)) {
-      external.push(depName);
-    }
-  }
-  if (external.length > 0) {
-    pkgUrl += "&external=" + external.join(",");
-  }
   if (pkg.subModule) {
     if (!pkg.alias) {
       aliasName += "/" + pkg.subModule;
@@ -325,15 +329,44 @@ function addPkgToImportMap(
   if (withExports && !pkg.subModule) {
     importMap.imports[aliasName + "/"] = pkgUrl + "/";
   }
+  if (pkg.dependencies) {
+    if (!pkg.subModule) {
+      importMap.scopes[aliasName] = {};
+    }
+    if (withExports || pkg.subModule) {
+      importMap.scopes[pkg.name + "/"] = {};
+    }
+    for (const [depName, depVersion] of Object.entries(pkg.dependencies)) {
+      const dep = `${depName}@${depVersion}`;
+      const depPkg = await fetchPkgInfo(dep);
+      if (depPkg) {
+        const depUrl =
+          `${importUrl.origin}/${VERSION}/${depPkg.name}@${depPkg.version}`;
+        if (!pkg.subModule) {
+          importMap.scopes[aliasName][depName] = depUrl;
+        }
+        if (withExports || pkg.subModule) {
+          importMap.scopes[pkg.name + "/"][depName] = depUrl;
+        }
+      }
+    }
+  }
   return true;
 }
 
 function getPkgUrl(pkg: Package): [url: string, withExports: boolean] {
-  const { name, version, exports } = pkg;
+  const { name, version, exports, dependencies, peerDependencies } = pkg;
   const withExports = typeof exports === "object" &&
     Object.keys(exports).some((key) =>
       key.length >= 3 && key.startsWith("./") && key !== "./package.json"
     );
+
+  if (
+    (dependencies && Object.keys(dependencies).length > 0) ||
+    (peerDependencies && Object.keys(peerDependencies).length > 0)
+  ) {
+    return [`${importUrl.origin}/${VERSION}/*${name}@${version}`, withExports];
+  }
   return [`${importUrl.origin}/${VERSION}/${name}@${version}`, withExports];
 }
 
@@ -421,7 +454,7 @@ if (import.meta.main) {
   try {
     const config = await getDenoConfig();
     if (isNEString(config.importMap)) {
-      importMapFile = config.importMap;
+      importMapFilepath = config.importMap;
     }
     await commands[command as keyof typeof commands](...parseFlags(args));
     console.log(`✨ Done in ${(performance.now() - start).toFixed(2)}ms`);
