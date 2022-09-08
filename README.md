@@ -135,7 +135,7 @@ const worker = editorWorker()
 
 ## Deno compatibility
 
-**esm.sh** will resolve the node internal modules (**fs**, **child_process**, etc.) with [`deno.land/std/node`](https://deno.land/std/node) to support some packages working in Deno, like `postcss`:
+**esm.sh** will resolve the node internal modules (**fs**, **child_process**, etc.) with [`deno.land/std/node`](https://deno.land/std/node) to support Deno.
 
 ```javascript
 import postcss from "https://esm.sh/postcss"
@@ -147,27 +147,15 @@ const { css } = await postcss([ autoprefixer ]).process(`
 `).async()
 ```
 
-By default esm.sh will use a fixed version of `deno.land/std/node` to support Deno. You can use the `?deno-std=$VER` query to specify a different version:
+By default esm.sh will use a fixed version of `deno.land/std/node`. You can use the `?deno-std=$VER` query to specify a different version:
 
 ```javascript
 import postcss from "https://esm.sh/postcss?deno-std=0.128.0"
 ```
 
-### X-Typescript-Types
+### Use CLI Script
 
-By default, **esm.sh** will respond with a custom `X-TypeScript-Types` HTTP header when the types (`.d.ts`) is defined. This is useful for deno type checks ([link](https://deno.land/manual/typescript/types#using-x-typescript-types-header)).
-
-![Figure #1](./server/embed/assets/sceenshot-deno-types.png)
-
-You can pass the `?no-dts` query to disable the `X-TypeScript-Types` header if some types are incorrect:
-
-```javascript
-import unescape from "https://esm.sh/lodash/unescape?no-dts"
-```
-
-### Deno CLI Script
-
-The CLI script for Deno is using to manage the **import maps** with npm modules from _esm.sh_, it will arrange the dependencies automatically and pin the build version always.
+The CLI script is using to manage the imports with **import maps**, it will resolve the dependencies automatically and always pin the build version. To use the CLI mode, you need to run the `init` command in your project root directory:
 
 ```bash
 deno run -A -r https://esm.sh init
@@ -182,6 +170,18 @@ deno task npm:add react:preact/compat # add packages with alias
 deno task npm:update react react-dom # upgrade packages
 deno task npm:update # update all packages
 deno task npm:remove react react-dom # remove packages
+```
+
+### X-Typescript-Types
+
+By default, **esm.sh** will respond with a custom `X-TypeScript-Types` HTTP header when the types (`.d.ts`) is defined. This is useful for deno type checks ([link](https://deno.land/manual/typescript/types#using-x-typescript-types-header)).
+
+![Figure #1](./server/embed/assets/sceenshot-deno-types.png)
+
+You can pass the `?no-dts` query to disable the `X-TypeScript-Types` header if some types are incorrect:
+
+```javascript
+import unescape from "https://esm.sh/lodash/unescape?no-dts"
 ```
 
 ## Pin the build version
