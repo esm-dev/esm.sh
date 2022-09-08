@@ -34,9 +34,8 @@ async function add(args: string[], options: Record<string, string>) {
   const pkgs = (await Promise.all(args.map(fetchPkgInfo))).filter(
     Boolean,
   ) as Package[];
-  const alias = pkgs.length === 1 ? options.alias : undefined;
-  if (alias) {
-    (pkgs[0] as Record<string, unknown>).alias = alias;
+  if (pkgs.length === 1 && options.alias) {
+    (pkgs[0] as Record<string, unknown>).alias = options.alias;
   }
 
   await Promise.all(
@@ -53,7 +52,7 @@ async function add(args: string[], options: Record<string, string>) {
     console.log(
       pkgs.map((pkg, index) => {
         const tab = index === pkgs.length - 1 ? "└─" : "├─";
-        const { name, version, subModule } = pkg;
+        const { name, version, subModule, alias } = pkg;
         let msg = `${tab} ${name}@${version}`;
         if (subModule) {
           msg = `${msg}/${subModule}`;
