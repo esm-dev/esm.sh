@@ -1,4 +1,4 @@
-import { assert } from "https://deno.land/std@0.145.0/testing/asserts.ts";
+import { assert } from "https://deno.land/std@0.155.0/testing/asserts.ts";
 
 import { createGenerator } from "http://localhost:8080/@unocss/core@0.30.3";
 import presetUno from "http://localhost:8080/@unocss/preset-uno@0.30.3";

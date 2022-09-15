@@ -1,4 +1,4 @@
-import { assert } from "https://deno.land/std@0.145.0/testing/asserts.ts";
+import { assert } from "https://deno.land/std@0.155.0/testing/asserts.ts";
 
 import Ajv from "http://localhost:8080/ajv";
 import addFormats from "http://localhost:8080/ajv-formats";

@@ -1,4 +1,4 @@
-import { assertEquals } from "https://deno.land/std@0.145.0/testing/asserts.ts";
+import { assertEquals } from "https://deno.land/std@0.155.0/testing/asserts.ts";
 
 import chalk from "http://localhost:8080/chalk@5.0.1";
 
