@@ -75,15 +75,6 @@ func (s *stringSet) Values() []string {
 	return a
 }
 
-func mapLen(m sync.Map) int {
-	n := 0
-	m.Range(func(key, value interface{}) bool {
-		n++
-		return true
-	})
-	return n
-}
-
 func identify(importPath string) string {
 	p := []byte(importPath)
 	for i, c := range p {
@@ -209,94 +200,108 @@ func kill(pidFile string) (err error) {
 // 	}
 // }
 
-func fixBuildArgs(alias map[string]string, deps PkgSlice, pkgName string) (map[string]string, PkgSlice) {
-	_alias := map[string]string{}
-	_deps := PkgSlice{}
-	switch pkgName {
-	case "react", "react-dom", "preact", "vue":
-		return _alias, _deps
-	}
-	for k, v := range alias {
-		if pkgName != v && !strings.HasPrefix(v, pkgName+"/") {
-			_alias[k] = v
-		}
-	}
-	for _, pkg := range deps {
-		if pkg.Name != pkgName {
-			_deps = append(_deps, pkg)
-		}
-	}
-	return _alias, _deps
-}
-
-func decodeBuildArgsPrefix(raw string) (alias map[string]string, deps PkgSlice, external []string, dsv string, err error) {
+func decodeBuildArgsPrefix(raw string) (args BuildArgs, err error) {
 	s, err := atobUrl(strings.TrimPrefix(strings.TrimSuffix(raw, "/"), "X-"))
 	if err == nil {
+		args = BuildArgs{external: newStringSet()}
 		for _, p := range strings.Split(s, "\n") {
-			if strings.HasPrefix(p, "a/") || strings.HasPrefix(p, "alias:") {
-				alias = map[string]string{}
+			if strings.HasPrefix(p, "a/") {
+				args.alias = map[string]string{}
 				for _, p := range strings.Split(strings.TrimPrefix(strings.TrimPrefix(p, "a/"), "alias:"), ",") {
 					name, to := utils.SplitByFirstByte(p, ':')
 					name = strings.TrimSpace(name)
 					to = strings.TrimSpace(to)
 					if name != "" && to != "" {
-						alias[name] = to
+						args.alias[name] = to
 					}
 				}
-			} else if strings.HasPrefix(p, "d/") || strings.HasPrefix(p, "deps:") {
+			} else if strings.HasPrefix(p, "d/") {
 				for _, p := range strings.Split(strings.TrimPrefix(strings.TrimPrefix(p, "d/"), "deps:"), ",") {
 					m, _, err := parsePkg(p)
 					if err != nil {
 						if strings.HasSuffix(err.Error(), "not found") {
 							continue
 						}
-						return nil, nil, nil, "", err
+						return args, err
 					}
-					if !deps.Has(m.Name) {
-						deps = append(deps, *m)
+					if !args.deps.Has(m.Name) {
+						args.deps = append(args.deps, *m)
 					}
 				}
 			} else if strings.HasPrefix(p, "e/") {
-				external = append(external, strings.Split(strings.TrimPrefix(p, "e/"), ",")...)
+				for _, name := range strings.Split(strings.TrimPrefix(p, "e/"), ",") {
+					args.external.Add(name)
+				}
 			} else if strings.HasPrefix(p, "dsv/") {
-				dsv = strings.TrimPrefix(p, "dsv/")
+				args.denoStdVersion = strings.TrimPrefix(p, "dsv/")
+			} else {
+				switch p {
+				case "ir":
+					args.ignoreRequire = true
+				case "kn":
+					args.keepNames = true
+				case "ia":
+					args.ignoreAnnotations = true
+				case "sm":
+					args.sourcemap = true
+				}
 			}
 		}
 	}
 	return
 }
 
-func encodeBuildArgsPrefix(alias map[string]string, deps PkgSlice, external *stringSet, dsv string) string {
-	args := []string{}
-	if len(alias) > 0 {
+func encodeBuildArgsPrefix(args BuildArgs, pkg Pkg, forTypes bool) string {
+	lines := []string{}
+	if len(args.alias) > 0 && !stableBuild[pkg.Name] {
 		var ss sort.StringSlice
-		for name, to := range alias {
-			ss = append(ss, fmt.Sprintf("%s:%s", name, to))
+		for name, to := range args.alias {
+			if name != pkg.Name {
+				ss = append(ss, fmt.Sprintf("%s:%s", name, to))
+			}
 		}
 		ss.Sort()
-		args = append(args, fmt.Sprintf("a/%s", strings.Join(ss, ",")))
+		lines = append(lines, fmt.Sprintf("a/%s", strings.Join(ss, ",")))
 	}
-	if len(deps) > 0 {
+	if len(args.deps) > 0 && !stableBuild[pkg.Name] {
 		var ss sort.StringSlice
-		for _, pkg := range deps {
-			ss = append(ss, fmt.Sprintf("%s@%s", pkg.Name, pkg.Version))
+		for _, p := range args.deps {
+			if p.Name != pkg.Name {
+				ss = append(ss, fmt.Sprintf("%s@%s", p.Name, p.Version))
+			}
 		}
 		ss.Sort()
-		args = append(args, fmt.Sprintf("d/%s", strings.Join(ss, ",")))
+		lines = append(lines, fmt.Sprintf("d/%s", strings.Join(ss, ",")))
 	}
-	if external.Size() > 0 {
+	if args.external.Size() > 0 {
 		var ss sort.StringSlice
-		for _, name := range external.Values() {
-			ss = append(ss, name)
+		for _, name := range args.external.Values() {
+			if name != pkg.Name {
+				ss = append(ss, name)
+			}
 		}
 		ss.Sort()
-		args = append(args, fmt.Sprintf("e/%s", strings.Join(ss, ",")))
+		lines = append(lines, fmt.Sprintf("e/%s", strings.Join(ss, ",")))
 	}
-	if dsv != "" && dsv != denoStdVersion {
-		args = append(args, fmt.Sprintf("dsv/%s", dsv))
+	if !forTypes {
+		if args.denoStdVersion != "" && args.denoStdVersion != denoStdVersion {
+			lines = append(lines, fmt.Sprintf("dsv/%s", args.denoStdVersion))
+		}
+		if args.ignoreRequire {
+			lines = append(lines, "ir")
+		}
+		if args.keepNames {
+			lines = append(lines, "kn")
+		}
+		if args.ignoreAnnotations {
+			lines = append(lines, "ia")
+		}
+		if args.sourcemap {
+			lines = append(lines, "sm")
+		}
 	}
-	if len(args) > 0 {
-		return fmt.Sprintf("X-%s/", btoaUrl(strings.Join(args, "\n")))
+	if len(lines) > 0 {
+		return fmt.Sprintf("X-%s/", btoaUrl(strings.Join(lines, "\n")))
 	}
 	return ""
 }

@@ -175,8 +175,8 @@ func esmHandler(options esmHandlerOptions) rex.Handle {
 					if !t.startTime.IsZero() {
 						m["startTime"] = t.startTime.Format(http.TimeFormat)
 					}
-					if len(t.Deps) > 0 {
-						m["deps"] = t.Deps.String()
+					if len(t.deps) > 0 {
+						m["deps"] = t.deps.String()
 					}
 					q[i] = m
 					i++
@@ -461,7 +461,7 @@ func esmHandler(options esmHandlerOptions) rex.Handle {
 				name, to := utils.SplitByFirstByte(p, ':')
 				name = strings.TrimSpace(name)
 				to = strings.TrimSpace(to)
-				if name != "" && to != "" {
+				if name != "" && to != "" && name != reqPkg.Name {
 					alias[name] = to
 				}
 			}
@@ -479,7 +479,7 @@ func esmHandler(options esmHandlerOptions) rex.Handle {
 					}
 					return rex.Status(400, fmt.Sprintf("Invalid deps query: %v not found", p))
 				}
-				if !deps.Has(m.Name) {
+				if !deps.Has(m.Name) && m.Name != reqPkg.Name {
 					deps = append(deps, *m)
 				}
 			}
@@ -508,7 +508,7 @@ func esmHandler(options esmHandlerOptions) rex.Handle {
 		// deno std version
 		dsv := denoStdVersion
 		fv := ctx.Form.Value("deno-std")
-		if regFullVersion.MatchString(fv) {
+		if fv != "" && regFullVersion.MatchString(fv) && target == "deno" {
 			dsv = fv
 		}
 
@@ -519,10 +519,10 @@ func esmHandler(options esmHandlerOptions) rex.Handle {
 		isPined := ctx.Form.Has("pin") || hasBuildVerPrefix
 		isWorker := ctx.Form.Has("worker")
 		noCheck := ctx.Form.Has("no-check") || ctx.Form.Has("no-dts")
-		ignoreRequire := ctx.Form.Has("ignore-require") || ctx.Form.Has("no-require")
+		ignoreRequire := ctx.Form.Has("ignore-require") || ctx.Form.Has("no-require") || reqPkg.Name == "@unocss/preset-icons"
 		keepNames := ctx.Form.Has("keep-names")
 		ignoreAnnotations := ctx.Form.Has("ignore-annotations")
-		sourcemap := ctx.Form.Has("sourcemap")
+		sourcemap := ctx.Form.Has("sourcemap") || ctx.Form.Has("source-map")
 
 		// check `?external` query
 		for _, p := range strings.Split(ctx.Form.Value("external"), ",") {
@@ -544,35 +544,6 @@ func esmHandler(options esmHandlerOptions) rex.Handle {
 			}
 		}
 
-		// parse `BuildArgsPrefix`
-		if hasBuildVerPrefix {
-			a := strings.Split(reqPkg.Submodule, "/")
-			if len(a) > 1 && strings.HasPrefix(a[0], "X-") {
-				reqPkg.Submodule = strings.Join(a[1:], "/")
-				_alias, _deps, _external, _dsv, err := decodeBuildArgsPrefix(a[0])
-				if err != nil {
-					return throwErrorJS(ctx, err)
-				}
-				for k, v := range _alias {
-					alias[k] = v
-				}
-				for _, p := range _deps {
-					if !deps.Has(p.Name) {
-						deps = append(deps, p)
-					}
-				}
-				for _, p := range _external {
-					external.Add(p)
-				}
-				if _dsv != "" {
-					dsv = _dsv
-				}
-			}
-		}
-
-		// fix alias and deps
-		alias, deps = fixBuildArgs(alias, deps, reqPkg.Name)
-
 		// check whether it is `bare` mode
 		if hasBuildVerPrefix && endsWith(pathname, ".js") {
 			a := strings.Split(reqPkg.Submodule, "/")
@@ -583,30 +554,9 @@ func esmHandler(options esmHandlerOptions) rex.Handle {
 						submodule = strings.TrimSuffix(submodule, ".bundle")
 						isBundleMode = true
 					}
-					if endsWith(submodule, ".external") {
-						submodule = strings.TrimSuffix(submodule, ".external")
-						external.Reset()
-						external.Add("*")
-					}
 					if endsWith(submodule, ".development") {
 						submodule = strings.TrimSuffix(submodule, ".development")
 						isDev = true
-					}
-					if endsWith(submodule, ".sm") {
-						submodule = strings.TrimSuffix(submodule, ".sm")
-						sourcemap = true
-					}
-					if endsWith(submodule, ".ia") {
-						submodule = strings.TrimSuffix(submodule, ".ia")
-						ignoreAnnotations = true
-					}
-					if endsWith(submodule, ".kn") {
-						submodule = strings.TrimSuffix(submodule, ".kn")
-						keepNames = true
-					}
-					if endsWith(submodule, ".nr") {
-						submodule = strings.TrimSuffix(submodule, ".nr")
-						ignoreRequire = true
 					}
 					pkgName := path.Base(reqPkg.Name)
 					if submodule == pkgName || (strings.HasSuffix(pkgName, ".js") && submodule+".js" == pkgName) {
@@ -619,17 +569,38 @@ func esmHandler(options esmHandlerOptions) rex.Handle {
 			}
 		}
 
+		buildArgs := BuildArgs{
+			denoStdVersion:    dsv,
+			alias:             alias,
+			deps:              deps,
+			external:          external,
+			ignoreRequire:     ignoreRequire,
+			keepNames:         keepNames,
+			ignoreAnnotations: ignoreAnnotations,
+			sourcemap:         sourcemap,
+		}
+
+		// parse and use `X-` prefix
+		if hasBuildVerPrefix {
+			a := strings.Split(reqPkg.Submodule, "/")
+			if len(a) > 1 && strings.HasPrefix(a[0], "X-") {
+				reqPkg.Submodule = strings.Join(a[1:], "/")
+				args, err := decodeBuildArgsPrefix(a[0])
+				if err != nil {
+					return throwErrorJS(ctx, err)
+				}
+				buildArgs = args
+			}
+		}
+
 		if hasBuildVerPrefix && storageType == "types" {
 			task := &BuildTask{
-				CdnOrigin:      origin,
-				BuildVersion:   buildVersion,
-				DenoStdVersion: dsv,
-				Pkg:            *reqPkg,
-				Alias:          alias,
-				Deps:           deps,
-				External:       external,
-				Target:         "types",
-				stage:          "-",
+				BuildArgs:    buildArgs,
+				CdnOrigin:    origin,
+				BuildVersion: buildVersion,
+				Pkg:          *reqPkg,
+				Target:       "types",
+				stage:        "-",
 			}
 			var savePath string
 			findTypesFile := func() (bool, int64, time.Time, error) {
@@ -638,7 +609,7 @@ func esmHandler(options esmHandlerOptions) rex.Handle {
 					buildVersion,
 					reqPkg.Name,
 					reqPkg.Version,
-					encodeBuildArgsPrefix(alias, deps, external, dsv),
+					encodeBuildArgsPrefix(buildArgs, *reqPkg, true),
 				), reqPkg.Submodule)
 				if strings.HasSuffix(savePath, "~.d.ts") {
 					savePath = strings.TrimSuffix(savePath, "~.d.ts")
@@ -684,21 +655,14 @@ func esmHandler(options esmHandlerOptions) rex.Handle {
 		}
 
 		task := &BuildTask{
-			CdnOrigin:         origin,
-			BuildVersion:      buildVersion,
-			DenoStdVersion:    dsv,
-			Pkg:               *reqPkg,
-			Alias:             alias,
-			Deps:              deps,
-			External:          external,
-			Target:            target,
-			DevMode:           isDev,
-			BundleMode:        isBundleMode || isWorker,
-			IgnoreRequire:     ignoreRequire,
-			KeepNames:         keepNames,
-			IgnoreAnnotations: ignoreAnnotations,
-			Sourcemap:         sourcemap,
-			stage:             "init",
+			BuildArgs:    buildArgs,
+			CdnOrigin:    origin,
+			BuildVersion: buildVersion,
+			Pkg:          *reqPkg,
+			Target:       target,
+			DevMode:      isDev,
+			BundleMode:   isBundleMode || isWorker,
+			stage:        "init",
 		}
 		taskID := task.ID()
 		esm, err := findModule(taskID)

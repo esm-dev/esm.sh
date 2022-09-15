@@ -7,26 +7,52 @@ import (
 func TestAliasDepsPrefix(t *testing.T) {
 	external := newStringSet()
 	external.Add("foo")
-	prefix := encodeBuildArgsPrefix(map[string]string{"a": "b"}, PkgSlice{
-		Pkg{Name: "b", Version: "1.0.0"},
-		Pkg{Name: "d", Version: "1.0.0"},
-		Pkg{Name: "c", Version: "1.0.0"},
-	}, external, "0.128.0")
-	a, d, e, dsv, err := decodeBuildArgsPrefix(prefix)
+	prefix := encodeBuildArgsPrefix(
+		BuildArgs{
+			alias: map[string]string{"a": "b"},
+			deps: PkgSlice{
+				Pkg{Name: "c", Version: "1.0.0"},
+				Pkg{Name: "d", Version: "1.0.0"},
+				Pkg{Name: "e", Version: "1.0.0"},
+				Pkg{Name: "foo", Version: "1.0.0"}, // to be avoided
+			},
+			external:          external,
+			denoStdVersion:    "0.128.0",
+			ignoreRequire:     true,
+			keepNames:         true,
+			ignoreAnnotations: true,
+			sourcemap:         true,
+		},
+		Pkg{Name: "foo"},
+		false,
+	)
+	args, err := decodeBuildArgsPrefix(prefix)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(a) != 1 || a["a"] != "b" {
+	if len(args.alias) != 1 || args.alias["a"] != "b" {
 		t.Fatal("invalid alias")
 	}
-	if len(d) != 3 {
+	if len(args.deps) != 3 {
 		t.Fatal("invalid deps")
 	}
-	if len(e) != 1 {
+	if args.external.Size() != 1 {
 		t.Fatal("invalid external")
 	}
-	if dsv != "0.128.0" {
+	if args.denoStdVersion != "0.128.0" {
 		t.Fatal("invalid denoStdVersion")
 	}
-	t.Log(a, d, e)
+	if !args.ignoreRequire {
+		t.Fatal("ignoreRequire should be true")
+	}
+	if !args.keepNames {
+		t.Fatal("keepNames should be true")
+	}
+	if !args.ignoreAnnotations {
+		t.Fatal("ignoreAnnotations should be true")
+	}
+	if !args.sourcemap {
+		t.Fatal("sourcemap should be true")
+	}
+	t.Log(prefix, args)
 }

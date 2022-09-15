@@ -14,7 +14,7 @@ import (
 )
 
 func (task *BuildTask) CopyDTS(dts string, buildVersion int) (n int, err error) {
-	buildArgsPrefix := encodeBuildArgsPrefix(task.Alias, task.Deps, task.External, "")
+	buildArgsPrefix := encodeBuildArgsPrefix(task.BuildArgs, task.Pkg, true)
 	tracing := newStringSet()
 	err = task.copyDTS(dts, buildVersion, buildArgsPrefix, tracing)
 	if err == nil {
@@ -114,7 +114,7 @@ func (task *BuildTask) copyDTS(dts string, buildVersion int, aliasDepsPrefix str
 			return importPath
 		}
 
-		if task.External.Has("*") && !isLocalImport(importPath) {
+		if task.external.Has("*") && !isLocalImport(importPath) {
 			return importPath
 		}
 
@@ -127,12 +127,12 @@ func (task *BuildTask) copyDTS(dts string, buildVersion int, aliasDepsPrefix str
 		}
 
 		// apply `?alias`
-		to, ok := task.Alias[importPath]
+		to, ok := task.alias[importPath]
 		if ok {
 			importPath = to
 		}
 
-		if globalDeclareModules.Has(importPath) || task.External.Has(importPath) {
+		if globalDeclareModules.Has(importPath) || task.external.Has(importPath) {
 			return importPath
 		}
 
@@ -189,7 +189,7 @@ func (task *BuildTask) copyDTS(dts string, buildVersion int, aliasDepsPrefix str
 			}
 
 			// use version defined in `?deps`
-			if pkg, ok := task.Deps.Get(depTypePkgName); ok {
+			if pkg, ok := task.deps.Get(depTypePkgName); ok {
 				maybeVersion = []string{
 					pkg.Version,
 					"latest",
@@ -242,10 +242,7 @@ func (task *BuildTask) copyDTS(dts string, buildVersion int, aliasDepsPrefix str
 				}
 			}
 
-			alias, deps := fixBuildArgs(task.Alias, task.Deps, info.Name)
-			pkgBasePath := pkgBase + encodeBuildArgsPrefix(alias, deps, task.External, "")
-
-			// CDN URL
+			pkgBasePath := pkgBase + encodeBuildArgsPrefix(task.BuildArgs, task.Pkg, true)
 			importPath = fmt.Sprintf("%s/%s", cdnOriginAndBuildBasePath, pkgBasePath+importPath)
 		}
 
