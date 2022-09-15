@@ -253,20 +253,7 @@ CheckYarn:
 	return
 }
 
-func getPackageInfo(wd string, name string, version string) (info NpmPackage, submodule string, fromPackageJSON bool, err error) {
-	slice := strings.Split(name, "/")
-	if l := len(slice); strings.HasPrefix(name, "@") && l > 1 {
-		name = strings.Join(slice[:2], "/")
-		if l > 2 {
-			submodule = strings.Join(slice[2:], "/")
-		}
-	} else {
-		name = slice[0]
-		if l > 1 {
-			submodule = strings.Join(slice[1:], "/")
-		}
-	}
-
+func getPackageInfo(wd string, name string, version string) (info NpmPackage, fromPackageJSON bool, err error) {
 	if name == "@types/node" {
 		info = NpmPackage{
 			Name:    "@types/node",
@@ -308,7 +295,7 @@ func fetchPackageInfo(name string, version string) (info NpmPackage, err error) 
 		if !ok {
 			break
 		}
-		time.Sleep(50 * time.Millisecond)
+		time.Sleep(10 * time.Millisecond)
 	}
 
 	data, err := cache.Get(id)

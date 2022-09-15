@@ -74,7 +74,7 @@ func parsePkg(pathname string) (*Pkg, string, error) {
 		}, q, nil
 	}
 
-	info, _, _, err := getPackageInfo("", name, version)
+	info, _, err := getPackageInfo("", name, version)
 	if err != nil {
 		return nil, "", err
 	}

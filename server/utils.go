@@ -11,6 +11,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/ije/gox/utils"
 	"github.com/ije/gox/valid"
@@ -253,25 +254,43 @@ func decodeBuildArgsPrefix(raw string) (args BuildArgs, err error) {
 
 func encodeBuildArgsPrefix(args BuildArgs, pkg Pkg, forTypes bool) string {
 	lines := []string{}
+	pkgDeps := map[string]bool{}
+	for i := 0; i < 3; i++ {
+		info, _, err := getPackageInfo("", pkg.Name, pkg.Version)
+		if err == nil {
+			for name := range info.Dependencies {
+				pkgDeps[name] = true
+			}
+			for name := range info.PeerDependencies {
+				pkgDeps[name] = true
+			}
+			break
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
 	if len(args.alias) > 0 && !stableBuild[pkg.Name] {
 		var ss sort.StringSlice
 		for name, to := range args.alias {
-			if name != pkg.Name {
+			if name != pkg.Name && pkgDeps[name] {
 				ss = append(ss, fmt.Sprintf("%s:%s", name, to))
 			}
 		}
-		ss.Sort()
-		lines = append(lines, fmt.Sprintf("a/%s", strings.Join(ss, ",")))
+		if len(ss) > 0 {
+			ss.Sort()
+			lines = append(lines, fmt.Sprintf("a/%s", strings.Join(ss, ",")))
+		}
 	}
 	if len(args.deps) > 0 && !stableBuild[pkg.Name] {
 		var ss sort.StringSlice
 		for _, p := range args.deps {
-			if p.Name != pkg.Name {
+			if p.Name != pkg.Name && pkgDeps[p.Name] {
 				ss = append(ss, fmt.Sprintf("%s@%s", p.Name, p.Version))
 			}
 		}
-		ss.Sort()
-		lines = append(lines, fmt.Sprintf("d/%s", strings.Join(ss, ",")))
+		if len(ss) > 0 {
+			ss.Sort()
+			lines = append(lines, fmt.Sprintf("d/%s", strings.Join(ss, ",")))
+		}
 	}
 	if args.external.Size() > 0 {
 		var ss sort.StringSlice
@@ -280,8 +299,10 @@ func encodeBuildArgsPrefix(args BuildArgs, pkg Pkg, forTypes bool) string {
 				ss = append(ss, name)
 			}
 		}
-		ss.Sort()
-		lines = append(lines, fmt.Sprintf("e/%s", strings.Join(ss, ",")))
+		if len(ss) > 0 {
+			ss.Sort()
+			lines = append(lines, fmt.Sprintf("e/%s", strings.Join(ss, ",")))
+		}
 	}
 	if !forTypes {
 		if args.denoStdVersion != "" && args.denoStdVersion != denoStdVersion {

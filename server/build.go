@@ -554,15 +554,14 @@ esbuild:
 					} else {
 						polyfill, ok := polyfilledBuiltInNodeModules[name]
 						if ok {
-							p, submodule, _, e := getPackageInfo(task.wd, polyfill, "latest")
+							p, _, e := getPackageInfo(task.wd, polyfill, "latest")
 							if e != nil {
 								err = e
 								return
 							}
 							importPath = task.getImportPath(Pkg{
-								Name:      p.Name,
-								Version:   p.Version,
-								Submodule: submodule,
+								Name:    p.Name,
+								Version: p.Version,
 							}, "")
 							importPath = strings.TrimSuffix(importPath, ".js") + ".bundle.js"
 						} else {
@@ -625,7 +624,7 @@ esbuild:
 					} else if v, ok := npm.PeerDependencies[pkgNameInfo.Fullname]; ok {
 						version = v
 					}
-					p, submodule, _, e := getPackageInfo(task.wd, name, version)
+					p, _, e := getPackageInfo(task.wd, pkgNameInfo.Fullname, version)
 					if e != nil {
 						err = e
 						return
@@ -634,7 +633,7 @@ esbuild:
 					pkg := Pkg{
 						Name:      p.Name,
 						Version:   p.Version,
-						Submodule: submodule,
+						Submodule: pkgNameInfo.Submodule,
 					}
 					t := &BuildTask{
 						BuildArgs:    task.BuildArgs,
@@ -857,11 +856,9 @@ func (task *BuildTask) storeToDB(esm *ModuleMeta) {
 func (task *BuildTask) checkDTS(esm *ModuleMeta, npm *NpmPackage) {
 	name := task.Pkg.Name
 	submodule := task.Pkg.Submodule
-	buildArgsPrefix := encodeBuildArgsPrefix(task.BuildArgs, task.Pkg, true)
-
 	var dts string
 	if npm.Types != "" {
-		dts = toTypesPath(task.wd, npm, "", buildArgsPrefix, submodule)
+		dts = toTypesPath(task.wd, npm, "", encodeBuildArgsPrefix(task.BuildArgs, task.Pkg, true), submodule)
 	} else if !strings.HasPrefix(name, "@types/") {
 		versions := []string{"latest"}
 		versionParts := strings.Split(task.Pkg.Version, ".")
@@ -879,9 +876,10 @@ func (task *BuildTask) checkDTS(esm *ModuleMeta, npm *NpmPackage) {
 			versions = append([]string{pkg.Version}, versions...)
 		}
 		for _, version := range versions {
-			p, _, _, err := getPackageInfo(task.wd, typesPkgName, version)
+			p, _, err := getPackageInfo(task.wd, typesPkgName, version)
 			if err == nil {
-				dts = toTypesPath(task.wd, &p, version, buildArgsPrefix, submodule)
+				prefix := encodeBuildArgsPrefix(task.BuildArgs, Pkg{Name: p.Name, Version: p.Version}, true)
+				dts = toTypesPath(task.wd, &p, version, prefix, submodule)
 				break
 			}
 		}

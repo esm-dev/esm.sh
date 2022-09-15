@@ -202,11 +202,17 @@ func (task *BuildTask) copyDTS(dts string, buildVersion int, aliasDepsPrefix str
 				fromPackageJSON bool
 			)
 			for _, version := range maybeVersion {
-				info, subpath, fromPackageJSON, err = getPackageInfo(task.wd, importPath, version)
+				var pkg *Pkg
+				pkg, _, err = parsePkg(importPath)
+				if err != nil {
+					break
+				}
+				info, fromPackageJSON, err = getPackageInfo(task.wd, pkg.Name, version)
 				if err != nil || ((info.Types == "" && info.Typings == "") && !strings.HasPrefix(info.Name, "@types/")) {
-					info, _, fromPackageJSON, err = getPackageInfo(task.wd, toTypesPackageName(importPath), version)
+					info, fromPackageJSON, err = getPackageInfo(task.wd, toTypesPackageName(pkg.Name), version)
 				}
 				if err == nil {
+					subpath = pkg.Submodule
 					break
 				}
 			}
@@ -242,7 +248,7 @@ func (task *BuildTask) copyDTS(dts string, buildVersion int, aliasDepsPrefix str
 				}
 			}
 
-			pkgBasePath := pkgBase + encodeBuildArgsPrefix(task.BuildArgs, task.Pkg, true)
+			pkgBasePath := pkgBase + encodeBuildArgsPrefix(task.BuildArgs, Pkg{Name: info.Name, Version: info.Version}, true)
 			importPath = fmt.Sprintf("%s/%s", cdnOriginAndBuildBasePath, pkgBasePath+importPath)
 		}
 
