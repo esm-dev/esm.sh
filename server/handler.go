@@ -544,6 +544,30 @@ func esmHandler(options esmHandlerOptions) rex.Handle {
 			}
 		}
 
+		buildArgs := BuildArgs{
+			denoStdVersion:    dsv,
+			alias:             alias,
+			deps:              deps,
+			external:          external,
+			ignoreRequire:     ignoreRequire,
+			keepNames:         keepNames,
+			ignoreAnnotations: ignoreAnnotations,
+			sourcemap:         sourcemap,
+		}
+
+		// parse and use `X-` prefix
+		if hasBuildVerPrefix {
+			a := strings.Split(reqPkg.Submodule, "/")
+			if len(a) > 1 && strings.HasPrefix(a[0], "X-") {
+				reqPkg.Submodule = strings.Join(a[1:], "/")
+				args, err := decodeBuildArgsPrefix(a[0])
+				if err != nil {
+					return throwErrorJS(ctx, err)
+				}
+				buildArgs = args
+			}
+		}
+
 		// check whether it is `bare` mode
 		if hasBuildVerPrefix && endsWith(pathname, ".js") {
 			a := strings.Split(reqPkg.Submodule, "/")
@@ -566,30 +590,6 @@ func esmHandler(options esmHandlerOptions) rex.Handle {
 					target = a[0]
 					isBare = true
 				}
-			}
-		}
-
-		buildArgs := BuildArgs{
-			denoStdVersion:    dsv,
-			alias:             alias,
-			deps:              deps,
-			external:          external,
-			ignoreRequire:     ignoreRequire,
-			keepNames:         keepNames,
-			ignoreAnnotations: ignoreAnnotations,
-			sourcemap:         sourcemap,
-		}
-
-		// parse and use `X-` prefix
-		if hasBuildVerPrefix {
-			a := strings.Split(reqPkg.Submodule, "/")
-			if len(a) > 1 && strings.HasPrefix(a[0], "X-") {
-				reqPkg.Submodule = strings.Join(a[1:], "/")
-				args, err := decodeBuildArgsPrefix(a[0])
-				if err != nil {
-					return throwErrorJS(ctx, err)
-				}
-				buildArgs = args
 			}
 		}
 
