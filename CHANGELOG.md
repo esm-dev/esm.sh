@@ -1,5 +1,13 @@
 # Change Log
 
+## v95
+
+- Fix `web-streams-ponyfill` build (close [#417](https://github.com/ije/esm.sh/issues/417))
+- Fix invalid `?deps` and `?alias` resolving
+- Fix `solid-js/web` build for Deno
+- Add `add react:preact/compat` pattern for the deno CLI
+- Upgrade `deno/std` to **0.155.0**.
+
 ## v94
 
 - Downgrade `deno/std` to **0.153.0**.
