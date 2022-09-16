@@ -162,6 +162,7 @@ var requireModeAllowList = []string{
 	"typescript",
 	"vscode-oniguruma",
 	"postcss-selector-parser",
+	"web-streams-ponyfill",
 }
 
 func parseCJSModuleExports(buildDir string, importPath string, nodeEnv string) (ret cjsExportsResult, err error) {

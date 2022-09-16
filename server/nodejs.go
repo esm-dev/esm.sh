@@ -469,7 +469,7 @@ func resolvePackageExports(p *NpmPackage, exports interface{}, target string, is
 	}
 }
 
-func fixNpmPackage(p NpmPackage, target string, isDev bool) *NpmPackage {
+func fixNpmPackage(wd string, p NpmPackage, target string, isDev bool) *NpmPackage {
 	exports := p.DefinedExports
 	np := &p
 
@@ -507,7 +507,7 @@ func fixNpmPackage(p NpmPackage, target string, isDev bool) *NpmPackage {
 	}
 
 	if p.Module == "" {
-		if p.JsNextMain != "" {
+		if p.JsNextMain != "" && fileExists(path.Join(wd, p.JsNextMain)) {
 			p.Module = p.JsNextMain
 		} else if p.ES2015 != "" {
 			p.Module = p.ES2015
