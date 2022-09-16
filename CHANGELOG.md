@@ -6,7 +6,6 @@
 - Fix invalid `?deps` and `?alias` resolving
 - Fix `solid-js/web` build for Deno
 - Add `add react:preact/compat` pattern for the deno CLI
-- Upgrade `deno/std` to **0.155.0**.
 
 ## v94
 
