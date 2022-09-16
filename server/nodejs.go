@@ -438,7 +438,7 @@ func resolvePackageExports(p *NpmPackage, exports interface{}, target string, is
 			names = append(names, "default")
 		}
 		// support solid.js ssr in deno
-		if p.Name == "solid-js" && target == "deno" {
+		if (p.Name == "solid-js" || strings.HasPrefix(p.Name, "solid-js/")) && target == "deno" {
 			names = append([]string{"node"}, names...)
 		}
 		for _, name := range names {
