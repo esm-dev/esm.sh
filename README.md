@@ -33,22 +33,6 @@ or import non-module(js) files:
 import "https://esm.sh/react/package.json" assert { type: "json" }
 ```
 
-### Bundle mode
-
-```javascript
-import { Button } from "https://esm.sh/antd?bundle"
-```
-
-In **bundle** mode, all dependencies will be bundled into a single JS file.
-
-### Development mode
-
-```javascript
-import React from "https://esm.sh/react?dev"
-```
-
-The `?dev` query builds modules with `process.env.NODE_ENV` equals to `development`, that is useful to build modules like **React** to allow you to get more development warn/error details.
-
 ### Specify dependencies
 
 ```javascript
@@ -69,7 +53,20 @@ By default, esm.sh rewrites import specifier based on the package's dependency s
 }
 ```
 
-You can use the `?external=PACKAGE` query to specify external dependencies. These dependencies will not be resolved with the code. You need to use [**import maps**](https://github.com/WICG/import-maps) to specify the location for these dependencies.
+You can use the `?external=PACKAGE` query to specify external dependencies. Or you can **mark all dependencies as external** by add `*` prefix before the package name:
+
+```json
+{
+  "imports": {
+    "preact": "https://esm.sh/preact@10.7.2",
+    "preact-render-to-string": "https://esm.sh/*preact-render-to-string@5.2.0",
+    "swr": "https://esm.sh/*swr@1.3.0",
+    "react": "https://esm.sh/preact@10.7.2/compat",
+  }
+}
+```
+
+These dependencies will not be resolved with the code. You need to use [**import maps**](https://github.com/WICG/import-maps) to specify the location for these dependencies.
 
 ### Aliasing dependencies
 
@@ -84,6 +81,22 @@ import useSWR from "https://esm.sh/swr?alias=react:preact/compat&deps=preact@10.
 ```
 
 The origin idea was coming from [@lucacasonato](https://github.com/lucacasonato).
+
+### Bundle mode
+
+```javascript
+import { Button } from "https://esm.sh/antd?bundle"
+```
+
+In **bundle** mode, all dependencies will be bundled into a single JS file.
+
+### Development mode
+
+```javascript
+import React from "https://esm.sh/react?dev"
+```
+
+The `?dev` query builds modules with `process.env.NODE_ENV` equals to `development`, that is useful to build modules like **React** to allow you to get more development warn/error details.
 
 ### ESBuild options
 
@@ -122,7 +135,7 @@ import Daygrid from "https://esm.sh/@fullcalendar/daygrid"
 
 This only works when the NPM module imports CSS files in JS directly.
 
-
+<!--
 ## Web Worker
 
 esm.sh supports `?worker` mode to load modules as web worker:
@@ -132,6 +145,7 @@ import editorWorker from "https://esm.sh/monaco-editor/esm/vs/editor/editor.work
 
 const worker = editorWorker()
 ```
+-->
 
 ## Deno compatibility
 
