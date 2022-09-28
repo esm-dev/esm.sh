@@ -284,6 +284,15 @@ func getPackageInfo(wd string, name string, version string) (info NpmPackage, fr
 var lock sync.Map
 
 func fetchPackageInfo(name string, version string) (info NpmPackage, err error) {
+	a := strings.Split(strings.Trim(name, "/"), "/")
+	for i, s := range a {
+		a[i] = strings.TrimSpace(s)
+	}
+	name = a[0]
+	if strings.HasPrefix(name, "@") && len(a) > 1 {
+		name = a[0] + "/" + a[1]
+	}
+
 	if version == "" {
 		version = "latest"
 	}
