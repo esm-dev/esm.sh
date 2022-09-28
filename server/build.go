@@ -20,13 +20,6 @@ import (
 	"github.com/ije/gox/utils"
 )
 
-// stable build for UI libraries like react, to make sure the runtime is single copy
-var stableBuild = map[string]bool{
-	"react":  true,
-	"preact": true,
-	"vue":    true,
-}
-
 type BuildArgs struct {
 	alias             map[string]string
 	deps              PkgSlice

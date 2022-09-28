@@ -629,11 +629,6 @@ func toTypesPackageName(pkgName string) string {
 	return "@types/" + pkgName
 }
 
-var fixedPkgVersions = map[string]string{
-	"@types/react@17": "17.0.49",
-	"@types/react@18": "18.0.18",
-}
-
 func fixPkgVersion(info NpmPackage) (NpmPackage, error) {
 	for prefix, ver := range fixedPkgVersions {
 		if strings.HasPrefix(info.Name+"@"+info.Version, prefix) {
