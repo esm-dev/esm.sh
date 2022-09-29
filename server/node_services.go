@@ -155,13 +155,14 @@ var requireModeAllowList = []string{
 	"keycode",
 	"lru_map",
 	"lz-string",
+	"postcss-selector-parser",
 	"resolve",
 	"safe-buffer",
 	"seedrandom",
+	"stream-browserify",
 	"stream-http",
 	"typescript",
 	"vscode-oniguruma",
-	"postcss-selector-parser",
 	"web-streams-ponyfill",
 }
 

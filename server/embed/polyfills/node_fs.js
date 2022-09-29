@@ -22,6 +22,8 @@ export let closeSync = () => _e("closeSync");
 export let constants = new Proxy({}, { get: () => null });
 export let copyFile = () => _e("copyFile");
 export let copyFileSync = () => _e("copyFileSync");
+export let createReadStream = () => _e("createReadStream");
+export let createWriteStream = () => _e("createWriteStream");
 export let Dir = () => _e("Dir");
 export let Dirent = () => _e("Dirent");
 export let exists = () => _e("exists");
@@ -48,7 +50,7 @@ export let open = () => _e("open");
 export let openSync = () => _e("openSync");
 export let read = () => _e("read");
 export let readSync = () => _e("readSync");
-export let promises = new Proxy({}, { get: (name) => _e(`promises/${name}`) });
+export let promises = new Proxy({}, { get: (_t, prop) => _e(`promises/${prop}`) });
 export let readdir = () => _e("readdir");
 export let readdirSync = () => _e("readdirSync");
 export let readFile = () => _e("readFile");
@@ -95,6 +97,8 @@ export default {
   constants,
   copyFile,
   copyFileSync,
+  createReadStream,
+  createWriteStream,
   Dir,
   Dirent,
   exists,
