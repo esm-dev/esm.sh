@@ -1,5 +1,12 @@
 # Change Log
 
+## v96
+
+- Update the fake node `fs` ployfill for browsers(add `createReadStream` and `createWriteStream` methods)
+- Check package name (close [#424](https://github.com/ije/esm.sh/issues/424))
+- Fix some invalid types bulids
+- Upgrade esbuild to **0.15.9**
+
 ## v95
 
 - Fix `web-streams-ponyfill` build (close [#417](https://github.com/ije/esm.sh/issues/417))

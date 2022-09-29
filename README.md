@@ -5,7 +5,7 @@ A fast, global content delivery network for [NPM](http://npmjs.org/) packages wi
 ## Import from URL
 
 ```javascript
-import React from "https://esm.sh/react"
+import React from "https://esm.sh/react" // 18.2.0
 ```
 
 ### Specify version
@@ -18,29 +18,29 @@ You may also use a [semver](https://docs.npmjs.com/cli/v6/using-npm/semver) or a
 
 ```javascript
 import React from "https://esm.sh/react@17"   // 17.0.2
-import React from "https://esm.sh/react@next" // 18.0.0-rc.0-next-13036bfbc-20220121
+import React from "https://esm.sh/react@next" // 18.3.0-next-3de926449-20220927
 ```
 
 ### Submodule
 
 ```javascript
-import { renderToString } from "https://esm.sh/react-dom/server"
+import { renderToString } from "https://esm.sh/react-dom@18.2.0/server"
 ```
 
 or import non-module(js) files:
 
 ```javascript
-import "https://esm.sh/react/package.json" assert { type: "json" }
+import "https://esm.sh/react@18.2.0/package.json" assert { type: "json" }
 ```
 
 ### Specify dependencies
 
 ```javascript
-import React from "https://esm.sh/react@16.14.0"
-import useSWR from "https://esm.sh/swr?deps=react@16.14.0"
+import React from "https://esm.sh/react@17.0.2"
+import useSWR from "https://esm.sh/swr?deps=react@17.0.2"
 ```
 
-By default, esm.sh rewrites import specifier based on the package's dependency statement. To specify version of dependencies, you can use the `?deps=PACKAGE@VERSION` query. You can separate multiple dependencies with commas: `?deps=react@16.14.0,react-dom@16.14.0`.
+By default, esm.sh rewrites import specifier based on the package's dependency statement. To specify version of dependencies, you can use the `?deps=PACKAGE@VERSION` query. You can separate multiple dependencies with commas: `?deps=react@17.0.2,react-dom@17.0.2`.
 
 ### Specify external dependencies
 
@@ -203,7 +203,7 @@ import unescape from "https://esm.sh/lodash/unescape?no-dts"
 Since we update esm.sh server frequently, sometime we may break packages that work fine previously by mistake, the server will rebuild all modules when the patch pushed. To avoid this, you can **pin** the build version by the `?pin=BUILD_VERSON` query. This will give you an **immutable** cached module.
 
 ```javascript
-import React from "https://esm.sh/react@17.0.2?pin=v95"
+import React from "https://esm.sh/react@17.0.2?pin=v96"
 ```
 
 ## Global CDN
