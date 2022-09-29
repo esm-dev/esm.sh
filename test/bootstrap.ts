@@ -69,7 +69,7 @@ async function runCliTest() {
       "run",
       "-A",
       "-r",
-      "http://localhost:8080/v94",
+      "http://localhost:8080/v95",
       "add",
       "preact@10.10.6",
       "preact-render-to-string@5.2.3",
@@ -90,21 +90,21 @@ async function runCliTest() {
     JSON.stringify(im) !== JSON.stringify({
       imports: {
         "preact-render-to-string":
-          "http://localhost:8080/v94/*preact-render-to-string@5.2.3",
+          "http://localhost:8080/v95/*preact-render-to-string@5.2.3",
         "preact-render-to-string/":
-          "http://localhost:8080/v94/*preact-render-to-string@5.2.3/",
-        preact: "http://localhost:8080/v94/preact@10.10.6",
-        "preact/": "http://localhost:8080/v94/preact@10.10.6/",
-        react: "http://localhost:8080/v94/preact@10.10.6/compat",
-        swr: "http://localhost:8080/v94/*swr@1.3.0",
-        "swr/": "http://localhost:8080/v94/*swr@1.3.0/",
+          "http://localhost:8080/v95/*preact-render-to-string@5.2.3/",
+        preact: "http://localhost:8080/v95/preact@10.10.6",
+        "preact/": "http://localhost:8080/v95/preact@10.10.6/",
+        react: "http://localhost:8080/v95/preact@10.10.6/compat",
+        swr: "http://localhost:8080/v95/*swr@1.3.0",
+        "swr/": "http://localhost:8080/v95/*swr@1.3.0/",
       },
       scopes: {
         "preact-render-to-string": {
-          "pretty-format": "http://localhost:8080/v94/pretty-format@3.8.0",
+          "pretty-format": "http://localhost:8080/v95/pretty-format@3.8.0",
         },
         "preact-render-to-string/": {
-          "pretty-format": "http://localhost:8080/v94/pretty-format@3.8.0",
+          "pretty-format": "http://localhost:8080/v95/pretty-format@3.8.0",
         },
       },
     })
