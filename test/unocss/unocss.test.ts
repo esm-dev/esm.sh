@@ -1,9 +1,9 @@
 import { assert } from "https://deno.land/std@0.155.0/testing/asserts.ts";
 
-import { createGenerator } from "http://localhost:8080/@unocss/core@0.30.3";
-import presetUno from "http://localhost:8080/@unocss/preset-uno@0.30.3";
-import presetIcons from "http://localhost:8080/@unocss/preset-icons@0.30.3?ignore-require&target=esnext";
-import carbonIcons from "http://localhost:8080/@iconify-json/carbon@1.1.2/icons.json" assert {
+import { createGenerator } from "http://localhost:8080/@unocss/core@0.45";
+import presetUno from "http://localhost:8080/@unocss/preset-uno@0.45";
+import presetIcons from "http://localhost:8080/@unocss/preset-icons@0.45";
+import carbonIcons from "http://localhost:8080/@iconify-json/carbon@1.1/icons.json" assert {
   type: "json",
 };
 
