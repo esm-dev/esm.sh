@@ -51,12 +51,16 @@ github.com/dustin/go-humanize v1.0.0 h1:VSnTsYCnlFHaM2/igO1h6X3HA71jcobQuxemgkq4
 github.com/dustin/go-humanize v1.0.0/go.mod h1:HtrtbFcZ19U5GC7JDqmcUSB87Iq5E25KnS6fMYU6eOk=
 github.com/evanw/esbuild v0.14.50 h1:h7sijkRPGB9ckpIOc6FMZ81/NMy/4g40LhsBAtPa3/I=
 github.com/evanw/esbuild v0.14.50/go.mod h1:dkwI35DCMf0iR+tJDiCEiPKZ4A+AotmmeLpPEv3dl9k=
+github.com/evanw/esbuild v0.15.9 h1:1mjUDJqaSdVZJa6HXD5tyKDNZ2fym9lULLg+Ar2Nqzs=
+github.com/evanw/esbuild v0.15.9/go.mod h1:iINY06rn799hi48UqEnaQvVfZWe6W9bET78LbvN8VWk=
 github.com/golang/glog v0.0.0-20160126235308-23def4e6c14b h1:VKtxabqXZkF25pY9ekfRL6a582T4P37/31XEstQ5p58=
 github.com/golang/glog v0.0.0-20160126235308-23def4e6c14b/go.mod h1:SBH7ygxi8pfUlaOkMMuAQtPIUF8ecWP5IEl/CR7VP2Q=
 github.com/google/go-cmp v0.5.7 h1:81/ik6ipDQS2aGcBfIN5dHDB36BwrStyeAQquSYCV4o=
 github.com/google/go-cmp v0.5.7/go.mod h1:n+brtR0CgQNWTVd5ZUFpTBC8YFBDLK/h/bpaJ8/DtOE=
 github.com/ije/esbuild-internal v0.14.50 h1:d5xi9QkZesEk5wy4rPph05sOg9wPikYeS/2HcVYBOvQ=
 github.com/ije/esbuild-internal v0.14.50/go.mod h1:UyeT5QMYAjXd91YPB26x8zj0RYu6WDq0yw6JHn66vw8=
+github.com/ije/esbuild-internal v0.15.9 h1:vI4bbcQUGooaZKZPqCHvMDTxJsgVGM5TiK7x7GJkpSo=
+github.com/ije/esbuild-internal v0.15.9/go.mod h1:UoKsnSemBwKVxxw6hikmxdxaxaB9PLe9IbbnrM1abZU=
 github.com/ije/gox v0.6.1 h1:GGWzuAb5EugWYXqwgFrWDJah3tFZGgG8hA8Hl5Dgj8E=
 github.com/ije/gox v0.6.1/go.mod h1:HeDdgw2DUqWKHUyRjy9pdS4ESVxxv+0N5iOufd1JGRs=
 github.com/ije/postdb v0.7.1 h1:8bakgT2tXXQmMiBnqyQRneRW0iYhDQ/zvmlghqlH9Kg=
