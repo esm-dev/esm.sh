@@ -61,7 +61,7 @@ func (task *BuildTask) copyDTS(dts string, buildVersion int, aliasDepsPrefix str
 	}
 
 	imports := newStringSet()
-	globalDeclareModules := newStringSet()
+	internalDeclareModules := newStringSet()
 	entryDeclareModules := []string{}
 
 	dtsFilePath := path.Join(task.wd, "node_modules", regFullVersionPath.ReplaceAllString(dts, "$1/"))
@@ -74,7 +74,10 @@ func (task *BuildTask) copyDTS(dts string, buildVersion int, aliasDepsPrefix str
 	pass1Buf := bytes.NewBuffer(nil)
 	err = walkDts(dtsFile, pass1Buf, func(importPath string, kind string, position int) string {
 		if kind == "declare module" {
-			globalDeclareModules.Add(importPath)
+			internalDeclareModules.Add(importPath)
+		}
+		if kind == "import expr" || kind == "import call" {
+			imports.Add(importPath)
 		}
 		return importPath
 	})
@@ -84,12 +87,19 @@ func (task *BuildTask) copyDTS(dts string, buildVersion int, aliasDepsPrefix str
 		return
 	}
 
+	for _, importPath := range imports.Values() {
+		if !internalDeclareModules.Has(importPath) {
+			internalDeclareModules.Remove(importPath)
+		}
+	}
+	imports.Reset()
+
 	buf := bytes.NewBuffer(nil)
 	if pkgName == "@types/node" {
 		fmt.Fprintf(buf, "/// <reference path=\"%s/node.ns.d.ts\" />\n", cdnOriginAndBuildBasePath)
 	}
 	err = walkDts(pass1Buf, buf, func(importPath string, kind string, position int) string {
-		// resove `declare module "xxx" {}`, and the "xxx" must equal to the `moduleName`
+		// resove `declare module "xxx" {}`
 		if kind == "declare module" {
 			moduleName := pkgName
 			if len(subPath) > 0 {
@@ -103,6 +113,7 @@ func (task *BuildTask) copyDTS(dts string, buildVersion int, aliasDepsPrefix str
 			if strings.HasPrefix(importPath, "node:") {
 				importPath = "@types/node/" + strings.TrimPrefix(importPath, "node:")
 			}
+			// current module
 			if importPath == moduleName {
 				if strings.HasPrefix(moduleName, "@types/node/") {
 					return fmt.Sprintf("%s/@types/node@%s/%s.d.ts", cdnOriginAndBuildBasePath, nodeTypesVersion, strings.TrimPrefix(moduleName, "@types/node/"))
@@ -111,14 +122,16 @@ func (task *BuildTask) copyDTS(dts string, buildVersion int, aliasDepsPrefix str
 				entryDeclareModules = append(entryDeclareModules, fmt.Sprintf("%s:%d", moduleName, position+len(url)+1))
 				return url
 			}
-			return importPath
+			if internalDeclareModules.Has(importPath) {
+				return importPath
+			}
 		}
 
 		if task.external.Has("*") && !isLocalImport(importPath) {
 			return importPath
 		}
 
-		// fix types
+		// fix import path
 		switch importPath {
 		case "node-fetch":
 			importPath = "node-fetch-native"
@@ -126,13 +139,25 @@ func (task *BuildTask) copyDTS(dts string, buildVersion int, aliasDepsPrefix str
 			importPath = fmt.Sprintf("@types/%s", importPath)
 		}
 
-		// apply `?alias`
+		// fix some weird import paths
+		if kind == "import call" {
+			if task.Pkg.Name == "@mdx-js/mdx" {
+				if (strings.Contains(dts, "plugin/recma-document") || strings.Contains(dts, "plugin/recma-jsx-rewrite")) && importPath == "@types/estree" {
+					importPath = "@types/estree-jsx"
+				}
+			}
+			if strings.HasPrefix(dts, "remark-rehype") && importPath == "mdast-util-to-hast/lib" {
+				importPath = "mdast-util-to-hast"
+			}
+		}
+
+		// use `?alias`
 		to, ok := task.alias[importPath]
 		if ok {
 			importPath = to
 		}
 
-		if globalDeclareModules.Has(importPath) || task.external.Has(importPath) {
+		if internalDeclareModules.Has(importPath) || task.external.Has(importPath) {
 			return importPath
 		}
 

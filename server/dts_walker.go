@@ -98,7 +98,7 @@ func walkDts(r io.Reader, buf *bytes.Buffer, resolve func(path string, kind stri
 							if len(a) == 3 {
 								buf.Write(a[0])
 								buf.Write(q)
-								buf.WriteString(resolve(string(a[1]), "import", buf.Len()))
+								buf.WriteString(resolve(string(a[1]), "import expr", buf.Len()))
 								buf.Write(q)
 								buf.Write(a[2])
 							} else {
@@ -116,7 +116,7 @@ func walkDts(r io.Reader, buf *bytes.Buffer, resolve func(path string, kind stri
 									buf := bytes.NewBuffer(nil)
 									buf.Write(a[0])
 									buf.Write(q)
-									buf.WriteString(resolve(string(a[1]), "import", buf.Len()))
+									buf.WriteString(resolve(string(a[1]), "import call", buf.Len()))
 									buf.Write(q)
 									buf.Write(a[2])
 									return buf.Bytes()
@@ -154,7 +154,7 @@ func walkDts(r io.Reader, buf *bytes.Buffer, resolve func(path string, kind stri
 								buf := bytes.NewBuffer(nil)
 								buf.Write(a[0])
 								buf.Write(q)
-								buf.WriteString(resolve(string(a[1]), "import", buf.Len()))
+								buf.WriteString(resolve(string(a[1]), "import call", buf.Len()))
 								buf.Write(q)
 								buf.Write(a[2])
 								return buf.Bytes()

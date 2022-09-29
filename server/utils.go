@@ -56,6 +56,13 @@ func (s *stringSet) Add(key string) {
 	s.m[key] = struct{}{}
 }
 
+func (s *stringSet) Remove(key string) {
+	s.lock.Lock()
+	defer s.lock.Unlock()
+
+	delete(s.m, key)
+}
+
 func (s *stringSet) Reset() {
 	s.lock.Lock()
 	defer s.lock.Unlock()

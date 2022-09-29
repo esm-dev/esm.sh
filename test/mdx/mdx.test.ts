@@ -1,6 +1,7 @@
 import { assertStringIncludes } from "https://deno.land/std@0.155.0/testing/asserts.ts";
 
-import { compile } from "http://localhost:8080/@mdx-js/mdx@2.1.3?no-dts";
+import "https://esm.sh/react@18.2.0";
+import { compile } from "http://localhost:8080/@mdx-js/mdx@2.1.3";
 
 const md = `
 export const Thing = () => <>World!</>
@@ -12,7 +13,7 @@ console.log("Hello, World!")
 \`\`\`
 `;
 
-Deno.test("mdx?no-dts", async () => {
+Deno.test("mdx", async () => {
   const output = await compile(md, {
     jsxImportSource: "https://esm.sh/react@18.2.0",
   });
