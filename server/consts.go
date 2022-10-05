@@ -9,6 +9,7 @@ const (
 	nodeTypesVersion = "16.11.62"
 )
 
+// fix some package versions
 var fixedPkgVersions = map[string]string{
 	"@types/react@17": "17.0.50",
 	"@types/react@18": "18.0.21",

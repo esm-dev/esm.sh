@@ -10,7 +10,7 @@ import (
 
 var (
 	regFromExpr          = regexp.MustCompile(`(}|\s)from\s*("|')`)
-	regImportPlainExpr   = regexp.MustCompile(`import\s*("|')`)
+	regImportBareExpr    = regexp.MustCompile(`import\s*("|')`)
 	regImportCallExpr    = regexp.MustCompile(`import\((('[^']+')|("[^"]+"))\)`)
 	regDeclareModuleExpr = regexp.MustCompile(`declare\s+module\s*('|")([^'"]+)("|')`)
 	regReferenceTag      = regexp.MustCompile(`<reference\s+(path|types)\s*=\s*('|")([^'"]+)("|')\s*/?>`)
@@ -87,7 +87,7 @@ func walkDts(r io.Reader, buf *bytes.Buffer, resolve func(path string, kind stri
 						importExportScope = true
 					}
 					if importExportScope {
-						if regFromExpr.Match(inlineToken) || regImportPlainExpr.Match(inlineToken) {
+						if regFromExpr.Match(inlineToken) || regImportBareExpr.Match(inlineToken) {
 							importExportScope = false
 							q := bytesSigleQoute
 							a := bytes.Split(inlineToken, q)

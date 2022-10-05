@@ -29,13 +29,6 @@ var (
 	embedFS    EmbedFS
 )
 
-var (
-	// base path for requests
-	basePath string
-	// http redrect for URLs not from basepath
-	baseRedirect bool
-)
-
 type EmbedFS interface {
 	ReadFile(name string) ([]byte, error)
 }
@@ -53,29 +46,29 @@ func Serve(efs EmbedFS) {
 		fsUrl            string
 		logLevel         string
 		logDir           string
-		npmRegistry      string
 		origin           string
+		basePath         string
+		npmRegistry      string
 		unpkgOrigin      string
 		noCompress       bool
 		isDev            bool
 	)
-	flag.IntVar(&port, "port", 80, "http server port")
-	flag.IntVar(&httpsPort, "https-port", 0, "https(autotls) server port, default is disabled")
-	flag.IntVar(&nsPort, "ns-port", 8088, "node services server port")
-	flag.StringVar(&basePath, "base-path", "", "base path")
-	flag.BoolVar(&baseRedirect, "base-redirect", false, "http redrect for URLs not from basepath")
-	flag.StringVar(&etcDir, "etc-dir", ".esmd", "etc dir")
-	flag.StringVar(&cacheUrl, "cache", "", "cache config, default is 'memory:default'")
-	flag.StringVar(&dbUrl, "db", "", "database config, default is 'postdb:[etc-dir]/esm.db'")
-	flag.StringVar(&fsUrl, "fs", "", "filesystem config, default is 'local:[etc-dir]/storage'")
-	flag.IntVar(&buildConcurrency, "build-concurrency", runtime.NumCPU(), "maximum number of concurrent build task")
-	flag.StringVar(&logDir, "log-dir", "", "log dir")
-	flag.StringVar(&logLevel, "log-level", "info", "log level")
-	flag.BoolVar(&noCompress, "no-compress", false, "disable compression for text content")
-	flag.BoolVar(&isDev, "dev", false, "run server in development mode")
+	flag.IntVar(&port, "port", 80, "the http server port")
+	flag.IntVar(&httpsPort, "https-port", 0, "the https(autotls) server port, default is disabled")
+	flag.IntVar(&nsPort, "ns-port", 8088, "the node services server port")
+	flag.IntVar(&buildConcurrency, "build-concurrency", runtime.NumCPU(), "the maximum number of concurrent build task")
+	flag.StringVar(&etcDir, "etc-dir", ".esmd", "the working dir")
+	flag.StringVar(&cacheUrl, "cache", "", "the cache config, default is 'memory:default'")
+	flag.StringVar(&dbUrl, "db", "", "the database config, default is 'postdb:[etc-dir]/esm.db'")
+	flag.StringVar(&fsUrl, "fs", "", "the fs(storage) config, default is 'local:[etc-dir]/storage'")
+	flag.StringVar(&logDir, "log-dir", "", "the log dir")
+	flag.StringVar(&logLevel, "log-level", "info", "the log level")
 	flag.StringVar(&origin, "origin", "", "the server origin, default is the request host")
-	flag.StringVar(&npmRegistry, "npm-registry", "", "npm registry")
-	flag.StringVar(&unpkgOrigin, "unpkg-origin", "https://unpkg.com", "unpkg.com origin")
+	flag.StringVar(&basePath, "base-path", "", "the base path")
+	flag.StringVar(&npmRegistry, "npm-registry", "", "the npm registry")
+	flag.StringVar(&unpkgOrigin, "unpkg-origin", "https://unpkg.com", "the unpkg.com origin")
+	flag.BoolVar(&noCompress, "no-compress", false, "to disable the compression for text content")
+	flag.BoolVar(&isDev, "dev", false, "to run server in development mode")
 
 	flag.Parse()
 
@@ -187,7 +180,7 @@ func Serve(efs EmbedFS) {
 			ExposedHeaders:   []string{"X-TypeScript-Types"},
 			AllowCredentials: false,
 		}),
-		esmHandler(esmHandlerOptions{origin, unpkgOrigin}),
+		esmHandler(esmHandlerOptions{origin, basePath, unpkgOrigin}),
 	)
 
 	C := rex.Serve(rex.ServerConfig{

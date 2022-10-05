@@ -2,21 +2,16 @@ package server
 
 import (
 	"encoding/json"
-	"errors"
 	"fmt"
-	"io/ioutil"
 	"path"
 	"strings"
 
 	"esm.sh/server/storage"
-	"github.com/ije/esbuild-internal/js_ast"
-	"github.com/ije/esbuild-internal/js_parser"
-	"github.com/ije/esbuild-internal/logger"
 	"github.com/ije/gox/utils"
 )
 
 // ESM defines the ES Module meta
-type ModuleMeta struct {
+type ESM struct {
 	Exports       []string `json:"-"`
 	ExportDefault bool     `json:"d"`
 	CJS           bool     `json:"c"`
@@ -25,7 +20,7 @@ type ModuleMeta struct {
 	PackageCSS    bool     `json:"s"`
 }
 
-func initModule(wd string, pkg Pkg, target string, isDev bool) (esm *ModuleMeta, npm *NpmPackage, err error) {
+func initModule(wd string, pkg Pkg, target string, isDev bool) (esm *ESM, npm *NpmPackage, err error) {
 	packageDir := path.Join(wd, "node_modules", pkg.Name)
 	packageFile := path.Join(packageDir, "package.json")
 
@@ -36,7 +31,7 @@ func initModule(wd string, pkg Pkg, target string, isDev bool) (esm *ModuleMeta,
 	}
 
 	npm = fixNpmPackage(wd, p, target, isDev)
-	esm = &ModuleMeta{}
+	esm = &ESM{}
 
 	defer func() {
 		esm.CJS = npm.Module == ""
@@ -182,7 +177,7 @@ func initModule(wd string, pkg Pkg, target string, isDev bool) (esm *ModuleMeta,
 	}
 
 	if npm.Module != "" {
-		modulePath, exportDefault, reason := checkESM(wd, npm.Name, npm.Module)
+		modulePath, exportDefault, reason := parseESModule(wd, npm.Name, npm.Module)
 		if reason == nil {
 			npm.Module = modulePath
 			esm.ExportDefault = exportDefault
@@ -248,7 +243,7 @@ type OldMeta struct {
 	PackageCSS    bool     `json:"packageCSS"`
 }
 
-func findModule(id string) (esm *ModuleMeta, err error) {
+func findModule(id string) (esm *ESM, err error) {
 	store, _, err := db.Get(id)
 	if err == nil {
 		if v, ok := store["meta"]; ok {
@@ -257,7 +252,7 @@ func findModule(id string) (esm *ModuleMeta, err error) {
 			var old OldMeta
 			err = json.Unmarshal([]byte(v), &old)
 			if err == nil {
-				esm = &ModuleMeta{
+				esm = &ESM{
 					CJS:           old.Module == "" && old.Main != "",
 					ExportDefault: old.ExportDefault,
 					TypesOnly:     old.Module == "" && old.Main == "" && old.Types != "",
@@ -281,57 +276,6 @@ func findModule(id string) (esm *ModuleMeta, err error) {
 			esm = nil
 			err = storage.ErrNotFound
 			return
-		}
-	}
-	return
-}
-
-func checkESM(wd string, packageName string, moduleSpecifier string) (resolveName string, exportDefault bool, err error) {
-	pkgDir := path.Join(wd, "node_modules", packageName)
-	resolveName = moduleSpecifier
-	switch path.Ext(moduleSpecifier) {
-	case ".js", ".jsx", ".ts", ".tsx", ".mjs":
-	default:
-		resolveName = moduleSpecifier + ".js"
-		if !fileExists(path.Join(pkgDir, resolveName)) {
-			resolveName = moduleSpecifier + ".mjs"
-		}
-	}
-	if !fileExists(path.Join(pkgDir, resolveName)) && dirExists(path.Join(pkgDir, moduleSpecifier)) {
-		resolveName = path.Join(moduleSpecifier, "index.js")
-		if !fileExists(path.Join(pkgDir, resolveName)) {
-			resolveName = path.Join(moduleSpecifier, "index.mjs")
-		}
-	}
-	filename := path.Join(pkgDir, resolveName)
-	switch path.Ext(filename) {
-	case ".js", ".jsx", ".ts", ".tsx", ".mjs":
-	default:
-		filename += ".js"
-	}
-	data, err := ioutil.ReadFile(filename)
-	if err != nil {
-		return
-	}
-	log := logger.NewDeferLog(logger.DeferLogNoVerboseOrDebug, nil)
-	ast, pass := js_parser.Parse(log, logger.Source{
-		Index:          0,
-		KeyPath:        logger.Path{Text: "<stdin>"},
-		PrettyPath:     "<stdin>",
-		Contents:       string(data),
-		IdentifierName: "stdin",
-	}, js_parser.Options{})
-	if pass {
-		esm := ast.ExportsKind == js_ast.ExportsESM
-		if !esm {
-			err = errors.New("not a module")
-			return
-		}
-		for name := range ast.NamedExports {
-			if name == "default" {
-				exportDefault = true
-				break
-			}
 		}
 	}
 	return

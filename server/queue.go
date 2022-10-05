@@ -7,7 +7,7 @@ import (
 	"time"
 )
 
-// A Queue for esbuild
+// A Queue for esm build tasks
 type BuildQueue struct {
 	lock         sync.RWMutex
 	list         *list.List
@@ -22,7 +22,7 @@ type BuildQueueConsumer struct {
 }
 
 type BuildOutput struct {
-	meta *ModuleMeta
+	meta *ESM
 	err  error
 }
 

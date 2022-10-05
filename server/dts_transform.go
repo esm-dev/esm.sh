@@ -46,8 +46,8 @@ func (task *BuildTask) copyDTS(dts string, buildVersion int, aliasDepsPrefix str
 	}
 
 	buildBasePath := fmt.Sprintf("/v%d", buildVersion)
-	cdnOriginAndBasePath := task.CdnOrigin + basePath
-	cdnOriginAndBuildBasePath := task.CdnOrigin + basePath + buildBasePath
+	cdnOriginAndBasePath := task.CdnOrigin + task.BasePath
+	cdnOriginAndBuildBasePath := task.CdnOrigin + task.BasePath + buildBasePath
 
 	dtsPath := utils.CleanPath(strings.Join(append([]string{
 		buildBasePath,
@@ -390,7 +390,7 @@ func (task *BuildTask) copyDTS(dts string, buildVersion int, aliasDepsPrefix str
 	return
 }
 
-// remove `global { ... }`
+// to remove `global { ... }`
 func removeGlobalBlob(input []byte) (output []byte, err error) {
 	start := bytes.Index(input, []byte("global {"))
 	if start == -1 {

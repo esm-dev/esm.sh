@@ -20,23 +20,14 @@ import (
 	"github.com/ije/gox/utils"
 )
 
-type BuildArgs struct {
-	alias             map[string]string
-	deps              PkgSlice
-	external          *stringSet
-	denoStdVersion    string
-	ignoreRequire     bool
-	ignoreAnnotations bool
-	keepNames         bool
-	sourcemap         bool
-}
-
 type BuildTask struct {
 	BuildArgs
-	BuildVersion int
-	CdnOrigin    string
-	Target       string
+
 	Pkg          Pkg
+	CdnOrigin    string
+	BasePath     string
+	Target       string
+	BuildVersion int
 	DevMode      bool
 	BundleMode   bool
 
@@ -92,7 +83,7 @@ func (task *BuildTask) getImportPath(pkg Pkg, prefix string) string {
 
 	return fmt.Sprintf(
 		"%s/%s/%s@%s/%s%s/%s.js",
-		basePath,
+		task.BasePath,
 		task.getBuildVersion(pkg),
 		pkg.Name,
 		pkg.Version,
@@ -109,7 +100,7 @@ func (task *BuildTask) getBuildVersion(pkg Pkg) string {
 	return fmt.Sprintf("v%d", task.BuildVersion)
 }
 
-func (task *BuildTask) Build() (esm *ModuleMeta, err error) {
+func (task *BuildTask) Build() (esm *ESM, err error) {
 	prev, err := findModule(task.ID())
 	if err == nil {
 		return prev, nil
@@ -149,7 +140,7 @@ func (task *BuildTask) Build() (esm *ModuleMeta, err error) {
 	return task.build(newStringSet())
 }
 
-func (task *BuildTask) build(tracing *stringSet) (esm *ModuleMeta, err error) {
+func (task *BuildTask) build(tracing *stringSet) (esm *ESM, err error) {
 	if tracing.Has(task.ID()) {
 		return
 	}
@@ -222,8 +213,8 @@ func (task *BuildTask) build(tracing *stringSet) (esm *ModuleMeta, err error) {
 		nodeEnv = "development"
 	}
 	define := map[string]string{
-		"__filename":                  fmt.Sprintf(`"%s%s/%s"`, task.CdnOrigin, basePath, task.ID()),
-		"__dirname":                   fmt.Sprintf(`"%s%s/%s"`, task.CdnOrigin, basePath, path.Dir(task.ID())),
+		"__filename":                  fmt.Sprintf(`"%s%s/%s"`, task.CdnOrigin, task.BasePath, task.ID()),
+		"__dirname":                   fmt.Sprintf(`"%s%s/%s"`, task.CdnOrigin, task.BasePath, path.Dir(task.ID())),
 		"Buffer":                      "__Buffer$",
 		"process":                     "__Process$",
 		"setImmediate":                "__setImmediate$",
@@ -519,6 +510,7 @@ esbuild:
 						BuildArgs:    task.BuildArgs,
 						wd:           task.wd, // use current wd to avoid reinstall
 						CdnOrigin:    task.CdnOrigin,
+						BasePath:     task.BasePath,
 						BuildVersion: task.BuildVersion,
 						Pkg:          subPkg,
 						Target:       task.Target,
@@ -535,7 +527,7 @@ esbuild:
 					if task.Target == "node" {
 						importPath = "buffer"
 					} else {
-						importPath = fmt.Sprintf("%s/v%d/node_buffer.js", basePath, task.BuildVersion)
+						importPath = fmt.Sprintf("%s/v%d/node_buffer.js", task.BasePath, task.BuildVersion)
 					}
 				}
 				// is node builtin module
@@ -560,11 +552,11 @@ esbuild:
 						} else {
 							_, err := embedFS.ReadFile(fmt.Sprintf("server/embed/polyfills/node_%s.js", name))
 							if err == nil {
-								importPath = fmt.Sprintf("%s/v%d/node_%s.js", basePath, task.BuildVersion, name)
+								importPath = fmt.Sprintf("%s/v%d/node_%s.js", task.BasePath, task.BuildVersion, name)
 							} else {
 								importPath = fmt.Sprintf(
 									"%s/error.js?type=unsupported-nodejs-builtin-module&name=%s&importer=%s",
-									basePath,
+									task.BasePath,
 									name,
 									task.Pkg.Name,
 								)
@@ -631,6 +623,7 @@ esbuild:
 					t := &BuildTask{
 						BuildArgs:    task.BuildArgs,
 						CdnOrigin:    task.CdnOrigin,
+						BasePath:     task.BasePath,
 						BuildVersion: task.BuildVersion,
 						Pkg:          pkg,
 						Target:       task.Target,
@@ -781,14 +774,14 @@ esbuild:
 					if task.Target == "deno" {
 						fmt.Fprintf(buf, `import __Process$ from "https://deno.land/std@%s/node/process.ts";%s`, task.denoStdVersion, eol)
 					} else {
-						fmt.Fprintf(buf, `import __Process$ from "%s/v%d/node_process.js";%s`, basePath, task.BuildVersion, eol)
+						fmt.Fprintf(buf, `import __Process$ from "%s/v%d/node_process.js";%s`, task.BasePath, task.BuildVersion, eol)
 					}
 				}
 				if bytes.Contains(outputContent, []byte("__Buffer$")) {
 					if task.Target == "deno" {
 						fmt.Fprintf(buf, `import  { Buffer as __Buffer$ } from "https://deno.land/std@%s/node/buffer.ts";%s`, task.denoStdVersion, eol)
 					} else {
-						fmt.Fprintf(buf, `import { Buffer as __Buffer$ } from "%s/v%d/node_buffer.js";%s`, basePath, task.BuildVersion, eol)
+						fmt.Fprintf(buf, `import { Buffer as __Buffer$ } from "%s/v%d/node_buffer.js";%s`, task.BasePath, task.BuildVersion, eol)
 					}
 				}
 				if bytes.Contains(outputContent, []byte("__global$")) {
@@ -833,7 +826,7 @@ esbuild:
 	return
 }
 
-func (task *BuildTask) storeToDB(esm *ModuleMeta) {
+func (task *BuildTask) storeToDB(esm *ESM) {
 	dbErr := db.Put(
 		task.ID(),
 		"build",
@@ -846,7 +839,7 @@ func (task *BuildTask) storeToDB(esm *ModuleMeta) {
 	}
 }
 
-func (task *BuildTask) checkDTS(esm *ModuleMeta, npm *NpmPackage) {
+func (task *BuildTask) checkDTS(esm *ESM, npm *NpmPackage) {
 	name := task.Pkg.Name
 	submodule := task.Pkg.Submodule
 	var dts string

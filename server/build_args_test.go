@@ -4,7 +4,7 @@ import (
 	"testing"
 )
 
-func TestAliasDepsPrefix(t *testing.T) {
+func TestEncodeBuildArgs(t *testing.T) {
 	external := newStringSet()
 	external.Add("foo")
 	prefix := encodeBuildArgsPrefix(

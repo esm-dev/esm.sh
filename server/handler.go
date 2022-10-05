@@ -42,6 +42,7 @@ var httpClient = &http.Client{
 
 type esmHandlerOptions = struct {
 	origin      string
+	basePath    string
 	unpkgOrigin string
 }
 
@@ -94,15 +95,13 @@ func esmHandler(options esmHandlerOptions) rex.Handle {
 		}
 
 		// Build prefix may only be served from "${cdnBasePath}/${buildPrefix}/..."
-		if basePath != "" {
-			if strings.HasPrefix(pathname, basePath+"/") {
-				pathname = strings.TrimPrefix(pathname, basePath)
-			} else if baseRedirect {
-				url := strings.TrimPrefix(ctx.R.URL.String(), basePath)
-				url = fmt.Sprintf("%s/%s", basePath, url)
-				return rex.Redirect(url, http.StatusTemporaryRedirect)
+		if options.basePath != "" {
+			if strings.HasPrefix(pathname, options.basePath+"/") {
+				pathname = strings.TrimPrefix(pathname, options.basePath)
 			} else {
-				return rex.Status(404, "not found")
+				url := strings.TrimPrefix(ctx.R.URL.String(), options.basePath)
+				url = fmt.Sprintf("%s/%s", options.basePath, url)
+				return rex.Redirect(url, http.StatusTemporaryRedirect)
 			}
 		}
 
@@ -145,13 +144,13 @@ func esmHandler(options esmHandlerOptions) rex.Handle {
 			if err != nil {
 				return err
 			}
-			readme = bytes.ReplaceAll(readme, []byte("./server/embed/"), []byte(basePath+"/embed/"))
+			readme = bytes.ReplaceAll(readme, []byte("./server/embed/"), []byte(options.basePath+"/embed/"))
 			readme = bytes.ReplaceAll(readme, []byte("./HOSTING.md"), []byte("https://github.com/ije/esm.sh/blob/master/HOSTING.md"))
-			readme = bytes.ReplaceAll(readme, []byte("https://esm.sh"), []byte("{origin}"+basePath))
+			readme = bytes.ReplaceAll(readme, []byte("https://esm.sh"), []byte("{origin}"+options.basePath))
 			readmeStrLit := utils.MustEncodeJSON(string(readme))
 			html := bytes.ReplaceAll(indexHTML, []byte("'# README'"), readmeStrLit)
 			html = bytes.ReplaceAll(html, []byte("{VERSION}"), []byte(fmt.Sprintf("%d", VERSION)))
-			html = bytes.ReplaceAll(html, []byte("{basePath}"), []byte(basePath))
+			html = bytes.ReplaceAll(html, []byte("{basePath}"), []byte(options.basePath))
 			ctx.SetHeader("Cache-Control", fmt.Sprintf("public, max-age=%d", 10*60))
 			return rex.Content("index.html", startTime, bytes.NewReader(html))
 
@@ -597,6 +596,7 @@ func esmHandler(options esmHandlerOptions) rex.Handle {
 			task := &BuildTask{
 				BuildArgs:    buildArgs,
 				CdnOrigin:    origin,
+				BasePath:     options.basePath,
 				BuildVersion: buildVersion,
 				Pkg:          *reqPkg,
 				Target:       "types",
@@ -657,6 +657,7 @@ func esmHandler(options esmHandlerOptions) rex.Handle {
 		task := &BuildTask{
 			BuildArgs:    buildArgs,
 			CdnOrigin:    origin,
+			BasePath:     options.basePath,
 			BuildVersion: buildVersion,
 			Pkg:          *reqPkg,
 			Target:       target,
@@ -711,7 +712,7 @@ func esmHandler(options esmHandlerOptions) rex.Handle {
 				value := fmt.Sprintf(
 					"%s%s/%s",
 					origin,
-					basePath,
+					options.basePath,
 					strings.TrimPrefix(esm.Dts, "/"),
 				)
 				ctx.SetHeader("X-TypeScript-Types", value)
@@ -755,7 +756,7 @@ func esmHandler(options esmHandlerOptions) rex.Handle {
 				url := fmt.Sprintf(
 					"%s%s/%s",
 					origin,
-					basePath,
+					options.basePath,
 					strings.TrimPrefix(esm.Dts, "/"),
 				)
 				ctx.SetHeader("X-TypeScript-Types", url)
@@ -770,13 +771,13 @@ func esmHandler(options esmHandlerOptions) rex.Handle {
 		if isWorker {
 			fmt.Fprintf(buf, `export default function workerFactory() {%s  return new Worker('%s/%s', { type: 'module' })%s}`, "\n", origin, taskID, "\n")
 		} else {
-			fmt.Fprintf(buf, `export * from "%s%s/%s";%s`, origin, basePath, taskID, "\n")
+			fmt.Fprintf(buf, `export * from "%s%s/%s";%s`, origin, options.basePath, taskID, "\n")
 			if esm.CJS || esm.ExportDefault {
 				fmt.Fprintf(
 					buf,
 					`export { default } from "%s%s/%s";%s`,
 					origin,
-					basePath,
+					options.basePath,
 					taskID,
 					"\n",
 				)
@@ -787,7 +788,7 @@ func esmHandler(options esmHandlerOptions) rex.Handle {
 			url := fmt.Sprintf(
 				"%s%s/%s",
 				origin,
-				basePath,
+				options.basePath,
 				strings.TrimPrefix(esm.Dts, "/"),
 			)
 			ctx.SetHeader("X-TypeScript-Types", url)
