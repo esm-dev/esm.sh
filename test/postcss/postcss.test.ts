@@ -1,7 +1,7 @@
 import { assert } from "https://deno.land/std@0.155.0/testing/asserts.ts";
 
-import postcss from "http://localhost:8080/postcss";
-import autoprefixer from "http://localhost:8080/autoprefixer";
+import postcss from "https://esm.sh/postcss@8.4.16";
+import autoprefixer from "https://esm.sh/autoprefixer@10.4.12";
 
 Deno.test("postcss(autoprefixer)", async () => {
   const { css } = await postcss([autoprefixer]).process(`
