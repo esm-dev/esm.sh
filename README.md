@@ -66,7 +66,7 @@ You can use the `?external=PACKAGE` query to specify external dependencies. Or y
 }
 ```
 
-These dependencies will not be resolved with the code. You need to use [**import maps**](https://github.com/WICG/import-maps) to specify the location for these dependencies.
+These dependencies will not be resolved with the code. You need to use [**import maps**](https://github.com/WICG/import-maps) to specify the location for these dependencies. If you are using [Deno](https://deno.land/), you can use the [CLI Script](#use-cli-script) to generate and update the import map for you that will resolve the dependencies automatically.
 
 ### Aliasing dependencies
 
