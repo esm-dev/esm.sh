@@ -49,6 +49,7 @@ func Serve(efs EmbedFS) {
 		origin           string
 		basePath         string
 		npmRegistry      string
+		npmToken         string
 		unpkgOrigin      string
 		noCompress       bool
 		isDev            bool
@@ -66,6 +67,7 @@ func Serve(efs EmbedFS) {
 	flag.StringVar(&origin, "origin", "", "the server origin, default is the request host")
 	flag.StringVar(&basePath, "base-path", "", "the base path")
 	flag.StringVar(&npmRegistry, "npm-registry", "", "the npm registry")
+	flag.StringVar(&npmToken, "npm-token", "", "the npm token for private responstries")
 	flag.StringVar(&unpkgOrigin, "unpkg-origin", "https://unpkg.com", "the unpkg.com origin")
 	flag.BoolVar(&noCompress, "no-compress", false, "to disable the compression for text content")
 	flag.BoolVar(&isDev, "dev", false, "to run server in development mode")
@@ -116,7 +118,7 @@ func Serve(efs EmbedFS) {
 	if nodeInstallDir == "" {
 		nodeInstallDir = path.Join(etcDir, "nodejs")
 	}
-	node, err = checkNode(nodeInstallDir, npmRegistry)
+	node, err = checkNode(nodeInstallDir, npmRegistry, npmToken)
 	if err != nil {
 		log.Fatalf("check nodejs env: %v", err)
 	}
