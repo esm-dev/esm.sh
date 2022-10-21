@@ -122,8 +122,6 @@ func (task *BuildTask) Build() (esm *ESM, err error) {
 				0644,
 			)
 
-			fmt.Println("File path:", rcFilePath)
-
 			if err != nil {
 				log.Errorf("Failed to create .mpmrc file: %v", err)
 				return
