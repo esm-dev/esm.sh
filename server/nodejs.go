@@ -610,10 +610,8 @@ func yarnAdd(wd string, packages ...string) (err error) {
 
 		cmd := exec.Command("yarn", append(args, packages...)...)
 
-		if node.npmToken != "" {
-			cmd.Env = os.Environ()
-			cmd.Env = append(cmd.Env, "ESM_NPM_TOKEN="+node.npmToken)
-		}
+		cmd.Env = os.Environ()
+		cmd.Env = append(cmd.Env, "ESM_NPM_TOKEN="+node.npmToken)
 
 		cmd.Dir = wd
 
