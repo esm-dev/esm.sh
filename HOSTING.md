@@ -43,6 +43,7 @@ Server options:
 - `dbUrl` - the database url (default is `postdb:$etcDir/esm.db`)
 - `origin` - the origin of the CDN
 - `npmRegistry` - the npm registry (default is https://npmjs.org/registry)
+- `npmToken` - the private token for npm registry
 
 ## Deploy with Docker
 

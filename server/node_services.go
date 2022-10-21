@@ -112,6 +112,7 @@ func startNodeServices(etcDir string, port int) (err error) {
 		[]byte(fmt.Sprintf(nsApp, port)),
 		0644,
 	)
+
 	if err != nil {
 		return
 	}

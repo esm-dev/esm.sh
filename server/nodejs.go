@@ -186,11 +186,12 @@ type NpmPackage struct {
 // Node defines the nodejs info
 type Node struct {
 	version     string
+	npmToken    string
 	npmRegistry string
 	yarn        string
 }
 
-func checkNode(installDir string, npmRegistry string) (node *Node, err error) {
+func checkNode(installDir string, npmRegistry string, npmToken string) (node *Node, err error) {
 	var installed bool
 CheckNodejs:
 	version, major, err := getNodejsVersion()
@@ -232,6 +233,10 @@ CheckNodejs:
 		if err == nil {
 			node.npmRegistry = strings.TrimRight(strings.TrimSpace(string(output)), "/") + "/"
 		}
+	}
+
+	if npmToken != "" {
+		node.npmToken = npmToken
 	}
 
 CheckYarn:
@@ -316,7 +321,16 @@ func fetchPackageInfo(name string, version string) (info NpmPackage, err error) 
 	defer lock.Delete(id)
 
 	start := time.Now()
-	resp, err := httpClient.Get(node.npmRegistry + name)
+	req, err := http.NewRequest("GET", node.npmRegistry+name, nil)
+	if err != nil {
+		return
+	}
+	if node.npmToken != "" {
+		req.Header.Set("Authorization", "Bearer "+node.npmToken)
+	}
+
+	resp, err := httpClient.Do(req)
+
 	if err != nil {
 		return
 	}
@@ -578,7 +592,6 @@ func yarnAdd(wd string, packages ...string) (err error) {
 			"--ignore-scripts",
 			"--ignore-workspace-root-check",
 			"--no-bin-links",
-			"--no-default-rc",
 			"--no-lockfile",
 			"--no-node-version-check",
 			"--no-progress",
@@ -594,8 +607,14 @@ func yarnAdd(wd string, packages ...string) (err error) {
 		if yarnMutex != "" {
 			args = append(args, "--mutex", yarnMutex)
 		}
+
 		cmd := exec.Command("yarn", append(args, packages...)...)
+
+		cmd.Env = os.Environ()
+		cmd.Env = append(cmd.Env, "ESM_NPM_TOKEN="+node.npmToken)
+
 		cmd.Dir = wd
+
 		output, err := cmd.CombinedOutput()
 		if err != nil {
 			return fmt.Errorf("yarn add %s: %s", strings.Join(packages, ","), string(output))
