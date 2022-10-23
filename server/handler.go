@@ -198,6 +198,9 @@ func esmHandler(options esmHandlerOptions) rex.Handle {
 				"buildQueue": q[:i],
 			}
 
+		case "/build-target":
+			return getTargetByUA(ctx.R.UserAgent())
+
 		case "/error.js":
 			switch ctx.Form.Value("type") {
 			case "resolve":
