@@ -25,7 +25,7 @@ var (
 	fs         storage.FS
 	buildQueue *BuildQueue
 	log        *logx.Logger
-	node       *Node
+	nodejs     *NodejsInfo
 	embedFS    EmbedFS
 )
 
@@ -118,11 +118,11 @@ func Serve(efs EmbedFS) {
 	if nodeInstallDir == "" {
 		nodeInstallDir = path.Join(etcDir, "nodejs")
 	}
-	node, err = checkNode(nodeInstallDir, npmRegistry, npmToken)
+	nodejs, err = checkNodejs(nodeInstallDir, npmRegistry, npmToken)
 	if err != nil {
-		log.Fatalf("check nodejs env: %v", err)
+		log.Fatalf("check nodejs: %v", err)
 	}
-	log.Infof("nodejs v%s installed, registry: %s, yarn: %s", node.version, node.npmRegistry, node.yarn)
+	log.Infof("nodejs v%s installed, registry: %s, yarn: %s", nodejs.version, nodejs.npmRegistry, nodejs.yarn)
 
 	storage.SetLogger(log)
 	storage.SetIsDev(isDev)

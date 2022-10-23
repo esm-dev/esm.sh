@@ -183,15 +183,15 @@ type NpmPackage struct {
 	DefinedExports   interface{}            `json:"exports,omitempty"`
 }
 
-// Node defines the nodejs info
-type Node struct {
+// NodeInfo defines the installed node.js
+type NodejsInfo struct {
 	version     string
-	npmToken    string
 	npmRegistry string
+	npmToken    string
 	yarn        string
 }
 
-func checkNode(installDir string, npmRegistry string, npmToken string) (node *Node, err error) {
+func checkNodejs(installDir string, npmRegistry string, npmToken string) (node *NodejsInfo, err error) {
 	var installed bool
 CheckNodejs:
 	version, major, err := getNodejsVersion()
@@ -221,7 +221,7 @@ CheckNodejs:
 		}
 	}
 
-	node = &Node{
+	node = &NodejsInfo{
 		version:     version,
 		npmRegistry: "https://registry.npmjs.org/",
 	}
@@ -321,12 +321,12 @@ func fetchPackageInfo(name string, version string) (info NpmPackage, err error) 
 	defer lock.Delete(id)
 
 	start := time.Now()
-	req, err := http.NewRequest("GET", node.npmRegistry+name, nil)
+	req, err := http.NewRequest("GET", nodejs.npmRegistry+name, nil)
 	if err != nil {
 		return
 	}
-	if node.npmToken != "" {
-		req.Header.Set("Authorization", "Bearer "+node.npmToken)
+	if nodejs.npmToken != "" {
+		req.Header.Set("Authorization", "Bearer "+nodejs.npmToken)
 	}
 
 	resp, err := httpClient.Do(req)
@@ -597,7 +597,7 @@ func yarnAdd(wd string, packages ...string) (err error) {
 			"--no-progress",
 			"--non-interactive",
 			"--silent",
-			"--registry=" + node.npmRegistry,
+			"--registry=" + nodejs.npmRegistry,
 		}
 		yarnCacheDir := os.Getenv("YARN_CACHE_DIR")
 		if yarnCacheDir != "" {
@@ -609,11 +609,8 @@ func yarnAdd(wd string, packages ...string) (err error) {
 		}
 
 		cmd := exec.Command("yarn", append(args, packages...)...)
-
-		cmd.Env = os.Environ()
-		cmd.Env = append(cmd.Env, "ESM_NPM_TOKEN="+node.npmToken)
-
 		cmd.Dir = wd
+		cmd.Env = append(os.Environ(), "ESM_NPM_TOKEN="+nodejs.npmToken)
 
 		output, err := cmd.CombinedOutput()
 		if err != nil {
