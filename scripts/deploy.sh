@@ -33,23 +33,24 @@ fi
 
 port="80"
 httpsPort="0"
-etcDir=""
+etcDir="/etc/esmd"
 cacheUrl=""
 fsUrl=""
 dbUrl=""
 origin=""
 npmRegistry=""
+npmToken=""
 
 if [ "$init" == "yes" ]; then
-  read -p "http server  port (default is ${port}): " v
+  read -p "http server port (default is ${port}): " v
   if [ "$v" != "" ]; then
     port="$v"
   fi
-  read -p "https(autotls) server port (default is disabled): " v
+  read -p "https(autocert) server port (default is disabled): " v
   if [ "$v" != "" ]; then
     httpsPort="$v"
   fi
-  read -p "etc directory (ensure user '${user}' have the r/w permission of it, default is '.esmd/'): " v
+  read -p "etc directory (ensure user '${user}' have the r/w permission of it, default is '${etcDir}'): " v
   if [ "$v" != "" ]; then
     etcDir="$v"
   fi
@@ -71,7 +72,11 @@ if [ "$init" == "yes" ]; then
   fi
   read -p "npm registry (optional): " v
   if [ "$v" != "" ]; then
-    origin="$v"
+    npmRegistry="$v"
+  fi
+  read -p "private token for npm registry (optional): " v
+  if [ "$v" != "" ]; then
+    npmToken="$v"
   fi
 fi
 
@@ -113,7 +118,7 @@ ssh -p $sshPort $user@$host << EOF
       rm -f \$SVCF
     fi
     writeSVConfLine "[program:esmd]"
-    writeSVConfLine "command=/usr/local/bin/esmd --port=${port} --https-port=${httpsPort} --etc-dir=${etcDir} --cache=${cacheUrl} --fs=${fsUrl} --db=${dbUrl} --origin=${origin} --npm-registry=${npmRegistry}"
+    writeSVConfLine "command=/usr/local/bin/esmd --port=${port} --https-port=${httpsPort} --etc-dir=${etcDir} --cache=${cacheUrl} --fs=${fsUrl} --db=${dbUrl} --origin=${origin} --npm-registry=${npmRegistry} --npm-token=${npmToken}"
     writeSVConfLine "directory=/tmp"
     writeSVConfLine "user=$user"
     writeSVConfLine "autostart=true"

@@ -58,7 +58,7 @@ func Serve(efs EmbedFS) {
 	flag.IntVar(&httpsPort, "https-port", 0, "the https(autotls) server port, default is disabled")
 	flag.IntVar(&nsPort, "ns-port", 8088, "the node services server port")
 	flag.IntVar(&buildConcurrency, "build-concurrency", runtime.NumCPU(), "the maximum number of concurrent build task")
-	flag.StringVar(&etcDir, "etc-dir", ".esmd", "the working dir")
+	flag.StringVar(&etcDir, "etc-dir", ".esmd", "the etc dir for db, builds, log, etc..")
 	flag.StringVar(&cacheUrl, "cache", "", "the cache config, default is 'memory:default'")
 	flag.StringVar(&dbUrl, "db", "", "the database config, default is 'postdb:[etc-dir]/esm.db'")
 	flag.StringVar(&fsUrl, "fs", "", "the fs(storage) config, default is 'local:[etc-dir]/storage'")

@@ -35,13 +35,12 @@ your host machine.
 Server options:
 
 - `port` - the port to listen
-- `httpsPort` - the port to listen https (use
-  [autocert](golang.org/x/crypto/acme/autocert))
-- `etcDir` - the workding directory (default is `.esmd/`)
-- `cacheUrl` - the cache url (default is `memory:main`)
-- `fsUrl` - the fs (storage) url (default is `local:$etcDir/storage`)
-- `dbUrl` - the database url (default is `postdb:$etcDir/esm.db`)
-- `origin` - the origin of the CDN
+- `httpsPort` - the port to listen https (use [autocert](golang.org/x/crypto/acme/autocert))
+- `etcDir` - the etc directory (default is `/etc/esmd`)
+- `cache` - the cache config (default is `memory:main`)
+- `db` - the database config (default is `postdb:$etcDir/esm.db`)
+- `fs` - the fs (storage) config (default is `local:$etcDir/storage`)
+- `origin` - the origin of the CDN (this is useful when running the server behind a proxy/CDN)
 - `npmRegistry` - the npm registry (default is https://npmjs.org/registry)
 - `npmToken` - the private token for npm registry
 
