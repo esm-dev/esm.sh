@@ -40,7 +40,7 @@ import React from "https://esm.sh/react@17.0.2"
 import useSWR from "https://esm.sh/swr?deps=react@17.0.2"
 ```
 
-By default, esm.sh rewrites import specifier based on the package's dependency statement. To specify version of dependencies, you can use the `?deps=PACKAGE@VERSION` query. You can separate multiple dependencies with commas: `?deps=react@17.0.2,react-dom@17.0.2`.
+By default, esm.sh will rewrite import specifier based on the package's dependency statement. To specify version of dependencies, you can use the `?deps=PACKAGE@VERSION` query. You can separate multiple dependencies with commas: `?deps=react@17.0.2,react-dom@17.0.2`.
 
 ### Specify external dependencies
 
@@ -53,7 +53,7 @@ By default, esm.sh rewrites import specifier based on the package's dependency s
 }
 ```
 
-You can use the `?external=PACKAGE` query to specify external dependencies. Or you can **mark all dependencies as external** by add `*` prefix before the package name:
+You can use the `?external=PACKAGE` query to specify external dependencies. Or you can **mark all dependencies as external** by adding `*` prefix before the package name:
 
 ```json
 {
@@ -66,7 +66,7 @@ You can use the `?external=PACKAGE` query to specify external dependencies. Or y
 }
 ```
 
-These dependencies will not be resolved with the code. You need to use [**import maps**](https://github.com/WICG/import-maps) to specify the location for these dependencies. If you are using [Deno](https://deno.land/), you can use the [CLI Script](#use-cli-script) to generate and update the import map for you that will resolve the dependencies automatically.
+These dependencies will not be resolved within the code. You need to use [**import maps**](https://github.com/WICG/import-maps) to specify the url for these dependencies. If you are using [Deno](https://deno.land/), you can use the [CLI Script](#use-cli-script) to generate and update the import map that will resolve the dependencies automatically.
 
 ### Aliasing dependencies
 
