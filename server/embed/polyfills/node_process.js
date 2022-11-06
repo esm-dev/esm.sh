@@ -1,7 +1,7 @@
 /*
   (The MIT License)
 
-  Copyright (c) 2013 Roman Shtylman <shtylman@gmail.com>
+  Copyright (c) 2020 Mathias Rasmussen <mathiasvr@gmail.com>
 
   Permission is hereby granted, free of charge, to any person obtaining
   a copy of this software and associated documentation files (the
@@ -31,141 +31,6 @@
 import { EventEmitter } from "./node_events.js"
 const events = new EventEmitter()
 events.setMaxListeners(1 << 10) // 1024
-
-let cachedSetTimeout;
-let cachedClearTimeout;
-
-function defaultSetTimeout() {
-  throw new Error("setTimeout has not been defined");
-}
-
-function defaultClearTimeout() {
-  throw new Error("clearTimeout has not been defined");
-}
-
-(function () {
-  try {
-    if (typeof setTimeout === "function") {
-      cachedSetTimeout = setTimeout;
-    } else {
-      cachedSetTimeout = defaultSetTimeout;
-    }
-  } catch (e) {
-    cachedSetTimeout = defaultSetTimeout;
-  }
-  try {
-    if (typeof clearTimeout === "function") {
-      cachedClearTimeout = clearTimeout;
-    } else {
-      cachedClearTimeout = defaultClearTimeout;
-    }
-  } catch (e) {
-    cachedClearTimeout = defaultClearTimeout;
-  }
-}())
-
-function runTimeout(fn) {
-  if (cachedSetTimeout === setTimeout) {
-    //normal enviroments in sane situations
-    return setTimeout(fn, 0);
-  }
-  // if setTimeout wasn't available but was latter defined
-  if ((cachedSetTimeout === defaultSetTimeout || !cachedSetTimeout) && setTimeout) {
-    cachedSetTimeout = setTimeout;
-    return setTimeout(fn, 0);
-  }
-  try {
-    // when when somebody has screwed with setTimeout but no I.E. maddness
-    return cachedSetTimeout(fn, 0);
-  } catch (e) {
-    try {
-      // When we are in I.E. but the script has been evaled so I.E. doesn't trust the global object when called normally
-      return cachedSetTimeout.call(null, fn, 0);
-    } catch (e) {
-      // same as above but when it's a version of I.E. that must have the global object for 'this', hopfully our context correct otherwise it will throw a global error
-      return cachedSetTimeout.call(this, fn, 0);
-    }
-  }
-}
-
-function runClearTimeout(marker) {
-  if (cachedClearTimeout === clearTimeout) {
-    //normal enviroments in sane situations
-    return clearTimeout(marker);
-  }
-  // if clearTimeout wasn't available but was latter defined
-  if ((cachedClearTimeout === defaultClearTimeout || !cachedClearTimeout) && clearTimeout) {
-    cachedClearTimeout = clearTimeout;
-    return clearTimeout(marker);
-  }
-  try {
-    // when when somebody has screwed with setTimeout but no I.E. maddness
-    return cachedClearTimeout(marker);
-  } catch (e) {
-    try {
-      // When we are in I.E. but the script has been evaled so I.E. doesn't  trust the global object when called normally
-      return cachedClearTimeout.call(null, marker);
-    } catch (e) {
-      // same as above but when it's a version of I.E. that must have the global object for 'this', hopfully our context correct otherwise it will throw a global error.
-      // Some versions of I.E. have different rules for clearTimeout vs setTimeout
-      return cachedClearTimeout.call(this, marker);
-    }
-  }
-}
-
-let queue = [];
-let queueIndex = -1;
-let currentQueue;
-let draining = false;
-
-function cleanUpNextTick() {
-  if (!draining || !currentQueue) {
-    return;
-  }
-  draining = false;
-  if (currentQueue.length) {
-    queue = currentQueue.concat(queue);
-  } else {
-    queueIndex = -1;
-  }
-  if (queue.length) {
-    drainQueue();
-  }
-}
-
-function drainQueue() {
-  if (draining) {
-    return;
-  }
-  let timeout = runTimeout(cleanUpNextTick);
-  draining = true;
-
-  let len = queue.length;
-  while (len) {
-    currentQueue = queue;
-    queue = [];
-    while (++queueIndex < len) {
-      if (currentQueue) {
-        currentQueue[queueIndex].run();
-      }
-    }
-    queueIndex = -1;
-    len = queue.length;
-  }
-  currentQueue = null;
-  draining = false;
-  runClearTimeout(timeout);
-}
-
-class Item {
-  constructor(fn, array) {
-    this.fn = fn;
-    this.array = array;
-  }
-  run() {
-    this.fn.apply(null, this.array);
-  }
-}
 
 const deno = typeof Deno !== "undefined";
 
@@ -234,17 +99,5 @@ export default {
     }
   },
   umask: () => deno ? Deno.umask ?? 0 : 0,
-  // arrow function don't have `arguments`
-  nextTick: function (fn) {
-    let args = new Array(arguments.length - 1);
-    if (arguments.length > 1) {
-      for (let i = 1; i < arguments.length; i++) {
-        args[i - 1] = arguments[i];
-      }
-    }
-    queue.push(new Item(fn, args));
-    if (queue.length === 1 && !draining) {
-      runTimeout(drainQueue);
-    }
-  },
+  nextTick: (func, ...args) => queueMicrotask(() => func(...args))
 };
