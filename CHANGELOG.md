@@ -1,5 +1,12 @@
 # Change Log
 
+## v97
+
+- Add `https://esm.sh/build-target` endpoint to return the build `target` of current browser/runtime by checking `User-Agent` header.
+- Support `--npm-token` option to support private packages ([#435](https://github.com/ije/esm.sh/issues/435)).
+- Update `polyfills/node_process`: replace timeout with `queueMicrotask` ([#444](https://github.com/ije/esm.sh/issues/444)).
+- Upgrade `deno/std` to **0.162.0**.
+
 ## v96
 
 - Update the fake node `fs` ployfill for browsers(add `createReadStream` and `createWriteStream` methods)
