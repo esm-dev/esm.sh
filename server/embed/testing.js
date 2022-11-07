@@ -83,7 +83,7 @@ document.querySelector('h1 > em').appendChild(document.createTextNode(' · Testi
 document.querySelector('main').remove()
 document.querySelector('#root').appendChild($container)
 
-test('canvas-confetti', async (t) => {
+test('canvas-confetti@1.6', async (t) => {
   const { default: confetti } = t.module
 
   t.$span.style.cursor = 'pointer'
@@ -139,7 +139,7 @@ test(['react@17', 'react-dom@17'], async (t) => {
   t.ok()
 })
 
-test(['react@17', 'react-dom@17', 'react-redux?deps=react@17', 'redux'], async (t) => {
+test(['react@17', 'react-dom@17', 'react-redux@8.0?deps=react@17', 'redux@4.2'], async (t) => {
   const [
     { createElement, Fragment },
     { render },
@@ -170,7 +170,7 @@ test(['react@17', 'react-dom@17', 'react-redux?deps=react@17', 'redux'], async (
   t.ok()
 })
 
-test(['react@17', 'react-dom@17', 'mobx-react-lite?deps=react@17,react-dom@17', 'mobx'], async (t) => {
+test(['react@17', 'react-dom@17', 'mobx-react-lite@3.4?deps=react@17,react-dom@17', 'mobx@6.6'], async (t) => {
   const [
     { createElement, Fragment },
     { render },
@@ -196,7 +196,7 @@ test(['react@17', 'react-dom@17', 'mobx-react-lite?deps=react@17,react-dom@17', 
   t.ok()
 })
 
-test(['react@17', 'react-dom@17', '@emotion/styled?deps=react@17', '@emotion/react?deps=react@17'], async (t) => {
+test(['react@17', 'react-dom@17', '@emotion/styled@11.10?deps=react@17', '@emotion/react@11.10?deps=react@17'], async (t) => {
   const [
     { createElement, Fragment, useState },
     { render },
@@ -243,7 +243,7 @@ test(['react@17', 'react-dom@17', '@emotion/styled?deps=react@17', '@emotion/rea
   t.ok()
 })
 
-test(['react@17', 'react-dom@17', 'html-to-react?deps=react@17'], async (t) => {
+test(['react@17', 'react-dom@17', 'html-to-react@1.5?deps=react@17'], async (t) => {
   const [
     { createElement },
     { render },
@@ -259,7 +259,7 @@ test(['react@17', 'react-dom@17', 'html-to-react?deps=react@17'], async (t) => {
   t.ok()
 })
 
-test(['react@17', 'react-dom@17', 'antd?deps=react@17,react-dom@17&bundle'], async (t) => {
+test(['react@17', 'react-dom@17', 'antd@4.24?deps=react@17,react-dom@17&bundle'], async (t) => {
   const [
     { createElement, Fragment },
     { render },
@@ -285,7 +285,7 @@ test(['react@17', 'react-dom@17', 'antd?deps=react@17,react-dom@17&bundle'], asy
   t.ok()
 })
 
-test(['react@17', 'react-dom@17', '@material-ui/core?deps=react@17,react-dom@17'], async (t) => {
+test(['react@17', 'react-dom@17', '@material-ui/core@4.12?deps=react@17,react-dom@17'], async (t) => {
   const [
     { createElement, useState },
     { render },
@@ -305,7 +305,7 @@ test(['react@17', 'react-dom@17', '@material-ui/core?deps=react@17,react-dom@17'
   t.ok()
 })
 
-test(['preact', 'preact/hooks'], async (t) => {
+test(['preact@10.11', 'preact@10.11/hooks'], async (t) => {
   const [
     { h, render },
     { useState }
@@ -323,7 +323,7 @@ test(['preact', 'preact/hooks'], async (t) => {
   t.ok()
 })
 
-test(['preact@10.7.2', 'preact@10.7.2/hooks', 'swr?alias=react:preact/compat&deps=preact@10.7.2'], async (t) => {
+test(['preact@10.7.2', 'preact@10.7.2/hooks', 'swr@1.3?alias=react:preact/compat&deps=preact@10.7.2'], async (t) => {
   const [
     { Fragment, h, render },
     { useEffect },
@@ -349,7 +349,7 @@ test(['preact@10.7.2', 'preact@10.7.2/hooks', 'swr?alias=react:preact/compat&dep
   t.ok()
 })
 
-test('vue@2', async (t) => {
+test('vue@2.7', async (t) => {
   const { default: Vue } = t.module
 
   new Vue({
@@ -381,7 +381,7 @@ test('vue@2', async (t) => {
   t.ok()
 })
 
-test('vue@3', async (t) => {
+test('vue@3.2', async (t) => {
   const { createApp, h } = t.module
 
   createApp({
@@ -410,7 +410,7 @@ test('vue@3', async (t) => {
 })
 
 
-test(['rxjs@7', 'rxjs@7/operators'], async (t) => {
+test(['rxjs@7.5', 'rxjs@7.5/operators'], async (t) => {
   const [{ fromEvent }, { throttleTime, scan }] = t.modules
 
   t.$span.innerText = '⏱ 0'
@@ -426,7 +426,7 @@ test(['rxjs@7', 'rxjs@7/operators'], async (t) => {
   t.ok()
 })
 
-test('jquery', async (t) => {
+test('jquery@3.6', async (t) => {
   const { default: $ } = t.module
 
   $(t.$span).css({ color: 'gray' }).text('$')
@@ -434,7 +434,7 @@ test('jquery', async (t) => {
   t.ok()
 })
 
-test('lodash', async (t) => {
+test('lodash@4.17', async (t) => {
   const { default: _ } = t.module
 
   const defaults = _.defaults({ lodash: '_' }, { lodash: 'lodash' })
@@ -444,7 +444,7 @@ test('lodash', async (t) => {
   t.ok()
 })
 
-test('d3', async (t) => {
+test('d3@7.6', async (t) => {
   const d3 = t.module
 
   t.$span.id = 'd3-span'
@@ -453,7 +453,7 @@ test('d3', async (t) => {
   t.ok()
 })
 
-test('pixi.js', async (t) => {
+test('pixi.js@6', async (t) => {
   const { Application, Sprite } = t.module
 
   const app = new Application({ width: 30, height: 30, resolution: 2, backgroundAlpha: 0 });
@@ -477,7 +477,7 @@ test('pixi.js', async (t) => {
   t.$span.appendChild(app.view);
 })
 
-test('three', async (t) => {
+test('three@0.146', async (t) => {
   const {
     Scene,
     PerspectiveCamera,
