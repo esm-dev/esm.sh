@@ -1,4 +1,4 @@
-import { assertStringIncludes } from "https://deno.land/std@0.155.0/testing/asserts.ts";
+import { assertStringIncludes } from "https://deno.land/std@0.162.0/testing/asserts.ts";
 
 import "https://esm.sh/react@18.2.0";
 import { compile } from "http://localhost:8080/@mdx-js/mdx@2.1.3";

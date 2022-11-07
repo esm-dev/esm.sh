@@ -1,6 +1,6 @@
 import {
   assertStringIncludes,
-} from "https://deno.land/std@0.155.0/testing/asserts.ts";
+} from "https://deno.land/std@0.162.0/testing/asserts.ts";
 
 Deno.test("`?deno-std` query", async () => {
   const entryCode = await fetch(

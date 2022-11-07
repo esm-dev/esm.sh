@@ -1,4 +1,4 @@
-import { assert } from "https://deno.land/std@0.155.0/testing/asserts.ts";
+import { assert } from "https://deno.land/std@0.162.0/testing/asserts.ts";
 
 import postcss from "http://localhost:8080/postcss@8.4.16";
 import autoprefixer from "http://localhost:8080/autoprefixer@10.4.12?deps=postcss@8.4.16";

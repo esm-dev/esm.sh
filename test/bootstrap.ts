@@ -29,8 +29,8 @@ async function runTest(name: string, retry?: boolean) {
     Deno.execPath(),
     "test",
     "-A",
-    "--check=all",
     "--unstable",
+    "--check",
     "--reload=http://localhost:8080",
     "--location=http://0.0.0.0/",
   ];

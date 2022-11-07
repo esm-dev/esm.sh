@@ -1,4 +1,4 @@
-import { assertEquals } from "https://deno.land/std@0.155.0/testing/asserts.ts";
+import { assertEquals } from "https://deno.land/std@0.162.0/testing/asserts.ts";
 
 import compareVersions from "https://esm.sh/tiny-version-compare@3.0.1";
 

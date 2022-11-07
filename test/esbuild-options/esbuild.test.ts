@@ -1,7 +1,7 @@
 import {
   assertEquals,
   assertStringIncludes,
-} from "https://deno.land/std@0.155.0/testing/asserts.ts";
+} from "https://deno.land/std@0.162.0/testing/asserts.ts";
 
 Deno.test("esbuild options", async (t) => {
   await t.step("?sourcemap", async () => {
