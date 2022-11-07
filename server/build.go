@@ -114,7 +114,6 @@ func (task *BuildTask) Build() (esm *ESM, err error) {
 		ensureDir(task.wd)
 
 		rcFilePath := path.Join(task.wd, ".npmrc")
-
 		if !fileExists(rcFilePath) {
 			err = ioutil.WriteFile(
 				rcFilePath,
@@ -123,11 +122,12 @@ func (task *BuildTask) Build() (esm *ESM, err error) {
 			)
 
 			if err != nil {
-				log.Errorf("Failed to create .mpmrc file: %v", err)
+				log.Errorf("Failed to create .npmrc file: %v", err)
 				return
 			}
 		}
 	}
+
 	defer func() {
 		err := os.RemoveAll(task.wd)
 		if err != nil {
