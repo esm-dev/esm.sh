@@ -31,6 +31,7 @@ async function runTest(name: string, retry?: boolean) {
     "-A",
     "--unstable",
     "--check",
+    "--no-lock",
     "--reload=http://localhost:8080",
     "--location=http://0.0.0.0/",
   ];
@@ -69,6 +70,7 @@ async function runCliTest() {
       "run",
       "-A",
       "-r",
+      "--no-lock",
       "http://localhost:8080/v95",
       "add",
       "preact@10.10.6",
