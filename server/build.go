@@ -113,15 +113,10 @@ func (task *BuildTask) Build() (esm *ESM, err error) {
 		task.wd = path.Join(os.TempDir(), fmt.Sprintf("esm-build-%s-%s", hex.EncodeToString(hasher.Sum(nil)), rs.Hex.String(8)))
 		ensureDir(task.wd)
 
-		if nodejs.npmToken != "" {
+		if npmConfig.authToken != "" {
 			rcFilePath := path.Join(task.wd, ".npmrc")
 			if !fileExists(rcFilePath) {
-				err = ioutil.WriteFile(
-					rcFilePath,
-					[]byte("_authToken=${ESM_NPM_TOKEN}"),
-					0644,
-				)
-
+				err = ioutil.WriteFile(rcFilePath, []byte("_authToken=${ESM_NPM_TOKEN}"), 0644)
 				if err != nil {
 					log.Errorf("Failed to create .npmrc file: %v", err)
 					return

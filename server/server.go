@@ -6,10 +6,12 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"os/exec"
 	"os/signal"
 	"path"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"syscall"
 	"time"
 
@@ -25,7 +27,7 @@ var (
 	fs         storage.FS
 	buildQueue *BuildQueue
 	log        *logx.Logger
-	nodejs     *NodejsInfo
+	npmConfig  *NpmConfig
 	embedFS    EmbedFS
 )
 
@@ -54,9 +56,9 @@ func Serve(efs EmbedFS) {
 		noCompress       bool
 		isDev            bool
 	)
-	flag.IntVar(&port, "port", 80, "the http server port")
-	flag.IntVar(&httpsPort, "https-port", 0, "the https(autotls) server port, default is disabled")
-	flag.IntVar(&nsPort, "ns-port", 8088, "the node services server port")
+	flag.IntVar(&port, "port", 80, "the port for http server")
+	flag.IntVar(&httpsPort, "https-port", 0, "the port for https server powered by autotls, default is disabled")
+	flag.IntVar(&nsPort, "ns-port", 8088, "the port for node services")
 	flag.IntVar(&buildConcurrency, "build-concurrency", runtime.NumCPU(), "the maximum number of concurrent build task")
 	flag.StringVar(&etcDir, "etc-dir", ".esmd", "the etc dir for db, builds, log, etc..")
 	flag.StringVar(&cacheUrl, "cache", "", "the cache config, default is 'memory:default'")
@@ -64,11 +66,11 @@ func Serve(efs EmbedFS) {
 	flag.StringVar(&fsUrl, "fs", "", "the fs(storage) config, default is 'local:[etc-dir]/storage'")
 	flag.StringVar(&logDir, "log-dir", "", "the log dir")
 	flag.StringVar(&logLevel, "log-level", "info", "the log level")
-	flag.StringVar(&origin, "origin", "", "the server origin, default is the request host")
+	flag.StringVar(&origin, "origin", "", "the server origin, default is using request origin")
 	flag.StringVar(&basePath, "base-path", "", "the base path")
 	flag.StringVar(&npmRegistry, "npm-registry", "", "the npm registry")
 	flag.StringVar(&npmToken, "npm-token", "", "the npm token for private responstries")
-	flag.StringVar(&unpkgOrigin, "unpkg-origin", "https://unpkg.com", "the unpkg.com origin")
+	flag.StringVar(&unpkgOrigin, "unpkg-origin", "https://unpkg.com", "the origin of unpkg.com")
 	flag.BoolVar(&noCompress, "no-compress", false, "to disable the compression for text content")
 	flag.BoolVar(&isDev, "dev", false, "to run server in development mode")
 
@@ -118,11 +120,21 @@ func Serve(efs EmbedFS) {
 	if nodeInstallDir == "" {
 		nodeInstallDir = path.Join(etcDir, "nodejs")
 	}
-	nodejs, err = checkNodejs(nodeInstallDir, npmRegistry, npmToken)
+	nodeVer, yarnVer, err := checkNodejs(nodeInstallDir, npmRegistry, npmToken)
 	if err != nil {
 		log.Fatalf("check nodejs: %v", err)
 	}
-	log.Infof("nodejs v%s installed, registry: %s, yarn: %s", nodejs.version, nodejs.npmRegistry, nodejs.yarn)
+	if npmRegistry == "" {
+		output, err := exec.Command("npm", "config", "get", "registry").CombinedOutput()
+		if err == nil {
+			npmRegistry = strings.TrimRight(strings.TrimSpace(string(output)), "/") + "/"
+		}
+	}
+	npmConfig = &NpmConfig{
+		registry:  npmRegistry,
+		authToken: npmToken,
+	}
+	log.Infof("nodejs v%s installed, registry: %s, yarn: %s", nodeVer, npmRegistry, yarnVer)
 
 	storage.SetLogger(log)
 	storage.SetIsDev(isDev)
