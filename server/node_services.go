@@ -14,28 +14,23 @@ import (
 )
 
 const nsApp = `
-const http = require('http');
-const ns = require('esm-node-services');
-
-const services = {
-  test: async input => ({ ...input }),
-	...ns
-}
+const http = require("http");
+const services = require("esm-node-services");
 
 const requestListener = function (req, res) {
   if (req.method === "GET") {
     res.writeHead(200);
     res.end("READY");
   } else if (req.method === "POST") {
-    let data = '';
-    req.on('data', chunk => {
+    let data = "";
+    req.on("data", chunk => {
       data += chunk;
     });
-    req.on('end', async () => {
+    req.on("end", async () => {
       try {
         const { service, input } = JSON.parse(data);
         let output = null
-        if (typeof service === 'string' && service in services) {
+        if (typeof service === "string" && service in services) {
           output = await services[service](input)
         } else {
           output = { error: 'service "' + service + '" not found' }
@@ -77,7 +72,7 @@ func invokeNodeService(serviceName string, input map[string]interface{}) (data [
 	}
 	res, err := http.Post(fmt.Sprintf("http://localhost:%d", nsPort), "application/json", buf)
 	if err != nil {
-		// kill current ns process
+		// kill current ns process to get new one
 		kill(nsPidFile)
 		return
 	}
@@ -193,6 +188,10 @@ func parseCJSModuleExports(buildDir string, importPath string, nodeEnv string) (
 	}
 
 	if ret.Error != "" {
+		if ret.Stack == "unreachable" {
+			// whoops, the cjs-lexer is down, let' kill current ns process to get new one
+			kill(nsPidFile)
+		}
 		if ret.Stack != "" {
 			log.Errorf("[ns] parseCJSModuleExports: %s\n---\n%s\n---", ret.Error, ret.Stack)
 		} else {
