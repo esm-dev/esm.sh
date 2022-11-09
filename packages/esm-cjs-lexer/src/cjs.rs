@@ -108,7 +108,9 @@ impl ExportsParser {
         self.idents.insert(name.into(), IdentKind::Object(obj.props.clone()));
       }
       Expr::Class(ClassExpr { class, .. }) => {
-        self.idents.insert(name.into(), IdentKind::Class(class.clone()));
+        self
+          .idents
+          .insert(name.into(), IdentKind::Class(class.as_ref().clone()));
       }
       Expr::Arrow(arrow) => {
         self.idents.insert(
@@ -119,17 +121,16 @@ impl ExportsParser {
           }),
         );
       }
-      Expr::Fn(FnExpr {
-        function: Function { body: Some(body), .. },
-        ..
-      }) => {
-        self.idents.insert(
-          name.into(),
-          IdentKind::Fn(FnDesc {
-            stmts: body.stmts.clone(),
-            extends: vec![],
-          }),
-        );
+      Expr::Fn(FnExpr { function, .. }) => {
+        if let Function { body: Some(body), .. } = function.as_ref() {
+          self.idents.insert(
+            name.into(),
+            IdentKind::Fn(FnDesc {
+              stmts: body.stmts.clone(),
+              extends: vec![],
+            }),
+          );
+        };
       }
       Expr::Member(_) => {
         if is_member_member(expr, "process", "env", "NODE_ENV") {
@@ -260,7 +261,7 @@ impl ExportsParser {
   fn as_class(&self, expr: &Expr) -> Option<Class> {
     match expr {
       Expr::Paren(ParenExpr { expr, .. }) => return self.as_class(expr),
-      Expr::Class(ClassExpr { class, .. }) => Some(class.clone()),
+      Expr::Class(ClassExpr { class, .. }) => Some(class.as_ref().clone()),
       Expr::Ident(id) => {
         if let Some(value) = self.idents.get(id.sym.as_ref().into()) {
           match value {
@@ -278,13 +279,16 @@ impl ExportsParser {
   fn as_function(&self, expr: &Expr) -> Option<FnDesc> {
     match expr {
       Expr::Paren(ParenExpr { expr, .. }) => return self.as_function(expr),
-      Expr::Fn(FnExpr {
-        function: Function { body: Some(body), .. },
-        ..
-      }) => Some(FnDesc {
-        stmts: body.stmts.clone(),
-        extends: vec![],
-      }),
+      Expr::Fn(FnExpr { function, .. }) => {
+        if let Function { body: Some(body), .. } = function.as_ref() {
+          Some(FnDesc {
+            stmts: body.stmts.clone(),
+            extends: vec![],
+          })
+        } else {
+          None
+        }
+      }
       Expr::Ident(id) => {
         if let Some(value) = self.idents.get(id.sym.as_ref().into()) {
           match value {
@@ -430,19 +434,10 @@ impl ExportsParser {
   }
 
   fn get_exports_prop_name(&self, expr: &Expr) -> Option<String> {
-    if let Expr::Member(MemberExpr {
-      obj: ExprOrSuper::Expr(obj),
-      prop,
-      ..
-    }) = expr
-    {
+    if let Expr::Member(MemberExpr { obj, prop, .. }) = expr {
       if let Expr::Ident(obj) = obj.as_ref() {
         if self.is_exports_ident(obj.sym.as_ref()) {
-          return match prop.as_ref() {
-            Expr::Ident(prop) => Some(prop.sym.as_ref().into()),
-            Expr::Lit(Lit::Str(Str { value, .. })) => Some(value.as_ref().into()),
-            _ => None,
-          };
+          return get_prop_name(prop);
         }
       }
     }
@@ -495,17 +490,8 @@ impl ExportsParser {
           _ => None,
         },
       };
-      if let Some(Expr::Member(MemberExpr {
-        obj: ExprOrSuper::Expr(obj),
-        prop,
-        ..
-      })) = left_expr
-      {
-        let prop = match prop.as_ref() {
-          Expr::Ident(prop) => Some(prop.sym.as_ref().to_owned()),
-          Expr::Lit(Lit::Str(Str { value, .. })) => Some(value.as_ref().to_owned()),
-          _ => None,
-        };
+      if let Some(Expr::Member(MemberExpr { obj, prop, .. })) = left_expr {
+        let prop = get_prop_name(prop);
         if let Some(prop) = prop {
           match obj.as_ref() {
             Expr::Ident(obj) => {
@@ -635,22 +621,14 @@ impl ExportsParser {
                     }
                     // var foo = {}
                     // foo.bar = 'bar'
-                    Expr::Member(MemberExpr {
-                      obj: ExprOrSuper::Expr(obj),
-                      prop,
-                      ..
-                    }) => {
-                      let key = match prop.as_ref() {
-                        Expr::Ident(id) => Some(id.sym.as_ref()),
-                        Expr::Lit(Lit::Str(Str { value, .. })) => Some(value.as_ref()),
-                        _ => None,
-                      };
+                    Expr::Member(MemberExpr { obj, prop, .. }) => {
+                      let key = get_prop_name(prop);
                       if let Some(key) = key {
                         if let Expr::Ident(obj_id) = obj.as_ref() {
                           let obj_name = obj_id.sym.as_ref();
                           if let Some(mut props) = self.as_obj(obj) {
                             props.push(PropOrSpread::Prop(Box::new(Prop::KeyValue(KeyValueProp {
-                              key: PropName::Ident(quote_ident(key)),
+                              key: PropName::Ident(quote_ident(&key)),
                               value: Box::new(Expr::Lit(Lit::Bool(Bool {
                                 span: DUMMY_SP,
                                 value: true,
@@ -734,8 +712,8 @@ impl ExportsParser {
     for stmt in &stmts {
       match stmt {
         // var foo = exports.foo || (exports.foo = {})
-        Stmt::Decl(Decl::Var(VarDecl { decls, .. })) => {
-          for decl in decls {
+        Stmt::Decl(Decl::Var(var)) => {
+          for decl in var.as_ref().decls.iter() {
             self.try_to_mark_exports_alias(decl);
             if let Some(init_expr) = &decl.init {
               for bare_export_name in self.get_bare_export_names(init_expr) {
@@ -967,18 +945,11 @@ fn is_member(expr: &Expr, obj_name: &str, prop_name: &str) -> bool {
 }
 
 fn is_member_member(expr: &Expr, obj_name: &str, middle_obj_name: &str, prop_name: &str) -> bool {
-  if let Expr::Member(MemberExpr {
-    obj: ExprOrSuper::Expr(obj),
-    prop,
-    ..
-  }) = expr
-  {
+  if let Expr::Member(MemberExpr { obj, prop, .. }) = expr {
     if is_member(obj, obj_name, middle_obj_name) {
-      return match prop.as_ref() {
-        Expr::Ident(prop) => prop.sym.as_ref().eq(prop_name),
-        Expr::Lit(Lit::Str(Str { value, .. })) => value.as_ref().eq(prop_name),
-        _ => false,
-      };
+      if let Some(name) = get_prop_name(prop) {
+        return name.eq(prop_name);
+      }
     }
   }
   false
@@ -986,8 +957,8 @@ fn is_member_member(expr: &Expr, obj_name: &str, middle_obj_name: &str, prop_nam
 
 fn with_expr_callee(call: &CallExpr) -> Option<&Expr> {
   match &call.callee {
-    ExprOrSuper::Super(_) => None,
-    ExprOrSuper::Expr(callee) => Some(callee.as_ref()),
+    Callee::Expr(callee) => Some(callee.as_ref()),
+    _ => None,
   }
 }
 
@@ -1102,7 +1073,7 @@ fn is_tslib_export_star_call(call: &CallExpr) -> bool {
   if let Some(callee) = with_expr_callee(call) {
     match callee {
       Expr::Member(MemberExpr { prop, .. }) => {
-        if let Expr::Ident(prop) = prop.as_ref() {
+        if let MemberProp::Ident(prop) = prop {
           return prop.sym.as_ref().eq("__exportStar");
         }
       }
@@ -1111,7 +1082,7 @@ fn is_tslib_export_star_call(call: &CallExpr) -> bool {
       }
       Expr::Paren(ParenExpr { expr, .. }) => match expr.as_ref() {
         Expr::Member(MemberExpr { prop, .. }) => {
-          if let Expr::Ident(prop) = prop.as_ref() {
+          if let MemberProp::Ident(prop) = prop {
             return prop.sym.as_ref().eq("__exportStar");
           }
         }
@@ -1122,7 +1093,7 @@ fn is_tslib_export_star_call(call: &CallExpr) -> bool {
           if let Some(last) = exprs.last() {
             match last.as_ref() {
               Expr::Member(MemberExpr { prop, .. }) => {
-                if let Expr::Ident(prop) = prop.as_ref() {
+                if let MemberProp::Ident(prop) = prop {
                   return prop.sym.as_ref().eq("__exportStar");
                 }
               }
@@ -1165,19 +1136,10 @@ fn get_arrow_body_as_stmts(arrow: &ArrowExpr) -> Vec<Stmt> {
 }
 
 fn get_member_prop_name(expr: &Expr, obj_name: &str) -> Option<String> {
-  if let Expr::Member(MemberExpr {
-    obj: ExprOrSuper::Expr(obj),
-    prop,
-    ..
-  }) = expr
-  {
+  if let Expr::Member(MemberExpr { obj, prop, .. }) = expr {
     if let Expr::Ident(obj) = obj.as_ref() {
       if obj.sym.as_ref().eq(obj_name) {
-        return match prop.as_ref() {
-          Expr::Ident(prop) => Some(prop.sym.as_ref().into()),
-          Expr::Lit(Lit::Str(Str { value, .. })) => Some(value.as_ref().into()),
-          _ => None,
-        };
+        return get_prop_name(prop);
       }
     }
   }
@@ -1212,6 +1174,18 @@ fn get_class_static_names(class: &Class) -> Vec<String> {
     .collect()
 }
 
+fn get_prop_name(prop: &MemberProp) -> Option<String> {
+  match prop {
+    MemberProp::Ident(prop) => Some(prop.sym.as_ref().into()),
+    MemberProp::Computed(ComputedPropName { expr, .. }) => match expr.as_ref() {
+      Expr::Ident(prop) => Some(prop.sym.as_ref().into()),
+      Expr::Lit(Lit::Str(Str { value, .. })) => Some(value.as_ref().into()),
+      _ => None,
+    },
+    _ => None,
+  }
+}
+
 fn stringify_prop_name(name: &PropName) -> Option<String> {
   match name {
     PropName::Ident(id) => Some(id.sym.as_ref().into()),
@@ -1232,7 +1206,6 @@ fn quote_str(value: &str) -> Str {
   Str {
     span: DUMMY_SP,
     value: value.into(),
-    has_escape: false,
-    kind: Default::default(),
+    raw: None,
   }
 }

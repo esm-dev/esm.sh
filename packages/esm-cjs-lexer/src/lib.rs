@@ -31,10 +31,11 @@ pub fn parse(
   };
   let call_mode = if let Some(ok) = call_mode { ok } else { false };
   let (exports, reexports) = swc.parse_cjs_exports(node_env.as_str(), call_mode).unwrap();
-  let output = &Output {
-    exports: exports,
-    reexports: reexports,
-  };
-
-  Ok(JsValue::from_serde(output).unwrap())
+  Ok(
+    serde_wasm_bindgen::to_value(&Output {
+      exports: exports,
+      reexports: reexports,
+    })
+    .unwrap(),
+  )
 }
