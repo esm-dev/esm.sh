@@ -1,5 +1,17 @@
 # Change Log
 
+## v98
+
+- Add **tree-shaking** support for es modules
+  ```js
+  import { __await, __rest } from "https://esm.sh/tslib" // 7.3KB
+  import { __await, __rest } from "https://esm.sh/tslib?exports=__await,__rest" // 489B
+  ```
+- Add `node-fetch` polyfill for browsers and deno
+- Restart `ns` process when got "unreachable" error (close [#448](https://github.com/ije/esm.sh/issues/448))
+- Fix `exports` resolver (close [#422](https://github.com/ije/esm.sh/issues/422))
+- **cjs-lexer**: Update `swc` to latest
+
 ## v97
 
 - Add `https://esm.sh/build-target` endpoint to return the build `target` of current browser/runtime by checking `User-Agent` header.

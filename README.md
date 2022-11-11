@@ -82,6 +82,15 @@ import useSWR from "https://esm.sh/swr?alias=react:preact/compat&deps=preact@10.
 
 The origin idea was coming from [@lucacasonato](https://github.com/lucacasonato).
 
+### Tree Shaking
+
+By default esm.sh will export all members of the module, you can specify the `exports` by adding `?exports=foo,bar` query:
+
+```js
+import { __await, __rest } from "https://esm.sh/tslib" // 7.3KB
+import { __await, __rest } from "https://esm.sh/tslib?exports=__await,__rest" // 489B
+```
+
 ### Bundle mode
 
 ```javascript
@@ -203,7 +212,7 @@ import unescape from "https://esm.sh/lodash/unescape?no-dts"
 Since we update esm.sh server frequently, sometime we may break packages that work fine previously by mistake, the server will rebuild all modules when the patch pushed. To avoid this, you can **pin** the build version by the `?pin=BUILD_VERSON` query. This will give you an **immutable** cached module.
 
 ```javascript
-import React from "https://esm.sh/react@17.0.2?pin=v97"
+import React from "https://esm.sh/react@17.0.2?pin=v98"
 ```
 
 ## Global CDN
