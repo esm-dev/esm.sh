@@ -30,7 +30,7 @@ func initModule(wd string, pkg Pkg, target string, isDev bool) (esm *ESM, npm *N
 		return
 	}
 
-	npm = fixNpmPackage(wd, p, target, isDev)
+	npm = fixNpmPackage(wd, &p, target, isDev)
 	esm = &ESM{}
 
 	defer func() {
@@ -65,7 +65,7 @@ func initModule(wd string, pkg Pkg, target string, isDev bool) (esm *ESM, npm *N
 				if err != nil {
 					return
 				}
-				np := fixNpmPackage(wd, p, target, isDev)
+				np := fixNpmPackage(wd, &p, target, isDev)
 				if np.Module != "" {
 					npm.Module = path.Join(pkg.Submodule, np.Module)
 				} else {

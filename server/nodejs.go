@@ -448,11 +448,13 @@ func resolvePackageExports(p *NpmPackage, exports interface{}, target string, is
 				break
 			}
 		}
-		for _, name := range []string{"require", "node", "default"} {
-			value, ok := m[name]
-			if ok {
-				resolvePackageExports(p, value, target, isDev, "")
-				break
+		if p.Module == "" {
+			for _, name := range []string{"require", "node", "default"} {
+				value, ok := m[name]
+				if ok {
+					resolvePackageExports(p, value, target, isDev, "")
+					break
+				}
 			}
 		}
 		for key, value := range m {
@@ -469,9 +471,8 @@ func resolvePackageExports(p *NpmPackage, exports interface{}, target string, is
 	}
 }
 
-func fixNpmPackage(wd string, p NpmPackage, target string, isDev bool) *NpmPackage {
-	exports := p.DefinedExports
-	np := &p
+func fixNpmPackage(wd string, np *NpmPackage, target string, isDev bool) *NpmPackage {
+	exports := np.DefinedExports
 
 	if exports != nil {
 		if m, ok := exports.(map[string]interface{}); ok {
@@ -498,26 +499,26 @@ func fixNpmPackage(wd string, p NpmPackage, target string, isDev bool) *NpmPacka
 				*/
 				resolvePackageExports(np, m, target, isDev, np.Type)
 			}
-		} else if _, ok := exports.(string); ok {
+		} else if s, ok := exports.(string); ok {
 			/*
 			  exports: "./esm/index.js"
 			*/
-			resolvePackageExports(np, exports, target, isDev, np.Type)
+			resolvePackageExports(np, s, target, isDev, np.Type)
 		}
 	}
 
-	if p.Module == "" {
-		if p.JsNextMain != "" && fileExists(path.Join(wd, p.JsNextMain)) {
-			p.Module = p.JsNextMain
-		} else if p.ES2015 != "" {
-			p.Module = p.ES2015
-		} else if p.Main != "" && (p.Type == "module" || strings.Contains(p.Main, "/esm/") || strings.Contains(p.Main, "/es/") || strings.HasSuffix(p.Main, ".mjs")) {
-			p.Module = p.Main
+	if np.Module == "" {
+		if np.JsNextMain != "" && fileExists(path.Join(wd, np.JsNextMain)) {
+			np.Module = np.JsNextMain
+		} else if np.ES2015 != "" {
+			np.Module = np.ES2015
+		} else if np.Main != "" && (np.Type == "module" || strings.Contains(np.Main, "/esm/") || strings.Contains(np.Main, "/es/") || strings.HasSuffix(np.Main, ".mjs")) {
+			np.Module = np.Main
 		}
 	}
 
-	if p.Types == "" && p.Typings != "" {
-		p.Types = p.Typings
+	if np.Types == "" && np.Typings != "" {
+		np.Types = np.Typings
 	}
 
 	return np
