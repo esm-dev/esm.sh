@@ -136,10 +136,10 @@ export async function existsFile(path: string): Promise<boolean> {
 if (import.meta.main) {
   startEsmServer(async () => {
     const [testDir] = Deno.args;
-    await runCliTest();
     if (testDir) {
       await runTest(testDir, true);
     } else {
+      await runCliTest();
       for await (const entry of Deno.readDir("./test")) {
         if (entry.isDirectory) {
           await runTest(entry.name);
