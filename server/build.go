@@ -215,10 +215,21 @@ func (task *BuildTask) build(tracing *stringSet) (esm *ESM, err error) {
 		input = &api.StdinOptions{
 			Contents:   buf.String(),
 			ResolveDir: task.wd,
-			Sourcefile: "mod.js",
+			Sourcefile: "mod.mjs",
 		}
 	} else {
-		entryPoint = path.Join(task.wd, "node_modules", npm.Name, npm.Module)
+		if task.treeShaking.Size() > 0 {
+			buf := bytes.NewBuffer(nil)
+			fmt.Fprintf(buf, `import { %s } from "%s";`, strings.Join(task.treeShaking.Values(), ","), path.Join(npm.Name, npm.Module))
+			fmt.Fprintf(buf, `export { %s };`, strings.Join(task.treeShaking.Values(), ","))
+			input = &api.StdinOptions{
+				Contents:   buf.String(),
+				ResolveDir: task.wd,
+				Sourcefile: "mod.mjs",
+			}
+		} else {
+			entryPoint = path.Join(task.wd, "node_modules", npm.Name, npm.Module)
+		}
 	}
 
 	nodeEnv := "production"
@@ -520,8 +531,8 @@ esbuild:
 						Submodule: submodule,
 					}
 					subTask := &BuildTask{
+						wd:           task.wd, // use current wd to skip install deps
 						BuildArgs:    task.BuildArgs,
-						wd:           task.wd, // use current wd to avoid reinstall
 						CdnOrigin:    task.CdnOrigin,
 						BasePath:     task.BasePath,
 						BuildVersion: task.BuildVersion,
@@ -529,8 +540,9 @@ esbuild:
 						Target:       task.Target,
 						DevMode:      task.DevMode,
 					}
-					subTask.build(tracing)
+					_, err = subTask.build(tracing)
 					if err != nil {
+						err = errors.New("can not build sub-module '" + submodule + "': " + err.Error())
 						return
 					}
 					importPath = task.getImportPath(subPkg, encodeBuildArgsPrefix(subTask.BuildArgs, subTask.Pkg, false))
@@ -640,8 +652,8 @@ esbuild:
 						DevMode:      task.DevMode,
 					}
 
-					_, _err := findModule(t.ID())
-					if _err == storage.ErrNotFound {
+					_, erro := findModule(t.ID())
+					if erro == storage.ErrNotFound {
 						buildQueue.Add(t, "")
 					}
 

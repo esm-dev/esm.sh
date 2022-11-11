@@ -243,7 +243,7 @@ func esmHandler(options esmHandlerOptions) rex.Handle {
 			pathname = "/" + pathname[2:]
 		}
 
-		// serve embed polyfills/types
+		// use embed polyfills/types if possible
 		if hasBuildVerPrefix {
 			data, err := embedFS.ReadFile("server/embed/polyfills" + pathname)
 			if err == nil {
@@ -332,7 +332,6 @@ func esmHandler(options esmHandlerOptions) rex.Handle {
 				if hasBuildVerPrefix {
 					storageType = "builds"
 				}
-
 			// todo: transform ts/jsx/tsx for browser
 			case ".ts", ".jsx", ".tsx":
 				if hasBuildVerPrefix {
@@ -342,7 +341,6 @@ func esmHandler(options esmHandlerOptions) rex.Handle {
 				} else if len(strings.Split(pathname, "/")) > 2 {
 					storageType = "raw"
 				}
-
 			case ".json", ".css", ".pcss", ".postcss", ".less", ".sass", ".scss", ".stylus", ".styl", ".wasm", ".xml", ".yaml", ".md", ".svg", ".png", ".jpg", ".webp", ".gif", ".eot", ".ttf", ".otf", ".woff", ".woff2":
 				if hasBuildVerPrefix {
 					if strings.HasSuffix(pathname, ".css") {
@@ -455,7 +453,7 @@ func esmHandler(options esmHandlerOptions) rex.Handle {
 			}
 		}
 
-		// check `alias` query
+		// check `?alias` query
 		alias := map[string]string{}
 		for _, p := range strings.Split(ctx.Form.Value("alias"), ",") {
 			p = strings.TrimSpace(p)
@@ -469,7 +467,7 @@ func esmHandler(options esmHandlerOptions) rex.Handle {
 			}
 		}
 
-		// check `deps` query
+		// check `?deps` query
 		deps := PkgSlice{}
 		for _, p := range strings.Split(ctx.Form.Value("deps"), ",") {
 			p = strings.TrimSpace(p)
@@ -487,14 +485,23 @@ func esmHandler(options esmHandlerOptions) rex.Handle {
 			}
 		}
 
-		// determine build target
+		// check `?treeShaking` query
+		treeShaking := newStringSet()
+		for _, p := range strings.Split(ctx.Form.Value("tree-shaking"), ",") {
+			p = strings.TrimSpace(p)
+			if regJSIdent.MatchString(p) {
+				treeShaking.Add(p)
+			}
+		}
+
+		// determine build target by `target` query or `User-Agent` header
 		target := strings.ToLower(ctx.Form.Value("target"))
 		_, targeted := targets[target]
 		if !targeted {
 			target = getTargetByUA(ctx.R.UserAgent())
 		}
 
-		// build version
+		// check build version
 		buildVersion := VERSION
 		pv := outdatedBuildVer
 		if outdatedBuildVer == "" {
@@ -507,7 +514,7 @@ func esmHandler(options esmHandlerOptions) rex.Handle {
 			}
 		}
 
-		// deno std version
+		// check deno/std version by `?deno-std=VER` query
 		dsv := denoStdVersion
 		fv := ctx.Form.Value("deno-std")
 		if fv != "" && regFullVersion.MatchString(fv) && target == "deno" {
@@ -551,6 +558,7 @@ func esmHandler(options esmHandlerOptions) rex.Handle {
 			alias:             alias,
 			deps:              deps,
 			external:          external,
+			treeShaking:       treeShaking,
 			ignoreRequire:     ignoreRequire,
 			keepNames:         keepNames,
 			ignoreAnnotations: ignoreAnnotations,
@@ -775,7 +783,7 @@ func esmHandler(options esmHandlerOptions) rex.Handle {
 			fmt.Fprintf(buf, `export default function workerFactory() {%s  return new Worker('%s/%s', { type: 'module' })%s}`, "\n", origin, taskID, "\n")
 		} else {
 			fmt.Fprintf(buf, `export * from "%s%s/%s";%s`, origin, options.basePath, taskID, "\n")
-			if esm.CJS || esm.ExportDefault {
+			if (esm.CJS || esm.ExportDefault) && (treeShaking.Size() == 0 || treeShaking.Has("default")) {
 				fmt.Fprintf(
 					buf,
 					`export { default } from "%s%s/%s";%s`,

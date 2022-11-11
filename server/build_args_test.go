@@ -1,12 +1,15 @@
 package server
 
 import (
+	"fmt"
 	"testing"
 )
 
 func TestEncodeBuildArgs(t *testing.T) {
 	external := newStringSet()
-	external.Add("foo")
+	treeShaking := newStringSet()
+	external.Add("bar")
+	treeShaking.Add("bar")
 	prefix := encodeBuildArgsPrefix(
 		BuildArgs{
 			alias: map[string]string{"a": "b"},
@@ -17,6 +20,7 @@ func TestEncodeBuildArgs(t *testing.T) {
 				Pkg{Name: "foo", Version: "1.0.0"}, // to be avoided
 			},
 			external:          external,
+			treeShaking:       treeShaking,
 			denoStdVersion:    "0.128.0",
 			ignoreRequire:     true,
 			keepNames:         true,
@@ -30,6 +34,7 @@ func TestEncodeBuildArgs(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	fmt.Println(args.alias)
 	if len(args.alias) != 1 || args.alias["a"] != "b" {
 		t.Fatal("invalid alias")
 	}
@@ -38,6 +43,9 @@ func TestEncodeBuildArgs(t *testing.T) {
 	}
 	if args.external.Size() != 1 {
 		t.Fatal("invalid external")
+	}
+	if args.treeShaking.Size() != 1 {
+		t.Fatal("invalid treeShaking")
 	}
 	if args.denoStdVersion != "0.128.0" {
 		t.Fatal("invalid denoStdVersion")

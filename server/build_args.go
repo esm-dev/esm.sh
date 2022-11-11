@@ -13,6 +13,7 @@ type BuildArgs struct {
 	alias             map[string]string
 	deps              PkgSlice
 	external          *stringSet
+	treeShaking       *stringSet
 	denoStdVersion    string
 	ignoreRequire     bool
 	ignoreAnnotations bool
@@ -23,7 +24,7 @@ type BuildArgs struct {
 func decodeBuildArgsPrefix(raw string) (args BuildArgs, err error) {
 	s, err := atobUrl(strings.TrimPrefix(strings.TrimSuffix(raw, "/"), "X-"))
 	if err == nil {
-		args = BuildArgs{external: newStringSet()}
+		args = BuildArgs{external: newStringSet(), treeShaking: newStringSet()}
 		for _, p := range strings.Split(s, "\n") {
 			if strings.HasPrefix(p, "a/") {
 				args.alias = map[string]string{}
@@ -52,6 +53,10 @@ func decodeBuildArgsPrefix(raw string) (args BuildArgs, err error) {
 				for _, name := range strings.Split(strings.TrimPrefix(p, "e/"), ",") {
 					args.external.Add(name)
 				}
+			} else if strings.HasPrefix(p, "ts/") {
+				for _, name := range strings.Split(strings.TrimPrefix(p, "ts/"), ",") {
+					args.treeShaking.Add(name)
+				}
 			} else if strings.HasPrefix(p, "dsv/") {
 				args.denoStdVersion = strings.TrimPrefix(p, "dsv/")
 			} else {
@@ -73,24 +78,27 @@ func decodeBuildArgsPrefix(raw string) (args BuildArgs, err error) {
 
 func encodeBuildArgsPrefix(args BuildArgs, pkg Pkg, forTypes bool) string {
 	lines := []string{}
-	pkgDeps := map[string]bool{}
-	for i := 0; i < 3; i++ {
-		info, _, err := getPackageInfo("", pkg.Name, pkg.Version)
-		if err == nil {
-			for name := range info.Dependencies {
-				pkgDeps[name] = true
+	var pkgDeps *stringSet
+	if (len(args.alias) > 0 || len(args.deps) > 0) && !stableBuild[pkg.Name] && npmConfig != nil {
+		for i := 0; i < 3; i++ {
+			info, _, err := getPackageInfo("", pkg.Name, pkg.Version)
+			if err == nil {
+				pkgDeps = newStringSet()
+				for name := range info.Dependencies {
+					pkgDeps.Add(name)
+				}
+				for name := range info.PeerDependencies {
+					pkgDeps.Add(name)
+				}
+				break
 			}
-			for name := range info.PeerDependencies {
-				pkgDeps[name] = true
-			}
-			break
+			time.Sleep(50 * time.Millisecond)
 		}
-		time.Sleep(50 * time.Millisecond)
 	}
 	if len(args.alias) > 0 && !stableBuild[pkg.Name] {
 		var ss sort.StringSlice
 		for name, to := range args.alias {
-			if name != pkg.Name && pkgDeps[name] {
+			if name != pkg.Name && (pkgDeps == nil || pkgDeps.Has(name)) {
 				ss = append(ss, fmt.Sprintf("%s:%s", name, to))
 			}
 		}
@@ -102,7 +110,7 @@ func encodeBuildArgsPrefix(args BuildArgs, pkg Pkg, forTypes bool) string {
 	if len(args.deps) > 0 && !stableBuild[pkg.Name] {
 		var ss sort.StringSlice
 		for _, p := range args.deps {
-			if p.Name != pkg.Name && pkgDeps[p.Name] {
+			if p.Name != pkg.Name && (pkgDeps == nil || pkgDeps.Has(p.Name)) {
 				ss = append(ss, fmt.Sprintf("%s@%s", p.Name, p.Version))
 			}
 		}
@@ -121,6 +129,16 @@ func encodeBuildArgsPrefix(args BuildArgs, pkg Pkg, forTypes bool) string {
 		if len(ss) > 0 {
 			ss.Sort()
 			lines = append(lines, fmt.Sprintf("e/%s", strings.Join(ss, ",")))
+		}
+	}
+	if args.treeShaking.Size() > 0 {
+		var ss sort.StringSlice
+		for _, name := range args.treeShaking.Values() {
+			ss = append(ss, name)
+		}
+		if len(ss) > 0 {
+			ss.Sort()
+			lines = append(lines, fmt.Sprintf("ts/%s", strings.Join(ss, ",")))
 		}
 	}
 	if !forTypes {
