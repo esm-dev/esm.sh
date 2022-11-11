@@ -215,7 +215,7 @@ func (task *BuildTask) build(tracing *stringSet) (esm *ESM, err error) {
 		input = &api.StdinOptions{
 			Contents:   buf.String(),
 			ResolveDir: task.wd,
-			Sourcefile: "mod.mjs",
+			Sourcefile: "mod.js",
 		}
 	} else {
 		if task.treeShaking.Size() > 0 {
@@ -225,7 +225,7 @@ func (task *BuildTask) build(tracing *stringSet) (esm *ESM, err error) {
 			input = &api.StdinOptions{
 				Contents:   buf.String(),
 				ResolveDir: task.wd,
-				Sourcefile: "mod.mjs",
+				Sourcefile: "mod.js",
 			}
 		} else {
 			entryPoint = path.Join(task.wd, "node_modules", npm.Name, npm.Module)
