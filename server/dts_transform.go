@@ -133,8 +133,6 @@ func (task *BuildTask) copyDTS(dts string, buildVersion int, aliasDepsPrefix str
 
 		// fix import path
 		switch importPath {
-		case "node-fetch":
-			importPath = "node-fetch-native"
 		case "estree", "estree-jsx", "unist", "react", "react-dom":
 			importPath = fmt.Sprintf("@types/%s", importPath)
 		}

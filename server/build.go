@@ -581,12 +581,9 @@ esbuild:
 				if importPath == "" && task.external.Has("*") {
 					importPath = name
 				}
-				// use `node-fetch-naitve` instead of `node-fetch`
+				// use `node_fetch.js` polyfill instead of `node-fetch`
 				if importPath == "" && name == "node-fetch" && task.Target != "node" {
-					importPath = task.getImportPath(Pkg{
-						Name:    "node-fetch-native",
-						Version: "0.1.3",
-					}, "")
+					importPath = fmt.Sprintf("%s/v%d/node_fetch.js", task.BasePath, task.BuildVersion)
 				}
 				// use version defined in `?deps` query
 				if importPath == "" {
