@@ -359,7 +359,7 @@ func (task *BuildTask) build(tracing *stringSet) (esm *ESM, err error) {
 					}
 
 					// bundle the package/module it self and the entrypoint
-					if specifier == task.Pkg.ImportPath() || specifier == path.Join(npm.Name, npm.Main) || specifier == path.Join(npm.Name, npm.Module) {
+					if specifier == task.Pkg.ImportPath() || specifier == entryPoint || specifier == path.Join(npm.Name, npm.Main) || specifier == path.Join(npm.Name, npm.Module) {
 						return api.OnResolveResult{}, nil
 					}
 

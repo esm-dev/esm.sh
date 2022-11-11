@@ -485,9 +485,9 @@ func esmHandler(options esmHandlerOptions) rex.Handle {
 			}
 		}
 
-		// check `?treeShaking` query
+		// check `?exports` query
 		treeShaking := newStringSet()
-		for _, p := range strings.Split(ctx.Form.Value("tree-shaking"), ",") {
+		for _, p := range strings.Split(ctx.Form.Value("exports"), ",") {
 			p = strings.TrimSpace(p)
 			if regJSIdent.MatchString(p) {
 				treeShaking.Add(p)
