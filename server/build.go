@@ -220,8 +220,7 @@ func (task *BuildTask) build(tracing *stringSet) (esm *ESM, err error) {
 	} else {
 		if task.treeShaking.Size() > 0 {
 			buf := bytes.NewBuffer(nil)
-			fmt.Fprintf(buf, `import { %s } from "%s";`, strings.Join(task.treeShaking.Values(), ","), path.Join(npm.Name, npm.Module))
-			fmt.Fprintf(buf, `export { %s };`, strings.Join(task.treeShaking.Values(), ","))
+			fmt.Fprintf(buf, `export { %s } from "%s";`, strings.Join(task.treeShaking.Values(), ","), path.Join(npm.Name, npm.Module))
 			input = &api.StdinOptions{
 				Contents:   buf.String(),
 				ResolveDir: task.wd,
@@ -360,7 +359,7 @@ func (task *BuildTask) build(tracing *stringSet) (esm *ESM, err error) {
 					}
 
 					// bundle the package/module it self and the entrypoint
-					if specifier == task.Pkg.ImportPath() || specifier == entryPoint {
+					if specifier == task.Pkg.ImportPath() || specifier == path.Join(npm.Name, npm.Main) || specifier == path.Join(npm.Name, npm.Module) {
 						return api.OnResolveResult{}, nil
 					}
 
@@ -461,10 +460,10 @@ esbuild:
 	if task.sourcemap {
 		options.Sourcemap = api.SourceMapInline
 	}
-	if entryPoint != "" {
-		options.EntryPoints = []string{entryPoint}
-	} else {
+	if input != nil {
 		options.Stdin = input
+	} else if entryPoint != "" {
+		options.EntryPoints = []string{entryPoint}
 	}
 	result := api.Build(options)
 	if len(result.Errors) > 0 {
