@@ -530,7 +530,7 @@ esbuild:
 						Submodule: submodule,
 					}
 					subTask := &BuildTask{
-						wd:           task.wd, // use current wd to skip install deps
+						wd:           task.wd, // use current `wd` to skip deps installation
 						BuildArgs:    task.BuildArgs,
 						CdnOrigin:    task.CdnOrigin,
 						BasePath:     task.BasePath,
@@ -539,9 +539,10 @@ esbuild:
 						Target:       task.Target,
 						DevMode:      task.DevMode,
 					}
+					subTask.treeShaking = newStringSet()
 					_, err = subTask.build(tracing)
 					if err != nil {
-						err = errors.New("can not build sub-module '" + submodule + "': " + err.Error())
+						err = errors.New("can not build '" + submodule + "': " + err.Error())
 						return
 					}
 					importPath = task.getImportPath(subPkg, encodeBuildArgsPrefix(subTask.BuildArgs, subTask.Pkg, false))
@@ -650,6 +651,7 @@ esbuild:
 						Target:       task.Target,
 						DevMode:      task.DevMode,
 					}
+					t.treeShaking = newStringSet()
 
 					_, erro := findModule(t.ID())
 					if erro == storage.ErrNotFound {
