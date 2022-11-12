@@ -1,14 +1,15 @@
 package server
 
 import (
-	"fmt"
 	"testing"
 )
 
 func TestEncodeBuildArgs(t *testing.T) {
 	external := newStringSet()
 	treeShaking := newStringSet()
+	external.Add("baz")
 	external.Add("bar")
+	treeShaking.Add("baz")
 	treeShaking.Add("bar")
 	prefix := encodeBuildArgsPrefix(
 		BuildArgs{
@@ -34,17 +35,16 @@ func TestEncodeBuildArgs(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	fmt.Println(args.alias)
 	if len(args.alias) != 1 || args.alias["a"] != "b" {
 		t.Fatal("invalid alias")
 	}
 	if len(args.deps) != 3 {
 		t.Fatal("invalid deps")
 	}
-	if args.external.Size() != 1 {
+	if args.external.Size() != 2 {
 		t.Fatal("invalid external")
 	}
-	if args.treeShaking.Size() != 1 {
+	if args.treeShaking.Size() != 2 {
 		t.Fatal("invalid treeShaking")
 	}
 	if args.denoStdVersion != "0.128.0" {

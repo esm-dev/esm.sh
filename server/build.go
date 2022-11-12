@@ -521,7 +521,7 @@ esbuild:
 				if isRemoteImport(name) || task.external.Has(name) {
 					importPath = name
 				}
-				// is sub-module
+				// sub module
 				if importPath == "" && strings.HasPrefix(name, task.Pkg.Name+"/") {
 					submodule := strings.TrimPrefix(name, task.Pkg.Name+"/")
 					subPkg := Pkg{
