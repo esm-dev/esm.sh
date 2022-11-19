@@ -190,7 +190,6 @@ func Serve(efs EmbedFS) {
 			AllowedMethods: []string{
 				http.MethodGet,
 			},
-			AllowedHeaders:   []string{"*"},
 			ExposedHeaders:   []string{"X-TypeScript-Types"},
 			AllowCredentials: false,
 		}),
