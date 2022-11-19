@@ -91,7 +91,7 @@ func esmHandler(options esmHandlerOptions) rex.Handle {
 			if !strings.HasSuffix(url, ".d.ts") {
 				url += "~.d.ts"
 			}
-			return rex.Redirect(url, http.StatusTemporaryRedirect)
+			return rex.Redirect(url, http.StatusFound)
 		}
 
 		// Build prefix may only be served from "${cdnBasePath}/${buildPrefix}/..."
@@ -101,7 +101,7 @@ func esmHandler(options esmHandlerOptions) rex.Handle {
 			} else {
 				url := strings.TrimPrefix(ctx.R.URL.String(), options.basePath)
 				url = fmt.Sprintf("%s/%s", options.basePath, url)
-				return rex.Redirect(url, http.StatusTemporaryRedirect)
+				return rex.Redirect(url, http.StatusFound)
 			}
 		}
 
@@ -303,13 +303,13 @@ func esmHandler(options esmHandlerOptions) rex.Handle {
 				if ctx.R.URL.RawQuery != "" {
 					query = "&" + ctx.R.URL.RawQuery
 				}
-				return rex.Redirect(fmt.Sprintf("%s%s/%s%s@%s%s%s", origin, prefix, eaSign, reqPkg.Name, reqPkg.Version, query, submodule), http.StatusTemporaryRedirect)
+				return rex.Redirect(fmt.Sprintf("%s%s/%s%s@%s%s%s", origin, prefix, eaSign, reqPkg.Name, reqPkg.Version, query, submodule), http.StatusFound)
 
 			}
 			if ctx.R.URL.RawQuery != "" {
 				query = "?" + ctx.R.URL.RawQuery
 			}
-			return rex.Redirect(fmt.Sprintf("%s%s/%s%s%s", origin, prefix, eaSign, reqPkg.String(), query), http.StatusTemporaryRedirect)
+			return rex.Redirect(fmt.Sprintf("%s%s/%s%s%s", origin, prefix, eaSign, reqPkg.String(), query), http.StatusFound)
 		}
 
 		// since most transformers handle `jsxSource` by concating string "/jsx-runtime"
@@ -357,7 +357,7 @@ func esmHandler(options esmHandlerOptions) rex.Handle {
 			return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				if !regFullVersionPath.MatchString(pathname) {
 					url := fmt.Sprintf("%s/%s", origin, reqPkg.String())
-					http.Redirect(w, r, url, http.StatusTemporaryRedirect)
+					http.Redirect(w, r, url, http.StatusFound)
 					return
 				}
 				savePath := path.Join("raw", reqPkg.String())
@@ -494,10 +494,10 @@ func esmHandler(options esmHandlerOptions) rex.Handle {
 			}
 		}
 
-		// determine build target by `target` query or `User-Agent` header
+		// determine build target by `?target` query or `User-Agent` header
 		target := strings.ToLower(ctx.Form.Value("target"))
-		_, targeted := targets[target]
-		if !targeted {
+		targetFromUA := targets[target] == 0
+		if targetFromUA {
 			target = getTargetByUA(ctx.R.UserAgent())
 		}
 
@@ -740,7 +740,7 @@ func esmHandler(options esmHandlerOptions) rex.Handle {
 
 			if !regFullVersionPath.MatchString(pathname) || !isPined {
 				url := fmt.Sprintf("%s/%s.css", origin, strings.TrimSuffix(taskID, ".js"))
-				return rex.Redirect(url, http.StatusTemporaryRedirect)
+				return rex.Redirect(url, http.StatusFound)
 			}
 
 			taskID = fmt.Sprintf("%s.css", strings.TrimSuffix(taskID, ".js"))
@@ -807,19 +807,15 @@ func esmHandler(options esmHandlerOptions) rex.Handle {
 
 		if regFullVersionPath.MatchString(pathname) {
 			if isPined {
-				if targeted {
-					ctx.SetHeader("Cache-Control", "public, max-age=31536000, immutable")
-				} else {
-					ctx.SetHeader("Cache-Control", "public, max-age=31536000, immutable")
-					ctx.SetHeader("Vary", "Origin, Accept-Encoding, User-Agent")
-				}
+				ctx.SetHeader("Cache-Control", "public, max-age=31536000, immutable")
 			} else {
-				ctx.SetHeader("Cache-Control", fmt.Sprintf("public, max-age=%d", 3600)) // cache for 1 hours
-				ctx.SetHeader("Vary", "Origin, Accept-Encoding, User-Agent")
+				ctx.SetHeader("Cache-Control", fmt.Sprintf("public, max-age=%d", 24*3600)) // cache for 24 hours
 			}
 		} else {
-			ctx.SetHeader("Cache-Control", fmt.Sprintf("public, max-age=%d", 5*60)) // cache for 5 minutes
-			ctx.SetHeader("Vary", "Origin, Accept-Encoding, User-Agent")
+			ctx.SetHeader("Cache-Control", fmt.Sprintf("public, max-age=%d", 10*60)) // cache for 10 minutes
+		}
+		if targetFromUA {
+			ctx.AddHeader("Vary", "User-Agent")
 		}
 		ctx.SetHeader("Content-Type", "application/javascript; charset=utf-8")
 		return buf
