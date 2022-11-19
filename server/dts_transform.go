@@ -14,7 +14,7 @@ import (
 )
 
 func (task *BuildTask) CopyDTS(dts string, buildVersion int) (n int, err error) {
-	buildArgsPrefix := encodeBuildArgsPrefix(task.BuildArgs, task.Pkg, true)
+	buildArgsPrefix := encodeBuildArgsPrefix(task.BuildArgs, task.Pkg.Name, true)
 	tracing := newStringSet()
 	err = task.copyDTS(dts, buildVersion, buildArgsPrefix, tracing)
 	if err == nil {
@@ -271,7 +271,7 @@ func (task *BuildTask) copyDTS(dts string, buildVersion int, aliasDepsPrefix str
 				}
 			}
 
-			pkgBasePath := pkgBase + encodeBuildArgsPrefix(task.BuildArgs, Pkg{Name: info.Name, Version: info.Version}, true)
+			pkgBasePath := pkgBase + encodeBuildArgsPrefix(task.BuildArgs, info.Name, true)
 			importPath = fmt.Sprintf("%s/%s", cdnOriginAndBuildBasePath, pkgBasePath+importPath)
 		}
 

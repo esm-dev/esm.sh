@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"sort"
 	"strings"
-	"time"
 
 	"github.com/ije/gox/utils"
 )
@@ -76,29 +75,12 @@ func decodeBuildArgsPrefix(raw string) (args BuildArgs, err error) {
 	return
 }
 
-func encodeBuildArgsPrefix(args BuildArgs, pkg Pkg, forTypes bool) string {
+func encodeBuildArgsPrefix(args BuildArgs, pkgName string, forTypes bool) string {
 	lines := []string{}
-	var pkgDeps *stringSet
-	if (len(args.alias) > 0 || len(args.deps) > 0) && !stableBuild[pkg.Name] && npmConfig != nil {
-		for i := 0; i < 3; i++ {
-			info, _, err := getPackageInfo("", pkg.Name, pkg.Version)
-			if err == nil {
-				pkgDeps = newStringSet()
-				for name := range info.Dependencies {
-					pkgDeps.Add(name)
-				}
-				for name := range info.PeerDependencies {
-					pkgDeps.Add(name)
-				}
-				break
-			}
-			time.Sleep(50 * time.Millisecond)
-		}
-	}
-	if len(args.alias) > 0 && !stableBuild[pkg.Name] {
+	if len(args.alias) > 0 && !stableBuild[pkgName] {
 		var ss sort.StringSlice
 		for name, to := range args.alias {
-			if name != pkg.Name && (pkgDeps == nil || pkgDeps.Has(name)) {
+			if name != pkgName {
 				ss = append(ss, fmt.Sprintf("%s:%s", name, to))
 			}
 		}
@@ -107,10 +89,10 @@ func encodeBuildArgsPrefix(args BuildArgs, pkg Pkg, forTypes bool) string {
 			lines = append(lines, fmt.Sprintf("a/%s", strings.Join(ss, ",")))
 		}
 	}
-	if len(args.deps) > 0 && !stableBuild[pkg.Name] {
+	if len(args.deps) > 0 && !stableBuild[pkgName] {
 		var ss sort.StringSlice
 		for _, p := range args.deps {
-			if p.Name != pkg.Name && (pkgDeps == nil || pkgDeps.Has(p.Name)) {
+			if p.Name != pkgName {
 				ss = append(ss, fmt.Sprintf("%s@%s", p.Name, p.Version))
 			}
 		}
@@ -122,7 +104,7 @@ func encodeBuildArgsPrefix(args BuildArgs, pkg Pkg, forTypes bool) string {
 	if args.external.Size() > 0 {
 		var ss sort.StringSlice
 		for _, name := range args.external.Values() {
-			if name != pkg.Name {
+			if name != pkgName {
 				ss = append(ss, name)
 			}
 		}

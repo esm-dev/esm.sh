@@ -640,7 +640,7 @@ func esmHandler(options esmHandlerOptions) rex.Handle {
 					buildVersion,
 					reqPkg.Name,
 					reqPkg.Version,
-					encodeBuildArgsPrefix(buildArgs, *reqPkg, true),
+					encodeBuildArgsPrefix(buildArgs, reqPkg.Name, true),
 				), reqPkg.Submodule)
 				if strings.HasSuffix(savePath, "~.d.ts") {
 					savePath = strings.TrimSuffix(savePath, "~.d.ts")
