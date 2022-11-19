@@ -94,7 +94,7 @@ func esmHandler(options esmHandlerOptions) rex.Handle {
 			return rex.Redirect(url, http.StatusFound)
 		}
 
-		// Build prefix may only be served from "${cdnBasePath}/${buildPrefix}/..."
+		// Build prefix may only be served from "${options.basePath}/..."
 		if options.basePath != "" {
 			if strings.HasPrefix(pathname, options.basePath+"/") {
 				pathname = strings.TrimPrefix(pathname, options.basePath)
@@ -108,7 +108,7 @@ func esmHandler(options esmHandlerOptions) rex.Handle {
 		var hasBuildVerPrefix bool
 		var outdatedBuildVer string
 
-		// Check current version
+		// Check build version
 		buildBasePath := fmt.Sprintf("/v%d", VERSION)
 		if strings.HasPrefix(pathname, "/stable/") {
 			pathname = strings.TrimPrefix(pathname, "/stable")
@@ -117,7 +117,7 @@ func esmHandler(options esmHandlerOptions) rex.Handle {
 			a := strings.Split(pathname, "/")
 			pathname = "/" + strings.Join(a[2:], "/")
 			hasBuildVerPrefix = true
-			// Otherwise check possible pinned version
+			// Otherwise check possible fixed version
 		} else if regBuildVersionPath.MatchString(pathname) {
 			a := strings.Split(pathname, "/")
 			pathname = "/" + strings.Join(a[2:], "/")
@@ -281,17 +281,9 @@ func esmHandler(options esmHandlerOptions) rex.Handle {
 		}
 
 		// redirect to the url with full package version
-		if (!hasBuildVerPrefix || strings.HasSuffix(pathname, ".d.ts")) && !strings.HasPrefix(pathname, fmt.Sprintf("/%s@%s", reqPkg.Name, reqPkg.Version)) {
-			prefix := ""
+		if !hasBuildVerPrefix && !strings.HasPrefix(pathname, fmt.Sprintf("/%s@%s", reqPkg.Name, reqPkg.Version)) {
 			eaSign := ""
 			query := ""
-			if hasBuildVerPrefix {
-				if outdatedBuildVer != "" {
-					prefix = fmt.Sprintf("/%s", outdatedBuildVer)
-				} else {
-					prefix = fmt.Sprintf("/v%d", VERSION)
-				}
-			}
 			if external.Has("*") {
 				eaSign = "*"
 			}
@@ -303,13 +295,41 @@ func esmHandler(options esmHandlerOptions) rex.Handle {
 				if ctx.R.URL.RawQuery != "" {
 					query = "&" + ctx.R.URL.RawQuery
 				}
-				return rex.Redirect(fmt.Sprintf("%s%s/%s%s@%s%s%s", origin, prefix, eaSign, reqPkg.Name, reqPkg.Version, query, submodule), http.StatusFound)
-
+				return rex.Redirect(fmt.Sprintf("%s/%s%s@%s%s%s", origin, eaSign, reqPkg.Name, reqPkg.Version, query, submodule), http.StatusFound)
 			}
 			if ctx.R.URL.RawQuery != "" {
 				query = "?" + ctx.R.URL.RawQuery
 			}
-			return rex.Redirect(fmt.Sprintf("%s%s/%s%s%s", origin, prefix, eaSign, reqPkg.String(), query), http.StatusFound)
+			return rex.Redirect(fmt.Sprintf("%s/%s%s%s", origin, eaSign, reqPkg.String(), query), http.StatusFound)
+		}
+
+		// redirect to the url with full package version
+		if hasBuildVerPrefix && !strings.HasPrefix(pathname, fmt.Sprintf("/%s@%s", reqPkg.Name, reqPkg.Version)) {
+			prefix := ""
+			subpath := ""
+			query := ""
+			if hasBuildVerPrefix {
+				if stableBuild[reqPkg.Name] {
+					prefix = "/stable"
+				} else if outdatedBuildVer != "" {
+					prefix = fmt.Sprintf("/%s", outdatedBuildVer)
+				} else {
+					prefix = fmt.Sprintf("/v%d", VERSION)
+				}
+			}
+			a := strings.Split(pathname, "/")
+			if strings.HasPrefix(reqPkg.Name, "@") {
+				subpath = strings.Join(a[3:], "/")
+			} else {
+				subpath = strings.Join(a[2:], "/")
+			}
+			if subpath != "" {
+				subpath = "/" + subpath
+			}
+			if ctx.R.URL.RawQuery != "" {
+				query = "?" + ctx.R.URL.RawQuery
+			}
+			return rex.Redirect(fmt.Sprintf("%s%s/%s@%s%s%s", origin, prefix, reqPkg.Name, reqPkg.Version, subpath, query), http.StatusFound)
 		}
 
 		// since most transformers handle `jsxSource` by concating string "/jsx-runtime"

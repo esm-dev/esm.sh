@@ -651,6 +651,7 @@ esbuild:
 						Target:       task.Target,
 						DevMode:      task.DevMode,
 					}
+					// clear `?exports` args
 					t.treeShaking = newStringSet()
 
 					_, erro := findModule(t.ID())
@@ -658,7 +659,7 @@ esbuild:
 						buildQueue.Add(t, "")
 					}
 
-					importPath = task.getImportPath(pkg, encodeBuildArgsPrefix(task.BuildArgs, task.Pkg, false))
+					importPath = task.getImportPath(pkg, encodeBuildArgsPrefix(task.BuildArgs, pkg, false))
 				}
 				if importPath == "" {
 					err = fmt.Errorf("Could not resolve \"%s\" (Imported by \"%s\")", name, task.Pkg.Name)
