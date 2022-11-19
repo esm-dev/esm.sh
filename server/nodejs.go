@@ -170,17 +170,18 @@ type NpmPackageVerions struct {
 type NpmPackage struct {
 	Name             string                 `json:"name"`
 	Version          string                 `json:"version"`
+	Type             string                 `json:"type,omitempty"`
 	Main             string                 `json:"main,omitempty"`
 	Module           string                 `json:"module,omitempty"`
 	JsNextMain       string                 `json:"jsnext:main,omitempty"`
 	ES2015           string                 `json:"es2015,omitempty"`
-	Type             string                 `json:"type,omitempty"`
 	Types            string                 `json:"types,omitempty"`
 	Typings          string                 `json:"typings,omitempty"`
 	Dependencies     map[string]string      `json:"dependencies,omitempty"`
 	PeerDependencies map[string]string      `json:"peerDependencies,omitempty"`
 	Imports          map[string]interface{} `json:"imports,omitempty"`
 	DefinedExports   interface{}            `json:"exports,omitempty"`
+	// todo: support `browser` field
 }
 
 // NodeInfo defines the installed node.js
