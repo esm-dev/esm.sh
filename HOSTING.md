@@ -2,9 +2,9 @@
 
 [esm.sh](https://esm.sh) provides a fast, global content delivery network
 publicly which powered by [Cloudflare](https://cloudflare.com). You also can
-deploy your own esm.sh CDN.
+host esm.sh on your server.
 
-To build and deploy your CDN, You will need [Go](https://golang.org/dl) 1.16+ to
+To serve esm.sh, You will need [Go](https://golang.org/dl) 1.16+ to
 compile the server. The server runtime will install the nodejs (16 LTS)
 automatically.
 
@@ -29,7 +29,7 @@ Please ensure the [supervisor](http://supervisord.org/) has been installed on
 your host machine.
 
 ```bash
-./scripts/deploy.sh
+./scripts/deploy.sh --init
 ```
 
 Server options:

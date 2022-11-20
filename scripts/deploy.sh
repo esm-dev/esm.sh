@@ -1,34 +1,10 @@
 #!/bin/bash
 
-host="$1"
-if [ "$host" == "" ]; then
-  read -p "deploy to (domain or IP): " v
-  if [ "$v" != "" ]; then
-    host="$v"
-  fi
-fi
-
-if [ "$host" == "" ]; then
-  echo "missing host"
-  exit
-fi
-
-user="root"
-read -p "login user (default is 'root'): " v
-if [ "$v" != "" ]; then
-  user="$v"
-fi
-
-sshPort="22"
-read -p "ssh port (default is 22): " v
-if [ "$v" != "" ]; then
-  sshPort="$v"
-fi
-
 init="no"
-read -p "initiate supervisor service? y/N " v
-if [ "$v" == "y" ]; then
+host="$1"
+if [ "$host" == "--init" ]; then
   init="yes"
+  host="$2"
 fi
 
 port="80"
@@ -42,42 +18,68 @@ npmRegistry=""
 npmToken=""
 
 if [ "$init" == "yes" ]; then
-  read -p "http server port (default is ${port}): " v
+  echo "---"
+  read -p "? http server port (default is ${port}): " v
   if [ "$v" != "" ]; then
     port="$v"
   fi
-  read -p "https(autocert) server port (default is disabled): " v
+  read -p "? https(autocert) server port (default is disabled): " v
   if [ "$v" != "" ]; then
     httpsPort="$v"
   fi
-  read -p "etc directory (ensure user '${user}' have the r/w permission of it, default is '${etcDir}'): " v
+  read -p "? etc directory (ensure you have the r/w permission of it, default is '${etcDir}'): " v
   if [ "$v" != "" ]; then
     etcDir="$v"
   fi
-  read -p "cache config (default is 'memory:main'): " v
+  read -p "? cache config (default is 'memory:main'): " v
   if [ "$v" != "" ]; then
     cacheUrl="$v"
   fi
-  read -p "fs config (default is 'local:\$etcDir/storage'): " v
+  read -p "? fs config (default is 'local:\$etcDir/storage'): " v
   if [ "$v" != "" ]; then
     fsUrl="$v"
   fi
-  read -p "db config (default is 'postdb:\$etcDir/esm.db'): " v
+  read -p "? db config (default is 'postdb:\$etcDir/esm.db'): " v
   if [ "$v" != "" ]; then
     dbUrl="$v"
   fi
-  read -p "server origin (optional): " v
+  read -p "? server origin (optional): " v
   if [ "$v" != "" ]; then
     origin="$v"
   fi
-  read -p "npm registry (optional): " v
+  read -p "? npm registry (optional): " v
   if [ "$v" != "" ]; then
     npmRegistry="$v"
   fi
-  read -p "private token for npm registry (optional): " v
+  read -p "? private token for npm registry (optional): " v
   if [ "$v" != "" ]; then
     npmToken="$v"
   fi
+fi
+echo "---"
+
+if [ "$host" == "" ]; then
+  read -p "? deploy to (domain or IP): " v
+  if [ "$v" != "" ]; then
+    host="$v"
+  fi
+fi
+
+if [ "$host" == "" ]; then
+  echo "missing host"
+  exit
+fi
+
+user="root"
+read -p "? login user (default is 'root'): " v
+if [ "$v" != "" ]; then
+  user="$v"
+fi
+
+sshPort="22"
+read -p "? ssh port (default is 22): " v
+if [ "$v" != "" ]; then
+  sshPort="$v"
 fi
 
 scriptsDir=$(dirname $0)
