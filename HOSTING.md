@@ -1,11 +1,11 @@
 # Self-Hosting
 
 [esm.sh](https://esm.sh) provides a fast, global content delivery network
-publicly which powered by [Cloudflare](https://cloudflare.com). You also can
-host esm.sh on your server.
+publicly which powered by [Cloudflare](https://cloudflare.com). You may also want to
+host esm.sh by yourself.
 
 To serve esm.sh, You will need [Go](https://golang.org/dl) 1.16+ to
-compile the server. The server runtime will install the nodejs (16 LTS)
+run and compile the server. The server runtime will install the nodejs (16 LTS)
 automatically.
 
 ## Clone code
@@ -40,9 +40,9 @@ Server options:
 - `cache` - the cache config (default is `memory:main`)
 - `db` - the database config (default is `postdb:$etcDir/esm.db`)
 - `fs` - the fs (storage) config (default is `local:$etcDir/storage`)
-- `origin` - the origin of the CDN (this is useful when running the server behind a proxy/CDN)
+- `origin` - the origin of the CDN (this is useful when running the server behind a proxy/CDN, optional)
 - `npmRegistry` - the npm registry (default is https://npmjs.org/registry)
-- `npmToken` - the private token for npm registry
+- `npmToken` - the private token for npm registry (optional)
 
 ## Deploy with Docker
 
