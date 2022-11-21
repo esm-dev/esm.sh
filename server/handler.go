@@ -192,6 +192,7 @@ func esmHandler(options esmHandlerOptions) rex.Handle {
 			if err != nil {
 				return err
 			}
+			ctx.SetHeader("Cache-Control", "private, no-store, no-cache, must-revalidate")
 			return map[string]interface{}{
 				"ns":         string(out),
 				"uptime":     time.Since(startTime).String(),
