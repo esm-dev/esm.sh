@@ -18,7 +18,7 @@ npmRegistry=""
 npmToken=""
 
 if [ "$init" == "yes" ]; then
-  echo "---"
+  echo "Server options:"
   read -p "? http server port (default is ${port}): " v
   if [ "$v" != "" ]; then
     port="$v"
@@ -55,8 +55,8 @@ if [ "$init" == "yes" ]; then
   if [ "$v" != "" ]; then
     npmToken="$v"
   fi
+  echo "---"
 fi
-echo "---"
 
 if [ "$host" == "" ]; then
   read -p "? deploy to (domain or IP): " v

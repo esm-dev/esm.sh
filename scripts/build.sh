@@ -1,7 +1,7 @@
 #!/bin/bash
 
-read -p "build GOOS (default is 'linux'): " goos
-read -p "build GOARCH (default is 'amd64'): " goarch
+read -p "? build GOOS (default is 'linux'): " goos
+read -p "? build GOARCH (default is 'amd64'): " goarch
 if [ "$goos" == "" ]; then
   goos="linux"
 fi
