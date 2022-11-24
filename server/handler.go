@@ -388,62 +388,50 @@ func esmHandler(options esmHandlerOptions) rex.Handle {
 					w.Write([]byte(err.Error()))
 					return
 				}
-				if exists {
-					f, err := fs.ReadFile(savePath, size)
+
+				// fetch the non-existent file from unpkg.com and save to fs
+				if !exists {
+					resp, err := httpClient.Get(fmt.Sprintf("%s/%s", strings.TrimSuffix(options.unpkgOrigin, "/"), reqPkg.String()))
 					if err != nil {
 						w.WriteHeader(500)
 						w.Write([]byte(err.Error()))
 						return
 					}
-					defer f.Close()
-					if strings.HasSuffix(pathname, ".ts") {
-						w.Header().Set("Content-Type", "application/typescript")
+					defer resp.Body.Close()
+
+					if resp.StatusCode >= 500 {
+						w.WriteHeader(http.StatusBadGateway)
+						w.Write([]byte("Bad Gateway"))
+						return
 					}
-					w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
-					http.ServeContent(w, r, savePath, modtime, f)
-					return
-				}
-				resp, err := httpClient.Get(fmt.Sprintf("%s/%s", strings.TrimSuffix(options.unpkgOrigin, "/"), reqPkg.String()))
-				if err != nil {
-					w.WriteHeader(500)
-					w.Write([]byte(err.Error()))
-					return
-				}
-				defer resp.Body.Close()
 
-				if resp.StatusCode >= 500 {
-					w.WriteHeader(http.StatusBadGateway)
-					w.Write([]byte("Bad Gateway"))
-					return
-				}
+					if resp.StatusCode >= 400 {
+						w.WriteHeader(http.StatusBadGateway)
+						io.Copy(w, resp.Body)
+						return
+					}
 
-				if resp.StatusCode >= 400 {
-					w.WriteHeader(http.StatusBadGateway)
-					io.Copy(w, resp.Body)
-					return
-				}
-
-				n, err := fs.WriteFile(savePath, resp.Body)
-				if err != nil {
-					w.WriteHeader(500)
-					w.Write([]byte(err.Error()))
-					return
-				}
-
-				f, err := fs.ReadFile(savePath, n)
-				if err != nil {
-					w.WriteHeader(500)
-					w.Write([]byte(err.Error()))
-					return
-				}
-
-				for key, values := range resp.Header {
-					for _, value := range values {
-						ctx.AddHeader(key, value)
+					size, err = fs.WriteFile(savePath, resp.Body)
+					if err != nil {
+						w.WriteHeader(500)
+						w.Write([]byte(err.Error()))
+						return
 					}
 				}
-				ctx.SetHeader("Cache-Control", "public, max-age=31536000, immutable")
-				io.Copy(w, f)
+
+				f, err := fs.ReadFile(savePath, size)
+				if err != nil {
+					w.WriteHeader(500)
+					w.Write([]byte(err.Error()))
+					return
+				}
+				defer f.Close()
+
+				if strings.HasSuffix(pathname, ".ts") {
+					w.Header().Set("Content-Type", "application/typescript")
+				}
+				w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
+				http.ServeContent(w, r, savePath, modtime, f)
 			})
 		}
 
