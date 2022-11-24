@@ -160,6 +160,7 @@ var requireModeAllowList = []string{
 	"typescript",
 	"vscode-oniguruma",
 	"web-streams-ponyfill",
+	"maplibre-gl",
 }
 
 func parseCJSModuleExports(buildDir string, importPath string, nodeEnv string) (ret cjsExportsResult, err error) {
