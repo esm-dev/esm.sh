@@ -166,6 +166,66 @@ type NpmPackageVerions struct {
 	Versions map[string]NpmPackage `json:"versions"`
 }
 
+func (a *NpmPackage) UnmarshalJSON(b []byte) error {
+	var n NpmPackageTemp
+	if err := json.Unmarshal(b, &n); err != nil {
+		return err
+	}
+	*a = *n.ToNpmPackage()
+	return nil
+}
+
+type StringOrMap struct {
+	Value string
+	Map   map[string]string
+}
+
+func (a *StringOrMap) UnmarshalJSON(b []byte) error {
+	if err := json.Unmarshal(b, &a.Value); err != nil {
+		if err := json.Unmarshal(b, &a.Map); err != nil {
+			return err
+		}
+	}
+	// TODO: Set Value to first element of map if it exists
+	return nil
+}
+
+// NpmPackageTemp defines the package.json of npm
+type NpmPackageTemp struct {
+	Name             string                 `json:"name"`
+	Version          string                 `json:"version"`
+	Type             string                 `json:"type,omitempty"`
+	Main             string                 `json:"main,omitempty"`
+	Module           StringOrMap            `json:"module,omitempty"`
+	JsNextMain       string                 `json:"jsnext:main,omitempty"`
+	ES2015           StringOrMap            `json:"es2015,omitempty"`
+	Types            string                 `json:"types,omitempty"`
+	Typings          string                 `json:"typings,omitempty"`
+	Dependencies     map[string]string      `json:"dependencies,omitempty"`
+	PeerDependencies map[string]string      `json:"peerDependencies,omitempty"`
+	Imports          map[string]interface{} `json:"imports,omitempty"`
+	DefinedExports   interface{}            `json:"exports,omitempty"`
+	// todo: support `browser` field
+}
+
+func (a *NpmPackageTemp) ToNpmPackage() *NpmPackage {
+	return &NpmPackage{
+		Name:             a.Name,
+		Version:          a.Version,
+		Type:             a.Type,
+		Main:             a.Main,
+		Module:           a.Module.Value,
+		JsNextMain:       a.JsNextMain,
+		ES2015:           a.ES2015.Value,
+		Types:            a.Types,
+		Typings:          a.Typings,
+		Dependencies:     a.Dependencies,
+		PeerDependencies: a.PeerDependencies,
+		Imports:          a.Imports,
+		DefinedExports:   a.DefinedExports,
+	}
+}
+
 // NpmPackage defines the package.json of npm
 type NpmPackage struct {
 	Name             string                 `json:"name"`
