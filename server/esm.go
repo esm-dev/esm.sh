@@ -2,11 +2,13 @@ package server
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"path"
 	"strings"
 
 	"esm.sh/server/storage"
+
 	"github.com/ije/gox/utils"
 )
 
@@ -172,16 +174,12 @@ func initModule(wd string, pkg Pkg, target string, isDev bool) (esm *ESM, npm *N
 		return
 	}
 
-	if npm.Module == "" && npm.Main != "" && (strings.Contains(npm.Main, "/npm/") || strings.Contains(npm.Main, "/es/") || strings.HasSuffix(npm.Main, ".mjs")) {
-		npm.Module = npm.Main
-	}
-
 	if npm.Module != "" {
-		modulePath, exportDefault, reason := parseESModule(wd, npm.Name, npm.Module)
-		if reason == nil {
+		modulePath, exportDefault, erro := parseESModule(wd, npm.Name, npm.Module)
+		if erro == nil {
 			npm.Module = modulePath
 			esm.ExportDefault = exportDefault
-		} else if reason.Error() == "not a module" {
+		} else if erro.Error() == "not a module" {
 			var ret cjsExportsResult
 			ret, err = parseCJSModuleExports(wd, path.Join(pkg.Name, strings.TrimSuffix(npm.Module, ".js")), nodeEnv)
 			if err == nil && ret.Error != "" {
@@ -196,7 +194,7 @@ func initModule(wd string, pkg Pkg, target string, isDev bool) (esm *ESM, npm *N
 			esm.Exports = ret.Exports
 			log.Warnf("fake module from '%s' of '%s'", npm.Main, npm.Name)
 		} else {
-			err = fmt.Errorf("checkESM: %s", reason)
+			err = fmt.Errorf("parseESModule: %s", erro)
 			return
 		}
 	} else if npm.Main != "" {
@@ -279,4 +277,98 @@ func findModule(id string) (esm *ESM, err error) {
 		}
 	}
 	return
+}
+
+func parseESModule(wd string, packageName string, moduleSpecifier string) (resolveName string, hasDefaultExport bool, err error) {
+	pkgDir := path.Join(wd, "node_modules", packageName)
+	switch path.Ext(moduleSpecifier) {
+	case ".js", ".jsx", ".ts", ".tsx", ".mjs":
+		resolveName = moduleSpecifier
+	default:
+		resolveName = moduleSpecifier + ".mjs"
+		if !fileExists(path.Join(pkgDir, resolveName)) {
+			resolveName = moduleSpecifier + ".js"
+		}
+		if !fileExists(path.Join(pkgDir, resolveName)) && dirExists(path.Join(pkgDir, moduleSpecifier)) {
+			resolveName = path.Join(moduleSpecifier, "index.mjs")
+			if !fileExists(path.Join(pkgDir, resolveName)) {
+				resolveName = path.Join(moduleSpecifier, "index.js")
+			}
+		}
+	}
+
+	isESM, _hasDefaultExport, err := parseJS(path.Join(pkgDir, resolveName))
+	if err != nil {
+		return
+	}
+
+	if !isESM {
+		err = errors.New("not a module")
+		return
+	}
+
+	hasDefaultExport = _hasDefaultExport
+	return
+}
+
+func fixNpmPackage(wd string, np *NpmPackage, target string, isDev bool) *NpmPackage {
+	exports := np.DefinedExports
+
+	if exports != nil {
+		if m, ok := exports.(map[string]interface{}); ok {
+			v, ok := m["."]
+			if ok {
+				/*
+					exports: {
+						".": {
+							"require": "./cjs/index.js",
+							"import": "./esm/index.js"
+						}
+					}
+					exports: {
+						".": "./esm/index.js"
+					}
+				*/
+				resolvePackageExports(np, v, target, isDev, np.Type)
+			} else {
+				/*
+					exports: {
+						"require": "./cjs/index.js",
+						"import": "./esm/index.js"
+					}
+				*/
+				resolvePackageExports(np, m, target, isDev, np.Type)
+			}
+		} else if s, ok := exports.(string); ok {
+			/*
+			  exports: "./esm/index.js"
+			*/
+			resolvePackageExports(np, s, target, isDev, np.Type)
+		}
+	}
+
+	nmDir := path.Join(wd, "node_modules")
+	if np.Module == "" {
+		if np.JsNextMain != "" && fileExists(path.Join(nmDir, np.Name, np.JsNextMain)) {
+			np.Module = np.JsNextMain
+		} else if np.ES2015 != "" && fileExists(path.Join(nmDir, np.Name, np.ES2015)) {
+			np.Module = np.ES2015
+		} else if np.Main != "" && (np.Type == "module" || strings.HasSuffix(np.Main, ".mjs") || strings.HasSuffix(np.Main, ".esm.js") || strings.Contains(np.Main, "/esm/") || strings.Contains(np.Main, "/es/")) {
+			np.Module = np.Main
+		}
+	}
+
+	if np.Browser != "" && fileExists(path.Join(nmDir, np.Name, np.Browser)) {
+		isEsm, _, _ := parseJS(path.Join(nmDir, np.Name, np.Browser))
+		if isEsm {
+			log.Infof("%s@%s: use `browser` field as module: %s", np.Name, np.Version, np.Browser)
+			np.Module = np.Browser
+		}
+	}
+
+	if np.Types == "" && np.Typings != "" {
+		np.Types = np.Typings
+	}
+
+	return np
 }

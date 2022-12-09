@@ -166,27 +166,15 @@ type NpmPackageVerions struct {
 	Versions map[string]NpmPackage `json:"versions"`
 }
 
-func (a *NpmPackage) UnmarshalJSON(b []byte) error {
-	var n NpmPackageTemp
-	if err := json.Unmarshal(b, &n); err != nil {
-		return err
-	}
-	*a = *n.ToNpmPackage()
-	return nil
-}
-
 type StringOrMap struct {
 	Value string
-	Map   map[string]string
+	Map   map[string]interface{}
 }
 
 func (a *StringOrMap) UnmarshalJSON(b []byte) error {
 	if err := json.Unmarshal(b, &a.Value); err != nil {
-		if err := json.Unmarshal(b, &a.Map); err != nil {
-			return err
-		}
+		return json.Unmarshal(b, &a.Map)
 	}
-	// TODO: Set Value to first element of map if it exists
 	return nil
 }
 
@@ -196,9 +184,10 @@ type NpmPackageTemp struct {
 	Version          string                 `json:"version"`
 	Type             string                 `json:"type,omitempty"`
 	Main             string                 `json:"main,omitempty"`
+	Browser          StringOrMap            `json:"browser,omitempty"`
 	Module           StringOrMap            `json:"module,omitempty"`
-	JsNextMain       string                 `json:"jsnext:main,omitempty"`
 	ES2015           StringOrMap            `json:"es2015,omitempty"`
+	JsNextMain       string                 `json:"jsnext:main,omitempty"`
 	Types            string                 `json:"types,omitempty"`
 	Typings          string                 `json:"typings,omitempty"`
 	Dependencies     map[string]string      `json:"dependencies,omitempty"`
@@ -208,15 +197,32 @@ type NpmPackageTemp struct {
 	// todo: support `browser` field
 }
 
+func (a *StringOrMap) MainValue() string {
+	if a.Value != "" {
+		return a.Value
+	}
+	if a.Map != nil {
+		v, ok := a.Map["."]
+		if ok {
+			s, isStr := v.(string)
+			if isStr {
+				return s
+			}
+		}
+	}
+	return ""
+}
+
 func (a *NpmPackageTemp) ToNpmPackage() *NpmPackage {
 	return &NpmPackage{
 		Name:             a.Name,
 		Version:          a.Version,
 		Type:             a.Type,
 		Main:             a.Main,
-		Module:           a.Module.Value,
+		Browser:          a.Browser.MainValue(),
+		Module:           a.Module.MainValue(),
+		ES2015:           a.ES2015.MainValue(),
 		JsNextMain:       a.JsNextMain,
-		ES2015:           a.ES2015.Value,
 		Types:            a.Types,
 		Typings:          a.Typings,
 		Dependencies:     a.Dependencies,
@@ -228,20 +234,29 @@ func (a *NpmPackageTemp) ToNpmPackage() *NpmPackage {
 
 // NpmPackage defines the package.json of npm
 type NpmPackage struct {
-	Name             string                 `json:"name"`
-	Version          string                 `json:"version"`
-	Type             string                 `json:"type,omitempty"`
-	Main             string                 `json:"main,omitempty"`
-	Module           string                 `json:"module,omitempty"`
-	JsNextMain       string                 `json:"jsnext:main,omitempty"`
-	ES2015           string                 `json:"es2015,omitempty"`
-	Types            string                 `json:"types,omitempty"`
-	Typings          string                 `json:"typings,omitempty"`
-	Dependencies     map[string]string      `json:"dependencies,omitempty"`
-	PeerDependencies map[string]string      `json:"peerDependencies,omitempty"`
-	Imports          map[string]interface{} `json:"imports,omitempty"`
-	DefinedExports   interface{}            `json:"exports,omitempty"`
-	// todo: support `browser` field
+	Name             string
+	Version          string
+	Type             string
+	Main             string
+	Browser          string
+	Module           string
+	ES2015           string
+	JsNextMain       string
+	Types            string
+	Typings          string
+	Dependencies     map[string]string
+	PeerDependencies map[string]string
+	Imports          map[string]interface{}
+	DefinedExports   interface{}
+}
+
+func (a *NpmPackage) UnmarshalJSON(b []byte) error {
+	var n NpmPackageTemp
+	if err := json.Unmarshal(b, &n); err != nil {
+		return err
+	}
+	*a = *n.ToNpmPackage()
+	return nil
 }
 
 // NodeInfo defines the installed node.js
@@ -530,59 +545,6 @@ func resolvePackageExports(p *NpmPackage, exports interface{}, target string, is
 			}
 		}
 	}
-}
-
-func fixNpmPackage(wd string, np *NpmPackage, target string, isDev bool) *NpmPackage {
-	exports := np.DefinedExports
-
-	if exports != nil {
-		if m, ok := exports.(map[string]interface{}); ok {
-			v, ok := m["."]
-			if ok {
-				/*
-					exports: {
-						".": {
-							"require": "./cjs/index.js",
-							"import": "./esm/index.js"
-						}
-					}
-					exports: {
-						".": "./esm/index.js"
-					}
-				*/
-				resolvePackageExports(np, v, target, isDev, np.Type)
-			} else {
-				/*
-					exports: {
-						"require": "./cjs/index.js",
-						"import": "./esm/index.js"
-					}
-				*/
-				resolvePackageExports(np, m, target, isDev, np.Type)
-			}
-		} else if s, ok := exports.(string); ok {
-			/*
-			  exports: "./esm/index.js"
-			*/
-			resolvePackageExports(np, s, target, isDev, np.Type)
-		}
-	}
-
-	if np.Module == "" {
-		if np.JsNextMain != "" && fileExists(path.Join(wd, np.JsNextMain)) {
-			np.Module = np.JsNextMain
-		} else if np.ES2015 != "" {
-			np.Module = np.ES2015
-		} else if np.Main != "" && (np.Type == "module" || strings.Contains(np.Main, "/esm/") || strings.Contains(np.Main, "/es/") || strings.HasSuffix(np.Main, ".mjs")) {
-			np.Module = np.Main
-		}
-	}
-
-	if np.Types == "" && np.Typings != "" {
-		np.Types = np.Typings
-	}
-
-	return np
 }
 
 func installNodejs(dir string, version string) (err error) {

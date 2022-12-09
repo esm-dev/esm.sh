@@ -1,18 +1,12 @@
 package server
 
 import (
-	"errors"
-	"io/ioutil"
-	"path"
 	"regexp"
 	"strconv"
 	"strings"
 
 	"github.com/evanw/esbuild/pkg/api"
 	"github.com/ije/esbuild-internal/compat"
-	"github.com/ije/esbuild-internal/js_ast"
-	"github.com/ije/esbuild-internal/js_parser"
-	"github.com/ije/esbuild-internal/logger"
 	"github.com/mssola/user_agent"
 )
 
@@ -203,55 +197,4 @@ func getTargetByUA(ua string) string {
 		}
 	}
 	return "es2015"
-}
-
-func parseESModule(wd string, packageName string, moduleSpecifier string) (resolveName string, exportDefault bool, err error) {
-	pkgDir := path.Join(wd, "node_modules", packageName)
-	resolveName = moduleSpecifier
-	switch path.Ext(moduleSpecifier) {
-	case ".js", ".jsx", ".ts", ".tsx", ".mjs":
-	default:
-		resolveName = moduleSpecifier + ".js"
-		if !fileExists(path.Join(pkgDir, resolveName)) {
-			resolveName = moduleSpecifier + ".mjs"
-		}
-	}
-	if !fileExists(path.Join(pkgDir, resolveName)) && dirExists(path.Join(pkgDir, moduleSpecifier)) {
-		resolveName = path.Join(moduleSpecifier, "index.js")
-		if !fileExists(path.Join(pkgDir, resolveName)) {
-			resolveName = path.Join(moduleSpecifier, "index.mjs")
-		}
-	}
-	filename := path.Join(pkgDir, resolveName)
-	switch path.Ext(filename) {
-	case ".js", ".jsx", ".ts", ".tsx", ".mjs":
-	default:
-		filename += ".js"
-	}
-	data, err := ioutil.ReadFile(filename)
-	if err != nil {
-		return
-	}
-	log := logger.NewDeferLog(logger.DeferLogNoVerboseOrDebug, nil)
-	ast, pass := js_parser.Parse(log, logger.Source{
-		Index:          0,
-		KeyPath:        logger.Path{Text: "<stdin>"},
-		PrettyPath:     "<stdin>",
-		Contents:       string(data),
-		IdentifierName: "stdin",
-	}, js_parser.Options{})
-	if pass {
-		esm := ast.ExportsKind == js_ast.ExportsESM
-		if !esm {
-			err = errors.New("not a module")
-			return
-		}
-		for name := range ast.NamedExports {
-			if name == "default" {
-				exportDefault = true
-				break
-			}
-		}
-	}
-	return
 }

@@ -13,6 +13,7 @@ const (
 var fixedPkgVersions = map[string]string{
 	"@types/react@17": "17.0.52",
 	"@types/react@18": "18.0.25",
+	"isomorphic-ws@4": "5.0.0",
 }
 
 // stable build for UI libraries like react, to make sure the runtime is single copy

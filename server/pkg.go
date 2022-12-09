@@ -67,6 +67,11 @@ func parsePkg(pathname string) (*Pkg, string, error) {
 	}
 
 	if regFullVersion.MatchString(version) {
+		for prefix, ver := range fixedPkgVersions {
+			if strings.HasPrefix(name+"@"+version, prefix) {
+				version = ver
+			}
+		}
 		return &Pkg{
 			Name:      name,
 			Version:   version,

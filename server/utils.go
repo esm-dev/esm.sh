@@ -2,6 +2,7 @@ package server
 
 import (
 	"encoding/base64"
+	"errors"
 	"io/ioutil"
 	"os"
 	"path"
@@ -10,6 +11,9 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/ije/esbuild-internal/js_ast"
+	"github.com/ije/esbuild-internal/js_parser"
+	"github.com/ije/esbuild-internal/logger"
 	"github.com/ije/gox/valid"
 )
 
@@ -195,4 +199,26 @@ func kill(pidFile string) (err error) {
 		return
 	}
 	return process.Kill()
+}
+
+func parseJS(filename string) (isESM bool, hasDefaultExport bool, err error) {
+	data, err := ioutil.ReadFile(filename)
+	if err != nil {
+		return
+	}
+	log := logger.NewDeferLog(logger.DeferLogNoVerboseOrDebug, nil)
+	ast, pass := js_parser.Parse(log, logger.Source{
+		Index:          0,
+		KeyPath:        logger.Path{Text: "<stdin>"},
+		PrettyPath:     "<stdin>",
+		Contents:       string(data),
+		IdentifierName: "stdin",
+	}, js_parser.Options{})
+	if !pass {
+		err = errors.New("invalid syntax, require javascript/typescript")
+		return
+	}
+	isESM = ast.ExportsKind == js_ast.ExportsESM
+	_, hasDefaultExport = ast.NamedExports["default"]
+	return
 }
