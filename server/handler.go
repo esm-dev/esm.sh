@@ -375,64 +375,54 @@ func esmHandler(options esmHandlerOptions) rex.Handle {
 
 		// serve raw dist files like CSS that is fetching from unpkg.com
 		if storageType == "raw" {
-			return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				if !regFullVersionPath.MatchString(pathname) {
-					url := fmt.Sprintf("%s/%s", origin, reqPkg.String())
-					http.Redirect(w, r, url, http.StatusFound)
-					return
-				}
-				savePath := path.Join("raw", reqPkg.String())
-				exists, size, modtime, err := fs.Exists(savePath)
+			if !regFullVersionPath.MatchString(pathname) {
+				url := fmt.Sprintf("%s/%s", origin, reqPkg.String())
+				return rex.Redirect(url, http.StatusFound)
+			}
+
+			savePath := path.Join("raw", reqPkg.String())
+			exists, size, modtime, err := fs.Exists(savePath)
+			if err != nil {
+				return rex.Status(500, err.Error())
+			}
+
+			// fetch the non-existent file from unpkg.com and save to fs
+			if !exists {
+				resp, err := httpClient.Get(fmt.Sprintf("%s/%s", strings.TrimSuffix(options.unpkgOrigin, "/"), reqPkg.String()))
 				if err != nil {
-					w.WriteHeader(500)
-					w.Write([]byte(err.Error()))
-					return
+					return rex.Status(http.StatusBadGateway, "Bad Gateway")
+				}
+				defer resp.Body.Close()
+
+				if resp.StatusCode >= 500 {
+					return rex.Status(http.StatusBadGateway, "Bad Gateway")
 				}
 
-				// fetch the non-existent file from unpkg.com and save to fs
-				if !exists {
-					resp, err := httpClient.Get(fmt.Sprintf("%s/%s", strings.TrimSuffix(options.unpkgOrigin, "/"), reqPkg.String()))
-					if err != nil {
-						w.WriteHeader(500)
-						w.Write([]byte(err.Error()))
-						return
+				if resp.StatusCode >= 400 {
+					if resp.StatusCode == 404 {
+						return rex.Status(404, "Not Found")
 					}
-					defer resp.Body.Close()
-
-					if resp.StatusCode >= 500 {
-						w.WriteHeader(http.StatusBadGateway)
-						w.Write([]byte("Bad Gateway"))
-						return
-					}
-
-					if resp.StatusCode >= 400 {
-						w.WriteHeader(http.StatusBadGateway)
-						io.Copy(w, resp.Body)
-						return
-					}
-
-					size, err = fs.WriteFile(savePath, resp.Body)
-					if err != nil {
-						w.WriteHeader(500)
-						w.Write([]byte(err.Error()))
-						return
-					}
+					return rex.Status(http.StatusBadGateway, "Bad Gateway")
 				}
 
-				f, err := fs.ReadFile(savePath, size)
+				size, err = fs.WriteFile(savePath, resp.Body)
 				if err != nil {
-					w.WriteHeader(500)
-					w.Write([]byte(err.Error()))
-					return
+					return rex.Status(500, err.Error())
 				}
-				defer f.Close()
+			}
 
-				if strings.HasSuffix(pathname, ".ts") {
-					w.Header().Set("Content-Type", "application/typescript")
-				}
-				w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
-				http.ServeContent(w, r, savePath, modtime, f)
-			})
+			f, err := fs.ReadFile(savePath, size)
+			if err != nil {
+				return rex.Status(500, err.Error())
+			}
+			// rex 1.8.1 has bug that will close the file repeatedly
+			// defer f.Close()
+
+			if strings.HasSuffix(pathname, ".ts") {
+				ctx.SetHeader("Content-Type", "application/typescript")
+			}
+			ctx.SetHeader("Cache-Control", "public, max-age=31536000, immutable")
+			return rex.Content(savePath, modtime, f)
 		}
 
 		// serve build files
