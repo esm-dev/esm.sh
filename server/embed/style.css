@@ -356,3 +356,26 @@ i {
 .test ul li em {
   color: #999;
 }
+
+@media (prefers-color-scheme: dark) {
+  body {
+    color: #d9d5ce !important;
+    background-color: #0e1011 !important;
+  }
+  .hljs {
+    color: #cfcac2 !important;
+    background-color: #121415 !important;
+  }
+  .readme pre {
+    background-color: #121415 !important;
+  }
+  .hljs-keyword, .hljs-selector-tag, .hljs-subst {
+    color: #cfcac2 !important;
+  }
+  .hljs-attribute, .hljs-name, .hljs-tag {
+    color: #71ffff !important;
+  }
+  :root {
+    color-scheme: dark;
+  }
+}
