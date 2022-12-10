@@ -3,7 +3,6 @@
   overflow-x: auto;
   padding: .5em;
   color: #333;
-  background: #f8f8f8
 }
 
 .hljs-comment,
@@ -77,11 +76,11 @@
 }
 
 .hljs-deletion {
-  background: #fdd
+  background-color: #fdd
 }
 
 .hljs-addition {
-  background: #dfd
+  background-color: #dfd
 }
 
 .hljs-emphasis {
@@ -213,14 +212,14 @@ i {
   border-radius: 6px;
   line-height: 1.5;
   color: #333;
-  background-color: #f8f8f8;
+  background-color: #f6f7f7;
   white-space: pre;
   -webkit-overflow-scrolling: touch;
 }
 
 .readme pre>code {
   display: block;
-  padding: 1.2rem !important;
+  padding: 1rem !important;
 }
 
 .readme :not(pre)>code {
@@ -235,15 +234,10 @@ i {
   content: '`'
 }
 
-.readme pre>code.language-bash .hljs-built_in::before {
-  color: #bbb;
-  content: '$ ';
-}
-
 .readme details {
   margin: 1.5rem 0;
   padding: 0.5rem 1rem;
-  background: #fafafa;
+  background: #f-colorafafa;
   border: 1px solid #eaeaea;
   border-radius: 6px;
 }
@@ -260,7 +254,7 @@ i {
 
 .readme blockquote {
   color: #666666;
-  background: #fafafa;
+  background: #f-colorafafa;
   border: 1px solid #eaeaea;
   border-radius: 6px;
   padding: 0 1.25rem;
@@ -311,7 +305,7 @@ i {
   box-shadow: none;
 }
 
-.readme h1 a.github:hover {
+.readme h1 .github:hover {
   color: #000;
 }
 
@@ -359,15 +353,23 @@ i {
 
 @media (prefers-color-scheme: dark) {
   body {
-    color: #d9d5ce !important;
+    color: #e6e1d9 !important;
     background-color: #0e1011 !important;
   }
   .hljs {
     color: #cfcac2 !important;
-    background-color: #121415 !important;
+  }
+  .readme h1 {
+    border-color: #4b495e;
+  }
+  .readme h1 .github {
+    color: #999;
+  }
+  .readme h1 .github:hover {
+    color: #eee;
   }
   .readme pre {
-    background-color: #121415 !important;
+    background-color: #232323 !important;
   }
   .hljs-keyword, .hljs-selector-tag, .hljs-subst {
     color: #cfcac2 !important;
