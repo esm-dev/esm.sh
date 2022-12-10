@@ -415,8 +415,6 @@ func esmHandler(options esmHandlerOptions) rex.Handle {
 			if err != nil {
 				return rex.Status(500, err.Error())
 			}
-			// rex 1.8.1 has bug that will close the file repeatedly
-			// defer f.Close()
 
 			if strings.HasSuffix(pathname, ".ts") {
 				ctx.SetHeader("Content-Type", "application/typescript")
