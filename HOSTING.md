@@ -4,7 +4,7 @@
 publicly which powered by [Cloudflare](https://cloudflare.com). You may also want to
 host esm.sh by yourself.
 
-To serve esm.sh, You will need [Go](https://golang.org/dl) 1.16+ to
+To serve esm.sh, You will need [Go](https://golang.org/dl) 1.18+ to
 run and compile the server. The server runtime will install the nodejs (16 LTS)
 automatically.
 
@@ -37,9 +37,13 @@ Server options:
 - `port` - the port to listen
 - `httpsPort` - the port to listen https (use [autocert](golang.org/x/crypto/acme/autocert))
 - `etcDir` - the etc directory (default is `/etc/esmd`)
-- `cache` - the cache config (default is `memory:main`)
+- `cache` - the cache config (default is `memory:default`)
+
+    The `LRU` strategy is also supported, set the option to `memoryLRU:default` instead.
 - `db` - the database config (default is `postdb:$etcDir/esm.db`)
 - `fs` - the fs (storage) config (default is `local:$etcDir/storage`)
+
+  The `LRU` strategy is also supported, set the option to `localLRU:$etcDir/storage` instead.
 - `origin` - the origin of the CDN (this is useful when running the server behind a proxy/CDN, optional)
 - `npmRegistry` - the npm registry (default is https://npmjs.org/registry)
 - `npmToken` - the private token for npm registry (optional)
