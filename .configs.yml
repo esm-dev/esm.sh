@@ -1,0 +1,3 @@
+ban-list:
+  packages:
+  - '@withfig/autocomplete'
