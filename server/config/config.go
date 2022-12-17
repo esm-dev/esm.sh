@@ -1,40 +1,47 @@
 package config
 
 import (
+	"encoding/json"
 	"fmt"
+	"io/ioutil"
+	"os"
 	"strings"
-
-	"github.com/spf13/viper"
 )
 
 var cfgs *Configs
 
 type Configs struct {
-	BanList BanList `mapstructure:"ban-list"`
+	BanList BanList `json:"ban_list"`
 }
 
 type BanList struct {
-	Packages []string
-	Scopes   []BanScope
+	Packages []string   `json:"packages"`
+	Scopes   []BanScope `json:"scopes"`
 }
 
 type BanScope struct {
-	Name     string
-	Excludes []string
+	Name     string   `json:"name"`
+	Excludes []string `json:"excludes"`
 }
 
 // MustLoadConfigs Loading configs from local `.configs.yml` file. Panic if failed to load.
 func MustLoadConfigs() {
-	v := viper.New()
-	v.SetConfigName(".configs")
-	v.SetConfigType("yaml")
-	v.AddConfigPath(".")    // optionally look for config in the working directory
-	err := v.ReadInConfig() // Find and read the config file
-	if err != nil {         // Handle errors reading the config file
-		panic(fmt.Errorf("fatal error config file: %w", err))
+	var (
+		err      error
+		cfgFile  *os.File
+		cfgBytes []byte
+	)
+
+	if cfgFile, err = os.Open(".configs.json"); err != nil {
+		panic(fmt.Errorf("fatal error open config file: %w", err))
+	}
+	defer cfgFile.Close()
+
+	if cfgBytes, err = ioutil.ReadAll(cfgFile); err != nil {
+		panic(fmt.Errorf("fatal error read config file: %w", err))
 	}
 
-	if err = v.Unmarshal(&cfgs); err != nil {
+	if err = json.Unmarshal(cfgBytes, &cfgs); err != nil {
 		panic(fmt.Errorf("fatal error parse config: %w", err))
 	}
 }
@@ -43,10 +50,10 @@ func Get() *Configs {
 	return cfgs
 }
 
-// IsPackageBaned Checking if the package is banned.
+// IsPackageBanned Checking if the package is banned.
 // The `packages` list is the highest priority ban rule to match,
 // so the `excludes` list in the `scopes` list won't take effect if the package is banned in `packages` list
-func (banList *BanList) IsPackageBaned(fullName string) bool {
+func (banList *BanList) IsPackageBanned(fullName string) bool {
 	var (
 		fullNameWithoutVersion  string // e.g. @github/faker
 		scope                   string // e.g. @github

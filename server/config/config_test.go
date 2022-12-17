@@ -1,8 +1,10 @@
 package config
 
-import "testing"
+import (
+	"testing"
+)
 
-func TestBanList_IsPackageBaned(t *testing.T) {
+func TestBanList_IsPackageBanned(t *testing.T) {
 	type args struct {
 		fullName string
 	}
@@ -63,8 +65,8 @@ func TestBanList_IsPackageBaned(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := tt.banList.IsPackageBaned(tt.args.fullName); got != tt.want {
-				t.Errorf("IsPackageBaned() = %v, want %v", got, tt.want)
+			if got := tt.banList.IsPackageBanned(tt.args.fullName); got != tt.want {
+				t.Errorf("IsPackageBanned() = %v, want %v", got, tt.want)
 			}
 		})
 	}

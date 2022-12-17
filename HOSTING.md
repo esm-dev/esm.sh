@@ -21,14 +21,18 @@ Belows are supported customization:
 - ban list
   
   The server allows you ban some packages or scopes by:
-  ```yaml
-  ban-list:
-    packages:
-      - '@your_scope/package_name_without_scope'
-    scopes:
-    - name: '@your_scope'
-      excludes:
-      - 'package_name_without_scope'
+  ```json
+  {
+    "ban_list": {
+        "packages": ["@some_scope/package_name"],
+        "scopes": [{
+            "name": "@your_scope",
+            "excludes": [
+              "package_name"
+            ]
+        }]
+    }
+  }
   ```
 ## Run the sever locally
 

@@ -59,7 +59,7 @@ func esmHandler(options esmHandlerOptions) rex.Handle {
 		// trim the leading `/` in pathname to get the package name
 		// e.g. /@withfig/autocomplete --> @withfig/autocomplete
 		packageFullName := pathname[1:]
-		if config.Get().BanList.IsPackageBaned(packageFullName) {
+		if config.Get().BanList.IsPackageBanned(packageFullName) {
 			log.Debugf("The package %s is banned.", packageFullName)
 			return rex.Status(403, "forbidden")
 		}
