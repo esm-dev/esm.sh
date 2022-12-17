@@ -14,7 +14,26 @@ automatically.
 git clone https://github.com/ije/esm.sh
 cd esm.sh
 ```
+## Configs
+You can add some customize configs by `.config.yml`.
 
+Belows are supported customization:
+- ban list
+  
+  The server allows you ban some packages or scopes by:
+  ```json
+  {
+    "ban_list": {
+        "packages": ["@some_scope/package_name"],
+        "scopes": [{
+            "name": "@your_scope",
+            "excludes": [
+              "package_name"
+            ]
+        }]
+    }
+  }
+  ```
 ## Run the sever locally
 
 ```bash

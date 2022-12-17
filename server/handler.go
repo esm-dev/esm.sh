@@ -13,14 +13,11 @@ import (
 	"strings"
 	"time"
 
+	"esm.sh/server/config"
 	"esm.sh/server/storage"
 	"github.com/ije/gox/utils"
 	"github.com/ije/rex"
 )
-
-var banList = map[string]bool{
-	"/@withfig/autocomplete": true,
-}
 
 var httpClient = &http.Client{
 	Transport: &http.Transport{
@@ -59,10 +56,12 @@ func esmHandler(options esmHandlerOptions) rex.Handle {
 		}
 
 		// ban malicious requests by banList
-		for prefix := range banList {
-			if strings.HasPrefix(pathname, prefix) {
-				return rex.Status(403, "forbidden")
-			}
+		// trim the leading `/` in pathname to get the package name
+		// e.g. /@withfig/autocomplete --> @withfig/autocomplete
+		packageFullName := pathname[1:]
+		if config.Get().BanList.IsPackageBanned(packageFullName) {
+			log.Debugf("The package %s is banned.", packageFullName)
+			return rex.Status(403, "forbidden")
 		}
 
 		// strip loc

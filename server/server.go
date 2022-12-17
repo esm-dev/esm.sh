@@ -15,6 +15,7 @@ import (
 	"syscall"
 	"time"
 
+	"esm.sh/server/config"
 	"esm.sh/server/storage"
 
 	logx "github.com/ije/gox/log"
@@ -75,6 +76,8 @@ func Serve(efs EmbedFS) {
 	flag.BoolVar(&isDev, "dev", false, "to run server in development mode")
 
 	flag.Parse()
+
+	config.MustLoadConfigs()
 
 	var err error
 	etcDir, err = filepath.Abs(etcDir)
