@@ -9,11 +9,11 @@ require (
 	github.com/aws/aws-sdk-go-v2/feature/s3/manager v1.11.5
 	github.com/aws/aws-sdk-go-v2/service/s3 v1.26.5
 	github.com/dgraph-io/ristretto v0.1.0
-	github.com/evanw/esbuild v0.16.3
-	github.com/ije/esbuild-internal v0.16.3
+	github.com/evanw/esbuild v0.16.8
+	github.com/ije/esbuild-internal v0.16.8
 	github.com/ije/gox v0.6.1
 	github.com/ije/postdb v0.7.1
-	github.com/ije/rex v1.8.4
+	github.com/ije/rex v1.8.5
 	github.com/mssola/user_agent v0.5.3
 )
 
