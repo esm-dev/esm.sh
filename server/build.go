@@ -134,7 +134,7 @@ func (task *BuildTask) Build() (esm *ESM, err error) {
 	for i := 0; i < 3; i++ {
 		err = yarnAdd(task.wd, fmt.Sprintf("%s@%s", task.Pkg.Name, task.Pkg.Version))
 		if err == nil && !fileExists(path.Join(task.wd, "node_modules", task.Pkg.Name, "package.json")) {
-			defer yarnCacheClean(task.wd, task.Pkg.Name)
+			defer yarnCacheClean(task.Pkg.Name)
 			err = fmt.Errorf("yarnAdd(%s): package.json not found", task.Pkg)
 		}
 		if err == nil {
@@ -309,6 +309,11 @@ func (task *BuildTask) build(tracing *stringSet) (esm *ESM, err error) {
 						}
 					}
 
+					// bundle the package/module it self and the entrypoint
+					if specifier == task.Pkg.ImportPath() || specifier == entryPoint || specifier == path.Join(npm.Name, npm.Main) || specifier == path.Join(npm.Name, npm.Module) {
+						return api.OnResolveResult{}, nil
+					}
+
 					// splits modules based on the `exports` defines in package.json,
 					// see https://nodejs.org/api/packages.html
 					if strings.HasPrefix(specifier, "./") || strings.HasPrefix(specifier, "../") || specifier == ".." {
@@ -317,7 +322,11 @@ func (task *BuildTask) build(tracing *stringSet) (esm *ESM, err error) {
 						if strings.HasPrefix(resolvedPath, "/private/var/") {
 							resolvedPath = strings.TrimPrefix(resolvedPath, "/private")
 						}
-						modulePath := "." + strings.TrimPrefix(resolvedPath, path.Join(task.wd, "node_modules", npm.Name))
+						specInPkg := "." + strings.TrimPrefix(resolvedPath, path.Join(task.wd, "node_modules", npm.Name))
+						// bundle {pkgName}/{pkgName}.js
+						if specInPkg == fmt.Sprintf("./%s.js", task.Pkg.Name) {
+							return api.OnResolveResult{}, nil
+						}
 						v, ok := npm.DefinedExports.(map[string]interface{})
 						if ok {
 							for export, paths := range v {
@@ -326,16 +335,16 @@ func (task *BuildTask) build(tracing *stringSet) (esm *ESM, err error) {
 									for _, value := range m {
 										s, ok := value.(string)
 										if ok && s != "" {
-											match := modulePath == s || modulePath+".js" == s || modulePath+".mjs" == s
+											match := specInPkg == s || specInPkg+".js" == s || specInPkg+".mjs" == s
 											if !match {
 												if a := strings.Split(s, "*"); len(a) == 2 {
 													prefix := a[0]
 													suffix := a[1]
-													if (strings.HasPrefix(modulePath, prefix)) &&
-														(strings.HasSuffix(modulePath, suffix) ||
-															strings.HasSuffix(modulePath+".js", suffix) ||
-															strings.HasSuffix(modulePath+".mjs", suffix)) {
-														matchName := strings.TrimPrefix(strings.TrimSuffix(modulePath, suffix), prefix)
+													if (strings.HasPrefix(specInPkg, prefix)) &&
+														(strings.HasSuffix(specInPkg, suffix) ||
+															strings.HasSuffix(specInPkg+".js", suffix) ||
+															strings.HasSuffix(specInPkg+".mjs", suffix)) {
+														matchName := strings.TrimPrefix(strings.TrimSuffix(specInPkg, suffix), prefix)
 														export = strings.Replace(export, "*", matchName, -1)
 														match = true
 													}
@@ -354,11 +363,6 @@ func (task *BuildTask) build(tracing *stringSet) (esm *ESM, err error) {
 								}
 							}
 						}
-					}
-
-					// bundle the package/module it self and the entrypoint
-					if specifier == task.Pkg.ImportPath() || specifier == entryPoint || specifier == path.Join(npm.Name, npm.Main) || specifier == path.Join(npm.Name, npm.Module) {
-						return api.OnResolveResult{}, nil
 					}
 
 					// for local modules
@@ -680,7 +684,7 @@ esbuild:
 								for i := 0; i < 3; i++ {
 									err = yarnAdd(task.wd, fmt.Sprintf("%s@%s", pkg.Name, pkg.Version))
 									if err == nil && !fileExists(path.Join(task.wd, "node_modules", pkg.Name, "package.json")) {
-										defer yarnCacheClean(task.wd, pkg.Name)
+										defer yarnCacheClean(pkg.Name)
 										err = fmt.Errorf("yarnAdd(%s): package.json not found", pkg)
 									}
 									if err == nil {
