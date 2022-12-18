@@ -14,8 +14,6 @@ import (
 	"strings"
 	"time"
 
-	"esm.sh/server/storage"
-
 	"github.com/evanw/esbuild/pkg/api"
 	"github.com/ije/gox/crypto/rs"
 	"github.com/ije/gox/utils"
@@ -102,8 +100,8 @@ func (task *BuildTask) getBuildVersion(pkg Pkg) string {
 }
 
 func (task *BuildTask) Build() (esm *ESM, err error) {
-	prev, err := findModule(task.ID())
-	if err == nil {
+	prev, ok := findESMBuild(task.ID())
+	if ok {
 		return prev, nil
 	}
 
@@ -113,7 +111,7 @@ func (task *BuildTask) Build() (esm *ESM, err error) {
 		task.wd = path.Join(os.TempDir(), fmt.Sprintf("esm-build-%s-%s", hex.EncodeToString(hasher.Sum(nil)), rs.Hex.String(8)))
 		ensureDir(task.wd)
 
-		if npmConfig.authToken != "" {
+		if cfg.NpmToken != "" {
 			rcFilePath := path.Join(task.wd, ".npmrc")
 			if !fileExists(rcFilePath) {
 				err = ioutil.WriteFile(rcFilePath, []byte("_authToken=${ESM_NPM_TOKEN}"), 0644)
@@ -656,8 +654,8 @@ esbuild:
 					// clear `?exports` args
 					t.treeShaking = newStringSet()
 
-					_, erro := findModule(t.ID())
-					if erro == storage.ErrNotFound {
+					_, ok := findESMBuild(t.ID())
+					if ok {
 						buildQueue.Add(t, "")
 					}
 
@@ -853,15 +851,9 @@ esbuild:
 }
 
 func (task *BuildTask) storeToDB(esm *ESM) {
-	dbErr := db.Put(
-		task.ID(),
-		"build",
-		storage.Store{
-			"meta": string(utils.MustEncodeJSON(esm)),
-		},
-	)
-	if dbErr != nil {
-		log.Errorf("db: %v", dbErr)
+	err := db.Put(task.ID(), utils.MustEncodeJSON(esm))
+	if err != nil {
+		log.Errorf("db: %v", err)
 	}
 }
 

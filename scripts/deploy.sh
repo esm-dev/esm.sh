@@ -8,8 +8,8 @@ if [ "$host" == "--init" ]; then
 fi
 
 port="80"
-httpsPort="0"
-etcDir="/etc/esmd"
+tlsPort="0"
+workDir="/etc/esmd"
 cacheUrl=""
 fsUrl=""
 dbUrl=""
@@ -25,21 +25,21 @@ if [ "$init" == "yes" ]; then
   fi
   read -p "? https(autocert) server port (default is disabled): " v
   if [ "$v" != "" ]; then
-    httpsPort="$v"
+    tlsPort="$v"
   fi
-  read -p "? etc directory (ensure you have the r/w permission of it, default is '${etcDir}'): " v
+  read -p "? etc directory (ensure you have the r/w permission of it, default is '${workDir}'): " v
   if [ "$v" != "" ]; then
-    etcDir="$v"
+    workDir="$v"
   fi
   read -p "? cache config (default is 'memory:main'): " v
   if [ "$v" != "" ]; then
     cacheUrl="$v"
   fi
-  read -p "? fs config (default is 'local:\$etcDir/storage'): " v
+  read -p "? fs config (default is 'local:\$workDir/storage'): " v
   if [ "$v" != "" ]; then
     fsUrl="$v"
   fi
-  read -p "? db config (default is 'postdb:\$etcDir/esm.db'): " v
+  read -p "? db config (default is 'postdb:\$workDir/esm.db'): " v
   if [ "$v" != "" ]; then
     dbUrl="$v"
   fi
@@ -119,8 +119,10 @@ ssh -p $sshPort $user@$host << EOF
     if [ -f \$SVCF ]; then
       rm -f \$SVCF
     fi
+    mkdir -p /etc/esmd
+    echo "{\"port\":${port},\"tlsPort\":${tlsPort},\"workDir\":\"${workDir}\",\"cache\":\"${cacheUrl}\",\"storage\":\"${fsUrl}\",\"database\":\"${dbUrl}\",\"origin\":\"${origin}\",\"npmRegistry\":\"${npmRegistry}\",\"npmToken\":\"${npmToken}\"}" >> /etc/esmd/config.json
     writeSVConfLine "[program:esmd]"
-    writeSVConfLine "command=/usr/local/bin/esmd --port=${port} --https-port=${httpsPort} --etc-dir=${etcDir} --cache=${cacheUrl} --fs=${fsUrl} --db=${dbUrl} --origin=${origin} --npm-registry=${npmRegistry} --npm-token=${npmToken}"
+    writeSVConfLine "command=/usr/local/bin/esmd --config=/etc/esmd/config.json"
     writeSVConfLine "directory=/tmp"
     writeSVConfLine "user=$user"
     writeSVConfLine "autostart=true"

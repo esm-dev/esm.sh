@@ -9,26 +9,24 @@ import (
 	"os/exec"
 	"os/signal"
 	"path"
-	"path/filepath"
-	"runtime"
 	"strings"
 	"syscall"
 	"time"
 
-	"esm.sh/server/config"
-	"esm.sh/server/storage"
+	"github.com/ije/esm.sh/server/config"
+	"github.com/ije/esm.sh/server/storage"
 
 	logx "github.com/ije/gox/log"
 	"github.com/ije/rex"
 )
 
 var (
+	cfg        *config.Config
 	cache      storage.Cache
-	db         storage.DB
-	fs         storage.FS
+	db         storage.DataBase
+	fs         storage.FileSystem
 	buildQueue *BuildQueue
 	log        *logx.Logger
-	npmConfig  *NpmConfig
 	embedFS    EmbedFS
 )
 
@@ -39,68 +37,29 @@ type EmbedFS interface {
 // Serve serves ESM server
 func Serve(efs EmbedFS) {
 	var (
-		port             int
-		httpsPort        int
-		nsPort           int
-		buildConcurrency int
-		etcDir           string
-		cacheUrl         string
-		dbUrl            string
-		fsUrl            string
-		logLevel         string
-		logDir           string
-		origin           string
-		basePath         string
-		npmRegistry      string
-		npmToken         string
-		unpkgOrigin      string
-		noCompress       bool
-		isDev            bool
+		cfile string
+		isDev bool
+		err   error
 	)
-	flag.IntVar(&port, "port", 80, "the port for http server")
-	flag.IntVar(&httpsPort, "https-port", 0, "the port for https server powered by autotls, default is disabled")
-	flag.IntVar(&nsPort, "ns-port", 8088, "the port for node services")
-	flag.IntVar(&buildConcurrency, "build-concurrency", runtime.NumCPU(), "the maximum number of concurrent build task")
-	flag.StringVar(&etcDir, "etc-dir", ".esmd", "the etc dir for db, builds, log, etc..")
-	flag.StringVar(&cacheUrl, "cache", "", "the cache config, default is 'memory:default'")
-	flag.StringVar(&dbUrl, "db", "", "the database config, default is 'postdb:[etc-dir]/esm.db'")
-	flag.StringVar(&fsUrl, "fs", "", "the fs(storage) config, default is 'local:[etc-dir]/storage'")
-	flag.StringVar(&logDir, "log-dir", "", "the log dir")
-	flag.StringVar(&logLevel, "log-level", "info", "the log level")
-	flag.StringVar(&origin, "origin", "", "the server origin, default is using request origin")
-	flag.StringVar(&basePath, "base-path", "", "the base path")
-	flag.StringVar(&npmRegistry, "npm-registry", "", "the npm registry")
-	flag.StringVar(&npmToken, "npm-token", "", "the npm token for private responstries")
-	flag.StringVar(&unpkgOrigin, "unpkg-origin", "https://unpkg.com", "the origin of unpkg.com")
-	flag.BoolVar(&noCompress, "no-compress", false, "to disable the compression for text content")
-	flag.BoolVar(&isDev, "dev", false, "to run server in development mode")
 
+	flag.StringVar(&cfile, "config", "config.json", "the config file path")
+	flag.BoolVar(&isDev, "dev", false, "to run server in development mode")
 	flag.Parse()
 
-	config.MustLoadConfigs()
-
-	var err error
-	etcDir, err = filepath.Abs(etcDir)
-	if err != nil {
-		fmt.Printf("bad etc dir: %v\n", err)
-		os.Exit(1)
-	}
-
-	if cacheUrl == "" {
-		cacheUrl = "memory:default"
-	}
-	if dbUrl == "" {
-		dbUrl = fmt.Sprintf("postdb:%s", path.Join(etcDir, "esm.db"))
-	}
-	if fsUrl == "" {
-		fsUrl = fmt.Sprintf("local:%s", path.Join(etcDir, "storage"))
-	}
-	if logDir == "" {
-		logDir = path.Join(etcDir, "log")
+	if !fileExists(cfile) {
+		cfg = config.Default()
+		fmt.Println("Config file not found, use default config")
+	} else {
+		cfg, err = config.Load(cfile)
+		if err != nil {
+			fmt.Println(err.Error())
+			os.Exit(1)
+		}
+		fmt.Println("Config loaded from", cfile)
 	}
 
 	if isDev {
-		logLevel = "debug"
+		cfg.LogLevel = "debug"
 		cwd, err := os.Getwd()
 		if err != nil {
 			fmt.Println(err)
@@ -112,58 +71,51 @@ func Serve(efs EmbedFS) {
 		os.Setenv("NO_COLOR", "1") // disable log color in production
 	}
 
-	log, err = logx.New(fmt.Sprintf("file:%s?buffer=32k", path.Join(logDir, fmt.Sprintf("main-v%d.log", VERSION))))
+	log, err = logx.New(fmt.Sprintf("file:%s?buffer=32k", path.Join(cfg.LogDir, fmt.Sprintf("main-v%d.log", VERSION))))
 	if err != nil {
 		fmt.Printf("initiate logger: %v\n", err)
 		os.Exit(1)
 	}
-	log.SetLevelByName(logLevel)
+	log.SetLevelByName(cfg.LogLevel)
 
 	nodeInstallDir := os.Getenv("NODE_INSTALL_DIR")
 	if nodeInstallDir == "" {
-		nodeInstallDir = path.Join(etcDir, "nodejs")
+		nodeInstallDir = path.Join(cfg.WorkDir, "nodejs")
 	}
-	nodeVer, yarnVer, err := checkNodejs(nodeInstallDir, npmRegistry, npmToken)
+	nodeVer, yarnVer, err := checkNodejs(nodeInstallDir)
 	if err != nil {
 		log.Fatalf("check nodejs: %v", err)
 	}
-	if npmRegistry == "" {
+	if cfg.NpmRegistry == "" {
 		output, err := exec.Command("npm", "config", "get", "registry").CombinedOutput()
 		if err == nil {
-			npmRegistry = strings.TrimRight(strings.TrimSpace(string(output)), "/") + "/"
+			cfg.NpmRegistry = strings.TrimRight(strings.TrimSpace(string(output)), "/") + "/"
 		}
 	}
-	npmConfig = &NpmConfig{
-		registry:  npmRegistry,
-		authToken: npmToken,
-	}
-	log.Infof("nodejs v%s installed, registry: %s, yarn: %s", nodeVer, npmRegistry, yarnVer)
+	log.Infof("nodejs v%s installed, registry: %s, yarn: %s", nodeVer, cfg.NpmRegistry, yarnVer)
 
-	storage.SetLogger(log)
-	storage.SetIsDev(isDev)
-
-	cache, err = storage.OpenCache(cacheUrl)
+	cache, err = storage.OpenCache(cfg.Cache)
 	if err != nil {
-		log.Fatalf("init storage(cache,%s): %v", cacheUrl, err)
+		log.Fatalf("init storage(cache,%s): %v", cfg.Cache, err)
 	}
 
-	db, err = storage.OpenDB(dbUrl)
+	db, err = storage.OpenDB(cfg.Database)
 	if err != nil {
-		log.Fatalf("init storage(db,%s): %v", dbUrl, err)
+		log.Fatalf("init storage(db,%s): %v", cfg.Database, err)
 	}
 
-	fs, err = storage.OpenFS(fsUrl)
+	fs, err = storage.OpenFS(cfg.Storage)
 	if err != nil {
-		log.Fatalf("init storage(fs,%s): %v", fsUrl, err)
+		log.Fatalf("init storage(fs,%s): %v", cfg.Storage, err)
 	}
 
-	buildQueue = newBuildQueue(buildConcurrency)
+	buildQueue = newBuildQueue(int(cfg.BuildConcurrency))
 
 	var accessLogger *logx.Logger
-	if logDir == "" {
+	if cfg.LogDir == "" {
 		accessLogger = &logx.Logger{}
 	} else {
-		accessLogger, err = logx.New(fmt.Sprintf("file:%s?buffer=32k&fileDateFormat=20060102", path.Join(logDir, "access.log")))
+		accessLogger, err = logx.New(fmt.Sprintf("file:%s?buffer=32k&fileDateFormat=20060102", path.Join(cfg.LogDir, "access.log")))
 		if err != nil {
 			log.Fatalf("initiate access logger: %v", err)
 		}
@@ -173,7 +125,7 @@ func Serve(efs EmbedFS) {
 	// start cjs lexer server
 	go func() {
 		for {
-			err := startNodeServices(etcDir, nsPort)
+			err := startNodeServices()
 			if err != nil && err.Error() != "signal: interrupt" {
 				log.Warnf("node services exit: %v", err)
 			}
@@ -181,7 +133,7 @@ func Serve(efs EmbedFS) {
 		}
 	}()
 
-	if !noCompress {
+	if !cfg.NoCompress {
 		rex.Use(rex.Compression())
 	}
 	rex.Use(
@@ -196,23 +148,23 @@ func Serve(efs EmbedFS) {
 			ExposedHeaders:   []string{"X-TypeScript-Types"},
 			AllowCredentials: false,
 		}),
-		esmHandler(esmHandlerOptions{origin, basePath, unpkgOrigin}),
+		esmHandler(),
 	)
 
 	C := rex.Serve(rex.ServerConfig{
-		Port: uint16(port),
+		Port: uint16(cfg.Port),
 		TLS: rex.TLSConfig{
-			Port: uint16(httpsPort),
+			Port: uint16(cfg.TlsPort),
 			AutoTLS: rex.AutoTLSConfig{
-				AcceptTOS: httpsPort > 0 && !isDev,
-				CacheDir:  path.Join(etcDir, "autotls"),
+				AcceptTOS: cfg.TlsPort > 0 && !isDev,
+				CacheDir:  path.Join(cfg.WorkDir, "autotls"),
 			},
 		},
 	})
 
 	if isDev {
-		log.Debugf("Server is ready on http://localhost:%d", port)
-		log.Debugf("Testing page at http://localhost:%d?test", port)
+		log.Debugf("Server is ready on http://localhost:%d", cfg.Port)
+		log.Debugf("Testing page at http://localhost:%d?test", cfg.Port)
 	} else {
 		log.Info("Server is ready")
 	}

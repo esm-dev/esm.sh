@@ -17,7 +17,7 @@ import (
 	"sync"
 	"time"
 
-	"esm.sh/server/storage"
+	"github.com/ije/esm.sh/server/storage"
 
 	"github.com/Masterminds/semver/v3"
 	"github.com/ije/gox/utils"
@@ -259,13 +259,7 @@ func (a *NpmPackage) UnmarshalJSON(b []byte) error {
 	return nil
 }
 
-// NodeInfo defines the installed node.js
-type NpmConfig struct {
-	registry  string
-	authToken string
-}
-
-func checkNodejs(installDir string, npmRegistry string, npmToken string) (nodeVer string, yarnVer string, err error) {
+func checkNodejs(installDir string) (nodeVer string, yarnVer string, err error) {
 	var installed bool
 CheckNodejs:
 	nodeVer, major, err := getNodejsVersion()
@@ -377,12 +371,12 @@ func fetchPackageInfo(name string, version string) (info NpmPackage, err error) 
 	defer lock.Delete(id)
 
 	start := time.Now()
-	req, err := http.NewRequest("GET", npmConfig.registry+name, nil)
+	req, err := http.NewRequest("GET", cfg.NpmRegistry+name, nil)
 	if err != nil {
 		return
 	}
-	if npmConfig.authToken != "" {
-		req.Header.Set("Authorization", "Bearer "+npmConfig.authToken)
+	if cfg.NpmToken != "" {
+		req.Header.Set("Authorization", "Bearer "+cfg.NpmToken)
 	}
 
 	resp, err := httpClient.Do(req)
@@ -601,7 +595,7 @@ func yarnAdd(wd string, packages ...string) (err error) {
 			"--no-progress",
 			"--non-interactive",
 			"--silent",
-			"--registry=" + npmConfig.registry,
+			"--registry=" + cfg.NpmRegistry,
 		}
 		yarnCacheDir := os.Getenv("YARN_CACHE_DIR")
 		if yarnCacheDir != "" {
@@ -614,8 +608,8 @@ func yarnAdd(wd string, packages ...string) (err error) {
 
 		cmd := exec.Command("yarn", append(args, packages...)...)
 		cmd.Dir = wd
-		if npmConfig.authToken != "" {
-			cmd.Env = append(os.Environ(), "ESM_NPM_TOKEN="+npmConfig.authToken)
+		if cfg.NpmToken != "" {
+			cmd.Env = append(os.Environ(), "ESM_NPM_TOKEN="+cfg.NpmToken)
 		}
 
 		output, err := cmd.CombinedOutput()

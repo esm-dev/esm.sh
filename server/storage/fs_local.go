@@ -11,7 +11,7 @@ import (
 
 type localFSDriver struct{}
 
-func (driver *localFSDriver) Open(root string, options url.Values) (FS, error) {
+func (driver *localFSDriver) Open(root string, options url.Values) (FileSystem, error) {
 	root = filepath.Clean(root)
 	err := ensureDir(root)
 	if err != nil {
@@ -79,5 +79,5 @@ func ensureDir(dir string) (err error) {
 }
 
 func init() {
-	RegisterFS("local", &localFSDriver{})
+	RegisterFileSystem("local", &localFSDriver{})
 }

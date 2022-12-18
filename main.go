@@ -3,7 +3,7 @@ package main
 import (
 	"embed"
 
-	"esm.sh/server"
+	"github.com/ije/esm.sh/server"
 )
 
 //go:embed README.md

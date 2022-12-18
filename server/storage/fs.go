@@ -10,11 +10,11 @@ import (
 	"github.com/ije/gox/utils"
 )
 
-type FSDriver interface {
-	Open(root string, options url.Values) (conn FS, err error)
+type FileSystemDriver interface {
+	Open(root string, options url.Values) (conn FileSystem, err error)
 }
 
-type FS interface {
+type FileSystem interface {
 	Exists(path string) (found bool, size int64, modtime time.Time, err error)
 	ReadFile(path string, size int64) (content io.ReadSeekCloser, err error)
 	WriteFile(path string, r io.Reader) (written int64, err error)
@@ -23,19 +23,19 @@ type FS interface {
 
 var fsDrivers = sync.Map{}
 
-func OpenFS(fsUrl string) (FS, error) {
+func OpenFS(fsUrl string) (FileSystem, error) {
 	name, addr := utils.SplitByFirstByte(fsUrl, ':')
 	fs, ok := fsDrivers.Load(name)
 	if ok {
 		root, options, err := parseConfigUrl(addr)
 		if err == nil {
-			return fs.(FSDriver).Open(root, options)
+			return fs.(FileSystemDriver).Open(root, options)
 		}
 	}
 	return nil, fmt.Errorf("unregistered fs '%s'", name)
 }
 
-func RegisterFS(name string, driver FSDriver) error {
+func RegisterFileSystem(name string, driver FileSystemDriver) error {
 	_, ok := fsDrivers.Load(name)
 	if ok {
 		return fmt.Errorf("fs driver '%s' has been registered", name)

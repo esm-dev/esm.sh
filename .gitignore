@@ -2,6 +2,7 @@
 Thumbs.db
 esmd
 .esmd/
+config.json
 node_modules/
 target/
 pkg/

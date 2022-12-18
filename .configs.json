@@ -1,8 +1,0 @@
-{
-  "ban_list": {
-    "packages": [
-      "@withfig/autocomplete"
-    ],
-    "scopes": []
-  }
-}

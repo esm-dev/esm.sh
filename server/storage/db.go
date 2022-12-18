@@ -4,33 +4,24 @@ import (
 	"fmt"
 	"net/url"
 	"sync"
-	"time"
 
 	"github.com/ije/gox/utils"
 )
 
-type Store map[string]string
-
-type ListItem struct {
-	Store   map[string]string `json:"store"`
-	Modtime uint32            `json:"modtime"`
-}
-
 type DBDriver interface {
-	Open(config string, options url.Values) (conn DB, err error)
+	Open(config string, options url.Values) (conn DataBase, err error)
 }
 
-type DB interface {
-	Get(id string) (store Store, modtime time.Time, err error)
-	Put(id string, category string, store Store) error
-	List(category string) ([]ListItem, error)
-	Delete(id string) error
+type DataBase interface {
+	Get(key string) ([]byte, error)
+	Put(key string, value []byte) error
+	Delete(key string) error
 	Close() error
 }
 
 var dbDrivers = sync.Map{}
 
-func OpenDB(url string) (DB, error) {
+func OpenDB(url string) (DataBase, error) {
 	name, addr := utils.SplitByFirstByte(url, ':')
 	db, ok := dbDrivers.Load(name)
 	if ok {

@@ -7,8 +7,6 @@ import (
 	"path"
 	"strings"
 
-	"esm.sh/server/storage"
-
 	"github.com/ije/gox/utils"
 )
 
@@ -233,50 +231,23 @@ func initModule(wd string, pkg Pkg, target string, isDev bool) (esm *ESM, npm *N
 	return
 }
 
-type OldMeta struct {
-	*NpmPackage
-	ExportDefault bool     `json:"exportDefault"`
-	Exports       []string `json:"exports"`
-	Dts           string   `json:"dts"`
-	PackageCSS    bool     `json:"packageCSS"`
-}
-
-func findModule(id string) (esm *ESM, err error) {
-	store, _, err := db.Get(id)
-	if err == nil {
-		if v, ok := store["meta"]; ok {
-			err = json.Unmarshal([]byte(v), &esm)
-		} else if v, ok := store["esm"]; ok {
-			var old OldMeta
-			err = json.Unmarshal([]byte(v), &old)
-			if err == nil {
-				esm = &ESM{
-					CJS:           old.Module == "" && old.Main != "",
-					ExportDefault: old.ExportDefault,
-					TypesOnly:     old.Module == "" && old.Main == "" && old.Types != "",
-					Dts:           old.Dts,
-					PackageCSS:    old.PackageCSS,
-				}
-			}
-		} else {
-			err = fmt.Errorf("bad data")
-		}
-		if err != nil {
-			db.Delete(id)
-			err = storage.ErrNotFound
-			return
-		}
-
+func findESMBuild(id string) (*ESM, bool) {
+	value, err := db.Get(id)
+	if err == nil && value != nil {
+		var esm ESM
 		var exists bool
-		exists, _, _, err = fs.Exists(path.Join("builds", id))
-		if err == nil && !exists {
-			db.Delete(id)
-			esm = nil
-			err = storage.ErrNotFound
-			return
+		err = json.Unmarshal(value, &esm)
+		if err == nil {
+			exists, _, _, err = fs.Exists(path.Join("builds", id))
+			if err == nil && exists {
+				return &esm, true
+			}
 		}
+
+		// delete the invalid db entry
+		db.Delete(id)
 	}
-	return
+	return nil, false
 }
 
 func parseESModule(wd string, packageName string, moduleSpecifier string) (resolveName string, hasDefaultExport bool, err error) {

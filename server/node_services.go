@@ -52,7 +52,6 @@ const server = http.createServer(requestListener);
 server.listen(%d);
 `
 
-var nsPort int
 var nsPidFile string
 
 type NSPlayload struct {
@@ -70,7 +69,10 @@ func invokeNodeService(serviceName string, input map[string]interface{}) (data [
 	if err != nil {
 		return
 	}
-	res, err := http.Post(fmt.Sprintf("http://localhost:%d", nsPort), "application/json", buf)
+	if cfg.NsPort == 0 {
+		return nil, errors.New("node service port is not set")
+	}
+	res, err := http.Post(fmt.Sprintf("http://localhost:%d", cfg.NsPort), "application/json", buf)
 	if err != nil {
 		// kill current ns process to get new one
 		kill(nsPidFile)
@@ -81,15 +83,18 @@ func invokeNodeService(serviceName string, input map[string]interface{}) (data [
 	return
 }
 
-func startNodeServices(etcDir string, port int) (err error) {
-	wd := path.Join(etcDir, "ns")
+func startNodeServices() (err error) {
+	if cfg.NsPort == 0 {
+		return errors.New("node service port is not set")
+	}
+
+	wd := path.Join(cfg.WorkDir, "ns")
 	err = clearDir(wd)
 	if err != nil {
 		return
 	}
 
-	nsPort = port
-	nsPidFile = path.Join(etcDir, "ns.pid")
+	nsPidFile = path.Join(cfg.WorkDir, "ns.pid")
 
 	// install services
 	cmd := exec.Command("yarn", "add", "esm-node-services")
@@ -104,7 +109,7 @@ func startNodeServices(etcDir string, port int) (err error) {
 	// create ns script
 	err = ioutil.WriteFile(
 		path.Join(wd, "ns.js"),
-		[]byte(fmt.Sprintf(nsApp, port)),
+		[]byte(fmt.Sprintf(nsApp, cfg.NsPort)),
 		0644,
 	)
 

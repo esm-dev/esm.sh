@@ -1,7 +1,7 @@
 async function startEsmServer(onReady: () => void) {
   await run("go", "build", "-o", "esmd", "main.go");
   const p = Deno.run({
-    cmd: ["./esmd", "--port", "8080"],
+    cmd: ["./esmd"],
     stdout: "null",
     stderr: "inherit",
   });

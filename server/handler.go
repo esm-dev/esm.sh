@@ -13,8 +13,6 @@ import (
 	"strings"
 	"time"
 
-	"esm.sh/server/config"
-	"esm.sh/server/storage"
 	"github.com/ije/gox/utils"
 	"github.com/ije/rex"
 )
@@ -37,14 +35,8 @@ var httpClient = &http.Client{
 	},
 }
 
-type esmHandlerOptions = struct {
-	origin      string
-	basePath    string
-	unpkgOrigin string
-}
-
 // esm.sh query middleware for rex
-func esmHandler(options esmHandlerOptions) rex.Handle {
+func esmHandler() rex.Handle {
 	startTime := time.Now()
 
 	return func(ctx *rex.Context) interface{} {
@@ -59,7 +51,7 @@ func esmHandler(options esmHandlerOptions) rex.Handle {
 		// trim the leading `/` in pathname to get the package name
 		// e.g. /@withfig/autocomplete --> @withfig/autocomplete
 		packageFullName := pathname[1:]
-		if config.Get().BanList.IsPackageBanned(packageFullName) {
+		if cfg.BanList.IsPackageBanned(packageFullName) {
 			log.Debugf("The package %s is banned.", packageFullName)
 			return rex.Status(403, "forbidden")
 		}
@@ -70,8 +62,8 @@ func esmHandler(options esmHandlerOptions) rex.Handle {
 		}
 
 		var origin string
-		if options.origin != "" {
-			origin = strings.TrimSuffix(options.origin, "/")
+		if cfg.Origin != "" {
+			origin = strings.TrimSuffix(cfg.Origin, "/")
 		} else {
 			proto := "http"
 			if ctx.R.TLS != nil {
@@ -93,13 +85,13 @@ func esmHandler(options esmHandlerOptions) rex.Handle {
 			return rex.Redirect(url, http.StatusFound)
 		}
 
-		// Build prefix may only be served from "${options.basePath}/..."
-		if options.basePath != "" {
-			if strings.HasPrefix(pathname, options.basePath+"/") {
-				pathname = strings.TrimPrefix(pathname, options.basePath)
+		// Build prefix may only be served from "${cfg.BasePath}/..."
+		if cfg.BasePath != "" {
+			if strings.HasPrefix(pathname, cfg.BasePath+"/") {
+				pathname = strings.TrimPrefix(pathname, cfg.BasePath)
 			} else {
-				url := strings.TrimPrefix(ctx.R.URL.String(), options.basePath)
-				url = fmt.Sprintf("%s/%s", options.basePath, url)
+				url := strings.TrimPrefix(ctx.R.URL.String(), cfg.BasePath)
+				url = fmt.Sprintf("%s/%s", cfg.BasePath, url)
 				return rex.Redirect(url, http.StatusFound)
 			}
 		}
@@ -143,13 +135,13 @@ func esmHandler(options esmHandlerOptions) rex.Handle {
 			if err != nil {
 				return err
 			}
-			readme = bytes.ReplaceAll(readme, []byte("./server/embed/"), []byte(options.basePath+"/embed/"))
+			readme = bytes.ReplaceAll(readme, []byte("./server/embed/"), []byte(cfg.BasePath+"/embed/"))
 			readme = bytes.ReplaceAll(readme, []byte("./HOSTING.md"), []byte("https://github.com/ije/esm.sh/blob/master/HOSTING.md"))
-			readme = bytes.ReplaceAll(readme, []byte("https://esm.sh"), []byte("{origin}"+options.basePath))
+			readme = bytes.ReplaceAll(readme, []byte("https://esm.sh"), []byte("{origin}"+cfg.BasePath))
 			readmeStrLit := utils.MustEncodeJSON(string(readme))
 			html := bytes.ReplaceAll(indexHTML, []byte("'# README'"), readmeStrLit)
 			html = bytes.ReplaceAll(html, []byte("{VERSION}"), []byte(fmt.Sprintf("%d", VERSION)))
-			html = bytes.ReplaceAll(html, []byte("{basePath}"), []byte(options.basePath))
+			html = bytes.ReplaceAll(html, []byte("{basePath}"), []byte(cfg.BasePath))
 			ctx.SetHeader("Cache-Control", fmt.Sprintf("public, max-age=%d", 10*60))
 			return rex.Content("index.html", startTime, bytes.NewReader(html))
 
@@ -181,7 +173,7 @@ func esmHandler(options esmHandlerOptions) rex.Handle {
 				}
 			}
 			buildQueue.lock.RUnlock()
-			res, err := http.Get(fmt.Sprintf("http://localhost:%d", nsPort))
+			res, err := http.Get(fmt.Sprintf("http://localhost:%d", cfg.NsPort))
 			if err != nil {
 				kill(nsPidFile)
 				return err
@@ -387,7 +379,7 @@ func esmHandler(options esmHandlerOptions) rex.Handle {
 
 			// fetch the non-existent file from unpkg.com and save to fs
 			if !exists {
-				resp, err := httpClient.Get(fmt.Sprintf("%s/%s", strings.TrimSuffix(options.unpkgOrigin, "/"), reqPkg.String()))
+				resp, err := httpClient.Get(fmt.Sprintf("%s/%s", strings.TrimSuffix(cfg.UnpkgOrigin, "/"), reqPkg.String()))
 				if err != nil {
 					return rex.Status(http.StatusBadGateway, "Bad Gateway")
 				}
@@ -570,6 +562,10 @@ func esmHandler(options esmHandlerOptions) rex.Handle {
 				if err != nil {
 					return throwErrorJS(ctx, err)
 				}
+				if args.denoStdVersion == "" {
+					// ensure deno/std version used
+					args.denoStdVersion = denoStdVersion
+				}
 				buildArgs = args
 			}
 		}
@@ -603,7 +599,7 @@ func esmHandler(options esmHandlerOptions) rex.Handle {
 			task := &BuildTask{
 				BuildArgs:    buildArgs,
 				CdnOrigin:    origin,
-				BasePath:     options.basePath,
+				BasePath:     cfg.BasePath,
 				BuildVersion: buildVersion,
 				Pkg:          *reqPkg,
 				Target:       "types",
@@ -664,7 +660,7 @@ func esmHandler(options esmHandlerOptions) rex.Handle {
 		task := &BuildTask{
 			BuildArgs:    buildArgs,
 			CdnOrigin:    origin,
-			BasePath:     options.basePath,
+			BasePath:     cfg.BasePath,
 			BuildVersion: buildVersion,
 			Pkg:          *reqPkg,
 			Target:       target,
@@ -673,20 +669,14 @@ func esmHandler(options esmHandlerOptions) rex.Handle {
 			stage:        "init",
 		}
 		taskID := task.ID()
-		esm, err := findModule(taskID)
-		if err != nil && err != storage.ErrNotFound {
-			return rex.Status(500, err.Error())
-		}
-		if err == storage.ErrNotFound {
+		esm, ok := findESMBuild(taskID)
+		if !ok {
 			if !isBare && !isPined {
 				// find previous build version
 				for i := 0; i < VERSION; i++ {
 					id := fmt.Sprintf("v%d/%s", VERSION-(i+1), taskID[len(fmt.Sprintf("v%d/", VERSION)):])
-					esm, err = findModule(id)
-					if err != nil && err != storage.ErrNotFound {
-						return rex.Status(500, err.Error())
-					}
-					if err == nil {
+					esm, ok = findESMBuild(taskID)
+					if ok {
 						taskID = id
 						break
 					}
@@ -719,7 +709,7 @@ func esmHandler(options esmHandlerOptions) rex.Handle {
 				value := fmt.Sprintf(
 					"%s%s/%s",
 					origin,
-					options.basePath,
+					cfg.BasePath,
 					strings.TrimPrefix(esm.Dts, "/"),
 				)
 				ctx.SetHeader("X-TypeScript-Types", value)
@@ -763,7 +753,7 @@ func esmHandler(options esmHandlerOptions) rex.Handle {
 				url := fmt.Sprintf(
 					"%s%s/%s",
 					origin,
-					options.basePath,
+					cfg.BasePath,
 					strings.TrimPrefix(esm.Dts, "/"),
 				)
 				ctx.SetHeader("X-TypeScript-Types", url)
@@ -778,13 +768,13 @@ func esmHandler(options esmHandlerOptions) rex.Handle {
 		if isWorker {
 			fmt.Fprintf(buf, `export default function workerFactory() {%s  return new Worker('%s/%s', { type: 'module' })%s}`, "\n", origin, taskID, "\n")
 		} else {
-			fmt.Fprintf(buf, `export * from "%s%s/%s";%s`, origin, options.basePath, taskID, "\n")
+			fmt.Fprintf(buf, `export * from "%s%s/%s";%s`, origin, cfg.BasePath, taskID, "\n")
 			if (esm.CJS || esm.ExportDefault) && (treeShaking.Size() == 0 || treeShaking.Has("default")) {
 				fmt.Fprintf(
 					buf,
 					`export { default } from "%s%s/%s";%s`,
 					origin,
-					options.basePath,
+					cfg.BasePath,
 					taskID,
 					"\n",
 				)
@@ -795,7 +785,7 @@ func esmHandler(options esmHandlerOptions) rex.Handle {
 			url := fmt.Sprintf(
 				"%s%s/%s",
 				origin,
-				options.basePath,
+				cfg.BasePath,
 				strings.TrimPrefix(esm.Dts, "/"),
 			)
 			ctx.SetHeader("X-TypeScript-Types", url)

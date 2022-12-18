@@ -14,35 +14,35 @@ automatically.
 git clone https://github.com/ije/esm.sh
 cd esm.sh
 ```
-## Configs
-You can add some customize configs by `.config.yml`.
 
-Belows are supported customization:
-- ban list
-  
-  The server allows you ban some packages or scopes by:
-  ```json
-  {
-    "ban_list": {
-        "packages": ["@some_scope/package_name"],
-        "scopes": [{
-            "name": "@your_scope",
-            "excludes": [
-              "package_name"
-            ]
-        }]
-    }
-  }
-  ```
+## Configration
+
+To configure the server, you need to create a `config.json` file then pass it to the server bootstrap command. For example:
+
+```jsonc
+// config.json
+{
+  "port": 8080,
+  "tlsPort": 443,
+  "workDir": "/var/www/esmd",
+  "storage": "local:/var/www/esmd/storage",
+  "origin": "https://esm.sh",
+  "npmRegistry": "https://npmjs.org/registry",
+  "npmToken": "xxxxxx"
+}
+```
+
+You can find all the server options in [config.exmaple.jsonc](./config.example.jsonc). (**Note**: the `config.example.jsonc` is not a valid JSON file, it's a JSONC file.)
+
 ## Run the sever locally
 
 ```bash
-go run main.go --port=8080 --dev
+go run main.go --config=config.json --dev
 ```
 
 Then you can import `React` from http://localhost:8080/react
 
-## Deploy to remote host
+## Deploy to remote host with the quick deploy script
 
 Please ensure the [supervisor](http://supervisord.org/) has been installed on
 your host machine.
@@ -50,22 +50,6 @@ your host machine.
 ```bash
 ./scripts/deploy.sh --init
 ```
-
-Server options:
-
-- `port` - the port to listen
-- `httpsPort` - the port to listen https (use [autocert](golang.org/x/crypto/acme/autocert))
-- `etcDir` - the etc directory (default is `/etc/esmd`)
-- `cache` - the cache config (default is `memory:default`)
-
-    The `LRU` strategy is also supported, set the option to `memoryLRU:default` instead.
-- `db` - the database config (default is `postdb:$etcDir/esm.db`)
-- `fs` - the fs (storage) config (default is `local:$etcDir/storage`)
-
-  The `LRU` strategy is also supported, set the option to `localLRU:$etcDir/storage` instead.
-- `origin` - the origin of the CDN (this is useful when running the server behind a proxy/CDN, optional)
-- `npmRegistry` - the npm registry (default is https://npmjs.org/registry)
-- `npmToken` - the private token for npm registry (optional)
 
 ## Deploy with Docker
 

@@ -3,15 +3,31 @@ package config
 import (
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
 	"os"
+	"path"
+	"path/filepath"
+	"runtime"
 	"strings"
 )
 
-var cfgs *Configs
-
-type Configs struct {
-	BanList BanList `json:"ban_list"`
+type Config struct {
+	Port             uint16  `json:"port,omitempty"`
+	TlsPort          uint16  `json:"tlsPort,omitempty"`
+	NsPort           uint16  `json:"nsPort,omitempty"`
+	BuildConcurrency uint16  `json:"buildConcurrency,omitempty"`
+	BanList          BanList `json:"banList,omitempty"`
+	WorkDir          string  `json:"workDir,omitempty"`
+	Cache            string  `json:"cache,omitempty"`
+	Database         string  `json:"database,omitempty"`
+	Storage          string  `json:"storage,omitempty"`
+	LogLevel         string  `json:"logLevel,omitempty"`
+	LogDir           string  `json:"logDir,omitempty"`
+	Origin           string  `json:"origin,omitempty"`
+	BasePath         string  `json:"basePath,omitempty"`
+	NpmRegistry      string  `json:"npmRegistry,omitempty"`
+	NpmToken         string  `json:"npmToken,omitempty"`
+	UnpkgOrigin      string  `json:"unpkgOrigin,omitempty"`
+	NoCompress       bool    `json:"noCompress,omitempty"`
 }
 
 type BanList struct {
@@ -24,30 +40,83 @@ type BanScope struct {
 	Excludes []string `json:"excludes"`
 }
 
-// MustLoadConfigs Loading configs from local `.configs.yml` file. Panic if failed to load.
-func MustLoadConfigs() {
+// Load loads config from the given file. Panic if failed to load.
+func Load(filename string) (*Config, error) {
 	var (
-		err      error
-		cfgFile  *os.File
-		cfgBytes []byte
+		cfg     *Config
+		cfgFile *os.File
+		err     error
 	)
 
-	if cfgFile, err = os.Open(".configs.json"); err != nil {
-		panic(fmt.Errorf("fatal error open config file: %w", err))
+	cfgFile, err = os.Open(filename)
+	if err != nil {
+		return nil, fmt.Errorf("fail to read config file: %w", err)
 	}
 	defer cfgFile.Close()
 
-	if cfgBytes, err = ioutil.ReadAll(cfgFile); err != nil {
-		panic(fmt.Errorf("fatal error read config file: %w", err))
+	err = json.NewDecoder(cfgFile).Decode(&cfg)
+	if err != nil {
+		return nil, fmt.Errorf("fail to parse config: %w", err)
 	}
 
-	if err = json.Unmarshal(cfgBytes, &cfgs); err != nil {
-		panic(fmt.Errorf("fatal error parse config: %w", err))
+	// fix config
+	if cfg.WorkDir == "" {
+		homeDir, err := os.UserHomeDir()
+		if err != nil {
+			return nil, fmt.Errorf("fail to get current user home directory: %w", err)
+		}
+		cfg.WorkDir = path.Join(homeDir, ".esmd")
+	} else {
+		cfg.WorkDir, err = filepath.Abs(cfg.WorkDir)
+		if err != nil {
+			return nil, fmt.Errorf("fail to get absolute path of the work directory: %w", err)
+		}
 	}
+	if cfg.Port == 0 {
+		cfg.Port = 8080
+	}
+	if cfg.NsPort == 0 {
+		cfg.NsPort = 8088
+	}
+	if cfg.BuildConcurrency == 0 {
+		cfg.BuildConcurrency = uint16(runtime.NumCPU())
+	}
+	if cfg.Cache == "" {
+		cfg.Cache = "memory:default"
+	}
+	if cfg.Database == "" {
+		cfg.Database = fmt.Sprintf("bolt:%s", path.Join(cfg.WorkDir, "esm.db"))
+	}
+	if cfg.Storage == "" {
+		cfg.Storage = fmt.Sprintf("local:%s", path.Join(cfg.WorkDir, "storage"))
+	}
+	if cfg.LogDir == "" {
+		cfg.LogDir = path.Join(cfg.WorkDir, "log")
+	}
+	if cfg.UnpkgOrigin == "" {
+		cfg.UnpkgOrigin = "https://unpkg.com"
+	}
+
+	return cfg, nil
 }
 
-func Get() *Configs {
-	return cfgs
+func Default() *Config {
+	homeDir, err := os.UserHomeDir()
+	if err != nil {
+		panic(err)
+	}
+	workDir := path.Join(homeDir, ".esmd")
+	return &Config{
+		Port:             8080,
+		NsPort:           8088,
+		BuildConcurrency: uint16(runtime.NumCPU()),
+		WorkDir:          workDir,
+		Cache:            "memory:default",
+		Database:         fmt.Sprintf("bolt:%s", path.Join(workDir, "esm.db")),
+		Storage:          fmt.Sprintf("local:%s", path.Join(workDir, "storage")),
+		LogDir:           path.Join(workDir, "log"),
+		UnpkgOrigin:      "https://unpkg.com",
+	}
 }
 
 // IsPackageBanned Checking if the package is banned.

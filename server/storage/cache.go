@@ -29,7 +29,7 @@ func OpenCache(url string) (cache Cache, err error) {
 	name, addr := utils.SplitByFirstByte(url, ':')
 	driver, ok := cacheDrivers.Load(name)
 	if !ok {
-		err = fmt.Errorf("Unknown driver '%s'", name)
+		err = fmt.Errorf("unknown driver '%s'", name)
 		return
 	}
 
