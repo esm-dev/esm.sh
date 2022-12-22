@@ -164,9 +164,9 @@ async function init(args: string[], options: Record<string, string>) {
   const tasks = config.tasks as undefined | Record<string, string>;
   config.tasks = {
     ...tasks,
-    "npm:add": `deno run -A ${importUrl.origin}/${VERSION} add`,
-    "npm:update": `deno run -A ${importUrl.origin}/${VERSION} update`,
-    "npm:remove": `deno run -A ${importUrl.origin}/${VERSION} remove`,
+    "esm:add": `deno run -A ${importUrl.origin}/${VERSION} add`,
+    "esm:update": `deno run -A ${importUrl.origin}/${VERSION} update`,
+    "esm:remove": `deno run -A ${importUrl.origin}/${VERSION} remove`,
   };
   await Deno.writeTextFile(
     "deno.json",
@@ -175,17 +175,17 @@ async function init(args: string[], options: Record<string, string>) {
   await saveImportMap(importMap);
   console.log("Initialized %cdeno.json%c, 3 task added:", "color:green", "");
   console.log(
-    "  - %cdeno task npm:add%c [packages...]",
+    "  - %cdeno task esm:add%c [packages...]",
     "color:blue",
     "color:gray",
   );
   console.log(
-    "  - %cdeno task npm:update%c [packages...]",
+    "  - %cdeno task esm:update%c [packages...]",
     "color:blue",
     "color:gray",
   );
   console.log(
-    "  - %cdeno task npm:remove%c [packages...]",
+    "  - %cdeno task esm:remove%c [packages...]",
     "color:blue",
     "color:gray",
   );
