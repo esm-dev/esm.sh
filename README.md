@@ -186,15 +186,15 @@ The CLI script is using to manage the imports with **import maps**, it will reso
 deno run -A -r https://esm.sh init
 ```
 
-After initializing, you can use the `deno task npm:[add/update/remove]` commands to manage the npm modules in the import maps.
+After initializing, you can use the `deno task esm:[add/update/remove]` commands to manage the npm modules in the import maps.
 
 ```bash
-deno task npm:add react react-dom # add packages
-deno task npm:add react@17 # add packages with specified version
-deno task npm:add react:preact/compat # add packages with alias
-deno task npm:update react react-dom # upgrade packages
-deno task npm:update # update all packages
-deno task npm:remove react react-dom # remove packages
+deno task esm:add react react-dom # add packages
+deno task esm:add react@17 # add packages with specified version
+deno task esm:add react:preact/compat # add packages with alias
+deno task esm:update react react-dom # upgrade packages
+deno task esm:update # update all packages
+deno task esm:remove react react-dom # remove packages
 ```
 
 ### X-Typescript-Types
