@@ -76,15 +76,6 @@ func esmHandler() rex.Handle {
 			origin = "https://esm.sh"
 		}
 
-		// redirect `/@types/` to `.d.ts` files
-		if strings.HasPrefix(pathname, "/@types/") {
-			url := fmt.Sprintf("%s/v%d%s", origin, VERSION, pathname)
-			if !strings.HasSuffix(url, ".d.ts") {
-				url += "~.d.ts"
-			}
-			return rex.Redirect(url, http.StatusFound)
-		}
-
 		// Build prefix may only be served from "${cfg.BasePath}/..."
 		if cfg.BasePath != "" {
 			if strings.HasPrefix(pathname, cfg.BasePath+"/") {
@@ -261,6 +252,29 @@ func esmHandler() rex.Handle {
 				status = 404
 			}
 			return rex.Status(status, message)
+		}
+
+		// redirect `/@types/` to `.d.ts` files
+		if strings.HasPrefix(reqPkg.Name, "@types/") && (reqPkg.Submodule == "" || !strings.HasSuffix(reqPkg.Submodule, ".d.ts")) {
+			url := fmt.Sprintf("%s/v%d%s", origin, VERSION, pathname)
+			if reqPkg.Submodule == "" {
+				info, _, err := getPackageInfo("", reqPkg.Name, reqPkg.Version)
+				if err != nil {
+					return rex.Status(500, err.Error())
+				}
+				types := "index.d.ts"
+				if info.Types != "" {
+					types = info.Types
+				} else if info.Typings != "" {
+					types = info.Typings
+				} else if info.Main != "" && strings.HasSuffix(info.Main, ".d.ts") {
+					types = info.Main
+				}
+				url += "/" + types
+			} else {
+				url += "~.d.ts"
+			}
+			return rex.Redirect(url, http.StatusFound)
 		}
 
 		// support `/react-dom@18.2.0&external=react&dev/client` with query `external=react&dev`
