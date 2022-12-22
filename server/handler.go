@@ -49,7 +49,7 @@ func esmHandler() rex.Handle {
 
 		// ban malicious requests by banList
 		// trim the leading `/` in pathname to get the package name
-		// e.g. /@withfig/autocomplete --> @withfig/autocomplete
+		// e.g. /@withfig/autocomplete -> @withfig/autocomplete
 		packageFullName := pathname[1:]
 		if cfg.BanList.IsPackageBanned(packageFullName) {
 			log.Debugf("The package %s is banned.", packageFullName)

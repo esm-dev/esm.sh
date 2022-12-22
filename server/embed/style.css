@@ -237,7 +237,7 @@ i {
 .readme details {
   margin: 1.5rem 0;
   padding: 0.5rem 1rem;
-  background: #f-colorafafa;
+  background: #f9f9f9;
   border: 1px solid #eaeaea;
   border-radius: 6px;
 }
@@ -254,7 +254,7 @@ i {
 
 .readme blockquote {
   color: #666666;
-  background: #f-colorafafa;
+  background: #ff9f9f9;
   border: 1px solid #eaeaea;
   border-radius: 6px;
   padding: 0 1.25rem;
