@@ -748,10 +748,7 @@ func esmHandler() rex.Handle {
 		}
 
 		if isBare {
-			savePath := path.Join(
-				"builds",
-				taskID,
-			)
+			savePath := path.Join("builds", taskID)
 			exists, size, modtime, err := fs.Exists(savePath)
 			if err != nil {
 				return rex.Status(500, err.Error())
@@ -780,7 +777,24 @@ func esmHandler() rex.Handle {
 		fmt.Fprintf(buf, `/* esm.sh - %v */%s`, reqPkg, "\n")
 
 		if isWorker {
-			fmt.Fprintf(buf, `export default function workerFactory() {%s  return new Worker('%s/%s', { type: 'module' })%s}`, "\n", origin, taskID, "\n")
+			savePath := path.Join("builds", taskID)
+			exists, size, _, err := fs.Exists(savePath)
+			if err != nil {
+				return rex.Status(500, err.Error())
+			}
+			if !exists {
+				return rex.Status(404, "File not found")
+			}
+			r, err := fs.ReadFile(savePath, size)
+			if err != nil {
+				return rex.Status(500, err.Error())
+			}
+			code, err := ioutil.ReadAll(r)
+			if err != nil {
+				return rex.Status(500, err.Error())
+			}
+			ctx.SetHeader("Cache-Control", "public, max-age=31536000, immutable")
+			fmt.Fprintf(buf, `export default function workerFactory() { const blob = new Blob([%s], {type: 'application/javascript'}); return new Worker(URL.createObjectURL(blob), { type: "module" })}`, utils.MustEncodeJSON(string(code)))
 		} else {
 			fmt.Fprintf(buf, `export * from "%s%s/%s";%s`, origin, cfg.BasePath, taskID, "\n")
 			if (esm.CJS || esm.ExportDefault) && (treeShaking.Size() == 0 || treeShaking.Has("default")) {

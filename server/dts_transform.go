@@ -37,7 +37,7 @@ func (task *BuildTask) copyDTS(dts string, buildVersion int, aliasDepsPrefix str
 		return
 	}
 
-	pkgNameInfo := parsePkgNameInfo(utils.CleanPath(dts)[1:])
+	pkgNameInfo := parsePkgName(utils.CleanPath(dts)[1:])
 	versionedName := pkgNameInfo.Fullname
 	subPath := strings.Split(pkgNameInfo.Submodule, "/")
 	pkgName, _ := utils.SplitByLastByte(versionedName, '@')
@@ -202,7 +202,7 @@ func (task *BuildTask) copyDTS(dts string, buildVersion int, aliasDepsPrefix str
 				return importPath
 			}
 
-			pkgNameInfo := parsePkgNameInfo(importPath)
+			pkgNameInfo := parsePkgName(importPath)
 			depTypePkgName := pkgNameInfo.Fullname
 			maybeVersion := []string{"latest"}
 			if v, ok := taskPkgInfo.Dependencies[depTypePkgName]; ok {
@@ -309,7 +309,7 @@ func (task *BuildTask) copyDTS(dts string, buildVersion int, aliasDepsPrefix str
 				}
 			}
 			if b.Len() > 0 {
-				pkgNameInfo := parsePkgNameInfo(name)
+				pkgNameInfo := parsePkgName(name)
 				name = pkgNameInfo.Fullname
 				subpath := ""
 				if pkgNameInfo.Submodule != "" {

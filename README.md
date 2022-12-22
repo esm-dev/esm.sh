@@ -146,7 +146,6 @@ import Daygrid from "https://esm.sh/@fullcalendar/daygrid"
 
 This only works when the NPM module imports CSS files in JS directly.
 
-<!--
 ## Web Worker
 
 esm.sh supports `?worker` mode to load modules as web worker:
@@ -156,7 +155,6 @@ import editorWorker from "https://esm.sh/monaco-editor/esm/vs/editor/editor.work
 
 const worker = editorWorker()
 ```
--->
 
 ## Deno compatibility
 

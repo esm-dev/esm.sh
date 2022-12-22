@@ -277,7 +277,7 @@ func (task *BuildTask) build(tracing *stringSet) (esm *ESM, err error) {
 
 					// bundles all dependencies in `bundle` mode, apart from peer dependencies
 					if task.BundleMode && !extraExternal.Has(specifier) {
-						pkgNameInfo := parsePkgNameInfo(specifier)
+						pkgNameInfo := parsePkgName(specifier)
 						if !builtInNodeModules[pkgNameInfo.Name] {
 							_, ok := npm.PeerDependencies[pkgNameInfo.Name]
 							if !ok {
@@ -426,6 +426,43 @@ func (task *BuildTask) build(tracing *stringSet) (esm *ESM, err error) {
 						return
 					})
 			}
+		},
+	}
+	esmBundlerPlugin := api.Plugin{
+		Name: "esm.sh-bundler",
+		Setup: func(build api.PluginBuild) {
+			build.OnResolve(
+				api.OnResolveOptions{Filter: ".*"},
+				func(args api.OnResolveArgs) (api.OnResolveResult, error) {
+					var path string
+					prefix := fmt.Sprintf(`%s/v%d/`, task.BasePath, task.BuildVersion)
+					if strings.HasPrefix(args.Path, prefix) {
+						path = "/" + strings.TrimPrefix(args.Path, prefix)
+					} else if args.Namespace == "embed" {
+						path = filepath.Join("/", args.Path)
+					}
+					data, err := embedFS.ReadFile(("server/embed/polyfills" + path))
+					if err == nil {
+						return api.OnResolveResult{
+							Path:       path,
+							Namespace:  "embed",
+							PluginData: data,
+						}, err
+					}
+					return api.OnResolveResult{}, nil
+				},
+			)
+			build.OnLoad(
+				api.OnLoadOptions{Filter: ".*", Namespace: "embed"},
+				func(args api.OnLoadArgs) (api.OnLoadResult, error) {
+					data := args.PluginData.([]byte)
+					contents := string(data)
+					return api.OnLoadResult{
+						Contents: &contents,
+						Loader:   api.LoaderJS,
+					}, nil
+				},
+			)
 		},
 	}
 
@@ -627,7 +664,7 @@ esbuild:
 				// common npm dependency
 				if importPath == "" {
 					version := "latest"
-					pkgNameInfo := parsePkgNameInfo(name)
+					pkgNameInfo := parsePkgName(name)
 					if pkgNameInfo.Fullname == task.Pkg.Name {
 						version = task.Pkg.Version
 					} else if v, ok := npm.Dependencies[pkgNameInfo.Fullname]; ok {
@@ -834,6 +871,31 @@ esbuild:
 			_, err = buf.Write(outputContent)
 			if err != nil {
 				return
+			}
+
+			if task.BundleMode && task.Target != "deno" {
+				options.Plugins = []api.Plugin{esmBundlerPlugin}
+				options.EntryPoints = nil
+				options.Stdin = &api.StdinOptions{
+					Contents:   buf.String(),
+					ResolveDir: task.wd,
+					Sourcefile: "mod.js",
+				}
+				ret := api.Build(options)
+				if len(ret.Errors) > 0 {
+					msg := ret.Errors[0].Text
+					err = errors.New("esbuild: " + msg)
+					return
+				}
+				for _, w := range ret.Warnings {
+					log.Warnf("esbuild(%s,bundler): %s", task.ID(), w.Text)
+				}
+				for _, file := range ret.OutputFiles {
+					if strings.HasSuffix(file.Path, ".js") {
+						buf.Reset()
+						buf.Write(file.Contents)
+					}
+				}
 			}
 
 			err = fs.WriteData(path.Join("builds", task.ID()), buf.Bytes())

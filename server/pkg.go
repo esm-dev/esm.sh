@@ -20,7 +20,7 @@ type PkgNameInfo struct {
 	Submodule string `json:"submodule"`
 }
 
-func parsePkgNameInfo(pathname string) *PkgNameInfo {
+func parsePkgName(pathname string) *PkgNameInfo {
 	a := strings.Split(strings.Trim(pathname, "/"), "/")
 	for i, s := range a {
 		a[i] = strings.TrimSpace(s)
@@ -46,7 +46,7 @@ func parsePkgNameInfo(pathname string) *PkgNameInfo {
 }
 
 func parsePkg(pathname string) (*Pkg, string, error) {
-	pkgNameInfo := parsePkgNameInfo(pathname)
+	pkgNameInfo := parsePkgName(pathname)
 	scope := pkgNameInfo.Scope
 	packageName := pkgNameInfo.Name
 	submodule := pkgNameInfo.Submodule
