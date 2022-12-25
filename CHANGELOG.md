@@ -1,9 +1,22 @@
 # Change Log
 
+## v100
+
+- Improve self-hosting configuration. check [HOSTING.md](./HOSTING.md) for more details.
+- Support `browser` field when it's an es6 module (close [#381](https://github.com/ije/esm.sh/issues/381)).
+- Purge headers from unpkg.com to avoid repeated `Access-Control-Allow-Origin` header (close [#453](https://github.com/ije/esm.sh/issues/453)).
+- Fix content compression (close [#460](https://github.com/ije/esm.sh/issues/460)).
+- Fix alias export (close [#471](https://github.com/ije/esm.sh/issues/471)).
+- Fix cycle importing (close [#464](https://github.com/ije/esm.sh/issues/464)).
+- Fix scenarios where module/es2015 are shims (maps).
+- Fix worker cors issue.
+- Upgrade `esbuild` to **0.16.10**.
+- Upgrade `deno/std` to **0.170.0**.
+
 ## v99
 
 - Improve CDN cache performance, now you can get faster response time of `.d.ts`, `.wasm` and other static files.
-- Remove `?deps` purge (close [#422](https://github.com/ije/esm.sh/issues/420))
+- Remove `?deps` purge (close [#420](https://github.com/ije/esm.sh/issues/420))
 - Remove `?export` query of sub build task
 - Upgrade `deno/std` to **0.165.0**.
 
