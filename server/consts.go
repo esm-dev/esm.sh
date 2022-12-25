@@ -4,15 +4,15 @@ const (
 	// esm.sh build version
 	VERSION          = 99
 	nodejsMinVersion = 16
-	denoStdVersion   = "0.165.0"
+	denoStdVersion   = "0.170.0"
 	nodejsLatestLTS  = "16.18.1"
-	nodeTypesVersion = "16.18.3"
+	nodeTypesVersion = "16.18.10"
 )
 
 // fix some package versions
 var fixedPkgVersions = map[string]string{
 	"@types/react@17": "17.0.52",
-	"@types/react@18": "18.0.25",
+	"@types/react@18": "18.0.26",
 	"isomorphic-ws@4": "5.0.0",
 }
 
