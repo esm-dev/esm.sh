@@ -466,6 +466,27 @@ func (task *BuildTask) build(tracing *stringSet) (esm *ESM, err error) {
 		},
 	}
 
+	// resolve alias export like: `export * from "./twind.js";`
+resolveAliasExport:
+	if entryPoint != "" {
+		fi, err := os.Lstat(entryPoint)
+		if err != nil {
+			return nil, err
+		}
+		if fi.Size() < 100 {
+			data, err := ioutil.ReadFile(entryPoint)
+			if err != nil {
+				return nil, err
+			}
+			code := strings.TrimSpace(string(data))
+			matchs := regAliasExport.FindStringSubmatch(code)
+			if len(matchs) == 2 {
+				entryPoint = path.Join(path.Dir(entryPoint))
+				goto resolveAliasExport
+			}
+		}
+	}
+
 esbuild:
 	options := api.BuildOptions{
 		Outdir:            "/esbuild",

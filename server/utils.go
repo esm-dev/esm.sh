@@ -23,6 +23,7 @@ var (
 	regBuildVersionPath = regexp.MustCompile(`^/v\d+(/|$)`)
 	regLocPath          = regexp.MustCompile(`(\.[a-z]+):\d+:\d+$`)
 	regJSIdent          = regexp.MustCompile(`^[$_a-zA-Z][$_a-zA-Z0-9]*$`)
+	regAliasExport      = regexp.MustCompile(`^export\s*\*\s*from\s*['"](\.+/.+?)['"];?$`)
 	npmNaming           = valid.Validator{valid.FromTo{'a', 'z'}, valid.FromTo{'A', 'Z'}, valid.FromTo{'0', '9'}, valid.Eq('.'), valid.Eq('_'), valid.Eq('-')}
 )
 
