@@ -449,7 +449,10 @@ func (task *BuildTask) build(tracing *stringSet) (esm *ESM, err error) {
 							PluginData: data,
 						}, err
 					}
-					return api.OnResolveResult{}, nil
+					return api.OnResolveResult{
+						Path:     path,
+						External: true,
+					}, nil
 				},
 			)
 			build.OnLoad(
