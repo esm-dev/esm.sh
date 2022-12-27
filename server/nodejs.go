@@ -194,7 +194,6 @@ type NpmPackageTemp struct {
 	PeerDependencies map[string]string      `json:"peerDependencies,omitempty"`
 	Imports          map[string]interface{} `json:"imports,omitempty"`
 	DefinedExports   interface{}            `json:"exports,omitempty"`
-	// todo: support `browser` field
 }
 
 func (a *StringOrMap) MainValue() string {
@@ -214,17 +213,34 @@ func (a *StringOrMap) MainValue() string {
 }
 
 func (a *NpmPackageTemp) ToNpmPackage() *NpmPackage {
+	browser := map[string]string{}
+	if a.Browser.Value != "" {
+		browser["."] = a.Browser.Value
+	}
+	if a.Browser.Map != nil {
+		for k, v := range a.Browser.Map {
+			s, isStr := v.(string)
+			if isStr {
+				browser[k] = s
+			} else {
+				b, ok := v.(bool)
+				if ok && !b {
+					browser[k] = ""
+				}
+			}
+		}
+	}
 	return &NpmPackage{
 		Name:             a.Name,
 		Version:          a.Version,
 		Type:             a.Type,
 		Main:             a.Main,
-		Browser:          a.Browser.MainValue(),
 		Module:           a.Module.MainValue(),
 		ES2015:           a.ES2015.MainValue(),
 		JsNextMain:       a.JsNextMain,
 		Types:            a.Types,
 		Typings:          a.Typings,
+		Browser:          browser,
 		Dependencies:     a.Dependencies,
 		PeerDependencies: a.PeerDependencies,
 		Imports:          a.Imports,
@@ -238,12 +254,12 @@ type NpmPackage struct {
 	Version          string
 	Type             string
 	Main             string
-	Browser          string
 	Module           string
 	ES2015           string
 	JsNextMain       string
 	Types            string
 	Typings          string
+	Browser          map[string]string
 	Dependencies     map[string]string
 	PeerDependencies map[string]string
 	Imports          map[string]interface{}

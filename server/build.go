@@ -253,7 +253,7 @@ func (task *BuildTask) build(tracing *stringSet) (esm *ESM, err error) {
 	externalDeps := newStringSet()
 	extraExternal := newStringSet()
 	esmResolverPlugin := api.Plugin{
-		Name: "esm.sh-resolver",
+		Name: "esm-resolver",
 		Setup: func(build api.PluginBuild) {
 			build.OnResolve(
 				api.OnResolveOptions{Filter: ".*"},
@@ -267,6 +267,29 @@ func (task *BuildTask) build(tracing *stringSet) (esm *ESM, err error) {
 
 					// resolve nodejs builtin modules like `node:path`
 					specifier = strings.TrimPrefix(specifier, "node:")
+
+					// use `browser` field
+					if len(npm.Browser) > 0 && task.Target != "deno" && task.Target != "node" {
+						spec := specifier
+						if strings.HasPrefix(specifier, "./") || strings.HasPrefix(specifier, "../") || specifier == ".." {
+							fullpath := path.Join(path.Dir(args.Importer), specifier)
+							// in macOS, the dir `/private/var/` is equal to `/var/`
+							if strings.HasPrefix(fullpath, "/private/var/") {
+								fullpath = strings.TrimPrefix(fullpath, "/private")
+							}
+							spec = "." + strings.TrimPrefix(fullpath, path.Join(task.wd, "node_modules", npm.Name))
+						}
+						if name, ok := npm.Browser[spec]; ok {
+							if name == "" {
+								// browser exclude
+								return api.OnResolveResult{Namespace: "browser-exclude"}, nil
+							} else if strings.HasPrefix(name, "./") {
+								specifier = path.Join(task.wd, "node_modules", npm.Name, name)
+							} else {
+								specifier = name
+							}
+						}
+					}
 
 					// use `?alias` query
 					if len(task.alias) > 0 {
@@ -317,14 +340,14 @@ func (task *BuildTask) build(tracing *stringSet) (esm *ESM, err error) {
 					// splits modules based on the `exports` defines in package.json,
 					// see https://nodejs.org/api/packages.html
 					if strings.HasPrefix(specifier, "./") || strings.HasPrefix(specifier, "../") || specifier == ".." {
-						resolvedPath := path.Join(path.Dir(args.Importer), specifier)
+						fullpath := path.Join(path.Dir(args.Importer), specifier)
 						// in macOS, the dir `/private/var/` is equal to `/var/`
-						if strings.HasPrefix(resolvedPath, "/private/var/") {
-							resolvedPath = strings.TrimPrefix(resolvedPath, "/private")
+						if strings.HasPrefix(fullpath, "/private/var/") {
+							fullpath = strings.TrimPrefix(fullpath, "/private")
 						}
-						specInPkg := "." + strings.TrimPrefix(resolvedPath, path.Join(task.wd, "node_modules", npm.Name))
+						spec := "." + strings.TrimPrefix(fullpath, path.Join(task.wd, "node_modules", npm.Name))
 						// bundle {pkgName}/{pkgName}.js
-						if specInPkg == fmt.Sprintf("./%s.js", task.Pkg.Name) {
+						if spec == fmt.Sprintf("./%s.js", task.Pkg.Name) {
 							return api.OnResolveResult{}, nil
 						}
 						v, ok := npm.DefinedExports.(map[string]interface{})
@@ -335,16 +358,16 @@ func (task *BuildTask) build(tracing *stringSet) (esm *ESM, err error) {
 									for _, value := range m {
 										s, ok := value.(string)
 										if ok && s != "" {
-											match := specInPkg == s || specInPkg+".js" == s || specInPkg+".mjs" == s
+											match := spec == s || spec+".js" == s || spec+".mjs" == s
 											if !match {
 												if a := strings.Split(s, "*"); len(a) == 2 {
 													prefix := a[0]
 													suffix := a[1]
-													if (strings.HasPrefix(specInPkg, prefix)) &&
-														(strings.HasSuffix(specInPkg, suffix) ||
-															strings.HasSuffix(specInPkg+".js", suffix) ||
-															strings.HasSuffix(specInPkg+".mjs", suffix)) {
-														matchName := strings.TrimPrefix(strings.TrimSuffix(specInPkg, suffix), prefix)
+													if (strings.HasPrefix(spec, prefix)) &&
+														(strings.HasSuffix(spec, suffix) ||
+															strings.HasSuffix(spec+".js", suffix) ||
+															strings.HasSuffix(spec+".mjs", suffix)) {
+														matchName := strings.TrimPrefix(strings.TrimSuffix(spec, suffix), prefix)
 														export = strings.Replace(export, "*", matchName, -1)
 														match = true
 													}
@@ -400,6 +423,15 @@ func (task *BuildTask) build(tracing *stringSet) (esm *ESM, err error) {
 				},
 			)
 
+			// for browser exclude
+			build.OnLoad(
+				api.OnLoadOptions{Filter: ".*", Namespace: "browser-exclude"},
+				func(args api.OnLoadArgs) (ret api.OnLoadResult, err error) {
+					contents := "export default undefined;"
+					return api.OnLoadResult{Contents: &contents, Loader: api.LoaderJS}, nil
+				},
+			)
+
 			// workaround for prisma build
 			if npm.Name == "prisma" {
 				build.OnLoad(
@@ -429,7 +461,7 @@ func (task *BuildTask) build(tracing *stringSet) (esm *ESM, err error) {
 		},
 	}
 	esmBundlerPlugin := api.Plugin{
-		Name: "esm.sh-bundler",
+		Name: "esm-bundler",
 		Setup: func(build api.PluginBuild) {
 			build.OnResolve(
 				api.OnResolveOptions{Filter: ".*"},

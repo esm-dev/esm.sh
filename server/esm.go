@@ -329,11 +329,12 @@ func fixNpmPackage(wd string, np *NpmPackage, target string, isDev bool) *NpmPac
 		}
 	}
 
-	if np.Browser != "" && fileExists(path.Join(nmDir, np.Name, np.Browser)) {
-		isEsm, _, _ := parseJS(path.Join(nmDir, np.Name, np.Browser))
+	browserMain := np.Browser["."]
+	if browserMain != "" && fileExists(path.Join(nmDir, np.Name, browserMain)) {
+		isEsm, _, _ := parseJS(path.Join(nmDir, np.Name, browserMain))
 		if isEsm {
-			log.Infof("%s@%s: use `browser` field as module: %s", np.Name, np.Version, np.Browser)
-			np.Module = np.Browser
+			log.Infof("%s@%s: use `browser` field as module: %s", np.Name, np.Version, browserMain)
+			np.Module = browserMain
 		}
 	}
 
