@@ -2,7 +2,7 @@
 
 ## v102
 
-- Support `browser` field of **package.json** to improve compatibility with npm packages in browser. For example, the `webtorrent` package will use `memory-chunk-store` instead of `fs-chunk-store` and exclude built-in modules like `fs`, `net`, `os` and so on. (Close [#450](https://github.com/ije/esm.sh/issues/450))
+- Support `browser` field of **package.json** to improve compatibility with npm packages in browser. For example, the `webtorrent` package will use `memory-chunk-store` instead of `fs-chunk-store` and exclude built-in modules like `fs`, `net`, `os` and so on.
   ```json
   {
     "name": "webtorrent",
@@ -20,9 +20,9 @@
       "os": false,
       "ut_pex": false
     },
-    ...
   }
   ```
+  (Close [#450](https://github.com/ije/esm.sh/issues/450))
 
 ## v101
 
