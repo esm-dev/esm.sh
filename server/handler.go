@@ -598,7 +598,7 @@ func esmHandler() rex.Handle {
 		}
 
 		// check whether it is `bare` mode
-		if hasBuildVerPrefix && endsWith(pathname, ".js") {
+		if hasBuildVerPrefix && (endsWith(pathname, ".js") || endsWith(pathname, ".css")) {
 			a := strings.Split(reqPkg.Submodule, "/")
 			if len(a) > 1 {
 				if _, ok := targets[a[0]]; ok {
@@ -614,6 +614,10 @@ func esmHandler() rex.Handle {
 					pkgName := path.Base(reqPkg.Name)
 					if submodule == pkgName || (strings.HasSuffix(pkgName, ".js") && submodule+".js" == pkgName) {
 						submodule = ""
+					}
+					if submodule == pkgName+".css" {
+						submodule = ""
+						isPkgCss = true
 					}
 					reqPkg.Submodule = submodule
 					target = a[0]
