@@ -1,5 +1,29 @@
 # Change Log
 
+## v102
+
+- Support `browser` field of **package.json** to improve compatibility with npm packages in browser. For example, the `webtorrent` package will use `memory-chunk-store` instead of `fs-chunk-store` and exclude built-in modules like `fs`, `net`, `os` and so on. (Close [#450](https://github.com/ije/esm.sh/issues/450))
+  ```json
+  {
+    "name": "webtorrent",
+    "description": "Streaming torrent client",
+    "version": "1.9.6",
+    "browser": {
+      "./lib/server.js": false,
+      "./lib/conn-pool.js": false,
+      "./lib/utp.js": false,
+      "bittorrent-dht/client": false,
+      "fs": false,
+      "fs-chunk-store": "memory-chunk-store",
+      "load-ip-set": false,
+      "net": false,
+      "os": false,
+      "ut_pex": false
+    },
+    ...
+  }
+  ```
+
 ## v101
 
 - Fix `?bundle` mode with illegal paths (close [#476](https://github.com/ije/esm.sh/issues/476)).
