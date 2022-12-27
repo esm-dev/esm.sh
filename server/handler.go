@@ -451,6 +451,15 @@ func esmHandler() rex.Handle {
 					ctx.SetHeader("Content-Type", "application/typescript; charset=utf-8")
 				}
 				ctx.SetHeader("Cache-Control", "public, max-age=31536000, immutable")
+				if ctx.Form.Has("worker") && storageType == "builds" {
+					defer r.Close()
+					code, err := ioutil.ReadAll(r)
+					if err != nil {
+						return rex.Status(500, err.Error())
+					}
+					ctx.SetHeader("Content-Type", "application/javascript; charset=utf-8")
+					return fmt.Sprintf(`export default function workerFactory() { const blob = new Blob([%s], { type: "application/javascript" }); return new Worker(URL.createObjectURL(blob), { type: "module" })}`, utils.MustEncodeJSON(string(code)))
+				}
 				return rex.Content(savePath, modtime, r)
 			}
 		}
@@ -765,7 +774,7 @@ func esmHandler() rex.Handle {
 				return rex.Status(500, err.Error())
 			}
 			ctx.SetHeader("Cache-Control", "public, max-age=31536000, immutable")
-			if isWorker {
+			if isWorker && strings.HasSuffix(taskID, ".js") {
 				defer r.Close()
 				code, err := ioutil.ReadAll(r)
 				if err != nil {
