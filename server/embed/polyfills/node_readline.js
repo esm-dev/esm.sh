@@ -1,12 +1,12 @@
 // https://nodejs.org/api/readline.html
 
-function notImplemented(name) {
-  throw new Error(`[esm.sh] readline: '${name}' is not implemented`)
+function notImplemented(name, type = 'function') {
+  throw new Error(`[esm.sh] readline: ${type} '${name}' is not implemented`)
 }
 
 export class Interface {
   constructor() {
-    notImplemented('Interface')
+    notImplemented('Interface', 'class')
   }
 }
 
@@ -18,7 +18,7 @@ export function clearScreenDown() {
   notImplemented('clearScreenDown')
 }
 
-export function createInterface() { 
+export function createInterface() {
   return new Interface()
 }
 

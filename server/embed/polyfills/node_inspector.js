@@ -1,12 +1,12 @@
 // https://nodejs.org/api/inspector.html
 
-function notImplemented(name) {
-  throw new Error(`[esm.sh] inspector: '${name}' is not implemented`)
+function notImplemented(name, type = 'function') {
+  throw new Error(`[esm.sh] inspector: ${type} '${name}' is not implemented`)
 }
 
 export class Session {
   constructor() {
-    notImplemented('Session')
+    notImplemented('Session', 'class')
   }
 }
 
