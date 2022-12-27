@@ -481,6 +481,10 @@ func esmHandler() rex.Handle {
 					}
 					return rex.Status(400, fmt.Sprintf("Invalid deps query: %v not found", p))
 				}
+				if reqPkg.Name == "react-dom" && m.Name == "react" {
+					// the `react` version always matches `react-dom` version
+					continue
+				}
 				if !deps.Has(m.Name) && m.Name != reqPkg.Name {
 					deps = append(deps, *m)
 				}
@@ -738,7 +742,7 @@ func esmHandler() rex.Handle {
 				return rex.Status(404, "Package CSS not found")
 			}
 
-			if !regFullVersionPath.MatchString(pathname) || !isPined {
+			if !regFullVersionPath.MatchString(pathname) || !isPined || targetFromUA {
 				url := fmt.Sprintf("%s/%s.css", origin, strings.TrimSuffix(taskID, ".js"))
 				return rex.Redirect(url, http.StatusFound)
 			}
@@ -760,16 +764,16 @@ func esmHandler() rex.Handle {
 			if err != nil {
 				return rex.Status(500, err.Error())
 			}
-			if !hasBuildVerPrefix && esm.Dts != "" && !noCheck && !isWorker {
-				url := fmt.Sprintf(
-					"%s%s/%s",
-					origin,
-					cfg.BasePath,
-					strings.TrimPrefix(esm.Dts, "/"),
-				)
-				ctx.SetHeader("X-TypeScript-Types", url)
-			}
 			ctx.SetHeader("Cache-Control", "public, max-age=31536000, immutable")
+			if isWorker {
+				defer r.Close()
+				code, err := ioutil.ReadAll(r)
+				if err != nil {
+					return rex.Status(500, err.Error())
+				}
+				ctx.SetHeader("Content-Type", "application/javascript; charset=utf-8")
+				return fmt.Sprintf(`export default function workerFactory() { const blob = new Blob([%s], { type: "application/javascript" }); return new Worker(URL.createObjectURL(blob), { type: "module" })}`, utils.MustEncodeJSON(string(code)))
+			}
 			return rex.Content(savePath, modtime, r)
 		}
 
@@ -777,24 +781,7 @@ func esmHandler() rex.Handle {
 		fmt.Fprintf(buf, `/* esm.sh - %v */%s`, reqPkg, "\n")
 
 		if isWorker {
-			savePath := path.Join("builds", taskID)
-			exists, size, _, err := fs.Exists(savePath)
-			if err != nil {
-				return rex.Status(500, err.Error())
-			}
-			if !exists {
-				return rex.Status(404, "File not found")
-			}
-			r, err := fs.ReadFile(savePath, size)
-			if err != nil {
-				return rex.Status(500, err.Error())
-			}
-			code, err := ioutil.ReadAll(r)
-			if err != nil {
-				return rex.Status(500, err.Error())
-			}
-			ctx.SetHeader("Cache-Control", "public, max-age=31536000, immutable")
-			fmt.Fprintf(buf, `export default function workerFactory() { const blob = new Blob([%s], {type: 'application/javascript'}); return new Worker(URL.createObjectURL(blob), { type: "module" })}`, utils.MustEncodeJSON(string(code)))
+			fmt.Fprintf(buf, `export { default } from "%s%s/%s?worker";`, origin, cfg.BasePath, taskID)
 		} else {
 			fmt.Fprintf(buf, `export * from "%s%s/%s";%s`, origin, cfg.BasePath, taskID, "\n")
 			if (esm.CJS || esm.ExportDefault) && (treeShaking.Size() == 0 || treeShaking.Has("default")) {
