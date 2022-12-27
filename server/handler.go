@@ -820,7 +820,7 @@ func esmHandler() rex.Handle {
 		}
 
 		if regFullVersionPath.MatchString(pathname) {
-			if isPined {
+			if isPined && !targetFromUA {
 				ctx.SetHeader("Cache-Control", "public, max-age=31536000, immutable")
 			} else {
 				ctx.SetHeader("Cache-Control", fmt.Sprintf("public, max-age=%d", 24*3600)) // cache for 24 hours
