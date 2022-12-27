@@ -134,7 +134,7 @@ Other supported options of [esbuild](https://esbuild.github.io/):
 
   This only supports the `inline` mode.
 
-## Web Worker
+### Web Worker
 
 esm.sh supports `?worker` query to load module as web worker:
 
