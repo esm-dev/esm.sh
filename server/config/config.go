@@ -93,6 +93,9 @@ func Load(filename string) (*Config, error) {
 	if cfg.LogDir == "" {
 		cfg.LogDir = path.Join(cfg.WorkDir, "log")
 	}
+	if cfg.LogLevel == "" {
+		cfg.LogLevel = "info"
+	}
 	if cfg.UnpkgOrigin == "" {
 		cfg.UnpkgOrigin = "https://unpkg.com"
 	}
@@ -115,6 +118,7 @@ func Default() *Config {
 		Database:         fmt.Sprintf("bolt:%s", path.Join(workDir, "esm.db")),
 		Storage:          fmt.Sprintf("local:%s", path.Join(workDir, "storage")),
 		LogDir:           path.Join(workDir, "log"),
+		LogLevel:         "info",
 		UnpkgOrigin:      "https://unpkg.com",
 	}
 }
