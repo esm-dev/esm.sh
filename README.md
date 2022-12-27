@@ -134,27 +134,23 @@ Other supported options of [esbuild](https://esbuild.github.io/):
 
   This only supports the `inline` mode.
 
-### Package CSS
-
-```javascript
-import Daygrid from "https://esm.sh/@fullcalendar/daygrid"
-```
-
-```html
-<link rel="stylesheet" href="https://esm.sh/@fullcalendar/daygrid?css">
-```
-
-This only works when the NPM module imports CSS files in JS directly.
-
 ## Web Worker
 
-esm.sh supports `?worker` mode to load modules as web worker:
+esm.sh supports `?worker` query to load module as web worker:
 
 ```javascript
 import editorWorker from "https://esm.sh/monaco-editor/esm/vs/editor/editor.worker?worker"
 
 const worker = editorWorker()
 ```
+
+### Package CSS
+
+```html
+<link rel="stylesheet" href="https://esm.sh/monaco-editor?css">
+```
+
+This only works when the NPM package imports CSS files in JS directly.
 
 ## Deno compatibility
 
