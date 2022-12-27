@@ -450,7 +450,7 @@ func (task *BuildTask) build(tracing *stringSet) (esm *ESM, err error) {
 						}, err
 					}
 					return api.OnResolveResult{
-						Path:     path,
+						Path:     args.Path,
 						External: true,
 					}, nil
 				},

@@ -92,6 +92,9 @@ func encodeBuildArgsPrefix(args BuildArgs, pkgName string, forTypes bool) string
 	if len(args.deps) > 0 && !stableBuild[pkgName] {
 		var ss sort.StringSlice
 		for _, p := range args.deps {
+			if pkgName == "react-dom" && p.Name == "react" {
+				continue
+			}
 			if p.Name != pkgName {
 				ss = append(ss, fmt.Sprintf("%s@%s", p.Name, p.Version))
 			}
