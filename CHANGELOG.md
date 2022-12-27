@@ -1,5 +1,10 @@
 # Change Log
 
+## v101
+
+- Fix `?bundle` mode with illegal paths (close [#476](https://github.com/ije/esm.sh/issues/476)).
+- Fix `?worker` mode doesn't support CORS.
+
 ## v100
 
 - Improve self-hosting configuration. check [HOSTING.md](./HOSTING.md) for more details.
