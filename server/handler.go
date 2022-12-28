@@ -734,7 +734,7 @@ func esmHandler() rex.Handle {
 			}
 		}
 
-		// todo: redirect to .d.ts
+		// should redirect to `*.d.ts` ?
 		if esm.TypesOnly {
 			if esm.Dts != "" && !noCheck {
 				value := fmt.Sprintf(
@@ -810,11 +810,16 @@ func esmHandler() rex.Handle {
 		}
 
 		if esm.Dts != "" && !noCheck && !isWorker {
+			dts := strings.TrimPrefix(esm.Dts, "/")
+			if stableBuild[reqPkg.Name] {
+				dts = strings.Join(strings.Split(dts, "/")[1:], "/")
+				dts = fmt.Sprintf("v%d/%s", VERSION, dts)
+			}
 			url := fmt.Sprintf(
 				"%s%s/%s",
 				origin,
 				cfg.BasePath,
-				strings.TrimPrefix(esm.Dts, "/"),
+				dts,
 			)
 			ctx.SetHeader("X-TypeScript-Types", url)
 		}
