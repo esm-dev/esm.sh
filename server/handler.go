@@ -256,7 +256,7 @@ func esmHandler() rex.Handle {
 
 		// redirect `/@types/` to `.d.ts` files
 		if strings.HasPrefix(reqPkg.Name, "@types/") && (reqPkg.Submodule == "" || !strings.HasSuffix(reqPkg.Submodule, ".d.ts")) {
-			url := fmt.Sprintf("%s/v%d%s", origin, VERSION, pathname)
+			url := fmt.Sprintf("%s%s/v%d%s", origin, cfg.BasePath, VERSION, pathname)
 			if reqPkg.Submodule == "" {
 				info, _, err := getPackageInfo("", reqPkg.Name, reqPkg.Version)
 				if err != nil {
@@ -301,12 +301,12 @@ func esmHandler() rex.Handle {
 				if ctx.R.URL.RawQuery != "" {
 					query = "&" + ctx.R.URL.RawQuery
 				}
-				return rex.Redirect(fmt.Sprintf("%s/%s%s@%s%s%s", origin, eaSign, reqPkg.Name, reqPkg.Version, query, submodule), http.StatusFound)
+				return rex.Redirect(fmt.Sprintf("%s%s/%s%s@%s%s%s", origin, cfg.BasePath, eaSign, reqPkg.Name, reqPkg.Version, query, submodule), http.StatusFound)
 			}
 			if ctx.R.URL.RawQuery != "" {
 				query = "?" + ctx.R.URL.RawQuery
 			}
-			return rex.Redirect(fmt.Sprintf("%s/%s%s%s", origin, eaSign, reqPkg.String(), query), http.StatusFound)
+			return rex.Redirect(fmt.Sprintf("%s%s/%s%s%s", origin, cfg.BasePath, eaSign, reqPkg.String(), query), http.StatusFound)
 		}
 
 		// redirect to the url with full package version
@@ -335,7 +335,7 @@ func esmHandler() rex.Handle {
 			if ctx.R.URL.RawQuery != "" {
 				query = "?" + ctx.R.URL.RawQuery
 			}
-			return rex.Redirect(fmt.Sprintf("%s%s/%s@%s%s%s", origin, prefix, reqPkg.Name, reqPkg.Version, subpath, query), http.StatusFound)
+			return rex.Redirect(fmt.Sprintf("%s%s%s/%s@%s%s%s", origin, cfg.BasePath, prefix, reqPkg.Name, reqPkg.Version, subpath, query), http.StatusFound)
 		}
 
 		// since most transformers handle `jsxSource` by concating string "/jsx-runtime"
@@ -381,7 +381,7 @@ func esmHandler() rex.Handle {
 		// serve raw dist files like CSS that is fetching from unpkg.com
 		if storageType == "raw" {
 			if !regFullVersionPath.MatchString(pathname) {
-				url := fmt.Sprintf("%s/%s", origin, reqPkg.String())
+				url := fmt.Sprintf("%s%s/%s", origin, cfg.BasePath, reqPkg.String())
 				return rex.Redirect(url, http.StatusFound)
 			}
 
@@ -756,7 +756,7 @@ func esmHandler() rex.Handle {
 			}
 
 			if !regFullVersionPath.MatchString(pathname) || !isPined || targetFromUA {
-				url := fmt.Sprintf("%s/%s.css", origin, strings.TrimSuffix(taskID, ".js"))
+				url := fmt.Sprintf("%s%s/%s.css", origin, cfg.BasePath, strings.TrimSuffix(taskID, ".js"))
 				return rex.Redirect(url, http.StatusFound)
 			}
 
