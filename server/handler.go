@@ -78,7 +78,7 @@ func esmHandler() rex.Handle {
 
 		// Build prefix may only be served from "${cfg.BasePath}/..."
 		if cfg.BasePath != "" {
-			if strings.HasPrefix(pathname, cfg.BasePath+"/") {
+			if strings.HasPrefix(pathname, cfg.BasePath) {
 				pathname = strings.TrimPrefix(pathname, cfg.BasePath)
 			} else {
 				url := strings.TrimPrefix(ctx.R.URL.String(), cfg.BasePath)
