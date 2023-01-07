@@ -387,7 +387,7 @@ func fetchPackageInfo(name string, version string) (info NpmPackage, err error) 
 	defer lock.Delete(id)
 
 	start := time.Now()
-	req, err := http.NewRequest("GET", cfg.NpmRegistry+name, nil)
+	req, err := http.NewRequest("GET", strings.TrimRight(cfg.NpmRegistry,"/")+"/"+name, nil)
 	if err != nil {
 		return
 	}

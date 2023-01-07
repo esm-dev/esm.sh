@@ -39,8 +39,8 @@
   // The base path of server, default is "/".
   "basePath": "/",
 
-  // The npm registry, default is "https://registry.npmjs.org".
-  "npmRegistry": "https://registry.npmjs.org",
+  // The npm registry, default is "https://registry.npmjs.org/".
+  "npmRegistry": "https://registry.npmjs.org/",
 
   // The npm token for private packages, default is blank.
   "npmToken": "",
