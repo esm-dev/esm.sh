@@ -167,6 +167,9 @@ func countFeatures(feature compat.JSFeature) int {
 }
 
 func getTargetByUA(ua string) string {
+	if ua == "" || strings.HasPrefix(ua, "curl/") {
+		return "esnext"
+	}
 	if strings.HasPrefix(ua, "Deno/") {
 		return "deno"
 	}
@@ -174,6 +177,9 @@ func getTargetByUA(ua string) string {
 		return "node"
 	}
 	name, version := user_agent.New(ua).Browser()
+	if name == "" || version == "" {
+		return "esnext"
+	}
 	if engine, ok := engines[strings.ToLower(name)]; ok {
 		a := strings.Split(version, ".")
 		if len(a) > 3 {
