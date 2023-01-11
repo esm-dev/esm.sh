@@ -45,8 +45,8 @@
   // The npm token for private packages, default is blank.
   "npmToken": "",
 
-  // The unpkg origin to fetch non-module files, default is "https://unpkg.com".
-  "unpkgOrigin": "https://unpkg.com",
+  // The npm cdn to fetch non-module files, default is "https://unpkg.com".
+  "npmCDN": "https://unpkg.com",
 
   // Disable compressing the response, default is false.
   "noCompress": false,

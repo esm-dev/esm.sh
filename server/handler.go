@@ -363,13 +363,13 @@ func esmHandler() rex.Handle {
 				if hasBuildVerPrefix {
 					storageType = "builds"
 				}
-			// todo: transform ts/jsx/tsx for browser
 			case ".ts", ".jsx", ".tsx":
 				if hasBuildVerPrefix {
 					if strings.HasSuffix(pathname, ".d.ts") {
 						storageType = "types"
 					}
 				} else if len(strings.Split(pathname, "/")) > 2 {
+					// todo: transform ts/jsx/tsx for browsers
 					storageType = "raw"
 				}
 			case ".json", ".css", ".pcss", ".postcss", ".less", ".sass", ".scss", ".stylus", ".styl", ".wasm", ".xml", ".yaml", ".md", ".svg", ".png", ".jpg", ".webp", ".gif", ".eot", ".ttf", ".otf", ".woff", ".woff2":
@@ -396,9 +396,9 @@ func esmHandler() rex.Handle {
 				return rex.Status(500, err.Error())
 			}
 
-			// fetch the non-existent file from unpkg.com and save to fs
+			// fetch file from unpkg.com and save it to fs
 			if !exists {
-				resp, err := httpClient.Get(fmt.Sprintf("%s/%s", strings.TrimSuffix(cfg.UnpkgOrigin, "/"), reqPkg.String()))
+				resp, err := httpClient.Get(fmt.Sprintf("%s/%s", strings.TrimSuffix(cfg.NpmCDN, "/"), reqPkg.String()))
 				if err != nil {
 					return rex.Status(http.StatusBadGateway, "Bad Gateway")
 				}
@@ -412,7 +412,7 @@ func esmHandler() rex.Handle {
 					if resp.StatusCode == 404 {
 						return rex.Status(404, "Not Found")
 					}
-					return rex.Status(http.StatusBadGateway, "Bad Gateway")
+					return rex.Status(http.StatusBadRequest, "Bad Request")
 				}
 
 				size, err = fs.WriteFile(savePath, resp.Body)

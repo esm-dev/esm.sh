@@ -26,7 +26,7 @@ type Config struct {
 	BasePath         string  `json:"basePath,omitempty"`
 	NpmRegistry      string  `json:"npmRegistry,omitempty"`
 	NpmToken         string  `json:"npmToken,omitempty"`
-	UnpkgOrigin      string  `json:"unpkgOrigin,omitempty"`
+	NpmCDN           string  `json:"npmCDN,omitempty"`
 	NoCompress       bool    `json:"noCompress,omitempty"`
 }
 
@@ -97,8 +97,8 @@ func Load(filename string) (*Config, error) {
 	if cfg.LogLevel == "" {
 		cfg.LogLevel = "info"
 	}
-	if cfg.UnpkgOrigin == "" {
-		cfg.UnpkgOrigin = "https://unpkg.com"
+	if cfg.NpmCDN == "" {
+		cfg.NpmCDN = "https://unpkg.com"
 	}
 
 	return cfg, nil
@@ -120,7 +120,7 @@ func Default() *Config {
 		Storage:          fmt.Sprintf("local:%s", path.Join(workDir, "storage")),
 		LogDir:           path.Join(workDir, "log"),
 		LogLevel:         "info",
-		UnpkgOrigin:      "https://unpkg.com",
+		NpmCDN:           "https://unpkg.com",
 	}
 }
 
