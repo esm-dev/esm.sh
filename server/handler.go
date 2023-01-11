@@ -338,12 +338,17 @@ func esmHandler() rex.Handle {
 			return rex.Redirect(fmt.Sprintf("%s%s%s/%s@%s%s%s", origin, cfg.BasePath, prefix, reqPkg.Name, reqPkg.Version, subpath, query), http.StatusFound)
 		}
 
-		// since most transformers handle `jsxSource` by concating string "/jsx-runtime"
-		// we need to support url like `https://esm.sh/react?dev&target=esnext/jsx-runtime`
-		if (reqPkg.Name == "react" || reqPkg.Name == "preact") && strings.HasSuffix(ctx.R.URL.RawQuery, "/jsx-runtime") {
-			ctx.R.URL.RawQuery = strings.TrimSuffix(ctx.R.URL.RawQuery, "/jsx-runtime")
-			pathname = fmt.Sprintf("/%s/jsx-runtime", reqPkg.Name)
-			reqPkg.Submodule = "jsx-runtime"
+		// support `https://esm.sh/react?dev&target=es2020/jsx-runtime` for jsx transformer
+		for _, jsxRuntime := range []string{"jsx-runtime", "jsx-dev-runtime"} {
+			if strings.HasSuffix(ctx.R.URL.RawQuery, "/"+jsxRuntime) {
+				if reqPkg.Submodule == "" {
+					reqPkg.Submodule = jsxRuntime
+				} else {
+					reqPkg.Submodule = reqPkg.Submodule + "/" + jsxRuntime
+				}
+				pathname = fmt.Sprintf("/%s/%s", reqPkg.Name, reqPkg.Submodule)
+				ctx.R.URL.RawQuery = strings.TrimSuffix(ctx.R.URL.RawQuery, "/"+jsxRuntime)
+			}
 		}
 
 		// or use `?path=$PATH` query to override the pathname
@@ -562,10 +567,8 @@ func esmHandler() rex.Handle {
 		}
 
 		// force react/jsx-dev-runtime and react-refresh into `dev` mode
-		if !isDev {
-			if (reqPkg.Name == "react" && reqPkg.Submodule == "jsx-dev-runtime") || reqPkg.Name == "react-refresh" {
-				isDev = true
-			}
+		if !isDev && ((reqPkg.Name == "react" && reqPkg.Submodule == "jsx-dev-runtime") || reqPkg.Name == "react-refresh") {
+			isDev = true
 		}
 
 		buildArgs := BuildArgs{
