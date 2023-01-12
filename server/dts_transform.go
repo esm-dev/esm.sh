@@ -127,7 +127,7 @@ func (task *BuildTask) copyDTS(dts string, buildVersion int, aliasDepsPrefix str
 			}
 		}
 
-		if task.external.Has("*") && !isLocalImport(importPath) {
+		if task.external.Has("*") && !strings.HasPrefix(pkgName, "@types/") && !isLocalImport(importPath) {
 			return importPath
 		}
 
