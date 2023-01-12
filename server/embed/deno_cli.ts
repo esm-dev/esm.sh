@@ -329,11 +329,9 @@ async function addPkgToImportMap(
     importMap.imports[aliasName + "/"] = pkgUrl + "/";
   }
   if (pkg.dependencies) {
-    if (!pkg.subModule) {
-      importMap.scopes[aliasName] = {};
-    }
-    if (withExports || pkg.subModule) {
-      importMap.scopes[pkg.name + "/"] = {};
+    const esmshScope = `https://esm.sh/${VERSION}/`;
+    if (!Reflect.has(importMap.scopes, esmshScope)) {
+      importMap.scopes[esmshScope] = {};
     }
     for (const [depName, depVersion] of Object.entries(pkg.dependencies)) {
       const dep = `${depName}@${depVersion}`;
@@ -341,12 +339,7 @@ async function addPkgToImportMap(
       if (depPkg) {
         const depUrl =
           `${importUrl.origin}/${VERSION}/${depPkg.name}@${depPkg.version}`;
-        if (!pkg.subModule) {
-          importMap.scopes[aliasName][depName] = depUrl;
-        }
-        if (withExports || pkg.subModule) {
-          importMap.scopes[pkg.name + "/"][depName] = depUrl;
-        }
+        importMap.scopes[esmshScope][depName] = depUrl;
       }
     }
   }
