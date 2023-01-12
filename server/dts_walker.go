@@ -6,14 +6,17 @@ import (
 	"fmt"
 	"io"
 	"regexp"
+	"strings"
+
+	"github.com/ije/gox/utils"
 )
 
 var (
-	regFromExpr          = regexp.MustCompile(`(}|\s)from\s*("|')`)
-	regImportBareExpr    = regexp.MustCompile(`import\s*("|')`)
-	regImportCallExpr    = regexp.MustCompile(`import\((('[^']+')|("[^"]+"))\)`)
-	regDeclareModuleExpr = regexp.MustCompile(`declare\s+module\s*('|")([^'"]+)("|')`)
-	regReferenceTag      = regexp.MustCompile(`<reference\s+(path|types)\s*=\s*('|")([^'"]+)("|')\s*/?>`)
+	regFromExpr          = regexp.MustCompile(`(}|\s)from\s*('|")`)
+	regImportBareExpr    = regexp.MustCompile(`import\s*('|")`)
+	regImportCallExpr    = regexp.MustCompile(`import\(('|").+?('|")\)`)
+	regDeclareModuleExpr = regexp.MustCompile(`declare\s+module\s*('|").+?('|")`)
+	regReferenceTag      = regexp.MustCompile(`<reference\s+(path|types)\s*=\s*('|")(.+?)('|")\s*/?>`)
 )
 
 var (
@@ -30,8 +33,8 @@ func walkDts(r io.Reader, buf *bytes.Buffer, resolve func(path string, kind stri
 	var importExportScope bool
 	scanner := bufio.NewScanner(r)
 	for scanner.Scan() {
-		token, leftSpaces := trimSpace(scanner.Bytes())
-		buf.Write(leftSpaces)
+		token, trimedSpaces := trimSpace(scanner.Bytes())
+		buf.Write(trimedSpaces)
 	Re:
 		if !commentScope && bytes.HasPrefix(token, bytesCommentStart) {
 			commentScope = true
@@ -42,8 +45,8 @@ func walkDts(r io.Reader, buf *bytes.Buffer, resolve func(path string, kind stri
 				commentScope = false
 				buf.Write(token[:endIndex+2])
 				if rest := token[endIndex+2:]; len(rest) > 0 {
-					token, leftSpaces = trimSpace(rest)
-					buf.Write(leftSpaces)
+					token, trimedSpaces = trimSpace(rest)
+					buf.Write(trimedSpaces)
 					goto Re
 				}
 			} else {
@@ -59,7 +62,11 @@ func walkDts(r io.Reader, buf *bytes.Buffer, resolve func(path string, kind stri
 					if format == "path" && !isLocalImport(path) {
 						path = "./" + path
 					}
-					res := resolve(path, "reference "+format, buf.Len())
+					kind := "referenceTypes"
+					if format == "path" {
+						kind = "referencePath"
+					}
+					res := resolve(path, kind, buf.Len())
 					if format == "types" && isRemoteImport(res) {
 						format = "path"
 					}
@@ -80,9 +87,18 @@ func walkDts(r io.Reader, buf *bytes.Buffer, resolve func(path string, kind stri
 				if i > 0 {
 					buf.WriteByte(';')
 				}
-				inlineToken, leftSpaces := trimSpace(inlineScanner.Bytes())
-				buf.Write(leftSpaces)
+				inlineToken, trimedSpaces := trimSpace(inlineScanner.Bytes())
+				buf.Write(trimedSpaces)
 				if len(inlineToken) > 0 {
+					// TypeScript may start raising a diagnostic when ESM declaration files use `export =`
+					// see https://github.com/microsoft/TypeScript/issues/51321
+					if bytes.HasPrefix(inlineToken, []byte("export=")) || bytes.HasPrefix(inlineToken, []byte("export =")) {
+						_, rest := utils.SplitByFirstByte(string(inlineToken), '=')
+						buf.WriteString("export default ")
+						buf.WriteString(strings.TrimLeft(rest, " "))
+						i++
+						continue
+					}
 					if !importExportScope && startsWith(string(inlineToken), "import ", "import\"", "import'", "import{", "export ", "export{") {
 						importExportScope = true
 					}
@@ -98,7 +114,7 @@ func walkDts(r io.Reader, buf *bytes.Buffer, resolve func(path string, kind stri
 							if len(a) == 3 {
 								buf.Write(a[0])
 								buf.Write(q)
-								buf.WriteString(resolve(string(a[1]), "import expr", buf.Len()))
+								buf.WriteString(resolve(string(a[1]), "importExpr", buf.Len()))
 								buf.Write(q)
 								buf.Write(a[2])
 							} else {
@@ -116,7 +132,7 @@ func walkDts(r io.Reader, buf *bytes.Buffer, resolve func(path string, kind stri
 									buf := bytes.NewBuffer(nil)
 									buf.Write(a[0])
 									buf.Write(q)
-									buf.WriteString(resolve(string(a[1]), "import call", buf.Len()))
+									buf.WriteString(resolve(string(a[1]), "importCall", buf.Len()))
 									buf.Write(q)
 									buf.Write(a[2])
 									return buf.Bytes()
@@ -136,7 +152,7 @@ func walkDts(r io.Reader, buf *bytes.Buffer, resolve func(path string, kind stri
 						if len(a) == 3 {
 							buf.Write(a[0])
 							buf.Write(q)
-							buf.WriteString(resolve(string(a[1]), "declare module", buf.Len()))
+							buf.WriteString(resolve(string(a[1]), "declareModule", buf.Len()))
 							buf.Write(q)
 							buf.Write(a[2])
 						} else {
@@ -154,7 +170,7 @@ func walkDts(r io.Reader, buf *bytes.Buffer, resolve func(path string, kind stri
 								buf := bytes.NewBuffer(nil)
 								buf.Write(a[0])
 								buf.Write(q)
-								buf.WriteString(resolve(string(a[1]), "import call", buf.Len()))
+								buf.WriteString(resolve(string(a[1]), "importCall", buf.Len()))
 								buf.Write(q)
 								buf.Write(a[2])
 								return buf.Bytes()

@@ -72,14 +72,14 @@ func (task *BuildTask) copyDTS(dts string, buildVersion int, aliasDepsPrefix str
 	}
 
 	pass1Buf := bytes.NewBuffer(nil)
-	err = walkDts(dtsFile, pass1Buf, func(importPath string, kind string, position int) string {
-		if kind == "declare module" {
-			internalDeclareModules.Add(importPath)
+	err = walkDts(dtsFile, pass1Buf, func(name string, kind string, position int) string {
+		if kind == "declareModule" {
+			internalDeclareModules.Add(name)
 		}
-		if kind == "import expr" || kind == "import call" {
-			imports.Add(importPath)
+		if kind == "importExpr" || kind == "importCall" {
+			imports.Add(name)
 		}
-		return importPath
+		return name
 	})
 	// close the opened dts file
 	dtsFile.Close()
@@ -87,9 +87,9 @@ func (task *BuildTask) copyDTS(dts string, buildVersion int, aliasDepsPrefix str
 		return
 	}
 
-	for _, importPath := range imports.Values() {
-		if !internalDeclareModules.Has(importPath) {
-			internalDeclareModules.Remove(importPath)
+	for _, path := range imports.Values() {
+		if !internalDeclareModules.Has(path) {
+			internalDeclareModules.Remove(path)
 		}
 	}
 	imports.Reset()
@@ -100,7 +100,7 @@ func (task *BuildTask) copyDTS(dts string, buildVersion int, aliasDepsPrefix str
 	}
 	err = walkDts(pass1Buf, buf, func(importPath string, kind string, position int) string {
 		// resove `declare module "xxx" {}`
-		if kind == "declare module" {
+		if kind == "declareModule" {
 			moduleName := pkgName
 			if len(subPath) > 0 {
 				moduleName += "/" + strings.Join(subPath, "/")
@@ -138,7 +138,7 @@ func (task *BuildTask) copyDTS(dts string, buildVersion int, aliasDepsPrefix str
 		}
 
 		// fix some weird import paths
-		if kind == "import call" {
+		if kind == "importCall" {
 			if task.Pkg.Name == "@mdx-js/mdx" {
 				if (strings.Contains(dts, "plugin/recma-document") || strings.Contains(dts, "plugin/recma-jsx-rewrite")) && importPath == "@types/estree" {
 					importPath = "@types/estree-jsx"
