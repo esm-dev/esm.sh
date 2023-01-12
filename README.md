@@ -174,13 +174,13 @@ import postcss from "https://esm.sh/postcss?deno-std=0.128.0"
 
 ### Use CLI Script
 
-The CLI script is using to manage the imports with **import maps**, it will resolve the dependencies automatically and always pin the build version. To use the CLI mode, you need to run the `init` command in your project root directory:
+**esm.sh** provides a CLI script to manage the imports with **import maps** in [Deno](https://deno.land), it will resolve dependencies automatically and always **pin** the build version. To use the CLI script, you need to run the `init` command in your project root directory:
 
 ```bash
 deno run -A -r https://esm.sh init
 ```
 
-After initializing, you can use the `deno task esm:[add/update/remove]` commands to manage the npm modules in the import maps.
+After initializing, you can use the `deno task esm:[add/update/remove]` commands to manage imports of NPM in the import maps.
 
 ```bash
 deno task esm:add react react-dom # add packages
