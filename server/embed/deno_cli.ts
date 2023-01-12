@@ -329,7 +329,7 @@ async function addPkgToImportMap(
     importMap.imports[aliasName + "/"] = pkgUrl + "/";
   }
   if (pkg.dependencies) {
-    const esmshScope = `https://esm.sh/${VERSION}/`;
+    const esmshScope = `${importUrl.origin}/${VERSION}/`;
     if (!Reflect.has(importMap.scopes, esmshScope)) {
       importMap.scopes[esmshScope] = {};
     }
