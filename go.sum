@@ -2,10 +2,10 @@ github.com/Masterminds/semver/v3 v3.2.0 h1:3MEsd0SM6jqZojhjLWWeBY+Kcjy9i6MQAeY7Y
 github.com/Masterminds/semver/v3 v3.2.0/go.mod h1:qvl/7zhW3nngYb5+80sSMF+FG2BjYrf8m9wsX0PNOMQ=
 github.com/andybalholm/brotli v1.0.4 h1:V7DdXeJtZscaqfNuAdSRuRFzuiKlHSC/Zh3zl9qY3JY=
 github.com/andybalholm/brotli v1.0.4/go.mod h1:fO7iG3H7G2nSZ7m0zPUDn85XEX2GTukHGRSepvi9Eig=
-github.com/evanw/esbuild v0.16.10 h1:Wn4sao3reOG21sbrdhkaSnsLOBh60rhz96IMpOwWJrs=
-github.com/evanw/esbuild v0.16.10/go.mod h1:iINY06rn799hi48UqEnaQvVfZWe6W9bET78LbvN8VWk=
-github.com/ije/esbuild-internal v0.16.10 h1:lIoXfyS/7u+o/xaFX3LH+gapF9nZPxIjub9ZOMJUa7k=
-github.com/ije/esbuild-internal v0.16.10/go.mod h1:UoKsnSemBwKVxxw6hikmxdxaxaB9PLe9IbbnrM1abZU=
+github.com/evanw/esbuild v0.16.17 h1:8sbjDTaHGBnXpDmeMXtnOMmCkEZJ5bSRBu8C1A71a7Y=
+github.com/evanw/esbuild v0.16.17/go.mod h1:iINY06rn799hi48UqEnaQvVfZWe6W9bET78LbvN8VWk=
+github.com/ije/esbuild-internal v0.16.17 h1:qshOxs8fVF8TWWoHtzVbCFpL7jY6t18quA1FmO2QoUI=
+github.com/ije/esbuild-internal v0.16.17/go.mod h1:UoKsnSemBwKVxxw6hikmxdxaxaB9PLe9IbbnrM1abZU=
 github.com/ije/gox v0.6.1 h1:GGWzuAb5EugWYXqwgFrWDJah3tFZGgG8hA8Hl5Dgj8E=
 github.com/ije/gox v0.6.1/go.mod h1:HeDdgw2DUqWKHUyRjy9pdS4ESVxxv+0N5iOufd1JGRs=
 github.com/ije/rex v1.8.5 h1:QDrANwnvwefE52SOv87J9UljGP0BFMLj1tbWmJqQRCs=
