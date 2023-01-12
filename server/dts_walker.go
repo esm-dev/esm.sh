@@ -6,9 +6,6 @@ import (
 	"fmt"
 	"io"
 	"regexp"
-	"strings"
-
-	"github.com/ije/gox/utils"
 )
 
 var (
@@ -90,15 +87,16 @@ func walkDts(r io.Reader, buf *bytes.Buffer, resolve func(path string, kind stri
 				inlineToken, trimedSpaces := trimSpace(inlineScanner.Bytes())
 				buf.Write(trimedSpaces)
 				if len(inlineToken) > 0 {
+
 					// TypeScript may start raising a diagnostic when ESM declaration files use `export =`
 					// see https://github.com/microsoft/TypeScript/issues/51321
-					if bytes.HasPrefix(inlineToken, []byte("export=")) || bytes.HasPrefix(inlineToken, []byte("export =")) {
-						_, rest := utils.SplitByFirstByte(string(inlineToken), '=')
-						buf.WriteString("export default ")
-						buf.WriteString(strings.TrimLeft(rest, " "))
-						i++
-						continue
-					}
+					// if bytes.HasPrefix(inlineToken, []byte("export=")) || bytes.HasPrefix(inlineToken, []byte("export =")) {
+					// 	buf.WriteString("// ")
+					// 	buf.Write(inlineToken)
+					// 	i++
+					// 	continue
+					// }
+
 					if !importExportScope && startsWith(string(inlineToken), "import ", "import\"", "import'", "import{", "export ", "export{") {
 						importExportScope = true
 					}
