@@ -24,7 +24,7 @@ var (
 	regexpLocPath          = regexp.MustCompile(`(\.[a-z]+):\d+:\d+$`)
 	regexpJSIdent          = regexp.MustCompile(`^[$_a-zA-Z][$_a-zA-Z0-9]*$`)
 	regexpAliasExport      = regexp.MustCompile(`^export\s*\*\s*from\s*['"](\.+/.+?)['"];?$`)
-	npmNaming              = valid.Validator{valid.FromTo{'a', 'z'}, valid.FromTo{'A', 'Z'}, valid.FromTo{'0', '9'}, valid.Eq('.'), valid.Eq('_'), valid.Eq('-')}
+	npmNaming              = valid.Validator{valid.FromTo{'a', 'z'}, valid.FromTo{'0', '9'}, valid.Eq('_'), valid.Eq('.'), valid.Eq('-')}
 )
 
 type stringSet struct {

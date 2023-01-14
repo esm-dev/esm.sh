@@ -396,7 +396,7 @@ func esmHandler() rex.Handle {
 				return rex.Status(500, err.Error())
 			}
 
-			// fetch file from unpkg.com and save it to fs
+			// fetch non-js file from unpkg.com and save it to fs
 			if !exists {
 				resp, err := httpClient.Get(fmt.Sprintf("%s/%s", strings.TrimSuffix(cfg.NpmCDN, "/"), reqPkg.String()))
 				if err != nil {

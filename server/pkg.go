@@ -7,20 +7,14 @@ import (
 	"github.com/ije/gox/utils"
 )
 
-type Pkg struct {
-	Name      string `json:"name"`
-	Version   string `json:"version"`
-	Submodule string `json:"submodule"`
-}
-
-type PkgNameInfo struct {
+type PkgPath struct {
 	Fullname  string `json:"fullname"`
 	Scope     string `json:"scope"`
 	Name      string `json:"name"`
 	Submodule string `json:"submodule"`
 }
 
-func parsePkgName(pathname string) *PkgNameInfo {
+func parsePkgPath(pathname string) *PkgPath {
 	a := strings.Split(strings.Trim(pathname, "/"), "/")
 	for i, s := range a {
 		a[i] = strings.TrimSpace(s)
@@ -37,7 +31,7 @@ func parsePkgName(pathname string) *PkgNameInfo {
 		fullname = "@" + scope + "/" + packageName
 	}
 
-	return &PkgNameInfo{
+	return &PkgPath{
 		Scope:     scope,
 		Name:      packageName,
 		Submodule: submodule,
@@ -45,27 +39,29 @@ func parsePkgName(pathname string) *PkgNameInfo {
 	}
 }
 
+type Pkg struct {
+	Name      string `json:"name"`
+	Version   string `json:"version"`
+	Submodule string `json:"submodule"`
+}
+
 func parsePkg(pathname string) (*Pkg, string, error) {
-	pkgNameInfo := parsePkgName(pathname)
-	scope := pkgNameInfo.Scope
-	packageName := pkgNameInfo.Name
-	submodule := pkgNameInfo.Submodule
+	pkgPath := parsePkgPath(pathname)
+	scope := pkgPath.Scope
+	submodule := strings.TrimSuffix(pkgPath.Submodule, ".js")
+	pkgName, maybeVersion := utils.SplitByLastByte(pkgPath.Name, '@')
 
-	// ref https://github.com/npm/validate-npm-package-name
-	if scope != "" && (len(scope) > 214 || !npmNaming.Is(scope)) {
-		return nil, "", fmt.Errorf("invalid scope '%s'", scope)
-	}
-
-	name, maybeVersion := utils.SplitByLastByte(packageName, '@')
-	version, q := utils.SplitByFirstByte(maybeVersion, '&')
-	if name != "" && (len(name) > 214 || !npmNaming.Is(name)) {
-		return nil, "", fmt.Errorf("invalid package name '%s'", name)
-	}
-
+	name := pkgName
 	if scope != "" {
 		name = fmt.Sprintf("@%s/%s", scope, name)
 	}
 
+	// ref https://github.com/npm/validate-npm-package-name
+	if (scope != "" && !npmNaming.Is(scope)) || (pkgName == "" || !npmNaming.Is(pkgName)) || len(name) > 214 {
+		return nil, "", fmt.Errorf("invalid package name '%s'", name)
+	}
+
+	version, q := utils.SplitByFirstByte(maybeVersion, '&')
 	if regexpFullVersion.MatchString(version) {
 		for prefix, ver := range fixedPkgVersions {
 			if strings.HasPrefix(name+"@"+version, prefix) {
@@ -75,7 +71,7 @@ func parsePkg(pathname string) (*Pkg, string, error) {
 		return &Pkg{
 			Name:      name,
 			Version:   version,
-			Submodule: strings.TrimSuffix(submodule, ".js"),
+			Submodule: submodule,
 		}, q, nil
 	}
 
@@ -87,7 +83,7 @@ func parsePkg(pathname string) (*Pkg, string, error) {
 	return &Pkg{
 		Name:      name,
 		Version:   info.Version,
-		Submodule: strings.TrimSuffix(submodule, ".js"),
+		Submodule: submodule,
 	}, q, nil
 }
 

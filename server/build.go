@@ -300,7 +300,7 @@ func (task *BuildTask) build(tracing *stringSet) (esm *ESM, err error) {
 
 					// bundles all dependencies in `bundle` mode, apart from peer dependencies
 					if task.BundleMode && !extraExternal.Has(specifier) {
-						pkgNameInfo := parsePkgName(specifier)
+						pkgNameInfo := parsePkgPath(specifier)
 						if !builtInNodeModules[pkgNameInfo.Name] {
 							_, ok := npm.PeerDependencies[pkgNameInfo.Name]
 							if !ok {
@@ -720,7 +720,7 @@ esbuild:
 				// common npm dependency
 				if importPath == "" {
 					version := "latest"
-					pkgNameInfo := parsePkgName(name)
+					pkgNameInfo := parsePkgPath(name)
 					if pkgNameInfo.Fullname == task.Pkg.Name {
 						version = task.Pkg.Version
 					} else if v, ok := npm.Dependencies[pkgNameInfo.Fullname]; ok {
