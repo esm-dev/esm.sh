@@ -58,7 +58,7 @@ func esmHandler() rex.Handle {
 
 		// strip loc
 		if strings.ContainsRune(pathname, ':') {
-			pathname = regLocPath.ReplaceAllString(pathname, "$1")
+			pathname = regexpLocPath.ReplaceAllString(pathname, "$1")
 		}
 
 		var origin string
@@ -100,7 +100,7 @@ func esmHandler() rex.Handle {
 			pathname = "/" + strings.Join(a[2:], "/")
 			hasBuildVerPrefix = true
 			// Otherwise check possible fixed version
-		} else if regBuildVersionPath.MatchString(pathname) {
+		} else if regexpBuildVersionPath.MatchString(pathname) {
 			a := strings.Split(pathname, "/")
 			pathname = "/" + strings.Join(a[2:], "/")
 			hasBuildVerPrefix = true
@@ -385,7 +385,7 @@ func esmHandler() rex.Handle {
 
 		// serve raw dist files like CSS that is fetching from unpkg.com
 		if storageType == "raw" {
-			if !regFullVersionPath.MatchString(pathname) {
+			if !regexpFullVersionPath.MatchString(pathname) {
 				url := fmt.Sprintf("%s%s/%s", origin, cfg.BasePath, reqPkg.String())
 				return rex.Redirect(url, http.StatusFound)
 			}
@@ -509,7 +509,7 @@ func esmHandler() rex.Handle {
 		treeShaking := newStringSet()
 		for _, p := range strings.Split(ctx.Form.Value("exports"), ",") {
 			p = strings.TrimSpace(p)
-			if regJSIdent.MatchString(p) {
+			if regexpJSIdent.MatchString(p) {
 				treeShaking.Add(p)
 			}
 		}
@@ -537,7 +537,7 @@ func esmHandler() rex.Handle {
 		// check deno/std version by `?deno-std=VER` query
 		dsv := denoStdVersion
 		fv := ctx.Form.Value("deno-std")
-		if fv != "" && regFullVersion.MatchString(fv) && target == "deno" {
+		if fv != "" && regexpFullVersion.MatchString(fv) && target == "deno" {
 			dsv = fv
 		}
 
@@ -758,7 +758,7 @@ func esmHandler() rex.Handle {
 				return rex.Status(404, "Package CSS not found")
 			}
 
-			if !regFullVersionPath.MatchString(pathname) || !isPined || targetFromUA {
+			if !regexpFullVersionPath.MatchString(pathname) || !isPined || targetFromUA {
 				url := fmt.Sprintf("%s%s/%s.css", origin, cfg.BasePath, strings.TrimSuffix(taskID, ".js"))
 				return rex.Redirect(url, http.StatusFound)
 			}
@@ -827,7 +827,7 @@ func esmHandler() rex.Handle {
 			ctx.SetHeader("X-TypeScript-Types", url)
 		}
 
-		if regFullVersionPath.MatchString(pathname) {
+		if regexpFullVersionPath.MatchString(pathname) {
 			if isPined && !targetFromUA {
 				ctx.SetHeader("Cache-Control", "public, max-age=31536000, immutable")
 			} else {

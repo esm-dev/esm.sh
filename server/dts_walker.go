@@ -9,11 +9,11 @@ import (
 )
 
 var (
-	regFromExpr          = regexp.MustCompile(`(}|\s)from\s*('|")`)
-	regImportBareExpr    = regexp.MustCompile(`import\s*('|")`)
-	regImportCallExpr    = regexp.MustCompile(`import\(('|").+?('|")\)`)
-	regDeclareModuleExpr = regexp.MustCompile(`declare\s+module\s*('|").+?('|")`)
-	regReferenceTag      = regexp.MustCompile(`<reference\s+(path|types)\s*=\s*('|")(.+?)('|")\s*/?>`)
+	regexpFromExpr          = regexp.MustCompile(`(}|\s)from\s*('|")`)
+	regexpImportBareExpr    = regexp.MustCompile(`import\s*('|")`)
+	regexpImportCallExpr    = regexp.MustCompile(`(import|require)\(('|").+?('|")\)`)
+	regexpDeclareModuleExpr = regexp.MustCompile(`declare\s+module\s*('|").+?('|")`)
+	regexpReferenceTag      = regexp.MustCompile(`<reference\s+(path|types)\s*=\s*('|")(.+?)('|")\s*/?>`)
 )
 
 var (
@@ -51,8 +51,8 @@ func walkDts(r io.Reader, buf *bytes.Buffer, resolve func(path string, kind stri
 			}
 		} else if bytes.HasPrefix(token, bytesStripleSlash) {
 			rest := bytes.TrimPrefix(token, bytesStripleSlash)
-			if regReferenceTag.Match(rest) {
-				a := regReferenceTag.FindAllSubmatch(rest, 1)
+			if regexpReferenceTag.Match(rest) {
+				a := regexpReferenceTag.FindAllSubmatch(rest, 1)
 				format := string(a[0][1])
 				path := string(a[0][3])
 				if format == "path" || format == "types" {
@@ -101,7 +101,7 @@ func walkDts(r io.Reader, buf *bytes.Buffer, resolve func(path string, kind stri
 						importExportScope = true
 					}
 					if importExportScope {
-						if regFromExpr.Match(inlineToken) || regImportBareExpr.Match(inlineToken) {
+						if regexpFromExpr.Match(inlineToken) || regexpImportBareExpr.Match(inlineToken) {
 							importExportScope = false
 							q := bytesSigleQoute
 							a := bytes.Split(inlineToken, q)
@@ -118,8 +118,8 @@ func walkDts(r io.Reader, buf *bytes.Buffer, resolve func(path string, kind stri
 							} else {
 								buf.Write(inlineToken)
 							}
-						} else if regImportCallExpr.Match(inlineToken) {
-							buf.Write(regImportCallExpr.ReplaceAllFunc(inlineToken, func(importCallExpr []byte) []byte {
+						} else if regexpImportCallExpr.Match(inlineToken) {
+							buf.Write(regexpImportCallExpr.ReplaceAllFunc(inlineToken, func(importCallExpr []byte) []byte {
 								q := bytesSigleQoute
 								a := bytes.Split(importCallExpr, q)
 								if len(a) != 3 {
@@ -140,7 +140,7 @@ func walkDts(r io.Reader, buf *bytes.Buffer, resolve func(path string, kind stri
 						} else {
 							buf.Write(inlineToken)
 						}
-					} else if bytes.HasPrefix(inlineToken, []byte("declare")) && regDeclareModuleExpr.Match(token) {
+					} else if bytes.HasPrefix(inlineToken, []byte("declare")) && regexpDeclareModuleExpr.Match(token) {
 						q := bytesSigleQoute
 						a := bytes.Split(inlineToken, q)
 						if len(a) != 3 {
@@ -156,8 +156,8 @@ func walkDts(r io.Reader, buf *bytes.Buffer, resolve func(path string, kind stri
 						} else {
 							buf.Write(inlineToken)
 						}
-					} else if regImportCallExpr.Match(inlineToken) {
-						buf.Write(regImportCallExpr.ReplaceAllFunc(inlineToken, func(importCallExpr []byte) []byte {
+					} else if regexpImportCallExpr.Match(inlineToken) {
+						buf.Write(regexpImportCallExpr.ReplaceAllFunc(inlineToken, func(importCallExpr []byte) []byte {
 							q := bytesSigleQoute
 							a := bytes.Split(importCallExpr, q)
 							if len(a) != 3 {

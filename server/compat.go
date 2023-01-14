@@ -10,7 +10,7 @@ import (
 	"github.com/mssola/user_agent"
 )
 
-var regBrowserVersion = regexp.MustCompile(`^([0-9]+)(?:\.([0-9]+))?(?:\.([0-9]+))?$`)
+var regexpBrowserVersion = regexp.MustCompile(`^([0-9]+)(?:\.([0-9]+))?(?:\.([0-9]+))?$`)
 
 var targets = map[string]api.Target{
 	"es2015": api.ES2015,
@@ -123,7 +123,7 @@ func validateESMAFeatures(target api.Target) int {
 func validateEngineFeatures(engine api.Engine) int {
 	constraints := make(map[compat.Engine][]int)
 
-	if match := regBrowserVersion.FindStringSubmatch(engine.Version); match != nil {
+	if match := regexpBrowserVersion.FindStringSubmatch(engine.Version); match != nil {
 		if major, err := strconv.Atoi(match[1]); err == nil {
 			version := []int{major}
 			if minor, err := strconv.Atoi(match[2]); err == nil {

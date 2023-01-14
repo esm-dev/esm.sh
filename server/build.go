@@ -514,7 +514,7 @@ resolveAliasExport:
 				return nil, err
 			}
 			code := strings.TrimSpace(string(data))
-			matchs := regAliasExport.FindStringSubmatch(code)
+			matchs := regexpAliasExport.FindStringSubmatch(code)
 			if len(matchs) == 2 {
 				entryPoint = path.Join(path.Dir(entryPoint))
 				goto resolveAliasExport

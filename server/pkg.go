@@ -66,7 +66,7 @@ func parsePkg(pathname string) (*Pkg, string, error) {
 		name = fmt.Sprintf("@%s/%s", scope, name)
 	}
 
-	if regFullVersion.MatchString(version) {
+	if regexpFullVersion.MatchString(version) {
 		for prefix, ver := range fixedPkgVersions {
 			if strings.HasPrefix(name+"@"+version, prefix) {
 				version = ver
