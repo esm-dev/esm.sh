@@ -1,0 +1,6 @@
+{
+  "imports": {
+    "fast-deep-equal": "./deep-eq.js",
+    "json-schema-traverse": "./not-existed-file-should-throw.js"
+  }
+}
