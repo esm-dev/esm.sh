@@ -299,10 +299,10 @@ func (task *BuildTask) build(tracing *stringSet) (esm *ESM, err error) {
 					}
 
 					// bundles all dependencies in `bundle` mode, apart from peer dependencies
-					if task.BundleMode && !extraExternal.Has(specifier) {
+					if task.BundleMode && !extraExternal.Has(specifier) && !task.external.Has(specifier) {
 						pkgNameInfo := parsePkgPath(specifier)
 						if !builtInNodeModules[pkgNameInfo.Name] {
-							_, ok := npm.PeerDependencies[pkgNameInfo.Name]
+							_, ok := npm.PeerDependencies[pkgNameInfo.Fullname]
 							if !ok {
 								return api.OnResolveResult{}, nil
 							}
