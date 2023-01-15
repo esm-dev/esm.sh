@@ -7,7 +7,6 @@ function use(arg: any) {
 }
 
 Deno.test("external-bundle", async () => {
-  use(ajv)
+  use(ajv) //hack to prevent unused import removal
   assert((globalThis as any).ourDeepEqImported === true)
-  // assert(html == "<main><p>just now</p></main>");
 });
