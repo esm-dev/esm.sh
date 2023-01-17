@@ -4,7 +4,7 @@ const (
 	// esm.sh build version
 	VERSION          = 102
 	nodejsMinVersion = 16
-	denoStdVersion   = "0.170.0"
+	denoStdVersion   = "0.173.0"
 	nodejsLatestLTS  = "16.18.1"
 	nodeTypesVersion = "16.18.10"
 )
