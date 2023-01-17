@@ -1,5 +1,35 @@
 # Change Log
 
+## v103
+
+- Add `inject` argument for worker factory
+  ```js
+  import workerFactory from "https://esm.sh/xxhash-wasm@1.0.2?worker";
+
+  const workerInject = `
+  self.onmessage = (e) => {
+    // variable 'E' is the xxhash-wasm module default export
+    E().then(hasher => {
+      self.postMessage(hasher.h64ToString(e.data));
+    })
+  }
+  `;
+
+  const worker = workerFactory(workerInject);
+  worker.onmessage = (e) => {
+    console.log(e.data); // 502b0c5fc4a5704c
+  };
+  worker.postMessage("Hello");
+  ```
+- Respect `?external` arg in bundle mode (close [#498](https://github.com/ije/esm.sh/issues/498))
+- Add `require()` syntax support for **dts** transformer
+- Fix import maps scope is not correct by the CLI script (close [#480](https://github.com/ije/esm.sh/issues/480))
+- Fix `basePath` doesn't take effect on redirects (close [#481](https://github.com/ije/esm.sh/issues/481))
+- Fix `X-TypeScript-Types` header not pined for stable builds
+- Fix some bugs related to package path parsing ([#487](https://github.com/ije/esm.sh/pull/487))
+- Upgrade `esbuild` to **0.16.17**
+- Upgrade `deno/std` to **0.173.0**
+
 ## v102
 
 - Support `browser` field of **package.json** to improve compatibility with npm packages in browser. For example, the `webtorrent` package will use `memory-chunk-store` instead of `fs-chunk-store` and exclude built-in modules like `fs`, `net`, `os` and so on.
