@@ -44,36 +44,7 @@ func esmHandler() rex.Handle {
 
 		// ban malicious requests
 		if strings.HasPrefix(pathname, ".") || strings.HasSuffix(pathname, ".php") {
-			return rex.Status(400, "Bad Request")
-		}
-
-		// ban malicious requests by banList
-		// trim the leading `/` in pathname to get the package name
-		// e.g. /@withfig/autocomplete -> @withfig/autocomplete
-		packageFullName := pathname[1:]
-		if cfg.BanList.IsPackageBanned(packageFullName) {
-			log.Debugf("The package %s is banned.", packageFullName)
-			return rex.Status(403, "forbidden")
-		}
-
-		// strip loc
-		if strings.ContainsRune(pathname, ':') {
-			pathname = regexpLocPath.ReplaceAllString(pathname, "$1")
-		}
-
-		var origin string
-		if cfg.Origin != "" {
-			origin = strings.TrimSuffix(cfg.Origin, "/")
-		} else {
-			proto := "http"
-			if ctx.R.TLS != nil {
-				proto = "https"
-			}
-			origin = fmt.Sprintf("%s://%s", proto, ctx.R.Host)
-		}
-		// force to use https for esm.sh
-		if origin == "http://esm.sh" {
-			origin = "https://esm.sh"
+			return rex.Status(404, "not found")
 		}
 
 		// Build prefix may only be served from "${cfg.BasePath}/..."
@@ -87,37 +58,9 @@ func esmHandler() rex.Handle {
 			}
 		}
 
-		var hasBuildVerPrefix bool
-		var outdatedBuildVer string
-
-		// Check build version
-		buildBasePath := fmt.Sprintf("/v%d", VERSION)
-		if strings.HasPrefix(pathname, "/stable/") {
-			pathname = strings.TrimPrefix(pathname, "/stable")
-			hasBuildVerPrefix = true
-		} else if strings.HasPrefix(pathname, buildBasePath+"/") || pathname == buildBasePath {
-			a := strings.Split(pathname, "/")
-			pathname = "/" + strings.Join(a[2:], "/")
-			hasBuildVerPrefix = true
-			// Otherwise check possible fixed version
-		} else if regexpBuildVersionPath.MatchString(pathname) {
-			a := strings.Split(pathname, "/")
-			pathname = "/" + strings.Join(a[2:], "/")
-			hasBuildVerPrefix = true
-			outdatedBuildVer = a[1]
-		}
-
-		// match static routess
+		// static routes
 		switch pathname {
 		case "/":
-			if strings.HasPrefix(ctx.R.UserAgent(), "Deno/") {
-				cliTs, err := embedFS.ReadFile("server/embed/deno_cli.ts")
-				if err != nil {
-					return err
-				}
-				ctx.SetHeader("Content-Type", "application/typescript; charset=utf-8")
-				return bytes.ReplaceAll(cliTs, []byte("v{VERSION}"), []byte(fmt.Sprintf("v%d", VERSION)))
-			}
 			indexHTML, err := embedFS.ReadFile("server/embed/index.html")
 			if err != nil {
 				return err
@@ -188,7 +131,7 @@ func esmHandler() rex.Handle {
 			switch ctx.Form.Value("type") {
 			case "resolve":
 				return throwErrorJS(ctx, fmt.Errorf(
-					`Can't resolve "%s" (Imported by "%s")`,
+					`Could not resolve "%s" (Imported by "%s")`,
 					ctx.Form.Value("name"),
 					ctx.Form.Value("importer"),
 				))
@@ -204,6 +147,48 @@ func esmHandler() rex.Handle {
 
 		case "/favicon.ico":
 			return rex.Status(404, "not found")
+		}
+
+		// strip loc suffix
+		if strings.ContainsRune(pathname, ':') {
+			pathname = regexpLocPath.ReplaceAllString(pathname, "$1")
+		}
+
+		var hasBuildVerPrefix bool
+		var outdatedBuildVer string
+
+		// check build version prefix
+		buildBasePath := fmt.Sprintf("/v%d", VERSION)
+		if strings.HasPrefix(pathname, "/stable/") {
+			pathname = strings.TrimPrefix(pathname, "/stable")
+			hasBuildVerPrefix = true
+		} else if strings.HasPrefix(pathname, buildBasePath+"/") || pathname == buildBasePath {
+			a := strings.Split(pathname, "/")
+			pathname = "/" + strings.Join(a[2:], "/")
+			hasBuildVerPrefix = true
+			// Otherwise check possible fixed version
+		} else if regexpBuildVersionPath.MatchString(pathname) {
+			a := strings.Split(pathname, "/")
+			pathname = "/" + strings.Join(a[2:], "/")
+			hasBuildVerPrefix = true
+			outdatedBuildVer = a[1]
+		}
+
+		// ban malicious requests by banList
+		// trim the leading `/` in pathname to get the package name
+		// e.g. /@withfig/autocomplete -> @withfig/autocomplete
+		packageFullName := pathname[1:]
+		if cfg.BanList.IsPackageBanned(packageFullName) {
+			return rex.Status(403, "forbidden")
+		}
+
+		if strings.HasPrefix(ctx.R.UserAgent(), "Deno/") && pathname == "/" {
+			cliTs, err := embedFS.ReadFile("server/embed/deno_cli.ts")
+			if err != nil {
+				return err
+			}
+			ctx.SetHeader("Content-Type", "application/typescript; charset=utf-8")
+			return bytes.ReplaceAll(cliTs, []byte("v{VERSION}"), []byte(fmt.Sprintf("v%d", VERSION)))
 		}
 
 		// serve embed assets
@@ -254,9 +239,25 @@ func esmHandler() rex.Handle {
 			return rex.Status(status, message)
 		}
 
+		var cdnOrigin string
+		if cfg.Origin != "" {
+			cdnOrigin = strings.TrimSuffix(cfg.Origin, "/")
+		} else {
+			proto := "http"
+			if ctx.R.TLS != nil {
+				proto = "https"
+			}
+			cdnOrigin = fmt.Sprintf("%s://%s", proto, ctx.R.Host)
+		}
+
+		// force to use https for esm.sh
+		if cdnOrigin == "http://esm.sh" {
+			cdnOrigin = "https://esm.sh"
+		}
+
 		// redirect `/@types/` to `.d.ts` files
 		if strings.HasPrefix(reqPkg.Name, "@types/") && (reqPkg.Submodule == "" || !strings.HasSuffix(reqPkg.Submodule, ".d.ts")) {
-			url := fmt.Sprintf("%s%s/v%d%s", origin, cfg.BasePath, VERSION, pathname)
+			url := fmt.Sprintf("%s%s/v%d%s", cdnOrigin, cfg.BasePath, VERSION, pathname)
 			if reqPkg.Submodule == "" {
 				info, _, err := getPackageInfo("", reqPkg.Name, reqPkg.Version)
 				if err != nil {
@@ -301,12 +302,12 @@ func esmHandler() rex.Handle {
 				if ctx.R.URL.RawQuery != "" {
 					query = "&" + ctx.R.URL.RawQuery
 				}
-				return rex.Redirect(fmt.Sprintf("%s%s/%s%s@%s%s%s", origin, cfg.BasePath, eaSign, reqPkg.Name, reqPkg.Version, query, submodule), http.StatusFound)
+				return rex.Redirect(fmt.Sprintf("%s%s/%s%s@%s%s%s", cdnOrigin, cfg.BasePath, eaSign, reqPkg.Name, reqPkg.Version, query, submodule), http.StatusFound)
 			}
 			if ctx.R.URL.RawQuery != "" {
 				query = "?" + ctx.R.URL.RawQuery
 			}
-			return rex.Redirect(fmt.Sprintf("%s%s/%s%s%s", origin, cfg.BasePath, eaSign, reqPkg.String(), query), http.StatusFound)
+			return rex.Redirect(fmt.Sprintf("%s%s/%s%s%s", cdnOrigin, cfg.BasePath, eaSign, reqPkg.String(), query), http.StatusFound)
 		}
 
 		// redirect to the url with full package version
@@ -335,7 +336,7 @@ func esmHandler() rex.Handle {
 			if ctx.R.URL.RawQuery != "" {
 				query = "?" + ctx.R.URL.RawQuery
 			}
-			return rex.Redirect(fmt.Sprintf("%s%s%s/%s@%s%s%s", origin, cfg.BasePath, prefix, reqPkg.Name, reqPkg.Version, subpath, query), http.StatusFound)
+			return rex.Redirect(fmt.Sprintf("%s%s%s/%s@%s%s%s", cdnOrigin, cfg.BasePath, prefix, reqPkg.Name, reqPkg.Version, subpath, query), http.StatusFound)
 		}
 
 		// support `https://esm.sh/react?dev&target=es2020/jsx-runtime` for jsx transformer
@@ -386,7 +387,7 @@ func esmHandler() rex.Handle {
 		// serve raw dist files like CSS that is fetching from unpkg.com
 		if storageType == "raw" {
 			if !regexpFullVersionPath.MatchString(pathname) {
-				url := fmt.Sprintf("%s%s/%s", origin, cfg.BasePath, reqPkg.String())
+				url := fmt.Sprintf("%s%s/%s", cdnOrigin, cfg.BasePath, reqPkg.String())
 				return rex.Redirect(url, http.StatusFound)
 			}
 
@@ -632,7 +633,7 @@ func esmHandler() rex.Handle {
 		if hasBuildVerPrefix && storageType == "types" {
 			task := &BuildTask{
 				BuildArgs:    buildArgs,
-				CdnOrigin:    origin,
+				CdnOrigin:    cdnOrigin,
 				BasePath:     cfg.BasePath,
 				BuildVersion: buildVersion,
 				Pkg:          *reqPkg,
@@ -693,7 +694,7 @@ func esmHandler() rex.Handle {
 
 		task := &BuildTask{
 			BuildArgs:    buildArgs,
-			CdnOrigin:    origin,
+			CdnOrigin:    cdnOrigin,
 			BasePath:     cfg.BasePath,
 			BuildVersion: buildVersion,
 			Pkg:          *reqPkg,
@@ -742,7 +743,7 @@ func esmHandler() rex.Handle {
 			if esm.Dts != "" && !noCheck {
 				value := fmt.Sprintf(
 					"%s%s/%s",
-					origin,
+					cdnOrigin,
 					cfg.BasePath,
 					strings.TrimPrefix(esm.Dts, "/"),
 				)
@@ -759,7 +760,7 @@ func esmHandler() rex.Handle {
 			}
 
 			if !regexpFullVersionPath.MatchString(pathname) || !isPined || targetFromUA {
-				url := fmt.Sprintf("%s%s/%s.css", origin, cfg.BasePath, strings.TrimSuffix(taskID, ".js"))
+				url := fmt.Sprintf("%s%s/%s.css", cdnOrigin, cfg.BasePath, strings.TrimSuffix(taskID, ".js"))
 				return rex.Redirect(url, http.StatusFound)
 			}
 
@@ -797,14 +798,14 @@ func esmHandler() rex.Handle {
 		fmt.Fprintf(buf, `/* esm.sh - %v */%s`, reqPkg, "\n")
 
 		if isWorker {
-			fmt.Fprintf(buf, `export { default } from "%s%s/%s?worker";`, origin, cfg.BasePath, taskID)
+			fmt.Fprintf(buf, `export { default } from "%s%s/%s?worker";`, cdnOrigin, cfg.BasePath, taskID)
 		} else {
-			fmt.Fprintf(buf, `export * from "%s%s/%s";%s`, origin, cfg.BasePath, taskID, "\n")
+			fmt.Fprintf(buf, `export * from "%s%s/%s";%s`, cdnOrigin, cfg.BasePath, taskID, "\n")
 			if (esm.CJS || esm.ExportDefault) && (treeShaking.Size() == 0 || treeShaking.Has("default")) {
 				fmt.Fprintf(
 					buf,
 					`export { default } from "%s%s/%s";%s`,
-					origin,
+					cdnOrigin,
 					cfg.BasePath,
 					taskID,
 					"\n",
@@ -818,12 +819,7 @@ func esmHandler() rex.Handle {
 				dts = strings.Join(strings.Split(dts, "/")[1:], "/")
 				dts = fmt.Sprintf("v%d/%s", VERSION, dts)
 			}
-			url := fmt.Sprintf(
-				"%s%s/%s",
-				origin,
-				cfg.BasePath,
-				dts,
-			)
+			url := fmt.Sprintf("%s%s/%s", cdnOrigin, cfg.BasePath, dts)
 			ctx.SetHeader("X-TypeScript-Types", url)
 		}
 

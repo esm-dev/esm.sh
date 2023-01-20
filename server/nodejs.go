@@ -408,7 +408,7 @@ func fetchPackageInfo(name string, version string) (info NpmPackage, err error) 
 	}
 	if resp.StatusCode != 200 {
 		ret, _ := ioutil.ReadAll(resp.Body)
-		err = fmt.Errorf("npm: can't get metadata of package '%s' (%s: %s)", name, resp.Status, string(ret))
+		err = fmt.Errorf("npm: could not get metadata of package '%s' (%s: %s)", name, resp.Status, string(ret))
 		return
 	}
 
