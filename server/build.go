@@ -75,6 +75,10 @@ func (task *BuildTask) getImportPath(pkg Pkg, prefix string) string {
 	if pkg.Submodule != "" {
 		name = pkg.Submodule
 	}
+	// workaround for es5-ext weird "/#/" path
+	if pkg.Name == "es5-ext" {
+		name = strings.ReplaceAll(name, "/#/", "/$$/")
+	}
 	name = strings.TrimSuffix(name, ".js")
 	if task.DevMode {
 		name += ".development"

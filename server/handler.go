@@ -623,6 +623,10 @@ func esmHandler() rex.Handle {
 						submodule = ""
 						isPkgCss = true
 					}
+					// workaround for es5-ext weird "/#/" path
+					if pkgName == "es5-ext" {
+						submodule = strings.ReplaceAll(submodule, "/$$/", "/#/")
+					}
 					reqPkg.Submodule = submodule
 					target = a[0]
 					isBare = true

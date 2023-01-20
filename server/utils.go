@@ -89,8 +89,10 @@ func identify(importPath string) string {
 	p := []byte(importPath)
 	for i, c := range p {
 		switch c {
-		case '/', '-', '@', '.':
+		case '/', '-', '.':
 			p[i] = '_'
+		case '@', '#':
+			p[i] = '$'
 		default:
 			p[i] = c
 		}
