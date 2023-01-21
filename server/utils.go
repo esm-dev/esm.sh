@@ -14,6 +14,7 @@ import (
 	"github.com/ije/esbuild-internal/js_ast"
 	"github.com/ije/esbuild-internal/js_parser"
 	"github.com/ije/esbuild-internal/logger"
+	"github.com/ije/gox/utils"
 	"github.com/ije/gox/valid"
 )
 
@@ -21,7 +22,7 @@ var (
 	regexpFullVersion      = regexp.MustCompile(`^\d+\.\d+\.\d+[a-zA-Z0-9\.\+\-_]*$`)
 	regexpFullVersionPath  = regexp.MustCompile(`([^/])@\d+\.\d+\.\d+[a-zA-Z0-9\.\+\-_]*(/|$)`)
 	regexpBuildVersionPath = regexp.MustCompile(`^/v\d+(/|$)`)
-	regexpLocPath          = regexp.MustCompile(`(\.[a-z]+):\d+:\d+$`)
+	regexpLocPath          = regexp.MustCompile(`(\.js):\d+:\d+$`)
 	regexpJSIdent          = regexp.MustCompile(`^[$_a-zA-Z][$_a-zA-Z0-9]*$`)
 	regexpAliasExport      = regexp.MustCompile(`^export\s*\*\s*from\s*['"](\.+/.+?)['"];?$`)
 	npmNaming              = valid.Validator{valid.FromTo{'a', 'z'}, valid.FromTo{'0', '9'}, valid.Eq('_'), valid.Eq('.'), valid.Eq('-')}
@@ -85,6 +86,32 @@ func (s *stringSet) Values() []string {
 	return a
 }
 
+func splitPkgPath(pathname string) (pkgName string, submodule string) {
+	a := strings.Split(strings.Trim(pathname, "/"), "/")
+	pkgName = a[0]
+	submodule = strings.Join(a[1:], "/")
+	if strings.HasPrefix(pkgName, "@") && len(a) > 1 {
+		pkgName = a[0] + "/" + a[1]
+		submodule = strings.Join(a[2:], "/")
+	}
+	return
+}
+
+// ref https://github.com/npm/validate-npm-package-name
+func validateNpmName(name string) bool {
+	scope := ""
+	nameWithoutScope := name
+	if strings.HasPrefix(name, "@") {
+		scope, nameWithoutScope = utils.SplitByFirstByte(name, '/')
+		scope = scope[1:]
+	}
+	if (scope != "" && !npmNaming.Is(scope)) || (nameWithoutScope == "" || !npmNaming.Is(nameWithoutScope)) || len(name) > 214 {
+		return false
+	}
+	return true
+}
+
+// identify returns a valid identifier for the given import path.
 func identify(importPath string) string {
 	p := []byte(importPath)
 	for i, c := range p {
@@ -100,14 +127,17 @@ func identify(importPath string) string {
 	return string(p)
 }
 
+// isRemoteImport returns true if the import path is a remote URL.
 func isRemoteImport(importPath string) bool {
 	return strings.HasPrefix(importPath, "https://") || strings.HasPrefix(importPath, "http://")
 }
 
+// isLocalImport returns true if the import path is a local path.
 func isLocalImport(importPath string) bool {
 	return strings.HasPrefix(importPath, "file://") || strings.HasPrefix(importPath, "/") || strings.HasPrefix(importPath, "./") || strings.HasPrefix(importPath, "../") || importPath == "." || importPath == ".."
 }
 
+// include returns true if the given string is included in the given array.
 func includes(a []string, s string) bool {
 	for _, v := range a {
 		if v == s {
@@ -204,7 +234,7 @@ func kill(pidFile string) (err error) {
 	return process.Kill()
 }
 
-func parseJS(filename string) (isESM bool, hasDefaultExport bool, err error) {
+func validateJS(filename string) (isESM bool, hasDefaultExport bool, err error) {
 	data, err := ioutil.ReadFile(filename)
 	if err != nil {
 		return

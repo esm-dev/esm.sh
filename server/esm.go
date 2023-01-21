@@ -173,7 +173,7 @@ func initModule(wd string, pkg Pkg, target string, isDev bool) (esm *ESM, npm *N
 	}
 
 	if npm.Module != "" {
-		modulePath, exportDefault, erro := parseESModule(wd, npm.Name, npm.Module)
+		modulePath, exportDefault, erro := resovleESModule(wd, npm.Name, npm.Module)
 		if erro == nil {
 			npm.Module = modulePath
 			esm.ExportDefault = exportDefault
@@ -235,11 +235,10 @@ func findESMBuild(id string) (*ESM, bool) {
 	value, err := db.Get(id)
 	if err == nil && value != nil {
 		var esm ESM
-		var exists bool
 		err = json.Unmarshal(value, &esm)
 		if err == nil {
-			exists, _, _, err = fs.Exists(path.Join("builds", id))
-			if err == nil && exists {
+			_, err = fs.Stat(path.Join("builds", id))
+			if err == nil {
 				return &esm, true
 			}
 		}
@@ -250,7 +249,7 @@ func findESMBuild(id string) (*ESM, bool) {
 	return nil, false
 }
 
-func parseESModule(wd string, packageName string, moduleSpecifier string) (resolveName string, hasDefaultExport bool, err error) {
+func resovleESModule(wd string, packageName string, moduleSpecifier string) (resolveName string, hasDefaultExport bool, err error) {
 	pkgDir := path.Join(wd, "node_modules", packageName)
 	switch path.Ext(moduleSpecifier) {
 	case ".js", ".jsx", ".ts", ".tsx", ".mjs":
@@ -268,7 +267,7 @@ func parseESModule(wd string, packageName string, moduleSpecifier string) (resol
 		}
 	}
 
-	isESM, _hasDefaultExport, err := parseJS(path.Join(pkgDir, resolveName))
+	isESM, _hasDefaultExport, err := validateJS(path.Join(pkgDir, resolveName))
 	if err != nil {
 		return
 	}
@@ -331,7 +330,7 @@ func fixNpmPackage(wd string, np *NpmPackage, target string, isDev bool) *NpmPac
 
 	browserMain := np.Browser["."]
 	if browserMain != "" && fileExists(path.Join(nmDir, np.Name, browserMain)) {
-		isEsm, _, _ := parseJS(path.Join(nmDir, np.Name, browserMain))
+		isEsm, _, _ := validateJS(path.Join(nmDir, np.Name, browserMain))
 		if isEsm {
 			log.Infof("%s@%s: use `browser` field as module: %s", np.Name, np.Version, browserMain)
 			np.Module = browserMain

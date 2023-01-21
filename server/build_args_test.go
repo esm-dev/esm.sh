@@ -18,7 +18,7 @@ func TestEncodeBuildArgs(t *testing.T) {
 				Pkg{Name: "c", Version: "1.0.0"},
 				Pkg{Name: "d", Version: "1.0.0"},
 				Pkg{Name: "e", Version: "1.0.0"},
-				Pkg{Name: "foo", Version: "1.0.0"}, // to be avoided
+				Pkg{Name: "foo", Version: "1.0.0"}, // to be ignored
 			},
 			external:          external,
 			treeShaking:       treeShaking,

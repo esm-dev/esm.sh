@@ -8,20 +8,20 @@ import (
 	"time"
 )
 
-type mItem struct {
-	value     []byte
-	expiresAt int64
+type mValue struct {
+	data      []byte
+	expiredAt int64
 }
 
-func (v mItem) isExpired() bool {
-	return v.expiresAt > 0 && time.Now().UnixNano() > v.expiresAt
+func (v mValue) isExpired() bool {
+	return v.expiredAt > 0 && time.Now().UnixNano() > v.expiredAt
 }
 
 type mCache struct {
 	lock       sync.RWMutex
-	storage    map[string]mItem
 	gcInterval time.Duration
 	gcTimer    *time.Timer
+	storage    map[string]mValue
 }
 
 func (mc *mCache) Has(key string) (bool, error) {
@@ -52,7 +52,7 @@ func (mc *mCache) Get(key string) (value []byte, err error) {
 		return
 	}
 
-	value = s.value
+	value = s.data
 	return
 }
 
@@ -61,9 +61,9 @@ func (mc *mCache) Set(key string, value []byte, ttl time.Duration) error {
 	defer mc.lock.Unlock()
 
 	if ttl > 0 {
-		mc.storage[key] = mItem{value, time.Now().Add(ttl).UnixNano()}
+		mc.storage[key] = mValue{value, time.Now().Add(ttl).UnixNano()}
 	} else {
-		mc.storage[key] = mItem{value, 0}
+		mc.storage[key] = mValue{value, 0}
 	}
 	return nil
 }
@@ -80,11 +80,11 @@ func (mc *mCache) Flush() error {
 	mc.lock.Lock()
 	defer mc.lock.Unlock()
 
-	mc.storage = map[string]mItem{}
+	mc.storage = map[string]mValue{}
 	return nil
 }
 
-func (mc *mCache) setGCInterval(interval time.Duration) {
+func (mc *mCache) setGC(interval time.Duration) {
 	if interval > 0 && interval != mc.gcInterval {
 		if mc.gcTimer != nil {
 			mc.gcTimer.Stop()
@@ -123,10 +123,10 @@ func (mcd *mcDriver) Open(region string, options url.Values) (Cache, error) {
 	}
 
 	c := &mCache{
-		storage:    map[string]mItem{},
+		storage:    map[string]mValue{},
 		gcInterval: gcInterval,
 	}
-	c.setGCInterval(gcInterval)
+	c.setGC(gcInterval)
 	return c, nil
 }
 

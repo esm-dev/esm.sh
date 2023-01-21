@@ -99,14 +99,14 @@ func Serve(efs EmbedFS) {
 		log.Fatalf("init storage(cache,%s): %v", cfg.Cache, err)
 	}
 
-	db, err = storage.OpenDB(cfg.Database)
-	if err != nil {
-		log.Fatalf("init storage(db,%s): %v", cfg.Database, err)
-	}
-
 	fs, err = storage.OpenFS(cfg.Storage)
 	if err != nil {
 		log.Fatalf("init storage(fs,%s): %v", cfg.Storage, err)
+	}
+
+	db, err = storage.OpenDB(cfg.Database)
+	if err != nil {
+		log.Fatalf("init storage(db,%s): %v", cfg.Database, err)
 	}
 
 	buildQueue = newBuildQueue(int(cfg.BuildConcurrency))

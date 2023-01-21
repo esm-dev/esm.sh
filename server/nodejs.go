@@ -375,12 +375,16 @@ func fetchPackageInfo(name string, version string) (info NpmPackage, err error) 
 		time.Sleep(10 * time.Millisecond)
 	}
 
-	data, err := cache.Get(id)
-	if err == nil && json.Unmarshal(data, &info) == nil {
-		return
-	}
-	if err != nil && err != storage.ErrNotFound && err != storage.ErrExpired {
-		log.Error("cache:", err)
+	// check cache firstly
+	if cache != nil {
+		var data []byte
+		data, err = cache.Get(id)
+		if err == nil && json.Unmarshal(data, &info) == nil {
+			return
+		}
+		if err != nil && err != storage.ErrNotFound && err != storage.ErrExpired {
+			log.Error("cache:", err)
+		}
 	}
 
 	lock.Store(id, struct{}{})
@@ -396,7 +400,6 @@ func fetchPackageInfo(name string, version string) (info NpmPackage, err error) 
 	}
 
 	resp, err := httpClient.Do(req)
-
 	if err != nil {
 		return
 	}
@@ -412,7 +415,7 @@ func fetchPackageInfo(name string, version string) (info NpmPackage, err error) 
 		return
 	}
 
-	data, err = ioutil.ReadAll(resp.Body)
+	data, err := ioutil.ReadAll(resp.Body)
 	if err == io.EOF {
 		err = nil
 	}
@@ -478,12 +481,14 @@ func fetchPackageInfo(name string, version string) (info NpmPackage, err error) 
 
 	log.Debugf("lookup package(%s@%s) in %v", name, info.Version, time.Since(start))
 
-	// cache data
-	var ttl time.Duration = 0
-	if !isFullVersion {
-		ttl = 10 * time.Minute
+	// cache package info for 10 minutes
+	if cache != nil {
+		var ttl time.Duration = 0
+		if !isFullVersion {
+			ttl = 10 * time.Minute
+		}
+		cache.Set(id, utils.MustEncodeJSON(info), ttl)
 	}
-	cache.Set(id, utils.MustEncodeJSON(info), ttl)
 	return
 }
 

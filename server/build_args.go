@@ -37,7 +37,7 @@ func decodeBuildArgsPrefix(raw string) (args BuildArgs, err error) {
 				}
 			} else if strings.HasPrefix(p, "d/") {
 				for _, p := range strings.Split(strings.TrimPrefix(strings.TrimPrefix(p, "d/"), "deps:"), ",") {
-					m, _, err := parsePkg(p)
+					m, _, err := validatePkgPath(p)
 					if err != nil {
 						if strings.HasSuffix(err.Error(), "not found") {
 							continue
@@ -45,7 +45,7 @@ func decodeBuildArgsPrefix(raw string) (args BuildArgs, err error) {
 						return args, err
 					}
 					if !args.deps.Has(m.Name) {
-						args.deps = append(args.deps, *m)
+						args.deps = append(args.deps, m)
 					}
 				}
 			} else if strings.HasPrefix(p, "e/") {

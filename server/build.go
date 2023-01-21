@@ -170,7 +170,7 @@ func (task *BuildTask) build(tracing *stringSet) (esm *ESM, err error) {
 
 	if task.Target == "types" {
 		if npm.Types != "" {
-			dts := npm.Name + "@" + npm.Version + "/" + npm.Types
+			dts := npm.Name + "@" + npm.Version + path.Join("/", npm.Types)
 			task.stage = "transform-dts"
 			task.transformDTS(dts)
 		}
@@ -178,7 +178,7 @@ func (task *BuildTask) build(tracing *stringSet) (esm *ESM, err error) {
 	}
 
 	if npm.Main == "" && npm.Module == "" && npm.Types != "" {
-		dts := npm.Name + "@" + npm.Version + "/" + npm.Types
+		dts := npm.Name + "@" + npm.Version + path.Join("/", npm.Types)
 		task.stage = "transform-dts"
 		task.transformDTS(dts)
 		task.storeToDB(esm)
@@ -304,9 +304,9 @@ func (task *BuildTask) build(tracing *stringSet) (esm *ESM, err error) {
 
 					// bundles all dependencies in `bundle` mode, apart from peer dependencies
 					if task.BundleMode && !extraExternal.Has(specifier) && !task.external.Has(specifier) {
-						pkgNameInfo := parsePkgPath(specifier)
-						if !builtInNodeModules[pkgNameInfo.Name] {
-							_, ok := npm.PeerDependencies[pkgNameInfo.Fullname]
+						pkgName, _ := splitPkgPath(specifier)
+						if !builtInNodeModules[pkgName] {
+							_, ok := npm.PeerDependencies[pkgName]
 							if !ok {
 								return api.OnResolveResult{}, nil
 							}
@@ -724,15 +724,15 @@ esbuild:
 				// common npm dependency
 				if importPath == "" {
 					version := "latest"
-					pkgNameInfo := parsePkgPath(name)
-					if pkgNameInfo.Fullname == task.Pkg.Name {
+					pkgName, submodule := splitPkgPath(name)
+					if pkgName == task.Pkg.Name {
 						version = task.Pkg.Version
-					} else if v, ok := npm.Dependencies[pkgNameInfo.Fullname]; ok {
+					} else if v, ok := npm.Dependencies[pkgName]; ok {
 						version = v
-					} else if v, ok := npm.PeerDependencies[pkgNameInfo.Fullname]; ok {
+					} else if v, ok := npm.PeerDependencies[pkgName]; ok {
 						version = v
 					}
-					p, _, e := getPackageInfo(task.wd, pkgNameInfo.Fullname, version)
+					p, _, e := getPackageInfo(task.wd, pkgName, version)
 					if e != nil {
 						err = e
 						return
@@ -741,7 +741,7 @@ esbuild:
 					pkg := Pkg{
 						Name:      p.Name,
 						Version:   p.Version,
-						Submodule: pkgNameInfo.Submodule,
+						Submodule: submodule,
 					}
 					t := &BuildTask{
 						BuildArgs:    task.BuildArgs,
@@ -776,7 +776,7 @@ esbuild:
 						p = bytes.TrimPrefix(p, []byte{')'})
 						var marked bool
 						if _, ok := builtInNodeModules[name]; !ok {
-							pkg, _, err := parsePkg(name)
+							pkg, _, err := validatePkgPath(name)
 							if err == nil && !fileExists(path.Join(task.wd, "node_modules", pkg.Name, "package.json")) {
 								for i := 0; i < 3; i++ {
 									err = yarnAdd(task.wd, fmt.Sprintf("%s@%s", pkg.Name, pkg.Version))
@@ -793,7 +793,7 @@ esbuild:
 								}
 							}
 							if err == nil {
-								dep, depNpm, err := initModule(task.wd, *pkg, task.Target, task.DevMode)
+								dep, depNpm, err := initModule(task.wd, pkg, task.Target, task.DevMode)
 								if err == nil {
 									if bytes.HasPrefix(p, []byte{'.'}) {
 										// right shift to strip the object `key`
@@ -958,12 +958,12 @@ esbuild:
 				}
 			}
 
-			err = fs.WriteData(path.Join("builds", task.ID()), buf.Bytes())
+			_, err = fs.WriteFile(path.Join("builds", task.ID()), buf)
 			if err != nil {
 				return
 			}
 		} else if strings.HasSuffix(file.Path, ".css") {
-			err = fs.WriteData(path.Join("builds", strings.TrimSuffix(task.ID(), ".js")+".css"), outputContent)
+			_, err = fs.WriteFile(path.Join("builds", strings.TrimSuffix(task.ID(), ".js")+".css"), bytes.NewReader(outputContent))
 			if err != nil {
 				return
 			}
@@ -1021,7 +1021,7 @@ func (task *BuildTask) checkDTS(esm *ESM, npm *NpmPackage) {
 
 func (task *BuildTask) transformDTS(dts string) {
 	start := time.Now()
-	n, err := task.CopyDTS(dts, task.BuildVersion)
+	n, err := task.CopyDTS(dts)
 	if err != nil && os.IsExist(err) {
 		log.Errorf("transformDTS(%s): %v", dts, err)
 		return

@@ -7,58 +7,23 @@ import (
 	"github.com/ije/gox/utils"
 )
 
-type PkgPath struct {
-	Fullname  string `json:"fullname"`
-	Scope     string `json:"scope"`
-	Name      string `json:"name"`
-	Submodule string `json:"submodule"`
-}
-
-func parsePkgPath(pathname string) *PkgPath {
-	a := strings.Split(strings.Trim(pathname, "/"), "/")
-	for i, s := range a {
-		a[i] = strings.TrimSpace(s)
-	}
-
-	scope := ""
-	packageName := a[0]
-	submodule := strings.Join(a[1:], "/")
-	fullname := a[0]
-	if strings.HasPrefix(packageName, "@") && len(a) > 1 {
-		scope = packageName[1:]
-		packageName = a[1]
-		submodule = strings.Join(a[2:], "/")
-		fullname = "@" + scope + "/" + packageName
-	}
-
-	return &PkgPath{
-		Scope:     scope,
-		Name:      packageName,
-		Submodule: submodule,
-		Fullname:  fullname,
-	}
-}
-
 type Pkg struct {
 	Name      string `json:"name"`
 	Version   string `json:"version"`
 	Submodule string `json:"submodule"`
 }
 
-func parsePkg(pathname string) (*Pkg, string, error) {
-	pkgPath := parsePkgPath(pathname)
-	scope := pkgPath.Scope
-	submodule := strings.TrimSuffix(pkgPath.Submodule, ".js")
-	pkgName, maybeVersion := utils.SplitByLastByte(pkgPath.Name, '@')
-
-	name := pkgName
-	if scope != "" {
-		name = fmt.Sprintf("@%s/%s", scope, name)
+func validatePkgPath(pathname string) (Pkg, string, error) {
+	pkgName, submodule := splitPkgPath(pathname)
+	submodule = strings.TrimSuffix(submodule, ".js")
+	name, maybeVersion := utils.SplitByLastByte(pkgName, '@')
+	if strings.HasPrefix(pkgName, "@") {
+		name, maybeVersion = utils.SplitByLastByte(pkgName[1:], '@')
+		name = "@" + name
 	}
 
-	// ref https://github.com/npm/validate-npm-package-name
-	if (scope != "" && !npmNaming.Is(scope)) || (pkgName == "" || !npmNaming.Is(pkgName)) || len(name) > 214 {
-		return nil, "", fmt.Errorf("invalid package name '%s'", name)
+	if !validateNpmName(name) {
+		return Pkg{}, "", fmt.Errorf("invalid package name '%s'", name)
 	}
 
 	version, q := utils.SplitByFirstByte(maybeVersion, '&')
@@ -68,7 +33,7 @@ func parsePkg(pathname string) (*Pkg, string, error) {
 				version = ver
 			}
 		}
-		return &Pkg{
+		return Pkg{
 			Name:      name,
 			Version:   version,
 			Submodule: submodule,
@@ -77,10 +42,10 @@ func parsePkg(pathname string) (*Pkg, string, error) {
 
 	info, _, err := getPackageInfo("", name, version)
 	if err != nil {
-		return nil, "", err
+		return Pkg{}, "", err
 	}
 
-	return &Pkg{
+	return Pkg{
 		Name:      name,
 		Version:   info.Version,
 		Submodule: submodule,

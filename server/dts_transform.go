@@ -10,20 +10,22 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/ije/esm.sh/server/storage"
+
 	"github.com/ije/gox/utils"
 )
 
-func (task *BuildTask) CopyDTS(dts string, buildVersion int) (n int, err error) {
+func (task *BuildTask) CopyDTS(dts string) (n int, err error) {
 	buildArgsPrefix := encodeBuildArgsPrefix(task.BuildArgs, task.Pkg.Name, true)
 	tracing := newStringSet()
-	err = task.copyDTS(dts, buildVersion, buildArgsPrefix, tracing)
+	err = task.copyDTS(dts, buildArgsPrefix, tracing)
 	if err == nil {
 		n = tracing.Size()
 	}
 	return
 }
 
-func (task *BuildTask) copyDTS(dts string, buildVersion int, aliasDepsPrefix string, tracing *stringSet) (err error) {
+func (task *BuildTask) copyDTS(dts string, aliasDepsPrefix string, tracing *stringSet) (err error) {
 	// don't copy repeatly
 	if tracing.Has(aliasDepsPrefix + dts) {
 		return
@@ -37,26 +39,25 @@ func (task *BuildTask) copyDTS(dts string, buildVersion int, aliasDepsPrefix str
 		return
 	}
 
-	pkgPath := parsePkgPath(utils.CleanPath(dts)[1:])
-	versionedName := pkgPath.Fullname
-	subPath := strings.Split(pkgPath.Submodule, "/")
-	pkgName, _ := utils.SplitByLastByte(versionedName, '@')
+	pkgNameWithVersion, submodule := splitPkgPath(utils.CleanPath(dts))
+	subPath := strings.Split(submodule, "/")
+	pkgName, _ := utils.SplitByLastByte(pkgNameWithVersion, '@')
 	if pkgName == "" {
-		pkgName = versionedName
+		pkgName = pkgNameWithVersion
 	}
 
-	buildBasePath := fmt.Sprintf("/v%d", buildVersion)
+	buildBasePath := fmt.Sprintf("/v%d", task.BuildVersion)
 	cdnOriginAndBasePath := task.CdnOrigin + task.BasePath
 	cdnOriginAndBuildBasePath := task.CdnOrigin + task.BasePath + buildBasePath
 
 	dtsPath := utils.CleanPath(strings.Join(append([]string{
 		buildBasePath,
-		versionedName,
+		pkgNameWithVersion,
 		aliasDepsPrefix,
-	}, subPath...), "/"))
+	}, strings.Split(submodule, "/")...), "/"))
 	savePath := "types" + dtsPath
-	exists, _, _, err := fs.Exists(savePath)
-	if err != nil || exists {
+	_, err = fs.Stat(savePath)
+	if err != nil && err != storage.ErrNotFound {
 		return
 	}
 
@@ -70,6 +71,7 @@ func (task *BuildTask) copyDTS(dts string, buildVersion int, aliasDepsPrefix str
 	if err != nil {
 		return
 	}
+	defer dtsFile.Close()
 
 	pass1Buf := bytes.NewBuffer(nil)
 	err = walkDts(dtsFile, pass1Buf, func(name string, kind string, position int) string {
@@ -81,8 +83,6 @@ func (task *BuildTask) copyDTS(dts string, buildVersion int, aliasDepsPrefix str
 		}
 		return name
 	})
-	// close the opened dts file
-	dtsFile.Close()
 	if err != nil {
 		return
 	}
@@ -202,8 +202,7 @@ func (task *BuildTask) copyDTS(dts string, buildVersion int, aliasDepsPrefix str
 				return importPath
 			}
 
-			pkgPath := parsePkgPath(importPath)
-			depTypePkgName := pkgPath.Fullname
+			depTypePkgName, _ := splitPkgPath(importPath)
 			maybeVersion := []string{"latest"}
 			if v, ok := taskPkgInfo.Dependencies[depTypePkgName]; ok {
 				maybeVersion = []string{v, "latest"}
@@ -225,8 +224,8 @@ func (task *BuildTask) copyDTS(dts string, buildVersion int, aliasDepsPrefix str
 				fromPackageJSON bool
 			)
 			for _, version := range maybeVersion {
-				var pkg *Pkg
-				pkg, _, err = parsePkg(importPath)
+				var pkg Pkg
+				pkg, _, err = validatePkgPath(importPath)
 				if err != nil {
 					break
 				}
@@ -309,11 +308,11 @@ func (task *BuildTask) copyDTS(dts string, buildVersion int, aliasDepsPrefix str
 				}
 			}
 			if b.Len() > 0 {
-				pkgPath := parsePkgPath(name)
-				name = pkgPath.Fullname
+				pkgName, submodule := splitPkgPath(name)
+				name = pkgName
 				subpath := ""
-				if pkgPath.Submodule != "" {
-					subpath = "/" + pkgPath.Submodule
+				if submodule != "" {
+					subpath = "/" + submodule
 				}
 
 				fmt.Fprintf(buf, `%sdeclare module "%s/%s@*%s" `, "\n", cdnOriginAndBasePath, name, subpath)
@@ -350,7 +349,7 @@ func (task *BuildTask) copyDTS(dts string, buildVersion int, aliasDepsPrefix str
 		buf = bytes.NewBuffer(dtsData)
 	}
 
-	err = fs.WriteData(savePath, buf.Bytes())
+	_, err = fs.WriteFile(savePath, buf)
 	if err != nil {
 		return
 	}
@@ -372,7 +371,7 @@ func (task *BuildTask) copyDTS(dts string, buildVersion int, aliasDepsPrefix str
 		}
 		wg.Add(1)
 		go func(importDts string) {
-			err := task.copyDTS(importDts, buildVersion, aliasDepsPrefix, tracing)
+			err := task.copyDTS(importDts, aliasDepsPrefix, tracing)
 			if err != nil {
 				errors = append(errors, err)
 			}
@@ -412,22 +411,29 @@ func removeGlobalBlob(input []byte) (output []byte, err error) {
 func toTypesPath(wd string, p *NpmPackage, version string, buildArgsPrefix string, subpath string) string {
 	var types string
 	if subpath != "" {
-		types = subpath
-		packageJSONFile := path.Join(wd, "node_modules", p.Name, subpath, "package.json")
-		if fileExists(packageJSONFile) {
-			var sp NpmPackage
-			if utils.ParseJSONFile(packageJSONFile, &sp) == nil {
-				if sp.Types != "" {
-					types = path.Join(subpath, sp.Types)
-				} else if sp.Typings != "" {
-					types = path.Join(subpath, sp.Typings)
+		if p.Types != "" {
+			var rawPkg NpmPackage
+			if utils.ParseJSONFile(path.Join(wd, "node_modules", p.Name, "package.json"), &rawPkg) == nil {
+				if p.Types != rawPkg.Types && p.Types != rawPkg.Typings {
+					types = p.Types
 				}
 			}
 		}
+		if types == "" {
+			var subPkg NpmPackage
+			if utils.ParseJSONFile(path.Join(wd, "node_modules", p.Name, subpath, "package.json"), &subPkg) == nil {
+				if subPkg.Types != "" {
+					types = path.Join(subpath, subPkg.Types)
+				} else if subPkg.Typings != "" {
+					types = path.Join(subpath, subPkg.Typings)
+				}
+			}
+		}
+		if types == "" {
+			types = subpath
+		}
 	} else if p.Types != "" {
 		types = p.Types
-	} else if p.Typings != "" {
-		types = p.Typings
 	} else {
 		return ""
 	}

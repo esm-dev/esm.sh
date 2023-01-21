@@ -9,9 +9,8 @@ import (
 )
 
 var (
+	ErrNotFound = errors.New("not found")
 	ErrExpired  = errors.New("record is expired")
-	ErrNotFound = errors.New("record not found")
-	// ErrIO       = errors.New("io error")
 )
 
 func parseConfigUrl(configUrl string) (root string, options url.Values, err error) {

@@ -6,7 +6,6 @@ import (
 	"os"
 	"path"
 	"path/filepath"
-	"time"
 )
 
 type localFSDriver struct{}
@@ -24,22 +23,25 @@ type localFSLayer struct {
 	root string
 }
 
-func (fs *localFSLayer) Exists(name string) (bool, int64, time.Time, error) {
+func (fs *localFSLayer) Stat(name string) (FileStat, error) {
 	fullPath := path.Join(fs.root, name)
 	fi, err := os.Stat(fullPath)
 	if err != nil {
-		var modtime time.Time
 		if os.IsNotExist(err) {
-			err = nil
+			return nil, ErrNotFound
 		}
-		return false, 0, modtime, err
+		return nil, err
 	}
-	return true, fi.Size(), fi.ModTime(), nil
+	return fi, nil
 }
 
-func (fs *localFSLayer) ReadFile(name string, size int64) (file io.ReadSeekCloser, err error) {
+func (fs *localFSLayer) OpenFile(name string) (file io.ReadSeekCloser, err error) {
 	fullPath := path.Join(fs.root, name)
-	return os.Open(fullPath)
+	file, err = os.Open(fullPath)
+	if err != nil && os.IsNotExist(err) {
+		err = ErrNotFound
+	}
+	return
 }
 
 func (fs *localFSLayer) WriteFile(name string, content io.Reader) (written int64, err error) {
@@ -53,21 +55,10 @@ func (fs *localFSLayer) WriteFile(name string, content io.Reader) (written int64
 	if err != nil {
 		return
 	}
+	defer file.Close()
 
 	written, err = io.Copy(file, content)
-	if closeError := file.Close(); closeError != nil && err == nil {
-		err = closeError
-	}
 	return
-}
-
-func (fs *localFSLayer) WriteData(name string, data []byte) error {
-	fullPath := path.Join(fs.root, name)
-	err := ensureDir(path.Dir(fullPath))
-	if err != nil {
-		return err
-	}
-	return os.WriteFile(fullPath, data, 0666)
 }
 
 func ensureDir(dir string) (err error) {

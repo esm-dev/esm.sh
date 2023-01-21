@@ -3,15 +3,15 @@ package server
 import (
 	"bytes"
 	"fmt"
-	"io"
 	"io/ioutil"
 	"net"
 	"net/http"
-	"os"
 	"path"
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/ije/esm.sh/server/storage"
 
 	"github.com/ije/gox/utils"
 	"github.com/ije/rex"
@@ -227,7 +227,7 @@ func esmHandler() rex.Handle {
 		}
 
 		// get package info
-		reqPkg, unQuery, err := parsePkg(pathname)
+		reqPkg, unQuery, err := validatePkgPath(pathname)
 		if err != nil {
 			status := 500
 			message := err.Error()
@@ -392,13 +392,13 @@ func esmHandler() rex.Handle {
 			}
 
 			savePath := path.Join("raw", reqPkg.String())
-			exists, size, modtime, err := fs.Exists(savePath)
-			if err != nil {
+			_, err := fs.Stat(savePath)
+			if err != nil && err != storage.ErrNotFound {
 				return rex.Status(500, err.Error())
 			}
 
 			// fetch non-js file from unpkg.com and save it to fs
-			if !exists {
+			if err == storage.ErrNotFound {
 				resp, err := httpClient.Get(fmt.Sprintf("%s/%s", strings.TrimSuffix(cfg.NpmCDN, "/"), reqPkg.String()))
 				if err != nil {
 					return rex.Status(http.StatusBadGateway, "Bad Gateway")
@@ -416,22 +416,28 @@ func esmHandler() rex.Handle {
 					return rex.Status(http.StatusBadRequest, "Bad Request")
 				}
 
-				size, err = fs.WriteFile(savePath, resp.Body)
+				_, err = fs.WriteFile(savePath, resp.Body)
 				if err != nil {
 					return rex.Status(500, err.Error())
 				}
 			}
 
-			f, err := fs.ReadFile(savePath, size)
+			fi, err := fs.Stat(savePath)
+			if err != nil {
+				if err == storage.ErrNotFound {
+					return rex.Status(404, "File not found")
+				}
+				return rex.Status(500, err.Error())
+			}
+			f, err := fs.OpenFile(savePath)
 			if err != nil {
 				return rex.Status(500, err.Error())
 			}
-
 			if strings.HasSuffix(pathname, ".ts") {
 				ctx.SetHeader("Content-Type", "application/typescript")
 			}
 			ctx.SetHeader("Cache-Control", "public, max-age=31536000, immutable")
-			return rex.Content(savePath, modtime, f)
+			return rex.Content(savePath, fi.ModTime(), f) // auto closed
 		}
 
 		// serve build files
@@ -443,13 +449,13 @@ func esmHandler() rex.Handle {
 				savePath = path.Join(storageType, fmt.Sprintf("v%d", VERSION), pathname)
 			}
 
-			exists, size, modtime, err := fs.Exists(savePath)
-			if err != nil {
+			fi, err := fs.Stat(savePath)
+			if err != nil && err != storage.ErrNotFound {
 				return rex.Status(500, err.Error())
 			}
 
-			if exists {
-				r, err := fs.ReadFile(savePath, size)
+			if err == nil {
+				r, err := fs.OpenFile(savePath)
 				if err != nil {
 					return rex.Status(500, err.Error())
 				}
@@ -466,7 +472,7 @@ func esmHandler() rex.Handle {
 					ctx.SetHeader("Content-Type", "application/javascript; charset=utf-8")
 					return fmt.Sprintf(`export default function workerFactory(inject) { const blob = new Blob([%s, typeof inject === "string" ? "\n// inject\n" + inject : ""], { type: "application/javascript" }); return new Worker(URL.createObjectURL(blob), { type: "module" })}`, utils.MustEncodeJSON(string(code)))
 				}
-				return rex.Content(savePath, modtime, r)
+				return rex.Content(savePath, fi.ModTime(), r) // auto closed
 			}
 		}
 
@@ -489,7 +495,7 @@ func esmHandler() rex.Handle {
 		for _, p := range strings.Split(ctx.Form.Value("deps"), ",") {
 			p = strings.TrimSpace(p)
 			if p != "" {
-				m, _, err := parsePkg(p)
+				m, _, err := validatePkgPath(p)
 				if err != nil {
 					if strings.HasSuffix(err.Error(), "not found") {
 						continue
@@ -501,7 +507,7 @@ func esmHandler() rex.Handle {
 					continue
 				}
 				if !deps.Has(m.Name) && m.Name != reqPkg.Name {
-					deps = append(deps, *m)
+					deps = append(deps, m)
 				}
 			}
 		}
@@ -635,17 +641,7 @@ func esmHandler() rex.Handle {
 		}
 
 		if hasBuildVerPrefix && storageType == "types" {
-			task := &BuildTask{
-				BuildArgs:    buildArgs,
-				CdnOrigin:    cdnOrigin,
-				BasePath:     cfg.BasePath,
-				BuildVersion: buildVersion,
-				Pkg:          *reqPkg,
-				Target:       "types",
-				stage:        "-",
-			}
-			var savePath string
-			findTypesFile := func() (bool, int64, time.Time, error) {
+			findDts := func() (savePath string, fi storage.FileStat, err error) {
 				savePath = path.Join(fmt.Sprintf(
 					"types/v%d/%s@%s/%s",
 					buildVersion,
@@ -655,20 +651,30 @@ func esmHandler() rex.Handle {
 				), reqPkg.Submodule)
 				if strings.HasSuffix(savePath, "~.d.ts") {
 					savePath = strings.TrimSuffix(savePath, "~.d.ts")
-					ok, _, _, err := fs.Exists(path.Join(savePath, "index.d.ts"))
-					if err != nil {
-						return false, 0, time.Time{}, err
+					_, err := fs.Stat(path.Join(savePath, "index.d.ts"))
+					if err != nil && err != storage.ErrNotFound {
+						return "", nil, err
 					}
-					if ok {
+					if err == nil {
 						savePath = path.Join(savePath, "index.d.ts")
 					} else {
 						savePath += ".d.ts"
 					}
 				}
-				return fs.Exists(savePath)
+				fi, err = fs.Stat(savePath)
+				return savePath, fi, err
 			}
-			exists, size, modtime, err := findTypesFile()
-			if err == nil && !exists {
+			_, _, err := findDts()
+			if err == storage.ErrNotFound {
+				task := &BuildTask{
+					BuildArgs:    buildArgs,
+					CdnOrigin:    cdnOrigin,
+					BasePath:     cfg.BasePath,
+					BuildVersion: buildVersion,
+					Pkg:          reqPkg,
+					Target:       "types",
+					stage:        "-",
+				}
 				c := buildQueue.Add(task, ctx.RemoteIP())
 				select {
 				case output := <-c.C:
@@ -680,20 +686,20 @@ func esmHandler() rex.Handle {
 					return rex.Status(http.StatusRequestTimeout, "timeout, we are transforming the types hardly, please try again later!")
 				}
 			}
+			savePath, fi, err := findDts()
+			if err != nil {
+				if err == storage.ErrNotFound {
+					return rex.Status(404, "Types not found")
+				}
+				return rex.Status(500, err.Error())
+			}
+			r, err := fs.OpenFile(savePath)
 			if err != nil {
 				return rex.Status(500, err.Error())
 			}
-			var r io.ReadSeeker
-			r, err = fs.ReadFile(savePath, size)
-			if err != nil {
-				if os.IsExist(err) {
-					return rex.Status(500, err.Error())
-				}
-				r = bytes.NewReader([]byte("/* fake(empty) types */"))
-			}
 			ctx.SetHeader("Content-Type", "application/typescript; charset=utf-8")
 			ctx.SetHeader("Cache-Control", "public, max-age=31536000, immutable")
-			return rex.Content(savePath, modtime, r) // auto close
+			return rex.Content(savePath, fi.ModTime(), r) // auto closed
 		}
 
 		task := &BuildTask{
@@ -701,7 +707,7 @@ func esmHandler() rex.Handle {
 			CdnOrigin:    cdnOrigin,
 			BasePath:     cfg.BasePath,
 			BuildVersion: buildVersion,
-			Pkg:          *reqPkg,
+			Pkg:          reqPkg,
 			Target:       target,
 			DevMode:      isDev,
 			BundleMode:   isBundleMode || isWorker,
@@ -774,14 +780,14 @@ func esmHandler() rex.Handle {
 
 		if isBare {
 			savePath := path.Join("builds", taskID)
-			exists, size, modtime, err := fs.Exists(savePath)
+			fi, err := fs.Stat(savePath)
 			if err != nil {
+				if err == storage.ErrNotFound {
+					return rex.Status(404, "File not found")
+				}
 				return rex.Status(500, err.Error())
 			}
-			if !exists {
-				return rex.Status(404, "File not found")
-			}
-			r, err := fs.ReadFile(savePath, size)
+			r, err := fs.OpenFile(savePath)
 			if err != nil {
 				return rex.Status(500, err.Error())
 			}
@@ -795,7 +801,7 @@ func esmHandler() rex.Handle {
 				ctx.SetHeader("Content-Type", "application/javascript; charset=utf-8")
 				return fmt.Sprintf(`export default function workerFactory() { const blob = new Blob([%s], { type: "application/javascript" }); return new Worker(URL.createObjectURL(blob), { type: "module" })}`, utils.MustEncodeJSON(string(code)))
 			}
-			return rex.Content(savePath, modtime, r)
+			return rex.Content(savePath, fi.ModTime(), r) // auto closed
 		}
 
 		buf := bytes.NewBuffer(nil)

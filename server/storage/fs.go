@@ -14,11 +14,15 @@ type FileSystemDriver interface {
 	Open(root string, options url.Values) (conn FileSystem, err error)
 }
 
+type FileStat interface {
+	Size() int64
+	ModTime() time.Time
+}
+
 type FileSystem interface {
-	Exists(path string) (found bool, size int64, modtime time.Time, err error)
-	ReadFile(path string, size int64) (content io.ReadSeekCloser, err error)
+	Stat(path string) (stat FileStat, err error)
+	OpenFile(path string) (content io.ReadSeekCloser, err error)
 	WriteFile(path string, r io.Reader) (written int64, err error)
-	WriteData(path string, data []byte) error
 }
 
 var fsDrivers = sync.Map{}
