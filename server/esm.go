@@ -192,7 +192,7 @@ func initModule(wd string, pkg Pkg, target string, isDev bool) (esm *ESM, npm *N
 			esm.Exports = ret.Exports
 			log.Warnf("fake module from '%s' of '%s'", npm.Main, npm.Name)
 		} else {
-			err = fmt.Errorf("parseESModule: %s", erro)
+			err = fmt.Errorf("resovleESModule: %s", erro)
 			return
 		}
 	} else if npm.Main != "" {

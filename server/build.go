@@ -343,7 +343,7 @@ func (task *BuildTask) build(tracing *stringSet) (esm *ESM, err error) {
 
 					// splits modules based on the `exports` defines in package.json,
 					// see https://nodejs.org/api/packages.html
-					if strings.HasPrefix(specifier, "./") || strings.HasPrefix(specifier, "../") || specifier == ".." {
+					if (strings.HasPrefix(specifier, "./") || strings.HasPrefix(specifier, "../") || specifier == "..") && !strings.HasSuffix(specifier, ".js") {
 						fullpath := path.Join(path.Dir(args.Importer), specifier)
 						// in macOS, the dir `/private/var/` is equal to `/var/`
 						if strings.HasPrefix(fullpath, "/private/var/") {
@@ -621,6 +621,7 @@ esbuild:
 					importPath = name
 				}
 				// sub module
+				fmt.Println(task.Pkg, name)
 				if importPath == "" && strings.HasPrefix(name, task.Pkg.Name+"/") {
 					submodule := strings.TrimPrefix(name, task.Pkg.Name+"/")
 					subPkg := Pkg{
