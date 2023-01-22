@@ -15,16 +15,19 @@
   // The work directory for the server app, default is "~/.esmd".
   "workDir": "~/.esmd",
 
-  // The cache type, default is "memory:default".
-  // You can also implement your own cache by implementing the `Cache` interface.
+  // The cache url, default is "memory:default".
+  // You can also implement your own cache by implementing the `Cache` interface
+  // in https://github.com/ije/esm.sh/blob/main/server/storage/cache.go
   "cache": "memory:default",
 
-  // The database type, default is "bolt:~/.esmd/esm.db".
-  // You can also implement your own database by implementing the `Database` interface.
+  // The database url, default is "bolt:~/.esmd/esm.db".
+  // You can also implement your own database by implementing the `DataBase` interface
+  // in https://github.com/ije/esm.sh/blob/main/server/storage/db.go
   "database": "bolt:~/.esmd/esm.db",
 
-  // The file storage type, default is "local:~/.esmd/storage".
-  // You can also implement your own file storage by implementing the `FileSystem` interface.
+  // The file storage url, default is "local:~/.esmd/storage".
+  // You can also implement your own file storage by implementing the `FileSystem` interface
+  // in https://github.com/ije/esm.sh/blob/main/server/storage/fs.go
   "storage": "local:~/.esmd/storage",
 
   // The log level, default is "info", you can also set it to "debug" to enable debug logs.
@@ -42,7 +45,7 @@
   // The npm registry, default is "https://registry.npmjs.org/".
   "npmRegistry": "https://registry.npmjs.org/",
 
-  // The npm token for private packages, default is blank.
+  // The npm token for private packages, default is empty.
   "npmToken": "",
 
   // The npm cdn to fetch non-module files, default is "https://unpkg.com".

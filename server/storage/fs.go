@@ -10,8 +10,10 @@ import (
 	"github.com/ije/gox/utils"
 )
 
-type FileSystemDriver interface {
-	Open(root string, options url.Values) (conn FileSystem, err error)
+type FileSystem interface {
+	Stat(path string) (stat FileStat, err error)
+	OpenFile(path string) (content io.ReadSeekCloser, err error)
+	WriteFile(path string, r io.Reader) (written int64, err error)
 }
 
 type FileStat interface {
@@ -19,10 +21,8 @@ type FileStat interface {
 	ModTime() time.Time
 }
 
-type FileSystem interface {
-	Stat(path string) (stat FileStat, err error)
-	OpenFile(path string) (content io.ReadSeekCloser, err error)
-	WriteFile(path string, r io.Reader) (written int64, err error)
+type FileSystemDriver interface {
+	Open(root string, options url.Values) (conn FileSystem, err error)
 }
 
 var fsDrivers = sync.Map{}

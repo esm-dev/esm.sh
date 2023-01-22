@@ -17,6 +17,10 @@ type Cache interface {
 	Flush() error
 }
 
+type CacheDriver interface {
+	Open(addr string, args url.Values) (cache Cache, err error)
+}
+
 var cacheDrivers sync.Map
 
 // New returns a new cache by url
@@ -40,10 +44,6 @@ func OpenCache(url string) (cache Cache, err error) {
 
 	cache, err = driver.(CacheDriver).Open(path, options)
 	return
-}
-
-type CacheDriver interface {
-	Open(addr string, args url.Values) (cache Cache, err error)
 }
 
 func RegisterCache(name string, driver CacheDriver) error {

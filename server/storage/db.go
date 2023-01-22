@@ -8,15 +8,15 @@ import (
 	"github.com/ije/gox/utils"
 )
 
-type DBDriver interface {
-	Open(config string, options url.Values) (conn DataBase, err error)
-}
-
 type DataBase interface {
 	Get(key string) ([]byte, error)
 	Put(key string, value []byte) error
 	Delete(key string) error
 	Close() error
+}
+
+type DBDriver interface {
+	Open(config string, options url.Values) (conn DataBase, err error)
 }
 
 var dbDrivers = sync.Map{}
