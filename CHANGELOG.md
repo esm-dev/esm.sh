@@ -1,5 +1,11 @@
 # Change Log
 
+## v104
+
+- Rewrite `FileSystem` interface of storage.
+- Fix submodule build with `exports` in package.json (close [#497](https://github.com/ije/esm.sh/issues/497))
+- Fix es5-ext weird `/#/` path (close [#502](https://github.com/ije/esm.sh/issues/502))
+
 ## v103
 
 - Add `inject` argument for worker factory
