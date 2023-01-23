@@ -91,12 +91,16 @@ func initModule(wd string, pkg Pkg, target string, isDev bool) (esm *ESM, npm *N
 				if p.DefinedExports != nil {
 					if m, ok := p.DefinedExports.(map[string]interface{}); ok {
 						for name, defines := range m {
-							if name == "./"+pkg.Submodule {
+							if name == "./"+pkg.Submodule || name == "./"+pkg.Submodule+".js" {
 								/**
 								  exports: {
 								    "./lib/core": {
 								      "require": "./lib/core.js",
-								      "import": "./es/core.js"
+								      "import": "./esm/core.js"
+								    },
+										"./lib/core.js": {
+								      "require": "./lib/core.js",
+								      "import": "./esm/core.js"
 								    }
 								  }
 								*/
@@ -108,7 +112,7 @@ func initModule(wd string, pkg Pkg, target string, isDev bool) (esm *ESM, npm *N
 								  exports: {
 								    "./lib/languages/*": {
 								      "require": "./lib/languages/*.js",
-								      "import": "./es/languages/*.js"
+								      "import": "./esm/languages/*.js"
 								    },
 								  }
 								*/
