@@ -64,6 +64,11 @@ async function runCliTest() {
     `{"importMap": "import-map.json"}`,
   );
 
+  const res = await fetch("http://localhost:8080/");
+  if (!res.headers.get("content-type")?.startsWith("application/typescript")) {
+    throw new Error(`Invalid content type: ${res.headers.get("content-type")}`);
+  }
+
   const { code, success } = await Deno.run({
     cmd: [
       Deno.execPath(),
