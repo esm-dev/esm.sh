@@ -248,25 +248,22 @@ func esmHandler() rex.Handle {
 			return rex.Status(status, message)
 		}
 
+		proto := "http"
+		if ctx.R.TLS != nil {
+			proto = "https"
+		}
+		reqOrigin := fmt.Sprintf("%s://%s", proto, ctx.R.Host)
+
 		var cdnOrigin string
 		if cfg.Origin != "" {
 			cdnOrigin = strings.TrimSuffix(cfg.Origin, "/")
 		} else {
-			proto := "http"
-			if ctx.R.TLS != nil {
-				proto = "https"
-			}
-			cdnOrigin = fmt.Sprintf("%s://%s", proto, ctx.R.Host)
-		}
-
-		// force to use https for esm.sh
-		if cdnOrigin == "http://esm.sh" {
-			cdnOrigin = "https://esm.sh"
+			cdnOrigin = reqOrigin
 		}
 
 		// redirect `/@types/` to `.d.ts` files
 		if strings.HasPrefix(reqPkg.Name, "@types/") && (reqPkg.Submodule == "" || !strings.HasSuffix(reqPkg.Submodule, ".d.ts")) {
-			url := fmt.Sprintf("%s%s/v%d%s", cdnOrigin, cfg.BasePath, VERSION, pathname)
+			url := fmt.Sprintf("%s%s/v%d%s", reqOrigin, cfg.BasePath, VERSION, pathname)
 			if reqPkg.Submodule == "" {
 				info, _, err := getPackageInfo("", reqPkg.Name, reqPkg.Version)
 				if err != nil {
@@ -311,12 +308,12 @@ func esmHandler() rex.Handle {
 				if ctx.R.URL.RawQuery != "" {
 					query = "&" + ctx.R.URL.RawQuery
 				}
-				return rex.Redirect(fmt.Sprintf("%s%s/%s%s@%s%s%s", cdnOrigin, cfg.BasePath, eaSign, reqPkg.Name, reqPkg.Version, query, submodule), http.StatusFound)
+				return rex.Redirect(fmt.Sprintf("%s%s/%s%s@%s%s%s", reqOrigin, cfg.BasePath, eaSign, reqPkg.Name, reqPkg.Version, query, submodule), http.StatusFound)
 			}
 			if ctx.R.URL.RawQuery != "" {
 				query = "?" + ctx.R.URL.RawQuery
 			}
-			return rex.Redirect(fmt.Sprintf("%s%s/%s%s%s", cdnOrigin, cfg.BasePath, eaSign, reqPkg.String(), query), http.StatusFound)
+			return rex.Redirect(fmt.Sprintf("%s%s/%s%s%s", reqOrigin, cfg.BasePath, eaSign, reqPkg.String(), query), http.StatusFound)
 		}
 
 		// redirect to the url with full package version
@@ -345,7 +342,7 @@ func esmHandler() rex.Handle {
 			if ctx.R.URL.RawQuery != "" {
 				query = "?" + ctx.R.URL.RawQuery
 			}
-			return rex.Redirect(fmt.Sprintf("%s%s%s/%s@%s%s%s", cdnOrigin, cfg.BasePath, prefix, reqPkg.Name, reqPkg.Version, subpath, query), http.StatusFound)
+			return rex.Redirect(fmt.Sprintf("%s%s%s/%s@%s%s%s", reqOrigin, cfg.BasePath, prefix, reqPkg.Name, reqPkg.Version, subpath, query), http.StatusFound)
 		}
 
 		// support `https://esm.sh/react?dev&target=es2020/jsx-runtime` for jsx transformer
@@ -396,7 +393,7 @@ func esmHandler() rex.Handle {
 		// serve raw dist files like CSS that is fetching from unpkg.com
 		if storageType == "raw" {
 			if !regexpFullVersionPath.MatchString(pathname) {
-				url := fmt.Sprintf("%s%s/%s", cdnOrigin, cfg.BasePath, reqPkg.String())
+				url := fmt.Sprintf("%s%s/%s", reqOrigin, cfg.BasePath, reqPkg.String())
 				return rex.Redirect(url, http.StatusFound)
 			}
 
@@ -762,7 +759,7 @@ func esmHandler() rex.Handle {
 			if esm.Dts != "" && !noCheck {
 				value := fmt.Sprintf(
 					"%s%s/%s",
-					cdnOrigin,
+					reqOrigin,
 					cfg.BasePath,
 					strings.TrimPrefix(esm.Dts, "/"),
 				)
@@ -779,7 +776,7 @@ func esmHandler() rex.Handle {
 			}
 
 			if !regexpFullVersionPath.MatchString(pathname) || !isPined || targetFromUA {
-				url := fmt.Sprintf("%s%s/%s.css", cdnOrigin, cfg.BasePath, strings.TrimSuffix(taskID, ".js"))
+				url := fmt.Sprintf("%s%s/%s.css", reqOrigin, cfg.BasePath, strings.TrimSuffix(taskID, ".js"))
 				return rex.Redirect(url, http.StatusFound)
 			}
 
