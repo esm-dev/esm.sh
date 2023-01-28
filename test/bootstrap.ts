@@ -1,11 +1,12 @@
-async function startEsmServer(onReady: () => void) {
+async function startEsmServer(onStart: () => void, single: boolean) {
   await run("go", "build", "-o", "esmd", "main.go");
   const p = Deno.run({
     cmd: ["./esmd"],
-    stdout: "null",
+    stdout: single ? "inherit" : "null",
     stderr: "inherit",
   });
   addEventListener("unload", (e) => {
+    console.log("closing esm.sh server...");
     p.kill("SIGINT");
   });
   while (true) {
@@ -16,7 +17,7 @@ async function startEsmServer(onReady: () => void) {
       );
       if (body === "READY") {
         console.log("esm.sh server started.");
-        onReady();
+        onStart();
         break;
       }
     } catch (_) {}
@@ -136,8 +137,8 @@ export async function existsFile(path: string): Promise<boolean> {
 }
 
 if (import.meta.main) {
+  const [testDir] = Deno.args;
   startEsmServer(async () => {
-    const [testDir] = Deno.args;
     if (testDir) {
       await runTest(testDir, true);
     } else {
@@ -150,5 +151,5 @@ if (import.meta.main) {
     }
     console.log("Done!");
     Deno.exit(0);
-  });
+  }, Boolean(testDir));
 }
