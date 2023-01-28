@@ -10,7 +10,7 @@ import (
 	"github.com/mssola/user_agent"
 )
 
-var regexpBrowserVersion = regexp.MustCompile(`^([0-9]+)(?:\.([0-9]+))?(?:\.([0-9]+))?$`)
+var regexpBrowserVersion = regexp.MustCompile(`^(\d+)(?:\.(\d+))?(?:\.(\d+))?$`)
 
 var targets = map[string]api.Target{
 	"es2015": api.ES2015,
@@ -166,6 +166,18 @@ func countFeatures(feature compat.JSFeature) int {
 	return n
 }
 
+func getEngineInfo(ua string) (name string, version string) {
+	for _, v := range strings.Split(ua, " ") {
+		if strings.HasPrefix(v, "Chrome/") {
+			return "Chrome", v[7:]
+		}
+		if strings.HasPrefix(v, "HeadlessChrome/") {
+			return "Chrome", v[15:]
+		}
+	}
+	return user_agent.New(ua).Browser()
+}
+
 func getTargetByUA(ua string) string {
 	if ua == "" || strings.HasPrefix(ua, "curl/") {
 		return "esnext"
@@ -176,15 +188,11 @@ func getTargetByUA(ua string) string {
 	if strings.HasPrefix(ua, "Node/") {
 		return "node"
 	}
-	name, version := user_agent.New(ua).Browser()
+	name, version := getEngineInfo(ua)
 	if name == "" || version == "" {
 		return "esnext"
 	}
 	if engine, ok := engines[strings.ToLower(name)]; ok {
-		a := strings.Split(version, ".")
-		if len(a) > 3 {
-			version = strings.Join(a[:3], ".")
-		}
 		unspportEngineFeatures := validateEngineFeatures(api.Engine{
 			Name:    engine,
 			Version: version,
