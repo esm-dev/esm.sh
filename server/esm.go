@@ -173,8 +173,20 @@ func initModule(wd string, pkg Pkg, target string, isDev bool) (esm *ESM, npm Np
 			return
 		}
 
-		log.Warnf("fake ES module '%s' of '%s', use the `main` field instead", npm.Module, npm.Name)
+		var ret cjsExportsResult
+		ret, err = parseCJSModuleExports(wd, path.Join(wd, "node_modules", pkg.Name, modulePath), nodeEnv)
+		if err == nil && ret.Error != "" {
+			err = fmt.Errorf("parseCJSModuleExports: %s", ret.Error)
+		}
+		if err != nil {
+			return
+		}
+		npm.Main = npm.Module
 		npm.Module = ""
+		esm.ExportDefault = ret.ExportDefault
+		esm.Exports = ret.Exports
+		log.Warnf("fake ES module '%s' of '%s'", npm.Main, npm.Name)
+		return
 	}
 
 	if npm.Main != "" {
@@ -189,7 +201,6 @@ func initModule(wd string, pkg Pkg, target string, isDev bool) (esm *ESM, npm Np
 		esm.ExportDefault = ret.ExportDefault
 		esm.Exports = ret.Exports
 	}
-
 	return
 }
 
