@@ -1,8 +1,18 @@
 # Change Log
 
+## v105
+
+- Check types which is not defined in `package.json`
+- Fix empty module build (close [#483](https://github.com/ije/esm.sh/issues/483))
+- Fix exports field resolving (close [#503](https://github.com/ije/esm.sh/issues/503))
+- Fix deno cli script (close [#505](https://github.com/ije/esm.sh/issues/505))
+- Fix incorrect redirects (close [#508](https://github.com/ije/esm.sh/issues/508))
+- Fix invalid target with `HeadlessChrome/` UA (close [#509](https://github.com/ije/esm.sh/issues/509))
+- Upgrade `deno/std` to **0.175.0**
+
 ## v104
 
-- Rewrite `FileSystem` interface of storage.
+- Rewrite `FileSystem` interface of the storage.
 - Fix submodule build with `exports` in package.json (close [#497](https://github.com/ije/esm.sh/issues/497))
 - Fix es5-ext weird `/#/` path (close [#502](https://github.com/ije/esm.sh/issues/502))
 
