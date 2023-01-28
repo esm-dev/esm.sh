@@ -101,7 +101,7 @@ function verifyExports(names) {
 
 exports.parseCjsExports = async input => {
   const { buildDir, importPath, nodeEnv = "production", requireMode } = input
-  const entry = /\.(js|cjs|mjs)$/.test(importPath) ? join(buildDir, "node_modules", importPath) : await resolve(buildDir, importPath)
+  const entry = importPath.startsWith("/") && /\.(js|cjs|mjs)$/.test(importPath) ? importPath : await resolve(buildDir, importPath)
   const exports = []
 
   if (requireMode) {
@@ -121,7 +121,7 @@ exports.parseCjsExports = async input => {
     return verifyExports(getJSONKeys(entry))
   }
 
-  if (!entry.endsWith(".js") && !entry.endsWith(".cjs")) {
+  if (!entry.endsWith(".js") && !entry.endsWith(".cjs") && !entry.endsWith(".mjs")) {
     return verifyExports(exports)
   }
 
