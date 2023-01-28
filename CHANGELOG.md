@@ -1,5 +1,9 @@
 # Change Log
 
+## v106
+
+- Just fix fake module export names resolving (close [#510](https://github.com/ije/esm.sh/issues/510))
+
 ## v105
 
 - Check types which is not defined in `package.json`
