@@ -679,3 +679,7 @@ func fixPkgVersion(info NpmPackage) (NpmPackage, error) {
 	}
 	return info, nil
 }
+
+func isTypesOnlyPackage(p NpmPackage) bool {
+	return p.Main == "" && p.Module == "" && p.Types != ""
+}

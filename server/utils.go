@@ -111,22 +111,6 @@ func validateNpmName(name string) bool {
 	return true
 }
 
-// identify returns a valid identifier for the given import path.
-func identify(importPath string) string {
-	p := []byte(importPath)
-	for i, c := range p {
-		switch c {
-		case '/', '-', '.':
-			p[i] = '_'
-		case '@', '#':
-			p[i] = '$'
-		default:
-			p[i] = c
-		}
-	}
-	return string(p)
-}
-
 // isRemoteImport returns true if the import path is a remote URL.
 func isRemoteImport(importPath string) bool {
 	return strings.HasPrefix(importPath, "https://") || strings.HasPrefix(importPath, "http://")

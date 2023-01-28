@@ -20,7 +20,7 @@ type ESM struct {
 	PackageCSS    bool     `json:"s"`
 }
 
-func initModule(wd string, pkg Pkg, target string, isDev bool) (esm *ESM, npm *NpmPackage, err error) {
+func initModule(wd string, pkg Pkg, target string, isDev bool) (esm *ESM, npm NpmPackage, err error) {
 	packageDir := path.Join(wd, "node_modules", pkg.Name)
 	packageFile := path.Join(packageDir, "package.json")
 
@@ -30,12 +30,12 @@ func initModule(wd string, pkg Pkg, target string, isDev bool) (esm *ESM, npm *N
 		return
 	}
 
-	npm = fixNpmPackage(wd, &p, target, isDev)
+	npm = fixNpmPackage(wd, p, target, isDev)
 	esm = &ESM{}
 
 	defer func() {
-		esm.CJS = npm.Module == ""
-		esm.TypesOnly = npm.Module == "" && npm.Main == "" && npm.Types != ""
+		esm.CJS = npm.Main != "" && npm.Module == ""
+		esm.TypesOnly = isTypesOnlyPackage(npm)
 	}()
 
 	nodeEnv := "production"
@@ -65,7 +65,7 @@ func initModule(wd string, pkg Pkg, target string, isDev bool) (esm *ESM, npm *N
 				if err != nil {
 					return
 				}
-				np := fixNpmPackage(wd, &p, target, isDev)
+				np := fixNpmPackage(wd, p, target, isDev)
 				if np.Module != "" {
 					npm.Module = path.Join(pkg.Submodule, np.Module)
 				} else {
@@ -104,7 +104,7 @@ func initModule(wd string, pkg Pkg, target string, isDev bool) (esm *ESM, npm *N
 								    }
 								  }
 								*/
-								resolvePackageExports(npm, defines, target, isDev, npm.Type)
+								resolvePackageExports(&npm, defines, target, isDev, npm.Type)
 								resolved = true
 								break
 							} else if strings.HasSuffix(name, "/*") && strings.HasPrefix("./"+pkg.Submodule, strings.TrimSuffix(name, "*")) {
@@ -132,7 +132,7 @@ func initModule(wd string, pkg Pkg, target string, isDev bool) (esm *ESM, npm *N
 									hasDefines = true
 								}
 								if hasDefines {
-									resolvePackageExports(npm, defines, target, isDev, npm.Type)
+									resolvePackageExports(&npm, defines, target, isDev, npm.Type)
 									resolved = true
 								}
 							}
@@ -157,22 +157,7 @@ func initModule(wd string, pkg Pkg, target string, isDev bool) (esm *ESM, npm *N
 		}
 	}
 
-	if target == "types" {
-		return
-	}
-
-	if npm.Main == "" && npm.Module == "" {
-		if fileExists(path.Join(packageDir, "index.mjs")) {
-			npm.Module = "./index.mjs"
-		} else if fileExists(path.Join(packageDir, "index.js")) {
-			npm.Main = "./index.js"
-		} else if fileExists(path.Join(packageDir, "index.cjs")) {
-			npm.Main = "./index.cjs"
-		}
-	}
-
-	// for pure types packages
-	if npm.Main == "" && npm.Module == "" && npm.Types != "" {
+	if target == "types" || isTypesOnlyPackage(npm) {
 		return
 	}
 
@@ -223,13 +208,6 @@ func initModule(wd string, pkg Pkg, target string, isDev bool) (esm *ESM, npm *N
 		//   esm.Module = resolved
 		//   esm.ExportDefault = exportDefault
 		// }
-	}
-
-	if path.Dir(npm.Main) != "" && npm.Types == "" {
-		typesPath := path.Join(path.Dir(npm.Main), "index.d.ts")
-		if fileExists(path.Join(packageDir, typesPath)) {
-			npm.Types = typesPath
-		}
 	}
 
 	return
@@ -285,10 +263,8 @@ func resovleESModule(wd string, packageName string, moduleSpecifier string) (res
 	return
 }
 
-func fixNpmPackage(wd string, np *NpmPackage, target string, isDev bool) *NpmPackage {
-	exports := np.DefinedExports
-
-	if exports != nil {
+func fixNpmPackage(wd string, p NpmPackage, target string, isDev bool) NpmPackage {
+	if exports := p.DefinedExports; exports != nil {
 		if m, ok := exports.(map[string]interface{}); ok {
 			v, ok := m["."]
 			if ok {
@@ -303,7 +279,7 @@ func fixNpmPackage(wd string, np *NpmPackage, target string, isDev bool) *NpmPac
 						".": "./esm/index.js"
 					}
 				*/
-				resolvePackageExports(np, v, target, isDev, np.Type)
+				resolvePackageExports(&p, v, target, isDev, p.Type)
 			} else {
 				/*
 					exports: {
@@ -311,39 +287,87 @@ func fixNpmPackage(wd string, np *NpmPackage, target string, isDev bool) *NpmPac
 						"import": "./esm/index.js"
 					}
 				*/
-				resolvePackageExports(np, m, target, isDev, np.Type)
+				resolvePackageExports(&p, m, target, isDev, p.Type)
 			}
 		} else if s, ok := exports.(string); ok {
 			/*
 			  exports: "./esm/index.js"
 			*/
-			resolvePackageExports(np, s, target, isDev, np.Type)
+			resolvePackageExports(&p, s, target, isDev, p.Type)
 		}
 	}
 
 	nmDir := path.Join(wd, "node_modules")
-	if np.Module == "" {
-		if np.JsNextMain != "" && fileExists(path.Join(nmDir, np.Name, np.JsNextMain)) {
-			np.Module = np.JsNextMain
-		} else if np.ES2015 != "" && fileExists(path.Join(nmDir, np.Name, np.ES2015)) {
-			np.Module = np.ES2015
-		} else if np.Main != "" && (np.Type == "module" || strings.HasSuffix(np.Main, ".mjs") || strings.HasSuffix(np.Main, ".esm.js") || strings.Contains(np.Main, "/esm/") || strings.Contains(np.Main, "/es/")) {
-			np.Module = np.Main
+	if p.Module == "" {
+		if p.JsNextMain != "" && fileExists(path.Join(nmDir, p.Name, p.JsNextMain)) {
+			p.Module = p.JsNextMain
+		} else if p.ES2015 != "" && fileExists(path.Join(nmDir, p.Name, p.ES2015)) {
+			p.Module = p.ES2015
+		} else if p.Main != "" && (p.Type == "module" || strings.HasSuffix(p.Main, ".mjs") || strings.HasSuffix(p.Main, ".esm.js") || strings.Contains(p.Main, "/esm/") || strings.Contains(p.Main, "/es/")) {
+			p.Module = p.Main
 		}
 	}
 
-	browserMain := np.Browser["."]
-	if browserMain != "" && fileExists(path.Join(nmDir, np.Name, browserMain)) {
-		isEsm, _, _ := validateJS(path.Join(nmDir, np.Name, browserMain))
+	if p.Main == "" && p.Module == "" {
+		if fileExists(path.Join(nmDir, p.Name, "index.mjs")) {
+			p.Module = "./index.mjs"
+		} else if fileExists(path.Join(nmDir, p.Name, "index.js")) {
+			p.Main = "./index.js"
+		} else if fileExists(path.Join(nmDir, p.Name, "index.cjs")) {
+			p.Main = "./index.cjs"
+		}
+	}
+
+	browserMain := p.Browser["."]
+	if browserMain != "" && fileExists(path.Join(nmDir, p.Name, browserMain)) {
+		isEsm, _, _ := validateJS(path.Join(nmDir, p.Name, browserMain))
 		if isEsm {
-			log.Infof("%s@%s: use `browser` field as module: %s", np.Name, np.Version, browserMain)
-			np.Module = browserMain
+			log.Infof("%s@%s: use `browser` field as module: %s", p.Name, p.Version, browserMain)
+			p.Module = browserMain
 		}
 	}
 
-	if np.Types == "" && np.Typings != "" {
-		np.Types = np.Typings
+	if p.Types == "" && p.Typings != "" {
+		p.Types = p.Typings
 	}
 
-	return np
+	if p.Types == "" && p.Main != "" {
+		if strings.HasSuffix(p.Main, ".d.ts") {
+			p.Types = p.Main
+			p.Main = ""
+		} else {
+			name, _ := utils.SplitByLastByte(p.Main, '.')
+			maybeTypesPath := name + ".d.ts"
+			if fileExists(path.Join(nmDir, p.Name, maybeTypesPath)) {
+				p.Types = maybeTypesPath
+			} else {
+				dir, _ := utils.SplitByLastByte(p.Main, '/')
+				maybeTypesPath := dir + "/index.d.ts"
+				if fileExists(path.Join(nmDir, p.Name, maybeTypesPath)) {
+					p.Types = maybeTypesPath
+				}
+			}
+		}
+	}
+
+	if p.Types == "" && p.Module != "" {
+		if strings.HasSuffix(p.Module, ".d.ts") {
+			p.Types = p.Module
+			p.Module = ""
+		} else {
+			name, _ := utils.SplitByLastByte(p.Module, '.')
+			maybeTypesPath := name + ".d.ts"
+			if fileExists(path.Join(nmDir, p.Name, maybeTypesPath)) {
+				p.Types = maybeTypesPath
+			} else {
+				dir, _ := utils.SplitByLastByte(p.Module, '/')
+				maybeTypesPath := dir + "/index.d.ts"
+				if fileExists(path.Join(nmDir, p.Name, maybeTypesPath)) {
+					p.Types = maybeTypesPath
+				}
+			}
+		}
+	}
+
+	return p
 }

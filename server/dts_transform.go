@@ -15,22 +15,22 @@ import (
 	"github.com/ije/gox/utils"
 )
 
-func (task *BuildTask) CopyDTS(dts string) (n int, err error) {
+func (task *BuildTask) TransformDTS(dts string) (n int, err error) {
 	buildArgsPrefix := encodeBuildArgsPrefix(task.BuildArgs, task.Pkg.Name, true)
-	tracing := newStringSet()
-	err = task.copyDTS(dts, buildArgsPrefix, tracing)
+	marker := newStringSet()
+	err = task.transformDTS(dts, buildArgsPrefix, marker)
 	if err == nil {
-		n = tracing.Size()
+		n = marker.Size()
 	}
 	return
 }
 
-func (task *BuildTask) copyDTS(dts string, aliasDepsPrefix string, tracing *stringSet) (err error) {
-	// don't copy repeatly
-	if tracing.Has(aliasDepsPrefix + dts) {
+func (task *BuildTask) transformDTS(dts string, aliasDepsPrefix string, marker *stringSet) (err error) {
+	// don't transform repeatly
+	if marker.Has(aliasDepsPrefix + dts) {
 		return
 	}
-	tracing.Add(aliasDepsPrefix + dts)
+	marker.Add(aliasDepsPrefix + dts)
 
 	var taskPkgInfo NpmPackage
 	taskPkgJsonPath := path.Join(task.wd, "node_modules", task.Pkg.Name, "package.json")
@@ -247,7 +247,7 @@ func (task *BuildTask) copyDTS(dts string, aliasDepsPrefix string, tracing *stri
 			if info.Types != "" || info.Typings != "" {
 				// copy dependent dts files in the node_modules directory in current build context
 				if fromPackageJSON {
-					typesPath := toTypesPath(task.wd, &info, "", "", subpath)
+					typesPath := toTypesPath(task.wd, info, "", "", subpath)
 					if strings.HasSuffix(typesPath, ".d.ts") && !strings.HasSuffix(typesPath, "~.d.ts") {
 						imports.Add(typesPath)
 					}
@@ -371,7 +371,7 @@ func (task *BuildTask) copyDTS(dts string, aliasDepsPrefix string, tracing *stri
 		}
 		wg.Add(1)
 		go func(importDts string) {
-			err := task.copyDTS(importDts, aliasDepsPrefix, tracing)
+			err := task.transformDTS(importDts, aliasDepsPrefix, marker)
 			if err != nil {
 				errors = append(errors, err)
 			}
@@ -408,7 +408,7 @@ func removeGlobalBlob(input []byte) (output []byte, err error) {
 	return nil, errors.New("removeGlobalBlob: global block not end")
 }
 
-func toTypesPath(wd string, p *NpmPackage, version string, buildArgsPrefix string, subpath string) string {
+func toTypesPath(wd string, p NpmPackage, version string, buildArgsPrefix string, subpath string) string {
 	var types string
 	if subpath != "" {
 		if p.Types != "" {

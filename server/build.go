@@ -161,9 +161,8 @@ func (task *BuildTask) build(tracing *stringSet) (esm *ESM, err error) {
 	}
 	tracing.Add(task.ID())
 
-	var npm *NpmPackage
 	task.stage = "init"
-	esm, npm, err = initModule(task.wd, task.Pkg, task.Target, task.DevMode)
+	esm, npm, err := initModule(task.wd, task.Pkg, task.Target, task.DevMode)
 	if err != nil {
 		return
 	}
@@ -172,15 +171,15 @@ func (task *BuildTask) build(tracing *stringSet) (esm *ESM, err error) {
 		if npm.Types != "" {
 			dts := npm.Name + "@" + npm.Version + path.Join("/", npm.Types)
 			task.stage = "transform-dts"
-			task.transformDTS(dts)
+			task.buildDTS(dts)
 		}
 		return
 	}
 
-	if npm.Main == "" && npm.Module == "" && npm.Types != "" {
+	if isTypesOnlyPackage(npm) {
 		dts := npm.Name + "@" + npm.Version + path.Join("/", npm.Types)
 		task.stage = "transform-dts"
-		task.transformDTS(dts)
+		task.buildDTS(dts)
 		task.storeToDB(esm)
 		return
 	}
@@ -614,7 +613,7 @@ esbuild:
 			}
 
 			// replace external imports/requires
-			for _, name := range externalDeps.Values() {
+			for depIndex, name := range externalDeps.Values() {
 				var importPath string
 				// remote imports
 				if isRemoteImport(name) || task.external.Has(name) {
@@ -767,10 +766,10 @@ esbuild:
 					return
 				}
 				buffer := bytes.NewBuffer(nil)
-				identifier := identify(name)
-				slice := bytes.Split(outputContent, []byte(fmt.Sprintf("\"__ESM_SH_EXTERNAL:%s\"", name)))
+				identifier := fmt.Sprintf("%x", depIndex)
 				cjsContext := false
 				cjsImports := newStringSet()
+				slice := bytes.Split(outputContent, []byte(fmt.Sprintf("\"__ESM_SH_EXTERNAL:%s\"", name)))
 				for i, p := range slice {
 					if cjsContext {
 						p = bytes.TrimPrefix(p, []byte{')'})
@@ -983,7 +982,7 @@ func (task *BuildTask) storeToDB(esm *ESM) {
 	}
 }
 
-func (task *BuildTask) checkDTS(esm *ESM, npm *NpmPackage) {
+func (task *BuildTask) checkDTS(esm *ESM, npm NpmPackage) {
 	name := task.Pkg.Name
 	submodule := task.Pkg.Submodule
 	var dts string
@@ -1009,7 +1008,7 @@ func (task *BuildTask) checkDTS(esm *ESM, npm *NpmPackage) {
 			p, _, err := getPackageInfo(task.wd, typesPkgName, version)
 			if err == nil {
 				prefix := encodeBuildArgsPrefix(task.BuildArgs, p.Name, true)
-				dts = toTypesPath(task.wd, &p, version, prefix, submodule)
+				dts = toTypesPath(task.wd, p, version, prefix, submodule)
 				break
 			}
 		}
@@ -1019,12 +1018,12 @@ func (task *BuildTask) checkDTS(esm *ESM, npm *NpmPackage) {
 	}
 }
 
-func (task *BuildTask) transformDTS(dts string) {
+func (task *BuildTask) buildDTS(dts string) {
 	start := time.Now()
-	n, err := task.CopyDTS(dts)
+	n, err := task.TransformDTS(dts)
 	if err != nil && os.IsExist(err) {
-		log.Errorf("transformDTS(%s): %v", dts, err)
+		log.Errorf("TransformDTS(%s): %v", dts, err)
 		return
 	}
-	log.Debugf("copy dts '%s' (%d files copied) in %v", dts, n, time.Since(start))
+	log.Debugf("transform dts '%s' (%d related dts files transformed) in %v", dts, n, time.Since(start))
 }
