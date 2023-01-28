@@ -166,25 +166,18 @@ func initModule(wd string, pkg Pkg, target string, isDev bool) (esm *ESM, npm Np
 		if erro == nil {
 			npm.Module = modulePath
 			esm.ExportDefault = exportDefault
-		} else if erro.Error() == "not a module" {
-			var ret cjsExportsResult
-			ret, err = parseCJSModuleExports(wd, path.Join(pkg.Name, strings.TrimSuffix(npm.Module, ".js")), nodeEnv)
-			if err == nil && ret.Error != "" {
-				err = fmt.Errorf("parseCJSModuleExports: %s", ret.Error)
-			}
-			if err != nil {
-				return
-			}
-			npm.Main = npm.Module
-			npm.Module = ""
-			esm.ExportDefault = ret.ExportDefault
-			esm.Exports = ret.Exports
-			log.Warnf("fake module from '%s' of '%s'", npm.Main, npm.Name)
-		} else {
+			return
+		}
+		if erro != nil && erro.Error() != "not a module" {
 			err = fmt.Errorf("resovleESModule: %s", erro)
 			return
 		}
-	} else if npm.Main != "" {
+
+		log.Warnf("fake ES module '%s' of '%s', use `main` feild instead", npm.Module, npm.Name)
+		npm.Module = ""
+	}
+
+	if npm.Main != "" {
 		var ret cjsExportsResult
 		ret, err = parseCJSModuleExports(wd, pkg.ImportPath(), nodeEnv)
 		if err == nil && ret.Error != "" {
@@ -195,19 +188,6 @@ func initModule(wd string, pkg Pkg, target string, isDev bool) (esm *ESM, npm Np
 		}
 		esm.ExportDefault = ret.ExportDefault
 		esm.Exports = ret.Exports
-		// if ret.Error != "" && strings.Contains(ret.Error, "Unexpected export statement in CJS module") {
-		//   if pkg.Submodule != "" {
-		//     esm.Module = pkg.Submodule
-		//   } else {
-		//     esm.Module = esm.Main
-		//   }
-		//   resolved, exportDefault, err := checkESM(wd, esm.Name, esm.Module)
-		//   if err != nil {
-		//     return nil, err
-		//   }
-		//   esm.Module = resolved
-		//   esm.ExportDefault = exportDefault
-		// }
 	}
 
 	return
