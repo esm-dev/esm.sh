@@ -158,6 +158,32 @@ func esmHandler() rex.Handle {
 			return rex.Status(404, "not found")
 		}
 
+		proto := "http"
+		if ctx.R.TLS != nil {
+			proto = "https"
+		}
+		reqOrigin := fmt.Sprintf("%s://%s", proto, ctx.R.Host)
+
+		var cdnOrigin string
+		if cfg.Origin != "" {
+			cdnOrigin = strings.TrimSuffix(cfg.Origin, "/")
+		} else {
+			cdnOrigin = reqOrigin
+		}
+
+		// serve embed assets
+		if strings.HasPrefix(pathname, "/embed/") {
+			data, err := embedFS.ReadFile("server" + pathname)
+			if err == nil {
+				if strings.HasSuffix(pathname, ".js") {
+					data = bytes.ReplaceAll(data, []byte("{origin}"), []byte(cdnOrigin))
+					data = bytes.ReplaceAll(data, []byte("{basePath}"), []byte(cfg.BasePath))
+				}
+				ctx.SetHeader("Cache-Control", fmt.Sprintf("public, max-age=%d", 10*60))
+				return rex.Content(pathname, startTime, bytes.NewReader(data))
+			}
+		}
+
 		// strip loc suffix
 		if strings.ContainsRune(pathname, ':') {
 			pathname = regexpLocPath.ReplaceAllString(pathname, "$1")
@@ -200,19 +226,6 @@ func esmHandler() rex.Handle {
 			return bytes.ReplaceAll(cliTs, []byte("v{VERSION}"), []byte(fmt.Sprintf("v%d", VERSION)))
 		}
 
-		// serve embed assets
-		if strings.HasPrefix(pathname, "/embed/") {
-			data, err := embedFS.ReadFile("server" + pathname)
-			if err != nil {
-				// try `/embed/test/**/*`
-				data, err = embedFS.ReadFile(pathname[7:])
-			}
-			if err == nil {
-				ctx.SetHeader("Cache-Control", fmt.Sprintf("public, max-age=%d", 10*60))
-				return rex.Content(pathname, startTime, bytes.NewReader(data))
-			}
-		}
-
 		external := newStringSet()
 		// check `/*pathname`
 		if strings.HasPrefix(pathname, "/*") {
@@ -246,19 +259,6 @@ func esmHandler() rex.Handle {
 				status = 404
 			}
 			return rex.Status(status, message)
-		}
-
-		proto := "http"
-		if ctx.R.TLS != nil {
-			proto = "https"
-		}
-		reqOrigin := fmt.Sprintf("%s://%s", proto, ctx.R.Host)
-
-		var cdnOrigin string
-		if cfg.Origin != "" {
-			cdnOrigin = strings.TrimSuffix(cfg.Origin, "/")
-		} else {
-			cdnOrigin = reqOrigin
 		}
 
 		// redirect `/@types/` to `.d.ts` files
@@ -675,7 +675,6 @@ func esmHandler() rex.Handle {
 				task := &BuildTask{
 					BuildArgs:    buildArgs,
 					CdnOrigin:    cdnOrigin,
-					BasePath:     cfg.BasePath,
 					BuildVersion: buildVersion,
 					Pkg:          reqPkg,
 					Target:       "types",
@@ -711,7 +710,6 @@ func esmHandler() rex.Handle {
 		task := &BuildTask{
 			BuildArgs:    buildArgs,
 			CdnOrigin:    cdnOrigin,
-			BasePath:     cfg.BasePath,
 			BuildVersion: buildVersion,
 			Pkg:          reqPkg,
 			Target:       target,

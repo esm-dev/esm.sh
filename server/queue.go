@@ -50,9 +50,11 @@ func (t *queueTask) run() BuildOutput {
 		} else {
 			log.Errorf("build %s: %v", t.ID(), output.err)
 		}
-	case <-time.After(5 * time.Minute):
+	case <-time.After(10 * time.Minute):
 		log.Errorf("build %s: timeout(%v)", t.ID(), time.Since(t.startTime))
-		output = BuildOutput{err: fmt.Errorf("build ")}
+		output = BuildOutput{
+			err: fmt.Errorf("build %s: timeout(%v)", t.ID(), time.Since(t.startTime)),
+		}
 	}
 
 	return output

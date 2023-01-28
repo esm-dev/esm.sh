@@ -173,7 +173,7 @@ func initModule(wd string, pkg Pkg, target string, isDev bool) (esm *ESM, npm Np
 			return
 		}
 
-		log.Warnf("fake ES module '%s' of '%s', use `main` feild instead", npm.Module, npm.Name)
+		log.Warnf("fake ES module '%s' of '%s', use the `main` field instead", npm.Module, npm.Name)
 		npm.Module = ""
 	}
 

@@ -72,7 +72,22 @@ func Load(filename string) (*Config, error) {
 			return nil, fmt.Errorf("fail to get absolute path of the work directory: %w", err)
 		}
 	}
-	cfg.BasePath = strings.TrimRight(cfg.BasePath, "/")
+	if cfg.BasePath != "" {
+		a := strings.Split(cfg.BasePath, "/")
+		path := make([]string, len(a))
+		n := 0
+		for i := 0; i < len(a); i++ {
+			if a[i] != "" {
+				path[n] = a[i]
+				n++
+			}
+		}
+		if n > 0 {
+			cfg.BasePath = "/" + strings.Join(path[:n], "/")
+		} else {
+			cfg.BasePath = ""
+		}
+	}
 	if cfg.Port == 0 {
 		cfg.Port = 8080
 	}
