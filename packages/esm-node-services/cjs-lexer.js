@@ -1,5 +1,5 @@
 const fs = require("fs")
-const { dirname } = require("path")
+const { dirname, join } = require("path")
 const { promisify } = require("util")
 const { parse } = require("esm-cjs-lexer")
 const enhancedResolve = require("enhanced-resolve")
@@ -101,7 +101,7 @@ function verifyExports(names) {
 
 exports.parseCjsExports = async input => {
   const { buildDir, importPath, nodeEnv = "production", requireMode } = input
-  const entry = await resolve(buildDir, importPath)
+  const entry = /\.(js|cjs|mjs)$/.test(importPath) ? join(buildDir, "node_modules", importPath) : await resolve(buildDir, importPath)
   const exports = []
 
   if (requireMode) {
