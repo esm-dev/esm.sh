@@ -35,7 +35,7 @@ import "https://esm.sh/react@18.2.0/package.json" assert { type: "json" }
 
 ### Specify dependencies
 
-By default, esm.sh will rewrite import specifier based on the package's dependency statement. To specify version of dependencies, you can use the `?deps=PACKAGE@VERSION` query. You can separate multiple dependencies with commas: `?deps=react@17.0.2,react-dom@17.0.2`.
+By default, esm.sh rewrites import specifier based on the `dependencies` statement in package.json. To specify version of those dependencies, you can use the `?deps=PACKAGE@VERSION` query. You can separate multiple dependencies with commas: `?deps=react@17.0.2,react-dom@17.0.2`.
 
 ```javascript
 import React from "https://esm.sh/react@17.0.2"
@@ -69,7 +69,6 @@ These dependencies will not be resolved within the code. You need to use [**impo
 }
 ```
 
-
 ### Aliasing dependencies
 
 ```javascript
@@ -99,7 +98,7 @@ import { __await, __rest } from "https://esm.sh/tslib?exports=__await,__rest" //
 import { Button } from "https://esm.sh/antd?bundle"
 ```
 
-In **bundle** mode, all dependencies will be bundled into a single JS file.
+In **bundle** mode, all dependencies are bundled into a single JS file.
 
 ### Development mode
 
@@ -150,11 +149,11 @@ const worker = editorWorker()
 <link rel="stylesheet" href="https://esm.sh/monaco-editor?css">
 ```
 
-This only works when the NPM package imports CSS files in JS directly.
+**This only works when the NPM package imports CSS files in JS directly.**
 
 ## Deno compatibility
 
-**esm.sh** will resolve the node internal modules (**fs**, **child_process**, etc.) with [`deno.land/std/node`](https://deno.land/std/node) to support Deno.
+**esm.sh** resolves the node internal modules (**fs**, **child_process**, etc.) with [`deno.land/std/node`](https://deno.land/std/node) to support Deno.
 
 ```javascript
 import postcss from "https://esm.sh/postcss"
@@ -205,7 +204,7 @@ import unescape from "https://esm.sh/lodash/unescape?no-dts"
 
 ## Pin the build version
 
-Since we update esm.sh server frequently, sometime we may break packages that work fine previously by mistake, the server will rebuild all modules when the patch pushed. To avoid this, you can **pin** the build version by the `?pin=BUILD_VERSON` query. This will give you an **immutable** cached module.
+Since we update esm.sh server frequently, sometime we may break packages that work fine previously by mistake, the server will rebuild all modules when a patch pushed. To avoid this, you can **pin** the build version by adding `?pin=BUILD_VERSON` query. This will give you an **immutable** cached module.
 
 ```javascript
 import React from "https://esm.sh/react@17.0.2?pin=v106"
