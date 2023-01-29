@@ -106,11 +106,11 @@ In **bundle** mode, all dependencies are bundled into a single JS file.
 import React from "https://esm.sh/react?dev"
 ```
 
-The `?dev` query builds modules with `process.env.NODE_ENV` equals to `development`, that is useful to build modules like **React** to allow you to get more development warn/error details.
+The `?dev` query builds modules with `process.env.NODE_ENV` equals to `development` or by checking `development` condition of package exports, that is useful to build modules like **React** to allow you to get full development warn/error details.
 
 ### ESBuild options
 
-By default, esm.sh will check the `User-Agent` header to get the build target automatically. You can specify it with the `?target` query. Available targets: **es2015** - **es2022**, **esnext**, **node**, and **deno**.
+By default, esm.sh checks the `User-Agent` header to get the build target automatically. You can specify it with the `?target` query. Available targets: **es2015** - **es2022**, **esnext**, **node**, and **deno**.
 
 ```javascript
 import React from "https://esm.sh/react?target=es2020"
@@ -135,7 +135,7 @@ Other supported options of [esbuild](https://esbuild.github.io/):
 
 ### Web Worker
 
-esm.sh supports `?worker` query to load module as web worker:
+esm.sh supports `?worker` query to load the module as a web worker:
 
 ```javascript
 import editorWorker from "https://esm.sh/monaco-editor/esm/vs/editor/editor.worker?worker"
@@ -149,7 +149,7 @@ const worker = editorWorker()
 <link rel="stylesheet" href="https://esm.sh/monaco-editor?css">
 ```
 
-**This only works when the NPM package imports CSS files in JS directly.**
+**This only works when the package imports CSS files in JS directly.**
 
 ## Deno compatibility
 
@@ -165,7 +165,7 @@ const { css } = await postcss([ autoprefixer ]).process(`
 `).async()
 ```
 
-By default esm.sh will use a fixed version of `deno.land/std/node`. You can use the `?deno-std=$VER` query to specify a different version:
+By default esm.sh uses a fixed version of `deno.land/std/node`. You can use the `?deno-std=$VER` query to specify a different version:
 
 ```javascript
 import postcss from "https://esm.sh/postcss?deno-std=0.128.0"
