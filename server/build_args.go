@@ -17,7 +17,8 @@ type BuildArgs struct {
 	ignoreRequire     bool
 	ignoreAnnotations bool
 	keepNames         bool
-	sourcemap         bool
+	// todo: remove this, always create sourcemap
+	sourcemap bool
 }
 
 func decodeBuildArgsPrefix(raw string) (args BuildArgs, err error) {

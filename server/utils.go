@@ -19,11 +19,11 @@ import (
 )
 
 var (
-	regexpFullVersion      = regexp.MustCompile(`^\d+\.\d+\.\d+[a-zA-Z0-9\.\+\-_]*$`)
-	regexpFullVersionPath  = regexp.MustCompile(`([^/])@\d+\.\d+\.\d+[a-zA-Z0-9\.\+\-_]*(/|$)`)
+	regexpFullVersion      = regexp.MustCompile(`^\d+\.\d+\.\d+[\w\.\+\-]*$`)
+	regexpFullVersionPath  = regexp.MustCompile(`([^/])@\d+\.\d+\.\d+[\w\.\+\-]*(/|$)`)
 	regexpBuildVersionPath = regexp.MustCompile(`^/v\d+(/|$)`)
 	regexpLocPath          = regexp.MustCompile(`(\.js):\d+:\d+$`)
-	regexpJSIdent          = regexp.MustCompile(`^[$_a-zA-Z][$_a-zA-Z0-9]*$`)
+	regexpJSIdent          = regexp.MustCompile(`^[a-zA-Z_$][\w$]*$`)
 	regexpAliasExport      = regexp.MustCompile(`^export\s*\*\s*from\s*['"](\.+/.+?)['"];?$`)
 	npmNaming              = valid.Validator{valid.FromTo{'a', 'z'}, valid.FromTo{'0', '9'}, valid.Eq('_'), valid.Eq('.'), valid.Eq('-')}
 )

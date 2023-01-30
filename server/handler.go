@@ -816,14 +816,20 @@ func esmHandler() rex.Handle {
 		} else {
 			fmt.Fprintf(buf, `export * from "%s%s/%s";%s`, cdnOrigin, cfg.BasePath, taskID, "\n")
 			if (esm.CJS || esm.ExportDefault) && (treeShaking.Size() == 0 || treeShaking.Has("default")) {
-				fmt.Fprintf(
-					buf,
-					`export { default } from "%s%s/%s";%s`,
-					cdnOrigin,
-					cfg.BasePath,
-					taskID,
-					"\n",
-				)
+				fmt.Fprintf(buf, `export { default } from "%s%s/%s";%s`, cdnOrigin, cfg.BasePath, taskID, "\n")
+			}
+			if esm.CJS && ctx.Form.Has("cjs-exports") {
+				exports := newStringSet()
+				for _, p := range strings.Split(ctx.Form.Value("cjs-exports"), ",") {
+					p = strings.TrimSpace(p)
+					if regexpJSIdent.MatchString(p) {
+						exports.Add(p)
+					}
+				}
+				if exports.Size() > 0 {
+					fmt.Fprintf(buf, `import __cjs_exports$ from "%s%s/%s";%s`, cdnOrigin, cfg.BasePath, taskID, "\n")
+					fmt.Fprintf(buf, `export const { %s } = __cjs_exports$;%s`, strings.Join(exports.Values(), ", "), "\n")
+				}
 			}
 		}
 

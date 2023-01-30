@@ -64,9 +64,7 @@ Or you can **mark all dependencies as external** by adding `*` prefix before the
 }
 ```
 
-### Using Import Maps with URL Query
-
-Import maps supports **trailing slash** that can not work with URL search params friendly. To fix this issue, esm.sh provides a **special format** for import URL that allows you to use query params with trailing slash: **change the query prefix `?` to `&` and put it after the package version**.
+Import maps supports [**trailing slash**](https://github.com/WICG/import-maps#packages-via-trailing-slashes) that can not work with URL search params friendly. To fix this issue, esm.sh provides a **special format** for import URL that allows you to use query params with trailing slash: **change the query prefix `?` to `&` and put it after the package version**.
 
 ```json
 {
@@ -170,6 +168,14 @@ const worker = workerFactory(workerAddon)
 ```
 
 This only works when the package **imports CSS files in JS** directly.
+
+### Fixing CommonJS Exports
+
+If you get an error like `...not provide an export named...`, that means the server can not resolve the CommonJS exports correctly. You can add `?cjs-exports=foo,bar` query to fix this issue:
+
+```javascript
+import { NinetyRing, NinetyRingWithBg } from "https://esm.sh/react-svg-spinners@0.3.1?cjs-exports=NinetyRing,NinetyRingWithBg"
+```
 
 ## Deno Compatibility
 
