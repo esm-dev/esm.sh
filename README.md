@@ -1,4 +1,6 @@
-# ESM
+![esm.sh](./server/embed/assets/og-image.svg)
+
+# esm.sh
 
 A fast, global content delivery network for [NPM](http://npmjs.org/) packages with **ES Module** format.
 
