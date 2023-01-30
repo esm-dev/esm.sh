@@ -505,8 +505,8 @@ func getNodejsVersion() (version string, major int, err error) {
 }
 
 // see https://nodejs.org/api/packages.html
-func resolvePackageExports(p *NpmPackage, exports interface{}, target string, isDev bool, pType string) {
-	s, ok := exports.(string)
+func resolvePackageExports(p *NpmPackage, conditions interface{}, target string, isDev bool, pType string) {
+	s, ok := conditions.(string)
 	if ok {
 		if pType == "module" {
 			p.Module = s
@@ -516,21 +516,21 @@ func resolvePackageExports(p *NpmPackage, exports interface{}, target string, is
 		return
 	}
 
-	m, ok := exports.(map[string]interface{})
+	m, ok := conditions.(map[string]interface{})
 	if ok {
-		names := []string{"es2015", "module", "import", "browser", "worker"}
+		names := []string{"browser", "module", "import", "es2015", "worker"}
 		if target == "deno" {
-			names = []string{"deno", "es2015", "module", "import", "worker", "browser"}
+			names = []string{"deno", "worker", "module", "import", "es2015", "browser"}
 		}
-		if p.Type == "module" {
+		if pType == "module" {
 			if isDev {
 				names = append([]string{"development"}, names...)
 			}
 			names = append(names, "default")
 		}
-		// support solid.js ssr in deno
+		// support solid.js (<=1.6) for deno target
 		if (p.Name == "solid-js" || strings.HasPrefix(p.Name, "solid-js/")) && target == "deno" {
-			names = append([]string{"node"}, names...)
+			names = append([]string{"deno", "worker", "node"}, names...)
 		}
 		for _, name := range names {
 			value, ok := m[name]
