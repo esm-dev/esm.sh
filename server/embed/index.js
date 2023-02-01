@@ -7,7 +7,6 @@ import bash from '{origin}{basePath}/highlight.js/lib/languages/bash'
 
 export function render(md) {
   const mainEl = document.querySelector('main')
-  console.log(md.split("# esm.sh"))
   mainEl.innerHTML = marked.parse(md.split("# esm.sh")[1]).replaceAll(/\{origin\}/g, '{origin}{basePath}') + `<p class="link"><a href="./?test">Testing &rarr; </a></p>`
   mainEl.querySelectorAll('code.language-bash').forEach(block => {
     block.innerHTML = block.innerHTML.replace(/(^|\n)\$ /g, '$1')

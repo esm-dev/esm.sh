@@ -190,6 +190,7 @@ func esmHandler() rex.Handle {
 		}
 
 		var hasBuildVerPrefix bool
+		var hasStablePrefix bool
 		var outdatedBuildVer string
 
 		// check build version prefix
@@ -197,6 +198,7 @@ func esmHandler() rex.Handle {
 		if strings.HasPrefix(pathname, "/stable/") {
 			pathname = strings.TrimPrefix(pathname, "/stable")
 			hasBuildVerPrefix = true
+			hasStablePrefix = true
 		} else if strings.HasPrefix(pathname, buildBasePath+"/") || pathname == buildBasePath {
 			a := strings.Split(pathname, "/")
 			pathname = "/" + strings.Join(a[2:], "/")
@@ -370,21 +372,21 @@ func esmHandler() rex.Handle {
 				if hasBuildVerPrefix {
 					storageType = "builds"
 				}
-			case ".ts", ".jsx", ".tsx":
+			case ".css", ".map":
 				if hasBuildVerPrefix {
-					if strings.HasSuffix(pathname, ".d.ts") {
-						storageType = "types"
-					}
+					storageType = "builds"
+				} else if len(strings.Split(pathname, "/")) > 2 {
+					storageType = "raw"
+				}
+			case ".jsx", ".ts", ".tsx":
+				if hasBuildVerPrefix && strings.HasSuffix(pathname, ".d.ts") {
+					storageType = "types"
 				} else if len(strings.Split(pathname, "/")) > 2 {
 					// todo: transform ts/jsx/tsx for browsers
 					storageType = "raw"
 				}
-			case ".json", ".css", ".pcss", ".postcss", ".less", ".sass", ".scss", ".stylus", ".styl", ".wasm", ".xml", ".yaml", ".md", ".svg", ".png", ".jpg", ".webp", ".gif", ".eot", ".ttf", ".otf", ".woff", ".woff2":
-				if hasBuildVerPrefix {
-					if strings.HasSuffix(pathname, ".css") {
-						storageType = "builds"
-					}
-				} else if len(strings.Split(pathname, "/")) > 2 {
+			case ".json", ".less", ".sass", ".scss", ".wasm", ".xml", ".yaml", ".md", ".svg", ".png", ".jpg", ".webp", ".gif", ".eot", ".ttf", ".otf", ".woff", ".woff2":
+				if len(strings.Split(pathname, "/")) > 2 {
 					storageType = "raw"
 				}
 			}
@@ -451,13 +453,20 @@ func esmHandler() rex.Handle {
 			var savePath string
 			if outdatedBuildVer != "" {
 				savePath = path.Join(storageType, outdatedBuildVer, pathname)
+			} else if hasStablePrefix {
+				savePath = path.Join(storageType, "stable", pathname)
 			} else {
 				savePath = path.Join(storageType, fmt.Sprintf("v%d", VERSION), pathname)
 			}
 
 			fi, err := fs.Stat(savePath)
-			if err != nil && err != storage.ErrNotFound {
-				return rex.Status(500, err.Error())
+			if err != nil {
+				if err == storage.ErrNotFound && strings.HasSuffix(pathname, ".js.map") {
+					return rex.Status(404, "Not found")
+				}
+				if err != storage.ErrNotFound {
+					return rex.Status(500, err.Error())
+				}
 			}
 
 			if err == nil {
@@ -564,7 +573,6 @@ func esmHandler() rex.Handle {
 		ignoreRequire := ctx.Form.Has("ignore-require") || ctx.Form.Has("no-require") || reqPkg.Name == "@unocss/preset-icons"
 		keepNames := ctx.Form.Has("keep-names")
 		ignoreAnnotations := ctx.Form.Has("ignore-annotations")
-		sourcemap := ctx.Form.Has("sourcemap") || ctx.Form.Has("source-map")
 
 		// check `?external` query
 		for _, p := range strings.Split(ctx.Form.Value("external"), ",") {
@@ -593,7 +601,6 @@ func esmHandler() rex.Handle {
 			ignoreRequire:     ignoreRequire,
 			keepNames:         keepNames,
 			ignoreAnnotations: ignoreAnnotations,
-			sourcemap:         sourcemap,
 		}
 
 		// parse and use `X-` prefix

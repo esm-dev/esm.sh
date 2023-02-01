@@ -26,7 +26,6 @@ func TestEncodeBuildArgs(t *testing.T) {
 			ignoreRequire:     true,
 			keepNames:         true,
 			ignoreAnnotations: true,
-			sourcemap:         true,
 		},
 		"foo",
 		false,
@@ -58,9 +57,6 @@ func TestEncodeBuildArgs(t *testing.T) {
 	}
 	if !args.ignoreAnnotations {
 		t.Fatal("ignoreAnnotations should be true")
-	}
-	if !args.sourcemap {
-		t.Fatal("sourcemap should be true")
 	}
 	t.Log(prefix, args)
 }

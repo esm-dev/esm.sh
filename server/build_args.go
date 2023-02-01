@@ -17,8 +17,6 @@ type BuildArgs struct {
 	ignoreRequire     bool
 	ignoreAnnotations bool
 	keepNames         bool
-	// todo: remove this, always create sourcemap
-	sourcemap bool
 }
 
 func decodeBuildArgsPrefix(raw string) (args BuildArgs, err error) {
@@ -67,8 +65,6 @@ func decodeBuildArgsPrefix(raw string) (args BuildArgs, err error) {
 					args.keepNames = true
 				case "ia":
 					args.ignoreAnnotations = true
-				case "sm":
-					args.sourcemap = true
 				}
 			}
 		}
@@ -139,9 +135,6 @@ func encodeBuildArgsPrefix(args BuildArgs, pkgName string, forTypes bool) string
 		}
 		if args.ignoreAnnotations {
 			lines = append(lines, "ia")
-		}
-		if args.sourcemap {
-			lines = append(lines, "sm")
 		}
 	}
 	if len(lines) > 0 {

@@ -215,7 +215,7 @@ func (task *BuildTask) build(marker *stringSet) (esm *ESM, err error) {
 		input = &api.StdinOptions{
 			Contents:   buf.String(),
 			ResolveDir: task.wd,
-			Sourcefile: "mod.js",
+			Sourcefile: "index.js",
 		}
 	} else {
 		if task.treeShaking.Size() > 0 {
@@ -224,7 +224,7 @@ func (task *BuildTask) build(marker *stringSet) (esm *ESM, err error) {
 			input = &api.StdinOptions{
 				Contents:   buf.String(),
 				ResolveDir: task.wd,
-				Sourcefile: "mod.js",
+				Sourcefile: "index.js",
 			}
 		} else {
 			entryPoint = path.Join(task.wd, "node_modules", npm.Name, npm.Module)
@@ -548,14 +548,13 @@ esbuild:
 			".woff":  api.LoaderDataURL,
 			".woff2": api.LoaderDataURL,
 		},
+		SourceRoot: "/",
+		Sourcemap:  api.SourceMapExternal,
 	}
 	if task.Target == "node" {
 		options.Platform = api.PlatformNode
 	} else {
 		options.Define = define
-	}
-	if task.sourcemap {
-		options.Sourcemap = api.SourceMapInline
 	}
 	if input != nil {
 		options.Stdin = input
@@ -583,7 +582,7 @@ esbuild:
 			input = &api.StdinOptions{
 				Contents:   fmt.Sprintf(`import "%s";export default null;`, task.Pkg.ImportPath()),
 				ResolveDir: task.wd,
-				Sourcefile: "mod.js",
+				Sourcefile: "index.js",
 			}
 			goto esbuild
 		}
@@ -891,27 +890,31 @@ esbuild:
 
 			// add nodejs/deno compatibility
 			if task.Target != "node" {
-				if bytes.Contains(outputContent, []byte("__Process$")) {
+				ids := newStringSet()
+				for _, r := range regexpGlobalIdent.FindAll(outputContent, -1) {
+					ids.Add(string(r))
+				}
+				if ids.Has("__Process$") {
 					if task.Target == "deno" {
 						fmt.Fprintf(buf, `import __Process$ from "https://deno.land/std@%s/node/process.ts";%s`, task.denoStdVersion, eol)
 					} else {
 						fmt.Fprintf(buf, `import __Process$ from "%s/v%d/node_process.js";%s`, cfg.BasePath, task.BuildVersion, eol)
 					}
 				}
-				if bytes.Contains(outputContent, []byte("__Buffer$")) {
+				if ids.Has("__Buffer$") {
 					if task.Target == "deno" {
 						fmt.Fprintf(buf, `import  { Buffer as __Buffer$ } from "https://deno.land/std@%s/node/buffer.ts";%s`, task.denoStdVersion, eol)
 					} else {
 						fmt.Fprintf(buf, `import { Buffer as __Buffer$ } from "%s/v%d/node_buffer.js";%s`, cfg.BasePath, task.BuildVersion, eol)
 					}
 				}
-				if bytes.Contains(outputContent, []byte("__global$")) {
+				if ids.Has("__global$") {
 					fmt.Fprintf(buf, `var __global$ = globalThis || (typeof window !== "undefined" ? window : self);%s`, eol)
 				}
-				if bytes.Contains(outputContent, []byte("__setImmediate$")) {
+				if ids.Has("__setImmediate$") {
 					fmt.Fprintf(buf, `var __setImmediate$ = (cb, ...args) => setTimeout(cb, 0, ...args);%s`, eol)
 				}
-				if bytes.Contains(outputContent, []byte("__rResolve$")) {
+				if ids.Has("__rResolve$") {
 					fmt.Fprintf(buf, `var __rResolve$ = p => p;%s`, eol)
 				}
 			}
@@ -935,7 +938,7 @@ esbuild:
 				options.Stdin = &api.StdinOptions{
 					Contents:   buf.String(),
 					ResolveDir: task.wd,
-					Sourcefile: "mod.js",
+					Sourcefile: "index.js",
 				}
 				ret := api.Build(options)
 				if len(ret.Errors) > 0 {
@@ -954,6 +957,11 @@ esbuild:
 				}
 			}
 
+			// add sourcemap Url
+			buf.WriteString("//# sourceMappingURL=")
+			buf.WriteString(filepath.Base(task.ID()))
+			buf.WriteString(".map")
+
 			_, err = fs.WriteFile(path.Join("builds", task.ID()), buf)
 			if err != nil {
 				return
@@ -964,6 +972,11 @@ esbuild:
 				return
 			}
 			esm.PackageCSS = true
+		} else if strings.HasSuffix(file.Path, ".map") {
+			_, err = fs.WriteFile(path.Join("builds", task.ID()+".map"), bytes.NewReader(outputContent))
+			if err != nil {
+				return
+			}
 		}
 	}
 

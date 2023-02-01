@@ -136,11 +136,6 @@ Other supported options of [esbuild](https://esbuild.github.io/):
   ```javascript
   import React from "https://esm.sh/react?ignore-annotations"
   ```
-- [Sourcemap](https://esbuild.github.io/api/#sourcemap)
-  ```javascript
-  import React from "https://esm.sh/react?sourcemap"
-  ```
-  This only supports the `inline` mode.
 
 ### Web Worker
 
