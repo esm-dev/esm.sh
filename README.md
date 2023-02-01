@@ -199,13 +199,13 @@ By default esm.sh uses a fixed version of `deno.land/std/node`. You can add the 
 import postcss from "https://esm.sh/postcss?deno-std=0.128.0"
 ```
 
-### X-Typescript-Types Header 
+### X-Typescript-Types Header
 
-You may find the `X-TypeScript-Types` header of responses from ems.sh, if the module has a `types` field in `package.json`. This will allow Deno to automatically download the type definitions for types checking and auto-completion ([link](https://deno.land/manual/typescript/types#using-x-typescript-types-header)).
+You may find the `X-TypeScript-Types` header in response from esm.sh if the module has a `types` field in `package.json`. This allows Deno to automatically download the type definitions for types checking and auto-completion ([link](https://deno.land/manual/typescript/types#using-x-typescript-types-header)).
 
 ![Figure #1](./server/embed/assets/sceenshot-deno-types.png)
 
-You can add the `?no-dts` query to disable the `X-TypeScript-Types` header if it's incorrect:
+You can add the `?no-dts` query to disable the `X-TypeScript-Types` header if the types is incorrect:
 
 ```javascript
 import unescape from "https://esm.sh/lodash/unescape?no-dts"
