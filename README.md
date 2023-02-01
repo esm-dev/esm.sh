@@ -66,7 +66,7 @@ Or you can **mark all dependencies as external** by adding `*` prefix before the
 }
 ```
 
-Import maps supports [**trailing slash**](https://github.com/WICG/import-maps#packages-via-trailing-slashes) that can not work with URL search params friendly. To fix this issue, esm.sh provides a **special format** for import URL that allows you to use query params with trailing slash: **change the query prefix `?` to `&` and put it after the package version**.
+Import maps supports [**trailing slash**](https://github.com/WICG/import-maps#packages-via-trailing-slashes) that can not work with URL search params friendly. To fix this issue, esm.sh provides a **special format** for import URL that allows you to use query params with trailing slash: change the query prefix `?` to `&` and put it after the package version.
 
 ```json
 {
@@ -171,9 +171,9 @@ const worker = workerFactory(workerAddon)
 
 This only works when the package **imports CSS files in JS** directly.
 
-### Fixing CommonJS Exports
+### Specify CJS Exports
 
-If you get an error like `...not provide an export named...`, that means the server can not resolve the CommonJS exports correctly. You can add `?cjs-exports=foo,bar` query to fix this issue:
+If you get an error like `...not provide an export named...`, that means esm.sh can not resolve CJS exports of the module correctly. You can add `?cjs-exports=foo,bar` query to specify the export names:
 
 ```javascript
 import { NinetyRing, NinetyRingWithBg } from "https://esm.sh/react-svg-spinners@0.3.1?cjs-exports=NinetyRing,NinetyRingWithBg"
@@ -190,7 +190,7 @@ import autoprefixer from "https://esm.sh/autoprefixer"
 const { css } = await postcss([ autoprefixer ]).process(`
   backdrop-filter: blur(5px);
   user-select: none;
-`).async()
+.async()
 ```
 
 By default esm.sh uses a fixed version of `deno.land/std/node`. You can add the `?deno-std=$VER` query to specify a different version:
@@ -199,13 +199,13 @@ By default esm.sh uses a fixed version of `deno.land/std/node`. You can add the 
 import postcss from "https://esm.sh/postcss?deno-std=0.128.0"
 ```
 
-### X-Typescript-Types
+### X-Typescript-Types Header 
 
-By default, **esm.sh** will add the `X-TypeScript-Types` header to the response if the module has a `types` field in `package.json`. This will allow Deno to automatically download the type definitions for types checking and auto-completion ([link](https://deno.land/manual/typescript/types#using-x-typescript-types-header)).
+You may find the `X-TypeScript-Types` header of responses from ems.sh, if the module has a `types` field in `package.json`. This will allow Deno to automatically download the type definitions for types checking and auto-completion ([link](https://deno.land/manual/typescript/types#using-x-typescript-types-header)).
 
 ![Figure #1](./server/embed/assets/sceenshot-deno-types.png)
 
-You can pass the `?no-dts` query to disable the `X-TypeScript-Types` header if some types are incorrect:
+You can add the `?no-dts` query to disable the `X-TypeScript-Types` header if it's incorrect:
 
 ```javascript
 import unescape from "https://esm.sh/lodash/unescape?no-dts"
@@ -230,7 +230,7 @@ deno task esm:update # update all packages
 deno task esm:remove react react-dom # remove packages
 ```
 
-## Pin the Build version
+## Pinning Build Version
 
 Since we update esm.sh server frequently, the server will rebuild all modules when a patch pushed, sometimes we may break packages that work well before by mistake. To avoid this, you can pin the build version of a module with the `?pin` query, this returns an **immutable** cached module.
 
