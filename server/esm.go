@@ -204,7 +204,7 @@ func initModule(wd string, pkg Pkg, target string, isDev bool) (esm *ESM, npm Np
 	return
 }
 
-func findESMBuild(id string) (*ESM, bool) {
+func queryESMBuild(id string) (*ESM, bool) {
 	value, err := db.Get(id)
 	if err == nil && value != nil {
 		var esm ESM

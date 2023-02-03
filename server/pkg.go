@@ -22,7 +22,7 @@ func validatePkgPath(pathname string) (Pkg, string, error) {
 		name = "@" + name
 	}
 
-	if !validateNpmName(name) {
+	if !validatePackageName(name) {
 		return Pkg{}, "", fmt.Errorf("invalid package name '%s'", name)
 	}
 

@@ -150,24 +150,6 @@ type cjsExportsResult struct {
 	Stack         string   `json:"stack"`
 }
 
-var requireModeAllowList = []string{
-	"domhandler",
-	"he",
-	"keycode",
-	"lru_map",
-	"lz-string",
-	"postcss-selector-parser",
-	"resolve",
-	"safe-buffer",
-	"seedrandom",
-	"stream-browserify",
-	"stream-http",
-	"typescript",
-	"vscode-oniguruma",
-	"web-streams-ponyfill",
-	"maplibre-gl",
-}
-
 func parseCJSModuleExports(buildDir string, importPath string, nodeEnv string) (ret cjsExportsResult, err error) {
 	args := map[string]interface{}{
 		"buildDir":   buildDir,

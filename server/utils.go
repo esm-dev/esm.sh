@@ -4,18 +4,17 @@ import (
 	"encoding/base64"
 	"errors"
 	"io/ioutil"
+	"net"
+	"net/http"
 	"os"
-	"path"
 	"regexp"
 	"strconv"
 	"strings"
-	"sync"
+	"time"
 
 	"github.com/ije/esbuild-internal/js_ast"
 	"github.com/ije/esbuild-internal/js_parser"
 	"github.com/ije/esbuild-internal/logger"
-	"github.com/ije/gox/utils"
-	"github.com/ije/gox/valid"
 )
 
 var (
@@ -26,65 +25,24 @@ var (
 	regexpJSIdent          = regexp.MustCompile(`^[a-zA-Z_$][\w$]*$`)
 	regexpAliasExport      = regexp.MustCompile(`^export\s*\*\s*from\s*['"](\.+/.+?)['"];?$`)
 	regexpGlobalIdent      = regexp.MustCompile(`__[a-zA-Z]+\$`)
-	npmNaming              = valid.Validator{valid.FromTo{'a', 'z'}, valid.FromTo{'0', '9'}, valid.Eq('_'), valid.Eq('.'), valid.Eq('-')}
 )
 
-type stringSet struct {
-	lock sync.RWMutex
-	m    map[string]struct{}
-}
+var httpClient = &http.Client{
+	Transport: &http.Transport{
+		Dial: func(network, addr string) (conn net.Conn, err error) {
+			conn, err = net.DialTimeout(network, addr, 15*time.Second)
+			if err != nil {
+				return conn, err
+			}
 
-func newStringSet() *stringSet {
-	return &stringSet{m: map[string]struct{}{}}
-}
-
-func (s *stringSet) Size() int {
-	s.lock.RLock()
-	defer s.lock.RUnlock()
-
-	return len(s.m)
-}
-
-func (s *stringSet) Has(key string) bool {
-	s.lock.RLock()
-	defer s.lock.RUnlock()
-
-	_, ok := s.m[key]
-	return ok
-}
-
-func (s *stringSet) Add(key string) {
-	s.lock.Lock()
-	defer s.lock.Unlock()
-
-	s.m[key] = struct{}{}
-}
-
-func (s *stringSet) Remove(key string) {
-	s.lock.Lock()
-	defer s.lock.Unlock()
-
-	delete(s.m, key)
-}
-
-func (s *stringSet) Reset() {
-	s.lock.Lock()
-	defer s.lock.Unlock()
-
-	s.m = map[string]struct{}{}
-}
-
-func (s *stringSet) Values() []string {
-	s.lock.RLock()
-	defer s.lock.RUnlock()
-
-	a := make([]string, len(s.m))
-	i := 0
-	for key := range s.m {
-		a[i] = key
-		i++
-	}
-	return a
+			// Set a one-time deadline for potential SSL handshaking
+			conn.SetDeadline(time.Now().Add(60 * time.Second))
+			return conn, nil
+		},
+		MaxIdleConnsPerHost:   6,
+		ResponseHeaderTimeout: 60 * time.Second,
+		Proxy:                 http.ProxyFromEnvironment,
+	},
 }
 
 func splitPkgPath(pathname string) (pkgName string, submodule string) {
@@ -96,20 +54,6 @@ func splitPkgPath(pathname string) (pkgName string, submodule string) {
 		submodule = strings.Join(a[2:], "/")
 	}
 	return
-}
-
-// ref https://github.com/npm/validate-npm-package-name
-func validateNpmName(name string) bool {
-	scope := ""
-	nameWithoutScope := name
-	if strings.HasPrefix(name, "@") {
-		scope, nameWithoutScope = utils.SplitByFirstByte(name, '/')
-		scope = scope[1:]
-	}
-	if (scope != "" && !npmNaming.Is(scope)) || (nameWithoutScope == "" || !npmNaming.Is(nameWithoutScope)) || len(name) > 214 {
-		return false
-	}
-	return true
 }
 
 // isRemoteImport returns true if the import path is a remote URL.
@@ -148,14 +92,6 @@ func endsWith(s string, suffixs ...string) bool {
 		}
 	}
 	return false
-}
-
-type devFS struct {
-	cwd string
-}
-
-func (fs devFS) ReadFile(name string) ([]byte, error) {
-	return ioutil.ReadFile(path.Join(fs.cwd, name))
 }
 
 func dirExists(filepath string) bool {

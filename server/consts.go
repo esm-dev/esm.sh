@@ -22,3 +22,22 @@ var stableBuild = map[string]bool{
 	"preact": true,
 	"vue":    true,
 }
+
+// allowlist for require mode when parsing cjs exports fails
+var requireModeAllowList = []string{
+	"domhandler",
+	"he",
+	"keycode",
+	"lru_map",
+	"lz-string",
+	"maplibre-gl",
+	"postcss-selector-parser",
+	"resolve",
+	"safe-buffer",
+	"seedrandom",
+	"stream-browserify",
+	"stream-http",
+	"typescript",
+	"vscode-oniguruma",
+	"web-streams-ponyfill",
+}

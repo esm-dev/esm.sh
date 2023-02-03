@@ -103,7 +103,7 @@ func (task *BuildTask) getBuildVersion(pkg Pkg) string {
 }
 
 func (task *BuildTask) Build() (esm *ESM, err error) {
-	prev, ok := findESMBuild(task.ID())
+	prev, ok := queryESMBuild(task.ID())
 	if ok {
 		return prev, nil
 	}
@@ -750,7 +750,7 @@ esbuild:
 					// clear `?exports` args
 					t.treeShaking = newStringSet()
 
-					_, ok := findESMBuild(t.ID())
+					_, ok := queryESMBuild(t.ID())
 					if ok {
 						buildQueue.Add(t, "")
 					}

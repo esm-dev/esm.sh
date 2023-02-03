@@ -21,7 +21,11 @@ import (
 
 	"github.com/Masterminds/semver/v3"
 	"github.com/ije/gox/utils"
+	"github.com/ije/gox/valid"
 )
+
+// ref https://github.com/npm/validate-npm-package-name
+var npmNaming = valid.Validator{valid.FromTo{'a', 'z'}, valid.FromTo{'0', '9'}, valid.Eq('_'), valid.Eq('.'), valid.Eq('-')}
 
 var builtInNodeModules = map[string]bool{
 	"assert":              true,
@@ -166,18 +170,6 @@ type NpmPackageVerions struct {
 	Versions map[string]NpmPackage `json:"versions"`
 }
 
-type StringOrMap struct {
-	Value string
-	Map   map[string]interface{}
-}
-
-func (a *StringOrMap) UnmarshalJSON(b []byte) error {
-	if err := json.Unmarshal(b, &a.Value); err != nil {
-		return json.Unmarshal(b, &a.Map)
-	}
-	return nil
-}
-
 // NpmPackageTemp defines the package.json of npm
 type NpmPackageTemp struct {
 	Name             string                 `json:"name"`
@@ -194,22 +186,6 @@ type NpmPackageTemp struct {
 	PeerDependencies map[string]string      `json:"peerDependencies,omitempty"`
 	Imports          map[string]interface{} `json:"imports,omitempty"`
 	DefinedExports   interface{}            `json:"exports,omitempty"`
-}
-
-func (a *StringOrMap) MainValue() string {
-	if a.Value != "" {
-		return a.Value
-	}
-	if a.Map != nil {
-		v, ok := a.Map["."]
-		if ok {
-			s, isStr := v.(string)
-			if isStr {
-				return s
-			}
-		}
-	}
-	return ""
 }
 
 func (a *NpmPackageTemp) ToNpmPackage() *NpmPackage {
@@ -661,6 +637,20 @@ func yarnCacheClean(packages ...string) {
 			log.Debugf("yarn cache clean %s: %s", strings.Join(packages, ","), string(output))
 		}
 	}
+}
+
+// ref https://github.com/npm/validate-npm-package-name
+func validatePackageName(name string) bool {
+	scope := ""
+	nameWithoutScope := name
+	if strings.HasPrefix(name, "@") {
+		scope, nameWithoutScope = utils.SplitByFirstByte(name, '/')
+		scope = scope[1:]
+	}
+	if (scope != "" && !npmNaming.Is(scope)) || (nameWithoutScope == "" || !npmNaming.Is(nameWithoutScope)) || len(name) > 214 {
+		return false
+	}
+	return true
 }
 
 // added by @jimisaacs

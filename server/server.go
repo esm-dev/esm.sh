@@ -67,8 +67,8 @@ func Serve(efs EmbedFS) {
 		}
 		embedFS = &devFS{cwd}
 	} else {
-		embedFS = efs
 		os.Setenv("NO_COLOR", "1") // disable log color in production
+		embedFS = efs
 	}
 
 	log, err = logx.New(fmt.Sprintf("file:%s?buffer=32k", path.Join(cfg.LogDir, fmt.Sprintf("main-v%d.log", VERSION))))

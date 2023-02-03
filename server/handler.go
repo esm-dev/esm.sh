@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"fmt"
 	"io/ioutil"
-	"net"
 	"net/http"
 	"path"
 	"strconv"
@@ -16,24 +15,6 @@ import (
 	"github.com/ije/gox/utils"
 	"github.com/ije/rex"
 )
-
-var httpClient = &http.Client{
-	Transport: &http.Transport{
-		Dial: func(network, addr string) (conn net.Conn, err error) {
-			conn, err = net.DialTimeout(network, addr, 15*time.Second)
-			if err != nil {
-				return conn, err
-			}
-
-			// Set a one-time deadline for potential SSL handshaking
-			conn.SetDeadline(time.Now().Add(60 * time.Second))
-			return conn, nil
-		},
-		MaxIdleConnsPerHost:   6,
-		ResponseHeaderTimeout: 60 * time.Second,
-		Proxy:                 http.ProxyFromEnvironment,
-	},
-}
 
 // esm.sh query middleware for rex
 func esmHandler() rex.Handle {
@@ -725,13 +706,13 @@ func esmHandler() rex.Handle {
 			stage:        "init",
 		}
 		taskID := task.ID()
-		esm, ok := findESMBuild(taskID)
+		esm, ok := queryESMBuild(taskID)
 		if !ok {
 			if !isBare && !isPined {
 				// find previous build version
 				for i := 0; i < VERSION; i++ {
 					id := fmt.Sprintf("v%d/%s", VERSION-(i+1), taskID[len(fmt.Sprintf("v%d/", VERSION)):])
-					esm, ok = findESMBuild(taskID)
+					esm, ok = queryESMBuild(taskID)
 					if ok {
 						taskID = id
 						break
