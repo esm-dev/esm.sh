@@ -24,7 +24,7 @@ import React from "https://esm.sh/react@next" // 18.3.0-next-3de926449-20220927
 import { renderToString } from "https://esm.sh/react-dom@18.2.0/server"
 ```
 
-or import non-module(js) files:
+or import non-module(js) as following:
 
 ```javascript
 import "https://esm.sh/react@18.2.0/package.json" assert { type: "json" }
@@ -32,7 +32,7 @@ import "https://esm.sh/react@18.2.0/package.json" assert { type: "json" }
 
 ### Specify Dependencies
 
-By default, esm.sh rewrites import specifiers based on the `dependencies` field of `package.json`. To specify version of these dependencies, you can add the `?deps=PACKAGE@VERSION` query. Separate multiple dependencies with comma: `?deps=react@17.0.2,react-dom@17.0.2`.
+By default, ESM.SH rewrites import specifiers based on the `dependencies` field of `package.json`. To specify the version of these dependencies, you can add the `?deps=PACKAGE@VERSION` query. To specify multiple dependencies, separate them with a comma, like this: `?deps=react@17.0.2,react-dom@17.0.2`.
 
 ```javascript
 import React from "https://esm.sh/react@17.0.2"
@@ -53,7 +53,7 @@ Since these dependencies are not resolved, you need to use [**import maps**](htt
 }
 ```
 
-Or you can **mark all dependencies as external** by adding `*` prefix before the package name:
+Alternatively, you can **mark all dependencies as external** by adding a `*` prefix before the package name:
 
 ```json
 {
@@ -93,14 +93,14 @@ The origin idea was coming from [@lucacasonato](https://github.com/lucacasonato)
 
 ### Tree Shaking
 
-By default esm.sh bundles module with all export members, you can specify the `exports` by adding `?exports=foo,bar` query. With esbuild tree shaking, you can get a smaller bundle size:
+By default, esm.sh exports a module with all its exported members. However, if you want to import only a specific set of members, you can specify them by adding a `?exports=foo,bar` query to the import statement.
 
 ```js
 import { __await, __rest } from "https://esm.sh/tslib" // 7.3KB
 import { __await, __rest } from "https://esm.sh/tslib?exports=__await,__rest" // 489B
 ```
 
-This only works with **ESM** modules, **CJS** modules are not supported.
+By using this feature, you can take advantage of tree shaking with esbuild and achieve a smaller bundle size. **Note** that this feature is only supported for ESM modules and not CJS modules.
 
 ### Bundle Mode
 
@@ -116,7 +116,7 @@ In **bundle** mode, all dependencies are bundled into a single JS file except th
 import React from "https://esm.sh/react?dev"
 ```
 
-With the `?dev` option, esm.sh builds modules with `process.env.NODE_ENV` set to `"development"` or based on the condition `development` in the `exports` field of `package.json`. This is useful for libraries that have different behavior in development and production. For example, [React](https://reactjs.org/) will use a different warning message in development mode.
+With the `?dev` option, esm.sh builds a module with `process.env.NODE_ENV` set to `"development"` or based on the condition `development` in the `exports` field of `package.json`. This is useful for libraries that have different behavior in development and production. For example, [React](https://reactjs.org/) will use a different warning message in development mode.
 
 ### ESBuild Options
 
@@ -176,7 +176,7 @@ import { NinetyRing, NinetyRingWithBg } from "https://esm.sh/react-svg-spinners@
 
 ## Deno Compatibility
 
-**esm.sh** resolves the node internal modules (**fs**, **child_process**, etc.) with [`deno.land/std/node`](https://deno.land/std/node) to support Deno.
+esm.sh is a **Deno-friendly** CDN that resolves Node's internal modules (such as **fs**, **child_process**, etc.) using [`deno.land/std/node`](https://deno.land/std/node), making it compatible with Deno.
 
 ```javascript
 import postcss from "https://esm.sh/postcss"
@@ -188,7 +188,7 @@ const { css } = await postcss([ autoprefixer ]).process(`
 .async()
 ```
 
-By default esm.sh uses a fixed version of `deno.land/std/node`. You can add the `?deno-std=$VER` query to specify a different version:
+By default esm.sh uses a fixed version of `deno.land/std/node`. You can specify a different version by adding the `?deno-std=$VER` query:
 
 ```javascript
 import postcss from "https://esm.sh/postcss?deno-std=0.128.0"
@@ -196,42 +196,56 @@ import postcss from "https://esm.sh/postcss?deno-std=0.128.0"
 
 ### X-Typescript-Types Header
 
-You may find the `X-TypeScript-Types` header in response from esm.sh if the module has a `types` field in `package.json`. This allows Deno to automatically download the type definitions for types checking and auto-completion ([link](https://deno.land/manual/typescript/types#using-x-typescript-types-header)).
+Deno supports type definitions for modules with a `types` field in their `package.json` file through the `X-TypeScript-Types` header. This makes it possible to have type checking and auto-completion when using those modules in Deno. ([link](https://deno.land/manual/typescript/types#using-x-typescript-types-header)).
+
 
 ![Figure #1](./server/embed/assets/sceenshot-deno-types.png)
 
-You can add the `?no-dts` query to disable the `X-TypeScript-Types` header if the types is incorrect:
+In case the type definitions provided by the `X-TypeScript-Types` header are incorrect, you can disable it by adding the `?no-dts` query to the module import URL:
 
 ```javascript
 import unescape from "https://esm.sh/lodash/unescape?no-dts"
 ```
 
+This will prevent the `X-TypeScript-Types` header from being included in the network request, and you can manually specify the types for the imported module.
+
 ### Using CLI Script
 
-**esm.sh** provides a CLI script to manage the imports with **import maps** in [Deno](https://deno.land), it resolves dependencies automatically and always use a pinned build version. To use the CLI script, you need to run the `init` command in your project root directory:
+**esm.sh** provides a CLI script for managing imports with import maps in [Deno](https://deno.land). This CLI script automatically resolves dependencies and uses a pinned build version for stability.
+
+To use the esm.sh CLI script, you first need to run the `init` command in your project's root directory:
 
 ```bash
 deno run -A -r https://esm.sh init
 ```
 
-After initializing, you can use the `deno task esm:[add/update/remove]` commands to manage imports of NPM in the import maps.
+Once you've initialized the script, you can use the following commands to manage your imports:
 
 ```bash
-deno task esm:add react react-dom # add packages
-deno task esm:add react@17 # add packages with specified version
-deno task esm:add react:preact/compat # add packages with alias
-deno task esm:update react react-dom # upgrade packages
-deno task esm:update # update all packages
-deno task esm:remove react react-dom # remove packages
+# Adding packages
+deno task esm:add react react-dom     # add multiple packages
+deno task esm:add react@17.0.2        # specify version
+deno task esm:add react:preact/compat # using alias
+
+# Updating packages
+deno task esm:update react react-dom  # update specific packages
+deno task esm:update                  # update all packages
+
+# Removing packages
+deno task esm:remove react react-dom
 ```
 
 ## Pinning Build Version
 
-Since we update esm.sh server frequently, the server will rebuild all modules when a patch pushed, sometimes we may break packages that work well before by mistake. To avoid this, you can pin the build version of a module with the `?pin` query, this returns an **immutable** cached module.
+To ensure stable and consistent behavior, you may want to pin the build version of a module you're using from esm.sh. This helps you avoid potential breaking changes in the module caused by updates to the esm.sh server.
+
+The `?pin` query allows you to specify a specific build version of a module, which is an **immutable** cached version stored on the esm.sh CDN.
 
 ```javascript
 import React from "https://esm.sh/react@17.0.2?pin=v106"
 ```
+
+By using the `?pin` query in the import statement, you can rest assured that the version of the module you're using will not change, even if updates are pushed to the esm.sh server. This helps ensure the stability and reliability of your application.
 
 ## Global CDN
 
