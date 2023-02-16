@@ -198,7 +198,7 @@ func (task *BuildTask) build(marker *stringSet) (esm *ESM, err error) {
 		importPath := task.Pkg.ImportPath()
 		fmt.Fprintf(buf, `import * as __module from "%s";`, importPath)
 		// Default reexport all members from original module to prevent missing named exports members
-		fmt.Fprintf(buf, `export * from "%s"`, importPath)
+		fmt.Fprintf(buf, `export * from "%s";`, importPath)
 		if len(esm.Exports) > 0 {
 			var exports []string
 			for _, k := range esm.Exports {
