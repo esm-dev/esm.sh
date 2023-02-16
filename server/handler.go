@@ -394,14 +394,14 @@ func esmHandler() rex.Handle {
 					resp, err = httpClient.Get(fmt.Sprintf("%s/%s", strings.TrimSuffix(cfg.BackupNpmCDN, "/"), reqPkg.String()))
 				}
 				if err != nil {
-					return rex.Status(http.StatusInternalServerError, err.Error())
+					return rex.Status(500, err.Error())
 				}
 				defer resp.Body.Close()
 
 				if resp.StatusCode >= 500 {
 					b, err := io.ReadAll(resp.Body)
 					if err != nil {
-						return rex.Status(http.StatusInternalServerError, err.Error())
+						return rex.Status(500, err.Error())
 					}
 					return rex.Status(http.StatusBadGateway, b)
 				}
