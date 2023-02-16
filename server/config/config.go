@@ -27,6 +27,7 @@ type Config struct {
 	NpmRegistry      string  `json:"npmRegistry,omitempty"`
 	NpmToken         string  `json:"npmToken,omitempty"`
 	NpmCDN           string  `json:"npmCDN,omitempty"`
+	BackupNpmCDN     string  `json:"backupNpmCDN,omitempty"`
 	NoCompress       bool    `json:"noCompress,omitempty"`
 }
 

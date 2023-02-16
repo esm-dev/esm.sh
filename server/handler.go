@@ -3,6 +3,7 @@ package server
 import (
 	"bytes"
 	"fmt"
+	"io"
 	"io/ioutil"
 	"net/http"
 	"path"
@@ -373,7 +374,7 @@ func esmHandler() rex.Handle {
 			}
 		}
 
-		// serve raw dist files like CSS that is fetching from unpkg.com
+		// serve raw dist files like CSS that is fetching from npmCDN
 		if storageType == "raw" {
 			if !regexpFullVersionPath.MatchString(pathname) {
 				url := fmt.Sprintf("%s%s/%s", reqOrigin, cfg.BasePath, reqPkg.String())
@@ -386,16 +387,23 @@ func esmHandler() rex.Handle {
 				return rex.Status(500, err.Error())
 			}
 
-			// fetch non-js file from unpkg.com and save it to fs
+			// fetch non-js file from npmCDN and save it to fs
 			if err == storage.ErrNotFound {
 				resp, err := httpClient.Get(fmt.Sprintf("%s/%s", strings.TrimSuffix(cfg.NpmCDN, "/"), reqPkg.String()))
+				if err != nil && cfg.BackupNpmCDN != "" {
+					resp, err = httpClient.Get(fmt.Sprintf("%s/%s", strings.TrimSuffix(cfg.BackupNpmCDN, "/"), reqPkg.String()))
+				}
 				if err != nil {
-					return rex.Status(http.StatusBadGateway, "Bad Gateway")
+					return rex.Status(http.StatusInternalServerError, err.Error())
 				}
 				defer resp.Body.Close()
 
 				if resp.StatusCode >= 500 {
-					return rex.Status(http.StatusBadGateway, "Bad Gateway")
+					b, err := io.ReadAll(resp.Body)
+					if err != nil {
+						return rex.Status(http.StatusInternalServerError, err.Error())
+					}
+					return rex.Status(http.StatusBadGateway, b)
 				}
 
 				if resp.StatusCode >= 400 {
