@@ -69,48 +69,47 @@ async function add(args: string[], options: Record<string, string>) {
 async function update(args: string[], options: Record<string, string>) {
   const importMap = await loadImportMap();
   const latest = "latest" in options;
-  const toUpdate =
-    (args.length === 0
-      ? Object.keys(importMap.imports).filter((name) =>
-        importMap.imports[name].startsWith(`${importUrl.origin}/`)
-      ).map((name) => {
-        let version: string;
-        if (latest) {
-          version = "latest";
+  const toUpdate = args.length === 0
+    ? Object.keys(importMap.imports).filter((name) =>
+      importMap.imports[name].startsWith(`${importUrl.origin}/`)
+    ).map((name) => {
+      let version: string;
+      if (latest) {
+        version = "latest";
+      } else {
+        const url = importMap.imports[name];
+        const [, v] = url.match(/@(\d+\.\d+\.\d+(-[a-z0-9\-\.]+)?)/)!;
+        if (!v.includes("-")) {
+          version = v.split(".").slice(0, 2).join(".");
         } else {
-          const url = importMap.imports[name];
-          const [, v] = url.match(/@(\d+\.\d+\.\d+(-[a-z0-9\-\.]+)?)/)!;
-          if (!v.includes("-")) {
-            version = v.split(".").slice(0, 2).join(".");
-          } else {
-            version = v;
-          }
+          version = v;
         }
-        return `${name}@${version}`;
-      })
-      : args.filter((name) =>
-        name in importMap.imports ||
-        name.slice(0, name.lastIndexOf("@")) in importMap.imports
-      ).map((name) => {
-        let version: string;
-        if ((name.startsWith("@") ? name.slice(1) : name).includes("@")) {
-          const a = name.split("@");
-          version = a.pop()!;
-          name = a.join("@");
-        } else if (latest) {
-          version = "latest";
+      }
+      return `${name}@${version}`;
+    })
+    : args.filter((name) =>
+      name in importMap.imports ||
+      name.slice(0, name.lastIndexOf("@")) in importMap.imports
+    ).map((name) => {
+      let version: string;
+      if ((name.startsWith("@") ? name.slice(1) : name).includes("@")) {
+        const a = name.split("@");
+        version = a.pop()!;
+        name = a.join("@");
+      } else if (latest) {
+        version = "latest";
+      } else {
+        const url = importMap.imports[name] ??
+          importMap.imports[name.slice(0, name.lastIndexOf("@"))];
+        const [, v] = url.match(/@(\d+\.\d+\.\d+(-[a-z0-9\-\.]+)?)/)!;
+        if (!v.includes("-")) {
+          version = v.split(".").slice(0, 2).join(".");
         } else {
-          const url = importMap.imports[name] ??
-            importMap.imports[name.slice(0, name.lastIndexOf("@"))];
-          const [, v] = url.match(/@(\d+\.\d+\.\d+(-[a-z0-9\-\.]+)?)/)!;
-          if (!v.includes("-")) {
-            version = v.split(".").slice(0, 2).join(".");
-          } else {
-            version = v;
-          }
+          version = v;
         }
-        return `${name}@${version}`;
-      }));
+      }
+      return `${name}@${version}`;
+    });
   const pkgs = (await Promise.all(toUpdate.map(fetchPkgInfo))).filter(
     Boolean,
   ) as Package[];
@@ -229,6 +228,7 @@ async function fetchPkgInfo(query: string): Promise<Package | null> {
 
   if (!res.ok) {
     console.error(`%cerror%c: Failed to fetch "${pkgName}"`, "color:red", "");
+    console.error(await res.text());
     Deno.exit(1);
   }
 
