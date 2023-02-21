@@ -135,17 +135,7 @@ func (task *BuildTask) Build() (esm *ESM, err error) {
 
 	task.stage = "install"
 	for i := 0; i < 3; i++ {
-		err = yarnAdd(task.wd, fmt.Sprintf("%s@%s", task.Pkg.Name, task.Pkg.Version))
-		if err == nil && !fileExists(path.Join(task.wd, "node_modules", task.Pkg.Name, "package.json")) {
-			defer yarnCacheClean(task.Pkg.Name)
-			err = fmt.Errorf("yarnAdd(%s): package.json not found", task.Pkg)
-		}
-		if err == nil {
-			break
-		}
-		if i < 2 {
-			time.Sleep(100 * time.Millisecond)
-		}
+		err = yarnAdd(task.wd, task.Pkg)
 	}
 	if err != nil {
 		return
@@ -197,8 +187,6 @@ func (task *BuildTask) build(marker *stringSet) (esm *ESM, err error) {
 		buf := bytes.NewBuffer(nil)
 		importPath := task.Pkg.ImportPath()
 		fmt.Fprintf(buf, `import * as __module from "%s";`, importPath)
-		// Default reexport all members from original module to prevent missing named exports members
-		fmt.Fprintf(buf, `export * from "%s";`, importPath)
 		if len(esm.Exports) > 0 {
 			var exports []string
 			for _, k := range esm.Exports {
@@ -214,6 +202,8 @@ func (task *BuildTask) build(marker *stringSet) (esm *ESM, err error) {
 		}
 		fmt.Fprintf(buf, "const { default: __default, ...__rest } = __module;")
 		fmt.Fprintf(buf, "export default (__default !== undefined ? __default : __rest);")
+		// Default reexport all members from original module to prevent missing named exports members
+		fmt.Fprintf(buf, `export * from "%s";`, importPath)
 		input = &api.StdinOptions{
 			Contents:   buf.String(),
 			ResolveDir: task.wd,
@@ -775,19 +765,7 @@ esbuild:
 						if _, ok := builtInNodeModules[name]; !ok {
 							pkg, _, err := validatePkgPath(name)
 							if err == nil && !fileExists(path.Join(task.wd, "node_modules", pkg.Name, "package.json")) {
-								for i := 0; i < 3; i++ {
-									err = yarnAdd(task.wd, fmt.Sprintf("%s@%s", pkg.Name, pkg.Version))
-									if err == nil && !fileExists(path.Join(task.wd, "node_modules", pkg.Name, "package.json")) {
-										defer yarnCacheClean(pkg.Name)
-										err = fmt.Errorf("yarnAdd(%s): package.json not found", pkg)
-									}
-									if err == nil {
-										break
-									}
-									if i < 2 {
-										time.Sleep(100 * time.Millisecond)
-									}
-								}
+								err = yarnAdd(task.wd, pkg)
 							}
 							if err == nil {
 								dep, depNpm, err := initModule(task.wd, pkg, task.Target, task.DevMode)

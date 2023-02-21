@@ -32,6 +32,7 @@ var requireModeAllowList = []string{
 	"lz-string",
 	"maplibre-gl",
 	"postcss-selector-parser",
+	"react-draggable",
 	"resolve",
 	"safe-buffer",
 	"seedrandom",

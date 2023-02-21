@@ -351,6 +351,9 @@ func fetchPackageInfo(name string, version string) (info NpmPackage, err error) 
 		time.Sleep(10 * time.Millisecond)
 	}
 
+	lock.Store(id, struct{}{})
+	defer lock.Delete(id)
+
 	// check cache firstly
 	if cache != nil {
 		var data []byte
@@ -362,9 +365,6 @@ func fetchPackageInfo(name string, version string) (info NpmPackage, err error) 
 			log.Error("cache:", err)
 		}
 	}
-
-	lock.Store(id, struct{}{})
-	defer lock.Delete(id)
 
 	start := time.Now()
 	req, err := http.NewRequest("GET", strings.TrimRight(cfg.NpmRegistry, "/")+"/"+name, nil)
@@ -576,7 +576,24 @@ func installNodejs(dir string, version string) (err error) {
 	return
 }
 
-func yarnAdd(wd string, packages ...string) (err error) {
+func yarnAdd(wd string, pkg Pkg) (err error) {
+	for i := 0; i < 3; i++ {
+		err = runYarnAdd(wd, fmt.Sprintf("%s@%s", pkg.Name, pkg.Version))
+		if err == nil && !fileExists(path.Join(wd, "node_modules", pkg.Name, "package.json")) {
+			yarnCacheClean(pkg.Name)
+			err = fmt.Errorf("yarnAdd(%s): package.json not found", pkg)
+		}
+		if err == nil {
+			break
+		}
+		if i < 2 {
+			time.Sleep(100 * time.Millisecond)
+		}
+	}
+	return
+}
+
+func runYarnAdd(wd string, packages ...string) (err error) {
 	if len(packages) > 0 {
 		start := time.Now()
 		args := []string{
@@ -602,13 +619,11 @@ func yarnAdd(wd string, packages ...string) (err error) {
 		if yarnMutex != "" {
 			args = append(args, "--mutex", yarnMutex)
 		}
-
 		cmd := exec.Command("yarn", append(args, packages...)...)
 		cmd.Dir = wd
 		if cfg.NpmToken != "" {
 			cmd.Env = append(os.Environ(), "ESM_NPM_TOKEN="+cfg.NpmToken)
 		}
-
 		output, err := cmd.CombinedOutput()
 		if err != nil {
 			return fmt.Errorf("yarn add %s: %s", strings.Join(packages, ","), string(output))
@@ -630,11 +645,9 @@ func yarnCacheClean(packages ...string) {
 			args = append(args, "--mutex", yarnMutex)
 		}
 		cmd := exec.Command("yarn", append(args, packages...)...)
-		output, err := cmd.CombinedOutput()
+		_, err := cmd.CombinedOutput()
 		if err != nil {
 			log.Warnf("yarn cache clean %s: %s", strings.Join(packages, ","), err)
-		} else {
-			log.Debugf("yarn cache clean %s: %s", strings.Join(packages, ","), string(output))
 		}
 	}
 }

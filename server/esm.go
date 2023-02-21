@@ -190,6 +190,19 @@ func initModule(wd string, pkg Pkg, target string, isDev bool) (esm *ESM, npm Np
 	}
 
 	if npm.Main != "" {
+		// install peer dependencies when using `requireMode`
+		if includes(requireModeAllowList, pkg.Name) && len(npm.PeerDependencies) > 0 {
+			pkgs := make([]string, len(npm.PeerDependencies))
+			i := 0
+			for n, v := range npm.PeerDependencies {
+				pkgs[i] = n + "@" + v
+				i++
+			}
+			err = runYarnAdd(wd, pkgs...)
+			if err != nil {
+				return
+			}
+		}
 		var ret cjsExportsResult
 		ret, err = parseCJSModuleExports(wd, pkg.ImportPath(), nodeEnv)
 		if err == nil && ret.Error != "" {
