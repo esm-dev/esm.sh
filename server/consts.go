@@ -2,17 +2,17 @@ package server
 
 const (
 	// esm.sh build version
-	VERSION          = 106
+	VERSION          = 107
 	nodejsMinVersion = 16
-	denoStdVersion   = "0.175.0"
-	nodejsLatestLTS  = "16.18.1"
-	nodeTypesVersion = "16.18.10"
+	denoStdVersion   = "0.177.0"
+	nodejsLatestLTS  = "16.19.1"
+	nodeTypesVersion = "16.18.12"
 )
 
 // fix some package versions
 var fixedPkgVersions = map[string]string{
 	"@types/react@17": "17.0.53",
-	"@types/react@18": "18.0.27",
+	"@types/react@18": "18.0.28",
 	"isomorphic-ws@4": "5.0.0",
 }
 
