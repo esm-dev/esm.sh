@@ -7,7 +7,7 @@ import (
 
 	"github.com/evanw/esbuild/pkg/api"
 	"github.com/ije/esbuild-internal/compat"
-	"github.com/mssola/user_agent"
+	"github.com/mssola/useragent"
 )
 
 var regexpBrowserVersion = regexp.MustCompile(`^(\d+)(?:\.(\d+))?(?:\.(\d+))?$`)
@@ -175,7 +175,7 @@ func getEngineInfo(ua string) (name string, version string) {
 			return "Chrome", v[15:]
 		}
 	}
-	return user_agent.New(ua).Browser()
+	return useragent.New(ua).Browser()
 }
 
 func getTargetByUA(ua string) string {
