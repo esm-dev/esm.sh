@@ -114,7 +114,7 @@ func Load(filename string) (*Config, error) {
 		cfg.LogLevel = "info"
 	}
 	if cfg.NpmCDN == "" {
-		cfg.NpmCDN = "https://cdn.jsdelivr.net/npm"
+		cfg.NpmCDN = "https://esm.sh"
 	}
 
 	return cfg, nil
@@ -136,7 +136,7 @@ func Default() *Config {
 		Storage:          fmt.Sprintf("local:%s", path.Join(workDir, "storage")),
 		LogDir:           path.Join(workDir, "log"),
 		LogLevel:         "info",
-		NpmCDN:           "https://cdn.jsdelivr.net/npm",
+		NpmCDN:           "https://esm.sh",
 	}
 }
 

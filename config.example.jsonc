@@ -48,8 +48,8 @@
   // The npm token for private packages, default is empty.
   "npmToken": "",
 
-  // The npm cdn to fetch non-module files, default is "https://unpkg.com".
-  "npmCDN": "https://unpkg.com",
+  // The npm cdn to fetch non-module files, default is "https://esm.sh".
+  "npmCDN": "https://esm.sh",
 
   // Disable compressing the response, default is false.
   "noCompress": false,
