@@ -1,5 +1,19 @@
 # Change Log
 
+## v107
+
+- Add `?cjs-export` query (close [#512](https://github.com/ije/esm.sh/issues/512))<br>
+  If you get an error like `...not provide an export named...`, that means esm.sh can not resolve CJS exports of the module correctly. You can add `?cjs-exports=foo,bar` query to specify the export names:
+  ```javascript
+  import { NinetyRing, NinetyRingWithBg } from "https://esm.sh/react-svg-spinners@0.3.1?cjs-exports=NinetyRing,NinetyRingWithBg"
+  ```
+- Update `requireModeAllowList` (close [#520](https://github.com/ije/esm.sh/issues/520))
+- **Remove** `?sourcemap` query, always generate source map as inline url.
+- Default export all members from original module to prevent missing named exports members ([#522](https://github.com/ije/esm.sh/pull/522))
+- Only apply patch if types are missing in preact ([#523](https://github.com/ije/esm.sh/pull/523))
+- Upgrade `esbuild` to **0.17.10**.
+- Upgrade `deno/std` to **0.177.0**
+
 ## v106
 
 - Just fix fake module export names resolving (close [#510](https://github.com/ije/esm.sh/issues/510))

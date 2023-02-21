@@ -71,8 +71,8 @@ Import maps supports [**trailing slash**](https://github.com/WICG/import-maps#pa
 ```json
 {
   "imports": {
-    "react-dom": "https://esm.sh/react-dom@18.2.0?pin=v106&dev",
-    "react-dom/": "https://esm.sh/react-dom@18.2.0&pin=v106&dev/",
+    "react-dom": "https://esm.sh/react-dom@18.2.0?pin=v107&dev",
+    "react-dom/": "https://esm.sh/react-dom@18.2.0&pin=v107&dev/",
   }
 }
 ```
@@ -242,7 +242,7 @@ To ensure stable and consistent behavior, you may want to pin the build version 
 The `?pin` query allows you to specify a specific build version of a module, which is an **immutable** cached version stored on the esm.sh CDN.
 
 ```javascript
-import React from "https://esm.sh/react@17.0.2?pin=v106"
+import React from "https://esm.sh/react@17.0.2?pin=v107"
 ```
 
 By using the `?pin` query in the import statement, you can rest assured that the version of the module you're using will not change, even if updates are pushed to the esm.sh server. This helps ensure the stability and reliability of your application.
