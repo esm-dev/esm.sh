@@ -268,6 +268,13 @@ func esmHandler() rex.Handle {
 			return rex.Redirect(url, http.StatusFound)
 		}
 
+		// redirect to css for CSS packages
+		css := cssPackages[reqPkg.Name]
+		if css != "" && reqPkg.Submodule == "" {
+			url := fmt.Sprintf("%s%s/%s/%s", reqOrigin, cfg.BasePath, reqPkg.String(), css)
+			return rex.Redirect(url, http.StatusFound)
+		}
+
 		// support `/react-dom@18.2.0&external=react&dev/client` with query `external=react&dev`
 		if unQuery != "" {
 			qs := []string{unQuery}

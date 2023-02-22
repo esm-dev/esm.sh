@@ -16,6 +16,13 @@ var fixedPkgVersions = map[string]string{
 	"isomorphic-ws@4": "5.0.0",
 }
 
+// css packages
+var cssPackages = map[string]string{
+	"normalize.css": "normalize.css",
+	"@unocss/reset": "tailwind.css",
+	"reset-css":     "reset.css",
+}
+
 // stable build for UI libraries like react, to make sure the runtime is single copy
 var stableBuild = map[string]bool{
 	"react":  true,
