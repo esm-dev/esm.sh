@@ -263,7 +263,7 @@ func (task *BuildTask) build(marker *stringSet) (esm *ESM, err error) {
 					specifier = strings.TrimPrefix(specifier, "node:")
 
 					// use `browser` field
-					if len(npm.Browser) > 0 && task.Target != "deno" && task.Target != "node" {
+					if len(npm.Browser) > 0 && task.Target != "deno" && task.Target != "deno-legacy" && task.Target != "node" {
 						spec := specifier
 						if strings.HasPrefix(specifier, "./") || strings.HasPrefix(specifier, "../") || specifier == ".." {
 							fullpath := path.Join(path.Dir(args.Importer), specifier)
@@ -311,7 +311,7 @@ func (task *BuildTask) build(marker *stringSet) (esm *ESM, err error) {
 							}, nil
 						} else if m, ok := v.(map[string]interface{}); ok {
 							targets := []string{"browser", "default", "node"}
-							if task.Target == "deno" || task.Target == "node" {
+							if task.Target == "deno" || task.Target == "deno-legacy" || task.Target == "node" {
 								targets = []string{"node", "default", "browser"}
 							}
 							for _, t := range targets {
@@ -634,19 +634,25 @@ esbuild:
 					}
 					importPath = task.getImportPath(subPkg, encodeBuildArgsPrefix(subTask.BuildArgs, subTask.Pkg.Name, false))
 				}
-				// is node builtin `buffer` module
+				// node builtin `buffer` module
 				if importPath == "" && name == "buffer" {
-					if task.Target == "node" {
-						importPath = "buffer"
+					if task.Target == "node" || task.Target == "deno" {
+						importPath = "npm:buffer"
 					} else {
 						importPath = fmt.Sprintf("%s/v%d/node_buffer.js", cfg.BasePath, task.BuildVersion)
 					}
 				}
-				// is node builtin module
+				// node builtin module
 				if importPath == "" && builtInNodeModules[name] {
 					if task.Target == "node" {
-						importPath = name
+						importPath = fmt.Sprintf("node:%s", name)
 					} else if task.Target == "deno" && denoStdNodeModules[name] {
+						if denoUnspportedNodeModules[name] {
+							importPath = fmt.Sprintf("https://deno.land/std@%s/node/%s.ts", denoStdVersion, name)
+						} else {
+							importPath = fmt.Sprintf("node:%s", name)
+						}
+					} else if task.Target == "deno-legacy" && denoStdNodeModules[name] {
 						importPath = fmt.Sprintf("https://deno.land/std@%s/node/%s.ts", task.denoStdVersion, name)
 					} else {
 						polyfill, ok := polyfilledBuiltInNodeModules[name]
@@ -876,6 +882,8 @@ esbuild:
 				}
 				if ids.Has("__Process$") {
 					if task.Target == "deno" {
+						fmt.Fprintf(buf, `import __Process$ from "node:process";%s`, eol)
+					} else if task.Target == "deno-legacy" {
 						fmt.Fprintf(buf, `import __Process$ from "https://deno.land/std@%s/node/process.ts";%s`, task.denoStdVersion, eol)
 					} else {
 						fmt.Fprintf(buf, `import __Process$ from "%s/v%d/node_process.js";%s`, cfg.BasePath, task.BuildVersion, eol)
@@ -883,6 +891,8 @@ esbuild:
 				}
 				if ids.Has("__Buffer$") {
 					if task.Target == "deno" {
+						fmt.Fprintf(buf, `import __Buffer$ from "node:buffer";%s`, eol)
+					} else if task.Target == "deno-legacy" {
 						fmt.Fprintf(buf, `import  { Buffer as __Buffer$ } from "https://deno.land/std@%s/node/buffer.ts";%s`, task.denoStdVersion, eol)
 					} else {
 						fmt.Fprintf(buf, `import { Buffer as __Buffer$ } from "%s/v%d/node_buffer.js";%s`, cfg.BasePath, task.BuildVersion, eol)
@@ -899,7 +909,7 @@ esbuild:
 				}
 			}
 
-			if task.Target == "deno" {
+			if task.Target == "deno" || task.Target == "deno-legacy" {
 				if task.DevMode {
 					outputContent = bytes.Replace(outputContent, []byte("typeof window !== \"undefined\""), []byte("typeof document !== \"undefined\""), -1)
 				} else {
@@ -912,7 +922,7 @@ esbuild:
 				return
 			}
 
-			if task.BundleMode && task.Target != "deno" {
+			if task.BundleMode && task.Target != "deno" && task.Target != "deno-legacy" {
 				options.Plugins = []api.Plugin{esmBundlerPlugin}
 				options.EntryPoints = nil
 				options.Stdin = &api.StdinOptions{

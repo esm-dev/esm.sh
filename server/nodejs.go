@@ -109,7 +109,11 @@ var polyfilledBuiltInNodeModules = map[string]string{
 	"zlib":           "browserify-zlib",
 }
 
-// status: https://deno.land/std/node
+var denoUnspportedNodeModules = map[string]bool{
+	"inspector": true,
+}
+
+// @ref https://deno.land/std@0.177.0/node
 var denoStdNodeModules = map[string]bool{
 	"assert":              true,
 	"assert/strict":       true,
@@ -337,6 +341,9 @@ func fetchPackageInfo(name string, version string) (info NpmPackage, err error) 
 		name = a[0] + "/" + a[1]
 	}
 
+	if strings.HasPrefix(version, "=") || strings.HasPrefix(version, "v") {
+		version = version[1:]
+	}
 	if version == "" {
 		version = "latest"
 	}
@@ -494,8 +501,9 @@ func resolvePackageExports(p *NpmPackage, conditions interface{}, target string,
 
 	m, ok := conditions.(map[string]interface{})
 	if ok {
+		targetDeno := target == "deno" || target == "deno-legacy"
 		names := []string{"browser", "module", "import", "es2015", "worker"}
-		if target == "deno" {
+		if targetDeno {
 			names = []string{"deno", "worker", "module", "import", "es2015", "browser"}
 		}
 		if pType == "module" {
@@ -505,7 +513,7 @@ func resolvePackageExports(p *NpmPackage, conditions interface{}, target string,
 			names = append(names, "default")
 		}
 		// support solid.js (<=1.6) for deno target
-		if (p.Name == "solid-js" || strings.HasPrefix(p.Name, "solid-js/")) && target == "deno" {
+		if (p.Name == "solid-js" || strings.HasPrefix(p.Name, "solid-js/")) && targetDeno {
 			names = append([]string{"deno", "worker", "node"}, names...)
 		}
 		for _, name := range names {

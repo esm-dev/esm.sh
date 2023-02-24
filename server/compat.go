@@ -5,6 +5,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/Masterminds/semver/v3"
 	"github.com/evanw/esbuild/pkg/api"
 	"github.com/ije/esbuild-internal/compat"
 	"github.com/mssola/useragent"
@@ -13,17 +14,18 @@ import (
 var regexpBrowserVersion = regexp.MustCompile(`^(\d+)(?:\.(\d+))?(?:\.(\d+))?$`)
 
 var targets = map[string]api.Target{
-	"es2015": api.ES2015,
-	"es2016": api.ES2016,
-	"es2017": api.ES2017,
-	"es2018": api.ES2018,
-	"es2019": api.ES2019,
-	"es2020": api.ES2020,
-	"es2021": api.ES2021,
-	"es2022": api.ES2022,
-	"esnext": api.ESNext,
-	"node":   api.ESNext,
-	"deno":   api.ESNext,
+	"es2015":      api.ES2015,
+	"es2016":      api.ES2016,
+	"es2017":      api.ES2017,
+	"es2018":      api.ES2018,
+	"es2019":      api.ES2019,
+	"es2020":      api.ES2020,
+	"es2021":      api.ES2021,
+	"es2022":      api.ES2022,
+	"esnext":      api.ESNext,
+	"deno":        api.ESNext,
+	"deno-legacy": api.ESNext,
+	"node":        api.ESNext,
 }
 
 var engines = map[string]api.EngineName{
@@ -178,11 +180,17 @@ func getEngineInfo(ua string) (name string, version string) {
 	return useragent.New(ua).Browser()
 }
 
+var deno131 = semver.MustParse("1.31.0")
+
 func getTargetByUA(ua string) string {
 	if ua == "" || strings.HasPrefix(ua, "curl/") {
 		return "esnext"
 	}
 	if strings.HasPrefix(ua, "Deno/") {
+		uaVersion, err := semver.NewVersion(strings.TrimPrefix(ua, "Deno/"))
+		if err == nil && uaVersion.LessThan(deno131) {
+			return "deno-legacy"
+		}
 		return "deno"
 	}
 	if strings.HasPrefix(ua, "Node/") {
