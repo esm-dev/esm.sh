@@ -2,6 +2,7 @@ package server
 
 import (
 	"bytes"
+	"encoding/json"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -243,6 +244,31 @@ func esmHandler() rex.Handle {
 				status = 404
 			}
 			return rex.Status(status, message)
+		}
+
+		// redirect `/v107/$PKG/es2022/foo.wasm` to `$PKG/$PKG/foo.wasm`
+		if hasBuildVerPrefix && strings.HasSuffix(reqPkg.Submodule, ".wasm") {
+			f, err := fs.OpenFile(path.Join("raw", reqPkg.Name+"@"+reqPkg.Version, "__esm_meta.json"))
+			if err != nil {
+				return rex.Status(500, err.Error())
+			}
+			defer f.Close()
+			var meta map[string]interface{}
+			if json.NewDecoder(f).Decode(&meta) == nil {
+				if v, ok := meta["files"]; ok {
+					if files, ok := v.([]interface{}); ok {
+						wasmName := path.Base(reqPkg.Submodule)
+						for _, v := range files {
+							if fp, ok := v.(string); ok {
+								if path.Base(fp) == wasmName {
+									url := fmt.Sprintf("%s%s/%s@%s/%s", cdnOrigin, cfg.BasePath, reqPkg.Name, reqPkg.Version, fp)
+									return rex.Redirect(url, http.StatusFound)
+								}
+							}
+						}
+					}
+				}
+			}
 		}
 
 		// redirect `/@types/` to `.d.ts` files

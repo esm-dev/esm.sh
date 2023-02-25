@@ -134,9 +134,7 @@ func (task *BuildTask) Build() (esm *ESM, err error) {
 	}()
 
 	task.stage = "install"
-	for i := 0; i < 3; i++ {
-		err = yarnAdd(task.wd, task.Pkg)
-	}
+	err = yarnAdd(task.wd, task.Pkg)
 	if err != nil {
 		return
 	}
@@ -971,6 +969,19 @@ esbuild:
 
 	task.checkDTS(esm, npm)
 	task.storeToDB(esm)
+
+	list, err := readDir(path.Join(task.wd, "node_modules", npm.Name))
+	if err == nil {
+		meta := map[string]interface{}{
+			"name":    npm.Name,
+			"version": npm.Version,
+			"css":     esm.PackageCSS,
+			"dts":     esm.Dts,
+			"files":   list,
+		}
+		data := bytes.NewReader(utils.MustEncodeJSON(meta))
+		fs.WriteFile(path.Join("raw", fmt.Sprintf("%s@%s", npm.Name, npm.Version), "__esm_meta.json"), data)
+	}
 	return
 }
 

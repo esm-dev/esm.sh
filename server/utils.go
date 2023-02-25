@@ -7,6 +7,7 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"path/filepath"
 	"regexp"
 	"strconv"
 	"strings"
@@ -110,6 +111,24 @@ func ensureDir(dir string) (err error) {
 		err = os.MkdirAll(dir, 0755)
 	}
 	return
+}
+
+func readDir(root string) ([]string, error) {
+	rootDir, err := filepath.Abs(root)
+	if err != nil {
+		return nil, err
+	}
+	var files []string
+	err = filepath.Walk(rootDir, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+		if !info.IsDir() {
+			files = append(files, strings.TrimPrefix(path, rootDir+"/"))
+		}
+		return nil
+	})
+	return files, err
 }
 
 func clearDir(dir string) (err error) {
