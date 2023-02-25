@@ -18,7 +18,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v2
         with:
-          node-version: 16.16
+          node-version: 16.19
 
       - name: Install Go
         uses: actions/setup-go@v2
