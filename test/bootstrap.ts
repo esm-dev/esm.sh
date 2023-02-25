@@ -1,3 +1,4 @@
+#!/usr/bin/env -S deno run --allow-run --allow-read --allow-write --allow-net
 async function startEsmServer(onStart: () => void, single: boolean) {
   await run("go", "build", "-o", "esmd", "main.go");
   const p = Deno.run({
