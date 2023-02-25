@@ -4,7 +4,7 @@ import {
 
 Deno.test("`?deno-std` query", async () => {
   const entryCode = await fetch(
-    `http://localhost:8080/postcss@8.4.14?target=deno-legacy&deno-std=0.128.0`,
+    `http://localhost:8080/postcss@8.4.14?target=deno&deno-std=0.128.0`,
   ).then((res) => res.text());
   const url = new URL(entryCode.split('"')[1]);
   assertStringIncludes(
