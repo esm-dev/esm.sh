@@ -124,7 +124,10 @@ func readDir(root string) ([]string, error) {
 			return err
 		}
 		if !info.IsDir() {
-			files = append(files, strings.TrimPrefix(path, rootDir+"/"))
+			name := strings.TrimPrefix(path, rootDir+"/")
+			if !strings.HasPrefix(name, "node_modules/") && !strings.HasPrefix(name, ".") {
+				files = append(files, name)
+			}
 		}
 		return nil
 	})
