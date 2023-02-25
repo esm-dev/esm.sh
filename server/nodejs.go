@@ -501,7 +501,7 @@ func resolvePackageExports(p *NpmPackage, conditions interface{}, target string,
 
 	m, ok := conditions.(map[string]interface{})
 	if ok {
-		targetDeno := target == "deno" || target == "deno-legacy"
+		targetDeno := target == "deno" || target == "denonext"
 		names := []string{"browser", "module", "import", "es2015", "worker"}
 		if targetDeno {
 			names = []string{"deno", "worker", "module", "import", "es2015", "browser"}
