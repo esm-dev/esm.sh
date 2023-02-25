@@ -1,10 +1,10 @@
 import {
   assertStringIncludes,
-} from "https://deno.land/std@0.170.0/testing/asserts.ts";
+} from "https://deno.land/std@0.178.0/testing/asserts.ts";
 
 Deno.test("`?deno-std` query", async () => {
   const entryCode = await fetch(
-    `http://localhost:8080/postcss@8.4.14?deno-std=0.128.0`,
+    `http://localhost:8080/postcss@8.4.14?target=denold&deno-std=0.128.0`,
   ).then((res) => res.text());
   const url = new URL(entryCode.split('"')[1]);
   assertStringIncludes(

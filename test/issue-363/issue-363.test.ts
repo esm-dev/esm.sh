@@ -1,4 +1,4 @@
-import { assertEquals } from "https://deno.land/std@0.170.0/testing/asserts.ts";
+import { assertEquals } from "https://deno.land/std@0.178.0/testing/asserts.ts";
 
 import { fs } from "http://localhost:8080/memfs";
 

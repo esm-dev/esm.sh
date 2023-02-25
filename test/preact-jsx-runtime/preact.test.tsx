@@ -1,6 +1,6 @@
 /** @jsxImportSource http://localhost:8080/preact */
 
-import { assert } from "https://deno.land/std@0.170.0/testing/asserts.ts";
+import { assert } from "https://deno.land/std@0.178.0/testing/asserts.ts";
 
 import { useState } from "http://localhost:8080/preact/hooks";
 import render from "http://localhost:8080/preact-render-to-string";

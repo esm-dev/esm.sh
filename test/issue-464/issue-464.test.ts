@@ -1,4 +1,4 @@
-import { assertEquals } from "https://deno.land/std@0.170.0/testing/asserts.ts";
+import { assertEquals } from "https://deno.land/std@0.178.0/testing/asserts.ts";
 
 // shim document.createTreeWalker and HTMLElement class
 class HTMLElement {}

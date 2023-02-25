@@ -144,7 +144,7 @@ if (import.meta.main) {
     } else {
       await runCliTest();
       for await (const entry of Deno.readDir("./test")) {
-        if (entry.isDirectory) {
+        if (entry.isDirectory && !entry.name.startsWith("_")) {
           await runTest(entry.name);
         }
       }

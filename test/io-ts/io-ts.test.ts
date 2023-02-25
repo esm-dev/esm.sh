@@ -1,4 +1,4 @@
-import { assert } from "https://deno.land/std@0.170.0/testing/asserts.ts";
+import { assert } from "https://deno.land/std@0.178.0/testing/asserts.ts";
 
 import * as t from "http://localhost:8080/io-ts";
 import { isRight } from "http://localhost:8080/fp-ts/lib/Either";
