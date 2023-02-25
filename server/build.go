@@ -256,13 +256,17 @@ func (task *BuildTask) build(marker *stringSet) (esm *ESM, err error) {
 						return api.OnResolveResult{External: true}, nil
 					}
 
+					// ignore `require()` expression
+					if task.ignoreRequire && (args.Kind == api.ResolveJSRequireCall || args.Kind == api.ResolveJSRequireResolve) && npm.Module != "" {
+						return api.OnResolveResult{Path: args.Path, External: true}, nil
+					}
+
 					// strip the tailing slash
 					specifier := strings.TrimSuffix(args.Path, "/")
-
-					// resolve nodejs builtin modules like `node:path`
+					// strip the `node:` prefix
 					specifier = strings.TrimPrefix(specifier, "node:")
 
-					// use `browser` field
+					// use `browser` field of package.json
 					if len(npm.Browser) > 0 && task.Target != "deno" && task.Target != "deno-legacy" && task.Target != "node" {
 						spec := specifier
 						if strings.HasPrefix(specifier, "./") || strings.HasPrefix(specifier, "../") || specifier == ".." {
@@ -292,7 +296,7 @@ func (task *BuildTask) build(marker *stringSet) (esm *ESM, err error) {
 						}
 					}
 
-					// bundles all dependencies in `bundle` mode, apart from peer dependencies
+					// bundles all dependencies in `bundle` mode, apart from peer dependencies and `?external` query
 					if task.BundleMode && !extraExternal.Has(specifier) && !task.external.Has(specifier) {
 						pkgName, _ := splitPkgPath(specifier)
 						if !builtInNodeModules[pkgName] {
@@ -303,7 +307,7 @@ func (task *BuildTask) build(marker *stringSet) (esm *ESM, err error) {
 						}
 					}
 
-					// resolve path by `imports` in package.json
+					// resolve path by `imports` of package.json
 					if v, ok := npm.Imports[args.Path]; ok {
 						if s, ok := v.(string); ok {
 							return api.OnResolveResult{
@@ -389,7 +393,7 @@ func (task *BuildTask) build(marker *stringSet) (esm *ESM, err error) {
 							return api.OnResolveResult{}, nil
 						}
 
-						// bundle if this pkg has 'exports' definitions but the local module is not in 'exports'
+						// bundle if this pkg has 'exports' definitions
 						if npm.DefinedExports != nil && !reflect.ValueOf(npm.DefinedExports).IsNil() {
 							return api.OnResolveResult{}, nil
 						}
@@ -404,11 +408,6 @@ func (task *BuildTask) build(marker *stringSet) (esm *ESM, err error) {
 						specifier = strings.TrimPrefix(fullFilepath, filepath.Join(task.wd, "node_modules")+"/")
 						externalDeps.Add(specifier)
 						return api.OnResolveResult{Path: "__ESM_SH_EXTERNAL:" + specifier, External: true}, nil
-					}
-
-					// ignore `require()` of esm module
-					if task.ignoreRequire && (args.Kind == api.ResolveJSRequireCall || args.Kind == api.ResolveJSRequireResolve) && npm.Module != "" {
-						return api.OnResolveResult{Path: specifier, External: true}, nil
 					}
 
 					// dynamic external
