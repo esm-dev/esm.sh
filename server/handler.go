@@ -587,7 +587,7 @@ func esmHandler() rex.Handle {
 
 		isBare := false
 		isPkgCss := ctx.Form.Has("css")
-		isBundleMode := ctx.Form.Has("bundle")
+		isBundleMode := ctx.Form.Has("bundle") && !stableBuild[reqPkg.Name]
 		isDev := ctx.Form.Has("dev")
 		isPined := ctx.Form.Has("pin") || hasBuildVerPrefix
 		isWorker := ctx.Form.Has("worker")
