@@ -1,5 +1,24 @@
 # Change Log
 
+## v108
+
+- Add `denonext` target to use [deno 1.31 node compatibility layer](https://deno.com/blog/v1.31#compatibility-layer-is-now-part-of-the-runtime)
+- Redirect to css file for css packages
+  ```
+  https://esm.sh/normalize.css -> https://esm.sh/normalize.css/normalize.css
+  ```
+- Fix wasm packages can't get the wasm file.
+  ```js
+  import init, { transform } from "https://esm.sh/lightningcss-wasm";
+  // before: you need to specify the wasm file path
+  await init("https://esm.sh/lightningcss-wasm/lightningcss_node.wasm")
+  // after: you don't need to specify it
+  await init()
+  ```
+- Disable `bundle` mode for stable builds
+- Fix alias export (close [#527](https://github.com/ije/esm.sh/issues/527))
+- Update references to reqOrigin to use cdnOrigin ([#529](https://github.com/ije/esm.sh/pull/529) by [@jaredcwhite](https://github.com/jaredcwhite))
+
 ## v107
 
 - Add `?cjs-export` query (close [#512](https://github.com/ije/esm.sh/issues/512))<br>
