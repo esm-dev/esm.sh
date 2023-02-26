@@ -492,22 +492,30 @@ func (task *BuildTask) build(marker *stringSet) (esm *ESM, err error) {
 		},
 	}
 
-	// resolve alias export like: `export * from "./twind.js";`
 resolveAliasExport:
+	// resolve alias export like: `export * from "./twind.js";`
 	if entryPoint != "" {
 		fi, err := os.Lstat(entryPoint)
 		if err != nil {
 			return nil, err
 		}
-		if fi.Size() < 100 {
+		if fi.Size() < 128 {
 			data, err := ioutil.ReadFile(entryPoint)
 			if err != nil {
 				return nil, err
 			}
-			code := strings.TrimSpace(string(data))
-			matchs := regexpAliasExport.FindStringSubmatch(code)
+			ret := api.Transform(string(data), api.TransformOptions{
+				Format:            api.FormatESModule,
+				Target:            api.ESNext,
+				Platform:          api.PlatformBrowser,
+				LegalComments:     api.LegalCommentsNone,
+				MinifyWhitespace:  true,
+				MinifyIdentifiers: true,
+				MinifySyntax:      true,
+			})
+			matchs := regexpAliasExport.FindSubmatch(ret.Code)
 			if len(matchs) == 2 {
-				entryPoint = path.Join(path.Dir(entryPoint))
+				entryPoint = path.Join(path.Dir(entryPoint), string(matchs[1]))
 				goto resolveAliasExport
 			}
 		}

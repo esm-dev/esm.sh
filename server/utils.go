@@ -24,7 +24,7 @@ var (
 	regexpBuildVersionPath = regexp.MustCompile(`^/v\d+(/|$)`)
 	regexpLocPath          = regexp.MustCompile(`(\.js):\d+:\d+$`)
 	regexpJSIdent          = regexp.MustCompile(`^[a-zA-Z_$][\w$]*$`)
-	regexpAliasExport      = regexp.MustCompile(`^export\s*\*\s*from\s*['"](\.+/.+?)['"];?$`)
+	regexpAliasExport      = regexp.MustCompile(`^export\*from['"](\.\.?/.+?)['"];\s$`)
 	regexpGlobalIdent      = regexp.MustCompile(`__[a-zA-Z]+\$`)
 )
 
