@@ -111,9 +111,10 @@ func esmHandler() rex.Handle {
 			}
 			ctx.SetHeader("Cache-Control", "private, no-store, no-cache, must-revalidate")
 			return map[string]interface{}{
-				"ns":         string(out),
-				"uptime":     time.Since(startTime).String(),
 				"buildQueue": q[:i],
+				"ns":         string(out),
+				"version":    VERSION,
+				"uptime":     time.Since(startTime).String(),
 			}
 
 		case "/build-target":
