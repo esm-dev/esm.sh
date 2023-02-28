@@ -1,6 +1,9 @@
-import { assert } from "https://deno.land/std@0.178.0/testing/asserts.ts";
+import {
+  assert,
+  assertStringIncludes,
+} from "https://deno.land/std@0.178.0/testing/asserts.ts";
 
-import { renderToString } from "http://localhost:8080/react-dom@18/server";
+import { renderToString } from "http://localhost:8080/react-dom@18.2.0/server";
 
 Deno.test("react-jsx-runtime", async () => {
   const html = renderToString(
@@ -12,5 +15,12 @@ Deno.test("react-jsx-runtime", async () => {
     typeof html === "string" &&
       html.includes("<h1>Hi :)</h1>") &&
       html.includes("<main") && html.includes("</main>"),
+  );
+  const res = await fetch(
+    "http://localhost:8080/stable/react@18.2.0/deno/jsx-runtime.js",
+  );
+  assertStringIncludes(
+    await res.text(),
+    `"/stable/react@18.2.0/deno/react.js"`,
   );
 });

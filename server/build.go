@@ -328,6 +328,13 @@ func (task *BuildTask) build(marker *stringSet) (esm *ESM, err error) {
 						}
 					}
 
+					// externalize the main module
+					// e.g. "react/jsx-runtime" imports "react"
+					if task.Pkg.Submodule != "" && task.Pkg.Name == specifier {
+						externalDeps.Add(specifier)
+						return api.OnResolveResult{Path: "__ESM_SH_EXTERNAL:" + specifier, External: true}, nil
+					}
+
 					// bundle the package/module it self and the entrypoint
 					if specifier == task.Pkg.ImportPath() || specifier == entryPoint || specifier == path.Join(npm.Name, npm.Main) || specifier == path.Join(npm.Name, npm.Module) {
 						return api.OnResolveResult{}, nil
