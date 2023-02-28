@@ -394,7 +394,7 @@ func esmHandler() rex.Handle {
 				} else if len(strings.Split(pathname, "/")) > 2 {
 					storageType = "raw"
 				}
-			case ".jsx", ".ts", ".tsx":
+			case ".jsx", ".mjs", ".ts", ".mts", ".tsx":
 				if hasBuildVerPrefix && strings.HasSuffix(pathname, ".d.ts") {
 					storageType = "types"
 				} else if len(strings.Split(pathname, "/")) > 2 {
@@ -464,7 +464,7 @@ func esmHandler() rex.Handle {
 			if err != nil {
 				return rex.Status(500, err.Error())
 			}
-			if strings.HasSuffix(pathname, ".ts") {
+			if strings.HasSuffix(pathname, ".ts") || strings.HasSuffix(pathname, ".mts") {
 				ctx.SetHeader("Content-Type", "application/typescript")
 			}
 			ctx.SetHeader("Cache-Control", "public, max-age=31536000, immutable")
