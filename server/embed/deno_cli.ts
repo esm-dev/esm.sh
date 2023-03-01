@@ -18,7 +18,14 @@ const VERSION = /^\/v\d+$/.test(importUrl.pathname)
   ? importUrl.pathname.slice(1)
   : "v{VERSION}";
 
-let importMapFilepath = "import_map.json";
+// stable build for UI libraries like react, to make sure the runtime is single copy
+const stableBuild = new Set([
+  "react",
+  "preact",
+  "vue",
+]);
+
+let imFilename = "import_map.json";
 
 async function add(args: string[], options: Record<string, string>) {
   if (options.alias && args.length > 1) {
@@ -43,9 +50,7 @@ async function add(args: string[], options: Record<string, string>) {
   );
   await saveImportMap(importMap);
   console.log(
-    `Added ${pkgs.length} packages to %c${
-      importMapFilepath.split(/[\/\\]/g).pop()
-    }`,
+    `Added ${pkgs.length} packages to %c${imFilename.split(/[\/\\]/g).pop()}`,
     "color:blue",
   );
   if (pkgs.length > 0) {
@@ -158,7 +163,7 @@ async function init(args: string[], options: Record<string, string>) {
   const config = await getDenoConfig();
   const importMap = await loadImportMap();
   if (!isNEString(config.importMap)) {
-    config.importMap = importMapFilepath;
+    config.importMap = imFilename;
   }
   const tasks = config.tasks as undefined | Record<string, string>;
   config.tasks = {
@@ -251,7 +256,7 @@ async function fetchPkgInfo(query: string): Promise<Package | null> {
 async function loadImportMap(): Promise<ImportMap> {
   const importMap: ImportMap = { imports: {}, scopes: {} };
   try {
-    const raw = (await Deno.readTextFile(importMapFilepath)).trim();
+    const raw = (await Deno.readTextFile(imFilename)).trim();
     if (raw.startsWith("{") && raw.endsWith("}")) {
       const { imports, scopes } = JSON.parse(raw);
       if (imports) {
@@ -292,7 +297,7 @@ async function saveImportMap(importMap: ImportMap): Promise<void> {
 
   // write
   await Deno.writeTextFile(
-    importMapFilepath,
+    imFilename,
     JSON.stringify({ imports: sortedImports, scopes: sortedScopes }, null, 2),
   );
 }
@@ -352,10 +357,11 @@ function getPkgUrl(pkg: Package): [url: string, withExports: boolean] {
     Object.keys(exports).some((key) =>
       key.length >= 3 && key.startsWith("./") && key !== "./package.json"
     );
-
   if (
-    (dependencies && Object.keys(dependencies).length > 0) ||
-    (peerDependencies && Object.keys(peerDependencies).length > 0)
+    !stableBuild.has(name) && (
+      (dependencies && Object.keys(dependencies).length > 0) ||
+      (peerDependencies && Object.keys(peerDependencies).length > 0)
+    )
   ) {
     return [`${importUrl.origin}/${VERSION}/*${name}@${version}`, withExports];
   }
@@ -446,7 +452,7 @@ if (import.meta.main) {
   try {
     const config = await getDenoConfig();
     if (isNEString(config.importMap)) {
-      importMapFilepath = config.importMap;
+      imFilename = config.importMap;
     }
     await commands[command as keyof typeof commands](...parseFlags(args));
     console.log(`✨ Done in ${(performance.now() - start).toFixed(2)}ms`);
