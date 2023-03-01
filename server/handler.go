@@ -401,7 +401,7 @@ func esmHandler() rex.Handle {
 					// todo: transform ts/jsx/tsx for browsers
 					storageType = "raw"
 				}
-			case ".json", ".less", ".sass", ".scss", ".wasm", ".xml", ".yaml", ".md", ".svg", ".png", ".jpg", ".webp", ".gif", ".eot", ".ttf", ".otf", ".woff", ".woff2":
+			case ".wasm", ".less", ".sass", ".scss", ".html", ".htm", ".md", ".txt", ".json", ".xml", ".yml", ".yaml", ".svg", ".png", ".jpg", ".webp", ".gif", ".eot", ".ttf", ".otf", ".woff", ".woff2":
 				if len(strings.Split(pathname, "/")) > 2 {
 					storageType = "raw"
 				}
@@ -499,6 +499,8 @@ func esmHandler() rex.Handle {
 				}
 				if storageType == "types" {
 					ctx.SetHeader("Content-Type", "application/typescript; charset=utf-8")
+				} else if strings.HasSuffix(savePath, ".map") {
+					ctx.SetHeader("Content-Type", "application/json; charset=utf-8")
 				}
 				ctx.SetHeader("Cache-Control", "public, max-age=31536000, immutable")
 				if ctx.Form.Has("worker") && storageType == "builds" {
