@@ -102,6 +102,13 @@ func (task *BuildTask) getBuildVersion(pkg Pkg) string {
 	return fmt.Sprintf("v%d", task.BuildVersion)
 }
 
+func (task *BuildTask) getSavepath() string {
+	if stableBuild[task.Pkg.Name] {
+		return path.Join(fmt.Sprintf("builds/v%d", STABLE_VERSION), strings.TrimPrefix(task.ID(), "stable/"))
+	}
+	return path.Join("builds", task.ID())
+}
+
 func (task *BuildTask) Build() (esm *ESM, err error) {
 	prev, ok := queryESMBuild(task.ID())
 	if ok {
@@ -935,18 +942,18 @@ esbuild:
 			buf.WriteString(filepath.Base(task.ID()))
 			buf.WriteString(".map")
 
-			_, err = fs.WriteFile(path.Join("builds", task.ID()), buf)
+			_, err = fs.WriteFile(task.getSavepath(), buf)
 			if err != nil {
 				return
 			}
 		} else if strings.HasSuffix(file.Path, ".css") {
-			_, err = fs.WriteFile(path.Join("builds", strings.TrimSuffix(task.ID(), ".js")+".css"), bytes.NewReader(outputContent))
+			_, err = fs.WriteFile(strings.TrimSuffix(task.getSavepath(), ".js")+".css", bytes.NewReader(outputContent))
 			if err != nil {
 				return
 			}
 			esm.PackageCSS = true
 		} else if strings.HasSuffix(file.Path, ".map") {
-			_, err = fs.WriteFile(path.Join("builds", task.ID()+".map"), bytes.NewReader(outputContent))
+			_, err = fs.WriteFile(task.getSavepath()+".map", bytes.NewReader(outputContent))
 			if err != nil {
 				return
 			}

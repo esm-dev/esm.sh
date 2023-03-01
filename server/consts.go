@@ -2,7 +2,13 @@ package server
 
 const (
 	// esm.sh build version
-	VERSION          = 109
+	VERSION = 109
+	// esm.sh stable build version, used for UI libraries like react, to make sure the runtime is single copy
+	// change this carefully
+	STABLE_VERSION = 109
+)
+
+const (
 	nodejsMinVersion = 16
 	denoStdVersion   = "0.177.0"
 	nodejsLatestLTS  = "16.19.1"

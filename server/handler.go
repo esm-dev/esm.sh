@@ -477,7 +477,7 @@ func esmHandler() rex.Handle {
 			if outdatedBuildVer != "" {
 				savePath = path.Join(storageType, outdatedBuildVer, pathname)
 			} else if hasStablePrefix {
-				savePath = path.Join(storageType, "stable", pathname)
+				savePath = path.Join(storageType, fmt.Sprintf("v%d", STABLE_VERSION), pathname)
 			} else {
 				savePath = path.Join(storageType, fmt.Sprintf("v%d", VERSION), pathname)
 			}
@@ -820,7 +820,7 @@ func esmHandler() rex.Handle {
 		}
 
 		if isBare {
-			savePath := path.Join("builds", taskID)
+			savePath := task.getSavepath()
 			fi, err := fs.Stat(savePath)
 			if err != nil {
 				if err == storage.ErrNotFound {
@@ -833,7 +833,7 @@ func esmHandler() rex.Handle {
 				return rex.Status(500, err.Error())
 			}
 			ctx.SetHeader("Cache-Control", "public, max-age=31536000, immutable")
-			if isWorker && strings.HasSuffix(taskID, ".js") {
+			if isWorker && strings.HasSuffix(savePath, ".js") {
 				defer r.Close()
 				code, err := ioutil.ReadAll(r)
 				if err != nil {
