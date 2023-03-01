@@ -2,10 +2,10 @@ package server
 
 const (
 	// esm.sh build version
-	VERSION = 109
+	VERSION = 110
 	// esm.sh stable build version, used for UI libraries like react, to make sure the runtime is single copy
 	// change this carefully
-	STABLE_VERSION = 109
+	STABLE_VERSION = 110
 )
 
 const (
