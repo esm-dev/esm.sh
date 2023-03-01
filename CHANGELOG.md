@@ -1,5 +1,9 @@
 # Change Log
 
+## v110
+
+- Fix `Content-Type` header for dts files
+
 ## v109
 
 - Ignore `?external` option for stable builds
