@@ -1,5 +1,11 @@
 # Change Log
 
+## v109
+
+- Ignore `?external` option for stable builds
+- Fix `react/jsx-runtime` bundles `react` module
+- Remove alias export resolving (close [#530](https://github.com/ije/esm.sh/issues/530))
+
 ## v108
 
 - Add `denonext` target to use [deno 1.31 node compatibility layer](https://deno.com/blog/v1.31#compatibility-layer-is-now-part-of-the-runtime)

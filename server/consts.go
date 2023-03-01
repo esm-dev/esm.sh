@@ -2,7 +2,7 @@ package server
 
 const (
 	// esm.sh build version
-	VERSION          = 108
+	VERSION          = 109
 	nodejsMinVersion = 16
 	denoStdVersion   = "0.177.0"
 	nodejsLatestLTS  = "16.19.1"
