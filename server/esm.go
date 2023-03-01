@@ -223,6 +223,9 @@ func queryESMBuild(id string) (*ESM, bool) {
 		var esm ESM
 		err = json.Unmarshal(value, &esm)
 		if err == nil {
+			if strings.HasPrefix(id, "stable/") {
+				id = fmt.Sprintf("v%d/", STABLE_VERSION) + strings.TrimPrefix(id, "stable/")
+			}
 			_, err = fs.Stat(path.Join("builds", id))
 			if err == nil {
 				return &esm, true
