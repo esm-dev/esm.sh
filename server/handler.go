@@ -610,6 +610,11 @@ func esmHandler() rex.Handle {
 			}
 		}
 
+		// ignore `?external` option for stable builds
+		if stableBuild[reqPkg.Name] {
+			external.Reset()
+		}
+
 		// force react/jsx-dev-runtime and react-refresh into `dev` mode
 		if !isDev && ((reqPkg.Name == "react" && reqPkg.Submodule == "jsx-dev-runtime") || reqPkg.Name == "react-refresh") {
 			isDev = true
