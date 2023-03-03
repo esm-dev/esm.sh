@@ -46,7 +46,7 @@ func esmHandler() rex.Handle {
 		case "/":
 			// return deno cli script if the `User-Agent` is "Deno"
 			if strings.HasPrefix(ctx.R.UserAgent(), "Deno/") {
-				cliTs, err := embedFS.ReadFile("server/embed/deno_cli.ts")
+				cliTs, err := embedFS.ReadFile("CLI.ts")
 				if err != nil {
 					return err
 				}

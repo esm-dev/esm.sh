@@ -76,7 +76,8 @@ async function update(args: string[], options: Record<string, string>) {
   const latest = "latest" in options;
   const toUpdate = args.length === 0
     ? Object.keys(importMap.imports).filter((name) =>
-      importMap.imports[name].startsWith(`${importUrl.origin}/`)
+      importMap.imports[name].startsWith(`${importUrl.origin}/`) &&
+      !name.endsWith("/")
     ).map((name) => {
       let version: string;
       if (latest) {
@@ -201,16 +202,17 @@ async function fetchPkgInfo(query: string): Promise<Package | null> {
     return Promise.resolve(cache.get(query)!);
   }
 
-  let name = query;
   let pkgName: string;
   let alias: string | undefined;
   let subModule: string | undefined;
-  const r = query.split(":").filter(Boolean);
-  if (r.length > 1) {
-    [alias, name] = r;
+  if (query.includes(":")) {
+    [alias, query] = query.split(":", 2);
   }
-  const a = name.split("/").filter(Boolean);
-  if (name.startsWith("@")) {
+  if (!query) {
+    throw new Error(`Invalid package name: "${query}"`);
+  }
+  const a = query.split("/").filter(Boolean);
+  if (query.startsWith("@")) {
     if (a.length < 2) {
       return null;
     }
@@ -332,6 +334,8 @@ async function addPkgToImportMap(
   importMap.imports[aliasName] = pkgUrl;
   if (withExports && !pkg.subModule) {
     importMap.imports[aliasName + "/"] = pkgUrl + "/";
+  } else {
+    Reflect.deleteProperty(importMap.imports, aliasName + "/");
   }
   if (pkg.dependencies) {
     const esmshScope = `${importUrl.origin}/${VERSION}/`;
@@ -355,7 +359,7 @@ function getPkgUrl(pkg: Package): [url: string, withExports: boolean] {
   const { name, version, exports, dependencies, peerDependencies } = pkg;
   const withExports = typeof exports === "object" &&
     Object.keys(exports).some((key) =>
-      key.length >= 3 && key.startsWith("./") && key !== "./package.json"
+      key.startsWith("./") && key !== "./package.json"
     );
   if (
     !stableBuild.has(name) && (

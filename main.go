@@ -7,6 +7,7 @@ import (
 )
 
 //go:embed README.md
+//go:embed CLI.ts
 //go:embed server/embed
 var fs embed.FS
 
