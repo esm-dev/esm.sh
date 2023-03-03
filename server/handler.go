@@ -195,21 +195,22 @@ func esmHandler() rex.Handle {
 			outdatedBuildVer = a[1]
 		}
 
+		// check if the request is for the CLI, support version prefix
+		if strings.HasPrefix(ctx.R.UserAgent(), "Deno/") && pathname == "/" {
+			cliTs, err := embedFS.ReadFile("CLI.ts")
+			if err != nil {
+				return err
+			}
+			ctx.SetHeader("Content-Type", "application/typescript; charset=utf-8")
+			return bytes.ReplaceAll(cliTs, []byte("v{VERSION}"), []byte(fmt.Sprintf("v%d", VERSION)))
+		}
+
 		// ban malicious requests by banList
 		// trim the leading `/` in pathname to get the package name
 		// e.g. /@withfig/autocomplete -> @withfig/autocomplete
 		packageFullName := pathname[1:]
 		if cfg.BanList.IsPackageBanned(packageFullName) {
 			return rex.Status(403, "forbidden")
-		}
-
-		if strings.HasPrefix(ctx.R.UserAgent(), "Deno/") && pathname == "/" {
-			cliTs, err := embedFS.ReadFile("server/embed/deno_cli.ts")
-			if err != nil {
-				return err
-			}
-			ctx.SetHeader("Content-Type", "application/typescript; charset=utf-8")
-			return bytes.ReplaceAll(cliTs, []byte("v{VERSION}"), []byte(fmt.Sprintf("v%d", VERSION)))
 		}
 
 		external := newStringSet()
