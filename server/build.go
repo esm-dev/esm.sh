@@ -560,14 +560,15 @@ esbuild:
 				externalDeps.Add(name)
 				goto esbuild
 			}
-		} else if strings.HasPrefix(msg, "No matching export in \"") && strings.Contains(msg, "for import \"default\"") {
-			input = &api.StdinOptions{
-				Contents:   fmt.Sprintf(`import "%s";export default null;`, task.Pkg.ImportPath()),
-				ResolveDir: task.wd,
-				Sourcefile: "index.js",
-			}
-			goto esbuild
 		}
+		// else if strings.HasPrefix(msg, "No matching export in \"") && strings.Contains(msg, "for import \"default\"") {
+		// input = &api.StdinOptions{
+		// 	Contents:   fmt.Sprintf(`import "%s";export default null;`, task.Pkg.ImportPath()),
+		// 	ResolveDir: task.wd,
+		// 	Sourcefile: "index.js",
+		// }
+		// goto esbuild
+		//}
 		err = errors.New("esbuild: " + msg)
 		return
 	}
