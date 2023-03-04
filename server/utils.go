@@ -3,7 +3,6 @@ package server
 import (
 	"encoding/base64"
 	"errors"
-	"io/ioutil"
 	"net"
 	"net/http"
 	"os"
@@ -158,7 +157,7 @@ func kill(pidFile string) (err error) {
 	if pidFile == "" {
 		return
 	}
-	data, err := ioutil.ReadFile(pidFile)
+	data, err := os.ReadFile(pidFile)
 	if err != nil {
 		if os.IsNotExist(err) {
 			err = nil
@@ -177,7 +176,7 @@ func kill(pidFile string) (err error) {
 }
 
 func validateJS(filename string) (isESM bool, hasDefaultExport bool, err error) {
-	data, err := ioutil.ReadFile(filename)
+	data, err := os.ReadFile(filename)
 	if err != nil {
 		return
 	}
