@@ -41,6 +41,22 @@ func esmHandler() rex.Handle {
 			}
 		}
 
+		// pprof
+		// if strings.HasPrefix(pathname, "/debug/pprof/") {
+		// 	switch pathname {
+		// 	case "/debug/pprof/cmdline":
+		// 		return http.HandlerFunc(pprof.Cmdline)
+		// 	case "/debug/pprof/profile":
+		// 		return http.HandlerFunc(pprof.Profile)
+		// 	case "/debug/pprof/symbol":
+		// 		return http.HandlerFunc(pprof.Symbol)
+		// 	case "/debug/pprof/trace":
+		// 		return http.HandlerFunc(pprof.Trace)
+		// 	default:
+		// 		return http.HandlerFunc(pprof.Index)
+		// 	}
+		// }
+
 		// static routes
 		switch pathname {
 		case "/":

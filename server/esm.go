@@ -198,7 +198,7 @@ func initModule(wd string, pkg Pkg, target string, isDev bool) (esm *ESM, npm Np
 				pkgs[i] = n + "@" + v
 				i++
 			}
-			err = runYarnAdd(wd, pkgs...)
+			err = runYarnAdd(wd, false, pkgs...)
 			if err != nil {
 				return
 			}

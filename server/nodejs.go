@@ -585,10 +585,11 @@ func installNodejs(dir string, version string) (err error) {
 }
 
 func yarnAdd(wd string, pkg Pkg) (err error) {
+	noCache := false
 	for i := 0; i < 3; i++ {
-		err = runYarnAdd(wd, fmt.Sprintf("%s@%s", pkg.Name, pkg.Version))
+		err = runYarnAdd(wd, noCache, fmt.Sprintf("%s@%s", pkg.Name, pkg.Version))
 		if err == nil && !fileExists(path.Join(wd, "node_modules", pkg.Name, "package.json")) {
-			yarnCacheClean(pkg.Name)
+			noCache = true
 			err = fmt.Errorf("yarnAdd(%s): package.json not found", pkg)
 		}
 		if err == nil {
@@ -601,7 +602,7 @@ func yarnAdd(wd string, pkg Pkg) (err error) {
 	return
 }
 
-func runYarnAdd(wd string, packages ...string) (err error) {
+func runYarnAdd(wd string, noCache bool, packages ...string) (err error) {
 	if len(packages) > 0 {
 		start := time.Now()
 		args := []string{
@@ -610,7 +611,6 @@ func runYarnAdd(wd string, packages ...string) (err error) {
 			"--ignore-engines",
 			"--ignore-platform",
 			"--ignore-scripts",
-			"--ignore-workspace-root-check",
 			"--no-bin-links",
 			"--no-lockfile",
 			"--no-node-version-check",
@@ -619,9 +619,13 @@ func runYarnAdd(wd string, packages ...string) (err error) {
 			"--silent",
 			"--registry=" + cfg.NpmRegistry,
 		}
-		yarnCacheDir := os.Getenv("YARN_CACHE_DIR")
-		if yarnCacheDir != "" {
-			args = append(args, "--cache-folder", yarnCacheDir)
+		if noCache {
+			args = append(args, "--cache-folder", path.Join(wd, ".yarn_cache"))
+		} else {
+			yarnCacheDir := os.Getenv("YARN_CACHE_DIR")
+			if yarnCacheDir != "" {
+				args = append(args, "--cache-folder", yarnCacheDir)
+			}
 		}
 		yarnMutex := os.Getenv("YARN_MUTEX")
 		if yarnMutex != "" {
@@ -639,25 +643,6 @@ func runYarnAdd(wd string, packages ...string) (err error) {
 		log.Debug("yarn add", strings.Join(packages, ","), "in", time.Since(start))
 	}
 	return
-}
-
-func yarnCacheClean(packages ...string) {
-	if len(packages) > 0 {
-		args := []string{"cache", "clean"}
-		yarnCacheDir := os.Getenv("YARN_CACHE_DIR")
-		if yarnCacheDir != "" {
-			args = append(args, "--cache-folder", yarnCacheDir)
-		}
-		yarnMutex := os.Getenv("YARN_MUTEX")
-		if yarnMutex != "" {
-			args = append(args, "--mutex", yarnMutex)
-		}
-		cmd := exec.Command("yarn", append(args, packages...)...)
-		_, err := cmd.CombinedOutput()
-		if err != nil {
-			log.Warnf("yarn cache clean %s: %s", strings.Join(packages, ","), err)
-		}
-	}
 }
 
 // ref https://github.com/npm/validate-npm-package-name
