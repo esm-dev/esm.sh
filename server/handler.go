@@ -684,7 +684,6 @@ func esmHandler() rex.Handle {
 					}
 					if submodule == pkgName+".css" {
 						submodule = ""
-						isPkgCss = true
 					}
 					// workaround for es5-ext weird "/#/" path
 					if pkgName == "es5-ext" {
@@ -819,18 +818,13 @@ func esmHandler() rex.Handle {
 			return []byte("export default null;\n")
 		}
 
-		if isPkgCss {
+		// redirect to package css from `?css`
+		if isPkgCss && reqPkg.Submodule == "" {
 			if !esm.PackageCSS {
 				return rex.Status(404, "Package CSS not found")
 			}
-
-			if !regexpFullVersionPath.MatchString(pathname) || !isPined || targetFromUA {
-				url := fmt.Sprintf("%s%s/%s.css", cdnOrigin, cfg.BasePath, strings.TrimSuffix(taskID, ".js"))
-				return rex.Redirect(url, http.StatusFound)
-			}
-
-			taskID = fmt.Sprintf("%s.css", strings.TrimSuffix(taskID, ".js"))
-			isBare = true
+			url := fmt.Sprintf("%s%s/%s.css", cdnOrigin, cfg.BasePath, strings.TrimSuffix(taskID, ".js"))
+			return rex.Redirect(url, http.StatusFound)
 		}
 
 		if isBare {
