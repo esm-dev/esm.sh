@@ -519,10 +519,11 @@ func esmHandler() rex.Handle {
 				ctx.SetHeader("Cache-Control", "public, max-age=31536000, immutable")
 				if ctx.Form.Has("worker") && storageType == "builds" {
 					defer r.Close()
-					code, err := ioutil.ReadAll(r)
+					buf, err := ioutil.ReadAll(r)
 					if err != nil {
 						return rex.Status(500, err.Error())
 					}
+					code := bytes.TrimSuffix(buf, []byte(fmt.Sprintf(`//# sourceMappingURL=%s.map`, path.Base(savePath))))
 					ctx.SetHeader("Content-Type", "application/javascript; charset=utf-8")
 					return fmt.Sprintf(`export default function workerFactory(inject) { const blob = new Blob([%s, typeof inject === "string" ? "\n// inject\n" + inject : ""], { type: "application/javascript" }); return new Worker(URL.createObjectURL(blob), { type: "module" })}`, utils.MustEncodeJSON(string(code)))
 				}
@@ -843,10 +844,11 @@ func esmHandler() rex.Handle {
 			ctx.SetHeader("Cache-Control", "public, max-age=31536000, immutable")
 			if isWorker && strings.HasSuffix(savePath, ".js") {
 				defer r.Close()
-				code, err := ioutil.ReadAll(r)
+				buf, err := ioutil.ReadAll(r)
 				if err != nil {
 					return rex.Status(500, err.Error())
 				}
+				code := bytes.TrimSuffix(buf, []byte(fmt.Sprintf(`//# sourceMappingURL=%s.map`, path.Base(savePath))))
 				ctx.SetHeader("Content-Type", "application/javascript; charset=utf-8")
 				return fmt.Sprintf(`export default function workerFactory() { const blob = new Blob([%s], { type: "application/javascript" }); return new Worker(URL.createObjectURL(blob), { type: "module" })}`, utils.MustEncodeJSON(string(code)))
 			}
