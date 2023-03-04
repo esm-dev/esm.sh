@@ -251,6 +251,7 @@ func (task *BuildTask) build(marker *stringSet) (esm *ESM, err error) {
 	}
 	externalDeps := newStringSet()
 	extraExternal := newStringSet()
+	browserExclude := map[string]*stringSet{}
 	esmResolverPlugin := api.Plugin{
 		Name: "esm-resolver",
 		Setup: func(build api.PluginBuild) {
@@ -285,8 +286,9 @@ func (task *BuildTask) build(marker *stringSet) (esm *ESM, err error) {
 						if name, ok := npm.Browser[spec]; ok {
 							if name == "" {
 								// browser exclude
-								return api.OnResolveResult{Namespace: "browser-exclude"}, nil
-							} else if strings.HasPrefix(name, "./") {
+								return api.OnResolveResult{Path: args.Path, Namespace: "browser-exclude"}, nil
+							}
+							if strings.HasPrefix(name, "./") {
 								specifier = path.Join(task.wd, "node_modules", npm.Name, name)
 							} else {
 								specifier = name
@@ -432,37 +434,15 @@ func (task *BuildTask) build(marker *stringSet) (esm *ESM, err error) {
 			build.OnLoad(
 				api.OnLoadOptions{Filter: ".*", Namespace: "browser-exclude"},
 				func(args api.OnLoadArgs) (ret api.OnLoadResult, err error) {
-					contents := "export default undefined;"
+					contents := "export default null;"
+					if exports, ok := browserExclude[args.Path]; ok {
+						for _, name := range exports.Values() {
+							contents = fmt.Sprintf("%sexport const %s = null;", contents, name)
+						}
+					}
 					return api.OnLoadResult{Contents: &contents, Loader: api.LoaderJS}, nil
 				},
 			)
-
-			// workaround for prisma build
-			if npm.Name == "prisma" {
-				build.OnLoad(
-					api.OnLoadOptions{Filter: "\\/node_modules\\/"},
-					func(args api.OnLoadArgs) (ret api.OnLoadResult, err error) {
-						if strings.HasSuffix(args.Path, ".js") {
-							var file *os.File
-							file, err = os.Open(args.Path)
-							if err != nil {
-								return
-							}
-							defer file.Close()
-							buf := new(bytes.Buffer)
-							_, err = buf.ReadFrom(file)
-							if err != nil {
-								return
-							}
-							code := buf.String()
-							code = strings.ReplaceAll(code, "eval(`require('../package.json')`)", "require('../package.json')")
-							code = strings.ReplaceAll(code, "eval(\"__dirname\")", "__dirname")
-							code = strings.ReplaceAll(code, "eval(\"require.main === module\")", "import.meta.main")
-							ret.Contents = &code
-						}
-						return
-					})
-			}
 		},
 	}
 	esmBundlerPlugin := api.Plugin{
@@ -548,12 +528,11 @@ esbuild:
 		// mark the missing module as external to exclude it from the bundle
 		msg := result.Errors[0].Text
 		if strings.HasPrefix(msg, "Could not resolve \"") {
-			// but current package/module can not mark as external
+			// current package/module can not be marked as external
 			if strings.Contains(msg, fmt.Sprintf("Could not resolve \"%s\"", task.Pkg.ImportPath())) {
 				err = fmt.Errorf("Could not resolve \"%s\"", task.Pkg.ImportPath())
 				return
 			}
-			log.Warnf("esbuild(%s): %s", task.ID(), msg)
 			name := strings.Split(msg, "\"")[1]
 			if !extraExternal.Has(name) {
 				extraExternal.Add(name)
@@ -561,14 +540,21 @@ esbuild:
 				goto esbuild
 			}
 		}
-		// else if strings.HasPrefix(msg, "No matching export in \"") && strings.Contains(msg, "for import \"default\"") {
-		// input = &api.StdinOptions{
-		// 	Contents:   fmt.Sprintf(`import "%s";export default null;`, task.Pkg.ImportPath()),
-		// 	ResolveDir: task.wd,
-		// 	Sourcefile: "index.js",
-		// }
-		// goto esbuild
-		//}
+		if strings.HasPrefix(msg, "No matching export in \"") {
+			a := strings.Split(msg, "\"")
+			if len(a) > 4 {
+				spec := a[1]
+				name := a[3]
+				if strings.HasPrefix(spec, "browser-exclude:") && name != "default" {
+					spec = strings.TrimPrefix(spec, "browser-exclude:")
+					if browserExclude[spec] == nil {
+						browserExclude[spec] = newStringSet()
+					}
+					browserExclude[spec].Add(name)
+					goto esbuild
+				}
+			}
+		}
 		err = errors.New("esbuild: " + msg)
 		return
 	}
