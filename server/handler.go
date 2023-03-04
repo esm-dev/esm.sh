@@ -142,17 +142,14 @@ func esmHandler() rex.Handle {
 			return rex.Status(404, "not found")
 		}
 
-		proto := "http"
-		if ctx.R.TLS != nil {
-			proto = "https"
-		}
-		reqOrigin := fmt.Sprintf("%s://%s", proto, ctx.R.Host)
-
-		var cdnOrigin string
-		if cfg.Origin != "" {
-			cdnOrigin = strings.TrimSuffix(cfg.Origin, "/")
-		} else {
-			cdnOrigin = reqOrigin
+		cdnOrigin := cfg.Origin
+		if cdnOrigin == "" {
+			proto := "http"
+			if ctx.R.TLS != nil {
+				proto = "https"
+			}
+			// use the request host as the origin if not set in config.json
+			cdnOrigin = fmt.Sprintf("%s://%s", proto, ctx.R.Host)
 		}
 
 		// serve embed assets
@@ -424,9 +421,9 @@ func esmHandler() rex.Handle {
 
 			// fetch non-js file from npmCDN and save it to fs
 			if err == storage.ErrNotFound {
-				resp, err := httpClient.Get(fmt.Sprintf("%s/%s", strings.TrimSuffix(cfg.NpmCDN, "/"), reqPkg.String()))
+				resp, err := httpClient.Get(fmt.Sprintf("%s/%s", cfg.NpmCDN, reqPkg.String()))
 				if err != nil && cfg.BackupNpmCDN != "" {
-					resp, err = httpClient.Get(fmt.Sprintf("%s/%s", strings.TrimSuffix(cfg.BackupNpmCDN, "/"), reqPkg.String()))
+					resp, err = httpClient.Get(fmt.Sprintf("%s/%s", cfg.BackupNpmCDN, reqPkg.String()))
 				}
 				if err != nil {
 					return rex.Status(500, err.Error())

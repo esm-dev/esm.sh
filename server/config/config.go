@@ -73,13 +73,19 @@ func Load(filename string) (*Config, error) {
 			return nil, fmt.Errorf("fail to get absolute path of the work directory: %w", err)
 		}
 	}
+	if cfg.Port == 0 {
+		cfg.Port = 8080
+	}
+	if cfg.NsPort == 0 {
+		cfg.NsPort = 8088
+	}
 	if cfg.BasePath != "" {
 		a := strings.Split(cfg.BasePath, "/")
 		path := make([]string, len(a))
 		n := 0
-		for i := 0; i < len(a); i++ {
-			if a[i] != "" {
-				path[n] = a[i]
+		for _, p := range a {
+			if p != "" && p != "." {
+				path[n] = p
 				n++
 			}
 		}
@@ -89,11 +95,8 @@ func Load(filename string) (*Config, error) {
 			cfg.BasePath = ""
 		}
 	}
-	if cfg.Port == 0 {
-		cfg.Port = 8080
-	}
-	if cfg.NsPort == 0 {
-		cfg.NsPort = 8088
+	if cfg.Origin != "" {
+		cfg.Origin = strings.TrimSuffix(cfg.Origin, "/")
 	}
 	if cfg.BuildConcurrency == 0 {
 		cfg.BuildConcurrency = uint16(runtime.NumCPU())
@@ -113,10 +116,14 @@ func Load(filename string) (*Config, error) {
 	if cfg.LogLevel == "" {
 		cfg.LogLevel = "info"
 	}
-	if cfg.NpmCDN == "" {
+	if cfg.NpmCDN != "" {
+		cfg.NpmCDN = strings.TrimSuffix(cfg.NpmCDN, "/")
+	} else {
 		cfg.NpmCDN = "https://esm.sh"
 	}
-
+	if cfg.BackupNpmCDN != "" {
+		cfg.BackupNpmCDN = strings.TrimSuffix(cfg.BackupNpmCDN, "/")
+	}
 	return cfg, nil
 }
 
