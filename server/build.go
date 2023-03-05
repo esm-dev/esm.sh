@@ -149,11 +149,11 @@ func (task *BuildTask) Build() (esm *ESM, err error) {
 	return task.build(newStringSet())
 }
 
-func (task *BuildTask) build(marker *stringSet) (esm *ESM, err error) {
-	if marker.Has(task.ID()) {
+func (task *BuildTask) build(tracing *stringSet) (esm *ESM, err error) {
+	if tracing.Has(task.ID()) {
 		return
 	}
-	marker.Add(task.ID())
+	tracing.Add(task.ID())
 
 	task.stage = "init"
 	esm, npm, err := initModule(task.wd, task.Pkg, task.Target, task.DevMode)
@@ -607,7 +607,7 @@ esbuild:
 						DevMode:      task.DevMode,
 					}
 					subTask.treeShaking = newStringSet()
-					_, err = subTask.build(marker)
+					_, err = subTask.build(tracing)
 					if err != nil {
 						err = errors.New("can not build '" + submodule + "': " + err.Error())
 						return
@@ -927,7 +927,9 @@ esbuild:
 				}
 			}
 
-			if npm.Deprecated != "" {
+			// check if package is deprecated
+			p, e := fetchPackageInfo(task.Pkg.Name, task.Pkg.Version)
+			if e == nil && p.Deprecated != "" {
 				fmt.Fprintf(buf, `console.warn("[npm] %%cdeprecated%%c %s@%s: %s", "color:red", "");%s`, task.Pkg.Name, task.Pkg.Version, npm.Deprecated, "\n")
 			}
 
