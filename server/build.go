@@ -250,7 +250,7 @@ func (task *BuildTask) build(marker *stringSet) (esm *ESM, err error) {
 		"global.process.env.NODE_ENV": fmt.Sprintf(`"%s"`, nodeEnv),
 	}
 	externalDeps := newStringSet()
-	extraExternal := newStringSet()
+	implicitExternal := newStringSet()
 	browserExclude := map[string]*stringSet{}
 	esmResolverPlugin := api.Plugin{
 		Name: "esm-resolver",
@@ -304,7 +304,7 @@ func (task *BuildTask) build(marker *stringSet) (esm *ESM, err error) {
 					}
 
 					// bundles all dependencies in `bundle` mode, apart from peer dependencies and `?external` query
-					if task.BundleMode && !extraExternal.Has(specifier) && !task.external.Has(specifier) {
+					if task.BundleMode && !implicitExternal.Has(specifier) && !task.external.Has(specifier) {
 						pkgName, _ := splitPkgPath(specifier)
 						if !builtInNodeModules[pkgName] {
 							_, ok := npm.PeerDependencies[pkgName]
@@ -534,8 +534,8 @@ esbuild:
 				return
 			}
 			name := strings.Split(msg, "\"")[1]
-			if !extraExternal.Has(name) {
-				extraExternal.Add(name)
+			if !implicitExternal.Has(name) {
+				implicitExternal.Add(name)
 				externalDeps.Add(name)
 				goto esbuild
 			}
@@ -543,15 +543,18 @@ esbuild:
 		if strings.HasPrefix(msg, "No matching export in \"") {
 			a := strings.Split(msg, "\"")
 			if len(a) > 4 {
-				spec := a[1]
-				name := a[3]
-				if strings.HasPrefix(spec, "browser-exclude:") && name != "default" {
-					spec = strings.TrimPrefix(spec, "browser-exclude:")
-					if browserExclude[spec] == nil {
-						browserExclude[spec] = newStringSet()
+				path, exportName := a[1], a[3]
+				if strings.HasPrefix(path, "browser-exclude:") && exportName != "default" {
+					path = strings.TrimPrefix(path, "browser-exclude:")
+					exports, ok := browserExclude[path]
+					if !ok {
+						exports = newStringSet()
+						browserExclude[path] = exports
 					}
-					browserExclude[spec].Add(name)
-					goto esbuild
+					if !exports.Has(exportName) {
+						exports.Add(exportName)
+						goto esbuild
+					}
 				}
 			}
 		}
