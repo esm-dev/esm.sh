@@ -21,11 +21,7 @@ type ESM struct {
 }
 
 func initModule(wd string, pkg Pkg, target string, isDev bool) (esm *ESM, npm NpmPackage, err error) {
-	packageDir := path.Join(wd, "node_modules", pkg.Name)
-	packageFile := path.Join(packageDir, "package.json")
-
-	var p NpmPackage
-	err = utils.ParseJSONFile(packageFile, &p)
+	p, err := fetchPackageInfo(pkg.Name, pkg.Version)
 	if err != nil {
 		return
 	}

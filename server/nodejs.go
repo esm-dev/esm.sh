@@ -190,6 +190,7 @@ type NpmPackageTemp struct {
 	PeerDependencies map[string]string      `json:"peerDependencies,omitempty"`
 	Imports          map[string]interface{} `json:"imports,omitempty"`
 	DefinedExports   interface{}            `json:"exports,omitempty"`
+	Deprecated       string                 `json:"deprecated,omitempty"`
 }
 
 func (a *NpmPackageTemp) ToNpmPackage() *NpmPackage {
@@ -225,6 +226,7 @@ func (a *NpmPackageTemp) ToNpmPackage() *NpmPackage {
 		PeerDependencies: a.PeerDependencies,
 		Imports:          a.Imports,
 		DefinedExports:   a.DefinedExports,
+		Deprecated:       a.Deprecated,
 	}
 }
 
@@ -244,6 +246,7 @@ type NpmPackage struct {
 	PeerDependencies map[string]string
 	Imports          map[string]interface{}
 	DefinedExports   interface{}
+	Deprecated       string
 }
 
 func (a *NpmPackage) UnmarshalJSON(b []byte) error {
