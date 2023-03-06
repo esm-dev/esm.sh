@@ -356,24 +356,13 @@ func fetchPackageInfo(name string, version string) (info NpmPackage, err error) 
 	if version == "" {
 		version = "latest"
 	}
-	id := fmt.Sprintf("npm:%s@%s", name, version)
 
-	// wait lock release
-	for {
-		_, ok := lock.Load(id)
-		if !ok {
-			break
-		}
-		time.Sleep(10 * time.Millisecond)
-	}
-
-	lock.Store(id, struct{}{})
-	defer lock.Delete(id)
+	cacheKey := fmt.Sprintf("npm:%s@%s", name, version)
 
 	// check cache firstly
 	if cache != nil {
 		var data []byte
-		data, err = cache.Get(id)
+		data, err = cache.Get(cacheKey)
 		if err == nil && json.Unmarshal(data, &info) == nil {
 			return
 		}
@@ -381,6 +370,18 @@ func fetchPackageInfo(name string, version string) (info NpmPackage, err error) 
 			log.Error("cache:", err)
 		}
 	}
+
+	// wait lock release
+	for {
+		_, ok := lock.Load(cacheKey)
+		if !ok {
+			break
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+
+	lock.Store(cacheKey, struct{}{})
+	defer lock.Delete(cacheKey)
 
 	start := time.Now()
 	req, err := http.NewRequest("GET", strings.TrimRight(cfg.NpmRegistry, "/")+"/"+name, nil)
@@ -401,22 +402,15 @@ func fetchPackageInfo(name string, version string) (info NpmPackage, err error) 
 		err = fmt.Errorf("npm: package '%s' not found", name)
 		return
 	}
+
 	if resp.StatusCode != 200 {
 		ret, _ := ioutil.ReadAll(resp.Body)
 		err = fmt.Errorf("npm: could not get metadata of package '%s' (%s: %s)", name, resp.Status, string(ret))
 		return
 	}
 
-	data, err := ioutil.ReadAll(resp.Body)
-	if err == io.EOF {
-		err = nil
-	}
-	if err != nil {
-		return
-	}
-
 	var h NpmPackageVerions
-	err = json.Unmarshal(data, &h)
+	err = json.NewDecoder(resp.Request.Body).Decode(&h)
 	if err != nil {
 		return
 	}
@@ -479,7 +473,7 @@ func fetchPackageInfo(name string, version string) (info NpmPackage, err error) 
 		if !isFullVersion {
 			ttl = 10 * time.Minute
 		}
-		cache.Set(id, utils.MustEncodeJSON(info), ttl)
+		cache.Set(cacheKey, utils.MustEncodeJSON(info), ttl)
 	}
 	return
 }

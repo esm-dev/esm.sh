@@ -3,7 +3,6 @@ package storage
 import (
 	"errors"
 	"net/url"
-	"runtime"
 	"sync"
 	"time"
 )
@@ -84,34 +83,17 @@ func (mc *mCache) Flush() error {
 	return nil
 }
 
-func (mc *mCache) setGC(interval time.Duration) {
-	if interval > 0 && interval != mc.gcInterval {
-		if mc.gcTimer != nil {
-			mc.gcTimer.Stop()
-		}
-		mc.gcInterval = interval
-		if interval > time.Second {
-			mc.gcTimer = time.AfterFunc(interval, mc.gc)
-		}
-	}
-}
-
 func (mc *mCache) gc() {
 	mc.gcTimer = time.AfterFunc(mc.gcInterval, mc.gc)
 
-	mc.lock.RLock()
-	defer mc.lock.RUnlock()
+	mc.lock.Lock()
+	defer mc.lock.Unlock()
+
 	for key, d := range mc.storage {
 		if d.isExpired() {
-			mc.lock.RUnlock()
-			mc.lock.Lock()
 			delete(mc.storage, key)
-			mc.lock.Unlock()
-			mc.lock.RLock()
 		}
 	}
-
-	runtime.GC()
 }
 
 type mcDriver struct{}
@@ -122,12 +104,14 @@ func (mcd *mcDriver) Open(region string, options url.Values) (Cache, error) {
 		return nil, errors.New("invalid gcInterval value")
 	}
 
-	c := &mCache{
+	mc := &mCache{
 		storage:    map[string]mValue{},
 		gcInterval: gcInterval,
 	}
-	c.setGC(gcInterval)
-	return c, nil
+	if gcInterval >= time.Second {
+		mc.gcTimer = time.AfterFunc(gcInterval, mc.gc)
+	}
+	return mc, nil
 }
 
 func init() {
