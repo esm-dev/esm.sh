@@ -410,7 +410,7 @@ func fetchPackageInfo(name string, version string) (info NpmPackage, err error) 
 	}
 
 	var h NpmPackageVerions
-	err = json.NewDecoder(resp.Request.Body).Decode(&h)
+	err = json.NewDecoder(resp.Body).Decode(&h)
 	if err != nil {
 		return
 	}
