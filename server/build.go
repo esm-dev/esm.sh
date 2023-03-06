@@ -930,7 +930,7 @@ esbuild:
 			// check if package is deprecated
 			p, e := fetchPackageInfo(task.Pkg.Name, task.Pkg.Version)
 			if e == nil && p.Deprecated != "" {
-				fmt.Fprintf(buf, `console.warn("[npm] %%cdeprecated%%c %s@%s: %s", "color:red", "");%s`, task.Pkg.Name, task.Pkg.Version, npm.Deprecated, "\n")
+				fmt.Fprintf(buf, `console.warn("[npm] %%cdeprecated%%c %s@%s: %s", "color:red", "");%s`, task.Pkg.Name, task.Pkg.Version, p.Deprecated, "\n")
 			}
 
 			// add sourcemap Url
