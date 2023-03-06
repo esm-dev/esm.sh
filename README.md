@@ -32,7 +32,7 @@ import "https://esm.sh/react@18.2.0/package.json" assert { type: "json" }
 
 ### Specify Dependencies
 
-By default, ESM.SH rewrites import specifiers based on the `dependencies` field of `package.json`. To specify the version of these dependencies, you can add the `?deps=PACKAGE@VERSION` query. To specify multiple dependencies, separate them with a comma, like this: `?deps=react@17.0.2,react-dom@17.0.2`.
+By default, esm.sh rewrites import specifiers based on the package dependencies. To specify the version of these dependencies, you can add the `?deps=PACKAGE@VERSION` query. To specify multiple dependencies, separate them with a comma, like this: `?deps=react@17.0.2,react-dom@17.0.2`.
 
 ```javascript
 import React from "https://esm.sh/react@17.0.2"
@@ -42,7 +42,7 @@ import useSWR from "https://esm.sh/swr?deps=react@17.0.2"
 ### Specify External Dependencies
 
 You can add the `?external=foo,bar` query to specify external dependencies.
-Since these dependencies are not resolved, you need to use [**import maps**](https://github.com/WICG/import-maps) to specify the URL for these dependencies. If you are using [Deno](https://deno.land/), you can use the [CLI Script](#using-cli-script) to generate and update the import maps that will resolve the external dependencies automatically.
+Since these dependencies are not resolved, you need to use [**import maps**](https://github.com/WICG/import-maps) to specify the URL for these dependencies. If you are using Deno, you can use the [CLI Script](#using-cli-script) to generate and update the import maps that will resolve the external dependencies automatically.
 
 ```json
 {
@@ -66,7 +66,7 @@ Alternatively, you can **mark all dependencies as external** by adding a `*` pre
 }
 ```
 
-Import maps supports [**trailing slash**](https://github.com/WICG/import-maps#packages-via-trailing-slashes) that can not work with URL search params friendly. To fix this issue, esm.sh provides a **special format** for import URL that allows you to use query params with trailing slash: change the query prefix `?` to `&` and put it after the package version.
+Import maps supports [**trailing slash**](https://github.com/WICG/import-maps#packages-via-trailing-slashes) that can not work with URL search params friendly. To fix this issue, esm.sh provides a special format for import URL that allows you to use query params with trailing slash: change the query prefix `?` to `&` and put it after the package version.
 
 ```json
 {
@@ -95,7 +95,7 @@ The origin idea was coming from [@lucacasonato](https://github.com/lucacasonato)
 
 By default, esm.sh exports a module with all its exported members. However, if you want to import only a specific set of members, you can specify them by adding a `?exports=foo,bar` query to the import statement.
 
-```js
+```javascript
 import { __await, __rest } from "https://esm.sh/tslib" // 7.3KB
 import { __await, __rest } from "https://esm.sh/tslib?exports=__await,__rest" // 489B
 ```
@@ -116,17 +116,17 @@ In **bundle** mode, all dependencies are bundled into a single JS file except th
 import React from "https://esm.sh/react?dev"
 ```
 
-With the `?dev` option, esm.sh builds a module with `process.env.NODE_ENV` set to `"development"` or based on the condition `development` in the `exports` field of `package.json`. This is useful for libraries that have different behavior in development and production. For example, [React](https://reactjs.org/) will use a different warning message in development mode.
+With the `?dev` option, esm.sh builds a module with `process.env.NODE_ENV` set to `"development"` or based on the condition `development` in the `exports` field of `package.json`. This is useful for libraries that have different behavior in development and production. For example, React will use a different warning message in development mode.
 
 ### ESBuild Options
 
-By default, esm.sh checks the `User-Agent` header to determine the build target. You can also specify the `target` by adding `?target`, available targets are: **es2015** - **es2022**, **esnext**, **node**, and **deno**.
+By default, esm.sh checks the `User-Agent` header to determine the build target. You can also specify the `target` by adding `?target`, available targets are: **es2015** - **es2022**, **esnext**, **deno**, and **denonext**.
 
 ```javascript
 import React from "https://esm.sh/react?target=es2020"
 ```
 
-Other supported options of [esbuild](https://esbuild.github.io/):
+Other supported options of esbuild:
 
 - [Keep names](https://esbuild.github.io/api/#keep-names)
   ```javascript
@@ -188,7 +188,7 @@ const { css } = await postcss([ autoprefixer ]).process(`
 .async()
 ```
 
-For users using deno `< 1.31` , esm.sh uses [`deno.land/std@0.177.0/node`](https://deno.land/std@0.177.0/node) as node compatibility layer. You can specify a different version by adding the `?deno-std=$VER` query:
+For users using deno `< 1.31`, esm.sh uses [deno.land/std@0.177.0/node](https://deno.land/std@0.177.0/node) as node compatibility layer. You can specify a different version by adding the `?deno-std=$VER` query:
 
 ```javascript
 import postcss from "https://esm.sh/postcss?deno-std=0.128.0"
@@ -249,7 +249,7 @@ import React from "https://esm.sh/v111/react-dom"
 
 By using the `?pin` query in the import statement, you can rest assured that the version of the module you're using will not change, even if updates are pushed to the esm.sh server. This helps ensure the stability and reliability of your application.
 
-For UI libraries like [React](https://reactjs.org/) and [Vue](https://vuejs.org/), esm.sh uses a special build version `stable` to ensure single version of the library is used in the whole application.
+For UI libraries like _React_ and _Vue_, esm.sh uses a special build version `stable` to ensure single version of the library is used in the whole application.
 
 ## Global CDN
 
