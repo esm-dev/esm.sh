@@ -1,5 +1,13 @@
 # Change Log
 
+## v111
+
+- Print package `deprecated` message
+- Remove source map url of worker
+- Fix package CSS redirects with `target` option
+- Fix build dead-loop for edge cases
+- Fix CLI `update` command (close [#536](https://github.com/ije/esm.sh/issues/536))
+
 ## v110
 
 - Fix `Content-Type` header for dts files
