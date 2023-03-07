@@ -38,6 +38,7 @@ var stableBuild = map[string]bool{
 
 // allowlist for require mode when parsing cjs exports fails
 var requireModeAllowList = []string{
+	"@babel/types",
 	"domhandler",
 	"he",
 	"keycode",
