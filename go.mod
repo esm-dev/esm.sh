@@ -1,4 +1,4 @@
-module github.com/ije/esm.sh
+module github.com/esm-dev/esm.sh
 
 go 1.18
 

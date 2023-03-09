@@ -10,7 +10,7 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/ije/esm.sh/server/storage"
+	"github.com/esm-dev/esm.sh/server/storage"
 
 	"github.com/ije/gox/utils"
 )

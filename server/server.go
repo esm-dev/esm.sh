@@ -13,8 +13,8 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/ije/esm.sh/server/config"
-	"github.com/ije/esm.sh/server/storage"
+	"github.com/esm-dev/esm.sh/server/config"
+	"github.com/esm-dev/esm.sh/server/storage"
 
 	logx "github.com/ije/gox/log"
 	"github.com/ije/rex"

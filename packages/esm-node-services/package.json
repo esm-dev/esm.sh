@@ -15,6 +15,6 @@
     "esm-cjs-lexer": "0.7.5",
     "enhanced-resolve": "5.12.0"
   },
-  "repository": "https://github.com/ije/esm.sh",
+  "repository": "https://github.com/esm-dev/esm.sh",
   "license": "MIT"
 }

@@ -17,7 +17,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/ije/esm.sh/server/storage"
+	"github.com/esm-dev/esm.sh/server/storage"
 
 	"github.com/Masterminds/semver/v3"
 	"github.com/ije/gox/utils"

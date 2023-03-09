@@ -2,7 +2,7 @@
 name = "esm-cjs-lexer"
 version = "0.7.5"
 description = "A WASM module to parse cjs module exports for ESM."
-repository = "https://github.com/ije/esm.sh"
+repository = "https://github.com/esm-dev/esm.sh"
 license = "MIT"
 authors = ["The Aleph.js authors"]
 edition = "2021"

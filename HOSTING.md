@@ -11,7 +11,7 @@ automatically.
 ## Clone code
 
 ```baseh
-git clone https://github.com/ije/esm.sh
+git clone https://github.com/esm-dev/esm.sh
 cd esm.sh
 ```
 
