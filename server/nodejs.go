@@ -25,7 +25,7 @@ import (
 )
 
 // ref https://github.com/npm/validate-npm-package-name
-var npmNaming = valid.Validator{valid.FromTo{'a', 'z'}, valid.FromTo{'0', '9'}, valid.Eq('_'), valid.Eq('.'), valid.Eq('-')}
+var npmNaming = valid.Validator{valid.FromTo{'a', 'z'}, valid.FromTo{'A', 'Z'}, valid.FromTo{'0', '9'}, valid.Eq('.'), valid.Eq('-'), valid.Eq('_')}
 
 var builtInNodeModules = map[string]bool{
 	"assert":              true,
