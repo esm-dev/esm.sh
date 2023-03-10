@@ -2,8 +2,6 @@ package server
 
 import (
 	"bytes"
-	"crypto/sha1"
-	"encoding/hex"
 	"errors"
 	"fmt"
 	"io/ioutil"
@@ -15,7 +13,6 @@ import (
 	"time"
 
 	"github.com/evanw/esbuild/pkg/api"
-	"github.com/ije/gox/crypto/rs"
 	"github.com/ije/gox/utils"
 )
 
@@ -131,13 +128,13 @@ func (task *BuildTask) Build() (esm *ESM, err error) {
 		}
 	}
 
-// TODO: Remove node_modules of the idle working dir
-// 	defer func() {
-// 		err := os.RemoveAll(task.wd)
-// 		if err != nil {
-// 			log.Warnf("clean build(%s) dir: %v", task.ID(), err)
-// 		}
-// 	}()
+	// TODO: Remove node_modules of the idle working dir
+	// 	defer func() {
+	// 		err := os.RemoveAll(task.wd)
+	// 		if err != nil {
+	// 			log.Warnf("clean build(%s) dir: %v", task.ID(), err)
+	// 		}
+	// 	}()
 
 	task.stage = "install"
 	err = yarnAdd(task.wd, task.Pkg)
