@@ -371,17 +371,10 @@ func fetchPackageInfo(name string, version string) (info NpmPackage, err error) 
 		}
 	}
 
-	// wait lock release
-	for {
-		_, ok := lock.Load(cacheKey)
-		if !ok {
-			break
-		}
-		time.Sleep(10 * time.Millisecond)
-	}
+	mutex, _ := lock.LoadOrStore(cacheKey, &sync.Mutex{})
 
-	lock.Store(cacheKey, struct{}{})
-	defer lock.Delete(cacheKey)
+	mutex.(*sync.Mutex).Lock()
+	defer mutex.(*sync.Mutex).Unlock()
 
 	start := time.Now()
 	req, err := http.NewRequest("GET", strings.TrimRight(cfg.NpmRegistry, "/")+"/"+name, nil)
@@ -587,10 +580,20 @@ func installNodejs(dir string, version string) (err error) {
 	return
 }
 
+var addingLock sync.Map
+
 func yarnAdd(wd string, pkg Pkg) (err error) {
 	noCache := false
 	for i := 0; i < 3; i++ {
-		err = runYarnAdd(wd, noCache, fmt.Sprintf("%s@%s", pkg.Name, pkg.Version))
+
+		pkgNameFormat := fmt.Sprintf("%s@%s", pkg.Name, pkg.Version)
+
+		mutex, _ := addingLock.LoadOrStore(pkgNameFormat, &sync.Mutex{})
+
+		mutex.(*sync.Mutex).Lock()
+		defer mutex.(*sync.Mutex).Unlock()
+
+		err = runYarnAdd(wd, noCache, pkgNameFormat)
 		if err == nil && !fileExists(path.Join(wd, "node_modules", pkg.Name, "package.json")) {
 			noCache = true
 			err = fmt.Errorf("yarnAdd(%s): package.json not found", pkg)
@@ -615,7 +618,6 @@ func runYarnAdd(wd string, noCache bool, packages ...string) (err error) {
 			"--ignore-platform",
 			"--ignore-scripts",
 			"--no-bin-links",
-			"--no-lockfile",
 			"--no-node-version-check",
 			"--no-progress",
 			"--non-interactive",

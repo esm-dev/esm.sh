@@ -116,9 +116,7 @@ func (task *BuildTask) Build() (esm *ESM, err error) {
 	}
 
 	if task.wd == "" {
-		hasher := sha1.New()
-		hasher.Write([]byte(task.ID()))
-		task.wd = path.Join(os.TempDir(), fmt.Sprintf("esm-build-%s-%s", hex.EncodeToString(hasher.Sum(nil)), rs.Hex.String(8)))
+		task.wd = path.Join(os.TempDir(), fmt.Sprintf("esm-build-%s-%s", task.Pkg.Name, task.Pkg.Version))
 		ensureDir(task.wd)
 
 		if cfg.NpmToken != "" {
@@ -133,12 +131,13 @@ func (task *BuildTask) Build() (esm *ESM, err error) {
 		}
 	}
 
-	defer func() {
-		err := os.RemoveAll(task.wd)
-		if err != nil {
-			log.Warnf("clean build(%s) dir: %v", task.ID(), err)
-		}
-	}()
+// TODO: Remove node_modules of the idle working dir
+// 	defer func() {
+// 		err := os.RemoveAll(task.wd)
+// 		if err != nil {
+// 			log.Warnf("clean build(%s) dir: %v", task.ID(), err)
+// 		}
+// 	}()
 
 	task.stage = "install"
 	err = yarnAdd(task.wd, task.Pkg)
@@ -607,11 +606,6 @@ esbuild:
 						DevMode:      task.DevMode,
 					}
 					subTask.treeShaking = newStringSet()
-					_, err = subTask.build(tracing)
-					if err != nil {
-						err = errors.New("can not build '" + submodule + "': " + err.Error())
-						return
-					}
 					importPath = task.getImportPath(subPkg, encodeBuildArgsPrefix(subTask.BuildArgs, subTask.Pkg.Name, false))
 				}
 				// node builtin `buffer` module
