@@ -1,5 +1,6 @@
 {
     "port": 8080,
-    "nsPort": 8088
+    "nsPort": 8088,
+    "buildConcurrency": 4
 }
   
