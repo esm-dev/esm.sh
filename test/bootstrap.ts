@@ -26,7 +26,8 @@ async function startEsmServer(onStart: () => void, single: boolean) {
   await p.status();
 }
 
-async function runTest(name: string, retry?: boolean) {
+async function runTest(name: string, retry?: boolean): Promise<number> {
+  const execBegin = Date.now();
   const cmd = [
     Deno.execPath(),
     "test",
@@ -50,11 +51,12 @@ async function runTest(name: string, retry?: boolean) {
     if (!retry) {
       console.log("something wrong, retry...");
       await new Promise((resolve) => setTimeout(resolve, 100));
-      await runTest(name, true);
+      return await runTest(name, true);
     } else {
       Deno.exit(code);
     }
   }
+  return Date.now() - execBegin
 }
 
 async function runCliTest() {
@@ -140,17 +142,18 @@ export async function existsFile(path: string): Promise<boolean> {
 if (import.meta.main) {
   const [testDir] = Deno.args;
   startEsmServer(async () => {
+    let spentTimeCount = 0;
     if (testDir) {
-      await runTest(testDir, true);
+      spentTimeCount += await runTest(testDir, true);
     } else {
       await runCliTest();
       for await (const entry of Deno.readDir("./test")) {
         if (entry.isDirectory && !entry.name.startsWith("_")) {
-          await runTest(entry.name);
+          spentTimeCount += await runTest(entry.name);
         }
       }
     }
-    console.log("Done!");
+    console.log(`Done! Total time spent: ${spentTimeCount}`);
     Deno.exit(0);
   }, Boolean(testDir));
 }
