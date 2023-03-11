@@ -359,6 +359,15 @@ func fetchPackageInfo(name string, version string) (info NpmPackage, err error) 
 
 	cacheKey := fmt.Sprintf("npm:%s@%s", name, version)
 
+	mutex, loaded := lock.LoadOrStore(cacheKey, &sync.Mutex{})
+
+	log.Debugf("fetch lock: %s, loaded(%v)", cacheKey, loaded)
+	mutex.(*sync.Mutex).Lock()
+	defer func() {
+		log.Debugf("fetch  unlock: %s", cacheKey)
+		mutex.(*sync.Mutex).Unlock()
+	}()
+
 	// check cache firstly
 	if cache != nil {
 		var data []byte
@@ -370,11 +379,6 @@ func fetchPackageInfo(name string, version string) (info NpmPackage, err error) 
 			log.Error("cache:", err)
 		}
 	}
-
-	mutex, _ := lock.LoadOrStore(cacheKey, &sync.Mutex{})
-
-	mutex.(*sync.Mutex).Lock()
-	defer mutex.(*sync.Mutex).Unlock()
 
 	start := time.Now()
 	req, err := http.NewRequest("GET", strings.TrimRight(cfg.NpmRegistry, "/")+"/"+name, nil)
@@ -586,10 +590,19 @@ func yarnAdd(wd string, pkg Pkg) (err error) {
 	noCache := false
 	pkgNameFormat := fmt.Sprintf("%s@%s", pkg.Name, pkg.Version)
 
-	mutex, _ := addingLock.LoadOrStore(pkgNameFormat, &sync.Mutex{})
+	mutex, loaded := addingLock.LoadOrStore(pkgNameFormat, &sync.Mutex{})
 
+	log.Debugf("yarn add lock: %s, loaded(%v)", pkgNameFormat, loaded)
 	mutex.(*sync.Mutex).Lock()
-	defer mutex.(*sync.Mutex).Unlock()
+	defer func() {
+		log.Debugf("yarn add unlock: %s", pkgNameFormat)
+		mutex.(*sync.Mutex).Unlock()
+	}()
+
+	// file exist, skip install
+	if _, e := os.Stat(path.Join(wd, ".yarn_added")); e == nil {
+		return
+	}
 
 	for i := 0; i < 3; i++ {
 		err = runYarnAdd(wd, noCache, pkgNameFormat)
@@ -644,6 +657,8 @@ func runYarnAdd(wd string, noCache bool, packages ...string) (err error) {
 		if err != nil {
 			return fmt.Errorf("yarn add %s: %s", strings.Join(packages, ","), string(output))
 		}
+
+		os.Create(path.Join(wd, ".yarn_added"))
 		log.Debug("yarn add", strings.Join(packages, ","), "in", time.Since(start))
 	}
 	return
