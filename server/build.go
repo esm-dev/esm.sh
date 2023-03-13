@@ -593,17 +593,7 @@ esbuild:
 						Version:   task.Pkg.Version,
 						Submodule: submodule,
 					}
-					subTask := &BuildTask{
-						wd:           task.wd, // use current `wd` to skip deps installation
-						BuildArgs:    task.BuildArgs,
-						CdnOrigin:    task.CdnOrigin,
-						BuildVersion: task.BuildVersion,
-						Pkg:          subPkg,
-						Target:       task.Target,
-						DevMode:      task.DevMode,
-					}
-					subTask.treeShaking = newStringSet()
-					importPath = task.getImportPath(subPkg, encodeBuildArgsPrefix(subTask.BuildArgs, subTask.Pkg.Name, false))
+					importPath = task.getImportPath(subPkg, encodeBuildArgsPrefix(task.BuildArgs, task.Pkg.Name, false))
 				}
 				// node builtin `buffer` module
 				if importPath == "" && name == "buffer" {
@@ -727,7 +717,7 @@ esbuild:
 					importPath = task.getImportPath(pkg, encodeBuildArgsPrefix(task.BuildArgs, pkg.Name, false))
 				}
 				if importPath == "" {
-					err = fmt.Errorf("Could not resolve \"%s\" (Imported by \"%s\")", name, task.Pkg.Name)
+					err = fmt.Errorf("could not resolve \"%s\" (Imported by \"%s\")", name, task.Pkg.Name)
 					return
 				}
 				buffer := bytes.NewBuffer(nil)
@@ -746,6 +736,7 @@ esbuild:
 							}
 							if err == nil {
 								dep, depNpm, err := initModule(task.wd, pkg, task.Target, task.DevMode)
+
 								if err == nil {
 									if bytes.HasPrefix(p, []byte{'.'}) {
 										// right shift to strip the object `key`
@@ -825,7 +816,9 @@ esbuild:
 						} else {
 							switch importName {
 							case "default":
-								fmt.Fprintf(buf, `import __%s$ from "%s";%s`, identifier, importPath, eol)
+								// Judge import members of commonjs package import at runtime due to lazy bundling of the module
+								fmt.Fprintf(buf, `import * as __%s$$$ from "%s";%s`, identifier, importPath, eol)
+								fmt.Fprintf(buf, `const __%s$ = __%s$$$.default ? __%s$$$.default : __%s$$$;%s`, identifier, identifier, identifier, identifier, eol)
 							case "*":
 								fmt.Fprintf(buf, `import * as __%s$ from "%s";%s`, identifier, importPath, eol)
 							case "all":
