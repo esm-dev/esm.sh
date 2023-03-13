@@ -6,3 +6,5 @@ config.json
 node_modules/
 target/
 pkg/
+.idea
+.vscode

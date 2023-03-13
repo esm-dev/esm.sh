@@ -2,8 +2,6 @@ package server
 
 import (
 	"bytes"
-	"crypto/sha1"
-	"encoding/hex"
 	"errors"
 	"fmt"
 	"io/ioutil"
@@ -15,7 +13,6 @@ import (
 	"time"
 
 	"github.com/evanw/esbuild/pkg/api"
-	"github.com/ije/gox/crypto/rs"
 	"github.com/ije/gox/utils"
 )
 
@@ -116,9 +113,7 @@ func (task *BuildTask) Build() (esm *ESM, err error) {
 	}
 
 	if task.wd == "" {
-		hasher := sha1.New()
-		hasher.Write([]byte(task.ID()))
-		task.wd = path.Join(os.TempDir(), fmt.Sprintf("esm-build-%s-%s", hex.EncodeToString(hasher.Sum(nil)), rs.Hex.String(8)))
+		task.wd = path.Join(os.TempDir(), fmt.Sprintf("esm-build-%s-%s", task.Pkg.Name, task.Pkg.Version))
 		ensureDir(task.wd)
 
 		if cfg.NpmToken != "" {
@@ -133,12 +128,13 @@ func (task *BuildTask) Build() (esm *ESM, err error) {
 		}
 	}
 
-	defer func() {
-		err := os.RemoveAll(task.wd)
-		if err != nil {
-			log.Warnf("clean build(%s) dir: %v", task.ID(), err)
-		}
-	}()
+	// TODO: Remove node_modules of the idle working dir
+	// 	defer func() {
+	// 		err := os.RemoveAll(task.wd)
+	// 		if err != nil {
+	// 			log.Warnf("clean build(%s) dir: %v", task.ID(), err)
+	// 		}
+	// 	}()
 
 	task.stage = "install"
 	err = yarnAdd(task.wd, task.Pkg)
@@ -597,22 +593,7 @@ esbuild:
 						Version:   task.Pkg.Version,
 						Submodule: submodule,
 					}
-					subTask := &BuildTask{
-						wd:           task.wd, // use current `wd` to skip deps installation
-						BuildArgs:    task.BuildArgs,
-						CdnOrigin:    task.CdnOrigin,
-						BuildVersion: task.BuildVersion,
-						Pkg:          subPkg,
-						Target:       task.Target,
-						DevMode:      task.DevMode,
-					}
-					subTask.treeShaking = newStringSet()
-					_, err = subTask.build(tracing)
-					if err != nil {
-						err = errors.New("can not build '" + submodule + "': " + err.Error())
-						return
-					}
-					importPath = task.getImportPath(subPkg, encodeBuildArgsPrefix(subTask.BuildArgs, subTask.Pkg.Name, false))
+					importPath = task.getImportPath(subPkg, encodeBuildArgsPrefix(task.BuildArgs, task.Pkg.Name, false))
 				}
 				// node builtin `buffer` module
 				if importPath == "" && name == "buffer" {
@@ -736,7 +717,7 @@ esbuild:
 					importPath = task.getImportPath(pkg, encodeBuildArgsPrefix(task.BuildArgs, pkg.Name, false))
 				}
 				if importPath == "" {
-					err = fmt.Errorf("Could not resolve \"%s\" (Imported by \"%s\")", name, task.Pkg.Name)
+					err = fmt.Errorf("could not resolve \"%s\" (Imported by \"%s\")", name, task.Pkg.Name)
 					return
 				}
 				buffer := bytes.NewBuffer(nil)
@@ -755,6 +736,7 @@ esbuild:
 							}
 							if err == nil {
 								dep, depNpm, err := initModule(task.wd, pkg, task.Target, task.DevMode)
+
 								if err == nil {
 									if bytes.HasPrefix(p, []byte{'.'}) {
 										// right shift to strip the object `key`
@@ -834,7 +816,9 @@ esbuild:
 						} else {
 							switch importName {
 							case "default":
-								fmt.Fprintf(buf, `import __%s$ from "%s";%s`, identifier, importPath, eol)
+								// Judge import members of commonjs package import at runtime due to lazy bundling of the module
+								fmt.Fprintf(buf, `import * as __%s$$$ from "%s";%s`, identifier, importPath, eol)
+								fmt.Fprintf(buf, `const __%s$ = __%s$$$.default ? __%s$$$.default : __%s$$$;%s`, identifier, identifier, identifier, identifier, eol)
 							case "*":
 								fmt.Fprintf(buf, `import * as __%s$ from "%s";%s`, identifier, importPath, eol)
 							case "all":

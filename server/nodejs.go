@@ -359,6 +359,15 @@ func fetchPackageInfo(name string, version string) (info NpmPackage, err error) 
 
 	cacheKey := fmt.Sprintf("npm:%s@%s", name, version)
 
+	mutex, loaded := lock.LoadOrStore(cacheKey, &sync.Mutex{})
+
+	log.Debugf("fetch lock: %s, loaded(%v)", cacheKey, loaded)
+	mutex.(*sync.Mutex).Lock()
+	defer func() {
+		log.Debugf("fetch  unlock: %s", cacheKey)
+		mutex.(*sync.Mutex).Unlock()
+	}()
+
 	// check cache firstly
 	if cache != nil {
 		var data []byte
@@ -370,18 +379,6 @@ func fetchPackageInfo(name string, version string) (info NpmPackage, err error) 
 			log.Error("cache:", err)
 		}
 	}
-
-	// wait lock release
-	for {
-		_, ok := lock.Load(cacheKey)
-		if !ok {
-			break
-		}
-		time.Sleep(10 * time.Millisecond)
-	}
-
-	lock.Store(cacheKey, struct{}{})
-	defer lock.Delete(cacheKey)
 
 	start := time.Now()
 	req, err := http.NewRequest("GET", strings.TrimRight(cfg.NpmRegistry, "/")+"/"+name, nil)
@@ -587,10 +584,28 @@ func installNodejs(dir string, version string) (err error) {
 	return
 }
 
+var addingLock sync.Map
+
 func yarnAdd(wd string, pkg Pkg) (err error) {
 	noCache := false
+	pkgNameFormat := fmt.Sprintf("%s@%s", pkg.Name, pkg.Version)
+
+	mutex, loaded := addingLock.LoadOrStore(pkgNameFormat, &sync.Mutex{})
+
+	log.Debugf("yarn add lock: %s, loaded(%v)", pkgNameFormat, loaded)
+	mutex.(*sync.Mutex).Lock()
+	defer func() {
+		log.Debugf("yarn add unlock: %s", pkgNameFormat)
+		mutex.(*sync.Mutex).Unlock()
+	}()
+
+	// file exist, skip install
+	if _, e := os.Stat(path.Join(wd, ".yarn_added")); e == nil {
+		return
+	}
+
 	for i := 0; i < 3; i++ {
-		err = runYarnAdd(wd, noCache, fmt.Sprintf("%s@%s", pkg.Name, pkg.Version))
+		err = runYarnAdd(wd, noCache, pkgNameFormat)
 		if err == nil && !fileExists(path.Join(wd, "node_modules", pkg.Name, "package.json")) {
 			noCache = true
 			err = fmt.Errorf("yarnAdd(%s): package.json not found", pkg)
@@ -615,7 +630,6 @@ func runYarnAdd(wd string, noCache bool, packages ...string) (err error) {
 			"--ignore-platform",
 			"--ignore-scripts",
 			"--no-bin-links",
-			"--no-lockfile",
 			"--no-node-version-check",
 			"--no-progress",
 			"--non-interactive",
@@ -643,6 +657,8 @@ func runYarnAdd(wd string, noCache bool, packages ...string) (err error) {
 		if err != nil {
 			return fmt.Errorf("yarn add %s: %s", strings.Join(packages, ","), string(output))
 		}
+
+		os.Create(path.Join(wd, ".yarn_added"))
 		log.Debug("yarn add", strings.Join(packages, ","), "in", time.Since(start))
 	}
 	return

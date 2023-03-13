@@ -2,7 +2,7 @@
 async function startEsmServer(onStart: () => void, single: boolean) {
   await run("go", "build", "-o", "esmd", "main.go");
   const p = Deno.run({
-    cmd: ["./esmd"],
+    cmd: ["./esmd", "--config", "test/config.json"],
     stdout: single ? "inherit" : "null",
     stderr: "inherit",
   });

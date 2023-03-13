@@ -210,14 +210,6 @@ func (task *BuildTask) transformDTS(dts string, aliasDepsPrefix string, marker *
 				maybeVersion = []string{v, "latest"}
 			}
 
-			// use version defined in `?deps`
-			if pkg, ok := task.deps.Get(depTypePkgName); ok {
-				maybeVersion = []string{
-					pkg.Version,
-					"latest",
-				}
-			}
-
 			var (
 				info            NpmPackage
 				subpath         string
@@ -240,6 +232,11 @@ func (task *BuildTask) transformDTS(dts string, aliasDepsPrefix string, marker *
 			}
 			if err != nil {
 				return importPath
+			}
+
+			// use version defined in `?deps`
+			if pkg, ok := task.deps.Get(depTypePkgName); ok {
+				info.Version = pkg.Version
 			}
 
 			pkgBase := info.Name + "@" + info.Version + "/"
