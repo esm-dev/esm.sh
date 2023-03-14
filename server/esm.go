@@ -95,7 +95,7 @@ func initModule(wd string, pkg Pkg, target string, isDev bool) (esm *ESM, npm Np
 								      "require": "./lib/core.js",
 								      "import": "./esm/core.js"
 								    },
-										"./lib/core.js": {
+									"./lib/core.js": {
 								      "require": "./lib/core.js",
 								      "import": "./esm/core.js"
 								    }
@@ -117,10 +117,34 @@ func initModule(wd string, pkg Pkg, target string, isDev bool) (esm *ESM, npm Np
 								hasDefines := false
 								if m, ok := defines.(map[string]interface{}); ok {
 									newDefines := map[string]interface{}{}
+
 									for key, value := range m {
 										if s, ok := value.(string); ok && s != name {
 											newDefines[key] = strings.Replace(s, "*", suffix, -1)
 											hasDefines = true
+										}
+
+										/**
+										exports: {
+											"./*": {
+												"types": "./*.d.ts",
+												"import": {
+													"types": "./esm/*.d.mts",
+													"default": "./esm/*.mjs"
+												},
+												"default": "./*.js"
+											}
+										}
+										*/
+										if s, ok := value.(map[string]interface{}); ok {
+											subNewDefinies := map[string]interface{}{}
+											for subKey, subValue := range s {
+												if s1, ok := subValue.(string); ok && s1 != name {
+													subNewDefinies[subKey] = strings.Replace(s1, "*", suffix, -1)
+													hasDefines = true
+												}
+											}
+											newDefines[key] = subNewDefinies
 										}
 									}
 									defines = newDefines
@@ -136,6 +160,7 @@ func initModule(wd string, pkg Pkg, target string, isDev bool) (esm *ESM, npm Np
 						}
 					}
 				}
+
 				if !resolved {
 					if npm.Type == "module" || npm.Module != "" {
 						// follow main module type
