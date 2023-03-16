@@ -42,7 +42,17 @@ func (task *BuildTask) ID() string {
 
 	if pkg.Submodule != "" {
 		name = pkg.Submodule
+	} else {
+		pack, _ := fetchPackageInfo(pkg.Name, pkg.Version)
+
+		if pack.Module != "" {
+			name = strings.TrimSuffix(pack.Module, filepath.Ext(pack.Module))
+		} else if pack.Main != "" {
+			name = strings.TrimSuffix(pack.Main, filepath.Ext(pack.Main))
+		}
+
 	}
+
 	name = strings.TrimSuffix(name, ".js")
 	if task.DevMode {
 		name += ".development"
