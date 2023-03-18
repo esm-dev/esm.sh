@@ -45,6 +45,43 @@ func (task *BuildTask) ID() string {
 	} else {
 		pack, _ := fetchPackageInfo(pkg.Name, pkg.Version)
 
+		// `Exports` should be top level to find the entry
+		// https://nodejs.org/dist/latest-v18.x/docs/api/packages.html#main-entry-point-export
+		if exports := pack.DefinedExports; exports != nil {
+			// TODO: Refactor & combine all find entry logic
+
+			if m, ok := exports.(map[string]interface{}); ok {
+				v, ok := m["."]
+				if ok {
+					/*
+						exports: {
+							".": {
+								"require": "./cjs/index.js",
+								"import": "./esm/index.js"
+							}
+						}
+						exports: {
+							".": "./esm/index.js"
+						}
+					*/
+					resolvePackageExports(&pack, v, task.Target, task.DevMode, pack.Type)
+				} else {
+					/*
+						exports: {
+							"require": "./cjs/index.js",
+							"import": "./esm/index.js"
+							"default": "./esm/index.js"
+						}
+					*/
+					resolvePackageExports(&pack, m, task.Target, task.DevMode, pack.Type)
+				}
+			} else if s, ok := exports.(string); ok {
+				/*
+				  exports: "./esm/index.js"
+				*/
+				resolvePackageExports(&pack, s, task.Target, task.DevMode, pack.Type)
+			}
+		}
 		if pack.Module != "" {
 			name = strings.TrimSuffix(pack.Module, filepath.Ext(pack.Module))
 		} else if pack.Main != "" {
