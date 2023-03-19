@@ -26,6 +26,7 @@ const stableBuild = new Set([
 ]);
 
 let imFilename = "import_map.json";
+let indentWidth = 2;
 
 async function add(args: string[], options: Record<string, string>) {
   if (options.alias && args.length > 1) {
@@ -175,7 +176,7 @@ async function init(args: string[], options: Record<string, string>) {
   };
   await Deno.writeTextFile(
     "deno.json",
-    JSON.stringify(config, null, 2),
+    JSON.stringify(config, null, indentWidth),
   );
   await saveImportMap(importMap);
   console.log("Initialized %cdeno.json%c, 3 task added:", "color:green", "");
@@ -300,7 +301,7 @@ async function saveImportMap(importMap: ImportMap): Promise<void> {
   // write
   await Deno.writeTextFile(
     imFilename,
-    JSON.stringify({ imports: sortedImports, scopes: sortedScopes }, null, 2),
+    JSON.stringify({ imports: sortedImports, scopes: sortedScopes }, null, indentWidth),
   );
 }
 
@@ -457,6 +458,9 @@ if (import.meta.main) {
     const config = await getDenoConfig();
     if (isNEString(config.importMap)) {
       imFilename = config.importMap;
+    }
+    if (typeof config?.fmt?.options?.indentWidth === "number") {
+      indentWidth = config.fmt.options.indentWidth;
     }
     await commands[command as keyof typeof commands](...parseFlags(args));
     console.log(`✨ Done in ${(performance.now() - start).toFixed(2)}ms`);
