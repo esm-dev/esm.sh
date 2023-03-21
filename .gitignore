@@ -1,4 +1,6 @@
 .DS_Store
+.idea/
+.vscode/
 Thumbs.db
 esmd
 .esmd/
@@ -6,5 +8,3 @@ config.json
 node_modules/
 target/
 pkg/
-.idea
-.vscode

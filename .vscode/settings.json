@@ -1,9 +1,0 @@
-{
-  "[rust]": {
-    "editor.defaultFormatter": "rust-lang.rust-analyzer",
-    "editor.formatOnSave": true
-  },
-  "rust-analyzer.linkedProjects": [
-    "packages/esm-cjs-lexer/Cargo.toml"
-  ]
-}
