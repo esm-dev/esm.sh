@@ -855,7 +855,7 @@ esbuild:
 				}
 				if ids.Has("__Buffer$") {
 					if task.Target == "denonext" {
-						fmt.Fprintf(buf, `import __Buffer$ from "node:buffer";%s`, eol)
+						fmt.Fprintf(buf, `import { Buffer as __Buffer$ } from "node:buffer";%s`, eol)
 					} else if task.Target == "deno" {
 						fmt.Fprintf(buf, `import  { Buffer as __Buffer$ } from "https://deno.land/std@%s/node/buffer.ts";%s`, task.denoStdVersion, eol)
 					} else {
