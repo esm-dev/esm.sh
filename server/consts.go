@@ -41,6 +41,7 @@ var requireModeAllowList = []string{
 	"@babel/types",
 	"domhandler",
 	"he",
+	"jsbn",
 	"keycode",
 	"lru_map",
 	"lz-string",
