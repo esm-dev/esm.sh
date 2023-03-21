@@ -359,12 +359,9 @@ func fetchPackageInfo(name string, version string) (info NpmPackage, err error) 
 
 	cacheKey := fmt.Sprintf("npm:%s@%s", name, version)
 
-	mutex, loaded := lock.LoadOrStore(cacheKey, &sync.Mutex{})
-
-	log.Debugf("fetch lock: %s, loaded(%v)", cacheKey, loaded)
+	mutex, _ := lock.LoadOrStore(cacheKey, &sync.Mutex{})
 	mutex.(*sync.Mutex).Lock()
 	defer func() {
-		log.Debugf("fetch  unlock: %s", cacheKey)
 		mutex.(*sync.Mutex).Unlock()
 	}()
 
@@ -590,12 +587,9 @@ func yarnAdd(wd string, pkg Pkg) (err error) {
 	noCache := false
 	pkgNameFormat := fmt.Sprintf("%s@%s", pkg.Name, pkg.Version)
 
-	mutex, loaded := addingLock.LoadOrStore(pkgNameFormat, &sync.Mutex{})
-
-	log.Debugf("yarn add lock: %s, loaded(%v)", pkgNameFormat, loaded)
+	mutex, _ := addingLock.LoadOrStore(pkgNameFormat, &sync.Mutex{})
 	mutex.(*sync.Mutex).Lock()
 	defer func() {
-		log.Debugf("yarn add unlock: %s", pkgNameFormat)
 		mutex.(*sync.Mutex).Unlock()
 	}()
 
