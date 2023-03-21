@@ -837,6 +837,15 @@ esbuild:
 			}
 
 			if task.Target == "deno" || task.Target == "denonext" {
+				// inject xhr polyfill for axios
+				if task.Pkg.Name == "axios" {
+					outputContent = bytes.Join([][]byte{
+						[]byte(`import "https://deno.land/x/xhr@0.3.0/mod.ts";`),
+						outputContent,
+					}, []byte{})
+				}
+				// most of npm packages check for window object to detect browser environment, but Deno also has the window object
+				// so we need to replace the check with document object
 				if task.DevMode {
 					outputContent = bytes.Replace(outputContent, []byte("typeof window !== \"undefined\""), []byte("typeof document !== \"undefined\""), -1)
 				} else {
