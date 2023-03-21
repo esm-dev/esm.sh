@@ -679,11 +679,8 @@ func esmHandler() rex.Handle {
 						submodule = strings.TrimSuffix(submodule, ".development")
 						isDev = true
 					}
-					pkgName := path.Base(reqPkg.Name)
-					if submodule == pkgName || (strings.HasSuffix(pkgName, ".js") && submodule+".js" == pkgName) {
-						submodule = ""
-					}
-					if submodule == pkgName+".css" {
+					pkgName := strings.TrimSuffix(path.Base(reqPkg.Name), ".js")
+					if submodule == pkgName || submodule == pkgName+".css" {
 						submodule = ""
 					}
 					// workaround for es5-ext weird "/#/" path

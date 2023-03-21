@@ -38,12 +38,11 @@ func (task *BuildTask) ID() string {
 	}
 
 	pkg := task.Pkg
-	name := path.Base(pkg.Name)
+	name := strings.TrimSuffix(path.Base(pkg.Name), ".js")
 
 	if pkg.Submodule != "" {
 		name = pkg.Submodule
 	}
-	name = strings.TrimSuffix(name, ".js")
 	if task.DevMode {
 		name += ".development"
 	}
@@ -67,7 +66,7 @@ func (task *BuildTask) ID() string {
 }
 
 func (task *BuildTask) getImportPath(pkg Pkg, prefix string) string {
-	name := path.Base(pkg.Name)
+	name := strings.TrimSuffix(path.Base(pkg.Name), ".js")
 	if pkg.Submodule != "" {
 		name = pkg.Submodule
 	}
@@ -75,7 +74,6 @@ func (task *BuildTask) getImportPath(pkg Pkg, prefix string) string {
 	if pkg.Name == "es5-ext" {
 		name = strings.ReplaceAll(name, "/#/", "/$$/")
 	}
-	name = strings.TrimSuffix(name, ".js")
 	if task.DevMode {
 		name += ".development"
 	}
