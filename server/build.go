@@ -211,7 +211,8 @@ func (task *BuildTask) build(tracing *stringSet) (esm *ESM, err error) {
 	} else {
 		if task.treeShaking.Size() > 0 {
 			buf := bytes.NewBuffer(nil)
-			fmt.Fprintf(buf, `export { %s } from "%s";`, strings.Join(task.treeShaking.Values(), ","), path.Join(npm.Name, npm.Module))
+			importPath := task.Pkg.ImportPath()
+			fmt.Fprintf(buf, `export { %s } from "%s";`, strings.Join(task.treeShaking.Values(), ","), importPath)
 			input = &api.StdinOptions{
 				Contents:   buf.String(),
 				ResolveDir: task.wd,
@@ -246,239 +247,6 @@ func (task *BuildTask) build(tracing *stringSet) (esm *ESM, err error) {
 	externalDeps := newStringSet()
 	implicitExternal := newStringSet()
 	browserExclude := map[string]*stringSet{}
-	esmResolverPlugin := api.Plugin{
-		Name: "esm-resolver",
-		Setup: func(build api.PluginBuild) {
-			build.OnResolve(
-				api.OnResolveOptions{Filter: ".*"},
-				func(args api.OnResolveArgs) (api.OnResolveResult, error) {
-					if strings.HasPrefix(args.Path, "data:") {
-						return api.OnResolveResult{External: true}, nil
-					}
-
-					// ignore `require()` expression
-					if task.ignoreRequire && (args.Kind == api.ResolveJSRequireCall || args.Kind == api.ResolveJSRequireResolve) && npm.Module != "" {
-						return api.OnResolveResult{Path: args.Path, External: true}, nil
-					}
-
-					// strip the tailing slash
-					specifier := strings.TrimSuffix(args.Path, "/")
-					// strip the `node:` prefix
-					specifier = strings.TrimPrefix(specifier, "node:")
-
-					// use `browser` field of package.json
-					if len(npm.Browser) > 0 && task.Target != "deno" && task.Target != "denonext" && task.Target != "node" {
-						spec := specifier
-						if strings.HasPrefix(specifier, "./") || strings.HasPrefix(specifier, "../") || specifier == ".." {
-							fullpath := path.Join(path.Dir(args.Importer), specifier)
-							// in macOS, the dir `/private/var/` is equal to `/var/`
-							if strings.HasPrefix(fullpath, "/private/var/") {
-								fullpath = strings.TrimPrefix(fullpath, "/private")
-							}
-							spec = "." + strings.TrimPrefix(fullpath, path.Join(task.wd, "node_modules", npm.Name))
-						}
-						if name, ok := npm.Browser[spec]; ok {
-							if name == "" {
-								// browser exclude
-								return api.OnResolveResult{Path: args.Path, Namespace: "browser-exclude"}, nil
-							}
-							if strings.HasPrefix(name, "./") {
-								specifier = path.Join(task.wd, "node_modules", npm.Name, name)
-							} else {
-								specifier = name
-							}
-						}
-					}
-
-					// use `?alias` query
-					if len(task.alias) > 0 {
-						if name, ok := task.alias[specifier]; ok {
-							specifier = name
-						}
-					}
-
-					// bundles all dependencies in `bundle` mode, apart from peer dependencies and `?external` query
-					if task.BundleMode && !implicitExternal.Has(specifier) && !task.external.Has(specifier) {
-						pkgName, _ := splitPkgPath(specifier)
-						if !builtInNodeModules[pkgName] {
-							_, ok := npm.PeerDependencies[pkgName]
-							if !ok {
-								return api.OnResolveResult{}, nil
-							}
-						}
-					}
-
-					// resolve path by `imports` of package.json
-					if v, ok := npm.Imports[args.Path]; ok {
-						if s, ok := v.(string); ok {
-							return api.OnResolveResult{
-								Path: path.Join(task.wd, "node_modules", npm.Name, s),
-							}, nil
-						} else if m, ok := v.(map[string]interface{}); ok {
-							targets := []string{"browser", "default", "node"}
-							if task.Target == "deno" || task.Target == "denonext" || task.Target == "node" {
-								targets = []string{"node", "default", "browser"}
-							}
-							for _, t := range targets {
-								if v, ok := m[t]; ok {
-									if s, ok := v.(string); ok {
-										return api.OnResolveResult{
-											Path: path.Join(task.wd, "node_modules", npm.Name, s),
-										}, nil
-									}
-								}
-							}
-						}
-					}
-
-					// externalize the main module
-					// e.g. "react/jsx-runtime" imports "react"
-					if task.Pkg.Submodule != "" && task.Pkg.Name == specifier {
-						externalDeps.Add(specifier)
-						return api.OnResolveResult{Path: "__ESM_SH_EXTERNAL:" + specifier, External: true}, nil
-					}
-
-					// bundle the package/module it self and the entrypoint
-					if specifier == task.Pkg.ImportPath() || specifier == entryPoint || specifier == path.Join(npm.Name, npm.Main) || specifier == path.Join(npm.Name, npm.Module) {
-						return api.OnResolveResult{}, nil
-					}
-
-					// splits modules based on the `exports` defines in package.json,
-					// see https://nodejs.org/api/packages.html
-					if (strings.HasPrefix(specifier, "./") || strings.HasPrefix(specifier, "../") || specifier == "..") && !strings.HasSuffix(specifier, ".js") && !strings.HasSuffix(specifier, ".mjs") && !strings.HasSuffix(specifier, ".json") {
-						fullpath := path.Join(path.Dir(args.Importer), specifier)
-						// in macOS, the dir `/private/var/` is equal to `/var/`
-						if strings.HasPrefix(fullpath, "/private/var/") {
-							fullpath = strings.TrimPrefix(fullpath, "/private")
-						}
-						spec := "." + strings.TrimPrefix(fullpath, path.Join(task.wd, "node_modules", npm.Name))
-						// bundle {pkgName}/{pkgName}.js
-						if spec == fmt.Sprintf("./%s.js", task.Pkg.Name) {
-							return api.OnResolveResult{}, nil
-						}
-						v, ok := npm.DefinedExports.(map[string]interface{})
-						if ok {
-							for export, paths := range v {
-								m, ok := paths.(map[string]interface{})
-								if ok && export != "." {
-									for _, value := range m {
-										s, ok := value.(string)
-										if ok && s != "" {
-											match := spec == s || spec+".js" == s || spec+".mjs" == s
-											if !match {
-												if a := strings.Split(s, "*"); len(a) == 2 {
-													prefix := a[0]
-													suffix := a[1]
-													if (strings.HasPrefix(spec, prefix)) &&
-														(strings.HasSuffix(spec, suffix) ||
-															strings.HasSuffix(spec+".js", suffix) ||
-															strings.HasSuffix(spec+".mjs", suffix)) {
-														matchName := strings.TrimPrefix(strings.TrimSuffix(spec, suffix), prefix)
-														export = strings.Replace(export, "*", matchName, -1)
-														match = true
-													}
-												}
-											}
-											if match {
-												url := path.Join(npm.Name, export)
-												if url == task.Pkg.ImportPath() {
-													return api.OnResolveResult{}, nil
-												}
-												externalDeps.Add(url)
-												return api.OnResolveResult{Path: "__ESM_SH_EXTERNAL:" + url, External: true}, nil
-											}
-										}
-									}
-								}
-							}
-						}
-					}
-
-					// for local modules
-					if isLocalImport(specifier) {
-						// bundle if the entry pkg is not a submodule
-						if task.Pkg.Submodule == "" {
-							return api.OnResolveResult{}, nil
-						}
-
-						// bundle if this pkg has 'exports' definitions
-						if npm.DefinedExports != nil && !reflect.ValueOf(npm.DefinedExports).IsNil() {
-							return api.OnResolveResult{}, nil
-						}
-
-						// otherwise do not bundle its local dependencies
-						var dirpath = args.ResolveDir
-						if strings.HasPrefix(dirpath, "/private/var/") {
-							dirpath = strings.TrimPrefix(dirpath, "/private")
-						}
-						fullFilepath := filepath.Join(dirpath, specifier)
-						// convert: full filepath -> package name + submodule path
-						specifier = strings.TrimPrefix(fullFilepath, filepath.Join(task.wd, "node_modules")+"/")
-						externalDeps.Add(specifier)
-						return api.OnResolveResult{Path: "__ESM_SH_EXTERNAL:" + specifier, External: true}, nil
-					}
-
-					// dynamic external
-					externalDeps.Add(specifier)
-					return api.OnResolveResult{Path: "__ESM_SH_EXTERNAL:" + specifier, External: true}, nil
-				},
-			)
-
-			// for browser exclude
-			build.OnLoad(
-				api.OnLoadOptions{Filter: ".*", Namespace: "browser-exclude"},
-				func(args api.OnLoadArgs) (ret api.OnLoadResult, err error) {
-					contents := "export default null;"
-					if exports, ok := browserExclude[args.Path]; ok {
-						for _, name := range exports.Values() {
-							contents = fmt.Sprintf("%sexport const %s = null;", contents, name)
-						}
-					}
-					return api.OnLoadResult{Contents: &contents, Loader: api.LoaderJS}, nil
-				},
-			)
-		},
-	}
-	esmBundlerPlugin := api.Plugin{
-		Name: "esm-bundler",
-		Setup: func(build api.PluginBuild) {
-			build.OnResolve(
-				api.OnResolveOptions{Filter: ".*"},
-				func(args api.OnResolveArgs) (api.OnResolveResult, error) {
-					var path string
-					prefix := fmt.Sprintf(`%s/v%d/`, cfg.BasePath, task.BuildVersion)
-					if strings.HasPrefix(args.Path, prefix) {
-						path = "/" + strings.TrimPrefix(args.Path, prefix)
-					} else if args.Namespace == "embed" {
-						path = filepath.Join("/", args.Path)
-					}
-					data, err := embedFS.ReadFile(("server/embed/polyfills" + path))
-					if err == nil {
-						return api.OnResolveResult{
-							Path:       path,
-							Namespace:  "embed",
-							PluginData: data,
-						}, err
-					}
-					return api.OnResolveResult{
-						Path:     args.Path,
-						External: true,
-					}, nil
-				},
-			)
-			build.OnLoad(
-				api.OnLoadOptions{Filter: ".*", Namespace: "embed"},
-				func(args api.OnLoadArgs) (api.OnLoadResult, error) {
-					data := args.PluginData.([]byte)
-					contents := string(data)
-					return api.OnLoadResult{
-						Contents: &contents,
-						Loader:   api.LoaderJS,
-					}, nil
-				},
-			)
-		},
-	}
 
 esbuild:
 	options := api.BuildOptions{
@@ -493,7 +261,210 @@ esbuild:
 		MinifySyntax:      !task.DevMode,
 		KeepNames:         task.keepNames,         // prevent class/function names erasing
 		IgnoreAnnotations: task.ignoreAnnotations, // some libs maybe use wrong side-effect annotations
-		Plugins:           []api.Plugin{esmResolverPlugin},
+		Plugins: []api.Plugin{{
+			Name: "esm",
+			Setup: func(build api.PluginBuild) {
+				build.OnResolve(
+					api.OnResolveOptions{Filter: ".*"},
+					func(args api.OnResolveArgs) (api.OnResolveResult, error) {
+						if strings.HasPrefix(args.Path, "data:") {
+							return api.OnResolveResult{External: true}, nil
+						}
+
+						// ignore `require()` expression
+						if task.ignoreRequire && (args.Kind == api.ResolveJSRequireCall || args.Kind == api.ResolveJSRequireResolve) && npm.Module != "" {
+							return api.OnResolveResult{Path: args.Path, External: true}, nil
+						}
+
+						// strip the tailing slash
+						specifier := strings.TrimSuffix(args.Path, "/")
+						// strip the `node:` prefix
+						specifier = strings.TrimPrefix(specifier, "node:")
+
+						// use `browser` field of package.json
+						if len(npm.Browser) > 0 && task.Target != "deno" && task.Target != "denonext" && task.Target != "node" {
+							spec := specifier
+							if strings.HasPrefix(specifier, "./") || strings.HasPrefix(specifier, "../") || specifier == ".." {
+								fullpath := path.Join(path.Dir(args.Importer), specifier)
+								// in macOS, the dir `/private/var/` is equal to `/var/`
+								if strings.HasPrefix(fullpath, "/private/var/") {
+									fullpath = strings.TrimPrefix(fullpath, "/private")
+								}
+								spec = "." + strings.TrimPrefix(fullpath, path.Join(task.wd, "node_modules", npm.Name))
+							}
+							if name, ok := npm.Browser[spec]; ok {
+								if name == "" {
+									// browser exclude
+									return api.OnResolveResult{Path: args.Path, Namespace: "browser-exclude"}, nil
+								}
+								if strings.HasPrefix(name, "./") {
+									specifier = path.Join(task.wd, "node_modules", npm.Name, name)
+								} else {
+									specifier = name
+								}
+							}
+						}
+
+						// use `?alias` query
+						if len(task.alias) > 0 {
+							if name, ok := task.alias[specifier]; ok {
+								specifier = name
+							}
+						}
+
+						// bundles all dependencies in `bundle` mode, apart from peer dependencies and `?external` query
+						if task.BundleMode && !implicitExternal.Has(specifier) && !task.external.Has(specifier) {
+							pkgName, _ := splitPkgPath(specifier)
+							if !builtInNodeModules[pkgName] {
+								_, ok := npm.PeerDependencies[pkgName]
+								if !ok {
+									return api.OnResolveResult{}, nil
+								}
+							}
+						}
+
+						// resolve path by `imports` of package.json
+						if v, ok := npm.Imports[args.Path]; ok {
+							if s, ok := v.(string); ok {
+								return api.OnResolveResult{
+									Path: path.Join(task.wd, "node_modules", npm.Name, s),
+								}, nil
+							} else if m, ok := v.(map[string]interface{}); ok {
+								targets := []string{"browser", "default", "node"}
+								if task.Target == "deno" || task.Target == "denonext" || task.Target == "node" {
+									targets = []string{"node", "default", "browser"}
+								}
+								for _, t := range targets {
+									if v, ok := m[t]; ok {
+										if s, ok := v.(string); ok {
+											return api.OnResolveResult{
+												Path: path.Join(task.wd, "node_modules", npm.Name, s),
+											}, nil
+										}
+									}
+								}
+							}
+						}
+
+						// externalize the main module
+						// e.g. "react/jsx-runtime" imports "react"
+						if task.Pkg.Submodule != "" && task.Pkg.Name == specifier {
+							externalDeps.Add(specifier)
+							return api.OnResolveResult{Path: "__ESM_SH_EXTERNAL:" + specifier, External: true}, nil
+						}
+
+						// bundle the package/module it self and the entrypoint
+						if specifier == task.Pkg.ImportPath() || specifier == entryPoint || specifier == path.Join(npm.Name, npm.Main) || specifier == path.Join(npm.Name, npm.Module) {
+							return api.OnResolveResult{}, nil
+						}
+
+						// splits modules based on the `exports` defines in package.json,
+						// see https://nodejs.org/api/packages.html
+						if (strings.HasPrefix(specifier, "./") || strings.HasPrefix(specifier, "../") || specifier == "..") && !strings.HasSuffix(specifier, ".js") && !strings.HasSuffix(specifier, ".mjs") && !strings.HasSuffix(specifier, ".json") {
+							fullpath := path.Join(path.Dir(args.Importer), specifier)
+							// in macOS, the dir `/private/var/` is equal to `/var/`
+							if strings.HasPrefix(fullpath, "/private/var/") {
+								fullpath = strings.TrimPrefix(fullpath, "/private")
+							}
+							spec := "." + strings.TrimPrefix(fullpath, path.Join(task.wd, "node_modules", npm.Name))
+							// bundle {pkgName}/{pkgName}.js
+							if spec == fmt.Sprintf("./%s.js", task.Pkg.Name) {
+								return api.OnResolveResult{}, nil
+							}
+							v, ok := npm.DefinedExports.(map[string]interface{})
+							if ok {
+								for export, paths := range v {
+									m, ok := paths.(map[string]interface{})
+									if ok && export != "." {
+										for _, value := range m {
+											s, ok := value.(string)
+											if ok && s != "" {
+												match := spec == s || spec+".js" == s || spec+".mjs" == s
+												if !match {
+													if a := strings.Split(s, "*"); len(a) == 2 {
+														prefix := a[0]
+														suffix := a[1]
+														if (strings.HasPrefix(spec, prefix)) &&
+															(strings.HasSuffix(spec, suffix) ||
+																strings.HasSuffix(spec+".js", suffix) ||
+																strings.HasSuffix(spec+".mjs", suffix)) {
+															matchName := strings.TrimPrefix(strings.TrimSuffix(spec, suffix), prefix)
+															export = strings.Replace(export, "*", matchName, -1)
+															match = true
+														}
+													}
+												}
+												if match {
+													url := path.Join(npm.Name, export)
+													if url == task.Pkg.ImportPath() {
+														return api.OnResolveResult{}, nil
+													}
+													externalDeps.Add(url)
+													return api.OnResolveResult{Path: "__ESM_SH_EXTERNAL:" + url, External: true}, nil
+												}
+											}
+										}
+									}
+								}
+							}
+						}
+
+						// for local modules
+						if isLocalImport(specifier) {
+							// bundle if the entry pkg is not a submodule
+							if task.Pkg.Submodule == "" {
+								return api.OnResolveResult{}, nil
+							}
+
+							// bundle if this pkg has 'exports' definitions
+							if npm.DefinedExports != nil && !reflect.ValueOf(npm.DefinedExports).IsNil() {
+								return api.OnResolveResult{}, nil
+							}
+
+							// otherwise do not bundle its local dependencies
+							var dirpath = args.ResolveDir
+							if strings.HasPrefix(dirpath, "/private/var/") {
+								dirpath = strings.TrimPrefix(dirpath, "/private")
+							}
+							fullFilepath := filepath.Join(dirpath, specifier)
+							// convert: full filepath -> package name + submodule path
+							specifier = strings.TrimPrefix(fullFilepath, filepath.Join(task.wd, "node_modules")+"/")
+							externalDeps.Add(specifier)
+							return api.OnResolveResult{Path: "__ESM_SH_EXTERNAL:" + specifier, External: true}, nil
+						}
+
+						// check dep `sideEffects`
+						sideEffects := api.SideEffectsTrue
+						if fileExists(path.Join(task.wd, "node_modules", specifier, "package.json")) {
+							var np NpmPackage
+							if utils.ParseJSONFile(path.Join(task.wd, "node_modules", specifier, "package.json"), &np) == nil {
+								if !np.SideEffects {
+									sideEffects = api.SideEffectsFalse
+								}
+							}
+						}
+
+						// dynamic external
+						externalDeps.Add(specifier)
+						return api.OnResolveResult{Path: "__ESM_SH_EXTERNAL:" + specifier, External: true, SideEffects: sideEffects}, nil
+					},
+				)
+
+				// for browser exclude
+				build.OnLoad(
+					api.OnLoadOptions{Filter: ".*", Namespace: "browser-exclude"},
+					func(args api.OnLoadArgs) (ret api.OnLoadResult, err error) {
+						contents := "export default null;"
+						if exports, ok := browserExclude[args.Path]; ok {
+							for _, name := range exports.Values() {
+								contents = fmt.Sprintf("%sexport const %s = null;", contents, name)
+							}
+						}
+						return api.OnLoadResult{Contents: &contents, Loader: api.LoaderJS}, nil
+					},
+				)
+			},
+		}},
 		Loader: map[string]api.Loader{
 			".wasm":  api.LoaderDataURL,
 			".svg":   api.LoaderDataURL,
@@ -697,22 +668,29 @@ esbuild:
 						Submodule: submodule,
 					}
 					t := &BuildTask{
-						BuildArgs:    task.BuildArgs,
+						BuildArgs: BuildArgs{
+							alias:             task.alias,
+							deps:              task.deps,
+							external:          task.external,
+							treeShaking:       newStringSet(), // clear `?exports` args
+							denoStdVersion:    task.denoStdVersion,
+							ignoreRequire:     task.ignoreRequire,
+							ignoreAnnotations: task.ignoreAnnotations,
+							keepNames:         task.keepNames,
+						},
 						CdnOrigin:    task.CdnOrigin,
 						BuildVersion: task.BuildVersion,
 						Pkg:          pkg,
 						Target:       task.Target,
 						DevMode:      task.DevMode,
 					}
-					// clear `?exports` args
-					t.treeShaking = newStringSet()
 
 					_, ok := queryESMBuild(t.ID())
 					if ok {
 						buildQueue.Add(t, "")
 					}
 
-					importPath = task.getImportPath(pkg, encodeBuildArgsPrefix(task.BuildArgs, pkg.Name, false))
+					importPath = task.getImportPath(pkg, encodeBuildArgsPrefix(t.BuildArgs, pkg.Name, false))
 				}
 				if importPath == "" {
 					err = fmt.Errorf("could not resolve \"%s\" (Imported by \"%s\")", name, task.Pkg.Name)
@@ -872,7 +850,46 @@ esbuild:
 			}
 
 			if task.BundleMode && task.Target != "deno" && task.Target != "denonext" {
-				options.Plugins = []api.Plugin{esmBundlerPlugin}
+				options.Plugins = []api.Plugin{{
+					Name: "esm",
+					Setup: func(build api.PluginBuild) {
+						build.OnResolve(
+							api.OnResolveOptions{Filter: ".*"},
+							func(args api.OnResolveArgs) (api.OnResolveResult, error) {
+								var path string
+								prefix := fmt.Sprintf(`%s/v%d/`, cfg.BasePath, task.BuildVersion)
+								if strings.HasPrefix(args.Path, prefix) {
+									path = "/" + strings.TrimPrefix(args.Path, prefix)
+								} else if args.Namespace == "embed" {
+									path = filepath.Join("/", args.Path)
+								}
+								data, err := embedFS.ReadFile(("server/embed/polyfills" + path))
+								if err == nil {
+									return api.OnResolveResult{
+										Path:       path,
+										Namespace:  "embed",
+										PluginData: data,
+									}, err
+								}
+								return api.OnResolveResult{
+									Path:     args.Path,
+									External: true,
+								}, nil
+							},
+						)
+						build.OnLoad(
+							api.OnLoadOptions{Filter: ".*", Namespace: "embed"},
+							func(args api.OnLoadArgs) (api.OnLoadResult, error) {
+								data := args.PluginData.([]byte)
+								contents := string(data)
+								return api.OnLoadResult{
+									Contents: &contents,
+									Loader:   api.LoaderJS,
+								}, nil
+							},
+						)
+					},
+				}}
 				options.EntryPoints = nil
 				options.Stdin = &api.StdinOptions{
 					Contents:   buf.String(),

@@ -186,6 +186,7 @@ type NpmPackageTemp struct {
 	JsNextMain       string                 `json:"jsnext:main,omitempty"`
 	Types            string                 `json:"types,omitempty"`
 	Typings          string                 `json:"typings,omitempty"`
+	SideEffects      interface{}            `json:"sideEffects,omitempty"`
 	Dependencies     map[string]string      `json:"dependencies,omitempty"`
 	PeerDependencies map[string]string      `json:"peerDependencies,omitempty"`
 	Imports          map[string]interface{} `json:"imports,omitempty"`
@@ -217,6 +218,14 @@ func (a *NpmPackageTemp) ToNpmPackage() *NpmPackage {
 			deprecated = s
 		}
 	}
+	sideEffects := true
+	if a.SideEffects != nil {
+		if s, ok := a.SideEffects.(string); ok {
+			sideEffects = s != "false"
+		} else if b, ok := a.SideEffects.(bool); ok {
+			sideEffects = b
+		}
+	}
 	return &NpmPackage{
 		Name:             a.Name,
 		Version:          a.Version,
@@ -228,6 +237,7 @@ func (a *NpmPackageTemp) ToNpmPackage() *NpmPackage {
 		Types:            a.Types,
 		Typings:          a.Typings,
 		Browser:          browser,
+		SideEffects:      sideEffects,
 		Dependencies:     a.Dependencies,
 		PeerDependencies: a.PeerDependencies,
 		Imports:          a.Imports,
@@ -247,6 +257,7 @@ type NpmPackage struct {
 	JsNextMain       string
 	Types            string
 	Typings          string
+	SideEffects      bool
 	Browser          map[string]string
 	Dependencies     map[string]string
 	PeerDependencies map[string]string
