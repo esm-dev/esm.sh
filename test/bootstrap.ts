@@ -1,8 +1,9 @@
 #!/usr/bin/env -S deno run --allow-run --allow-read --allow-write --allow-net
-async function startEsmServer(onStart: () => void, single: boolean) {
+
+async function startServer(onStart: () => void, single: boolean) {
   await run("go", "build", "-o", "esmd", "main.go");
   const p = Deno.run({
-    cmd: ["./esmd", "--config", "test/config.json"],
+    cmd: ["./esmd"],
     stdout: single ? "inherit" : "null",
     stderr: "inherit",
   });
@@ -126,8 +127,7 @@ async function run(...cmd: string[]) {
   return await Deno.run({ cmd, stdout: "inherit", stderr: "inherit" }).status();
 }
 
-/* check whether or not the given path exists as regular file. */
-export async function existsFile(path: string): Promise<boolean> {
+async function existsFile(path: string): Promise<boolean> {
   try {
     const fi = await Deno.lstat(path);
     return fi.isFile;
@@ -141,7 +141,7 @@ export async function existsFile(path: string): Promise<boolean> {
 
 if (import.meta.main) {
   const [testDir] = Deno.args;
-  startEsmServer(async () => {
+  startServer(async () => {
     let spentTimeCount = 0;
     if (testDir) {
       spentTimeCount += await runTest(testDir, true);
