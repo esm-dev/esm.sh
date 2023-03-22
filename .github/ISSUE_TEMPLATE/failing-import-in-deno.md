@@ -3,16 +3,15 @@ name: A failing module import in Deno
 about: Submit a report if a module fails to import in Deno.
 title: 'Failed to import -'
 labels: deno
-assignees: ''
 ---
 
 ## Failing module
 
-- **GitHub**: 
-- **npm**:
+- **GitHub**: https://github.com/my/repo
+- **npm**: https://npmjs.com/package/my_package
 
 ```js
-import { something } from 'https://esm.sh/my_module'
+import { something } from "https://esm.sh/my_module"
 ```
 
 ## Error message
