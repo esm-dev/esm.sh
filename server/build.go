@@ -39,9 +39,11 @@ func (task *BuildTask) ID() string {
 
 	pkg := task.Pkg
 	name := strings.TrimSuffix(path.Base(pkg.Name), ".js")
+	extname := ".mjs"
 
 	if pkg.Submodule != "" {
 		name = pkg.Submodule
+		extname = ".js"
 	}
 	if task.DevMode {
 		name += ".development"
@@ -51,24 +53,27 @@ func (task *BuildTask) ID() string {
 	}
 
 	task.id = fmt.Sprintf(
-		"%s/%s@%s/%s%s/%s.js",
+		"%s/%s@%s/%s%s/%s%s",
 		task.getBuildVersion(task.Pkg),
 		pkg.Name,
 		pkg.Version,
 		encodeBuildArgsPrefix(task.BuildArgs, task.Pkg.Name, task.Target == "types"),
 		task.Target,
 		name,
+		extname,
 	)
 	if task.Target == "types" {
-		task.id = strings.TrimSuffix(task.id, ".js")
+		task.id = strings.TrimSuffix(task.id, extname)
 	}
 	return task.id
 }
 
 func (task *BuildTask) getImportPath(pkg Pkg, prefix string) string {
 	name := strings.TrimSuffix(path.Base(pkg.Name), ".js")
+	extname := ".mjs"
 	if pkg.Submodule != "" {
 		name = pkg.Submodule
+		extname = ".js"
 	}
 	// workaround for es5-ext weird "/#/" path
 	if pkg.Name == "es5-ext" {
@@ -79,7 +84,7 @@ func (task *BuildTask) getImportPath(pkg Pkg, prefix string) string {
 	}
 
 	return fmt.Sprintf(
-		"%s/%s/%s@%s/%s%s/%s.js",
+		"%s/%s/%s@%s/%s%s/%s%s",
 		cfg.BasePath,
 		task.getBuildVersion(pkg),
 		pkg.Name,
@@ -87,6 +92,7 @@ func (task *BuildTask) getImportPath(pkg Pkg, prefix string) string {
 		prefix,
 		task.Target,
 		name,
+		extname,
 	)
 }
 
@@ -596,7 +602,8 @@ esbuild:
 								Name:    p.Name,
 								Version: p.Version,
 							}, "")
-							importPath = strings.TrimSuffix(importPath, ".js") + ".bundle.js"
+							extname := filepath.Ext(importPath)
+							importPath = strings.TrimSuffix(importPath, extname) + ".bundle" + extname
 						} else {
 							_, err := embedFS.ReadFile(fmt.Sprintf("server/embed/polyfills/node_%s.js", name))
 							if err == nil {
@@ -938,7 +945,8 @@ esbuild:
 				return
 			}
 		} else if strings.HasSuffix(file.Path, ".css") {
-			_, err = fs.WriteFile(strings.TrimSuffix(task.getSavepath(), ".js")+".css", bytes.NewReader(outputContent))
+			savePath := task.getSavepath()
+			_, err = fs.WriteFile(strings.TrimSuffix(savePath, path.Ext(savePath))+".css", bytes.NewReader(outputContent))
 			if err != nil {
 				return
 			}

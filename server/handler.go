@@ -398,7 +398,7 @@ func esmHandler() rex.Handle {
 		var storageType string
 		if reqPkg.Submodule != "" {
 			switch path.Ext(pathname) {
-			case ".js":
+			case ".mjs", ".js":
 				if hasBuildVerPrefix {
 					storageType = "builds"
 				}
@@ -408,7 +408,7 @@ func esmHandler() rex.Handle {
 				} else if len(strings.Split(pathname, "/")) > 2 {
 					storageType = "raw"
 				}
-			case ".jsx", ".mjs", ".ts", ".mts", ".tsx":
+			case ".jsx", ".ts", ".mts", ".tsx":
 				if hasBuildVerPrefix && strings.HasSuffix(pathname, ".d.ts") {
 					storageType = "types"
 				} else if len(strings.Split(pathname, "/")) > 2 {
@@ -498,7 +498,7 @@ func esmHandler() rex.Handle {
 
 			fi, err := fs.Stat(savePath)
 			if err != nil {
-				if err == storage.ErrNotFound && strings.HasSuffix(pathname, ".js.map") {
+				if err == storage.ErrNotFound && endsWith(pathname, ".mjs.map", ".js.map") {
 					return rex.Status(404, "Not found")
 				}
 				if err != storage.ErrNotFound {
@@ -668,30 +668,43 @@ func esmHandler() rex.Handle {
 		}
 
 		// check whether it is `bare` mode
-		if hasBuildVerPrefix && (endsWith(pathname, ".js") || endsWith(pathname, ".css")) {
+		if hasBuildVerPrefix && (endsWith(pathname, ".mjs", ".js", ".css")) {
 			a := strings.Split(reqPkg.Submodule, "/")
 			if len(a) > 1 {
-				if _, ok := targets[a[0]]; ok {
-					submodule := strings.TrimSuffix(strings.Join(a[1:], "/"), ".js")
-					if endsWith(submodule, ".bundle") {
-						submodule = strings.TrimSuffix(submodule, ".bundle")
-						isBundleMode = true
-					}
-					if endsWith(submodule, ".development") {
-						submodule = strings.TrimSuffix(submodule, ".development")
-						isDev = true
-					}
+				maybeTarget := a[0]
+				if _, ok := targets[maybeTarget]; ok {
+					submodule := strings.Join(a[1:], "/")
 					pkgName := strings.TrimSuffix(path.Base(reqPkg.Name), ".js")
-					if submodule == pkgName || submodule == pkgName+".css" {
-						submodule = ""
+					if submodule == pkgName+".css" {
+						reqPkg.Submodule = ""
+						target = maybeTarget
+						isBare = true
+					} else if !strings.HasSuffix(submodule, ".css") {
+						mjs := strings.HasSuffix(submodule, ".mjs")
+						if mjs {
+							submodule = strings.TrimSuffix(submodule, ".mjs")
+						} else {
+							submodule = strings.TrimSuffix(submodule, ".js")
+						}
+						if endsWith(submodule, ".bundle") {
+							submodule = strings.TrimSuffix(submodule, ".bundle")
+							isBundleMode = true
+						}
+						if endsWith(submodule, ".development") {
+							submodule = strings.TrimSuffix(submodule, ".development")
+							isDev = true
+						}
+						if submodule == pkgName && mjs {
+							submodule = ""
+						}
+						// workaround for es5-ext weird "/#/" path
+						if submodule != "" && reqPkg.Name == "es5-ext" {
+							submodule = strings.ReplaceAll(submodule, "/$$/", "/#/")
+						}
+						reqPkg.Submodule = submodule
+						target = maybeTarget
+						isBare = true
 					}
-					// workaround for es5-ext weird "/#/" path
-					if pkgName == "es5-ext" {
-						submodule = strings.ReplaceAll(submodule, "/$$/", "/#/")
-					}
-					reqPkg.Submodule = submodule
-					target = a[0]
-					isBare = true
 				}
 			}
 		}
@@ -823,7 +836,7 @@ func esmHandler() rex.Handle {
 			if !esm.PackageCSS {
 				return rex.Status(404, "Package CSS not found")
 			}
-			url := fmt.Sprintf("%s%s/%s.css", cdnOrigin, cfg.BasePath, strings.TrimSuffix(taskID, ".js"))
+			url := fmt.Sprintf("%s%s/%s.css", cdnOrigin, cfg.BasePath, strings.TrimSuffix(taskID, path.Ext(taskID)))
 			return rex.Redirect(url, http.StatusFound)
 		}
 
@@ -841,7 +854,7 @@ func esmHandler() rex.Handle {
 				return rex.Status(500, err.Error())
 			}
 			ctx.SetHeader("Cache-Control", "public, max-age=31536000, immutable")
-			if isWorker && strings.HasSuffix(savePath, ".js") {
+			if isWorker && endsWith(savePath, ".mjs", ".js") {
 				defer r.Close()
 				buf, err := ioutil.ReadAll(r)
 				if err != nil {

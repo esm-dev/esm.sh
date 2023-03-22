@@ -155,7 +155,9 @@ if (import.meta.main) {
     }
     timeUsed = Math.ceil(timeUsed / 1000);
     console.log(
-      `Done! Total time spent: %c${Math.floor(timeUsed / 60)}m${timeUsed}s`,
+      `Done! Total time spent: %c${Math.floor(timeUsed / 60)}m${
+        timeUsed % 60
+      }s`,
       "color: blue",
     );
     Deno.exit(0);

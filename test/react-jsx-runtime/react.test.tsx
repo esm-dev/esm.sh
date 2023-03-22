@@ -21,6 +21,6 @@ Deno.test("react-jsx-runtime", async () => {
   );
   assertStringIncludes(
     await res.text(),
-    `"/stable/react@18.2.0/deno/react.js"`,
+    `"/stable/react@18.2.0/deno/react.mjs"`,
   );
 });
