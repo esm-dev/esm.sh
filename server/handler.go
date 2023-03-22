@@ -569,10 +569,12 @@ func esmHandler() rex.Handle {
 
 		// check `?exports` query
 		treeShaking := newStringSet()
-		for _, p := range strings.Split(ctx.Form.Value("exports"), ",") {
-			p = strings.TrimSpace(p)
-			if regexpJSIdent.MatchString(p) {
-				treeShaking.Add(p)
+		if !stableBuild[reqPkg.Name] {
+			for _, p := range strings.Split(ctx.Form.Value("exports"), ",") {
+				p = strings.TrimSpace(p)
+				if regexpJSIdent.MatchString(p) {
+					treeShaking.Add(p)
+				}
 			}
 		}
 
