@@ -1,5 +1,21 @@
 # Change Log
 
+## v112
+
+- Use `.mjs` extension for the package main module to resolve subpath conflicts
+- Ignore `?exports` query when importing stable modules
+- Fix npm naming regexp (close [#541](https://github.com/esm-dev/esm.sh/issues/541))
+- Fix node buffer import for denonext target (closed [#556](https://github.com/esm-dev/esm.sh/issues/556))
+- Fix tree shaking (close [#521](https://github.com/esm-dev/esm.sh/issues/521))
+- Fix package nested conditions export ([#546](https://github.com/esm-dev/esm.sh/pull/546) by @Justinidlerz)
+- Fix esm imports in cjs (close [#557](https://github.com/esm-dev/esm.sh/issues/557))
+- Improve server performance ([#543](https://github.com/esm-dev/esm.sh/pull/543) by @Justinidlerz)
+- Update requireModeAllowList (close [#540](https://github.com/esm-dev/esm.sh/issues/540), [#548](https://github.com/esm-dev/esm.sh/issues/548))
+
+For Deno:
+- Inject `XHR` polyfill for `axios`, `cross-fetch`, `whatwg-fetch` automatically
+- CLI: Use user-specified indent size ([#551](https://github.com/esm-dev/esm.sh/pull/551) by @npg418)
+
 ## v111
 
 - Print package `deprecated` message
