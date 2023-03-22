@@ -498,7 +498,7 @@ func esmHandler() rex.Handle {
 
 			fi, err := fs.Stat(savePath)
 			if err != nil {
-				if err == storage.ErrNotFound && endsWith(pathname, ".mjs.map", ".js.map") {
+				if err == storage.ErrNotFound && strings.HasSuffix(pathname, ".map") {
 					return rex.Status(404, "Not found")
 				}
 				if err != storage.ErrNotFound {
@@ -694,7 +694,7 @@ func esmHandler() rex.Handle {
 							submodule = strings.TrimSuffix(submodule, ".development")
 							isDev = true
 						}
-						if submodule == pkgName && mjs {
+						if submodule == pkgName && (mjs || stableBuild[reqPkg.Name]) {
 							submodule = ""
 						}
 						// workaround for es5-ext weird "/#/" path
