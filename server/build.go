@@ -739,7 +739,7 @@ esbuild:
 										}
 									}
 									// if the dependency is an es module without `default` export, then use star import
-									if !marked && depNpm.Module != "" {
+									if !marked && depNpm.Module != "" && !depESM.ExportDefault {
 										cjsImports.Add("*")
 										marked = true
 									}

@@ -8,7 +8,7 @@ async function startServer(onStart: () => void, single: boolean) {
     stderr: "inherit",
   });
   addEventListener("unload", (e) => {
-    console.log("closing esm.sh server...");
+    console.log("%cClosing esm.sh server...", "color: grey");
     p.kill("SIGINT");
   });
   while (true) {
@@ -57,7 +57,7 @@ async function runTest(name: string, retry?: boolean): Promise<number> {
       Deno.exit(code);
     }
   }
-  return Date.now() - execBegin
+  return Date.now() - execBegin;
 }
 
 async function runCliTest() {
@@ -142,18 +142,22 @@ async function existsFile(path: string): Promise<boolean> {
 if (import.meta.main) {
   const [testDir] = Deno.args;
   startServer(async () => {
-    let spentTimeCount = 0;
+    let timeUsed = 0;
     if (testDir) {
-      spentTimeCount += await runTest(testDir, true);
+      timeUsed += await runTest(testDir, true);
     } else {
       await runCliTest();
       for await (const entry of Deno.readDir("./test")) {
         if (entry.isDirectory && !entry.name.startsWith("_")) {
-          spentTimeCount += await runTest(entry.name);
+          timeUsed += await runTest(entry.name);
         }
       }
     }
-    console.log(`Done! Total time spent: ${spentTimeCount}`);
+    timeUsed = Math.ceil(timeUsed / 1000);
+    console.log(
+      `Done! Total time spent: %c${Math.floor(timeUsed / 60)}m${timeUsed}s`,
+      "color: blue",
+    );
     Deno.exit(0);
   }, Boolean(testDir));
 }
