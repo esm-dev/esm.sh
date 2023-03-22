@@ -845,7 +845,8 @@ esbuild:
 
 			if task.Target == "deno" || task.Target == "denonext" {
 				// inject xhr polyfill for axios
-				if task.Pkg.Name == "axios" {
+				switch task.Pkg.Name {
+				case "axios", "cross-fetch", "whatwg-fetch":
 					outputContent = bytes.Join([][]byte{
 						[]byte(`import "https://deno.land/x/xhr@0.3.0/mod.ts";`),
 						outputContent,
