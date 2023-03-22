@@ -15,8 +15,9 @@ type Pkg struct {
 
 func validatePkgPath(pathname string) (Pkg, string, error) {
 	pkgName, submodule := splitPkgPath(pathname)
-	submodule = strings.TrimSuffix(submodule, ".mjs")
-	submodule = strings.TrimSuffix(submodule, ".js")
+	if submodule != "" {
+		submodule = strings.TrimSuffix(submodule, ".js")
+	}
 	name, maybeVersion := utils.SplitByLastByte(pkgName, '@')
 	if strings.HasPrefix(pkgName, "@") {
 		name, maybeVersion = utils.SplitByLastByte(pkgName[1:], '@')
