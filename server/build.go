@@ -112,7 +112,7 @@ func (task *BuildTask) getSavepath() string {
 
 func (task *BuildTask) Build() (esm *ESM, err error) {
 	if task.wd == "" {
-		task.wd = path.Join(os.TempDir(), fmt.Sprintf("esm-build-%s-%s", task.Pkg.Name, task.Pkg.Version))
+		task.wd = path.Join(os.TempDir(), fmt.Sprintf("esm/%s@%s", task.Pkg.Name, task.Pkg.Version))
 		ensureDir(task.wd)
 
 		if cfg.NpmToken != "" {
