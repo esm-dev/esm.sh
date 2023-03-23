@@ -42,6 +42,8 @@ var requireModeAllowList = []string{
 	"domhandler",
 	"he",
 	"jsbn",
+	"netmask",
+	"xml2js",
 	"keycode",
 	"lru_map",
 	"lz-string",
