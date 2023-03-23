@@ -469,8 +469,11 @@ func esmHandler() rex.Handle {
 			return rex.Content(savePath, fi.ModTime(), f) // auto closed
 		}
 
+		// rebuild the module when `?rebuild=TRUE` is set
+		rebuild := ctx.Form.Value("rebuild") == "TRUE"
+
 		// serve build files
-		if hasBuildVerPrefix && (storageType == "builds" || storageType == "types") {
+		if hasBuildVerPrefix && (storageType == "builds" || storageType == "types") && !rebuild {
 			var savePath string
 			if outdatedBuildVer != "" {
 				savePath = path.Join(storageType, outdatedBuildVer, pathname)
@@ -617,7 +620,6 @@ func esmHandler() rex.Handle {
 		ignoreRequire := ctx.Form.Has("ignore-require") || ctx.Form.Has("no-require") || reqPkg.Name == "@unocss/preset-icons"
 		keepNames := ctx.Form.Has("keep-names")
 		ignoreAnnotations := ctx.Form.Has("ignore-annotations")
-		rebuild := ctx.Form.Value("rebuild") == "TRUE"
 
 		// force react/jsx-dev-runtime and react-refresh into `dev` mode
 		if !isDev && ((reqPkg.Name == "react" && reqPkg.Submodule == "jsx-dev-runtime") || reqPkg.Name == "react-refresh") {
