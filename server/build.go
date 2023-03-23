@@ -111,11 +111,6 @@ func (task *BuildTask) getSavepath() string {
 }
 
 func (task *BuildTask) Build() (esm *ESM, err error) {
-	prev, ok := queryESMBuild(task.ID())
-	if ok {
-		return prev, nil
-	}
-
 	if task.wd == "" {
 		task.wd = path.Join(os.TempDir(), fmt.Sprintf("esm-build-%s-%s", task.Pkg.Name, task.Pkg.Version))
 		ensureDir(task.wd)
@@ -146,15 +141,10 @@ func (task *BuildTask) Build() (esm *ESM, err error) {
 		return
 	}
 
-	return task.build(newStringSet())
+	return task.build()
 }
 
-func (task *BuildTask) build(tracing *stringSet) (esm *ESM, err error) {
-	if tracing.Has(task.ID()) {
-		return
-	}
-	tracing.Add(task.ID())
-
+func (task *BuildTask) build() (esm *ESM, err error) {
 	task.stage = "init"
 	esm, npm, err := initModule(task.wd, task.Pkg, task.Target, task.DevMode)
 	if err != nil {

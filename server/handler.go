@@ -41,22 +41,6 @@ func esmHandler() rex.Handle {
 			}
 		}
 
-		// pprof
-		// if strings.HasPrefix(pathname, "/debug/pprof/") {
-		// 	switch pathname {
-		// 	case "/debug/pprof/cmdline":
-		// 		return http.HandlerFunc(pprof.Cmdline)
-		// 	case "/debug/pprof/profile":
-		// 		return http.HandlerFunc(pprof.Profile)
-		// 	case "/debug/pprof/symbol":
-		// 		return http.HandlerFunc(pprof.Symbol)
-		// 	case "/debug/pprof/trace":
-		// 		return http.HandlerFunc(pprof.Trace)
-		// 	default:
-		// 		return http.HandlerFunc(pprof.Index)
-		// 	}
-		// }
-
 		// static routes
 		switch pathname {
 		case "/":
@@ -605,17 +589,6 @@ func esmHandler() rex.Handle {
 			dsv = fv
 		}
 
-		isBare := false
-		isPkgCss := ctx.Form.Has("css")
-		isBundleMode := ctx.Form.Has("bundle") && !stableBuild[reqPkg.Name]
-		isDev := ctx.Form.Has("dev")
-		isPined := ctx.Form.Has("pin") || hasBuildVerPrefix
-		isWorker := ctx.Form.Has("worker")
-		noCheck := ctx.Form.Has("no-check") || ctx.Form.Has("no-dts")
-		ignoreRequire := ctx.Form.Has("ignore-require") || ctx.Form.Has("no-require") || reqPkg.Name == "@unocss/preset-icons"
-		keepNames := ctx.Form.Has("keep-names")
-		ignoreAnnotations := ctx.Form.Has("ignore-annotations")
-
 		// check `?external` query
 		for _, p := range strings.Split(ctx.Form.Value("external"), ",") {
 			p = strings.TrimSpace(p)
@@ -633,6 +606,18 @@ func esmHandler() rex.Handle {
 		if stableBuild[reqPkg.Name] {
 			external.Reset()
 		}
+
+		isBare := false
+		isPkgCss := ctx.Form.Has("css")
+		isBundleMode := ctx.Form.Has("bundle") && !stableBuild[reqPkg.Name]
+		isDev := ctx.Form.Has("dev")
+		isPined := ctx.Form.Has("pin") || hasBuildVerPrefix
+		isWorker := ctx.Form.Has("worker")
+		noCheck := ctx.Form.Has("no-check") || ctx.Form.Has("no-dts")
+		ignoreRequire := ctx.Form.Has("ignore-require") || ctx.Form.Has("no-require") || reqPkg.Name == "@unocss/preset-icons"
+		keepNames := ctx.Form.Has("keep-names")
+		ignoreAnnotations := ctx.Form.Has("ignore-annotations")
+		rebuild := ctx.Form.Value("rebuild") == "TRUE"
 
 		// force react/jsx-dev-runtime and react-refresh into `dev` mode
 		if !isDev && ((reqPkg.Name == "react" && reqPkg.Submodule == "jsx-dev-runtime") || reqPkg.Name == "react-refresh") {
@@ -781,14 +766,20 @@ func esmHandler() rex.Handle {
 			stage:        "init",
 		}
 		taskID := task.ID()
-		esm, ok := queryESMBuild(taskID)
-		if !ok {
-			if !isBare && !isPined {
+
+		var esm *ESM
+		var hasBuild bool
+		if !rebuild {
+			esm, hasBuild = queryESMBuild(taskID)
+		}
+
+		if !hasBuild {
+			if !isBare && !isPined && !rebuild {
 				// find previous build version
 				for i := 0; i < VERSION; i++ {
 					id := fmt.Sprintf("v%d/%s", VERSION-(i+1), taskID[len(fmt.Sprintf("v%d/", VERSION)):])
-					esm, ok = queryESMBuild(taskID)
-					if ok {
+					esm, hasBuild = queryESMBuild(taskID)
+					if hasBuild {
 						taskID = id
 						break
 					}
@@ -796,9 +787,8 @@ func esmHandler() rex.Handle {
 			}
 
 			// if the previous build exists and is not pin/bare mode, then build current module in backgound,
-			// or wait the current build task for 30 seconds
+			// or wait the current build task for 60 seconds
 			if esm != nil {
-				// todo: maybe don't build?
 				buildQueue.Add(task, "")
 			} else {
 				c := buildQueue.Add(task, ctx.RemoteIP())
@@ -815,7 +805,7 @@ func esmHandler() rex.Handle {
 			}
 		}
 
-		// should redirect to `*.d.ts` ?
+		// should redirect to `*.d.ts` file
 		if esm.TypesOnly {
 			if esm.Dts != "" && !noCheck {
 				value := fmt.Sprintf(
