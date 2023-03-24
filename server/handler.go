@@ -687,7 +687,11 @@ func esmHandler() rex.Handle {
 							submodule = strings.TrimSuffix(submodule, ".development")
 							isDev = true
 						}
-						if submodule == pkgName && (mjs || stableBuild[reqPkg.Name]) {
+						if submodule == pkgName && !mjs && stableBuild[reqPkg.Name] {
+							url := fmt.Sprintf("%s%s/%s@%s", cdnOrigin, cfg.BasePath, reqPkg.Name, reqPkg.Version)
+							return rex.Redirect(url, http.StatusFound)
+						}
+						if submodule == pkgName && mjs {
 							submodule = ""
 						}
 						// workaround for es5-ext weird "/#/" path
