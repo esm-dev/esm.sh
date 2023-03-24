@@ -267,16 +267,35 @@ esbuild:
 							return api.OnResolveResult{External: true}, nil
 						}
 
-						if reservedPackages[args.Path] {
-							if task.Target == "deno" || task.Target == "denonext" {
-								return api.OnResolveResult{Path: fmt.Sprintf("npm:%s", args.Path), External: true}, nil
+						for _, name := range reservedPackages {
+							if args.Path == name || strings.HasPrefix(args.Path, name+"/") {
+								if task.Target == "deno" || task.Target == "denonext" {
+									pkgName, submodule := splitPkgPath(args.Path)
+									version := "latest"
+									if pkgName == task.Pkg.Name {
+										version = task.Pkg.Version
+									} else if v, ok := npm.Dependencies[pkgName]; ok {
+										version = v
+									} else if v, ok := npm.PeerDependencies[pkgName]; ok {
+										version = v
+									}
+									p, _, err := getPackageInfo(task.wd, pkgName, version)
+									if err == nil {
+										pkg := Pkg{
+											Name:      p.Name,
+											Version:   p.Version,
+											Submodule: submodule,
+										}
+										return api.OnResolveResult{Path: fmt.Sprintf("npm:%s", pkg.String()), External: true}, nil
+									}
+								}
+								return api.OnResolveResult{Path: fmt.Sprintf(
+									"%s/error.js?type=unsupported-npm-package&name=%s&importer=%s",
+									cfg.BasePath,
+									args.Path,
+									task.Pkg.Name,
+								), External: true}, nil
 							}
-							return api.OnResolveResult{Path: fmt.Sprintf(
-								"%s/error.js?type=unsupported-npm-package&name=%s&importer=%s",
-								cfg.BasePath,
-								args.Path,
-								task.Pkg.Name,
-							), External: true}, nil
 						}
 
 						// ignore `require()` expression

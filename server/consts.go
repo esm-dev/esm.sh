@@ -37,10 +37,10 @@ var stableBuild = map[string]bool{
 }
 
 // reserved packages, for `deno` target use `npm:package` to import (skip build)
-var reservedPackages = map[string]bool{
-	"fsevent":           true,
-	"default-gateway":   true,
-	"@achingbrain/ssdp": true,
+var reservedPackages = []string{
+	"fsevent",
+	"default-gateway",
+	"@achingbrain/ssdp",
 }
 
 // allowlist for require mode when parsing cjs exports fails
