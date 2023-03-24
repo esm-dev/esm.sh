@@ -147,10 +147,10 @@ func Default() *Config {
 	}
 }
 
-// IsPackageBanned Checking if the package is banned.
+// GetPackageBanListState Get the package is in private scope and the package banned status.
 // The `packages` list is the highest priority ban rule to match,
 // so the `excludes` list in the `scopes` list won't take effect if the package is banned in `packages` list
-func (banList *BanList) IsPackageBanned(fullName string) bool {
+func (banList *BanList) GetPackageBanListState(fullName string) (inScope bool, banned bool) {
 	var (
 		fullNameWithoutVersion  string // e.g. @github/faker
 		scope                   string // e.g. @github
@@ -169,17 +169,17 @@ func (banList *BanList) IsPackageBanned(fullName string) bool {
 
 	for _, p := range banList.Packages {
 		if fullNameWithoutVersion == p {
-			return true
+			return true, true
 		}
 	}
 
 	for _, s := range banList.Scopes {
 		if scope == s.Name {
-			return !isPackageExcluded(nameWithoutVersionScope, s.Excludes)
+			return true, !isPackageExcluded(nameWithoutVersionScope, s.Excludes)
 		}
 	}
 
-	return false
+	return false, false
 }
 
 func isPackageExcluded(name string, excludes []string) bool {

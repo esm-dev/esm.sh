@@ -212,7 +212,8 @@ func esmHandler() rex.Handle {
 		// trim the leading `/` in pathname to get the package name
 		// e.g. /@withfig/autocomplete -> @withfig/autocomplete
 		packageFullName := pathname[1:]
-		if cfg.BanList.IsPackageBanned(packageFullName) {
+		pkgInPrivateScope, pkgBanned := cfg.BanList.GetPackageBanListState(packageFullName)
+		if pkgBanned {
 			return rex.Status(403, "forbidden")
 		}
 
@@ -423,6 +424,34 @@ func esmHandler() rex.Handle {
 			_, err := fs.Stat(savePath)
 			if err != nil && err != storage.ErrNotFound {
 				return rex.Status(500, err.Error())
+			}
+
+			// Handle private package resources
+			if pkgInPrivateScope {
+				task := &BuildTask{
+					CdnOrigin: cdnOrigin,
+					Pkg:       reqPkg,
+					BuildArgs: BuildArgs{
+						alias:       map[string]string{},
+						deps:        PkgSlice{},
+						external:    newStringSet(),
+						treeShaking: newStringSet(),
+					},
+					Target: "raw",
+					stage:  "-",
+				}
+				c := buildQueue.Add(task, ctx.RemoteIP())
+				select {
+				case output := <-c.C:
+					if output.err != nil {
+						return rex.Status(500, "Raw file: "+output.err.Error())
+					}
+				case <-time.After(time.Minute):
+					buildQueue.RemoveConsumer(task, c)
+					return rex.Status(http.StatusRequestTimeout, "timeout, we are transforming the types hardly, please try again later!")
+				}
+
+				_, err = fs.Stat(savePath)
 			}
 
 			// fetch non-js file from npmCDN and save it to fs

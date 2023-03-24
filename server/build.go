@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
+	"io"
 	"io/ioutil"
 	"os"
 	"path"
@@ -44,6 +45,9 @@ func (task *BuildTask) ID() string {
 	if pkg.Submodule != "" {
 		name = pkg.Submodule
 		extname = ".js"
+	}
+	if task.Target == "raw" {
+		extname = ""
 	}
 	if task.DevMode {
 		name += ".development"
@@ -145,6 +149,26 @@ func (task *BuildTask) Build() (esm *ESM, err error) {
 }
 
 func (task *BuildTask) build() (esm *ESM, err error) {
+	if task.Target == "raw" {
+		filePath := path.Join(task.wd, "node_modules", task.Pkg.Name, task.Pkg.Submodule)
+		log.Infof(filePath)
+
+		var file io.Reader
+		file, err = os.Open(filePath)
+		if err != nil {
+			return
+		}
+
+		saveFilePath := path.Join("raw", task.Pkg.String())
+
+		_, err = fs.WriteFile(saveFilePath, file)
+		if err != nil {
+			return
+		}
+
+		return
+	}
+
 	task.stage = "init"
 	esm, npm, err := initModule(task.wd, task.Pkg, task.Target, task.DevMode)
 	if err != nil {
