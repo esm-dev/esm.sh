@@ -267,6 +267,18 @@ esbuild:
 							return api.OnResolveResult{External: true}, nil
 						}
 
+						if reservedPackages[args.Path] {
+							if task.Target == "deno" || task.Target == "denonext" {
+								return api.OnResolveResult{Path: fmt.Sprintf("npm:%s", args.Path), External: true}, nil
+							}
+							return api.OnResolveResult{Path: fmt.Sprintf(
+								"%s/error.js?type=unsupported-npm-package&name=%s&importer=%s",
+								cfg.BasePath,
+								args.Path,
+								task.Pkg.Name,
+							), External: true}, nil
+						}
+
 						// ignore `require()` expression
 						if task.ignoreRequire && (args.Kind == api.ResolveJSRequireCall || args.Kind == api.ResolveJSRequireResolve) && npm.Module != "" {
 							return api.OnResolveResult{Path: args.Path, External: true}, nil

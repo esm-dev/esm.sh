@@ -134,6 +134,12 @@ func esmHandler() rex.Handle {
 					ctx.Form.Value("name"),
 					ctx.Form.Value("importer"),
 				))
+			case "unsupported-npm-package":
+				return throwErrorJS(ctx, fmt.Errorf(
+					`Unsupported Npm package "%s" (Imported by "%s")`,
+					ctx.Form.Value("name"),
+					ctx.Form.Value("importer"),
+				))
 			default:
 				return throwErrorJS(ctx, fmt.Errorf("Unknown error"))
 			}

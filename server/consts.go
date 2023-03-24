@@ -36,6 +36,13 @@ var stableBuild = map[string]bool{
 	"vue":    true,
 }
 
+// reserved packages, for `deno` target use `npm:package` to import (skip build)
+var reservedPackages = map[string]bool{
+	"fsevent":           true,
+	"default-gateway":   true,
+	"@achingbrain/ssdp": true,
+}
+
 // allowlist for require mode when parsing cjs exports fails
 var requireModeAllowList = []string{
 	"@babel/types",
