@@ -265,3 +265,5 @@ To host esm.sh by yourself, check the [hosting](./HOSTING.md) documentation.
 ## Sponsor This Project
 
 esm.sh is a free and open source project. If you like this project please consider supporting us via [opencollective.com/esm](https://opencollective.com/esm). Your support will help us to continue to maintain and improve this project. Thank you!
+
+[![Become a Backer](https://opencollective.com/esm/tiers/backer.svg?avatarHeight=50)](https://opencollective.com/esm)
