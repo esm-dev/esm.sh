@@ -609,6 +609,16 @@ func yarnAdd(wd string, pkg Pkg) (err error) {
 		return
 	}
 
+	// Create package.json to prevent read up-levels
+	wdPackageFilePath := path.Join(wd, "package.json")
+	if !fileExists(wdPackageFilePath) {
+		fileContent := []byte("{}")
+		err = os.WriteFile(wdPackageFilePath, fileContent, 0644)
+		if err != nil {
+			return fmt.Errorf("init cache dir failed: %s", pkgNameFormat)
+		}
+	}
+
 	for i := 0; i < 3; i++ {
 		err = runYarnAdd(wd, noCache, pkgNameFormat)
 		if err == nil && !fileExists(path.Join(wd, "node_modules", pkg.Name, "package.json")) {

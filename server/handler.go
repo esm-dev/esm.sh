@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
-	"io"
 	"io/ioutil"
 	"net/http"
 	"path"
@@ -212,7 +211,7 @@ func esmHandler() rex.Handle {
 		// trim the leading `/` in pathname to get the package name
 		// e.g. /@withfig/autocomplete -> @withfig/autocomplete
 		packageFullName := pathname[1:]
-		pkgInPrivateScope, pkgBanned := cfg.BanList.GetPackageBanListState(packageFullName)
+		pkgBanned := cfg.BanList.IsPackageBanned(packageFullName)
 		if pkgBanned {
 			return rex.Status(403, "forbidden")
 		}
@@ -426,63 +425,39 @@ func esmHandler() rex.Handle {
 				return rex.Status(500, err.Error())
 			}
 
-			// Handle private package resources
-			if pkgInPrivateScope {
-				task := &BuildTask{
-					CdnOrigin: cdnOrigin,
-					Pkg:       reqPkg,
-					BuildArgs: BuildArgs{
-						alias:       map[string]string{},
-						deps:        PkgSlice{},
-						external:    newStringSet(),
-						treeShaking: newStringSet(),
-					},
-					Target: "raw",
-					stage:  "-",
-				}
-				c := buildQueue.Add(task, ctx.RemoteIP())
-				select {
-				case output := <-c.C:
-					if output.err != nil {
-						return rex.Status(500, "Raw file: "+output.err.Error())
-					}
-				case <-time.After(time.Minute):
-					buildQueue.RemoveConsumer(task, c)
-					return rex.Status(http.StatusRequestTimeout, "timeout, we are transforming the types hardly, please try again later!")
-				}
-
-				_, err = fs.Stat(savePath)
-			}
-
-			// fetch non-js file from npmCDN and save it to fs
+			// Use local cached npm package to serve static file
 			if err == storage.ErrNotFound {
-				resp, err := httpClient.Get(fmt.Sprintf("%s/%s", cfg.NpmCDN, reqPkg.String()))
-				if err != nil && cfg.BackupNpmCDN != "" {
-					resp, err = httpClient.Get(fmt.Sprintf("%s/%s", cfg.BackupNpmCDN, reqPkg.String()))
-				}
-				if err != nil {
+				fileDir := fmt.Sprintf("npm/%s@%s", reqPkg.Name, reqPkg.Version)
+				savePath = path.Join(fileDir, "node_modules", reqPkg.Name, reqPkg.Submodule)
+				_, err = fs.Stat(savePath)
+
+				if err != nil && err != storage.ErrNotFound {
 					return rex.Status(500, err.Error())
 				}
-				defer resp.Body.Close()
 
-				if resp.StatusCode >= 500 {
-					b, err := io.ReadAll(resp.Body)
-					if err != nil {
-						return rex.Status(500, err.Error())
+				if err == storage.ErrNotFound {
+					task := &BuildTask{
+						CdnOrigin: cdnOrigin,
+						Pkg:       reqPkg,
+						BuildArgs: BuildArgs{
+							alias:       map[string]string{},
+							deps:        PkgSlice{},
+							external:    newStringSet(),
+							treeShaking: newStringSet(),
+						},
+						Target: "raw",
+						stage:  "-",
 					}
-					return rex.Status(http.StatusBadGateway, b)
-				}
-
-				if resp.StatusCode >= 400 {
-					if resp.StatusCode == 404 {
-						return rex.Status(404, "Not Found")
+					c := buildQueue.Add(task, ctx.RemoteIP())
+					select {
+					case output := <-c.C:
+						if output.err != nil {
+							return rex.Status(500, "Raw file: "+output.err.Error())
+						}
+					case <-time.After(time.Minute):
+						buildQueue.RemoveConsumer(task, c)
+						return rex.Status(http.StatusRequestTimeout, "timeout, we are downloading package hardly, please try again later!")
 					}
-					return rex.Status(http.StatusBadRequest, "Bad Request")
-				}
-
-				_, err = fs.WriteFile(savePath, resp.Body)
-				if err != nil {
-					return rex.Status(500, err.Error())
 				}
 			}
 

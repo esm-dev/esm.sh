@@ -4,8 +4,6 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
-	"io"
-	"io/ioutil"
 	"os"
 	"path"
 	"path/filepath"
@@ -116,13 +114,16 @@ func (task *BuildTask) getSavepath() string {
 
 func (task *BuildTask) Build() (esm *ESM, err error) {
 	if task.wd == "" {
-		task.wd = path.Join(os.TempDir(), fmt.Sprintf("esm/%s@%s", task.Pkg.Name, task.Pkg.Version))
-		ensureDir(task.wd)
+		task.wd, err = fs.EnsurePath(path.Join(fmt.Sprintf("npm/%s@%s", task.Pkg.Name, task.Pkg.Version)))
+
+		if err != nil {
+			return
+		}
 
 		if cfg.NpmToken != "" {
 			rcFilePath := path.Join(task.wd, ".npmrc")
 			if !fileExists(rcFilePath) {
-				err = ioutil.WriteFile(rcFilePath, []byte("_authToken=${ESM_NPM_TOKEN}"), 0644)
+				err = os.WriteFile(rcFilePath, []byte("_authToken=${ESM_NPM_TOKEN}"), 0644)
 				if err != nil {
 					log.Errorf("Failed to create .npmrc file: %v", err)
 					return
@@ -150,22 +151,6 @@ func (task *BuildTask) Build() (esm *ESM, err error) {
 
 func (task *BuildTask) build() (esm *ESM, err error) {
 	if task.Target == "raw" {
-		filePath := path.Join(task.wd, "node_modules", task.Pkg.Name, task.Pkg.Submodule)
-		log.Infof(filePath)
-
-		var file io.Reader
-		file, err = os.Open(filePath)
-		if err != nil {
-			return
-		}
-
-		saveFilePath := path.Join("raw", task.Pkg.String())
-
-		_, err = fs.WriteFile(saveFilePath, file)
-		if err != nil {
-			return
-		}
-
 		return
 	}
 
