@@ -179,13 +179,13 @@ import { NinetyRing, NinetyRingWithBg } from "https://esm.sh/react-svg-spinners@
 esm.sh is a **Deno-friendly** CDN that resolves Node's built-in modules (such as **fs**, **os**, etc.), making it compatible with Deno.
 
 ```javascript
-import postcss from "https://esm.sh/postcss"
-import autoprefixer from "https://esm.sh/autoprefixer"
+import express from "https://esm.sh/express";
 
-const { css } = await postcss([ autoprefixer ]).process(`
-  backdrop-filter: blur(5px);
-  user-select: none;
-.async()
+const app = express();
+app.get("/", (req, res) => {
+  res.send("Hello World");
+});
+app.listen(3000)
 ```
 
 For users using deno `< 1.31`, esm.sh uses [deno.land/std@0.177.0/node](https://deno.land/std@0.177.0/node) as node compatibility layer. You can specify a different version by adding the `?deno-std=$VER` query:
