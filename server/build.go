@@ -736,7 +736,10 @@ esbuild:
 					if cjsContext {
 						p = bytes.TrimPrefix(p, []byte{')'})
 						var marked bool
-						if _, ok := builtInNodeModules[name]; !ok {
+						if builtInNodeModules[name] {
+							cjsImportNames.Add("default")
+							marked = true
+						} else {
 							depPkg, _, err := validatePkgPath(name)
 							depWd := task.wd
 							if err == nil && !fileExists(path.Join(depWd, "node_modules", depPkg.Name, "package.json")) {
