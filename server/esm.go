@@ -184,10 +184,11 @@ func initModule(wd string, pkg Pkg, target string, isDev bool) (esm *ESM, npm Np
 	}
 
 	if npm.Module != "" {
-		modulePath, exportDefault, erro := resovleESModule(wd, npm.Name, npm.Module)
+		modulePath, namedExports, erro := resovleESModule(wd, npm.Name, npm.Module)
 		if erro == nil {
 			npm.Module = modulePath
-			esm.ExportDefault = exportDefault
+			esm.Exports = namedExports
+			esm.ExportDefault = includes(namedExports, "default")
 			return
 		}
 		if erro != nil && erro.Error() != "not a module" {
@@ -260,7 +261,7 @@ func queryESMBuild(id string) (*ESM, bool) {
 	return nil, false
 }
 
-func resovleESModule(wd string, packageName string, moduleSpecifier string) (resolveName string, hasDefaultExport bool, err error) {
+func resovleESModule(wd string, packageName string, moduleSpecifier string) (resolveName string, namedExports []string, err error) {
 	pkgDir := path.Join(wd, "node_modules", packageName)
 	switch path.Ext(moduleSpecifier) {
 	case ".js", ".jsx", ".ts", ".tsx", ".mjs":
@@ -278,7 +279,7 @@ func resovleESModule(wd string, packageName string, moduleSpecifier string) (res
 		}
 	}
 
-	isESM, _hasDefaultExport, err := validateJS(path.Join(pkgDir, resolveName))
+	isESM, _namedExports, err := validateJS(path.Join(pkgDir, resolveName))
 	if err != nil {
 		return
 	}
@@ -288,7 +289,7 @@ func resovleESModule(wd string, packageName string, moduleSpecifier string) (res
 		return
 	}
 
-	hasDefaultExport = _hasDefaultExport
+	namedExports = _namedExports
 	return
 }
 

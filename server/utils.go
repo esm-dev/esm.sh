@@ -67,6 +67,9 @@ func isLocalImport(importPath string) bool {
 
 // include returns true if the given string is included in the given array.
 func includes(a []string, s string) bool {
+	if len(a) == 0 {
+		return false
+	}
 	for _, v := range a {
 		if v == s {
 			return true
@@ -175,7 +178,7 @@ func kill(pidFile string) (err error) {
 	return process.Kill()
 }
 
-func validateJS(filename string) (isESM bool, hasDefaultExport bool, err error) {
+func validateJS(filename string) (isESM bool, namedExports []string, err error) {
 	data, err := os.ReadFile(filename)
 	if err != nil {
 		return
@@ -193,6 +196,11 @@ func validateJS(filename string) (isESM bool, hasDefaultExport bool, err error) 
 		return
 	}
 	isESM = ast.ExportsKind == js_ast.ExportsESM
-	_, hasDefaultExport = ast.NamedExports["default"]
+	namedExports = make([]string, len(ast.NamedExports))
+	i := 0
+	for name := range ast.NamedExports {
+		namedExports[i] = name
+		i++
+	}
 	return
 }

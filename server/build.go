@@ -728,7 +728,7 @@ esbuild:
 				buffer := bytes.NewBuffer(nil)
 				identifier := fmt.Sprintf("%x", externalDeps.Size()-depIndex)
 				cjsContext := false
-				cjsImports := newStringSet()
+				cjsImportNames := newStringSet()
 
 				// walk output content to find all external dependencies
 				slice := bytes.Split(outputContent, []byte(fmt.Sprintf("\"__ESM_SH_EXTERNAL:%s\"", name)))
@@ -737,12 +737,15 @@ esbuild:
 						p = bytes.TrimPrefix(p, []byte{')'})
 						var marked bool
 						if _, ok := builtInNodeModules[name]; !ok {
-							pkg, _, err := validatePkgPath(name)
-							if err == nil && !fileExists(path.Join(task.wd, "node_modules", pkg.Name, "package.json")) {
-								err = yarnAdd(task.wd, pkg)
+							depPkg, _, err := validatePkgPath(name)
+							depWd := task.wd
+							if err == nil && !fileExists(path.Join(depWd, "node_modules", depPkg.Name, "package.json")) {
+								// the dep may be a peer depencency
+								depWd = path.Join(os.TempDir(), fmt.Sprintf("esm/%s@%s", depPkg.Name, depPkg.Version))
+								err = yarnAdd(depWd, depPkg)
 							}
 							if err == nil {
-								depESM, depNpm, e := initModule(task.wd, pkg, task.Target, task.DevMode)
+								depESM, depNpm, e := initModule(depWd, depPkg, task.Target, task.DevMode)
 								if e == nil {
 									// support edge case like `require('htmlparser').Parser`
 									if bytes.HasPrefix(p, []byte{'.'}) {
@@ -758,24 +761,37 @@ esbuild:
 										}
 										importName := string(p[1 : shift+1])
 										if includes(depESM.Exports, importName) {
-											cjsImports.Add(importName)
+											cjsImportNames.Add(importName)
 											marked = true
 											p = p[1:]
 										} else {
-											cjsImports.Add("default")
+											cjsImportNames.Add("default")
 											marked = true
 										}
 									}
-									// if the dependency is an es module without `default` export, then use star import
-									if !marked && depNpm.Module != "" && !depESM.ExportDefault {
-										cjsImports.Add("*")
+									// the dep is a esm module
+									if !marked && depNpm.Module != "" {
+										if depESM.ExportDefault {
+											cjsImportNames.Add("default")
+										} else {
+											cjsImportNames.Add("*")
+										}
+										marked = true
+									}
+									// the dep is a cjs module
+									if !marked && depNpm.Module == "" {
+										if includes(depESM.Exports, "__esModule") && depESM.ExportDefault {
+											cjsImportNames.Add("*")
+										} else {
+											cjsImportNames.Add("default")
+										}
 										marked = true
 									}
 								}
 							}
 						}
 						if !marked {
-							cjsImports.Add("default")
+							cjsImportNames.Add("lazy")
 						}
 					}
 					cjsContext = bytes.HasSuffix(p, []byte{'('}) && !bytes.HasSuffix(p, []byte("import("))
@@ -804,16 +820,18 @@ esbuild:
 					}
 				}
 
-				if cjsImports.Size() > 0 {
+				if cjsImportNames.Size() > 0 {
 					buf := bytes.NewBuffer(nil)
-					for _, importName := range cjsImports.Values() {
+					for _, importName := range cjsImportNames.Values() {
 						if name == "object-assign" {
 							fmt.Fprintf(buf, `const __%s$ = Object.assign;%s`, identifier, eol)
 						} else {
 							switch importName {
+							case "lazy":
+								fmt.Fprintf(buf, `import * as _%s$ from "%s";%s`, identifier, importPath, eol)
+								fmt.Fprintf(buf, `const __%s$ = _%s$.default !== void 0 ? _%s$.default : _%s$;%s`, identifier, identifier, identifier, identifier, eol)
 							case "default":
-								fmt.Fprintf(buf, `import * as __%s$$ from "%s";%s`, identifier, importPath, eol)
-								fmt.Fprintf(buf, `const __%s$ = __%s$$.default !== void 0 ? __%s$$.default : __%s$$;%s`, identifier, identifier, identifier, identifier, eol)
+								fmt.Fprintf(buf, `import __%s$ from "%s";%s`, identifier, importPath, eol)
 							case "*":
 								fmt.Fprintf(buf, `import * as __%s$ from "%s";%s`, identifier, importPath, eol)
 							default:
