@@ -2,7 +2,7 @@ package server
 
 const (
 	// esm.sh build version
-	VERSION = 112
+	VERSION = 113
 	// esm.sh stable build version, used for UI libraries like react, to make sure the runtime is single copy
 	// change this carefully
 	STABLE_VERSION = 112
@@ -31,9 +31,10 @@ var cssPackages = map[string]string{
 
 // stable build for UI libraries like react, to make sure the runtime is single copy
 var stableBuild = map[string]bool{
-	"react":  true,
-	"preact": true,
-	"vue":    true,
+	"react":    true,
+	"preact":   true,
+	"solid-js": true,
+	"vue":      true,
 }
 
 // reserved packages, for `deno` target use `npm:package` to import (skip build)

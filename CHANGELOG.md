@@ -1,5 +1,12 @@
 # Change Log
 
+## v113
+
+- `express` is working in Deno
+- Fix lost non-mjs-extension module caused by v112 (close [#559](https://github.com/esm-dev/esm.sh/issues/559))
+- Fix exports of `netmask` and `xml2js` ([#561](https://github.com/esm-dev/esm.sh/pull/561) @jcc10)
+- Fix `default` import of deps for cjs (close [#565](https://github.com/esm-dev/esm.sh/issues/565), [#566](https://github.com/esm-dev/esm.sh/issues/566))
+
 ## v112
 
 - Use `.mjs` extension for the package main module to resolve subpath conflicts
