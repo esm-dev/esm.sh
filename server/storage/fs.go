@@ -12,7 +12,6 @@ import (
 
 type FileSystem interface {
 	Stat(path string) (stat FileStat, err error)
-	EnsurePath(path string) (filePath string, err error)
 	OpenFile(path string) (content io.ReadSeekCloser, err error)
 	WriteFile(path string, r io.Reader) (written int64, err error)
 }

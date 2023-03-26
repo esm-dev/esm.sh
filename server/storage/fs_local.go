@@ -23,18 +23,6 @@ type localFSLayer struct {
 	root string
 }
 
-func (fs *localFSLayer) EnsurePath(name string) (string, error) {
-	fullPath := path.Join(fs.root, name)
-	_, err := os.Stat(fullPath)
-	if err != nil && os.IsNotExist(err) {
-		err = os.MkdirAll(fullPath, 0755)
-		if err != nil {
-			return fullPath, err
-		}
-	}
-	return fullPath, nil
-}
-
 func (fs *localFSLayer) Stat(name string) (FileStat, error) {
 	fullPath := path.Join(fs.root, name)
 	fi, err := os.Stat(fullPath)
