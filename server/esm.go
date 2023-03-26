@@ -12,12 +12,12 @@ import (
 
 // ESM defines the ES Module meta
 type ESM struct {
-	Exports       []string `json:"-"`
-	ExportDefault bool     `json:"d"`
-	CJS           bool     `json:"c"`
-	TypesOnly     bool     `json:"o"`
-	Dts           string   `json:"t"`
-	PackageCSS    bool     `json:"s"`
+	NamedExports     []string `json:"-"`
+	HasExportDefault bool     `json:"d"`
+	CJS              bool     `json:"c"`
+	Dts              string   `json:"t"`
+	TypesOnly        bool     `json:"o"`
+	PackageCSS       bool     `json:"s"`
 }
 
 func initModule(wd string, pkg Pkg, target string, isDev bool) (esm *ESM, npm NpmPackage, err error) {
@@ -187,8 +187,8 @@ func initModule(wd string, pkg Pkg, target string, isDev bool) (esm *ESM, npm Np
 		modulePath, namedExports, erro := resovleESModule(wd, npm.Name, npm.Module)
 		if erro == nil {
 			npm.Module = modulePath
-			esm.Exports = namedExports
-			esm.ExportDefault = includes(namedExports, "default")
+			esm.NamedExports = namedExports
+			esm.HasExportDefault = includes(namedExports, "default")
 			return
 		}
 		if erro != nil && erro.Error() != "not a module" {
@@ -206,8 +206,8 @@ func initModule(wd string, pkg Pkg, target string, isDev bool) (esm *ESM, npm Np
 		}
 		npm.Main = npm.Module
 		npm.Module = ""
-		esm.ExportDefault = ret.ExportDefault
-		esm.Exports = ret.Exports
+		esm.HasExportDefault = ret.ExportDefault
+		esm.NamedExports = ret.Exports
 		log.Warnf("fake ES module '%s' of '%s'", npm.Main, npm.Name)
 		return
 	}
@@ -234,8 +234,8 @@ func initModule(wd string, pkg Pkg, target string, isDev bool) (esm *ESM, npm Np
 		if err != nil {
 			return
 		}
-		esm.ExportDefault = ret.ExportDefault
-		esm.Exports = ret.Exports
+		esm.HasExportDefault = ret.ExportDefault
+		esm.NamedExports = ret.Exports
 	}
 	return
 }

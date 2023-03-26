@@ -192,9 +192,9 @@ func (task *BuildTask) build() (esm *ESM, err error) {
 		buf := bytes.NewBuffer(nil)
 		importPath := task.Pkg.ImportPath()
 		fmt.Fprintf(buf, `import * as __module from "%s";`, importPath)
-		if len(esm.Exports) > 0 {
+		if len(esm.NamedExports) > 0 {
 			var exports []string
-			for _, k := range esm.Exports {
+			for _, k := range esm.NamedExports {
 				if k == "__esModule" {
 					fmt.Fprintf(buf, "export const __esModule = true;")
 				} else {
@@ -773,7 +773,7 @@ esbuild:
 											}
 										}
 										importName := string(p[1 : shift+1])
-										if includes(depESM.Exports, importName) {
+										if includes(depESM.NamedExports, importName) {
 											cjsImportNames.Add(importName)
 											marked = true
 											p = p[1:]
@@ -784,7 +784,7 @@ esbuild:
 									}
 									// the dep is a esm module
 									if !marked && depNpm.Module != "" {
-										if depESM.ExportDefault {
+										if depESM.HasExportDefault {
 											cjsImportNames.Add("default")
 										} else {
 											cjsImportNames.Add("*")
@@ -793,7 +793,7 @@ esbuild:
 									}
 									// the dep is a cjs module
 									if !marked && depNpm.Module == "" {
-										if includes(depESM.Exports, "__esModule") && depESM.ExportDefault {
+										if includes(depESM.NamedExports, "__esModule") && depESM.HasExportDefault {
 											cjsImportNames.Add("*")
 										} else {
 											cjsImportNames.Add("default")

@@ -902,7 +902,7 @@ func esmHandler() rex.Handle {
 			fmt.Fprintf(buf, `export { default } from "%s%s/%s?worker";`, cdnOrigin, cfg.BasePath, taskID)
 		} else {
 			fmt.Fprintf(buf, `export * from "%s%s/%s";%s`, cdnOrigin, cfg.BasePath, taskID, "\n")
-			if (esm.CJS || esm.ExportDefault) && (treeShaking.Size() == 0 || treeShaking.Has("default")) {
+			if (esm.CJS || esm.HasExportDefault) && (treeShaking.Size() == 0 || treeShaking.Has("default")) {
 				fmt.Fprintf(buf, `export { default } from "%s%s/%s";%s`, cdnOrigin, cfg.BasePath, taskID, "\n")
 			}
 			if esm.CJS && ctx.Form.Has("cjs-exports") {
