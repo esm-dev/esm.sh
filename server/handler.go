@@ -7,6 +7,7 @@ import (
 	"io"
 	"io/ioutil"
 	"net/http"
+	"os"
 	"path"
 	"strconv"
 	"strings"
@@ -212,7 +213,8 @@ func esmHandler() rex.Handle {
 		// trim the leading `/` in pathname to get the package name
 		// e.g. /@withfig/autocomplete -> @withfig/autocomplete
 		packageFullName := pathname[1:]
-		if cfg.BanList.IsPackageBanned(packageFullName) {
+		pkgBanned := cfg.BanList.IsPackageBanned(packageFullName)
+		if pkgBanned {
 			return rex.Status(403, "forbidden")
 		}
 
@@ -412,67 +414,91 @@ func esmHandler() rex.Handle {
 			}
 		}
 
-		// serve raw dist files like CSS that is fetching from npmCDN
+		// serve raw dist or npm dist files like CSS/map etc..
 		if storageType == "raw" {
+			respRawFile := func(savePath string, fromRaw bool, modifyTime time.Time, err error) interface{} {
+				var content io.ReadSeekCloser
+				if err == nil {
+					if fromRaw {
+						content, err = fs.OpenFile(savePath)
+					} else {
+						content, err = os.Open(savePath)
+						if os.IsNotExist(err) {
+							err = storage.ErrNotFound
+						}
+					}
+				}
+				if err != nil {
+					if err != storage.ErrNotFound {
+						return rex.Status(500, err.Error())
+					} else {
+						return rex.Status(404, "File not found")
+					}
+				}
+				if strings.HasSuffix(pathname, ".ts") || strings.HasSuffix(pathname, ".mts") {
+					ctx.SetHeader("Content-Type", "application/typescript")
+				}
+				ctx.SetHeader("Cache-Control", "public, max-age=31536000, immutable")
+				return rex.Content(savePath, modifyTime, content) // auto closed
+			}
+
 			if !regexpFullVersionPath.MatchString(pathname) {
 				url := fmt.Sprintf("%s%s/%s", cdnOrigin, cfg.BasePath, reqPkg.String())
 				return rex.Redirect(url, http.StatusFound)
 			}
 
+			// Try read file from raw dist
 			savePath := path.Join("raw", reqPkg.String())
-			_, err := fs.Stat(savePath)
-			if err != nil && err != storage.ErrNotFound {
-				return rex.Status(500, err.Error())
-			}
-
-			// fetch non-js file from npmCDN and save it to fs
-			if err == storage.ErrNotFound {
-				resp, err := httpClient.Get(fmt.Sprintf("%s/%s", cfg.NpmCDN, reqPkg.String()))
-				if err != nil && cfg.BackupNpmCDN != "" {
-					resp, err = httpClient.Get(fmt.Sprintf("%s/%s", cfg.BackupNpmCDN, reqPkg.String()))
-				}
-				if err != nil {
-					return rex.Status(500, err.Error())
-				}
-				defer resp.Body.Close()
-
-				if resp.StatusCode >= 500 {
-					b, err := io.ReadAll(resp.Body)
-					if err != nil {
-						return rex.Status(500, err.Error())
-					}
-					return rex.Status(http.StatusBadGateway, b)
-				}
-
-				if resp.StatusCode >= 400 {
-					if resp.StatusCode == 404 {
-						return rex.Status(404, "Not Found")
-					}
-					return rex.Status(http.StatusBadRequest, "Bad Request")
-				}
-
-				_, err = fs.WriteFile(savePath, resp.Body)
-				if err != nil {
-					return rex.Status(500, err.Error())
-				}
-			}
-
 			fi, err := fs.Stat(savePath)
-			if err != nil {
-				if err == storage.ErrNotFound {
-					return rex.Status(404, "File not found")
+			if err == nil {
+				return respRawFile(savePath, true, fi.ModTime(), err)
+			} else if err != storage.ErrNotFound {
+				return respRawFile(savePath, true, time.Now(), err)
+			}
+
+			// Use local cached npm package to serve static file
+			fileDir := fmt.Sprintf("npm/%s@%s", reqPkg.Name, reqPkg.Version)
+			savePath = path.Join(cfg.WorkDir, fileDir, "node_modules", reqPkg.Name, reqPkg.Submodule)
+
+			fi, err = os.Stat(savePath)
+			if err == nil {
+				return respRawFile(savePath, false, fi.ModTime(), err)
+			} else if !os.IsNotExist(err) {
+				return respRawFile(savePath, false, time.Now(), err)
+			}
+
+			task := &BuildTask{
+				CdnOrigin: cdnOrigin,
+				Pkg:       reqPkg,
+				BuildArgs: BuildArgs{
+					alias:       map[string]string{},
+					deps:        PkgSlice{},
+					external:    newStringSet(),
+					treeShaking: newStringSet(),
+				},
+				Target: "raw",
+				stage:  "-",
+			}
+			c := buildQueue.Add(task, ctx.RemoteIP())
+			select {
+			case output := <-c.C:
+				if output.err != nil {
+					return rex.Status(500, "Raw file: "+output.err.Error())
 				}
-				return rex.Status(500, err.Error())
+			case <-time.After(time.Minute):
+				buildQueue.RemoveConsumer(task, c)
+				return rex.Status(http.StatusRequestTimeout, "timeout, we are downloading package hardly, please try again later!")
 			}
-			f, err := fs.OpenFile(savePath)
-			if err != nil {
-				return rex.Status(500, err.Error())
+
+			fi, err = os.Stat(savePath)
+			if err == nil {
+				return respRawFile(savePath, false, fi.ModTime(), err)
 			}
-			if strings.HasSuffix(pathname, ".ts") || strings.HasSuffix(pathname, ".mts") {
-				ctx.SetHeader("Content-Type", "application/typescript")
+			if !os.IsNotExist(err) {
+				return respRawFile(savePath, false, time.Now(), err)
 			}
-			ctx.SetHeader("Cache-Control", "public, max-age=31536000, immutable")
-			return rex.Content(savePath, fi.ModTime(), f) // auto closed
+
+			return rex.Status(404, "File not found")
 		}
 
 		// rebuild the module when `?rebuild=TRUE` is set

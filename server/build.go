@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
-	"io/ioutil"
 	"os"
 	"path"
 	"path/filepath"
@@ -44,6 +43,9 @@ func (task *BuildTask) ID() string {
 	if pkg.Submodule != "" {
 		name = pkg.Submodule
 		extname = ".js"
+	}
+	if task.Target == "raw" {
+		extname = ""
 	}
 	if task.DevMode {
 		name += ".development"
@@ -112,13 +114,17 @@ func (task *BuildTask) getSavepath() string {
 
 func (task *BuildTask) Build() (esm *ESM, err error) {
 	if task.wd == "" {
-		task.wd = path.Join(os.TempDir(), fmt.Sprintf("esm/%s@%s", task.Pkg.Name, task.Pkg.Version))
+		task.wd = path.Join(cfg.WorkDir, fmt.Sprintf("npm/%s@%s", task.Pkg.Name, task.Pkg.Version))
 		ensureDir(task.wd)
+
+		if err != nil {
+			return
+		}
 
 		if cfg.NpmToken != "" {
 			rcFilePath := path.Join(task.wd, ".npmrc")
 			if !fileExists(rcFilePath) {
-				err = ioutil.WriteFile(rcFilePath, []byte("_authToken=${ESM_NPM_TOKEN}"), 0644)
+				err = os.WriteFile(rcFilePath, []byte("_authToken=${ESM_NPM_TOKEN}"), 0644)
 				if err != nil {
 					log.Errorf("Failed to create .npmrc file: %v", err)
 					return
@@ -145,6 +151,10 @@ func (task *BuildTask) Build() (esm *ESM, err error) {
 }
 
 func (task *BuildTask) build() (esm *ESM, err error) {
+	if task.Target == "raw" {
+		return
+	}
+
 	task.stage = "init"
 	esm, npm, err := initModule(task.wd, task.Pkg, task.Target, task.DevMode)
 	if err != nil {
