@@ -114,7 +114,8 @@ func (task *BuildTask) getSavepath() string {
 
 func (task *BuildTask) Build() (esm *ESM, err error) {
 	if task.wd == "" {
-		task.wd, err = fs.EnsurePath(path.Join(fmt.Sprintf("npm/%s@%s", task.Pkg.Name, task.Pkg.Version)))
+		task.wd = path.Join(cfg.WorkDir, fmt.Sprintf("npm/%s@%s", task.Pkg.Name, task.Pkg.Version))
+		ensureDir(task.wd)
 
 		if err != nil {
 			return
