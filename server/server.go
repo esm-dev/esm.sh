@@ -148,7 +148,7 @@ func Serve(efs EmbedFS) {
 			ExposedHeaders:   []string{"X-TypeScript-Types"},
 			AllowCredentials: false,
 		}),
-		esmHandler(),
+		serverHandler(),
 	)
 
 	C := rex.Serve(rex.ServerConfig{

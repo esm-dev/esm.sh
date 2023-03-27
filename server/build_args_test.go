@@ -7,10 +7,12 @@ import (
 func TestEncodeBuildArgs(t *testing.T) {
 	external := newStringSet()
 	treeShaking := newStringSet()
+	conditions := newStringSet()
 	external.Add("baz")
 	external.Add("bar")
 	treeShaking.Add("baz")
 	treeShaking.Add("bar")
+	conditions.Add("react-server")
 	prefix := encodeBuildArgsPrefix(
 		BuildArgs{
 			alias: map[string]string{"a": "b"},
@@ -22,6 +24,7 @@ func TestEncodeBuildArgs(t *testing.T) {
 			},
 			external:          external,
 			treeShaking:       treeShaking,
+			conditions:        conditions,
 			denoStdVersion:    "0.128.0",
 			ignoreRequire:     true,
 			keepNames:         true,
@@ -45,6 +48,9 @@ func TestEncodeBuildArgs(t *testing.T) {
 	}
 	if args.treeShaking.Size() != 2 {
 		t.Fatal("invalid treeShaking")
+	}
+	if args.conditions.Size() != 1 {
+		t.Fatal("invalid conditions")
 	}
 	if args.denoStdVersion != "0.128.0" {
 		t.Fatal("invalid denoStdVersion")

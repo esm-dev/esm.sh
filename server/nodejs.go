@@ -495,65 +495,6 @@ func getNodejsVersion() (version string, major int, err error) {
 	return
 }
 
-// see https://nodejs.org/api/packages.html
-func resolvePackageExports(p *NpmPackage, conditions interface{}, target string, isDev bool, pType string) {
-	s, ok := conditions.(string)
-	if ok {
-		if pType == "module" {
-			p.Module = s
-		} else {
-			p.Main = s
-		}
-		return
-	}
-
-	m, ok := conditions.(map[string]interface{})
-	if ok {
-		targetDeno := target == "deno" || target == "denonext"
-		names := []string{"browser", "module", "import", "es2015", "worker"}
-		if targetDeno {
-			names = []string{"deno", "worker", "module", "import", "es2015", "browser"}
-		}
-		if pType == "module" {
-			if isDev {
-				names = append([]string{"development"}, names...)
-			}
-			names = append(names, "default")
-		}
-		// support solid.js (<=1.6) for deno target
-		if (p.Name == "solid-js" || strings.HasPrefix(p.Name, "solid-js/")) && targetDeno {
-			names = append([]string{"deno", "worker", "node"}, names...)
-		}
-		for _, name := range names {
-			value, ok := m[name]
-			if ok {
-				resolvePackageExports(p, value, target, isDev, "module")
-				break
-			}
-		}
-		if p.Module == "" {
-			for _, name := range []string{"require", "node", "default"} {
-				value, ok := m[name]
-				if ok {
-					resolvePackageExports(p, value, target, isDev, "")
-					break
-				}
-			}
-		}
-		for key, value := range m {
-			s, ok := value.(string)
-			if ok && s != "" {
-				switch key {
-				case "types":
-					p.Types = s
-				case "typings":
-					p.Typings = s
-				}
-			}
-		}
-	}
-}
-
 func installNodejs(dir string, version string) (err error) {
 	dlURL := fmt.Sprintf("https://nodejs.org/dist/v%s/node-v%s-%s-x64.tar.xz", version, version, runtime.GOOS)
 	resp, err := http.Get(dlURL)

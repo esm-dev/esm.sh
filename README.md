@@ -128,13 +128,17 @@ import React from "https://esm.sh/react?target=es2020"
 
 Other supported options of esbuild:
 
+- [Conditions](https://esbuild.github.io/api/#conditions)
+  ```javascript
+  import foo from "https://esm.sh/foo?conditions=custom1,custom2"
+  ```
 - [Keep names](https://esbuild.github.io/api/#keep-names)
   ```javascript
-  import React from "https://esm.sh/react?keep-names"
+  import foo from "https://esm.sh/foo?keep-names"
   ```
 - [Ignore annotations](https://esbuild.github.io/api/#ignore-annotations)
   ```javascript
-  import React from "https://esm.sh/react?ignore-annotations"
+  import foo from "https://esm.sh/foo?ignore-annotations"
   ```
 
 ### Web Worker

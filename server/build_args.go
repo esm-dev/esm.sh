@@ -13,6 +13,7 @@ type BuildArgs struct {
 	deps              PkgSlice
 	external          *stringSet
 	treeShaking       *stringSet
+	conditions        *stringSet
 	denoStdVersion    string
 	ignoreRequire     bool
 	ignoreAnnotations bool
@@ -22,7 +23,11 @@ type BuildArgs struct {
 func decodeBuildArgsPrefix(raw string) (args BuildArgs, err error) {
 	s, err := atobUrl(strings.TrimPrefix(strings.TrimSuffix(raw, "/"), "X-"))
 	if err == nil {
-		args = BuildArgs{external: newStringSet(), treeShaking: newStringSet()}
+		args = BuildArgs{
+			external:    newStringSet(),
+			treeShaking: newStringSet(),
+			conditions:  newStringSet(),
+		}
 		for _, p := range strings.Split(s, "\n") {
 			if strings.HasPrefix(p, "a/") {
 				args.alias = map[string]string{}
@@ -54,6 +59,10 @@ func decodeBuildArgsPrefix(raw string) (args BuildArgs, err error) {
 			} else if strings.HasPrefix(p, "ts/") {
 				for _, name := range strings.Split(strings.TrimPrefix(p, "ts/"), ",") {
 					args.treeShaking.Add(name)
+				}
+			} else if strings.HasPrefix(p, "c/") {
+				for _, name := range strings.Split(strings.TrimPrefix(p, "c/"), ",") {
+					args.conditions.Add(name)
 				}
 			} else if strings.HasPrefix(p, "dsv/") {
 				args.denoStdVersion = strings.TrimPrefix(p, "dsv/")
@@ -121,6 +130,16 @@ func encodeBuildArgsPrefix(args BuildArgs, pkgName string, forTypes bool) string
 		if len(ss) > 0 {
 			ss.Sort()
 			lines = append(lines, fmt.Sprintf("ts/%s", strings.Join(ss, ",")))
+		}
+	}
+	if args.conditions.Size() > 0 {
+		var ss sort.StringSlice
+		for _, name := range args.conditions.Values() {
+			ss = append(ss, name)
+		}
+		if len(ss) > 0 {
+			ss.Sort()
+			lines = append(lines, fmt.Sprintf("c/%s", strings.Join(ss, ",")))
 		}
 	}
 	if !forTypes {

@@ -22,7 +22,7 @@ type BuildQueueConsumer struct {
 }
 
 type BuildOutput struct {
-	meta *ESM
+	meta *ESMBuild
 	err  error
 }
 

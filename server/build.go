@@ -15,6 +15,15 @@ import (
 	"github.com/ije/gox/utils"
 )
 
+type ESMBuild struct {
+	NamedExports     []string `json:"-"`
+	HasExportDefault bool     `json:"d"`
+	CJS              bool     `json:"c"`
+	Dts              string   `json:"t"`
+	TypesOnly        bool     `json:"o"`
+	PackageCSS       bool     `json:"s"`
+}
+
 type BuildTask struct {
 	BuildArgs
 
@@ -22,8 +31,8 @@ type BuildTask struct {
 	CdnOrigin    string
 	Target       string
 	BuildVersion int
-	DevMode      bool
-	BundleMode   bool
+	Dev          bool
+	Bundle       bool
 
 	// internal
 	id    string
@@ -31,88 +40,7 @@ type BuildTask struct {
 	stage string
 }
 
-func (task *BuildTask) ID() string {
-	if task.id != "" {
-		return task.id
-	}
-
-	pkg := task.Pkg
-	name := strings.TrimSuffix(path.Base(pkg.Name), ".js")
-	extname := ".mjs"
-
-	if pkg.Submodule != "" {
-		name = pkg.Submodule
-		extname = ".js"
-	}
-	if task.Target == "raw" {
-		extname = ""
-	}
-	if task.DevMode {
-		name += ".development"
-	}
-	if task.BundleMode {
-		name += ".bundle"
-	}
-
-	task.id = fmt.Sprintf(
-		"%s/%s@%s/%s%s/%s%s",
-		task.getBuildVersion(task.Pkg),
-		pkg.Name,
-		pkg.Version,
-		encodeBuildArgsPrefix(task.BuildArgs, task.Pkg.Name, task.Target == "types"),
-		task.Target,
-		name,
-		extname,
-	)
-	if task.Target == "types" {
-		task.id = strings.TrimSuffix(task.id, extname)
-	}
-	return task.id
-}
-
-func (task *BuildTask) getImportPath(pkg Pkg, prefix string) string {
-	name := strings.TrimSuffix(path.Base(pkg.Name), ".js")
-	extname := ".mjs"
-	if pkg.Submodule != "" {
-		name = pkg.Submodule
-		extname = ".js"
-	}
-	// workaround for es5-ext weird "/#/" path
-	if pkg.Name == "es5-ext" {
-		name = strings.ReplaceAll(name, "/#/", "/$$/")
-	}
-	if task.DevMode {
-		name += ".development"
-	}
-
-	return fmt.Sprintf(
-		"%s/%s/%s@%s/%s%s/%s%s",
-		cfg.BasePath,
-		task.getBuildVersion(pkg),
-		pkg.Name,
-		pkg.Version,
-		prefix,
-		task.Target,
-		name,
-		extname,
-	)
-}
-
-func (task *BuildTask) getBuildVersion(pkg Pkg) string {
-	if stableBuild[pkg.Name] {
-		return "stable"
-	}
-	return fmt.Sprintf("v%d", task.BuildVersion)
-}
-
-func (task *BuildTask) getSavepath() string {
-	if stableBuild[task.Pkg.Name] {
-		return path.Join(fmt.Sprintf("builds/v%d", STABLE_VERSION), strings.TrimPrefix(task.ID(), "stable/"))
-	}
-	return path.Join("builds", task.ID())
-}
-
-func (task *BuildTask) Build() (esm *ESM, err error) {
+func (task *BuildTask) Build() (esm *ESMBuild, err error) {
 	if task.wd == "" {
 		task.wd = path.Join(cfg.WorkDir, fmt.Sprintf("npm/%s@%s", task.Pkg.Name, task.Pkg.Version))
 		ensureDir(task.wd)
@@ -150,13 +78,13 @@ func (task *BuildTask) Build() (esm *ESM, err error) {
 	return task.build()
 }
 
-func (task *BuildTask) build() (esm *ESM, err error) {
+func (task *BuildTask) build() (esm *ESMBuild, err error) {
 	if task.Target == "raw" {
 		return
 	}
 
 	task.stage = "init"
-	esm, npm, err := initModule(task.wd, task.Pkg, task.Target, task.DevMode)
+	esm, npm, err := task.init()
 	if err != nil {
 		return
 	}
@@ -230,7 +158,7 @@ func (task *BuildTask) build() (esm *ESM, err error) {
 	}
 
 	nodeEnv := "production"
-	if task.DevMode {
+	if task.Dev {
 		nodeEnv = "development"
 	}
 	define := map[string]string{
@@ -259,12 +187,13 @@ esbuild:
 		Outdir:            "/esbuild",
 		Write:             false,
 		Bundle:            true,
+		Conditions:        task.conditions.Values(),
 		Target:            targets[task.Target],
 		Format:            api.FormatESModule,
 		Platform:          api.PlatformBrowser,
-		MinifyWhitespace:  !task.DevMode,
-		MinifyIdentifiers: !task.DevMode,
-		MinifySyntax:      !task.DevMode,
+		MinifyWhitespace:  !task.Dev,
+		MinifyIdentifiers: !task.Dev,
+		MinifySyntax:      !task.Dev,
 		KeepNames:         task.keepNames,         // prevent class/function names erasing
 		IgnoreAnnotations: task.ignoreAnnotations, // some libs maybe use wrong side-effect annotations
 		Plugins: []api.Plugin{{
@@ -350,7 +279,7 @@ esbuild:
 						}
 
 						// bundles all dependencies in `bundle` mode, apart from peer dependencies and `?external` query
-						if task.BundleMode && !implicitExternal.Has(specifier) && !task.external.Has(specifier) {
+						if task.Bundle && !implicitExternal.Has(specifier) && !task.external.Has(specifier) {
 							pkgName, _ := splitPkgPath(specifier)
 							if !builtInNodeModules[pkgName] {
 								_, ok := npm.PeerDependencies[pkgName]
@@ -580,7 +509,7 @@ esbuild:
 				nodeEnv,
 			))
 			eol := "\n"
-			if !task.DevMode {
+			if !task.Dev {
 				eol = ""
 			}
 
@@ -711,6 +640,7 @@ esbuild:
 							deps:              task.deps,
 							external:          task.external,
 							treeShaking:       newStringSet(), // clear `?exports` args
+							conditions:        newStringSet(),
 							denoStdVersion:    task.denoStdVersion,
 							ignoreRequire:     task.ignoreRequire,
 							ignoreAnnotations: task.ignoreAnnotations,
@@ -720,7 +650,7 @@ esbuild:
 						BuildVersion: task.BuildVersion,
 						Pkg:          pkg,
 						Target:       task.Target,
-						DevMode:      task.DevMode,
+						Dev:          task.Dev,
 					}
 
 					_, ok := queryESMBuild(t.ID())
@@ -758,7 +688,14 @@ esbuild:
 								err = yarnAdd(depWd, depPkg)
 							}
 							if err == nil {
-								depESM, depNpm, e := initModule(depWd, depPkg, task.Target, task.DevMode)
+								task := &BuildTask{
+									BuildArgs: task.BuildArgs,
+									Pkg:       depPkg,
+									Target:    task.Target,
+									Dev:       task.Dev,
+									wd:        depWd,
+								}
+								depESM, depNpm, e := task.init()
 								if e == nil {
 									// support edge case like `require('htmlparser').Parser`
 									if bytes.HasPrefix(p, []byte{'.'}) {
@@ -898,7 +835,7 @@ esbuild:
 			// most of npm packages check for window object to detect browser environment, but Deno also has the window object
 			// so we need to replace the check with document object
 			if task.Target == "deno" || task.Target == "denonext" {
-				if task.DevMode {
+				if task.Dev {
 					outputContent = bytes.Replace(outputContent, []byte("typeof window !== \"undefined\""), []byte("typeof document !== \"undefined\""), -1)
 				} else {
 					outputContent = bytes.Replace(outputContent, []byte("typeof window<\"u\""), []byte("typeof document<\"u\""), -1)
@@ -910,7 +847,7 @@ esbuild:
 				return
 			}
 
-			if task.BundleMode && task.Target != "deno" && task.Target != "denonext" {
+			if task.Bundle && task.Target != "deno" && task.Target != "denonext" {
 				options.Plugins = []api.Plugin{{
 					Name: "esm",
 					Setup: func(build api.PluginBuild) {
@@ -1022,14 +959,14 @@ esbuild:
 	return
 }
 
-func (task *BuildTask) storeToDB(esm *ESM) {
+func (task *BuildTask) storeToDB(esm *ESMBuild) {
 	err := db.Put(task.ID(), utils.MustEncodeJSON(esm))
 	if err != nil {
 		log.Errorf("db: %v", err)
 	}
 }
 
-func (task *BuildTask) checkDTS(esm *ESM, npm NpmPackage) {
+func (task *BuildTask) checkDTS(esm *ESMBuild, npm NpmPackage) {
 	name := task.Pkg.Name
 	submodule := task.Pkg.Submodule
 	var dts string

@@ -19,8 +19,7 @@ import (
 	"github.com/ije/rex"
 )
 
-// esm.sh query middleware for rex
-func esmHandler() rex.Handle {
+func serverHandler() rex.Handle {
 	startTime := time.Now()
 
 	return func(ctx *rex.Context) interface{} {
@@ -86,8 +85,8 @@ func esmHandler() rex.Handle {
 						"pkg":        t.Pkg.String(),
 						"target":     t.Target,
 						"inProcess":  t.inProcess,
-						"devMode":    t.DevMode,
-						"bundleMode": t.BundleMode,
+						"dev":        t.Dev,
+						"bundle":     t.Bundle,
 					}
 					if !t.startTime.IsZero() {
 						m["startTime"] = t.startTime.Format(http.TimeFormat)
@@ -475,6 +474,7 @@ func esmHandler() rex.Handle {
 					deps:        PkgSlice{},
 					external:    newStringSet(),
 					treeShaking: newStringSet(),
+					conditions:  newStringSet(),
 				},
 				Target: "raw",
 				stage:  "-",
@@ -597,6 +597,15 @@ func esmHandler() rex.Handle {
 			}
 		}
 
+		// check `?conditions` query
+		conditions := newStringSet()
+		for _, p := range strings.Split(ctx.Form.Value("conditions"), ",") {
+			p = strings.TrimSpace(p)
+			if p != "" {
+				conditions.Add(p)
+			}
+		}
+
 		// determine build target by `?target` query or `User-Agent` header
 		target := strings.ToLower(ctx.Form.Value("target"))
 		targetFromUA := targets[target] == 0
@@ -644,7 +653,7 @@ func esmHandler() rex.Handle {
 
 		isBare := false
 		isPkgCss := ctx.Form.Has("css")
-		isBundleMode := ctx.Form.Has("bundle") && !stableBuild[reqPkg.Name]
+		isBundle := ctx.Form.Has("bundle") && !stableBuild[reqPkg.Name]
 		isDev := ctx.Form.Has("dev")
 		isPined := ctx.Form.Has("pin") || hasBuildVerPrefix
 		isWorker := ctx.Form.Has("worker")
@@ -664,6 +673,7 @@ func esmHandler() rex.Handle {
 			deps:              deps,
 			external:          external,
 			treeShaking:       treeShaking,
+			conditions:        conditions,
 			ignoreRequire:     ignoreRequire,
 			keepNames:         keepNames,
 			ignoreAnnotations: ignoreAnnotations,
@@ -707,7 +717,7 @@ func esmHandler() rex.Handle {
 						}
 						if endsWith(submodule, ".bundle") {
 							submodule = strings.TrimSuffix(submodule, ".bundle")
-							isBundleMode = true
+							isBundle = true
 						}
 						if endsWith(submodule, ".development") {
 							submodule = strings.TrimSuffix(submodule, ".development")
@@ -799,13 +809,13 @@ func esmHandler() rex.Handle {
 			BuildVersion: buildVersion,
 			Pkg:          reqPkg,
 			Target:       target,
-			DevMode:      isDev,
-			BundleMode:   isBundleMode || isWorker,
+			Dev:          isDev,
+			Bundle:       isBundle || isWorker,
 			stage:        "init",
 		}
 		taskID := task.ID()
 
-		var esm *ESM
+		var esm *ESMBuild
 		var hasBuild bool
 		if !rebuild {
 			esm, hasBuild = queryESMBuild(taskID)

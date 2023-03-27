@@ -10,25 +10,101 @@ import (
 	"github.com/ije/gox/utils"
 )
 
-// ESM defines the ES Module meta
-type ESM struct {
-	NamedExports     []string `json:"-"`
-	HasExportDefault bool     `json:"d"`
-	CJS              bool     `json:"c"`
-	Dts              string   `json:"t"`
-	TypesOnly        bool     `json:"o"`
-	PackageCSS       bool     `json:"s"`
+func (task *BuildTask) ID() string {
+	if task.id != "" {
+		return task.id
+	}
+
+	pkg := task.Pkg
+	name := strings.TrimSuffix(path.Base(pkg.Name), ".js")
+	extname := ".mjs"
+
+	if pkg.Submodule != "" {
+		name = pkg.Submodule
+		extname = ".js"
+	}
+	if task.Target == "raw" {
+		extname = ""
+	}
+	if task.Dev {
+		name += ".development"
+	}
+	if task.Bundle {
+		name += ".bundle"
+	}
+
+	task.id = fmt.Sprintf(
+		"%s/%s@%s/%s%s/%s%s",
+		task.getBuildVersion(task.Pkg),
+		pkg.Name,
+		pkg.Version,
+		encodeBuildArgsPrefix(task.BuildArgs, task.Pkg.Name, task.Target == "types"),
+		task.Target,
+		name,
+		extname,
+	)
+	if task.Target == "types" {
+		task.id = strings.TrimSuffix(task.id, extname)
+	}
+	return task.id
 }
 
-func initModule(wd string, pkg Pkg, target string, isDev bool) (esm *ESM, npm NpmPackage, err error) {
+func (task *BuildTask) getImportPath(pkg Pkg, prefix string) string {
+	name := strings.TrimSuffix(path.Base(pkg.Name), ".js")
+	extname := ".mjs"
+	if pkg.Submodule != "" {
+		name = pkg.Submodule
+		extname = ".js"
+	}
+	// workaround for es5-ext weird "/#/" path
+	if pkg.Name == "es5-ext" {
+		name = strings.ReplaceAll(name, "/#/", "/$$/")
+	}
+	if task.Dev {
+		name += ".development"
+	}
+
+	return fmt.Sprintf(
+		"%s/%s/%s@%s/%s%s/%s%s",
+		cfg.BasePath,
+		task.getBuildVersion(pkg),
+		pkg.Name,
+		pkg.Version,
+		prefix,
+		task.Target,
+		name,
+		extname,
+	)
+}
+
+func (task *BuildTask) getBuildVersion(pkg Pkg) string {
+	if stableBuild[pkg.Name] {
+		return "stable"
+	}
+	return fmt.Sprintf("v%d", task.BuildVersion)
+}
+
+func (task *BuildTask) getSavepath() string {
+	if stableBuild[task.Pkg.Name] {
+		return path.Join(fmt.Sprintf("builds/v%d", STABLE_VERSION), strings.TrimPrefix(task.ID(), "stable/"))
+	}
+	return path.Join("builds", task.ID())
+}
+
+func (task *BuildTask) init() (esm *ESMBuild, npm NpmPackage, err error) {
+	pkg := task.Pkg
+	wd := task.wd
+	target := task.Target
+	isDev := task.Dev
+
 	var p NpmPackage
 	err = utils.ParseJSONFile(path.Join(wd, "node_modules", pkg.Name, "package.json"), &p)
 	if err != nil {
 		return
 	}
 
-	npm = fixNpmPackage(wd, p, target, isDev)
-	esm = &ESM{}
+	npm = task.fixNpmPackage(p)
+	esm = &ESMBuild{}
 
 	defer func() {
 		esm.CJS = npm.Main != "" && npm.Module == ""
@@ -62,7 +138,7 @@ func initModule(wd string, pkg Pkg, target string, isDev bool) (esm *ESM, npm Np
 				if err != nil {
 					return
 				}
-				np := fixNpmPackage(wd, p, target, isDev)
+				np := task.fixNpmPackage(p)
 				if np.Module != "" {
 					npm.Module = path.Join(pkg.Submodule, np.Module)
 				} else {
@@ -101,7 +177,7 @@ func initModule(wd string, pkg Pkg, target string, isDev bool) (esm *ESM, npm Np
 								    }
 								  }
 								*/
-								resolvePackageExports(&npm, defines, target, isDev, npm.Type)
+								task.resolvePackageExports(&npm, defines, npm.Type)
 								resolved = true
 								break
 							} else if strings.HasSuffix(name, "/*") && strings.HasPrefix("./"+pkg.Submodule, strings.TrimSuffix(name, "*")) {
@@ -153,7 +229,7 @@ func initModule(wd string, pkg Pkg, target string, isDev bool) (esm *ESM, npm Np
 									hasDefines = true
 								}
 								if hasDefines {
-									resolvePackageExports(&npm, defines, target, isDev, npm.Type)
+									task.resolvePackageExports(&npm, defines, npm.Type)
 									resolved = true
 								}
 							}
@@ -240,60 +316,7 @@ func initModule(wd string, pkg Pkg, target string, isDev bool) (esm *ESM, npm Np
 	return
 }
 
-func queryESMBuild(id string) (*ESM, bool) {
-	value, err := db.Get(id)
-	if err == nil && value != nil {
-		var esm ESM
-		err = json.Unmarshal(value, &esm)
-		if err == nil {
-			if strings.HasPrefix(id, "stable/") {
-				id = fmt.Sprintf("v%d/", STABLE_VERSION) + strings.TrimPrefix(id, "stable/")
-			}
-			_, err = fs.Stat(path.Join("builds", id))
-			if err == nil {
-				return &esm, true
-			}
-		}
-
-		// delete the invalid db entry
-		db.Delete(id)
-	}
-	return nil, false
-}
-
-func resovleESModule(wd string, packageName string, moduleSpecifier string) (resolveName string, namedExports []string, err error) {
-	pkgDir := path.Join(wd, "node_modules", packageName)
-	switch path.Ext(moduleSpecifier) {
-	case ".js", ".jsx", ".ts", ".tsx", ".mjs":
-		resolveName = moduleSpecifier
-	default:
-		resolveName = moduleSpecifier + ".mjs"
-		if !fileExists(path.Join(pkgDir, resolveName)) {
-			resolveName = moduleSpecifier + ".js"
-		}
-		if !fileExists(path.Join(pkgDir, resolveName)) && dirExists(path.Join(pkgDir, moduleSpecifier)) {
-			resolveName = path.Join(moduleSpecifier, "index.mjs")
-			if !fileExists(path.Join(pkgDir, resolveName)) {
-				resolveName = path.Join(moduleSpecifier, "index.js")
-			}
-		}
-	}
-
-	isESM, _namedExports, err := validateJS(path.Join(pkgDir, resolveName))
-	if err != nil {
-		return
-	}
-
-	if !isESM {
-		err = errors.New("not a module")
-		return
-	}
-
-	namedExports = _namedExports
-	return
-}
-
-func fixNpmPackage(wd string, p NpmPackage, target string, isDev bool) NpmPackage {
+func (task *BuildTask) fixNpmPackage(p NpmPackage) NpmPackage {
 	if exports := p.DefinedExports; exports != nil {
 		if m, ok := exports.(map[string]interface{}); ok {
 			v, ok := m["."]
@@ -309,7 +332,7 @@ func fixNpmPackage(wd string, p NpmPackage, target string, isDev bool) NpmPackag
 						".": "./esm/index.js"
 					}
 				*/
-				resolvePackageExports(&p, v, target, isDev, p.Type)
+				task.resolvePackageExports(&p, v, p.Type)
 			} else {
 				/*
 					exports: {
@@ -317,17 +340,17 @@ func fixNpmPackage(wd string, p NpmPackage, target string, isDev bool) NpmPackag
 						"import": "./esm/index.js"
 					}
 				*/
-				resolvePackageExports(&p, m, target, isDev, p.Type)
+				task.resolvePackageExports(&p, m, p.Type)
 			}
 		} else if s, ok := exports.(string); ok {
 			/*
 			  exports: "./esm/index.js"
 			*/
-			resolvePackageExports(&p, s, target, isDev, p.Type)
+			task.resolvePackageExports(&p, s, p.Type)
 		}
 	}
 
-	nmDir := path.Join(wd, "node_modules")
+	nmDir := path.Join(task.wd, "node_modules")
 	if p.Module == "" {
 		if p.JsNextMain != "" && fileExists(path.Join(nmDir, p.Name, p.JsNextMain)) {
 			p.Module = p.JsNextMain
@@ -400,4 +423,119 @@ func fixNpmPackage(wd string, p NpmPackage, target string, isDev bool) NpmPackag
 	}
 
 	return p
+}
+
+// see https://nodejs.org/api/packages.html
+func (task *BuildTask) resolvePackageExports(p *NpmPackage, exports interface{}, pType string) {
+	s, ok := exports.(string)
+	if ok {
+		if pType == "module" {
+			p.Module = s
+		} else {
+			p.Main = s
+		}
+		return
+	}
+
+	m, ok := exports.(map[string]interface{})
+	if ok {
+		targetDeno := task.Target == "deno" || task.Target == "denonext"
+		conditions := []string{"browser", "module", "import", "es2015", "worker"}
+		if targetDeno {
+			conditions = []string{"deno", "worker", "module", "import", "es2015", "browser"}
+		}
+		if task.Dev {
+			conditions = append([]string{"development"}, conditions...)
+		}
+		if task.conditions.Size() > 0 {
+			conditions = append(task.conditions.Values(), conditions...)
+		}
+		if pType == "module" {
+			conditions = append(conditions, "default")
+		}
+		// support solid.js (<=1.6) for deno target
+		if (p.Name == "solid-js" || strings.HasPrefix(p.Name, "solid-js/")) && targetDeno {
+			conditions = append([]string{"deno", "worker", "node"}, conditions...)
+		}
+		for _, condition := range conditions {
+			v, ok := m[condition]
+			if ok {
+				task.resolvePackageExports(p, v, "module")
+				break
+			}
+		}
+		if p.Module == "" {
+			for _, condition := range []string{"require", "node", "default"} {
+				v, ok := m[condition]
+				if ok {
+					task.resolvePackageExports(p, v, "")
+					break
+				}
+			}
+		}
+		for key, value := range m {
+			s, ok := value.(string)
+			if ok && s != "" {
+				switch key {
+				case "types":
+					p.Types = s
+				case "typings":
+					p.Typings = s
+				}
+			}
+		}
+	}
+}
+
+func queryESMBuild(id string) (*ESMBuild, bool) {
+	value, err := db.Get(id)
+	if err == nil && value != nil {
+		var esm ESMBuild
+		err = json.Unmarshal(value, &esm)
+		if err == nil {
+			if strings.HasPrefix(id, "stable/") {
+				id = fmt.Sprintf("v%d/", STABLE_VERSION) + strings.TrimPrefix(id, "stable/")
+			}
+			_, err = fs.Stat(path.Join("builds", id))
+			if err == nil {
+				return &esm, true
+			}
+		}
+
+		// delete the invalid db entry
+		db.Delete(id)
+	}
+	return nil, false
+}
+
+func resovleESModule(wd string, packageName string, moduleSpecifier string) (resolveName string, namedExports []string, err error) {
+	pkgDir := path.Join(wd, "node_modules", packageName)
+	switch path.Ext(moduleSpecifier) {
+	case ".js", ".jsx", ".ts", ".tsx", ".mjs":
+		resolveName = moduleSpecifier
+	default:
+		resolveName = moduleSpecifier + ".mjs"
+		if !fileExists(path.Join(pkgDir, resolveName)) {
+			resolveName = moduleSpecifier + ".js"
+		}
+		if !fileExists(path.Join(pkgDir, resolveName)) && dirExists(path.Join(pkgDir, moduleSpecifier)) {
+			resolveName = path.Join(moduleSpecifier, "index.mjs")
+			if !fileExists(path.Join(pkgDir, resolveName)) {
+				resolveName = path.Join(moduleSpecifier, "index.js")
+			}
+		}
+	}
+
+	isESM, _namedExports, err := validateJS(path.Join(pkgDir, resolveName))
+	if err != nil {
+		return
+	}
+
+	if !isESM {
+		err = errors.New("not a module")
+		return
+	}
+
+	namedExports = _namedExports
+	return
 }
