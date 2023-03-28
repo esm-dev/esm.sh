@@ -17,6 +17,7 @@ func validatePkgPath(pathname string) (Pkg, string, error) {
 	pkgName, submodule := splitPkgPath(pathname)
 	if submodule != "" {
 		submodule = strings.TrimSuffix(submodule, ".js")
+		submodule = strings.TrimSuffix(submodule, ".mjs")
 	}
 	name, maybeVersion := utils.SplitByLastByte(pkgName, '@')
 	if strings.HasPrefix(pkgName, "@") {

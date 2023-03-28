@@ -182,7 +182,7 @@ func (task *BuildTask) build() (esm *ESMBuild, err error) {
 	implicitExternal := newStringSet()
 	browserExclude := map[string]*stringSet{}
 
-esbuild:
+rebuild:
 	options := api.BuildOptions{
 		Outdir:            "/esbuild",
 		Write:             false,
@@ -376,7 +376,7 @@ esbuild:
 						}
 
 						// for local modules
-						if isLocalImport(specifier) {
+						if isLocalSpecifier(specifier) {
 							// bundle if the entry pkg is not a submodule
 							if task.Pkg.Submodule == "" {
 								return api.OnResolveResult{}, nil
@@ -468,7 +468,7 @@ esbuild:
 			if !implicitExternal.Has(name) {
 				implicitExternal.Add(name)
 				externalDeps.Add(name)
-				goto esbuild
+				goto rebuild
 			}
 		}
 		if strings.HasPrefix(msg, "No matching export in \"") {
@@ -484,7 +484,7 @@ esbuild:
 					}
 					if !exports.Has(exportName) {
 						exports.Add(exportName)
-						goto esbuild
+						goto rebuild
 					}
 				}
 			}
@@ -517,7 +517,7 @@ esbuild:
 			for depIndex, name := range externalDeps.Values() {
 				var importPath string
 				// remote imports
-				if isRemoteImport(name) || task.external.Has(name) {
+				if isRemoteSpecifier(name) || task.external.Has(name) {
 					importPath = name
 				}
 				// sub module

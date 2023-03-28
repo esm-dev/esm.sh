@@ -193,13 +193,11 @@ func (task *BuildTask) init() (esm *ESMBuild, npm NpmPackage, err error) {
 								hasDefines := false
 								if m, ok := defines.(map[string]interface{}); ok {
 									newDefines := map[string]interface{}{}
-
 									for key, value := range m {
 										if s, ok := value.(string); ok && s != name {
 											newDefines[key] = strings.Replace(s, "*", suffix, -1)
 											hasDefines = true
 										}
-
 										/**
 										exports: {
 											"./*": {
@@ -356,7 +354,7 @@ func (task *BuildTask) fixNpmPackage(p NpmPackage) NpmPackage {
 			p.Module = p.JsNextMain
 		} else if p.ES2015 != "" && fileExists(path.Join(nmDir, p.Name, p.ES2015)) {
 			p.Module = p.ES2015
-		} else if p.Main != "" && (p.Type == "module" || strings.HasSuffix(p.Main, ".mjs") || strings.HasSuffix(p.Main, ".esm.js") || strings.Contains(p.Main, "/esm/") || strings.Contains(p.Main, "/es/")) {
+		} else if p.Main != "" && (p.Type == "module" || strings.HasSuffix(p.Main, ".mjs")) {
 			p.Module = p.Main
 		}
 	}
@@ -508,25 +506,25 @@ func queryESMBuild(id string) (*ESMBuild, bool) {
 	return nil, false
 }
 
-func resovleESModule(wd string, packageName string, moduleSpecifier string) (resolveName string, namedExports []string, err error) {
+func resovleESModule(wd string, packageName string, moduleSpecifier string) (resolvedName string, namedExports []string, err error) {
 	pkgDir := path.Join(wd, "node_modules", packageName)
 	switch path.Ext(moduleSpecifier) {
-	case ".js", ".jsx", ".ts", ".tsx", ".mjs":
-		resolveName = moduleSpecifier
+	case ".mjs", ".js", ".jsx", ".mts", ".ts", ".tsx":
+		resolvedName = moduleSpecifier
 	default:
-		resolveName = moduleSpecifier + ".mjs"
-		if !fileExists(path.Join(pkgDir, resolveName)) {
-			resolveName = moduleSpecifier + ".js"
+		resolvedName = moduleSpecifier + ".mjs"
+		if !fileExists(path.Join(pkgDir, resolvedName)) {
+			resolvedName = moduleSpecifier + ".js"
 		}
-		if !fileExists(path.Join(pkgDir, resolveName)) && dirExists(path.Join(pkgDir, moduleSpecifier)) {
-			resolveName = path.Join(moduleSpecifier, "index.mjs")
-			if !fileExists(path.Join(pkgDir, resolveName)) {
-				resolveName = path.Join(moduleSpecifier, "index.js")
+		if !fileExists(path.Join(pkgDir, resolvedName)) && dirExists(path.Join(pkgDir, moduleSpecifier)) {
+			resolvedName = path.Join(moduleSpecifier, "index.mjs")
+			if !fileExists(path.Join(pkgDir, resolvedName)) {
+				resolvedName = path.Join(moduleSpecifier, "index.js")
 			}
 		}
 	}
 
-	isESM, _namedExports, err := validateJS(path.Join(pkgDir, resolveName))
+	isESM, _namedExports, err := validateJS(path.Join(pkgDir, resolvedName))
 	if err != nil {
 		return
 	}

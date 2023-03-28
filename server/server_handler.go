@@ -301,8 +301,7 @@ func serverHandler() rex.Handle {
 		}
 
 		// redirect to css for CSS packages
-		css := cssPackages[reqPkg.Name]
-		if css != "" && reqPkg.Submodule == "" {
+		if css := cssPackages[reqPkg.Name]; css != "" && reqPkg.Submodule == "" {
 			url := fmt.Sprintf("%s%s/%s/%s", cdnOrigin, cfg.BasePath, reqPkg.String(), css)
 			return rex.Redirect(url, http.StatusFound)
 		}
@@ -704,17 +703,16 @@ func serverHandler() rex.Handle {
 				if _, ok := targets[maybeTarget]; ok {
 					submodule := strings.Join(a[1:], "/")
 					pkgName := strings.TrimSuffix(path.Base(reqPkg.Name), ".js")
-					if submodule == pkgName+".css" {
-						reqPkg.Submodule = ""
-						target = maybeTarget
-						isBare = true
-					} else if !strings.HasSuffix(submodule, ".css") {
-						mjs := strings.HasSuffix(submodule, ".mjs")
-						if mjs {
-							submodule = strings.TrimSuffix(submodule, ".mjs")
+					if strings.HasSuffix(submodule, ".css") {
+						if submodule == pkgName+".css" {
+							reqPkg.Submodule = ""
+							target = maybeTarget
+							isBare = true
 						} else {
-							submodule = strings.TrimSuffix(submodule, ".js")
+							url := fmt.Sprintf("%s%s/%s", cdnOrigin, cfg.BasePath, reqPkg.String())
+							return rex.Redirect(url, http.StatusFound)
 						}
+					} else {
 						if endsWith(submodule, ".bundle") {
 							submodule = strings.TrimSuffix(submodule, ".bundle")
 							isBundle = true
@@ -723,11 +721,12 @@ func serverHandler() rex.Handle {
 							submodule = strings.TrimSuffix(submodule, ".development")
 							isDev = true
 						}
-						if submodule == pkgName && !mjs && stableBuild[reqPkg.Name] {
+						isPkgEntry := strings.HasSuffix(pathname, ".mjs") // <- /v100/react@18.2.0/es2022/react.mjs
+						if submodule == pkgName && !isPkgEntry && stableBuild[reqPkg.Name] {
 							url := fmt.Sprintf("%s%s/%s@%s", cdnOrigin, cfg.BasePath, reqPkg.Name, reqPkg.Version)
 							return rex.Redirect(url, http.StatusFound)
 						}
-						if submodule == pkgName && mjs {
+						if submodule == pkgName && isPkgEntry {
 							submodule = ""
 						}
 						// workaround for es5-ext weird "/#/" path
@@ -887,14 +886,14 @@ func serverHandler() rex.Handle {
 				}
 				return rex.Status(500, err.Error())
 			}
-			r, err := fs.OpenFile(savePath)
+			f, err := fs.OpenFile(savePath)
 			if err != nil {
 				return rex.Status(500, err.Error())
 			}
 			ctx.SetHeader("Cache-Control", "public, max-age=31536000, immutable")
 			if isWorker && endsWith(savePath, ".mjs", ".js") {
-				defer r.Close()
-				buf, err := ioutil.ReadAll(r)
+				buf, err := ioutil.ReadAll(f)
+				f.Close()
 				if err != nil {
 					return rex.Status(500, err.Error())
 				}
@@ -902,7 +901,7 @@ func serverHandler() rex.Handle {
 				ctx.SetHeader("Content-Type", "application/javascript; charset=utf-8")
 				return fmt.Sprintf(`export default function workerFactory() { const blob = new Blob([%s], { type: "application/javascript" }); return new Worker(URL.createObjectURL(blob), { type: "module" })}`, utils.MustEncodeJSON(string(code)))
 			}
-			return rex.Content(savePath, fi.ModTime(), r) // auto closed
+			return rex.Content(savePath, fi.ModTime(), f) // auto closed
 		}
 
 		buf := bytes.NewBuffer(nil)

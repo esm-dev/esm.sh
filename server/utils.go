@@ -55,17 +55,17 @@ func splitPkgPath(pathname string) (pkgName string, submodule string) {
 	return
 }
 
-// isRemoteImport returns true if the import path is a remote URL.
-func isRemoteImport(importPath string) bool {
+// isRemoteSpecifier returns true if the import path is a remote URL.
+func isRemoteSpecifier(importPath string) bool {
 	return strings.HasPrefix(importPath, "https://") || strings.HasPrefix(importPath, "http://")
 }
 
-// isLocalImport returns true if the import path is a local path.
-func isLocalImport(importPath string) bool {
+// isLocalSpecifier returns true if the import path is a local path.
+func isLocalSpecifier(importPath string) bool {
 	return strings.HasPrefix(importPath, "file://") || strings.HasPrefix(importPath, "/") || strings.HasPrefix(importPath, "./") || strings.HasPrefix(importPath, "../") || importPath == "." || importPath == ".."
 }
 
-// include returns true if the given string is included in the given array.
+// includes returns true if the given string is included in the given array.
 func includes(a []string, s string) bool {
 	if len(a) == 0 {
 		return false

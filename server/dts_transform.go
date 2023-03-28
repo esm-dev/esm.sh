@@ -127,7 +127,7 @@ func (task *BuildTask) transformDTS(dts string, aliasDepsPrefix string, marker *
 			}
 		}
 
-		if task.external.Has("*") && !strings.HasPrefix(pkgName, "@types/") && !isLocalImport(importPath) {
+		if task.external.Has("*") && !strings.HasPrefix(pkgName, "@types/") && !isLocalSpecifier(importPath) {
 			return importPath
 		}
 
@@ -159,7 +159,7 @@ func (task *BuildTask) transformDTS(dts string, aliasDepsPrefix string, marker *
 			return importPath
 		}
 
-		if isLocalImport(importPath) {
+		if isLocalSpecifier(importPath) {
 			if importPath == "." {
 				importPath = "./index.d.ts"
 			}
@@ -356,7 +356,7 @@ func (task *BuildTask) transformDTS(dts string, aliasDepsPrefix string, marker *
 	var wg sync.WaitGroup
 	var errors []error
 	for _, importDts := range imports.Values() {
-		if isLocalImport(importDts) {
+		if isLocalSpecifier(importDts) {
 			if strings.HasPrefix(importDts, "/") {
 				pkg, subpath := utils.SplitByFirstByte(importDts, '/')
 				if strings.HasPrefix(pkg, "@") {
