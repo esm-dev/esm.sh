@@ -295,7 +295,7 @@ func (task *BuildTask) init() (esm *ESMBuild, npm NpmPackage, err error) {
 				pkgs[i] = n + "@" + v
 				i++
 			}
-			err = runYarnAdd(wd, false, pkgs...)
+			err = pnpmAdd(wd, pkgs...)
 			if err != nil {
 				return
 			}

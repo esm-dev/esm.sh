@@ -82,7 +82,7 @@ func Serve(efs EmbedFS) {
 	if nodeInstallDir == "" {
 		nodeInstallDir = path.Join(cfg.WorkDir, "nodejs")
 	}
-	nodeVer, yarnVer, err := checkNodejs(nodeInstallDir)
+	nodeVer, pnpmVer, err := checkNodejs(nodeInstallDir)
 	if err != nil {
 		log.Fatalf("check nodejs: %v", err)
 	}
@@ -92,7 +92,7 @@ func Serve(efs EmbedFS) {
 			cfg.NpmRegistry = strings.TrimRight(strings.TrimSpace(string(output)), "/") + "/"
 		}
 	}
-	log.Infof("nodejs v%s installed, registry: %s, yarn: %s", nodeVer, cfg.NpmRegistry, yarnVer)
+	log.Infof("nodejs v%s installed, registry: %s, pnpm: %s", nodeVer, cfg.NpmRegistry, pnpmVer)
 
 	cache, err = storage.OpenCache(cfg.Cache)
 	if err != nil {

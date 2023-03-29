@@ -275,7 +275,7 @@ func (a *NpmPackage) UnmarshalJSON(b []byte) error {
 	return nil
 }
 
-func checkNodejs(installDir string) (nodeVer string, yarnVer string, err error) {
+func checkNodejs(installDir string) (nodeVer string, pnpmVer string, err error) {
 	var installed bool
 CheckNodejs:
 	nodeVer, major, err := getNodejsVersion()
@@ -306,20 +306,20 @@ CheckNodejs:
 	}
 
 CheckYarn:
-	output, err := exec.Command("yarn", "-v").CombinedOutput()
+	output, err := exec.Command("pnpm", "-v").CombinedOutput()
 	if err != nil {
 		if errors.Is(err, exec.ErrNotFound) {
-			output, err = exec.Command("npm", "install", "yarn", "-g").CombinedOutput()
+			output, err = exec.Command("npm", "install", "pnpm", "-g").CombinedOutput()
 			if err != nil {
-				err = fmt.Errorf("install yarn: %s", strings.TrimSpace(string(output)))
+				err = fmt.Errorf("install pnpm: %s", strings.TrimSpace(string(output)))
 				return
 			}
 			goto CheckYarn
 		}
-		err = fmt.Errorf("bad yarn version: %s", strings.TrimSpace(string(output)))
+		err = fmt.Errorf("bad pnpm version: %s", strings.TrimSpace(string(output)))
 	}
 	if err == nil {
-		yarnVer = strings.TrimSpace(string(output))
+		pnpmVer = strings.TrimSpace(string(output))
 	}
 	return
 }
@@ -535,20 +535,13 @@ func installNodejs(dir string, version string) (err error) {
 
 var addingLock sync.Map
 
-func yarnAdd(wd string, pkg Pkg) (err error) {
-	noCache := false
+func installPackage(wd string, pkg Pkg) (err error) {
 	pkgNameFormat := fmt.Sprintf("%s@%s", pkg.Name, pkg.Version)
-
 	mutex, _ := addingLock.LoadOrStore(pkgNameFormat, &sync.Mutex{})
 	mutex.(*sync.Mutex).Lock()
 	defer func() {
 		mutex.(*sync.Mutex).Unlock()
 	}()
-
-	// file exist, skip install
-	if _, e := os.Stat(path.Join(wd, ".yarn_added")); e == nil {
-		return
-	}
 
 	// Create package.json to prevent read up-levels
 	wdPackageFilePath := path.Join(wd, "package.json")
@@ -561,10 +554,9 @@ func yarnAdd(wd string, pkg Pkg) (err error) {
 	}
 
 	for i := 0; i < 3; i++ {
-		err = runYarnAdd(wd, noCache, pkgNameFormat)
+		err = pnpmAdd(wd, pkgNameFormat)
 		if err == nil && !fileExists(path.Join(wd, "node_modules", pkg.Name, "package.json")) {
-			noCache = true
-			err = fmt.Errorf("yarnAdd(%s): package.json not found", pkg)
+			err = fmt.Errorf("installPackage(%s): package.json not found", pkg)
 		}
 		if err == nil {
 			break
@@ -576,46 +568,27 @@ func yarnAdd(wd string, pkg Pkg) (err error) {
 	return
 }
 
-func runYarnAdd(wd string, noCache bool, packages ...string) (err error) {
+func pnpmAdd(wd string, packages ...string) (err error) {
 	if len(packages) > 0 {
 		start := time.Now()
-		args := []string{
-			"add",
-			"--check-files",
-			"--ignore-engines",
-			"--ignore-platform",
+		args := []string{"add"}
+		args = append(args, packages...)
+		args = append(
+			args,
 			"--ignore-scripts",
-			"--no-bin-links",
-			"--no-node-version-check",
-			"--no-progress",
-			"--non-interactive",
-			"--silent",
-			"--registry=" + cfg.NpmRegistry,
-		}
-		if noCache {
-			args = append(args, "--cache-folder", path.Join(wd, ".yarn_cache"))
-		} else {
-			yarnCacheDir := os.Getenv("YARN_CACHE_DIR")
-			if yarnCacheDir != "" {
-				args = append(args, "--cache-folder", yarnCacheDir)
-			}
-		}
-		yarnMutex := os.Getenv("YARN_MUTEX")
-		if yarnMutex != "" {
-			args = append(args, "--mutex", yarnMutex)
-		}
-		cmd := exec.Command("yarn", append(args, packages...)...)
+			"--loglevel", "error",
+			"--registry", cfg.NpmRegistry,
+		)
+		cmd := exec.Command("pnpm", args...)
 		cmd.Dir = wd
 		if cfg.NpmToken != "" {
 			cmd.Env = append(os.Environ(), "ESM_NPM_TOKEN="+cfg.NpmToken)
 		}
 		output, err := cmd.CombinedOutput()
 		if err != nil {
-			return fmt.Errorf("yarn add %s: %s", strings.Join(packages, ","), string(output))
+			return fmt.Errorf("pnpm add %s: %s", strings.Join(packages, ","), string(output))
 		}
-
-		os.Create(path.Join(wd, ".yarn_added"))
-		log.Debug("yarn add", strings.Join(packages, ","), "in", time.Since(start))
+		log.Debug("pnpm add", strings.Join(packages, ","), "in", time.Since(start))
 	}
 	return
 }

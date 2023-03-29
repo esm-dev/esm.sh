@@ -70,7 +70,7 @@ func (task *BuildTask) Build() (esm *ESMBuild, err error) {
 	// 	}()
 
 	task.stage = "install"
-	err = yarnAdd(task.wd, task.Pkg)
+	err = installPackage(task.wd, task.Pkg)
 	if err != nil {
 		return
 	}
@@ -685,7 +685,7 @@ rebuild:
 							if err == nil && !fileExists(path.Join(depWd, "node_modules", depPkg.Name, "package.json")) {
 								// the dep may be a peer depencency
 								depWd = path.Join(os.TempDir(), fmt.Sprintf("esm/%s@%s", depPkg.Name, depPkg.Version))
-								err = yarnAdd(depWd, depPkg)
+								err = installPackage(depWd, depPkg)
 							}
 							if err == nil {
 								task := &BuildTask{
