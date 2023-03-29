@@ -107,32 +107,45 @@ func fileExists(filepath string) bool {
 }
 
 func ensureDir(dir string) (err error) {
-	_, err = os.Stat(dir)
+	_, err = os.Lstat(dir)
 	if err != nil && os.IsNotExist(err) {
 		err = os.MkdirAll(dir, 0755)
 	}
 	return
 }
 
-func readDir(root string) ([]string, error) {
+func findFiles(root string, fn func(p string) bool) ([]string, error) {
 	rootDir, err := filepath.Abs(root)
 	if err != nil {
 		return nil, err
 	}
+	entries, err := os.ReadDir(rootDir)
+	if err != nil {
+		return nil, err
+	}
 	var files []string
-	err = filepath.Walk(rootDir, func(path string, info os.FileInfo, err error) error {
-		if err != nil {
-			return err
-		}
-		if !info.IsDir() {
-			name := strings.TrimPrefix(path, rootDir+"/")
-			if !strings.HasPrefix(name, "node_modules/") && !strings.HasPrefix(name, ".") {
+	for _, entry := range entries {
+		name := entry.Name()
+		if entry.IsDir() {
+			if name == "node_modules" {
+				continue
+			}
+			subFiles, err := findFiles(filepath.Join(rootDir, name), fn)
+			if err != nil {
+				return nil, err
+			}
+			files = make([]string, len(files)+len(subFiles))
+			for i, f := range subFiles {
+				files[i+len(files)] = filepath.Join(name, f)
+			}
+			copy(files, subFiles)
+		} else {
+			if fn(name) {
 				files = append(files, name)
 			}
 		}
-		return nil
-	})
-	return files, err
+	}
+	return files, nil
 }
 
 func clearDir(dir string) (err error) {

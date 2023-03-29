@@ -2,7 +2,6 @@ package server
 
 import (
 	"bytes"
-	"encoding/json"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -254,27 +253,29 @@ func serverHandler() rex.Handle {
 
 		// redirect `/v107/$PKG/es2022/foo.wasm` to `$PKG/$PKG/foo.wasm`
 		if hasBuildVerPrefix && strings.HasSuffix(reqPkg.Submodule, ".wasm") {
-			f, err := fs.OpenFile(path.Join("raw", reqPkg.Name+"@"+reqPkg.Version, "__esm_meta.json"))
+			pkgRoot := path.Join(cfg.WorkDir, "npm", reqPkg.Name+"@"+reqPkg.Version, "node_modules", reqPkg.Name)
+			wasmFiles, err := findFiles(pkgRoot, func(fp string) bool {
+				return strings.HasSuffix(fp, ".wasm")
+			})
 			if err != nil {
 				return rex.Status(500, err.Error())
 			}
-			defer f.Close()
-			var meta map[string]interface{}
-			if json.NewDecoder(f).Decode(&meta) == nil {
-				if v, ok := meta["files"]; ok {
-					if files, ok := v.([]interface{}); ok {
-						wasmName := path.Base(reqPkg.Submodule)
-						for _, v := range files {
-							if fp, ok := v.(string); ok {
-								if path.Base(fp) == wasmName {
-									url := fmt.Sprintf("%s%s/%s@%s/%s", cdnOrigin, cfg.BasePath, reqPkg.Name, reqPkg.Version, fp)
-									return rex.Redirect(url, http.StatusFound)
-								}
-							}
-						}
+			var wasmFile string
+			if l := len(wasmFiles); l == 1 {
+				wasmFile = wasmFiles[0]
+			} else if l > 1 {
+				for _, f := range wasmFiles {
+					if strings.Contains(reqPkg.Submodule, f) {
+						wasmFile = f
+						break
 					}
 				}
 			}
+			if wasmFile == "" {
+				return rex.Status(404, "Wasm File not found")
+			}
+			url := fmt.Sprintf("%s%s/%s@%s/%s", cdnOrigin, cfg.BasePath, reqPkg.Name, reqPkg.Version, wasmFile)
+			return rex.Redirect(url, http.StatusFound)
 		}
 
 		// redirect `/@types/` to `.d.ts` files
@@ -458,7 +459,7 @@ func serverHandler() rex.Handle {
 			fileDir := fmt.Sprintf("npm/%s@%s", reqPkg.Name, reqPkg.Version)
 			savePath = path.Join(cfg.WorkDir, fileDir, "node_modules", reqPkg.Name, reqPkg.Submodule)
 
-			fi, err = os.Stat(savePath)
+			fi, err = os.Lstat(savePath)
 			if err == nil {
 				return respRawFile(savePath, false, fi.ModTime(), err)
 			} else if !os.IsNotExist(err) {
@@ -489,7 +490,7 @@ func serverHandler() rex.Handle {
 				return rex.Status(http.StatusRequestTimeout, "timeout, we are downloading package hardly, please try again later!")
 			}
 
-			fi, err = os.Stat(savePath)
+			fi, err = os.Lstat(savePath)
 			if err == nil {
 				return respRawFile(savePath, false, fi.ModTime(), err)
 			}

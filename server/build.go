@@ -196,6 +196,7 @@ rebuild:
 		MinifySyntax:      !task.Dev,
 		KeepNames:         task.keepNames,         // prevent class/function names erasing
 		IgnoreAnnotations: task.ignoreAnnotations, // some libs maybe use wrong side-effect annotations
+		PreserveSymlinks:  true,
 		Plugins: []api.Plugin{{
 			Name: "esm",
 			Setup: func(build api.PluginBuild) {
@@ -252,10 +253,6 @@ rebuild:
 							spec := specifier
 							if strings.HasPrefix(specifier, "./") || strings.HasPrefix(specifier, "../") || specifier == ".." {
 								fullpath := path.Join(path.Dir(args.Importer), specifier)
-								// in macOS, the dir `/private/var/` is equal to `/var/`
-								if strings.HasPrefix(fullpath, "/private/var/") {
-									fullpath = strings.TrimPrefix(fullpath, "/private")
-								}
 								spec = "." + strings.TrimPrefix(fullpath, path.Join(task.wd, "node_modules", npm.Name))
 							}
 							if name, ok := npm.Browser[spec]; ok {
@@ -328,10 +325,6 @@ rebuild:
 						// see https://nodejs.org/api/packages.html
 						if (strings.HasPrefix(specifier, "./") || strings.HasPrefix(specifier, "../") || specifier == "..") && !strings.HasSuffix(specifier, ".js") && !strings.HasSuffix(specifier, ".mjs") && !strings.HasSuffix(specifier, ".json") {
 							fullpath := path.Join(path.Dir(args.Importer), specifier)
-							// in macOS, the dir `/private/var/` is equal to `/var/`
-							if strings.HasPrefix(fullpath, "/private/var/") {
-								fullpath = strings.TrimPrefix(fullpath, "/private")
-							}
 							spec := "." + strings.TrimPrefix(fullpath, path.Join(task.wd, "node_modules", npm.Name))
 							// bundle {pkgName}/{pkgName}.js
 							if spec == fmt.Sprintf("./%s.js", task.Pkg.Name) {
@@ -388,11 +381,7 @@ rebuild:
 							}
 
 							// otherwise do not bundle its local dependencies
-							var dirpath = args.ResolveDir
-							if strings.HasPrefix(dirpath, "/private/var/") {
-								dirpath = strings.TrimPrefix(dirpath, "/private")
-							}
-							fullFilepath := filepath.Join(dirpath, specifier)
+							fullFilepath := filepath.Join(args.ResolveDir, specifier)
 							// convert: full filepath -> package name + submodule path
 							specifier = strings.TrimPrefix(fullFilepath, filepath.Join(task.wd, "node_modules")+"/")
 							externalDeps.Add(specifier)
@@ -943,19 +932,6 @@ rebuild:
 
 	task.checkDTS(esm, npm)
 	task.storeToDB(esm)
-
-	list, err := readDir(path.Join(task.wd, "node_modules", npm.Name))
-	if err == nil {
-		meta := map[string]interface{}{
-			"name":    npm.Name,
-			"version": npm.Version,
-			"css":     esm.PackageCSS,
-			"dts":     esm.Dts,
-			"files":   list,
-		}
-		data := bytes.NewReader(utils.MustEncodeJSON(meta))
-		fs.WriteFile(path.Join("raw", fmt.Sprintf("%s@%s", npm.Name, npm.Version), "__esm_meta.json"), data)
-	}
 	return
 }
 

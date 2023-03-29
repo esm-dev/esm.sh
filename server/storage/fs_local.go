@@ -25,7 +25,7 @@ type localFSLayer struct {
 
 func (fs *localFSLayer) Stat(name string) (FileStat, error) {
 	fullPath := path.Join(fs.root, name)
-	fi, err := os.Stat(fullPath)
+	fi, err := os.Lstat(fullPath)
 	if err != nil {
 		if os.IsNotExist(err) {
 			return nil, ErrNotFound
@@ -62,7 +62,7 @@ func (fs *localFSLayer) WriteFile(name string, content io.Reader) (written int64
 }
 
 func ensureDir(dir string) (err error) {
-	_, err = os.Stat(dir)
+	_, err = os.Lstat(dir)
 	if err != nil && os.IsNotExist(err) {
 		err = os.MkdirAll(dir, 0755)
 	}
