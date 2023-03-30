@@ -252,8 +252,8 @@ rebuild:
 						if len(npm.Browser) > 0 && task.Target != "deno" && task.Target != "denonext" && task.Target != "node" {
 							spec := specifier
 							if strings.HasPrefix(specifier, "./") || strings.HasPrefix(specifier, "../") || specifier == ".." {
-								fullpath := path.Join(path.Dir(args.Importer), specifier)
-								spec = "." + strings.TrimPrefix(fullpath, path.Join(task.wd, "node_modules", npm.Name))
+								fullFilepath := filepath.Join(args.ResolveDir, specifier)
+								spec = "." + strings.TrimPrefix(fullFilepath, path.Join(task.wd, "node_modules", npm.Name))
 							}
 							if name, ok := npm.Browser[spec]; ok {
 								if name == "" {
@@ -324,8 +324,8 @@ rebuild:
 						// splits modules based on the `exports` defines in package.json,
 						// see https://nodejs.org/api/packages.html
 						if (strings.HasPrefix(specifier, "./") || strings.HasPrefix(specifier, "../") || specifier == "..") && !strings.HasSuffix(specifier, ".js") && !strings.HasSuffix(specifier, ".mjs") && !strings.HasSuffix(specifier, ".json") {
-							fullpath := path.Join(path.Dir(args.Importer), specifier)
-							spec := "." + strings.TrimPrefix(fullpath, path.Join(task.wd, "node_modules", npm.Name))
+							fullFilepath := filepath.Join(args.ResolveDir, specifier)
+							spec := "." + strings.TrimPrefix(fullFilepath, path.Join(task.wd, "node_modules", npm.Name))
 							// bundle {pkgName}/{pkgName}.js
 							if spec == fmt.Sprintf("./%s.js", task.Pkg.Name) {
 								return api.OnResolveResult{}, nil
