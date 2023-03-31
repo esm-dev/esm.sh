@@ -138,6 +138,10 @@ func (task *BuildTask) init() (esm *ESMBuild, npm NpmPackage, err error) {
 				if err != nil {
 					return
 				}
+				if p.Version == "" {
+					// use parent package version if submodule package.json doesn't have version
+					p.Version = npm.Version
+				}
 				np := task.fixNpmPackage(p)
 				if np.Module != "" {
 					npm.Module = path.Join(pkg.Submodule, np.Module)
@@ -437,25 +441,28 @@ func (task *BuildTask) resolvePackageExports(p *NpmPackage, exports interface{},
 
 	m, ok := exports.(map[string]interface{})
 	if ok {
-		targetDeno := task.Target == "deno" || task.Target == "denonext"
-		conditions := []string{"browser", "module", "import", "es2015", "worker"}
-		if targetDeno {
-			conditions = []string{"deno", "worker", "module", "import", "es2015", "browser"}
-		}
-		if task.Dev {
-			conditions = append([]string{"development"}, conditions...)
-		}
-		if task.conditions.Size() > 0 {
-			conditions = append(task.conditions.Values(), conditions...)
+		targetConditions := []string{"browser"}
+		conditions := []string{"import", "module", "es2015"}
+		switch task.Target {
+		case "deno", "denonext":
+			targetConditions = []string{"deno", "worker", "browser"}
+			// priority use `node` condition for solid.js (< 1.5.6) in deno
+			if (p.Name == "solid-js" || strings.HasPrefix(p.Name, "solid-js/")) && semverLessThan(p.Version, "1.5.6") {
+				targetConditions = []string{"node"}
+			}
+		case "node":
+			targetConditions = []string{"node"}
 		}
 		if pType == "module" {
 			conditions = append(conditions, "default")
 		}
-		// support solid.js (<=1.6) for deno target
-		if (p.Name == "solid-js" || strings.HasPrefix(p.Name, "solid-js/")) && targetDeno {
-			conditions = append([]string{"deno", "worker", "node"}, conditions...)
+		if task.Dev {
+			targetConditions = append(targetConditions, "development")
 		}
-		for _, condition := range conditions {
+		if task.conditions.Size() > 0 {
+			targetConditions = append(task.conditions.Values(), targetConditions...)
+		}
+		for _, condition := range append(targetConditions, conditions...) {
 			v, ok := m[condition]
 			if ok {
 				task.resolvePackageExports(p, v, "module")
@@ -463,7 +470,11 @@ func (task *BuildTask) resolvePackageExports(p *NpmPackage, exports interface{},
 			}
 		}
 		if p.Module == "" {
-			for _, condition := range []string{"require", "node", "default"} {
+			conditions := []string{"node", "require", "default"}
+			if task.Dev {
+				conditions = []string{"node", "development", "require", "default"}
+			}
+			for _, condition := range conditions {
 				v, ok := m[condition]
 				if ok {
 					task.resolvePackageExports(p, v, "")

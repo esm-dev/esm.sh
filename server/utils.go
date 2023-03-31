@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Masterminds/semver/v3"
 	"github.com/ije/esbuild-internal/js_ast"
 	"github.com/ije/esbuild-internal/js_parser"
 	"github.com/ije/esbuild-internal/logger"
@@ -63,6 +64,10 @@ func isRemoteSpecifier(importPath string) bool {
 // isLocalSpecifier returns true if the import path is a local path.
 func isLocalSpecifier(importPath string) bool {
 	return strings.HasPrefix(importPath, "file://") || strings.HasPrefix(importPath, "/") || strings.HasPrefix(importPath, "./") || strings.HasPrefix(importPath, "../") || importPath == "." || importPath == ".."
+}
+
+func semverLessThan(a string, b string) bool {
+	return semver.MustParse(a).LessThan(semver.MustParse(b))
 }
 
 // includes returns true if the given string is included in the given array.

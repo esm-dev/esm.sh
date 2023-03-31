@@ -1,8 +1,8 @@
 import { assertEquals } from "https://deno.land/std@0.178.0/testing/asserts.ts";
 
-import { transform } from "http://localhost:8080/@babel/standalone@7.21.4";
-import babelPresetSolid from "http://localhost:8080/babel-preset-solid@1.6.16";
-import { renderToString } from "http://localhost:8080/solid-js@1.6.16/web";
+import { transform } from "http://localhost:8080/@babel/standalone@7.18.9";
+import babelPresetSolid from "http://localhost:8080/babel-preset-solid@1.5.1";
+import { renderToString } from "http://localhost:8080/solid-js@1.5.1/web";
 
 function transformSolid(rawCode: string): string {
   const { code } = transform(rawCode, {
@@ -11,11 +11,7 @@ function transformSolid(rawCode: string): string {
         generate: "ssr",
         hydratable: false,
       }],
-      ["typescript", {
-        onlyRemoveTypeImports: true,
-        isTSX: true,
-        allExtensions: true,
-      }],
+      ["typescript", { onlyRemoveTypeImports: true }],
     ],
     filename: "main.jsx",
   });
@@ -23,14 +19,11 @@ function transformSolid(rawCode: string): string {
     throw new Error("code is empty");
   }
   return code
-    .replaceAll(`"solid-js"`, `"http://localhost:8080/solid-js@1.6.16"`)
-    .replaceAll(
-      `"solid-js/web"`,
-      `"http://localhost:8080/solid-js@1.6.16/web"`,
-    );
+    .replaceAll(`"solid-js"`, `"http://localhost:8080/solid-js@1.5.1"`)
+    .replaceAll(`"solid-js/web"`, `"http://localhost:8080/solid-js@1.5.1/web"`);
 }
 
-Deno.test("solid.js ssr", async () => {
+Deno.test("solid-js@1.5.1 ssr", async () => {
   const code = `import { createSignal } from "solid-js";
 
   function Counter() {

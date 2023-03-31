@@ -1,0 +1,9 @@
+{
+  "compilerOptions": {
+    "lib": [
+      "dom",
+      "dom.asynciterable",
+      "deno.ns"
+    ]
+  }
+}
