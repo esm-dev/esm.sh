@@ -181,7 +181,7 @@ func (task *BuildTask) init() (esm *ESMBuild, npm NpmPackage, err error) {
 								    }
 								  }
 								*/
-								task.resolvePackageExports(&npm, defines, npm.Type)
+								task.applyConditions(&npm, defines, npm.Type)
 								resolved = true
 								break
 							} else if strings.HasSuffix(name, "/*") && strings.HasPrefix("./"+pkg.Submodule, strings.TrimSuffix(name, "*")) {
@@ -231,7 +231,7 @@ func (task *BuildTask) init() (esm *ESMBuild, npm NpmPackage, err error) {
 									hasDefines = true
 								}
 								if hasDefines {
-									task.resolvePackageExports(&npm, defines, npm.Type)
+									task.applyConditions(&npm, defines, npm.Type)
 									resolved = true
 								}
 							}
@@ -334,7 +334,7 @@ func (task *BuildTask) fixNpmPackage(p NpmPackage) NpmPackage {
 						".": "./esm/index.js"
 					}
 				*/
-				task.resolvePackageExports(&p, v, p.Type)
+				task.applyConditions(&p, v, p.Type)
 			} else {
 				/*
 					exports: {
@@ -342,13 +342,13 @@ func (task *BuildTask) fixNpmPackage(p NpmPackage) NpmPackage {
 						"import": "./esm/index.js"
 					}
 				*/
-				task.resolvePackageExports(&p, m, p.Type)
+				task.applyConditions(&p, m, p.Type)
 			}
 		} else if s, ok := exports.(string); ok {
 			/*
 			  exports: "./esm/index.js"
 			*/
-			task.resolvePackageExports(&p, s, p.Type)
+			task.applyConditions(&p, s, p.Type)
 		}
 	}
 
@@ -428,7 +428,7 @@ func (task *BuildTask) fixNpmPackage(p NpmPackage) NpmPackage {
 }
 
 // see https://nodejs.org/api/packages.html
-func (task *BuildTask) resolvePackageExports(p *NpmPackage, exports interface{}, pType string) {
+func (task *BuildTask) applyConditions(p *NpmPackage, exports interface{}, pType string) {
 	s, ok := exports.(string)
 	if ok {
 		if pType == "module" {
@@ -465,19 +465,16 @@ func (task *BuildTask) resolvePackageExports(p *NpmPackage, exports interface{},
 		for _, condition := range append(targetConditions, conditions...) {
 			v, ok := m[condition]
 			if ok {
-				task.resolvePackageExports(p, v, "module")
+				task.applyConditions(p, v, "module")
 				break
 			}
 		}
 		if p.Module == "" {
-			conditions := []string{"node", "require", "default"}
-			if task.Dev {
-				conditions = []string{"node", "development", "require", "default"}
-			}
-			for _, condition := range conditions {
+			conditions := []string{"require", "default"}
+			for _, condition := range append(targetConditions, conditions...) {
 				v, ok := m[condition]
 				if ok {
-					task.resolvePackageExports(p, v, "")
+					task.applyConditions(p, v, "commonjs")
 					break
 				}
 			}
