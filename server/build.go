@@ -669,12 +669,18 @@ rebuild:
 							cjsImportNames.Add("default")
 							marked = true
 						} else {
-							depPkg, _, err := validatePkgPath(name)
+							depPkg := Pkg{}
+							if a := strings.Split(name, "/"); strings.HasPrefix(name, "@") {
+								depPkg.Name = a[0] + "/" + a[1]
+								depPkg.Submodule = strings.Join(a[2:], "/")
+							} else {
+								depPkg.Name = a[0]
+								depPkg.Submodule = strings.Join(a[1:], "/")
+							}
 							depWd := task.wd
-							if err == nil && !fileExists(path.Join(depWd, "node_modules", depPkg.Name, "package.json")) {
-								// the dep may be a peer depencency
-								depWd = path.Join(os.TempDir(), fmt.Sprintf("esm/%s@%s", depPkg.Name, depPkg.Version))
-								err = installPackage(depWd, depPkg)
+							// support pnpm
+							if l, e := filepath.EvalSymlinks(path.Join(task.wd, "node_modules", task.Pkg.Name)); e == nil {
+								depWd = path.Join(l, "../..")
 							}
 							if err == nil {
 								task := &BuildTask{
@@ -764,11 +770,19 @@ rebuild:
 					for _, importName := range cjsImportNames.Values() {
 						if name == "object-assign" {
 							fmt.Fprintf(buf, `const __%s$ = Object.assign;%s`, identifier, eol)
+						} else if name == "has" {
+							fmt.Fprintf(buf, `const __%s$ = Object.hasOwn;%s`, identifier, eol)
+						} else if name == "array-flatten" {
+							fmt.Fprintf(buf, `const __%s$ = (a)=>a.flat(Infinity);%s`, identifier, eol)
+						} else if name == "array-includes" {
+							fmt.Fprintf(buf, `const __%s$ = (a,p,i)=>a.includes(p,i);%s`, identifier, eol)
+						} else if name == "has-symbols" {
+							fmt.Fprintf(buf, `const __%s$ = ()=>!0;%s`, identifier, eol)
 						} else {
 							switch importName {
 							case "lazy":
-								fmt.Fprintf(buf, `import * as _%s$ from "%s";%s`, identifier, importPath, eol)
-								fmt.Fprintf(buf, `const __%s$ = _%s$.default !== void 0 ? _%s$.default : _%s$;%s`, identifier, identifier, identifier, identifier, eol)
+								fmt.Fprintf(buf, `import * as ___%s$ from "%s";%s`, identifier, importPath, eol)
+								fmt.Fprintf(buf, `const __%s$ = ___%s$.default !== void 0 ? ___%s$.default : ___%s$;%s`, identifier, identifier, identifier, identifier, eol)
 							case "default":
 								fmt.Fprintf(buf, `import __%s$ from "%s";%s`, identifier, importPath, eol)
 							case "*":

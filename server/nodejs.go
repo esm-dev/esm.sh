@@ -547,9 +547,10 @@ func installPackage(wd string, pkg Pkg) (err error) {
 	wdPackageFilePath := path.Join(wd, "package.json")
 	if !fileExists(wdPackageFilePath) {
 		fileContent := []byte("{}")
+		ensureDir(path.Dir(wdPackageFilePath))
 		err = os.WriteFile(wdPackageFilePath, fileContent, 0644)
 		if err != nil {
-			return fmt.Errorf("init cache dir failed: %s", pkgNameFormat)
+			return fmt.Errorf("ensure package.json failed: %s", pkgNameFormat)
 		}
 	}
 
