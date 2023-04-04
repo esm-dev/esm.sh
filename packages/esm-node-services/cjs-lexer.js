@@ -1,5 +1,5 @@
 const fs = require("fs")
-const { dirname, join } = require("path")
+const { dirname } = require("path")
 const { promisify } = require("util")
 const { parse } = require("esm-cjs-lexer")
 const enhancedResolve = require("enhanced-resolve")
@@ -131,6 +131,13 @@ exports.parseCjsExports = async input => {
     try {
       const code = fs.readFileSync(req.path, "utf-8")
       const results = parse(req.path, code, nodeEnv, req.callMode)
+      if (results.reexports.length === 1 && /^[a-z@]/i.test(results.reexports[0]) && results.exports.length === 0 && exports.length === 0) {
+        return {
+          reexport: results.reexports[0],
+          exportDefault: false,
+          exports: [],
+        }
+      }
       exports.push(...results.exports)
       for (let reexport of results.reexports) {
         const callMode = reexport.endsWith("()")

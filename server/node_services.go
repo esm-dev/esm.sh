@@ -144,6 +144,7 @@ func startNodeServices() (err error) {
 }
 
 type cjsExportsResult struct {
+	Reexport      string   `json:"reexport,omitempty"`
 	ExportDefault bool     `json:"exportDefault"`
 	Exports       []string `json:"exports"`
 	Error         string   `json:"error"`
