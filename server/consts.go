@@ -17,8 +17,8 @@ const (
 
 // fix some package versions
 var fixedPkgVersions = map[string]string{
-	"@types/react@17": "17.0.55",
-	"@types/react@18": "18.0.32",
+	"@types/react@17": "17.0.56",
+	"@types/react@18": "18.0.33",
 	"isomorphic-ws@4": "5.0.0",
 }
 
