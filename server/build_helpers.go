@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"path"
+	"path/filepath"
 	"strings"
 
 	"github.com/ije/gox/utils"
@@ -91,7 +92,18 @@ func (task *BuildTask) getSavepath() string {
 	return path.Join("builds", task.ID())
 }
 
-func (task *BuildTask) init() (esm *ESMBuild, npm NpmPackage, err error) {
+func (task *BuildTask) getRealWD() string {
+	if l, e := filepath.EvalSymlinks(path.Join(task.wd, "node_modules", task.Pkg.Name)); e == nil {
+		return path.Join(l, "../..")
+	}
+	return task.wd
+}
+
+func (task *BuildTask) getPackageInfo(name string, version string) (info NpmPackage, fromPackageJSON bool, err error) {
+	return getPackageInfo(task.getRealWD(), name, version)
+}
+
+func (task *BuildTask) init() (esm *ESMBuild, npm NpmPackage, reexport string, err error) {
 	pkg := task.Pkg
 	wd := task.wd
 	target := task.Target
@@ -289,6 +301,7 @@ func (task *BuildTask) init() (esm *ESMBuild, npm NpmPackage, err error) {
 		if err != nil {
 			return
 		}
+		reexport = ret.Reexport
 		npm.Main = npm.Module
 		npm.Module = ""
 		esm.HasExportDefault = ret.ExportDefault
@@ -319,6 +332,7 @@ func (task *BuildTask) init() (esm *ESMBuild, npm NpmPackage, err error) {
 		if err != nil {
 			return
 		}
+		reexport = ret.Reexport
 		esm.HasExportDefault = ret.ExportDefault
 		esm.NamedExports = ret.Exports
 	}

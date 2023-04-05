@@ -84,7 +84,7 @@ func (task *BuildTask) build() (esm *ESMBuild, err error) {
 	}
 
 	task.stage = "init"
-	esm, npm, err := task.init()
+	esm, npm, reexport, err := task.init()
 	if err != nil {
 		return
 	}
@@ -102,6 +102,45 @@ func (task *BuildTask) build() (esm *ESMBuild, err error) {
 		dts := npm.Name + "@" + npm.Version + path.Join("/", npm.Types)
 		task.stage = "transform-dts"
 		task.buildDTS(dts)
+		task.storeToDB(esm)
+		return
+	}
+
+	if reexport != "" {
+		p, _, e := task.getPackageInfo(reexport, "latest")
+		if e != nil {
+			err = e
+			return
+		}
+		importPath := task.getImportPath(Pkg{
+			Name:    p.Name,
+			Version: p.Version,
+		}, encodeBuildArgsPrefix(task.BuildArgs, task.Pkg.Name, false))
+		buf := bytes.NewBuffer(nil)
+		fmt.Fprintf(buf, `export * from "%s";`, importPath)
+
+		// Check if the package has default export
+		t := &BuildTask{
+			BuildArgs: task.BuildArgs,
+			Pkg: Pkg{
+				Name:    p.Name,
+				Version: p.Version,
+			},
+			Target: task.Target,
+			Dev:    task.Dev,
+			wd:     task.getRealWD(),
+		}
+		aEsm, _, _, e := t.init()
+		if e == nil && aEsm.HasExportDefault {
+			fmt.Fprintf(buf, "\n")
+			fmt.Fprintf(buf, `export { default } from "%s";`, importPath)
+		}
+
+		_, err = fs.WriteFile(task.getSavepath(), buf)
+		if err != nil {
+			return
+		}
+		task.checkDTS(esm, npm)
 		task.storeToDB(esm)
 		return
 	}
@@ -219,7 +258,7 @@ rebuild:
 									} else if v, ok := npm.PeerDependencies[pkgName]; ok {
 										version = v
 									}
-									p, _, err := getPackageInfo(task.wd, pkgName, version)
+									p, _, err := task.getPackageInfo(pkgName, version)
 									if err == nil {
 										pkg := Pkg{
 											Name:      p.Name,
@@ -517,7 +556,7 @@ rebuild:
 						Version:   task.Pkg.Version,
 						Submodule: submodule,
 					}
-					importPath = task.getImportPath(subPkg, encodeBuildArgsPrefix(task.BuildArgs, task.Pkg.Name, false))
+					importPath = task.getImportPath(subPkg, encodeBuildArgsPrefix(task.BuildArgs, subPkg.Name, false))
 				}
 				// node builtin `buffer` module
 				if importPath == "" && name == "buffer" {
@@ -542,7 +581,7 @@ rebuild:
 					} else {
 						polyfill, ok := polyfilledBuiltInNodeModules[name]
 						if ok {
-							p, _, e := getPackageInfo(task.wd, polyfill, "latest")
+							p, _, e := task.getPackageInfo(polyfill, "latest")
 							if e != nil {
 								err = e
 								return
@@ -612,7 +651,7 @@ rebuild:
 					} else if v, ok := npm.PeerDependencies[pkgName]; ok {
 						version = v
 					}
-					p, _, e := getPackageInfo(task.wd, pkgName, version)
+					p, _, e := task.getPackageInfo(pkgName, version)
 					if e != nil {
 						err = e
 						return
@@ -677,20 +716,15 @@ rebuild:
 								depPkg.Name = a[0]
 								depPkg.Submodule = strings.Join(a[1:], "/")
 							}
-							depWd := task.wd
-							// support pnpm
-							if l, e := filepath.EvalSymlinks(path.Join(task.wd, "node_modules", task.Pkg.Name)); e == nil {
-								depWd = path.Join(l, "../..")
-							}
 							if err == nil {
 								task := &BuildTask{
 									BuildArgs: task.BuildArgs,
 									Pkg:       depPkg,
 									Target:    task.Target,
 									Dev:       task.Dev,
-									wd:        depWd,
+									wd:        task.getRealWD(),
 								}
-								depESM, depNpm, e := task.init()
+								depESM, depNpm, _, e := task.init()
 								if e == nil {
 									// support edge case like `require('htmlparser').Parser`
 									if bytes.HasPrefix(p, []byte{'.'}) {
@@ -714,22 +748,9 @@ rebuild:
 											marked = true
 										}
 									}
-									// the dep is a esm module
+									// if the dep is an es6 module
 									if !marked && depNpm.Module != "" {
-										if depESM.HasExportDefault {
-											cjsImportNames.Add("default")
-										} else {
-											cjsImportNames.Add("*")
-										}
-										marked = true
-									}
-									// the dep is a cjs module
-									if !marked && depNpm.Module == "" {
-										if includes(depESM.NamedExports, "__esModule") && depESM.HasExportDefault {
-											cjsImportNames.Add("*")
-										} else {
-											cjsImportNames.Add("default")
-										}
+										cjsImportNames.Add("*")
 										marked = true
 									}
 								}
@@ -781,8 +802,12 @@ rebuild:
 						} else {
 							switch importName {
 							case "lazy":
-								fmt.Fprintf(buf, `import * as ___%s$ from "%s";%s`, identifier, importPath, eol)
-								fmt.Fprintf(buf, `const __%s$ = ___%s$.default !== void 0 ? ___%s$.default : ___%s$;%s`, identifier, identifier, identifier, identifier, eol)
+								fmt.Fprintf(buf, `import * as _%s$ from "%s";%s`, identifier, importPath, eol)
+								if task.Target == "deno" || task.Target == "denonext" || task.Target == "node" || task.Target >= "es2020" {
+									fmt.Fprintf(buf, `const __%s$ = _%s$.default??_%s$;%s`, identifier, identifier, identifier, eol)
+								} else {
+									fmt.Fprintf(buf, `const __%s$ = _%s$.default!==void 0?_%s$.default:_%s$;%s`, identifier, identifier, identifier, identifier, eol)
+								}
 							case "default":
 								fmt.Fprintf(buf, `import __%s$ from "%s";%s`, identifier, importPath, eol)
 							case "*":
@@ -979,7 +1004,7 @@ func (task *BuildTask) checkDTS(esm *ESMBuild, npm NpmPackage) {
 			versions = append([]string{pkg.Version}, versions...)
 		}
 		for _, version := range versions {
-			p, _, err := getPackageInfo(task.wd, typesPkgName, version)
+			p, _, err := task.getPackageInfo(typesPkgName, version)
 			if err == nil {
 				prefix := encodeBuildArgsPrefix(task.BuildArgs, p.Name, true)
 				dts = toTypesPath(task.wd, p, version, prefix, submodule)

@@ -1,7 +1,10 @@
 #!/usr/bin/env -S deno run --allow-run --allow-read --allow-write --allow-net
 
 async function startServer(onStart: () => void, single: boolean) {
-  await run("go", "build", "-o", "esmd", "main.go");
+  const { code, success } = await run("go", "build", "-o", "esmd", "main.go");
+  if (!success) {
+    Deno.exit(code);
+  }
   const p = Deno.run({
     cmd: ["./esmd"],
     stdout: single ? "inherit" : "null",
