@@ -426,6 +426,14 @@ func toTypesPath(wd string, p NpmPackage, version string, buildArgsPrefix string
 		}
 	} else if p.Types != "" {
 		types = p.Types
+	} else if p.Typings != "" {
+		types = p.Typings
+	} else if strings.HasPrefix(p.Name, "@types") {
+		if strings.HasSuffix(p.Main, ".d.ts") {
+			types = p.Main
+		} else {
+			types = "index.d.ts"
+		}
 	} else {
 		return ""
 	}
