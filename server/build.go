@@ -91,7 +91,7 @@ func (task *BuildTask) build() (esm *ESMBuild, err error) {
 
 	if task.Target == "types" {
 		var dts string
-		if endsWith(task.Pkg.FullSubmodule, ".d.ts", ".d.mts") {
+		if endsWith(task.Pkg.FullSubmodule, ".d.ts", ".d.mts") && !endsWith(task.Pkg.FullSubmodule, "~.d.ts") {
 			dts = npm.Name + "@" + npm.Version + path.Join("/", task.Pkg.FullSubmodule)
 		} else if npm.Types != "" {
 			dts = npm.Name + "@" + npm.Version + path.Join("/", npm.Types)
