@@ -90,8 +90,13 @@ func (task *BuildTask) build() (esm *ESMBuild, err error) {
 	}
 
 	if task.Target == "types" {
-		if npm.Types != "" {
-			dts := npm.Name + "@" + npm.Version + path.Join("/", npm.Types)
+		var dts string
+		if strings.HasSuffix(task.Pkg.FullSubmodule, ".d.ts") || strings.HasSuffix(task.Pkg.FullSubmodule, ".d.mts") {
+			dts = npm.Name + "@" + npm.Version + path.Join("/", task.Pkg.FullSubmodule)
+		} else if npm.Types != "" {
+			dts = npm.Name + "@" + npm.Version + path.Join("/", task.Pkg.FullSubmodule)
+		}
+		if dts != "" {
 			task.stage = "transform-dts"
 			task.buildDTS(dts)
 		}

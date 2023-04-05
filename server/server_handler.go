@@ -400,7 +400,7 @@ func serverHandler() rex.Handle {
 					storageType = "raw"
 				}
 			case ".jsx", ".ts", ".mts", ".tsx":
-				if hasBuildVerPrefix && strings.HasSuffix(pathname, ".d.ts") {
+				if hasBuildVerPrefix && (strings.HasSuffix(pathname, ".d.ts") || strings.HasSuffix(pathname, ".d.mts")) {
 					storageType = "types"
 				} else if len(strings.Split(pathname, "/")) > 2 {
 					// todo: transform ts/jsx/tsx for browsers
@@ -750,7 +750,7 @@ func serverHandler() rex.Handle {
 					reqPkg.Name,
 					reqPkg.Version,
 					encodeBuildArgsPrefix(buildArgs, reqPkg.Name, true),
-				), reqPkg.Submodule)
+				), reqPkg.FullSubmodule)
 				if strings.HasSuffix(savePath, "~.d.ts") {
 					savePath = strings.TrimSuffix(savePath, "~.d.ts")
 					_, err := fs.Stat(path.Join(savePath, "index.d.ts"))
