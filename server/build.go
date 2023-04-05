@@ -75,6 +75,7 @@ func (task *BuildTask) Build() (esm *ESMBuild, err error) {
 		return
 	}
 
+	task.stage = "build"
 	return task.build()
 }
 
@@ -83,8 +84,7 @@ func (task *BuildTask) build() (esm *ESMBuild, err error) {
 		return
 	}
 
-	task.stage = "init"
-	esm, npm, reexport, err := task.init()
+	esm, npm, reexport, err := task.analyze()
 	if err != nil {
 		return
 	}
@@ -130,7 +130,7 @@ func (task *BuildTask) build() (esm *ESMBuild, err error) {
 			Dev:    task.Dev,
 			wd:     task.getRealWD(),
 		}
-		aEsm, _, _, e := t.init()
+		aEsm, _, _, e := t.analyze()
 		if e == nil && aEsm.HasExportDefault {
 			fmt.Fprintf(buf, "\n")
 			fmt.Fprintf(buf, `export { default } from "%s";`, importPath)
@@ -145,7 +145,6 @@ func (task *BuildTask) build() (esm *ESMBuild, err error) {
 		return
 	}
 
-	task.stage = "build"
 	defer func() {
 		if err != nil {
 			esm = nil
@@ -489,7 +488,7 @@ rebuild:
 		if strings.HasPrefix(msg, "Could not resolve \"") {
 			// current package/module can not be marked as external
 			if strings.Contains(msg, fmt.Sprintf("Could not resolve \"%s\"", task.Pkg.ImportPath())) {
-				err = fmt.Errorf("Could not resolve \"%s\"", task.Pkg.ImportPath())
+				err = fmt.Errorf("could not resolve \"%s\"", task.Pkg.ImportPath())
 				return
 			}
 			name := strings.Split(msg, "\"")[1]
@@ -724,7 +723,7 @@ rebuild:
 									Dev:       task.Dev,
 									wd:        task.getRealWD(),
 								}
-								depESM, depNpm, _, e := task.init()
+								depESM, depNpm, _, e := task.analyze()
 								if e == nil {
 									// support edge case like `require('htmlparser').Parser`
 									if bytes.HasPrefix(p, []byte{'.'}) {

@@ -116,6 +116,9 @@ func Load(filename string) (*Config, error) {
 	if cfg.LogLevel == "" {
 		cfg.LogLevel = "info"
 	}
+	if cfg.NpmRegistry != "" {
+		cfg.NpmRegistry = strings.TrimRight(cfg.NpmRegistry, "/") + "/"
+	}
 	if cfg.NpmCDN != "" {
 		cfg.NpmCDN = strings.TrimSuffix(cfg.NpmCDN, "/")
 	} else {

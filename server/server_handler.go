@@ -811,7 +811,7 @@ func serverHandler() rex.Handle {
 			Target:       target,
 			Dev:          isDev,
 			Bundle:       isBundle || isWorker,
-			stage:        "init",
+			stage:        "pending",
 		}
 		taskID := task.ID()
 

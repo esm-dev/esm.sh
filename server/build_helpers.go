@@ -103,7 +103,7 @@ func (task *BuildTask) getPackageInfo(name string, version string) (info NpmPack
 	return getPackageInfo(task.getRealWD(), name, version)
 }
 
-func (task *BuildTask) init() (esm *ESMBuild, npm NpmPackage, reexport string, err error) {
+func (task *BuildTask) analyze() (esm *ESMBuild, npm NpmPackage, reexport string, err error) {
 	pkg := task.Pkg
 	wd := task.wd
 	target := task.Target
