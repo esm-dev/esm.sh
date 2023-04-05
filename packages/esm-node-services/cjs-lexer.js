@@ -131,7 +131,13 @@ exports.parseCjsExports = async input => {
     try {
       const code = fs.readFileSync(req.path, "utf-8")
       const results = parse(req.path, code, nodeEnv, req.callMode)
-      if (results.reexports.length === 1 && /^[a-z@]/i.test(results.reexports[0]) && results.exports.length === 0 && exports.length === 0) {
+      if (
+        results.reexports.length === 1 &&
+        /^[a-z@]/i.test(results.reexports[0]) &&
+        !results.reexports[0].endsWith("()") &&
+        results.exports.length === 0 &&
+        exports.length === 0
+      ) {
         return {
           reexport: results.reexports[0],
           exportDefault: false,
