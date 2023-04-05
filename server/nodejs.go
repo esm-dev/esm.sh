@@ -338,10 +338,8 @@ func getPackageInfo(wd string, name string, version string) (info NpmPackage, fr
 		pkgJsonPath := path.Join(wd, "node_modules", name, "package.json")
 		if fileExists(pkgJsonPath) && utils.ParseJSONFile(pkgJsonPath, &info) == nil {
 			info, err = fixPkgVersion(info)
-			if err == nil {
-				fromPackageJSON = true
-				return
-			}
+			fromPackageJSON = true
+			return
 		}
 	}
 

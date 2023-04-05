@@ -94,6 +94,7 @@ func (task *BuildTask) transformDTS(dts string, aliasDepsPrefix string, marker *
 	}
 	imports.Reset()
 
+	wd := task.getRealWD()
 	buf := bytes.NewBuffer(nil)
 	if pkgName == "@types/node" {
 		fmt.Fprintf(buf, "/// <reference path=\"%s/node.ns.d.ts\" />\n", cdnOriginAndBuildBasePath)
@@ -131,7 +132,7 @@ func (task *BuildTask) transformDTS(dts string, aliasDepsPrefix string, marker *
 			return importPath
 		}
 
-		// fix import path
+		// use `@types/xxx`
 		switch importPath {
 		case "estree", "estree-jsx", "unist", "react", "react-dom":
 			importPath = fmt.Sprintf("@types/%s", importPath)
@@ -190,16 +191,13 @@ func (task *BuildTask) transformDTS(dts string, aliasDepsPrefix string, marker *
 			}
 		} else {
 			if importPath == "node" {
-				importPath = fmt.Sprintf("%s/node.ns.d.ts", cdnOriginAndBuildBasePath)
-				return importPath
+				return fmt.Sprintf("%s/node.ns.d.ts", cdnOriginAndBuildBasePath)
 			}
 			if strings.HasPrefix(importPath, "node:") {
-				importPath = fmt.Sprintf("%s/@types/node@%s/%s.d.ts", cdnOriginAndBuildBasePath, nodeTypesVersion, strings.TrimPrefix(importPath, "node:"))
-				return importPath
+				return fmt.Sprintf("%s/@types/node@%s/%s.d.ts", cdnOriginAndBuildBasePath, nodeTypesVersion, strings.TrimPrefix(importPath, "node:"))
 			}
 			if _, ok := builtInNodeModules[importPath]; ok {
-				importPath = fmt.Sprintf("%s/@types/node@%s/%s.d.ts", cdnOriginAndBuildBasePath, nodeTypesVersion, importPath)
-				return importPath
+				return fmt.Sprintf("%s/@types/node@%s/%s.d.ts", cdnOriginAndBuildBasePath, nodeTypesVersion, importPath)
 			}
 
 			depTypePkgName, _ := splitPkgPath(importPath)
@@ -221,9 +219,9 @@ func (task *BuildTask) transformDTS(dts string, aliasDepsPrefix string, marker *
 				if err != nil {
 					break
 				}
-				info, fromPackageJSON, err = getPackageInfo(task.wd, pkg.Name, version)
+				info, fromPackageJSON, err = getPackageInfo(wd, pkg.Name, version)
 				if err != nil || ((info.Types == "" && info.Typings == "") && !strings.HasPrefix(info.Name, "@types/")) {
-					info, fromPackageJSON, err = getPackageInfo(task.wd, toTypesPackageName(pkg.Name), version)
+					info, fromPackageJSON, err = getPackageInfo(wd, toTypesPackageName(pkg.Name), version)
 				}
 				if err == nil {
 					subpath = pkg.Submodule
@@ -234,40 +232,35 @@ func (task *BuildTask) transformDTS(dts string, aliasDepsPrefix string, marker *
 				return importPath
 			}
 
+			// use types with `exports` contidions
+			info = task.fixNpmPackage(info)
+
 			// use version defined in `?deps`
 			if pkg, ok := task.deps.Get(depTypePkgName); ok {
 				info.Version = pkg.Version
 			}
 
-			pkgBase := info.Name + "@" + info.Version + "/"
-
-			if info.Types != "" || info.Typings != "" {
-				// copy dependent dts files in the node_modules directory in current build context
-				if fromPackageJSON {
-					typesPath := toTypesPath(task.wd, info, "", "", subpath)
-					if strings.HasSuffix(typesPath, ".d.ts") && !strings.HasSuffix(typesPath, "~.d.ts") {
-						imports.Add(typesPath)
-					}
-					importPath = strings.TrimPrefix(typesPath, pkgBase)
-				} else {
-					if info.Types != "" {
-						if subpath != "" && strings.HasSuffix(info.Types, ".d.ts") {
-							info.Types = path.Join(subpath, info.Types)
-						}
-						importPath = utils.CleanPath(info.Types)[1:]
-					} else if info.Typings != "" {
-						if subpath != "" && strings.HasSuffix(info.Typings, ".d.ts") {
-							info.Typings = path.Join(subpath, info.Typings)
-						}
-						importPath = utils.CleanPath(info.Typings)[1:]
-					}
-					if !strings.HasSuffix(importPath, ".d.ts") {
-						importPath += "~.d.ts"
-					}
+			// copy dependent dts files in the node_modules directory in current build context
+			if fromPackageJSON {
+				typesPath := toTypesPath(wd, info, "", "", subpath)
+				if strings.HasSuffix(typesPath, ".d.ts") && !strings.HasSuffix(typesPath, "~.d.ts") {
+					imports.Add(typesPath)
+				}
+				importPath = strings.TrimPrefix(typesPath, info.Name+"@"+info.Version+"/")
+			} else {
+				if subpath != "" {
+					importPath = subpath
+				} else if info.Types != "" {
+					importPath = utils.CleanPath(info.Types)[1:]
+				} else if info.Typings != "" {
+					importPath = utils.CleanPath(info.Typings)[1:]
+				}
+				if !strings.HasSuffix(importPath, ".d.ts") {
+					importPath += "~.d.ts"
 				}
 			}
 
-			pkgBasePath := pkgBase + encodeBuildArgsPrefix(task.BuildArgs, info.Name, true)
+			pkgBasePath := info.Name + "@" + info.Version + "/" + encodeBuildArgsPrefix(task.BuildArgs, info.Name, true)
 			importPath = fmt.Sprintf("%s/%s", cdnOriginAndBuildBasePath, pkgBasePath+importPath)
 		}
 

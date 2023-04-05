@@ -94,6 +94,9 @@ func (task *BuildTask) getSavepath() string {
 
 func (task *BuildTask) getRealWD() string {
 	if l, e := filepath.EvalSymlinks(path.Join(task.wd, "node_modules", task.Pkg.Name)); e == nil {
+		if strings.HasPrefix(task.Pkg.Name, "@") {
+			return path.Join(l, "../../..")
+		}
 		return path.Join(l, "../..")
 	}
 	return task.wd
