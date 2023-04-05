@@ -139,7 +139,7 @@ func (task *BuildTask) analyze() (esm *ESMBuild, npm NpmPackage, reexport string
 	}
 
 	if pkg.Submodule != "" {
-		if strings.HasSuffix(pkg.Submodule, ".d.ts") {
+		if endsWith(pkg.Submodule, ".d.ts", ".d.mts") {
 			if strings.HasSuffix(pkg.Submodule, "~.d.ts") {
 				submodule := strings.TrimSuffix(pkg.Submodule, "~.d.ts")
 				subDir := path.Join(wd, "node_modules", npm.Name, submodule)
