@@ -246,7 +246,7 @@ func (a *NpmPackageTemp) ToNpmPackage() *NpmPackage {
 	}
 }
 
-// NpmPackage defines the package.json of npm
+// NpmPackage defines the package.json
 type NpmPackage struct {
 	Name             string
 	Version          string
@@ -367,9 +367,9 @@ func fetchPackageInfo(name string, version string) (info NpmPackage, err error) 
 	if version == "" {
 		version = "latest"
 	}
+	isFullVersion := regexpFullVersion.MatchString(version)
 
 	cacheKey := fmt.Sprintf("npm:%s@%s", name, version)
-
 	mutex, _ := lock.LoadOrStore(cacheKey, &sync.Mutex{})
 	mutex.(*sync.Mutex).Lock()
 	defer func() {
@@ -389,7 +389,17 @@ func fetchPackageInfo(name string, version string) (info NpmPackage, err error) 
 	}
 
 	start := time.Now()
-	req, err := http.NewRequest("GET", strings.TrimRight(cfg.NpmRegistry, "/")+"/"+name, nil)
+	defer func() {
+		if err == nil {
+			log.Debugf("lookup package(%s@%s) in %v", name, info.Version, time.Since(start))
+		}
+	}()
+
+	url := cfg.NpmRegistry + name
+	if isFullVersion {
+		url += "/" + version
+	}
+	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
 		return
 	}
@@ -414,6 +424,17 @@ func fetchPackageInfo(name string, version string) (info NpmPackage, err error) 
 		return
 	}
 
+	if isFullVersion {
+		err = json.NewDecoder(resp.Body).Decode(&info)
+		if err != nil {
+			return
+		}
+		if cache != nil {
+			cache.Set(cacheKey, utils.MustEncodeJSON(info), 24*time.Hour)
+		}
+		return
+	}
+
 	var h NpmPackageVerions
 	err = json.NewDecoder(resp.Body).Decode(&h)
 	if err != nil {
@@ -425,43 +446,38 @@ func fetchPackageInfo(name string, version string) (info NpmPackage, err error) 
 		return
 	}
 
-	isFullVersion := regexpFullVersion.MatchString(version)
-	if isFullVersion {
-		info = h.Versions[version]
+	distVersion, ok := h.DistTags[version]
+	if ok {
+		info = h.Versions[distVersion]
 	} else {
-		distVersion, ok := h.DistTags[version]
-		if ok {
-			info = h.Versions[distVersion]
-		} else {
-			var c *semver.Constraints
-			c, err = semver.NewConstraint(version)
-			if err != nil && version != "latest" {
-				return fetchPackageInfo(name, "latest")
+		var c *semver.Constraints
+		c, err = semver.NewConstraint(version)
+		if err != nil && version != "latest" {
+			return fetchPackageInfo(name, "latest")
+		}
+		vs := make([]*semver.Version, len(h.Versions))
+		i := 0
+		for v := range h.Versions {
+			// ignore prerelease versions
+			if !strings.ContainsRune(version, '-') && strings.ContainsRune(v, '-') {
+				continue
 			}
-			vs := make([]*semver.Version, len(h.Versions))
-			i := 0
-			for v := range h.Versions {
-				// ignore prerelease versions
-				if !strings.ContainsRune(version, '-') && strings.ContainsRune(v, '-') {
-					continue
-				}
-				var ver *semver.Version
-				ver, err = semver.NewVersion(v)
-				if err != nil {
-					return
-				}
-				if c.Check(ver) {
-					vs[i] = ver
-					i++
-				}
+			var ver *semver.Version
+			ver, err = semver.NewVersion(v)
+			if err != nil {
+				return
 			}
-			if i > 0 {
-				vs = vs[:i]
-				if i > 1 {
-					sort.Sort(semver.Collection(vs))
-				}
-				info = h.Versions[vs[i-1].String()]
+			if c.Check(ver) {
+				vs[i] = ver
+				i++
 			}
+		}
+		if i > 0 {
+			vs = vs[:i]
+			if i > 1 {
+				sort.Sort(semver.Collection(vs))
+			}
+			info = h.Versions[vs[i-1].String()]
 		}
 	}
 
@@ -470,15 +486,9 @@ func fetchPackageInfo(name string, version string) (info NpmPackage, err error) 
 		return
 	}
 
-	log.Debugf("lookup package(%s@%s) in %v", name, info.Version, time.Since(start))
-
 	// cache package info for 10 minutes
 	if cache != nil {
-		var ttl time.Duration = 0
-		if !isFullVersion {
-			ttl = 10 * time.Minute
-		}
-		cache.Set(cacheKey, utils.MustEncodeJSON(info), ttl)
+		cache.Set(cacheKey, utils.MustEncodeJSON(info), 10*time.Minute)
 	}
 	return
 }
