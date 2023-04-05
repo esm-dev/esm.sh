@@ -438,7 +438,7 @@ func toTypesPath(wd string, p NpmPackage, version string, buildArgsPrefix string
 		return ""
 	}
 
-	if !strings.HasSuffix(types, ".d.ts") && !strings.HasSuffix(types, ".d.mts") {
+	if !endsWith(types, ".d.ts", ".d.mts") {
 		pkgDir := path.Join(wd, "node_modules", p.Name)
 		if fileExists(path.Join(pkgDir, types, "index.d.ts")) {
 			types = types + "/index.d.ts"

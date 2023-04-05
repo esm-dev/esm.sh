@@ -400,7 +400,7 @@ func serverHandler() rex.Handle {
 					storageType = "raw"
 				}
 			case ".jsx", ".ts", ".mts", ".tsx":
-				if hasBuildVerPrefix && (strings.HasSuffix(pathname, ".d.ts") || strings.HasSuffix(pathname, ".d.mts")) {
+				if hasBuildVerPrefix && (endsWith(pathname, ".d.ts", ".d.mts")) {
 					storageType = "types"
 				} else if len(strings.Split(pathname, "/")) > 2 {
 					// todo: transform ts/jsx/tsx for browsers
