@@ -8,13 +8,15 @@ import (
 )
 
 type Pkg struct {
-	Name      string `json:"name"`
-	Version   string `json:"version"`
-	Submodule string `json:"submodule"`
+	Name          string `json:"name"`
+	Version       string `json:"version"`
+	Submodule     string `json:"submodule"`
+	FullSubmodule string `json:"fullsubmodule"`
 }
 
 func validatePkgPath(pathname string) (Pkg, string, error) {
 	pkgName, submodule := splitPkgPath(pathname)
+	fullSubmodule := submodule
 	if submodule != "" {
 		submodule = strings.TrimSuffix(submodule, ".js")
 		submodule = strings.TrimSuffix(submodule, ".mjs")
@@ -37,9 +39,10 @@ func validatePkgPath(pathname string) (Pkg, string, error) {
 			}
 		}
 		return Pkg{
-			Name:      name,
-			Version:   version,
-			Submodule: submodule,
+			Name:          name,
+			Version:       version,
+			Submodule:     submodule,
+			FullSubmodule: fullSubmodule,
 		}, q, nil
 	}
 
@@ -49,9 +52,10 @@ func validatePkgPath(pathname string) (Pkg, string, error) {
 	}
 
 	return Pkg{
-		Name:      name,
-		Version:   info.Version,
-		Submodule: submodule,
+		Name:          name,
+		Version:       info.Version,
+		Submodule:     submodule,
+		FullSubmodule: fullSubmodule,
 	}, q, nil
 }
 

@@ -104,6 +104,13 @@ func (task *BuildTask) init() (esm *ESMBuild, npm NpmPackage, err error) {
 	}
 
 	npm = task.fixNpmPackage(p)
+
+	// Check if the supplied path name is actually a main export.
+	// See: https://github.com/esm-dev/esm.sh/issues/578
+	if pkg.FullSubmodule == path.Clean(npm.Main) || pkg.FullSubmodule == path.Clean(npm.Module) {
+		task.Pkg.Submodule = ""
+	}
+
 	esm = &ESMBuild{}
 
 	defer func() {
