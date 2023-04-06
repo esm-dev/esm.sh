@@ -305,7 +305,7 @@ CheckNodejs:
 		}
 	}
 
-CheckYarn:
+CheckPnpm:
 	output, err := exec.Command("pnpm", "-v").CombinedOutput()
 	if err != nil {
 		if errors.Is(err, exec.ErrNotFound) {
@@ -314,7 +314,7 @@ CheckYarn:
 				err = fmt.Errorf("install pnpm: %s", strings.TrimSpace(string(output)))
 				return
 			}
-			goto CheckYarn
+			goto CheckPnpm
 		}
 		err = fmt.Errorf("bad pnpm version: %s", strings.TrimSpace(string(output)))
 	}
