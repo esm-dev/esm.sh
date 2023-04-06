@@ -1,6 +1,6 @@
 # Contributing to esm.sh
 
-Welcome, and thank you for taking time in contributing to esm.sh project! ♥️
+Welcome, and thank you for taking time in contributing to esm.sh project!
 
 ## Development Setup
 
@@ -16,7 +16,7 @@ You will need [Golang](https://golang.org/) 1.18+.
 
 ## Configration
 
-To configure the server, you need to create a `config.json` file then pass it to the server bootstrap command. For example:
+To configure the server,  create a `config.json` file in the root directory. Here is an example:
 
 ```jsonc
 // config.json
@@ -28,26 +28,27 @@ To configure the server, you need to create a `config.json` file then pass it to
 }
 ```
 
-You can find all the server options in [config.exmaple.jsonc](./config.example.jsonc). (**Note**: the `config.example.jsonc` is not a valid JSON file, it's a JSONC file.)
+You can find all the server options in [config.exmaple.jsonc](./config.example.jsonc).
 
 ## Run the sever in development mode
 
 ```bash
-go run main.go --config=config.json --dev
+go run main.go --dev
 ```
 
-Then you can import `React` from http://localhost:8080/react
+Then you can import `React` from "http://localhost:8080/react"
 
 ## Run testings
 
 ```bash
 # Run all tests
 ./test/bootstrap.sh
+
 # Run tests for a specific module
 ./test/bootstrap.sh preact
 ```
 
-All tests are written in Deno, you can find them in [test/](./test) directory.
+All the tests are written in Deno, you can find them in [test/](./test) directory.
 
 ## Code of Conduct
 

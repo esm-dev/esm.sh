@@ -1,5 +1,16 @@
 # Change Log
 
+## v114
+
+- Add `?conditions` query as esbuild option
+- Use **pnpm** to install packages instead of yarn (save the server disk space & improve the build performance)
+- Serve static files on local (#564 @Justinidlerz)
+- Support `.d.mts` extension (close #580)
+- Fix cjs transpiling (close #577)
+- Fix types bulid (close #572, #576)
+- Fix invalid type URL if submodule is main entry (#579 @marvinhagemeister)
+- Upgrade esbuild to 0.17.14
+
 ## v113
 
 - `express` is working in Deno
