@@ -36,7 +36,7 @@ func serverHandler() rex.Handle {
 			} else {
 				url := strings.TrimPrefix(ctx.R.URL.String(), cfg.BasePath)
 				url = fmt.Sprintf("%s/%s", cfg.BasePath, url)
-				return rex.Redirect(url, http.StatusFound)
+				return rex.Redirect(url, http.StatusMovedPermanently)
 			}
 		}
 
@@ -275,7 +275,7 @@ func serverHandler() rex.Handle {
 				return rex.Status(404, "Wasm File not found")
 			}
 			url := fmt.Sprintf("%s%s/%s@%s/%s", cdnOrigin, cfg.BasePath, reqPkg.Name, reqPkg.Version, wasmFile)
-			return rex.Redirect(url, http.StatusFound)
+			return rex.Redirect(url, http.StatusMovedPermanently)
 		}
 
 		// redirect `/@types/` to `.d.ts` files
@@ -298,13 +298,13 @@ func serverHandler() rex.Handle {
 			} else {
 				url += "~.d.ts"
 			}
-			return rex.Redirect(url, http.StatusFound)
+			return rex.Redirect(url, http.StatusMovedPermanently)
 		}
 
 		// redirect to css for CSS packages
 		if css := cssPackages[reqPkg.Name]; css != "" && reqPkg.Submodule == "" {
 			url := fmt.Sprintf("%s%s/%s/%s", cdnOrigin, cfg.BasePath, reqPkg.String(), css)
-			return rex.Redirect(url, http.StatusFound)
+			return rex.Redirect(url, http.StatusMovedPermanently)
 		}
 
 		// support `/react-dom@18.2.0&external=react&dev/client` with query `external=react&dev`
@@ -339,7 +339,7 @@ func serverHandler() rex.Handle {
 			return rex.Redirect(fmt.Sprintf("%s%s/%s%s%s", cdnOrigin, cfg.BasePath, eaSign, reqPkg.String(), query), http.StatusFound)
 		}
 
-		// redirect to the url with full package version
+		// redirect to the url with full package version with build version prefix
 		if hasBuildVerPrefix && !strings.HasPrefix(pathname, fmt.Sprintf("/%s@%s", reqPkg.Name, reqPkg.Version)) {
 			prefix := ""
 			subpath := ""
@@ -400,7 +400,7 @@ func serverHandler() rex.Handle {
 					storageType = "raw"
 				}
 			case ".jsx", ".ts", ".mts", ".tsx":
-				if hasBuildVerPrefix && (endsWith(pathname, ".d.ts", ".d.mts")) {
+				if hasBuildVerPrefix && endsWith(pathname, ".d.ts", ".d.mts") {
 					storageType = "types"
 				} else if len(strings.Split(pathname, "/")) > 2 {
 					// todo: transform ts/jsx/tsx for browsers
@@ -441,6 +441,7 @@ func serverHandler() rex.Handle {
 				return rex.Content(savePath, modifyTime, content) // auto closed
 			}
 
+			// redirect to the url with full package version
 			if !regexpFullVersionPath.MatchString(pathname) {
 				url := fmt.Sprintf("%s%s/%s", cdnOrigin, cfg.BasePath, reqPkg.String())
 				return rex.Redirect(url, http.StatusFound)
@@ -725,7 +726,7 @@ func serverHandler() rex.Handle {
 						isPkgEntry := strings.HasSuffix(pathname, ".mjs") // <- /v100/react@18.2.0/es2022/react.mjs
 						if submodule == pkgName && !isPkgEntry && stableBuild[reqPkg.Name] {
 							url := fmt.Sprintf("%s%s/%s@%s", cdnOrigin, cfg.BasePath, reqPkg.Name, reqPkg.Version)
-							return rex.Redirect(url, http.StatusFound)
+							return rex.Redirect(url, http.StatusMovedPermanently)
 						}
 						if submodule == pkgName && isPkgEntry {
 							submodule = ""
@@ -875,7 +876,7 @@ func serverHandler() rex.Handle {
 				return rex.Status(404, "Package CSS not found")
 			}
 			url := fmt.Sprintf("%s%s/%s.css", cdnOrigin, cfg.BasePath, strings.TrimSuffix(taskID, path.Ext(taskID)))
-			return rex.Redirect(url, http.StatusFound)
+			return rex.Redirect(url, http.StatusMovedPermanently)
 		}
 
 		if isBare {
