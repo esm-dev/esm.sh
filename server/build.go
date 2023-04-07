@@ -299,7 +299,7 @@ rebuild:
 									return api.OnResolveResult{Path: args.Path, Namespace: "browser-exclude"}, nil
 								}
 								if strings.HasPrefix(name, "./") {
-									specifier = path.Join(task.wd, "node_modules", npm.Name, name)
+									specifier = path.Join(npm.Name, name)
 								} else {
 									specifier = name
 								}
