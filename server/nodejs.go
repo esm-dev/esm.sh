@@ -563,7 +563,11 @@ func installPackage(wd string, pkg Pkg) (err error) {
 	}
 
 	for i := 0; i < 3; i++ {
-		err = pnpmAdd(wd, pkgNameFormat)
+		if regexpFullVersion.MatchString(pkg.Version) {
+			err = pnpmAdd(wd, pkgNameFormat, "--prefer-offline")
+		} else {
+			err = pnpmAdd(wd, pkgNameFormat)
+		}
 		if err == nil && !fileExists(path.Join(wd, "node_modules", pkg.Name, "package.json")) {
 			err = fmt.Errorf("installPackage(%s): package.json not found", pkg)
 		}
