@@ -143,7 +143,13 @@ async function existsFile(path: string): Promise<boolean> {
 }
 
 if (import.meta.main) {
-  const [testDir] = Deno.args;
+  const [testDir] = Deno.args.filter((arg) => !arg.startsWith("-"));
+  const clean = Deno.args.includes("--clean");
+  if (clean) {
+    console.log("Cleaning up...");
+    await Deno.remove("../.esmd/storage", { recursive: true });
+    await Deno.remove("../.esmd/esm.db" );
+  }
   startServer(async () => {
     let timeUsed = 0;
     if (testDir) {

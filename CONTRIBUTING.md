@@ -2,7 +2,7 @@
 
 Welcome, and thank you for taking time in contributing to esm.sh project!
 
-## Development Setup
+## Development setup
 
 You will need [Golang](https://golang.org/) 1.18+.
 
@@ -10,13 +10,13 @@ You will need [Golang](https://golang.org/) 1.18+.
 2. Clone the repository to your local device.
 3. Create a new branch `git checkout -b BRANCH_NAME`.
 4. Change code then run the testings.
-5. [Push your branch to Github after all tests passed.](#Testing)
+5. Push your branch to Github after **all tests passed**.
 6. Make a [pull request](https://github.com/esm-dev/esm.sh/pulls).
 7. Merge to master branch by our maintainers.
 
 ## Configration
 
-To configure the server,  create a `config.json` file in the root directory. Here is an example:
+To configure the server,  create a `config.json` file in the project root directory. Here is an example:
 
 ```jsonc
 // config.json
@@ -44,8 +44,11 @@ Then you can import `React` from "http://localhost:8080/react"
 # Run all tests
 ./test/bootstrap.sh
 
-# Run tests for a specific module
+# Run tests for a specific case (directory name)
 ./test/bootstrap.sh preact
+
+# Or run tests after cleaning the cache
+./test/bootstrap.sh --clean
 ```
 
 All the tests are written in Deno, you can find them in [test/](./test) directory.
