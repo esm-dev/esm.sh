@@ -10,14 +10,14 @@ import (
 
 type BuildArgs struct {
 	alias             map[string]string
-	conditions        *stringSet
-	denoStdVersion    string
 	deps              PkgSlice
+	conditions        *stringSet
 	external          *stringSet
+	treeShaking       *stringSet
+	denoStdVersion    string
 	ignoreAnnotations bool
 	ignoreRequire     bool
 	keepNames         bool
-	treeShaking       *stringSet
 }
 
 func decodeBuildArgsPrefix(raw string) (args BuildArgs, err error) {

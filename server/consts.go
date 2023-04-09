@@ -10,9 +10,9 @@ const (
 
 const (
 	nodejsMinVersion = 16
+	nodejsLatestLTS  = "18.15.0"
+	nodeTypesVersion = "18.15.11"
 	denoStdVersion   = "0.177.0"
-	nodejsLatestLTS  = "16.19.1"
-	nodeTypesVersion = "16.18.12"
 )
 
 // fix some package versions
