@@ -143,12 +143,15 @@ async function existsFile(path: string): Promise<boolean> {
 }
 
 if (import.meta.main) {
+  const rootDir = new URL(import.meta.url).pathname.split("/").slice(0, -2)
+    .join("/");
+  Deno.chdir(rootDir);
   const [testDir] = Deno.args.filter((arg) => !arg.startsWith("-"));
   const clean = Deno.args.includes("--clean");
   if (clean) {
     console.log("Cleaning up...");
-    await Deno.remove("../.esmd/storage", { recursive: true });
-    await Deno.remove("../.esmd/esm.db" );
+    await Deno.remove("./.esmd/storage", { recursive: true });
+    await Deno.remove("./.esmd/esm.db");
   }
   startServer(async () => {
     let timeUsed = 0;
