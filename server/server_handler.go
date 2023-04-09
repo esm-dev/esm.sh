@@ -239,7 +239,7 @@ func serverHandler() rex.Handle {
 		}
 
 		// get package info
-		reqPkg, unQuery, err := validatePkgPath(pathname)
+		reqPkg, extraQuery, err := validatePkgPath(pathname)
 		if err != nil {
 			status := 500
 			message := err.Error()
@@ -307,9 +307,9 @@ func serverHandler() rex.Handle {
 			return rex.Redirect(url, http.StatusMovedPermanently)
 		}
 
-		// support `/react-dom@18.2.0&external=react&dev/client` with query `external=react&dev`
-		if unQuery != "" {
-			qs := []string{unQuery}
+		// use extra query like `/react-dom@18.2.0&external=react&dev/client`
+		if extraQuery != "" {
+			qs := []string{extraQuery}
 			if ctx.R.URL.RawQuery != "" {
 				qs = append(qs, ctx.R.URL.RawQuery)
 			}
@@ -323,7 +323,7 @@ func serverHandler() rex.Handle {
 			if external.Has("*") {
 				eaSign = "*"
 			}
-			if unQuery != "" {
+			if extraQuery != "" {
 				submodule := ""
 				if reqPkg.Submodule != "" {
 					submodule = "/" + reqPkg.Submodule
@@ -368,7 +368,7 @@ func serverHandler() rex.Handle {
 			return rex.Redirect(fmt.Sprintf("%s%s%s/%s@%s%s%s", cdnOrigin, cfg.BasePath, prefix, reqPkg.Name, reqPkg.Version, subpath, query), http.StatusFound)
 		}
 
-		// support `https://esm.sh/react?dev&target=es2020/jsx-runtime` for jsx transformer
+		// support `https://esm.sh/react?dev&target=es2020/jsx-runtime` pattern for jsx transformer
 		for _, jsxRuntime := range []string{"jsx-runtime", "jsx-dev-runtime"} {
 			if strings.HasSuffix(ctx.R.URL.RawQuery, "/"+jsxRuntime) {
 				if reqPkg.Submodule == "" {
@@ -669,15 +669,15 @@ func serverHandler() rex.Handle {
 		}
 
 		buildArgs := BuildArgs{
-			denoStdVersion:    dsv,
 			alias:             alias,
+			conditions:        conditions,
+			denoStdVersion:    dsv,
 			deps:              deps,
 			external:          external,
-			treeShaking:       treeShaking,
-			conditions:        conditions,
+			ignoreAnnotations: ignoreAnnotations,
 			ignoreRequire:     ignoreRequire,
 			keepNames:         keepNames,
-			ignoreAnnotations: ignoreAnnotations,
+			treeShaking:       treeShaking,
 		}
 
 		// parse and use `X-` prefix
@@ -834,6 +834,13 @@ func serverHandler() rex.Handle {
 					}
 				}
 			}
+
+			// check request package
+			p, e := fetchPackageInfo(reqPkg.Name, reqPkg.Version)
+			if e != nil {
+				return rex.Status(500, e.Error())
+			}
+			task.Deprecated = p.Deprecated
 
 			// if the previous build exists and is not pin/bare mode, then build current module in backgound,
 			// or wait the current build task for 60 seconds

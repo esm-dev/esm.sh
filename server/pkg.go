@@ -14,7 +14,7 @@ type Pkg struct {
 	FullSubmodule string `json:"fullsubmodule"`
 }
 
-func validatePkgPath(pathname string) (Pkg, string, error) {
+func validatePkgPath(pathname string) (pkg Pkg, query string, err error) {
 	pkgName, submodule := splitPkgPath(pathname)
 	fullSubmodule := submodule
 	if submodule != "" {
@@ -36,6 +36,7 @@ func validatePkgPath(pathname string) (Pkg, string, error) {
 		for prefix, ver := range fixedPkgVersions {
 			if strings.HasPrefix(name+"@"+version, prefix) {
 				version = ver
+				break
 			}
 		}
 		return Pkg{
@@ -46,14 +47,22 @@ func validatePkgPath(pathname string) (Pkg, string, error) {
 		}, q, nil
 	}
 
-	info, _, err := getPackageInfo("", name, version)
+	p, _, err := getPackageInfo("", name, version)
 	if err != nil {
 		return Pkg{}, "", err
 	}
 
+	version = p.Version
+	for prefix, ver := range fixedPkgVersions {
+		if strings.HasPrefix(name+"@"+version, prefix) {
+			version = ver
+			break
+		}
+	}
+
 	return Pkg{
 		Name:          name,
-		Version:       info.Version,
+		Version:       version,
 		Submodule:     submodule,
 		FullSubmodule: fullSubmodule,
 	}, q, nil

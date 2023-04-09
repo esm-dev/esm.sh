@@ -33,11 +33,13 @@ type BuildTask struct {
 	BuildVersion int
 	Dev          bool
 	Bundle       bool
+	Deprecated   string
 
 	// internal
-	id    string
-	wd    string
-	stage string
+	id     string
+	wd     string
+	realWd string
+	stage  string
 }
 
 func (task *BuildTask) Build() (esm *ESMBuild, err error) {
@@ -60,14 +62,6 @@ func (task *BuildTask) Build() (esm *ESMBuild, err error) {
 			}
 		}
 	}
-
-	// TODO: Remove node_modules of the idle working dir
-	// 	defer func() {
-	// 		err := os.RemoveAll(task.wd)
-	// 		if err != nil {
-	// 			log.Warnf("clean build(%s) dir: %v", task.ID(), err)
-	// 		}
-	// 	}()
 
 	task.stage = "install"
 	err = installPackage(task.wd, task.Pkg)
@@ -939,9 +933,8 @@ rebuild:
 			}
 
 			// check if package is deprecated
-			p, e := fetchPackageInfo(task.Pkg.Name, task.Pkg.Version)
-			if e == nil && p.Deprecated != "" {
-				fmt.Fprintf(buf, `console.warn("[npm] %%cdeprecated%%c %s@%s: %s", "color:red", "");%s`, task.Pkg.Name, task.Pkg.Version, p.Deprecated, "\n")
+			if task.Deprecated != "" {
+				fmt.Fprintf(buf, `console.warn("[npm] %%cdeprecated%%c %s@%s: %s", "color:red", "");%s`, task.Pkg.Name, task.Pkg.Version, task.Deprecated, "\n")
 			}
 
 			// add sourcemap Url

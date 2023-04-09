@@ -93,13 +93,18 @@ func (task *BuildTask) getSavepath() string {
 }
 
 func (task *BuildTask) getRealWD() string {
-	if l, e := filepath.EvalSymlinks(path.Join(task.wd, "node_modules", task.Pkg.Name)); e == nil {
-		if strings.HasPrefix(task.Pkg.Name, "@") {
-			return path.Join(l, "../../..")
+	if task.realWd == "" {
+		if l, e := filepath.EvalSymlinks(path.Join(task.wd, "node_modules", task.Pkg.Name)); e == nil {
+			if strings.HasPrefix(task.Pkg.Name, "@") {
+				task.realWd = path.Join(l, "../../..")
+			} else {
+				task.realWd = path.Join(l, "../..")
+			}
+		} else {
+			task.realWd = task.wd
 		}
-		return path.Join(l, "../..")
 	}
-	return task.wd
+	return task.realWd
 }
 
 func (task *BuildTask) getPackageInfo(name string, version string) (info NpmPackage, fromPackageJSON bool, err error) {
