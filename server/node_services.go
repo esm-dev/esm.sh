@@ -88,8 +88,13 @@ func startNodeServices() (err error) {
 		return errors.New("node service port is not set")
 	}
 
-	// install services
 	wd := path.Join(cfg.WorkDir, "ns")
+	err = ensureDir(wd)
+	if err != nil {
+		return err
+	}
+
+	// install services
 	cmd := exec.Command("pnpm", "add", "esm-node-services")
 	cmd.Dir = wd
 	var output []byte
