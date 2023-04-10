@@ -743,6 +743,10 @@ rebuild:
 									}
 									// if the dep is an es6 module
 									if !marked && depNpm.Module != "" {
+										cjsImportNames.Add("*?")
+										marked = true
+									}
+									if !marked && includes(depESM.NamedExports, "__esModule") && depESM.HasExportDefault {
 										cjsImportNames.Add("*")
 										marked = true
 									}
@@ -794,6 +798,13 @@ rebuild:
 							fmt.Fprintf(buf, `const __%s$ = ()=>!0;%s`, identifier, eol)
 						} else {
 							switch importName {
+							case "default":
+								fmt.Fprintf(buf, `import __%s$ from "%s";%s`, identifier, importPath, eol)
+							case "*":
+								fmt.Fprintf(buf, `import * as __%s$ from "%s";%s`, identifier, importPath, eol)
+							case "*?":
+								fmt.Fprintf(buf, `import * as _%s$ from "%s";%s`, identifier, importPath, eol)
+								fmt.Fprintf(buf, `const __%s$ = Object.assign({__esModule:!0},_%s$);%s`, identifier, identifier, eol)
 							case "lazy":
 								fmt.Fprintf(buf, `import * as _%s$ from "%s";%s`, identifier, importPath, eol)
 								if task.Target == "deno" || task.Target == "denonext" || task.Target == "node" || task.Target >= "es2020" {
@@ -801,10 +812,6 @@ rebuild:
 								} else {
 									fmt.Fprintf(buf, `const __%s$ = _%s$.default!==void 0?_%s$.default:_%s$;%s`, identifier, identifier, identifier, identifier, eol)
 								}
-							case "default":
-								fmt.Fprintf(buf, `import __%s$ from "%s";%s`, identifier, importPath, eol)
-							case "*":
-								fmt.Fprintf(buf, `import * as __%s$ from "%s";%s`, identifier, importPath, eol)
 							default:
 								fmt.Fprintf(buf, `import { %s as __%s$%s } from "%s";%s`, importName, identifier, importName, importPath, eol)
 							}
