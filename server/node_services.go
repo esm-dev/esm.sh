@@ -94,8 +94,6 @@ func startNodeServices() (err error) {
 		return
 	}
 
-	nsPidFile = path.Join(cfg.WorkDir, "ns.pid")
-
 	// install services
 	cmd := exec.Command("pnpm", "add", "esm-node-services")
 	cmd.Dir = wd
@@ -116,6 +114,8 @@ func startNodeServices() (err error) {
 	if err != nil {
 		return
 	}
+
+	nsPidFile = path.Join(cfg.WorkDir, "ns", "ns.pid")
 
 	// kill previous ns process if exists
 	kill(nsPidFile)

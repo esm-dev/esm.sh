@@ -150,9 +150,11 @@ if (import.meta.main) {
   const clean = Deno.args.includes("--clean");
   if (clean) {
     console.log("Cleaning up...");
+    await Deno.remove("./.esmd/log", { recursive: true });
     await Deno.remove("./.esmd/storage", { recursive: true });
     await Deno.remove("./.esmd/esm.db");
   }
+  console.log("Starting esm.sh server...");
   startServer(async () => {
     let timeUsed = 0;
     if (testDir) {

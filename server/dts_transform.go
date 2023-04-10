@@ -320,7 +320,7 @@ func (task *BuildTask) transformDTS(dts string, aliasDepsPrefix string, marker *
 			dtsData = bytes.ReplaceAll(dtsData, []byte(" export { Buffer };"), []byte(" export const Buffer: Buffer;"))
 		}
 		if strings.HasSuffix(savePath, "/url.d.ts") || strings.HasSuffix(savePath, "/buffer.d.ts") {
-			dtsData, err = removeGlobalBlob(dtsData)
+			dtsData, err = removeGlobalBlock(dtsData)
 			if err != nil {
 				return
 			}
@@ -380,7 +380,7 @@ func (task *BuildTask) transformDTS(dts string, aliasDepsPrefix string, marker *
 }
 
 // to remove `global { ... }`
-func removeGlobalBlob(input []byte) (output []byte, err error) {
+func removeGlobalBlock(input []byte) (output []byte, err error) {
 	start := bytes.Index(input, []byte("global {"))
 	if start == -1 {
 		return input, nil
@@ -397,7 +397,7 @@ func removeGlobalBlob(input []byte) (output []byte, err error) {
 			return bytes.Join([][]byte{input[:start], input[i+1:]}, nil), nil
 		}
 	}
-	return nil, errors.New("removeGlobalBlob: global block not end")
+	return nil, errors.New("removeGlobalBlock: global block not end")
 }
 
 func toTypesPath(wd string, p NpmPackage, version string, buildArgsPrefix string, subpath string) string {

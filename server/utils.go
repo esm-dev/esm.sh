@@ -176,7 +176,7 @@ func atobUrl(s string) (string, error) {
 
 func kill(pidFile string) (err error) {
 	if pidFile == "" {
-		return
+		return nil
 	}
 	data, err := os.ReadFile(pidFile)
 	if err != nil {
@@ -186,8 +186,8 @@ func kill(pidFile string) (err error) {
 		return
 	}
 	pid, err := strconv.Atoi(string(data))
-	if err != nil {
-		return
+	if err != nil || pid <= 0 {
+		return nil
 	}
 	process, err := os.FindProcess(pid)
 	if err != nil {
