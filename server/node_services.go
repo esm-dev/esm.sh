@@ -88,13 +88,8 @@ func startNodeServices() (err error) {
 		return errors.New("node service port is not set")
 	}
 
-	wd := path.Join(cfg.WorkDir, "ns")
-	err = clearDir(wd)
-	if err != nil {
-		return
-	}
-
 	// install services
+	wd := path.Join(cfg.WorkDir, "ns")
 	cmd := exec.Command("pnpm", "add", "esm-node-services")
 	cmd.Dir = wd
 	var output []byte
@@ -110,7 +105,6 @@ func startNodeServices() (err error) {
 		[]byte(fmt.Sprintf(nsApp, cfg.NsPort)),
 		0644,
 	)
-
 	if err != nil {
 		return
 	}
@@ -130,10 +124,10 @@ func startNodeServices() (err error) {
 		return
 	}
 
-	log.Debug("node services process started, pid is", cmd.Process.Pid)
-
-	// store node process pid
+	// save pid
 	ioutil.WriteFile(nsPidFile, []byte(strconv.Itoa(cmd.Process.Pid)), 0644)
+
+	log.Debug("node services process started, pid is", cmd.Process.Pid)
 
 	// wait the process to exit
 	err = cmd.Wait()

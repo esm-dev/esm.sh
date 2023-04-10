@@ -153,12 +153,6 @@ func findFiles(root string, fn func(p string) bool) ([]string, error) {
 	return files, nil
 }
 
-func clearDir(dir string) (err error) {
-	os.RemoveAll(dir)
-	err = os.MkdirAll(dir, 0755)
-	return
-}
-
 func btoaUrl(s string) string {
 	return strings.TrimRight(base64.URLEncoding.EncodeToString([]byte(s)), "=")
 }
