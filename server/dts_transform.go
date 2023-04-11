@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"os"
 	"path"
-	"strconv"
 	"strings"
 	"sync"
 
@@ -40,14 +39,12 @@ func (task *BuildTask) transformDTS(dts string, aliasDepsPrefix string, marker *
 	}
 
 	pkgNameWithVersion, submodule := splitPkgPath(utils.CleanPath(dts))
-	subPath := strings.Split(submodule, "/")
 	pkgName, _ := utils.SplitByLastByte(pkgNameWithVersion, '@')
 	if pkgName == "" {
 		pkgName = pkgNameWithVersion
 	}
 
 	buildBasePath := fmt.Sprintf("/v%d", task.BuildVersion)
-	cdnOriginAndBasePath := task.CdnOrigin + cfg.BasePath
 	cdnOriginAndBuildBasePath := task.CdnOrigin + cfg.BasePath + buildBasePath
 
 	dtsPath := utils.CleanPath(strings.Join(append([]string{
@@ -61,10 +58,6 @@ func (task *BuildTask) transformDTS(dts string, aliasDepsPrefix string, marker *
 		return
 	}
 
-	imports := newStringSet()
-	internalDeclareModules := newStringSet()
-	entryDeclareModules := []string{}
-
 	dtsFilePath := path.Join(task.wd, "node_modules", regexpFullVersionPath.ReplaceAllString(dts, "$1/"))
 	dtsDir := path.Dir(dtsFilePath)
 	dtsFile, err := os.Open(dtsFilePath)
@@ -73,13 +66,11 @@ func (task *BuildTask) transformDTS(dts string, aliasDepsPrefix string, marker *
 	}
 	defer dtsFile.Close()
 
+	internalDeclModules := newStringSet()
 	pass1Buf := bytes.NewBuffer(nil)
 	err = walkDts(dtsFile, pass1Buf, func(name string, kind string, position int) string {
 		if kind == "declareModule" {
-			internalDeclareModules.Add(name)
-		}
-		if kind == "importExpr" || kind == "importCall" {
-			imports.Add(name)
+			internalDeclModules.Add(name)
 		}
 		return name
 	})
@@ -87,43 +78,29 @@ func (task *BuildTask) transformDTS(dts string, aliasDepsPrefix string, marker *
 		return
 	}
 
-	for _, path := range imports.Values() {
-		if !internalDeclareModules.Has(path) {
-			internalDeclareModules.Remove(path)
+	for _, path := range internalDeclModules.Values() {
+		if pkgName == "@types/node" {
+			if strings.HasPrefix(path, "node:") {
+				internalDeclModules.Remove(path)
+			}
+		} else if path == pkgName || strings.HasPrefix(path, pkgName+"/") {
+			internalDeclModules.Remove(path)
 		}
 	}
-	imports.Reset()
 
 	wd := task.getRealWD()
 	buf := bytes.NewBuffer(nil)
+	imports := newStringSet()
 	if pkgName == "@types/node" {
 		fmt.Fprintf(buf, "/// <reference path=\"%s/node.ns.d.ts\" />\n", cdnOriginAndBuildBasePath)
 	}
 	err = walkDts(pass1Buf, buf, func(importPath string, kind string, position int) string {
 		// resove `declare module "xxx" {}`
 		if kind == "declareModule" {
-			moduleName := pkgName
-			if len(subPath) > 0 {
-				moduleName += "/" + strings.Join(subPath, "/")
-				if strings.HasSuffix(moduleName, "/index.d.ts") {
-					moduleName = strings.TrimSuffix(moduleName, "/index.d.ts")
-				} else {
-					moduleName = strings.TrimSuffix(moduleName, ".d.ts")
-				}
+			if strings.HasPrefix(importPath, "node:") && pkgName == "@types/node" {
+				return fmt.Sprintf("%s/@types/node@%s/%s.d.ts", cdnOriginAndBuildBasePath, nodeTypesVersion, strings.TrimPrefix(importPath, "node:"))
 			}
-			if strings.HasPrefix(importPath, "node:") {
-				importPath = "@types/node/" + strings.TrimPrefix(importPath, "node:")
-			}
-			// current module
-			if importPath == moduleName {
-				if strings.HasPrefix(moduleName, "@types/node/") {
-					return fmt.Sprintf("%s/@types/node@%s/%s.d.ts", cdnOriginAndBuildBasePath, nodeTypesVersion, strings.TrimPrefix(moduleName, "@types/node/"))
-				}
-				url := fmt.Sprintf("%s/%s", cdnOriginAndBasePath, moduleName)
-				entryDeclareModules = append(entryDeclareModules, fmt.Sprintf("%s:%d", moduleName, position+len(url)+1))
-				return url
-			}
-			if internalDeclareModules.Has(importPath) {
+			if internalDeclModules.Has(importPath) {
 				return importPath
 			}
 		}
@@ -156,7 +133,7 @@ func (task *BuildTask) transformDTS(dts string, aliasDepsPrefix string, marker *
 			importPath = to
 		}
 
-		if internalDeclareModules.Has(importPath) || task.external.Has(importPath) {
+		if internalDeclModules.Has(importPath) || task.external.Has(importPath) {
 			return importPath
 		}
 
@@ -255,7 +232,7 @@ func (task *BuildTask) transformDTS(dts string, aliasDepsPrefix string, marker *
 				} else if info.Typings != "" {
 					importPath = utils.CleanPath(info.Typings)[1:]
 				}
-				if !strings.HasSuffix(importPath, ".d.ts") {
+				if !strings.HasSuffix(importPath, ".d.ts") && !strings.HasSuffix(importPath, "/*") {
 					importPath += "~.d.ts"
 				}
 			}
@@ -268,47 +245,6 @@ func (task *BuildTask) transformDTS(dts string, aliasDepsPrefix string, marker *
 	})
 	if err != nil {
 		return
-	}
-
-	if len(entryDeclareModules) > 0 {
-		dtsData := buf.Bytes()
-		dataLen := buf.Len()
-		for _, record := range entryDeclareModules {
-			name, pos := utils.SplitByLastByte(record, ':')
-			i, _ := strconv.Atoi(pos)
-			b := bytes.NewBuffer(nil)
-			open := false
-			internal := 0
-			for ; i < dataLen; i++ {
-				c := dtsData[i]
-				b.WriteByte(c)
-				if c == '{' {
-					if !open {
-						open = true
-					} else {
-						internal++
-					}
-				} else if c == '}' && open {
-					if internal > 0 {
-						internal--
-					} else {
-						open = false
-						break
-					}
-				}
-			}
-			if b.Len() > 0 {
-				pkgName, submodule := splitPkgPath(name)
-				name = pkgName
-				subpath := ""
-				if submodule != "" {
-					subpath = "/" + submodule
-				}
-
-				fmt.Fprintf(buf, `%sdeclare module "%s/%s@*%s" `, "\n", cdnOriginAndBasePath, name, subpath)
-				buf.WriteString(strings.TrimSpace(b.String()))
-			}
-		}
 	}
 
 	// workaroud for `@types/node`
@@ -438,7 +374,7 @@ func toTypesPath(wd string, p NpmPackage, version string, buildArgsPrefix string
 		return ""
 	}
 
-	if !endsWith(types, ".d.ts", ".d.mts") {
+	if !endsWith(types, ".d.ts", ".d.mts") && !strings.HasSuffix(types, "/*") {
 		pkgDir := path.Join(wd, "node_modules", p.Name)
 		if fileExists(path.Join(pkgDir, types, "index.d.ts")) {
 			types = types + "/index.d.ts"

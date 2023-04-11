@@ -97,7 +97,7 @@ func walkDts(r io.Reader, buf *bytes.Buffer, resolve func(path string, kind stri
 					// 	continue
 					// }
 
-					if !importExportScope && startsWith(string(inlineToken), "import ", "import\"", "import'", "import{", "export ", "export{") {
+					if !importExportScope && startsWith(string(inlineToken), "import ", "import\"", "import'", "import{", "export ", "export{") && !bytes.HasPrefix(inlineToken, []byte("export =")) {
 						importExportScope = true
 					}
 					if importExportScope {
