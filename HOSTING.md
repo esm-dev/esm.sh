@@ -8,6 +8,12 @@ To serve esm.sh, You will need [Go](https://golang.org/dl) 1.18+ to
 run and compile the server. The server runtime will install the nodejs (16 LTS)
 automatically.
 
+## Recommended host machine requirements
+
+- 4 CPU cores or more
+- 8GB RAM or more
+- 100GB disk space or more
+
 ## Clone code
 
 ```baseh

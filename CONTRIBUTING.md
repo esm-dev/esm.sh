@@ -47,7 +47,7 @@ Then you can import `React` from "http://localhost:8080/react"
 # Run tests for a specific case (directory name)
 ./test/bootstrap.sh preact
 
-# Or run tests after cleaning the cache
+# Or run tests with clean workDir
 ./test/bootstrap.sh --clean
 ```
 
