@@ -1,5 +1,13 @@
 # Change Log
 
+## v115
+
+- Return JavaScript modules for `?module` query with `wasm` files
+- Fix types transformer (close #581)
+- Fix incorrect named import of cjs modules (close #583)
+- Fix sumodule path resolving (close #584)
+- Upgrade `@types/node` to 18
+
 ## v114
 
 - Add `?conditions` query as esbuild option
