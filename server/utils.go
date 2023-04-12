@@ -139,9 +139,10 @@ func findFiles(root string, fn func(p string) bool) ([]string, error) {
 			if err != nil {
 				return nil, err
 			}
-			files = make([]string, len(files)+len(subFiles))
+			n := len(files)
+			files = make([]string, n+len(subFiles))
 			for i, f := range subFiles {
-				files[i+len(files)] = filepath.Join(name, f)
+				files[i+n] = filepath.Join(name, f)
 			}
 			copy(files, subFiles)
 		} else {

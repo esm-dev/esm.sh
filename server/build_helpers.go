@@ -117,13 +117,12 @@ func (task *BuildTask) analyze() (esm *ESMBuild, npm NpmPackage, reexport string
 	target := task.Target
 	isDev := task.Dev
 
-	var p NpmPackage
-	err = utils.ParseJSONFile(path.Join(wd, "node_modules", pkg.Name, "package.json"), &p)
+	err = utils.ParseJSONFile(path.Join(wd, "node_modules", pkg.Name, "package.json"), &npm)
 	if err != nil {
 		return
 	}
 
-	npm = task.fixNpmPackage(p)
+	npm = task.fixNpmPackage(npm)
 
 	// Check if the supplied path name is actually a main export.
 	// See: https://github.com/esm-dev/esm.sh/issues/578
@@ -192,10 +191,10 @@ func (task *BuildTask) analyze() (esm *ESMBuild, npm NpmPackage, reexport string
 				}
 			} else {
 				var resolved bool
-				if p.DefinedExports != nil {
-					if m, ok := p.DefinedExports.(map[string]interface{}); ok {
+				if npm.DefinedExports != nil {
+					if m, ok := npm.DefinedExports.(map[string]interface{}); ok {
 						for name, defines := range m {
-							if name == "./"+pkg.Submodule || name == "./"+pkg.Submodule+".js" {
+							if name == "./"+pkg.Submodule || name == "./"+pkg.Submodule+".js" || name == "./"+pkg.Submodule+".mjs" {
 								/**
 								  exports: {
 								    "./lib/core": {
@@ -482,7 +481,9 @@ func (task *BuildTask) applyConditions(p *NpmPackage, exports interface{}, pType
 		case "node":
 			targetConditions = []string{"node"}
 		}
-		if pType == "module" {
+		_, hasRequireCondition := m["require"]
+		_, hasNodeCondition := m["node"]
+		if pType == "module" || hasRequireCondition || hasNodeCondition {
 			conditions = append(conditions, "default")
 		}
 		if task.Dev {
@@ -499,11 +500,11 @@ func (task *BuildTask) applyConditions(p *NpmPackage, exports interface{}, pType
 			}
 		}
 		if p.Module == "" {
-			conditions := []string{"require", "default"}
+			conditions := []string{"require", "node", "default"}
 			for _, condition := range append(targetConditions, conditions...) {
 				v, ok := m[condition]
 				if ok {
-					task.applyConditions(p, v, "commonjs")
+					task.applyConditions(p, v, "")
 					break
 				}
 			}
