@@ -239,6 +239,17 @@ rebuild:
 							return api.OnResolveResult{External: true}, nil
 						}
 
+						if strings.HasSuffix(args.Path, ".wasm") {
+							fullFilepath := filepath.Join(args.ResolveDir, args.Path)
+							if fileExists(fullFilepath) {
+								wasmPath := strings.TrimPrefix(fullFilepath, path.Join(task.wd, "node_modules", npm.Name))
+								wasmUrl := fmt.Sprintf("%s%s/%s%s", task.CdnOrigin, cfg.BasePath, task.Pkg.String(), wasmPath)
+								code := fmt.Sprintf("const data=await fetch('%s').then(r=>r.arrayBuffer());export default new WebAssembly.Module(data)", wasmUrl)
+								url := fmt.Sprintf("data:text/javascript,%s", code)
+								return api.OnResolveResult{External: true, Path: url}, nil
+							}
+						}
+
 						for _, name := range reservedPackages {
 							if args.Path == name || strings.HasPrefix(args.Path, name+"/") {
 								if task.Target == "deno" || task.Target == "denonext" {
@@ -452,8 +463,8 @@ rebuild:
 				)
 			},
 		}},
+		// for css bundle
 		Loader: map[string]api.Loader{
-			".wasm":  api.LoaderDataURL,
 			".svg":   api.LoaderDataURL,
 			".png":   api.LoaderDataURL,
 			".webp":  api.LoaderDataURL,
@@ -657,15 +668,12 @@ rebuild:
 					}
 					t := &BuildTask{
 						BuildArgs: BuildArgs{
-							alias:             task.alias,
-							deps:              task.deps,
-							external:          task.external,
-							treeShaking:       newStringSet(), // clear `?exports` args
-							conditions:        newStringSet(),
-							denoStdVersion:    task.denoStdVersion,
-							ignoreRequire:     task.ignoreRequire,
-							ignoreAnnotations: task.ignoreAnnotations,
-							keepNames:         task.keepNames,
+							alias:          map[string]string{},
+							deps:           task.deps,
+							external:       task.external,
+							treeShaking:    newStringSet(), // remove `?exports` args
+							conditions:     newStringSet(), // remove `?conditions` args
+							denoStdVersion: task.denoStdVersion,
 						},
 						CdnOrigin:    task.CdnOrigin,
 						BuildVersion: task.BuildVersion,
@@ -675,7 +683,7 @@ rebuild:
 					}
 
 					_, ok := queryESMBuild(t.ID())
-					if ok {
+					if !ok {
 						buildQueue.Add(t, "")
 					}
 

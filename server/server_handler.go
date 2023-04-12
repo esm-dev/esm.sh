@@ -406,7 +406,19 @@ func serverHandler() rex.Handle {
 					// todo: transform ts/jsx/tsx for browsers
 					storageType = "raw"
 				}
-			case ".wasm", ".less", ".sass", ".scss", ".html", ".htm", ".md", ".txt", ".json", ".xml", ".yml", ".yaml", ".svg", ".png", ".jpg", ".webp", ".gif", ".eot", ".ttf", ".otf", ".woff", ".woff2":
+			case ".wasm":
+				if ctx.Form.Has("module") {
+					buf := &bytes.Buffer{}
+					wasmUrl := fmt.Sprintf("%s%s%s", cdnOrigin, cfg.BasePath, pathname)
+					fmt.Fprintf(buf, "/* esm.sh - CompiledWasm */\n")
+					fmt.Fprintf(buf, "const data = await fetch(%s).then(r => r.arrayBuffer());\nexport default new WebAssembly.Module(data);", strings.TrimSpace(string(utils.MustEncodeJSON(wasmUrl))))
+					ctx.SetHeader("Cache-Control", "public, max-age=31536000, immutable")
+					ctx.SetHeader("Content-Type", "application/javascript; charset=utf-8")
+					return buf
+				} else if len(strings.Split(pathname, "/")) > 2 {
+					storageType = "raw"
+				}
+			case ".less", ".sass", ".scss", ".html", ".htm", ".md", ".txt", ".json", ".xml", ".yml", ".yaml", ".svg", ".png", ".jpg", ".webp", ".gif", ".eot", ".ttf", ".otf", ".woff", ".woff2":
 				if len(strings.Split(pathname, "/")) > 2 {
 					storageType = "raw"
 				}
