@@ -170,6 +170,16 @@ const worker = workerFactory(workerAddon)
 
 This only works when the package **imports CSS files in JS** directly.
 
+### Importing WASM Modules
+
+esm.sh supports importing wasm modules in JS directly, to do that, you need to add `?module` query to the import URL:
+
+```javascript
+import wasm from "https://esm.sh/@dqbd/tiktoken@1.0.3/tiktoken_bg.wasm?module"
+
+const { exports } = WebAssembly.instantiate(wasm, imports)
+```
+
 ### Specify CJS Exports
 
 If you get an error like `...not provide an export named...`, that means esm.sh can not resolve CJS exports of the module correctly. You can add `?cjs-exports=foo,bar` query to specify the export names:
