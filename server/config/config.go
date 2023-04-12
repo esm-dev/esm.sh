@@ -26,8 +26,6 @@ type Config struct {
 	BasePath         string  `json:"basePath,omitempty"`
 	NpmRegistry      string  `json:"npmRegistry,omitempty"`
 	NpmToken         string  `json:"npmToken,omitempty"`
-	NpmCDN           string  `json:"npmCDN,omitempty"`
-	BackupNpmCDN     string  `json:"backupNpmCDN,omitempty"`
 	NoCompress       bool    `json:"noCompress,omitempty"`
 }
 
@@ -119,14 +117,6 @@ func Load(filename string) (*Config, error) {
 	if cfg.NpmRegistry != "" {
 		cfg.NpmRegistry = strings.TrimRight(cfg.NpmRegistry, "/") + "/"
 	}
-	if cfg.NpmCDN != "" {
-		cfg.NpmCDN = strings.TrimSuffix(cfg.NpmCDN, "/")
-	} else {
-		cfg.NpmCDN = "https://esm.sh"
-	}
-	if cfg.BackupNpmCDN != "" {
-		cfg.BackupNpmCDN = strings.TrimSuffix(cfg.BackupNpmCDN, "/")
-	}
 	return cfg, nil
 }
 
@@ -146,7 +136,6 @@ func Default() *Config {
 		Storage:          fmt.Sprintf("local:%s", path.Join(workDir, "storage")),
 		LogDir:           path.Join(workDir, "log"),
 		LogLevel:         "info",
-		NpmCDN:           "https://esm.sh",
 	}
 }
 
