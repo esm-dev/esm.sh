@@ -2,9 +2,11 @@ package server
 
 import (
 	"fmt"
+	"net/url"
 	"strings"
 
 	"github.com/ije/gox/utils"
+	"github.com/ije/gox/valid"
 )
 
 type Pkg struct {
@@ -12,60 +14,99 @@ type Pkg struct {
 	Version       string `json:"version"`
 	Submodule     string `json:"submodule"`
 	FullSubmodule string `json:"fullsubmodule"`
+	FromGithub    bool   `json:"fromGithub"`
 }
 
 func validatePkgPath(pathname string) (pkg Pkg, query string, err error) {
-	pkgName, submodule := splitPkgPath(pathname)
-	fullSubmodule := submodule
-	if submodule != "" {
-		submodule = strings.TrimSuffix(submodule, ".js")
-		submodule = strings.TrimSuffix(submodule, ".mjs")
+	fromGithub := strings.HasPrefix(pathname, "/gh/") && strings.Count(pathname, "/") >= 3
+	if fromGithub {
+		pathname = "/@" + pathname[4:]
 	}
+	pkgName, fullSubmodule := splitPkgPath(pathname)
 	name, maybeVersion := utils.SplitByLastByte(pkgName, '@')
 	if strings.HasPrefix(pkgName, "@") {
 		name, maybeVersion = utils.SplitByLastByte(pkgName[1:], '@')
 		name = "@" + name
 	}
-
 	if !validatePackageName(name) {
 		return Pkg{}, "", fmt.Errorf("invalid package name '%s'", name)
 	}
 
-	version, q := utils.SplitByFirstByte(maybeVersion, '&')
-	if regexpFullVersion.MatchString(version) {
-		for prefix, ver := range fixedPkgVersions {
-			if strings.HasPrefix(name+"@"+version, prefix) {
-				version = ver
-				break
-			}
-		}
-		return Pkg{
-			Name:          name,
-			Version:       version,
-			Submodule:     submodule,
-			FullSubmodule: fullSubmodule,
-		}, q, nil
+	version, query := utils.SplitByFirstByte(maybeVersion, '&')
+	if v, e := url.QueryUnescape(version); e == nil {
+		version = v
 	}
 
-	p, _, err := getPackageInfo("", name, version)
-	if err != nil {
-		return Pkg{}, "", err
+	submodule := fullSubmodule
+	if submodule != "" {
+		submodule = strings.TrimSuffix(submodule, ".js")
+		submodule = strings.TrimSuffix(submodule, ".mjs")
 	}
 
-	version = p.Version
-	for prefix, ver := range fixedPkgVersions {
-		if strings.HasPrefix(name+"@"+version, prefix) {
-			version = ver
-			break
-		}
-	}
-
-	return Pkg{
+	pkg = Pkg{
 		Name:          name,
 		Version:       version,
 		Submodule:     submodule,
 		FullSubmodule: fullSubmodule,
-	}, q, nil
+		FromGithub:    fromGithub,
+	}
+
+	if fromGithub {
+		// strip the leading `@`
+		pkg.Name = pkg.Name[1:]
+		// if the version is a commit-ish
+		if valid.IsHexString(version) && len(version) >= 10 {
+			return
+		}
+		var refs []GitRef
+		refs, err = listRepoRefs(fmt.Sprintf("https://github.com/%s", pkg.Name))
+		if err != nil {
+			return
+		}
+		valid := false
+		if version != "" {
+			for _, ref := range refs {
+				if ref.Ref == "refs/heads/"+version {
+					pkg.Version = ref.Sha[:10]
+					valid = true
+					break
+				} else if ref.Ref == "refs/tags/"+version || strings.HasPrefix(ref.Sha, version) {
+					valid = true
+					break
+				}
+			}
+		} else {
+			for _, ref := range refs {
+				if ref.Ref == "HEAD" {
+					pkg.Version = ref.Sha[:10]
+					valid = true
+					break
+				}
+			}
+		}
+		if !valid {
+			err = fmt.Errorf("invalid version '%s'", version)
+		}
+		return
+	}
+
+	// use fixed version
+	for prefix, fixedVersion := range fixedPkgVersions {
+		if strings.HasPrefix(name+"@"+version, prefix) {
+			pkg.Version = fixedVersion
+			return
+		}
+	}
+
+	if regexpFullVersion.MatchString(version) {
+		return
+	}
+
+	p, _, err := getPackageInfo("", name, version)
+	if err == nil {
+		pkg.Version = p.Version
+	}
+	return
 }
 
 func (m Pkg) Equels(other Pkg) bool {
@@ -118,4 +159,15 @@ func (a PkgSlice) String() string {
 		s[i] = m.String()
 	}
 	return strings.Join(s, ",")
+}
+
+func splitPkgPath(pathname string) (pkgName string, submodule string) {
+	a := strings.Split(strings.Trim(pathname, "/"), "/")
+	pkgName = a[0]
+	submodule = strings.Join(a[1:], "/")
+	if strings.HasPrefix(pkgName, "@") && len(a) > 1 {
+		pkgName = a[0] + "/" + a[1]
+		submodule = strings.Join(a[2:], "/")
+	}
+	return
 }

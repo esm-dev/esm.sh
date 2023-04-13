@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
+	"net/url"
 	"os"
 	"path"
 	"path/filepath"
@@ -44,7 +45,11 @@ type BuildTask struct {
 
 func (task *BuildTask) Build() (esm *ESMBuild, err error) {
 	if task.wd == "" {
-		task.wd = path.Join(cfg.WorkDir, fmt.Sprintf("npm/%s@%s", task.Pkg.Name, task.Pkg.Version))
+		src := "npm"
+		if task.Pkg.FromGithub {
+			src = "npm/_gh"
+		}
+		task.wd = path.Join(cfg.WorkDir, fmt.Sprintf("%s/%s@%s", src, task.Pkg.Name, task.Pkg.Version))
 		ensureDir(task.wd)
 
 		if err != nil {
@@ -235,6 +240,13 @@ rebuild:
 				build.OnResolve(
 					api.OnResolveOptions{Filter: ".*"},
 					func(args api.OnResolveArgs) (api.OnResolveResult, error) {
+						if strings.HasPrefix(args.Path, "file:") {
+							return api.OnResolveResult{
+								Path:     fmt.Sprintf("/error.js?type=unsupported-file-dependency&name=%s&importer=%s", strings.TrimPrefix(args.Path, "file:"), task.Pkg.Name),
+								External: true,
+							}, nil
+						}
+
 						if strings.HasPrefix(args.Path, "data:") {
 							return api.OnResolveResult{External: true}, nil
 						}
@@ -326,6 +338,24 @@ rebuild:
 								if !ok {
 									return api.OnResolveResult{}, nil
 								}
+							}
+						}
+
+						if v, ok := npm.Dependencies[args.Path]; ok && (strings.HasPrefix(v, "git+ssh://") || strings.HasPrefix(v, "git+https://") || strings.HasPrefix(v, "git://")) {
+							gitUrl, err := url.Parse(v)
+							if err == nil && gitUrl.Hostname() == "github.com" {
+								repo := strings.TrimSuffix(gitUrl.Path[1:], ".git")
+								if gitUrl.Scheme == "git+ssh" {
+									repo = gitUrl.Port() + "/" + repo
+								}
+								path := fmt.Sprintf("/v%d/gh/%s", VERSION, repo)
+								if gitUrl.Fragment != "" {
+									path += "@" + url.QueryEscape(gitUrl.Fragment)
+								}
+								return api.OnResolveResult{
+									Path:     path,
+									External: true,
+								}, nil
 							}
 						}
 
@@ -433,9 +463,9 @@ rebuild:
 
 						// check dep `sideEffects`
 						sideEffects := api.SideEffectsTrue
-						if fileExists(path.Join(task.wd, "node_modules", specifier, "package.json")) {
+						if f := path.Join(task.wd, "node_modules", specifier, "package.json"); fileExists(f) {
 							var np NpmPackage
-							if utils.ParseJSONFile(path.Join(task.wd, "node_modules", specifier, "package.json"), &np) == nil {
+							if utils.ParseJSONFile(f, &np) == nil {
 								if !np.SideEffects {
 									sideEffects = api.SideEffectsFalse
 								}
@@ -574,13 +604,9 @@ rebuild:
 				if importPath == "" && builtInNodeModules[name] {
 					if task.Target == "node" {
 						importPath = fmt.Sprintf("node:%s", name)
-					} else if task.Target == "denonext" && denoStdNodeModules[name] {
-						if denoUnspportedNodeModules[name] {
-							importPath = fmt.Sprintf("https://deno.land/std@%s/node/%s.ts", denoStdVersion, name)
-						} else {
-							importPath = fmt.Sprintf("node:%s", name)
-						}
-					} else if task.Target == "deno" && denoStdNodeModules[name] {
+					} else if task.Target == "denonext" && !denoNextUnspportedNodeModules[name] {
+						importPath = fmt.Sprintf("node:%s", name)
+					} else if task.Target == "deno" {
 						importPath = fmt.Sprintf("https://deno.land/std@%s/node/%s.ts", task.denoStdVersion, name)
 					} else {
 						polyfill, ok := polyfilledBuiltInNodeModules[name]
@@ -1020,7 +1046,7 @@ func (task *BuildTask) checkDTS(esm *ESMBuild, npm NpmPackage) {
 		}
 	}
 	if dts != "" {
-		esm.Dts = fmt.Sprintf("/v%d/%s", task.BuildVersion, dts)
+		esm.Dts = fmt.Sprintf("/v%d%s/%s", task.BuildVersion, task.ghPrefix(), dts)
 	}
 }
 

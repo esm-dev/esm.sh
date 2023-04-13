@@ -45,17 +45,6 @@ var httpClient = &http.Client{
 	},
 }
 
-func splitPkgPath(pathname string) (pkgName string, submodule string) {
-	a := strings.Split(strings.Trim(pathname, "/"), "/")
-	pkgName = a[0]
-	submodule = strings.Join(a[1:], "/")
-	if strings.HasPrefix(pkgName, "@") && len(a) > 1 {
-		pkgName = a[0] + "/" + a[1]
-		submodule = strings.Join(a[2:], "/")
-	}
-	return
-}
-
 // isRemoteSpecifier returns true if the import path is a remote URL.
 func isRemoteSpecifier(importPath string) bool {
 	return strings.HasPrefix(importPath, "https://") || strings.HasPrefix(importPath, "http://")

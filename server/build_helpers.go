@@ -35,8 +35,9 @@ func (task *BuildTask) ID() string {
 	}
 
 	task.id = fmt.Sprintf(
-		"%s/%s@%s/%s%s/%s%s",
+		"%s%s/%s@%s/%s%s/%s%s",
 		task.getBuildVersion(task.Pkg),
+		task.ghPrefix(),
 		pkg.Name,
 		pkg.Version,
 		encodeBuildArgsPrefix(task.BuildArgs, task.Pkg.Name, task.Target == "types"),
@@ -48,6 +49,13 @@ func (task *BuildTask) ID() string {
 		task.id = strings.TrimSuffix(task.id, extname)
 	}
 	return task.id
+}
+
+func (task *BuildTask) ghPrefix() string {
+	if task.Pkg.FromGithub {
+		return "/gh"
+	}
+	return ""
 }
 
 func (task *BuildTask) getImportPath(pkg Pkg, prefix string) string {
@@ -326,7 +334,7 @@ func (task *BuildTask) analyze() (esm *ESMBuild, npm NpmPackage, reexport string
 				pkgs[i] = n + "@" + v
 				i++
 			}
-			err = pnpmAdd(wd, pkgs...)
+			err = pnpmInstall(wd, pkgs...)
 			if err != nil {
 				return
 			}
@@ -347,6 +355,9 @@ func (task *BuildTask) analyze() (esm *ESMBuild, npm NpmPackage, reexport string
 }
 
 func (task *BuildTask) fixNpmPackage(p NpmPackage) NpmPackage {
+	if task.Pkg.FromGithub {
+		p.Name = task.Pkg.Name
+	}
 	if exports := p.DefinedExports; exports != nil {
 		if m, ok := exports.(map[string]interface{}); ok {
 			v, ok := m["."]

@@ -67,3 +67,7 @@ var requireModeAllowList = []string{
 	"vscode-oniguruma",
 	"web-streams-ponyfill",
 }
+
+var denoNextUnspportedNodeModules = map[string]bool{
+	"inspector": true,
+}

@@ -139,6 +139,12 @@ func serverHandler() rex.Handle {
 					ctx.Form.Value("name"),
 					ctx.Form.Value("importer"),
 				))
+			case "unsupported-file-dependency":
+				return throwErrorJS(ctx, fmt.Errorf(
+					`Unsupported file dependency "%s" (Imported by "%s")`,
+					ctx.Form.Value("name"),
+					ctx.Form.Value("importer"),
+				))
 			default:
 				return throwErrorJS(ctx, fmt.Errorf("Unknown error"))
 			}
@@ -207,6 +213,21 @@ func serverHandler() rex.Handle {
 			return bytes.ReplaceAll(cliTs, []byte("v{VERSION}"), []byte(fmt.Sprintf("v%d", VERSION)))
 		}
 
+		// use embed polyfills/types if possible
+		if hasBuildVerPrefix {
+			data, err := embedFS.ReadFile("server/embed/polyfills" + pathname)
+			if err == nil {
+				ctx.SetHeader("Cache-Control", "public, max-age=31536000, immutable")
+				return rex.Content(pathname, startTime, bytes.NewReader(data))
+			}
+			data, err = embedFS.ReadFile("server/embed/types" + pathname)
+			if err == nil {
+				ctx.SetHeader("Content-Type", "application/typescript; charset=utf-8")
+				ctx.SetHeader("Cache-Control", "public, max-age=31536000, immutable")
+				return rex.Content(pathname, startTime, bytes.NewReader(data))
+			}
+		}
+
 		// ban malicious requests by banList
 		// trim the leading `/` in pathname to get the package name
 		// e.g. /@withfig/autocomplete -> @withfig/autocomplete
@@ -221,21 +242,9 @@ func serverHandler() rex.Handle {
 		if strings.HasPrefix(pathname, "/*") {
 			external.Add("*")
 			pathname = "/" + pathname[2:]
-		}
-
-		// use embed polyfills/types if possible
-		if hasBuildVerPrefix {
-			data, err := embedFS.ReadFile("server/embed/polyfills" + pathname)
-			if err == nil {
-				ctx.SetHeader("Cache-Control", "public, max-age=31536000, immutable")
-				return rex.Content(pathname, startTime, bytes.NewReader(data))
-			}
-			data, err = embedFS.ReadFile("server/embed/types" + pathname)
-			if err == nil {
-				ctx.SetHeader("Content-Type", "application/typescript; charset=utf-8")
-				ctx.SetHeader("Cache-Control", "public, max-age=31536000, immutable")
-				return rex.Content(pathname, startTime, bytes.NewReader(data))
-			}
+		} else if strings.HasPrefix(pathname, "/gh/*") {
+			external.Add("*")
+			pathname = "/gh/" + pathname[5:]
 		}
 
 		// get package info
@@ -316,56 +325,55 @@ func serverHandler() rex.Handle {
 			ctx.R.URL.RawQuery = strings.Join(qs, "&")
 		}
 
+		ghPrefix := ""
+		if reqPkg.FromGithub {
+			ghPrefix = "/gh"
+		}
+
 		// redirect to the url with full package version
-		if !hasBuildVerPrefix && !strings.HasPrefix(pathname, fmt.Sprintf("/%s@%s", reqPkg.Name, reqPkg.Version)) {
+		if !hasBuildVerPrefix && !strings.HasPrefix(pathname, fmt.Sprintf("%s/%s@%s", ghPrefix, reqPkg.Name, reqPkg.Version)) {
 			eaSign := ""
 			query := ""
 			if external.Has("*") {
 				eaSign = "*"
 			}
 			if extraQuery != "" {
-				submodule := ""
+				subPath := ""
 				if reqPkg.Submodule != "" {
-					submodule = "/" + reqPkg.Submodule
+					subPath = "/" + reqPkg.Submodule
 				}
 				if ctx.R.URL.RawQuery != "" {
 					query = "&" + ctx.R.URL.RawQuery
 				}
-				return rex.Redirect(fmt.Sprintf("%s%s/%s%s@%s%s%s", cdnOrigin, cfg.BasePath, eaSign, reqPkg.Name, reqPkg.Version, query, submodule), http.StatusFound)
+				return rex.Redirect(fmt.Sprintf("%s%s%s/%s%s@%s%s%s", cdnOrigin, cfg.BasePath, ghPrefix, eaSign, reqPkg.Name, reqPkg.Version, query, subPath), http.StatusFound)
 			}
 			if ctx.R.URL.RawQuery != "" {
 				query = "?" + ctx.R.URL.RawQuery
 			}
-			return rex.Redirect(fmt.Sprintf("%s%s/%s%s%s", cdnOrigin, cfg.BasePath, eaSign, reqPkg.String(), query), http.StatusFound)
+			return rex.Redirect(fmt.Sprintf("%s%s%s/%s%s%s", cdnOrigin, cfg.BasePath, ghPrefix, eaSign, reqPkg.String(), query), http.StatusFound)
 		}
 
 		// redirect to the url with full package version with build version prefix
-		if hasBuildVerPrefix && !strings.HasPrefix(pathname, fmt.Sprintf("/%s@%s", reqPkg.Name, reqPkg.Version)) {
-			prefix := ""
-			subpath := ""
+		if hasBuildVerPrefix && !strings.HasPrefix(pathname, fmt.Sprintf("%s/%s@%s", ghPrefix, reqPkg.Name, reqPkg.Version)) {
+			versionPrefix := ""
+			subPath := ""
 			query := ""
 			if hasBuildVerPrefix {
 				if stableBuild[reqPkg.Name] {
-					prefix = "/stable"
+					versionPrefix = "/stable"
 				} else if outdatedBuildVer != "" {
-					prefix = fmt.Sprintf("/%s", outdatedBuildVer)
+					versionPrefix = fmt.Sprintf("/%s", outdatedBuildVer)
 				} else {
-					prefix = fmt.Sprintf("/v%d", VERSION)
+					versionPrefix = fmt.Sprintf("/v%d", VERSION)
 				}
 			}
-			a := strings.Split(pathname, "/")
-			if strings.HasPrefix(reqPkg.Name, "@") {
-				subpath = strings.Join(a[3:], "/")
-			} else {
-				subpath = strings.Join(a[2:], "/")
-			}
-			if subpath != "" {
-				subpath = "/" + subpath
+			if reqPkg.FullSubmodule != "" {
+				subPath = "/" + reqPkg.FullSubmodule
 			}
 			if ctx.R.URL.RawQuery != "" {
 				query = "?" + ctx.R.URL.RawQuery
 			}
-			return rex.Redirect(fmt.Sprintf("%s%s%s/%s@%s%s%s", cdnOrigin, cfg.BasePath, prefix, reqPkg.Name, reqPkg.Version, subpath, query), http.StatusFound)
+			return rex.Redirect(fmt.Sprintf("%s%s%s%s/%s@%s%s%s", cdnOrigin, cfg.BasePath, versionPrefix, ghPrefix, reqPkg.Name, reqPkg.Version, subPath, query), http.StatusFound)
 		}
 
 		// support `https://esm.sh/react?dev&target=es2020/jsx-runtime` pattern for jsx transformer
@@ -450,7 +458,9 @@ func serverHandler() rex.Handle {
 						return rex.Status(404, "File not found")
 					}
 				}
-				if strings.HasSuffix(pathname, ".ts") || strings.HasSuffix(pathname, ".mts") {
+				if endsWith(pathname, ".js", ".mjs") {
+					ctx.SetHeader("Content-Type", "application/javascript")
+				} else if endsWith(pathname, ".ts", ".mts") {
 					ctx.SetHeader("Content-Type", "application/typescript")
 				}
 				ctx.SetHeader("Cache-Control", "public, max-age=31536000, immutable")
@@ -549,6 +559,8 @@ func serverHandler() rex.Handle {
 				}
 				if storageType == "types" {
 					ctx.SetHeader("Content-Type", "application/typescript; charset=utf-8")
+				} else if endsWith(pathname, ".js", ".mjs") {
+					ctx.SetHeader("Content-Type", "application/javascript; charset=utf-8")
 				} else if strings.HasSuffix(savePath, ".map") {
 					ctx.SetHeader("Content-Type", "application/json; charset=utf-8")
 				}
@@ -852,11 +864,13 @@ func serverHandler() rex.Handle {
 			}
 
 			// check request package
-			p, _, e := getPackageInfo("", reqPkg.Name, reqPkg.Version)
-			if e != nil {
-				return rex.Status(500, e.Error())
+			if !reqPkg.FromGithub {
+				p, _, e := getPackageInfo("", reqPkg.Name, reqPkg.Version)
+				if e != nil {
+					return rex.Status(500, e.Error())
+				}
+				task.Deprecated = p.Deprecated
 			}
-			task.Deprecated = p.Deprecated
 
 			// if the previous build exists and is not pin/bare mode, then build current module in backgound,
 			// or wait the current build task for 60 seconds

@@ -5,8 +5,8 @@ publicly which powered by [Cloudflare](https://cloudflare.com). You may also wan
 host esm.sh by yourself.
 
 To serve esm.sh, You will need [Go](https://golang.org/dl) 1.18+ to
-run and compile the server. The server runtime will install the nodejs (16 LTS)
-automatically.
+run and compile the server. The server will install [Node.js](https://nodejs.org/en/download/) runtime
+automatically if it's not found on your host machine.
 
 ## Recommended host machine (single server)
 
@@ -23,7 +23,7 @@ cd esm.sh
 
 ## Configration
 
-To configure the server, you need to create a `config.json` file then pass it to the server bootstrap command. For example:
+To configure the server, create a `config.json` file then pass it to the server bootstrap command. For example:
 
 ```jsonc
 // config.json

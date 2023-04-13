@@ -45,7 +45,7 @@ func TestPkgPath(t *testing.T) {
 	if q != "" {
 		t.Fatalf("invalid unquery('%s'), should be empty", q)
 	}
-	if pkg.String() != "@types/react@18.0.26" {
-		t.Fatalf("invalid pkg('%v'), should be '@types/react@18.0.26'", pkg)
+	if pkg.String() != "@types/react@"+fixedPkgVersions["@types/react@18"] {
+		t.Fatalf("invalid pkg('%v'), should be '@types/react@%s'", pkg, fixedPkgVersions["@types/react@18"])
 	}
 }
