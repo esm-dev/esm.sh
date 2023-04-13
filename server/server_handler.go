@@ -852,7 +852,7 @@ func serverHandler() rex.Handle {
 			}
 
 			// check request package
-			p, e := fetchPackageInfo(reqPkg.Name, reqPkg.Version)
+			p, _, e := getPackageInfo("", reqPkg.Name, reqPkg.Version)
 			if e != nil {
 				return rex.Status(500, e.Error())
 			}
