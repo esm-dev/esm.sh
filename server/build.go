@@ -45,11 +45,7 @@ type BuildTask struct {
 
 func (task *BuildTask) Build() (esm *ESMBuild, err error) {
 	if task.wd == "" {
-		src := "npm"
-		if task.Pkg.FromGithub {
-			src = "npm/_gh"
-		}
-		task.wd = path.Join(cfg.WorkDir, fmt.Sprintf("%s/%s@%s", src, task.Pkg.Name, task.Pkg.Version))
+		task.wd = path.Join(cfg.WorkDir, fmt.Sprintf("npm/%s", task.Pkg.VersionName()))
 		ensureDir(task.wd)
 
 		if err != nil {
@@ -74,15 +70,15 @@ func (task *BuildTask) Build() (esm *ESMBuild, err error) {
 		return
 	}
 
+	if task.Target == "raw" {
+		return
+	}
+
 	task.stage = "build"
 	return task.build()
 }
 
 func (task *BuildTask) build() (esm *ESMBuild, err error) {
-	if task.Target == "raw" {
-		return
-	}
-
 	esm, npm, reexport, err := task.analyze()
 	if err != nil {
 		return

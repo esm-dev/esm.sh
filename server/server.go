@@ -10,6 +10,7 @@ import (
 	"os/signal"
 	"path"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
 
@@ -21,13 +22,15 @@ import (
 )
 
 var (
-	cfg        *config.Config
-	cache      storage.Cache
-	db         storage.DataBase
-	fs         storage.FileSystem
-	buildQueue *BuildQueue
-	log        *logx.Logger
-	embedFS    EmbedFS
+	cfg         *config.Config
+	cache       storage.Cache
+	db          storage.DataBase
+	fs          storage.FileSystem
+	buildQueue  *BuildQueue
+	log         *logx.Logger
+	embedFS     EmbedFS
+	fetchLock   sync.Map
+	installLock sync.Map
 )
 
 type EmbedFS interface {

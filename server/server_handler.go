@@ -3,7 +3,6 @@ package server
 import (
 	"bytes"
 	"fmt"
-	"io"
 	"io/ioutil"
 	"net/http"
 	"os"
@@ -260,7 +259,7 @@ func serverHandler() rex.Handle {
 			return rex.Status(status, message)
 		}
 
-		// redirect `/v107/$PKG/es2022/foo.wasm` to `$PKG/$PKG/foo.wasm`
+		// redirect `/v107/$PKG/es2022/foo.wasm` to `$PKG/foo.wasm`
 		if hasBuildVerPrefix && strings.HasSuffix(reqPkg.Submodule, ".wasm") {
 			pkgRoot := path.Join(cfg.WorkDir, "npm", reqPkg.Name+"@"+reqPkg.Version, "node_modules", reqPkg.Name)
 			wasmFiles, err := findFiles(pkgRoot, func(fp string) bool {
@@ -333,24 +332,22 @@ func serverHandler() rex.Handle {
 		// redirect to the url with full package version
 		if !hasBuildVerPrefix && !strings.HasPrefix(pathname, fmt.Sprintf("%s/%s@%s", ghPrefix, reqPkg.Name, reqPkg.Version)) {
 			eaSign := ""
+			subPath := ""
 			query := ""
 			if external.Has("*") {
 				eaSign = "*"
 			}
-			if extraQuery != "" {
-				subPath := ""
-				if reqPkg.Submodule != "" {
-					subPath = "/" + reqPkg.Submodule
-				}
-				if ctx.R.URL.RawQuery != "" {
-					query = "&" + ctx.R.URL.RawQuery
-				}
-				return rex.Redirect(fmt.Sprintf("%s%s%s/%s%s@%s%s%s", cdnOrigin, cfg.BasePath, ghPrefix, eaSign, reqPkg.Name, reqPkg.Version, query, subPath), http.StatusFound)
+			if reqPkg.FullSubmodule != "" {
+				subPath = "/" + reqPkg.FullSubmodule
 			}
 			if ctx.R.URL.RawQuery != "" {
+				if extraQuery != "" {
+					query = "&" + ctx.R.URL.RawQuery
+					return rex.Redirect(fmt.Sprintf("%s%s%s/%s%s@%s%s%s", cdnOrigin, cfg.BasePath, ghPrefix, eaSign, reqPkg.Name, reqPkg.Version, query, subPath), http.StatusFound)
+				}
 				query = "?" + ctx.R.URL.RawQuery
 			}
-			return rex.Redirect(fmt.Sprintf("%s%s%s/%s%s%s", cdnOrigin, cfg.BasePath, ghPrefix, eaSign, reqPkg.String(), query), http.StatusFound)
+			return rex.Redirect(fmt.Sprintf("%s%s%s/%s%s@%s%s%s", cdnOrigin, cfg.BasePath, ghPrefix, eaSign, reqPkg.Name, reqPkg.Version, subPath, query), http.StatusFound)
 		}
 
 		// redirect to the url with full package version with build version prefix
@@ -373,7 +370,7 @@ func serverHandler() rex.Handle {
 			if ctx.R.URL.RawQuery != "" {
 				query = "?" + ctx.R.URL.RawQuery
 			}
-			return rex.Redirect(fmt.Sprintf("%s%s%s%s/%s@%s%s%s", cdnOrigin, cfg.BasePath, versionPrefix, ghPrefix, reqPkg.Name, reqPkg.Version, subPath, query), http.StatusFound)
+			return rex.Redirect(fmt.Sprintf("%s%s%s/%s%s%s", cdnOrigin, cfg.BasePath, versionPrefix, reqPkg.VersionName(), subPath, query), http.StatusFound)
 		}
 
 		// support `https://esm.sh/react?dev&target=es2020/jsx-runtime` pattern for jsx transformer
@@ -439,100 +436,51 @@ func serverHandler() rex.Handle {
 
 		// serve raw dist or npm dist files like CSS/map etc..
 		if storageType == "raw" {
-			respRawFile := func(savePath string, fromRaw bool, modifyTime time.Time, err error) interface{} {
-				var content io.ReadSeekCloser
-				if err == nil {
-					if fromRaw {
-						content, err = fs.OpenFile(savePath)
-					} else {
-						content, err = os.Open(savePath)
-						if os.IsNotExist(err) {
-							err = storage.ErrNotFound
-						}
+			installDir := fmt.Sprintf("npm/%s", reqPkg.VersionName())
+			savePath := path.Join(cfg.WorkDir, installDir, "node_modules", reqPkg.Name, reqPkg.FullSubmodule)
+			fi, err := os.Lstat(savePath)
+			if err != nil {
+				if os.IsExist(err) {
+					return rex.Status(500, err.Error())
+				}
+				task := &BuildTask{
+					CdnOrigin: cdnOrigin,
+					Pkg:       reqPkg,
+					BuildArgs: BuildArgs{
+						alias:       map[string]string{},
+						deps:        PkgSlice{},
+						external:    newStringSet(),
+						treeShaking: newStringSet(),
+						conditions:  newStringSet(),
+					},
+					Target: "raw",
+					stage:  "pending",
+				}
+				c := buildQueue.Add(task, ctx.RemoteIP())
+				select {
+				case output := <-c.C:
+					if output.err != nil {
+						return rex.Status(500, "Raw file: "+output.err.Error())
 					}
+				case <-time.After(time.Minute):
+					buildQueue.RemoveConsumer(task, c)
+					return rex.Status(http.StatusRequestTimeout, "timeout, we are downloading package hardly, please try again later!")
 				}
-				if err != nil {
-					if err != storage.ErrNotFound {
-						return rex.Status(500, err.Error())
-					} else {
-						return rex.Status(404, "File not found")
-					}
+			}
+
+			content, err := os.Open(savePath)
+			if err != nil {
+				if os.IsExist(err) {
+					return rex.Status(500, err.Error())
 				}
-				if endsWith(pathname, ".js", ".mjs") {
-					ctx.SetHeader("Content-Type", "application/javascript")
-				} else if endsWith(pathname, ".ts", ".mts") {
-					ctx.SetHeader("Content-Type", "application/typescript")
-				}
-				ctx.SetHeader("Cache-Control", "public, max-age=31536000, immutable")
-				return rex.Content(savePath, modifyTime, content) // auto closed
+				return rex.Status(404, "File Not Found")
 			}
-
-			// redirect to the url with full package version
-			if !regexpFullVersionPath.MatchString(pathname) {
-				url := fmt.Sprintf("%s%s/%s", cdnOrigin, cfg.BasePath, reqPkg.String())
-				return rex.Redirect(url, http.StatusFound)
-			}
-
-			// Try read file from raw dist
-			savePath := path.Join("raw", reqPkg.String())
-			fi, err := fs.Stat(savePath)
-			if err == nil {
-				return respRawFile(savePath, true, fi.ModTime(), err)
-			} else if err != storage.ErrNotFound {
-				return respRawFile(savePath, true, time.Now(), err)
-			}
-
-			// Use local cached npm package to serve static file
-			fileDir := fmt.Sprintf("npm/%s@%s", reqPkg.Name, reqPkg.Version)
-			savePath = path.Join(cfg.WorkDir, fileDir, "node_modules", reqPkg.Name, reqPkg.Submodule)
-
-			fi, err = os.Lstat(savePath)
-			if err == nil {
-				return respRawFile(savePath, false, fi.ModTime(), err)
-			} else if !os.IsNotExist(err) {
-				return respRawFile(savePath, false, time.Now(), err)
-			}
-
-			task := &BuildTask{
-				CdnOrigin: cdnOrigin,
-				Pkg:       reqPkg,
-				BuildArgs: BuildArgs{
-					alias:       map[string]string{},
-					deps:        PkgSlice{},
-					external:    newStringSet(),
-					treeShaking: newStringSet(),
-					conditions:  newStringSet(),
-				},
-				Target: "raw",
-				stage:  "-",
-			}
-			c := buildQueue.Add(task, ctx.RemoteIP())
-			select {
-			case output := <-c.C:
-				if output.err != nil {
-					return rex.Status(500, "Raw file: "+output.err.Error())
-				}
-			case <-time.After(time.Minute):
-				buildQueue.RemoveConsumer(task, c)
-				return rex.Status(http.StatusRequestTimeout, "timeout, we are downloading package hardly, please try again later!")
-			}
-
-			fi, err = os.Lstat(savePath)
-			if err == nil {
-				return respRawFile(savePath, false, fi.ModTime(), err)
-			}
-			if !os.IsNotExist(err) {
-				return respRawFile(savePath, false, time.Now(), err)
-			}
-
-			return rex.Status(404, "File not found")
+			ctx.SetHeader("Cache-Control", "public, max-age=31536000, immutable")
+			return rex.Content(savePath, fi.ModTime(), content) // auto closed
 		}
 
-		// rebuild the module when `?rebuild=TRUE` is set
-		rebuild := ctx.Form.Value("rebuild") == "TRUE"
-
 		// serve build files
-		if hasBuildVerPrefix && (storageType == "builds" || storageType == "types") && !rebuild {
+		if hasBuildVerPrefix && (storageType == "builds" || storageType == "types") {
 			var savePath string
 			if outdatedBuildVer != "" {
 				savePath = path.Join(storageType, outdatedBuildVer, pathname)
@@ -842,16 +790,12 @@ func serverHandler() rex.Handle {
 			Bundle:       isBundle || isWorker,
 			stage:        "pending",
 		}
-		taskID := task.ID()
 
-		var esm *ESMBuild
-		var hasBuild bool
-		if !rebuild {
-			esm, hasBuild = queryESMBuild(taskID)
-		}
+		taskID := task.ID()
+		esm, hasBuild := queryESMBuild(taskID)
 
 		if !hasBuild {
-			if !isBare && !isPined && !rebuild {
+			if !isBare && !isPined {
 				// find previous build version
 				for i := 0; i < VERSION; i++ {
 					id := fmt.Sprintf("v%d/%s", VERSION-(i+1), taskID[len(fmt.Sprintf("v%d/", VERSION)):])

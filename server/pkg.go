@@ -6,7 +6,6 @@ import (
 	"strings"
 
 	"github.com/ije/gox/utils"
-	"github.com/ije/gox/valid"
 )
 
 type Pkg struct {
@@ -54,38 +53,24 @@ func validatePkgPath(pathname string) (pkg Pkg, query string, err error) {
 	if fromGithub {
 		// strip the leading `@`
 		pkg.Name = pkg.Name[1:]
-		// if the version is a commit-ish
-		if valid.IsHexString(version) && len(version) >= 10 {
-			return
-		}
-		var refs []GitRef
-		refs, err = listRepoRefs(fmt.Sprintf("https://github.com/%s", pkg.Name))
-		if err != nil {
-			return
-		}
-		valid := false
-		if version != "" {
-			for _, ref := range refs {
-				if ref.Ref == "refs/heads/"+version {
-					pkg.Version = ref.Sha[:10]
-					valid = true
-					break
-				} else if ref.Ref == "refs/tags/"+version || strings.HasPrefix(ref.Sha, version) {
-					valid = true
-					break
-				}
+		if pkg.Version == "" {
+			var refs []GitRef
+			refs, err = listRepoRefs(fmt.Sprintf("https://github.com/%s", pkg.Name))
+			if err != nil {
+				return
 			}
-		} else {
 			for _, ref := range refs {
 				if ref.Ref == "HEAD" {
 					pkg.Version = ref.Sha[:10]
-					valid = true
 					break
 				}
 			}
+		} else if strings.HasPrefix(pkg.Version, "semver:") {
+			// TODO: support semver
+			pkg.Version = ""
 		}
-		if !valid {
-			err = fmt.Errorf("invalid version '%s'", version)
+		if pkg.Version == "" {
+			err = fmt.Errorf("tag or branch not found")
 		}
 		return
 	}
@@ -109,21 +94,29 @@ func validatePkgPath(pathname string) (pkg Pkg, query string, err error) {
 	return
 }
 
-func (m Pkg) Equels(other Pkg) bool {
-	return m.Name == other.Name && m.Version == other.Version && m.Submodule == other.Submodule
+func (pkg Pkg) Equels(other Pkg) bool {
+	return pkg.Name == other.Name && pkg.Version == other.Version && pkg.Submodule == other.Submodule
 }
 
-func (m Pkg) ImportPath() string {
-	if m.Submodule != "" {
-		return m.Name + "/" + m.Submodule
+func (pkg Pkg) ImportPath() string {
+	if pkg.Submodule != "" {
+		return pkg.Name + "/" + pkg.Submodule
 	}
-	return m.Name
+	return pkg.Name
 }
 
-func (m Pkg) String() string {
-	s := m.Name + "@" + m.Version
-	if m.Submodule != "" {
-		s += "/" + m.Submodule
+func (pkg Pkg) VersionName() string {
+	s := pkg.Name + "@" + pkg.Version
+	if pkg.FromGithub {
+		s = "gh/" + s
+	}
+	return s
+}
+
+func (pkg Pkg) String() string {
+	s := pkg.VersionName()
+	if pkg.Submodule != "" {
+		s += "/" + pkg.Submodule
 	}
 	return s
 }

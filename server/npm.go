@@ -156,9 +156,6 @@ func getPackageInfo(wd string, name string, version string) (info NpmPackage, fr
 	return
 }
 
-var netLock sync.Map
-var pnpmLock sync.Map
-
 func fetchPackageInfo(name string, version string) (info NpmPackage, err error) {
 	a := strings.Split(strings.Trim(name, "/"), "/")
 	name = a[0]
@@ -175,7 +172,7 @@ func fetchPackageInfo(name string, version string) (info NpmPackage, err error) 
 	isFullVersion := regexpFullVersion.MatchString(version)
 
 	cacheKey := fmt.Sprintf("npm:%s@%s", name, version)
-	mutex, _ := netLock.LoadOrStore(cacheKey, &sync.Mutex{})
+	mutex, _ := fetchLock.LoadOrStore(cacheKey, &sync.Mutex{})
 	mutex.(*sync.Mutex).Lock()
 	defer func() {
 		mutex.(*sync.Mutex).Unlock()
@@ -299,14 +296,14 @@ func fetchPackageInfo(name string, version string) (info NpmPackage, err error) 
 }
 
 func installPackage(wd string, pkg Pkg) (err error) {
-	pkgNameFormat := fmt.Sprintf("%s@%s", pkg.Name, pkg.Version)
-	mutex, _ := pnpmLock.LoadOrStore(pkgNameFormat, &sync.Mutex{})
+	pkgVersionName := pkg.VersionName()
+	mutex, _ := installLock.LoadOrStore(pkgVersionName, &sync.Mutex{})
 	mutex.(*sync.Mutex).Lock()
 	defer func() {
 		mutex.(*sync.Mutex).Unlock()
 	}()
 
-	// Create package.json to prevent read up-levels
+	// ensure package.json file to prevent read up-levels
 	packageFilePath := path.Join(wd, "package.json")
 	if pkg.FromGithub || !fileExists(packageFilePath) {
 		fileContent := []byte("{}")
@@ -320,20 +317,30 @@ func installPackage(wd string, pkg Pkg) (err error) {
 		ensureDir(path.Dir(packageFilePath))
 		err = os.WriteFile(packageFilePath, fileContent, 0644)
 		if err != nil {
-			return fmt.Errorf("ensure package.json failed: %s", pkgNameFormat)
+			return fmt.Errorf("ensure package.json failed: %s", pkgVersionName)
 		}
 	}
 
 	for i := 0; i < 3; i++ {
 		if pkg.FromGithub {
 			err = pnpmInstall(wd)
+			// pnpm will ignore github package which has been installed without `package.json` file
+			if err == nil && !dirExists(path.Join(wd, "node_modules", pkg.Name)) {
+				err = ghInstall(wd, pkg.Name, pkg.Version)
+			}
 		} else if regexpFullVersion.MatchString(pkg.Version) {
-			err = pnpmInstall(wd, pkgNameFormat, "--prefer-offline")
+			err = pnpmInstall(wd, pkgVersionName, "--prefer-offline")
 		} else {
-			err = pnpmInstall(wd, pkgNameFormat)
+			err = pnpmInstall(wd, pkgVersionName)
 		}
-		if err == nil && !fileExists(path.Join(wd, "node_modules", pkg.Name, "package.json")) {
-			err = fmt.Errorf("installPackage(%s): package.json not found", pkg)
+		packageFilePath := path.Join(wd, "node_modules", pkg.Name, "package.json")
+		if err == nil && !fileExists(packageFilePath) {
+			if pkg.FromGithub {
+				ensureDir(path.Dir(packageFilePath))
+				err = ioutil.WriteFile(packageFilePath, utils.MustEncodeJSON(pkg), 0644)
+			} else {
+				err = fmt.Errorf("pnpm install %s: package.json not found", pkg)
+			}
 		}
 		if err == nil {
 			break

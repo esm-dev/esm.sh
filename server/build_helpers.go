@@ -357,6 +357,7 @@ func (task *BuildTask) analyze() (esm *ESMBuild, npm NpmPackage, reexport string
 func (task *BuildTask) fixNpmPackage(p NpmPackage) NpmPackage {
 	if task.Pkg.FromGithub {
 		p.Name = task.Pkg.Name
+		p.Version = task.Pkg.Version
 	}
 	if exports := p.DefinedExports; exports != nil {
 		if m, ok := exports.(map[string]interface{}); ok {
