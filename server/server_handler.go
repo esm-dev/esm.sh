@@ -722,8 +722,9 @@ func serverHandler() rex.Handle {
 		if hasBuildVerPrefix && storageType == "types" {
 			findDts := func() (savePath string, fi storage.FileStat, err error) {
 				savePath = path.Join(fmt.Sprintf(
-					"types/v%d/%s@%s/%s",
+					"types/v%d%s/%s@%s/%s",
 					buildVersion,
+					ghPrefix,
 					reqPkg.Name,
 					reqPkg.Version,
 					encodeBuildArgsPrefix(buildArgs, reqPkg.Name, true),

@@ -45,6 +45,9 @@ func (task *BuildTask) transformDTS(dts string, aliasDepsPrefix string, marker *
 	}
 
 	buildBasePath := fmt.Sprintf("/v%d", task.BuildVersion)
+	if task.Pkg.FromGithub {
+		buildBasePath += "/gh"
+	}
 	cdnOriginAndBuildBasePath := task.CdnOrigin + cfg.BasePath + buildBasePath
 
 	dtsPath := utils.CleanPath(strings.Join(append([]string{

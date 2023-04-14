@@ -20,7 +20,7 @@ import (
 
 var (
 	regexpFullVersion      = regexp.MustCompile(`^\d+\.\d+\.\d+[\w\.\+\-]*$`)
-	regexpFullVersionPath  = regexp.MustCompile(`([^/])@\d+\.\d+\.\d+[\w\.\+\-]*(/|$)`)
+	regexpFullVersionPath  = regexp.MustCompile(`(\w)@(v?\d+\.\d+\.\d+[\w\.\+\-]*|[0-9a-f]{10})(/|$)`)
 	regexpBuildVersionPath = regexp.MustCompile(`^/v\d+(/|$)`)
 	regexpLocPath          = regexp.MustCompile(`(\.js):\d+:\d+$`)
 	regexpJSIdent          = regexp.MustCompile(`^[a-zA-Z_$][\w$]*$`)
