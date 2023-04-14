@@ -460,7 +460,11 @@ func serverHandler() rex.Handle {
 				select {
 				case output := <-c.C:
 					if output.err != nil {
-						return rex.Status(500, "Raw file: "+output.err.Error())
+						return rex.Status(500, "Fail to install package: "+output.err.Error())
+					}
+					fi, err = os.Lstat(savePath)
+					if err != nil {
+						return rex.Status(500, err.Error())
 					}
 				case <-time.After(time.Minute):
 					buildQueue.RemoveConsumer(task, c)
