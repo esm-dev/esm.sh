@@ -208,7 +208,6 @@ func fetchPackageInfo(name string, version string) (info NpmPackage, err error) 
 	if cfg.NpmToken != "" {
 		req.Header.Set("Authorization", "Bearer "+cfg.NpmToken)
 	}
-
 	resp, err := httpClient.Do(req)
 	if err != nil {
 		return

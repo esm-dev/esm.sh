@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"net/http"
 	"os"
 	"os/exec"
 	"path"
@@ -69,11 +68,7 @@ func listRepoRefs(repo string) (refs []GitRef, err error) {
 
 func ghInstall(wd, name, hash string) (err error) {
 	url := fmt.Sprintf(`https://codeload.github.com/%s/tar.gz/%s`, name, hash)
-	req, err := http.NewRequest("GET", url, nil)
-	if err != nil {
-		return
-	}
-	res, err := httpClient.Do(req)
+	res, err := fetch(url)
 	if err != nil {
 		return
 	}

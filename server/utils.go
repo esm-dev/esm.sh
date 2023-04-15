@@ -1,6 +1,7 @@
 package server
 
 import (
+	"context"
 	"encoding/base64"
 	"errors"
 	"net"
@@ -29,20 +30,26 @@ var (
 
 var httpClient = &http.Client{
 	Transport: &http.Transport{
-		Dial: func(network, addr string) (conn net.Conn, err error) {
-			conn, err = net.DialTimeout(network, addr, 15*time.Second)
-			if err != nil {
-				return conn, err
-			}
-
-			// Set a one-time deadline for potential SSL handshaking
-			conn.SetDeadline(time.Now().Add(60 * time.Second))
-			return conn, nil
-		},
-		MaxIdleConnsPerHost:   6,
-		ResponseHeaderTimeout: 60 * time.Second,
-		Proxy:                 http.ProxyFromEnvironment,
+		Proxy: http.ProxyFromEnvironment,
+		DialContext: transportDialContext(&net.Dialer{
+			Timeout:   30 * time.Second,
+			KeepAlive: 30 * time.Second,
+		}),
+		ForceAttemptHTTP2:     true,
+		MaxIdleConns:          100,
+		IdleConnTimeout:       90 * time.Second,
+		ResponseHeaderTimeout: 10 * time.Second,
+		TLSHandshakeTimeout:   10 * time.Second,
+		ExpectContinueTimeout: 1 * time.Second,
 	},
+}
+
+func transportDialContext(dialer *net.Dialer) func(context.Context, string, string) (net.Conn, error) {
+	return dialer.DialContext
+}
+
+func fetch(url string) (res *http.Response, err error) {
+	return httpClient.Get(url)
 }
 
 // isRemoteSpecifier returns true if the import path is a remote URL.

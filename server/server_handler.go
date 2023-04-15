@@ -3,6 +3,7 @@ package server
 import (
 	"bytes"
 	"fmt"
+	"io"
 	"io/ioutil"
 	"net/http"
 	"os"
@@ -97,13 +98,13 @@ func serverHandler() rex.Handle {
 				}
 			}
 			buildQueue.lock.RUnlock()
-			res, err := http.Get(fmt.Sprintf("http://localhost:%d", cfg.NsPort))
+			res, err := fetch(fmt.Sprintf("http://localhost:%d", cfg.NsPort))
 			if err != nil {
 				kill(nsPidFile)
 				return err
 			}
 			defer res.Body.Close()
-			out, err := ioutil.ReadAll(res.Body)
+			out, err := io.ReadAll(res.Body)
 			if err != nil {
 				return err
 			}

@@ -4,7 +4,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"net/http"
 	"os"
 	"os/exec"
 	"path"
@@ -160,7 +159,7 @@ func getNodejsVersion() (version string, major int, err error) {
 
 func installNodejs(dir string, version string) (err error) {
 	dlURL := fmt.Sprintf("https://nodejs.org/dist/v%s/node-v%s-%s-x64.tar.xz", version, version, runtime.GOOS)
-	resp, err := http.Get(dlURL)
+	resp, err := fetch(dlURL)
 	if err != nil {
 		err = fmt.Errorf("download nodejs: %v", err)
 		return
