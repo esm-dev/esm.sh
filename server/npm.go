@@ -327,8 +327,6 @@ func installPackage(wd string, pkg Pkg) (err error) {
 			if err == nil && !dirExists(path.Join(wd, "node_modules", pkg.Name)) {
 				err = ghInstall(wd, pkg.Name, pkg.Version)
 			}
-		} else if regexpFullVersion.MatchString(pkg.Version) {
-			err = pnpmInstall(wd, pkgVersionName, "--prefer-offline")
 		} else {
 			err = pnpmInstall(wd, pkgVersionName)
 		}
