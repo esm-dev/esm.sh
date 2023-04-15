@@ -30,13 +30,14 @@
   // in https://github.com/esm-dev/esm.sh/blob/main/server/storage/fs.go
   "storage": "local:~/.esmd/storage",
 
-  // The log level, default is "info", you can also set it to "debug" to enable debug logs.
-  "logLevel": "info",
-
   // The log directory, default is "~/.esmd/log".
   "logDir": "~/.esmd/log",
 
+  // The log level, default is "info", you can also set it to "debug" to enable debug logs.
+  "logLevel": "info",
+
   // The origin of modules, default is using the origin of the request.
+  // Use to fix origin with reverse proxy, for examle "https://esm.sh"
   "origin": "",
 
   // The base path of server, default is "/".
