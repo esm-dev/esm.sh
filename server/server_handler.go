@@ -310,7 +310,7 @@ func serverHandler() rex.Handle {
 			return rex.Redirect(url, http.StatusMovedPermanently)
 		}
 
-		// redirect to css for CSS packages
+		// redirect to css path for CSS packages
 		if css := cssPackages[reqPkg.Name]; css != "" && reqPkg.Submodule == "" {
 			url := fmt.Sprintf("%s%s/%s/%s", cdnOrigin, cfg.BasePath, reqPkg.String(), css)
 			return rex.Redirect(url, http.StatusMovedPermanently)

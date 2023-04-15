@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/ije/gox/utils"
+	"github.com/ije/gox/valid"
 )
 
 type Pkg struct {
@@ -53,25 +54,32 @@ func validatePkgPath(pathname string) (pkg Pkg, query string, err error) {
 	if fromGithub {
 		// strip the leading `@`
 		pkg.Name = pkg.Name[1:]
+		if valid.IsHexString(pkg.Version) && len(pkg.Version) >= 10 {
+			return
+		}
+		var refs []GitRef
+		refs, err = listRepoRefs(fmt.Sprintf("https://github.com/%s", pkg.Name))
+		if err != nil {
+			return
+		}
 		if pkg.Version == "" {
-			var refs []GitRef
-			refs, err = listRepoRefs(fmt.Sprintf("https://github.com/%s", pkg.Name))
-			if err != nil {
-				return
-			}
 			for _, ref := range refs {
 				if ref.Ref == "HEAD" {
 					pkg.Version = ref.Sha[:10]
-					break
+					return
 				}
 			}
 		} else if strings.HasPrefix(pkg.Version, "semver:") {
 			// TODO: support semver
-			pkg.Version = ""
+		} else {
+			for _, ref := range refs {
+				if ref.Ref == "refs/tags/"+pkg.Version || ref.Ref == "refs/heads/"+pkg.Version {
+					pkg.Version = ref.Sha[:10]
+					return
+				}
+			}
 		}
-		if pkg.Version == "" {
-			err = fmt.Errorf("tag or branch not found")
-		}
+		err = fmt.Errorf("tag or branch not found")
 		return
 	}
 
