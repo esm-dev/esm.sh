@@ -54,7 +54,7 @@ func validatePkgPath(pathname string) (pkg Pkg, query string, err error) {
 	if fromGithub {
 		// strip the leading `@`
 		pkg.Name = pkg.Name[1:]
-		if valid.IsHexString(pkg.Version) && len(pkg.Version) >= 10 {
+		if (valid.IsHexString(pkg.Version) && len(pkg.Version) >= 10) || regexpFullVersion.MatchString(strings.TrimPrefix(pkg.Version, "v")) {
 			return
 		}
 		var refs []GitRef
@@ -73,10 +73,7 @@ func validatePkgPath(pathname string) (pkg Pkg, query string, err error) {
 			// TODO: support semver
 		} else {
 			for _, ref := range refs {
-				if ref.Ref == "refs/tags/"+pkg.Version {
-					return
-				}
-				if ref.Ref == "refs/heads/"+pkg.Version {
+				if ref.Ref == "refs/tags/"+pkg.Version || ref.Ref == "refs/heads/"+pkg.Version {
 					pkg.Version = ref.Sha[:10]
 					return
 				}
