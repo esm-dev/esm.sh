@@ -10,11 +10,11 @@ import (
 )
 
 type Pkg struct {
-	Name          string `json:"name"`
-	Version       string `json:"version"`
-	Submodule     string `json:"submodule"`
-	FullSubmodule string `json:"fullsubmodule"`
-	FromGithub    bool   `json:"fromGithub"`
+	Name       string `json:"name"`
+	Version    string `json:"version"`
+	Submodule  string `json:"submodule"`
+	Subpath    string `json:"fullsubmodule"`
+	FromGithub bool   `json:"fromGithub"`
 }
 
 func validatePkgPath(pathname string) (pkg Pkg, query string, err error) {
@@ -44,11 +44,11 @@ func validatePkgPath(pathname string) (pkg Pkg, query string, err error) {
 	}
 
 	pkg = Pkg{
-		Name:          name,
-		Version:       version,
-		Submodule:     submodule,
-		FullSubmodule: fullSubmodule,
-		FromGithub:    fromGithub,
+		Name:       name,
+		Version:    version,
+		Submodule:  submodule,
+		Subpath:    fullSubmodule,
+		FromGithub: fromGithub,
 	}
 
 	if fromGithub {
@@ -73,7 +73,10 @@ func validatePkgPath(pathname string) (pkg Pkg, query string, err error) {
 			// TODO: support semver
 		} else {
 			for _, ref := range refs {
-				if ref.Ref == "refs/tags/"+pkg.Version || ref.Ref == "refs/heads/"+pkg.Version {
+				if ref.Ref == "refs/tags/"+pkg.Version {
+					return
+				}
+				if ref.Ref == "refs/heads/"+pkg.Version {
 					pkg.Version = ref.Sha[:10]
 					return
 				}
@@ -127,6 +130,14 @@ func (pkg Pkg) String() string {
 		s += "/" + pkg.Submodule
 	}
 	return s
+}
+
+type PathSlice []string
+
+func (a PathSlice) Len() int      { return len(a) }
+func (a PathSlice) Swap(i, j int) { a[i], a[j] = a[j], a[i] }
+func (a PathSlice) Less(i, j int) bool {
+	return len(strings.Split(a[i], "/")) < len(strings.Split(a[j], "/"))
 }
 
 // sortable pkg slice

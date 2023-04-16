@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"path"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -260,7 +261,7 @@ func serverHandler() rex.Handle {
 			return rex.Status(status, message)
 		}
 
-		// redirect `/v107/$PKG/es2022/foo.wasm` to `$PKG/foo.wasm`
+		// redirect to real wasm file: `/v100/PKG/es2022/foo.wasm` -> `/PKG/foo.wasm`
 		if hasBuildVerPrefix && strings.HasSuffix(reqPkg.Submodule, ".wasm") {
 			pkgRoot := path.Join(cfg.WorkDir, "npm", reqPkg.Name+"@"+reqPkg.Version, "node_modules", reqPkg.Name)
 			wasmFiles, err := findFiles(pkgRoot, func(fp string) bool {
@@ -273,8 +274,9 @@ func serverHandler() rex.Handle {
 			if l := len(wasmFiles); l == 1 {
 				wasmFile = wasmFiles[0]
 			} else if l > 1 {
+				sort.Sort(sort.Reverse(PathSlice(wasmFiles)))
 				for _, f := range wasmFiles {
-					if strings.Contains(reqPkg.Submodule, f) {
+					if strings.Contains(reqPkg.Subpath, f) {
 						wasmFile = f
 						break
 					}
@@ -287,7 +289,7 @@ func serverHandler() rex.Handle {
 			return rex.Redirect(url, http.StatusMovedPermanently)
 		}
 
-		// redirect `/@types/` to `.d.ts` files
+		// redirect `/@types/PKG` to main dts files
 		if strings.HasPrefix(reqPkg.Name, "@types/") && (reqPkg.Submodule == "" || !strings.HasSuffix(reqPkg.Submodule, ".d.ts")) {
 			url := fmt.Sprintf("%s%s/v%d%s", cdnOrigin, cfg.BasePath, VERSION, pathname)
 			if reqPkg.Submodule == "" {
@@ -310,7 +312,7 @@ func serverHandler() rex.Handle {
 			return rex.Redirect(url, http.StatusMovedPermanently)
 		}
 
-		// redirect to css path for CSS packages
+		// redirect to main css path for CSS packages
 		if css := cssPackages[reqPkg.Name]; css != "" && reqPkg.Submodule == "" {
 			url := fmt.Sprintf("%s%s/%s/%s", cdnOrigin, cfg.BasePath, reqPkg.String(), css)
 			return rex.Redirect(url, http.StatusMovedPermanently)
@@ -338,8 +340,8 @@ func serverHandler() rex.Handle {
 			if external.Has("*") {
 				eaSign = "*"
 			}
-			if reqPkg.FullSubmodule != "" {
-				subPath = "/" + reqPkg.FullSubmodule
+			if reqPkg.Subpath != "" {
+				subPath = "/" + reqPkg.Subpath
 			}
 			if ctx.R.URL.RawQuery != "" {
 				if extraQuery != "" {
@@ -365,8 +367,8 @@ func serverHandler() rex.Handle {
 					versionPrefix = fmt.Sprintf("/v%d", VERSION)
 				}
 			}
-			if reqPkg.FullSubmodule != "" {
-				subPath = "/" + reqPkg.FullSubmodule
+			if reqPkg.Subpath != "" {
+				subPath = "/" + reqPkg.Subpath
 			}
 			if ctx.R.URL.RawQuery != "" {
 				query = "?" + ctx.R.URL.RawQuery
@@ -438,7 +440,7 @@ func serverHandler() rex.Handle {
 		// serve raw dist or npm dist files like CSS/map etc..
 		if storageType == "raw" {
 			installDir := fmt.Sprintf("npm/%s", reqPkg.VersionName())
-			savePath := path.Join(cfg.WorkDir, installDir, "node_modules", reqPkg.Name, reqPkg.FullSubmodule)
+			savePath := path.Join(cfg.WorkDir, installDir, "node_modules", reqPkg.Name, reqPkg.Subpath)
 			fi, err := os.Lstat(savePath)
 			if err != nil {
 				if os.IsExist(err) {
@@ -733,7 +735,7 @@ func serverHandler() rex.Handle {
 					reqPkg.Name,
 					reqPkg.Version,
 					encodeBuildArgsPrefix(buildArgs, reqPkg.Name, true),
-				), reqPkg.FullSubmodule)
+				), reqPkg.Subpath)
 				if strings.HasSuffix(savePath, "~.d.ts") {
 					savePath = strings.TrimSuffix(savePath, "~.d.ts")
 					_, err := fs.Stat(path.Join(savePath, "index.d.ts"))
