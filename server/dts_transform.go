@@ -201,7 +201,12 @@ func (task *BuildTask) transformDTS(dts string, aliasDepsPrefix string, marker *
 				}
 				info, fromPackageJSON, err = getPackageInfo(wd, pkg.Name, version)
 				if err != nil || ((info.Types == "" && info.Typings == "") && !strings.HasPrefix(info.Name, "@types/")) {
-					info, fromPackageJSON, err = getPackageInfo(wd, toTypesPackageName(pkg.Name), version)
+					p, ok, e := getPackageInfo(wd, toTypesPackageName(pkg.Name), version)
+					if e == nil {
+						info = p
+						fromPackageJSON = ok
+						err = nil
+					}
 				}
 				if err == nil {
 					subpath = pkg.Submodule
@@ -212,7 +217,7 @@ func (task *BuildTask) transformDTS(dts string, aliasDepsPrefix string, marker *
 				return importPath
 			}
 
-			// use types with `exports` contidions
+			// use types with `exports` and `typesVersions` contidions
 			info = task.fixNpmPackage(info)
 
 			// use version defined in `?deps`
@@ -234,6 +239,8 @@ func (task *BuildTask) transformDTS(dts string, aliasDepsPrefix string, marker *
 					importPath = utils.CleanPath(info.Types)[1:]
 				} else if info.Typings != "" {
 					importPath = utils.CleanPath(info.Typings)[1:]
+				} else {
+					importPath = "index.d.ts"
 				}
 				if !strings.HasSuffix(importPath, ".d.ts") && !strings.HasSuffix(importPath, "/*") {
 					importPath += "~.d.ts"
@@ -374,7 +381,7 @@ func toTypesPath(wd string, p NpmPackage, version string, buildArgsPrefix string
 			types = "index.d.ts"
 		}
 	} else {
-		return ""
+		types = "index.d.ts"
 	}
 
 	if !endsWith(types, ".d.ts", ".d.mts") && !strings.HasSuffix(types, "/*") {

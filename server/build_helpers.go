@@ -359,6 +359,42 @@ func (task *BuildTask) fixNpmPackage(p NpmPackage) NpmPackage {
 		p.Name = task.Pkg.Name
 		p.Version = task.Pkg.Version
 	}
+
+	if p.Types == "" && p.Typings != "" {
+		p.Types = p.Typings
+	}
+
+	if len(p.TypesVersions) > 0 {
+		var usedCondition string
+		for c, e := range p.TypesVersions {
+			if c == "*" && strings.HasPrefix(c, ">") || strings.HasPrefix(c, ">=") {
+				if usedCondition == "" || c == "*" || c > usedCondition {
+					if m, ok := e.(map[string]interface{}); ok {
+						d, ok := m["*"]
+						if !ok {
+							d, ok = m["."]
+						}
+						if ok {
+							if a, ok := d.([]interface{}); ok && len(a) > 0 {
+								if t, ok := a[0].(string); ok {
+									usedCondition = c
+									if strings.HasSuffix(t, "*") {
+										f := p.Types
+										if f == "" {
+											f = "index.d.ts"
+										}
+										t = path.Join(t[:len(t)-1], f)
+									}
+									p.Types = t
+								}
+							}
+						}
+					}
+				}
+			}
+		}
+	}
+
 	if exports := p.DefinedExports; exports != nil {
 		if m, ok := exports.(map[string]interface{}); ok {
 			v, ok := m["."]
@@ -422,10 +458,6 @@ func (task *BuildTask) fixNpmPackage(p NpmPackage) NpmPackage {
 		}
 	}
 
-	if p.Types == "" && p.Typings != "" {
-		p.Types = p.Typings
-	}
-
 	if p.Types == "" && p.Main != "" {
 		if strings.HasSuffix(p.Main, ".d.ts") {
 			p.Types = p.Main
@@ -482,7 +514,7 @@ func (task *BuildTask) applyConditions(p *NpmPackage, exports interface{}, pType
 	m, ok := exports.(map[string]interface{})
 	if ok {
 		targetConditions := []string{"browser"}
-		conditions := []string{"import", "module", "es2015"}
+		conditions := []string{"module", "import", "es2015"}
 		switch task.Target {
 		case "deno", "denonext":
 			targetConditions = []string{"deno", "worker", "browser"}

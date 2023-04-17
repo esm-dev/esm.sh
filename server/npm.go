@@ -45,6 +45,7 @@ type NpmPackageTemp struct {
 	Dependencies     map[string]string      `json:"dependencies,omitempty"`
 	PeerDependencies map[string]string      `json:"peerDependencies,omitempty"`
 	Imports          map[string]interface{} `json:"imports,omitempty"`
+	TypesVersions    map[string]interface{} `json:"typesVersions,omitempty"`
 	DefinedExports   interface{}            `json:"exports,omitempty"`
 	Deprecated       interface{}            `json:"deprecated,omitempty"`
 }
@@ -96,6 +97,7 @@ func (a *NpmPackageTemp) ToNpmPackage() *NpmPackage {
 		Dependencies:     a.Dependencies,
 		PeerDependencies: a.PeerDependencies,
 		Imports:          a.Imports,
+		TypesVersions:    a.TypesVersions,
 		DefinedExports:   a.DefinedExports,
 		Deprecated:       deprecated,
 	}
@@ -117,6 +119,7 @@ type NpmPackage struct {
 	Dependencies     map[string]string
 	PeerDependencies map[string]string
 	Imports          map[string]interface{}
+	TypesVersions    map[string]interface{}
 	DefinedExports   interface{}
 	Deprecated       string
 }
