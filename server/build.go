@@ -773,7 +773,11 @@ rebuild:
 									}
 									// if the dep is an es6 module
 									if !marked && depNpm.Module != "" {
-										cjsImportNames.Add("*?")
+										if depESM.HasExportDefault && len(depESM.NamedExports) == 1 {
+											cjsImportNames.Add("default")
+										} else {
+											cjsImportNames.Add("*?")
+										}
 										marked = true
 									}
 									if !marked && includes(depESM.NamedExports, "__esModule") && depESM.HasExportDefault {
