@@ -261,6 +261,13 @@ func serverHandler() rex.Handle {
 			return rex.Status(status, message)
 		}
 
+		if includes(nativeNodePackages, reqPkg.Name) {
+			return throwErrorJS(ctx, fmt.Errorf(
+				`Unsupported npm package "%s": native node modules are not supported yet`,
+				reqPkg.Name,
+			))
+		}
+
 		// redirect to real wasm file: `/v100/PKG/es2022/foo.wasm` -> `/PKG/foo.wasm`
 		if hasBuildVerPrefix && strings.HasSuffix(reqPkg.Submodule, ".wasm") {
 			pkgRoot := path.Join(cfg.WorkDir, "npm", reqPkg.Name+"@"+reqPkg.Version, "node_modules", reqPkg.Name)

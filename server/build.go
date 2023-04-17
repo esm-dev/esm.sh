@@ -258,7 +258,7 @@ rebuild:
 							}
 						}
 
-						for _, name := range reservedPackages {
+						for _, name := range nativeNodePackages {
 							if args.Path == name || strings.HasPrefix(args.Path, name+"/") {
 								if task.Target == "deno" || task.Target == "denonext" {
 									pkgName, submodule := splitPkgPath(args.Path)
