@@ -218,7 +218,7 @@ func (task *BuildTask) analyze() (esm *ESMBuild, npm NpmPackage, reexport string
 								task.applyConditions(&npm, defines, npm.Type)
 								resolved = true
 								break
-							} else if strings.HasSuffix(name, "/*") && strings.HasPrefix("./"+pkg.Submodule, strings.TrimSuffix(name, "*")) {
+							} else if strings.HasSuffix(name, "*") && strings.HasPrefix("./"+pkg.Submodule, strings.TrimSuffix(name, "*")) {
 								/**
 								  exports: {
 								    "./lib/languages/*": {

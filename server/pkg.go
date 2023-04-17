@@ -22,7 +22,7 @@ func validatePkgPath(pathname string) (pkg Pkg, query string, err error) {
 	if fromGithub {
 		pathname = "/@" + pathname[4:]
 	}
-	pkgName, fullSubmodule := splitPkgPath(pathname)
+	pkgName, subpath := splitPkgPath(pathname)
 	name, maybeVersion := utils.SplitByLastByte(pkgName, '@')
 	if strings.HasPrefix(pkgName, "@") {
 		name, maybeVersion = utils.SplitByLastByte(pkgName[1:], '@')
@@ -37,17 +37,18 @@ func validatePkgPath(pathname string) (pkg Pkg, query string, err error) {
 		version = v
 	}
 
-	submodule := fullSubmodule
+	submodule := subpath
 	if submodule != "" {
 		submodule = strings.TrimSuffix(submodule, ".js")
 		submodule = strings.TrimSuffix(submodule, ".mjs")
+		submodule = strings.TrimSuffix(submodule, "/index")
 	}
 
 	pkg = Pkg{
 		Name:       name,
 		Version:    version,
 		Submodule:  submodule,
-		Subpath:    fullSubmodule,
+		Subpath:    subpath,
 		FromGithub: fromGithub,
 	}
 
