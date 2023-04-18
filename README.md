@@ -2,9 +2,14 @@
 
 # esm.sh
 
-A fast, global content delivery network for [NPM](http://npmjs.org/) packages with **ES Module** format.
+A fast, global content delivery network (CDN) for modern(es2015+) web development.
 
-## Import from URL
+<p>
+  <a href="https://discord.gg/Xkn239au"><img src="https://img.shields.io/discord/1097820016893763684?color=%23008181&label=Chat&labelColor=%23111&logo=discord&logoColor=%23aaaaaa" alt="Chat"></a>
+  <a href="https://twitter.com/intent/follow?screen_name=jexia_"><img src="https://img.shields.io/twitter/follow/jexia_?style=social" alt="Twitter"></a>
+</p>
+
+## Import from NPM
 
 ```javascript
 import React from "https://esm.sh/react@18.2.0"
@@ -29,6 +34,16 @@ or import non-module(js) as following:
 ```javascript
 import "https://esm.sh/react@18.2.0/package.json" assert { type: "json" }
 ```
+
+## Import from GitHub Repo
+
+You can also import modules/assets from a github repo: `esm.sh/gh/OWNER/REPO/PATH`
+
+```javascript
+import sfMeta from "https:/esms.h/gh/superfluid-finance/metadata"
+```
+
+or load a svg image from a github repo: https://esm.sh/gh/microsoft/fluentui-emoji/assets/Alien/Flat/alien_flat.svg
 
 ### Specify Dependencies
 
@@ -71,8 +86,8 @@ Import maps supports [**trailing slash**](https://github.com/WICG/import-maps#pa
 ```json
 {
   "imports": {
-    "react-dom": "https://esm.sh/react-dom@18.2.0?pin=v115&dev",
-    "react-dom/": "https://esm.sh/react-dom@18.2.0&pin=v115&dev/",
+    "react-dom": "https://esm.sh/react-dom@18.2.0?pin=v116&dev",
+    "react-dom/": "https://esm.sh/react-dom@18.2.0&pin=v116&dev/",
   }
 }
 ```
@@ -256,9 +271,9 @@ To ensure stable and consistent behavior, you may want to pin the build version 
 The `?pin` query allows you to specify a specific build version of a module, which is an **immutable** cached version stored on the esm.sh CDN.
 
 ```javascript
-import React from "https://esm.sh/react-dom?pin=v115"
+import React from "https://esm.sh/react-dom?pin=v116"
 // or use version prefix
-import React from "https://esm.sh/v115/react-dom"
+import React from "https://esm.sh/v116/react-dom"
 ```
 
 By using the `?pin` query in the import statement, you can rest assured that the version of the module you're using will not change, even if updates are pushed to the esm.sh server. This helps ensure the stability and reliability of your application.

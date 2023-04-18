@@ -1,5 +1,15 @@
 # Change Log
 
+## v116
+
+- Support modules/assets from Github repo (close #588)
+- Update `nativeNodePackages` (close #591)
+- Fix dep import url of cjs module (close #592)
+- Add support of resolving `typesVersions` (close #593)
+- Fix `exports` glob condition resloving (close #594)
+- Remove shebang (close #596)
+- Fix missed build version of dts files (close #589)
+
 ## v115
 
 - Return JavaScript modules for `?module` query with `wasm` files
