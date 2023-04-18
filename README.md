@@ -41,7 +41,7 @@ You can also import modules/assets from a github repo: `esm.sh/gh/OWNER/REPO/PAT
 
 ```javascript
 // ensure there is a `package.json` in the root of the repo
-import tslib from "https:/esm.sh/gh/microsoft/tslib"
+import tslib from "https://esm.sh/gh/microsoft/tslib"
 ```
 
 or load a svg image from a github repo: https://esm.sh/gh/microsoft/fluentui-emoji/assets/Alien/Flat/alien_flat.svg
