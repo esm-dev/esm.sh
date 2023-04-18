@@ -187,6 +187,10 @@ func kill(pidFile string) (err error) {
 	return process.Kill()
 }
 
+func isJSIdentChar(c byte) bool {
+	return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '_' || c == '$'
+}
+
 func validateJS(filename string) (isESM bool, namedExports []string, err error) {
 	data, err := os.ReadFile(filename)
 	if err != nil {
