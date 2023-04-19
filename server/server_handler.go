@@ -688,9 +688,9 @@ func serverHandler() rex.Handle {
 		}
 
 		// check whether it is `bare` mode
-		if hasBuildVerPrefix && (endsWith(pathname, ".mjs", ".js", ".css")) {
+		if hasBuildVerPrefix && (endsWith(reqPkg.Subpath, ".mjs", ".js", ".css")) {
 			a := strings.Split(reqPkg.Submodule, "/")
-			if len(a) > 1 {
+			if len(a) > 0 {
 				maybeTarget := a[0]
 				if _, ok := targets[maybeTarget]; ok {
 					submodule := strings.Join(a[1:], "/")
@@ -713,7 +713,7 @@ func serverHandler() rex.Handle {
 							submodule = strings.TrimSuffix(submodule, ".development")
 							isDev = true
 						}
-						isPkgEntry := strings.HasSuffix(pathname, ".mjs") // <- /v100/react@18.2.0/es2022/react.mjs
+						isPkgEntry := strings.HasSuffix(reqPkg.Subpath, ".mjs") // <- /v100/react@18.2.0/es2022/react.mjs
 						if submodule == pkgName && !isPkgEntry && stableBuild[reqPkg.Name] {
 							url := fmt.Sprintf("%s%s/%s@%s", cdnOrigin, cfg.BasePath, reqPkg.Name, reqPkg.Version)
 							return rex.Redirect(url, http.StatusMovedPermanently)
