@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
-	"io/ioutil"
 	"net/url"
 	"os"
 	"path"
@@ -272,7 +271,7 @@ rebuild:
 						if strings.HasSuffix(args.Path, ".json") {
 							jsonFile := filepath.Join(args.ResolveDir, args.Path)
 							if fileExists(jsonFile) {
-								return api.OnResolveResult{Path: args.Path, Namespace: "json", PluginData: jsonFile}, nil
+								return api.OnResolveResult{Path: jsonFile}, nil
 							}
 						}
 
@@ -489,27 +488,6 @@ rebuild:
 						// dynamic external
 						externalDeps.Add(specifier)
 						return api.OnResolveResult{Path: "__ESM_SH_EXTERNAL:" + specifier, External: true, SideEffects: sideEffects}, nil
-					},
-				)
-
-				// import info from "./packge.json"
-				build.OnLoad(
-					api.OnLoadOptions{Filter: ".*", Namespace: "json"},
-					func(args api.OnLoadArgs) (ret api.OnLoadResult, err error) {
-						jsonFile, ok := args.PluginData.(string)
-						if !ok {
-							return api.OnLoadResult{}, errors.New("plugin data is not a string")
-						}
-						data, err := ioutil.ReadFile(jsonFile)
-						if err != nil {
-							return api.OnLoadResult{}, err
-						}
-						prefix := []byte("export default ")
-						code := make([]byte, len(prefix)+len(data))
-						copy(code, prefix)
-						copy(code[len(prefix):], data)
-						contents := string(code)
-						return api.OnLoadResult{Contents: &contents, Loader: api.LoaderJS}, nil
 					},
 				)
 
