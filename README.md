@@ -37,10 +37,9 @@ import "https://esm.sh/react@18.2.0/package.json" assert { type: "json" }
 
 ## Import from GitHub Repo
 
-You can also import modules/assets from a github repo: `esm.sh/gh/OWNER/REPO/PATH`. For example:
+You can also import modules/assets from a github repo: `/gh/OWNER/REPO/PATH`. For example:
 
 ```javascript
-// ensure there is a `package.json` in the root of the repo
 import tslib from "https://esm.sh/gh/microsoft/tslib"
 ```
 
