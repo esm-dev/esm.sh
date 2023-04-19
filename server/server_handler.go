@@ -215,17 +215,22 @@ func serverHandler() rex.Handle {
 		}
 
 		// use embed polyfills/types if possible
-		if hasBuildVerPrefix {
-			data, err := embedFS.ReadFile("server/embed/polyfills" + pathname)
-			if err == nil {
-				ctx.SetHeader("Cache-Control", "public, max-age=31536000, immutable")
-				return rex.Content(pathname, startTime, bytes.NewReader(data))
+		if hasBuildVerPrefix && strings.Count(pathname, "/") == 1 {
+			if strings.HasSuffix(pathname, ".js") {
+				data, err := embedFS.ReadFile("server/embed/polyfills" + pathname)
+				if err == nil {
+					ctx.SetHeader("Content-Type", "application/javascript; charset=utf-8")
+					ctx.SetHeader("Cache-Control", "public, max-age=31536000, immutable")
+					return rex.Content(pathname, startTime, bytes.NewReader(data))
+				}
 			}
-			data, err = embedFS.ReadFile("server/embed/types" + pathname)
-			if err == nil {
-				ctx.SetHeader("Content-Type", "application/typescript; charset=utf-8")
-				ctx.SetHeader("Cache-Control", "public, max-age=31536000, immutable")
-				return rex.Content(pathname, startTime, bytes.NewReader(data))
+			if strings.HasSuffix(pathname, ".d.ts") {
+				data, err := embedFS.ReadFile("server/embed/types" + pathname)
+				if err == nil {
+					ctx.SetHeader("Content-Type", "application/typescript; charset=utf-8")
+					ctx.SetHeader("Cache-Control", "public, max-age=31536000, immutable")
+					return rex.Content(pathname, startTime, bytes.NewReader(data))
+				}
 			}
 		}
 
