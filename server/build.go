@@ -611,14 +611,6 @@ rebuild:
 					}
 					importPath = task.getImportPath(subPkg, encodeBuildArgsPrefix(task.BuildArgs, subPkg.Name, false))
 				}
-				// node builtin `buffer` module
-				if importPath == "" && name == "buffer" {
-					if task.Target == "node" || task.Target == "denonext" {
-						importPath = "npm:buffer"
-					} else {
-						importPath = fmt.Sprintf("%s/v%d/node_buffer.js", cfg.BasePath, task.BuildVersion)
-					}
-				}
 				// node builtin module
 				if importPath == "" && builtInNodeModules[name] {
 					if task.Target == "node" {
@@ -630,15 +622,12 @@ rebuild:
 					} else {
 						polyfill, ok := polyfilledBuiltInNodeModules[name]
 						if ok {
-							p, _, e := task.getPackageInfo(polyfill, "latest")
+							p, _, e := validatePkgPath(polyfill)
 							if e != nil {
 								err = e
 								return
 							}
-							importPath = task.getImportPath(Pkg{
-								Name:    p.Name,
-								Version: p.Version,
-							}, "")
+							importPath = task.getImportPath(p, "")
 							extname := filepath.Ext(importPath)
 							importPath = strings.TrimSuffix(importPath, extname) + ".bundle" + extname
 						} else {
@@ -900,7 +889,7 @@ rebuild:
 					} else if task.Target == "deno" {
 						fmt.Fprintf(buf, `import  { Buffer as __Buffer$ } from "https://deno.land/std@%s/node/buffer.ts";%s`, task.denoStdVersion, eol)
 					} else {
-						fmt.Fprintf(buf, `import { Buffer as __Buffer$ } from "%s/v%d/node_buffer.js";%s`, cfg.BasePath, task.BuildVersion, eol)
+						fmt.Fprintf(buf, `import { Buffer as __Buffer$ } from "%s/v%d/%s/%s/buffer.bundle.mjs";%s`, cfg.BasePath, task.BuildVersion, polyfilledBuiltInNodeModules["buffer"], task.Target, eol)
 					}
 				}
 				if ids.Has("__global$") {
