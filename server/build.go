@@ -44,6 +44,16 @@ type BuildTask struct {
 }
 
 func (task *BuildTask) Build() (esm *ESMBuild, err error) {
+	// check request package
+	if !task.Pkg.FromGithub {
+		var p NpmPackage
+		p, _, err = getPackageInfo("", task.Pkg.Name, task.Pkg.Version)
+		if err != nil {
+			return
+		}
+		task.Deprecated = p.Deprecated
+	}
+
 	if task.wd == "" {
 		task.wd = path.Join(cfg.WorkDir, fmt.Sprintf("npm/%s", task.Pkg.VersionName()))
 		ensureDir(task.wd)

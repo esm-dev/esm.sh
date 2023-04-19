@@ -651,7 +651,7 @@ func serverHandler() rex.Handle {
 		isPkgCss := ctx.Form.Has("css")
 		isBundle := ctx.Form.Has("bundle") && !stableBuild[reqPkg.Name]
 		isDev := ctx.Form.Has("dev")
-		isPined := ctx.Form.Has("pin") || hasBuildVerPrefix
+		isPined := ctx.Form.Has("pin") || hasBuildVerPrefix || stableBuild[reqPkg.Name]
 		isWorker := ctx.Form.Has("worker")
 		noCheck := ctx.Form.Has("no-check") || ctx.Form.Has("no-dts")
 		ignoreRequire := ctx.Form.Has("ignore-require") || ctx.Form.Has("no-require") || reqPkg.Name == "@unocss/preset-icons"
@@ -814,27 +814,21 @@ func serverHandler() rex.Handle {
 
 		taskID := task.ID()
 		esm, hasBuild := queryESMBuild(taskID)
+		fallback := false
 
 		if !hasBuild {
 			if !isBare && !isPined {
 				// find previous build version
 				for i := 0; i < VERSION; i++ {
-					id := fmt.Sprintf("v%d/%s", VERSION-(i+1), taskID[len(fmt.Sprintf("v%d/", VERSION)):])
-					esm, hasBuild = queryESMBuild(taskID)
+					id := fmt.Sprintf("v%d/%s", VERSION-(i+1), strings.Join(strings.Split(taskID, "/")[1:], "/"))
+					esm, hasBuild = queryESMBuild(id)
 					if hasBuild {
+						log.Warn("fallback to previous build:", id)
+						fallback = true
 						taskID = id
 						break
 					}
 				}
-			}
-
-			// check request package
-			if !reqPkg.FromGithub {
-				p, _, e := getPackageInfo("", reqPkg.Name, reqPkg.Version)
-				if e != nil {
-					return rex.Status(500, e.Error())
-				}
-				task.Deprecated = p.Deprecated
 			}
 
 			// if the previous build exists and is not pin/bare mode, then build current module in backgound,
@@ -942,15 +936,14 @@ func serverHandler() rex.Handle {
 			url := fmt.Sprintf("%s%s/%s", cdnOrigin, cfg.BasePath, dts)
 			ctx.SetHeader("X-TypeScript-Types", url)
 		}
-
-		if regexpFullVersionPath.MatchString(pathname) {
-			if isPined && !targetFromUA {
+		if fallback {
+			ctx.SetHeader("Cache-Control", "private, no-store, no-cache, must-revalidate")
+		} else {
+			if isPined {
 				ctx.SetHeader("Cache-Control", "public, max-age=31536000, immutable")
 			} else {
 				ctx.SetHeader("Cache-Control", fmt.Sprintf("public, max-age=%d", 24*3600)) // cache for 24 hours
 			}
-		} else {
-			ctx.SetHeader("Cache-Control", fmt.Sprintf("public, max-age=%d", 10*60)) // cache for 10 minutes
 		}
 		if targetFromUA {
 			ctx.AddHeader("Vary", "User-Agent")
