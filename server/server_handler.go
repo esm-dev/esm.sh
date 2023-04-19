@@ -679,6 +679,7 @@ func serverHandler() rex.Handle {
 				if err != nil {
 					return throwErrorJS(ctx, err)
 				}
+				reqPkg.Subpath = strings.Join(strings.Split(reqPkg.Subpath, "/")[1:], "/")
 				if args.denoStdVersion == "" {
 					// ensure deno/std version used
 					args.denoStdVersion = denoStdVersion
