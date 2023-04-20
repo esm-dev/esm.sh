@@ -517,7 +517,8 @@ func (task *BuildTask) applyConditions(p *NpmPackage, exports interface{}, pType
 		conditions := []string{"module", "import", "es2015"}
 		switch task.Target {
 		case "deno", "denonext":
-			targetConditions = []string{"deno", "worker", "browser"}
+			targetConditions = []string{"deno", "worker"}
+			conditions = append(conditions, "browser")
 			// priority use `node` condition for solid.js (< 1.5.6) in deno
 			if (p.Name == "solid-js" || strings.HasPrefix(p.Name, "solid-js/")) && semverLessThan(p.Version, "1.5.6") {
 				targetConditions = []string{"node"}

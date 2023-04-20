@@ -2,8 +2,10 @@ package server
 
 import (
 	"bytes"
+	"encoding/base64"
 	"errors"
 	"fmt"
+	"io/ioutil"
 	"net/url"
 	"os"
 	"path"
@@ -257,21 +259,17 @@ rebuild:
 							return api.OnResolveResult{External: true}, nil
 						}
 
-						if strings.HasSuffix(args.Path, ".wasm") {
-							fullFilepath := filepath.Join(args.ResolveDir, args.Path)
-							if fileExists(fullFilepath) {
-								wasmPath := strings.TrimPrefix(fullFilepath, path.Join(task.wd, "node_modules", npm.Name))
-								wasmUrl := fmt.Sprintf("%s%s/%s%s", task.CdnOrigin, cfg.BasePath, task.Pkg.String(), wasmPath)
-								code := fmt.Sprintf("const data=await fetch('%s').then(r=>r.arrayBuffer());export default new WebAssembly.Module(data)", wasmUrl)
-								url := fmt.Sprintf("data:text/javascript,%s", code)
-								return api.OnResolveResult{External: true, Path: url}, nil
-							}
-						}
-
 						if strings.HasSuffix(args.Path, ".json") {
 							jsonFile := filepath.Join(args.ResolveDir, args.Path)
 							if fileExists(jsonFile) {
 								return api.OnResolveResult{Path: jsonFile}, nil
+							}
+						}
+
+						if strings.HasSuffix(args.Path, ".wasm") {
+							fullFilepath := filepath.Join(args.ResolveDir, args.Path)
+							if fileExists(fullFilepath) {
+								return api.OnResolveResult{Path: fullFilepath, Namespace: "wasm"}, nil
 							}
 						}
 
@@ -488,6 +486,20 @@ rebuild:
 						// dynamic external
 						externalDeps.Add(specifier)
 						return api.OnResolveResult{Path: "__ESM_SH_EXTERNAL:" + specifier, External: true, SideEffects: sideEffects}, nil
+					},
+				)
+
+				// for wasm module exclude
+				build.OnLoad(
+					api.OnLoadOptions{Filter: ".*", Namespace: "wasm"},
+					func(args api.OnLoadArgs) (ret api.OnLoadResult, err error) {
+						wasm, err := ioutil.ReadFile(args.Path)
+						if err != nil {
+							return
+						}
+						wasm64 := base64.StdEncoding.EncodeToString(wasm)
+						code := fmt.Sprintf("export default new WebAssembly.Module(Uint8Array.from(atob('%s'), c => c.charCodeAt(0)))", wasm64)
+						return api.OnLoadResult{Contents: &code, Loader: api.LoaderJS}, nil
 					},
 				)
 
