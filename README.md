@@ -2,7 +2,7 @@
 
 # esm.sh
 
-A fast, global content delivery network (CDN) for modern(es2015+) web development.
+A fast, global, & smart content delivery network (CDN) for modern(es2015+) web development.
 
 <p>
   <a href="https://discord.gg/Xkn239au"><img src="https://img.shields.io/discord/1097820016893763684?color=%23008181&label=Chat&labelColor=%23111&logo=discord&logoColor=%23aaaaaa" alt="Chat"></a>
