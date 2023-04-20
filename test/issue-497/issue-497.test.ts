@@ -1,4 +1,4 @@
-import { assertEquals } from "https://deno.land/std@0.178.0/testing/asserts.ts";
+import { assertEquals } from "https://deno.land/std@0.180.0/testing/asserts.ts";
 
 import wretch from "http://localhost:8080/wretch@2.4.1";
 

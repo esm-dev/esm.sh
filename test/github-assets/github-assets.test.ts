@@ -1,7 +1,7 @@
 import {
   assertEquals,
   assertStringIncludes,
-} from "https://deno.land/std@0.178.0/testing/asserts.ts";
+} from "https://deno.land/std@0.180.0/testing/asserts.ts";
 
 Deno.test("github assets", async () => {
   const res = await fetch(

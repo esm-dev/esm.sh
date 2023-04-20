@@ -1,4 +1,4 @@
-import { assertStringIncludes } from "https://deno.land/std@0.178.0/testing/asserts.ts";
+import { assertStringIncludes } from "https://deno.land/std@0.180.0/testing/asserts.ts";
 
 import React, { type FC, Suspense } from "http://localhost:8080/react@next";
 import ReactDom from "http://localhost:8080/react-dom@next/server";

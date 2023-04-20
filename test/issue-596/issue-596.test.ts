@@ -1,4 +1,4 @@
-import { assert  } from "https://deno.land/std@0.178.0/testing/asserts.ts";
+import { assert  } from "https://deno.land/std@0.180.0/testing/asserts.ts";
 
 
 Deno.test("issue #596", async () => {

@@ -1,6 +1,6 @@
 import {
   assertStringIncludes,
-} from "https://deno.land/std@0.178.0/testing/asserts.ts";
+} from "https://deno.land/std@0.180.0/testing/asserts.ts";
 
 import { html } from "http://localhost:8080/htm/preact?deps=preact@10.11.3";
 import { useState } from "http://localhost:8080/preact@10.11.3/hooks";

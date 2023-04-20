@@ -1,7 +1,7 @@
 import {
   assert,
   assertStringIncludes,
-} from "https://deno.land/std@0.178.0/testing/asserts.ts";
+} from "https://deno.land/std@0.180.0/testing/asserts.ts";
 
 import { renderToString } from "http://localhost:8080/react-dom@18.2.0/server";
 

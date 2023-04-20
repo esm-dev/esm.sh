@@ -1,4 +1,4 @@
-import { assertStringIncludes } from "https://deno.land/std@0.178.0/testing/asserts.ts";
+import { assertStringIncludes } from "https://deno.land/std@0.180.0/testing/asserts.ts";
 
 import { transformAsync } from "http://localhost:8080/@babel/core@7.21.3";
 import babelPresetTS from "http://localhost:8080/@babel/preset-typescript@7.21.0";

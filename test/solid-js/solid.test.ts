@@ -1,4 +1,4 @@
-import { assertEquals } from "https://deno.land/std@0.178.0/testing/asserts.ts";
+import { assertEquals } from "https://deno.land/std@0.180.0/testing/asserts.ts";
 
 import { transform } from "http://localhost:8080/@babel/standalone@7.21.4";
 import babelPresetSolid from "http://localhost:8080/babel-preset-solid@1.6.16";
