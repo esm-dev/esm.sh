@@ -1040,7 +1040,7 @@ func (task *BuildTask) checkDTS(esm *ESMBuild, npm NpmPackage) {
 	submodule := task.Pkg.Submodule
 	var dts string
 	if npm.Types != "" {
-		dts = toTypesPath(task.wd, npm, "", encodeBuildArgsPrefix(task.BuildArgs, task.Pkg.Name, true), submodule)
+		dts = task.toTypesPath(task.wd, npm, "", encodeBuildArgsPrefix(task.BuildArgs, task.Pkg.Name, true), submodule)
 	} else if !strings.HasPrefix(name, "@types/") {
 		versions := []string{"latest"}
 		versionParts := strings.Split(task.Pkg.Version, ".")
@@ -1061,7 +1061,7 @@ func (task *BuildTask) checkDTS(esm *ESMBuild, npm NpmPackage) {
 			p, _, err := task.getPackageInfo(typesPkgName, version)
 			if err == nil {
 				prefix := encodeBuildArgsPrefix(task.BuildArgs, p.Name, true)
-				dts = toTypesPath(task.wd, p, version, prefix, submodule)
+				dts = task.toTypesPath(task.wd, p, version, prefix, submodule)
 				break
 			}
 		}

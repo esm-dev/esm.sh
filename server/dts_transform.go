@@ -199,6 +199,7 @@ func (task *BuildTask) transformDTS(dts string, aliasDepsPrefix string, marker *
 				if err != nil {
 					break
 				}
+				subpath = pkg.Submodule
 				info, fromPackageJSON, err = getPackageInfo(wd, pkg.Name, version)
 				if err != nil || ((info.Types == "" && info.Typings == "") && !strings.HasPrefix(info.Name, "@types/")) {
 					p, ok, e := getPackageInfo(wd, toTypesPackageName(pkg.Name), version)
@@ -209,7 +210,6 @@ func (task *BuildTask) transformDTS(dts string, aliasDepsPrefix string, marker *
 					}
 				}
 				if err == nil {
-					subpath = pkg.Submodule
 					break
 				}
 			}
@@ -227,7 +227,7 @@ func (task *BuildTask) transformDTS(dts string, aliasDepsPrefix string, marker *
 
 			// copy dependent dts files in the node_modules directory in current build context
 			if fromPackageJSON {
-				typesPath := toTypesPath(wd, info, "", "", subpath)
+				typesPath := task.toTypesPath(wd, info, "", "", subpath)
 				if strings.HasSuffix(typesPath, ".d.ts") && !strings.HasSuffix(typesPath, "~.d.ts") {
 					imports.Add(typesPath)
 				}
@@ -248,7 +248,7 @@ func (task *BuildTask) transformDTS(dts string, aliasDepsPrefix string, marker *
 			}
 
 			pkgBasePath := info.Name + "@" + info.Version + "/" + encodeBuildArgsPrefix(task.BuildArgs, info.Name, true)
-			importPath = fmt.Sprintf("%s/%s", cdnOriginAndBuildBasePath, pkgBasePath+importPath)
+			importPath = fmt.Sprintf("%s/%s%s", cdnOriginAndBuildBasePath, pkgBasePath, importPath)
 		}
 
 		return importPath
@@ -346,26 +346,24 @@ func removeGlobalBlock(input []byte) (output []byte, err error) {
 	return nil, errors.New("removeGlobalBlock: global block not end")
 }
 
-func toTypesPath(wd string, p NpmPackage, version string, buildArgsPrefix string, subpath string) string {
+func (task *BuildTask) toTypesPath(wd string, p NpmPackage, version string, buildArgsPrefix string, subpath string) string {
 	var types string
 	if subpath != "" {
-		if p.Types != "" {
-			var rawPkg NpmPackage
-			if utils.ParseJSONFile(path.Join(wd, "node_modules", p.Name, "package.json"), &rawPkg) == nil {
-				if p.Types != rawPkg.Types && p.Types != rawPkg.Typings {
-					types = p.Types
-				}
-			}
+		t := &BuildTask{
+			BuildArgs: task.BuildArgs,
+			Pkg: Pkg{
+				Name:      p.Name,
+				Version:   p.Version,
+				Submodule: subpath,
+				Subpath:   subpath,
+			},
+			Target: task.Target,
+			Dev:    false,
+			wd:     wd,
 		}
-		if types == "" {
-			var subPkg NpmPackage
-			if utils.ParseJSONFile(path.Join(wd, "node_modules", p.Name, subpath, "package.json"), &subPkg) == nil {
-				if subPkg.Types != "" {
-					types = path.Join(subpath, subPkg.Types)
-				} else if subPkg.Typings != "" {
-					types = path.Join(subpath, subPkg.Typings)
-				}
-			}
+		_, p, _, e := t.analyze()
+		if e == nil {
+			types = p.Types
 		}
 		if types == "" {
 			types = subpath
@@ -398,5 +396,6 @@ func toTypesPath(wd string, p NpmPackage, version string, buildArgsPrefix string
 	if version == "" {
 		version = p.Version
 	}
+
 	return fmt.Sprintf("%s@%s/%s%s", p.Name, version, buildArgsPrefix, utils.CleanPath(types)[1:])
 }
