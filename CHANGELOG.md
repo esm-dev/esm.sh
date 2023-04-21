@@ -1,5 +1,13 @@
 # Change Log
 
+## v117
+
+- Fix Buffer polyfill for deno (close #574)
+- Fix dts transformer with submodule (close #599)
+- Fix importing `.json` as a module (close #601)
+- Fix `.wasm` module importing (close #602)
+- Fix path `/v100/PKG/TARGET/index.js`
+
 ## v116
 
 - Support modules/assets from Github repo (close #588)

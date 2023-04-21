@@ -37,7 +37,7 @@ import "https://esm.sh/react@18.2.0/package.json" assert { type: "json" }
 
 ## Import from GitHub Repo
 
-You can also import modules/assets from a github repo: `/gh/OWNER/REPO/PATH`. For example:
+You can also import modules/assets from a github repo: `/gh/OWNER/REPO[@TAG]/PATH`. For example:
 
 ```javascript
 import tslib from "https://esm.sh/gh/microsoft/tslib"
@@ -86,8 +86,8 @@ Import maps supports [**trailing slash**](https://github.com/WICG/import-maps#pa
 ```json
 {
   "imports": {
-    "react-dom": "https://esm.sh/react-dom@18.2.0?pin=v116&dev",
-    "react-dom/": "https://esm.sh/react-dom@18.2.0&pin=v116&dev/",
+    "react-dom": "https://esm.sh/react-dom@18.2.0?pin=v117&dev",
+    "react-dom/": "https://esm.sh/react-dom@18.2.0&pin=v117&dev/",
   }
 }
 ```
@@ -271,9 +271,9 @@ To ensure stable and consistent behavior, you may want to pin the build version 
 The `?pin` query allows you to specify a specific build version of a module, which is an **immutable** cached version stored on the esm.sh CDN.
 
 ```javascript
-import React from "https://esm.sh/react-dom?pin=v116"
+import React from "https://esm.sh/react-dom?pin=v117"
 // or use version prefix
-import React from "https://esm.sh/v116/react-dom"
+import React from "https://esm.sh/v117/react-dom"
 ```
 
 By using the `?pin` query in the import statement, you can rest assured that the version of the module you're using will not change, even if updates are pushed to the esm.sh server. This helps ensure the stability and reliability of your application.
