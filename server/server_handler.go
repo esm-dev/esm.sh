@@ -2,6 +2,10 @@ package server
 
 import (
 	"bytes"
+	"crypto/sha1"
+	"encoding/hex"
+	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -15,11 +19,143 @@ import (
 
 	"github.com/esm-dev/esm.sh/server/storage"
 
+	"github.com/evanw/esbuild/pkg/api"
 	"github.com/ije/gox/utils"
 	"github.com/ije/rex"
 )
 
-func serverHandler() rex.Handle {
+type Publish struct {
+	Types string `json:"types"`
+	Code  string `json:"code"`
+}
+
+func postHandler() rex.Handle {
+	return func(ctx *rex.Context) interface{} {
+		if ctx.R.Method == "POST" {
+			pathname := ctx.Path.String()
+			if pathname != "/publish" {
+				return rex.Status(404, "not found")
+			}
+			defer ctx.R.Body.Close()
+			if ctx.R.Header.Get("Content-Type") != "application/json" {
+				return rex.Status(400, "invalid content type, should be application/json")
+			}
+			var pub Publish
+			err := json.NewDecoder(ctx.R.Body).Decode(&pub)
+			if err != nil {
+				return rex.Status(400, "failed to parse publish config: "+err.Error())
+			}
+			if pub.Code == "" {
+				return rex.Status(400, "code is required")
+			}
+			input := &api.StdinOptions{
+				Contents:   pub.Code,
+				ResolveDir: "/",
+				Sourcefile: "index.tsx",
+				Loader:     api.LoaderTSX,
+			}
+			deps := map[string]string{}
+			onResolver := func(args api.OnResolveArgs) (api.OnResolveResult, error) {
+				path := args.Path
+				if isLocalSpecifier(path) {
+					return api.OnResolveResult{}, errors.New("local specifier is not allowed")
+				}
+				if !isRemoteSpecifier(path) {
+					pkg, _, err := validatePkgPath(strings.TrimPrefix(path, "npm:"))
+					if err != nil {
+						return api.OnResolveResult{}, err
+					}
+					path = pkg.Name
+					if pkg.Submodule != "" {
+						path += "/" + pkg.Submodule
+					}
+					deps[pkg.Name] = pkg.Version
+				}
+				return api.OnResolveResult{
+					Path:     path,
+					External: true,
+				}, nil
+			}
+			ret := api.Build(api.BuildOptions{
+				Outdir:           "/esbuild",
+				Stdin:            input,
+				Platform:         api.PlatformBrowser,
+				Format:           api.FormatESModule,
+				TreeShaking:      api.TreeShakingTrue,
+				Target:           api.ESNext,
+				Bundle:           true,
+				MinifyWhitespace: true,
+				MinifySyntax:     true,
+				Write:            false,
+				Plugins: []api.Plugin{
+					{
+						Name: "resolver",
+						Setup: func(build api.PluginBuild) {
+							build.OnResolve(api.OnResolveOptions{Filter: ".*"}, onResolver)
+						},
+					},
+				},
+			})
+			if len(ret.Errors) > 0 {
+				return rex.Status(400, "failed to validate code: "+ret.Errors[0].Text)
+			}
+			if len(ret.OutputFiles) == 0 {
+				return rex.Status(400, "failed to validate code: no output files")
+			}
+			code := ret.OutputFiles[0].Contents
+			if len(code) == 0 {
+				return rex.Status(400, "code is empty")
+			}
+			h := sha1.New()
+			h.Write(code)
+			id := hex.EncodeToString(h.Sum(nil))
+			key := "publish-" + id
+			record, err := db.Get(key)
+			if err != nil {
+				return rex.Status(500, "failed to save code")
+			}
+			if record == nil {
+				_, err = fs.WriteFile(path.Join("publish", id, "index.mjs"), bytes.NewReader(code))
+				if err == nil {
+					buf := bytes.NewBuffer(nil)
+					enc := json.NewEncoder(buf)
+					enc.Encode(map[string]interface{}{
+						"name":         id,
+						"version":      "0.0.0",
+						"dependencies": deps,
+						"type":         "module",
+						"module":       "index.mjs",
+					})
+					_, err = fs.WriteFile(path.Join("publish", id, "package.json"), buf)
+				}
+				if err == nil {
+					err = db.Put(key, utils.MustEncodeJSON(map[string]interface{}{
+						"createdAt": time.Now().Unix(),
+					}))
+				}
+			}
+			if err != nil {
+				return rex.Status(500, "failed to save code")
+			}
+			cdnOrigin := cfg.Origin
+			if cdnOrigin == "" {
+				proto := "http"
+				if ctx.R.TLS != nil {
+					proto = "https"
+				}
+				// use the request host as the origin if not set in config.json
+				cdnOrigin = fmt.Sprintf("%s://%s", proto, ctx.R.Host)
+			}
+			return map[string]interface{}{
+				"id":  id,
+				"url": fmt.Sprintf("%s/~%s", cdnOrigin, id),
+			}
+		}
+		return nil
+	}
+}
+
+func getHandler() rex.Handle {
 	startTime := time.Now()
 
 	return func(ctx *rex.Context) interface{} {
@@ -124,30 +260,30 @@ func serverHandler() rex.Handle {
 			switch ctx.Form.Value("type") {
 			case "resolve":
 				return throwErrorJS(ctx, fmt.Errorf(
-					`Could not resolve "%s" (Imported by "%s")`,
+					`could not resolve "%s" (Imported by "%s")`,
 					ctx.Form.Value("name"),
 					ctx.Form.Value("importer"),
 				))
 			case "unsupported-nodejs-builtin-module":
 				return throwErrorJS(ctx, fmt.Errorf(
-					`Unsupported nodejs builtin module "%s" (Imported by "%s")`,
+					`unsupported nodejs builtin module "%s" (Imported by "%s")`,
 					ctx.Form.Value("name"),
 					ctx.Form.Value("importer"),
 				))
 			case "unsupported-npm-package":
 				return throwErrorJS(ctx, fmt.Errorf(
-					`Unsupported Npm package "%s" (Imported by "%s")`,
+					`unsupported Npm package "%s" (Imported by "%s")`,
 					ctx.Form.Value("name"),
 					ctx.Form.Value("importer"),
 				))
 			case "unsupported-file-dependency":
 				return throwErrorJS(ctx, fmt.Errorf(
-					`Unsupported file dependency "%s" (Imported by "%s")`,
+					`unsupported file dependency "%s" (Imported by "%s")`,
 					ctx.Form.Value("name"),
 					ctx.Form.Value("importer"),
 				))
 			default:
-				return throwErrorJS(ctx, fmt.Errorf("Unknown error"))
+				return throwErrorJS(ctx, fmt.Errorf("unknown error"))
 			}
 
 		case "/favicon.ico":
@@ -268,7 +404,7 @@ func serverHandler() rex.Handle {
 
 		if includes(nativeNodePackages, reqPkg.Name) {
 			return throwErrorJS(ctx, fmt.Errorf(
-				`Unsupported npm package "%s": native node modules are not supported yet`,
+				`unsupported npm package "%s": native node modules are not supported yet`,
 				reqPkg.Name,
 			))
 		}
