@@ -15,6 +15,7 @@ type Pkg struct {
 	Submodule  string `json:"submodule"`
 	Subpath    string `json:"fullsubmodule"`
 	FromGithub bool   `json:"fromGithub"`
+	FromEsmsh  bool   `json:"fromEsmsh"`
 }
 
 func validatePkgPath(pathname string) (pkg Pkg, query string, err error) {
@@ -22,13 +23,15 @@ func validatePkgPath(pathname string) (pkg Pkg, query string, err error) {
 	if fromGithub {
 		pathname = "/@" + pathname[4:]
 	}
+
 	pkgName, subpath := splitPkgPath(pathname)
 	name, maybeVersion := utils.SplitByLastByte(pkgName, '@')
 	if strings.HasPrefix(pkgName, "@") {
 		name, maybeVersion = utils.SplitByLastByte(pkgName[1:], '@')
 		name = "@" + name
 	}
-	if !validatePackageName(name) {
+	fromEsmsh := strings.HasPrefix(name, "~") && valid.IsHexString(name[1:])
+	if !fromEsmsh && !validatePackageName(name) {
 		return Pkg{}, "", fmt.Errorf("invalid package name '%s'", name)
 	}
 
@@ -50,6 +53,12 @@ func validatePkgPath(pathname string) (pkg Pkg, query string, err error) {
 		Submodule:  submodule,
 		Subpath:    subpath,
 		FromGithub: fromGithub,
+		FromEsmsh:  fromEsmsh,
+	}
+
+	if fromEsmsh {
+		pkg.Version = "0.0.0"
+		return
 	}
 
 	if fromGithub {
@@ -172,7 +181,7 @@ func (a PkgSlice) String() string {
 }
 
 func splitPkgPath(pathname string) (pkgName string, submodule string) {
-	a := strings.Split(strings.Trim(pathname, "/"), "/")
+	a := strings.Split(strings.TrimPrefix(pathname, "/"), "/")
 	pkgName = a[0]
 	submodule = strings.Join(a[1:], "/")
 	if strings.HasPrefix(pkgName, "@") && len(a) > 1 {

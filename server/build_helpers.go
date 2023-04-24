@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
+	"os"
 	"path"
 	"path/filepath"
 	"strings"
@@ -20,6 +22,9 @@ func (task *BuildTask) ID() string {
 	name := strings.TrimSuffix(path.Base(pkg.Name), ".js")
 	extname := ".mjs"
 
+	if pkg.FromEsmsh && len(name) > 11 {
+		name = name[1:11]
+	}
 	if pkg.Submodule != "" {
 		name = pkg.Submodule
 		extname = ".js"
@@ -64,6 +69,9 @@ func (task *BuildTask) getImportPath(pkg Pkg, buildArgsPrefix string) string {
 	if pkg.Submodule != "" {
 		name = strings.TrimSuffix(strings.TrimSuffix(pkg.Submodule, ".js"), ".mjs")
 		extname = ".js"
+	}
+	if pkg.FromEsmsh && len(name) > 11 {
+		name = name[1:11]
 	}
 	// workaround for es5-ext weird "/#/" path
 	if pkg.Name == "es5-ext" {
@@ -617,5 +625,23 @@ func resovleESModule(wd string, packageName string, moduleSpecifier string) (res
 	}
 
 	namedExports = _namedExports
+	return
+}
+
+func copyPublishFile(id string, name string, dir string) (err error) {
+	var r io.ReadCloser
+	var f *os.File
+	r, err = fs.OpenFile(path.Join("publish", strings.TrimPrefix(id, "~"), name))
+	if err != nil {
+		return fmt.Errorf("open file failed: %s", name)
+	}
+	defer r.Close()
+	ensureDir(dir)
+	f, err = os.OpenFile(path.Join(dir, name), os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0644)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+	_, err = io.Copy(f, r)
 	return
 }

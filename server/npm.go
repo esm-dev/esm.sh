@@ -307,7 +307,9 @@ func installPackage(wd string, pkg Pkg) (err error) {
 
 	// ensure package.json file to prevent read up-levels
 	packageFilePath := path.Join(wd, "package.json")
-	if pkg.FromGithub || !fileExists(packageFilePath) {
+	if pkg.FromEsmsh {
+		err = copyPublishFile(pkg.Name, "package.json", wd)
+	} else if pkg.FromGithub || !fileExists(packageFilePath) {
 		fileContent := []byte("{}")
 		if pkg.FromGithub {
 			fileContent = []byte(fmt.Sprintf(
@@ -316,15 +318,22 @@ func installPackage(wd string, pkg Pkg) (err error) {
 				fmt.Sprintf("git+https://github.com/%s.git#%s", pkg.Name, pkg.Version),
 			))
 		}
-		ensureDir(path.Dir(packageFilePath))
 		err = os.WriteFile(packageFilePath, fileContent, 0644)
-		if err != nil {
-			return fmt.Errorf("ensure package.json failed: %s", pkgVersionName)
-		}
+	}
+	if err != nil {
+		return fmt.Errorf("ensure package.json failed: %s", pkgVersionName)
 	}
 
 	for i := 0; i < 3; i++ {
-		if pkg.FromGithub {
+		if pkg.FromEsmsh {
+			err = pnpmInstall(wd)
+			if err == nil {
+				installDir := path.Join(wd, "node_modules", pkg.Name)
+				for _, name := range []string{"package.json", "index.mjs"} {
+					err = copyPublishFile(pkg.Name, name, installDir)
+				}
+			}
+		} else if pkg.FromGithub {
 			err = pnpmInstall(wd)
 			// pnpm will ignore github package which has been installed without `package.json` file
 			if err == nil && !dirExists(path.Join(wd, "node_modules", pkg.Name)) {

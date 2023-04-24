@@ -47,7 +47,7 @@ type BuildTask struct {
 
 func (task *BuildTask) Build() (esm *ESMBuild, err error) {
 	// check request package
-	if !task.Pkg.FromGithub {
+	if !task.Pkg.FromEsmsh && !task.Pkg.FromGithub {
 		var p NpmPackage
 		p, _, err = getPackageInfo("", task.Pkg.Name, task.Pkg.Version)
 		if err != nil {
@@ -255,7 +255,7 @@ rebuild:
 							}, nil
 						}
 
-						if strings.HasPrefix(args.Path, "data:") {
+						if strings.HasPrefix(args.Path, "data:") || strings.HasPrefix(args.Path, "https:") || strings.HasPrefix(args.Path, "http:") {
 							return api.OnResolveResult{External: true}, nil
 						}
 
@@ -309,10 +309,10 @@ rebuild:
 							return api.OnResolveResult{Path: args.Path, External: true}, nil
 						}
 
-						// strip the tailing slash
+						// clean specifier
 						specifier := strings.TrimSuffix(args.Path, "/")
-						// strip the `node:` prefix
 						specifier = strings.TrimPrefix(specifier, "node:")
+						specifier = strings.TrimPrefix(specifier, "npm:")
 
 						// use `browser` field of package.json
 						if len(npm.Browser) > 0 && task.Target != "deno" && task.Target != "denonext" && task.Target != "node" {

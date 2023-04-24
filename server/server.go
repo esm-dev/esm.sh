@@ -147,11 +147,13 @@ func Serve(efs EmbedFS) {
 			AllowedOrigins: []string{"*"},
 			AllowedMethods: []string{
 				http.MethodGet,
+				http.MethodPost,
 			},
 			ExposedHeaders:   []string{"X-TypeScript-Types"},
 			AllowCredentials: false,
 		}),
-		serverHandler(),
+		postHandler(),
+		getHandler(),
 	)
 
 	C := rex.Serve(rex.ServerConfig{
