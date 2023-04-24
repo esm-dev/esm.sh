@@ -650,11 +650,6 @@ func serverHandler() rex.Handle {
 			}
 		}
 
-		// ignore `?external` option for stable builds
-		if stableBuild[reqPkg.Name] {
-			external.Reset()
-		}
-
 		isBare := false
 		isPkgCss := ctx.Form.Has("css")
 		isBundle := ctx.Form.Has("bundle") && !stableBuild[reqPkg.Name]
@@ -683,6 +678,15 @@ func serverHandler() rex.Handle {
 			treeShaking:       treeShaking,
 		}
 
+		// clear build args for stable build
+		if stableBuild[reqPkg.Name] && reqPkg.Submodule == "" {
+			buildArgs = BuildArgs{
+				external:    newStringSet(),
+				treeShaking: newStringSet(),
+				conditions:  newStringSet(),
+			}
+		}
+
 		// parse and use `X-` prefix
 		if hasBuildVerPrefix {
 			a := strings.Split(reqPkg.Submodule, "/")
@@ -701,7 +705,7 @@ func serverHandler() rex.Handle {
 			}
 		}
 
-		// check whether it is `bare` mode
+		// check `bare` mode
 		if hasBuildVerPrefix && (endsWith(reqPkg.Subpath, ".mjs", ".js", ".css")) {
 			a := strings.Split(reqPkg.Submodule, "/")
 			if len(a) > 0 {

@@ -58,7 +58,7 @@ func (task *BuildTask) ghPrefix() string {
 	return ""
 }
 
-func (task *BuildTask) getImportPath(pkg Pkg, prefix string) string {
+func (task *BuildTask) getImportPath(pkg Pkg, buildArgsPrefix string) string {
 	name := strings.TrimSuffix(path.Base(pkg.Name), ".js")
 	extname := ".mjs"
 	if pkg.Submodule != "" {
@@ -73,13 +73,18 @@ func (task *BuildTask) getImportPath(pkg Pkg, prefix string) string {
 		name += ".development"
 	}
 
+	// clear build args for stable build
+	if buildArgsPrefix != "" && stableBuild[pkg.Name] && pkg.Submodule == "" {
+		buildArgsPrefix = ""
+	}
+
 	return fmt.Sprintf(
 		"%s/%s/%s@%s/%s%s/%s%s",
 		cfg.BasePath,
 		task.getBuildVersion(pkg),
 		pkg.Name,
 		pkg.Version,
-		prefix,
+		buildArgsPrefix,
 		task.Target,
 		name,
 		extname,

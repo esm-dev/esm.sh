@@ -32,9 +32,11 @@ var cssPackages = map[string]string{
 
 // stable build for UI libraries like react, to make sure the runtime is single copy
 var stableBuild = map[string]bool{
-	"react":    true,
+	"lit":      true,
 	"preact":   true,
+	"react":    true,
 	"solid-js": true,
+	"svelte":   true,
 	"vue":      true,
 }
 
