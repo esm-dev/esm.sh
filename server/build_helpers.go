@@ -120,22 +120,21 @@ func (task *BuildTask) getPackageInfo(name string, version string) (info NpmPack
 }
 
 func (task *BuildTask) analyze() (esm *ESMBuild, npm NpmPackage, reexport string, err error) {
-	pkg := task.Pkg
 	wd := task.wd
-	target := task.Target
-	isDev := task.Dev
+	pkg := task.Pkg
 
-	err = utils.ParseJSONFile(path.Join(wd, "node_modules", pkg.Name, "package.json"), &npm)
+	var p NpmPackage
+	err = utils.ParseJSONFile(path.Join(wd, "node_modules", pkg.Name, "package.json"), &p)
 	if err != nil {
 		return
 	}
-
-	npm = task.fixNpmPackage(npm)
+	npm = task.fixNpmPackage(p)
 
 	// Check if the supplied path name is actually a main export.
 	// See: https://github.com/esm-dev/esm.sh/issues/578
 	if pkg.Subpath == path.Clean(npm.Main) || pkg.Subpath == path.Clean(npm.Module) {
 		task.Pkg.Submodule = ""
+		npm = task.fixNpmPackage(p)
 	}
 
 	esm = &ESMBuild{}
@@ -144,11 +143,6 @@ func (task *BuildTask) analyze() (esm *ESMBuild, npm NpmPackage, reexport string
 		esm.CJS = npm.Main != "" && npm.Module == ""
 		esm.TypesOnly = isTypesOnlyPackage(npm)
 	}()
-
-	nodeEnv := "production"
-	if isDev {
-		nodeEnv = "development"
-	}
 
 	if pkg.Submodule != "" {
 		if endsWith(pkg.Submodule, ".d.ts", ".d.mts") {
@@ -198,7 +192,19 @@ func (task *BuildTask) analyze() (esm *ESMBuild, npm NpmPackage, reexport string
 					npm.Types = pkg.Submodule + ".d.ts"
 				}
 			} else {
-				var resolved bool
+				if npm.Type == "module" || npm.Module != "" {
+					// follow main module type
+					npm.Module = pkg.Submodule
+				} else {
+					npm.Main = pkg.Submodule
+				}
+				npm.Types = ""
+				if fileExists(path.Join(subDir, "index.d.ts")) {
+					npm.Types = path.Join(pkg.Submodule, "index.d.ts")
+				} else if fileExists(path.Join(subDir + ".d.ts")) {
+					npm.Types = pkg.Submodule + ".d.ts"
+				}
+				// reslove submodule wiht `exports` conditions if exists
 				if npm.DefinedExports != nil {
 					if m, ok := npm.DefinedExports.(map[string]interface{}); ok {
 						for name, defines := range m {
@@ -216,7 +222,6 @@ func (task *BuildTask) analyze() (esm *ESMBuild, npm NpmPackage, reexport string
 								  }
 								*/
 								task.applyConditions(&npm, defines, npm.Type)
-								resolved = true
 								break
 							} else if strings.HasSuffix(name, "*") && strings.HasPrefix("./"+pkg.Submodule, strings.TrimSuffix(name, "*")) {
 								/**
@@ -266,33 +271,22 @@ func (task *BuildTask) analyze() (esm *ESMBuild, npm NpmPackage, reexport string
 								}
 								if hasDefines {
 									task.applyConditions(&npm, defines, npm.Type)
-									resolved = true
 								}
 							}
 						}
-					}
-				}
-
-				if !resolved {
-					if npm.Type == "module" || npm.Module != "" {
-						// follow main module type
-						npm.Module = pkg.Submodule
-					} else {
-						npm.Main = pkg.Submodule
-					}
-					npm.Types = ""
-					if fileExists(path.Join(subDir, "index.d.ts")) {
-						npm.Types = path.Join(pkg.Submodule, "index.d.ts")
-					} else if fileExists(path.Join(subDir + ".d.ts")) {
-						npm.Types = pkg.Submodule + ".d.ts"
 					}
 				}
 			}
 		}
 	}
 
-	if target == "types" || isTypesOnlyPackage(npm) {
+	if task.Target == "types" || isTypesOnlyPackage(npm) {
 		return
+	}
+
+	nodeEnv := "production"
+	if task.Dev {
+		nodeEnv = "development"
 	}
 
 	if npm.Module != "" {
