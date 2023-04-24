@@ -209,9 +209,9 @@ func getHandler() rex.Handle {
 			return rex.Content("index.html", startTime, bytes.NewReader(html))
 
 		case "/status.json":
-			buildQueue.lock.RLock()
 			q := make([]map[string]interface{}, buildQueue.list.Len())
 			i := 0
+			buildQueue.lock.RLock()
 			for el := buildQueue.list.Front(); el != nil; el = el.Next() {
 				t, ok := el.Value.(*queueTask)
 				if ok {
@@ -236,6 +236,13 @@ func getHandler() rex.Handle {
 				}
 			}
 			buildQueue.lock.RUnlock()
+
+			n := 0
+			purgeTimers.Range(func(key, value interface{}) bool {
+				n++
+				return true
+			})
+
 			res, err := fetch(fmt.Sprintf("http://localhost:%d", cfg.NsPort))
 			if err != nil {
 				kill(nsPidFile)
@@ -246,12 +253,14 @@ func getHandler() rex.Handle {
 			if err != nil {
 				return err
 			}
+
 			ctx.SetHeader("Cache-Control", "private, no-store, no-cache, must-revalidate")
 			return map[string]interface{}{
-				"buildQueue": q[:i],
-				"ns":         string(out),
-				"version":    VERSION,
-				"uptime":     time.Since(startTime).String(),
+				"buildQueue":  q[:i],
+				"purgeTimers": n,
+				"ns":          string(out),
+				"version":     VERSION,
+				"uptime":      time.Since(startTime).String(),
 			}
 
 		case "/build-target":

@@ -31,6 +31,7 @@ var (
 	embedFS     EmbedFS
 	fetchLock   sync.Map
 	installLock sync.Map
+	purgeTimers sync.Map
 )
 
 type EmbedFS interface {
