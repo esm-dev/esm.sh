@@ -346,9 +346,17 @@ func serverHandler() rex.Handle {
 
 		// redirect to the url with full package version
 		if !hasBuildVerPrefix && !strings.HasPrefix(pathname, fmt.Sprintf("%s/%s@%s", ghPrefix, reqPkg.Name, reqPkg.Version)) {
+			bvPrefix := ""
 			eaSign := ""
 			subPath := ""
 			query := ""
+			if endsWith(pathname, ".d.ts", ".d.mts") {
+				if outdatedBuildVer != "" {
+					bvPrefix = fmt.Sprintf("/%s", outdatedBuildVer)
+				} else {
+					bvPrefix = fmt.Sprintf("/v%d", VERSION)
+				}
+			}
 			if external.Has("*") {
 				eaSign = "*"
 			}
@@ -358,25 +366,25 @@ func serverHandler() rex.Handle {
 			if ctx.R.URL.RawQuery != "" {
 				if extraQuery != "" {
 					query = "&" + ctx.R.URL.RawQuery
-					return rex.Redirect(fmt.Sprintf("%s%s%s/%s%s@%s%s%s", cdnOrigin, cfg.BasePath, ghPrefix, eaSign, reqPkg.Name, reqPkg.Version, query, subPath), http.StatusFound)
+					return rex.Redirect(fmt.Sprintf("%s%s%s%s/%s%s@%s%s%s", cdnOrigin, cfg.BasePath, bvPrefix, ghPrefix, eaSign, reqPkg.Name, reqPkg.Version, query, subPath), http.StatusFound)
 				}
 				query = "?" + ctx.R.URL.RawQuery
 			}
-			return rex.Redirect(fmt.Sprintf("%s%s%s/%s%s@%s%s%s", cdnOrigin, cfg.BasePath, ghPrefix, eaSign, reqPkg.Name, reqPkg.Version, subPath, query), http.StatusFound)
+			return rex.Redirect(fmt.Sprintf("%s%s%s%s/%s%s@%s%s%s", cdnOrigin, cfg.BasePath, bvPrefix, ghPrefix, eaSign, reqPkg.Name, reqPkg.Version, subPath, query), http.StatusFound)
 		}
 
 		// redirect to the url with full package version with build version prefix
 		if hasBuildVerPrefix && !strings.HasPrefix(pathname, fmt.Sprintf("%s/%s@%s", ghPrefix, reqPkg.Name, reqPkg.Version)) {
-			versionPrefix := ""
+			bvPrefix := ""
 			subPath := ""
 			query := ""
 			if hasBuildVerPrefix {
 				if stableBuild[reqPkg.Name] {
-					versionPrefix = "/stable"
+					bvPrefix = "/stable"
 				} else if outdatedBuildVer != "" {
-					versionPrefix = fmt.Sprintf("/%s", outdatedBuildVer)
+					bvPrefix = fmt.Sprintf("/%s", outdatedBuildVer)
 				} else {
-					versionPrefix = fmt.Sprintf("/v%d", VERSION)
+					bvPrefix = fmt.Sprintf("/v%d", VERSION)
 				}
 			}
 			if reqPkg.Subpath != "" {
@@ -385,7 +393,7 @@ func serverHandler() rex.Handle {
 			if ctx.R.URL.RawQuery != "" {
 				query = "?" + ctx.R.URL.RawQuery
 			}
-			return rex.Redirect(fmt.Sprintf("%s%s%s/%s%s%s", cdnOrigin, cfg.BasePath, versionPrefix, reqPkg.VersionName(), subPath, query), http.StatusFound)
+			return rex.Redirect(fmt.Sprintf("%s%s%s/%s%s%s", cdnOrigin, cfg.BasePath, bvPrefix, reqPkg.VersionName(), subPath, query), http.StatusFound)
 		}
 
 		// support `https://esm.sh/react?dev&target=es2020/jsx-runtime` pattern for jsx transformer
