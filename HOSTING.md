@@ -10,7 +10,8 @@ automatically if it's not found on your host machine.
 
 ## Recommended host machine (single server)
 
-- 4 CPU cores or more
+- Linux system
+- 4x CPU cores or more
 - 8GB RAM or more
 - 100GB disk space or more
 

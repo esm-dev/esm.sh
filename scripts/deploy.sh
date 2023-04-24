@@ -116,6 +116,7 @@ ssh -p $sshPort $user@$host << EOF
   chmod +x /usr/local/bin/esmd
 
   if [ "$init" == "yes" ]; then
+    echo fs.inotify.max_user_watches=524288 | sudo tee -a /etc/sysctl.conf && sudo sysctl -p
     if [ -f \$SVCF ]; then
       rm -f \$SVCF
     fi
