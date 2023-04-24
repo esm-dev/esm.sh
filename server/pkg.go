@@ -19,11 +19,7 @@ type Pkg struct {
 }
 
 func validatePkgPath(pathname string) (pkg Pkg, query string, err error) {
-	fromEsmsh := strings.HasPrefix(pathname, "/~")
-	fromGithub := !fromEsmsh && strings.HasPrefix(pathname, "/gh/") && strings.Count(pathname, "/") >= 3
-	if fromEsmsh {
-		pathname = "/" + pathname[2:]
-	}
+	fromGithub := strings.HasPrefix(pathname, "/gh/") && strings.Count(pathname, "/") >= 3
 	if fromGithub {
 		pathname = "/@" + pathname[4:]
 	}
@@ -34,7 +30,8 @@ func validatePkgPath(pathname string) (pkg Pkg, query string, err error) {
 		name, maybeVersion = utils.SplitByLastByte(pkgName[1:], '@')
 		name = "@" + name
 	}
-	if !validatePackageName(name) {
+	fromEsmsh := strings.HasPrefix(name, "~") && valid.IsHexString(name[1:])
+	if !fromEsmsh && !validatePackageName(name) {
 		return Pkg{}, "", fmt.Errorf("invalid package name '%s'", name)
 	}
 

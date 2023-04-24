@@ -34,19 +34,19 @@ func postHandler() rex.Handle {
 		if ctx.R.Method == "POST" {
 			pathname := ctx.Path.String()
 			if pathname != "/publish" {
-				return rex.Status(404, "not found")
+				return rex.Err(404, "not found")
 			}
 			defer ctx.R.Body.Close()
 			if ctx.R.Header.Get("Content-Type") != "application/json" {
-				return rex.Status(400, "invalid content type, should be application/json")
+				return rex.Err(400, "invalid content type, should be application/json")
 			}
 			var pub Publish
 			err := json.NewDecoder(ctx.R.Body).Decode(&pub)
 			if err != nil {
-				return rex.Status(400, "failed to parse publish config: "+err.Error())
+				return rex.Err(400, "failed to parse publish config: "+err.Error())
 			}
 			if pub.Code == "" {
-				return rex.Status(400, "code is required")
+				return rex.Err(400, "code is required")
 			}
 			input := &api.StdinOptions{
 				Contents:   pub.Code,
@@ -97,14 +97,14 @@ func postHandler() rex.Handle {
 				},
 			})
 			if len(ret.Errors) > 0 {
-				return rex.Status(400, "failed to validate code: "+ret.Errors[0].Text)
+				return rex.Err(400, "failed to validate code: "+ret.Errors[0].Text)
 			}
 			if len(ret.OutputFiles) == 0 {
-				return rex.Status(400, "failed to validate code: no output files")
+				return rex.Err(400, "failed to validate code: no output files")
 			}
 			code := ret.OutputFiles[0].Contents
 			if len(code) == 0 {
-				return rex.Status(400, "code is empty")
+				return rex.Err(400, "code is empty")
 			}
 			h := sha1.New()
 			h.Write(code)
@@ -112,7 +112,7 @@ func postHandler() rex.Handle {
 			key := "publish-" + id
 			record, err := db.Get(key)
 			if err != nil {
-				return rex.Status(500, "failed to save code")
+				return rex.Err(500, "failed to save code")
 			}
 			if record == nil {
 				_, err = fs.WriteFile(path.Join("publish", id, "index.mjs"), bytes.NewReader(code))
@@ -120,7 +120,7 @@ func postHandler() rex.Handle {
 					buf := bytes.NewBuffer(nil)
 					enc := json.NewEncoder(buf)
 					enc.Encode(map[string]interface{}{
-						"name":         id,
+						"name":         "~" + id,
 						"version":      "0.0.0",
 						"dependencies": deps,
 						"type":         "module",
@@ -135,7 +135,7 @@ func postHandler() rex.Handle {
 				}
 			}
 			if err != nil {
-				return rex.Status(500, "failed to save code")
+				return rex.Err(500, "failed to save code")
 			}
 			cdnOrigin := cfg.Origin
 			if cdnOrigin == "" {
@@ -147,8 +147,9 @@ func postHandler() rex.Handle {
 				cdnOrigin = fmt.Sprintf("%s://%s", proto, ctx.R.Host)
 			}
 			return map[string]interface{}{
-				"id":  id,
-				"url": fmt.Sprintf("%s/~%s", cdnOrigin, id),
+				"id":        id,
+				"url":       fmt.Sprintf("%s/~%s", cdnOrigin, id),
+				"bundleUrl": fmt.Sprintf("%s/~%s?bundle", cdnOrigin, id),
 			}
 		}
 		return nil
@@ -481,7 +482,7 @@ func getHandler() rex.Handle {
 		}
 
 		// redirect to the url with full package version
-		if !hasBuildVerPrefix && !strings.HasPrefix(pathname, fmt.Sprintf("%s/%s@%s", ghPrefix, reqPkg.Name, reqPkg.Version)) {
+		if !hasBuildVerPrefix && !reqPkg.FromEsmsh && !strings.HasPrefix(pathname, fmt.Sprintf("%s/%s@%s", ghPrefix, reqPkg.Name, reqPkg.Version)) {
 			bvPrefix := ""
 			eaSign := ""
 			subPath := ""
