@@ -4,10 +4,10 @@
 
 A fast, global, & smart content delivery network (CDN) for modern(es2015+) web development.
 
-<p>
-  <a href="https://discord.gg/Xkn239au"><img src="https://img.shields.io/discord/1097820016893763684?color=%23008181&label=Chat&labelColor=%23111&logo=discord&logoColor=%23aaaaaa" alt="Chat"></a>
-  <a href="https://twitter.com/intent/follow?screen_name=jexia_"><img src="https://img.shields.io/twitter/follow/jexia_?style=social" alt="Twitter"></a>
-</p>
+[![Twitter](https://img.shields.io/github/v/release/esm-dev/esm.sh?display_name=tag&sort=semver&style=flat&colorA=232323&colorB=232323)](https://twitter.com/jexia_)
+[![Discord](https://img.shields.io/discord/1097820016893763684?style=flat&colorA=232323&colorB=232323&label=&logo=discord&logoColor=eeeeee)](https://discord.gg/Xkn239au)
+[![Twitter](https://img.shields.io/twitter/follow/jexia_?label=%40jexia_&style=flat&colorA=232323&colorB=232323&logo=twitter&logoColor=eeeeee)](https://twitter.com/jexia_)
+[![Open Collective](https://img.shields.io/opencollective/all/esm?style=flat&colorA=232323&colorB=232323)](https://opencollective.com/esm)
 
 ## Import from NPM
 
