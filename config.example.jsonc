@@ -52,6 +52,9 @@
   // Disable compressing the response, default is false.
   "noCompress": false,
 
+  // The auth secret to validate the `X-Auth-Secret` header of requests, default is no auth.
+  "authSecret": "",
+
   // The list to ban some packages or scopes.
   "banList": {
     "packages": ["@some_scope/package_name"],

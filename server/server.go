@@ -153,6 +153,7 @@ func Serve(efs EmbedFS) {
 			ExposedHeaders:   []string{"X-TypeScript-Types"},
 			AllowCredentials: false,
 		}),
+		XAuth(cfg.AuthSecret),
 		postHandler(),
 		getHandler(),
 	)

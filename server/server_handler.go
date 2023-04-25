@@ -1111,6 +1111,15 @@ func getHandler() rex.Handle {
 	}
 }
 
+func XAuth(secret string) rex.Handle {
+	return func(ctx *rex.Context) interface{} {
+		if secret != "" && ctx.R.Header.Get("X-Auth-Secret") != secret {
+			return rex.Status(401, "Unauthorized")
+		}
+		return nil
+	}
+}
+
 func throwErrorJS(ctx *rex.Context, err error) interface{} {
 	buf := bytes.NewBuffer(nil)
 	fmt.Fprintf(buf, "/* esm.sh - error */\n")
