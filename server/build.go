@@ -77,21 +77,19 @@ func (task *BuildTask) Build() (esm *ESMBuild, err error) {
 		}
 	}
 
-	purgeDelay := 10 * time.Minute
 	v, loaded := purgeTimers.LoadAndDelete(versionName)
 	if loaded {
 		if t, ok := v.(*time.Timer); ok {
 			t.Stop()
 		}
 	}
-	defer func() {
-		wd := task.wd
-		purgeTimers.Store(versionName, time.AfterFunc(purgeDelay, func() {
-			purgeTimers.Delete(versionName)
-			log.Debugf("Purging %s...", versionName)
-			os.RemoveAll(wd)
-		}))
-	}()
+
+	wd := task.wd
+	purgeTimers.Store(versionName, time.AfterFunc(10*time.Minute, func() {
+		purgeTimers.Delete(versionName)
+		log.Debugf("Purging %s...", versionName)
+		os.RemoveAll(wd)
+	}))
 
 	task.stage = "install"
 	err = installPackage(task.wd, task.Pkg)
