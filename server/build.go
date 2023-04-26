@@ -59,7 +59,6 @@ func (task *BuildTask) Build() (esm *ESMBuild, err error) {
 	versionName := task.Pkg.VersionName()
 	if task.wd == "" {
 		task.wd = path.Join(cfg.WorkDir, fmt.Sprintf("npm/%s", versionName))
-
 		err = ensureDir(task.wd)
 		if err != nil {
 			return
@@ -77,19 +76,19 @@ func (task *BuildTask) Build() (esm *ESMBuild, err error) {
 		}
 	}
 
-	v, loaded := purgeTimers.LoadAndDelete(versionName)
-	if loaded {
-		if t, ok := v.(*time.Timer); ok {
-			t.Stop()
+	defer func(wd string, tkey string) {
+		v, loaded := purgeTimers.LoadAndDelete(tkey)
+		if loaded {
+			if t, ok := v.(*time.Timer); ok {
+				t.Stop()
+			}
 		}
-	}
-
-	wd := task.wd
-	purgeTimers.Store(versionName, time.AfterFunc(10*time.Minute, func() {
-		purgeTimers.Delete(versionName)
-		log.Debugf("Purging %s...", versionName)
-		os.RemoveAll(wd)
-	}))
+		purgeTimers.Store(tkey, time.AfterFunc(10*time.Minute, func() {
+			log.Debugf("Purging %s...", tkey)
+			purgeTimers.Delete(tkey)
+			os.RemoveAll(wd)
+		}))
+	}(task.wd, versionName)
 
 	task.stage = "install"
 	err = installPackage(task.wd, task.Pkg)
