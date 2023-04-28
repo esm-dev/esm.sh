@@ -156,7 +156,14 @@ func getNodejsVersion() (version string, major int, err error) {
 }
 
 func installNodejs(dir string, version string) (err error) {
-	dlURL := fmt.Sprintf("https://nodejs.org/dist/v%s/node-v%s-%s-x64.tar.xz", version, version, runtime.GOOS)
+	arch := runtime.GOARCH
+	switch arch {
+	case "amd64":
+		arch = "x64"
+	case "386":
+		arch = "x86"
+	}
+	dlURL := fmt.Sprintf("https://nodejs.org/dist/v%s/node-v%s-%s-%s.tar.xz", version, version, runtime.GOOS, arch)
 	resp, err := fetch(dlURL)
 	if err != nil {
 		err = fmt.Errorf("download nodejs: %v", err)
