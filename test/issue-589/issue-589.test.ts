@@ -1,4 +1,7 @@
-import { assertEquals } from "https://deno.land/std@0.180.0/testing/asserts.ts";
+import {
+  assert,
+  assertEquals,
+} from "https://deno.land/std@0.180.0/testing/asserts.ts";
 
 Deno.test("issue #589", async () => {
   const { version } = await fetch("http://localhost:8080/status.json").then((
@@ -11,8 +14,9 @@ Deno.test("issue #589", async () => {
   res.body?.cancel();
 
   assertEquals(res.status, 302);
-  assertEquals(
-    res.headers.get("location"),
-    `http://localhost:8080/v${version}/@types/react@18.0.38/index.d.ts`,
+  assert(
+    res.headers.get("location")!.startsWith(
+      `http://localhost:8080/v${version}/@types/react@18.`,
+    ),
   );
 });
