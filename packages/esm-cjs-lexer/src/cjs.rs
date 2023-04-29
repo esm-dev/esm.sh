@@ -517,7 +517,7 @@ impl ExportsParser {
           }
         }
       } else {
-        for bare_export_name in self.get_bare_export_names(assign.right.as_ref()) {
+        if let Some(bare_export_name) = self.get_bare_export_names(assign.right.as_ref()) {
           self.exports.insert(bare_export_name);
         }
       }
@@ -716,7 +716,7 @@ impl ExportsParser {
           for decl in var.as_ref().decls.iter() {
             self.try_to_mark_exports_alias(decl);
             if let Some(init_expr) = &decl.init {
-              for bare_export_name in self.get_bare_export_names(init_expr) {
+              if let Some(bare_export_name) = self.get_bare_export_names(init_expr) {
                 self.exports.insert(bare_export_name);
               }
             }
@@ -830,13 +830,19 @@ impl ExportsParser {
                   self.reexports.insert(reexport);
                 }
               }
+            } else if is_export_call(&call) && call.args.len() > 0 {
+              if let Some(props) = self.as_obj(call.args[0].expr.as_ref()) {
+                self.use_object_as_exports(props);
+              } else if let Some(reexport) = self.as_reexport(call.args[0].expr.as_ref()) {
+                self.reexports.insert(reexport);
+              }
             } else if let Some(body) = is_umd_iife_call(&call) {
               self.dep_parse(body, false);
             } else if let Some(body) = is_iife_call(&call) {
               for arg in &call.args {
                 if arg.spread.is_none() {
                   // (function() { ... })(exports.foo || (exports.foo = {}))
-                  for bare_export_name in self.get_bare_export_names(arg.expr.as_ref()) {
+                  if let Some(bare_export_name) = self.get_bare_export_names(arg.expr.as_ref()) {
                     self.exports.insert(bare_export_name);
                   }
                 }
@@ -852,7 +858,7 @@ impl ExportsParser {
                   // (function() { ... })(exports.foo || (exports.foo = {}))
                   for arg in &call.args {
                     if arg.spread.is_none() {
-                      for bare_export_name in self.get_bare_export_names(arg.expr.as_ref()) {
+                      if let Some(bare_export_name) = self.get_bare_export_names(arg.expr.as_ref()) {
                         self.exports.insert(bare_export_name);
                       }
                     }
@@ -1061,6 +1067,18 @@ fn is_iife_call(call: &CallExpr) -> Option<Vec<Stmt>> {
     _ => {}
   }
   None
+}
+
+fn is_export_call(call: &CallExpr) -> bool {
+  if let Some(callee) = with_expr_callee(call) {
+    match callee {
+      Expr::Ident(id) => {
+        return id.sym.as_ref().eq("__export");
+      }
+      _ => {}
+    }
+  }
+  false
 }
 
 // match:

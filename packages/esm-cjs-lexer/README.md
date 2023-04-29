@@ -21,15 +21,17 @@ Types:
 export function parse(
   specifier: string,
   code: string,
-  node_env?: 'development' | 'production',
-  call_mode?: boolean,
+  options? {
+    nodeEnv?: 'development' | 'production',
+    callMode?: boolean,
+  }
 ): {
   exports: string[],
   reexports: string[],
 };
 ```
 
-Example: 
+Example:
 ```js
 const { parse } = require('esm-cjs-lexer');
 
@@ -61,7 +63,7 @@ const { exports, reexports } = parse('index.cjs', `
   module.exports = { foo, ...obj, ...require("./lib") };
 `);
 
-// condition
+// if condition
 // exports: ['foo', 'cjs']
 const { exports } = parse('index.cjs', `
   module.exports.a = "a";
@@ -95,7 +97,7 @@ const { exports } = parse('index.cjs', `
   exports.__esModule = true
 `);
 
-// condition with `process.env.NODE_ENV`
+// env condition with `process.env.NODE_ENV`
 // reexports: ['./index.development']
 const { reexports } = parse('index.cjs', `
   if (process.env.NODE_ENV === "development") {
@@ -103,7 +105,7 @@ const { reexports } = parse('index.cjs', `
   } else {
     module.exports = require("./index.production")
   }
-`, 'development');
+`, { nodeEnv: 'development' });
 
 // IIFE exports
 // exports: ['foo']
@@ -138,7 +140,7 @@ const { exports } = parse('lib.cjs', `
   module.exports = function() {
     return { foo: 'bar' }
   }
-`, 'production', true);
+`, { callMode: true });
 ```
 
 ## Development Setup

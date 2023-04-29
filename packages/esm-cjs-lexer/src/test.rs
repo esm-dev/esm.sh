@@ -722,4 +722,19 @@ mod tests {
       .expect("could not parse exports");
     assert_eq!(exports.join(","), "i18n,use,t");
   }
+
+  #[test]
+  fn parse_cjs_exports_case_23() {
+    let source = r#"
+      Object.defineProperty(exports, "__esModule", { value: true });
+      __export({foo:"bar"});
+      __export(require("./lib"));
+    "#;
+    let swc = SWC::parse("index.cjs", source).expect("could not parse module");
+    let (exports, reexports) = swc
+      .parse_cjs_exports("production", true)
+      .expect("could not parse exports");
+    assert_eq!(exports.join(","), "__esModule,foo");
+    assert_eq!(reexports.join(","), "./lib");
+  }
 }
