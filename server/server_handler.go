@@ -1111,9 +1111,9 @@ func getHandler() rex.Handle {
 	}
 }
 
-func XAuth(secret string) rex.Handle {
+func auth(secret string) rex.Handle {
 	return func(ctx *rex.Context) interface{} {
-		if secret != "" && ctx.R.Header.Get("X-Auth-Secret") != secret {
+		if secret != "" && ctx.R.Header.Get("Authorization") != "Bearer "+secret {
 			return rex.Status(401, "Unauthorized")
 		}
 		return nil
