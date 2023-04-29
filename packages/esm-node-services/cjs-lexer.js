@@ -130,7 +130,7 @@ exports.parseCjsExports = async input => {
     const req = requires.pop()
     try {
       const code = fs.readFileSync(req.path, "utf-8")
-      const results = parse(req.path, code, nodeEnv, req.callMode)
+      const results = parse(req.path, code, { nodeEnv, callMode: req.callMode })
       if (
         results.reexports.length === 1 &&
         /^[a-z@]/i.test(results.reexports[0]) &&
