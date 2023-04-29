@@ -156,7 +156,7 @@ dependencies = [
 
 [[package]]
 name = "esm-cjs-lexer"
-version = "0.7.5"
+version = "0.8.0"
 dependencies = [
  "anyhow",
  "console_error_panic_hook",
