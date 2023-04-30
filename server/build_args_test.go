@@ -30,7 +30,7 @@ func TestEncodeBuildArgs(t *testing.T) {
 			keepNames:         true,
 			ignoreAnnotations: true,
 		},
-		"foo",
+		Pkg{Name: "foo"},
 		false,
 	)
 	args, err := decodeBuildArgsPrefix(prefix)

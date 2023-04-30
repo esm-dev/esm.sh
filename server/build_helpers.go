@@ -45,7 +45,7 @@ func (task *BuildTask) ID() string {
 		task.ghPrefix(),
 		pkg.Name,
 		pkg.Version,
-		encodeBuildArgsPrefix(task.BuildArgs, task.Pkg.Name, task.Target == "types"),
+		encodeBuildArgsPrefix(task.BuildArgs, task.Pkg, task.Target == "types"),
 		task.Target,
 		name,
 		extname,

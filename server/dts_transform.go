@@ -15,7 +15,7 @@ import (
 )
 
 func (task *BuildTask) TransformDTS(dts string) (n int, err error) {
-	buildArgsPrefix := encodeBuildArgsPrefix(task.BuildArgs, task.Pkg.Name, true)
+	buildArgsPrefix := encodeBuildArgsPrefix(task.BuildArgs, task.Pkg, true)
 	marker := newStringSet()
 	err = task.transformDTS(dts, buildArgsPrefix, marker)
 	if err == nil {
@@ -247,7 +247,7 @@ func (task *BuildTask) transformDTS(dts string, aliasDepsPrefix string, marker *
 				}
 			}
 
-			pkgBasePath := info.Name + "@" + info.Version + "/" + encodeBuildArgsPrefix(task.BuildArgs, info.Name, true)
+			pkgBasePath := info.Name + "@" + info.Version + "/" + encodeBuildArgsPrefix(task.BuildArgs, Pkg{Name: info.Name}, true)
 			importPath = fmt.Sprintf("%s/%s%s", cdnOriginAndBuildBasePath, pkgBasePath, importPath)
 		}
 

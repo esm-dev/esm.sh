@@ -76,17 +76,17 @@ func (task *BuildTask) Build() (esm *ESMBuild, err error) {
 		}
 	}
 
-	defer func(wd string, tkey string) {
-		v, loaded := purgeTimers.LoadAndDelete(tkey)
+	defer func(dir string, key string) {
+		v, loaded := purgeTimers.LoadAndDelete(key)
 		if loaded {
 			if t, ok := v.(*time.Timer); ok {
 				t.Stop()
 			}
 		}
-		purgeTimers.Store(tkey, time.AfterFunc(10*time.Minute, func() {
-			log.Debugf("Purging %s...", tkey)
-			purgeTimers.Delete(tkey)
-			os.RemoveAll(wd)
+		purgeTimers.Store(key, time.AfterFunc(24*time.Hour, func() {
+			log.Debugf("Purging %s...", key)
+			purgeTimers.Delete(key)
+			os.RemoveAll(dir)
 		}))
 	}(task.wd, versionName)
 
@@ -136,7 +136,7 @@ func (task *BuildTask) build() (esm *ESMBuild, err error) {
 		importPath := task.getImportPath(Pkg{
 			Name:    p.Name,
 			Version: p.Version,
-		}, encodeBuildArgsPrefix(task.BuildArgs, task.Pkg.Name, false))
+		}, encodeBuildArgsPrefix(task.BuildArgs, task.Pkg, false))
 		buf := bytes.NewBuffer(nil)
 		fmt.Fprintf(buf, `export * from "%s";`, importPath)
 
@@ -635,7 +635,7 @@ rebuild:
 						Version:   task.Pkg.Version,
 						Submodule: submodule,
 					}
-					importPath = task.getImportPath(subPkg, encodeBuildArgsPrefix(task.BuildArgs, subPkg.Name, false))
+					importPath = task.getImportPath(subPkg, encodeBuildArgsPrefix(task.BuildArgs, subPkg, false))
 				}
 				// node builtin module
 				if importPath == "" && builtInNodeModules[name] {
@@ -692,7 +692,7 @@ rebuild:
 								Version:   dep.Version,
 								Submodule: submodule,
 							}
-							importPath = task.getImportPath(subPkg, encodeBuildArgsPrefix(task.BuildArgs, subPkg.Name, false))
+							importPath = task.getImportPath(subPkg, encodeBuildArgsPrefix(task.BuildArgs, subPkg, false))
 							break
 						}
 					}
@@ -747,7 +747,7 @@ rebuild:
 						buildQueue.Add(t, "")
 					}
 
-					importPath = task.getImportPath(pkg, encodeBuildArgsPrefix(t.BuildArgs, pkg.Name, false))
+					importPath = task.getImportPath(pkg, encodeBuildArgsPrefix(t.BuildArgs, pkg, false))
 				}
 				if importPath == "" {
 					err = fmt.Errorf("could not resolve \"%s\" (Imported by \"%s\")", name, task.Pkg.Name)
@@ -1054,7 +1054,7 @@ func (task *BuildTask) checkDTS(esm *ESMBuild, npm NpmPackage) {
 	submodule := task.Pkg.Submodule
 	var dts string
 	if npm.Types != "" {
-		dts = task.toTypesPath(task.wd, npm, "", encodeBuildArgsPrefix(task.BuildArgs, task.Pkg.Name, true), submodule)
+		dts = task.toTypesPath(task.wd, npm, "", encodeBuildArgsPrefix(task.BuildArgs, task.Pkg, true), submodule)
 	} else if !strings.HasPrefix(name, "@types/") {
 		versions := []string{"latest"}
 		versionParts := strings.Split(task.Pkg.Version, ".")
@@ -1074,7 +1074,7 @@ func (task *BuildTask) checkDTS(esm *ESMBuild, npm NpmPackage) {
 		for _, version := range versions {
 			p, _, err := task.getPackageInfo(typesPkgName, version)
 			if err == nil {
-				prefix := encodeBuildArgsPrefix(task.BuildArgs, p.Name, true)
+				prefix := encodeBuildArgsPrefix(task.BuildArgs, Pkg{Name: p.Name}, true)
 				dts = task.toTypesPath(task.wd, p, version, prefix, submodule)
 				break
 			}
