@@ -33,7 +33,7 @@ func postHandler() rex.Handle {
 	return func(ctx *rex.Context) interface{} {
 		if ctx.R.Method == "POST" {
 			pathname := ctx.Path.String()
-			if pathname != "/publish" {
+			if pathname != "/build" {
 				return rex.Err(404, "not found")
 			}
 			defer ctx.R.Body.Close()

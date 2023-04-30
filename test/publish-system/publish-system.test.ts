@@ -4,7 +4,7 @@ Deno.test("publish-system", async (t) => {
   let url = "";
   let bundleUrl = "";
   await t.step("publish", async () => {
-    const ret = await fetch("http://localhost:8080/publish", {
+    const ret = await fetch("http://localhost:8080/build", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
