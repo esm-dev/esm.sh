@@ -1,5 +1,15 @@
 # Change Log
 
+## v118
+
+- feat: Publish system (#607)
+- **esm-cjs-lexer**: Support `__export(require("..."))` pattern (close #611)
+- Add `Auth` middleware
+- Upgrade `stableBuild` to v118
+- Remove **lit** from `stableBuild`
+- Fix submodule types (close #606)
+- Fix arch for darwin arm64 (#617 by @JLugagne)
+
 ## v117
 
 - Fix Buffer polyfill for deno (close #574)

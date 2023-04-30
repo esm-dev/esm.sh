@@ -2,10 +2,10 @@ package server
 
 const (
 	// esm.sh build version
-	VERSION = 117
+	VERSION = 118
 	// esm.sh stable build version, used for UI libraries like react, to make sure the runtime is single copy
 	// change this carefully!
-	STABLE_VERSION = 112
+	STABLE_VERSION = 118
 )
 
 const (
@@ -32,7 +32,6 @@ var cssPackages = map[string]string{
 
 // stable build for UI libraries like react, to make sure the runtime is single copy
 var stableBuild = map[string]bool{
-	"lit":      true,
 	"preact":   true,
 	"react":    true,
 	"solid-js": true,

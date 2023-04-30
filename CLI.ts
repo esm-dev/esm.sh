@@ -20,8 +20,10 @@ const VERSION = /^\/v\d+$/.test(importUrl.pathname)
 
 // stable build for UI libraries like react, to make sure the runtime is single copy
 const stableBuild = new Set([
-  "react",
   "preact",
+  "react",
+  "solid-js",
+  "svelte",
   "vue",
 ]);
 
