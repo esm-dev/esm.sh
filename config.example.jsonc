@@ -53,7 +53,7 @@
   "noCompress": false,
 
   // The auth secret to validate the `Authorization` header of requests, default is no auth.
-  "authToken": "",
+  "authSecret": "",
 
   // The list to ban some packages or scopes.
   "banList": {
