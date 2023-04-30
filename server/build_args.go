@@ -81,55 +81,57 @@ func decodeBuildArgsPrefix(raw string) (args BuildArgs, err error) {
 	return
 }
 
-func encodeBuildArgsPrefix(args BuildArgs, pkgName string, forTypes bool) string {
+func encodeBuildArgsPrefix(args BuildArgs, pkg Pkg, forTypes bool) string {
 	lines := []string{}
-	if len(args.alias) > 0 && !stableBuild[pkgName] {
-		var ss sort.StringSlice
-		for name, to := range args.alias {
-			if name != pkgName {
-				ss = append(ss, fmt.Sprintf("%s:%s", name, to))
+	if !(stableBuild[pkg.Name] && pkg.Submodule == "") {
+		if len(args.alias) > 0 {
+			var ss sort.StringSlice
+			for name, to := range args.alias {
+				if name != pkg.Name {
+					ss = append(ss, fmt.Sprintf("%s:%s", name, to))
+				}
+			}
+			if len(ss) > 0 {
+				ss.Sort()
+				lines = append(lines, fmt.Sprintf("a/%s", strings.Join(ss, ",")))
 			}
 		}
-		if len(ss) > 0 {
-			ss.Sort()
-			lines = append(lines, fmt.Sprintf("a/%s", strings.Join(ss, ",")))
-		}
-	}
-	if len(args.deps) > 0 && !stableBuild[pkgName] {
-		var ss sort.StringSlice
-		for _, p := range args.deps {
-			if pkgName == "react-dom" && p.Name == "react" {
-				continue
+		if len(args.deps) > 0 {
+			var ss sort.StringSlice
+			for _, p := range args.deps {
+				if pkg.Name == "react-dom" && p.Name == "react" {
+					continue
+				}
+				if p.Name != pkg.Name {
+					ss = append(ss, fmt.Sprintf("%s@%s", p.Name, p.Version))
+				}
 			}
-			if p.Name != pkgName {
-				ss = append(ss, fmt.Sprintf("%s@%s", p.Name, p.Version))
+			if len(ss) > 0 {
+				ss.Sort()
+				lines = append(lines, fmt.Sprintf("d/%s", strings.Join(ss, ",")))
 			}
 		}
-		if len(ss) > 0 {
-			ss.Sort()
-			lines = append(lines, fmt.Sprintf("d/%s", strings.Join(ss, ",")))
+		if args.external.Size() > 0 {
+			var ss sort.StringSlice
+			for _, name := range args.external.Values() {
+				if name != pkg.Name {
+					ss = append(ss, name)
+				}
+			}
+			if len(ss) > 0 {
+				ss.Sort()
+				lines = append(lines, fmt.Sprintf("e/%s", strings.Join(ss, ",")))
+			}
 		}
-	}
-	if args.external.Size() > 0 {
-		var ss sort.StringSlice
-		for _, name := range args.external.Values() {
-			if name != pkgName {
+		if args.treeShaking.Size() > 0 {
+			var ss sort.StringSlice
+			for _, name := range args.treeShaking.Values() {
 				ss = append(ss, name)
 			}
-		}
-		if len(ss) > 0 {
-			ss.Sort()
-			lines = append(lines, fmt.Sprintf("e/%s", strings.Join(ss, ",")))
-		}
-	}
-	if args.treeShaking.Size() > 0 {
-		var ss sort.StringSlice
-		for _, name := range args.treeShaking.Values() {
-			ss = append(ss, name)
-		}
-		if len(ss) > 0 {
-			ss.Sort()
-			lines = append(lines, fmt.Sprintf("ts/%s", strings.Join(ss, ",")))
+			if len(ss) > 0 {
+				ss.Sort()
+				lines = append(lines, fmt.Sprintf("ts/%s", strings.Join(ss, ",")))
+			}
 		}
 	}
 	if args.conditions.Size() > 0 {

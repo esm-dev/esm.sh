@@ -796,7 +796,6 @@ func getHandler() rex.Handle {
 			}
 		}
 
-		isBare := false
 		isPkgCss := ctx.Form.Has("css")
 		isBundle := ctx.Form.Has("bundle") && !stableBuild[reqPkg.Name]
 		isDev := ctx.Form.Has("dev")
@@ -824,15 +823,6 @@ func getHandler() rex.Handle {
 			treeShaking:       treeShaking,
 		}
 
-		// clear build args for stable build
-		if stableBuild[reqPkg.Name] && reqPkg.Submodule == "" {
-			buildArgs = BuildArgs{
-				external:    newStringSet(),
-				treeShaking: newStringSet(),
-				conditions:  newStringSet(),
-			}
-		}
-
 		// parse and use `X-` prefix
 		if hasBuildVerPrefix {
 			a := strings.Split(reqPkg.Submodule, "/")
@@ -851,7 +841,17 @@ func getHandler() rex.Handle {
 			}
 		}
 
-		// check `bare` mode
+		// clear build args for main entry of stable builds
+		if stableBuild[reqPkg.Name] && reqPkg.Submodule == "" {
+			buildArgs = BuildArgs{
+				external:    newStringSet(),
+				treeShaking: newStringSet(),
+				conditions:  buildArgs.conditions,
+			}
+		}
+
+		// check if it's build path
+		isBuildPath := false
 		if hasBuildVerPrefix && (endsWith(reqPkg.Subpath, ".mjs", ".js", ".css")) {
 			a := strings.Split(reqPkg.Submodule, "/")
 			if len(a) > 0 {
@@ -863,7 +863,7 @@ func getHandler() rex.Handle {
 						if submodule == pkgName+".css" {
 							reqPkg.Submodule = ""
 							target = maybeTarget
-							isBare = true
+							isBuildPath = true
 						} else {
 							url := fmt.Sprintf("%s%s/%s", cdnOrigin, cfg.BasePath, reqPkg.String())
 							return rex.Redirect(url, http.StatusFound)
@@ -891,7 +891,7 @@ func getHandler() rex.Handle {
 						}
 						reqPkg.Submodule = submodule
 						target = maybeTarget
-						isBare = true
+						isBuildPath = true
 					}
 				}
 			}
@@ -905,7 +905,7 @@ func getHandler() rex.Handle {
 					ghPrefix,
 					reqPkg.Name,
 					reqPkg.Version,
-					encodeBuildArgsPrefix(buildArgs, reqPkg.Name, true),
+					encodeBuildArgsPrefix(buildArgs, reqPkg, true),
 				), reqPkg.Subpath)
 				if strings.HasSuffix(savePath, "~.d.ts") {
 					savePath = strings.TrimSuffix(savePath, "~.d.ts")
@@ -975,7 +975,7 @@ func getHandler() rex.Handle {
 		fallback := false
 
 		if !hasBuild {
-			if !isBare && !isPined {
+			if !isBuildPath && !isPined {
 				// find previous build version
 				for i := 0; i < VERSION; i++ {
 					id := fmt.Sprintf("v%d/%s", VERSION-(i+1), strings.Join(strings.Split(taskID, "/")[1:], "/"))
@@ -1033,7 +1033,7 @@ func getHandler() rex.Handle {
 			return rex.Redirect(url, http.StatusMovedPermanently)
 		}
 
-		if isBare {
+		if isBuildPath {
 			savePath := task.getSavepath()
 			fi, err := fs.Stat(savePath)
 			if err != nil {
