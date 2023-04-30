@@ -16,6 +16,7 @@ dbUrl=""
 origin=""
 npmRegistry=""
 npmToken=""
+authSecret=""
 
 if [ "$init" == "yes" ]; then
   echo "Server options:"
@@ -27,19 +28,19 @@ if [ "$init" == "yes" ]; then
   if [ "$v" != "" ]; then
     tlsPort="$v"
   fi
-  read -p "? etc directory (ensure you have the r/w permission of it, default is '${workDir}'): " v
+  read -p "? workDir (ensure you have the r/w permission of it, default is '${workDir}'): " v
   if [ "$v" != "" ]; then
     workDir="$v"
   fi
-  read -p "? cache config (default is 'memory:main'): " v
+  read -p "? cache (default is 'memory:main'): " v
   if [ "$v" != "" ]; then
     cacheUrl="$v"
   fi
-  read -p "? fs config (default is 'local:\$workDir/storage'): " v
+  read -p "? file storage (default is 'local:\$workDir/storage'): " v
   if [ "$v" != "" ]; then
     fsUrl="$v"
   fi
-  read -p "? db config (default is 'postdb:\$workDir/esm.db'): " v
+  read -p "? database (default is 'postdb:\$workDir/esm.db'): " v
   if [ "$v" != "" ]; then
     dbUrl="$v"
   fi
@@ -54,6 +55,10 @@ if [ "$init" == "yes" ]; then
   read -p "? private token for npm registry (optional): " v
   if [ "$v" != "" ]; then
     npmToken="$v"
+  fi
+  read -p "? auth secret (optional): " v
+  if [ "$v" != "" ]; then
+    authSecret="$v"
   fi
   echo "---"
 fi
@@ -121,7 +126,7 @@ ssh -p $sshPort $user@$host << EOF
       rm -f \$SVCF
     fi
     mkdir -p /etc/esmd
-    echo "{\"port\":${port},\"tlsPort\":${tlsPort},\"workDir\":\"${workDir}\",\"cache\":\"${cacheUrl}\",\"storage\":\"${fsUrl}\",\"database\":\"${dbUrl}\",\"origin\":\"${origin}\",\"npmRegistry\":\"${npmRegistry}\",\"npmToken\":\"${npmToken}\"}" >> /etc/esmd/config.json
+    echo "{\"port\":${port},\"tlsPort\":${tlsPort},\"workDir\":\"${workDir}\",\"cache\":\"${cacheUrl}\",\"storage\":\"${fsUrl}\",\"database\":\"${dbUrl}\",\"origin\":\"${origin}\",\"npmRegistry\":\"${npmRegistry}\",\"npmToken\":\"${npmToken}\",\"authSecret\":\"${authSecret}\"}" >> /etc/esmd/config.json
     writeSVConfLine "[program:esmd]"
     writeSVConfLine "command=/usr/local/bin/esmd --config=/etc/esmd/config.json"
     writeSVConfLine "directory=/tmp"
