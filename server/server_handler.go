@@ -633,7 +633,10 @@ func getHandler() rex.Handle {
 					}
 					fi, err = os.Lstat(savePath)
 					if err != nil {
-						return rex.Status(500, err.Error())
+						if os.IsExist(err) {
+							return rex.Status(500, err.Error())
+						}
+						return rex.Status(404, "File Not Found")
 					}
 				case <-time.After(time.Minute):
 					buildQueue.RemoveConsumer(task, c)
