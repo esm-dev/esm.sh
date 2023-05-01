@@ -44,7 +44,11 @@ func (task *BuildTask) transformDTS(dts string, aliasDepsPrefix string, marker *
 		pkgName = pkgNameWithVersion
 	}
 
-	buildBasePath := fmt.Sprintf("/v%d", task.BuildVersion)
+	bv := task.BuildVersion
+	if stableBuild[pkgName] || pkgName == "@types/react" {
+		bv = STABLE_VERSION
+	}
+	buildBasePath := fmt.Sprintf("/v%d", bv)
 	if task.Pkg.FromGithub {
 		buildBasePath += "/gh"
 	}

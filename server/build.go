@@ -1081,7 +1081,11 @@ func (task *BuildTask) checkDTS(esm *ESMBuild, npm NpmPackage) {
 		}
 	}
 	if dts != "" {
-		esm.Dts = fmt.Sprintf("/v%d%s/%s", task.BuildVersion, task.ghPrefix(), dts)
+		bv := task.BuildVersion
+		if stableBuild[task.Pkg.Name] {
+			bv = STABLE_VERSION
+		}
+		esm.Dts = fmt.Sprintf("/v%d%s/%s", bv, task.ghPrefix(), dts)
 	}
 }
 
