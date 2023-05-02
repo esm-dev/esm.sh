@@ -56,9 +56,9 @@ func (task *BuildTask) Build() (esm *ESMBuild, err error) {
 		task.Deprecated = p.Deprecated
 	}
 
-	versionName := task.Pkg.VersionName()
+	pkgVersionName := task.Pkg.VersionName()
 	if task.wd == "" {
-		task.wd = path.Join(cfg.WorkDir, fmt.Sprintf("npm/%s", versionName))
+		task.wd = path.Join(cfg.WorkDir, fmt.Sprintf("npm/%s", pkgVersionName))
 		err = ensureDir(task.wd)
 		if err != nil {
 			return
@@ -76,19 +76,21 @@ func (task *BuildTask) Build() (esm *ESMBuild, err error) {
 		}
 	}
 
-	defer func(dir string, key string) {
-		v, loaded := purgeTimers.LoadAndDelete(key)
+	defer func(dir string, pkgVersionName string) {
+		v, loaded := purgeTimers.LoadAndDelete(pkgVersionName)
 		if loaded {
-			if t, ok := v.(*time.Timer); ok {
-				t.Stop()
-			}
+			v.(*time.Timer).Stop()
 		}
-		purgeTimers.Store(key, time.AfterFunc(24*time.Hour, func() {
-			log.Debugf("Purging %s...", key)
-			purgeTimers.Delete(key)
+		purgeDelay := 24 * time.Hour
+		purgeTimers.Store(pkgVersionName, time.AfterFunc(purgeDelay, func() {
+			purgeTimers.Delete(pkgVersionName)
+			lock := getInstallLock(pkgVersionName)
+			lock.Lock()
+			log.Debugf("Purging %s...", pkgVersionName)
 			os.RemoveAll(dir)
+			lock.Unlock()
 		}))
-	}(task.wd, versionName)
+	}(task.wd, pkgVersionName)
 
 	task.stage = "install"
 	err = installPackage(task.wd, task.Pkg)
@@ -1093,10 +1095,10 @@ func (task *BuildTask) checkDTS(esm *ESMBuild, npm NpmPackage) {
 
 func (task *BuildTask) buildDTS(dts string) {
 	start := time.Now()
-	n, err := task.TransformDTS(dts)
+	err := task.TransformDTS(dts)
 	if err != nil && os.IsExist(err) {
 		log.Errorf("TransformDTS(%s): %v", dts, err)
 		return
 	}
-	log.Debugf("transform dts '%s' (%d related dts files transformed) in %v", dts, n, time.Since(start))
+	log.Debugf("transform dts '%s' in %v", dts, time.Since(start))
 }

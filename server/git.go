@@ -10,7 +10,6 @@ import (
 	"os/exec"
 	"path"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/esm-dev/esm.sh/server/storage"
@@ -25,11 +24,9 @@ type GitRef struct {
 // list repo refs using `git ls-remote repo`
 func listRepoRefs(repo string) (refs []GitRef, err error) {
 	cacheKey := fmt.Sprintf("gh:%s", repo)
-	mutex, _ := fetchLock.LoadOrStore(cacheKey, &sync.Mutex{})
-	mutex.(*sync.Mutex).Lock()
-	defer func() {
-		mutex.(*sync.Mutex).Unlock()
-	}()
+	lock := getFetchLock(cacheKey)
+	lock.Lock()
+	defer lock.Unlock()
 
 	// check cache firstly
 	if cache != nil {

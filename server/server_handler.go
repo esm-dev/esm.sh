@@ -1098,13 +1098,8 @@ func getHandler() rex.Handle {
 		}
 
 		if esm.Dts != "" && !noCheck && !isWorker {
-			dts := strings.TrimPrefix(esm.Dts, "/")
-			if stableBuild[reqPkg.Name] {
-				dts = strings.Join(strings.Split(dts, "/")[1:], "/")
-				dts = fmt.Sprintf("v%d/%s", VERSION, dts)
-			}
-			url := fmt.Sprintf("%s%s/%s", cdnOrigin, cfg.BasePath, dts)
-			ctx.SetHeader("X-TypeScript-Types", url)
+			dtsUrl := fmt.Sprintf("%s%s%s", cdnOrigin, cfg.BasePath, esm.Dts)
+			ctx.SetHeader("X-TypeScript-Types", dtsUrl)
 		}
 		if fallback {
 			ctx.SetHeader("Cache-Control", "private, no-store, no-cache, must-revalidate")

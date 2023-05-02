@@ -7,30 +7,19 @@ import (
 	"os"
 	"path"
 	"strings"
-	"sync"
 
 	"github.com/esm-dev/esm.sh/server/storage"
 
 	"github.com/ije/gox/utils"
 )
 
-func (task *BuildTask) TransformDTS(dts string) (n int, err error) {
+func (task *BuildTask) TransformDTS(dts string) (err error) {
 	buildArgsPrefix := encodeBuildArgsPrefix(task.BuildArgs, task.Pkg, true)
-	marker := newStringSet()
-	err = task.transformDTS(dts, buildArgsPrefix, marker)
-	if err == nil {
-		n = marker.Size()
-	}
+	err = task.transformDTS(dts, buildArgsPrefix)
 	return
 }
 
-func (task *BuildTask) transformDTS(dts string, aliasDepsPrefix string, marker *stringSet) (err error) {
-	// don't transform repeatly
-	if marker.Has(aliasDepsPrefix + dts) {
-		return
-	}
-	marker.Add(aliasDepsPrefix + dts)
-
+func (task *BuildTask) transformDTS(dts string, aliasDepsPrefix string) (err error) {
 	var taskPkgInfo NpmPackage
 	taskPkgJsonPath := path.Join(task.wd, "node_modules", task.Pkg.Name, "package.json")
 	err = utils.ParseJSONFile(taskPkgJsonPath, &taskPkgInfo)
@@ -44,18 +33,12 @@ func (task *BuildTask) transformDTS(dts string, aliasDepsPrefix string, marker *
 		pkgName = pkgNameWithVersion
 	}
 
-	bv := task.BuildVersion
-	if stableBuild[pkgName] || pkgName == "@types/react" {
-		bv = STABLE_VERSION
-	}
-	buildBasePath := fmt.Sprintf("/v%d", bv)
+	dir := fmt.Sprintf("/v%d", task.BuildVersion)
 	if task.Pkg.FromGithub {
-		buildBasePath += "/gh"
+		dir += "/gh"
 	}
-	cdnOriginAndBuildBasePath := task.CdnOrigin + cfg.BasePath + buildBasePath
-
 	dtsPath := utils.CleanPath(strings.Join(append([]string{
-		buildBasePath,
+		dir,
 		pkgNameWithVersion,
 		aliasDepsPrefix,
 	}, strings.Split(submodule, "/")...), "/"))
@@ -97,15 +80,15 @@ func (task *BuildTask) transformDTS(dts string, aliasDepsPrefix string, marker *
 
 	wd := task.getRealWD()
 	buf := bytes.NewBuffer(nil)
-	imports := newStringSet()
+	dtsBasePath := fmt.Sprintf("%s%s/v%d", task.CdnOrigin, cfg.BasePath, task.BuildVersion)
 	if pkgName == "@types/node" {
-		fmt.Fprintf(buf, "/// <reference path=\"%s/node.ns.d.ts\" />\n", cdnOriginAndBuildBasePath)
+		fmt.Fprintf(buf, "/// <reference path=\"%s/node.ns.d.ts\" />\n", dtsBasePath)
 	}
 	err = walkDts(pass1Buf, buf, func(importPath string, kind string, position int) string {
 		// resove `declare module "xxx" {}`
 		if kind == "declareModule" {
 			if strings.HasPrefix(importPath, "node:") && pkgName == "@types/node" {
-				return fmt.Sprintf("%s/@types/node@%s/%s.d.ts", cdnOriginAndBuildBasePath, nodeTypesVersion, strings.TrimPrefix(importPath, "node:"))
+				return fmt.Sprintf("%s/@types/node@%s/%s.d.ts", dtsBasePath, nodeTypesVersion, strings.TrimPrefix(importPath, "node:"))
 			}
 			if internalDeclModules.Has(importPath) {
 				return importPath
@@ -170,18 +153,15 @@ func (task *BuildTask) transformDTS(dts string, aliasDepsPrefix string, marker *
 					}
 				}
 			}
-			if strings.HasSuffix(dts, ".d.ts") && !strings.HasSuffix(dts, "~.d.ts") {
-				imports.Add(importPath)
-			}
 		} else {
 			if importPath == "node" {
-				return fmt.Sprintf("%s/node.ns.d.ts", cdnOriginAndBuildBasePath)
+				return fmt.Sprintf("%s/node.ns.d.ts", dtsBasePath)
 			}
 			if strings.HasPrefix(importPath, "node:") {
-				return fmt.Sprintf("%s/@types/node@%s/%s.d.ts", cdnOriginAndBuildBasePath, nodeTypesVersion, strings.TrimPrefix(importPath, "node:"))
+				return fmt.Sprintf("%s/@types/node@%s/%s.d.ts", dtsBasePath, nodeTypesVersion, strings.TrimPrefix(importPath, "node:"))
 			}
 			if _, ok := builtInNodeModules[importPath]; ok {
-				return fmt.Sprintf("%s/@types/node@%s/%s.d.ts", cdnOriginAndBuildBasePath, nodeTypesVersion, importPath)
+				return fmt.Sprintf("%s/@types/node@%s/%s.d.ts", dtsBasePath, nodeTypesVersion, importPath)
 			}
 
 			depTypePkgName, _ := splitPkgPath(importPath)
@@ -232,9 +212,6 @@ func (task *BuildTask) transformDTS(dts string, aliasDepsPrefix string, marker *
 			// copy dependent dts files in the node_modules directory in current build context
 			if fromPackageJSON {
 				typesPath := task.toTypesPath(wd, info, "", "", subpath)
-				if strings.HasSuffix(typesPath, ".d.ts") && !strings.HasSuffix(typesPath, "~.d.ts") {
-					imports.Add(typesPath)
-				}
 				importPath = strings.TrimPrefix(typesPath, info.Name+"@"+info.Version+"/")
 			} else {
 				if subpath != "" {
@@ -250,11 +227,13 @@ func (task *BuildTask) transformDTS(dts string, aliasDepsPrefix string, marker *
 					importPath += "~.d.ts"
 				}
 			}
-
-			pkgBasePath := info.Name + "@" + info.Version + "/" + encodeBuildArgsPrefix(task.BuildArgs, Pkg{Name: info.Name}, true)
-			importPath = fmt.Sprintf("%s/%s%s", cdnOriginAndBuildBasePath, pkgBasePath, importPath)
+			bv := task.BuildVersion
+			if stableBuild[info.Name] || stableBuild[strings.TrimPrefix(info.Name, "@types/")] {
+				bv = STABLE_VERSION
+			}
+			pkgPath := info.Name + "@" + info.Version + "/" + encodeBuildArgsPrefix(task.BuildArgs, Pkg{Name: info.Name}, true)
+			importPath = fmt.Sprintf("%s%s/v%d/%s%s", task.CdnOrigin, cfg.BasePath, bv, pkgPath, importPath)
 		}
-
 		return importPath
 	})
 	if err != nil {
@@ -292,40 +271,6 @@ func (task *BuildTask) transformDTS(dts string, aliasDepsPrefix string, marker *
 	}
 
 	_, err = fs.WriteFile(savePath, buf)
-	if err != nil {
-		return
-	}
-
-	var wg sync.WaitGroup
-	var errors []error
-	for _, importDts := range imports.Values() {
-		if isLocalSpecifier(importDts) {
-			if strings.HasPrefix(importDts, "/") {
-				pkg, subpath := utils.SplitByFirstByte(importDts, '/')
-				if strings.HasPrefix(pkg, "@") {
-					n, _ := utils.SplitByFirstByte(subpath, '/')
-					pkg = fmt.Sprintf("%s/%s", pkg, n)
-				}
-				importDts = path.Join(pkg, importDts)
-			} else {
-				importDts = path.Join(path.Dir(dts), importDts)
-			}
-		}
-		wg.Add(1)
-		go func(importDts string) {
-			err := task.transformDTS(importDts, aliasDepsPrefix, marker)
-			if err != nil {
-				errors = append(errors, err)
-			}
-			wg.Done()
-		}(importDts)
-	}
-	wg.Wait()
-
-	if len(errors) > 0 {
-		err = errors[0]
-	}
-
 	return
 }
 

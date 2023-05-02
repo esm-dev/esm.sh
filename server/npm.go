@@ -175,11 +175,9 @@ func fetchPackageInfo(name string, version string) (info NpmPackage, err error) 
 	isFullVersion := regexpFullVersion.MatchString(version)
 
 	cacheKey := fmt.Sprintf("npm:%s@%s", name, version)
-	mutex, _ := fetchLock.LoadOrStore(cacheKey, &sync.Mutex{})
-	mutex.(*sync.Mutex).Lock()
-	defer func() {
-		mutex.(*sync.Mutex).Unlock()
-	}()
+	lock := getFetchLock(cacheKey)
+	lock.Lock()
+	defer lock.Unlock()
 
 	// check cache firstly
 	if cache != nil {
@@ -299,11 +297,9 @@ func fetchPackageInfo(name string, version string) (info NpmPackage, err error) 
 
 func installPackage(wd string, pkg Pkg) (err error) {
 	pkgVersionName := pkg.VersionName()
-	mutex, _ := installLock.LoadOrStore(pkgVersionName, &sync.Mutex{})
-	mutex.(*sync.Mutex).Lock()
-	defer func() {
-		mutex.(*sync.Mutex).Unlock()
-	}()
+	lock := getInstallLock(pkgVersionName)
+	lock.Lock()
+	defer lock.Unlock()
 
 	// ensure package.json file to prevent read up-levels
 	packageFilePath := path.Join(wd, "package.json")
@@ -318,6 +314,7 @@ func installPackage(wd string, pkg Pkg) (err error) {
 				fmt.Sprintf("git+https://github.com/%s.git#%s", pkg.Name, pkg.Version),
 			))
 		}
+		ensureDir(wd)
 		err = os.WriteFile(packageFilePath, fileContent, 0644)
 	}
 	if err != nil {
@@ -427,4 +424,14 @@ func fixPkgVersion(info NpmPackage) (NpmPackage, error) {
 
 func isTypesOnlyPackage(p NpmPackage) bool {
 	return p.Main == "" && p.Module == "" && p.Types != ""
+}
+
+func getInstallLock(key string) *sync.Mutex {
+	v, _ := installLocks.LoadOrStore(key, &sync.Mutex{})
+	return v.(*sync.Mutex)
+}
+
+func getFetchLock(key string) *sync.Mutex {
+	v, _ := fetchLocks.LoadOrStore(key, &sync.Mutex{})
+	return v.(*sync.Mutex)
 }

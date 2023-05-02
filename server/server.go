@@ -22,16 +22,16 @@ import (
 )
 
 var (
-	cfg         *config.Config
-	cache       storage.Cache
-	db          storage.DataBase
-	fs          storage.FileSystem
-	buildQueue  *BuildQueue
-	log         *logx.Logger
-	embedFS     EmbedFS
-	fetchLock   sync.Map
-	installLock sync.Map
-	purgeTimers sync.Map
+	cfg          *config.Config
+	cache        storage.Cache
+	db           storage.DataBase
+	fs           storage.FileSystem
+	buildQueue   *BuildQueue
+	log          *logx.Logger
+	embedFS      EmbedFS
+	fetchLocks   sync.Map
+	installLocks sync.Map
+	purgeTimers  sync.Map
 )
 
 type EmbedFS interface {
