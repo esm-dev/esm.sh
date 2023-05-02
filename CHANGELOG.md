@@ -1,5 +1,11 @@
 # Change Log
 
+## v119
+
+- Fix named import of cjs (close #620)
+- Use `STABKE_VERSION` for dts build of `stableBuild`
+- Upgrade esbuild to **0.17.18**
+
 ## v118
 
 - feat: Publish system (#607)
