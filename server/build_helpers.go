@@ -22,8 +22,8 @@ func (task *BuildTask) ID() string {
 	name := strings.TrimSuffix(path.Base(pkg.Name), ".js")
 	extname := ".mjs"
 
-	if pkg.FromEsmsh && len(name) > 11 {
-		name = name[1:11]
+	if pkg.FromEsmsh {
+		name = "mod"
 	}
 	if pkg.Submodule != "" {
 		name = pkg.Submodule
@@ -70,8 +70,8 @@ func (task *BuildTask) getImportPath(pkg Pkg, buildArgsPrefix string) string {
 		name = strings.TrimSuffix(strings.TrimSuffix(pkg.Submodule, ".js"), ".mjs")
 		extname = ".js"
 	}
-	if pkg.FromEsmsh && len(name) > 11 {
-		name = name[1:11]
+	if pkg.FromEsmsh {
+		name = "mod"
 	}
 	// workaround for es5-ext weird "/#/" path
 	if pkg.Name == "es5-ext" {

@@ -99,6 +99,7 @@ func encodeBuildArgsPrefix(args BuildArgs, pkg Pkg, forTypes bool) string {
 		if len(args.deps) > 0 {
 			var ss sort.StringSlice
 			for _, p := range args.deps {
+				// react-dom always depends the same version of react
 				if pkg.Name == "react-dom" && p.Name == "react" {
 					continue
 				}
@@ -123,14 +124,16 @@ func encodeBuildArgsPrefix(args BuildArgs, pkg Pkg, forTypes bool) string {
 				lines = append(lines, fmt.Sprintf("e/%s", strings.Join(ss, ",")))
 			}
 		}
-		if args.treeShaking.Size() > 0 {
-			var ss sort.StringSlice
-			for _, name := range args.treeShaking.Values() {
-				ss = append(ss, name)
-			}
-			if len(ss) > 0 {
-				ss.Sort()
-				lines = append(lines, fmt.Sprintf("ts/%s", strings.Join(ss, ",")))
+		if !forTypes {
+			if args.treeShaking.Size() > 0 {
+				var ss sort.StringSlice
+				for _, name := range args.treeShaking.Values() {
+					ss = append(ss, name)
+				}
+				if len(ss) > 0 {
+					ss.Sort()
+					lines = append(lines, fmt.Sprintf("ts/%s", strings.Join(ss, ",")))
+				}
 			}
 		}
 	}

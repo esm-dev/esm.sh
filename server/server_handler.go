@@ -880,12 +880,21 @@ func getHandler() rex.Handle {
 							submodule = strings.TrimSuffix(submodule, ".development")
 							isDev = true
 						}
-						isPkgEntry := strings.HasSuffix(reqPkg.Subpath, ".mjs") // <- /v100/react@18.2.0/es2022/react.mjs
-						if submodule == pkgName && !isPkgEntry && stableBuild[reqPkg.Name] {
-							url := fmt.Sprintf("%s%s/%s@%s", cdnOrigin, cfg.BasePath, reqPkg.Name, reqPkg.Version)
+						isMjs := strings.HasSuffix(reqPkg.Subpath, ".mjs")
+						// fix old build `/stable/react/deno/react.js` to `/stable/react/deno/react.mjs`
+						if !isMjs && submodule == pkgName && stableBuild[reqPkg.Name] {
+							url := fmt.Sprintf(
+								"%s%s/stable/%s@%s/%s/%s.mjs",
+								cdnOrigin,
+								cfg.BasePath,
+								reqPkg.Name,
+								reqPkg.Version,
+								maybeTarget,
+								reqPkg.Name,
+							)
 							return rex.Redirect(url, http.StatusMovedPermanently)
 						}
-						if submodule == pkgName && isPkgEntry {
+						if isMjs && submodule == pkgName {
 							submodule = ""
 						}
 						// workaround for es5-ext weird "/#/" path
