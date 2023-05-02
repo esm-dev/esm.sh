@@ -798,7 +798,7 @@ rebuild:
 											shift++
 										}
 										importName := string(p[1 : shift+1])
-										if includes(depESM.NamedExports, importName) {
+										if importName != "default" && includes(depESM.NamedExports, importName) {
 											cjsImportNames.Add(importName)
 											marked = true
 											p = p[1:]
@@ -811,8 +811,10 @@ rebuild:
 									if !marked && depNpm.Module != "" {
 										if depESM.HasExportDefault && len(depESM.NamedExports) == 1 {
 											cjsImportNames.Add("default")
-										} else {
+										} else if bytes.Contains(outputContent, []byte("__esModule")) {
 											cjsImportNames.Add("*?")
+										} else {
+											cjsImportNames.Add("*")
 										}
 										marked = true
 									}
