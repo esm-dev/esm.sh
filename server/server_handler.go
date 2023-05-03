@@ -24,7 +24,7 @@ import (
 	"github.com/ije/rex"
 )
 
-type Publish struct {
+type BuildInput struct {
 	Types string `json:"types"`
 	Code  string `json:"code"`
 }
@@ -36,20 +36,28 @@ func postHandler() rex.Handle {
 			if pathname != "/build" {
 				return rex.Err(404, "not found")
 			}
+			var input BuildInput
 			defer ctx.R.Body.Close()
-			if ctx.R.Header.Get("Content-Type") != "application/json" {
-				return rex.Err(400, "invalid content type, should be application/json")
+			switch ctx.R.Header.Get("Content-Type") {
+			case "application/json":
+				err := json.NewDecoder(ctx.R.Body).Decode(&input)
+				if err != nil {
+					return rex.Err(400, "failed to parse input config: "+err.Error())
+				}
+			case "application/javascript", "text/javascript", "application/typescript", "text/typescript":
+				code, err := ioutil.ReadAll(ctx.R.Body)
+				if err != nil {
+					return rex.Err(400, "failed to read code: "+err.Error())
+				}
+				input.Code = string(code)
+			default:
+				return rex.Err(400, "invalid content type")
 			}
-			var pub Publish
-			err := json.NewDecoder(ctx.R.Body).Decode(&pub)
-			if err != nil {
-				return rex.Err(400, "failed to parse publish config: "+err.Error())
-			}
-			if pub.Code == "" {
+			if input.Code == "" {
 				return rex.Err(400, "code is required")
 			}
-			input := &api.StdinOptions{
-				Contents:   pub.Code,
+			stdin := &api.StdinOptions{
+				Contents:   input.Code,
 				ResolveDir: "/",
 				Sourcefile: "index.tsx",
 				Loader:     api.LoaderTSX,
@@ -78,7 +86,7 @@ func postHandler() rex.Handle {
 			}
 			ret := api.Build(api.BuildOptions{
 				Outdir:           "/esbuild",
-				Stdin:            input,
+				Stdin:            stdin,
 				Platform:         api.PlatformBrowser,
 				Format:           api.FormatESModule,
 				TreeShaking:      api.TreeShakingTrue,
