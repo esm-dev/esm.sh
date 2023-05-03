@@ -98,7 +98,10 @@ func Load(filename string) (*Config, error) {
 		cfg.Origin = strings.TrimSuffix(cfg.Origin, "/")
 	}
 	if cfg.BuildConcurrency == 0 {
-		cfg.BuildConcurrency = uint16(runtime.NumCPU())
+		cfg.BuildConcurrency = uint16(2 * runtime.NumCPU())
+	}
+	if cfg.BuildConcurrency < 4 {
+		cfg.BuildConcurrency = 4
 	}
 	if cfg.Cache == "" {
 		cfg.Cache = "memory:default"
@@ -127,10 +130,14 @@ func Default() *Config {
 		panic(err)
 	}
 	workDir := path.Join(homeDir, ".esmd")
+	buildConcurrency := 2 * runtime.NumCPU()
+	if buildConcurrency < 4 {
+		buildConcurrency = 4
+	}
 	return &Config{
 		Port:             8080,
 		NsPort:           8088,
-		BuildConcurrency: uint16(runtime.NumCPU()),
+		BuildConcurrency: uint16(buildConcurrency),
 		WorkDir:          workDir,
 		Cache:            "memory:default",
 		Database:         fmt.Sprintf("bolt:%s", path.Join(workDir, "esm.db")),

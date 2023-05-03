@@ -9,7 +9,7 @@
   // The port to listen server on for node service, default is 8088 (do not change if you don't know what you are doing).
   "nsPort": 8088,
 
-  // The build max concurrency, default equals to the number of CPUs.
+  // The build max concurrency, default is `max(4, 2*NumCPU)`
   "buildConcurrency": 0,
 
   // The work directory for the server app, default is "~/.esmd".
