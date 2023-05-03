@@ -4,11 +4,11 @@
 
 A fast, smart, & global content delivery network (CDN) for modern(es2015+) web development.
 
-[![Release](https://img.shields.io/github/v/release/esm-dev/esm.sh?display_name=tag&sort=semver&style=flat&colorA=232323&colorB=232323&logo=hackthebox&logoColor=eeeeee)](https://github.com/esm-dev/esm.sh/releases)
+[![Release](https://img.shields.io/github/v/release/esm-dev/esm.sh?label=&display_name=tag&sort=semver&style=flat&colorA=232323&colorB=232323&logo=hackthebox&logoColor=eeeeee)](https://github.com/esm-dev/esm.sh/releases)
 [![Discord](https://img.shields.io/discord/1097820016893763684?style=flat&colorA=232323&colorB=232323&label=&logo=discord&logoColor=eeeeee)](https://discord.gg/XDbjMeb7pb)
 [![Twitter](https://img.shields.io/twitter/follow/jexia_?label=%40jexia_&style=flat&colorA=232323&colorB=232323&logo=twitter&logoColor=eeeeee)](https://twitter.com/jexia_)
-[![Open Collective](https://img.shields.io/github/sponsors/ije?label=sponsors&style=flat&colorA=232323&colorB=232323&logo=githubsponsors&logoColor=eeeeee)](https://github.com/sponsors/ije)
-[![Open Collective](https://img.shields.io/opencollective/all/esm?label=sponsors&style=flat&colorA=232323&colorB=232323&logo=opencollective&logoColor=eeeeee)](https://opencollective.com/esm)
+[![Github Sponsors](https://img.shields.io/github/sponsors/ije?label=&style=flat&colorA=232323&colorB=232323&logo=githubsponsors&logoColor=eeeeee)](https://github.com/sponsors/ije)
+[![Open Collective](https://img.shields.io/opencollective/all/esm?label=&style=flat&colorA=232323&colorB=232323&logo=opencollective&logoColor=eeeeee)](https://opencollective.com/esm)
 
 ## Import from NPM
 
