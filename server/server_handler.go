@@ -1020,17 +1020,23 @@ func getHandler() rex.Handle {
 
 		// should redirect to `*.d.ts` file
 		if esm.TypesOnly {
-			if esm.Dts != "" && !noCheck {
-				value := fmt.Sprintf(
-					"%s%s/%s",
-					cdnOrigin,
-					cfg.BasePath,
-					strings.TrimPrefix(esm.Dts, "/"),
-				)
-				ctx.SetHeader("X-TypeScript-Types", value)
-			}
-			ctx.SetHeader("Cache-Control", "private, no-store, no-cache, must-revalidate")
+			dtsUrl := fmt.Sprintf(
+				"%s%s/%s",
+				cdnOrigin,
+				cfg.BasePath,
+				strings.TrimPrefix(esm.Dts, "/"),
+			)
+			ctx.SetHeader("X-TypeScript-Types", dtsUrl)
 			ctx.SetHeader("Content-Type", "application/javascript; charset=utf-8")
+			if fallback {
+				ctx.SetHeader("Cache-Control", "private, no-store, no-cache, must-revalidate")
+			} else {
+				if isPined {
+					ctx.SetHeader("Cache-Control", "public, max-age=31536000, immutable")
+				} else {
+					ctx.SetHeader("Cache-Control", fmt.Sprintf("public, max-age=%d", 24*3600)) // cache for 24 hours
+				}
+			}
 			return []byte("export default null;\n")
 		}
 

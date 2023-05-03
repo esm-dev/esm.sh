@@ -115,7 +115,6 @@ func (task *BuildTask) build() (esm *ESMBuild, err error) {
 	if task.Target == "types" {
 		if npm.Types != "" {
 			dts := npm.Name + "@" + npm.Version + path.Join("/", npm.Types)
-			task.stage = "transform-dts"
 			task.buildDTS(dts)
 		}
 		return
@@ -123,7 +122,7 @@ func (task *BuildTask) build() (esm *ESMBuild, err error) {
 
 	if esm.TypesOnly {
 		dts := npm.Name + "@" + npm.Version + path.Join("/", npm.Types)
-		task.stage = "transform-dts"
+		esm.Dts = fmt.Sprintf("/v%d%s/%s", task.BuildVersion, task.ghPrefix(), dts)
 		task.buildDTS(dts)
 		task.storeToDB(esm)
 		return
@@ -1095,6 +1094,7 @@ func (task *BuildTask) checkDTS(esm *ESMBuild, npm NpmPackage) {
 
 func (task *BuildTask) buildDTS(dts string) {
 	start := time.Now()
+	task.stage = "transform-dts"
 	n, err := task.TransformDTS(dts)
 	if err != nil && os.IsExist(err) {
 		log.Errorf("TransformDTS(%s): %v", dts, err)

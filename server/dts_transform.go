@@ -31,9 +31,9 @@ func (task *BuildTask) transformDTS(dts string, aliasDepsPrefix string, marker *
 	}
 	marker.Add(aliasDepsPrefix + dts)
 
-	var taskPkgInfo NpmPackage
-	taskPkgJsonPath := path.Join(task.wd, "node_modules", task.Pkg.Name, "package.json")
-	err = utils.ParseJSONFile(taskPkgJsonPath, &taskPkgInfo)
+	var pkgInfo NpmPackage
+	pkgJsonPath := path.Join(task.wd, "node_modules", task.Pkg.Name, "package.json")
+	err = utils.ParseJSONFile(pkgJsonPath, &pkgInfo)
 	if err != nil {
 		return
 	}
@@ -67,11 +67,11 @@ func (task *BuildTask) transformDTS(dts string, aliasDepsPrefix string, marker *
 	}
 	defer dtsFile.Close()
 
-	internalDeclModules := newStringSet()
+	allDeclModules := newStringSet()
 	pass1Buf := bytes.NewBuffer(nil)
 	err = walkDts(dtsFile, pass1Buf, func(name string, kind string, position int) string {
 		if kind == "declareModule" {
-			internalDeclModules.Add(name)
+			allDeclModules.Add(name)
 		}
 		return name
 	})
@@ -79,14 +79,20 @@ func (task *BuildTask) transformDTS(dts string, aliasDepsPrefix string, marker *
 		return
 	}
 
-	for _, path := range internalDeclModules.Values() {
+	internalDeclModules := newStringSet()
+	for _, path := range allDeclModules.Values() {
 		if pkgName == "@types/node" {
 			if strings.HasPrefix(path, "node:") {
-				internalDeclModules.Remove(path)
+				continue
 			}
+		} else if _, ok := pkgInfo.Dependencies[path]; ok {
+			continue
+		} else if _, ok := pkgInfo.PeerDependencies[path]; ok {
+			continue
 		} else if path == pkgName || strings.HasPrefix(path, pkgName+"/") {
-			internalDeclModules.Remove(path)
+			continue
 		}
+		internalDeclModules.Add(path)
 	}
 
 	wd := task.getRealWD()
@@ -181,9 +187,9 @@ func (task *BuildTask) transformDTS(dts string, aliasDepsPrefix string, marker *
 
 			depTypePkgName, _ := splitPkgPath(importPath)
 			maybeVersion := []string{"latest"}
-			if v, ok := taskPkgInfo.Dependencies[depTypePkgName]; ok {
+			if v, ok := pkgInfo.Dependencies[depTypePkgName]; ok {
 				maybeVersion = []string{v, "latest"}
-			} else if v, ok := taskPkgInfo.PeerDependencies[depTypePkgName]; ok {
+			} else if v, ok := pkgInfo.PeerDependencies[depTypePkgName]; ok {
 				maybeVersion = []string{v, "latest"}
 			}
 

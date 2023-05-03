@@ -584,12 +584,13 @@ func queryESMBuild(id string) (*ESMBuild, bool) {
 			if strings.HasPrefix(id, "stable/") {
 				id = fmt.Sprintf("v%d/", STABLE_VERSION) + strings.TrimPrefix(id, "stable/")
 			}
-			_, err = fs.Stat(path.Join("builds", id))
-			if err == nil {
+			if !esm.TypesOnly {
+				_, err = fs.Stat(path.Join("builds", id))
+			}
+			if err == nil || os.IsExist(err) {
 				return &esm, true
 			}
 		}
-
 		// delete the invalid db entry
 		db.Delete(id)
 	}
