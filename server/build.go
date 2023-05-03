@@ -1095,10 +1095,10 @@ func (task *BuildTask) checkDTS(esm *ESMBuild, npm NpmPackage) {
 
 func (task *BuildTask) buildDTS(dts string) {
 	start := time.Now()
-	err := task.TransformDTS(dts)
+	n, err := task.TransformDTS(dts)
 	if err != nil && os.IsExist(err) {
 		log.Errorf("TransformDTS(%s): %v", dts, err)
 		return
 	}
-	log.Debugf("transform dts '%s' in %v", dts, time.Since(start))
+	log.Debugf("transform dts '%s'(%d related dts files) in %v", dts, n, time.Since(start))
 }

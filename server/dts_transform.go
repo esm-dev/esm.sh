@@ -7,19 +7,30 @@ import (
 	"os"
 	"path"
 	"strings"
+	"sync"
 
 	"github.com/esm-dev/esm.sh/server/storage"
 
 	"github.com/ije/gox/utils"
 )
 
-func (task *BuildTask) TransformDTS(dts string) (err error) {
+func (task *BuildTask) TransformDTS(dts string) (n int, err error) {
 	buildArgsPrefix := encodeBuildArgsPrefix(task.BuildArgs, task.Pkg, true)
-	err = task.transformDTS(dts, buildArgsPrefix)
+	marker := newStringSet()
+	err = task.transformDTS(dts, buildArgsPrefix, marker)
+	if err == nil {
+		n = marker.Size()
+	}
 	return
 }
 
-func (task *BuildTask) transformDTS(dts string, aliasDepsPrefix string) (err error) {
+func (task *BuildTask) transformDTS(dts string, aliasDepsPrefix string, marker *stringSet) (err error) {
+	// don't transform repeatly
+	if marker.Has(aliasDepsPrefix + dts) {
+		return
+	}
+	marker.Add(aliasDepsPrefix + dts)
+
 	var taskPkgInfo NpmPackage
 	taskPkgJsonPath := path.Join(task.wd, "node_modules", task.Pkg.Name, "package.json")
 	err = utils.ParseJSONFile(taskPkgJsonPath, &taskPkgInfo)
@@ -80,6 +91,7 @@ func (task *BuildTask) transformDTS(dts string, aliasDepsPrefix string) (err err
 
 	wd := task.getRealWD()
 	buf := bytes.NewBuffer(nil)
+	imports := newStringSet()
 	dtsBasePath := fmt.Sprintf("%s%s/v%d", task.CdnOrigin, cfg.BasePath, task.BuildVersion)
 	if pkgName == "@types/node" {
 		fmt.Fprintf(buf, "/// <reference path=\"%s/node.ns.d.ts\" />\n", dtsBasePath)
@@ -153,6 +165,9 @@ func (task *BuildTask) transformDTS(dts string, aliasDepsPrefix string) (err err
 					}
 				}
 			}
+			if strings.HasSuffix(dts, ".d.ts") && !strings.HasSuffix(dts, "~.d.ts") {
+				imports.Add(importPath)
+			}
 		} else {
 			if importPath == "node" {
 				return fmt.Sprintf("%s/node.ns.d.ts", dtsBasePath)
@@ -212,6 +227,9 @@ func (task *BuildTask) transformDTS(dts string, aliasDepsPrefix string) (err err
 			// copy dependent dts files in the node_modules directory in current build context
 			if fromPackageJSON {
 				typesPath := task.toTypesPath(wd, info, "", "", subpath)
+				if strings.HasSuffix(typesPath, ".d.ts") && !strings.HasSuffix(typesPath, "~.d.ts") {
+					imports.Add(typesPath)
+				}
 				importPath = strings.TrimPrefix(typesPath, info.Name+"@"+info.Version+"/")
 			} else {
 				if subpath != "" {
@@ -271,6 +289,40 @@ func (task *BuildTask) transformDTS(dts string, aliasDepsPrefix string) (err err
 	}
 
 	_, err = fs.WriteFile(savePath, buf)
+	if err != nil {
+		return
+	}
+
+	var wg sync.WaitGroup
+	var errors []error
+	for _, importDts := range imports.Values() {
+		if isLocalSpecifier(importDts) {
+			if strings.HasPrefix(importDts, "/") {
+				pkg, subpath := utils.SplitByFirstByte(importDts, '/')
+				if strings.HasPrefix(pkg, "@") {
+					n, _ := utils.SplitByFirstByte(subpath, '/')
+					pkg = fmt.Sprintf("%s/%s", pkg, n)
+				}
+				importDts = path.Join(pkg, importDts)
+			} else {
+				importDts = path.Join(path.Dir(dts), importDts)
+			}
+		}
+		wg.Add(1)
+		go func(importDts string) {
+			err := task.transformDTS(importDts, aliasDepsPrefix, marker)
+			if err != nil {
+				errors = append(errors, err)
+			}
+			wg.Done()
+		}(importDts)
+	}
+	wg.Wait()
+
+	if len(errors) > 0 {
+		err = errors[0]
+	}
+
 	return
 }
 
