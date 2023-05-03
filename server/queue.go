@@ -28,11 +28,11 @@ type BuildOutput struct {
 
 type queueTask struct {
 	*BuildTask
-	inProcess  bool
-	el         *list.Element
-	createTime time.Time
-	startTime  time.Time
-	consumers  []*BuildQueueConsumer
+	inProcess bool
+	el        *list.Element
+	createdAt time.Time
+	startedAt time.Time
+	consumers []*BuildQueueConsumer
 }
 
 func (t *queueTask) run() BuildOutput {
@@ -46,14 +46,14 @@ func (t *queueTask) run() BuildOutput {
 	select {
 	case output = <-c:
 		if output.err == nil {
-			log.Infof("build '%s'(%s) done in %v", t.Pkg, t.Target, time.Since(t.startTime))
+			log.Infof("build '%s'(%s) done in %v", t.Pkg, t.Target, time.Since(t.startedAt))
 		} else {
 			log.Errorf("build %s: %v", t.ID(), output.err)
 		}
 	case <-time.After(10 * time.Minute):
-		log.Errorf("build %s: timeout(%v)", t.ID(), time.Since(t.startTime))
+		log.Errorf("build %s: timeout(%v)", t.ID(), time.Since(t.startedAt))
 		output = BuildOutput{
-			err: fmt.Errorf("build %s: timeout(%v)", t.ID(), time.Since(t.startTime)),
+			err: fmt.Errorf("build %s: timeout(%v)", t.ID(), time.Since(t.startedAt)),
 		}
 	}
 
@@ -91,10 +91,11 @@ func (q *BuildQueue) Add(task *BuildTask, consumerIp string) *BuildQueueConsumer
 		return c
 	}
 
+	task.stage = "pending"
 	t = &queueTask{
-		BuildTask:  task,
-		createTime: time.Now(),
-		consumers:  []*BuildQueueConsumer{},
+		BuildTask: task,
+		createdAt: time.Now(),
+		consumers: []*BuildQueueConsumer{},
 	}
 	if consumerIp != "" {
 		t.consumers = []*BuildQueueConsumer{c}
@@ -154,7 +155,7 @@ func (q *BuildQueue) next() {
 }
 
 func (q *BuildQueue) wait(t *queueTask) {
-	t.startTime = time.Now()
+	t.startedAt = time.Now()
 
 	output := t.run()
 

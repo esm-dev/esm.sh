@@ -121,7 +121,7 @@ func (task *BuildTask) build() (esm *ESMBuild, err error) {
 		return
 	}
 
-	if isTypesOnlyPackage(npm) {
+	if esm.TypesOnly {
 		dts := npm.Name + "@" + npm.Version + path.Join("/", npm.Types)
 		task.stage = "transform-dts"
 		task.buildDTS(dts)

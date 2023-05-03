@@ -216,17 +216,18 @@ func getHandler() rex.Handle {
 				t, ok := el.Value.(*queueTask)
 				if ok {
 					m := map[string]interface{}{
-						"stage":      t.stage,
-						"createTime": t.createTime.Format(http.TimeFormat),
-						"consumers":  t.consumers,
-						"pkg":        t.Pkg.String(),
-						"target":     t.Target,
-						"inProcess":  t.inProcess,
-						"dev":        t.Dev,
-						"bundle":     t.Bundle,
+						"bundle":    t.Bundle,
+						"bv":        t.BuildVersion,
+						"consumers": t.consumers,
+						"createdAt": t.createdAt.Format(http.TimeFormat),
+						"dev":       t.Dev,
+						"inProcess": t.inProcess,
+						"pkg":       t.Pkg.String(),
+						"stage":     t.stage,
+						"target":    t.Target,
 					}
-					if !t.startTime.IsZero() {
-						m["startTime"] = t.startTime.Format(http.TimeFormat)
+					if !t.startedAt.IsZero() {
+						m["startedAt"] = t.startedAt.Format(http.TimeFormat)
 					}
 					if len(t.deps) > 0 {
 						m["deps"] = t.deps.String()
@@ -623,7 +624,6 @@ func getHandler() rex.Handle {
 						conditions:  newStringSet(),
 					},
 					Target: "raw",
-					stage:  "pending",
 				}
 				c := buildQueue.Add(task, ctx.RemoteIP())
 				select {
@@ -942,7 +942,6 @@ func getHandler() rex.Handle {
 					BuildVersion: buildVersion,
 					Pkg:          reqPkg,
 					Target:       "types",
-					stage:        "-",
 				}
 				c := buildQueue.Add(task, ctx.RemoteIP())
 				select {
@@ -979,7 +978,6 @@ func getHandler() rex.Handle {
 			Target:       target,
 			Dev:          isDev,
 			Bundle:       isBundle || isWorker,
-			stage:        "pending",
 		}
 
 		taskID := task.ID()
