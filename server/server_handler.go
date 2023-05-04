@@ -300,6 +300,7 @@ func getHandler() rex.Handle {
 				return err
 			}
 			ctx.SetHeader("Cache-Control", "public, max-age=31536000, immutable")
+			ctx.AddHeader("Vary", "User-Agent")
 			return bytes.ReplaceAll(data, []byte("$ORIGIN"), []byte(cdnOrigin))
 
 		case "/build-target":
