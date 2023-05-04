@@ -10,10 +10,14 @@ export type BuildResult = {
   bundleUrl: string;
 };
 
-export async function build(code :string): Promise<BuildResult>
-export async function build(options: BuildOptions): Promise<BuildResult>
-export async function build(codeOrOptions: BuildOptions|string): Promise<BuildResult> {
-  const options = typeof codeOrOptions === "string" ? { code: codeOrOptions } : codeOrOptions;
+export async function build(code: string): Promise<BuildResult>;
+export async function build(options: BuildOptions): Promise<BuildResult>;
+export async function build(
+  codeOrOptions: BuildOptions | string,
+): Promise<BuildResult> {
+  const options = typeof codeOrOptions === "string"
+    ? { code: codeOrOptions }
+    : codeOrOptions;
   if (!options?.code) {
     throw new Error("esm.sh [build] <400> missing code");
   }
@@ -28,6 +32,14 @@ export async function build(codeOrOptions: BuildOptions|string): Promise<BuildRe
     );
   }
   return ret;
+}
+
+export function esm(
+  strings: TemplateStringsArray,
+  ...values: any[]
+): Promise<BuildResult> {
+  const code = String.raw({ raw: strings }, ...values);
+  return build(code);
 }
 
 export default build;

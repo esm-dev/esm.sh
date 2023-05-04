@@ -18,4 +18,9 @@ export async function build(options) {
   return ret;
 }
 
+export function esm(strings, ...values) {
+  const code = String.raw({ raw: strings }, ...values);
+  return build(code);
+}
+
 export default build;
