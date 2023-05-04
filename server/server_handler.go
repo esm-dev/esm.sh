@@ -25,139 +25,143 @@ import (
 )
 
 type BuildInput struct {
-	Types string `json:"types"`
-	Code  string `json:"code"`
+	Code  string            `json:"code"`
+	Deps  map[string]string `json:"dependencies"`
+	Types string            `json:"types"`
 }
 
 func postHandler() rex.Handle {
 	return func(ctx *rex.Context) interface{} {
 		if ctx.R.Method == "POST" {
-			pathname := ctx.Path.String()
-			if pathname != "/build" {
-				return rex.Err(404, "not found")
-			}
-			var input BuildInput
-			defer ctx.R.Body.Close()
-			switch ctx.R.Header.Get("Content-Type") {
-			case "application/json":
-				err := json.NewDecoder(ctx.R.Body).Decode(&input)
-				if err != nil {
-					return rex.Err(400, "failed to parse input config: "+err.Error())
-				}
-			case "application/javascript", "text/javascript", "application/typescript", "text/typescript":
-				code, err := ioutil.ReadAll(ctx.R.Body)
-				if err != nil {
-					return rex.Err(400, "failed to read code: "+err.Error())
-				}
-				input.Code = string(code)
-			default:
-				return rex.Err(400, "invalid content type")
-			}
-			if input.Code == "" {
-				return rex.Err(400, "code is required")
-			}
-			stdin := &api.StdinOptions{
-				Contents:   input.Code,
-				ResolveDir: "/",
-				Sourcefile: "index.tsx",
-				Loader:     api.LoaderTSX,
-			}
-			deps := map[string]string{}
-			onResolver := func(args api.OnResolveArgs) (api.OnResolveResult, error) {
-				path := args.Path
-				if isLocalSpecifier(path) {
-					return api.OnResolveResult{}, errors.New("local specifier is not allowed")
-				}
-				if !isRemoteSpecifier(path) {
-					pkg, _, err := validatePkgPath(strings.TrimPrefix(path, "npm:"))
+			switch ctx.Path.String() {
+			case "/build":
+				var input BuildInput
+				defer ctx.R.Body.Close()
+				switch ctx.R.Header.Get("Content-Type") {
+				case "application/json":
+					err := json.NewDecoder(ctx.R.Body).Decode(&input)
 					if err != nil {
-						return api.OnResolveResult{}, err
+						return rex.Err(400, "failed to parse input config: "+err.Error())
 					}
-					path = pkg.Name
-					if pkg.Submodule != "" {
-						path += "/" + pkg.Submodule
+				case "application/javascript", "text/javascript", "application/typescript", "text/typescript":
+					code, err := ioutil.ReadAll(ctx.R.Body)
+					if err != nil {
+						return rex.Err(400, "failed to read code: "+err.Error())
 					}
-					deps[pkg.Name] = pkg.Version
+					input.Code = string(code)
+				default:
+					return rex.Err(400, "invalid content type")
 				}
-				return api.OnResolveResult{
-					Path:     path,
-					External: true,
-				}, nil
-			}
-			ret := api.Build(api.BuildOptions{
-				Outdir:           "/esbuild",
-				Stdin:            stdin,
-				Platform:         api.PlatformBrowser,
-				Format:           api.FormatESModule,
-				TreeShaking:      api.TreeShakingTrue,
-				Target:           api.ESNext,
-				Bundle:           true,
-				MinifyWhitespace: true,
-				MinifySyntax:     true,
-				Write:            false,
-				Plugins: []api.Plugin{
-					{
-						Name: "resolver",
-						Setup: func(build api.PluginBuild) {
-							build.OnResolve(api.OnResolveOptions{Filter: ".*"}, onResolver)
+				if input.Code == "" {
+					return rex.Err(400, "code is required")
+				}
+				if input.Deps == nil {
+					input.Deps = map[string]string{}
+				}
+				stdin := &api.StdinOptions{
+					Contents:   input.Code,
+					ResolveDir: "/",
+					Sourcefile: "index.tsx",
+					Loader:     api.LoaderTSX,
+				}
+				onResolver := func(args api.OnResolveArgs) (api.OnResolveResult, error) {
+					path := args.Path
+					if isLocalSpecifier(path) {
+						return api.OnResolveResult{}, errors.New("local specifier is not allowed")
+					}
+					if !isRemoteSpecifier(path) {
+						pkg, _, err := validatePkgPath(strings.TrimPrefix(path, "npm:"))
+						if err != nil {
+							return api.OnResolveResult{}, err
+						}
+						path = pkg.Name
+						if pkg.Submodule != "" {
+							path += "/" + pkg.Submodule
+						}
+						input.Deps[pkg.Name] = pkg.Version
+					}
+					return api.OnResolveResult{
+						Path:     path,
+						External: true,
+					}, nil
+				}
+				ret := api.Build(api.BuildOptions{
+					Outdir:           "/esbuild",
+					Stdin:            stdin,
+					Platform:         api.PlatformBrowser,
+					Format:           api.FormatESModule,
+					TreeShaking:      api.TreeShakingTrue,
+					Target:           api.ESNext,
+					Bundle:           true,
+					MinifyWhitespace: true,
+					MinifySyntax:     true,
+					Write:            false,
+					Plugins: []api.Plugin{
+						{
+							Name: "resolver",
+							Setup: func(build api.PluginBuild) {
+								build.OnResolve(api.OnResolveOptions{Filter: ".*"}, onResolver)
+							},
 						},
 					},
-				},
-			})
-			if len(ret.Errors) > 0 {
-				return rex.Err(400, "failed to validate code: "+ret.Errors[0].Text)
-			}
-			if len(ret.OutputFiles) == 0 {
-				return rex.Err(400, "failed to validate code: no output files")
-			}
-			code := ret.OutputFiles[0].Contents
-			if len(code) == 0 {
-				return rex.Err(400, "code is empty")
-			}
-			h := sha1.New()
-			h.Write(code)
-			id := hex.EncodeToString(h.Sum(nil))
-			key := "publish-" + id
-			record, err := db.Get(key)
-			if err != nil {
-				return rex.Err(500, "failed to save code")
-			}
-			if record == nil {
-				_, err = fs.WriteFile(path.Join("publish", id, "index.mjs"), bytes.NewReader(code))
-				if err == nil {
-					buf := bytes.NewBuffer(nil)
-					enc := json.NewEncoder(buf)
-					enc.Encode(map[string]interface{}{
-						"name":         "~" + id,
-						"version":      "0.0.0",
-						"dependencies": deps,
-						"type":         "module",
-						"module":       "index.mjs",
-					})
-					_, err = fs.WriteFile(path.Join("publish", id, "package.json"), buf)
+				})
+				if len(ret.Errors) > 0 {
+					return rex.Err(400, "failed to validate code: "+ret.Errors[0].Text)
 				}
-				if err == nil {
-					err = db.Put(key, utils.MustEncodeJSON(map[string]interface{}{
-						"createdAt": time.Now().Unix(),
-					}))
+				if len(ret.OutputFiles) == 0 {
+					return rex.Err(400, "failed to validate code: no output files")
 				}
-			}
-			if err != nil {
-				return rex.Err(500, "failed to save code")
-			}
-			cdnOrigin := cfg.Origin
-			if cdnOrigin == "" {
-				proto := "http"
-				if ctx.R.TLS != nil {
-					proto = "https"
+				code := ret.OutputFiles[0].Contents
+				if len(code) == 0 {
+					return rex.Err(400, "code is empty")
 				}
-				// use the request host as the origin if not set in config.json
-				cdnOrigin = fmt.Sprintf("%s://%s", proto, ctx.R.Host)
-			}
-			return map[string]interface{}{
-				"id":        id,
-				"url":       fmt.Sprintf("%s/~%s", cdnOrigin, id),
-				"bundleUrl": fmt.Sprintf("%s/~%s?bundle", cdnOrigin, id),
+				h := sha1.New()
+				h.Write(code)
+				id := hex.EncodeToString(h.Sum(nil))
+				key := "publish-" + id
+				record, err := db.Get(key)
+				if err != nil {
+					return rex.Err(500, "failed to save code")
+				}
+				if record == nil {
+					_, err = fs.WriteFile(path.Join("publish", id, "index.mjs"), bytes.NewReader(code))
+					if err == nil {
+						buf := bytes.NewBuffer(nil)
+						enc := json.NewEncoder(buf)
+						enc.Encode(map[string]interface{}{
+							"name":         "~" + id,
+							"version":      "0.0.0",
+							"dependencies": input.Deps,
+							"type":         "module",
+							"module":       "index.mjs",
+						})
+						_, err = fs.WriteFile(path.Join("publish", id, "package.json"), buf)
+					}
+					if err == nil {
+						err = db.Put(key, utils.MustEncodeJSON(map[string]interface{}{
+							"createdAt": time.Now().Unix(),
+						}))
+					}
+				}
+				if err != nil {
+					return rex.Err(500, "failed to save code")
+				}
+				cdnOrigin := cfg.Origin
+				if cdnOrigin == "" {
+					proto := "http"
+					if ctx.R.TLS != nil {
+						proto = "https"
+					}
+					// use the request host as the origin if not set in config.json
+					cdnOrigin = fmt.Sprintf("%s://%s", proto, ctx.R.Host)
+				}
+				return map[string]interface{}{
+					"id":        id,
+					"url":       fmt.Sprintf("%s/~%s", cdnOrigin, id),
+					"bundleUrl": fmt.Sprintf("%s/~%s?bundle", cdnOrigin, id),
+				}
+			default:
+				return rex.Err(404, "not found")
 			}
 		}
 		return nil
@@ -173,6 +177,16 @@ func getHandler() rex.Handle {
 		// ban malicious requests
 		if strings.HasPrefix(pathname, ".") || strings.HasSuffix(pathname, ".php") {
 			return rex.Status(404, "not found")
+		}
+
+		cdnOrigin := cfg.Origin
+		if cdnOrigin == "" {
+			proto := "http"
+			if ctx.R.TLS != nil {
+				proto = "https"
+			}
+			// use the request host as the origin if not set in config.json
+			cdnOrigin = fmt.Sprintf("%s://%s", proto, ctx.R.Host)
 		}
 
 		// Build prefix may only be served from "${cfg.BasePath}/..."
@@ -272,6 +286,22 @@ func getHandler() rex.Handle {
 				"uptime":      time.Since(startTime).String(),
 			}
 
+		case "/build":
+			var data []byte
+			var err error
+			if strings.HasPrefix(ctx.R.UserAgent(), "Deno/") {
+				data, err = embedFS.ReadFile("server/embed/build.ts")
+				ctx.SetHeader("Content-Type", "application/typescript; charset=utf-8")
+			} else {
+				data, err = embedFS.ReadFile("server/embed/build.js")
+				ctx.SetHeader("Content-Type", "application/javascript; charset=utf-8")
+			}
+			if err != nil {
+				return err
+			}
+			ctx.SetHeader("Cache-Control", "public, max-age=31536000, immutable")
+			return bytes.ReplaceAll(data, []byte("$ORIGIN"), []byte(cdnOrigin))
+
 		case "/build-target":
 			return getTargetByUA(ctx.R.UserAgent())
 
@@ -307,16 +337,6 @@ func getHandler() rex.Handle {
 
 		case "/favicon.ico":
 			return rex.Status(404, "not found")
-		}
-
-		cdnOrigin := cfg.Origin
-		if cdnOrigin == "" {
-			proto := "http"
-			if ctx.R.TLS != nil {
-				proto = "https"
-			}
-			// use the request host as the origin if not set in config.json
-			cdnOrigin = fmt.Sprintf("%s://%s", proto, ctx.R.Host)
 		}
 
 		// serve embed assets

@@ -3,6 +3,8 @@ import {
   assertStringIncludes,
 } from "https://deno.land/std@0.180.0/testing/asserts.ts";
 
+import { build } from "http://localhost:8080/build";
+
 Deno.test("build api", async (t) => {
   let url = "";
   let bundleUrl = "";
@@ -57,4 +59,10 @@ Deno.test("build api (json)", async (t) => {
     assertEquals(render1(), "<h1>Hello world!</h1>");
     assertEquals(render2(), "<h1>Hello world!</h1>");
   });
+});
+
+Deno.test("build api (use sdk)", async () => {
+  const ret = await build(`export default "Hello world!";`);
+  const { default: message } = await import(ret.url);
+  assertEquals(message, "Hello world!");
 });
