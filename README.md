@@ -36,7 +36,7 @@ or import non-module(js) as following:
 import "https://esm.sh/react@18.2.0/package.json" assert { type: "json" }
 ```
 
-## Import from GitHub Repo
+### Import from GitHub Repo
 
 You can also import modules/assets from a github repo: `/gh/OWNER/REPO[@TAG]/PATH`. For example:
 
@@ -202,6 +202,55 @@ If you get an error like `...not provide an export named...`, that means esm.sh 
 
 ```javascript
 import { NinetyRing, NinetyRingWithBg } from "https://esm.sh/react-svg-spinners@0.3.1?cjs-exports=NinetyRing,NinetyRingWithBg"
+```
+
+## Building a Module with Custom Input(code)
+
+This is an **_experimental_** API that allows you to build a module with custom input(code).
+
+- Imports NPM/GH packages
+- Supports TS/JSX syntaxes
+- Bundle mulitple modules into a single JS file
+
+```javascript
+import build, { esm } from "https://esm.sh/build"
+
+// use `esm` tag function
+const ret = await esm`
+/* @jsx h */
+import { h } from "preact@10.13.2";
+import { renderToString } from "preact-render-to-string@6.0.2";
+export function render(): string {
+  return renderToString(<h1>Hello world!</h1>);
+}
+`
+
+// use `build` function
+const ret = await build({
+  dependencies: {
+    "preact": "^10.13.2",
+    "preact-render-to-string": "^6.0.2"
+  },
+  code: `
+    /* @jsx h */
+    import { h } from "preact";
+    import { renderToString } from "preact-render-to-string";
+    export function render(): string {
+      return renderToString(<h1>Hello world!</h1>);
+    }
+  `,
+  // for deno types checking
+  types:`
+    export function render(): string;
+  `
+})
+
+// import module
+const { render } = await import(ret.url)
+// import bundled module
+const { render } = await import(ret.bundleUrl)
+
+render() // "<h1>Hello world!</h1>"
 ```
 
 ## Deno Compatibility
