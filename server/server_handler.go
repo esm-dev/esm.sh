@@ -459,10 +459,17 @@ func getHandler() rex.Handle {
 		}
 
 		// redirect to real wasm file: `/v100/PKG/es2022/foo.wasm` -> `/PKG/foo.wasm`
-		if hasBuildVerPrefix && strings.HasSuffix(reqPkg.Submodule, ".wasm") {
-			pkgRoot := path.Join(cfg.WorkDir, "npm", reqPkg.Name+"@"+reqPkg.Version, "node_modules", reqPkg.Name)
+		if hasBuildVerPrefix && endsWith(reqPkg.Submodule, ".wasm", ".json") {
+			dir := path.Join(cfg.WorkDir, "npm", reqPkg.Name+"@"+reqPkg.Version)
+			if !dirExists(dir) {
+				err := installPackage(dir, reqPkg)
+				if err != nil {
+					return rex.Status(500, err.Error())
+				}
+			}
+			pkgRoot := path.Join(dir, "node_modules", reqPkg.Name)
 			wasmFiles, err := findFiles(pkgRoot, func(fp string) bool {
-				return strings.HasSuffix(fp, ".wasm")
+				return endsWith(fp, ".wasm", ".json")
 			})
 			if err != nil {
 				return rex.Status(500, err.Error())
