@@ -81,7 +81,7 @@ func (task *BuildTask) Build() (esm *ESMBuild, err error) {
 		if loaded {
 			v.(*time.Timer).Stop()
 		}
-		purgeTimers.Store(pkgVersionName, time.AfterFunc(purgeDelay, toPurge(pkgVersionName, dir)))
+		toPurge(pkgVersionName, dir)
 	}(task.wd, pkgVersionName)
 
 	task.stage = "install"

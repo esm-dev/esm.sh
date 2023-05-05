@@ -237,15 +237,15 @@ func validateJS(filename string) (isESM bool, namedExports []string, err error) 
 
 var purgeDelay = 24 * time.Hour
 
-func toPurge(pkg string, destDir string) func() {
-	return func() {
+func toPurge(pkg string, destDir string) {
+	purgeTimers.Store(pkg, time.AfterFunc(purgeDelay, func() {
 		purgeTimers.Delete(pkg)
 		lock := getInstallLock(pkg)
 		lock.Lock()
 		log.Debugf("Purging %s...", pkg)
 		os.RemoveAll(destDir)
 		lock.Unlock()
-	}
+	}))
 }
 
 func restorePurgeTimers(npmDir string) {
@@ -280,7 +280,7 @@ func restorePurgeTimers(npmDir string) {
 		}
 	}
 	for _, pkg := range pkgs {
-		purgeTimers.Store(pkg, time.AfterFunc(purgeDelay, toPurge(pkg, path.Join(npmDir, pkg))))
+		toPurge(pkg, path.Join(npmDir, pkg))
 	}
 	log.Debugf("Restored %d purge timers", len(pkgs))
 }
