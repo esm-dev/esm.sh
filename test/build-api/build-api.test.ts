@@ -61,6 +61,31 @@ Deno.test("build api (json)", async (t) => {
   });
 });
 
+Deno.test("build api (with types)", async (t) => {
+  const ret = await fetch("http://localhost:8080/build", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      dependencies: {
+        preact: "^10.13.2",
+      },
+      code: `
+        export { h } from "preact";
+      `,
+      types: `
+        export { h } from "preact"
+      `,
+    }),
+  }).then((r) => r.json());
+  if (ret.error) {
+    throw new Error(`<${ret.error.status}> ${ret.error.message}`);
+  }
+
+  const mod = await import(ret.url);
+  mod.h("h1", null, "Hello world!");
+  assertEquals(typeof mod.h, "function");
+});
+
 Deno.test("build api (use sdk)", async (t) => {
   await t.step("use `build` function", async () => {
     const ret = await build(`export default "Hello world!";`);
@@ -68,7 +93,7 @@ Deno.test("build api (use sdk)", async (t) => {
     assertEquals(message, "Hello world!");
   });
 
-  await t.step("use `esm` template function", async () => {
+  await t.step("use `esm` tag function", async () => {
     const message = "Hello world!";
     const ret = await esm`export default ${JSON.stringify(message)};`;
     const mod = await import(ret.url);

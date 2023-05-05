@@ -326,8 +326,11 @@ func installPackage(wd string, pkg Pkg) (err error) {
 			err = pnpmInstall(wd)
 			if err == nil {
 				installDir := path.Join(wd, "node_modules", pkg.Name)
-				for _, name := range []string{"package.json", "index.mjs"} {
+				for _, name := range []string{"package.json", "index.mjs", "index.d.ts"} {
 					err = copyPublishFile(pkg.Name, name, installDir)
+					if err != nil {
+						break
+					}
 				}
 			}
 		} else if pkg.FromGithub {

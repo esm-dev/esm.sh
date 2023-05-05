@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/esm-dev/esm.sh/server/storage"
 	"github.com/ije/gox/utils"
 )
 
@@ -634,6 +635,9 @@ func copyPublishFile(id string, name string, dir string) (err error) {
 	var f *os.File
 	r, err = fs.OpenFile(path.Join("publish", strings.TrimPrefix(id, "~"), name))
 	if err != nil {
+		if err == storage.ErrNotFound {
+			return nil
+		}
 		return fmt.Errorf("open file failed: %s", name)
 	}
 	defer r.Close()

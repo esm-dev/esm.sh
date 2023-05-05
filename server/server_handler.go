@@ -121,21 +121,30 @@ func postHandler() rex.Handle {
 				key := "publish-" + id
 				record, err := db.Get(key)
 				if err != nil {
-					return rex.Err(500, "failed to save code")
+					return rex.Err(500, "internal server error")
 				}
 				if record == nil {
 					_, err = fs.WriteFile(path.Join("publish", id, "index.mjs"), bytes.NewReader(code))
 					if err == nil {
 						buf := bytes.NewBuffer(nil)
 						enc := json.NewEncoder(buf)
-						enc.Encode(map[string]interface{}{
+						pkgJson := map[string]interface{}{
 							"name":         "~" + id,
 							"version":      "0.0.0",
 							"dependencies": input.Deps,
 							"type":         "module",
 							"module":       "index.mjs",
-						})
-						_, err = fs.WriteFile(path.Join("publish", id, "package.json"), buf)
+						}
+						if input.Types != "" {
+							pkgJson["types"] = "index.d.ts"
+							_, err = fs.WriteFile(path.Join("publish", id, "index.d.ts"), strings.NewReader(input.Types))
+						}
+						if err == nil {
+							err = enc.Encode(pkgJson)
+							if err == nil {
+								_, err = fs.WriteFile(path.Join("publish", id, "package.json"), buf)
+							}
+						}
 					}
 					if err == nil {
 						err = db.Put(key, utils.MustEncodeJSON(map[string]interface{}{
