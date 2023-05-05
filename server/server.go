@@ -137,6 +137,8 @@ func Serve(efs EmbedFS) {
 		}
 	}()
 
+	go restorePurgeTimers(path.Join(cfg.WorkDir, "npm"))
+
 	if !cfg.NoCompress {
 		rex.Use(rex.Compression())
 	}
