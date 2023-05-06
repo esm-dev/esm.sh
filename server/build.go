@@ -779,6 +779,9 @@ rebuild:
 									wd:        task.getRealWD(),
 								}
 								depESM, depNpm, _, e := task.analyze()
+								if e != nil {
+									log.Warnf("analyze dep(%s) failed: %s", depPkg, e.Error())
+								}
 								if e == nil {
 									// support edge case like `require('htmlparser').Parser`
 									if bytes.HasPrefix(p, []byte{'.'}) {

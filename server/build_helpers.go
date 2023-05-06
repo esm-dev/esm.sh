@@ -615,6 +615,13 @@ func resovleESModule(wd string, packageName string, moduleSpecifier string) (res
 			}
 		}
 	}
+	if !fileExists(path.Join(pkgDir, resolvedName)) {
+		if strings.HasSuffix(resolvedName, "index/index.js") {
+			resolvedName = strings.TrimSuffix(resolvedName, "/index.js") + ".js"
+		} else if strings.HasSuffix(resolvedName, "index/index.mjs") {
+			resolvedName = strings.TrimSuffix(resolvedName, "/index.mjs") + ".mjs"
+		}
+	}
 
 	isESM, _namedExports, err := validateJS(path.Join(pkgDir, resolvedName))
 	if err != nil {
