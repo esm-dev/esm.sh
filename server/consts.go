@@ -45,6 +45,7 @@ var nativeNodePackages = []string{
 	"default-gateway",
 	"fsevent",
 	"re2",
+	"zlib-sync",
 }
 
 // allowlist for require mode when parsing cjs exports fails
