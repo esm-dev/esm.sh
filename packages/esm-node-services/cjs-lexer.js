@@ -5,7 +5,10 @@ const { parse } = require("esm-cjs-lexer")
 const enhancedResolve = require("enhanced-resolve")
 
 const identRegexp = /^[a-zA-Z_\$][a-zA-Z0-9_\$]*$/
-const resolve = promisify(enhancedResolve.create())
+const resolve = promisify(enhancedResolve.create({
+  conditionNames: ["require", "node", "default"],
+  extensions: [".cjs", ".js", ".json", ".node"],
+}))
 const reservedWords = new Set([
   "abstract", "arguments", "await", "boolean",
   "break", "byte", "case", "catch",
