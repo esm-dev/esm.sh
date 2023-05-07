@@ -26,7 +26,7 @@ kv_namespaces = [
 ]
 
 [vars]
-ESM_SERVER_ORIGIN = "https://esm.build"
+ESM_SERVER_ORIGIN = "https://YOUR_ORIGIN_ESM_HOSTNAME"
 WORKER_ENV = "production"
 # your other vars...
 
