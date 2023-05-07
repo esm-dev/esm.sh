@@ -6,5 +6,6 @@ esmd
 .esmd/
 config.json
 node_modules/
+dist/
 target/
 pkg/
