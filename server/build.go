@@ -514,10 +514,10 @@ rebuild:
 				build.OnLoad(
 					api.OnLoadOptions{Filter: ".*", Namespace: "browser-exclude"},
 					func(args api.OnLoadArgs) (ret api.OnLoadResult, err error) {
-						contents := "export default null;"
+						contents := "export default {};"
 						if exports, ok := browserExclude[args.Path]; ok {
 							for _, name := range exports.Values() {
-								contents = fmt.Sprintf("%sexport const %s = null;", contents, name)
+								contents = fmt.Sprintf("%sexport const %s = {};", contents, name)
 							}
 						}
 						return api.OnLoadResult{Contents: &contents, Loader: api.LoaderJS}, nil
