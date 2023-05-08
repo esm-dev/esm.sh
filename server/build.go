@@ -282,7 +282,7 @@ rebuild:
 
 						for _, name := range nativeNodePackages {
 							if args.Path == name || strings.HasPrefix(args.Path, name+"/") {
-								if task.Target == "deno" || task.Target == "denonext" {
+								if task.isDenoTarget() {
 									pkgName, submodule := splitPkgPath(args.Path)
 									version := "latest"
 									if pkgName == task.Pkg.Name {
@@ -322,7 +322,7 @@ rebuild:
 						specifier = strings.TrimPrefix(specifier, "npm:")
 
 						// use `browser` field of package.json
-						if len(npm.Browser) > 0 && task.Target != "deno" && task.Target != "denonext" && task.Target != "node" {
+						if len(npm.Browser) > 0 && !task.isServerTarget() {
 							spec := specifier
 							if strings.HasPrefix(specifier, "./") || strings.HasPrefix(specifier, "../") || specifier == ".." {
 								fullFilepath := filepath.Join(args.ResolveDir, specifier)
@@ -385,7 +385,7 @@ rebuild:
 								}, nil
 							} else if m, ok := v.(map[string]interface{}); ok {
 								targets := []string{"browser", "default", "node"}
-								if task.Target == "deno" || task.Target == "denonext" || task.Target == "node" {
+								if task.isServerTarget() {
 									targets = []string{"node", "default", "browser"}
 								}
 								for _, t := range targets {
@@ -874,7 +874,7 @@ rebuild:
 								fmt.Fprintf(buf, `import __%s$ from "%s";%s`, identifier, importPath, eol)
 							case "default?":
 								fmt.Fprintf(buf, `import * as _%s$ from "%s";%s`, identifier, importPath, eol)
-								if task.Target == "deno" || task.Target == "denonext" || task.Target == "node" || task.Target >= "es2020" {
+								if task.isServerTarget() || task.Target >= "es2020" {
 									fmt.Fprintf(buf, `const __%s$ = _%s$.default??_%s$;%s`, identifier, identifier, identifier, eol)
 								} else {
 									fmt.Fprintf(buf, `const __%s$ = _%s$.default!==void 0?_%s$.default:_%s$;%s`, identifier, identifier, identifier, identifier, eol)
@@ -929,7 +929,7 @@ rebuild:
 
 			// most of npm packages check for window object to detect browser environment, but Deno also has the window object
 			// so we need to replace the check with document object
-			if task.Target == "deno" || task.Target == "denonext" {
+			if task.isDenoTarget() {
 				if task.Dev {
 					outputContent = bytes.Replace(outputContent, []byte("typeof window !== \"undefined\""), []byte("typeof document !== \"undefined\""), -1)
 				} else {

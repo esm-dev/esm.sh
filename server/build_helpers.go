@@ -133,6 +133,14 @@ func (task *BuildTask) getPackageInfo(name string, version string) (info NpmPack
 	return getPackageInfo(task.getRealWD(), name, version)
 }
 
+func (task *BuildTask) isServerTarget() bool {
+	return task.Target == "deno" || task.Target == "denonext" || task.Target == "node"
+}
+
+func (task *BuildTask) isDenoTarget() bool {
+	return task.Target == "deno" || task.Target == "denonext"
+}
+
 func (task *BuildTask) analyze() (esm *ESMBuild, npm NpmPackage, reexport string, err error) {
 	wd := task.wd
 	pkg := task.Pkg
@@ -637,7 +645,7 @@ func resovleESModule(wd string, packageName string, moduleSpecifier string) (res
 	return
 }
 
-func copyPublishFile(id string, name string, dir string) (err error) {
+func copyRawBuildFile(id string, name string, dir string) (err error) {
 	var r io.ReadCloser
 	var f *os.File
 	r, err = fs.OpenFile(path.Join("publish", strings.TrimPrefix(id, "~"), name))

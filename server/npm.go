@@ -304,7 +304,7 @@ func installPackage(wd string, pkg Pkg) (err error) {
 	// ensure package.json file to prevent read up-levels
 	packageFilePath := path.Join(wd, "package.json")
 	if pkg.FromEsmsh {
-		err = copyPublishFile(pkg.Name, "package.json", wd)
+		err = copyRawBuildFile(pkg.Name, "package.json", wd)
 	} else if pkg.FromGithub || !fileExists(packageFilePath) {
 		fileContent := []byte("{}")
 		if pkg.FromGithub {
@@ -327,7 +327,7 @@ func installPackage(wd string, pkg Pkg) (err error) {
 			if err == nil {
 				installDir := path.Join(wd, "node_modules", pkg.Name)
 				for _, name := range []string{"package.json", "index.mjs", "index.d.ts"} {
-					err = copyPublishFile(pkg.Name, name, installDir)
+					err = copyRawBuildFile(pkg.Name, name, installDir)
 					if err != nil {
 						break
 					}
