@@ -5,7 +5,6 @@ import {
   assertEquals,
   assertStringIncludes,
 } from "https://deno.land/std@0.180.0/testing/asserts.ts";
-import Worker from "../../packages/esm-worker/dist/index.js";
 
 async function run(name: string, ...args: string[]) {
   const cwd = join(
@@ -20,12 +19,15 @@ async function run(name: string, ...args: string[]) {
   });
   const status = await command.spawn().status;
   if (!status.success) {
-    Deno.exit(status.code);
+    throw new Error(`Failed to run ${name} ${args.join(" ")}`);
   }
 }
 
 await run("npm", "i");
 await run("node", "build.mjs");
+const { default: Worker } = await import(
+  `../../packages/esm-worker/dist/index.js`
+);
 
 const workerOrigin = "http://localhost:8787";
 const worker = Worker(
