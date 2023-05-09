@@ -939,7 +939,9 @@ func getHandler() rex.Handle {
 							)
 							return rex.Redirect(url, http.StatusMovedPermanently)
 						}
-						if isMjs && submodule == pkgName {
+						if strings.HasPrefix(reqPkg.Name, "~") {
+							submodule = ""
+						} else if isMjs && submodule == pkgName {
 							submodule = ""
 						}
 						// workaround for es5-ext weird "/#/" path
@@ -1096,8 +1098,9 @@ func getHandler() rex.Handle {
 
 		if isBarePath {
 			savePath := task.getSavepath()
-			if strings.HasSuffix(reqPkg.Subpath, ".css") && strings.HasSuffix(savePath, ".mjs") {
-				savePath = strings.TrimSuffix(savePath, ".mjs") + ".css"
+			if strings.HasSuffix(reqPkg.Subpath, ".css") {
+				base, _ := utils.SplitByLastByte(savePath, '.')
+				savePath = base + ".css"
 			}
 			fi, err := fs.Stat(savePath)
 			if err != nil {
