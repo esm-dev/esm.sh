@@ -1087,6 +1087,9 @@ func getHandler() rex.Handle {
 					ctx.SetHeader("Cache-Control", fmt.Sprintf("public, max-age=%d", 24*3600)) // cache for 24 hours
 				}
 			}
+			if ctx.R.Method == http.MethodHead {
+				return []byte{}
+			}
 			return []byte("export default null;\n")
 		}
 
@@ -1171,7 +1174,11 @@ func getHandler() rex.Handle {
 		if targetFromUA {
 			ctx.AddHeader("Vary", "User-Agent")
 		}
+		ctx.SetHeader("Content-Length", strconv.Itoa(buf.Len()))
 		ctx.SetHeader("Content-Type", "application/javascript; charset=utf-8")
+		if ctx.R.Method == http.MethodHead {
+			return []byte{}
+		}
 		return buf
 	}
 }
