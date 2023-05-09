@@ -13,4 +13,10 @@ Deno.test("package css", async () => {
   );
   assertEquals(res.headers.get("content-type"), "text/css; charset=utf-8");
   res.body?.cancel();
+
+  const res2 = await fetch(
+    `http://localhost:8080/v${version}/monaco-editor@0.38.0/es2022/monaco-editor.css`,
+  );
+  assertEquals(res2.headers.get("content-type"), "text/css; charset=utf-8");
+  res2.body?.cancel();
 });

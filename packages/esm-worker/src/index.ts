@@ -4,9 +4,9 @@ import type {
   Middleware,
   PackageInfo,
   PackageRegistryInfo,
-} from "../types";
+} from "../types/index.d.ts";
 import { compareVersions, satisfies, validate } from "compare-versions";
-import { getEsmaVersionFromUA } from "./compat";
+import { getEsmaVersionFromUA } from "./compat.ts";
 import {
   assetsExts,
   boolJoin,
@@ -22,7 +22,7 @@ import {
   stableBuild,
   stringifyUrlSearch,
   trimPrefix,
-} from "./utils";
+} from "./utils.ts";
 
 const regexpFullVersion = /^\d+\.\d+\.\d+/;
 const regexpCommitish = /^[a-f0-9]{10,}$/;
@@ -70,8 +70,8 @@ class ESMWorker {
     const ctx: Context = {
       cache,
       env,
-      data: {},
       url,
+      data: {},
       waitUntil: (p) => context.waitUntil(p),
       withCache,
       isDev,

@@ -11,6 +11,7 @@
     "target": "ESNext",
     "module": "ESNext",
     "moduleResolution": "bundler",
+    "allowImportingTsExtensions": true,
     "esModuleInterop": true
   },
   "include": [ "src/**/*.ts" ]

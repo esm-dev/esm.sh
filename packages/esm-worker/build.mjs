@@ -3,7 +3,7 @@ import { build as esbuild } from "esbuild";
 
 const build = (options) => {
   return esbuild({
-    target: "es2022",
+    target: "esnext",
     format: "esm",
     platform: "browser",
     outdir: "dist",
