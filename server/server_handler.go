@@ -685,6 +685,7 @@ func getHandler() rex.Handle {
 					}
 				case <-time.After(time.Minute):
 					buildQueue.RemoveConsumer(task, c)
+					ctx.SetHeader("Cache-Control", "private, no-store, no-cache, must-revalidate")
 					return rex.Status(http.StatusRequestTimeout, "timeout, we are downloading package hardly, please try again later!")
 				}
 			}
@@ -998,6 +999,7 @@ func getHandler() rex.Handle {
 					}
 				case <-time.After(time.Minute):
 					buildQueue.RemoveConsumer(task, c)
+					ctx.SetHeader("Cache-Control", "private, no-store, no-cache, must-revalidate")
 					return rex.Status(http.StatusRequestTimeout, "timeout, we are transforming the types hardly, please try again later!")
 				}
 			}
@@ -1060,6 +1062,7 @@ func getHandler() rex.Handle {
 					esm = output.meta
 				case <-time.After(time.Minute):
 					buildQueue.RemoveConsumer(task, c)
+					ctx.SetHeader("Cache-Control", "private, no-store, no-cache, must-revalidate")
 					return rex.Status(http.StatusRequestTimeout, "timeout, we are building the package hardly, please try again later!")
 				}
 			}
