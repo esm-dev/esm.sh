@@ -2,6 +2,7 @@ package server
 
 import (
 	"archive/tar"
+	"bytes"
 	"compress/gzip"
 	"encoding/json"
 	"fmt"
@@ -41,12 +42,19 @@ func listRepoRefs(repo string) (refs []GitRef, err error) {
 	}
 
 	cmd := exec.Command("git", "ls-remote", repo)
-	out, err := cmd.Output()
+	out := bytes.NewBuffer(nil)
+	errOut := bytes.NewBuffer(nil)
+	cmd.Stdout = out
+	cmd.Stderr = errOut
+	err = cmd.Run()
 	if err != nil {
+		if errOut.Len() > 0 {
+			return nil, fmt.Errorf(errOut.String())
+		}
 		return nil, err
 	}
 	refs = []GitRef{}
-	for _, line := range strings.Split(string(out), "\n") {
+	for _, line := range strings.Split(out.String(), "\n") {
 		if line == "" {
 			continue
 		}
