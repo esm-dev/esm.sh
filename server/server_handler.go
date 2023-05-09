@@ -899,7 +899,7 @@ func getHandler() rex.Handle {
 		}
 
 		// check if it's build path
-		isBuildPath := false
+		isBarePath := false
 		if hasBuildVerPrefix && (endsWith(reqPkg.Subpath, ".mjs", ".js", ".css")) {
 			a := strings.Split(reqPkg.Submodule, "/")
 			if len(a) > 0 {
@@ -911,7 +911,7 @@ func getHandler() rex.Handle {
 						if submodule == pkgName+".css" {
 							reqPkg.Submodule = ""
 							target = maybeTarget
-							isBuildPath = true
+							isBarePath = true
 						} else {
 							url := fmt.Sprintf("%s%s/%s", cdnOrigin, cfg.BasePath, reqPkg.String())
 							return rex.Redirect(url, http.StatusFound)
@@ -948,7 +948,7 @@ func getHandler() rex.Handle {
 						}
 						reqPkg.Submodule = submodule
 						target = maybeTarget
-						isBuildPath = true
+						isBarePath = true
 					}
 				}
 			}
@@ -1030,7 +1030,7 @@ func getHandler() rex.Handle {
 		fallback := false
 
 		if !hasBuild {
-			if !isBuildPath && !isPined {
+			if !isBarePath && !isPined {
 				// find previous build version
 				for i := 0; i < VERSION; i++ {
 					id := fmt.Sprintf("v%d/%s", VERSION-(i+1), strings.Join(strings.Split(taskID, "/")[1:], "/"))
@@ -1094,8 +1094,11 @@ func getHandler() rex.Handle {
 			return rex.Redirect(url, http.StatusMovedPermanently)
 		}
 
-		if isBuildPath {
+		if isBarePath {
 			savePath := task.getSavepath()
+			if strings.HasSuffix(reqPkg.Subpath, ".css") && strings.HasSuffix(savePath, ".mjs") {
+				savePath = strings.TrimSuffix(savePath, ".mjs") + ".css"
+			}
 			fi, err := fs.Stat(savePath)
 			if err != nil {
 				if err == storage.ErrNotFound {
