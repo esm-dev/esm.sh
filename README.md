@@ -21,7 +21,7 @@ You may also use a [semver](https://docs.npmjs.com/cli/v6/using-npm/semver) or a
 ```javascript
 import React from "https://esm.sh/react"      // 18.2.0 (latest)
 import React from "https://esm.sh/react@17"   // 17.0.2
-import React from "https://esm.sh/react@next" // 18.3.0-next-3de926449-20220927
+import React from "https://esm.sh/react@canary" // 18.3.0-canary-7cd98ef2b-20230509
 ```
 
 ### Submodule
