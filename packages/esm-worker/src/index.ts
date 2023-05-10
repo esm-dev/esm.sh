@@ -130,11 +130,7 @@ class ESMWorker {
       }
     }
 
-    if (
-      pathname === "/" ||
-      pathname === "/build" ||
-      pathname.startsWith("/embed/")
-    ) {
+    if (pathname === "/" || pathname.startsWith("/embed/")) {
       return fetchServerOrigin(
         req,
         ctx,
@@ -164,6 +160,24 @@ class ESMWorker {
       pathname = "/" + a.slice(2).join("/");
     } else if (hasBuildVerQuery) {
       buildVersion = url.searchParams.get("pin")!;
+    }
+
+    if (pathname === "/build") {
+      if (!hasBuildVerPrefix && !hasBuildVerQuery) {
+        const headers = corsHeaders();
+        headers.set("Cache-Control", "public, max-age=86400");
+        return redirect(
+          new URL(`/${buildVersion}/build`, url),
+          302,
+          headers,
+        );
+      }
+      return fetchServerOrigin(
+        req,
+        ctx,
+        `${pathname}${url.search}`,
+        corsHeaders(),
+      );
     }
 
     const gh = pathname.startsWith("/gh/");

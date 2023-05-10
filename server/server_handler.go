@@ -383,7 +383,7 @@ func esmHandler() rex.Handle {
 		}
 
 		if pathname == "/build" {
-			if !hasBuildVerPrefix {
+			if !hasBuildVerPrefix && !ctx.Form.Has("pin") {
 				url := fmt.Sprintf("%s%s/v%d/build", cdnOrigin, cfg.BasePath, VERSION)
 				return rex.Redirect(url, 302)
 			}
