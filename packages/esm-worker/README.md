@@ -1,6 +1,6 @@
 # esm-worker
 
-A Cloudflare workers that handles all requests to the esm.sh origin server at
+A [Cloudflare worker](https://www.cloudflare.com/products/workers) that handles all requests to the esm.sh origin server at
 the edge.
 
 - Cache everything by checking the `Cache-Control` header from the origin server
@@ -59,7 +59,7 @@ declare global {
 export default worker((req, ctx) => {
   const { env, isDev, url } = ctx;
   if (url.pathname === "/") {
-    // custom the homepage
+    // custom homepage
     return new Response("<h1>Welcome to use esm.sh!</h1>", {
       headers: { "content-type": "text/html" },
     });
