@@ -63,7 +63,7 @@ serve((req) => worker.fetch(req, env, { waitUntil: () => {} }), {
 // wait for a while
 await new Promise((resolve) => setTimeout(resolve, 500));
 
-Deno.test("CF Worker", {
+Deno.test("esm-worker", {
   sanitizeOps: false,
   sanitizeResources: false,
 }, async (t) => {

@@ -728,7 +728,7 @@ async function fetchServerOrigin(
       resHeaders.set("Cache-Control", res.headers.get("Cache-Control")!);
     } else if (res.status === 301 || res.status === 400) {
       resHeaders.set("Cache-Control", "public, max-age=31536000, immutable");
-    } else if (res.status === 402) {
+    } else if (res.status === 302) {
       resHeaders.set("Cache-Control", "public, max-age=600");
     } else if (res.status === 404) {
       const message = await res.text();
