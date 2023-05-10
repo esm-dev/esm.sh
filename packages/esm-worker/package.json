@@ -1,7 +1,7 @@
 {
   "name": "esm-worker",
   "description": "A Cloudflare workers that handles all requests to the esm.sh origin server at the edge.",
-  "version": "0.120.0",
+  "version": "0.120.1",
   "type": "module",
   "module": "dist/index.js",
   "types": "types/index.d.ts",

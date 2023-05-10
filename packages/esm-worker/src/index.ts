@@ -130,7 +130,11 @@ class ESMWorker {
       }
     }
 
-    if (pathname === "/" || pathname.startsWith("/embed/")) {
+    if (
+      pathname === "/" ||
+      pathname === "/build" ||
+      pathname.startsWith("/embed/")
+    ) {
       return fetchServerOrigin(
         req,
         ctx,
@@ -408,13 +412,18 @@ class ESMWorker {
         const ua = req.headers.get("user-agent");
         target = getEsmaVersionFromUA(ua);
       }
-      headers.set("Cache-Control", "public, max-age=31536000, immutable");
+      const pined = hasBuildVerPrefix || hasBuildVerQuery;
+      if (pined) {
+        headers.set("Cache-Control", "public, max-age=31536000, immutable");
+      } else {
+        headers.set("Cache-Control", "public, max-age=86400");
+      }
       return redirect(
         new URL(
           `${prefix}/${pkg}@${packageVersion}/${target}/${packageName}.css`,
           url,
         ),
-        301,
+        pined ? 301 : 302,
         headers,
       );
     }

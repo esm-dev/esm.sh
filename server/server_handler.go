@@ -1104,7 +1104,11 @@ func esmHandler() rex.Handle {
 				return rex.Status(404, "Package CSS not found")
 			}
 			url := fmt.Sprintf("%s%s/%s.css", cdnOrigin, cfg.BasePath, strings.TrimSuffix(taskID, path.Ext(taskID)))
-			return rex.Redirect(url, http.StatusMovedPermanently)
+			code := 302
+			if isPined {
+				code = 301
+			}
+			return rex.Redirect(url, code)
 		}
 
 		if isBarePath {
