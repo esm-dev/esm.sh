@@ -23,6 +23,7 @@ async function run(name: string, ...args: string[]) {
   }
 }
 
+// build and import esm worker
 await run("npm", "i");
 await run("node", "build.mjs");
 const { default: Worker } = await import(
@@ -53,11 +54,13 @@ const env = {
 };
 const ac = new AbortController();
 
+// start worker
 serve((req) => worker.fetch(req, env, { waitUntil: () => {} }), {
   port: 8787,
   signal: ac.signal,
 });
 
+// wait for a while
 await new Promise((resolve) => setTimeout(resolve, 500));
 
 Deno.test("CF Worker", {
@@ -105,11 +108,13 @@ Deno.test("CF Worker", {
     );
   });
 
+  let VERSION: number;
   await t.step("status.json", async () => {
     const ret: any = await fetch(`${workerOrigin}/status.json`).then((res) =>
       res.json()
     );
     assertEquals(typeof ret.version, "number");
+    VERSION = ret.version;
   });
 
   await t.step("npm modules", async () => {
@@ -399,6 +404,18 @@ Deno.test("CF Worker", {
   });
 
   await t.step("build", async () => {
+    const res = await fetch(`${workerOrigin}/build`);
+    res.body?.cancel();
+    assertEquals(new URL(res.url).pathname, `/v${VERSION}/build`);
+    assertEquals(
+      res.headers.get("Cache-Control"),
+      "public, max-age=31536000, immutable",
+    );
+    assertEquals(
+      res.headers.get("Content-Type"),
+      "application/typescript; charset=utf-8",
+    );
+
     const ret: any = await fetch(`${workerOrigin}/build`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -414,7 +431,10 @@ Deno.test("CF Worker", {
       throw new Error(`<${ret.error.status}> ${ret.error.message}`);
     }
     const { default: render } = await import(
-      new URL(`/v119${new URL(ret.url).pathname}/deno/mod.mjs`, workerOrigin)
+      new URL(
+        `/v${VERSION}${new URL(ret.url).pathname}/deno/mod.mjs`,
+        workerOrigin,
+      )
         .href
     );
     assertEquals(render(), "<h1>Hello world!</h1>");

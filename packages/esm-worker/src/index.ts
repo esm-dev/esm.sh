@@ -82,6 +82,14 @@ class ESMWorker {
 
     switch (pathname) {
       case "/build":
+        if (req.method === "POST" || req.method === "PUT") {
+          return fetchServerOrigin(
+            req,
+            ctx,
+            `${pathname}${url.search}`,
+            corsHeaders(),
+          );
+        }
       case "/error.js":
       case "/status.json":
         return fetchServerOrigin(
@@ -174,10 +182,13 @@ class ESMWorker {
     const headers = corsHeaders();
 
     if (
-      hasBuildVerPrefix &&
-      (pathname === "/node.ns.d.ts" ||
-        (pathname.startsWith("/node_") && pathname.endsWith(".js") &&
-          pathname.slice(1).indexOf("/") === -1))
+      hasBuildVerPrefix && (
+        pathname === "/node.ns.d.ts" || (
+          pathname.startsWith("/node_") &&
+          pathname.endsWith(".js") &&
+          pathname.slice(1).indexOf("/") === -1
+        )
+      )
     ) {
       // for old(deleted) ployfill
       if (pathname === "/node_buffer.js") {
@@ -266,10 +277,12 @@ class ESMWorker {
 
     // redirect to commit-ish version
     if (
-      gh &&
-      !(packageVersion &&
-        (regexpCommitish.test(packageVersion) ||
-          regexpFullVersion.test(trimPrefix(packageVersion, "v"))))
+      gh && !(
+        packageVersion && (
+          regexpCommitish.test(packageVersion) ||
+          regexpFullVersion.test(trimPrefix(packageVersion, "v"))
+        )
+      )
     ) {
       return ctx.withCache(async () => {
         return fetchServerOrigin(req, ctx, url.pathname + url.search, headers);
@@ -281,6 +294,9 @@ class ESMWorker {
       return ctx.withCache(async () => {
         const res = await fetch(`${npmRegistry}${pkg}`);
         if (!res.ok) {
+          if (res.status === 404 || res.status === 401) {
+            return pkgNotFound(pkg, headers);
+          }
           return new Response(res.body, { status: res.status, headers });
         }
         const regInfo: PackageRegistryInfo = await res.json();
@@ -356,6 +372,9 @@ class ESMWorker {
         } else {
           const res = await fetch(`${npmRegistry}${pkg}/${packageVersion}`);
           if (!res.ok) {
+            if (res.status === 404 || res.status === 401) {
+              return pkgNotFound(pkg, headers);
+            }
             return new Response(res.body, { status: res.status, headers });
           }
           const pkgJson: PackageInfo = await res.json();
@@ -514,14 +533,8 @@ class ESMWorker {
       res = await fetchESM(req, ctx, headers, path, { gzip: false });
     }
 
-    switch (res.status) {
-      case 200:
-      case 301:
-      case 302:
-      case 400:
-      case 404:
-        ctx.waitUntil(ctx.cache.put(cacheKey, res.clone()));
-        break;
+    if (res.headers.get("Cache-Control")?.startsWith("public, max-age=")) {
+      ctx.waitUntil(ctx.cache.put(cacheKey, res.clone()));
     }
 
     return res;
@@ -588,7 +601,10 @@ async function fetchESM(
       headers.set("Content-Type", obj.httpMetadata.contentType);
       headers.set("Cache-Control", "public, max-age=31536000, immutable");
       headers.set("X-Content-Source", storage);
-      return new Response(obj.body as ReadableStream<Uint8Array>, { headers });
+      return new Response(
+        req.method === "HEAD" ? null : obj.body as ReadableStream<Uint8Array>,
+        { headers },
+      );
     }
   } else {
     const { value, metadata } = await KV.getWithMetadata<
@@ -606,7 +622,7 @@ async function fetchESM(
         headers.set("Access-Control-Expose-Headers", "X-TypeScript-Types");
       }
       headers.set("X-Content-Source", storage);
-      return new Response(body, { headers });
+      return new Response(req.method === "HEAD" ? null : body, { headers });
     }
   }
 
@@ -629,7 +645,7 @@ async function fetchESM(
   }
 
   // save to KV/R2 if immutable
-  if (cacheControl?.includes("immutable")) {
+  if (req.method === "GET" && cacheControl?.includes("immutable")) {
     if (storage === "r2") {
       const buffer = await res.arrayBuffer();
       await R2.put(storeKey, buffer.slice(0), {
@@ -654,7 +670,7 @@ async function fetchESM(
     return new Response(body, { headers });
   }
 
-  return new Response(res.body, { headers });
+  return new Response(req.method === "HEAD" ? null : res.body, { headers });
 }
 
 async function fetchServerOrigin(
@@ -683,16 +699,31 @@ async function fetchServerOrigin(
   });
   if (!res.ok) {
     // fix cache-control by status code
-    if (res.status === 301) {
-      resHeaders.set("Cache-Control", "public, max-age=31536000, immutable");
-    } else if (res.status === 302) {
-      resHeaders.set("Cache-Control", "public, max-age=600");
-    } else if (res.status === 400 || res.status === 404) {
-      resHeaders.set("Cache-Control", "public, max-age=86400");
-    } else if (res.status >= 500) {
-      resHeaders.set("Cache-Control", "public, max-age=60");
-    } else if (res.headers.has("Cache-Control")) {
-      resHeaders.set("Cache-Control", res.headers.get("Cache-Control")!);
+    switch (res.status) {
+      case 301:
+      case 400:
+        resHeaders.set("Cache-Control", "public, max-age=31536000, immutable");
+        break;
+      case 302:
+        resHeaders.set("Cache-Control", "public, max-age=600");
+        break;
+      case 404: {
+        const message = await res.text();
+        if (!/package .+ not found/.test(message)) {
+          resHeaders.set(
+            "Cache-Control",
+            "public, max-age=31536000, immutable",
+          );
+        }
+        return new Response(message, { status: 404, headers: resHeaders });
+      }
+      case 500:
+        resHeaders.set("Cache-Control", "public, max-age=60");
+        break;
+      default:
+        if (res.headers.has("Cache-Control")) {
+          resHeaders.set("Cache-Control", res.headers.get("Cache-Control")!);
+        }
     }
     if (res.status === 301 || res.status === 302) {
       // await res.body?.cancel?.()
@@ -702,7 +733,7 @@ async function fetchServerOrigin(
       res.status === 500 &&
       res.headers.get("Content-Type")?.startsWith("text/html")
     ) {
-      await res.body?.cancel?.();
+      // await res.body?.cancel?.();
       return new Response("Bad Gateway", { status: 502, headers: resHeaders });
     }
     return new Response(res.body, { status: res.status, headers: resHeaders });
@@ -710,8 +741,9 @@ async function fetchServerOrigin(
   copyHeaders(
     resHeaders,
     res.headers,
-    "Content-Type",
     "Cache-Control",
+    "Content-Type",
+    "Content-Length",
     "X-Typescript-Types",
   );
   if (resHeaders.has("X-Typescript-Types")) {
@@ -747,4 +779,16 @@ function fixContentType(type: string | null, path: string) {
     return boolJoin(["application/json", charset], ";");
   }
   return type ?? "application/octet-stream";
+}
+
+function pkgNotFound(pkg: string, headers: Headers) {
+  headers.set("Content-Type", "application/javascript; charset=utf-8");
+  return new Response(
+    [
+      `/* esm.sh - error */`,
+      `throw new Error("[esm.sh] " + "npm: package '${pkg}' not found");`,
+      `export default null;`,
+    ].join("\n"),
+    { status: 404, headers },
+  );
 }
