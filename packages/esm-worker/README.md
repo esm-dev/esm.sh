@@ -10,7 +10,7 @@ the edge.
 ## Getting Started
 
 ```bash
-npm install esm-worker
+npm install esm-worker@0.120
 ```
 
 You need to add following configuration to your `wrangler.toml`:
@@ -49,12 +49,40 @@ Then, wrap your worker with the `esm-worker` package:
 ```js
 import worker from "esm-worker";
 
+// extend the `Env` interface
+declare global {
+  interface Env {
+    // your other vars in `wrangler.toml`...
+  }
+}
+
 export default worker((req, ctx) => {
-  if (ctx.url.pathname === "/") {
+  const { env, isDev, url } = ctx;
+  if (url.pathname === "/") {
     // custom the homepage
     return new Response("<h1>Welcome to use esm.sh!</h1>", {
       headers: { "content-type": "text/html" },
     });
+
+    // using cache
+    return ctx.withCache(() =>
+      new Response("Boom!", {
+        headers: { "cache-control": "public; max-age=600" },
+      })
+    );
+  }
+
+  // using KV
+  await env.KV.put("key", "value");
+  const value = await env.KV.get("key");
+
+  // using R2
+  await env.R2.put("key", "value");
+  const r2obj = await env.R2.get("key");
+
+  if (isDev) {
+    // local development
+    // your code...
   }
 });
 ```

@@ -21,13 +21,13 @@ export default function (
 ): ExportedHandlerFetchHandler<Env, {}>;
 
 export type Context<Data = Record<string, any>> = {
+  cache: Cache;
+  data: Data;
+  env: Env;
+  isDev: boolean;
+  url: URL;
   waitUntil(promise: Promise<any>): void;
   withCache(fetch: () => Promise<Response> | Response): Promise<Response>;
-  cache: Cache;
-  url: URL;
-  env: Env;
-  data: Data;
-  isDev: boolean;
 };
 
 export interface Middleware {
