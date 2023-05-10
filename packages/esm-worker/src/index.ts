@@ -172,11 +172,13 @@ class ESMWorker {
           headers,
         );
       }
-      return fetchServerOrigin(
-        req,
-        ctx,
-        `${pathname}${url.search}`,
-        corsHeaders(),
+      return ctx.withCache(() =>
+        fetchServerOrigin(
+          req,
+          ctx,
+          url.pathname + url.search,
+          corsHeaders(),
+        )
       );
     }
 
