@@ -30,9 +30,9 @@ type BuildInput struct {
 	Types string            `json:"types"`
 }
 
-func postHandler() rex.Handle {
+func apiHandler() rex.Handle {
 	return func(ctx *rex.Context) interface{} {
-		if ctx.R.Method == "POST" {
+		if ctx.R.Method == "POST" || ctx.R.Method == "PUT" {
 			switch ctx.Path.String() {
 			case "/build":
 				var input BuildInput
@@ -177,7 +177,7 @@ func postHandler() rex.Handle {
 	}
 }
 
-func getHandler() rex.Handle {
+func esmHandler() rex.Handle {
 	startTime := time.Now()
 
 	return func(ctx *rex.Context) interface{} {
@@ -295,23 +295,6 @@ func getHandler() rex.Handle {
 				"uptime":      time.Since(startTime).String(),
 			}
 
-		case "/build":
-			var data []byte
-			var err error
-			if strings.HasPrefix(ctx.R.UserAgent(), "Deno/") {
-				data, err = embedFS.ReadFile("server/embed/build.ts")
-				ctx.SetHeader("Content-Type", "application/typescript; charset=utf-8")
-			} else {
-				data, err = embedFS.ReadFile("server/embed/build.js")
-				ctx.SetHeader("Content-Type", "application/javascript; charset=utf-8")
-			}
-			if err != nil {
-				return err
-			}
-			ctx.SetHeader("Cache-Control", "public, max-age=31536000, immutable")
-			ctx.AddHeader("Vary", "User-Agent")
-			return bytes.ReplaceAll(data, []byte("$ORIGIN"), []byte(cdnOrigin))
-
 		case "/build-target":
 			return getTargetByUA(ctx.R.UserAgent())
 
@@ -389,14 +372,36 @@ func getHandler() rex.Handle {
 			outdatedBuildVer = a[1]
 		}
 
-		// check if the request is for the CLI, support version prefix
-		if strings.HasPrefix(ctx.R.UserAgent(), "Deno/") && pathname == "/" {
+		// check if the request is from Deno runtime for the CLI script
+		if pathname == "/" && strings.HasPrefix(ctx.R.UserAgent(), "Deno/") {
 			cliTs, err := embedFS.ReadFile("CLI.ts")
 			if err != nil {
 				return err
 			}
 			ctx.SetHeader("Content-Type", "application/typescript; charset=utf-8")
 			return bytes.ReplaceAll(cliTs, []byte("v{VERSION}"), []byte(fmt.Sprintf("v%d", VERSION)))
+		}
+
+		if pathname == "/build" {
+			if !hasBuildVerPrefix {
+				url := fmt.Sprintf("%s%s/v%d/build", cdnOrigin, cfg.BasePath, VERSION)
+				return rex.Redirect(url, 302)
+			}
+			var data []byte
+			var err error
+			if strings.HasPrefix(ctx.R.UserAgent(), "Deno/") {
+				data, err = embedFS.ReadFile("server/embed/build.ts")
+				ctx.SetHeader("Content-Type", "application/typescript; charset=utf-8")
+			} else {
+				data, err = embedFS.ReadFile("server/embed/build.js")
+				ctx.SetHeader("Content-Type", "application/javascript; charset=utf-8")
+			}
+			if err != nil {
+				return err
+			}
+			ctx.SetHeader("Cache-Control", "public, max-age=31536000, immutable")
+			ctx.AddHeader("Vary", "User-Agent")
+			return bytes.ReplaceAll(data, []byte("$ORIGIN"), []byte(cdnOrigin))
 		}
 
 		// use embed polyfills/types if possible

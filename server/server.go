@@ -156,8 +156,8 @@ func Serve(efs EmbedFS) {
 			AllowCredentials: false,
 		}),
 		auth(cfg.AuthSecret),
-		postHandler(),
-		getHandler(),
+		apiHandler(),
+		esmHandler(),
 	)
 
 	C := rex.Serve(rex.ServerConfig{
