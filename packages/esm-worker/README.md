@@ -45,7 +45,7 @@ WORKER_ENV = "development"
 
 Then, wrap your worker with the `esm-worker` package:
 
-```javascript
+```typescript
 import worker from "esm-worker";
 
 // extend the `Env` interface
