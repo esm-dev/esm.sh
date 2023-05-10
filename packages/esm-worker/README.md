@@ -27,6 +27,7 @@ kv_namespaces = [
 
 [vars]
 ESM_SERVER_ORIGIN = "https://YOUR_ORIGIN_ESM_HOSTNAME"
+ESM_SERVER_AUTH_TOKEN = "" # optional
 WORKER_ENV = "production"
 # your other vars...
 

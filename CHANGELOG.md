@@ -1,5 +1,17 @@
 # Change Log
 
+## v120
+
+- build-api: Support types option
+- Open-source the cloudflare worker
+- Support `HEAD` method
+- Fix bare path for css/custom build
+- Fixing type only packages missing the `X-Typescript-Types` header
+- Fix cjs-lexer `exports` resloving
+- Use empty object instead of `null` for browser exclude (close #613)
+- Add `zlib-sync` to nativeNodePackages (close #621)
+- Redirect invalid `*.json` url
+
 ## v119
 
 - Fix named import of cjs (close #620)

@@ -10,7 +10,7 @@ automatically if it's not found on your host machine.
 
 ## Recommended host machine (single server)
 
-- Linux system
+- Linux system with git installed
 - 4x CPU cores or more
 - 8GB RAM or more
 - 100GB disk space or more
@@ -48,6 +48,12 @@ go run main.go --config=config.json --dev
 ```
 
 Then you can import `React` from http://localhost:8080/react
+
+## Using Cloudflare Workers
+
+You can also use [Cloudflare Workers](https://workers.cloudflare.com/) as the front layer to cache the requests.
+
+Check [esm-worker](./packages/esm-worker/README.md).
 
 ## Deploy to remote host with the quick deploy script
 
