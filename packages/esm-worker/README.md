@@ -1,11 +1,10 @@
 # esm-worker
 
-A [Cloudflare worker](https://www.cloudflare.com/products/workers) that handles all requests to the esm.sh origin server at
-the edge.
+A [Cloudflare worker](https://www.cloudflare.com/products/workers) that handles all requests of esm.sh at the edge(earth).
 
-- Cache everything by checking the `Cache-Control` header from the origin server
-- Store modules in KV
-- Store assets in R2
+- [Cache](https://developers.cloudflare.com/workers/runtime-apis/cache/) everything at the edge
+- Store ES6 modules in [KV](https://developers.cloudflare.com/workers/runtime-apis/kv)
+- Store NPM/GH assets in [R2](https://developers.cloudflare.com/r2/api/workers/workers-api-reference)
 
 ## Getting Started
 
@@ -46,7 +45,7 @@ WORKER_ENV = "development"
 
 Then, wrap your worker with the `esm-worker` package:
 
-```js
+```javascript
 import worker from "esm-worker";
 
 // extend the `Env` interface
@@ -58,6 +57,7 @@ declare global {
 
 export default worker((req, ctx) => {
   const { env, isDev, url } = ctx;
+
   if (url.pathname === "/") {
     // custom homepage
     return new Response("<h1>Welcome to use esm.sh!</h1>", {
@@ -84,5 +84,7 @@ export default worker((req, ctx) => {
     // local development
     // your code...
   }
+
+  // return void to handle esm requests
 });
 ```
