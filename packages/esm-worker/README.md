@@ -25,7 +25,7 @@ kv_namespaces = [
 ]
 
 [vars]
-ESM_SERVER_ORIGIN = "https://YOUR_ORIGIN_ESM_HOSTNAME"
+ESM_SERVER_ORIGIN = "https://esm.sh"
 ESM_SERVER_AUTH_TOKEN = "" # optional
 WORKER_ENV = "production"
 # your other vars...
@@ -58,7 +58,21 @@ declare global {
 export default worker((req, ctx) => {
   const { env, isDev, url } = ctx;
 
+  // your routes...
   if (url.pathname === "/") {
+    // using the KV storage
+    await env.KV.put("key", "value");
+    const value = await env.KV.get("key");
+
+    // using the R2 storage
+    await env.R2.put("key", "value");
+    const r2obj = await env.R2.get("key");
+
+    if (isDev) {
+      // local development
+      // your code...
+    }
+
     // custom homepage
     return new Response("<h1>Welcome to use esm.sh!</h1>", {
       headers: { "content-type": "text/html" },
@@ -72,19 +86,6 @@ export default worker((req, ctx) => {
     );
   }
 
-  // using KV
-  await env.KV.put("key", "value");
-  const value = await env.KV.get("key");
-
-  // using R2
-  await env.R2.put("key", "value");
-  const r2obj = await env.R2.get("key");
-
-  if (isDev) {
-    // local development
-    // your code...
-  }
-
-  // return void to handle esm requests
+  // return void to handle rest requests to the ESM_SERVER_ORIGIN
 });
 ```

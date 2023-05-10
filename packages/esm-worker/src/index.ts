@@ -724,31 +724,23 @@ async function fetchServerOrigin(
   });
   if (!res.ok) {
     // fix cache-control by status code
-    switch (res.status) {
-      case 301:
-      case 400:
-        resHeaders.set("Cache-Control", "public, max-age=31536000, immutable");
-        break;
-      case 302:
-        resHeaders.set("Cache-Control", "public, max-age=600");
-        break;
-      case 404: {
-        const message = await res.text();
-        if (!/package .+ not found/.test(message)) {
-          resHeaders.set(
-            "Cache-Control",
-            "public, max-age=31536000, immutable",
-          );
-        }
-        return new Response(message, { status: 404, headers: resHeaders });
+    if (res.headers.has("Cache-Control")) {
+      resHeaders.set("Cache-Control", res.headers.get("Cache-Control")!);
+    } else if (res.status === 301 || res.status === 400) {
+      resHeaders.set("Cache-Control", "public, max-age=31536000, immutable");
+    } else if (res.status === 402) {
+      resHeaders.set("Cache-Control", "public, max-age=600");
+    } else if (res.status === 404) {
+      const message = await res.text();
+      if (!/package .+ not found/.test(message)) {
+        resHeaders.set(
+          "Cache-Control",
+          "public, max-age=31536000, immutable",
+        );
       }
-      case 500:
-        resHeaders.set("Cache-Control", "public, max-age=60");
-        break;
-      default:
-        if (res.headers.has("Cache-Control")) {
-          resHeaders.set("Cache-Control", res.headers.get("Cache-Control")!);
-        }
+      return new Response(message, { status: 404, headers: resHeaders });
+    } else if (res.status === 500) {
+      resHeaders.set("Cache-Control", "public, max-age=60");
     }
     if (res.status === 301 || res.status === 302) {
       // await res.body?.cancel?.()
