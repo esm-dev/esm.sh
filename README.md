@@ -19,8 +19,8 @@ import React from "https://esm.sh/react@18.2.0"
 You may also use a [semver](https://docs.npmjs.com/cli/v6/using-npm/semver) or a [dist-tag](https://docs.npmjs.com/cli/v8/commands/npm-dist-tag) instead of a fixed version number, or omit the version/tag entirely to use the `latest` tag:
 
 ```javascript
-import React from "https://esm.sh/react"      // 18.2.0 (latest)
-import React from "https://esm.sh/react@17"   // 17.0.2
+import React from "https://esm.sh/react"        // 18.2.0 (latest)
+import React from "https://esm.sh/react@17"     // 17.0.2
 import React from "https://esm.sh/react@canary" // 18.3.0-canary-7cd98ef2b-20230509
 ```
 
