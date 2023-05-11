@@ -1,5 +1,20 @@
 import uaParser from "ua-parser-js";
 
+export const targets = new Set([
+    "es2015",
+    "es2016",
+    "es2017",
+    "es2018",
+    "es2019",
+    "es2020",
+    "es2021",
+    "es2022",
+    "esnext",
+    "deno",
+    "denonext",
+    "node",
+])
+
 /** the js table transpiled from https://github.com/evanw/esbuild/blob/main/internal/compat/js_table.go */
 const jsTable: Record<string, Record<string, [number, number, number]>> = {
   ArbitraryModuleNamespaceNames: {
@@ -590,9 +605,7 @@ const esmaUnsupportedFeatures: [string, number][] = [
   "es2018",
   "es2017",
   "es2016",
-].map((
-  esma,
-) => [
+].map((esma) => [
   esma,
   getUnsupportedFeatures(esma.slice(0, 2).toUpperCase(), esma.slice(2)).length,
 ]);

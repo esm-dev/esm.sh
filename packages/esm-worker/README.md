@@ -1,10 +1,14 @@
 # esm-worker
 
-A [Cloudflare worker](https://www.cloudflare.com/products/workers) that handles all requests of esm.sh at the edge(earth).
+A [Cloudflare worker](https://www.cloudflare.com/products/workers) that handles
+all requests of esm.sh at the edge(earth).
 
-- [Cache](https://developers.cloudflare.com/workers/runtime-apis/cache/) everything at the edge
-- Store ES6 modules in [KV](https://developers.cloudflare.com/workers/runtime-apis/kv)
-- Store NPM/GH assets in [R2](https://developers.cloudflare.com/r2/api/workers/workers-api-reference)
+- [Cache](https://developers.cloudflare.com/workers/runtime-apis/cache/)
+  everything at the edge
+- Store ES6 modules in
+  [KV](https://developers.cloudflare.com/workers/runtime-apis/kv)
+- Store NPM/GH assets in
+  [R2](https://developers.cloudflare.com/r2/api/workers/workers-api-reference)
 
 ## Getting Started
 
@@ -26,8 +30,7 @@ kv_namespaces = [
 
 [vars]
 ESM_SERVER_ORIGIN = "https://esm.sh"
-ESM_SERVER_AUTH_TOKEN = "" # optional
-WORKER_ENV = "production"
+NPM_REGISTRY = "https://registry.npmjs.org/"
 # your other vars...
 
 [[r2_buckets]]
@@ -36,7 +39,20 @@ bucket_name = "YOUR_BUCKET_NAME"
 preview_bucket_name = "YOUR_PREVIEW_BUCKET_NAME"
 ```
 
-create a `.dev.vars` file for local development in the root directory of your
+Optional configurations in secrets:
+
+- If you are using a private npm registry, you need to add the following
+  configuration:
+  ```bash
+  wrangler secret put NPM_TOKEN
+  ```
+- If you are using a self-hosting esm.sh server with `authSecret` option, you need to
+  add the following configuration:
+  ```bash
+  wrangler secret put ESM_SERVER_AUTH_TOKEN
+  ```
+
+Create a `.dev.vars` file for local development in the root directory of your
 project:
 
 ```toml
@@ -51,12 +67,12 @@ import worker from "esm-worker";
 // extend the `Env` interface
 declare global {
   interface Env {
-    // your other vars in `wrangler.toml`...
+    // your other vars in `wrangler.toml` ...
   }
 }
 
 export default worker((req, ctx) => {
-  const { env, isDev, url } = ctx;
+  const { env, url } = ctx;
 
   // your routes...
   if (url.pathname === "/") {
@@ -68,12 +84,12 @@ export default worker((req, ctx) => {
     await env.R2.put("key", "value");
     const r2obj = await env.R2.get("key");
 
-    if (isDev) {
+    if (env.WORKER_ENV === "development") {
       // local development
-      // your code...
+      // your code ...
     }
 
-    // custom homepage
+    // a custom homepage
     return new Response("<h1>Welcome to use esm.sh!</h1>", {
       headers: { "content-type": "text/html" },
     });
@@ -86,6 +102,6 @@ export default worker((req, ctx) => {
     );
   }
 
-  // return void to handle rest requests to the ESM_SERVER_ORIGIN
+  // esm.sh routes...
 });
 ```

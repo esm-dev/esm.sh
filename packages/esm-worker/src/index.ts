@@ -6,33 +6,31 @@ import type {
   PackageRegistryInfo,
 } from "../types/index.d.ts";
 import { compareVersions, satisfies, validate } from "compare-versions";
-import { getEsmaVersionFromUA } from "./compat.ts";
+import { getEsmaVersionFromUA, targets } from "./compat.ts";
 import {
-  assetsExts,
   boolJoin,
   checkPreflight,
   copyHeaders,
   corsHeaders,
-  cssPackages,
   fixPkgVersion,
-  npmNamingRegexp,
-  npmRegistry,
   redirect,
   splitBy,
-  stableBuild,
   stringifyUrlSearch,
   trimPrefix,
 } from "./utils.ts";
 
+const regexpNpmNaming = /^[a-zA-Z0-9][\w\.\-\_]*$/;
 const regexpFullVersion = /^\d+\.\d+\.\d+/;
 const regexpCommitish = /^[a-f0-9]{10,}$/;
 const regexpBuildVersion = /^(v\d+|stable)$/;
 const regexpBuildVersionPrefix = /^\/(v\d+|stable)\//;
-const regexpBuildTarget =
-  /^(es20(15|16|17|18|19|20|21|22)|esnext|deno|denonext|node)$/i;
 
+// consts defined in `server/consts.go`
 const VERSION = __VERSION__;
 const STABLE_VERSION = __STABLE_VERSION__;
+const stableBuild = new Set(Object.keys(JSON.parse(__STABLE_BUILD__)));
+const assetsExts = new Set(Object.keys(JSON.parse(__ASSETS_EXTS__)));
+const cssPackages = JSON.parse(__CSS_PACKAGES__);
 
 class ESMWorker {
   middleware?: Middleware;
@@ -66,7 +64,6 @@ class ESMWorker {
       }
       return res;
     };
-    const isDev = env.WORKER_ENV === "development";
     const ctx: Context = {
       cache,
       env,
@@ -74,7 +71,6 @@ class ESMWorker {
       data: {},
       waitUntil: (p) => context.waitUntil(p),
       withCache,
-      isDev,
     };
 
     let pathname = decodeURIComponent(url.pathname);
@@ -248,7 +244,7 @@ class ESMWorker {
       }
     }
 
-    if (packageScope !== "" && !npmNamingRegexp.test(packageScope.slice(1))) {
+    if (packageScope !== "" && !regexpNpmNaming.test(packageScope.slice(1))) {
       return new Response(`Invalid scope name '${packageScope}'`, {
         status: 400,
         headers,
@@ -261,7 +257,7 @@ class ESMWorker {
 
     const fromEsmsh = packageName.startsWith("~") &&
       regexpCommitish.test(packageName.slice(1));
-    if (!fromEsmsh && !npmNamingRegexp.test(packageName)) {
+    if (!fromEsmsh && !regexpNpmNaming.test(packageName)) {
       return new Response(`Invalid package name '${packageName}'`, {
         status: 400,
         headers,
@@ -312,7 +308,11 @@ class ESMWorker {
     // redirect to specific version
     if (!gh && !(packageVersion && regexpFullVersion.test(packageVersion))) {
       return ctx.withCache(async () => {
-        const res = await fetch(`${npmRegistry}${pkg}`);
+        const headers = new Headers();
+        if (env.NPM_TOKEN) {
+          headers.set("Authorization", `Bearer ${env.NPM_TOKEN}`);
+        }
+        const res = await fetch(`${env.NPM_REGISTRY}${pkg}`, { headers });
         if (!res.ok) {
           if (res.status === 404 || res.status === 401) {
             return pkgNotFound(pkg, headers);
@@ -390,7 +390,14 @@ class ESMWorker {
         if (subPath !== "") {
           p += "~.d.ts";
         } else {
-          const res = await fetch(`${npmRegistry}${pkg}/${packageVersion}`);
+          const headers = new Headers();
+          if (env.NPM_TOKEN) {
+            headers.set("Authorization", `Bearer ${env.NPM_TOKEN}`);
+          }
+          const res = await fetch(
+            `${env.NPM_REGISTRY}${pkg}/${packageVersion}`,
+            { headers },
+          );
           if (!res.ok) {
             if (res.status === 404 || res.status === 401) {
               return pkgNotFound(pkg, headers);
@@ -424,7 +431,7 @@ class ESMWorker {
         prefix += "/gh";
       }
       let target = url.searchParams.get("target");
-      if (!target || !regexpBuildTarget.test(target)) {
+      if (!target || !targets.has(target)) {
         const ua = req.headers.get("user-agent");
         target = getEsmaVersionFromUA(ua);
       }
@@ -492,12 +499,12 @@ class ESMWorker {
 
     // check `target` for caching strategy
     const hasPinedTarget = url.searchParams.has("target")! &&
-      regexpBuildTarget.test(
+      targets.has(
         url.searchParams.get("target")!,
       );
     if (
       !hasPinedTarget &&
-      !pathname.split("/").some((p) => regexpBuildTarget.test(p)) &&
+      !pathname.split("/").some((p) => targets.has(p)) &&
       !pathname.endsWith(".d.ts")
     ) {
       const target = getEsmaVersionFromUA(req.headers.get("user-agent"));
@@ -679,7 +686,7 @@ async function fetchESM(
       return new Response(buffer.slice(0), { headers });
     }
     // seems `local` CF worker doesn't support `ReadableStream.tee` yet, so we need to use `arrayBuffer` here
-    if (ctx.isDev) {
+    if (ctx.env.WORKER_ENV === "development") {
       const buf = await res.arrayBuffer();
       const value = options.gzip
         ? new Response(buf).body.pipeThrough(new CompressionStream("gzip"))
@@ -712,6 +719,8 @@ async function fetchServerOrigin(
     "Content-Type",
     "Referer",
     "User-Agent",
+    "X-Real-Ip",
+    "X-Forwarded-For",
   );
   if (ctx.env.ESM_SERVER_AUTH_TOKEN) {
     headers.set("Authorization", `Bearer ${ctx.env.ESM_SERVER_AUTH_TOKEN}`);
@@ -771,7 +780,7 @@ async function fetchServerOrigin(
 
 function hasTargetSegment(path: string) {
   const parts = path.slice(1).split("/");
-  return parts.length >= 2 && parts.some((p) => regexpBuildTarget.test(p));
+  return parts.length >= 2 && parts.some((p) => targets.has(p));
 }
 
 function fixContentType(type: string | null, path: string) {
