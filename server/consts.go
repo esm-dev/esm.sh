@@ -15,7 +15,7 @@ const (
 	denoStdVersion   = "0.177.0"
 )
 
-// fix some package versions
+// fix some npm package versions
 var fixedPkgVersions = map[string]string{
 	"@types/react@17": "17.0.58",
 	"@types/react@18": "18.2.6",
@@ -37,6 +37,32 @@ var stableBuild = map[string]bool{
 	"solid-js": true,
 	"svelte":   true,
 	"vue":      true,
+}
+
+var assetExts = map[string]bool{
+	"wasm":  true,
+	"css":   true,
+	"less":  true,
+	"sass":  true,
+	"scss":  true,
+	"json":  true,
+	"xml":   true,
+	"yml":   true,
+	"yaml":  true,
+	"txt":   true,
+	"md":    true,
+	"html":  true,
+	"htm":   true,
+	"svg":   true,
+	"png":   true,
+	"jpg":   true,
+	"webp":  true,
+	"gif":   true,
+	"eot":   true,
+	"ttf":   true,
+	"otf":   true,
+	"woff":  true,
+	"woff2": true,
 }
 
 // native node packages, for `deno` target use `npm:package` to import (skip build)

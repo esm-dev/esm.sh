@@ -611,29 +611,19 @@ func esmHandler() rex.Handle {
 			reqPkg.Submodule = utils.CleanPath(v)[1:]
 		}
 
-		var storageType string
-		if reqPkg.Submodule != "" {
-			switch path.Ext(pathname) {
-			case ".mjs", ".js":
-				if hasBuildVerPrefix {
-					storageType = "builds"
-				}
-			case ".css", ".map":
-				if hasBuildVerPrefix {
-					storageType = "builds"
-				} else if len(strings.Split(pathname, "/")) > 2 {
-					storageType = "raw"
-				}
-			case ".jsx", ".ts", ".mts", ".tsx":
+		var reqType string
+		if reqPkg.Subpath != "" {
+			ext := path.Ext(reqPkg.Subpath)
+			switch ext {
+			case ".mjs", ".js", ".jsx", ".ts", ".mts", ".tsx":
 				if endsWith(pathname, ".d.ts", ".d.mts") {
 					if !hasBuildVerPrefix {
 						url := fmt.Sprintf("%s%s/v%d%s", cdnOrigin, cfg.BasePath, VERSION, pathname)
 						return rex.Redirect(url, http.StatusMovedPermanently)
 					}
-					storageType = "types"
-				} else if len(strings.Split(pathname, "/")) > 2 {
-					// todo: transform ts/jsx/tsx for browsers
-					storageType = "raw"
+					reqType = "types"
+				} else if hasBuildVerPrefix && hasTargetSegment(reqPkg.Subpath) {
+					reqType = "builds"
 				}
 			case ".wasm":
 				if ctx.Form.Has("module") {
@@ -644,18 +634,24 @@ func esmHandler() rex.Handle {
 					ctx.SetHeader("Cache-Control", "public, max-age=31536000, immutable")
 					ctx.SetHeader("Content-Type", "application/javascript; charset=utf-8")
 					return buf
-				} else if len(strings.Split(pathname, "/")) > 2 {
-					storageType = "raw"
+				} else {
+					reqType = "raw"
 				}
-			case ".less", ".sass", ".scss", ".html", ".htm", ".md", ".txt", ".json", ".xml", ".yml", ".yaml", ".svg", ".png", ".jpg", ".webp", ".gif", ".eot", ".ttf", ".otf", ".woff", ".woff2":
-				if len(strings.Split(pathname, "/")) > 2 {
-					storageType = "raw"
+			case ".css", ".map":
+				if hasBuildVerPrefix && hasTargetSegment(reqPkg.Subpath) {
+					reqType = "builds"
+				} else {
+					reqType = "raw"
+				}
+			default:
+				if ext != "" && assetExts[ext[1:]] {
+					reqType = "raw"
 				}
 			}
 		}
 
 		// serve raw dist or npm dist files like CSS/map etc..
-		if storageType == "raw" {
+		if reqType == "raw" {
 			installDir := fmt.Sprintf("npm/%s", reqPkg.VersionName())
 			savePath := path.Join(cfg.WorkDir, installDir, "node_modules", reqPkg.Name, reqPkg.Subpath)
 			fi, err := os.Lstat(savePath)
@@ -707,14 +703,14 @@ func esmHandler() rex.Handle {
 		}
 
 		// serve build files
-		if hasBuildVerPrefix && (storageType == "builds" || storageType == "types") {
+		if hasBuildVerPrefix && (reqType == "builds" || reqType == "types") {
 			var savePath string
 			if outdatedBuildVer != "" {
-				savePath = path.Join(storageType, outdatedBuildVer, pathname)
+				savePath = path.Join(reqType, outdatedBuildVer, pathname)
 			} else if hasStablePrefix {
-				savePath = path.Join(storageType, fmt.Sprintf("v%d", STABLE_VERSION), pathname)
+				savePath = path.Join(reqType, fmt.Sprintf("v%d", STABLE_VERSION), pathname)
 			} else {
-				savePath = path.Join(storageType, fmt.Sprintf("v%d", VERSION), pathname)
+				savePath = path.Join(reqType, fmt.Sprintf("v%d", VERSION), pathname)
 			}
 
 			fi, err := fs.Stat(savePath)
@@ -732,7 +728,7 @@ func esmHandler() rex.Handle {
 				if err != nil {
 					return rex.Status(500, err.Error())
 				}
-				if storageType == "types" {
+				if reqType == "types" {
 					ctx.SetHeader("Content-Type", "application/typescript; charset=utf-8")
 				} else if endsWith(pathname, ".js", ".mjs") {
 					ctx.SetHeader("Content-Type", "application/javascript; charset=utf-8")
@@ -740,7 +736,7 @@ func esmHandler() rex.Handle {
 					ctx.SetHeader("Content-Type", "application/json; charset=utf-8")
 				}
 				ctx.SetHeader("Cache-Control", "public, max-age=31536000, immutable")
-				if ctx.Form.Has("worker") && storageType == "builds" {
+				if ctx.Form.Has("worker") && reqType == "builds" {
 					defer r.Close()
 					buf, err := ioutil.ReadAll(r)
 					if err != nil {
@@ -962,7 +958,7 @@ func esmHandler() rex.Handle {
 			}
 		}
 
-		if hasBuildVerPrefix && storageType == "types" {
+		if hasBuildVerPrefix && reqType == "types" {
 			findDts := func() (savePath string, fi storage.FileStat, err error) {
 				savePath = path.Join(fmt.Sprintf(
 					"types/v%d%s/%s@%s/%s",
@@ -1199,6 +1195,16 @@ func auth(secret string) rex.Handle {
 		}
 		return nil
 	}
+}
+
+func hasTargetSegment(path string) bool {
+	parts := strings.Split(path, "/")
+	for _, part := range parts {
+		if targets[part] > 0 {
+			return true
+		}
+	}
+	return false
 }
 
 func throwErrorJS(ctx *rex.Context, err error) interface{} {

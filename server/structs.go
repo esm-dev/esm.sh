@@ -17,25 +17,29 @@ func (fs devFS) ReadFile(name string) ([]byte, error) {
 
 type stringSet struct {
 	lock sync.RWMutex
-	m    map[string]struct{}
+	set  map[string]struct{}
 }
 
-func newStringSet() *stringSet {
-	return &stringSet{m: map[string]struct{}{}}
+func newStringSet(keys ...string) *stringSet {
+	set := make(map[string]struct{}, len(keys))
+	for _, key := range keys {
+		set[key] = struct{}{}
+	}
+	return &stringSet{set: set}
 }
 
 func (s *stringSet) Size() int {
 	s.lock.RLock()
 	defer s.lock.RUnlock()
 
-	return len(s.m)
+	return len(s.set)
 }
 
 func (s *stringSet) Has(key string) bool {
 	s.lock.RLock()
 	defer s.lock.RUnlock()
 
-	_, ok := s.m[key]
+	_, ok := s.set[key]
 	return ok
 }
 
@@ -43,30 +47,30 @@ func (s *stringSet) Add(key string) {
 	s.lock.Lock()
 	defer s.lock.Unlock()
 
-	s.m[key] = struct{}{}
+	s.set[key] = struct{}{}
 }
 
 func (s *stringSet) Remove(key string) {
 	s.lock.Lock()
 	defer s.lock.Unlock()
 
-	delete(s.m, key)
+	delete(s.set, key)
 }
 
 func (s *stringSet) Reset() {
 	s.lock.Lock()
 	defer s.lock.Unlock()
 
-	s.m = map[string]struct{}{}
+	s.set = map[string]struct{}{}
 }
 
 func (s *stringSet) Values() []string {
 	s.lock.RLock()
 	defer s.lock.RUnlock()
 
-	a := make([]string, len(s.m))
+	a := make([]string, len(s.set))
 	i := 0
-	for key := range s.m {
+	for key := range s.set {
 		a[i] = key
 		i++
 	}

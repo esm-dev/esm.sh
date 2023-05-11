@@ -612,22 +612,29 @@ func resovleESModule(wd string, packageName string, moduleSpecifier string) (res
 	case ".mjs", ".js", ".jsx", ".mts", ".ts", ".tsx":
 		resolvedName = moduleSpecifier
 	default:
-		resolvedName = moduleSpecifier + ".mjs"
-		if !fileExists(path.Join(pkgDir, resolvedName)) {
-			resolvedName = moduleSpecifier + ".js"
+		for _, ext := range []string{".mjs", ".js", ".jsx", ".mts", ".ts", ".tsx"} {
+			name := moduleSpecifier + ext
+			if fileExists(path.Join(pkgDir, name)) {
+				resolvedName = name
+				break
+			}
 		}
 		if !fileExists(path.Join(pkgDir, resolvedName)) && dirExists(path.Join(pkgDir, moduleSpecifier)) {
-			resolvedName = path.Join(moduleSpecifier, "index.mjs")
-			if !fileExists(path.Join(pkgDir, resolvedName)) {
-				resolvedName = path.Join(moduleSpecifier, "index.js")
+			for _, ext := range []string{".mjs", ".js", ".jsx", ".mts", ".ts", ".tsx"} {
+				name := path.Join(moduleSpecifier, "index"+ext)
+				if fileExists(path.Join(pkgDir, name)) {
+					resolvedName = name
+					break
+				}
 			}
 		}
 	}
 	if !fileExists(path.Join(pkgDir, resolvedName)) {
-		if strings.HasSuffix(resolvedName, "index/index.js") {
-			resolvedName = strings.TrimSuffix(resolvedName, "/index.js") + ".js"
-		} else if strings.HasSuffix(resolvedName, "index/index.mjs") {
-			resolvedName = strings.TrimSuffix(resolvedName, "/index.mjs") + ".mjs"
+		for _, ext := range []string{".mjs", ".js", ".jsx", ".mts", ".ts", ".tsx"} {
+			if strings.HasSuffix(resolvedName, "index/index"+ext) {
+				resolvedName = strings.TrimSuffix(resolvedName, "/index"+ext) + ext
+				break
+			}
 		}
 	}
 
