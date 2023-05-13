@@ -74,30 +74,6 @@ var nativeNodePackages = []string{
 	"zlib-sync",
 }
 
-// allowlist for require mode when parsing cjs exports fails
-var requireModeAllowList = []string{
-	"@babel/types",
-	"domhandler",
-	"he",
-	"jsbn",
-	"netmask",
-	"xml2js",
-	"keycode",
-	"lru_map",
-	"lz-string",
-	"maplibre-gl",
-	"postcss-selector-parser",
-	"react-draggable",
-	"resolve",
-	"safe-buffer",
-	"seedrandom",
-	"stream-browserify",
-	"stream-http",
-	"typescript",
-	"vscode-oniguruma",
-	"web-streams-ponyfill",
-}
-
 var denoNextUnspportedNodeModules = map[string]bool{
 	"inspector": true,
 }
