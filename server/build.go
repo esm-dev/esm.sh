@@ -855,6 +855,12 @@ rebuild:
 					}
 				}
 
+				if cjsImportNames.Has("default") && cjsImportNames.Has("default?") {
+					cjsImportNames.Remove("default?")
+				}
+				if cjsImportNames.Has("*") && cjsImportNames.Has("*?") {
+					cjsImportNames.Remove("*?")
+				}
 				if cjsImportNames.Size() > 0 {
 					buf := bytes.NewBuffer(nil)
 					for _, importName := range cjsImportNames.Values() {
@@ -868,6 +874,8 @@ rebuild:
 							fmt.Fprintf(buf, `const __%s$ = (a,p,i)=>a.includes(p,i);%s`, identifier, eol)
 						} else if name == "has-symbols" {
 							fmt.Fprintf(buf, `const __%s$ = ()=>!0;%s`, identifier, eol)
+						} else if name == "es6-symbol" {
+							fmt.Fprintf(buf, `const __%s$ = Symbol;%s`, identifier, eol)
 						} else {
 							switch importName {
 							case "*":

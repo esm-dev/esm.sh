@@ -16,6 +16,7 @@ import (
 // allowlist for require mode when parsing cjs exports fails
 var requireModeAllowList = []string{
 	"@babel/types",
+	"cheerio",
 	"domhandler",
 	"he",
 	"jsbn",
