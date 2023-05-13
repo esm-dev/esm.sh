@@ -283,7 +283,7 @@ rebuild:
 						for _, name := range nativeNodePackages {
 							if args.Path == name || strings.HasPrefix(args.Path, name+"/") {
 								if task.isDenoTarget() {
-									pkgName, submodule := splitPkgPath(args.Path)
+									pkgName, subPath := splitPkgPath(args.Path)
 									version := "latest"
 									if pkgName == task.Pkg.Name {
 										version = task.Pkg.Version
@@ -297,7 +297,8 @@ rebuild:
 										pkg := Pkg{
 											Name:      p.Name,
 											Version:   p.Version,
-											Submodule: submodule,
+											Subpath:   subPath,
+											Submodule: toModuleName(subPath),
 										}
 										return api.OnResolveResult{Path: fmt.Sprintf("npm:%s", pkg.String()), External: true}, nil
 									}
@@ -622,11 +623,12 @@ rebuild:
 				}
 				// sub module
 				if importPath == "" && strings.HasPrefix(name, task.Pkg.Name+"/") {
-					submodule := strings.TrimPrefix(name, task.Pkg.Name+"/")
+					subPath := strings.TrimPrefix(name, task.Pkg.Name+"/")
 					subPkg := Pkg{
 						Name:      task.Pkg.Name,
 						Version:   task.Pkg.Version,
-						Submodule: submodule,
+						Subpath:   subPath,
+						Submodule: toModuleName(subPath),
 					}
 					importPath = task.getImportPath(subPkg, encodeBuildArgsPrefix(task.BuildArgs, subPkg, false))
 				}
@@ -676,14 +678,15 @@ rebuild:
 				if importPath == "" {
 					for _, dep := range task.deps {
 						if name == dep.Name || strings.HasPrefix(name, dep.Name+"/") {
-							var submodule string
+							var subPath string
 							if name != dep.Name {
-								submodule = strings.TrimPrefix(name, dep.Name+"/")
+								subPath = strings.TrimPrefix(name, dep.Name+"/")
 							}
 							subPkg := Pkg{
 								Name:      dep.Name,
 								Version:   dep.Version,
-								Submodule: submodule,
+								Subpath:   subPath,
+								Submodule: toModuleName(subPath),
 							}
 							importPath = task.getImportPath(subPkg, encodeBuildArgsPrefix(task.BuildArgs, subPkg, false))
 							break
@@ -700,7 +703,7 @@ rebuild:
 				// common npm dependency
 				if importPath == "" {
 					version := "latest"
-					pkgName, submodule := splitPkgPath(name)
+					pkgName, subpath := splitPkgPath(name)
 					if pkgName == task.Pkg.Name {
 						version = task.Pkg.Version
 					} else if v, ok := npm.Dependencies[pkgName]; ok {
@@ -714,15 +717,11 @@ rebuild:
 						return
 					}
 
-					if submodule != "" {
-						submodule = strings.TrimSuffix(submodule, ".js")
-						submodule = strings.TrimSuffix(submodule, ".mjs")
-						submodule = strings.TrimSuffix(submodule, "/index")
-					}
 					pkg := Pkg{
 						Name:      p.Name,
 						Version:   p.Version,
-						Submodule: submodule,
+						Subpath:   subpath,
+						Submodule: toModuleName(subpath),
 					}
 					t := &BuildTask{
 						BuildArgs: BuildArgs{
@@ -770,11 +769,12 @@ rebuild:
 							depPkg := Pkg{}
 							if a := strings.Split(name, "/"); strings.HasPrefix(name, "@") {
 								depPkg.Name = a[0] + "/" + a[1]
-								depPkg.Submodule = strings.Join(a[2:], "/")
+								depPkg.Subpath = strings.Join(a[2:], "/")
 							} else {
 								depPkg.Name = a[0]
-								depPkg.Submodule = strings.Join(a[1:], "/")
+								depPkg.Subpath = strings.Join(a[1:], "/")
 							}
+							depPkg.Submodule = toModuleName(depPkg.Subpath)
 							if err == nil {
 								task := &BuildTask{
 									BuildArgs: task.BuildArgs,

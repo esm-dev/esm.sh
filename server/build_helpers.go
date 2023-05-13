@@ -68,7 +68,7 @@ func (task *BuildTask) getImportPath(pkg Pkg, buildArgsPrefix string) string {
 	name := strings.TrimSuffix(path.Base(pkg.Name), ".js")
 	extname := ".mjs"
 	if pkg.Submodule != "" {
-		name = strings.TrimSuffix(strings.TrimSuffix(pkg.Submodule, ".js"), ".mjs")
+		name = pkg.Submodule
 		extname = ".js"
 	}
 	if pkg.FromEsmsh {

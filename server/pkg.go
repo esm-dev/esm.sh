@@ -12,8 +12,8 @@ import (
 type Pkg struct {
 	Name       string `json:"name"`
 	Version    string `json:"version"`
-	Submodule  string `json:"submodule"`
 	Subpath    string `json:"fullsubmodule"`
+	Submodule  string `json:"submodule"`
 	FromGithub bool   `json:"fromGithub"`
 	FromEsmsh  bool   `json:"fromEsmsh"`
 }
@@ -40,18 +40,11 @@ func validatePkgPath(pathname string) (pkg Pkg, query string, err error) {
 		version = v
 	}
 
-	submodule := subpath
-	if submodule != "" {
-		submodule = strings.TrimSuffix(submodule, ".js")
-		submodule = strings.TrimSuffix(submodule, ".mjs")
-		submodule = strings.TrimSuffix(submodule, "/index")
-	}
-
 	pkg = Pkg{
 		Name:       name,
 		Version:    version,
-		Submodule:  submodule,
 		Subpath:    subpath,
+		Submodule:  toModuleName(subpath),
 		FromGithub: fromGithub,
 		FromEsmsh:  fromEsmsh,
 	}
@@ -180,13 +173,24 @@ func (a PkgSlice) String() string {
 	return strings.Join(s, ",")
 }
 
-func splitPkgPath(pathname string) (pkgName string, submodule string) {
+func toModuleName(path string) string {
+	if path != "" {
+		submodule := path
+		submodule = strings.TrimSuffix(submodule, ".js")
+		submodule = strings.TrimSuffix(submodule, ".mjs")
+		submodule = strings.TrimSuffix(submodule, "/index")
+		return submodule
+	}
+	return ""
+}
+
+func splitPkgPath(pathname string) (pkgName string, subpath string) {
 	a := strings.Split(strings.TrimPrefix(pathname, "/"), "/")
 	pkgName = a[0]
-	submodule = strings.Join(a[1:], "/")
+	subpath = strings.Join(a[1:], "/")
 	if strings.HasPrefix(pkgName, "@") && len(a) > 1 {
 		pkgName = a[0] + "/" + a[1]
-		submodule = strings.Join(a[2:], "/")
+		subpath = strings.Join(a[2:], "/")
 	}
 	return
 }
