@@ -1,4 +1,4 @@
-const fixedPkgVersions = JSON.parse(__FIXED_PKG_VERSIONS__);
+import { fixedPkgVersions } from "./consts.ts";
 
 export function fixPkgVersion(pkg: string, version: string) {
   for (const [k, v] of Object.entries(fixedPkgVersions)) {

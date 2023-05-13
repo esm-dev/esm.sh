@@ -74,7 +74,7 @@ declare global {
 export default worker((req, ctx) => {
   const { env, url } = ctx;
 
-  // your routes...
+  // your routes override esm.sh routes
   if (url.pathname === "/") {
     // using the KV storage
     await env.KV.put("key", "value");
@@ -102,6 +102,5 @@ export default worker((req, ctx) => {
     );
   }
 
-  // esm.sh routes...
 });
 ```

@@ -5,12 +5,6 @@ import type {
 } from "@cloudflare/workers-types";
 
 declare global {
-  const __VERSION__: number;
-  const __STABLE_VERSION__: number;
-  const __STABLE_BUILD__: string;
-  const __FIXED_PKG_VERSIONS__: string;
-  const __CSS_PACKAGES__: string;
-  const __ASSETS_EXTS__: string;
   interface Env {
     WORKER_ENV: "development" | "production";
     KV: KVNamespace;

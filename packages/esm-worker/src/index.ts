@@ -8,6 +8,13 @@ import type {
 import { compareVersions, satisfies, validate } from "compare-versions";
 import { getEsmaVersionFromUA, targets } from "./compat.ts";
 import {
+  assetsExts,
+  cssPackages,
+  STABLE_VERSION,
+  stableBuild,
+  VERSION,
+} from "./consts.ts";
+import {
   boolJoin,
   checkPreflight,
   copyHeaders,
@@ -24,13 +31,6 @@ const regexpFullVersion = /^\d+\.\d+\.\d+/;
 const regexpCommitish = /^[a-f0-9]{10,}$/;
 const regexpBuildVersion = /^(v\d+|stable)$/;
 const regexpBuildVersionPrefix = /^\/(v\d+|stable)\//;
-
-// consts defined in `server/consts.go`
-const VERSION = __VERSION__;
-const STABLE_VERSION = __STABLE_VERSION__;
-const stableBuild = new Set(Object.keys(JSON.parse(__STABLE_BUILD__)));
-const assetsExts = new Set(Object.keys(JSON.parse(__ASSETS_EXTS__)));
-const cssPackages = JSON.parse(__CSS_PACKAGES__);
 
 class ESMWorker {
   middleware?: Middleware;
