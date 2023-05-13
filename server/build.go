@@ -714,6 +714,11 @@ rebuild:
 						return
 					}
 
+					if submodule != "" {
+						submodule = strings.TrimSuffix(submodule, ".js")
+						submodule = strings.TrimSuffix(submodule, ".mjs")
+						submodule = strings.TrimSuffix(submodule, "/index")
+					}
 					pkg := Pkg{
 						Name:      p.Name,
 						Version:   p.Version,
