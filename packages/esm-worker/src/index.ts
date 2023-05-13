@@ -32,6 +32,8 @@ const regexpCommitish = /^[a-f0-9]{10,}$/;
 const regexpBuildVersion = /^(v\d+|stable)$/;
 const regexpBuildVersionPrefix = /^\/(v\d+|stable)\//;
 
+const defaultNpmRegistry = "https://registry.npmjs.org";
+
 class ESMWorker {
   middleware?: Middleware;
   cache?: Cache;
@@ -312,7 +314,10 @@ class ESMWorker {
         if (env.NPM_TOKEN) {
           headers.set("Authorization", `Bearer ${env.NPM_TOKEN}`);
         }
-        const res = await fetch(`${env.NPM_REGISTRY}${pkg}`, { headers });
+        const res = await fetch(
+          new URL(pkg, env.NPM_REGISTRY ?? defaultNpmRegistry),
+          { headers },
+        );
         if (!res.ok) {
           if (res.status === 404 || res.status === 401) {
             return pkgNotFound(pkg, headers);
@@ -395,7 +400,7 @@ class ESMWorker {
             headers.set("Authorization", `Bearer ${env.NPM_TOKEN}`);
           }
           const res = await fetch(
-            `${env.NPM_REGISTRY}${pkg}/${packageVersion}`,
+            new URL(pkg, env.NPM_REGISTRY ?? defaultNpmRegistry),
             { headers },
           );
           if (!res.ok) {
