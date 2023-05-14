@@ -13,7 +13,7 @@ all requests of esm.sh at the edge(earth).
 ## Getting Started
 
 ```bash
-npm install esm-worker@0.120
+npm install esm-worker@0.121
 ```
 
 You need to add following configuration to your `wrangler.toml`:

@@ -1,4 +1,22 @@
-# Change Log
+# Changelog
+
+## v121
+
+- Use `browser` field for package main if possible
+  ```json
+  {
+    "name": "pkg",
+    "version": "1.0.0",
+    "main": "./index.js",
+    "browser": {
+      "./index.js": "./browser.js"
+    }
+  }
+  ```
+- Fix redirects for `?css` and `GET /build`
+- Fix `*.js.js` module path (close #627)
+- Fix cjs imports (close #629, #626)
+- Add `pako` to the `requireModeAllowList`
 
 ## v120
 
