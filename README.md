@@ -55,10 +55,11 @@ import React from "https://esm.sh/react@17.0.2"
 import useSWR from "https://esm.sh/swr?deps=react@17.0.2"
 ```
 
-### Specify External Dependencies
+### Using Import Maps
 
-You can add the `?external=foo,bar` query to specify external dependencies.
-Since these dependencies are not resolved, you need to use [**import maps**](https://github.com/WICG/import-maps) to specify the URL for these dependencies. If you are using Deno, you can use the [CLI Script](#using-cli-script) to generate and update the import maps that will resolve the external dependencies automatically.
+[**Import Maps**](https://github.com/WICG/import-maps) has been supported by most modern browsers and Deno natively. This allows _**bare import specifiers**_, such as `import moment from "reat"`, to work.
+
+esm.sh supports `?external=foo,bar` query to specify external dependencies. With this query, esm.sh will not rewrite the import specifiers of the specified dependencies. For example:
 
 ```json
 {
@@ -92,6 +93,8 @@ Import maps supports [**trailing slash**](https://github.com/WICG/import-maps#pa
   }
 }
 ```
+
+> If you are using Deno, you can use the [CLI Script](#using-cli-script) to generate and update the import maps that will resolve the external dependencies automatically.
 
 ### Aliasing Dependencies
 
