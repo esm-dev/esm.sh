@@ -5,4 +5,4 @@ export const STABLE_VERSION = 118;
 export const stableBuild = new Set(["preact","react","solid-js","svelte","vue"]);
 export const assetsExts = new Set(["wasm","css","less","sass","scss","json","xml","yml","yaml","txt","md","html","htm","svg","png","jpg","webp","gif","eot","ttf","otf","woff","woff2"]);
 export const cssPackages = {"normalize.css":"normalize.css","@unocss/reset":"tailwind.css","reset-css":"reset.css"};
-export const fixedPkgVersions = {"@types/react@17":"17.0.58","@types/react@18":"18.2.6","isomorphic-ws@4":"5.0.0","resolve@1.22":"1.22.2"};
+export const fixedPkgVersions = {"@types/react@17":"17.0.59","@types/react@18":"18.2.6","isomorphic-ws@4":"5.0.0","resolve@1.22":"1.22.2"};
