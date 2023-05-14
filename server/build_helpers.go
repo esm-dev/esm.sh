@@ -465,14 +465,45 @@ func (task *BuildTask) fixNpmPackage(p NpmPackage) NpmPackage {
 		}
 	}
 
-	browserMain := p.Browser["."]
-	if browserMain != "" && fileExists(path.Join(nmDir, p.Name, browserMain)) {
-		isEsm, _, _ := validateJS(path.Join(nmDir, p.Name, browserMain))
-		if isEsm {
-			log.Infof("%s@%s: use `browser` field as module: %s", p.Name, p.Version, browserMain)
-			p.Module = browserMain
+	if p.Module != "" && !strings.HasPrefix(p.Module, "./") {
+		p.Module = "." + utils.CleanPath(p.Module)
+	}
+	if p.Main != "" && !strings.HasPrefix(p.Main, "./") {
+		p.Main = "." + utils.CleanPath(p.Main)
+	}
+
+	if !task.isServerTarget() {
+		var browserModule string
+		var browserMain string
+		if p.Module != "" {
+			m, ok := p.Browser[p.Module]
+			if ok {
+				browserModule = m
+			}
+		} else if p.Main != "" {
+			m, ok := p.Browser[p.Main]
+			if ok {
+				browserMain = m
+			}
+		}
+		if browserModule == "" && browserMain == "" {
+			if m := p.Browser["."]; m != "" && fileExists(path.Join(nmDir, p.Name, m)) {
+				isEsm, _, _ := validateJS(path.Join(nmDir, p.Name, m))
+				if isEsm {
+					browserModule = m
+				} else {
+					browserMain = m
+				}
+			}
+		}
+		if browserModule != "" {
+			p.Module = browserModule
+		} else if browserMain != "" {
+			p.Main = browserMain
 		}
 	}
+
+	// log.Debug("[main]", task.Pkg, p.Main, p.Module)
 
 	if p.Types == "" && p.Main != "" {
 		if strings.HasSuffix(p.Main, ".d.ts") {

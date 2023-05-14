@@ -775,54 +775,56 @@ rebuild:
 								depPkg.Subpath = strings.Join(a[1:], "/")
 							}
 							depPkg.Submodule = toModuleName(depPkg.Subpath)
-							if err == nil {
-								task := &BuildTask{
-									BuildArgs: task.BuildArgs,
-									Pkg:       depPkg,
-									Target:    task.Target,
-									Dev:       task.Dev,
-									wd:        task.getRealWD(),
-								}
-								depESM, depNpm, _, e := task.analyze()
-								if e != nil {
-									log.Warnf("analyze dep(%s) failed: %s", depPkg, e.Error())
-								}
-								if e == nil {
-									// support edge case like `require('htmlparser').Parser`
-									if bytes.HasPrefix(p, []byte{'.'}) {
-										// right shift to strip the object `key`
-										shift := 0
-										for i, l := 1, len(p); i < l; i++ {
-											if !isJSIdentChar(p[i]) {
-												break
-											}
-											shift++
+							var np NpmPackage
+							if utils.ParseJSONFile(path.Join(task.getRealWD(), "node_modules", depPkg.Name, "package.json"), &np) == nil {
+								depPkg.Version = np.Version
+							}
+							task := &BuildTask{
+								BuildArgs: task.BuildArgs,
+								Pkg:       depPkg,
+								Target:    task.Target,
+								Dev:       task.Dev,
+								wd:        task.getRealWD(),
+							}
+							depESM, depNpm, _, e := task.analyze()
+							if e != nil {
+								log.Warnf("analyze dep(%s) failed: %s", depPkg, e.Error())
+							}
+							if e == nil {
+								// support edge case like `require('htmlparser').Parser`
+								if bytes.HasPrefix(p, []byte{'.'}) {
+									// right shift to strip the object `key`
+									shift := 0
+									for i, l := 1, len(p); i < l; i++ {
+										if !isJSIdentChar(p[i]) {
+											break
 										}
-										importName := string(p[1 : shift+1])
-										if importName != "default" && includes(depESM.NamedExports, importName) {
-											cjsImportNames.Add(importName)
-											marked = true
-											p = p[1:]
-										} else {
-											cjsImportNames.Add("default")
-											marked = true
-										}
+										shift++
 									}
-									// if the dep is an es6 module
-									if !marked && depNpm.Module != "" {
-										if depESM.HasExportDefault && len(depESM.NamedExports) == 1 {
-											cjsImportNames.Add("default")
-										} else if bytes.Contains(outputContent, []byte("__esModule")) {
-											cjsImportNames.Add("*?")
-										} else {
-											cjsImportNames.Add("*")
-										}
+									importName := string(p[1 : shift+1])
+									if importName != "default" && includes(depESM.NamedExports, importName) {
+										cjsImportNames.Add(importName)
+										marked = true
+										p = p[1:]
+									} else {
+										cjsImportNames.Add("default")
 										marked = true
 									}
-									if !marked && includes(depESM.NamedExports, "__esModule") && depESM.HasExportDefault {
+								}
+								// if the dep is an es6 module
+								if !marked && depNpm.Module != "" {
+									if depESM.HasExportDefault && len(depESM.NamedExports) == 1 {
+										cjsImportNames.Add("default")
+									} else if bytes.Contains(outputContent, []byte("__esModule")) {
+										cjsImportNames.Add("*?")
+									} else {
 										cjsImportNames.Add("*")
-										marked = true
 									}
+									marked = true
+								}
+								if !marked && includes(depESM.NamedExports, "__esModule") && depESM.HasExportDefault {
+									cjsImportNames.Add("*")
+									marked = true
 								}
 							}
 						}
