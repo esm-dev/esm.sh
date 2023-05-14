@@ -637,31 +637,31 @@ func queryESMBuild(id string) (*ESMBuild, bool) {
 	return nil, false
 }
 
+var esmExts = []string{".mjs", ".js", ".jsx", ".mts", ".ts", ".tsx"}
+
 func resovleESModule(wd string, packageName string, moduleSpecifier string) (resolvedName string, namedExports []string, err error) {
 	pkgDir := path.Join(wd, "node_modules", packageName)
-	switch path.Ext(moduleSpecifier) {
-	case ".mjs", ".js", ".jsx", ".mts", ".ts", ".tsx":
-		resolvedName = moduleSpecifier
-	default:
-		for _, ext := range []string{".mjs", ".js", ".jsx", ".mts", ".ts", ".tsx"} {
+	resolvedName = moduleSpecifier
+	if !fileExists(path.Join(pkgDir, resolvedName)) {
+		for _, ext := range esmExts {
 			name := moduleSpecifier + ext
 			if fileExists(path.Join(pkgDir, name)) {
 				resolvedName = name
 				break
 			}
 		}
-		if !fileExists(path.Join(pkgDir, resolvedName)) && dirExists(path.Join(pkgDir, moduleSpecifier)) {
-			for _, ext := range []string{".mjs", ".js", ".jsx", ".mts", ".ts", ".tsx"} {
-				name := path.Join(moduleSpecifier, "index"+ext)
-				if fileExists(path.Join(pkgDir, name)) {
-					resolvedName = name
-					break
-				}
+	}
+	if !fileExists(path.Join(pkgDir, resolvedName)) && dirExists(path.Join(pkgDir, moduleSpecifier)) {
+		for _, ext := range esmExts {
+			name := path.Join(moduleSpecifier, "index"+ext)
+			if fileExists(path.Join(pkgDir, name)) {
+				resolvedName = name
+				break
 			}
 		}
 	}
 	if !fileExists(path.Join(pkgDir, resolvedName)) {
-		for _, ext := range []string{".mjs", ".js", ".jsx", ".mts", ".ts", ".tsx"} {
+		for _, ext := range esmExts {
 			if strings.HasSuffix(resolvedName, "index/index"+ext) {
 				resolvedName = strings.TrimSuffix(resolvedName, "/index"+ext) + ext
 				break

@@ -176,8 +176,13 @@ func (a PkgSlice) String() string {
 func toModuleName(path string) string {
 	if path != "" {
 		submodule := path
-		submodule = strings.TrimSuffix(submodule, ".js")
-		submodule = strings.TrimSuffix(submodule, ".mjs")
+		if strings.HasSuffix(submodule, ".mjs") {
+			submodule = strings.TrimSuffix(submodule, ".mjs")
+		} else if strings.HasSuffix(submodule, ".cjs") {
+			submodule = strings.TrimSuffix(submodule, ".cjs")
+		} else {
+			submodule = strings.TrimSuffix(submodule, ".js")
+		}
 		submodule = strings.TrimSuffix(submodule, "/index")
 		return submodule
 	}
