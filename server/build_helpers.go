@@ -581,7 +581,7 @@ func (task *BuildTask) applyConditions(p *NpmPackage, exports interface{}, pType
 		if task.Dev {
 			targetConditions = append(targetConditions, "development")
 		}
-		if task.conditions.Size() > 0 {
+		if task.conditions.Len() > 0 {
 			targetConditions = append(task.conditions.Values(), targetConditions...)
 		}
 		for _, condition := range append(targetConditions, conditions...) {

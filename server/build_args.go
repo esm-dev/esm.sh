@@ -112,7 +112,7 @@ func encodeBuildArgsPrefix(args BuildArgs, pkg Pkg, forTypes bool) string {
 				lines = append(lines, fmt.Sprintf("d/%s", strings.Join(ss, ",")))
 			}
 		}
-		if args.external.Size() > 0 {
+		if args.external.Len() > 0 {
 			var ss sort.StringSlice
 			for _, name := range args.external.Values() {
 				if name != pkg.Name {
@@ -125,7 +125,7 @@ func encodeBuildArgsPrefix(args BuildArgs, pkg Pkg, forTypes bool) string {
 			}
 		}
 		if !forTypes {
-			if args.treeShaking.Size() > 0 {
+			if args.treeShaking.Len() > 0 {
 				var ss sort.StringSlice
 				for _, name := range args.treeShaking.Values() {
 					ss = append(ss, name)
@@ -137,7 +137,7 @@ func encodeBuildArgsPrefix(args BuildArgs, pkg Pkg, forTypes bool) string {
 			}
 		}
 	}
-	if args.conditions.Size() > 0 {
+	if args.conditions.Len() > 0 {
 		var ss sort.StringSlice
 		for _, name := range args.conditions.Values() {
 			ss = append(ss, name)

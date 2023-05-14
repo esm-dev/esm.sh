@@ -43,13 +43,13 @@ func TestEncodeBuildArgs(t *testing.T) {
 	if len(args.deps) != 3 {
 		t.Fatal("invalid deps")
 	}
-	if args.external.Size() != 2 {
+	if args.external.Len() != 2 {
 		t.Fatal("invalid external")
 	}
-	if args.treeShaking.Size() != 2 {
+	if args.treeShaking.Len() != 2 {
 		t.Fatal("invalid treeShaking")
 	}
-	if args.conditions.Size() != 1 {
+	if args.conditions.Len() != 1 {
 		t.Fatal("invalid conditions")
 	}
 	if args.denoStdVersion != "0.128.0" {

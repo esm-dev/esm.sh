@@ -19,7 +19,7 @@ func (task *BuildTask) TransformDTS(dts string) (n int, err error) {
 	marker := newStringSet()
 	err = task.transformDTS(dts, buildArgsPrefix, marker)
 	if err == nil {
-		n = marker.Size()
+		n = marker.Len()
 	}
 	return
 }

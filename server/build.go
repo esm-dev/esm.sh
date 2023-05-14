@@ -195,7 +195,7 @@ func (task *BuildTask) build() (esm *ESMBuild, err error) {
 			Sourcefile: "_entry.js",
 		}
 	} else {
-		if task.treeShaking.Size() > 0 {
+		if task.treeShaking.Len() > 0 {
 			buf := bytes.NewBuffer(nil)
 			importPath := task.Pkg.ImportPath()
 			fmt.Fprintf(buf, `export { %s } from "%s";`, strings.Join(task.treeShaking.Values(), ","), importPath)
@@ -230,7 +230,7 @@ func (task *BuildTask) build() (esm *ESMBuild, err error) {
 		"global.require.resolve":      "__rResolve$",
 		"global.process.env.NODE_ENV": fmt.Sprintf(`"%s"`, nodeEnv),
 	}
-	externalDeps := newStringSet()
+	externalDeps := &orderedStringSet{}
 	implicitExternal := newStringSet()
 	browserExclude := map[string]*stringSet{}
 
@@ -752,7 +752,7 @@ rebuild:
 				}
 
 				buffer := bytes.NewBuffer(nil)
-				identifier := fmt.Sprintf("%x", externalDeps.Size()-depIndex)
+				identifier := fmt.Sprintf("%x", externalDeps.Len()-depIndex)
 				cjsContext := false
 				cjsImportNames := newStringSet()
 
@@ -863,7 +863,7 @@ rebuild:
 				if cjsImportNames.Has("*") && cjsImportNames.Has("*?") {
 					cjsImportNames.Remove("*?")
 				}
-				if cjsImportNames.Size() > 0 {
+				if cjsImportNames.Len() > 0 {
 					buf := bytes.NewBuffer(nil)
 					for _, importName := range cjsImportNames.Values() {
 						if name == "object-assign" {

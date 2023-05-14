@@ -28,7 +28,7 @@ func newStringSet(keys ...string) *stringSet {
 	return &stringSet{set: set}
 }
 
-func (s *stringSet) Size() int {
+func (s *stringSet) Len() int {
 	s.lock.RLock()
 	defer s.lock.RUnlock()
 
@@ -74,6 +74,26 @@ func (s *stringSet) Values() []string {
 		a[i] = key
 		i++
 	}
+	return a
+}
+
+type orderedStringSet struct {
+	set []string
+}
+
+func (s *orderedStringSet) Len() int {
+	return len(s.set)
+}
+
+func (s *orderedStringSet) Add(key string) {
+	if !includes(s.set, key) {
+		s.set = append(s.set, key)
+	}
+}
+
+func (s *orderedStringSet) Values() []string {
+	a := make([]string, len(s.set))
+	copy(a, s.set)
 	return a
 }
 
