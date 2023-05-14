@@ -242,7 +242,7 @@ const ret = await build({
       return renderToString(<h1>Hello world!</h1>);
     }
   `,
-  // for deno types checking
+  // for types checking and LSP completion
   types:`
     export function render(): string;
   `

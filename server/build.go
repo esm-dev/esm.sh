@@ -192,7 +192,7 @@ func (task *BuildTask) build() (esm *ESMBuild, err error) {
 		input = &api.StdinOptions{
 			Contents:   buf.String(),
 			ResolveDir: task.wd,
-			Sourcefile: "index.js",
+			Sourcefile: "_entry.js",
 		}
 	} else {
 		if task.treeShaking.Size() > 0 {
@@ -202,7 +202,7 @@ func (task *BuildTask) build() (esm *ESMBuild, err error) {
 			input = &api.StdinOptions{
 				Contents:   buf.String(),
 				ResolveDir: task.wd,
-				Sourcefile: "index.js",
+				Sourcefile: "_entry.js",
 			}
 		} else {
 			entryPoint = path.Join(task.wd, "node_modules", npm.Name, npm.Module)
@@ -1002,7 +1002,7 @@ rebuild:
 				options.Stdin = &api.StdinOptions{
 					Contents:   buf.String(),
 					ResolveDir: task.wd,
-					Sourcefile: "index.js",
+					Sourcefile: "_output.js",
 				}
 				ret := api.Build(options)
 				if len(ret.Errors) > 0 {
