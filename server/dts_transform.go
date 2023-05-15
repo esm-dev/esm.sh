@@ -53,7 +53,7 @@ func (task *BuildTask) transformDTS(dts string, aliasDepsPrefix string, marker *
 		pkgNameWithVersion,
 		aliasDepsPrefix,
 	}, strings.Split(submodule, "/")...), "/"))
-	savePath := "types" + dtsPath
+	savePath := path.Join("types", getTypesRoot(task.CdnOrigin), dtsPath)
 	_, err = fs.Stat(savePath)
 	if err != nil && err != storage.ErrNotFound {
 		return

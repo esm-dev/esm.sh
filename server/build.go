@@ -214,8 +214,8 @@ func (task *BuildTask) build() (esm *ESMBuild, err error) {
 		nodeEnv = "development"
 	}
 	define := map[string]string{
-		"__filename":                  fmt.Sprintf(`"%s%s/%s"`, task.CdnOrigin, cfg.BasePath, task.ID()),
-		"__dirname":                   fmt.Sprintf(`"%s%s/%s"`, task.CdnOrigin, cfg.BasePath, path.Dir(task.ID())),
+		"__filename":                  fmt.Sprintf(`"/_virtual/%s"`, task.ID()),
+		"__dirname":                   fmt.Sprintf(`"/_virtual/%s"`, path.Dir(task.ID())),
 		"Buffer":                      "__Buffer$",
 		"process":                     "__Process$",
 		"setImmediate":                "__setImmediate$",
@@ -367,7 +367,7 @@ rebuild:
 								if gitUrl.Scheme == "git+ssh" {
 									repo = gitUrl.Port() + "/" + repo
 								}
-								path := fmt.Sprintf("/v%d/gh/%s", VERSION, repo)
+								path := fmt.Sprintf("/v%d/gh/%s", task.BuildVersion, repo)
 								if gitUrl.Fragment != "" {
 									path += "@" + url.QueryEscape(gitUrl.Fragment)
 								}

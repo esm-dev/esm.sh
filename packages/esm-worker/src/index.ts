@@ -603,9 +603,12 @@ async function fetchESM(
   }
   const { R2, KV } = ctx.env;
   const [pathname] = splitBy(path, "?", true);
-  const storage = pathname.endsWith(".d.ts") || pathname.endsWith(".map")
-    ? "r2"
-    : "workers-kv";
+  const isDts = pathname.endsWith(".d.ts") || pathname.endsWith(".d.mts");
+  if (isDts && req.headers.has("X-Real-Origin")) {
+    const { host } = new URL(req.headers.get("X-Real-Origin")!);
+    storeKey = host.replace(":", "_") + "/" + storeKey;
+  }
+  const storage = isDts || pathname.endsWith(".map") ? "r2" : "workers-kv";
   const headers = corsHeaders();
   if (options.targetFromUA) {
     headers.set("Vary", "Origin,User-Agent");
@@ -698,14 +701,22 @@ async function fetchServerOrigin(
   copyHeaders(
     headers,
     req.headers,
-    "Origin",
     "Accept-Encoding",
     "Content-Type",
+    "Origin",
     "Referer",
     "User-Agent",
-    "X-Real-Ip",
+    "X-Esm-Worker-Version",
     "X-Forwarded-For",
+    "X-Real-Ip",
+    "X-Real-Origin",
   );
+  if (!headers.has("X-Esm-Worker-Version")) {
+    headers.set("X-Esm-Worker-Version", `v${VERSION}`);
+  }
+  if (!headers.has("X-Real-Origin")) {
+    headers.set("X-Real-Origin", ctx.url.origin);
+  }
   if (ctx.env.ESM_SERVER_AUTH_TOKEN) {
     headers.set("Authorization", `Bearer ${ctx.env.ESM_SERVER_AUTH_TOKEN}`);
   }
