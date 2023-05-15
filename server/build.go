@@ -31,7 +31,6 @@ type BuildTask struct {
 	BuildArgs
 
 	Pkg          Pkg
-	CdnOrigin    string
 	Target       string
 	BuildVersion int
 	Dev          bool
@@ -214,8 +213,8 @@ func (task *BuildTask) build() (esm *ESMBuild, err error) {
 		nodeEnv = "development"
 	}
 	define := map[string]string{
-		"__filename":                  fmt.Sprintf(`"%s%s/%s"`, task.CdnOrigin, cfg.BasePath, task.ID()),
-		"__dirname":                   fmt.Sprintf(`"%s%s/%s"`, task.CdnOrigin, cfg.BasePath, path.Dir(task.ID())),
+		"__filename":                  fmt.Sprintf(`"file:///esmd%s/%s"`, cfg.BasePath, task.ID()),
+		"__dirname":                   fmt.Sprintf(`"file:///esmd%s/%s"`, cfg.BasePath, path.Dir(task.ID())),
 		"Buffer":                      "__Buffer$",
 		"process":                     "__Process$",
 		"setImmediate":                "__setImmediate$",
@@ -732,7 +731,6 @@ rebuild:
 							conditions:     newStringSet(), // remove `?conditions` args
 							denoStdVersion: task.denoStdVersion,
 						},
-						CdnOrigin:    task.CdnOrigin,
 						BuildVersion: task.BuildVersion,
 						Pkg:          pkg,
 						Target:       task.Target,
