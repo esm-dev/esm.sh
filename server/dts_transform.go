@@ -98,7 +98,7 @@ func (task *BuildTask) transformDTS(dts string, aliasDepsPrefix string, marker *
 	wd := task.getRealWD()
 	buf := bytes.NewBuffer(nil)
 	imports := newStringSet()
-	dtsBasePath := fmt.Sprintf("%s/v%d", cfg.BasePath, task.BuildVersion)
+	dtsBasePath := fmt.Sprintf("%s%s/v%d", task.CdnOrigin, cfg.BasePath, task.BuildVersion)
 	if pkgName == "@types/node" {
 		fmt.Fprintf(buf, "/// <reference path=\"%s/node.ns.d.ts\" />\n", dtsBasePath)
 	}
@@ -256,7 +256,7 @@ func (task *BuildTask) transformDTS(dts string, aliasDepsPrefix string, marker *
 				bv = STABLE_VERSION
 			}
 			pkgPath := info.Name + "@" + info.Version + "/" + encodeBuildArgsPrefix(task.BuildArgs, Pkg{Name: info.Name}, true)
-			importPath = fmt.Sprintf("%s/v%d/%s%s", cfg.BasePath, bv, pkgPath, importPath)
+			importPath = fmt.Sprintf("%s%s/v%d/%s%s", task.CdnOrigin, cfg.BasePath, bv, pkgPath, importPath)
 		}
 		return importPath
 	})

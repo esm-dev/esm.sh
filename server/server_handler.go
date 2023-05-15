@@ -155,10 +155,7 @@ func apiHandler() rex.Handle {
 				if err != nil {
 					return rex.Err(500, "failed to save code")
 				}
-				cdnOrigin := ctx.R.Header.Get("X-Real-Origin")
-				if cdnOrigin == "" {
-					cdnOrigin = cfg.Origin
-				}
+				cdnOrigin := cfg.Origin
 				if cdnOrigin == "" {
 					proto := "http"
 					if ctx.R.TLS != nil {
@@ -191,10 +188,7 @@ func esmHandler() rex.Handle {
 			return rex.Status(404, "not found")
 		}
 
-		cdnOrigin := ctx.R.Header.Get("X-Real-Origin")
-		if cdnOrigin == "" {
-			cdnOrigin = cfg.Origin
-		}
+		cdnOrigin := cfg.Origin
 		if cdnOrigin == "" {
 			proto := "http"
 			if ctx.R.TLS != nil {
@@ -666,7 +660,8 @@ func esmHandler() rex.Handle {
 					return rex.Status(500, err.Error())
 				}
 				task := &BuildTask{
-					Pkg: reqPkg,
+					CdnOrigin: cdnOrigin,
+					Pkg:       reqPkg,
 					BuildArgs: BuildArgs{
 						alias:       map[string]string{},
 						deps:        PkgSlice{},
@@ -992,6 +987,7 @@ func esmHandler() rex.Handle {
 			if err == storage.ErrNotFound {
 				task := &BuildTask{
 					BuildArgs:    buildArgs,
+					CdnOrigin:    cdnOrigin,
 					BuildVersion: buildVersion,
 					Pkg:          reqPkg,
 					Target:       "types",
@@ -1026,6 +1022,7 @@ func esmHandler() rex.Handle {
 
 		task := &BuildTask{
 			BuildArgs:    buildArgs,
+			CdnOrigin:    cdnOrigin,
 			BuildVersion: buildVersion,
 			Pkg:          reqPkg,
 			Target:       target,

@@ -698,18 +698,14 @@ async function fetchServerOrigin(
   copyHeaders(
     headers,
     req.headers,
+    "Origin",
     "Accept-Encoding",
     "Content-Type",
-    "Origin",
     "Referer",
     "User-Agent",
-    "X-Forwarded-For",
     "X-Real-Ip",
-    "X-Real-Origin"
+    "X-Forwarded-For",
   );
-  if (!headers.has("X-Real-Origin")) {
-    headers.set("X-Real-Origin", ctx.url.origin);
-  }
   if (ctx.env.ESM_SERVER_AUTH_TOKEN) {
     headers.set("Authorization", `Bearer ${ctx.env.ESM_SERVER_AUTH_TOKEN}`);
   }

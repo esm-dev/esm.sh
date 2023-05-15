@@ -3,7 +3,6 @@ package config
 import (
 	"encoding/json"
 	"fmt"
-	"net/url"
 	"os"
 	"path"
 	"path/filepath"
@@ -96,7 +95,6 @@ func Load(filename string) (*Config, error) {
 		}
 	}
 	if cfg.Origin != "" {
-		assertOrigin(cfg.Origin)
 		cfg.Origin = strings.TrimSuffix(cfg.Origin, "/")
 	}
 	if cfg.BuildConcurrency == 0 {
@@ -121,7 +119,6 @@ func Load(filename string) (*Config, error) {
 		cfg.LogLevel = "info"
 	}
 	if cfg.NpmRegistry != "" {
-		assertOrigin(cfg.NpmRegistry)
 		cfg.NpmRegistry = strings.TrimRight(cfg.NpmRegistry, "/") + "/"
 	}
 	return cfg, nil
@@ -183,13 +180,6 @@ func (banList *BanList) IsPackageBanned(fullName string) bool {
 	}
 
 	return false
-}
-
-func assertOrigin(s string) {
-	_, err := url.Parse(s)
-	if err != nil {
-		panic("invalid origin: " + s)
-	}
 }
 
 func isPackageExcluded(name string, excludes []string) bool {
