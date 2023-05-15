@@ -1,8 +1,8 @@
 import { assertEquals } from "https://deno.land/std@0.180.0/testing/asserts.ts";
 
-import { h } from "http://localhost:8080/preact";
-import { useState } from "http://localhost:8080/preact/hooks";
-import render from "http://localhost:8080/preact-render-to-string";
+import { h } from "http://localhost:8080/preact@10.14.0";
+import { useState } from "http://localhost:8080/preact@10.14.0/hooks";
+import render from "http://localhost:8080/preact-render-to-string@6.0.3?deps=preact@10.14.0";
 
 Deno.test("preact", () => {
   const App = () => {
