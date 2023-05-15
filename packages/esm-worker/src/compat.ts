@@ -636,3 +636,8 @@ export const getEsmaVersionFromUA = (userAgent: string | null) => {
   }
   return "es2015";
 };
+
+export function hasTargetSegment(path: string) {
+  const parts = path.slice(1).split("/");
+  return parts.length >= 2 && parts.some((p) => targets.has(p));
+}

@@ -32,15 +32,67 @@ export function boolJoin(arr: unknown[], separator: string) {
   return arr.filter(Boolean).join(separator);
 }
 
-/** create redirect response with custom headers. */
+export function fixContentType(type: string | null, path: string) {
+  const [pathname] = splitBy(path, "?", true);
+  if (pathname.endsWith(".wasm")) {
+    return "application/wasm";
+  }
+  const [t, charset] = splitBy(type ?? "", ";", true);
+  if (
+    (pathname.endsWith(".js") || pathname.endsWith(".mjs")) &&
+    t !== "application/javascript"
+  ) {
+    return boolJoin(["application/javascript", charset], ";");
+  }
+  if (
+    (pathname.endsWith(".ts") || pathname.endsWith(".mts")) &&
+    t !== "application/typescript"
+  ) {
+    return boolJoin(["application/typescript", charset], ";");
+  }
+  if (pathname.endsWith(".map") && t !== "application/json") {
+    return boolJoin(["application/json", charset], ";");
+  }
+  return type ?? "application/octet-stream";
+}
+
+/** create redirect response. */
 export function redirect(
   url: URL | string,
-  code: number,
-  headers: HeadersInit,
+  status: 301 | 302,
+  cacheMaxAge = 600,
 ) {
-  headers = headers instanceof Headers ? headers : new Headers(headers);
+  const headers = corsHeaders();
   headers.set("Location", url.toString());
-  return new Response(null, { status: code, headers });
+  if (status === 301) {
+    headers.set("Cache-Control", "public, max-age=31536000, immutable");
+  } else {
+    headers.set(
+      "Cache-Control",
+      `public, max-age=${cacheMaxAge}`,
+    );
+  }
+  return new Response(null, { status, headers });
+}
+
+export function err(message: string, status: number = 500) {
+  return new Response(
+    message,
+    { status, headers: corsHeaders() },
+  );
+}
+
+export function errPkgNotFound(pkg: string) {
+  const headers = corsHeaders();
+  headers.set("Content-Type", "application/javascript; charset=utf-8");
+  return new Response(
+    [
+      `/* esm.sh - error */`,
+      `throw new Error("[esm.sh] " + "npm: package '${pkg}' not found");`,
+      `export default null;`,
+    ].join("\n"),
+    { status: 404, headers },
+  );
 }
 
 export function checkPreflight(req: Request): Response | undefined {
