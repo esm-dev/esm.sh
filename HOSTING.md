@@ -1,14 +1,15 @@
 # Self-Hosting
 
 [esm.sh](https://esm.sh) provides a fast, global content delivery network
-publicly which powered by [Cloudflare](https://cloudflare.com). You may also want to
-host esm.sh by yourself.
+publicly which powered by [Cloudflare](https://cloudflare.com). You may also
+want to host esm.sh by yourself.
 
-To serve esm.sh, You will need [Go](https://golang.org/dl) 1.18+ to
-run and compile the server. The server will install [Node.js](https://nodejs.org/en/download/) runtime
-automatically if it's not found on your host machine.
+To serve esm.sh, You will need [Go](https://golang.org/dl) 1.18+ to run and
+compile the server. The server will install
+[Node.js](https://nodejs.org/en/download/) runtime automatically if it's not
+found on your host machine.
 
-## Recommended host machine (single server)
+## Recommended Host Machine (Single Server)
 
 - Linux system with git installed
 - 4x CPU cores or more
@@ -24,13 +25,13 @@ cd esm.sh
 
 ## Configration
 
-To configure the server, create a `config.json` file then pass it to the server bootstrap command. For example:
+To configure the server, create a `config.json` file then pass it to the server
+bootstrap command. For example:
 
 ```jsonc
 // config.json
 {
   "port": 8080,
-  "tlsPort": 443,
   "workDir": "/var/www/esmd",
   "storage": "local:/var/www/esmd/storage",
   "origin": "https://esm.sh",
@@ -39,9 +40,11 @@ To configure the server, create a `config.json` file then pass it to the server 
 }
 ```
 
-You can find all the server options in [config.exmaple.jsonc](./config.example.jsonc). (**Note**: the `config.example.jsonc` is not a valid JSON file, it's a JSONC file.)
+You can find all the server options in
+[config.exmaple.jsonc](./config.example.jsonc). (**Note**: the
+`config.example.jsonc` is not a valid JSON file, it's a JSONC file.)
 
-## Run the sever locally
+## Run the Sever Locally
 
 ```bash
 go run main.go --config=config.json --dev
@@ -49,13 +52,7 @@ go run main.go --config=config.json --dev
 
 Then you can import `React` from http://localhost:8080/react
 
-## Using Cloudflare Workers
-
-You can also use [Cloudflare Workers](https://workers.cloudflare.com/) as the front layer to cache the requests.
-
-Check [esm-worker](./packages/esm-worker/README.md).
-
-## Deploy to remote host with the quick deploy script
+## Deploy to Single Machine with the Quick Deploy Script
 
 Please ensure the [supervisor](http://supervisord.org/) has been installed on
 your host machine.
@@ -67,3 +64,11 @@ your host machine.
 ## Deploy with Docker
 
 An example [Dockerfile](./Dockerfile) is found in the root of this project.
+
+## Deploy with Cloudflare Workers
+
+We use [Cloudflare Workers](https://workers.cloudflare.com/) as the CDN layer to
+handle and cache esm.sh requests at edge(earth). We open sourced the code, you
+can use it to build your own esm CDN without deploying the server easily.
+
+More details check [esm-worker](./packages/esm-worker/README.md).

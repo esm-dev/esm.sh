@@ -91,16 +91,15 @@ export default worker((req, ctx) => {
 
     // a custom homepage
     return new Response("<h1>Welcome to use esm.sh!</h1>", {
-      headers: { "content-type": "text/html" },
+      headers: { "Content-Type": "text/html" },
     });
 
     // using cache
     return ctx.withCache(() =>
       new Response("Boom!", {
-        headers: { "cache-control": "public; max-age=600" },
+        headers: { "Cache-Control": "public; max-age=600" },
       })
     );
   }
-
 });
 ```
