@@ -123,26 +123,22 @@ Deno.test("esm-worker", {
     });
     res.body?.cancel();
     assertEquals(res.status, 302);
-    assertStringIncludes(res.headers.get("Location")!, "react-dom@");
-    assertEquals(res.headers.get("Cache-Control"), "public, max-age=600");
-    const url = new URL(
-      new URL(res.headers.get("Location")!).pathname,
-      workerOrigin,
+    assert(
+      res.headers.get("Location")!.startsWith(`${workerOrigin}/react-dom@`),
     );
-    const res2 = await fetch(url);
+    assertEquals(res.headers.get("Cache-Control"), "public, max-age=600");
+    const res2 = await fetch(res.headers.get("Location")!);
     const code = await res2.text();
-    const dts = res2.headers.get("X-Typescript-Types")!;
     assertEquals(res2.status, 200);
     assertEquals(
       res2.headers.get("Content-Type"),
       "application/javascript; charset=utf-8",
     );
     assertEquals(res2.headers.get("Cache-Control"), "public, max-age=86400");
-    const modUrl = new URL(
-      new URL(code.match(/from "(.+)"/)?.[1]!).pathname,
-      workerOrigin,
-    );
-    assert(modUrl.pathname.endsWith("/deno/react-dom.mjs"));
+
+    const modUrl = code.match(/from "(.+)"/)?.[1]!;
+    assert(modUrl.startsWith(workerOrigin));
+    assert(modUrl.endsWith("/deno/react-dom.mjs"));
     const res3 = await fetch(modUrl);
     assertEquals(res3.status, 200);
     assertEquals(
@@ -156,8 +152,10 @@ Deno.test("esm-worker", {
     const modCode = await res3.text();
     assertStringIncludes(modCode, "/stable/react@");
     assertStringIncludes(modCode, "createElement");
-    assert(/v\d+\/.+\.d\.ts$/.test(dts));
-    const dtsUrl = new URL(new URL(dts).pathname, workerOrigin);
+
+    const dtsUrl = res2.headers.get("X-Typescript-Types")!;
+    assert(dtsUrl.startsWith(workerOrigin));
+    assert(dtsUrl.endsWith(".d.ts"));
     const res4 = await fetch(dtsUrl);
     res4.body?.cancel();
     assertEquals(res4.status, 200);
@@ -173,13 +171,11 @@ Deno.test("esm-worker", {
     });
     res.body?.cancel();
     assertEquals(res.status, 302);
-    assertStringIncludes(res.headers.get("Location")!, "react-dom@18");
-    assertEquals(res.headers.get("Cache-Control"), "public, max-age=600");
-    const url = new URL(
-      new URL(res.headers.get("Location")!).pathname,
-      workerOrigin,
+    assert(
+      res.headers.get("Location")!.startsWith(`${workerOrigin}/react-dom@`),
     );
-    const res2 = await fetch(url);
+    assertEquals(res.headers.get("Cache-Control"), "public, max-age=600");
+    const res2 = await fetch(res.headers.get("Location")!);
     const code = await res2.text();
     assertEquals(res2.status, 200);
     assertEquals(
@@ -188,11 +184,8 @@ Deno.test("esm-worker", {
     );
     assertEquals(res2.headers.get("Cache-Control"), "public, max-age=86400");
     assert(/v\d+\/.+\.d\.ts$/.test(res2.headers.get("X-Typescript-Types")!));
-    const modUrl = new URL(
-      new URL(code.match(/from "(.+)"/)?.[1]!).pathname,
-      workerOrigin,
-    );
-    assert(modUrl.pathname.endsWith("/deno/server.js"));
+    const modUrl = code.match(/from "(.+)"/)?.[1]!;
+    assert(modUrl.endsWith("/deno/server.js"));
     const res3 = await fetch(modUrl);
     assertEquals(res3.status, 200);
     assertEquals(
@@ -210,15 +203,10 @@ Deno.test("esm-worker", {
     const res = await fetch(`${workerOrigin}/react`, { redirect: "manual" });
     res.body?.cancel();
     assertEquals(res.status, 302);
-    assertStringIncludes(res.headers.get("Location")!, "react@");
+    assert(res.headers.get("Location")!.startsWith(`${workerOrigin}/react@`));
     assertEquals(res.headers.get("Cache-Control"), "public, max-age=600");
-    const url = new URL(
-      new URL(res.headers.get("Location")!).pathname,
-      workerOrigin,
-    );
-    const res2 = await fetch(url);
+    const res2 = await fetch(res.headers.get("Location")!);
     const code = await res2.text();
-    const dts = res2.headers.get("X-Typescript-Types")!;
     assertEquals(res2.status, 200);
     assertEquals(
       res2.headers.get("Content-Type"),
@@ -228,10 +216,8 @@ Deno.test("esm-worker", {
       res2.headers.get("Cache-Control"),
       "public, max-age=31536000, immutable",
     );
-    const modUrl = new URL(
-      new URL(code.match(/from "(.+)"/)?.[1]!).pathname,
-      workerOrigin,
-    );
+    const modUrl = new URL(code.match(/from "(.+)"/)?.[1]!);
+    assertEquals(modUrl.origin, workerOrigin);
     assert(modUrl.pathname.startsWith("/stable/react@"));
     assert(modUrl.pathname.endsWith("/deno/react.mjs"));
     const res3 = await fetch(modUrl);
@@ -245,8 +231,10 @@ Deno.test("esm-worker", {
       "public, max-age=31536000, immutable",
     );
     assertStringIncludes(await res3.text(), "createElement");
-    assert(/v\d+\/.+\.d\.ts$/.test(dts));
-    const dtsUrl = new URL(new URL(dts).pathname, workerOrigin);
+
+    const dtsUrl = res2.headers.get("X-Typescript-Types")!;
+    assert(dtsUrl.startsWith(workerOrigin));
+    assert(dtsUrl.endsWith(".d.ts"));
     const res4 = await fetch(dtsUrl);
     res4.body?.cancel();
     assertEquals(res4.status, 200);
@@ -260,10 +248,7 @@ Deno.test("esm-worker", {
     const url = `${workerOrigin}/v115/react@18.2.0?target=es2020`;
     const res2 = await fetch(url);
     const code = await res2.text();
-    const modUrl = new URL(
-      new URL(code.match(/from "(.+)"/)?.[1]!).pathname,
-      workerOrigin,
-    );
+    const modUrl = new URL(code.match(/from "(.+)"/)?.[1]!);
     assertEquals(res2.status, 200);
     assertEquals(
       res2.headers.get("Content-Type"),
@@ -274,6 +259,7 @@ Deno.test("esm-worker", {
       "public, max-age=31536000, immutable",
     );
     assert(/v\d+\/.+\.d\.ts$/.test(res2.headers.get("X-Typescript-Types")!));
+    assertEquals(modUrl.origin, workerOrigin);
     assertEquals(modUrl.pathname, "/stable/react@18.2.0/es2020/react.mjs");
     const res3 = await fetch(modUrl);
     assertEquals(res3.status, 200);
@@ -294,13 +280,9 @@ Deno.test("esm-worker", {
     });
     res.body?.cancel();
     assertEquals(res.status, 302);
-    assertStringIncludes(res.headers.get("Location")!, "/react@");
+    assert(res.headers.get("Location")!.startsWith(`${workerOrigin}/react@`));
     assertEquals(res.headers.get("Cache-Control"), "public, max-age=600");
-    const url = new URL(
-      new URL(res.headers.get("Location")!).pathname,
-      workerOrigin,
-    );
-    const res2 = await fetch(url);
+    const res2 = await fetch(res.headers.get("Location")!);
     assertEquals(res2.status, 200);
     assertEquals(
       res2.headers.get("Content-Type"),
@@ -314,48 +296,18 @@ Deno.test("esm-worker", {
     assertEquals(pkgJson.name, "react");
   });
 
-  await t.step("gh assets", async () => {
-    const res = await fetch(
-      `${workerOrigin}/gh/microsoft/fluentui-emoji/assets/Alien/Flat/alien_flat.svg`,
-      { redirect: "manual" },
-    );
-    res.body?.cancel();
-    assertEquals(res.status, 302);
-    assertStringIncludes(res.headers.get("Location")!, "fluentui-emoji@");
-    assertEquals(res.headers.get("Cache-Control"), "public, max-age=600");
-    const url = new URL(
-      new URL(res.headers.get("Location")!).pathname,
-      workerOrigin,
-    );
-    const res2 = await fetch(url);
-    const svg = await res2.text();
-    assertEquals(res2.status, 200);
-    assertEquals(res2.headers.get("Content-Type"), "image/svg+xml");
-    assertEquals(
-      res2.headers.get("Cache-Control"),
-      "public, max-age=31536000, immutable",
-    );
-    assertStringIncludes(svg, "<svg");
-  });
-
   await t.step("gh modules", async () => {
-    const res = await fetch(`${workerOrigin}/gh/superfluid-finance/metadata`, {
+    const res = await fetch(`${workerOrigin}/gh/microsoft/tslib`, {
       redirect: "manual",
     });
     res.body?.cancel();
     assertEquals(res.status, 302);
-    assertStringIncludes(res.headers.get("Location")!, "metadata@");
+    const rUrl = res.headers.get("Location")!;
+    assert(rUrl.startsWith(`${workerOrigin}/gh/microsoft/tslib@`));
     assertEquals(res.headers.get("Cache-Control"), "public, max-age=600");
-    const url = new URL(
-      new URL(res.headers.get("Location")!).pathname,
-      workerOrigin,
-    );
-    const res2 = await fetch(url);
+    const res2 = await fetch(res.headers.get("Location")!);
     const code = await res2.text();
-    const modUrl = new URL(
-      new URL(code.match(/from "(.+)"/)?.[1]!).pathname,
-      workerOrigin,
-    );
+    const modUrl = new URL(code.match(/from "(.+)"/)?.[1]!);
     assertEquals(res2.status, 200);
     assertEquals(
       res2.headers.get("Content-Type"),
@@ -365,7 +317,7 @@ Deno.test("esm-worker", {
     assert(
       /v\d+\/gh\/.+\.d\.ts$/.test(res2.headers.get("X-Typescript-Types")!),
     );
-    assert(modUrl.pathname.endsWith("/deno/metadata.mjs"));
+    assert(modUrl.pathname.endsWith("/deno/tslib.mjs"));
     const res3 = await fetch(modUrl);
     assertEquals(res3.status, 200);
     assertEquals(
@@ -386,13 +338,10 @@ Deno.test("esm-worker", {
     );
     res.body?.cancel();
     assertEquals(res.status, 302);
-    assertStringIncludes(res.headers.get("Location")!, "fluentui-emoji@");
+    const rUrl = res.headers.get("Location")!;
+    assert(rUrl.startsWith(`${workerOrigin}/gh/microsoft/fluentui-emoji@`));
     assertEquals(res.headers.get("Cache-Control"), "public, max-age=600");
-    const url = new URL(
-      new URL(res.headers.get("Location")!).pathname,
-      workerOrigin,
-    );
-    const res2 = await fetch(url);
+    const res2 = await fetch(rUrl);
     const svg = await res2.text();
     assertEquals(res2.status, 200);
     assertEquals(res2.headers.get("Content-Type"), "image/svg+xml");

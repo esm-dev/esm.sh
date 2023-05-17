@@ -55,7 +55,7 @@ class ESMWorker {
     }
 
     const url = new URL(req.url);
-    const cache = this.cache ?? (this.cache = await caches.open(`v${VERSION}`));
+    const cache = this.cache ?? (this.cache = await caches.open(`esm.sh/v${VERSION}`));
     const withCache = async (fetcher: () => Promise<Response> | Response) => {
       // check if cache hits
       let res = await cache.match(url);
@@ -601,12 +601,15 @@ async function fetchESM(
   }
   const { R2, KV } = ctx.env;
   const [pathname] = splitBy(path, "?", true);
-  const isDts = pathname.endsWith(".d.ts") || pathname.endsWith(".d.mts");
-  if (isDts && req.headers.has("X-Real-Origin")) {
+  if (req.headers.has("X-Real-Origin")) {
     const { host } = new URL(req.headers.get("X-Real-Origin")!);
     storeKey = host.replace(":", "_") + "/" + storeKey;
   }
-  const storage = isDts || pathname.endsWith(".map") ? "r2" : "workers-kv";
+  const storage =
+    pathname.endsWith(".d.ts") || pathname.endsWith(".d.mts") ||
+      pathname.endsWith(".map")
+      ? "r2"
+      : "workers-kv";
   const headers = corsHeaders();
   if (options.targetFromUA) {
     headers.set("Vary", "Origin,User-Agent");
