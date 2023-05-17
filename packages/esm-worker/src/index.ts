@@ -1,6 +1,6 @@
-import type { ExecutionContext } from "@cloudflare/workers-types";
 import type {
   Context,
+  HttpMetadata,
   Middleware,
   PackageInfo,
   PackageRegistryInfo,
@@ -16,6 +16,7 @@ import {
 } from "./consts.ts";
 import { getContentType } from "./content_type.ts";
 import {
+  asKV,
   checkPreflight,
   copyHeaders,
   corsHeaders,
@@ -37,8 +38,8 @@ const regexpBuildVersionPrefix = /^\/(v\d+|stable)\//;
 const defaultNpmRegistry = "https://registry.npmjs.org";
 
 class ESMWorker {
-  middleware?: Middleware;
   cache?: Cache;
+  middleware?: Middleware;
 
   constructor(middleware?: Middleware) {
     this.middleware = middleware;
@@ -55,7 +56,8 @@ class ESMWorker {
     }
 
     const url = new URL(req.url);
-    const cache = this.cache ?? (this.cache = await caches.open(`esm.sh/v${VERSION}`));
+    const cache = this.cache ??
+      (this.cache = await caches.open(`esm.sh/v${VERSION}`));
     const withCache = async (fetcher: () => Promise<Response> | Response) => {
       // check if cache hits
       let res = await cache.match(url);
@@ -70,12 +72,19 @@ class ESMWorker {
     };
     const ctx: Context = {
       cache,
-      env,
       url,
       data: {},
       waitUntil: (p) => context.waitUntil(p),
       withCache,
     };
+
+    // use CF R2
+    if (env.STORAGE === undefined) {
+      env.STORAGE = Reflect.get(env, "R2") || {
+        get: () => null,
+        put: () => {},
+      };
+    }
 
     let pathname = decodeURIComponent(url.pathname);
     let buildVersion = "v" + VERSION;
@@ -85,6 +94,7 @@ class ESMWorker {
         if (req.method === "POST" || req.method === "PUT") {
           return fetchServerOrigin(
             req,
+            env,
             ctx,
             `${pathname}${url.search}`,
             corsHeaders(),
@@ -94,6 +104,7 @@ class ESMWorker {
       case "/status.json":
         return fetchServerOrigin(
           req,
+          env,
           ctx,
           `${pathname}${url.search}`,
           corsHeaders(),
@@ -117,6 +128,7 @@ class ESMWorker {
     ) {
       return fetchServerOrigin(
         req,
+        env,
         ctx,
         `${pathname}${url.search}`,
         corsHeaders(),
@@ -124,7 +136,7 @@ class ESMWorker {
     }
 
     if (this.middleware) {
-      const resp = await this.middleware(req, ctx);
+      const resp = await this.middleware(req, env, ctx);
       if (resp) {
         return resp;
       }
@@ -133,6 +145,7 @@ class ESMWorker {
     if (pathname === "/" || pathname.startsWith("/embed/")) {
       return fetchServerOrigin(
         req,
+        env,
         ctx,
         `${pathname}${url.search}`,
         corsHeaders(),
@@ -173,6 +186,7 @@ class ESMWorker {
       return ctx.withCache(() =>
         fetchServerOrigin(
           req,
+          env,
           ctx,
           url.pathname + url.search,
           corsHeaders(),
@@ -213,7 +227,7 @@ class ESMWorker {
         );
       }
       return ctx.withCache(() =>
-        fetchESM(req, ctx, `/${buildVersion}${pathname}`, {
+        fetchESM(req, env, ctx, `/${buildVersion}${pathname}`, {
           gzip: true,
         })
       );
@@ -294,6 +308,7 @@ class ESMWorker {
       return ctx.withCache(async () => {
         return fetchServerOrigin(
           req,
+          env,
           ctx,
           url.pathname + url.search,
           corsHeaders(),
@@ -439,7 +454,7 @@ class ESMWorker {
     // redirect to real wasm file: `/v100/PKG/es2022/foo.wasm` -> `PKG/foo.wasm`
     if (hasBuildVerPrefix && subPath.endsWith(".wasm")) {
       return ctx.withCache(() => {
-        return fetchServerOrigin(req, ctx, url.pathname, corsHeaders());
+        return fetchServerOrigin(req, env, ctx, url.pathname, corsHeaders());
       });
     }
 
@@ -459,6 +474,7 @@ class ESMWorker {
         return ctx.withCache(() => {
           return fetchServerOrigin(
             req,
+            env,
             ctx,
             url.pathname + "?module",
             corsHeaders(),
@@ -470,7 +486,7 @@ class ESMWorker {
           const pathname = `${
             gh ? "/gh" : ""
           }/${pkg}@${packageVersion}${subPath}`;
-          return fetchAsset(req, ctx, pathname);
+          return fetchAsset(req, ctx, env, pathname);
         });
       }
     }
@@ -527,7 +543,7 @@ class ESMWorker {
         prefix += "/gh";
       }
       const path = `${prefix}/${pkg}@${packageVersion}${subPath}${url.search}`;
-      res = await fetchESM(req, ctx, path, { gzip: true });
+      res = await fetchESM(req, env, ctx, path, { gzip: true });
     } else {
       const search = url.searchParams;
       const target = cacheKey.searchParams.get("target");
@@ -546,7 +562,7 @@ class ESMWorker {
       const path = `${prefix}/${
         hasExternalAllMarker ? "*" : ""
       }${pkg}@${packageVersion}${subPath}${stringifyUrlSearch(search)}`;
-      res = await fetchESM(req, ctx, path, { gzip: false, targetFromUA });
+      res = await fetchESM(req, env, ctx, path, { gzip: false, targetFromUA });
     }
 
     if (res.headers.get("Cache-Control")?.startsWith("public, max-age=")) {
@@ -560,30 +576,34 @@ class ESMWorker {
 async function fetchAsset(
   req: Request,
   ctx: Context,
+  env: Env,
   pathname: string,
 ) {
   const resHeaders = corsHeaders();
-  const r2 = ctx.env.R2;
-  const r2o = await r2.get(pathname.slice(1));
-  if (r2o) {
-    resHeaders.set("Content-Type", r2o.httpMetadata.contentType);
+  const ret = await env.STORAGE.get(pathname.slice(1));
+  if (ret) {
+    resHeaders.set(
+      "Content-Type",
+      ret.httpMetadata?.contentType || getContentType(pathname),
+    );
     resHeaders.set("Cache-Control", "public, max-age=31536000, immutable");
-    resHeaders.set("X-Content-Source", "r2");
-    return new Response(r2o.body as ReadableStream<Uint8Array>, {
+    resHeaders.set("X-Content-Source", "esm-worker");
+    return new Response(ret.body as ReadableStream<Uint8Array>, {
       headers: resHeaders,
     });
   }
 
-  const res = await fetchServerOrigin(req, ctx, pathname, resHeaders);
+  const res = await fetchServerOrigin(req, env, ctx, pathname, resHeaders);
   if (res.ok) {
     const contentType = res.headers.get("content-type") ||
       getContentType(pathname);
     const buffer = await res.arrayBuffer();
-    await r2.put(pathname.slice(1), buffer.slice(0), {
+    await env.STORAGE.put(pathname.slice(1), buffer.slice(0), {
       httpMetadata: { contentType },
     });
     resHeaders.set("Content-Type", contentType);
     resHeaders.set("Cache-Control", "public, max-age=31536000, immutable");
+    resHeaders.set("X-Content-Source", env.ESM_SERVER_ORIGIN);
     return new Response(buffer.slice(0), { headers: resHeaders });
   }
   return res;
@@ -591,6 +611,7 @@ async function fetchAsset(
 
 async function fetchESM(
   req: Request,
+  env: Env,
   ctx: Context,
   path: string,
   options: { gzip: boolean; targetFromUA?: boolean },
@@ -599,37 +620,27 @@ async function fetchESM(
   if (storeKey.startsWith("stable/")) {
     storeKey = `v${STABLE_VERSION}/` + storeKey.slice(7);
   }
-  const { R2, KV } = ctx.env;
+  const KV = Reflect.get(env, "KV") as KVNamespace | undefined ??
+    asKV(env.STORAGE);
   const [pathname] = splitBy(path, "?", true);
   if (req.headers.has("X-Real-Origin")) {
     const { host } = new URL(req.headers.get("X-Real-Origin")!);
     storeKey = host.replace(":", "_") + "/" + storeKey;
   }
-  const storage =
-    pathname.endsWith(".d.ts") || pathname.endsWith(".d.mts") ||
-      pathname.endsWith(".map")
-      ? "r2"
-      : "workers-kv";
   const headers = corsHeaders();
   if (options.targetFromUA) {
     headers.set("Vary", "Origin,User-Agent");
   }
-  if (storage === "r2") {
-    const obj = await R2.get(storeKey);
-    if (obj) {
-      const contentType = obj.httpMetadata?.contentType || getContentType(path);
-      headers.set("Content-Type", contentType);
-      headers.set("Cache-Control", "public, max-age=31536000, immutable");
-      headers.set("X-Content-Source", "r2");
-      return new Response(
-        req.method === "HEAD" ? null : obj.body as ReadableStream<Uint8Array>,
-        { headers },
-      );
-    }
-  } else {
-    const { value, metadata } = await KV.getWithMetadata<
-      { contentType: string; cacheControl: string; dts?: string }
-    >(storeKey, "stream");
+  const hpStorage = !(
+    pathname.endsWith(".d.ts") ||
+    pathname.endsWith(".d.mts") ||
+    pathname.endsWith(".map")
+  );
+  if (hpStorage) {
+    const { value, metadata } = await KV.getWithMetadata<HttpMetadata>(
+      storeKey,
+      "stream",
+    );
     if (value && metadata) {
       let body = value as ReadableStream<Uint8Array>;
       if (options.gzip) {
@@ -641,12 +652,24 @@ async function fetchESM(
         headers.set("X-TypeScript-Types", metadata.dts);
         headers.set("Access-Control-Expose-Headers", "X-TypeScript-Types");
       }
-      headers.set("X-Content-Source", "kv");
+      headers.set("X-Content-Source", "esm-worker");
       return new Response(req.method === "HEAD" ? null : body, { headers });
+    }
+  } else {
+    const obj = await env.STORAGE.get(storeKey);
+    if (obj) {
+      const contentType = obj.httpMetadata?.contentType || getContentType(path);
+      headers.set("Content-Type", contentType);
+      headers.set("Cache-Control", "public, max-age=31536000, immutable");
+      headers.set("X-Content-Source", "esm-worker");
+      return new Response(
+        req.method === "HEAD" ? null : obj.body as ReadableStream<Uint8Array>,
+        { headers },
+      );
     }
   }
 
-  const res = await fetchServerOrigin(req, ctx, path, headers);
+  const res = await fetchServerOrigin(req, env, ctx, path, headers);
   if (!res.ok) {
     return res;
   }
@@ -663,18 +686,19 @@ async function fetchESM(
     headers.set("X-TypeScript-Types", dts);
     headers.set("Access-Control-Expose-Headers", "X-TypeScript-Types");
   }
+  headers.set("X-Content-Source", env.ESM_SERVER_ORIGIN);
 
   // save to KV/R2 if immutable
   if (req.method === "GET" && cacheControl?.includes("immutable")) {
-    if (storage === "r2") {
+    if (!hpStorage) {
       const buffer = await res.arrayBuffer();
-      await R2.put(storeKey, buffer.slice(0), {
+      await env.STORAGE.put(storeKey, buffer.slice(0), {
         httpMetadata: { contentType },
       });
       return new Response(buffer.slice(0), { headers });
     }
     // seems `local` CF worker doesn't support `ReadableStream.tee` yet, so we need to use `arrayBuffer` here
-    if (ctx.env.WORKER_ENV === "development") {
+    if (env.WORKER_ENV === "development") {
       const buf = await res.arrayBuffer();
       const value = options.gzip
         ? new Response(buf).body.pipeThrough(new CompressionStream("gzip"))
@@ -695,6 +719,7 @@ async function fetchESM(
 
 async function fetchServerOrigin(
   req: Request,
+  env: Env,
   ctx: Context,
   url: string,
   resHeaders: Headers,
@@ -719,10 +744,10 @@ async function fetchServerOrigin(
   if (!headers.has("X-Real-Origin")) {
     headers.set("X-Real-Origin", ctx.url.origin);
   }
-  if (ctx.env.ESM_SERVER_AUTH_TOKEN) {
-    headers.set("Authorization", `Bearer ${ctx.env.ESM_SERVER_AUTH_TOKEN}`);
+  if (env.ESM_SERVER_AUTH_TOKEN) {
+    headers.set("Authorization", `Bearer ${env.ESM_SERVER_AUTH_TOKEN}`);
   }
-  const res = await fetch(new URL(url, ctx.env.ESM_SERVER_ORIGIN), {
+  const res = await fetch(new URL(url, env.ESM_SERVER_ORIGIN), {
     method: req.method,
     body: req.body,
     headers,
@@ -775,6 +800,10 @@ async function fetchServerOrigin(
   return new Response(res.body, { headers: resHeaders });
 }
 
-export default function worker(middleware?: Middleware): ESMWorker {
+export function withESMWorker(middleware?: Middleware): ESMWorker {
   return new ESMWorker(middleware);
 }
+
+export default withESMWorker;
+
+export const version = `v${VERSION}`;

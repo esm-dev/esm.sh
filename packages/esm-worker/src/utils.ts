@@ -1,4 +1,41 @@
+import type {
+  HttpMetadata,
+  WorkerStorage,
+  WorkerStorageKV,
+} from "../types/index.d.ts";
 import { fixedPkgVersions } from "./consts.ts";
+
+export function asKV(
+  storage?: R2Bucket | WorkerStorage,
+): WorkerStorageKV | undefined {
+  if (!storage) {
+    return undefined;
+  }
+  return globalThis.__AS_KV__ ?? (globalThis.__AS_KV__ = {
+    async getWithMetadata(
+      key: string,
+      _type: "stream",
+    ): Promise<
+      { value: ReadableStream | null; metadata: HttpMetadata | null }
+    > {
+      const ret = await storage.get(key);
+      if (ret === null) {
+        return { value: null, metadata: null };
+      }
+      return {
+        value: ret.body,
+        metadata: ret.httpMetadata as HttpMetadata | undefined ?? null,
+      };
+    },
+    async put(
+      key: string,
+      value: ArrayBuffer | Uint8Array | ReadableStream,
+      options?: { metadata?: HttpMetadata },
+    ): Promise<void> {
+      await storage.put(key, value, { httpMetadata: options?.metadata });
+    },
+  });
+}
 
 export function fixPkgVersion(pkg: string, version: string) {
   for (const [k, v] of Object.entries(fixedPkgVersions)) {

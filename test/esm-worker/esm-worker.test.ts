@@ -26,13 +26,13 @@ async function run(name: string, ...args: string[]) {
 // build and import esm worker
 await run("npm", "i");
 await run("node", "build.mjs");
-const { default: Worker } = await import(
+const { withESMWorker } = await import(
   `../../packages/esm-worker/dist/index.js`
 );
 
 const workerOrigin = "http://localhost:8787";
-const worker = Worker(
-  async (_req: Request, ctx: { url: URL }) => {
+const worker = withESMWorker(
+  async (_req: Request, _env: {}, ctx: { url: URL }) => {
     if (ctx.url.pathname === "/") {
       return new Response("<h1>Welcome to use esm.sh!</h1>", {
         headers: { "content-type": "text/html" },
@@ -41,16 +41,8 @@ const worker = Worker(
   },
 );
 const env = {
-  WORKER_ENV: "development",
-  KV: {
-    getWithMetadata: () => ({ value: null, metadata: null }),
-    put: () => {},
-  },
-  R2: {
-    get: () => null,
-    put: () => {},
-  },
   ESM_SERVER_ORIGIN: "http://localhost:8080",
+  WORKER_ENV: "development",
 };
 const ac = new AbortController();
 

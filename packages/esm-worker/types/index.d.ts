@@ -1,36 +1,65 @@
-import type {
-  ExportedHandlerFetchHandler,
-  KVNamespace,
-  R2Bucket,
-} from "@cloudflare/workers-types";
-
 declare global {
   interface Env {
-    WORKER_ENV: "development" | "production";
-    KV: KVNamespace;
-    R2: R2Bucket;
-    NPM_REGISTRY: string;
-    NPM_TOKEN?: string;
+    STORAGE: WorkerStorage;
     ESM_SERVER_ORIGIN: string;
     ESM_SERVER_AUTH_TOKEN?: string;
+    NPM_REGISTRY?: string;
+    NPM_TOKEN?: string;
+    WORKER_ENV?: "development" | "production";
   }
 }
 
-export default function (
-  middleware?: Middleware,
-): ExportedHandlerFetchHandler<Env, {}>;
+export type HttpMetadata = {
+  contentType: string;
+  dts?: string;
+};
+
+export interface WorkerStorageKV {
+  getWithMetadata(
+    key: string,
+    type: "stream",
+  ): Promise<
+    { value: ReadableStream | null; metadata: HttpMetadata | null }
+  >;
+  put(
+    key: string,
+    value: ArrayBufferLike | ArrayBuffer | ReadableStream,
+    options?: { metadata?: HttpMetadata | null },
+  ): Promise<void>;
+}
+
+export interface WorkerStorage {
+  get(key: string): Promise<
+    {
+      body: ReadableStream<Uint8Array>;
+      httpMetadata?: HttpMetadata;
+    } | null
+  >;
+  put(
+    key: string,
+    value: ArrayBufferLike | ArrayBuffer | ReadableStream,
+    options?: { httpMetadata?: HttpMetadata },
+  ): Promise<void>;
+}
+
+export function withESMWorker(middleware?: Middleware): {
+  fetch: (req: Request, env: Env, context: Context) => Promise<Response>;
+};
+
+export default withESMWorker;
+
+export const version: string;
 
 export type Context<Data = Record<string, any>> = {
   cache: Cache;
   data: Data;
-  env: Env;
   url: URL;
   waitUntil(promise: Promise<any>): void;
   withCache(fetch: () => Promise<Response> | Response): Promise<Response>;
 };
 
 export interface Middleware {
-  (req: Request, ctx: Context): Promise<Response | undefined>;
+  (req: Request, env: Env, ctx: Context): Promise<Response | undefined>;
 }
 
 export type PackageInfo = {
