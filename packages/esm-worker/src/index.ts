@@ -616,7 +616,11 @@ async function fetchESM(
   if (storage === "r2") {
     const obj = await R2.get(storeKey);
     if (obj) {
-      headers.set("Content-Type", obj.httpMetadata.contentType);
+      let contentType = obj.httpMetadata?.contentType;
+      if (!contentType) {
+        contentType = fixContentType(contentType, path);
+      }
+      headers.set("Content-Type", contentType);
       headers.set("Cache-Control", "public, max-age=31536000, immutable");
       headers.set("X-Content-Source", storage);
       return new Response(

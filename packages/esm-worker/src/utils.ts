@@ -50,7 +50,7 @@ export function fixContentType(type: string | null, path: string) {
   ) {
     return boolJoin(["application/typescript", charset], ";");
   }
-  if (pathname.endsWith(".map") && t !== "application/json") {
+  if ((pathname.endsWith(".map") || pathname.endsWith(".json")) && t !== "application/json") {
     return boolJoin(["application/json", charset], ";");
   }
   return type ?? "application/octet-stream";
