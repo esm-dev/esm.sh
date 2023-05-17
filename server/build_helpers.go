@@ -312,7 +312,7 @@ func (task *BuildTask) analyze() (esm *ESMBuild, npm NpmPackage, reexport string
 	}
 
 	if npm.Module != "" {
-		modulePath, namedExports, erro := resovleESModule(wd, npm.Name, npm.Module)
+		modulePath, namedExports, erro := resolveESModule(wd, npm.Name, npm.Module)
 		if erro == nil {
 			npm.Module = modulePath
 			esm.NamedExports = namedExports
@@ -320,7 +320,7 @@ func (task *BuildTask) analyze() (esm *ESMBuild, npm NpmPackage, reexport string
 			return
 		}
 		if erro != nil && erro.Error() != "not a module" {
-			err = fmt.Errorf("resovleESModule: %s", erro)
+			err = fmt.Errorf("resolveESModule: %s", erro)
 			return
 		}
 
@@ -465,10 +465,10 @@ func (task *BuildTask) fixNpmPackage(p NpmPackage) NpmPackage {
 		}
 	}
 
-	if p.Module != "" && !strings.HasPrefix(p.Module, "./") {
+	if p.Module != "" && !strings.HasPrefix(p.Module, "./") && !strings.HasPrefix(p.Module, "../") {
 		p.Module = "." + utils.CleanPath(p.Module)
 	}
-	if p.Main != "" && !strings.HasPrefix(p.Main, "./") {
+	if p.Main != "" && !strings.HasPrefix(p.Main, "./") && !strings.HasPrefix(p.Module, "../") {
 		p.Main = "." + utils.CleanPath(p.Main)
 	}
 
@@ -639,7 +639,7 @@ func queryESMBuild(id string) (*ESMBuild, bool) {
 
 var esmExts = []string{".mjs", ".js", ".jsx", ".mts", ".ts", ".tsx"}
 
-func resovleESModule(wd string, packageName string, moduleSpecifier string) (resolvedName string, namedExports []string, err error) {
+func resolveESModule(wd string, packageName string, moduleSpecifier string) (resolvedName string, namedExports []string, err error) {
 	pkgDir := path.Join(wd, "node_modules", packageName)
 	resolvedName = moduleSpecifier
 	if !fileExists(path.Join(pkgDir, resolvedName)) {
