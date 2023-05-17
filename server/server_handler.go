@@ -745,7 +745,7 @@ func esmHandler() rex.Handle {
 				}
 				if reqType == "types" {
 					ctx.SetHeader("Content-Type", "application/typescript; charset=utf-8")
-				} else if endsWith(pathname, ".js", ".mjs") {
+				} else if endsWith(pathname, ".js", ".mjs", ".jsx", ".ts", ".mts", ".tsx") {
 					ctx.SetHeader("Content-Type", "application/javascript; charset=utf-8")
 				} else if strings.HasSuffix(savePath, ".map") {
 					ctx.SetHeader("Content-Type", "application/json; charset=utf-8")
@@ -973,6 +973,7 @@ func esmHandler() rex.Handle {
 			}
 		}
 
+		// build and return dts
 		if hasBuildVerPrefix && reqType == "types" {
 			findDts := func() (savePath string, fi storage.FileStat, err error) {
 				savePath = path.Join(fmt.Sprintf(
