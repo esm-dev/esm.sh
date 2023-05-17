@@ -1,5 +1,14 @@
 # Changelog
 
+## v122
+
+- Use stable imports order
+- Support more asset extnames
+- esm-worker: Use `X-Real-Origin` and `X-Esm-Worker-Version` headers
+- Fix worker `CORS` issue (close #631)
+- Fix sub-module resolving (close #633)
+- Fix undefined content-type header (close #635)
+
 ## v121
 
 - Use `browser` field for package main if possible
