@@ -14,13 +14,13 @@ import {
   stableBuild,
   VERSION,
 } from "./consts.ts";
+import { getContentType } from "./content_type.ts";
 import {
   checkPreflight,
   copyHeaders,
   corsHeaders,
   err,
   errPkgNotFound,
-  fixContentType,
   fixPkgVersion,
   redirect,
   splitBy,
@@ -576,10 +576,8 @@ async function fetchAsset(
 
   const res = await fetchServerOrigin(req, ctx, pathname, resHeaders);
   if (res.ok) {
-    const contentType = fixContentType(
-      res.headers.get("content-type"),
-      pathname,
-    );
+    const contentType = res.headers.get("content-type") ||
+      getContentType(pathname);
     const buffer = await res.arrayBuffer();
     await r2.put(pathname.slice(1), buffer.slice(0), {
       httpMetadata: { contentType },
@@ -616,13 +614,10 @@ async function fetchESM(
   if (storage === "r2") {
     const obj = await R2.get(storeKey);
     if (obj) {
-      let contentType = obj.httpMetadata?.contentType;
-      if (!contentType) {
-        contentType = fixContentType(contentType, path);
-      }
+      const contentType = obj.httpMetadata?.contentType || getContentType(path);
       headers.set("Content-Type", contentType);
       headers.set("Cache-Control", "public, max-age=31536000, immutable");
-      headers.set("X-Content-Source", storage);
+      headers.set("X-Content-Source", "r2");
       return new Response(
         req.method === "HEAD" ? null : obj.body as ReadableStream<Uint8Array>,
         { headers },
@@ -643,7 +638,7 @@ async function fetchESM(
         headers.set("X-TypeScript-Types", metadata.dts);
         headers.set("Access-Control-Expose-Headers", "X-TypeScript-Types");
       }
-      headers.set("X-Content-Source", storage);
+      headers.set("X-Content-Source", "kv");
       return new Response(req.method === "HEAD" ? null : body, { headers });
     }
   }
@@ -653,7 +648,7 @@ async function fetchESM(
     return res;
   }
 
-  const contentType = fixContentType(res.headers.get("Content-Type"), path);
+  const contentType = res.headers.get("Content-Type") || getContentType(path);
   const cacheControl = res.headers.get("Cache-Control");
   const dts = res.headers.get("X-TypeScript-Types");
 

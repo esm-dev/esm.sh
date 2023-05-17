@@ -56,6 +56,7 @@ var assetExts = map[string]bool{
 	"tmTheme":    true,
 	"yml":        true,
 	"yaml":       true,
+	"pdf":        true,
 	"txt":        true,
 	"glsl":       true,
 	"frag":       true,
@@ -69,7 +70,6 @@ var assetExts = map[string]bool{
 	"svelte":     true,
 	"svg":        true,
 	"png":        true,
-	"apng":       true,
 	"jpg":        true,
 	"jpeg":       true,
 	"webp":       true,
@@ -91,6 +91,10 @@ var assetExts = map[string]bool{
 	"m4v":        true,
 	"ogv":        true,
 	"webm":       true,
+	"zip":        true,
+	"gz":         true,
+	"tar":        true,
+	"tgz":        true,
 }
 
 // native node packages, for `deno` target use `npm:package` to import (skip build)

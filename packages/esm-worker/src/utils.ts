@@ -28,34 +28,6 @@ export function splitBy(
   return [s, ""];
 }
 
-export function boolJoin(arr: unknown[], separator: string) {
-  return arr.filter(Boolean).join(separator);
-}
-
-export function fixContentType(type: string | null, path: string) {
-  const [pathname] = splitBy(path, "?", true);
-  if (pathname.endsWith(".wasm")) {
-    return "application/wasm";
-  }
-  const [t, charset] = splitBy(type ?? "", ";", true);
-  if (
-    (pathname.endsWith(".js") || pathname.endsWith(".mjs")) &&
-    t !== "application/javascript"
-  ) {
-    return boolJoin(["application/javascript", charset], ";");
-  }
-  if (
-    (pathname.endsWith(".ts") || pathname.endsWith(".mts")) &&
-    t !== "application/typescript"
-  ) {
-    return boolJoin(["application/typescript", charset], ";");
-  }
-  if ((pathname.endsWith(".map") || pathname.endsWith(".json")) && t !== "application/json") {
-    return boolJoin(["application/json", charset], ";");
-  }
-  return type ?? "application/octet-stream";
-}
-
 /** create redirect response. */
 export function redirect(
   url: URL | string,
