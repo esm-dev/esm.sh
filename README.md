@@ -57,7 +57,7 @@ import useSWR from "https://esm.sh/swr?deps=react@17.0.2"
 
 ### Using Import Maps
 
-[**Import Maps**](https://github.com/WICG/import-maps) has been supported by most modern browsers and Deno natively. This allows _**bare import specifiers**_, such as `import moment from "reat"`, to work.
+[**Import Maps**](https://github.com/WICG/import-maps) has been supported by most modern browsers and Deno natively. This allows _**bare import specifiers**_, such as `import React from "react"`, to work.
 
 esm.sh supports `?external=foo,bar` query to specify external dependencies. With this query, esm.sh will not rewrite the import specifiers of the specified dependencies. For example:
 
