@@ -56,7 +56,10 @@ export type Context<Data = Record<string, any>> = {
   data: Data;
   url: URL;
   waitUntil(promise: Promise<any>): void;
-  withCache(fetch: () => Promise<Response> | Response): Promise<Response>;
+  withCache(
+    fetcher: () => Promise<Response> | Response,
+    options?: { varyUA: string },
+  ): Promise<Response>;
 };
 
 export interface Middleware {

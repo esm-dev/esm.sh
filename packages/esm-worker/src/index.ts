@@ -65,13 +65,25 @@ class ESMWorker {
     const url = new URL(req.url);
     const cache = this.cache ??
       (this.cache = await caches.open(`esm.sh/v${VERSION}`));
-    const withCache = async (fetcher: () => Promise<Response> | Response) => {
-      // check if cache hits
-      let res = await cache.match(url);
+    const withCache = async (
+      fetcher: () => Promise<Response> | Response,
+      options?: { varyUA: string },
+    ) => {
+      let cacheKey = url;
+      if (options?.varyUA) {
+        const target = getEsmaVersionFromUA(options.varyUA);
+        cacheKey.searchParams.set("_target", target);
+      }
+      let res = await cache.match(cacheKey);
       if (res) {
         return res;
       }
       res = await fetcher();
+      if (options.varyUA) {
+        const headers = new Headers(res.headers);
+        headers.append("Vary", "User-Agent");
+        res = new Response(res.body, { status: res.status, headers });
+      }
       if (res.headers.get("Cache-Control")?.startsWith("public, max-age=")) {
         context.waitUntil(cache.put(url, res.clone()));
       }
@@ -174,10 +186,10 @@ class ESMWorker {
       buildVersion = url.searchParams.get("pin")!;
     }
 
-    if (pathname === "/build") {
+    if (pathname === "/build" || pathname === "/server") {
       if (!hasBuildVerPrefix && !hasBuildVerQuery) {
         return redirect(
-          new URL(`/${buildVersion}/build`, url),
+          new URL(`/${buildVersion}${pathname}`, url),
           302,
           86400,
         );
@@ -189,8 +201,9 @@ class ESMWorker {
           ctx,
           url.pathname + url.search,
           corsHeaders(),
-        )
-      );
+        ), {
+        varyUA: req.headers.get("User-Agent") ?? "",
+      });
     }
 
     const gh = pathname.startsWith("/gh/");
