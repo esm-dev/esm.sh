@@ -11,8 +11,8 @@ import type {
   Context,
   HttpMetadata,
   WorkerStorage,
-} from "https://esm.sh/esm-worker@0.122.9";
-import { withESMWorker } from "https://esm.sh/esm-worker@0.122.9";
+} from "https://esm.sh/esm-worker@0.122.10";
+import { withESMWorker } from "https://esm.sh/esm-worker@0.122.10";
 
 type Handler = (
   request: Request,
@@ -37,7 +37,7 @@ export async function serve(handler: Handler, options?: ServeInit) {
   }
   return await stdServe((req, connInfo) => {
     const context = {
-      ...connInfo,
+      connInfo,
       waitUntil: () => {},
     };
     return worker.fetch(req, env, context);
