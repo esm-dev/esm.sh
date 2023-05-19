@@ -164,3 +164,68 @@ async function hashKey(key: string): Promise<string> {
 }
 
 export default serve;
+
+if (import.meta.main) {
+  const { parse } = await import("https://deno.land/std@0.188.0/flags/mod.ts");
+  const flags = parse(Deno.args);
+  const port = flags.port || 8787;
+  serve((req) => {
+    const url = new URL(req.url);
+    if (url.pathname === "/") {
+      return new Response(
+        `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>ESM&gt;CDN</title>
+  <style>
+    * {
+      padding: 0;
+      margin: 0;
+    }
+    body {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      height: 100vh;
+      overflow: hidden;
+    }
+    h1 {
+      font-size: 32px;
+      line-height: 1.5;
+      font-family: Inter, sans-serif;
+      text-align: center;
+    }
+    p {
+      font-size: 18px;
+      text-align: center;
+      line-height: 1.2;
+      color: #888;
+    }
+    pre {
+      margin-top: 23px;
+      background-color: #f3f3f3;
+      padding: 16px 20px;
+      border-radius: 8px;
+      font-size: 14px;
+    }
+  </style>
+</head>
+<body>
+  <div id="app">
+    <h1>Welcome to use esm.sh!</h1>
+    <p>This is local version of esm.sh running on Deno.</p>
+    <pre><code>import React from "http://localhost:${port}/react"</code></pre>
+  </div>
+</body>
+</html>
+`,
+        {
+          headers: { "Content-Type": "text/html; charset=utf-8" },
+        },
+      );
+    }
+  }, {
+    port,
+  });
+}
