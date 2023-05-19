@@ -417,6 +417,20 @@ func esmHandler() rex.Handle {
 			return bytes.ReplaceAll(data, []byte("$ORIGIN"), []byte(cdnOrigin))
 		}
 
+		if pathname == "/server" {
+			if !hasBuildVerPrefix && !ctx.Form.Has("pin") {
+				url := fmt.Sprintf("%s%s/v%d/server", cdnOrigin, cfg.BasePath, CTX_VERSION)
+				return rex.Redirect(url, 302)
+			}
+			data, err := embedFS.ReadFile("server/embed/server.ts")
+			if err != nil {
+				return err
+			}
+			ctx.SetHeader("Content-Type", "application/typescript; charset=utf-8")
+			ctx.SetHeader("Cache-Control", "public, max-age=31536000, immutable")
+			return data
+		}
+
 		// use embed polyfills/types if possible
 		if hasBuildVerPrefix && strings.Count(pathname, "/") == 1 {
 			if strings.HasSuffix(pathname, ".js") {
