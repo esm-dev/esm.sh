@@ -1,7 +1,6 @@
 declare global {
   interface Env {
-    STORAGE: WorkerStorage;
-    ESM_SERVER_ORIGIN: string;
+    ESM_SERVER_ORIGIN?: string;
     ESM_SERVER_AUTH_TOKEN?: string;
     NPM_REGISTRY?: string;
     NPM_TOKEN?: string;
@@ -14,6 +13,7 @@ export type HttpMetadata = {
   dts?: string;
 };
 
+// compatibility with Cloudflare KV
 export interface WorkerStorageKV {
   getWithMetadata(
     key: string,
@@ -28,6 +28,7 @@ export interface WorkerStorageKV {
   ): Promise<void>;
 }
 
+// compatibility with Cloudflare R2
 export interface WorkerStorage {
   get(key: string): Promise<
     {
@@ -59,7 +60,11 @@ export type Context<Data = Record<string, any>> = {
 };
 
 export interface Middleware {
-  (req: Request, env: Env, ctx: Context): Promise<Response | undefined>;
+  (
+    req: Request,
+    env: Env,
+    ctx: Context,
+  ): Response | void | Promise<Response | void>;
 }
 
 export type PackageInfo = {

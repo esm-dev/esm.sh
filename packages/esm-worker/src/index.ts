@@ -4,6 +4,7 @@ import type {
   Middleware,
   PackageInfo,
   PackageRegistryInfo,
+  WorkerStorage,
 } from "../types/index.d.ts";
 import { compareVersions, satisfies, validate } from "compare-versions";
 import { getEsmaVersionFromUA, hasTargetSegment, targets } from "./compat.ts";
@@ -36,6 +37,12 @@ const regexpBuildVersion = /^(v\d+|stable)$/;
 const regexpBuildVersionPrefix = /^\/(v\d+|stable)\//;
 
 const defaultNpmRegistry = "https://registry.npmjs.org";
+const defaultEsmServerOrigin = "https://esm.sh";
+
+const fakeStorage: WorkerStorage = {
+  get: () => null,
+  put: () => Promise.resolve(),
+};
 
 class ESMWorker {
   cache?: Cache;
@@ -71,20 +78,12 @@ class ESMWorker {
       return res;
     };
     const ctx: Context = {
+      ...context,
       cache,
       url,
       data: {},
-      waitUntil: (p) => context.waitUntil(p),
       withCache,
     };
-
-    // use CF R2
-    if (env.STORAGE === undefined) {
-      env.STORAGE = Reflect.get(env, "R2") || {
-        get: () => null,
-        put: () => {},
-      };
-    }
 
     let pathname = decodeURIComponent(url.pathname);
     let buildVersion = "v" + VERSION;
@@ -580,7 +579,8 @@ async function fetchAsset(
   pathname: string,
 ) {
   const resHeaders = corsHeaders();
-  const ret = await env.STORAGE.get(pathname.slice(1));
+  const storage = Reflect.get(env, "R2") as R2Bucket | undefined ?? fakeStorage;
+  const ret = await storage.get(pathname.slice(1));
   if (ret) {
     resHeaders.set(
       "Content-Type",
@@ -598,12 +598,15 @@ async function fetchAsset(
     const contentType = res.headers.get("content-type") ||
       getContentType(pathname);
     const buffer = await res.arrayBuffer();
-    await env.STORAGE.put(pathname.slice(1), buffer.slice(0), {
+    await storage.put(pathname.slice(1), buffer.slice(0), {
       httpMetadata: { contentType },
     });
     resHeaders.set("Content-Type", contentType);
     resHeaders.set("Cache-Control", "public, max-age=31536000, immutable");
-    resHeaders.set("X-Content-Source", env.ESM_SERVER_ORIGIN);
+    resHeaders.set(
+      "X-Content-Source",
+      env.ESM_SERVER_ORIGIN ?? defaultEsmServerOrigin,
+    );
     return new Response(buffer.slice(0), { headers: resHeaders });
   }
   return res;
@@ -620,8 +623,9 @@ async function fetchESM(
   if (storeKey.startsWith("stable/")) {
     storeKey = `v${STABLE_VERSION}/` + storeKey.slice(7);
   }
+  const storage = Reflect.get(env, "R2") as R2Bucket | undefined ?? fakeStorage;
   const KV = Reflect.get(env, "KV") as KVNamespace | undefined ??
-    asKV(env.STORAGE);
+    asKV(storage);
   const [pathname] = splitBy(path, "?", true);
   if (req.headers.has("X-Real-Origin")) {
     const { host } = new URL(req.headers.get("X-Real-Origin")!);
@@ -631,12 +635,12 @@ async function fetchESM(
   if (options.targetFromUA) {
     headers.set("Vary", "Origin,User-Agent");
   }
-  const hpStorage = !(
+  const isModuleFile = !(
     pathname.endsWith(".d.ts") ||
     pathname.endsWith(".d.mts") ||
     pathname.endsWith(".map")
   );
-  if (hpStorage) {
+  if (isModuleFile) {
     const { value, metadata } = await KV.getWithMetadata<HttpMetadata>(
       storeKey,
       "stream",
@@ -656,7 +660,7 @@ async function fetchESM(
       return new Response(req.method === "HEAD" ? null : body, { headers });
     }
   } else {
-    const obj = await env.STORAGE.get(storeKey);
+    const obj = await storage.get(storeKey);
     if (obj) {
       const contentType = obj.httpMetadata?.contentType || getContentType(path);
       headers.set("Content-Type", contentType);
@@ -686,13 +690,16 @@ async function fetchESM(
     headers.set("X-TypeScript-Types", dts);
     headers.set("Access-Control-Expose-Headers", "X-TypeScript-Types");
   }
-  headers.set("X-Content-Source", env.ESM_SERVER_ORIGIN);
+  headers.set(
+    "X-Content-Source",
+    env.ESM_SERVER_ORIGIN ?? defaultEsmServerOrigin,
+  );
 
   // save to KV/R2 if immutable
   if (req.method === "GET" && cacheControl?.includes("immutable")) {
-    if (!hpStorage) {
+    if (!isModuleFile) {
       const buffer = await res.arrayBuffer();
-      await env.STORAGE.put(storeKey, buffer.slice(0), {
+      await storage.put(storeKey, buffer.slice(0), {
         httpMetadata: { contentType },
       });
       return new Response(buffer.slice(0), { headers });
@@ -747,12 +754,15 @@ async function fetchServerOrigin(
   if (env.ESM_SERVER_AUTH_TOKEN) {
     headers.set("Authorization", `Bearer ${env.ESM_SERVER_AUTH_TOKEN}`);
   }
-  const res = await fetch(new URL(url, env.ESM_SERVER_ORIGIN), {
-    method: req.method,
-    body: req.body,
-    headers,
-    redirect: "manual",
-  });
+  const res = await fetch(
+    new URL(url, env.ESM_SERVER_ORIGIN ?? defaultEsmServerOrigin),
+    {
+      method: req.method,
+      body: req.body,
+      headers,
+      redirect: "manual",
+    },
+  );
   if (!res.ok) {
     // fix cache-control by status code
     if (res.headers.has("Cache-Control")) {

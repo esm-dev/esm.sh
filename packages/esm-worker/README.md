@@ -1,6 +1,6 @@
 # esm-worker
 
-A [Cloudflare worker](https://www.cloudflare.com/products/workers) that handles
+A [Cloudflare worker](https://www.cloudflare.com/products/workers) handles
 all requests of esm.sh at the edge(earth).
 
 - [Cache](https://developers.cloudflare.com/workers/runtime-apis/cache/)
@@ -80,10 +80,6 @@ export default withESMWorker((req, env, ctx) => {
       // local development
       // your code ...
     }
-
-    // using the storage
-    await env.STORAGE.put("key", new TextEncoder().encode("value"));
-    const ret = await env.STORAGE.get("key");
 
     // using a custom homepage
     return new Response("<h1>Welcome to use esm.sh!</h1>", {
