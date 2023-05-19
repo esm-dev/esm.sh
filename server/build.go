@@ -67,7 +67,24 @@ func (task *BuildTask) Build() (esm *ESMBuild, err error) {
 		if cfg.NpmToken != "" {
 			rcFilePath := path.Join(task.wd, ".npmrc")
 			if !fileExists(rcFilePath) {
-				err = os.WriteFile(rcFilePath, []byte("_authToken=${ESM_NPM_TOKEN}"), 0644)
+				var output bytes.Buffer
+
+				if cfg.NpmRegistryScope != "" && cfg.NpmRegistry != "" {
+					output.WriteString(fmt.Sprintf("%s:registry=%s\n", cfg.NpmRegistryScope, cfg.NpmRegistry))
+				} else if cfg.NpmRegistryScope == "" && cfg.NpmRegistry != "" {
+					output.WriteString(fmt.Sprintf("registry=%s\n", cfg.NpmRegistry))
+				}
+
+				if cfg.NpmRegistry != "" && cfg.NpmToken != "" {
+					var tokenReg string
+					tokenReg, err = removeHttpPrefix(cfg.NpmRegistry)
+					if err != nil {
+						log.Errorf("Invalid npm registry in config: %v", err)
+						return
+					}
+					output.WriteString(fmt.Sprintf("%s:_authToken=${ESM_NPM_TOKEN}\n", tokenReg))
+				}
+				err = os.WriteFile(rcFilePath, output.Bytes(), 0644)
 				if err != nil {
 					log.Errorf("Failed to create .npmrc file: %v", err)
 					return
