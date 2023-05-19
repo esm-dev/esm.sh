@@ -90,22 +90,11 @@ export class FileStorage implements WorkerStorage {
     const filepath = join(await this.rootDir, await hashKey(key));
     try {
       const file = await Deno.open(filepath);
-      let httpMetadata: HttpMetadata | undefined;
-      try {
-        const data = await Deno.readTextFile(filepath + ".metadata");
-        try {
-          httpMetadata = JSON.parse(data);
-        } catch (_) {
-          // ignore error
-        }
-      } catch (err) {
-        if (!(err instanceof Deno.errors.NotFound)) {
-          throw err;
-        }
-      }
+      const data = await Deno.readTextFile(filepath + ".metadata.json");
+      const metadata = JSON.parse(data);
       return {
         body: file.readable,
-        httpMetadata,
+        httpMetadata: metadata.httpMetadata,
       };
     } catch (err) {
       if (err instanceof Deno.errors.NotFound) {
@@ -129,14 +118,18 @@ export class FileStorage implements WorkerStorage {
       await Deno.writeFile(filepath, new Uint8Array(value));
     }
     try {
-      if (options?.httpMetadata) {
-        await Deno.writeTextFile(
-          filepath + ".metadata",
-          JSON.stringify(options.httpMetadata),
-        );
-      }
-    } catch (_) {
-      // ignore error
+      const metadata = {
+        key,
+        time: Date.now(),
+        httpMetadata: options?.httpMetadata,
+      };
+      await Deno.writeTextFile(
+        filepath + ".metadata.json",
+        JSON.stringify(metadata, undefined, 2),
+      );
+    } catch (err) {
+      await Deno.remove(filepath);
+      throw err;
     }
   }
 }
