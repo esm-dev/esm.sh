@@ -160,8 +160,7 @@ if (import.meta.main) {
   const { parse } = await import("https://deno.land/std@0.188.0/flags/mod.ts");
   const flags = parse(Deno.args);
   const port = flags.port || 8787;
-  serve((req) => {
-    const url = new URL(req.url);
+  serve((_req, { url }) => {
     if (url.pathname === "/") {
       return new Response(
         `<!DOCTYPE html>
@@ -218,7 +217,7 @@ if (import.meta.main) {
 <body>
   <h1>Welcome to use esm.sh!</h1>
   <p>This is local version of esm.sh running on Deno 🦕.</p>
-  <pre><code><span class="keyword">import</span> React <span class="keyword">from</span> "<a href="http://localhost:${port}/react" class="url">http://localhost:${port}/react</a>"</code></pre>
+  <pre><code><span class="keyword">import</span> React <span class="keyword">from</span> "<a href="${url.origin}/react" class="url">${url.origin}/react</a>"</code></pre>
 </body>
 </html>
 `,
