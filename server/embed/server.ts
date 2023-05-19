@@ -11,8 +11,8 @@ import type {
   Context,
   HttpMetadata,
   WorkerStorage,
-} from "https://esm.sh/esm-worker@0.122.8";
-import { withESMWorker } from "https://esm.sh/esm-worker@0.122.8";
+} from "https://esm.sh/esm-worker@0.122.9";
+import { withESMWorker } from "https://esm.sh/esm-worker@0.122.9";
 
 type Handler = (
   request: Request,
@@ -24,7 +24,6 @@ const envKeys = [
   "ESM_SERVER_AUTH_TOKEN",
   "NPM_REGISTRY",
   "NPM_TOKEN",
-  "WORKER_ENV",
 ];
 
 let env: Env = {};

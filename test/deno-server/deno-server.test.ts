@@ -7,7 +7,6 @@ import { FileStorage, init, serve } from "http://localhost:8080/server";
 
 init({
   ESM_SERVER_ORIGIN: "http://localhost:8080",
-  WORKER_ENV: "development",
 });
 
 Deno.test("deno server", async () => {

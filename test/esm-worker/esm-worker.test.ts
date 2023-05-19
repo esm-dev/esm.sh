@@ -42,7 +42,6 @@ const worker = withESMWorker(
 );
 const env = {
   ESM_SERVER_ORIGIN: "http://localhost:8080",
-  WORKER_ENV: "development",
 };
 const ac = new AbortController();
 
