@@ -717,19 +717,20 @@ async function fetchESM(
       });
       return new Response(buffer.slice(0), { headers });
     }
-    // seems `local` CF worker doesn't support `ReadableStream.tee` yet, so we need to use `arrayBuffer` here
-    if (env.WORKER_ENV === "development") {
-      const buf = await res.arrayBuffer();
-      const value = options.gzip
-        ? new Response(buf).body.pipeThrough(new CompressionStream("gzip"))
-        : buf;
-      await KV.put(storeKey, value as any, { metadata: { contentType, dts } });
-      return new Response(buf, { headers });
+    let body: ReadableStream<Uint8Array> | ArrayBuffer;
+    let value: ReadableStream<Uint8Array> | ArrayBuffer;
+    try {
+      const [a, b] = res.body.tee();
+      body = a;
+      value = options.gzip ? b.pipeThrough(new CompressionStream("gzip")) : b;
+    } catch (_) {
+      // failed to tee, fallback to arrayBuffer
+      const buffer = await res.arrayBuffer();
+      body = buffer.slice(0);
+      value = options.gzip
+        ? new Response(buffer.slice(0)).body.pipeThrough(new CompressionStream("gzip"))
+        : buffer.slice(0);
     }
-    const [body, bodyCopy] = res.body.tee();
-    const value = options.gzip
-      ? bodyCopy.pipeThrough(new CompressionStream("gzip"))
-      : bodyCopy;
     await KV.put(storeKey, value as any, { metadata: { contentType, dts } });
     return new Response(body, { headers });
   }

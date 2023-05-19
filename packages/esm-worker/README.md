@@ -10,11 +10,13 @@ all requests of esm.sh at the edge(earth).
 - Store NPM/GH assets in
   [R2](https://developers.cloudflare.com/r2/api/workers/workers-api-reference)
 
-## Getting Started
+## Installation
 
 ```bash
 npm install esm-worker@0.122
 ```
+
+## Configuration
 
 You need to add following configuration to your `wrangler.toml`:
 
@@ -39,7 +41,7 @@ bucket_name = "YOUR_BUCKET_NAME"
 preview_bucket_name = "YOUR_PREVIEW_BUCKET_NAME"
 ```
 
-Optional configurations in secrets:
+Other optional configurations in secrets:
 
 - If you are using a self-hosting esm.sh server with `authSecret` option, you
   need to add the following configuration:
@@ -52,14 +54,9 @@ Optional configurations in secrets:
   wrangler secret put NPM_TOKEN
   ```
 
-Create a `.dev.vars` file for local development in the root directory of your
-project:
+## Usage
 
-```toml
-WORKER_ENV = "development"
-```
-
-Then, wrap your worker with the `esm-worker` package:
+Wrap your Cloudflare worker with the `esm-worker` package:
 
 ```typescript
 import { withESMWorker } from "esm-worker";
@@ -76,11 +73,6 @@ export default withESMWorker((req, env, ctx) => {
 
   // your routes override esm.sh routes
   if (url.pathname === "/") {
-    if (env.WORKER_ENV === "development") {
-      // local development
-      // your code ...
-    }
-
     // using a custom homepage
     return new Response("<h1>Welcome to use esm.sh!</h1>", {
       headers: { "Content-Type": "text/html" },
@@ -94,4 +86,10 @@ export default withESMWorker((req, env, ctx) => {
     );
   }
 });
+```
+
+## Deploy to Cloudflare Edge
+
+```bash
+wrangler publish
 ```

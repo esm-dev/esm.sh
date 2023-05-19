@@ -4,7 +4,6 @@ declare global {
     ESM_SERVER_AUTH_TOKEN?: string;
     NPM_REGISTRY?: string;
     NPM_TOKEN?: string;
-    WORKER_ENV?: "development" | "production";
   }
 }
 
