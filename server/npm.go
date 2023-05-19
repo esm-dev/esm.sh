@@ -199,6 +199,13 @@ func fetchPackageInfo(name string, version string) (info NpmPackage, err error) 
 	}()
 
 	url := cfg.NpmRegistry + name
+	if cfg.NpmRegistryScope != "" {
+		isInScope := strings.HasPrefix(name, cfg.NpmRegistryScope)
+		if !isInScope {
+			url = "https://registry.npmjs.org/" + name
+		}
+	}
+
 	if isFullVersion {
 		url += "/" + version
 	}
@@ -374,7 +381,6 @@ func pnpmInstall(wd string, packages ...string) (err error) {
 		args,
 		"--ignore-scripts",
 		"--loglevel", "error",
-		"--registry", cfg.NpmRegistry,
 	)
 	start := time.Now()
 	cmd := exec.Command("pnpm", args...)

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/base64"
 	"errors"
+	"fmt"
 	"net"
 	"net/http"
 	"os"
@@ -284,4 +285,13 @@ func restorePurgeTimers(npmDir string) {
 		toPurge(pkg, path.Join(npmDir, pkg))
 	}
 	log.Debugf("Restored %d purge timers", len(pkgs))
+}
+
+func removeHttpPrefix(s string) (string, error) {
+	for i, v := range s {
+		if v == ':' {
+			return s[i+1:], nil
+		}
+	}
+	return "", fmt.Errorf("Colon not found in string: %s", s)
 }
