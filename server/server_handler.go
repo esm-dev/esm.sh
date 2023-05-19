@@ -400,20 +400,37 @@ func esmHandler() rex.Handle {
 				url := fmt.Sprintf("%s%s/v%d/build", cdnOrigin, cfg.BasePath, CTX_VERSION)
 				return rex.Redirect(url, 302)
 			}
-			var data []byte
-			var err error
-			if strings.HasPrefix(ctx.R.UserAgent(), "Deno/") {
-				data, err = embedFS.ReadFile("server/embed/build.ts")
-				ctx.SetHeader("Content-Type", "application/typescript; charset=utf-8")
-			} else {
-				data, err = embedFS.ReadFile("server/embed/build.js")
-				ctx.SetHeader("Content-Type", "application/javascript; charset=utf-8")
-			}
+			data, err := embedFS.ReadFile("build.ts")
 			if err != nil {
 				return err
 			}
+			target := strings.ToLower(ctx.Form.Value("target"))
+			targetFromUA := targets[target] == 0
+			if targetFromUA {
+				target = getTargetByUA(ctx.R.UserAgent())
+			}
+			if target == "deno" {
+				ctx.SetHeader("Content-Type", "application/typescript; charset=utf-8")
+			} else {
+				ret := api.Transform(string(data), api.TransformOptions{
+					Loader:            api.LoaderTS,
+					Format:            api.FormatESModule,
+					Platform:          api.PlatformBrowser,
+					Target:            targets[target],
+					MinifyWhitespace:  true,
+					MinifyIdentifiers: true,
+					MinifySyntax:      true,
+				})
+				if len(ret.Errors) > 0 {
+					return throwErrorJS(ctx, fmt.Errorf("transform error: %s", ret.Errors[0].Text))
+				}
+				data = []byte(ret.Code)
+				ctx.SetHeader("Content-Type", "application/javascript; charset=utf-8")
+			}
 			ctx.SetHeader("Cache-Control", "public, max-age=31536000, immutable")
-			ctx.AddHeader("Vary", "User-Agent")
+			if targetFromUA {
+				ctx.AddHeader("Vary", "User-Agent")
+			}
 			return bytes.ReplaceAll(data, []byte("$ORIGIN"), []byte(cdnOrigin))
 		}
 
@@ -422,7 +439,7 @@ func esmHandler() rex.Handle {
 				url := fmt.Sprintf("%s%s/v%d/server", cdnOrigin, cfg.BasePath, CTX_VERSION)
 				return rex.Redirect(url, 302)
 			}
-			data, err := embedFS.ReadFile("server/embed/server.ts")
+			data, err := embedFS.ReadFile("server.ts")
 			if err != nil {
 				return err
 			}

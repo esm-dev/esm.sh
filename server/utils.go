@@ -293,5 +293,5 @@ func removeHttpPrefix(s string) (string, error) {
 			return s[i+1:], nil
 		}
 	}
-	return "", fmt.Errorf("Colon not found in string: %s", s)
+	return "", fmt.Errorf("colon not found in string: %s", s)
 }

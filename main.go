@@ -8,6 +8,8 @@ import (
 
 //go:embed README.md
 //go:embed CLI.ts
+//go:embed build.ts
+//go:embed server.ts
 //go:embed server/embed
 var fs embed.FS
 

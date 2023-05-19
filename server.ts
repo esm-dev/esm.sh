@@ -193,12 +193,14 @@ if (import.meta.main) {
       margin-bottom: 8px;
       font-size: 40px;
       line-height: 1;
-      font-family: Inter, sans-serif;
+      font-family: Inter,sans-serif;
+      text-align: center;
     }
     p {
       font-size: 18px;
       line-height: 1;
       color: #888;
+      text-align: center:
     }
     pre {
       margin-top: 24px;
