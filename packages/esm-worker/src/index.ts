@@ -90,12 +90,16 @@ class ESMWorker {
       return res;
     };
     const ctx: Context = {
-      ...context,
       cache,
       url,
       data: {},
+      waitUntil: (p: Promise<any>) => context.waitUntil(p),
       withCache,
     };
+    // for deno runtime
+    if (Reflect.has(context, "connInfo")) {
+      Object.assign(ctx, Reflect.get(context, "connInfo"));
+    }
 
     let pathname = decodeURIComponent(url.pathname);
     let buildVersion = "v" + VERSION;
@@ -728,7 +732,9 @@ async function fetchESM(
       const buffer = await res.arrayBuffer();
       body = buffer.slice(0);
       value = options.gzip
-        ? new Response(buffer.slice(0)).body.pipeThrough(new CompressionStream("gzip"))
+        ? new Response(buffer.slice(0)).body.pipeThrough(
+          new CompressionStream("gzip"),
+        )
         : buffer.slice(0);
     }
     await KV.put(storeKey, value as any, { metadata: { contentType, dts } });
