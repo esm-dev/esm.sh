@@ -46,8 +46,14 @@
   // The npm registry, default is "https://registry.npmjs.org/".
   "npmRegistry": "https://registry.npmjs.org/",
 
+  // The scope applied to the npm registry. This will ensure only packages
+  // with this scope get downloaded from the registry, default is empty.
+  // Default behavior is to fetch all packages from the npm registry.
+  "npmRegistryScope": "@my-scope",
+
   // The npm token for private packages, default is empty.
   "npmToken": "",
+
 
   // Disable compressing the response, default is false.
   "noCompress": false,
