@@ -10,7 +10,15 @@ A fast, smart, & global content delivery network (CDN) for modern(es2015+) web d
 [![Github Sponsors](https://img.shields.io/github/sponsors/ije?label=&style=flat&colorA=232323&colorB=232323&logo=githubsponsors&logoColor=eeeeee)](https://github.com/sponsors/ije)
 [![Open Collective](https://img.shields.io/opencollective/all/esm?label=&style=flat&colorA=232323&colorB=232323&logo=opencollective&logoColor=eeeeee)](https://opencollective.com/esm)
 
-## Import from NPM
+## How to Use
+
+esm.sh is a modern CDN that allows you to import [es6 modules](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Guide/Modules) from a URL:
+
+```javascript
+import Foo from "https://esm.sh/PKG@VERSION[/PATH]"
+```
+
+### Import from NPM
 
 ```javascript
 import React from "https://esm.sh/react@18.2.0"
@@ -24,7 +32,17 @@ import React from "https://esm.sh/react@17"     // 17.0.2
 import React from "https://esm.sh/react@canary" // 18.3.0-canary-7cd98ef2b-20230509
 ```
 
-### Submodule
+### Import from GitHub Repos
+
+You can also import modules/assets from a github repo: `/gh/OWNER/REPO[@TAG]/PATH`. For example:
+
+```javascript
+import tslib from "https://esm.sh/gh/microsoft/tslib"
+```
+
+or load a svg image from a github repo: https://esm.sh/gh/microsoft/fluentui-emoji/assets/Alien/Flat/alien_flat.svg
+
+### Import a Submodule
 
 ```javascript
 import { renderToString } from "https://esm.sh/react-dom@18.2.0/server"
@@ -36,16 +54,6 @@ or import non-module(js) as following:
 import "https://esm.sh/react@18.2.0/package.json" assert { type: "json" }
 ```
 
-### Import from GitHub Repo
-
-You can also import modules/assets from a github repo: `/gh/OWNER/REPO[@TAG]/PATH`. For example:
-
-```javascript
-import tslib from "https://esm.sh/gh/microsoft/tslib"
-```
-
-or load a svg image from a github repo: https://esm.sh/gh/microsoft/fluentui-emoji/assets/Alien/Flat/alien_flat.svg
-
 ### Specify Dependencies
 
 By default, esm.sh rewrites import specifiers based on the package dependencies. To specify the version of these dependencies, you can add the `?deps=PACKAGE@VERSION` query. To specify multiple dependencies, separate them with a comma, like this: `?deps=react@17.0.2,react-dom@17.0.2`.
@@ -54,47 +62,6 @@ By default, esm.sh rewrites import specifiers based on the package dependencies.
 import React from "https://esm.sh/react@17.0.2"
 import useSWR from "https://esm.sh/swr?deps=react@17.0.2"
 ```
-
-### Using Import Maps
-
-[**Import Maps**](https://github.com/WICG/import-maps) has been supported by most modern browsers and Deno natively. This allows _**bare import specifiers**_, such as `import React from "react"`, to work.
-
-esm.sh supports `?external=foo,bar` query to specify external dependencies. With this query, esm.sh will not rewrite the import specifiers of the specified dependencies. For example:
-
-```json
-{
-  "imports": {
-    "preact": "https://esm.sh/preact@10.7.2",
-    "preact-render-to-string": "https://esm.sh/preact-render-to-string@5.2.0?external=preact",
-  }
-}
-```
-
-Alternatively, you can **mark all dependencies as external** by adding a `*` prefix before the package name:
-
-```json
-{
-  "imports": {
-    "preact": "https://esm.sh/preact@10.7.2",
-    "preact-render-to-string": "https://esm.sh/*preact-render-to-string@5.2.0",
-    "swr": "https://esm.sh/*swr@1.3.0",
-    "react": "https://esm.sh/preact@10.7.2/compat",
-  }
-}
-```
-
-Import maps supports [**trailing slash**](https://github.com/WICG/import-maps#packages-via-trailing-slashes) that can not work with URL search params friendly. To fix this issue, esm.sh provides a special format for import URL that allows you to use query params with trailing slash: change the query prefix `?` to `&` and put it after the package version.
-
-```json
-{
-  "imports": {
-    "react-dom": "https://esm.sh/react-dom@18.2.0?pin=v122&dev",
-    "react-dom/": "https://esm.sh/react-dom@18.2.0&pin=v122&dev/",
-  }
-}
-```
-
-> If you are using Deno, you can use the [CLI Script](#using-cli-script) to generate and update the import maps that will resolve the external dependencies automatically.
 
 ### Aliasing Dependencies
 
@@ -206,6 +173,47 @@ If you get an error like `...not provide an export named...`, that means esm.sh 
 ```javascript
 import { NinetyRing, NinetyRingWithBg } from "https://esm.sh/react-svg-spinners@0.3.1?cjs-exports=NinetyRing,NinetyRingWithBg"
 ```
+
+## Using Import Maps
+
+[**Import Maps**](https://github.com/WICG/import-maps) has been supported by most modern browsers and Deno natively. This allows _**bare import specifiers**_, such as `import React from "react"`, to work.
+
+esm.sh supports `?external=foo,bar` query to specify external dependencies. With this query, esm.sh will not rewrite the import specifiers of the specified dependencies. For example:
+
+```json
+{
+  "imports": {
+    "preact": "https://esm.sh/preact@10.7.2",
+    "preact-render-to-string": "https://esm.sh/preact-render-to-string@5.2.0?external=preact",
+  }
+}
+```
+
+Alternatively, you can **mark all dependencies as external** by adding a `*` prefix before the package name:
+
+```json
+{
+  "imports": {
+    "preact": "https://esm.sh/preact@10.7.2",
+    "preact-render-to-string": "https://esm.sh/*preact-render-to-string@5.2.0",
+    "swr": "https://esm.sh/*swr@1.3.0",
+    "react": "https://esm.sh/preact@10.7.2/compat",
+  }
+}
+```
+
+Import maps supports [**trailing slash**](https://github.com/WICG/import-maps#packages-via-trailing-slashes) that can not work with URL search params friendly. To fix this issue, esm.sh provides a special format for import URL that allows you to use query params with trailing slash: change the query prefix `?` to `&` and put it after the package version.
+
+```json
+{
+  "imports": {
+    "react-dom": "https://esm.sh/react-dom@18.2.0?pin=v122&dev",
+    "react-dom/": "https://esm.sh/react-dom@18.2.0&pin=v122&dev/",
+  }
+}
+```
+
+> If you are using Deno, you can use the [CLI Script](#using-cli-script) to generate and update the import maps that will resolve the external dependencies automatically.
 
 ## Building a Module with Custom Input(code)
 
