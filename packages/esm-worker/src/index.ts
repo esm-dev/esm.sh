@@ -40,7 +40,7 @@ const defaultNpmRegistry = "https://registry.npmjs.org";
 const defaultEsmServerOrigin = "https://esm.sh";
 
 const fakeStorage: WorkerStorage = {
-  get: () => null,
+  get: () => Promise.resolve(null),
   put: () => Promise.resolve(),
 };
 
@@ -69,7 +69,7 @@ class ESMWorker {
       fetcher: () => Promise<Response> | Response,
       options?: { varyUA: string },
     ) => {
-      let cacheKey = url;
+      const cacheKey = url;
       if (options?.varyUA) {
         const target = getEsmaVersionFromUA(options.varyUA);
         cacheKey.searchParams.set("_target", target);
@@ -115,6 +115,7 @@ class ESMWorker {
             corsHeaders(),
           );
         }
+        // fallthrough
       case "/error.js":
       case "/status.json":
         return fetchServerOrigin(
@@ -321,15 +322,15 @@ class ESMWorker {
         )
       )
     ) {
-      return ctx.withCache(async () => {
-        return fetchServerOrigin(
+      return ctx.withCache(() =>
+        fetchServerOrigin(
           req,
           env,
           ctx,
           url.pathname + url.search,
           corsHeaders(),
-        );
-      });
+        )
+      );
     }
 
     // redirect to specific version
@@ -396,7 +397,7 @@ class ESMWorker {
               return redirect(new URL(uri, url), 302);
             }
           }
-        } catch (error) {
+        } catch (_) {
           // error of `satisfies` function
           return err(`Invalid package version '${packageVersion}'`);
         }
@@ -724,7 +725,7 @@ async function fetchESM(
     let body: ReadableStream<Uint8Array> | ArrayBuffer;
     let value: ReadableStream<Uint8Array> | ArrayBuffer;
     try {
-      const [a, b] = res.body.tee();
+      const [a, b] = res.body!.tee();
       body = a;
       value = options.gzip ? b.pipeThrough(new CompressionStream("gzip")) : b;
     } catch (_) {
@@ -732,7 +733,7 @@ async function fetchESM(
       const buffer = await res.arrayBuffer();
       body = buffer.slice(0);
       value = options.gzip
-        ? new Response(buffer.slice(0)).body.pipeThrough(
+        ? new Response(buffer.slice(0)).body!.pipeThrough(
           new CompressionStream("gzip"),
         )
         : buffer.slice(0);

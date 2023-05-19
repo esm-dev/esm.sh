@@ -43,7 +43,14 @@ export interface WorkerStorage {
 }
 
 export function withESMWorker(middleware?: Middleware): {
-  fetch: (req: Request, env: Env, context: Context) => Promise<Response>;
+  fetch: (
+    req: Request,
+    env: Env,
+    context: {
+      connInfo?: Record<string, any>;
+      waitUntil(promise: Promise<any>): void;
+    },
+  ) => Promise<Response>;
 };
 
 export default withESMWorker;

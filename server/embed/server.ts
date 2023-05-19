@@ -19,7 +19,7 @@ type Handler = (
   context: Context & ConnInfo,
 ) => Response | void | Promise<Response | void>;
 
-const envKeys = [
+const envKeys: (keyof Env)[] = [
   "ESM_SERVER_ORIGIN",
   "ESM_SERVER_AUTH_TOKEN",
   "NPM_REGISTRY",
@@ -30,10 +30,10 @@ let env: Env = {};
 
 export async function serve(handler: Handler, options?: ServeInit) {
   const worker = withESMWorker((req, _env, ctx) => {
-    return handler?.(req, ctx);
+    return handler?.(req, ctx as Context & ConnInfo);
   });
-  if (Reflect.has(env, "R2")) {
-    Reflect.set(worker.env, "R2", new FileStorage());
+  if (!Reflect.has(env, "R2")) {
+    Reflect.set(env, "R2", new FileStorage());
   }
   return await stdServe((req, connInfo) => {
     const context = {
@@ -46,10 +46,10 @@ export async function serve(handler: Handler, options?: ServeInit) {
 
 type InitEnv = {
   storage?: WorkerStorage | null;
-} & ENV;
+} & Env;
 
-export async function init(env: InitEnv = {}) {
-  const { storage, ...rest } = env;
+export function init(initEnv: InitEnv = {}) {
+  const { storage, ...rest } = initEnv;
   if (storage) {
     Reflect.set(env, "R2", storage);
   }
@@ -95,7 +95,7 @@ export class FileStorage implements WorkerStorage {
         const data = await Deno.readTextFile(filepath + ".metadata");
         try {
           httpMetadata = JSON.parse(data);
-        } catch (error) {
+        } catch (_) {
           // ignore error
         }
       } catch (err) {
@@ -135,7 +135,7 @@ export class FileStorage implements WorkerStorage {
           JSON.stringify(options.httpMetadata),
         );
       }
-    } catch (error) {
+    } catch (_) {
       // ignore error
     }
   }
@@ -162,8 +162,6 @@ async function hashKey(key: string): Promise<string> {
   return [...new Uint8Array(buffer)].map((b) => b.toString(16).padStart(2, "0"))
     .join("");
 }
-
-export default serve;
 
 if (import.meta.main) {
   const { parse } = await import("https://deno.land/std@0.188.0/flags/mod.ts");
@@ -229,3 +227,5 @@ if (import.meta.main) {
     port,
   });
 }
+
+export default serve;
