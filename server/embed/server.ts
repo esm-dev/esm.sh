@@ -185,36 +185,45 @@ if (import.meta.main) {
       display: flex;
       align-items: center;
       justify-content: center;
+      flex-direction: column;
       height: 100vh;
       overflow: hidden;
     }
     h1 {
-      font-size: 32px;
-      line-height: 1.5;
+      margin-bottom: 8px;
+      font-size: 40px;
+      line-height: 1;
       font-family: Inter, sans-serif;
-      text-align: center;
     }
     p {
       font-size: 18px;
-      text-align: center;
-      line-height: 1.2;
+      line-height: 1;
       color: #888;
     }
     pre {
-      margin-top: 23px;
+      margin-top: 24px;
       background-color: #f3f3f3;
-      padding: 16px 20px;
+      padding: 18px;
       border-radius: 8px;
       font-size: 14px;
+      line-height: 1;
+    }
+    pre .keyword {
+      color: #888;
+    }
+    pre a {
+      color: #58a65c;
+      text-decoration: underline;
+    }
+    pre a:hover {
+      opacity: 0.8;
     }
   </style>
 </head>
 <body>
-  <div id="app">
-    <h1>Welcome to use esm.sh!</h1>
-    <p>This is local version of esm.sh running on Deno.</p>
-    <pre><code>import React from "http://localhost:${port}/react"</code></pre>
-  </div>
+  <h1>Welcome to use esm.sh!</h1>
+  <p>This is local version of esm.sh running on Deno 🦕.</p>
+  <pre><code><span class="keyword">import</span> React <span class="keyword">from</span> "<a href="http://localhost:${port}/react" class="url">http://localhost:${port}/react</a>"</code></pre>
 </body>
 </html>
 `,
@@ -225,6 +234,26 @@ if (import.meta.main) {
     }
   }, {
     port,
+    onListen: () => {
+      console.log(
+        "%cWelcome to use esm.sh!",
+        "font-weight:bold;color:#007bff;",
+      );
+      console.log(
+        "%cThis is local version of esm.sh running on Deno 🦕.",
+        "color:gray;",
+      );
+      console.log(
+        `Homepage: %chttp://localhost:${port}`,
+        "color:gray;",
+        "",
+      );
+      console.log(
+        `Module: %chttp://localhost:${port}/react`,
+        "color:gray;",
+        "",
+      );
+    },
   });
 }
 
