@@ -79,7 +79,7 @@ class ESMWorker {
         return res;
       }
       res = await fetcher();
-      if (options.varyUA) {
+      if (options?.varyUA) {
         const headers = new Headers(res.headers);
         headers.append("Vary", "User-Agent");
         res = new Response(res.body, { status: res.status, headers });
