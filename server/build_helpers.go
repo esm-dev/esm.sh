@@ -374,6 +374,8 @@ func (task *BuildTask) fixNpmPackage(p NpmPackage) NpmPackage {
 	if task.Pkg.FromGithub {
 		p.Name = task.Pkg.Name
 		p.Version = task.Pkg.Version
+	} else {
+		p.Version = strings.TrimPrefix(p.Version, "v")
 	}
 
 	if p.Types == "" && p.Typings != "" {
