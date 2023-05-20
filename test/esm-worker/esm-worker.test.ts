@@ -32,7 +32,7 @@ const { withESMWorker } = await import(
 
 const workerOrigin = "http://localhost:8787";
 const worker = withESMWorker(
-  async (_req: Request, _env: {}, ctx: { url: URL }) => {
+  (_req: Request, _env: {}, ctx: { url: URL }) => {
     if (ctx.url.pathname === "/") {
       return new Response("<h1>Welcome to use esm.sh!</h1>", {
         headers: { "content-type": "text/html" },
@@ -41,7 +41,7 @@ const worker = withESMWorker(
   },
 );
 const env = {
-  ESM_SERVER_ORIGIN: "http://localhost:8080",
+  ESM_ORIGIN: "http://localhost:8080",
 };
 const ac = new AbortController();
 

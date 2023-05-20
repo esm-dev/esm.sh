@@ -11,17 +11,18 @@ import type {
   Context,
   HttpMetadata,
   WorkerStorage,
-} from "https://esm.sh/esm-worker@0.122.11";
-import { withESMWorker } from "https://esm.sh/esm-worker@0.122.11";
+} from "https://esm.sh/esm-worker@0.122.12";
+import { withESMWorker } from "https://esm.sh/esm-worker@0.122.12";
 
 type Handler = (
   request: Request,
   context: Context & ConnInfo,
 ) => Response | void | Promise<Response | void>;
 
+const isDenoDeploy = Deno.env.has("DENO_DEPLOYMENT_ID");
 const envKeys: (keyof Env)[] = [
-  "ESM_SERVER_ORIGIN",
-  "ESM_SERVER_AUTH_TOKEN",
+  "ESM_ORIGIN",
+  "ESM_TOKEN",
   "NPM_REGISTRY",
   "NPM_TOKEN",
 ];
@@ -32,7 +33,7 @@ export async function serve(handler: Handler, options?: ServeInit) {
   const worker = withESMWorker((req, _env, ctx) => {
     return handler?.(req, ctx as Context & ConnInfo);
   });
-  if (!Reflect.has(env, "R2")) {
+  if (!Reflect.has(env, "R2") && !isDenoDeploy) {
     Reflect.set(env, "R2", new FileStorage());
   }
   return await stdServe((req, connInfo) => {
@@ -156,9 +157,34 @@ async function hashKey(key: string): Promise<string> {
     .join("");
 }
 
-if (import.meta.main) {
+if (import.meta.main && !isDenoDeploy) {
   const { parse } = await import("https://deno.land/std@0.188.0/flags/mod.ts");
   const flags = parse(Deno.args);
+  if (flags.help || flags.h) {
+    console.log(
+      "%cWelcome to use esm.sh!",
+      "font-weight:bold;color:#007bff;",
+    );
+    console.log(
+      "%cThis is local version of esm.sh running on Deno 🦕.",
+      "color:gray;",
+    );
+    console.log("");
+    console.log("Usage:");
+    console.log("  deno run -A -r https://esm.sh/server");
+    console.log("");
+    console.log("Options:");
+    console.log("  --port <port>    Port to listen on. Default is 8787.");
+    console.log("  --help, -h       Print this help message.");
+    console.log("");
+    console.log("ENVIRONMENT VARIABLES:");
+    console.log("  ESM_ORIGIN    The origin of esm.sh server.");
+    console.log("  ESM_TOKEN     The token of esm.sh server.");
+    console.log("  NPM_REGISTRY  The npm registry, Default is 'https://registry.npmjs.org/'.");
+    console.log("  NPM_TOKEN     The npm token.");
+    Deno.exit(0);
+  }
+  init();
   const port = flags.port || 8787;
   serve((_req, { url }) => {
     if (url.pathname === "/") {

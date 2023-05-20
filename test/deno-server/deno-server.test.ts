@@ -6,7 +6,7 @@ import {
 import { FileStorage, init, serve } from "http://localhost:8080/server";
 
 init({
-  ESM_SERVER_ORIGIN: "http://localhost:8080",
+  ESM_ORIGIN: "http://localhost:8080",
 });
 
 Deno.test("deno server", async () => {
@@ -25,7 +25,7 @@ Deno.test("deno server", async () => {
   assertStringIncludes(await new Response(ret!.body).text(), "createElement");
 
   const ac = new AbortController();
-  await serve((req, { url }) => {
+  await serve((_req, { url }) => {
     if (url.pathname === "/") {
       return new Response("<h1>Welcome to use esm.sh served by Deno.</h1>", {
         headers: { "Content-Type": "text/html" },
@@ -36,7 +36,7 @@ Deno.test("deno server", async () => {
     port: 8787,
     onListen: async ({ port }) => {
       assertEquals(port, 8787);
-      let res = await fetch("http://localhost:8787/", {
+      const res = await fetch("http://localhost:8787/", {
         headers: { "User-Agent": "Chrome/90.0.4430.212" },
       });
       assertEquals(res.status, 200);
