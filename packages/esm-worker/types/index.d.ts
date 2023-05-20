@@ -1,7 +1,7 @@
 declare global {
   interface Env {
-    ESM_SERVER_ORIGIN?: string;
-    ESM_SERVER_AUTH_TOKEN?: string;
+    ESM_ORIGIN?: string;
+    ESM_TOKEN?: string;
     NPM_REGISTRY?: string;
     NPM_TOKEN?: string;
   }

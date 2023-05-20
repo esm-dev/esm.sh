@@ -31,7 +31,7 @@ kv_namespaces = [
 ]
 
 [vars]
-ESM_SERVER_ORIGIN = "https://esm.sh" # change to your self-hosting esm.sh server if needed
+ESM_ORIGIN = "https://esm.sh" # change to your self-hosting esm.sh server if needed
 NPM_REGISTRY = "https://registry.npmjs.org/" # change to your private npm registry if needed
 # your other vars...
 
@@ -46,7 +46,7 @@ Other optional configurations in secrets:
 - If you are using a self-hosting esm.sh server with `authSecret` option, you
   need to add the following configuration:
   ```bash
-  wrangler secret put ESM_SERVER_AUTH_TOKEN
+  wrangler secret put ESM_TOKEN
   ```
 - If you are using a private npm registry, you need to add the following
   configuration:

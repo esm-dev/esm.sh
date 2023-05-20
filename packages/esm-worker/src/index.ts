@@ -623,7 +623,7 @@ async function fetchAsset(
     resHeaders.set("Cache-Control", "public, max-age=31536000, immutable");
     resHeaders.set(
       "X-Content-Source",
-      env.ESM_SERVER_ORIGIN ?? defaultEsmServerOrigin,
+      env.ESM_ORIGIN ?? defaultEsmServerOrigin,
     );
     return new Response(buffer.slice(0), { headers: resHeaders });
   }
@@ -710,7 +710,7 @@ async function fetchESM(
   }
   headers.set(
     "X-Content-Source",
-    env.ESM_SERVER_ORIGIN ?? defaultEsmServerOrigin,
+    env.ESM_ORIGIN ?? defaultEsmServerOrigin,
   );
 
   // save to KV/R2 if immutable
@@ -772,11 +772,11 @@ async function fetchServerOrigin(
   if (!headers.has("X-Real-Origin")) {
     headers.set("X-Real-Origin", ctx.url.origin);
   }
-  if (env.ESM_SERVER_AUTH_TOKEN) {
-    headers.set("Authorization", `Bearer ${env.ESM_SERVER_AUTH_TOKEN}`);
+  if (env.ESM_TOKEN) {
+    headers.set("Authorization", `Bearer ${env.ESM_TOKEN}`);
   }
   const res = await fetch(
-    new URL(url, env.ESM_SERVER_ORIGIN ?? defaultEsmServerOrigin),
+    new URL(url, env.ESM_ORIGIN ?? defaultEsmServerOrigin),
     {
       method: req.method,
       body: req.body,
