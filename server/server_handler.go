@@ -530,9 +530,17 @@ func esmHandler() rex.Handle {
 			} else if l > 1 {
 				sort.Sort(sort.Reverse(PathSlice(files)))
 				for _, f := range files {
-					if strings.Contains(reqPkg.Subpath, f) {
+					if strings.HasSuffix(reqPkg.Subpath, f) {
 						file = f
 						break
+					}
+				}
+				if file == "" {
+					for _, f := range files {
+						if path.Base(reqPkg.Subpath) == path.Base(f) {
+							file = f
+							break
+						}
 					}
 				}
 			}
