@@ -18,7 +18,7 @@ esm.sh is a modern CDN that allows you to import
 from a URL:
 
 ```javascript
-import Foo from "https://esm.sh/PKG@VERSION[/PATH]";
+import Module from "https://esm.sh/PKG@SEMVER[/PATH]";
 ```
 
 ### Import from NPM
@@ -43,11 +43,11 @@ You can also import modules/assets from a github repo:
 `/gh/OWNER/REPO[@TAG]/PATH`. For example:
 
 ```javascript
-import tslib from "https://esm.sh/gh/microsoft/tslib";
+import tslib from "https://esm.sh/gh/microsoft/tslib@2.5.0";
 ```
 
 or load a svg image from a github repo:
-https://esm.sh/gh/microsoft/fluentui-emoji/assets/Alien/Flat/alien_flat.svg
+https://esm.sh/gh/microsoft/fluentui-emoji/assets/Party%20popper/Color/party_popper_color.svg
 
 ### Import a Submodule
 
