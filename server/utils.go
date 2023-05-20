@@ -117,7 +117,7 @@ func ensureDir(dir string) (err error) {
 	return
 }
 
-func findFiles(root string, fn func(p string) bool) ([]string, error) {
+func findFiles(root string, dir string, fn func(p string) bool) ([]string, error) {
 	rootDir, err := filepath.Abs(root)
 	if err != nil {
 		return nil, err
@@ -129,23 +129,27 @@ func findFiles(root string, fn func(p string) bool) ([]string, error) {
 	var files []string
 	for _, entry := range entries {
 		name := entry.Name()
+		path := name
+		if dir != "" {
+			path = dir + "/" + name
+		}
 		if entry.IsDir() {
 			if name == "node_modules" {
 				continue
 			}
-			subFiles, err := findFiles(filepath.Join(rootDir, name), fn)
+			subFiles, err := findFiles(filepath.Join(rootDir, name), path, fn)
 			if err != nil {
 				return nil, err
 			}
 			n := len(files)
 			files = make([]string, n+len(subFiles))
 			for i, f := range subFiles {
-				files[i+n] = filepath.Join(name, f)
+				files[i+n] = f
 			}
 			copy(files, subFiles)
 		} else {
-			if fn(name) {
-				files = append(files, name)
+			if fn(path) {
+				files = append(files, path)
 			}
 		}
 	}

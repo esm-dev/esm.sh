@@ -507,8 +507,9 @@ func esmHandler() rex.Handle {
 			))
 		}
 
-		// redirect to real wasm file: `/v100/PKG/es2022/foo.wasm` -> `/PKG/foo.wasm`
+		// fix url related `import.meta.url`
 		if hasBuildVerPrefix && endsWith(reqPkg.Subpath, ".wasm", ".json") {
+			extname := path.Ext(reqPkg.Subpath)
 			dir := path.Join(cfg.WorkDir, "npm", reqPkg.Name+"@"+reqPkg.Version)
 			if !dirExists(dir) {
 				err := installPackage(dir, reqPkg)
@@ -517,28 +518,28 @@ func esmHandler() rex.Handle {
 				}
 			}
 			pkgRoot := path.Join(dir, "node_modules", reqPkg.Name)
-			wasmFiles, err := findFiles(pkgRoot, func(fp string) bool {
-				return endsWith(fp, ".wasm", ".json")
+			files, err := findFiles(pkgRoot, "", func(fp string) bool {
+				return strings.HasSuffix(fp, extname)
 			})
 			if err != nil {
 				return rex.Status(500, err.Error())
 			}
-			var wasmFile string
-			if l := len(wasmFiles); l == 1 {
-				wasmFile = wasmFiles[0]
+			var file string
+			if l := len(files); l == 1 {
+				file = files[0]
 			} else if l > 1 {
-				sort.Sort(sort.Reverse(PathSlice(wasmFiles)))
-				for _, f := range wasmFiles {
+				sort.Sort(sort.Reverse(PathSlice(files)))
+				for _, f := range files {
 					if strings.Contains(reqPkg.Subpath, f) {
-						wasmFile = f
+						file = f
 						break
 					}
 				}
 			}
-			if wasmFile == "" {
-				return rex.Status(404, "Wasm File not found")
+			if file == "" {
+				return rex.Status(404, "File not found")
 			}
-			url := fmt.Sprintf("%s%s/%s@%s/%s", cdnOrigin, cfg.BasePath, reqPkg.Name, reqPkg.Version, wasmFile)
+			url := fmt.Sprintf("%s%s/%s@%s/%s", cdnOrigin, cfg.BasePath, reqPkg.Name, reqPkg.Version, file)
 			return rex.Redirect(url, http.StatusMovedPermanently)
 		}
 
