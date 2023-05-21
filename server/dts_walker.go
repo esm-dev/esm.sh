@@ -9,8 +9,9 @@ import (
 )
 
 var (
-	regexpFromExpr          = regexp.MustCompile(`(}|\s)from\s*('|")`)
-	regexpImportBareExpr    = regexp.MustCompile(`import\s*('|")`)
+	regexpImportExportExpr  = regexp.MustCompile(`^(import|export)\s*(type\s*)?('|"|\*|\{)`)
+	regexpFromExpr          = regexp.MustCompile(`(\}|\*|\s)from\s*('|")`)
+	regexpImportPathExpr    = regexp.MustCompile(`^import\s*('|")`)
 	regexpImportCallExpr    = regexp.MustCompile(`(import|require)\(('|").+?('|")\)`)
 	regexpDeclareModuleExpr = regexp.MustCompile(`declare\s+module\s*('|").+?('|")`)
 	regexpReferenceTag      = regexp.MustCompile(`<reference\s+(path|types)\s*=\s*('|")(.+?)('|")\s*/?>`)
@@ -97,12 +98,11 @@ func walkDts(r io.Reader, buf *bytes.Buffer, resolve func(path string, kind stri
 					// 	continue
 					// }
 
-					if !importExportScope && startsWith(string(inlineToken), "import ", "import\"", "import'", "import{", "export ", "export{") && !bytes.HasPrefix(inlineToken, []byte("export =")) {
+					if !importExportScope && regexpImportExportExpr.Match(inlineToken) {
 						importExportScope = true
 					}
 					if importExportScope {
-						if regexpFromExpr.Match(inlineToken) || regexpImportBareExpr.Match(inlineToken) {
-							importExportScope = false
+						if regexpFromExpr.Match(inlineToken) || regexpImportPathExpr.Match(inlineToken) {
 							q := bytesSigleQoute
 							a := bytes.Split(inlineToken, q)
 							if len(a) != 3 {
@@ -118,6 +118,7 @@ func walkDts(r io.Reader, buf *bytes.Buffer, resolve func(path string, kind stri
 							} else {
 								buf.Write(inlineToken)
 							}
+							importExportScope = false
 						} else if regexpImportCallExpr.Match(inlineToken) {
 							buf.Write(regexpImportCallExpr.ReplaceAllFunc(inlineToken, func(importCallExpr []byte) []byte {
 								q := bytesSigleQoute

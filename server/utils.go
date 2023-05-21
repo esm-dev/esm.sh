@@ -81,15 +81,6 @@ func includes(a []string, s string) bool {
 	return false
 }
 
-func startsWith(s string, prefixs ...string) bool {
-	for _, prefix := range prefixs {
-		if strings.HasPrefix(s, prefix) {
-			return true
-		}
-	}
-	return false
-}
-
 func endsWith(s string, suffixs ...string) bool {
 	for _, suffix := range suffixs {
 		if strings.HasSuffix(s, suffix) {
