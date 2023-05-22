@@ -75,8 +75,8 @@ More details check [esm-worker](./packages/esm-worker/README.md).
 
 ## Deploy with Deno
 
-We also provide a Deno server which is powered by [esm-worker](./packages/esm-worker/README.md)
+We also provide a server for [Deno](https://deno.land) which is powered by the [esm-worker](./packages/esm-worker/README.md).
 
 ```bash
-deno run -A https://esm.sh/v122/server --port=8080
+deno run -A https://esm.sh/v123/server --port=8080
 ```

@@ -1,5 +1,13 @@
 # Changelog
 
+## v123
+
+- Add `/server` endpoint for Deno to serve esm.sh locally
+- Add scope to config (#636 by @johnpangalos)
+- Fix `.d.ts` walker (close #640)
+- Fix packages with `v` prefix in `version` (close #639)
+- Fix `findFiles` function (close #638)
+
 ## v122
 
 - Use stable imports order
