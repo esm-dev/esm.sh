@@ -2,7 +2,7 @@
 
 ## v124
 
-
+- Fix the dts walker (close #642)
 
 ## v123
 
