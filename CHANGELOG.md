@@ -1,5 +1,9 @@
 # Changelog
 
+## v124
+
+
+
 ## v123
 
 - Add `/server` endpoint for Deno to serve esm.sh locally
