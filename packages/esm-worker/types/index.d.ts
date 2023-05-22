@@ -64,7 +64,7 @@ export type Context<Data = Record<string, any>> = {
   waitUntil(promise: Promise<any>): void;
   withCache(
     fetcher: () => Promise<Response> | Response,
-    options?: { varyUA: string },
+    options?: { varyUA: boolean },
   ): Promise<Response>;
 };
 
