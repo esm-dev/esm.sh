@@ -65,14 +65,19 @@ class ESMWorker {
     const cache = this.cache ??
       (this.cache = await caches.open(`esm.sh/v${VERSION}`));
     const withCache: Context["withCache"] = async (fetcher, options) => {
+      const isHeadMethod = req.method === "HEAD";
       const hasPinedTarget = targets.has(url.searchParams.get("target") ?? "");
-      const varyUA = options?.varyUA && !hasPinedTarget
+      const varyUA = options?.varyUA && !hasPinedTarget;
       if (varyUA) {
         const target = getEsmaVersionFromUA(req.headers.get("User-Agent"));
         url.searchParams.set("target", target);
       }
       let res = await cache.match(url);
       if (res) {
+        if (isHeadMethod) {
+          const { status, headers } = res;
+          return new Response(null, { status, headers });
+        }
         return res;
       }
       res = await fetcher();
@@ -83,6 +88,10 @@ class ESMWorker {
       }
       if (res.headers.get("Cache-Control")?.startsWith("public, max-age=")) {
         context.waitUntil(cache.put(url, res.clone()));
+      }
+      if (isHeadMethod) {
+        const { status, headers } = res;
+        return new Response(null, { status, headers });
       }
       return res;
     };
@@ -639,7 +648,7 @@ async function fetchESM(
           headers.set("Access-Control-Expose-Headers", "X-TypeScript-Types");
         }
         headers.set("X-Content-Source", "esm-worker");
-        return new Response(req.method === "HEAD" ? null : body, { headers });
+        return new Response(body, { headers });
       }
     } else {
       const obj = await storage.get(storeKey);
@@ -649,10 +658,7 @@ async function fetchESM(
         headers.set("Content-Type", contentType);
         headers.set("Cache-Control", "public, max-age=31536000, immutable");
         headers.set("X-Content-Source", "esm-worker");
-        return new Response(
-          req.method === "HEAD" ? null : obj.body as ReadableStream<Uint8Array>,
-          { headers },
-        );
+        return new Response(obj.body, { headers });
       }
     }
   }
@@ -680,7 +686,7 @@ async function fetchESM(
   );
 
   // save to KV/R2 if immutable
-  if (!noStore && req.method === "GET" && cacheControl?.includes("immutable")) {
+  if (!noStore && cacheControl?.includes("immutable")) {
     if (!isModuleFile) {
       const buffer = await res.arrayBuffer();
       await storage.put(storeKey, buffer.slice(0), {
@@ -708,7 +714,7 @@ async function fetchESM(
     return new Response(body, { headers });
   }
 
-  return new Response(req.method === "HEAD" ? null : res.body, { headers });
+  return new Response(res.body, { headers });
 }
 
 async function fetchServerOrigin(
@@ -744,7 +750,7 @@ async function fetchServerOrigin(
   const res = await fetch(
     new URL(url, env.ESM_ORIGIN ?? defaultEsmServerOrigin),
     {
-      method: req.method,
+      method: req.method === "HEAD" ? "GET" : req.method,
       body: req.body,
       headers,
       redirect: "manual",
