@@ -2,8 +2,8 @@ lockfileVersion: '6.0'
 
 dependencies:
   esm-worker:
-    specifier: ^0.124.0
-    version: 0.124.0
+    specifier: ^0.124.1
+    version: 0.124.1
 
 devDependencies:
   esbuild:
@@ -240,6 +240,6 @@ packages:
       '@esbuild/win32-x64': 0.17.19
     dev: true
 
-  /esm-worker@0.124.0:
-    resolution: {integrity: sha512-yZjXy4bTePKg6RM6l9cz9iGUAawtXSHwS8pmC9kdzqp/p46OZvHixPz6VpBZ9EMp0fvvBw2dNs8Dw0JVVmKD+g==}
+  /esm-worker@0.124.1:
+    resolution: {integrity: sha512-mrCdcFhClMa/L5rNDHhgeMUBc5Sh1iyNECM6gRUFyO0j4QLP4Hpm6PRE52Eu74ZsWPlt144XFZxfTxwkGOsexw==}
     dev: false
