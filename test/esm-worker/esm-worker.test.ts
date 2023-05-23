@@ -24,7 +24,7 @@ async function run(name: string, ...args: string[]) {
 }
 
 // build and import esm worker
-await run("npm", "i");
+await run("pnpm", "i");
 await run("node", "build.mjs");
 const { withESMWorker } = await import(
   `../../packages/esm-worker/dist/index.js`
