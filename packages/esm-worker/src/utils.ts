@@ -138,8 +138,3 @@ export function copyHeaders(dst: Headers, src: Headers, ...keys: string[]) {
     }
   }
 }
-
-export function stringifyUrlSearch(params: URLSearchParams) {
-  const s = params.toString();
-  return s ? "?" + s : "";
-}

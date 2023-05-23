@@ -26,7 +26,6 @@ import {
   fixPkgVersion,
   redirect,
   splitBy,
-  stringifyUrlSearch,
   trimPrefix,
 } from "./utils.ts";
 
@@ -67,9 +66,7 @@ class ESMWorker {
       (this.cache = await caches.open(`esm.sh/v${VERSION}`));
     const withCache: Context["withCache"] = async (fetcher, options) => {
       const hasPinedTarget = targets.has(url.searchParams.get("target") ?? "");
-      const varyUA = options?.varyUA && !hasPinedTarget &&
-        !url.pathname.split("/").some((p) => targets.has(p)) &&
-        !url.pathname.endsWith(".d.ts");
+      const varyUA = options?.varyUA && !hasPinedTarget
       if (varyUA) {
         const target = getEsmaVersionFromUA(req.headers.get("User-Agent"));
         url.searchParams.set("target", target);
@@ -516,25 +513,25 @@ class ESMWorker {
       });
     }
 
-    return ctx.withCache(() => {
-      if (
-        hasBuildVerPrefix &&
-        (subPath.endsWith(".d.ts") || hasTargetSegment(subPath))
-      ) {
-        // fix "stable" module path
-        if (
-          stableBuild.has(pkg) &&
-          !subPath.endsWith(".d.ts") &&
-          (subPath.endsWith(`/${pkg}.js`) ||
-            !url.pathname.startsWith("/stable/")) &&
-          subPath.split("/").length === 3
-        ) {
-          const [_, target] = subPath.split("/");
-          return redirect(
-            new URL(`/${pkg}@${packageVersion}?target=${target}`, url),
-            301,
-          );
-        }
+    if (
+      hasBuildVerPrefix &&
+      (subPath.endsWith(".d.ts") || hasTargetSegment(subPath))
+    ) {
+      // fix "stable" module path
+      // if (
+      //   stableBuild.has(pkg) &&
+      //   !subPath.endsWith(".d.ts") &&
+      //   (subPath.endsWith(`/${pkg}.js`) ||
+      //     !url.pathname.startsWith("/stable/")) &&
+      //   subPath.split("/").length === 3
+      // ) {
+      //   const [_, target] = subPath.split("/");
+      //   return redirect(
+      //     new URL(`/${pkg}@${packageVersion}?target=${target}`, url),
+      //     301,
+      //   );
+      // }
+      return ctx.withCache(() => {
         let prefix = `/${buildVersion}`;
         if (gh) {
           prefix += "/gh";
@@ -542,21 +539,23 @@ class ESMWorker {
         const path =
           `${prefix}/${pkg}@${packageVersion}${subPath}${url.search}`;
         return fetchESM(req, env, ctx, path, { gzip: true });
-      } else {
-        let prefix = "";
-        if (hasBuildVerPrefix) {
-          prefix += `/${buildVersion}`;
-        } else if (stableBuild.has(pkg)) {
-          prefix += `/v${STABLE_VERSION}`;
-        }
-        if (gh) {
-          prefix += "/gh";
-        }
-        const path = `${prefix}/${
-          hasExternalAllMarker ? "*" : ""
-        }${pkg}@${packageVersion}${subPath}${url.search}`;
-        return fetchESM(req, env, ctx, path, { gzip: false });
+      });
+    }
+
+    return ctx.withCache(() => {
+      let prefix = "";
+      if (hasBuildVerPrefix) {
+        prefix += `/${buildVersion}`;
+      } else if (stableBuild.has(pkg)) {
+        prefix += `/v${STABLE_VERSION}`;
       }
+      if (gh) {
+        prefix += "/gh";
+      }
+      const path = `${prefix}/${
+        hasExternalAllMarker ? "*" : ""
+      }${pkg}@${packageVersion}${subPath}${url.search}`;
+      return fetchESM(req, env, ctx, path, { gzip: false });
     }, { varyUA: true });
   }
 }
