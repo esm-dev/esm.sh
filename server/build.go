@@ -116,6 +116,29 @@ func (task *BuildTask) Build() (esm *ESMBuild, err error) {
 }
 
 func (task *BuildTask) build() (esm *ESMBuild, err error) {
+	// build json
+	if strings.HasSuffix(task.Pkg.Submodule, ".json") {
+		nmDir := path.Join(task.wd, "node_modules")
+		jsonPath := path.Join(nmDir, task.Pkg.Name, task.Pkg.Submodule)
+		if fileExists(jsonPath) {
+			json, err := ioutil.ReadFile(jsonPath)
+			if err != nil {
+				return nil, err
+			}
+			buffer := bytes.NewBufferString("export default ")
+			buffer.Write(json)
+			_, err = fs.WriteFile(task.getSavepath(), buffer)
+			if err != nil {
+				return nil, err
+			}
+			esm := &ESMBuild{
+				HasExportDefault: true,
+			}
+			task.storeToDB(esm)
+			return esm, nil
+		}
+	}
+
 	esm, npm, reexport, err := task.analyze()
 	if err != nil {
 		return

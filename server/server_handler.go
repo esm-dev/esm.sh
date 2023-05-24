@@ -1192,6 +1192,9 @@ func esmHandler() rex.Handle {
 				ctx.SetHeader("Content-Type", "application/javascript; charset=utf-8")
 				return fmt.Sprintf(`export default function workerFactory() { const blob = new Blob([%s], { type: "application/javascript" }); return new Worker(URL.createObjectURL(blob), { type: "module" })}`, utils.MustEncodeJSON(string(code)))
 			}
+			if endsWith(savePath, ".mjs", ".js") {
+				ctx.SetHeader("Content-Type", "application/javascript; charset=utf-8")
+			}
 			return rex.Content(savePath, fi.ModTime(), f) // auto closed
 		}
 
