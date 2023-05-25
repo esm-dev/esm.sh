@@ -16,7 +16,7 @@ You will need [Golang](https://golang.org/) 1.18+.
 
 ## Configration
 
-To configure the server,  create a `config.json` file in the project root directory. Here is an example:
+To configure the server, create a `config.json` file in the project root directory. Here is an example:
 
 ```jsonc
 // config.json
@@ -47,7 +47,7 @@ Then you can import `React` from "http://localhost:8080/react"
 # Run tests for a specific case (directory name)
 ./test/bootstrap.sh preact
 
-# Or run tests with clean workDir
+# Run tests with `clean` option (purge previous builds)
 ./test/bootstrap.sh --clean
 ```
 
