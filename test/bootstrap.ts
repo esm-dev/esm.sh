@@ -5,12 +5,11 @@ async function startServer(onStart: () => void, single: boolean) {
   if (!success) {
     Deno.exit(code);
   }
-  const p = Deno.run({
-    cmd: ["./esmd"],
+  const p = new Deno.Command("./esmd", {
     stdout: single ? "inherit" : "null",
     stderr: "inherit",
-  });
-  addEventListener("unload", (e) => {
+  }).spawn();
+  addEventListener("unload", (_e) => {
     console.log("%cClosing esm.sh server...", "color: grey");
     p.kill("SIGINT");
   });
@@ -25,15 +24,16 @@ async function startServer(onStart: () => void, single: boolean) {
         onStart();
         break;
       }
-    } catch (_) {}
+    } catch (_) {
+      // ignore
+    }
   }
-  await p.status();
+  await p.status;
 }
 
 async function runTest(name: string, retry?: boolean): Promise<number> {
   const execBegin = Date.now();
-  const cmd = [
-    Deno.execPath(),
+  const args = [
     "test",
     "-A",
     "--unstable",
@@ -44,13 +44,13 @@ async function runTest(name: string, retry?: boolean): Promise<number> {
   ];
   const dir = `test/${name}/`;
   if (await existsFile(dir + "deno.json")) {
-    cmd.push("--config", dir + "deno.json");
+    args.push("--config", dir + "deno.json");
   }
-  cmd.push(dir);
+  args.push(dir);
 
   console.log(`\n[test ${name}]`);
 
-  const { code, success } = await run(...cmd);
+  const { code, success } = await run(Deno.execPath(), ...args);
   if (!success) {
     if (!retry) {
       console.log("something wrong, retry...");
@@ -77,9 +77,8 @@ async function runCliTest() {
     throw new Error(`Invalid content type: ${res.headers.get("content-type")}`);
   }
 
-  const { code, success } = await Deno.run({
-    cmd: [
-      Deno.execPath(),
+  const p = new Deno.Command(Deno.execPath(), {
+    args: [
       "run",
       "-A",
       "-r",
@@ -94,7 +93,8 @@ async function runCliTest() {
     cwd,
     stdout: "inherit",
     stderr: "inherit",
-  }).status();
+  }).spawn();
+  const { code, success } = await p.status;
   if (!success) {
     Deno.exit(code);
   }
@@ -126,8 +126,13 @@ async function runCliTest() {
   }
 }
 
-async function run(...cmd: string[]) {
-  return await Deno.run({ cmd, stdout: "inherit", stderr: "inherit" }).status();
+function run(name: string, ...args: string[]) {
+  const p = new Deno.Command(name, {
+    args,
+    stdout: "inherit",
+    stderr: "inherit",
+  }).spawn();
+  return p.status;
 }
 
 async function existsFile(path: string): Promise<boolean> {
