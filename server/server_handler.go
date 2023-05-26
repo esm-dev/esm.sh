@@ -884,7 +884,7 @@ func esmHandler() rex.Handle {
 		// check deno/std version by `?deno-std=VER` query
 		dsv := denoStdVersion
 		fv := ctx.Form.Value("deno-std")
-		if fv != "" && regexpFullVersion.MatchString(fv) && target == "deno" {
+		if fv != "" && regexpFullVersion.MatchString(fv) && semverLessThan(fv, denoStdVersion) && target == "deno" {
 			dsv = fv
 		}
 
