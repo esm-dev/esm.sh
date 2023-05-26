@@ -12,7 +12,7 @@ const (
 	nodejsMinVersion = 16
 	nodejsLatestLTS  = "18.16.0"
 	nodeTypesVersion = "18.16.9"
-	denoStdVersion   = "0.177.0"
+	denoStdVersion   = "0.177.1"
 )
 
 // fix some npm package versions
