@@ -6,6 +6,9 @@ on:
   pull_request:
     branches: [ "main" ]
 
+permissions: 
+  packages: write
+  
 jobs:
 
   build:
@@ -35,4 +38,4 @@ jobs:
           context: .
           platforms: linux/amd64,linux/arm64
           push: true
-          tags: ghcr.io/zsnmwy/esm-sh:latest
+          tags: ghcr.io/${{ github.repository_owner }}/esmd:latest

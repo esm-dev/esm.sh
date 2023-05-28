@@ -1,14 +1,28 @@
+# syntax=docker/dockerfile:1
 FROM golang:1.18 AS build
 
+WORKDIR /app
+COPY . .
 RUN apt-get update -y && apt-get install -y xz-utils
-RUN useradd -u 1000 -m esm
-RUN mkdir /esm && chown esm:esm /esm
-RUN git clone https://github.com/esm-dev/esm.sh /esm/esm.sh
-RUN git checkout v124
+RUN go build -o /esmd
 
-USER esm
-WORKDIR /esm
-RUN go build -o bin/esmd esm.sh/main.go
+FROM node:18-alpine3.16
+ENV USER_ID=65535
+ENV GROUP_ID=65535
+ENV USER_NAME=esm
+ENV GROUP_NAME=esm
 
-RUN echo "{\"port\":80,\"workDir\":\"/esm\"}" >> /esm/config.json
-ENTRYPOINT ["/esm/bin/esmd", "--config", "config.json"]
+RUN apk add --no-cache libc6-compat
+RUN addgroup -g $GROUP_ID $GROUP_NAME && \
+    adduser --shell /sbin/nologin --disabled-password \
+    --uid $USER_ID --ingroup $GROUP_NAME $USER_NAME
+RUN mkdir -p /usr/local/lib && chown -R $USER_NAME:$GROUP_NAME /usr/local/lib
+
+USER $USER_NAME
+
+WORKDIR /home/esm
+COPY --from=build /esmd /home/esm/esmd
+
+RUN echo "{\"port\":80,\"workDir\":\"/home/esm/workdir\"}" >> /home/esm/config.json
+
+ENTRYPOINT ["/home/esm/esmd", "--config", "config.json"]
