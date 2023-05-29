@@ -16,7 +16,7 @@ RUN apk add --no-cache libc6-compat
 RUN addgroup -g $GROUP_ID $GROUP_NAME && \
     adduser --shell /sbin/nologin --disabled-password \
     --uid $USER_ID --ingroup $GROUP_NAME $USER_NAME
-RUN mkdir -p /usr/local/lib && chown -R $USER_NAME:$GROUP_NAME /usr/local/lib
+RUN mkdir -p /usr/local/lib && chown -R $USER_NAME:$GROUP_NAME /usr/local
 
 USER $USER_NAME
 
