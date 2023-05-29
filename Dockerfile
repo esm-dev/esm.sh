@@ -12,7 +12,7 @@ ENV GROUP_ID=65535
 ENV USER_NAME=esm
 ENV GROUP_NAME=esm
 
-RUN apk add --no-cache libc6-compat
+RUN apk add --no-cache libc6-compat xz
 RUN addgroup -g $GROUP_ID $GROUP_NAME && \
     adduser --shell /sbin/nologin --disabled-password \
     --uid $USER_ID --ingroup $GROUP_NAME $USER_NAME
