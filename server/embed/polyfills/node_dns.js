@@ -1,91 +1,95 @@
 // https://nodejs.org/api/dns.html
 
-function notImplemented(name, type = 'function') {
-  throw new Error(`[esm.sh] dns: ${type} '${name}' is not implemented`)
+function panic() {
+  throw new Error(
+    `[esm.sh] "node:dns" is not supported in browser environment.`,
+  );
 }
 
 export class Resolver {
   constructor() {
-    notImplemented('Resolver', 'class')
+    panic();
   }
 }
 
-export let promises = new Proxy({}, { get: (_t, prop) => notImplemented(`promises/${prop}`) });
+export let promises = new Proxy({}, {
+  get: (_t, prop) => notImplemented(`promises/${prop}`),
+});
 
 export function getServers() {
-  notImplemented("getServers")
+  panic();
 }
 
 export function lookup() {
-  notImplemented("lookup")
+  panic();
 }
 
 export function lookupService() {
-  notImplemented("lookupService")
+  panic();
 }
 
 export function resolve() {
-  notImplemented("resolve")
+  panic();
 }
 
 export function resolve4() {
-  notImplemented("resolve4")
+  panic();
 }
 
 export function resolve6() {
-  notImplemented("resolve6")
+  panic();
 }
 
 export function resolveAny() {
-  notImplemented("resolveAny")
+  panic();
 }
 
 export function resolveCname() {
-  notImplemented("resolveCname")
+  panic();
 }
 
 export function resolveCaa() {
-  notImplemented("resolveCaa")
+  panic();
 }
 
 export function resolveMx() {
-  notImplemented("resolveMx")
+  panic();
 }
 
 export function resolveNaptr() {
-  notImplemented("resolveNaptr")
+  panic();
 }
 
 export function resolveNs() {
-  notImplemented("resolveNs")
+  panic();
 }
 
 export function resolvePtr() {
-  notImplemented("resolvePtr")
+  panic();
 }
 
 export function resolveSoa() {
-  notImplemented("resolveSoa")
+  panic();
 }
 
 export function resolveSrv() {
-  notImplemented("resolveSrv")
+  panic();
 }
 
 export function resolveTxt() {
-  notImplemented("resolveTxt")
+  panic();
 }
 
 export function reverse() {
-  notImplemented("reverse")
+  panic();
 }
 
 export function setDefaultResultOrder() {
-  notImplemented("setDefaultResultOrder")
+  panic();
 }
 
 export function setServers() {
-  notImplemented("setServers")
+  panic();
 }
 
 export default {
@@ -110,4 +114,4 @@ export default {
   reverse,
   setDefaultResultOrder,
   setServers,
-}
+};

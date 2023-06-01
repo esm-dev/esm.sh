@@ -1,56 +1,90 @@
 // https://nodejs.org/api/net.html
 
-function notImplemented(name) {
-  throw new Error(`[esm.sh] net: '${name}' is not implemented`)
+function panic() {
+  throw new Error(
+    `[esm.sh] "node:net" is not supported in browser environment.`,
+  );
 }
 
 export class BlockList {
   constructor() {
-    notImplemented('BlockList')
+    panic();
   }
 }
 
 export class SocketAddress {
   constructor() {
-    notImplemented('SocketAddress')
+    panic();
   }
 }
 
 export class Server {
   constructor() {
-    notImplemented('Server')
+    panic();
   }
 }
 
 export class Socket {
   constructor() {
-    notImplemented('Socket')
+    panic();
   }
 }
 
 export function connect() {
-  notImplemented('connect')
+  panic();
 }
 
 export function createConnection() {
-  notImplemented('createConnection')
+  panic();
 }
 
 export function createServer() {
-  notImplemented('createServer')
+  panic();
 }
 
-export function isIP() {
-  notImplemented('isIP')
+export function getDefaultAutoSelectFamily() {
+  panic();
 }
 
-export function isIPv4() {
-  notImplemented('isIPv4')
+export function setDefaultAutoSelectFamily() {
+  panic();
 }
 
+export function getDefaultAutoSelectFamilyAttemptTimeout() {
+  panic();
+}
+
+export function setDefaultAutoSelectFamilyAttemptTimeout() {
+  panic();
+}
+
+export function isIP(addr) {
+  if (isIPv4(addr)) return 4;
+  if (isIPv6(addr)) return 6;
+  return 0;
+}
+
+export function isIPv4(addr) {
+  if (typeof addr !== "string") return false;
+  const parts = addr.split(".");
+  if (parts.length !== 4) return false;
+  for (const part of parts) {
+    const n = Number(part);
+    if (Number.isNaN(n) || n < 0 || n > 255) return false;
+  }
+  return true;
+}
 
 export function isIPv6() {
-  notImplemented('isIPv6')
+  if (typeof addr !== "string") return false;
+  const parts = addr.split(":");
+  if (parts.length < 3 || parts.length > 8) return false;
+  for (const part of parts) {
+    if (part.length === 0) return false;
+    if (part.length > 4) return false;
+    if (!/^[0-9a-fA-F]+$/.test(part)) return false;
+  }
+  return true;
 }
 
 export default {
@@ -61,7 +95,11 @@ export default {
   connect,
   createConnection,
   createServer,
+  getDefaultAutoSelectFamily,
+  setDefaultAutoSelectFamily,
+  getDefaultAutoSelectFamilyAttemptTimeout,
+  setDefaultAutoSelectFamilyAttemptTimeout,
   isIP,
   isIPv4,
   isIPv6,
-}
+};

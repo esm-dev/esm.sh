@@ -1,35 +1,39 @@
 // https://nodejs.org/api/inspector.html
 
-function notImplemented(name, type = 'function') {
-  throw new Error(`[esm.sh] inspector: ${type} '${name}' is not implemented`)
+function panic() {
+  throw new Error(
+    `[esm.sh] "node:inspector" is not supported in browser environment.`,
+  );
 }
 
 export class Session {
   constructor() {
-    notImplemented('Session', 'class')
+    panic();
   }
 }
 
 export function close() {
-  notImplemented('close')
+  panic();
 }
 
 export function open() {
-  notImplemented('open')
+  panic();
 }
 
 export function url() {
-  notImplemented('url')
+  panic();
 }
 
 export function waitForDebugger() {
-  notImplemented('waitForDebugger')
+  panic();
 }
+
+export const console = window.console;
 
 export default {
   close,
-  console,
+  console: window.console,
   open,
   url,
-  waitForDebugger
-}
+  waitForDebugger,
+};

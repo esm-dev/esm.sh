@@ -1,61 +1,62 @@
 // https://nodejs.org/api/tls.html
 
-function notImplemented(name) {
-  throw new Error(`[esm.sh] tls: '${name}' is not implemented`)
+function panic() {
+  throw new Error(
+    `[esm.sh] "node:tls" is not supported in browser environment.`,
+  );
 }
 
 export class CryptoStream {
   constructor() {
-    notImplemented('CryptoStream')
+    panic();
   }
 }
 
 export class SecurePair {
   constructor() {
-    notImplemented('SecurePair')
+    panic();
   }
 }
 
 export class Server {
   constructor() {
-    notImplemented('Server')
+    panic();
   }
 }
 
 export class TLSSocket {
   constructor() {
-    notImplemented('TLSSocket')
+    panic();
   }
 }
 
-export const rootCertificates = []
-export const DEFAULT_ECDH_CURVE = 'auto'
-export const DEFAULT_MAX_VERSION = 'TLSv1.3'
-export const DEFAULT_MIN_VERSION = 'TLSv1.2'
+export const rootCertificates = [];
+export const DEFAULT_ECDH_CURVE = "auto";
+export const DEFAULT_MAX_VERSION = "TLSv1.3";
+export const DEFAULT_MIN_VERSION = "TLSv1.2";
 
 export function checkServerIdentity() {
-  notImplemented('checkServerIdentity')
+  panic();
 }
 
 export function connect() {
-  notImplemented('connect')
+  panic();
 }
 
 export function createSecureContext() {
-  notImplemented('createSecureContext')
+  panic();
 }
 
 export function createSecurePair() {
-  notImplemented('createSecurePair')
+  panic();
 }
 
 export function createServer() {
-  notImplemented('createServer')
+  panic();
 }
 
-
 export function getCiphers() {
-  notImplemented('getCiphers')
+  panic();
 }
 
 export default {
@@ -73,4 +74,4 @@ export default {
   createSecurePair,
   createServer,
   getCiphers,
-}
+};

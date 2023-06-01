@@ -1,44 +1,46 @@
 // https://nodejs.org/api/perf_hooks.html
 
-function notImplemented(name) {
-  throw new Error(`[esm.sh] pref_hooks: '${name}' is not implemented`)
+function panic() {
+  throw new Error(
+    `[esm.sh] "node:perf_hooks" is not supported in browser environment.`,
+  );
 }
 
-export const performance = window.performance
-export const PerformanceObserver = window.PerformanceObserver
-export const PerformanceEntry = window.PerformanceEntry
-export const PerformanceObserverEntryList = window.PerformanceObserverEntryList
+export const performance = window.performance;
+export const PerformanceObserver = window.PerformanceObserver;
+export const PerformanceEntry = window.PerformanceEntry;
+export const PerformanceObserverEntryList = window.PerformanceObserverEntryList;
 
 export class PerformanceNodeTiming extends PerformanceEntry {
   constructor() {
-    notImplemented('PerformanceNodeTiming')
+    panic();
   }
 }
 
 export class Histogram {
   constructor() {
-    notImplemented('Histogram')
+    panic();
   }
 }
 
 export class IntervalHistogram extends Histogram {
   constructor() {
-    notImplemented('IntervalHistogram')
+    panic();
   }
 }
 
 export class RecordableHistogram extends Histogram {
   constructor() {
-    notImplemented('RecordableHistogram')
+    panic();
   }
 }
 
 export function createHistogram() {
-  notImplemented('createHistogram')
+  panic();
 }
 
 export function monitorEventLoopDelay() {
-  notImplemented('monitorEventLoopDelay')
+  panic();
 }
 
 export default {
@@ -51,5 +53,5 @@ export default {
   IntervalHistogram,
   RecordableHistogram,
   createHistogram,
-  monitorEventLoopDelay
-}
+  monitorEventLoopDelay,
+};

@@ -1,37 +1,39 @@
 // https://nodejs.org/api/readline.html
 
-function notImplemented(name, type = 'function') {
-  throw new Error(`[esm.sh] readline: ${type} '${name}' is not implemented`)
+function panic() {
+  throw new Error(
+    `[esm.sh] "node:readline" is not supported in browser environment.`,
+  );
 }
 
 export class Interface {
   constructor() {
-    notImplemented('Interface', 'class')
+    panic();
   }
 }
 
 export function clearLine() {
-  notImplemented('clearLine')
+  panic();
 }
 
 export function clearScreenDown() {
-  notImplemented('clearScreenDown')
+  panic();
 }
 
 export function createInterface() {
-  return new Interface()
+  return new Interface();
 }
 
 export function cursorTo() {
-  notImplemented('cursorTo')
+  panic();
 }
 
 export function emitKeypressEvents() {
-  notImplemented('emitKeypressEvents')
+  panic();
 }
 
 export function moveCursor() {
-  notImplemented('moveCursor')
+  panic();
 }
 
 export default {
@@ -42,4 +44,4 @@ export default {
   cursorTo,
   emitKeypressEvents,
   moveCursor,
-}
+};

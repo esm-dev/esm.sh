@@ -1,20 +1,22 @@
 // https://nodejs.org/api/dgram.html
 
-function notImplemented(name, type = 'function') {
-  throw new Error(`[esm.sh] dgram: ${type} '${name}' is not implemented`)
+function panic() {
+  throw new Error(
+    `[esm.sh] "node:dgram" is not supported in browser environment.`,
+  );
 }
 
 export class Socket {
-  constructor(){
-    notImplemented('Socket', 'class')
+  constructor() {
+    panic();
   }
 }
 
-export function createSocket(){
-  notImplemented('createSocket')
+export function createSocket() {
+  panic();
 }
 
-export default{
+export default {
   Socket,
   createSocket,
-}
+};
