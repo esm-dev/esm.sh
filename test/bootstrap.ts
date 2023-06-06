@@ -5,22 +5,19 @@ async function startServer(onStart: () => Promise<void>, single: boolean) {
   if (!success) {
     Deno.exit(code);
   }
-  const ac = new AbortController();
   const p = new Deno.Command("./esmd", {
     stdout: single ? "inherit" : "null",
     stderr: "inherit",
-    signal: ac.signal,
   }).spawn();
   addEventListener("unload", () => {
     console.log("%cClosing esm.sh server...", "color: grey");
-    ac.abort();
+    p.kill("SIGINT");
   });
   while (true) {
     try {
-      await new Promise((resolve) => setTimeout(resolve, 500));
-      const status = await fetch(`http://localhost:8080/status.json`).then((res) =>
-        res.json()
-      );
+      await new Promise((resolve) => setTimeout(resolve, 100));
+      const res = await fetch(`http://localhost:8080/status.json`);
+      const status = await res.json();
       if (status.ns === "READY") {
         console.log("esm.sh server started.");
         await onStart();
@@ -56,7 +53,7 @@ async function runTest(name: string, retry?: boolean): Promise<number> {
   if (!success) {
     if (!retry) {
       console.log("something wrong, retry...");
-      await new Promise((resolve) => setTimeout(resolve, 100));
+      await new Promise((resolve) => setTimeout(resolve, 500));
       return await runTest(name, true);
     } else {
       Deno.exit(code);
