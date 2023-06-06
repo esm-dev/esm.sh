@@ -321,8 +321,8 @@ app.get("/", (req, res) => {
 app.listen(3000);
 ```
 
-For users using deno `< 1.31`, esm.sh uses
-[deno.land/std@0.177.0/node](https://deno.land/std@0.177.0/node) as node
+For users using deno `< 1.33.2`, esm.sh uses
+[deno.land/std@0.177.0/node](https://deno.land/std@0.177.1/node) as node
 compatibility layer. You can specify a different version by adding the
 `?deno-std=$VER` query:
 

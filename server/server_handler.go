@@ -308,7 +308,7 @@ func esmHandler() rex.Handle {
 				"uptime":      time.Since(startTime).String(),
 			}
 
-		case "/build-target":
+		case "/esma-target":
 			return getTargetByUA(ctx.R.UserAgent())
 
 		case "/error.js":
@@ -409,7 +409,7 @@ func esmHandler() rex.Handle {
 			if targetFromUA {
 				target = getTargetByUA(ctx.R.UserAgent())
 			}
-			if target == "deno" {
+			if target == "deno" || target == "denonext" {
 				ctx.SetHeader("Content-Type", "application/typescript; charset=utf-8")
 			} else {
 				ret := api.Transform(string(data), api.TransformOptions{

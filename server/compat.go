@@ -5,6 +5,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/Masterminds/semver/v3"
 	"github.com/evanw/esbuild/pkg/api"
 	"github.com/ije/esbuild-internal/compat"
 	"github.com/mssola/useragent"
@@ -179,19 +180,18 @@ func getEngineInfo(ua string) (name string, version string) {
 	return useragent.New(ua).Browser()
 }
 
-// var deno131 = semver.MustParse("1.31.0")
+var deno1_33_2 = semver.MustParse("1.33.2")
 
 func getTargetByUA(ua string) string {
 	if ua == "" || strings.HasPrefix(ua, "curl/") {
 		return "esnext"
 	}
 	if strings.HasPrefix(ua, "Deno/") {
-		// uaVersion, err := semver.NewVersion(strings.TrimPrefix(ua, "Deno/"))
-		// if err == nil && uaVersion.LessThan(deno131) {
-		// 	return "deno"
-		// }
-		// return "denonext"
-		return "deno"
+		uaVersion, err := semver.NewVersion(strings.TrimPrefix(ua, "Deno/"))
+		if err == nil && uaVersion.LessThan(deno1_33_2) {
+			return "deno"
+		}
+		return "denonext"
 	}
 	if strings.HasPrefix(ua, "Node/") || strings.HasPrefix(ua, "Bun/") {
 		return "node"

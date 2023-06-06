@@ -1,19 +1,20 @@
+import { compare } from "compare-versions";
 import uaParser from "ua-parser-js";
 
 export const targets = new Set([
-    "es2015",
-    "es2016",
-    "es2017",
-    "es2018",
-    "es2019",
-    "es2020",
-    "es2021",
-    "es2022",
-    "esnext",
-    "deno",
-    "denonext",
-    "node",
-])
+  "es2015",
+  "es2016",
+  "es2017",
+  "es2018",
+  "es2019",
+  "es2020",
+  "es2021",
+  "es2022",
+  "esnext",
+  "deno",
+  "denonext",
+  "node",
+]);
 
 /** the js table transpiled from https://github.com/evanw/esbuild/blob/main/internal/compat/js_table.go */
 const jsTable: Record<string, Record<string, [number, number, number]>> = {
@@ -610,13 +611,18 @@ const esmaUnsupportedFeatures: [string, number][] = [
   getUnsupportedFeatures(esma.slice(0, 2).toUpperCase(), esma.slice(2)).length,
 ]);
 
+const deno1_33_2 = "1.33.2";
+
 /** get esma version from the `User-Agent` header by checking the `jsTable` object. */
 export const getEsmaVersionFromUA = (userAgent: string | null) => {
   if (!userAgent || userAgent.startsWith("curl/")) {
     return "esnext";
   }
   if (userAgent.startsWith("Deno/")) {
-    return "deno";
+    if (compare(userAgent.slice(5), deno1_33_2, "<")) {
+      return "deno";
+    }
+    return "denonext";
   }
   if (userAgent.startsWith("Node/") || userAgent.startsWith("Bun/")) {
     return "node";

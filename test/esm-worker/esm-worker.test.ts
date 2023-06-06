@@ -129,7 +129,7 @@ Deno.test("esm-worker", {
 
     const modUrl = code.match(/from "(.+)"/)?.[1]!;
     assert(modUrl.startsWith(workerOrigin));
-    assert(modUrl.endsWith("/deno/react-dom.mjs"));
+    assert(modUrl.endsWith("/denonext/react-dom.mjs"));
     const res3 = await fetch(modUrl);
     assertEquals(res3.status, 200);
     assertEquals(
@@ -176,7 +176,7 @@ Deno.test("esm-worker", {
     assertEquals(res2.headers.get("Cache-Control"), "public, max-age=86400");
     assert(/v\d+\/.+\.d\.ts$/.test(res2.headers.get("X-Typescript-Types")!));
     const modUrl = code.match(/from "(.+)"/)?.[1]!;
-    assert(modUrl.endsWith("/deno/server.js"));
+    assert(modUrl.endsWith("/denonext/server.js"));
     const res3 = await fetch(modUrl);
     assertEquals(res3.status, 200);
     assertEquals(
@@ -210,7 +210,7 @@ Deno.test("esm-worker", {
     const modUrl = new URL(code.match(/from "(.+)"/)?.[1]!);
     assertEquals(modUrl.origin, workerOrigin);
     assert(modUrl.pathname.startsWith("/stable/react@"));
-    assert(modUrl.pathname.endsWith("/deno/react.mjs"));
+    assert(modUrl.pathname.endsWith("/denonext/react.mjs"));
     const res3 = await fetch(modUrl);
     assertEquals(res3.status, 200);
     assertEquals(
@@ -308,7 +308,7 @@ Deno.test("esm-worker", {
     assert(
       /v\d+\/gh\/.+\.d\.ts$/.test(res2.headers.get("X-Typescript-Types")!),
     );
-    assert(modUrl.pathname.endsWith("/deno/tslib.mjs"));
+    assert(modUrl.pathname.endsWith("/denonext/tslib.mjs"));
     const res3 = await fetch(modUrl);
     assertEquals(res3.status, 200);
     assertEquals(
@@ -372,12 +372,23 @@ Deno.test("esm-worker", {
     }
     const { default: render } = await import(
       new URL(
-        `/v${VERSION}${new URL(ret.url).pathname}/deno/mod.mjs`,
+        `/v${VERSION}${new URL(ret.url).pathname}/denonext/mod.mjs`,
         workerOrigin,
       )
         .href
     );
     assertEquals(render(), "<h1>Hello world!</h1>");
+  });
+
+  await t.step("/esma-target", async () => {
+    const getTarget = async (ua: string) => {
+      const rest = await fetch(`${workerOrigin}/esma-target`, {
+        headers: { "User-Agent": ua },
+      });
+      return await rest.text();
+    };
+    assertEquals(await getTarget("Deno/1.33.1"), "deno");
+    assertEquals(await getTarget("Deno/1.33.2"), "denonext");
   });
 
   ac.abort();

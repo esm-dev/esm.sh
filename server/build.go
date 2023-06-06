@@ -1002,7 +1002,7 @@ rebuild:
 				return
 			}
 
-			if task.Bundle && task.Target != "deno" && task.Target != "denonext" {
+			if task.Bundle && !task.isDenoTarget() {
 				options.Plugins = []api.Plugin{{
 					Name: "esm",
 					Setup: func(build api.PluginBuild) {
