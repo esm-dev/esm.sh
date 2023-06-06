@@ -1,27 +1,29 @@
 #!/usr/bin/env -S deno run --allow-run --allow-read --allow-write --allow-net
 
-async function startServer(onStart: () => void, single: boolean) {
+async function startServer(onStart: () => Promise<void>, single: boolean) {
   const { code, success } = await run("go", "build", "-o", "esmd", "main.go");
   if (!success) {
     Deno.exit(code);
   }
+  const ac = new AbortController();
   const p = new Deno.Command("./esmd", {
     stdout: single ? "inherit" : "null",
     stderr: "inherit",
+    signal: ac.signal,
   }).spawn();
-  addEventListener("unload", (_e) => {
+  addEventListener("unload", () => {
     console.log("%cClosing esm.sh server...", "color: grey");
-    p.kill("SIGINT");
+    ac.abort();
   });
   while (true) {
     try {
       await new Promise((resolve) => setTimeout(resolve, 500));
-      const body = await fetch(`http://localhost:8088`).then((res) =>
-        res.text()
+      const status = await fetch(`http://localhost:8080/status.json`).then((res) =>
+        res.json()
       );
-      if (body === "READY") {
+      if (status.ns === "READY") {
         console.log("esm.sh server started.");
-        onStart();
+        await onStart();
         break;
       }
     } catch (_) {
