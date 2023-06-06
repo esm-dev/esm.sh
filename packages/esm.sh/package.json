@@ -1,6 +1,6 @@
 {
   "name": "esm.sh",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "description": "A fast, smart, & global content delivery network (CDN) for modern(es2015+) web development.",
   "repository": "https://github.com/esm-dev/esm.sh",
   "license": "MIT",
@@ -25,7 +25,7 @@
     }
   },
   "dependencies": {
-    "esm-worker": "^0.124.1"
+    "esm-worker": "^0.125.0"
   },
   "devDependencies": {
     "esbuild": "^0.17.19"

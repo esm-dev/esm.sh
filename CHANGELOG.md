@@ -1,5 +1,14 @@
 # Changelog
 
+## v125
+
+- Fix `node-fetch` import in cjs modules (close #649)
+- Add `node:worker_threads` polyfill(fake) (close #648)
+- Use `denonext` target for Deno >= 1.33.2 (close #646)
+- Fix `.json.js` path (close #645)
+- Fix cache missing content (close #641)
+- Upgrade `deno/std` to **0.177.1**
+
 ## v124
 
 - Fix the dts walker (close #642)

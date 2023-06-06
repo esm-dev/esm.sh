@@ -32,9 +32,9 @@ You may also use a [semver](https://docs.npmjs.com/cli/v6/using-npm/semver) or a
 fixed version number, or omit the version/tag entirely to use the `latest` tag:
 
 ```javascript
-import React from "https://esm.sh/react"; // 18.2.0 (latest)
-import React from "https://esm.sh/react@17"; // 17.0.2
-import React from "https://esm.sh/react@canary"; // 18.3.0-canary-7cd98ef2b-20230509
+import React from "https://esm.sh/react";        // 18.2.0 (latest)
+import React from "https://esm.sh/react@17";     // 17.0.2
+import React from "https://esm.sh/react@canary"; // 18.3.0-canary-e1ad4aa36-20230601
 ```
 
 ### Import from GitHub Repos
@@ -246,8 +246,8 @@ package version.
 ```json
 {
   "imports": {
-    "react-dom": "https://esm.sh/react-dom@18.2.0?pin=v124&dev",
-    "react-dom/": "https://esm.sh/react-dom@18.2.0&pin=v124&dev/"
+    "react-dom": "https://esm.sh/react-dom@18.2.0?pin=v125&dev",
+    "react-dom/": "https://esm.sh/react-dom@18.2.0&pin=v125&dev/"
   }
 }
 ```
@@ -391,9 +391,9 @@ The `?pin` query allows you to specify a specific build version of a module,
 which is an **immutable** cached version stored on the esm.sh CDN.
 
 ```javascript
-import React from "https://esm.sh/react-dom?pin=v124";
+import React from "https://esm.sh/react-dom?pin=v125";
 // or use version prefix
-import React from "https://esm.sh/v124/react-dom";
+import React from "https://esm.sh/v125/react-dom";
 ```
 
 By using the `?pin` query in the import statement, you can rest assured that the

@@ -4,7 +4,7 @@ RUN apt-get update -y && apt-get install -y xz-utils
 RUN useradd -u 1000 -m esm
 RUN mkdir /esm && chown esm:esm /esm
 RUN git clone https://github.com/esm-dev/esm.sh /esm/esm.sh
-RUN git checkout v124
+RUN git checkout v125
 
 USER esm
 WORKDIR /esm

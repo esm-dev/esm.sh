@@ -11,8 +11,8 @@ import type {
   Context,
   HttpMetadata,
   WorkerStorage,
-} from "https://esm.sh/esm-worker@0.124.1";
-import { withESMWorker } from "https://esm.sh/esm-worker@0.124.1";
+} from "https://esm.sh/esm-worker@0.125.0";
+import { withESMWorker } from "https://esm.sh/esm-worker@0.125.0";
 
 type Handler = (
   request: Request,

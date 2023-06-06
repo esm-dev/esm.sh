@@ -1,9 +1,13 @@
-lockfileVersion: '6.0'
+lockfileVersion: '6.1'
+
+settings:
+  autoInstallPeers: true
+  excludeLinksFromLockfile: false
 
 dependencies:
   esm-worker:
-    specifier: ^0.124.1
-    version: 0.124.1
+    specifier: ^0.125.0
+    version: 0.125.0
 
 devDependencies:
   esbuild:
@@ -240,6 +244,6 @@ packages:
       '@esbuild/win32-x64': 0.17.19
     dev: true
 
-  /esm-worker@0.124.1:
-    resolution: {integrity: sha512-mrCdcFhClMa/L5rNDHhgeMUBc5Sh1iyNECM6gRUFyO0j4QLP4Hpm6PRE52Eu74ZsWPlt144XFZxfTxwkGOsexw==}
+  /esm-worker@0.125.0:
+    resolution: {integrity: sha512-9pap5oMBL9rUm1hDcDrzym/DqlwCgm9i26QUso0MfdYVonQAs7PMsB2oikbt/vORHrn0bNTR7qI3HExYQlhxAQ==}
     dev: false
