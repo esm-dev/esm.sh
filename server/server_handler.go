@@ -500,6 +500,11 @@ func esmHandler() rex.Handle {
 			return rex.Status(status, message)
 		}
 
+		if reqPkg.Name == "apps" {
+			// resvered package name
+			return rex.Status(404, "not found")
+		}
+
 		if includes(nativeNodePackages, reqPkg.Name) {
 			return throwErrorJS(ctx, fmt.Errorf(
 				`unsupported npm package "%s": native node modules are not supported yet`,

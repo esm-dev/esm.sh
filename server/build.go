@@ -805,6 +805,9 @@ rebuild:
 						if builtInNodeModules[name] {
 							cjsImportNames.Add("default")
 							marked = true
+						} else if name == "node-fetch" {
+							cjsImportNames.Add("*")
+							marked = true
 						} else {
 							depPkg := Pkg{}
 							if a := strings.Split(name, "/"); strings.HasPrefix(name, "@") {
@@ -918,6 +921,8 @@ rebuild:
 							fmt.Fprintf(buf, `const __%s$ = ()=>!0;%s`, identifier, eol)
 						} else if name == "es6-symbol" {
 							fmt.Fprintf(buf, `const __%s$ = Symbol;%s`, identifier, eol)
+						} else if name == "abort-controller" {
+							fmt.Fprintf(buf, `const __%s$ = globalThis.AbortController;__%s$.default=globalThis.AbortController;%s`, identifier, identifier, eol)
 						} else {
 							switch importName {
 							case "*":
