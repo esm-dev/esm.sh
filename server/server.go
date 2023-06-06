@@ -126,7 +126,7 @@ func Serve(efs EmbedFS) {
 	}
 	accessLogger.SetQuite(true) // quite in terminal
 
-	// start cjs lexer server
+	// start node services process
 	go func() {
 		for {
 			err := startNodeServices()
@@ -179,7 +179,7 @@ func Serve(efs EmbedFS) {
 	}
 
 	c := make(chan os.Signal, 1)
-	signal.Notify(c, syscall.SIGTERM, syscall.SIGINT, syscall.SIGQUIT, syscall.SIGHUP)
+	signal.Notify(c, syscall.SIGTERM, syscall.SIGINT, syscall.SIGQUIT, syscall.SIGHUP, syscall.SIGABRT)
 	select {
 	case <-c:
 	case err = <-C:

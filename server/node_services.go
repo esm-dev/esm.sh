@@ -9,7 +9,6 @@ import (
 	"net/http"
 	"os/exec"
 	"path"
-	"strconv"
 	"strings"
 )
 
@@ -40,6 +39,7 @@ var requireModeAllowList = []string{
 }
 
 const nsApp = `
+const fs = require("fs");
 const http = require("http");
 const services = require("esm-node-services");
 
@@ -73,6 +73,8 @@ const requestListener = function (req, res) {
     res.end("Method not allowed");
   }
 }
+
+fs.writeFile("%s", process.pid.toString(), () => {});
 
 const server = http.createServer(requestListener);
 server.listen(%d);
@@ -120,6 +122,10 @@ func startNodeServices() (err error) {
 		return err
 	}
 
+	// kill previous ns process if exists
+	nsPidFile = path.Join(cfg.WorkDir, "ns", "ns.pid")
+	kill(nsPidFile)
+
 	// install services
 	cmd := exec.Command("pnpm", "add", "esm-node-services@0.8.1")
 	cmd.Dir = wd
@@ -133,17 +139,12 @@ func startNodeServices() (err error) {
 	// create ns script
 	err = ioutil.WriteFile(
 		path.Join(wd, "ns.js"),
-		[]byte(fmt.Sprintf(nsApp, cfg.NsPort)),
+		[]byte(fmt.Sprintf(nsApp, nsPidFile, cfg.NsPort)),
 		0644,
 	)
 	if err != nil {
 		return
 	}
-
-	nsPidFile = path.Join(cfg.WorkDir, "ns", "ns.pid")
-
-	// kill previous ns process if exists
-	kill(nsPidFile)
 
 	errBuf := bytes.NewBuffer(nil)
 	cmd = exec.Command("node", "ns.js")
@@ -154,9 +155,6 @@ func startNodeServices() (err error) {
 	if err != nil {
 		return
 	}
-
-	// save pid
-	ioutil.WriteFile(nsPidFile, []byte(strconv.Itoa(cmd.Process.Pid)), 0644)
 
 	log.Debug("node services process started, pid is", cmd.Process.Pid)
 
