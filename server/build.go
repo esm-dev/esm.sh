@@ -64,7 +64,7 @@ func (task *BuildTask) Build() (esm *ESMBuild, err error) {
 			return
 		}
 
-		if cfg.NpmToken != "" {
+		if cfg.NpmToken != "" || (cfg.NpmUser != "" && cfg.NpmPassword != "") {
 			rcFilePath := path.Join(task.wd, ".npmrc")
 			if !fileExists(rcFilePath) {
 				var output bytes.Buffer
@@ -84,6 +84,18 @@ func (task *BuildTask) Build() (esm *ESMBuild, err error) {
 					}
 					output.WriteString(fmt.Sprintf("%s:_authToken=${ESM_NPM_TOKEN}\n", tokenReg))
 				}
+
+				if cfg.NpmRegistry != "" && cfg.NpmUser != "" && cfg.NpmPassword != "" {
+					var tokenReg string
+					tokenReg, err = removeHttpPrefix(cfg.NpmRegistry)
+					if err != nil {
+						log.Errorf("Invalid npm registry in config: %v", err)
+						return
+					}
+					output.WriteString(fmt.Sprintf("%s:username=${ESM_NPM_USER}\n", tokenReg))
+					output.WriteString(fmt.Sprintf("%s:_password=${ESM_NPM_PASSWORD}\n", tokenReg))
+				}
+
 				err = os.WriteFile(rcFilePath, output.Bytes(), 0644)
 				if err != nil {
 					log.Errorf("Failed to create .npmrc file: %v", err)
@@ -102,6 +114,7 @@ func (task *BuildTask) Build() (esm *ESMBuild, err error) {
 	}(task.wd, pkgVersionName)
 
 	task.stage = "install"
+
 	err = installPackage(task.wd, task.Pkg)
 	if err != nil {
 		return
