@@ -1,6 +1,7 @@
 package server
 
 import (
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
@@ -216,6 +217,9 @@ func fetchPackageInfo(name string, version string) (info NpmPackage, err error) 
 	if cfg.NpmToken != "" {
 		req.Header.Set("Authorization", "Bearer "+cfg.NpmToken)
 	}
+	if cfg.NpmUser != "" && cfg.NpmPassword != "" {
+		req.SetBasicAuth(cfg.NpmUser, cfg.NpmPassword)
+	}
 	resp, err := httpClient.Do(req)
 	if err != nil {
 		return
@@ -387,6 +391,16 @@ func pnpmInstall(wd string, packages ...string) (err error) {
 	cmd.Dir = wd
 	if cfg.NpmToken != "" {
 		cmd.Env = append(os.Environ(), "ESM_NPM_TOKEN="+cfg.NpmToken)
+	}
+	if cfg.NpmUser != "" && cfg.NpmPassword != "" {
+		data := []byte(cfg.NpmPassword)
+		password := make([]byte, base64.StdEncoding.EncodedLen(len(data)))
+		base64.StdEncoding.Encode(password, data)
+		cmd.Env = append(
+			os.Environ(),
+			"ESM_NPM_USER="+cfg.NpmUser,
+			"ESM_NPM_PASSWORD="+string(password),
+		)
 	}
 	output, err := cmd.CombinedOutput()
 	if err != nil {

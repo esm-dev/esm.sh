@@ -27,6 +27,8 @@ type Config struct {
 	NpmRegistry      string  `json:"npmRegistry,omitempty"`
 	NpmToken         string  `json:"npmToken,omitempty"`
 	NpmRegistryScope string  `json:"npmRegistryScope,omitempty"`
+	NpmUser          string  `json:"npmUser,omitempty"`
+	NpmPassword      string  `json:"npmPassword,omitempty"`
 	AuthSecret       string  `json:"authSecret,omitempty"`
 	NoCompress       bool    `json:"noCompress,omitempty"`
 }

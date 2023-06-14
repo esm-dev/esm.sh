@@ -50,10 +50,13 @@
   // with this scope get downloaded from the registry, default is empty.
   // Default behavior is to fetch all packages from the npm registry.
   "npmRegistryScope": "@my-scope",
-
+  // These two fields are used for basic authentication towards a private
+  // package registry, default for both is empty.
+  "npmUser": "username",
+  "npmPassword": "password",
+  
   // The npm token for private packages, default is empty.
   "npmToken": "",
-
 
   // Disable compressing the response, default is false.
   "noCompress": false,
