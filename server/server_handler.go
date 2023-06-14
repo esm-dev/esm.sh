@@ -505,13 +505,6 @@ func esmHandler() rex.Handle {
 			return rex.Status(404, "not found")
 		}
 
-		if includes(nativeNodePackages, reqPkg.Name) {
-			return throwErrorJS(ctx, fmt.Errorf(
-				`unsupported npm package "%s": native node modules are not supported yet`,
-				reqPkg.Name,
-			))
-		}
-
 		// fix url related `import.meta.url`
 		if hasBuildVerPrefix && endsWith(reqPkg.Subpath, ".wasm", ".json") {
 			extname := path.Ext(reqPkg.Subpath)
@@ -871,6 +864,13 @@ func esmHandler() rex.Handle {
 		targetFromUA := targets[target] == 0
 		if targetFromUA {
 			target = getTargetByUA(ctx.R.UserAgent())
+		}
+
+		if strings.HasPrefix(target, "es") && includes(nativeNodePackages, reqPkg.Name) {
+			return throwErrorJS(ctx, fmt.Errorf(
+				`unsupported npm package "%s": native node module is not supported in browser`,
+				reqPkg.Name,
+			))
 		}
 
 		// check build version
