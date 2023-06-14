@@ -25,8 +25,9 @@ var fixedPkgVersions = map[string]string{
 
 // css packages
 var cssPackages = map[string]string{
-	"normalize.css": "normalize.css",
 	"@unocss/reset": "tailwind.css",
+	"inter-ui":      "inter.css",
+	"normalize.css": "normalize.css",
 	"reset-css":     "reset.css",
 }
 
