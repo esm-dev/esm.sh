@@ -326,6 +326,10 @@ rebuild:
 							}
 						}
 
+						if args.Path == "pnpapi" {
+							return api.OnResolveResult{Path: args.Path, Namespace: "browser-exclude"}, nil
+						}
+
 						if strings.HasSuffix(args.Path, ".wasm") {
 							fullFilepath := filepath.Join(args.ResolveDir, args.Path)
 							if fileExists(fullFilepath) {
