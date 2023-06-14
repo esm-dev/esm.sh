@@ -116,6 +116,15 @@ const { exports } = parse('index.cjs', `
   module.exports = Fn()
 `);
 
+// annotated exports
+// exports: ['foo', 'bar']
+const { exports } = parse('lib.cjs', `
+0 && (module.exports = {
+ foo,
+ bar,
+})
+`);
+
 // UMD format
 // exports: ['foo']
 const { exports } = parse('index.cjs', `
@@ -141,13 +150,6 @@ const { exports } = parse('lib.cjs', `
     return { foo: 'bar' }
   }
 `, { callMode: true });
-
-// annotated exports
-// exports: ['foo', 'bar']
-0 && (module.exports = {
- foo,
- bar,
-});
 ```
 
 ## Development Setup
