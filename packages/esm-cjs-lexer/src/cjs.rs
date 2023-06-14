@@ -878,6 +878,18 @@ impl ExportsParser {
               false,
             );
           }
+          // 0 && (module.exports = { foo })
+          Expr::Bin(BinExpr { op, right, .. }) => {
+            if matches!(op, BinaryOp::LogicalAnd) {
+              if let Expr::Assign(assign) = right.as_ref() {
+                self.get_exports_from_assign(assign);
+              }  else   if let Expr::Paren(paren) = right.as_ref() {
+                if let Expr::Assign(assign) = paren.expr.as_ref() {
+                  self.get_exports_from_assign(assign);
+                }
+              }
+            }
+          }
           _ => {}
         },
         Stmt::Block(BlockStmt { stmts, .. }) => {

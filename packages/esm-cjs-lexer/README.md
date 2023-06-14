@@ -141,6 +141,13 @@ const { exports } = parse('lib.cjs', `
     return { foo: 'bar' }
   }
 `, { callMode: true });
+
+// annotated exports
+// exports: ['foo', 'bar']
+0 && (module.exports = {
+ foo,
+ bar,
+});
 ```
 
 ## Development Setup
