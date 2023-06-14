@@ -1,5 +1,6 @@
 export type BuildOptions = {
   code: string;
+  loader?: "js" | "jsx" | "ts" | "tsx";
   dependencies?: Record<string, string>;
   types?: string;
 };
@@ -34,12 +35,18 @@ export async function build(
   return ret;
 }
 
-export function esm(
+export async function esm<T extends object = Record<string, any>>(
   strings: TemplateStringsArray,
   ...values: any[]
-): Promise<BuildResult> {
+): Promise<T & { _url: string; _bundleUrl: string }> {
   const code = String.raw({ raw: strings }, ...values);
-  return build(code);
+  const ret = await build(code);
+  const mod: T = await import(ret.url);
+  return {
+    ...mod,
+    _url: ret.url,
+    _bundleUrl: ret.bundleUrl,
+  };
 }
 
 export default build;

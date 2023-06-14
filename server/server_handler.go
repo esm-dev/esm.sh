@@ -27,9 +27,10 @@ import (
 )
 
 type BuildInput struct {
-	Code  string            `json:"code"`
-	Deps  map[string]string `json:"dependencies"`
-	Types string            `json:"types"`
+	Code   string            `json:"code"`
+	Loader string            `json:"loader,omitempty"`
+	Deps   map[string]string `json:"dependencies"`
+	Types  string            `json:"types"`
 }
 
 func apiHandler() rex.Handle {
@@ -39,7 +40,7 @@ func apiHandler() rex.Handle {
 			case "/build":
 				var input BuildInput
 				defer ctx.R.Body.Close()
-				switch ctx.R.Header.Get("Content-Type") {
+				switch ct := ctx.R.Header.Get("Content-Type"); ct {
 				case "application/json":
 					err := json.NewDecoder(ctx.R.Body).Decode(&input)
 					if err != nil {
@@ -51,6 +52,11 @@ func apiHandler() rex.Handle {
 						return rex.Err(400, "failed to read code: "+err.Error())
 					}
 					input.Code = string(code)
+					if strings.Contains(ct, "javascript") {
+						input.Loader = "jsx"
+					} else {
+						input.Loader = "tsx"
+					}
 				default:
 					return rex.Err(400, "invalid content type")
 				}
@@ -60,10 +66,15 @@ func apiHandler() rex.Handle {
 				if input.Deps == nil {
 					input.Deps = map[string]string{}
 				}
+				loader := "tsx"
+				switch input.Loader {
+				case "js", "jsx", "ts", "tsx":
+					loader = input.Loader
+				}
 				stdin := &api.StdinOptions{
 					Contents:   input.Code,
 					ResolveDir: "/",
-					Sourcefile: "index.tsx",
+					Sourcefile: "index." + loader,
 					Loader:     api.LoaderTSX,
 				}
 				onResolver := func(args api.OnResolveArgs) (api.OnResolveResult, error) {
@@ -72,7 +83,7 @@ func apiHandler() rex.Handle {
 						return api.OnResolveResult{}, errors.New("local specifier is not allowed")
 					}
 					if !isRemoteSpecifier(path) {
-						pkg, _, err := validatePkgPath(strings.TrimPrefix(path, "npm:"))
+						pkg, _, err := validatePkgPath("/" + strings.TrimPrefix(path, "npm:"))
 						if err != nil {
 							return api.OnResolveResult{}, err
 						}

@@ -21,6 +21,19 @@ from a URL:
 import Module from "https://esm.sh/PKG@SEMVER[/PATH]";
 ```
 
+or build a module with custom input(code):
+
+```javascript
+import { esm } from "https://esm.sh/build";
+
+const mod = await esm`
+  export const foo: string = "bar";
+`;
+console.log(mod.foo); // "bar"
+```
+
+> More usage check out [here](#building-a-module-with-custom-inputcode).
+
 ### Import from NPM
 
 ```javascript
@@ -272,12 +285,12 @@ app.listen(3000);
 ```
 
 For users using deno `< 1.33.2`, esm.sh uses
-[deno.land/std@0.177.0/node](https://deno.land/std@0.177.1/node) as node
+[deno.land/std@0.177.1/node](https://deno.land/std@0.177.1/node) as the node
 compatibility layer. You can specify a different version by adding the
 `?deno-std=$VER` query:
 
 ```javascript
-import postcss from "https://esm.sh/postcss?deno-std=0.128.0";
+import postcss from "https://esm.sh/express?deno-std=0.128.0";
 ```
 
 ### X-Typescript-Types Header
@@ -341,19 +354,8 @@ input(code).
 - Bundle mulitple modules into a single JS file
 
 ```javascript
-import build, { esm } from "https://esm.sh/build";
+import build from "https://esm.sh/build";
 
-// use `esm` tag function
-const ret = await esm`
-/* @jsx h */
-import { h } from "preact@10.13.2";
-import { renderToString } from "preact-render-to-string@6.0.2";
-export function render(): string {
-  return renderToString(<h1>Hello world!</h1>);
-}
-`;
-
-// use `build` function
 const ret = await build({
   dependencies: {
     "preact": "^10.13.2",
@@ -379,6 +381,21 @@ const { render } = await import(ret.url);
 const { render } = await import(ret.bundleUrl);
 
 render(); // "<h1>Hello world!</h1>"
+```
+
+or use the `esm` tag function to build and import js/ts snippet quickly in browser
+with npm packages:
+
+```javascript
+import { esm } from "https://esm.sh/build";
+
+const mod = await esm`
+   /* @jsx h */
+  import { h } from "preact@10.13.2";
+  import { renderToString } from "preact-render-to-string@6.0.2";
+  export const html = renderToString(<h1>Hello world!</h1>);
+`;
+console.log(mod.html); // "<h1>Hello world!</h1>"
 ```
 
 ## Pinning Build Version

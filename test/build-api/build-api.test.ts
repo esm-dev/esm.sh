@@ -95,8 +95,9 @@ Deno.test("build api (use sdk)", async (t) => {
 
   await t.step("use `esm` tag function", async () => {
     const message = "Hello world!";
-    const ret = await esm`export default ${JSON.stringify(message)};`;
-    const mod = await import(ret.url);
+    const mod = await esm<{ default: string }>`export default ${
+      JSON.stringify(message)
+    };`;
     assertEquals(mod.default, message);
   });
 });
