@@ -1,5 +1,18 @@
 # Changelog
 
+## v126
+
+- **breaking**: the `esm` tag function of build API now imorts module
+  ```js
+  import { esm } from "https://esm.sh/build";
+  const mod = await esm`
+    export const foo:string = "bar"
+  `;
+  console.log(mod.foo); // "bar"
+  ```
+- cjs-lexer: support _annotated_ exports (close #659)
+- Add support for basic auth (#657 by @johnpangalos)
+
 ## v125
 
 - Fix `node-fetch` import in cjs modules (close #649)
