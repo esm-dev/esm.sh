@@ -25,10 +25,11 @@ var fixedPkgVersions = map[string]string{
 
 // css packages
 var cssPackages = map[string]string{
-	"@unocss/reset": "tailwind.css",
-	"inter-ui":      "inter.css",
-	"normalize.css": "normalize.css",
-	"reset-css":     "reset.css",
+	"@unocss/reset":    "tailwind.css",
+	"inter-ui":         "inter.css",
+	"normalize.css":    "normalize.css",
+	"modern-normalize": "modern-normalize.css",
+	"reset-css":        "reset.css",
 }
 
 // stable build for UI libraries like react, to make sure the runtime is single copy
