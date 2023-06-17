@@ -80,7 +80,8 @@ async function update(args: string[], options: Record<string, string>) {
   const toUpdate = args.length === 0
     ? Object.keys(importMap.imports).filter((name) =>
       importMap.imports[name].startsWith(`${importUrl.origin}/`) &&
-      !name.endsWith("/")
+      !name.endsWith("/") &&
+      !importMap.imports[name].startsWith(`${importUrl.origin}/gh/`)
     ).map((name) => {
       let version: string;
       if (latest) {
