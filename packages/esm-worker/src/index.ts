@@ -689,9 +689,9 @@ async function fetchESM(
   if (!noStore && cacheControl?.includes("immutable")) {
     if (!isModuleFile) {
       const buffer = await res.arrayBuffer();
-      await storage.put(storeKey, buffer.slice(0), {
+      ctx.waitUntil(storage.put(storeKey, buffer.slice(0), {
         httpMetadata: { contentType },
-      });
+      }));
       return new Response(buffer.slice(0), { headers });
     }
     let body: ReadableStream<Uint8Array> | ArrayBuffer;
@@ -700,17 +700,18 @@ async function fetchESM(
       const [a, b] = res.body!.tee();
       body = a;
       value = options.gzip ? b.pipeThrough(new CompressionStream("gzip")) : b;
-    } catch (_) {
+  } catch (_) {
       // failed to tee, fallback to arrayBuffer
-      const buffer = await res.arrayBuffer();
-      body = buffer.slice(0);
+      body = await res.arrayBuffer();
       value = options.gzip
-        ? new Response(buffer.slice(0)).body!.pipeThrough(
+        ? new Response(body.slice(0)).body!.pipeThrough(
           new CompressionStream("gzip"),
         )
-        : buffer.slice(0);
+        : body.slice(0);
     }
-    await KV.put(storeKey, value as any, { metadata: { contentType, dts } });
+    ctx.waitUntil(
+      KV.put(storeKey, value as any, { metadata: { contentType, dts } }),
+    );
     return new Response(body, { headers });
   }
 
@@ -794,7 +795,6 @@ async function fetchServerOrigin(
     res.headers,
     "Cache-Control",
     "Content-Type",
-    "Content-Length",
     "X-Typescript-Types",
   );
   if (resHeaders.has("X-Typescript-Types")) {
