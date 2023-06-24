@@ -389,6 +389,15 @@ func (task *BuildTask) toTypesPath(wd string, p NpmPackage, version string, buil
 		types = "index.d.ts"
 	}
 
+	if endsWith(types, ".d") {
+		pkgDir := path.Join(wd, "node_modules", p.Name)
+		if fileExists(path.Join(pkgDir, types+".ts")) {
+			types = types + ".ts"
+		} else if fileExists(path.Join(pkgDir, types+".mts")) {
+			types = types + ".mts"
+		}
+	}
+
 	if !endsWith(types, ".d.ts", ".d.mts") && !strings.HasSuffix(types, "/*") {
 		pkgDir := path.Join(wd, "node_modules", p.Name)
 		if fileExists(path.Join(pkgDir, types, "index.d.ts")) {
