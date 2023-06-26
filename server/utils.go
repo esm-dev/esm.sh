@@ -290,3 +290,10 @@ func removeHttpPrefix(s string) (string, error) {
 	}
 	return "", fmt.Errorf("colon not found in string: %s", s)
 }
+
+func concatBytes(a, b []byte) []byte {
+	c := make([]byte, len(a)+len(b))
+	copy(c, a)
+	copy(c[len(a):], b)
+	return c
+}

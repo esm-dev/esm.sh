@@ -3,6 +3,7 @@ package server
 import (
 	"bytes"
 	"encoding/base64"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io/ioutil"
@@ -39,10 +40,11 @@ type BuildTask struct {
 	Deprecated   string
 
 	// internal
-	id     string
-	wd     string
-	realWd string
-	stage  string
+	id          string
+	wd          string
+	realWd      string
+	stage       string
+	appendLines int // to fix the source map
 }
 
 func (task *BuildTask) Build() (esm *ESMBuild, err error) {
@@ -267,8 +269,8 @@ func (task *BuildTask) build() (esm *ESMBuild, err error) {
 		nodeEnv = "development"
 	}
 	define := map[string]string{
-		"__filename":                  fmt.Sprintf(`"/_virtual/%s"`, task.ID()),
-		"__dirname":                   fmt.Sprintf(`"/_virtual/%s"`, path.Dir(task.ID())),
+		"__filename":                  fmt.Sprintf(`"/_virtual/esm.sh/%s"`, task.ID()),
+		"__dirname":                   fmt.Sprintf(`"/_virtual/esm.sh/%s"`, path.Dir(task.ID())),
 		"Buffer":                      "__Buffer$",
 		"process":                     "__Process$",
 		"setImmediate":                "__setImmediate$",
@@ -378,6 +380,18 @@ rebuild:
 						specifier := strings.TrimSuffix(args.Path, "/")
 						specifier = strings.TrimPrefix(specifier, "node:")
 						specifier = strings.TrimPrefix(specifier, "npm:")
+
+						// bundle polyfills if `?bundle` is set for browser target
+						if task.Bundle && !task.isServerTarget() {
+							data, err := embedFS.ReadFile(("server/embed/polyfills/node_" + specifier))
+							if err == nil {
+								return api.OnResolveResult{
+									Path:       "embed:polyfills/node_" + specifier,
+									Namespace:  "embed",
+									PluginData: data,
+								}, nil
+							}
+						}
 
 						// use `browser` field of package.json
 						if len(npm.Browser) > 0 && !task.isServerTarget() {
@@ -554,6 +568,19 @@ rebuild:
 					},
 				)
 
+				// for embed module bundle
+				build.OnLoad(
+					api.OnLoadOptions{Filter: ".*", Namespace: "embed"},
+					func(args api.OnLoadArgs) (api.OnLoadResult, error) {
+						data := args.PluginData.([]byte)
+						contents := string(data)
+						return api.OnLoadResult{
+							Contents: &contents,
+							Loader:   api.LoaderJS,
+						}, nil
+					},
+				)
+
 				// for wasm module exclude
 				build.OnLoad(
 					api.OnLoadOptions{Filter: ".*", Namespace: "wasm"},
@@ -651,24 +678,25 @@ rebuild:
 		}
 	}
 
-	for _, file := range result.OutputFiles {
-		outputContent := file.Contents
+	eol := "\n"
 
+	// TODO: using `__ESM_SH_EXTERNAL` sucks! must be refactored!!!
+	for _, file := range result.OutputFiles {
 		if strings.HasSuffix(file.Path, ".js") {
-			buf := bytes.NewBufferString(fmt.Sprintf(
+			jsContent := file.Contents
+			header := bytes.NewBufferString(fmt.Sprintf(
 				"/* esm.sh - esbuild bundle(%s) %s %s */\n",
 				task.Pkg.String(),
 				strings.ToLower(task.Target),
 				nodeEnv,
 			))
-			eol := "\n"
-			if !task.Dev {
-				eol = ""
-			}
+
+			esModuleAnn := bytes.Contains(jsContent, []byte("__esModule"))
 
 			// remove shebang
-			if bytes.HasPrefix(outputContent, []byte("#!/")) {
-				outputContent = outputContent[bytes.IndexByte(outputContent, '\n')+1:]
+			if bytes.HasPrefix(jsContent, []byte("#!/")) {
+				jsContent = jsContent[bytes.IndexByte(jsContent, '\n')+1:]
+				task.appendLines--
 			}
 
 			// replace external imports/requires
@@ -808,13 +836,13 @@ rebuild:
 					return
 				}
 
-				buffer := bytes.NewBuffer(nil)
 				identifier := fmt.Sprintf("%x", externalDeps.Len()-depIndex)
 				cjsContext := false
 				cjsImportNames := newStringSet()
+				buffer := bytes.NewBuffer(nil)
+				slice := bytes.Split(jsContent, []byte(fmt.Sprintf("\"__ESM_SH_EXTERNAL:%s\"", name)))
 
 				// walk output content to find all external dependencies
-				slice := bytes.Split(outputContent, []byte(fmt.Sprintf("\"__ESM_SH_EXTERNAL:%s\"", name)))
 				for i, p := range slice {
 					if cjsContext {
 						p = bytes.TrimPrefix(p, []byte{')'})
@@ -875,7 +903,7 @@ rebuild:
 								if !marked && depNpm.Module != "" {
 									if depESM.HasExportDefault && len(depESM.NamedExports) == 1 {
 										cjsImportNames.Add("default")
-									} else if bytes.Contains(outputContent, []byte("__esModule")) {
+									} else if esModuleAnn {
 										cjsImportNames.Add("*?")
 									} else {
 										cjsImportNames.Add("*")
@@ -961,153 +989,98 @@ rebuild:
 							}
 						}
 					}
-					outputContent = make([]byte, buf.Len()+buffer.Len())
-					copy(outputContent, buf.Bytes())
-					copy(outputContent[buf.Len():], buffer.Bytes())
+					task.appendLines += strings.Count(buf.String(), eol)
+					jsContent = concatBytes(buf.Bytes(), buffer.Bytes())
 				} else {
-					outputContent = buffer.Bytes()
+					jsContent = buffer.Bytes()
 				}
 			}
 
 			// add nodejs compatibility
 			if task.Target != "node" {
 				ids := newStringSet()
-				for _, r := range regexpGlobalIdent.FindAll(outputContent, -1) {
+				for _, r := range regexpGlobalIdent.FindAll(jsContent, -1) {
 					ids.Add(string(r))
 				}
 				if ids.Has("__Process$") {
 					if task.Target == "denonext" {
-						fmt.Fprintf(buf, `import __Process$ from "node:process";%s`, eol)
+						fmt.Fprintf(header, `import __Process$ from "node:process";%s`, eol)
 					} else if task.Target == "deno" {
-						fmt.Fprintf(buf, `import __Process$ from "https://deno.land/std@%s/node/process.ts";%s`, task.denoStdVersion, eol)
+						fmt.Fprintf(header, `import __Process$ from "https://deno.land/std@%s/node/process.ts";%s`, task.denoStdVersion, eol)
 					} else {
-						fmt.Fprintf(buf, `import __Process$ from "%s/v%d/node_process.js";%s`, cfg.BasePath, task.BuildVersion, eol)
+						fmt.Fprintf(header, `import __Process$ from "%s/v%d/node_process.js";%s`, cfg.BasePath, task.BuildVersion, eol)
 					}
 				}
 				if ids.Has("__Buffer$") {
 					if task.Target == "denonext" {
-						fmt.Fprintf(buf, `import { Buffer as __Buffer$ } from "node:buffer";%s`, eol)
+						fmt.Fprintf(header, `import { Buffer as __Buffer$ } from "node:buffer";%s`, eol)
 					} else if task.Target == "deno" {
-						fmt.Fprintf(buf, `import  { Buffer as __Buffer$ } from "https://deno.land/std@%s/node/buffer.ts";%s`, task.denoStdVersion, eol)
+						fmt.Fprintf(header, `import  { Buffer as __Buffer$ } from "https://deno.land/std@%s/node/buffer.ts";%s`, task.denoStdVersion, eol)
 					} else {
-						fmt.Fprintf(buf, `import { Buffer as __Buffer$ } from "%s/v%d/%s/%s/buffer.bundle.mjs";%s`, cfg.BasePath, task.BuildVersion, polyfilledBuiltInNodeModules["buffer"], task.Target, eol)
+						fmt.Fprintf(header, `import { Buffer as __Buffer$ } from "%s/v%d/buffer@6.0.3/%s/buffer.bundle.mjs";%s`, cfg.BasePath, task.BuildVersion, task.Target, eol)
 					}
 				}
 				if ids.Has("__global$") {
-					fmt.Fprintf(buf, `var __global$ = globalThis || (typeof window !== "undefined" ? window : self);%s`, eol)
+					fmt.Fprintf(header, `var __global$ = globalThis || (typeof window !== "undefined" ? window : self);%s`, eol)
 				}
 				if ids.Has("__setImmediate$") {
-					fmt.Fprintf(buf, `var __setImmediate$ = (cb, ...args) => setTimeout(cb, 0, ...args);%s`, eol)
+					fmt.Fprintf(header, `var __setImmediate$ = (cb, ...args) => setTimeout(cb, 0, ...args);%s`, eol)
 				}
 				if ids.Has("__rResolve$") {
-					fmt.Fprintf(buf, `var __rResolve$ = p => p;%s`, eol)
+					fmt.Fprintf(header, `var __rResolve$ = p => p;%s`, eol)
 				}
 			}
 
-			// most of npm packages check for window object to detect browser environment, but Deno also has the window object
-			// so we need to replace the check with document object
-			if task.isDenoTarget() {
-				if task.Dev {
-					outputContent = bytes.Replace(outputContent, []byte("typeof window !== \"undefined\""), []byte("typeof document !== \"undefined\""), -1)
-				} else {
-					outputContent = bytes.Replace(outputContent, []byte("typeof window<\"u\""), []byte("typeof document<\"u\""), -1)
-				}
-			}
+			// to fix the source map
+			task.appendLines += strings.Count(header.String(), eol)
 
-			_, err = buf.Write(rewriteJS(task, outputContent))
-			if err != nil {
-				return
-			}
-
-			if task.Bundle && !task.isDenoTarget() {
-				options.Plugins = []api.Plugin{{
-					Name: "esm",
-					Setup: func(build api.PluginBuild) {
-						build.OnResolve(
-							api.OnResolveOptions{Filter: ".*"},
-							func(args api.OnResolveArgs) (api.OnResolveResult, error) {
-								var path string
-								prefix := fmt.Sprintf(`%s/v%d/`, cfg.BasePath, task.BuildVersion)
-								if strings.HasPrefix(args.Path, prefix) {
-									path = "/" + strings.TrimPrefix(args.Path, prefix)
-								} else if args.Namespace == "embed" {
-									path = filepath.Join("/", args.Path)
-								}
-								data, err := embedFS.ReadFile(("server/embed/polyfills" + path))
-								if err == nil {
-									return api.OnResolveResult{
-										Path:       path,
-										Namespace:  "embed",
-										PluginData: data,
-									}, err
-								}
-								return api.OnResolveResult{
-									Path:     args.Path,
-									External: true,
-								}, nil
-							},
-						)
-						build.OnLoad(
-							api.OnLoadOptions{Filter: ".*", Namespace: "embed"},
-							func(args api.OnLoadArgs) (api.OnLoadResult, error) {
-								data := args.PluginData.([]byte)
-								contents := string(data)
-								return api.OnLoadResult{
-									Contents: &contents,
-									Loader:   api.LoaderJS,
-								}, nil
-							},
-						)
-					},
-				}}
-				options.EntryPoints = nil
-				options.Stdin = &api.StdinOptions{
-					Contents:   buf.String(),
-					ResolveDir: task.wd,
-					Sourcefile: "_output.js",
-				}
-				ret := api.Build(options)
-				if len(ret.Errors) > 0 {
-					msg := ret.Errors[0].Text
-					err = errors.New("esbuild: " + msg)
-					return
-				}
-				for _, w := range ret.Warnings {
-					log.Warnf("esbuild(%s,bundler): %s", task.ID(), w.Text)
-				}
-				for _, file := range ret.OutputFiles {
-					if strings.HasSuffix(file.Path, ".js") {
-						buf.Reset()
-						buf.Write(file.Contents)
-					}
-				}
-			}
+			finalContent := bytes.NewBuffer(nil)
+			finalContent.Write(header.Bytes())
+			finalContent.Write(rewriteJS(task, jsContent))
 
 			// check if package is deprecated
 			if task.Deprecated != "" {
-				fmt.Fprintf(buf, `console.warn("[npm] %%cdeprecated%%c %s@%s: %s", "color:red", "");%s`, task.Pkg.Name, task.Pkg.Version, task.Deprecated, "\n")
+				fmt.Fprintf(finalContent, `console.warn("[npm] %%cdeprecated%%c %s@%s: %s", "color:red", "");%s`, task.Pkg.Name, task.Pkg.Version, task.Deprecated, "\n")
 			}
 
 			// add sourcemap Url
-			buf.WriteString("//# sourceMappingURL=")
-			buf.WriteString(filepath.Base(task.ID()))
-			buf.WriteString(".map")
+			finalContent.WriteString("//# sourceMappingURL=")
+			finalContent.WriteString(filepath.Base(task.ID()))
+			finalContent.WriteString(".map")
 
-			_, err = fs.WriteFile(task.getSavepath(), buf)
+			_, err = fs.WriteFile(task.getSavepath(), finalContent)
 			if err != nil {
 				return
 			}
-		} else if strings.HasSuffix(file.Path, ".css") {
+		}
+	}
+
+	for _, file := range result.OutputFiles {
+		if strings.HasSuffix(file.Path, ".css") {
 			savePath := task.getSavepath()
-			_, err = fs.WriteFile(strings.TrimSuffix(savePath, path.Ext(savePath))+".css", bytes.NewReader(outputContent))
+			_, err = fs.WriteFile(strings.TrimSuffix(savePath, path.Ext(savePath))+".css", bytes.NewReader(file.Contents))
 			if err != nil {
 				return
 			}
 			esm.PackageCSS = true
-		} else if strings.HasSuffix(file.Path, ".map") {
-			_, err = fs.WriteFile(task.getSavepath()+".map", bytes.NewReader(outputContent))
-			if err != nil {
-				return
+		} else if strings.HasSuffix(file.Path, ".js.map") {
+			var sourceMap map[string]interface{}
+			if json.Unmarshal(file.Contents, &sourceMap) == nil {
+				if mapping, ok := sourceMap["mappings"].(string); ok {
+					fixedMapping := make([]byte, task.appendLines+len(mapping))
+					for i := 0; i < task.appendLines; i++ {
+						fixedMapping[i] = ';'
+					}
+					copy(fixedMapping[task.appendLines:], mapping)
+					sourceMap["mappings"] = string(fixedMapping)
+				}
+				buf := bytes.NewBuffer(nil)
+				if json.NewEncoder(buf).Encode(sourceMap) == nil {
+					_, err = fs.WriteFile(task.getSavepath()+".map", buf)
+					if err != nil {
+						return
+					}
+				}
 			}
 		}
 	}
