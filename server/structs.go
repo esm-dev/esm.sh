@@ -77,26 +77,6 @@ func (s *stringSet) Values() []string {
 	return a
 }
 
-type orderedStringSet struct {
-	set []string
-}
-
-func (s *orderedStringSet) Len() int {
-	return len(s.set)
-}
-
-func (s *orderedStringSet) Add(key string) {
-	if !includes(s.set, key) {
-		s.set = append(s.set, key)
-	}
-}
-
-func (s *orderedStringSet) Values() []string {
-	a := make([]string, len(s.set))
-	copy(a, s.set)
-	return a
-}
-
 type StringOrMap struct {
 	Value string
 	Map   map[string]interface{}

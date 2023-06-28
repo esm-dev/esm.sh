@@ -285,7 +285,7 @@ func esmHandler() rex.Handle {
 						m["startedAt"] = t.startedAt.Format(http.TimeFormat)
 					}
 					if len(t.deps) > 0 {
-						m["deps"] = t.deps.String()
+						m["deps"] = t.Args.deps.String()
 					}
 					q[i] = m
 					i++
@@ -724,7 +724,7 @@ func esmHandler() rex.Handle {
 				task := &BuildTask{
 					CdnOrigin: cdnOrigin,
 					Pkg:       reqPkg,
-					BuildArgs: BuildArgs{
+					Args: BuildArgs{
 						alias:       map[string]string{},
 						deps:        PkgSlice{},
 						external:    newStringSet(),
@@ -1059,7 +1059,7 @@ func esmHandler() rex.Handle {
 			_, _, err := findDts()
 			if err == storage.ErrNotFound {
 				task := &BuildTask{
-					BuildArgs:    buildArgs,
+					Args:         buildArgs,
 					CdnOrigin:    cdnOrigin,
 					BuildVersion: buildVersion,
 					Pkg:          reqPkg,
@@ -1094,7 +1094,7 @@ func esmHandler() rex.Handle {
 		}
 
 		task := &BuildTask{
-			BuildArgs:    buildArgs,
+			Args:         buildArgs,
 			CdnOrigin:    cdnOrigin,
 			BuildVersion: buildVersion,
 			Pkg:          reqPkg,

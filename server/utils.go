@@ -21,6 +21,8 @@ import (
 	"github.com/ije/esbuild-internal/logger"
 )
 
+const EOL = "\n"
+
 var (
 	regexpFullVersion      = regexp.MustCompile(`^\d+\.\d+\.\d+[\w\.\+\-]*$`)
 	regexpFullVersionPath  = regexp.MustCompile(`(\w)@(v?\d+\.\d+\.\d+[\w\.\+\-]*|[0-9a-f]{10})(/|$)`)
@@ -200,10 +202,6 @@ func kill(pidFile string) (err error) {
 	return process.Kill()
 }
 
-func isJSIdentChar(c byte) bool {
-	return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '_' || c == '$'
-}
-
 func validateJS(filename string) (isESM bool, namedExports []string, err error) {
 	data, err := os.ReadFile(filename)
 	if err != nil {
@@ -296,4 +294,8 @@ func concatBytes(a, b []byte) []byte {
 	copy(c, a)
 	copy(c[len(a):], b)
 	return c
+}
+
+func jsDataUrl(code string) string {
+	return fmt.Sprintf("data:text/javascript;base64,%s", base64.StdEncoding.EncodeToString([]byte(code)))
 }

@@ -16,7 +16,6 @@ import (
 var requireModeAllowList = []string{
 	"@babel/types",
 	"cheerio",
-	"domhandler",
 	"he",
 	"jsbn",
 	"netmask",

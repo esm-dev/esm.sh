@@ -7,7 +7,6 @@ import (
 	"io"
 	"os"
 	"path"
-	"path/filepath"
 	"strings"
 
 	"github.com/esm-dev/esm.sh/server/storage"
@@ -46,7 +45,7 @@ func (task *BuildTask) ID() string {
 		task.ghPrefix(),
 		pkg.Name,
 		pkg.Version,
-		encodeBuildArgsPrefix(task.BuildArgs, task.Pkg, task.Target == "types"),
+		encodeBuildArgsPrefix(task.Args, task.Pkg, task.Target == "types"),
 		task.Target,
 		name,
 		extname,
@@ -114,23 +113,8 @@ func (task *BuildTask) getSavepath() string {
 	return path.Join("builds", task.ID())
 }
 
-func (task *BuildTask) getRealWD() string {
-	if task.realWd == "" {
-		if l, e := filepath.EvalSymlinks(path.Join(task.wd, "node_modules", task.Pkg.Name)); e == nil {
-			if strings.HasPrefix(task.Pkg.Name, "@") {
-				task.realWd = path.Join(l, "../../..")
-			} else {
-				task.realWd = path.Join(l, "../..")
-			}
-		} else {
-			task.realWd = task.wd
-		}
-	}
-	return task.realWd
-}
-
 func (task *BuildTask) getPackageInfo(name string, version string) (info NpmPackage, fromPackageJSON bool, err error) {
-	return getPackageInfo(task.getRealWD(), name, version)
+	return getPackageInfo(task.installDir, name, version)
 }
 
 func (task *BuildTask) isServerTarget() bool {
@@ -141,7 +125,7 @@ func (task *BuildTask) isDenoTarget() bool {
 	return task.Target == "deno" || task.Target == "denonext"
 }
 
-func (task *BuildTask) analyze() (esm *ESMBuild, npm NpmPackage, reexport string, err error) {
+func (task *BuildTask) analyze(forceCjsOnly bool) (esm *ESMBuild, npm NpmPackage, reexport string, err error) {
 	wd := task.wd
 	pkg := task.Pkg
 
@@ -311,7 +295,7 @@ func (task *BuildTask) analyze() (esm *ESMBuild, npm NpmPackage, reexport string
 		nodeEnv = "development"
 	}
 
-	if npm.Module != "" {
+	if npm.Module != "" && !forceCjsOnly {
 		modulePath, namedExports, erro := resolveESModule(wd, npm.Name, npm.Module)
 		if erro == nil {
 			npm.Module = modulePath
@@ -583,8 +567,8 @@ func (task *BuildTask) applyConditions(p *NpmPackage, exports interface{}, pType
 		if task.Dev {
 			targetConditions = append(targetConditions, "development")
 		}
-		if task.conditions.Len() > 0 {
-			targetConditions = append(task.conditions.Values(), targetConditions...)
+		if task.Args.conditions.Len() > 0 {
+			targetConditions = append(task.Args.conditions.Values(), targetConditions...)
 		}
 		for _, condition := range append(targetConditions, conditions...) {
 			v, ok := m[condition]
@@ -593,14 +577,11 @@ func (task *BuildTask) applyConditions(p *NpmPackage, exports interface{}, pType
 				break
 			}
 		}
-		if p.Module == "" {
-			conditions := []string{"require", "node", "default"}
-			for _, condition := range append(targetConditions, conditions...) {
-				v, ok := m[condition]
-				if ok {
-					task.applyConditions(p, v, "")
-					break
-				}
+		for _, condition := range append(targetConditions, "require", "node", "default") {
+			v, ok := m[condition]
+			if ok {
+				task.applyConditions(p, v, "commonjs")
+				break
 			}
 		}
 		for key, value := range m {

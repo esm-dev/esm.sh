@@ -31,7 +31,7 @@ func rewriteJS(task *BuildTask, js []byte) []byte {
 	case "iconv-lite":
 		if task.isDenoTarget() && semverLessThan(task.Pkg.Version, "0.5.0") {
 			old := "__Process$.versions.node"
-			new := "(void 0)                "
+			new := "__Process$.versions.nope"
 			js = bytes.Replace(js, []byte(old), []byte(new), 1)
 		}
 	}
