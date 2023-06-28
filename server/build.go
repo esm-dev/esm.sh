@@ -66,18 +66,6 @@ func (task *BuildTask) Build() (esm *ESMBuild, err error) {
 			return
 		}
 
-		if l, e := filepath.EvalSymlinks(path.Join(task.wd, "node_modules", task.Pkg.Name)); e == nil {
-			task.realWd = l
-			if task.Pkg.FromGithub || strings.HasPrefix(task.Pkg.Name, "@") {
-				task.installDir = path.Join(l, "../../..")
-			} else {
-				task.installDir = path.Join(l, "../..")
-			}
-		} else {
-			task.realWd = task.wd
-			task.installDir = task.wd
-		}
-
 		if cfg.NpmToken != "" || (cfg.NpmUser != "" && cfg.NpmPassword != "") {
 			rcFilePath := path.Join(task.wd, ".npmrc")
 			if !fileExists(rcFilePath) {
@@ -132,6 +120,18 @@ func (task *BuildTask) Build() (esm *ESMBuild, err error) {
 	err = installPackage(task.wd, task.Pkg)
 	if err != nil {
 		return
+	}
+
+	if l, e := filepath.EvalSymlinks(path.Join(task.wd, "node_modules", task.Pkg.Name)); e == nil {
+		task.realWd = l
+		if task.Pkg.FromGithub || strings.HasPrefix(task.Pkg.Name, "@") {
+			task.installDir = path.Join(l, "../../..")
+		} else {
+			task.installDir = path.Join(l, "../..")
+		}
+	} else {
+		task.realWd = task.wd
+		task.installDir = task.wd
 	}
 
 	if task.Target == "raw" {
@@ -189,31 +189,48 @@ func (task *BuildTask) build() (esm *ESMBuild, err error) {
 
 	// cjs reexport
 	if reexport != "" {
-		p, _, e := task.getPackageInfo(reexport, "latest")
+		pkgName, subpath := splitPkgPath(reexport)
+		v, ok := npm.Dependencies[pkgName]
+		if !ok {
+			v, ok = npm.PeerDependencies[pkgName]
+		}
+		if !ok {
+			v = "latest"
+		}
+		p, formJson, e := task.getPackageInfo(pkgName, v)
 		if e != nil {
 			err = e
 			return
 		}
-		importPath := task.getImportPath(Pkg{
-			Name:    p.Name,
-			Version: p.Version,
-		}, encodeBuildArgsPrefix(task.Args, task.Pkg, false))
-		buf := bytes.NewBuffer(nil)
-		fmt.Fprintf(buf, `export * from "%s";`, importPath)
-
 		// Check if the package has default export
 		t := &BuildTask{
 			Args: task.Args,
 			Pkg: Pkg{
-				Name:    p.Name,
-				Version: p.Version,
+				Name:      p.Name,
+				Version:   p.Version,
+				Subpath:   subpath,
+				Submodule: toModuleName(subpath),
 			},
 			Target: task.Target,
 			Dev:    task.Dev,
 			wd:     task.installDir,
 		}
-		aEsm, _, _, e := t.analyze(false)
-		if e == nil && aEsm.HasExportDefault {
+		if !formJson {
+			err = installPackage(task.wd, t.Pkg)
+			if err != nil {
+				return
+			}
+		}
+		m, _, _, e := t.analyze(false)
+		if e != nil {
+			err = e
+			return
+		}
+
+		buf := bytes.NewBuffer(nil)
+		importPath := task.getImportPath(t.Pkg, encodeBuildArgsPrefix(task.Args, task.Pkg, false))
+		fmt.Fprintf(buf, `export * from "%s";`, importPath)
+		if m.HasExportDefault {
 			fmt.Fprintf(buf, "\n")
 			fmt.Fprintf(buf, `export { default } from "%s";`, importPath)
 		}
@@ -738,8 +755,15 @@ rebuild:
 						tmp[i] = true
 					} else if !isLocalSpecifier(name) && !builtInNodeModules[name] {
 						pkgName, subpath := splitPkgPath(name)
-						npm, formJson, e := task.getPackageInfo(pkgName, "latest")
-						if e == nil && formJson {
+						v, ok := npm.Dependencies[pkgName]
+						if !ok {
+							v, ok = npm.PeerDependencies[pkgName]
+						}
+						if !ok {
+							v = "latest"
+						}
+						npm, formJson, e := task.getPackageInfo(pkgName, v)
+						if e == nil {
 							// if the dep is a esm only package
 							// or the dep(cjs) exports `__esModule`
 							if npm.Type == "module" {
@@ -757,9 +781,14 @@ rebuild:
 									Dev:    task.Dev,
 									wd:     task.installDir,
 								}
-								aEsm, _, _, e := t.analyze(true)
-								if e == nil && includes(aEsm.NamedExports, "__esModule") {
-									tmp[i] = true
+								if !formJson {
+									e = installPackage(task.wd, t.Pkg)
+								}
+								if e == nil {
+									m, _, _, e := t.analyze(true)
+									if e == nil && includes(m.NamedExports, "__esModule") {
+										tmp[i] = true
+									}
 								}
 							}
 						}
