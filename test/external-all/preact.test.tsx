@@ -4,7 +4,7 @@ import { h } from "preact";
 import render from "preact-render-to-string";
 import useSWR from "swr";
 
-Deno.test("external all", async () => {
+Deno.test("external all", () => {
   const fetcher = (url: string) => fetch(url).then((res) => res.json());
   const App = () => {
     const { data } = useSWR("http://localhost:8080/status.json", fetcher, {

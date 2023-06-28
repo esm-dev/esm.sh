@@ -5,5 +5,8 @@
       "deno.ns"
     ]
   },
-  "importMap": "./import_map.json"
+  "imports": {
+    "fast-deep-equal": "./deep-eq.js",
+    "json-schema-traverse": "./not-existed-file-should-throw.js"
+  }
 }

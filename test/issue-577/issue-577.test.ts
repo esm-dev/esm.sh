@@ -5,10 +5,10 @@ import { Document } from "https://deno.land/x/deno_dom@v0.1.38/deno-dom-wasm.ts"
 Reflect.set(globalThis, "document", new Document());
 
 const { default: HTMLDOMParser } = await import(
-  "http://localhost:8080/html-dom-parser@3.1.7?dev"
+  "http://localhost:8080/html-dom-parser@3.1.7"
 );
 
-Deno.test("issue #577", async () => {
+Deno.test("issue #577", () => {
   const dom = HTMLDOMParser("<p>Hello, World!</p>");
   assertEquals(dom[0].type, "tag");
 });

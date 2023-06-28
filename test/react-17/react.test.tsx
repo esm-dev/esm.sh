@@ -3,7 +3,7 @@ import { assert } from "https://deno.land/std@0.180.0/testing/asserts.ts";
 import React from "http://localhost:8080/react@17";
 import { renderToString } from "http://localhost:8080/react-dom@17/server";
 
-Deno.test("react@17", async () => {
+Deno.test("react@17", () => {
   const html = renderToString(
     <main>
       <h1>Hi :)</h1>
