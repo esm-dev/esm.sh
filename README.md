@@ -26,10 +26,11 @@ or build a module with custom input(code):
 ```javascript
 import { esm } from "https://esm.sh/build";
 
-const mod = await esm`
-  export const foo: string = "bar";
+const { say } = await esm`
+  import chalk from "chalk";
+  export const say = () => chalk.blue("Hi!");
 `;
-console.log(mod.foo); // "bar"
+console.log(say()); // "Hi!"
 ```
 
 > More usage check out [here](#building-a-module-with-custom-inputcode).
