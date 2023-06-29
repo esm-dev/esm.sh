@@ -113,8 +113,25 @@ func (task *BuildTask) getSavepath() string {
 	return path.Join("builds", task.ID())
 }
 
-func (task *BuildTask) getPackageInfo(name string, version string) (info NpmPackage, fromPackageJSON bool, err error) {
-	return getPackageInfo(task.installDir, name, version)
+func (task *BuildTask) getPackageInfo(name string) (pkg Pkg, p NpmPackage, fromPackageJSON bool, err error) {
+	pkgName, subpath := splitPkgPath(name)
+	v, ok := task.npm.Dependencies[pkgName]
+	if !ok {
+		v, ok = task.npm.PeerDependencies[pkgName]
+	}
+	if !ok {
+		v = "latest"
+	}
+	p, fromPackageJSON, err = getPackageInfo(task.installDir, pkgName, v)
+	if err == nil {
+		pkg = Pkg{
+			Name:      p.Name,
+			Version:   p.Version,
+			Subpath:   subpath,
+			Submodule: toModuleName(subpath),
+		}
+	}
+	return
 }
 
 func (task *BuildTask) isServerTarget() bool {
@@ -146,7 +163,7 @@ func (task *BuildTask) analyze(forceCjsOnly bool) (esm *ESMBuild, npm NpmPackage
 	esm = &ESMBuild{}
 
 	defer func() {
-		esm.CJS = npm.Main != "" && npm.Module == ""
+		esm.FromCJS = npm.Main != "" && npm.Module == ""
 		esm.TypesOnly = isTypesOnlyPackage(npm)
 	}()
 

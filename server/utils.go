@@ -83,6 +83,34 @@ func includes(a []string, s string) bool {
 	return false
 }
 
+func filter(a []string, fn func(s string) bool) []string {
+	l := len(a)
+	if l == 0 {
+		return nil
+	}
+	b := make([]string, l)
+	i := 0
+	for _, v := range a {
+		if fn(v) {
+			b[i] = v
+			i++
+		}
+	}
+	return b[:i]
+}
+
+func sliceMap(a []string, fn func(s string) string) []string {
+	l := len(a)
+	if l == 0 {
+		return nil
+	}
+	b := make([]string, l)
+	for i, v := range a {
+		b[i] = fn(v)
+	}
+	return b
+}
+
 func endsWith(s string, suffixs ...string) bool {
 	for _, suffix := range suffixs {
 		if strings.HasSuffix(s, suffix) {

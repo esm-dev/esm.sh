@@ -20,11 +20,12 @@ import (
 
 type ESMBuild struct {
 	NamedExports     []string `json:"-"`
-	HasExportDefault bool     `json:"d"`
-	CJS              bool     `json:"c"`
-	Dts              string   `json:"t"`
-	TypesOnly        bool     `json:"o"`
-	PackageCSS       bool     `json:"s"`
+	HasExportDefault bool     `json:"d,omitempty"`
+	FromCJS          bool     `json:"c,omitempty"`
+	Dts              string   `json:"t,omitempty"`
+	TypesOnly        bool     `json:"o,omitempty"`
+	PackageCSS       bool     `json:"s,omitempty"`
+	Deps             []string `json:"p,omitempty"`
 }
 
 type BuildTask struct {
@@ -38,13 +39,15 @@ type BuildTask struct {
 	Deprecated   string
 	// internal
 	id          string
+	stage       string
 	wd          string
 	realWd      string
 	installDir  string
-	stage       string
-	deps        []string
-	cjsDeps     [][2]string
+	imports     []string
+	requires    [][2]string
 	headerLines int // to fix the source map
+	esm         *ESMBuild
+	npm         NpmPackage
 }
 
 func (task *BuildTask) Build() (esm *ESMBuild, err error) {
@@ -139,10 +142,15 @@ func (task *BuildTask) Build() (esm *ESMBuild, err error) {
 	}
 
 	task.stage = "build"
-	return task.build()
+	err = task.build()
+	if err != nil {
+		return
+	}
+
+	return task.esm, nil
 }
 
-func (task *BuildTask) build() (esm *ESMBuild, err error) {
+func (task *BuildTask) build() (err error) {
 	// build json
 	if strings.HasSuffix(task.Pkg.Submodule, ".json") {
 		nmDir := path.Join(task.wd, "node_modules")
@@ -150,19 +158,19 @@ func (task *BuildTask) build() (esm *ESMBuild, err error) {
 		if fileExists(jsonPath) {
 			json, err := ioutil.ReadFile(jsonPath)
 			if err != nil {
-				return nil, err
+				return err
 			}
 			buffer := bytes.NewBufferString("export default ")
 			buffer.Write(json)
 			_, err = fs.WriteFile(task.getSavepath(), buffer)
 			if err != nil {
-				return nil, err
+				return err
 			}
-			esm := &ESMBuild{
+			task.esm = &ESMBuild{
 				HasExportDefault: true,
 			}
-			task.storeToDB(esm)
-			return esm, nil
+			task.storeToDB()
+			return nil
 		}
 	}
 
@@ -170,6 +178,8 @@ func (task *BuildTask) build() (esm *ESMBuild, err error) {
 	if err != nil {
 		return
 	}
+	task.npm = npm
+	task.esm = esm
 
 	if task.Target == "types" {
 		if npm.Types != "" {
@@ -183,34 +193,21 @@ func (task *BuildTask) build() (esm *ESMBuild, err error) {
 		dts := npm.Name + "@" + npm.Version + path.Join("/", npm.Types)
 		esm.Dts = fmt.Sprintf("/v%d%s/%s", task.BuildVersion, task.ghPrefix(), dts)
 		task.buildDTS(dts)
-		task.storeToDB(esm)
+		task.storeToDB()
 		return
 	}
 
 	// cjs reexport
 	if reexport != "" {
-		pkgName, subpath := splitPkgPath(reexport)
-		v, ok := npm.Dependencies[pkgName]
-		if !ok {
-			v, ok = npm.PeerDependencies[pkgName]
-		}
-		if !ok {
-			v = "latest"
-		}
-		p, formJson, e := task.getPackageInfo(pkgName, v)
+		pkg, _, formJson, e := task.getPackageInfo(reexport)
 		if e != nil {
 			err = e
 			return
 		}
 		// Check if the package has default export
 		t := &BuildTask{
-			Args: task.Args,
-			Pkg: Pkg{
-				Name:      p.Name,
-				Version:   p.Version,
-				Subpath:   subpath,
-				Submodule: toModuleName(subpath),
-			},
+			Args:   task.Args,
+			Pkg:    pkg,
 			Target: task.Target,
 			Dev:    task.Dev,
 			wd:     task.installDir,
@@ -239,8 +236,8 @@ func (task *BuildTask) build() (esm *ESMBuild, err error) {
 		if err != nil {
 			return
 		}
-		task.checkDTS(esm, npm)
-		task.storeToDB(esm)
+		task.checkDTS()
+		task.storeToDB()
 		return
 	}
 
@@ -347,7 +344,7 @@ rebuild:
 						}
 
 						if implicitExternal.Has(args.Path) {
-							return api.OnResolveResult{Path: task.resolveExternal(args.Path, &npm, isRequireCall), External: true}, nil
+							return api.OnResolveResult{Path: task.resolveExternal(args.Path, args.Kind), External: true}, nil
 						}
 
 						// externalize yarn PnP API
@@ -462,7 +459,7 @@ rebuild:
 						if task.Bundle && !task.Args.external.Has(specifier) && !implicitExternal.Has(specifier) {
 							if builtInNodeModules[specifier] {
 								if task.isServerTarget() {
-									return api.OnResolveResult{Path: task.resolveExternal(specifier, &npm, isRequireCall), External: true}, nil
+									return api.OnResolveResult{Path: task.resolveExternal(specifier, args.Kind), External: true}, nil
 								}
 								data, err := embedFS.ReadFile(("server/embed/polyfills/node_" + specifier))
 								if err == nil {
@@ -504,7 +501,7 @@ rebuild:
 						// externalize the _parent_ module
 						// e.g. "react/jsx-runtime" imports "react"
 						if task.Pkg.Submodule != "" && task.Pkg.Name == specifier {
-							return api.OnResolveResult{Path: task.resolveExternal(specifier, &npm, isRequireCall), External: true}, nil
+							return api.OnResolveResult{Path: task.resolveExternal(specifier, args.Kind), External: true}, nil
 						}
 
 						// bundle the package/module it self and the entrypoint
@@ -548,7 +545,7 @@ rebuild:
 													if url == task.Pkg.ImportPath() {
 														return api.OnResolveResult{}, nil
 													}
-													return api.OnResolveResult{Path: task.resolveExternal(url, &npm, isRequireCall), External: true}, nil
+													return api.OnResolveResult{Path: task.resolveExternal(url, args.Kind), External: true}, nil
 												}
 											}
 										}
@@ -564,7 +561,7 @@ rebuild:
 								return api.OnResolveResult{}, nil
 							}
 							specifier = strings.TrimPrefix(fullFilepath, filepath.Join(task.installDir, "node_modules")+"/")
-							return api.OnResolveResult{Path: task.resolveExternal(specifier, &npm, isRequireCall), External: true}, nil
+							return api.OnResolveResult{Path: task.resolveExternal(specifier, args.Kind), External: true}, nil
 						}
 
 						// check `sideEffects`
@@ -579,7 +576,7 @@ rebuild:
 						}
 
 						// dynamic external
-						return api.OnResolveResult{Path: task.resolveExternal(specifier, &npm, isRequireCall), External: true, SideEffects: sideEffects}, nil
+						return api.OnResolveResult{Path: task.resolveExternal(specifier, args.Kind), External: true, SideEffects: sideEffects}, nil
 					},
 				)
 
@@ -745,38 +742,25 @@ rebuild:
 				}
 			}
 
-			if len(task.cjsDeps) > 0 {
-				tmp := make([]bool, len(task.cjsDeps))
-				for i, dep := range task.cjsDeps {
+			if len(task.requires) > 0 {
+				tmp := make([]bool, len(task.requires))
+				for i, dep := range task.requires {
 					name := dep[0]
 					url := dep[1]
 					// if `require("module").default` found
 					if bytes.Contains(jsContent, []byte(fmt.Sprintf(`("%s").default`, name))) {
 						tmp[i] = true
 					} else if !isLocalSpecifier(name) && !builtInNodeModules[name] {
-						pkgName, subpath := splitPkgPath(name)
-						v, ok := npm.Dependencies[pkgName]
-						if !ok {
-							v, ok = npm.PeerDependencies[pkgName]
-						}
-						if !ok {
-							v = "latest"
-						}
-						npm, formJson, e := task.getPackageInfo(pkgName, v)
+						pkg, p, formJson, e := task.getPackageInfo(name)
 						if e == nil {
 							// if the dep is a esm only package
 							// or the dep(cjs) exports `__esModule`
-							if npm.Type == "module" {
+							if p.Type == "module" {
 								tmp[i] = true
 							} else {
 								t := &BuildTask{
-									Args: task.Args,
-									Pkg: Pkg{
-										Name:      npm.Name,
-										Version:   npm.Version,
-										Subpath:   subpath,
-										Submodule: toModuleName(subpath),
-									},
+									Args:   task.Args,
+									Pkg:    pkg,
 									Target: task.Target,
 									Dev:    task.Dev,
 									wd:     task.installDir,
@@ -796,7 +780,7 @@ rebuild:
 					fmt.Fprintf(header, `import * as __%x$ from "%s";%s`, i, url, EOL)
 				}
 				fmt.Fprint(header, `var require=n=>{const e=m=>typeof m.default<"u"?m.default:m,c=m=>Object.assign({},m);switch(n){`)
-				for i, dep := range task.cjsDeps {
+				for i, dep := range task.requires {
 					name := dep[0]
 					esModule := tmp[i]
 					if esModule {
@@ -862,12 +846,16 @@ rebuild:
 		}
 	}
 
-	task.checkDTS(esm, npm)
-	task.storeToDB(esm)
+	esm.Deps = filter(task.imports, func(dep string) bool {
+		return strings.HasPrefix(dep, "/") || strings.HasPrefix(dep, "http:") || strings.HasPrefix(dep, "https:")
+	})
+
+	task.checkDTS()
+	task.storeToDB()
 	return
 }
 
-func (task *BuildTask) resolveExternal(specifier string, npm *NpmPackage, isRequireCall bool) string {
+func (task *BuildTask) resolveExternal(specifier string, kind api.ResolveKind) string {
 	var importPath string
 	// remote imports
 	if task.Args.external.Has(specifier) || task.Args.external.Has("*") {
@@ -967,9 +955,9 @@ func (task *BuildTask) resolveExternal(specifier string, npm *NpmPackage, isRequ
 		pkgName, subpath := splitPkgPath(specifier)
 		if pkgName == task.Pkg.Name {
 			version = task.Pkg.Version
-		} else if v, ok := npm.Dependencies[pkgName]; ok {
+		} else if v, ok := task.npm.Dependencies[pkgName]; ok {
 			version = v
-		} else if v, ok := npm.PeerDependencies[pkgName]; ok {
+		} else if v, ok := task.npm.PeerDependencies[pkgName]; ok {
 			version = v
 		}
 		pkg := Pkg{
@@ -992,38 +980,38 @@ func (task *BuildTask) resolveExternal(specifier string, npm *NpmPackage, isRequ
 		importPath = specifier
 	}
 
-	if !includes(task.deps, importPath) {
-		task.deps = append(task.deps, importPath)
+	if !includes(task.imports, importPath) && kind != api.ResolveJSDynamicImport {
+		task.imports = append(task.imports, importPath)
 	}
 
-	if isRequireCall {
+	if kind == api.ResolveJSRequireCall {
 		has := false
-		for _, v := range task.cjsDeps {
+		for _, v := range task.requires {
 			if has = v[0] == specifier; has {
 				break
 			}
 		}
 		if !has {
-			task.cjsDeps = append([][2]string{{specifier, importPath}}, task.cjsDeps...)
+			task.requires = append([][2]string{{specifier, importPath}}, task.requires...)
 		}
 		return specifier
 	}
 	return importPath
 }
 
-func (task *BuildTask) storeToDB(esm *ESMBuild) {
-	err := db.Put(task.ID(), utils.MustEncodeJSON(esm))
+func (task *BuildTask) storeToDB() {
+	err := db.Put(task.ID(), utils.MustEncodeJSON(task.esm))
 	if err != nil {
 		log.Errorf("db: %v", err)
 	}
 }
 
-func (task *BuildTask) checkDTS(esm *ESMBuild, npm NpmPackage) {
+func (task *BuildTask) checkDTS() {
 	name := task.Pkg.Name
 	submodule := task.Pkg.Submodule
 	var dts string
-	if npm.Types != "" {
-		dts = task.toTypesPath(task.wd, npm, "", encodeBuildArgsPrefix(task.Args, task.Pkg, true), submodule)
+	if task.npm.Types != "" {
+		dts = task.toTypesPath(task.wd, task.npm, "", encodeBuildArgsPrefix(task.Args, task.Pkg, true), submodule)
 	} else if !strings.HasPrefix(name, "@types/") {
 		versions := []string{"latest"}
 		versionParts := strings.Split(task.Pkg.Version, ".")
@@ -1041,7 +1029,7 @@ func (task *BuildTask) checkDTS(esm *ESMBuild, npm NpmPackage) {
 			versions = append([]string{pkg.Version}, versions...)
 		}
 		for _, version := range versions {
-			p, _, err := task.getPackageInfo(typesPkgName, version)
+			p, _, err := getPackageInfo(task.installDir, typesPkgName, version)
 			if err == nil {
 				prefix := encodeBuildArgsPrefix(task.Args, Pkg{Name: p.Name}, true)
 				dts = task.toTypesPath(task.wd, p, version, prefix, submodule)
@@ -1054,7 +1042,7 @@ func (task *BuildTask) checkDTS(esm *ESMBuild, npm NpmPackage) {
 		if stableBuild[task.Pkg.Name] {
 			bv = STABLE_VERSION
 		}
-		esm.Dts = fmt.Sprintf("/v%d%s/%s", bv, task.ghPrefix(), dts)
+		task.esm.Dts = fmt.Sprintf("/v%d%s/%s", bv, task.ghPrefix(), dts)
 	}
 }
 

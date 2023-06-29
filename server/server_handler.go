@@ -284,7 +284,7 @@ func esmHandler() rex.Handle {
 					if !t.startedAt.IsZero() {
 						m["startedAt"] = t.startedAt.Format(http.TimeFormat)
 					}
-					if len(t.deps) > 0 {
+					if len(t.Args.deps) > 0 {
 						m["deps"] = t.Args.deps.String()
 					}
 					q[i] = m
@@ -1215,16 +1215,26 @@ func esmHandler() rex.Handle {
 		}
 
 		buf := bytes.NewBuffer(nil)
-		fmt.Fprintf(buf, `/* esm.sh - %v */%s`, reqPkg, "\n")
+		fmt.Fprintf(buf, `/* esm.sh - %v */%s`, reqPkg, EOL)
 
 		if isWorker {
 			fmt.Fprintf(buf, `export { default } from "%s%s/%s?worker";`, cdnOrigin, cfg.BasePath, taskID)
 		} else {
-			fmt.Fprintf(buf, `export * from "%s%s/%s";%s`, cdnOrigin, cfg.BasePath, taskID, "\n")
-			if (esm.CJS || esm.HasExportDefault) && (treeShaking.Len() == 0 || treeShaking.Has("default")) {
-				fmt.Fprintf(buf, `export { default } from "%s%s/%s";%s`, cdnOrigin, cfg.BasePath, taskID, "\n")
+			if len(esm.Deps) > 0 {
+				// TODO: lookup deps of deps
+				ctx.AddHeader("X-Esm-Deps", strings.Join(sliceMap(esm.Deps, func(dep string) string {
+					if strings.HasPrefix(dep, "/") {
+						dep = fmt.Sprintf("%s%s%s", cdnOrigin, cfg.BasePath, dep)
+					}
+					fmt.Fprintf(buf, `import "%s";%s`, dep, EOL)
+					return dep
+				}), ", "))
 			}
-			if esm.CJS && ctx.Form.Has("cjs-exports") {
+			fmt.Fprintf(buf, `export * from "%s%s/%s";%s`, cdnOrigin, cfg.BasePath, taskID, EOL)
+			if (esm.FromCJS || esm.HasExportDefault) && (treeShaking.Len() == 0 || treeShaking.Has("default")) {
+				fmt.Fprintf(buf, `export { default } from "%s%s/%s";%s`, cdnOrigin, cfg.BasePath, taskID, EOL)
+			}
+			if esm.FromCJS && ctx.Form.Has("cjs-exports") {
 				exports := newStringSet()
 				for _, p := range strings.Split(ctx.Form.Value("cjs-exports"), ",") {
 					p = strings.TrimSpace(p)
@@ -1233,8 +1243,8 @@ func esmHandler() rex.Handle {
 					}
 				}
 				if exports.Len() > 0 {
-					fmt.Fprintf(buf, `import __cjs_exports$ from "%s%s/%s";%s`, cdnOrigin, cfg.BasePath, taskID, "\n")
-					fmt.Fprintf(buf, `export const { %s } = __cjs_exports$;%s`, strings.Join(exports.Values(), ", "), "\n")
+					fmt.Fprintf(buf, `import __cjs_exports$ from "%s%s/%s";%s`, cdnOrigin, cfg.BasePath, taskID, EOL)
+					fmt.Fprintf(buf, `export const { %s } = __cjs_exports$;%s`, strings.Join(exports.Values(), ", "), EOL)
 				}
 			}
 		}
