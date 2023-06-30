@@ -401,6 +401,13 @@ rebuild:
 						if len(task.Args.alias) > 0 {
 							if name, ok := task.Args.alias[specifier]; ok {
 								specifier = name
+							} else {
+								pkgName, subpath := splitPkgPath(specifier)
+								if subpath != "" {
+									if name, ok := task.Args.alias[pkgName]; ok {
+										specifier = name + "/" + subpath
+									}
+								}
 							}
 						}
 
@@ -857,11 +864,11 @@ rebuild:
 
 func (task *BuildTask) resolveExternal(specifier string, kind api.ResolveKind) string {
 	var importPath string
-	// remote imports
+	// check `?external`
 	if task.Args.external.Has(specifier) || task.Args.external.Has("*") {
 		importPath = specifier
 	}
-	// sub module
+	// is sub-module of current package
 	if importPath == "" && strings.HasPrefix(specifier, task.Pkg.Name+"/") {
 		subPath := strings.TrimPrefix(specifier, task.Pkg.Name+"/")
 		subPkg := Pkg{
@@ -951,30 +958,48 @@ func (task *BuildTask) resolveExternal(specifier string, kind api.ResolveKind) s
 	}
 	// common npm dependency
 	if importPath == "" {
-		version := "latest"
 		pkgName, subpath := splitPkgPath(specifier)
-		if pkgName == task.Pkg.Name {
-			version = task.Pkg.Version
-		} else if v, ok := task.npm.Dependencies[pkgName]; ok {
-			version = v
-		} else if v, ok := task.npm.PeerDependencies[pkgName]; ok {
-			version = v
+		if task.Args.external.Has(pkgName) {
+			importPath = specifier
+		} else {
+			version := "latest"
+			if pkgName == task.Pkg.Name {
+				version = task.Pkg.Version
+			} else if pkg, ok := task.Args.deps.Get(pkgName); ok {
+				version = pkg.Version
+			} else if v, ok := task.npm.Dependencies[pkgName]; ok {
+				version = v
+			} else if v, ok := task.npm.PeerDependencies[pkgName]; ok {
+				version = v
+			}
+			pkg := Pkg{
+				Name:      pkgName,
+				Version:   version,
+				Subpath:   subpath,
+				Submodule: toModuleName(subpath),
+			}
+			args := BuildArgs{
+				alias:             task.Args.alias,
+				deps:              task.Args.deps,
+				external:          task.Args.external,
+				denoStdVersion:    task.Args.denoStdVersion,
+				ignoreAnnotations: task.Args.ignoreAnnotations,
+				ignoreRequire:     task.Args.ignoreAnnotations,
+				keepNames:         task.Args.ignoreAnnotations,
+				treeShaking:       newStringSet(), // remove `?exports` args
+				conditions:        newStringSet(), // remove `?conditions` args
+			}
+			if stableBuild[pkgName] {
+				args.alias = map[string]string{}
+				args.deps = []Pkg{}
+				args.external = newStringSet()
+				args.denoStdVersion = ""
+				args.ignoreAnnotations = false
+				args.ignoreRequire = false
+				args.keepNames = false
+			}
+			importPath = task.getImportPath(pkg, encodeBuildArgsPrefix(args, pkg, false))
 		}
-		pkg := Pkg{
-			Name:      pkgName,
-			Version:   version,
-			Subpath:   subpath,
-			Submodule: toModuleName(subpath),
-		}
-		args := BuildArgs{
-			alias:          map[string]string{},
-			deps:           task.Args.deps,
-			external:       task.Args.external,
-			treeShaking:    newStringSet(), // remove `?exports` args
-			conditions:     newStringSet(), // remove `?conditions` args
-			denoStdVersion: task.Args.denoStdVersion,
-		}
-		importPath = task.getImportPath(pkg, encodeBuildArgsPrefix(args, pkg, false))
 	}
 	if importPath == "" {
 		importPath = specifier

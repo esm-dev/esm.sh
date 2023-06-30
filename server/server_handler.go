@@ -923,7 +923,7 @@ func esmHandler() rex.Handle {
 		isPined := ctx.Form.Has("pin") || hasBuildVerPrefix || stableBuild[reqPkg.Name]
 		isWorker := ctx.Form.Has("worker")
 		noCheck := ctx.Form.Has("no-check") || ctx.Form.Has("no-dts")
-		ignoreRequire := ctx.Form.Has("ignore-require") || ctx.Form.Has("no-require") || reqPkg.Name == "@unocss/preset-icons"
+		ignoreRequire := ctx.Form.Has("ignore-require") || reqPkg.Name == "@unocss/preset-icons"
 		keepNames := ctx.Form.Has("keep-names")
 		ignoreAnnotations := ctx.Form.Has("ignore-annotations")
 
@@ -1222,7 +1222,7 @@ func esmHandler() rex.Handle {
 		} else {
 			if len(esm.Deps) > 0 {
 				// TODO: lookup deps of deps
-				ctx.AddHeader("X-Esm-Deps", strings.Join(sliceMap(esm.Deps, func(dep string) string {
+				ctx.SetHeader("X-Esm-Deps", strings.Join(sliceMap(esm.Deps, func(dep string) string {
 					if strings.HasPrefix(dep, "/") {
 						dep = fmt.Sprintf("%s%s%s", cdnOrigin, cfg.BasePath, dep)
 					}
@@ -1230,6 +1230,7 @@ func esmHandler() rex.Handle {
 					return dep
 				}), ", "))
 			}
+			ctx.SetHeader("X-Esm-Id", taskID)
 			fmt.Fprintf(buf, `export * from "%s%s/%s";%s`, cdnOrigin, cfg.BasePath, taskID, EOL)
 			if (esm.FromCJS || esm.HasExportDefault) && (treeShaking.Len() == 0 || treeShaking.Has("default")) {
 				fmt.Fprintf(buf, `export { default } from "%s%s/%s";%s`, cdnOrigin, cfg.BasePath, taskID, EOL)

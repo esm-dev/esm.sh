@@ -115,14 +115,17 @@ func (task *BuildTask) getSavepath() string {
 
 func (task *BuildTask) getPackageInfo(name string) (pkg Pkg, p NpmPackage, fromPackageJSON bool, err error) {
 	pkgName, subpath := splitPkgPath(name)
-	v, ok := task.npm.Dependencies[pkgName]
-	if !ok {
-		v, ok = task.npm.PeerDependencies[pkgName]
+	var version string
+	if pkg, ok := task.Args.deps.Get(pkgName); ok {
+		version = pkg.Version
+	} else if v, ok := task.npm.Dependencies[pkgName]; ok {
+		version = v
+	} else if v, ok = task.npm.PeerDependencies[pkgName]; ok {
+		version = v
+	} else {
+		version = "latest"
 	}
-	if !ok {
-		v = "latest"
-	}
-	p, fromPackageJSON, err = getPackageInfo(task.installDir, pkgName, v)
+	p, fromPackageJSON, err = getPackageInfo(task.installDir, pkgName, version)
 	if err == nil {
 		pkg = Pkg{
 			Name:      p.Name,
