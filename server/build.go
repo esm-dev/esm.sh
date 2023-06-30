@@ -424,6 +424,12 @@ rebuild:
 									} else if v, ok := npm.PeerDependencies[pkgName]; ok {
 										version = v
 									}
+									if !regexpFullVersion.MatchString(version) {
+										p, _, err := getPackageInfo(task.installDir, pkgName, version)
+										if err == nil {
+											version = p.Version
+										}
+									}
 									if err == nil {
 										pkg := Pkg{
 											Name:      pkgName,
@@ -971,6 +977,12 @@ func (task *BuildTask) resolveExternal(specifier string, kind api.ResolveKind) s
 				version = v
 			} else if v, ok := task.npm.PeerDependencies[pkgName]; ok {
 				version = v
+			}
+			if !regexpFullVersion.MatchString(version) {
+				p, _, err := getPackageInfo(task.installDir, pkgName, version)
+				if err == nil {
+					version = p.Version
+				}
 			}
 			pkg := Pkg{
 				Name:      pkgName,

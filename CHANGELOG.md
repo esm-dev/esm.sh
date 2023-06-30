@@ -1,5 +1,15 @@
 # Changelog
 
+## v127
+
+- Add `preload` imports
+- Add `modern-normalize` to the `cssPackages`
+- Fix subpath not be resovled with `?alias` (close #671)
+- Fix dts transformer for "*.d" path imports (close #660)
+- Fix source map mappings (close #668)
+- CLI: Fix update failure caused by gh module (#661 by @lifegpc)
+- Upgrade esbuild to **0.18.10**
+
 ## v126
 
 - **breaking**: the `esm` tag function of build API now imorts module
