@@ -9,6 +9,7 @@ declare global {
 
 export type HttpMetadata = {
   contentType: string;
+  deps?: string;
   dts?: string;
 };
 

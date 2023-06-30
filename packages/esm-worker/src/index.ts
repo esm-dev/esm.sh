@@ -643,9 +643,13 @@ async function fetchESM(
         }
         headers.set("Content-Type", metadata.contentType);
         headers.set("Cache-Control", "public, max-age=31536000, immutable");
+        if (metadata.deps) {
+          headers.set("X-Esm-Deps", metadata.deps);
+          headers.append("Access-Control-Expose-Headers", "X-Esm-Deps");
+        }
         if (metadata.dts) {
           headers.set("X-TypeScript-Types", metadata.dts);
-          headers.set("Access-Control-Expose-Headers", "X-TypeScript-Types");
+          headers.append("Access-Control-Expose-Headers", "X-TypeScript-Types");
         }
         headers.set("X-Content-Source", "esm-worker");
         return new Response(body, { headers });
@@ -670,15 +674,20 @@ async function fetchESM(
 
   const contentType = res.headers.get("Content-Type") || getContentType(path);
   const cacheControl = res.headers.get("Cache-Control");
+  const deps = res.headers.get("X-Esm-Deps");
   const dts = res.headers.get("X-TypeScript-Types");
 
   headers.set("Content-Type", contentType);
   if (cacheControl) {
     headers.set("Cache-Control", cacheControl);
   }
+  if (deps) {
+    headers.set("X-Esm-Deps", deps);
+    headers.append("Access-Control-Expose-Headers", "X-Esm-Deps");
+  }
   if (dts) {
     headers.set("X-TypeScript-Types", dts);
-    headers.set("Access-Control-Expose-Headers", "X-TypeScript-Types");
+    headers.append("Access-Control-Expose-Headers", "X-TypeScript-Types");
   }
   headers.set(
     "X-Content-Source",
@@ -700,7 +709,7 @@ async function fetchESM(
       const [a, b] = res.body!.tee();
       body = a;
       value = options.gzip ? b.pipeThrough(new CompressionStream("gzip")) : b;
-  } catch (_) {
+    } catch (_) {
       // failed to tee, fallback to arrayBuffer
       body = await res.arrayBuffer();
       value = options.gzip
@@ -710,7 +719,7 @@ async function fetchESM(
         : body.slice(0);
     }
     ctx.waitUntil(
-      KV.put(storeKey, value as any, { metadata: { contentType, dts } }),
+      KV.put(storeKey, value as any, { metadata: { contentType, dts,deps } }),
     );
     return new Response(body, { headers });
   }
@@ -795,10 +804,14 @@ async function fetchServerOrigin(
     res.headers,
     "Cache-Control",
     "Content-Type",
+    "X-Esm-Deps",
     "X-Typescript-Types",
   );
+  if (resHeaders.has("X-Esm-Deps")) {
+    resHeaders.append("Access-Control-Expose-Headers", "X-Esm-Deps");
+  }
   if (resHeaders.has("X-Typescript-Types")) {
-    resHeaders.set("Access-Control-Expose-Headers", "X-TypeScript-Types");
+    resHeaders.append("Access-Control-Expose-Headers", "X-TypeScript-Types");
   }
   return new Response(res.body, { headers: resHeaders });
 }
