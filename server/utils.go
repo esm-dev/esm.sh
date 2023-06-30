@@ -111,6 +111,14 @@ func sliceMap(a []string, fn func(s string) string) []string {
 	return b
 }
 
+func cloneMap(m map[string]string) map[string]string {
+	n := make(map[string]string, len(m))
+	for k, v := range m {
+		n[k] = v
+	}
+	return n
+}
+
 func endsWith(s string, suffixs ...string) bool {
 	for _, suffix := range suffixs {
 		if strings.HasSuffix(s, suffix) {

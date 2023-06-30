@@ -991,24 +991,13 @@ func (task *BuildTask) resolveExternal(specifier string, kind api.ResolveKind) s
 				Submodule: toModuleName(subpath),
 			}
 			args := BuildArgs{
-				alias:             task.Args.alias,
-				deps:              task.Args.deps,
-				external:          task.Args.external,
-				denoStdVersion:    task.Args.denoStdVersion,
-				ignoreAnnotations: task.Args.ignoreAnnotations,
-				ignoreRequire:     task.Args.ignoreAnnotations,
-				keepNames:         task.Args.ignoreAnnotations,
-				treeShaking:       newStringSet(), // remove `?exports` args
-				conditions:        newStringSet(), // remove `?conditions` args
+				alias:       cloneMap(task.Args.alias),
+				external:    newStringSet(), // remove `?external` args
+				treeShaking: newStringSet(), // remove `?exports` args
+				conditions:  newStringSet(), // remove `?conditions` args
 			}
 			if stableBuild[pkgName] {
 				args.alias = map[string]string{}
-				args.deps = []Pkg{}
-				args.external = newStringSet()
-				args.denoStdVersion = ""
-				args.ignoreAnnotations = false
-				args.ignoreRequire = false
-				args.keepNames = false
 			}
 			importPath = task.getImportPath(pkg, encodeBuildArgsPrefix(args, pkg, false))
 		}
