@@ -992,10 +992,12 @@ func (task *BuildTask) resolveExternal(specifier string, kind api.ResolveKind) s
 			}
 			args := BuildArgs{
 				alias:       cloneMap(task.Args.alias),
-				external:    newStringSet(), // remove `?external` args
-				treeShaking: newStringSet(), // remove `?exports` args
-				conditions:  newStringSet(), // remove `?conditions` args
+				external:    newStringSet(task.Args.external.Values()...),
+				treeShaking: newStringSet(),
+				conditions:  newStringSet(),
 			}
+			delete(args.alias, pkgName)
+			args.external.Remove(pkgName)
 			if stableBuild[pkgName] {
 				args.alias = map[string]string{}
 			}
