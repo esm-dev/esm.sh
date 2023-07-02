@@ -1000,6 +1000,7 @@ func (task *BuildTask) resolveExternal(specifier string, kind api.ResolveKind) s
 			args.external.Remove(pkgName)
 			if stableBuild[pkgName] {
 				args.alias = map[string]string{}
+				args.external.Reset()
 			}
 			importPath = task.getImportPath(pkg, encodeBuildArgsPrefix(args, pkg, false))
 		}
