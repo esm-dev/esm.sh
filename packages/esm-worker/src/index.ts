@@ -643,13 +643,17 @@ async function fetchESM(
         }
         headers.set("Content-Type", metadata.contentType);
         headers.set("Cache-Control", "public, max-age=31536000, immutable");
+        const exposedHeaders = [];
         if (metadata.deps) {
           headers.set("X-Esm-Deps", metadata.deps);
-          headers.append("Access-Control-Expose-Headers", "X-Esm-Deps");
+          exposedHeaders.push("X-Esm-Deps");
         }
         if (metadata.dts) {
           headers.set("X-TypeScript-Types", metadata.dts);
-          headers.append("Access-Control-Expose-Headers", "X-TypeScript-Types");
+          exposedHeaders.push("X-TypeScript-Types");
+        }
+        if (exposedHeaders.length > 0) {
+          headers.set("Access-Control-Expose-Headers", exposedHeaders.join(", "));
         }
         headers.set("X-Content-Source", "esm-worker");
         return new Response(body, { headers });
@@ -676,6 +680,7 @@ async function fetchESM(
   const cacheControl = res.headers.get("Cache-Control");
   const deps = res.headers.get("X-Esm-Deps");
   const dts = res.headers.get("X-TypeScript-Types");
+  const exposedHeaders = [];
 
   headers.set("Content-Type", contentType);
   if (cacheControl) {
@@ -683,11 +688,14 @@ async function fetchESM(
   }
   if (deps) {
     headers.set("X-Esm-Deps", deps);
-    headers.append("Access-Control-Expose-Headers", "X-Esm-Deps");
+    exposedHeaders.push("X-Esm-Deps");
   }
   if (dts) {
     headers.set("X-TypeScript-Types", dts);
-    headers.append("Access-Control-Expose-Headers", "X-TypeScript-Types");
+    exposedHeaders.push("X-TypeScript-Types");
+  }
+  if (exposedHeaders.length > 0) {
+    headers.set("Access-Control-Expose-Headers", exposedHeaders.join(", "));
   }
   headers.set(
     "X-Content-Source",
@@ -807,11 +815,14 @@ async function fetchServerOrigin(
     "X-Esm-Deps",
     "X-Typescript-Types",
   );
-  if (resHeaders.has("X-Esm-Deps")) {
-    resHeaders.append("Access-Control-Expose-Headers", "X-Esm-Deps");
+  const exposedHeaders = []
+  for (const key of ["X-Esm-Deps", "X-Typescript-Types"]) {
+    if (resHeaders.has(key)) {
+      exposedHeaders.push(key);
+    }
   }
-  if (resHeaders.has("X-Typescript-Types")) {
-    resHeaders.append("Access-Control-Expose-Headers", "X-TypeScript-Types");
+  if (exposedHeaders.length> 0) {
+    resHeaders.set("Access-Control-Expose-Headers", exposedHeaders.join(", "));
   }
   return new Response(res.body, { headers: resHeaders });
 }
