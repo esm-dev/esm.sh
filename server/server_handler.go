@@ -348,6 +348,12 @@ func esmHandler() rex.Handle {
 					ctx.Form.Value("name"),
 					ctx.Form.Value("importer"),
 				))
+			case "unsupported-node-native-module":
+				return throwErrorJS(ctx, fmt.Errorf(
+					`unsupported node native module "%s" (Imported by "%s")`,
+					ctx.Form.Value("name"),
+					ctx.Form.Value("importer"),
+				))
 			default:
 				return throwErrorJS(ctx, fmt.Errorf("unknown error"))
 			}

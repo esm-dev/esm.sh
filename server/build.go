@@ -328,7 +328,7 @@ rebuild:
 					func(args api.OnResolveArgs) (api.OnResolveResult, error) {
 						if strings.HasPrefix(args.Path, "file:") {
 							return api.OnResolveResult{
-								Path:     fmt.Sprintf("/error.js?type=unsupported-file-dependency&name=%s&importer=%s", strings.TrimPrefix(args.Path, "file:"), task.Pkg.Name),
+								Path:     fmt.Sprintf("%s/error.js?type=unsupported-file-dependency&name=%s&importer=%s", cfg.BasePath, strings.TrimPrefix(args.Path, "file:"), task.Pkg),
 								External: true,
 							}, nil
 						}
@@ -440,12 +440,10 @@ rebuild:
 										return api.OnResolveResult{Path: fmt.Sprintf("npm:%s", pkg.String()), External: true}, nil
 									}
 								}
-								return api.OnResolveResult{Path: fmt.Sprintf(
-									"%s/error.js?type=unsupported-npm-package&name=%s&importer=%s",
-									cfg.BasePath,
-									specifier,
-									task.Pkg.Name,
-								), External: true}, nil
+								return api.OnResolveResult{
+									Path:     fmt.Sprintf("%s/error.js?type=unsupported-npm-package&name=%s&importer=%s", cfg.BasePath, specifier, task.Pkg),
+									External: true,
+								}, nil
 							}
 						}
 
@@ -456,16 +454,19 @@ rebuild:
 							fullFilepath = filepath.Join(task.installDir, "node_modules", specifier)
 						}
 
-						if strings.HasSuffix(fullFilepath, ".json") {
-							if fileExists(fullFilepath) {
-								return api.OnResolveResult{Path: fullFilepath}, nil
-							}
+						if strings.HasSuffix(fullFilepath, ".node") && fileExists(fullFilepath) {
+							return api.OnResolveResult{
+								Path:     fmt.Sprintf("%s/error.js?type=unsupported-node-native-module&name=%s&importer=%s", cfg.BasePath, path.Base(args.Path), task.Pkg),
+								External: true,
+							}, nil
 						}
 
-						if strings.HasSuffix(fullFilepath, ".wasm") {
-							if fileExists(fullFilepath) {
-								return api.OnResolveResult{Path: fullFilepath, Namespace: "wasm"}, nil
-							}
+						if strings.HasSuffix(fullFilepath, ".json") && fileExists(fullFilepath) {
+							return api.OnResolveResult{Path: fullFilepath}, nil
+						}
+
+						if strings.HasSuffix(fullFilepath, ".wasm") && fileExists(fullFilepath) {
+							return api.OnResolveResult{Path: fullFilepath, Namespace: "wasm"}, nil
 						}
 
 						// bundles all dependencies in `bundle` mode, apart from peer dependencies and `?external` query
