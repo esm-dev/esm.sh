@@ -911,10 +911,10 @@ func (task *BuildTask) resolveExternal(specifier string, kind api.ResolveKind) s
 					importPath = fmt.Sprintf("%s/v%d/node_%s.js", cfg.BasePath, task.BuildVersion, specifier)
 				} else {
 					importPath = fmt.Sprintf(
-						"%s/error.js?type=unsupported-nodejs-builtin-module&name=%s&importer=%s",
+						"%s/error.js?type=unsupported-node-builtin-module&name=%s&importer=%s",
 						cfg.BasePath,
 						specifier,
-						task.Pkg.Name,
+						task.Pkg,
 					)
 				}
 			}
