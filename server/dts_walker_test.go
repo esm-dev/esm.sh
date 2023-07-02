@@ -19,6 +19,7 @@ func TestDtsWalker(t *testing.T) {
 import * as CSS from 'csstype';
 import * as PropTypes from 'prop-types';
 import type { Interaction as SchedulerInteraction } /* bad comment */ from "scheduler/tracing";
+import DefaultExport, { AndNamed } from "scheduler/tracing";
 
 export * from "react";
 export = React;
@@ -41,6 +42,7 @@ import React = require("react");
 import * as CSS from 'https://esm.sh/csstype@1.0.0/index.d.ts';
 import * as PropTypes from 'https://esm.sh/prop-types@1.0.0/index.d.ts';
 import type { Interaction as SchedulerInteraction } /* bad comment */ from "https://esm.sh/scheduler@1.0.0/tracing.d.ts";
+import DefaultExport, { AndNamed } from "https://esm.sh/scheduler@1.0.0/tracing.d.ts";
 
 export * from "https://esm.sh/@types/react@1.0.0/index.d.ts";
 export = React;
