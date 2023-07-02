@@ -9,7 +9,7 @@ import (
 )
 
 var (
-	regexpImportExportExpr  = regexp.MustCompile(`^(import|export)(\s+type)?\s*('|"|[a-zA-Z0-9_\$]+\s+from|\*|\{)`)
+	regexpImportExportExpr  = regexp.MustCompile(`^(import|export)(\s+type)?\s*('|"|[a-zA-Z0-9_\$]+(\s+from|,\s*\{)|\*|\{)`)
 	regexpFromExpr          = regexp.MustCompile(`(\}|\*|\s)from\s*('|")`)
 	regexpImportPathExpr    = regexp.MustCompile(`^import\s*('|")`)
 	regexpImportCallExpr    = regexp.MustCompile(`(import|require)\(('|").+?('|")\)`)
