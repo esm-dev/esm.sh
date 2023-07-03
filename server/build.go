@@ -518,69 +518,71 @@ rebuild:
 							return api.OnResolveResult{Path: task.resolveExternal(specifier, args.Kind), External: true}, nil
 						}
 
-						// bundle the package/module it self and the entrypoint
-						if specifier == task.Pkg.ImportPath() || specifier == entryPoint || specifier == path.Join(npm.Name, npm.Main) || specifier == path.Join(npm.Name, npm.Module) {
+						// bundle the module it self and the entrypoint
+						if specifier == entryPoint || specifier == task.Pkg.ImportPath() || specifier == path.Join(npm.Name, npm.Module) || specifier == path.Join(npm.Name, npm.Main) {
 							return api.OnResolveResult{}, nil
 						}
 
-						// splits modules based on the `exports` defines in package.json,
-						// see https://nodejs.org/api/packages.html
-						if (strings.HasPrefix(specifier, "./") || strings.HasPrefix(specifier, "../") || specifier == "..") && !strings.HasSuffix(specifier, ".js") && !strings.HasSuffix(specifier, ".mjs") && !strings.HasSuffix(specifier, ".json") {
-							spec := "." + strings.TrimPrefix(fullFilepath, path.Join(task.installDir, "node_modules", npm.Name))
-							// bundle {pkgName}/{pkgName}.js
-							if spec == fmt.Sprintf("./%s.js", task.Pkg.Name) {
-								return api.OnResolveResult{}, nil
-							}
-							v, ok := npm.DefinedExports.(map[string]interface{})
-							if ok {
-								for export, paths := range v {
-									m, ok := paths.(map[string]interface{})
-									if ok && export != "." {
-										for _, value := range m {
-											s, ok := value.(string)
-											if ok && s != "" {
-												match := spec == s || spec+".js" == s || spec+".mjs" == s
-												if !match {
-													if a := strings.Split(s, "*"); len(a) == 2 {
-														prefix := a[0]
-														suffix := a[1]
-														if (strings.HasPrefix(spec, prefix)) &&
-															(strings.HasSuffix(spec, suffix) ||
-																strings.HasSuffix(spec+".js", suffix) ||
-																strings.HasSuffix(spec+".mjs", suffix)) {
-															matchName := strings.TrimPrefix(strings.TrimSuffix(spec, suffix), prefix)
-															export = strings.Replace(export, "*", matchName, -1)
-															match = true
+						if isLocalSpecifier(specifier) {
+							// is sub-module of current package and non-dynamic import
+							if strings.HasPrefix(fullFilepath, task.realWd) && args.Kind != api.ResolveJSDynamicImport {
+								// splits modules based on the `exports` defines in package.json,
+								// see https://nodejs.org/api/packages.html
+								if v, ok := npm.DefinedExports.(map[string]interface{}); ok {
+									modName := "." + strings.TrimPrefix(fullFilepath, path.Join(task.installDir, "node_modules", npm.Name))
+									// bundles _internal_ modules
+									if strings.Contains(modName, "/internal/") {
+										return api.OnResolveResult{}, nil
+									}
+									if strings.HasSuffix(modName, ".mjs") {
+										modName = strings.TrimSuffix(specifier, ".mjs")
+									} else {
+										modName = strings.TrimSuffix(modName, ".js")
+									}
+									for export, paths := range v {
+										m, ok := paths.(map[string]interface{})
+										if ok && export != "." {
+											for _, value := range m {
+												s, ok := value.(string)
+												if ok && s != "" {
+													match := modName == s || modName+".js" == s || modName+".mjs" == s
+													if !match {
+														if a := strings.Split(s, "*"); len(a) == 2 {
+															prefix, suffix := a[0], a[1]
+															if strings.HasPrefix(modName, prefix) &&
+																(strings.HasSuffix(modName, suffix) ||
+																	strings.HasSuffix(modName+".js", suffix) ||
+																	strings.HasSuffix(modName+".mjs", suffix)) {
+																matchName := strings.TrimPrefix(strings.TrimSuffix(modName, suffix), prefix)
+																export = strings.Replace(export, "*", matchName, -1)
+																match = true
+															}
 														}
 													}
-												}
-												if match {
-													url := path.Join(npm.Name, export)
-													if url == task.Pkg.ImportPath() {
-														return api.OnResolveResult{}, nil
+													if match {
+														url := path.Join(npm.Name, export)
+														if i := task.Pkg.ImportPath(); url != i && url != i+"/index" {
+															sideEffects := api.SideEffectsTrue
+															if !npm.SideEffects {
+																sideEffects = api.SideEffectsFalse
+															}
+															return api.OnResolveResult{Path: task.resolveExternal(url, args.Kind), External: true, SideEffects: sideEffects}, nil
+														}
 													}
-													return api.OnResolveResult{Path: task.resolveExternal(url, args.Kind), External: true}, nil
 												}
 											}
 										}
 									}
 								}
-							}
-						}
-
-						// local imports
-						if isLocalSpecifier(specifier) {
-							// bundle current package modules
-							if strings.HasPrefix(fullFilepath, task.realWd) {
 								return api.OnResolveResult{}, nil
 							}
 							specifier = strings.TrimPrefix(fullFilepath, filepath.Join(task.installDir, "node_modules")+"/")
-							return api.OnResolveResult{Path: task.resolveExternal(specifier, args.Kind), External: true}, nil
 						}
 
 						// check `sideEffects`
 						sideEffects := api.SideEffectsTrue
-						if f := path.Join(task.installDir, "node_modules", specifier, "package.json"); fileExists(f) {
+						pkgName, _ := splitPkgPath(specifier)
+						if f := path.Join(task.installDir, "node_modules", pkgName, "package.json"); fileExists(f) {
 							var np NpmPackage
 							if utils.ParseJSONFile(f, &np) == nil {
 								if !np.SideEffects {
