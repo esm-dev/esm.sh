@@ -11,14 +11,14 @@ const (
 const (
 	nodejsMinVersion = 16
 	nodejsLatestLTS  = "18.16.0"
-	nodeTypesVersion = "18.16.9"
+	nodeTypesVersion = "18.16.19"
 	denoStdVersion   = "0.177.1"
 )
 
 // fix some npm package versions
 var fixedPkgVersions = map[string]string{
-	"@types/react@17": "17.0.59",
-	"@types/react@18": "18.2.6",
+	"@types/react@17": "17.0.52",
+	"@types/react@18": "18.2.14",
 	"isomorphic-ws@4": "5.0.0",
 	"resolve@1.22":    "1.22.2", // 1.22.3+ will read package.json from disk
 }
