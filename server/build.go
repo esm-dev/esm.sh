@@ -999,8 +999,6 @@ func (task *BuildTask) resolveExternal(specifier string, kind api.ResolveKind) s
 				treeShaking: newStringSet(),
 				conditions:  newStringSet(),
 			}
-			delete(args.alias, pkgName)
-			args.external.Remove(pkgName)
 			if stableBuild[pkgName] {
 				args.alias = map[string]string{}
 				args.external.Reset()
