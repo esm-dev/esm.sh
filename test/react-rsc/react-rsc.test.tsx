@@ -1,8 +1,9 @@
+// deno-lint-ignore-file no-explicit-any
 import { assertStringIncludes } from "https://deno.land/std@0.180.0/testing/asserts.ts";
 
-import React, { type FC, Suspense } from "http://localhost:8080/react@next";
-import ReactDom from "http://localhost:8080/react-dom@next/server";
-import ReactServerDom from "http://localhost:8080/react-server-dom-webpack@experimental/server.browser?deps=react@next";
+import React from "http://localhost:8080/react@canary";
+import ReactDom from "http://localhost:8080/react-dom@canary/server";
+import ReactServerDom from "http://localhost:8080/react-server-dom-webpack@canary/server.browser?deps=react@canary,react-dom@canary";
 
 /**
  * Wrap a client-side module import with metadata
@@ -11,15 +12,17 @@ import ReactServerDom from "http://localhost:8080/react-server-dom-webpack@exper
  * @param {string} localImportPath Path to client-side module on the file system.
  */
 function getClientComponentModule(id: string, localImportPath: string) {
-  return `import DefaultExport from ${JSON.stringify(localImportPath)};
-	DefaultExport.$$typeof = Symbol.for("react.client.reference");
-	DefaultExport.$$id=${JSON.stringify(id)};
-	export default DefaultExport;`;
+  return `
+import DefaultExport from ${JSON.stringify(localImportPath)}
+DefaultExport.$$typeof = Symbol.for("react.client.reference")
+DefaultExport.$$id=${JSON.stringify(id)}
+export default DefaultExport
+`;
 }
 
 const FooCode = `
 "use client"
-import React from "http://localhost:8080/react@next"
+import React from "http://localhost:8080/react@canary"
 export default () => React.createElement("h2", null, "Foo")
 `;
 
@@ -46,7 +49,8 @@ Deno.test("react-rsc", async () => {
         </ul>
       </>
     );
-  }) as unknown as FC;
+  }) as any;
+  const Suspense = React.Suspense as any;
   const App = () => (
     <>
       <h1>AbraMix</h1>
