@@ -64,5 +64,4 @@ func TestEncodeBuildArgs(t *testing.T) {
 	if !args.ignoreAnnotations {
 		t.Fatal("ignoreAnnotations should be true")
 	}
-	t.Log(prefix, args)
 }

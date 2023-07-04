@@ -50,5 +50,8 @@ jobs:
         with:
           deno-version: v1.x
 
-      - name: Run Deno test
+      - name: Run `go test`
+        run: go test github.com/esm-dev/esm.sh/server -v
+
+      - name: Run `deno test`
         run: deno run -A test/bootstrap.ts

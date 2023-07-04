@@ -22,5 +22,14 @@ func TestListRepoRefs(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	t.Log(refs)
+	var headSha string
+	for _, ref := range refs {
+		if ref.Ref == "HEAD" {
+			headSha = ref.Sha
+			break
+		}
+	}
+	if headSha == "" {
+		t.Fatal("HEAD not found")
+	}
 }
