@@ -1,5 +1,14 @@
 # Changelog
 
+## v128
+
+- Add official Docker image: https://ghcr.io/esm-dev/esm.sh
+- Fix missed `?external` of deps
+- Fix duplicate `Access-Control-Expose-Headers` headers
+- Fix dts transform for imports with both default and named imports (#675 by @hayes)
+- Don't bundle dynamic imports
+- Upgrade _stableBuild_ to **v128**
+
 ## v127
 
 - Add `preload` imports
