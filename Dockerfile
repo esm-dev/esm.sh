@@ -1,14 +1,37 @@
-FROM golang:1.18 AS build
+#######################################
+#
+# Build
+#
+#######################################
+FROM golang:1.19-alpine AS build-stage
 
-RUN apt-get update -y && apt-get install -y xz-utils
-RUN useradd -u 1000 -m esm
-RUN mkdir /esm && chown esm:esm /esm
-RUN git clone https://github.com/esm-dev/esm.sh /esm/esm.sh
-RUN git checkout v127
+ENV ESM_SH_GIT_URL https://github.com/esm-dev/esm.sh
 
-USER esm
-WORKDIR /esm
-RUN go build -o bin/esmd esm.sh/main.go
+RUN apk add --no-cache git
 
-RUN echo "{\"port\":80,\"workDir\":\"/esm\"}" >> /esm/config.json
-ENTRYPOINT ["/esm/bin/esmd", "--config", "config.json"]
+RUN git clone --branch main $ESM_SH_GIT_URL /tmp/esm.sh
+
+WORKDIR /tmp/esm.sh
+
+RUN CGO_ENABLED=0 GOOS=linux go build -o esmd main.go
+
+#######################################
+#
+# Release
+#
+#######################################
+FROM node:18-alpine AS release-stage
+
+COPY --from=build-stage /tmp/esm.sh/esmd /bin/esmd
+RUN apk update && apk add --no-cache libcap-utils
+
+RUN setcap cap_net_bind_service=ep /bin/esmd
+RUN chown node:node /bin/esmd
+
+RUN npm i -g pnpm
+
+USER node
+WORKDIR /
+
+EXPOSE 8080
+CMD ["/bin/esmd"]
