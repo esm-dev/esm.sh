@@ -170,7 +170,7 @@ func apiHandler() rex.Handle {
 				}
 				cdnOrigin := ctx.R.Header.Get("X-Real-Origin")
 				if cdnOrigin == "" {
-					cdnOrigin = cfg.Origin
+					cdnOrigin = cfg.CdnOrigin
 				}
 				if cdnOrigin == "" {
 					proto := "http"
@@ -206,7 +206,7 @@ func esmHandler() rex.Handle {
 
 		cdnOrigin := ctx.R.Header.Get("X-Real-Origin")
 		if cdnOrigin == "" {
-			cdnOrigin = cfg.Origin
+			cdnOrigin = cfg.CdnOrigin
 		}
 		if cdnOrigin == "" {
 			proto := "http"
@@ -222,13 +222,13 @@ func esmHandler() rex.Handle {
 			CTX_VERSION, _ = strconv.Atoi(ewv[1:])
 		}
 
-		// Build prefix may only be served from "${cfg.BasePath}/..."
-		if cfg.BasePath != "" {
-			if strings.HasPrefix(pathname, cfg.BasePath) {
-				pathname = strings.TrimPrefix(pathname, cfg.BasePath)
+		// Build prefix may only be served from "${cfg.CdnBasePath}/..."
+		if cfg.CdnBasePath != "" {
+			if strings.HasPrefix(pathname, cfg.CdnBasePath) {
+				pathname = strings.TrimPrefix(pathname, cfg.CdnBasePath)
 			} else {
-				url := strings.TrimPrefix(ctx.R.URL.String(), cfg.BasePath)
-				url = fmt.Sprintf("%s/%s", cfg.BasePath, url)
+				url := strings.TrimPrefix(ctx.R.URL.String(), cfg.CdnBasePath)
+				url = fmt.Sprintf("%s/%s", cfg.CdnBasePath, url)
 				return rex.Redirect(url, http.StatusMovedPermanently)
 			}
 		}
@@ -253,13 +253,13 @@ func esmHandler() rex.Handle {
 			if err != nil {
 				return err
 			}
-			readme = bytes.ReplaceAll(readme, []byte("./server/embed/"), []byte(cfg.BasePath+"/embed/"))
+			readme = bytes.ReplaceAll(readme, []byte("./server/embed/"), []byte(cfg.CdnBasePath+"/embed/"))
 			readme = bytes.ReplaceAll(readme, []byte("./HOSTING.md"), []byte("https://github.com/esm-dev/esm.sh/blob/master/HOSTING.md"))
-			readme = bytes.ReplaceAll(readme, []byte("https://esm.sh"), []byte("{origin}"+cfg.BasePath))
+			readme = bytes.ReplaceAll(readme, []byte("https://esm.sh"), []byte("{origin}"+cfg.CdnBasePath))
 			readmeStrLit := utils.MustEncodeJSON(string(readme))
 			html := bytes.ReplaceAll(indexHTML, []byte("'# README'"), readmeStrLit)
 			html = bytes.ReplaceAll(html, []byte("{VERSION}"), []byte(fmt.Sprintf("%d", CTX_VERSION)))
-			html = bytes.ReplaceAll(html, []byte("{basePath}"), []byte(cfg.BasePath))
+			html = bytes.ReplaceAll(html, []byte("{basePath}"), []byte(cfg.CdnBasePath))
 			ctx.SetHeader("Cache-Control", fmt.Sprintf("public, max-age=%d", 10*60))
 			return rex.Content("index.html", startTime, bytes.NewReader(html))
 
@@ -368,7 +368,7 @@ func esmHandler() rex.Handle {
 			if err == nil {
 				if strings.HasSuffix(pathname, ".js") {
 					data = bytes.ReplaceAll(data, []byte("{origin}"), []byte(cdnOrigin))
-					data = bytes.ReplaceAll(data, []byte("{basePath}"), []byte(cfg.BasePath))
+					data = bytes.ReplaceAll(data, []byte("{basePath}"), []byte(cfg.CdnBasePath))
 				}
 				ctx.SetHeader("Cache-Control", fmt.Sprintf("public, max-age=%d", 10*60))
 				return rex.Content(pathname, startTime, bytes.NewReader(data))
@@ -414,7 +414,7 @@ func esmHandler() rex.Handle {
 
 		if pathname == "/build" {
 			if !hasBuildVerPrefix && !ctx.Form.Has("pin") {
-				url := fmt.Sprintf("%s%s/v%d/build", cdnOrigin, cfg.BasePath, CTX_VERSION)
+				url := fmt.Sprintf("%s%s/v%d/build", cdnOrigin, cfg.CdnBasePath, CTX_VERSION)
 				return rex.Redirect(url, 302)
 			}
 			data, err := embedFS.ReadFile("build.ts")
@@ -453,7 +453,7 @@ func esmHandler() rex.Handle {
 
 		if pathname == "/server" {
 			if !hasBuildVerPrefix && !ctx.Form.Has("pin") {
-				url := fmt.Sprintf("%s%s/v%d/server", cdnOrigin, cfg.BasePath, CTX_VERSION)
+				url := fmt.Sprintf("%s%s/v%d/server", cdnOrigin, cfg.CdnBasePath, CTX_VERSION)
 				return rex.Redirect(url, 302)
 			}
 			data, err := embedFS.ReadFile("server.ts")
@@ -562,13 +562,13 @@ func esmHandler() rex.Handle {
 			if file == "" {
 				return rex.Status(404, "File not found")
 			}
-			url := fmt.Sprintf("%s%s/%s@%s/%s", cdnOrigin, cfg.BasePath, reqPkg.Name, reqPkg.Version, file)
+			url := fmt.Sprintf("%s%s/%s@%s/%s", cdnOrigin, cfg.CdnBasePath, reqPkg.Name, reqPkg.Version, file)
 			return rex.Redirect(url, http.StatusMovedPermanently)
 		}
 
 		// redirect `/@types/PKG` to main dts files
 		if strings.HasPrefix(reqPkg.Name, "@types/") && (reqPkg.Submodule == "" || !strings.HasSuffix(reqPkg.Submodule, ".d.ts")) {
-			url := fmt.Sprintf("%s%s/v%d%s", cdnOrigin, cfg.BasePath, CTX_VERSION, pathname)
+			url := fmt.Sprintf("%s%s/v%d%s", cdnOrigin, cfg.CdnBasePath, CTX_VERSION, pathname)
 			if reqPkg.Submodule == "" {
 				info, _, err := getPackageInfo("", reqPkg.Name, reqPkg.Version)
 				if err != nil {
@@ -591,7 +591,7 @@ func esmHandler() rex.Handle {
 
 		// redirect to main css path for CSS packages
 		if css := cssPackages[reqPkg.Name]; css != "" && reqPkg.Submodule == "" {
-			url := fmt.Sprintf("%s%s/%s/%s", cdnOrigin, cfg.BasePath, reqPkg.String(), css)
+			url := fmt.Sprintf("%s%s/%s/%s", cdnOrigin, cfg.CdnBasePath, reqPkg.String(), css)
 			return rex.Redirect(url, http.StatusMovedPermanently)
 		}
 
@@ -631,11 +631,11 @@ func esmHandler() rex.Handle {
 			if ctx.R.URL.RawQuery != "" {
 				if extraQuery != "" {
 					query = "&" + ctx.R.URL.RawQuery
-					return rex.Redirect(fmt.Sprintf("%s%s%s%s/%s%s@%s%s%s", cdnOrigin, cfg.BasePath, bvPrefix, ghPrefix, eaSign, reqPkg.Name, reqPkg.Version, query, subPath), http.StatusFound)
+					return rex.Redirect(fmt.Sprintf("%s%s%s%s/%s%s@%s%s%s", cdnOrigin, cfg.CdnBasePath, bvPrefix, ghPrefix, eaSign, reqPkg.Name, reqPkg.Version, query, subPath), http.StatusFound)
 				}
 				query = "?" + ctx.R.URL.RawQuery
 			}
-			return rex.Redirect(fmt.Sprintf("%s%s%s%s/%s%s@%s%s%s", cdnOrigin, cfg.BasePath, bvPrefix, ghPrefix, eaSign, reqPkg.Name, reqPkg.Version, subPath, query), http.StatusFound)
+			return rex.Redirect(fmt.Sprintf("%s%s%s%s/%s%s@%s%s%s", cdnOrigin, cfg.CdnBasePath, bvPrefix, ghPrefix, eaSign, reqPkg.Name, reqPkg.Version, subPath, query), http.StatusFound)
 		}
 
 		// redirect to the url with full package version with build version prefix
@@ -658,7 +658,7 @@ func esmHandler() rex.Handle {
 			if ctx.R.URL.RawQuery != "" {
 				query = "?" + ctx.R.URL.RawQuery
 			}
-			return rex.Redirect(fmt.Sprintf("%s%s%s/%s%s%s", cdnOrigin, cfg.BasePath, bvPrefix, reqPkg.VersionName(), subPath, query), http.StatusFound)
+			return rex.Redirect(fmt.Sprintf("%s%s%s/%s%s%s", cdnOrigin, cfg.CdnBasePath, bvPrefix, reqPkg.VersionName(), subPath, query), http.StatusFound)
 		}
 
 		// support `https://esm.sh/react?dev&target=es2020/jsx-runtime` pattern for jsx transformer
@@ -686,7 +686,7 @@ func esmHandler() rex.Handle {
 			case ".mjs", ".js", ".jsx", ".ts", ".mts", ".tsx":
 				if endsWith(pathname, ".d.ts", ".d.mts") {
 					if !hasBuildVerPrefix {
-						url := fmt.Sprintf("%s%s/v%d%s", cdnOrigin, cfg.BasePath, CTX_VERSION, pathname)
+						url := fmt.Sprintf("%s%s/v%d%s", cdnOrigin, cfg.CdnBasePath, CTX_VERSION, pathname)
 						return rex.Redirect(url, http.StatusMovedPermanently)
 					}
 					reqType = "types"
@@ -696,7 +696,7 @@ func esmHandler() rex.Handle {
 			case ".wasm":
 				if ctx.Form.Has("module") {
 					buf := &bytes.Buffer{}
-					wasmUrl := fmt.Sprintf("%s%s%s", cdnOrigin, cfg.BasePath, pathname)
+					wasmUrl := fmt.Sprintf("%s%s%s", cdnOrigin, cfg.CdnBasePath, pathname)
 					fmt.Fprintf(buf, "/* esm.sh - CompiledWasm */\n")
 					fmt.Fprintf(buf, "const data = await fetch(%s).then(r => r.arrayBuffer());\nexport default new WebAssembly.Module(data);", strings.TrimSpace(string(utils.MustEncodeJSON(wasmUrl))))
 					ctx.SetHeader("Cache-Control", "public, max-age=31536000, immutable")
@@ -992,7 +992,7 @@ func esmHandler() rex.Handle {
 							target = maybeTarget
 							isBarePath = true
 						} else {
-							url := fmt.Sprintf("%s%s/%s", cdnOrigin, cfg.BasePath, reqPkg.String())
+							url := fmt.Sprintf("%s%s/%s", cdnOrigin, cfg.CdnBasePath, reqPkg.String())
 							return rex.Redirect(url, http.StatusFound)
 						}
 					} else {
@@ -1010,7 +1010,7 @@ func esmHandler() rex.Handle {
 							url := fmt.Sprintf(
 								"%s%s/stable/%s@%s/%s/%s.mjs",
 								cdnOrigin,
-								cfg.BasePath,
+								cfg.CdnBasePath,
 								reqPkg.Name,
 								reqPkg.Version,
 								maybeTarget,
@@ -1153,7 +1153,7 @@ func esmHandler() rex.Handle {
 			dtsUrl := fmt.Sprintf(
 				"%s%s/%s",
 				cdnOrigin,
-				cfg.BasePath,
+				cfg.CdnBasePath,
 				strings.TrimPrefix(esm.Dts, "/"),
 			)
 			ctx.SetHeader("X-TypeScript-Types", dtsUrl)
@@ -1178,7 +1178,7 @@ func esmHandler() rex.Handle {
 			if !esm.PackageCSS {
 				return rex.Status(404, "Package CSS not found")
 			}
-			url := fmt.Sprintf("%s%s/%s.css", cdnOrigin, cfg.BasePath, strings.TrimSuffix(taskID, path.Ext(taskID)))
+			url := fmt.Sprintf("%s%s/%s.css", cdnOrigin, cfg.CdnBasePath, strings.TrimSuffix(taskID, path.Ext(taskID)))
 			code := 302
 			if isPined {
 				code = 301
@@ -1224,22 +1224,22 @@ func esmHandler() rex.Handle {
 		fmt.Fprintf(buf, `/* esm.sh - %v */%s`, reqPkg, EOL)
 
 		if isWorker {
-			fmt.Fprintf(buf, `export { default } from "%s%s/%s?worker";`, cdnOrigin, cfg.BasePath, taskID)
+			fmt.Fprintf(buf, `export { default } from "%s%s/%s?worker";`, cdnOrigin, cfg.CdnBasePath, taskID)
 		} else {
 			if len(esm.Deps) > 0 {
 				// TODO: lookup deps of deps
 				ctx.SetHeader("X-Esm-Deps", strings.Join(sliceMap(esm.Deps, func(dep string) string {
 					if strings.HasPrefix(dep, "/") {
-						dep = fmt.Sprintf("%s%s%s", cdnOrigin, cfg.BasePath, dep)
+						dep = fmt.Sprintf("%s%s%s", cdnOrigin, cfg.CdnBasePath, dep)
 					}
 					fmt.Fprintf(buf, `import "%s";%s`, dep, EOL)
 					return dep
 				}), ", "))
 			}
 			ctx.SetHeader("X-Esm-Id", taskID)
-			fmt.Fprintf(buf, `export * from "%s%s/%s";%s`, cdnOrigin, cfg.BasePath, taskID, EOL)
+			fmt.Fprintf(buf, `export * from "%s%s/%s";%s`, cdnOrigin, cfg.CdnBasePath, taskID, EOL)
 			if (esm.FromCJS || esm.HasExportDefault) && (treeShaking.Len() == 0 || treeShaking.Has("default")) {
-				fmt.Fprintf(buf, `export { default } from "%s%s/%s";%s`, cdnOrigin, cfg.BasePath, taskID, EOL)
+				fmt.Fprintf(buf, `export { default } from "%s%s/%s";%s`, cdnOrigin, cfg.CdnBasePath, taskID, EOL)
 			}
 			if esm.FromCJS && ctx.Form.Has("cjs-exports") {
 				exports := newStringSet()
@@ -1250,14 +1250,14 @@ func esmHandler() rex.Handle {
 					}
 				}
 				if exports.Len() > 0 {
-					fmt.Fprintf(buf, `import __cjs_exports$ from "%s%s/%s";%s`, cdnOrigin, cfg.BasePath, taskID, EOL)
+					fmt.Fprintf(buf, `import __cjs_exports$ from "%s%s/%s";%s`, cdnOrigin, cfg.CdnBasePath, taskID, EOL)
 					fmt.Fprintf(buf, `export const { %s } = __cjs_exports$;%s`, strings.Join(exports.Values(), ", "), EOL)
 				}
 			}
 		}
 
 		if esm.Dts != "" && !noCheck && !isWorker {
-			dtsUrl := fmt.Sprintf("%s%s%s", cdnOrigin, cfg.BasePath, esm.Dts)
+			dtsUrl := fmt.Sprintf("%s%s%s", cdnOrigin, cfg.CdnBasePath, esm.Dts)
 			ctx.SetHeader("X-TypeScript-Types", dtsUrl)
 		}
 		if fallback {

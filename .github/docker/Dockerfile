@@ -5,8 +5,11 @@
 #######################################
 FROM golang:1.20-alpine AS build-stage
 
+ENV ESM_SH_VERSION v127
+ENV ESM_SH_GIT_URL https://github.com/esm-dev/esm.sh
+
 RUN apk add --no-cache git
-RUN git clone --branch main --depth 1 https://github.com/esm-dev/esm.sh /tmp/esm.sh
+RUN git clone --branch $ESM_SH_VERSION --depth 1 $ESM_SH_GIT_URL /tmp/esm.sh
 
 WORKDIR /tmp/esm.sh
 RUN CGO_ENABLED=0 GOOS=linux go build -o esmd main.go

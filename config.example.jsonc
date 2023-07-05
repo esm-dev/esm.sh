@@ -36,12 +36,12 @@
   // The log level, default is "info", you can also set it to "debug" to enable debug logs.
   "logLevel": "info",
 
-  // The origin of modules, default is using the origin of the request.
+  // The origin of CDN, default is using the origin of the request.
   // Use to fix origin with reverse proxy, for examle "https://esm.sh"
-  "origin": "",
+  "cdnOrigin": "",
 
-  // The base path of server, default is "/".
-  "basePath": "/",
+  // The base path of CDN, default is "/".
+  "cdnBasePath": "/",
 
   // The npm registry, default is "https://registry.npmjs.org/".
   "npmRegistry": "https://registry.npmjs.org/",
@@ -50,11 +50,12 @@
   // with this scope get downloaded from the registry, default is empty.
   // Default behavior is to fetch all packages from the npm registry.
   "npmRegistryScope": "@my-scope",
+
   // These two fields are used for basic authentication towards a private
   // package registry, default for both is empty.
-  "npmUser": "username",
-  "npmPassword": "password",
-  
+  "npmUser": "",
+  "npmPassword": "",
+
   // The npm token for private packages, default is empty.
   "npmToken": "",
 

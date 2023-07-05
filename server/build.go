@@ -328,7 +328,7 @@ rebuild:
 					func(args api.OnResolveArgs) (api.OnResolveResult, error) {
 						if strings.HasPrefix(args.Path, "file:") {
 							return api.OnResolveResult{
-								Path:     fmt.Sprintf("%s/error.js?type=unsupported-file-dependency&name=%s&importer=%s", cfg.BasePath, strings.TrimPrefix(args.Path, "file:"), task.Pkg),
+								Path:     fmt.Sprintf("%s/error.js?type=unsupported-file-dependency&name=%s&importer=%s", cfg.CdnBasePath, strings.TrimPrefix(args.Path, "file:"), task.Pkg),
 								External: true,
 							}, nil
 						}
@@ -441,7 +441,7 @@ rebuild:
 									}
 								}
 								return api.OnResolveResult{
-									Path:     fmt.Sprintf("%s/error.js?type=unsupported-npm-package&name=%s&importer=%s", cfg.BasePath, specifier, task.Pkg),
+									Path:     fmt.Sprintf("%s/error.js?type=unsupported-npm-package&name=%s&importer=%s", cfg.CdnBasePath, specifier, task.Pkg),
 									External: true,
 								}, nil
 							}
@@ -456,7 +456,7 @@ rebuild:
 
 						if strings.HasSuffix(fullFilepath, ".node") && fileExists(fullFilepath) {
 							return api.OnResolveResult{
-								Path:     fmt.Sprintf("%s/error.js?type=unsupported-node-native-module&name=%s&importer=%s", cfg.BasePath, path.Base(args.Path), task.Pkg),
+								Path:     fmt.Sprintf("%s/error.js?type=unsupported-node-native-module&name=%s&importer=%s", cfg.CdnBasePath, path.Base(args.Path), task.Pkg),
 								External: true,
 							}, nil
 						}
@@ -735,7 +735,7 @@ rebuild:
 					} else if task.Target == "deno" {
 						fmt.Fprintf(header, `import __Process$ from "https://deno.land/std@%s/node/process.ts";%s`, task.Args.denoStdVersion, EOL)
 					} else {
-						fmt.Fprintf(header, `import __Process$ from "%s/v%d/node_process.js";%s`, cfg.BasePath, task.BuildVersion, EOL)
+						fmt.Fprintf(header, `import __Process$ from "%s/v%d/node_process.js";%s`, cfg.CdnBasePath, task.BuildVersion, EOL)
 					}
 				}
 				if ids.Has("__Buffer$") {
@@ -744,7 +744,7 @@ rebuild:
 					} else if task.Target == "deno" {
 						fmt.Fprintf(header, `import { Buffer as __Buffer$ } from "https://deno.land/std@%s/node/buffer.ts";%s`, task.Args.denoStdVersion, EOL)
 					} else {
-						fmt.Fprintf(header, `import { Buffer as __Buffer$ } from "%s/v%d/buffer@6.0.3/%s/buffer.mjs";%s`, cfg.BasePath, task.BuildVersion, task.Target, EOL)
+						fmt.Fprintf(header, `import { Buffer as __Buffer$ } from "%s/v%d/buffer@6.0.3/%s/buffer.mjs";%s`, cfg.CdnBasePath, task.BuildVersion, task.Target, EOL)
 					}
 				}
 				if ids.Has("__global$") {
@@ -910,11 +910,11 @@ func (task *BuildTask) resolveExternal(specifier string, kind api.ResolveKind) s
 			} else {
 				_, err := embedFS.ReadFile(fmt.Sprintf("server/embed/polyfills/node_%s.js", specifier))
 				if err == nil {
-					importPath = fmt.Sprintf("%s/v%d/node_%s.js", cfg.BasePath, task.BuildVersion, specifier)
+					importPath = fmt.Sprintf("%s/v%d/node_%s.js", cfg.CdnBasePath, task.BuildVersion, specifier)
 				} else {
 					importPath = fmt.Sprintf(
 						"%s/error.js?type=unsupported-node-builtin-module&name=%s&importer=%s",
-						cfg.BasePath,
+						cfg.CdnBasePath,
 						specifier,
 						task.Pkg,
 					)
@@ -961,7 +961,7 @@ func (task *BuildTask) resolveExternal(specifier string, kind api.ResolveKind) s
 			importPath = jsDataUrl(`export const AbortSignal=globalThis.AbortSignal;export const AbortController=globalThis.AbortController;export default AbortController`)
 		case "node-fetch":
 			if task.Target != "node" {
-				importPath = fmt.Sprintf("%s/v%d/node_fetch.js", cfg.BasePath, task.BuildVersion)
+				importPath = fmt.Sprintf("%s/v%d/node_fetch.js", cfg.CdnBasePath, task.BuildVersion)
 			}
 		}
 	}

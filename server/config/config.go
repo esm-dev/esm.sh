@@ -3,12 +3,17 @@ package config
 import (
 	"encoding/json"
 	"fmt"
+	"net/url"
 	"os"
 	"path"
 	"path/filepath"
 	"runtime"
 	"strings"
+
+	"github.com/ije/gox/utils"
 )
+
+const MinBuildConcurrency = 4
 
 type Config struct {
 	Port             uint16  `json:"port,omitempty"`
@@ -16,20 +21,20 @@ type Config struct {
 	NsPort           uint16  `json:"nsPort,omitempty"`
 	BuildConcurrency uint16  `json:"buildConcurrency,omitempty"`
 	BanList          BanList `json:"banList,omitempty"`
+	AuthSecret       string  `json:"authSecret,omitempty"`
 	WorkDir          string  `json:"workDir,omitempty"`
 	Cache            string  `json:"cache,omitempty"`
 	Database         string  `json:"database,omitempty"`
 	Storage          string  `json:"storage,omitempty"`
 	LogLevel         string  `json:"logLevel,omitempty"`
 	LogDir           string  `json:"logDir,omitempty"`
-	Origin           string  `json:"origin,omitempty"`
-	BasePath         string  `json:"basePath,omitempty"`
+	CdnOrigin        string  `json:"cdnOrigin,omitempty"`
+	CdnBasePath      string  `json:"cdnBasePath,omitempty"`
 	NpmRegistry      string  `json:"npmRegistry,omitempty"`
 	NpmToken         string  `json:"npmToken,omitempty"`
 	NpmRegistryScope string  `json:"npmRegistryScope,omitempty"`
 	NpmUser          string  `json:"npmUser,omitempty"`
 	NpmPassword      string  `json:"npmPassword,omitempty"`
-	AuthSecret       string  `json:"authSecret,omitempty"`
 	NoCompress       bool    `json:"noCompress,omitempty"`
 }
 
@@ -75,14 +80,42 @@ func Load(filename string) (*Config, error) {
 			return nil, fmt.Errorf("fail to get absolute path of the work directory: %w", err)
 		}
 	}
-	if cfg.Port == 0 {
-		cfg.Port = 8080
+	return fixConfig(cfg), nil
+}
+
+func Default() *Config {
+	homeDir, err := os.UserHomeDir()
+	if err != nil {
+		panic(err)
 	}
-	if cfg.NsPort == 0 {
-		cfg.NsPort = 8088
+	return fixConfig(&Config{
+		WorkDir: path.Join(homeDir, ".esmd"),
+	})
+}
+
+func fixConfig(c *Config) *Config {
+	if c.Port == 0 {
+		c.Port = 8080
 	}
-	if cfg.BasePath != "" {
-		a := strings.Split(cfg.BasePath, "/")
+	if c.NsPort == 0 {
+		c.NsPort = 8088
+	}
+	if c.CdnOrigin != "" {
+		_, e := url.Parse(c.NpmRegistry)
+		if e != nil {
+			panic("invalid Cdnorigin url: " + e.Error())
+		}
+		c.CdnOrigin = strings.TrimRight(c.CdnOrigin, "/")
+	} else {
+		v := os.Getenv("CDN_ORIGIN")
+		if v != "" {
+			if _, e := url.Parse(v); e == nil {
+				c.CdnOrigin = strings.TrimRight(v, "/")
+			}
+		}
+	}
+	if c.CdnBasePath != "" {
+		a := strings.Split(c.CdnBasePath, "/")
 		path := make([]string, len(a))
 		n := 0
 		for _, p := range a {
@@ -92,62 +125,67 @@ func Load(filename string) (*Config, error) {
 			}
 		}
 		if n > 0 {
-			cfg.BasePath = "/" + strings.Join(path[:n], "/")
+			c.CdnBasePath = "/" + strings.Join(path[:n], "/")
 		} else {
-			cfg.BasePath = ""
+			c.CdnBasePath = ""
+		}
+	} else {
+		v := os.Getenv("CDN_BASE_PATH")
+		if v != "" {
+			c.CdnBasePath = utils.CleanPath(v)
 		}
 	}
-	if cfg.Origin != "" {
-		cfg.Origin = strings.TrimSuffix(cfg.Origin, "/")
+	if c.BuildConcurrency == 0 {
+		c.BuildConcurrency = uint16(2 * runtime.NumCPU())
 	}
-	if cfg.BuildConcurrency == 0 {
-		cfg.BuildConcurrency = uint16(2 * runtime.NumCPU())
+	if c.BuildConcurrency < MinBuildConcurrency {
+		c.BuildConcurrency = MinBuildConcurrency
 	}
-	if cfg.BuildConcurrency < 4 {
-		cfg.BuildConcurrency = 4
+	if c.Cache == "" {
+		c.Cache = "memory:default"
 	}
-	if cfg.Cache == "" {
-		cfg.Cache = "memory:default"
+	if c.Database == "" {
+		c.Database = fmt.Sprintf("bolt:%s", path.Join(c.WorkDir, "esm.db"))
 	}
-	if cfg.Database == "" {
-		cfg.Database = fmt.Sprintf("bolt:%s", path.Join(cfg.WorkDir, "esm.db"))
+	if c.Storage == "" {
+		c.Storage = fmt.Sprintf("local:%s", path.Join(c.WorkDir, "storage"))
 	}
-	if cfg.Storage == "" {
-		cfg.Storage = fmt.Sprintf("local:%s", path.Join(cfg.WorkDir, "storage"))
+	if c.LogDir == "" {
+		c.LogDir = path.Join(c.WorkDir, "log")
 	}
-	if cfg.LogDir == "" {
-		cfg.LogDir = path.Join(cfg.WorkDir, "log")
+	if c.LogLevel == "" {
+		c.LogLevel = "info"
 	}
-	if cfg.LogLevel == "" {
-		cfg.LogLevel = "info"
+	if c.NpmRegistry != "" {
+		_, e := url.Parse(c.NpmRegistry)
+		if e != nil {
+			panic("invalid npm registry url: " + e.Error())
+		}
+		c.NpmRegistry = strings.TrimRight(c.NpmRegistry, "/") + "/"
+	} else {
+		v := os.Getenv("NPM_REGISTRY")
+		if v != "" {
+			if _, e := url.Parse(v); e == nil {
+				c.NpmRegistry = strings.TrimRight(v, "/") + "/"
+			}
+		}
 	}
-	if cfg.NpmRegistry != "" {
-		cfg.NpmRegistry = strings.TrimRight(cfg.NpmRegistry, "/") + "/"
+	if c.NpmToken == "" {
+		c.NpmToken = os.Getenv("NPM_TOKEN")
 	}
-	return cfg, nil
-}
-
-func Default() *Config {
-	homeDir, err := os.UserHomeDir()
-	if err != nil {
-		panic(err)
+	if c.NpmRegistryScope == "" {
+		c.NpmRegistryScope = os.Getenv("NPM_REGISTRY_SCOPE")
 	}
-	workDir := path.Join(homeDir, ".esmd")
-	buildConcurrency := 2 * runtime.NumCPU()
-	if buildConcurrency < 4 {
-		buildConcurrency = 4
+	if c.NpmUser == "" {
+		c.NpmUser = os.Getenv("NPM_USER")
 	}
-	return &Config{
-		Port:             8080,
-		NsPort:           8088,
-		BuildConcurrency: uint16(buildConcurrency),
-		WorkDir:          workDir,
-		Cache:            "memory:default",
-		Database:         fmt.Sprintf("bolt:%s", path.Join(workDir, "esm.db")),
-		Storage:          fmt.Sprintf("local:%s", path.Join(workDir, "storage")),
-		LogDir:           path.Join(workDir, "log"),
-		LogLevel:         "info",
+	if c.NpmPassword == "" {
+		c.NpmPassword = os.Getenv("NPM_PASSWORD")
 	}
+	if c.AuthSecret == "" {
+		c.AuthSecret = os.Getenv("SERVER_AUTH_SECRET")
+	}
+	return c
 }
 
 // IsPackageBanned Checking if the package is banned.

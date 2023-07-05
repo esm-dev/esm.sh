@@ -88,7 +88,7 @@ func (task *BuildTask) getImportPath(pkg Pkg, buildArgsPrefix string) string {
 
 	return fmt.Sprintf(
 		"%s/%s/%s@%s/%s%s/%s%s",
-		cfg.BasePath,
+		cfg.CdnBasePath,
 		task.getBuildVersion(pkg),
 		pkg.Name,
 		pkg.Version,

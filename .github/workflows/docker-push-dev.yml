@@ -1,12 +1,12 @@
-name: Docker push latest
+name: Docker push dev
 
 on:
   push:
-    tags:
-      - v*
+    branches:
+      - main
 
 jobs:
-  latest:
+  dev:
     runs-on: ubuntu-latest
     permissions:
       packages: write
@@ -33,7 +33,7 @@ jobs:
       - name: Build and push
         uses: docker/build-push-action@v4
         with:
-          context: ./.github/docker
+          context: .
           platforms: linux/amd64,linux/arm64
           push: true
-          tags: esm-dev/esm.sh:latest,esm-dev/esm.sh:v127
+          tags: esm-dev/esm.sh:dev

@@ -63,7 +63,41 @@ your host machine.
 
 ## Deploy with Docker
 
-An example [Dockerfile](./Dockerfile) is found in the root of this project.
+esm.sh provides an official docker image for deployment. You can pull the container image from https://ghcr.io/esm-dev/esm.sh:
+
+```bash
+docker pull ghcr.io/esm-dev/esm.sh:v127   # specific version
+docker pull ghcr.io/esm-dev/esm.sh:latest # latest stable version
+docker pull ghcr.io/esm-dev/esm.sh:dev    # latest dev version
+```
+
+Then run the container:
+
+```bash
+docker run -p 8080:8080 \
+  -e NPM_REGISTRY=https://npmjs.org/registry \
+  -e NPM_TOKEN=xxxxxx \
+  ghcr.io/esm-dev/esm.sh:latest
+```
+
+Available environment variables:
+
+- `CDN_ORIGIN`: The origin of CDN, default is using the origin of the request.
+- `CDN_BASE_PATH`: The base path of CDN, default is "/".
+- `NPM_REGISTRY`: The NPM registry, default is "https://registry.npmjs.org/".
+- `NPM_TOKEN`: The NPM token for private packages.
+- `NPM_REGISTRY_SCOPE`: The NPM registry scope, default is no scope.
+- `NPM_USER`: The NPM user for private packages.
+- `NPM_PASSWORD`: The NPM password for private packages.
+- `SERVER_AUTH_SECRET`: The server auth secret, default is no auth.
+
+You can also create your own Dockerfile with `ghcr.io/esm-dev/esm.sh`:
+
+```dockerfile
+FROM ghcr.io/esm-dev/esm.sh
+ADD ./config.json /etc/esmd/config.json
+CMD ["esmd", "--config", "/etc/esmd/config.json"]
+```
 
 ## Deploy with Cloudflare Workers
 
