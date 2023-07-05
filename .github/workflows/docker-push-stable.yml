@@ -1,4 +1,4 @@
-name: Docker push latest
+name: Docker
 
 on:
   push:
@@ -6,7 +6,8 @@ on:
       - v*
 
 jobs:
-  latest:
+  push_image:
+    name: Push `stable`
     runs-on: ubuntu-latest
     permissions:
       packages: write
@@ -36,4 +37,4 @@ jobs:
           context: ./.github/docker
           platforms: linux/amd64,linux/arm64
           push: true
-          tags: esm-dev/esm.sh:latest,esm-dev/esm.sh:v127
+          tags: ghcr.io/esm-dev/esm.sh:latest,ghcr.io/esm-dev/esm.sh:v127
