@@ -3,7 +3,7 @@
 # Build
 #
 #######################################
-FROM golang:1.19-alpine AS build-stage
+FROM golang:1.20-alpine AS build-stage
 
 RUN apk add --no-cache git
 RUN git clone --branch main https://github.com/esm-dev/esm.sh /tmp/esm.sh
