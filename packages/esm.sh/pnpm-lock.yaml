@@ -6,8 +6,8 @@ settings:
 
 dependencies:
   esm-worker:
-    specifier: ^0.128.2
-    version: 0.128.2
+    specifier: ^0.128.3
+    version: 0.128.3
 
 devDependencies:
   esbuild:
@@ -244,6 +244,6 @@ packages:
       '@esbuild/win32-x64': 0.18.10
     dev: true
 
-  /esm-worker@0.128.2:
-    resolution: {integrity: sha512-tnFuuyGm7QZ1f+Z+HUZkpCvuHn4HYn6JuxkVPWkUeDgr0M8Pt8/2oehrgEO0sjHANzBWvxn+u2dwnNdedoC+5A==}
+  /esm-worker@0.128.3:
+    resolution: {integrity: sha512-1k4++oyckZMGT08cOY8rNooZYfK8uUn6C/cjgTNF3HV+ZStOC3Re17fDJyth4vL8tDA1wmDV3gLvOq5j3r1XdQ==}
     dev: false
