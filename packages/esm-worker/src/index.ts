@@ -531,20 +531,6 @@ class ESMWorker {
       hasBuildVerPrefix &&
       (subPath.endsWith(".d.ts") || hasTargetSegment(subPath))
     ) {
-      // fix "stable" module path
-      // if (
-      //   stableBuild.has(pkg) &&
-      //   !subPath.endsWith(".d.ts") &&
-      //   (subPath.endsWith(`/${pkg}.js`) ||
-      //     !url.pathname.startsWith("/stable/")) &&
-      //   subPath.split("/").length === 3
-      // ) {
-      //   const [_, target] = subPath.split("/");
-      //   return redirect(
-      //     new URL(`/${pkg}@${packageVersion}?target=${target}`, url),
-      //     301,
-      //   );
-      // }
       return ctx.withCache(() => {
         let prefix = `/${buildVersion}`;
         if (gh) {
@@ -600,16 +586,16 @@ async function fetchAsset(
     const contentType = res.headers.get("content-type") ||
       getContentType(pathname);
     const buffer = await res.arrayBuffer();
-    await storage.put(pathname.slice(1), buffer.slice(0), {
+    ctx.waitUntil(storage.put(pathname.slice(1), buffer.slice(0), {
       httpMetadata: { contentType },
-    });
+    }));
     resHeaders.set("Content-Type", contentType);
     resHeaders.set("Cache-Control", "public, max-age=31536000, immutable");
     resHeaders.set(
       "X-Content-Source",
       env.ESM_ORIGIN ?? defaultEsmServerOrigin,
     );
-    return new Response(buffer.slice(0), { headers: resHeaders });
+    return new Response(buffer, { headers: resHeaders });
   }
   return res;
 }
@@ -689,6 +675,7 @@ async function fetchESM(
   const deps = res.headers.get("X-Esm-Deps");
   const dts = res.headers.get("X-TypeScript-Types");
   const exposedHeaders = [];
+  const buffer = await res.arrayBuffer();
 
   headers.set("Content-Type", contentType);
   if (cacheControl) {
@@ -712,7 +699,6 @@ async function fetchESM(
 
   // save to KV/R2 if immutable
   if (!noStore && cacheControl?.includes("immutable")) {
-    const buffer = await res.arrayBuffer();
     if (!isModuleFile) {
       ctx.waitUntil(
         storage.put(storeKey, buffer.slice(0), {
@@ -730,10 +716,9 @@ async function fetchESM(
         KV.put(storeKey, readable, { metadata: { contentType, dts, deps } }),
       );
     }
-    return new Response(buffer, { headers });
   }
 
-  return new Response(res.body, { headers });
+  return new Response(buffer, { headers });
 }
 
 async function fetchServerOrigin(
@@ -775,42 +760,42 @@ async function fetchServerOrigin(
       redirect: "manual",
     },
   );
+  const buffer = await res.arrayBuffer();
   if (!res.ok) {
+    // CF default error page(html)
+    if (
+      res.status === 500 &&
+      res.headers.get("Content-Type")?.startsWith("text/html")
+    ) {
+      return new Response("Bad Gateway", { status: 502, headers: resHeaders });
+    }
+    // redirects
+    if (res.status === 301 || res.status === 302) {
+      return redirect(res.headers.get("Location")!, res.status);
+    }
     // fix cache-control by status code
     if (res.headers.has("Cache-Control")) {
       resHeaders.set("Cache-Control", res.headers.get("Cache-Control")!);
-    } else if (res.status === 301 || res.status === 400) {
+    } else if (res.status === 400) {
       resHeaders.set("Cache-Control", "public, max-age=31536000, immutable");
-    } else if (res.status === 302) {
-      resHeaders.set("Cache-Control", "public, max-age=600");
     } else if (res.status === 404) {
-      const message = await res.text();
+      const message = new TextDecoder().decode(buffer);
       if (!/package .+ not found/.test(message)) {
         resHeaders.set(
           "Cache-Control",
           "public, max-age=31536000, immutable",
         );
       }
-      return new Response(message, { status: 404, headers: resHeaders });
     }
-    if (res.status === 301 || res.status === 302) {
-      // await res.body?.cancel?.()
-      return redirect(res.headers.get("Location")!, res.status);
-    }
-    if (
-      res.status === 500 &&
-      res.headers.get("Content-Type")?.startsWith("text/html")
-    ) {
-      // await res.body?.cancel?.();
-      return new Response("Bad Gateway", { status: 502, headers: resHeaders });
-    }
-    return new Response(res.body, { status: res.status, headers: resHeaders });
+    copyHeaders(resHeaders, res.headers, "Content-Type");
+    return new Response(buffer, { status: res.status, headers: resHeaders });
   }
   copyHeaders(
     resHeaders,
     res.headers,
     "Cache-Control",
     "Content-Type",
+    "Content-Length",
     "X-Esm-Deps",
     "X-Typescript-Types",
   );
@@ -823,7 +808,7 @@ async function fetchServerOrigin(
   if (exposedHeaders.length > 0) {
     resHeaders.set("Access-Control-Expose-Headers", exposedHeaders.join(", "));
   }
-  return new Response(res.body, { headers: resHeaders });
+  return new Response(buffer, { headers: resHeaders });
 }
 
 export function withESMWorker(middleware?: Middleware): ESMWorker {
