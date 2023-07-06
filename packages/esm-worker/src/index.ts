@@ -38,7 +38,7 @@ const regexpBuildVersionPrefix = /^\/(v\d+|stable)\//;
 const defaultNpmRegistry = "https://registry.npmjs.org";
 const defaultEsmServerOrigin = "https://esm.sh";
 
-const fakeStorage: WorkerStorage = {
+const noopStorage: WorkerStorage = {
   get: () => Promise.resolve(null),
   put: () => Promise.resolve(),
 };
@@ -257,9 +257,7 @@ class ESMWorker {
         );
       }
       return ctx.withCache(() =>
-        fetchESM(req, env, ctx, `/${buildVersion}${pathname}`, {
-          gzip: true,
-        })
+        fetchESM(req, env, ctx, `/${buildVersion}${pathname}`, true)
       );
     }
 
@@ -554,7 +552,7 @@ class ESMWorker {
         }
         const path =
           `${prefix}/${pkg}@${packageVersion}${subPath}${url.search}`;
-        return fetchESM(req, env, ctx, path, { gzip: true });
+        return fetchESM(req, env, ctx, path, true);
       });
     }
 
@@ -571,7 +569,7 @@ class ESMWorker {
       const path = `${prefix}/${
         hasExternalAllMarker ? "*" : ""
       }${pkg}@${packageVersion}${subPath}${url.search}`;
-      return fetchESM(req, env, ctx, path, { gzip: false });
+      return fetchESM(req, env, ctx, path);
     }, { varyUA: true });
   }
 }
@@ -583,7 +581,7 @@ async function fetchAsset(
   pathname: string,
 ) {
   const resHeaders = corsHeaders();
-  const storage = Reflect.get(env, "R2") as R2Bucket | undefined ?? fakeStorage;
+  const storage = Reflect.get(env, "R2") as R2Bucket | undefined ?? noopStorage;
   const ret = await storage.get(pathname.slice(1));
   if (ret) {
     resHeaders.set(
@@ -621,7 +619,7 @@ async function fetchESM(
   env: Env,
   ctx: Context,
   path: string,
-  options: { gzip: boolean },
+  gzip?: boolean,
 ): Promise<Response> {
   let storeKey = path.slice(1);
   if (storeKey.startsWith("stable/")) {
@@ -629,7 +627,7 @@ async function fetchESM(
   }
   const headers = corsHeaders();
   const [pathname] = splitBy(path, "?", true);
-  const storage = Reflect.get(env, "R2") as R2Bucket | undefined ?? fakeStorage;
+  const storage = Reflect.get(env, "R2") as R2Bucket | undefined ?? noopStorage;
   const KV = Reflect.get(env, "KV") as KVNamespace | undefined ?? asKV(storage);
   const noStore = req.headers.has("X-Real-Origin");
   const isModuleFile = !(
@@ -645,7 +643,7 @@ async function fetchESM(
       );
       if (value && metadata) {
         let body = value as ReadableStream<Uint8Array>;
-        if (options.gzip) {
+        if (gzip && typeof DecompressionStream !== "undefined") {
           body = body.pipeThrough(new DecompressionStream("gzip"));
         }
         headers.set("Content-Type", metadata.contentType);
@@ -714,32 +712,25 @@ async function fetchESM(
 
   // save to KV/R2 if immutable
   if (!noStore && cacheControl?.includes("immutable")) {
+    const buffer = await res.arrayBuffer();
     if (!isModuleFile) {
-      const buffer = await res.arrayBuffer();
-      await storage.put(storeKey, buffer.slice(0), {
-        httpMetadata: { contentType },
-      });
-      return new Response(buffer.slice(0), { headers });
-    }
-    let body: ReadableStream<Uint8Array> | ArrayBuffer;
-    let value: ReadableStream<Uint8Array> | ArrayBuffer;
-    try {
-      const [a, b] = res.body!.tee();
-      body = a;
-      value = options.gzip ? b.pipeThrough(new CompressionStream("gzip")) : b;
-    } catch (_) {
-      // failed to tee, fallback to arrayBuffer
-      body = await res.arrayBuffer();
-      value = options.gzip
-        ? new Response(body.slice(0)).body!.pipeThrough(
+      ctx.waitUntil(
+        storage.put(storeKey, buffer.slice(0), {
+          httpMetadata: { contentType },
+        }),
+      );
+    } else {
+      let readable = new Response(buffer.slice(0)).body;
+      if (gzip && typeof CompressionStream !== "undefined") {
+        readable = readable.pipeThrough<Uint8Array>(
           new CompressionStream("gzip"),
-        )
-        : body.slice(0);
+        );
+      }
+      ctx.waitUntil(
+        KV.put(storeKey, readable, { metadata: { contentType, dts, deps } }),
+      );
     }
-    await KV.put(storeKey, value as any, {
-      metadata: { contentType, dts, deps },
-    });
-    return new Response(body, { headers });
+    return new Response(buffer, { headers });
   }
 
   return new Response(res.body, { headers });
