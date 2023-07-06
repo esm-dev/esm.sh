@@ -72,7 +72,14 @@ class ESMWorker {
         const target = getEsmaVersionFromUA(req.headers.get("User-Agent"));
         url.searchParams.set("target", target);
       }
-      let res = await cache.match(url);
+      const cacheKey = new URL(url);
+      for (const key of ['x-real-origin', 'x-esm-worker-version']) {
+        const value = req.headers.get(key);
+        if (value) {
+          cacheKey.searchParams.set(key, value);
+        }
+      }
+      let res = await cache.match(cacheKey);
       if (res) {
         if (isHeadMethod) {
           const { status, headers } = res;
@@ -87,7 +94,7 @@ class ESMWorker {
         res = new Response(res.body, { status: res.status, headers });
       }
       if (res.headers.get("Cache-Control")?.startsWith("public, max-age=")) {
-        context.waitUntil(cache.put(url, res.clone()));
+        context.waitUntil(cache.put(cacheKey, res.clone()));
       }
       if (isHeadMethod) {
         const { status, headers } = res;
@@ -653,7 +660,10 @@ async function fetchESM(
           exposedHeaders.push("X-TypeScript-Types");
         }
         if (exposedHeaders.length > 0) {
-          headers.set("Access-Control-Expose-Headers", exposedHeaders.join(", "));
+          headers.set(
+            "Access-Control-Expose-Headers",
+            exposedHeaders.join(", "),
+          );
         }
         headers.set("X-Content-Source", "esm-worker");
         return new Response(body, { headers });
@@ -727,7 +737,7 @@ async function fetchESM(
         : body.slice(0);
     }
     ctx.waitUntil(
-      KV.put(storeKey, value as any, { metadata: { contentType, dts,deps } }),
+      KV.put(storeKey, value as any, { metadata: { contentType, dts, deps } }),
     );
     return new Response(body, { headers });
   }
@@ -815,13 +825,13 @@ async function fetchServerOrigin(
     "X-Esm-Deps",
     "X-Typescript-Types",
   );
-  const exposedHeaders = []
+  const exposedHeaders = [];
   for (const key of ["X-Esm-Deps", "X-Typescript-Types"]) {
     if (resHeaders.has(key)) {
       exposedHeaders.push(key);
     }
   }
-  if (exposedHeaders.length> 0) {
+  if (exposedHeaders.length > 0) {
     resHeaders.set("Access-Control-Expose-Headers", exposedHeaders.join(", "));
   }
   return new Response(res.body, { headers: resHeaders });
