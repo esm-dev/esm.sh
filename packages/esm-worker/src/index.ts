@@ -73,7 +73,7 @@ class ESMWorker {
         url.searchParams.set("target", target);
       }
       const cacheKey = new URL(url);
-      for (const key of ['x-real-origin', 'x-esm-worker-version']) {
+      for (const key of ["x-real-origin", "x-esm-worker-version"]) {
         const value = req.headers.get(key);
         if (value) {
           cacheKey.searchParams.set(key, value);
@@ -716,9 +716,9 @@ async function fetchESM(
   if (!noStore && cacheControl?.includes("immutable")) {
     if (!isModuleFile) {
       const buffer = await res.arrayBuffer();
-      ctx.waitUntil(storage.put(storeKey, buffer.slice(0), {
+      await storage.put(storeKey, buffer.slice(0), {
         httpMetadata: { contentType },
-      }));
+      });
       return new Response(buffer.slice(0), { headers });
     }
     let body: ReadableStream<Uint8Array> | ArrayBuffer;
@@ -736,9 +736,9 @@ async function fetchESM(
         )
         : body.slice(0);
     }
-    ctx.waitUntil(
-      KV.put(storeKey, value as any, { metadata: { contentType, dts, deps } }),
-    );
+    await KV.put(storeKey, value as any, {
+      metadata: { contentType, dts, deps },
+    });
     return new Response(body, { headers });
   }
 
