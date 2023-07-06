@@ -1137,6 +1137,12 @@ func esmHandler() rex.Handle {
 				select {
 				case output := <-c.C:
 					if output.err != nil {
+						if m := output.err.Error(); strings.Contains(m, "no such file or directory") ||
+							strings.Contains(m, "is not exported from package") ||
+							strings.Contains(m, "parseCJSModuleExports: Can't resolve") {
+							ctx.SetHeader("Cache-Control", "public, max-age=31536000, immutable")
+							return rex.Status(404, "Module not found")
+						}
 						return throwErrorJS(ctx, output.err)
 					}
 					esm = output.meta

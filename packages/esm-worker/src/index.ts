@@ -801,8 +801,6 @@ async function fetchServerOrigin(
         );
       }
       return new Response(message, { status: 404, headers: resHeaders });
-    } else if (res.status === 500) {
-      resHeaders.set("Cache-Control", "public, max-age=60");
     }
     if (res.status === 301 || res.status === 302) {
       // await res.body?.cancel?.()
