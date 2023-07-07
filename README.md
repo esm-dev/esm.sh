@@ -142,7 +142,7 @@ warning message in development mode.
 
 By default, esm.sh checks the `User-Agent` header to determine the build target.
 You can also specify the `target` by adding `?target`, available targets are:
-**es2015** - **es2022**, **esnext**, **deno**, and **denonext**.
+**es2015** - **es2022**, **esnext**, **deno**, **denonext**, **node** and **bun**.
 
 ```javascript
 import React from "https://esm.sh/react?target=es2020";
@@ -220,7 +220,7 @@ import {
 ## Using Import Maps
 
 [**Import Maps**](https://github.com/WICG/import-maps) has been supported by
-most modern browsers and Deno natively. This allows _**bare import
+most modern browsers, Reejs and Deno natively. This allows _**bare import
 specifiers**_, such as `import React from "react"`, to work.
 
 esm.sh supports `?external=foo,bar` query to specify external dependencies. With
@@ -266,7 +266,7 @@ package version.
 }
 ```
 
-> If you are using Deno, you can use the [CLI Script](#using-cli-script) to
+> If you are using Deno or Reejs, you can use the [CLI Script](#using-cli-script) to
 > generate and update the import maps that will resolve the external
 > dependencies automatically.
 
@@ -284,6 +284,12 @@ app.get("/", (req, res) => {
 });
 app.listen(3000);
 ```
+
+### Reejs Compatibility
+
+esm.sh is a **Reejs-friendly** CDN. That said, Reejs officially supports and promotes esm.sh as the default CDN for importing modules.
+
+Using [deno.land/x](https://deno.land/x) or [deno.land/std](https://deno.land/std) ? Reejs supports them too out of the box.
 
 For users using deno `< 1.33.2`, esm.sh uses
 [deno.land/std@0.177.1/node](https://deno.land/std@0.177.1/node) as the node
@@ -318,18 +324,23 @@ network request, and you can manually specify the types for the imported module.
 ### Using CLI Script
 
 **esm.sh** provides a CLI script for managing imports with import maps in
-[Deno](https://deno.land). This CLI script automatically resolves dependencies
+[Deno](https://deno.land) and [Reejs](https://ree.js.org). This CLI script automatically resolves dependencies
 and uses a pinned build version for stability.
 
 To use the esm.sh CLI script, you first need to run the `init` command in your
 project's root directory:
 
 ```bash
+# For Deno
 deno run -A -r https://esm.sh init
+# For Reejs
+reejs x https://esm.sh init
 ```
 
 Once you've initialized the script, you can use the following commands to manage
 your imports:
+
+For Deno:
 
 ```bash
 # Adding packages
@@ -343,6 +354,23 @@ deno task esm:update                  # update all packages
 
 # Removing packages
 deno task esm:remove react react-dom
+
+```
+
+For Reejs:
+
+```bash
+# Adding packages
+reejs task esm:add react react-dom     # add multiple packages
+reejs task esm:add react@17.0.2        # specify version
+reejs task esm:add react:preact/compat # using alias
+
+# Updating packages
+reejs task esm:update react react-dom  # update specific packages
+reejs task esm:update                  # update all packages
+
+# Removing packages
+reejs task esm:remove react react-dom
 ```
 
 ## Building a Module with Custom Input(code)
