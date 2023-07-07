@@ -817,7 +817,7 @@ rebuild:
 
 			// check if package is deprecated
 			if task.Deprecated != "" {
-				fmt.Fprintf(finalContent, `console.warn("[npm] %%cdeprecated%%c %s@%s: %s", "color:red", "");%s`, task.Pkg.Name, task.Pkg.Version, task.Deprecated, "\n")
+				fmt.Fprintf(finalContent, `console.warn("[npm] %%cdeprecated%%c %s@%s: %s", "color:red", "");%s`, task.Pkg.Name, task.Pkg.Version, strings.ReplaceAll(task.Deprecated, "\"", "\\\""), "\n")
 			}
 
 			// add sourcemap Url
