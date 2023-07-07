@@ -676,7 +676,9 @@ async function fetchESM(
   // if the buffer is not valid utf8
   // try to re-fetch the module and check again
   if (!isValidUTF8(buffer)) {
-    await new Promise((resolve) => setTimeout(resolve, 50));
+    await new Promise((resolve) =>
+      setTimeout(resolve, 50 + Math.random() * 50)
+    );
     const res = await fetchServerOrigin(req, env, ctx, path, headers);
     if (!res.ok) {
       return res;
@@ -684,6 +686,11 @@ async function fetchESM(
     buffer = await res.arrayBuffer();
   }
   if (!isValidUTF8(buffer)) {
+    const headers = corsHeaders();
+    headers.set(
+      "Cache-Control",
+      "private, no-store, no-cache, must-revalidate",
+    );
     return new Response("Invalid Body", { status: 502, headers });
   }
 
