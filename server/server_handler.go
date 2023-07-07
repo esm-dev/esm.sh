@@ -236,14 +236,26 @@ func esmHandler() rex.Handle {
 		// static routes
 		switch pathname {
 		case "/":
-			// return deno cli script if the `User-Agent` is "Deno"
-			if strings.HasPrefix(ctx.R.UserAgent(), "Deno/") {
-				cliTs, err := embedFS.ReadFile("CLI.ts")
+			if strings.HasPrefix(ctx.R.UserAgent(), "Deno/") || strings.HasPrefix(ctx.R.UserAgent(), "Node/") || strings.HasPrefix(ctx.R.UserAgent(), "Bun/") {
+				//serve cli
+				//CLI.deno.ts is for deno, CLI.node.js for nodejs, bun. they currently use reejs to achieve url imports
+				if strings.HasPrefix(ctx.R.UserAgent(), "Deno/"){
+				cliTs, err := embedFS.ReadFile("CLI.deno.ts")
 				if err != nil {
 					return err
 				}
 				ctx.SetHeader("Content-Type", "application/typescript; charset=utf-8")
 				return bytes.ReplaceAll(cliTs, []byte("v{VERSION}"), []byte(fmt.Sprintf("v%d", CTX_VERSION)))
+			}
+			if(strings.HasPrefix(ctx.R.UserAgent(), "Node/")) || strings.HasPrefix(ctx.R.UserAgent(), "Bun/"){
+				cliTs, err := embedFS.ReadFile("CLI.node.js")
+				if err != nil {
+					return err
+				}
+				ctx.SetHeader("Content-Type", "application/javascript; charset=utf-8")
+				cliTs = bytes.ReplaceAll(cliTs, []byte("v{VERSION}"), []byte(fmt.Sprintf("v%d", CTX_VERSION)))
+				return bytes.ReplaceAll(cliTs, []byte("https://esm.sh"), []byte(cdnOrigin+cfg.CdnBasePath))
+			}
 			}
 			indexHTML, err := embedFS.ReadFile("server/embed/index.html")
 			if err != nil {
@@ -403,13 +415,26 @@ func esmHandler() rex.Handle {
 		}
 
 		// check if the request is from Deno runtime for the CLI script
-		if pathname == "/" && strings.HasPrefix(ctx.R.UserAgent(), "Deno/") {
-			cliTs, err := embedFS.ReadFile("CLI.ts")
-			if err != nil {
-				return err
-			}
-			ctx.SetHeader("Content-Type", "application/typescript; charset=utf-8")
-			return bytes.ReplaceAll(cliTs, []byte("v{VERSION}"), []byte(fmt.Sprintf("v%d", CTX_VERSION)))
+		if pathname == "/" && (strings.HasPrefix(ctx.R.UserAgent(), "Deno/") || strings.HasPrefix(ctx.R.UserAgent(), "Node/") || strings.HasPrefix(ctx.R.UserAgent(), "Bun/")) {
+			//serve cli
+				//CLI.deno.ts is for deno, CLI.node.js for nodejs, bun. they currently use reejs to achieve url imports
+				if strings.HasPrefix(ctx.R.UserAgent(), "Deno/"){
+					cliTs, err := embedFS.ReadFile("CLI.deno.ts")
+					if err != nil {
+						return err
+					}
+					ctx.SetHeader("Content-Type", "application/typescript; charset=utf-8")
+					return bytes.ReplaceAll(cliTs, []byte("v{VERSION}"), []byte(fmt.Sprintf("v%d", CTX_VERSION)))
+				}
+				if(strings.HasPrefix(ctx.R.UserAgent(), "Node/")) || strings.HasPrefix(ctx.R.UserAgent(), "Bun/"){
+					cliTs, err := embedFS.ReadFile("CLI.node.js")
+					if err != nil {
+						return err
+					}
+					ctx.SetHeader("Content-Type", "application/javascript; charset=utf-8")
+					cliTs = bytes.ReplaceAll(cliTs, []byte("v{VERSION}"), []byte(fmt.Sprintf("v%d", CTX_VERSION)))
+					return bytes.ReplaceAll(cliTs, []byte("https://esm.sh"), []byte(cdnOrigin+cfg.CdnBasePath))
+				}
 		}
 
 		if pathname == "/build" {
@@ -456,9 +481,21 @@ func esmHandler() rex.Handle {
 				url := fmt.Sprintf("%s%s/v%d/server", cdnOrigin, cfg.CdnBasePath, CTX_VERSION)
 				return rex.Redirect(url, 302)
 			}
-			data, err := embedFS.ReadFile("server.ts")
-			if err != nil {
-				return err
+			//declare the data variable here
+			var data []byte
+			var err error //also declare the error variable here
+			//look what is the user agent and serve the right file. server.deno.ts for deno, and server.node.js for node & bun
+			if strings.HasPrefix(ctx.R.UserAgent(), "Deno/") {
+				data, err = embedFS.ReadFile("server.deno.ts")
+				if err != nil {
+					return err
+				}
+			}
+			if strings.HasPrefix(ctx.R.UserAgent(), "Node/") || strings.HasPrefix(ctx.R.UserAgent(), "Bun/") {
+				data, err = embedFS.ReadFile("server.node.js")
+				if err != nil {
+					return err
+				}
 			}
 			ctx.SetHeader("Content-Type", "application/typescript; charset=utf-8")
 			ctx.SetHeader("Cache-Control", "public, max-age=31536000, immutable")

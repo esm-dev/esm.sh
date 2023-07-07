@@ -7,9 +7,11 @@ import (
 )
 
 //go:embed README.md
-//go:embed CLI.ts
+//go:embed CLI.deno.ts
+//go:embed CLI.node.js
 //go:embed build.ts
-//go:embed server.ts
+//go:embed server.deno.ts
+//go:embed server.node.js
 //go:embed server/embed
 var fs embed.FS
 
