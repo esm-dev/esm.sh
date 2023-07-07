@@ -753,9 +753,7 @@ async function fetchServerOrigin(
   copyHeaders(
     headers,
     req.headers,
-    "Accept-Encoding",
     "Content-Type",
-    "Origin",
     "Referer",
     "User-Agent",
     "X-Esm-Worker-Version",
