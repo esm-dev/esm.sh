@@ -23,7 +23,7 @@ export interface WorkerStorageKV {
   >;
   put(
     key: string,
-    value: ArrayBufferLike | ArrayBuffer | ReadableStream,
+    value: string | ArrayBufferLike | ArrayBuffer | ReadableStream,
     options?: { metadata?: HttpMetadata | null },
   ): Promise<void>;
 }
@@ -34,12 +34,16 @@ export interface WorkerStorage {
     {
       body: ReadableStream<Uint8Array>;
       httpMetadata?: HttpMetadata;
+      customMetadata?: Record<string, string>;
     } | null
   >;
   put(
     key: string,
     value: ArrayBufferLike | ArrayBuffer | ReadableStream,
-    options?: { httpMetadata?: HttpMetadata },
+    options?: {
+      httpMetadata?: HttpMetadata;
+      customMetadata?: Record<string, string>;
+    },
   ): Promise<void>;
 }
 

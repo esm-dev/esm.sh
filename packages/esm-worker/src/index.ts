@@ -24,6 +24,7 @@ import {
   err,
   errPkgNotFound,
   fixPkgVersion,
+  isValidUTF8,
   redirect,
   splitBy,
   trimPrefix,
@@ -616,13 +617,13 @@ async function fetchESM(
   const storage = Reflect.get(env, "R2") as R2Bucket | undefined ?? noopStorage;
   const KV = Reflect.get(env, "KV") as KVNamespace | undefined ?? asKV(storage);
   const noStore = req.headers.has("X-Real-Origin");
-  const isModuleFile = !(
+  const isModule = !(
     pathname.endsWith(".d.ts") ||
     pathname.endsWith(".d.mts") ||
     pathname.endsWith(".map")
   );
   if (!noStore) {
-    if (isModuleFile) {
+    if (isModule) {
       const { value, metadata } = await KV.getWithMetadata<HttpMetadata>(
         storeKey,
         "stream",
@@ -670,12 +671,27 @@ async function fetchESM(
     return res;
   }
 
+  let buffer = await res.arrayBuffer();
+
+  // if the buffer is not valid utf8
+  // try to re-fetch the module and check again
+  if (!isValidUTF8(buffer)) {
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    const res = await fetchServerOrigin(req, env, ctx, path, headers);
+    if (!res.ok) {
+      return res;
+    }
+    buffer = await res.arrayBuffer();
+  }
+  if (!isValidUTF8(buffer)) {
+    return new Response("Invalid Body", { status: 502, headers });
+  }
+
   const contentType = res.headers.get("Content-Type") || getContentType(path);
   const cacheControl = res.headers.get("Cache-Control");
   const deps = res.headers.get("X-Esm-Deps");
   const dts = res.headers.get("X-TypeScript-Types");
   const exposedHeaders = [];
-  const buffer = await res.arrayBuffer();
 
   headers.set("Content-Type", contentType);
   if (cacheControl) {
@@ -699,22 +715,20 @@ async function fetchESM(
 
   // save to KV/R2 if immutable
   if (!noStore && cacheControl?.includes("immutable")) {
-    if (!isModuleFile) {
-      ctx.waitUntil(
-        storage.put(storeKey, buffer.slice(0), {
-          httpMetadata: { contentType },
-        }),
-      );
+    if (!isModule) {
+      ctx.waitUntil(storage.put(storeKey, buffer.slice(0), {
+        httpMetadata: { contentType },
+      }));
     } else {
-      let readable = new Response(buffer.slice(0)).body;
+      let value: ArrayBuffer | ReadableStream = buffer.slice(0);
       if (gzip && typeof CompressionStream !== "undefined") {
-        readable = readable.pipeThrough<Uint8Array>(
+        value = new Response(value).body.pipeThrough<Uint8Array>(
           new CompressionStream("gzip"),
         );
       }
-      ctx.waitUntil(
-        KV.put(storeKey, readable, { metadata: { contentType, dts, deps } }),
-      );
+      ctx.waitUntil(KV.put(storeKey, value, {
+        metadata: { contentType, dts, deps },
+      }));
     }
   }
 

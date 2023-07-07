@@ -24,7 +24,7 @@ export function asKV(
       }
       return {
         value: ret.body,
-        metadata: ret.httpMetadata as HttpMetadata | undefined ?? null,
+        metadata: ret.customMetadata as HttpMetadata | undefined ?? null,
       };
     },
     async put(
@@ -32,7 +32,7 @@ export function asKV(
       value: ArrayBuffer | Uint8Array | ReadableStream,
       options?: { metadata?: HttpMetadata },
     ): Promise<void> {
-      await storage.put(key, value, { httpMetadata: options?.metadata });
+      await storage.put(key, value, { customMetadata: options?.metadata });
     },
   });
 }
@@ -63,6 +63,56 @@ export function splitBy(
     return [s.slice(0, i), s.slice(i + searchString.length)];
   }
   return [s, ""];
+}
+
+// copied from https://github.com/websockets/utf-8-validate/blob/master/fallback.js
+export function isValidUTF8(buffer: ArrayBuffer): boolean {
+  const len = buffer.byteLength;
+  const view = new Uint8Array(buffer);
+  let i = 0;
+  while (i < len) {
+    if ((view[i] & 0x80) === 0x00) { // 0xxxxxxx
+      i++;
+    } else if ((view[i] & 0xe0) === 0xc0) { // 110xxxxx 10xxxxxx
+      if (
+        i + 1 === len ||
+        (view[i + 1] & 0xc0) !== 0x80 ||
+        (view[i] & 0xfe) === 0xc0 // overlong
+      ) {
+        return false;
+      }
+
+      i += 2;
+    } else if ((view[i] & 0xf0) === 0xe0) { // 1110xxxx 10xxxxxx 10xxxxxx
+      if (
+        i + 2 >= len ||
+        (view[i + 1] & 0xc0) !== 0x80 ||
+        (view[i + 2] & 0xc0) !== 0x80 ||
+        view[i] === 0xe0 && (view[i + 1] & 0xe0) === 0x80 || // overlong
+        view[i] === 0xed && (view[i + 1] & 0xe0) === 0xa0 // surrogate (U+D800 - U+DFFF)
+      ) {
+        return false;
+      }
+
+      i += 3;
+    } else if ((view[i] & 0xf8) === 0xf0) { // 11110xxx 10xxxxxx 10xxxxxx 10xxxxxx
+      if (
+        i + 3 >= len ||
+        (view[i + 1] & 0xc0) !== 0x80 ||
+        (view[i + 2] & 0xc0) !== 0x80 ||
+        (view[i + 3] & 0xc0) !== 0x80 ||
+        view[i] === 0xf0 && (view[i + 1] & 0xf0) === 0x80 || // overlong
+        view[i] === 0xf4 && view[i + 1] > 0x8f || view[i] > 0xf4 // > U+10FFFF
+      ) {
+        return false;
+      }
+
+      i += 4;
+    } else {
+      return false;
+    }
+  }
+  return true;
 }
 
 /** create redirect response. */
