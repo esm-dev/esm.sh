@@ -16,6 +16,7 @@ import (
 var requireModeAllowList = []string{
 	"@babel/types",
 	"cheerio",
+	"graceful-fs",
 	"he",
 	"jsbn",
 	"netmask",
@@ -126,7 +127,7 @@ func startNodeServices() (err error) {
 	kill(nsPidFile)
 
 	// install services
-	cmd := exec.Command("pnpm", "add", "esm-node-services@0.8.3")
+	cmd := exec.Command("pnpm", "add", "esm-node-services@0.8.4")
 	cmd.Dir = wd
 	var output []byte
 	output, err = cmd.CombinedOutput()

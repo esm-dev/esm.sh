@@ -138,6 +138,7 @@ exports.parseCjsExports = async input => {
         results.reexports.length === 1 &&
         /^[a-z@]/i.test(results.reexports[0]) &&
         !results.reexports[0].endsWith("()") &&
+        !builtInNodeModules.has(results.reexports[0]) &&
         results.exports.length === 0 &&
         exports.length === 0
       ) {
