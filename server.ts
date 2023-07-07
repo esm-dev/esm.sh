@@ -166,8 +166,8 @@ if (import.meta.main && !isDenoDeploy) {
       "font-weight:bold;color:#007bff;",
     );
     console.log(
-      "%cThis is local version of esm.sh running on Deno 🦕.",
-      "color:gray;",
+      "%cThis is local version of esm.sh running on %cDeno 🦕%c.",
+      "color:gray;","color: green", "color:gray;"
     );
     console.log("");
     console.log("Usage:");
@@ -260,8 +260,8 @@ if (import.meta.main && !isDenoDeploy) {
         "font-weight:bold;color:#007bff;",
       );
       console.log(
-        "%cThis is local version of esm.sh running on Deno 🦕.",
-        "color:gray;",
+        "%cThis is local version of esm.sh running on %cDeno 🦕%c.",
+        "color:gray;","color: green", "color:gray;"
       );
       console.log(
         `Homepage: %chttp://localhost:${port}`,
