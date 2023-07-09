@@ -302,6 +302,9 @@ func (task *BuildTask) build() (err error) {
 		"global.require.resolve":      "__rResolve$",
 		"global.process.env.NODE_ENV": fmt.Sprintf(`"%s"`, nodeEnv),
 	}
+	if task.Target == "node" {
+		define = map[string]string{}
+	}
 	browserExclude := map[string]*stringSet{}
 	implicitExternal := newStringSet()
 
