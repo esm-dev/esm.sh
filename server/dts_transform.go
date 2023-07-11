@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path"
 	"strings"
@@ -97,6 +98,7 @@ func (task *BuildTask) transformDTS(dts string, aliasDepsPrefix string, marker *
 
 	installDir := task.installDir
 	buf := bytes.NewBuffer(nil)
+	footer := bytes.NewBuffer(nil)
 	imports := newStringSet()
 	dtsBasePath := fmt.Sprintf("%s%s/v%d", task.CdnOrigin, cfg.CdnBasePath, task.BuildVersion)
 	if pkgName == "@types/node" {
@@ -258,6 +260,15 @@ func (task *BuildTask) transformDTS(dts string, aliasDepsPrefix string, marker *
 			pkgPath := info.Name + "@" + info.Version + "/" + encodeBuildArgsPrefix(task.Args, Pkg{Name: info.Name}, true)
 			importPath = fmt.Sprintf("%s%s/v%d/%s%s", task.CdnOrigin, cfg.CdnBasePath, bv, pkgPath, importPath)
 		}
+
+		if kind == "declareModule" && strings.HasSuffix(importPath, "/"+dts) {
+			baseUrl := task.CdnOrigin + cfg.CdnBasePath
+			aliasDeclareModule(footer, fmt.Sprintf("%s/v%d/%s", baseUrl, task.BuildVersion, pkgNameWithVersion), importPath)
+			aliasDeclareModule(footer, fmt.Sprintf("%s/v%d/%s?*", baseUrl, task.BuildVersion, pkgNameWithVersion), importPath)
+			aliasDeclareModule(footer, fmt.Sprintf("%s/%s", baseUrl, pkgNameWithVersion), importPath)
+			aliasDeclareModule(footer, fmt.Sprintf("%s/%s?*", baseUrl, pkgNameWithVersion), importPath)
+		}
+
 		return importPath
 	})
 	if err != nil {
@@ -292,6 +303,11 @@ func (task *BuildTask) transformDTS(dts string, aliasDepsPrefix string, marker *
 			)
 			buf = bytes.NewBuffer(dtsData)
 		}
+	}
+
+	if footer.Len() > 0 {
+		buf.WriteString("\n// added by esm.sh\n")
+		io.Copy(buf, footer)
 	}
 
 	_, err = fs.WriteFile(savePath, buf)
@@ -414,4 +430,10 @@ func (task *BuildTask) toTypesPath(wd string, p NpmPackage, version string, buil
 	}
 
 	return fmt.Sprintf("%s@%s/%s%s", p.Name, version, buildArgsPrefix, utils.CleanPath(types)[1:])
+}
+
+func aliasDeclareModule(wr io.Writer, aliasName string, moduleName string) {
+	fmt.Fprintf(wr, "declare module \"%s\" {\n", aliasName)
+	fmt.Fprintf(wr, "  export * from \"%s\";\n", moduleName)
+	fmt.Fprintf(wr, "}\n")
 }
