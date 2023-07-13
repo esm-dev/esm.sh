@@ -744,6 +744,7 @@ impl ExportsParser {
           // tslib.__exportStar(..., exports)
           // __exportStar(..., exports)
           Expr::Call(call) => {
+            println!("is call");
             if is_object_static_mothod_call(&call, "defineProperty") && call.args.len() >= 3 {
               let arg0 = &call.args[0];
               let arg1 = &call.args[1];
@@ -837,8 +838,10 @@ impl ExportsParser {
                 self.reexports.insert(reexport);
               }
             } else if let Some(body) = is_umd_iife_call(&call) {
+              println!("is_umd_iife_call");
               self.dep_parse(body, false);
             } else if let Some(body) = is_iife_call(&call) {
+              println!("is_iife_call");
               for arg in &call.args {
                 if arg.spread.is_none() {
                   // (function() { ... })(exports.foo || (exports.foo = {}))
@@ -849,12 +852,18 @@ impl ExportsParser {
               }
               self.dep_parse(body, false);
             }
+            println!("after");
           }
           // ~function(){ ... }()
+          // !(function(e, t) { ... })(this, (function (e) { ... }));
           Expr::Unary(UnaryExpr { op, arg, .. }) => {
             if let UnaryOp::Minus | UnaryOp::Plus | UnaryOp::Bang | UnaryOp::Tilde | UnaryOp::Void = op {
               if let Expr::Call(call) = arg.as_ref() {
-                if let Some(body) = is_iife_call(&call) {
+                if let Some(body) = is_umd_iife_call(&call) {
+                  println!("is_umd_iife_call");
+                  self.dep_parse(body, false);
+                } else if let Some(body) = is_iife_call(&call) {
+                  println!("is iife call");
                   // (function() { ... })(exports.foo || (exports.foo = {}))
                   for arg in &call.args {
                     if arg.spread.is_none() {
@@ -883,7 +892,7 @@ impl ExportsParser {
             if matches!(op, BinaryOp::LogicalAnd) {
               if let Expr::Assign(assign) = right.as_ref() {
                 self.get_exports_from_assign(assign);
-              }  else   if let Expr::Paren(paren) = right.as_ref() {
+              } else if let Expr::Paren(paren) = right.as_ref() {
                 if let Expr::Assign(assign) = paren.expr.as_ref() {
                   self.get_exports_from_assign(assign);
                 }
@@ -1006,6 +1015,7 @@ fn is_object_static_mothod_call(call: &CallExpr, method: &str) -> bool {
 fn is_umd_params(params: &Vec<Pat>) -> bool {
   if params.len() == 2 {
     if let Pat::Ident(bid) = &params.get(0).unwrap() {
+      println!("bid sym {}", bid.id.sym);
       if bid.id.sym.eq("global") {
         if let Pat::Ident(bid) = &params.get(1).unwrap() {
           if bid.id.sym.eq("factory") {
@@ -1016,6 +1026,124 @@ fn is_umd_params(params: &Vec<Pat>) -> bool {
     }
   }
   false
+}
+
+fn is_string_literal(expr: &Expr, value: &str) -> bool {
+  match &*expr {
+    Expr::Lit(Lit::Str(Str {
+      value: literal_value, ..
+    })) => literal_value.eq(value),
+    _ => false,
+  }
+}
+
+fn is_typeof(expr: &Expr, identifier: &str) -> bool {
+  match &*expr {
+    Expr::Unary(UnaryExpr { arg, op, .. }) => match op {
+      UnaryOp::TypeOf => match &**arg {
+        Expr::Ident(ident) => ident.sym.eq(identifier),
+        _ => false,
+      },
+      _ => false,
+    },
+    _ => false,
+  }
+}
+
+fn is_umd_exports_check(expr: &Expr) -> bool {
+  match &*expr {
+    Expr::Bin(BinExpr { left, right, op, .. }) => match op {
+      BinaryOp::EqEq | BinaryOp::EqEqEq => {
+        (is_typeof(&left, "exports") && is_string_literal(&right, "object"))
+          || (is_typeof(&right, "exports") && is_string_literal(&left, "object"))
+      }
+      _ => false,
+    },
+    _ => false,
+  }
+}
+
+fn is_umd_module_check(expr: &Expr) -> bool {
+  match &*expr {
+    Expr::Bin(BinExpr { left, right, op, .. }) => match op {
+      BinaryOp::EqEq | BinaryOp::EqEqEq => {
+        (is_typeof(&left, "module") && is_string_literal(&right, "object"))
+          || (is_typeof(&right, "module") && is_string_literal(&left, "object"))
+      }
+      _ => false,
+    },
+    _ => false,
+  }
+}
+
+fn is_umd_define_check(expr: &Expr) -> bool {
+  match &*expr {
+    Expr::Bin(BinExpr { left, right, op, .. }) => match op {
+      BinaryOp::EqEq | BinaryOp::EqEqEq => {
+        (is_typeof(&left, "define") && is_string_literal(&right, "function"))
+          || (is_typeof(&right, "define") && is_string_literal(&left, "function"))
+      }
+      _ => false,
+    },
+    _ => false,
+  }
+}
+
+// if ('object' == typeof exports && 'object' == typeof module)
+// module.exports = t(require('react'));
+// else if ('function' == typeof define && define.amd) define(['react'], t);
+// else {
+// var r = 'object' == typeof exports ? t(require('react')) : t(e.react);
+// for (var n in r) ('object' == typeof exports ? exports : e)[n] = r[n];
+// }
+fn is_umd_stmts(stmts: &Vec<Stmt>) -> bool {
+  match stmts.get(0) {
+    Some(stmt) => match stmt {
+      // TODO: handle ternary version
+      // !(function (e, t) {
+      //   "object" == typeof exports && "undefined" != typeof module
+      //     ? t(exports)
+      //     : "function" == typeof define && define.amd
+      //     ? define(["exports"], t)
+      //     : t(
+      //         ((e =
+      //           "undefined" != typeof globalThis
+      //             ? globalThis
+      //             : e || self).rudderanalytics = {})
+      //       );
+      // })(this, function (e) {
+      Stmt::If(IfStmt { test, alt, .. }) => match &**test {
+        Expr::Bin(BinExpr { left, right, op, .. }) => {
+          if matches!(op, BinaryOp::LogicalAnd) {
+            if (is_umd_exports_check(&left) && is_umd_module_check(&right))
+              || (is_umd_exports_check(&right) && is_umd_module_check(&left))
+            {
+              match &*alt {
+                Some(alt_stmt) => match &**alt_stmt {
+                  Stmt::If(IfStmt { test, .. }) => match &**test {
+                    Expr::Bin(BinExpr { left, op, .. }) => {
+                      if matches!(op, BinaryOp::LogicalAnd) && is_umd_define_check(&left) {
+                        return true;
+                      }
+                      return false;
+                    }
+                    _ => false,
+                  },
+                  _ => false,
+                },
+                _ => false,
+              };
+            }
+            return false;
+          }
+          return false;
+        }
+        _ => false,
+      },
+      _ => false,
+    },
+    None => false,
+  }
 }
 
 fn is_umd_iife_call(call: &CallExpr) -> Option<Vec<Stmt>> {
@@ -1047,9 +1175,16 @@ fn is_umd_iife_call(call: &CallExpr) -> Option<Vec<Stmt>> {
       Expr::Fn(func) => {
         if is_umd_params(&func.function.params.iter().map(|p| p.pat.clone()).collect()) {
           return stmts;
+        } else if let Some(BlockStmt { stmts: body_stmts, .. }) = &func.function.body {
+          if is_umd_stmts(body_stmts) {
+            println!("is_umd_stmts");
+            return stmts;
+          }
+          return None;
         }
       }
       Expr::Arrow(arrow) => {
+        // TODO: detect for minified umd, haven't seen any in the wild yet though
         if is_umd_params(&arrow.params) {
           return stmts;
         }
