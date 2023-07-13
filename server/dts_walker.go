@@ -26,7 +26,7 @@ var (
 	bytesStripleSlash = []byte{'/', '/', '/'}
 )
 
-func walkDts(r io.Reader, buf *bytes.Buffer, resolve func(path string, kind string, position int) string) (err error) {
+func walkDts(r io.Reader, buf *bytes.Buffer, resolve func(specifier string, kind string, position int) string) (err error) {
 	var commentScope bool
 	var importExportScope bool
 	scanner := bufio.NewScanner(r)

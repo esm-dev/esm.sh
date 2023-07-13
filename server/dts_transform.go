@@ -70,11 +70,11 @@ func (task *BuildTask) transformDTS(dts string, aliasDepsPrefix string, marker *
 
 	allDeclModules := newStringSet()
 	pass1Buf := bytes.NewBuffer(nil)
-	err = walkDts(dtsFile, pass1Buf, func(name string, kind string, position int) string {
+	err = walkDts(dtsFile, pass1Buf, func(specifier string, kind string, position int) string {
 		if kind == "declareModule" {
-			allDeclModules.Add(name)
+			allDeclModules.Add(specifier)
 		}
-		return name
+		return specifier
 	})
 	if err != nil {
 		return
@@ -104,90 +104,92 @@ func (task *BuildTask) transformDTS(dts string, aliasDepsPrefix string, marker *
 	if pkgName == "@types/node" {
 		fmt.Fprintf(buf, "/// <reference path=\"%s/node.ns.d.ts\" />\n", dtsBasePath)
 	}
-	err = walkDts(pass1Buf, buf, func(importPath string, kind string, position int) string {
+	err = walkDts(pass1Buf, buf, func(specifier string, kind string, position int) string {
 		// resove `declare module "xxx" {}`
 		if kind == "declareModule" {
-			if strings.HasPrefix(importPath, "node:") && pkgName == "@types/node" {
-				return fmt.Sprintf("%s/@types/node@%s/%s.d.ts", dtsBasePath, nodeTypesVersion, strings.TrimPrefix(importPath, "node:"))
+			if strings.HasPrefix(specifier, "node:") && pkgName == "@types/node" {
+				return fmt.Sprintf("%s/@types/node@%s/%s.d.ts", dtsBasePath, nodeTypesVersion, strings.TrimPrefix(specifier, "node:"))
 			}
-			if internalDeclModules.Has(importPath) {
-				return importPath
+			if internalDeclModules.Has(specifier) {
+				return specifier
 			}
 		}
 
-		if task.Args.external.Has("*") && !strings.HasPrefix(pkgName, "@types/") && !isLocalSpecifier(importPath) {
-			return importPath
+		if task.Args.external.Has("*") && !strings.HasPrefix(pkgName, "@types/") && !isLocalSpecifier(specifier) {
+			return specifier
 		}
+
+		res := specifier
 
 		// use `@types/xxx`
-		switch importPath {
+		switch res {
 		case "estree", "estree-jsx", "unist", "react", "react-dom":
-			importPath = fmt.Sprintf("@types/%s", importPath)
+			res = fmt.Sprintf("@types/%s", res)
 		}
 
 		// fix some weird import paths
 		if kind == "importCall" {
 			if task.Pkg.Name == "@mdx-js/mdx" {
-				if (strings.Contains(dts, "plugin/recma-document") || strings.Contains(dts, "plugin/recma-jsx-rewrite")) && importPath == "@types/estree" {
-					importPath = "@types/estree-jsx"
+				if (strings.Contains(dts, "plugin/recma-document") || strings.Contains(dts, "plugin/recma-jsx-rewrite")) && res == "@types/estree" {
+					res = "@types/estree-jsx"
 				}
 			}
-			if strings.HasPrefix(dts, "remark-rehype") && importPath == "mdast-util-to-hast/lib" {
-				importPath = "mdast-util-to-hast"
+			if strings.HasPrefix(dts, "remark-rehype") && res == "mdast-util-to-hast/lib" {
+				res = "mdast-util-to-hast"
 			}
 		}
 
 		// use `?alias`
-		to, ok := task.Args.alias[importPath]
+		to, ok := task.Args.alias[res]
 		if ok {
-			importPath = to
+			res = to
 		}
 
-		if internalDeclModules.Has(importPath) || task.Args.external.Has(importPath) {
-			return importPath
+		if internalDeclModules.Has(res) || task.Args.external.Has(res) {
+			return res
 		}
 
-		if isLocalSpecifier(importPath) {
-			if importPath == "." {
-				importPath = "./index.d.ts"
+		if isLocalSpecifier(res) {
+			if res == "." {
+				res = "./index.d.ts"
 			}
-			if importPath == ".." {
-				importPath = "../index.d.ts"
+			if res == ".." {
+				res = "../index.d.ts"
 			}
 			// some types is using `.js` extname
-			importPath = strings.TrimSuffix(importPath, ".js")
-			if !strings.HasSuffix(importPath, ".d.ts") {
-				if fileExists(path.Join(dtsDir, importPath, "index.d.ts")) {
-					importPath = strings.TrimSuffix(importPath, "/") + "/index.d.ts"
-				} else if fileExists(path.Join(dtsDir, importPath+".d.ts")) {
-					importPath = importPath + ".d.ts"
+			res = strings.TrimSuffix(res, ".js")
+			if !strings.HasSuffix(res, ".d.ts") {
+				if fileExists(path.Join(dtsDir, res, "index.d.ts")) {
+					res = strings.TrimSuffix(res, "/") + "/index.d.ts"
+				} else if fileExists(path.Join(dtsDir, res+".d.ts")) {
+					res = res + ".d.ts"
 				} else {
 					var p NpmPackage
-					packageJSONFile := path.Join(dtsDir, importPath, "package.json")
+					packageJSONFile := path.Join(dtsDir, res, "package.json")
 					if fileExists(packageJSONFile) && utils.ParseJSONFile(packageJSONFile, &p) == nil {
 						if p.Types != "" {
-							importPath = strings.TrimSuffix(importPath, "/") + utils.CleanPath(p.Types)
+							res = strings.TrimSuffix(res, "/") + utils.CleanPath(p.Types)
 						} else if p.Typings != "" {
-							importPath = strings.TrimSuffix(importPath, "/") + utils.CleanPath(p.Typings)
+							res = strings.TrimSuffix(res, "/") + utils.CleanPath(p.Typings)
 						}
 					}
 				}
 			}
 			if strings.HasSuffix(dts, ".d.ts") && !strings.HasSuffix(dts, "~.d.ts") {
-				imports.Add(importPath)
+				imports.Add(res)
 			}
 		} else {
-			if importPath == "node" {
+			if res == "node" {
 				return fmt.Sprintf("%s/node.ns.d.ts", dtsBasePath)
 			}
-			if strings.HasPrefix(importPath, "node:") {
-				return fmt.Sprintf("%s/@types/node@%s/%s.d.ts", dtsBasePath, nodeTypesVersion, strings.TrimPrefix(importPath, "node:"))
+			if strings.HasPrefix(res, "node:") {
+				return fmt.Sprintf("%s/@types/node@%s/%s.d.ts", dtsBasePath, nodeTypesVersion, strings.TrimPrefix(res, "node:"))
 			}
-			if _, ok := builtInNodeModules[importPath]; ok {
-				return fmt.Sprintf("%s/@types/node@%s/%s.d.ts", dtsBasePath, nodeTypesVersion, importPath)
+			if _, ok := builtInNodeModules[res]; ok {
+				return fmt.Sprintf("%s/@types/node@%s/%s.d.ts", dtsBasePath, nodeTypesVersion, res)
 			}
 
-			depTypePkgName, _ := splitPkgPath(importPath)
+			depTypePkgName, _ := splitPkgPath(res)
 			maybeVersion := []string{"latest"}
 			if v, ok := pkgInfo.Dependencies[depTypePkgName]; ok {
 				maybeVersion = []string{v, "latest"}
@@ -202,7 +204,7 @@ func (task *BuildTask) transformDTS(dts string, aliasDepsPrefix string, marker *
 			)
 			for _, version := range maybeVersion {
 				var pkg Pkg
-				pkg, _, err = validatePkgPath(importPath)
+				pkg, _, err = validatePkgPath(res)
 				if err != nil {
 					break
 				}
@@ -221,7 +223,7 @@ func (task *BuildTask) transformDTS(dts string, aliasDepsPrefix string, marker *
 				}
 			}
 			if err != nil {
-				return importPath
+				return res
 			}
 
 			// use types with `exports` and `typesVersions` contidions
@@ -238,19 +240,19 @@ func (task *BuildTask) transformDTS(dts string, aliasDepsPrefix string, marker *
 				if strings.HasSuffix(typesPath, ".d.ts") && !strings.HasSuffix(typesPath, "~.d.ts") {
 					imports.Add(typesPath)
 				}
-				importPath = strings.TrimPrefix(typesPath, info.Name+"@"+info.Version+"/")
+				res = strings.TrimPrefix(typesPath, info.Name+"@"+info.Version+"/")
 			} else {
 				if subpath != "" {
-					importPath = subpath
+					res = subpath
 				} else if info.Types != "" {
-					importPath = utils.CleanPath(info.Types)[1:]
+					res = utils.CleanPath(info.Types)[1:]
 				} else if info.Typings != "" {
-					importPath = utils.CleanPath(info.Typings)[1:]
+					res = utils.CleanPath(info.Typings)[1:]
 				} else {
-					importPath = "index.d.ts"
+					res = "index.d.ts"
 				}
-				if !strings.HasSuffix(importPath, ".d.ts") && !strings.HasSuffix(importPath, "/*") {
-					importPath += "~.d.ts"
+				if !strings.HasSuffix(res, ".d.ts") && !strings.HasSuffix(res, "/*") {
+					res += "~.d.ts"
 				}
 			}
 			bv := task.BuildVersion
@@ -258,18 +260,22 @@ func (task *BuildTask) transformDTS(dts string, aliasDepsPrefix string, marker *
 				bv = STABLE_VERSION
 			}
 			pkgPath := info.Name + "@" + info.Version + "/" + encodeBuildArgsPrefix(task.Args, Pkg{Name: info.Name}, true)
-			importPath = fmt.Sprintf("%s%s/v%d/%s%s", task.CdnOrigin, cfg.CdnBasePath, bv, pkgPath, importPath)
+			res = fmt.Sprintf("%s%s/v%d/%s%s", task.CdnOrigin, cfg.CdnBasePath, bv, pkgPath, res)
 		}
 
-		if kind == "declareModule" && strings.HasSuffix(importPath, "/"+dts) {
+		if kind == "declareModule" && strings.HasSuffix(res, "/"+dts) {
 			baseUrl := task.CdnOrigin + cfg.CdnBasePath
-			aliasDeclareModule(footer, fmt.Sprintf("%s/v%d/%s", baseUrl, task.BuildVersion, pkgNameWithVersion), importPath)
-			aliasDeclareModule(footer, fmt.Sprintf("%s/v%d/%s?*", baseUrl, task.BuildVersion, pkgNameWithVersion), importPath)
-			aliasDeclareModule(footer, fmt.Sprintf("%s/%s", baseUrl, pkgNameWithVersion), importPath)
-			aliasDeclareModule(footer, fmt.Sprintf("%s/%s?*", baseUrl, pkgNameWithVersion), importPath)
+			moduleName := pkgNameWithVersion
+			if _, subPath := splitPkgPath(specifier); subPath != "" {
+				moduleName = moduleName + "/" + subPath
+			}
+			aliasDeclareModule(footer, fmt.Sprintf("%s/v%d/%s", baseUrl, task.BuildVersion, moduleName), res)
+			aliasDeclareModule(footer, fmt.Sprintf("%s/v%d/%s?*", baseUrl, task.BuildVersion, moduleName), res)
+			aliasDeclareModule(footer, fmt.Sprintf("%s/%s", baseUrl, moduleName), res)
+			aliasDeclareModule(footer, fmt.Sprintf("%s/%s?*", baseUrl, moduleName), res)
 		}
 
-		return importPath
+		return res
 	})
 	if err != nil {
 		return
