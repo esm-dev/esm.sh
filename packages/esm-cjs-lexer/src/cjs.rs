@@ -524,6 +524,87 @@ impl ExportsParser {
     }
   }
 
+  // function (e, t, r) {
+  //   "use strict";
+  //   r.r(t), r.d(t, "named", (function () { return n }));
+  //   var n = "named-export";
+  //   t.default = "default-export";
+  // }
+  fn get_webpack_umd_module_exports(&mut self, expr: &Expr, webpack_exports_sym: &str, webpack_require_sym: &str) {
+    match &*expr {
+      Expr::Seq(SeqExpr { exprs, .. }) => {
+        for expr in exprs {
+          self.get_webpack_umd_module_exports(&expr, webpack_exports_sym, webpack_require_sym)
+        }
+      }
+      Expr::Call(call) => {
+        if let Some(Expr::Member(MemberExpr {
+          // obj: Ident { sym: obj_sym, .. },
+          // prop: Ident { sym: prop_sym, .. },
+          obj,
+          prop,
+          ..
+        })) = with_expr_callee(call)
+        {
+          if let (Expr::Ident(Ident { sym: obj_sym, .. }), MemberProp::Ident(Ident { sym: prop_sym, .. })) =
+            (&**obj, &*prop)
+          {
+            if obj_sym.as_ref().eq(webpack_require_sym) && prop_sym.as_ref().eq("r") {
+              self.exports.insert("__esModule".to_string());
+            }
+            if obj_sym.as_ref().eq(webpack_require_sym) && prop_sym.as_ref().eq("d") {
+              let CallExpr { args, .. } = &*call;
+              let ExprOrSpread { expr, .. } = args.get(1).unwrap();
+              if let Expr::Lit(Lit::Str(Str { value, .. })) = &**expr {
+                self.exports.insert(value.as_ref().to_string());
+              }
+            }
+          }
+        }
+      }
+      Expr::Assign(AssignExpr {
+        left,
+        op: AssignOp::Assign,
+        ..
+      }) => {
+        // if let PatOrExpr::Expr(expr) = &*left {
+        //   println!("pat {}", i);
+
+        //   if let Expr::Member(MemberExpr { obj, prop, .. }) = &**expr {
+        //     if let Expr::Ident(Ident { sym, .. }) = &**obj {
+        //       if sym.as_ref().eq(webpack_exports_sym.as_ref()) {
+        //         if let MemberProp::Ident(prop) = prop {
+        //           if prop.sym.as_ref().eq("default") {
+        //             self.exports.insert("default".to_string());
+        //           }
+        //         }
+        //       }
+        //     }
+        //   }
+        // }
+        // This doesn't feel right but is what ends up matching
+        // t.default = "default-export"
+        // May be an swc ast bug
+        if let PatOrExpr::Pat(pat) = &left {
+          if let Pat::Expr(expr) = &**pat {
+            if let Expr::Member(MemberExpr { obj, prop, .. }) = &**expr {
+              if let Expr::Ident(Ident { sym, .. }) = &**obj {
+                if sym.as_ref().eq(webpack_exports_sym) {
+                  if let MemberProp::Ident(prop) = prop {
+                    if prop.sym.as_ref().eq("default") {
+                      self.exports.insert("default".to_string());
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+      _ => {}
+    }
+  }
+
   // walk and mark idents
   fn walk_stmts(&mut self, stmts: &Vec<Stmt>) -> bool {
     for stmt in stmts {
@@ -911,7 +992,105 @@ impl ExportsParser {
             self.dep_parse(vec![alt.as_ref().clone()], false);
           }
         }
-        _ => {}
+        Stmt::Return(ReturnStmt { arg, .. }) => {
+          if let Some(arg) = arg {
+            match &**arg {
+              Expr::Call(call) => {
+                if let Some(Expr::Fn(FnExpr { function, .. })) = with_expr_callee(call) {
+                  if let Function {
+                    body: Some(BlockStmt { stmts, .. }),
+                    ..
+                  } = function.as_ref()
+                  {
+                    if let Stmt::Decl(Decl::Fn(FnDecl { function, .. })) = stmts.get(1).unwrap() {
+                      if let Function {
+                        body: Some(BlockStmt { stmts, .. }),
+                        ..
+                      } = function.as_ref()
+                      {
+                        if let Stmt::If(IfStmt { cons, .. }) = stmts.get(0).unwrap() {
+                          if let Stmt::Return(ReturnStmt { arg: Some(arg), .. }) = &**cons {
+                            if let Expr::Member(MemberExpr {
+                              prop: MemberProp::Ident(prop),
+                              ..
+                            }) = &**arg
+                            {
+                              if prop.sym.as_ref().eq("exports") {
+                                if call.args.len() != 1 {
+                                  return;
+                                }
+                                println!("is webpack require");
+                                let ExprOrSpread { expr, .. } = call.args.get(0).unwrap();
+                                if let Expr::Array(ArrayLit { elems, .. }) = &**expr {
+                                  for elem in elems {
+                                    if let Some(ExprOrSpread { expr, .. }) = elem {
+                                      if let Expr::Fn(FnExpr { function, .. }) = &**expr {
+                                        if let Function {
+                                          body: Some(BlockStmt { stmts, .. }),
+                                          params,
+                                          ..
+                                        } = function.as_ref()
+                                        {
+                                          if let Param {
+                                            pat:
+                                              Pat::Ident(BindingIdent {
+                                                id:
+                                                  Ident {
+                                                    sym: webpack_exports_sym,
+                                                    ..
+                                                  },
+                                                ..
+                                              }),
+                                            ..
+                                          } = params.get(1).unwrap()
+                                          {
+                                            // TODO: handle missing case
+                                            if let Param {
+                                              pat:
+                                                Pat::Ident(BindingIdent {
+                                                  id:
+                                                    Ident {
+                                                      sym: webpack_require_sym,
+                                                      ..
+                                                    },
+                                                  ..
+                                                }),
+                                              ..
+                                            } = params.get(2).unwrap()
+                                            {
+                                              for stmt in stmts {
+                                                if let Stmt::Expr(ExprStmt { expr, .. }) = stmt {
+                                                  self.get_webpack_umd_module_exports(
+                                                    expr,
+                                                    webpack_exports_sym.as_ref(),
+                                                    webpack_require_sym.as_ref(),
+                                                  )
+                                                }
+                                                // stmts
+                                              }
+                                            }
+                                          }
+                                        }
+                                      }
+                                    }
+                                  }
+                                }
+                              }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+              _ => {}
+            }
+          }
+        }
+        _ => {
+          println!("no matches");
+        }
       }
     }
   }
@@ -1184,7 +1363,7 @@ fn is_umd_iife_call(call: &CallExpr) -> Option<Vec<Stmt>> {
         }
       }
       Expr::Arrow(arrow) => {
-        // TODO: detect for minified umd, haven't seen any in the wild yet though
+        // TODO: detect for minified umd, haven't seen any in the wild using arrow fns yet though
         if is_umd_params(&arrow.params) {
           return stmts;
         }
