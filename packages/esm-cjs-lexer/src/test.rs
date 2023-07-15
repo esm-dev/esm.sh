@@ -700,7 +700,8 @@ mod tests {
 
   #[test]
   fn parse_cjs_exports_case_21_3() {
-    // Webpack minified UMD output for:
+    // Webpack 4 minified UMD output after replacing https://github.com/glennflanagan/react-collapsible/blob/1b987617fe7c20337977a0a877574263ed7ed657/src/Collapsible.js#L1
+    // with:
     // ```
     // export const named = 'named-export';
 
@@ -768,6 +769,63 @@ mod tests {
       .parse_cjs_exports("production", true)
       .expect("could not parse exports");
     assert_eq!(exports.join(","), "__esModule,named,default");
+  }
+
+  #[test]
+  fn parse_cjs_exports_case_21_4() {
+    // Webpack 5 minified UMD output after replacing https://github.com/amrlabib/react-timer-hook/blob/46aad2022d5cfa69bb24d1f4a20a94c774ea13d7/src/index.js#L1:
+    // with:
+    // ```
+    // export const named1 = 'named-export-1';
+    // export const named2 = 'named-export-2';
+
+    // export default 'default-export';
+    // ```
+    // Manually formatted to avoid ast changes from prettier
+    let source = r#"
+    !function (e, t) {
+      "object" == typeof exports && "object" == typeof module ?
+        module.exports = t() :
+        "function" == typeof define && define.amd ?
+          define([], t) :
+          "object" == typeof exports ?
+            exports["react-timer-hook"] = t() :
+            e["react-timer-hook"] = t()
+    }(
+      "undefined" != typeof self ? self : this,
+      (() =>
+        (() => {
+          "use strict";
+          var e = {
+            d: (t, o) => {
+              for (var r in o)
+                e.o(o, r) && !e.o(t, r) && Object.defineProperty(t, r, { enumerable: !0, get: o[r] })
+            },
+            o: (e, t) => Object.prototype.hasOwnProperty.call(e, t),
+            r: e => {
+              "undefined" != typeof Symbol && Symbol.toStringTag && Object.defineProperty(e, Symbol.toStringTag, { value: "Module" }),
+                Object.defineProperty(e, "__esModule", { value: !0 })
+            }
+          },
+            t = {};
+          e.r(t),
+            e.d(t, {
+              default: () => n,
+              named1: () => o,
+              named2: () => r
+            });
+          const o = "named-export-1",
+            r = "named-export-2",
+            n = "default-export";
+          return t
+        })()
+      ));
+    "#;
+    let swc = SWC::parse("index.cjs", source).expect("could not parse module");
+    let (exports, _) = swc
+      .parse_cjs_exports("production", true)
+      .expect("could not parse exports");
+    assert_eq!(exports.join(","), "__esModule,named-export-1,named-export-2,default");
   }
 
   #[test]
