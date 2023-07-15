@@ -530,36 +530,46 @@ impl ExportsParser {
   //   var n = "named-export";
   //   t.default = "default-export";
   // }
-  fn get_webpack_umd_module_exports(&mut self, expr: &Expr, webpack_exports_sym: &str, webpack_require_sym: &str) {
+  fn get_webpack_exports_from_module_fns(
+    &mut self,
+    expr: &Expr,
+    webpack_exports_sym: &str,
+    webpack_require_sym: Option<&str>,
+  ) {
     match &*expr {
       Expr::Seq(SeqExpr { exprs, .. }) => {
         for expr in exprs {
-          self.get_webpack_umd_module_exports(&expr, webpack_exports_sym, webpack_require_sym)
+          self.get_webpack_exports_from_module_fns(&expr, webpack_exports_sym, webpack_require_sym)
         }
       }
       Expr::Call(call) => {
-        if let Some(Expr::Member(MemberExpr {
-          // obj: Ident { sym: obj_sym, .. },
-          // prop: Ident { sym: prop_sym, .. },
-          obj,
-          prop,
-          ..
-        })) = with_expr_callee(call)
-        {
-          if let (Expr::Ident(Ident { sym: obj_sym, .. }), MemberProp::Ident(Ident { sym: prop_sym, .. })) =
-            (&**obj, &*prop)
-          {
-            if obj_sym.as_ref().eq(webpack_require_sym) && prop_sym.as_ref().eq("r") {
-              self.exports.insert("__esModule".to_string());
-            }
-            if obj_sym.as_ref().eq(webpack_require_sym) && prop_sym.as_ref().eq("d") {
-              let CallExpr { args, .. } = &*call;
-              let ExprOrSpread { expr, .. } = args.get(1).unwrap();
-              if let Expr::Lit(Lit::Str(Str { value, .. })) = &**expr {
-                self.exports.insert(value.as_ref().to_string());
+        match webpack_require_sym {
+          Some(webpack_require_sym) => {
+            if let Some(Expr::Member(MemberExpr {
+              // obj: Ident { sym: obj_sym, .. },
+              // prop: Ident { sym: prop_sym, .. },
+              obj,
+              prop,
+              ..
+            })) = with_expr_callee(call)
+            {
+              if let (Expr::Ident(Ident { sym: obj_sym, .. }), MemberProp::Ident(Ident { sym: prop_sym, .. })) =
+                (&**obj, &*prop)
+              {
+                if obj_sym.as_ref().eq(webpack_require_sym) && prop_sym.as_ref().eq("r") {
+                  self.exports.insert("__esModule".to_string());
+                }
+                if obj_sym.as_ref().eq(webpack_require_sym) && prop_sym.as_ref().eq("d") {
+                  let CallExpr { args, .. } = &*call;
+                  let ExprOrSpread { expr, .. } = args.get(1).unwrap();
+                  if let Expr::Lit(Lit::Str(Str { value, .. })) = &**expr {
+                    self.exports.insert(value.as_ref().to_string());
+                  }
+                }
               }
             }
           }
+          None => {}
         }
       }
       Expr::Assign(AssignExpr {
@@ -1031,7 +1041,7 @@ impl ExportsParser {
                                           ..
                                         } = function.as_ref()
                                         {
-                                          if let Param {
+                                          if let Some(Param {
                                             pat:
                                               Pat::Ident(BindingIdent {
                                                 id:
@@ -1042,10 +1052,9 @@ impl ExportsParser {
                                                 ..
                                               }),
                                             ..
-                                          } = params.get(1).unwrap()
+                                          }) = params.get(1)
                                           {
-                                            // TODO: handle missing case
-                                            if let Param {
+                                            if let Some(Param {
                                               pat:
                                                 Pat::Ident(BindingIdent {
                                                   id:
@@ -1056,17 +1065,26 @@ impl ExportsParser {
                                                   ..
                                                 }),
                                               ..
-                                            } = params.get(2).unwrap()
+                                            }) = params.get(2)
                                             {
                                               for stmt in stmts {
                                                 if let Stmt::Expr(ExprStmt { expr, .. }) = stmt {
-                                                  self.get_webpack_umd_module_exports(
+                                                  self.get_webpack_exports_from_module_fns(
                                                     expr,
                                                     webpack_exports_sym.as_ref(),
-                                                    webpack_require_sym.as_ref(),
+                                                    Some(webpack_require_sym.as_ref()),
                                                   )
                                                 }
-                                                // stmts
+                                              }
+                                            } else {
+                                              for stmt in stmts {
+                                                if let Stmt::Expr(ExprStmt { expr, .. }) = stmt {
+                                                  self.get_webpack_exports_from_module_fns(
+                                                    expr,
+                                                    webpack_exports_sym.as_ref(),
+                                                    None,
+                                                  )
+                                                }
                                               }
                                             }
                                           }
