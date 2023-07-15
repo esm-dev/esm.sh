@@ -1291,7 +1291,7 @@ fn get_expr_from_pat_or_expr(v: &PatOrExpr) -> Option<&Expr> {
 }
 
 fn get_arrow_body_as_stmts(arrow: &ArrowExpr) -> Vec<Stmt> {
-  match &arrow.body {
+  match &*arrow.body {
     BlockStmtOrExpr::BlockStmt(BlockStmt { stmts, .. }) => stmts.clone(),
     BlockStmtOrExpr::Expr(expr) => vec![Stmt::Return(ReturnStmt {
       span: DUMMY_SP,
