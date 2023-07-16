@@ -999,13 +999,13 @@ impl ExportsParser {
                     ..
                   } = function.as_ref()
                   {
-                    if let Stmt::Decl(Decl::Fn(FnDecl { function, .. })) = stmts.get(1).unwrap() {
+                    if let Some(Stmt::Decl(Decl::Fn(FnDecl { function, .. }))) = stmts.get(1) {
                       if let Function {
                         body: Some(BlockStmt { stmts, .. }),
                         ..
                       } = function.as_ref()
                       {
-                        if let Stmt::If(IfStmt { cons, .. }) = stmts.get(0).unwrap() {
+                        if let Some(Stmt::If(IfStmt { cons, .. })) = stmts.get(0) {
                           if let Stmt::Return(ReturnStmt { arg: Some(arg), .. }) = &**cons {
                             if let Expr::Member(MemberExpr {
                               prop: MemberProp::Ident(prop),
@@ -1017,56 +1017,57 @@ impl ExportsParser {
                                   return;
                                 }
                                 println!("is webpack require");
-                                let ExprOrSpread { expr, .. } = call.args.get(0).unwrap();
-                                if let Expr::Array(ArrayLit { elems, .. }) = &**expr {
-                                  for elem in elems {
-                                    if let Some(ExprOrSpread { expr, .. }) = elem {
-                                      if let Expr::Fn(FnExpr { function, .. }) = &**expr {
-                                        if let Function {
-                                          body: Some(BlockStmt { stmts, .. }),
-                                          params,
-                                          ..
-                                        } = function.as_ref()
-                                        {
-                                          if let Some(Param {
-                                            pat:
-                                              Pat::Ident(BindingIdent {
-                                                id:
-                                                  Ident {
-                                                    sym: webpack_exports_sym,
-                                                    ..
-                                                  },
-                                                ..
-                                              }),
+                                if let Some(ExprOrSpread { expr, .. }) = call.args.get(0) {
+                                  if let Expr::Array(ArrayLit { elems, .. }) = &**expr {
+                                    for elem in elems {
+                                      if let Some(ExprOrSpread { expr, .. }) = elem {
+                                        if let Expr::Fn(FnExpr { function, .. }) = &**expr {
+                                          if let Function {
+                                            body: Some(BlockStmt { stmts, .. }),
+                                            params,
                                             ..
-                                          }) = params.get(1)
+                                          } = function.as_ref()
                                           {
                                             if let Some(Param {
                                               pat:
                                                 Pat::Ident(BindingIdent {
                                                   id:
                                                     Ident {
-                                                      sym: webpack_require_sym,
+                                                      sym: webpack_exports_sym,
                                                       ..
                                                     },
                                                   ..
                                                 }),
                                               ..
-                                            }) = params.get(2)
+                                            }) = params.get(1)
                                             {
-                                              for stmt in stmts {
-                                                if let Stmt::Expr(ExprStmt { expr, .. }) = stmt {
-                                                  self.get_webpack4_exports(
-                                                    expr,
-                                                    webpack_exports_sym.as_ref(),
-                                                    Some(webpack_require_sym.as_ref()),
-                                                  )
+                                              if let Some(Param {
+                                                pat:
+                                                  Pat::Ident(BindingIdent {
+                                                    id:
+                                                      Ident {
+                                                        sym: webpack_require_sym,
+                                                        ..
+                                                      },
+                                                    ..
+                                                  }),
+                                                ..
+                                              }) = params.get(2)
+                                              {
+                                                for stmt in stmts {
+                                                  if let Stmt::Expr(ExprStmt { expr, .. }) = stmt {
+                                                    self.get_webpack4_exports(
+                                                      expr,
+                                                      webpack_exports_sym.as_ref(),
+                                                      Some(webpack_require_sym.as_ref()),
+                                                    )
+                                                  }
                                                 }
-                                              }
-                                            } else {
-                                              for stmt in stmts {
-                                                if let Stmt::Expr(ExprStmt { expr, .. }) = stmt {
-                                                  self.get_webpack4_exports(expr, webpack_exports_sym.as_ref(), None)
+                                              } else {
+                                                for stmt in stmts {
+                                                  if let Stmt::Expr(ExprStmt { expr, .. }) = stmt {
+                                                    self.get_webpack4_exports(expr, webpack_exports_sym.as_ref(), None)
+                                                  }
                                                 }
                                               }
                                             }
@@ -1089,6 +1090,7 @@ impl ExportsParser {
                     if let BlockStmtOrExpr::BlockStmt(BlockStmt { stmts, .. }) = &**body {
                       match stmts.get(1) {
                         Some(Stmt::Decl(Decl::Var(var_decl))) => {
+                          println!("is webpack require");
                           let VarDecl { decls, .. } = &**var_decl;
                           match decls.get(0) {
                             Some(VarDeclarator {
@@ -1133,8 +1135,6 @@ impl ExportsParser {
                                     Some(Stmt::Expr(ExprStmt { expr, .. })) => {
                                       if let Expr::Seq(SeqExpr { exprs, .. }) = &**expr {
                                         for expr in exprs {
-                                          println!("is webpack require");
-
                                           if let Expr::Call(call) = &**expr {
                                             if let Some(Expr::Member(MemberExpr { obj, prop, .. })) =
                                               with_expr_callee(call)
