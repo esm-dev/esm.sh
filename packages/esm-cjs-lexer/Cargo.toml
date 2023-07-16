@@ -30,6 +30,9 @@ swc_ecma_visit = "0.93.1"
 wasm-bindgen = {version = "0.2.83", features = ["serde-serialize"]}
 serde-wasm-bindgen = "0.4.5"
 console_error_panic_hook = { version = "0.1.7", optional = true }
+# We get build error without this
+# https://docs.rs/getrandom/latest/getrandom/#webassembly-support
+getrandom = { version = "0.2", features = ["js"] }
 
 [profile.release]
 # less code to include into binary
