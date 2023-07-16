@@ -830,6 +830,80 @@ mod tests {
 
   #[test]
   fn parse_cjs_exports_case_21_5() {
+    // Webpack 5 minified UMD output after replacing https://github.com/amrlabib/react-timer-hook/blob/46aad2022d5cfa69bb24d1f4a20a94c774ea13d7/src/index.js#L1:
+    // with:
+    // ```
+    // import { useEffect } from "react";
+
+    // export default function useFn() {
+    //   useEffect(() => {}, []);
+    // }
+
+    // export const named1 = "named-export-1";
+    // export const named2 = "named-export-2";
+    // ```
+    // Formatted with Deno to avoid ast changes from prettier
+    let source = r#"
+    !function (e, t) {
+      "object" == typeof exports && "object" == typeof module
+        ? module.exports = t(require("react"))
+        : "function" == typeof define && define.amd
+        ? define(["react"], t)
+        : "object" == typeof exports
+        ? exports["react-timer-hook"] = t(require("react"))
+        : e["react-timer-hook"] = t(e.react);
+    }("undefined" != typeof self ? self : this, (e) =>
+      (() => {
+        "use strict";
+        var t = {
+            156: (t) => {
+              t.exports = e;
+            },
+          },
+          r = {};
+        function o(e) {
+          var n = r[e];
+          if (void 0 !== n) return n.exports;
+          var a = r[e] = { exports: {} };
+          return t[e](a, a.exports, o), a.exports;
+        }
+        o.n = (e) => {
+          var t = e && e.__esModule ? () => e.default : () => e;
+          return o.d(t, { a: t }), t;
+        },
+          o.d = (e, t) => {
+            for (var r in t) {
+              o.o(t, r) && !o.o(e, r) &&
+                Object.defineProperty(e, r, { enumerable: !0, get: t[r] });
+            }
+          },
+          o.o = (e, t) => Object.prototype.hasOwnProperty.call(e, t),
+          o.r = (e) => {
+            "undefined" != typeof Symbol && Symbol.toStringTag &&
+            Object.defineProperty(e, Symbol.toStringTag, { value: "Module" }),
+              Object.defineProperty(e, "__esModule", { value: !0 });
+          };
+        var n = {};
+        return (() => {
+          o.r(n), o.d(n, { default: () => t, named1: () => r, named2: () => a });
+          var e = o(156);
+          function t() {
+            (0, e.useEffect)(() => {}, []);
+          }
+          const r = "named-export-1", a = "named-export-2";
+        })(),
+          n;
+      })());    
+    "#;
+    let swc = SWC::parse("index.cjs", source).expect("could not parse module");
+    let (exports, _) = swc
+      .parse_cjs_exports("production", true)
+      .expect("could not parse exports");
+    assert_eq!(exports.join(","), "__esModule,default,named1,named2");
+  }
+
+  #[test]
+  fn parse_cjs_exports_case_21_6() {
     // Webpack 5 minified UMD output after replacing https://github.com/xmtp/xmtp-js-content-types/blob/c3cac4842c98785a0436240148f228c654c919c8/remote-attachment/src/index.ts
     // with:
     // ```
@@ -871,7 +945,7 @@ mod tests {
   }
 
   #[test]
-  fn parse_cjs_exports_case_21_6() {
+  fn parse_cjs_exports_case_21_7() {
     // Webpack 5 minified UMD output after replacing https://github.com/xmtp/xmtp-js-content-types/blob/c3cac4842c98785a0436240148f228c654c919c8/remote-attachment/src/index.ts
     // with:
     // ```
