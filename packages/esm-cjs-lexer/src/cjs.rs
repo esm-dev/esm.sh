@@ -1088,91 +1088,44 @@ impl ExportsParser {
                 Some(Expr::Paren(ParenExpr { expr, .. })) => {
                   if let Expr::Arrow(ArrowExpr { body, .. }) = &**expr {
                     if let BlockStmtOrExpr::BlockStmt(BlockStmt { stmts, .. }) = &**body {
-                      match stmts.get(1) {
-                        Some(Stmt::Decl(Decl::Var(var_decl))) => {
-                          let VarDecl { decls, .. } = &**var_decl;
-                          match decls.get(0) {
-                            Some(VarDeclarator {
-                              name:
-                                Pat::Ident(BindingIdent {
-                                  id:
-                                    Ident {
-                                      sym: webpack_require_sym,
-                                      ..
-                                    },
-                                  ..
-                                }),
-                              init,
-                              ..
-                            }) => {
-                              if let Some(init) = init {
-                                if let Expr::Object(ObjectLit { props, .. }) = &**init {
-                                  let mut webpack_require_props = 0;
-                                  for prop in props {
-                                    match prop {
-                                      PropOrSpread::Prop(prop) => match &**prop {
-                                        Prop::KeyValue(KeyValueProp {
-                                          key: PropName::Ident(Ident { sym, .. }),
-                                          ..
-                                        }) => {
-                                          let sym_ref = sym.as_ref();
-                                          if sym_ref.eq("r") || sym.as_ref().eq("d") {
-                                            webpack_require_props = webpack_require_props + 1;
-                                          }
-                                        }
-                                        _ => {}
-                                      },
-                                      _ => {}
-                                    }
-                                  }
-
-                                  // Not using webpack_require, try checking return instead
-                                  if webpack_require_props != 2 {
-                                    if let Some(Stmt::Return(ReturnStmt { arg, .. })) = stmts.get(stmts.len() - 1) {
-                                      if let Some(arg) = arg {
-                                        match &**arg {
-                                          Expr::Seq(SeqExpr { exprs, .. }) => {
-                                            if let Some(module_exports_expr) = exprs.get(exprs.len() - 1) {
-                                              if let Some(module_iife_expr) = exprs.get(0) {
-                                                if let Expr::Call(module_iife_call_expr) = &**module_iife_expr {
-                                                  if let Some(stmts) = is_iife_call(module_iife_call_expr) {
-                                                    if let Expr::Ident(Ident {
-                                                      sym: module_exports_sym,
-                                                      ..
-                                                    }) = &**module_exports_expr
-                                                    {
-                                                      if let Some(Stmt::Decl(Decl::Var(var_decl))) = stmts.get(0) {
-                                                        let VarDecl { decls, .. } = &**var_decl;
-                                                        if let Some(VarDeclarator { name, init, .. }) = decls.get(0) {
-                                                          if let Some(init_expr) = init {
-                                                            if let Expr::Ident(Ident { sym, .. }) = &**init_expr {
-                                                              if module_exports_sym.as_ref().eq(sym.as_ref()) {
-                                                                if let Pat::Ident(BindingIdent {
-                                                                  id: Ident { sym, .. },
-                                                                  ..
-                                                                }) = name
-                                                                {
-                                                                  self.exports_alias.insert(sym.as_ref().to_owned());
-                                                                  self.dep_parse(stmts, false);
-                                                                }
-                                                              }
-                                                            }
-                                                          }
-                                                        }
-                                                      }
-                                                    }
-                                                  }
-                                                }
-                                              }
-                                            }
-                                          }
-                                          _ => {}
+                      if let Some(Stmt::Decl(Decl::Var(var_decl))) = stmts.get(1) {
+                        let VarDecl { decls, .. } = &**var_decl;
+                        match decls.get(0) {
+                          Some(VarDeclarator {
+                            name:
+                              Pat::Ident(BindingIdent {
+                                id:
+                                  Ident {
+                                    sym: webpack_require_sym,
+                                    ..
+                                  },
+                                ..
+                              }),
+                            init,
+                            ..
+                          }) => {
+                            if let Some(init) = init {
+                              if let Expr::Object(ObjectLit { props, .. }) = &**init {
+                                let mut webpack_require_props = 0;
+                                for prop in props {
+                                  match prop {
+                                    PropOrSpread::Prop(prop) => match &**prop {
+                                      Prop::KeyValue(KeyValueProp {
+                                        key: PropName::Ident(Ident { sym, .. }),
+                                        ..
+                                      }) => {
+                                        let sym_ref = sym.as_ref();
+                                        if sym_ref.eq("r") || sym.as_ref().eq("d") {
+                                          webpack_require_props = webpack_require_props + 1;
                                         }
                                       }
-                                    }
-                                    return;
+                                      _ => {}
+                                    },
+                                    _ => {}
                                   }
+                                }
 
+                                if webpack_require_props == 2 {
                                   match stmts.get(2) {
                                     Some(Stmt::Expr(ExprStmt { expr, .. })) => {
                                       if let Expr::Seq(SeqExpr { exprs, .. }) = &**expr {
@@ -1223,10 +1176,72 @@ impl ExportsParser {
                                 }
                               }
                             }
+                          }
+                          _ => {}
+                        }
+                      }
+
+                      if let Some(Stmt::Return(ReturnStmt { arg, .. })) = stmts.get(stmts.len() - 1) {
+                        if let Some(arg) = arg {
+                          match &**arg {
+                            Expr::Seq(SeqExpr { exprs, .. }) => {
+                              if let Some(module_exports_expr) = exprs.get(exprs.len() - 1) {
+                                if let Some(module_iife_expr) = exprs.get(0) {
+                                  if let Expr::Call(module_iife_call_expr) = &**module_iife_expr {
+                                    if let Some(stmts) = is_iife_call(module_iife_call_expr) {
+                                      if let Expr::Ident(Ident {
+                                        sym: module_exports_sym,
+                                        ..
+                                      }) = &**module_exports_expr
+                                      {
+                                        if let Some(Stmt::Decl(Decl::Var(var_decl))) = stmts.get(0) {
+                                          let VarDecl { decls, .. } = &**var_decl;
+                                          if let Some(VarDeclarator { name, init, .. }) = decls.get(0) {
+                                            if let Some(init_expr) = init {
+                                              if let Expr::Ident(Ident { sym, .. }) = &**init_expr {
+                                                if module_exports_sym.as_ref().eq(sym.as_ref()) {
+                                                  if let Pat::Ident(BindingIdent {
+                                                    id: Ident { sym, .. }, ..
+                                                  }) = name
+                                                  {
+                                                    self.exports_alias.insert(sym.as_ref().to_owned());
+                                                    self.dep_parse(stmts, false);
+                                                    return;
+                                                  }
+                                                }
+                                              }
+                                            }
+                                          }
+                                        }
+
+                                        if let Some(Stmt::Decl(Decl::Var(var_decl))) = stmts.get(1) {
+                                          let VarDecl { decls, .. } = &**var_decl;
+                                          if let Some(VarDeclarator { name, init, .. }) = decls.get(0) {
+                                            if let Some(init_expr) = init {
+                                              if let Expr::Ident(Ident { sym, .. }) = &**init_expr {
+                                                if module_exports_sym.as_ref().eq(sym.as_ref()) {
+                                                  if let Pat::Ident(BindingIdent {
+                                                    id: Ident { sym, .. }, ..
+                                                  }) = name
+                                                  {
+                                                    self.exports_alias.insert(sym.as_ref().to_owned());
+                                                    self.dep_parse(stmts, false);
+                                                    return;
+                                                  }
+                                                }
+                                              }
+                                            }
+                                          }
+                                        }
+                                      }
+                                    }
+                                  }
+                                }
+                              }
+                            }
                             _ => {}
                           }
                         }
-                        _ => {}
                       }
                     }
                   }
