@@ -1115,7 +1115,7 @@ impl ExportsParser {
                                         ..
                                       }) => {
                                         let sym_ref = sym.as_ref();
-                                        if sym_ref.eq("r") || sym.as_ref().eq("d") {
+                                        if sym_ref.eq("r") || sym_ref.eq("d") {
                                           webpack_require_props = webpack_require_props + 1;
                                         }
                                       }
@@ -1178,6 +1178,142 @@ impl ExportsParser {
                             }
                           }
                           _ => {}
+                        }
+                      }
+
+                      if let Some(Stmt::Decl(Decl::Fn(FnDecl {
+                        ident:
+                          Ident {
+                            sym: webpack_require_sym,
+                            ..
+                          },
+                        ..
+                      }))) = stmts.get(2)
+                      {
+                        let mut webpack_require_props = 0;
+                        for stmt in stmts {
+                          if let Stmt::Expr(ExprStmt { expr, .. }) = stmt {
+                            match &**expr {
+                              Expr::Seq(SeqExpr { exprs, .. }) => {
+                                for expr in exprs {
+                                  match &**expr {
+                                    Expr::Assign(AssignExpr {
+                                      op: AssignOp::Assign,
+                                      left,
+                                      ..
+                                    }) => {
+                                      if let PatOrExpr::Pat(pat) = left {
+                                        if let Pat::Expr(expr) = &**pat {
+                                          if let Expr::Member(MemberExpr {
+                                            obj,
+                                            prop: MemberProp::Ident(Ident { sym: prop_sym, .. }),
+                                            ..
+                                          }) = &**expr
+                                          {
+                                            if let Expr::Ident(Ident { sym, .. }) = &**obj {
+                                              if sym.as_ref().eq(webpack_require_sym.as_ref()) {
+                                                let prop_sym_ref = prop_sym.as_ref();
+                                                if prop_sym_ref.eq("r") || prop_sym_ref.eq("d") {
+                                                  webpack_require_props = webpack_require_props + 1;
+                                                }
+                                              }
+                                            }
+                                          }
+                                        }
+                                      }
+                                    }
+                                    _ => {}
+                                  }
+                                }
+                              }
+                              Expr::Assign(AssignExpr {
+                                op: AssignOp::Assign,
+                                left,
+                                ..
+                              }) => {
+                                if let PatOrExpr::Pat(pat) = left {
+                                  if let Pat::Expr(expr) = &**pat {
+                                    if let Expr::Member(MemberExpr {
+                                      obj,
+                                      prop: MemberProp::Ident(Ident { sym: prop_sym, .. }),
+                                      ..
+                                    }) = &**expr
+                                    {
+                                      if let Expr::Ident(Ident { sym, .. }) = &**obj {
+                                        if sym.as_ref().eq(webpack_require_sym.as_ref()) {
+                                          let prop_sym_ref = prop_sym.as_ref();
+                                          if prop_sym_ref.eq("r") || prop_sym_ref.eq("d") {
+                                            webpack_require_props = webpack_require_props + 1;
+                                          }
+                                        }
+                                      }
+                                    }
+                                  }
+                                }
+                              }
+                              _ => {}
+                            }
+                          }
+                        }
+
+                        if webpack_require_props == 2 {
+                          if let Some(Stmt::Return(ReturnStmt { arg: Some(arg), .. })) = stmts.get(stmts.len() - 1) {
+                            if let Expr::Seq(SeqExpr { exprs, .. }) = &**arg {
+                              if let Some(expr) = exprs.get(0) {
+                                if let Expr::Call(call) = &**expr {
+                                  if let Some(stmts) = is_iife_call(call) {
+                                    match stmts.get(0) {
+                                      Some(Stmt::Expr(ExprStmt { expr, .. })) => {
+                                        if let Expr::Seq(SeqExpr { exprs, .. }) = &**expr {
+                                          for expr in exprs {
+                                            if let Expr::Call(call) = &**expr {
+                                              if let Some(Expr::Member(MemberExpr { obj, prop, .. })) =
+                                                with_expr_callee(call)
+                                              {
+                                                if let (
+                                                  Expr::Ident(Ident { sym: obj_sym, .. }),
+                                                  MemberProp::Ident(Ident { sym: prop_sym, .. }),
+                                                ) = (&**obj, &*prop)
+                                                {
+                                                  if !obj_sym.as_ref().eq(webpack_require_sym) {
+                                                    return;
+                                                  }
+                                                  let prop_sym_ref = prop_sym.as_ref();
+
+                                                  if prop_sym_ref.eq("r") {
+                                                    self.exports.insert("__esModule".to_string());
+                                                  }
+                                                  if prop_sym_ref.eq("d") {
+                                                    let CallExpr { args, .. } = &*call;
+                                                    if let Some(ExprOrSpread { expr, .. }) = args.get(1) {
+                                                      if let Expr::Object(ObjectLit { props, .. }) = &**expr {
+                                                        for prop in props {
+                                                          if let PropOrSpread::Prop(prop) = prop {
+                                                            if let Prop::KeyValue(KeyValueProp {
+                                                              key: PropName::Ident(Ident { sym, .. }),
+                                                              ..
+                                                            }) = &**prop
+                                                            {
+                                                              self.exports.insert(sym.as_ref().to_string());
+                                                            }
+                                                          }
+                                                        }
+                                                      }
+                                                    }
+                                                  }
+                                                }
+                                              }
+                                            }
+                                          }
+                                        }
+                                      }
+                                      _ => {}
+                                    }
+                                  }
+                                }
+                              }
+                            }
+                          }
                         }
                       }
 
