@@ -829,6 +829,48 @@ mod tests {
   }
 
   #[test]
+  fn parse_cjs_exports_case_21_5() {
+    // Webpack 5 minified UMD output after replacing https://github.com/xmtp/xmtp-js-content-types/blob/c3cac4842c98785a0436240148f228c654c919c8/remote-attachment/src/index.ts
+    // with:
+    // ```
+    // export const named1 = 'named-export-1';
+    // export const named2 = 'named-export-2';
+
+    // export default 'default-export';
+    // ```
+    // Formatted with Deno to avoid ast changes from prettier
+    let source = r#"
+    !function (e, t) {
+      "object" == typeof exports && "object" == typeof module
+        ? module.exports = t()
+        : "function" == typeof define && define.amd
+        ? define([], t)
+        : "object" == typeof exports
+        ? exports.xmtp = t()
+        : e.xmtp = t();
+    }(this, () =>
+      (() => {
+        "use strict";
+        var e = {};
+        return (() => {
+          var t = e;
+          Object.defineProperty(t, "__esModule", { value: !0 }),
+            t.named2 = t.named1 = void 0,
+            t.named1 = "named-export-1",
+            t.named2 = "named-export-2",
+            t.default = "default-export";
+        })(),
+          e;
+      })());    
+    "#;
+    let swc = SWC::parse("index.cjs", source).expect("could not parse module");
+    let (exports, _) = swc
+      .parse_cjs_exports("production", true)
+      .expect("could not parse exports");
+    assert_eq!(exports.join(","), "__esModule,named2,named1,default");
+  }
+
+  #[test]
   fn parse_cjs_exports_case_22() {
     let source = r#"
       var url = module.exports = {};

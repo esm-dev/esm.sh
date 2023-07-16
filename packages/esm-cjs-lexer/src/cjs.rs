@@ -565,8 +565,6 @@ impl ExportsParser {
         ..
       }) => {
         // if let PatOrExpr::Expr(expr) = &*left {
-        //   println!("pat {}", i);
-
         //   if let Expr::Member(MemberExpr { obj, prop, .. }) = &**expr {
         //     if let Expr::Ident(Ident { sym, .. }) = &**obj {
         //       if sym.as_ref().eq(webpack_exports_sym.as_ref()) {
@@ -754,6 +752,187 @@ impl ExportsParser {
     false
   }
 
+  fn parse_expr(&mut self, expr: &Expr) {
+    match expr {
+      // exports.foo = 'bar'
+      // module.exports.foo = 'bar'
+      // module.exports = { foo: 'bar' }
+      // module.exports = { ...require('a'), ...require('b') }
+      // module.exports = require('lib')
+      // foo = exports.foo || (exports.foo = {})
+      Expr::Seq(SeqExpr { exprs, .. }) => {
+        for expr in exprs {
+          self.parse_expr(expr);
+        }
+      }
+      Expr::Assign(assign) => {
+        self.get_exports_from_assign(&assign);
+      }
+      // Object.defineProperty(exports, 'foo', { value: 'bar' })
+      // Object.defineProperty(module.exports, 'foo', { value: 'bar' })
+      // Object.defineProperty(module, 'exports', { value: { foo: 'bar' }})
+      // Object.assign(exports, { foo: 'bar' })
+      // Object.assign(module.exports, { foo: 'bar' }, { ...require('a') }, require('b'))
+      // Object.assign(module, { exports: { foo: 'bar' } })
+      // Object.assign(module, { exports: require('lib') })
+      // (function() { ... })()
+      // require("tslib").__exportStar(..., exports)
+      // tslib.__exportStar(..., exports)
+      // __exportStar(..., exports)
+      Expr::Call(call) => {
+        if is_object_static_mothod_call(&call, "defineProperty") && call.args.len() >= 3 {
+          let arg0 = &call.args[0];
+          let arg1 = &call.args[1];
+          let arg2 = &call.args[2];
+          let is_module = is_module_ident(arg0.expr.as_ref());
+          let is_exports = self.is_exports_expr(arg0.expr.as_ref());
+
+          let name = self.as_str(arg1.expr.as_ref());
+          let mut with_value_or_getter = false;
+          let mut with_value: Option<Expr> = None;
+          if let Some(props) = self.as_obj(arg2.expr.as_ref()) {
+            for prop in props {
+              if let PropOrSpread::Prop(prop) = prop {
+                let key = match prop.as_ref() {
+                  Prop::KeyValue(KeyValueProp { key, value, .. }) => {
+                    let key = stringify_prop_name(key);
+                    if let Some(key) = &key {
+                      if key.eq("value") {
+                        with_value = Some(value.as_ref().clone());
+                      }
+                    }
+                    key
+                  }
+                  Prop::Method(MethodProp { key, .. }) => stringify_prop_name(key),
+                  _ => None,
+                };
+                if let Some(key) = key {
+                  if key.eq("value") || key.eq("get") {
+                    with_value_or_getter = true;
+                    break;
+                  }
+                }
+              }
+            }
+          }
+          if is_exports && with_value_or_getter {
+            if let Some(name) = name {
+              self.exports.insert(name);
+            }
+          }
+          if is_module {
+            if let Some(expr) = with_value {
+              self.reset(&expr);
+            }
+          }
+        } else if is_object_static_mothod_call(&call, "assign") && call.args.len() >= 2 {
+          let is_module = is_module_ident(call.args[0].expr.as_ref());
+          let is_exports = self.is_exports_expr(call.args[0].expr.as_ref());
+          for arg in &call.args[1..] {
+            if let Some(props) = self.as_obj(arg.expr.as_ref()) {
+              if is_module {
+                let mut with_exports: Option<Expr> = None;
+                for prop in props {
+                  if let PropOrSpread::Prop(prop) = prop {
+                    if let Prop::KeyValue(KeyValueProp { key, value, .. }) = prop.as_ref() {
+                      let key = stringify_prop_name(key);
+                      if let Some(key) = &key {
+                        if self.is_exports_ident(key) {
+                          with_exports = Some(value.as_ref().clone());
+                          break;
+                        }
+                      }
+                    };
+                  }
+                }
+                if let Some(exports_expr) = with_exports {
+                  self.reset(&exports_expr);
+                }
+              } else if is_exports {
+                self.use_object_as_exports(props);
+              }
+            } else if let Some(reexport) = self.as_reexport(arg.expr.as_ref()) {
+              if is_exports {
+                self.reexports.insert(reexport);
+              }
+            }
+          }
+        } else if is_tslib_export_star_call(&call) && call.args.len() >= 2 {
+          let is_exports = self.is_exports_expr(call.args[1].expr.as_ref());
+          if is_exports {
+            if let Some(props) = self.as_obj(call.args[0].expr.as_ref()) {
+              self.use_object_as_exports(props);
+            } else if let Some(reexport) = self.as_reexport(call.args[0].expr.as_ref()) {
+              self.reexports.insert(reexport);
+            }
+          }
+        } else if is_export_call(&call) && call.args.len() > 0 {
+          if let Some(props) = self.as_obj(call.args[0].expr.as_ref()) {
+            self.use_object_as_exports(props);
+          } else if let Some(reexport) = self.as_reexport(call.args[0].expr.as_ref()) {
+            self.reexports.insert(reexport);
+          }
+        } else if let Some(body) = is_umd_iife_call(&call) {
+          self.dep_parse(body, false);
+        } else if let Some(body) = is_iife_call(&call) {
+          for arg in &call.args {
+            if arg.spread.is_none() {
+              // (function() { ... })(exports.foo || (exports.foo = {}))
+              if let Some(bare_export_name) = self.get_bare_export_names(arg.expr.as_ref()) {
+                self.exports.insert(bare_export_name);
+              }
+            }
+          }
+          self.dep_parse(body, false);
+        }
+      }
+      // ~function(){ ... }()
+      // !(function(e, t) { ... })(this, (function (e) { ... }));
+      Expr::Unary(UnaryExpr { op, arg, .. }) => {
+        if let UnaryOp::Minus | UnaryOp::Plus | UnaryOp::Bang | UnaryOp::Tilde | UnaryOp::Void = op {
+          if let Expr::Call(call) = arg.as_ref() {
+            if let Some(body) = is_umd_iife_call(&call) {
+              self.dep_parse(body, false);
+            } else if let Some(body) = is_iife_call(&call) {
+              // (function() { ... })(exports.foo || (exports.foo = {}))
+              for arg in &call.args {
+                if arg.spread.is_none() {
+                  if let Some(bare_export_name) = self.get_bare_export_names(arg.expr.as_ref()) {
+                    self.exports.insert(bare_export_name);
+                  }
+                }
+              }
+              self.dep_parse(body, false);
+            }
+          }
+        }
+      }
+      // (function(){ ... }())
+      Expr::Paren(ParenExpr { expr, .. }) => {
+        self.parse(
+          vec![Stmt::Expr(ExprStmt {
+            span: DUMMY_SP,
+            expr: expr.clone(),
+          })],
+          false,
+        );
+      }
+      // 0 && (module.exports = { foo })
+      Expr::Bin(BinExpr { op, right, .. }) => {
+        if matches!(op, BinaryOp::LogicalAnd) {
+          if let Expr::Assign(assign) = right.as_ref() {
+            self.get_exports_from_assign(assign);
+          } else if let Expr::Paren(paren) = right.as_ref() {
+            if let Expr::Assign(assign) = paren.expr.as_ref() {
+              self.get_exports_from_assign(assign);
+            }
+          }
+        }
+      }
+      _ => {}
+    }
+  }
+
   fn parse(&mut self, stmts: Vec<Stmt>, as_fn: bool) {
     self.walk_stmts(&stmts);
 
@@ -800,185 +979,7 @@ impl ExportsParser {
             }
           }
         }
-        Stmt::Expr(ExprStmt { expr, .. }) => match expr.as_ref() {
-          // exports.foo = 'bar'
-          // module.exports.foo = 'bar'
-          // module.exports = { foo: 'bar' }
-          // module.exports = { ...require('a'), ...require('b') }
-          // module.exports = require('lib')
-          // foo = exports.foo || (exports.foo = {})
-          Expr::Assign(assign) => {
-            self.get_exports_from_assign(assign);
-          }
-          // Object.defineProperty(exports, 'foo', { value: 'bar' })
-          // Object.defineProperty(module.exports, 'foo', { value: 'bar' })
-          // Object.defineProperty(module, 'exports', { value: { foo: 'bar' }})
-          // Object.assign(exports, { foo: 'bar' })
-          // Object.assign(module.exports, { foo: 'bar' }, { ...require('a') }, require('b'))
-          // Object.assign(module, { exports: { foo: 'bar' } })
-          // Object.assign(module, { exports: require('lib') })
-          // (function() { ... })()
-          // require("tslib").__exportStar(..., exports)
-          // tslib.__exportStar(..., exports)
-          // __exportStar(..., exports)
-          Expr::Call(call) => {
-            println!("is call");
-            if is_object_static_mothod_call(&call, "defineProperty") && call.args.len() >= 3 {
-              let arg0 = &call.args[0];
-              let arg1 = &call.args[1];
-              let arg2 = &call.args[2];
-              let is_module = is_module_ident(arg0.expr.as_ref());
-              let is_exports = self.is_exports_expr(arg0.expr.as_ref());
-
-              let name = self.as_str(arg1.expr.as_ref());
-              let mut with_value_or_getter = false;
-              let mut with_value: Option<Expr> = None;
-              if let Some(props) = self.as_obj(arg2.expr.as_ref()) {
-                for prop in props {
-                  if let PropOrSpread::Prop(prop) = prop {
-                    let key = match prop.as_ref() {
-                      Prop::KeyValue(KeyValueProp { key, value, .. }) => {
-                        let key = stringify_prop_name(key);
-                        if let Some(key) = &key {
-                          if key.eq("value") {
-                            with_value = Some(value.as_ref().clone());
-                          }
-                        }
-                        key
-                      }
-                      Prop::Method(MethodProp { key, .. }) => stringify_prop_name(key),
-                      _ => None,
-                    };
-                    if let Some(key) = key {
-                      if key.eq("value") || key.eq("get") {
-                        with_value_or_getter = true;
-                        break;
-                      }
-                    }
-                  }
-                }
-              }
-              if is_exports && with_value_or_getter {
-                if let Some(name) = name {
-                  self.exports.insert(name);
-                }
-              }
-              if is_module {
-                if let Some(expr) = with_value {
-                  self.reset(&expr);
-                }
-              }
-            } else if is_object_static_mothod_call(&call, "assign") && call.args.len() >= 2 {
-              let is_module = is_module_ident(call.args[0].expr.as_ref());
-              let is_exports = self.is_exports_expr(call.args[0].expr.as_ref());
-              for arg in &call.args[1..] {
-                if let Some(props) = self.as_obj(arg.expr.as_ref()) {
-                  if is_module {
-                    let mut with_exports: Option<Expr> = None;
-                    for prop in props {
-                      if let PropOrSpread::Prop(prop) = prop {
-                        if let Prop::KeyValue(KeyValueProp { key, value, .. }) = prop.as_ref() {
-                          let key = stringify_prop_name(key);
-                          if let Some(key) = &key {
-                            if self.is_exports_ident(key) {
-                              with_exports = Some(value.as_ref().clone());
-                              break;
-                            }
-                          }
-                        };
-                      }
-                    }
-                    if let Some(exports_expr) = with_exports {
-                      self.reset(&exports_expr);
-                    }
-                  } else if is_exports {
-                    self.use_object_as_exports(props);
-                  }
-                } else if let Some(reexport) = self.as_reexport(arg.expr.as_ref()) {
-                  if is_exports {
-                    self.reexports.insert(reexport);
-                  }
-                }
-              }
-            } else if is_tslib_export_star_call(&call) && call.args.len() >= 2 {
-              let is_exports = self.is_exports_expr(call.args[1].expr.as_ref());
-              if is_exports {
-                if let Some(props) = self.as_obj(call.args[0].expr.as_ref()) {
-                  self.use_object_as_exports(props);
-                } else if let Some(reexport) = self.as_reexport(call.args[0].expr.as_ref()) {
-                  self.reexports.insert(reexport);
-                }
-              }
-            } else if is_export_call(&call) && call.args.len() > 0 {
-              if let Some(props) = self.as_obj(call.args[0].expr.as_ref()) {
-                self.use_object_as_exports(props);
-              } else if let Some(reexport) = self.as_reexport(call.args[0].expr.as_ref()) {
-                self.reexports.insert(reexport);
-              }
-            } else if let Some(body) = is_umd_iife_call(&call) {
-              println!("is_umd_iife_call");
-              self.dep_parse(body, false);
-            } else if let Some(body) = is_iife_call(&call) {
-              println!("is_iife_call");
-              for arg in &call.args {
-                if arg.spread.is_none() {
-                  // (function() { ... })(exports.foo || (exports.foo = {}))
-                  if let Some(bare_export_name) = self.get_bare_export_names(arg.expr.as_ref()) {
-                    self.exports.insert(bare_export_name);
-                  }
-                }
-              }
-              self.dep_parse(body, false);
-            }
-            println!("after");
-          }
-          // ~function(){ ... }()
-          // !(function(e, t) { ... })(this, (function (e) { ... }));
-          Expr::Unary(UnaryExpr { op, arg, .. }) => {
-            if let UnaryOp::Minus | UnaryOp::Plus | UnaryOp::Bang | UnaryOp::Tilde | UnaryOp::Void = op {
-              if let Expr::Call(call) = arg.as_ref() {
-                if let Some(body) = is_umd_iife_call(&call) {
-                  println!("is_umd_iife_call");
-                  self.dep_parse(body, false);
-                } else if let Some(body) = is_iife_call(&call) {
-                  println!("is iife call");
-                  // (function() { ... })(exports.foo || (exports.foo = {}))
-                  for arg in &call.args {
-                    if arg.spread.is_none() {
-                      if let Some(bare_export_name) = self.get_bare_export_names(arg.expr.as_ref()) {
-                        self.exports.insert(bare_export_name);
-                      }
-                    }
-                  }
-                  self.dep_parse(body, false);
-                }
-              }
-            }
-          }
-          // (function(){ ... }())
-          Expr::Paren(ParenExpr { expr, .. }) => {
-            self.parse(
-              vec![Stmt::Expr(ExprStmt {
-                span: DUMMY_SP,
-                expr: expr.clone(),
-              })],
-              false,
-            );
-          }
-          // 0 && (module.exports = { foo })
-          Expr::Bin(BinExpr { op, right, .. }) => {
-            if matches!(op, BinaryOp::LogicalAnd) {
-              if let Expr::Assign(assign) = right.as_ref() {
-                self.get_exports_from_assign(assign);
-              } else if let Expr::Paren(paren) = right.as_ref() {
-                if let Expr::Assign(assign) = paren.expr.as_ref() {
-                  self.get_exports_from_assign(assign);
-                }
-              }
-            }
-          }
-          _ => {}
-        },
+        Stmt::Expr(ExprStmt { expr, .. }) => self.parse_expr(expr),
         Stmt::Block(BlockStmt { stmts, .. }) => {
           self.dep_parse(stmts.clone(), false);
         }
@@ -1016,7 +1017,6 @@ impl ExportsParser {
                                 if call.args.len() != 1 {
                                   return;
                                 }
-                                println!("is webpack require");
                                 if let Some(ExprOrSpread { expr, .. }) = call.args.get(0) {
                                   if let Expr::Array(ArrayLit { elems, .. }) = &**expr {
                                     for elem in elems {
@@ -1090,7 +1090,6 @@ impl ExportsParser {
                     if let BlockStmtOrExpr::BlockStmt(BlockStmt { stmts, .. }) = &**body {
                       match stmts.get(1) {
                         Some(Stmt::Decl(Decl::Var(var_decl))) => {
-                          println!("is webpack require");
                           let VarDecl { decls, .. } = &**var_decl;
                           match decls.get(0) {
                             Some(VarDeclarator {
@@ -1127,7 +1126,50 @@ impl ExportsParser {
                                     }
                                   }
 
+                                  // Not using webpack_require, try checking return instead
                                   if webpack_require_props != 2 {
+                                    if let Some(Stmt::Return(ReturnStmt { arg, .. })) = stmts.get(stmts.len() - 1) {
+                                      if let Some(arg) = arg {
+                                        match &**arg {
+                                          Expr::Seq(SeqExpr { exprs, .. }) => {
+                                            if let Some(module_exports_expr) = exprs.get(exprs.len() - 1) {
+                                              if let Some(module_iife_expr) = exprs.get(0) {
+                                                if let Expr::Call(module_iife_call_expr) = &**module_iife_expr {
+                                                  if let Some(stmts) = is_iife_call(module_iife_call_expr) {
+                                                    if let Expr::Ident(Ident {
+                                                      sym: module_exports_sym,
+                                                      ..
+                                                    }) = &**module_exports_expr
+                                                    {
+                                                      if let Some(Stmt::Decl(Decl::Var(var_decl))) = stmts.get(0) {
+                                                        let VarDecl { decls, .. } = &**var_decl;
+                                                        if let Some(VarDeclarator { name, init, .. }) = decls.get(0) {
+                                                          if let Some(init_expr) = init {
+                                                            if let Expr::Ident(Ident { sym, .. }) = &**init_expr {
+                                                              if module_exports_sym.as_ref().eq(sym.as_ref()) {
+                                                                if let Pat::Ident(BindingIdent {
+                                                                  id: Ident { sym, .. },
+                                                                  ..
+                                                                }) = name
+                                                                {
+                                                                  self.exports_alias.insert(sym.as_ref().to_owned());
+                                                                  self.dep_parse(stmts, false);
+                                                                }
+                                                              }
+                                                            }
+                                                          }
+                                                        }
+                                                      }
+                                                    }
+                                                  }
+                                                }
+                                              }
+                                            }
+                                          }
+                                          _ => {}
+                                        }
+                                      }
+                                    }
                                     return;
                                   }
 
@@ -1299,7 +1341,6 @@ fn is_object_static_mothod_call(call: &CallExpr, method: &str) -> bool {
 fn is_umd_params(params: &Vec<Pat>) -> bool {
   if params.len() == 2 {
     if let Pat::Ident(bid) = &params.get(0).unwrap() {
-      println!("bid sym {}", bid.id.sym);
       if bid.id.sym.eq("global") {
         if let Pat::Ident(bid) = &params.get(1).unwrap() {
           if bid.id.sym.eq("factory") {
@@ -1489,7 +1530,6 @@ fn is_umd_iife_call(call: &CallExpr) -> Option<Vec<Stmt>> {
           return stmts;
         } else if let Some(BlockStmt { stmts: body_stmts, .. }) = &func.function.body {
           if is_umd_checks(body_stmts) {
-            println!("is_umd_stmts");
             return stmts;
           }
           return None;
