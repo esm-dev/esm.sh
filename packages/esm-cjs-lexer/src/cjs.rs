@@ -600,6 +600,64 @@ impl ExportsParser {
     }
   }
 
+  fn is_umd_iife_call(&mut self, call: &CallExpr) -> Option<Vec<Stmt>> {
+    if call.args.len() == 2 {
+      let mut arg1 = call.args.get(1).unwrap().expr.as_ref();
+      if let Expr::Paren(ParenExpr { expr, .. }) = arg1 {
+        arg1 = expr.as_ref();
+      }
+      let stmts = match arg1 {
+        Expr::Fn(func) => {
+          if let Some(BlockStmt { stmts, .. }) = &func.function.body {
+            Some(stmts.clone())
+          } else {
+            None
+          }
+        }
+        Expr::Arrow(arrow) => Some(get_arrow_body_as_stmts(&arrow)),
+        _ => None,
+      };
+      let expr = if let Some(callee) = with_expr_callee(call) {
+        match callee {
+          Expr::Paren(ParenExpr { expr, .. }) => expr.as_ref(),
+          _ => callee,
+        }
+      } else {
+        return None;
+      };
+      match expr {
+        Expr::Fn(func) => {
+          if is_umd_params(&func.function.params.iter().map(|p| p.pat.clone()).collect()) {
+            return stmts;
+          } else if let Some(BlockStmt { stmts: body_stmts, .. }) = &func.function.body {
+            if is_umd_checks(body_stmts) {
+              if let Some(Param {
+                pat: Pat::Ident(BindingIdent {
+                  id: Ident { sym, .. }, ..
+                }),
+                ..
+              }) = &func.function.params.get(0)
+              {
+                self.exports_alias.insert(sym.as_ref().to_owned());
+              }
+
+              return stmts;
+            }
+            return None;
+          }
+        }
+        Expr::Arrow(arrow) => {
+          // TODO: detect for minified umd, haven't seen any in the wild using arrow fns yet though
+          if is_umd_params(&arrow.params) {
+            return stmts;
+          }
+        }
+        _ => {}
+      }
+    }
+    None
+  }
+
   // walk and mark idents
   fn walk_stmts(&mut self, stmts: &Vec<Stmt>) -> bool {
     for stmt in stmts {
@@ -872,7 +930,7 @@ impl ExportsParser {
           } else if let Some(reexport) = self.as_reexport(call.args[0].expr.as_ref()) {
             self.reexports.insert(reexport);
           }
-        } else if let Some(body) = is_umd_iife_call(&call) {
+        } else if let Some(body) = self.is_umd_iife_call(&call) {
           self.dep_parse(body, false);
         } else if let Some(body) = is_iife_call(&call) {
           for arg in &call.args {
@@ -891,7 +949,7 @@ impl ExportsParser {
       Expr::Unary(UnaryExpr { op, arg, .. }) => {
         if let UnaryOp::Minus | UnaryOp::Plus | UnaryOp::Bang | UnaryOp::Tilde | UnaryOp::Void = op {
           if let Expr::Call(call) = arg.as_ref() {
-            if let Some(body) = is_umd_iife_call(&call) {
+            if let Some(body) = self.is_umd_iife_call(&call) {
               self.dep_parse(body, false);
             } else if let Some(body) = is_iife_call(&call) {
               // (function() { ... })(exports.foo || (exports.foo = {}))
@@ -1546,6 +1604,10 @@ fn is_umd_module_check(expr: &Expr) -> bool {
         (is_typeof(&left, "module") && is_string_literal(&right, "object"))
           || (is_typeof(&right, "module") && is_string_literal(&left, "object"))
       }
+      BinaryOp::NotEq | BinaryOp::NotEqEq => {
+        (is_typeof(&left, "module") && is_string_literal(&right, "undefined"))
+          || (is_typeof(&right, "module") && is_string_literal(&left, "undefined"))
+      }
       _ => false,
     },
     _ => false,
@@ -1648,54 +1710,6 @@ fn is_umd_checks(stmts: &Vec<Stmt>) -> bool {
     },
     None => false,
   }
-}
-
-fn is_umd_iife_call(call: &CallExpr) -> Option<Vec<Stmt>> {
-  if call.args.len() == 2 {
-    let mut arg1 = call.args.get(1).unwrap().expr.as_ref();
-    if let Expr::Paren(ParenExpr { expr, .. }) = arg1 {
-      arg1 = expr.as_ref();
-    }
-    let stmts = match arg1 {
-      Expr::Fn(func) => {
-        if let Some(BlockStmt { stmts, .. }) = &func.function.body {
-          Some(stmts.clone())
-        } else {
-          None
-        }
-      }
-      Expr::Arrow(arrow) => Some(get_arrow_body_as_stmts(&arrow)),
-      _ => None,
-    };
-    let expr = if let Some(callee) = with_expr_callee(call) {
-      match callee {
-        Expr::Paren(ParenExpr { expr, .. }) => expr.as_ref(),
-        _ => callee,
-      }
-    } else {
-      return None;
-    };
-    match expr {
-      Expr::Fn(func) => {
-        if is_umd_params(&func.function.params.iter().map(|p| p.pat.clone()).collect()) {
-          return stmts;
-        } else if let Some(BlockStmt { stmts: body_stmts, .. }) = &func.function.body {
-          if is_umd_checks(body_stmts) {
-            return stmts;
-          }
-          return None;
-        }
-      }
-      Expr::Arrow(arrow) => {
-        // TODO: detect for minified umd, haven't seen any in the wild using arrow fns yet though
-        if is_umd_params(&arrow.params) {
-          return stmts;
-        }
-      }
-      _ => {}
-    }
-  }
-  None
 }
 
 fn is_iife_call(call: &CallExpr) -> Option<Vec<Stmt>> {

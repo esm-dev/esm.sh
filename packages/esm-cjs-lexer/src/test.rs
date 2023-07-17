@@ -1027,7 +1027,7 @@ mod tests {
     let (exports, _) = swc
       .parse_cjs_exports("production", true)
       .expect("could not parse exports");
-    assert_eq!(exports.join(","), "__esModule,named2,named1,default");
+    assert_eq!(exports.join(","), "default,named1,named2,__esModule");
   }
 
   #[test]
