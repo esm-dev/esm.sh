@@ -988,6 +988,49 @@ mod tests {
   }
 
   #[test]
+  fn parse_cjs_exports_case_21_8() {
+    // Rollup 2 minified UMD output after replacing https://github.com/Hacker0x01/react-datepicker/blob/0c13f35e11577ca0979c363a19ea2c1f34bfdf1f/src/index.jsx#L1
+    // with:
+    // ```
+    // import { useEffect } from "react";
+
+    // export default function useFn() {
+    //   useEffect(() => {}, []);
+    // }
+
+    // export const named1 = "named-export-1";
+    // export const named2 = "named-export-2";
+    // ```
+    // Formatted with Deno to avoid ast changes from prettier
+    let source = r#"
+    !function (e, t) {
+      "object" == typeof exports && "undefined" != typeof module
+        ? t(exports, require("react"))
+        : "function" == typeof define && define.amd
+        ? define(["exports", "react"], t)
+        : t(
+          (e = "undefined" != typeof globalThis ? globalThis : e || self)
+            .DatePicker = {},
+          e.React,
+        );
+    }(this, function (e, t) {
+      "use strict";
+      e.default = function () {
+        t.useEffect(function () {}, []);
+      },
+        e.named1 = "named-export-1",
+        e.named2 = "named-export-2",
+        Object.defineProperty(e, "__esModule", { value: !0 });
+    });
+    "#;
+    let swc = SWC::parse("index.cjs", source).expect("could not parse module");
+    let (exports, _) = swc
+      .parse_cjs_exports("production", true)
+      .expect("could not parse exports");
+    assert_eq!(exports.join(","), "__esModule,named2,named1,default");
+  }
+
+  #[test]
   fn parse_cjs_exports_case_22() {
     let source = r#"
       var url = module.exports = {};
