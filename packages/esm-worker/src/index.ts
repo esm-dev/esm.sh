@@ -636,9 +636,9 @@ async function fetchESM(
         headers.set("Content-Type", metadata.contentType);
         headers.set("Cache-Control", "public, max-age=31536000, immutable");
         const exposedHeaders = [];
-        if (metadata.deps) {
-          headers.set("X-Esm-Deps", metadata.deps);
-          exposedHeaders.push("X-Esm-Deps");
+        if (metadata.buildId) {
+          headers.set("X-Esm-Id", metadata.buildId);
+          exposedHeaders.push("X-Esm-Id");
         }
         if (metadata.dts) {
           headers.set("X-TypeScript-Types", metadata.dts);
@@ -696,7 +696,7 @@ async function fetchESM(
 
   const contentType = res.headers.get("Content-Type") || getContentType(path);
   const cacheControl = res.headers.get("Cache-Control");
-  const deps = res.headers.get("X-Esm-Deps");
+  const buildId = res.headers.get("X-Esm-Id");
   const dts = res.headers.get("X-TypeScript-Types");
   const exposedHeaders = [];
 
@@ -704,9 +704,9 @@ async function fetchESM(
   if (cacheControl) {
     headers.set("Cache-Control", cacheControl);
   }
-  if (deps) {
-    headers.set("X-Esm-Deps", deps);
-    exposedHeaders.push("X-Esm-Deps");
+  if (buildId) {
+    headers.set("X-Esm-Id", buildId);
+    exposedHeaders.push("X-Esm-Id");
   }
   if (dts) {
     headers.set("X-TypeScript-Types", dts);
@@ -734,7 +734,7 @@ async function fetchESM(
         );
       }
       ctx.waitUntil(KV.put(storeKey, value, {
-        metadata: { contentType, dts, deps },
+        metadata: { contentType, dts, buildId },
       }));
     }
   }
@@ -815,11 +815,11 @@ async function fetchServerOrigin(
     "Cache-Control",
     "Content-Type",
     "Content-Length",
-    "X-Esm-Deps",
+    "X-Esm-Id",
     "X-Typescript-Types",
   );
   const exposedHeaders = [];
-  for (const key of ["X-Esm-Deps", "X-Typescript-Types"]) {
+  for (const key of ["X-Esm-Id", "X-Typescript-Types"]) {
     if (resHeaders.has(key)) {
       exposedHeaders.push(key);
     }

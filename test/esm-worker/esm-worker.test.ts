@@ -119,17 +119,15 @@ Deno.test("esm-worker", {
     );
     assertEquals(res.headers.get("Cache-Control"), "public, max-age=600");
     const res2 = await fetch(res.headers.get("Location")!);
-    const code = await res2.text();
+    const modUrl = new URL(res2.headers.get("X-Esm-Id")!, workerOrigin);
+    res2.body?.cancel();
     assertEquals(res2.status, 200);
     assertEquals(
       res2.headers.get("Content-Type"),
       "application/javascript; charset=utf-8",
     );
     assertEquals(res2.headers.get("Cache-Control"), "public, max-age=86400");
-
-    const modUrl = code.match(/from "(.+)"/)?.[1]!;
-    assert(modUrl.startsWith(workerOrigin));
-    assert(modUrl.endsWith("/denonext/react-dom.mjs"));
+    assert(modUrl.pathname.endsWith("/denonext/react-dom.mjs"));
     const res3 = await fetch(modUrl);
     assertEquals(res3.status, 200);
     assertEquals(
@@ -167,7 +165,8 @@ Deno.test("esm-worker", {
     );
     assertEquals(res.headers.get("Cache-Control"), "public, max-age=600");
     const res2 = await fetch(res.headers.get("Location")!);
-    const code = await res2.text();
+    const modUrl = new URL(res2.headers.get("X-Esm-Id")!, workerOrigin);
+    res2.body?.cancel();
     assertEquals(res2.status, 200);
     assertEquals(
       res2.headers.get("Content-Type"),
@@ -175,8 +174,7 @@ Deno.test("esm-worker", {
     );
     assertEquals(res2.headers.get("Cache-Control"), "public, max-age=86400");
     assert(/v\d+\/.+\.d\.ts$/.test(res2.headers.get("X-Typescript-Types")!));
-    const modUrl = code.match(/from "(.+)"/)?.[1]!;
-    assert(modUrl.endsWith("/denonext/server.js"));
+    assert(modUrl.pathname.endsWith("/denonext/server.js"));
     const res3 = await fetch(modUrl);
     assertEquals(res3.status, 200);
     assertEquals(
@@ -197,7 +195,8 @@ Deno.test("esm-worker", {
     assert(res.headers.get("Location")!.startsWith(`${workerOrigin}/react@`));
     assertEquals(res.headers.get("Cache-Control"), "public, max-age=600");
     const res2 = await fetch(res.headers.get("Location")!);
-    const code = await res2.text();
+    const modUrl = new URL(res2.headers.get("X-Esm-Id")!, workerOrigin);
+    res2.body?.cancel();
     assertEquals(res2.status, 200);
     assertEquals(
       res2.headers.get("Content-Type"),
@@ -207,7 +206,6 @@ Deno.test("esm-worker", {
       res2.headers.get("Cache-Control"),
       "public, max-age=31536000, immutable",
     );
-    const modUrl = new URL(code.match(/from "(.+)"/)?.[1]!);
     assertEquals(modUrl.origin, workerOrigin);
     assert(modUrl.pathname.startsWith("/stable/react@"));
     assert(modUrl.pathname.endsWith("/denonext/react.mjs"));
@@ -238,8 +236,8 @@ Deno.test("esm-worker", {
   await t.step("npm modules (pined)", async () => {
     const url = `${workerOrigin}/v115/react@18.2.0?target=es2020`;
     const res2 = await fetch(url);
-    const code = await res2.text();
-    const modUrl = new URL(code.match(/from "(.+)"/)?.[1]!);
+    const modUrl = new URL(res2.headers.get("X-Esm-Id")!, workerOrigin);
+    res2.body?.cancel();
     assertEquals(res2.status, 200);
     assertEquals(
       res2.headers.get("Content-Type"),
@@ -297,8 +295,8 @@ Deno.test("esm-worker", {
     assert(rUrl.startsWith(`${workerOrigin}/gh/microsoft/tslib@`));
     assertEquals(res.headers.get("Cache-Control"), "public, max-age=600");
     const res2 = await fetch(res.headers.get("Location")!);
-    const code = await res2.text();
-    const modUrl = new URL(code.match(/from "(.+)"/)?.[1]!);
+    const modUrl = new URL(res2.headers.get("X-Esm-Id")!, workerOrigin);
+    res2.body?.cancel();
     assertEquals(res2.status, 200);
     assertEquals(
       res2.headers.get("Content-Type"),
