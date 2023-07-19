@@ -316,7 +316,7 @@ func (task *BuildTask) analyze(forceCjsOnly bool) (esm *ESMBuild, npm NpmPackage
 	}
 
 	if npm.Module != "" && !forceCjsOnly {
-		modulePath, namedExports, erro := resolveESModule(wd, npm.Name, npm.Module)
+		modulePath, namedExports, erro := esmLexer(wd, npm.Name, npm.Module)
 		if erro == nil {
 			npm.Module = modulePath
 			esm.NamedExports = namedExports
@@ -324,14 +324,14 @@ func (task *BuildTask) analyze(forceCjsOnly bool) (esm *ESMBuild, npm NpmPackage
 			return
 		}
 		if erro != nil && erro.Error() != "not a module" {
-			err = fmt.Errorf("resolveESModule: %s", erro)
+			err = fmt.Errorf("esmLexer: %s", erro)
 			return
 		}
 
 		var ret cjsExportsResult
-		ret, err = parseCJSModuleExports(wd, path.Join(wd, "node_modules", pkg.Name, modulePath), nodeEnv)
+		ret, err = cjsLexer(wd, path.Join(wd, "node_modules", pkg.Name, modulePath), nodeEnv)
 		if err == nil && ret.Error != "" {
-			err = fmt.Errorf("parseCJSModuleExports: %s", ret.Error)
+			err = fmt.Errorf("cjsLexer: %s", ret.Error)
 		}
 		if err != nil {
 			return
@@ -360,9 +360,9 @@ func (task *BuildTask) analyze(forceCjsOnly bool) (esm *ESMBuild, npm NpmPackage
 			}
 		}
 		var ret cjsExportsResult
-		ret, err = parseCJSModuleExports(wd, pkg.ImportPath(), nodeEnv)
+		ret, err = cjsLexer(wd, pkg.ImportPath(), nodeEnv)
 		if err == nil && ret.Error != "" {
-			err = fmt.Errorf("parseCJSModuleExports: %s", ret.Error)
+			err = fmt.Errorf("cjsLexer: %s", ret.Error)
 		}
 		if err != nil {
 			return
@@ -642,7 +642,10 @@ func queryESMBuild(id string) (*ESMBuild, bool) {
 
 var esmExts = []string{".mjs", ".js", ".jsx", ".mts", ".ts", ".tsx"}
 
-func resolveESModule(wd string, packageName string, moduleSpecifier string) (resolvedName string, namedExports []string, err error) {
+func esmLexer(wd string, packageName string, moduleSpecifier string) (resolvedName string, namedExports []string, err error) {
+	fmt.Println(wd,
+		packageName,
+		moduleSpecifier)
 	pkgDir := path.Join(wd, "node_modules", packageName)
 	resolvedName = moduleSpecifier
 	if !fileExists(path.Join(pkgDir, resolvedName)) {

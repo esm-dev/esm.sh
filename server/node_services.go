@@ -174,7 +174,7 @@ type cjsExportsResult struct {
 	Stack         string   `json:"stack"`
 }
 
-func parseCJSModuleExports(buildDir string, importPath string, nodeEnv string) (ret cjsExportsResult, err error) {
+func cjsLexer(buildDir string, importPath string, nodeEnv string) (ret cjsExportsResult, err error) {
 	args := map[string]interface{}{
 		"buildDir":   buildDir,
 		"importPath": importPath,
@@ -205,9 +205,9 @@ func parseCJSModuleExports(buildDir string, importPath string, nodeEnv string) (
 			kill(nsPidFile)
 		}
 		if ret.Stack != "" {
-			log.Errorf("[ns] parseCJSModuleExports: %s\n---\n%s\n---", ret.Error, ret.Stack)
+			log.Errorf("[ns] cjsLexer: %s\n---\n%s\n---", ret.Error, ret.Stack)
 		} else {
-			log.Errorf("[ns] parseCJSModuleExports: %s", ret.Error)
+			log.Errorf("[ns] cjsLexer: %s", ret.Error)
 		}
 	}
 	return
