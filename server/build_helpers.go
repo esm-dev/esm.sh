@@ -7,6 +7,7 @@ import (
 	"io"
 	"os"
 	"path"
+	"sort"
 	"strings"
 
 	"github.com/esm-dev/esm.sh/server/storage"
@@ -233,7 +234,13 @@ func (task *BuildTask) analyze(forceCjsOnly bool) (esm *ESMBuild, npm NpmPackage
 				// reslove submodule wiht `exports` conditions if exists
 				if npm.DefinedExports != nil {
 					if m, ok := npm.DefinedExports.(map[string]interface{}); ok {
-						for name, defines := range m {
+						var names SortedPaths
+						for name := range m {
+							names = append(names, name)
+						}
+						sort.Sort(names)
+						for _, name := range names {
+							defines := m[name]
 							if name == "./"+pkg.Submodule || name == "./"+pkg.Submodule+".js" || name == "./"+pkg.Submodule+".mjs" {
 								/**
 								  exports: {
@@ -643,9 +650,6 @@ func queryESMBuild(id string) (*ESMBuild, bool) {
 var esmExts = []string{".mjs", ".js", ".jsx", ".mts", ".ts", ".tsx"}
 
 func esmLexer(wd string, packageName string, moduleSpecifier string) (resolvedName string, namedExports []string, err error) {
-	fmt.Println(wd,
-		packageName,
-		moduleSpecifier)
 	pkgDir := path.Join(wd, "node_modules", packageName)
 	resolvedName = moduleSpecifier
 	if !fileExists(path.Join(pkgDir, resolvedName)) {

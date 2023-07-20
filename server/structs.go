@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"io/ioutil"
 	"path"
+	"strings"
 	"sync"
 )
 
@@ -103,4 +104,25 @@ func (a *StringOrMap) MainValue() string {
 		}
 	}
 	return ""
+}
+
+type SortedPaths []string
+
+func (a SortedPaths) Len() int {
+	return len(a)
+}
+
+func (a SortedPaths) Less(i, j int) bool {
+	iParts := strings.Split(a[i], "/")
+	jParts := strings.Split(a[j], "/")
+	for k := 0; k < len(iParts) && k < len(jParts); k++ {
+		if iParts[k] != jParts[k] {
+			return iParts[k] < jParts[k]
+		}
+	}
+	return len(iParts) < len(jParts)
+}
+
+func (a SortedPaths) Swap(i, j int) {
+	a[i], a[j] = a[j], a[i]
 }

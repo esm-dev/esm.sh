@@ -99,18 +99,6 @@ func filter(a []string, fn func(s string) bool) []string {
 	return b[:i]
 }
 
-func sliceMap(a []string, fn func(s string) string) []string {
-	l := len(a)
-	if l == 0 {
-		return nil
-	}
-	b := make([]string, l)
-	for i, v := range a {
-		b[i] = fn(v)
-	}
-	return b
-}
-
 func cloneMap(m map[string]string) map[string]string {
 	n := make(map[string]string, len(m))
 	for k, v := range m {
