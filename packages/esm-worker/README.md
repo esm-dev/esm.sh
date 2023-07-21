@@ -13,7 +13,7 @@ all requests of esm.sh at the edge(earth).
 ## Installation
 
 ```bash
-npm install esm-worker@^0.128.0
+npm install esm-worker@^0.129.0
 ```
 
 ## Configuration
