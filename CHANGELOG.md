@@ -2,7 +2,13 @@
 
 ## v129
 
-TODO
+- BREAKING: Remove `x-esm-deps` header (close #683)
+- Sort `exports` of package.json when looping (close #683)
+- Don't replace `typeof window` for deno target (close #681)
+- Don't replace node global variable for `?target=node`
+- Fix **dts** transformer (close #670)
+- Fix depreacted message with `"`
+- esm-worker: Fix cacheKey with `x-real-origin` header
 
 ## v128
 
