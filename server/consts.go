@@ -18,7 +18,7 @@ const (
 // fix some npm package versions
 var fixedPkgVersions = map[string]string{
 	"@types/react@17": "17.0.62",
-	"@types/react@18": "18.2.14",
+	"@types/react@18": "18.2.15",
 	"isomorphic-ws@4": "5.0.0",
 	"resolve@1.22":    "1.22.2", // 1.22.3+ will read package.json from disk
 }
