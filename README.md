@@ -324,7 +324,7 @@ network request, and you can manually specify the types for the imported module.
 ### Using CLI Script
 
 **esm.sh** provides a CLI script for managing imports with import maps in
-[Deno](https://deno.land) and [Reejs](https://ree.js.org). This CLI script automatically resolves dependencies
+[Deno](https://deno.land) and Node/Bun (via [Reejs](https://ree.js.org/)). This CLI script automatically resolves dependencies
 and uses a pinned build version for stability.
 
 To use the esm.sh CLI script, you first need to run the `init` command in your
@@ -333,7 +333,7 @@ project's root directory:
 ```bash
 # For Deno
 deno run -A -r https://esm.sh init
-# For Reejs
+# For Node/Bun (via Reejs):
 reejs x https://esm.sh init
 ```
 
@@ -354,10 +354,9 @@ deno task esm:update                  # update all packages
 
 # Removing packages
 deno task esm:remove react react-dom
-
 ```
 
-For Reejs:
+For Node/Bun (via [Reejs](https://ree.js.org/)):
 
 ```bash
 # Adding packages
