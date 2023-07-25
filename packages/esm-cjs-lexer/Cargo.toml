@@ -20,16 +20,19 @@ serde = { version = "1.0.147", features = ["derive"] }
 # swc
 # docs: https://swc.rs
 # crate: https://crates.io/search?q=swc
-swc_common = { version = "0.29.13", features = ["sourcemap"] }
-swc_ecmascript = { version = "0.205.73", features = ["parser", "visit"] }
-swc_ecma_ast = "0.94.18"
-swc_ecma_visit = "0.80.18"
+swc_common = { version = "0.31.17", features = ["sourcemap"] }
+swc_ecmascript = { version = "0.231.14", features = ["parser", "visit"] }
+swc_ecma_ast = "0.107.1"
+swc_ecma_visit = "0.93.1"
 
 # wasm-bindgen
 # docs: https://rustwasm.github.io/docs/wasm-bindgen
 wasm-bindgen = {version = "0.2.83", features = ["serde-serialize"]}
 serde-wasm-bindgen = "0.4.5"
 console_error_panic_hook = { version = "0.1.7", optional = true }
+# We get build error without this
+# https://docs.rs/getrandom/latest/getrandom/#webassembly-support
+getrandom = { version = "0.2", features = ["js"] }
 
 [profile.release]
 # less code to include into binary
