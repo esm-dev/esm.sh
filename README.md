@@ -17,27 +17,27 @@ esm.sh is a modern CDN that allows you to import
 [es6 modules](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Guide/Modules)
 from a URL:
 
-```javascript
+```js
 import Module from "https://esm.sh/PKG@SEMVER[/PATH]";
 ```
 
 or build a module with custom input(code):
 
-```javascript
+```js
 import { esm } from "https://esm.sh/build";
 
-const { say } = await esm`
+const { sayHi } = await esm`
   import chalk from "chalk";
-  export const say = () => chalk.blue("Hi!");
+  export const sayHi = () => chalk.blue("Hi!");
 `;
-console.log(say()); // "Hi!"
+console.log(sayHi()); // prints "Hi!" message with blue color
 ```
 
 > More usage check out [here](#building-a-module-with-custom-inputcode).
 
 ### Import from NPM
 
-```javascript
+```js
 import React from "https://esm.sh/react@18.2.0";
 ```
 
@@ -45,35 +45,35 @@ You may also use a [semver](https://docs.npmjs.com/cli/v6/using-npm/semver) or a
 [dist-tag](https://docs.npmjs.com/cli/v8/commands/npm-dist-tag) instead of a
 fixed version number, or omit the version/tag entirely to use the `latest` tag:
 
-```javascript
+```js
 import React from "https://esm.sh/react";        // 18.2.0 (latest)
 import React from "https://esm.sh/react@17";     // 17.0.2
 import React from "https://esm.sh/react@canary"; // 18.3.0-canary-e1ad4aa36-20230601
 ```
 
+You can import submodules of a package:
+
+```js
+import { renderToString } from "https://esm.sh/react-dom@18.2.0/server";
+```
+
+or import/fetch non-module(js) as following:
+
+```js
+import "https://esm.sh/react@18.2.0/package.json" assert { type: "json" };
+```
+
 ### Import from GitHub Repos
 
-You can also import modules/assets from a github repo:
+esm.sh supports to import modules/assets from a github repo:
 `/gh/OWNER/REPO[@TAG]/PATH`. For example:
 
-```javascript
+```js
 import tslib from "https://esm.sh/gh/microsoft/tslib@2.5.0";
 ```
 
 or load a svg image from a github repo:
 https://esm.sh/gh/microsoft/fluentui-emoji/assets/Party%20popper/Color/party_popper_color.svg
-
-### Import a Submodule
-
-```javascript
-import { renderToString } from "https://esm.sh/react-dom@18.2.0/server";
-```
-
-or import non-module(js) as following:
-
-```javascript
-import "https://esm.sh/react@18.2.0/package.json" assert { type: "json" };
-```
 
 ### Specify Dependencies
 
@@ -82,20 +82,20 @@ To specify the version of these dependencies, you can add the
 `?deps=PACKAGE@VERSION` query. To specify multiple dependencies, separate them
 with a comma, like this: `?deps=react@17.0.2,react-dom@17.0.2`.
 
-```javascript
+```js
 import React from "https://esm.sh/react@17.0.2";
 import useSWR from "https://esm.sh/swr?deps=react@17.0.2";
 ```
 
 ### Aliasing Dependencies
 
-```javascript
+```js
 import useSWR from "https://esm.sh/swr?alias=react:preact/compat";
 ```
 
 in combination with `?deps`:
 
-```javascript
+```js
 import useSWR from "https://esm.sh/swr?alias=react:preact/compat&deps=preact@10.5.14";
 ```
 
@@ -108,7 +108,7 @@ By default, esm.sh exports a module with all its exported members. However, if
 you want to import only a specific set of members, you can specify them by
 adding a `?exports=foo,bar` query to the import statement.
 
-```javascript
+```js
 import { __await, __rest } from "https://esm.sh/tslib"; // 7.3KB
 import { __await, __rest } from "https://esm.sh/tslib?exports=__await,__rest"; // 489B
 ```
@@ -119,7 +119,7 @@ ESM modules and not CJS modules.
 
 ### Bundle Mode
 
-```javascript
+```js
 import { Button } from "https://esm.sh/antd?bundle";
 ```
 
@@ -128,7 +128,7 @@ the peer dependencies.
 
 ### Development Mode
 
-```javascript
+```js
 import React from "https://esm.sh/react?dev";
 ```
 
@@ -144,22 +144,22 @@ By default, esm.sh checks the `User-Agent` header to determine the build target.
 You can also specify the `target` by adding `?target`, available targets are:
 **es2015** - **es2022**, **esnext**, **deno**, **denonext**, **node** and **bun**.
 
-```javascript
+```js
 import React from "https://esm.sh/react?target=es2020";
 ```
 
 Other supported options of esbuild:
 
 - [Conditions](https://esbuild.github.io/api/#conditions)
-  ```javascript
+  ```js
   import foo from "https://esm.sh/foo?conditions=custom1,custom2";
   ```
 - [Keep names](https://esbuild.github.io/api/#keep-names)
-  ```javascript
+  ```js
   import foo from "https://esm.sh/foo?keep-names";
   ```
 - [Ignore annotations](https://esbuild.github.io/api/#ignore-annotations)
-  ```javascript
+  ```js
   import foo from "https://esm.sh/foo?ignore-annotations";
   ```
 
@@ -167,7 +167,7 @@ Other supported options of esbuild:
 
 esm.sh supports `?worker` query to load the module as a web worker:
 
-```javascript
+```js
 import workerFactory from "https://esm.sh/monaco-editor/esm/vs/editor/editor.worker?worker";
 
 const worker = workerFactory();
@@ -176,7 +176,7 @@ const worker = workerFactory();
 You can pass some custom code snippet to the worker when calling the factory
 function:
 
-```javascript
+```js
 const workerAddon = `
 self.onmessage = function (e) {
   console.log(e.data)
@@ -198,7 +198,7 @@ This only works when the package **imports CSS files in JS** directly.
 esm.sh supports importing wasm modules in JS directly, to do that, you need to
 add `?module` query to the import URL:
 
-```javascript
+```js
 import wasm from "https://esm.sh/@dqbd/tiktoken@1.0.3/tiktoken_bg.wasm?module";
 
 const { exports } = WebAssembly.instantiate(wasm, imports);
@@ -210,7 +210,7 @@ If you get an error like `...not provide an export named...`, that means esm.sh
 can not resolve CJS exports of the module correctly. You can add
 `?cjs-exports=foo,bar` query to specify the export names:
 
-```javascript
+```js
 import {
   NinetyRing,
   NinetyRingWithBg,
@@ -275,7 +275,7 @@ package version.
 esm.sh is a **Deno-friendly** CDN that resolves Node's built-in modules (such as
 **fs**, **os**, **net**, etc.), making it compatible with Deno.
 
-```javascript
+```js
 import express from "https://esm.sh/express";
 
 const app = express();
@@ -296,7 +296,7 @@ For users using deno `< 1.33.2`, esm.sh uses
 compatibility layer. You can specify a different version by adding the
 `?deno-std=$VER` query:
 
-```javascript
+```js
 import postcss from "https://esm.sh/express?deno-std=0.128.0";
 ```
 
@@ -314,7 +314,7 @@ In case the type definitions provided by the `X-TypeScript-Types` header are
 incorrect, you can disable it by adding the `?no-dts` query to the module import
 URL:
 
-```javascript
+```js
 import unescape from "https://esm.sh/lodash/unescape?no-dts";
 ```
 
@@ -381,7 +381,7 @@ input(code).
 - Supports TS/JSX syntaxes
 - Bundle mulitple modules into a single JS file
 
-```javascript
+```js
 import build from "https://esm.sh/build";
 
 const ret = await build({
@@ -414,7 +414,7 @@ render(); // "<h1>Hello world!</h1>"
 or use the `esm` tag function to build and import js/ts snippet quickly in browser
 with npm packages:
 
-```javascript
+```js
 import { esm } from "https://esm.sh/build";
 
 const mod = await esm`
@@ -435,7 +435,7 @@ changes in the module caused by updates to the esm.sh server.
 The `?pin` query allows you to specify a specific build version of a module,
 which is an **immutable** cached version stored on the esm.sh CDN.
 
-```javascript
+```js
 import React from "https://esm.sh/react-dom?pin=v129";
 // or use version prefix
 import React from "https://esm.sh/v129/react-dom";
