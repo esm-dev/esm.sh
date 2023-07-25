@@ -201,14 +201,14 @@ add `?module` query to the import URL:
 ```js
 import wasm from "https://esm.sh/@dqbd/tiktoken@1.0.3/tiktoken_bg.wasm?module";
 
-const { exports } = WebAssembly.instantiate(wasm, imports);
+const { exports } = new WebAssembly.Instance(wasm, imports);
 ```
 
 ### Specify CJS Exports
 
 If you get an error like `...not provide an export named...`, that means esm.sh
 can not resolve CJS exports of the module correctly. You can add
-`?cjs-exports=foo,bar` query to specify the export names:
+`?cjs-exports=foo,bar` query to specify the named exports:
 
 ```js
 import {
@@ -285,12 +285,6 @@ app.get("/", (req, res) => {
 app.listen(3000);
 ```
 
-### Reejs Compatibility
-
-esm.sh is a **Reejs-friendly** CDN. That said, Reejs officially supports and promotes esm.sh as the default CDN for importing modules.
-
-Using [deno.land/x](https://deno.land/x) or [deno.land/std](https://deno.land/std) ? Reejs supports them too out of the box.
-
 For users using deno `< 1.33.2`, esm.sh uses
 [deno.land/std@0.177.1/node](https://deno.land/std@0.177.1/node) as the node
 compatibility layer. You can specify a different version by adding the
@@ -299,8 +293,6 @@ compatibility layer. You can specify a different version by adding the
 ```js
 import postcss from "https://esm.sh/express?deno-std=0.128.0";
 ```
-
-### X-Typescript-Types Header
 
 Deno supports type definitions for modules with a `types` field in their
 `package.json` file through the `X-TypeScript-Types` header. This makes it
@@ -321,6 +313,13 @@ import unescape from "https://esm.sh/lodash/unescape?no-dts";
 This will prevent the `X-TypeScript-Types` header from being included in the
 network request, and you can manually specify the types for the imported module.
 
+### Supporting Nodejs/Bun
+
+Nodejs(18+) supports http imorting under the `--experimental-network-imports` flag. Bun doesn't
+support http modules yet.
+
+We highly recommend [Reejs](https://ree.js.org/) as the runtime with esm.sh that works both in Nodejs and Bun.
+
 ### Using CLI Script
 
 **esm.sh** provides a CLI script for managing imports with import maps in
@@ -331,16 +330,11 @@ To use the esm.sh CLI script, you first need to run the `init` command in your
 project's root directory:
 
 ```bash
-# For Deno
 deno run -A -r https://esm.sh init
-# For Node/Bun (via Reejs):
-reejs x https://esm.sh init
 ```
 
 Once you've initialized the script, you can use the following commands to manage
 your imports:
-
-For Deno:
 
 ```bash
 # Adding packages
@@ -356,20 +350,15 @@ deno task esm:update                  # update all packages
 deno task esm:remove react react-dom
 ```
 
-For Node/Bun (via [Reejs](https://ree.js.org/)):
+The CLI script works with Node/Bun via [Reejs](https://ree.js.org/):
 
 ```bash
-# Adding packages
-reejs task esm:add react react-dom     # add multiple packages
-reejs task esm:add react@17.0.2        # specify version
-reejs task esm:add react:preact/compat # using alias
-
-# Updating packages
-reejs task esm:update react react-dom  # update specific packages
-reejs task esm:update                  # update all packages
-
-# Removing packages
-reejs task esm:remove react react-dom
+# Initializing
+reejs x https://esm.sh init
+# Using reejs tasks like deno tasks above
+reejs task esm:add    react
+reejs task esm:update react
+reejs task esm:remove react
 ```
 
 ## Building a Module with Custom Input(code)
