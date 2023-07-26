@@ -219,7 +219,8 @@ func (task *BuildTask) analyze(forceCjsOnly bool) (esm *ESMBuild, npm NpmPackage
 					npm.Types = pkg.Submodule + ".d.ts"
 				}
 			} else {
-				if npm.Type == "module" || npm.Module != "" {
+				asMjs := path.Join(wd, "node_modules", npm.Name, pkg.Submodule+".mjs")
+				if npm.Type == "module" || npm.Module != "" || fileExists(asMjs) {
 					// follow main module type
 					npm.Module = pkg.Submodule
 				} else {
