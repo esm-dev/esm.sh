@@ -737,6 +737,9 @@ rebuild:
 						fmt.Fprintf(header, `import __Process$ from "node:process";%s`, EOL)
 					} else if task.Target == "deno" {
 						fmt.Fprintf(header, `import __Process$ from "https://deno.land/std@%s/node/process.ts";%s`, task.Args.denoStdVersion, EOL)
+					} else if task.Bundle {
+						data, _ := embedFS.ReadFile("server/embed/polyfills/node_process.js")
+						fmt.Fprintf(header, `import __Process$ from "%s";%s`, jsDataUrl(string(data)), EOL)
 					} else {
 						fmt.Fprintf(header, `import __Process$ from "%s/v%d/node_process.js";%s`, cfg.CdnBasePath, task.BuildVersion, EOL)
 					}
@@ -746,6 +749,9 @@ rebuild:
 						fmt.Fprintf(header, `import { Buffer as __Buffer$ } from "node:buffer";%s`, EOL)
 					} else if task.Target == "deno" {
 						fmt.Fprintf(header, `import { Buffer as __Buffer$ } from "https://deno.land/std@%s/node/buffer.ts";%s`, task.Args.denoStdVersion, EOL)
+					} else if task.Bundle {
+						data, _ := embedFS.ReadFile("server/embed/polyfills/node_buffer.js")
+						fmt.Fprintf(header, `import { Buffer as __Buffer$ } from "%s";%s`, jsDataUrl(string(data)), EOL)
 					} else {
 						fmt.Fprintf(header, `import { Buffer as __Buffer$ } from "%s/v%d/buffer@6.0.3/%s/buffer.mjs";%s`, cfg.CdnBasePath, task.BuildVersion, task.Target, EOL)
 					}
