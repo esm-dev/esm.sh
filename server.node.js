@@ -241,7 +241,6 @@ console.log(
 );
 
 if (!globalThis?.Bun) {
-  
   serve({
     fetch: App.fetch,
     port,

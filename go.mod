@@ -4,8 +4,8 @@ go 1.18
 
 require (
 	github.com/Masterminds/semver/v3 v3.2.1
-	github.com/evanw/esbuild v0.18.10
-	github.com/ije/esbuild-internal v0.18.10
+	github.com/evanw/esbuild v0.18.17
+	github.com/ije/esbuild-internal v0.18.17
 	github.com/ije/gox v0.6.1
 	github.com/ije/rex v1.9.1
 	github.com/mssola/useragent v1.0.0

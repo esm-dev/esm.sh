@@ -1,5 +1,13 @@
 # Changelog
 
+## v130
+
+- esm-cjs-lexer: support minified UMD exports (#689)
+- Support sub `.mjs` module (close #691)
+- Fix `?bundle` mode ignores `node_process.js` (close #694)
+- Upgrade `@types/react@18` to **18.2.15**
+- Upgrade esbuild to **0.18.17**
+
 ## v129
 
 - BREAKING: Remove `x-esm-deps` header (close #683)

@@ -308,7 +308,9 @@ async function saveImportMap(importMap: ImportMap): Promise<void> {
   );
 }
 
-async function getDenoConfig(): Promise<Record<string, unknown>> {
+// todo: support deno.jsonc
+// deno-lint-ignore no-explicit-any
+async function getDenoConfig(): Promise<Record<string, any>> {
   try {
     const config = await Deno.readTextFile("deno.json");
     return JSON.parse(config);

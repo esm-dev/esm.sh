@@ -9,5 +9,5 @@ Deno.test("issue #694", async () => {
   const code = await fetch(
     `http://localhost:8080/${id}`,
   ).then((res) => res.text());
-  assertStringIncludes(code, `import __Process$ from "data:text/javascript;`);
+  assertStringIncludes(code, `globalThis.__Process$=`);
 });

@@ -118,6 +118,15 @@ class ESMWorker {
     let pathname = decodeURIComponent(url.pathname);
     let buildVersion = "v" + VERSION;
 
+    if (url.hostname.endsWith(".esm.sh")) {
+      const subdomain = url.hostname.slice(0, -7);
+      if (subdomain.startsWith("v") && /^\d+$/.test(subdomain.slice(1))) {
+        buildVersion = subdomain;
+      } else {
+        return err("Invalid hostname", 400);
+      }
+    }
+
     switch (pathname) {
       case "/build":
         if (req.method === "POST" || req.method === "PUT") {

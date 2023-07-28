@@ -1,21 +1,21 @@
-export type BuildOptions = {
+export type BuildInput = {
   code: string;
   loader?: "js" | "jsx" | "ts" | "tsx";
   dependencies?: Record<string, string>;
   types?: string;
 };
 
-export type BuildResult = {
+export type BuildOutput = {
   id: string;
   url: string;
   bundleUrl: string;
 };
 
-export async function build(code: string): Promise<BuildResult>;
-export async function build(options: BuildOptions): Promise<BuildResult>;
+export async function build(code: string): Promise<BuildOutput>;
+export async function build(options: BuildInput): Promise<BuildOutput>;
 export async function build(
-  codeOrOptions: BuildOptions | string,
-): Promise<BuildResult> {
+  codeOrOptions: BuildInput | string,
+): Promise<BuildOutput> {
   const options = typeof codeOrOptions === "string"
     ? { code: codeOrOptions }
     : codeOrOptions;

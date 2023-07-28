@@ -30,7 +30,7 @@ const { sayHi } = await esm`
   import chalk from "chalk";
   export const sayHi = () => chalk.blue("Hi!");
 `;
-console.log(sayHi()); // prints "Hi!" message with blue color
+console.log(sayHi()); // prints "Hi!" message in blue color
 ```
 
 > More usage check out [here](#building-a-module-with-custom-inputcode).
@@ -260,8 +260,8 @@ package version.
 ```json
 {
   "imports": {
-    "react-dom": "https://esm.sh/react-dom@18.2.0?pin=v129&dev",
-    "react-dom/": "https://esm.sh/react-dom@18.2.0&pin=v129&dev/"
+    "react-dom": "https://esm.sh/react-dom@18.2.0?pin=v130&dev",
+    "react-dom/": "https://esm.sh/react-dom@18.2.0&pin=v130&dev/"
   }
 }
 ```
@@ -425,9 +425,9 @@ The `?pin` query allows you to specify a specific build version of a module,
 which is an **immutable** cached version stored on the esm.sh CDN.
 
 ```js
-import React from "https://esm.sh/react-dom?pin=v129";
+import React from "https://esm.sh/react-dom?pin=v130";
 // or use version prefix
-import React from "https://esm.sh/v129/react-dom";
+import React from "https://esm.sh/v130/react-dom";
 ```
 
 By using the `?pin` query in the import statement, you can rest assured that the

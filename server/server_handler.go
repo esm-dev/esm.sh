@@ -1255,7 +1255,7 @@ func esmHandler() rex.Handle {
 				}
 				code := bytes.TrimSuffix(buf, []byte(fmt.Sprintf(`//# sourceMappingURL=%s.map`, path.Base(savePath))))
 				ctx.SetHeader("Content-Type", "application/javascript; charset=utf-8")
-				return fmt.Sprintf(`export default function workerFactory() { const blob = new Blob([%s], { type: "application/javascript" }); return new Worker(URL.createObjectURL(blob), { type: "module" })}`, utils.MustEncodeJSON(string(code)))
+				return fmt.Sprintf(`export default function workerFactory(inject) { const blob = new Blob([%s, typeof inject === "string" ? "\n// inject\n" + inject : ""], { type: "application/javascript" }); return new Worker(URL.createObjectURL(blob), { type: "module" })}`, utils.MustEncodeJSON(string(code)))
 			}
 			if endsWith(savePath, ".mjs", ".js") {
 				ctx.SetHeader("Content-Type", "application/javascript; charset=utf-8")

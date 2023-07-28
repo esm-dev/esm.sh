@@ -11,8 +11,8 @@ import type {
   Context,
   HttpMetadata,
   WorkerStorage,
-} from "/esm-worker@0.129.0";
-import { withESMWorker } from "/esm-worker@0.129.0";
+} from "https://esm.sh/esm-worker@0.130.0";
+import { withESMWorker } from "https://esm.sh/esm-worker@0.130.0";
 
 type Handler = (
   request: Request,
@@ -29,7 +29,7 @@ const envKeys: (keyof Env)[] = [
 
 let env: Env = {};
 
-export async function serve(handler: Handler, options?: ServeInit) {
+export async function serve(handler?: Handler, options?: ServeInit) {
   const worker = withESMWorker((req, _env, ctx) => {
     return handler?.(req, ctx as Context & ConnInfo);
   });
@@ -162,7 +162,7 @@ if (import.meta.main && !isDenoDeploy) {
   const flags = parse(Deno.args);
   if (flags.help || flags.h) {
     console.log(
-      "%cWelcome to use esm.sh!",
+      "%cWelcome to esm.sh!",
       "font-weight:bold;color:#007bff;",
     );
     console.log(
@@ -241,7 +241,7 @@ if (import.meta.main && !isDenoDeploy) {
   </style>
 </head>
 <body>
-  <h1>Welcome to use esm.sh!</h1>
+  <h1>Welcome to esm.sh!</h1>
   <p>This is local version of esm.sh running on Deno 🦕.</p>
   <pre><code><span class="keyword">import</span> React <span class="keyword">from</span> "<a href="${url.origin}/react" class="url">${url.origin}/react</a>"</code></pre>
 </body>
@@ -256,7 +256,7 @@ if (import.meta.main && !isDenoDeploy) {
     port,
     onListen: () => {
       console.log(
-        "%cWelcome to use esm.sh!",
+        "%cWelcome to esm.sh!",
         "font-weight:bold;color:#007bff;",
       );
       console.log(

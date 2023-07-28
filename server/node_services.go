@@ -127,7 +127,7 @@ func startNodeServices() (err error) {
 	kill(nsPidFile)
 
 	// install services
-	cmd := exec.Command("pnpm", "add", "esm-node-services@0.8.4")
+	cmd := exec.Command("pnpm", "add", "esm-node-services@0.9.0")
 	cmd.Dir = wd
 	var output []byte
 	output, err = cmd.CombinedOutput()

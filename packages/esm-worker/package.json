@@ -1,7 +1,7 @@
 {
   "name": "esm-worker",
   "description": "A Cloudflare worker handles all requests of esm.sh at the edge(earth).",
-  "version": "0.129.0",
+  "version": "0.130.1",
   "type": "module",
   "module": "dist/index.js",
   "types": "types/index.d.ts",
@@ -13,10 +13,10 @@
     "types/index.d.ts"
   ],
   "devDependencies": {
-    "@cloudflare/workers-types": "4.20230518.0",
+    "@cloudflare/workers-types": "4.20230724.0",
     "@types/ua-parser-js": "0.7.36",
-    "compare-versions": "6.0.0-rc.2",
-    "esbuild": "0.18.10",
+    "compare-versions": "6.0.0",
+    "esbuild": "0.18.17",
     "ua-parser-js": "1.0.35"
   },
   "repository": "https://github.com/esm-dev/esm.sh",
