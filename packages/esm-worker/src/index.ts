@@ -110,6 +110,7 @@ class ESMWorker {
       waitUntil: (p: Promise<any>) => context.waitUntil(p),
       withCache,
     };
+
     // for deno runtime
     if (Reflect.has(context, "connInfo")) {
       Object.assign(ctx, Reflect.get(context, "connInfo"));
@@ -122,8 +123,6 @@ class ESMWorker {
       const subdomain = url.hostname.slice(0, -7);
       if (subdomain.startsWith("v") && /^\d+$/.test(subdomain.slice(1))) {
         buildVersion = subdomain;
-      } else {
-        return err("Invalid hostname", 400);
       }
     }
 
