@@ -4,34 +4,16 @@ A **WASM** module to parse the `module.exports` of a commonjs module for **ESM**
 
 ## Installation
 
-```bash
-npm install esm-cjs-lexer
-```
-
-for `yarn` users:
+[esm-cjs-lexer](https://npmjs.org/esm-cjs-lexer) is a npm package and can be installed with:
 
 ```bash
-yarn add esm-cjs-lexer
+npm i esm-cjs-lexer
 ```
 
 ## Usage
 
-Types:
-```ts
-export function parse(
-  specifier: string,
-  code: string,
-  options? {
-    nodeEnv?: 'development' | 'production',
-    callMode?: boolean,
-  }
-): {
-  exports: string[],
-  reexports: string[],
-};
-```
+[esm-cjs-lexer](https://npmjs.org/esm-cjs-lexer) provides a `parse` function to parse the `module.exports` of a commonjs module. It returns an object with `exports` and `reexports` fields. For example:
 
-Example:
 ```js
 const { parse } = require('esm-cjs-lexer');
 
@@ -148,6 +130,22 @@ const { exports } = parse('lib.cjs', `
     return { foo: 'bar' }
   }
 `, { callMode: true });
+```
+
+The `parse` function has the following types definition:
+
+```ts
+export function parse(
+  specifier: string,
+  code: string,
+  options? {
+    nodeEnv?: 'development' | 'production',
+    callMode?: boolean,
+  }
+): {
+  exports: string[],
+  reexports: string[],
+};
 ```
 
 ## Development Setup
