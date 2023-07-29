@@ -21,7 +21,7 @@ pub struct FnDesc {
   extends: Vec<String>,
 }
 
-pub struct ExportsParser {
+pub struct CJSLexer {
   pub node_env: String,
   pub call_mode: bool,
   pub fn_returned: bool,
@@ -31,7 +31,7 @@ pub struct ExportsParser {
   pub reexports: IndexSet<String>,
 }
 
-impl ExportsParser {
+impl CJSLexer {
   fn clear(&mut self) {
     self.exports.clear();
     self.reexports.clear();
@@ -56,7 +56,7 @@ impl ExportsParser {
     } else if let Some(FnDesc { stmts, extends }) = self.as_function(expr) {
       self.clear();
       if self.call_mode {
-        self.dep_parse(stmts, true);
+        self.walk_body(stmts, true);
       } else {
         for name in extends {
           self.exports.insert(name);
@@ -68,7 +68,7 @@ impl ExportsParser {
           self.clear();
           self.reexports.insert(format!("{}()", reexport));
         } else if let Some(FnDesc { stmts, .. }) = self.as_function(callee) {
-          self.dep_parse(stmts, true);
+          self.walk_body(stmts, true);
         }
       }
     }
@@ -931,7 +931,7 @@ impl ExportsParser {
             self.reexports.insert(reexport);
           }
         } else if let Some(body) = self.is_umd_iife_call(&call) {
-          self.dep_parse(body, false);
+          self.walk_body(body, false);
         } else if let Some(body) = is_iife_call(&call) {
           for arg in &call.args {
             if arg.spread.is_none() {
@@ -941,7 +941,7 @@ impl ExportsParser {
               }
             }
           }
-          self.dep_parse(body, false);
+          self.walk_body(body, false);
         }
       }
       // ~function(){ ... }()
@@ -950,7 +950,7 @@ impl ExportsParser {
         if let UnaryOp::Minus | UnaryOp::Plus | UnaryOp::Bang | UnaryOp::Tilde | UnaryOp::Void = op {
           if let Expr::Call(call) = arg.as_ref() {
             if let Some(body) = self.is_umd_iife_call(&call) {
-              self.dep_parse(body, false);
+              self.walk_body(body, false);
             } else if let Some(body) = is_iife_call(&call) {
               // (function() { ... })(exports.foo || (exports.foo = {}))
               for arg in &call.args {
@@ -960,14 +960,14 @@ impl ExportsParser {
                   }
                 }
               }
-              self.dep_parse(body, false);
+              self.walk_body(body, false);
             }
           }
         }
       }
       // (function(){ ... }())
       Expr::Paren(ParenExpr { expr, .. }) => {
-        self.parse(
+        self.walk(
           vec![Stmt::Expr(ExprStmt {
             span: DUMMY_SP,
             expr: expr.clone(),
@@ -991,10 +991,10 @@ impl ExportsParser {
     }
   }
 
-  fn parse(&mut self, stmts: Vec<Stmt>, as_fn: bool) {
+  fn walk(&mut self, stmts: Vec<Stmt>, as_fn: bool) {
     self.walk_stmts(&stmts);
 
-    // parse exports (as function)
+    // check exports (as function)
     if as_fn {
       for stmt in &stmts {
         if self.fn_returned {
@@ -1002,13 +1002,13 @@ impl ExportsParser {
         }
         match stmt {
           Stmt::Block(BlockStmt { stmts, .. }) => {
-            self.dep_parse(stmts.clone(), true);
+            self.walk_body(stmts.clone(), true);
           }
           Stmt::If(IfStmt { test, cons, alt, .. }) => {
             if self.is_true(test) {
-              self.dep_parse(vec![cons.as_ref().clone()], true);
+              self.walk_body(vec![cons.as_ref().clone()], true);
             } else if let Some(alt) = alt {
-              self.dep_parse(vec![alt.as_ref().clone()], true);
+              self.walk_body(vec![alt.as_ref().clone()], true);
             }
           }
           Stmt::Return(ReturnStmt { arg, .. }) => {
@@ -1023,7 +1023,7 @@ impl ExportsParser {
       return;
     }
 
-    // parse exports
+    // check exports
     for stmt in &stmts {
       match stmt {
         // var foo = exports.foo || (exports.foo = {})
@@ -1039,13 +1039,13 @@ impl ExportsParser {
         }
         Stmt::Expr(ExprStmt { expr, .. }) => self.parse_expr(expr),
         Stmt::Block(BlockStmt { stmts, .. }) => {
-          self.dep_parse(stmts.clone(), false);
+          self.walk_body(stmts.clone(), false);
         }
         Stmt::If(IfStmt { test, cons, alt, .. }) => {
           if self.is_true(test) {
-            self.dep_parse(vec![cons.as_ref().clone()], false);
+            self.walk_body(vec![cons.as_ref().clone()], false);
           } else if let Some(alt) = alt {
-            self.dep_parse(vec![alt.as_ref().clone()], false);
+            self.walk_body(vec![alt.as_ref().clone()], false);
           }
         }
         Stmt::Return(ReturnStmt { arg, .. }) => {
@@ -1399,7 +1399,7 @@ impl ExportsParser {
                                                   }) = name
                                                   {
                                                     self.exports_alias.insert(sym.as_ref().to_owned());
-                                                    self.dep_parse(stmts, false);
+                                                    self.walk_body(stmts, false);
                                                     return;
                                                   }
                                                 }
@@ -1419,7 +1419,7 @@ impl ExportsParser {
                                                   }) = name
                                                   {
                                                     self.exports_alias.insert(sym.as_ref().to_owned());
-                                                    self.dep_parse(stmts, false);
+                                                    self.walk_body(stmts, false);
                                                     return;
                                                   }
                                                 }
@@ -1451,8 +1451,8 @@ impl ExportsParser {
     }
   }
 
-  fn dep_parse(&mut self, body: Vec<Stmt>, as_fn: bool) {
-    let mut dep_parser = ExportsParser {
+  fn walk_body(&mut self, body: Vec<Stmt>, as_fn: bool) {
+    let mut lexer = CJSLexer {
       node_env: self.node_env.to_owned(),
       call_mode: false,
       fn_returned: false,
@@ -1461,14 +1461,14 @@ impl ExportsParser {
       exports: self.exports.clone(),
       reexports: self.reexports.clone(),
     };
-    dep_parser.parse(body, as_fn);
-    self.fn_returned = dep_parser.fn_returned;
-    self.exports = dep_parser.exports;
-    self.reexports = dep_parser.reexports;
+    lexer.walk(body, as_fn);
+    self.fn_returned = lexer.fn_returned;
+    self.exports = lexer.exports;
+    self.reexports = lexer.reexports;
   }
 }
 
-impl Fold for ExportsParser {
+impl Fold for CJSLexer {
   noop_fold_type!();
 
   fn fold_module_items(&mut self, items: Vec<ModuleItem>) -> Vec<ModuleItem> {
@@ -1484,7 +1484,7 @@ impl Fold for ExportsParser {
       })
       .filter(|item| !item.is_empty())
       .collect::<Vec<Stmt>>();
-    self.parse(stmts, false);
+    self.walk(stmts, false);
     items
   }
 }

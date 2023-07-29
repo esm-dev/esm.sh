@@ -1,6 +1,6 @@
 # esm-cjs-lexer
 
-A **WASM** module to parse commonjs exports for **ESM**, powered by [swc](https://github.com/swc-project/swc) in **rust**.
+A **WASM** module to parse the `module.exports` of a commonjs module for **ESM** converting, powered by [swc](https://github.com/swc-project/swc).
 
 ## Installation
 
@@ -38,12 +38,10 @@ const { parse } = require('esm-cjs-lexer');
 // named exports
 // exports: ['a', 'b', 'c', '__esModule', 'foo']
 const { exports } = parse('index.cjs', `
-  /* exports.ignore = "not detected"; */
   exports.a = "a";
   module.exports.b = "b";
   Object.defineProperty(exports, "c", { value: "c" });
   Object.defineProperty(module.exports, "__esModule", { value: true })
-
   const key = "foo"
   Object.defineProperty(exports, key, { value: "e" });
 `);
@@ -81,6 +79,16 @@ const { exports } = parse('index.cjs', `
   }
 `);
 
+// if condition by checking `process.env.NODE_ENV`
+// reexports: ['./index.development']
+const { reexports } = parse('index.cjs', `
+  if (process.env.NODE_ENV === "development") {
+    module.exports = require("./index.development")
+  } else {
+    module.exports = require("./index.production")
+  }
+`, { nodeEnv: 'development' });
+
 // block&IIFE
 // exports: ['foo', 'baz', '__esModule']
 const { exports } = parse('index.cjs', `
@@ -97,17 +105,7 @@ const { exports } = parse('index.cjs', `
   exports.__esModule = true
 `);
 
-// env condition with `process.env.NODE_ENV`
-// reexports: ['./index.development']
-const { reexports } = parse('index.cjs', `
-  if (process.env.NODE_ENV === "development") {
-    module.exports = require("./index.development")
-  } else {
-    module.exports = require("./index.production")
-  }
-`, { nodeEnv: 'development' });
-
-// IIFE exports
+// function called exports
 // exports: ['foo']
 const { exports } = parse('index.cjs', `
   function Fn() {

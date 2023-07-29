@@ -1,4 +1,4 @@
-use crate::cjs::ExportsParser;
+use crate::cjs::CJSLexer;
 use crate::error::{DiagnosticBuffer, ErrorBuffer};
 
 use indexmap::{IndexMap, IndexSet};
@@ -65,7 +65,7 @@ impl SWC {
     node_env: &str,
     call_mode: bool,
   ) -> Result<(Vec<String>, Vec<String>), anyhow::Error> {
-    let mut parser = ExportsParser {
+    let mut lexer = CJSLexer {
       node_env: node_env.to_owned(),
       call_mode: call_mode,
       fn_returned: false,
@@ -75,10 +75,10 @@ impl SWC {
       reexports: IndexSet::new(),
     };
     let program = Program::Module(self.module.clone());
-    program.fold_with(&mut parser);
+    program.fold_with(&mut lexer);
     Ok((
-      parser.exports.into_iter().collect(),
-      parser.reexports.into_iter().collect(),
+      lexer.exports.into_iter().collect(),
+      lexer.reexports.into_iter().collect(),
     ))
   }
 }
