@@ -119,13 +119,6 @@ class ESMWorker {
     let pathname = decodeURIComponent(url.pathname);
     let buildVersion = "v" + VERSION;
 
-    if (url.hostname.endsWith(".esm.sh")) {
-      const subdomain = url.hostname.slice(0, -7);
-      if (subdomain.startsWith("v") && /^\d+$/.test(subdomain.slice(1))) {
-        buildVersion = subdomain;
-      }
-    }
-
     switch (pathname) {
       case "/build":
         if (req.method === "POST" || req.method === "PUT") {
@@ -226,11 +219,9 @@ class ESMWorker {
           req,
           env,
           ctx,
-          url.pathname + url.search,
+          `/${buildVersion}${pathname}` + url.search,
           corsHeaders(),
-        ), {
-        varyUA: true,
-      });
+        ), { varyUA: true });
     }
 
     const gh = pathname.startsWith("/gh/");
