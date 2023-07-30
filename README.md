@@ -46,8 +46,8 @@ You may also use a [semver](https://docs.npmjs.com/cli/v6/using-npm/semver) or a
 fixed version number, or omit the version/tag entirely to use the `latest` tag:
 
 ```js
-import React from "https://esm.sh/react";        // 18.2.0 (latest)
-import React from "https://esm.sh/react@17";     // 17.0.2
+import React from "https://esm.sh/react"; // 18.2.0 (latest)
+import React from "https://esm.sh/react@17"; // 17.0.2
 import React from "https://esm.sh/react@canary"; // 18.3.0-canary-e1ad4aa36-20230601
 ```
 
@@ -142,7 +142,8 @@ warning message in development mode.
 
 By default, esm.sh checks the `User-Agent` header to determine the build target.
 You can also specify the `target` by adding `?target`, available targets are:
-**es2015** - **es2022**, **esnext**, **deno**, **denonext**, **node** and **bun**.
+**es2015** - **es2022**, **esnext**, **deno**, **denonext**, **node** and
+**bun**.
 
 ```js
 import React from "https://esm.sh/react?target=es2020";
@@ -266,9 +267,8 @@ package version.
 }
 ```
 
-> If you are using Deno or Reejs, you can use the [CLI Script](#using-cli-script) to
-> generate and update the import maps that will resolve the external
-> dependencies automatically.
+> esm.sh also provides a [CLI Script](#using-cli-script) in Deno to generate and
+> update the import maps that resolves dependencies automatically.
 
 ## Deno Compatibility
 
@@ -315,16 +315,18 @@ network request, and you can manually specify the types for the imported module.
 
 ## Supporting Nodejs/Bun
 
-Nodejs(18+) supports http imorting under the `--experimental-network-imports` flag. Bun doesn't
-support http modules yet.
+Nodejs(18+) supports http imorting under the `--experimental-network-imports`
+flag. Bun doesn't support http modules yet.
 
-We highly recommend [Reejs](https://ree.js.org/) as the runtime with esm.sh that works both in Nodejs and Bun.
+We highly recommend [Reejs](https://ree.js.org/) as the runtime with esm.sh that
+works both in Nodejs and Bun.
 
 ## Using CLI Script
 
 **esm.sh** provides a CLI script for managing imports with import maps in
-[Deno](https://deno.land) and Node/Bun (via [Reejs](https://ree.js.org/)). This CLI script automatically resolves dependencies
-and uses a pinned build version for stability.
+[Deno](https://deno.land) and Node/Bun (via [Reejs](https://ree.js.org/)). This
+CLI script automatically resolves dependencies and uses a pinned build version
+for stability.
 
 To use the esm.sh CLI script, you first need to run the `init` command in your
 project's root directory:
@@ -400,8 +402,8 @@ const { render } = await import(ret.bundleUrl);
 render(); // "<h1>Hello world!</h1>"
 ```
 
-or use the `esm` tag function to build and import js/ts snippet quickly in browser
-with npm packages:
+or use the `esm` tag function to build and import js/ts snippet quickly in
+browser with npm packages:
 
 ```js
 import { esm } from "https://esm.sh/build";
