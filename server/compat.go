@@ -193,7 +193,7 @@ func getTargetByUA(ua string) string {
 		}
 		return "denonext"
 	}
-	if strings.HasPrefix(ua, "Node/") || strings.HasPrefix(ua, "Bun/") {
+	if ua == "undici" || strings.HasPrefix(ua, "Node/") || strings.HasPrefix(ua, "Bun/") {
 		return "node"
 	}
 	name, version := getEngineInfo(ua)

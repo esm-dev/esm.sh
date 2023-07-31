@@ -624,7 +624,11 @@ export const getEsmaVersionFromUA = (userAgent: string | null) => {
     }
     return "denonext";
   }
-  if (userAgent.startsWith("Node/") || userAgent.startsWith("Bun/")) {
+  if (
+    userAgent === "undici" ||
+    userAgent.startsWith("Node/") ||
+    userAgent.startsWith("Bun/")
+  ) {
     return "node";
   }
   const browser = getBrowserInfo(userAgent);
