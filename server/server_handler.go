@@ -22,7 +22,6 @@ import (
 
 	"github.com/evanw/esbuild/pkg/api"
 	"github.com/ije/gox/utils"
-	"github.com/ije/gox/valid"
 	"github.com/ije/rex"
 )
 
@@ -198,6 +197,7 @@ func esmHandler() rex.Handle {
 
 	return func(ctx *rex.Context) interface{} {
 		pathname := ctx.Path.String()
+		userAgent := ctx.R.UserAgent()
 
 		// ban malicious requests
 		if strings.HasPrefix(pathname, ".") || strings.HasSuffix(pathname, ".php") {
@@ -217,9 +217,12 @@ func esmHandler() rex.Handle {
 			cdnOrigin = fmt.Sprintf("%s://%s", proto, ctx.R.Host)
 		}
 
-		CTX_VERSION := VERSION
-		if ewv := ctx.R.Header.Get("X-Esm-Worker-Version"); ewv != "" && strings.HasPrefix(ewv, "v") && valid.IsNumber(ewv[1:]) {
-			CTX_VERSION, _ = strconv.Atoi(ewv[1:])
+		CTX_BUILD_VERSION := VERSION
+		if v := ctx.R.Header.Get("X-Esm-Worker-Version"); v != "" && strings.HasPrefix(v, "v") {
+			i, e := strconv.Atoi(v[1:])
+			if e == nil && i > 0 {
+				CTX_BUILD_VERSION = i
+			}
 		}
 
 		// Build prefix may only be served from "${cfg.CdnBasePath}/..."
@@ -236,26 +239,22 @@ func esmHandler() rex.Handle {
 		// static routes
 		switch pathname {
 		case "/":
-			if strings.HasPrefix(ctx.R.UserAgent(), "Deno/") || strings.HasPrefix(ctx.R.UserAgent(), "Node/") || strings.HasPrefix(ctx.R.UserAgent(), "Bun/") {
-				//serve cli
-				//CLI.deno.ts is for deno, CLI.node.js for nodejs, bun. they currently use reejs to achieve url imports
-				if strings.HasPrefix(ctx.R.UserAgent(), "Deno/") {
-					cliTs, err := embedFS.ReadFile("CLI.deno.ts")
-					if err != nil {
-						return err
-					}
-					ctx.SetHeader("Content-Type", "application/typescript; charset=utf-8")
-					return bytes.ReplaceAll(cliTs, []byte("v{VERSION}"), []byte(fmt.Sprintf("v%d", CTX_VERSION)))
+			if strings.HasPrefix(userAgent, "Deno/") {
+				cliTs, err := embedFS.ReadFile("CLI.deno.ts")
+				if err != nil {
+					return err
 				}
-				if (strings.HasPrefix(ctx.R.UserAgent(), "Node/")) || strings.HasPrefix(ctx.R.UserAgent(), "Bun/") {
-					cliTs, err := embedFS.ReadFile("CLI.node.js")
-					if err != nil {
-						return err
-					}
-					ctx.SetHeader("Content-Type", "application/javascript; charset=utf-8")
-					cliTs = bytes.ReplaceAll(cliTs, []byte("v{VERSION}"), []byte(fmt.Sprintf("v%d", CTX_VERSION)))
-					return bytes.ReplaceAll(cliTs, []byte("https://esm.sh"), []byte(cdnOrigin+cfg.CdnBasePath))
+				ctx.SetHeader("Content-Type", "application/typescript; charset=utf-8")
+				return bytes.ReplaceAll(cliTs, []byte("v{VERSION}"), []byte(fmt.Sprintf("v%d", CTX_BUILD_VERSION)))
+			}
+			if userAgent == "undici" || strings.HasPrefix(userAgent, "Node/") || strings.HasPrefix(userAgent, "Bun/") {
+				cliJs, err := embedFS.ReadFile("CLI.node.js")
+				if err != nil {
+					return err
 				}
+				ctx.SetHeader("Content-Type", "application/javascript; charset=utf-8")
+				cliJs = bytes.ReplaceAll(cliJs, []byte("v{VERSION}"), []byte(fmt.Sprintf("v%d", CTX_BUILD_VERSION)))
+				return bytes.ReplaceAll(cliJs, []byte("https://esm.sh"), []byte(cdnOrigin+cfg.CdnBasePath))
 			}
 			indexHTML, err := embedFS.ReadFile("server/embed/index.html")
 			if err != nil {
@@ -270,7 +269,7 @@ func esmHandler() rex.Handle {
 			readme = bytes.ReplaceAll(readme, []byte("https://esm.sh"), []byte("{origin}"+cfg.CdnBasePath))
 			readmeStrLit := utils.MustEncodeJSON(string(readme))
 			html := bytes.ReplaceAll(indexHTML, []byte("'# README'"), readmeStrLit)
-			html = bytes.ReplaceAll(html, []byte("{VERSION}"), []byte(fmt.Sprintf("%d", CTX_VERSION)))
+			html = bytes.ReplaceAll(html, []byte("{VERSION}"), []byte(fmt.Sprintf("%d", CTX_BUILD_VERSION)))
 			html = bytes.ReplaceAll(html, []byte("{basePath}"), []byte(cfg.CdnBasePath))
 			ctx.SetHeader("Cache-Control", fmt.Sprintf("public, max-age=%d", 10*60))
 			return rex.Content("index.html", startTime, bytes.NewReader(html))
@@ -327,12 +326,12 @@ func esmHandler() rex.Handle {
 				"buildQueue":  q[:i],
 				"purgeTimers": n,
 				"ns":          string(out),
-				"version":     CTX_VERSION,
+				"version":     CTX_BUILD_VERSION,
 				"uptime":      time.Since(startTime).String(),
 			}
 
 		case "/esma-target":
-			return getTargetByUA(ctx.R.UserAgent())
+			return getTargetByUA(userAgent)
 
 		case "/error.js":
 			switch ctx.Form.Value("type") {
@@ -397,7 +396,7 @@ func esmHandler() rex.Handle {
 		var outdatedBuildVer string
 
 		// check build version prefix
-		buildBasePath := fmt.Sprintf("/v%d", CTX_VERSION)
+		buildBasePath := fmt.Sprintf("/v%d", CTX_BUILD_VERSION)
 		if strings.HasPrefix(pathname, "/stable/") {
 			pathname = strings.TrimPrefix(pathname, "/stable")
 			hasBuildVerPrefix = true
@@ -414,32 +413,9 @@ func esmHandler() rex.Handle {
 			outdatedBuildVer = a[1]
 		}
 
-		// check if the request is from Deno runtime for the CLI script
-		if pathname == "/" && (strings.HasPrefix(ctx.R.UserAgent(), "Deno/") || strings.HasPrefix(ctx.R.UserAgent(), "Node/") || strings.HasPrefix(ctx.R.UserAgent(), "Bun/")) {
-			//serve cli
-			//CLI.deno.ts is for deno, CLI.node.js for nodejs, bun. they currently use reejs to achieve url imports
-			if strings.HasPrefix(ctx.R.UserAgent(), "Deno/") {
-				cliTs, err := embedFS.ReadFile("CLI.deno.ts")
-				if err != nil {
-					return err
-				}
-				ctx.SetHeader("Content-Type", "application/typescript; charset=utf-8")
-				return bytes.ReplaceAll(cliTs, []byte("v{VERSION}"), []byte(fmt.Sprintf("v%d", CTX_VERSION)))
-			}
-			if (strings.HasPrefix(ctx.R.UserAgent(), "Node/")) || strings.HasPrefix(ctx.R.UserAgent(), "Bun/") {
-				cliTs, err := embedFS.ReadFile("CLI.node.js")
-				if err != nil {
-					return err
-				}
-				ctx.SetHeader("Content-Type", "application/javascript; charset=utf-8")
-				cliTs = bytes.ReplaceAll(cliTs, []byte("v{VERSION}"), []byte(fmt.Sprintf("v%d", CTX_VERSION)))
-				return bytes.ReplaceAll(cliTs, []byte("https://esm.sh"), []byte(cdnOrigin+cfg.CdnBasePath))
-			}
-		}
-
 		if pathname == "/build" {
 			if !hasBuildVerPrefix && !ctx.Form.Has("pin") {
-				url := fmt.Sprintf("%s%s/v%d/build", cdnOrigin, cfg.CdnBasePath, CTX_VERSION)
+				url := fmt.Sprintf("%s%s/v%d/build", cdnOrigin, cfg.CdnBasePath, CTX_BUILD_VERSION)
 				return rex.Redirect(url, 302)
 			}
 			data, err := embedFS.ReadFile("build.ts")
@@ -449,7 +425,7 @@ func esmHandler() rex.Handle {
 			target := strings.ToLower(ctx.Form.Value("target"))
 			targetFromUA := targets[target] == 0
 			if targetFromUA {
-				target = getTargetByUA(ctx.R.UserAgent())
+				target = getTargetByUA(userAgent)
 			}
 			if target == "deno" || target == "denonext" {
 				ctx.SetHeader("Content-Type", "application/typescript; charset=utf-8")
@@ -478,20 +454,18 @@ func esmHandler() rex.Handle {
 
 		if pathname == "/server" {
 			if !hasBuildVerPrefix && !ctx.Form.Has("pin") {
-				url := fmt.Sprintf("%s%s/v%d/server", cdnOrigin, cfg.CdnBasePath, CTX_VERSION)
+				url := fmt.Sprintf("%s%s/v%d/server", cdnOrigin, cfg.CdnBasePath, CTX_BUILD_VERSION)
 				return rex.Redirect(url, 302)
 			}
-			//declare the data variable here
 			var data []byte
-			var err error //also declare the error variable here
-			//look what is the user agent and serve the right file. server.deno.ts for deno, and server.node.js for node & bun
-			if strings.HasPrefix(ctx.R.UserAgent(), "Deno/") {
+			var err error
+			if strings.HasPrefix(userAgent, "Deno/") {
 				data, err = embedFS.ReadFile("server.deno.ts")
 				if err != nil {
 					return err
 				}
 			}
-			if strings.HasPrefix(ctx.R.UserAgent(), "Node/") || strings.HasPrefix(ctx.R.UserAgent(), "Bun/") {
+			if userAgent == "undici" || strings.HasPrefix(userAgent, "Node/") || strings.HasPrefix(userAgent, "Bun/") {
 				data, err = embedFS.ReadFile("server.node.js")
 				if err != nil {
 					return err
@@ -605,7 +579,7 @@ func esmHandler() rex.Handle {
 
 		// redirect `/@types/PKG` to main dts files
 		if strings.HasPrefix(reqPkg.Name, "@types/") && (reqPkg.Submodule == "" || !strings.HasSuffix(reqPkg.Submodule, ".d.ts")) {
-			url := fmt.Sprintf("%s%s/v%d%s", cdnOrigin, cfg.CdnBasePath, CTX_VERSION, pathname)
+			url := fmt.Sprintf("%s%s/v%d%s", cdnOrigin, cfg.CdnBasePath, CTX_BUILD_VERSION, pathname)
 			if reqPkg.Submodule == "" {
 				info, _, err := getPackageInfo("", reqPkg.Name, reqPkg.Version)
 				if err != nil {
@@ -656,7 +630,7 @@ func esmHandler() rex.Handle {
 				if outdatedBuildVer != "" {
 					bvPrefix = fmt.Sprintf("/%s", outdatedBuildVer)
 				} else {
-					bvPrefix = fmt.Sprintf("/v%d", CTX_VERSION)
+					bvPrefix = fmt.Sprintf("/v%d", CTX_BUILD_VERSION)
 				}
 			}
 			if external.Has("*") {
@@ -686,7 +660,7 @@ func esmHandler() rex.Handle {
 				} else if outdatedBuildVer != "" {
 					bvPrefix = fmt.Sprintf("/%s", outdatedBuildVer)
 				} else {
-					bvPrefix = fmt.Sprintf("/v%d", CTX_VERSION)
+					bvPrefix = fmt.Sprintf("/v%d", CTX_BUILD_VERSION)
 				}
 			}
 			if reqPkg.Subpath != "" {
@@ -723,7 +697,7 @@ func esmHandler() rex.Handle {
 			case ".mjs", ".js", ".jsx", ".ts", ".mts", ".tsx":
 				if endsWith(pathname, ".d.ts", ".d.mts") {
 					if !hasBuildVerPrefix {
-						url := fmt.Sprintf("%s%s/v%d%s", cdnOrigin, cfg.CdnBasePath, CTX_VERSION, pathname)
+						url := fmt.Sprintf("%s%s/v%d%s", cdnOrigin, cfg.CdnBasePath, CTX_BUILD_VERSION, pathname)
 						return rex.Redirect(url, http.StatusMovedPermanently)
 					}
 					reqType = "types"
@@ -815,7 +789,7 @@ func esmHandler() rex.Handle {
 			} else if hasStablePrefix {
 				savePath = path.Join(reqType, fmt.Sprintf("v%d", STABLE_VERSION), pathname)
 			} else {
-				savePath = path.Join(reqType, fmt.Sprintf("v%d", CTX_VERSION), pathname)
+				savePath = path.Join(reqType, fmt.Sprintf("v%d", CTX_BUILD_VERSION), pathname)
 			}
 			if reqType == "types" {
 				savePath = path.Join("types", getTypesRoot(cdnOrigin), strings.TrimPrefix(savePath, "types/"))
@@ -924,7 +898,7 @@ func esmHandler() rex.Handle {
 		target := strings.ToLower(ctx.Form.Value("target"))
 		targetFromUA := targets[target] == 0
 		if targetFromUA {
-			target = getTargetByUA(ctx.R.UserAgent())
+			target = getTargetByUA(userAgent)
 		}
 
 		if strings.HasPrefix(target, "es") && includes(nativeNodePackages, reqPkg.Name) {
@@ -935,14 +909,14 @@ func esmHandler() rex.Handle {
 		}
 
 		// check build version
-		buildVersion := CTX_VERSION
+		buildVersion := CTX_BUILD_VERSION
 		pv := outdatedBuildVer
 		if outdatedBuildVer == "" {
 			pv = ctx.Form.Value("pin")
 		}
 		if pv != "" && strings.HasPrefix(pv, "v") {
 			i, err := strconv.Atoi(pv[1:])
-			if err == nil && i > 0 && i < CTX_VERSION {
+			if err == nil && i > 0 && i < CTX_BUILD_VERSION {
 				buildVersion = i
 			}
 		}
@@ -1160,8 +1134,8 @@ func esmHandler() rex.Handle {
 		if !hasBuild {
 			if !isBarePath && !isPined {
 				// find previous build version
-				for i := 0; i < CTX_VERSION; i++ {
-					id := fmt.Sprintf("v%d/%s", CTX_VERSION-(i+1), strings.Join(strings.Split(buildId, "/")[1:], "/"))
+				for i := 0; i < CTX_BUILD_VERSION; i++ {
+					id := fmt.Sprintf("v%d/%s", CTX_BUILD_VERSION-(i+1), strings.Join(strings.Split(buildId, "/")[1:], "/"))
 					esm, hasBuild = queryESMBuild(id)
 					if hasBuild {
 						log.Warn("fallback to previous build:", id)
