@@ -82,7 +82,7 @@ async function runCliTest() {
       "-A",
       "-r",
       "--no-lock",
-      "http://localhost:8080/v100",
+      "http://localhost:8080/v100/cli",
       "add",
       "preact@10.10.6",
       "preact-render-to-string@5.2.3",

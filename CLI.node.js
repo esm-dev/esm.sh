@@ -1,6 +1,6 @@
 const importUrl = new URL(globalThis?.process?.env?.ESMSH_SERVER || "https://esm.sh");
-const VERSION = /^\/v\d+$/.test(importUrl.pathname)
-  ? importUrl.pathname.slice(1)
+const VERSION = /^\/v\d+\//.test(importUrl.pathname)
+  ? importUrl.pathname.split("/")[1]
   : "v{VERSION}";
 
 // stable build for UI libraries like react, to make sure the runtime is single copy
@@ -157,9 +157,9 @@ async function init(args, options) {
   const tasks = config.tasks;
   config.tasks = {
     ...tasks,
-    "esm:add": `reejs x ${importUrl.origin}/${VERSION} add`,
-    "esm:update": `reejs x ${importUrl.origin}/${VERSION} update`,
-    "esm:remove": `reejs x ${importUrl.origin}/${VERSION} remove`,
+    "esm:add": `reejs x ${importUrl.origin}/${VERSION}/cli add`,
+    "esm:update": `reejs x ${importUrl.origin}/${VERSION}/cli update`,
+    "esm:remove": `reejs x ${importUrl.origin}/${VERSION}/cli remove`,
   };
   await Deno.writeTextFile(
     "reecfg.json",

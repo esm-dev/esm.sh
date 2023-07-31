@@ -34,7 +34,7 @@ const workerOrigin = "http://localhost:8787";
 const worker = withESMWorker(
   (_req: Request, _env: {}, ctx: { url: URL }) => {
     if (ctx.url.pathname === "/") {
-      return new Response("<h1>Welcome to use esm.sh!</h1>", {
+      return new Response("<h1>Welcome to esm.sh!</h1>", {
         headers: { "content-type": "text/html" },
       });
     }
@@ -68,7 +68,7 @@ Deno.test("esm-worker", {
       "text/html",
     );
     const text = await res.text();
-    assertStringIncludes(text, "<h1>Welcome to use esm.sh!</h1>");
+    assertStringIncludes(text, "<h1>Welcome to esm.sh!</h1>");
   });
 
   await t.step("deno CLI", async () => {

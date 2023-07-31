@@ -120,6 +120,22 @@ class ESMWorker {
     let buildVersion = "v" + VERSION;
 
     switch (pathname) {
+      case "/":
+        // redirect to the CLI script if the request is from Node.js/Deno/Bun
+        if (
+          ua === "undici" ||
+          ua?.startsWith("Node/") ||
+          ua?.startsWith("Deno/") ||
+          ua?.startsWith("Bun/")
+        ) {
+          return redirect(
+            new URL(`/${buildVersion}/cli${url.search}`, url),
+            302,
+            86400,
+          );
+        }
+        break;
+
       case "/build":
         if (req.method === "POST" || req.method === "PUT") {
           return fetchServerOrigin(
@@ -130,7 +146,8 @@ class ESMWorker {
             corsHeaders(),
           );
         }
-        // fallthrough
+        break;
+
       case "/error.js":
       case "/status.json":
         return fetchServerOrigin(
@@ -140,33 +157,16 @@ class ESMWorker {
           `${pathname}${url.search}`,
           corsHeaders(),
         );
+
       case "/esma-target":
         return new Response(getEsmaVersionFromUA(ua), {
           headers: corsHeaders(),
         });
-      default:
-        // ban malicious requests
-        if (pathname.startsWith("/.") || pathname.endsWith(".php")) {
-          return new Response("Not found", { status: 404 });
-        }
     }
 
-    // return the CLI script if the request is from Node.js/Deno/Bun
-    if (
-      ua === "undici" ||
-      ua?.startsWith("Node/") ||
-      ua?.startsWith("Deno/") ||
-      ua?.startsWith("Bun/")
-    ) {
-      if (pathname === "/" || /^\/v\d+\/?$/.test(pathname)) {
-        return fetchServerOrigin(
-          req,
-          env,
-          ctx,
-          `${pathname}${url.search}`,
-          corsHeaders(),
-        );
-      }
+    // ban malicious requests
+    if (pathname.startsWith("/.") || pathname.endsWith(".php")) {
+      return new Response("Not found", { status: 404 });
     }
 
     if (this.middleware) {
@@ -209,7 +209,9 @@ class ESMWorker {
       buildVersion = url.searchParams.get("pin")!;
     }
 
-    if (pathname === "/build" || pathname === "/server") {
+    if (
+      pathname === "/cli" || pathname === "/build" || pathname === "/server"
+    ) {
       if (!hasBuildVerPrefix && !hasBuildVerQuery) {
         return redirect(
           new URL(`/${buildVersion}${pathname}`, url),
