@@ -205,17 +205,14 @@ import wasm from "https://esm.sh/@dqbd/tiktoken@1.0.3/tiktoken_bg.wasm?module";
 const { exports } = new WebAssembly.Instance(wasm, imports);
 ```
 
-### Specify CJS Exports
+### Fixing Named Exports
 
 If you get an error like `...not provide an export named...`, that means esm.sh
-can not resolve CJS exports of the module correctly. You can add
-`?cjs-exports=foo,bar` query to specify the named exports:
+can't resolve named exports of the module correctly. You can add
+`?exports=foo,bar` query to specify the named exports:
 
 ```js
-import {
-  NinetyRing,
-  NinetyRingWithBg,
-} from "https://esm.sh/react-svg-spinners@0.3.1?cjs-exports=NinetyRing,NinetyRingWithBg";
+import { render } from "https://esm.sh/react-dom@18.2.0?exports=render";
 ```
 
 ## Using Import Maps
@@ -443,7 +440,7 @@ application.
 
 ## Global CDN
 
-<img width="150" align="right" src="./server/embed/assets/cf.svg">
+<img width="150" align="right" src="./server/embed/assets/cf.svg" />
 
 The Global CDN of esm.sh is provided by [Cloudflare](https://cloudflare.com),
 one of the world's largest and fastest cloud network platforms.
