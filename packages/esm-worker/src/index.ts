@@ -63,6 +63,7 @@ class ESMWorker {
     }
 
     const url = new URL(req.url);
+    const ua = req.headers.get("User-Agent");
     const cache = this.cache ??
       (this.cache = await caches.open(`esm.sh/v${VERSION}`));
     const withCache: Context["withCache"] = async (fetcher, options) => {
@@ -70,8 +71,7 @@ class ESMWorker {
       const hasPinedTarget = targets.has(url.searchParams.get("target") ?? "");
       const varyUA = options?.varyUA && !hasPinedTarget;
       if (varyUA) {
-        const target = getEsmaVersionFromUA(req.headers.get("User-Agent"));
-        url.searchParams.set("target", target);
+        url.searchParams.set("target", getEsmaVersionFromUA(ua));
       }
       const cacheKey = new URL(url);
       for (const key of ["x-real-origin", "x-esm-worker-version"]) {
@@ -141,10 +141,9 @@ class ESMWorker {
           corsHeaders(),
         );
       case "/esma-target":
-        return new Response(
-          getEsmaVersionFromUA(req.headers.get("User-Agent")),
-          { headers: corsHeaders() },
-        );
+        return new Response(getEsmaVersionFromUA(ua), {
+          headers: corsHeaders(),
+        });
       default:
         // ban malicious requests
         if (pathname.startsWith("/.") || pathname.endsWith(".php")) {
@@ -152,18 +151,22 @@ class ESMWorker {
         }
     }
 
-    // return deno CLI script
+    // return the CLI script if the request is from Node.js/Deno/Bun
     if (
-      req.headers.get("User-Agent")?.startsWith("Deno/") &&
-      (pathname === "/" || /^\/v\d+\/?$/.test(pathname))
+      ua === "undici" ||
+      ua?.startsWith("Node/") ||
+      ua?.startsWith("Deno/") ||
+      ua?.startsWith("Bun/")
     ) {
-      return fetchServerOrigin(
-        req,
-        env,
-        ctx,
-        `${pathname}${url.search}`,
-        corsHeaders(),
-      );
+      if (pathname === "/" || /^\/v\d+\/?$/.test(pathname)) {
+        return fetchServerOrigin(
+          req,
+          env,
+          ctx,
+          `${pathname}${url.search}`,
+          corsHeaders(),
+        );
+      }
     }
 
     if (this.middleware) {
@@ -465,7 +468,6 @@ class ESMWorker {
       }
       let target = url.searchParams.get("target");
       if (!target || !targets.has(target)) {
-        const ua = req.headers.get("user-agent");
         target = getEsmaVersionFromUA(ua);
       }
       const pined = hasBuildVerPrefix || hasBuildVerQuery;
