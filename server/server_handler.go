@@ -768,11 +768,11 @@ func esmHandler() rex.Handle {
 					CdnOrigin: cdnOrigin,
 					Pkg:       reqPkg,
 					Args: BuildArgs{
-						alias:       map[string]string{},
-						deps:        PkgSlice{},
-						external:    newStringSet(),
-						treeShaking: newStringSet(),
-						conditions:  newStringSet(),
+						alias:      map[string]string{},
+						deps:       PkgSlice{},
+						external:   newStringSet(),
+						exports:    newStringSet(),
+						conditions: newStringSet(),
 					},
 					Target: "raw",
 				}
@@ -859,57 +859,64 @@ func esmHandler() rex.Handle {
 
 		// check `?alias` query
 		alias := map[string]string{}
-		for _, p := range strings.Split(ctx.Form.Value("alias"), ",") {
-			p = strings.TrimSpace(p)
-			if p != "" {
-				name, to := utils.SplitByFirstByte(p, ':')
-				name = strings.TrimSpace(name)
-				to = strings.TrimSpace(to)
-				if name != "" && to != "" && name != reqPkg.Name {
-					alias[name] = to
+		if ctx.Form.Has("alias") {
+			for _, p := range strings.Split(ctx.Form.Value("alias"), ",") {
+				p = strings.TrimSpace(p)
+				if p != "" {
+					name, to := utils.SplitByFirstByte(p, ':')
+					name = strings.TrimSpace(name)
+					to = strings.TrimSpace(to)
+					if name != "" && to != "" && name != reqPkg.Name {
+						alias[name] = to
+					}
 				}
 			}
 		}
 
 		// check `?deps` query
 		deps := PkgSlice{}
-		for _, p := range strings.Split(ctx.Form.Value("deps"), ",") {
-			p = strings.TrimSpace(p)
-			if p != "" {
-				m, _, err := validatePkgPath(p)
-				if err != nil {
-					if strings.HasSuffix(err.Error(), "not found") {
+		if ctx.Form.Has("deps") {
+			for _, p := range strings.Split(ctx.Form.Value("deps"), ",") {
+				p = strings.TrimSpace(p)
+				if p != "" {
+					m, _, err := validatePkgPath(p)
+					if err != nil {
+						if strings.HasSuffix(err.Error(), "not found") {
+							continue
+						}
+						return rex.Status(400, fmt.Sprintf("Invalid deps query: %v not found", p))
+					}
+					if reqPkg.Name == "react-dom" && m.Name == "react" {
+						// the `react` version always matches `react-dom` version
 						continue
 					}
-					return rex.Status(400, fmt.Sprintf("Invalid deps query: %v not found", p))
-				}
-				if reqPkg.Name == "react-dom" && m.Name == "react" {
-					// the `react` version always matches `react-dom` version
-					continue
-				}
-				if !deps.Has(m.Name) && m.Name != reqPkg.Name {
-					deps = append(deps, m)
+					if !deps.Has(m.Name) && m.Name != reqPkg.Name {
+						deps = append(deps, m)
+					}
 				}
 			}
 		}
 
 		// check `?exports` query
-		treeShaking := newStringSet()
-		if !stableBuild[reqPkg.Name] {
-			for _, p := range strings.Split(ctx.Form.Value("exports"), ",") {
+		exports := newStringSet()
+		if (ctx.Form.Has("exports") || ctx.Form.Has("cjs-exports")) && !stableBuild[reqPkg.Name] {
+			value := ctx.Form.Value("exports") + "," + ctx.Form.Value("cjs-exports")
+			for _, p := range strings.Split(value, ",") {
 				p = strings.TrimSpace(p)
 				if regexpJSIdent.MatchString(p) {
-					treeShaking.Add(p)
+					exports.Add(p)
 				}
 			}
 		}
 
 		// check `?conditions` query
 		conditions := newStringSet()
-		for _, p := range strings.Split(ctx.Form.Value("conditions"), ",") {
-			p = strings.TrimSpace(p)
-			if p != "" {
-				conditions.Add(p)
+		if ctx.Form.Has("conditions") {
+			for _, p := range strings.Split(ctx.Form.Value("conditions"), ",") {
+				p = strings.TrimSpace(p)
+				if p != "" {
+					conditions.Add(p)
+				}
 			}
 		}
 
@@ -984,7 +991,7 @@ func esmHandler() rex.Handle {
 			ignoreAnnotations: ignoreAnnotations,
 			ignoreRequire:     ignoreRequire,
 			keepNames:         keepNames,
-			treeShaking:       treeShaking,
+			exports:           exports,
 		}
 
 		// parse and use `X-` prefix
@@ -1008,9 +1015,9 @@ func esmHandler() rex.Handle {
 		// clear build args for main entry of stable builds
 		if stableBuild[reqPkg.Name] && reqPkg.Submodule == "" {
 			buildArgs = BuildArgs{
-				external:    newStringSet(),
-				treeShaking: newStringSet(),
-				conditions:  buildArgs.conditions,
+				external:   newStringSet(),
+				exports:    newStringSet(),
+				conditions: buildArgs.conditions,
 			}
 		}
 
@@ -1280,21 +1287,12 @@ func esmHandler() rex.Handle {
 			}
 			ctx.SetHeader("X-Esm-Id", buildId)
 			fmt.Fprintf(buf, `export * from "%s/%s";%s`, cfg.CdnBasePath, buildId, EOL)
-			if (esm.FromCJS || esm.HasExportDefault) && (treeShaking.Len() == 0 || treeShaking.Has("default")) {
+			if (esm.FromCJS || esm.HasExportDefault) && (exports.Len() == 0 || exports.Has("default")) {
 				fmt.Fprintf(buf, `export { default } from "%s/%s";%s`, cfg.CdnBasePath, buildId, EOL)
 			}
-			if esm.FromCJS && ctx.Form.Has("cjs-exports") {
-				exports := newStringSet()
-				for _, p := range strings.Split(ctx.Form.Value("cjs-exports"), ",") {
-					p = strings.TrimSpace(p)
-					if regexpJSIdent.MatchString(p) {
-						exports.Add(p)
-					}
-				}
-				if exports.Len() > 0 {
-					fmt.Fprintf(buf, `import __cjs_exports$ from "%s/%s";%s`, cfg.CdnBasePath, buildId, EOL)
-					fmt.Fprintf(buf, `export const { %s } = __cjs_exports$;%s`, strings.Join(exports.Values(), ", "), EOL)
-				}
+			if esm.FromCJS && exports.Len() > 0 {
+				fmt.Fprintf(buf, `import __cjs_exports$ from "%s/%s";%s`, cfg.CdnBasePath, buildId, EOL)
+				fmt.Fprintf(buf, `export const { %s } = __cjs_exports$;%s`, strings.Join(exports.Values(), ", "), EOL)
 			}
 		}
 

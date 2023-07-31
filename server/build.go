@@ -264,17 +264,17 @@ func (task *BuildTask) build() (err error) {
 		input = &api.StdinOptions{
 			Contents:   buf.String(),
 			ResolveDir: task.wd,
-			Sourcefile: "_entry.js",
+			Sourcefile: "build.js",
 		}
 	} else {
-		if task.Args.treeShaking.Len() > 0 {
+		if task.Args.exports.Len() > 0 {
 			buf := bytes.NewBuffer(nil)
 			importPath := task.Pkg.ImportPath()
-			fmt.Fprintf(buf, `export { %s } from "%s";`, strings.Join(task.Args.treeShaking.Values(), ","), importPath)
+			fmt.Fprintf(buf, `export { %s } from "%s";`, strings.Join(task.Args.exports.Values(), ","), importPath)
 			input = &api.StdinOptions{
 				Contents:   buf.String(),
 				ResolveDir: task.wd,
-				Sourcefile: "_entry.js",
+				Sourcefile: "build.js",
 			}
 		} else {
 			entryPoint = path.Join(task.wd, "node_modules", npm.Name, npm.Module)
@@ -1011,10 +1011,10 @@ func (task *BuildTask) resolveExternal(specifier string, kind api.ResolveKind) s
 				Submodule: toModuleName(subpath),
 			}
 			args := BuildArgs{
-				alias:       cloneMap(task.Args.alias),
-				external:    newStringSet(task.Args.external.Values()...),
-				treeShaking: newStringSet(),
-				conditions:  newStringSet(),
+				alias:      cloneMap(task.Args.alias),
+				external:   newStringSet(task.Args.external.Values()...),
+				exports:    newStringSet(),
+				conditions: newStringSet(),
 			}
 			if stableBuild[pkgName] {
 				args.alias = map[string]string{}

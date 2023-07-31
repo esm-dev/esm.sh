@@ -6,12 +6,12 @@ import (
 
 func TestEncodeBuildArgs(t *testing.T) {
 	external := newStringSet()
-	treeShaking := newStringSet()
+	exports := newStringSet()
 	conditions := newStringSet()
 	external.Add("baz")
 	external.Add("bar")
-	treeShaking.Add("baz")
-	treeShaking.Add("bar")
+	exports.Add("baz")
+	exports.Add("bar")
 	conditions.Add("react-server")
 	prefix := encodeBuildArgsPrefix(
 		BuildArgs{
@@ -23,7 +23,7 @@ func TestEncodeBuildArgs(t *testing.T) {
 				Pkg{Name: "foo", Version: "1.0.0"}, // to be ignored
 			},
 			external:          external,
-			treeShaking:       treeShaking,
+			exports:           exports,
 			conditions:        conditions,
 			denoStdVersion:    "0.128.0",
 			ignoreRequire:     true,
@@ -46,8 +46,8 @@ func TestEncodeBuildArgs(t *testing.T) {
 	if args.external.Len() != 2 {
 		t.Fatal("invalid external")
 	}
-	if args.treeShaking.Len() != 2 {
-		t.Fatal("invalid treeShaking")
+	if args.exports.Len() != 2 {
+		t.Fatal("invalid exports")
 	}
 	if args.conditions.Len() != 1 {
 		t.Fatal("invalid conditions")
