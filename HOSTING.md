@@ -35,7 +35,7 @@ bootstrap command. For example:
   "workDir": "/var/www/esmd",
   "storage": "local:/var/www/esmd/storage",
   "origin": "https://esm.sh",
-  "npmRegistry": "https://npmjs.org/registry",
+  "npmRegistry": "https://registry.npmjs.org/",
   "npmToken": "xxxxxx"
 }
 ```
@@ -75,7 +75,7 @@ Then run the container:
 
 ```bash
 docker run -p 8080:8080 \
-  -e NPM_REGISTRY=https://npmjs.org/registry \
+  -e NPM_REGISTRY=https://registry.npmjs.org/ \
   -e NPM_TOKEN=xxxxxx \
   ghcr.io/esm-dev/esm.sh:latest
 ```
