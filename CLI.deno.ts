@@ -143,7 +143,7 @@ async function update(args: string[], options: Record<string, string>) {
   }
 }
 
-async function remove(args: string[], options: Record<string, string>) {
+async function remove(args: string[], _options: Record<string, string>) {
   const importMap = await loadImportMap();
   const toRemove = args.filter((name) => name in importMap.imports);
   for (const name of toRemove) {
@@ -164,13 +164,13 @@ async function remove(args: string[], options: Record<string, string>) {
   }
 }
 
-async function init(args: string[], options: Record<string, string>) {
+async function init(_args: string[], _options: Record<string, string>) {
   const config = await getDenoConfig();
   const importMap = await loadImportMap();
   if (!isNEString(config.importMap)) {
     config.importMap = imFilename;
   }
-  const tasks = config.tasks as undefined | Record<string, string>;
+  const tasks = config.tasks as Record<string, string> | undefined;
   config.tasks = {
     ...tasks,
     "esm:add": `deno run -A ${importUrl.origin}/${VERSION} add`,
@@ -304,7 +304,11 @@ async function saveImportMap(importMap: ImportMap): Promise<void> {
   // write
   await Deno.writeTextFile(
     imFilename,
-    JSON.stringify({ imports: sortedImports, scopes: sortedScopes }, null, indentWidth),
+    JSON.stringify(
+      { imports: sortedImports, scopes: sortedScopes },
+      null,
+      indentWidth,
+    ),
   );
 }
 
