@@ -14,7 +14,7 @@ export type Package = {
 };
 
 const importUrl = new URL(import.meta.url);
-const VERSION = /^\/v\d+\//.test(importUrl.pathname)
+const VERSION = /^\/v\d+\/?/.test(importUrl.pathname)
   ? importUrl.pathname.split("/")[1]
   : "v{VERSION}";
 
@@ -173,9 +173,9 @@ async function init(_args: string[], _options: Record<string, string>) {
   const tasks = config.tasks as Record<string, string> | undefined;
   config.tasks = {
     ...tasks,
-    "esm:add": `deno run -A ${importUrl.origin}/${VERSION}/cli add`,
-    "esm:update": `deno run -A ${importUrl.origin}/${VERSION}/cli update`,
-    "esm:remove": `deno run -A ${importUrl.origin}/${VERSION}/cli remove`,
+    "esm:add": `deno run -A ${importUrl.origin}/${VERSION} add`,
+    "esm:update": `deno run -A ${importUrl.origin}/${VERSION} update`,
+    "esm:remove": `deno run -A ${importUrl.origin}/${VERSION} remove`,
   };
   await Deno.writeTextFile(
     "deno.json",

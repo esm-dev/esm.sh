@@ -119,23 +119,25 @@ class ESMWorker {
     let pathname = decodeURIComponent(url.pathname);
     let buildVersion = "v" + VERSION;
 
-    switch (pathname) {
-      case "/":
-        // redirect to the CLI script if the request is from Node.js/Deno/Bun
-        if (
-          ua === "undici" ||
-          ua?.startsWith("Node/") ||
-          ua?.startsWith("Deno/") ||
-          ua?.startsWith("Bun/")
-        ) {
-          return redirect(
-            new URL(`/${buildVersion}/cli${url.search}`, url),
-            302,
-            86400,
-          );
-        }
-        break;
+    if (
+      ua === "undici" ||
+      ua?.startsWith("Node/") ||
+      ua?.startsWith("Deno/") ||
+      ua?.startsWith("Bun/")
+    ) {
+      if (pathname === "/" || /^\/v\d+\/?$/.test(pathname)) {
+        return ctx.withCache(() =>
+          fetchServerOrigin(
+            req,
+            env,
+            ctx,
+            pathname,
+            corsHeaders(),
+          ), { varyUA: true });
+      }
+    }
 
+    switch (pathname) {
       case "/build":
         if (req.method === "POST" || req.method === "PUT") {
           return fetchServerOrigin(
@@ -209,9 +211,7 @@ class ESMWorker {
       buildVersion = url.searchParams.get("pin")!;
     }
 
-    if (
-      pathname === "/cli" || pathname === "/build" || pathname === "/server"
-    ) {
+    if (pathname === "/build" || pathname === "/server") {
       if (!hasBuildVerPrefix && !hasBuildVerQuery) {
         return redirect(
           new URL(`/${buildVersion}${pathname}`, url),
@@ -224,7 +224,7 @@ class ESMWorker {
           req,
           env,
           ctx,
-          `/${buildVersion}${pathname}` + url.search,
+          `/${buildVersion}${pathname}`,
           corsHeaders(),
         ), { varyUA: true });
     }

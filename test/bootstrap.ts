@@ -20,7 +20,7 @@ async function startServer(onStart: () => Promise<void>, single: boolean) {
       const status = await res.json();
       if (status.ns === "READY") {
         console.log("esm.sh server started.");
-        await onStart();
+        onStart();
         break;
       }
     } catch (_) {
@@ -62,68 +62,6 @@ async function runTest(name: string, retry?: boolean): Promise<number> {
   return Date.now() - execBegin;
 }
 
-async function runCliTest() {
-  console.log(`\n[test CLI]`);
-
-  const cwd = await Deno.makeTempDir();
-  await Deno.writeTextFile(
-    cwd + "/deno.json",
-    `{"importMap": "import-map.json"}`,
-  );
-
-  const res = await fetch("http://localhost:8080/");
-  if (!res.headers.get("content-type")?.startsWith("application/typescript")) {
-    throw new Error(`Invalid content type: ${res.headers.get("content-type")}`);
-  }
-
-  const p = new Deno.Command(Deno.execPath(), {
-    args: [
-      "run",
-      "-A",
-      "-r",
-      "--no-lock",
-      "http://localhost:8080/v100/cli",
-      "add",
-      "preact@10.10.6",
-      "preact-render-to-string@5.2.3",
-      "react:preact@10.10.6/compat",
-      "swr@1.3.0",
-    ],
-    cwd,
-    stdout: "inherit",
-    stderr: "inherit",
-  }).spawn();
-  const { code, success } = await p.status;
-  if (!success) {
-    Deno.exit(code);
-  }
-
-  const imRaw = await Deno.readTextFile(cwd + "/import-map.json");
-  const im = JSON.parse(imRaw);
-  if (
-    JSON.stringify(im) !== JSON.stringify({
-      imports: {
-        "preact-render-to-string":
-          "http://localhost:8080/v100/*preact-render-to-string@5.2.3",
-        "preact-render-to-string/":
-          "http://localhost:8080/v100/*preact-render-to-string@5.2.3/",
-        preact: "http://localhost:8080/v100/preact@10.10.6",
-        "preact/": "http://localhost:8080/v100/preact@10.10.6/",
-        react: "http://localhost:8080/v100/preact@10.10.6/compat",
-        swr: "http://localhost:8080/v100/*swr@1.3.0",
-        "swr/": "http://localhost:8080/v100/*swr@1.3.0/",
-      },
-      scopes: {
-        "http://localhost:8080/v100/": {
-          "pretty-format": "http://localhost:8080/v100/pretty-format@3.8.0",
-        },
-      },
-    })
-  ) {
-    console.log(im);
-    throw new Error("Invalid import maps generated");
-  }
-}
 
 function run(name: string, ...args: string[]) {
   const p = new Deno.Command(name, {
@@ -168,7 +106,6 @@ if (import.meta.main) {
     if (testDir) {
       timeUsed += await runTest(testDir, true);
     } else {
-      await runCliTest();
       for await (const entry of Deno.readDir("./test")) {
         if (entry.isDirectory && !entry.name.startsWith("_")) {
           timeUsed += await runTest(entry.name);

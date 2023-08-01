@@ -1,5 +1,5 @@
 const importUrl = new URL(globalThis?.process?.env?.ESMSH_SERVER || "https://esm.sh");
-const VERSION = /^\/v\d+\//.test(importUrl.pathname)
+const VERSION = /^\/v\d+\/?/.test(importUrl.pathname)
   ? importUrl.pathname.split("/")[1]
   : "v{VERSION}";
 
@@ -157,9 +157,9 @@ async function init(args, options) {
   const tasks = config.tasks;
   config.tasks = {
     ...tasks,
-    "esm:add": `reejs x ${importUrl.origin}/${VERSION}/cli add`,
-    "esm:update": `reejs x ${importUrl.origin}/${VERSION}/cli update`,
-    "esm:remove": `reejs x ${importUrl.origin}/${VERSION}/cli remove`,
+    "esm:add": `reejs x ${importUrl.origin}/${VERSION} add`,
+    "esm:update": `reejs x ${importUrl.origin}/${VERSION} update`,
+    "esm:remove": `reejs x ${importUrl.origin}/${VERSION} remove`,
   };
   await Deno.writeTextFile(
     "reecfg.json",

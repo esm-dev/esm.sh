@@ -236,13 +236,31 @@ func esmHandler() rex.Handle {
 			}
 		}
 
+		if userAgent == "undici" || strings.HasPrefix(userAgent, "Node/") || strings.HasPrefix(userAgent, "Deno/") || strings.HasPrefix(userAgent, "Bun/") {
+			if pathname == "/" || regexpCliPath.MatchString(pathname) {
+				if strings.HasPrefix(userAgent, "Deno/") {
+					cliTs, err := embedFS.ReadFile("CLI.deno.ts")
+					if err != nil {
+						return err
+					}
+					ctx.SetHeader("Content-Type", "application/typescript; charset=utf-8")
+					return bytes.ReplaceAll(cliTs, []byte("v{VERSION}"), []byte(fmt.Sprintf("v%d", CTX_BUILD_VERSION)))
+				}
+				if userAgent == "undici" || strings.HasPrefix(userAgent, "Node/") || strings.HasPrefix(userAgent, "Bun/") {
+					cliJs, err := embedFS.ReadFile("CLI.node.js")
+					if err != nil {
+						return err
+					}
+					ctx.SetHeader("Content-Type", "application/javascript; charset=utf-8")
+					cliJs = bytes.ReplaceAll(cliJs, []byte("v{VERSION}"), []byte(fmt.Sprintf("v%d", CTX_BUILD_VERSION)))
+					return bytes.ReplaceAll(cliJs, []byte("https://esm.sh"), []byte(cdnOrigin+cfg.CdnBasePath))
+				}
+			}
+		}
+
 		// static routes
 		switch pathname {
 		case "/":
-			if userAgent == "undici" || strings.HasPrefix(userAgent, "Node/") || strings.HasPrefix(userAgent, "Deno/") || strings.HasPrefix(userAgent, "Bun/") {
-				url := fmt.Sprintf("%s%s/v%d/cli", cdnOrigin, cfg.CdnBasePath, CTX_BUILD_VERSION)
-				return rex.Redirect(url, 302)
-			}
 			indexHTML, err := embedFS.ReadFile("server/embed/index.html")
 			if err != nil {
 				return err
@@ -400,31 +418,7 @@ func esmHandler() rex.Handle {
 			outdatedBuildVer = a[1]
 		}
 
-		switch pathname {
-		case "/cli":
-			if !hasBuildVerPrefix && !ctx.Form.Has("pin") {
-				url := fmt.Sprintf("%s%s/v%d/cli", cdnOrigin, cfg.CdnBasePath, CTX_BUILD_VERSION)
-				return rex.Redirect(url, 302)
-			}
-			if strings.HasPrefix(userAgent, "Deno/") {
-				cliTs, err := embedFS.ReadFile("CLI.deno.ts")
-				if err != nil {
-					return err
-				}
-				ctx.SetHeader("Content-Type", "application/typescript; charset=utf-8")
-				return bytes.ReplaceAll(cliTs, []byte("v{VERSION}"), []byte(fmt.Sprintf("v%d", CTX_BUILD_VERSION)))
-			}
-			if userAgent == "undici" || strings.HasPrefix(userAgent, "Node/") || strings.HasPrefix(userAgent, "Bun/") {
-				cliJs, err := embedFS.ReadFile("CLI.node.js")
-				if err != nil {
-					return err
-				}
-				ctx.SetHeader("Content-Type", "application/javascript; charset=utf-8")
-				cliJs = bytes.ReplaceAll(cliJs, []byte("v{VERSION}"), []byte(fmt.Sprintf("v%d", CTX_BUILD_VERSION)))
-				return bytes.ReplaceAll(cliJs, []byte("https://esm.sh"), []byte(cdnOrigin+cfg.CdnBasePath))
-			}
-
-		case "/build":
+		if pathname == "/build" {
 			if !hasBuildVerPrefix && !ctx.Form.Has("pin") {
 				url := fmt.Sprintf("%s%s/v%d/build", cdnOrigin, cfg.CdnBasePath, CTX_BUILD_VERSION)
 				return rex.Redirect(url, 302)
@@ -461,8 +455,9 @@ func esmHandler() rex.Handle {
 				ctx.AddHeader("Vary", "User-Agent")
 			}
 			return bytes.ReplaceAll(data, []byte("$ORIGIN"), []byte(cdnOrigin))
+		}
 
-		case "/server":
+		if pathname == "/server" {
 			if !hasBuildVerPrefix && !ctx.Form.Has("pin") {
 				url := fmt.Sprintf("%s%s/v%d/server", cdnOrigin, cfg.CdnBasePath, CTX_BUILD_VERSION)
 				return rex.Redirect(url, 302)
