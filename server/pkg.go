@@ -189,8 +189,8 @@ func toModuleName(path string) string {
 	return ""
 }
 
-func splitPkgPath(pathname string) (pkgName string, subpath string) {
-	a := strings.Split(strings.TrimPrefix(pathname, "/"), "/")
+func splitPkgPath(specifier string) (pkgName string, subpath string) {
+	a := strings.Split(strings.TrimPrefix(specifier, "/"), "/")
 	pkgName = a[0]
 	subpath = strings.Join(a[1:], "/")
 	if strings.HasPrefix(pkgName, "@") && len(a) > 1 {
@@ -198,4 +198,9 @@ func splitPkgPath(pathname string) (pkgName string, subpath string) {
 		subpath = strings.Join(a[2:], "/")
 	}
 	return
+}
+
+func getPkgName(specifier string) string {
+	name, _ := splitPkgPath(specifier)
+	return name
 }

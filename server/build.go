@@ -473,7 +473,7 @@ rebuild:
 						}
 
 						// bundles all dependencies in `bundle` mode, apart from peer dependencies and `?external` query
-						if task.Bundle && !task.Args.external.Has(specifier) && !implicitExternal.Has(specifier) {
+						if task.Bundle && !task.Args.external.Has(getPkgName(specifier)) && !implicitExternal.Has(specifier) {
 							if builtInNodeModules[specifier] {
 								if task.isServerTarget() {
 									return api.OnResolveResult{Path: task.resolveExternal(specifier, args.Kind), External: true}, nil
@@ -891,7 +891,7 @@ rebuild:
 func (task *BuildTask) resolveExternal(specifier string, kind api.ResolveKind) string {
 	var importPath string
 	// check `?external`
-	if task.Args.external.Has(specifier) || task.Args.external.Has("*") {
+	if task.Args.external.Has(getPkgName(specifier)) || task.Args.external.Has("*") {
 		importPath = specifier
 	}
 	// is sub-module of current package

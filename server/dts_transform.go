@@ -145,7 +145,7 @@ func (task *BuildTask) transformDTS(dts string, aliasDepsPrefix string, marker *
 			res = to
 		}
 
-		if internalDeclModules.Has(res) || task.Args.external.Has(res) {
+		if internalDeclModules.Has(res) || task.Args.external.Has(getPkgName(res)) {
 			return res
 		}
 
