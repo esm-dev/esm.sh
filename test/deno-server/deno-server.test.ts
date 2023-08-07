@@ -27,7 +27,7 @@ Deno.test("deno server", async () => {
   const ac = new AbortController();
   await serve((_req, { url }) => {
     if (url.pathname === "/") {
-      return new Response("<h1>Welcome to use esm.sh served by Deno.</h1>", {
+      return new Response("<h1>Welcome to esm.sh!</h1>", {
         headers: { "Content-Type": "text/html" },
       });
     }
@@ -43,7 +43,7 @@ Deno.test("deno server", async () => {
       assertEquals(res.headers.get("content-type"), "text/html");
       assertEquals(
         await res.text(),
-        "<h1>Welcome to use esm.sh served by Deno.</h1>",
+        "<h1>Welcome to esm.sh!</h1>",
       );
       ac.abort();
     },

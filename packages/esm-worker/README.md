@@ -74,7 +74,7 @@ export default withESMWorker((req, env, ctx) => {
   // your routes override esm.sh routes
   if (url.pathname === "/") {
     // using a custom homepage
-    return new Response("<h1>Welcome to use esm.sh!</h1>", {
+    return new Response("<h1>Welcome to esm.sh!</h1>", {
       headers: { "Content-Type": "text/html" },
     });
 
