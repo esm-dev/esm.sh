@@ -1163,6 +1163,11 @@ func esmHandler() rex.Handle {
 						if m := output.err.Error(); strings.Contains(m, "no such file or directory") ||
 							strings.Contains(m, "is not exported from package") ||
 							strings.Contains(m, "cjsLexer: Can't resolve") {
+							// redirect old build path (.js) to new build path (.mjs)
+							if strings.HasSuffix(reqPkg.Subpath, "/"+reqPkg.Name+".js") {
+								url := strings.TrimSuffix(ctx.R.URL.String(), ".js") + ".mjs"
+								return rex.Redirect(url, http.StatusPermanentRedirect)
+							}
 							ctx.SetHeader("Cache-Control", "public, max-age=31536000, immutable")
 							return rex.Status(404, "Module not found")
 						}
