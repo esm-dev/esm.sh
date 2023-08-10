@@ -421,7 +421,7 @@ func esmHandler() rex.Handle {
 		if pathname == "/build" {
 			if !hasBuildVerPrefix && !ctx.Form.Has("pin") {
 				url := fmt.Sprintf("%s%s/v%d/build", cdnOrigin, cfg.CdnBasePath, CTX_BUILD_VERSION)
-				return rex.Redirect(url, 302)
+				return rex.Redirect(url, http.StatusFound)
 			}
 			data, err := embedFS.ReadFile("build.ts")
 			if err != nil {
@@ -460,7 +460,7 @@ func esmHandler() rex.Handle {
 		if pathname == "/server" {
 			if !hasBuildVerPrefix && !ctx.Form.Has("pin") {
 				url := fmt.Sprintf("%s%s/v%d/server", cdnOrigin, cfg.CdnBasePath, CTX_BUILD_VERSION)
-				return rex.Redirect(url, 302)
+				return rex.Redirect(url, http.StatusFound)
 			}
 			var data []byte
 			var err error
@@ -1166,7 +1166,7 @@ func esmHandler() rex.Handle {
 							// redirect old build path (.js) to new build path (.mjs)
 							if strings.HasSuffix(reqPkg.Subpath, "/"+reqPkg.Name+".js") {
 								url := strings.TrimSuffix(ctx.R.URL.String(), ".js") + ".mjs"
-								return rex.Redirect(url, http.StatusPermanentRedirect)
+								return rex.Redirect(url, http.StatusMovedPermanently)
 							}
 							ctx.SetHeader("Cache-Control", "public, max-age=31536000, immutable")
 							return rex.Status(404, "Module not found")
