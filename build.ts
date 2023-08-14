@@ -38,14 +38,13 @@ export async function build(
 export async function esm<T extends object = Record<string, any>>(
   strings: TemplateStringsArray,
   ...values: any[]
-): Promise<T & { _url: string; _bundleUrl: string }> {
+): Promise<T & { _build: BuildOutput }> {
   const code = String.raw({ raw: strings }, ...values);
   const ret = await build(code);
   const mod: T = await import(ret.url);
   return {
     ...mod,
-    _url: ret.url,
-    _bundleUrl: ret.bundleUrl,
+    _build: ret,
   };
 }
 
