@@ -1,22 +1,18 @@
-import { assertStringIncludes } from "https://deno.land/std@0.180.0/testing/asserts.ts";
-
-import { getHighlighter } from "http://localhost:8080/shikiji@0.3.3";
+import {
+  assertEquals,
+  assertStringIncludes,
+} from "https://deno.land/std@0.180.0/testing/asserts.ts";
 
 Deno.test("issue #705", async () => {
-  const shiki = await getHighlighter({
-    themes: ["nord", "min-light"],
-    langs: ["javascript"],
-  });
-
-  const code = shiki.codeToHtmlDualThemes('console.log("hello")', {
-    lang: "javascript",
-    themes: {
-      light: "min-light",
-      dark: "nord",
-    },
-  });
-  assertStringIncludes(
-    code,
-    `<pre class="shiki shiki-dual-themes min-light nord`,
+  const { version } = await fetch("http://localhost:8080/status.json").then((
+    res,
+  ) => res.json());
+  const dts = await fetch(
+    `http://localhost:8080/v${version}/shikiji@0.3.3/dist/index.d.mts`,
+  ).then((res) => res.text());
+  const { default: nord } = await import(
+    `http://localhost:8080/v${version}/shikiji@0.3.3/es2022/dist/themes/nord.js`
   );
+  assertStringIncludes(dts, "'./types/types.d.mts'");
+  assertEquals(nord.name, "nord");
 });

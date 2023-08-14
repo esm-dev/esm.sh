@@ -156,13 +156,18 @@ func (task *BuildTask) transformDTS(dts string, aliasDepsPrefix string, marker *
 			if res == ".." {
 				res = "../index.d.ts"
 			}
-			// some types is using `.js` extname
+			// some types is using `.m?js` extname
+			res = strings.TrimSuffix(res, ".mjs")
 			res = strings.TrimSuffix(res, ".js")
-			if !strings.HasSuffix(res, ".d.ts") {
-				if fileExists(path.Join(dtsDir, res, "index.d.ts")) {
-					res = strings.TrimSuffix(res, "/") + "/index.d.ts"
-				} else if fileExists(path.Join(dtsDir, res+".d.ts")) {
+			if !strings.HasSuffix(res, ".d.ts") && !strings.HasSuffix(res, ".d.mts") {
+				if fileExists(path.Join(dtsDir, res+".d.ts")) {
 					res = res + ".d.ts"
+				} else if fileExists(path.Join(dtsDir, res+".d.mts")) {
+					res = res + ".d.mts"
+				} else if fileExists(path.Join(dtsDir, res, "index.d.ts")) {
+					res = strings.TrimSuffix(res, "/") + "/index.d.ts"
+				} else if fileExists(path.Join(dtsDir, res, "index.d.mts")) {
+					res = strings.TrimSuffix(res, "/") + "/index.d.mts"
 				} else {
 					var p NpmPackage
 					packageJSONFile := path.Join(dtsDir, res, "package.json")
@@ -175,7 +180,7 @@ func (task *BuildTask) transformDTS(dts string, aliasDepsPrefix string, marker *
 					}
 				}
 			}
-			if strings.HasSuffix(dts, ".d.ts") && !strings.HasSuffix(dts, "~.d.ts") {
+			if (strings.HasSuffix(dts, ".d.ts") || strings.HasSuffix(dts, ".d.mts")) && !strings.HasSuffix(dts, "~.d.ts") {
 				imports.Add(res)
 			}
 		} else {

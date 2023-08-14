@@ -768,7 +768,7 @@ func esmHandler() rex.Handle {
 						}
 						return rex.Status(404, "File Not Found")
 					}
-				case <-time.After(time.Minute):
+				case <-time.After(10 * time.Minute):
 					buildQueue.RemoveConsumer(task, c)
 					ctx.SetHeader("Cache-Control", "private, no-store, no-cache, must-revalidate")
 					return rex.Status(http.StatusRequestTimeout, "timeout, we are downloading package hardly, please try again later!")
@@ -1100,7 +1100,7 @@ func esmHandler() rex.Handle {
 					if output.err != nil {
 						return rex.Status(500, "types: "+output.err.Error())
 					}
-				case <-time.After(time.Minute):
+				case <-time.After(10 * time.Minute):
 					buildQueue.RemoveConsumer(task, c)
 					ctx.SetHeader("Cache-Control", "private, no-store, no-cache, must-revalidate")
 					return rex.Status(http.StatusRequestTimeout, "timeout, we are transforming the types hardly, please try again later!")
@@ -1174,7 +1174,7 @@ func esmHandler() rex.Handle {
 						return throwErrorJS(ctx, output.err)
 					}
 					esm = output.meta
-				case <-time.After(time.Minute):
+				case <-time.After(10 * time.Minute):
 					buildQueue.RemoveConsumer(task, c)
 					ctx.SetHeader("Cache-Control", "private, no-store, no-cache, must-revalidate")
 					return rex.Status(http.StatusRequestTimeout, "timeout, we are building the package hardly, please try again later!")
