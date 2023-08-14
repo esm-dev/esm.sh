@@ -531,7 +531,7 @@ rebuild:
 							if strings.HasPrefix(fullFilepath, task.realWd) && args.Kind != api.ResolveJSDynamicImport {
 								// splits modules based on the `exports` defines in package.json,
 								// see https://nodejs.org/api/packages.html
-								if v, ok := npm.DefinedExports.(map[string]interface{}); ok {
+								if om, ok := npm.PkgExports.(*orderedMap); ok {
 									modName := "." + strings.TrimPrefix(fullFilepath, path.Join(task.installDir, "node_modules", npm.Name))
 									// bundles _internal_ modules
 									if strings.Contains(modName, "/internal/") {
@@ -542,10 +542,12 @@ rebuild:
 									} else {
 										modName = strings.TrimSuffix(modName, ".js")
 									}
-									for export, paths := range v {
-										m, ok := paths.(map[string]interface{})
-										if ok && export != "." {
-											for _, value := range m {
+									for e := om.l.Front(); e != nil; e = e.Next() {
+										name, paths := om.Entry(e)
+										m, ok := paths.(*orderedMap)
+										if ok && name != "." {
+											for e := m.l.Front(); e != nil; e = e.Next() {
+												_, value := om.Entry(e)
 												s, ok := value.(string)
 												if ok && s != "" {
 													match := modName == s || modName+".js" == s || modName+".mjs" == s
@@ -557,13 +559,13 @@ rebuild:
 																	strings.HasSuffix(modName+".js", suffix) ||
 																	strings.HasSuffix(modName+".mjs", suffix)) {
 																matchName := strings.TrimPrefix(strings.TrimSuffix(modName, suffix), prefix)
-																export = strings.Replace(export, "*", matchName, -1)
+																name = strings.Replace(name, "*", matchName, -1)
 																match = true
 															}
 														}
 													}
 													if match {
-														url := path.Join(npm.Name, export)
+														url := path.Join(npm.Name, name)
 														if i := task.Pkg.ImportPath(); url != i && url != i+"/index" {
 															sideEffects := api.SideEffectsTrue
 															if !npm.SideEffects {

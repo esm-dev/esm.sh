@@ -47,14 +47,14 @@ type NpmPackageTemp struct {
 	PeerDependencies map[string]string      `json:"peerDependencies,omitempty"`
 	Imports          map[string]interface{} `json:"imports,omitempty"`
 	TypesVersions    map[string]interface{} `json:"typesVersions,omitempty"`
-	DefinedExports   interface{}            `json:"exports,omitempty"`
+	PkgExports       json.RawMessage        `json:"exports,omitempty"`
 	Deprecated       interface{}            `json:"deprecated,omitempty"`
 }
 
 func (a *NpmPackageTemp) ToNpmPackage() *NpmPackage {
 	browser := map[string]string{}
-	if a.Browser.Value != "" {
-		browser["."] = a.Browser.Value
+	if a.Browser.Str != "" {
+		browser["."] = a.Browser.Str
 	}
 	if a.Browser.Map != nil {
 		for k, v := range a.Browser.Map {
@@ -83,6 +83,22 @@ func (a *NpmPackageTemp) ToNpmPackage() *NpmPackage {
 			sideEffects = b
 		}
 	}
+	var pkgExports interface{} = nil
+	if rawExports := a.PkgExports; rawExports != nil {
+		var v interface{}
+		if json.Unmarshal(rawExports, &v) == nil {
+			if s, ok := v.(string); ok {
+				pkgExports = s
+			} else if _, ok := v.(map[string]interface{}); ok {
+				om := newOrderedMap()
+				if om.UnmarshalJSON(rawExports) == nil {
+					pkgExports = om
+				} else {
+					pkgExports = v
+				}
+			}
+		}
+	}
 	return &NpmPackage{
 		Name:             a.Name,
 		Version:          a.Version,
@@ -99,7 +115,7 @@ func (a *NpmPackageTemp) ToNpmPackage() *NpmPackage {
 		PeerDependencies: a.PeerDependencies,
 		Imports:          a.Imports,
 		TypesVersions:    a.TypesVersions,
-		DefinedExports:   a.DefinedExports,
+		PkgExports:       pkgExports,
 		Deprecated:       deprecated,
 	}
 }
@@ -121,7 +137,7 @@ type NpmPackage struct {
 	PeerDependencies map[string]string
 	Imports          map[string]interface{}
 	TypesVersions    map[string]interface{}
-	DefinedExports   interface{}
+	PkgExports       interface{}
 	Deprecated       string
 }
 

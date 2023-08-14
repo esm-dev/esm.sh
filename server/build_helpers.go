@@ -7,7 +7,6 @@ import (
 	"io"
 	"os"
 	"path"
-	"sort"
 	"strings"
 
 	"github.com/esm-dev/esm.sh/server/storage"
@@ -234,47 +233,43 @@ func (task *BuildTask) analyze(forceCjsOnly bool) (esm *ESMBuild, npm NpmPackage
 					npm.Types = pkg.Submodule + ".d.ts"
 				}
 				// reslove submodule wiht `exports` conditions if exists
-				if npm.DefinedExports != nil {
-					if m, ok := npm.DefinedExports.(map[string]interface{}); ok {
-						var names SortedPaths
-						for name := range m {
-							names = append(names, name)
-						}
-						sort.Sort(names)
-						for _, name := range names {
-							defines := m[name]
+				if npm.PkgExports != nil {
+					if om, ok := npm.PkgExports.(*orderedMap); ok {
+						for e := om.l.Front(); e != nil; e = e.Next() {
+							name, exports := om.Entry(e)
 							if name == "./"+pkg.Submodule || name == "./"+pkg.Submodule+".js" || name == "./"+pkg.Submodule+".mjs" {
 								/**
-								  exports: {
-								    "./lib/core": {
-								      "require": "./lib/core.js",
-								      "import": "./esm/core.js"
-								    },
-									"./lib/core.js": {
-								      "require": "./lib/core.js",
-								      "import": "./esm/core.js"
-								    }
-								  }
+								exports: {
+									"./lib/core": {
+										"require": "./lib/core.js",
+										"import": "./esm/core.js"
+									},
+								"./lib/core.js": {
+										"require": "./lib/core.js",
+										"import": "./esm/core.js"
+									}
+								}
 								*/
-								task.applyConditions(&npm, defines, npm.Type)
+								task.applyConditions(&npm, exports, npm.Type)
 								break
 							} else if strings.HasSuffix(name, "*") && strings.HasPrefix("./"+pkg.Submodule, strings.TrimSuffix(name, "*")) {
 								/**
-								  exports: {
-								    "./lib/languages/*": {
-								      "require": "./lib/languages/*.js",
-								      "import": "./esm/languages/*.js"
-								    },
-								  }
+								exports: {
+									"./lib/languages/*": {
+										"require": "./lib/languages/*.js",
+										"import": "./esm/languages/*.js"
+									},
+								}
 								*/
 								suffix := strings.TrimPrefix("./"+pkg.Submodule, strings.TrimSuffix(name, "*"))
-								hasDefines := false
-								if m, ok := defines.(map[string]interface{}); ok {
-									newDefines := map[string]interface{}{}
-									for key, value := range m {
+								hitExports := false
+								if om, ok := exports.(*orderedMap); ok {
+									newExports := newOrderedMap()
+									for e := om.l.Front(); e != nil; e = e.Next() {
+										key, value := om.Entry(e)
 										if s, ok := value.(string); ok && s != name {
-											newDefines[key] = strings.Replace(s, "*", suffix, -1)
-											hasDefines = true
+											newExports.Set(key, strings.Replace(s, "*", suffix, -1))
+											hitExports = true
 										}
 										/**
 										exports: {
@@ -289,23 +284,24 @@ func (task *BuildTask) analyze(forceCjsOnly bool) (esm *ESMBuild, npm NpmPackage
 										}
 										*/
 										if s, ok := value.(map[string]interface{}); ok {
-											subNewDefinies := map[string]interface{}{}
+											subNewDefinies := newOrderedMap()
 											for subKey, subValue := range s {
 												if s1, ok := subValue.(string); ok && s1 != name {
-													subNewDefinies[subKey] = strings.Replace(s1, "*", suffix, -1)
-													hasDefines = true
+													subNewDefinies.Set(subKey, strings.Replace(s1, "*", suffix, -1))
+													hitExports = true
 												}
 											}
-											newDefines[key] = subNewDefinies
+											newExports.Set(key, subNewDefinies)
 										}
 									}
-									defines = newDefines
-								} else if s, ok := defines.(string); ok && name != s {
-									defines = strings.Replace(s, "*", suffix, -1)
-									hasDefines = true
+									exports = newExports
+								} else if s, ok := exports.(string); ok {
+									exports = strings.Replace(s, "*", suffix, -1)
+									hitExports = true
 								}
-								if hasDefines {
-									task.applyConditions(&npm, defines, npm.Type)
+								if hitExports {
+									task.applyConditions(&npm, exports, npm.Type)
+									break
 								}
 							}
 						}
@@ -400,10 +396,10 @@ func (task *BuildTask) fixNpmPackage(p NpmPackage) NpmPackage {
 		for c, e := range p.TypesVersions {
 			if c == "*" && strings.HasPrefix(c, ">") || strings.HasPrefix(c, ">=") {
 				if usedCondition == "" || c == "*" || c > usedCondition {
-					if m, ok := e.(map[string]interface{}); ok {
-						d, ok := m["*"]
+					if om, ok := e.(*orderedMap); ok {
+						d, ok := om.m["*"]
 						if !ok {
-							d, ok = m["."]
+							d, ok = om.m["."]
 						}
 						if ok {
 							if a, ok := d.([]interface{}); ok && len(a) > 0 {
@@ -426,9 +422,9 @@ func (task *BuildTask) fixNpmPackage(p NpmPackage) NpmPackage {
 		}
 	}
 
-	if exports := p.DefinedExports; exports != nil {
-		if m, ok := exports.(map[string]interface{}); ok {
-			v, ok := m["."]
+	if exports := p.PkgExports; exports != nil {
+		if om, ok := exports.(*orderedMap); ok {
+			v, ok := om.m["."]
 			if ok {
 				/*
 					exports: {
@@ -449,7 +445,7 @@ func (task *BuildTask) fixNpmPackage(p NpmPackage) NpmPackage {
 						"import": "./esm/index.js"
 					}
 				*/
-				task.applyConditions(&p, m, p.Type)
+				task.applyConditions(&p, om, p.Type)
 			}
 		} else if s, ok := exports.(string); ok {
 			/*
@@ -573,7 +569,7 @@ func (task *BuildTask) applyConditions(p *NpmPackage, exports interface{}, pType
 		return
 	}
 
-	m, ok := exports.(map[string]interface{})
+	om, ok := exports.(*orderedMap)
 	if ok {
 		targetConditions := []string{"browser"}
 		conditions := []string{"module", "import", "es2015"}
@@ -588,8 +584,8 @@ func (task *BuildTask) applyConditions(p *NpmPackage, exports interface{}, pType
 		case "node":
 			targetConditions = []string{"node"}
 		}
-		_, hasRequireCondition := m["require"]
-		_, hasNodeCondition := m["node"]
+		_, hasRequireCondition := om.m["require"]
+		_, hasNodeCondition := om.m["node"]
 		if pType == "module" || hasRequireCondition || hasNodeCondition {
 			conditions = append(conditions, "default")
 		}
@@ -600,20 +596,22 @@ func (task *BuildTask) applyConditions(p *NpmPackage, exports interface{}, pType
 			targetConditions = append(task.Args.conditions.Values(), targetConditions...)
 		}
 		for _, condition := range append(targetConditions, conditions...) {
-			v, ok := m[condition]
+			v, ok := om.m[condition]
 			if ok {
 				task.applyConditions(p, v, "module")
 				break
 			}
 		}
 		for _, condition := range append(targetConditions, "require", "node", "default") {
-			v, ok := m[condition]
+			v, ok := om.m[condition]
 			if ok {
 				task.applyConditions(p, v, "commonjs")
 				break
 			}
 		}
-		for key, value := range m {
+		for e := om.l.Front(); e != nil; e = e.Next() {
+			key := e.Value.(string)
+			value := om.m[key]
 			s, ok := value.(string)
 			if ok && s != "" {
 				switch key {
