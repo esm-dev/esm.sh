@@ -1,3 +1,5 @@
+// deno-lint-ignore-file no-explicit-any
+
 export type BuildInput = {
   code: string;
   loader?: "js" | "jsx" | "ts" | "tsx";
@@ -22,7 +24,7 @@ export async function build(
   if (!options?.code) {
     throw new Error("esm.sh [build] <400> missing code");
   }
-  const ret = await fetch("$ORIGIN/build", {
+  const ret: any = await fetch("$ORIGIN/build", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(options),
@@ -40,12 +42,40 @@ export async function esm<T extends object = Record<string, any>>(
   ...values: any[]
 ): Promise<T & { _build: BuildOutput }> {
   const code = String.raw({ raw: strings }, ...values);
-  const ret = await build(code);
+  const ret = await withCache(code);
   const mod: T = await import(ret.url);
   return {
     ...mod,
     _build: ret,
   };
+}
+
+async function withCache(code: string): Promise<BuildOutput> {
+  let key = code;
+  if (globalThis.crypto && globalThis.crypto.subtle) {
+    key = await hashText(code);
+  }
+  if (globalThis.localStorage) {
+    const cached = localStorage.getItem(key);
+    if (cached) {
+      return JSON.parse(cached);
+    }
+  }
+  const ret = await build(code);
+  if (globalThis.localStorage) {
+    localStorage.setItem(key, JSON.stringify(ret));
+  }
+  return ret;
+}
+
+export async function hashText(s: string): Promise<string> {
+  const buffer = await crypto.subtle.digest(
+    "SHA-1",
+    new TextEncoder().encode(s),
+  );
+  return Array.from(new Uint8Array(buffer)).map((b) =>
+    b.toString(16).padStart(2, "0")
+  ).join("");
 }
 
 export default build;

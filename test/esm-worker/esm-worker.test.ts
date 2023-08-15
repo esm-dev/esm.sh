@@ -71,6 +71,15 @@ Deno.test("esm-worker", {
     assertStringIncludes(text, "<h1>Welcome to esm.sh!</h1>");
   });
 
+  let VERSION: number;
+  await t.step("status.json", async () => {
+    const ret: any = await fetch(`${workerOrigin}/status.json`).then((res) =>
+      res.json()
+    );
+    assertEquals(typeof ret.version, "number");
+    VERSION = ret.version;
+  });
+
   await t.step("deno CLI", async () => {
     const res = await fetch(workerOrigin);
     res.body?.cancel();
@@ -82,7 +91,7 @@ Deno.test("esm-worker", {
   });
 
   await t.step("embed polyfills/types", async () => {
-    const res = await fetch(`${workerOrigin}/v115/node.ns.d.ts`);
+    const res = await fetch(`${workerOrigin}/v${VERSION}/node.ns.d.ts`);
     res.body?.cancel();
     assertEquals(res.status, 200);
     assertEquals(
@@ -90,22 +99,13 @@ Deno.test("esm-worker", {
       "application/typescript; charset=utf-8",
     );
 
-    const res2 = await fetch(`${workerOrigin}/v115/node_process.js`);
+    const res2 = await fetch(`${workerOrigin}/v${VERSION}/node_process.js`);
     res2.body?.cancel();
     assertEquals(res2.status, 200);
     assertStringIncludes(
       res2.headers.get("Content-Type")!,
       "/javascript; charset=utf-8",
     );
-  });
-
-  let VERSION: number;
-  await t.step("status.json", async () => {
-    const ret: any = await fetch(`${workerOrigin}/status.json`).then((res) =>
-      res.json()
-    );
-    assertEquals(typeof ret.version, "number");
-    VERSION = ret.version;
   });
 
   await t.step("npm modules", async () => {
@@ -234,7 +234,7 @@ Deno.test("esm-worker", {
   });
 
   await t.step("npm modules (pined)", async () => {
-    const url = `${workerOrigin}/v115/react@18.2.0?target=es2020`;
+    const url = `${workerOrigin}/v${VERSION}/react@18.2.0?target=es2020`;
     const res2 = await fetch(url);
     const modUrl = new URL(res2.headers.get("X-Esm-Id")!, workerOrigin);
     res2.body?.cancel();

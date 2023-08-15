@@ -144,6 +144,7 @@ export function err(message: string, status: number = 500) {
 export function errPkgNotFound(pkg: string) {
   const headers = corsHeaders();
   headers.set("Content-Type", "application/javascript; charset=utf-8");
+  headers.set("Cache-Control", "private, no-cache, no-store, must-revalidate");
   return new Response(
     [
       `/* esm.sh - error */`,
@@ -187,4 +188,14 @@ export function copyHeaders(dst: Headers, src: Headers, ...keys: string[]) {
       dst.set(k, src.get(k)!);
     }
   }
+}
+
+export async function hashText(s: string): Promise<string> {
+  const buffer = await crypto.subtle.digest(
+    "SHA-1",
+    new TextEncoder().encode(s),
+  );
+  return Array.from(new Uint8Array(buffer)).map((b) =>
+    b.toString(16).padStart(2, "0")
+  ).join("");
 }

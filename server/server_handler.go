@@ -27,8 +27,8 @@ import (
 type BuildInput struct {
 	Code   string            `json:"code"`
 	Loader string            `json:"loader,omitempty"`
-	Deps   map[string]string `json:"dependencies"`
-	Types  string            `json:"types"`
+	Deps   map[string]string `json:"dependencies,omitempty"`
+	Types  string            `json:"types,omitempty"`
 }
 
 func apiHandler() rex.Handle {
@@ -128,6 +128,22 @@ func apiHandler() rex.Handle {
 				}
 				h := sha1.New()
 				h.Write(code)
+				if len(input.Deps) > 0 {
+					keys := make(sort.StringSlice, len(input.Deps))
+					i := 0
+					for key := range input.Deps {
+						keys[i] = key
+						i++
+					}
+					keys.Sort()
+					for _, key := range keys {
+						h.Write([]byte(key))
+						h.Write([]byte(input.Deps[key]))
+					}
+				}
+				if input.Types != "" {
+					h.Write([]byte(input.Types))
+				}
 				id := hex.EncodeToString(h.Sum(nil))
 				key := "publish-" + id
 				record, err := db.Get(key)
@@ -178,6 +194,7 @@ func apiHandler() rex.Handle {
 					// use the request host as the origin if not set in config.json
 					cdnOrigin = fmt.Sprintf("%s://%s", proto, ctx.R.Host)
 				}
+				ctx.W.Header().Set("Cache-Control", "private, no-store, no-cache, must-revalidate")
 				return map[string]interface{}{
 					"id":        id,
 					"url":       fmt.Sprintf("%s/~%s", cdnOrigin, id),
