@@ -258,8 +258,8 @@ package version.
 ```json
 {
   "imports": {
-    "react-dom": "https://esm.sh/react-dom@18.2.0?pin=v130&dev",
-    "react-dom/": "https://esm.sh/react-dom@18.2.0&pin=v130&dev/"
+    "react-dom": "https://esm.sh/react-dom@18.2.0?pin=v131&dev",
+    "react-dom/": "https://esm.sh/react-dom@18.2.0&pin=v131&dev/"
   }
 }
 ```
@@ -424,9 +424,9 @@ The `?pin` query allows you to specify a specific build version of a module,
 which is an **immutable** cached version stored on the esm.sh CDN.
 
 ```js
-import React from "https://esm.sh/react-dom?pin=v130";
+import React from "https://esm.sh/react-dom?pin=v131";
 // or use version prefix
-import React from "https://esm.sh/v130/react-dom";
+import React from "https://esm.sh/v131/react-dom";
 ```
 
 By using the `?pin` query in the import statement, you can rest assured that the

@@ -1,5 +1,14 @@
 # Changelog
 
+## v131
+
+- Add cache layer for the `/build` API
+- Fix dts transformer resolver ignoring `*.mjs` url
+- fix `?external` option ignoring sub-modules
+- Use raw order of the `exports` in package.json (close #705)
+- Redirect old build path (`.js`) to new build path (`.mjs`) (close #703)
+- Upgrade esbuild to **0.19.2**
+
 ## v130
 
 - esm-cjs-lexer: support minified UMD exports (#689)
