@@ -69,7 +69,7 @@ esm.sh supports to import modules/assets from a github repo:
 `/gh/OWNER/REPO[@TAG]/PATH`. For example:
 
 ```js
-import tslib from "https://esm.sh/gh/microsoft/tslib@2.5.0";
+import tslib from "https://esm.sh/gh/microsoft/tslib@2.6.0";
 ```
 
 or load a svg image from a github repo:
