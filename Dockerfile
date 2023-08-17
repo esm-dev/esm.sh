@@ -18,7 +18,7 @@ RUN CGO_ENABLED=0 GOOS=linux go build -o esmd main.go
 #######################################
 FROM node:18-alpine AS release-stage
 
-RUN apk update && apk add --no-cache libcap-utils
+RUN apk update && apk add --no-cache git libcap-utils
 RUN npm i -g pnpm
 
 COPY --from=build-stage /tmp/esm.sh/esmd /bin/esmd
