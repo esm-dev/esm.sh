@@ -25,25 +25,8 @@ class Process extends EventEmitter {
   pid = 0;
   arch = "unknown";
   platform = "browser";
-  version = "v18.12.1";
-  versions = {
-    node: "18.12.1",
-    uv: "1.43.0",
-    zlib: "1.2.11",
-    brotli: "1.0.9",
-    ares: "1.18.1",
-    modules: "108",
-    nghttp2: "1.47.0",
-    napi: "8",
-    llhttp: "6.0.10",
-    openssl: "3.0.7+quic",
-    cldr: "41.0",
-    icu: "71.1",
-    tz: "2022b",
-    unicode: "14.0",
-    ngtcp2: "0.8.1",
-    nghttp3: "0.7.0",
-  };
+  version = "";
+  versions = {};
   emitWarning = () => {
     throw new Error("process.emitWarning is not supported");
   };
@@ -69,12 +52,32 @@ const process = new Process();
 // partly copied from https://github.com/denoland/deno_std/tree/v0.177.0/node
 if (typeof Deno !== "undefined") {
   process.name = "deno";
+  process.browser = false;
   process.pid = Deno.pid;
   process.cwd = () => Deno.cwd();
   process.chdir = (d) => Deno.chdir(d);
   process.arch = Deno.build.arch;
   process.platform = Deno.build.os;
-  process.versions = { ...process.versions, ...Deno.version };
+  process.version = "v18.12.1";
+  process.versions = {
+    node: "18.12.1",
+    uv: "1.43.0",
+    zlib: "1.2.11",
+    brotli: "1.0.9",
+    ares: "1.18.1",
+    modules: "108",
+    nghttp2: "1.47.0",
+    napi: "8",
+    llhttp: "6.0.10",
+    openssl: "3.0.7+quic",
+    cldr: "41.0",
+    icu: "71.1",
+    tz: "2022b",
+    unicode: "14.0",
+    ngtcp2: "0.8.1",
+    nghttp3: "0.7.0",
+    ...Deno.version,
+  };
 
   process.env = new Proxy({}, {
     get(_target, prop) {
