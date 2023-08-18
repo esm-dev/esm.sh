@@ -498,11 +498,14 @@ func esmHandler() rex.Handle {
 			if strings.HasSuffix(pathname, ".js") {
 				data, err := embedFS.ReadFile("server/embed/polyfills" + pathname)
 				if err == nil {
-					header.Set("Content-Type", "application/javascript; charset=utf-8")
-					header.Set("Cache-Control", "public, max-age=31536000, immutable")
 					code, err := minify(string(data), targets[target], api.LoaderJS)
 					if err != nil {
 						return throwErrorJS(ctx, fmt.Errorf("transform error: %v", err))
+					}
+					header.Set("Content-Type", "application/javascript; charset=utf-8")
+					header.Set("Cache-Control", "public, max-age=31536000, immutable")
+					if targetFromUA {
+						header.Add("Vary", "User-Agent")
 					}
 					return rex.Content(pathname, startTime, bytes.NewReader(code))
 				}
