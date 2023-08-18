@@ -435,6 +435,13 @@ func esmHandler() rex.Handle {
 			outdatedBuildVer = a[1]
 		}
 
+		// determine build target by `?target` query or `User-Agent` header
+		target := strings.ToLower(ctx.Form.Value("target"))
+		targetFromUA := targets[target] == 0
+		if targetFromUA {
+			target = getTargetByUA(userAgent)
+		}
+
 		if pathname == "/build" {
 			if !hasBuildVerPrefix && !ctx.Form.Has("pin") {
 				url := fmt.Sprintf("%s%s/v%d/build", cdnOrigin, cfg.CdnBasePath, CTX_BUILD_VERSION)
@@ -444,27 +451,15 @@ func esmHandler() rex.Handle {
 			if err != nil {
 				return err
 			}
-			target := strings.ToLower(ctx.Form.Value("target"))
-			targetFromUA := targets[target] == 0
-			if targetFromUA {
-				target = getTargetByUA(userAgent)
-			}
+
 			if target == "deno" || target == "denonext" {
 				header.Set("Content-Type", "application/typescript; charset=utf-8")
 			} else {
-				ret := api.Transform(string(data), api.TransformOptions{
-					Loader:            api.LoaderTS,
-					Format:            api.FormatESModule,
-					Platform:          api.PlatformBrowser,
-					Target:            targets[target],
-					MinifyWhitespace:  true,
-					MinifyIdentifiers: true,
-					MinifySyntax:      true,
-				})
-				if len(ret.Errors) > 0 {
-					return throwErrorJS(ctx, fmt.Errorf("transform error: %s", ret.Errors[0].Text))
+				code, err := minify(string(data), targets[target], api.LoaderTS)
+				if err != nil {
+					return throwErrorJS(ctx, fmt.Errorf("transform error: %v", err))
 				}
-				data = []byte(ret.Code)
+				data = code
 				header.Set("Content-Type", "application/javascript; charset=utf-8")
 			}
 			header.Set("Cache-Control", "public, max-age=31536000, immutable")
@@ -505,7 +500,11 @@ func esmHandler() rex.Handle {
 				if err == nil {
 					header.Set("Content-Type", "application/javascript; charset=utf-8")
 					header.Set("Cache-Control", "public, max-age=31536000, immutable")
-					return rex.Content(pathname, startTime, bytes.NewReader(data))
+					code, err := minify(string(data), targets[target], api.LoaderJS)
+					if err != nil {
+						return throwErrorJS(ctx, fmt.Errorf("transform error: %v", err))
+					}
+					return rex.Content(pathname, startTime, bytes.NewReader(code))
 				}
 			}
 			if strings.HasSuffix(pathname, ".d.ts") {
@@ -914,13 +913,6 @@ func esmHandler() rex.Handle {
 					conditions.Add(p)
 				}
 			}
-		}
-
-		// determine build target by `?target` query or `User-Agent` header
-		target := strings.ToLower(ctx.Form.Value("target"))
-		targetFromUA := targets[target] == 0
-		if targetFromUA {
-			target = getTargetByUA(userAgent)
 		}
 
 		if strings.HasPrefix(target, "es") && includes(nativeNodePackages, reqPkg.Name) {

@@ -724,6 +724,7 @@ func bundleNodePolyfill(name string, globalName string, namedExport string, targ
 		Bundle:            true,
 		Target:            target,
 		Format:            api.FormatIIFE,
+		Platform:          api.PlatformBrowser,
 		MinifyWhitespace:  true,
 		MinifyIdentifiers: true,
 		MinifySyntax:      true,
@@ -756,4 +757,20 @@ func bundleNodePolyfill(name string, globalName string, namedExport string, targ
 		return nil, errors.New(ret.Errors[0].Text)
 	}
 	return ret.OutputFiles[0].Contents, nil
+}
+
+func minify(code string, target api.Target, loader api.Loader) ([]byte, error) {
+	ret := api.Transform(code, api.TransformOptions{
+		Target:            target,
+		Format:            api.FormatESModule,
+		Platform:          api.PlatformBrowser,
+		MinifyWhitespace:  true,
+		MinifyIdentifiers: true,
+		MinifySyntax:      true,
+		Loader:            loader,
+	})
+	if ret.Errors != nil && len(ret.Errors) > 0 {
+		return nil, errors.New(ret.Errors[0].Text)
+	}
+	return ret.Code, nil
 }
