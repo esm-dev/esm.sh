@@ -283,19 +283,13 @@ class ESMWorker {
         pathname === "/node.ns.d.ts" || (
           pathname.startsWith("/node_") &&
           pathname.endsWith(".js") &&
-          pathname.slice(1).indexOf("/") === -1
+          !pathname.slice(1).includes("/")
         )
       )
     ) {
-      // for old(deleted) ployfill
-      if (pathname === "/node_buffer.js") {
-        return redirect(
-          new URL(`/${buildVersion}/buffer@6.0.3`, url),
-          301,
-        );
-      }
-      return ctx.withCache(() =>
-        fetchESM(req, env, ctx, `/${buildVersion}${pathname}`, true)
+      return ctx.withCache(
+        () => fetchESM(req, env, ctx, `/${buildVersion}${pathname}`, true),
+        { varyUA: true },
       );
     }
 
