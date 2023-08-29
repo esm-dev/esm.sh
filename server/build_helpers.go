@@ -714,15 +714,14 @@ func copyRawBuildFile(id string, name string, dir string) (err error) {
 	return
 }
 
-func bundleNodePolyfill(name string, globalName string, namedExport string, target api.Target) ([]byte, error) {
-	ret := api.Build(api.BuildOptions{
+func bundleNodePolyfill(name string, globalName string, namedExport string, target string) ([]byte, error) {
+	opts := api.BuildOptions{
 		Stdin: &api.StdinOptions{
 			Contents: fmt.Sprintf(`import * as e from "node_%s.js";globalThis.%s=e.%s`, name, globalName, namedExport),
 			Loader:   api.LoaderJS,
 		},
 		Write:             false,
 		Bundle:            true,
-		Target:            target,
 		Format:            api.FormatIIFE,
 		Platform:          api.PlatformBrowser,
 		MinifyWhitespace:  true,
@@ -751,24 +750,29 @@ func bundleNodePolyfill(name string, globalName string, namedExport string, targ
 						}, nil
 					},
 				)
-			}}},
-	})
+			},
+		}},
+	}
+	opts.Target, opts.Engines = getTargetFromName(target)
+	ret := api.Build(opts)
 	if ret.Errors != nil && len(ret.Errors) > 0 {
 		return nil, errors.New(ret.Errors[0].Text)
 	}
 	return ret.OutputFiles[0].Contents, nil
 }
 
-func minify(code string, target api.Target, loader api.Loader) ([]byte, error) {
-	ret := api.Transform(code, api.TransformOptions{
-		Target:            target,
+func minify(code string, target string, loader api.Loader) ([]byte, error) {
+	opts := api.TransformOptions{
+		Target:            api.ESNext,
 		Format:            api.FormatESModule,
 		Platform:          api.PlatformBrowser,
 		MinifyWhitespace:  true,
 		MinifyIdentifiers: true,
 		MinifySyntax:      true,
 		Loader:            loader,
-	})
+	}
+	opts.Target, opts.Engines = getTargetFromName(target)
+	ret := api.Transform(code, opts)
 	if ret.Errors != nil && len(ret.Errors) > 0 {
 		return nil, errors.New(ret.Errors[0].Text)
 	}

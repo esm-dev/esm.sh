@@ -12,6 +12,7 @@ import (
 )
 
 var regexpBrowserVersion = regexp.MustCompile(`^(\d+)(?:\.(\d+))?(?:\.(\d+))?$`)
+var v1_33_2 = semver.MustParse("1.33.2")
 
 var targets = map[string]api.Target{
 	"es2015":   api.ES2015,
@@ -28,14 +29,13 @@ var targets = map[string]api.Target{
 	"node":     api.ESNext,
 }
 
-var engines = map[string]api.EngineName{
-	"node":    api.EngineNode,
+var browsers = map[string]api.EngineName{
 	"chrome":  api.EngineChrome,
 	"edge":    api.EngineEdge,
 	"firefox": api.EngineFirefox,
 	"ios":     api.EngineIOS,
-	"safari":  api.EngineSafari,
 	"opera":   api.EngineOpera,
+	"safari":  api.EngineSafari,
 }
 
 var jsFeatures = []compat.JSFeature{
@@ -168,27 +168,24 @@ func countFeatures(feature compat.JSFeature) int {
 	return n
 }
 
-func getEngineInfo(ua string) (name string, version string) {
-	for _, v := range strings.Split(ua, " ") {
-		if strings.HasPrefix(v, "Chrome/") {
-			return "Chrome", v[7:]
-		}
-		if strings.HasPrefix(v, "HeadlessChrome/") {
-			return "Chrome", v[15:]
-		}
+func getBrowserInfo(ua string) (name string, version string) {
+	name, version = useragent.New(ua).Browser()
+	if name == "HeadlessChrome" {
+		return "Chrome", version
 	}
-	return useragent.New(ua).Browser()
+	if name == "Safari" && strings.Contains(ua, "iPhone;") {
+		return "iOS", version
+	}
+	return
 }
 
-var deno1_33_2 = semver.MustParse("1.33.2")
-
 func getTargetByUA(ua string) string {
-	if ua == "" || strings.HasPrefix(ua, "curl/") {
+	if ua == "" {
 		return "esnext"
 	}
 	if strings.HasPrefix(ua, "Deno/") {
 		uaVersion, err := semver.NewVersion(strings.TrimPrefix(ua, "Deno/"))
-		if err == nil && uaVersion.LessThan(deno1_33_2) {
+		if err == nil && uaVersion.LessThan(v1_33_2) {
 			return "deno"
 		}
 		return "denonext"
@@ -196,12 +193,38 @@ func getTargetByUA(ua string) string {
 	if ua == "undici" || strings.HasPrefix(ua, "Node/") || strings.HasPrefix(ua, "Bun/") {
 		return "node"
 	}
-	name, version := getEngineInfo(ua)
+	return ""
+}
+
+func getBuildTargetByUA(ua string) string {
+	if target := getTargetByUA(ua); target != "" {
+		return target
+	}
+	name, version := getBrowserInfo(ua)
 	if name == "" || version == "" {
 		return "esnext"
 	}
-	if engine, ok := engines[strings.ToLower(name)]; ok {
-		unspportEngineFeatures := validateEngineFeatures(api.Engine{
+	name = strings.ToLower(name)
+	if _, ok := browsers[name]; !ok {
+		return "esnext"
+	}
+	p := strings.Split(version, ".")
+	if (name == "safari" || name == "ios") && len(p) > 1 {
+		return name + p[0] + "." + p[1]
+	}
+	return name + p[0]
+}
+
+func getEsmaTargetByUA(ua string) string {
+	if target := getTargetByUA(ua); target != "" {
+		return target
+	}
+	name, version := getBrowserInfo(ua)
+	if name == "" || version == "" {
+		return "esnext"
+	}
+	if engine, ok := browsers[strings.ToLower(name)]; ok {
+		unspportedJSFeatures := validateEngineFeatures(api.Engine{
 			Name:    engine,
 			Version: version,
 		})
@@ -213,12 +236,27 @@ func getTargetByUA(ua string) string {
 			"es2018",
 			"es2017",
 			"es2016",
+			"es2015",
 		} {
-			unspportESMAFeatures := validateESMAFeatures(targets[target])
-			if unspportEngineFeatures <= unspportESMAFeatures {
+			if unspportedJSFeatures <= validateESMAFeatures(targets[target]) {
 				return target
 			}
 		}
 	}
-	return "es2015"
+	return "esnext"
+}
+
+func getTargetFromName(targetName string) (api.Target, []api.Engine) {
+	if t, ok := targets[targetName]; ok {
+		return t, []api.Engine{}
+	}
+	for name, engine := range browsers {
+		if strings.HasPrefix(targetName, name) {
+			return api.ESNext, []api.Engine{{
+				Name:    engine,
+				Version: strings.TrimPrefix(targetName, name),
+			}}
+		}
+	}
+	return api.ESNext, []api.Engine{}
 }

@@ -314,7 +314,7 @@ rebuild:
 		Write:             false,
 		Bundle:            true,
 		Conditions:        task.Args.conditions.Values(),
-		Target:            targets[task.Target],
+		Target:            api.ESNext,
 		Format:            api.FormatESModule,
 		Platform:          api.PlatformBrowser,
 		MinifyWhitespace:  !task.Dev,
@@ -657,6 +657,7 @@ rebuild:
 		SourceRoot: "/",
 		Sourcemap:  api.SourceMapExternal,
 	}
+	options.Target, options.Engines = getTargetFromName(task.Target)
 	if task.Target == "node" {
 		options.Platform = api.PlatformNode
 	} else {
@@ -741,7 +742,7 @@ rebuild:
 						fmt.Fprintf(header, `import __Process$ from "https://deno.land/std@%s/node/process.ts";%s`, task.Args.denoStdVersion, EOL)
 					} else if task.Bundle {
 						var js []byte
-						js, err = bundleNodePolyfill("process", "__Process$", "default", targets[task.Target])
+						js, err = bundleNodePolyfill("process", "__Process$", "default", task.Target)
 						if err != nil {
 							return
 						}
@@ -757,7 +758,7 @@ rebuild:
 						fmt.Fprintf(header, `import { Buffer as __Buffer$ } from "https://deno.land/std@%s/node/buffer.ts";%s`, task.Args.denoStdVersion, EOL)
 					} else if task.Bundle {
 						var js []byte
-						js, err = bundleNodePolyfill("buffer", "__Buffer$", "Buffer", targets[task.Target])
+						js, err = bundleNodePolyfill("buffer", "__Buffer$", "Buffer", task.Target)
 						if err != nil {
 							return
 						}
