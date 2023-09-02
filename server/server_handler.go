@@ -353,7 +353,7 @@ func esmHandler() rex.Handle {
 			}
 
 		case "/esma-target":
-			return getTargetByUA(userAgent)
+			return getBuildTargetByUA(userAgent)
 
 		case "/error.js":
 			switch ctx.Form.Value("type") {
@@ -439,7 +439,7 @@ func esmHandler() rex.Handle {
 		target := strings.ToLower(ctx.Form.Value("target"))
 		targetFromUA := targets[target] == 0
 		if targetFromUA {
-			target = getTargetByUA(userAgent)
+			target = getBuildTargetByUA(userAgent)
 		}
 
 		if pathname == "/build" {

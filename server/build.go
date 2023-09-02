@@ -313,16 +313,20 @@ rebuild:
 		Outdir:            "/esbuild",
 		Write:             false,
 		Bundle:            true,
-		Conditions:        task.Args.conditions.Values(),
-		Target:            targets[task.Target],
 		Format:            api.FormatESModule,
+		Target:            targets[task.Target],
 		Platform:          api.PlatformBrowser,
 		MinifyWhitespace:  !task.Dev,
 		MinifyIdentifiers: !task.Dev,
 		MinifySyntax:      !task.Dev,
 		KeepNames:         task.Args.keepNames,         // prevent class/function names erasing
 		IgnoreAnnotations: task.Args.ignoreAnnotations, // some libs maybe use wrong side-effect annotations
-		// PreserveSymlinks:  true,
+		Conditions:        task.Args.conditions.Values(),
+		// prevent features that can not be polyfilled
+		Supported: map[string]bool{
+			"bigint":          true,
+			"top-level-await": true,
+		},
 		Plugins: []api.Plugin{{
 			Name: "esm",
 			Setup: func(build api.PluginBuild) {
@@ -618,7 +622,7 @@ rebuild:
 				build.OnLoad(
 					api.OnLoadOptions{Filter: ".*", Namespace: "wasm"},
 					func(args api.OnLoadArgs) (ret api.OnLoadResult, err error) {
-						wasm, err := ioutil.ReadFile(args.Path)
+						wasm, err := os.ReadFile(args.Path)
 						if err != nil {
 							return
 						}

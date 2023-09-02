@@ -7,7 +7,7 @@ import type {
   WorkerStorage,
 } from "../types/index.d.ts";
 import { compareVersions, satisfies, validate } from "compare-versions";
-import { getEsmaVersionFromUA, hasTargetSegment, targets } from "./compat.ts";
+import { getBuildTargetFromUA, hasTargetSegment, targets } from "./compat.ts";
 import {
   assetsExts,
   cssPackages,
@@ -72,7 +72,7 @@ class ESMWorker {
       const hasPinedTarget = targets.has(url.searchParams.get("target") ?? "");
       const varyUA = options?.varyUA && !hasPinedTarget;
       if (varyUA) {
-        url.searchParams.set("target", getEsmaVersionFromUA(ua));
+        url.searchParams.set("target", getBuildTargetFromUA(ua));
       }
       const cacheKey = new URL(url);
       for (const key of ["x-real-origin", "x-esm-worker-version"]) {
@@ -194,7 +194,7 @@ class ESMWorker {
         );
 
       case "/esma-target":
-        return new Response(getEsmaVersionFromUA(ua), {
+        return new Response(getBuildTargetFromUA(ua), {
           headers: corsHeaders(),
         });
     }
@@ -497,7 +497,7 @@ class ESMWorker {
       }
       let target = url.searchParams.get("target");
       if (!target || !targets.has(target)) {
-        target = getEsmaVersionFromUA(ua);
+        target = getBuildTargetFromUA(ua);
       }
       const pined = hasBuildVerPrefix || hasBuildVerQuery;
       return redirect(

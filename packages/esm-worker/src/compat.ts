@@ -587,15 +587,14 @@ const getUnsupportedFeatures = (name: string, version: string) => {
 };
 
 const getBrowserInfo = (ua: string): { name?: string; version?: string } => {
-  for (const d of ua.split(" ")) {
-    if (d.startsWith("Chrome/")) {
-      return { name: "Chrome", version: d.slice(7) };
-    }
-    if (d.startsWith("HeadlessChrome/")) {
-      return { name: "Chrome", version: d.slice(15) };
-    }
+  const info = uaParser(ua).browser;
+  if (info.name === "HeadlessChrome") {
+    info.name = "Chrome";
+  } else if (info.name === "Safari" && ua.includes("iPhone;")) {
+    info.name = "iOS";
   }
   return uaParser(ua).browser;
+  return info;
 };
 
 const esmaUnsupportedFeatures: [string, number][] = [
@@ -606,20 +605,21 @@ const esmaUnsupportedFeatures: [string, number][] = [
   "es2018",
   "es2017",
   "es2016",
+  "es2015",
 ].map((esma) => [
   esma,
   getUnsupportedFeatures(esma.slice(0, 2).toUpperCase(), esma.slice(2)).length,
 ]);
 
-const deno1_33_2 = "1.33.2";
+const v1_33_2 = "1.33.2";
 
-/** get esma version from the `User-Agent` header by checking the `jsTable` object. */
-export const getEsmaVersionFromUA = (userAgent: string | null) => {
+/** get build target from the `User-Agent` header by checking the `jsTable` object. */
+export const getBuildTargetFromUA = (userAgent: string | null) => {
   if (!userAgent || userAgent.startsWith("curl/")) {
     return "esnext";
   }
   if (userAgent.startsWith("Deno/")) {
-    if (compare(userAgent.slice(5), deno1_33_2, "<")) {
+    if (compare(userAgent.slice(5), v1_33_2, "<")) {
       return "deno";
     }
     return "denonext";
@@ -644,7 +644,7 @@ export const getEsmaVersionFromUA = (userAgent: string | null) => {
       return esma;
     }
   }
-  return "es2015";
+  return "esnext";
 };
 
 export function hasTargetSegment(path: string) {
