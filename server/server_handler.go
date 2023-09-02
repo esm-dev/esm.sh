@@ -353,7 +353,7 @@ func esmHandler() rex.Handle {
 			}
 
 		case "/esma-target":
-			return getEsmaTargetByUA(userAgent)
+			return getTargetByUA(userAgent)
 
 		case "/error.js":
 			switch ctx.Form.Value("type") {
@@ -439,7 +439,7 @@ func esmHandler() rex.Handle {
 		target := strings.ToLower(ctx.Form.Value("target"))
 		targetFromUA := targets[target] == 0
 		if targetFromUA {
-			target = getBuildTargetByUA(userAgent)
+			target = getTargetByUA(userAgent)
 		}
 
 		if pathname == "/build" {
@@ -455,7 +455,7 @@ func esmHandler() rex.Handle {
 			if target == "deno" || target == "denonext" {
 				header.Set("Content-Type", "application/typescript; charset=utf-8")
 			} else {
-				code, err := minify(string(data), target, api.LoaderTS)
+				code, err := minify(string(data), targets[target], api.LoaderTS)
 				if err != nil {
 					return throwErrorJS(ctx, fmt.Errorf("transform error: %v", err))
 				}
@@ -498,7 +498,7 @@ func esmHandler() rex.Handle {
 			if strings.HasSuffix(pathname, ".js") {
 				data, err := embedFS.ReadFile("server/embed/polyfills" + pathname)
 				if err == nil {
-					code, err := minify(string(data), target, api.LoaderJS)
+					code, err := minify(string(data), targets[target], api.LoaderJS)
 					if err != nil {
 						return throwErrorJS(ctx, fmt.Errorf("transform error: %v", err))
 					}
@@ -1018,7 +1018,7 @@ func esmHandler() rex.Handle {
 			a := strings.Split(reqPkg.Submodule, "/")
 			if len(a) > 0 {
 				maybeTarget := a[0]
-				if isTargetParam(maybeTarget) {
+				if _, ok := targets[maybeTarget]; ok {
 					submodule := strings.Join(a[1:], "/")
 					pkgName := strings.TrimSuffix(path.Base(reqPkg.Name), ".js")
 					if strings.HasSuffix(submodule, ".css") {
@@ -1326,22 +1326,10 @@ func auth(secret string) rex.Handle {
 	}
 }
 
-func isTargetParam(v string) bool {
-	if _, ok := targets[v]; ok {
-		return true
-	}
-	for name := range browsers {
-		if strings.HasPrefix(v, name) {
-			return true
-		}
-	}
-	return false
-}
-
 func hasTargetSegment(path string) bool {
 	parts := strings.Split(path, "/")
 	for _, part := range parts {
-		if isTargetParam(part) {
+		if targets[part] > 0 {
 			return true
 		}
 	}

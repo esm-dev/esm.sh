@@ -1,12 +1,12 @@
 #!/usr/bin/env -S deno run --allow-run --allow-read --allow-write --allow-net
 
-async function startServer(onStart: () => Promise<void>, verbose: boolean) {
+async function startServer(onStart: () => Promise<void>, single: boolean) {
   const { code, success } = await run("go", "build", "-o", "esmd", "main.go");
   if (!success) {
     Deno.exit(code);
   }
   const p = new Deno.Command("./esmd", {
-    stdout: verbose ? "inherit" : "null",
+    stdout: single ? "inherit" : "null",
     stderr: "inherit",
   }).spawn();
   addEventListener("unload", () => {
@@ -62,6 +62,7 @@ async function runTest(name: string, retry?: boolean): Promise<number> {
   return Date.now() - execBegin;
 }
 
+
 function run(name: string, ...args: string[]) {
   const p = new Deno.Command(name, {
     args,
@@ -87,16 +88,14 @@ if (import.meta.main) {
   const rootDir = new URL(import.meta.url).pathname.split("/").slice(0, -2)
     .join("/");
   Deno.chdir(rootDir);
-  const tests = Deno.args.filter((arg) => !arg.startsWith("-"));
+  const [testDir] = Deno.args.filter((arg) => !arg.startsWith("-"));
   const clean = Deno.args.includes("--clean");
   if (clean) {
+    console.log("Cleaning up...");
     try {
-      console.log("Cleaning up...");
-      await Promise.all([
-        Deno.remove("./.esmd/log", { recursive: true }),
-        Deno.remove("./.esmd/storage", { recursive: true }),
-        Deno.remove("./.esmd/esm.db"),
-      ]);
+      await Deno.remove("./.esmd/log", { recursive: true });
+      await Deno.remove("./.esmd/storage", { recursive: true });
+      await Deno.remove("./.esmd/esm.db");
     } catch (_) {
       // ignore
     }
@@ -104,10 +103,8 @@ if (import.meta.main) {
   console.log("Starting esm.sh server...");
   startServer(async () => {
     let timeUsed = 0;
-    if (tests.length > 0) {
-      for (const testDir of tests) {
-        timeUsed += await runTest(testDir, true);
-      }
+    if (testDir) {
+      timeUsed += await runTest(testDir, true);
     } else {
       for await (const entry of Deno.readDir("./test")) {
         if (entry.isDirectory && !entry.name.startsWith("_")) {
@@ -123,5 +120,5 @@ if (import.meta.main) {
       "color: blue",
     );
     Deno.exit(0);
-  }, tests.length > 0);
+  }, Boolean(testDir));
 }
