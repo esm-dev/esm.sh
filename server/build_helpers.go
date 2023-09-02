@@ -573,6 +573,11 @@ func (task *BuildTask) applyConditions(p *NpmPackage, exports interface{}, pType
 	if ok {
 		targetConditions := []string{"browser"}
 		conditions := []string{"module", "import", "es2015"}
+		_, hasRequireCondition := om.m["require"]
+		_, hasNodeCondition := om.m["node"]
+		if pType == "module" || hasRequireCondition || hasNodeCondition {
+			conditions = append(conditions, "default")
+		}
 		switch task.Target {
 		case "deno", "denonext":
 			targetConditions = []string{"deno", "worker"}
@@ -583,11 +588,6 @@ func (task *BuildTask) applyConditions(p *NpmPackage, exports interface{}, pType
 			}
 		case "node":
 			targetConditions = []string{"node"}
-		}
-		_, hasRequireCondition := om.m["require"]
-		_, hasNodeCondition := om.m["node"]
-		if pType == "module" || hasRequireCondition || hasNodeCondition {
-			conditions = append(conditions, "default")
 		}
 		if task.Dev {
 			targetConditions = append(targetConditions, "development")
