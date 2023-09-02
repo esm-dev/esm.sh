@@ -14,7 +14,7 @@ import (
 	"github.com/ije/gox/utils"
 )
 
-var builtInNodeModules = map[string]bool{
+var internalNodeModules = map[string]bool{
 	"assert":              true,
 	"assert/strict":       true,
 	"async_hooks":         true,
@@ -69,7 +69,7 @@ var builtInNodeModules = map[string]bool{
 }
 
 // copy from https://github.com/webpack/webpack/blob/master/lib/ModuleNotFoundError.js#L13
-var polyfilledBuiltInNodeModules = map[string]string{
+var polyfilledInternalNodeModules = map[string]string{
 	"assert":         "assert@2.0.0",
 	"buffer":         "buffer@6.0.3",
 	"console":        "console-browserify@1.2.0",

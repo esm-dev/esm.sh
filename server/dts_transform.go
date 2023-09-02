@@ -190,7 +190,7 @@ func (task *BuildTask) transformDTS(dts string, aliasDepsPrefix string, marker *
 			if strings.HasPrefix(res, "node:") {
 				return fmt.Sprintf("%s/@types/node@%s/%s.d.ts", dtsBasePath, nodeTypesVersion, strings.TrimPrefix(res, "node:"))
 			}
-			if _, ok := builtInNodeModules[res]; ok {
+			if _, ok := internalNodeModules[res]; ok {
 				return fmt.Sprintf("%s/@types/node@%s/%s.d.ts", dtsBasePath, nodeTypesVersion, res)
 			}
 
