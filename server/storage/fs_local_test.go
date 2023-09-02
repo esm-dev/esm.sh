@@ -2,7 +2,7 @@ package storage
 
 import (
 	"bytes"
-	"io/ioutil"
+	"io"
 	"os"
 	"path/filepath"
 	"testing"
@@ -47,7 +47,7 @@ func TestLocalFS(t *testing.T) {
 	}
 	defer f.Close()
 
-	data, err := ioutil.ReadAll(f)
+	data, err := io.ReadAll(f)
 	if err != nil {
 		t.Fatal(err)
 	}

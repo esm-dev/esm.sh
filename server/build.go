@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io/ioutil"
 	"net/url"
 	"os"
 	"path"
@@ -156,7 +155,7 @@ func (task *BuildTask) build() (err error) {
 		nmDir := path.Join(task.wd, "node_modules")
 		jsonPath := path.Join(nmDir, task.Pkg.Name, task.Pkg.Submodule)
 		if fileExists(jsonPath) {
-			json, err := ioutil.ReadFile(jsonPath)
+			json, err := os.ReadFile(jsonPath)
 			if err != nil {
 				return err
 			}

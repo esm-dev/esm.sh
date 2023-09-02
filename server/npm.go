@@ -4,7 +4,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"net/http"
 	"os"
 	"os/exec"
@@ -248,7 +248,7 @@ func fetchPackageInfo(name string, version string) (info NpmPackage, err error) 
 	}
 
 	if resp.StatusCode != 200 {
-		ret, _ := ioutil.ReadAll(resp.Body)
+		ret, _ := io.ReadAll(resp.Body)
 		err = fmt.Errorf("npm: could not get metadata of package '%s' (%s: %s)", name, resp.Status, string(ret))
 		return
 	}
@@ -375,7 +375,7 @@ func installPackage(wd string, pkg Pkg) (err error) {
 		if err == nil && !fileExists(packageFilePath) {
 			if pkg.FromGithub {
 				ensureDir(path.Dir(packageFilePath))
-				err = ioutil.WriteFile(packageFilePath, utils.MustEncodeJSON(pkg), 0644)
+				err = os.WriteFile(packageFilePath, utils.MustEncodeJSON(pkg), 0644)
 			} else {
 				err = fmt.Errorf("pnpm install %s: package.json not found", pkg)
 			}

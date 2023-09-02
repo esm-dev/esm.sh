@@ -5,8 +5,9 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"net/http"
+	"os"
 	"os/exec"
 	"path"
 	"strings"
@@ -107,7 +108,7 @@ func invokeNodeService(serviceName string, input map[string]interface{}) (data [
 		return
 	}
 	defer res.Body.Close()
-	data, err = ioutil.ReadAll(res.Body)
+	data, err = io.ReadAll(res.Body)
 	return
 }
 
@@ -137,7 +138,7 @@ func startNodeServices() (err error) {
 	}
 
 	// create ns script
-	err = ioutil.WriteFile(
+	err = os.WriteFile(
 		path.Join(wd, "ns.js"),
 		[]byte(fmt.Sprintf(nsApp, nsPidFile, cfg.NsPort)),
 		0644,
