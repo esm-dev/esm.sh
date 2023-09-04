@@ -2,7 +2,7 @@ package server
 
 const (
 	// esm.sh build version
-	VERSION = 131
+	VERSION = 132
 	// esm.sh stable build version, used for UI libraries like react, to make sure the runtime is single copy
 	// change this carefully!
 	STABLE_VERSION = 128
@@ -17,8 +17,8 @@ const (
 
 // fix some npm package versions
 var fixedPkgVersions = map[string]string{
-	"@types/react@17": "17.0.64",
-	"@types/react@18": "18.2.20",
+	"@types/react@17": "17.0.65",
+	"@types/react@18": "18.2.21",
 	"isomorphic-ws@4": "5.0.0",
 	"resolve@1.22":    "1.22.2", // 1.22.3+ will read package.json from disk
 }

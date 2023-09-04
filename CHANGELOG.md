@@ -1,5 +1,13 @@
 # Changelog
 
+## v132
+
+- Resolve node internal modules when `?external=*` set (close #714)
+- Fix builds with `bigint` and `top-level-await` for all targets (close #711)
+- Fix `node:process` ployfill module mssing the `hrtime` method
+- Fix docker image missing `git` command
+- esm-worker: add `varyUA` option for polyfill modules
+
 ## v131
 
 - Add cache layer for the `/build` API
