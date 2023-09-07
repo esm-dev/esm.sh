@@ -114,6 +114,10 @@ if (typeof Deno !== "undefined") {
     },
   });
   process.argv = argv;
+} else {
+  let cwd = "/";
+  process.cwd = () => cwd;
+  process.chdir = (d) => cwd = d;
 }
 
 export default process;
