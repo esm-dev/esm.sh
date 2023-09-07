@@ -33,9 +33,24 @@ const { sayHi } = await esm`
 console.log(sayHi()); // prints "Hi!" message in blue color
 ```
 
-> More usage check out [here](#building-a-module-with-custom-inputcode).
+> More usage check out [here](#building-module-with-custom-inputcode).
 
-### Import from NPM
+You may want to use _**bare specifier**_ instead of URL with [import maps](https://github.com/WICG/import-maps):
+
+```html
+<script type="importmap">
+  {
+    "imports": {
+      "react": "https://esm.sh/react@18.2.0"
+    }
+  }
+</script>
+<script type="module">
+  import React from "react" // alias to https://esm.sh/react@18.2.0
+</script>
+```
+
+### Importing from NPM
 
 ```js
 import React from "https://esm.sh/react@18.2.0";
@@ -46,8 +61,8 @@ You may also use a [semver](https://docs.npmjs.com/cli/v6/using-npm/semver) or a
 fixed version number, or omit the version/tag entirely to use the `latest` tag:
 
 ```js
-import React from "https://esm.sh/react"; // 18.2.0 (latest)
-import React from "https://esm.sh/react@17"; // 17.0.2
+import React from "https://esm.sh/react";        // 18.2.0 (latest)
+import React from "https://esm.sh/react@^17";    // 17.0.2
 import React from "https://esm.sh/react@canary"; // 18.3.0-canary-e1ad4aa36-20230601
 ```
 
@@ -63,7 +78,7 @@ or import/fetch non-module(js) as following:
 import "https://esm.sh/react@18.2.0/package.json" assert { type: "json" };
 ```
 
-### Import from GitHub Repos
+### Importing from GitHub
 
 esm.sh supports to import modules/assets from a github repo:
 `/gh/OWNER/REPO[@TAG]/PATH`. For example:
@@ -75,7 +90,7 @@ import tslib from "https://esm.sh/gh/microsoft/tslib@2.6.0";
 or load a svg image from a github repo:
 https://esm.sh/gh/microsoft/fluentui-emoji/assets/Party%20popper/Color/party_popper_color.svg
 
-### Specify Dependencies
+### Specifying Dependencies
 
 By default, esm.sh rewrites import specifiers based on the package dependencies.
 To specify the version of these dependencies, you can add the
@@ -218,7 +233,7 @@ import { render } from "https://esm.sh/react-dom@18.2.0?exports=render";
 ## Using Import Maps
 
 [**Import Maps**](https://github.com/WICG/import-maps) has been supported by
-most modern browsers, Reejs and Deno natively. This allows _**bare import
+most modern browsers and Deno natively. This allows _**bare import
 specifiers**_, such as `import React from "react"`, to work.
 
 esm.sh supports `?external=foo,bar` query to specify external dependencies. With
@@ -360,7 +375,7 @@ reejs task esm:update react
 reejs task esm:remove react
 ```
 
-## Building a Module with Custom Input(code)
+## Building Module with Custom Input(code)
 
 This is an **_experimental_** API that allows you to build a module with custom
 input(code).
@@ -406,7 +421,7 @@ browser with npm packages:
 import { esm } from "https://esm.sh/build";
 
 const mod = await esm`
-   /* @jsx h */
+  /* @jsx h */
   import { h } from "preact@10.13.2";
   import { renderToString } from "preact-render-to-string@6.0.2";
   export const html = renderToString(<h1>Hello world!</h1>);
