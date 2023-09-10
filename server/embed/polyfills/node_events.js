@@ -547,8 +547,31 @@ function eventTargetAgnosticAddListener(emitter, name, listener, flags) {
   }
 }
 
+function setMaxListeners (n = defaultMaxListeners, ...eventTargets) {
+  if (typeof n !== "number" || n < 0 || NumberIsNaN(n)) {
+    throw new RangeError(
+      'The value of "n" is out of range. It must be a non-negative number. Received ' +
+        n + ".",
+    );
+  }
+  
+  if (eventTargets.length === 0) {
+    defaultMaxListeners = n;
+  } else {
+    for (let i = 0; i < eventTargets.length; i++) {
+      const target = eventTargets[i];
+      if (typeof target.setMaxListeners === 'function') {
+        target.setMaxListeners(n);
+      } else {
+        throw new TypeError(`eventTarget is invalid, must have 'setMaxListeners' method.`);
+      }
+    }
+  }
+};
+
 export {
   defaultMaxListeners,
+  setMaxListeners,
   EventEmitter,
   EventEmitter as default,
   init,
