@@ -327,7 +327,7 @@ network request, and you can manually specify the types for the imported module.
 
 ## Supporting Nodejs/Bun
 
-Nodejs(18+) supports http imorting under the `--experimental-network-imports`
+Nodejs(18+) supports http importing under the `--experimental-network-imports`
 flag. Bun doesn't support http modules yet.
 
 We highly recommend [Reejs](https://ree.js.org/) as the runtime with esm.sh that
