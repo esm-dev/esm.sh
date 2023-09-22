@@ -209,6 +209,25 @@ const worker = workerFactory(workerAddon);
 
 This only works when the package **imports CSS files in JS** directly.
 
+### Raw source files
+
+In rare cases, you may want to request JS source files from packages, as-is,
+without transformation into ES modules. To do so, you need to add a `?raw`
+query to the request URL:
+
+```js
+await navigator.serviceWorker.register(
+  new URL(
+    "https://esm.sh/playground-elements@0.18.1/playground-service-worker.js?raw", 
+    import.meta.url.href
+  ), 
+  { scope: '/' }
+);
+```
+
+For example, you might need to register a package's source script as a service 
+worker in a browser that does not yet support the new `type: "module"` option.
+
 ### Importing WASM Modules
 
 esm.sh supports importing wasm modules in JS directly, to do that, you need to
