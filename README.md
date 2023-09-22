@@ -209,25 +209,6 @@ const worker = workerFactory(workerAddon);
 
 This only works when the package **imports CSS files in JS** directly.
 
-### Raw source files
-
-In rare cases, you may want to request JS source files from packages, as-is,
-without transformation into ES modules. To do so, you need to add a `?raw`
-query to the request URL:
-
-```js
-await navigator.serviceWorker.register(
-  new URL(
-    "https://esm.sh/playground-elements@0.18.1/playground-service-worker.js?raw", 
-    import.meta.url.href
-  ), 
-  { scope: '/' }
-);
-```
-
-For example, you might need to register a package's source script as a service 
-worker in a browser that does not yet support the new `type: "module"` option.
-
 ### Importing WASM Modules
 
 esm.sh supports importing wasm modules in JS directly, to do that, you need to
@@ -300,6 +281,35 @@ package version.
 
 > esm.sh also provides a [CLI Script](#using-cli-script) in Deno to generate and
 > update the import maps that resolves dependencies automatically.
+
+### Escape Hatch: Raw Source Files
+
+In rare cases, you may want to request JS source files from packages, as-is,
+without transformation into ES modules. To do so, you need to add a `?raw`
+query to the request URL.
+
+For example, you might need to register a package's source script as a service worker
+in a browser that [does not yet support](https://caniuse.com/mdn-api_serviceworker_ecmascript_modules) 
+the `type: "module"` option:
+
+```js
+await navigator.serviceWorker.register(
+  new URL(
+    "https://esm.sh/playground-elements@0.18.1/playground-service-worker.js?raw", 
+    import.meta.url.href
+  ), 
+  { scope: '/' }
+);
+```
+
+You may alternatively specify an `&raw` extra query after the package version:
+
+```html
+<playground-project sandbox-base-url="https://esm.sh/playground-elements@0.18.1&raw/"
+></playground-project>
+```
+
+so that transitive references in the raw assets will also be raw requests.
 
 ## Deno Compatibility
 

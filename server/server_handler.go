@@ -725,7 +725,7 @@ func esmHandler() rex.Handle {
 						return rex.Redirect(url, http.StatusMovedPermanently)
 					}
 					reqType = "types"
-				} else if ctx.Form.Has("raw") {
+				} else if ctx.R.URL.Query().Has("raw") {
 					reqType = "raw"
 				} else if hasBuildVerPrefix && hasTargetSegment(reqPkg.Subpath) {
 					reqType = "builds"
