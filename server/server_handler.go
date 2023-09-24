@@ -804,6 +804,11 @@ func esmHandler() rex.Handle {
 				return rex.Status(404, "File Not Found")
 			}
 			header.Set("Cache-Control", "public, max-age=31536000, immutable")
+			if endsWith(savePath, ".js", ".mjs", ".jsx") {
+				header.Set("Content-Type", "application/javascript; charset=utf-8")
+			} else if endsWith(savePath, ".ts", ".mts", ".tsx") {
+				header.Set("Content-Type", "application/typescript; charset=utf-8")
+			}
 			return rex.Content(savePath, fi.ModTime(), content) // auto closed
 		}
 

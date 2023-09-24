@@ -8,7 +8,7 @@ import {
       "http://localhost:8080/playground-elements@0.18.1/playground-service-worker.js?raw",
     );
     assertEquals(res.status, 200);
-    assertEquals(res.headers.get("content-type"), "application/javascript");
+    assertEquals(res.headers.get("content-type"), "application/javascript; charset=utf-8");
     assertStringIncludes(await res.text(), "!function(){");
   });
 
@@ -17,7 +17,7 @@ import {
       "http://localhost:8080/playground-elements@0.18.1&raw/playground-service-worker.js",
     );
     assertEquals(res.status, 200);
-    assertEquals(res.headers.get("content-type"), "application/javascript");
+    assertEquals(res.headers.get("content-type"), "application/javascript; charset=utf-8");
     assertStringIncludes(await res.text(), "!function(){");
   });
   

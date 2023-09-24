@@ -285,6 +285,22 @@ Deno.test("esm-worker", {
     assertEquals(pkgJson.name, "react");
   });
 
+  await t.step("npm assets (raw)", async () => {
+    const res = await fetch(
+      `${workerOrigin}/playground-elements@0.18.1&raw/playground-service-worker.js`
+    );
+    assertEquals(res.status, 200);
+    assertEquals(
+      res.headers.get("Content-Type"),
+      "application/javascript; charset=utf-8",
+    );
+    assertEquals(
+      res.headers.get("Cache-Control"),
+      "public, max-age=31536000, immutable",
+    );
+    assertStringIncludes(await res.text(), "!function(){");
+  });
+
   await t.step("gh modules", async () => {
     const res = await fetch(`${workerOrigin}/gh/microsoft/tslib`, {
       redirect: "manual",
