@@ -114,7 +114,7 @@ in combination with `?deps`:
 import useSWR from "https://esm.sh/swr?alias=react:preact/compat&deps=preact@10.5.14";
 ```
 
-The origin idea was coming from
+The original idea came from
 [@lucacasonato](https://github.com/lucacasonato).
 
 ### Tree Shaking
