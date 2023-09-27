@@ -1030,13 +1030,14 @@ func (task *BuildTask) resolveExternal(specifier string, kind api.ResolveKind) s
 	}
 
 	if kind == api.ResolveJSRequireCall {
-		has := false
+		var found bool
 		for _, v := range task.requires {
-			if has = v[0] == specifier; has {
+			if v[0] == specifier {
+				found = true
 				break
 			}
 		}
-		if !has {
+		if !found {
 			task.requires = append([][2]string{{specifier, resolvedPath}}, task.requires...)
 		}
 		return specifier
