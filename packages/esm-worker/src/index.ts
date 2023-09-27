@@ -648,6 +648,7 @@ async function fetchESM(
   const KV = Reflect.get(env, "KV") as KVNamespace | undefined ?? asKV(storage);
   const noStore = req.headers.has("X-Real-Origin");
   const isModule = !(
+    ctx.url.searchParams.has('raw') ||
     pathname.endsWith(".d.ts") ||
     pathname.endsWith(".d.mts") ||
     pathname.endsWith(".map")
