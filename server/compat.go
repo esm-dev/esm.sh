@@ -95,25 +95,25 @@ var jsFeatures = []compat.JSFeature{
 }
 
 func validateESMAFeatures(target api.Target) int {
-	constraints := make(map[compat.Engine][]int)
+	constraints := make(map[compat.Engine]compat.Semver)
 
 	switch target {
 	case api.ES2015:
-		constraints[compat.ES] = []int{2015}
+		constraints[compat.ES] = compat.Semver{Parts: []int{2015}}
 	case api.ES2016:
-		constraints[compat.ES] = []int{2016}
+		constraints[compat.ES] = compat.Semver{Parts: []int{2016}}
 	case api.ES2017:
-		constraints[compat.ES] = []int{2017}
+		constraints[compat.ES] = compat.Semver{Parts: []int{2017}}
 	case api.ES2018:
-		constraints[compat.ES] = []int{2018}
+		constraints[compat.ES] = compat.Semver{Parts: []int{2018}}
 	case api.ES2019:
-		constraints[compat.ES] = []int{2019}
+		constraints[compat.ES] = compat.Semver{Parts: []int{2019}}
 	case api.ES2020:
-		constraints[compat.ES] = []int{2020}
+		constraints[compat.ES] = compat.Semver{Parts: []int{2020}}
 	case api.ES2021:
-		constraints[compat.ES] = []int{2021}
+		constraints[compat.ES] = compat.Semver{Parts: []int{2021}}
 	case api.ES2022:
-		constraints[compat.ES] = []int{2022}
+		constraints[compat.ES] = compat.Semver{Parts: []int{2022}}
 	case api.ESNext:
 	default:
 		panic("invalid target")
@@ -123,16 +123,16 @@ func validateESMAFeatures(target api.Target) int {
 }
 
 func validateEngineFeatures(engine api.Engine) int {
-	constraints := make(map[compat.Engine][]int)
+	constraints := make(map[compat.Engine]compat.Semver)
 
 	if match := regexpBrowserVersion.FindStringSubmatch(engine.Version); match != nil {
 		if major, err := strconv.Atoi(match[1]); err == nil {
-			version := []int{major}
+			version := compat.Semver{Parts: []int{major}}
 			if minor, err := strconv.Atoi(match[2]); err == nil {
-				version = append(version, minor)
+				version.Parts = append(version.Parts, minor)
 			}
 			if patch, err := strconv.Atoi(match[3]); err == nil {
-				version = append(version, patch)
+				version.Parts = append(version.Parts, patch)
 			}
 			switch engine.Name {
 			case api.EngineNode:
