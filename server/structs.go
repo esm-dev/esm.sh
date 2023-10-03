@@ -134,6 +134,7 @@ func (a SortedPaths) Swap(i, j int) {
 // The orderedMap type, has similar operations as the default map type
 // copied from https://gitlab.com/c0b/go-ordered-json
 type orderedMap struct {
+	lock sync.RWMutex
 	m    map[string]interface{}
 	l    *list.List
 	keys map[string]*list.Element // the double linked list for delete and lookup to be O(1)
@@ -151,6 +152,8 @@ func newOrderedMap() *orderedMap {
 // Set sets value for particular key, this will remember the order of keys inserted
 // but if the key already exists, the order is not updated.
 func (om *orderedMap) Set(key string, value interface{}) {
+	om.lock.Lock()
+	defer om.lock.Unlock()
 	if _, ok := om.m[key]; !ok {
 		om.keys[key] = om.l.PushBack(key)
 	}

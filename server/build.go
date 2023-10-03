@@ -11,6 +11,7 @@ import (
 	"path"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/evanw/esbuild/pkg/api"
@@ -37,6 +38,7 @@ type BuildTask struct {
 	Bundle       bool
 	Deprecated   string
 	// internal
+	lock        sync.Mutex
 	id          string
 	stage       string
 	wd          string
@@ -343,9 +345,8 @@ rebuild:
 							return api.OnResolveResult{Path: args.Path, External: true}, nil
 						}
 
-						// ignore `require()`
-						isRequireCall := args.Kind == api.ResolveJSRequireCall
-						if isRequireCall && task.Args.ignoreRequire && npm.Module != "" {
+						// `?ignore-require`
+						if task.Args.ignoreRequire && args.Kind == api.ResolveJSRequireCall && npm.Module != "" {
 							return api.OnResolveResult{Path: args.Path, External: true}, nil
 						}
 
@@ -781,20 +782,20 @@ rebuild:
 			}
 
 			if len(task.requires) > 0 {
-				tmp := make([]bool, len(task.requires))
-				for i, dep := range task.requires {
-					name := dep[0]
-					url := dep[1]
+				isEsModule := make([]bool, len(task.requires))
+				for i, d := range task.requires {
+					name := d[0]
+					url := d[1]
 					// if `require("module").default` found
 					if bytes.Contains(jsContent, []byte(fmt.Sprintf(`("%s").default`, name))) {
-						tmp[i] = true
+						isEsModule[i] = true
 					} else if !isLocalSpecifier(name) && !internalNodeModules[name] {
 						pkg, p, formJson, e := task.getPackageInfo(name)
 						if e == nil {
 							// if the dep is a esm only package
 							// or the dep(cjs) exports `__esModule`
 							if p.Type == "module" {
-								tmp[i] = true
+								isEsModule[i] = true
 							} else {
 								t := &BuildTask{
 									Args:   task.Args,
@@ -809,7 +810,7 @@ rebuild:
 								if e == nil {
 									m, _, _, e := t.analyze(true)
 									if e == nil && includes(m.NamedExports, "__esModule") {
-										tmp[i] = true
+										isEsModule[i] = true
 									}
 								}
 							}
@@ -818,9 +819,14 @@ rebuild:
 					fmt.Fprintf(header, `import * as __%x$ from "%s";%s`, i, url, EOL)
 				}
 				fmt.Fprint(header, `var require=n=>{const e=m=>typeof m.default<"u"?m.default:m,c=m=>Object.assign({},m);switch(n){`)
-				for i, dep := range task.requires {
-					name := dep[0]
-					esModule := tmp[i]
+				record := newStringSet()
+				for i, d := range task.requires {
+					name := d[0]
+					if record.Has(name) {
+						continue
+					}
+					record.Add(name)
+					esModule := isEsModule[i]
 					if esModule {
 						fmt.Fprintf(header, `case"%s":return c(__%x$);`, name, i)
 					} else {
@@ -884,7 +890,12 @@ rebuild:
 		}
 	}
 
+	record := newStringSet()
 	esm.Deps = filter(task.imports, func(dep string) bool {
+		if record.Has(dep) {
+			return false
+		}
+		record.Add(dep)
 		return strings.HasPrefix(dep, "/") || strings.HasPrefix(dep, "http:") || strings.HasPrefix(dep, "https:")
 	})
 
@@ -893,8 +904,7 @@ rebuild:
 	return
 }
 
-func (task *BuildTask) resolveExternal(specifier string, kind api.ResolveKind) string {
-	var resolvedPath string
+func (task *BuildTask) resolveExternal(specifier string, kind api.ResolveKind) (resolvedPath string) {
 	// node builtin module
 	if internalNodeModules[specifier] && !task.Args.external.Has(getPkgName(specifier)) {
 		if task.Target == "node" {
@@ -944,32 +954,6 @@ func (task *BuildTask) resolveExternal(specifier string, kind api.ResolveKind) s
 		}
 		resolvedPath = task.getImportPath(subPkg, encodeBuildArgsPrefix(task.Args, subPkg, false))
 	}
-	// use version defined in `?deps` query
-	if resolvedPath == "" {
-		for _, dep := range task.Args.deps {
-			if specifier == dep.Name || strings.HasPrefix(specifier, dep.Name+"/") {
-				var subPath string
-				if specifier != dep.Name {
-					subPath = strings.TrimPrefix(specifier, dep.Name+"/")
-				}
-				subPkg := Pkg{
-					Name:      dep.Name,
-					Version:   dep.Version,
-					Subpath:   subPath,
-					Submodule: toModuleName(subPath),
-				}
-				resolvedPath = task.getImportPath(subPkg, encodeBuildArgsPrefix(task.Args, subPkg, false))
-				break
-			}
-		}
-	}
-	// force the dependency version of `react` equals to react-dom
-	if resolvedPath == "" && task.Pkg.Name == "react-dom" && specifier == "react" {
-		resolvedPath = task.getImportPath(Pkg{
-			Name:    specifier,
-			Version: task.Pkg.Version,
-		}, "")
-	}
 	// replace some polyfills with native APIs
 	if resolvedPath == "" {
 		switch specifier {
@@ -1014,35 +998,39 @@ func (task *BuildTask) resolveExternal(specifier string, kind api.ResolveKind) s
 		}
 		args := BuildArgs{
 			alias:      cloneMap(task.Args.alias),
+			conditions: newStringSet(task.Args.conditions.Values()...),
 			external:   newStringSet(task.Args.external.Values()...),
 			exports:    newStringSet(),
-			conditions: newStringSet(),
 		}
-		if stableBuild[pkgName] {
-			args.alias = map[string]string{}
-			args.external.Reset()
+		// force the dependency version of `react` equals to react-dom
+		if task.Pkg.Name == "react-dom" && specifier == "react" {
+			pkg.Version = task.Pkg.Version
+		}
+		// use version defined in `?deps` query
+		for _, dep := range task.Args.deps {
+			if specifier == dep.Name || strings.HasPrefix(specifier, dep.Name+"/") {
+				pkg.Version = dep.Version
+				break
+			}
 		}
 		resolvedPath = task.getImportPath(pkg, encodeBuildArgsPrefix(args, pkg, false))
 	}
 
-	if !includes(task.imports, resolvedPath) && kind != api.ResolveJSDynamicImport {
+	if kind != api.ResolveJSDynamicImport {
+		task.lock.Lock()
 		task.imports = append(task.imports, resolvedPath)
+		task.lock.Unlock()
 	}
 
+	// `require("module")`
 	if kind == api.ResolveJSRequireCall {
-		var found bool
-		for _, v := range task.requires {
-			if v[0] == specifier {
-				found = true
-				break
-			}
-		}
-		if !found {
-			task.requires = append([][2]string{{specifier, resolvedPath}}, task.requires...)
-		}
-		return specifier
+		task.lock.Lock()
+		task.requires = append(task.requires, [2]string{specifier, resolvedPath})
+		task.lock.Unlock()
+		resolvedPath = specifier
 	}
-	return resolvedPath
+
+	return
 }
 
 func (task *BuildTask) storeToDB() {

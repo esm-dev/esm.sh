@@ -81,12 +81,6 @@ func (task *BuildTask) getImportPath(pkg Pkg, buildArgsPrefix string) string {
 	if task.Dev {
 		name += ".development"
 	}
-
-	// clear build args for stable build
-	if buildArgsPrefix != "" && stableBuild[pkg.Name] && pkg.Submodule == "" {
-		buildArgsPrefix = ""
-	}
-
 	return fmt.Sprintf(
 		"%s/%s/%s@%s/%s%s/%s%s",
 		cfg.CdnBasePath,
@@ -570,57 +564,60 @@ func (task *BuildTask) applyConditions(p *NpmPackage, exports interface{}, pType
 	}
 
 	om, ok := exports.(*orderedMap)
-	if ok {
-		targetConditions := []string{"browser"}
-		conditions := []string{"module", "import", "es2015"}
-		_, hasRequireCondition := om.m["require"]
-		_, hasNodeCondition := om.m["node"]
-		if pType == "module" || hasRequireCondition || hasNodeCondition {
-			conditions = append(conditions, "default")
-		}
-		switch task.Target {
-		case "deno", "denonext":
-			targetConditions = []string{"deno", "worker"}
-			conditions = append(conditions, "browser")
-			// priority use `node` condition for solid.js (< 1.5.6) in deno
-			if (p.Name == "solid-js" || strings.HasPrefix(p.Name, "solid-js/")) && semverLessThan(p.Version, "1.5.6") {
-				targetConditions = []string{"node"}
+	if !ok {
+		return
+	}
+
+	for e := om.l.Front(); e != nil; e = e.Next() {
+		key := e.Value.(string)
+		value := om.m[key]
+		s, ok := value.(string)
+		if ok && s != "" {
+			switch key {
+			case "types":
+				p.Types = s
+			case "typings":
+				p.Typings = s
 			}
-		case "node":
+		}
+	}
+
+	targetConditions := []string{"browser"}
+	conditions := []string{"module", "import", "es2015"}
+	_, hasRequireCondition := om.m["require"]
+	_, hasNodeCondition := om.m["node"]
+	if pType == "module" || hasRequireCondition || hasNodeCondition {
+		conditions = append(conditions, "default")
+	}
+	switch task.Target {
+	case "deno", "denonext":
+		targetConditions = []string{"deno", "worker"}
+		conditions = append(conditions, "browser")
+		// priority use `node` condition for solid.js (< 1.5.6) in deno
+		if (p.Name == "solid-js" || strings.HasPrefix(p.Name, "solid-js/")) && semverLessThan(p.Version, "1.5.6") {
 			targetConditions = []string{"node"}
 		}
-		if task.Dev {
-			targetConditions = append(targetConditions, "development")
+	case "node":
+		targetConditions = []string{"node"}
+	}
+	if task.Dev {
+		targetConditions = append(targetConditions, "development")
+	}
+	if task.Args.conditions.Len() > 0 {
+		targetConditions = append(task.Args.conditions.Values(), targetConditions...)
+	}
+	for _, condition := range append(targetConditions, conditions...) {
+		v, ok := om.m[condition]
+		if ok {
+			task.applyConditions(p, v, "module")
+			return
 		}
-		if task.Args.conditions.Len() > 0 {
-			targetConditions = append(task.Args.conditions.Values(), targetConditions...)
-		}
-		for _, condition := range append(targetConditions, conditions...) {
-			v, ok := om.m[condition]
-			if ok {
-				task.applyConditions(p, v, "module")
-				break
-			}
-		}
-		for _, condition := range append(targetConditions, "require", "node", "default") {
-			v, ok := om.m[condition]
-			if ok {
-				task.applyConditions(p, v, "commonjs")
-				break
-			}
-		}
-		for e := om.l.Front(); e != nil; e = e.Next() {
-			key := e.Value.(string)
-			value := om.m[key]
-			s, ok := value.(string)
-			if ok && s != "" {
-				switch key {
-				case "types":
-					p.Types = s
-				case "typings":
-					p.Typings = s
-				}
-			}
+	}
+	for _, condition := range append(targetConditions, "require", "node", "default") {
+		v, ok := om.m[condition]
+		if ok {
+			task.applyConditions(p, v, "commonjs")
+			break
 		}
 	}
 }
