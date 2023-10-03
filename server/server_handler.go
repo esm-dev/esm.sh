@@ -1028,7 +1028,7 @@ func esmHandler() rex.Handle {
 				if _, ok := targets[maybeTarget]; ok {
 					submodule := strings.Join(a[1:], "/")
 					pkgName := strings.TrimSuffix(path.Base(reqPkg.Name), ".js")
-					if strings.HasSuffix(submodule, ".css") {
+					if strings.HasSuffix(submodule, ".css") && strings.HasPrefix(reqPkg.Subpath, ".js") {
 						if submodule == pkgName+".css" {
 							reqPkg.Submodule = ""
 							target = maybeTarget
