@@ -1,9 +1,11 @@
 // deno-lint-ignore-file no-explicit-any
 import { assertStringIncludes } from "https://deno.land/std@0.180.0/testing/asserts.ts";
-
-import React from "http://localhost:8080/react@canary";
-import ReactDom from "http://localhost:8080/react-dom@canary/server";
-import ReactServerDom from "http://localhost:8080/react-server-dom-webpack@canary/server.browser?deps=react@canary,react-dom@canary";
+// deno-lint-ignore ban-ts-comment
+// @ts-ignore
+globalThis.__webpack_require__ = () => {};
+import React from "http://localhost:8080/react@canary?conditions=react-server";
+import ReactDom from "http://localhost:8080/react-dom@canary/server?conditions=react-server";
+import ReactServerDom from "http://localhost:8080/react-server-dom-turbopack@canary/server?deps=react@canary,react-dom@canary&conditions=react-server";
 
 /**
  * Wrap a client-side module import with metadata
