@@ -177,7 +177,7 @@ func (task *BuildTask) build() (err error) {
 	}
 
 	esm, npm, reexport, err := task.analyze(false)
-	if err != nil {
+	if err != nil && !strings.HasPrefix(err.Error(), "cjsLexer: Can't resolve") {
 		return
 	}
 	task.npm = npm

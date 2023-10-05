@@ -161,7 +161,7 @@ func (task *BuildTask) analyze(forceCjsOnly bool) (esm *ESMBuild, npm NpmPackage
 	esm = &ESMBuild{}
 
 	defer func() {
-		esm.FromCJS = npm.Main != "" && npm.Module == ""
+		esm.FromCJS = npm.Module == "" && npm.Main != ""
 		esm.TypesOnly = isTypesOnlyPackage(npm)
 	}()
 
@@ -327,6 +327,9 @@ func (task *BuildTask) analyze(forceCjsOnly bool) (esm *ESMBuild, npm NpmPackage
 			return
 		}
 
+		npm.Main = npm.Module
+		npm.Module = ""
+
 		var ret cjsExportsResult
 		ret, err = cjsLexer(wd, path.Join(wd, "node_modules", pkg.Name, modulePath), nodeEnv)
 		if err == nil && ret.Error != "" {
@@ -336,8 +339,6 @@ func (task *BuildTask) analyze(forceCjsOnly bool) (esm *ESMBuild, npm NpmPackage
 			return
 		}
 		reexport = ret.Reexport
-		npm.Main = npm.Module
-		npm.Module = ""
 		esm.HasExportDefault = ret.ExportDefault
 		esm.NamedExports = ret.Exports
 		log.Warnf("fake ES module '%s' of '%s'", npm.Main, npm.Name)
