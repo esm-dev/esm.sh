@@ -31,6 +31,7 @@ var (
 	regexpLocPath          = regexp.MustCompile(`(\.js):\d+:\d+$`)
 	regexpJSIdent          = regexp.MustCompile(`^[a-zA-Z_$][\w$]*$`)
 	regexpGlobalIdent      = regexp.MustCompile(`__[a-zA-Z]+\$`)
+	regexpVarEqual         = regexp.MustCompile(`var ([a-zA-Z]+)\s*=\s*[a-zA-Z]+$`)
 )
 
 var httpClient = &http.Client{

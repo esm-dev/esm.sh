@@ -10,6 +10,7 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"sync"
 	"time"
@@ -784,13 +785,26 @@ rebuild:
 			if len(task.requires) > 0 {
 				isEsModule := make([]bool, len(task.requires))
 				for i, d := range task.requires {
-					name := d[0]
-					url := d[1]
-					// if `require("module").default` found
-					if bytes.Contains(jsContent, []byte(fmt.Sprintf(`("%s").default`, name))) {
+					specifier := d[0]
+					fmt.Fprintf(header, `import * as __%x$ from "%s";%s`, i, d[1], EOL)
+					if bytes.Contains(jsContent, []byte(fmt.Sprintf(`("%s").default`, specifier))) {
+						// if `require("module").default` found
 						isEsModule[i] = true
-					} else if !isLocalSpecifier(name) && !internalNodeModules[name] {
-						pkg, p, formJson, e := task.getPackageInfo(name)
+						continue
+					}
+					if !isLocalSpecifier(specifier) && !internalNodeModules[specifier] {
+						if a := bytes.SplitN(jsContent, []byte(fmt.Sprintf(`("%s")`, specifier)), 2); len(a) == 2 {
+							p1 := a[0]
+							ret := regexpVarEqual.FindSubmatch(p1)
+							if len(ret) > 0 {
+								r, e := regexp.Compile(fmt.Sprintf(`[^a-zA-Z0-9_$]%s\(`, string(ret[len(ret)-1])))
+								if e == nil && r.Match(a[1]) {
+									// if `var a = require("module");a()` found
+									continue
+								}
+							}
+						}
+						pkg, p, formJson, e := task.getPackageInfo(specifier)
 						if e == nil {
 							// if the dep is a esm only package
 							// or the dep(cjs) exports `__esModule`
@@ -816,21 +830,20 @@ rebuild:
 							}
 						}
 					}
-					fmt.Fprintf(header, `import * as __%x$ from "%s";%s`, i, url, EOL)
 				}
 				fmt.Fprint(header, `var require=n=>{const e=m=>typeof m.default<"u"?m.default:m,c=m=>Object.assign({},m);switch(n){`)
 				record := newStringSet()
 				for i, d := range task.requires {
-					name := d[0]
-					if record.Has(name) {
+					specifier := d[0]
+					if record.Has(specifier) {
 						continue
 					}
-					record.Add(name)
+					record.Add(specifier)
 					esModule := isEsModule[i]
 					if esModule {
-						fmt.Fprintf(header, `case"%s":return c(__%x$);`, name, i)
+						fmt.Fprintf(header, `case"%s":return c(__%x$);`, specifier, i)
 					} else {
-						fmt.Fprintf(header, `case"%s":return e(__%x$);`, name, i)
+						fmt.Fprintf(header, `case"%s":return e(__%x$);`, specifier, i)
 					}
 				}
 				fmt.Fprintf(header, `default:throw new Error("module \""+n+"\" not found");}};%s`, EOL)
