@@ -63,12 +63,14 @@ impl CJSLexer {
         }
       }
     } else if let Expr::Call(call) = expr {
-      if let Some(callee) = with_expr_callee(call) {
-        if let Some(reexport) = self.as_reexport(callee) {
-          self.clear();
-          self.reexports.insert(format!("{}()", reexport));
-        } else if let Some(FnDesc { stmts, .. }) = self.as_function(callee) {
-          self.walk_body(stmts, true);
+      if call.args.len() == 0 {
+        if let Some(callee) = with_expr_callee(call) {
+          if let Some(reexport) = self.as_reexport(callee) {
+            self.clear();
+            self.reexports.insert(format!("{}()", reexport));
+          } else if let Some(FnDesc { stmts, .. }) = self.as_function(callee) {
+            self.walk_body(stmts, true);
+          }
         }
       }
     }
