@@ -392,13 +392,16 @@ rebuild:
 								fullFilepath := filepath.Join(args.ResolveDir, specifier)
 								spec = "." + strings.TrimPrefix(fullFilepath, path.Join(task.installDir, "node_modules", npm.Name))
 							}
+							if _, ok := npm.Browser[spec]; !ok && path.Ext(spec) == "" {
+								spec += ".js"
+							}
 							if name, ok := npm.Browser[spec]; ok {
 								if name == "" {
 									// browser exclude
 									return api.OnResolveResult{Path: args.Path, Namespace: "browser-exclude"}, nil
 								}
 								if strings.HasPrefix(name, "./") {
-									specifier = path.Join(npm.Name, name)
+									specifier = path.Join(task.installDir, "node_modules", npm.Name, name)
 								} else {
 									specifier = name
 								}
