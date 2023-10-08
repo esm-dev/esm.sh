@@ -37,4 +37,4 @@ jobs:
           context: ./.github/docker
           platforms: linux/amd64,linux/arm64
           push: true
-          tags: ghcr.io/esm-dev/esm.sh:latest,ghcr.io/esm-dev/esm.sh:v132
+          tags: ghcr.io/esm-dev/esm.sh:latest,ghcr.io/esm-dev/esm.sh:v133

@@ -11,8 +11,8 @@ import type {
   Context,
   HttpMetadata,
   WorkerStorage,
-} from "https://esm.sh/esm-worker@0.132.0";
-import { withESMWorker } from "https://esm.sh/esm-worker@0.132.0";
+} from "https://esm.sh/esm-worker@0.133.0";
+import { withESMWorker } from "https://esm.sh/esm-worker@0.133.0";
 
 type Handler = (
   request: Request,
@@ -167,7 +167,9 @@ if (import.meta.main && !isDenoDeploy) {
     );
     console.log(
       "%cThis is local version of esm.sh running on %cDeno 🦕%c.",
-      "color:gray;","color: green", "color:gray;"
+      "color:gray;",
+      "color: green",
+      "color:gray;",
     );
     console.log("");
     console.log("Usage:");
@@ -180,7 +182,9 @@ if (import.meta.main && !isDenoDeploy) {
     console.log("ENVIRONMENT VARIABLES:");
     console.log("  ESM_ORIGIN    The origin of esm.sh server.");
     console.log("  ESM_TOKEN     The token of esm.sh server.");
-    console.log("  NPM_REGISTRY  The npm registry, Default is 'https://registry.npmjs.org/'.");
+    console.log(
+      "  NPM_REGISTRY  The npm registry, Default is 'https://registry.npmjs.org/'.",
+    );
     console.log("  NPM_TOKEN     The npm token.");
     Deno.exit(0);
   }
@@ -261,7 +265,9 @@ if (import.meta.main && !isDenoDeploy) {
       );
       console.log(
         "%cThis is local version of esm.sh running on %cDeno 🦕%c.",
-        "color:gray;","color: green", "color:gray;"
+        "color:gray;",
+        "color: green",
+        "color:gray;",
       );
       console.log(
         `Homepage: %chttp://localhost:${port}`,

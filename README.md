@@ -273,8 +273,8 @@ package version.
 ```json
 {
   "imports": {
-    "react-dom": "https://esm.sh/react-dom@18.2.0?pin=v132&dev",
-    "react-dom/": "https://esm.sh/react-dom@18.2.0&pin=v132&dev/"
+    "react-dom": "https://esm.sh/react-dom@18.2.0?pin=v133&dev",
+    "react-dom/": "https://esm.sh/react-dom@18.2.0&pin=v133&dev/"
   }
 }
 ```
@@ -289,15 +289,15 @@ without transformation into ES modules. To do so, you need to add a `?raw`
 query to the request URL.
 
 For example, you might need to register a package's source script as a service worker
-in a browser that [does not yet support](https://caniuse.com/mdn-api_serviceworker_ecmascript_modules) 
+in a browser that [does not yet support](https://caniuse.com/mdn-api_serviceworker_ecmascript_modules)
 the `type: "module"` option:
 
 ```js
 await navigator.serviceWorker.register(
   new URL(
-    "https://esm.sh/playground-elements@0.18.1/playground-service-worker.js?raw", 
+    "https://esm.sh/playground-elements@0.18.1/playground-service-worker.js?raw",
     import.meta.url.href
-  ), 
+  ),
   { scope: '/' }
 );
 ```
@@ -468,9 +468,9 @@ The `?pin` query allows you to specify a specific build version of a module,
 which is an **immutable** cached version stored on the esm.sh CDN.
 
 ```js
-import React from "https://esm.sh/react-dom?pin=v132";
+import React from "https://esm.sh/react-dom?pin=v133";
 // or use version prefix
-import React from "https://esm.sh/v132/react-dom";
+import React from "https://esm.sh/v133/react-dom";
 ```
 
 By using the `?pin` query in the import statement, you can rest assured that the

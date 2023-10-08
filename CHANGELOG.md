@@ -1,5 +1,17 @@
 # Changelog
 
+## v133
+
+- Add `?raw` to support requests for raw package source files (#731 by @johnyanarella)
+- Add global `setMaxListeners` to `node:events` polyfill (#719)
+- cjs-lexer: resolving error now doesn't break build (close #738)
+- Fix `cwd` method of `node:process` polyfill (close #718)
+- Fix `applyConditions` function use `node` condition for browser (close #732)
+- Fix `*.css.js` path (close #728)
+- Fix some invalid _require_ imports (close #724)
+- Fix relative path resolving of `browser` in package.json
+- Upgrade esbuild to **0.19.4**
+
 ## v132
 
 - Resolve node internal modules when `?external=*` set (close #714)

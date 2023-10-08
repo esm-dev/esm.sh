@@ -25,9 +25,9 @@
     }
   },
   "dependencies": {
-    "esm-worker": "^0.132.0"
+    "esm-worker": "0.133.0"
   },
   "devDependencies": {
-    "esbuild": "0.19.2"
+    "esbuild": "0.19.4"
   }
 }
