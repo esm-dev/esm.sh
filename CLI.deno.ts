@@ -28,7 +28,6 @@ const stableBuild = new Set([
 ]);
 
 let imFilename = "import_map.json";
-let indentWidth = 2;
 
 async function add(args: string[], options: Record<string, string>) {
   if (options.alias && args.length > 1) {
@@ -170,6 +169,9 @@ async function init(_args: string[], _options: Record<string, string>) {
   if (!isNEString(config.importMap)) {
     config.importMap = imFilename;
   }
+  if (config.importMap === "deno.json") {
+    delete config.importMap;
+  }
   const tasks = config.tasks as Record<string, string> | undefined;
   config.tasks = {
     ...tasks,
@@ -177,11 +179,21 @@ async function init(_args: string[], _options: Record<string, string>) {
     "esm:update": `deno run -A ${importUrl.origin}/${VERSION} update`,
     "esm:remove": `deno run -A ${importUrl.origin}/${VERSION} remove`,
   };
-  await Deno.writeTextFile(
-    "deno.json",
-    JSON.stringify(config, null, indentWidth),
-  );
-  await saveImportMap(importMap);
+  if (imFilename === "deno.json") {
+    await saveImportMap({
+      ...config,
+      ...importMap
+    });
+  }
+  else {
+    await Deno.writeTextFile(
+      "deno.json",
+      await denoFmt(
+        JSON.stringify(config)
+      )
+    );
+    await saveImportMap(importMap);
+  }
   console.log("Initialized %cdeno.json%c, 3 task added:", "color:green", "");
   console.log(
     "  - %cdeno task esm:add%c [packages...]",
@@ -259,12 +271,36 @@ async function fetchPkgInfo(query: string): Promise<Package | null> {
   return pkg;
 }
 
+// https://github.com/denoland/fresh/blob/main/src/dev/mod.ts#L154-L170
+async function denoFmt(code: string, ext = "json") {
+  const proc = new Deno.Command(Deno.execPath(), {
+    args: ["fmt", "--ext", ext, "-"],
+    stdin: "piped",
+    stdout: "piped",
+    stderr: "null",
+  }).spawn();
+    
+  const raw = new ReadableStream({
+    start(controller) {
+      controller.enqueue(new TextEncoder().encode(code));
+      controller.close();
+    },
+  });
+  await raw.pipeTo(proc.stdin);
+  const { stdout } = await proc.output();
+  
+  const formattedStr = new TextDecoder().decode(stdout);
+  return formattedStr;
+}
+
 async function loadImportMap(): Promise<ImportMap> {
-  const importMap: ImportMap = { imports: {}, scopes: {} };
+  let importMap: ImportMap = { imports: {}, scopes: {} };
   try {
     const raw = (await Deno.readTextFile(imFilename)).trim();
     if (raw.startsWith("{") && raw.endsWith("}")) {
-      const { imports, scopes } = JSON.parse(raw);
+      const parsed = JSON.parse(raw);
+      const { imports, scopes } = parsed;
+      importMap = { ...parsed };
       if (imports) {
         Object.assign(importMap.imports, imports);
       }
@@ -304,10 +340,8 @@ async function saveImportMap(importMap: ImportMap): Promise<void> {
   // write
   await Deno.writeTextFile(
     imFilename,
-    JSON.stringify(
-      { imports: sortedImports, scopes: sortedScopes },
-      null,
-      indentWidth,
+    await denoFmt(
+      JSON.stringify({ ...importMap, imports: sortedImports, scopes: sortedScopes })
     ),
   );
 }
@@ -468,8 +502,8 @@ if (import.meta.main) {
     if (isNEString(config.importMap)) {
       imFilename = config.importMap;
     }
-    if (typeof config?.fmt?.options?.indentWidth === "number") {
-      indentWidth = config.fmt.options.indentWidth;
+    else {
+      imFilename = "deno.json";
     }
     await commands[command as keyof typeof commands](...parseFlags(args));
     console.log(`✨ Done in ${(performance.now() - start).toFixed(2)}ms`);
