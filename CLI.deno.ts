@@ -169,6 +169,9 @@ async function init(_args: string[], _options: Record<string, string>) {
   if (!isNEString(config.importMap)) {
     config.importMap = imFilename;
   }
+  if (config.importMap === "deno.json") {
+    delete config.importMap;
+  }
   const tasks = config.tasks as Record<string, string> | undefined;
   config.tasks = {
     ...tasks,
@@ -176,13 +179,21 @@ async function init(_args: string[], _options: Record<string, string>) {
     "esm:update": `deno run -A ${importUrl.origin}/${VERSION} update`,
     "esm:remove": `deno run -A ${importUrl.origin}/${VERSION} remove`,
   };
-  await Deno.writeTextFile(
-    "deno.json",
-    await denoFmt(
-      JSON.stringify(config)
-    )
-  );
-  await saveImportMap(importMap);
+  if (imFilename === "deno.json") {
+    await saveImportMap({
+      ...config,
+      ...importMap
+    });
+  }
+  else {
+    await Deno.writeTextFile(
+      "deno.json",
+      await denoFmt(
+        JSON.stringify(config)
+      )
+    );
+    await saveImportMap(importMap);
+  }
   console.log("Initialized %cdeno.json%c, 3 task added:", "color:green", "");
   console.log(
     "  - %cdeno task esm:add%c [packages...]",
@@ -283,11 +294,13 @@ async function denoFmt(code: string, ext = "json") {
 }
 
 async function loadImportMap(): Promise<ImportMap> {
-  const importMap: ImportMap = { imports: {}, scopes: {} };
+  let importMap: ImportMap = { imports: {}, scopes: {} };
   try {
     const raw = (await Deno.readTextFile(imFilename)).trim();
     if (raw.startsWith("{") && raw.endsWith("}")) {
-      const { imports, scopes } = JSON.parse(raw);
+      const parsed = JSON.parse(raw);
+      const { imports, scopes } = parsed;
+      importMap = { ...parsed };
       if (imports) {
         Object.assign(importMap.imports, imports);
       }
@@ -328,7 +341,7 @@ async function saveImportMap(importMap: ImportMap): Promise<void> {
   await Deno.writeTextFile(
     imFilename,
     await denoFmt(
-      JSON.stringify({ imports: sortedImports, scopes: sortedScopes })
+      JSON.stringify({ ...importMap, imports: sortedImports, scopes: sortedScopes })
     ),
   );
 }
@@ -488,6 +501,9 @@ if (import.meta.main) {
     const config = await getDenoConfig();
     if (isNEString(config.importMap)) {
       imFilename = config.importMap;
+    }
+    else {
+      imFilename = "deno.json";
     }
     if (typeof config?.fmt?.options?.indentWidth === "number") {
       indentWidth = config.fmt.options.indentWidth;
