@@ -28,7 +28,6 @@ const stableBuild = new Set([
 ]);
 
 let imFilename = "import_map.json";
-let indentWidth = 2;
 
 async function add(args: string[], options: Record<string, string>) {
   if (options.alias && args.length > 1) {
@@ -179,7 +178,9 @@ async function init(_args: string[], _options: Record<string, string>) {
   };
   await Deno.writeTextFile(
     "deno.json",
-    JSON.stringify(config, null, indentWidth),
+    await denoFmt(
+      JSON.stringify(config)
+    )
   );
   await saveImportMap(importMap);
   console.log("Initialized %cdeno.json%c, 3 task added:", "color:green", "");
@@ -259,6 +260,28 @@ async function fetchPkgInfo(query: string): Promise<Package | null> {
   return pkg;
 }
 
+// https://github.com/denoland/fresh/blob/main/src/dev/mod.ts#L154-L170
+async function denoFmt(code: string, ext = "json") {
+  const proc = new Deno.Command(Deno.execPath(), {
+    args: ["fmt", "--ext", ext, "-"],
+    stdin: "piped",
+    stdout: "piped",
+    stderr: "null",
+  }).spawn();
+    
+  const raw = new ReadableStream({
+    start(controller) {
+      controller.enqueue(new TextEncoder().encode(code));
+      controller.close();
+    },
+  });
+  await raw.pipeTo(proc.stdin);
+  const { stdout } = await proc.output();
+  
+  const formattedStr = new TextDecoder().decode(stdout);
+  return formattedStr;
+}
+
 async function loadImportMap(): Promise<ImportMap> {
   const importMap: ImportMap = { imports: {}, scopes: {} };
   try {
@@ -304,10 +327,8 @@ async function saveImportMap(importMap: ImportMap): Promise<void> {
   // write
   await Deno.writeTextFile(
     imFilename,
-    JSON.stringify(
-      { imports: sortedImports, scopes: sortedScopes },
-      null,
-      indentWidth,
+    await denoFmt(
+      JSON.stringify({ imports: sortedImports, scopes: sortedScopes })
     ),
   );
 }
