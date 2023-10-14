@@ -505,9 +505,6 @@ if (import.meta.main) {
     else {
       imFilename = "deno.json";
     }
-    if (typeof config?.fmt?.options?.indentWidth === "number") {
-      indentWidth = config.fmt.options.indentWidth;
-    }
     await commands[command as keyof typeof commands](...parseFlags(args));
     console.log(`✨ Done in ${(performance.now() - start).toFixed(2)}ms`);
   } catch (error) {
