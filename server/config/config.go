@@ -16,26 +16,27 @@ import (
 const MinBuildConcurrency = 4
 
 type Config struct {
-	Port             uint16  `json:"port,omitempty"`
-	TlsPort          uint16  `json:"tlsPort,omitempty"`
-	NsPort           uint16  `json:"nsPort,omitempty"`
-	BuildConcurrency uint16  `json:"buildConcurrency,omitempty"`
-	BanList          BanList `json:"banList,omitempty"`
-	AuthSecret       string  `json:"authSecret,omitempty"`
-	WorkDir          string  `json:"workDir,omitempty"`
-	Cache            string  `json:"cache,omitempty"`
-	Database         string  `json:"database,omitempty"`
-	Storage          string  `json:"storage,omitempty"`
-	LogLevel         string  `json:"logLevel,omitempty"`
-	LogDir           string  `json:"logDir,omitempty"`
-	CdnOrigin        string  `json:"cdnOrigin,omitempty"`
-	CdnBasePath      string  `json:"cdnBasePath,omitempty"`
-	NpmRegistry      string  `json:"npmRegistry,omitempty"`
-	NpmToken         string  `json:"npmToken,omitempty"`
-	NpmRegistryScope string  `json:"npmRegistryScope,omitempty"`
-	NpmUser          string  `json:"npmUser,omitempty"`
-	NpmPassword      string  `json:"npmPassword,omitempty"`
-	NoCompress       bool    `json:"noCompress,omitempty"`
+	Port             uint16    `json:"port,omitempty"`
+	TlsPort          uint16    `json:"tlsPort,omitempty"`
+	NsPort           uint16    `json:"nsPort,omitempty"`
+	BuildConcurrency uint16    `json:"buildConcurrency,omitempty"`
+	BanList          BanList   `json:"banList,omitempty"`
+	AllowList        AllowList `json:"allowList,omitempty"`
+	AuthSecret       string    `json:"authSecret,omitempty"`
+	WorkDir          string    `json:"workDir,omitempty"`
+	Cache            string    `json:"cache,omitempty"`
+	Database         string    `json:"database,omitempty"`
+	Storage          string    `json:"storage,omitempty"`
+	LogLevel         string    `json:"logLevel,omitempty"`
+	LogDir           string    `json:"logDir,omitempty"`
+	CdnOrigin        string    `json:"cdnOrigin,omitempty"`
+	CdnBasePath      string    `json:"cdnBasePath,omitempty"`
+	NpmRegistry      string    `json:"npmRegistry,omitempty"`
+	NpmToken         string    `json:"npmToken,omitempty"`
+	NpmRegistryScope string    `json:"npmRegistryScope,omitempty"`
+	NpmUser          string    `json:"npmUser,omitempty"`
+	NpmPassword      string    `json:"npmPassword,omitempty"`
+	NoCompress       bool      `json:"noCompress,omitempty"`
 }
 
 type BanList struct {
@@ -46,6 +47,16 @@ type BanList struct {
 type BanScope struct {
 	Name     string   `json:"name"`
 	Excludes []string `json:"excludes"`
+}
+
+type AllowList struct {
+	Packages []string     `json:"packages"`
+	Scopes   []AllowScope `json:"scopes"`
+}
+
+type AllowScope struct {
+	Name       string `json:"name"`
+	Includes []string `json:"includes"`
 }
 
 // Load loads config from the given file. Panic if failed to load.
@@ -188,16 +199,14 @@ func fixConfig(c *Config) *Config {
 	return c
 }
 
-// IsPackageBanned Checking if the package is banned.
-// The `packages` list is the highest priority ban rule to match,
-// so the `excludes` list in the `scopes` list won't take effect if the package is banned in `packages` list
-func (banList *BanList) IsPackageBanned(fullName string) bool {
-	var (
-		fullNameWithoutVersion  string // e.g. @github/faker
-		scope                   string // e.g. @github
-		nameWithoutVersionScope string // e.g. faker
-	)
-	paths := strings.Split(fullName, "/")
+// extractPackageName Will take a packageName as input extract key
+// parts and return them
+//
+// fullNameWithoutVersion  e.g. @github/faker
+// scope                   e.g. @github
+// nameWithoutVersionScope e.g. faker
+func extractPackageName(packageName string) (fullNameWithoutVersion string, scope string, nameWithoutVersionScope string) {
+	paths := strings.Split(packageName, "/")
 	if len(paths) < 2 {
 		// the package has no scope prefix
 		nameWithoutVersionScope = strings.Split(paths[0], "@")[0]
@@ -207,6 +216,15 @@ func (banList *BanList) IsPackageBanned(fullName string) bool {
 		nameWithoutVersionScope = strings.Split(paths[1], "@")[0]
 		fullNameWithoutVersion = fmt.Sprintf("%s/%s", scope, nameWithoutVersionScope)
 	}
+
+	return fullNameWithoutVersion, scope, nameWithoutVersionScope
+}
+
+// IsPackageBanned Checking if the package is banned.
+// The `packages` list is the highest priority ban rule to match,
+// so the `excludes` list in the `scopes` list won't take effect if the package is banned in `packages` list
+func (banList *BanList) IsPackageBanned(fullName string) bool {
+	fullNameWithoutVersion,	scope, nameWithoutVersionScope := extractPackageName(fullName)
 
 	for _, p := range banList.Packages {
 		if fullNameWithoutVersion == p {
@@ -222,6 +240,28 @@ func (banList *BanList) IsPackageBanned(fullName string) bool {
 
 	return false
 }
+
+// IsPackageAllowed Checking if the package is allowed.
+// The `packages` list is the highest priority allow rule to match,
+// so the `includes` list in the `scopes` list won't take effect if the package is allowed in `packages` list
+func (allowList *AllowList) IsPackageAllowed(fullName string) bool {
+	fullNameWithoutVersion,	scope, nameWithoutVersionScope := extractPackageName(fullName)
+
+	for _, p := range allowList.Packages {
+		if fullNameWithoutVersion == p {
+			return false
+		}
+	}
+
+	for _, s := range allowList.Scopes {
+		if scope == s.Name {
+			return !isPackageExcluded(nameWithoutVersionScope, s.Includes)
+		}
+	}
+
+	return true
+}
+
 
 func isPackageExcluded(name string, excludes []string) bool {
 	for _, exclude := range excludes {
