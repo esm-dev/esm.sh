@@ -255,7 +255,7 @@ func (allowList *AllowList) IsPackageAllowed(fullName string) bool {
 
 	for _, s := range allowList.Scopes {
 		if scope == s.Name {
-			return !isPackageInList(nameWithoutVersionScope, s.Includes)
+			return isPackageInList(nameWithoutVersionScope, s.Includes)
 		}
 	}
 
