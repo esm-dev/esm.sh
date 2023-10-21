@@ -189,7 +189,7 @@ async function init(_args: string[], _options: Record<string, string>) {
     await Deno.writeTextFile(
       "deno.json",
       await denoFmt(
-        JSON.stringify(config)
+        JSON.stringify(config, null, 4)
       )
     );
     await saveImportMap(importMap);
@@ -341,7 +341,11 @@ async function saveImportMap(importMap: ImportMap): Promise<void> {
   await Deno.writeTextFile(
     imFilename,
     await denoFmt(
-      JSON.stringify({ ...importMap, imports: sortedImports, scopes: sortedScopes })
+      JSON.stringify(
+        { ...importMap, imports: sortedImports, scopes: sortedScopes },
+        null,
+        4
+      )
     ),
   );
 }
