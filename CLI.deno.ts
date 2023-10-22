@@ -189,7 +189,7 @@ async function init(_args: string[], _options: Record<string, string>) {
     await Deno.writeTextFile(
       "deno.json",
       await denoFmt(
-        JSON.stringify(config)
+        JSON.stringify(config, null, 4)
       )
     );
     await saveImportMap(importMap);
@@ -317,13 +317,15 @@ async function loadImportMap(): Promise<ImportMap> {
 }
 
 async function saveImportMap(importMap: ImportMap): Promise<void> {
+  const scopes = importMap.scopes ?? {};
+
   // clean up
   for (const importName in importMap.imports) {
-    for (const [scopeName, scope] of Object.entries(importMap.scopes)) {
+    for (const [scopeName, scope] of Object.entries(scopes)) {
       if (importName in scope) {
         Reflect.deleteProperty(scope, importName);
         if (Object.keys(scope).length === 0) {
-          Reflect.deleteProperty(importMap.scopes, scopeName);
+          Reflect.deleteProperty(scopes, scopeName);
         }
       }
     }
@@ -332,7 +334,7 @@ async function saveImportMap(importMap: ImportMap): Promise<void> {
   // sort
   const sortedImports = sortImports(importMap.imports);
   const sortedScopes = Object.fromEntries(
-    Object.entries(importMap.scopes).sort(sortByKey).map((
+    Object.entries(scopes).sort(sortByKey).map((
       [key, scope],
     ) => [key, sortImports(scope)]),
   );
@@ -341,7 +343,11 @@ async function saveImportMap(importMap: ImportMap): Promise<void> {
   await Deno.writeTextFile(
     imFilename,
     await denoFmt(
-      JSON.stringify({ ...importMap, imports: sortedImports, scopes: sortedScopes })
+      JSON.stringify(
+        { ...importMap, imports: sortedImports, scopes: sortedScopes },
+        null,
+        4
+      )
     ),
   );
 }
