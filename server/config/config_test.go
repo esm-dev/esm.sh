@@ -232,5 +232,4 @@ func TestBanList_IsPackageBanned(t *testing.T) {
 			}
 		})
 	}
-
 }
