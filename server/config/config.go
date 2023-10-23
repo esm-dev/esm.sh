@@ -56,7 +56,6 @@ type AllowList struct {
 
 type AllowScope struct {
 	Name       string `json:"name"`
-	Includes []string `json:"includes"`
 }
 
 // Load loads config from the given file. Panic if failed to load.
@@ -245,21 +244,24 @@ func (banList *BanList) IsPackageBanned(fullName string) bool {
 // The `packages` list is the highest priority allow rule to match,
 // so the `includes` list in the `scopes` list won't take effect if the package is allowed in `packages` list
 func (allowList *AllowList) IsPackageAllowed(fullName string) bool {
-	fullNameWithoutVersion,	scope, nameWithoutVersionScope := extractPackageName(fullName)
+	if len(allowList.Packages) == 0 && len(allowList.Scopes) == 0 {
+		return true
+	}
+	fullNameWithoutVersion,	scope, _ := extractPackageName(fullName)
 
 	for _, p := range allowList.Packages {
 		if fullNameWithoutVersion == p {
-			return false
+			return true
 		}
 	}
 
 	for _, s := range allowList.Scopes {
 		if scope == s.Name {
-			return isPackageInList(nameWithoutVersionScope, s.Includes)
+			return true
 		}
 	}
 
-	return true
+	return false
 }
 
 
