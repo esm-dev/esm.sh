@@ -233,7 +233,7 @@ func (banList *BanList) IsPackageBanned(fullName string) bool {
 
 	for _, s := range banList.Scopes {
 		if scope == s.Name {
-			return !isPackageInList(nameWithoutVersionScope, s.Excludes)
+			return !isPackageExcluded(nameWithoutVersionScope, s.Excludes)
 		}
 	}
 
@@ -264,10 +264,9 @@ func (allowList *AllowList) IsPackageAllowed(fullName string) bool {
 	return false
 }
 
-
-func isPackageInList(name string, list []string) bool {
-	for _, list := range list {
-		if name == list {
+func isPackageExcluded(name string, excludes []string) bool {
+	for _, exclude := range excludes {
+		if name == exclude {
 			return true
 		}
 	}
