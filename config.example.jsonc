@@ -74,5 +74,13 @@
         "package_name"
       ]
     }]
+  },
+
+  // The list to only allow some packages or scopes.
+  "allowList": {
+    "packages": ["@some_scope/package_name"],
+    "scopes": [{
+      "name": "@your_scope",
+    }]
   }
 }
