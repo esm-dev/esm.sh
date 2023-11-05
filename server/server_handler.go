@@ -524,7 +524,7 @@ func esmHandler() rex.Handle {
 		// trim the leading `/` in pathname to get the package name
 		// e.g. /@ORG/PKG -> @ORG/PKG
 		packageFullName := pathname[1:]
-		pkgAllowed := cfg.AllowList.isPackageAllowed(packageFullName)
+		pkgAllowed := cfg.AllowList.IsPackageAllowed(packageFullName)
 		pkgBanned := cfg.BanList.IsPackageBanned(packageFullName)
 		if !pkgAllowed || pkgBanned {
 			return rex.Status(403, "forbidden")
