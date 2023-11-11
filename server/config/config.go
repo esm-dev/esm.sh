@@ -13,8 +13,6 @@ import (
 	"github.com/ije/gox/utils"
 )
 
-const MinBuildConcurrency = 4
-
 type Config struct {
 	Port             uint16    `json:"port,omitempty"`
 	TlsPort          uint16    `json:"tlsPort,omitempty"`
@@ -55,7 +53,7 @@ type AllowList struct {
 }
 
 type AllowScope struct {
-	Name       string `json:"name"`
+	Name string `json:"name"`
 }
 
 // Load loads config from the given file. Panic if failed to load.
@@ -146,10 +144,7 @@ func fixConfig(c *Config) *Config {
 		}
 	}
 	if c.BuildConcurrency == 0 {
-		c.BuildConcurrency = uint16(2 * runtime.NumCPU())
-	}
-	if c.BuildConcurrency < MinBuildConcurrency {
-		c.BuildConcurrency = MinBuildConcurrency
+		c.BuildConcurrency = uint16(runtime.NumCPU())
 	}
 	if c.Cache == "" {
 		c.Cache = "memory:default"
@@ -223,7 +218,7 @@ func extractPackageName(packageName string) (fullNameWithoutVersion string, scop
 // The `packages` list is the highest priority ban rule to match,
 // so the `excludes` list in the `scopes` list won't take effect if the package is banned in `packages` list
 func (banList *BanList) IsPackageBanned(fullName string) bool {
-	fullNameWithoutVersion,	scope, nameWithoutVersionScope := extractPackageName(fullName)
+	fullNameWithoutVersion, scope, nameWithoutVersionScope := extractPackageName(fullName)
 
 	for _, p := range banList.Packages {
 		if fullNameWithoutVersion == p {
@@ -247,7 +242,8 @@ func (allowList *AllowList) IsPackageAllowed(fullName string) bool {
 	if len(allowList.Packages) == 0 && len(allowList.Scopes) == 0 {
 		return true
 	}
-	fullNameWithoutVersion,	scope, _ := extractPackageName(fullName)
+
+	fullNameWithoutVersion, scope, _ := extractPackageName(fullName)
 
 	for _, p := range allowList.Packages {
 		if fullNameWithoutVersion == p {

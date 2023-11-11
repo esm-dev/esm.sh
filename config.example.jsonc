@@ -9,7 +9,7 @@
   // The port to listen server on for node service, default is 8088 (do not change if you don't know what you are doing).
   "nsPort": 8088,
 
-  // The build max concurrency, default is `max(4, 2*NumCPU)`
+  // The build max concurrency, default is `runtime.NumCPU()`
   "buildConcurrency": 0,
 
   // The work directory for the server app, default is "~/.esmd".
@@ -80,7 +80,7 @@
   "allowList": {
     "packages": ["@some_scope/package_name"],
     "scopes": [{
-      "name": "@your_scope",
+      "name": "@your_scope"
     }]
   }
 }
