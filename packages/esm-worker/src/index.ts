@@ -405,9 +405,7 @@ class ESMWorker {
           prefix += "*";
         }
         const eq = extraQuery ? "&" + extraQuery : "";
-        const distVersion = packageVersion
-          ? regInfo["dist-tags"]?.[packageVersion]
-          : undefined;
+        const distVersion = regInfo["dist-tags"]?.[packageVersion || "latest"];
         if (distVersion) {
           const uri = `${prefix}${pkg}@${
             fixPkgVersion(pkg, distVersion)
@@ -648,7 +646,7 @@ async function fetchESM(
   const KV = Reflect.get(env, "KV") as KVNamespace | undefined ?? asKV(storage);
   const noStore = req.headers.has("X-Real-Origin");
   const isModule = !(
-    ctx.url.searchParams.has('raw') ||
+    ctx.url.searchParams.has("raw") ||
     pathname.endsWith(".d.ts") ||
     pathname.endsWith(".d.mts") ||
     pathname.endsWith(".map")
