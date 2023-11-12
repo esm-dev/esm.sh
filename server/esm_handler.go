@@ -256,7 +256,7 @@ func esmHandler() rex.Handle {
 		if userAgent == "undici" || strings.HasPrefix(userAgent, "Node/") || strings.HasPrefix(userAgent, "Deno/") || strings.HasPrefix(userAgent, "Bun/") {
 			if pathname == "/" || regexpCliPath.MatchString(pathname) {
 				if strings.HasPrefix(userAgent, "Deno/") {
-					cliTs, err := embedFS.ReadFile("CLI.deno.ts")
+					cliTs, err := embedFS.ReadFile("server/embed/CLI.deno.ts")
 					if err != nil {
 						return err
 					}
@@ -264,7 +264,7 @@ func esmHandler() rex.Handle {
 					return bytes.ReplaceAll(cliTs, []byte("v{VERSION}"), []byte(fmt.Sprintf("v%d", CTX_BUILD_VERSION)))
 				}
 				if userAgent == "undici" || strings.HasPrefix(userAgent, "Node/") || strings.HasPrefix(userAgent, "Bun/") {
-					cliJs, err := embedFS.ReadFile("CLI.node.js")
+					cliJs, err := embedFS.ReadFile("server/embed/CLI.node.js")
 					if err != nil {
 						return err
 					}
@@ -476,19 +476,22 @@ func esmHandler() rex.Handle {
 			}
 			var data []byte
 			var err error
+			cType := "application/javascript; charset=utf-8"
 			if strings.HasPrefix(userAgent, "Deno/") {
-				data, err = embedFS.ReadFile("server.deno.ts")
+				data, err = embedFS.ReadFile("server/embed/server.deno.ts")
 				if err != nil {
 					return err
 				}
-			}
-			if userAgent == "undici" || strings.HasPrefix(userAgent, "Node/") || strings.HasPrefix(userAgent, "Bun/") {
-				data, err = embedFS.ReadFile("server.node.js")
+				cType = "application/typescript; charset=utf-8"
+			} else if userAgent == "undici" || strings.HasPrefix(userAgent, "Node/") || strings.HasPrefix(userAgent, "Bun/") {
+				data, err = embedFS.ReadFile("server/embed/server.node.js")
 				if err != nil {
 					return err
 				}
+			} else {
+				data = []byte("/* esm.sh - error */\nconsole.error('esm.sh server is not supported in browser environment.');")
 			}
-			header.Set("Content-Type", "application/typescript; charset=utf-8")
+			header.Set("Content-Type", cType)
 			header.Set("Cache-Control", "public, max-age=31536000, immutable")
 			return data
 		}
