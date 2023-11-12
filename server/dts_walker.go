@@ -65,7 +65,7 @@ func walkDts(r io.Reader, buf *bytes.Buffer, resolve func(specifier string, kind
 						kind = "referencePath"
 					}
 					res := resolve(path, kind, buf.Len())
-					if format == "types" && isRemoteSpecifier(res) {
+					if format == "types" && isHttpSepcifier(res) {
 						format = "path"
 					}
 					fmt.Fprintf(buf, `/// <reference %s="%s" />`, format, res)

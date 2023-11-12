@@ -59,7 +59,7 @@ import React = require("https://esm.sh/@types/react@1.0.0/index.d.ts");
 			if name == "react" || name == "react-dom" {
 				return fmt.Sprintf("https://esm.sh/@types/%s@1.0.0/index.d.ts", name)
 			}
-			pkgName, subPath := splitPkgPath(name)
+			pkgName, _, subPath := splitPkgPath(name)
 			if subPath != "" {
 				return fmt.Sprintf("https://esm.sh/%s@1.0.0/%s.d.ts", pkgName, subPath)
 			}

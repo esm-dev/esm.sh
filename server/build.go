@@ -412,7 +412,7 @@ rebuild:
 							if name, ok := task.Args.alias[specifier]; ok {
 								specifier = name
 							} else {
-								pkgName, subpath := splitPkgPath(specifier)
+								pkgName, _, subpath := splitPkgPath(specifier)
 								if subpath != "" {
 									if name, ok := task.Args.alias[pkgName]; ok {
 										specifier = name + "/" + subpath
@@ -425,7 +425,7 @@ rebuild:
 						for _, name := range nativeNodePackages {
 							if specifier == name || strings.HasPrefix(specifier, name+"/") {
 								if task.isDenoTarget() {
-									pkgName, subPath := splitPkgPath(specifier)
+									pkgName, _, subPath := splitPkgPath(specifier)
 									version := "latest"
 									if pkgName == task.Pkg.Name {
 										version = task.Pkg.Version
@@ -494,7 +494,7 @@ rebuild:
 									}, nil
 								}
 							}
-							pkgName, _ := splitPkgPath(specifier)
+							pkgName := getPkgName(specifier)
 							if !internalNodeModules[pkgName] {
 								_, ok := npm.PeerDependencies[pkgName]
 								if !ok {
@@ -613,7 +613,7 @@ rebuild:
 
 						// check `sideEffects`
 						sideEffects := api.SideEffectsTrue
-						pkgName, _ := splitPkgPath(specifier)
+						pkgName := getPkgName(specifier)
 						if f := path.Join(task.installDir, "node_modules", pkgName, "package.json"); fileExists(f) {
 							var np NpmPackage
 							if utils.ParseJSONFile(f, &np) == nil {
@@ -1008,7 +1008,7 @@ func (task *BuildTask) resolveExternal(specifier string, kind api.ResolveKind) (
 	}
 	// common npm dependency
 	if resolvedPath == "" {
-		pkgName, subpath := splitPkgPath(specifier)
+		pkgName, _, subpath := splitPkgPath(specifier)
 		version := "latest"
 		if pkgName == task.Pkg.Name {
 			version = task.Pkg.Version

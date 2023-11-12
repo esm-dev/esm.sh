@@ -24,15 +24,10 @@ func validatePkgPath(pathname string) (pkg Pkg, query string, err error) {
 		pathname = "/@" + pathname[4:]
 	}
 
-	pkgName, subpath := splitPkgPath(pathname)
-	name, maybeVersion := utils.SplitByLastByte(pkgName, '@')
-	if strings.HasPrefix(pkgName, "@") {
-		name, maybeVersion = utils.SplitByLastByte(pkgName[1:], '@')
-		name = "@" + name
-	}
-	fromEsmsh := strings.HasPrefix(name, "~") && valid.IsHexString(name[1:])
-	if !fromEsmsh && !validatePackageName(name) {
-		return Pkg{}, "", fmt.Errorf("invalid package name '%s'", name)
+	pkgName, maybeVersion, subpath := splitPkgPath(pathname)
+	fromEsmsh := strings.HasPrefix(pkgName, "~") && valid.IsHexString(pkgName[1:])
+	if !fromEsmsh && !validatePackageName(pkgName) {
+		return Pkg{}, "", fmt.Errorf("invalid package name '%s'", pkgName)
 	}
 
 	version, query := utils.SplitByFirstByte(maybeVersion, '&')
@@ -41,7 +36,7 @@ func validatePkgPath(pathname string) (pkg Pkg, query string, err error) {
 	}
 
 	pkg = Pkg{
-		Name:       name,
+		Name:       pkgName,
 		Version:    version,
 		Subpath:    subpath,
 		Submodule:  toModuleName(subpath),
@@ -88,7 +83,7 @@ func validatePkgPath(pathname string) (pkg Pkg, query string, err error) {
 
 	// use fixed version
 	for prefix, fixedVersion := range fixedPkgVersions {
-		if strings.HasPrefix(name+"@"+version, prefix) {
+		if strings.HasPrefix(pkgName+"@"+version, prefix) {
 			pkg.Version = fixedVersion
 			return
 		}
@@ -98,7 +93,7 @@ func validatePkgPath(pathname string) (pkg Pkg, query string, err error) {
 		return
 	}
 
-	p, _, err := getPackageInfo("", name, version)
+	p, _, err := getPackageInfo("", pkgName, version)
 	if err == nil {
 		pkg.Version = p.Version
 	}
@@ -189,18 +184,24 @@ func toModuleName(path string) string {
 	return ""
 }
 
-func splitPkgPath(specifier string) (pkgName string, subpath string) {
+func splitPkgPath(specifier string) (pkgName string, version string, subpath string) {
 	a := strings.Split(strings.TrimPrefix(specifier, "/"), "/")
-	pkgName = a[0]
+	pkgNameWithVersion := a[0]
 	subpath = strings.Join(a[1:], "/")
-	if strings.HasPrefix(pkgName, "@") && len(a) > 1 {
-		pkgName = a[0] + "/" + a[1]
+	if strings.HasPrefix(pkgNameWithVersion, "@") && len(a) > 1 {
+		pkgNameWithVersion = a[0] + "/" + a[1]
 		subpath = strings.Join(a[2:], "/")
+	}
+	if len(pkgNameWithVersion) > 0 && pkgNameWithVersion[0] == '@' {
+		pkgName, version = utils.SplitByLastByte(pkgNameWithVersion[1:], '@')
+		pkgName = "@" + pkgName
+	} else {
+		pkgName, version = utils.SplitByLastByte(pkgNameWithVersion, '@')
 	}
 	return
 }
 
 func getPkgName(specifier string) string {
-	name, _ := splitPkgPath(specifier)
+	name, _, _ := splitPkgPath(specifier)
 	return name
 }

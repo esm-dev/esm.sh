@@ -5,6 +5,18 @@ import (
 )
 
 func TestPkgPath(t *testing.T) {
+	pkgName, pkgVersion, subPath := splitPkgPath("react")
+	if pkgName != "react" || pkgVersion != "" || subPath != "" {
+		t.Fatal("invalid splitPkgPath('react')")
+	}
+	pkgName, pkgVersion, subPath = splitPkgPath("react@18.2.0")
+	if pkgName != "react" || pkgVersion != "18.2.0" || subPath != "" {
+		t.Fatal("invalid splitPkgPath('react@18.2.0')")
+	}
+	pkgName, pkgVersion, subPath = splitPkgPath("react-dom@18.2.0/server")
+	if pkgName != "react-dom" || pkgVersion != "18.2.0" || subPath != "server" {
+		t.Fatal("invalid splitPkgPath('react@18.2.0/server')")
+	}
 	pkg, q, err := validatePkgPath("react@18.2.0")
 	if err != nil {
 		t.Fatal(err)

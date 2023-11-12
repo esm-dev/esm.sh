@@ -13,14 +13,8 @@ export type BuildOutput = {
   bundleUrl: string;
 };
 
-export async function build(code: string): Promise<BuildOutput>;
-export async function build(options: BuildInput): Promise<BuildOutput>;
-export async function build(
-  codeOrOptions: BuildInput | string,
-): Promise<BuildOutput> {
-  const options = typeof codeOrOptions === "string"
-    ? { code: codeOrOptions }
-    : codeOrOptions;
+export async function build(input: string | BuildInput): Promise<BuildOutput> {
+  const options = typeof input === "string" ? { code: input } : input;
   if (!options?.code) {
     throw new Error("esm.sh [build] <400> missing code");
   }
@@ -50,10 +44,12 @@ export async function esm<T extends object = Record<string, any>>(
   };
 }
 
-async function withCache(code: string): Promise<BuildOutput> {
-  let key = code;
-  if (globalThis.crypto && globalThis.crypto.subtle) {
-    key = await hashText(code);
+export async function withCache(
+  input: string | BuildInput,
+): Promise<BuildOutput> {
+  let key = typeof input === "string" ? input : JSON.stringify(input);
+  if (globalThis.crypto) {
+    key = await hashText(key);
   }
   if (globalThis.localStorage) {
     const cached = localStorage.getItem(key);
@@ -61,7 +57,7 @@ async function withCache(code: string): Promise<BuildOutput> {
       return JSON.parse(cached);
     }
   }
-  const ret = await build(code);
+  const ret = await build(input);
   if (globalThis.localStorage) {
     localStorage.setItem(key, JSON.stringify(ret));
   }

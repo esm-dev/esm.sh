@@ -109,7 +109,7 @@ func (task *BuildTask) getSavepath() string {
 }
 
 func (task *BuildTask) getPackageInfo(name string) (pkg Pkg, p NpmPackage, fromPackageJSON bool, err error) {
-	pkgName, subpath := splitPkgPath(name)
+	pkgName, _, subpath := splitPkgPath(name)
 	var version string
 	if pkg, ok := task.Args.deps.Get(pkgName); ok {
 		version = pkg.Version

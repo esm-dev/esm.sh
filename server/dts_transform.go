@@ -39,12 +39,11 @@ func (task *BuildTask) transformDTS(dts string, aliasDepsPrefix string, marker *
 		return
 	}
 
-	pkgNameWithVersion, submodule := splitPkgPath(utils.CleanPath(dts))
-	pkgName, _ := utils.SplitByLastByte(pkgNameWithVersion, '@')
-	if pkgName == "" {
-		pkgName = pkgNameWithVersion
+	pkgName, version, subPath := splitPkgPath(utils.CleanPath(dts))
+	pkgNameWithVersion := pkgName
+	if version != "" {
+		pkgNameWithVersion = pkgNameWithVersion + "@" + version
 	}
-
 	dir := fmt.Sprintf("/v%d", task.BuildVersion)
 	if task.Pkg.FromGithub {
 		dir += "/gh"
@@ -53,7 +52,7 @@ func (task *BuildTask) transformDTS(dts string, aliasDepsPrefix string, marker *
 		dir,
 		pkgNameWithVersion,
 		aliasDepsPrefix,
-	}, strings.Split(submodule, "/")...), "/"))
+	}, strings.Split(subPath, "/")...), "/"))
 	savePath := path.Join("types", getTypesRoot(task.CdnOrigin), dtsPath)
 	_, err = fs.Stat(savePath)
 	if err != nil && err != storage.ErrNotFound {
@@ -194,7 +193,7 @@ func (task *BuildTask) transformDTS(dts string, aliasDepsPrefix string, marker *
 				return fmt.Sprintf("%s/@types/node@%s/%s.d.ts", dtsBasePath, nodeTypesVersion, res)
 			}
 
-			depTypePkgName, _ := splitPkgPath(res)
+			depTypePkgName := getPkgName(res)
 			maybeVersion := []string{"latest"}
 			if v, ok := pkgInfo.Dependencies[depTypePkgName]; ok {
 				maybeVersion = []string{v, "latest"}
@@ -271,7 +270,7 @@ func (task *BuildTask) transformDTS(dts string, aliasDepsPrefix string, marker *
 		if kind == "declareModule" && strings.HasSuffix(res, "/"+dts) {
 			baseUrl := task.CdnOrigin + cfg.CdnBasePath
 			moduleName := pkgNameWithVersion
-			if _, subPath := splitPkgPath(specifier); subPath != "" {
+			if _, _, subPath := splitPkgPath(specifier); subPath != "" {
 				moduleName = moduleName + "/" + subPath
 			}
 			aliasDeclareModule(footer, fmt.Sprintf("%s/v%d/%s", baseUrl, task.BuildVersion, moduleName), res)

@@ -58,8 +58,8 @@ func fetch(url string) (res *http.Response, err error) {
 	return httpClient.Get(url)
 }
 
-// isRemoteSpecifier returns true if the import path is a remote URL.
-func isRemoteSpecifier(importPath string) bool {
+// isHttpSepcifier returns true if the import path is a remote URL.
+func isHttpSepcifier(importPath string) bool {
 	return strings.HasPrefix(importPath, "https://") || strings.HasPrefix(importPath, "http://")
 }
 
