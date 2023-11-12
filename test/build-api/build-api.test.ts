@@ -11,30 +11,6 @@ Deno.test("build api", async (t) => {
   await t.step("build", async () => {
     const ret = await fetch("http://localhost:8080/build", {
       method: "POST",
-      headers: { "Content-Type": "application/javascript" },
-      body: `export default "Hello world!";`,
-    }).then((r) => r.json());
-    if (ret.error) {
-      throw new Error(`<${ret.error.status}> ${ret.error.message}`);
-    }
-    url = ret.url;
-    bundleUrl = ret.bundleUrl;
-    assertStringIncludes(url, "/~");
-    assertStringIncludes(bundleUrl, "?bundle");
-  });
-
-  await t.step("import published module", async () => {
-    const { default: message } = await import(url);
-    assertEquals(message, "Hello world!");
-  });
-});
-
-Deno.test("build api (json)", async (t) => {
-  let url = "";
-  let bundleUrl = "";
-  await t.step("build", async () => {
-    const ret = await fetch("http://localhost:8080/build", {
-      method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         code: `/* @jsx h */
@@ -42,6 +18,7 @@ Deno.test("build api (json)", async (t) => {
           import { renderToString } from "npm:preact-render-to-string@6.0.2";
           export default () => renderToString(<h1>Hello world!</h1>);
         `,
+        loader: "jsx",
       }),
     }).then((r) => r.json());
     if (ret.error) {
@@ -61,7 +38,7 @@ Deno.test("build api (json)", async (t) => {
   });
 });
 
-Deno.test("build api (with types)", async (t) => {
+Deno.test("build api (with options)", async () => {
   const ret = await fetch("http://localhost:8080/build", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -84,6 +61,23 @@ Deno.test("build api (with types)", async (t) => {
   const mod = await import(ret.url);
   mod.h("h1", null, "Hello world!");
   assertEquals(typeof mod.h, "function");
+});
+
+Deno.test("build api (transformOnly)", async () => {
+  const ret = await fetch("http://localhost:8080/build", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      code: `
+        const n:number = 42;
+      `,
+      transformOnly: true,
+    }),
+  }).then((r) => r.json());
+  if (ret.error) {
+    throw new Error(`<${ret.error.status}> ${ret.error.message}`);
+  }
+  assertEquals(ret.code, "const n=42;\n");
 });
 
 Deno.test("build api (use sdk)", async (t) => {

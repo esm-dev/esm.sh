@@ -7,7 +7,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"path"
 	"sort"
 	"strings"
@@ -19,10 +18,12 @@ import (
 )
 
 type BuildInput struct {
-	Code   string            `json:"code"`
-	Loader string            `json:"loader,omitempty"`
-	Deps   map[string]string `json:"dependencies,omitempty"`
-	Types  string            `json:"types,omitempty"`
+	Code          string            `json:"code"`
+	Loader        string            `json:"loader,omitempty"`
+	Deps          map[string]string `json:"dependencies,omitempty"`
+	Types         string            `json:"types,omitempty"`
+	TransformOnly bool              `json:"transformOnly,omitempty"`
+	Target        string            `json:"target,omitempty"`
 }
 
 func apiHandler() rex.Handle {
@@ -30,40 +31,29 @@ func apiHandler() rex.Handle {
 		if ctx.R.Method == "POST" || ctx.R.Method == "PUT" {
 			switch ctx.Path.String() {
 			case "/build":
-				var input BuildInput
 				defer ctx.R.Body.Close()
-				switch ct := ctx.R.Header.Get("Content-Type"); ct {
-				case "application/json":
-					err := json.NewDecoder(ctx.R.Body).Decode(&input)
-					if err != nil {
-						return rex.Err(400, "failed to parse input config: "+err.Error())
-					}
-				case "application/javascript", "text/javascript", "application/typescript", "text/typescript":
-					code, err := io.ReadAll(ctx.R.Body)
-					if err != nil {
-						return rex.Err(400, "failed to read code: "+err.Error())
-					}
-					input.Code = string(code)
-					if strings.Contains(ct, "javascript") {
-						input.Loader = "jsx"
-					} else {
-						input.Loader = "tsx"
-					}
-				default:
-					return rex.Err(400, "invalid content type")
+				var input BuildInput
+				err := json.NewDecoder(ctx.R.Body).Decode(&input)
+				if err != nil {
+					return rex.Err(400, "invalid body content type")
 				}
 				if input.Code == "" {
 					return rex.Err(400, "code is required")
 				}
-				id, err := build(input)
+				cdnOrigin := getCdnOrign(ctx)
+				id, err := build(input, cdnOrigin)
 				if err != nil {
 					if strings.HasPrefix(err.Error(), "<400> ") {
 						return rex.Err(400, err.Error()[6:])
 					}
 					return rex.Err(500, "failed to save code")
 				}
-				cdnOrigin := getCdnOrign(ctx)
 				ctx.W.Header().Set("Cache-Control", "private, no-store, no-cache, must-revalidate")
+				if input.TransformOnly {
+					return map[string]interface{}{
+						"code": id,
+					}
+				}
 				return map[string]interface{}{
 					"id":        id,
 					"url":       fmt.Sprintf("%s/~%s", cdnOrigin, id),
@@ -77,17 +67,17 @@ func apiHandler() rex.Handle {
 	}
 }
 
-func build(input BuildInput) (id string, err error) {
+func build(input BuildInput, cdnOrigin string) (id string, err error) {
 	loader := "tsx"
 	switch input.Loader {
 	case "js", "jsx", "ts", "tsx":
 		loader = input.Loader
 	}
-	stdin := &api.StdinOptions{
-		Contents:   input.Code,
-		ResolveDir: "/",
-		Sourcefile: "index." + loader,
-		Loader:     api.LoaderTSX,
+	target := api.ESNext
+	if input.Target != "" {
+		if t, ok := targets[input.Target]; ok {
+			target = t
+		}
 	}
 	if input.Deps == nil {
 		input.Deps = map[string]string{}
@@ -108,20 +98,33 @@ func build(input BuildInput) (id string, err error) {
 			} else if _, ok := input.Deps[pkgName]; !ok {
 				input.Deps[pkgName] = "*"
 			}
+			if input.TransformOnly {
+				path = fmt.Sprintf("%s/%s", cdnOrigin, pkgName)
+				if version != "" {
+					path += "@" + version
+				}
+				if subPath != "" {
+					path += "/" + subPath
+				}
+			}
 		}
 		return api.OnResolveResult{
 			Path:     path,
 			External: true,
 		}, nil
 	}
-	ret := api.Build(api.BuildOptions{
+	stdin := &api.StdinOptions{
+		Contents:   input.Code,
+		ResolveDir: "/",
+		Sourcefile: "index." + loader,
+		Loader:     api.LoaderTSX,
+	}
+	opts := api.BuildOptions{
 		Outdir:           "/esbuild",
 		Stdin:            stdin,
 		Platform:         api.PlatformBrowser,
 		Format:           api.FormatESModule,
-		TreeShaking:      api.TreeShakingTrue,
-		Target:           api.ESNext,
-		Bundle:           true,
+		Target:           target,
 		MinifyWhitespace: true,
 		MinifySyntax:     true,
 		Write:            false,
@@ -133,7 +136,12 @@ func build(input BuildInput) (id string, err error) {
 				},
 			},
 		},
-	})
+	}
+	if !input.TransformOnly {
+		opts.Bundle = true
+		opts.TreeShaking = api.TreeShakingTrue
+	}
+	ret := api.Build(opts)
 	if len(ret.Errors) > 0 {
 		return "", errors.New("<400> failed to validate code: " + ret.Errors[0].Text)
 	}
@@ -141,6 +149,9 @@ func build(input BuildInput) (id string, err error) {
 		return "", errors.New("<400> failed to validate code: no output files")
 	}
 	code := ret.OutputFiles[0].Contents
+	if input.TransformOnly {
+		return string(code), nil
+	}
 	if len(code) == 0 {
 		return "", errors.New("<400> code is empty")
 	}

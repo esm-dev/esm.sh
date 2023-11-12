@@ -31,6 +31,14 @@ export async function build(input: string | BuildInput): Promise<BuildOutput> {
   return ret;
 }
 
+export async function transform(
+  input: string | BuildInput & { target?: string },
+): Promise<{ code: string }> {
+  const options = typeof input === "string" ? { code: input } : input;
+  Reflect.set(options, "transformOnly", true);
+  return await build(options) as unknown as { code: string };
+}
+
 export async function esm<T extends object = Record<string, any>>(
   strings: TemplateStringsArray,
   ...values: any[]
