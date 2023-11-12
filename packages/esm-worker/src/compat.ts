@@ -619,7 +619,8 @@ export const getBuildTargetFromUA = (userAgent: string | null) => {
     return "esnext";
   }
   if (userAgent.startsWith("Deno/")) {
-    if (compare(userAgent.slice(5), v1_33_2, "<")) {
+    const v = userAgent.slice(5).match(/^\d+\.\d+\.\d+/);
+    if (v && compare(v[0], v1_33_2, "<")) {
       return "deno";
     }
     return "denonext";
