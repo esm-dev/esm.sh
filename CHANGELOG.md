@@ -1,5 +1,15 @@
 # Changelog
 
+## v134
+
+- Add `transformOnly` option for build api
+- Add `allowList` in config (#745 by @olekenneth)
+- Improved Deno CLI (#742 by @Kyiro)
+- Worker: fix dist version lookup
+- Fix exported names from a dependency (close #729, #750)
+- Fix: write `.npmrc` file if `NpmRegistry` is set (close #737) (#751 by @edeustace)
+- Upgrade esbuild to **0.19.5**
+
 ## v133
 
 - Add `?raw` to support requests for raw package source files (#731 by @johnyanarella)

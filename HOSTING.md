@@ -67,7 +67,7 @@ esm.sh provides an official docker image for deployment. You can pull the contai
 
 ```bash
 docker pull ghcr.io/esm-dev/esm.sh      # latest version
-docker pull ghcr.io/esm-dev/esm.sh:v133 # specific version
+docker pull ghcr.io/esm-dev/esm.sh:v134 # specific version
 docker pull ghcr.io/esm-dev/esm.sh:dev  # latest development version
 ```
 
@@ -112,5 +112,5 @@ More details check [esm-worker](./packages/esm-worker/README.md).
 We also provide a server for [Deno](https://deno.land) which is powered by the [esm-worker](./packages/esm-worker/README.md).
 
 ```bash
-deno run -A https://esm.sh/v133/server --port=8080
+deno run -A https://esm.sh/v134/server --port=8080
 ```
