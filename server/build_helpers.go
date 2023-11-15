@@ -213,8 +213,8 @@ func (task *BuildTask) analyze(forceCjsOnly bool) (esm *ESMBuild, npm NpmPackage
 					npm.Types = pkg.Submodule + ".d.ts"
 				}
 			} else {
-				asMjs := path.Join(wd, "node_modules", npm.Name, pkg.Submodule+".mjs")
-				if npm.Type == "module" || npm.Module != "" || fileExists(asMjs) {
+				fp := path.Join(wd, "node_modules", npm.Name, pkg.Submodule+".mjs")
+				if npm.Type == "module" || npm.Module != "" || fileExists(fp) {
 					// follow main module type
 					npm.Module = pkg.Submodule
 				} else {
@@ -509,8 +509,6 @@ func (task *BuildTask) fixNpmPackage(p NpmPackage) NpmPackage {
 		}
 	}
 
-	// log.Debug("[main]", task.Pkg, p.Main, p.Module)
-
 	if p.Types == "" && p.Main != "" {
 		if strings.HasSuffix(p.Main, ".d.ts") {
 			p.Types = p.Main
@@ -659,12 +657,20 @@ func esmLexer(wd string, packageName string, moduleSpecifier string) (resolvedNa
 			}
 		}
 	}
-	if !fileExists(path.Join(pkgDir, resolvedName)) && dirExists(path.Join(pkgDir, moduleSpecifier)) {
-		for _, ext := range esmExts {
-			name := path.Join(moduleSpecifier, "index"+ext)
-			if fileExists(path.Join(pkgDir, name)) {
-				resolvedName = name
-				break
+	if !fileExists(path.Join(pkgDir, resolvedName)) {
+		if endsWith(resolvedName, esmExts...) {
+			name, ext := utils.SplitByLastByte(resolvedName, '.')
+			fixedName := name + "/index." + ext
+			if fileExists(path.Join(pkgDir, fixedName)) {
+				resolvedName = fixedName
+			}
+		} else if dirExists(path.Join(pkgDir, moduleSpecifier)) {
+			for _, ext := range esmExts {
+				name := path.Join(moduleSpecifier, "index"+ext)
+				if fileExists(path.Join(pkgDir, name)) {
+					resolvedName = name
+					break
+				}
 			}
 		}
 	}
