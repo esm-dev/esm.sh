@@ -612,6 +612,7 @@ const esmaUnsupportedFeatures: [string, number][] = [
 ]);
 
 const v1_33_2 = "1.33.2";
+const rVersion = /^\d+\.\d+\.\d+/;
 
 /** get build target from the `User-Agent` header by checking the `jsTable` object. */
 export const getBuildTargetFromUA = (userAgent: string | null) => {
@@ -619,7 +620,7 @@ export const getBuildTargetFromUA = (userAgent: string | null) => {
     return "esnext";
   }
   if (userAgent.startsWith("Deno/")) {
-    const v = userAgent.slice(5).match(/^\d+\.\d+\.\d+/);
+    const v = userAgent.slice(5).match(rVersion);
     if (v && compare(v[0], v1_33_2, "<")) {
       return "deno";
     }
