@@ -2,12 +2,12 @@ name: Docker
 
 on:
   push:
-    branches:
-      - main
+    tags:
+      - v*
 
 jobs:
   push_image:
-    name: Push `dev`
+    name: Push `stable`
     runs-on: ubuntu-latest
     permissions:
       packages: write
@@ -37,4 +37,4 @@ jobs:
           context: .
           platforms: linux/amd64,linux/arm64
           push: true
-          tags: ghcr.io/esm-dev/esm.sh:dev
+          tags: ghcr.io/esm-dev/esm.sh:latest,ghcr.io/esm-dev/esm.sh:v134
