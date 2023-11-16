@@ -26,12 +26,12 @@ var npmNaming = valid.Validator{valid.FromTo{'a', 'z'}, valid.FromTo{'A', 'Z'}, 
 
 // NpmPackageVerions defines versions of a NPM package
 type NpmPackageVerions struct {
-	DistTags map[string]string     `json:"dist-tags"`
-	Versions map[string]NpmPackage `json:"versions"`
+	DistTags map[string]string         `json:"dist-tags"`
+	Versions map[string]NpmPackageInfo `json:"versions"`
 }
 
-// NpmPackageTemp defines the package.json of NPM
-type NpmPackageTemp struct {
+// NpmPackageJSON defines the package.json of NPM
+type NpmPackageJSON struct {
 	Name             string                 `json:"name"`
 	Version          string                 `json:"version"`
 	Type             string                 `json:"type,omitempty"`
@@ -51,7 +51,7 @@ type NpmPackageTemp struct {
 	Deprecated       interface{}            `json:"deprecated,omitempty"`
 }
 
-func (a *NpmPackageTemp) ToNpmPackage() *NpmPackage {
+func (a *NpmPackageJSON) ToNpmPackage() *NpmPackageInfo {
 	browser := map[string]string{}
 	if a.Browser.Str != "" {
 		browser["."] = a.Browser.Str
@@ -99,7 +99,7 @@ func (a *NpmPackageTemp) ToNpmPackage() *NpmPackage {
 			}
 		}
 	}
-	return &NpmPackage{
+	return &NpmPackageInfo{
 		Name:             a.Name,
 		Version:          a.Version,
 		Type:             a.Type,
@@ -121,7 +121,7 @@ func (a *NpmPackageTemp) ToNpmPackage() *NpmPackage {
 }
 
 // NpmPackage defines the package.json
-type NpmPackage struct {
+type NpmPackageInfo struct {
 	Name             string
 	Version          string
 	Type             string
@@ -141,8 +141,8 @@ type NpmPackage struct {
 	Deprecated       string
 }
 
-func (a *NpmPackage) UnmarshalJSON(b []byte) error {
-	var n NpmPackageTemp
+func (a *NpmPackageInfo) UnmarshalJSON(b []byte) error {
+	var n NpmPackageJSON
 	if err := json.Unmarshal(b, &n); err != nil {
 		return err
 	}
@@ -150,9 +150,9 @@ func (a *NpmPackage) UnmarshalJSON(b []byte) error {
 	return nil
 }
 
-func getPackageInfo(wd string, name string, version string) (info NpmPackage, fromPackageJSON bool, err error) {
+func getPackageInfo(wd string, name string, version string) (info NpmPackageInfo, fromPackageJSON bool, err error) {
 	if name == "@types/node" {
-		info = NpmPackage{
+		info = NpmPackageInfo{
 			Name:    "@types/node",
 			Version: nodeTypesVersion,
 			Types:   "index.d.ts",
@@ -176,7 +176,7 @@ func getPackageInfo(wd string, name string, version string) (info NpmPackage, fr
 	return
 }
 
-func fetchPackageInfo(name string, version string) (info NpmPackage, err error) {
+func fetchPackageInfo(name string, version string) (info NpmPackageInfo, err error) {
 	a := strings.Split(strings.Trim(name, "/"), "/")
 	name = a[0]
 	if strings.HasPrefix(name, "@") && len(a) > 1 {
@@ -453,7 +453,7 @@ func toTypesPackageName(pkgName string) string {
 	return "@types/" + pkgName
 }
 
-func fixPkgVersion(info NpmPackage) (NpmPackage, error) {
+func fixPkgVersion(info NpmPackageInfo) (NpmPackageInfo, error) {
 	for prefix, ver := range fixedPkgVersions {
 		if strings.HasPrefix(info.Name+"@"+info.Version, prefix) {
 			return fetchPackageInfo(info.Name, ver)
@@ -462,7 +462,7 @@ func fixPkgVersion(info NpmPackage) (NpmPackage, error) {
 	return info, nil
 }
 
-func isTypesOnlyPackage(p NpmPackage) bool {
+func isTypesOnlyPackage(p NpmPackageInfo) bool {
 	return p.Main == "" && p.Module == "" && p.Types != ""
 }
 

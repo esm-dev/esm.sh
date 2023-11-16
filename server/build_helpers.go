@@ -108,7 +108,7 @@ func (task *BuildTask) getSavepath() string {
 	return path.Join("builds", task.ID())
 }
 
-func (task *BuildTask) getPackageInfo(name string) (pkg Pkg, p NpmPackage, fromPackageJSON bool, err error) {
+func (task *BuildTask) getPackageInfo(name string) (pkg Pkg, p NpmPackageInfo, fromPackageJSON bool, err error) {
 	pkgName, _, subpath := splitPkgPath(name)
 	var version string
 	if pkg, ok := task.Args.deps.Get(pkgName); ok {
@@ -140,11 +140,11 @@ func (task *BuildTask) isDenoTarget() bool {
 	return task.Target == "deno" || task.Target == "denonext"
 }
 
-func (task *BuildTask) analyze(forceCjsOnly bool) (esm *ESMBuild, npm NpmPackage, reexport string, err error) {
+func (task *BuildTask) analyze(forceCjsOnly bool) (esm *ESMBuild, npm NpmPackageInfo, reexport string, err error) {
 	wd := task.wd
 	pkg := task.Pkg
 
-	var p NpmPackage
+	var p NpmPackageInfo
 	err = utils.ParseJSONFile(path.Join(wd, "node_modules", pkg.Name, "package.json"), &p)
 	if err != nil {
 		return
@@ -182,7 +182,7 @@ func (task *BuildTask) analyze(forceCjsOnly bool) (esm *ESMBuild, npm NpmPackage
 			subDir := path.Join(wd, "node_modules", npm.Name, pkg.Submodule)
 			packageFile := path.Join(subDir, "package.json")
 			if fileExists(packageFile) {
-				var p NpmPackage
+				var p NpmPackageInfo
 				err = utils.ParseJSONFile(packageFile, &p)
 				if err != nil {
 					return
@@ -374,7 +374,7 @@ func (task *BuildTask) analyze(forceCjsOnly bool) (esm *ESMBuild, npm NpmPackage
 	return
 }
 
-func (task *BuildTask) fixNpmPackage(p NpmPackage) NpmPackage {
+func (task *BuildTask) fixNpmPackage(p NpmPackageInfo) NpmPackageInfo {
 	if task.Pkg.FromGithub {
 		p.Name = task.Pkg.Name
 		p.Version = task.Pkg.Version
@@ -551,7 +551,7 @@ func (task *BuildTask) fixNpmPackage(p NpmPackage) NpmPackage {
 }
 
 // see https://nodejs.org/api/packages.html
-func (task *BuildTask) applyConditions(p *NpmPackage, exports interface{}, pType string) {
+func (task *BuildTask) applyConditions(p *NpmPackageInfo, exports interface{}, pType string) {
 	s, ok := exports.(string)
 	if ok {
 		if pType == "module" {

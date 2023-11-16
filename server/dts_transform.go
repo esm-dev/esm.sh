@@ -32,7 +32,7 @@ func (task *BuildTask) transformDTS(dts string, aliasDepsPrefix string, marker *
 	}
 	marker.Add(aliasDepsPrefix + dts)
 
-	var pkgInfo NpmPackage
+	var pkgInfo NpmPackageInfo
 	pkgJsonPath := path.Join(task.wd, "node_modules", task.Pkg.Name, "package.json")
 	err = utils.ParseJSONFile(pkgJsonPath, &pkgInfo)
 	if err != nil {
@@ -168,7 +168,7 @@ func (task *BuildTask) transformDTS(dts string, aliasDepsPrefix string, marker *
 				} else if fileExists(path.Join(dtsDir, res, "index.d.mts")) {
 					res = strings.TrimSuffix(res, "/") + "/index.d.mts"
 				} else {
-					var p NpmPackage
+					var p NpmPackageInfo
 					packageJSONFile := path.Join(dtsDir, res, "package.json")
 					if fileExists(packageJSONFile) && utils.ParseJSONFile(packageJSONFile, &p) == nil {
 						if p.Types != "" {
@@ -202,7 +202,7 @@ func (task *BuildTask) transformDTS(dts string, aliasDepsPrefix string, marker *
 			}
 
 			var (
-				info            NpmPackage
+				info            NpmPackageInfo
 				subpath         string
 				fromPackageJSON bool
 			)
@@ -379,7 +379,7 @@ func removeGlobalBlock(input []byte) (output []byte, err error) {
 	return nil, errors.New("removeGlobalBlock: global block not end")
 }
 
-func (task *BuildTask) toTypesPath(wd string, p NpmPackage, version string, buildArgsPrefix string, subpath string) string {
+func (task *BuildTask) toTypesPath(wd string, p NpmPackageInfo, version string, buildArgsPrefix string, subpath string) string {
 	var types string
 	if subpath != "" {
 		t := &BuildTask{

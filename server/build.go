@@ -49,13 +49,13 @@ type BuildTask struct {
 	requires    [][2]string
 	headerLines int // to fix the source map
 	esm         *ESMBuild
-	npm         NpmPackage
+	npm         NpmPackageInfo
 }
 
 func (task *BuildTask) Build() (esm *ESMBuild, err error) {
 	// check request package
 	if !task.Pkg.FromEsmsh && !task.Pkg.FromGithub {
-		var p NpmPackage
+		var p NpmPackageInfo
 		p, _, err = getPackageInfo("", task.Pkg.Name, task.Pkg.Version)
 		if err != nil {
 			return
@@ -615,7 +615,7 @@ rebuild:
 						sideEffects := api.SideEffectsTrue
 						pkgName := getPkgName(specifier)
 						if f := path.Join(task.installDir, "node_modules", pkgName, "package.json"); fileExists(f) {
-							var np NpmPackage
+							var np NpmPackageInfo
 							if utils.ParseJSONFile(f, &np) == nil {
 								if !np.SideEffects {
 									sideEffects = api.SideEffectsFalse
