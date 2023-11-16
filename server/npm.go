@@ -75,12 +75,20 @@ func (a *NpmPackageJSON) ToNpmPackage() *NpmPackageInfo {
 			deprecated = s
 		}
 	}
-	sideEffects := true
+	var sideEffects *stringSet = nil
+	sideEffectsFalse := false
 	if a.SideEffects != nil {
 		if s, ok := a.SideEffects.(string); ok {
-			sideEffects = s != "false"
+			sideEffectsFalse = s == "false"
 		} else if b, ok := a.SideEffects.(bool); ok {
-			sideEffects = b
+			sideEffectsFalse = !b
+		} else if m, ok := a.SideEffects.([]interface{}); ok && len(m) > 0 {
+			sideEffects = newStringSet()
+			for _, v := range m {
+				if name, ok := v.(string); ok {
+					sideEffects.Add(name)
+				}
+			}
 		}
 	}
 	var pkgExports interface{} = nil
@@ -110,6 +118,7 @@ func (a *NpmPackageJSON) ToNpmPackage() *NpmPackageInfo {
 		Types:            a.Types,
 		Typings:          a.Typings,
 		Browser:          browser,
+		SideEffectsFalse: sideEffectsFalse,
 		SideEffects:      sideEffects,
 		Dependencies:     a.Dependencies,
 		PeerDependencies: a.PeerDependencies,
@@ -131,7 +140,8 @@ type NpmPackageInfo struct {
 	JsNextMain       string
 	Types            string
 	Typings          string
-	SideEffects      bool
+	SideEffectsFalse bool
+	SideEffects      *stringSet
 	Browser          map[string]string
 	Dependencies     map[string]string
 	PeerDependencies map[string]string

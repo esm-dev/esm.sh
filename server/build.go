@@ -536,10 +536,11 @@ rebuild:
 						if isLocalSpecifier(specifier) {
 							// sub-module of current package and non-dynamic import
 							if strings.HasPrefix(fullFilepath, task.realWd) && args.Kind != api.ResolveJSDynamicImport {
+								relPath := "." + strings.TrimPrefix(fullFilepath, path.Join(task.installDir, "node_modules", npm.Name))
 								// splits modules based on the `exports` defines in package.json,
 								// see https://nodejs.org/api/packages.html
 								if om, ok := npm.PkgExports.(*orderedMap); ok {
-									modName := "." + strings.TrimPrefix(fullFilepath, path.Join(task.installDir, "node_modules", npm.Name))
+									modName := relPath
 									if strings.HasSuffix(modName, ".mjs") {
 										modName = strings.TrimSuffix(specifier, ".mjs")
 									} else {
@@ -570,16 +571,20 @@ rebuild:
 													if match {
 														url := path.Join(npm.Name, name)
 														if i := task.Pkg.ImportPath(); url != i && url != i+"/index" {
-															sideEffects := api.SideEffectsTrue
-															if !npm.SideEffects {
-																sideEffects = api.SideEffectsFalse
-															}
-															return api.OnResolveResult{Path: task.resolveExternal(url, args.Kind), External: true, SideEffects: sideEffects}, nil
+															return api.OnResolveResult{Path: task.resolveExternal(url, args.Kind), External: true}, nil
 														}
 													}
 												}
 											}
 										}
+									}
+								}
+
+								// externalize the sub module that is in the `sideEffects` field(as list)
+								if npm.SideEffects != nil {
+									if npm.SideEffects.Has(relPath) || npm.SideEffects.Has(strings.TrimPrefix(relPath, "./")) {
+										url := path.Join(npm.Name, relPath)
+										return api.OnResolveResult{Path: task.resolveExternal(url, args.Kind), External: true}, nil
 									}
 								}
 
@@ -596,8 +601,8 @@ rebuild:
 											if len(p) == 3 && string(p[0]) == "export*from" && string(p[2]) == ";\n" {
 												url := string(p[1])
 												if !isLocalSpecifier(url) {
-													isAlias = true
 													specifier = url
+													isAlias = true
 												}
 											}
 										}
@@ -608,23 +613,12 @@ rebuild:
 									return api.OnResolveResult{}, nil
 								}
 							}
+
 							specifier = strings.TrimPrefix(fullFilepath, filepath.Join(task.installDir, "node_modules")+"/")
 						}
 
-						// check `sideEffects`
-						sideEffects := api.SideEffectsTrue
-						pkgName := getPkgName(specifier)
-						if f := path.Join(task.installDir, "node_modules", pkgName, "package.json"); fileExists(f) {
-							var np NpmPackageInfo
-							if utils.ParseJSONFile(f, &np) == nil {
-								if !np.SideEffects {
-									sideEffects = api.SideEffectsFalse
-								}
-							}
-						}
-
 						// dynamic external
-						return api.OnResolveResult{Path: task.resolveExternal(specifier, args.Kind), External: true, SideEffects: sideEffects}, nil
+						return api.OnResolveResult{Path: task.resolveExternal(specifier, args.Kind), External: true}, nil
 					},
 				)
 
