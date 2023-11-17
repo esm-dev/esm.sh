@@ -534,10 +534,10 @@ rebuild:
 						}
 
 						if isLocalSpecifier(specifier) {
-							// sub-module of current package and non-dynamic import
+							// is sub-module of current package and non-dynamic import
 							if strings.HasPrefix(fullFilepath, task.realWd) && args.Kind != api.ResolveJSDynamicImport {
 								relPath := "." + strings.TrimPrefix(fullFilepath, path.Join(task.installDir, "node_modules", npm.Name))
-								// splits modules based on the `exports` defines in package.json,
+								// split modules based on the `exports` defines in package.json,
 								// see https://nodejs.org/api/packages.html
 								if om, ok := npm.PkgExports.(*orderedMap); ok {
 									modName := relPath
@@ -580,7 +580,7 @@ rebuild:
 									}
 								}
 
-								// externalize the sub module that is in the `sideEffects` field(as list)
+								// split the sub module that is in the `sideEffects` field(as list)
 								if npm.SideEffects != nil {
 									if npm.SideEffects.Has(relPath) || npm.SideEffects.Has(strings.TrimPrefix(relPath, "./")) {
 										url := path.Join(npm.Name, relPath)
@@ -588,9 +588,8 @@ rebuild:
 									}
 								}
 
-								// externalize the module that is an alias of a dependency
+								// split the module that is an alias of a dependency
 								// means this file just include a single line(js): `export * from "dep"`
-								isAlias := false
 								fi, ioErr := os.Lstat(fullFilepath)
 								if ioErr == nil && fi.Size() < 256 {
 									data, ioErr := os.ReadFile(fullFilepath)
@@ -601,17 +600,14 @@ rebuild:
 											if len(p) == 3 && string(p[0]) == "export*from" && string(p[2]) == ";\n" {
 												url := string(p[1])
 												if !isLocalSpecifier(url) {
-													specifier = url
-													isAlias = true
+													return api.OnResolveResult{Path: task.resolveExternal(url, args.Kind), External: true}, nil
 												}
 											}
 										}
 									}
 								}
 
-								if !isAlias {
-									return api.OnResolveResult{}, nil
-								}
+								return api.OnResolveResult{}, nil
 							}
 
 							specifier = strings.TrimPrefix(fullFilepath, filepath.Join(task.installDir, "node_modules")+"/")

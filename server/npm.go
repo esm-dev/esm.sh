@@ -96,7 +96,9 @@ func (a *NpmPackageJSON) ToNpmPackage() *NpmPackageInfo {
 		var v interface{}
 		if json.Unmarshal(rawExports, &v) == nil {
 			if s, ok := v.(string); ok {
-				pkgExports = s
+				if len(s) > 0 {
+					pkgExports = s
+				}
 			} else if _, ok := v.(map[string]interface{}); ok {
 				om := newOrderedMap()
 				if om.UnmarshalJSON(rawExports) == nil {
