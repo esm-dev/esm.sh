@@ -771,6 +771,7 @@ func minify(code string, target api.Target, loader api.Loader) ([]byte, error) {
 		MinifyWhitespace:  true,
 		MinifyIdentifiers: true,
 		MinifySyntax:      true,
+		LegalComments:     api.LegalCommentsInline,
 		Loader:            loader,
 	})
 	if ret.Errors != nil && len(ret.Errors) > 0 {
