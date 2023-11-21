@@ -132,22 +132,21 @@ func esmHandler() rex.Handle {
 				return true
 			})
 
+			nsStatus := "IOERROR"
 			res, err := fetch(fmt.Sprintf("http://localhost:%d", cfg.NsPort))
-			if err != nil {
-				kill(nsPidFile)
-				return err
-			}
-			defer res.Body.Close()
-			out, err := io.ReadAll(res.Body)
-			if err != nil {
-				return err
+			if err == nil {
+				out, err := io.ReadAll(res.Body)
+				res.Body.Close()
+				if err == nil {
+					nsStatus = string(out)
+				}
 			}
 
 			header.Set("Cache-Control", "private, no-store, no-cache, must-revalidate")
 			return map[string]interface{}{
 				"buildQueue":  q[:i],
 				"purgeTimers": n,
-				"ns":          string(out),
+				"ns":          nsStatus,
 				"version":     CTX_BUILD_VERSION,
 				"uptime":      time.Since(startTime).String(),
 			}

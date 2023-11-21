@@ -11,6 +11,7 @@ import (
 	"os/exec"
 	"path"
 	"strings"
+	"time"
 )
 
 // allowlist for require mode when parsing cjs exports fails
@@ -101,9 +102,16 @@ func invokeNodeService(serviceName string, input map[string]interface{}) (data [
 	if cfg.NsPort == 0 {
 		return nil, errors.New("node service port is not set")
 	}
-	res, err := http.Post(fmt.Sprintf("http://localhost:%d", cfg.NsPort), "application/json", buf)
+	var res *http.Response
+	for i := 0; i < 3; i++ {
+		res, err = http.Post(fmt.Sprintf("http://localhost:%d", cfg.NsPort), "application/json", buf)
+		if err == nil {
+			break
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
 	if err != nil {
-		// kill current ns process to get new one
+		// kill current ns process for getting new one
 		kill(nsPidFile)
 		return
 	}
@@ -157,7 +165,7 @@ func startNodeServices() (err error) {
 		return
 	}
 
-	log.Debug("node services process started, pid is", cmd.Process.Pid)
+	log.Info("node services process started, pid is", cmd.Process.Pid)
 
 	// wait the process to exit
 	err = cmd.Wait()
@@ -201,10 +209,10 @@ func cjsLexer(buildDir string, importPath string, nodeEnv string) (ret cjsExport
 	}
 
 	if ret.Error != "" {
-		if ret.Stack == "unreachable" {
-			// whoops, the cjs-lexer is down, let' kill current ns process to get new one
-			kill(nsPidFile)
-		}
+		// if ret.Stack == "unreachable" {
+		//   whoops, the cjs-lexer is down, let' kill current ns process to get new one
+		//   kill(nsPidFile)
+		// }
 		if ret.Stack != "" {
 			log.Errorf("[ns] cjsLexer: %s\n---\n%s\n---", ret.Error, ret.Stack)
 		} else {
