@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"path"
 	"sort"
 	"strings"
@@ -18,12 +19,14 @@ import (
 )
 
 type BuildInput struct {
-	Code          string            `json:"code"`
-	Loader        string            `json:"loader,omitempty"`
-	Deps          map[string]string `json:"dependencies,omitempty"`
-	Types         string            `json:"types,omitempty"`
-	TransformOnly bool              `json:"transformOnly,omitempty"`
-	Target        string            `json:"target,omitempty"`
+	Code            string            `json:"code"`
+	Loader          string            `json:"loader,omitempty"`
+	Deps            map[string]string `json:"dependencies,omitempty"`
+	Types           string            `json:"types,omitempty"`
+	TransformOnly   bool              `json:"transformOnly,omitempty"`
+	Target          string            `json:"target,omitempty"`
+	JsxImportSource string            `json:"jsxImportSource,omitempty"`
+	Hash            string            `json:"hash,omitempty"`
 }
 
 func apiHandler() rex.Handle {
@@ -40,6 +43,29 @@ func apiHandler() rex.Handle {
 				if input.Code == "" {
 					return rex.Err(400, "code is required")
 				}
+				if input.TransformOnly {
+					if targets[input.Target] == 0 {
+						input.Target = getBuildTargetByUA(ctx.R.UserAgent())
+					}
+					if input.Hash != "" {
+						savePath := fmt.Sprintf("publish/+%s.%s.mjs", input.Hash, input.Target)
+						_, err := fs.Stat(savePath)
+						if err == nil {
+							r, err := fs.OpenFile(savePath)
+							if err != nil {
+								return rex.Err(500, "failed to read code")
+							}
+							code, err := io.ReadAll(r)
+							r.Close()
+							if err != nil {
+								return rex.Err(500, "failed to read code")
+							}
+							return map[string]interface{}{
+								"code": string(code),
+							}
+						}
+					}
+				}
 				cdnOrigin := getCdnOrign(ctx)
 				id, err := build(input, cdnOrigin)
 				if err != nil {
@@ -50,6 +76,9 @@ func apiHandler() rex.Handle {
 				}
 				ctx.W.Header().Set("Cache-Control", "private, no-store, no-cache, must-revalidate")
 				if input.TransformOnly {
+					if input.Hash != "" {
+						go fs.WriteFile(fmt.Sprintf("publish/+%s.%s.mjs", input.Hash, input.Target), strings.NewReader(id))
+					}
 					return map[string]interface{}{
 						"code": id,
 					}
@@ -98,15 +127,6 @@ func build(input BuildInput, cdnOrigin string) (id string, err error) {
 			} else if _, ok := input.Deps[pkgName]; !ok {
 				input.Deps[pkgName] = "*"
 			}
-			if input.TransformOnly {
-				path = fmt.Sprintf("%s/%s", cdnOrigin, pkgName)
-				if version != "" {
-					path += "@" + version
-				}
-				if subPath != "" {
-					path += "/" + subPath
-				}
-			}
 		}
 		return api.OnResolveResult{
 			Path:     path,
@@ -119,12 +139,18 @@ func build(input BuildInput, cdnOrigin string) (id string, err error) {
 		Sourcefile: "index." + loader,
 		Loader:     api.LoaderTSX,
 	}
+	jsx := api.JSXTransform
+	if input.JsxImportSource != "" {
+		jsx = api.JSXAutomatic
+	}
 	opts := api.BuildOptions{
 		Outdir:           "/esbuild",
 		Stdin:            stdin,
 		Platform:         api.PlatformBrowser,
 		Format:           api.FormatESModule,
 		Target:           target,
+		JSX:              jsx,
+		JSXImportSource:  input.JsxImportSource,
 		MinifyWhitespace: true,
 		MinifySyntax:     true,
 		Write:            false,

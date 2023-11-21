@@ -26,11 +26,11 @@ async function run(name: string, ...args: string[]) {
 // build and import esm worker
 await run("pnpm", "i");
 await run("node", "build.mjs");
-const { withESMWorker } = await import(
-  `../../packages/esm-worker/dist/index.js`
-);
 
 const workerOrigin = "http://localhost:8787";
+const { withESMWorker } = await import(
+  "../../packages/esm-worker/dist/index.js"
+);
 const worker = withESMWorker(
   (_req: Request, _env: {}, ctx: { url: URL }) => {
     if (ctx.url.pathname === "/") {
@@ -73,9 +73,8 @@ Deno.test("esm-worker", {
 
   let VERSION: number;
   await t.step("status.json", async () => {
-    const ret: any = await fetch(`${workerOrigin}/status.json`).then((res) =>
-      res.json()
-    );
+    const res = await fetch(`${workerOrigin}/status.json`);
+    const ret = await res.json();
     assertEquals(typeof ret.version, "number");
     VERSION = ret.version;
   });
@@ -287,7 +286,7 @@ Deno.test("esm-worker", {
 
   await t.step("npm assets (raw)", async () => {
     const res = await fetch(
-      `${workerOrigin}/playground-elements@0.18.1&raw/playground-service-worker.js`
+      `${workerOrigin}/playground-elements@0.18.1&raw/playground-service-worker.js`,
     );
     assertEquals(res.status, 200);
     assertEquals(
@@ -370,7 +369,7 @@ Deno.test("esm-worker", {
       "application/typescript; charset=utf-8",
     );
 
-    const ret: any = await fetch(`${workerOrigin}/build`, {
+    const res2 = await fetch(`${workerOrigin}/build`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -380,7 +379,8 @@ Deno.test("esm-worker", {
           export default () => renderToString(<h1>Hello world!</h1>);
         `,
       }),
-    }).then((r) => r.json());
+    });
+    const ret = await res2.json();
     if (ret.error) {
       throw new Error(`<${ret.error.status}> ${ret.error.message}`);
     }
@@ -388,10 +388,39 @@ Deno.test("esm-worker", {
       new URL(
         `/v${VERSION}${new URL(ret.url).pathname}/denonext/mod.mjs`,
         workerOrigin,
-      )
-        .href
+      ).href
     );
     assertEquals(render(), "<h1>Hello world!</h1>");
+
+    const fakeHash = crypto.randomUUID();
+    const res3 = await fetch(`${workerOrigin}/build`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        code: `/* @jsx h */
+          import { h } from "preact@10.13.2";
+          import { renderToString } from "preact-render-to-string@6.0.2";
+          export default () => renderToString(<h1>Hello world!</h1>);
+        `,
+        transformOnly: true,
+        loader: "jsx",
+        hash: fakeHash,
+        target: "es2022",
+      }),
+    });
+    const ret2 = await res3.json();
+    assertStringIncludes(ret2.code, `h("h1"`);
+
+    const res5 = await fetch(`${workerOrigin}/+${fakeHash}.mjs`, {
+      headers: { "User-Agent": "Chrome/90.0.4430.212" },
+    });
+    assertEquals(res5.status, 200);
+    assertEquals(
+      res5.headers.get("Content-Type"),
+      "application/javascript; charset=utf-8",
+    );
+    const code = await res5.text();
+    assertStringIncludes(code, `h("h1"`);
   });
 
   await t.step("/esma-target", async () => {

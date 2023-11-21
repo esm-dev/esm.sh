@@ -6,9 +6,10 @@ import (
 	"github.com/esm-dev/esm.sh/server"
 )
 
-//go:embed README.md
 //go:embed build.ts
+//go:embed run.ts
 //go:embed server/embed
+//go:embed README.md
 var fs embed.FS
 
 func main() {

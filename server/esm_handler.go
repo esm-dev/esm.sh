@@ -78,6 +78,14 @@ func esmHandler() rex.Handle {
 		// static routes
 		switch pathname {
 		case "/":
+			if ctx.Form.Has("run") {
+				runHTML, err := embedFS.ReadFile("server/embed/run.html")
+				if err != nil {
+					return err
+				}
+				header.Set("Cache-Control", fmt.Sprintf("public, max-age=%d", 10*60))
+				return rex.Content("run.html", startTime, bytes.NewReader(runHTML))
+			}
 			indexHTML, err := embedFS.ReadFile("server/embed/index.html")
 			if err != nil {
 				return err
@@ -161,33 +169,33 @@ func esmHandler() rex.Handle {
 					`could not resolve "%s" (Imported by "%s")`,
 					ctx.Form.Value("name"),
 					ctx.Form.Value("importer"),
-				))
+				), true)
 			case "unsupported-node-builtin-module":
 				return throwErrorJS(ctx, fmt.Errorf(
 					`unsupported Node builtin module "%s" (Imported by "%s")`,
 					ctx.Form.Value("name"),
 					ctx.Form.Value("importer"),
-				))
+				), true)
 			case "unsupported-node-native-module":
 				return throwErrorJS(ctx, fmt.Errorf(
 					`unsupported node native module "%s" (Imported by "%s")`,
 					ctx.Form.Value("name"),
 					ctx.Form.Value("importer"),
-				))
+				), true)
 			case "unsupported-npm-package":
 				return throwErrorJS(ctx, fmt.Errorf(
 					`unsupported NPM package "%s" (Imported by "%s")`,
 					ctx.Form.Value("name"),
 					ctx.Form.Value("importer"),
-				))
+				), true)
 			case "unsupported-file-dependency":
 				return throwErrorJS(ctx, fmt.Errorf(
 					`unsupported file dependency "%s" (Imported by "%s")`,
 					ctx.Form.Value("name"),
 					ctx.Form.Value("importer"),
-				))
+				), true)
 			default:
-				return throwErrorJS(ctx, fmt.Errorf("unknown error"))
+				return throwErrorJS(ctx, fmt.Errorf("unknown error"), true)
 			}
 
 		case "/favicon.ico":
@@ -241,12 +249,31 @@ func esmHandler() rex.Handle {
 			target = getBuildTargetByUA(userAgent)
 		}
 
-		if pathname == "/build" {
+		if strings.HasPrefix(pathname, "/+") {
+			hash, ext := utils.SplitByLastByte(pathname[2:], '.')
+			savaPath := fmt.Sprintf("publish/+%s.%s.%s", hash, target, ext)
+			fi, err := fs.Stat(savaPath)
+			if err != nil {
+				if err == storage.ErrNotFound {
+					return rex.Status(404, "not found")
+				}
+				return rex.Status(500, err.Error())
+			}
+			r, err := fs.OpenFile(savaPath)
+			if err != nil {
+				return rex.Status(500, err.Error())
+			}
+			header.Set("Content-Type", "application/javascript; charset=utf-8")
+			header.Set("Cache-Control", "public, max-age=31536000, immutable")
+			return rex.Content(savaPath, fi.ModTime(), r) // auto closed
+		}
+
+		if pathname == "/build" || pathname == "/run" {
 			if !hasBuildVerPrefix && !ctx.Form.Has("pin") {
-				url := fmt.Sprintf("%s%s/v%d/build", cdnOrigin, cfg.CdnBasePath, CTX_BUILD_VERSION)
+				url := fmt.Sprintf("%s%s/v%d%s", cdnOrigin, cfg.CdnBasePath, CTX_BUILD_VERSION, pathname)
 				return rex.Redirect(url, http.StatusFound)
 			}
-			data, err := embedFS.ReadFile("build.ts")
+			data, err := embedFS.ReadFile(fmt.Sprintf("%s.ts", pathname[1:]))
 			if err != nil {
 				return err
 			}
@@ -256,7 +283,7 @@ func esmHandler() rex.Handle {
 			} else {
 				code, err := minify(string(data), targets[target], api.LoaderTS)
 				if err != nil {
-					return throwErrorJS(ctx, fmt.Errorf("transform error: %v", err))
+					return throwErrorJS(ctx, fmt.Errorf("transform error: %v", err), false)
 				}
 				data = code
 				header.Set("Content-Type", "application/javascript; charset=utf-8")
@@ -265,7 +292,7 @@ func esmHandler() rex.Handle {
 			if targetFromUA {
 				header.Add("Vary", "User-Agent")
 			}
-			return bytes.ReplaceAll(data, []byte("$ORIGIN"), []byte(cdnOrigin))
+			return data
 		}
 
 		if pathname == "/server" {
@@ -302,7 +329,7 @@ func esmHandler() rex.Handle {
 				if err == nil {
 					code, err := minify(string(data), targets[target], api.LoaderJS)
 					if err != nil {
-						return throwErrorJS(ctx, fmt.Errorf("transform error: %v", err))
+						return throwErrorJS(ctx, fmt.Errorf("transform error: %v", err), false)
 					}
 					header.Set("Content-Type", "application/javascript; charset=utf-8")
 					header.Set("Cache-Control", "public, max-age=31536000, immutable")
@@ -732,7 +759,7 @@ func esmHandler() rex.Handle {
 			return throwErrorJS(ctx, fmt.Errorf(
 				`unsupported npm package "%s": native node module is not supported in browser`,
 				reqPkg.Name,
-			))
+			), false)
 		}
 
 		// check build version
@@ -802,7 +829,7 @@ func esmHandler() rex.Handle {
 				reqPkg.Submodule = strings.Join(a[1:], "/")
 				args, err := decodeBuildArgsPrefix(a[0])
 				if err != nil {
-					return throwErrorJS(ctx, err)
+					return throwErrorJS(ctx, err, false)
 				}
 				reqPkg.Subpath = strings.Join(strings.Split(reqPkg.Subpath, "/")[1:], "/")
 				if args.denoStdVersion == "" {
@@ -992,7 +1019,7 @@ func esmHandler() rex.Handle {
 							header.Set("Cache-Control", "public, max-age=31536000, immutable")
 							return rex.Status(404, "Module not found")
 						}
-						return throwErrorJS(ctx, output.err)
+						return throwErrorJS(ctx, output.err, false)
 					}
 					esm = output.meta
 				case <-time.After(10 * time.Minute):
@@ -1152,7 +1179,7 @@ func hasTargetSegment(path string) bool {
 	return false
 }
 
-func throwErrorJS(ctx *rex.Context, err error) interface{} {
+func throwErrorJS(ctx *rex.Context, err error, static bool) interface{} {
 	buf := bytes.NewBuffer(nil)
 	fmt.Fprintf(buf, "/* esm.sh - error */\n")
 	fmt.Fprintf(
@@ -1162,7 +1189,11 @@ func throwErrorJS(ctx *rex.Context, err error) interface{} {
 		"\n",
 	)
 	fmt.Fprintf(buf, "export default null;\n")
-	ctx.W.Header().Set("Cache-Control", "private, no-store, no-cache, must-revalidate")
+	if static {
+		ctx.W.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
+	} else {
+		ctx.W.Header().Set("Cache-Control", "private, no-store, no-cache, must-revalidate")
+	}
 	ctx.W.Header().Set("Content-Type", "application/javascript; charset=utf-8")
 	return rex.Status(500, buf)
 }

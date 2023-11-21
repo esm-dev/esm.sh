@@ -7,6 +7,17 @@ export type BuildInput = {
   types?: string;
 };
 
+export type TransformOptions = {
+  target?:
+    | "deno"
+    | "denonext"
+    | "node"
+    | "esnext"
+    | `es201${5 | 6 | 7 | 8 | 9}`
+    | `es202${0 | 1 | 2}`;
+  jsxImportSource?: string;
+};
+
 export type BuildOutput = {
   id: string;
   url: string;
@@ -18,7 +29,7 @@ export async function build(input: string | BuildInput): Promise<BuildOutput> {
   if (!options?.code) {
     throw new Error("esm.sh [build] <400> missing code");
   }
-  const ret: any = await fetch("$ORIGIN/build", {
+  const ret: any = await fetch(new URL("/build", import.meta.url), {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(options),
@@ -32,7 +43,7 @@ export async function build(input: string | BuildInput): Promise<BuildOutput> {
 }
 
 export async function transform(
-  input: string | BuildInput & { target?: string },
+  input: string | (BuildInput & TransformOptions),
 ): Promise<{ code: string }> {
   const options = typeof input === "string" ? { code: input } : input;
   Reflect.set(options, "transformOnly", true);

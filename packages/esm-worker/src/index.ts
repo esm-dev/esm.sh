@@ -25,7 +25,6 @@ import {
   errPkgNotFound,
   fixPkgVersion,
   hashText,
-  isValidUTF8,
   redirect,
   splitBy,
   trimPrefix,
@@ -39,6 +38,7 @@ const regexpBuildVersionPrefix = /^\/(v\d+|stable)\//;
 
 const defaultNpmRegistry = "https://registry.npmjs.org";
 const defaultEsmServerOrigin = "https://esm.sh";
+const immutableCache = "public, max-age=31536000, immutable";
 
 const noopStorage: WorkerStorage = {
   get: () => Promise.resolve(null),
@@ -120,6 +120,7 @@ class ESMWorker {
     let pathname = decodeURIComponent(url.pathname);
     let buildVersion = "v" + VERSION;
 
+    // return the CLI script
     if (
       ua === "undici" ||
       ua?.startsWith("Node/") ||
@@ -127,18 +128,15 @@ class ESMWorker {
       ua?.startsWith("Bun/")
     ) {
       if (pathname === "/" || /^\/v\d+\/?$/.test(pathname)) {
-        return ctx.withCache(() =>
-          fetchServerOrigin(
-            req,
-            env,
-            ctx,
-            pathname,
-            corsHeaders(),
-          ), { varyUA: true });
+        return ctx.withCache(
+          () => fetchOrigin(req, env, ctx, pathname, corsHeaders()),
+          { varyUA: true },
+        );
       }
     }
 
     switch (pathname) {
+      // build api
       case "/build":
         if (req.method === "POST" || req.method === "PUT") {
           const input = await req.text();
@@ -160,7 +158,7 @@ class ESMWorker {
               headers,
             });
           }
-          const res = await fetchServerOrigin(
+          const res = await fetchOrigin(
             new Request(req.url, {
               method: "POST",
               headers: req.headers,
@@ -184,24 +182,45 @@ class ESMWorker {
         break;
 
       case "/error.js":
-      case "/status.json":
-        return fetchServerOrigin(
-          req,
-          env,
-          ctx,
-          `${pathname}${url.search}`,
-          corsHeaders(),
+        return ctx.withCache(
+          () =>
+            fetchOrigin(
+              req,
+              env,
+              ctx,
+              pathname + url.search,
+              corsHeaders(),
+            ),
+          { varyUA: true },
         );
 
+      case "/status.json":
+        return fetchOrigin(req, env, ctx, pathname, corsHeaders());
+
       case "/esma-target":
-        return new Response(getBuildTargetFromUA(ua), {
-          headers: corsHeaders(),
-        });
+        return ctx.withCache(
+          () => {
+            const headers = corsHeaders();
+            headers.set("cache-control", immutableCache);
+            return new Response(getBuildTargetFromUA(ua), { headers });
+          },
+          { varyUA: true },
+        );
     }
 
     // ban malicious requests
-    if (pathname.startsWith("/.") || pathname.endsWith(".php")) {
-      return new Response("Not found", { status: 404 });
+    if (
+      pathname === "/favicon.ico" ||
+      pathname.startsWith("/.") ||
+      pathname.endsWith(".php")
+    ) {
+      return ctx.withCache(
+        () =>
+          new Response(null, {
+            status: 404,
+            headers: { "cache-control": immutableCache },
+          }),
+      );
     }
 
     if (this.middleware) {
@@ -212,7 +231,7 @@ class ESMWorker {
     }
 
     if (pathname === "/" || pathname.startsWith("/embed/")) {
-      return fetchServerOrigin(
+      return fetchOrigin(
         req,
         env,
         ctx,
@@ -244,7 +263,16 @@ class ESMWorker {
       buildVersion = url.searchParams.get("pin")!;
     }
 
-    if (pathname === "/build" || pathname === "/server") {
+    if (pathname.startsWith("/+")) {
+      return ctx.withCache(
+        () => fetchOriginWithKVCache(req, env, ctx, pathname),
+        { varyUA: true },
+      );
+    }
+
+    if (
+      pathname === "/build" || pathname === "/run" || pathname === "/server"
+    ) {
       if (!hasBuildVerPrefix && !hasBuildVerQuery) {
         return redirect(
           new URL(`/${buildVersion}${pathname}`, url),
@@ -252,14 +280,10 @@ class ESMWorker {
           86400,
         );
       }
-      return ctx.withCache(() =>
-        fetchServerOrigin(
-          req,
-          env,
-          ctx,
-          `/${buildVersion}${pathname}`,
-          corsHeaders(),
-        ), { varyUA: true });
+      return ctx.withCache(
+        () => fetchOrigin(req, env, ctx, pathname, corsHeaders()),
+        { varyUA: true },
+      );
     }
 
     const gh = pathname.startsWith("/gh/");
@@ -288,7 +312,14 @@ class ESMWorker {
       )
     ) {
       return ctx.withCache(
-        () => fetchESM(req, env, ctx, `/${buildVersion}${pathname}`, true),
+        () =>
+          fetchOriginWithKVCache(
+            req,
+            env,
+            ctx,
+            `/${buildVersion}${pathname}`,
+            true,
+          ),
         { varyUA: true },
       );
     }
@@ -366,7 +397,7 @@ class ESMWorker {
       )
     ) {
       return ctx.withCache(() =>
-        fetchServerOrigin(
+        fetchOrigin(
           req,
           env,
           ctx,
@@ -511,7 +542,7 @@ class ESMWorker {
     // redirect to real wasm file: `/v100/PKG/es2022/foo.wasm` -> `PKG/foo.wasm`
     if (hasBuildVerPrefix && subPath.endsWith(".wasm")) {
       return ctx.withCache(() => {
-        return fetchServerOrigin(req, env, ctx, url.pathname, corsHeaders());
+        return fetchOrigin(req, env, ctx, url.pathname, corsHeaders());
       });
     }
 
@@ -529,7 +560,7 @@ class ESMWorker {
       // use origin server response for `*.wasm?module`
       if (ext === "wasm" && url.searchParams.has("module")) {
         return ctx.withCache(() => {
-          return fetchServerOrigin(
+          return fetchOrigin(
             req,
             env,
             ctx,
@@ -543,7 +574,7 @@ class ESMWorker {
           const pathname = `${
             gh ? "/gh" : ""
           }/${pkg}@${packageVersion}${subPath}`;
-          return fetchAsset(req, ctx, env, pathname);
+          return fetchOriginWithR2Cache(req, ctx, env, pathname);
         });
       }
     }
@@ -567,7 +598,7 @@ class ESMWorker {
         }
         const path =
           `${prefix}/${pkg}@${packageVersion}${subPath}${url.search}`;
-        return fetchESM(req, env, ctx, path, true);
+        return fetchOriginWithKVCache(req, env, ctx, path, true);
       });
     }
 
@@ -584,194 +615,12 @@ class ESMWorker {
       const path = `${prefix}/${
         hasExternalAllMarker ? "*" : ""
       }${pkg}@${packageVersion}${subPath}${url.search}`;
-      return fetchESM(req, env, ctx, path);
+      return fetchOriginWithKVCache(req, env, ctx, path);
     }, { varyUA: true });
   }
 }
 
-async function fetchAsset(
-  req: Request,
-  ctx: Context,
-  env: Env,
-  pathname: string,
-) {
-  const resHeaders = corsHeaders();
-  const storage = Reflect.get(env, "R2") as R2Bucket | undefined ?? noopStorage;
-  const ret = await storage.get(pathname.slice(1));
-  if (ret) {
-    resHeaders.set(
-      "Content-Type",
-      ret.httpMetadata?.contentType || getContentType(pathname),
-    );
-    resHeaders.set("Cache-Control", "public, max-age=31536000, immutable");
-    resHeaders.set("X-Content-Source", "esm-worker");
-    return new Response(ret.body as ReadableStream<Uint8Array>, {
-      headers: resHeaders,
-    });
-  }
-
-  const res = await fetchServerOrigin(req, env, ctx, pathname, resHeaders);
-  if (res.ok) {
-    const contentType = res.headers.get("content-type") ||
-      getContentType(pathname);
-    const buffer = await res.arrayBuffer();
-    ctx.waitUntil(storage.put(pathname.slice(1), buffer.slice(0), {
-      httpMetadata: { contentType },
-    }));
-    resHeaders.set("Content-Type", contentType);
-    resHeaders.set("Cache-Control", "public, max-age=31536000, immutable");
-    resHeaders.set(
-      "X-Content-Source",
-      env.ESM_ORIGIN ?? defaultEsmServerOrigin,
-    );
-    return new Response(buffer, { headers: resHeaders });
-  }
-  return res;
-}
-
-async function fetchESM(
-  req: Request,
-  env: Env,
-  ctx: Context,
-  path: string,
-  gzip?: boolean,
-): Promise<Response> {
-  let storeKey = path.slice(1);
-  if (storeKey.startsWith("stable/")) {
-    storeKey = `v${STABLE_VERSION}/` + storeKey.slice(7);
-  }
-  const headers = corsHeaders();
-  const [pathname] = splitBy(path, "?", true);
-  const storage = Reflect.get(env, "R2") as R2Bucket | undefined ?? noopStorage;
-  const KV = Reflect.get(env, "KV") as KVNamespace | undefined ?? asKV(storage);
-  const noStore = req.headers.has("X-Real-Origin");
-  const isModule = !(
-    ctx.url.searchParams.has("raw") ||
-    pathname.endsWith(".d.ts") ||
-    pathname.endsWith(".d.mts") ||
-    pathname.endsWith(".map")
-  );
-  if (!noStore) {
-    if (isModule) {
-      const { value, metadata } = await KV.getWithMetadata<HttpMetadata>(
-        storeKey,
-        "stream",
-      );
-      if (value && metadata) {
-        let body = value as ReadableStream<Uint8Array>;
-        if (gzip && typeof DecompressionStream !== "undefined") {
-          body = body.pipeThrough(new DecompressionStream("gzip"));
-        }
-        headers.set("Content-Type", metadata.contentType);
-        headers.set("Cache-Control", "public, max-age=31536000, immutable");
-        const exposedHeaders = [];
-        if (metadata.buildId) {
-          headers.set("X-Esm-Id", metadata.buildId);
-          exposedHeaders.push("X-Esm-Id");
-        }
-        if (metadata.dts) {
-          headers.set("X-TypeScript-Types", metadata.dts);
-          exposedHeaders.push("X-TypeScript-Types");
-        }
-        if (exposedHeaders.length > 0) {
-          headers.set(
-            "Access-Control-Expose-Headers",
-            exposedHeaders.join(", "),
-          );
-        }
-        headers.set("X-Content-Source", "esm-worker");
-        return new Response(body, { headers });
-      }
-    } else {
-      const obj = await storage.get(storeKey);
-      if (obj) {
-        const contentType = obj.httpMetadata?.contentType ||
-          getContentType(path);
-        headers.set("Content-Type", contentType);
-        headers.set("Cache-Control", "public, max-age=31536000, immutable");
-        headers.set("X-Content-Source", "esm-worker");
-        return new Response(obj.body, { headers });
-      }
-    }
-  }
-
-  const res = await fetchServerOrigin(req, env, ctx, path, headers);
-  if (!res.ok) {
-    return res;
-  }
-
-  let buffer = await res.arrayBuffer();
-
-  // if the buffer is not valid utf8
-  // try to re-fetch the module and check again
-  if (!isValidUTF8(buffer)) {
-    await new Promise((resolve) =>
-      setTimeout(resolve, 50 + Math.random() * 50)
-    );
-    const res = await fetchServerOrigin(req, env, ctx, path, headers);
-    if (!res.ok) {
-      return res;
-    }
-    buffer = await res.arrayBuffer();
-  }
-  if (!isValidUTF8(buffer)) {
-    const headers = corsHeaders();
-    headers.set(
-      "Cache-Control",
-      "private, no-store, no-cache, must-revalidate",
-    );
-    return new Response("Invalid Body", { status: 502, headers });
-  }
-
-  const contentType = res.headers.get("Content-Type") || getContentType(path);
-  const cacheControl = res.headers.get("Cache-Control");
-  const buildId = res.headers.get("X-Esm-Id");
-  const dts = res.headers.get("X-TypeScript-Types");
-  const exposedHeaders = [];
-
-  headers.set("Content-Type", contentType);
-  if (cacheControl) {
-    headers.set("Cache-Control", cacheControl);
-  }
-  if (buildId) {
-    headers.set("X-Esm-Id", buildId);
-    exposedHeaders.push("X-Esm-Id");
-  }
-  if (dts) {
-    headers.set("X-TypeScript-Types", dts);
-    exposedHeaders.push("X-TypeScript-Types");
-  }
-  if (exposedHeaders.length > 0) {
-    headers.set("Access-Control-Expose-Headers", exposedHeaders.join(", "));
-  }
-  headers.set(
-    "X-Content-Source",
-    env.ESM_ORIGIN ?? defaultEsmServerOrigin,
-  );
-
-  // save to KV/R2 if immutable
-  if (!noStore && cacheControl?.includes("immutable")) {
-    if (!isModule) {
-      ctx.waitUntil(storage.put(storeKey, buffer.slice(0), {
-        httpMetadata: { contentType },
-      }));
-    } else {
-      let value: ArrayBuffer | ReadableStream = buffer.slice(0);
-      if (gzip && typeof CompressionStream !== "undefined") {
-        value = new Response(value).body.pipeThrough<Uint8Array>(
-          new CompressionStream("gzip"),
-        );
-      }
-      ctx.waitUntil(KV.put(storeKey, value, {
-        metadata: { contentType, dts, buildId },
-      }));
-    }
-  }
-
-  return new Response(buffer, { headers });
-}
-
-async function fetchServerOrigin(
+async function fetchOrigin(
   req: Request,
   env: Env,
   ctx: Context,
@@ -825,13 +674,13 @@ async function fetchServerOrigin(
     if (res.headers.has("Cache-Control")) {
       resHeaders.set("Cache-Control", res.headers.get("Cache-Control")!);
     } else if (res.status === 400) {
-      resHeaders.set("Cache-Control", "public, max-age=31536000, immutable");
+      resHeaders.set("Cache-Control", immutableCache);
     } else if (res.status === 404) {
       const message = new TextDecoder().decode(buffer);
       if (!/package .+ not found/.test(message)) {
         resHeaders.set(
           "Cache-Control",
-          "public, max-age=31536000, immutable",
+          immutableCache,
         );
       }
     }
@@ -857,6 +706,184 @@ async function fetchServerOrigin(
     resHeaders.set("Access-Control-Expose-Headers", exposedHeaders.join(", "));
   }
   return new Response(buffer, { headers: resHeaders });
+}
+
+async function fetchOriginWithKVCache(
+  req: Request,
+  env: Env,
+  ctx: Context,
+  path: string,
+  gzip?: boolean,
+): Promise<Response> {
+  let storeKey = path.slice(1);
+  if (storeKey.startsWith("stable/")) {
+    storeKey = `v${STABLE_VERSION}/` + storeKey.slice(7);
+  } else if (storeKey.startsWith("+")) {
+    storeKey = `modules/` + storeKey;
+  }
+  const headers = corsHeaders();
+  const [pathname] = splitBy(path, "?", true);
+  const storage = Reflect.get(env, "R2") as R2Bucket | undefined ?? noopStorage;
+  const KV = Reflect.get(env, "KV") as KVNamespace | undefined ?? asKV(storage);
+  const noStore = req.headers.has("X-Real-Origin");
+  const isModule = !(
+    ctx.url.searchParams.has("raw") ||
+    pathname.endsWith(".d.ts") ||
+    pathname.endsWith(".d.mts") ||
+    pathname.endsWith(".map")
+  );
+  if (!noStore) {
+    if (isModule) {
+      const { value, metadata } = await KV.getWithMetadata<HttpMetadata>(
+        storeKey,
+        "stream",
+      );
+      if (value && metadata) {
+        let body = value as ReadableStream<Uint8Array>;
+        if (gzip && typeof DecompressionStream !== "undefined") {
+          body = body.pipeThrough(new DecompressionStream("gzip"));
+        }
+        headers.set("Content-Type", metadata.contentType);
+        headers.set("Cache-Control", immutableCache);
+        const exposedHeaders = [];
+        if (metadata.buildId) {
+          headers.set("X-Esm-Id", metadata.buildId);
+          exposedHeaders.push("X-Esm-Id");
+        }
+        if (metadata.dts) {
+          headers.set("X-TypeScript-Types", metadata.dts);
+          exposedHeaders.push("X-TypeScript-Types");
+        }
+        if (exposedHeaders.length > 0) {
+          headers.set(
+            "Access-Control-Expose-Headers",
+            exposedHeaders.join(", "),
+          );
+        }
+        headers.set("X-Content-Source", "esm-worker");
+        return new Response(body, { headers });
+      }
+    } else {
+      const obj = await storage.get(storeKey);
+      if (obj) {
+        const contentType = obj.httpMetadata?.contentType ||
+          getContentType(path);
+        headers.set("Content-Type", contentType);
+        headers.set("Cache-Control", immutableCache);
+        headers.set("X-Content-Source", "esm-worker");
+        return new Response(obj.body, { headers });
+      }
+    }
+  }
+
+  const res = await fetchOrigin(req, env, ctx, path, headers);
+  if (!res.ok) {
+    return res;
+  }
+
+  const buffer = await res.arrayBuffer();
+
+  // // if the buffer is not valid utf8
+  // // try to re-fetch the module and check again
+  // if (!isValidUTF8(buffer)) {
+  //   await new Promise((resolve) =>
+  //     setTimeout(resolve, 50 + Math.random() * 50)
+  //   );
+  //   const res = await fetchOrigin(req, env, ctx, path, headers);
+  //   if (!res.ok) {
+  //     return res;
+  //   }
+  //   buffer = await res.arrayBuffer();
+  // }
+  // if (!isValidUTF8(buffer)) {
+  //   const headers = corsHeaders();
+  //   headers.set(
+  //     "Cache-Control",
+  //     "private, no-store, no-cache, must-revalidate",
+  //   );
+  //   return new Response("Invalid Body", { status: 502, headers });
+  // }
+
+  const contentType = res.headers.get("Content-Type") || getContentType(path);
+  const cacheControl = res.headers.get("Cache-Control");
+  const buildId = res.headers.get("X-Esm-Id");
+  const dts = res.headers.get("X-TypeScript-Types");
+  const exposedHeaders = [];
+
+  headers.set("Content-Type", contentType);
+  if (cacheControl) {
+    headers.set("Cache-Control", cacheControl);
+  }
+  if (buildId) {
+    headers.set("X-Esm-Id", buildId);
+    exposedHeaders.push("X-Esm-Id");
+  }
+  if (dts) {
+    headers.set("X-TypeScript-Types", dts);
+    exposedHeaders.push("X-TypeScript-Types");
+  }
+  if (exposedHeaders.length > 0) {
+    headers.set("Access-Control-Expose-Headers", exposedHeaders.join(", "));
+  }
+  headers.set("X-Content-Source", "origin");
+
+  // save to KV/R2 if immutable
+  if (!noStore && cacheControl?.includes("immutable")) {
+    if (!isModule) {
+      ctx.waitUntil(storage.put(storeKey, buffer.slice(0), {
+        httpMetadata: { contentType },
+      }));
+    } else {
+      let value: ArrayBuffer | ReadableStream = buffer.slice(0);
+      if (gzip && typeof CompressionStream !== "undefined") {
+        value = new Response(value).body.pipeThrough<Uint8Array>(
+          new CompressionStream("gzip"),
+        );
+      }
+      ctx.waitUntil(KV.put(storeKey, value, {
+        metadata: { contentType, dts, buildId },
+      }));
+    }
+  }
+
+  return new Response(buffer, { headers });
+}
+
+async function fetchOriginWithR2Cache(
+  req: Request,
+  ctx: Context,
+  env: Env,
+  pathname: string,
+) {
+  const resHeaders = corsHeaders();
+  const storage = Reflect.get(env, "R2") as R2Bucket | undefined ?? noopStorage;
+  const ret = await storage.get(pathname.slice(1));
+  if (ret) {
+    resHeaders.set(
+      "Content-Type",
+      ret.httpMetadata?.contentType || getContentType(pathname),
+    );
+    resHeaders.set("Cache-Control", immutableCache);
+    resHeaders.set("X-Content-Source", "esm-worker");
+    return new Response(ret.body as ReadableStream<Uint8Array>, {
+      headers: resHeaders,
+    });
+  }
+
+  const res = await fetchOrigin(req, env, ctx, pathname, resHeaders);
+  if (res.ok) {
+    const contentType = res.headers.get("content-type") ||
+      getContentType(pathname);
+    const buffer = await res.arrayBuffer();
+    ctx.waitUntil(storage.put(pathname.slice(1), buffer.slice(0), {
+      httpMetadata: { contentType },
+    }));
+    resHeaders.set("Content-Type", contentType);
+    resHeaders.set("Cache-Control", immutableCache);
+    resHeaders.set("X-Content-Source", "origin");
+    return new Response(buffer, { headers: resHeaders });
+  }
+  return res;
 }
 
 export function withESMWorker(middleware?: Middleware): ESMWorker {
