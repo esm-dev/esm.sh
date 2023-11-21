@@ -251,6 +251,19 @@ class ESMWorker {
       url.pathname = pathname;
     }
 
+    // strip loc
+    if (/:\d+:\d+$/.test(pathname)) {
+      pathname = splitBy(pathname, ":")[0];
+    }
+
+    // singleton build module
+    if (pathname.startsWith("/+")) {
+      return ctx.withCache(
+        () => fetchOriginWithKVCache(req, env, ctx, pathname),
+        { varyUA: true },
+      );
+    }
+
     // strip build version prefix
     const hasBuildVerPrefix = regexpBuildVersionPrefix.test(pathname);
     const hasBuildVerQuery = !hasBuildVerPrefix &&
@@ -261,13 +274,6 @@ class ESMWorker {
       pathname = "/" + a.slice(2).join("/");
     } else if (hasBuildVerQuery) {
       buildVersion = url.searchParams.get("pin")!;
-    }
-
-    if (pathname.startsWith("/+")) {
-      return ctx.withCache(
-        () => fetchOriginWithKVCache(req, env, ctx, pathname),
-        { varyUA: true },
-      );
     }
 
     if (
@@ -281,7 +287,14 @@ class ESMWorker {
         );
       }
       return ctx.withCache(
-        () => fetchOrigin(req, env, ctx, pathname, corsHeaders()),
+        () =>
+          fetchOrigin(
+            req,
+            env,
+            ctx,
+            `/${buildVersion}${pathname}`,
+            corsHeaders(),
+          ),
         { varyUA: true },
       );
     }
@@ -295,11 +308,6 @@ class ESMWorker {
     const hasExternalAllMarker = pathname.startsWith("/*");
     if (hasExternalAllMarker) {
       pathname = "/" + pathname.slice(2);
-    }
-
-    // strip loc
-    if (/:\d+:\d+$/.test(pathname)) {
-      pathname = splitBy(pathname, ":")[0];
     }
 
     if (

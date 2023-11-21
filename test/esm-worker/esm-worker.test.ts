@@ -27,12 +27,15 @@ async function run(name: string, ...args: string[]) {
 await run("pnpm", "i");
 await run("node", "build.mjs");
 
+const env = {
+  ESM_ORIGIN: "http://localhost:8080",
+};
 const workerOrigin = "http://localhost:8787";
 const { withESMWorker } = await import(
-  "../../packages/esm-worker/dist/index.js"
+  `../../packages/esm-worker/dist/index.js`
 );
 const worker = withESMWorker(
-  (_req: Request, _env: {}, ctx: { url: URL }) => {
+  (_req: Request, _env: typeof env, ctx: { url: URL }) => {
     if (ctx.url.pathname === "/") {
       return new Response("<h1>Welcome to esm.sh!</h1>", {
         headers: { "content-type": "text/html" },
@@ -40,12 +43,10 @@ const worker = withESMWorker(
     }
   },
 );
-const env = {
-  ESM_ORIGIN: "http://localhost:8080",
-};
+
 const ac = new AbortController();
 
-// start worker
+// start the worker
 serve((req) => worker.fetch(req, env, { waitUntil: () => {} }), {
   port: 8787,
   signal: ac.signal,
@@ -280,7 +281,7 @@ Deno.test("esm-worker", {
       res2.headers.get("Cache-Control"),
       "public, max-age=31536000, immutable",
     );
-    const pkgJson: any = await res2.json();
+    const pkgJson = await res2.json();
     assertEquals(pkgJson.name, "react");
   });
 

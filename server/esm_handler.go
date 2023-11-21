@@ -220,28 +220,6 @@ func esmHandler() rex.Handle {
 			pathname = regexpLocPath.ReplaceAllString(pathname, "$1")
 		}
 
-		var hasBuildVerPrefix bool
-		var hasStablePrefix bool
-		var outdatedBuildVer string
-
-		// check build version prefix
-		buildBasePath := fmt.Sprintf("/v%d", CTX_BUILD_VERSION)
-		if strings.HasPrefix(pathname, "/stable/") {
-			pathname = strings.TrimPrefix(pathname, "/stable")
-			hasBuildVerPrefix = true
-			hasStablePrefix = true
-		} else if strings.HasPrefix(pathname, buildBasePath+"/") || pathname == buildBasePath {
-			a := strings.Split(pathname, "/")
-			pathname = "/" + strings.Join(a[2:], "/")
-			hasBuildVerPrefix = true
-			// Otherwise check possible fixed version
-		} else if regexpBuildVersionPath.MatchString(pathname) {
-			a := strings.Split(pathname, "/")
-			pathname = "/" + strings.Join(a[2:], "/")
-			hasBuildVerPrefix = true
-			outdatedBuildVer = a[1]
-		}
-
 		// determine build target by `?target` query or `User-Agent` header
 		target := strings.ToLower(ctx.Form.Value("target"))
 		targetFromUA := targets[target] == 0
@@ -266,6 +244,28 @@ func esmHandler() rex.Handle {
 			header.Set("Content-Type", "application/javascript; charset=utf-8")
 			header.Set("Cache-Control", "public, max-age=31536000, immutable")
 			return rex.Content(savaPath, fi.ModTime(), r) // auto closed
+		}
+
+		var hasBuildVerPrefix bool
+		var hasStablePrefix bool
+		var outdatedBuildVer string
+
+		// check build version prefix
+		buildBasePath := fmt.Sprintf("/v%d", CTX_BUILD_VERSION)
+		if strings.HasPrefix(pathname, "/stable/") {
+			pathname = strings.TrimPrefix(pathname, "/stable")
+			hasBuildVerPrefix = true
+			hasStablePrefix = true
+		} else if strings.HasPrefix(pathname, buildBasePath+"/") || pathname == buildBasePath {
+			a := strings.Split(pathname, "/")
+			pathname = "/" + strings.Join(a[2:], "/")
+			hasBuildVerPrefix = true
+			// Otherwise check possible fixed version
+		} else if regexpBuildVersionPath.MatchString(pathname) {
+			a := strings.Split(pathname, "/")
+			pathname = "/" + strings.Join(a[2:], "/")
+			hasBuildVerPrefix = true
+			outdatedBuildVer = a[1]
 		}
 
 		if pathname == "/build" || pathname == "/run" {
