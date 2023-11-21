@@ -13,6 +13,7 @@
       }
     }
   </script>
+  <script src="https://cdn.tailwindcss.com"></script>
   <script type="module" src="/run" defer></script>
 </head>
 
@@ -23,10 +24,11 @@
 
     function App() {
       return (
-        <h1>Hello, World!</h1>
+        <h1 class="text-3xl font-bold">
+          Hello, World!
+        </h1>
       )
     }
-
     createRoot(globalThis.root).render(<App />)
   </script>
 </body>
