@@ -26,11 +26,13 @@ or build a module with custom input(code):
 ```js
 import { esm } from "https://esm.sh/build";
 
-const { sayHi } = await esm`
-  import chalk from "chalk";
-  export const sayHi = () => chalk.blue("Hi!");
+const { render } = await esm`
+  /* @jsx h */
+  import { h } from "npm:preact@10.13.2";
+  import { renderToString } from "npm:preact-render-to-string@6.0.2";
+  export const render () => renderToString(<h1>Hello world!</h1>);
 `;
-console.log(sayHi()); // prints "Hi!" message in blue color
+console.log(render()); // "<h1>Hello world!</h1>"
 ```
 
 > More usage check out [here](#building-module-with-custom-inputcode).
@@ -132,14 +134,38 @@ By using this feature, you can take advantage of tree shaking with esbuild and
 achieve a smaller bundle size. **Note** that this feature is only supported for
 ESM modules and not CJS modules.
 
-### Bundle Mode
+### Bundling Strategy
+
+By default, esm.sh bundles sub-modules of a package that are defined in the `exports`
+field of `package.json` into a single JS file.
+
+You can also bundle all dependencies of a package into a single JS file by adding
+`?bundle-deps` query to the import URL:
 
 ```js
-import { Button } from "https://esm.sh/antd?bundle";
+import { Button } from "https://esm.sh/antd?bundle-deps";
 ```
 
-In **bundle** mode, all dependencies are bundled into a single JS file except
-the peer dependencies.
+Bundling code into a single file can reduce the number of network requests and
+improve performance. However, it may bundle shared code repeatedly. In extreme
+case, it may break the side effects of the package, or change the `import.meta.url`
+pointing. To avoid this, you can add `?no-bundle` to disable the bundling behavior:
+
+```js
+import "https://esm.sh/@pyscript/core?no-bundle";
+```
+
+For package authors, you can specify the bundling strategy by adding the `esm.sh`
+field to `package.json`:
+
+```json
+{
+  "name": "foo",
+  "esm.sh": {
+    "bundle": false, // disables bundling behavior
+  }
+}
+```
 
 ### Development Mode
 
@@ -295,17 +321,18 @@ the `type: "module"` option:
 ```js
 await navigator.serviceWorker.register(
   new URL(
-    "https://esm.sh/playground-elements@0.18.1/playground-service-worker.js?raw",
+    "https://esm.sh/playground-elements/playground-service-worker.js?raw",
     import.meta.url.href
   ),
   { scope: '/' }
 );
 ```
 
-You may alternatively specify an `&raw` extra query after the package version:
+You may alternatively use `raw.esm.sh` as the origin, which is equivalent to
+`esm.sh/PATH?raw`:
 
 ```html
-<playground-project sandbox-base-url="https://esm.sh/playground-elements@0.18.1&raw/"
+<playground-project sandbox-base-url="https://raw.esm.sh/playground-elements/"
 ></playground-project>
 ```
 
@@ -425,9 +452,7 @@ const ret = await build({
     /* @jsx h */
     import { h } from "preact";
     import { renderToString } from "preact-render-to-string";
-    export function render(): string {
-      return renderToString(<h1>Hello world!</h1>);
-    }
+    export const render () => renderToString(<h1>Hello world!</h1>);
   `,
   // for types checking and LSP completion
   types: `
@@ -449,13 +474,13 @@ browser with npm packages:
 ```js
 import { esm } from "https://esm.sh/build";
 
-const mod = await esm`
+const { render } = await esm`
   /* @jsx h */
-  import { h } from "preact@10.13.2";
-  import { renderToString } from "preact-render-to-string@6.0.2";
-  export const html = renderToString(<h1>Hello world!</h1>);
+  import { h } from "npm:preact@10.13.2";
+  import { renderToString } from "npm:preact-render-to-string@6.0.2";
+  export const render () => renderToString(<h1>Hello world!</h1>);
 `;
-console.log(mod.html); // "<h1>Hello world!</h1>"
+console.log(render()); // "<h1>Hello world!</h1>"
 ```
 
 ## Pinning Build Version
