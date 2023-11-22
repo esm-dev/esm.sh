@@ -13,7 +13,7 @@ export type TransformOptions = {
     | "esnext"
     | `es201${5 | 6 | 7 | 8 | 9}`
     | `es202${0 | 1 | 2}`;
-  jsxImportSource?: string;
+  imports?: Record<string, string>;
 };
 
 export type BuildOutput = {
@@ -27,7 +27,7 @@ export async function build(input: string | BuildInput): Promise<BuildOutput> {
   if (!options?.code) {
     throw new Error("esm.sh [build] <400> missing code");
   }
-  const ret: any = await fetch(new URL("/build", import.meta.url), {
+  const ret = await fetch(new URL("/build", import.meta.url), {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(options),
@@ -61,13 +61,12 @@ export async function esm<T extends object = Record<string, any>>(
   };
 }
 
-export async function withCache(
+async function withCache(
   input: string | BuildInput,
 ): Promise<BuildOutput> {
-  let key = typeof input === "string" ? input : JSON.stringify(input);
-  if (globalThis.crypto) {
-    key = await hashText(key);
-  }
+  const key = await computeHash(
+    typeof input === "string" ? input : JSON.stringify(input),
+  );
   if (globalThis.localStorage) {
     const cached = localStorage.getItem(key);
     if (cached) {
@@ -81,14 +80,19 @@ export async function withCache(
   return ret;
 }
 
-export async function hashText(s: string): Promise<string> {
-  const buffer = await crypto.subtle.digest(
-    "SHA-1",
-    new TextEncoder().encode(s),
+async function computeHash(input: string): Promise<string> {
+  if (!globalThis.crypto) {
+    const { h64ToString } = await (await import(`./xxhash-wasm@1.0.2`))
+      .default();
+    return h64ToString(input);
+  }
+  const buffer = new Uint8Array(
+    await crypto.subtle.digest(
+      "SHA-1",
+      new TextEncoder().encode(input),
+    ),
   );
-  return Array.from(new Uint8Array(buffer)).map((b) =>
-    b.toString(16).padStart(2, "0")
-  ).join("");
+  return [...buffer].map((b) => b.toString(16).padStart(2, "0")).join("");
 }
 
 export default build;

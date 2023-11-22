@@ -4,29 +4,32 @@
  *
  */
 
-const d = document;
-const runScripts: { loader: string; code: string }[] = [];
-let jsxImportSource: string | undefined = undefined;
+/// <reference lib="dom" />
 
-d.querySelectorAll("script").forEach((el) => {
+const d = document;
+const l = localStorage;
+const kImportmap = "importmap";
+const kJsxImportSource = "@jsxImportSource";
+const kScript = "script";
+const loaders: Record<string, string> = {
+  "text/jsx": "jsx",
+  "text/babel": "jsx",
+  "text/tsx": "tsx",
+  "text/ts": "ts",
+};
+
+const runScripts: { loader: string; code: string }[] = [];
+let imports: Record<string, string> | undefined = undefined;
+
+d.querySelectorAll(kScript).forEach((el) => {
   let loader: string | null = null;
-  switch (el.type) {
-    case "importmap": {
-      const im = JSON.parse(el.innerHTML);
-      jsxImportSource = im.imports?.["@jsxImportSource"];
-      break;
+  if (el.type === kImportmap) {
+    imports = JSON.parse(el.innerHTML).imports;
+    if (imports && HTMLScriptElement.supports?.(kImportmap)) {
+      imports = { [kJsxImportSource]: imports[kJsxImportSource] };
     }
-    case "text/babel":
-    case "text/tsx":
-      loader = "tsx";
-      break;
-    case "text/jsx":
-      loader = "jsx";
-      break;
-    case "text/typescript":
-    case "application/typescript":
-      loader = "ts";
-      break;
+  } else {
+    loader = loaders[el.type];
   }
   if (loader) {
     runScripts.push({ loader, code: el.innerHTML });
@@ -35,32 +38,38 @@ d.querySelectorAll("script").forEach((el) => {
 
 runScripts.forEach(async (input) => {
   const murl = new URL(import.meta.url);
-  const buffer = new Uint8Array(
-    await crypto.subtle.digest(
-      "SHA-1",
-      new TextEncoder().encode(
-        murl.pathname + input.loader + (jsxImportSource ?? "") +
-          input.code,
-      ),
-    ),
-  );
-  const hash = [...buffer].map((b) => b.toString(16).padStart(2, "0"))
-    .join("");
+  const hash = await computeHash(JSON.stringify([murl, input, imports]));
   const cacheKey = "esm.sh/run/" + hash;
-  let js = localStorage.getItem(cacheKey);
+  let js = l.getItem(cacheKey);
   if (!js) {
     const res = await fetch(murl.origin + `/+${hash}.mjs`);
     if (res.ok) {
       js = await res.text();
     } else {
       const { transform } = await import(`./build`);
-      const ret = await transform({ ...input, jsxImportSource, hash });
+      const ret = await transform({ ...input, imports, hash });
       js = ret.code;
     }
-    localStorage.setItem(cacheKey, js!);
+    l.setItem(cacheKey, js!);
   }
-  const script = d.createElement("script");
+  const script = d.createElement(kScript);
   script.type = "module";
   script.innerHTML = js!;
   d.body.appendChild(script);
 });
+
+async function computeHash(input: string): Promise<string> {
+  const c = window.crypto;
+  if (!c) {
+    const { h64ToString } = await (await import(`./xxhash-wasm@1.0.2`))
+      .default();
+    return h64ToString(input);
+  }
+  const buffer = new Uint8Array(
+    await c.subtle.digest(
+      "SHA-1",
+      new TextEncoder().encode(input),
+    ),
+  );
+  return [...buffer].map((b) => b.toString(16).padStart(2, "0")).join("");
+}

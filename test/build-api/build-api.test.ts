@@ -77,7 +77,7 @@ Deno.test("build api (transformOnly)", async () => {
   if (ret.error) {
     throw new Error(`<${ret.error.status}> ${ret.error.message}`);
   }
-  assertEquals(ret.code, "const n=42;\n");
+  assertEquals(ret.code, "var n=42;\n");
 });
 
 Deno.test("build api (use sdk)", async (t) => {

@@ -19,14 +19,14 @@ import (
 )
 
 type BuildInput struct {
-	Code            string            `json:"code"`
-	Loader          string            `json:"loader,omitempty"`
-	Deps            map[string]string `json:"dependencies,omitempty"`
-	Types           string            `json:"types,omitempty"`
-	TransformOnly   bool              `json:"transformOnly,omitempty"`
-	Target          string            `json:"target,omitempty"`
-	JsxImportSource string            `json:"jsxImportSource,omitempty"`
-	Hash            string            `json:"hash,omitempty"`
+	Code          string            `json:"code"`
+	Loader        string            `json:"loader,omitempty"`
+	Deps          map[string]string `json:"dependencies,omitempty"`
+	Types         string            `json:"types,omitempty"`
+	TransformOnly bool              `json:"transformOnly,omitempty"`
+	Target        string            `json:"target,omitempty"`
+	Imports       map[string]string `json:"imports,omitempty"`
+	Hash          string            `json:"hash,omitempty"`
 }
 
 func apiHandler() rex.Handle {
@@ -111,21 +111,51 @@ func build(input BuildInput, cdnOrigin string) (id string, err error) {
 	if input.Deps == nil {
 		input.Deps = map[string]string{}
 	}
+
+	imports := map[string]string{}
+	trailingSlashImports := map[string]string{}
+	jsxImportSource := ""
+	if input.Imports != nil {
+		for key, value := range input.Imports {
+			if strings.HasSuffix(key, "/") {
+				trailingSlashImports[key] = value
+			} else {
+				if key == "@jsxImportSource" {
+					jsxImportSource = value
+				}
+				imports[key] = value
+			}
+		}
+	}
+
 	onResolver := func(args api.OnResolveArgs) (api.OnResolveResult, error) {
 		path := args.Path
-		if isLocalSpecifier(path) {
-			return api.OnResolveResult{}, errors.New("local specifier is not allowed")
-		}
-		if !isHttpSepcifier(path) {
-			pkgName, version, subPath := splitPkgPath(strings.TrimPrefix(path, "npm:"))
-			path = pkgName
-			if subPath != "" {
-				path += "/" + subPath
+		if input.TransformOnly {
+			if value, ok := imports[path]; ok {
+				path = value
+			} else {
+				for key, value := range trailingSlashImports {
+					if strings.HasPrefix(path, key) {
+						path = value + path[len(key):]
+						break
+					}
+				}
 			}
-			if version != "" {
-				input.Deps[pkgName] = version
-			} else if _, ok := input.Deps[pkgName]; !ok {
-				input.Deps[pkgName] = "*"
+		} else {
+			if isLocalSpecifier(path) {
+				return api.OnResolveResult{}, errors.New("local specifier is not allowed")
+			}
+			if !isHttpSepcifier(path) {
+				pkgName, version, subPath := splitPkgPath(strings.TrimPrefix(path, "npm:"))
+				path = pkgName
+				if subPath != "" {
+					path += "/" + subPath
+				}
+				if version != "" {
+					input.Deps[pkgName] = version
+				} else if _, ok := input.Deps[pkgName]; !ok {
+					input.Deps[pkgName] = "*"
+				}
 			}
 		}
 		return api.OnResolveResult{
@@ -140,7 +170,7 @@ func build(input BuildInput, cdnOrigin string) (id string, err error) {
 		Loader:     api.LoaderTSX,
 	}
 	jsx := api.JSXTransform
-	if input.JsxImportSource != "" {
+	if jsxImportSource != "" {
 		jsx = api.JSXAutomatic
 	}
 	opts := api.BuildOptions{
@@ -150,7 +180,9 @@ func build(input BuildInput, cdnOrigin string) (id string, err error) {
 		Format:           api.FormatESModule,
 		Target:           target,
 		JSX:              jsx,
-		JSXImportSource:  input.JsxImportSource,
+		JSXImportSource:  jsxImportSource,
+		Bundle:           true,
+		TreeShaking:      api.TreeShakingFalse,
 		MinifyWhitespace: true,
 		MinifySyntax:     true,
 		Write:            false,
@@ -162,10 +194,6 @@ func build(input BuildInput, cdnOrigin string) (id string, err error) {
 				},
 			},
 		},
-	}
-	if !input.TransformOnly {
-		opts.Bundle = true
-		opts.TreeShaking = api.TreeShakingTrue
 	}
 	ret := api.Build(opts)
 	if len(ret.Errors) > 0 {
