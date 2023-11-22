@@ -136,8 +136,8 @@ ESM modules and not CJS modules.
 
 ### Bundling Strategy
 
-By default, esm.sh bundles sub-modules of a package that are defined in the `exports`
-field of `package.json` into a single JS file.
+By default, esm.sh bundles sub-modules in the dependency tree when you import a
+module.
 
 You can also bundle all dependencies of a package into a single JS file by adding
 `?bundle-deps` query to the import URL:
@@ -146,10 +146,10 @@ You can also bundle all dependencies of a package into a single JS file by addin
 import { Button } from "https://esm.sh/antd?bundle-deps";
 ```
 
-Bundling code into a single file can reduce the number of network requests and
-improve performance. However, it may bundle shared code repeatedly. In extreme
-case, it may break the side effects of the package, or change the `import.meta.url`
-pointing. To avoid this, you can add `?no-bundle` to disable the bundling behavior:
+Bundling deps can reduce the number of network requests and improve performance.
+However, it may bundle shared code repeatedly. In extreme case, it may break the
+side effects of the package, or change the `import.meta.url` pointing. To avoid
+this, you can add `?no-bundle` to disable the default bundling behavior:
 
 ```js
 import "https://esm.sh/@pyscript/core?no-bundle";
@@ -158,7 +158,7 @@ import "https://esm.sh/@pyscript/core?no-bundle";
 For package authors, you can specify the bundling strategy by adding the `esm.sh`
 field to `package.json`:
 
-```json
+```jsonc
 {
   "name": "foo",
   "esm.sh": {
@@ -175,9 +175,9 @@ import React from "https://esm.sh/react?dev";
 
 With the `?dev` option, esm.sh builds a module with `process.env.NODE_ENV` set
 to `"development"` or based on the condition `development` in the `exports`
-field of `package.json`. This is useful for libraries that have different
-behavior in development and production. For example, React will use a different
-warning message in development mode.
+field. This is useful for libraries that have different behavior in development
+and production. For example, React will use a different warning message in
+development mode.
 
 ### ESBuild Options
 
