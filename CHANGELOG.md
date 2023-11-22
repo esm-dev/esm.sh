@@ -1,5 +1,14 @@
 # Changelog
 
+## v135
+
+- Introduce https://esm.sh/run
+- worker: Use `raw.esm.sh` hostname for ?raw option
+- Add `?no-bundle` option
+- Support `esm.sh` field in package.json
+- Fix sub-module resolving (close #754, #743)
+- Upgrade esbuild to **0.19.7**
+
 ## v134
 
 - Add `transformOnly` option for build api
