@@ -579,9 +579,8 @@ class ESMWorker {
       }
       if (assetsExts.has(ext)) {
         return ctx.withCache(() => {
-          const pathname = `${
-            gh ? "/gh" : ""
-          }/${pkg}@${packageVersion}${subPath}`;
+          const prefix = gh ? "/gh" : "";
+          const pathname = `${prefix}/${pkg}@${packageVersion}${subPath}`;
           return fetchOriginWithR2Cache(req, ctx, env, pathname);
         });
       }
@@ -593,6 +592,9 @@ class ESMWorker {
       params.forEach((val, key) => {
         url.searchParams.set(key, val);
       });
+    }
+    if (url.hostname === "raw.esm.sh") {
+      url.searchParams.set("raw", "");
     }
 
     if (
@@ -620,9 +622,9 @@ class ESMWorker {
       if (gh) {
         prefix += "/gh";
       }
-      const path = `${prefix}/${
-        hasExternalAllMarker ? "*" : ""
-      }${pkg}@${packageVersion}${subPath}${url.search}`;
+      const marker = hasExternalAllMarker ? "*" : "";
+      const path =
+        `${prefix}/${marker}${pkg}@${packageVersion}${subPath}${url.search}`;
       return fetchOriginWithKVCache(req, env, ctx, path);
     }, { varyUA: true });
   }
