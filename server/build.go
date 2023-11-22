@@ -548,6 +548,10 @@ rebuild:
 									}
 									for e := om.l.Front(); e != nil; e = e.Next() {
 										name, paths := om.Entry(e)
+										if strings.HasSuffix(name, "/*") && strings.HasPrefix(relPath, strings.TrimSuffix(name, "*")) {
+											url := path.Join(npm.Name, relPath)
+											return api.OnResolveResult{Path: task.resolveExternal(url, args.Kind), External: true}, nil
+										}
 										m, ok := paths.(*orderedMap)
 										if ok && name != "." {
 											for e := m.l.Front(); e != nil; e = e.Next() {
