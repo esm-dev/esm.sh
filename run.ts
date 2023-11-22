@@ -13,7 +13,7 @@ const kJsxImportSource = "@jsxImportSource";
 const kScript = "script";
 const loaders: Record<string, string> = {
   "text/jsx": "jsx",
-  "text/babel": "jsx",
+  "text/babel": "tsx",
   "text/tsx": "tsx",
   "text/ts": "ts",
 };
