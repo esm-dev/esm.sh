@@ -1,8 +1,44 @@
 package server
 
 import (
+	"encoding/json"
 	"testing"
 )
+
+func TestPackageJsonParse(t *testing.T) {
+	var info NpmPackageInfo
+	err := json.Unmarshal([]byte(`{
+		"name": "foo",
+		"version": "1.0.0",
+		"main": "index.js",
+		"module": "index.mjs",
+		"sideEffects": false,
+		"esm.sh": {
+			  "bundle": false
+		  }
+		}`), &info)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if info.Name != "foo" {
+		t.Fatal("invalid name")
+	}
+	if info.Version != "1.0.0" {
+		t.Fatal("invalid version")
+	}
+	if info.Main != "index.js" {
+		t.Fatal("invalid main")
+	}
+	if info.Module != "index.mjs" {
+		t.Fatal("invalid module")
+	}
+	if info.SideEffectsFalse != true {
+		t.Fatal("invalid sideEffects")
+	}
+	if info.ESMConfig["bundle"] != false {
+		t.Fatal("invalid esm.sh config")
+	}
+}
 
 func TestPkgPath(t *testing.T) {
 	pkgName, pkgVersion, subPath := splitPkgPath("react")

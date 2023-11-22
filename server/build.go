@@ -36,7 +36,8 @@ type BuildTask struct {
 	Target       string
 	BuildVersion int
 	Dev          bool
-	Bundle       bool
+	BundleDeps   bool
+	NoBundle     bool
 	Deprecated   string
 	// internal
 	lock        sync.Mutex
@@ -309,6 +310,21 @@ func (task *BuildTask) build() (err error) {
 	browserExclude := map[string]*stringSet{}
 	implicitExternal := newStringSet()
 
+	noBundle := task.NoBundle
+	if npm.ESMConfig != nil {
+		if v, ok := npm.ESMConfig["bundle"]; ok {
+			if b, ok := v.(bool); ok {
+				noBundle = !b
+			} else if m, ok := v.(map[string]interface{}); ok {
+				if v, ok := m["modules"]; ok {
+					if b, ok := v.(bool); ok {
+						noBundle = !b
+					}
+				}
+			}
+		}
+	}
+
 rebuild:
 	options := api.BuildOptions{
 		Outdir:            "/esbuild",
@@ -480,7 +496,7 @@ rebuild:
 						}
 
 						// bundles all dependencies in `bundle` mode, apart from peer dependencies and `?external` query
-						if task.Bundle && !task.Args.external.Has(getPkgName(specifier)) && !implicitExternal.Has(specifier) {
+						if task.BundleDeps && !task.Args.external.Has(getPkgName(specifier)) && !implicitExternal.Has(specifier) {
 							if internalNodeModules[specifier] {
 								if task.isServerTarget() {
 									return api.OnResolveResult{Path: task.resolveExternal(specifier, args.Kind), External: true}, nil
@@ -535,49 +551,66 @@ rebuild:
 
 						if isLocalSpecifier(specifier) {
 							// is sub-module of current package and non-dynamic import
-							if strings.HasPrefix(fullFilepath, task.realWd) && args.Kind != api.ResolveJSDynamicImport {
+							if strings.HasPrefix(fullFilepath, task.realWd) && args.Kind != api.ResolveJSDynamicImport && !noBundle {
 								relPath := "." + strings.TrimPrefix(fullFilepath, path.Join(task.installDir, "node_modules", npm.Name))
 								// split modules based on the `exports` defines in package.json,
 								// see https://nodejs.org/api/packages.html
 								if om, ok := npm.PkgExports.(*orderedMap); ok {
-									modName := relPath
-									if strings.HasSuffix(modName, ".mjs") {
-										modName = strings.TrimSuffix(specifier, ".mjs")
-									} else {
-										modName = strings.TrimSuffix(modName, ".js")
-									}
+									bareName := stripModuleExt(relPath)
 									for e := om.l.Front(); e != nil; e = e.Next() {
 										name, paths := om.Entry(e)
-										if strings.HasSuffix(name, "/*") && strings.HasPrefix(relPath, strings.TrimSuffix(name, "*")) {
-											url := path.Join(npm.Name, relPath)
-											return api.OnResolveResult{Path: task.resolveExternal(url, args.Kind), External: true}, nil
+										if !strings.HasPrefix(name, "./") {
+											continue
 										}
-										m, ok := paths.(*orderedMap)
-										if ok && name != "." {
-											for e := m.l.Front(); e != nil; e = e.Next() {
-												_, value := om.Entry(e)
-												s, ok := value.(string)
-												if ok && s != "" {
-													match := modName == s || modName+".js" == s || modName+".mjs" == s
-													if !match {
-														if a := strings.Split(s, "*"); len(a) == 2 {
-															prefix, suffix := a[0], a[1]
-															if strings.HasPrefix(modName, prefix) &&
-																(strings.HasSuffix(modName, suffix) ||
-																	strings.HasSuffix(modName+".js", suffix) ||
-																	strings.HasSuffix(modName+".mjs", suffix)) {
-																matchName := strings.TrimPrefix(strings.TrimSuffix(modName, suffix), prefix)
-																name = strings.Replace(name, "*", matchName, -1)
-																match = true
-															}
+										if strings.ContainsRune(name, '*') {
+											var match bool
+											var prefix string
+											var suffix string
+											if s, ok := paths.(string); ok {
+												// exports: "./*": "./dist/*.js"
+												prefix, suffix = utils.SplitByLastByte(s, '*')
+												match = strings.HasPrefix(bareName, prefix) && (suffix == "" || strings.HasSuffix(relPath, suffix))
+											} else if m, ok := paths.(*orderedMap); ok {
+												// exports: "./*": { "import": "./dist/*.js" }
+												for e := m.l.Front(); e != nil; e = e.Next() {
+													_, value := m.Entry(e)
+													if s, ok := value.(string); ok {
+														prefix, suffix = utils.SplitByLastByte(s, '*')
+														match = strings.HasPrefix(bareName, prefix) && (suffix == "" || strings.HasSuffix(relPath, suffix))
+														if match {
+															break
 														}
 													}
-													if match {
-														url := path.Join(npm.Name, name)
-														if i := task.Pkg.ImportPath(); url != i && url != i+"/index" {
-															return api.OnResolveResult{Path: task.resolveExternal(url, args.Kind), External: true}, nil
+												}
+											}
+											if match {
+												exportPrefix, _ := utils.SplitByLastByte(name, '*')
+												url := path.Join(npm.Name, exportPrefix+strings.TrimPrefix(bareName, prefix))
+												if i := task.Pkg.ImportPath(); url != i && url != i+"/index" {
+													return api.OnResolveResult{Path: task.resolveExternal(url, args.Kind), External: true}, nil
+												}
+											}
+										} else {
+											match := false
+											if s, ok := paths.(string); ok && stripModuleExt(s) == bareName {
+												// exports: "./foo": "./foo.js"
+												match = true
+											} else if m, ok := paths.(*orderedMap); ok {
+												// exports: "./foo": { "import": "./foo.js" }
+												for e := m.l.Front(); e != nil; e = e.Next() {
+													_, value := m.Entry(e)
+													if s, ok := value.(string); ok {
+														if stripModuleExt(s) == bareName {
+															match = true
+															break
 														}
 													}
+												}
+											}
+											if match {
+												url := path.Join(npm.Name, stripModuleExt(name))
+												if i := task.Pkg.ImportPath(); url != i && url != i+"/index" {
+													return api.OnResolveResult{Path: task.resolveExternal(url, args.Kind), External: true}, nil
 												}
 											}
 										}
@@ -760,7 +793,7 @@ rebuild:
 						fmt.Fprintf(header, `import __Process$ from "node:process";%s`, EOL)
 					} else if task.Target == "deno" {
 						fmt.Fprintf(header, `import __Process$ from "https://deno.land/std@%s/node/process.ts";%s`, task.Args.denoStdVersion, EOL)
-					} else if task.Bundle {
+					} else if task.BundleDeps {
 						var js []byte
 						js, err = bundleNodePolyfill("process", "__Process$", "default", targets[task.Target])
 						if err != nil {
@@ -776,7 +809,7 @@ rebuild:
 						fmt.Fprintf(header, `import { Buffer as __Buffer$ } from "node:buffer";%s`, EOL)
 					} else if task.Target == "deno" {
 						fmt.Fprintf(header, `import { Buffer as __Buffer$ } from "https://deno.land/std@%s/node/buffer.ts";%s`, task.Args.denoStdVersion, EOL)
-					} else if task.Bundle {
+					} else if task.BundleDeps {
 						var js []byte
 						js, err = bundleNodePolyfill("buffer", "__Buffer$", "Buffer", targets[task.Target])
 						if err != nil {
@@ -982,6 +1015,10 @@ func (task *BuildTask) resolveExternal(specifier string, kind api.ResolveKind) (
 			Submodule: toModuleName(subPath),
 		}
 		resolvedPath = task.getImportPath(subPkg, encodeBuildArgsPrefix(task.Args, subPkg, false))
+		if task.NoBundle {
+			n, e := utils.SplitByLastByte(resolvedPath, '.')
+			resolvedPath = n + ".bundless." + e
+		}
 	}
 	// replace some polyfills with native APIs
 	if resolvedPath == "" {

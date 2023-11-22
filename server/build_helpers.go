@@ -36,8 +36,10 @@ func (task *BuildTask) ID() string {
 	if task.Dev {
 		name += ".development"
 	}
-	if task.Bundle {
+	if task.BundleDeps {
 		name += ".bundle"
+	} else if task.NoBundle {
+		name += ".bundless"
 	}
 
 	task.id = fmt.Sprintf(
@@ -226,7 +228,7 @@ func (task *BuildTask) analyze(forceCjsOnly bool) (esm *ESMBuild, npm NpmPackage
 				} else if fileExists(path.Join(subDir + ".d.ts")) {
 					npm.Types = pkg.Submodule + ".d.ts"
 				}
-				// reslove submodule wiht `exports` conditions if exists
+				// reslove sub-module using `exports` conditions if exists
 				if npm.PkgExports != nil {
 					if om, ok := npm.PkgExports.(*orderedMap); ok {
 						for e := om.l.Front(); e != nil; e = e.Next() {

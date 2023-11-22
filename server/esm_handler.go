@@ -112,7 +112,7 @@ func esmHandler() rex.Handle {
 				t, ok := el.Value.(*queueTask)
 				if ok {
 					m := map[string]interface{}{
-						"bundle":    t.Bundle,
+						"bundle":    t.BundleDeps,
 						"bv":        t.BuildVersion,
 						"consumers": t.consumers,
 						"createdAt": t.createdAt.Format(http.TimeFormat),
@@ -796,7 +796,8 @@ func esmHandler() rex.Handle {
 		}
 
 		isPkgCss := ctx.Form.Has("css")
-		isBundle := ctx.Form.Has("bundle") && !stableBuild[reqPkg.Name]
+		bundleDeps := (ctx.Form.Has("bundle") || ctx.Form.Has("bundle-deps")) && !stableBuild[reqPkg.Name]
+		noBundle := !bundleDeps && (ctx.Form.Has("bundless") || ctx.Form.Has("no-bundle")) && !stableBuild[reqPkg.Name]
 		isDev := ctx.Form.Has("dev")
 		isPined := ctx.Form.Has("pin") || hasBuildVerPrefix || stableBuild[reqPkg.Name]
 		isWorker := ctx.Form.Has("worker")
@@ -868,11 +869,14 @@ func esmHandler() rex.Handle {
 							return rex.Redirect(url, http.StatusFound)
 						}
 					} else {
-						if endsWith(submodule, ".bundle") {
+						if strings.HasSuffix(submodule, ".bundle") {
 							submodule = strings.TrimSuffix(submodule, ".bundle")
-							isBundle = true
+							bundleDeps = true
+						} else if strings.HasSuffix(submodule, ".bundless") {
+							submodule = strings.TrimSuffix(submodule, ".bundless")
+							noBundle = true
 						}
-						if endsWith(submodule, ".development") {
+						if strings.HasSuffix(submodule, ".development") {
 							submodule = strings.TrimSuffix(submodule, ".development")
 							isDev = true
 						}
@@ -978,7 +982,8 @@ func esmHandler() rex.Handle {
 			Pkg:          reqPkg,
 			Target:       target,
 			Dev:          isDev,
-			Bundle:       isBundle || isWorker,
+			BundleDeps:   bundleDeps || isWorker,
+			NoBundle:     noBundle,
 		}
 
 		buildId := task.ID()

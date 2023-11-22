@@ -118,6 +118,15 @@ func endsWith(s string, suffixs ...string) bool {
 	return false
 }
 
+func stripModuleExt(s string) string {
+	for _, ext := range jsExts {
+		if strings.HasSuffix(s, ext) {
+			return s[:len(s)-len(ext)]
+		}
+	}
+	return s
+}
+
 func dirExists(filepath string) bool {
 	fi, err := os.Lstat(filepath)
 	return err == nil && fi.IsDir()

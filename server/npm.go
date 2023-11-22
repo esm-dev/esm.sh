@@ -49,6 +49,7 @@ type NpmPackageJSON struct {
 	TypesVersions    map[string]interface{} `json:"typesVersions,omitempty"`
 	PkgExports       json.RawMessage        `json:"exports,omitempty"`
 	Deprecated       interface{}            `json:"deprecated,omitempty"`
+	ESMConfig        interface{}            `json:"esm.sh,omitempty"`
 }
 
 func (a *NpmPackageJSON) ToNpmPackage() *NpmPackageInfo {
@@ -73,6 +74,12 @@ func (a *NpmPackageJSON) ToNpmPackage() *NpmPackageInfo {
 	if a.Deprecated != nil {
 		if s, ok := a.Deprecated.(string); ok {
 			deprecated = s
+		}
+	}
+	esmConfig := map[string]interface{}{}
+	if a.ESMConfig != nil {
+		if v, ok := a.ESMConfig.(map[string]interface{}); ok {
+			esmConfig = v
 		}
 	}
 	var sideEffects *stringSet = nil
@@ -128,6 +135,7 @@ func (a *NpmPackageJSON) ToNpmPackage() *NpmPackageInfo {
 		TypesVersions:    a.TypesVersions,
 		PkgExports:       pkgExports,
 		Deprecated:       deprecated,
+		ESMConfig:        esmConfig,
 	}
 }
 
@@ -151,6 +159,7 @@ type NpmPackageInfo struct {
 	TypesVersions    map[string]interface{}
 	PkgExports       interface{}
 	Deprecated       string
+	ESMConfig        map[string]interface{}
 }
 
 func (a *NpmPackageInfo) UnmarshalJSON(b []byte) error {
