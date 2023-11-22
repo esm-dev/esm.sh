@@ -246,16 +246,6 @@ import wasm from "https://esm.sh/@dqbd/tiktoken@1.0.3/tiktoken_bg.wasm?module";
 const { exports } = new WebAssembly.Instance(wasm, imports);
 ```
 
-### Fixing Named Exports
-
-If you get an error like `...not provide an export named...`, that means esm.sh
-can't resolve named exports of the module correctly. You can add
-`?exports=foo,bar` query to specify the named exports:
-
-```js
-import { render } from "https://esm.sh/react-dom@18.2.0?exports=render";
-```
-
 ## Using Import Maps
 
 [**Import Maps**](https://github.com/WICG/import-maps) has been supported by
