@@ -48,6 +48,26 @@ func apiHandler() rex.Handle {
 						input.Target = getBuildTargetByUA(ctx.R.UserAgent())
 					}
 					if input.Hash != "" {
+						h := sha1.New()
+						h.Write([]byte(input.Loader))
+						h.Write([]byte(input.Code))
+						if len(input.Imports) > 0 {
+							keys := make(sort.StringSlice, len(input.Imports))
+							i := 0
+							for key := range input.Imports {
+								keys[i] = key
+
+								i++
+							}
+							keys.Sort()
+							for _, key := range keys {
+								h.Write([]byte(key))
+								h.Write([]byte(input.Imports[key]))
+							}
+						}
+						if hex.EncodeToString(h.Sum(nil)) != input.Hash {
+							return rex.Err(400, "invalid hash")
+						}
 						savePath := fmt.Sprintf("publish/+%s.%s.mjs", input.Hash, input.Target)
 						_, err := fs.Stat(savePath)
 						if err == nil {
