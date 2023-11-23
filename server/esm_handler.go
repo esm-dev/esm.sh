@@ -274,11 +274,7 @@ func esmHandler() rex.Handle {
 			outdatedBuildVer = a[1]
 		}
 
-		if strings.HasPrefix(pathname, "/uno-generate/") {
-			return rex.Status(400, "not supported")
-		}
-
-		if pathname == "/build" || pathname == "/run" || pathname == "/uno" {
+		if pathname == "/build" || pathname == "/run" {
 			if !hasBuildVerPrefix && !ctx.Form.Has("pin") {
 				url := fmt.Sprintf("%s%s/v%d%s", cdnOrigin, cfg.CdnBasePath, CTX_BUILD_VERSION, pathname)
 				return rex.Redirect(url, http.StatusFound)

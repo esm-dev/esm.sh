@@ -435,21 +435,6 @@ Deno.test("esm-worker", {
     assertEquals(await getTarget("Deno/1.33.2"), "denonext");
   });
 
-  await t.step("/uno-generate", async () => {
-    const res = await fetch(`${workerOrigin}/uno-generate/f00`, {
-      method: "POST",
-      body: "p-4",
-    });
-    const ret = await res.json();
-    assertStringIncludes(ret.css, ".p-4{padding:1rem;}");
-    const res2 = await fetch(`${workerOrigin}/uno-generate/f00`, {
-      method: "POST",
-      body: "<>",
-    });
-    const ret2 = await res2.json();
-    assertEquals(ret2.css, null);
-  });
-
   ac.abort();
   await new Promise((resolve) => setTimeout(resolve, 500));
 });
