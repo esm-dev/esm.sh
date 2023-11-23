@@ -15,6 +15,8 @@
   "devDependencies": {
     "@cloudflare/workers-types": "4.20231121.0",
     "@types/ua-parser-js": "0.7.39",
+    "@unocss/core": "0.57.7",
+    "@unocss/preset-wind": "0.57.7",
     "compare-versions": "6.1.0",
     "esbuild": "0.19.7",
     "ua-parser-js": "1.0.37"

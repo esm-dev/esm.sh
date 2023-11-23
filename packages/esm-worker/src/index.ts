@@ -7,6 +7,8 @@ import type {
   WorkerStorage,
 } from "../types/index.d.ts";
 import { compareVersions, satisfies, validate } from "compare-versions";
+import { UnoGenerator } from "@unocss/core";
+import presetWind from "@unocss/preset-wind";
 import { getBuildTargetFromUA, hasTargetSegment, targets } from "./compat.ts";
 import {
   assetsExts,
@@ -44,6 +46,8 @@ const noopStorage: WorkerStorage = {
   get: () => Promise.resolve(null),
   put: () => Promise.resolve(),
 };
+
+const uno = new UnoGenerator({ presets: [presetWind()] });
 
 class ESMWorker {
   cache?: Cache;
@@ -258,10 +262,48 @@ class ESMWorker {
 
     // singleton build module
     if (pathname.startsWith("/+")) {
+      if (pathname.endsWith(".css")) {
+        return ctx.withCache(async () => {
+          const storage = Reflect.get(env, "R2") as R2Bucket | undefined ??
+            noopStorage;
+          const KV = Reflect.get(env, "KV") as KVNamespace | undefined ??
+            asKV(storage);
+          const { value } = await KV.getWithMetadata(
+            "uno/" + pathname.slice(2),
+            "stream",
+          );
+          if (!value) {
+            return err("Not Found", 404);
+          }
+          const headers = corsHeaders();
+          headers.set("content-type", "text/css");
+          headers.set("cache-control", immutableCache);
+          headers.set("X-Content-Source", "esm-worker");
+          return new Response(value, { headers });
+        });
+      }
       return ctx.withCache(
         () => fetchOriginWithKVCache(req, env, ctx, pathname),
         { varyUA: true },
       );
+    }
+
+    if (pathname.startsWith("/uno-generate/") && req.method === "POST") {
+      const hash = pathname.slice(15);
+      if (!/^[a-f0-9]+$/.test(hash)) {
+        return err("Invalid hash", 400);
+      }
+      const input = await req.text();
+      const ret = await uno.generate(input);
+      if (ret.matched.size == 0) {
+        return Response.json({ css: null }, { headers: corsHeaders() });
+      }
+      const storage = Reflect.get(env, "R2") as R2Bucket | undefined ??
+        noopStorage;
+      const KV = Reflect.get(env, "KV") as KVNamespace | undefined ??
+        asKV(storage);
+      ctx.waitUntil(KV.put(`uno/${hash}.css`, ret.css));
+      return Response.json({ css: ret.css }, { headers: corsHeaders() });
     }
 
     // strip build version prefix
@@ -277,7 +319,10 @@ class ESMWorker {
     }
 
     if (
-      pathname === "/build" || pathname === "/run" || pathname === "/server"
+      pathname === "/build" ||
+      pathname === "/run" ||
+      pathname === "/uno" ||
+      pathname === "/server"
     ) {
       if (!hasBuildVerPrefix && !hasBuildVerQuery) {
         return redirect(
