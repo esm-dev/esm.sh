@@ -19,13 +19,17 @@ const loaders: Record<string, string> = {
 };
 
 const runScripts: { loader: string; code: string }[] = [];
-let imports: Record<string, string> | undefined = undefined;
+let imports: Record<string, string> = {};
 
+// lookup run scripts
 d.querySelectorAll(kScript).forEach((el) => {
   let loader: string | null = null;
   if (el.type === kImportmap) {
-    imports = JSON.parse(el.innerHTML).imports;
-    if (imports && HTMLScriptElement.supports?.(kImportmap)) {
+    const v = JSON.parse(el.innerHTML).imports;
+    for (const k in v) {
+      imports[k] = v[k];
+    }
+    if (HTMLScriptElement.supports?.(kImportmap)) {
       imports = { [kJsxImportSource]: imports[kJsxImportSource] };
     }
   } else {
@@ -36,11 +40,27 @@ d.querySelectorAll(kScript).forEach((el) => {
   }
 });
 
-runScripts.forEach(async (input) => {
+// transform and insert scripts
+runScripts.forEach(async (input, idx) => {
   const murl = new URL(import.meta.url);
-  const hash = await computeHash(JSON.stringify([murl, input, imports]));
-  const cacheKey = "esm.sh/run/" + hash;
-  let js = l.getItem(cacheKey);
+  const buffer = new Uint8Array(
+    await crypto.subtle.digest(
+      "SHA-1",
+      new TextEncoder().encode(
+        input.loader + input.code +
+          (imports
+            ? Object.keys(imports).sort().map((k) => k + imports![k]).join("")
+            : ""),
+      ),
+    ),
+  );
+  const hash = [...buffer].map((b) => b.toString(16).padStart(2, "0")).join("");
+  const jsCacheKey = "esm.sh/run/" + idx;
+  const hashCacheKey = jsCacheKey + "/hash";
+  let js = l.getItem(jsCacheKey);
+  if (js && l.getItem(hashCacheKey) !== hash) {
+    js = null;
+  }
   if (!js) {
     const res = await fetch(murl.origin + `/+${hash}.mjs`);
     if (res.ok) {
@@ -50,26 +70,11 @@ runScripts.forEach(async (input) => {
       const ret = await transform({ ...input, imports, hash });
       js = ret.code;
     }
-    l.setItem(cacheKey, js!);
+    l.setItem(jsCacheKey, js!);
+    l.setItem(hashCacheKey, hash);
   }
   const script = d.createElement(kScript);
   script.type = "module";
   script.innerHTML = js!;
   d.body.appendChild(script);
 });
-
-async function computeHash(input: string): Promise<string> {
-  const c = window.crypto;
-  if (!c) {
-    const { h64ToString } = await (await import(`./xxhash-wasm@1.0.2`))
-      .default();
-    return h64ToString(input);
-  }
-  const buffer = new Uint8Array(
-    await c.subtle.digest(
-      "SHA-1",
-      new TextEncoder().encode(input),
-    ),
-  );
-  return [...buffer].map((b) => b.toString(16).padStart(2, "0")).join("");
-}
