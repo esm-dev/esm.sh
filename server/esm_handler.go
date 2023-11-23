@@ -141,13 +141,19 @@ func esmHandler() rex.Handle {
 			})
 
 			nsStatus := "IOERROR"
-			res, err := fetch(fmt.Sprintf("http://localhost:%d", cfg.NsPort))
+			client := &http.Client{Timeout: 2 * time.Second}
+			res, err := client.Get(fmt.Sprintf("http://localhost:%d", cfg.NsPort))
 			if err == nil {
 				out, err := io.ReadAll(res.Body)
 				res.Body.Close()
 				if err == nil {
 					nsStatus = string(out)
 				}
+			}
+			if nsStatus != "READY" {
+				// whoops, can't connect to node service,
+				// kill current process for getting new one
+				kill(nsPidFile)
 			}
 
 			header.Set("Cache-Control", "private, no-store, no-cache, must-revalidate")

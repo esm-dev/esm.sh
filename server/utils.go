@@ -38,7 +38,7 @@ var httpClient = &http.Client{
 	Transport: &http.Transport{
 		Proxy: http.ProxyFromEnvironment,
 		DialContext: transportDialContext(&net.Dialer{
-			Timeout:   30 * time.Second,
+			Timeout:   10 * time.Second,
 			KeepAlive: 30 * time.Second,
 		}),
 		ForceAttemptHTTP2:     true,
