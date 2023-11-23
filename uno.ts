@@ -46,12 +46,22 @@ const kUnoSegment = "/@unocss/";
   }
 
   if (css) {
-    const link = d.createElement("link");
+    const cacheKey = "esm.sh/uno/reset";
+    let restCSS = l.getItem(cacheKey);
+    if (!restCSS) {
+      const res = await fetch(
+        `https://esm.sh${kUnoSegment}reset@${UNO_VERSION}/tailwind.css`,
+      );
+      if (res.ok) {
+        restCSS = await res.text();
+        l.setItem(cacheKey, restCSS);
+      }
+    }
+    if (restCSS) {
+      css = restCSS + css;
+    }
     const style = d.createElement("style");
-    link.rel = "stylesheet";
-    link.href = `https://esm.sh${kUnoSegment}reset@${UNO_VERSION}/tailwind.css`;
     style.textContent = css;
-    head.appendChild(link);
     head.appendChild(style);
   }
 })(document, localStorage);
