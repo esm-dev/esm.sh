@@ -136,51 +136,6 @@ class ESMWorker {
     }
 
     switch (pathname) {
-      // build api
-      case "/build":
-        if (req.method === "POST" || req.method === "PUT") {
-          const input = await req.text();
-          const key = "esm-build-" + await hashText(input);
-          const storage = Reflect.get(env, "R2") as R2Bucket | undefined ??
-            noopStorage;
-          const KV = Reflect.get(env, "KV") as KVNamespace | undefined ??
-            asKV(storage);
-          const { value } = await KV.getWithMetadata(key, "stream");
-          if (value) {
-            const headers = corsHeaders();
-            headers.set("content-type", "application/json");
-            headers.set(
-              "cache-control",
-              "private, no-store, no-cache, must-revalidate",
-            );
-            headers.set("X-Content-Source", "esm-worker");
-            return new Response(value, {
-              headers,
-            });
-          }
-          const res = await fetchOrigin(
-            new Request(req.url, {
-              method: "POST",
-              headers: req.headers,
-              body: input,
-            }),
-            env,
-            ctx,
-            `${pathname}${url.search}`,
-            corsHeaders(),
-          );
-          if (res.status !== 200) {
-            return res;
-          }
-          const body = await res.arrayBuffer();
-          ctx.waitUntil(KV.put(key, body));
-          return new Response(body, {
-            status: res.status,
-            headers: res.headers,
-          });
-        }
-        break;
-
       case "/error.js":
         return ctx.withCache(
           () =>
@@ -208,6 +163,62 @@ class ESMWorker {
         );
     }
 
+    if (this.middleware) {
+      const resp = await this.middleware(req, env, ctx);
+      if (resp) {
+        return resp;
+      }
+    }
+
+    if (
+      req.method === "POST" &&
+      (pathname === "/build" || pathname === "/transform")
+    ) {
+      const input = await req.text();
+      const key = "esm-build-" + await hashText(input);
+      const storage = Reflect.get(env, "R2") as R2Bucket | undefined ??
+        noopStorage;
+      const KV = Reflect.get(env, "KV") as KVNamespace | undefined ??
+        asKV(storage);
+      const { value } = await KV.getWithMetadata(key, "stream");
+      if (value) {
+        const headers = corsHeaders();
+        headers.set("content-type", "application/json");
+        headers.set(
+          "cache-control",
+          "private, no-store, no-cache, must-revalidate",
+        );
+        headers.set("X-Content-Source", "esm-worker");
+        return new Response(value, {
+          headers,
+        });
+      }
+      const res = await fetchOrigin(
+        new Request(req.url, {
+          method: "POST",
+          headers: req.headers,
+          body: input,
+        }),
+        env,
+        ctx,
+        `${pathname}${url.search}`,
+        corsHeaders(),
+      );
+      if (res.status !== 200) {
+        return res;
+      }
+      const body = await res.arrayBuffer();
+      ctx.waitUntil(KV.put(key, body));
+      return new Response(body, {
+        status: res.status,
+        headers: res.headers,
+      });
+    }
+
+    if (req.method !== "GET" && req.method !== "HEAD") {
+      return err("Method Not Allowed", 405);
+    }
+
     // ban malicious requests
     if (
       pathname === "/favicon.ico" ||
@@ -223,13 +234,7 @@ class ESMWorker {
       );
     }
 
-    if (this.middleware) {
-      const resp = await this.middleware(req, env, ctx);
-      if (resp) {
-        return resp;
-      }
-    }
-
+    // landing page or embed files
     if (pathname === "/" || pathname.startsWith("/embed/")) {
       return fetchOrigin(
         req,

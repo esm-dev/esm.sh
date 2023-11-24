@@ -228,6 +228,9 @@ func esmHandler() rex.Handle {
 
 		if strings.HasPrefix(pathname, "/+") {
 			hash, ext := utils.SplitByLastByte(pathname[2:], '.')
+			if len(hash) != 40 || ext != "mjs" {
+				return rex.Status(404, "not found")
+			}
 			target := getBuildTargetByUA(userAgent)
 			savaPath := fmt.Sprintf("publish/+%s.%s.%s", hash, target, ext)
 			fi, err := fs.Stat(savaPath)

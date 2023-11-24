@@ -393,35 +393,55 @@ Deno.test("esm-worker", {
     );
     assertEquals(render(), "<h1>Hello world!</h1>");
 
-    const fakeHash = crypto.randomUUID();
-    const res3 = await fetch(`${workerOrigin}/build`, {
+    const options = {
+      code: `
+        import { renderToString } from "preact-render-to-string";
+        export default () => renderToString(<h1>Hello world!</h1>);
+      `,
+      loader: "jsx",
+      target: "es2022",
+      imports: JSON.stringify({
+        "@jsxImportSource": "https://preact@10.13.2",
+        "preact-render-to-string":
+          "https://esm.sh/preact-render-to-string6.0.2",
+      }),
+      hash: "",
+    };
+    options.hash = await computeHash(
+      options.loader + options.code + options.imports,
+    );
+    const res3 = await fetch(`${workerOrigin}/transform`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        code: `/* @jsx h */
-          import { h } from "preact@10.13.2";
-          import { renderToString } from "preact-render-to-string@6.0.2";
-          export default () => renderToString(<h1>Hello world!</h1>);
-        `,
-        transformOnly: true,
-        loader: "jsx",
-        hash: fakeHash,
-        target: "es2022",
-      }),
+      body: JSON.stringify(options),
     });
     const ret2 = await res3.json();
-    assertStringIncludes(ret2.code, `h("h1"`);
+    assertStringIncludes(
+      ret2.code,
+      `"https://preact@10.13.2/jsx-runtime"`,
+    );
+    assertStringIncludes(
+      ret2.code,
+      `"https://esm.sh/preact-render-to-string6.0.2"`,
+    );
 
-    const res5 = await fetch(`${workerOrigin}/+${fakeHash}.mjs`, {
+    const res4 = await fetch(`${workerOrigin}/+${options.hash}.mjs`, {
       headers: { "User-Agent": "Chrome/90.0.4430.212" },
     });
-    assertEquals(res5.status, 200);
+    assertEquals(res4.status, 200);
     assertEquals(
-      res5.headers.get("Content-Type"),
+      res4.headers.get("Content-Type"),
       "application/javascript; charset=utf-8",
     );
-    const code = await res5.text();
-    assertStringIncludes(code, `h("h1"`);
+    const code = await res4.text();
+    assertStringIncludes(
+      code,
+      `"https://preact@10.13.2/jsx-runtime"`,
+    );
+    assertStringIncludes(
+      code,
+      `"https://esm.sh/preact-render-to-string6.0.2"`,
+    );
   });
 
   await t.step("/esma-target", async () => {
@@ -438,3 +458,13 @@ Deno.test("esm-worker", {
   ac.abort();
   await new Promise((resolve) => setTimeout(resolve, 500));
 });
+
+async function computeHash(input: string): Promise<string> {
+  const buffer = new Uint8Array(
+    await crypto.subtle.digest(
+      "SHA-1",
+      new TextEncoder().encode(input),
+    ),
+  );
+  return [...buffer].map((b) => b.toString(16).padStart(2, "0")).join("");
+}

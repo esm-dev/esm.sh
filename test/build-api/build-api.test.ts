@@ -64,20 +64,46 @@ Deno.test("build api (with options)", async () => {
 });
 
 Deno.test("build api (transformOnly)", async () => {
-  const ret = await fetch("http://localhost:8080/build", {
+  const ret = await fetch("http://localhost:8080/transform", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       code: `
         const n:number = 42;
       `,
-      transformOnly: true,
     }),
   }).then((r) => r.json());
   if (ret.error) {
     throw new Error(`<${ret.error.status}> ${ret.error.message}`);
   }
   assertEquals(ret.code, "var n=42;\n");
+});
+
+Deno.test("build api (transform with hash)", async () => {
+  const options = {
+    loader: "ts",
+    code: `
+      const n:number = 42;
+    `,
+    imports: "{}",
+    hash: "",
+  };
+  options.hash = await computeHash(
+    options.loader + options.code + options.imports,
+  );
+  const ret = await fetch("http://localhost:8080/transform", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(options),
+  }).then((r) => r.json());
+  if (ret.error) {
+    throw new Error(`<${ret.error.status}> ${ret.error.message}`);
+  }
+  assertEquals(ret.code, "var n=42;\n");
+
+  const res = await fetch(`http://localhost:8080/+${options.hash}.mjs`);
+  assertEquals(res.status, 200);
+  assertEquals(await res.text(), "var n=42;\n");
 });
 
 Deno.test("build api (use sdk)", async (t) => {
@@ -95,3 +121,13 @@ Deno.test("build api (use sdk)", async (t) => {
     assertEquals(mod.default, message);
   });
 });
+
+async function computeHash(input: string): Promise<string> {
+  const buffer = new Uint8Array(
+    await crypto.subtle.digest(
+      "SHA-1",
+      new TextEncoder().encode(input),
+    ),
+  );
+  return [...buffer].map((b) => b.toString(16).padStart(2, "0")).join("");
+}

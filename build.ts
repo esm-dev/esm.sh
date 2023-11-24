@@ -22,44 +22,46 @@ export type BuildOutput = {
   bundleUrl: string;
 };
 
-export async function build(input: string | BuildInput): Promise<BuildOutput> {
-  const options = typeof input === "string" ? { code: input } : input;
-  if (!options.code) {
-    throw new Error("esm.sh [build] <400> missing code");
-  }
-  const ret = await fetch(new URL("/build", import.meta.url), {
+async function fetchApi(
+  endpoint: string,
+  options: Record<string, unknown>,
+): Promise<any> {
+  const res = await fetch(new URL(endpoint, import.meta.url), {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(options),
-  }).then((r) => r.json());
+  });
+  if (!res.ok) {
+    throw new Error(
+      `esm.sh [${endpoint.slice(1)}] <${res.status}> ${res.statusText}`,
+    );
+  }
+  const ret = await res.json();
   if (ret.error) {
     throw new Error(
-      `esm.sh [build] <${ret.error.status}> ${ret.error.message}`,
+      `esm.sh [${endpoint.slice(1)}] ${ret.error.message}`,
     );
   }
   return ret;
 }
 
-export async function transform(
+export function build(input: string | BuildInput): Promise<BuildOutput> {
+  const options = typeof input === "string" ? { code: input } : input;
+  if (!options.code) {
+    throw new Error("esm.sh [build] <400> missing code");
+  }
+  return fetchApi("/build", options);
+}
+
+export function transform(
   input: string | (BuildInput & TransformOptions),
 ): Promise<{ code: string }> {
   const options = typeof input === "string" ? { code: input } : input;
   if (!options.code) {
     throw new Error("esm.sh [transform] <400> missing code");
   }
-  const loader = options.loader || "tsx";
-  const imports = JSON.stringify(options.imports || {});
-  const hash = await computeHash(loader + options.code + imports);
-  options.loader = loader;
-  Reflect.set(options, "imports", imports);
-  Reflect.set(options, "hash", hash);
-  Reflect.set(options, "transformOnly", true);
-  const res = await fetch(new URL(`/+${hash}.mjs`, import.meta.url));
-  if (res.ok) {
-    return { code: await res.text() };
-  } else {
-    return await build(options) as unknown as { code: string };
-  }
+  Reflect.set(options, "imports", JSON.stringify(options.imports || {}));
+  return fetchApi("/transform", options);
 }
 
 export async function esm<T extends object = Record<string, any>>(

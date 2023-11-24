@@ -31,7 +31,7 @@ type BuildInput struct {
 
 func apiHandler() rex.Handle {
 	return func(ctx *rex.Context) interface{} {
-		if ctx.R.Method == "POST" || ctx.R.Method == "PUT" {
+		if ctx.R.Method == "POST" {
 			switch ctx.Path.String() {
 			case "/transform", "/build":
 				defer ctx.R.Body.Close()
@@ -51,6 +51,9 @@ func apiHandler() rex.Handle {
 						input.Target = getBuildTargetByUA(ctx.R.UserAgent())
 					}
 					if input.Hash != "" {
+						if len(input.Hash) != 40 {
+							return rex.Err(400, "invalid hash")
+						}
 						h := sha1.New()
 						h.Write([]byte(input.Loader))
 						h.Write([]byte(input.Code))
