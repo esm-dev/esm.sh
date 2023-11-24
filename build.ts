@@ -24,7 +24,7 @@ export type BuildOutput = {
 
 export async function build(input: string | BuildInput): Promise<BuildOutput> {
   const options = typeof input === "string" ? { code: input } : input;
-  if (!options?.code) {
+  if (!options.code) {
     throw new Error("esm.sh [build] <400> missing code");
   }
   const ret = await fetch(new URL("/build", import.meta.url), {
@@ -44,8 +44,22 @@ export async function transform(
   input: string | (BuildInput & TransformOptions),
 ): Promise<{ code: string }> {
   const options = typeof input === "string" ? { code: input } : input;
+  if (!options.code) {
+    throw new Error("esm.sh [transform] <400> missing code");
+  }
+  const loader = options.loader || "tsx";
+  const imports = JSON.stringify(options.imports || {});
+  const hash = await computeHash(loader + options.code + imports);
+  options.loader = loader;
+  Reflect.set(options, "imports", imports);
+  Reflect.set(options, "hash", hash);
   Reflect.set(options, "transformOnly", true);
-  return await build(options) as unknown as { code: string };
+  const res = await fetch(new URL(`/+${hash}.mjs`, import.meta.url));
+  if (res.ok) {
+    return { code: await res.text() };
+  } else {
+    return await build(options) as unknown as { code: string };
+  }
 }
 
 export async function esm<T extends object = Record<string, any>>(
@@ -81,11 +95,6 @@ async function withCache(
 }
 
 async function computeHash(input: string): Promise<string> {
-  if (!globalThis.crypto) {
-    const { h64ToString } = await (await import(`./xxhash-wasm@1.0.2`))
-      .default();
-    return h64ToString(input);
-  }
   const buffer = new Uint8Array(
     await crypto.subtle.digest(
       "SHA-1",

@@ -25,7 +25,7 @@ type BuildInput struct {
 	Types         string            `json:"types,omitempty"`
 	TransformOnly bool              `json:"transformOnly,omitempty"`
 	Target        string            `json:"target,omitempty"`
-	Imports       map[string]string `json:"imports,omitempty"`
+	Imports       string            `json:"imports,omitempty"`
 	Hash          string            `json:"hash,omitempty"`
 }
 
@@ -33,7 +33,7 @@ func apiHandler() rex.Handle {
 	return func(ctx *rex.Context) interface{} {
 		if ctx.R.Method == "POST" || ctx.R.Method == "PUT" {
 			switch ctx.Path.String() {
-			case "/build":
+			case "/transform", "/build":
 				defer ctx.R.Body.Close()
 				var input BuildInput
 				err := json.NewDecoder(ctx.R.Body).Decode(&input)
@@ -43,6 +43,9 @@ func apiHandler() rex.Handle {
 				if input.Code == "" {
 					return rex.Err(400, "code is required")
 				}
+				if !input.TransformOnly {
+					input.TransformOnly = ctx.Path.String() == "/transform"
+				}
 				if input.TransformOnly {
 					if targets[input.Target] == 0 {
 						input.Target = getBuildTargetByUA(ctx.R.UserAgent())
@@ -51,20 +54,7 @@ func apiHandler() rex.Handle {
 						h := sha1.New()
 						h.Write([]byte(input.Loader))
 						h.Write([]byte(input.Code))
-						if len(input.Imports) > 0 {
-							keys := make(sort.StringSlice, len(input.Imports))
-							i := 0
-							for key := range input.Imports {
-								keys[i] = key
-
-								i++
-							}
-							keys.Sort()
-							for _, key := range keys {
-								h.Write([]byte(key))
-								h.Write([]byte(input.Imports[key]))
-							}
-						}
+						h.Write([]byte(input.Imports))
 						if hex.EncodeToString(h.Sum(nil)) != input.Hash {
 							return rex.Err(400, "invalid hash")
 						}
@@ -135,15 +125,19 @@ func build(input BuildInput, cdnOrigin string) (id string, err error) {
 	imports := map[string]string{}
 	trailingSlashImports := map[string]string{}
 	jsxImportSource := ""
-	if input.Imports != nil {
-		for key, value := range input.Imports {
-			if strings.HasSuffix(key, "/") {
-				trailingSlashImports[key] = value
-			} else {
-				if key == "@jsxImportSource" {
-					jsxImportSource = value
+
+	var m map[string]interface{}
+	if json.Unmarshal([]byte(input.Imports), &m) == nil {
+		for key, v := range m {
+			if value, ok := v.(string); ok && value != "" {
+				if strings.HasSuffix(key, "/") {
+					trailingSlashImports[key] = value
+				} else {
+					if key == "@jsxImportSource" {
+						jsxImportSource = value
+					}
+					imports[key] = value
 				}
-				imports[key] = value
 			}
 		}
 	}

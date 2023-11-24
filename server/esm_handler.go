@@ -226,15 +226,9 @@ func esmHandler() rex.Handle {
 			pathname = regexpLocPath.ReplaceAllString(pathname, "$1")
 		}
 
-		// determine build target by `?target` query or `User-Agent` header
-		target := strings.ToLower(ctx.Form.Value("target"))
-		targetFromUA := targets[target] == 0
-		if targetFromUA {
-			target = getBuildTargetByUA(userAgent)
-		}
-
 		if strings.HasPrefix(pathname, "/+") {
 			hash, ext := utils.SplitByLastByte(pathname[2:], '.')
+			target := getBuildTargetByUA(userAgent)
 			savaPath := fmt.Sprintf("publish/+%s.%s.%s", hash, target, ext)
 			fi, err := fs.Stat(savaPath)
 			if err != nil {
@@ -249,6 +243,7 @@ func esmHandler() rex.Handle {
 			}
 			header.Set("Content-Type", "application/javascript; charset=utf-8")
 			header.Set("Cache-Control", "public, max-age=31536000, immutable")
+			header.Add("Vary", "User-Agent")
 			return rex.Content(savaPath, fi.ModTime(), r) // auto closed
 		}
 
@@ -284,6 +279,7 @@ func esmHandler() rex.Handle {
 				return err
 			}
 
+			target := getBuildTargetByUA(userAgent)
 			if target == "deno" || target == "denonext" {
 				header.Set("Content-Type", "application/typescript; charset=utf-8")
 			} else {
@@ -295,9 +291,7 @@ func esmHandler() rex.Handle {
 				header.Set("Content-Type", "application/javascript; charset=utf-8")
 			}
 			header.Set("Cache-Control", "public, max-age=31536000, immutable")
-			if targetFromUA {
-				header.Add("Vary", "User-Agent")
-			}
+			header.Add("Vary", "User-Agent")
 			return data
 		}
 
@@ -333,15 +327,14 @@ func esmHandler() rex.Handle {
 			if strings.HasSuffix(pathname, ".js") {
 				data, err := embedFS.ReadFile("server/embed/polyfills" + pathname)
 				if err == nil {
+					target := getBuildTargetByUA(userAgent)
 					code, err := minify(string(data), targets[target], api.LoaderJS)
 					if err != nil {
 						return throwErrorJS(ctx, fmt.Errorf("transform error: %v", err), false)
 					}
 					header.Set("Content-Type", "application/javascript; charset=utf-8")
 					header.Set("Cache-Control", "public, max-age=31536000, immutable")
-					if targetFromUA {
-						header.Add("Vary", "User-Agent")
-					}
+					header.Add("Vary", "User-Agent")
 					return rex.Content(pathname, startTime, bytes.NewReader(code))
 				}
 			}
@@ -698,6 +691,19 @@ func esmHandler() rex.Handle {
 			}
 		}
 
+		// determine build target by `?target` query or `User-Agent` header
+		target := strings.ToLower(ctx.Form.Value("target"))
+		targetFromUA := targets[target] == 0
+		if targetFromUA {
+			target = getBuildTargetByUA(userAgent)
+		}
+		if strings.HasPrefix(target, "es") && includes(nativeNodePackages, reqPkg.Name) {
+			return throwErrorJS(ctx, fmt.Errorf(
+				`unsupported npm package "%s": native node module is not supported in browser`,
+				reqPkg.Name,
+			), false)
+		}
+
 		// check `?alias` query
 		alias := map[string]string{}
 		if ctx.Form.Has("alias") {
@@ -761,13 +767,6 @@ func esmHandler() rex.Handle {
 			}
 		}
 
-		if strings.HasPrefix(target, "es") && includes(nativeNodePackages, reqPkg.Name) {
-			return throwErrorJS(ctx, fmt.Errorf(
-				`unsupported npm package "%s": native node module is not supported in browser`,
-				reqPkg.Name,
-			), false)
-		}
-
 		// check build version
 		buildVersion := CTX_BUILD_VERSION
 		pv := outdatedBuildVer
@@ -802,7 +801,7 @@ func esmHandler() rex.Handle {
 		}
 
 		isPkgCss := ctx.Form.Has("css")
-		bundleDeps := (ctx.Form.Has("bundle") || ctx.Form.Has("bundle-deps")) && !stableBuild[reqPkg.Name]
+		bundleDeps := (ctx.Form.Has("bundle") || ctx.Form.Has("standalone") || ctx.Form.Has("bundle-deps")) && !stableBuild[reqPkg.Name]
 		noBundle := !bundleDeps && (ctx.Form.Has("bundless") || ctx.Form.Has("no-bundle")) && !stableBuild[reqPkg.Name]
 		isDev := ctx.Form.Has("dev")
 		isPined := ctx.Form.Has("pin") || hasBuildVerPrefix || stableBuild[reqPkg.Name]
