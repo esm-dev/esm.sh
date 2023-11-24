@@ -136,23 +136,15 @@ ESM modules and not CJS modules.
 
 ### Bundling Strategy
 
-By default, esm.sh bundles sub-modules in the dependency tree when you import a
-module.
-
-You can also bundle all dependencies of a package into a single JS file by adding
-`?bundle-deps` query to the import URL:
-
-```js
-import { Button } from "https://esm.sh/antd?bundle-deps";
-```
+By default, esm.sh bundles sub-modules that ain't declared in the `exports` field.
 
 Bundling deps can reduce the number of network requests and improve performance.
 However, it may bundle shared code repeatedly. In extreme case, it may break the
 side effects of the package, or change the `import.meta.url` pointing. To avoid
-this, you can add `?no-bundle` to disable the default bundling behavior:
+this, you can add `?bundless` to disable the default bundling behavior:
 
 ```js
-import "https://esm.sh/@pyscript/core?no-bundle";
+import "https://esm.sh/@pyscript/core?bundless";
 ```
 
 For package authors, you can specify the bundling strategy by adding the `esm.sh`
@@ -165,6 +157,13 @@ field to `package.json`:
     "bundle": false, // disables bundling behavior
   }
 }
+```
+
+esm.sh supports `?standalone` query to bundle all dependencies(except deps in `peerDependencies`)
+into a single JS file.
+
+```js
+import { Button } from "https://esm.sh/antd?standalone";
 ```
 
 ### Development Mode
