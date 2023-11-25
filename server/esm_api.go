@@ -34,9 +34,9 @@ func apiHandler() rex.Handle {
 		if ctx.R.Method == "POST" {
 			switch ctx.Path.String() {
 			case "/transform", "/build":
-				defer ctx.R.Body.Close()
 				var input BuildInput
-				err := json.NewDecoder(ctx.R.Body).Decode(&input)
+				err := json.NewDecoder(io.LimitReader(ctx.R.Body, 1024*1024)).Decode(&input)
+				ctx.R.Body.Close()
 				if err != nil {
 					return rex.Err(400, "invalid body content type")
 				}

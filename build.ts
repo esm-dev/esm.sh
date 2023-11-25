@@ -24,22 +24,30 @@ export type BuildOutput = {
 
 async function fetchApi(
   endpoint: string,
-  options: Record<string, unknown>,
+  options: Record<string, any>,
 ): Promise<any> {
+  const apiName = endpoint.slice(1);
+  if (options.code.length > 100 * 1024) {
+    throw new Error(`esm.sh [${apiName}] <400> code exceeded limit.`);
+  }
+  const body = JSON.stringify(options);
+  if (body.length > 1024 * 1024) {
+    throw new Error(`esm.sh [${apiName}] <400> body exceeded limit.`);
+  }
   const res = await fetch(new URL(endpoint, import.meta.url), {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(options),
+    body,
   });
   if (!res.ok) {
     throw new Error(
-      `esm.sh [${endpoint.slice(1)}] <${res.status}> ${res.statusText}`,
+      `esm.sh [${apiName}] <${res.status}> ${res.statusText}`,
     );
   }
   const ret = await res.json();
   if (ret.error) {
     throw new Error(
-      `esm.sh [${endpoint.slice(1)}] ${ret.error.message}`,
+      `esm.sh [${apiName}] ${ret.error.message}`,
     );
   }
   return ret;

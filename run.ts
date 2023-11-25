@@ -4,10 +4,9 @@
  *
  */
 
-/// <reference lib="dom" />
-
 const d = document;
 const l = localStorage;
+const KB = 1024;
 const kRun = "esm.sh/run";
 const kImportmap = "importmap";
 const kJsxImportSource = "@jsxImportSource";
@@ -36,7 +35,11 @@ d.querySelectorAll(kScript).forEach((el) => {
   } else {
     loader = loaders[el.type];
     if (loader) {
-      runScripts.push({ loader, code: el.innerHTML });
+      const code = el.innerHTML;
+      if (code.length > 100 * KB) {
+        throw new Error(kRun + " " + code.length + " bytes exceeded limit.");
+      }
+      runScripts.push({ loader, code });
     }
   }
 });
