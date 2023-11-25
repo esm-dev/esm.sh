@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width" />
+  <title>🔥</title>
+  <link rel="stylesheet" href="https://esm.sh/hot/app.css">
+  </link>
+  <script type="importmap">
+    {
+      "imports": {
+        "@jsxImportSource": "https://esm.sh/react@18.2.0",
+        "vue": "https://esm.sh/vue@3.3.9",
+        "react": "https://esm.sh/react@18.2.0",
+        "react-dom/": "https://esm.sh/react-dom@18/"
+      }
+    }
+  </script>
+</head>
+
+<body class="hot-app">
+  <h1 class="text-3xl font-bold p-4">
+    Hello, World!
+  </h1>
+
+  <div id="app1"></div>
+  <div id="app2"></div>
+
+  <script type="module/hot">
+    import { createElement } from "react"
+    import { createRoot } from "react-dom/client"
+    import App from "./hot-test/App.tsx"
+
+    createRoot(app1).render(createElement(App))
+  </script>
+
+  <script type="module/hot">
+    import { createApp } from "vue"
+    import App from "./hot-test/App.vue"
+
+    createApp(App).mount("#app2")
+  </script>
+
+  <script type="module">
+    import hot from "/hot"
+
+    hot.register("app.css",
+      () => document.body.innerHTML,
+      async (html) => {
+        const { createGenerator } = await import("https://esm.sh/@unocss/core@0.57.7");
+        const { default: presetWind } = await import("https://esm.sh/@unocss/preset-wind@0.57.7?bundle");
+
+        const uno = createGenerator({
+          presets: [presetWind()],
+        });
+        const { css } = await uno.generate(html, {
+          id: "index.html",
+        });
+        return css;
+      }
+    ).run("/embed/sw.js")
+  </script>
+</body>
+
+</html>

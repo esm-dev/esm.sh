@@ -455,6 +455,33 @@ Deno.test("esm-worker", {
     assertEquals(await getTarget("Deno/1.33.2"), "denonext");
   });
 
+  await t.step("/hot", async () => {
+    const res = await fetch(`${workerOrigin}/hot`, {
+      headers: { "User-Agent": "Chrome/90.0.4430.212" },
+    });
+    assertEquals(res.status, 200);
+    assertEquals(
+      res.headers.get("Content-Type"),
+      "application/javascript; charset=utf-8",
+    );
+
+    const res2 = await fetch(`${workerOrigin}/hot/app.css`, {
+      headers: { "User-Agent": "Chrome/90.0.4430.212" },
+    });
+    assertEquals(res2.status, 200);
+    assertEquals(res2.headers.get("Content-Type"), "text/css");
+    assertEquals(await res2.text(), ".hot-app{visibility:hidden;}");
+
+    const res3 = await fetch(`${workerOrigin}/hot-features/jit`, {
+      headers: { "User-Agent": "Chrome/90.0.4430.212" },
+    });
+    assertEquals(res3.status, 200);
+    assertEquals(
+      res3.headers.get("Content-Type"),
+      "application/javascript; charset=utf-8",
+    );
+  });
+
   ac.abort();
   await new Promise((resolve) => setTimeout(resolve, 500));
 });

@@ -78,14 +78,6 @@ func esmHandler() rex.Handle {
 		// static routes
 		switch pathname {
 		case "/":
-			if ctx.Form.Has("run") {
-				runHTML, err := embedFS.ReadFile("server/embed/run.html")
-				if err != nil {
-					return err
-				}
-				header.Set("Cache-Control", fmt.Sprintf("public, max-age=%d", 10*60))
-				return rex.Content("run.html", startTime, bytes.NewReader(runHTML))
-			}
 			indexHTML, err := embedFS.ReadFile("server/embed/index.html")
 			if err != nil {
 				return err
@@ -211,14 +203,15 @@ func esmHandler() rex.Handle {
 		// serve embed assets
 		if strings.HasPrefix(pathname, "/embed/") {
 			data, err := embedFS.ReadFile("server" + pathname)
-			if err == nil {
-				if strings.HasSuffix(pathname, ".js") {
-					data = bytes.ReplaceAll(data, []byte("{origin}"), []byte(cdnOrigin))
-					data = bytes.ReplaceAll(data, []byte("{basePath}"), []byte(cfg.CdnBasePath))
-				}
-				header.Set("Cache-Control", fmt.Sprintf("public, max-age=%d", 10*60))
-				return rex.Content(pathname, startTime, bytes.NewReader(data))
+			if err != nil {
+				return err
 			}
+			if strings.HasSuffix(pathname, ".js") {
+				data = bytes.ReplaceAll(data, []byte("{origin}"), []byte(cdnOrigin))
+				data = bytes.ReplaceAll(data, []byte("{basePath}"), []byte(cfg.CdnBasePath))
+			}
+			header.Set("Cache-Control", fmt.Sprintf("public, max-age=%d", 10*60))
+			return rex.Content(pathname, startTime, bytes.NewReader(data))
 		}
 
 		// strip loc suffix
@@ -272,14 +265,31 @@ func esmHandler() rex.Handle {
 			outdatedBuildVer = a[1]
 		}
 
-		if pathname == "/build" || pathname == "/run" {
+		if pathname == "/build" || pathname == "/run" || pathname == "/hot" || strings.HasPrefix(pathname, "/hot-features/") {
 			if !hasBuildVerPrefix && !ctx.Form.Has("pin") {
 				url := fmt.Sprintf("%s%s/v%d%s", cdnOrigin, cfg.CdnBasePath, CTX_BUILD_VERSION, pathname)
 				return rex.Redirect(url, http.StatusFound)
 			}
-			data, err := embedFS.ReadFile(fmt.Sprintf("%s.ts", pathname[1:]))
+			name := pathname[1:]
+			if strings.HasPrefix(name, "hot-features/") {
+				name = "server/embed/" + name
+			}
+			data, err := embedFS.ReadFile(fmt.Sprintf("%s.ts", name))
 			if err != nil {
-				return err
+				return rex.Status(404, err.Error())
+			}
+
+			if pathname == "/hot" {
+				features := strings.Split(ctx.R.URL.RawQuery, "+")
+				for _, name := range features {
+					if name == "jit" || name == "vue" {
+						data = bytes.ReplaceAll(
+							data,
+							[]byte(fmt.Sprintf(`const %s = featureDisabled("%s");`, name, name)),
+							[]byte(fmt.Sprintf(`import %s from "%s%s/v%d/hot-features/%s";`, name, cdnOrigin, cfg.CdnBasePath, CTX_BUILD_VERSION, name)),
+						)
+					}
+				}
 			}
 
 			target := getBuildTargetByUA(userAgent)
@@ -296,6 +306,19 @@ func esmHandler() rex.Handle {
 			header.Set("Cache-Control", "public, max-age=31536000, immutable")
 			header.Add("Vary", "User-Agent")
 			return data
+		}
+
+		// virtual file for esm.sh/hot
+		if strings.HasPrefix(pathname, "/hot/") {
+			placeholder := []byte{}
+			_, ext := utils.SplitByLastByte(pathname, '.')
+			switch ext {
+			case "css":
+				placeholder = []byte(".hot-app{visibility:hidden;}")
+			case "json":
+				placeholder = []byte("null")
+			}
+			return rex.Content(pathname[5:], time.Now(), bytes.NewReader(placeholder))
 		}
 
 		if pathname == "/server" {

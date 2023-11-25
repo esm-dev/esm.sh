@@ -282,7 +282,11 @@ class ESMWorker {
     }
 
     if (
-      pathname === "/build" || pathname === "/run" || pathname === "/server"
+      pathname === "/server" ||
+      pathname === "/build" ||
+      pathname === "/run" ||
+      pathname === "/hot" ||
+      pathname.startsWith("/hot-features/")
     ) {
       if (!hasBuildVerPrefix && !hasBuildVerQuery) {
         return redirect(
@@ -302,6 +306,26 @@ class ESMWorker {
           ),
         { varyUA: true },
       );
+    }
+
+    // virtual file for esm.sh/hot
+    if (pathname.startsWith("/hot/")) {
+      const name = pathname.slice(5);
+      const ext = splitBy(name, ".", true)[1];
+      const contentType = getContentType(pathname);
+      let placeholder = "";
+      switch (ext) {
+        case "css":
+          placeholder = ".hot-app{visibility:hidden;}";
+          break;
+        case "json":
+          placeholder = "null";
+          break;
+      }
+      return new Response(placeholder, {
+        status: 200,
+        headers: { "Content-Type": contentType },
+      });
     }
 
     const gh = pathname.startsWith("/gh/");
