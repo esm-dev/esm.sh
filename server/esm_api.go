@@ -114,11 +114,17 @@ func build(input BuildInput, cdnOrigin string) (id string, err error) {
 	switch input.Loader {
 	case "js", "jsx", "ts", "tsx":
 		loader = input.Loader
+	default:
+		if input.Loader != "" {
+			return "", errors.New("<400> invalid loader")
+		}
 	}
 	target := api.ESNext
 	if input.Target != "" {
 		if t, ok := targets[input.Target]; ok {
 			target = t
+		} else {
+			return "", errors.New("<400> invalid target")
 		}
 	}
 	if input.Deps == nil {
