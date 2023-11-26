@@ -114,6 +114,8 @@ func build(input BuildInput, cdnOrigin string) (id string, err error) {
 	switch input.Loader {
 	case "js", "jsx", "ts", "tsx":
 		loader = input.Loader
+	case "babel":
+		loader = "tsx"
 	default:
 		if input.Loader != "" {
 			return "", errors.New("<400> invalid loader")
