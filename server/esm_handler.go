@@ -268,6 +268,9 @@ func esmHandler() rex.Handle {
 		if pathname == "/build" || pathname == "/run" || pathname == "/hot" || strings.HasPrefix(pathname, "/hot-features/") {
 			if !hasBuildVerPrefix && !ctx.Form.Has("pin") {
 				url := fmt.Sprintf("%s%s/v%d%s", cdnOrigin, cfg.CdnBasePath, CTX_BUILD_VERSION, pathname)
+				if ctx.R.URL.RawQuery != "" {
+					url += "?" + ctx.R.URL.RawQuery
+				}
 				return rex.Redirect(url, http.StatusFound)
 			}
 			name := pathname[1:]
@@ -280,14 +283,43 @@ func esmHandler() rex.Handle {
 			}
 
 			if pathname == "/hot" {
-				features := strings.Split(ctx.R.URL.RawQuery, "+")
-				for _, name := range features {
-					if name == "tsx" || name == "vue" {
-						data = bytes.ReplaceAll(
-							data,
-							[]byte(fmt.Sprintf(`const %s = featureDisabled("%s");`, name, name)),
-							[]byte(fmt.Sprintf(`import %s from "%s%s/v%d/hot-features/%s";`, name, cdnOrigin, cfg.CdnBasePath, CTX_BUILD_VERSION, name)),
-						)
+				features := []string{}
+				imports := []string{}
+				for _, name := range strings.Split(ctx.R.URL.RawQuery, "+") {
+					name, version := utils.SplitByLastByte(name, '@')
+					if regexpJSIdent.MatchString(name) {
+						_, err := embedFS.ReadFile(fmt.Sprintf("server/embed/hot-features/%s.ts", name))
+						if err == nil {
+							query := ""
+							if version != "" {
+								if regexpFullVersion.MatchString(version) {
+									query = fmt.Sprintf("?version=%s", version)
+								} else {
+									imports = append(imports, fmt.Sprintf(`console.warn("[esm.sh/hot] invalid version: %s@%s");`, name, version))
+								}
+							}
+							features = append(features, name)
+							imports = append(imports, fmt.Sprintf(`import %s from "%s%s/v%d/hot-features/%s%s";`, name, cdnOrigin, cfg.CdnBasePath, CTX_BUILD_VERSION, name, query))
+						}
+					}
+				}
+				if len(features) > 0 {
+					data = bytes.Replace(
+						data,
+						[]byte("const langs: Language[] = []"),
+						[]byte(fmt.Sprintf(`%sconst langs: Language[] = [%s]`, strings.Join(imports, "\n"), strings.Join(features, ", "))),
+						1,
+					)
+				}
+			}
+
+			// replace version with `?version`
+			if strings.HasPrefix(name, "server/embed/hot-features/") {
+				version := ctx.Form.Value("version")
+				if version != "" && regexpFullVersion.MatchString(version) {
+					m := regexpVersionAnnotation.FindAllSubmatch(data, -1)
+					if len(m) > 0 {
+						data = bytes.ReplaceAll(data, []byte("@"+string(m[0][1])), []byte("@"+version))
 					}
 				}
 			}

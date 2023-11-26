@@ -480,6 +480,17 @@ Deno.test("esm-worker", {
       res3.headers.get("Content-Type"),
       "application/javascript; charset=utf-8",
     );
+    assertStringIncludes(await res3.text(), "esm-compiler");
+
+    const res4 = await fetch(`${workerOrigin}/hot?vue@3.3.8`, {
+      headers: { "User-Agent": "Chrome/90.0.4430.212" },
+    });
+    assertStringIncludes(await res4.text(), "/hot-features/vue?version=3.3.8");
+
+    const res5 = await fetch(`${workerOrigin}/hot-features/vue?version=3.3.8`, {
+      headers: { "User-Agent": "Chrome/90.0.4430.212" },
+    });
+    assertStringIncludes(await res5.text(), "@vue/compiler-sfc@3.3.8");
   });
 
   ac.abort();

@@ -1,15 +1,26 @@
 /// <reference lib="dom" />
 /// <reference lib="webworker" />
 
+interface Language {
+  extnames: string[];
+  transform: (
+    url: URL,
+    source: string,
+    options: Record<string, any>,
+  ) => Promise<{ code: string; map?: string }>;
+}
+
+interface VfsRecord {
+  name: string;
+  hash: string;
+  data: string | Uint8Array;
+}
+
 const VERSION = 135;
-
-const tsx = featureDisabled("tsx");
-const vue = featureDisabled("vue");
-
+const langs: Language[] = [];
 const doc = globalThis.document;
 const enc = new TextEncoder();
 const dec = new TextDecoder();
-const { stringify, parse } = JSON;
 const kJsxImportSource = "@jsxImportSource";
 const kSkipWaiting = "SKIP_WAITING";
 const kVfs = "vfs";
@@ -28,7 +39,7 @@ openRequest.onerror = function () {
 openRequest.onupgradeneeded = function () {
   const db = openRequest.result;
   if (!db.objectStoreNames.contains(kVfs)) {
-    db.createObjectStore(kVfs, { keyPath: "id" });
+    db.createObjectStore(kVfs, { keyPath: "name" });
   }
 };
 openRequest.onsuccess = function () {
@@ -36,15 +47,14 @@ openRequest.onsuccess = function () {
 };
 
 // virtual file system using indexed database
-type VfsRecord = { id: string; hash: string; data: Uint8Array | string };
 const getVfsStore = async (mode: IDBTransactionMode) => {
   const db = await dbPromise;
   return db.transaction(kVfs, mode).objectStore(kVfs);
 };
 const vfs = {
-  async get(id: string) {
+  async get(name: string) {
     const store = await getVfsStore("readonly");
-    const req = store.get(id);
+    const req = store.get(name);
     return new Promise<VfsRecord | null>(
       (resolve, reject) => {
         req.onsuccess = () => resolve(req.result ? req.result : null);
@@ -52,9 +62,9 @@ const vfs = {
       },
     );
   },
-  async put(id: string, hash: string, data: Uint8Array | string) {
+  async put(name: string, hash: string, data: Uint8Array | string) {
     const store = await getVfsStore("readwrite");
-    const req = store.put({ id, hash, data });
+    const req = store.put({ name, hash, data });
     return new Promise<void>((resolve, reject) => {
       req.onsuccess = () => resolve();
       req.onerror = () => reject(req.error);
@@ -62,6 +72,7 @@ const vfs = {
   },
 };
 
+// 🔥 class
 class Hot {
   handlers: Record<string, () => Promise<VfsRecord>> = {};
 
@@ -71,7 +82,7 @@ class Hot {
       | T
       | Response
       | Promise<T | Response>,
-    handler: (input: T) =>
+    transformer: (input: T) =>
       | T
       | Response
       | Promise<T | Response>,
@@ -91,7 +102,7 @@ class Hot {
       if (cached && cached.hash === hash) {
         return cached;
       }
-      let data = input = handler(input);
+      let data = transformer(input);
       if (data instanceof Promise) {
         data = await data;
       }
@@ -111,12 +122,12 @@ class Hot {
         console.log(`[hot] ${name} updated`);
       }
       await vfs.put(name, hash, data);
-      return { id: name, hash, data };
+      return { name, hash, data };
     };
     return this;
   }
 
-  use(...milddlewares: ((hot: HotApp) => void)[]): this {
+  use(...milddlewares: ((hot: this) => void)[]): this {
     milddlewares.forEach((mw) => mw(this));
     return this;
   }
@@ -136,18 +147,18 @@ class Hot {
       () => {
         const im = doc.querySelector("head>script[type=importmap]");
         if (im) {
-          const v = parse(im.innerHTML);
+          const v = JSON.parse(im.innerHTML);
           const imports: Record<string, string> = {};
           const supported = HTMLScriptElement.supports?.("importmap");
           for (const k in v.imports) {
-            if (!supported && k === kJsxImportSource) {
+            if (!supported || k === kJsxImportSource) {
               imports[k] = v.imports[k];
             }
           }
           if (supported && "scopes" in v) {
             delete v.scopes;
           }
-          return stringify({ ...v, imports });
+          return JSON.stringify({ ...v, imports });
         }
         return "{}";
       },
@@ -161,7 +172,7 @@ class Hot {
     const reg = await sw.register(swUrl, { type: "module" });
 
     // there's a waiting for reload
-    reg.waiting?.postMessage({ type: kSkipWaiting });
+    reg.waiting?.postMessage(kSkipWaiting);
 
     // detect Service Worker update available and wait for it to become installed
     reg.addEventListener("updatefound", () => {
@@ -170,7 +181,7 @@ class Hot {
         if (waiting) {
           // if there's an existing controller (previous Service Worker)
           if (sw.controller) {
-            waiting.postMessage({ type: kSkipWaiting });
+            waiting.postMessage(kSkipWaiting);
           } else {
             // otherwise it's the first install
             // invoke all handlers and store them to the database
@@ -261,54 +272,52 @@ if (!doc) {
 
   const serveVFS = async (url: URL) => {
     const name = url.pathname.slice(5);
+    const headers = { "Content-Type": typesMap.get(getExtname(name)) ?? "" };
+    if (name in hot.handlers) {
+      const record = await hot.handlers[name]();
+      return new Response(record.data, { headers });
+    }
     const file = await vfs.get(name);
     if (!file) {
       return new Response("Not found", { status: 404 });
     }
-    return new Response(file.data, {
-      status: 200,
-      headers: { "Content-Type": typesMap.get(getExtname(name)) ?? "" },
-    });
+    return new Response(file.data, { headers });
   };
 
-  const jsType = typesMap.get("js") + ";charset=utf-8";
-  const serveModule = async (url: URL, lang: string) => {
-    const res = await fetch(url);
+  const isDev = new URL(import.meta.url).hostname === "localhost";
+  const jsHeaders = { "Content-Type": typesMap.get("js") + ";charset=utf-8" };
+  const serveLanguage = async (lang: Language, url: URL, ext: string) => {
+    const res = await fetch(url, { headers: { "Cache-Control": "no-cache" } });
     if (!res.ok) {
       return res;
     }
     const im = await vfs.get("importmap.json");
-    const importMap: { imports?: Record<string, string> } = parse(
+    const importMap: { imports?: Record<string, string> } = JSON.parse(
       im?.data ? (isString(im.data) ? im.data : dec.decode(im.data)) : "{}",
     );
+    const jsxImportSource = ext === "jsx" || ext === "tsx"
+      ? importMap.imports?.[kJsxImportSource]
+      : undefined;
     const source = await res.text();
-    const hash = await computeHash(
-      enc.encode((importMap.imports?.[kJsxImportSource] ?? "") + source),
-    );
     const cached = await vfs.get(url.href);
+    const hash = await computeHash(enc.encode(jsxImportSource + source));
     if (cached && cached.hash === hash) {
-      return new Response(cached.data, { headers: { "Content-Type": jsType } });
+      return new Response(cached.data, { headers: jsHeaders });
     }
-    const isDev = new URL(import.meta.url).hostname === "localhost";
-    let ret: { code: string; map?: string };
     try {
-      if (lang === "vue") {
-        ret = await vue(url, source, { importMap, isDev });
-      } else {
-        ret = await tsx(url, source, { lang, importMap, isDev });
+      const ret = await lang.transform(url, source, { importMap, isDev });
+      let body = ret.code;
+      if (ret.map) {
+        body +=
+          "\n//# sourceMappingURL=data:application/json;charset=utf-8;base64,";
+        body += btoa(ret.map);
       }
+      await vfs.put(url.href, hash, body);
+      return new Response(body, { headers: jsHeaders });
     } catch (err) {
       console.error(err);
       return new Response(err.message, { status: 500 });
     }
-    let body = ret.code;
-    if (ret.map) {
-      body +=
-        "\n//# sourceMappingURL=data:application/json;charset=utf-8;base64,";
-      body += btoa(ret.map);
-    }
-    await vfs.put(url.href, hash, body);
-    return new Response(body, { headers: { "Content-Type": jsType } });
   };
 
   self.addEventListener("fetch", (event) => {
@@ -321,19 +330,18 @@ if (!doc) {
         evt.respondWith(cacheFetch(evt.request));
       }
     } else {
-      const lang = getExtname(url.pathname);
-      if (lang === "jsx" || lang === "ts" || lang === "tsx" || lang === "vue") {
-        evt.respondWith(serveModule(url, lang));
+      const ext = getExtname(url.pathname);
+      const lang = langs.find((lang) => lang.extnames.includes(ext));
+      if (lang) {
+        evt.respondWith(serveLanguage(lang, url, ext));
       }
     }
   });
 
   self.addEventListener("message", (event) => {
-    switch (event.data.type) {
-      case kSkipWaiting:
-        // @ts-ignore
-        self.skipWaiting();
-        break;
+    if (event.data === kSkipWaiting) {
+      // @ts-ignore
+      self.skipWaiting();
     }
   });
 }
@@ -353,10 +361,6 @@ function getExtname(s: string): string {
 async function computeHash(input: Uint8Array): Promise<string> {
   const buffer = new Uint8Array(await crypto.subtle.digest("SHA-1", input));
   return [...buffer].map((b) => b.toString(16).padStart(2, "0")).join("");
-}
-
-function featureDisabled(name: string): any {
-  return () => Promise.reject(new Error(`Feature ${name} is disabled.`));
 }
 
 export default hot;

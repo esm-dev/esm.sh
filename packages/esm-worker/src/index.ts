@@ -290,7 +290,7 @@ class ESMWorker {
     ) {
       if (!hasBuildVerPrefix && !hasBuildVerQuery) {
         return redirect(
-          new URL(`/${buildVersion}${pathname}`, url),
+          new URL(`/${buildVersion}${pathname}${url.search}`, url),
           302,
           86400,
         );
@@ -301,7 +301,7 @@ class ESMWorker {
             req,
             env,
             ctx,
-            `/${buildVersion}${pathname}`,
+            `/${buildVersion}${pathname}${url.search}`,
             corsHeaders(),
           ),
         { varyUA: true },

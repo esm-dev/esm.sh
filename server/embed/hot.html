@@ -13,7 +13,8 @@
         "@jsxImportSource": "https://esm.sh/react@18.2.0",
         "vue": "https://esm.sh/vue@3.3.9",
         "react": "https://esm.sh/react@18.2.0",
-        "react-dom/": "https://esm.sh/react-dom@18/"
+        "react-dom/": "https://esm.sh/react-dom@18/",
+        "svelte/": "https://esm.sh/svelte@4.2.7/"
       }
     }
   </script>
@@ -26,6 +27,7 @@
 
   <div id="app1"></div>
   <div id="app2"></div>
+  <div id="app3"></div>
 
   <script type="module/hot">
     import { createElement } from "react"
@@ -40,6 +42,12 @@
     import App from "./hot-test/App.vue"
 
     createApp(App).mount("#app2")
+  </script>
+
+  <script type="module/hot">
+    import App from "./hot-test/App.svelte";
+
+    new App({ target: app3 });
   </script>
 
   <script type="module">

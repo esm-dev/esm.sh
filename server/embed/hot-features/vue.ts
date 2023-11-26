@@ -1,3 +1,5 @@
+/** @version: 3.3.9 */
+
 import {
   type CompilerOptions,
   compileScript,
@@ -124,14 +126,14 @@ async function computeHash(input: Uint8Array): Promise<string> {
   return [...buffer].map((b) => b.toString(16).padStart(2, "0")).join("");
 }
 
-export default (
-  url: URL,
-  code: string,
-  { isDev, importMap }: Record<string, any> = {},
-) => {
-  return transform(url.pathname, code, {
-    isDev,
-    importMap,
-    sourceMap: !!isDev,
-  });
+export default {
+  extnames: ["vue"],
+  transform: (url: URL, source: string, options: Record<string, any> = {}) => {
+    const { isDev, importMap } = options;
+    return transform(url.pathname, source, {
+      isDev,
+      importMap,
+      sourceMap: !!isDev,
+    });
+  },
 };

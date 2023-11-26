@@ -1,1 +1,1 @@
-import '/v135/hot?tsx+vue';
+import "/v135/hot?tsx+vue+svelte";

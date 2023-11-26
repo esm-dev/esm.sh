@@ -1,7 +1,7 @@
 <script setup>
 import { ref } from 'vue'
 
-const msg = ref('Hello World!')
+const msg = ref('Hello Vue!')
 </script>
 
 <template>
@@ -11,6 +11,6 @@ const msg = ref('Hello World!')
 
 <style scoped>
   h1 {
-    color: green;
+    color: #42b883;
   }
 </style>
