@@ -482,10 +482,12 @@ Deno.test("esm-worker", {
     );
     assertStringIncludes(await res3.text(), "esm-compiler");
 
-    const res4 = await fetch(`${workerOrigin}/hot?vue@3.3.8`, {
+    const res4 = await fetch(`${workerOrigin}/hot?vue@3.3.8+tsx`, {
       headers: { "User-Agent": "Chrome/90.0.4430.212" },
     });
-    assertStringIncludes(await res4.text(), "/hot-features/vue?version=3.3.8");
+    const code4 = await res4.text();
+    assertStringIncludes(code4, "/hot-features/vue?version=3.3.8");
+    assertStringIncludes(code4, "/hot-features/tsx");
 
     const res5 = await fetch(`${workerOrigin}/hot-features/vue?version=3.3.8`, {
       headers: { "User-Agent": "Chrome/90.0.4430.212" },

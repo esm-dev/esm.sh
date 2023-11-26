@@ -70,11 +70,11 @@ class ESMWorker {
     const withCache: Context["withCache"] = async (fetcher, options) => {
       const isHeadMethod = req.method === "HEAD";
       const hasPinedTarget = targets.has(url.searchParams.get("target") ?? "");
+      const cacheKey = new URL(url);
       const varyUA = options?.varyUA && !hasPinedTarget;
       if (varyUA) {
-        url.searchParams.set("target", getBuildTargetFromUA(ua));
+        cacheKey.searchParams.set("target", getBuildTargetFromUA(ua));
       }
-      const cacheKey = new URL(url);
       for (const key of ["x-real-origin", "x-esm-worker-version"]) {
         const value = req.headers.get(key);
         if (value) {

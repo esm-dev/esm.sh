@@ -859,8 +859,8 @@ func esmHandler() rex.Handle {
 		}
 
 		isPkgCss := ctx.Form.Has("css")
-		bundleDeps := (ctx.Form.Has("bundle") || ctx.Form.Has("standalone") || ctx.Form.Has("bundle-deps")) && !stableBuild[reqPkg.Name]
-		noBundle := !bundleDeps && (ctx.Form.Has("bundless") || ctx.Form.Has("no-bundle")) && !stableBuild[reqPkg.Name]
+		bundleDeps := ctx.Form.Has("bundle") || ctx.Form.Has("standalone") || ctx.Form.Has("bundle-deps")
+		noBundle := !bundleDeps && (ctx.Form.Has("bundless") || ctx.Form.Has("no-bundle"))
 		isDev := ctx.Form.Has("dev")
 		isPined := ctx.Form.Has("pin") || hasBuildVerPrefix || stableBuild[reqPkg.Name]
 		isWorker := ctx.Form.Has("worker")
