@@ -1,4 +1,4 @@
-/*! esm.sh run
+/*! esm.sh/run
  *
  * Add `<script type="module" src="https://esm.sh/run"></script>` to run jsx/ts in browser without build step.
  *
@@ -17,7 +17,7 @@ const imSupported = HTMLScriptElement.supports?.(kImportmap);
 const imImports: Record<string, string> = {};
 const runScripts: { loader: string; code: string }[] = [];
 
-// lookup scripts
+// lookup run scripts
 d.querySelectorAll(kScript).forEach((el) => {
   let loader: string | null = null;
   if (el.type === kImportmap) {
@@ -39,7 +39,7 @@ d.querySelectorAll(kScript).forEach((el) => {
   }
 });
 
-// transform and insert scripts
+// transform and insert run scripts
 const imports = stringify(imImports);
 runScripts.forEach(async (input, idx) => {
   const buffer = new Uint8Array(
@@ -63,10 +63,11 @@ runScripts.forEach(async (input, idx) => {
     if (res.ok) {
       js = await res.text();
     } else {
-      const { code, error } = await fetch(origin + "/transform", {
+      const res = await fetch(origin + "/transform", {
         method: "POST",
         body: stringify({ ...input, imports, hash }),
-      }).then((res) => res.json());
+      });
+      const { code, error } = await res.json();
       if (error) {
         throw new Error(kRun + " " + error.message);
       }
