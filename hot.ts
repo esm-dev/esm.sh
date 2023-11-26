@@ -1,13 +1,17 @@
 /// <reference lib="dom" />
 /// <reference lib="webworker" />
 
-interface Language {
-  extnames: string[];
-  transform: (
-    url: URL,
-    source: string,
-    options: Record<string, any>,
-  ) => Promise<{ code: string; map?: string }>;
+interface Plugin {
+  name?: string;
+  setup: (hot: Hot) => void;
+}
+
+interface Loader {
+  test: RegExp;
+  load: (url: URL, source: string, options: Record<string, any>) => Promise<{
+    code: string;
+    map?: string;
+  }>;
 }
 
 interface VfsRecord {
@@ -17,7 +21,7 @@ interface VfsRecord {
 }
 
 const VERSION = 135;
-const langs: Language[] = [];
+const plugins: Plugin[] = [];
 const doc = globalThis.document;
 const enc = new TextEncoder();
 const dec = new TextDecoder();
@@ -74,21 +78,22 @@ const vfs = {
 
 // 🔥 class
 class Hot {
-  handlers: Record<string, () => Promise<VfsRecord>> = {};
+  vfs: Record<string, () => Promise<VfsRecord>> = {};
+  loaders: Loader[] = [];
 
   register<T extends string | Uint8Array>(
     name: string,
-    fetcher: () =>
+    load: () =>
       | T
       | Response
       | Promise<T | Response>,
-    transformer: (input: T) =>
+    transform: (input: T) =>
       | T
       | Response
       | Promise<T | Response>,
   ) {
-    this.handlers[name] = async () => {
-      let input = fetcher();
+    this.vfs[name] = async () => {
+      let input = load();
       if (input instanceof Promise) {
         input = await input;
       }
@@ -102,7 +107,7 @@ class Hot {
       if (cached && cached.hash === hash) {
         return cached;
       }
-      let data = transformer(input);
+      let data = transform(input);
       if (data instanceof Promise) {
         data = await data;
       }
@@ -127,8 +132,8 @@ class Hot {
     return this;
   }
 
-  use(...milddlewares: ((hot: this) => void)[]): this {
-    milddlewares.forEach((mw) => mw(this));
+  onLoad(test: RegExp, load: Loader["load"]) {
+    this.loaders.push({ test, load });
     return this;
   }
 
@@ -166,7 +171,7 @@ class Hot {
     );
 
     const updateVFS = Promise.all(
-      Object.values(this.handlers).map((handler) => handler()),
+      Object.values(this.vfs).map((handler) => handler()),
     );
 
     const reg = await sw.register(swUrl, { type: "module" });
@@ -184,7 +189,7 @@ class Hot {
             waiting.postMessage(kSkipWaiting);
           } else {
             // otherwise it's the first install
-            // invoke all handlers and store them to the database
+            // invoke all vfs and store them to the database
             // then reload the page
             updateVFS.then(() => {
               reload();
@@ -222,6 +227,7 @@ class Hot {
 
 // 🔥
 const hot = new Hot();
+plugins.forEach((plugin) => plugin.setup(hot));
 
 // sw environment
 if (!doc) {
@@ -273,8 +279,8 @@ if (!doc) {
   const serveVFS = async (url: URL) => {
     const name = url.pathname.slice(5);
     const headers = { "Content-Type": typesMap.get(getExtname(name)) ?? "" };
-    if (name in hot.handlers) {
-      const record = await hot.handlers[name]();
+    if (name in hot.vfs) {
+      const record = await hot.vfs[name]();
       return new Response(record.data, { headers });
     }
     const file = await vfs.get(name);
@@ -286,7 +292,7 @@ if (!doc) {
 
   const isDev = new URL(import.meta.url).hostname === "localhost";
   const jsHeaders = { "Content-Type": typesMap.get("js") + ";charset=utf-8" };
-  const serveLanguage = async (lang: Language, url: URL, ext: string) => {
+  const serveLoader = async (loader: Loader, url: URL) => {
     const res = await fetch(url, { headers: { "Cache-Control": "no-cache" } });
     if (!res.ok) {
       return res;
@@ -295,7 +301,7 @@ if (!doc) {
     const importMap: { imports?: Record<string, string> } = JSON.parse(
       im?.data ? (isString(im.data) ? im.data : dec.decode(im.data)) : "{}",
     );
-    const jsxImportSource = ext === "jsx" || ext === "tsx"
+    const jsxImportSource = isJsx(url.pathname)
       ? importMap.imports?.[kJsxImportSource]
       : undefined;
     const source = await res.text();
@@ -305,7 +311,7 @@ if (!doc) {
       return new Response(cached.data, { headers: jsHeaders });
     }
     try {
-      const ret = await lang.transform(url, source, { importMap, isDev });
+      const ret = await loader.load(url, source, { importMap, isDev });
       let body = ret.code;
       if (ret.map) {
         body +=
@@ -323,17 +329,17 @@ if (!doc) {
   self.addEventListener("fetch", (event) => {
     const evt = event as FetchEvent;
     const url = new URL(evt.request.url);
-    if (url.hostname === "esm.sh") {
-      if (url.pathname.startsWith("/hot/")) {
+    const { pathname, hostname } = url;
+    if (hostname === "esm.sh") {
+      if (pathname.startsWith("/hot/")) {
         evt.respondWith(serveVFS(url));
       } else {
         evt.respondWith(cacheFetch(evt.request));
       }
     } else {
-      const ext = getExtname(url.pathname);
-      const lang = langs.find((lang) => lang.extnames.includes(ext));
-      if (lang) {
-        evt.respondWith(serveLanguage(lang, url, ext));
+      const loader = hot.loaders.find((l) => l.test.test(pathname));
+      if (loader) {
+        evt.respondWith(serveLoader(loader, url));
       }
     }
   });
@@ -348,6 +354,10 @@ if (!doc) {
 
 function isString(v: unknown): v is string {
   return typeof v === "string";
+}
+
+function isJsx(pathname: string): boolean {
+  return pathname.endsWith(".jsx") || pathname.endsWith(".tsx");
 }
 
 function getExtname(s: string): string {

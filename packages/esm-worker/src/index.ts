@@ -286,7 +286,7 @@ class ESMWorker {
       pathname === "/build" ||
       pathname === "/run" ||
       pathname === "/hot" ||
-      pathname.startsWith("/hot-features/")
+      pathname.startsWith("/hot-plugins/")
     ) {
       if (!hasBuildVerPrefix && !hasBuildVerQuery) {
         return redirect(

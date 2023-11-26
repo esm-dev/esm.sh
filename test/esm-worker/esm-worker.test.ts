@@ -472,7 +472,7 @@ Deno.test("esm-worker", {
     assertEquals(res2.headers.get("Content-Type"), "text/css");
     assertEquals(await res2.text(), ".hot-app{visibility:hidden;}");
 
-    const res3 = await fetch(`${workerOrigin}/hot-features/tsx`, {
+    const res3 = await fetch(`${workerOrigin}/hot-plugins/tsx`, {
       headers: { "User-Agent": "Chrome/90.0.4430.212" },
     });
     assertEquals(res3.status, 200);
@@ -486,10 +486,10 @@ Deno.test("esm-worker", {
       headers: { "User-Agent": "Chrome/90.0.4430.212" },
     });
     const code4 = await res4.text();
-    assertStringIncludes(code4, "/hot-features/vue?version=3.3.8");
-    assertStringIncludes(code4, "/hot-features/tsx");
+    assertStringIncludes(code4, "/hot-plugins/vue?version=3.3.8");
+    assertStringIncludes(code4, "/hot-plugins/tsx");
 
-    const res5 = await fetch(`${workerOrigin}/hot-features/vue?version=3.3.8`, {
+    const res5 = await fetch(`${workerOrigin}/hot-plugins/vue?version=3.3.8`, {
       headers: { "User-Agent": "Chrome/90.0.4430.212" },
     });
     assertStringIncludes(await res5.text(), "@vue/compiler-sfc@3.3.8");

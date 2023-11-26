@@ -265,7 +265,7 @@ func esmHandler() rex.Handle {
 			outdatedBuildVer = a[1]
 		}
 
-		if pathname == "/build" || pathname == "/run" || pathname == "/hot" || strings.HasPrefix(pathname, "/hot-features/") {
+		if pathname == "/build" || pathname == "/run" || pathname == "/hot" || strings.HasPrefix(pathname, "/hot-plugins/") {
 			if !hasBuildVerPrefix && !ctx.Form.Has("pin") {
 				url := fmt.Sprintf("%s%s/v%d%s", cdnOrigin, cfg.CdnBasePath, CTX_BUILD_VERSION, pathname)
 				if ctx.R.URL.RawQuery != "" {
@@ -274,7 +274,7 @@ func esmHandler() rex.Handle {
 				return rex.Redirect(url, http.StatusFound)
 			}
 			name := pathname[1:]
-			if strings.HasPrefix(name, "hot-features/") {
+			if strings.HasPrefix(name, "hot-plugins/") {
 				name = "server/embed/" + name
 			}
 			data, err := embedFS.ReadFile(fmt.Sprintf("%s.ts", name))
@@ -288,7 +288,7 @@ func esmHandler() rex.Handle {
 				for _, name := range strings.Split(ctx.R.URL.RawQuery, "+") {
 					name, version := utils.SplitByLastByte(name, '@')
 					if regexpJSIdent.MatchString(name) {
-						_, err := embedFS.ReadFile(fmt.Sprintf("server/embed/hot-features/%s.ts", name))
+						_, err := embedFS.ReadFile(fmt.Sprintf("server/embed/hot-plugins/%s.ts", name))
 						if err == nil {
 							query := ""
 							if version != "" {
@@ -299,22 +299,22 @@ func esmHandler() rex.Handle {
 								}
 							}
 							features = append(features, name)
-							imports = append(imports, fmt.Sprintf(`import %s from "%s%s/v%d/hot-features/%s%s";`, name, cdnOrigin, cfg.CdnBasePath, CTX_BUILD_VERSION, name, query))
+							imports = append(imports, fmt.Sprintf(`import %s from "%s%s/v%d/hot-plugins/%s%s";`, name, cdnOrigin, cfg.CdnBasePath, CTX_BUILD_VERSION, name, query))
 						}
 					}
 				}
 				if len(features) > 0 {
 					data = bytes.Replace(
 						data,
-						[]byte("const langs: Language[] = []"),
-						[]byte(fmt.Sprintf(`%sconst langs: Language[] = [%s]`, strings.Join(imports, "\n"), strings.Join(features, ", "))),
+						[]byte("const plugins: Plugin[] = []"),
+						[]byte(fmt.Sprintf(`%sconst plugins: Plugin[] = [%s]`, strings.Join(imports, "\n"), strings.Join(features, ", "))),
 						1,
 					)
 				}
 			}
 
 			// replace version with `?version`
-			if strings.HasPrefix(name, "server/embed/hot-features/") {
+			if strings.HasPrefix(name, "server/embed/hot-plugins/") {
 				version := ctx.Form.Value("version")
 				if version != "" && regexpFullVersion.MatchString(version) {
 					m := regexpVersionAnnotation.FindAllSubmatch(data, -1)

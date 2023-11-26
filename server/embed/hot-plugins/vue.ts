@@ -11,14 +11,14 @@ import {
   type SFCTemplateCompileOptions,
 } from "https://esm.sh/v135/@vue/compiler-sfc@3.3.9";
 
-export type Options = {
+interface Options {
   script?: Omit<SFCScriptCompileOptions, "id">;
   template?: Partial<SFCTemplateCompileOptions>;
   style?: Partial<SFCAsyncStyleCompileOptions>;
   isDev?: boolean;
   importMap?: { imports?: Record<string, string> };
   sourceMap?: boolean;
-};
+}
 
 const transform = async (
   specifier: string,
@@ -127,13 +127,18 @@ async function computeHash(input: Uint8Array): Promise<string> {
 }
 
 export default {
-  extnames: ["vue"],
-  transform: (url: URL, source: string, options: Record<string, any> = {}) => {
-    const { isDev, importMap } = options;
-    return transform(url.pathname, source, {
-      isDev,
-      importMap,
-      sourceMap: !!isDev,
-    });
+  name: "vue",
+  setup(hot: any) {
+    hot.onLoad(
+      /\.vue$/,
+      (url: URL, source: string, options: Record<string, any> = {}) => {
+        const { isDev, importMap } = options;
+        return transform(url.pathname, source, {
+          isDev,
+          importMap,
+          sourceMap: !!isDev,
+        });
+      },
+    );
   },
 };
