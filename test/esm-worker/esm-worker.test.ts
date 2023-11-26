@@ -472,7 +472,7 @@ Deno.test("esm-worker", {
     assertEquals(res2.headers.get("Content-Type"), "text/css");
     assertEquals(await res2.text(), ".hot-app{visibility:hidden;}");
 
-    const res3 = await fetch(`${workerOrigin}/hot-features/jit`, {
+    const res3 = await fetch(`${workerOrigin}/hot-features/tsx`, {
       headers: { "User-Agent": "Chrome/90.0.4430.212" },
     });
     assertEquals(res3.status, 200);

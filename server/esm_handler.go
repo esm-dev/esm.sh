@@ -282,7 +282,7 @@ func esmHandler() rex.Handle {
 			if pathname == "/hot" {
 				features := strings.Split(ctx.R.URL.RawQuery, "+")
 				for _, name := range features {
-					if name == "jit" || name == "vue" {
+					if name == "tsx" || name == "vue" {
 						data = bytes.ReplaceAll(
 							data,
 							[]byte(fmt.Sprintf(`const %s = featureDisabled("%s");`, name, name)),

@@ -22,5 +22,6 @@ export default async (
     jsxImportSource: importMap.imports?.["@jsxImportSource"],
     importMap: JSON.stringify(importMap),
     minify: !isDev ? { compress: true, keepNames: true } : undefined,
+    target: "es2020", // TODO: check user agent
   });
 };

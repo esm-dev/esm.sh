@@ -3,12 +3,13 @@
 
 const VERSION = 135;
 
-const jit = featureDisabled("jit");
+const tsx = featureDisabled("tsx");
 const vue = featureDisabled("vue");
 
 const doc = globalThis.document;
 const enc = new TextEncoder();
 const dec = new TextDecoder();
+const { stringify, parse } = JSON;
 const kJsxImportSource = "@jsxImportSource";
 const kSkipWaiting = "SKIP_WAITING";
 const kVfs = "vfs";
@@ -16,15 +17,11 @@ const kVfs = "vfs";
 // open indexed database
 let onOpen: () => void;
 let onOpenError: (reason: DOMException | null) => void;
-const openRequest = indexedDB.open("hot", VERSION);
+const openRequest = indexedDB.open("esm.sh/hot", VERSION);
 const dbPromise = new Promise<IDBDatabase>((resolve, reject) => {
   onOpen = () => resolve(openRequest.result);
   onOpenError = reject;
 });
-const getVfsStore = async (mode: IDBTransactionMode) => {
-  const db = await dbPromise;
-  return db.transaction(kVfs, mode).objectStore(kVfs);
-};
 openRequest.onerror = function () {
   onOpenError(openRequest.error);
 };
@@ -39,13 +36,16 @@ openRequest.onsuccess = function () {
 };
 
 // virtual file system using indexed database
+type VfsRecord = { id: string; hash: string; data: Uint8Array | string };
+const getVfsStore = async (mode: IDBTransactionMode) => {
+  const db = await dbPromise;
+  return db.transaction(kVfs, mode).objectStore(kVfs);
+};
 const vfs = {
   async get(id: string) {
     const store = await getVfsStore("readonly");
     const req = store.get(id);
-    return new Promise<
-      { id: string; hash: string; data: Uint8Array | string } | null
-    >(
+    return new Promise<VfsRecord | null>(
       (resolve, reject) => {
         req.onsuccess = () => resolve(req.result ? req.result : null);
         req.onerror = () => reject(req.error);
@@ -62,8 +62,8 @@ const vfs = {
   },
 };
 
-class HotApp {
-  handlers: Record<string, () => Promise<void>> = {};
+class Hot {
+  handlers: Record<string, () => Promise<VfsRecord>> = {};
 
   register<T extends string | Uint8Array>(
     name: string,
@@ -76,7 +76,7 @@ class HotApp {
       | Response
       | Promise<T | Response>,
   ) {
-    const go = async () => {
+    this.handlers[name] = async () => {
       let input = fetcher();
       if (input instanceof Promise) {
         input = await input;
@@ -89,19 +89,30 @@ class HotApp {
       );
       const cached = await vfs.get(name);
       if (cached && cached.hash === hash) {
-        return;
+        return cached;
       }
-      let ret = input = handler(input);
-      if (ret instanceof Promise) {
-        ret = await ret;
+      let data = input = handler(input);
+      if (data instanceof Promise) {
+        data = await data;
       }
-      if (ret instanceof Response) {
-        ret = new Uint8Array(await ret.arrayBuffer()) as T;
+      if (data instanceof Response) {
+        data = new Uint8Array(await data.arrayBuffer()) as T;
       }
-      await vfs.put(name, hash, ret);
-      console.log(`[hot] ${name} updated`);
+      if (cached && doc) {
+        if (name.endsWith(".css")) {
+          const url = `https://esm.sh/hot/${name}`;
+          const el = doc.querySelector(`link[href="${url}"]`);
+          if (el) {
+            const copy = el.cloneNode(true) as HTMLLinkElement;
+            copy.href = url + "?" + hash;
+            el.replaceWith(copy);
+          }
+        }
+        console.log(`[hot] ${name} updated`);
+      }
+      await vfs.put(name, hash, data);
+      return { id: name, hash, data };
     };
-    this.handlers[name] = go;
     return this;
   }
 
@@ -111,6 +122,10 @@ class HotApp {
   }
 
   async run(swUrl = "/sw.js") {
+    if (!doc) {
+      throw new Error("HotApp.run() can't be called in Service Worker.");
+    }
+
     const sw = navigator.serviceWorker;
     if (!sw) {
       throw new Error("Service Worker not supported.");
@@ -119,18 +134,22 @@ class HotApp {
     this.register(
       "importmap.json",
       () => {
-        let imports: Record<string, string> = {};
-        const v = JSON.parse(
-          doc.querySelector("head>script[type=importmap]")?.innerHTML ??
-            "{}",
-        );
-        for (const k in v.imports) {
-          imports[k] = v.imports[k];
+        const im = doc.querySelector("head>script[type=importmap]");
+        if (im) {
+          const v = parse(im.innerHTML);
+          const imports: Record<string, string> = {};
+          const supported = HTMLScriptElement.supports?.("importmap");
+          for (const k in v.imports) {
+            if (!supported && k === kJsxImportSource) {
+              imports[k] = v.imports[k];
+            }
+          }
+          if (supported && "scopes" in v) {
+            delete v.scopes;
+          }
+          return stringify({ ...v, imports });
         }
-        if (HTMLScriptElement.supports?.("importmap")) {
-          imports = { [kJsxImportSource]: imports[kJsxImportSource] };
-        }
-        return JSON.stringify({ ...v, imports });
+        return "{}";
       },
       (input) => input,
     );
@@ -190,9 +209,11 @@ class HotApp {
   }
 }
 
-// only run in Service Worker
+// 🔥
+const hot = new Hot();
+
+// sw environment
 if (!doc) {
-  // MIME types for web
   const mimeTypes: Record<string, string[]> = {
     "a/gzip": ["gz"],
     "a/javascript": ["js", "mjs"],
@@ -226,17 +247,16 @@ if (!doc) {
       return fetch(req);
     }
     const cache = hotCache ?? (hotCache = await caches.open("hot/v" + VERSION));
-    const res = await cache.match(req);
+    let res = await cache.match(req);
     if (res) {
       return res;
     }
-    const res2 = await fetch(req);
-    if (!res2.ok) {
-      return res2;
+    res = await fetch(req);
+    if (!res.ok) {
+      return res;
     }
-    const res3 = res2.clone();
-    cache.put(req, res3);
-    return res2;
+    cache.put(req, res.clone());
+    return res;
   };
 
   const serveVFS = async (url: URL) => {
@@ -258,7 +278,7 @@ if (!doc) {
       return res;
     }
     const im = await vfs.get("importmap.json");
-    const importMap: { imports?: Record<string, string> } = JSON.parse(
+    const importMap: { imports?: Record<string, string> } = parse(
       im?.data ? (isString(im.data) ? im.data : dec.decode(im.data)) : "{}",
     );
     const source = await res.text();
@@ -275,7 +295,7 @@ if (!doc) {
       if (lang === "vue") {
         ret = await vue(url, source, { importMap, isDev });
       } else {
-        ret = await jit(url, source, { lang, importMap, isDev });
+        ret = await tsx(url, source, { lang, importMap, isDev });
       }
     } catch (err) {
       console.error(err);
@@ -339,4 +359,4 @@ function featureDisabled(name: string): any {
   return () => Promise.reject(new Error(`Feature ${name} is disabled.`));
 }
 
-export default !doc ? null : new HotApp();
+export default hot;
