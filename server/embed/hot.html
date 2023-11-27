@@ -18,40 +18,24 @@
       }
     }
   </script>
+  <style type="text/draft">
+    .hello {
+      color: red;
+    }
+  </style>
 </head>
 
 <body class="hot-app">
-  <h1 class="text-3xl font-bold p-4">
+  <h1 class="text-3xl font-bold p-4 hello">
     Hello, World!
   </h1>
 
-  <div id="app1"></div>
-  <div id="app2"></div>
-  <div id="app3"></div>
-
-  <script type="module/hot">
-    import { createElement } from "react"
-    import { createRoot } from "react-dom/client"
-    import App from "./hot-test/App.tsx"
-
-    createRoot(app1).render(createElement(App))
-  </script>
-
-  <script type="module/hot">
-    import { createApp } from "vue"
-    import App from "./hot-test/App.vue"
-
-    createApp(App).mount("#app2")
-  </script>
-
-  <script type="module/hot">
-    import App from "./hot-test/App.svelte";
-
-    new App({ target: app3 });
-  </script>
+  <react-root src="./hot-test/App.tsx"></react-root>
+  <vue-root src="./hot-test/App.vue" shadow></vue-root>
+  <svelte-root src="./hot-test/App.svelte" shadow></svelte-root>
 
   <script type="module">
-    import hot from "/hot"
+    import hot from "/hot?svelte-root,vue-root,react-root"
 
     hot.register("app.css",
       () => document.body.innerHTML,

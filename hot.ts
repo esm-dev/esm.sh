@@ -212,6 +212,13 @@ class Hot {
           el.replaceWith(copy);
         },
       );
+      doc.querySelectorAll("link[rel='stylesheet/hot']").forEach(
+        (el) => {
+          const copy = el.cloneNode(true) as HTMLLinkElement;
+          copy.rel = "stylesheet";
+          el.replaceWith(copy);
+        },
+      );
       console.log("[hot] Service Worker active");
     }
 
@@ -292,8 +299,9 @@ if (!doc) {
 
   const isDev = new URL(import.meta.url).hostname === "localhost";
   const jsHeaders = { "Content-Type": typesMap.get("js") + ";charset=utf-8" };
+  const noCacheHeaders = { "Cache-Control": "no-cache" };
   const serveLoader = async (loader: Loader, url: URL) => {
-    const res = await fetch(url, { headers: { "Cache-Control": "no-cache" } });
+    const res = await fetch(url, { headers: isDev ? noCacheHeaders : {} });
     if (!res.ok) {
       return res;
     }

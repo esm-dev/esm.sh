@@ -78,17 +78,17 @@ const transform = async (
   if (descriptor.styles.some((s) => s.scoped)) {
     output.push(`__sfc__.__scopeId = ${JSON.stringify(`data-v-${id}`)};`);
   }
-  output.push(`export default __sfc__;`);
 
-  const css = (await Promise.all(descriptor.styles.map(async (style) => {
+  const styles = await Promise.all(descriptor.styles.map(async (style) => {
     const result = await compileStyleAsync({
       ...options?.style,
+      id,
       filename: descriptor.filename,
       source: style.content,
-      id,
       scoped: style.scoped,
-      modules: false,
+      modules: style.module != null,
       inMap: compiledScript.map,
+      isAsync: false,
     });
     if (result.errors.length) {
       // postcss uses pathToFileURL which isn't polyfilled in the browser
@@ -99,16 +99,32 @@ const transform = async (
       }
       // proceed even if css compile errors
       return "";
-    } else {
-      return result.code;
     }
-  }))).join("\n");
-  if (css) {
-    output.push("__sfc__.css = " + JSON.stringify(css));
+    let css = result.code;
+    if (result.map) {
+      css +=
+        "\n//# sourceMappingURL=data:application/json;charset=utf-8;base64,";
+      css += btoa(JSON.stringify(result.map));
+    }
+    return css;
+  }));
+  if (styles.length) {
+    output.push("const __mounted__ = __sfc__.mounted;");
+    output.push("__sfc__.mounted = function() { ");
+    output.push("const rootEl = this.$root.$el;");
     output.push(
-      "document.head.appendChild(document.createElement('style')).textContent = __sfc__.css;",
+      "const doc = rootEl.getRootNode ? rootEl.getRootNode() : rootEl.ownerDocument;",
     );
+    styles.forEach((css) => {
+      output.push("const style = document.createElement('style');");
+      output.push(`style.textContent = ${JSON.stringify(css)};`);
+      output.push(`style.setAttribute('data-v-${id}', '');`);
+      output.push("(doc.head || doc).appendChild(style);");
+    });
+    output.push("__mounted__ && __mounted__.call(this);");
+    output.push("};");
   }
+  output.push(`export default __sfc__;`);
 
   return {
     code: output.join("\n"),

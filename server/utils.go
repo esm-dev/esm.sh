@@ -33,6 +33,7 @@ var (
 	regexpJSIdent           = regexp.MustCompile(`^[a-zA-Z_$][\w$]*$`)
 	regexpGlobalIdent       = regexp.MustCompile(`__[a-zA-Z]+\$`)
 	regexpVarEqual          = regexp.MustCompile(`var ([a-zA-Z]+)\s*=\s*[a-zA-Z]+$`)
+	regexpPluginSeparator   = regexp.MustCompile(`\+|,|\|`)
 )
 
 var httpClient = &http.Client{

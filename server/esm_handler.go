@@ -285,9 +285,9 @@ func esmHandler() rex.Handle {
 			if pathname == "/hot" {
 				features := []string{}
 				imports := []string{}
-				for _, name := range strings.Split(ctx.R.URL.RawQuery, "+") {
+				for i, name := range regexpPluginSeparator.Split(ctx.R.URL.RawQuery, -1) {
 					name, version := utils.SplitByLastByte(name, '@')
-					if regexpJSIdent.MatchString(name) {
+					if validatePackageName(name) {
 						_, err := embedFS.ReadFile(fmt.Sprintf("server/embed/hot-plugins/%s.ts", name))
 						if err == nil {
 							query := ""
@@ -298,8 +298,9 @@ func esmHandler() rex.Handle {
 									imports = append(imports, fmt.Sprintf(`console.warn("[esm.sh/hot] invalid version: %s@%s");`, name, version))
 								}
 							}
-							features = append(features, name)
-							imports = append(imports, fmt.Sprintf(`import %s from "%s%s/v%d/hot-plugins/%s%s";`, name, cdnOrigin, cfg.CdnBasePath, CTX_BUILD_VERSION, name, query))
+							id := fmt.Sprintf("p%d", i)
+							features = append(features, id)
+							imports = append(imports, fmt.Sprintf(`import %s from "%s%s/v%d/hot-plugins/%s%s";`, id, cdnOrigin, cfg.CdnBasePath, CTX_BUILD_VERSION, name, query))
 						}
 					}
 				}
