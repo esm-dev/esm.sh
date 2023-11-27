@@ -1,3 +1,5 @@
+/** @version: 0.3.1 */
+
 import initWasm, {
   transform,
   transformCSS,
@@ -48,13 +50,20 @@ export default {
             }
             return {
               code: [
-                "const css = " + stringify(css),
-                "const style = document.createElement('style')",
-                `style.setAttribute('data-module', ${stringify(pathname)})`,
-                "style.appendChild(document.createTextNode(css))",
-                "document.head.appendChild(style)",
-                "export default " + stringify(cssModulesExports),
-              ].join("\n"),
+                "const d = document;",
+                "const id = ",
+                stringify(pathname),
+                ";export const css = ",
+                stringify(css),
+                ";if (!d.getElementById(id)) {",
+                "const style = d.createElement('style');",
+                "style.id = id;",
+                "style.textContent = css;",
+                "d.head.appendChild(style);",
+                "}",
+                "export default ",
+                stringify(cssModulesExports),
+              ].join(""),
             };
           }
           return { code, map };

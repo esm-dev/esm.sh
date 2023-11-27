@@ -1,0 +1,26 @@
+import {
+  init as initWasm,
+  parse,
+} from "https://esm.sh/v135/markdown-wasm-es@1.2.1";
+
+export default {
+  name: "md",
+  setup(hot: any) {
+    let waiting: Promise<any> | null = null;
+    const init = async () => {
+      if (waiting === null) {
+        waiting = initWasm();
+      }
+      await waiting;
+    };
+
+    hot.onLoad(
+      /\.(md|markdown)$/,
+      async (_url: URL, source: string, _options: Record<string, any> = {}) => {
+        await init();
+        const html = parse(source);
+        return { code: html, headers: { "content-type": "text/html" } };
+      },
+    );
+  },
+};

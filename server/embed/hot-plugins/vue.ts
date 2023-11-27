@@ -58,7 +58,7 @@ const transform = async (
       ...options?.template?.compilerOptions,
       runtimeModuleName:
         options?.template?.compilerOptions?.runtimeModuleName ??
-          options?.importMap?.imports?.["vue"],
+          options?.importMap?.imports?.["vue"] ?? "https://esm.sh/vue@3.3.9",
       expressionPlugins,
     },
   };
@@ -76,7 +76,7 @@ const transform = async (
   const output = [mainScript];
   output.push(`__sfc__.__file = ${JSON.stringify(specifier)};`);
   if (descriptor.styles.some((s) => s.scoped)) {
-    output.push(`__sfc__.__scopeId = ${JSON.stringify(`data-v-${id}`)};`);
+    output.push(`__sfc__.__scopeId = "data-v-${id}";`);
   }
 
   const styles = await Promise.all(descriptor.styles.map(async (style) => {
@@ -109,17 +109,25 @@ const transform = async (
     return css;
   }));
   if (styles.length) {
+    output.push([
+      "const addClass = (doc, id, css) => {",
+      "if (!doc.getElementById(id)) {",
+      "const style = document.createElement('style');",
+      `style.id = id;`,
+      `style.textContent = css;`,
+      "(doc.head || doc).appendChild(style);",
+      "}};",
+    ].join(""));
     output.push("const __mounted__ = __sfc__.mounted;");
     output.push("__sfc__.mounted = function() { ");
     output.push("const rootEl = this.$root.$el;");
     output.push(
       "const doc = rootEl.getRootNode ? rootEl.getRootNode() : rootEl.ownerDocument;",
     );
-    styles.forEach((css) => {
-      output.push("const style = document.createElement('style');");
-      output.push(`style.textContent = ${JSON.stringify(css)};`);
-      output.push(`style.setAttribute('data-v-${id}', '');`);
-      output.push("(doc.head || doc).appendChild(style);");
+    styles.forEach((css, idx) => {
+      output.push(
+        `addClass(doc, "data-v-${id}-${idx}", ${JSON.stringify(css)});`,
+      );
     });
     output.push("__mounted__ && __mounted__.call(this);");
     output.push("};");

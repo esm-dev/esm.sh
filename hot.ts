@@ -1,5 +1,14 @@
+/*! 🔥 esm.sh/hot
+ *
+ * Get started: https://esm.sh/hot/get-started
+ * Docs: https://esm.sh/hot/docs
+ *
+ */
+
 /// <reference lib="dom" />
 /// <reference lib="webworker" />
+
+import { e } from "https://esm.sh/@unocss/core@0.57.7";
 
 interface Plugin {
   name?: string;
@@ -11,7 +20,12 @@ interface Loader {
   load: (url: URL, source: string, options: Record<string, any>) => Promise<{
     code: string;
     map?: string;
+    headers?: HeadersInit;
   }>;
+}
+
+interface FetchHandler {
+  (req: Request): Response | Promise<Response>;
 }
 
 interface VfsRecord {
@@ -78,12 +92,14 @@ const vfs = {
 
 // 🔥 class
 class Hot {
-  vfs: Record<string, () => Promise<VfsRecord>> = {};
   loaders: Loader[] = [];
+  fetcherListeners: { test: RegExp; handler: FetchHandler }[] = [];
+  swListeners: ((sw: ServiceWorker) => void)[] = [];
+  vfs: Record<string, (req?: Request) => Promise<VfsRecord>> = {};
 
   register<T extends string | Uint8Array>(
     name: string,
-    load: () =>
+    load: (req?: Request) =>
       | T
       | Response
       | Promise<T | Response>,
@@ -92,8 +108,8 @@ class Hot {
       | Response
       | Promise<T | Response>,
   ) {
-    this.vfs[name] = async () => {
-      let input = load();
+    this.vfs[name] = async (req?: Request) => {
+      let input = load(req);
       if (input instanceof Promise) {
         input = await input;
       }
@@ -133,13 +149,29 @@ class Hot {
   }
 
   onLoad(test: RegExp, load: Loader["load"]) {
-    this.loaders.push({ test, load });
+    if (!doc) {
+      this.loaders.push({ test, load });
+    }
     return this;
   }
 
-  async run(swUrl = "/sw.js") {
+  onFetch(test: RegExp, handler: FetchHandler) {
     if (!doc) {
-      throw new Error("HotApp.run() can't be called in Service Worker.");
+      this.fetcherListeners.push({ test, handler });
+    }
+    return this;
+  }
+
+  onActive(handler: (reg: ServiceWorker) => void) {
+    if (doc) {
+      this.swListeners.push(handler);
+    }
+    return this;
+  }
+
+  async fire(swUrl = "/sw.js") {
+    if (!doc) {
+      throw new Error("Hot.fire() can't be called in Service Worker.");
     }
 
     const sw = navigator.serviceWorker;
@@ -169,15 +201,12 @@ class Hot {
       },
       (input) => input,
     );
-
     const updateVFS = Promise.all(
       Object.values(this.vfs).map((handler) => handler()),
     );
 
     const reg = await sw.register(swUrl, { type: "module" });
-
-    // there's a waiting for reload
-    reg.waiting?.postMessage(kSkipWaiting);
+    const { active, waiting } = reg;
 
     // detect Service Worker update available and wait for it to become installed
     reg.addEventListener("updatefound", () => {
@@ -204,30 +233,28 @@ class Hot {
       reload();
     });
 
-    if (reg.active) {
-      doc.querySelectorAll("script[type='module/hot']").forEach(
-        (el) => {
-          const copy = el.cloneNode(true) as HTMLScriptElement;
-          copy.type = "module";
-          el.replaceWith(copy);
-        },
-      );
-      doc.querySelectorAll("link[rel='stylesheet/hot']").forEach(
-        (el) => {
-          const copy = el.cloneNode(true) as HTMLLinkElement;
-          copy.rel = "stylesheet";
-          el.replaceWith(copy);
-        },
-      );
-      console.log("[hot] Service Worker active");
+    // there's a waiting, send skip waiting message
+    if (waiting) {
+      waiting.postMessage(kSkipWaiting);
     }
 
-    let refreshing = false;
-    function reload() {
-      if (!refreshing) {
-        refreshing = true;
-        location.reload();
+    // there's an active Service Worker, invoke all listeners
+    if (active) {
+      for (const handler of this.swListeners) {
+        handler(active);
       }
+      doc.querySelectorAll(
+        ["iframe", "script", "link", "style"].map((t) => "hot-" + t).join(","),
+      ).forEach(
+        (el) => {
+          const copy = doc.createElement(el.tagName.slice(4).toLowerCase());
+          el.getAttributeNames().forEach((name) => {
+            copy.setAttribute(name, el.getAttribute(name)!);
+          });
+          el.replaceWith(copy);
+        },
+      );
+      console.log("🔥 [hot] app fired.");
     }
   }
 }
@@ -235,8 +262,9 @@ class Hot {
 // 🔥
 const hot = new Hot();
 plugins.forEach((plugin) => plugin.setup(hot));
+export default hot;
 
-// sw environment
+// service worker environment
 if (!doc) {
   const mimeTypes: Record<string, string[]> = {
     "a/gzip": ["gz"],
@@ -283,11 +311,10 @@ if (!doc) {
     return res;
   };
 
-  const serveVFS = async (url: URL) => {
-    const name = url.pathname.slice(5);
+  const serveVFS = async (req: Request, name: string) => {
     const headers = { "Content-Type": typesMap.get(getExtname(name)) ?? "" };
     if (name in hot.vfs) {
-      const record = await hot.vfs[name]();
+      const record = await hot.vfs[name](req);
       return new Response(record.data, { headers });
     }
     const file = await vfs.get(name);
@@ -327,7 +354,7 @@ if (!doc) {
         body += btoa(ret.map);
       }
       await vfs.put(url.href, hash, body);
-      return new Response(body, { headers: jsHeaders });
+      return new Response(body, { headers: ret.headers ?? jsHeaders });
     } catch (err) {
       console.error(err);
       return new Response(err.message, { status: 500 });
@@ -336,16 +363,25 @@ if (!doc) {
 
   self.addEventListener("fetch", (event) => {
     const evt = event as FetchEvent;
-    const url = new URL(evt.request.url);
+    const { request } = evt;
+    const url = new URL(request.url);
     const { pathname, hostname } = url;
+    const { loaders, fetcherListeners } = hot;
+    if (fetcherListeners.length > 0) {
+      for (const { test, handler } of fetcherListeners) {
+        if (test.test(pathname)) {
+          return evt.respondWith(handler(request));
+        }
+      }
+    }
     if (hostname === "esm.sh") {
       if (pathname.startsWith("/hot/")) {
-        evt.respondWith(serveVFS(url));
+        evt.respondWith(serveVFS(request, pathname.slice(5)));
       } else {
-        evt.respondWith(cacheFetch(evt.request));
+        evt.respondWith(cacheFetch(request));
       }
-    } else {
-      const loader = hot.loaders.find((l) => l.test.test(pathname));
+    } else if (!url.searchParams.has("raw")) {
+      const loader = loaders.find(({ test }) => test.test(pathname));
       if (loader) {
         evt.respondWith(serveLoader(loader, url));
       }
@@ -360,25 +396,39 @@ if (!doc) {
   });
 }
 
+/** check if the value is a string */
 function isString(v: unknown): v is string {
   return typeof v === "string";
 }
 
+/** check if the pathname is a jsx file */
 function isJsx(pathname: string): boolean {
   return pathname.endsWith(".jsx") || pathname.endsWith(".tsx");
 }
 
-function getExtname(s: string): string {
-  const i = s.lastIndexOf(".");
+/** get the extension name of the given path */
+function getExtname(path: string): string {
+  const i = path.lastIndexOf(".");
   if (i >= 0) {
-    return s.slice(i + 1);
+    return path.slice(i + 1);
   }
   return "";
 }
 
-async function computeHash(input: Uint8Array): Promise<string> {
-  const buffer = new Uint8Array(await crypto.subtle.digest("SHA-1", input));
+/** compute the hash of the given input, default to SHA-1 */
+async function computeHash(
+  input: Uint8Array,
+  algorithm: AlgorithmIdentifier = "SHA-1",
+): Promise<string> {
+  const buffer = new Uint8Array(await crypto.subtle.digest(algorithm, input));
   return [...buffer].map((b) => b.toString(16).padStart(2, "0")).join("");
 }
 
-export default hot;
+/** reload the page */
+let reloading = false;
+function reload() {
+  if (!reloading) {
+    reloading = true;
+    location.reload();
+  }
+}

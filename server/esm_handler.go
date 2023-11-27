@@ -133,7 +133,7 @@ func esmHandler() rex.Handle {
 			})
 
 			nsStatus := "IOERROR"
-			client := &http.Client{Timeout: 2 * time.Second}
+			client := &http.Client{Timeout: 5 * time.Second}
 			res, err := client.Get(fmt.Sprintf("http://localhost:%d", cfg.NsPort))
 			if err == nil {
 				out, err := io.ReadAll(res.Body)
@@ -283,9 +283,10 @@ func esmHandler() rex.Handle {
 			}
 
 			if pathname == "/hot" {
-				features := []string{}
+				plugins := []string{}
 				imports := []string{}
-				for i, name := range regexpPluginSeparator.Split(ctx.R.URL.RawQuery, -1) {
+				for i, name := range strings.Split(ctx.Form.Value("plugins"), ",") {
+					name = strings.TrimSpace(name)
 					name, version := utils.SplitByLastByte(name, '@')
 					if validatePackageName(name) {
 						_, err := embedFS.ReadFile(fmt.Sprintf("server/embed/hot-plugins/%s.ts", name))
@@ -299,16 +300,16 @@ func esmHandler() rex.Handle {
 								}
 							}
 							id := fmt.Sprintf("p%d", i)
-							features = append(features, id)
+							plugins = append(plugins, id)
 							imports = append(imports, fmt.Sprintf(`import %s from "%s%s/v%d/hot-plugins/%s%s";`, id, cdnOrigin, cfg.CdnBasePath, CTX_BUILD_VERSION, name, query))
 						}
 					}
 				}
-				if len(features) > 0 {
+				if len(plugins) > 0 {
 					data = bytes.Replace(
 						data,
 						[]byte("const plugins: Plugin[] = []"),
-						[]byte(fmt.Sprintf(`%sconst plugins: Plugin[] = [%s]`, strings.Join(imports, "\n"), strings.Join(features, ", "))),
+						[]byte(fmt.Sprintf(`%sconst plugins: Plugin[] = [%s]`, strings.Join(imports, "\n"), strings.Join(plugins, ", "))),
 						1,
 					)
 				}

@@ -1,10 +1,10 @@
 export default {
   name: "svelte-root",
   setup(hot: any) {
-    if (globalThis.customElements) {
+    hot.onActive((_sw: ServiceWorker) => {
       customElements.define(
         "svelte-root",
-        class MyCustomElement extends HTMLElement {
+        class SvelteRoot extends HTMLElement {
           constructor() {
             super();
           }
@@ -28,6 +28,6 @@ export default {
           }
         },
       );
-    }
+    });
   },
 };

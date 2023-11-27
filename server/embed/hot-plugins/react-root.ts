@@ -6,10 +6,10 @@ import { createRoot } from "https://esm.sh/react-dom@18.2.0/client";
 export default {
   name: "react-root",
   setup(hot: any) {
-    if (globalThis.customElements) {
+    hot.onActive((_sw: ServiceWorker) => {
       customElements.define(
         "react-root",
-        class MyCustomElement extends HTMLElement {
+        class ReactRoot extends HTMLElement {
           constructor() {
             super();
           }
@@ -27,6 +27,6 @@ export default {
           }
         },
       );
-    }
+    });
   },
 };

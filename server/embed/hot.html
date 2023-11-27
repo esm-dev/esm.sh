@@ -5,53 +5,32 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width" />
   <title>🔥</title>
-  <link rel="stylesheet" href="https://esm.sh/hot/app.css">
-  </link>
+  <link rel="stylesheet" href="https://esm.sh/hot/uno.css"></link>
   <script type="importmap">
     {
       "imports": {
         "@jsxImportSource": "https://esm.sh/react@18.2.0",
         "vue": "https://esm.sh/vue@3.3.9",
-        "react": "https://esm.sh/react@18.2.0",
-        "react-dom/": "https://esm.sh/react-dom@18/",
         "svelte/": "https://esm.sh/svelte@4.2.7/"
       }
     }
   </script>
-  <style type="text/draft">
-    .hello {
-      color: red;
-    }
-  </style>
 </head>
 
 <body class="hot-app">
-  <h1 class="text-3xl font-bold p-4 hello">
+  <h1 class="text-3xl text-gray">
     Hello, World!
   </h1>
 
   <react-root src="./hot-test/App.tsx"></react-root>
   <vue-root src="./hot-test/App.vue" shadow></vue-root>
   <svelte-root src="./hot-test/App.svelte" shadow></svelte-root>
+  <markdown-body src="./hot-test/hello.md" shadow></markdown-body>
 
   <script type="module">
-    import hot from "/hot?svelte-root,vue-root,react-root"
+    import hot from "/hot?plugins=svelte-root,vue-root,react-root,markdown-body"
 
-    hot.register("app.css",
-      () => document.body.innerHTML,
-      async (html) => {
-        const { createGenerator } = await import("https://esm.sh/@unocss/core@0.57.7");
-        const { default: presetWind } = await import("https://esm.sh/@unocss/preset-wind@0.57.7?bundle");
-
-        const uno = createGenerator({
-          presets: [presetWind()],
-        });
-        const { css } = await uno.generate(html, {
-          id: "index.html",
-        });
-        return css;
-      }
-    ).run("/embed/sw.js")
+    hot.fire("/embed/sw.js");
   </script>
 </body>
 

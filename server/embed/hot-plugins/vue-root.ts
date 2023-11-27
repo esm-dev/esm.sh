@@ -5,10 +5,10 @@ import { createApp } from "https://esm.sh/vue@3.3.9";
 export default {
   name: "vue-root",
   setup(hot: any) {
-    if (globalThis.customElements) {
+    hot.onActive((_sw: ServiceWorker) => {
       customElements.define(
         "vue-root",
-        class MyCustomElement extends HTMLElement {
+        class VueRoot extends HTMLElement {
           constructor() {
             super();
           }
@@ -32,6 +32,6 @@ export default {
           }
         },
       );
-    }
+    });
   },
 };
