@@ -8,8 +8,6 @@
 /// <reference lib="dom" />
 /// <reference lib="webworker" />
 
-import { e } from "https://esm.sh/@unocss/core@0.57.7";
-
 interface Plugin {
   name?: string;
   setup: (hot: Hot) => void;
@@ -32,6 +30,7 @@ interface VfsRecord {
   name: string;
   hash: string;
   data: string | Uint8Array;
+  headers: [string, string][] | null;
 }
 
 const VERSION = 135;
@@ -80,9 +79,19 @@ const vfs = {
       },
     );
   },
-  async put(name: string, hash: string, data: Uint8Array | string) {
+  async put(
+    name: string,
+    hash: string,
+    data: Uint8Array | string,
+    headers?: HeadersInit,
+  ) {
     const store = await getVfsStore("readwrite");
-    const req = store.put({ name, hash, data });
+    const req = store.put({
+      name,
+      hash,
+      data,
+      headers: headers ? [...new Headers(headers)] : null,
+    });
     return new Promise<void>((resolve, reject) => {
       req.onsuccess = () => resolve();
       req.onerror = () => reject(req.error);
@@ -143,7 +152,7 @@ class Hot {
         console.log(`[hot] ${name} updated`);
       }
       await vfs.put(name, hash, data);
-      return { name, hash, data };
+      return { name, hash, data, headers: null };
     };
     return this;
   }
@@ -343,18 +352,23 @@ if (!doc) {
     const cached = await vfs.get(url.href);
     const hash = await computeHash(enc.encode(jsxImportSource + source));
     if (cached && cached.hash === hash) {
-      return new Response(cached.data, { headers: jsHeaders });
+      return new Response(cached.data, {
+        headers: cached.headers ?? jsHeaders,
+      });
     }
     try {
-      const ret = await loader.load(url, source, { importMap, isDev });
-      let body = ret.code;
-      if (ret.map) {
+      const { code, map, headers } = await loader.load(url, source, {
+        importMap,
+        isDev,
+      });
+      let body = code;
+      if (map) {
         body +=
           "\n//# sourceMappingURL=data:application/json;charset=utf-8;base64,";
-        body += btoa(ret.map);
+        body += btoa(map);
       }
-      await vfs.put(url.href, hash, body);
-      return new Response(body, { headers: ret.headers ?? jsHeaders });
+      await vfs.put(url.href, hash, body, headers);
+      return new Response(body, { headers: headers ?? jsHeaders });
     } catch (err) {
       console.error(err);
       return new Response(err.message, { status: 500 });
