@@ -20,6 +20,7 @@ interface Loader {
     map?: string;
     headers?: HeadersInit;
   }>;
+  varyUA?: boolean; // for the loaders that checks build target by user-agent header
 }
 
 interface FetchHandler {
@@ -157,9 +158,9 @@ class Hot {
     return this;
   }
 
-  onLoad(test: RegExp, load: Loader["load"]) {
+  onLoad(test: RegExp, load: Loader["load"], varyUA = false) {
     if (!doc) {
-      this.loaders.push({ test, load });
+      this.loaders.push({ test, load, varyUA });
     }
     return this;
   }
@@ -350,7 +351,9 @@ if (!doc) {
       : undefined;
     const source = await res.text();
     const cached = await vfs.get(url.href);
-    const hash = await computeHash(enc.encode(jsxImportSource + source));
+    const hash = await computeHash(enc.encode(
+      jsxImportSource + source + (loader.varyUA ? navigator.userAgent : ""),
+    ));
     if (cached && cached.hash === hash) {
       return new Response(cached.data, {
         headers: cached.headers ?? jsHeaders,

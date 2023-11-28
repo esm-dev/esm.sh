@@ -1,38 +1,55 @@
 /** @version: 0.3.1 */
 
 import initWasm, {
+  type Targets,
   transform,
   transformCSS,
 } from "https://esm.sh/v135/esm-compiler@0.3.1";
+
+let waiting: Promise<any> | null = null;
+const init = async () => {
+  if (waiting === null) {
+    waiting = initWasm(
+      fetch("https://esm.sh/esm-compiler@0.3.1/esm_compiler_bg.wasm"),
+    );
+  }
+  await waiting;
+};
 
 export default {
   name: "tsx",
   setup(hot: any) {
     const { stringify } = JSON;
 
-    let waiting: Promise<any> | null = null;
-    const init = async () => {
-      if (waiting === null) {
-        waiting = initWasm(
-          fetch("https://esm.sh/esm-compiler@0.3.1/esm_compiler_bg.wasm"),
-        );
-      }
-      await waiting;
+    const targets: Targets = {
+      chrome: 95 << 16, // default to chrome 95
     };
+    if (!globalThis.document) {
+      const { userAgent } = navigator;
+      if (userAgent.includes("Safari/")) {
+        // safari: Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.1 Safari/605.1.15
+        // chrome: Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36
+        let m = userAgent.match(/Version\/(\d+)\.(\d)+/);
+        if (m) {
+          targets.safari = parseInt(m[1]) << 16 | parseInt(m[2]) << 8;
+        } else if ((m = userAgent.match(/Chrome\/(\d+)\./))) {
+          targets.chrome = parseInt(m[1]) << 16;
+        }
+      }
+    }
 
     hot.onLoad(
-      /\.(jsx|tsx|ts|css)$/,
+      /\.(js|mjs|jsx|tsx|ts|css)$/,
       async (url: URL, source: string, options: Record<string, any> = {}) => {
         const { pathname } = url;
         const { isDev, importMap } = options;
         await init();
         if (pathname.endsWith(".css")) {
+          // todo: check more browsers
           const { code, map, exports } = transformCSS(pathname, source, {
+            targets,
             minify: !isDev,
             cssModules: pathname.endsWith(".module.css"),
-            targets: {
-              chrome: 95 << 16, // TODO: check user agent
-            },
             sourceMap: !!isDev,
           });
           if (url.searchParams.has("module")) {
@@ -77,6 +94,7 @@ export default {
           target: "es2020", // TODO: check user agent
         });
       },
+      true, // varyUA
     );
   },
 };
