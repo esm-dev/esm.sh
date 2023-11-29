@@ -7,16 +7,16 @@ require (
 	github.com/evanw/esbuild v0.19.7
 	github.com/ije/esbuild-internal v0.19.7
 	github.com/ije/gox v0.6.1
-	github.com/ije/rex v1.10.7
+	github.com/ije/rex v1.10.8
 	github.com/mssola/useragent v1.0.0
 	go.etcd.io/bbolt v1.3.8
 )
 
 require (
-	github.com/andybalholm/brotli v1.0.5 // indirect
-	github.com/rs/cors v1.9.0 // indirect
-	golang.org/x/crypto v0.12.0 // indirect
+	github.com/andybalholm/brotli v1.0.6 // indirect
+	github.com/rs/cors v1.10.1 // indirect
+	golang.org/x/crypto v0.16.0 // indirect
 	golang.org/x/net v0.10.0 // indirect
-	golang.org/x/sys v0.11.0 // indirect
-	golang.org/x/text v0.12.0 // indirect
+	golang.org/x/sys v0.15.0 // indirect
+	golang.org/x/text v0.14.0 // indirect
 )
