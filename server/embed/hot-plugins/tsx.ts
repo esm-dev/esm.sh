@@ -1,16 +1,16 @@
-/** @version: 0.3.2 */
+/** @version: 0.3.3 */
 
 import initWasm, {
   type Targets,
   transform,
   transformCSS,
-} from "https://esm.sh/v135/esm-compiler@0.3.2";
+} from "https://esm.sh/v135/esm-compiler@0.3.3";
 
 let waiting: Promise<any> | null = null;
 const init = async () => {
   if (waiting === null) {
     waiting = initWasm(
-      fetch("https://esm.sh/esm-compiler@0.3.2/esm_compiler_bg.wasm"),
+      fetch("https://esm.sh/esm-compiler@0.3.3/esm_compiler_bg.wasm"),
     );
   }
   await waiting;
@@ -38,8 +38,28 @@ export default {
       }
     }
 
+    // add `?dev` to react/react-dom import url in development mode
+    if (hot.isDev) {
+      hot.onFetch((url: URL, req: Request) => {
+        if (
+          url.hostname === "esm.sh" &&
+          !url.searchParams.has("dev") &&
+          req.method === "GET"
+        ) {
+          const p = url.pathname.split("/");
+          const [name] = p[1].split("@");
+          return p.length <= 3 && (name === "react" || name === "react-dom");
+        }
+        return false;
+      }, (req: Request) => {
+        const url = new URL(req.url);
+        url.searchParams.set("dev", "");
+        return Response.redirect(url.href.replace("dev=", "dev"), 302);
+      });
+    }
+
     hot.onLoad(
-      /\.(js|mjs|jsx|tsx|ts|css)$/,
+      /\.(js|mjs|jsx|mts|ts|tsx|css)$/,
       async (url: URL, source: string, options: Record<string, any> = {}) => {
         const { pathname } = url;
         const { importMap } = options;
@@ -89,19 +109,19 @@ export default {
         }
         const imports = importMap.imports;
         const jsxImportSource = imports?.["@jsxImportSource"];
-        const hmrRuntimeUrl = imports?.["@hmrRuntimeUrl"];
+        const hmrRuntime = imports?.["@hmrRuntime"];
         return transform(pathname, source, {
           isDev,
-          sourceMap: !!isDev,
+          sourceMap: Boolean(isDev),
           jsxImportSource: jsxImportSource,
           importMap: stringify(importMap ?? {}),
           minify: !isDev ? { compress: true, keepNames: true } : undefined,
           target: "es2020", // TODO: check user agent
-          hmr: hmrRuntimeUrl
+          hmr: hmrRuntime && Boolean(isDev)
             ? {
-              runtimeUrl: hmrRuntimeUrl,
+              runtime: hmrRuntime,
               reactRefresh: jsxImportSource?.includes("/react"),
-              reactRefreshRuntimeUrl: imports?.["@reactRefreshRuntimeUrl"],
+              reactRefreshRuntime: imports?.["@reactRefreshRuntime"],
             }
             : undefined,
         });

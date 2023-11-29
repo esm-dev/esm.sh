@@ -1,6 +1,8 @@
 /** @version: 3.3.9 */
 
-import { createApp } from "https://esm.sh/vue@3.3.9";
+function importAll(...urls: (string | URL)[]) {
+  return Promise.all(urls.map((url) => import(url.toString())));
+}
 
 export default {
   name: "vue-root",
@@ -22,12 +24,16 @@ export default {
             }
             const src = this.getAttribute("src");
             if (src) {
-              import(new URL(src, location.href).href).then(
-                ({ default: Component }) => {
-                  const app = createApp(Component);
-                  app.mount(rootDiv);
-                },
-              );
+              importAll(
+                "https://esm.sh/vue@3.3.9",
+                new URL(src, location.href),
+              ).then(([
+                { createApp },
+                { default: Component },
+              ]) => {
+                const app = createApp(Component);
+                app.mount(rootDiv);
+              });
             }
           }
         },

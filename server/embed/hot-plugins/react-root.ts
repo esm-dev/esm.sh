@@ -1,7 +1,8 @@
 /** @version: 18.2.0 */
 
-import { createElement } from "https://esm.sh/react@18.2.0?dev";
-import { createRoot } from "https://esm.sh/react-dom@18.2.0/client?dev";
+function importAll(...urls: (string | URL)[]) {
+  return Promise.all(urls.map((url) => import(url.toString())));
+}
 
 export default {
   name: "react-root",
@@ -13,17 +14,29 @@ export default {
           constructor() {
             super();
           }
-          connectedCallback() {
+          async connectedCallback() {
             const rootDiv = document.createElement("div");
             const src = this.getAttribute("src");
             this.appendChild(rootDiv);
-            if (src) {
-              import(new URL(src, location.href).href).then(
-                ({ default: Component }) => {
-                  createRoot(rootDiv).render(createElement(Component));
-                },
-              );
+            if (!src) {
+              return;
             }
+            if (hot.hmr) {
+              // ensure react-refresh is injected before react-dom is loaded
+              await import("https://esm.sh/hot/_hmr_react_refresh.js");
+            }
+            const [
+              { createElement, StrictMode },
+              { createRoot },
+              { default: Component },
+            ] = await importAll(
+              "https://esm.sh/react@18.2.0",
+              "https://esm.sh/react-dom@18.2.0/client",
+              new URL(src, location.href),
+            );
+            createRoot(rootDiv).render(
+              createElement(StrictMode, null, createElement(Component)),
+            );
           }
         },
       );

@@ -15,19 +15,18 @@ export default {
     hot.hmrCallbacks = new Map<string, (module: any) => void>();
     hot.customImports = {
       ...hot.customImports,
-      "@hmrRuntimeUrl": "https://esm.sh/hot/_hmr.js",
-      "@reactRefreshRuntimeUrl": "https://esm.sh/hot/_hmr_react.js",
+      "@hmrRuntime": "https://esm.sh/hot/_hmr.js",
+      "@reactRefreshRuntime": "https://esm.sh/hot/_hmr_react_refresh.js",
     };
-    hot.register("_hmr.js", () => "", () => {
-      return `
+    hot.register(
+      "_hmr.js",
+      () => `
         export default (path) => ({
           decline() {
             HOT.hmrModules.delete(path);
             HOT.hmrCallbacks.set(path, () => location.reload());
           },
           accept(cb) {
-            const hmrModules = HOT.hmrModules ?? (HOT.hmrModules = new Set());
-            const hmrCallbacks = HOT.hmrCallbacks ?? (HOT.hmrCallbacks = new Map());
             if (!HOT.hmrModules.has(path)) {
               HOT.hmrModules.add(path);
               HOT.hmrCallbacks.set(path, cb);
@@ -37,10 +36,12 @@ export default {
             location.reload();
           }
         })
-      `;
-    });
-    hot.register("_hmr_react.js", () => "", () => {
-      return `
+      `,
+      (code: string) => code,
+    );
+    hot.register(
+      "_hmr_react_refresh.js",
+      () => `
         // react-refresh
         // @link https://github.com/facebook/react/issues/16604#issuecomment-528663101
 
@@ -62,8 +63,9 @@ export default {
         window.$RefreshSig$ = () => type => type;
 
         export { refresh as __REACT_REFRESH__, runtime as __REACT_REFRESH_RUNTIME__ };
-      `;
-    });
+      `,
+      (code: string) => code,
+    );
     hot.onFire((_sw: ServiceWorker) => {
       const source = new EventSource(new URL("hot-notify", location.href));
       source.addEventListener("fs-notify", async (ev) => {

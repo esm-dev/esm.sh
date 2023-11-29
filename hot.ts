@@ -28,6 +28,10 @@ interface FetchHandler {
   (req: Request): Response | Promise<Response>;
 }
 
+interface UrlTest {
+  (url: URL, req: Request): boolean;
+}
+
 interface VfsRecord {
   name: string;
   hash: string;
@@ -108,7 +112,7 @@ const vfs = {
 // 🔥 class
 class Hot {
   loaders: Loader[] = [];
-  fetcherListeners: { test: RegExp; handler: FetchHandler }[] = [];
+  fetchListeners: { test: UrlTest; handler: FetchHandler }[] = [];
   swListeners: ((sw: ServiceWorker) => void)[] = [];
   vfs: Record<string, (req?: Request) => Promise<VfsRecord>> = {};
   customImports?: Record<string, string>;
@@ -174,9 +178,9 @@ class Hot {
     return this;
   }
 
-  onFetch(test: RegExp, handler: FetchHandler) {
+  onFetch(test: UrlTest, handler: FetchHandler) {
     if (!doc) {
-      this.fetcherListeners.push({ test, handler });
+      this.fetchListeners.push({ test, handler });
     }
     return this;
   }
@@ -401,10 +405,10 @@ if (!doc) {
     const { request } = evt;
     const url = new URL(request.url);
     const { pathname, hostname } = url;
-    const { loaders, fetcherListeners } = hot;
-    if (fetcherListeners.length > 0) {
-      for (const { test, handler } of fetcherListeners) {
-        if (test.test(pathname)) {
+    const { loaders, fetchListeners } = hot;
+    if (fetchListeners.length > 0) {
+      for (const { test, handler } of fetchListeners) {
+        if (test(url, request)) {
           return evt.respondWith(handler(request));
         }
       }
