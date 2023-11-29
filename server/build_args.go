@@ -83,7 +83,7 @@ func decodeBuildArgsPrefix(raw string) (args BuildArgs, err error) {
 
 func encodeBuildArgsPrefix(args BuildArgs, pkg Pkg, forTypes bool) string {
 	lines := []string{}
-	if !(stableBuild[pkg.Name] && pkg.Submodule == "") {
+	if !(stableBuild[pkg.Name] && pkg.SubModule == "") {
 		if len(args.alias) > 0 {
 			var ss sort.StringSlice
 			for name, to := range args.alias {

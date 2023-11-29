@@ -520,8 +520,8 @@ func esmHandler() rex.Handle {
 		}
 
 		// fix url related `import.meta.url`
-		if hasBuildVerPrefix && endsWith(reqPkg.Subpath, ".wasm", ".json") {
-			extname := path.Ext(reqPkg.Subpath)
+		if hasBuildVerPrefix && endsWith(reqPkg.SubPath, ".wasm", ".json") {
+			extname := path.Ext(reqPkg.SubPath)
 			dir := path.Join(cfg.WorkDir, "npm", reqPkg.Name+"@"+reqPkg.Version)
 			if !dirExists(dir) {
 				err := installPackage(dir, reqPkg)
@@ -542,14 +542,14 @@ func esmHandler() rex.Handle {
 			} else if l > 1 {
 				sort.Sort(sort.Reverse(PathSlice(files)))
 				for _, f := range files {
-					if strings.HasSuffix(reqPkg.Subpath, f) {
+					if strings.HasSuffix(reqPkg.SubPath, f) {
 						file = f
 						break
 					}
 				}
 				if file == "" {
 					for _, f := range files {
-						if path.Base(reqPkg.Subpath) == path.Base(f) {
+						if path.Base(reqPkg.SubPath) == path.Base(f) {
 							file = f
 							break
 						}
@@ -564,9 +564,9 @@ func esmHandler() rex.Handle {
 		}
 
 		// redirect `/@types/PKG` to main dts files
-		if strings.HasPrefix(reqPkg.Name, "@types/") && (reqPkg.Submodule == "" || !strings.HasSuffix(reqPkg.Submodule, ".d.ts")) {
+		if strings.HasPrefix(reqPkg.Name, "@types/") && (reqPkg.SubModule == "" || !strings.HasSuffix(reqPkg.SubModule, ".d.ts")) {
 			url := fmt.Sprintf("%s%s/v%d%s", cdnOrigin, cfg.CdnBasePath, CTX_BUILD_VERSION, pathname)
-			if reqPkg.Submodule == "" {
+			if reqPkg.SubModule == "" {
 				info, _, err := getPackageInfo("", reqPkg.Name, reqPkg.Version)
 				if err != nil {
 					return rex.Status(500, err.Error())
@@ -587,7 +587,7 @@ func esmHandler() rex.Handle {
 		}
 
 		// redirect to main css path for CSS packages
-		if css := cssPackages[reqPkg.Name]; css != "" && reqPkg.Submodule == "" {
+		if css := cssPackages[reqPkg.Name]; css != "" && reqPkg.SubModule == "" {
 			url := fmt.Sprintf("%s%s/%s/%s", cdnOrigin, cfg.CdnBasePath, reqPkg.String(), css)
 			return rex.Redirect(url, http.StatusMovedPermanently)
 		}
@@ -622,8 +622,8 @@ func esmHandler() rex.Handle {
 			if external.Has("*") {
 				eaSign = "*"
 			}
-			if reqPkg.Subpath != "" {
-				subPath = "/" + reqPkg.Subpath
+			if reqPkg.SubPath != "" {
+				subPath = "/" + reqPkg.SubPath
 			}
 			if ctx.R.URL.RawQuery != "" {
 				if extraQuery != "" {
@@ -649,8 +649,8 @@ func esmHandler() rex.Handle {
 					bvPrefix = fmt.Sprintf("/v%d", CTX_BUILD_VERSION)
 				}
 			}
-			if reqPkg.Subpath != "" {
-				subPath = "/" + reqPkg.Subpath
+			if reqPkg.SubPath != "" {
+				subPath = "/" + reqPkg.SubPath
 			}
 			if ctx.R.URL.RawQuery != "" {
 				query = "?" + ctx.R.URL.RawQuery
@@ -661,24 +661,24 @@ func esmHandler() rex.Handle {
 		// support `https://esm.sh/react?dev&target=es2020/jsx-runtime` pattern for jsx transformer
 		for _, jsxRuntime := range []string{"jsx-runtime", "jsx-dev-runtime"} {
 			if strings.HasSuffix(ctx.R.URL.RawQuery, "/"+jsxRuntime) {
-				if reqPkg.Submodule == "" {
-					reqPkg.Submodule = jsxRuntime
+				if reqPkg.SubModule == "" {
+					reqPkg.SubModule = jsxRuntime
 				} else {
-					reqPkg.Submodule = reqPkg.Submodule + "/" + jsxRuntime
+					reqPkg.SubModule = reqPkg.SubModule + "/" + jsxRuntime
 				}
-				pathname = fmt.Sprintf("/%s/%s", reqPkg.Name, reqPkg.Submodule)
+				pathname = fmt.Sprintf("/%s/%s", reqPkg.Name, reqPkg.SubModule)
 				ctx.R.URL.RawQuery = strings.TrimSuffix(ctx.R.URL.RawQuery, "/"+jsxRuntime)
 			}
 		}
 
 		// or use `?path=$PATH` query to override the pathname
 		if v := ctx.Form.Value("path"); v != "" {
-			reqPkg.Submodule = utils.CleanPath(v)[1:]
+			reqPkg.SubModule = utils.CleanPath(v)[1:]
 		}
 
 		var reqType string
-		if reqPkg.Subpath != "" {
-			ext := path.Ext(reqPkg.Subpath)
+		if reqPkg.SubPath != "" {
+			ext := path.Ext(reqPkg.SubPath)
 			switch ext {
 			case ".mjs", ".js", ".jsx", ".ts", ".mts", ".tsx":
 				if endsWith(pathname, ".d.ts", ".d.mts") {
@@ -689,7 +689,7 @@ func esmHandler() rex.Handle {
 					reqType = "types"
 				} else if ctx.R.URL.Query().Has("raw") {
 					reqType = "raw"
-				} else if hasBuildVerPrefix && hasTargetSegment(reqPkg.Subpath) {
+				} else if hasBuildVerPrefix && hasTargetSegment(reqPkg.SubPath) {
 					reqType = "builds"
 				}
 			case ".wasm":
@@ -705,7 +705,7 @@ func esmHandler() rex.Handle {
 					reqType = "raw"
 				}
 			case ".css", ".map":
-				if hasBuildVerPrefix && hasTargetSegment(reqPkg.Subpath) {
+				if hasBuildVerPrefix && hasTargetSegment(reqPkg.SubPath) {
 					reqType = "builds"
 				} else {
 					reqType = "raw"
@@ -720,7 +720,7 @@ func esmHandler() rex.Handle {
 		// serve raw dist or npm dist files like CSS/map etc..
 		if reqType == "raw" {
 			installDir := fmt.Sprintf("npm/%s", reqPkg.VersionName())
-			savePath := path.Join(cfg.WorkDir, installDir, "node_modules", reqPkg.Name, reqPkg.Subpath)
+			savePath := path.Join(cfg.WorkDir, installDir, "node_modules", reqPkg.Name, reqPkg.SubPath)
 			fi, err := os.Lstat(savePath)
 			if err != nil {
 				if os.IsExist(err) {
@@ -945,7 +945,7 @@ func esmHandler() rex.Handle {
 		ignoreAnnotations := ctx.Form.Has("ignore-annotations")
 
 		// force react/jsx-dev-runtime and react-refresh into `dev` mode
-		if !isDev && ((reqPkg.Name == "react" && reqPkg.Submodule == "jsx-dev-runtime") || reqPkg.Name == "react-refresh") {
+		if !isDev && ((reqPkg.Name == "react" && reqPkg.SubModule == "jsx-dev-runtime") || reqPkg.Name == "react-refresh") {
 			isDev = true
 		}
 
@@ -963,14 +963,14 @@ func esmHandler() rex.Handle {
 
 		// parse and use `X-` prefix
 		if hasBuildVerPrefix {
-			a := strings.Split(reqPkg.Submodule, "/")
+			a := strings.Split(reqPkg.SubModule, "/")
 			if len(a) > 1 && strings.HasPrefix(a[0], "X-") {
-				reqPkg.Submodule = strings.Join(a[1:], "/")
+				reqPkg.SubModule = strings.Join(a[1:], "/")
 				args, err := decodeBuildArgsPrefix(a[0])
 				if err != nil {
 					return throwErrorJS(ctx, err, false)
 				}
-				reqPkg.Subpath = strings.Join(strings.Split(reqPkg.Subpath, "/")[1:], "/")
+				reqPkg.SubPath = strings.Join(strings.Split(reqPkg.SubPath, "/")[1:], "/")
 				if args.denoStdVersion == "" {
 					// ensure deno/std version used
 					args.denoStdVersion = denoStdVersion
@@ -980,7 +980,7 @@ func esmHandler() rex.Handle {
 		}
 
 		// clear build args for main entry of stable builds
-		if stableBuild[reqPkg.Name] && reqPkg.Submodule == "" {
+		if stableBuild[reqPkg.Name] && reqPkg.SubModule == "" {
 			buildArgs = BuildArgs{
 				external:   newStringSet(),
 				exports:    newStringSet(),
@@ -990,16 +990,16 @@ func esmHandler() rex.Handle {
 
 		// check if it's build path
 		isBarePath := false
-		if hasBuildVerPrefix && (endsWith(reqPkg.Subpath, ".mjs", ".js", ".css")) {
-			a := strings.Split(reqPkg.Submodule, "/")
+		if hasBuildVerPrefix && (endsWith(reqPkg.SubPath, ".mjs", ".js", ".css")) {
+			a := strings.Split(reqPkg.SubModule, "/")
 			if len(a) > 0 {
 				maybeTarget := a[0]
 				if _, ok := targets[maybeTarget]; ok {
 					submodule := strings.Join(a[1:], "/")
 					pkgName := strings.TrimSuffix(path.Base(reqPkg.Name), ".js")
-					if strings.HasSuffix(submodule, ".css") && !strings.HasSuffix(reqPkg.Subpath, ".js") {
+					if strings.HasSuffix(submodule, ".css") && !strings.HasSuffix(reqPkg.SubPath, ".js") {
 						if submodule == pkgName+".css" {
-							reqPkg.Submodule = ""
+							reqPkg.SubModule = ""
 							target = maybeTarget
 							isBarePath = true
 						} else {
@@ -1018,7 +1018,7 @@ func esmHandler() rex.Handle {
 							submodule = strings.TrimSuffix(submodule, ".development")
 							isDev = true
 						}
-						isMjs := strings.HasSuffix(reqPkg.Subpath, ".mjs")
+						isMjs := strings.HasSuffix(reqPkg.SubPath, ".mjs")
 						// fix old build `/stable/react/deno/react.js` to `/stable/react/deno/react.mjs`
 						if !isMjs && submodule == pkgName && stableBuild[reqPkg.Name] {
 							url := fmt.Sprintf(
@@ -1041,7 +1041,7 @@ func esmHandler() rex.Handle {
 						if submodule != "" && reqPkg.Name == "es5-ext" {
 							submodule = strings.ReplaceAll(submodule, "/$$/", "/#/")
 						}
-						reqPkg.Submodule = submodule
+						reqPkg.SubModule = submodule
 						target = maybeTarget
 						isBarePath = true
 					}
@@ -1060,7 +1060,7 @@ func esmHandler() rex.Handle {
 					reqPkg.Name,
 					reqPkg.Version,
 					encodeBuildArgsPrefix(buildArgs, reqPkg, true),
-				), reqPkg.Subpath)
+				), reqPkg.SubPath)
 				if strings.HasSuffix(savePath, "~.d.ts") {
 					savePath = strings.TrimSuffix(savePath, "~.d.ts")
 					_, err := fs.Stat(path.Join(savePath, "index.d.ts"))
@@ -1155,7 +1155,7 @@ func esmHandler() rex.Handle {
 						if m := output.err.Error(); strings.Contains(m, "no such file or directory") ||
 							strings.Contains(m, "is not exported from package") {
 							// redirect old build path (.js) to new build path (.mjs)
-							if strings.HasSuffix(reqPkg.Subpath, "/"+reqPkg.Name+".js") {
+							if strings.HasSuffix(reqPkg.SubPath, "/"+reqPkg.Name+".js") {
 								url := strings.TrimSuffix(ctx.R.URL.String(), ".js") + ".mjs"
 								return rex.Redirect(url, http.StatusMovedPermanently)
 							}
@@ -1199,7 +1199,7 @@ func esmHandler() rex.Handle {
 		}
 
 		// redirect to package css from `?css`
-		if isPkgCss && reqPkg.Submodule == "" {
+		if isPkgCss && reqPkg.SubModule == "" {
 			if !esm.PackageCSS {
 				return rex.Status(404, "Package CSS not found")
 			}
@@ -1213,7 +1213,7 @@ func esmHandler() rex.Handle {
 
 		if isBarePath {
 			savePath := task.getSavepath()
-			if strings.HasSuffix(reqPkg.Subpath, ".css") {
+			if strings.HasSuffix(reqPkg.SubPath, ".css") {
 				base, _ := utils.SplitByLastByte(savePath, '.')
 				savePath = base + ".css"
 			}

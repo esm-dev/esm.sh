@@ -12,8 +12,8 @@ import (
 type Pkg struct {
 	Name       string `json:"name"`
 	Version    string `json:"version"`
-	Subpath    string `json:"fullsubmodule"`
-	Submodule  string `json:"submodule"`
+	SubPath    string `json:"fullsubModule"`
+	SubModule  string `json:"subModule"`
 	FromGithub bool   `json:"fromGithub"`
 	FromEsmsh  bool   `json:"fromEsmsh"`
 }
@@ -24,7 +24,7 @@ func validatePkgPath(pathname string) (pkg Pkg, query string, err error) {
 		pathname = "/@" + pathname[4:]
 	}
 
-	pkgName, maybeVersion, subpath := splitPkgPath(pathname)
+	pkgName, maybeVersion, subPath := splitPkgPath(pathname)
 	fromEsmsh := strings.HasPrefix(pkgName, "~") && valid.IsHexString(pkgName[1:])
 	if !fromEsmsh && !validatePackageName(pkgName) {
 		return Pkg{}, "", fmt.Errorf("invalid package name '%s'", pkgName)
@@ -38,8 +38,8 @@ func validatePkgPath(pathname string) (pkg Pkg, query string, err error) {
 	pkg = Pkg{
 		Name:       pkgName,
 		Version:    version,
-		Subpath:    subpath,
-		Submodule:  toModuleName(subpath),
+		SubPath:    subPath,
+		SubModule:  toModuleBareName(subPath, true),
 		FromGithub: fromGithub,
 		FromEsmsh:  fromEsmsh,
 	}
@@ -101,12 +101,12 @@ func validatePkgPath(pathname string) (pkg Pkg, query string, err error) {
 }
 
 func (pkg Pkg) Equels(other Pkg) bool {
-	return pkg.Name == other.Name && pkg.Version == other.Version && pkg.Submodule == other.Submodule
+	return pkg.Name == other.Name && pkg.Version == other.Version && pkg.SubModule == other.SubModule
 }
 
 func (pkg Pkg) ImportPath() string {
-	if pkg.Submodule != "" {
-		return pkg.Name + "/" + pkg.Submodule
+	if pkg.SubModule != "" {
+		return pkg.Name + "/" + pkg.SubModule
 	}
 	return pkg.Name
 }
@@ -121,8 +121,8 @@ func (pkg Pkg) VersionName() string {
 
 func (pkg Pkg) String() string {
 	s := pkg.VersionName()
-	if pkg.Submodule != "" {
-		s += "/" + pkg.Submodule
+	if pkg.SubModule != "" {
+		s += "/" + pkg.SubModule
 	}
 	return s
 }
@@ -168,29 +168,31 @@ func (a PkgSlice) String() string {
 	return strings.Join(s, ",")
 }
 
-func toModuleName(path string) string {
+func toModuleBareName(path string, stripIndexSuffier bool) string {
 	if path != "" {
-		submodule := path
-		if strings.HasSuffix(submodule, ".mjs") {
-			submodule = strings.TrimSuffix(submodule, ".mjs")
-		} else if strings.HasSuffix(submodule, ".cjs") {
-			submodule = strings.TrimSuffix(submodule, ".cjs")
+		subModule := path
+		if strings.HasSuffix(subModule, ".mjs") {
+			subModule = strings.TrimSuffix(subModule, ".mjs")
+		} else if strings.HasSuffix(subModule, ".cjs") {
+			subModule = strings.TrimSuffix(subModule, ".cjs")
 		} else {
-			submodule = strings.TrimSuffix(submodule, ".js")
+			subModule = strings.TrimSuffix(subModule, ".js")
 		}
-		submodule = strings.TrimSuffix(submodule, "/index")
-		return submodule
+		if stripIndexSuffier {
+			subModule = strings.TrimSuffix(subModule, "/index")
+		}
+		return subModule
 	}
 	return ""
 }
 
-func splitPkgPath(specifier string) (pkgName string, version string, subpath string) {
+func splitPkgPath(specifier string) (pkgName string, version string, subPath string) {
 	a := strings.Split(strings.TrimPrefix(specifier, "/"), "/")
 	pkgNameWithVersion := a[0]
-	subpath = strings.Join(a[1:], "/")
+	subPath = strings.Join(a[1:], "/")
 	if strings.HasPrefix(pkgNameWithVersion, "@") && len(a) > 1 {
 		pkgNameWithVersion = a[0] + "/" + a[1]
-		subpath = strings.Join(a[2:], "/")
+		subPath = strings.Join(a[2:], "/")
 	}
 	if len(pkgNameWithVersion) > 0 && pkgNameWithVersion[0] == '@' {
 		pkgName, version = utils.SplitByLastByte(pkgNameWithVersion[1:], '@')

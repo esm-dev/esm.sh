@@ -26,8 +26,8 @@ func (task *BuildTask) ID() string {
 	if pkg.FromEsmsh {
 		name = "mod"
 	}
-	if pkg.Submodule != "" {
-		name = pkg.Submodule
+	if pkg.SubModule != "" {
+		name = pkg.SubModule
 		extname = ".js"
 	}
 	if task.Target == "raw" {
@@ -69,8 +69,8 @@ func (task *BuildTask) ghPrefix() string {
 func (task *BuildTask) getImportPath(pkg Pkg, buildArgsPrefix string) string {
 	name := strings.TrimSuffix(path.Base(pkg.Name), ".js")
 	extname := ".mjs"
-	if pkg.Submodule != "" {
-		name = pkg.Submodule
+	if pkg.SubModule != "" {
+		name = pkg.SubModule
 		extname = ".js"
 	}
 	if pkg.FromEsmsh {
@@ -127,8 +127,8 @@ func (task *BuildTask) getPackageInfo(name string) (pkg Pkg, p NpmPackageInfo, f
 		pkg = Pkg{
 			Name:      p.Name,
 			Version:   p.Version,
-			Subpath:   subpath,
-			Submodule: toModuleName(subpath),
+			SubPath:   subpath,
+			SubModule: toModuleBareName(subpath, true),
 		}
 	}
 	return
@@ -155,8 +155,8 @@ func (task *BuildTask) analyze(forceCjsOnly bool) (esm *ESMBuild, npm NpmPackage
 
 	// Check if the supplied path name is actually a main export.
 	// See: https://github.com/esm-dev/esm.sh/issues/578
-	if pkg.Subpath == path.Clean(npm.Main) || pkg.Subpath == path.Clean(npm.Module) {
-		task.Pkg.Submodule = ""
+	if pkg.SubPath == path.Clean(npm.Main) || pkg.SubPath == path.Clean(npm.Module) {
+		task.Pkg.SubModule = ""
 		npm = task.fixNpmPackage(p)
 	}
 
@@ -167,10 +167,10 @@ func (task *BuildTask) analyze(forceCjsOnly bool) (esm *ESMBuild, npm NpmPackage
 		esm.TypesOnly = isTypesOnlyPackage(npm)
 	}()
 
-	if pkg.Submodule != "" {
-		if endsWith(pkg.Submodule, ".d.ts", ".d.mts") {
-			if strings.HasSuffix(pkg.Submodule, "~.d.ts") {
-				submodule := strings.TrimSuffix(pkg.Submodule, "~.d.ts")
+	if pkg.SubModule != "" {
+		if endsWith(pkg.SubModule, ".d.ts", ".d.mts") {
+			if strings.HasSuffix(pkg.SubModule, "~.d.ts") {
+				submodule := strings.TrimSuffix(pkg.SubModule, "~.d.ts")
 				subDir := path.Join(wd, "node_modules", npm.Name, submodule)
 				if fileExists(path.Join(subDir, "index.d.ts")) {
 					npm.Types = path.Join(submodule, "index.d.ts")
@@ -178,10 +178,10 @@ func (task *BuildTask) analyze(forceCjsOnly bool) (esm *ESMBuild, npm NpmPackage
 					npm.Types = submodule + ".d.ts"
 				}
 			} else {
-				npm.Types = pkg.Submodule
+				npm.Types = pkg.SubModule
 			}
 		} else {
-			subDir := path.Join(wd, "node_modules", npm.Name, pkg.Submodule)
+			subDir := path.Join(wd, "node_modules", npm.Name, pkg.SubModule)
 			packageFile := path.Join(subDir, "package.json")
 			if fileExists(packageFile) {
 				var p NpmPackageInfo
@@ -195,45 +195,45 @@ func (task *BuildTask) analyze(forceCjsOnly bool) (esm *ESMBuild, npm NpmPackage
 				}
 				np := task.fixNpmPackage(p)
 				if np.Module != "" {
-					npm.Module = path.Join(pkg.Submodule, np.Module)
+					npm.Module = path.Join(pkg.SubModule, np.Module)
 				} else {
 					npm.Module = ""
 				}
 				if p.Main != "" {
-					npm.Main = path.Join(pkg.Submodule, p.Main)
+					npm.Main = path.Join(pkg.SubModule, p.Main)
 				} else {
-					npm.Main = path.Join(pkg.Submodule, "index.js")
+					npm.Main = path.Join(pkg.SubModule, "index.js")
 				}
 				npm.Types = ""
 				if p.Types != "" {
-					npm.Types = path.Join(pkg.Submodule, p.Types)
+					npm.Types = path.Join(pkg.SubModule, p.Types)
 				} else if p.Typings != "" {
-					npm.Types = path.Join(pkg.Submodule, p.Typings)
+					npm.Types = path.Join(pkg.SubModule, p.Typings)
 				} else if fileExists(path.Join(subDir, "index.d.ts")) {
-					npm.Types = path.Join(pkg.Submodule, "index.d.ts")
+					npm.Types = path.Join(pkg.SubModule, "index.d.ts")
 				} else if fileExists(path.Join(subDir + ".d.ts")) {
-					npm.Types = pkg.Submodule + ".d.ts"
+					npm.Types = pkg.SubModule + ".d.ts"
 				}
 			} else {
-				fp := path.Join(wd, "node_modules", npm.Name, pkg.Submodule+".mjs")
+				fp := path.Join(wd, "node_modules", npm.Name, pkg.SubModule+".mjs")
 				if npm.Type == "module" || npm.Module != "" || fileExists(fp) {
 					// follow main module type
-					npm.Module = pkg.Submodule
+					npm.Module = pkg.SubModule
 				} else {
-					npm.Main = pkg.Submodule
+					npm.Main = pkg.SubModule
 				}
 				npm.Types = ""
 				if fileExists(path.Join(subDir, "index.d.ts")) {
-					npm.Types = path.Join(pkg.Submodule, "index.d.ts")
+					npm.Types = path.Join(pkg.SubModule, "index.d.ts")
 				} else if fileExists(path.Join(subDir + ".d.ts")) {
-					npm.Types = pkg.Submodule + ".d.ts"
+					npm.Types = pkg.SubModule + ".d.ts"
 				}
 				// reslove sub-module using `exports` conditions if exists
 				if npm.PkgExports != nil {
 					if om, ok := npm.PkgExports.(*orderedMap); ok {
 						for e := om.l.Front(); e != nil; e = e.Next() {
 							name, exports := om.Entry(e)
-							if name == "./"+pkg.Submodule || name == "./"+pkg.Submodule+".js" || name == "./"+pkg.Submodule+".mjs" {
+							if name == "./"+pkg.SubModule || name == "./"+pkg.SubModule+".js" || name == "./"+pkg.SubModule+".mjs" {
 								/**
 								exports: {
 									"./lib/core": {
@@ -248,7 +248,7 @@ func (task *BuildTask) analyze(forceCjsOnly bool) (esm *ESMBuild, npm NpmPackage
 								*/
 								task.applyConditions(&npm, exports, npm.Type)
 								break
-							} else if strings.HasSuffix(name, "*") && strings.HasPrefix("./"+pkg.Submodule, strings.TrimSuffix(name, "*")) {
+							} else if strings.HasSuffix(name, "*") && strings.HasPrefix("./"+pkg.SubModule, strings.TrimSuffix(name, "*")) {
 								/**
 								exports: {
 									"./lib/languages/*": {
@@ -257,7 +257,7 @@ func (task *BuildTask) analyze(forceCjsOnly bool) (esm *ESMBuild, npm NpmPackage
 									},
 								}
 								*/
-								suffix := strings.TrimPrefix("./"+pkg.Submodule, strings.TrimSuffix(name, "*"))
+								suffix := strings.TrimPrefix("./"+pkg.SubModule, strings.TrimSuffix(name, "*"))
 								hitExports := false
 								if om, ok := exports.(*orderedMap); ok {
 									newExports := newOrderedMap()

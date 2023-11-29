@@ -212,7 +212,7 @@ func (task *BuildTask) transformDTS(dts string, aliasDepsPrefix string, marker *
 				if err != nil {
 					break
 				}
-				subpath = pkg.Submodule
+				subpath = toModuleBareName(pkg.SubPath, false)
 				info, fromPackageJSON, err = getPackageInfo(installDir, pkg.Name, version)
 				if err != nil || ((info.Types == "" && info.Typings == "") && !strings.HasPrefix(info.Name, "@types/")) {
 					p, ok, e := getPackageInfo(installDir, toTypesPackageName(pkg.Name), version)
@@ -387,8 +387,8 @@ func (task *BuildTask) toTypesPath(wd string, p NpmPackageInfo, version string, 
 			Pkg: Pkg{
 				Name:      p.Name,
 				Version:   p.Version,
-				Submodule: subpath,
-				Subpath:   subpath,
+				SubModule: subpath,
+				SubPath:   subpath,
 			},
 			Target: task.Target,
 			Dev:    false,

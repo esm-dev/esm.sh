@@ -154,9 +154,9 @@ func (task *BuildTask) Build() (esm *ESMBuild, err error) {
 
 func (task *BuildTask) build() (err error) {
 	// build json
-	if strings.HasSuffix(task.Pkg.Submodule, ".json") {
+	if strings.HasSuffix(task.Pkg.SubModule, ".json") {
 		nmDir := path.Join(task.wd, "node_modules")
-		jsonPath := path.Join(nmDir, task.Pkg.Name, task.Pkg.Submodule)
+		jsonPath := path.Join(nmDir, task.Pkg.Name, task.Pkg.SubModule)
 		if fileExists(jsonPath) {
 			json, err := os.ReadFile(jsonPath)
 			if err != nil {
@@ -460,8 +460,8 @@ rebuild:
 										pkg := Pkg{
 											Name:      pkgName,
 											Version:   version,
-											Subpath:   subPath,
-											Submodule: toModuleName(subPath),
+											SubPath:   subPath,
+											SubModule: toModuleBareName(subPath, true),
 										}
 										return api.OnResolveResult{Path: fmt.Sprintf("npm:%s", pkg.String()), External: true}, nil
 									}
@@ -540,7 +540,7 @@ rebuild:
 
 						// externalize the _parent_ module
 						// e.g. "react/jsx-runtime" imports "react"
-						if task.Pkg.Submodule != "" && task.Pkg.Name == specifier {
+						if task.Pkg.SubModule != "" && task.Pkg.Name == specifier {
 							return api.OnResolveResult{Path: task.resolveExternal(specifier, args.Kind), External: true}, nil
 						}
 
@@ -1011,8 +1011,8 @@ func (task *BuildTask) resolveExternal(specifier string, kind api.ResolveKind) (
 		subPkg := Pkg{
 			Name:      task.Pkg.Name,
 			Version:   task.Pkg.Version,
-			Subpath:   subPath,
-			Submodule: toModuleName(subPath),
+			SubPath:   subPath,
+			SubModule: toModuleBareName(subPath, true),
 		}
 		resolvedPath = task.getImportPath(subPkg, encodeBuildArgsPrefix(task.Args, subPkg, false))
 		if task.NoBundle {
@@ -1059,8 +1059,8 @@ func (task *BuildTask) resolveExternal(specifier string, kind api.ResolveKind) (
 		pkg := Pkg{
 			Name:      pkgName,
 			Version:   version,
-			Subpath:   subpath,
-			Submodule: toModuleName(subpath),
+			SubPath:   subpath,
+			SubModule: toModuleBareName(subpath, true),
 		}
 		args := BuildArgs{
 			alias:      cloneMap(task.Args.alias),
@@ -1108,7 +1108,7 @@ func (task *BuildTask) storeToDB() {
 
 func (task *BuildTask) checkDTS() {
 	name := task.Pkg.Name
-	submodule := task.Pkg.Submodule
+	submodule := task.Pkg.SubModule
 	var dts string
 	if task.npm.Types != "" {
 		dts = task.toTypesPath(task.wd, task.npm, "", encodeBuildArgsPrefix(task.Args, task.Pkg, true), submodule)
