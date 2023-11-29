@@ -1,12 +1,12 @@
 /** @version: 18.2.0 */
 
-import { createElement } from "https://esm.sh/react@18.2.0";
-import { createRoot } from "https://esm.sh/react-dom@18.2.0/client";
+import { createElement } from "https://esm.sh/react@18.2.0?dev";
+import { createRoot } from "https://esm.sh/react-dom@18.2.0/client?dev";
 
 export default {
   name: "react-root",
   setup(hot: any) {
-    hot.onActive((_sw: ServiceWorker) => {
+    hot.onFire((_sw: ServiceWorker) => {
       customElements.define(
         "react-root",
         class ReactRoot extends HTMLElement {

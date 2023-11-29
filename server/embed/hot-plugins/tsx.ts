@@ -1,16 +1,16 @@
-/** @version: 0.3.1 */
+/** @version: 0.3.2 */
 
 import initWasm, {
   type Targets,
   transform,
   transformCSS,
-} from "https://esm.sh/v135/esm-compiler@0.3.1";
+} from "https://esm.sh/v135/esm-compiler@0.3.2";
 
 let waiting: Promise<any> | null = null;
 const init = async () => {
   if (waiting === null) {
     waiting = initWasm(
-      fetch("https://esm.sh/esm-compiler@0.3.1/esm_compiler_bg.wasm"),
+      fetch("https://esm.sh/esm-compiler@0.3.2/esm_compiler_bg.wasm"),
     );
   }
   await waiting;
@@ -42,7 +42,8 @@ export default {
       /\.(js|mjs|jsx|tsx|ts|css)$/,
       async (url: URL, source: string, options: Record<string, any> = {}) => {
         const { pathname } = url;
-        const { isDev, importMap } = options;
+        const { importMap } = options;
+        const { isDev } = hot;
         await init();
         if (pathname.endsWith(".css")) {
           // todo: check more browsers
@@ -66,6 +67,7 @@ export default {
               });
             }
             return {
+              // TODO: support hmr
               code: [
                 "const d = document;",
                 "const id = ",
@@ -85,13 +87,23 @@ export default {
           }
           return { code, map };
         }
+        const imports = importMap.imports;
+        const jsxImportSource = imports?.["@jsxImportSource"];
+        const hmrRuntimeUrl = imports?.["@hmrRuntimeUrl"];
         return transform(pathname, source, {
           isDev,
           sourceMap: !!isDev,
-          jsxImportSource: importMap.imports?.["@jsxImportSource"],
-          importMap: stringify(importMap),
+          jsxImportSource: jsxImportSource,
+          importMap: stringify(importMap ?? {}),
           minify: !isDev ? { compress: true, keepNames: true } : undefined,
           target: "es2020", // TODO: check user agent
+          hmr: hmrRuntimeUrl
+            ? {
+              runtimeUrl: hmrRuntimeUrl,
+              reactRefresh: jsxImportSource?.includes("/react"),
+              reactRefreshRuntimeUrl: imports?.["@reactRefreshRuntimeUrl"],
+            }
+            : undefined,
         });
       },
       true, // varyUA

@@ -5,7 +5,7 @@ import { createApp } from "https://esm.sh/vue@3.3.9";
 export default {
   name: "vue-root",
   setup(hot: any) {
-    hot.onActive((_sw: ServiceWorker) => {
+    hot.onFire((_sw: ServiceWorker) => {
       customElements.define(
         "vue-root",
         class VueRoot extends HTMLElement {

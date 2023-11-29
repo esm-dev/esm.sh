@@ -156,7 +156,8 @@ export default {
     hot.onLoad(
       /\.vue$/,
       (url: URL, source: string, options: Record<string, any> = {}) => {
-        const { isDev, importMap } = options;
+        const { importMap } = options;
+        const { isDev } = hot;
         return transform(url.pathname, source, {
           isDev,
           importMap,

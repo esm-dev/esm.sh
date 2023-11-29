@@ -1,7 +1,7 @@
 export default {
   name: "svelte-root",
   setup(hot: any) {
-    hot.onActive((_sw: ServiceWorker) => {
+    hot.onFire((_sw: ServiceWorker) => {
       customElements.define(
         "svelte-root",
         class SvelteRoot extends HTMLElement {

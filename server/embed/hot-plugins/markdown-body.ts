@@ -1,24 +1,19 @@
 const deafultStyle = `
-blockquote {
-  padding-left: var(--lineHeight);
-  border-left: 2px solid #ccc;
-}
-
 h1 > a.anchor,
 h2 > a.anchor,
 h3 > a.anchor,
 h4 > a.anchor,
 h5 > a.anchor,
 h6 > a.anchor {
+  position: relative;
   display: inline-block;
   float: left;
-  height: 1.2em;
-  width: 1em;
   margin-left: -1em;
-  position: relative;
+  width: 1em;
+  height: 1em;
   outline: none;
+  color: inherit;
 }
-/*.anchor:target { background: yellow; }*/
 h1 > a.anchor:before,
 h2 > a.anchor:before,
 h3 > a.anchor:before,
@@ -27,13 +22,13 @@ h5 > a.anchor:before,
 h6 > a.anchor:before {
   visibility: hidden;
   position: absolute;
-  opacity: 0.2;
-  right:0;
-  top:0;
-  width:  1em;
-  font-weight:300;
+  opacity: 0.33;
+  right: 0;
+  top: 0;
+  width: 1em;
+  height: 1em;
+  content: "⌁";
   line-height: inherit;
-  content: ""; /* U+E08F */
   text-align: center;
 }
 h1 > a.anchor:hover:before,
@@ -43,7 +38,7 @@ h4 > a.anchor:hover:before,
 h5 > a.anchor:hover:before,
 h6 > a.anchor:hover:before {
   visibility: visible;
-  opacity:0.8;
+  opacity: 1;
 }
 h1 > a.anchor:focus:before,
 h2 > a.anchor:focus:before,
@@ -59,13 +54,12 @@ h5:hover .anchor:before,
 h6:hover .anchor:before {
   visibility: visible;
 }
-
 `;
 
 export default {
   name: "markdown-body",
   setup(hot: any) {
-    hot.onActive((_sw: ServiceWorker) => {
+    hot.onFire((_sw: ServiceWorker) => {
       customElements.define(
         "markdown-body",
         class VueRoot extends HTMLElement {
@@ -85,15 +79,17 @@ export default {
             }
             const src = this.getAttribute("src");
             if (src) {
-              fetch(new URL(src, location.href).href).then(
-                (res) => {
-                  if (res.ok) {
-                    res.text().then((html) => {
-                      rootDiv.innerHTML = html;
-                    });
-                  }
-                },
-              );
+              const url = new URL(src, location.href);
+              const load = async () => {
+                const res = await fetch(url);
+                if (res.ok) {
+                  rootDiv.innerHTML = await res.text();
+                }
+              };
+              if (hot.hmr) {
+                hot.hmrCallbacks.set(url.pathname, load);
+              }
+              load();
             }
           }
         },

@@ -19,7 +19,10 @@ export default {
       set entry(e: string | string[]) {
         entry = e;
       },
-      config: (config: typeof unoConfig) => {
+      config: (config: typeof unoConfig & { entry?: typeof entry }) => {
+        if (config.entry) {
+          entry = config.entry;
+        }
         Object.assign(unoConfig, config);
       },
     };

@@ -7,8 +7,8 @@ export default {
   setup(hot: any) {
     hot.onLoad(
       /\.svelte$/,
-      (url: URL, source: string, options: Record<string, any> = {}) => {
-        const { isDev, importMap: _importMap } = options;
+      (url: URL, source: string, _options: Record<string, any> = {}) => {
+        const { isDev } = hot;
         const { js } = compile(source, {
           filename: url.pathname,
           generate: "dom",

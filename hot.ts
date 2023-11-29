@@ -9,7 +9,8 @@
 /// <reference lib="webworker" />
 
 interface Plugin {
-  name?: string;
+  name: string;
+  devOnly?: boolean;
   setup: (hot: Hot) => void;
 }
 
@@ -34,11 +35,15 @@ interface VfsRecord {
   headers: [string, string][] | null;
 }
 
+interface ImportMap {
+  imports?: Record<string, string>;
+  scopes?: Record<string, Record<string, string>>;
+}
+
 const VERSION = 135;
 const plugins: Plugin[] = [];
 const doc = globalThis.document;
 const enc = new TextEncoder();
-const dec = new TextDecoder();
 const kJsxImportSource = "@jsxImportSource";
 const kSkipWaiting = "SKIP_WAITING";
 const kVfs = "vfs";
@@ -106,6 +111,8 @@ class Hot {
   fetcherListeners: { test: RegExp; handler: FetchHandler }[] = [];
   swListeners: ((sw: ServiceWorker) => void)[] = [];
   vfs: Record<string, (req?: Request) => Promise<VfsRecord>> = {};
+  customImports?: Record<string, string>;
+  isDev = location.hostname === "localhost";
 
   register<T extends string | Uint8Array>(
     name: string,
@@ -126,10 +133,14 @@ class Hot {
       if (input instanceof Response) {
         input = new Uint8Array(await input.arrayBuffer()) as T;
       }
+      if (!isString(input) && !(input instanceof Uint8Array)) {
+        input = String(input) as T;
+      }
       const hash = await computeHash(
         isString(input) ? enc.encode(input) : input,
       );
-      const cached = await vfs.get(name);
+      const url = `https://esm.sh/hot/${name}`;
+      const cached = await vfs.get(url);
       if (cached && cached.hash === hash) {
         return cached;
       }
@@ -142,7 +153,6 @@ class Hot {
       }
       if (cached && doc) {
         if (name.endsWith(".css")) {
-          const url = `https://esm.sh/hot/${name}`;
           const el = doc.querySelector(`link[href="${url}"]`);
           if (el) {
             const copy = el.cloneNode(true) as HTMLLinkElement;
@@ -150,9 +160,8 @@ class Hot {
             el.replaceWith(copy);
           }
         }
-        console.log(`[hot] ${name} updated`);
       }
-      await vfs.put(name, hash, data);
+      await vfs.put(url, hash, data);
       return { name, hash, data, headers: null };
     };
     return this;
@@ -172,14 +181,14 @@ class Hot {
     return this;
   }
 
-  onActive(handler: (reg: ServiceWorker) => void) {
+  onFire(handler: (reg: ServiceWorker) => void) {
     if (doc) {
       this.swListeners.push(handler);
     }
     return this;
   }
 
-  async fire(swUrl = "/sw.js") {
+  async fire(swName = "sw.js") {
     if (!doc) {
       throw new Error("Hot.fire() can't be called in Service Worker.");
     }
@@ -189,33 +198,9 @@ class Hot {
       throw new Error("Service Worker not supported.");
     }
 
-    this.register(
-      "importmap.json",
-      () => {
-        const im = doc.querySelector("head>script[type=importmap]");
-        if (im) {
-          const v = JSON.parse(im.innerHTML);
-          const imports: Record<string, string> = {};
-          const supported = HTMLScriptElement.supports?.("importmap");
-          for (const k in v.imports) {
-            if (!supported || k === kJsxImportSource) {
-              imports[k] = v.imports[k];
-            }
-          }
-          if (supported && "scopes" in v) {
-            delete v.scopes;
-          }
-          return JSON.stringify({ ...v, imports });
-        }
-        return "{}";
-      },
-      (input) => input,
-    );
-    const updateVFS = Promise.all(
-      Object.values(this.vfs).map((handler) => handler()),
-    );
-
-    const reg = await sw.register(swUrl, { type: "module" });
+    const reg = await sw.register(new URL(swName, location.href), {
+      type: "module",
+    });
     const { active, waiting } = reg;
 
     // detect Service Worker update available and wait for it to become installed
@@ -230,7 +215,7 @@ class Hot {
             // otherwise it's the first install
             // invoke all vfs and store them to the database
             // then reload the page
-            updateVFS.then(() => {
+            this.syncVFS().then(() => {
               reload();
             });
           }
@@ -253,6 +238,12 @@ class Hot {
       for (const handler of this.swListeners) {
         handler(active);
       }
+      await this.syncVFS();
+      doc.querySelectorAll("script[type='module/hot']").forEach((el) => {
+        const copy = el.cloneNode(true) as HTMLScriptElement;
+        copy.type = "module";
+        el.replaceWith(copy);
+      });
       doc.querySelectorAll(
         ["iframe", "script", "link", "style"].map((t) => "hot-" + t).join(","),
       ).forEach(
@@ -261,10 +252,38 @@ class Hot {
           el.getAttributeNames().forEach((name) => {
             copy.setAttribute(name, el.getAttribute(name)!);
           });
+          copy.textContent = el.textContent;
           el.replaceWith(copy);
         },
       );
-      console.log("🔥 [hot] app fired.");
+      console.log("🔥 app fired.");
+    }
+  }
+
+  async syncVFS() {
+    if (doc) {
+      const script = doc.querySelector("head>script[type=importmap]");
+      const importMap: ImportMap = { imports: { ...this.customImports } };
+      if (script) {
+        const supported = HTMLScriptElement.supports?.("importmap");
+        const v = JSON.parse(script.innerHTML);
+        for (const k in v.imports) {
+          if (!supported || k === kJsxImportSource) {
+            importMap.imports![k] = v.imports[k];
+          }
+        }
+        if (!supported && "scopes" in v) {
+          importMap.scopes = v.scopes;
+        }
+      }
+      await vfs.put(
+        "importmap.json",
+        await computeHash(enc.encode(JSON.stringify(importMap))),
+        importMap as unknown as string,
+      );
+      await Promise.all(
+        Object.values(this.vfs).map((handler) => handler()),
+      );
     }
   }
 }
@@ -272,6 +291,7 @@ class Hot {
 // 🔥
 const hot = new Hot();
 plugins.forEach((plugin) => plugin.setup(hot));
+Object.assign(globalThis, { HOT: hot });
 export default hot;
 
 // service worker environment
@@ -306,14 +326,14 @@ if (!doc) {
   let hotCache: Cache | null = null;
   const cacheFetch = async (req: Request) => {
     if (req.method !== "GET") {
-      return fetch(req);
+      return fetch(req, { redirect: "manual" });
     }
     const cache = hotCache ?? (hotCache = await caches.open("hot/v" + VERSION));
     let res = await cache.match(req);
     if (res) {
       return res;
     }
-    res = await fetch(req);
+    res = await fetch(req, { redirect: "manual" });
     if (!res.ok) {
       return res;
     }
@@ -327,25 +347,22 @@ if (!doc) {
       const record = await hot.vfs[name](req);
       return new Response(record.data, { headers });
     }
-    const file = await vfs.get(name);
+    const file = await vfs.get(`https://esm.sh/hot/${name}`);
     if (!file) {
-      return new Response("Not found", { status: 404 });
+      return fetch(req);
     }
     return new Response(file.data, { headers });
   };
 
-  const isDev = new URL(import.meta.url).hostname === "localhost";
   const jsHeaders = { "Content-Type": typesMap.get("js") + ";charset=utf-8" };
   const noCacheHeaders = { "Cache-Control": "no-cache" };
   const serveLoader = async (loader: Loader, url: URL) => {
-    const res = await fetch(url, { headers: isDev ? noCacheHeaders : {} });
+    const res = await fetch(url, { headers: hot.isDev ? noCacheHeaders : {} });
     if (!res.ok) {
       return res;
     }
     const im = await vfs.get("importmap.json");
-    const importMap: { imports?: Record<string, string> } = JSON.parse(
-      im?.data ? (isString(im.data) ? im.data : dec.decode(im.data)) : "{}",
-    );
+    const importMap: ImportMap = (im?.data as unknown) ?? {};
     const jsxImportSource = isJsx(url.pathname)
       ? importMap.imports?.[kJsxImportSource]
       : undefined;
@@ -360,10 +377,11 @@ if (!doc) {
       });
     }
     try {
-      const { code, map, headers } = await loader.load(url, source, {
-        importMap,
-        isDev,
-      });
+      const { code, map, headers } = await loader.load(
+        url,
+        source,
+        { importMap },
+      );
       let body = code;
       if (map) {
         body +=
