@@ -20,6 +20,10 @@ func (fs devFS) ReadFile(name string) ([]byte, error) {
 	return os.ReadFile(path.Join(fs.cwd, name))
 }
 
+func (fs devFS) Lstat(name string) (os.FileInfo, error) {
+	return os.Lstat(path.Join(fs.cwd, name))
+}
+
 type stringSet struct {
 	lock sync.RWMutex
 	set  map[string]struct{}

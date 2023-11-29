@@ -202,6 +202,79 @@ func esmHandler() rex.Handle {
 
 		// serve embed assets
 		if strings.HasPrefix(pathname, "/embed/") {
+			modTime := startTime
+			if fs, ok := embedFS.(*devFS); ok {
+				if pathname == "/embed/hot-notify" {
+					flusher, ok := ctx.W.(http.Flusher)
+					if !ok {
+						return rex.Status(404, "not found")
+					}
+
+					// Send the initial headers saying we're gonna stream the response.
+					ctx.W.Header().Set("Transfer-Encoding", "chunked")
+					ctx.W.Header().Set("Content-Type", "text/event-stream")
+					ctx.W.WriteHeader(http.StatusOK)
+					ctx.W.Write([]byte(": hot notify stream\n\n"))
+					flusher.Flush()
+
+					watchFiles := []string{
+						"hot.html",
+						"sw.js",
+						"hot-test/App.tsx",
+						"hot-test/App.vue",
+						"hot-test/App.svelte",
+						"hot-test/hello.md",
+						"hot-test/style.module.css",
+					}
+					notifyCh := make(chan []byte, len(watchFiles))
+					endCh := make(chan struct{}, 1)
+
+					go func(c chan []byte) {
+						modTimes := make([]int64, len(watchFiles))
+						for i, name := range watchFiles {
+							fi, err := fs.Lstat("server/embed/" + name)
+							if err != nil {
+								panic(err)
+							}
+							modTimes[i] = fi.ModTime().UnixMilli()
+						}
+						for {
+							select {
+							case <-endCh:
+								return
+							default:
+								for i, name := range watchFiles {
+									fi, err := fs.Lstat("server/embed/" + name)
+									if err == nil {
+										modTime := fi.ModTime().UnixMilli()
+										if modTime != modTimes[i] {
+											modTimes[i] = modTime
+											notifyCh <- []byte(fmt.Sprintf(`{"type":"modify","name":"/embed/%s","mtime":%d,"size":%d}`, name, modTime, fi.Size()))
+										}
+									}
+								}
+							}
+							time.Sleep(time.Second / 2)
+						}
+					}(notifyCh)
+
+					for {
+						select {
+						case <-ctx.R.Context().Done():
+							endCh <- struct{}{}
+							return nil
+						case data := <-notifyCh:
+							ctx.W.Write([]byte("event: fs-notify\ndata: "))
+							ctx.W.Write(data)
+							ctx.W.Write([]byte("\n\n"))
+							flusher.Flush()
+						}
+					}
+				}
+				if fi, err := fs.Lstat("server" + pathname); err == nil {
+					modTime = fi.ModTime()
+				}
+			}
 			data, err := embedFS.ReadFile("server" + pathname)
 			if err != nil {
 				return err
@@ -211,7 +284,7 @@ func esmHandler() rex.Handle {
 				data = bytes.ReplaceAll(data, []byte("{basePath}"), []byte(cfg.CdnBasePath))
 			}
 			header.Set("Cache-Control", fmt.Sprintf("public, max-age=%d", 10*60))
-			return rex.Content(pathname, startTime, bytes.NewReader(data))
+			return rex.Content(pathname, modTime, bytes.NewReader(data))
 		}
 
 		// strip loc suffix
