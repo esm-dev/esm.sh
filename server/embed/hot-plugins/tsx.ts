@@ -100,12 +100,12 @@ export default {
                 stringify(pathname),
                 ";export const css = ",
                 stringify(css),
-                ";const old = Array.from(d.head.children).filter((el) => el.getAttribute('data-module-id') === id);",
+                ";const old = d.getElementById(id);",
                 "const style = d.createElement('style');",
-                "style.setAttribute('data-module-id', id);",
+                "style.id = id;",
                 "style.textContent = css;",
                 "d.head.appendChild(style);",
-                "old.forEach((el) => d.head.removeChild(el));",
+                "old && d.head.removeChild(old);",
                 "export default ",
                 stringify(cssModulesExports),
                 isDev && hmrRuntime &&
@@ -123,13 +123,11 @@ export default {
           importMap: stringify(importMap ?? {}),
           minify: !isDev ? { compress: true, keepNames: true } : undefined,
           target: "es2020", // TODO: check user agent
-          hmr: hmrRuntime && Boolean(isDev)
-            ? {
-              runtime: hmrRuntime,
-              reactRefresh: jsxImportSource?.includes("/react"),
-              reactRefreshRuntime: imports?.["@reactRefreshRuntime"],
-            }
-            : undefined,
+          hmr: hmrRuntime && {
+            runtime: hmrRuntime,
+            reactRefresh: jsxImportSource?.includes("/react"),
+            reactRefreshRuntime: imports?.["@reactRefreshRuntime"],
+          },
         });
       },
       true, // varyUA
