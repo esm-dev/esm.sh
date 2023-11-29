@@ -64,6 +64,8 @@ export default {
         const { pathname } = url;
         const { importMap } = options;
         const { isDev } = hot;
+        const imports = importMap.imports;
+        const hmrRuntime = imports?.["@hmrRuntime"];
         await init();
         if (pathname.endsWith(".css")) {
           // todo: check more browsers
@@ -89,27 +91,31 @@ export default {
             return {
               // TODO: support hmr
               code: [
+                isDev && hmrRuntime &&
+                `import H from ${stringify(hmrRuntime)};import.meta.hot = H(${
+                  stringify(pathname)
+                });`,
                 "const d = document;",
                 "const id = ",
                 stringify(pathname),
                 ";export const css = ",
                 stringify(css),
-                ";if (!d.getElementById(id)) {",
+                ";const old = Array.from(d.head.children).filter((el) => el.getAttribute('data-module-id') === id);",
                 "const style = d.createElement('style');",
-                "style.id = id;",
+                "style.setAttribute('data-module-id', id);",
                 "style.textContent = css;",
                 "d.head.appendChild(style);",
-                "}",
+                "old.forEach((el) => d.head.removeChild(el));",
                 "export default ",
                 stringify(cssModulesExports),
-              ].join(""),
+                isDev && hmrRuntime &&
+                ";import.meta.hot.accept();",
+              ].filter(Boolean).join(""),
             };
           }
           return { code, map };
         }
-        const imports = importMap.imports;
         const jsxImportSource = imports?.["@jsxImportSource"];
-        const hmrRuntime = imports?.["@hmrRuntime"];
         return transform(pathname, source, {
           isDev,
           sourceMap: Boolean(isDev),
