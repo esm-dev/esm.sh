@@ -8,8 +8,10 @@ const eventColors = {
 
 export default {
   name: "hmr",
-  devOnly: true,
   setup(hot: any) {
+    if (!hot.isDev) {
+      return;
+    }
     hot.hmr = true;
     hot.hmrModules = new Set<string>();
     hot.hmrCallbacks = new Map<string, (module: any) => void>();

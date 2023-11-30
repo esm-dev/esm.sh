@@ -1,7 +1,6 @@
 /*! 🔥 esm.sh/hot
  *
- * Get started: https://esm.sh/hot/get-started
- * Docs: https://esm.sh/hot/docs
+ * Documentations: https://esm.sh/hot/docs
  *
  */
 
@@ -10,7 +9,6 @@
 
 interface Plugin {
   name: string;
-  devOnly?: boolean;
   setup: (hot: Hot) => void;
 }
 
@@ -21,7 +19,7 @@ interface Loader {
     map?: string;
     headers?: HeadersInit;
   }>;
-  varyUA?: boolean; // for the loaders that checks build target by user-agent header
+  varyUA?: boolean; // for the loaders that checks build target by `user-agent` header
 }
 
 interface FetchHandler {
@@ -116,7 +114,11 @@ class Hot {
   swListeners: ((sw: ServiceWorker) => void)[] = [];
   vfs: Record<string, (req?: Request) => Promise<VfsRecord>> = {};
   customImports?: Record<string, string>;
-  isDev = location.hostname === "localhost";
+
+  #isDev = location.hostname === "localhost";
+  get isDev() {
+    return this.#isDev;
+  }
 
   register<T extends string | Uint8Array>(
     name: string,
