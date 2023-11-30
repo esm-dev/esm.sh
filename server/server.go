@@ -12,7 +12,6 @@ import (
 	"strings"
 	"sync"
 	"syscall"
-	"time"
 
 	"github.com/esm-dev/esm.sh/server/config"
 	"github.com/esm-dev/esm.sh/server/storage"
@@ -98,6 +97,11 @@ func Serve(efs EmbedFS) {
 	}
 	log.Infof("nodejs v%s installed, registry: %s, pnpm: %s", nodeVer, cfg.NpmRegistry, pnpmVer)
 
+	err = initCJSLexerWorkDirectory()
+	if err != nil {
+		log.Fatalf("init cjs-lexer: %v", err)
+	}
+
 	cache, err = storage.OpenCache(cfg.Cache)
 	if err != nil {
 		log.Fatalf("init storage(cache,%s): %v", cfg.Cache, err)
@@ -125,17 +129,6 @@ func Serve(efs EmbedFS) {
 		}
 	}
 	accessLogger.SetQuite(true) // quite in terminal
-
-	// start node services process
-	go func() {
-		for {
-			err := startNodeServices()
-			if err != nil && err.Error() != "signal: interrupt" {
-				log.Warnf("node services exit: %v", err)
-			}
-			time.Sleep(time.Second / 10)
-		}
-	}()
 
 	go restorePurgeTimers(path.Join(cfg.WorkDir, "npm"))
 
@@ -187,7 +180,6 @@ func Serve(efs EmbedFS) {
 	}
 
 	// release resources
-	kill(nsPidFile)
 	db.Close()
 	log.FlushBuffer()
 	accessLogger.FlushBuffer()

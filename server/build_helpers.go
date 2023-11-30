@@ -348,8 +348,8 @@ func (task *BuildTask) analyze(forceCjsOnly bool) (esm *ESMBuild, npm NpmPackage
 	}
 
 	if npm.Main != "" {
-		// install peer dependencies when using `requireMode`
-		if includes(requireModeAllowList, pkg.Name) && len(npm.PeerDependencies) > 0 {
+		// install peer dependencies when using `invokeMode`
+		if includes(invokeModeAllowList, pkg.Name) && len(npm.PeerDependencies) > 0 {
 			pkgs := make([]string, len(npm.PeerDependencies))
 			i := 0
 			for n, v := range npm.PeerDependencies {

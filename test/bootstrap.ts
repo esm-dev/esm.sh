@@ -16,9 +16,9 @@ async function startServer(onStart: () => Promise<void>, verbose: boolean) {
   while (true) {
     try {
       await new Promise((resolve) => setTimeout(resolve, 100));
-      const res = await fetch(`http://localhost:8080/status.json`);
-      const status = await res.json();
-      if (status.ns === "READY") {
+      const res = await fetch("http://localhost:8080/status.json");
+      const ret = await res.json();
+      if (ret.version) {
         console.log("esm.sh server started.");
         onStart();
         break;

@@ -132,27 +132,10 @@ func esmHandler() rex.Handle {
 				return true
 			})
 
-			nsStatus := "IOERROR"
-			client := &http.Client{Timeout: 5 * time.Second}
-			res, err := client.Get(fmt.Sprintf("http://localhost:%d", cfg.NsPort))
-			if err == nil {
-				out, err := io.ReadAll(res.Body)
-				res.Body.Close()
-				if err == nil {
-					nsStatus = string(out)
-				}
-			}
-			if nsStatus != "READY" {
-				// whoops, can't connect to node service,
-				// kill current process for getting new one
-				kill(nsPidFile)
-			}
-
 			header.Set("Cache-Control", "private, no-store, no-cache, must-revalidate")
 			return map[string]interface{}{
 				"buildQueue":  q[:i],
 				"purgeTimers": n,
-				"ns":          nsStatus,
 				"version":     CTX_BUILD_VERSION,
 				"uptime":      time.Since(startTime).String(),
 			}

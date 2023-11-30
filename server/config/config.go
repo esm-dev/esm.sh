@@ -16,7 +16,6 @@ import (
 type Config struct {
 	Port             uint16    `json:"port,omitempty"`
 	TlsPort          uint16    `json:"tlsPort,omitempty"`
-	NsPort           uint16    `json:"nsPort,omitempty"`
 	BuildConcurrency uint16    `json:"buildConcurrency,omitempty"`
 	BanList          BanList   `json:"banList,omitempty"`
 	AllowList        AllowList `json:"allowList,omitempty"`
@@ -104,9 +103,6 @@ func Default() *Config {
 func fixConfig(c *Config) *Config {
 	if c.Port == 0 {
 		c.Port = 8080
-	}
-	if c.NsPort == 0 {
-		c.NsPort = 8088
 	}
 	if c.CdnOrigin != "" {
 		_, e := url.Parse(c.NpmRegistry)
