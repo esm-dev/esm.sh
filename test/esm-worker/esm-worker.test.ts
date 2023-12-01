@@ -455,6 +455,30 @@ Deno.test("esm-worker", {
     assertEquals(await getTarget("Deno/1.33.2"), "denonext");
   });
 
+  await t.step("cache for different UAs", async () => {
+    const fetchModule = async (ua: string) => {
+      const rest = await fetch(`${workerOrigin}/react@18.2.0`, {
+        headers: { "User-Agent": ua },
+      });
+      return await rest.text();
+    };
+
+    assertStringIncludes(await fetchModule("Deno/1.33.1"), "/deno/");
+    assertStringIncludes(await fetchModule("Deno/1.33.2"), "/denonext/");
+    assertStringIncludes(
+      await fetchModule(
+        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/116.0.0.0 Safari/537.36",
+      ),
+      "/es2022/",
+    );
+    assertStringIncludes(
+      await fetchModule(
+        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.3 Safari/605.1.15",
+      ),
+      "/es2021/",
+    );
+  });
+
   await t.step("/hot", async () => {
     const res = await fetch(`${workerOrigin}/hot`, {
       headers: { "User-Agent": "Chrome/90.0.4430.212" },

@@ -30,7 +30,7 @@ import {
   trimPrefix,
 } from "./utils.ts";
 
-const regexpNpmNaming = /^[a-zA-Z0-9][\w\.\-\_]*$/;
+const regexpNpmNaming = /^[a-zA-Z0-9][\w\.\-]*$/;
 const regexpFullVersion = /^\d+\.\d+\.\d+/;
 const regexpCommitish = /^[a-f0-9]{10,}$/;
 const regexpBuildVersion = /^(v\d+|stable)$/;
@@ -73,7 +73,10 @@ class ESMWorker {
       const cacheKey = new URL(url);
       const varyUA = options?.varyUA && !hasPinedTarget;
       if (varyUA) {
-        cacheKey.searchParams.set("target", getBuildTargetFromUA(ua));
+        const target = getBuildTargetFromUA(ua);
+        cacheKey.searchParams.set("target", target);
+        //! don't delete this line, it used to ensure KV/R2 cache respect different UA
+        url.searchParams.set("target", target);
       }
       for (const key of ["x-real-origin", "x-esm-worker-version"]) {
         const value = req.headers.get(key);
@@ -264,7 +267,7 @@ class ESMWorker {
     // singleton build module
     if (pathname.startsWith("/+")) {
       return ctx.withCache(
-        () => fetchOriginWithKVCache(req, env, ctx, pathname),
+        () => fetchOriginWithKVCache(req, env, ctx, pathname + url.search),
         { varyUA: true },
       );
     }
@@ -354,7 +357,7 @@ class ESMWorker {
             req,
             env,
             ctx,
-            `/${buildVersion}${pathname}`,
+            `/${buildVersion}${pathname}${url.search}`,
             true,
           ),
         { varyUA: true },
@@ -663,7 +666,7 @@ async function fetchOrigin(
   req: Request,
   env: Env,
   ctx: Context,
-  url: string,
+  uri: string,
   resHeaders: Headers,
 ): Promise<Response> {
   const headers = new Headers();
@@ -688,7 +691,7 @@ async function fetchOrigin(
     headers.set("Authorization", `Bearer ${env.ESM_TOKEN}`);
   }
   const res = await fetch(
-    new URL(url, env.ESM_ORIGIN ?? defaultEsmServerOrigin),
+    new URL(uri, env.ESM_ORIGIN ?? defaultEsmServerOrigin),
     {
       method: req.method === "HEAD" ? "GET" : req.method,
       body: req.body,
