@@ -22,8 +22,12 @@ export default {
               return;
             }
             if (hot.hmr) {
-              // ensure react-refresh is injected before react-dom is loaded
-              await import("https://esm.sh/hot/_hmr_react_refresh.js");
+              try {
+                // ensure react-refresh is injected before react-dom is loaded
+                await import("https://esm.sh/hot/_hmr_react_refresh.js");
+              } catch (err) {
+                console.warn("Failed to load react-refresh runtime:", err);
+              }
             }
             const [
               { createElement, StrictMode },

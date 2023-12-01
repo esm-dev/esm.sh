@@ -49,6 +49,7 @@ const enc = new TextEncoder();
 const kJsxImportSource = "@jsxImportSource";
 const kSkipWaiting = "SKIP_WAITING";
 const kVfs = "vfs";
+const kUtf8 = "; charset=utf-8";
 
 // open indexed database
 let onOpen: () => void;
@@ -98,7 +99,7 @@ const vfs = {
       name,
       hash,
       data,
-      headers: headers ? [...new Headers(headers)] : null,
+      headers: headers ?? null,
     });
     return new Promise<void>((resolve, reject) => {
       req.onsuccess = () => resolve();
@@ -241,10 +242,10 @@ class Hot {
 
     // there's an active Service Worker, invoke all listeners
     if (active) {
+      await this.syncVFS();
       for (const handler of this.swListeners) {
         handler(active);
       }
-      await this.syncVFS();
       doc.querySelectorAll("script[type='module/hot']").forEach((el) => {
         const copy = el.cloneNode(true) as HTMLScriptElement;
         copy.type = "module";
@@ -304,16 +305,19 @@ export default hot;
 if (!doc) {
   const mimeTypes: Record<string, string[]> = {
     "a/gzip": ["gz"],
-    "a/javascript": ["js", "mjs"],
-    "a/json": ["json", "map"],
+    "a/javascript~": ["js", "mjs"],
+    "a/json~": ["json", "map"],
     "a/wasm": ["wasm"],
-    "a/xml": ["xml"],
+    "a/xml~": ["xml"],
+    "i/gif": ["gif"],
     "i/jpeg": ["jpeg", "jpg"],
     "i/png": ["png"],
-    "i/svg+xml": ["svg"],
+    "i/svg+xml~": ["svg"],
+    "i/webp": ["webp"],
     "t/css": ["css"],
     "t/csv": ["csv"],
     "t/html": ["html", "htm"],
+    "t/markdown": ["md", "markdown"],
     "t/plain": ["txt", "glsl"],
     "t/yaml": ["yaml", "yml"],
   };
@@ -325,7 +329,16 @@ if (!doc) {
   const typesMap = new Map<string, string>();
   for (const contentType in mimeTypes) {
     for (const ext of mimeTypes[contentType]) {
-      typesMap.set(ext, alias[contentType.charAt(0)] + contentType.slice(1));
+      const type = alias[contentType.charAt(0)];
+      const endsWithTilde = contentType.endsWith("~");
+      let suffix = contentType.slice(1);
+      if (type === "text" || endsWithTilde) {
+        if (endsWithTilde) {
+          suffix = suffix.slice(0, -1);
+        }
+        suffix += kUtf8;
+      }
+      typesMap.set(ext, type + suffix);
     }
   }
 
@@ -360,7 +373,7 @@ if (!doc) {
     return new Response(file.data, { headers });
   };
 
-  const jsHeaders = { "Content-Type": typesMap.get("js") + ";charset=utf-8" };
+  const jsHeaders = { "Content-Type": typesMap.get("js") + kUtf8 };
   const noCacheHeaders = { "Cache-Control": "no-cache" };
   const serveLoader = async (loader: Loader, url: URL) => {
     const res = await fetch(url, { headers: hot.isDev ? noCacheHeaders : {} });
@@ -421,7 +434,7 @@ if (!doc) {
       } else {
         evt.respondWith(cacheFetch(request));
       }
-    } else if (!url.searchParams.has("raw")) {
+    } else if (!url.searchParams.has("raw") && request.url !== location.href) {
       const loader = loaders.find(({ test }) => test.test(pathname));
       if (loader) {
         evt.respondWith(serveLoader(loader, url));
