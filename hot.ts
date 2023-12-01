@@ -327,11 +327,11 @@ if (!doc) {
     t: "text",
   };
   const typesMap = new Map<string, string>();
-  for (const contentType in mimeTypes) {
-    for (const ext of mimeTypes[contentType]) {
-      const type = alias[contentType.charAt(0)];
-      const endsWithTilde = contentType.endsWith("~");
-      let suffix = contentType.slice(1);
+  for (const mimeType in mimeTypes) {
+    for (const ext of mimeTypes[mimeType]) {
+      const type = alias[mimeType.charAt(0)];
+      const endsWithTilde = mimeType.endsWith("~");
+      let suffix = mimeType.slice(1);
       if (type === "text" || endsWithTilde) {
         if (endsWithTilde) {
           suffix = suffix.slice(0, -1);
@@ -380,13 +380,18 @@ if (!doc) {
     if (!res.ok) {
       return res;
     }
-    const im = await vfs.get("importmap.json");
+    const [im, source] = await Promise.all([
+      vfs.get("importmap.json"),
+      res.text(),
+    ]);
     const importMap: ImportMap = (im?.data as unknown) ?? {};
     const jsxImportSource = isJsx(url.pathname)
       ? importMap.imports?.[kJsxImportSource]
       : undefined;
-    const source = await res.text();
-    const cached = await vfs.get(url.href);
+    const cacheKey = hot.isDev && url.host === location.host
+      ? url.href.replace(/?t=[a-z0-9]$/, "")
+      : url.href;
+    const cached = await vfs.get(cacheKey);
     const hash = await computeHash(enc.encode(
       jsxImportSource + source + (loader.varyUA ? navigator.userAgent : ""),
     ));
@@ -407,7 +412,7 @@ if (!doc) {
           "\n//# sourceMappingURL=data:application/json;charset=utf-8;base64,";
         body += btoa(map);
       }
-      await vfs.put(url.href, hash, body, headers);
+      vfs.put(cacheKey, hash, body, headers);
       return new Response(body, { headers: headers ?? jsHeaders });
     } catch (err) {
       console.error(err);
