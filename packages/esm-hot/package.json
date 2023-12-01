@@ -1,0 +1,28 @@
+{
+  "name": "@esm.sh/hot",
+  "version": "0.135.0",
+  "description": "🔥 esm.sh/hot",
+  "type": "module",
+  "main": "src/index.mjs",
+  "module": "src/index.mjs",
+  "types": "types/index.d.ts",
+  "bin": {
+    "hot": "./bin/cli.mjs"
+  },
+  "scripts": {
+    "test": "./bin/cli.mjs -w --spa --plugins=tsx --cwd=test"
+  },
+  "dependencies": {
+    "@hono/node-server": "^1.3.1"
+  },
+  "files": [
+    "bin/",
+    "src/",
+    "types/"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https//github.com/esm-dev/esm.sh"
+  },
+  "license": "MIT"
+}
