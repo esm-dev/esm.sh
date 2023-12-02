@@ -1,7 +1,7 @@
 import { openFile } from "./fs.mjs";
 
-const regexpPluginNaming = /^[a-zA-Z0-9][\w\.\-]*(@\d+\.\d+\.\d+)?$/;
 const enc = new TextEncoder();
+const regexpPluginNaming = /^[a-zA-Z0-9][\w\.\-]*(@\d+\.\d+\.\d+)?$/;
 
 /**
  * serves a hot app.
@@ -68,7 +68,7 @@ export const serveHot = (options) => {
       if (plugins?.length) {
         hotUrl.searchParams.set("plugins", plugins);
       }
-      return new Response(`import "${hotUrl.href}"`, {
+      return new Response(`import hot from "${hotUrl.href}";hot.listen();`, {
         headers: {
           "content-type": "application/javascript; charset=utf-8",
           "last-modified": new Date().toUTCString(),

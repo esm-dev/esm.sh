@@ -1,6 +1,6 @@
 /*! 🔥 esm.sh/hot
  *
- * Documentations: https://esm.sh/hot/docs
+ * Docs: https://esm.sh/hot/docs
  *
  */
 
@@ -50,6 +50,7 @@ const kJsxImportSource = "@jsxImportSource";
 const kSkipWaiting = "SKIP_WAITING";
 const kVfs = "vfs";
 const kUtf8 = "; charset=utf-8";
+const tsQuery = /\?t=[a-z0-9]+$/;
 
 // open indexed database
 let onOpen: () => void;
@@ -59,6 +60,10 @@ const dbPromise = new Promise<IDBDatabase>((resolve, reject) => {
   onOpen = () => resolve(openRequest.result);
   onOpenError = reject;
 });
+const getVfsStore = async (mode: IDBTransactionMode) => {
+  const db = await dbPromise;
+  return db.transaction(kVfs, mode).objectStore(kVfs);
+};
 openRequest.onerror = function () {
   onOpenError(openRequest.error);
 };
@@ -72,11 +77,7 @@ openRequest.onsuccess = function () {
   onOpen();
 };
 
-// virtual file system using indexed database
-const getVfsStore = async (mode: IDBTransactionMode) => {
-  const db = await dbPromise;
-  return db.transaction(kVfs, mode).objectStore(kVfs);
-};
+/** virtual file system using indexed database */
 const vfs = {
   async get(name: string) {
     const store = await getVfsStore("readonly");
@@ -108,7 +109,7 @@ const vfs = {
   },
 };
 
-// 🔥 class
+/** 🔥 class */
 class Hot {
   loaders: Loader[] = [];
   fetchListeners: { test: UrlTest; handler: FetchHandler }[] = [];
@@ -117,10 +118,14 @@ class Hot {
   customImports?: Record<string, string>;
 
   #isDev = location.hostname === "localhost";
+  #reloading = false;
+
+  /** returns true if the current hostname is localhost */
   get isDev() {
     return this.#isDev;
   }
 
+  /** register a plugin */
   register<T extends string | Uint8Array>(
     name: string,
     load: (req?: Request) =>
@@ -220,11 +225,7 @@ class Hot {
             waiting.postMessage(kSkipWaiting);
           } else {
             // otherwise it's the first install
-            // invoke all vfs and store them to the database
-            // then reload the page
-            this.syncVFS().then(() => {
-              reload();
-            });
+            this.reload();
           }
         }
       });
@@ -232,7 +233,7 @@ class Hot {
 
     // detect controller change and refresh the page
     sw.addEventListener("controllerchange", () => {
-      reload();
+      this.reload();
     });
 
     // there's a waiting, send skip waiting message
@@ -240,34 +241,179 @@ class Hot {
       waiting.postMessage(kSkipWaiting);
     }
 
-    // there's an active Service Worker, invoke all listeners
+    // there's an active Service Worker
     if (active) {
-      await this.syncVFS();
-      for (const handler of this.swListeners) {
-        handler(active);
-      }
-      doc.querySelectorAll("script[type='module/hot']").forEach((el) => {
-        const copy = el.cloneNode(true) as HTMLScriptElement;
-        copy.type = "module";
-        el.replaceWith(copy);
-      });
-      doc.querySelectorAll(
-        ["iframe", "script", "link", "style"].map((t) => "hot-" + t).join(","),
-      ).forEach(
-        (el) => {
-          const copy = doc.createElement(el.tagName.slice(4).toLowerCase());
-          el.getAttributeNames().forEach((name) => {
-            copy.setAttribute(name, el.getAttribute(name)!);
-          });
-          copy.textContent = el.textContent;
-          el.replaceWith(copy);
-        },
-      );
-      console.log("🔥 app fired.");
+      this.#onActive(active);
     }
   }
 
-  async syncVFS() {
+  /** reload the page */
+  reload() {
+    if (!this.#reloading) {
+      this.#reloading = true;
+      location.reload();
+    }
+  }
+
+  listen() {
+    const mimeTypes: Record<string, string[]> = {
+      "a/gzip": ["gz"],
+      "a/javascript~": ["js", "mjs"],
+      "a/json~": ["json", "map"],
+      "a/wasm": ["wasm"],
+      "a/xml~": ["xml"],
+      "i/gif": ["gif"],
+      "i/jpeg": ["jpeg", "jpg"],
+      "i/png": ["png"],
+      "i/svg+xml~": ["svg"],
+      "i/webp": ["webp"],
+      "t/css": ["css"],
+      "t/csv": ["csv"],
+      "t/html": ["html", "htm"],
+      "t/markdown": ["md", "markdown"],
+      "t/plain": ["txt", "glsl"],
+      "t/yaml": ["yaml", "yml"],
+    };
+    const alias: Record<string, string> = {
+      a: "application",
+      i: "image",
+      t: "text",
+    };
+    const typesMap = new Map<string, string>();
+    for (const mimeType in mimeTypes) {
+      for (const ext of mimeTypes[mimeType]) {
+        const type = alias[mimeType.charAt(0)];
+        const endsWithTilde = mimeType.endsWith("~");
+        let suffix = mimeType.slice(1);
+        if (type === "text" || endsWithTilde) {
+          if (endsWithTilde) {
+            suffix = suffix.slice(0, -1);
+          }
+          suffix += kUtf8;
+        }
+        typesMap.set(ext, type + suffix);
+      }
+    }
+
+    let hotCache: Cache | null = null;
+    const cacheFetch = async (req: Request) => {
+      if (req.method !== "GET") {
+        return fetch(req, { redirect: "manual" });
+      }
+      const cache = hotCache ??
+        (hotCache = await caches.open("hot/v" + VERSION));
+      let res = await cache.match(req);
+      if (res) {
+        return res;
+      }
+      res = await fetch(req, { redirect: "manual" });
+      if (!res.ok) {
+        return res;
+      }
+      cache.put(req, res.clone());
+      return res;
+    };
+
+    const serveVFS = async (req: Request, name: string) => {
+      const headers = { "Content-Type": typesMap.get(getExtname(name)) ?? "" };
+      if (name in hot.vfs) {
+        const record = await hot.vfs[name](req);
+        return new Response(record.data, { headers });
+      }
+      const file = await vfs.get(`https://esm.sh/hot/${name}`);
+      if (!file) {
+        return fetch(req);
+      }
+      return new Response(file.data, { headers });
+    };
+
+    const jsHeaders = { "Content-Type": typesMap.get("js") + kUtf8 };
+    const noCacheHeaders = { "Cache-Control": "no-cache" };
+    const serveLoader = async (loader: Loader, url: URL) => {
+      const res = await fetch(url, {
+        headers: hot.isDev ? noCacheHeaders : {},
+      });
+      if (!res.ok) {
+        return res;
+      }
+      const [im, source] = await Promise.all([
+        vfs.get("importmap.json"),
+        res.text(),
+      ]);
+      const importMap: ImportMap = (im?.data as unknown) ?? {};
+      const jsxImportSource = isJsx(url.pathname)
+        ? importMap.imports?.[kJsxImportSource]
+        : undefined;
+      const cacheKey = hot.isDev && url.host === location.host
+        ? url.href.replace(tsQuery, "")
+        : url.href;
+      const cached = await vfs.get(cacheKey);
+      const hash = await computeHash(enc.encode(
+        jsxImportSource + source + (loader.varyUA ? navigator.userAgent : ""),
+      ));
+      if (cached && cached.hash === hash) {
+        return new Response(cached.data, {
+          headers: cached.headers ?? jsHeaders,
+        });
+      }
+      try {
+        const { code, map, headers } = await loader.load(
+          url,
+          source,
+          { importMap },
+        );
+        let body = code;
+        if (map) {
+          body +=
+            "\n//# sourceMappingURL=data:application/json;charset=utf-8;base64,";
+          body += btoa(map);
+        }
+        vfs.put(cacheKey, hash, body, headers);
+        return new Response(body, { headers: headers ?? jsHeaders });
+      } catch (err) {
+        console.error(err);
+        return new Response(err.message, { status: 500 });
+      }
+    };
+
+    self.addEventListener("fetch", (event) => {
+      const evt = event as FetchEvent;
+      const { request } = evt;
+      const url = new URL(request.url);
+      const { pathname, hostname } = url;
+      const { loaders, fetchListeners } = hot;
+      if (fetchListeners.length > 0) {
+        for (const { test, handler } of fetchListeners) {
+          if (test(url, request)) {
+            return evt.respondWith(handler(request));
+          }
+        }
+      }
+      if (hostname !== location.hostname) {
+        if (hostname == "esm.sh" && pathname.startsWith("/hot/")) {
+          evt.respondWith(serveVFS(request, pathname.slice(5)));
+        } else {
+          evt.respondWith(cacheFetch(request));
+        }
+      } else if (
+        !url.searchParams.has("raw") && request.url !== location.href
+      ) {
+        const loader = loaders.find(({ test }) => test.test(pathname));
+        if (loader) {
+          evt.respondWith(serveLoader(loader, url));
+        }
+      }
+    });
+
+    self.addEventListener("message", (event) => {
+      if (event.data === kSkipWaiting) {
+        // @ts-ignore
+        self.skipWaiting();
+      }
+    });
+  }
+
+  async #syncVFS() {
     if (doc) {
       const script = doc.querySelector("head>script[type=importmap]");
       const importMap: ImportMap = { imports: { ...this.customImports } };
@@ -293,166 +439,31 @@ class Hot {
       );
     }
   }
-}
 
-// 🔥
-const hot = new Hot();
-plugins.forEach((plugin) => plugin.setup(hot));
-Object.assign(globalThis, { HOT: hot });
-export default hot;
-
-// service worker environment
-if (!doc) {
-  const mimeTypes: Record<string, string[]> = {
-    "a/gzip": ["gz"],
-    "a/javascript~": ["js", "mjs"],
-    "a/json~": ["json", "map"],
-    "a/wasm": ["wasm"],
-    "a/xml~": ["xml"],
-    "i/gif": ["gif"],
-    "i/jpeg": ["jpeg", "jpg"],
-    "i/png": ["png"],
-    "i/svg+xml~": ["svg"],
-    "i/webp": ["webp"],
-    "t/css": ["css"],
-    "t/csv": ["csv"],
-    "t/html": ["html", "htm"],
-    "t/markdown": ["md", "markdown"],
-    "t/plain": ["txt", "glsl"],
-    "t/yaml": ["yaml", "yml"],
-  };
-  const alias: Record<string, string> = {
-    a: "application",
-    i: "image",
-    t: "text",
-  };
-  const typesMap = new Map<string, string>();
-  for (const mimeType in mimeTypes) {
-    for (const ext of mimeTypes[mimeType]) {
-      const type = alias[mimeType.charAt(0)];
-      const endsWithTilde = mimeType.endsWith("~");
-      let suffix = mimeType.slice(1);
-      if (type === "text" || endsWithTilde) {
-        if (endsWithTilde) {
-          suffix = suffix.slice(0, -1);
-        }
-        suffix += kUtf8;
-      }
-      typesMap.set(ext, type + suffix);
+  async #onActive(sw: ServiceWorker) {
+    await this.#syncVFS();
+    for (const handler of this.swListeners) {
+      handler(sw);
     }
+    doc.querySelectorAll("script[type='module/hot']").forEach((el) => {
+      const copy = el.cloneNode(true) as HTMLScriptElement;
+      copy.type = "module";
+      el.replaceWith(copy);
+    });
+    doc.querySelectorAll(
+      ["iframe", "script", "link", "style"].map((t) => "hot-" + t).join(","),
+    ).forEach(
+      (el) => {
+        const copy = doc.createElement(el.tagName.slice(4).toLowerCase());
+        el.getAttributeNames().forEach((name) => {
+          copy.setAttribute(name, el.getAttribute(name)!);
+        });
+        copy.textContent = el.textContent;
+        el.replaceWith(copy);
+      },
+    );
+    console.log("🔥 app fired.");
   }
-
-  let hotCache: Cache | null = null;
-  const cacheFetch = async (req: Request) => {
-    if (req.method !== "GET") {
-      return fetch(req, { redirect: "manual" });
-    }
-    const cache = hotCache ?? (hotCache = await caches.open("hot/v" + VERSION));
-    let res = await cache.match(req);
-    if (res) {
-      return res;
-    }
-    res = await fetch(req, { redirect: "manual" });
-    if (!res.ok) {
-      return res;
-    }
-    cache.put(req, res.clone());
-    return res;
-  };
-
-  const serveVFS = async (req: Request, name: string) => {
-    const headers = { "Content-Type": typesMap.get(getExtname(name)) ?? "" };
-    if (name in hot.vfs) {
-      const record = await hot.vfs[name](req);
-      return new Response(record.data, { headers });
-    }
-    const file = await vfs.get(`https://esm.sh/hot/${name}`);
-    if (!file) {
-      return fetch(req);
-    }
-    return new Response(file.data, { headers });
-  };
-
-  const jsHeaders = { "Content-Type": typesMap.get("js") + kUtf8 };
-  const noCacheHeaders = { "Cache-Control": "no-cache" };
-  const serveLoader = async (loader: Loader, url: URL) => {
-    const res = await fetch(url, { headers: hot.isDev ? noCacheHeaders : {} });
-    if (!res.ok) {
-      return res;
-    }
-    const [im, source] = await Promise.all([
-      vfs.get("importmap.json"),
-      res.text(),
-    ]);
-    const importMap: ImportMap = (im?.data as unknown) ?? {};
-    const jsxImportSource = isJsx(url.pathname)
-      ? importMap.imports?.[kJsxImportSource]
-      : undefined;
-    const cacheKey = hot.isDev && url.host === location.host
-      ? url.href.replace(/?t=[a-z0-9]$/, "")
-      : url.href;
-    const cached = await vfs.get(cacheKey);
-    const hash = await computeHash(enc.encode(
-      jsxImportSource + source + (loader.varyUA ? navigator.userAgent : ""),
-    ));
-    if (cached && cached.hash === hash) {
-      return new Response(cached.data, {
-        headers: cached.headers ?? jsHeaders,
-      });
-    }
-    try {
-      const { code, map, headers } = await loader.load(
-        url,
-        source,
-        { importMap },
-      );
-      let body = code;
-      if (map) {
-        body +=
-          "\n//# sourceMappingURL=data:application/json;charset=utf-8;base64,";
-        body += btoa(map);
-      }
-      vfs.put(cacheKey, hash, body, headers);
-      return new Response(body, { headers: headers ?? jsHeaders });
-    } catch (err) {
-      console.error(err);
-      return new Response(err.message, { status: 500 });
-    }
-  };
-
-  self.addEventListener("fetch", (event) => {
-    const evt = event as FetchEvent;
-    const { request } = evt;
-    const url = new URL(request.url);
-    const { pathname, hostname } = url;
-    const { loaders, fetchListeners } = hot;
-    if (fetchListeners.length > 0) {
-      for (const { test, handler } of fetchListeners) {
-        if (test(url, request)) {
-          return evt.respondWith(handler(request));
-        }
-      }
-    }
-    if (hostname === "esm.sh") {
-      if (pathname.startsWith("/hot/")) {
-        evt.respondWith(serveVFS(request, pathname.slice(5)));
-      } else {
-        evt.respondWith(cacheFetch(request));
-      }
-    } else if (!url.searchParams.has("raw") && request.url !== location.href) {
-      const loader = loaders.find(({ test }) => test.test(pathname));
-      if (loader) {
-        evt.respondWith(serveLoader(loader, url));
-      }
-    }
-  });
-
-  self.addEventListener("message", (event) => {
-    if (event.data === kSkipWaiting) {
-      // @ts-ignore
-      self.skipWaiting();
-    }
-  });
 }
 
 /** check if the value is a string */
@@ -483,11 +494,8 @@ async function computeHash(
   return [...buffer].map((b) => b.toString(16).padStart(2, "0")).join("");
 }
 
-/** reload the page */
-let reloading = false;
-function reload() {
-  if (!reloading) {
-    reloading = true;
-    location.reload();
-  }
-}
+// 🔥
+const hot = new Hot();
+plugins.forEach((plugin) => plugin.setup(hot));
+Object.assign(globalThis, { HOT: hot });
+export default hot;
