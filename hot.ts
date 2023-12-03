@@ -1,8 +1,8 @@
 /*! 🔥 esm.sh/hot
- *
- * Docs: https://esm.sh/hot/docs
- *
- */
+*
+* Docs: https://esm.sh/hot/docs
+*
+*/
 
 /// <reference lib="dom" />
 /// <reference lib="webworker" />
@@ -14,32 +14,36 @@ interface Plugin {
 
 interface Loader {
   test: RegExp;
-  load: (url: URL, source: string, options: Record<string, any>) => Promise<{
+  load: (
+    url: URL,
+    source: string,
+    options: { importMap: ImportMap },
+  ) => Promise<{
     code: string;
     map?: string;
-    headers?: HeadersInit;
+    headers?: Record<string, string>;
   }>;
   varyUA?: boolean; // for the loaders that checks build target by `user-agent` header
+}
+
+interface ImportMap {
+  imports?: Record<string, string>;
+  scopes?: Record<string, Record<string, string>>;
 }
 
 interface FetchHandler {
   (req: Request): Response | Promise<Response>;
 }
 
-interface UrlTest {
+interface URLTest {
   (url: URL, req: Request): boolean;
 }
 
-interface VfsRecord {
+interface VFSRecord {
   name: string;
   hash: string;
   data: string | Uint8Array;
-  headers: [string, string][] | null;
-}
-
-interface ImportMap {
-  imports?: Record<string, string>;
-  scopes?: Record<string, Record<string, string>>;
+  headers: Record<string, string> | null;
 }
 
 const VERSION = 135;
@@ -49,53 +53,55 @@ const enc = new TextEncoder();
 const kJsxImportSource = "@jsxImportSource";
 const kSkipWaiting = "SKIP_WAITING";
 const kVfs = "vfs";
-const kUtf8 = "; charset=utf-8";
+const kContentType = "content-type";
 const tsQuery = /\?t=[a-z0-9]+$/;
 
-// open indexed database
-let onOpen: () => void;
-let onOpenError: (reason: DOMException | null) => void;
-const openRequest = indexedDB.open("esm.sh/hot", VERSION);
-const dbPromise = new Promise<IDBDatabase>((resolve, reject) => {
-  onOpen = () => resolve(openRequest.result);
-  onOpenError = reject;
-});
-const getVfsStore = async (mode: IDBTransactionMode) => {
-  const db = await dbPromise;
-  return db.transaction(kVfs, mode).objectStore(kVfs);
-};
-openRequest.onerror = function () {
-  onOpenError(openRequest.error);
-};
-openRequest.onupgradeneeded = function () {
-  const db = openRequest.result;
-  if (!db.objectStoreNames.contains(kVfs)) {
-    db.createObjectStore(kVfs, { keyPath: "name" });
-  }
-};
-openRequest.onsuccess = function () {
-  onOpen();
-};
-
 /** virtual file system using indexed database */
-const vfs = {
+class VFS {
+  #dbPromise: Promise<IDBDatabase>;
+
+  constructor() {
+    let onOpen: (db: IDBDatabase) => void;
+    let onError: (reason: DOMException | null) => void;
+    this.#dbPromise = new Promise<IDBDatabase>((resolve, reject) => {
+      onOpen = resolve;
+      onError = reject;
+    });
+
+    // open indexed database
+    const openRequest = indexedDB.open("esm.sh/hot", VERSION);
+    openRequest.onupgradeneeded = function () {
+      const db = openRequest.result;
+      if (!db.objectStoreNames.contains(kVfs)) {
+        db.createObjectStore(kVfs, { keyPath: "name" });
+      }
+    };
+    openRequest.onsuccess = function () {
+      onOpen(openRequest.result);
+    };
+    openRequest.onerror = function () {
+      onError(openRequest.error);
+    };
+  }
+
   async get(name: string) {
-    const store = await getVfsStore("readonly");
+    const store = await this.#getDbStore("readonly");
     const req = store.get(name);
-    return new Promise<VfsRecord | null>(
+    return new Promise<VFSRecord | null>(
       (resolve, reject) => {
         req.onsuccess = () => resolve(req.result ? req.result : null);
         req.onerror = () => reject(req.error);
       },
     );
-  },
+  }
+
   async put(
     name: string,
     hash: string,
     data: Uint8Array | string,
-    headers?: HeadersInit,
+    headers?: Record<string, string> | null,
   ) {
-    const store = await getVfsStore("readwrite");
+    const store = await this.#getDbStore("readwrite");
     const req = store.put({
       name,
       hash,
@@ -106,19 +112,43 @@ const vfs = {
       req.onsuccess = () => resolve();
       req.onerror = () => reject(req.error);
     });
-  },
-};
+  }
+
+  async #getDbStore(mode: IDBTransactionMode) {
+    const db = await this.#dbPromise;
+    return db.transaction(kVfs, mode).objectStore(kVfs);
+  }
+}
 
 /** 🔥 class */
 class Hot {
-  loaders: Loader[] = [];
-  fetchListeners: { test: UrlTest; handler: FetchHandler }[] = [];
-  swListeners: ((sw: ServiceWorker) => void)[] = [];
-  vfs: Record<string, (req?: Request) => Promise<VfsRecord>> = {};
-  customImports?: Record<string, string>;
-
+  #vfs = new VFS();
+  #cache: Promise<Cache> | null = null;
+  #customImports: Map<string, string> = new Map();
+  #prefetches = new Set<string>();
+  #fetchListeners: { test: URLTest; handler: FetchHandler }[] = [];
+  #fireListeners: ((sw: ServiceWorker) => void)[] = [];
+  #vfsRegisters: Record<string, (req?: Request) => Promise<VFSRecord>> = {};
+  #loaders: Loader[] = [];
   #isDev = location.hostname === "localhost";
   #reloading = false;
+
+  get vfs() {
+    return this.#vfs;
+  }
+
+  get cache() {
+    return this.#cache ??
+      (this.#cache = caches.open("esm.sh/hot/v" + VERSION));
+  }
+
+  get customImports() {
+    return this.#customImports;
+  }
+
+  get prefetches() {
+    return this.#prefetches;
+  }
 
   /** returns true if the current hostname is localhost */
   get isDev() {
@@ -137,7 +167,7 @@ class Hot {
       | Response
       | Promise<T | Response>,
   ) {
-    this.vfs[name] = async (req?: Request) => {
+    this.#vfsRegisters[name] = async (req?: Request) => {
       let input = load(req);
       if (input instanceof Promise) {
         input = await input;
@@ -151,8 +181,8 @@ class Hot {
       const hash = await computeHash(
         isString(input) ? enc.encode(input) : input,
       );
-      const url = `https://esm.sh/hot/${name}`;
-      const cached = await vfs.get(url);
+      const url = this.hotUrl(name);
+      const cached = await this.#vfs.get(url);
       if (cached && cached.hash === hash) {
         return cached;
       }
@@ -173,7 +203,7 @@ class Hot {
           }
         }
       }
-      await vfs.put(url, hash, data);
+      await this.#vfs.put(url, hash, data);
       return { name, hash, data, headers: null };
     };
     return this;
@@ -181,28 +211,28 @@ class Hot {
 
   onLoad(test: RegExp, load: Loader["load"], varyUA = false) {
     if (!doc) {
-      this.loaders.push({ test, load, varyUA });
+      this.#loaders.push({ test, load, varyUA });
     }
     return this;
   }
 
-  onFetch(test: UrlTest, handler: FetchHandler) {
+  onFetch(test: URLTest, handler: FetchHandler) {
     if (!doc) {
-      this.fetchListeners.push({ test, handler });
+      this.#fetchListeners.push({ test, handler });
     }
     return this;
   }
 
   onFire(handler: (reg: ServiceWorker) => void) {
     if (doc) {
-      this.swListeners.push(handler);
+      this.#fireListeners.push(handler);
     }
     return this;
   }
 
   async fire(swName = "sw.js") {
     if (!doc) {
-      throw new Error("Hot.fire() can't be called in Service Worker.");
+      throw new Error("Hot.fire() can't be called in Service Worker scope.");
     }
 
     const sw = navigator.serviceWorker;
@@ -210,10 +240,10 @@ class Hot {
       throw new Error("Service Worker not supported.");
     }
 
-    const reg = await sw.register(new URL(swName, location.href), {
-      type: "module",
-    });
-    const { active, waiting } = reg;
+    const reg = await sw.register(
+      new URL(swName, location.href),
+      { type: "module" },
+    );
 
     // detect Service Worker update available and wait for it to become installed
     reg.addEventListener("updatefound", () => {
@@ -222,10 +252,16 @@ class Hot {
         if (waiting) {
           // if there's an existing controller (previous Service Worker)
           if (sw.controller) {
+            // ask user to confirm update?
             waiting.postMessage(kSkipWaiting);
           } else {
             // otherwise it's the first install
-            this.reload();
+            waiting.addEventListener("statechange", () => {
+              const { active } = reg;
+              if (active) {
+                this.#fireApp(active);
+              }
+            });
           }
         }
       });
@@ -236,43 +272,40 @@ class Hot {
       this.reload();
     });
 
-    // there's a waiting, send skip waiting message
-    if (waiting) {
-      waiting.postMessage(kSkipWaiting);
-    }
+    // if there's a waiting, send skip waiting message
+    reg.waiting?.postMessage(kSkipWaiting);
 
-    // there's an active Service Worker
+    // fire immediately if there's an active Service Worker
+    const { active } = reg;
     if (active) {
-      this.#onActive(active);
-    }
-  }
-
-  /** reload the page */
-  reload() {
-    if (!this.#reloading) {
-      this.#reloading = true;
-      location.reload();
+      this.#fireApp(active);
     }
   }
 
   listen() {
+    if (doc) {
+      throw new Error(
+        "Hot.listen() can't be called outside Service Worker scope.",
+      );
+    }
+
     const mimeTypes: Record<string, string[]> = {
       "a/gzip": ["gz"],
-      "a/javascript~": ["js", "mjs"],
-      "a/json~": ["json", "map"],
+      "a/javascript;": ["js", "mjs"],
+      "a/json;": ["json", "map"],
       "a/wasm": ["wasm"],
-      "a/xml~": ["xml"],
+      "a/xml;": ["xml"],
       "i/gif": ["gif"],
       "i/jpeg": ["jpeg", "jpg"],
       "i/png": ["png"],
-      "i/svg+xml~": ["svg"],
+      "i/svg+xml;": ["svg"],
       "i/webp": ["webp"],
-      "t/css": ["css"],
-      "t/csv": ["csv"],
-      "t/html": ["html", "htm"],
-      "t/markdown": ["md", "markdown"],
-      "t/plain": ["txt", "glsl"],
-      "t/yaml": ["yaml", "yml"],
+      "t/css;": ["css"],
+      "t/csv;": ["csv"],
+      "t/html;": ["html", "htm"],
+      "t/markdown;": ["md", "markdown"],
+      "t/plain;": ["txt", "glsl"],
+      "t/yaml;": ["yaml", "yml"],
     };
     const alias: Record<string, string> = {
       a: "application",
@@ -282,26 +315,20 @@ class Hot {
     const typesMap = new Map<string, string>();
     for (const mimeType in mimeTypes) {
       for (const ext of mimeTypes[mimeType]) {
-        const type = alias[mimeType.charAt(0)];
-        const endsWithTilde = mimeType.endsWith("~");
+        const endsWithSemicolon = mimeType.endsWith(";");
         let suffix = mimeType.slice(1);
-        if (type === "text" || endsWithTilde) {
-          if (endsWithTilde) {
-            suffix = suffix.slice(0, -1);
-          }
-          suffix += kUtf8;
+        if (endsWithSemicolon) {
+          suffix += " charset=utf-8";
         }
-        typesMap.set(ext, type + suffix);
+        typesMap.set(ext, alias[mimeType.charAt(0)] + suffix);
       }
     }
 
-    let hotCache: Cache | null = null;
-    const cacheFetch = async (req: Request) => {
+    const fetchWithCache = async (req: Request) => {
       if (req.method !== "GET") {
         return fetch(req, { redirect: "manual" });
       }
-      const cache = hotCache ??
-        (hotCache = await caches.open("hot/v" + VERSION));
+      const cache = await this.cache;
       let res = await cache.match(req);
       if (res) {
         return res;
@@ -314,24 +341,28 @@ class Hot {
       return res;
     };
 
+    const vfs = this.#vfs;
     const serveVFS = async (req: Request, name: string) => {
-      const headers = { "Content-Type": typesMap.get(getExtname(name)) ?? "" };
-      if (name in hot.vfs) {
-        const record = await hot.vfs[name](req);
+      const headers: HeadersInit = [[
+        kContentType,
+        typesMap.get(getExtname(name)) ?? "",
+      ]];
+      if (name in this.#vfsRegisters) {
+        const record = await this.#vfsRegisters[name](req);
         return new Response(record.data, { headers });
       }
-      const file = await vfs.get(`https://esm.sh/hot/${name}`);
+      const file = await vfs.get(this.hotUrl(name));
       if (!file) {
         return fetch(req);
       }
       return new Response(file.data, { headers });
     };
 
-    const jsHeaders = { "Content-Type": typesMap.get("js") + kUtf8 };
+    const jsHeaders: HeadersInit = [[kContentType, typesMap.get("js") ?? ""]];
     const noCacheHeaders = { "Cache-Control": "no-cache" };
     const serveLoader = async (loader: Loader, url: URL) => {
       const res = await fetch(url, {
-        headers: hot.isDev ? noCacheHeaders : {},
+        headers: this.#isDev ? noCacheHeaders : {},
       });
       if (!res.ok) {
         return res;
@@ -341,10 +372,10 @@ class Hot {
         res.text(),
       ]);
       const importMap: ImportMap = (im?.data as unknown) ?? {};
-      const jsxImportSource = isJsx(url.pathname)
+      const jsxImportSource = isJSX(url.pathname)
         ? importMap.imports?.[kJsxImportSource]
         : undefined;
-      const cacheKey = hot.isDev && url.host === location.host
+      const cacheKey = this.#isDev && url.host === location.host
         ? url.href.replace(tsQuery, "")
         : url.href;
       const cached = await vfs.get(cacheKey);
@@ -376,12 +407,25 @@ class Hot {
       }
     };
 
+    self.addEventListener("install", (event) => {
+      // @ts-ignore
+      event.waitUntil(
+        this.cache.then((cache) => cache.addAll([...this.#prefetches])),
+      );
+    });
+
+    self.addEventListener("activate", (event) => {
+      // @ts-ignore
+      event.waitUntil(clients.claim());
+    });
+
     self.addEventListener("fetch", (event) => {
       const evt = event as FetchEvent;
       const { request } = evt;
       const url = new URL(request.url);
       const { pathname, hostname } = url;
-      const { loaders, fetchListeners } = hot;
+      const loaders = this.#loaders;
+      const fetchListeners = this.#fetchListeners;
       if (fetchListeners.length > 0) {
         for (const { test, handler } of fetchListeners) {
           if (test(url, request)) {
@@ -390,13 +434,13 @@ class Hot {
         }
       }
       if (hostname !== location.hostname) {
-        if (hostname == "esm.sh" && pathname.startsWith("/hot/")) {
+        if (hostname === "esm.sh" && pathname.startsWith("/hot/")) {
           evt.respondWith(serveVFS(request, pathname.slice(5)));
         } else {
-          evt.respondWith(cacheFetch(request));
+          evt.respondWith(fetchWithCache(request));
         }
       } else if (
-        !url.searchParams.has("raw") && request.url !== location.href
+        !url.searchParams.has("raw") && url.pathname !== location.pathname
       ) {
         const loader = loaders.find(({ test }) => test.test(pathname));
         if (loader) {
@@ -413,36 +457,52 @@ class Hot {
     });
   }
 
-  async #syncVFS() {
-    if (doc) {
-      const script = doc.querySelector("head>script[type=importmap]");
-      const importMap: ImportMap = { imports: { ...this.customImports } };
-      if (script) {
-        const supported = HTMLScriptElement.supports?.("importmap");
-        const v = JSON.parse(script.innerHTML);
-        for (const k in v.imports) {
-          if (!supported || k === kJsxImportSource) {
-            importMap.imports![k] = v.imports[k];
-          }
-        }
-        if (!supported && "scopes" in v) {
-          importMap.scopes = v.scopes;
-        }
-      }
-      await vfs.put(
-        "importmap.json",
-        await computeHash(enc.encode(JSON.stringify(importMap))),
-        importMap as unknown as string,
-      );
-      await Promise.all(
-        Object.values(this.vfs).map((handler) => handler()),
-      );
+  /** reload the page */
+  reload() {
+    if (!this.#reloading) {
+      this.#reloading = true;
+      location.reload();
     }
   }
 
-  async #onActive(sw: ServiceWorker) {
+  hotUrl(name: string) {
+    return "https://esm.sh/hot/" + name;
+  }
+
+  async #syncVFS() {
+    const script = doc.querySelector("head>script[type=importmap]");
+    const importMap: ImportMap = {
+      imports: Object.fromEntries(this.#customImports.entries()),
+    };
+    if (script) {
+      const supported = HTMLScriptElement.supports?.("importmap");
+      const v = JSON.parse(script.innerHTML);
+      for (const k in v.imports) {
+        if (!supported || k === kJsxImportSource) {
+          importMap.imports![k] = v.imports[k];
+        }
+      }
+      if (!supported && "scopes" in v) {
+        importMap.scopes = v.scopes;
+      }
+    }
+    await this.#vfs.put(
+      "importmap.json",
+      await computeHash(enc.encode(JSON.stringify(importMap))),
+      importMap as unknown as string,
+    );
+    await Promise.all(
+      Object.values(this.#vfsRegisters).map((handler) => handler()),
+    );
+  }
+
+  async #fireApp(sw: ServiceWorker) {
+    if (this.#isDev) {
+      const hmr = await import(`./hot-plugins/hmr`);
+      hmr.default.setup(this);
+    }
     await this.#syncVFS();
-    for (const handler of this.swListeners) {
+    for (const handler of this.#fireListeners) {
       handler(sw);
     }
     doc.querySelectorAll("script[type='module/hot']").forEach((el) => {
@@ -450,18 +510,13 @@ class Hot {
       copy.type = "module";
       el.replaceWith(copy);
     });
-    doc.querySelectorAll(
-      ["iframe", "script", "link", "style"].map((t) => "hot-" + t).join(","),
-    ).forEach(
-      (el) => {
-        const copy = doc.createElement(el.tagName.slice(4).toLowerCase());
-        el.getAttributeNames().forEach((name) => {
-          copy.setAttribute(name, el.getAttribute(name)!);
-        });
-        copy.textContent = el.textContent;
-        el.replaceWith(copy);
-      },
-    );
+    doc.querySelectorAll("hot-link,hot-script,hot-iframe").forEach((el) => {
+      const copy = doc.createElement(el.tagName.slice(4).toLowerCase());
+      el.getAttributeNames().forEach((name) => {
+        copy.setAttribute(name, el.getAttribute(name)!);
+      });
+      el.replaceWith(copy);
+    });
     console.log("🔥 app fired.");
   }
 }
@@ -472,7 +527,7 @@ function isString(v: unknown): v is string {
 }
 
 /** check if the pathname is a jsx file */
-function isJsx(pathname: string): boolean {
+function isJSX(pathname: string): boolean {
   return pathname.endsWith(".jsx") || pathname.endsWith(".tsx");
 }
 
@@ -497,5 +552,5 @@ async function computeHash(
 // 🔥
 const hot = new Hot();
 plugins.forEach((plugin) => plugin.setup(hot));
-Object.assign(globalThis, { HOT: hot });
+Reflect.set(globalThis, "HOT", hot);
 export default hot;

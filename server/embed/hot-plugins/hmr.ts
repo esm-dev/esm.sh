@@ -12,14 +12,14 @@ export default {
     if (!hot.isDev) {
       return;
     }
-    hot.hmr = true;
+
     hot.hmrModules = new Set<string>();
     hot.hmrCallbacks = new Map<string, (module: any) => void>();
-    hot.customImports = {
-      ...hot.customImports,
-      "@hmrRuntime": "https://esm.sh/hot/_hmr.js",
-      "@reactRefreshRuntime": "https://esm.sh/hot/_hmr_react_refresh.js",
-    };
+
+    hot.customImports.set(
+      "@hmrRuntime",
+      "https://esm.sh/hot/_hmr.js",
+    );
     hot.register(
       "_hmr.js",
       () => `
@@ -40,6 +40,11 @@ export default {
         })
       `,
       (code: string) => code,
+    );
+
+    hot.customImports.set(
+      "@reactRefreshRuntime",
+      "https://esm.sh/hot/_hmr_react_refresh.js",
     );
     hot.register(
       "_hmr_react_refresh.js",

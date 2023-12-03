@@ -89,7 +89,6 @@ export default {
               });
             }
             return {
-              // TODO: support hmr
               code: [
                 isDev && hmrRuntime &&
                 `import H from ${stringify(hmrRuntime)};import.meta.hot = H(${

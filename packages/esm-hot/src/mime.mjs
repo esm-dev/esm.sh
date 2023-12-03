@@ -1,13 +1,13 @@
 // MIME types for web
 const mimeTypes = {
   // application
-  "a/javascript~": ["js", "mjs"],
+  "a/javascript;": ["js", "mjs"],
   "a/wasm": ["wasm"],
-  "a/json~": ["json", "map"],
-  "a/jsonc~": ["jsonc"],
-  "a/json5~": ["json5"],
+  "a/json;": ["json", "map"],
+  "a/jsonc;": ["jsonc"],
+  "a/json5;": ["json5"],
   "a/pdf": ["pdf"],
-  "a/xml~": ["xml", "plist", "tmLanguage", "tmTheme"],
+  "a/xml;": ["xml", "plist", "tmLanguage", "tmTheme"],
   "a/zip": ["zip"],
   "a/gzip": ["gz"],
   "a/tar": ["tar"],
@@ -43,7 +43,7 @@ const mimeTypes = {
   "i/gif": ["gif"],
   "i/webp": ["webp"],
   "i/avif": ["avif"],
-  "i/svg+xml~": ["svg", "svgz"],
+  "i/svg+xml;": ["svg", "svgz"],
   "i/x-icon": ["ico"],
   // audio
   "u/mp4": ["m4a"],
@@ -69,10 +69,10 @@ const defaultType = "application/octet-stream";
 const typesMap = Object.entries(mimeTypes).reduce(
   (map, [mimeType, exts]) => {
     const type = alias[mimeType.charAt(0)];
-    const endsWithTilde = mimeType.endsWith("~");
+    const endsWithSemicolon = mimeType.endsWith(";");
     let suffix = mimeType.slice(1);
-    if (type === "text" || endsWithTilde) {
-      if (endsWithTilde) {
+    if (type === "text" || endsWithSemicolon) {
+      if (endsWithSemicolon) {
         suffix = suffix.slice(0, -1);
       }
       suffix += "; charset=utf-8";
