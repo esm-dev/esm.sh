@@ -11,7 +11,6 @@ import (
 	"path"
 	"path/filepath"
 	"regexp"
-	"strconv"
 	"strings"
 	"time"
 
@@ -214,28 +213,6 @@ func atobUrl(s string) (string, error) {
 		return "", err
 	}
 	return string(data), nil
-}
-
-func kill(pidFile string) (err error) {
-	if pidFile == "" {
-		return nil
-	}
-	data, err := os.ReadFile(pidFile)
-	if err != nil {
-		if os.IsNotExist(err) {
-			err = nil
-		}
-		return
-	}
-	pid, err := strconv.Atoi(string(data))
-	if err != nil || pid <= 0 {
-		return nil
-	}
-	process, err := os.FindProcess(pid)
-	if err != nil {
-		return
-	}
-	return process.Kill()
 }
 
 func validateJS(filename string) (isESM bool, namedExports []string, err error) {
