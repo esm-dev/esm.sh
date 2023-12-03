@@ -73,7 +73,9 @@ export default {
       `,
       (code: string) => code,
     );
+
     hot.onFire((_sw: ServiceWorker) => {
+      const logPrefix = ["🔥 %c[HMR]", "color:#999"];
       const connect = () => {
         const source = new EventSource(new URL("hot-notify", location.href));
         source.addEventListener("fs-notify", async (ev) => {
@@ -97,30 +99,29 @@ export default {
           }
           if (module || handler) {
             console.log(
-              `🔥 %c[HMR] %c${type}`,
-              "color:#999",
+              ...logPrefix,
+              `%c${type}`,
               `color:${eventColors[type as keyof typeof eventColors]}`,
               `${JSON.stringify(name)}`,
             );
           }
         });
+        let state = 0;
         source.onopen = () => {
+          state = 1;
           console.log(
-            "🔥 %c[HMR]",
-            "color:#999",
-            "listening for file changes...",
+            ...logPrefix,
+            "connected, listening for file changes...",
           );
         };
         source.onerror = (err) => {
-          if (err.eventPhase === EventSource.CLOSED) {
-            console.log(
-              "🔥 %c[HMR]",
-              "color:#999",
-              "connection lost, reconnecting...",
-            );
-            setTimeout(() => {
-              connect();
-            }, 300);
+          if (state == 0) {
+            console.warn(...logPrefix, "failed to connect.");
+          }
+          if (state == 1 && err.eventPhase === EventSource.CLOSED) {
+            console.log(...logPrefix, "connection lost, reconnecting...");
+            state = 0;
+            setTimeout(connect, 300);
           }
         };
       };
