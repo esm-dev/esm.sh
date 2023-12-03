@@ -260,7 +260,7 @@ func esmHandler() rex.Handle {
 			}
 			data, err := embedFS.ReadFile("server" + pathname)
 			if err != nil {
-				return err
+				return rex.Status(404, "not found")
 			}
 			if strings.HasSuffix(pathname, ".js") {
 				data = bytes.ReplaceAll(data, []byte("{origin}"), []byte(cdnOrigin))

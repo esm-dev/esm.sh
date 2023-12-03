@@ -7,7 +7,7 @@ require (
 	github.com/evanw/esbuild v0.19.7
 	github.com/ije/esbuild-internal v0.19.7
 	github.com/ije/gox v0.6.1
-	github.com/ije/rex v1.10.8
+	github.com/ije/rex v1.10.9
 	github.com/mssola/useragent v1.0.0
 	go.etcd.io/bbolt v1.3.8
 )
