@@ -1,3 +1,6 @@
+import { useState } from "react";
+
 export default function App() {
-  return <h1>Hello React!</h1>;
+  const [msg] = useState("React");
+  return <h1 style={{ fontSize: 12 }}>Hello {msg}!</h1>;
 }

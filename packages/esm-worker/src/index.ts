@@ -98,7 +98,10 @@ class ESMWorker {
         headers.append("Vary", "User-Agent");
         res = new Response(res.body, { status: res.status, headers });
       }
-      if (res.headers.get("Cache-Control")?.startsWith("public, max-age=")) {
+      if (
+        res.ok &&
+        res.headers.get("Cache-Control")?.startsWith("public, max-age=")
+      ) {
         context.waitUntil(cache.put(cacheKey, res.clone()));
       }
       if (isHeadMethod) {

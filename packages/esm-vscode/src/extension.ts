@@ -1,6 +1,10 @@
 import * as vscode from "vscode";
-import type { ProjectConfig } from "./typescript-esm-plugin.ts";
-import { getImportMap } from "./util.ts";
+import type { ImportMap } from "./typescript-esm-plugin.ts";
+import { getImportMapFromHtml } from "./util.ts";
+
+interface ProjectConfig {
+  importMap?: ImportMap;
+}
 
 interface TSApi {
   updateConfig: (config: ProjectConfig) => void;
@@ -11,34 +15,21 @@ export async function activate(context: vscode.ExtensionContext) {
 
   let tsApi: TSApi;
   try {
-    tsApi = await setupTSLang();
+    tsApi = await setupTSLsp();
     console.log("vscode typescript extension activated.");
   } catch (e) {
     console.error(e);
   }
 
-  // check the jsxImportSource in index.html
-  const checkJSXImportSourceInIndexHtml = async (
-    document: vscode.TextDocument,
-  ) => {
-    const importMap = await getImportMap(document);
-    const jsxImportSource = importMap?.imports["@jsxImportSource"];
-    if (jsxImportSource) {
-      console.log("@jsxImportSource", jsxImportSource);
-    }
-    tsApi.updateConfig({ jsxImportSource });
-  };
-  workspace.findFiles("index.html").then((uris) => {
-    uris.forEach((uri) => {
-      workspace.openTextDocument(uri).then(checkJSXImportSourceInIndexHtml);
-    });
-  });
-  context.subscriptions.push(workspace.onDidSaveTextDocument((document) => {
-    const name = workspace.asRelativePath(document.uri);
-    if (name === "index.html") {
-      checkJSXImportSourceInIndexHtml(document);
-    }
-  }));
+  context.subscriptions.push(
+    workspace.onDidSaveTextDocument(async (document) => {
+      const name = workspace.asRelativePath(document.uri);
+      if (name === "index.html") {
+        const importMap = getImportMapFromHtml(document.getText());
+        tsApi.updateConfig({ importMap });
+      }
+    }),
+  );
 
   context.subscriptions.push(
     commands.registerCommand(
@@ -48,25 +39,9 @@ export async function activate(context: vscode.ExtensionContext) {
       },
     ),
   );
-
-  context.subscriptions.push(
-    workspace.registerTextDocumentContentProvider(
-      "esmsh",
-      new class implements vscode.TextDocumentContentProvider {
-        provideTextDocumentContent(uri: vscode.Uri): string {
-          console.log("@@ provideTextDocumentContent", uri);
-          return `/** useState hook */
-        export function useState(a) {
-          return [a,()=>{}]
-        }
-        `;
-        }
-      }(),
-    ),
-  );
 }
 
-async function setupTSLang() {
+async function setupTSLsp() {
   const tsExtension = vscode.extensions.getExtension(
     "vscode.typescript-language-features",
   );
@@ -78,17 +53,12 @@ async function setupTSLang() {
   const config: ProjectConfig = {};
   return {
     updateConfig: (c: ProjectConfig) => {
+      const old = JSON.stringify(config);
       Object.assign(config, c);
-      api.configurePlugin("typescript-esm-plugin", config);
+      if (old !== JSON.stringify(config)) {
+        api.configurePlugin("typescript-esm-plugin", config);
+      }
     },
-  };
-}
-
-function debunce(fn: (...args: any[]) => void, delay: number) {
-  let timer: NodeJS.Timeout;
-  return (...args: any[]) => {
-    clearTimeout(timer);
-    timer = setTimeout(() => fn(...args), delay);
   };
 }
 

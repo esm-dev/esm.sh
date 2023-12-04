@@ -5,20 +5,23 @@ settings:
   excludeLinksFromLockfile: false
 
 dependencies:
-  sax-wasm:
-    specifier: ^2.2.4
-    version: 2.2.4
   typescript-esm-plugin:
     specifier: ./typescript-esm-plugin
     version: link:typescript-esm-plugin
 
 devDependencies:
+  '@types/node':
+    specifier: ^20.10.2
+    version: 20.10.2
   '@types/vscode':
     specifier: ^1.84.2
     version: 1.84.2
   esbuild:
     specifier: ^0.19.8
     version: 0.19.8
+  html5parser:
+    specifier: ^2.0.2
+    version: 2.0.2
   typescript:
     specifier: ^5.3.2
     version: 5.3.2
@@ -223,6 +226,12 @@ packages:
     dev: true
     optional: true
 
+  /@types/node@20.10.2:
+    resolution: {integrity: sha512-37MXfxkb0vuIlRKHNxwCkb60PNBpR94u4efQuN4JgIAm66zfCDXGSAFCef9XUWFovX2R1ok6Z7MHhtdVXXkkIw==}
+    dependencies:
+      undici-types: 5.26.5
+    dev: true
+
   /@types/vscode@1.84.2:
     resolution: {integrity: sha512-LCe1FvCDMJKkPdLVGYhP0HRJ1PDop2gRVm/zFHiOKwYLBRS7vEV3uOOUId4HMV+L1IxqyS+IZXMmlSMRbZGIAw==}
     dev: true
@@ -257,12 +266,22 @@ packages:
       '@esbuild/win32-x64': 0.19.8
     dev: true
 
-  /sax-wasm@2.2.4:
-    resolution: {integrity: sha512-KreOdNF02zEEDUyqLZjWQTMf+ev/6gEzp2ZT8w2xvqfHO/DRPL4RBYYeiXQpYEGD+1oZ81pjc3fPG5NLDh5ICg==}
-    dev: false
+  /html5parser@2.0.2:
+    resolution: {integrity: sha512-L0y+IdTVxHsovmye8MBtFgBvWZnq1C9WnI/SmJszxoQjmUH1psX2uzDk21O5k5et6udxdGjwxkbmT9eVRoG05w==}
+    dependencies:
+      tslib: 2.6.2
+    dev: true
+
+  /tslib@2.6.2:
+    resolution: {integrity: sha512-AEYxH93jGFPn/a2iVAwW87VuUIkR1FVUKB77NwMF7nBTDkDrrT/Hpt/IrCJ0QXhW27jTBDcf5ZY7w6RiqTMw2Q==}
+    dev: true
 
   /typescript@5.3.2:
     resolution: {integrity: sha512-6l+RyNy7oAHDfxC4FzSJcz9vnjTKxrLpDG5M2Vu4SHRVNg6xzqZp6LYSR9zjqQTu8DU/f5xwxUdADOkbrIX2gQ==}
     engines: {node: '>=14.17'}
     hasBin: true
+    dev: true
+
+  /undici-types@5.26.5:
+    resolution: {integrity: sha512-JlCMO+ehdEIKqlFxk6IfVoAUVmgz7cU7zD/h9XZ0qzeosSHmUJVOzSQvvYSYWXkFXC+IfLKSIffhv0sVZup6pA==}
     dev: true

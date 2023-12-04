@@ -1,0 +1,115 @@
+importmap set in index.html
+---
+{
+  "imports": {
+    "@jsxImportSource": "https://esm.sh/react@18.2.0",
+    "react": "https://esm.sh/react@18.2.0"
+  }
+}
+---
+
+importmap
+---
+{
+  "jsxImportSource": "https://esm.sh/react@18.2.0",
+  "alias": {
+    "@jsxImportSource": "https://esm.sh/react@18.2.0",
+    "react": "https://esm.sh/react@18.2.0"
+  }
+}
+---
+
+plugin created, typescrpt v5.2.2
+
+resolveModuleNameLiterals[0]: https://esm.sh/react@18.2.0/jsx-runtime
+---
+{
+  "containingFile": "/Users/x/.repos/esm.sh/packages/esm-hot/test/App.tsx"
+}
+---
+
+resolveModuleNameLiterals[1]: react
+---
+{
+  "containingFile": "/Users/x/.repos/esm.sh/packages/esm-hot/test/App.tsx"
+}
+---
+
+resolveModuleNameLiterals[1]: react
+---
+{
+  "containingFile": "/Users/x/.repos/esm.sh/packages/esm-hot/test/App.tsx"
+}
+---
+
+dts found: https://esm.sh/v128/@types/react@~18.2/jsx-runtime~.d.ts
+
+dts found: https://esm.sh/v128/@types/react@~18.2/index.d.ts
+
+dts found: https://esm.sh/v128/@types/react@~18.2/jsx-runtime~.d.ts
+
+dts found: https://esm.sh/v128/@types/react@~18.2/index.d.ts
+
+dts loaded: https://esm.sh/react@18.2.0/jsx-runtime -> https://esm.sh/v128/@types/react@18.2.38/jsx-runtime~.d.ts
+
+dts loaded: https://esm.sh/react@18.2.0 -> https://esm.sh/v128/@types/react@18.2.38/index.d.ts
+
+dts loaded: https://esm.sh/react@18.2.0/jsx-runtime -> https://esm.sh/v128/@types/react@18.2.38/jsx-runtime~.d.ts
+
+dts loaded: https://esm.sh/react@18.2.0 -> https://esm.sh/v128/@types/react@18.2.38/index.d.ts
+
+resolveModuleNameLiterals[0]: https://esm.sh/react@18.2.0/jsx-runtime
+---
+{
+  "containingFile": "/Users/x/.repos/esm.sh/packages/esm-hot/test/App.tsx"
+}
+---
+
+resolveModuleNameLiterals[1]: react
+---
+{
+  "containingFile": "/Users/x/.repos/esm.sh/packages/esm-hot/test/App.tsx"
+}
+---
+
+resolveModuleNameLiterals[0]: https://esm.sh/v128/csstype@3.1.2/index.d.ts
+---
+{
+  "containingFile": "/Users/x/.cache/esm.sh/v128/@types/react@18.2.38/index.d.ts"
+}
+---
+
+resolveModuleNameLiterals[1]: https://esm.sh/v128/@types/prop-types@15.7.11/index.d.ts
+---
+{
+  "containingFile": "/Users/x/.cache/esm.sh/v128/@types/react@18.2.38/index.d.ts"
+}
+---
+
+resolveModuleNameLiterals[2]: https://esm.sh/v128/@types/scheduler@0.16.8/tracing.d.ts
+---
+{
+  "containingFile": "/Users/x/.cache/esm.sh/v128/@types/react@18.2.38/index.d.ts"
+}
+---
+
+dts loaded: https://esm.sh/v128/@types/scheduler@0.16.8/tracing.d.ts
+
+dts loaded: https://esm.sh/v128/csstype@3.1.2/index.d.ts
+
+dts loaded: https://esm.sh/v128/@types/prop-types@15.7.11/index.d.ts
+
+resolveModuleNameLiterals[0]: https://esm.sh/react@18.2.0/jsx-runtime
+---
+{
+  "containingFile": "/Users/x/.repos/esm.sh/packages/esm-hot/test/App.tsx"
+}
+---
+
+resolveModuleNameLiterals[1]: react
+---
+{
+  "containingFile": "/Users/x/.repos/esm.sh/packages/esm-hot/test/App.tsx"
+}
+---
+
