@@ -1,7 +1,9 @@
 {
-  "name": "@esm.sh/vscode",
-  "version": "0.0.0",
-  "description": "The VS Code Extension for Typescript Language with esm.sh imports.",
+  "name": "esm-vscode",
+  "version": "0.0.1",
+  "displayName": "esm.sh",
+  "description": "Loading types from esm.sh CDN.",
+  "publisher": "ije",
   "activationEvents": [
     "onLanguage:html",
     "onLanguage:javascript",
@@ -10,6 +12,7 @@
     "onLanguage:typescriptreact"
   ],
   "main": "./dist/extension.js",
+  "icon": "icon.png",
   "contributes": {
     "typescriptServerPlugins": [
       {
@@ -25,7 +28,7 @@
     ]
   },
   "scripts": {
-    "build": "node build.mjs",
+    "build": "node build.mjs && vsce package",
     "start": "DEBUG=true npm run build && rm -rf ~/.cache/esm.sh && code --extensionDevelopmentPath=$PWD ../esm-hot/test"
   },
   "devDependencies": {
@@ -33,7 +36,8 @@
     "@types/vscode": "^1.84.2",
     "esbuild": "^0.19.8",
     "html5parser": "^2.0.2",
-    "typescript": "^5.3.2"
+    "typescript": "^5.3.2",
+    "vsce": "^2.15.0"
   },
   "dependencies": {
     "typescript-esm-plugin": "./typescript-esm-plugin"
