@@ -23,12 +23,9 @@ export interface ProjectConfig {
 class Plugin implements TS.server.PluginModule {
   #typescript: typeof TS;
   #projectConfig: ProjectConfig = { importMap: {} };
-  #declMap = new Map<string, Promise<void> | string>();
+  #declMap = new Map<string, Promise<void> | string | 404>();
   #logger: { i: number; info(s: string, ...args: any[]): void };
   #refresh = () => {};
-
-  static userAgent =
-    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36";
 
   constructor(ts: typeof TS) {
     this.#typescript = ts;
@@ -75,9 +72,8 @@ class Plugin implements TS.server.PluginModule {
 
     // refresh diagnostics when config changed
     this.#refresh = () => {
+      project.projectService.reloadProjects();
       project.refreshDiagnostics();
-      project.updateGraph();
-      languageService.getProgram()?.emit();
     };
 
     // load import map from index.html if exists
@@ -86,9 +82,8 @@ class Plugin implements TS.server.PluginModule {
       if (existsSync(indexHtml)) {
         const html = readFileSync(indexHtml, "utf-8");
         const importMap = getImportMapFromHtml(html);
-        this.#logger.info("importmap set in index.html", importMap);
+        this.#logger.info("load importmap from index.html", importMap);
         this.#preprocessImportMap(importMap);
-        this.#logger.info("importmap", this.#projectConfig.importMap);
       }
     } catch (error) {
       // ignore
@@ -107,38 +102,20 @@ class Plugin implements TS.server.PluginModule {
       return settings;
     };
 
-    // todo
-    const tsResolveTypeReferenceDirectiveReferences = languageServiceHost
-      .resolveTypeReferenceDirectiveReferences?.bind(languageServiceHost);
-    if (tsResolveTypeReferenceDirectiveReferences) {
-      languageServiceHost.resolveTypeReferenceDirectiveReferences = (
-        typeDirectiveReferences: readonly (TS.FileReference | string)[],
-        containingFile: string,
-        ...rest
-      ) => {
-        this.#logger.info(
-          "resolveTypeReferenceDirectiveReferences",
-          typeDirectiveReferences,
-        );
-        return tsResolveTypeReferenceDirectiveReferences(
-          typeDirectiveReferences,
-          containingFile,
-          ...rest,
-        );
-      };
-    }
-
     // rewrite TS module resolution
     const tsResolveModuleNameLiterals = languageServiceHost
       .resolveModuleNameLiterals?.bind(languageServiceHost);
     if (tsResolveModuleNameLiterals) {
-      const resolvedModule = (resolvedFileName: string, extension: string) => ({
-        resolvedModule: {
-          resolvedFileName,
-          extension,
-          resolvedUsingTsExtension: extension === ".d.ts",
-        },
-      });
+      const resolvedModule = (resolvedFileName: string, extension: string) => {
+        const resolvedUsingTsExtension = extension === ".d.ts";
+        return {
+          resolvedModule: {
+            resolvedFileName,
+            extension,
+            resolvedUsingTsExtension,
+          },
+        };
+      };
       languageServiceHost.resolveModuleNameLiterals = (
         literals,
         containingFile: string,
@@ -156,129 +133,151 @@ class Plugin implements TS.server.PluginModule {
           if (res.resolvedModule) {
             return res;
           }
-          this.#logger.info(
-            "resolveModuleNameLiterals[" + i + "]: " + literals[i].text,
-            { containingFile },
-          );
-          const literal = literals[i].text;
+          let literal = literals[i].text;
+          if (literal.startsWith("./") || literal.startsWith("../")) {
+            // fix relative path
+            const idx = containingFile.indexOf("/esm.sh/");
+            if (idx) {
+              literal =
+                new URL(literal, "https:/" + containingFile.slice(idx)).href;
+            }
+          }
           const specifier = this.#applyImportMap(literal);
-          if (isHttpUrlLike(specifier)) {
+          if (isValidEsmshUrl(specifier)) {
             const url = new URL(specifier);
-            if (url.hostname === "esm.sh") {
-              const isDts = specifier.endsWith(".d.ts");
-              if (this.#declMap.has(specifier)) {
-                const decl = this.#declMap.get(specifier);
-                if (typeof decl === "string") {
-                  if (decl) {
-                    return resolvedModule(join(esmCacheDir, decl), ".d.ts");
-                  }
-                  if (isDts) {
-                    return resolvedModule(
-                      join(esmCacheDir, url.pathname),
-                      ".d.ts",
-                    );
-                  }
-                }
-                return resolvedModule(specifier, ".js");
+            const isDts = specifier.endsWith(".d.ts");
+            if (this.#declMap.has(specifier)) {
+              const decl = this.#declMap.get(specifier);
+              if (decl === 404) {
+                return { resolvedModule: undefined };
               }
-              if (isDts) {
-                const dtsFile = join(esmCacheDir, url.pathname);
-                if (existsSync(dtsFile)) {
-                  this.#declMap.set(specifier, "");
-                  return resolvedModule(dtsFile, ".d.ts");
+              if (typeof decl === "string") {
+                if (decl) {
+                  return resolvedModule(join(esmCacheDir, decl), ".d.ts");
                 }
-                if (!this.#declMap.has(specifier)) {
-                  const cleanup = () => {
-                    this.#declMap.delete(specifier);
-                  };
-                  const load = () =>
-                    fetch(specifier).then((res) => {
-                      if (!res.ok) {
-                        res.body?.cancel();
-                        return Promise.reject(res.statusText);
+                if (isDts) {
+                  return resolvedModule(
+                    join(esmCacheDir, url.pathname),
+                    ".d.ts",
+                  );
+                }
+              }
+              return resolvedModule(specifier, ".js");
+            }
+
+            this.#logger.info("missing module types declare: " + specifier);
+            if (isDts) {
+              const dtsFile = join(esmCacheDir, url.pathname);
+              if (existsSync(dtsFile)) {
+                this.#declMap.set(specifier, "");
+                return resolvedModule(dtsFile, ".d.ts");
+              }
+              if (!this.#declMap.has(specifier)) {
+                const cleanup = () => {
+                  this.#declMap.delete(specifier);
+                };
+                const load = () =>
+                  fetch(
+                    specifier,
+                    { headers: { "user-agent": "Deno/1.38.0" } },
+                  ).then<string | 404>((res) => {
+                    if (!res.ok) {
+                      res.body?.cancel();
+                      if (res.status === 404) {
+                        return Promise.resolve(404 as const);
                       }
-                      return res.text();
-                    }).then((dts) => {
+                      return Promise.reject(res.statusText);
+                    }
+                    return res.text();
+                  }).then((dts) => {
+                    if (dts === 404) {
+                      this.#declMap.set(specifier, 404);
+                    } else {
                       const dtsDir = dirname(dtsFile);
                       if (!existsSync(dtsDir)) {
                         mkdirSync(dtsDir, { recursive: true });
                       }
                       writeFileSync(dtsFile, dts, "utf-8");
                       this.#declMap.set(specifier, "");
-                      this.#refresh();
-                      this.#logger.info("dts loaded: " + specifier);
-                    });
-
-                  this.#declMap.set(specifier, load().catch(cleanup));
+                    }
+                    this.#refresh();
+                  });
+                this.#declMap.set(specifier, load().catch(cleanup));
+              }
+            } else {
+              const urlHash = createHash("sha256").update(specifier)
+                .digest("hex");
+              const metaFile = join(esmCacheMetaDir, urlHash);
+              if (existsSync(metaFile)) {
+                const meta = JSON.parse(readFileSync(metaFile, "utf-8"));
+                if (meta.dts) {
+                  this.#declMap.set(specifier, meta.dts);
+                  return resolvedModule(join(esmCacheDir, meta.dts), ".d.ts");
                 }
-              } else {
-                const urlHash = createHash("sha256").update(specifier)
-                  .digest("hex");
-                const metaFile = join(esmCacheMetaDir, urlHash);
-                if (existsSync(metaFile)) {
-                  const meta = JSON.parse(readFileSync(metaFile, "utf-8"));
-                  if (meta.dts) {
-                    this.#declMap.set(specifier, meta.dts);
-                    return resolvedModule(join(esmCacheDir, meta.dts), ".d.ts");
-                  }
-                  this.#declMap.set(specifier, "");
-                  return resolvedModule(specifier, ".js");
-                } else if (!this.#declMap.has(specifier)) {
-                  const cleanup = () => {
-                    this.#declMap.delete(specifier);
-                  };
-                  const load = async () => {
-                    const dtsUrl = await fetch(specifier, {
-                      method: "HEAD",
-                      headers: { "user-agent": Plugin.userAgent },
-                    }).then((res) => {
-                      res.body?.cancel();
+                this.#declMap.set(specifier, "");
+                return resolvedModule(specifier, ".js");
+              } else if (!this.#declMap.has(specifier)) {
+                const cleanup = () => {
+                  this.#declMap.delete(specifier);
+                };
+                const load = async () => {
+                  const dtsUrl = await fetch(specifier, {
+                    method: "HEAD",
+                    headers: {
+                      "user-agent":
+                        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36",
+                    },
+                  }).then((res) => {
+                    res.body?.cancel();
+                    if (!res.ok) {
+                      if (res.status === 404) {
+                        return 404 as const;
+                      }
+                      return Promise.reject(res.statusText);
+                    }
+                    return res.headers.get("x-typescript-types") ?? "";
+                  }).catch(() => {
+                    cleanup();
+                    return null;
+                  });
+                  if (dtsUrl === 404) {
+                    this.#declMap.set(specifier, 404);
+                    this.#refresh();
+                  } else if (dtsUrl === "") {
+                    writeFileSync(metaFile, "{}", "utf-8");
+                    this.#declMap.set(specifier, "");
+                    this.#refresh();
+                  } else if (dtsUrl) {
+                    fetch(
+                      dtsUrl,
+                      { headers: { "user-agent": "Deno/1.38.0" } },
+                    ).then((res) => {
                       if (!res.ok) {
+                        res.body?.cancel();
                         return Promise.reject(res.statusText);
                       }
-                      return res.headers.get("x-typescript-types") ?? "";
-                    }).catch(() => {
-                      cleanup();
-                      return null;
-                    });
-                    if (dtsUrl) {
-                      this.#logger.info(
-                        "dts found: " + dtsUrl,
-                      );
-                      fetch(dtsUrl).then((res) => {
-                        if (!res.ok) {
-                          res.body?.cancel();
-                          return Promise.reject(res.statusText);
-                        }
-                        return res.text().then((dts) => [res.url, dts]);
-                      }).then(([resUrl, dts]) => {
-                        const url = new URL(resUrl);
-                        const dtsFile = join(esmCacheDir, url.pathname);
-                        const dtsDir = dirname(dtsFile);
-                        const meta = JSON.stringify({
-                          dts: url.pathname,
-                        });
-                        if (!existsSync(dtsDir)) {
-                          mkdirSync(dtsDir, { recursive: true });
-                        }
-                        writeFileSync(dtsFile, dts, "utf-8");
-                        writeFileSync(metaFile, meta, "utf-8");
-                        this.#declMap.set(specifier, url.pathname);
-                        this.#refresh();
-                        this.#logger.info(
-                          "dts loaded: " + specifier + " -> " + url.href,
-                        );
-                      }).catch(cleanup);
-                    } else if (dtsUrl === "") {
-                      writeFileSync(metaFile, "{}", "utf-8");
-                      this.#declMap.set(specifier, "");
+                      return res.text().then((dts) => [res.url, dts]);
+                    }).then(([resUrl, dts]) => {
+                      const url = new URL(resUrl);
+                      const dtsFile = join(esmCacheDir, url.pathname);
+                      const dtsDir = dirname(dtsFile);
+                      const meta = JSON.stringify({
+                        dts: url.pathname,
+                      });
+                      if (!existsSync(dtsDir)) {
+                        mkdirSync(dtsDir, { recursive: true });
+                      }
+                      writeFileSync(dtsFile, dts, "utf-8");
+                      writeFileSync(metaFile, meta, "utf-8");
+                      this.#declMap.set(specifier, url.pathname);
                       this.#refresh();
-                    }
-                  };
-                  this.#declMap.set(specifier, load());
-                }
+                    }).catch(cleanup);
+                  }
+                };
+                this.#declMap.set(specifier, load());
               }
             }
+
             return resolvedModule(specifier, ".js");
           }
           return { resolvedModule: undefined };
@@ -331,6 +330,10 @@ class Plugin implements TS.server.PluginModule {
         }
       }
     }
+    // sort trailingSlash by prefix length
+    importMap.trailingSlash?.sort((a, b) =>
+      b[0].split("/").length - a[0].split("/").length
+    );
     // TODO: scopes
     this.#projectConfig.importMap = importMap;
   }
@@ -340,8 +343,9 @@ function isNEString(s: any): s is string {
   return typeof s === "string" && s.length > 0;
 }
 
-function isHttpUrlLike(name: string) {
-  return name.startsWith("https://") || name.startsWith("http://");
+function isValidEsmshUrl(name: string) {
+  return /^https:\/\/esm\.sh\/((stable|v\d+)\/)?(@[a-zA-Z0-9][\w\.\-]*\/)?[a-zA-Z0-9][\w\.\-]*(@[a-zA-Z0-9]+((\.|\-)\w+)*)?(\/|$)/
+    .test(name);
 }
 
 export function init({ typescript }: { typescript: typeof TS }) {

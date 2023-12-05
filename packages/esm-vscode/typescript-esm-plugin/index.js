@@ -1,2 +1,2 @@
-const { init } = require("./typescript-esm-plugin")
+const { init } = require("./dist/typescript-esm-plugin")
 module.exports = init

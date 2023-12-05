@@ -26,5 +26,5 @@ await build({
 
 await build({
   entryPoints: ["src/typescript-esm-plugin.ts"],
-  outdir: "typescript-esm-plugin",
+  outdir: "typescript-esm-plugin/dist",
 });
