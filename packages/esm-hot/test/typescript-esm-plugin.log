@@ -1,115 +1,84 @@
-importmap set in index.html
+load importmap from index.html
 ---
 {
   "imports": {
-    "@jsxImportSource": "https://esm.sh/react@18.2.0",
-    "react": "https://esm.sh/react@18.2.0"
-  }
-}
----
-
-importmap
----
-{
-  "jsxImportSource": "https://esm.sh/react@18.2.0",
-  "alias": {
-    "@jsxImportSource": "https://esm.sh/react@18.2.0",
-    "react": "https://esm.sh/react@18.2.0"
+    "@jsxImportSource": "https://esm.sh/preact@10.19.2",
+    "react": "https://esm.sh/react@18.2.0",
+    "preact": "https://esm.sh/preact@10.19.2",
+    "preact/": "https://esm.sh/preact@10.19.2/"
   }
 }
 ---
 
 plugin created, typescrpt v5.2.2
 
-resolveModuleNameLiterals[0]: https://esm.sh/react@18.2.0/jsx-runtime
+missing module types declare: https://esm.sh/react@18.2.0
+
+missing module types declare: https://esm.sh/preact@10.19.2/jsx-runtime
+
+missing module types declare: https://esm.sh/react@18.2.0
+
+missing module types declare: https://esm.sh/v128/preact@10.19.2/src/index.d.ts
+
+missing module types declare: https://esm.sh/v128/preact@10.19.2/src/jsx.d.ts
+
+missing module types declare: https://esm.sh/v128/csstype@3.1.2/index.d.ts
+
+missing module types declare: https://esm.sh/v128/@types/prop-types@15.7.11/index.d.ts
+
+missing module types declare: https://esm.sh/v128/@types/scheduler@0.16.8/tracing.d.ts
+
+missing module types declare: https://esm.sh/preact@10.19.2
+
+missing module types declare: https://esm.sh/preact@10.19.2/
+
+missing module types declare: https://esm.sh/preact@10.19.2/h
+
+missing module types declare: https://esm.sh/preact@10.19.2/hoo
+
+missing module types declare: https://esm.sh/preact@10.19.2/hook
+
+missing module types declare: https://esm.sh/preact@10.19.2/hooks
+
+onConfigurationChanged
 ---
 {
-  "containingFile": "/Users/x/.repos/esm.sh/packages/esm-hot/test/App.tsx"
+  "importMap": {}
 }
 ---
 
-resolveModuleNameLiterals[1]: react
+onConfigurationChanged
 ---
 {
-  "containingFile": "/Users/x/.repos/esm.sh/packages/esm-hot/test/App.tsx"
+  "importMap": {
+    "imports": {
+      "react": "https://esm.sh/react@18.2.0",
+      "react/": "https://esm.sh/react@18.2.0/",
+      "@jsxImportSource": "https://esm.sh/react@18.2.0"
+    }
+  }
 }
 ---
 
-resolveModuleNameLiterals[1]: react
+onConfigurationChanged
 ---
 {
-  "containingFile": "/Users/x/.repos/esm.sh/packages/esm-hot/test/App.tsx"
+  "importMap": {}
 }
 ---
 
-dts found: https://esm.sh/v128/@types/react@~18.2/jsx-runtime~.d.ts
-
-dts found: https://esm.sh/v128/@types/react@~18.2/index.d.ts
-
-dts found: https://esm.sh/v128/@types/react@~18.2/jsx-runtime~.d.ts
-
-dts found: https://esm.sh/v128/@types/react@~18.2/index.d.ts
-
-dts loaded: https://esm.sh/react@18.2.0/jsx-runtime -> https://esm.sh/v128/@types/react@18.2.38/jsx-runtime~.d.ts
-
-dts loaded: https://esm.sh/react@18.2.0 -> https://esm.sh/v128/@types/react@18.2.38/index.d.ts
-
-dts loaded: https://esm.sh/react@18.2.0/jsx-runtime -> https://esm.sh/v128/@types/react@18.2.38/jsx-runtime~.d.ts
-
-dts loaded: https://esm.sh/react@18.2.0 -> https://esm.sh/v128/@types/react@18.2.38/index.d.ts
-
-resolveModuleNameLiterals[0]: https://esm.sh/react@18.2.0/jsx-runtime
+onConfigurationChanged
 ---
 {
-  "containingFile": "/Users/x/.repos/esm.sh/packages/esm-hot/test/App.tsx"
+  "importMap": {
+    "imports": {
+      "react": "https://esm.sh/react@18.2.0",
+      "react/": "https://esm.sh/react@18.2.0/",
+      "@jsxImportSource": "https://esm.sh/react@18.2.0"
+    }
+  }
 }
 ---
 
-resolveModuleNameLiterals[1]: react
----
-{
-  "containingFile": "/Users/x/.repos/esm.sh/packages/esm-hot/test/App.tsx"
-}
----
-
-resolveModuleNameLiterals[0]: https://esm.sh/v128/csstype@3.1.2/index.d.ts
----
-{
-  "containingFile": "/Users/x/.cache/esm.sh/v128/@types/react@18.2.38/index.d.ts"
-}
----
-
-resolveModuleNameLiterals[1]: https://esm.sh/v128/@types/prop-types@15.7.11/index.d.ts
----
-{
-  "containingFile": "/Users/x/.cache/esm.sh/v128/@types/react@18.2.38/index.d.ts"
-}
----
-
-resolveModuleNameLiterals[2]: https://esm.sh/v128/@types/scheduler@0.16.8/tracing.d.ts
----
-{
-  "containingFile": "/Users/x/.cache/esm.sh/v128/@types/react@18.2.38/index.d.ts"
-}
----
-
-dts loaded: https://esm.sh/v128/@types/scheduler@0.16.8/tracing.d.ts
-
-dts loaded: https://esm.sh/v128/csstype@3.1.2/index.d.ts
-
-dts loaded: https://esm.sh/v128/@types/prop-types@15.7.11/index.d.ts
-
-resolveModuleNameLiterals[0]: https://esm.sh/react@18.2.0/jsx-runtime
----
-{
-  "containingFile": "/Users/x/.repos/esm.sh/packages/esm-hot/test/App.tsx"
-}
----
-
-resolveModuleNameLiterals[1]: react
----
-{
-  "containingFile": "/Users/x/.repos/esm.sh/packages/esm-hot/test/App.tsx"
-}
----
+missing module types declare: https://esm.sh/react@18.2.0/jsx-runtime
 

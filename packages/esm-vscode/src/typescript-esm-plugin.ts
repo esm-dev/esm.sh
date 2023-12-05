@@ -82,8 +82,8 @@ class Plugin implements TS.server.PluginModule {
       if (existsSync(indexHtml)) {
         const html = readFileSync(indexHtml, "utf-8");
         const importMap = getImportMapFromHtml(html);
-        this.#logger.info("load importmap from index.html", importMap);
         this.#preprocessImportMap(importMap);
+        this.#logger.info("load importmap from index.html", importMap);
       }
     } catch (error) {
       // ignore

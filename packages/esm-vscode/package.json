@@ -19,8 +19,8 @@
     ],
     "commands": [
       {
-        "command": "esmsh.rebuildImportMap",
-        "title": "esm.sh: Rebuild Import Map"
+        "command": "esmsh.addModule",
+        "title": "esm.sh: Add Module"
       }
     ]
   },

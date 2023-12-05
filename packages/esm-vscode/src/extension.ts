@@ -1,6 +1,10 @@
 import * as vscode from "vscode";
 import type { ImportMap } from "./typescript-esm-plugin.ts";
-import { getImportMapFromHtml } from "./util.ts";
+import {
+  getImportMapFromHtml,
+  insertImportMap,
+  sortByVersion,
+} from "./util.ts";
 
 interface ProjectConfig {
   importMap?: ImportMap;
@@ -10,19 +14,26 @@ interface TSApi {
   updateConfig: (config: ProjectConfig) => void;
 }
 
+const regexpNpmNaming = /^[a-zA-Z0-9][\w\.\-]*$/;
+const jsxRuntimes = [
+  "react",
+  "preact",
+  "solid-js",
+];
+
 export async function activate(context: vscode.ExtensionContext) {
   const { commands, workspace, window } = vscode;
 
   let tsApi: TSApi;
   try {
-    tsApi = await setupTSLsp();
+    tsApi = await ensureTsApi();
     console.log("vscode typescript extension activated.");
   } catch (e) {
     console.error(e);
   }
 
   context.subscriptions.push(
-    workspace.onDidSaveTextDocument(async (document) => {
+    workspace.onDidSaveTextDocument((document) => {
       const name = workspace.asRelativePath(document.uri);
       if (name === "index.html") {
         const importMap = getImportMapFromHtml(document.getText());
@@ -33,15 +44,108 @@ export async function activate(context: vscode.ExtensionContext) {
 
   context.subscriptions.push(
     commands.registerCommand(
-      "esmsh.rebuildImportMap",
-      () => {
-        window.showInformationMessage("import map rebuilt");
+      "esmsh.addModule",
+      async () => {
+        const name = await window.showInputBox({
+          placeHolder: "Enter module name, e.g. lodash",
+          validateInput: (name: string) => {
+            if (!name.trim()) {
+              return null;
+            }
+            let scope = "";
+            let pkgName = name;
+            if (name.startsWith("@")) {
+              const parts = name.split("/");
+              if (parts.length < 2) {
+                return "Invalid Module Name";
+              }
+              scope = parts[0] + "/";
+              pkgName = parts[1];
+            }
+            if (
+              (scope && !regexpNpmNaming.test(scope)) ||
+              !regexpNpmNaming.test(pkgName)
+            ) {
+              return "Invalid Module Name";
+            }
+            return null;
+          },
+        });
+        if (!name) {
+          return;
+        }
+
+        // TODO: support multiple packages
+        const pkgName = name.trim().split(" ")[0];
+        window.withProgress({
+          location: vscode.ProgressLocation.Window,
+          cancellable: true,
+          title: `Searching '${pkgName}'...`,
+        }, async () => {
+          try {
+            const res = await fetch(`https://registry.npmjs.org/${pkgName}`);
+            if (!res.ok) {
+              window.showErrorMessage(`Could not find '${pkgName}'`);
+              return;
+            }
+
+            const pkgInfo = await res.json();
+            window.showQuickPick(
+              Object.keys(pkgInfo["dist-tags"]).map((dist) => ({
+                label: pkgName,
+                description: `<${dist}> ${pkgInfo["dist-tags"][dist]}`,
+              })).concat(
+                Object.keys(pkgInfo.versions).sort(sortByVersion).map((
+                  version,
+                ) => ({
+                  label: pkgName,
+                  description: version,
+                })),
+              ),
+              {
+                placeHolder: `Select a version of '${pkgName}':`,
+                matchOnDescription: true,
+              },
+            ).then(async (item) => {
+              if (!item) {
+                return;
+              }
+
+              const uris = await workspace.findFiles("index.html");
+              if (uris.length === 0) {
+                window.showErrorMessage("No index.html found");
+                return;
+              }
+
+              const uri = uris[0];
+              const document = await workspace.openTextDocument(uri);
+              const importMap = getImportMapFromHtml(document.getText());
+              const pkgName = item.label;
+              const version = item.description.split(" ")[1] ??
+                item.description;
+              const imports = importMap.imports || (importMap.imports = {});
+              if (jsxRuntimes.includes(pkgName)) {
+                imports["@jsxImportSource"] =
+                  `https://esm.sh/${pkgName}@${version}`;
+              }
+              imports[pkgName] = `https://esm.sh/${pkgName}@${version}`;
+              imports[pkgName + "/"] = `https://esm.sh/${pkgName}@${version}/`;
+              const newHtml = new TextEncoder().encode(
+                insertImportMap(document.getText(), importMap),
+              );
+              workspace.fs.writeFile(uri, newHtml);
+              tsApi.updateConfig({ importMap });
+            });
+          } catch (error) {
+            window.showErrorMessage(`Could not find '${name}'`);
+          }
+        });
       },
     ),
   );
 }
 
-async function setupTSLsp() {
+async function ensureTsApi() {
   const tsExtension = vscode.extensions.getExtension(
     "vscode.typescript-language-features",
   );
@@ -50,6 +154,9 @@ async function setupTSLsp() {
   }
   await tsExtension.activate();
   const api = tsExtension.exports.getAPI(0);
+  if (!api) {
+    throw new Error("vscode.typescript-language-features api not found");
+  }
   const config: ProjectConfig = {};
   return {
     updateConfig: (c: ProjectConfig) => {

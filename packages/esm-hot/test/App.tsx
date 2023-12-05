@@ -1,6 +1,7 @@
 import { useState } from "react";
+import { useEffect } from "preact/hooks";
 
 export default function App() {
-  const [msg] = useState("React");
-  return <h1 style={{ fontSize: 12 }}>Hello {msg}!</h1>;
+  useState(0);
+  return <h1 style={{ fontSize: 12 }}>Hello World!</h1>;
 }
