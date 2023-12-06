@@ -62,6 +62,7 @@ export async function activate(context: vscode.ExtensionContext) {
               scope = parts[0] + "/";
               pkgName = parts[1];
             }
+            pkgName = pkgName.split("@")[0];
             if (
               (scope && !regexpNpmNaming.test(scope)) ||
               !regexpNpmNaming.test(pkgName)
@@ -76,7 +77,22 @@ export async function activate(context: vscode.ExtensionContext) {
         }
 
         // TODO: support multiple packages
-        const pkgName = name.trim().split(" ")[0];
+        let pkgName = name.trim().split(" ")[0];
+        let scope = "";
+        let version = "";
+        if (pkgName.startsWith("@")) {
+          const parts = pkgName.split("/");
+          scope = parts[0];
+          pkgName = parts[1];
+        }
+        if (pkgName.includes("@")) {
+          const parts = pkgName.split("@");
+          pkgName = parts[0];
+          version = parts[1];
+        }
+        if (scope) {
+          pkgName = scope + "/" + pkgName;
+        }
         window.withProgress({
           location: vscode.ProgressLocation.Window,
           cancellable: true,
@@ -90,18 +106,22 @@ export async function activate(context: vscode.ExtensionContext) {
             }
 
             const pkgInfo = await res.json();
+            const distTags = Object.keys(pkgInfo["dist-tags"]).map((dist) => ({
+              label: pkgName,
+              description: `<${dist}> ${pkgInfo["dist-tags"][dist]}`,
+            }));
+            const allVersions = Object.keys(pkgInfo.versions).sort(
+              sortByVersion,
+            ).map((version) => ({ label: pkgName, description: version }));
+            const versions = version
+              ? allVersions.filter((v) => v.description.startsWith(version))
+              : distTags.concat(allVersions);
+            if (versions.length === 0) {
+              window.showErrorMessage(`Could not find '${pkgName}@${version}'`);
+              return;
+            }
             window.showQuickPick(
-              Object.keys(pkgInfo["dist-tags"]).map((dist) => ({
-                label: pkgName,
-                description: `<${dist}> ${pkgInfo["dist-tags"][dist]}`,
-              })).concat(
-                Object.keys(pkgInfo.versions).sort(sortByVersion).map((
-                  version,
-                ) => ({
-                  label: pkgName,
-                  description: version,
-                })),
-              ),
+              versions,
               {
                 placeHolder: `Select a version of '${pkgName}':`,
                 matchOnDescription: true,
