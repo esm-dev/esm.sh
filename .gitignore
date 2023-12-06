@@ -10,3 +10,4 @@ dist/
 target/
 pkg/
 *.log
+*.vsix
