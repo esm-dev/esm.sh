@@ -1,6 +1,6 @@
 {
   "name": "esm-vscode",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "displayName": "esm.sh",
   "description": "Loading types from esm.sh CDN.",
   "publisher": "ije",
@@ -29,7 +29,7 @@
   },
   "scripts": {
     "build": "node build.mjs && vsce package",
-    "start": "DEBUG=true npm run build && rm -rf ~/.cache/esm.sh && code --extensionDevelopmentPath=$PWD ../esm-hot/test"
+    "start": "DEBUG=true node build.mjs && rm -rf ~/.cache/esm.sh && code --extensionDevelopmentPath=$PWD ../esm-hot/test"
   },
   "devDependencies": {
     "@types/node": "^20.10.2",
