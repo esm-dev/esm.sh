@@ -24,7 +24,7 @@ class Plugin implements TS.server.PluginModule {
   #typescript: typeof TS;
   #projectConfig: ProjectConfig = { importMap: {} };
   #declMap = new Map<string, Promise<void> | string | 404>();
-  #logger: { i: number; info(s: string, ...args: any[]): void };
+  #logger: { info(s: string, ...args: any[]): void };
   #refresh = () => {};
 
   constructor(ts: typeof TS) {
@@ -33,10 +33,12 @@ class Plugin implements TS.server.PluginModule {
 
   create(info: TS.server.PluginCreateInfo): TS.LanguageService {
     const { languageService, languageServiceHost, project } = info;
-    const cwd = project.getCurrentDirectory();
     const home = homedir();
+    const cwd = project.getCurrentDirectory();
     const esmCacheDir = join(home, ".cache/esm.sh");
     const esmCacheMetaDir = join(esmCacheDir, "meta");
+
+    // ensure cache dir exists
     if (!existsSync(esmCacheMetaDir)) {
       mkdirSync(esmCacheMetaDir, { recursive: true });
     }
@@ -44,11 +46,10 @@ class Plugin implements TS.server.PluginModule {
     // @ts-ignore
     this.#logger = DEBUG
       ? {
-        i: 0,
         info(s: string, ...args: any[]) {
           const filename = join(cwd, "typescript-esm-plugin.log");
-          if (this.i === 0) {
-            this.i = 1;
+          if (!this._reset) {
+            this._reset = true;
             writeFileSync(filename, "", {
               encoding: "utf8",
               flag: "w",
@@ -61,24 +62,24 @@ class Plugin implements TS.server.PluginModule {
             lines.push(...args.map((arg) => JSON.stringify(arg, undefined, 2)));
             lines.push("---");
           }
-          writeFileSync(filename, lines.join("\n") + "\n\n", {
+          writeFileSync(filename, lines.join("\n") + "\n", {
             encoding: "utf8",
             flag: "a+",
             mode: 0o666,
           });
         },
       }
-      : { i: 0, info() {} };
+      : { info() {} };
 
-    // refresh diagnostics when config changed
+    // reload projects and refresh diagnostics
     this.#refresh = () => {
       project.projectService.reloadProjects();
       project.refreshDiagnostics();
     };
 
     // load import map from index.html if exists
-    const indexHtml = join(cwd, "index.html");
     try {
+      const indexHtml = join(cwd, "index.html");
       if (existsSync(indexHtml)) {
         const html = readFileSync(indexHtml, "utf-8");
         const importMap = getImportMapFromHtml(html);
@@ -90,10 +91,10 @@ class Plugin implements TS.server.PluginModule {
     }
 
     // rewrite TS compiler options
-    const tsGetCompilationSettings = languageServiceHost
+    const getCompilationSettings = languageServiceHost
       .getCompilationSettings.bind(languageServiceHost);
     languageServiceHost.getCompilationSettings = () => {
-      const settings: TS.CompilerOptions = tsGetCompilationSettings();
+      const settings: TS.CompilerOptions = getCompilationSettings();
       const jsxImportSource = this.#projectConfig.importMap?.jsxImportSource;
       if (jsxImportSource) {
         settings.jsx = TS.JsxEmit.ReactJSX;
@@ -103,9 +104,9 @@ class Plugin implements TS.server.PluginModule {
     };
 
     // rewrite TS module resolution
-    const tsResolveModuleNameLiterals = languageServiceHost
+    const resolveModuleNameLiterals = languageServiceHost
       .resolveModuleNameLiterals?.bind(languageServiceHost);
-    if (tsResolveModuleNameLiterals) {
+    if (resolveModuleNameLiterals) {
       const resolvedModule = (resolvedFileName: string, extension: string) => {
         const resolvedUsingTsExtension = extension === ".d.ts";
         return {
@@ -121,7 +122,7 @@ class Plugin implements TS.server.PluginModule {
         containingFile: string,
         ...rest
       ) => {
-        const resolvedModules = tsResolveModuleNameLiterals(
+        const resolvedModules = resolveModuleNameLiterals(
           literals,
           containingFile,
           ...rest,
@@ -284,6 +285,22 @@ class Plugin implements TS.server.PluginModule {
         });
       };
     }
+
+    // filter invalid auto imports
+    const getCompletionsAtPosition = languageService.getCompletionsAtPosition;
+    languageService.getCompletionsAtPosition = (
+      fileName,
+      position,
+      options,
+    ) => {
+      const result = getCompletionsAtPosition(fileName, position, options);
+      if (result) {
+        result.entries = result.entries.filter((entry) => {
+          return !entry.source?.includes("../.cache/esm.sh/");
+        });
+      }
+      return result;
+    };
 
     this.#logger.info("plugin created, typescrpt v" + this.#typescript.version);
 
