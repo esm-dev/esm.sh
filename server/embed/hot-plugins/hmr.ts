@@ -13,6 +13,7 @@ export default {
       return;
     }
 
+    hot.hmr = true;
     hot.hmrModules = new Set<string>();
     hot.hmrCallbacks = new Map<string, (module: any) => void>();
 
@@ -99,8 +100,8 @@ export default {
           }
           if (module || handler) {
             console.log(
-              ...logPrefix,
-              `%c${type}`,
+              logPrefix[0] + " %c" + type,
+              logPrefix[1],
               `color:${eventColors[type as keyof typeof eventColors]}`,
               `${JSON.stringify(name)}`,
             );

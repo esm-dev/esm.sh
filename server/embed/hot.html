@@ -25,11 +25,10 @@
   <react-root src="./hot-test/App.tsx"></react-root>
   <vue-root src="./hot-test/App.vue" shadow></vue-root>
   <svelte-root src="./hot-test/App.svelte" shadow></svelte-root>
-  <markdown-body src="./hot-test/hello.md" shadow></markdown-body>
+  <hot-html src="./hot-test/hello.md" shadow></hot-html>
 
   <script type="module">
-    import hot from "/hot?plugins=svelte-root,vue-root,react-root,markdown-body"
-
+    import hot from "/hot?plugins=react-root,vue-root,svelte-root"
     hot.fire("/embed/sw.js");
   </script>
 </body>

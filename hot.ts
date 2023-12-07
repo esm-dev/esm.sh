@@ -517,6 +517,35 @@ class Hot {
       });
       el.replaceWith(copy);
     });
+    customElements.define(
+      "hot-html",
+      class HotHtml extends HTMLElement {
+        constructor() {
+          super();
+        }
+        connectedCallback() {
+          const src = this.getAttribute("src");
+          if (!src) {
+            return;
+          }
+          const url = new URL(src, location.href);
+          const root = this.hasAttribute("shadow")
+            ? this.attachShadow({ mode: "open" })
+            : this;
+          const load = async () => {
+            const res = await fetch(url);
+            if (res.ok) {
+              const tpl = document.createElement("template");
+              tpl.innerHTML = await res.text();
+              root.replaceChildren(tpl.content);
+            }
+          };
+          // @ts-ignore
+          if (hot.hmr) hot.hmrCallbacks.set(url.pathname, load);
+          load();
+        }
+      },
+    );
     console.log("🔥 app fired.");
   }
 }
