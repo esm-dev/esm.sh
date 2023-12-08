@@ -135,8 +135,8 @@ class Plugin implements TS.server.PluginModule {
             return res;
           }
           let literal = literals[i].text;
+          // fix relative path
           if (literal.startsWith("./") || literal.startsWith("../")) {
-            // fix relative path
             const idx = containingFile.indexOf("/esm.sh/");
             if (idx) {
               literal =
@@ -204,6 +204,7 @@ class Plugin implements TS.server.PluginModule {
                     this.#refresh();
                   });
                 this.#declMap.set(specifier, load().catch(cleanup));
+                return resolvedModule(specifier, ".js");
               }
             } else {
               const urlHash = createHash("sha256").update(specifier)
@@ -276,10 +277,9 @@ class Plugin implements TS.server.PluginModule {
                   }
                 };
                 this.#declMap.set(specifier, load());
+                return resolvedModule(specifier, ".js");
               }
             }
-
-            return resolvedModule(specifier, ".js");
           }
           return { resolvedModule: undefined };
         });
