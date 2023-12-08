@@ -1,6 +1,6 @@
 {
   "name": "esm-vscode",
-  "version": "0.0.2",
+  "version": "0.0.4",
   "displayName": "esm.sh",
   "description": "Loading types from esm.sh CDN.",
   "publisher": "ije",
