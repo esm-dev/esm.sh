@@ -1,6 +1,7 @@
 import * as vscode from "vscode";
 import type { ImportMap } from "./typescript-esm-plugin.ts";
 import {
+  debunce,
   getImportMapFromHtml,
   insertImportMap,
   regexpNpmNaming,
@@ -27,17 +28,20 @@ export async function activate(context: vscode.ExtensionContext) {
   let tsApi: TSApi;
   try {
     tsApi = await ensureTsApi();
-    console.log("vscode typescript extension activated.");
   } catch (e) {
     console.error(e);
   }
+
+  const onIndexHtmlChange = debunce((html: string) => {
+    const importMap = getImportMapFromHtml(html);
+    tsApi.updateConfig({ importMap });
+  }, 500);
 
   context.subscriptions.push(
     workspace.onDidSaveTextDocument((document) => {
       const name = workspace.asRelativePath(document.uri);
       if (name === "index.html") {
-        const importMap = getImportMapFromHtml(document.getText());
-        tsApi.updateConfig({ importMap });
+        onIndexHtmlChange(document.getText());
       }
     }),
   );

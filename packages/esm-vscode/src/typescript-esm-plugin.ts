@@ -1,4 +1,4 @@
-import TS from "typescript/lib/tsserverlibrary";
+import type TS from "typescript/lib/tsserverlibrary";
 import { createHash } from "node:crypto";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
@@ -24,7 +24,7 @@ class Plugin implements TS.server.PluginModule {
   #typescript: typeof TS;
   #projectConfig: ProjectConfig = { importMap: {} };
   #declMap = new Map<string, Promise<void> | string | 404>();
-  #logger: { info(s: string, ...args: any[]): void };
+  #logger: { info(s: string, ...args: any[]): void } = { info() {} };
   #refresh = () => {};
 
   constructor(ts: typeof TS) {
@@ -97,7 +97,7 @@ class Plugin implements TS.server.PluginModule {
       const settings: TS.CompilerOptions = getCompilationSettings();
       const jsxImportSource = this.#projectConfig.importMap?.jsxImportSource;
       if (jsxImportSource) {
-        settings.jsx = TS.JsxEmit.ReactJSX;
+        settings.jsx = this.#typescript.JsxEmit.ReactJSX;
         settings.jsxImportSource = jsxImportSource;
       }
       return settings;

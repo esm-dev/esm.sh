@@ -144,3 +144,18 @@ export function sortByVersion(a: string, b: string) {
   }
   return 0;
 }
+
+export function debunce<T extends (...args: any[]) => any>(
+  fn: T,
+  timeout: number,
+): T {
+  let timer: number | undefined;
+  return ((...args: any[]) => {
+    if (timer) {
+      clearTimeout(timer);
+    }
+    timer = setTimeout(() => {
+      fn(...args);
+    }, timeout);
+  }) as any;
+}
