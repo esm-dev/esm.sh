@@ -2,7 +2,7 @@
 
 # esm.sh for VS Code
 
-An extension automatically loads types from [esm.sh](https://esm.sh) CDN for JavaScript and TypeScript files. No `npm install` required.
+An VS Code extension automatically loads types from [esm.sh](https://esm.sh) CDN for JavaScript and TypeScript. No `npm install` required.
 
 ## Usage
 
@@ -20,6 +20,7 @@ This extension respects `importmap` script tag in `index.html` of your project r
     }
   }
 </script>
+<script type="module" src="./app.jsx"></script>
 ```
 
 ```jsx

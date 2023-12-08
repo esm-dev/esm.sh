@@ -3,7 +3,7 @@ import { createHash } from "node:crypto";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { getImportMapFromHtml } from "./util.ts";
+import { getImportMapFromHtml, isNEString, isValidEsmshUrl } from "./util.ts";
 
 export interface ImportMap {
   imports?: Record<string, string>;
@@ -144,8 +144,9 @@ class Plugin implements TS.server.PluginModule {
             }
           }
           const specifier = this.#applyImportMap(literal);
-          if (isValidEsmshUrl(specifier)) {
-            const url = new URL(specifier);
+          const mod = isValidEsmshUrl(specifier);
+          if (mod) {
+            const { url } = mod;
             const isDts = specifier.endsWith(".d.ts");
             if (this.#declMap.has(specifier)) {
               const decl = this.#declMap.get(specifier);
@@ -354,15 +355,6 @@ class Plugin implements TS.server.PluginModule {
     // TODO: scopes
     this.#projectConfig.importMap = importMap;
   }
-}
-
-function isNEString(s: any): s is string {
-  return typeof s === "string" && s.length > 0;
-}
-
-function isValidEsmshUrl(name: string) {
-  return /^https:\/\/esm\.sh\/((stable|v\d+)\/)?(@[a-zA-Z0-9][\w\.\-]*\/)?[a-zA-Z0-9][\w\.\-]*(@[a-zA-Z0-9]+((\.|\-)\w+)*)?(\/|$)/
-    .test(name);
 }
 
 export function init({ typescript }: { typescript: typeof TS }) {

@@ -1,6 +1,51 @@
 import { IText, parse, SyntaxKind, walk } from "html5parser";
 import type { ImportMap } from "./typescript-esm-plugin.ts";
 
+export const regexpNpmNaming = /^[a-zA-Z0-9][\w\.\-]*$/;
+export const regexpBuildVersion = /^(v\d+|stable)$/;
+export const regexpSemVersion = /^v?\d+(\.\d+)*(-[\w\.]+)*$/;
+
+export function isNEString(s: any): s is string {
+  return typeof s === "string" && s.length > 0;
+}
+
+export function isValidEsmshUrl(
+  v: string,
+): { url: URL; name: string; version: string } | null {
+  if (!v.startsWith("https://esm.sh/")) {
+    return null;
+  }
+  let scope = "";
+  let name = "";
+  let version = "";
+  const url = new URL(v);
+  const parts = url.pathname.slice(1).split("/");
+  if (regexpBuildVersion.test(parts[0])) {
+    parts.shift();
+  }
+  name = parts.shift()!;
+  console.log(name);
+  if (name?.startsWith("@")) {
+    scope = name;
+    if (!regexpNpmNaming.test(scope.slice(1))) {
+      return null;
+    }
+    name = parts.shift()!;
+  }
+  const idx = name.lastIndexOf("@");
+  if (idx > 0) {
+    version = name.slice(idx + 1);
+    if (!regexpSemVersion.test(version)) {
+      return null;
+    }
+    name = name.slice(0, idx);
+  }
+  if (!name || !regexpNpmNaming.test(name)) {
+    return null;
+  }
+  return { url, name: scope ? scope + "/" + name : name, version };
+}
+
 export function getImportMapFromHtml(html: string) {
   let importMap: ImportMap = {};
   walk(parse(html), {

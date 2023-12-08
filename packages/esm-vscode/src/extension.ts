@@ -3,6 +3,7 @@ import type { ImportMap } from "./typescript-esm-plugin.ts";
 import {
   getImportMapFromHtml,
   insertImportMap,
+  regexpNpmNaming,
   sortByVersion,
 } from "./util.ts";
 
@@ -14,7 +15,6 @@ interface TSApi {
   updateConfig: (config: ProjectConfig) => void;
 }
 
-const regexpNpmNaming = /^[a-zA-Z0-9][\w\.\-]*$/;
 const jsxRuntimes = [
   "react",
   "preact",
