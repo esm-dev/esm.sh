@@ -1,20 +1,18 @@
 #!/usr/bin/env node
 
-import { serve } from "@hono/node-server";
+import { existsSync } from "node:fs";
+import { serve } from "../vendor/hono-server@1.3.1.mjs";
 import { serveHot } from "../src/index.mjs";
 
 if (process.argv.includes("--help") || process.argv.includes("-h")) {
   console.log(`
-Usage: npx @esm.sh/hot [options]
+Usage: npx esm.sh [options] [root]
 
 Options:
-  --cwd           Current working directory (default: ".")
-  --help, -h      Show help
+  --help, -h      Show help message
   --host          Host to listen on (default: "localhost")
-  --plugins       Plugins for service worker (default: [])
   --port, -p      Port number to listen on (default: 3000)
-  --spa           Enable SPA mode
-  --watch         Watch file changes for HMR
+  --watch, -w     Watch file changes for HMR
 `);
   process.exit(0);
 }
@@ -24,6 +22,12 @@ const args = {
 };
 
 process.argv.slice(2).forEach((arg) => {
+  if (!arg.startsWith("-")) {
+    if (existsSync(arg)) {
+      args.root = arg;
+    }
+    return;
+  }
   const [key, value] = arg.split("=");
   if ((key === "--port" || key === "-p") && value) {
     args.port = parseInt(value);
@@ -32,18 +36,8 @@ process.argv.slice(2).forEach((arg) => {
     }
   } else if (key === "--host" && value) {
     args.host = value;
-  } else if (key === "--spa") {
-    if (value) {
-      args.spa = { index: value };
-    } else {
-      args.spa = true;
-    }
   } else if (key === "--watch" || key === "-w") {
     args.watch = true;
-  } else if (key === "--cwd" && value) {
-    args.cwd = value;
-  } else if (key === "--plugins" && value) {
-    args.plugins = value.split(",");
   }
 });
 

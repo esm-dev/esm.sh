@@ -8,16 +8,16 @@
   <script type="importmap">
     {
       "imports": {
-        "@jsxImportSource": "https://esm.sh/react@18.2.0"
+        "svelte": "https://esm.sh/svelte@4.2.7",
       }
     }
   </script>
 </head>
 
 <body>
-  <react-root src="./App.tsx"></react-root>
+  <svelte-root src="./App.svelte"></svelte-root>
   <script type="module">
-    import hot from "https://esm.sh/v135/hot?plugins=react-root"
+    import hot from "https://esm.sh/v135/hot?plugins=svelte-root"
     hot.fire()
   </script>
 </body>

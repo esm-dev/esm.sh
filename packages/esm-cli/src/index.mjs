@@ -1,37 +1,30 @@
 import { openFile } from "./fs.mjs";
 
 const enc = new TextEncoder();
-const regexpPluginNaming = /^[a-zA-Z0-9][\w\.\-]*(@\d+\.\d+\.\d+)?$/;
 
 /**
- * serves a hot app.
+ * Creates a fetch handler for serving hot applications.
  * @param {import("../types").ServeOptions} options
  * @returns {(req: Request) => Promise<Response>}
  */
 export const serveHot = (options) => {
-  if (options.plugins) {
-    options.plugins = options.plugins.filter((name) =>
-      regexpPluginNaming.test(name)
-    );
-  }
-  const { spa, watch, plugins, cwd = "." } = options;
+  const { root = ".", fallback = "index.html", watch } = options;
   const fsWatchHandlers = new Set();
   if (watch) {
     import("node:fs").then(({ watch }) => {
       watch(
-        cwd,
+        root,
         { recursive: true },
         (event, filename) => {
-          fsWatchHandlers.forEach((handler) =>
-            handler(event === "change" ? "modify" : event, "/" + filename)
-          );
+          if (!/(^|\/)(\.|node_modules\/)/.test(filename) && !filename.endsWith(".log")) {
+            fsWatchHandlers.forEach((handler) =>
+              handler(event === "change" ? "modify" : event, "/" + filename)
+            );
+          }
         },
       );
       console.log(`Watching files changed...`);
     });
-  }
-  if (plugins?.length) {
-    console.log(`Using plugins: ${plugins.join(", ")}`);
   }
   return async (req) => {
     const url = new URL(req.url);
@@ -62,12 +55,9 @@ export const serveHot = (options) => {
         },
       );
     }
-    let file = pathname.includes(".") ? await openFile(cwd + pathname) : null;
+    let file = pathname.includes(".") ? await openFile(root + pathname) : null;
     if (!file && pathname === "/sw.js") {
       const hotUrl = new URL("https://esm.sh/v135/hot");
-      if (plugins?.length) {
-        hotUrl.searchParams.set("plugins", plugins);
-      }
       return new Response(`import hot from "${hotUrl.href}";hot.listen();`, {
         headers: {
           "content-type": "application/javascript; charset=utf-8",
@@ -76,19 +66,15 @@ export const serveHot = (options) => {
       });
     }
     if (!file) {
-      if (spa) {
-        const index = "index.html";
-        if (typeof spa === "string" && spa.endsWith(".html")) {
-          index = spa;
-        } else if (spa.index && spa.index.endsWith(".html")) {
-          index = spa.index;
-        }
-        file = await openFile(cwd + "/" + index);
-      } else {
-        file = await openFile(cwd + pathname + ".html");
-        if (!file) {
-          file = await openFile(cwd + pathname + "/index.html");
-        }
+      const list = [
+        pathname + ".html",
+        pathname + "/index.html",
+        "/404.html",
+        "/" + fallback,
+      ];
+      for (const filename of list) {
+        file = await openFile(root + filename);
+        if (file) break;
       }
     }
     if (file) {
@@ -123,5 +109,3 @@ export const serveHot = (options) => {
     return new Response("Not Found", { status: 404 });
   };
 };
-
-export default serveHot;

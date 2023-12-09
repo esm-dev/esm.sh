@@ -1,0 +1,35 @@
+{
+  "name": "esm.sh",
+  "version": "0.135.0",
+  "description": "The CLI tool for esm.sh hot applications.",
+  "type": "module",
+  "main": "src/index.mjs",
+  "module": "src/index.mjs",
+  "types": "types/index.d.ts",
+  "bin": "./bin/cli.mjs",
+  "exports": {
+    ".": {
+      "import": "./src/index.mjs",
+      "types": "./types/index.d.ts"
+    },
+    "./package.json": "./package.json"
+  },
+  "scripts": {
+    "test": "./bin/cli.mjs -w test"
+  },
+  "files": [
+    "bin/",
+    "src/",
+    "templates/",
+    "types/",
+    "vendor/"
+  ],
+  "engines": {
+    "node": ">=18.14.1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https//github.com/esm-dev/esm.sh"
+  },
+  "license": "MIT"
+}

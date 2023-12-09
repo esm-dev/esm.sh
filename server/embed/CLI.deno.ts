@@ -182,15 +182,14 @@ async function init(_args: string[], _options: Record<string, string>) {
   if (imFilename === "deno.json") {
     await saveImportMap({
       ...config,
-      ...importMap
+      ...importMap,
     });
-  }
-  else {
+  } else {
     await Deno.writeTextFile(
       "deno.json",
       await denoFmt(
-        JSON.stringify(config, null, 4)
-      )
+        JSON.stringify(config, null, 4),
+      ),
     );
     await saveImportMap(importMap);
   }
@@ -279,7 +278,7 @@ async function denoFmt(code: string, ext = "json") {
     stdout: "piped",
     stderr: "null",
   }).spawn();
-    
+
   const raw = new ReadableStream({
     start(controller) {
       controller.enqueue(new TextEncoder().encode(code));
@@ -288,7 +287,7 @@ async function denoFmt(code: string, ext = "json") {
   });
   await raw.pipeTo(proc.stdin);
   const { stdout } = await proc.output();
-  
+
   const formattedStr = new TextDecoder().decode(stdout);
   return formattedStr;
 }
@@ -346,8 +345,8 @@ async function saveImportMap(importMap: ImportMap): Promise<void> {
       JSON.stringify(
         { ...importMap, imports: sortedImports, scopes: sortedScopes },
         null,
-        4
-      )
+        4,
+      ),
     ),
   );
 }
@@ -507,8 +506,7 @@ if (import.meta.main) {
     const config = await getDenoConfig();
     if (isNEString(config.importMap)) {
       imFilename = config.importMap;
-    }
-    else {
+    } else {
       imFilename = "deno.json";
     }
     await commands[command as keyof typeof commands](...parseFlags(args));
@@ -517,3 +515,5 @@ if (import.meta.main) {
     throw error;
   }
 }
+
+export * from "https://esm.sh/v135/esm.sh@0.135.0";
