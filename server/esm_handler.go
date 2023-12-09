@@ -357,7 +357,7 @@ func esmHandler() rex.Handle {
 							}
 							id := fmt.Sprintf("p%d", i)
 							plugins = append(plugins, id)
-							imports = append(imports, fmt.Sprintf(`import %s from "%s%s/v%d/hot-plugins/%s%s";`, id, cdnOrigin, cfg.CdnBasePath, CTX_BUILD_VERSION, name, query))
+							imports = append(imports, fmt.Sprintf(`import %s from "./hot-plugins/%s%s";`, id, name, query))
 						}
 					}
 				}

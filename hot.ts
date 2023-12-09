@@ -23,10 +23,10 @@ interface Loader {
     map?: string;
     headers?: Record<string, string>;
   }>;
-  varyUA?: boolean; // for the loaders that checks build target by `user-agent` header
 }
 
 interface ImportMap {
+  $support?: boolean;
   imports?: Record<string, string>;
   scopes?: Record<string, Record<string, string>>;
 }
@@ -50,11 +50,10 @@ const VERSION = 135;
 const plugins: Plugin[] = [];
 const doc = globalThis.document;
 const enc = new TextEncoder();
-const kJsxImportSource = "@jsxImportSource";
 const kSkipWaiting = "SKIP_WAITING";
 const kVfs = "vfs";
 const kContentType = "content-type";
-const tsQuery = /\?t=[a-z0-9]+$/;
+const kImportmapJson = "internal:importmap.json";
 
 /** virtual file system using indexed database */
 class VFS {
@@ -162,7 +161,7 @@ class Hot {
       | T
       | Response
       | Promise<T | Response>,
-    transform: (input: T) =>
+    transform?: (input: T) =>
       | T
       | Response
       | Promise<T | Response>,
@@ -186,7 +185,7 @@ class Hot {
       if (cached && cached.hash === hash) {
         return cached;
       }
-      let data = transform(input);
+      let data = transform?.(input) ?? input;
       if (data instanceof Promise) {
         data = await data;
       }
@@ -209,9 +208,9 @@ class Hot {
     return this;
   }
 
-  onLoad(test: RegExp, load: Loader["load"], varyUA = false) {
+  onLoad(test: RegExp, load: Loader["load"]) {
     if (!doc) {
-      this.#loaders.push({ test, load, varyUA });
+      this.#loaders.push({ test, load });
     }
     return this;
   }
@@ -259,7 +258,7 @@ class Hot {
             waiting.addEventListener("statechange", () => {
               const { active } = reg;
               if (active) {
-                this.#fireApp(active);
+                this.reload();
               }
             });
           }
@@ -367,22 +366,41 @@ class Hot {
       if (!res.ok) {
         return res;
       }
-      const [im, source] = await Promise.all([
-        vfs.get("importmap.json"),
-        res.text(),
-      ]);
-      const importMap: ImportMap = (im?.data as unknown) ?? {};
-      const jsxImportSource = isJSX(url.pathname)
-        ? importMap.imports?.[kJsxImportSource]
-        : undefined;
-      const cacheKey = this.#isDev && url.host === location.host
-        ? url.href.replace(tsQuery, "")
-        : url.href;
+      const resHeaders = res.headers;
+      let etag = resHeaders.get("etag");
+      if (!etag) {
+        const size = resHeaders.get("content-length");
+        const modtime = resHeaders.get("last-modified");
+        if (size && modtime) {
+          etag = "W/" + JSON.stringify(
+            parseInt(size).toString(36) + "-" +
+              (new Date(modtime).getTime() / 1000).toString(36),
+          );
+        }
+      }
+      let buffer: string | null = null;
+      const source = async () => {
+        if (buffer === null) {
+          buffer = await res.text();
+        }
+        return buffer;
+      };
+      let cacheKey = url.href;
+      if (url.host === location.host) {
+        url.searchParams.delete("t");
+        cacheKey = url.pathname + url.search.replaceAll(/=(&|$)/g, "");
+      }
+      const ret = await vfs.get(kImportmapJson);
+      const importMap: ImportMap = (ret?.data as unknown) ?? {};
       const cached = await vfs.get(cacheKey);
-      const hash = await computeHash(enc.encode(
-        jsxImportSource + source + (loader.varyUA ? navigator.userAgent : ""),
-      ));
+      const hash = await computeHash(enc.encode([
+        JSON.stringify(importMap),
+        etag ?? await source(),
+      ].join("")));
       if (cached && cached.hash === hash) {
+        if (!res.bodyUsed) {
+          res.body?.cancel();
+        }
         return new Response(cached.data, {
           headers: cached.headers ?? jsHeaders,
         });
@@ -390,7 +408,7 @@ class Hot {
       try {
         const { code, map, headers } = await loader.load(
           url,
-          source,
+          await source(),
           { importMap },
         );
         let body = code;
@@ -412,11 +430,6 @@ class Hot {
       event.waitUntil(
         this.cache.then((cache) => cache.addAll([...this.#prefetches])),
       );
-    });
-
-    self.addEventListener("activate", (event) => {
-      // @ts-ignore
-      event.waitUntil(clients.claim());
     });
 
     self.addEventListener("fetch", (event) => {
@@ -470,27 +483,28 @@ class Hot {
   }
 
   async #syncVFS() {
-    const script = doc.querySelector("head>script[type=importmap]");
     const importMap: ImportMap = {
+      $support: HTMLScriptElement.supports?.("importmap"),
       imports: Object.fromEntries(this.#customImports.entries()),
     };
+    const script = doc.querySelector("head>script[type=importmap]");
     if (script) {
-      const supported = HTMLScriptElement.supports?.("importmap");
-      const v = JSON.parse(script.innerHTML);
-      for (const k in v.imports) {
-        if (!supported || k === kJsxImportSource) {
-          importMap.imports![k] = v.imports[k];
+      try {
+        const v = JSON.parse(script.innerHTML);
+        if (typeof v === "object" && v !== null) {
+          const { imports, scopes } = v;
+          for (const k in imports) {
+            importMap.imports![k] = imports[k];
+          }
+          if (typeof scopes === "object" && scopes !== null) {
+            importMap.scopes = scopes;
+          }
         }
-      }
-      if (!supported && "scopes" in v) {
-        importMap.scopes = v.scopes;
+      } catch (err) {
+        console.warn("Failed to parse importmap:", err);
       }
     }
-    await this.#vfs.put(
-      "importmap.json",
-      await computeHash(enc.encode(JSON.stringify(importMap))),
-      importMap as unknown as string,
-    );
+    await this.#vfs.put(kImportmapJson, "", importMap as any);
     await Promise.all(
       Object.values(this.#vfsRegisters).map((handler) => handler()),
     );
@@ -498,12 +512,12 @@ class Hot {
 
   async #fireApp(sw: ServiceWorker) {
     if (this.#isDev) {
-      const hmr = await import(`./hot-plugins/hmr`);
-      hmr.default.setup(this);
+      const { setup } = await import(`./hot-plugins/dev`);
+      setup(this);
     }
     await this.#syncVFS();
-    for (const handler of this.#fireListeners) {
-      handler(sw);
+    for (const onfire of this.#fireListeners) {
+      onfire(sw);
     }
     doc.querySelectorAll("script[type='module/hot']").forEach((el) => {
       const copy = el.cloneNode(true) as HTMLScriptElement;
@@ -541,7 +555,7 @@ class Hot {
             }
           };
           // @ts-ignore
-          if (hot.hmr) hot.hmrCallbacks.set(url.pathname, load);
+          if (hot.hmr) __hot_hmr_callbacks.set(url.pathname, load);
           load();
         }
       },
@@ -553,11 +567,6 @@ class Hot {
 /** check if the value is a string */
 function isString(v: unknown): v is string {
   return typeof v === "string";
-}
-
-/** check if the pathname is a jsx file */
-function isJSX(pathname: string): boolean {
-  return pathname.endsWith(".jsx") || pathname.endsWith(".tsx");
 }
 
 /** get the extension name of the given path */

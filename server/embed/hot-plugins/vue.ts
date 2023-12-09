@@ -7,11 +7,11 @@ import {
   parse,
   rewriteDefault,
   type SFCTemplateCompileOptions,
-} from "https://esm.sh/v135/@vue/compiler-sfc@3.3.9";
+} from "https://esm.sh/@vue/compiler-sfc@3.3.9";
 
 interface Options {
   hmr?: { runtime: string };
-  importMap?: { imports?: Record<string, string> };
+  importMap?: { $support?: boolean; imports?: Record<string, string> };
   isDev?: boolean;
 }
 
@@ -48,8 +48,9 @@ const compileSFC = async (
     ssr: false,
     ssrCssVars: descriptor.cssVars,
     compilerOptions: {
-      runtimeModuleName: importMap?.imports?.["vue"] ??
-        "https://esm.sh/vue@3.3.9",
+      runtimeModuleName: importMap?.imports?.["vue"]
+        ? importMap.$support ? "vue" : importMap.imports["vue"]
+        : "https://esm.sh/vue@3.3.9",
       expressionPlugins,
     },
   };

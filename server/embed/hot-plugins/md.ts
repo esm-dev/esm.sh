@@ -1,7 +1,4 @@
-import {
-  init as initWasm,
-  parse,
-} from "https://esm.sh/v135/markdown-wasm-es@1.2.1";
+import { init as initWasm, parse } from "https://esm.sh/markdown-wasm-es@1.2.1";
 
 const deafultStyle = `
 h1 > a.anchor,

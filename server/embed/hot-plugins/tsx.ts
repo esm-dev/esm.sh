@@ -4,7 +4,7 @@ import initWasm, {
   type Targets,
   transform,
   transformCSS,
-} from "https://esm.sh/v135/esm-compiler@0.3.3";
+} from "https://esm.sh/esm-compiler@0.3.3";
 
 let waiting: Promise<any> | null = null;
 const init = async () => {
@@ -20,23 +20,6 @@ export default {
   name: "tsx",
   setup(hot: any) {
     const { stringify } = JSON;
-
-    const targets: Targets = {
-      chrome: 95 << 16, // default to chrome 95
-    };
-    if (!globalThis.document) {
-      const { userAgent } = navigator;
-      if (userAgent.includes("Safari/")) {
-        // safari: Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.1 Safari/605.1.15
-        // chrome: Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36
-        let m = userAgent.match(/Version\/(\d+)\.(\d)+/);
-        if (m) {
-          targets.safari = parseInt(m[1]) << 16 | parseInt(m[2]) << 8;
-        } else if ((m = userAgent.match(/Chrome\/(\d+)\./))) {
-          targets.chrome = parseInt(m[1]) << 16;
-        }
-      }
-    }
 
     // add `?dev` to react/react-dom import url in development mode
     if (hot.isDev) {
@@ -68,7 +51,12 @@ export default {
         const hmrRuntime = imports?.["@hmrRuntime"];
         await init();
         if (pathname.endsWith(".css")) {
-          // todo: check more browsers
+          const targets: Targets = {
+            chrome: 95 << 16, // default to chrome 95
+            safari: 15 << 16, // default to safari 15
+            firefox: 114 << 16, // default to firefox 114
+            opera: 77 << 16, // default to opera 77
+          };
           const { code, map, exports } = transformCSS(pathname, source, {
             targets,
             minify: !isDev,
@@ -115,21 +103,21 @@ export default {
           return { code, map };
         }
         const jsxImportSource = imports?.["@jsxImportSource"];
+        const reactRefreshRuntime = imports?.["@reactRefreshRuntime"];
         return transform(pathname, source, {
           isDev,
-          sourceMap: Boolean(isDev),
+          sourceMap: !!isDev,
           jsxImportSource: jsxImportSource,
           importMap: stringify(importMap ?? {}),
           minify: !isDev ? { compress: true, keepNames: true } : undefined,
-          target: "es2020", // TODO: check user agent
+          target: "es2020",
           hmr: hmrRuntime && {
             runtime: hmrRuntime,
-            reactRefresh: jsxImportSource?.includes("/react"),
-            reactRefreshRuntime: imports?.["@reactRefreshRuntime"],
+            reactRefresh: !!reactRefreshRuntime,
+            reactRefreshRuntime: reactRefreshRuntime,
           },
         });
       },
-      true, // varyUA
     );
   },
 };

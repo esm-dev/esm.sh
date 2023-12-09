@@ -25,7 +25,7 @@ export default {
             const src = this.getAttribute("src");
             if (src) {
               importAll(
-                "https://esm.sh/vue@3.3.9",
+                "vue",
                 new URL(src, location.href),
               ).then(([
                 { createApp },
