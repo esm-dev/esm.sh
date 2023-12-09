@@ -71,7 +71,8 @@ class ESMWorker {
       const isHeadMethod = req.method === "HEAD";
       const hasPinedTarget = targets.has(url.searchParams.get("target") ?? "");
       const cacheKey = new URL(url);
-      const varyUA = options?.varyUA && !hasPinedTarget;
+      const varyUA = options?.varyUA && !hasPinedTarget &&
+        !url.searchParams.has("raw");
       if (varyUA) {
         const target = getBuildTargetFromUA(ua);
         cacheKey.searchParams.set("target", target);
