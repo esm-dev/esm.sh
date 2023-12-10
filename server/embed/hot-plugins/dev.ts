@@ -12,13 +12,11 @@ function setupHMR(hot: any) {
   window.__hot_hmr_modules = new Set();
   window.__hot_hmr_callbacks = new Map();
 
-  hot.customImports.set(
-    "@hmrRuntime",
-    "https://esm.sh/hot/_hmr.js",
-  );
-  hot.register(
-    "_hmr.js",
-    () => `
+  hot.customImports.set("@hmrRuntime", "/@hot/hmr.js");
+  hot.waitUntil(
+    hot.vfs.put(
+      "@hot/hmr.js",
+      `
       export default (path) => ({
         decline() {
           __hot_hmr_modules.delete(path);
@@ -35,6 +33,7 @@ function setupHMR(hot: any) {
         }
       })
     `,
+    ),
   );
 
   const logPrefix = ["🔥 %c[HMR]", "color:#999"];
@@ -44,7 +43,9 @@ function setupHMR(hot: any) {
     remove: "#F00C08",
   };
 
-  const source = new EventSource(new URL("hot-notify", location.href));
+  const source = new EventSource(
+    new URL(hot.basePath + "hot-notify", location.href),
+  );
   source.addEventListener("fs-notify", async (ev) => {
     const { type, name } = JSON.parse(ev.data);
     const module = window.__hot_hmr_modules.has(name);

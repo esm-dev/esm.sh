@@ -204,8 +204,7 @@ export default {
     hot.onLoad(
       /\.vue$/,
       (url: URL, source: string, options: Record<string, any> = {}) => {
-        const { importMap } = options;
-        const { isDev } = hot;
+        const { importMap, isDev } = options;
         const hmrRuntime = importMap.imports?.["@hmrRuntime"];
         return compileSFC(url.pathname, source, {
           isDev,

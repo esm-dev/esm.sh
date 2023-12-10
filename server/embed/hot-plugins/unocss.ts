@@ -1,11 +1,11 @@
-/** @version: 0.57.7 */
+/** @version: 0.58.0 */
 
 import {
   createGenerator,
   type UnoGenerator,
   type UserConfig,
-} from "https://esm.sh/@unocss/core@0.57.7";
-import presetWind from "https://esm.sh/@unocss/preset-wind@0.57.7?bundle";
+} from "https://esm.sh/@unocss/core@0.58.0";
+import presetWind from "https://esm.sh/@unocss/preset-wind@0.58.0?bundle";
 
 export default {
   name: "unocss",
@@ -13,38 +13,33 @@ export default {
     const unoConfig: UserConfig = {
       presets: [presetWind()],
     };
-    let entry: string | string[] = [];
     let uno: UnoGenerator;
     hot.unocss = {
-      set entry(e: string | string[]) {
-        entry = e;
-      },
-      config: (config: typeof unoConfig & { entry?: typeof entry }) => {
-        if (config.entry) {
-          entry = config.entry;
-        }
+      config: (config: UserConfig) => {
         Object.assign(unoConfig, config);
       },
     };
-    hot.register(
-      "uno.css",
-      async () => {
-        if (typeof entry === "string") {
-          return fetch(entry).then((res) => res.text());
-        }
-        const a = await Promise.all(entry.map((entryPoint) => {
+    hot.onLoad(
+      /(^|\/|\.)uno.css$/,
+      async (_url: URL, source: string, _options: Record<string, any> = {}) => {
+        const lines = source.split("\n");
+        const entryPoints = lines.filter((line) =>
+          line.startsWith("@include ")
+        );
+        const entry = entryPoints.map((line) =>
+          line.slice(9).split(",").map((s) => s.trim()).filter(Boolean)
+        ).flat();
+        const data = await Promise.all(entry.map((entryPoint) => {
           return fetch(entryPoint).then((res) => res.text());
         }));
-        return a.join("\n");
-      },
-      async (input: string) => {
         const { css } = await (uno ?? (uno = createGenerator(unoConfig)))
-          .generate(input, {
+          .generate(data.join("\n"), {
             preflights: true,
             minify: true,
           });
-        return css;
+        return { code: css, contentType: "text/css; charset=utf-8" };
       },
+      "eager",
     );
   },
 };

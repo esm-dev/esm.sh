@@ -8,8 +8,7 @@ export default {
     hot.onLoad(
       /\.svelte$/,
       (url: URL, source: string, options: Record<string, any> = {}) => {
-        const { isDev } = hot;
-        const { importMap } = options;
+        const { importMap, isDev } = options;
         const { js } = compile(source, {
           filename: url.pathname,
           sveltePath: importMap.imports?.["svelte/"] && importMap.$support

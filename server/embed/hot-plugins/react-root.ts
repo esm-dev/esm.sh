@@ -7,13 +7,11 @@ function importAll(...urls: (string | URL)[]) {
 export default {
   name: "react-root",
   setup(hot: any) {
-    hot.customImports.set(
-      "@reactRefreshRuntime",
-      "https://esm.sh/hot/_hmr_react_refresh.js",
-    );
-    hot.register(
-      "_hmr_react_refresh.js",
-      () => `
+    const refreshUrl = "/@hot/hmr_react_refresh.js";
+    hot.customImports.set("@reactRefreshRuntime", refreshUrl);
+    hot.waitUntil(hot.vfs.put(
+      refreshUrl.slice(1),
+      `
         // react-refresh
         // @link https://github.com/facebook/react/issues/16604#issuecomment-528663101
 
@@ -36,7 +34,8 @@ export default {
 
         export { refresh as __REACT_REFRESH__, runtime as __REACT_REFRESH_RUNTIME__ };
       `,
-    );
+    ));
+
     hot.onFire((_sw: ServiceWorker) => {
       customElements.define(
         "react-root",
@@ -54,7 +53,7 @@ export default {
             if (hot.hmr) {
               try {
                 // ensure react-refresh is injected before react-dom is loaded
-                await import("https://esm.sh/hot/_hmr_react_refresh.js");
+                await import(new URL(refreshUrl, location.href).href);
               } catch (err) {
                 console.warn("Failed to load react-refresh runtime:", err);
               }

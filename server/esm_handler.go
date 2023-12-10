@@ -302,6 +302,9 @@ func esmHandler() rex.Handle {
 						1,
 					)
 				}
+				if ctx.Form.Value("fire") == "auto" {
+					data = concatBytes(data, []byte("\n/* auto fire */\nhot.fire();"))
+				}
 			}
 
 			// replace version with `?version`

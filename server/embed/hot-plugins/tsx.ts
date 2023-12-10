@@ -45,11 +45,11 @@ export default {
       /\.(js|mjs|jsx|mts|ts|tsx|css)$/,
       async (url: URL, source: string, options: Record<string, any> = {}) => {
         const { pathname } = url;
-        const { importMap } = options;
-        const { isDev } = hot;
+        const { importMap, isDev } = options;
         const imports = importMap.imports;
         const hmrRuntime = imports?.["@hmrRuntime"];
         await init();
+
         if (pathname.endsWith(".css")) {
           const targets: Targets = {
             chrome: 95 << 16, // default to chrome 95
@@ -63,44 +63,50 @@ export default {
             cssModules: pathname.endsWith(".module.css"),
             sourceMap: !!isDev,
           });
-          if (url.searchParams.has("module")) {
-            let css = code;
-            if (map) {
-              css +=
-                "\n//# sourceMappingURL=data:application/json;charset=utf-8;base64,";
-              css += btoa(map);
-            }
-            const cssModulesExports: Record<string, string> = {};
-            if (exports) {
-              exports.forEach((cssExport, id) => {
-                cssModulesExports[id] = cssExport.name;
-              });
-            }
+
+          if (!url.searchParams.has("module")) {
             return {
-              code: [
-                isDev && hmrRuntime &&
-                `import H from ${stringify(hmrRuntime)};import.meta.hot = H(${
-                  stringify(pathname)
-                });`,
-                "const d = document;",
-                "const id = ",
-                stringify(pathname),
-                ";export const css = ",
-                stringify(css),
-                ";const old = d.getElementById(id);",
-                "const style = d.createElement('style');",
-                "style.id = id;",
-                "style.textContent = css;",
-                "d.head.appendChild(style);",
-                "old && d.head.removeChild(old);",
-                "export default ",
-                stringify(cssModulesExports),
-                isDev && hmrRuntime &&
-                ";import.meta.hot.accept();",
-              ].filter(Boolean).join(""),
+              code,
+              map,
+              contentType: "text/css; charset=utf-8",
             };
           }
-          return { code, map };
+
+          let css = code;
+          if (map) {
+            css +=
+              "\n//# sourceMappingURL=data:application/json;charset=utf-8;base64,";
+            css += btoa(map);
+          }
+          const cssModulesExports: Record<string, string> = {};
+          if (exports) {
+            exports.forEach((cssExport, id) => {
+              cssModulesExports[id] = cssExport.name;
+            });
+          }
+          return {
+            code: [
+              isDev && hmrRuntime &&
+              `import H from ${stringify(hmrRuntime)};import.meta.hot = H(${
+                stringify(pathname)
+              });`,
+              "const d = document;",
+              "const id = ",
+              stringify(pathname),
+              ";export const css = ",
+              stringify(css),
+              ";const old = d.getElementById(id);",
+              "const style = d.createElement('style');",
+              "style.id = id;",
+              "style.textContent = css;",
+              "d.head.appendChild(style);",
+              "old && d.head.removeChild(old);",
+              "export default ",
+              stringify(cssModulesExports),
+              isDev && hmrRuntime &&
+              ";import.meta.hot.accept();",
+            ].filter(Boolean).join(""),
+          };
         }
         const jsxImportSource = imports?.["@jsxImportSource"];
         const reactRefreshRuntime = imports?.["@reactRefreshRuntime"];
@@ -111,11 +117,13 @@ export default {
           importMap: stringify(importMap ?? {}),
           minify: !isDev ? { compress: true, keepNames: true } : undefined,
           target: "es2020",
-          hmr: hmrRuntime && {
-            runtime: hmrRuntime,
-            reactRefresh: !!reactRefreshRuntime,
-            reactRefreshRuntime: reactRefreshRuntime,
-          },
+          hmr: isDev
+            ? hmrRuntime && {
+              runtime: hmrRuntime,
+              reactRefresh: !!reactRefreshRuntime,
+              reactRefreshRuntime: reactRefreshRuntime,
+            }
+            : undefined,
         });
       },
     );
