@@ -12,8 +12,6 @@ export interface ServeOptions {
   root?: string;
   /** The fallback route, default is `index.html`. */
   fallback?: `${string}.html`;
-  /** Wtaching file changes for HMR, default is `false` */
-  watch?: boolean;
 }
 
 /** Creates a fetch handler for serving hot applications. */

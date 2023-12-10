@@ -12,7 +12,6 @@ Options:
   --help, -h      Show help message
   --host          Host to listen on (default: "localhost")
   --port, -p      Port number to listen on (default: 3000)
-  --watch, -w     Watch file changes for HMR
 `);
   process.exit(0);
 }
@@ -36,8 +35,6 @@ process.argv.slice(2).forEach((arg) => {
     }
   } else if (key === "--host" && value) {
     args.host = value;
-  } else if (key === "--watch" || key === "-w") {
-    args.watch = true;
   }
 });
 

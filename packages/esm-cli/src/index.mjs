@@ -1,6 +1,9 @@
 import { openFile } from "./fs.mjs";
 
 const enc = new TextEncoder();
+const fsFilter = (filename) =>
+  !/(^|\/)(\.|node_modules\/)/.test(filename) &&
+  !filename.endsWith(".log");
 
 /**
  * Creates a fetch handler for serving hot applications.
@@ -8,43 +11,61 @@ const enc = new TextEncoder();
  * @returns {(req: Request) => Promise<Response>}
  */
 export const serveHot = (options) => {
-  const { root = ".", fallback = "index.html", watch } = options;
-  const fsWatchHandlers = new Set();
-  if (watch) {
-    import("node:fs").then(({ watch }) => {
-      watch(
-        root,
-        { recursive: true },
-        (event, filename) => {
-          if (!/(^|\/)(\.|node_modules\/)/.test(filename) && !filename.endsWith(".log")) {
-            fsWatchHandlers.forEach((handler) =>
-              handler(event === "change" ? "modify" : event, "/" + filename)
-            );
-          }
-        },
-      );
-      console.log(`Watching files changed...`);
+  const { root = ".", fallback = "index.html" } = options;
+
+  const watchCallbacks = new Set();
+  const watchFS = async () => {
+    const { watch } = await import("node:fs");
+    watch(root, { recursive: true }, (event, filename) => {
+      if (fsFilter(filename)) {
+        watchCallbacks.forEach((handler) =>
+          handler(event === "change" ? "modify" : event, "/" + filename)
+        );
+      }
     });
-  }
+    console.log(`Watching files changed...`);
+  };
+  watchFS.watched = false;
+
+  const ls = async (dir, pos) => {
+    const { readdir } = await import("node:fs/promises");
+    const files = [];
+    const list = await readdir(dir, { withFileTypes: true });
+    for (const entry of list) {
+      const name = [pos, entry.name].filter(Boolean).join("/");
+      if (entry.isDirectory()) {
+        files.push(...(await ls(dir + "/" + entry.name, name)));
+      } else if (fsFilter(name)) {
+        files.push(name);
+      }
+    }
+    return files;
+  };
+
   return async (req) => {
     const url = new URL(req.url);
     const pathname = decodeURIComponent(url.pathname);
-    if (watch && pathname === "/hot-notify") {
-      let handler;
+
+    if (pathname === "/hot-notify") {
+      if (!watchFS.watched) {
+        watchFS.watched = true;
+        await watchFS();
+      }
+      let notify;
       return new Response(
         new ReadableStream({
           start(controller) {
             const enqueue = (chunk) => controller.enqueue(chunk);
-            handler = (type, name) => {
+            notify = (type, name) => {
               enqueue(enc.encode("event: fs-notify\ndata: "));
               enqueue(enc.encode(JSON.stringify({ type, name })));
               enqueue(enc.encode("\n\n"));
             };
-            fsWatchHandlers.add(handler);
+            watchCallbacks.add(notify);
             enqueue(enc.encode(": hot notify stream\n\n"));
           },
           cancel() {
-            handler && fsWatchHandlers.delete(handler);
+            notify && watchCallbacks.delete(notify);
           },
         }),
         {
@@ -55,6 +76,12 @@ export const serveHot = (options) => {
         },
       );
     }
+
+    if (pathname === "/hot-index") {
+      const entries = await ls(root);
+      return Response.json(entries);
+    }
+
     let file = pathname.includes(".") ? await openFile(root + pathname) : null;
     if (!file && pathname === "/sw.js") {
       const hotUrl = new URL("https://esm.sh/v135/hot");

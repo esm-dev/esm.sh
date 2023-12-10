@@ -22,8 +22,6 @@ export interface ServeOptions {
   root?: string;
   /** The fallback route, default is `index.html`. */
   fallback?: string;
-  /** Wtaching file changes for HMR, default is `false` */
-  watch?: boolean;
 }
 
 export function serveHost(

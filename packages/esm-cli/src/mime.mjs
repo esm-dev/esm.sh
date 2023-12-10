@@ -65,7 +65,7 @@ const alias = {
   u: "audio",
   v: "video",
 };
-const defaultType = "application/octet-stream";
+const defaultType = "binary/octet-stream";
 const typesMap = Object.entries(mimeTypes).reduce(
   (map, [mimeType, exts]) => {
     const type = alias[mimeType.charAt(0)];
@@ -91,7 +91,7 @@ const typesMap = Object.entries(mimeTypes).reduce(
 export function getMimeType(filename) {
   const idx = filename.lastIndexOf(".");
   if (idx < 0) return defaultType;
-  const ext = filename.slice(idx + 1);
+  let ext = filename.slice(idx + 1);
   if (ext === "gz" && filename.endsWith(".tar.gz")) {
     ext = "tar.gz";
   }
