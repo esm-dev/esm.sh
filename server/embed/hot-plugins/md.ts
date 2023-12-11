@@ -1,8 +1,9 @@
+import type { Hot } from "../types/hot.d.ts";
 import { init as initWasm, parse } from "https://esm.sh/markdown-wasm-es@1.2.1";
 
 export default {
   name: "md",
-  setup(hot: any) {
+  setup(hot: Hot) {
     let waiting: Promise<any> | null = null;
     const init = async () => {
       if (waiting === null) {

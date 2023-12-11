@@ -262,11 +262,20 @@ func esmHandler() rex.Handle {
 				}
 				return rex.Redirect(url, http.StatusFound)
 			}
-			name := pathname[1:]
-			if strings.HasPrefix(name, "hot-plugins/") {
-				name = "server/embed/" + name
+			filename := pathname[1:]
+			if strings.HasPrefix(filename, "hot-plugins/") {
+				filename = "server/embed/" + filename
+				if strings.HasSuffix(filename, ".d.ts") {
+					data, err := embedFS.ReadFile(filename)
+					if err != nil {
+						return rex.Status(404, err.Error())
+					}
+					header.Set("Content-Type", "application/typescript; charset=utf-8")
+					header.Set("Cache-Control", "public, max-age=31536000, immutable")
+					return data
+				}
 			}
-			data, err := embedFS.ReadFile(fmt.Sprintf("%s.ts", name))
+			data, err := embedFS.ReadFile(fmt.Sprintf("%s.ts", filename))
 			if err != nil {
 				return rex.Status(404, err.Error())
 			}
@@ -305,16 +314,21 @@ func esmHandler() rex.Handle {
 				if ctx.Form.Value("fire") == "auto" {
 					data = concatBytes(data, []byte("\n/* auto fire */\nhot.fire();"))
 				}
+				header.Set("X-TypeScript-Types", fmt.Sprintf("%s%s/v%d/hot.d.ts", cdnOrigin, cfg.CdnBasePath, CTX_BUILD_VERSION))
 			}
 
 			// replace version with `?version`
-			if strings.HasPrefix(name, "server/embed/hot-plugins/") {
+			if strings.HasPrefix(filename, "server/embed/hot-plugins/") {
 				version := ctx.Form.Value("version")
 				if version != "" && regexpFullVersion.MatchString(version) {
 					m := regexpVersionAnnotation.FindAllSubmatch(data, -1)
 					if len(m) > 0 {
 						data = bytes.ReplaceAll(data, []byte("@"+string(m[0][1])), []byte("@"+version))
 					}
+				}
+				_, err := embedFS.ReadFile(fmt.Sprintf("%s.d.ts", filename))
+				if err == nil {
+					header.Set("X-TypeScript-Types", fmt.Sprintf("%s%s/v%d/hot-plugins/%s.d.ts", cdnOrigin, cfg.CdnBasePath, CTX_BUILD_VERSION, path.Base(filename)))
 				}
 			}
 

@@ -1,13 +1,12 @@
+import type { Hot } from "../types/hot.d.ts";
+
 export default {
   name: "svelte-root",
-  setup(hot: any) {
+  setup(hot: Hot) {
     hot.onFire((_sw: ServiceWorker) => {
       customElements.define(
         "svelte-root",
         class SvelteRoot extends HTMLElement {
-          constructor() {
-            super();
-          }
           connectedCallback() {
             const rootDiv = document.createElement("div");
             if (this.hasAttribute("shadow")) {

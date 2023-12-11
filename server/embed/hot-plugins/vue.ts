@@ -1,5 +1,6 @@
 /** @version: 3.3.9 */
 
+import type { Hot, ImportMap } from "../types/hot.d.ts";
 import {
   type CompilerOptions,
   compileScript,
@@ -10,15 +11,15 @@ import {
 } from "https://esm.sh/@vue/compiler-sfc@3.3.9";
 
 interface Options {
+  isDev: boolean;
+  importMap: ImportMap;
   hmr?: { runtime: string };
-  importMap?: { $support?: boolean; imports?: Record<string, string> };
-  isDev?: boolean;
 }
 
 const compileSFC = async (
   filename: string,
   content: string,
-  options: Options = {},
+  options: Options,
 ) => {
   const { importMap, isDev, hmr } = options;
   const stringify = JSON.stringify;
@@ -39,6 +40,9 @@ const compileSFC = async (
   const expressionPlugins: CompilerOptions["expressionPlugins"] = isTS
     ? ["typescript"]
     : undefined;
+  const runtimeModuleName = importMap?.imports?.["vue"]
+    ? importMap.$support ? "vue" : importMap.imports["vue"]
+    : "https://esm.sh/vue@3.3.9";
   const templateOptions: Omit<SFCTemplateCompileOptions, "source"> = {
     id,
     filename: descriptor.filename,
@@ -47,12 +51,7 @@ const compileSFC = async (
     isProd: !isDev,
     ssr: false,
     ssrCssVars: descriptor.cssVars,
-    compilerOptions: {
-      runtimeModuleName: importMap?.imports?.["vue"]
-        ? importMap.$support ? "vue" : importMap.imports["vue"]
-        : "https://esm.sh/vue@3.3.9",
-      expressionPlugins,
-    },
+    compilerOptions: { runtimeModuleName, expressionPlugins },
   };
   const compiledScript = compileScript(descriptor, {
     inlineTemplate: true,
@@ -179,7 +178,7 @@ async function computeHash(input: string): Promise<string> {
 
 export default {
   name: "vue",
-  setup(hot: any) {
+  setup(hot: Hot) {
     // add `?dev` to vue import in dev mode
     if (hot.isDev) {
       hot.onFetch((url: URL, req: Request) => {

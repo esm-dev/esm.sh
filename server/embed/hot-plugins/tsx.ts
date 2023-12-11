@@ -1,16 +1,17 @@
-/** @version: 0.3.3 */
+/** @version: 0.3.5 */
 
+import type { Hot } from "../types/hot.d.ts";
 import initWasm, {
   type Targets,
   transform,
   transformCSS,
-} from "https://esm.sh/esm-compiler@0.3.3";
+} from "https://esm.sh/esm-compiler@0.3.5";
 
 let waiting: Promise<any> | null = null;
 const init = async () => {
   if (waiting === null) {
     waiting = initWasm(
-      fetch("https://esm.sh/esm-compiler@0.3.3/esm_compiler_bg.wasm"),
+      fetch("https://esm.sh/esm-compiler@0.3.5/esm_compiler_bg.wasm"),
     );
   }
   await waiting;
@@ -18,7 +19,7 @@ const init = async () => {
 
 export default {
   name: "tsx",
-  setup(hot: any) {
+  setup(hot: Hot) {
     const { stringify } = JSON;
 
     // add `?dev` to react/react-dom import url in development mode
@@ -43,7 +44,7 @@ export default {
 
     hot.onLoad(
       /\.(js|mjs|jsx|mts|ts|tsx|css)$/,
-      async (url: URL, source: string, options: Record<string, any> = {}) => {
+      async (url, source, options) => {
         const { pathname } = url;
         const { importMap, isDev } = options;
         const imports = importMap.imports;
@@ -114,11 +115,11 @@ export default {
           isDev,
           sourceMap: !!isDev,
           jsxImportSource: jsxImportSource,
-          importMap: stringify(importMap ?? {}),
+          importMap: importMap.$support ? undefined : stringify(importMap),
           minify: !isDev ? { compress: true, keepNames: true } : undefined,
           target: "es2020",
-          hmr: isDev
-            ? hmrRuntime && {
+          hmr: isDev && hmrRuntime
+            ? {
               runtime: hmrRuntime,
               reactRefresh: !!reactRefreshRuntime,
               reactRefreshRuntime: reactRefreshRuntime,

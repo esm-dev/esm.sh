@@ -1,3 +1,5 @@
+import type { Hot } from "../types/hot.d.ts";
+
 const html = String.raw;
 
 const template = html`
@@ -78,7 +80,7 @@ const template = html`
   </style>
 `;
 
-export function setup(hot: any) {
+export function setup(hot: Hot) {
   hot.onFire((_sw: ServiceWorker) => {
     const d = document;
     d.body.appendChild(d.createElement("hot-devtools"));

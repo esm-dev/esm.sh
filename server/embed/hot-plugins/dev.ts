@@ -1,99 +1,177 @@
-import { setup as setupDevtools } from "./devtools";
+import type { CallbackMap, Hot } from "../types/hot.d.ts";
 
-declare global {
-  interface Window {
-    __hot_hmr_modules: Set<string>;
-    __hot_hmr_callbacks: Map<string, (module: any) => void>;
+class CallbackMapImpl<T extends Function> implements CallbackMap<T> {
+  map = new Map<string, Set<T>>();
+  add(path: string, callback: T) {
+    const map = this.map;
+    (map.get(path) ?? map.set(path, new Set()).get(path)!).add(callback);
+  }
+  delete(path: string, callback?: T) {
+    const map = this.map;
+    if (callback) {
+      if (map.get(path)?.delete(callback)) {
+        if (map.get(path)!.size === 0) {
+          map.delete(path);
+        }
+      }
+    } else {
+      map.delete(path);
+    }
   }
 }
 
-function setupHMR(hot: any) {
-  hot.hmr = true;
-  window.__hot_hmr_modules = new Set();
-  window.__hot_hmr_callbacks = new Map();
+export function setup(hot: Hot) {
+  globalThis.__hot_hmr_modules = new Set();
+  globalThis.__hot_hmr_callbacks = new CallbackMapImpl();
+  globalThis.__hot_hmr_disposes = new CallbackMapImpl();
 
   hot.customImports.set("@hmrRuntime", "/@hot/hmr.js");
-  hot.waitUntil(
-    hot.vfs.put(
-      "@hot/hmr.js",
-      `
-      export default (path) => ({
-        decline() {
-          __hot_hmr_modules.delete(path);
-          __hot_hmr_callbacks.set(path, () => location.reload());
-        },
+  hot.waitUntil(hot.vfs.put(
+    "@hot/hmr.js",
+    `
+      const modules = new Map();
+      class Context {
+        constructor(path) {
+          this.path = path;
+          this.locked = false;
+        }
+        lock() {
+          this.locked = true;
+        }
         accept(cb) {
-          if (!__hot_hmr_modules.has(path)) {
-            __hot_hmr_modules.add(path);
-            typeof cb === "function" && __hot_hmr_callbacks.set(path, cb);
+          if (this.locked) {
+            return;
           }
-        },
+          __hot_hmr_modules.add(this.path);
+          typeof cb === "function" && __hot_hmr_callbacks.add(this.path, cb);
+        }
+        dispose(cb) {
+          typeof cb === "function" && __hot_hmr_disposes.add(this.path, cb);
+        }
         invalidate() {
-          location.reload();
+          location.reload()
         }
-      })
+      }
+      export default (path) => {
+        let module = modules.get(path);
+        if (module) {
+          module.lock();
+          return module
+        }
+        module = new Context(path);
+        modules.set(path, module);
+        return module;
+      };
     `,
-    ),
-  );
+  ));
 
-  const logPrefix = ["🔥 %c[HMR]", "color:#999"];
-  const eventColors = {
-    modify: "#056CF0",
-    create: "#20B44B",
-    remove: "#F00C08",
-  };
+  hot.onFire(() => {
+    const logPrefix = ["🔥 %c[HMR]", "color:#999"];
+    const eventColors = {
+      modify: "#056CF0",
+      create: "#20B44B",
+      remove: "#F00C08",
+    };
 
-  const source = new EventSource(
-    new URL(hot.basePath + "hot-notify", location.href),
-  );
-  source.addEventListener("fs-notify", async (ev) => {
-    const { type, name } = JSON.parse(ev.data);
-    const module = window.__hot_hmr_modules.has(name);
-    const callback = window.__hot_hmr_callbacks.get(name);
-    if (type === "modify") {
-      if (module) {
-        const url = new URL(name, location.href);
-        url.searchParams.set("t", Date.now().toString(36));
-        if (url.pathname.endsWith(".css")) {
-          url.searchParams.set("module", "");
-        }
-        const module = await import(url.href);
-        if (callback) {
-          callback(module);
-        }
-      } else if (callback) {
-        callback(null);
-      }
-    }
-    if (module || callback) {
-      console.log(
-        logPrefix[0] + " %c" + type,
-        logPrefix[1],
-        `color:${eventColors[type as keyof typeof eventColors]}`,
-        `${JSON.stringify(name)}`,
-      );
-    }
-  });
-  let connected = false;
-  source.onopen = () => {
-    connected = true;
-    console.log(
-      ...logPrefix,
-      "connected, listening for file changes...",
+    let connected = false;
+    const es = new EventSource(
+      new URL(hot.basePath + "hot-notify", location.href),
     );
-  };
-  source.onerror = (err) => {
-    if (err.eventPhase === EventSource.CLOSED) {
-      if (!connected) {
-        console.warn(...logPrefix, "failed to connect.");
-      } else {
-        console.log(...logPrefix, "connection lost, reconnecting...");
-      }
-    }
-  };
-}
 
-export function setup(hot: any) {
-  setupHMR(hot);
-  setupDevtools(hot);
+    es.addEventListener("fs-notify", async (evt) => {
+      const { type, name } = JSON.parse(evt.data);
+      const accepted = __hot_hmr_modules.has(name);
+      const callbacks = __hot_hmr_callbacks.map.get(name);
+      if (type === "modify") {
+        if (accepted) {
+          const disposes = __hot_hmr_disposes.map.get(name);
+          if (disposes) {
+            disposes.clear();
+            disposes.forEach((cb) => cb());
+          }
+          const url = new URL(name, location.href);
+          url.searchParams.set("t", Date.now().toString(36));
+          if (url.pathname.endsWith(".css")) {
+            url.searchParams.set("module", "");
+          }
+          const module = await import(url.href);
+          if (callbacks) {
+            callbacks.forEach((cb) => cb(module));
+          }
+        } else if (callbacks) {
+          callbacks.forEach((cb) => cb(null));
+        }
+      }
+      if (accepted || callbacks) {
+        console.log(
+          logPrefix[0] + " %c" + type,
+          logPrefix[1],
+          `color:${eventColors[type as keyof typeof eventColors]}`,
+          `${JSON.stringify(name)}`,
+        );
+      }
+    });
+
+    es.onopen = () => {
+      if (!connected) {
+        import(`./devtools`).then(({ setup }) => setup(hot));
+      }
+      connected = true;
+      console.log(
+        ...logPrefix,
+        "connected, listening for file changes...",
+      );
+    };
+
+    es.onerror = (err) => {
+      if (err.eventPhase === EventSource.CLOSED) {
+        if (!connected) {
+          console.warn(...logPrefix, "failed to connect.");
+        } else {
+          console.log(...logPrefix, "connection lost, reconnecting...");
+        }
+      }
+    };
+
+    document.querySelectorAll("link[rel=stylesheet]").forEach((el) => {
+      let link = el as HTMLLinkElement;
+      const url = new URL(link.href, location.href);
+      if (url.hostname === location.hostname) {
+        const reload = () => {
+          const next = new URL(url);
+          next.searchParams.set("t", Date.now().toString(36));
+          const oldLink = link;
+          const newLink = oldLink.cloneNode() as HTMLLinkElement;
+          newLink.href = next.href;
+          newLink.onload = () => {
+            oldLink.remove();
+            watchDeps();
+          };
+          oldLink.parentNode?.insertBefore(newLink, oldLink.nextSibling);
+          link = newLink;
+        };
+        const vfsKey = `loader(dev):${url.pathname.slice(1)}`;
+        const watchDeps = async () => {
+          const disposes: (() => void)[] = [];
+          const res = await hot.vfs.get(vfsKey);
+          const { deps } = res?.meta ?? {};
+          deps?.forEach((dep) => {
+            const specifier = typeof dep === "string" ? dep : dep.specifier;
+            if (specifier.startsWith("/")) {
+              const onChange = () => {
+                disposes.forEach((d) => d());
+                hot.vfs.delete(vfsKey).then(reload);
+              };
+              __hot_hmr_callbacks.add(specifier, onChange);
+              disposes.push(() => {
+                __hot_hmr_callbacks.delete(specifier, onChange);
+              });
+            }
+          });
+        };
+        __hot_hmr_callbacks.add(url.pathname, reload);
+        watchDeps();
+      }
+    });
+  });
 }

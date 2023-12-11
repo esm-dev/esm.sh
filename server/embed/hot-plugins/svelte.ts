@@ -1,13 +1,14 @@
 /** @version: 4.2.7 */
 
+import type { Hot } from "../types/hot.d.ts";
 import { compile } from "https://esm.sh/svelte@4.2.7/compiler";
 
 export default {
   name: "svelte",
-  setup(hot: any) {
+  setup(hot: Hot) {
     hot.onLoad(
       /\.svelte$/,
-      (url: URL, source: string, options: Record<string, any> = {}) => {
+      (url, source, options) => {
         const { importMap, isDev } = options;
         const { js } = compile(source, {
           filename: url.pathname,

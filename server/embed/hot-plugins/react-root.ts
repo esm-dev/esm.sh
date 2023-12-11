@@ -1,12 +1,14 @@
 /** @version: 18.2.0 */
 
+import type { Hot } from "../types/hot.d.ts";
+
 function importAll(...urls: (string | URL)[]) {
   return Promise.all(urls.map((url) => import(url.toString())));
 }
 
 export default {
   name: "react-root",
-  setup(hot: any) {
+  setup(hot: Hot) {
     const refreshUrl = "/@hot/hmr_react_refresh.js";
     hot.customImports.set("@reactRefreshRuntime", refreshUrl);
     hot.waitUntil(hot.vfs.put(
@@ -40,9 +42,6 @@ export default {
       customElements.define(
         "react-root",
         class ReactRoot extends HTMLElement {
-          constructor() {
-            super();
-          }
           async connectedCallback() {
             const rootDiv = document.createElement("div");
             const src = this.getAttribute("src");
@@ -50,7 +49,7 @@ export default {
             if (!src) {
               return;
             }
-            if (hot.hmr) {
+            if (hot.isDev) {
               try {
                 // ensure react-refresh is injected before react-dom is loaded
                 await import(new URL(refreshUrl, location.href).href);

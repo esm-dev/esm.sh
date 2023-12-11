@@ -7,47 +7,15 @@
 /// <reference lib="dom" />
 /// <reference lib="webworker" />
 
-interface Plugin {
-  name: string;
-  setup: (hot: Hot) => void;
-}
-
-interface Loader {
-  test: RegExp;
-  load: (url: URL, source: string, options: LoadOptions) => Promise<{
-    code: string;
-    contentType?: string;
-    map?: string;
-  }>;
-}
-
-interface LoadOptions {
-  isDev: boolean;
-  importMap: ImportMap;
-}
-
-interface ImportMap {
-  $support?: boolean;
-  imports?: Record<string, string>;
-  scopes?: Record<string, Record<string, string>>;
-}
-
-interface FetchHandler {
-  (req: Request): Response | Promise<Response>;
-}
-
-interface URLTest {
-  (url: URL, req: Request): boolean;
-}
-
-interface VFSRecord {
-  name: string;
-  data: string | Uint8Array;
-  meta?: {
-    checksum?: string;
-    contentType?: string;
-  };
-}
+import type {
+  FetchHandler,
+  HotCore,
+  ImportMap,
+  Loader,
+  Plugin,
+  URLTest,
+  VFSRecord,
+} from "./server/embed/types/hot.d.ts";
 
 const VERSION = 135;
 const plugins: Plugin[] = [];
@@ -119,10 +87,19 @@ class VFS {
       req.onerror = () => reject(req.error);
     });
   }
+
+  async delete(name: string) {
+    const store = await this.#getDbStore("readwrite");
+    const req = store.delete(name);
+    return new Promise<void>((resolve, reject) => {
+      req.onsuccess = () => resolve();
+      req.onerror = () => reject(req.error);
+    });
+  }
 }
 
 /** 🔥 class */
-class Hot {
+class Hot implements HotCore {
   #basePath = new URL(".", location.href).pathname;
   #cache: Promise<Cache> | null = null;
   #customImports: Map<string, string> = new Map();
@@ -132,6 +109,10 @@ class Hot {
   #loaders: Loader[] = [];
   #promises: Promise<any>[] = [];
   #vfs = new VFS();
+
+  constructor(plugins: Plugin[] = []) {
+    plugins.forEach((plugin) => plugin.setup(this));
+  }
 
   get basePath() {
     return this.#basePath;
@@ -300,17 +281,22 @@ class Hot {
             ? this.attachShadow({ mode: "open" })
             : this;
           root.innerHTML = "<slot></slot>";
-          const load = async () => {
-            const res = await fetch(url);
+          const load = async (first?: boolean) => {
+            const fetchUrl = new URL(src, url);
+            if (!first) {
+              fetchUrl.searchParams.set("t", Date.now().toString(36));
+            }
+            const res = await fetch(fetchUrl);
             if (res.ok) {
               const tpl = document.createElement("template");
               tpl.innerHTML = await res.text();
               root.replaceChildren(tpl.content);
             }
           };
-          // @ts-ignore
-          if (isDev) __hot_hmr_callbacks.set(url.pathname, load);
-          load();
+          if (isDev && url.hostname === location.hostname) {
+            __hot_hmr_callbacks.add(url.pathname, load);
+          }
+          load(true);
         }
       },
     );
@@ -405,16 +391,13 @@ class Hot {
       let cacheKey = url.href;
       if (url.host === location.host) {
         url.searchParams.delete("t");
-        cacheKey = url.pathname.slice(1) + url.search.replaceAll(/=(&|$)/g, "");
+        cacheKey = url.pathname.slice(1) + url.search.replace(/=(&|$)/g, "");
       }
-      cacheKey = "loader:" + cacheKey;
       let isDev = this.#isDev;
       if (req.headers.get("x-loader-env") === "production") {
         isDev = false;
       }
-      if (isDev) {
-        cacheKey += (cacheKey.includes("?") ? "&" : "?") + "dev";
-      }
+      cacheKey = "loader" + (isDev ? "(dev)" : "") + ":" + cacheKey;
       const [record, cached] = await Promise.all([
         vfs.get(kImportmapJson),
         vfs.get(cacheKey),
@@ -435,14 +418,14 @@ class Hot {
       try {
         const options = { isDev, importMap };
         const ret = await loader.load(url, await source(), options);
-        const { code, map, contentType } = ret;
+        const { code, contentType, deps, map } = ret;
         let body = code;
         if (map) {
           body +=
             "\n//# sourceMappingURL=data:application/json;charset=utf-8;base64,";
           body += btoa(map);
         }
-        vfs.put(cacheKey, body, { checksum, contentType });
+        vfs.put(cacheKey, body, { checksum, contentType, deps });
         return new Response(body, { headers: loaderHeaders(contentType) });
       } catch (err) {
         console.error(err);
@@ -493,10 +476,12 @@ class Hot {
   }
 }
 
+/** check if the given value is an object */
 function isObject(v: unknown) {
   return typeof v === "object" && v !== null && !Array.isArray(v);
 }
 
+/** check if the url is localhost */
 function isLocalhost({ hostname }: URL | Location) {
   return hostname === "localhost" || hostname === "127.0.0.1";
 }
@@ -510,7 +495,7 @@ function getExtname(path: string): string {
   return "";
 }
 
-/** compute the hash of the given input, default to SHA-1 */
+/** compute the hash of the given input, default algorithm is SHA-1 */
 async function computeHash(
   input: Uint8Array,
   algorithm: AlgorithmIdentifier = "SHA-1",
@@ -520,8 +505,5 @@ async function computeHash(
 }
 
 // 🔥
-const hot = new Hot();
+const hot = new Hot(plugins);
 export default hot;
-
-// apply plugins
-plugins.forEach((plugin) => plugin.setup(hot));

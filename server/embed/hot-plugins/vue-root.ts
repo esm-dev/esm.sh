@@ -1,19 +1,26 @@
 /** @version: 3.3.9 */
 
+import type { Hot, ImportMap } from "../types/hot.d.ts";
+
+function getImportMap(): ImportMap | null {
+  const script = document.querySelector("script[type=importmap]");
+  if (script) {
+    return JSON.parse(script.textContent!);
+  }
+  return null;
+}
+
 function importAll(...urls: (string | URL)[]) {
   return Promise.all(urls.map((url) => import(url.toString())));
 }
 
 export default {
   name: "vue-root",
-  setup(hot: any) {
+  setup(hot: Hot) {
     hot.onFire((_sw: ServiceWorker) => {
       customElements.define(
         "vue-root",
         class VueRoot extends HTMLElement {
-          constructor() {
-            super();
-          }
           connectedCallback() {
             const rootDiv = document.createElement("div");
             if (this.hasAttribute("shadow")) {
@@ -24,8 +31,9 @@ export default {
             }
             const src = this.getAttribute("src");
             if (src) {
+              const importMap = getImportMap();
               importAll(
-                "vue",
+                importMap?.imports?.["vue"] ?? "https://esm.sh/vue@3.3.9",
                 new URL(src, location.href),
               ).then(([
                 { createApp },
