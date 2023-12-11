@@ -1,7 +1,7 @@
 import { getMimeType } from "./mime.mjs";
 
 /**
- * openFile for all runtimes.
+ * openFile for all js runtimes.
  * @type {() => Promise<import("../types").FsFile>}
  */
 let openFile;
@@ -15,7 +15,7 @@ if (typeof Deno !== "undefined") {
         lastModified: stat.mtime?.getTime() ?? null,
         contentType: getMimeType(path),
         body: file.readable,
-        close: () => Promise.resolve(file.close()),
+        close: () => file.close(),
       };
     } catch (error) {
       if (error instanceof Deno.errors.NotFound) {
@@ -36,7 +36,7 @@ if (typeof Deno !== "undefined") {
       lastModified: file.lastModified,
       contentType: getMimeType(path),
       body: await file.stream(),
-      close: () => Promise.resolve(undefined),
+      close: () => {},
     };
   };
 } else if (typeof process === "object") {

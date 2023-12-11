@@ -1,9 +1,10 @@
 import { openFile } from "./fs.mjs";
 
 const enc = new TextEncoder();
-const fsFilter = (filename) =>
-  !/(^|\/)(\.|node_modules\/)/.test(filename) &&
-  !filename.endsWith(".log");
+const fsFilter = (filename) => {
+  return !/(^|\/)(\.|node_modules\/)/.test(filename) &&
+    !filename.endsWith(".log");
+};
 
 /**
  * Creates a fetch handler for serving hot applications.
@@ -93,6 +94,13 @@ export const serveHot = (options) => {
       });
     }
     if (!file) {
+      switch (pathname) {
+        case "/apple-touch-icon-precomposed.png":
+        case "/apple-touch-icon.png":
+        case "/robots.txt":
+        case "/favicon.ico":
+          return new Response("Not found", { status: 404 });
+      }
       const list = [
         pathname + ".html",
         pathname + "/index.html",
@@ -128,6 +136,9 @@ export const serveHot = (options) => {
               pump();
             };
             pump();
+          },
+          cancel() {
+            file.close();
           },
         }),
         { headers },
