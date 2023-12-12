@@ -80,74 +80,68 @@ const template = html`
   </style>
 `;
 
-export function setup(hot: Hot) {
-  hot.onFire((_sw: ServiceWorker) => {
-    const d = document;
-    d.body.appendChild(d.createElement("hot-devtools"));
+export function render(hot: Hot) {
+  const d = document;
 
-    class DevTools extends HTMLElement {
-      constructor() {
-        super();
-        const shadow = this.attachShadow({ mode: "open" });
-        shadow.innerHTML = template;
-      }
-      connectedCallback() {
-        const root = this.shadowRoot!;
-        const button = root.querySelector("button")!;
-        const urlBar = root.querySelector("a")!;
-        const publish = async () => {
-          const res = fetch(new URL(hot.basePath + "hot-index", location.href));
-          if (!res) {
-            return;
-          }
-          const index = await res.then((r) => r.json());
-          if (!Array.isArray(index) || index.length === 0) {
-            return;
-          }
-          index.push(
-            ...index.filter((name: string) => name.endsWith(".css"))
-              .map((name: string) => name + "?module"),
+  class DevTools extends HTMLElement {
+    connectedCallback() {
+      const root = this.attachShadow({ mode: "open" });
+      root.innerHTML = template;
+      const button = root.querySelector("button")!;
+      const urlBar = root.querySelector("a")!;
+      const publish = async () => {
+        const res = fetch(new URL(hot.basePath + "hot-index", location.href));
+        if (!res) {
+          return;
+        }
+        const index = await res.then((r) => r.json());
+        if (!Array.isArray(index) || index.length === 0) {
+          return;
+        }
+        index.push(
+          ...index.filter((name: string) => name.endsWith(".css"))
+            .map((name: string) => name + "?module"),
+        );
+        const loader: Record<string, string> = {};
+        const fd = new FormData();
+        await Promise.all(index.map(async (name: string) => {
+          const res = await fetch(
+            new URL(hot.basePath + name, location.href),
+            { headers: { "x-loader-env": "production" } },
           );
-          const loader: Record<string, string> = {};
-          const fd = new FormData();
-          await Promise.all(index.map(async (name: string) => {
-            const res = await fetch(
-              new URL(hot.basePath + name, location.href),
-              { headers: { "x-loader-env": "production" } },
-            );
-            if (!res) {
-              return;
-            }
-            if (res.headers.get("x-content-source") === "loader") {
-              loader[name] = res.headers.get("content-type")!;
-            }
-            fd.append(name, await res.blob());
-          }));
-          fd.append("index", JSON.stringify(index));
-          fd.append("loader", JSON.stringify(loader));
-          const res2 = await fetch("https://esm.sh/create/x-site", {
-            method: "POST",
-            body: fd,
-          });
           if (!res) {
             return;
           }
-          const { appId } = await res2.json();
-          urlBar.textContent = `https://${appId}.esm.app`;
-          urlBar.href = `https://${appId}.esm.app`;
-          urlBar.style.display = "flex";
-        };
-        button.onclick = () => {
-          button.classList.add("loading");
-          publish().finally(() => {
-            button.classList.remove("loading");
-          });
-        };
-        urlBar.onclick = () => {
-          urlBar.style.display = "none";
-        };
-      }
+          if (res.headers.get("x-content-source") === "loader") {
+            loader[name] = res.headers.get("content-type")!;
+          }
+          fd.append(name, await res.blob());
+        }));
+        fd.append("index", JSON.stringify(index));
+        fd.append("loader", JSON.stringify(loader));
+        const res2 = await fetch("https://esm.sh/create/x-site", {
+          method: "POST",
+          body: fd,
+        });
+        if (!res) {
+          return;
+        }
+        const { appId } = await res2.json();
+        urlBar.textContent = `https://${appId}.esm.app`;
+        urlBar.href = `https://${appId}.esm.app`;
+        urlBar.style.display = "flex";
+      };
+      button.onclick = () => {
+        button.classList.add("loading");
+        publish().finally(() => {
+          button.classList.remove("loading");
+        });
+      };
+      urlBar.onclick = () => {
+        urlBar.style.display = "none";
+      };
     }
-    customElements.define("hot-devtools", DevTools);
-  });
+  }
+  customElements.define("hot-devtools", DevTools);
+  d.body.appendChild(d.createElement("hot-devtools"));
 }

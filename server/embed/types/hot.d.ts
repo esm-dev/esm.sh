@@ -10,6 +10,7 @@ export interface Loader {
     source: string,
     options: LoadOptions,
   ) => Promise<LoaderOutput> | LoaderOutput;
+  fetch?: (req: Request) => Promise<Response>;
 }
 
 export interface LoadOptions {
@@ -78,7 +79,12 @@ export interface HotCore {
   listen(): void;
   onFetch(test: URLTest, handler: FetchHandler): this;
   onFire(handler: (reg: ServiceWorker) => void): this;
-  onLoad(test: RegExp, load: Loader["load"], priority?: "eager"): this;
+  onLoad(
+    test: RegExp,
+    load: Loader["load"],
+    fetch?: Loader["fetch"],
+    priority?: "eager",
+  ): this;
   waitUntil(promise: Promise<any>): void;
 }
 

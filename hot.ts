@@ -150,12 +150,17 @@ class Hot implements HotCore {
     return this;
   }
 
-  onLoad(test: RegExp, load: Loader["load"], priority?: string) {
+  onLoad(
+    test: RegExp,
+    load: Loader["load"],
+    fetch?: Loader["fetch"],
+    priority?: string,
+  ) {
     if (!doc) {
       if (priority === "eager") {
-        this.#loaders.unshift({ test, load });
+        this.#loaders.unshift({ test, load, fetch });
       } else {
-        this.#loaders.push({ test, load });
+        this.#loaders.push({ test, load, fetch });
       }
     }
     return this;
@@ -365,7 +370,7 @@ class Hot implements HotCore {
       return headers;
     };
     const serveLoader = async (loader: Loader, url: URL, req: Request) => {
-      const res = await fetch(req);
+      const res = await (loader.fetch ?? fetch)(req);
       if (!res.ok || res.headers.get(kContentSource) === "loader") {
         return res;
       }
@@ -411,9 +416,9 @@ class Hot implements HotCore {
         if (!res.bodyUsed) {
           res.body?.cancel();
         }
-        return new Response(cached.data, {
-          headers: loaderHeaders(cached.meta?.contentType),
-        });
+        const headers = loaderHeaders(cached.meta?.contentType);
+        headers.set("x-loader-cache", "HIT");
+        return new Response(cached.data, { headers });
       }
       try {
         const options = { isDev, importMap };
@@ -505,5 +510,4 @@ async function computeHash(
 }
 
 // 🔥
-const hot = new Hot(plugins);
-export default hot;
+export default new Hot(plugins);

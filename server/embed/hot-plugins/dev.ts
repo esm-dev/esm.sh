@@ -29,7 +29,7 @@ export function setup(hot: Hot) {
   hot.waitUntil(hot.vfs.put(
     "@hot/hmr.js",
     `
-      const modules = new Map();
+      const registry = new Map();
       class Context {
         constructor(path) {
           this.path = path;
@@ -53,15 +53,43 @@ export function setup(hot: Hot) {
         }
       }
       export default (path) => {
-        let module = modules.get(path);
+        let module = registry.get(path);
         if (module) {
           module.lock();
           return module
         }
         module = new Context(path);
-        modules.set(path, module);
+        registry.set(path, module);
         return module;
       };
+    `,
+  ));
+
+  hot.customImports.set("@reactRefreshRuntime", "/@hot/hmr_react_refresh.js");
+  hot.waitUntil(hot.vfs.put(
+    "@hot/hmr_react_refresh.js",
+    `
+      // react-refresh
+      // @link https://github.com/facebook/react/issues/16604#issuecomment-528663101
+
+      import runtime from "https://esm.sh/v135/react-refresh@0.14.0/runtime";
+
+      let timer;
+      const refresh = () => {
+        if (timer !== null) {
+          clearTimeout(timer);
+        }
+        timer = setTimeout(() => {
+          runtime.performReactRefresh()
+          timer = null;
+        }, 30);
+      };
+
+      runtime.injectIntoGlobalHook(window);
+      window.$RefreshReg$ = () => {};
+      window.$RefreshSig$ = () => type => type;
+
+      export { refresh as __REACT_REFRESH__, runtime as __REACT_REFRESH_RUNTIME__ };
     `,
   ));
 
@@ -114,7 +142,7 @@ export function setup(hot: Hot) {
 
     es.onopen = () => {
       if (!connected) {
-        import(`./devtools`).then(({ setup }) => setup(hot));
+        import(`./devtools`).then(({ render }) => render(hot));
       }
       connected = true;
       console.log(
@@ -133,6 +161,7 @@ export function setup(hot: Hot) {
       }
     };
 
+    // enable css hmr
     document.querySelectorAll("link[rel=stylesheet]").forEach((el) => {
       let link = el as HTMLLinkElement;
       const url = new URL(link.href, location.href);
@@ -144,7 +173,9 @@ export function setup(hot: Hot) {
           const newLink = oldLink.cloneNode() as HTMLLinkElement;
           newLink.href = next.href;
           newLink.onload = () => {
-            oldLink.remove();
+            setTimeout(() => {
+              oldLink.remove();
+            }, 0);
             watchDeps();
           };
           oldLink.parentNode?.insertBefore(newLink, oldLink.nextSibling);

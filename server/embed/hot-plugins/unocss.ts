@@ -22,15 +22,9 @@ export default {
     let uno: UnoGenerator;
     hot.onLoad(
       /(^|\/|\.)uno.css$/,
-      async (url: URL, source: string, _options: Record<string, any> = {}) => {
-        const lines = source.split("\n");
-        const entryPoints = lines.filter((line) =>
-          line.startsWith("@include ")
-        );
-        const deps = entryPoints.map((line) =>
-          line.slice(9).split(",").map((s) => s.trim()).filter(Boolean)
-        ).flat().map((s) => new URL(s, url));
-        const data = await Promise.all(deps.map((url) => {
+      async (_url: URL, source: string, _options: Record<string, any> = {}) => {
+        const { deps } = JSON.parse(source);
+        const data = await Promise.all(deps.map((url: string) => {
           return fetch(url).then((res) => res.text());
         }));
         const { css } = await (uno ?? (uno = createGenerator(unoConfig)))
@@ -41,10 +35,56 @@ export default {
         return {
           code: css,
           contentType: "text/css; charset=utf-8",
-          deps: deps.map((url) => url.pathname),
+          deps: deps.map((url: string) => new URL(url).pathname),
         };
+      },
+      async (req) => {
+        const css = await fetch(req).then((res) => res.text());
+        const deps = css.split("\n")
+          .filter((line) => line.startsWith("@include "))
+          .map((entry) =>
+            entry.slice(9).split(",").map((s) => s.trim()).filter(Boolean)
+          ).flat()
+          .map((s) => new URL(s, req.url));
+        const checksums = await Promise.all(deps.map((url) => {
+          return fetch(url).then((res) => {
+            const headers = res.headers;
+            let etag = headers.get("etag");
+            if (!etag) {
+              const size = headers.get("content-length");
+              const modtime = headers.get("last-modified");
+              if (size && modtime) {
+                etag = "W/" + JSON.stringify(
+                  parseInt(size).toString(36) + "-" +
+                    (new Date(modtime).getTime() / 1000).toString(36),
+                );
+              }
+            }
+            if (etag) {
+              res.body?.cancel();
+              return etag;
+            }
+            return res.text();
+          });
+        }));
+        return new Response(JSON.stringify({ deps }), {
+          headers: {
+            etag: await computeHash(
+              new TextEncoder().encode(css + checksums.join("\n")),
+            ),
+          },
+        });
       },
       "eager",
     );
   },
 };
+
+/** compute the hash of the given input, default algorithm is SHA-1 */
+async function computeHash(
+  input: Uint8Array,
+  algorithm: AlgorithmIdentifier = "SHA-1",
+): Promise<string> {
+  const buffer = new Uint8Array(await crypto.subtle.digest(algorithm, input));
+  return [...buffer].map((b) => b.toString(16).padStart(2, "0")).join("");
+}
