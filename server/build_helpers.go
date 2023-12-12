@@ -765,6 +765,55 @@ func bundleNodePolyfill(name string, globalName string, namedExport string, targ
 	return ret.OutputFiles[0].Contents, nil
 }
 
+func bundleHotScript(code string, target api.Target) ([]byte, error) {
+	ret := api.Build(api.BuildOptions{
+		Stdin: &api.StdinOptions{
+			Contents: code,
+			Loader:   api.LoaderTS,
+		},
+		Write:             false,
+		Bundle:            true,
+		Target:            target,
+		Format:            api.FormatESModule,
+		Platform:          api.PlatformBrowser,
+		MinifyWhitespace:  true,
+		MinifyIdentifiers: true,
+		MinifySyntax:      true,
+		LegalComments:     api.LegalCommentsInline,
+		Plugins: []api.Plugin{{
+			Name: "esm",
+			Setup: func(build api.PluginBuild) {
+				build.OnResolve(
+					api.OnResolveOptions{Filter: ".*"},
+					func(args api.OnResolveArgs) (api.OnResolveResult, error) {
+						if args.Kind == api.ResolveJSDynamicImport || isHttpSepcifier(args.Path) {
+							return api.OnResolveResult{Path: args.Path, External: true}, nil
+						}
+						return api.OnResolveResult{Path: path.Join("server/embed", args.Path), Namespace: "embed"}, nil
+					},
+				)
+				build.OnLoad(
+					api.OnLoadOptions{Filter: ".*", Namespace: "embed"},
+					func(args api.OnLoadArgs) (api.OnLoadResult, error) {
+						data, err := embedFS.ReadFile(args.Path + ".ts")
+						if err != nil {
+							return api.OnLoadResult{}, err
+						}
+						contents := string(data)
+						return api.OnLoadResult{
+							Contents: &contents,
+							Loader:   api.LoaderTS,
+						}, nil
+					},
+				)
+			}}},
+	})
+	if ret.Errors != nil && len(ret.Errors) > 0 {
+		return nil, errors.New(ret.Errors[0].Text)
+	}
+	return ret.OutputFiles[0].Contents, nil
+}
+
 func minify(code string, target api.Target, loader api.Loader) ([]byte, error) {
 	ret := api.Transform(code, api.TransformOptions{
 		Target:            target,

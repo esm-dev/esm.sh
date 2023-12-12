@@ -311,10 +311,18 @@ func esmHandler() rex.Handle {
 						1,
 					)
 				}
-				if ctx.Form.Value("fire") == "auto" {
-					data = concatBytes(data, []byte("\n/* auto fire */\nhot.fire();"))
-				}
 				header.Set("X-TypeScript-Types", fmt.Sprintf("%s%s/v%d/hot.d.ts", cdnOrigin, cfg.CdnBasePath, CTX_BUILD_VERSION))
+				if ctx.Form.Has("bundle") {
+					target := getBuildTargetByUA(userAgent)
+					code, err := bundleHotScript(string(data), targets[target])
+					if err != nil {
+						return throwErrorJS(ctx, fmt.Errorf("transform error: %v", err), false)
+					}
+					header.Set("Content-Type", "application/javascript; charset=utf-8")
+					header.Set("Cache-Control", "public, max-age=31536000, immutable")
+					header.Add("Vary", "User-Agent")
+					return code
+				}
 			}
 
 			// replace version with `?version`
