@@ -1135,7 +1135,7 @@ func esmHandler() rex.Handle {
 				if isPined {
 					header.Set("Cache-Control", "public, max-age=31536000, immutable")
 				} else {
-					header.Set("Cache-Control", fmt.Sprintf("public, max-age=%d", 24*3600)) // cache for 24 hours
+					header.Set("Cache-Control", fmt.Sprintf("public, max-age=%d", 7*24*3600)) // cache for 7 days
 				}
 			}
 			if ctx.R.Method == http.MethodHead {
@@ -1227,7 +1227,7 @@ func esmHandler() rex.Handle {
 			if isPined {
 				header.Set("Cache-Control", "public, max-age=31536000, immutable")
 			} else {
-				header.Set("Cache-Control", fmt.Sprintf("public, max-age=%d", 24*3600)) // cache for 24 hours
+				header.Set("Cache-Control", fmt.Sprintf("public, max-age=%d", 7*24*3600)) // cache for 7 days
 			}
 		}
 		if targetFromUA {

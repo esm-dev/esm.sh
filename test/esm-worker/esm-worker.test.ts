@@ -126,7 +126,7 @@ Deno.test("esm-worker", {
       res2.headers.get("Content-Type"),
       "application/javascript; charset=utf-8",
     );
-    assertEquals(res2.headers.get("Cache-Control"), "public, max-age=86400");
+    assertEquals(res2.headers.get("Cache-Control"), "public, max-age=604800");
     assert(modUrl.pathname.endsWith("/denonext/react-dom.mjs"));
     const res3 = await fetch(modUrl);
     assertEquals(res3.status, 200);
@@ -172,7 +172,7 @@ Deno.test("esm-worker", {
       res2.headers.get("Content-Type"),
       "application/javascript; charset=utf-8",
     );
-    assertEquals(res2.headers.get("Cache-Control"), "public, max-age=86400");
+    assertEquals(res2.headers.get("Cache-Control"), "public, max-age=604800");
     assert(/v\d+\/.+\.d\.ts$/.test(res2.headers.get("X-Typescript-Types")!));
     assert(modUrl.pathname.endsWith("/denonext/server.js"));
     const res3 = await fetch(modUrl);
@@ -318,7 +318,7 @@ Deno.test("esm-worker", {
       res2.headers.get("Content-Type"),
       "application/javascript; charset=utf-8",
     );
-    assertEquals(res2.headers.get("Cache-Control"), "public, max-age=86400");
+    assertEquals(res2.headers.get("Cache-Control"), "public, max-age=604800");
     assert(
       /v\d+\/gh\/.+\.d\.ts$/.test(res2.headers.get("X-Typescript-Types")!),
     );

@@ -299,7 +299,7 @@ class ESMWorker {
         return redirect(
           new URL(`/${buildVersion}${pathname}${url.search}`, url),
           302,
-          86400,
+          7 * 24 * 3600,
         );
       }
       return ctx.withCache(
@@ -579,7 +579,7 @@ class ESMWorker {
           url,
         ),
         pined ? 301 : 302,
-        86400,
+        7 * 24 * 3600,
       );
     }
 
