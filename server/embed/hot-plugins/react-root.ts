@@ -22,14 +22,12 @@ export default {
         "react-root",
         class ReactRoot extends HTMLElement {
           async connectedCallback() {
-            const rootDiv = document.createElement("div");
             const src = this.getAttribute("src");
-            this.appendChild(rootDiv);
             if (!src) {
               return;
             }
             if (hot.isDev) {
-              // ensure react-refresh is injected before react-dom is loaded
+              // ensure react-refresh is loaded before react runtime
               await import(
                 new URL("/@hot/hmr_react_refresh.js", location.href).href
               );
@@ -46,7 +44,7 @@ export default {
                   "/client",
               new URL(src, location.href),
             );
-            createRoot(rootDiv).render(
+            createRoot(this).render(
               createElement(StrictMode, null, createElement(Component)),
             );
           }

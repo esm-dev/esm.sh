@@ -268,7 +268,7 @@ func esmHandler() rex.Handle {
 				if strings.HasSuffix(filename, ".d.ts") {
 					data, err := embedFS.ReadFile(filename)
 					if err != nil {
-						return rex.Status(404, err.Error())
+						return rex.Status(404, "Not Found")
 					}
 					header.Set("Content-Type", "application/typescript; charset=utf-8")
 					header.Set("Cache-Control", "public, max-age=31536000, immutable")
@@ -277,16 +277,21 @@ func esmHandler() rex.Handle {
 			}
 			data, err := embedFS.ReadFile(fmt.Sprintf("%s.ts", filename))
 			if err != nil {
-				return rex.Status(404, err.Error())
+				return rex.Status(404, "Not Found")
 			}
 
 			if pathname == "/hot" {
+				set := newStringSet()
 				plugins := []string{}
 				imports := []string{}
 				for i, name := range strings.Split(ctx.Form.Value("plugins"), ",") {
 					name = strings.TrimSpace(name)
 					name, version := utils.SplitByLastByte(name, '@')
 					if validatePackageName(name) {
+						if set.Has(name) {
+							continue
+						}
+						set.Add(name)
 						_, err := embedFS.ReadFile(fmt.Sprintf("server/embed/hot-plugins/%s.ts", name))
 						if err == nil {
 							query := ""
@@ -297,7 +302,7 @@ func esmHandler() rex.Handle {
 									imports = append(imports, fmt.Sprintf(`console.warn("[esm.sh/hot] invalid version: %s@%s");`, name, version))
 								}
 							}
-							id := fmt.Sprintf("p%d", i)
+							id := fmt.Sprintf("plugin_%d", i)
 							plugins = append(plugins, id)
 							imports = append(imports, fmt.Sprintf(`import %s from "./hot-plugins/%s%s";`, id, name, query))
 						}

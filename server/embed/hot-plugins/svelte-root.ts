@@ -8,19 +8,15 @@ export default {
         "svelte-root",
         class SvelteRoot extends HTMLElement {
           connectedCallback() {
-            const rootDiv = document.createElement("div");
-            if (this.hasAttribute("shadow")) {
-              const shadow = this.attachShadow({ mode: "open" });
-              shadow.appendChild(rootDiv);
-            } else {
-              this.appendChild(rootDiv);
+            if (this.hasAttribute("shadow") && !this.shadowRoot) {
+              this.attachShadow({ mode: "open" });
             }
             const src = this.getAttribute("src");
             src &&
               import(new URL(src, location.href).href).then(
                 ({ default: Component }) => {
                   new Component({
-                    target: rootDiv,
+                    target: this.shadowRoot ?? this,
                   });
                 },
               );

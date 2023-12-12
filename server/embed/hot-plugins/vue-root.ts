@@ -22,12 +22,8 @@ export default {
         "vue-root",
         class VueRoot extends HTMLElement {
           connectedCallback() {
-            const rootDiv = document.createElement("div");
-            if (this.hasAttribute("shadow")) {
-              const shadow = this.attachShadow({ mode: "open" });
-              shadow.appendChild(rootDiv);
-            } else {
-              this.appendChild(rootDiv);
+            if (this.hasAttribute("shadow") && !this.shadowRoot) {
+              this.attachShadow({ mode: "open" });
             }
             const src = this.getAttribute("src");
             if (src) {
@@ -40,7 +36,7 @@ export default {
                 { default: Component },
               ]) => {
                 const app = createApp(Component);
-                app.mount(rootDiv);
+                app.mount(this.shadowRoot ?? this);
               });
             }
           }

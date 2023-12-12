@@ -98,7 +98,7 @@ class VFS {
   }
 }
 
-/** 🔥 class */
+/** 🔥 class implements HotCore interface. */
 class Hot implements HotCore {
   #basePath = new URL(".", location.href).pathname;
   #cache: Promise<Cache> | null = null;
@@ -127,7 +127,6 @@ class Hot implements HotCore {
     return this.#customImports;
   }
 
-  /** returns true if the current hostname is localhost */
   get isDev() {
     return this.#isDev;
   }
@@ -380,10 +379,7 @@ class Hot implements HotCore {
         const size = resHeaders.get("content-length");
         const modtime = resHeaders.get("last-modified");
         if (size && modtime) {
-          etag = "W/" + JSON.stringify(
-            parseInt(size).toString(36) + "-" +
-              (new Date(modtime).getTime() / 1000).toString(36),
-          );
+          etag = etag = "W/" + size + "-" + modtime;
         }
       }
       let buffer: string | null = null;
@@ -408,10 +404,9 @@ class Hot implements HotCore {
         vfs.get(cacheKey),
       ]);
       const importMap: ImportMap = (record?.data as unknown) ?? {};
-      const checksum = await computeHash(enc.encode([
-        JSON.stringify(importMap),
-        etag ?? await source(),
-      ].join("")));
+      const checksum = await computeHash(
+        enc.encode(JSON.stringify(importMap) + (etag ?? await source())),
+      );
       if (cached && cached.meta?.checksum === checksum) {
         if (!res.bodyUsed) {
           res.body?.cancel();
@@ -481,17 +476,17 @@ class Hot implements HotCore {
   }
 }
 
-/** check if the given value is an object */
+/** check if the given value is an object. */
 function isObject(v: unknown) {
   return typeof v === "object" && v !== null && !Array.isArray(v);
 }
 
-/** check if the url is localhost */
+/** check if the url is localhost. */
 function isLocalhost({ hostname }: URL | Location) {
   return hostname === "localhost" || hostname === "127.0.0.1";
 }
 
-/** get the extension name of the given path */
+/** get the extension name of the given path. */
 function getExtname(path: string): string {
   const i = path.lastIndexOf(".");
   if (i >= 0) {
@@ -500,7 +495,7 @@ function getExtname(path: string): string {
   return "";
 }
 
-/** compute the hash of the given input, default algorithm is SHA-1 */
+/** compute the hash of the given input, default algorithm is SHA-1. */
 async function computeHash(
   input: Uint8Array,
   algorithm: AlgorithmIdentifier = "SHA-1",
