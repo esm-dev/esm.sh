@@ -9,8 +9,8 @@ github.com/ije/esbuild-internal v0.19.7 h1:LGFfosWQwPVHSJyPljQzPfoDHSw0nrbjLV6R6
 github.com/ije/esbuild-internal v0.19.7/go.mod h1:s7HvKZ4ZGifyzvgWpSwnJOQTr6b+bsgfNBZ8HAEwwSM=
 github.com/ije/gox v0.6.1 h1:GGWzuAb5EugWYXqwgFrWDJah3tFZGgG8hA8Hl5Dgj8E=
 github.com/ije/gox v0.6.1/go.mod h1:HeDdgw2DUqWKHUyRjy9pdS4ESVxxv+0N5iOufd1JGRs=
-github.com/ije/rex v1.10.9 h1:c/ffTTp+vswAEBeyPRGl+B08dmFHJwh9V3Bx/Kn0ln8=
-github.com/ije/rex v1.10.9/go.mod h1:ilvkqXQaFQlZ5S7bb0dCucHeU9DK/x7CFR4ftz+cMeU=
+github.com/ije/rex v1.10.11 h1:8EwkI3/sQXjKYautuWwACqdenfAgYMVgShIrZZyU86E=
+github.com/ije/rex v1.10.11/go.mod h1:ilvkqXQaFQlZ5S7bb0dCucHeU9DK/x7CFR4ftz+cMeU=
 github.com/mssola/useragent v1.0.0 h1:WRlDpXyxHDNfvZaPEut5Biveq86Ze4o4EMffyMxmH5o=
 github.com/mssola/useragent v1.0.0/go.mod h1:hz9Cqz4RXusgg1EdI4Al0INR62kP7aPSRNHnpU+b85Y=
 github.com/pmezard/go-difflib v1.0.0 h1:4DBwDE0NGyQoBHbLQYPwSUPoCMWR5BEzIk/f1lZbAQM=
