@@ -22,10 +22,7 @@ export default {
     hot.onLoad(
       /(^|\/|\.)uno.css$/,
       async (_url: URL, source: string, _options: Record<string, any> = {}) => {
-        const { css: customCSS, entryPoints } = JSON.parse(source);
-        const data = await Promise.all(entryPoints.map((url: string) => {
-          return fetch(url).then((res) => res.text());
-        }));
+        const { customCSS, data, entryPoints } = JSON.parse(source);
         const res = await (uno ??
           (uno = createGenerator({
             ...unoConfig,
@@ -33,7 +30,7 @@ export default {
               unocssPresets.map((f) => f(unoConfig)),
             ),
           })))
-          .generate(data.join("\n"), {
+          .generate(data, {
             preflights: true,
             minify: true,
           });
@@ -60,50 +57,23 @@ export default {
             lines.push(line);
           }
         });
-        const entryPoints = atUse.map((entry) =>
-          entry.slice(5).split(";")[0].split(",")
+        const entryPoints = atUse.map((line) =>
+          line.slice(5).split(";")[0].split(",")
             .map((s) => s.trim()).filter(Boolean)
         ).flat()
           .map((s) => new URL(s, req.url));
-        const checksums = await Promise.all(entryPoints.map((url) => {
-          return fetch(url).then((res) => {
-            const headers = res.headers;
-            let etag = headers.get("etag");
-            if (!etag) {
-              const size = headers.get("content-length");
-              const modtime = headers.get("last-modified");
-              if (size && modtime) {
-                etag = "W/" + size + "-" + modtime;
-              }
-            }
-            if (etag) {
-              res.body?.cancel();
-              return etag;
-            }
-            return res.text();
-          });
-        }));
-        const etag = await computeHash(
-          new TextEncoder().encode(css + checksums.join("\n")),
+        const data = await Promise.all(
+          entryPoints.map((url) => fetch(url).then((res) => res.text())),
         );
         return new Response(
           JSON.stringify({
             entryPoints,
-            css: lines.join("\n"),
+            data: data.join("\n"),
+            customCSS: lines.join("\n"),
           }),
-          { headers: { etag } },
         );
       },
       "eager",
     );
   },
 };
-
-/** compute the hash of the given input, default algorithm is SHA-1 */
-async function computeHash(
-  input: Uint8Array,
-  algorithm: AlgorithmIdentifier = "SHA-1",
-): Promise<string> {
-  const buffer = new Uint8Array(await crypto.subtle.digest(algorithm, input));
-  return [...buffer].map((b) => b.toString(16).padStart(2, "0")).join("");
-}
