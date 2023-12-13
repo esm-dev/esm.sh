@@ -315,7 +315,6 @@ class Hot implements HotCore {
     }
 
     const mimeTypes: Record<string, string[]> = {
-      "a/gzip": ["gz"],
       "a/javascript;": ["js", "mjs"],
       "a/json;": ["json", "map"],
       "a/wasm": ["wasm"],
@@ -326,11 +325,8 @@ class Hot implements HotCore {
       "i/svg+xml;": ["svg"],
       "i/webp": ["webp"],
       "t/css;": ["css"],
-      "t/csv;": ["csv"],
       "t/html;": ["html", "htm"],
-      "t/markdown;": ["md", "markdown"],
-      "t/plain;": ["txt", "glsl"],
-      "t/yaml;": ["yaml", "yml"],
+      "t/plain;": ["csv", "md", "txt"],
     };
     const alias: Record<string, string> = {
       a: "application",
@@ -357,7 +353,8 @@ class Hot implements HotCore {
       }
       const headers: HeadersInit = [[
         kContentType,
-        file.meta?.contentType ?? typesMap.get(getExtname(name)) ?? "",
+        file.meta?.contentType ?? typesMap.get(getExtname(name)) ??
+          "binary/octet-stream",
       ]];
       return new Response(file.data, { headers });
     };
