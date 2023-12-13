@@ -29,39 +29,41 @@ export function setup(hot: Hot) {
   hot.waitUntil(hot.vfs.put(
     "@hot/hmr.js",
     `
-      const registry = new Map();
-      class Context {
-        constructor(path) {
-          this.path = path;
-          this.locked = false;
-        }
-        lock() {
-          this.locked = true;
-        }
-        accept(cb) {
-          if (this.locked) {
-            return;
-          }
-          __hot_hmr_modules.add(this.path);
-          typeof cb === "function" && __hot_hmr_callbacks.add(this.path, cb);
-        }
-        dispose(cb) {
-          typeof cb === "function" && __hot_hmr_disposes.add(this.path, cb);
-        }
-        invalidate() {
-          location.reload()
-        }
+    const registry = new Map();
+
+    class Context {
+      constructor(path) {
+        this.path = path;
+        this.locked = false;
       }
-      export default (path) => {
-        let module = registry.get(path);
-        if (module) {
-          module.lock();
-          return module
+      lock() {
+        this.locked = true;
+      }
+      accept(cb) {
+        if (this.locked) {
+          return;
         }
-        module = new Context(path);
-        registry.set(path, module);
-        return module;
-      };
+        __hot_hmr_modules.add(this.path);
+        typeof cb === "function" && __hot_hmr_callbacks.add(this.path, cb);
+      }
+      dispose(cb) {
+        typeof cb === "function" && __hot_hmr_disposes.add(this.path, cb);
+      }
+      invalidate() {
+        location.reload();
+      }
+    }
+
+    export default (path) => {
+      let ctx = registry.get(path);
+      if (ctx) {
+        ctx.lock();
+        return ctx;
+      }
+      ctx = new Context(path);
+      registry.set(path, ctx);
+      return ctx;
+    };
     `,
   ));
 
@@ -69,27 +71,27 @@ export function setup(hot: Hot) {
   hot.waitUntil(hot.vfs.put(
     "@hot/hmr_react_refresh.js",
     `
-      // react-refresh
-      // @link https://github.com/facebook/react/issues/16604#issuecomment-528663101
+    // react-refresh
+    // @link https://github.com/facebook/react/issues/16604#issuecomment-528663101
 
-      import runtime from "https://esm.sh/v135/react-refresh@0.14.0/runtime";
+    import runtime from "https://esm.sh/v135/react-refresh@0.14.0/runtime";
 
-      let timer;
-      const refresh = () => {
-        if (timer !== null) {
-          clearTimeout(timer);
-        }
-        timer = setTimeout(() => {
-          runtime.performReactRefresh()
-          timer = null;
-        }, 30);
-      };
+    let timer;
+    const refresh = () => {
+      if (timer !== null) {
+        clearTimeout(timer);
+      }
+      timer = setTimeout(() => {
+        runtime.performReactRefresh();
+        timer = null;
+      }, 30);
+    };
 
-      runtime.injectIntoGlobalHook(window);
-      window.$RefreshReg$ = () => {};
-      window.$RefreshSig$ = () => type => type;
+    runtime.injectIntoGlobalHook(window);
+    window.$RefreshReg$ = () => {};
+    window.$RefreshSig$ = () => type => type;
 
-      export { refresh as __REACT_REFRESH__, runtime as __REACT_REFRESH_RUNTIME__ };
+    export { refresh as __REACT_REFRESH__, runtime as __REACT_REFRESH_RUNTIME__ };
     `,
   ));
 

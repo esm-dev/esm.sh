@@ -107,12 +107,12 @@ export function render(hot: Hot) {
         await Promise.all(index.map(async (name: string) => {
           const res = await fetch(
             new URL(hot.basePath + name, location.href),
-            { headers: { "x-loader-env": "production" } },
+            { headers: { "hot-loader-env": "production" } },
           );
           if (!res) {
             return;
           }
-          if (res.headers.get("x-content-source") === "loader") {
+          if (res.headers.get("x-content-source") === "hot-loader") {
             loader[name] = res.headers.get("content-type")!;
           }
           fd.append(name, await res.blob());

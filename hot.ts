@@ -365,12 +365,12 @@ class Hot implements HotCore {
     const loaderHeaders = (contentType?: string) => {
       const headers = new Headers();
       headers.set(kContentType, contentType ?? typesMap.get("js")!);
-      headers.set(kContentSource, "loader");
+      headers.set(kContentSource, "hot-loader");
       return headers;
     };
     const serveLoader = async (loader: Loader, url: URL, req: Request) => {
       const res = await (loader.fetch ?? fetch)(req);
-      if (!res.ok || res.headers.get(kContentSource) === "loader") {
+      if (!res.ok || res.headers.get(kContentSource) === "hot-loader") {
         return res;
       }
       const resHeaders = res.headers;
@@ -395,7 +395,7 @@ class Hot implements HotCore {
         cacheKey = url.pathname.slice(1) + url.search.replace(/=(&|$)/g, "");
       }
       let isDev = this.#isDev;
-      if (req.headers.get("x-loader-env") === "production") {
+      if (req.headers.get("hot-loader-env") === "production") {
         isDev = false;
       }
       cacheKey = "loader" + (isDev ? "(dev)" : "") + ":" + cacheKey;
@@ -412,7 +412,7 @@ class Hot implements HotCore {
           res.body?.cancel();
         }
         const headers = loaderHeaders(cached.meta?.contentType);
-        headers.set("x-loader-cache", "HIT");
+        headers.set("hot-loader-cache-status", "HIT");
         return new Response(cached.data, { headers });
       }
       try {
