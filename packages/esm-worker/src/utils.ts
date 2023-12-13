@@ -119,7 +119,7 @@ export function isValidUTF8(buffer: ArrayBuffer): boolean {
 export function redirect(
   url: URL | string,
   status: 301 | 302,
-  cacheMaxAge = 600,
+  cacheMaxAge = 3600,
 ) {
   const headers = corsHeaders();
   headers.set("Location", url.toString());

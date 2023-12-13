@@ -117,7 +117,7 @@ Deno.test("esm-worker", {
     assert(
       res.headers.get("Location")!.startsWith(`${workerOrigin}/react-dom@`),
     );
-    assertEquals(res.headers.get("Cache-Control"), "public, max-age=600");
+    assertEquals(res.headers.get("Cache-Control"), "public, max-age=3600");
     const res2 = await fetch(res.headers.get("Location")!);
     const modUrl = new URL(res2.headers.get("X-Esm-Id")!, workerOrigin);
     res2.body?.cancel();
@@ -163,7 +163,7 @@ Deno.test("esm-worker", {
     assert(
       res.headers.get("Location")!.startsWith(`${workerOrigin}/react-dom@`),
     );
-    assertEquals(res.headers.get("Cache-Control"), "public, max-age=600");
+    assertEquals(res.headers.get("Cache-Control"), "public, max-age=3600");
     const res2 = await fetch(res.headers.get("Location")!);
     const modUrl = new URL(res2.headers.get("X-Esm-Id")!, workerOrigin);
     res2.body?.cancel();
@@ -193,7 +193,7 @@ Deno.test("esm-worker", {
     res.body?.cancel();
     assertEquals(res.status, 302);
     assert(res.headers.get("Location")!.startsWith(`${workerOrigin}/react@`));
-    assertEquals(res.headers.get("Cache-Control"), "public, max-age=600");
+    assertEquals(res.headers.get("Cache-Control"), "public, max-age=3600");
     const res2 = await fetch(res.headers.get("Location")!);
     const modUrl = new URL(res2.headers.get("X-Esm-Id")!, workerOrigin);
     res2.body?.cancel();
@@ -270,7 +270,7 @@ Deno.test("esm-worker", {
     res.body?.cancel();
     assertEquals(res.status, 302);
     assert(res.headers.get("Location")!.startsWith(`${workerOrigin}/react@`));
-    assertEquals(res.headers.get("Cache-Control"), "public, max-age=600");
+    assertEquals(res.headers.get("Cache-Control"), "public, max-age=3600");
     const res2 = await fetch(res.headers.get("Location")!);
     assertEquals(res2.status, 200);
     assertEquals(
@@ -309,7 +309,7 @@ Deno.test("esm-worker", {
     assertEquals(res.status, 302);
     const rUrl = res.headers.get("Location")!;
     assert(rUrl.startsWith(`${workerOrigin}/gh/microsoft/tslib@`));
-    assertEquals(res.headers.get("Cache-Control"), "public, max-age=600");
+    assertEquals(res.headers.get("Cache-Control"), "public, max-age=3600");
     const res2 = await fetch(res.headers.get("Location")!);
     const modUrl = new URL(res2.headers.get("X-Esm-Id")!, workerOrigin);
     res2.body?.cancel();
@@ -345,7 +345,7 @@ Deno.test("esm-worker", {
     assertEquals(res.status, 302);
     const rUrl = res.headers.get("Location")!;
     assert(rUrl.startsWith(`${workerOrigin}/gh/microsoft/fluentui-emoji@`));
-    assertEquals(res.headers.get("Cache-Control"), "public, max-age=600");
+    assertEquals(res.headers.get("Cache-Control"), "public, max-age=3600");
     const res2 = await fetch(rUrl);
     const svg = await res2.text();
     assertEquals(res2.status, 200);

@@ -81,7 +81,7 @@ export default withESMWorker((req, env, ctx) => {
     // using cache
     return ctx.withCache(() =>
       new Response("Boom!", {
-        headers: { "Cache-Control": "public; max-age=600" },
+        headers: { "Cache-Control": "public; max-age=3600" },
       })
     );
   }
