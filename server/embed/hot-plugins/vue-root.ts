@@ -1,14 +1,6 @@
 /** @version: 3.3.9 */
 
-import type { Hot, ImportMap } from "../types/hot.d.ts";
-
-function getImportMap(): ImportMap | null {
-  const script = document.querySelector("script[type=importmap]");
-  if (script) {
-    return JSON.parse(script.textContent!);
-  }
-  return null;
-}
+import type { Hot } from "../types/hot.d.ts";
 
 function importAll(...urls: (string | URL)[]) {
   return Promise.all(urls.map((url) => import(url.toString())));
@@ -27,9 +19,9 @@ export default {
             }
             const src = this.getAttribute("src");
             if (src) {
-              const importMap = getImportMap();
+              const { imports } = hot.importMap;
               importAll(
-                importMap?.imports?.["vue"] ?? "https://esm.sh/vue@3.3.9",
+                imports["vue"] ?? "https://esm.sh/vue@3.3.9",
                 new URL(src, location.href),
               ).then(([
                 { createApp },

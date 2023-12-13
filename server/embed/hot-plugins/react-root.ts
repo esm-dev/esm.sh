@@ -1,14 +1,6 @@
 /** @version: 18.2.0 */
 
-import type { Hot, ImportMap } from "../types/hot.d.ts";
-
-function getImportMap(): ImportMap | null {
-  const script = document.querySelector("script[type=importmap]");
-  if (script) {
-    return JSON.parse(script.textContent!);
-  }
-  return null;
-}
+import type { Hot } from "../types/hot.d.ts";
 
 function importAll(...urls: (string | URL)[]) {
   return Promise.all(urls.map((url) => import(url.toString())));
@@ -32,7 +24,7 @@ export default {
                 new URL("/@hot/hmr_react_refresh.js", location.href).href
               );
             }
-            const { imports } = getImportMap() ?? {};
+            const { imports } = hot.importMap;
             const [
               { createElement, StrictMode },
               { createRoot },

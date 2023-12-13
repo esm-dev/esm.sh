@@ -25,7 +25,7 @@ export function setup(hot: Hot) {
   globalThis.__hot_hmr_callbacks = new CallbackMapImpl();
   globalThis.__hot_hmr_disposes = new CallbackMapImpl();
 
-  hot.customImports.set("@hmrRuntime", "/@hot/hmr.js");
+  hot.importMap.imports["@hmrRuntime"] = "/@hot/hmr.js";
   hot.waitUntil(hot.vfs.put(
     "@hot/hmr.js",
     `
@@ -67,7 +67,7 @@ export function setup(hot: Hot) {
     `,
   ));
 
-  hot.customImports.set("@reactRefreshRuntime", "/@hot/hmr_react_refresh.js");
+  hot.importMap.imports["@reactRefreshRuntime"] = "/@hot/hmr_react_refresh.js";
   hot.waitUntil(hot.vfs.put(
     "@hot/hmr_react_refresh.js",
     `

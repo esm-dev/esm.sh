@@ -102,13 +102,14 @@ class VFS {
 class Hot implements HotCore {
   #basePath = new URL(".", location.href).pathname;
   #cache: Cache | null = null;
-  #customImports: Map<string, string> = new Map();
+  #importMap: Required<ImportMap> | null = null;
   #fetchListeners: { test: URLTest; handler: FetchHandler }[] = [];
   #fireListeners: ((sw: ServiceWorker) => void)[] = [];
   #isDev = isLocalhost(location);
   #loaders: Loader[] = [];
   #promises: Promise<any>[] = [];
   #vfs = new VFS();
+  #fired = false;
 
   constructor(plugins: Plugin[] = []) {
     plugins.forEach((plugin) => plugin.setup(this));
@@ -123,8 +124,8 @@ class Hot implements HotCore {
       (this.#cache = crateCacheProxy("esm.sh/hot/v" + VERSION));
   }
 
-  get customImports() {
-    return this.#customImports;
+  get importMap() {
+    return this.#importMap ?? (this.#importMap = parseImportMap());
   }
 
   get isDev() {
@@ -173,13 +174,19 @@ class Hot implements HotCore {
 
   async fire(swName = "/sw.js") {
     if (!doc) {
-      throw new Error("Hot.fire() can't be called in Service Worker scope.");
+      throw new Error("Document not found.");
     }
 
     const sw = navigator.serviceWorker;
     if (!sw) {
       throw new Error("Service Worker not supported.");
     }
+
+    if (this.#fired) {
+      console.warn("Got multiple fire() calls, ignored.");
+      return;
+    }
+    this.#fired = true;
 
     const swUrl = new URL(swName, location.href);
     const reg = await sw.register(swUrl, { type: "module" });
@@ -224,38 +231,13 @@ class Hot implements HotCore {
     }
   }
 
-  async #checkImportMap() {
-    const importMap: ImportMap = {
-      $support: HTMLScriptElement.supports?.("importmap"),
-      imports: Object.fromEntries(this.#customImports.entries()),
-    };
-    const script = doc.querySelector("head>script[type=importmap]");
-    if (script) {
-      try {
-        const v = JSON.parse(script.innerHTML);
-        if (isObject(v)) {
-          const { imports, scopes } = v;
-          for (const k in imports) {
-            importMap.imports![k] = imports[k];
-          }
-          if (isObject(scopes)) {
-            importMap.scopes = scopes;
-          }
-        }
-      } catch (err) {
-        console.error("Failed to parse importmap:", err);
-      }
-    }
-    await this.#vfs.put(kImportmapJson, importMap as any);
-  }
-
   async #fireApp(sw: ServiceWorker) {
     const isDev = this.#isDev;
     if (isDev) {
       const { setup } = await import(`./hot-plugins/dev`);
       setup(this);
     }
-    await this.#checkImportMap();
+    this.#promises.push(this.#vfs.put(kImportmapJson, this.importMap as any));
     await Promise.all(this.#promises);
     for (const onFire of this.#fireListeners) {
       onFire(sw);
@@ -308,10 +290,9 @@ class Hot implements HotCore {
   }
 
   listen() {
-    if (doc) {
-      throw new Error(
-        "Hot.listen() can't be called outside Service Worker scope.",
-      );
+    // @ts-ignore
+    if (typeof clients === "undefined") {
+      throw new Error("Service Worker scope not found.");
     }
 
     const mimeTypes: Record<string, string[]> = {
@@ -396,11 +377,11 @@ class Hot implements HotCore {
         isDev = false;
       }
       cacheKey = "loader" + (isDev ? "(dev)" : "") + ":" + cacheKey;
-      const [record, cached] = await Promise.all([
+      const [vfsImportMap, cached] = await Promise.all([
         vfs.get(kImportmapJson),
         vfs.get(cacheKey),
       ]);
-      const importMap: ImportMap = (record?.data as unknown) ?? {};
+      const importMap: ImportMap = (vfsImportMap?.data as unknown) ?? {};
       const checksum = await computeHash(
         enc.encode(JSON.stringify(importMap) + (etag ?? await source())),
       );
@@ -486,6 +467,36 @@ class Hot implements HotCore {
       }
     });
   }
+}
+
+/** parse importmap from <script> with `type=importmap` */
+function parseImportMap() {
+  if (!doc) {
+    throw new Error("Document not found.");
+  }
+  const importMap: Required<ImportMap> = {
+    $support: HTMLScriptElement.supports?.("importmap"),
+    imports: {},
+    scopes: {},
+  };
+  const script = doc.querySelector("head>script[type=importmap]");
+  if (script) {
+    try {
+      const v = JSON.parse(script.innerHTML);
+      if (isObject(v)) {
+        const { imports, scopes } = v;
+        for (const k in imports) {
+          importMap.imports[k] = imports[k];
+        }
+        if (isObject(scopes)) {
+          importMap.scopes = scopes;
+        }
+      }
+    } catch (err) {
+      console.error("Failed to parse importmap:", err);
+    }
+  }
+  return importMap;
 }
 
 /** create a cache proxy object. */
