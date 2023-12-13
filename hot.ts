@@ -432,6 +432,15 @@ class Hot implements HotCore {
         return new Response(err.message, { status: 500 });
       }
     };
+    const fetchWithCache = async (req: Request) => {
+      const cache = await this.cache;
+      const res = await cache.match(req);
+      if (res) return res;
+      const r = await fetch(req.url);
+      if (r.status !== 200) return r;
+      cache.put(req, r.clone());
+      return r;
+    };
 
     self.addEventListener("install", (event) => {
       // @ts-ignore
@@ -451,6 +460,12 @@ class Hot implements HotCore {
             return evt.respondWith(handler(request));
           }
         }
+      }
+      if (
+        url.hostname === "esm.sh" &&
+        /\w@\d+.\d+\.\d+(-|\/|\?|$)/.test(url.pathname)
+      ) {
+        return evt.respondWith(fetchWithCache(request));
       }
       if (hostname === location.hostname) {
         if (pathname.startsWith("/@hot/")) {
