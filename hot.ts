@@ -40,29 +40,29 @@ class VFS {
     });
 
     // open indexed database
-    const openRequest = indexedDB.open("esm.sh/hot", VERSION);
-    openRequest.onupgradeneeded = function () {
-      const db = openRequest.result;
+    const req = indexedDB.open("esm.sh/hot", VERSION);
+    req.onupgradeneeded = function () {
+      const db = req.result;
       if (!db.objectStoreNames.contains(kVfs)) {
         db.createObjectStore(kVfs, { keyPath: "name" });
       }
     };
-    openRequest.onsuccess = function () {
-      onOpen(openRequest.result);
+    req.onsuccess = function () {
+      onOpen(req.result);
     };
-    openRequest.onerror = function () {
-      onError(openRequest.error);
+    req.onerror = function () {
+      onError(req.error);
     };
   }
 
-  async #getDbStore(mode: IDBTransactionMode) {
+  async #start(mode: IDBTransactionMode) {
     const db = await this.#dbPromise;
     return db.transaction(kVfs, mode).objectStore(kVfs);
   }
 
   async get(name: string) {
-    const store = await this.#getDbStore("readonly");
-    const req = store.get(name);
+    const tx = await this.#start("readonly");
+    const req = tx.get(name);
     return new Promise<VFSRecord | null>(
       (resolve, reject) => {
         req.onsuccess = () => resolve(req.result ? req.result : null);
@@ -76,12 +76,12 @@ class VFS {
     data: string | Uint8Array,
     meta?: VFSRecord["meta"],
   ) {
-    const store = await this.#getDbStore("readwrite");
+    const tx = await this.#start("readwrite");
     const record: VFSRecord = { name, data };
     if (meta) {
       record.meta = meta;
     }
-    const req = store.put(record);
+    const req = tx.put(record);
     return new Promise<void>((resolve, reject) => {
       req.onsuccess = () => resolve();
       req.onerror = () => reject(req.error);
@@ -89,8 +89,8 @@ class VFS {
   }
 
   async delete(name: string) {
-    const store = await this.#getDbStore("readwrite");
-    const req = store.delete(name);
+    const tx = await this.#start("readwrite");
+    const req = tx.delete(name);
     return new Promise<void>((resolve, reject) => {
       req.onsuccess = () => resolve();
       req.onerror = () => reject(req.error);
@@ -101,7 +101,7 @@ class VFS {
 /** 🔥 class implements HotCore interface. */
 class Hot implements HotCore {
   #basePath = new URL(".", location.href).pathname;
-  #cache: Promise<Cache> | null = null;
+  #cache: Cache | null = null;
   #customImports: Map<string, string> = new Map();
   #fetchListeners: { test: URLTest; handler: FetchHandler }[] = [];
   #fireListeners: ((sw: ServiceWorker) => void)[] = [];
@@ -120,7 +120,7 @@ class Hot implements HotCore {
 
   get cache() {
     return this.#cache ??
-      (this.#cache = caches.open("esm.sh/hot/v" + VERSION));
+      (this.#cache = crateCacheProxy("esm.sh/hot/v" + VERSION));
   }
 
   get customImports() {
@@ -433,12 +433,12 @@ class Hot implements HotCore {
       }
     };
     const fetchWithCache = async (req: Request) => {
-      const cache = await this.cache;
+      const cache = this.cache;
       const res = await cache.match(req);
       if (res) return res;
       const r = await fetch(req.url);
       if (r.status !== 200) return r;
-      cache.put(req, r.clone());
+      await cache.put(req, r.clone());
       return r;
     };
 
@@ -489,6 +489,16 @@ class Hot implements HotCore {
       }
     });
   }
+}
+
+/** create a cache proxy object. */
+function crateCacheProxy(cacheName: string) {
+  const cachePromise = caches.open(cacheName);
+  return new Proxy({}, {
+    get: (_, name) => async (...args: any[]) => {
+      return (await cachePromise as any)[name](...args);
+    },
+  }) as Cache;
 }
 
 /** check if the given value is an object. */

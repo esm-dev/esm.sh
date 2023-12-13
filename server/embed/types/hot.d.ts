@@ -71,7 +71,7 @@ export interface VFS {
 
 export interface HotCore {
   readonly basePath: string;
-  readonly cache: Promise<Cache>;
+  readonly cache: Cache;
   readonly customImports: Map<string, string>;
   readonly isDev: boolean;
   readonly vfs: VFS;
