@@ -1,10 +1,10 @@
 /** @version: 4.2.7 */
 
-import type { Hot } from "../types/hot.d.ts";
+import type { Hot } from "../server/embed/types/hot.d.ts";
 import { compile } from "https://esm.sh/svelte@4.2.7/compiler";
 
 export default {
-  name: "svelte",
+  name: "svelte-loader",
   setup(hot: Hot) {
     hot.onLoad(
       /\.svelte$/,

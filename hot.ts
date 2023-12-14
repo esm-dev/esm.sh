@@ -234,7 +234,7 @@ class Hot implements HotCore {
   async #fireApp(sw: ServiceWorker) {
     const isDev = this.#isDev;
     if (isDev) {
-      const { setup } = await import(`./hot-plugins/dev`);
+      const { setup } = await import(`./hot/dev`);
       setup(this);
     }
     this.#promises.push(this.#vfs.put(kImportmapJson, this.importMap as any));
@@ -482,7 +482,7 @@ function parseImportMap() {
   const script = doc.querySelector("head>script[type=importmap]");
   if (script) {
     try {
-      const v = JSON.parse(script.innerHTML);
+      const v = JSON.parse(script.textContent!);
       if (isObject(v)) {
         const { imports, scopes } = v;
         for (const k in imports) {

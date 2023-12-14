@@ -1,3 +1,3 @@
-import hot from "https://esm.sh/v135/hot?plugins=tsx,md"
+import hot from "http://localhost:8080/v135/hot?plugins=tsx"
 
 hot.listen()

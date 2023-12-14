@@ -1,0 +1,17 @@
+@use index.html, App.jsx;
+
+.hot-app {
+  visibility: hidden
+}
+
+@media hot {
+  .hot-app {
+    visibility: visible;
+  }
+}
+
+.custom {
+  @apply p1 text-(white xl);
+  font-weight: 500;
+  background-color: theme('colors.red.400');
+}

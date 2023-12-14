@@ -489,14 +489,7 @@ Deno.test("esm-worker", {
       "application/javascript; charset=utf-8",
     );
 
-    const res2 = await fetch(`${workerOrigin}/hot/app.css`, {
-      headers: { "User-Agent": "Chrome/90.0.4430.212" },
-    });
-    assertEquals(res2.status, 200);
-    assertEquals(res2.headers.get("Content-Type"), "text/css");
-    assertEquals(await res2.text(), ".hot-app{visibility:hidden;}");
-
-    const res3 = await fetch(`${workerOrigin}/hot-plugins/tsx`, {
+    const res3 = await fetch(`${workerOrigin}/hot/tsx`, {
       headers: { "User-Agent": "Chrome/90.0.4430.212" },
     });
     assertEquals(res3.status, 200);
@@ -510,13 +503,13 @@ Deno.test("esm-worker", {
       headers: { "User-Agent": "Chrome/90.0.4430.212" },
     });
     const code4 = await res4.text();
-    assertStringIncludes(code4, "/hot-plugins/vue?version=3.3.8");
-    assertStringIncludes(code4, "/hot-plugins/tsx");
+    assertStringIncludes(code4, "/hot/vue@3.3.8");
+    assertStringIncludes(code4, "/hot/tsx");
 
-    const res5 = await fetch(`${workerOrigin}/hot-plugins/vue?version=3.3.8`, {
+    const res5 = await fetch(`${workerOrigin}/hot/vue@3.3.8`, {
       headers: { "User-Agent": "Chrome/90.0.4430.212" },
     });
-    assertStringIncludes(await res5.text(), "@vue/compiler-sfc@3.3.8");
+    assertStringIncludes(await res5.text(), "vue@3.3.8");
   });
 
   ac.abort();

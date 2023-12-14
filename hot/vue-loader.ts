@@ -1,6 +1,6 @@
 /** @version: 3.3.9 */
 
-import type { Hot, ImportMap } from "../types/hot.d.ts";
+import type { Hot, ImportMap } from "../server/embed/types/hot.d.ts";
 import {
   type CompilerOptions,
   compileScript,
@@ -177,7 +177,7 @@ async function computeHash(input: string): Promise<string> {
 }
 
 export default {
-  name: "vue",
+  name: "vue-loader",
   setup(hot: Hot) {
     // add `?dev` to vue import in dev mode
     if (hot.isDev) {

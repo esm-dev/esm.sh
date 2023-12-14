@@ -1,13 +1,13 @@
 /** @version: 3.3.9 */
 
-import type { Hot } from "../types/hot.d.ts";
+import type { Hot } from "../server/embed/types/hot.d.ts";
 
 function importAll(...urls: (string | URL)[]) {
   return Promise.all(urls.map((url) => import(url.toString())));
 }
 
 export default {
-  name: "vue-root",
+  name: "vue",
   setup(hot: Hot) {
     hot.onFire((_sw: ServiceWorker) => {
       customElements.define(

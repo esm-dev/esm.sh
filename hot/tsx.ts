@@ -1,6 +1,6 @@
 /** @version: 0.3.5 */
 
-import type { Hot } from "../types/hot.d.ts";
+import type { Hot } from "../server/embed/types/hot.d.ts";
 import initWasm, {
   type Targets,
   transform,
