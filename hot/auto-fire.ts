@@ -1,4 +1,4 @@
-import type { Hot } from "../types/hot.d.ts";
+import type { Hot } from "../server/embed/types/hot.d.ts";
 
 export default {
   name: "auto-fire",

@@ -1,4 +1,4 @@
-import type { CallbackMap, Hot } from "../types/hot.d.ts";
+import type { CallbackMap, Hot } from "../server/embed/types/hot.d.ts";
 
 class CallbackMapImpl<T extends Function> implements CallbackMap<T> {
   map = new Map<string, Set<T>>();
@@ -105,7 +105,7 @@ export function setup(hot: Hot) {
 
     let connected = false;
     const es = new EventSource(
-      new URL(hot.basePath + "hot-notify", location.href),
+      new URL(hot.basePath + "@hot-notify", location.href),
     );
 
     es.addEventListener("fs-notify", async (evt) => {

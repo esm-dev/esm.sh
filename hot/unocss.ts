@@ -1,6 +1,6 @@
 /** @version: 0.58.0 */
 
-import type { Hot } from "../types/hot.d.ts";
+import type { Hot } from "../server/embed/types/hot.d.ts";
 import {
   createGenerator,
   type UnoGenerator,
@@ -22,7 +22,7 @@ export default {
     hot.onLoad(
       /(^|\/|\.)uno.css$/,
       async (_url: URL, source: string, _options: Record<string, any> = {}) => {
-        const { customCSS, data, entryPoints } = JSON.parse(source);
+        const { css, data, entryPoints } = JSON.parse(source);
         const res = await (uno ??
           (uno = createGenerator({
             ...unoConfig,
@@ -37,16 +37,21 @@ export default {
         const transform = hot.unocssTransformDirectives;
         return {
           code: res.css +
-            (transform ? await transform(customCSS, uno) : customCSS),
+            (transform ? await transform(css, uno) : css),
           contentType: "text/css; charset=utf-8",
-          deps: entryPoints.map((url: string) => new URL(url).pathname),
+          deps: entryPoints.map((name: string) => "/" + name),
         };
       },
       async (req) => {
-        const css = await fetch(req).then((res) => res.text());
+        const res = await fetch(req);
+        if (!res.ok) {
+          return res;
+        }
+
+        const text = await res.text();
         const lines: string[] = [];
         const atUse: string[] = [];
-        css.split("\n").map((line) => {
+        text.split("\n").map((line) => {
           const trimmed = line.trimStart();
           if (trimmed.startsWith("@use ")) {
             atUse.push(trimmed);
@@ -57,19 +62,26 @@ export default {
             lines.push(line);
           }
         });
-        const entryPoints = atUse.map((line) =>
-          line.slice(5).split(";")[0].split(",")
-            .map((s) => s.trim()).filter(Boolean)
-        ).flat()
-          .map((s) => new URL(s, req.url));
-        const data = await Promise.all(
-          entryPoints.map((url) => fetch(url).then((res) => res.text())),
+
+        const globUrl = new URL(hot.basePath + "@hot-glob", req.url);
+        globUrl.searchParams.set(
+          "pattern",
+          atUse.map((line) => line.slice(5).split(";", 1)[0]).join(","),
         );
+        const globRes = await fetch(globUrl);
+        if (!globRes.ok) {
+          return globRes;
+        }
+        if (globRes.headers.get("content-type") !== "hot/glob") {
+          return new Response("Unsppported /@hot-glob api", { status: 500 });
+        }
+        const data = await globRes.text();
+        const entryPoints = JSON.parse(data.split("\n", 1)[0]);
         return new Response(
           JSON.stringify({
             entryPoints,
-            data: data.join("\n"),
-            customCSS: lines.join("\n"),
+            data,
+            css: lines.join("\n"),
           }),
         );
       },

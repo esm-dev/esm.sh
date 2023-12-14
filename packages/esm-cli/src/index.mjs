@@ -1,10 +1,5 @@
 import { openFile } from "./fs.mjs";
-
-const enc = new TextEncoder();
-const fsFilter = (filename) => {
-  return !/(^|\/)(\.|node_modules\/)/.test(filename) &&
-    !filename.endsWith(".log");
-};
+import { enc, fsFilter, globToRegExp } from "./util.mjs";
 
 /**
  * Creates a fetch handler for serving hot applications.
@@ -28,6 +23,7 @@ export const serveHot = (options) => {
   };
   watchFS.watched = false;
 
+  /** @returns {Promise<string[]>} */
   const ls = async (dir, pos) => {
     const { readdir } = await import("node:fs/promises");
     const files = [];
@@ -47,7 +43,7 @@ export const serveHot = (options) => {
     const url = new URL(req.url);
     const pathname = decodeURIComponent(url.pathname);
 
-    if (pathname === "/hot-notify") {
+    if (pathname === "/@hot-notify") {
       if (!watchFS.watched) {
         watchFS.watched = true;
         await watchFS();
@@ -78,9 +74,63 @@ export const serveHot = (options) => {
       );
     }
 
-    if (pathname === "/hot-index") {
+    if (pathname === "/@hot-index") {
       const entries = await ls(root);
       return Response.json(entries);
+    }
+
+    if (pathname === "/@hot-glob") {
+      const headers = new Headers({ "content-type": "hot/glob" });
+      const glob = url.searchParams.get("pattern");
+      if (!glob) {
+        return new Response("[]", { headers });
+      }
+      try {
+        const entries = await ls(root);
+        const matched = entries.filter((entry) =>
+          glob.includes(entry) || entry.match(globToRegExp(glob))
+        );
+        if (!matched.length) {
+          return new Response("[]", { headers });
+        }
+        let currentFile;
+        return new Response(
+          new ReadableStream({
+            start(controller) {
+              const enqueue = (chunk) => controller.enqueue(chunk);
+              const pipe = async () => {
+                const filename = matched.shift();
+                if (!filename) {
+                  controller.close();
+                  return;
+                }
+                currentFile = await openFile(root + "/" + filename);
+                const reader = currentFile.body.getReader();
+                const pump = async () => {
+                  const { done, value } = await reader.read();
+                  if (done) {
+                    currentFile.close();
+                    pipe();
+                    return;
+                  }
+                  enqueue(new Uint8Array(value));
+                  pump();
+                };
+                enqueue(enc.encode(`\n\n---${filename}---\n\n`));
+                pump();
+              };
+              enqueue(enc.encode(JSON.stringify(matched)));
+              pipe();
+            },
+            cancel() {
+              currentFile?.close();
+            },
+          }),
+          { headers },
+        );
+      } catch (e) {
+        return new Response(e.message, { status: 500 });
+      }
     }
 
     let file = pathname.includes(".") ? await openFile(root + pathname) : null;
@@ -128,8 +178,8 @@ export const serveHot = (options) => {
             const pump = async () => {
               const { done, value } = await reader.read();
               if (done) {
-                file.close();
                 controller.close();
+                file.close();
                 return;
               }
               controller.enqueue(new Uint8Array(value));

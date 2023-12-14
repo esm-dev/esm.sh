@@ -1,6 +1,6 @@
 /** @version: 0.58.0 */
 
-import type { Hot } from "../types/hot.d.ts";
+import type { Hot } from "../server/embed/types/hot.d.ts";
 import presetWebFonts from "https://esm.sh/@unocss/preset-web-fonts@0.58.0?bundle";
 
 export default {

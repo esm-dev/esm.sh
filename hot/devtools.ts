@@ -1,4 +1,4 @@
-import type { Hot } from "../types/hot.d.ts";
+import type { Hot } from "../server/embed/types/hot.d.ts";
 
 const html = String.raw;
 
@@ -90,7 +90,7 @@ export function render(hot: Hot) {
       const button = root.querySelector("button")!;
       const urlBar = root.querySelector("a")!;
       const publish = async () => {
-        const res = fetch(new URL(hot.basePath + "hot-index", location.href));
+        const res = fetch(new URL(hot.basePath + "@hot-index", location.href));
         if (!res) {
           return;
         }

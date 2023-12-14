@@ -1,6 +1,6 @@
 /** @version: 0.58.0 */
 
-import type { Hot } from "../types/hot.d.ts";
+import type { Hot } from "../server/embed/types/hot.d.ts";
 import presetIcons from "https://esm.sh/@unocss/preset-icons@0.58.0?bundle";
 
 export default {
