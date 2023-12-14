@@ -1,5 +1,5 @@
-import { openFile } from "./fs.mjs";
-import { enc, fsFilter, globToRegExp } from "./util.mjs";
+import fs from "./fs.mjs";
+import { enc, globToRegExp } from "./util.mjs";
 
 /**
  * Creates a fetch handler for serving hot applications.
@@ -8,61 +8,27 @@ import { enc, fsFilter, globToRegExp } from "./util.mjs";
  */
 export const serveHot = (options) => {
   const { root = ".", fallback = "index.html" } = options;
-
-  const watchCallbacks = new Set();
-  const watchFS = async () => {
-    const { watch } = await import("node:fs");
-    watch(root, { recursive: true }, (event, filename) => {
-      if (fsFilter(filename)) {
-        watchCallbacks.forEach((handler) =>
-          handler(event === "change" ? "modify" : event, "/" + filename)
-        );
-      }
-    });
-    console.log(`Watching files changed...`);
-  };
-  watchFS.watched = false;
-
-  /** @returns {Promise<string[]>} */
-  const ls = async (dir, pos) => {
-    const { readdir } = await import("node:fs/promises");
-    const files = [];
-    const list = await readdir(dir, { withFileTypes: true });
-    for (const entry of list) {
-      const name = [pos, entry.name].filter(Boolean).join("/");
-      if (entry.isDirectory()) {
-        files.push(...(await ls(dir + "/" + entry.name, name)));
-      } else if (fsFilter(name)) {
-        files.push(name);
-      }
-    }
-    return files;
-  };
+  const w = fs.watch(root);
 
   return async (req) => {
     const url = new URL(req.url);
     const pathname = decodeURIComponent(url.pathname);
 
     if (pathname === "/@hot-notify") {
-      if (!watchFS.watched) {
-        watchFS.watched = true;
-        await watchFS();
-      }
-      let notify;
+      let dispose;
       return new Response(
         new ReadableStream({
           start(controller) {
             const enqueue = (chunk) => controller.enqueue(chunk);
-            notify = (type, name) => {
+            dispose = w((type, name) => {
               enqueue(enc.encode("event: fs-notify\ndata: "));
               enqueue(enc.encode(JSON.stringify({ type, name })));
               enqueue(enc.encode("\n\n"));
-            };
-            watchCallbacks.add(notify);
+            });
             enqueue(enc.encode(": hot notify stream\n\n"));
           },
           cancel() {
-            notify && watchCallbacks.delete(notify);
+            dispose?.();
           },
         }),
         {
@@ -75,24 +41,33 @@ export const serveHot = (options) => {
     }
 
     if (pathname === "/@hot-index") {
-      const entries = await ls(root);
+      const entries = await fs.ls(root);
       return Response.json(entries);
     }
 
     if (pathname === "/@hot-glob") {
-      const headers = new Headers({ "content-type": "hot/glob" });
+      const headers = new Headers({
+        "content-type": "hot/glob",
+        "content-index": "2",
+      });
       const glob = url.searchParams.get("pattern");
       if (!glob) {
         return new Response("[]", { headers });
       }
       try {
-        const entries = await ls(root);
+        const entries = await fs.ls(root);
         const matched = entries.filter((entry) =>
           glob.includes(entry) || entry.match(globToRegExp(glob))
         );
         if (!matched.length) {
           return new Response("[]", { headers });
         }
+        const names = enc.encode(JSON.stringify(matched) + "\n");
+        const sizes = await Promise.all(matched.map(async (filename) => {
+          const stat = await fs.stat(root + "/" + filename);
+          return stat.size;
+        }));
+        headers.set("content-index", [names.length, ...sizes].join(","));
         let currentFile;
         return new Response(
           new ReadableStream({
@@ -104,7 +79,7 @@ export const serveHot = (options) => {
                   controller.close();
                   return;
                 }
-                currentFile = await openFile(root + "/" + filename);
+                currentFile = await fs.open(root + "/" + filename);
                 const reader = currentFile.body.getReader();
                 const pump = async () => {
                   const { done, value } = await reader.read();
@@ -116,10 +91,9 @@ export const serveHot = (options) => {
                   enqueue(new Uint8Array(value));
                   pump();
                 };
-                enqueue(enc.encode(`\n\n---${filename}---\n\n`));
                 pump();
               };
-              enqueue(enc.encode(JSON.stringify(matched)));
+              enqueue(names);
               pipe();
             },
             cancel() {
@@ -133,7 +107,7 @@ export const serveHot = (options) => {
       }
     }
 
-    let file = pathname.includes(".") ? await openFile(root + pathname) : null;
+    let file = pathname.includes(".") ? await fs.open(root + pathname) : null;
     if (!file && pathname === "/sw.js") {
       const hotUrl = new URL("https://esm.sh/v135/hot");
       return new Response(`import hot from "${hotUrl.href}";hot.listen();`, {
@@ -158,7 +132,7 @@ export const serveHot = (options) => {
         "/" + fallback,
       ];
       for (const filename of list) {
-        file = await openFile(root + filename);
+        file = await fs.open(root + filename);
         if (file) break;
       }
     }

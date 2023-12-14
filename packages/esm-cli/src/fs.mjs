@@ -1,12 +1,90 @@
+import { open, readdir, stat, watch } from "node:fs/promises";
 import { getMimeType } from "./mime.mjs";
 
-/**
- * openFile for all js runtimes.
- * @type {() => Promise<import("../types").FsFile>}
- */
-let openFile;
+const fsFilter = (filename) => {
+  return !/(^|\/)(\.|node_modules\/)/.test(filename) &&
+    !filename.endsWith(".log");
+};
+
+const fs = {
+  /**
+   * open a file.
+   * @type {(path: string) => Promise<import("../types").FsFile>}
+   */
+  open: async (path) => {
+    try {
+      const file = await open(path, "r");
+      const stat = await file.stat();
+      return {
+        size: stat.size,
+        lastModified: stat.mtime.getTime(),
+        contentType: getMimeType(path),
+        body: file.readableWebStream(),
+        close: () => file.close(),
+      };
+    } catch (error) {
+      if (error.code === "ENOENT") {
+        return null;
+      }
+      throw error;
+    }
+  },
+  /**
+   * find files in a directory.
+   * @type {(dir: string) => Promise<string[]>}
+   */
+  ls: async (dir, parent) => {
+    const files = [];
+    const list = await readdir(dir, { withFileTypes: true });
+    for (const entry of list) {
+      const name = [parent, entry.name].filter(Boolean).join("/");
+      if (entry.isDirectory()) {
+        files.push(...(await fs.ls(dir + "/" + entry.name, name)));
+      } else if (fsFilter(name)) {
+        files.push(name);
+      }
+    }
+    return files;
+  },
+  /**
+   * watch files changed.
+   * @type {(root: string) => (handler: (type: string, filename: string)=>void) => () => void}
+   */
+  watch: (root) => {
+    const watchCallbacks = new Set();
+    const start = async () => {
+      console.log("Watching files changed...");
+      for await (const evt of watch(root, { recursive: true })) {
+        const { eventType, filename } = evt;
+        if (fsFilter(filename)) {
+          watchCallbacks.forEach((handler) =>
+            handler(
+              eventType === "change" ? "modify" : eventType,
+              "/" + filename,
+            )
+          );
+        }
+      }
+    };
+    let started = false;
+    return (handler) => {
+      if (!started) {
+        start();
+        started = true;
+      }
+      watchCallbacks.add(handler);
+      return () => {
+        watchCallbacks.delete(handler);
+      };
+    };
+  },
+  stat: (path) => {
+    return stat(path);
+  },
+};
+
 if (typeof Deno !== "undefined") {
-  openFile = async (path) => {
+  fs.open = async (path) => {
     try {
       const file = await Deno.open(path);
       const stat = await file.stat();
@@ -25,7 +103,7 @@ if (typeof Deno !== "undefined") {
     }
   };
 } else if (typeof Bun !== "undefined") {
-  openFile = async (path) => {
+  fs.open = async (path) => {
     const file = Bun.file(path);
     const found = await file.exists();
     if (!found) {
@@ -39,29 +117,6 @@ if (typeof Deno !== "undefined") {
       close: () => {},
     };
   };
-} else if (typeof process === "object") {
-  const fsPromise = import("node:fs/promises");
-  openFile = async (path) => {
-    const fs = await fsPromise;
-    try {
-      const file = await fs.open(path, "r");
-      const stat = await file.stat();
-      return {
-        size: stat.size,
-        lastModified: stat.mtime.getTime(),
-        body: file.readableWebStream(),
-        contentType: getMimeType(path),
-        close: () => file.close(),
-      };
-    } catch (error) {
-      if (error.code === "ENOENT") {
-        return null;
-      }
-      throw error;
-    }
-  };
-} else {
-  throw new Error("no fs implementation");
 }
 
-export { openFile };
+export default fs;

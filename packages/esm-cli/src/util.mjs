@@ -1,21 +1,16 @@
 export const enc = new TextEncoder();
 
-export const fsFilter = (filename) => {
-  return !/(^|\/)(\.|node_modules\/)/.test(filename) &&
-    !filename.endsWith(".log");
-};
-
-const regexpCache = new Map();
 export const globToRegExp = (glob) => {
-  let reg = regexpCache.get(glob);
-  if (reg) return reg
-  regexpCache.set(glob, reg = new RegExp(
-    "^" + glob.replace(/[-+?.^$[\]()]/g, "\\$&")
-      .replace(/\{/g, "(").replace(/\}/g, ")").replace(/,\s*/g, "|")
-      .replace(/\*\*(\/\*+)?/g, "++").replace(/\*/g, "[^/]+").replace(/\+\+/g,".*?")
-      .replace(/\//g, "\\/") +
-      "$",
-    "i",
-  ));
-  return reg
+  const cache = globToRegExp.cache;
+  let reg = cache.get(glob);
+  if (reg) {
+    return reg;
+  }
+  const r = glob.replace(/[-+?.^$[\]]/g, "\\$&")
+    .replace(/\{/g, "(").replace(/\}/g, ")").replace(/,\s*/g, "|")
+    .replace(/\*\*(\/\*+)?/g, "++").replace(/\*/g, "[^/]+")
+    .replace(/\+\+/g, ".*?").replace(/\//g, "\\/");
+  cache.set(glob, reg = new RegExp("^" + r + "$", "i"));
+  return reg;
 };
+globToRegExp.cache = new Map();

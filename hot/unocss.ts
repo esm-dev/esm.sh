@@ -76,7 +76,10 @@ export default {
           return new Response("Unsppported /@hot-glob api", { status: 500 });
         }
         const data = await globRes.text();
-        const entryPoints = JSON.parse(data.split("\n", 1)[0]);
+        const n = parseInt(
+          globRes.headers.get("content-index")!.split(",", 1)[0],
+        );
+        const entryPoints = JSON.parse(data.slice(0, n));
         return new Response(
           JSON.stringify({
             entryPoints,

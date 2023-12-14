@@ -1,4 +1,4 @@
-@use index.html, App.jsx;
+@use **/*.jsx;
 
 .hot-app {
   visibility: hidden
