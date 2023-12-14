@@ -38,7 +38,13 @@ export default {
       }, (req: Request) => {
         const url = new URL(req.url);
         url.searchParams.set("dev", "");
-        return Response.redirect(url.href.replace("dev=", "dev"), 302);
+        return new Response(null, {
+          status: 302,
+          headers: {
+            "access-control-allow-origin": "*",
+            "location": url.href.replace("dev=", "dev"),
+          },
+        });
       });
     }
 
