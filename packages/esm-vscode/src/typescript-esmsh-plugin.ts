@@ -12,7 +12,7 @@ export interface ImportMap {
 
 export interface PreprocessedImportMap {
   jsxImportSource?: string;
-  alias?: Record<string, string>;
+  imports?: Record<string, string>;
   trailingSlash?: [string, string][];
 }
 
@@ -47,7 +47,7 @@ class Plugin implements TS.server.PluginModule {
     this.#logger = DEBUG
       ? {
         info(s: string, ...args: any[]) {
-          const filename = join(cwd, "typescript-esm-plugin.log");
+          const filename = join(cwd, "typescript-esmsh-plugin.log");
           if (!this._reset) {
             this._reset = true;
             writeFileSync(filename, "", {
@@ -95,11 +95,12 @@ class Plugin implements TS.server.PluginModule {
       .getCompilationSettings.bind(languageServiceHost);
     languageServiceHost.getCompilationSettings = () => {
       const settings: TS.CompilerOptions = getCompilationSettings();
-      const jsxImportSource = this.#projectConfig.importMap?.jsxImportSource;
-      if (jsxImportSource) {
+      const jsxImportSource = this.#projectConfig?.importMap.jsxImportSource;
+      if (jsxImportSource && !settings.jsxImportSource) {
         settings.jsx = this.#typescript.JsxEmit.ReactJSX;
         settings.jsxImportSource = jsxImportSource;
       }
+      settings.allowImportingTsExtensions = true;
       return settings;
     };
 
@@ -316,9 +317,9 @@ class Plugin implements TS.server.PluginModule {
 
   #applyImportMap(specifier: string) {
     const { importMap } = this.#projectConfig;
-    const alias = importMap.alias?.[specifier];
-    if (alias) {
-      return alias;
+    const res = importMap.imports?.[specifier];
+    if (res) {
+      return res;
     }
     if (importMap.trailingSlash?.length) {
       for (const [prefix, replacement] of importMap.trailingSlash) {
@@ -344,7 +345,7 @@ class Plugin implements TS.server.PluginModule {
           if (k === "@jsxImportSource") {
             importMap.jsxImportSource = v;
           }
-          (importMap.alias ?? (importMap.alias = {}))[k] = v;
+          (importMap.imports ?? (importMap.imports = {}))[k] = v;
         }
       }
     }

@@ -1,5 +1,5 @@
 import * as vscode from "vscode";
-import type { ImportMap } from "./typescript-esm-plugin.ts";
+import type { ImportMap } from "./typescript-esmsh-plugin.ts";
 import {
   debunce,
   getImportMapFromHtml,
@@ -187,7 +187,7 @@ async function ensureTsApi() {
       const old = JSON.stringify(config);
       Object.assign(config, c);
       if (old !== JSON.stringify(config)) {
-        api.configurePlugin("typescript-esm-plugin", config);
+        api.configurePlugin("typescript-esmsh-plugin", config);
       }
     },
   };

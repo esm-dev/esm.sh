@@ -1,5 +1,5 @@
 {
-  "name": "typescript-esm-plugin",
+  "name": "typescript-esmsh-plugin",
   "version": "0.0.0",
   "main": "./index.js"
 }

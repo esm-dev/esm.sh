@@ -16,7 +16,7 @@
   "contributes": {
     "typescriptServerPlugins": [
       {
-        "name": "typescript-esm-plugin",
+        "name": "typescript-esmsh-plugin",
         "enableForWorkspaceTypeScriptVersions": true
       }
     ],
@@ -29,18 +29,18 @@
   },
   "scripts": {
     "build": "node build.mjs && vsce package",
-    "start": "DEBUG=true node build.mjs && rm -rf ~/.cache/esm.sh && code --extensionDevelopmentPath=$PWD ../esm-hot/test"
+    "start": "DEBUG=true node build.mjs && rm -rf ~/.cache/esm.sh && code --extensionDevelopmentPath=$PWD ../esm-cli/templates/react"
   },
   "devDependencies": {
-    "@types/node": "^20.10.2",
-    "@types/vscode": "^1.84.2",
-    "esbuild": "^0.19.8",
-    "html5parser": "^2.0.2",
-    "typescript": "^5.3.2",
-    "vsce": "^2.15.0"
+    "@types/node": "20.10.4",
+    "@types/vscode": "1.84.2",
+    "@vscode/vsce": "2.22.0",
+    "esbuild": "0.19.8",
+    "html5parser": "2.0.2",
+    "typescript": "5.3.3"
   },
   "dependencies": {
-    "typescript-esm-plugin": "./typescript-esm-plugin"
+    "typescript-esmsh-plugin": "./typescript-esmsh-plugin"
   },
   "engines": {
     "vscode": "^1.84.0"
