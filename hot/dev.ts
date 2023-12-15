@@ -144,7 +144,8 @@ export function setup(hot: Hot) {
 
     es.onopen = () => {
       if (!connected) {
-        import(`./devtools`).then(({ render }) => render(hot));
+        import(new URL("./devtools", import.meta.url).href)
+          .then(({ render }) => render(hot));
       }
       connected = true;
       console.log(

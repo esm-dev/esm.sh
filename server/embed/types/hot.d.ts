@@ -60,12 +60,12 @@ export interface VFSMeta {
 }
 
 export interface VFS {
-  get(name: string): Promise<VFSRecord | null>;
+  get(name: string): Promise<VFSRecord | undefined>;
   put(
     name: string,
     data: string | Uint8Array,
     meta?: VFSRecord["meta"],
-  ): Promise<void>;
+  ): Promise<string>;
   delete(name: string): Promise<void>;
 }
 

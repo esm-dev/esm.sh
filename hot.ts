@@ -32,69 +32,40 @@ class VFS {
   #dbPromise: Promise<IDBDatabase>;
 
   constructor() {
-    let onOpen: (db: IDBDatabase) => void;
-    let onError: (reason: DOMException | null) => void;
-    this.#dbPromise = new Promise<IDBDatabase>((resolve, reject) => {
-      onOpen = resolve;
-      onError = reject;
-    });
-
     // open indexed database
     const req = indexedDB.open("esm.sh/hot", VERSION);
-    req.onupgradeneeded = function () {
+    req.onupgradeneeded = () => {
       const db = req.result;
       if (!db.objectStoreNames.contains(kVfs)) {
         db.createObjectStore(kVfs, { keyPath: "name" });
       }
     };
-    req.onsuccess = function () {
-      onOpen(req.result);
-    };
-    req.onerror = function () {
-      onError(req.error);
-    };
+    this.#dbPromise = waitIDBRequest<IDBDatabase>(req);
   }
 
-  async #start(mode: IDBTransactionMode) {
+  async #start(readonly = false) {
     const db = await this.#dbPromise;
-    return db.transaction(kVfs, mode).objectStore(kVfs);
+    return db.transaction(kVfs, readonly ? "readonly" : "readwrite")
+      .objectStore(kVfs);
   }
 
   async get(name: string) {
-    const tx = await this.#start("readonly");
-    const req = tx.get(name);
-    return new Promise<VFSRecord | null>(
-      (resolve, reject) => {
-        req.onsuccess = () => resolve(req.result ? req.result : null);
-        req.onerror = () => reject(req.error);
-      },
-    );
+    const tx = await this.#start(true);
+    return waitIDBRequest<VFSRecord | undefined>(tx.get(name));
   }
 
-  async put(
-    name: string,
-    data: string | Uint8Array,
-    meta?: VFSRecord["meta"],
-  ) {
-    const tx = await this.#start("readwrite");
+  async put(name: string, data: VFSRecord["data"], meta?: VFSRecord["meta"]) {
     const record: VFSRecord = { name, data };
     if (meta) {
       record.meta = meta;
     }
-    const req = tx.put(record);
-    return new Promise<void>((resolve, reject) => {
-      req.onsuccess = () => resolve();
-      req.onerror = () => reject(req.error);
-    });
+    const tx = await this.#start();
+    return waitIDBRequest<string>(tx.put(record));
   }
 
   async delete(name: string) {
-    const tx = await this.#start("readwrite");
-    const req = tx.delete(name);
-    return new Promise<void>((resolve, reject) => {
-      req.onsuccess = () => resolve();
-      req.onerror = () => reject(req.error);
-    });
+    const tx = await this.#start();
+    return waitIDBRequest<void>(tx.delete(name));
   }
 }
 
@@ -172,7 +143,7 @@ class Hot implements HotCore {
     }
   }
 
-  async fire(swName = "/sw.js") {
+  async fire(swScript = "/sw.js") {
     if (!doc) {
       throw new Error("Document not found.");
     }
@@ -186,13 +157,16 @@ class Hot implements HotCore {
       console.warn("Got multiple fire() calls, ignored.");
       return;
     }
+
+    const swScriptUrl = new URL(swScript, location.href);
+    this.#basePath = new URL(".", swScriptUrl).pathname;
     this.#fired = true;
 
-    const swUrl = new URL(swName, location.href);
-    const reg = await sw.register(swUrl, { type: "module" });
-
-    // update base path to the Service Worker's scope
-    this.#basePath = new URL(".", location.href).pathname;
+    const reg = await sw.register(swScriptUrl, {
+      type: "module",
+      updateViaCache: this.isDev ? "none" : "all",
+    });
+    let refreshing = false;
 
     // detect Service Worker update available and wait for it to become installed
     reg.addEventListener("updatefound", () => {
@@ -205,10 +179,12 @@ class Hot implements HotCore {
             waiting.postMessage(kSkipWaiting);
           } else {
             // otherwise it's the first install
+            waiting.postMessage(kSkipWaiting);
             waiting.addEventListener("statechange", () => {
-              const { active } = reg;
-              if (active) {
-                location.reload();
+              if (reg.active && !refreshing) {
+                refreshing = true;
+                this.#fireApp(reg.active, true);
+                this.isDev && console.log("🔥 app registered.");
               }
             });
           }
@@ -218,23 +194,23 @@ class Hot implements HotCore {
 
     // detect controller change and refresh the page
     sw.addEventListener("controllerchange", () => {
-      location.reload();
+      !refreshing && location.reload();
     });
 
     // if there's a waiting, send skip waiting message
     reg.waiting?.postMessage(kSkipWaiting);
 
     // fire immediately if there's an active Service Worker
-    const { active } = reg;
-    if (active) {
-      this.#fireApp(active);
+    if (reg.active) {
+      this.#fireApp(reg.active);
     }
   }
 
-  async #fireApp(sw: ServiceWorker) {
+  async #fireApp(sw: ServiceWorker, firstInstall = false) {
     const isDev = this.#isDev;
     if (isDev) {
-      const { setup } = await import(`./hot/dev`);
+      const url = "./hot/dev";
+      const { setup } = await import(url);
       setup(this);
     }
     this.#promises.push(this.#vfs.put(kImportmapJson, this.importMap as any));
@@ -242,17 +218,24 @@ class Hot implements HotCore {
     for (const onFire of this.#fireListeners) {
       onFire(sw);
     }
-    doc.querySelectorAll("script[type='module/hot']").forEach((el) => {
-      const copy = el.cloneNode(true) as HTMLScriptElement;
-      copy.type = "module";
-      el.replaceWith(copy);
-    });
-    doc.querySelectorAll("hot-link,hot-script,hot-iframe").forEach((el) => {
-      const copy = doc.createElement(el.tagName.slice(4).toLowerCase());
-      el.getAttributeNames().forEach((name) => {
-        copy.setAttribute(name, el.getAttribute(name)!);
+    if (firstInstall) {
+      doc.querySelectorAll("link[rel=stylesheet]").forEach((el) => {
+        const href = el.getAttribute("href");
+        if (href) {
+          const url = new URL(href, location.href);
+          if (isSameOrigin(url)) {
+            url.searchParams.set("t", getTimeStamp());
+            el.setAttribute("href", url.pathname + url.search);
+          }
+        }
       });
-      el.replaceWith(copy);
+    }
+    doc.querySelectorAll("script").forEach((el) => {
+      if (el.type === "text/babel" || el.type === "hot/module") {
+        const copy = el.cloneNode(true) as HTMLScriptElement;
+        copy.type = "module";
+        el.replaceWith(copy);
+      }
     });
     customElements.define(
       "hot-html",
@@ -268,29 +251,28 @@ class Hot implements HotCore {
             : this;
           root.innerHTML = "<slot></slot>";
           const load = async (first?: boolean) => {
-            const fetchUrl = new URL(src, url);
             if (!first) {
-              fetchUrl.searchParams.set("t", Date.now().toString(36));
+              url.searchParams.set("t", getTimeStamp());
             }
-            const res = await fetch(fetchUrl);
+            const res = await fetch(url);
             if (res.ok) {
               const tpl = document.createElement("template");
               tpl.innerHTML = await res.text();
               root.replaceChildren(tpl.content);
             }
           };
-          if (isDev && url.hostname === location.hostname) {
+          if (isDev && isSameOrigin(url)) {
             __hot_hmr_callbacks.add(url.pathname, load);
           }
           load(true);
         }
       },
     );
-    console.log("🔥 app fired.");
+    this.isDev && console.log("🔥 app fired.");
   }
 
   listen() {
-    // @ts-ignore
+    // @ts-ignore clients
     if (typeof clients === "undefined") {
       throw new Error("Service Worker scope not found.");
     }
@@ -420,13 +402,14 @@ class Hot implements HotCore {
       return r;
     };
 
-    self.addEventListener("install", (event) => {
-      // @ts-ignore
-      event.waitUntil(Promise.all(this.#promises));
-    });
+    // @ts-ignore disable type check
+    self.oninstall = (evt) => evt.waitUntil(Promise.all(this.#promises));
 
-    self.addEventListener("fetch", (event) => {
-      const evt = event as FetchEvent;
+    // @ts-ignore disable type check
+    self.onactivate = (evt) => evt.waitUntil(clients.claim());
+
+    // @ts-ignore disable type check
+    self.onfetch = (evt: FetchEvent) => {
       const { request } = evt;
       const url = new URL(request.url);
       const { pathname, hostname } = url;
@@ -458,14 +441,14 @@ class Hot implements HotCore {
           }
         }
       }
-    });
+    };
 
-    self.addEventListener("message", (event) => {
-      if (event.data === kSkipWaiting) {
-        // @ts-ignore
+    self.onmessage = (evt) => {
+      if (evt.data === kSkipWaiting) {
+        // @ts-ignore skipWaiting
         self.skipWaiting();
       }
-    });
+    };
   }
 }
 
@@ -503,10 +486,15 @@ function parseImportMap() {
 function crateCacheProxy(cacheName: string) {
   const cachePromise = caches.open(cacheName);
   return new Proxy({}, {
-    get: (_, name) => async (...args: any[]) => {
+    get: (_, name) => async (...args: unknown[]) => {
       return (await cachePromise as any)[name](...args);
     },
   }) as Cache;
+}
+
+/** check if the given url has the same origin with current location. */
+function isSameOrigin(url: URL) {
+  return url.origin === location.origin;
 }
 
 /** check if the given value is an object. */
@@ -519,6 +507,11 @@ function isLocalhost({ hostname }: URL | Location) {
   return hostname === "localhost" || hostname === "127.0.0.1";
 }
 
+/** get a timestamp string. */
+function getTimeStamp() {
+  return Date.now().toString(36);
+}
+
 /** get the extension name of the given path. */
 function getExtname(path: string): string {
   const i = path.lastIndexOf(".");
@@ -526,6 +519,14 @@ function getExtname(path: string): string {
     return path.slice(i + 1);
   }
   return "";
+}
+
+/** wait for the given IDBRequest. */
+function waitIDBRequest<T>(req: IDBRequest): Promise<T> {
+  return new Promise((resolve, reject) => {
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error);
+  });
 }
 
 /** compute the hash of the given input, default algorithm is SHA-1. */
