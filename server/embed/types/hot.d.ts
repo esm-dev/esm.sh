@@ -3,6 +3,12 @@ export interface Plugin {
   setup: (hot: HotCore) => void;
 }
 
+export interface FireOptions {
+  plugins?: Plugin[];
+  /** @default "/sw.js" */
+  swScript?: string;
+}
+
 export interface Loader {
   test: RegExp;
   load: (
@@ -36,6 +42,22 @@ export interface ImportMap {
   $support?: boolean;
   imports?: Record<string, string>;
   scopes?: Record<string, Record<string, string>>;
+}
+
+export interface ContentMap {
+  [key: string]: ContentMapItem;
+}
+
+export interface ContentMapItem {
+  url?: string;
+  data?: { value: any; expires?: number };
+  cacheTtl?: number;
+  method?: string;
+  body?: any;
+  authorization?: string;
+  headers?: [string, string][] | Record<string, string>;
+  pickKeys?: string[];
+  omitKeys?: string[];
 }
 
 export interface FetchHandler {
@@ -75,7 +97,7 @@ export interface HotCore {
   readonly importMap: Required<ImportMap>;
   readonly isDev: boolean;
   readonly vfs: VFS;
-  fire(sw?: string): Promise<void>;
+  fire(options?: FireOptions): Promise<void>;
   listen(): void;
   onFetch(test: URLTest, handler: FetchHandler): this;
   onFire(handler: (reg: ServiceWorker) => void): this;

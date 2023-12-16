@@ -1,5 +1,3 @@
-/** @version: 3.3.9 */
-
 import type { Hot } from "../server/embed/types/hot.d.ts";
 
 function importAll(...urls: (string | URL)[]) {
@@ -9,7 +7,7 @@ function importAll(...urls: (string | URL)[]) {
 export default {
   name: "vue",
   setup(hot: Hot) {
-    hot.onFire((_sw: ServiceWorker) => {
+    hot.onFire(() => {
       customElements.define(
         "vue-root",
         class VueRoot extends HTMLElement {

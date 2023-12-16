@@ -64,11 +64,14 @@ export default {
         });
 
         const globUrl = new URL(hot.basePath + "@hot-glob", req.url);
-        globUrl.searchParams.set(
-          "pattern",
-          atUse.map((line) => line.slice(5).split(";", 1)[0]).join(","),
-        );
-        const globRes = await fetch(globUrl);
+        const globRes = await fetch(globUrl, {
+          method: "POST",
+          body: JSON.stringify({
+            pattern: atUse.map((line) => line.slice(5).split(";", 1)[0]).join(
+              ",",
+            ),
+          }),
+        });
         if (!globRes.ok) {
           return globRes;
         }

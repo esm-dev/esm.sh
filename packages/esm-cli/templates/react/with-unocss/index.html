@@ -4,7 +4,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>esm.sh/hot</title>
+  <title>Develop stuff powered by browser</title>
   <link rel="icon" href="/assets/logo.svg" type="image/svg+xml" />
   <link rel="stylesheet" href="https://esm.sh/@unocss/reset@0.58.0/tailwind.css" />
   <link rel="stylesheet" href="/uno.css">
@@ -21,8 +21,12 @@
 <body>
   <react-root src="/App.jsx"></react-root>
   <script type="module">
-    import hot from "http://localhost:8080/v135/hot?plugins=react"
-    hot.fire()
+    import hot from "http://localhost:8080/v135/hot"
+    import react from "http://localhost:8080/v135/hot/react"
+
+    hot.fire({
+      plugins: [react],
+    })
   </script>
 </body>
 

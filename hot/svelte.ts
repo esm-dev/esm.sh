@@ -3,7 +3,7 @@ import type { Hot } from "../server/embed/types/hot.d.ts";
 export default {
   name: "svelte",
   setup(hot: Hot) {
-    hot.onFire((_sw: ServiceWorker) => {
+    hot.onFire(() => {
       customElements.define(
         "svelte-root",
         class SvelteRoot extends HTMLElement {
@@ -12,14 +12,13 @@ export default {
               this.attachShadow({ mode: "open" });
             }
             const src = this.getAttribute("src");
-            src &&
+            if (src) {
               import(new URL(src, location.href).href).then(
                 ({ default: Component }) => {
-                  new Component({
-                    target: this.shadowRoot ?? this,
-                  });
+                  new Component({ target: this.shadowRoot ?? this });
                 },
               );
+            }
           }
         },
       );

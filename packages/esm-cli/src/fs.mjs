@@ -1,7 +1,7 @@
 import { open, readdir, stat, watch } from "node:fs/promises";
 import { getMimeType } from "./mime.mjs";
 
-const fsFilter = (filename) => {
+const nameFilter = (filename) => {
   return !/(^|\/)(\.|node_modules\/)/.test(filename) &&
     !filename.endsWith(".log");
 };
@@ -40,7 +40,7 @@ const fs = {
       const name = [parent, entry.name].filter(Boolean).join("/");
       if (entry.isDirectory()) {
         files.push(...(await fs.ls(dir + "/" + entry.name, name)));
-      } else if (fsFilter(name)) {
+      } else if (nameFilter(name)) {
         files.push(name);
       }
     }
@@ -56,7 +56,7 @@ const fs = {
       console.log("Watching files changed...");
       for await (const evt of watch(root, { recursive: true })) {
         const { eventType, filename } = evt;
-        if (fsFilter(filename)) {
+        if (nameFilter(filename)) {
           watchCallbacks.forEach((handler) =>
             handler(
               eventType === "change" ? "modify" : eventType,
