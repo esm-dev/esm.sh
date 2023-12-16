@@ -45,19 +45,19 @@ export interface ImportMap {
 }
 
 export interface ContentMap {
-  [key: string]: ContentMapItem;
+  cache?: Record<string, { value: any; expires?: number } | Promise<any>>;
+  contents?: Record<string, ContentInit>;
 }
 
-export interface ContentMapItem {
+export interface ContentInit {
   url?: string;
-  data?: { value: any; expires?: number };
-  cacheTtl?: number;
   method?: string;
-  body?: any;
   authorization?: string;
   headers?: [string, string][] | Record<string, string>;
-  pickKeys?: string[];
-  omitKeys?: string[];
+  payload?: any;
+  select?: string | string[] | Record<string, string>;
+  cacheTtl?: number;
+  stream?: boolean;
 }
 
 export interface FetchHandler {

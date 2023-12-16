@@ -1,5 +1,11 @@
 import fs from "./fs.mjs";
-import { enc, globToRegExp, isNEString, isObject } from "./util.mjs";
+import {
+  enc,
+  globToRegExp,
+  isNEString,
+  isObject,
+  lookupValue,
+} from "./util.mjs";
 
 /**
  * Creates a fetch handler for serving hot applications.
@@ -9,13 +15,7 @@ import { enc, globToRegExp, isNEString, isObject } from "./util.mjs";
 export const serveHot = (options) => {
   const { root = ".", fallback = "index.html", env = {} } = options;
   const w = fs.watch(root);
-  const contentCache = new Map(); // todo: use `caches` api if possible
-  const resolveEnv = (value, name) => {
-    return value.replace(/\$\{name\}/gi, name).replace(
-      /\$\{ENV\.(.+?)\}/gi,
-      (_, key) => env[key.trim()] || "",
-    );
-  };
+  const contentCache = new Map(); // todo: use worker `caches` api if possible
 
   return async (req) => {
     const url = new URL(req.url);
@@ -29,15 +29,37 @@ export const serveHot = (options) => {
             cacheTtl,
             url,
             method,
-            body,
+            payload,
             authorization,
             headers,
-            pickKeys,
-            omitKeys,
+            select,
+            stream,
+            asterisk,
+            vars,
           } = await req.json();
           if (!isNEString(name) || !isNEString(url)) {
             return new Response("Invalid request", { status: 400 });
           }
+          const resolveEnv = (value) =>
+            value.replace(
+              /\$\{(.*?)\}/g,
+              (_, key) => {
+                key = key.trim().toLowerCase();
+                if (key === "name") {
+                  return name;
+                }
+                if (key === "*") {
+                  return asterisk ?? "";
+                }
+                if (key.startsWith("env.")) {
+                  return env[key.slice(4)] ?? "";
+                }
+                if (key.startsWith("vars.") && vars) {
+                  return vars[key.slice(6)] ?? "";
+                }
+                return "";
+              },
+            );
           const u = resolveEnv(url, name);
           const h = new Headers(headers);
           h.forEach((value, key) => {
@@ -46,53 +68,89 @@ export const serveHot = (options) => {
           if (authorization) {
             h.set("authorization", resolveEnv(authorization, name));
           }
+          let body;
+          if (isObject(payload) || Array.isArray(payload)) {
+            body = resolveEnv(JSON.stringify(payload), name);
+            if (!h.has("content-type")) {
+              h.set("content-type", "application/json");
+            }
+          } else if (payload) {
+            body = resolveEnv(String(payload), name);
+          }
           const args = JSON.stringify([
             u,
             method,
             body,
-            pickKeys,
-            omitKeys,
+            select,
+            vars,
             ...h.entries(),
           ]);
-          const cached = contentCache.get(name);
-          if (cached) {
-            if (cached.args === args && cached.expires > Date.now()) {
-              return Response.json(cached.value);
+          const cacheable = !stream && Number.isInteger(cacheTtl);
+          if (cacheable) {
+            const cached = contentCache.get(name);
+            if (cached) {
+              if (cached.args === args && cached.expires > Date.now()) {
+                return Response.json(cached.data);
+              }
+              // clear cache if args changed or expired
+              contentCache.delete(name);
             }
-            // delete expired cache
-            contentCache.delete(name);
           }
+
           const res = await fetch(u, { method, body, headers: h });
-          if (!res.ok) {
+          if (!res.ok || stream) {
             return res;
           }
-          let value = await res.json();
-          if (isObject(value)) {
-            if (Array.isArray(pickKeys) && pickKeys.length) {
-              const result = {};
-              for (const key of pickKeys) {
-                result[key] = value[key];
+
+          let data = await res.json();
+          if (isObject(data) && isNEString(select) && select !== "*") {
+            const ret = {};
+            const selectors = select.split(",").map((s) => s.trim())
+              .filter(Boolean);
+            for (const s of selectors) {
+              let key = s;
+              let selector = s;
+              const i = selector.indexOf(":");
+              if (i > 0) {
+                key = selector.slice(0, i).trimEnd();
+                selector = selector.slice(i + 1).trimStart();
               }
-              value = result;
+              const path = resolveEnv(selector).split(".").map((p) =>
+                p.split("[").map((expr) => {
+                  if (expr.endsWith("]")) {
+                    const key = expr.slice(0, -1);
+                    if (/^\d+$/.test(key)) {
+                      return parseInt(key);
+                    }
+                    return key.replace(/^['"]|['"]$/g, "");
+                  }
+                  return expr;
+                })
+              ).flat();
+              const value = lookupValue(data, path);
+              if (value !== undefined) {
+                ret[key] = value;
+              }
             }
-            if (Array.isArray(omitKeys) && omitKeys.length) {
-              for (const key of omitKeys) {
-                delete value[key];
-              }
+            if (selectors.length === 1) {
+              data = Object.values(ret)[0] ?? null;
+            } else {
+              data = ret;
             }
           }
-          if (Number.isInteger(cacheTtl)) {
+          if (cacheable) {
             contentCache.set(name, {
               args,
-              value,
+              data,
               expires: Date.now() + cacheTtl * 1000,
             });
           }
-          return Response.json(value);
+          return Response.json(data);
         } catch (e) {
           return new Response(e.message, { status: 500 });
         }
       }
+
       if (pathname === "/@hot-glob") {
         try {
           const headers = new Headers({

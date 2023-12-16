@@ -79,7 +79,7 @@ class Hot implements HotCore {
   #basePath = new URL(".", loc.href).pathname;
   #cache: Cache | null = null;
   #importMap: Required<ImportMap> | null = null;
-  #contentMap: ContentMap | null = null;
+  #contentMap: Required<ContentMap> | null = null;
   #fetchListeners: { test: URLTest; handler: FetchHandler }[] = [];
   #fireListeners: ((sw: ServiceWorker) => void)[] = [];
   #isDev = isLocalhost(location);
@@ -102,6 +102,10 @@ class Hot implements HotCore {
 
   get importMap() {
     return this.#importMap ?? (this.#importMap = parseImportMap());
+  }
+
+  get contentMap() {
+    return this.#contentMap ?? (this.#contentMap = parseContentMap());
   }
 
   get isDev() {
@@ -289,57 +293,74 @@ class Hot implements HotCore {
     });
 
     defineElement("hot-content", (el) => {
-      const is = attr(el, "is");
-      if (!is) {
+      const name = attr(el, "is");
+      if (!name) {
         return;
       }
-      const [name, ...path] = is.split(".");
-      const contentMap = this.#contentMap ??
-        (this.#contentMap = parseContentMap());
-      const content = contentMap[name];
+      const { cache, contents } = this.contentMap;
+      let asterisk: string | undefined = undefined;
+      let content = contents[name];
+      if (!content) {
+        for (const k in contents) {
+          const a = k.split("*");
+          if (a.length === 2) {
+            const [prefix, suffix] = a;
+            if (name.startsWith(prefix) && name.endsWith(suffix)) {
+              content = contents[k];
+              asterisk = name.slice(prefix.length, name.length - suffix.length);
+              break;
+            }
+          }
+        }
+      }
       if (!content) {
         return;
       }
       const render = (data: unknown) => {
-        const value = lookupValue(
-          data,
-          path.map((p) =>
-            p.split("[").map((expr) => {
-              const i = expr.indexOf("]");
-              if (i >= 0) {
-                const key = expr.slice(0, i);
-                if (/^\d+$/.test(key)) {
-                  return parseInt(key);
+        const use = attr(el, "use");
+        const value = use
+          ? lookupValue(
+            data,
+            use.split(".").map((p) =>
+              p.split("[").map((expr) => {
+                if (expr.endsWith("]")) {
+                  const key = expr.slice(0, -1);
+                  if (/^\d+$/.test(key)) {
+                    return parseInt(key);
+                  }
+                  return key.replace(/^['"]|['"]$/g, "");
                 }
-                return key.replace(/^['"]|['"]$/g, "");
-              }
-              return expr;
-            })
-          ).flat(),
-        );
+                return expr;
+              })
+            ).flat(),
+          )
+          : data;
         el.textContent = !isNullish(value)
           ? value.toString?.() ?? stringify(value)
           : "";
       };
-      const { data, cacheTtl } = content;
-      if (data && (!data.expires || data.expires > now())) {
-        render(data.value);
+      const cachedData = cache[name];
+      if (cachedData) {
+        if (cachedData instanceof Promise) {
+          cachedData.then(render);
+        } else if (!cachedData.expires || cachedData.expires > now()) {
+          render(cachedData.value);
+        }
       } else {
-        fetch(this.basePath + "@hot-content", {
+        cache[name] = fetch(this.basePath + "@hot-content", {
           method: "POST",
-          body: stringify({ name, ...content }),
-        }).then((res) => {
-          if (res.ok) {
-            res.json().then((value) => {
-              content.data = {
-                value,
-                expires: cacheTtl ? now() + (cacheTtl * 1000) : 0,
-              };
-              render(value);
-            });
-          } else {
-            console.error("Failed to fetch content", name);
+          body: stringify({ ...content, asterisk, name }),
+        }).then(async (res) => {
+          if (!res.ok) {
+            throw new Error(res.statusText);
           }
+          const value = await res.json();
+          cache[name] = {
+            value,
+            expires: content.cacheTtl ? now() + (content.cacheTtl * 1000) : 0,
+          };
+          render(value);
+          return value;
         });
       }
     });
@@ -596,38 +617,43 @@ function parseImportMap() {
 
 /** parse contentmap from <script> with `type=contentmap` */
 function parseContentMap() {
-  const contentMap: ContentMap = {};
+  const contentMap: Required<ContentMap> = {
+    cache: {},
+    contents: {},
+  };
   const obj = queryAndParseJSONScript("contentmap");
   if (obj) {
-    for (const k in obj) {
-      const v = obj[k];
+    const { cache, contents } = obj;
+    for (const k in contents) {
+      const v = contents[k];
       if (typeof v === "string") {
-        contentMap[k] = { url: v };
-      } else if (isObject(v) && (isNEString(v.url) || v.data !== undefined)) {
-        contentMap[k] = v;
+        contentMap.contents[k] = { url: v };
+      } else if (isObject(v) && isNEString(v.url)) {
+        contentMap.contents[k] = v;
       }
+    }
+    if (isObject(cache)) {
+      contentMap.cache = cache;
     }
   }
   return contentMap;
 }
 
 /** lookup value from the given object by the given path. */
-function lookupValue(obj: any, path?: (string | number)[]) {
+function lookupValue(obj: any, path: (string | number)[]) {
   let value = obj;
   if (isNullish(value)) {
     return value;
   }
-  if (path) {
-    for (const key of path) {
-      const v = value[key];
-      if (v === undefined) {
-        return;
-      }
-      if (typeof v === "function") {
-        return v.call(value);
-      }
-      value = v;
+  for (const key of path) {
+    const v = value[key];
+    if (v === undefined) {
+      return;
     }
+    if (typeof v === "function") {
+      return v.call(value);
+    }
+    value = v;
   }
   return value;
 }

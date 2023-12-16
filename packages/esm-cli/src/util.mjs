@@ -19,6 +19,30 @@ export function isObject(v) {
 }
 
 /**
+ * lookup value from the given object by the given path.
+ * @param {Record<string, unknown>} obj
+ * @param {(string | number)[]} path
+ * @returns {unknown}
+ */
+export function lookupValue(obj, path) {
+  let value = obj;
+  if (value === undefined || value === null) {
+    return value;
+  }
+  for (const key of path) {
+    const v = value[key];
+    if (v === undefined) {
+      return;
+    }
+    if (typeof v === "function") {
+      return v.call(value);
+    }
+    value = v;
+  }
+  return value;
+}
+
+/**
  * covert a glob pattern to a RegExp object.
  * @param {string} glob
  * @returns {RegExp}
