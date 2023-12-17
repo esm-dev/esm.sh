@@ -322,9 +322,9 @@ class Hot implements HotCore {
           el.innerHTML = "<code style='color:red'>" + data.message + "</code>";
           return;
         }
-        const fn = attr(el, "with");
-        const value = fn && !isNullish(data)
-          ? new Function("return " + fn).call(data)
+        const expr = attr(el, "with");
+        const value = expr && !isNullish(data)
+          ? new Function("return this." + expr).call(data)
           : data;
         el.innerHTML = !isNullish(value)
           ? value.toString?.() ?? stringify(value)
