@@ -95,6 +95,7 @@ export interface HotCore {
   readonly basePath: string;
   readonly cache: Cache;
   readonly importMap: Required<ImportMap>;
+  readonly contentMap: Required<ContentMap>;
   readonly isDev: boolean;
   readonly vfs: VFS;
   fire(options?: FireOptions): Promise<void>;

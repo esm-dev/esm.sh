@@ -2,6 +2,7 @@ import fs from "./fs.mjs";
 import {
   enc,
   globToRegExp,
+  isJSONResponse,
   isNEString,
   isObject,
   lookupValue,
@@ -10,14 +11,15 @@ import {
 /**
  * Creates a fetch handler for serving hot applications.
  * @param {import("../types").ServeOptions} options
- * @returns {(req: Request) => Promise<Response>}
+ * @returns {(req: Request, cfEnv?: Record<string, string>) => Promise<Response>}
  */
 export const serveHot = (options) => {
-  const { root = ".", fallback = "index.html", env = {} } = options;
+  const { root = ".", fallback = "index.html" } = options;
+  const env = typeof Deno === "object" ? Deno.env.toObject() : process.env;
   const w = fs.watch(root);
   const contentCache = new Map(); // todo: use worker `caches` api if possible
 
-  return async (req) => {
+  return async (req, cfEnv) => {
     const url = new URL(req.url);
     const pathname = decodeURIComponent(url.pathname);
 
@@ -52,7 +54,7 @@ export const serveHot = (options) => {
                   return asterisk ?? "";
                 }
                 if (key.startsWith("env.")) {
-                  return env[key.slice(4)] ?? "";
+                  return (cfEnv ?? env)[key.slice(4)] ?? "";
                 }
                 if (key.startsWith("vars.") && vars) {
                   return vars[key.slice(6)] ?? "";
@@ -61,6 +63,7 @@ export const serveHot = (options) => {
               },
             );
           const u = resolveEnv(url, name);
+          const m = method?.toUpperCase();
           const h = new Headers(headers);
           h.forEach((value, key) => {
             h.set(key, resolveEnv(value, name));
@@ -77,9 +80,12 @@ export const serveHot = (options) => {
           } else if (payload) {
             body = resolveEnv(String(payload), name);
           }
+          if (!m && body) {
+            m = "POST";
+          }
           const args = JSON.stringify([
             u,
-            method,
+            m,
             body,
             select,
             vars,
@@ -97,12 +103,22 @@ export const serveHot = (options) => {
             }
           }
 
-          const res = await fetch(u, { method, body, headers: h });
+          const res = await fetch(u, { method: m, headers: h, body });
           if (!res.ok || stream) {
-            return res;
+            const headers = new Headers();
+            res.headers.forEach((value, key) => {
+              if (key === "content-type" || key === "date" || key === "etag") {
+                headers.set(key, value);
+              }
+            });
+            return new Response(res.body, {
+              status: res.status,
+              statusText: res.statusText,
+              headers,
+            });
           }
 
-          let data = await res.json();
+          let data = await (isJSONResponse(res) ? res.json() : res.text());
           if (isObject(data) && isNEString(select) && select !== "*") {
             const ret = {};
             const selectors = select.split(",").map((s) => s.trim())

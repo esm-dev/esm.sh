@@ -21,6 +21,7 @@ const VERSION = 135;
 const doc: Document | undefined = globalThis.document;
 const loc = location;
 const enc = new TextEncoder();
+const parse = JSON.parse;
 const stringify = JSON.stringify;
 const kContentSource = "x-content-source";
 const kContentType = "content-type";
@@ -153,7 +154,7 @@ class Hot implements HotCore {
     }
   }
 
-  async fire({ plugins, swScript = "/sw.js" }: FireOptions) {
+  async fire({ plugins, swScript = "/sw.js" }: FireOptions = {}) {
     const sw = navigator.serviceWorker;
     if (!sw) {
       throw new Error("Service Worker not supported.");
@@ -264,7 +265,7 @@ class Hot implements HotCore {
       }
     });
 
-    defineElement("hot-html", (el) => {
+    defineElement("import-html", (el) => {
       const src = attr(el, "src");
       if (!src) {
         return;
@@ -292,8 +293,8 @@ class Hot implements HotCore {
       load(true);
     });
 
-    defineElement("hot-content", (el) => {
-      const name = attr(el, "is");
+    defineElement("use-content", (el) => {
+      const name = attr(el, "from");
       if (!name) {
         return;
       }
@@ -317,25 +318,15 @@ class Hot implements HotCore {
         return;
       }
       const render = (data: unknown) => {
-        const use = attr(el, "use");
-        const value = use
-          ? lookupValue(
-            data,
-            use.split(".").map((p) =>
-              p.split("[").map((expr) => {
-                if (expr.endsWith("]")) {
-                  const key = expr.slice(0, -1);
-                  if (/^\d+$/.test(key)) {
-                    return parseInt(key);
-                  }
-                  return key.replace(/^['"]|['"]$/g, "");
-                }
-                return expr;
-              })
-            ).flat(),
-          )
+        if (data instanceof Error) {
+          el.innerHTML = "<code style='color:red'>" + data.message + "</code>";
+          return;
+        }
+        const fn = attr(el, "with");
+        const value = fn && !isNullish(data)
+          ? new Function("return " + fn).call(data)
           : data;
-        el.textContent = !isNullish(value)
+        el.innerHTML = !isNullish(value)
           ? value.toString?.() ?? stringify(value)
           : "";
       };
@@ -351,14 +342,32 @@ class Hot implements HotCore {
           method: "POST",
           body: stringify({ ...content, asterisk, name }),
         }).then(async (res) => {
-          if (!res.ok) {
-            throw new Error(res.statusText);
+          if (res.ok) {
+            const value = await res.json();
+            cache[name] = {
+              value,
+              expires: content.cacheTtl ? now() + (content.cacheTtl * 1000) : 0,
+            };
+            return value;
           }
-          const value = await res.json();
-          cache[name] = {
-            value,
-            expires: content.cacheTtl ? now() + (content.cacheTtl * 1000) : 0,
-          };
+          let msg = res.statusText;
+          try {
+            const text = await res.text();
+            if (text) {
+              msg = text;
+              if (text.startsWith("{")) {
+                const { error, message } = parse(text);
+                const m = error?.message ?? message;
+                if (m) {
+                  msg = m;
+                }
+              }
+            }
+          } catch (_) {
+            // ignore
+          }
+          return new Error(msg);
+        }).then((value) => {
           render(value);
           return value;
         });
@@ -581,7 +590,7 @@ function queryAndParseJSONScript(type: string) {
   const script = doc!.querySelector("head>script[type=" + type + "]");
   if (script) {
     try {
-      const v = JSON.parse(script.textContent!);
+      const v = parse(script.textContent!);
       if (isObject(v)) {
         return v;
       }
@@ -637,25 +646,6 @@ function parseContentMap() {
     }
   }
   return contentMap;
-}
-
-/** lookup value from the given object by the given path. */
-function lookupValue(obj: any, path: (string | number)[]) {
-  let value = obj;
-  if (isNullish(value)) {
-    return value;
-  }
-  for (const key of path) {
-    const v = value[key];
-    if (v === undefined) {
-      return;
-    }
-    if (typeof v === "function") {
-      return v.call(value);
-    }
-    value = v;
-  }
-  return value;
 }
 
 /** create a cache proxy object. */

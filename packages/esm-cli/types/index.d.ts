@@ -12,8 +12,6 @@ export interface ServeOptions {
   root?: string;
   /** The fallback route, default is `index.html`. */
   fallback?: `${string}.html`;
-  /** System environment variables. */
-  env?: Record<string, string>;
 }
 
 /** Creates a fetch handler for serving hot applications. */

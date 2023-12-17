@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 
-import { existsSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
+import { join } from "node:path";
 import { serve } from "../vendor/hono-server@1.3.1.mjs";
 import { serveHot } from "../src/index.mjs";
 
@@ -37,6 +38,28 @@ process.argv.slice(2).forEach((arg) => {
     args.host = value;
   }
 });
+
+const dotEnvPath = join(args.root ?? process.cwd(), ".env");
+if (existsSync(dotEnvPath)) {
+  const env = Object.fromEntries(
+    readFileSync(dotEnvPath, "utf-8")
+      .split("\n").map((line) => line.trim())
+      .filter((line) => line && !line.startsWith("#"))
+      .map((line) => {
+        const kv = line.split("#")[0].trim();
+        const idx = kv.indexOf("=");
+        if (idx < 0) {
+          return [kv, ""];
+        }
+        return [
+          kv.slice(0, idx).trimEnd(),
+          kv.slice(idx + 1).trimStart(),
+        ];
+      }),
+  );
+  Object.assign(process.env, env);
+  console.log(".env loaded");
+}
 
 serve(
   { ...args, fetch: serveHot(args) },

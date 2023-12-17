@@ -19,6 +19,16 @@ export function isObject(v) {
 }
 
 /**
+ * check if the given response is a JSON response.
+ * @param {Response} response
+ * @returns {boolean}
+ */
+export function isJSONResponse(response) {
+  const cType = response.headers.get("content-type")
+  return /^(application|text)\/json(;|$)/.test(cType);
+}
+
+/**
  * lookup value from the given object by the given path.
  * @param {Record<string, unknown>} obj
  * @param {(string | number)[]} path
