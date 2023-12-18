@@ -8,7 +8,7 @@ import { serveHot } from "../src/index.mjs";
 
 if (process.argv.includes("--help") || process.argv.includes("-h")) {
   console.log(`
-Usage: npx esm.sh [options] [root]
+Usage: npx esm.sh [options] [dir]
 
 Options:
   --help, -h      Show help message
@@ -43,26 +43,42 @@ process.argv.slice(2).forEach((arg) => {
 // init HTMLRewriter wasm module
 await init();
 
+// load project '.env' vars if exists
 const dotEnvPath = join(args.root ?? process.cwd(), ".env");
 if (existsSync(dotEnvPath)) {
+  let section = "";
   const env = Object.fromEntries(
     readFileSync(dotEnvPath, "utf-8")
       .split("\n").map((line) => line.trim())
       .filter((line) => line && !line.startsWith("#"))
       .map((line) => {
-        const kv = line.split("#")[0].trim();
-        const idx = kv.indexOf("=");
-        if (idx < 0) {
-          return [kv, ""];
+        if (line.startsWith("[") && line.endsWith("]")) {
+          section = line;
+          return null;
         }
-        return [
-          kv.slice(0, idx).trimEnd(),
-          kv.slice(idx + 1).trimStart(),
-        ];
-      }),
+        const idx = line.indexOf("=");
+        if (idx <= 0 || !section) {
+          return null;
+        }
+        const key = section + line.slice(0, idx).trimEnd();
+        const value = line.slice(idx + 1).trimStart();
+        const v0 = value.charAt(0);
+        let start = 0;
+        let end = value.length;
+        let endAt = "#";
+        if (v0 === '"' || v0 === "'") {
+          endAt = v0;
+          start = 1;
+        }
+        const i = value.indexOf(endAt,1);
+        if (i >= 0) {
+          end = i ;
+        }
+        return [key, value.slice(start, end)];
+      }).filter(Boolean),
   );
   Object.assign(process.env, env);
-  console.log("Found project '.env'");
+  console.log("Found project '.env'", env);
 }
 
 serve(
