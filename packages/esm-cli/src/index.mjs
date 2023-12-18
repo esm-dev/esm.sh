@@ -28,12 +28,13 @@ export const serveHot = (options) => {
         try {
           const {
             name,
-            cacheTtl,
             url,
             method,
             payload,
             authorization,
             headers,
+            timeout,
+            cacheTtl,
             select,
             stream,
             asterisk,
@@ -103,7 +104,14 @@ export const serveHot = (options) => {
             }
           }
 
-          const res = await fetch(u, { method: m, headers: h, body });
+          let signal = undefined;
+          if (Number.isInteger(timeout) && timeout > 0) {
+            const ac = new AbortController();
+            setTimeout(() => ac.abort(), timeout * 1000);
+            signal = ac.signal;
+          }
+
+          const res = await fetch(u, { method: m, headers: h, body, signal });
           if (!res.ok || stream) {
             const headers = new Headers();
             res.headers.forEach((value, key) => {
@@ -330,6 +338,7 @@ export const serveHot = (options) => {
         { headers },
       );
     }
+
     return new Response("Not Found", { status: 404 });
   };
 };

@@ -2,7 +2,7 @@
 
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-import { serve } from "../vendor/hono-server@1.3.1.mjs";
+import { serve } from "../vendor/hono-server@1.3.3.mjs";
 import { serveHot } from "../src/index.mjs";
 
 if (process.argv.includes("--help") || process.argv.includes("-h")) {

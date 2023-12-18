@@ -1,5 +1,5 @@
 /**
- * @hono/node-server v1.3.1
+ * @hono/node-server v1.3.3
  * @author Yusuke Wada <https://github.com/yusukebe>
  * @license MIT
  *
@@ -70,23 +70,34 @@ var buildOutgoingHttpHeaders = (headers) => {
 // src/response.ts
 var responseCache = Symbol("responseCache");
 var cacheKey = Symbol("cache");
-var globalResponse = global.Response;
-var Response2 = class {
+var GlobalResponse = global.Response;
+var Response2 = class _Response {
   #body;
   #init;
-  // @ts-ignore
   get cache() {
     delete this[cacheKey];
-    return this[responseCache] ||= new globalResponse(this.#body, this.#init);
+    return this[responseCache] ||= new GlobalResponse(this.#body, this.#init);
   }
   constructor(body, init) {
     this.#body = body;
-    this.#init = init;
+    if (init instanceof _Response) {
+      const cachedGlobalResponse = init[responseCache];
+      if (cachedGlobalResponse) {
+        this.#init = cachedGlobalResponse;
+        this.cache;
+        return;
+      } else {
+        this.#init = init.#init;
+      }
+    } else {
+      this.#init = init;
+    }
     if (typeof body === "string" || body instanceof ReadableStream) {
       let headers = init?.headers || { "content-type": "text/plain;charset=UTF-8" };
       if (headers instanceof Headers) {
         headers = buildOutgoingHttpHeaders(headers);
       }
+      ;
       this[cacheKey] = [init?.status || 200, body, headers];
     }
   }
@@ -116,8 +127,8 @@ var Response2 = class {
     }
   });
 });
-Object.setPrototypeOf(Response2, globalResponse);
-Object.setPrototypeOf(Response2.prototype, globalResponse.prototype);
+Object.setPrototypeOf(Response2, GlobalResponse);
+Object.setPrototypeOf(Response2.prototype, GlobalResponse.prototype);
 Object.defineProperty(global, "Response", {
   value: Response2
 });
