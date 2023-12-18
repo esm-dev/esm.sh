@@ -3,6 +3,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { serve } from "../vendor/hono-server@1.3.3.mjs";
+import init from "../vendor/html-rewriter@0.4.1.mjs";
 import { serveHot } from "../src/index.mjs";
 
 if (process.argv.includes("--help") || process.argv.includes("-h")) {
@@ -39,6 +40,9 @@ process.argv.slice(2).forEach((arg) => {
   }
 });
 
+// init HTMLRewriter wasm module
+await init();
+
 const dotEnvPath = join(args.root ?? process.cwd(), ".env");
 if (existsSync(dotEnvPath)) {
   const env = Object.fromEntries(
@@ -58,7 +62,7 @@ if (existsSync(dotEnvPath)) {
       }),
   );
   Object.assign(process.env, env);
-  console.log(".env loaded");
+  console.log("Found project '.env'");
 }
 
 serve(

@@ -2,7 +2,6 @@
  * @hono/node-server v1.3.3
  * @author Yusuke Wada <https://github.com/yusukebe>
  * @license MIT
- *
  */
 
 // src/server.ts
