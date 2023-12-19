@@ -29,6 +29,7 @@ const fs = {
       throw error;
     }
   },
+
   /**
    * find files in a directory.
    * @type {(dir: string) => Promise<string[]>}
@@ -46,14 +47,15 @@ const fs = {
     }
     return files;
   },
+
   /**
-   * watch files changed.
+   * watch for file changes.
    * @type {(root: string) => (handler: (type: string, filename: string)=>void) => () => void}
    */
   watch: (root) => {
     const watchCallbacks = new Set();
     const start = async () => {
-      console.log("Watching files changed...");
+      console.log("Watching for file changes...");
       for await (const evt of watch(root, { recursive: true })) {
         const { eventType, filename } = evt;
         if (nameFilter(filename)) {

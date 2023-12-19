@@ -4,8 +4,10 @@ import {
   globToRegExp,
   isJSONResponse,
   isNEString,
+  isNullish,
   isObject,
   lookupValue,
+  readTextFromStream,
 } from "./util.mjs";
 
 /**
@@ -19,11 +21,18 @@ export const serveHot = (options) => {
   const watch = fs.watch(root);
   const contentCache = new Map(); // todo: use worker `caches` api if possible
 
-  return async (req, cfEnv) => {
+  /**
+   * Fetcher handles requests for hot applications.
+   * @param {Request} req - Incoming request
+   * @param {Record<string, string>} cfEnv - Cloudflare env
+   * @returns {Promise<Response>}
+   */
+  async function fetcher(req, cfEnv) {
     const url = new URL(req.url);
     const pathname = decodeURIComponent(url.pathname);
 
     switch (pathname) {
+      /** Proxy content map requests */
       case "/@hot-content": {
         const {
           name,
@@ -130,34 +139,25 @@ export const serveHot = (options) => {
         let data = await (isJSONResponse(res) ? res.json() : res.text());
         if (isObject(data) && isNEString(select) && select !== "*") {
           const ret = {};
-          const selectors = select.split(",").map((s) => s.trim())
-            .filter(Boolean);
+          const selectors = select.split(",")
+            .map((s) => s.trim()).filter(Boolean);
           for (const s of selectors) {
-            let key = s;
+            let alias = s;
             let selector = s;
+            if (selector.endsWith("!")) {
+              selector = selector.slice(0, -1);
+            }
             const i = selector.indexOf(":");
             if (i > 0) {
-              key = selector.slice(0, i).trimEnd();
+              alias = selector.slice(0, i).trimEnd();
               selector = selector.slice(i + 1).trimStart();
             }
-            const path = resolveEnv(selector).split(".").map((p) =>
-              p.split("[").map((expr) => {
-                if (expr.endsWith("]")) {
-                  const key = expr.slice(0, -1);
-                  if (/^\d+$/.test(key)) {
-                    return parseInt(key);
-                  }
-                  return key.replace(/^['"]|['"]$/g, "");
-                }
-                return expr;
-              })
-            ).flat();
-            const value = lookupValue(data, path);
+            const value = lookupValue(data, resolveEnv(selector));
             if (value !== undefined) {
-              ret[key] = value;
+              ret[alias] = value;
             }
           }
-          if (selectors.length === 1) {
+          if (selectors.length === 1 && selectors[0].endsWith("!")) {
             data = Object.values(ret)[0] ?? null;
           } else {
             data = ret;
@@ -173,6 +173,13 @@ export const serveHot = (options) => {
         return Response.json(data);
       }
 
+      /** The FS index of current project */
+      case "/@hot-index": {
+        const entries = await fs.ls(root);
+        return Response.json(entries);
+      }
+
+      /** Bundle files with glob pattern */
       case "/@hot-glob": {
         const headers = new Headers({
           "content-type": "hot/glob",
@@ -231,6 +238,7 @@ export const serveHot = (options) => {
         );
       }
 
+      /** Event source for HMR */
       case "/@hot-notify": {
         const disposes = [];
         return new Response(
@@ -257,26 +265,12 @@ export const serveHot = (options) => {
         );
       }
 
-      case "/@hot-index": {
-        const entries = await fs.ls(root);
-        return Response.json(entries);
-      }
-
+      /** Static files */
       default: {
         let filepath = pathname;
-        let file = pathname.includes(".")
-          ? await fs.open(root + filepath)
-          : null;
-        if (!file && pathname === "/sw.js") {
-          const hotUrl = new URL("https://esm.sh/v135/hot");
-          return new Response(
-            `import hot from "${hotUrl.href}";hot.listen();`,
-            {
-              headers: {
-                "content-type": "application/javascript; charset=utf-8",
-              },
-            },
-          );
+        let file = null;
+        if (pathname.includes(".")) {
+          file = await fs.open(root + filepath);
         }
         if (!file) {
           switch (pathname) {
@@ -285,17 +279,30 @@ export const serveHot = (options) => {
             case "/robots.txt":
             case "/favicon.ico":
               return new Response("Not found", { status: 404 });
-          }
-          const htmls = [
-            pathname + ".html",
-            pathname + "/index.html",
-            "/404.html",
-            "/" + fallback,
-          ];
-          for (const path of htmls) {
-            filepath = path;
-            file = await fs.open(root + filepath);
-            if (file) break;
+            case "/sw.js": {
+              const hotUrl = new URL("https://esm.sh/v135/hot");
+              return new Response(
+                `import hot from "${hotUrl.href}";hot.listen();`,
+                {
+                  headers: {
+                    "content-type": "application/javascript; charset=utf-8",
+                  },
+                },
+              );
+            }
+            default: {
+              const htmls = [
+                pathname !== "/" ? pathname + ".html" : null,
+                pathname !== "/" ? pathname + "/index.html" : null,
+                "/404.html",
+                "/" + fallback,
+              ].filter(Boolean);
+              for (const path of htmls) {
+                filepath = path;
+                file = await fs.open(root + filepath);
+                if (file) break;
+              }
+            }
           }
         }
         if (!file) {
@@ -316,7 +323,7 @@ export const serveHot = (options) => {
           file.close();
           return new Response(null, { headers });
         }
-        return new Response(
+        const res = new Response(
           new ReadableStream({
             start(controller) {
               const reader = file.body.getReader();
@@ -338,7 +345,175 @@ export const serveHot = (options) => {
           }),
           { headers },
         );
+        if (filepath.endsWith(".html")) {
+          return rewriteHtml(res, cfEnv, url, filepath);
+        }
+        return res;
       }
     }
-  };
+  }
+
+  /**
+   * rewrite html
+   * @param {Response} res
+   * @returns {Response}
+   */
+  function rewriteHtml(req, cfEnv, url, filepath) {
+    const rewriter = new HTMLRewriter();
+
+    // - resolve external importmap/contentmap
+    rewriter.on("script[type$=map][src]", {
+      async element(el) {
+        const type = el.getAttribute("type");
+        const src = el.getAttribute("src");
+        if (src && !/^\/|\w+:/.test(src)) {
+          const { pathname } = new URL(src, url.origin + filepath);
+          const file = await fs.open(root + pathname);
+          if (file) {
+            const text = await readTextFromStream(file.body);
+            file.close();
+            el.removeAttribute("src");
+            el.setAttribute("data-src", src);
+            el.setInnerContent(text);
+            if (type === "contentmap") {
+              contentMap = text;
+            }
+          }
+        }
+      },
+    });
+
+    // - check inline contentmap
+    let contentMap = "";
+    rewriter.on("script[type=contentmap]:not([src])", {
+      text(el) {
+        contentMap += el.text;
+      },
+    });
+
+    // - render `use-content` if `ssr` attribute is present
+    rewriter.on("use-content[from][ssr]", {
+      async element(el) {
+        if (contentMap) {
+          try {
+            const { contents = {} } = isNEString(contentMap)
+              ? (contentMap = JSON.parse(contentMap))
+              : contentMap;
+            const name = el.getAttribute("from");
+            let content = contents[name];
+            let asterisk = undefined;
+            if (!content) {
+              for (const k in contents) {
+                const a = k.split("*");
+                if (a.length === 2) {
+                  const [prefix, suffix] = a;
+                  if (
+                    name.startsWith(prefix) &&
+                    name.endsWith(suffix)
+                  ) {
+                    content = contents[k];
+                    asterisk = name.slice(
+                      prefix.length,
+                      name.length - suffix.length,
+                    );
+                    break;
+                  }
+                }
+              }
+            }
+            if (content) {
+              const process = (data) => {
+                if (data instanceof Error) {
+                  return "<code style='color:red'>" + data.message + "</code>";
+                }
+                const expr = el.getAttribute("with");
+                let value = data;
+                if (expr && !isNullish(data)) {
+                  if (req.cf) {
+                    value = lookupValue(data, expr);
+                  } else {
+                    value = new Function("return this." + expr).call(data);
+                  }
+                }
+                return !isNullish(value)
+                  ? value.toString?.() ?? stringify(value)
+                  : "";
+              };
+              const render = (data) => {
+                el.setInnerContent(process(data), { html: true });
+                el.setAttribute("ssr", "ok");
+              };
+              const res = await fetcher(
+                new Request(new URL("/@hot-content", url), {
+                  method: "POST",
+                  body: JSON.stringify({ ...content, asterisk, name }),
+                }),
+                cfEnv,
+              );
+              if (!res.ok) {
+                let msg = res.statusText;
+                try {
+                  const text = (await res.text()).trim();
+                  if (text) {
+                    msg = text;
+                    if (text.startsWith("{")) {
+                      const { error, message } = JSON.parse(text);
+                      msg = error?.message ?? message ?? msg;
+                    }
+                  }
+                } catch (_) {}
+                render(new Error(msg));
+              } else {
+                render(await res.json());
+              }
+            }
+          } catch (err) {
+            if (err instanceof SyntaxError) {
+              console.error("[error] Invalid contentmap:", err.message);
+            }
+          }
+        }
+      },
+    });
+
+    // - fix script/link with relative path
+    if (url.pathname !== "/") {
+      rewriter
+        .on("script[src]", {
+          element(el) {
+            const src = el.getAttribute("src");
+            if (src && !/^\/|\w+:/.test(src)) {
+              const { pathname } = new URL(src, url.origin + filepath);
+              el.setAttribute("src", pathname);
+            }
+          },
+        })
+        .on("link[href]", {
+          element(el) {
+            const href = el.getAttribute("href");
+            if (href && !/^\/|\w+:/.test(href)) {
+              const { pathname } = new URL(href, url.origin + filepath);
+              el.setAttribute("href", pathname);
+            }
+          },
+        });
+    }
+
+    // - tell the client to reload the page when the html is updated (dev mode only)
+    if (url.hostname === "localhost" || url.hostname === "127.0.0.1") {
+      rewriter.onDocument({
+        end(end) {
+          end.append(
+            `<script type="hot/module">window.__hot_hmr_callbacks?.add("${filepath}", () => location.reload())</script>`,
+            { html: true },
+          );
+        },
+      });
+    }
+
+    // - transform html
+    return rewriter.transform(req);
+  }
+
+  return fetcher;
 };

@@ -3,25 +3,25 @@
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { serve } from "../vendor/hono-server@1.3.3.mjs";
-import init from "../vendor/html-rewriter@0.4.1.mjs";
+import init, { HTMLRewriter } from "../vendor/html-rewriter@0.4.1.mjs";
 import { serveHot } from "../src/index.mjs";
 
+// - Show help message
 if (process.argv.includes("--help") || process.argv.includes("-h")) {
-  console.log(`
+  const message = `
 Usage: npx esm.sh [options] [dir]
 
 Options:
   --help, -h      Show help message
   --host          Host to listen on (default: "localhost")
   --port, -p      Port number to listen on (default: 3000)
-`);
+`;
+  console.log(message);
   process.exit(0);
 }
 
-const args = {
-  port: 3000,
-};
-
+// - Parse command line arguments
+const args = { port: 3000 };
 process.argv.slice(2).forEach((arg) => {
   if (!arg.startsWith("-")) {
     if (existsSync(arg)) {
@@ -40,10 +40,74 @@ process.argv.slice(2).forEach((arg) => {
   }
 });
 
-// init HTMLRewriter wasm module
+// - Add HTMLRewriter polyfill
+// https://developers.cloudflare.com/workers/runtime-apis/html-rewriter
+global.HTMLRewriter = class {
+  constructor() {
+    this.w = new HTMLRewriter((chunk) => {
+      this.c.enqueue(chunk);
+    });
+    this.t = new TransformStream({
+      start: (controller) => {
+        this.c = controller;
+      },
+      transform: async (chunk) => {
+        try {
+          await this.w.write(await chunk);
+        } finally {
+        }
+      },
+      flush: async () => {
+        try {
+          await this.w.end();
+        } finally {
+          this.w.free();
+        }
+      },
+    });
+  }
+  on(selector, handlers) {
+    this.w.on(selector, handlers);
+    return this;
+  }
+  onDocument(handlers) {
+    this.w.onDocument(handlers);
+    return this;
+  }
+  write(chunk) {
+    return this.w.write(chunk);
+  }
+  end() {
+    return this.w.end();
+  }
+  free() {
+    this.w.free();
+  }
+  /**
+   * @param {Response} response
+   * @returns {Response}
+   */
+  transform(response) {
+    const headers = new Headers(response.headers);
+    const outdatedHeaders = [
+      "content-encoding",
+      "content-length",
+      "last-modified",
+      "etag",
+    ];
+    for (const key of outdatedHeaders) {
+      headers.delete(key);
+    }
+    return new Response(response.body?.pipeThrough(this.t), {
+      status: response.status,
+      statusText: response.statusText,
+      headers
+    });
+  }
+};
 await init();
 
-// load project '.env' vars if exists
+// - Load project '.env' vars if exists
 const dotEnvPath = join(args.root ?? process.cwd(), ".env");
 if (existsSync(dotEnvPath)) {
   let section = "";
@@ -70,17 +134,18 @@ if (existsSync(dotEnvPath)) {
           endAt = v0;
           start = 1;
         }
-        const i = value.indexOf(endAt,1);
+        const i = value.indexOf(endAt, 1);
         if (i >= 0) {
-          end = i ;
+          end = i;
         }
         return [key, value.slice(start, end)];
       }).filter(Boolean),
   );
   Object.assign(process.env, env);
-  console.log("Found project '.env'", env);
+  console.log("Found project '.env'");
 }
 
+// - Start server
 serve(
   { ...args, fetch: serveHot(args) },
   (info) => {

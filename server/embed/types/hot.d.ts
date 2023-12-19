@@ -45,7 +45,7 @@ export interface ImportMap {
 }
 
 export interface ContentMap {
-  cache?: Record<string, { value: any; expires?: number } | Promise<any>>;
+  rendered?: Record<string, { value: any; expires?: number } | Promise<any>>;
   contents?: Record<string, ContentInit>;
 }
 
@@ -55,7 +55,8 @@ export interface ContentInit {
   authorization?: string;
   headers?: [string, string][] | Record<string, string>;
   payload?: any;
-  select?: string | string[] | Record<string, string>;
+  select?: string;
+  timeout?: number;
   cacheTtl?: number;
   stream?: boolean;
 }

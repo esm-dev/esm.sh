@@ -294,11 +294,14 @@ class Hot implements HotCore {
     });
 
     defineElement("use-content", (el) => {
+      if (attr(el, "ssr") === "ok") {
+        return;
+      }
       const name = attr(el, "from");
       if (!name) {
         return;
       }
-      const { cache, contents } = this.contentMap;
+      const { rendered, contents } = this.contentMap;
       let asterisk: string | undefined = undefined;
       let content = contents[name];
       if (!content) {
@@ -330,21 +333,21 @@ class Hot implements HotCore {
           ? value.toString?.() ?? stringify(value)
           : "";
       };
-      const cachedData = cache[name];
-      if (cachedData) {
-        if (cachedData instanceof Promise) {
-          cachedData.then(render);
-        } else if (!cachedData.expires || cachedData.expires > now()) {
-          render(cachedData.value);
+      const renderedData = rendered[name];
+      if (renderedData) {
+        if (renderedData instanceof Promise) {
+          renderedData.then(render);
+        } else if (!renderedData.expires || renderedData.expires > now()) {
+          render(renderedData.value);
         }
       } else {
-        cache[name] = fetch(this.basePath + "@hot-content", {
+        rendered[name] = fetch(this.basePath + "@hot-content", {
           method: "POST",
           body: stringify({ ...content, asterisk, name }),
         }).then(async (res) => {
           if (res.ok) {
             const value = await res.json();
-            cache[name] = {
+            rendered[name] = {
               value,
               expires: content.cacheTtl ? now() + (content.cacheTtl * 1000) : 0,
             };
@@ -352,24 +355,21 @@ class Hot implements HotCore {
           }
           let msg = res.statusText;
           try {
-            const text = await res.text();
+            const text = (await res.text()).trim();
             if (text) {
               msg = text;
               if (text.startsWith("{")) {
                 const { error, message } = parse(text);
-                const m = error?.message ?? message;
-                if (m) {
-                  msg = m;
-                }
+                msg = error?.message ?? message ?? msg;
               }
             }
           } catch (_) {
             // ignore
           }
           return new Error(msg);
-        }).then((value) => {
-          render(value);
-          return value;
+        }).then((ret) => {
+          render(ret);
+          return ret;
         });
       }
     });
@@ -595,7 +595,7 @@ function queryAndParseJSONScript(type: string) {
         return v;
       }
     } catch (err) {
-      console.error("Failed to parse JSON of", script, err);
+      console.error("Failed to parse", script, err.message);
     }
   }
   return null;
@@ -627,12 +627,12 @@ function parseImportMap() {
 /** parse contentmap from <script> with `type=contentmap` */
 function parseContentMap() {
   const contentMap: Required<ContentMap> = {
-    cache: {},
+    rendered: {},
     contents: {},
   };
   const obj = queryAndParseJSONScript("contentmap");
   if (obj) {
-    const { cache, contents } = obj;
+    const { rendered, contents } = obj;
     for (const k in contents) {
       const v = contents[k];
       if (typeof v === "string") {
@@ -641,8 +641,8 @@ function parseContentMap() {
         contentMap.contents[k] = v;
       }
     }
-    if (isObject(cache)) {
-      contentMap.cache = cache;
+    if (isObject(rendered)) {
+      contentMap.rendered = rendered;
     }
   }
   return contentMap;
