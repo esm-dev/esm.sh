@@ -67,9 +67,9 @@ export default {
         const globRes = await fetch(globUrl, {
           method: "POST",
           body: JSON.stringify({
-            pattern: atUse.map((line) => line.slice(5).split(";", 1)[0]).join(
-              ",",
-            ),
+            pattern: atUse.map((line) =>
+              line.slice(5).replace(/;+\s*$/, "").replace(/^['"]|['"]$/g, "")
+            ).join(),
           }),
         });
         if (!globRes.ok) {
