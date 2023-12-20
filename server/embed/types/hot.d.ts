@@ -3,12 +3,6 @@ export interface Plugin {
   setup: (hot: HotCore) => void;
 }
 
-export interface FireOptions {
-  plugins?: Plugin[];
-  /** @default "/sw.js" */
-  swScript?: string;
-}
-
 export interface Loader {
   test: RegExp;
   load: (
@@ -99,8 +93,9 @@ export interface HotCore {
   readonly contentMap: Required<ContentMap>;
   readonly isDev: boolean;
   readonly vfs: VFS;
-  fire(options?: FireOptions): Promise<void>;
-  listen(): void;
+  use(...plugins: Plugin[]): this;
+  fire(): Promise<void>;
+  listen(swScript?: string): void;
   onFetch(test: URLTest, handler: FetchHandler): this;
   onFire(handler: (reg: ServiceWorker) => void): this;
   onLoad(

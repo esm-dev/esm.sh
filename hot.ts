@@ -8,7 +8,6 @@
 import type {
   ContentMap,
   FetchHandler,
-  FireOptions,
   HotCore,
   ImportMap,
   Loader,
@@ -154,7 +153,7 @@ class Hot implements HotCore {
     }
   }
 
-  async fire({ plugins, swScript = "/sw.js" }: FireOptions = {}) {
+  async fire(swScript = "/sw.js") {
     const sw = navigator.serviceWorker;
     if (!sw) {
       throw new Error("Service Worker not supported.");
@@ -163,11 +162,6 @@ class Hot implements HotCore {
     if (this.#fired) {
       console.warn("Got multiple fire() calls, ignored.");
       return;
-    }
-
-    // apply plugins
-    if (plugins) {
-      plugins.forEach((plugin) => plugin.setup(this));
     }
 
     const isDev = this.#isDev;
@@ -375,6 +369,11 @@ class Hot implements HotCore {
     });
 
     isDev && console.log("🔥 app fired.");
+  }
+
+  use(...plugins: Plugin[]) {
+    plugins.forEach((plugin) => plugin.setup(this));
+    return this;
   }
 
   listen() {
