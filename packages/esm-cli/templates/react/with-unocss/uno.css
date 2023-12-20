@@ -1,4 +1,4 @@
-@use **/*.jsx;
+@use "**/*.jsx";
 
 .hot-app {
   visibility: hidden
@@ -10,8 +10,23 @@
   }
 }
 
-.custom {
-  @apply p1 text-(white xl);
-  font-weight: 500;
-  background-color: theme('colors.red.400');
+:root {
+  --text-color: #202020;
+  --bg-color: #ffffff;
+}
+
+.dark {
+  color-scheme: dark;
+  --text-color: #f0f0f0;
+  --bg-color: #202020;
+}
+
+.dark ::selection {
+  background: #454545;
+}
+
+body {
+  @apply m-0 p-0;
+  color: var(--text-color);
+  background-color: var(--bg-color);
 }

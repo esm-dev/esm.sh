@@ -1,7 +1,7 @@
 import { useState } from "react";
 
 const externalLinks = [
-  ["Get Started", "https://esm.sh/hot/docs/get-started"],
+  ["Get started", "https://esm.sh/hot/docs/get-started"],
   ["Docs", "https://esm.sh/hot/docs"],
   ["Github", "https://github.com/esm-dev/esm.sh"],
 ];
@@ -11,40 +11,90 @@ export default function App() {
 
   return (
     <div className="w-screen h-screen flex flex-col items-center justify-center">
-      <h1 className="flex items-center gap-3 text-4xl mt-6 font-600 leading-none text-center">
-        Develop stuff with
+      <p
+        className="fixed top-6 op-50 text-xs font-italic select-none cursor-pointer"
+        onClick={() => setCount(count + 1)}
+      >
+        ^^ Made with 💛, React & UnoCSS. ({count})
+      </p>
+
+      <h1 className="flex items-center gap-3 text-[40px] mt-6 font-600 leading-none text-center">
+        Develop stuff <em>with</em>
+
         <svg
-          className="w-7 h-7 top-0.5 relative"
+          className="w-8 h-8 top-0.8 relative"
           width="24"
           height="24"
           viewBox="0 0 24 24"
           fill="none"
+          stroke="currentColor"
+          strokeWidth="2.4"
           xmlns="http://www.w3.org/2000/svg"
         >
-          <path
-            d="M12 22.5C17.799 22.5 22.5 17.799 22.5 12C22.5 6.20101 17.799 1.5 12 1.5C6.20101 1.5 1.5 6.20101 1.5 12C1.5 17.799 6.20101 22.5 12 22.5Z"
-            stroke="currentColor"
-            strokeWidth="2.8"
-          />
-          <path
-            d="M1.5 9.32194C4.20562 8.65886 7.91182 8.25 12 8.25C16.0881 8.25 19.7943 8.65886 22.5 9.32194M1.5 14.6781C4.20562 15.3411 7.91182 15.75 12 15.75C16.0881 15.75 19.7943 15.3411 22.5 14.6781"
-            stroke="currentColor"
-            strokeWidth="2.8"
-          />
-          <path
-            d="M12 1.5C12.2286 1.5 12.5646 1.59957 13.001 2.02144C13.4445 2.45029 13.9125 3.14326 14.3381 4.11595C15.1872 6.05686 15.75 8.84314 15.75 12C15.75 15.1569 15.1872 17.9432 14.3381 19.8841C13.9125 20.8568 13.4445 21.5497 13.001 21.9785C12.5646 22.4004 12.2286 22.5 12 22.5C11.7714 22.5 11.4354 22.4004 10.999 21.9785C10.5555 21.5497 10.0875 20.8568 9.66189 19.8841C8.8128 17.9432 8.25 15.1569 8.25 12C8.25 8.84314 8.8128 6.05686 9.66189 4.11595C10.0875 3.14326 10.5555 2.45029 10.999 2.02144C11.4354 1.59957 11.7714 1.5 12 1.5Z"
-            stroke="currentColor"
-            strokeWidth="2.8"
-          />
+          <defs>
+            <clipPath id="--clip-circle">
+              <circle cx="12" cy="12" r="10.5" fill="white" stroke="none" />
+            </clipPath>
+            <ellipse id="--ellipse" cx="12" cy="12" ry="3.75" rx="14.5" />
+          </defs>
+
+          <path d="M11.9636 22.5C6.18472 22.5 1.5 17.799 1.5 12C1.5 6.20101 6.18472 1.5 11.9636 1.5">
+            <animate
+              attributeName="d"
+              to="M12.0364 22.5C17.8153 22.5 22.5 17.799 22.5 12C22.5 6.20101 17.8153 1.5 12.0364 1.5"
+              dur="3s"
+              repeatCount="indefinite"
+            />
+          </path>
+          <path d="M11.9636 22.5C6.18472 22.5 1.5 17.799 1.5 12C1.5 6.20101 6.18472 1.5 11.9636 1.5">
+            <animate
+              attributeName="d"
+              to="M12.0364 22.5C17.8153 22.5 22.5 17.799 22.5 12C22.5 6.20101 17.8153 1.5 12.0364 1.5"
+              dur="3s"
+              begin="1s"
+              repeatCount="indefinite"
+            />
+          </path>
+          <path d="M11.9636 22.5C6.18472 22.5 1.5 17.799 1.5 12C1.5 6.20101 6.18472 1.5 11.9636 1.5">
+            <animate
+              attributeName="d"
+              to="M12.0364 22.5C17.8153 22.5 22.5 17.799 22.5 12C22.5 6.20101 17.8153 1.5 12.0364 1.5"
+              dur="3s"
+              begin="2s"
+              repeatCount="indefinite"
+            />
+          </path>
+          <path d="M12.0364 22.5C17.8153 22.5 22.5 17.799 22.5 12C22.5 6.20101 17.8153 1.5 12.0364 1.5">
+            <animate
+              attributeName="d"
+              from="M11.9636 22.5C9.75448 22.5 7.96362 17.799 7.96362 12C7.96362 6.20101 9.75448 1.5 11.9636 1.5"
+              to="M12.0364 22.5C17.8153 22.5 22.5 17.799 22.5 12C22.5 6.20101 17.8153 1.5 12.0364 1.5"
+              dur="2s"
+            />
+          </path>
+          <path d="M12.0364 22.5C17.8153 22.5 22.5 17.799 22.5 12C22.5 6.20101 17.8153 1.5 12.0364 1.5">
+            <animate
+              attributeName="d"
+              from="M12.0364 22.5C14.2455 22.5 16.0364 17.799 16.0364 12C16.0364 6.20101 14.2455 1.5 12.0364 1.5"
+              to="M12.0364 22.5C17.8153 22.5 22.5 17.799 22.5 12C22.5 6.20101 17.8153 1.5 12.0364 1.5"
+              dur="1s"
+            />
+          </path>
+
+          <use clipPath="url(#--clip-circle)" href="#--ellipse" />
+
+          <circle cx="12" cy="12" r="10.5" />
         </svg>
+
         browser tech.
       </h1>
-      <nav className="fixed bottom-5 flex gap-6 mt-4">
+
+      <nav className="fixed bottom-4 flex items-center gap-6 mt-4">
         {externalLinks.map(([text, href]) => (
           <a
-            className="flex items-center gap-1 text-gray-400 hover:text-gray-900 transition-colors duration-300"
-            href={href}
+            className="flex items-center gap-0.5 leading-none op-40 hover:op-100 transition-top duration-300 relative top-0 hover:top--0.5"
             target="_blank"
+            href={href}
             key={href}
           >
             {text}
@@ -63,6 +113,29 @@ export default function App() {
             </svg>
           </a>
         ))}
+        <button
+          className="p1.5 rounded-full bg-gray-400/10 hover:bg-gray-400/20 group"
+          onClick={() => {
+            document.documentElement.classList.toggle("dark");
+          }}
+        >
+          <svg
+            className="w-4.5 h-4.5 op-40 group-hover:op-100"
+            width="24"
+            height="24"
+            viewBox="0 0 24 24"
+            xmlns="http://www.w3.org/2000/svg"
+          >
+            <path
+              fill="none"
+              stroke="currentColor"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth="2"
+              d="M14.828 14.828a4 4 0 1 0-5.656-5.656a4 4 0 0 0 5.656 5.656m-8.485 2.829l-1.414 1.414M6.343 6.343L4.929 4.929m12.728 1.414l1.414-1.414m-1.414 12.728l1.414 1.414M4 12H2m10-8V2m8 10h2m-10 8v2"
+            />
+          </svg>
+        </button>
       </nav>
     </div>
   );
