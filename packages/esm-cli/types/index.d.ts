@@ -10,8 +10,6 @@ export interface FsFile {
 export interface ServeOptions {
   /** The root path, default to current working directory. */
   root?: string;
-  /** The fallback route, default is `index.html`. */
-  fallback?: `${string}.html`;
 }
 
 /** Creates a fetch handler for serving hot applications. */

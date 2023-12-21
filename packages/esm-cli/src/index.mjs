@@ -16,7 +16,7 @@ import {
  * @returns {(req: Request, cfEnv?: Record<string, string>) => Promise<Response>}
  */
 export const serveHot = (options) => {
-  const { root = ".", fallback = "index.html" } = options;
+  const { root = "." } = options;
   const env = typeof Deno === "object" ? Deno.env.toObject() : process.env;
   const watch = fs.watch(root);
   const contentCache = new Map(); // todo: use worker `caches` api if possible
@@ -295,7 +295,7 @@ export const serveHot = (options) => {
                 pathname !== "/" ? pathname + ".html" : null,
                 pathname !== "/" ? pathname + "/index.html" : null,
                 "/404.html",
-                "/" + fallback,
+                "/index.html",
               ].filter(Boolean);
               for (const path of htmls) {
                 filepath = path;

@@ -1,27 +1,47 @@
 # esm.sh
 
-The [esm.sh](https://esm.sh) CLI/API for serving hot applications.
+The CLI/API for serving `esm.sh/hot` applications.
+
+## What is esm.sh/hot ?
+
+[TODO]
 
 ## Using the CLI tool
 
-The CLI tool is used to run a hot application in current directory.
+To use the CLI tool, you need to install it globally on your
+machine:
 
 ```bash
-npx esm.sh -w
+npm i -g esm.sh
 ```
 
-> The `-w` option is for watching the file changes to enable HMR.
+or using `npx` to run it directly:
+
+```bash
+npx esm.sh
+```
+
+The CLI will start a esm.sh/hot server using the current working directory as the root path.
+
+```bash
+$ esm.sh
+Listening on http://localhost:3000
+```
+
+or you can specify the root path:
+
+```bash
+$ esm.sh my-app
+```
 
 ## Using the API
 
-The esm.sh API uses standard web APIs to serve hot applications.
+The esm.sh API uses standard web APIs to serve requests of a hot application.
 
 ```ts
 export interface ServeOptions {
   /** The root path, default to current working directory. */
   root?: string;
-  /** The fallback route, default is `index.html`. */
-  fallback?: string;
 }
 
 export function serveHost(
