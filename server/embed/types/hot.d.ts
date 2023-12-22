@@ -89,11 +89,10 @@ export interface VFS {
 export interface HotCore {
   readonly basePath: string;
   readonly cache: Cache;
-  readonly importMap: Required<ImportMap>;
   readonly contentMap: Required<ContentMap>;
+  readonly importMap: Required<ImportMap>;
   readonly isDev: boolean;
   readonly vfs: VFS;
-  use(...plugins: Plugin[]): this;
   fire(): Promise<void>;
   listen(swScript?: string): void;
   onFetch(test: URLTest, handler: FetchHandler): this;
@@ -105,6 +104,7 @@ export interface HotCore {
     priority?: "eager",
   ): this;
   waitUntil(promise: Promise<any>): void;
+  use(...plugins: Plugin[]): this;
 }
 
 export interface Hot extends HotCore, HotAPI {}

@@ -10,7 +10,7 @@ declare global {
     presetWind?: PresetWindOptions;
   }
   interface HotAPI {
-    unocss: {
+    readonly unocss: {
       config(config: UnoConfig): void;
     };
     unocssPresets?: ((config: UnoConfig) => Preset)[];

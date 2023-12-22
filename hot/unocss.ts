@@ -12,36 +12,34 @@ export default {
   setup(hot: Hot) {
     const unoConfig: UnoConfig = {};
     const unocssPresets = hot.unocssPresets ?? (hot.unocssPresets = []);
-    hot.unocss = {
+    unocssPresets.push((config) => presetWind(config.presetWind));
+    Reflect.set(hot, "unocss", {
       config(config) {
         Object.assign(unoConfig, config);
       },
-    };
-    unocssPresets.push((config) => presetWind(config.presetWind));
+    });
     let uno: UnoGenerator;
     hot.onLoad(
       /(^|\/|\.)uno.css$/,
       async (_url: URL, source: string, _options: Record<string, any> = {}) => {
         const { css, data, entryPoints } = JSON.parse(source);
-        const res = await (uno ??
-          (uno = createGenerator({
-            ...unoConfig,
-            presets: (unoConfig.presets ?? []).concat(
-              unocssPresets.map((f) => f(unoConfig)),
-            ),
-          })))
-          .generate(data, {
-            preflights: true,
-            minify: true,
-          });
+        const res = await (uno ?? (uno = createGenerator({
+          ...unoConfig,
+          presets: (unoConfig.presets ?? []).concat(
+            unocssPresets.map((f) => f(unoConfig)),
+          ),
+        }))).generate(data, {
+          preflights: true,
+          minify: true,
+        });
         const transform = hot.unocssTransformDirectives;
         return {
-          code: res.css +
-            (transform ? await transform(css, uno) : css),
+          code: res.css + (transform ? await transform(css, uno) : css),
           contentType: "text/css; charset=utf-8",
           deps: entryPoints.map((name: string) => "/" + name),
         };
       },
+      // custom fetcher
       async (req) => {
         const res = await fetch(req);
         if (!res.ok) {
