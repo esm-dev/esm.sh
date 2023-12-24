@@ -190,9 +190,7 @@ export const serveHot = (options) => {
           return new Response("[]", { headers });
         }
         const entries = await fs.ls(root);
-        const matched = entries.filter((entry) =>
-          glob.includes(entry) || entry.match(globToRegExp(glob))
-        );
+        const matched = entries.filter((entry) => glob.includes(entry) || entry.match(globToRegExp(glob)));
         if (!matched.length) {
           return new Response("[]", { headers });
         }
@@ -238,19 +236,20 @@ export const serveHot = (options) => {
         );
       }
 
-      /** Event source for HMR */
+      /** Event stream for HMR */
       case "/@hot-notify": {
         const disposes = [];
         return new Response(
           new ReadableStream({
             start(controller) {
-              const enqueue = (chunk) => controller.enqueue(enc.encode(chunk));
+              const sendEvent = (eventName, data) => {
+                controller.enqueue("event: " + eventName + "\ndata: " + JSON.stringify(data) + "\n\n");
+              };
               disposes.push(watch((type, name) => {
-                enqueue("event: fs-notify\ndata: ");
-                enqueue(JSON.stringify({ type, name }));
-                enqueue("\n\n");
+                sendEvent("fs-notify", { type, name });
               }));
-              enqueue(": hot notify stream\n\n");
+              controller.enqueue(": hot notify stream\n\n");
+              sendEvent("open-devtools", null);
             },
             cancel() {
               disposes.forEach((dispose) => dispose());
@@ -396,9 +395,7 @@ export const serveHot = (options) => {
       async element(el) {
         if (contentMap) {
           try {
-            const { contents = {} } = isNEString(contentMap)
-              ? (contentMap = JSON.parse(contentMap))
-              : contentMap;
+            const { contents = {} } = isNEString(contentMap) ? (contentMap = JSON.parse(contentMap)) : contentMap;
             const name = el.getAttribute("from");
             let content = contents[name];
             let asterisk = undefined;
@@ -435,9 +432,7 @@ export const serveHot = (options) => {
                     value = new Function("return this." + expr).call(data);
                   }
                 }
-                return !isNullish(value)
-                  ? value.toString?.() ?? stringify(value)
-                  : "";
+                return !isNullish(value) ? value.toString?.() ?? stringify(value) : "";
               };
               const render = (data) => {
                 el.setInnerContent(process(data), { html: true });

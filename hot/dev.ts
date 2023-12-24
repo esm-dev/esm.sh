@@ -142,11 +142,12 @@ export function setup(hot: Hot) {
       }
     });
 
+    es.addEventListener("open-devtools", async () => {
+      const { render } = await import(new URL("./devtools", import.meta.url).href);
+      render(hot);
+    });
+
     es.onopen = () => {
-      if (!connected) {
-        import(new URL("./devtools", import.meta.url).href)
-          .then(({ render }) => render(hot));
-      }
       connected = true;
       console.log(
         ...logPrefix,
