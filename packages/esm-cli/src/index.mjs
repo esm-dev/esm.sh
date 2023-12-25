@@ -237,7 +237,7 @@ export const serveHot = (options) => {
       }
 
       /** Event stream for HMR */
-      case "/@hot-notify": {
+      case "/@hot-events": {
         const disposes = [];
         return new Response(
           new ReadableStream({

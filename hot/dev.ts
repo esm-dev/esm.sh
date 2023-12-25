@@ -105,7 +105,7 @@ export function setup(hot: Hot) {
 
     let connected = false;
     const es = new EventSource(
-      new URL(hot.basePath + "@hot-notify", location.href),
+      new URL(hot.basePath + "@hot-events", location.href),
     );
 
     es.addEventListener("fs-notify", async (evt) => {
