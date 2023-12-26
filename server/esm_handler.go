@@ -273,6 +273,7 @@ func esmHandler() rex.Handle {
 					header.Set("Cache-Control", "public, max-age=31536000, immutable")
 					return data
 				}
+				filename = strings.TrimSuffix(filename, ".ts")
 			}
 			data, err := embedFS.ReadFile(fmt.Sprintf("%s.ts", filename))
 			if err != nil {
