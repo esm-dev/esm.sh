@@ -40,10 +40,10 @@ export interface ImportMap {
 
 export interface ContentMap {
   rendered?: Record<string, { value: any; expires?: number } | Promise<any>>;
-  contents?: Record<string, ContentInit>;
+  contents?: Record<string, ContentSource>;
 }
 
-export interface ContentInit {
+export interface ContentSource {
   url?: string;
   method?: string;
   authorization?: string;
@@ -53,6 +53,13 @@ export interface ContentInit {
   timeout?: number;
   cacheTtl?: number;
   stream?: boolean;
+}
+
+export interface DevtoolsWidget {
+  title?: string;
+  icon: string;
+  component: string;
+  onMount(hot: Hot): void;
 }
 
 export interface FetchHandler {
