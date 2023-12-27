@@ -1,4 +1,4 @@
-import type { DevtoolsWidget, Hot } from "../server/embed/types/hot.d.ts";
+import type { DevtoolsWidget, DevtoolsWidgetFactory, Hot } from "../server/embed/types/hot.d.ts";
 import quickDeploy from "./devtools-quick-deploy.ts";
 
 const doc = document;
@@ -155,17 +155,15 @@ function renderWidget(w: DevtoolsWidget): string {
 let rendered = false;
 export function render(hot: Hot) {
   if (!rendered) {
-    const widgets: DevtoolsWidget[] = [quickDeploy];
+    const widgets: Array<DevtoolsWidgetFactory | DevtoolsWidget> = [quickDeploy];
 
     class DevTools extends HTMLElement {
       connectedCallback() {
         const root = this.attachShadow({ mode: "open" });
-        root.innerHTML = template(widgets);
+        root.innerHTML = template(widgets.map((v) => typeof v === "function" ? v(hot) : v));
       }
     }
     customElements.define("hot-devtools", DevTools);
-
-    widgets.forEach((w) => w.onMount(hot));
     doc.body.appendChild(doc.createElement("hot-devtools"));
     rendered = true;
   }

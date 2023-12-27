@@ -13,65 +13,67 @@ const icon = html`
 
 const template = html`
   <div>
+    quick deploy
   <div>
+  <style>
+    :host * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      line-height: 1;
+    }
+  </style>
 `;
 
-class QuickDeploy extends HTMLElement {
-  connectedCallback() {
-    const root = this.attachShadow({ mode: "open" });
-    root.innerHTML = template;
+export default (hot: Hot): DevtoolsWidget => {
+  class QuickDeploy extends HTMLElement {
+    connectedCallback() {
+      const root = this.attachShadow({ mode: "open" });
+      root.innerHTML = template;
 
-    const publish = async () => {
-      const res = fetch(new URL(hot.basePath + "@hot-index", location.href));
-      if (!res) {
-        return;
-      }
-      const index = await res.then((r) => r.json());
-      if (!Array.isArray(index) || index.length === 0) {
-        return;
-      }
-      index.push(
-        ...index.filter((name: string) => name.endsWith(".css"))
-          .map((name: string) => name + "?module"),
-      );
-      const loader: Record<string, string> = {};
-      const fd = new FormData();
-      await Promise.all(index.map(async (name: string) => {
-        const res = await fetch(
-          new URL(hot.basePath + name, location.href),
-          { headers: { "hot-loader-env": "production" } },
-        );
+      const publish = async () => {
+        const res = fetch(new URL(hot.basePath + "@hot-index", location.href));
         if (!res) {
           return;
         }
-        if (res.headers.get("x-content-source") === "hot-loader") {
-          loader[name] = res.headers.get("content-type")!;
+        const index = await res.then((r) => r.json());
+        if (!Array.isArray(index) || index.length === 0) {
+          return;
         }
-        fd.append(name, await res.blob());
-      }));
-      fd.append("index", JSON.stringify(index));
-      fd.append("loader", JSON.stringify(loader));
-      const res2 = await fetch("https://esm.sh/create/x-site", {
-        method: "POST",
-        body: fd,
-      });
-      if (!res) {
-        return;
-      }
-      const { appId } = await res2.json();
-      alert(`https://${appId}.esm.app`);
-    };
+        index.push(
+          ...index.filter((name: string) => name.endsWith(".css"))
+            .map((name: string) => name + "?module"),
+        );
+        const loader: Record<string, string> = {};
+        const fd = new FormData();
+        await Promise.all(index.map(async (name: string) => {
+          const res = await fetch(
+            new URL(hot.basePath + name, location.href),
+            { headers: { "hot-loader-env": "production" } },
+          );
+          if (!res) {
+            return;
+          }
+          if (res.headers.get("x-content-source") === "hot-loader") {
+            loader[name] = res.headers.get("content-type")!;
+          }
+          fd.append(name, await res.blob());
+        }));
+        fd.append("index", JSON.stringify(index));
+        fd.append("loader", JSON.stringify(loader));
+        const res2 = await fetch("https://esm.sh/create/x-site", {
+          method: "POST",
+          body: fd,
+        });
+        if (!res) {
+          return;
+        }
+        const { appId } = await res2.json();
+        alert(`https://${appId}.esm.app`);
+      };
+    }
   }
-}
-customElements.define(component, QuickDeploy);
 
-let hot: Hot;
-function onMount(self: Hot) {
-  hot = self;
-}
-
-export default {
-  component,
-  icon,
-  onMount,
-} satisfies DevtoolsWidget;
+  customElements.define(component, QuickDeploy);
+  return { icon, component };
+};

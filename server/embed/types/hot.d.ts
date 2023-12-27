@@ -56,10 +56,12 @@ export interface ContentSource {
 }
 
 export interface DevtoolsWidget {
-  title?: string;
   icon: string;
   component: string;
-  onMount(hot: Hot): void;
+}
+
+export interface DevtoolsWidgetFactory {
+  (hot: Hot): DevtoolsWidget;
 }
 
 export interface FetchHandler {
