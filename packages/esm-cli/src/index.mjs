@@ -18,7 +18,7 @@ import {
 export const serveHot = (options) => {
   const { root = "." } = options;
   const env = typeof Deno === "object" ? Deno.env.toObject() : process.env;
-  const watch = fs.watch(root);
+  const onFsNotify = fs.watch(root);
   const contentCache = new Map(); // todo: use worker `caches` api if possible
 
   /**
@@ -245,11 +245,13 @@ export const serveHot = (options) => {
               const sendEvent = (eventName, data) => {
                 controller.enqueue("event: " + eventName + "\ndata: " + JSON.stringify(data) + "\n\n");
               };
-              disposes.push(watch((type, name) => {
+              disposes.push(onFsNotify((type, name) => {
                 sendEvent("fs-notify", { type, name });
               }));
               controller.enqueue(": hot notify stream\n\n");
-              sendEvent("open-devtools", null);
+              if (url.hostname === "localhost" || url.hostname === "127.0.0.1") {
+                sendEvent("open-devtools", null);
+              }
             },
             cancel() {
               disposes.forEach((dispose) => dispose());
@@ -280,6 +282,10 @@ export const serveHot = (options) => {
               return new Response("Not found", { status: 404 });
             case "/sw.js": {
               const hotUrl = new URL("https://esm.sh/v135/hot");
+              const plugins = url.searchParams.get("hot-plugins");
+              if (plugins) {
+                hotUrl.searchParams.set("plugins", plugins);
+              }
               return new Response(
                 `import hot from "${hotUrl.href}";hot.listen();`,
                 {
