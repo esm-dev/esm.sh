@@ -1,15 +1,11 @@
 import type { Hot } from "../server/embed/types/hot.d.ts";
-import initWasm, {
-  type Targets,
-  transform,
-  transformCSS,
-} from "https://esm.sh/esm-compiler@0.3.5";
+import initWasm, { type Targets, transform, transformCSS } from "https://esm.sh/esm-compiler@0.3.6";
 
 let waiting: Promise<any> | null = null;
 const init = async () => {
   if (waiting === null) {
     waiting = initWasm(
-      fetch("https://esm.sh/esm-compiler@0.3.5/esm_compiler_bg.wasm"),
+      fetch("https://esm.sh/esm-compiler@0.3.6/esm_compiler_bg.wasm"),
     );
   }
   await waiting;
@@ -79,8 +75,7 @@ export default {
 
           let css = code;
           if (map) {
-            css +=
-              "\n//# sourceMappingURL=data:application/json;charset=utf-8;base64,";
+            css += "\n//# sourceMappingURL=data:application/json;charset=utf-8;base64,";
             css += btoa(map);
           }
           const cssModulesExports: Record<string, string> = {};
@@ -92,9 +87,7 @@ export default {
           return {
             code: [
               isDev && hmrRuntime &&
-              `import H from ${stringify(hmrRuntime)};import.meta.hot = H(${
-                stringify(pathname)
-              });`,
+              `import H from ${stringify(hmrRuntime)};import.meta.hot = H(${stringify(pathname)});`,
               "const d = document;",
               "const id = ",
               stringify(pathname),
