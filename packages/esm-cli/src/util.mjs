@@ -38,6 +38,15 @@ export function isJSONResponse(response) {
 }
 
 /**
+ * check if the given url is a local host.
+ * @param {URL} url
+ * @returns {boolean}
+ */
+export function isLocalHost({ hostname }) {
+  return hostname === "localhost" || hostname === "127.0.0.1" || hostname === "[::1]";
+}
+
+/**
  * read text from the given readable stream.
  * @param {ReadableStream<Uint8Array>} readable
  * @returns {Promise<string>}

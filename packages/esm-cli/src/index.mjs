@@ -3,6 +3,7 @@ import {
   enc,
   globToRegExp,
   isJSONResponse,
+  isLocalHost,
   isNEString,
   isNullish,
   isObject,
@@ -249,7 +250,7 @@ export const serveHot = (options) => {
                 sendEvent("fs-notify", { type, name });
               }));
               controller.enqueue(": hot notify stream\n\n");
-              if (url.hostname === "localhost" || url.hostname === "127.0.0.1") {
+              if (isLocalHost(url)) {
                 sendEvent("open-devtools", null);
               }
             },
@@ -366,8 +367,21 @@ export const serveHot = (options) => {
   function rewriteHtml(req, cfEnv, url, filepath) {
     const rewriter = new HTMLRewriter();
 
+    // - inject router index
+    rewriter.on("meta[name=fs-router]", {
+      async element(el) {
+        const content = el.getAttribute("content") ?? "./routes";
+        const { pathname } = new URL(content, url.origin + filepath);
+        const index = await fs.ls(root + pathname);
+        el.replace(
+          `<script type="applicatin/json" id="@hot/router">${JSON.stringify({ index })}</script>`,
+          { html: true },
+        );
+      },
+    });
+
     // - resolve external importmap/contentmap
-    rewriter.on("script[type$=map][src]", {
+    rewriter.on("script[type$=tmap][src]", {
       async element(el) {
         const type = el.getAttribute("type");
         const src = el.getAttribute("src");
@@ -501,7 +515,7 @@ export const serveHot = (options) => {
     }
 
     // - tell the client to reload the page when the html is updated (dev mode only)
-    if (url.hostname === "localhost" || url.hostname === "127.0.0.1") {
+    if (isLocalHost(url)) {
       rewriter.onDocument({
         end(end) {
           end.append(
