@@ -34,11 +34,12 @@ func esmHandler() rex.Handle {
 			return rex.Status(404, "not found")
 		}
 
-		CTX_BUILD_VERSION := VERSION
+		// use esm-worker build version if possible
+		BUILD_VERSION := VERSION
 		if v := ctx.R.Header.Get("X-Esm-Worker-Version"); v != "" && strings.HasPrefix(v, "v") {
 			i, e := strconv.Atoi(v[1:])
 			if e == nil && i > 0 {
-				CTX_BUILD_VERSION = i
+				BUILD_VERSION = i
 			}
 		}
 
@@ -53,6 +54,7 @@ func esmHandler() rex.Handle {
 			}
 		}
 
+		// serve the CLI script for Deno/Node.js/Bun runtime
 		if userAgent == "undici" || strings.HasPrefix(userAgent, "Node/") || strings.HasPrefix(userAgent, "Deno/") || strings.HasPrefix(userAgent, "Bun/") {
 			if pathname == "/" || regexpCliPath.MatchString(pathname) {
 				if strings.HasPrefix(userAgent, "Deno/") {
@@ -61,7 +63,7 @@ func esmHandler() rex.Handle {
 						return err
 					}
 					header.Set("Content-Type", "application/typescript; charset=utf-8")
-					return bytes.ReplaceAll(cliTs, []byte("v{VERSION}"), []byte(fmt.Sprintf("v%d", CTX_BUILD_VERSION)))
+					return bytes.ReplaceAll(cliTs, []byte("v{VERSION}"), []byte(fmt.Sprintf("v%d", BUILD_VERSION)))
 				}
 				if userAgent == "undici" || strings.HasPrefix(userAgent, "Node/") || strings.HasPrefix(userAgent, "Bun/") {
 					cliJs, err := embedFS.ReadFile("server/embed/CLI.node.js")
@@ -69,7 +71,7 @@ func esmHandler() rex.Handle {
 						return err
 					}
 					header.Set("Content-Type", "application/javascript; charset=utf-8")
-					cliJs = bytes.ReplaceAll(cliJs, []byte("v{VERSION}"), []byte(fmt.Sprintf("v%d", CTX_BUILD_VERSION)))
+					cliJs = bytes.ReplaceAll(cliJs, []byte("v{VERSION}"), []byte(fmt.Sprintf("v%d", BUILD_VERSION)))
 					return bytes.ReplaceAll(cliJs, []byte("https://esm.sh"), []byte(cdnOrigin+cfg.CdnBasePath))
 				}
 			}
@@ -91,7 +93,7 @@ func esmHandler() rex.Handle {
 			readme = bytes.ReplaceAll(readme, []byte("https://esm.sh"), []byte("{origin}"+cfg.CdnBasePath))
 			readmeStrLit := utils.MustEncodeJSON(string(readme))
 			html := bytes.ReplaceAll(indexHTML, []byte("'# README'"), readmeStrLit)
-			html = bytes.ReplaceAll(html, []byte("{VERSION}"), []byte(fmt.Sprintf("%d", CTX_BUILD_VERSION)))
+			html = bytes.ReplaceAll(html, []byte("{VERSION}"), []byte(fmt.Sprintf("%d", BUILD_VERSION)))
 			html = bytes.ReplaceAll(html, []byte("{basePath}"), []byte(cfg.CdnBasePath))
 			header.Set("Cache-Control", fmt.Sprintf("public, max-age=%d", 10*60))
 			return rex.Content("index.html", startTime, bytes.NewReader(html))
@@ -126,18 +128,11 @@ func esmHandler() rex.Handle {
 			}
 			buildQueue.lock.RUnlock()
 
-			n := 0
-			purgeTimers.Range(func(key, value interface{}) bool {
-				n++
-				return true
-			})
-
 			header.Set("Cache-Control", "private, no-store, no-cache, must-revalidate")
 			return map[string]interface{}{
-				"buildQueue":  q[:i],
-				"purgeTimers": n,
-				"version":     CTX_BUILD_VERSION,
-				"uptime":      time.Since(startTime).String(),
+				"buildQueue": q[:i],
+				"version":    BUILD_VERSION,
+				"uptime":     time.Since(startTime).String(),
 			}
 
 		case "/esma-target":
@@ -208,6 +203,7 @@ func esmHandler() rex.Handle {
 			pathname = regexpLocPath.ReplaceAllString(pathname, "$1")
 		}
 
+		// serve modules added by the build API
 		if strings.HasPrefix(pathname, "/+") {
 			hash, ext := utils.SplitByLastByte(pathname[2:], '.')
 			if len(hash) != 40 || ext != "mjs" {
@@ -234,34 +230,51 @@ func esmHandler() rex.Handle {
 
 		var hasBuildVerPrefix bool
 		var hasStablePrefix bool
-		var outdatedBuildVer string
+		var outdatedBuildVersion string
 
-		// check build version prefix
-		buildBasePath := fmt.Sprintf("/v%d", CTX_BUILD_VERSION)
+		// check build version prefix or `?pin=` query
+		buildVersion := BUILD_VERSION
 		if strings.HasPrefix(pathname, "/stable/") {
 			pathname = strings.TrimPrefix(pathname, "/stable")
 			hasBuildVerPrefix = true
 			hasStablePrefix = true
-		} else if strings.HasPrefix(pathname, buildBasePath+"/") || pathname == buildBasePath {
+		} else if strings.HasPrefix(pathname, fmt.Sprintf("/v%d/", BUILD_VERSION)) || pathname == fmt.Sprintf("/v%d", BUILD_VERSION) {
 			a := strings.Split(pathname, "/")
 			pathname = "/" + strings.Join(a[2:], "/")
 			hasBuildVerPrefix = true
-			// Otherwise check possible fixed version
 		} else if regexpBuildVersionPath.MatchString(pathname) {
+			// check possible fixed build version
 			a := strings.Split(pathname, "/")
+			v, _ := strconv.Atoi(a[1][1:])
+			if v == 0 || v > BUILD_VERSION {
+				return rex.Status(400, "Bad Request")
+			}
 			pathname = "/" + strings.Join(a[2:], "/")
 			hasBuildVerPrefix = true
-			outdatedBuildVer = a[1]
+			outdatedBuildVersion = a[1]
+			buildVersion = v
+		} else {
+			// Otherwise check "?pin=" query
+			pin := ctx.Form.Value("pin")
+			if pin != "" && strings.HasPrefix(pin, "v") {
+				i, err := strconv.Atoi(pin[1:])
+				if err == nil && i > 0 && i < BUILD_VERSION {
+					buildVersion = i
+				}
+			}
 		}
 
+		// serve internal scripts
 		if pathname == "/build" || pathname == "/run" || pathname == "/hot" || strings.HasPrefix(pathname, "/hot/") {
 			if !hasBuildVerPrefix && !ctx.Form.Has("pin") {
-				url := fmt.Sprintf("%s%s/v%d%s", cdnOrigin, cfg.CdnBasePath, CTX_BUILD_VERSION, pathname)
+				url := fmt.Sprintf("%s%s/v%d%s", cdnOrigin, cfg.CdnBasePath, BUILD_VERSION, pathname)
 				if ctx.R.URL.RawQuery != "" {
 					url += "?" + ctx.R.URL.RawQuery
 				}
+				// redirect to the url with build version prefix
 				return rex.Redirect(url, http.StatusFound)
 			}
+
 			filename, version := utils.SplitByLastByte(pathname[1:], '@')
 			if strings.HasPrefix(filename, "hot/") {
 				if strings.HasSuffix(filename, ".d.ts") {
@@ -275,23 +288,26 @@ func esmHandler() rex.Handle {
 				}
 				filename = strings.TrimSuffix(filename, ".ts")
 			}
+
 			data, err := embedFS.ReadFile(fmt.Sprintf("%s.ts", filename))
 			if err != nil {
 				return rex.Status(404, "Not Found")
 			}
 
 			if pathname == "/hot" {
-				set := newStringSet()
-				plugins := []string{}
-				imports := []string{}
+				header.Set("X-TypeScript-Types", fmt.Sprintf("%s%s/v%d/hot.d.ts", cdnOrigin, cfg.CdnBasePath, buildVersion))
+				plugins := newStringSet()
+				pluginIds := []string{}
+				pluginImports := []string{}
+				pluginDts := []string{}
 				for i, name := range strings.Split(ctx.Form.Value("plugins"), ",") {
 					name = strings.TrimSpace(name)
 					name, version := utils.SplitByLastByte(name, '@')
 					if validatePackageName(name) {
-						if set.Has(name) {
+						if plugins.Has(name) {
 							continue
 						}
-						set.Add(name)
+						plugins.Add(name)
 						_, err := embedFS.ReadFile(fmt.Sprintf("hot/%s.ts", name))
 						if err == nil {
 							ver := ""
@@ -299,25 +315,26 @@ func esmHandler() rex.Handle {
 								if regexpFullVersion.MatchString(version) {
 									ver = fmt.Sprintf("@%s", version)
 								} else {
-									imports = append(imports, fmt.Sprintf(`console.warn("[esm.sh/hot] invalid version: %s@%s");`, name, version))
+									pluginImports = append(pluginImports, fmt.Sprintf(`console.warn("[esm.sh/hot] invalid version: %s@%s");`, name, version))
 								}
 							}
 							id := fmt.Sprintf("plugin_%d", i)
-							plugins = append(plugins, id)
-							imports = append(imports, fmt.Sprintf(`import %s from "./hot/%s%s";`, id, name, ver))
+							pluginIds = append(pluginIds, id)
+							pluginImports = append(pluginImports, fmt.Sprintf(`import %s from "./hot/%s%s";`, id, name, ver))
+							_, dts404 := embedFS.ReadFile(fmt.Sprintf("hot/%s.d.ts", name))
+							if dts404 == nil {
+								pluginDts = append(pluginDts, fmt.Sprintf("hot/%s.d.ts", name))
+							}
 						}
 					}
 				}
-				if len(plugins) > 0 {
+				if len(pluginIds) > 0 {
 					data = bytes.Replace(
 						data,
 						[]byte("const plugins: Plugin[] = []"),
-						[]byte(fmt.Sprintf(`%sconst plugins: Plugin[] = [%s]`, strings.Join(imports, "\n"), strings.Join(plugins, ", "))),
+						[]byte(fmt.Sprintf(`%sconst plugins: Plugin[] = [%s]`, strings.Join(pluginImports, "\n"), strings.Join(pluginIds, ", "))),
 						1,
 					)
-				}
-				header.Set("X-TypeScript-Types", fmt.Sprintf("%s%s/v%d/hot.d.ts", cdnOrigin, cfg.CdnBasePath, CTX_BUILD_VERSION))
-				if ctx.Form.Has("bundle") {
 					target := getBuildTargetByUA(userAgent)
 					code, err := bundleHotScript(string(data), targets[target])
 					if err != nil {
@@ -326,6 +343,9 @@ func esmHandler() rex.Handle {
 					header.Set("Content-Type", "application/javascript; charset=utf-8")
 					header.Set("Cache-Control", "public, max-age=31536000, immutable")
 					header.Add("Vary", "User-Agent")
+					if len(pluginDts) > 0 {
+						header.Set("X-TypeScript-Types", fmt.Sprintf("%s%s/v%d/hot.d.ts?refs=%s", cdnOrigin, cfg.CdnBasePath, buildVersion, strings.Join(pluginDts, ",")))
+					}
 					return code
 				}
 			}
@@ -340,7 +360,7 @@ func esmHandler() rex.Handle {
 				}
 				_, err := embedFS.ReadFile(fmt.Sprintf("%s.d.ts", filename))
 				if err == nil {
-					header.Set("X-TypeScript-Types", fmt.Sprintf("%s%s/v%d/hot/%s.d.ts", cdnOrigin, cfg.CdnBasePath, CTX_BUILD_VERSION, path.Base(filename)))
+					header.Set("X-TypeScript-Types", fmt.Sprintf("%s%s/v%d/hot/%s.d.ts", cdnOrigin, cfg.CdnBasePath, buildVersion, path.Base(filename)))
 				}
 			}
 
@@ -360,9 +380,10 @@ func esmHandler() rex.Handle {
 			return data
 		}
 
+		// serve server script
 		if pathname == "/server" {
 			if !hasBuildVerPrefix && !ctx.Form.Has("pin") {
-				url := fmt.Sprintf("%s%s/v%d/server", cdnOrigin, cfg.CdnBasePath, CTX_BUILD_VERSION)
+				url := fmt.Sprintf("%s%s/v%d/server", cdnOrigin, cfg.CdnBasePath, BUILD_VERSION)
 				return rex.Redirect(url, http.StatusFound)
 			}
 			var data []byte
@@ -406,6 +427,15 @@ func esmHandler() rex.Handle {
 			if strings.HasSuffix(pathname, ".d.ts") {
 				data, err := embedFS.ReadFile("server/embed/types" + pathname)
 				if err == nil {
+					fv := ctx.Form.Value("refs")
+					if fv != "" {
+						var refs = make([]string, strings.Count(fv, ",")+1)
+						for i, ref := range strings.Split(fv, ",") {
+							url := fmt.Sprintf("%s%s/v%d/%s", cdnOrigin, cfg.CdnBasePath, buildVersion, ref)
+							refs[i] = fmt.Sprintf("/// <reference path=\"%s\" />", url)
+						}
+						data = concatBytes([]byte(strings.Join(refs, "\n")), data)
+					}
 					header.Set("Content-Type", "application/typescript; charset=utf-8")
 					header.Set("Cache-Control", "public, max-age=31536000, immutable")
 					return rex.Content(pathname, startTime, bytes.NewReader(data))
@@ -423,8 +453,8 @@ func esmHandler() rex.Handle {
 			return rex.Status(403, "forbidden")
 		}
 
+		// check `/*pathname` or `/gh/*pathname` pattern
 		external := newStringSet()
-		// check `/*pathname`
 		if strings.HasPrefix(pathname, "/*") {
 			external.Add("*")
 			pathname = "/" + pathname[2:]
@@ -444,11 +474,6 @@ func esmHandler() rex.Handle {
 				status = 404
 			}
 			return rex.Status(status, message)
-		}
-
-		if reqPkg.Name == "apps" {
-			// resvered package name
-			return rex.Status(404, "not found")
 		}
 
 		// fix url related `import.meta.url`
@@ -497,7 +522,7 @@ func esmHandler() rex.Handle {
 
 		// redirect `/@types/PKG` to main dts files
 		if strings.HasPrefix(reqPkg.Name, "@types/") && (reqPkg.SubModule == "" || !strings.HasSuffix(reqPkg.SubModule, ".d.ts")) {
-			url := fmt.Sprintf("%s%s/v%d%s", cdnOrigin, cfg.CdnBasePath, CTX_BUILD_VERSION, pathname)
+			url := fmt.Sprintf("%s%s/v%d%s", cdnOrigin, cfg.CdnBasePath, BUILD_VERSION, pathname)
 			if reqPkg.SubModule == "" {
 				info, _, err := getPackageInfo("", reqPkg.Name, reqPkg.Version)
 				if err != nil {
@@ -545,10 +570,10 @@ func esmHandler() rex.Handle {
 			subPath := ""
 			query := ""
 			if endsWith(pathname, ".d.ts", ".d.mts") {
-				if outdatedBuildVer != "" {
-					bvPrefix = fmt.Sprintf("/%s", outdatedBuildVer)
+				if outdatedBuildVersion != "" {
+					bvPrefix = fmt.Sprintf("/%s", outdatedBuildVersion)
 				} else {
-					bvPrefix = fmt.Sprintf("/v%d", CTX_BUILD_VERSION)
+					bvPrefix = fmt.Sprintf("/v%d", BUILD_VERSION)
 				}
 			}
 			if external.Has("*") {
@@ -575,10 +600,10 @@ func esmHandler() rex.Handle {
 			if hasBuildVerPrefix {
 				if stableBuild[reqPkg.Name] {
 					bvPrefix = "/stable"
-				} else if outdatedBuildVer != "" {
-					bvPrefix = fmt.Sprintf("/%s", outdatedBuildVer)
+				} else if outdatedBuildVersion != "" {
+					bvPrefix = fmt.Sprintf("/%s", outdatedBuildVersion)
 				} else {
-					bvPrefix = fmt.Sprintf("/v%d", CTX_BUILD_VERSION)
+					bvPrefix = fmt.Sprintf("/v%d", BUILD_VERSION)
 				}
 			}
 			if reqPkg.SubPath != "" {
@@ -615,7 +640,7 @@ func esmHandler() rex.Handle {
 			case ".mjs", ".js", ".jsx", ".ts", ".mts", ".tsx":
 				if endsWith(pathname, ".d.ts", ".d.mts") {
 					if !hasBuildVerPrefix {
-						url := fmt.Sprintf("%s%s/v%d%s", cdnOrigin, cfg.CdnBasePath, CTX_BUILD_VERSION, pathname)
+						url := fmt.Sprintf("%s%s/v%d%s", cdnOrigin, cfg.CdnBasePath, BUILD_VERSION, pathname)
 						return rex.Redirect(url, http.StatusMovedPermanently)
 					}
 					reqType = "types"
@@ -709,12 +734,12 @@ func esmHandler() rex.Handle {
 		// serve build files
 		if hasBuildVerPrefix && (reqType == "builds" || reqType == "types") {
 			var savePath string
-			if outdatedBuildVer != "" {
-				savePath = path.Join(reqType, outdatedBuildVer, pathname)
+			if outdatedBuildVersion != "" {
+				savePath = path.Join(reqType, outdatedBuildVersion, pathname)
 			} else if hasStablePrefix {
 				savePath = path.Join(reqType, fmt.Sprintf("v%d", STABLE_VERSION), pathname)
 			} else {
-				savePath = path.Join(reqType, fmt.Sprintf("v%d", CTX_BUILD_VERSION), pathname)
+				savePath = path.Join(reqType, fmt.Sprintf("v%d", BUILD_VERSION), pathname)
 			}
 			if reqType == "types" {
 				savePath = path.Join("types", getTypesRoot(cdnOrigin), strings.TrimPrefix(savePath, "types/"))
@@ -829,19 +854,6 @@ func esmHandler() rex.Handle {
 				if p != "" {
 					conditions.Add(p)
 				}
-			}
-		}
-
-		// check build version
-		buildVersion := CTX_BUILD_VERSION
-		pv := outdatedBuildVer
-		if outdatedBuildVer == "" {
-			pv = ctx.Form.Value("pin")
-		}
-		if pv != "" && strings.HasPrefix(pv, "v") {
-			i, err := strconv.Atoi(pv[1:])
-			if err == nil && i > 0 && i < CTX_BUILD_VERSION {
-				buildVersion = i
 			}
 		}
 
@@ -1063,8 +1075,8 @@ func esmHandler() rex.Handle {
 		if !hasBuild {
 			if !isBarePath && !isPined {
 				// find previous build version
-				for i := 0; i < CTX_BUILD_VERSION; i++ {
-					id := fmt.Sprintf("v%d/%s", CTX_BUILD_VERSION-(i+1), strings.Join(strings.Split(buildId, "/")[1:], "/"))
+				for i := 0; i < BUILD_VERSION; i++ {
+					id := fmt.Sprintf("v%d/%s", BUILD_VERSION-(i+1), strings.Join(strings.Split(buildId, "/")[1:], "/"))
 					esm, hasBuild = queryESMBuild(id)
 					if hasBuild {
 						log.Warn("fallback to previous build:", id)
@@ -1107,12 +1119,7 @@ func esmHandler() rex.Handle {
 
 		// should redirect to `*.d.ts` file
 		if esm.TypesOnly {
-			dtsUrl := fmt.Sprintf(
-				"%s%s/%s",
-				cdnOrigin,
-				cfg.CdnBasePath,
-				strings.TrimPrefix(esm.Dts, "/"),
-			)
+			dtsUrl := fmt.Sprintf("%s%s/%s", cdnOrigin, cfg.CdnBasePath, strings.TrimPrefix(esm.Dts, "/"))
 			header.Set("X-TypeScript-Types", dtsUrl)
 			header.Set("Content-Type", "application/javascript; charset=utf-8")
 			if fallback {

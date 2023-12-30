@@ -346,6 +346,8 @@ func fetchPackageInfo(name string, version string) (info NpmPackageInfo, err err
 
 func installPackage(wd string, pkg Pkg) (err error) {
 	pkgVersionName := pkg.VersionName()
+
+	// only one install process allowed at the same time
 	lock := getInstallLock(pkgVersionName)
 	lock.Lock()
 	defer lock.Unlock()

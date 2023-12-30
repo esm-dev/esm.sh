@@ -1,3 +1,5 @@
+/** @version: 3.3.9 */
+
 import type { Hot } from "../server/embed/types/hot.d.ts";
 
 function importAll(...urls: (string | URL)[]) {

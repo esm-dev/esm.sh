@@ -14,9 +14,7 @@ export type Package = {
 };
 
 const importUrl = new URL(import.meta.url);
-const VERSION = /^\/v\d+\/?/.test(importUrl.pathname)
-  ? importUrl.pathname.split("/")[1]
-  : "v{VERSION}";
+const VERSION = /^\/v\d+\/?/.test(importUrl.pathname) ? importUrl.pathname.split("/")[1] : "v{VERSION}";
 
 // stable build for UI libraries like react, to make sure the runtime is single copy
 const stableBuild = new Set([
@@ -395,8 +393,7 @@ async function addPkgToImportMap(
       const dep = `${depName}@${depVersion}`;
       const depPkg = await fetchPkgInfo(dep);
       if (depPkg) {
-        const depUrl =
-          `${importUrl.origin}/${VERSION}/${depPkg.name}@${depPkg.version}`;
+        const depUrl = `${importUrl.origin}/${VERSION}/${depPkg.name}@${depPkg.version}`;
         importMap.scopes[esmshScope][depName] = depUrl;
       }
     }
@@ -407,9 +404,7 @@ async function addPkgToImportMap(
 function getPkgUrl(pkg: Package): [url: string, withExports: boolean] {
   const { name, version, exports, dependencies, peerDependencies } = pkg;
   const withExports = typeof exports === "object" &&
-    Object.keys(exports).some((key) =>
-      key.startsWith("./") && key !== "./package.json"
-    );
+    Object.keys(exports).some((key) => key.startsWith("./") && key !== "./package.json");
   if (
     !stableBuild.has(name) && (
       (dependencies && Object.keys(dependencies).length > 0) ||
@@ -515,5 +510,3 @@ if (import.meta.main) {
     throw error;
   }
 }
-
-export * from "https://esm.sh/v135/esm.sh@0.135.0";

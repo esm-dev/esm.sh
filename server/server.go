@@ -30,7 +30,6 @@ var (
 	embedFS      EmbedFS
 	fetchLocks   sync.Map
 	installLocks sync.Map
-	purgeTimers  sync.Map
 )
 
 type EmbedFS interface {
@@ -129,8 +128,6 @@ func Serve(efs EmbedFS) {
 		}
 	}
 	accessLogger.SetQuite(true) // quite in terminal
-
-	go restorePurgeTimers(path.Join(cfg.WorkDir, "npm"))
 
 	if !cfg.NoCompress {
 		rex.Use(rex.Compression())

@@ -1,10 +1,6 @@
 import { serve } from "https://deno.land/std@0.180.0/http/server.ts";
 import { join } from "https://deno.land/std@0.180.0/path/mod.ts";
-import {
-  assert,
-  assertEquals,
-  assertStringIncludes,
-} from "https://deno.land/std@0.180.0/testing/asserts.ts";
+import { assert, assertEquals, assertStringIncludes } from "https://deno.land/std@0.180.0/testing/asserts.ts";
 
 async function run(name: string, ...args: string[]) {
   const cwd = join(
@@ -402,8 +398,7 @@ Deno.test("esm-worker", {
       target: "es2022",
       imports: JSON.stringify({
         "@jsxImportSource": "https://preact@10.13.2",
-        "preact-render-to-string":
-          "https://esm.sh/preact-render-to-string6.0.2",
+        "preact-render-to-string": "https://esm.sh/preact-render-to-string6.0.2",
       }),
       hash: "",
     };
@@ -489,6 +484,12 @@ Deno.test("esm-worker", {
       "application/javascript; charset=utf-8",
     );
 
+    const res2 = await fetch(`${workerOrigin}/hot?plugins=vue@3.3.8`, {
+      headers: { "User-Agent": "Chrome/90.0.4430.212" },
+    });
+    const code = await res2.text();
+    assertStringIncludes(code, "vue@3.3.8");
+
     const res3 = await fetch(`${workerOrigin}/hot/tsx`, {
       headers: { "User-Agent": "Chrome/90.0.4430.212" },
     });
@@ -499,17 +500,10 @@ Deno.test("esm-worker", {
     );
     assertStringIncludes(await res3.text(), "esm-compiler");
 
-    const res4 = await fetch(`${workerOrigin}/hot?plugins=vue@3.3.8,tsx`, {
+    const res4 = await fetch(`${workerOrigin}/hot/vue@3.3.8`, {
       headers: { "User-Agent": "Chrome/90.0.4430.212" },
     });
-    const code4 = await res4.text();
-    assertStringIncludes(code4, "/hot/vue@3.3.8");
-    assertStringIncludes(code4, "/hot/tsx");
-
-    const res5 = await fetch(`${workerOrigin}/hot/vue@3.3.8`, {
-      headers: { "User-Agent": "Chrome/90.0.4430.212" },
-    });
-    assertStringIncludes(await res5.text(), "vue@3.3.8");
+    assertStringIncludes(await res4.text(), "vue@3.3.8");
   });
 
   ac.abort();

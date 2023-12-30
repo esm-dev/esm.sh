@@ -112,14 +112,6 @@ func (task *BuildTask) Build() (esm *ESMBuild, err error) {
 		}
 	}
 
-	defer func(dir string, pkgVersionName string) {
-		v, loaded := purgeTimers.LoadAndDelete(pkgVersionName)
-		if loaded {
-			v.(*time.Timer).Stop()
-		}
-		toPurge(pkgVersionName, dir)
-	}(task.wd, pkgVersionName)
-
 	task.stage = "install"
 
 	err = installPackage(task.wd, task.Pkg)

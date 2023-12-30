@@ -8,7 +8,6 @@ import (
 	"net"
 	"net/http"
 	"os"
-	"path"
 	"path/filepath"
 	"regexp"
 	"strings"
@@ -184,22 +183,6 @@ func findFiles(root string, dir string, fn func(p string) bool) ([]string, error
 	return files, nil
 }
 
-func readDirnames(dir string) ([]string, error) {
-	entries, err := os.ReadDir(dir)
-	if err != nil {
-		return nil, err
-	}
-	names := make([]string, len(entries))
-	n := 0
-	for _, entry := range entries {
-		if entry.IsDir() {
-			names[n] = entry.Name()
-			n++
-		}
-	}
-	return names[:n], nil
-}
-
 func btoaUrl(s string) string {
 	return strings.TrimRight(base64.URLEncoding.EncodeToString([]byte(s)), "=")
 }
@@ -240,57 +223,6 @@ func validateJS(filename string) (isESM bool, namedExports []string, err error) 
 		i++
 	}
 	return
-}
-
-var purgeDelay = 24 * time.Hour
-
-func toPurge(pkg string, destDir string) {
-	timer := time.AfterFunc(purgeDelay, func() {
-		purgeTimers.Delete(pkg)
-		lock := getInstallLock(pkg)
-		lock.Lock()
-		log.Debugf("Purging %s...", pkg)
-		os.RemoveAll(destDir)
-		lock.Unlock()
-	})
-	purgeTimers.Store(pkg, timer)
-}
-
-func restorePurgeTimers(npmDir string) {
-	dirnames, err := readDirnames(npmDir)
-	if err != nil {
-		return
-	}
-	var pkgs []string
-	for _, name := range dirnames {
-		if name == "gh" {
-			owners, err := readDirnames(path.Join(npmDir, name))
-			if err == nil {
-				for _, owner := range owners {
-					repos, err := readDirnames(path.Join(npmDir, "gh", owner))
-					if err != nil {
-						return
-					}
-					for _, repo := range repos {
-						pkgs = append(pkgs, "gh/"+owner+"/"+repo)
-					}
-				}
-			}
-		} else if strings.HasPrefix(name, "@") {
-			subdirnames, err := readDirnames(path.Join(npmDir, name))
-			if err == nil {
-				for _, subdirname := range subdirnames {
-					pkgs = append(pkgs, name+"/"+subdirname)
-				}
-			}
-		} else {
-			pkgs = append(pkgs, name)
-		}
-	}
-	for _, pkg := range pkgs {
-		toPurge(pkg, path.Join(npmDir, pkg))
-	}
-	log.Debugf("Restored %d purge timers", len(pkgs))
 }
 
 func removeHttpPrefix(s string) (string, error) {

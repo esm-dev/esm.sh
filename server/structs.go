@@ -8,6 +8,7 @@ import (
 	"io"
 	"os"
 	"path"
+	"sort"
 	"strings"
 	"sync"
 )
@@ -84,6 +85,12 @@ func (s *stringSet) Values() []string {
 		i++
 	}
 	return a
+}
+
+func (s *stringSet) SortedValues() []string {
+	values := sort.StringSlice(s.Values())
+	sort.Sort(values)
+	return values
 }
 
 type StringOrMap struct {

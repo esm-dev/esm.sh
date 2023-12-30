@@ -116,10 +116,6 @@ export interface HotCore {
   use(...plugins: Plugin[]): this;
 }
 
-export interface Hot extends HotCore, HotAPI {}
-
-export default Hot;
-
 export interface CallbackMap<T extends Function> {
   readonly map: Map<string, Set<T>>;
   add: (path: string, callback: T) => void;
@@ -132,3 +128,7 @@ declare global {
   var __hot_hmr_disposes: CallbackMap<() => void>;
   interface HotAPI {}
 }
+
+export interface Hot extends HotCore, HotAPI {}
+
+export default Hot;

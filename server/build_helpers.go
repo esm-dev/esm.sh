@@ -1,6 +1,7 @@
 package server
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -786,20 +787,26 @@ func bundleHotScript(code string, target api.Target) ([]byte, error) {
 				build.OnResolve(
 					api.OnResolveOptions{Filter: ".*"},
 					func(args api.OnResolveArgs) (api.OnResolveResult, error) {
-						if args.Kind == api.ResolveJSDynamicImport || isHttpSepcifier(args.Path) {
-							return api.OnResolveResult{Path: args.Path, External: true}, nil
+						if args.Kind != api.ResolveJSDynamicImport && !isHttpSepcifier(args.Path) {
+							name, version := utils.SplitByLastByte(args.Path, '@')
+							data, err := embedFS.ReadFile(name + ".ts")
+							if err == nil {
+								if version != "" && regexpFullVersion.MatchString(version) {
+									m := regexpVersionAnnotation.FindAllSubmatch(data, -1)
+									if len(m) > 0 {
+										data = bytes.ReplaceAll(data, []byte("@"+string(m[0][1])), []byte("@"+version))
+									}
+								}
+								return api.OnResolveResult{Path: name + ".ts", PluginData: string(data), Namespace: "embed"}, nil
+							}
 						}
-						return api.OnResolveResult{Path: path.Join("server/embed", args.Path), Namespace: "embed"}, nil
+						return api.OnResolveResult{Path: args.Path, External: true}, nil
 					},
 				)
 				build.OnLoad(
 					api.OnLoadOptions{Filter: ".*", Namespace: "embed"},
 					func(args api.OnLoadArgs) (api.OnLoadResult, error) {
-						data, err := embedFS.ReadFile(args.Path + ".ts")
-						if err != nil {
-							return api.OnLoadResult{}, err
-						}
-						contents := string(data)
+						contents := args.PluginData.(string)
 						return api.OnLoadResult{
 							Contents: &contents,
 							Loader:   api.LoaderTS,
