@@ -144,9 +144,9 @@ func build(input BuildInput, cdnOrigin string) (id string, err error) {
 	if json.Unmarshal([]byte(input.ImportMap), &im) == nil {
 		v, ok := im["imports"]
 		if ok {
-			imports, ok := v.(map[string]interface{})
+			m, ok := v.(map[string]interface{})
 			if ok {
-				for key, v := range imports {
+				for key, v := range m {
 					if value, ok := v.(string); ok && value != "" {
 						if strings.HasSuffix(key, "/") {
 							trailingSlashImports[key] = value
