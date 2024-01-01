@@ -5,11 +5,7 @@ export interface Plugin {
 
 export interface Loader {
   test: RegExp;
-  load: (
-    url: URL,
-    source: string,
-    options: LoadOptions,
-  ) => Promise<LoaderOutput> | LoaderOutput;
+  load: (url: URL, source: string, options: LoadOptions) => Promise<LoaderOutput> | LoaderOutput;
   fetch?: (req: Request) => Promise<Response>;
 }
 
@@ -87,11 +83,7 @@ export interface VFSMeta {
 
 export interface VFS {
   get(name: string): Promise<VFSRecord | undefined>;
-  put(
-    name: string,
-    data: string | Uint8Array,
-    meta?: VFSRecord["meta"],
-  ): Promise<string>;
+  put(name: string, data: string | Uint8Array, meta?: VFSRecord["meta"]): Promise<string>;
   delete(name: string): Promise<void>;
 }
 
@@ -106,12 +98,7 @@ export interface HotCore {
   listen(swScript?: string): void;
   onFetch(test: URLTest, handler: FetchHandler): this;
   onFire(handler: (reg: ServiceWorker) => void): this;
-  onLoad(
-    test: RegExp,
-    load: Loader["load"],
-    fetch?: Loader["fetch"],
-    priority?: "eager",
-  ): this;
+  onLoad(test: RegExp, load: Loader["load"], fetch?: Loader["fetch"], priority?: "eager"): this;
   waitUntil(promise: Promise<any>): void;
   use(...plugins: Plugin[]): this;
 }

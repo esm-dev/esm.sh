@@ -396,14 +396,16 @@ Deno.test("esm-worker", {
       `,
       loader: "jsx",
       target: "es2022",
-      imports: JSON.stringify({
-        "@jsxImportSource": "https://preact@10.13.2",
-        "preact-render-to-string": "https://esm.sh/preact-render-to-string6.0.2",
+      importMap: JSON.stringify({
+        imports: {
+          "@jsxImportSource": "https://preact@10.13.2",
+          "preact-render-to-string": "https://esm.sh/preact-render-to-string6.0.2",
+        },
       }),
       hash: "",
     };
     options.hash = await computeHash(
-      options.loader + options.code + options.imports,
+      options.loader + options.code + options.importMap,
     );
     const res3 = await fetch(`${workerOrigin}/transform`, {
       method: "POST",

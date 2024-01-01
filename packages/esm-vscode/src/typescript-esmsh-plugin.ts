@@ -140,8 +140,7 @@ class Plugin implements TS.server.PluginModule {
           if (literal.startsWith("./") || literal.startsWith("../")) {
             const idx = containingFile.indexOf("/esm.sh/");
             if (idx) {
-              literal =
-                new URL(literal, "https:/" + containingFile.slice(idx)).href;
+              literal = new URL(literal, "https:/" + containingFile.slice(idx)).href;
             }
           }
           const specifier = this.#applyImportMap(literal);
@@ -350,9 +349,7 @@ class Plugin implements TS.server.PluginModule {
       }
     }
     // sort trailingSlash by prefix length
-    importMap.trailingSlash?.sort((a, b) =>
-      b[0].split("/").length - a[0].split("/").length
-    );
+    importMap.trailingSlash?.sort((a, b) => b[0].split("/").length - a[0].split("/").length);
     // TODO: scopes
     this.#projectConfig.importMap = importMap;
   }

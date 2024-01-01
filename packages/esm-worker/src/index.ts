@@ -8,13 +8,7 @@ import type {
 } from "../types/index.d.ts";
 import { compareVersions, satisfies, validate } from "compare-versions";
 import { getBuildTargetFromUA, hasTargetSegment, targets } from "./compat.ts";
-import {
-  assetsExts,
-  cssPackages,
-  STABLE_VERSION,
-  stableBuild,
-  VERSION,
-} from "./consts.ts";
+import { assetsExts, cssPackages, STABLE_VERSION, stableBuild, VERSION } from "./consts.ts";
 import { getContentType } from "./content_type.ts";
 import {
   asKV,
@@ -462,34 +456,24 @@ class ESMWorker {
         const eq = extraQuery ? "&" + extraQuery : "";
         const distVersion = regInfo["dist-tags"]?.[packageVersion || "latest"];
         if (distVersion) {
-          const uri = `${prefix}${pkg}@${
-            fixPkgVersion(pkg, distVersion)
-          }${eq}${subPath}${url.search}`;
+          const uri = `${prefix}${pkg}@${fixPkgVersion(pkg, distVersion)}${eq}${subPath}${url.search}`;
           return redirect(new URL(uri, url), 302);
         }
         const versions = Object.keys(regInfo.versions ?? []).filter(validate)
           .sort(compareVersions);
         if (!packageVersion) {
-          const latestVersion = versions.filter((v) =>
-            !v.includes("-")
-          ).pop() ?? versions.pop();
+          const latestVersion = versions.filter((v) => !v.includes("-")).pop() ?? versions.pop();
           if (latestVersion) {
-            const uri = `${prefix}${pkg}@${
-              fixPkgVersion(pkg, latestVersion)
-            }${eq}${subPath}${url.search}`;
+            const uri = `${prefix}${pkg}@${fixPkgVersion(pkg, latestVersion)}${eq}${subPath}${url.search}`;
             return redirect(new URL(uri, url), 302);
           }
         }
         try {
-          const arr = packageVersion.includes("-")
-            ? versions
-            : versions.filter((v) => !v.includes("-"));
+          const arr = packageVersion.includes("-") ? versions : versions.filter((v) => !v.includes("-"));
           for (let i = arr.length - 1; i >= 0; i--) {
             const v = arr[i];
             if (satisfies(v, packageVersion)) {
-              const uri = `${prefix}${pkg}@${
-                fixPkgVersion(pkg, v)
-              }${eq}${subPath}${url.search}`;
+              const uri = `${prefix}${pkg}@${fixPkgVersion(pkg, v)}${eq}${subPath}${url.search}`;
               return redirect(new URL(uri, url), 302);
             }
           }
@@ -622,8 +606,7 @@ class ESMWorker {
         if (gh) {
           prefix += "/gh";
         }
-        const path =
-          `${prefix}/${pkg}@${packageVersion}${subPath}${url.search}`;
+        const path = `${prefix}/${pkg}@${packageVersion}${subPath}${url.search}`;
         return fetchOriginWithKVCache(req, env, ctx, path, true);
       });
     }
@@ -639,8 +622,7 @@ class ESMWorker {
         prefix += "/gh";
       }
       const marker = hasExternalAllMarker ? "*" : "";
-      const path =
-        `${prefix}/${marker}${pkg}@${packageVersion}${subPath}${url.search}`;
+      const path = `${prefix}/${marker}${pkg}@${packageVersion}${subPath}${url.search}`;
       return fetchOriginWithKVCache(req, env, ctx, path);
     }, { varyUA: true });
   }
@@ -749,16 +731,17 @@ async function fetchOriginWithKVCache(
   }
   const headers = corsHeaders();
   const [pathname] = splitBy(path, "?", true);
-  const storage = Reflect.get(env, "R2") as R2Bucket | undefined ?? noopStorage;
-  const KV = Reflect.get(env, "KV") as KVNamespace | undefined ?? asKV(storage);
-  const noStore = req.headers.has("X-Real-Origin");
+  const R2 = Reflect.get(env, "R2") as R2Bucket | undefined ?? noopStorage;
+  const KV = Reflect.get(env, "KV") as KVNamespace | undefined ?? asKV(R2);
+  const fromWorker = req.headers.has("X-Real-Origin");
   const isModule = !(
     ctx.url.searchParams.has("raw") ||
     pathname.endsWith(".d.ts") ||
     pathname.endsWith(".d.mts") ||
     pathname.endsWith(".map")
   );
-  if (!noStore) {
+
+  if (!fromWorker) {
     if (isModule) {
       const { value, metadata } = await KV.getWithMetadata<HttpMetadata>(
         storeKey,
@@ -790,7 +773,7 @@ async function fetchOriginWithKVCache(
         return new Response(body, { headers });
       }
     } else {
-      const obj = await storage.get(storeKey);
+      const obj = await R2.get(storeKey);
       if (obj) {
         const contentType = obj.httpMetadata?.contentType ||
           getContentType(path);
@@ -808,28 +791,6 @@ async function fetchOriginWithKVCache(
   }
 
   const buffer = await res.arrayBuffer();
-
-  // // if the buffer is not valid utf8
-  // // try to re-fetch the module and check again
-  // if (!isValidUTF8(buffer)) {
-  //   await new Promise((resolve) =>
-  //     setTimeout(resolve, 50 + Math.random() * 50)
-  //   );
-  //   const res = await fetchOrigin(req, env, ctx, path, headers);
-  //   if (!res.ok) {
-  //     return res;
-  //   }
-  //   buffer = await res.arrayBuffer();
-  // }
-  // if (!isValidUTF8(buffer)) {
-  //   const headers = corsHeaders();
-  //   headers.set(
-  //     "Cache-Control",
-  //     "private, no-store, no-cache, must-revalidate",
-  //   );
-  //   return new Response("Invalid Body", { status: 502, headers });
-  // }
-
   const contentType = res.headers.get("Content-Type") || getContentType(path);
   const cacheControl = res.headers.get("Cache-Control");
   const buildId = res.headers.get("X-Esm-Id");
@@ -854,9 +815,9 @@ async function fetchOriginWithKVCache(
   headers.set("X-Content-Source", "origin");
 
   // save to KV/R2 if immutable
-  if (!noStore && cacheControl?.includes("immutable")) {
+  if (!fromWorker && cacheControl?.includes("immutable")) {
     if (!isModule) {
-      ctx.waitUntil(storage.put(storeKey, buffer.slice(0), {
+      ctx.waitUntil(R2.put(storeKey, buffer.slice(0), {
         httpMetadata: { contentType },
       }));
     } else {
@@ -882,8 +843,8 @@ async function fetchOriginWithR2Cache(
   pathname: string,
 ) {
   const resHeaders = corsHeaders();
-  const storage = Reflect.get(env, "R2") as R2Bucket | undefined ?? noopStorage;
-  const ret = await storage.get(pathname.slice(1));
+  const r2 = Reflect.get(env, "R2") as R2Bucket | undefined ?? noopStorage;
+  const ret = await r2.get(pathname.slice(1));
   if (ret) {
     resHeaders.set(
       "Content-Type",
@@ -901,7 +862,7 @@ async function fetchOriginWithR2Cache(
     const contentType = res.headers.get("content-type") ||
       getContentType(pathname);
     const buffer = await res.arrayBuffer();
-    ctx.waitUntil(storage.put(pathname.slice(1), buffer.slice(0), {
+    ctx.waitUntil(r2.put(pathname.slice(1), buffer.slice(0), {
       httpMetadata: { contentType },
     }));
     resHeaders.set("Content-Type", contentType);
