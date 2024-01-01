@@ -1,7 +1,7 @@
 # esm-worker
 
-A [Cloudflare worker](https://www.cloudflare.com/products/workers) handles
-all requests of esm.sh at the edge(earth).
+A [Cloudflare worker](https://www.cloudflare.com/products/workers) handles all
+requests of esm.sh at the edge(earth).
 
 - [Cache](https://developers.cloudflare.com/workers/runtime-apis/cache/)
   everything at the edge
@@ -91,5 +91,5 @@ export default withESMWorker((req, env, ctx) => {
 ## Deploy to Cloudflare Edge
 
 ```bash
-wrangler publish
+wrangler deploy
 ```
