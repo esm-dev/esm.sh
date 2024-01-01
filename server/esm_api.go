@@ -25,7 +25,7 @@ type BuildInput struct {
 	Types         string            `json:"types,omitempty"`
 	TransformOnly bool              `json:"transformOnly,omitempty"`
 	Target        string            `json:"target,omitempty"`
-	Imports       string            `json:"imports,omitempty"`
+	ImportMap     string            `json:"importMap,omitempty"`
 	Hash          string            `json:"hash,omitempty"`
 }
 
@@ -33,7 +33,7 @@ func apiHandler() rex.Handle {
 	return func(ctx *rex.Context) interface{} {
 		if ctx.R.Method == "POST" {
 			switch ctx.Path.String() {
-			case "/transform", "/build":
+			case "/build", "/transform":
 				var input BuildInput
 				err := json.NewDecoder(io.LimitReader(ctx.R.Body, 512*1024)).Decode(&input)
 				ctx.R.Body.Close()
@@ -60,7 +60,7 @@ func apiHandler() rex.Handle {
 						h := sha1.New()
 						h.Write([]byte(input.Loader))
 						h.Write([]byte(input.Code))
-						h.Write([]byte(input.Imports))
+						h.Write([]byte(input.ImportMap))
 						if hex.EncodeToString(h.Sum(nil)) != input.Hash {
 							return rex.Err(400, "invalid hash")
 						}
@@ -140,17 +140,23 @@ func build(input BuildInput, cdnOrigin string) (id string, err error) {
 	trailingSlashImports := map[string]string{}
 	jsxImportSource := ""
 
-	var m map[string]interface{}
-	if json.Unmarshal([]byte(input.Imports), &m) == nil {
-		for key, v := range m {
-			if value, ok := v.(string); ok && value != "" {
-				if strings.HasSuffix(key, "/") {
-					trailingSlashImports[key] = value
-				} else {
-					if key == "@jsxImportSource" {
-						jsxImportSource = value
+	var im map[string]interface{}
+	if json.Unmarshal([]byte(input.ImportMap), &im) == nil {
+		v, ok := im["imports"]
+		if ok {
+			imports, ok := v.(map[string]interface{})
+			if ok {
+				for key, v := range imports {
+					if value, ok := v.(string); ok && value != "" {
+						if strings.HasSuffix(key, "/") {
+							trailingSlashImports[key] = value
+						} else {
+							if key == "@jsxImportSource" {
+								jsxImportSource = value
+							}
+							imports[key] = value
+						}
 					}
-					imports[key] = value
 				}
 			}
 		}

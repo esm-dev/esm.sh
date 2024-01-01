@@ -13,19 +13,23 @@ const kRun = "esm.sh/run";
 const kScript = "script";
 const kImportmap = "importmap";
 const loaders = ["js", "jsx", "ts", "tsx", "babel"];
-const imSupported = HTMLScriptElement.supports?.(kImportmap);
-const imImports: Record<string, string> = {};
+const importMapSupported = HTMLScriptElement.supports?.(kImportmap);
+const imports: Record<string, string> = {};
+const scopes: Record<string, typeof imports> = {};
 const runScripts: { loader: string; code: string }[] = [];
 
 // lookup run scripts
 d.querySelectorAll(kScript).forEach((el) => {
   let loader: string | null = null;
   if (el.type === kImportmap) {
-    const v = JSON.parse(el.innerHTML).imports;
-    for (const k in v) {
-      if (!imSupported || k === "@jsxImportSource") {
-        imImports[k] = v[k];
+    const v = JSON.parse(el.innerHTML);
+    for (const k in v.imports) {
+      if (!importMapSupported || k === "@jsxImportSource") {
+        imports[k] = v.imports[k];
       }
+    }
+    if (!importMapSupported) {
+      Object.assign(scopes, v.scopes);
     }
   } else if (el.type.startsWith("text/")) {
     loader = el.type.slice(5);
@@ -40,13 +44,13 @@ d.querySelectorAll(kScript).forEach((el) => {
 });
 
 // transform and insert run scripts
-const imports = stringify(imImports);
+const importMap = stringify({ imports, scopes });
 runScripts.forEach(async (input, idx) => {
   const buffer = new Uint8Array(
     await crypto.subtle.digest(
       "SHA-1",
       new TextEncoder().encode(
-        input.loader + input.code + imports,
+        input.loader + input.code + importMap,
       ),
     ),
   );
@@ -65,7 +69,7 @@ runScripts.forEach(async (input, idx) => {
     } else {
       const res = await fetch(origin + "/transform", {
         method: "POST",
-        body: stringify({ ...input, imports, hash }),
+        body: stringify({ ...input, importMap, hash }),
       });
       const { code, error } = await res.json();
       if (error) {
