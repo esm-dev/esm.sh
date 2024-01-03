@@ -85,11 +85,11 @@ Deno.test("build api (transform with hash)", async () => {
     code: `
       const n:number = 42;
     `,
-    imports: "{}",
+    importMap: `{"imports":{}}`,
     hash: "",
   };
   options.hash = await computeHash(
-    options.loader + options.code + options.imports,
+    options.loader + options.code + options.importMap,
   );
   const ret = await fetch("http://localhost:8080/transform", {
     method: "POST",
