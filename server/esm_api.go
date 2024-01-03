@@ -19,14 +19,15 @@ import (
 )
 
 type BuildInput struct {
+	Source        string            `json:"source"`
 	Code          string            `json:"code"`
-	Loader        string            `json:"loader,omitempty"`
-	Deps          map[string]string `json:"dependencies,omitempty"`
-	Types         string            `json:"types,omitempty"`
-	TransformOnly bool              `json:"transformOnly,omitempty"`
-	Target        string            `json:"target,omitempty"`
-	ImportMap     string            `json:"importMap,omitempty"`
-	Hash          string            `json:"hash,omitempty"`
+	Loader        string            `json:"loader"`
+	Deps          map[string]string `json:"dependencies"`
+	Types         string            `json:"types"`
+	TransformOnly bool              `json:"transformOnly"`
+	Target        string            `json:"target"`
+	ImportMap     string            `json:"importMap"`
+	Hash          string            `json:"hash"`
 }
 
 func apiHandler() rex.Handle {
@@ -40,11 +41,14 @@ func apiHandler() rex.Handle {
 				if err != nil {
 					return rex.Err(400, "require valid json body")
 				}
-				if input.Code == "" {
-					return rex.Err(400, "code is required")
+				if input.Source == "" && input.Code != "" {
+					input.Source = input.Code
 				}
-				if len(input.Code) > 1024*1024 {
-					return rex.Err(429, "code is too large")
+				if input.Source == "" {
+					return rex.Err(400, "source is required")
+				}
+				if len(input.Source) > 1024*1024 {
+					return rex.Err(429, "source is too large")
 				}
 				if !input.TransformOnly {
 					input.TransformOnly = ctx.Path.String() == "/transform"
@@ -59,7 +63,7 @@ func apiHandler() rex.Handle {
 						}
 						h := sha1.New()
 						h.Write([]byte(input.Loader))
-						h.Write([]byte(input.Code))
+						h.Write([]byte(input.Source))
 						h.Write([]byte(input.ImportMap))
 						if hex.EncodeToString(h.Sum(nil)) != input.Hash {
 							return rex.Err(400, "invalid hash")
@@ -198,7 +202,7 @@ func build(input BuildInput, cdnOrigin string) (id string, err error) {
 		}, nil
 	}
 	stdin := &api.StdinOptions{
-		Contents:   input.Code,
+		Contents:   input.Source,
 		ResolveDir: "/",
 		Sourcefile: "index." + loader,
 		Loader:     api.LoaderTSX,
@@ -241,7 +245,7 @@ func build(input BuildInput, cdnOrigin string) (id string, err error) {
 		return string(code), nil
 	}
 	if len(code) == 0 {
-		return "", errors.New("<400> code is empty")
+		return "", errors.New("<400> source is empty")
 	}
 	h := sha1.New()
 	h.Write(code)

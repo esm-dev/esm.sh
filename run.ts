@@ -16,7 +16,7 @@ const loaders = ["js", "jsx", "ts", "tsx", "babel"];
 const importMapSupported = HTMLScriptElement.supports?.(kImportmap);
 const imports: Record<string, string> = {};
 const scopes: Record<string, typeof imports> = {};
-const runScripts: { loader: string; code: string }[] = [];
+const runScripts: { loader: string; source: string }[] = [];
 
 // lookup run scripts
 d.querySelectorAll(kScript).forEach((el) => {
@@ -34,11 +34,11 @@ d.querySelectorAll(kScript).forEach((el) => {
   } else if (el.type.startsWith("text/")) {
     loader = el.type.slice(5);
     if (loaders.includes(loader)) {
-      const code = el.innerHTML.trim();
-      if (code.length > MiB) {
-        throw new Error(kRun + " " + code.length + " bytes exceeded limit.");
+      const source = el.innerHTML.trim();
+      if (source.length > MiB) {
+        throw new Error(kRun + " " + source.length + " bytes exceeded limit.");
       }
-      runScripts.push({ loader, code });
+      runScripts.push({ loader, source });
     }
   }
 });
@@ -50,7 +50,7 @@ runScripts.forEach(async (input, idx) => {
     await crypto.subtle.digest(
       "SHA-1",
       new TextEncoder().encode(
-        input.loader + input.code + importMap,
+        input.loader + input.source + importMap,
       ),
     ),
   );

@@ -1,5 +1,5 @@
 export type BuildInput = {
-  code: string;
+  source: string;
   loader?: "js" | "jsx" | "ts" | "tsx";
   dependencies?: Record<string, string>;
   types?: string;
@@ -22,16 +22,18 @@ export type BuildOutput = {
   bundleUrl: string;
 };
 
+const MiB = 10 << 20;
+
 async function fetchApi(
   endpoint: string,
   options: Record<string, any>,
 ): Promise<any> {
   const apiName = endpoint.slice(1);
-  if (options.code.length > 100 * 1024) {
-    throw new Error(`esm.sh [${apiName}] <400> code exceeded limit.`);
+  if (options.source.length > MiB) {
+    throw new Error(`esm.sh [${apiName}] <400> source exceeded limit.`);
   }
   const body = JSON.stringify(options);
-  if (body.length > 1024 * 1024) {
+  if (body.length > 2 * MiB) {
     throw new Error(`esm.sh [${apiName}] <400> body exceeded limit.`);
   }
   const res = await fetch(new URL(endpoint, import.meta.url), {
@@ -54,9 +56,9 @@ async function fetchApi(
 }
 
 export function build(input: string | BuildInput): Promise<BuildOutput> {
-  const options = typeof input === "string" ? { code: input } : input;
-  if (!options.code) {
-    throw new Error("esm.sh [build] <400> missing code");
+  const options = typeof input === "string" ? { source: input } : input;
+  if (!options.source) {
+    throw new Error("esm.sh [build] <400> missing source");
   }
   return fetchApi("/build", options);
 }
@@ -64,9 +66,9 @@ export function build(input: string | BuildInput): Promise<BuildOutput> {
 export function transform(
   input: string | (BuildInput & TransformOptions),
 ): Promise<{ code: string }> {
-  const options = typeof input === "string" ? { code: input } : input;
-  if (!options.code) {
-    throw new Error("esm.sh [transform] <400> missing code");
+  const options = typeof input === "string" ? { source: input } : input;
+  if (!options.source) {
+    throw new Error("esm.sh [transform] <400> missing source");
   }
   Reflect.set(options, "imports", JSON.stringify(options.imports || {}));
   return fetchApi("/transform", options);
@@ -76,8 +78,8 @@ export async function esm<T extends object = Record<string, any>>(
   strings: TemplateStringsArray,
   ...values: any[]
 ): Promise<T & { _build: BuildOutput }> {
-  const code = String.raw({ raw: strings }, ...values);
-  const ret = await withCache(code);
+  const source = String.raw({ raw: strings }, ...values);
+  const ret = await buildWithCache(source);
   const mod: T = await import(ret.url);
   return {
     ...mod,
@@ -85,7 +87,7 @@ export async function esm<T extends object = Record<string, any>>(
   };
 }
 
-async function withCache(
+async function buildWithCache(
   input: string | BuildInput,
 ): Promise<BuildOutput> {
   const key = await computeHash(

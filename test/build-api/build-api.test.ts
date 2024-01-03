@@ -13,7 +13,7 @@ Deno.test("build api", async (t) => {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        code: `/* @jsx h */
+        source: `/* @jsx h */
           import { h } from "npm:preact@10.13.2";
           import { renderToString } from "npm:preact-render-to-string@6.0.2";
           export default () => renderToString(<h1>Hello world!</h1>);
@@ -46,7 +46,7 @@ Deno.test("build api (with options)", async () => {
       dependencies: {
         preact: "^10.13.2",
       },
-      code: `
+      source: `
         export { h } from "preact";
       `,
       types: `
@@ -68,7 +68,7 @@ Deno.test("build api (transformOnly)", async () => {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
-      code: `
+      source: `
         const n:number = 42;
       `,
     }),
@@ -82,14 +82,14 @@ Deno.test("build api (transformOnly)", async () => {
 Deno.test("build api (transform with hash)", async () => {
   const options = {
     loader: "ts",
-    code: `
+    source: `
       const n:number = 42;
     `,
     importMap: `{"imports":{}}`,
     hash: "",
   };
   options.hash = await computeHash(
-    options.loader + options.code + options.importMap,
+    options.loader + options.source + options.importMap,
   );
   const ret = await fetch("http://localhost:8080/transform", {
     method: "POST",
