@@ -35,7 +35,7 @@ func apiHandler() rex.Handle {
 			switch ctx.Path.String() {
 			case "/build", "/transform":
 				var input BuildInput
-				err := json.NewDecoder(io.LimitReader(ctx.R.Body, 512*1024)).Decode(&input)
+				err := json.NewDecoder(io.LimitReader(ctx.R.Body, 2*1024*1024)).Decode(&input)
 				ctx.R.Body.Close()
 				if err != nil {
 					return rex.Err(400, "require valid json body")
@@ -43,7 +43,7 @@ func apiHandler() rex.Handle {
 				if input.Code == "" {
 					return rex.Err(400, "code is required")
 				}
-				if len(input.Code) > 100*1024 {
+				if len(input.Code) > 1024*1024 {
 					return rex.Err(429, "code is too large")
 				}
 				if !input.TransformOnly {

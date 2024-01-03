@@ -8,7 +8,7 @@ const d = document;
 const l = localStorage;
 const stringify = JSON.stringify;
 const modUrl = new URL(import.meta.url);
-const KB = 1024;
+const MiB = 10 << 20;
 const kRun = "esm.sh/run";
 const kScript = "script";
 const kImportmap = "importmap";
@@ -35,7 +35,7 @@ d.querySelectorAll(kScript).forEach((el) => {
     loader = el.type.slice(5);
     if (loaders.includes(loader)) {
       const code = el.innerHTML.trim();
-      if (code.length > 100 * KB) {
+      if (code.length > MiB) {
         throw new Error(kRun + " " + code.length + " bytes exceeded limit.");
       }
       runScripts.push({ loader, code });
