@@ -8,7 +8,13 @@ import type {
 } from "../types/index.d.ts";
 import { compareVersions, satisfies, validate } from "compare-versions";
 import { getBuildTargetFromUA, hasTargetSegment, targets } from "./compat.ts";
-import { assetsExts, cssPackages, STABLE_VERSION, stableBuild, VERSION } from "./consts.ts";
+import {
+  assetsExts,
+  cssPackages,
+  STABLE_VERSION,
+  stableBuild,
+  VERSION,
+} from "./consts.ts";
 import { getContentType } from "./content_type.ts";
 import {
   asKV,
@@ -456,24 +462,34 @@ class ESMWorker {
         const eq = extraQuery ? "&" + extraQuery : "";
         const distVersion = regInfo["dist-tags"]?.[packageVersion || "latest"];
         if (distVersion) {
-          const uri = `${prefix}${pkg}@${fixPkgVersion(pkg, distVersion)}${eq}${subPath}${url.search}`;
+          const uri = `${prefix}${pkg}@${
+            fixPkgVersion(pkg, distVersion)
+          }${eq}${subPath}${url.search}`;
           return redirect(new URL(uri, url), 302);
         }
         const versions = Object.keys(regInfo.versions ?? []).filter(validate)
           .sort(compareVersions);
         if (!packageVersion) {
-          const latestVersion = versions.filter((v) => !v.includes("-")).pop() ?? versions.pop();
+          const latestVersion = versions.filter((v) =>
+            !v.includes("-")
+          ).pop() ?? versions.pop();
           if (latestVersion) {
-            const uri = `${prefix}${pkg}@${fixPkgVersion(pkg, latestVersion)}${eq}${subPath}${url.search}`;
+            const uri = `${prefix}${pkg}@${
+              fixPkgVersion(pkg, latestVersion)
+            }${eq}${subPath}${url.search}`;
             return redirect(new URL(uri, url), 302);
           }
         }
         try {
-          const arr = packageVersion.includes("-") ? versions : versions.filter((v) => !v.includes("-"));
+          const arr = packageVersion.includes("-")
+            ? versions
+            : versions.filter((v) => !v.includes("-"));
           for (let i = arr.length - 1; i >= 0; i--) {
             const v = arr[i];
             if (satisfies(v, packageVersion)) {
-              const uri = `${prefix}${pkg}@${fixPkgVersion(pkg, v)}${eq}${subPath}${url.search}`;
+              const uri = `${prefix}${pkg}@${
+                fixPkgVersion(pkg, v)
+              }${eq}${subPath}${url.search}`;
               return redirect(new URL(uri, url), 302);
             }
           }
@@ -606,7 +622,8 @@ class ESMWorker {
         if (gh) {
           prefix += "/gh";
         }
-        const path = `${prefix}/${pkg}@${packageVersion}${subPath}${url.search}`;
+        const path =
+          `${prefix}/${pkg}@${packageVersion}${subPath}${url.search}`;
         return fetchOriginWithKVCache(req, env, ctx, path, true);
       });
     }
@@ -622,7 +639,8 @@ class ESMWorker {
         prefix += "/gh";
       }
       const marker = hasExternalAllMarker ? "*" : "";
-      const path = `${prefix}/${marker}${pkg}@${packageVersion}${subPath}${url.search}`;
+      const path =
+        `${prefix}/${marker}${pkg}@${packageVersion}${subPath}${url.search}`;
       return fetchOriginWithKVCache(req, env, ctx, path);
     }, { varyUA: true });
   }
@@ -877,6 +895,6 @@ export function withESMWorker(middleware?: Middleware): ESMWorker {
   return new ESMWorker(middleware);
 }
 
-export default withESMWorker;
-
+export { getBuildTargetFromUA, targets };
 export const version = `v${VERSION}`;
+export default withESMWorker;

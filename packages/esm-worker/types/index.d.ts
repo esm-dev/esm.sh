@@ -58,9 +58,10 @@ export function withESMWorker(middleware?: Middleware): {
   ) => Promise<Response>;
 };
 
-export default withESMWorker;
-
+export const getBuildTargetFromUA: (ua: string | null) => string;
+export const targets: Set<string>;
 export const version: string;
+export default withESMWorker;
 
 export type Context<Data = Record<string, any>> = {
   cache: Cache;
