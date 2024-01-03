@@ -1,6 +1,11 @@
 export type ImportMap = {
-  readonly imports: Record<string, string>;
-  readonly scopes: Record<string, Record<string, string>>;
+  imports?: Record<string, string>;
+  scopes?: Record<string, Record<string, string>>;
+};
+
+export type DenoConfig = ImportMap & {
+  tasks?: Record<string, string>;
+  importMap?: string;
 };
 
 export type Package = {
@@ -14,7 +19,9 @@ export type Package = {
 };
 
 const importUrl = new URL(import.meta.url);
-const VERSION = /^\/v\d+\/?/.test(importUrl.pathname) ? importUrl.pathname.split("/")[1] : "v{VERSION}";
+const VERSION = /^\/v\d+\/?/.test(importUrl.pathname)
+  ? importUrl.pathname.split("/")[1]
+  : "v{VERSION}";
 
 // stable build for UI libraries like react, to make sure the runtime is single copy
 const stableBuild = new Set([
@@ -23,9 +30,13 @@ const stableBuild = new Set([
   "solid-js",
   "svelte",
   "vue",
+  "@vue/reactivity",
+  "@vue/runtime-core",
+  "@vue/runtime-dom",
+  "@vue/shared",
 ]);
 
-let imFilename = "import_map.json";
+let imFilename = "deno.json";
 
 async function add(args: string[], options: Record<string, string>) {
   if (options.alias && args.length > 1) {
@@ -73,18 +84,18 @@ async function add(args: string[], options: Record<string, string>) {
 
 async function update(args: string[], options: Record<string, string>) {
   const importMap = await loadImportMap();
+  const imports = importMap.imports ?? {};
   const latest = "latest" in options;
   const toUpdate = args.length === 0
-    ? Object.keys(importMap.imports).filter((name) =>
-      importMap.imports[name].startsWith(`${importUrl.origin}/`) &&
+    ? Object.entries(imports).filter(([name, url]) =>
+      url.startsWith(`${importUrl.origin}/`) &&
       !name.endsWith("/") &&
-      !importMap.imports[name].startsWith(`${importUrl.origin}/gh/`)
-    ).map((name) => {
+      !url.startsWith(`${importUrl.origin}/gh/`)
+    ).map(([name, url]) => {
       let version: string;
       if (latest) {
         version = "latest";
       } else {
-        const url = importMap.imports[name];
         const [, v] = url.match(/@(\d+\.\d+\.\d+(-[a-z0-9\-\.]+)?)/)!;
         if (!v.includes("-")) {
           version = v.split(".").slice(0, 2).join(".");
@@ -95,8 +106,8 @@ async function update(args: string[], options: Record<string, string>) {
       return `${name}@${version}`;
     })
     : args.filter((name) =>
-      name in importMap.imports ||
-      name.slice(0, name.lastIndexOf("@")) in importMap.imports
+      name in imports ||
+      name.slice(0, name.lastIndexOf("@")) in imports
     ).map((name) => {
       let version: string;
       if ((name.startsWith("@") ? name.slice(1) : name).includes("@")) {
@@ -106,8 +117,8 @@ async function update(args: string[], options: Record<string, string>) {
       } else if (latest) {
         version = "latest";
       } else {
-        const url = importMap.imports[name] ??
-          importMap.imports[name.slice(0, name.lastIndexOf("@"))];
+        const url = imports[name] ??
+          imports[name.slice(0, name.lastIndexOf("@"))];
         const [, v] = url.match(/@(\d+\.\d+\.\d+(-[a-z0-9\-\.]+)?)/)!;
         if (!v.includes("-")) {
           version = v.split(".").slice(0, 2).join(".");
@@ -142,12 +153,18 @@ async function update(args: string[], options: Record<string, string>) {
 
 async function remove(args: string[], _options: Record<string, string>) {
   const importMap = await loadImportMap();
-  const toRemove = args.filter((name) => name in importMap.imports);
+  const { imports, scopes } = importMap;
+  if (!imports) {
+    return;
+  }
+  const toRemove = args.filter((name) => name in imports);
   for (const name of toRemove) {
-    Reflect.deleteProperty(importMap.imports, name);
-    Reflect.deleteProperty(importMap.imports, name + "/");
-    Reflect.deleteProperty(importMap.scopes, name);
-    Reflect.deleteProperty(importMap.scopes, name + "/");
+    Reflect.deleteProperty(imports, name);
+    Reflect.deleteProperty(imports, name + "/");
+    if (scopes) {
+      Reflect.deleteProperty(scopes, name);
+      Reflect.deleteProperty(scopes, name + "/");
+    }
   }
   await saveImportMap(importMap);
   console.log(`Removed ${toRemove.length} packages`);
@@ -162,35 +179,18 @@ async function remove(args: string[], _options: Record<string, string>) {
 }
 
 async function init(_args: string[], _options: Record<string, string>) {
-  const config = await getDenoConfig();
-  const importMap = await loadImportMap();
-  if (!isNEString(config.importMap)) {
-    config.importMap = imFilename;
-  }
-  if (config.importMap === "deno.json") {
-    delete config.importMap;
-  }
-  const tasks = config.tasks as Record<string, string> | undefined;
+  const config = await readDenoConfig();
+  const tasks = config.tasks;
   config.tasks = {
     ...tasks,
     "esm:add": `deno run -A ${importUrl.origin}/${VERSION} add`,
     "esm:update": `deno run -A ${importUrl.origin}/${VERSION} update`,
     "esm:remove": `deno run -A ${importUrl.origin}/${VERSION} remove`,
   };
-  if (imFilename === "deno.json") {
-    await saveImportMap({
-      ...config,
-      ...importMap,
-    });
-  } else {
-    await Deno.writeTextFile(
-      "deno.json",
-      await denoFmt(
-        JSON.stringify(config, null, 4),
-      ),
-    );
-    await saveImportMap(importMap);
-  }
+  await Deno.writeTextFile(
+    "deno.json",
+    await denoFmt(JSON.stringify(config, null, 4)),
+  );
   console.log("Initialized %cdeno.json%c, 3 task added:", "color:green", "");
   console.log(
     "  - %cdeno task esm:add%c [packages...]",
@@ -291,26 +291,15 @@ async function denoFmt(code: string, ext = "json") {
 }
 
 async function loadImportMap(): Promise<ImportMap> {
-  let importMap: ImportMap = { imports: {}, scopes: {} };
   try {
-    const raw = (await Deno.readTextFile(imFilename)).trim();
-    if (raw.startsWith("{") && raw.endsWith("}")) {
-      const parsed = JSON.parse(raw);
-      const { imports, scopes } = parsed;
-      importMap = { ...parsed };
-      if (imports) {
-        Object.assign(importMap.imports, imports);
-      }
-      if (scopes) {
-        Object.assign(importMap.scopes, scopes);
-      }
-    }
+    const raw = await Deno.readTextFile(imFilename);
+    return JSON.parse(raw);
   } catch (err) {
-    if (!(err instanceof Deno.errors.NotFound)) {
-      throw err;
+    if (err instanceof Deno.errors.NotFound) {
+      return {};
     }
+    throw err;
   }
-  return importMap;
 }
 
 async function saveImportMap(importMap: ImportMap): Promise<void> {
@@ -350,11 +339,15 @@ async function saveImportMap(importMap: ImportMap): Promise<void> {
 }
 
 // todo: support deno.jsonc
-// deno-lint-ignore no-explicit-any
-async function getDenoConfig(): Promise<Record<string, any>> {
+let denoConfig: DenoConfig | undefined = undefined;
+async function readDenoConfig(): Promise<DenoConfig> {
+  if (denoConfig) {
+    return denoConfig;
+  }
   try {
     const config = await Deno.readTextFile("deno.json");
-    return JSON.parse(config);
+    denoConfig = JSON.parse(config);
+    return denoConfig!;
   } catch (err) {
     if (err instanceof Deno.errors.NotFound) {
       return {};
@@ -375,6 +368,9 @@ async function addPkgToImportMap(
     }
     pkgUrl += "/" + pkg.subModule;
   }
+  if (!importMap.imports) {
+    importMap.imports = {};
+  }
   if (importMap.imports[aliasName] === pkgUrl) {
     return false;
   }
@@ -386,6 +382,9 @@ async function addPkgToImportMap(
   }
   if (pkg.dependencies) {
     const esmshScope = `${importUrl.origin}/${VERSION}/`;
+    if (!importMap.scopes) {
+      importMap.scopes = {};
+    }
     if (!Reflect.has(importMap.scopes, esmshScope)) {
       importMap.scopes[esmshScope] = {};
     }
@@ -393,7 +392,8 @@ async function addPkgToImportMap(
       const dep = `${depName}@${depVersion}`;
       const depPkg = await fetchPkgInfo(dep);
       if (depPkg) {
-        const depUrl = `${importUrl.origin}/${VERSION}/${depPkg.name}@${depPkg.version}`;
+        const depUrl =
+          `${importUrl.origin}/${VERSION}/${depPkg.name}@${depPkg.version}`;
         importMap.scopes[esmshScope][depName] = depUrl;
       }
     }
@@ -404,7 +404,9 @@ async function addPkgToImportMap(
 function getPkgUrl(pkg: Package): [url: string, withExports: boolean] {
   const { name, version, exports, dependencies, peerDependencies } = pkg;
   const withExports = typeof exports === "object" &&
-    Object.keys(exports).some((key) => key.startsWith("./") && key !== "./package.json");
+    Object.keys(exports).some((key) =>
+      key.startsWith("./") && key !== "./package.json"
+    );
   if (
     !stableBuild.has(name) && (
       (dependencies && Object.keys(dependencies).length > 0) ||
@@ -416,7 +418,10 @@ function getPkgUrl(pkg: Package): [url: string, withExports: boolean] {
   return [`${importUrl.origin}/${VERSION}/${name}@${version}`, withExports];
 }
 
-function sortImports(imports: Record<string, string>) {
+function sortImports(imports?: Record<string, string>): typeof imports {
+  if (!imports) {
+    return undefined;
+  }
   return Object.fromEntries(
     Object.entries(imports).sort(sortByValue),
   );
@@ -444,10 +449,6 @@ function sortByValue(a: [string, string], b: [string, string]) {
     return 1;
   }
   return 0;
-}
-
-function isNEString(a: unknown): a is string {
-  return typeof a === "string" && a !== "";
 }
 
 function parseFlags(
@@ -482,29 +483,27 @@ function parseFlags(
   return [args, options];
 }
 
+function isNEString(a: unknown): a is string {
+  return typeof a === "string" && a !== "";
+}
+
 if (import.meta.main) {
   const start = performance.now();
   const [command, ...args] = Deno.args;
-  const commands = {
-    add,
-    remove,
-    update,
-    init,
-  };
+  const commands = { add, remove, update, init };
 
   if (command === undefined || !(command in commands)) {
-    console.error(`Command "${command}" not found`);
+    console.error(`%cerror%c: Invalid command "${command}"`, "color:red", "");
     Deno.exit(1);
   }
 
   try {
-    const config = await getDenoConfig();
+    const flags = parseFlags(args);
+    const config = await readDenoConfig();
     if (isNEString(config.importMap)) {
       imFilename = config.importMap;
-    } else {
-      imFilename = "deno.json";
     }
-    await commands[command as keyof typeof commands](...parseFlags(args));
+    await commands[command as keyof typeof commands](...flags);
     console.log(`✨ Done in ${(performance.now() - start).toFixed(2)}ms`);
   } catch (error) {
     throw error;
