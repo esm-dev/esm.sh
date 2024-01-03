@@ -11,6 +11,8 @@ import {
   readTextFromStream,
 } from "./util.mjs";
 
+const HOT_URL = "https://esm.sh/v135/hot";
+
 /**
  * Creates a fetch handler for serving hot applications.
  * @param {import("../types").ServeOptions} options
@@ -282,7 +284,7 @@ export const serveHot = (options) => {
             case "/favicon.ico":
               return new Response("Not found", { status: 404 });
             case "/sw.js": {
-              const hotUrl = new URL("https://esm.sh/v135/hot");
+              const hotUrl = new URL(HOT_URL);
               const plugins = url.searchParams.get("hot-plugins");
               if (plugins) {
                 hotUrl.searchParams.set("plugins", plugins);

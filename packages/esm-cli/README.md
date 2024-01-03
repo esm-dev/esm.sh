@@ -8,30 +8,17 @@ The CLI/API for serving `esm.sh/hot` applications.
 
 ## Using the CLI tool
 
-To use the CLI tool, you need to install it globally on your
-machine:
+The CLI starts a server using the current working directory as the root path of the esm.sh/hot application.
 
 ```bash
-npm i -g esm.sh
-```
-
-or using `npx` to run it directly:
-
-```bash
-npx esm.sh
-```
-
-The CLI will start a esm.sh/hot server using the current working directory as the root path.
-
-```bash
-$ esm.sh
+$ npx esm.sh
 Listening on http://localhost:3000
 ```
 
-or you can specify the root path:
+you can specify the root path as well:
 
 ```bash
-$ esm.sh my-app
+$ npx esm.sh my-app
 ```
 
 ## Using the API

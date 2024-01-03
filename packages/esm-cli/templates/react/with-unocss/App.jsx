@@ -1,8 +1,8 @@
 import { useState } from "react";
 
 const externalLinks = [
-  ["Get started", "https://esm.sh/hot/docs/get-started"],
-  ["Docs", "https://esm.sh/hot/docs"],
+  ["Docs", "https://esm.sh/docs#hot"],
+  ["Templates", "https://esm.sh/new"],
   ["Github", "https://github.com/esm-dev/esm.sh"],
 ];
 
@@ -92,7 +92,7 @@ export default function App() {
       <nav className="fixed bottom-4 flex items-center gap-6 mt-4">
         {externalLinks.map(([text, href]) => (
           <a
-            className="flex items-center gap-0.5 leading-none op-40 hover:op-100 transition-top duration-300 relative top-0 hover:top--0.5"
+            className="flex items-center gap-0.5 py-2 leading-none op-40 hover:op-100 transition-top duration-300 relative top-0 hover:top--0.5"
             target="_blank"
             href={href}
             key={href}
@@ -103,12 +103,14 @@ export default function App() {
               width="24"
               height="24"
               viewBox="0 0 24 24"
+              fill="none"
               xmlns="http://www.w3.org/2000/svg"
             >
               <path
+                d="M7 7h10m0 0v10m0-10L7 17"
                 stroke="currentColor"
                 strokeWidth="2"
-                d="M7 7h10m0 0v10m0-10L7 17"
+                strokeLinecap="round"
               />
             </svg>
           </a>
@@ -120,19 +122,19 @@ export default function App() {
           }}
         >
           <svg
-            className="w-4.5 h-4.5 op-40 group-hover:op-100"
+            className="w-4.5 h-4.5 op-40 group-hover:op-100 transition-opacity duration-300"
             width="24"
             height="24"
             viewBox="0 0 24 24"
+            fill="none"
             xmlns="http://www.w3.org/2000/svg"
           >
             <path
-              fill="none"
+              d="M14.828 14.828a4 4 0 1 0-5.656-5.656a4 4 0 0 0 5.656 5.656m-8.485 2.829l-1.414 1.414M6.343 6.343L4.929 4.929m12.728 1.414l1.414-1.414m-1.414 12.728l1.414 1.414M4 12H2m10-8V2m8 10h2m-10 8v2"
               stroke="currentColor"
+              strokeWidth="2"
               strokeLinecap="round"
               strokeLinejoin="round"
-              strokeWidth="2"
-              d="M14.828 14.828a4 4 0 1 0-5.656-5.656a4 4 0 0 0 5.656 5.656m-8.485 2.829l-1.414 1.414M6.343 6.343L4.929 4.929m12.728 1.414l1.414-1.414m-1.414 12.728l1.414 1.414M4 12H2m10-8V2m8 10h2m-10 8v2"
             />
           </svg>
         </button>

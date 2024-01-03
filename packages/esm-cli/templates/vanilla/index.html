@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>esm.sh/hot</title>
+  <script type="importmap">
+    {
+      "imports": {
+        "lit": "https://esm.sh/lit@3.1.0"
+      }
+    }
+  </script>
+
+  <script type="contentmap">
+    {
+      "contents": {
+        "val:*": {
+          "url": "https://api.val.town/v1/run/ije.${*}",
+          "authorization": "Bearer ${ENV.valtown}",
+          "select": "*",
+          "cacheTtl": 60
+        }
+      }
+    }
+  </script>
+</head>
+
+<body>
+  <use-content from="val:myInfo" with="url"  >loading...</use-content>
+  <use-content from="val:myInfo" with="html"  >loading...</use-content>
+
+  <script type="module">
+    import hot from "http://localhost:8080/v135/hot"
+    hot.fire()
+  </script>
+</body>
+
+</html>
