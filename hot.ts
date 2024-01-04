@@ -50,7 +50,8 @@ class VFS {
 
   async #start(readonly = false) {
     const db = await this.#dbPromise;
-    return db.transaction(kVfs, readonly ? "readonly" : "readwrite").objectStore(kVfs);
+    return db.transaction(kVfs, readonly ? "readonly" : "readwrite")
+      .objectStore(kVfs);
   }
 
   async get(name: string) {
@@ -139,6 +140,15 @@ class Hot implements HotCore {
       this.#loaders[priority ? "unshift" : "push"]({ test, load, fetch });
     }
     return this;
+  }
+
+  on(event: string, handler: (data: any) => void): () => void {
+    // TODO
+    return () => {};
+  }
+
+  send(event: string, data?: any) {
+    // TODO
   }
 
   waitUntil(promise: Promise<void>) {
@@ -259,7 +269,9 @@ class Hot implements HotCore {
       if (!src) {
         return;
       }
-      const root = el.hasAttribute("shadow") ? el.attachShadow({ mode: "open" }) : el;
+      const root = el.hasAttribute("shadow")
+        ? el.attachShadow({ mode: "open" })
+        : el;
       const url = new URL(src, loc.href);
       const load = async (first?: boolean) => {
         if (!first) {
@@ -313,8 +325,12 @@ class Hot implements HotCore {
           return;
         }
         const expr = attr(el, "with");
-        const value = expr && !isNullish(data) ? new Function("return this." + expr).call(data) : data;
-        el.innerHTML = !isNullish(value) ? value.toString?.() ?? stringify(value) : "";
+        const value = expr && !isNullish(data)
+          ? new Function("return this." + expr).call(data)
+          : data;
+        el.innerHTML = !isNullish(value)
+          ? value.toString?.() ?? stringify(value)
+          : "";
       };
       const renderedData = rendered[name];
       if (renderedData) {
@@ -407,7 +423,8 @@ class Hot implements HotCore {
         return createResponse("Not Found", {}, 404);
       }
       const headers: HeadersInit = {
-        [kContentType]: file.meta?.contentType ?? typesMap.get(getExtname(name)) ?? "binary/octet-stream",
+        [kContentType]: file.meta?.contentType ??
+          typesMap.get(getExtname(name)) ?? "binary/octet-stream",
       };
       return createResponse(file.data, headers);
     };
@@ -453,7 +470,9 @@ class Hot implements HotCore {
         vfs.get(cacheKey),
       ]);
       const importMap: ImportMap = (vfsImportMap?.data as unknown) ?? {};
-      const checksum = await computeHash(enc.encode(stringify(importMap) + (etag ?? await source())));
+      const checksum = await computeHash(
+        enc.encode(stringify(importMap) + (etag ?? await source())),
+      );
       if (cached && cached.meta?.checksum === checksum) {
         if (!res.bodyUsed) {
           res.body?.cancel();
@@ -468,7 +487,8 @@ class Hot implements HotCore {
         const { code, contentType, deps, map } = ret;
         let body = code;
         if (map) {
-          body += "\n//# sourceMappingURL=data:" + typesMap.get("json") + ";base64," + btoa(map);
+          body += "\n//# sourceMappingURL=data:" + typesMap.get("json") +
+            ";base64," + btoa(map);
         }
         vfs.put(cacheKey, body, { checksum, contentType, deps });
         return createResponse(body, loaderHeaders(contentType));
@@ -512,7 +532,9 @@ class Hot implements HotCore {
           }
         }
       }
-      if (url.hostname === "esm.sh" && /\w@\d+.\d+\.\d+(-|\/|\?|$)/.test(pathname)) {
+      if (
+        url.hostname === "esm.sh" && /\w@\d+.\d+\.\d+(-|\/|\?|$)/.test(pathname)
+      ) {
         return respondWith(fetchWithCache(request));
       }
       if (isSameOrigin(url)) {
