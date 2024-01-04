@@ -23,7 +23,7 @@ To configure the server, create a `config.json` file in the project root directo
 {
   "port": 8080,
   "workDir": ".esmd",
-  "npmRegistry": "https://npmjs.org/registry",
+  "npmRegistry": "https://registry.npmjs.org",
   "npmToken": "xxxxxx"
 }
 ```
