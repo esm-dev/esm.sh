@@ -20,6 +20,7 @@ import (
 
 type BuildInput struct {
 	Source        string            `json:"source"`
+	Code          string            `json:"code"`
 	Loader        string            `json:"loader"`
 	Deps          map[string]string `json:"dependencies"`
 	Types         string            `json:"types"`
@@ -39,6 +40,9 @@ func apiHandler() rex.Handle {
 				ctx.R.Body.Close()
 				if err != nil {
 					return rex.Err(400, "require valid json body")
+				}
+				if input.Source == "" && input.Code != "" {
+					input.Source = input.Code
 				}
 				if input.Source == "" {
 					return rex.Err(400, "source is required")
