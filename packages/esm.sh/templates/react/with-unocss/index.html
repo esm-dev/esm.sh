@@ -22,6 +22,14 @@
   <react-root src="./App.jsx"></react-root>
   <script type="module">
     import hot from "http://localhost:8080/v135/hot?plugins=react";
+    hot.onFire(() => {
+      hot.openMessageChannel("demo").then(channel => {
+        channel.onMessage(message => {
+          console.log(message);
+        })
+        channel.postMessage("Hello world!");
+      })
+    })
     hot.fire();
   </script>
 </body>

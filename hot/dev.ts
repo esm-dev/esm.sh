@@ -105,7 +105,7 @@ export function setup(hot: Hot) {
 
     let connected = false;
     const es = new EventSource(
-      new URL(hot.basePath + "@hot-events", location.href),
+      new URL(hot.basePath + "@hot-events?channel=dev", location.href),
     );
 
     es.addEventListener("fs-notify", async (evt) => {
@@ -143,7 +143,9 @@ export function setup(hot: Hot) {
     });
 
     es.addEventListener("open-devtools", async () => {
-      const { render } = await import(new URL("./devtools", import.meta.url).href);
+      const { render } = await import(
+        new URL("./devtools", import.meta.url).href
+      );
       render(hot);
     });
 

@@ -118,10 +118,15 @@ export interface HotCore {
     fetch?: Loader["fetch"],
     priority?: "eager",
   ): this;
-  on(event: string, handler: (data: any) => void): () => void;
-  send(event: string, data?: any): void;
+  openMessageChannel(name: string): Promise<MessageChannel>;
   waitUntil(promise: Promise<any>): void;
   use(...plugins: Plugin[]): this;
+}
+
+export interface MessageChannel {
+  onMessage(handler: (data: any) => void): () => void;
+  postMessage(data?: any): void;
+  close(): void;
 }
 
 export interface CallbackMap<T extends Function> {

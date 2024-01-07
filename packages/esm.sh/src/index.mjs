@@ -23,6 +23,7 @@ export const serveHot = (options) => {
   const env = typeof Deno === "object" ? Deno.env.toObject() : process.env;
   const onFsNotify = fs.watch(root);
   const contentCache = new Map(); // todo: use worker `caches` api if possible
+  const hotClients = new Map();
 
   /**
    * Fetcher handles requests for hot applications.
@@ -193,7 +194,9 @@ export const serveHot = (options) => {
           return new Response("[]", { headers });
         }
         const entries = await fs.ls(root);
-        const matched = entries.filter((entry) => glob.includes(entry) || entry.match(globToRegExp(glob)));
+        const matched = entries.filter((entry) =>
+          glob.includes(entry) || entry.match(globToRegExp(glob))
+        );
         if (!matched.length) {
           return new Response("[]", { headers });
         }
@@ -241,23 +244,47 @@ export const serveHot = (options) => {
 
       /** Event stream for HMR */
       case "/@hot-events": {
+        const channelName = url.searchParams.get("channel");
+        const devChannel = channelName === "dev";
         const disposes = [];
+        if (req.method === "POST") {
+          const data = await req.json();
+          const clients = hotClients.get(channelName)
+          if (!clients) {
+            return new Response("Channel not found", { status: 404 });
+          }
+          clients.forEach(({ sentEvent }) => sentEvent("message", data));
+          return new Response("Ok");
+        }
         return new Response(
           new ReadableStream({
             start(controller) {
-              const sendEvent = (eventName, data) => {
-                controller.enqueue("event: " + eventName + "\ndata: " + JSON.stringify(data) + "\n\n");
+              const sentEvent = (eventName, data) => {
+                controller.enqueue(
+                  "event: " + eventName + "\ndata: " + JSON.stringify(data) +
+                    "\n\n",
+                );
               };
-              disposes.push(onFsNotify((type, name) => {
-                sendEvent("fs-notify", { type, name });
-              }));
-              controller.enqueue(": hot notify stream\n\n");
-              if (isLocalHost(url)) {
-                sendEvent("open-devtools", null);
+              controller.enqueue(": hot events stream\n\n");
+              if (devChannel) {
+                disposes.push(onFsNotify((type, name) => {
+                  sentEvent("fs-notify", { type, name });
+                }));
+                if (isLocalHost(url)) {
+                  sentEvent("open-devtools", null);
+                }
+              } else {
+                const map = hotClients.get(channelName) ??
+                  hotClients.set(channelName, new Map()).get(channelName);
+                map.set(req, { sentEvent });
               }
             },
             cancel() {
-              disposes.forEach((dispose) => dispose());
+              if (devChannel) {
+                disposes.forEach((dispose) => dispose());
+              } else {
+                hotClients.get(channelName)?.delete(req);
+              }
             },
           }),
           {
@@ -299,12 +326,10 @@ export const serveHot = (options) => {
               );
             }
             default: {
-              const htmls = [
-                pathname !== "/" ? pathname + ".html" : null,
-                pathname !== "/" ? pathname + "/index.html" : null,
-                "/404.html",
-                "/index.html",
-              ].filter(Boolean);
+              const htmls = ["/404.html", "/index.html"];
+              if (pathname !== "/") {
+                htmls.unshift(pathname + ".html", pathname + "/index.html");
+              }
               for (const path of htmls) {
                 filepath = path;
                 file = await fs.open(root + filepath);
@@ -376,7 +401,9 @@ export const serveHot = (options) => {
         const { pathname } = new URL(content, url.origin + filepath);
         const index = await fs.ls(root + pathname);
         el.replace(
-          `<script type="applicatin/json" id="@hot/router">${JSON.stringify({ index })}</script>`,
+          `<script type="applicatin/json" id="@hot/router">${
+            JSON.stringify({ index })
+          }</script>`,
           { html: true },
         );
       },
@@ -417,7 +444,9 @@ export const serveHot = (options) => {
       async element(el) {
         if (contentMap) {
           try {
-            const { contents = {} } = isNEString(contentMap) ? (contentMap = JSON.parse(contentMap)) : contentMap;
+            const { contents = {} } = isNEString(contentMap)
+              ? (contentMap = JSON.parse(contentMap))
+              : contentMap;
             const name = el.getAttribute("from");
             let content = contents[name];
             let asterisk = undefined;
@@ -454,7 +483,9 @@ export const serveHot = (options) => {
                     value = new Function("return this." + expr).call(data);
                   }
                 }
-                return !isNullish(value) ? value.toString?.() ?? stringify(value) : "";
+                return !isNullish(value)
+                  ? value.toString?.() ?? stringify(value)
+                  : "";
               };
               const render = (data) => {
                 el.setInnerContent(process(data), { html: true });

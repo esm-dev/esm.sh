@@ -11,6 +11,7 @@ import type {
   HotCore,
   ImportMap,
   Loader,
+  MessageChannel,
   Plugin,
   URLTest,
   VFSRecord,
@@ -142,13 +143,39 @@ class Hot implements HotCore {
     return this;
   }
 
-  on(event: string, handler: (data: any) => void): () => void {
-    // TODO
-    return () => {};
-  }
-
-  send(event: string, data?: any) {
-    // TODO
+  openMessageChannel(name: string): Promise<MessageChannel> {
+    const conn = new EventSource(this.basePath + "@hot-events?channel=" + name);
+    return new Promise((resolve, reject) => {
+      const mc: MessageChannel = {
+        postMessage: (data) => {
+          fetch(
+            this.basePath + "@hot-events?channel=" + name,
+            {
+              method: "POST",
+              body: stringify(data),
+            },
+          );
+        },
+        onMessage: (handler) => {
+          const msgHandler = (evt: MessageEvent) => {
+            handler(parse(evt.data));
+          };
+          conn.addEventListener("message", msgHandler);
+          return () => {
+            conn.removeEventListener("message", msgHandler);
+          };
+        },
+        close: () => {
+          conn.close();
+        },
+      };
+      conn.onopen = () => {
+        resolve(mc);
+      };
+      conn.onerror = () => {
+        reject(new Error("Failed to open message channel."));
+      };
+    });
   }
 
   waitUntil(promise: Promise<void>) {
