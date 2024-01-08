@@ -12,8 +12,14 @@
       "import": "./src/index.mjs",
       "types": "./types/index.d.ts"
     },
+    "./compat": {
+      "deno": "./compat/deno.mjs",
+      "default": "./compat/default.mjs",
+      "types": "./types/compat.d.ts"
+    },
     "./package.json": "./package.json"
   },
+  "sideEffects": false,
   "scripts": {
     "start": "./bin/cli.mjs"
   },

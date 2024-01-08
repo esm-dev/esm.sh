@@ -36,19 +36,21 @@ export function serveHost(
 ): (req: Request) => Promise<Response>;
 ```
 
-For Node.js runtime, you need `@hono/server` to listen to the requests.
+For Node.js runtime, you need `@hono/server` to listen to the http requests.
 
 ```js
 import { serve } from "@hono/server";
 import { serveHot } from "esm.sh";
+import injectCompatLayer from "esm.sh/compat";
 
+await injectCompatLayer();
 serve({ port: 3000, fetch: serveHot() });
 ```
 
 For Deno runtime, you can use `serveHot` directly.
 
 ```js
-import { serveHot } from "https://esm.sh";
+import { serveHot } from "https://esm.sh/hot/server";
 
 Deno.server(serveHot());
 ```

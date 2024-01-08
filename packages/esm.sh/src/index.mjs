@@ -16,7 +16,7 @@ const HOT_URL = "https://esm.sh/v135/hot";
 /**
  * Creates a fetch handler for serving hot applications.
  * @param {import("../types").ServeOptions} options
- * @returns {(req: Request, cfEnv?: Record<string, string>) => Promise<Response>}
+ * @returns {(req: Request, cfEnv?: Record<string, any>) => Promise<Response>} fetch handler
  */
 export const serveHot = (options) => {
   const { root = "." } = options;
@@ -394,7 +394,7 @@ export const serveHot = (options) => {
   function rewriteHtml(req, cfEnv, url, filepath) {
     const rewriter = new HTMLRewriter();
 
-    // - inject router index
+    // - inject fs-based router index
     rewriter.on("meta[name=fs-router]", {
       async element(el) {
         const content = el.getAttribute("content") ?? "./routes";

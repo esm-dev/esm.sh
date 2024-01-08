@@ -26,7 +26,7 @@
 }
 
 body {
-  @apply m-0 p-0;
+  @apply m-0 p-0; /* @see https://unocss.dev/transformers/directives#usage */
   color: var(--text-color);
   background-color: var(--bg-color);
 }

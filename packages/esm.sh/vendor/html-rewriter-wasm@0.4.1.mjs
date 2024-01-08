@@ -5,9 +5,15 @@
  */
 
 import { homedir } from "node:os";
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import {
+  createWriteStream,
+  existsSync,
+  mkdirSync,
+  readFileSync,
+} from "node:fs";
+import { Writable } from "node:stream";
 import { dirname, join } from "node:path";
-import { awaitPromise, setWasmExports, wrap } from "./asyncify.mjs";
+import { awaitPromise, setWasmExports, wrap } from "./wasm-asyncify.mjs";
 
 const wbg = {};
 const imports = { __wbindgen_placeholder__: wbg };
@@ -1143,24 +1149,36 @@ wbg.__wbindgen_memory = function () {
 export default async function init() {
   if (wasm) return;
 
-  const dlUrl = "https://esm.sh/html-rewriter-wasm@0.4.1/dist/html_rewriter_bg.wasm";
+  const dlUrl =
+    "https://esm.sh/html-rewriter-wasm@0.4.1/dist/html_rewriter_bg.wasm";
   const cachePath = join(homedir(), ".cache", dlUrl.slice("https://".length));
 
-  let bytes;
+  let wasmInstance;
   if (existsSync(cachePath)) {
-    bytes = readFileSync(cachePath);
+    const bytes = readFileSync(cachePath);
+    const wasmModule = new WebAssembly.Module(bytes);
+    wasmInstance = new WebAssembly.Instance(wasmModule, imports);
   } else {
-    console.log("Installing html-rewriter-wasm...");
-    bytes = await fetch(dlUrl).then((res) => res.arrayBuffer());
+    console.log("Installing html_rewriter_bg.wasm...");
+    const res = await fetch(dlUrl);
+    if (!res.ok) throw new Error(`unexpected response ${res.statusText}`);
+    const [body, bodyCopy] = res.body.tee();
     const cachDir = dirname(cachePath);
     if (!existsSync(cachDir)) {
       mkdirSync(cachDir, { recursive: true });
     }
-    writeFileSync(cachePath, new Uint8Array(bytes));
+    const writable = createWriteStream(cachePath);
+    await Promise.all([
+      bodyCopy.pipeTo(Writable.toWeb(writable)),
+      WebAssembly.instantiateStreaming(
+        new Response(body, { headers: res.headers }),
+        imports,
+      ).then((res) => {
+        wasmInstance = res.instance;
+      }),
+    ]);
   }
 
-  const wasmModule = new WebAssembly.Module(bytes);
-  const wasmInstance = new WebAssembly.Instance(wasmModule, imports);
   wasm = wasmInstance.exports;
   setWasmExports(wasm);
 }
