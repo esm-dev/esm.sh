@@ -118,14 +118,14 @@ export interface HotCore {
     fetch?: Loader["fetch"],
     priority?: "eager",
   ): this;
-  openMessageChannel(name: string): Promise<MessageChannel>;
+  openMessageChannel(channelName: string): Promise<HotMessageChannel>;
   waitUntil(promise: Promise<any>): void;
   use(...plugins: Plugin[]): this;
 }
 
-export interface MessageChannel {
-  onMessage(handler: (data: any) => void): () => void;
-  postMessage(data?: any): void;
+export interface HotMessageChannel {
+  onMessage<T = any>(handler: (data: T) => void): () => void;
+  postMessage(data?: any): Promise<boolean>;
   close(): void;
 }
 

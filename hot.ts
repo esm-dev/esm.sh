@@ -9,9 +9,9 @@ import type {
   ContentMap,
   FetchHandler,
   HotCore,
+  HotMessageChannel,
   ImportMap,
   Loader,
-  MessageChannel,
   Plugin,
   URLTest,
   VFSRecord,
@@ -31,15 +31,15 @@ const kImportmapJson = "internal:importmap.json";
 const kSkipWaiting = "SKIP_WAITING";
 const kVfs = "vfs";
 
-/** pulgins imported by `?plugins=` query string. */
+/** pulgins imported by `?plugins=` query. */
 const plugins: Plugin[] = [];
 
 /** A virtual file system using indexed database. */
 class VFS {
   #dbPromise: Promise<IDBDatabase>;
 
-  constructor() {
-    const req = indexedDB.open(kHot, VERSION);
+  constructor(scope: string, version: number) {
+    const req = indexedDB.open(scope, version);
     req.onupgradeneeded = () => {
       const db = req.result;
       if (!db.objectStoreNames.contains(kVfs)) {
@@ -49,14 +49,14 @@ class VFS {
     this.#dbPromise = waitIDBRequest<IDBDatabase>(req);
   }
 
-  async #start(readonly = false) {
+  async #begin(readonly = false) {
     const db = await this.#dbPromise;
     return db.transaction(kVfs, readonly ? "readonly" : "readwrite")
       .objectStore(kVfs);
   }
 
   async get(name: string) {
-    const tx = await this.#start(true);
+    const tx = await this.#begin(true);
     return waitIDBRequest<VFSRecord | undefined>(tx.get(name));
   }
 
@@ -65,12 +65,12 @@ class VFS {
     if (meta) {
       record.meta = meta;
     }
-    const tx = await this.#start();
+    const tx = await this.#begin();
     return waitIDBRequest<string>(tx.put(record));
   }
 
   async delete(name: string) {
-    const tx = await this.#start();
+    const tx = await this.#begin();
     return waitIDBRequest<void>(tx.delete(name));
   }
 }
@@ -86,7 +86,7 @@ class Hot implements HotCore {
   #isDev = isLocalhost(location);
   #loaders: Loader[] = [];
   #promises: Promise<any>[] = [];
-  #vfs = new VFS();
+  #vfs = new VFS(kHot, VERSION);
   #fired = false;
 
   constructor(plugins: Plugin[] = []) {
@@ -98,7 +98,7 @@ class Hot implements HotCore {
   }
 
   get cache() {
-    return this.#cache ?? (this.#cache = crateCacheProxy(kHot + VERSION));
+    return this.#cache ?? (this.#cache = createCacheProxy(kHot + VERSION));
   }
 
   get importMap() {
@@ -143,18 +143,16 @@ class Hot implements HotCore {
     return this;
   }
 
-  openMessageChannel(name: string): Promise<MessageChannel> {
-    const conn = new EventSource(this.basePath + "@hot-events?channel=" + name);
+  openMessageChannel(channelName: string): Promise<HotMessageChannel> {
+    const url = this.basePath + "@hot-events?channel=" + channelName;
+    const conn = new EventSource(url);
     return new Promise((resolve, reject) => {
-      const mc: MessageChannel = {
+      const mc: HotMessageChannel = {
         postMessage: (data) => {
-          fetch(
-            this.basePath + "@hot-events?channel=" + name,
-            {
-              method: "POST",
-              body: stringify(data),
-            },
-          );
+          return fetch(url, {
+            method: "POST",
+            body: stringify(data ?? null),
+          }).then((res) => res.ok);
         },
         onMessage: (handler) => {
           const msgHandler = (evt: MessageEvent) => {
@@ -169,12 +167,11 @@ class Hot implements HotCore {
           conn.close();
         },
       };
-      conn.onopen = () => {
-        resolve(mc);
-      };
-      conn.onerror = () => {
-        reject(new Error("Failed to open message channel."));
-      };
+      conn.onopen = () => resolve(mc);
+      conn.onerror = () =>
+        reject(
+          new Error(`Failed to open message channel "${channelName}"`),
+        );
     });
   }
 
@@ -271,7 +268,7 @@ class Hot implements HotCore {
 
     // reload external css that may be handled by hot-loader
     if (firstActicve) {
-      lookupElements<HTMLLinkElement>("link[rel=stylesheet]", (el) => {
+      queryElements<HTMLLinkElement>("link[rel=stylesheet]", (el) => {
         const href = attr(el, "href");
         if (href) {
           const url = new URL(href, loc.href);
@@ -283,7 +280,7 @@ class Hot implements HotCore {
       });
     }
 
-    lookupElements<HTMLScriptElement>("script", (el) => {
+    queryElements<HTMLScriptElement>("script", (el) => {
       if (el.type === "text/babel" || el.type === "hot/module") {
         const copy = el.cloneNode(true) as HTMLScriptElement;
         copy.type = "module";
@@ -538,13 +535,13 @@ class Hot implements HotCore {
       return res;
     };
 
-    // @ts-ignore disable type check
+    // @ts-ignore listen to SW `install` event
     self.oninstall = (evt) => evt.waitUntil(Promise.all(this.#promises));
 
-    // @ts-ignore disable type check
+    // @ts-ignore listen to SW `activate` event
     self.onactivate = (evt) => evt.waitUntil(clients.claim());
 
-    // @ts-ignore disable type check
+    // @ts-ignore listen to SW `fetch` event
     self.onfetch = (evt: FetchEvent) => {
       const { request } = evt;
       const respondWith = evt.respondWith.bind(evt);
@@ -576,6 +573,7 @@ class Hot implements HotCore {
       }
     };
 
+    // listen to SW `message` event for `skipWaiting` control on renderer process
     self.onmessage = ({ data }) => {
       if (data === kSkipWaiting) {
         // @ts-ignore skipWaiting
@@ -590,8 +588,8 @@ function attr(el: Element, name: string) {
   return el.getAttribute(name);
 }
 
-/** look up all elements by the given selectors. */
-function lookupElements<T extends Element>(
+/** query all elements by the given selectors. */
+function queryElements<T extends Element>(
   selectors: string,
   callback: (value: T) => void,
 ) {
@@ -675,7 +673,7 @@ function parseContentMap() {
 }
 
 /** create a cache proxy object. */
-function crateCacheProxy(cacheName: string) {
+function createCacheProxy(cacheName: string) {
   const cachePromise = caches.open(cacheName);
   return new Proxy({}, {
     get: (_, name) => async (...args: unknown[]) => {

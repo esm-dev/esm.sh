@@ -242,7 +242,7 @@ export const serveHot = (options) => {
         );
       }
 
-      /** Event stream for HMR */
+      /** Events streaming */
       case "/@hot-events": {
         const channelName = url.searchParams.get("channel");
         const devChannel = channelName === "dev";
