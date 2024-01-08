@@ -6,8 +6,8 @@
   <meta name="viewport" content="width=device-width" />
   <title>ESM&gt;CDN</title>
   <link rel="icon" type="image/svg+xml" href="./embed/assets/favicon.svg">
-  <meta name="description" content="A fast, global content delivery network for NPM packages with ES6 module." />
-  <meta name="keywords" content="js,javascript,typescript,esm,es2015,es6,deno,npm,npm-cdn,cdn,infrastructure,esbuild" />
+  <meta name="description" content="A fast, smart, global content delivery network (CDN) for modern(es2015+) web development." />
+  <meta name="keywords" content="js,javascript,typescript,modern,web,dev,development,es,module,esm,es2015,es6,deno,npm,github,global,cdn,infrastructure,esbuild" />
   <link rel="stylesheet" href="./embed/style.css">
   <base href="{basePath}/" />
 </head>
@@ -30,11 +30,6 @@
       <p><em style="color: #999;">Loading...</em></p>
     </main>
   </div>
-  <script>
-    if (location.protocol === 'http:' && location.hostname == 'esm.sh') {
-      location.href = 'https://' + location.host + location.pathname + location.search
-    }
-  </script>
   <script type="module">
     const query = new URLSearchParams(location.search)
     if (query.has('test')) {
@@ -44,7 +39,7 @@
     }
   </script>
   <script nomodule>
-    document.querySelector('main').innerHTML = '<p><em style="color: #999;">nomodule, please upgrade your browser...</em></p>'
+    document.querySelector('main em').textContent = 'Please use a modern browser to view this site.'
   </script>
 </body>
 

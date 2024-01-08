@@ -107,9 +107,9 @@ html {
 }
 
 body {
+  text-rendering: optimizeLegibility;
   font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Helvetica Neue', Helvetica, Roboto, Ubuntu, Tahoma, Arial, 'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol', 'PingFang SC', 'Hiragino Sans GB', 'Heiti SC', 'Microsoft YaHei', 'WenQuanYi Micro Hei', sans-serif;
   color: #232323;
-  text-rendering: optimizeLegibility;
 }
 
 ul,
@@ -190,6 +190,7 @@ i {
   box-shadow: 0 1px 0 0 currentColor;
 }
 
+.readme a:has(> img),
 .readme a:hover {
   box-shadow: none;
 }
@@ -254,11 +255,15 @@ i {
 
 .readme blockquote {
   color: #666666;
-  background: #ff9f9f9;
+  background: #f9f9f9;
   border: 1px solid #eaeaea;
   border-radius: 6px;
-  padding: 0 1.25rem;
+  padding: 0.75rem 1rem;
   margin: 1.5rem 0;
+}
+
+.readme blockquote p {
+  margin-top: 0;
 }
 
 .readme hr {
@@ -352,6 +357,9 @@ i {
 }
 
 @media (prefers-color-scheme: dark) {
+  :root {
+    color-scheme: dark;
+  }
   body {
     color: #e6e1d9 !important;
     background-color: #0e1011 !important;
@@ -360,7 +368,7 @@ i {
     color: #cfcac2 !important;
   }
   .readme h1 {
-    border-color: #4b495e;
+    border-color: #323232;
   }
   .readme h1 .github {
     color: #999;
@@ -368,7 +376,12 @@ i {
   .readme h1 .github:hover {
     color: #eee;
   }
+  .readme blockquote {
+    background-color: #232323 !important;
+    border-color: #323232 !important;
+  }
   .readme pre {
+    color: #cfcac2;
     background-color: #232323 !important;
   }
   .hljs-keyword, .hljs-selector-tag, .hljs-subst {
@@ -376,8 +389,5 @@ i {
   }
   .hljs-attribute, .hljs-name, .hljs-tag {
     color: #71ffff !important;
-  }
-  :root {
-    color-scheme: dark;
   }
 }
