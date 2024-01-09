@@ -65,6 +65,7 @@ export function setup(hot: Hot) {
       return ctx;
     };
     `,
+    { contentType: "application/javascript" },
   ));
 
   hot.importMap.imports["@reactRefreshRuntime"] = "/@hot/hmr_react_refresh.js";
@@ -93,6 +94,7 @@ export function setup(hot: Hot) {
 
     export { refresh as __REACT_REFRESH__, runtime as __REACT_REFRESH_RUNTIME__ };
     `,
+    { contentType: "application/javascript" },
   ));
 
   hot.onFire(() => {

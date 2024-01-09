@@ -29,6 +29,7 @@ const kHot = "esm.sh/hot";
 const kHotLoader = "hot-loader";
 const kImportmapJson = "internal:importmap.json";
 const kSkipWaiting = "SKIP_WAITING";
+const kMessage = "message";
 const kVfs = "vfs";
 
 /** pulgins imported by `?plugins=` query. */
@@ -148,20 +149,20 @@ class Hot implements HotCore {
     const conn = new EventSource(url);
     return new Promise((resolve, reject) => {
       const mc: HotMessageChannel = {
+        onMessage: (handler) => {
+          const msgHandler = (evt: MessageEvent) => {
+            handler(parse(evt.data));
+          };
+          conn.addEventListener(kMessage, msgHandler);
+          return () => {
+            conn.removeEventListener(kMessage, msgHandler);
+          };
+        },
         postMessage: (data) => {
           return fetch(url, {
             method: "POST",
             body: stringify(data ?? null),
           }).then((res) => res.ok);
-        },
-        onMessage: (handler) => {
-          const msgHandler = (evt: MessageEvent) => {
-            handler(parse(evt.data));
-          };
-          conn.addEventListener("message", msgHandler);
-          return () => {
-            conn.removeEventListener("message", msgHandler);
-          };
         },
         close: () => {
           conn.close();
@@ -189,7 +190,7 @@ class Hot implements HotCore {
     }
 
     if (this.#fired) {
-      console.warn("Got multiple fire() calls, ignored.");
+      console.warn("Got multiple `fire()` calls.");
       return;
     }
 
@@ -411,35 +412,6 @@ class Hot implements HotCore {
       throw new Error("Service Worker scope not found.");
     }
 
-    const mimeTypes: Record<string, string[]> = {
-      "a/javascript;": ["js", "mjs"],
-      "a/json;": ["json"],
-      "a/wasm": ["wasm"],
-      "i/gif": ["gif"],
-      "i/jpeg": ["jpeg", "jpg"],
-      "i/png": ["png"],
-      "i/svg+xml;": ["svg"],
-      "i/webp": ["webp"],
-      "t/css;": ["css"],
-      "t/html;": ["html", "htm"],
-    };
-    const alias: Record<string, string> = {
-      a: "application",
-      i: "image",
-      t: "text",
-    };
-    const typesMap = new Map<string, string>();
-    for (const mimeType in mimeTypes) {
-      for (const ext of mimeTypes[mimeType]) {
-        const endsWithSemicolon = mimeType.endsWith(";");
-        let suffix = mimeType.slice(1);
-        if (endsWithSemicolon) {
-          suffix += " charset=utf-8";
-        }
-        typesMap.set(ext, alias[mimeType.charAt(0)] + suffix);
-      }
-    }
-
     const vfs = this.#vfs;
     const serveVFS = async (name: string) => {
       const file = await vfs.get(name);
@@ -447,14 +419,13 @@ class Hot implements HotCore {
         return createResponse("Not Found", {}, 404);
       }
       const headers: HeadersInit = {
-        [kContentType]: file.meta?.contentType ??
-          typesMap.get(getExtname(name)) ?? "binary/octet-stream",
+        [kContentType]: file.meta?.contentType ?? "binary/octet-stream",
       };
       return createResponse(file.data, headers);
     };
     const loaderHeaders = (contentType?: string) => {
       return new Headers([
-        [kContentType, contentType ?? typesMap.get("js")!],
+        [kContentType, contentType ?? "application/javascript; charset=utf-8"],
         [kContentSource, kHotLoader],
       ]);
     };
@@ -511,7 +482,7 @@ class Hot implements HotCore {
         const { code, contentType, deps, map } = ret;
         let body = code;
         if (map) {
-          body += "\n//# sourceMappingURL=data:" + typesMap.get("json") +
+          body += "\n//# sourceMappingURL=data:application/json" +
             ";base64," + btoa(map);
         }
         vfs.put(cacheKey, body, { checksum, contentType, deps });
