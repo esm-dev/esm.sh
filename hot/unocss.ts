@@ -73,12 +73,12 @@ export default {
         if (!globRes.ok) {
           return globRes;
         }
-        if (globRes.headers.get("content-type") !== "hot/glob") {
+        if (globRes.headers.get("content-type") !== "binary/glob") {
           return new Response("Unsppported /@hot-glob api", { status: 500 });
         }
         const data = await globRes.text();
         const n = parseInt(
-          globRes.headers.get("content-index")!.split(",", 1)[0],
+          globRes.headers.get("x-glob-index")!.split(",", 1)[0],
         );
         const entryPoints = JSON.parse(data.slice(0, n));
         return new Response(

@@ -186,8 +186,8 @@ export const serveHot = (options) => {
       /** Bundle files with glob pattern */
       case "/@hot-glob": {
         const headers = new Headers({
-          "content-type": "hot/glob",
-          "content-index": "2",
+          "content-type": "binary/glob",
+          "x-glob-index": "2",
         });
         const { pattern: glob } = await req.json();
         if (!isNEString(glob)) {
@@ -205,37 +205,43 @@ export const serveHot = (options) => {
           const stat = await fs.stat(root + "/" + filename);
           return stat.size;
         }));
-        headers.set("content-index", [names.length, ...sizes].join(","));
+        headers.set("x-glob-index", [names.length, ...sizes].join(","));
         let currentFile;
+        let isCancelled;
+        const push = async (controller) => {
+          const filename = matched.shift();
+          if (!filename) {
+            controller.close();
+            return;
+          }
+          currentFile = await fs.open(root + "/" + filename);
+          const reader = currentFile.body.getReader();
+          const pump = async () => {
+            const { done, value } = await reader.read();
+            if (done) {
+              currentFile.close();
+              currentFile = null;
+              return;
+            }
+            if (isCancelled) {
+              return;
+            }
+            controller.enqueue(new Uint8Array(value));
+            pump();
+          };
+          await pump();
+        };
         return new Response(
           new ReadableStream({
             start(controller) {
-              const enqueue = (chunk) => controller.enqueue(chunk);
-              const pipe = async () => {
-                const filename = matched.shift();
-                if (!filename) {
-                  controller.close();
-                  return;
-                }
-                currentFile = await fs.open(root + "/" + filename);
-                const reader = currentFile.body.getReader();
-                const pump = async () => {
-                  const { done, value } = await reader.read();
-                  if (done) {
-                    currentFile.close();
-                    pipe();
-                    return;
-                  }
-                  enqueue(new Uint8Array(value));
-                  pump();
-                };
-                pump();
-              };
-              enqueue(names);
-              pipe();
+              controller.enqueue(names);
+            },
+            async pull(controller) {
+              await push(controller);
             },
             cancel() {
               currentFile?.close();
+              isCancelled = true;
             },
           }),
           { headers },
@@ -249,7 +255,7 @@ export const serveHot = (options) => {
         const disposes = [];
         if (req.method === "POST") {
           const data = await req.json();
-          const clients = hotClients.get(channelName)
+          const clients = hotClients.get(channelName);
           if (!clients) {
             return new Response("Channel not found", { status: 404 });
           }

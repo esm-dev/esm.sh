@@ -43,7 +43,8 @@ export function isJSONResponse(response) {
  * @returns {boolean}
  */
 export function isLocalHost({ hostname }) {
-  return hostname === "localhost" || hostname === "127.0.0.1" || hostname === "[::1]";
+  return hostname === "localhost" || hostname === "127.0.0.1" ||
+    hostname === "[::1]";
 }
 
 /**
@@ -111,10 +112,13 @@ export function globToRegExp(glob) {
   if (reg) {
     return reg;
   }
-  const r = glob.replace(/[-+?.^$[\]]/g, "\\$&")
-    .replace(/\{/g, "(").replace(/\}/g, ")").replace(/,\s*/g, "|")
+  const r = glob
+    .replace(/^\.*\//g, "")
+    .replace(/[-+?.^$\[\]\(\)]/g, "\\$&")
+    .replace(/\{/g, "(").replace(/\}/g, ")").replace(/\s*,\s*/g, "|")
     .replace(/\*\*(\/\*+)?/g, "++").replace(/\*/g, "[^/]+")
-    .replace(/\+\+/g, ".*?").replace(/\//g, "\\/");
+    .replace(/\+\+/g, ".*?")
+    .replace(/\//g, "\\/");
   cache.set(glob, reg = new RegExp("^" + r + "$", "i"));
   return reg;
 }
