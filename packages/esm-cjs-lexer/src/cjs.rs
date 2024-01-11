@@ -1148,7 +1148,21 @@ impl CJSLexer {
                 Some(Expr::Paren(ParenExpr { expr, .. })) => {
                   if let Expr::Arrow(ArrowExpr { body, .. }) = &**expr {
                     if let BlockStmtOrExpr::BlockStmt(BlockStmt { stmts, .. }) = &**body {
-                      if let Some(Stmt::Decl(Decl::Var(var_decl))) = stmts.get(1) {
+                      let first_stmt_index = match stmts.get(0) {
+                        Some(Stmt::Expr(ExprStmt { expr, .. })) => match &**expr {
+                          Expr::Lit(Lit::Str(Str { value, .. })) => {
+                            if value.to_string().eq("use strict") {
+                              1
+                            } else {
+                              0
+                            }
+                          }
+                          _ => 0,
+                        },
+                        _ => 0,
+                      };
+
+                      if let Some(Stmt::Decl(Decl::Var(var_decl))) = stmts.get(first_stmt_index) {
                         let VarDecl { decls, .. } = &**var_decl;
                         match decls.get(0) {
                           Some(VarDeclarator {
@@ -1186,7 +1200,105 @@ impl CJSLexer {
                                 }
 
                                 if webpack_require_props == 2 {
-                                  stmts.iter().skip(2).find(|stmt| match stmt {
+                                  stmts.iter().skip(first_stmt_index + 1).find(|stmt| match stmt {
+                                    Stmt::Expr(ExprStmt { expr, .. }) => {
+                                      if let Expr::Seq(SeqExpr { exprs, .. }) = &**expr {
+                                        let mut found_webpack_require_exprs = false;
+                                        for expr in exprs {
+                                          if let Expr::Call(call) = &**expr {
+                                            if let Some(Expr::Member(MemberExpr { obj, prop, .. })) =
+                                              with_expr_callee(call)
+                                            {
+                                              if let (
+                                                Expr::Ident(Ident { sym: obj_sym, .. }),
+                                                MemberProp::Ident(Ident { sym: prop_sym, .. }),
+                                              ) = (&**obj, &*prop)
+                                              {
+                                                if !obj_sym.as_ref().eq(webpack_require_sym) {
+                                                  return false;
+                                                }
+                                                let prop_sym_ref = prop_sym.as_ref();
+
+                                                if prop_sym_ref.eq("r") {
+                                                  self.exports.insert("__esModule".to_string());
+                                                  found_webpack_require_exprs = true;
+                                                }
+                                                if prop_sym_ref.eq("d") {
+                                                  let CallExpr { args, .. } = &*call;
+                                                  if let Some(ExprOrSpread { expr, .. }) = args.get(1) {
+                                                    if let Expr::Object(ObjectLit { props, .. }) = &**expr {
+                                                      for prop in props {
+                                                        if let PropOrSpread::Prop(prop) = prop {
+                                                          if let Prop::KeyValue(KeyValueProp {
+                                                            key: PropName::Ident(Ident { sym, .. }),
+                                                            ..
+                                                          }) = &**prop
+                                                          {
+                                                            self.exports.insert(sym.as_ref().to_string());
+                                                            found_webpack_require_exprs = true;
+                                                          }
+                                                        }
+                                                      }
+                                                    }
+                                                  }
+                                                }
+                                              }
+                                            }
+                                          }
+                                        }
+                                        return found_webpack_require_exprs;
+                                      }
+                                      return false;
+                                    }
+                                    _ => false,
+                                  });
+                                }
+                              }
+                            }
+                          }
+                          _ => {}
+                        }
+                      }
+
+                      if let Some(Stmt::Decl(Decl::Var(var_decl))) = stmts.get(first_stmt_index) {
+                        let VarDecl { decls, .. } = &**var_decl;
+                        match decls.get(0) {
+                          Some(VarDeclarator {
+                            name:
+                              Pat::Ident(BindingIdent {
+                                id:
+                                  Ident {
+                                    sym: webpack_require_sym,
+                                    ..
+                                  },
+                                ..
+                              }),
+                            init,
+                            ..
+                          }) => {
+                            if let Some(init) = init {
+                              if let Expr::Object(ObjectLit { props, .. }) = &**init {
+                                let mut webpack_require_props = 0;
+                                for prop in props {
+                                  match prop {
+                                    PropOrSpread::Prop(prop) => match &**prop {
+                                      Prop::KeyValue(KeyValueProp {
+                                        key: PropName::Ident(Ident { sym, .. }),
+                                        ..
+                                      }) => {
+                                        let sym_ref = sym.as_ref();
+                                        if sym_ref.eq("r") || sym_ref.eq("d") {
+                                          webpack_require_props = webpack_require_props + 1;
+                                        }
+                                      }
+                                      _ => {}
+                                    },
+                                    _ => {}
+                                  }
+                                }
+
+                                if webpack_require_props == 2 {
+                                  stmts.iter().skip(first_stmt_index + 1).find(|stmt| match stmt {
                                     Stmt::Expr(ExprStmt { expr, .. }) => {
                                       if let Expr::Seq(SeqExpr { exprs, .. }) = &**expr {
                                         let mut found_webpack_require_exprs = false;
@@ -1253,7 +1365,8 @@ impl CJSLexer {
                             ..
                           },
                         ..
-                      }))) = stmts.get(2)
+                      }))) = stmts.get(first_stmt_index + 1)
+                      // }))) = stmts.get(2)
                       {
                         let mut webpack_require_props = 0;
                         for stmt in stmts {
@@ -1327,9 +1440,10 @@ impl CJSLexer {
                               if let Some(expr) = exprs.get(0) {
                                 if let Expr::Call(call) = &**expr {
                                   if let Some(stmts) = is_iife_call(call) {
-                                    match stmts.get(0) {
-                                      Some(Stmt::Expr(ExprStmt { expr, .. })) => {
+                                    stmts.iter().find(|stmt| match stmt {
+                                      Stmt::Expr(ExprStmt { expr, .. }) => {
                                         if let Expr::Seq(SeqExpr { exprs, .. }) = &**expr {
+                                          let mut found_webpack_require_exprs = false;
                                           for expr in exprs {
                                             if let Expr::Call(call) = &**expr {
                                               if let Some(Expr::Member(MemberExpr { obj, prop, .. })) =
@@ -1341,12 +1455,13 @@ impl CJSLexer {
                                                 ) = (&**obj, &*prop)
                                                 {
                                                   if !obj_sym.as_ref().eq(webpack_require_sym) {
-                                                    return;
+                                                    return false;
                                                   }
                                                   let prop_sym_ref = prop_sym.as_ref();
 
                                                   if prop_sym_ref.eq("r") {
                                                     self.exports.insert("__esModule".to_string());
+                                                    found_webpack_require_exprs = true;
                                                   }
                                                   if prop_sym_ref.eq("d") {
                                                     let CallExpr { args, .. } = &*call;
@@ -1360,6 +1475,7 @@ impl CJSLexer {
                                                             }) = &**prop
                                                             {
                                                               self.exports.insert(sym.as_ref().to_string());
+                                                              found_webpack_require_exprs = true;
                                                             }
                                                           }
                                                         }
@@ -1370,10 +1486,12 @@ impl CJSLexer {
                                               }
                                             }
                                           }
+                                          return found_webpack_require_exprs;
                                         }
+                                        return false;
                                       }
-                                      _ => {}
-                                    }
+                                      _ => false,
+                                    });
                                   }
                                 }
                               }

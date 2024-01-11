@@ -1144,6 +1144,136 @@ mod tests {
   }
 
   #[test]
+  fn parse_cjs_exports_case_21_10() {
+    // Webpack 5 minified UMD output from https://github.com/ttag-org/ttag/blob/622c16c8e723a15916f4c5e0fcabefe3d3ad5f84/src/index.ts#L1
+    // with irrelevant parts manually removed.
+    // This ended up being subtly different from parse_cjs_exports_case_21_9, found out when I tried testing with the full original output.
+    // Formatted with Deno to avoid ast changes from prettier.
+    let source = r#"
+    !function (n, t) {
+      if ("object" == typeof exports && "object" == typeof module) {
+        module.exports = t();
+      } else if ("function" == typeof define && define.amd) define([], t);
+      else {
+        var e = t();
+        for (var r in e) ("object" == typeof exports ? exports : n)[r] = e[r];
+      }
+    }(this, () =>
+      (() => {
+        var n = {
+            44: (n, t) => {
+            },
+            429: (n, t, e) => {
+            },
+          },
+          t = {};
+        function e(r) {
+          var o = t[r];
+          if (void 0 !== o) return o.exports;
+          var f = t[r] = { exports: {} };
+          return n[r](f, f.exports, e), f.exports;
+        }
+        e.d = (n, t) => {
+          for (var r in t) {
+            e.o(t, r) && !e.o(n, r) &&
+              Object.defineProperty(n, r, { enumerable: !0, get: t[r] });
+          }
+        },
+          e.o = (n, t) => Object.prototype.hasOwnProperty.call(n, t),
+          e.r = (n) => {
+            "undefined" != typeof Symbol && Symbol.toStringTag &&
+            Object.defineProperty(n, Symbol.toStringTag, { value: "Module" }),
+              Object.defineProperty(n, "__esModule", { value: !0 });
+          };
+        var r = {};
+        return (() => {
+          "use strict";
+          function n(n, t) {
+            var e = Object.keys(n);
+            if (Object.getOwnPropertySymbols) {
+              var r = Object.getOwnPropertySymbols(n);
+              t && (r = r.filter(function (t) {
+                return Object.getOwnPropertyDescriptor(n, t).enumerable;
+              })), e.push.apply(e, r);
+            }
+            return e;
+          }
+          function t(t) {
+            for (var e = 1; e < arguments.length; e++) {
+              var r = null != arguments[e] ? arguments[e] : {};
+              e % 2
+                ? n(Object(r), !0).forEach(function (n) {
+                  o(t, n, r[n]);
+                })
+                : Object.getOwnPropertyDescriptors
+                ? Object.defineProperties(t, Object.getOwnPropertyDescriptors(r))
+                : n(Object(r)).forEach(function (n) {
+                  Object.defineProperty(
+                    t,
+                    n,
+                    Object.getOwnPropertyDescriptor(r, n),
+                  );
+                });
+            }
+            return t;
+          }
+          function o(n, t, e) {
+            return (t = function (n) {
+                var t = function (n, t) {
+                  if ("object" != typeof n || null === n) return n;
+                  var e = n[Symbol.toPrimitive];
+                  if (void 0 !== e) {
+                    var r = e.call(n, "string");
+                    if ("object" != typeof r) return r;
+                    throw new TypeError(
+                      "@@toPrimitive must return a primitive value.",
+                    );
+                  }
+                  return String(n);
+                }(n);
+                return "symbol" == typeof t ? t : String(t);
+              }(t)) in n
+              ? Object.defineProperty(n, t, {
+                value: e,
+                enumerable: !0,
+                configurable: !0,
+                writable: !0,
+              })
+              : n[t] = e,
+              n;
+          }
+          e.r(r),
+            e.d(r, {
+              Context: () => F,
+              TTag: () => H,
+              _: () => B,
+              addLocale: () => R,
+              c: () => q,
+              gettext: () => U,
+              jt: () => G,
+              msgid: () => N,
+              ngettext: () => J,
+              setDedent: () => K,
+              setDefaultLang: () => Q,
+              t: () => V,
+              useLocale: () => X,
+              useLocales: () => Y,
+            });
+        })(),
+          r;
+      })());
+    "#;
+    let swc = SWC::parse("index.cjs", source).expect("could not parse module");
+    let (exports, _) = swc
+      .parse_cjs_exports("production", true)
+      .expect("could not parse exports");
+    assert_eq!(
+      exports.join(","),
+      "__esModule,Context,TTag,_,addLocale,c,gettext,jt,msgid,ngettext,setDedent,setDefaultLang,t,useLocale,useLocales"
+    );
+  }
+
+  #[test]
   fn parse_cjs_exports_case_22() {
     let source = r#"
       var url = module.exports = {};
