@@ -1031,6 +1031,119 @@ mod tests {
   }
 
   #[test]
+  fn parse_cjs_exports_case_21_9() {
+    // Webpack 5 minified UMD output after replacing https://github.com/ttag-org/ttag/blob/622c16c8e723a15916f4c5e0fcabefe3d3ad5f84/src/index.ts#L1
+    // with:
+    // ```
+    // function _objectSpread(target) { for (var i = 1; i < arguments.length; i++) { var source = null != arguments[i] ? arguments[i] : {}; i % 2 ? ownKeys(Object(source), !0).forEach(function (key) { _defineProperty(target, key, source[key]); }) : Object.getOwnPropertyDescriptors ? Object.defineProperties(target, Object.getOwnPropertyDescriptors(source)) : ownKeys(Object(source)).forEach(function (key) { Object.defineProperty(target, key, Object.getOwnPropertyDescriptor(source, key)); }); } return target; }
+    // function _defineProperty(obj, key, value) { key = _toPropertyKey(key); if (key in obj) { Object.defineProperty(obj, key, { value: value, enumerable: true, configurable: true, writable: true }); } else { obj[key] = value; } return obj; }
+    // function _toPropertyKey(arg) { var key = _toPrimitive(arg, "string"); return typeof key === "symbol" ? key : String(key); }
+    // function _toPrimitive(input, hint) { if (typeof input !== "object" || input === null) return input; var prim = input[Symbol.toPrimitive]; if (prim !== undefined) { var res = prim.call(input, hint || "default"); if (typeof res !== "object") return res; throw new TypeError("@@toPrimitive must return a primitive value."); } return (hint === "string" ? String : Number)(input); }
+    // export default createDedent({});
+    // function createDedent() {
+    //   return createDedent(_objectSpread(_objectSpread({})));
+    // }
+
+    // export const named1 = 'named1';
+    // ```
+    // Formatted with Deno to avoid ast changes from prettier
+    let source = r#"
+    !function (e, t) {
+      if ("object" == typeof exports && "object" == typeof module) {
+        module.exports = t();
+      } else if ("function" == typeof define && define.amd) define([], t);
+      else {
+        var r = t();
+        for (var o in r) ("object" == typeof exports ? exports : e)[o] = r[o];
+      }
+    }(this, () =>
+      (() => {
+        "use strict";
+        var e = {
+            d: (t, r) => {
+              for (var o in r) {
+                e.o(r, o) && !e.o(t, o) &&
+                  Object.defineProperty(t, o, { enumerable: !0, get: r[o] });
+              }
+            },
+            o: (e, t) => Object.prototype.hasOwnProperty.call(e, t),
+            r: (e) => {
+              "undefined" != typeof Symbol && Symbol.toStringTag &&
+              Object.defineProperty(e, Symbol.toStringTag, { value: "Module" }),
+                Object.defineProperty(e, "__esModule", { value: !0 });
+            },
+          },
+          t = {};
+        function r(e) {
+          return r =
+            "function" == typeof Symbol && "symbol" == typeof Symbol.iterator
+              ? function (e) {
+                return typeof e;
+              }
+              : function (e) {
+                return e && "function" == typeof Symbol &&
+                    e.constructor === Symbol && e !== Symbol.prototype
+                  ? "symbol"
+                  : typeof e;
+              },
+            r(e);
+        }
+        function o(e) {
+          for (var t = 1; t < arguments.length; t++) {
+            var r = null != arguments[t] ? arguments[t] : {};
+            t % 2
+              ? ownKeys(Object(r), !0).forEach(function (t) {
+                n(e, t, r[t]);
+              })
+              : Object.getOwnPropertyDescriptors
+              ? Object.defineProperties(e, Object.getOwnPropertyDescriptors(r))
+              : ownKeys(Object(r)).forEach(function (t) {
+                Object.defineProperty(e, t, Object.getOwnPropertyDescriptor(r, t));
+              });
+          }
+          return e;
+        }
+        function n(e, t, o) {
+          return (t = function (e) {
+              var t = function (e, t) {
+                if ("object" !== r(e) || null === e) return e;
+                var o = e[Symbol.toPrimitive];
+                if (void 0 !== o) {
+                  var n = o.call(e, "string");
+                  if ("object" !== r(n)) return n;
+                  throw new TypeError(
+                    "@@toPrimitive must return a primitive value.",
+                  );
+                }
+                return String(e);
+              }(e);
+              return "symbol" === r(t) ? t : String(t);
+            }(t)) in e
+            ? Object.defineProperty(e, t, {
+              value: o,
+              enumerable: !0,
+              configurable: !0,
+              writable: !0,
+            })
+            : e[t] = o,
+            e;
+        }
+        e.r(t), e.d(t, { default: () => i, named1: () => f });
+        const i = function e() {
+          return e(o(o({})));
+        }();
+        var f = "named1";
+        return t;
+      })());    
+    "#;
+    let swc = SWC::parse("index.cjs", source).expect("could not parse module");
+    let (exports, _) = swc
+      .parse_cjs_exports("production", true)
+      .expect("could not parse exports");
+    assert_eq!(exports.join(","), "__esModule,default,named1");
+  }
+
+  #[test]
   fn parse_cjs_exports_case_22() {
     let source = r#"
       var url = module.exports = {};

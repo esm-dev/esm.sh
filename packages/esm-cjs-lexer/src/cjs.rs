@@ -1186,9 +1186,10 @@ impl CJSLexer {
                                 }
 
                                 if webpack_require_props == 2 {
-                                  match stmts.get(2) {
-                                    Some(Stmt::Expr(ExprStmt { expr, .. })) => {
+                                  stmts.iter().skip(2).find(|stmt| match stmt {
+                                    Stmt::Expr(ExprStmt { expr, .. }) => {
                                       if let Expr::Seq(SeqExpr { exprs, .. }) = &**expr {
+                                        let mut found_webpack_require_exprs = false;
                                         for expr in exprs {
                                           if let Expr::Call(call) = &**expr {
                                             if let Some(Expr::Member(MemberExpr { obj, prop, .. })) =
@@ -1200,12 +1201,13 @@ impl CJSLexer {
                                               ) = (&**obj, &*prop)
                                               {
                                                 if !obj_sym.as_ref().eq(webpack_require_sym) {
-                                                  return;
+                                                  return false;
                                                 }
                                                 let prop_sym_ref = prop_sym.as_ref();
 
                                                 if prop_sym_ref.eq("r") {
                                                   self.exports.insert("__esModule".to_string());
+                                                  found_webpack_require_exprs = true;
                                                 }
                                                 if prop_sym_ref.eq("d") {
                                                   let CallExpr { args, .. } = &*call;
@@ -1219,6 +1221,7 @@ impl CJSLexer {
                                                           }) = &**prop
                                                           {
                                                             self.exports.insert(sym.as_ref().to_string());
+                                                            found_webpack_require_exprs = true;
                                                           }
                                                         }
                                                       }
@@ -1229,10 +1232,12 @@ impl CJSLexer {
                                             }
                                           }
                                         }
+                                        return found_webpack_require_exprs;
                                       }
+                                      return false;
                                     }
-                                    _ => {}
-                                  }
+                                    _ => false,
+                                  });
                                 }
                               }
                             }
