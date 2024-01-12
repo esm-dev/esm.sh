@@ -9,26 +9,32 @@
   "bin": "./bin/cli.mjs",
   "exports": {
     ".": {
+      "deno": "./deno.mjs",
+      "node": "./node.mjs",
+      "workerd": "./workerd.mjs",
       "import": "./src/index.mjs",
       "types": "./types/index.d.ts"
     },
-    "./compat": {
-      "deno": "./compat/deno.mjs",
-      "default": "./compat/default.mjs",
-      "types": "./types/compat.d.ts"
-    },
     "./package.json": "./package.json"
   },
-  "sideEffects": false,
+  "sideEffects": [
+    "./deno.mjs",
+    "./index.mjs"
+  ],
   "scripts": {
     "start": "./bin/cli.mjs"
+  },
+  "dependencies": {
+    "esm-compiler": "^0.4.1"
   },
   "files": [
     "bin/",
     "src/",
     "templates/",
     "types/",
-    "vendor/"
+    "vendor/",
+    "deno.mjs",
+    "index.mjs"
   ],
   "engines": {
     "node": ">=18.14.1"

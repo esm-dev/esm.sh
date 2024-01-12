@@ -1,0 +1,16 @@
+lockfileVersion: '6.0'
+
+settings:
+  autoInstallPeers: true
+  excludeLinksFromLockfile: false
+
+dependencies:
+  esm-compiler:
+    specifier: ^0.4.1
+    version: 0.4.1
+
+packages:
+
+  /esm-compiler@0.4.1:
+    resolution: {integrity: sha512-HBR5AfVW7rneeR2dy6VxGKhoIRN/DRl6rXegYtEh6ysB5Z2IrFtQwgIBVwK8Z22Fwlf2mMyQZ6LSdn2LetAsSg==}
+    dev: false

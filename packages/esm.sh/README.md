@@ -41,9 +41,7 @@ For Node.js runtime, you need `@hono/server` to listen to the http requests.
 ```js
 import { serve } from "@hono/server";
 import { serveHot } from "esm.sh";
-import injectCompatLayer from "esm.sh/compat";
 
-await injectCompatLayer();
 serve({ port: 3000, fetch: serveHot() });
 ```
 

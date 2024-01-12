@@ -35,6 +35,10 @@ export const serveHot = (options) => {
     const url = new URL(req.url);
     const pathname = decodeURIComponent(url.pathname);
 
+    if (cfEnv && !req.cf) {
+      cfEnv = undefined;
+    }
+
     switch (pathname) {
       /** Proxy content map requests */
       case "/@hot-content": {
@@ -351,12 +355,18 @@ export const serveHot = (options) => {
           "transfer-encoding": "chunked",
           "content-type": file.contentType,
           "content-length": file.size.toString(),
+          "cache-control": "public, max-age=0, must-revalidate",
         });
+        // todo: set cache-control to `public, max-age=31536000, immutable` by checking hash in the filename
         if (file.lastModified) {
-          headers.set(
-            "last-modified",
-            new Date(file.lastModified).toUTCString(),
-          );
+          const etag = 'W/"' + file.lastModified.toString(36) + "-" +
+            file.size.toString(36) + '"';
+          headers.set("etag", etag);
+          const ifNoneMatch = req.headers.get("if-none-match");
+          if (ifNoneMatch && ifNoneMatch === etag) {
+            file.close();
+            return new Response(null, { status: 304, headers });
+          }
         }
         if (req.method === "HEAD") {
           file.close();
@@ -385,7 +395,7 @@ export const serveHot = (options) => {
           { headers },
         );
         if (filepath.endsWith(".html")) {
-          return rewriteHtml(res, cfEnv, url, filepath);
+          return serveHtml(res, cfEnv, url, filepath);
         }
         return res;
       }
@@ -395,10 +405,16 @@ export const serveHot = (options) => {
   /**
    * rewrite html
    * @param {Response} res
-   * @returns {Response}
+   * @returns {Promise<Response>}
    */
-  function rewriteHtml(req, cfEnv, url, filepath) {
+  async function serveHtml(res, cfEnv, url, filepath) {
     const rewriter = new HTMLRewriter();
+
+    // - wait for HTMLRewriter wasm module to be initialized
+    if ("waiting" in HTMLRewriter) {
+      await HTMLRewriter.waiting;
+      delete HTMLRewriter.waiting;
+    }
 
     // - inject fs-based router index
     rewriter.on("meta[name=fs-router]", {
@@ -483,7 +499,7 @@ export const serveHot = (options) => {
                 const expr = el.getAttribute("with");
                 let value = data;
                 if (expr && !isNullish(data)) {
-                  if (req.cf) {
+                  if (cfEnv) {
                     value = lookupValue(data, expr);
                   } else {
                     value = new Function("return this." + expr).call(data);
@@ -566,7 +582,7 @@ export const serveHot = (options) => {
     }
 
     // - transform html
-    return rewriter.transform(req);
+    return rewriter.transform(res);
   }
 
   return fetcher;

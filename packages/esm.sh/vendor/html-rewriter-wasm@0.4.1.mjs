@@ -5,12 +5,8 @@
  */
 
 import { homedir } from "node:os";
-import {
-  createWriteStream,
-  existsSync,
-  mkdirSync,
-  readFileSync,
-} from "node:fs";
+import { createWriteStream } from "node:fs";
+import { mkdir, readFile } from "node:fs/promises";
 import { Writable } from "node:stream";
 import { dirname, join } from "node:path";
 import { awaitPromise, setWasmExports, wrap } from "./wasm-asyncify.mjs";
@@ -1154,19 +1150,21 @@ export default async function init() {
   const cachePath = join(homedir(), ".cache", dlUrl.slice("https://".length));
 
   let wasmInstance;
-  if (existsSync(cachePath)) {
-    const bytes = readFileSync(cachePath);
+  try {
+    const bytes = await readFile(cachePath);
     const wasmModule = new WebAssembly.Module(bytes);
     wasmInstance = new WebAssembly.Instance(wasmModule, imports);
-  } else {
+  } catch (err) {
+    if (err.code !== "ENOENT") throw err;
+  }
+
+  if (!wasmInstance) {
     console.log("Installing html_rewriter_bg.wasm...");
     const res = await fetch(dlUrl);
     if (!res.ok) throw new Error(`unexpected response ${res.statusText}`);
     const [body, bodyCopy] = res.body.tee();
     const cachDir = dirname(cachePath);
-    if (!existsSync(cachDir)) {
-      mkdirSync(cachDir, { recursive: true });
-    }
+    await mkdir(cachDir, { recursive: true });
     const writable = createWriteStream(cachePath);
     await Promise.all([
       bodyCopy.pipeTo(Writable.toWeb(writable)),

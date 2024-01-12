@@ -15,12 +15,21 @@ const fs = {
     try {
       const file = await open(path, "r");
       const stat = await file.stat();
+      let readable;
       return {
         size: stat.size,
         lastModified: stat.mtime.getTime(),
         contentType: getMimeType(path),
-        body: file.readableWebStream(),
-        close: () => file.close(),
+        get body() {
+          return readable ?? (readable = file.readableWebStream());
+        },
+        close: () => {
+          if (!readable || readable.locked) {
+            file.close();
+          } else {
+            readable.cancel();
+          }
+        }
       };
     } catch (error) {
       if (error.code === "ENOENT") {

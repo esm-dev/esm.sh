@@ -435,14 +435,7 @@ class Hot implements HotCore {
         return res;
       }
       const resHeaders = res.headers;
-      let etag = resHeaders.get("etag");
-      if (!etag) {
-        const size = resHeaders.get("content-length");
-        const modtime = resHeaders.get("last-modified");
-        if (size && modtime) {
-          etag = etag = "W/" + size + "-" + modtime;
-        }
-      }
+      const etag = resHeaders.get("etag");
       let buffer: string | null = null;
       const source = async () => {
         if (buffer === null) {
@@ -695,12 +688,6 @@ function now() {
 /** add timestamp to the given url. */
 function addTimeStamp(url: URL) {
   url.searchParams.set("t", now().toString(36));
-}
-
-/** get the extension name of the given path. */
-function getExtname(path: string): string {
-  const i = path.lastIndexOf(".");
-  return i >= 0 ? path.slice(i + 1) : "";
 }
 
 /** wait for the given IDBRequest. */

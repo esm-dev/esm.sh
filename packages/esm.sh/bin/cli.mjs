@@ -3,8 +3,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { serve } from "../vendor/hono-server@1.3.3.mjs";
-import { serveHot } from "../src/index.mjs";
-import injectCompatLayer from "../compat/default.mjs"
+import { serveHot } from "../node.mjs";
 
 // - Show help message
 if (process.argv.includes("--help") || process.argv.includes("-h")) {
@@ -77,9 +76,6 @@ if (existsSync(dotEnvPath)) {
   Object.assign(process.env, env);
   console.log("Project '.env' loaded");
 }
-
-// - Inject compatibility layer
-await injectCompatLayer();
 
 // - Start server
 serve(
