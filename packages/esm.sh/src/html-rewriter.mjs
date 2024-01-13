@@ -1,6 +1,6 @@
 import init, { HTMLRewriter } from "../vendor/html-rewriter-wasm@0.4.1.mjs";
 
-// Add HTMLRewriter compatibility
+// HTMLRewriter compatibility class
 // https://developers.cloudflare.com/workers/runtime-apis/html-rewriter
 globalThis.HTMLRewriter = class {
   static waiting = init();

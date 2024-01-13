@@ -11,7 +11,6 @@
     ".": {
       "deno": "./deno.mjs",
       "node": "./node.mjs",
-      "workerd": "./workerd.mjs",
       "import": "./src/index.mjs",
       "types": "./types/index.d.ts"
     },
@@ -23,9 +22,6 @@
   ],
   "scripts": {
     "start": "./bin/cli.mjs"
-  },
-  "dependencies": {
-    "esm-compiler": "^0.4.1"
   },
   "files": [
     "bin/",

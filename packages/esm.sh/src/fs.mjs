@@ -43,11 +43,11 @@ const fs = {
    * find files in a directory.
    * @type {(dir: string) => Promise<string[]>}
    */
-  ls: async (dir, _parent) => {
+  ls: async (dir, _root) => {
     const files = [];
     const list = await readdir(dir, { withFileTypes: true });
     for (const entry of list) {
-      const name = [_parent, entry.name].filter(Boolean).join("/");
+      const name = [_root, entry.name].filter(Boolean).join("/");
       if (entry.isDirectory()) {
         files.push(...(await fs.ls(dir + "/" + entry.name, name)));
       } else if (nameFilter(name)) {

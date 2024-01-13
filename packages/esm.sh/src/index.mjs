@@ -405,6 +405,9 @@ export const serveHot = (options) => {
   /**
    * rewrite html
    * @param {Response} res
+   * @param {Record<string, any>} cfEnv
+   * @param {URL} url
+   * @param {string} filepath
    * @returns {Promise<Response>}
    */
   async function serveHtml(res, cfEnv, url, filepath) {
