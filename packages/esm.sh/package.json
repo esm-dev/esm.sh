@@ -17,6 +17,7 @@
     "./package.json": "./package.json"
   },
   "sideEffects": [
+    "./src/html-rewriter.mjs",
     "./deno.mjs",
     "./index.mjs"
   ],

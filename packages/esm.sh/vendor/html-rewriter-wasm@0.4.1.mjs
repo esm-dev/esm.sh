@@ -4,12 +4,8 @@
  * @license BSD 3-Clause
  */
 
-import { homedir } from "node:os";
-import { createWriteStream } from "node:fs";
-import { mkdir, readFile } from "node:fs/promises";
-import { Writable } from "node:stream";
-import { dirname, join } from "node:path";
 import { awaitPromise, setWasmExports, wrap } from "./wasm-asyncify.mjs";
+import { loadWasm } from "./wasm-loader.mjs";
 
 const wbg = {};
 const imports = { __wbindgen_placeholder__: wbg };
@@ -1143,40 +1139,9 @@ wbg.__wbindgen_memory = function () {
 };
 
 export default async function init() {
-  if (wasm) return;
-
-  const dlUrl =
-    "https://esm.sh/html-rewriter-wasm@0.4.1/dist/html_rewriter_bg.wasm";
-  const cachePath = join(homedir(), ".cache", dlUrl.slice("https://".length));
-
-  let wasmInstance;
-  try {
-    const bytes = await readFile(cachePath);
-    const wasmModule = new WebAssembly.Module(bytes);
-    wasmInstance = new WebAssembly.Instance(wasmModule, imports);
-  } catch (err) {
-    if (err.code !== "ENOENT") throw err;
+  if (!wasm) {
+    const wasmInstance = await loadWasm(wasmUrl, imports);
+    wasm = wasmInstance.exports;
+    setWasmExports(wasm);
   }
-
-  if (!wasmInstance) {
-    console.log("Installing html_rewriter_bg.wasm...");
-    const res = await fetch(dlUrl);
-    if (!res.ok) throw new Error(`unexpected response ${res.statusText}`);
-    const [body, bodyCopy] = res.body.tee();
-    const cachDir = dirname(cachePath);
-    await mkdir(cachDir, { recursive: true });
-    const writable = createWriteStream(cachePath);
-    await Promise.all([
-      bodyCopy.pipeTo(Writable.toWeb(writable)),
-      WebAssembly.instantiateStreaming(
-        new Response(body, { headers: res.headers }),
-        imports,
-      ).then((res) => {
-        wasmInstance = res.instance;
-      }),
-    ]);
-  }
-
-  wasm = wasmInstance.exports;
-  setWasmExports(wasm);
 }
