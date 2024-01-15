@@ -1274,6 +1274,91 @@ mod tests {
   }
 
   #[test]
+  fn parse_cjs_exports_case_21_11() {
+    // Webpack 5 minified UMD output from https://github.com/OfficeDev/microsoft-teams-library-js/blob/b5ee6475a7ed333cdb27f25fc51e5bb1ebd0da94/packages/teams-js/src/index.ts#L1
+    // with irrelevant parts manually removed.
+    // with umdNamedDefine: true: https://webpack.js.org/configuration/output/#outputlibraryumdnameddefine
+    // Formatted with Deno to avoid ast changes from prettier.
+    let source = r#"
+    !function (e, t) {
+      "object" == typeof exports && "object" == typeof module
+        ? module.exports = t()
+        : "function" == typeof define && define.amd
+        ? define("microsoftTeams", [], t)
+        : "object" == typeof exports
+        ? exports.microsoftTeams = t()
+        : e.microsoftTeams = t();
+    }("undefined" != typeof self ? self : this, () =>
+      (() => {
+        var e = {
+            302: (e, t, n) => {
+            },
+            65: (e, t, n) => {},
+            247: (e) => {},
+          },
+          t = {};
+        function n(o) {
+          var i = t[o];
+          if (void 0 !== i) return i.exports;
+          var r = t[o] = { exports: {} };
+          return e[o](r, r.exports, n), r.exports;
+        }
+        (() => {
+          var e,
+            t = Object.getPrototypeOf
+              ? (e) => Object.getPrototypeOf(e)
+              : (e) => e.__proto__;
+          n.t = function (o, i) {
+            if (1 & i && (o = this(o)), 8 & i) return o;
+            if ("object" == typeof o && o) {
+              if (4 & i && o.__esModule) return o;
+              if (16 & i && "function" == typeof o.then) return o;
+            }
+            var r = Object.create(null);
+            n.r(r);
+            var a = {};
+            e = e || [null, t({}), t([]), t(t)];
+            for (
+              var s = 2 & i && o; "object" == typeof s && !~e.indexOf(s); s = t(s)
+            ) Object.getOwnPropertyNames(s).forEach((e) => a[e] = () => o[e]);
+            return a.default = () => o, n.d(r, a), r;
+          };
+        })(),
+          (() => {
+            n.d = (e, t) => {
+              for (var o in t) {n.o(t, o) && !n.o(e, o) &&
+                  Object.defineProperty(e, o, { enumerable: !0, get: t[o] });}
+            };
+          })(),
+          (() => {
+            n.o = (e, t) => Object.prototype.hasOwnProperty.call(e, t);
+          })(),
+          (() => {
+            n.r = (e) => {
+              "undefined" != typeof Symbol && Symbol.toStringTag &&
+              Object.defineProperty(e, Symbol.toStringTag, { value: "Module" }),
+                Object.defineProperty(e, "__esModule", { value: !0 });
+            };
+          })();
+        var o = {};
+        return (() => {
+          "use strict";
+          n.r(o),
+            n.d(o, {
+              app: () => pt,
+            });
+        })(),
+          o;
+      })());    
+    "#;
+    let swc = SWC::parse("index.cjs", source).expect("could not parse module");
+    let (exports, _) = swc
+      .parse_cjs_exports("production", true)
+      .expect("could not parse exports");
+    assert_eq!(exports.join(","), "__esModule,app");
+  }
+
+  #[test]
   fn parse_cjs_exports_case_22() {
     let source = r#"
       var url = module.exports = {};

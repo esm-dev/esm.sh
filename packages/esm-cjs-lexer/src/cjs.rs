@@ -602,6 +602,107 @@ impl CJSLexer {
     }
   }
 
+  fn get_webpack_require_props_from_props(&mut self, props: &Vec<PropOrSpread>) -> i32 {
+    props
+      .iter()
+      .map(|prop| match prop {
+        PropOrSpread::Prop(prop) => match &**prop {
+          Prop::KeyValue(KeyValueProp {
+            key: PropName::Ident(Ident { sym, .. }),
+            ..
+          }) => {
+            let sym_ref = sym.as_ref();
+            if sym_ref.eq("r") || sym_ref.eq("d") {
+              return 1;
+            }
+            return 0;
+          }
+          _ => 0,
+        },
+        _ => 0,
+      })
+      .sum()
+  }
+
+  fn get_webpack_require_props_from_stmts(&mut self, stmts: &Vec<Stmt>, webpack_require_sym: &str) -> i32 {
+    return stmts
+      .iter()
+      .map(|stmt| {
+        if let Stmt::Expr(ExprStmt { expr, .. }) = stmt {
+          match &**expr {
+            Expr::Seq(SeqExpr { exprs, .. }) => {
+              return exprs
+                .iter()
+                .map(|expr| match &**expr {
+                  Expr::Assign(AssignExpr {
+                    op: AssignOp::Assign,
+                    left,
+                    ..
+                  }) => {
+                    if let PatOrExpr::Pat(pat) = left {
+                      if let Pat::Expr(expr) = &**pat {
+                        if let Expr::Member(MemberExpr {
+                          obj,
+                          prop: MemberProp::Ident(Ident { sym: prop_sym, .. }),
+                          ..
+                        }) = &**expr
+                        {
+                          if let Expr::Ident(Ident { sym, .. }) = &**obj {
+                            if sym.as_ref().eq(<str as AsRef<str>>::as_ref(webpack_require_sym)) {
+                              let prop_sym_ref = prop_sym.as_ref();
+                              if prop_sym_ref.eq("r") || prop_sym_ref.eq("d") {
+                                return 1;
+                              }
+                            }
+                          }
+                        }
+                      }
+                    }
+                    return 0;
+                  }
+                  Expr::Call(call) => {
+                    if let Some(body) = is_iife_call(call) {
+                      return self.get_webpack_require_props_from_stmts(&body, webpack_require_sym);
+                    }
+                    return 0;
+                  }
+                  _ => 0,
+                })
+                .sum();
+            }
+            Expr::Assign(AssignExpr {
+              op: AssignOp::Assign,
+              left,
+              ..
+            }) => {
+              if let PatOrExpr::Pat(pat) = left {
+                if let Pat::Expr(expr) = &**pat {
+                  if let Expr::Member(MemberExpr {
+                    obj,
+                    prop: MemberProp::Ident(Ident { sym: prop_sym, .. }),
+                    ..
+                  }) = &**expr
+                  {
+                    if let Expr::Ident(Ident { sym, .. }) = &**obj {
+                      if sym.as_ref().eq(<str as AsRef<str>>::as_ref(webpack_require_sym)) {
+                        let prop_sym_ref = prop_sym.as_ref();
+                        if prop_sym_ref.eq("r") || prop_sym_ref.eq("d") {
+                          return 1;
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+              return 0;
+            }
+            _ => 0,
+          };
+        }
+        return 0;
+      })
+      .sum();
+  }
   fn is_umd_iife_call(&mut self, call: &CallExpr) -> Option<Vec<Stmt>> {
     if call.args.len() == 2 {
       let mut arg1 = call.args.get(1).unwrap().expr.as_ref();
@@ -1180,24 +1281,7 @@ impl CJSLexer {
                           }) => {
                             if let Some(init) = init {
                               if let Expr::Object(ObjectLit { props, .. }) = &**init {
-                                let mut webpack_require_props = 0;
-                                for prop in props {
-                                  match prop {
-                                    PropOrSpread::Prop(prop) => match &**prop {
-                                      Prop::KeyValue(KeyValueProp {
-                                        key: PropName::Ident(Ident { sym, .. }),
-                                        ..
-                                      }) => {
-                                        let sym_ref = sym.as_ref();
-                                        if sym_ref.eq("r") || sym_ref.eq("d") {
-                                          webpack_require_props = webpack_require_props + 1;
-                                        }
-                                      }
-                                      _ => {}
-                                    },
-                                    _ => {}
-                                  }
-                                }
+                                let webpack_require_props = self.get_webpack_require_props_from_props(props);
 
                                 if webpack_require_props == 2 {
                                   stmts.iter().skip(first_stmt_index + 1).take(8).find(|stmt| match stmt {
@@ -1278,24 +1362,7 @@ impl CJSLexer {
                           }) => {
                             if let Some(init) = init {
                               if let Expr::Object(ObjectLit { props, .. }) = &**init {
-                                let mut webpack_require_props = 0;
-                                for prop in props {
-                                  match prop {
-                                    PropOrSpread::Prop(prop) => match &**prop {
-                                      Prop::KeyValue(KeyValueProp {
-                                        key: PropName::Ident(Ident { sym, .. }),
-                                        ..
-                                      }) => {
-                                        let sym_ref = sym.as_ref();
-                                        if sym_ref.eq("r") || sym_ref.eq("d") {
-                                          webpack_require_props = webpack_require_props + 1;
-                                        }
-                                      }
-                                      _ => {}
-                                    },
-                                    _ => {}
-                                  }
-                                }
+                                let webpack_require_props = self.get_webpack_require_props_from_props(props);
 
                                 if webpack_require_props == 2 {
                                   stmts.iter().skip(first_stmt_index + 1).take(8).find(|stmt| match stmt {
@@ -1368,72 +1435,8 @@ impl CJSLexer {
                       }))) = stmts.get(first_stmt_index + 1)
                       // }))) = stmts.get(2)
                       {
-                        let mut webpack_require_props = 0;
-                        for stmt in stmts {
-                          if let Stmt::Expr(ExprStmt { expr, .. }) = stmt {
-                            match &**expr {
-                              Expr::Seq(SeqExpr { exprs, .. }) => {
-                                for expr in exprs {
-                                  match &**expr {
-                                    Expr::Assign(AssignExpr {
-                                      op: AssignOp::Assign,
-                                      left,
-                                      ..
-                                    }) => {
-                                      if let PatOrExpr::Pat(pat) = left {
-                                        if let Pat::Expr(expr) = &**pat {
-                                          if let Expr::Member(MemberExpr {
-                                            obj,
-                                            prop: MemberProp::Ident(Ident { sym: prop_sym, .. }),
-                                            ..
-                                          }) = &**expr
-                                          {
-                                            if let Expr::Ident(Ident { sym, .. }) = &**obj {
-                                              if sym.as_ref().eq(webpack_require_sym.as_ref()) {
-                                                let prop_sym_ref = prop_sym.as_ref();
-                                                if prop_sym_ref.eq("r") || prop_sym_ref.eq("d") {
-                                                  webpack_require_props = webpack_require_props + 1;
-                                                }
-                                              }
-                                            }
-                                          }
-                                        }
-                                      }
-                                    }
-                                    _ => {}
-                                  }
-                                }
-                              }
-                              Expr::Assign(AssignExpr {
-                                op: AssignOp::Assign,
-                                left,
-                                ..
-                              }) => {
-                                if let PatOrExpr::Pat(pat) = left {
-                                  if let Pat::Expr(expr) = &**pat {
-                                    if let Expr::Member(MemberExpr {
-                                      obj,
-                                      prop: MemberProp::Ident(Ident { sym: prop_sym, .. }),
-                                      ..
-                                    }) = &**expr
-                                    {
-                                      if let Expr::Ident(Ident { sym, .. }) = &**obj {
-                                        if sym.as_ref().eq(webpack_require_sym.as_ref()) {
-                                          let prop_sym_ref = prop_sym.as_ref();
-                                          if prop_sym_ref.eq("r") || prop_sym_ref.eq("d") {
-                                            webpack_require_props = webpack_require_props + 1;
-                                          }
-                                        }
-                                      }
-                                    }
-                                  }
-                                }
-                              }
-                              _ => {}
-                            }
-                          }
-                        }
-
+                        let webpack_require_props =
+                          self.get_webpack_require_props_from_stmts(stmts, webpack_require_sym);
                         if webpack_require_props == 2 {
                           if let Some(Stmt::Return(ReturnStmt { arg: Some(arg), .. })) = stmts.get(stmts.len() - 1) {
                             if let Expr::Seq(SeqExpr { exprs, .. }) = &**arg {
