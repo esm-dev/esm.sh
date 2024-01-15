@@ -113,12 +113,11 @@ export function globToRegExp(glob) {
     return reg;
   }
   const r = glob
-    .replace(/^\.*\//g, "")
-    .replace(/[-+?.^$\[\]\(\)]/g, "\\$&")
-    .replace(/\{/g, "(").replace(/\}/g, ")").replace(/\s*,\s*/g, "|")
-    .replace(/\*\*(\/\*+)?/g, "++").replace(/\*/g, "[^/]+")
+    .replace(/^[./\\]+/g, "")
+    .replace(/[\[\]\-+?.()^$]/g, "\\$&")
+    .replace(/[{]/g, "(").replace(/[}]/g, ")").replace(/\s*,\s*/g, "|")
+    .replace(/\*\*([/\\]+\*+)?/g, "++").replace(/\*/g, "[^/]+")
     .replace(/\+\+/g, ".*?")
-    .replace(/\//g, "\\/");
   cache.set(glob, reg = new RegExp("^" + r + "$", "i"));
   return reg;
 }

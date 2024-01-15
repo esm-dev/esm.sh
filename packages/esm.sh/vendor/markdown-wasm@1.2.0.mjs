@@ -2,96 +2,61 @@ import { loadWasm } from "./wasm-loader.mjs";
 
 const wasmURL = "https://esm.sh/markdown-wasm@1.2.0/dist/markdown.wasm";
 
-var e,
-  n,
-  o,
-  a,
-  d,
-  m,
-  h,
-  w,
-  g,
-  A,
-  E,
-  b,
-  _,
-  R,
-  S,
-  I,
-  T,
-  U,
-  W,
-  M,
-  H,
-  P,
-  F,
-  O,
-  k,
-  B,
-  N,
-  x,
-  initSync;
-function D(e) {
-  throw new Error("wasm abort" + (e ? ": " + (e.stack || e) : ""));
+var U, t, T, y, H, v, g, C, F, d, k, x, M, b, W, P, R, N, D;
+t = {};
+function X(e) {
+  y.delete(d.get(e)), T.push(e);
 }
-n = {
-  preRun: [],
-  postRun: [],
-  print: console.log.bind(console),
-  printErr: console.error.bind(console),
-};
-function G(e) {
-  m.delete(_.get(e)), d.push(e);
-}
-function K(e, n) {
-  return function (e, n) {
-    var t, r, o, i;
-    if (!m) {
-      for (m = new WeakMap(), t = 0; t < _.length; t++) {
-        (r = _.get(t)) && m.set(r, t);
+function j(e, r) {
+  return function (n, f) {
+    var u, m, h, p;
+    if (!y) {
+      for (y = new WeakMap(), u = 0; u < d.length; u++) {
+        (m = d.get(u)) && y.set(m, u);
       }
     }
-    if (m.has(e)) return m.get(e);
-    o = function () {
-      if (d.length) return d.pop();
+    if (y.has(n)) return y.get(n);
+    h = function () {
+      if (T.length) return T.pop();
       try {
-        _.grow(1);
-      } catch (e) {
-        if (!(e instanceof RangeError)) throw e;
-        throw "Unable to grow wasm table. Set ALLOW_TABLE_GROWTH.";
+        d.grow(1);
+      } catch (l) {
+        throw l instanceof RangeError
+          ? "Unable to grow wasm table. Set ALLOW_TABLE_GROWTH."
+          : l;
       }
-      return _.length - 1;
+      return d.length - 1;
     }();
     try {
-      _.set(o, e);
-    } catch (t) {
-      if (!(t instanceof TypeError)) throw t;
-      i = function (e, n) {
-        var t, r, o, i, u, a, s, f, c;
-        if ("function" == typeof WebAssembly.Function) {
+      d.set(h, n);
+    } catch (l) {
+      if (!(l instanceof TypeError)) throw l;
+      p = function (c, a) {
+        var i, _, o, s, A, E, w, S, O;
+        if (typeof WebAssembly.Function == "function") {
           for (
-            t = { i: "i32", j: "i64", f: "f32", d: "f64" },
-              r = { parameters: [], results: "v" == n[0] ? [] : [t[n[0]]] },
+            i = { i: "i32", j: "i64", f: "f32", d: "f64" },
+              _ = { parameters: [], results: a[0] == "v" ? [] : [i[a[0]]] },
               o = 1;
-            o < n.length;
+            o < a.length;
             ++o
-          ) r.parameters.push(t[n[o]]);
-          return new WebAssembly.Function(r, e);
+          ) _.parameters.push(i[a[o]]);
+          return new WebAssembly.Function(_, c);
         }
         for (
-          i = [1, 0, 1, 96],
-            u = n.slice(0, 1),
-            a = n.slice(1),
-            s = { i: 127, j: 126, f: 125, d: 124 },
-            i.push(a.length),
+          s = [1, 0, 1, 96],
+            A = a.slice(0, 1),
+            E = a.slice(1),
+            w = { i: 127, j: 126, f: 125, d: 124 },
+            s.push(E.length),
             o = 0;
-          o < a.length;
+          o < E.length;
           ++o
-        ) i.push(s[a[o]]);
-        return "v" == u ? i.push(0) : i = i.concat([1, s[u]]),
-          i[1] = i.length - 2,
-          f = new Uint8Array(
-            [0, 97, 115, 109, 1, 0, 0, 0].concat(i, [
+        ) s.push(w[E[o]]);
+        return A == "v" ? s.push(0) : s = s.concat([1, w[A]]),
+          s[1] = s.length - 2,
+          S = new Uint8Array(
+            [0, 97, 115, 109, 1, 0, 0, 0].concat(s, [
               2,
               7,
               1,
@@ -110,168 +75,84 @@ function K(e, n) {
               0,
             ]),
           ),
-          c = new WebAssembly.Module(f),
-          new WebAssembly.Instance(c, { e: { f: e } }).exports.f;
-      }(e, n), _.set(o, i);
+          O = new WebAssembly.Module(S),
+          new WebAssembly.Instance(O, { e: { f: c } }).exports.f;
+      }(n, f), d.set(h, p);
     }
-    return m.set(e, o), o;
-  }(e, n);
+    return y.set(n, h), h;
+  }(e, r);
 }
-function X(e) {
-  g = e,
-    n.HEAP8 = new Int8Array(e),
-    n.HEAP16 = new Int16Array(e),
-    n.HEAP32 = E = new Int32Array(e),
-    n.HEAPU8 = A = new Uint8Array(e),
-    n.HEAPU16 = new Uint16Array(e),
-    n.HEAPU32 = b = new Uint32Array(e),
-    n.HEAPF32 = new Float32Array(e),
-    n.HEAPF64 = new Float64Array(e);
-}
-function z(e) {
-  return e.startsWith(U);
+function K(e) {
+  v = e,
+    t.HEAP32 = C = new Int32Array(e),
+    t.HEAPU8 = g = new Uint8Array(e),
+    t.HEAPU32 = F = new Uint32Array(e);
 }
 function $(e) {
-  for (var t, r; e.length > 0;) {
-    "function" != typeof (t = e.shift())
-      ? "number" == typeof (r = t.func)
-        ? void 0 === t.arg ? _.get(r)() : _.get(r)(t.arg)
-        : r(void 0 === t.arg ? null : t.arg)
-      : t(n);
-  }
-}
-function Y(e) {
   try {
-    return h.grow(e - g.byteLength + 65535 >>> 16), X(h.buffer), 1;
-  } catch (e) {}
+    return H.grow(e - v.byteLength + 65535 >>> 16), K(H.buffer), 1;
+  } catch {}
 }
-function Q(e) {
-  function t() {
-    N ||
-      (N = !0,
-        n.calledRun = !0,
-        w ||
-        ($(S),
-          n.onRuntimeInitialized && n.onRuntimeInitialized(),
-          function () {
-            if (n.postRun) {
-              for (
-                "function" == typeof n.postRun && (n.postRun = [n.postRun]);
-                n.postRun.length;
-              ) e = n.postRun.shift(), I.unshift(e);
-            }
-            var e;
-            $(I);
-          }()));
-  }
-  e = e || o,
-    T > 0 || (function () {
-      if (n.preRun) {
-        for (
-          "function" == typeof n.preRun && (n.preRun = [n.preRun]);
-          n.preRun.length;
-        ) e = n.preRun.shift(), R.unshift(e);
+T = [],
+  k = [],
+  x = {
+    a: function (e) {
+      var r, n, f, u, m = g.length;
+      if ((e >>>= 0) > 2147483648) return !1;
+      for (r = 1; r <= 4; r *= 2) {
+        if (
+          n = m * (1 + .2 / r),
+            n = Math.min(n, e + 100663296),
+            $(Math.min(
+              2147483648,
+              ((f = Math.max(e, n)) % (u = 65536) > 0 && (f += u - f % u), f),
+            ))
+        ) return !0;
       }
-      var e;
-      $(R);
-    }(),
-      T > 0 ||
-      (n.setStatus
-        ? (n.setStatus("Running..."),
-          setTimeout(function () {
-            setTimeout(function () {
-              n.setStatus("");
-            }, 1), t();
-          }, 1))
-        : t()));
-}
-{
-  n.arguments && (o = n.arguments),
-    n.thisProgram && n.thisProgram,
-    n.quit && n.quit,
-    d = [],
-    n.wasmBinary && (y = n.wasmBinary),
-    n.noExitRuntime || !0,
-    "object" != typeof WebAssembly && D("no native wasm support detected"),
-    w = !1,
-    n.INITIAL_MEMORY,
-    R = [],
-    S = [],
-    I = [],
-    0,
-    T = 0,
-    U = "data:application/octet-stream;base64,",
-    z(W = "markdown.wasm") ||
-    (x = W, W = n.locateFile ? n.locateFile(x, a) : a + x),
-    M = {
-      a: function (e) {
-        var n, t, r, o, i = A.length;
-        if ((e >>>= 0) > 2147483648) return !1;
-        for (n = 1; n <= 4; n *= 2) {
-          if (
-            t = i * (1 + .2 / n),
-              t = Math.min(t, e + 100663296),
-              Y(Math.min(
-                2147483648,
-                ((r = Math.max(e, t)) % (o = 65536) > 0 && (r += o - r % o), r),
-              ))
-          ) return !0;
-        }
-        return !1;
-      },
+      return !1;
     },
-    initSync = (e) => {
-      var r, o = e.exports;
-      n.asm = o,
-        X((h = n.asm.b).buffer),
-        _ = n.asm.i,
-        r = n.asm.c,
-        S.unshift(r);
-    },
-    n.___wasm_call_ctors = function () {
-      return (n.___wasm_call_ctors = n.asm.c).apply(null, arguments);
-    },
-    H = n._wrealloc = function () {
-      return (H = n._wrealloc = n.asm.d).apply(null, arguments);
-    },
-    P = n._wfree = function () {
-      return (P = n._wfree = n.asm.e).apply(null, arguments);
-    },
-    F = n._WErrGetCode = function () {
-      return (F = n._WErrGetCode = n.asm.f).apply(null, arguments);
-    },
-    O = n._WErrGetMsg = function () {
-      return (O = n._WErrGetMsg = n.asm.g).apply(null, arguments);
-    },
-    k = n._WErrClear = function () {
-      return (k = n._WErrClear = n.asm.h).apply(null, arguments);
-    },
-    B = n._parseUTF8 = function () {
-      return (B = n._parseUTF8 = n.asm.j).apply(null, arguments);
-    },
-    n.addFunction = K,
-    n.removeFunction = G,
-    n.run = Q;
-}
-Q(), n.inspect = () => "[asm]", void 0 !== e && (module = e, e = void 0);
-class WError extends Error {
-  constructor(e, n, t, r) {
-    super(n, t || "wasm", r || 0), this.name = "WError", this.code = e;
+  },
+  D = (e) => {
+    var r, n = e.exports;
+    t.asm = n, K((H = t.asm.b).buffer), d = t.asm.i, r = t.asm.c, k.unshift(r);
+  },
+  t.___wasm_call_ctors = function () {
+    return (t.___wasm_call_ctors = t.asm.c).apply(null, arguments);
+  },
+  M = t._wrealloc = function () {
+    return (M = t._wrealloc = t.asm.d).apply(null, arguments);
+  },
+  b = t._wfree = function () {
+    return (b = t._wfree = t.asm.e).apply(null, arguments);
+  },
+  W = t._WErrGetCode = function () {
+    return (W = t._WErrGetCode = t.asm.f).apply(null, arguments);
+  },
+  P = t._WErrGetMsg = function () {
+    return (P = t._WErrGetMsg = t.asm.g).apply(null, arguments);
+  },
+  R = t._WErrClear = function () {
+    return (R = t._WErrClear = t.asm.h).apply(null, arguments);
+  },
+  N = t._parseUTF8 = function () {
+    return (N = t._parseUTF8 = t.asm.j).apply(null, arguments);
+  },
+  U !== void 0 && (module = U, U = void 0);
+class z extends Error {
+  constructor(r, n, f, u) {
+    super(n, f || "wasm", u || 0), this.name = "WError", this.code = r;
   }
 }
-function Z(e, n) {
-  const t = H(0, n);
-  return A.set(e, t), t;
+function B(e, r) {
+  const n = M(0, r);
+  return g.set(e, n), n;
 }
-let ee = 0;
-n.postRun.push(() => {
-  ee = H(0, 4);
-});
-const ne = (() => {
-    const e = new TextEncoder("utf-8"), n = new TextDecoder("utf-8");
-    return { encode: (n) => e.encode(n), decode: (e) => n.decode(e) };
+let G = 0;
+const L = (() => {
+    const e = new TextEncoder("utf-8"), r = new TextDecoder("utf-8");
+    return { encode: (n) => e.encode(n), decode: (n) => r.decode(n) };
   })(),
-  re = {
+  V = {
     COLLAPSE_WHITESPACE: 1,
     PERMISSIVE_ATX_HEADERS: 2,
     PERMISSIVE_URL_AUTO_LINKS: 4,
@@ -289,97 +170,105 @@ const ne = (() => {
     DEFAULT: 2823,
     NO_HTML: 96,
   },
-  oe = { HTML: 1, XHTML: 2, AllowJSURI: 4 };
-function ie(e, n) {
-  let t = void 0 === (n = n || {}).parseFlags ? re.DEFAULT : n.parseFlags,
-    r = n.allowJSURIs ? oe.AllowJSURI : 0;
-  switch (n.format) {
+  I = { HTML: 1, XHTML: 2, AllowJSURI: 4 };
+function Y(e, r) {
+  let n = (r = r || {}).parseFlags === void 0 ? V.DEFAULT : r.parseFlags,
+    f = r.allowJSURIs ? I.AllowJSURI : 0;
+  switch (r.format) {
     case "xhtml":
-      r |= oe.HTML | oe.XHTML;
+      f |= I.HTML | I.XHTML;
       break;
     case "html":
     case void 0:
     case null:
     case "":
-      r |= oe.HTML;
+      f |= I.HTML;
       break;
     default:
-      throw new Error(`invalid format "${n.format}"`);
+      throw new Error(`invalid format "${r.format}"`);
   }
-  let o = n.onCodeBlock
-    ? (i = n.onCodeBlock,
-      K(function (e, n, t, r, o) {
+  let u = r.onCodeBlock
+    ? (m = r.onCodeBlock,
+      j(function (l, c, a, i, _) {
         try {
-          const u = n > 0 ? ne.decode(A.subarray(e, e + n)) : "",
-            a = A.subarray(t, t + r);
-          let s = void 0;
-          a.toString = () => s || (s = ne.decode(a));
-          let f = null;
-          if (null === (f = i(u, a)) || void 0 === f) return -1;
-          let c = ue(f);
-          if (c.length > 0) {
-            const e = Z(c, c.length);
-            b[o >> 2] = e;
+          const o = c > 0 ? L.decode(g.subarray(l, l + c)) : "",
+            s = g.subarray(a, a + i);
+          let A;
+          s.toString = () => A || (A = L.decode(s));
+          let E = null;
+          if ((E = m(o, s)) === null || E === void 0) return -1;
+          let w = J(E);
+          if (w.length > 0) {
+            const S = B(w, w.length);
+            F[_ >> 2] = S;
           }
-          return c.length;
-        } catch (e) {
+          return w.length;
+        } catch (o) {
           return console.error(
-            `error in markdown onCodeBlock callback: ${e.stack || e}`,
+            `error in markdown onCodeBlock callback: ${o.stack || o}`,
           ),
             -1;
         }
       }, "iiiiii"))
     : 0;
-  var i;
-  let u = ue(e),
-    a = function (e) {
-      let n = e(ee), t = E[ee >> 2];
-      if (0 == t) return null;
-      let r = A.subarray(t, t + n);
-      return r.heapAddr = t, r;
-    }((e) =>
-      (function (e, n) {
-        const t = function (e) {
-            return e instanceof Uint8Array ? e : new Uint8Array(e);
-          }(e),
-          r = t.length,
-          o = Z(t, r),
-          i = n(o, r);
-        return function (e) {
-          P(e);
+  var m;
+  let h = J(e),
+    p = function (l) {
+      let c = l(G), a = C[G >> 2];
+      if (a == 0) return null;
+      let i = g.subarray(a, a + c);
+      return i.heapAddr = a, i;
+    }((l) =>
+      function (c, a) {
+        const i = function (A) {
+            return A instanceof Uint8Array ? A : new Uint8Array(A);
+          }(c),
+          _ = i.length,
+          o = B(i, _),
+          s = a(o, _);
+        return function (A) {
+          b(A);
         }(o),
-          i;
-      })(u, (n, i) => B(n, i, t, r, e, o))
+          s;
+      }(h, (c, a) => N(c, a, n, f, l, u))
     );
-  return n.onCodeBlock && G(o),
+  return r.onCodeBlock && X(u),
     function () {
-      let e = function () {
-        let e = F();
-        if (0 != e) {
-          let n = O(), t = 0 != n ? UTF8ArrayToString(A, n) : "";
-          return k(), new WError(e, t);
+      let l = function () {
+        let c = W();
+        if (c != 0) {
+          let a = P(), i = a != 0 ? UTF8ArrayToString(g, a) : "";
+          return R(), new z(c, i);
         }
       }();
-      if (e) throw e;
+      if (l) throw l;
     }(),
-    n.bytes || n.asMemoryView ? a : ne.decode(a);
+    r.bytes || r.asMemoryView ? p : L.decode(p);
 }
-function ue(e) {
-  return "string" == typeof e
-    ? ne.encode(e)
+function J(e) {
+  return typeof e == "string"
+    ? L.encode(e)
     : e instanceof Uint8Array
     ? e
     : new Uint8Array(e);
 }
-
-export { ie as parse, re as ParseFlags };
-
+export { V as ParseFlags, Y as parse };
 export default async function init() {
-  initSync(await loadWasm(wasmURL, { a: M }));
+  D(await loadWasm(wasmURL, { a: x }));
 }
 
 if (import.meta.main) {
-  init().then(() => {
-    console.log(ie("# Hello, world!"));
-  });
+  await init();
+  console.log(Y(
+    (new TextEncoder()).encode(
+      "---\ntitle:Hello World\n---\n# Hello, world!\nhello, world!\nlink: https://example.com\n```js\nconsole.log('hello, world!')\n```\n<foo-bar></foo-bar>\n",
+    ),
+    {
+      parseFlags: V.DEFAULT | V.NO_HTML,
+      onCodeBlock: (lang, code) => {
+        console.log(lang, code.toString());
+        return "// " + code;
+      },
+    },
+  ));
 }

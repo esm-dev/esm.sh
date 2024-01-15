@@ -7,6 +7,7 @@
 import { awaitPromise, setWasmExports, wrap } from "./wasm-asyncify.mjs";
 import { loadWasm } from "./wasm-loader.mjs";
 
+const wasmUrl = "https://esm.sh/html-rewriter-wasm@0.4.1/dist/html_rewriter_bg.wasm";
 const wbg = {};
 const imports = { __wbindgen_placeholder__: wbg };
 

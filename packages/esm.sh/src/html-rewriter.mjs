@@ -53,7 +53,6 @@ globalThis.HTMLRewriter = class {
     const outdatedHeaders = [
       "content-encoding",
       "content-length",
-      "last-modified",
       "etag",
     ];
     for (const key of outdatedHeaders) {
@@ -61,7 +60,6 @@ globalThis.HTMLRewriter = class {
     }
     return new Response(response.body?.pipeThrough(this.t), {
       status: response.status,
-      statusText: response.statusText,
       headers,
     });
   }

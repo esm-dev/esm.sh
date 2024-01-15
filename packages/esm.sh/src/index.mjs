@@ -1,4 +1,5 @@
 import fs from "./fs.mjs";
+import markdown from "./markdown.mjs";
 import {
   enc,
   globToRegExp,
@@ -394,6 +395,12 @@ export const serveHot = (options) => {
           }),
           { headers },
         );
+        if (
+          (filepath.endsWith(".md") || filepath.endsWith(".markdown")) &&
+          url.searchParams.has("html")
+        ) {
+          return markdown.transform(res);
+        }
         if (filepath.endsWith(".html")) {
           return serveHtml(res, cfEnv, url, filepath);
         }
