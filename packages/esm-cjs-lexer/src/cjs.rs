@@ -1200,7 +1200,7 @@ impl CJSLexer {
                                 }
 
                                 if webpack_require_props == 2 {
-                                  stmts.iter().skip(first_stmt_index + 1).find(|stmt| match stmt {
+                                  stmts.iter().skip(first_stmt_index + 1).take(8).find(|stmt| match stmt {
                                     Stmt::Expr(ExprStmt { expr, .. }) => {
                                       if let Expr::Seq(SeqExpr { exprs, .. }) = &**expr {
                                         let mut found_webpack_require_exprs = false;
@@ -1298,7 +1298,7 @@ impl CJSLexer {
                                 }
 
                                 if webpack_require_props == 2 {
-                                  stmts.iter().skip(first_stmt_index + 1).find(|stmt| match stmt {
+                                  stmts.iter().skip(first_stmt_index + 1).take(8).find(|stmt| match stmt {
                                     Stmt::Expr(ExprStmt { expr, .. }) => {
                                       if let Expr::Seq(SeqExpr { exprs, .. }) = &**expr {
                                         let mut found_webpack_require_exprs = false;
@@ -1440,7 +1440,7 @@ impl CJSLexer {
                               if let Some(expr) = exprs.get(0) {
                                 if let Expr::Call(call) = &**expr {
                                   if let Some(stmts) = is_iife_call(call) {
-                                    stmts.iter().find(|stmt| match stmt {
+                                    stmts.iter().take(8).find(|stmt| match stmt {
                                       Stmt::Expr(ExprStmt { expr, .. }) => {
                                         if let Expr::Seq(SeqExpr { exprs, .. }) = &**expr {
                                           let mut found_webpack_require_exprs = false;
