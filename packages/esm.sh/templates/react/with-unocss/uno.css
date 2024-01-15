@@ -1,14 +1,4 @@
-@use "**/*.jsx";
-
-.hot-app {
-  visibility: hidden
-}
-
-@media hot {
-  .hot-app {
-    visibility: visible;
-  }
-}
+@unoEntry "**/*.jsx";
 
 :root {
   --text-color: #202020;
@@ -27,6 +17,13 @@
 
 body {
   @apply m-0 p-0; /* @see https://unocss.dev/transformers/directives#usage */
+  visibility: hidden;
   color: var(--text-color);
   background-color: var(--bg-color);
+}
+
+@media hot {
+  body {
+    visibility: visible;
+  }
 }

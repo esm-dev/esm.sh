@@ -48,11 +48,11 @@ export default {
 
         const text = await res.text();
         const lines: string[] = [];
-        const atUse: string[] = [];
+        const entry: string[] = [];
         text.split("\n").map((line) => {
           const trimmed = line.trimStart();
-          if (trimmed.startsWith("@use ")) {
-            atUse.push(trimmed);
+          if (trimmed.toLowerCase().startsWith("@unoentry ")) {
+            entry.push(trimmed);
           } else {
             if (trimmed.startsWith("@media ")) {
               line = trimmed.replace(/^@media\s+hot/, "@media all");
@@ -65,8 +65,10 @@ export default {
         const globRes = await fetch(globUrl, {
           method: "POST",
           body: JSON.stringify({
-            pattern: atUse.map((line) =>
-              line.slice(5).replace(/;+\s*$/, "").replace(/^['"]|['"]$/g, "")
+            pattern: entry.map((line) =>
+              line.slice("@unoentry ".length)
+                .replace(/;+\s*$/, "")
+                .replace(/^['"]|['"]$/g, "")
             ).join(),
           }),
         });
