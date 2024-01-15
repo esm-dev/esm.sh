@@ -602,6 +602,57 @@ impl CJSLexer {
     }
   }
 
+  fn get_webpack_exports(&mut self, stmts: &Vec<Stmt>, webpack_require_sym: &str, first_stmt_index: &usize) {
+    stmts.iter().skip(first_stmt_index + 1).take(8).find(|stmt| match stmt {
+      Stmt::Expr(ExprStmt { expr, .. }) => {
+        if let Expr::Seq(SeqExpr { exprs, .. }) = &**expr {
+          let mut found_webpack_require_exprs = false;
+          for expr in exprs {
+            if let Expr::Call(call) = &**expr {
+              if let Some(Expr::Member(MemberExpr { obj, prop, .. })) = with_expr_callee(call) {
+                if let (Expr::Ident(Ident { sym: obj_sym, .. }), MemberProp::Ident(Ident { sym: prop_sym, .. })) =
+                  (&**obj, &*prop)
+                {
+                  if !obj_sym.as_ref().eq(webpack_require_sym) {
+                    return false;
+                  }
+                  let prop_sym_ref = prop_sym.as_ref();
+
+                  if prop_sym_ref.eq("r") {
+                    self.exports.insert("__esModule".to_string());
+                    found_webpack_require_exprs = true;
+                  }
+                  if prop_sym_ref.eq("d") {
+                    let CallExpr { args, .. } = &*call;
+                    if let Some(ExprOrSpread { expr, .. }) = args.get(1) {
+                      if let Expr::Object(ObjectLit { props, .. }) = &**expr {
+                        for prop in props {
+                          if let PropOrSpread::Prop(prop) = prop {
+                            if let Prop::KeyValue(KeyValueProp {
+                              key: PropName::Ident(Ident { sym, .. }),
+                              ..
+                            }) = &**prop
+                            {
+                              self.exports.insert(sym.as_ref().to_string());
+                              found_webpack_require_exprs = true;
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+          return found_webpack_require_exprs;
+        }
+        return false;
+      }
+      _ => false,
+    });
+  }
+
   fn get_webpack_require_props_from_props(&mut self, props: &Vec<PropOrSpread>) -> i32 {
     props
       .iter()
@@ -1284,58 +1335,7 @@ impl CJSLexer {
                                 let webpack_require_props = self.get_webpack_require_props_from_props(props);
 
                                 if webpack_require_props == 2 {
-                                  stmts.iter().skip(first_stmt_index + 1).take(8).find(|stmt| match stmt {
-                                    Stmt::Expr(ExprStmt { expr, .. }) => {
-                                      if let Expr::Seq(SeqExpr { exprs, .. }) = &**expr {
-                                        let mut found_webpack_require_exprs = false;
-                                        for expr in exprs {
-                                          if let Expr::Call(call) = &**expr {
-                                            if let Some(Expr::Member(MemberExpr { obj, prop, .. })) =
-                                              with_expr_callee(call)
-                                            {
-                                              if let (
-                                                Expr::Ident(Ident { sym: obj_sym, .. }),
-                                                MemberProp::Ident(Ident { sym: prop_sym, .. }),
-                                              ) = (&**obj, &*prop)
-                                              {
-                                                if !obj_sym.as_ref().eq(webpack_require_sym) {
-                                                  return false;
-                                                }
-                                                let prop_sym_ref = prop_sym.as_ref();
-
-                                                if prop_sym_ref.eq("r") {
-                                                  self.exports.insert("__esModule".to_string());
-                                                  found_webpack_require_exprs = true;
-                                                }
-                                                if prop_sym_ref.eq("d") {
-                                                  let CallExpr { args, .. } = &*call;
-                                                  if let Some(ExprOrSpread { expr, .. }) = args.get(1) {
-                                                    if let Expr::Object(ObjectLit { props, .. }) = &**expr {
-                                                      for prop in props {
-                                                        if let PropOrSpread::Prop(prop) = prop {
-                                                          if let Prop::KeyValue(KeyValueProp {
-                                                            key: PropName::Ident(Ident { sym, .. }),
-                                                            ..
-                                                          }) = &**prop
-                                                          {
-                                                            self.exports.insert(sym.as_ref().to_string());
-                                                            found_webpack_require_exprs = true;
-                                                          }
-                                                        }
-                                                      }
-                                                    }
-                                                  }
-                                                }
-                                              }
-                                            }
-                                          }
-                                        }
-                                        return found_webpack_require_exprs;
-                                      }
-                                      return false;
-                                    }
-                                    _ => false,
-                                  });
+                                  self.get_webpack_exports(stmts, &webpack_require_sym, &first_stmt_index);
                                 }
                               }
                             }
@@ -1365,58 +1365,7 @@ impl CJSLexer {
                                 let webpack_require_props = self.get_webpack_require_props_from_props(props);
 
                                 if webpack_require_props == 2 {
-                                  stmts.iter().skip(first_stmt_index + 1).take(8).find(|stmt| match stmt {
-                                    Stmt::Expr(ExprStmt { expr, .. }) => {
-                                      if let Expr::Seq(SeqExpr { exprs, .. }) = &**expr {
-                                        let mut found_webpack_require_exprs = false;
-                                        for expr in exprs {
-                                          if let Expr::Call(call) = &**expr {
-                                            if let Some(Expr::Member(MemberExpr { obj, prop, .. })) =
-                                              with_expr_callee(call)
-                                            {
-                                              if let (
-                                                Expr::Ident(Ident { sym: obj_sym, .. }),
-                                                MemberProp::Ident(Ident { sym: prop_sym, .. }),
-                                              ) = (&**obj, &*prop)
-                                              {
-                                                if !obj_sym.as_ref().eq(webpack_require_sym) {
-                                                  return false;
-                                                }
-                                                let prop_sym_ref = prop_sym.as_ref();
-
-                                                if prop_sym_ref.eq("r") {
-                                                  self.exports.insert("__esModule".to_string());
-                                                  found_webpack_require_exprs = true;
-                                                }
-                                                if prop_sym_ref.eq("d") {
-                                                  let CallExpr { args, .. } = &*call;
-                                                  if let Some(ExprOrSpread { expr, .. }) = args.get(1) {
-                                                    if let Expr::Object(ObjectLit { props, .. }) = &**expr {
-                                                      for prop in props {
-                                                        if let PropOrSpread::Prop(prop) = prop {
-                                                          if let Prop::KeyValue(KeyValueProp {
-                                                            key: PropName::Ident(Ident { sym, .. }),
-                                                            ..
-                                                          }) = &**prop
-                                                          {
-                                                            self.exports.insert(sym.as_ref().to_string());
-                                                            found_webpack_require_exprs = true;
-                                                          }
-                                                        }
-                                                      }
-                                                    }
-                                                  }
-                                                }
-                                              }
-                                            }
-                                          }
-                                        }
-                                        return found_webpack_require_exprs;
-                                      }
-                                      return false;
-                                    }
-                                    _ => false,
-                                  });
+                                  self.get_webpack_exports(stmts, &webpack_require_sym, &first_stmt_index);
                                 }
                               }
                             }
