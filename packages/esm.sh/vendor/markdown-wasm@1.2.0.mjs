@@ -32,17 +32,7 @@ function j(e, r) {
     } catch (l) {
       if (!(l instanceof TypeError)) throw l;
       p = function (c, a) {
-        var i, _, o, s, A, E, w, S, O;
-        if (typeof WebAssembly.Function == "function") {
-          for (
-            i = { i: "i32", j: "i64", f: "f32", d: "f64" },
-              _ = { parameters: [], results: a[0] == "v" ? [] : [i[a[0]]] },
-              o = 1;
-            o < a.length;
-            ++o
-          ) _.parameters.push(i[a[o]]);
-          return new WebAssembly.Function(_, c);
-        }
+        var o, s, A, E, w, S, O;
         for (
           s = [1, 0, 1, 96],
             A = a.slice(0, 1),
@@ -98,7 +88,7 @@ T = [],
   x = {
     a: function (e) {
       var r, n, f, u, m = g.length;
-      if ((e >>>= 0) > 2147483648) return !1;
+      if ((e >>>= 0) > 2147483648) return false;
       for (r = 1; r <= 4; r *= 2) {
         if (
           n = m * (1 + .2 / r),
@@ -107,9 +97,9 @@ T = [],
               2147483648,
               ((f = Math.max(e, n)) % (u = 65536) > 0 && (f += u - f % u), f),
             ))
-        ) return !0;
+        ) return true;
       }
-      return !1;
+      return false;
     },
   },
   D = (e) => {
@@ -204,10 +194,10 @@ function Y(e, r) {
           }
           return w.length;
         } catch (o) {
-          return console.error(
+          console.error(
             `error in markdown onCodeBlock callback: ${o.stack || o}`,
-          ),
-            -1;
+          );
+          return -1;
         }
       }, "iiiiii"))
     : 0;
