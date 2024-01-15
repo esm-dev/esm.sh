@@ -30,9 +30,11 @@ export default {
               { createRoot },
               { default: Component },
             ] = await importAll(
-              imports?.["react"] ?? "https://esm.sh/react@18.2.0",
-              imports?.["react-dom/client"] ??
-                (imports?.["react-dom"] ?? "https://esm.sh/react-dom@18.2.0") +
+              imports["react"] ?? "https://esm.sh/react@18.2.0",
+              imports["react-dom/client"] ??
+                (imports["react-dom"] ?? imports["react"]
+                    ? imports["react"].replace("react", "react-dom")
+                    : "https://esm.sh/react-dom@18.2.0") +
                   "/client",
               new URL(src, location.href),
             );

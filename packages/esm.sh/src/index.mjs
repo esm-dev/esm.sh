@@ -322,10 +322,10 @@ export const serveHot = (options) => {
             case "/favicon.ico":
               return new Response("Not found", { status: 404 });
             case "/sw.js": {
-              const hotUrl = new URL(HOT_URL);
-              const plugins = url.searchParams.get("hot-plugins");
-              if (plugins) {
-                hotUrl.searchParams.set("plugins", plugins);
+              let hotUrl = new URL(HOT_URL);
+              const v = url.searchParams.get("@hot");
+              if (v) {
+                hotUrl = new URL(v);
               }
               return new Response(
                 `import hot from "${hotUrl.href}";hot.listen();`,
@@ -590,6 +590,8 @@ export const serveHot = (options) => {
         },
       });
     }
+
+    // - TODO: support css hmr
 
     // - transform html
     return rewriter.transform(res);

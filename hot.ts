@@ -89,6 +89,7 @@ class Hot implements HotCore {
   #promises: Promise<any>[] = [];
   #vfs = new VFS(kHot, VERSION);
   #fired = false;
+  #firedSW: ServiceWorker | null = null;
 
   constructor(plugins: Plugin[] = []) {
     plugins.forEach((plugin) => plugin.setup(this));
@@ -127,7 +128,11 @@ class Hot implements HotCore {
 
   onFire(handler: (reg: ServiceWorker) => void) {
     if (doc) {
-      this.#fireListeners.push(handler);
+      if (this.#firedSW) {
+        handler(this.#firedSW);
+      } else {
+        this.#fireListeners.push(handler);
+      }
     }
     return this;
   }
@@ -199,6 +204,11 @@ class Hot implements HotCore {
     this.#basePath = new URL(".", swScriptUrl).pathname;
     this.#fired = true;
 
+    const v = this.importMap.scopes?.[swScript]?.["@hot"];
+    console.log(v);
+    if (v) {
+      swScriptUrl.searchParams.set("@hot", v);
+    }
     const reg = await sw.register(swScriptUrl, {
       type: "module",
       updateViaCache: isDev ? undefined : "all",
@@ -263,9 +273,10 @@ class Hot implements HotCore {
     await Promise.all(promises);
 
     // fire all `fire` listeners
-    for (const onFire of this.#fireListeners) {
-      onFire(sw);
+    for (const handler of this.#fireListeners) {
+      handler(sw);
     }
+    this.#firedSW = sw;
 
     // reload external css that may be handled by hot-loader
     if (firstActicve) {
