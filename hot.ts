@@ -328,11 +328,12 @@ class Hot implements HotCore {
       load(true);
     });
 
+    // <use-content name="foo" map="this.expr" ssr></use-content>
     defineElement("use-content", (el) => {
-      if (attr(el, "ssr") === "ok") {
+      if (attr(el, "_ssr") === "1") {
         return;
       }
-      const name = attr(el, "from");
+      const name = attr(el, "name");
       if (!name) {
         return;
       }
@@ -360,9 +361,9 @@ class Hot implements HotCore {
           el.innerHTML = "<code style='color:red'>" + data.message + "</code>";
           return;
         }
-        const expr = attr(el, "with");
-        const value = expr && !isNullish(data)
-          ? new Function("return this." + expr).call(data)
+        const mapExpr = attr(el, "map");
+        const value = mapExpr && !isNullish(data)
+          ? new Function("return " + mapExpr).call(data)
           : data;
         el.innerHTML = !isNullish(value)
           ? value.toString?.() ?? stringify(value)

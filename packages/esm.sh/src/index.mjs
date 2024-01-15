@@ -471,15 +471,15 @@ export const serveHot = (options) => {
       },
     });
 
-    // - render `use-content` if `ssr` attribute is present
-    rewriter.on("use-content[from][ssr]", {
+    // - render `use-content` if the `ssr` attribute is present
+    rewriter.on("use-content[name][ssr]", {
       async element(el) {
         if (contentMap) {
           try {
             const { contents = {} } = isNEString(contentMap)
               ? (contentMap = JSON.parse(contentMap))
               : contentMap;
-            const name = el.getAttribute("from");
+            const name = el.getAttribute("name");
             let content = contents[name];
             let asterisk = undefined;
             if (!content) {
@@ -506,13 +506,13 @@ export const serveHot = (options) => {
                 if (data instanceof Error) {
                   return "<code style='color:red'>" + data.message + "</code>";
                 }
-                const expr = el.getAttribute("with");
+                const mapExpr = el.getAttribute("map");
                 let value = data;
-                if (expr && !isNullish(data)) {
+                if (mapExpr && !isNullish(data)) {
                   if (cfEnv) {
-                    value = lookupValue(data, expr);
+                    value = lookupValue(data, mapExpr.trimStart().slice("this.".length));
                   } else {
-                    value = new Function("return this." + expr).call(data);
+                    value = new Function("return " + mapExpr).call(data);
                   }
                 }
                 return !isNullish(value)
@@ -521,7 +521,7 @@ export const serveHot = (options) => {
               };
               const render = (data) => {
                 el.setInnerContent(process(data), { html: true });
-                el.setAttribute("ssr", "ok");
+                el.setAttribute("_ssr", "1");
               };
               const res = await fetcher(
                 new Request(new URL("/@hot-content", url), {

@@ -76,8 +76,11 @@ export function lookupValue(obj, expr) {
   if (value === undefined || value === null) {
     return value;
   }
-  const path = expr.split(".").map((p) =>
-    p.split("[").map((expr) => {
+  const path = expr.split(".").map((p) => p.trim()).map((p) => {
+    if (p === "") {
+      throw new Error("invalid path expression");
+    }
+    return p.split("[").map((expr) => {
       if (expr.endsWith("]")) {
         const key = expr.slice(0, -1);
         if (/^\d+$/.test(key)) {
@@ -86,8 +89,8 @@ export function lookupValue(obj, expr) {
         return key.replace(/^['"]|['"]$/g, "");
       }
       return expr;
-    })
-  ).flat();
+    });
+  }).flat();
   for (const key of path) {
     const v = value[key];
     if (v === undefined) {
@@ -117,7 +120,7 @@ export function globToRegExp(glob) {
     .replace(/[\[\]\-+?.()^$]/g, "\\$&")
     .replace(/[{]/g, "(").replace(/[}]/g, ")").replace(/\s*,\s*/g, "|")
     .replace(/\*\*([/\\]+\*+)?/g, "++").replace(/\*/g, "[^/]+")
-    .replace(/\+\+/g, ".*?")
+    .replace(/\+\+/g, ".*?");
   cache.set(glob, reg = new RegExp("^" + r + "$", "i"));
   return reg;
 }
