@@ -76,7 +76,7 @@ class ESMWorker {
       if (varyUA) {
         const target = getBuildTargetFromUA(ua);
         cacheKey.searchParams.set("target", target);
-        //! don't delete this line, it used to ensure KV/R2 cache respect different UA
+        //! don't delete this line, it used to ensure KV/R2 cache respecting different UA
         url.searchParams.set("target", target);
       }
       for (const key of ["x-real-origin", "x-esm-worker-version"]) {
@@ -125,7 +125,11 @@ class ESMWorker {
     }
 
     let pathname = decodeURIComponent(url.pathname);
-    let buildVersion = "v" + VERSION;
+
+    // strip trailing slash
+    if (pathname !== "/" && pathname.endsWith("/")) {
+      pathname = pathname.slice(0, -1);
+    }
 
     // return the CLI script
     if (
@@ -257,10 +261,9 @@ class ESMWorker {
       url.search.endsWith("/jsx-runtime") ||
       url.search.endsWith("/jsx-dev-runtime")
     ) {
-      const [q, jsx] = splitBy(url.search, "/", true);
-      pathname = pathname + "/" + jsx;
+      const [q, jsxRuntime] = splitBy(url.search, "/", true);
+      url.pathname = pathname + "/" + jsxRuntime;
       url.search = q;
-      url.pathname = pathname;
     }
 
     // strip loc
@@ -276,7 +279,9 @@ class ESMWorker {
       );
     }
 
-    // strip build version prefix
+    let buildVersion = "v" + VERSION;
+
+    // check pinned build version
     const hasBuildVerPrefix = regexpBuildVersionPrefix.test(pathname);
     const hasBuildVerQuery = !hasBuildVerPrefix &&
       regexpBuildVersion.test(url.searchParams.get("pin") ?? "");
@@ -830,7 +835,7 @@ async function fetchOriginWithKVCache(
   if (exposedHeaders.length > 0) {
     headers.set("Access-Control-Expose-Headers", exposedHeaders.join(", "));
   }
-  headers.set("X-Content-Source", "origin");
+  headers.set("X-Content-Source", "origin-server");
 
   // save to KV/R2 if immutable
   if (!fromWorker && cacheControl?.includes("immutable")) {
@@ -885,7 +890,7 @@ async function fetchOriginWithR2Cache(
     }));
     resHeaders.set("Content-Type", contentType);
     resHeaders.set("Cache-Control", immutableCache);
-    resHeaders.set("X-Content-Source", "origin");
+    resHeaders.set("X-Content-Source", "origin-server");
     return new Response(buffer, { headers: resHeaders });
   }
   return res;

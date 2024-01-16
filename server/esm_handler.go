@@ -228,7 +228,25 @@ func esmHandler() rex.Handle {
 			return rex.Content(savaPath, fi.ModTime(), r) // auto closed
 		}
 
+		// check extra query like `/react-dom@18.2.0&external=react&dev/client`
+		var extraQuery string
+		if strings.ContainsRune(pathname, '@') && regexpPathWithVersion.MatchString(pathname) {
+			if _, v := utils.SplitByLastByte(pathname, '@'); v != "" {
+				if _, e := utils.SplitByFirstByte(v, '&'); e != "" {
+					extraQuery, _ = utils.SplitByFirstByte(e, '/')
+					if extraQuery != "" {
+						qs := []string{extraQuery}
+						if ctx.R.URL.RawQuery != "" {
+							qs = append(qs, ctx.R.URL.RawQuery)
+						}
+						ctx.R.URL.RawQuery = strings.Join(qs, "&")
+					}
+				}
+			}
+		}
+
 		var hasBuildVerPrefix bool
+		var hasPinedVerParam bool
 		var hasStablePrefix bool
 		var outdatedBuildVersion string
 
@@ -260,13 +278,14 @@ func esmHandler() rex.Handle {
 				i, err := strconv.Atoi(pin[1:])
 				if err == nil && i > 0 && i < BUILD_VERSION {
 					buildVersion = i
+					hasPinedVerParam = true
 				}
 			}
 		}
 
 		// serve internal scripts
 		if pathname == "/build" || pathname == "/run" || pathname == "/hot" || strings.HasPrefix(pathname, "/hot/") {
-			if !hasBuildVerPrefix && !ctx.Form.Has("pin") {
+			if !hasBuildVerPrefix && !hasPinedVerParam {
 				url := fmt.Sprintf("%s%s/v%d%s", cdnOrigin, cfg.CdnBasePath, BUILD_VERSION, pathname)
 				if ctx.R.URL.RawQuery != "" {
 					url += "?" + ctx.R.URL.RawQuery
@@ -382,7 +401,7 @@ func esmHandler() rex.Handle {
 
 		// serve server script
 		if pathname == "/server" {
-			if !hasBuildVerPrefix && !ctx.Form.Has("pin") {
+			if !hasBuildVerPrefix && !hasPinedVerParam {
 				url := fmt.Sprintf("%s%s/v%d/server", cdnOrigin, cfg.CdnBasePath, BUILD_VERSION)
 				return rex.Redirect(url, http.StatusFound)
 			}
@@ -547,15 +566,6 @@ func esmHandler() rex.Handle {
 		if css := cssPackages[reqPkg.Name]; css != "" && reqPkg.SubModule == "" {
 			url := fmt.Sprintf("%s%s/%s/%s", cdnOrigin, cfg.CdnBasePath, reqPkg.String(), css)
 			return rex.Redirect(url, http.StatusMovedPermanently)
-		}
-
-		// use extra query like `/react-dom@18.2.0&external=react&dev/client`
-		if extraQuery != "" {
-			qs := []string{extraQuery}
-			if ctx.R.URL.RawQuery != "" {
-				qs = append(qs, ctx.R.URL.RawQuery)
-			}
-			ctx.R.URL.RawQuery = strings.Join(qs, "&")
 		}
 
 		ghPrefix := ""
@@ -881,7 +891,7 @@ func esmHandler() rex.Handle {
 		bundleDeps := ctx.Form.Has("bundle") || ctx.Form.Has("standalone") || ctx.Form.Has("bundle-deps")
 		noBundle := !bundleDeps && (ctx.Form.Has("bundless") || ctx.Form.Has("no-bundle"))
 		isDev := ctx.Form.Has("dev")
-		isPined := ctx.Form.Has("pin") || hasBuildVerPrefix || stableBuild[reqPkg.Name]
+		isPined := hasBuildVerPrefix || hasPinedVerParam || stableBuild[reqPkg.Name]
 		isWorker := ctx.Form.Has("worker")
 		noCheck := ctx.Form.Has("no-check") || ctx.Form.Has("no-dts")
 		ignoreRequire := ctx.Form.Has("ignore-require") || reqPkg.Name == "@unocss/preset-icons"

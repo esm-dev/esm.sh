@@ -18,7 +18,7 @@ type Pkg struct {
 	FromEsmsh  bool   `json:"fromEsmsh"`
 }
 
-func validatePkgPath(pathname string) (pkg Pkg, query string, err error) {
+func validatePkgPath(pathname string) (pkg Pkg, extraQuery string, err error) {
 	fromGithub := strings.HasPrefix(pathname, "/gh/") && strings.Count(pathname, "/") >= 3
 	if fromGithub {
 		pathname = "/@" + pathname[4:]
@@ -30,7 +30,7 @@ func validatePkgPath(pathname string) (pkg Pkg, query string, err error) {
 		return Pkg{}, "", fmt.Errorf("invalid package name '%s'", pkgName)
 	}
 
-	version, query := utils.SplitByFirstByte(maybeVersion, '&')
+	version, extraQuery := utils.SplitByFirstByte(maybeVersion, '&')
 	if v, e := url.QueryUnescape(version); e == nil {
 		version = v
 	}

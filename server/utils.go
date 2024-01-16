@@ -24,6 +24,7 @@ const EOL = "\n"
 var (
 	regexpFullVersion       = regexp.MustCompile(`^\d+\.\d+\.\d+[\w\.\+\-]*$`)
 	regexpFullVersionPath   = regexp.MustCompile(`(\w)@(v?\d+\.\d+\.\d+[\w\.\+\-]*|[0-9a-f]{10})(/|$)`)
+	regexpPathWithVersion   = regexp.MustCompile(`\w@[\*\~\^\w\.\+\-]+(/|$)`)
 	regexpBuildVersionPath  = regexp.MustCompile(`^/v\d+(/|$)`)
 	regexpVersionAnnotation = regexp.MustCompile(`@version:\s(\d+\.\d+\.\d+)`)
 	regexpCliPath           = regexp.MustCompile(`^/v\d+\/?$`)
