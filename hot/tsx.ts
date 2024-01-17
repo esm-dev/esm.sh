@@ -1,11 +1,15 @@
 import type { Hot } from "../server/embed/types/hot.d.ts";
-import initWasm, { type Targets, transform, transformCSS } from "https://esm.sh/esm-compiler@0.3.6";
+import initWasm, {
+  type Targets,
+  transform,
+  transformCSS,
+} from "https://esm.sh/esm-compiler@0.4.2";
 
 let waiting: Promise<any> | null = null;
 const init = async () => {
   if (waiting === null) {
     waiting = initWasm(
-      fetch("https://esm.sh/esm-compiler@0.3.6/esm_compiler_bg.wasm"),
+      fetch("https://esm.sh/esm-compiler@0.4.2/esm_compiler_bg.wasm"),
     );
   }
   await waiting;
@@ -54,9 +58,6 @@ export default {
         if (pathname.endsWith(".css")) {
           const targets: Targets = {
             chrome: 95 << 16, // default to chrome 95
-            safari: 15 << 16, // default to safari 15
-            firefox: 114 << 16, // default to firefox 114
-            opera: 77 << 16, // default to opera 77
           };
           const { code, map, exports } = transformCSS(pathname, source, {
             targets,
@@ -75,7 +76,8 @@ export default {
 
           let css = code;
           if (map) {
-            css += "\n//# sourceMappingURL=data:application/json;charset=utf-8;base64,";
+            css +=
+              "\n//# sourceMappingURL=data:application/json;charset=utf-8;base64,";
             css += btoa(map);
           }
           const cssModulesExports: Record<string, string> = {};
@@ -87,7 +89,9 @@ export default {
           return {
             code: [
               isDev && hmrRuntime &&
-              `import H from ${stringify(hmrRuntime)};import.meta.hot = H(${stringify(pathname)});`,
+              `import H from ${stringify(hmrRuntime)};import.meta.hot = H(${
+                stringify(pathname)
+              });`,
               "const d = document;",
               "const id = ",
               stringify(pathname),
@@ -110,7 +114,7 @@ export default {
         const reactRefreshRuntime = imports?.["@reactRefreshRuntime"];
         return transform(pathname, source, {
           isDev,
-          sourceMap: !!isDev,
+          sourceMap: isDev ? "external" : undefined,
           jsxImportSource: jsxImportSource,
           importMap: importMap.$support ? undefined : stringify(importMap),
           minify: !isDev ? { compress: true, keepNames: true } : undefined,
