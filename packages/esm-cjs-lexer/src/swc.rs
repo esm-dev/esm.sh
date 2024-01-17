@@ -85,8 +85,7 @@ impl SWC {
 
 fn get_es_config() -> EsConfig {
   EsConfig {
-    export_default_from: false,
-    import_assertions: false,
+    import_attributes: true,
     jsx: false,
     ..EsConfig::default()
   }
