@@ -48,7 +48,7 @@ func initCJSLexerWorkDirectory() (err error) {
 	}
 
 	// install services
-	cmd := exec.Command("pnpm", "i", "enhanced-resolve@5.15.0", "esm-cjs-lexer@0.9.1")
+	cmd := exec.Command("pnpm", "i", "enhanced-resolve@5.15.0", "esm-cjs-lexer@0.10.0")
 	cmd.Dir = wd
 	var output []byte
 	output, err = cmd.CombinedOutput()
