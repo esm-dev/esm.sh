@@ -66,9 +66,7 @@ class ESMWorker {
     const url = new URL(req.url);
     const ua = req.headers.get("User-Agent");
     const cache = this.cache ??
-      (this.cache = await caches.open(
-        `esm.sh/v${VERSION}-` + Date.now().toString(36),
-      ));
+      (this.cache = await caches.open(`esm.sh/v${VERSION}`));
     const withCache: Context["withCache"] = async (fetcher, options) => {
       const isHeadMethod = req.method === "HEAD";
       const hasPinedTarget = targets.has(url.searchParams.get("target") ?? "");
