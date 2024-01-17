@@ -66,7 +66,9 @@ class ESMWorker {
     const url = new URL(req.url);
     const ua = req.headers.get("User-Agent");
     const cache = this.cache ??
-      (this.cache = await caches.open(`esm.sh/v${VERSION}`));
+      (this.cache = await caches.open(
+        `esm.sh/v${VERSION}-` + Date.now().toString(36),
+      ));
     const withCache: Context["withCache"] = async (fetcher, options) => {
       const isHeadMethod = req.method === "HEAD";
       const hasPinedTarget = targets.has(url.searchParams.get("target") ?? "");
@@ -256,13 +258,14 @@ class ESMWorker {
       );
     }
 
-    // fix `/jsx-runtime` path in query
+    // fix `/jsx-runtime` suffix in query, normally it happens with import maps
     if (
       url.search.endsWith("/jsx-runtime") ||
       url.search.endsWith("/jsx-dev-runtime")
     ) {
       const [q, jsxRuntime] = splitBy(url.search, "/", true);
-      url.pathname = pathname + "/" + jsxRuntime;
+      pathname = pathname + "/" + jsxRuntime;
+      url.pathname = pathname;
       url.search = q;
     }
 
