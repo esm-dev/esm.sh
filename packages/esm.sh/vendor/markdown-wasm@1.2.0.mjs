@@ -246,19 +246,3 @@ export { V as ParseFlags, Y as parse };
 export default async function init() {
   D(await loadWasm(wasmURL, { a: x }));
 }
-
-if (import.meta.main) {
-  await init();
-  console.log(Y(
-    (new TextEncoder()).encode(
-      "---\ntitle:Hello World\n---\n# Hello, world!\nhello, world!\nlink: https://example.com\n```js\nconsole.log('hello, world!')\n```\n<foo-bar></foo-bar>\n",
-    ),
-    {
-      parseFlags: V.DEFAULT | V.NO_HTML,
-      onCodeBlock: (lang, code) => {
-        console.log(lang, code.toString());
-        return "// " + code;
-      },
-    },
-  ));
-}
