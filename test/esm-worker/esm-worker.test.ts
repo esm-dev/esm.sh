@@ -362,7 +362,7 @@ Deno.test("esm-worker", {
 
   await t.step("npm assets (raw)", async () => {
     const res = await fetch(
-      `${workerOrigin}/playground-elements@0.18.1&raw/playground-service-worker.js`,
+      `${workerOrigin}/playground-elements@0.18.1/playground-service-worker.js?raw`,
     );
     assertEquals(res.status, 200);
     assertEquals(
@@ -374,6 +374,20 @@ Deno.test("esm-worker", {
       "public, max-age=31536000, immutable",
     );
     assertStringIncludes(await res.text(), "!function(){");
+
+    const res2 = await fetch(
+      `${workerOrigin}/playground-elements@0.18.1&raw/playground-service-worker.js`,
+    );
+    assertEquals(res2.status, 200);
+    assertEquals(
+      res2.headers.get("Content-Type"),
+      "application/javascript; charset=utf-8",
+    );
+    assertEquals(
+      res2.headers.get("Cache-Control"),
+      "public, max-age=31536000, immutable",
+    );
+    assertStringIncludes(await res2.text(), "!function(){");
   });
 
   await t.step("gh modules", async () => {
