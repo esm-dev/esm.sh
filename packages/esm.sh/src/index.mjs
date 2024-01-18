@@ -537,6 +537,12 @@ export const serveHot = (options) => {
     // - render `use-content` if the `ssr` attribute is present
     rewriter.on("use-content[src][ssr]", {
       async element(el) {
+        const src = el.getAttribute("src");
+        if (!src) {
+          el.removeAttribute("ssr");
+          el.setAttribute("_ssr", "1");
+          return;
+        }
         const process = (data) => {
           if (data instanceof Error) {
             return "<code style='color:red'>" + data.message + "</code>";
@@ -561,12 +567,6 @@ export const serveHot = (options) => {
         const render = (data) => {
           el.replace(process(data), { html: true });
         };
-        const src = el.getAttribute("src");
-        if (!src) {
-          el.removeAttribute("ssr");
-          el.setAttribute("_ssr", "1");
-          return;
-        }
         try {
           const res = await fetcher(
             new Request(new URL("/@hot-content", url), {

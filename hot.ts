@@ -294,7 +294,13 @@ class Hot implements HotCore {
       }
     });
 
+    // <use-html src="./pages/foo.html" ssr></use-html>
+    // <use-html src="./blog/foo.md" ssr></use-html>
+    // <use-html src="./icons/foo.svg" ssr></use-html>
     defineElement("use-html", (el) => {
+      if (attr(el, "_ssr") === "1") {
+        return;
+      }
       const src = attr(el, "src");
       if (!src) {
         return;
@@ -325,7 +331,7 @@ class Hot implements HotCore {
       load();
     });
 
-    // <use-content name="foo" map="this.bar" ssr></use-content>
+    // <use-content src="foo" map="this.bar" ssr></use-content>
     defineElement("use-content", (el) => {
       if (attr(el, "_ssr") === "1") {
         return;
