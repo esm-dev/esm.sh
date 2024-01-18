@@ -39,7 +39,6 @@ export interface ImportMap {
 }
 
 export interface ContentMap {
-  rendered?: Record<string, { value: any; expires?: number } | Promise<any>>;
   contents?: Record<string, ContentSource>;
 }
 
@@ -98,7 +97,6 @@ export interface VFS {
 export interface HotCore {
   readonly basePath: string;
   readonly cache: Cache;
-  readonly contentMap: Required<ContentMap>;
   readonly importMap: Required<ImportMap>;
   readonly isDev: boolean;
   readonly vfs: VFS;

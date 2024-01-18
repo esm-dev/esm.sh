@@ -6,7 +6,6 @@
 /// <reference lib="webworker" />
 
 import type {
-  ContentMap,
   FetchHandler,
   HotCore,
   HotMessageChannel,
@@ -81,13 +80,13 @@ class Hot implements HotCore {
   #basePath = new URL(".", loc.href).pathname;
   #cache: Cache | null = null;
   #importMap: Required<ImportMap> | null = null;
-  #contentMap: Required<ContentMap> | null = null;
   #fetchListeners: { test: URLTest; handler: FetchHandler }[] = [];
   #fireListeners: ((sw: ServiceWorker) => void)[] = [];
   #isDev = isLocalhost(location);
   #loaders: Loader[] = [];
   #promises: Promise<any>[] = [];
   #vfs = new VFS(kHot, VERSION);
+  #contentCache: Record<string, any> = {};
   #fired = false;
   #firedSW: ServiceWorker | null = null;
 
@@ -105,10 +104,6 @@ class Hot implements HotCore {
 
   get importMap() {
     return this.#importMap ?? (this.#importMap = parseImportMap());
-  }
-
-  get contentMap() {
-    return this.#contentMap ?? (this.#contentMap = parseContentMap());
   }
 
   get isDev() {
@@ -339,35 +334,6 @@ class Hot implements HotCore {
       if (!src) {
         return;
       }
-      const { rendered, contents } = this.contentMap;
-      const params: Record<string, string> = {};
-      let id = contents[src] ? src : undefined;
-      if (!id) {
-        for (const cid of Object.keys(contents)) {
-          if (!cid.includes("{") || !cid.includes("}") || cid.includes("}{")) {
-            continue;
-          }
-          const paramkeys: string[] = [];
-          const re = cid.replace(/[\[\]\-+*?.()^$]/g, "\\$&").replace(
-            /\{(\w+)\}/g,
-            (_, k) => {
-              paramkeys.push(k);
-              return "(.+?)";
-            },
-          );
-          const m = src.match(new RegExp("^" + re + "$"));
-          if (m) {
-            id = cid;
-            for (let i = 1; i < m.length; i++) {
-              params[paramkeys[i - 1]] = m[i];
-            }
-            break;
-          }
-        }
-      }
-      if (!id) {
-        return;
-      }
       const render = (data: unknown) => {
         if (data instanceof Error) {
           el.innerHTML = "<code style='color:red'>" + data.message + "</code>";
@@ -381,7 +347,8 @@ class Hot implements HotCore {
           ? value.toString?.() ?? stringify(value)
           : "";
       };
-      const renderedData = rendered[src];
+      const cache = this.#contentCache;
+      const renderedData = cache[src];
       if (renderedData) {
         if (renderedData instanceof Promise) {
           renderedData.then(render);
@@ -389,14 +356,15 @@ class Hot implements HotCore {
           render(renderedData);
         }
       } else {
-        rendered[src] = fetch(this.basePath + "@hot-content", {
+        cache[src] = fetch(this.basePath + "@hot-content", {
           method: "POST",
-          body: stringify({ id, params, location: location.pathname }),
+          body: stringify({ src, location: location.pathname }),
         }).then(async (res) => {
           if (res.ok) {
             const value = await res.json();
-            rendered[src] = value;
-            return value;
+            cache[src] = value;
+            render(value);
+            return;
           }
           let msg = res.statusText;
           try {
@@ -411,10 +379,8 @@ class Hot implements HotCore {
           } catch (_) {
             // ignore
           }
-          return new Error(msg);
-        }).then((ret) => {
-          render(ret);
-          return ret;
+          delete cache[src];
+          render(new Error(msg));
         });
       }
     });
@@ -631,30 +597,6 @@ function parseImportMap() {
     }
   }
   return importMap;
-}
-
-/** parse contentmap from <script> with `type=contentmap` */
-function parseContentMap() {
-  const contentMap: Required<ContentMap> = {
-    rendered: {},
-    contents: {},
-  };
-  const obj = queryAndParseJSONScript("contentmap");
-  if (obj) {
-    const { rendered, contents } = obj;
-    for (const k in contents) {
-      const v = contents[k];
-      if (typeof v === "string") {
-        contentMap.contents[k] = { url: v };
-      } else if (isObject(v) && isNEString(v.url)) {
-        contentMap.contents[k] = v;
-      }
-    }
-    if (isObject(rendered)) {
-      contentMap.rendered = rendered;
-    }
-  }
-  return contentMap;
 }
 
 /** create a cache proxy object. */

@@ -43,8 +43,8 @@ export const serveHot = (options) => {
     switch (pathname) {
       /** Proxy content map requests */
       case "/@hot-content": {
-        const { id, params, filepath, location } = await req.json();
-        if (!isNEString(id)) {
+        const { src, filepath, location } = await req.json();
+        if (!isNEString(src)) {
           return new Response("Invalid request", { status: 400 });
         }
 
@@ -97,7 +97,33 @@ export const serveHot = (options) => {
           return new Response("Invalid contentmap", { status: 400 });
         }
         const { contents = {} } = contentMap ?? {};
-        const content = contents[id];
+        const params = {};
+        let content = contents[src];
+        if (!content) {
+          for (const cid of Object.keys(contents)) {
+            if (
+              !cid.includes("{") || !cid.includes("}") || cid.includes("}{")
+            ) {
+              continue;
+            }
+            const paramkeys = [];
+            const re = cid.replace(/[\[\]\-+*?.()^$]/g, "\\$&").replace(
+              /\{(\w+?)\}/g,
+              (_, k) => {
+                paramkeys.push(k);
+                return "(.+?)";
+              },
+            );
+            const m = src.match(new RegExp("^" + re + "$"));
+            if (m) {
+              content = contents[cid];
+              for (let i = 1; i < m.length; i++) {
+                params[paramkeys[i - 1]] = m[i];
+              }
+              break;
+            }
+          }
+        }
         if (!content) {
           return new Response("Content not found", { status: 404 });
         }
@@ -152,7 +178,8 @@ export const serveHot = (options) => {
         if (!m && body) {
           m = "POST";
         }
-        const cacheKey = id + JSON.stringify(params);
+        // todo: check cookie
+        const cacheKey = src;
         const cacheable = !stream && Number.isInteger(cacheTtl);
         if (cacheable) {
           const cached = contentCache.get(cacheKey);
@@ -482,10 +509,9 @@ export const serveHot = (options) => {
       },
     });
 
-    // - resolve external importmap/contentmap
-    rewriter.on("script[type$=tmap][src]", {
+    // - resolve external importmap
+    rewriter.on("script[type=importmap][src]", {
       async element(el) {
-        const type = el.getAttribute("type");
         const src = el.getAttribute("src");
         if (src && !/^\/|\w+:/.test(src)) {
           const { pathname } = new URL(src, url.origin + filepath);
@@ -496,114 +522,80 @@ export const serveHot = (options) => {
             el.removeAttribute("src");
             el.setAttribute("data-src", src);
             el.setInnerContent(text);
-            if (type === "contentmap") {
-              contentMap = text;
-            }
           }
         }
       },
     });
 
-    // - check inline contentmap
-    let contentMap = "";
-    rewriter.on("script[type=contentmap]:not([src])", {
-      text(el) {
-        contentMap += el.text;
+    // - hide `type=contentmap` from script tag
+    rewriter.on("script[type=contentmap]", {
+      element(el) {
+        el.remove();
       },
     });
 
     // - render `use-content` if the `ssr` attribute is present
     rewriter.on("use-content[src][ssr]", {
       async element(el) {
-        if (contentMap) {
-          try {
-            const { contents = {} } = isNEString(contentMap)
-              ? (contentMap = JSON.parse(contentMap))
-              : contentMap;
-            const src = el.getAttribute("src");
-            const params = {};
-            let id = contents[src] ? src : undefined;
-            if (!id) {
-              for (const cid of Object.keys(contents)) {
-                if (
-                  !cid.includes("{") || !cid.includes("}") || cid.includes("}{")
-                ) {
-                  continue;
-                }
-                const paramkeys = [];
-                const re = cid.replace(/[\[\]\-+*?.()^$]/g, "\\$&").replace(
-                  /\{(\w+)\}/g,
-                  (_, k) => {
-                    paramkeys.push(k);
-                    return "(.+?)";
-                  },
-                );
-                const m = src.match(new RegExp("^" + re + "$"));
-                if (m) {
-                  id = cid;
-                  for (let i = 1; i < m.length; i++) {
-                    params[paramkeys[i - 1]] = m[i];
-                  }
-                  break;
-                }
-              }
-            }
-            if (id) {
-              const process = (data) => {
-                if (data instanceof Error) {
-                  return "<code style='color:red'>" + data.message + "</code>";
-                }
-                const mapExpr = el.getAttribute("map");
-                let value = data;
-                if (mapExpr && !isNullish(data)) {
-                  if (cfEnv) {
-                    // cloudflare workers disallow `new Function` and `eval`
-                    value = lookupValue(
-                      data,
-                      mapExpr.trimStart().slice("this.".length),
-                    );
-                  } else {
-                    value = new Function("return " + mapExpr).call(data);
-                  }
-                }
-                return !isNullish(value)
-                  ? value.toString?.() ?? stringify(value)
-                  : "";
-              };
-              const render = (data) => {
-                el.replace(
-                  "<use-content _ssr>" + process(data) + "</use-content>",
-                  { html: true },
-                );
-              };
-              const res = await fetcher(
-                new Request(new URL("/@hot-content", url), {
-                  method: "POST",
-                  body: JSON.stringify({ id, params, filepath }),
-                }),
-                cfEnv,
+        const process = (data) => {
+          if (data instanceof Error) {
+            return "<code style='color:red'>" + data.message + "</code>";
+          }
+          const mapExpr = el.getAttribute("map");
+          let value = data;
+          if (mapExpr && !isNullish(data)) {
+            if (cfEnv) {
+              // cloudflare workers disallow `new Function` and `eval`
+              value = lookupValue(
+                data,
+                mapExpr.trimStart().slice("this.".length),
               );
-              if (!res.ok) {
-                let msg = res.statusText;
-                try {
-                  const text = (await res.text()).trim();
-                  if (text) {
-                    msg = text;
-                    if (text.startsWith("{")) {
-                      const { error, message } = JSON.parse(text);
-                      msg = error?.message ?? message ?? msg;
-                    }
-                  }
-                } catch (_) {}
-                render(new Error(msg));
-              } else {
-                render(await res.json());
+            } else {
+              value = new Function("return " + mapExpr).call(data);
+            }
+          }
+          return !isNullish(value)
+            ? value.toString?.() ?? stringify(value)
+            : "";
+        };
+        const render = (data) => {
+          el.replace(process(data), { html: true });
+        };
+        const src = el.getAttribute("src");
+        if (!src) {
+          el.removeAttribute("ssr");
+          el.setAttribute("_ssr", "1");
+          return;
+        }
+        try {
+          const res = await fetcher(
+            new Request(new URL("/@hot-content", url), {
+              method: "POST",
+              body: JSON.stringify({ src, filepath }),
+            }),
+            cfEnv,
+          );
+          if (!res.ok) {
+            let msg = res.statusText;
+            try {
+              const text = (await res.text()).trim();
+              if (text) {
+                msg = text;
+                if (text.startsWith("{")) {
+                  const { error, message } = JSON.parse(text);
+                  msg = error?.message ?? message ?? msg;
+                }
               }
-            }
-          } catch (err) {
-            if (err instanceof SyntaxError) {
-              console.error("[error] Invalid contentmap:", err.message);
-            }
+            } catch (_) {}
+            render(new Error(msg));
+          } else {
+            render(await res.json());
+          }
+        } catch (err) {
+          if (err instanceof SyntaxError) {
+            render(new Error("Invalid contentmap: " + err.message));
+          } else {
+            render(err);
           }
         }
       },
