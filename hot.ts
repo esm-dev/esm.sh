@@ -205,7 +205,6 @@ class Hot implements HotCore {
     this.#fired = true;
 
     const v = this.importMap.scopes?.[swScript]?.["@hot"];
-    console.log(v);
     if (v) {
       swScriptUrl.searchParams.set("@hot", v);
     }
@@ -300,7 +299,7 @@ class Hot implements HotCore {
       }
     });
 
-    defineElement("import-html", (el) => {
+    defineElement("use-html", (el) => {
       const src = attr(el, "src");
       if (!src) {
         return;
@@ -309,8 +308,11 @@ class Hot implements HotCore {
         ? el.attachShadow({ mode: "open" })
         : el;
       const url = new URL(src, loc.href);
-      const load = async (first?: boolean) => {
-        if (!first) {
+      if ([".md", ".markdown"].some((ext) => url.pathname.endsWith(ext))) {
+        url.searchParams.set("html", "");
+      }
+      const load = async (hmr?: boolean) => {
+        if (hmr) {
           addTimeStamp(url);
         }
         const res = await fetch(url);
@@ -323,37 +325,47 @@ class Hot implements HotCore {
         }
       };
       if (isDev && isSameOrigin(url)) {
-        __hot_hmr_callbacks.add(url.pathname, load);
+        __hot_hmr_callbacks.add(url.pathname, () => load(true));
       }
-      load(true);
+      load();
     });
 
-    // <use-content name="foo" map="this.expr" ssr></use-content>
+    // <use-content name="foo" map="this.bar" ssr></use-content>
     defineElement("use-content", (el) => {
       if (attr(el, "_ssr") === "1") {
         return;
       }
-      const name = attr(el, "name");
-      if (!name) {
+      const src = attr(el, "src");
+      if (!src) {
         return;
       }
       const { rendered, contents } = this.contentMap;
-      let asterisk: string | undefined = undefined;
-      let content = contents[name];
-      if (!content) {
-        for (const k in contents) {
-          const a = k.split("*");
-          if (a.length === 2) {
-            const [prefix, suffix] = a;
-            if (name.startsWith(prefix) && name.endsWith(suffix)) {
-              content = contents[k];
-              asterisk = name.slice(prefix.length, name.length - suffix.length);
-              break;
+      const params: Record<string, string> = {};
+      let id = contents[src] ? src : undefined;
+      if (!id) {
+        for (const cid of Object.keys(contents)) {
+          if (!cid.includes("{") || !cid.includes("}") || cid.includes("}{")) {
+            continue;
+          }
+          const paramkeys: string[] = [];
+          const re = cid.replace(/[\[\]\-+*?.()^$]/g, "\\$&").replace(
+            /\{(\w+)\}/g,
+            (_, k) => {
+              paramkeys.push(k);
+              return "(.+?)";
+            },
+          );
+          const m = src.match(new RegExp("^" + re + "$"));
+          if (m) {
+            id = cid;
+            for (let i = 1; i < m.length; i++) {
+              params[paramkeys[i - 1]] = m[i];
             }
+            break;
           }
         }
       }
-      if (!content) {
+      if (!id) {
         return;
       }
       const render = (data: unknown) => {
@@ -369,24 +381,21 @@ class Hot implements HotCore {
           ? value.toString?.() ?? stringify(value)
           : "";
       };
-      const renderedData = rendered[name];
+      const renderedData = rendered[src];
       if (renderedData) {
         if (renderedData instanceof Promise) {
           renderedData.then(render);
-        } else if (!renderedData.expires || renderedData.expires > now()) {
-          render(renderedData.value);
+        } else {
+          render(renderedData);
         }
       } else {
-        rendered[name] = fetch(this.basePath + "@hot-content", {
+        rendered[src] = fetch(this.basePath + "@hot-content", {
           method: "POST",
-          body: stringify({ ...content, asterisk, name }),
+          body: stringify({ id, params, location: location.pathname }),
         }).then(async (res) => {
           if (res.ok) {
             const value = await res.json();
-            rendered[name] = {
-              value,
-              expires: content.cacheTtl ? now() + (content.cacheTtl * 1000) : 0,
-            };
+            rendered[src] = value;
             return value;
           }
           let msg = res.statusText;

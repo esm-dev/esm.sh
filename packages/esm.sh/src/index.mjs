@@ -43,83 +43,125 @@ export const serveHot = (options) => {
     switch (pathname) {
       /** Proxy content map requests */
       case "/@hot-content": {
+        const { id, params, filepath, location } = await req.json();
+        if (!isNEString(id)) {
+          return new Response("Invalid request", { status: 400 });
+        }
+
+        let contentMap = "";
+        let htmlFile = null;
+        if (filepath) {
+          htmlFile = await fs.open(root + filepath);
+        } else {
+          const searchList = ["/index.html"];
+          if (!location) {
+            location = "/";
+          }
+          if (location !== "/") {
+            searchList.unshift(location + ".html", location + "/index.html");
+          }
+          for (const path of searchList) {
+            htmlFile = await fs.open(root + path);
+            if (htmlFile) break;
+          }
+        }
+        if (!htmlFile) {
+          return new Response("Contentmap not found", { status: 404 });
+        }
+        const html = await readTextFromStream(htmlFile.body);
+        htmlFile.close();
+        await (new HTMLRewriter().on("script[type=contentmap]:not([src])", {
+          text(el) {
+            contentMap += el.text;
+          },
+        }).on("script[type=contentmap][src]", {
+          async element(el) {
+            const src = el.getAttribute("src");
+            if (src && !/^\/|\w+:/.test(src)) {
+              const { pathname } = new URL(src, url.origin + filepath);
+              const file = await fs.open(root + pathname);
+              if (file) {
+                const text = await readTextFromStream(file.body);
+                file.close();
+                contentMap = text;
+              }
+            }
+          },
+        }).transform(new Response(html))).arrayBuffer();
+        if (!contentMap) {
+          return new Response("Contentmap not found", { status: 404 });
+        }
+        try {
+          contentMap = JSON.parse(contentMap);
+        } catch (err) {
+          return new Response("Invalid contentmap", { status: 400 });
+        }
+        const { contents = {} } = contentMap ?? {};
+        const content = contents[id];
+        if (!content) {
+          return new Response("Content not found", { status: 404 });
+        }
+
         const {
-          name,
           url,
           method,
-          payload,
-          authorization,
+          token,
           headers,
+          payload,
           timeout,
           cacheTtl,
           select,
           stream,
-          asterisk,
-          vars,
-        } = await req.json();
-        if (!isNEString(name) || !isNEString(url)) {
-          return new Response("Invalid request", { status: 400 });
-        }
+        } = content;
         const resolveEnv = (value) =>
           value.replace(
             /\$\{(.*?)\}/g,
             (_, key) => {
               key = key.trim().toLowerCase();
-              if (key === "name") {
-                return name;
-              }
-              if (key === "*") {
-                return asterisk ?? "";
-              }
               if (key.startsWith("env.")) {
+                const k = key.slice(4);
                 const { hostname } = new URL(url);
-                return (cfEnv ?? env)["[" + hostname + "]" + key.slice(4)] ??
+                return (cfEnv ?? env)["[" + hostname + "]" + k] ??
+                  (cfEnv ?? env)[k] ??
                   "";
               }
-              if (key.startsWith("vars.") && vars) {
-                return vars[key.slice(6)] ?? "";
+              if (key.startsWith("params.") && params) {
+                return params[key.slice(7)] ?? "";
               }
               return "";
             },
           );
-        const u = resolveEnv(url, name);
+        const u = resolveEnv(url);
         const m = method?.toUpperCase();
         const h = new Headers(headers);
         h.forEach((value, key) => {
-          h.set(key, resolveEnv(value, name));
+          h.set(key, resolveEnv(value));
         });
-        if (authorization) {
-          h.set("authorization", resolveEnv(authorization, name));
+        if (token) {
+          h.set("authorization", "Bearer " + resolveEnv(token));
         }
         let body;
         if (isObject(payload) || Array.isArray(payload)) {
-          body = resolveEnv(JSON.stringify(payload), name);
+          body = resolveEnv(JSON.stringify(payload));
           if (!h.has("content-type")) {
             h.set("content-type", "application/json");
           }
         } else if (payload) {
-          body = resolveEnv(String(payload), name);
+          body = resolveEnv(String(payload));
         }
         if (!m && body) {
           m = "POST";
         }
-        const args = JSON.stringify([
-          u,
-          m,
-          body,
-          select,
-          vars,
-          ...h.entries(),
-        ]);
+        const cacheKey = id + JSON.stringify(params);
         const cacheable = !stream && Number.isInteger(cacheTtl);
         if (cacheable) {
-          const cached = contentCache.get(name);
+          const cached = contentCache.get(cacheKey);
           if (cached) {
-            if (cached.args === args && cached.expires > Date.now()) {
+            if (cached.expires > Date.now()) {
               return Response.json(cached.data);
             }
             // clear cache if args changed or expired
-            contentCache.delete(name);
+            contentCache.delete(cacheKey);
           }
         }
 
@@ -173,8 +215,7 @@ export const serveHot = (options) => {
           }
         }
         if (cacheable) {
-          contentCache.set(name, {
-            args,
+          contentCache.set(cacheKey, {
             data,
             expires: Date.now() + cacheTtl * 1000,
           });
@@ -472,36 +513,42 @@ export const serveHot = (options) => {
     });
 
     // - render `use-content` if the `ssr` attribute is present
-    rewriter.on("use-content[name][ssr]", {
+    rewriter.on("use-content[src][ssr]", {
       async element(el) {
         if (contentMap) {
           try {
             const { contents = {} } = isNEString(contentMap)
               ? (contentMap = JSON.parse(contentMap))
               : contentMap;
-            const name = el.getAttribute("name");
-            let content = contents[name];
-            let asterisk = undefined;
-            if (!content) {
-              for (const k in contents) {
-                const a = k.split("*");
-                if (a.length === 2) {
-                  const [prefix, suffix] = a;
-                  if (
-                    name.startsWith(prefix) &&
-                    name.endsWith(suffix)
-                  ) {
-                    content = contents[k];
-                    asterisk = name.slice(
-                      prefix.length,
-                      name.length - suffix.length,
-                    );
-                    break;
+            const src = el.getAttribute("src");
+            const params = {};
+            let id = contents[src] ? src : undefined;
+            if (!id) {
+              for (const cid of Object.keys(contents)) {
+                if (
+                  !cid.includes("{") || !cid.includes("}") || cid.includes("}{")
+                ) {
+                  continue;
+                }
+                const paramkeys = [];
+                const re = cid.replace(/[\[\]\-+*?.()^$]/g, "\\$&").replace(
+                  /\{(\w+)\}/g,
+                  (_, k) => {
+                    paramkeys.push(k);
+                    return "(.+?)";
+                  },
+                );
+                const m = src.match(new RegExp("^" + re + "$"));
+                if (m) {
+                  id = cid;
+                  for (let i = 1; i < m.length; i++) {
+                    params[paramkeys[i - 1]] = m[i];
                   }
+                  break;
                 }
               }
             }
-            if (content) {
+            if (id) {
               const process = (data) => {
                 if (data instanceof Error) {
                   return "<code style='color:red'>" + data.message + "</code>";
@@ -510,7 +557,11 @@ export const serveHot = (options) => {
                 let value = data;
                 if (mapExpr && !isNullish(data)) {
                   if (cfEnv) {
-                    value = lookupValue(data, mapExpr.trimStart().slice("this.".length));
+                    // cloudflare workers disallow `new Function` and `eval`
+                    value = lookupValue(
+                      data,
+                      mapExpr.trimStart().slice("this.".length),
+                    );
                   } else {
                     value = new Function("return " + mapExpr).call(data);
                   }
@@ -520,13 +571,15 @@ export const serveHot = (options) => {
                   : "";
               };
               const render = (data) => {
-                el.setInnerContent(process(data), { html: true });
-                el.setAttribute("_ssr", "1");
+                el.replace(
+                  "<use-content _ssr>" + process(data) + "</use-content>",
+                  { html: true },
+                );
               };
               const res = await fetcher(
                 new Request(new URL("/@hot-content", url), {
                   method: "POST",
-                  body: JSON.stringify({ ...content, asterisk, name }),
+                  body: JSON.stringify({ id, params, filepath }),
                 }),
                 cfEnv,
               );
@@ -561,8 +614,8 @@ export const serveHot = (options) => {
       rewriter
         .on("script[src]", {
           element(el) {
-            const src = el.getAttribute("src");
-            if (src && !/^\/|\w+:/.test(src)) {
+            const src = el.getAttribute("src")?.trim();
+            if (src && !/^(\/|\w+:)/.test(src)) {
               const { pathname } = new URL(src, url.origin + filepath);
               el.setAttribute("src", pathname);
             }
@@ -570,8 +623,8 @@ export const serveHot = (options) => {
         })
         .on("link[href]", {
           element(el) {
-            const href = el.getAttribute("href");
-            if (href && !/^\/|\w+:/.test(href)) {
+            const href = el.getAttribute("href")?.trim();
+            if (href && !/^(\/|\w+:)/.test(href)) {
               const { pathname } = new URL(href, url.origin + filepath);
               el.setAttribute("href", pathname);
             }

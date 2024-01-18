@@ -53,10 +53,10 @@ if (existsSync(dotEnvPath)) {
           return null;
         }
         const idx = line.indexOf("=");
-        if (idx <= 0 || !section) {
+        if (idx <= 0) {
           return null;
         }
-        const key = section + line.slice(0, idx).trimEnd();
+        const key = (section ?? "") + line.slice(0, idx).trimEnd();
         const value = line.slice(idx + 1).trimStart();
         const v0 = value.charAt(0);
         let start = 0;

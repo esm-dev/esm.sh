@@ -8,18 +8,16 @@
   <script type="importmap">
     {
       "imports": {
-        "lit": "https://esm.sh/lit@3.1.0"
+        "hot": "http://localhost:8080/v135/hot"
       }
     }
   </script>
-
   <script type="contentmap">
     {
       "contents": {
-        "val:*": {
-          "url": "https://api.val.town/v1/run/ije.${*}",
-          "authorization": "Bearer ${ENV.valtown}",
-          "select": "*",
+        "val:{name}": {
+          "url": "https://api.val.town/v1/run/ije.${params.name}",
+          "token": "${env.valtown}",
           "cacheTtl": 60
         }
       }
@@ -28,11 +26,11 @@
 </head>
 
 <body>
-  <use-content from="val:myInfo" with="url"  >loading...</use-content>
-  <use-content from="val:myInfo" with="html"  >loading...</use-content>
+  <use-content src="val:myInfo" map="this.url" ssr></use-content>
+  <use-content src="val:myInfo" map="this.html">loading...</use-content>
 
   <script type="module">
-    import hot from "http://localhost:8080/v135/hot"
+    import hot from "hot"
     hot.fire()
   </script>
 </body>

@@ -46,12 +46,12 @@ export interface ContentMap {
 export interface ContentSource {
   url?: string;
   method?: string;
-  authorization?: string;
+  token?: string;
   headers?: [string, string][] | Record<string, string>;
   payload?: any;
-  select?: string;
   timeout?: number;
   cacheTtl?: number;
+  select?: string;
   stream?: boolean;
 }
 
