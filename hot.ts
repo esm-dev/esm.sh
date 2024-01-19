@@ -1,5 +1,5 @@
 /*! 🔥 esm.sh/hot
- *  Docs https://esm.sh/hot/docs
+ *  Docs https://docs.esm.sh/hot
  */
 
 /// <reference lib="dom" />
@@ -26,7 +26,6 @@ const kContentSource = "x-content-source";
 const kContentType = "content-type";
 const kHot = "esm.sh/hot";
 const kHotLoader = "hot-loader";
-const kImportmapJson = "internal:importmap.json";
 const kSkipWaiting = "SKIP_WAITING";
 const kMessage = "message";
 const kVfs = "vfs";
@@ -177,10 +176,7 @@ class Hot implements HotCore {
   }
 
   waitUntil(promise: Promise<void>) {
-    const promises = this.#promises;
-    if (!promises.includes(promise)) {
-      promises.push(promise);
-    }
+    this.#promises.push(promise);
   }
 
   async fire(swScript = "/sw.js") {
@@ -228,7 +224,6 @@ class Hot implements HotCore {
                 if (reg.active && !refreshing) {
                   refreshing = true;
                   this.#fireApp(reg.active, true);
-                  isDev && console.log("🔥 app registered.");
                 }
               };
             }
@@ -253,7 +248,6 @@ class Hot implements HotCore {
 
   async #fireApp(sw: ServiceWorker, firstActicve = false) {
     const isDev = this.#isDev;
-    const promises = this.#promises;
 
     // load dev plugin if in development mode
     if (isDev) {
@@ -263,8 +257,8 @@ class Hot implements HotCore {
     }
 
     // wait until all promises resolved
-    promises.push(this.#vfs.put(kImportmapJson, this.importMap as any));
-    await Promise.all(promises);
+    sw.postMessage(this.importMap);
+    await Promise.all(this.#promises);
 
     // fire all `fire` listeners
     for (const handler of this.#fireListeners) {
@@ -286,6 +280,7 @@ class Hot implements HotCore {
       });
     }
 
+    // apply "text/babel" and "hot/module" script tags
     queryElements<HTMLScriptElement>("script", (el) => {
       if (el.type === "text/babel" || el.type === "hot/module") {
         const copy = el.cloneNode(true) as HTMLScriptElement;
@@ -317,12 +312,11 @@ class Hot implements HotCore {
           addTimeStamp(url);
         }
         const res = await fetch(url);
+        const text = await res.text();
         if (res.ok) {
-          const tpl = doc!.createElement("template");
-          tpl.innerHTML = await res.text();
-          root.replaceChildren(tpl.content);
+          root.innerHTML = text;
         } else {
-          console.error("Failed to load html from", url);
+          el.innerHTML = createErrorTag(text);
         }
       };
       if (isDev && isSameOrigin(url)) {
@@ -342,7 +336,7 @@ class Hot implements HotCore {
       }
       const render = (data: unknown) => {
         if (data instanceof Error) {
-          el.innerHTML = "<code style='color:red'>" + data.message + "</code>";
+          el.innerHTML = createErrorTag(data[kMessage]);
           return;
         }
         const mapExpr = attr(el, "map");
@@ -379,7 +373,7 @@ class Hot implements HotCore {
               msg = text;
               if (text.startsWith("{")) {
                 const { error, message } = parse(text);
-                msg = error?.message ?? message ?? msg;
+                msg = error?.[kMessage] ?? message ?? msg;
               }
             }
           } catch (_) {
@@ -446,11 +440,8 @@ class Hot implements HotCore {
         isDev = false;
       }
       cacheKey = "loader" + (isDev ? "(dev)" : "") + ":" + cacheKey;
-      const [vfsImportMap, cached] = await Promise.all([
-        vfs.get(kImportmapJson),
-        vfs.get(cacheKey),
-      ]);
-      const importMap: ImportMap = (vfsImportMap?.data as unknown) ?? {};
+      const importMap = this.importMap;
+      const cached = await vfs.get(cacheKey);
       const checksum = await computeHash(
         enc.encode(stringify(importMap) + (etag ?? await source())),
       );
@@ -474,8 +465,7 @@ class Hot implements HotCore {
         vfs.put(cacheKey, body, { checksum, contentType, deps });
         return createResponse(body, loaderHeaders(contentType));
       } catch (err) {
-        console.error(err);
-        return createResponse(err.message, {}, 500);
+        return createResponse(err[kMessage], {}, 500);
       }
     };
     const fetchWithCache = async (req: Request) => {
@@ -535,6 +525,8 @@ class Hot implements HotCore {
       if (data === kSkipWaiting) {
         // @ts-ignore skipWaiting
         self.skipWaiting();
+      } else if (isObject(data) && data.imports) {
+        this.#importMap = data as Required<ImportMap>;
       }
     };
   }
@@ -566,22 +558,6 @@ function defineElement(name: string, callback: (element: HTMLElement) => void) {
   );
 }
 
-/** query and parse json from <script> with the given type. */
-function queryAndParseJSONScript(type: string) {
-  const script = doc!.querySelector("head>script[type=" + type + "]");
-  if (script) {
-    try {
-      const v = parse(script.textContent!);
-      if (isObject(v)) {
-        return v;
-      }
-    } catch (err) {
-      console.error("Failed to parse", script, err.message);
-    }
-  }
-  return null;
-}
-
 /** parse importmap from <script> with `type=importmap` */
 function parseImportMap() {
   const importMap: Required<ImportMap> = {
@@ -589,9 +565,20 @@ function parseImportMap() {
     imports: {},
     scopes: {},
   };
-  const obj = queryAndParseJSONScript("importmap");
-  if (obj) {
-    const { imports, scopes } = obj;
+  if (!doc) {
+    return importMap;
+  }
+  const script = doc.querySelector("script[type=importmap]");
+  let json = null;
+  if (script) {
+    try {
+      json = parse(script.textContent!);
+    } catch (err) {
+      console.error("Failed to parse", script, err[kMessage]);
+    }
+  }
+  if (isObject(json)) {
+    const { imports, scopes } = json;
     for (const k in imports) {
       const url = imports[k];
       if (isNEString(url)) {
@@ -603,6 +590,11 @@ function parseImportMap() {
     }
   }
   return importMap;
+}
+
+/** create a error tag. */
+function createErrorTag(msg: string) {
+  return `<code style="color:red">${msg}</code>`;
 }
 
 /** create a cache proxy object. */
