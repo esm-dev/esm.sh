@@ -20,6 +20,7 @@ const VERSION = 135;
 const doc: Document | undefined = globalThis.document;
 const loc = location;
 const enc = new TextEncoder();
+const obj = Object;
 const parse = JSON.parse;
 const stringify = JSON.stringify;
 const kContentSource = "x-content-source";
@@ -29,6 +30,8 @@ const kHotLoader = "hot-loader";
 const kSkipWaiting = "SKIP_WAITING";
 const kMessage = "message";
 const kVfs = "vfs";
+const kInput = "input";
+const kUseState = "use-state";
 
 /** pulgins imported by `?plugins=` query. */
 const plugins: Plugin[] = [];
@@ -300,7 +303,7 @@ class Hot implements HotCore {
       if (!src) {
         return;
       }
-      const root = el.hasAttribute("shadow")
+      const root = hasAttr(el, "shadow")
         ? el.attachShadow({ mode: "open" })
         : el;
       const url = new URL(src, loc.href);
@@ -314,9 +317,9 @@ class Hot implements HotCore {
         const res = await fetch(url);
         const text = await res.text();
         if (res.ok) {
-          root.innerHTML = text;
+          setInnerHtml(root, text);
         } else {
-          el.innerHTML = createErrorTag(text);
+          setInnerHtml(root, createErrorTag(text));
         }
       };
       if (isDev && isSameOrigin(url)) {
@@ -336,16 +339,14 @@ class Hot implements HotCore {
       }
       const render = (data: unknown) => {
         if (data instanceof Error) {
-          el.innerHTML = createErrorTag(data[kMessage]);
+          setInnerHtml(el, createErrorTag(data[kMessage]));
           return;
         }
         const mapExpr = attr(el, "map");
         const value = mapExpr && !isNullish(data)
           ? new Function("return " + mapExpr).call(data)
           : data;
-        el.innerHTML = !isNullish(value)
-          ? value.toString?.() ?? stringify(value)
-          : "";
+        setInnerHtml(el, toString(value));
       };
       const cache = this.#contentCache;
       const renderedData = cache[src];
@@ -383,6 +384,97 @@ class Hot implements HotCore {
           render(new Error(msg));
         });
       }
+    });
+
+    defineElement("with-state", (el) => {
+      const init = new Function("return " + attr(el, "init") ?? "{}")();
+      const store = new Proxy(init, {
+        get: (target, key) => {
+          return get(target, key);
+        },
+        set: (target, key, value) => {
+          Reflect.set(target, key, value);
+          effectEls.forEach((el) => {
+            if (firstAttr(el) === key) {
+              const $update = get(el, "$update");
+              $update?.(value);
+            }
+          });
+          inputEls.forEach((el) => {
+            if (attr(el, "name") === key) {
+              el.value = toString(value);
+            }
+          });
+          return true;
+        },
+      });
+      const keys = obj.keys(init);
+      const effectEls: Element[] = [];
+      const inputEls: (HTMLInputElement | HTMLTextAreaElement)[] = [];
+      const inject = (el: Element) => {
+        for (let i = 0; i < el.children.length; i++) {
+          const child = el.children[i];
+          const tagName = child.tagName.toLowerCase();
+          if (tagName === kInput || tagName === "textarea") {
+            const inputEl = child as HTMLInputElement | HTMLTextAreaElement;
+            const name = attr(inputEl, "name");
+            if (name) {
+              inputEls.push(inputEl);
+              inputEl.value = store[name] ?? "";
+              inputEl.addEventListener(kInput, () => {
+                store[name] = inputEl.value;
+              });
+            }
+            continue;
+          }
+          const isEffectTag = tagName === kUseState;
+          if (isEffectTag) {
+            if (firstAttr(child)) {
+              effectEls.push(child);
+            }
+          }
+          for (const key of keys) {
+            if (obj.hasOwn(el, key) && !isEffectTag) {
+              continue;
+            }
+            obj.defineProperty(child, key, {
+              get: () => store[key],
+              set: (value) => {
+                store[key] = value;
+              },
+            });
+          }
+          inject(child);
+        }
+      };
+      inject(el);
+    });
+
+    defineElement(kUseState, (el) => {
+      const key = firstAttr(el);
+      if (!key) {
+        return;
+      }
+      let $update;
+      if (typeof get(el, key) === "boolean") {
+        const childNodes: Node[] = [];
+        el.childNodes.forEach((node) => {
+          childNodes.push(node);
+        });
+        $update = (value: any) => {
+          if (value) {
+            el.replaceChildren(...childNodes);
+          } else {
+            el.textContent = "";
+          }
+        };
+      } else {
+        $update = (value: any) => {
+          el.textContent = toString(value);
+        };
+      }
+      obj.assign(el, { $update });
+      $update(get(el, key));
     });
 
     isDev && console.log("🔥 app fired.");
@@ -532,6 +624,16 @@ class Hot implements HotCore {
   }
 }
 
+/** get the first attribute name of the given element. */
+function firstAttr(el: Element): string | undefined {
+  return el.getAttributeNames()[0];
+}
+
+/** check if the given element has the given attribute. */
+function hasAttr(el: Element, name: string) {
+  return el.hasAttribute(name);
+}
+
 /** get the attribute value of the given element. */
 function attr(el: Element, name: string) {
   return el.getAttribute(name);
@@ -556,6 +658,11 @@ function defineElement(name: string, callback: (element: HTMLElement) => void) {
       }
     },
   );
+}
+
+/** set innerHTML of the given element. */
+function setInnerHtml(el: HTMLElement | ShadowRoot, html: string) {
+  el.innerHTML = html;
 }
 
 /** parse importmap from <script> with `type=importmap` */
@@ -639,6 +746,19 @@ function isSameOrigin(url: URL) {
 /** check if the url is localhost. */
 function isLocalhost({ hostname }: URL | Location) {
   return hostname === "localhost" || hostname === "127.0.0.1";
+}
+
+/** get the given property of the given target. */
+function get(target: object, key: PropertyKey) {
+  return Reflect.get(target, key);
+}
+
+/** convert the given value to string. */
+function toString(value: unknown) {
+  if (isNullish(value)) {
+    return "";
+  }
+  return (value as any).toString?.() ?? stringify(value);
 }
 
 /** get current timestamp. */

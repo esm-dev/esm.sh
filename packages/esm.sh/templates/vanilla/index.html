@@ -29,6 +29,18 @@
   <use-content src="val:myInfo" map="this.url" ssr></use-content>
   <use-content src="val:myInfo" map="this.html">loading...</use-content>
 
+  <with-state init="{ show: false, msg: 'bar' }">
+    <input name="msg" type="text" />
+    <button onclick="this.msg = 'bar'">Reset</button>
+    <button onclick="this.show = !this.show">Show</button>
+    <p>
+      <use-state msg></use-state>
+    </p>
+    <use-state show>
+      <h1>Hi <use-state msg></use-state></h1>
+    </use-state>
+  </with-state>
+
   <script type="module">
     import hot from "hot"
     hot.fire()
