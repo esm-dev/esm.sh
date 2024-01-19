@@ -395,7 +395,7 @@ class Hot implements HotCore {
         set: (target, key, value) => {
           Reflect.set(target, key, value);
           effectEls.forEach((el) => {
-            if (firstAttr(el) === key) {
+            if (stateAttr(el)?.[0] === key) {
               const $update = get(el, "$update");
               $update?.(value);
             }
@@ -429,7 +429,7 @@ class Hot implements HotCore {
           }
           const isEffectTag = tagName === kUseState;
           if (isEffectTag) {
-            if (firstAttr(child)) {
+            if (stateAttr(child)) {
               effectEls.push(child);
             }
           }
@@ -451,17 +451,21 @@ class Hot implements HotCore {
     });
 
     defineElement(kUseState, (el) => {
-      const key = firstAttr(el);
-      if (!key) {
+      const v = stateAttr(el);
+      if (!v) {
         return;
       }
       let $update;
-      if (typeof get(el, key) === "boolean") {
+      const [key, notOp] = v;
+      if (notOp || typeof get(el, key) === "boolean") {
         const childNodes: Node[] = [];
         el.childNodes.forEach((node) => {
           childNodes.push(node);
         });
         $update = (value: any) => {
+          if (notOp) {
+            value = !value;
+          }
           if (value) {
             el.replaceChildren(...childNodes);
           } else {
@@ -624,11 +628,6 @@ class Hot implements HotCore {
   }
 }
 
-/** get the first attribute name of the given element. */
-function firstAttr(el: Element): string | undefined {
-  return el.getAttributeNames()[0];
-}
-
 /** check if the given element has the given attribute. */
 function hasAttr(el: Element, name: string) {
   return el.hasAttribute(name);
@@ -637,6 +636,19 @@ function hasAttr(el: Element, name: string) {
 /** get the attribute value of the given element. */
 function attr(el: Element, name: string) {
   return el.getAttribute(name);
+}
+
+/** get the state attribute of the given element. */
+function stateAttr(el: Element): [string, boolean] | null {
+  const p = el.getAttributeNames()[0];
+  if (!p) {
+    return null;
+  }
+  const notOp = p.startsWith("!");
+  if (notOp) {
+    return [p.slice(1), true];
+  }
+  return [p, false];
 }
 
 /** query all elements by the given selectors. */

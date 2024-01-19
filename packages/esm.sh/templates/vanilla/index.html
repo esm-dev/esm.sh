@@ -32,7 +32,10 @@
   <with-state init="{ show: false, msg: 'bar' }">
     <input name="msg" type="text" />
     <button onclick="this.msg = 'bar'">Reset</button>
-    <button onclick="this.show = !this.show">Show</button>
+    <button onclick="this.show = !this.show">
+      <use-state !show>Show</use-state>
+      <use-state show>Hide</use-state>
+    </button>
     <p>
       <use-state msg></use-state>
     </p>
