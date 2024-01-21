@@ -13,14 +13,14 @@ Usage: npx esm.sh [options] [dir]
 Options:
   --help, -h      Show help message
   --host          Host to listen on (default: "localhost")
-  --port, -p      Port number to listen on (default: 3000)
+  --port, -p      Port number to listen on (default: 6000)
 `;
   console.log(message);
   process.exit(0);
 }
 
 // - Parse command line arguments
-const args = { port: 3000 };
+const args = { port: 6000 };
 process.argv.slice(2).forEach((arg) => {
   if (!arg.startsWith("-")) {
     if (existsSync(arg)) {
