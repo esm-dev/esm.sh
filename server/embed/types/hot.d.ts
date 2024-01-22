@@ -100,6 +100,7 @@ export interface HotCore {
   readonly importMap: Required<ImportMap>;
   readonly isDev: boolean;
   readonly vfs: VFS;
+  state(init: Record<string, unknown> | Promise<Record<string, unknown>>): void;
   fire(): Promise<void>;
   listen(swScript?: string): void;
   onFetch(test: URLTest, handler: FetchHandler): this;
