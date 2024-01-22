@@ -21,7 +21,6 @@ const VERSION = 135;
 const doc: Document | undefined = globalThis.document;
 const loc = location;
 const enc = new TextEncoder();
-const obj = Object;
 const parse = JSON.parse;
 const stringify = JSON.stringify;
 const kContentSource = "x-content-source";
@@ -31,8 +30,6 @@ const kHotLoader = "hot-loader";
 const kSkipWaiting = "SKIP_WAITING";
 const kMessage = "message";
 const kVfs = "vfs";
-const symWatch = Symbol();
-const symAnyKey = Symbol();
 
 /** pulgins imported by `?plugins=` query. */
 const plugins: Plugin[] = [];
@@ -92,7 +89,6 @@ class Hot implements HotCore {
   #contentCache: Record<string, any> = {};
   #fired = false;
   #firedSW: ServiceWorker | null = null;
-  #state: Record<string, unknown> | null = null;
 
   constructor(plugins: Plugin[] = []) {
     plugins.forEach((plugin) => plugin.setup(this));
@@ -116,16 +112,6 @@ class Hot implements HotCore {
 
   get vfs() {
     return this.#vfs;
-  }
-
-  state(
-    init: Record<string, unknown> | Promise<Record<string, unknown>>,
-  ): void {
-    if (init instanceof Promise) {
-      this.#promises.push(init.then((state) => this.state(state)));
-    } else if (isObject(init)) {
-      this.#state = createStore(init);
-    }
   }
 
   onFetch(test: URLTest, handler: FetchHandler) {
@@ -328,11 +314,7 @@ class Hot implements HotCore {
         }
         const res = await fetch(url);
         const text = await res.text();
-        if (res.ok) {
-          setInnerHtml(root, text);
-        } else {
-          setInnerHtml(root, createErrorTag(text));
-        }
+        setInnerHtml(root, res.ok ? text : createErrorTag(text));
       };
       if (isDev && isSameOrigin(url)) {
         __hot_hmr_callbacks.add(pathname, () => load(true));
@@ -376,15 +358,14 @@ class Hot implements HotCore {
           if (res.ok) {
             const value = await res.json();
             cache[src] = value;
-            render(value);
-            return;
+            return render(value);
           }
           let msg = res.statusText;
           try {
             const text = (await res.text()).trim();
             if (text) {
               msg = text;
-              if (isBlockString(text.trim())) {
+              if (text.trimStart().startsWith("{")) {
                 const { error, message } = parse(text);
                 msg = error?.[kMessage] ?? message ?? msg;
               }
@@ -397,338 +378,6 @@ class Hot implements HotCore {
         });
       }
     });
-
-    // <use-state init="{foo: "bar"}">{foo}</use-state>
-    defineElement("use-state", (root) => {
-      const globalState = this.#state;
-      const inhertScopes = get(root, "$scopes") ??
-        (globalState ? [globalState] : []);
-      const init = new Function(
-        "$scope",
-        "return " + (attr(root, "onload") ?? "null"),
-      )(
-        new Proxy(Object.create(null), {
-          get: (_, key) => findOwn(inhertScopes, key)?.[key],
-          set: (_, key, value) => {
-            const s = findOwn(inhertScopes, key) ?? inhertScopes[0];
-            return s ? set(s, key, value) : false;
-          },
-        }),
-      );
-      const scopes = [
-        ...(isObject(init) ? [createStore(init)] : []),
-        ...inhertScopes,
-      ];
-      const interpret = (
-        $scopes: Record<string, unknown>[],
-        expr: string,
-        update: (content: string) => void,
-        blockStart?: string,
-        blockEnd?: string,
-      ) => {
-        const [texts, blocks] = splitByBlocks(
-          expr,
-          blockStart,
-          blockEnd,
-        );
-        if (blocks.length > 0) {
-          const effect = (watch?: boolean) => {
-            update(
-              texts.map((text, i) => {
-                const block = blocks[i];
-                if (block) {
-                  const m = block.match(
-                    /^([\w$]+)(\s*[\[\^+\-*/%<>|&.?].+)?$/,
-                  );
-                  if (m) {
-                    const [, ident, accesser] = m;
-                    const scope = findOwn($scopes, ident);
-                    if (scope) {
-                      if (watch) {
-                        scope[symWatch]?.(ident, effect);
-                      }
-                      let value = get(scope, ident);
-                      if (accesser) {
-                        value = new Function(ident, "return " + block)(value);
-                        if (value === false) {
-                          value = "";
-                        }
-                      }
-                      return text + toString(value);
-                    }
-                  }
-                }
-                return text;
-              }).join(""),
-            );
-          };
-          effect(true);
-        }
-      };
-      const reactive = (el: Element, currentScope?: any) => {
-        let $scopes = scopes;
-        if (currentScope) {
-          $scopes = [currentScope, ...scopes];
-        }
-        const activeNode = (node: ChildNode) => {
-          if (node.nodeType === 1 /* element node */) {
-            const el = node as Element;
-            const tagName = el.tagName.toLowerCase();
-            const props = attrs(el);
-
-            // nested <use-state> tag
-            if (tagName === "use-state") {
-              Object.assign(el, { $scopes });
-              return false;
-            }
-
-            const boolAttrs = new Set<string>();
-            const commonAttrs = new Set<string>();
-            const eventAttrs = new Set<string>();
-
-            for (const prop of props) {
-              if (attr(el, prop) === "") {
-                boolAttrs.add(prop);
-              } else if (prop.startsWith("on")) {
-                eventAttrs.add(prop);
-              } else {
-                commonAttrs.add(prop);
-              }
-            }
-
-            // list rendering
-            if (commonAttrs.has("for")) {
-              const [iter, key] = attr(el, "for")!.split(" of ").map((s) =>
-                s.trim()
-              );
-              if (iter && key) {
-                const templateEl = el;
-                const keyProp = attr(templateEl, "key");
-                const placeholder = doc!.createComment("&")!;
-                const scope = findOwn($scopes, key) ?? $scopes[0];
-                let marker: Element[] = [];
-                const renderList = () => {
-                  const arr = get(scope, key);
-                  if (Array.isArray(arr)) {
-                    let iterKey = iter;
-                    let iterIndex = "";
-                    if (isBlockString(iterKey, "(", ")")) {
-                      [iterKey, iterIndex] = iterKey.slice(1, -1).split(",", 2)
-                        .map((s) => s.trim());
-                    }
-                    const render = () => {
-                      const map = new Map<string, Element>();
-                      for (const el of marker) {
-                        const key = attr(el, "key");
-                        key && map.set(key, el);
-                      }
-                      const listEls = arr.map((item, index) => {
-                        const iterScope: Record<string, unknown> = {};
-                        if (iterKey) {
-                          iterScope[iterKey] = item;
-                        }
-                        if (iterIndex) {
-                          iterScope[iterIndex] = index;
-                        }
-                        if (keyProp && map.size > 0) {
-                          let key = "";
-                          interpret(
-                            [iterScope, ...$scopes],
-                            keyProp,
-                            (ret) => {
-                              key = ret;
-                            },
-                          );
-                          const sameKeyEl = map.get(key);
-                          if (sameKeyEl) {
-                            return sameKeyEl;
-                          }
-                        }
-                        const listEl = templateEl.cloneNode(true) as Element;
-                        reactive(listEl, iterScope);
-                        return listEl;
-                      });
-                      marker.forEach((el) => el.remove());
-                      listEls.forEach((el) => placeholder.before(el));
-                      marker = listEls;
-                    };
-                    render();
-                    get(arr, symWatch)(symAnyKey, render);
-                  } else if (marker.length > 0) {
-                    marker.forEach((el) => el.remove());
-                    marker.length = 0;
-                  }
-                };
-                el.replaceWith(placeholder);
-                templateEl.removeAttribute("for");
-                renderList();
-                scope[symWatch](key, renderList);
-              }
-              return false;
-            }
-
-            // render properties with state
-            for (const prop of commonAttrs) {
-              const isStyle = prop === "style";
-              interpret(
-                $scopes,
-                attr(el, prop) ?? "",
-                (content) => el.setAttribute(prop, content),
-                isStyle ? "state(" : undefined,
-                isStyle ? ")" : undefined,
-              );
-            }
-
-            // conditional rendering
-            let cProp = "";
-            let notOp = false;
-            for (let prop of boolAttrs) {
-              notOp = prop.startsWith("!");
-              if (notOp) {
-                prop = prop.slice(1);
-              }
-              if (findOwn($scopes, prop)) {
-                cProp = prop;
-                break;
-              }
-            }
-            if (cProp) {
-              const scope = findOwn($scopes, cProp) ?? $scopes[0];
-              const cEl = el;
-              const placeholder = doc!.createComment("&")!;
-              let anchor: ChildNode = el;
-              const switchEl = (nextEl: ChildNode) => {
-                if (nextEl !== anchor) {
-                  anchor.replaceWith(nextEl);
-                  anchor = nextEl;
-                }
-              };
-              const toggle = () => {
-                let ok = get(scope!, cProp!);
-                if (notOp) {
-                  ok = !ok;
-                }
-                if (ok) {
-                  switchEl(cEl);
-                } else {
-                  switchEl(placeholder);
-                }
-              };
-              toggle();
-              scope[symWatch](cProp, toggle);
-            }
-
-            // bind scopes for event handlers
-            if (eventAttrs.size > 0) {
-              const marker = new Set<string>();
-              for (const scope of $scopes) {
-                const keys = obj.keys(scope);
-                for (const key of keys) {
-                  if (!marker.has(key)) {
-                    marker.add(key);
-                    !Object.hasOwn(el, key) &&
-                      Object.defineProperty(el, key, {
-                        get: () => get(scope, key),
-                        set: (value) => set(scope, key, value),
-                      });
-                  }
-                }
-              }
-              // apply event modifiers if exists
-              for (const a of eventAttrs) {
-                let handler = attr(el, a);
-                if (handler) {
-                  const [event, ...rest] = a.toLowerCase().split(".");
-                  const modifiers = new Set(rest);
-                  const addCode = (code: string) => {
-                    handler = code + handler;
-                  };
-                  if (modifiers.size) {
-                    if (modifiers.delete("once")) {
-                      addCode(`this.removeAttribute('${event}');`);
-                    }
-                    if (modifiers.delete("prevent")) {
-                      addCode("event.preventDefault();");
-                    }
-                    if (modifiers.delete("stop")) {
-                      addCode("event.stopPropagation();");
-                    }
-                    if (event.startsWith("onkey") && modifiers.size) {
-                      if (modifiers.delete("space")) {
-                        modifiers.add(" ");
-                      }
-                      addCode(
-                        "if (!['" +
-                          ([...modifiers.values()].join("','")) +
-                          "'].includes(event.code.toLowerCase()))return;",
-                      );
-                    }
-                    el.removeAttribute(a);
-                    el.setAttribute(event, handler);
-                  }
-                }
-              }
-            }
-
-            // bind state for input, select and textarea elements
-            if (
-              tagName === "input" ||
-              tagName === "select" ||
-              tagName === "textarea"
-            ) {
-              const inputEl = el as
-                | HTMLInputElement
-                | HTMLSelectElement
-                | HTMLTextAreaElement;
-              const name = attr(inputEl, "name");
-              if (name) {
-                const scope = findOwn($scopes, name);
-                if (scope) {
-                  const type = attr(inputEl, "type");
-                  const isCheckBox = type === "checkbox";
-                  const update = () => {
-                    const value = get(scope, name);
-                    if (isCheckBox) {
-                      (inputEl as HTMLInputElement).checked = !!value;
-                    } else {
-                      inputEl.value = toString(value);
-                    }
-                  };
-                  let convert: (input: string) => unknown = String;
-                  if (type === "number") {
-                    convert = Number;
-                  } else if (isCheckBox) {
-                    convert = (_input) => (inputEl as HTMLInputElement).checked;
-                  }
-                  update();
-                  const dispose = scope[symWatch](name, update, true);
-                  inputEl.addEventListener("input", () => {
-                    const recover = dispose();
-                    set(scope, name, convert(inputEl.value));
-                    recover();
-                  });
-                }
-              }
-            }
-          } else if (node.nodeType === 3 /* text node */) {
-            interpret(
-              $scopes,
-              node.textContent ?? "",
-              (content) => node.textContent = content,
-            );
-          }
-        };
-        if (el !== root) {
-          activeNode(el);
-        }
-        walkNodes(el, activeNode);
-      };
-      reactive(root);
-    });
-
-    doc!.head.appendChild(doc!.createElement("style")).append(
-      "use-state{visibility: visible;}",
-    );
 
     isDev && console.log("🔥 app fired.");
   }
@@ -877,74 +526,9 @@ class Hot implements HotCore {
   }
 }
 
-function createStore<T extends object>(init: T) {
-  const watchers: Record<string | symbol, Set<() => void>> = {};
-  const watch = (
-    key: string | symbol,
-    handler: () => void,
-    disposable?: boolean,
-  ) => {
-    const set = watchers[key] ?? (watchers[key] = new Set());
-    const add = () => set.add(handler);
-    add();
-    if (disposable) {
-      return () => { // dispose
-        set.delete(handler);
-        return add; // recover
-      };
-    }
-  };
-  let filled = false;
-  let flushPending = false;
-  const flushKeys: Set<string | symbol> = new Set();
-  const flush = () => {
-    [...flushKeys, symAnyKey].forEach((key) => {
-      watchers[key]?.forEach((handler) => handler());
-    });
-    flushKeys.clear();
-    flushPending = false;
-  };
-  const store = new Proxy(Array.isArray(init) ? [] : Object.create(null), {
-    get: (target, key) => {
-      if (key === symWatch) {
-        return watch;
-      }
-      return get(target, key);
-    },
-    set: (target, key, value) => {
-      if (typeof value === "object" && value !== null) {
-        value = createStore(value);
-      }
-      const ok = set(target, key, value);
-      if (ok && filled) {
-        flushKeys.add(key);
-        if (!flushPending) {
-          flushPending = true;
-          queueMicrotask(flush);
-        }
-      }
-      return ok;
-    },
-  });
-  for (const [key, value] of Object.entries(init)) {
-    store[key] = value;
-  }
-  filled = true;
-  return store as T;
-}
-
-function findOwn(list: any[], key: PropertyKey) {
-  return list.find((o) => Reflect.has(o, key));
-}
-
 /** get the attribute value of the given element. */
 function attr(el: Element, name: string) {
   return el.getAttribute(name);
-}
-
-/** get all attribute names of the given element. */
-function attrs(el: Element) {
-  return el.getAttributeNames();
 }
 
 /** query all elements by the given selectors. */
@@ -954,50 +538,6 @@ function queryElements<T extends Element>(
 ) {
   // @ts-ignore callback
   doc.querySelectorAll(selectors).forEach(callback);
-}
-
-/** walk all nodes recursively. */
-function walkNodes(
-  { childNodes }: Element,
-  handler: (node: ChildNode) => void | false,
-) {
-  childNodes.forEach((node) => {
-    if (handler(node) !== false && node.nodeType === 1) {
-      walkNodes(node as Element, handler);
-    }
-  });
-}
-
-/** split the given expression by blocks. */
-function splitByBlocks(expr: string, bloackStart = "{", blockEnd = "}") {
-  const texts: string[] = [];
-  const blocks: string[] = [];
-  let i = 0;
-  let j = 0;
-  while (i < expr.length) {
-    j = expr.indexOf(bloackStart, i);
-    if (j === -1) {
-      texts.push(expr.slice(i));
-      break;
-    }
-    texts.push(expr.slice(i, j));
-    i = expr.indexOf(blockEnd, j);
-    if (i === -1) {
-      texts[texts.length - 1] += expr.slice(j);
-      break;
-    }
-    const ident = expr.slice(j + bloackStart.length, i).trim();
-    if (ident) {
-      blocks.push(ident);
-    }
-    i++;
-  }
-  return [texts, blocks];
-}
-
-/** check if the given text is a block string. */
-function isBlockString(text: string, bloackStart = "{", blockEnd = "}") {
-  return text.startsWith(bloackStart) && text.endsWith(blockEnd);
 }
 
 /** define a custom element. */
@@ -1096,16 +636,6 @@ function isSameOrigin(url: URL) {
 /** check if the url is localhost. */
 function isLocalhost({ hostname }: URL | Location) {
   return hostname === "localhost" || hostname === "127.0.0.1";
-}
-
-/** get the given property of the given target. */
-function get(target: object, key: PropertyKey) {
-  return Reflect.get(target, key);
-}
-
-/** set the given property of the given target. */
-function set(target: object, key: PropertyKey, value: unknown) {
-  return Reflect.set(target, key, value);
 }
 
 /** convert the given value to string. */
