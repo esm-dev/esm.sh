@@ -518,9 +518,14 @@ function core(
                     modifiers.add(" ");
                   }
                   addCode(
-                    "if (!['" +
-                      ([...modifiers.values()].join("','")) +
-                      "'].includes(event.code.toLowerCase()))return;",
+                    "if(![" +
+                      ([...modifiers].map((k) =>
+                        "'" + (k.length > 1
+                          ? k.charAt(0).toUpperCase() + k.slice(1)
+                          : k) +
+                        "'"
+                      ).join(",")) +
+                      "].includes(event.key))return;",
                   );
                 }
                 el.removeAttribute(a);
