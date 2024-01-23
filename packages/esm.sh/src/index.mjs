@@ -534,13 +534,11 @@ export const serveHot = (options) => {
       },
     });
 
-    // - render `use-content` if the `ssr` attribute is present
-    rewriter.on("use-content[src][ssr]", {
+    // - render `use-content`
+    rewriter.on("use-content[src]:not([live])", {
       async element(el) {
         const src = el.getAttribute("src");
         if (!src) {
-          el.removeAttribute("ssr");
-          el.setAttribute("_ssr", "1");
           return;
         }
         const process = (data) => {

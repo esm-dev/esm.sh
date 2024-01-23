@@ -293,9 +293,6 @@ class Hot implements HotCore {
     // <use-html src="./blog/foo.md" ssr></use-html>
     // <use-html src="./icons/foo.svg" ssr></use-html>
     defineElement("use-html", (el) => {
-      if (attr(el, "_ssr") === "1") {
-        return;
-      }
       const src = attr(el, "src");
       if (!src) {
         return;
@@ -324,13 +321,11 @@ class Hot implements HotCore {
 
     // <use-content src="foo" map="this.bar" ssr></use-content>
     defineElement("use-content", (el) => {
-      if (attr(el, "_ssr") === "1") {
-        return;
-      }
       const src = attr(el, "src");
       if (!src) {
         return;
       }
+      const cache = this.#contentCache;
       const render = (data: unknown) => {
         if (data instanceof Error) {
           setInnerHtml(el, createErrorTag(data[kMessage]));
@@ -342,41 +337,54 @@ class Hot implements HotCore {
           : data;
         setInnerHtml(el, toString(value));
       };
-      const cache = this.#contentCache;
-      const renderedData = cache[src];
-      if (renderedData) {
-        if (renderedData instanceof Promise) {
-          renderedData.then(render);
+      const load = () => {
+        const renderedData = cache[src];
+        if (renderedData) {
+          if (renderedData instanceof Promise) {
+            renderedData.then(render);
+          } else {
+            render(renderedData);
+          }
         } else {
-          render(renderedData);
-        }
-      } else {
-        cache[src] = fetch(this.basePath + "@hot-content", {
-          method: "POST",
-          body: stringify({ src, location: location.pathname }),
-        }).then(async (res) => {
-          if (res.ok) {
-            const value = await res.json();
-            cache[src] = value;
-            return render(value);
-          }
-          let msg = res.statusText;
-          try {
-            const text = (await res.text()).trim();
-            if (text) {
-              msg = text;
-              if (text.trimStart().startsWith("{")) {
-                const { error, message } = parse(text);
-                msg = error?.[kMessage] ?? message ?? msg;
-              }
+          cache[src] = fetch(this.basePath + "@hot-content", {
+            method: "POST",
+            body: stringify({ src, location: location.pathname }),
+          }).then(async (res) => {
+            if (res.ok) {
+              const value = await res.json();
+              cache[src] = value;
+              return render(value);
             }
-          } catch (_) {
-            // ignore
-          }
-          delete cache[src];
-          render(new Error(msg));
-        });
+            let msg = res.statusText;
+            try {
+              const text = (await res.text()).trim();
+              if (text) {
+                msg = text;
+                if (text.trimStart().startsWith("{")) {
+                  const { error, message } = parse(text);
+                  msg = error?.[kMessage] ?? message ?? msg;
+                }
+              }
+            } catch (_) {
+              // ignore
+            }
+            delete cache[src];
+            render(new Error(msg));
+          });
+        }
+      };
+      const liveProp = attr(el, "live");
+      if (liveProp) {
+        const live = parseInt(liveProp);
+        if (live > 0) {
+          const check = () => {
+            delete cache[src];
+            load();
+          };
+          setInterval(check, 1000 * live);
+        }
       }
+      load();
     });
 
     isDev && console.log("🔥 app fired.");
