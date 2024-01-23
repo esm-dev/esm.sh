@@ -3,17 +3,59 @@ import type { Hot } from "../server/embed/types/hot.d.ts";
 const doc = document;
 const obj = Object;
 const symWatch = Symbol();
+const symUnWatch = Symbol();
 const symAnyKey = Symbol();
+const regBlockExpr = /^(!+)?([\w$]+)\s*([\[\^+\-*/%<>|&.!?].+)?$/;
+
+const htmlBuiltinBooleanAttrs = new Set([
+  "allowfullscreen",
+  "async",
+  "autofocus",
+  "autoplay",
+  "checked",
+  "controls",
+  "default",
+  "defer",
+  "disabled",
+  "formnovalidate",
+  "inert",
+  "ismap",
+  "itemscope",
+  "loop",
+  "multiple",
+  "muted",
+  "nomodule",
+  "novalidate",
+  "open",
+  "playsinline",
+  "readonly",
+  "required",
+  "reversed",
+  "selected",
+]);
 
 /** create a reactive store. */
-function createStore<T extends object>(init: T) {
-  const watchers: Record<string | symbol, Set<() => void>> = {};
+function createStore<T extends object>(
+  init: T,
+  watchInit?: Iterable<[string | symbol, Set<() => void>]>,
+) {
+  let filled = false;
+  let flushPending = false;
+  let flushKeys: Set<string | symbol> = new Set();
+  const flush = () => {
+    [...flushKeys, symAnyKey].forEach((key) => {
+      watchers.get(key)?.forEach((handler) => handler());
+    });
+    flushKeys = new Set();
+    flushPending = false;
+  };
+  const watchers = new Map(watchInit);
   const watch = (
     key: string | symbol,
     handler: () => void,
     disposable?: boolean,
   ) => {
-    const set = watchers[key] ?? (watchers[key] = new Set());
+    const set = watchers.get(key) ?? (watchers.set(key, new Set()).get(key)!);
     const add = () => set.add(handler);
     add();
     if (disposable) {
@@ -23,26 +65,29 @@ function createStore<T extends object>(init: T) {
       };
     }
   };
-  let filled = false;
-  let flushPending = false;
-  const flushKeys: Set<string | symbol> = new Set();
-  const flush = () => {
-    [...flushKeys, symAnyKey].forEach((key) => {
-      watchers[key]?.forEach((handler) => handler());
-    });
-    flushKeys.clear();
-    flushPending = false;
+  const unwatch = () => {
+    const entries = watchers.entries();
+    watchers.clear();
+    return entries;
   };
   const store = new Proxy(Array.isArray(init) ? [] : Object.create(null), {
     get: (target, key) => {
       if (key === symWatch) {
         return watch;
       }
+      if (key === symUnWatch) {
+        return unwatch;
+      }
       return get(target, key);
     },
     set: (target, key, value) => {
-      if (typeof value === "object" && value !== null) {
-        value = createStore(value);
+      let oldWatchers: Iterable<[string | symbol, Set<() => void>]> | undefined;
+      const old = get(target, key);
+      if (isObject(old)) {
+        oldWatchers = get(old, symUnWatch)?.();
+      }
+      if (isObject(value)) {
+        value = createStore(value, oldWatchers);
       }
       const ok = set(target, key, value);
       if (ok && filled) {
@@ -63,13 +108,13 @@ function createStore<T extends object>(init: T) {
 }
 
 /** split the given expression by blocks. */
-function parseBlocks(expr: string, bloackStart = "{", blockEnd = "}") {
+function parseBlocks(expr: string, blockStart = "{", blockEnd = "}") {
   const texts: string[] = [];
   const blocks: string[] = [];
   let i = 0;
   let j = 0;
   while (i < expr.length) {
-    j = expr.indexOf(bloackStart, i);
+    j = expr.indexOf(blockStart, i);
     if (j === -1) {
       texts.push(expr.slice(i));
       break;
@@ -80,7 +125,7 @@ function parseBlocks(expr: string, bloackStart = "{", blockEnd = "}") {
       texts[texts.length - 1] += expr.slice(j);
       break;
     }
-    const ident = expr.slice(j + bloackStart.length, i).trim();
+    const ident = expr.slice(j + blockStart.length, i).trim();
     if (ident) {
       blocks.push(ident);
     }
@@ -132,13 +177,24 @@ function isNullish(v: unknown): v is null | undefined {
 }
 
 /** check if the given value is an object. */
-function isObject(v: unknown): v is Record<string, any> {
-  return typeof v === "object" && v !== null && !Array.isArray(v);
+function isObject(v: unknown): v is object {
+  return typeof v === "object" && v !== null;
+}
+
+/** check if the given value is a plain object. */
+function isPlainObject(v: unknown): v is Record<string, unknown> {
+  return isObject(v) && v.constructor === Object;
+}
+
+/** check if the given text is a block string. */
+function isBlockExpr(text: string, blockStart = "{", blockEnd = "}") {
+  const trimed = text.trim();
+  return trimed.startsWith(blockStart) && trimed.endsWith(blockEnd);
 }
 
 /** convert the given value to string. */
-function toString(value: unknown) {
-  if (isNullish(value)) {
+function toString(value: unknown, skipBoolean = false) {
+  if (isNullish(value) || (skipBoolean && typeof value === "boolean")) {
     return "";
   }
   if (typeof value === "string") {
@@ -167,56 +223,94 @@ function core(
     }),
   );
   const scopes = [
-    ...(isObject(init) ? [createStore(init)] : []),
+    ...(isPlainObject(init) ? [createStore(init)] : []),
     ...inhertScopes,
   ];
   const interpret = (
     $scopes: Record<string, unknown>[],
     expr: string,
-    update: (content: string) => void,
+    update: (nextValue: unknown) => void,
     blockStart?: string,
     blockEnd?: string,
   ) => {
-    const [texts, blocks] = parseBlocks(
-      expr,
-      blockStart,
-      blockEnd,
-    );
-    if (blocks.length > 0) {
-      const effect = (watch?: boolean) => {
-        update(
-          texts.map((text, i) => {
-            const block = blocks[i];
-            if (block) {
-              const m = block.match(
-                /^([\w$]+)(\s*[\[\^+\-*/%<>|&.?].+)?$/,
-              );
-              if (m) {
-                const [, ident, accesser] = m;
-                const scope = findOwn($scopes, ident);
-                if (scope) {
-                  if (watch) {
-                    scope[symWatch]?.(ident, effect);
-                  }
-                  let value = get(scope, ident);
-                  if (accesser) {
-                    value = new Function(ident, "return " + block)(value);
-                    if (value === false) {
-                      value = "";
-                    }
-                  }
-                  return text + toString(value);
-                }
-              }
-            }
-            return text;
-          }).join(""),
-        );
-      };
-      effect(true);
+    const [texts, blocks] = parseBlocks(expr, blockStart, blockEnd);
+    if (blocks.length === 0) {
+      return; // no blocks
     }
+    const exprCache = new Map<string, string[]>();
+    const parse = (blockExpr: string) => {
+      const expr = exprCache.get(blockExpr);
+      if (expr) {
+        return expr;
+      }
+      const m = blockExpr.match(regBlockExpr);
+      if (m) {
+        exprCache.set(blockExpr, m);
+      }
+      return m;
+    };
+    const invoke = (
+      blockExpr: string,
+      callback: (value: unknown) => void,
+      watch = true,
+    ) => {
+      const m = parse(blockExpr);
+      if (m) {
+        const [, op, ident, accesser] = m;
+        const scope = findOwn($scopes, ident);
+        if (scope) {
+          let value = get(scope, ident);
+          if (watch) {
+            // reinvoking when the value changes
+            scope[symWatch]?.(ident, () => {
+              invoke(blockExpr, callback, false);
+            });
+            // reinvoke when the value of the accesser changes
+            if (
+              accesser &&
+              (accesser.startsWith(".") || accesser.startsWith("[")) &&
+              isObject(value)
+            ) {
+              get(value, symWatch)?.(symAnyKey, () => {
+                invoke(blockExpr, callback, false);
+              });
+            }
+          }
+          if (op || accesser) {
+            value = new Function(ident, "return " + blockExpr)(value);
+          }
+          return callback(value);
+        }
+      }
+      callback(undefined);
+    };
+    // singleton block
+    if (blocks.length === 1 && isBlockExpr(expr)) {
+      return invoke(blocks[0], update);
+    }
+    const invokedBlocks = new Array(blocks.length);
+    const merge = () => {
+      const mergedValue = texts.map((text, i) => {
+        if (blocks[i]) {
+          return text + toString(invokedBlocks[i], true);
+        }
+        return text;
+      }).join("");
+      update(mergedValue);
+    };
+    let firstMerge = false;
+    blocks.map((blockExpr, i) => {
+      invoke(blockExpr, (value) => {
+        invokedBlocks[i] = value;
+        if (firstMerge) {
+          merge();
+        }
+      });
+    });
+    merge();
+    firstMerge = true;
   };
-  const reactive = (el: Element, currentScope?: any) => {
+  const reactive = (el: Element, currentScope?: unknown) => {
     let $scopes = scopes;
     if (currentScope) {
       $scopes = [currentScope, ...scopes];
@@ -238,7 +332,7 @@ function core(
         const eventAttrs = new Set<string>();
 
         for (const prop of props) {
-          if (attr(el, prop) === "") {
+          if (attr(el, prop) === "" && !htmlBuiltinBooleanAttrs.has(prop)) {
             boolAttrs.add(prop);
           } else if (prop.startsWith("on")) {
             eventAttrs.add(prop);
@@ -263,7 +357,7 @@ function core(
               if (Array.isArray(arr)) {
                 let iterKey = iter;
                 let iterIndex = "";
-                if (iterKey.startsWith("(") && iterKey.endsWith(")")) {
+                if (isBlockExpr(iterKey, "(", ")")) {
                   [iterKey, iterIndex] = iterKey.slice(1, -1).split(
                     ",",
                     2,
@@ -290,7 +384,7 @@ function core(
                         [iterScope, ...$scopes],
                         keyProp,
                         (ret) => {
-                          key = ret;
+                          key = toString(ret);
                         },
                       );
                       const sameKeyEl = map.get(key);
@@ -327,7 +421,17 @@ function core(
           interpret(
             $scopes,
             attr(el, prop) ?? "",
-            (content) => el.setAttribute(prop, content),
+            (v) => {
+              if (htmlBuiltinBooleanAttrs.has(prop)) {
+                if (v) {
+                  el.setAttribute(prop, "");
+                } else {
+                  el.removeAttribute(prop);
+                }
+              } else {
+                el.setAttribute(prop, toString(v, true));
+              }
+            },
             isStyle ? "state(" : undefined,
             isStyle ? ")" : undefined,
           );
@@ -347,29 +451,31 @@ function core(
           }
         }
         if (cProp) {
-          const scope = findOwn($scopes, cProp) ?? $scopes[0];
-          const cEl = el;
-          const placeholder = doc!.createComment("&")!;
-          let anchor: ChildNode = el;
-          const switchEl = (nextEl: ChildNode) => {
-            if (nextEl !== anchor) {
-              anchor.replaceWith(nextEl);
-              anchor = nextEl;
-            }
-          };
-          const toggle = () => {
-            let ok = get(scope!, cProp!);
-            if (notOp) {
-              ok = !ok;
-            }
-            if (ok) {
-              switchEl(cEl);
-            } else {
-              switchEl(placeholder);
-            }
-          };
-          toggle();
-          scope[symWatch](cProp, toggle);
+          const scope = findOwn($scopes, cProp);
+          if (scope) {
+            const cEl = el;
+            const placeholder = doc!.createComment("&")!;
+            let anchor: ChildNode = el;
+            const switchEl = (nextEl: ChildNode) => {
+              if (nextEl !== anchor) {
+                anchor.replaceWith(nextEl);
+                anchor = nextEl;
+              }
+            };
+            const toggle = () => {
+              let ok = get(scope!, cProp!);
+              if (notOp) {
+                ok = !ok;
+              }
+              if (ok) {
+                switchEl(cEl);
+              } else {
+                switchEl(placeholder);
+              }
+            };
+            toggle();
+            scope[symWatch](cProp, toggle);
+          }
         }
 
         // bind scopes for event handlers
@@ -468,7 +574,7 @@ function core(
         interpret(
           $scopes,
           node.textContent ?? "",
-          (content) => node.textContent = content,
+          (v) => node.textContent = toString(v, true),
         );
       }
     };
@@ -480,7 +586,7 @@ function core(
   reactive(root);
 }
 
-export default {
+const plugin = {
   name: "use-state",
   setup(hot: Hot) {
     let globalState: Record<string, unknown> | null = null;
@@ -490,7 +596,7 @@ export default {
     ): void => {
       if (init instanceof Promise) {
         hot.waitUntil(init.then((state) => hot.state(state)));
-      } else if (isObject(init)) {
+      } else if (isPlainObject(init)) {
         globalState = createStore(init);
       }
     };
@@ -510,3 +616,29 @@ export default {
     });
   },
 };
+
+// use the plugin as a standalone module:
+// https://esm.sh/hot/use-state?standalone
+export function standalone() {
+  const hot = {
+    _promises: [] as Promise<void>[],
+    _onFire: () => {},
+    waitUntil(promise: Promise<void>) {
+      this._promises.push(promise);
+    },
+    onFire(callback: () => void) {
+      this._onFire = callback;
+    },
+  };
+  plugin.setup(hot as unknown as Hot);
+  return (init: Record<string, unknown> | Promise<Record<string, unknown>>) => {
+    (hot as unknown as Hot).state(init);
+    if (hot._promises.length > 0) {
+      Promise.all(hot._promises).then(() => hot._onFire());
+    } else {
+      hot._onFire();
+    }
+  };
+}
+
+export default plugin;
