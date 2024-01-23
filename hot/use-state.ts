@@ -222,8 +222,13 @@ function core(
       },
     }),
   );
+  const withProp = attr(root, "with");
+  const withScope = withProp
+    ? findOwn(inhertScopes, withProp)?.[withProp]
+    : null;
   const scopes = [
     ...(isPlainObject(init) ? [createStore(init)] : []),
+    ...(withScope ? [withScope] : []),
     ...inhertScopes,
   ];
   const interpret = (
