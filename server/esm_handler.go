@@ -313,6 +313,7 @@ func esmHandler() rex.Handle {
 				return rex.Status(404, "Not Found")
 			}
 
+			// the hot script
 			if pathname == "/hot" {
 				header.Set("X-TypeScript-Types", fmt.Sprintf("%s%s/v%d/hot.d.ts", cdnOrigin, cfg.CdnBasePath, buildVersion))
 				plugins := newStringSet()
@@ -367,6 +368,19 @@ func esmHandler() rex.Handle {
 					}
 					return code
 				}
+			}
+
+			if strings.HasPrefix(filename, "hot/") && ctx.Form.Has("standalone") {
+				entryCode := fmt.Sprintf(`import { standalone } from "./%s"; export default standalone();`, filename)
+				target := getBuildTargetByUA(userAgent)
+				code, err := bundleHotScript(entryCode, targets[target])
+				if err != nil {
+					return throwErrorJS(ctx, fmt.Errorf("transform error: %v", err), false)
+				}
+				header.Set("Content-Type", "application/javascript; charset=utf-8")
+				header.Set("Cache-Control", "public, max-age=31536000, immutable")
+				header.Add("Vary", "User-Agent")
+				return code
 			}
 
 			// check version/dts for hot plugins
