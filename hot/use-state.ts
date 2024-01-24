@@ -38,32 +38,28 @@ const htmlBuiltinBooleanAttrs = new Set([
 function createStore<T extends object>(
   init: T,
   watchInit?: Iterable<[string | symbol, Set<() => void>]>,
-) {
+): T {
   let filled = false;
-  let flushPending = false;
-  let flushKeys: Set<string | symbol> = new Set();
-  const flush = () => {
-    [...flushKeys, symAnyKey].forEach((key) => {
-      watchers.get(key)?.forEach((handler) => handler());
+  let effectPending = false;
+  const effectKeys: Set<string | symbol> = new Set();
+  const effect = () => {
+    [...effectKeys, symAnyKey].forEach((key) => {
+      watchers.get(key)?.forEach((handler) => {
+        handler();
+      });
     });
-    flushKeys = new Set();
-    flushPending = false;
+    effectKeys.clear();
+    effectPending = false;
   };
   const watchers = new Map(watchInit);
-  const watch = (
-    key: string | symbol,
-    handler: () => void,
-    disposable?: boolean,
-  ) => {
+  const watch = (key: string | symbol, handler: () => void) => {
     const set = watchers.get(key) ?? (watchers.set(key, new Set()).get(key)!);
     const add = () => set.add(handler);
     add();
-    if (disposable) {
-      return () => { // dispose
-        set.delete(handler);
-        return add; // recover
-      };
-    }
+    return () => { // dispose
+      set.delete(handler);
+      return add; // recover
+    };
   };
   const unwatch = () => {
     const entries = watchers.entries();
@@ -81,20 +77,26 @@ function createStore<T extends object>(
       return get(target, key);
     },
     set: (target, key, value) => {
-      let oldWatchers: Iterable<[string | symbol, Set<() => void>]> | undefined;
       const old = get(target, key);
-      if (isObject(old)) {
-        oldWatchers = get(old, symUnWatch)?.();
+      if (old === value) {
+        return true;
       }
-      if (isObject(value)) {
+      if (isObject(value) && !get(value, symWatch)) {
+        let oldWatchers:
+          | Iterable<[string | symbol, Set<() => void>]>
+          | undefined;
+        if (isObject(old)) {
+          oldWatchers = get(old, symUnWatch)?.();
+        }
         value = createStore(value, oldWatchers);
       }
       const ok = set(target, key, value);
       if (ok && filled) {
-        flushKeys.add(key);
-        if (!flushPending) {
-          flushPending = true;
-          queueMicrotask(flush);
+        effectKeys.add(key);
+        if (!effectPending) {
+          effectPending = true;
+          // simple scheduler
+          queueMicrotask(effect);
         }
       }
       return ok;
@@ -104,7 +106,7 @@ function createStore<T extends object>(
     store[key] = value;
   }
   filled = true;
-  return store as T;
+  return store;
 }
 
 /** split the given expression by blocks. */
@@ -150,7 +152,10 @@ function set(target: object, key: PropertyKey, value: unknown) {
 }
 
 /** get the attribute value of the given element. */
-function attr(el: Element, name: string) {
+function attr(el: Element, name: string, value?: string) {
+  if (!isNullish(value)) {
+    return el.setAttribute(name, value);
+  }
   return el.getAttribute(name);
 }
 
@@ -227,8 +232,8 @@ function core(
     ? findOwn(inhertScopes, withProp)?.[withProp]
     : null;
   const scopes = [
-    ...(isPlainObject(init) ? [createStore(init)] : []),
-    ...(withScope ? [withScope] : []),
+    ...(isObject(init) ? [createStore(init)] : []),
+    ...(isObject(withScope) ? [withScope] : []),
     ...inhertScopes,
   ];
   const interpret = (
@@ -243,7 +248,7 @@ function core(
       return; // no blocks
     }
     const exprCache = new Map<string, string[]>();
-    const parse = (blockExpr: string) => {
+    const tokenize = (blockExpr: string) => {
       const expr = exprCache.get(blockExpr);
       if (expr) {
         return expr;
@@ -254,44 +259,46 @@ function core(
       }
       return m;
     };
-    const invoke = (
-      blockExpr: string,
-      callback: (value: unknown) => void,
-      watch = true,
-    ) => {
-      const m = parse(blockExpr);
+    const parse = (expr: string) => {
+      const m = tokenize(expr);
       if (m) {
-        const [, op, ident, accesser] = m;
-        const scope = findOwn($scopes, ident);
-        if (scope) {
-          let value = get(scope, ident);
-          if (watch) {
-            // reinvoking when the value changes
-            scope[symWatch]?.(ident, () => {
-              invoke(blockExpr, callback, false);
-            });
-            // reinvoke when the value of the accesser changes
-            if (
-              accesser &&
-              (accesser.startsWith(".") || accesser.startsWith("[")) &&
-              isObject(value)
-            ) {
-              get(value, symWatch)?.(symAnyKey, () => {
-                invoke(blockExpr, callback, false);
-              });
-            }
-          }
-          if (op || accesser) {
-            value = new Function(ident, "return " + blockExpr)(value);
-          }
-          return callback(value);
-        }
+        const [_, op, ident, accesser] = m;
+        const scope = findOwn($scopes, ident) ?? $scopes[0];
+        return [scope, op, ident, accesser];
       }
-      callback(undefined);
+      return null;
+    };
+    const createEffect = (expr: string, callback: (value: unknown) => void) => {
+      const ret = parse(expr);
+      if (ret) {
+        const [scope, op, ident, accesser] = ret;
+        let dispose: (() => void) | undefined;
+        const invoke = () => {
+          dispose?.();
+          const call = () => {
+            const value = get(scope, ident);
+            if (op || accesser) {
+              callback(new Function(ident, "return " + expr)(value));
+            } else {
+              callback(value);
+            }
+            return value;
+          };
+          const value = call();
+          const shouldWatchCurrentValueToo = accesser &&
+            (accesser.startsWith(".") || accesser.startsWith("[")) &&
+            isObject(value);
+          if (shouldWatchCurrentValueToo) {
+            dispose = get(value, symWatch)(symAnyKey, call);
+          }
+        };
+        invoke();
+        scope[symWatch]?.(ident, invoke);
+      }
     };
     // singleton block
     if (blocks.length === 1 && isBlockExpr(expr)) {
-      return invoke(blocks[0], update);
+      return createEffect(blocks[0], update);
     }
     const invokedBlocks = new Array(blocks.length);
     const merge = () => {
@@ -305,7 +312,7 @@ function core(
     };
     let firstMerge = false;
     blocks.map((blockExpr, i) => {
-      invoke(blockExpr, (value) => {
+      createEffect(blockExpr, (value) => {
         invokedBlocks[i] = value;
         if (firstMerge) {
           merge();
@@ -320,7 +327,7 @@ function core(
     if (currentScope) {
       $scopes = [currentScope, ...scopes];
     }
-    const activeNode = (node: ChildNode) => {
+    const handler = (node: ChildNode) => {
       if (node.nodeType === 1 /* element node */) {
         const el = node as Element;
         const tagName = el.tagName.toLowerCase();
@@ -357,16 +364,16 @@ function core(
             const placeholder = doc!.createComment("&")!;
             const scope = findOwn($scopes, key) ?? $scopes[0];
             let marker: Element[] = [];
+            let unwatch: (() => void) | undefined;
             const renderList = () => {
+              unwatch?.(); // dispose the previous array watcher if exists
               const arr = get(scope, key);
               if (Array.isArray(arr)) {
                 let iterKey = iter;
                 let iterIndex = "";
                 if (isBlockExpr(iterKey, "(", ")")) {
-                  [iterKey, iterIndex] = iterKey.slice(1, -1).split(
-                    ",",
-                    2,
-                  )
+                  [iterKey, iterIndex] = iterKey.slice(1, -1)
+                    .split(",", 2)
                     .map((s) => s.trim());
                 }
                 const render = () => {
@@ -394,11 +401,16 @@ function core(
                       );
                       const sameKeyEl = map.get(key);
                       if (sameKeyEl) {
+                        if (iterIndex) {
+                          get(sameKeyEl, "$scope")[iterIndex] = index;
+                        }
                         return sameKeyEl;
                       }
                     }
                     const listEl = templateEl.cloneNode(true) as Element;
-                    reactive(listEl, iterScope);
+                    const lterScopeStore = createStore(iterScope);
+                    set(listEl, "$scope", lterScopeStore);
+                    reactive(listEl, lterScopeStore);
                     return listEl;
                   });
                   marker.forEach((el) => el.remove());
@@ -406,7 +418,8 @@ function core(
                   marker = listEls;
                 };
                 render();
-                get(arr, symWatch)(symAnyKey, render);
+                // watch the array changes and re-render
+                unwatch = get(arr, symWatch)(symAnyKey, render);
               } else if (marker.length > 0) {
                 marker.forEach((el) => el.remove());
                 marker.length = 0;
@@ -421,6 +434,7 @@ function core(
         }
 
         // render properties with state
+        const style = [attr(el, "style"), null];
         for (const prop of commonAttrs) {
           const isStyle = prop === "style";
           interpret(
@@ -429,12 +443,23 @@ function core(
             (v) => {
               if (htmlBuiltinBooleanAttrs.has(prop)) {
                 if (v) {
-                  el.setAttribute(prop, "");
+                  attr(el, prop, "");
                 } else {
                   el.removeAttribute(prop);
                 }
               } else {
-                el.setAttribute(prop, toString(v, true));
+                let propName = prop;
+                let propValue = toString(v, true);
+                if (isStyle) {
+                  style[0] = propValue;
+                } else if (propName === "+style") {
+                  style[1] = propValue;
+                  propName = "style";
+                }
+                if (propName === "style") {
+                  propValue = style.filter(Boolean).join(";");
+                }
+                attr(el, propName, propValue);
               }
             },
             isStyle ? "state(" : undefined,
@@ -491,11 +516,12 @@ function core(
             for (const key of keys) {
               if (!marker.has(key)) {
                 marker.add(key);
-                !Object.hasOwn(el, key) &&
+                if (!Object.hasOwn(el, key)) {
                   Object.defineProperty(el, key, {
                     get: () => get(scope, key),
                     set: (value) => set(scope, key, value),
                   });
+                }
               }
             }
           }
@@ -534,7 +560,7 @@ function core(
                   );
                 }
                 el.removeAttribute(a);
-                el.setAttribute(event, handler);
+                attr(el, event, handler);
               }
             }
           }
@@ -571,7 +597,7 @@ function core(
                 convert = (_input) => (inputEl as HTMLInputElement).checked;
               }
               update();
-              const dispose = scope[symWatch](name, update, true);
+              const dispose = scope[symWatch](name, update);
               inputEl.addEventListener("input", () => {
                 const recover = dispose();
                 set(scope, name, convert(inputEl.value));
@@ -589,9 +615,9 @@ function core(
       }
     };
     if (el !== root) {
-      activeNode(el);
+      handler(el);
     }
-    walkNodes(el, activeNode);
+    walkNodes(el, handler);
   };
   reactive(root);
 }
@@ -632,21 +658,23 @@ const plugin = {
 export function standalone() {
   const hot = {
     _promises: [] as Promise<void>[],
-    _onFire: () => {},
+    _fire: () => {},
     waitUntil(promise: Promise<void>) {
       this._promises.push(promise);
     },
-    onFire(callback: () => void) {
-      this._onFire = callback;
+    onFire(fn: () => void) {
+      this._fire = fn;
     },
   };
   plugin.setup(hot as unknown as Hot);
-  return (init: Record<string, unknown> | Promise<Record<string, unknown>>) => {
-    (hot as unknown as Hot).state(init);
+  return (
+    init?: Record<string, unknown> | Promise<Record<string, unknown>>,
+  ) => {
+    init && (hot as unknown as Hot).state(init);
     if (hot._promises.length > 0) {
-      Promise.all(hot._promises).then(() => hot._onFire());
+      Promise.all(hot._promises).then(() => hot._fire());
     } else {
-      hot._onFire();
+      hot._fire();
     }
   };
 }
