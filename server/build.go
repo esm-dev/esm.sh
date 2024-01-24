@@ -1015,14 +1015,20 @@ func (task *BuildTask) resolveExternal(specifier string, kind api.ResolveKind) (
 	// replace some polyfills with native APIs
 	if resolvedPath == "" {
 		switch specifier {
-		case "object-assign":
-			resolvedPath = jsDataUrl(`export default Object.assign`)
 		case "array-flatten":
 			resolvedPath = jsDataUrl(`export const flatten=(a,d)=>a.flat(typeof d<"u"?d:Infinity);export default flatten`)
 		case "array-includes":
 			resolvedPath = jsDataUrl(`export default (a,p,i)=>a.includes(p,i)`)
 		case "abort-controller":
 			resolvedPath = jsDataUrl(`export const AbortSignal=globalThis.AbortSignal;export const AbortController=globalThis.AbortController;export default AbortController`)
+		case "object-assign":
+			resolvedPath = jsDataUrl(`export default Object.assign`)
+		case "has-own":
+			resolvedPath = jsDataUrl(`const hasOwn=Object.prototype.hasOwnProperty;export default Object.hasOwn ?? (o,p)=>hasOwn.call(o,p)`)
+		case "has-symbols":
+			resolvedPath = jsDataUrl(`export default ()=>true`)
+		case "function-bind":
+			resolvedPath = jsDataUrl(`export default Function.prototype.bind`)
 		case "node-fetch":
 			if task.Target != "node" {
 				resolvedPath = fmt.Sprintf("%s/v%d/node_fetch.js", cfg.CdnBasePath, task.BuildVersion)
