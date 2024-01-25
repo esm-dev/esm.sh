@@ -6,6 +6,7 @@ const symWatch = Symbol();
 const symUnWatch = Symbol();
 const symAnyKey = Symbol();
 
+/** HTML built-in boolean attributes. */
 const htmlBuiltinBooleanAttrs = new Set([
   "allowfullscreen",
   "async",
@@ -23,7 +24,6 @@ const htmlBuiltinBooleanAttrs = new Set([
   "loop",
   "multiple",
   "muted",
-  "nomodule",
   "novalidate",
   "open",
   "playsinline",
@@ -57,7 +57,7 @@ function createStore<T extends object>(
     add();
     return () => { // dispose
       set.delete(handler);
-      return add; // recover
+      return add; // rewatch
     };
   };
   const unwatch = () => {
@@ -66,7 +66,7 @@ function createStore<T extends object>(
     return entries;
   };
   const isArray = Array.isArray(init);
-  const store = new Proxy(isArray ? [] : Object.create(null), {
+  const store = new Proxy(isArray ? [] : obj.create(null), {
     get: (target, key) => {
       if (key === symWatch) {
         return watch;
@@ -103,19 +103,19 @@ function createStore<T extends object>(
       return ok;
     },
   });
-  for (const [key, value] of Object.entries(init)) {
+  for (const [key, value] of obj.entries(init)) {
     store[key] = value;
   }
   filled = true;
   return store;
 }
 
-/** split the given expression by blocks. */
+/** split the given text by block expressions. */
 function parseBlocks(
   text: string,
   blockStart = "{",
   blockEnd = "}",
-): [(string | Expr)[], number] {
+): [segments: (string | Expr)[], blocks: number] {
   const segments: (string | Expr)[] = [];
   let i = 0;
   let j = 0;
@@ -150,7 +150,7 @@ function parseBlocks(
 
 /** find the first object that has the given property. */
 function findOwn(list: any[], key: PropertyKey) {
-  return list.find((o) => Reflect.has(o, key));
+  return list.find((o) => obj.hasOwn(o, key));
 }
 
 /** get the given property of the given target. */
@@ -223,7 +223,7 @@ function toString(value: unknown, skipBoolean = false) {
 
 type Expr = [
   ident: string,
-  accesser: string | symbol | undefined,
+  prop: string | symbol | undefined,
   op: boolean,
   raw: string,
 ];
@@ -237,20 +237,22 @@ const tokenizeExpr = (blockExpr: string) => {
   if (expr) {
     return expr;
   }
-  const m = blockExpr.match(regExpr);
+  const m = regIdent.test(blockExpr)
+    ? ["", "", blockExpr]
+    : blockExpr.match(regExpr);
   if (m) {
-    const [_, preOp, ident, dotAcc, bracketAcc, postOp] = m;
-    let accesser: Expr[1] = dotAcc;
-    if (bracketAcc) {
-      const c = bracketAcc.charCodeAt(0);
-      accesser = c === 39 /* ' */ || c === 34 /* " */
-        ? bracketAcc.slice(1, -1)
-        : (regIdent.test(bracketAcc) ? symAnyKey : bracketAcc);
+    const [_, preOp, ident, dotProp, bracketProp, postOp] = m;
+    let prop: Expr[1] = dotProp;
+    if (bracketProp) {
+      const c = bracketProp.charCodeAt(0);
+      prop = c === 39 /* ' */ || c === 34 /* " */
+        ? bracketProp.slice(1, -1)
+        : (regIdent.test(bracketProp) ? symAnyKey : bracketProp);
     }
     const expr: Expr = [
       ident,
-      accesser,
-      !!(preOp || accesser || postOp),
+      prop,
+      !!(preOp || prop || postOp),
       blockExpr,
     ];
     exprCache.set(blockExpr, expr);
@@ -268,9 +270,9 @@ function core(
     (globalState ? [globalState] : []);
   const init = new Function(
     "$scope",
-    "return " + (attr(root, "onload") ?? "null"),
+    "return " + (attr(root, "onload") ?? attr(root, "init") ?? "null"),
   )(
-    new Proxy(Object.create(null), {
+    new Proxy(obj.create(null), {
       get: (_, key) => findOwn(inhertScopes, key)?.[key],
       set: (_, key, value) => {
         const s = findOwn(inhertScopes, key) ?? inhertScopes[0];
@@ -302,7 +304,7 @@ function core(
       return; // no blocks
     }
     const createEffect = (expr: Expr, callback: (value: unknown) => void) => {
-      const [ident, accesser, op, rawExpr] = expr;
+      const [ident, prop, op, rawExpr] = expr;
       const scope = findOwn($scopes, ident) ?? $scopes[0];
       let dispose: (() => void) | undefined;
       const invoke = () => {
@@ -317,13 +319,13 @@ function core(
           return value;
         };
         const value = call();
-        if (watch && accesser && isObject(value)) {
-          dispose = get(value, symWatch)(accesser, call);
+        if (watch && prop && isObject(value)) {
+          dispose = get(value, symWatch)(prop, call);
         }
       };
       invoke();
       if (watch) {
-        get(scope, symWatch)?.(ident, invoke);
+        get(scope, symWatch)(ident, invoke);
       }
     };
     // singleton block
@@ -349,11 +351,295 @@ function core(
     const merge = () => update(invokedSegments.join(""));
     merge();
   };
-  const reactive = (el: Element, currentScope?: unknown) => {
+  const statify = (el: Element, currentScope?: unknown) => {
     let $scopes = scopes;
     if (currentScope) {
       $scopes = [currentScope, ...scopes];
     }
+    // bind scopes for event handlers
+    const bindEventScope = (el: Element) => {
+      const marker = new Set<string>();
+      for (const scope of $scopes) {
+        const keys = obj.keys(scope);
+        for (const key of keys) {
+          if (!marker.has(key)) {
+            marker.add(key);
+            if (!obj.hasOwn(el, key)) {
+              obj.defineProperty(el, key, {
+                get: () => get(scope, key),
+                set: (value) => set(scope, key, value),
+              });
+            }
+          }
+        }
+      }
+    };
+    // apply event modifiers if exists
+    const applyEventModifiers = (el: Element, eventAttrs: Set<string>) => {
+      for (const a of eventAttrs) {
+        let handler = attr(el, a);
+        if (handler) {
+          const [event, ...rest] = a.toLowerCase().split(".");
+          const modifiers = new Set(rest);
+          const addCode = (code: string) => {
+            handler = code + handler;
+          };
+          if (modifiers.size) {
+            if (modifiers.delete("once")) {
+              addCode(`this.removeAttribute('${event}');`);
+            }
+            if (modifiers.delete("prevent")) {
+              addCode("event.preventDefault();");
+            }
+            if (modifiers.delete("stop")) {
+              addCode("event.stopPropagation();");
+            }
+            if (event.startsWith("onkey") && modifiers.size) {
+              if (modifiers.delete("space")) {
+                modifiers.add(" ");
+              }
+              addCode(
+                "if(![" +
+                  ([...modifiers].map((k) =>
+                    "'" + (k.length > 1
+                      ? k.charAt(0).toUpperCase() + k.slice(1)
+                      : k) +
+                    "'"
+                  ).join(",")) +
+                  "].includes(event.key))return;",
+              );
+            }
+            el.removeAttribute(a);
+            attr(el, event, handler);
+          }
+        }
+      }
+    };
+    // conditional rendering
+    const conditionalRender = (el: Element, ident: string, notOp?: boolean) => {
+      const scope = findOwn($scopes, ident);
+      if (scope) {
+        const cEl = el;
+        const placeholder = doc!.createComment("&")!;
+        let anchor: ChildNode = el;
+        const switchEl = (nextEl: ChildNode) => {
+          if (nextEl !== anchor) {
+            anchor.replaceWith(nextEl);
+            anchor = nextEl;
+          }
+        };
+        const toggle = () => {
+          let ok = get(scope, ident);
+          if (notOp) {
+            ok = !ok;
+          }
+          if (ok) {
+            switchEl(cEl);
+          } else {
+            switchEl(placeholder);
+          }
+        };
+        toggle();
+        scope[symWatch](ident, toggle);
+      }
+    };
+    // list rendering by checking the "for" attribute
+    const renderList = (el: Element) => {
+      const [iter, iterArrIdent] = attr(el, "for")!.split(" of ").map((s) =>
+        s.trim()
+      );
+      if (iter && iterArrIdent) {
+        const templateEl = el;
+        const keyProp = attr(templateEl, "key");
+        const placeholder = doc!.createComment("&")!;
+        const scope = findOwn($scopes, iterArrIdent) ?? $scopes[0];
+        let marker: Element[] = [];
+        let unwatch: (() => void) | undefined;
+        const rerender = () => {
+          unwatch?.(); // dispose the previous array watcher if exists
+          const arr = get(scope, iterArrIdent);
+          if (Array.isArray(arr)) {
+            let iterIdent = iter;
+            let iterIndexIdent = "";
+            if (isBlockExpr(iterIdent, "(", ")")) {
+              [iterIdent, iterIndexIdent] = iterIdent.slice(1, -1)
+                .split(",", 2)
+                .map((s) => s.trim());
+            }
+            const render = () => {
+              const map = new Map<string, Element>();
+              for (const el of marker) {
+                const key = attr(el, "key");
+                key && map.set(key, el);
+              }
+              const listEls = arr.map((item, index) => {
+                const iterScope: Record<string, unknown> = {};
+                if (iterIdent) {
+                  iterScope[iterIdent] = item;
+                }
+                if (iterIndexIdent) {
+                  iterScope[iterIndexIdent] = index;
+                }
+                if (keyProp && map.size > 0) {
+                  let key = "";
+                  interpret(
+                    [iterScope, ...$scopes],
+                    keyProp,
+                    (ret) => {
+                      key = toString(ret);
+                    },
+                    false,
+                  );
+                  const sameKeyEl = map.get(key);
+                  if (sameKeyEl) {
+                    if (iterIndexIdent) {
+                      get(sameKeyEl, "$scope")[iterIndexIdent] = index;
+                    }
+                    return sameKeyEl;
+                  }
+                }
+                const listEl = templateEl.cloneNode(true) as Element;
+                const lterScopeStore = createStore(iterScope);
+                set(listEl, "$scope", lterScopeStore);
+                statify(listEl, lterScopeStore);
+                return listEl;
+              });
+              marker.forEach((el) => el.remove());
+              listEls.forEach((el) => placeholder.before(el));
+              marker = listEls;
+            };
+            render();
+            // watch the array changes and re-render
+            unwatch = get(arr, symWatch)(symAnyKey, render);
+          } else if (marker.length > 0) {
+            marker.forEach((el) => el.remove());
+            marker.length = 0;
+          }
+        };
+        templateEl.removeAttribute("for");
+        el.replaceWith(placeholder);
+        rerender();
+        scope[symWatch](iterArrIdent, rerender);
+      }
+    };
+    // render text nodes
+    const renderTextNode = (text: Text) => {
+      const [segments, blocks] = parseBlocks(text.nodeValue!);
+      if (blocks === 0) {
+        return; // no blocks
+      }
+      const textNodes = segments.map((seg) => {
+        if (Array.isArray(seg)) {
+          const blockText = doc.createTextNode("");
+          interpret(
+            $scopes,
+            [[seg], 1],
+            (v) => blockText.nodeValue = toString(v, true),
+          );
+          return blockText;
+        }
+        return doc!.createTextNode(seg);
+      });
+      text.replaceWith(...textNodes.flat(1));
+    };
+    // render properties
+    const renderProperties = (el: Element, attrNames: Set<string>) => {
+      const style = [attr(el, "style"), null];
+      for (const prop of attrNames) {
+        const isStyle = prop === "style";
+        interpret(
+          $scopes,
+          attr(el, prop) ?? "",
+          (v) => {
+            if (htmlBuiltinBooleanAttrs.has(prop)) {
+              if (v) {
+                attr(el, prop, "");
+              } else {
+                el.removeAttribute(prop);
+              }
+            } else {
+              let propName = prop;
+              let propValue = toString(v, true);
+              if (isStyle) {
+                style[0] = propValue;
+              } else if (propName === "+style") {
+                style[1] = propValue;
+                propName = "style";
+              }
+              if (propName === "style") {
+                propValue = style.filter(Boolean).join(";");
+              }
+              attr(el, propName, propValue);
+            }
+          },
+          true,
+          isStyle ? "state(" : undefined,
+          isStyle ? ")" : undefined,
+        );
+      }
+    };
+    // two-way binding for <input> elements
+    const createModel = (inputEl: HTMLInputElement) => {
+      const name = attr(inputEl, "name");
+      if (name) {
+        const [ident, ...rest] = name.split(".");
+        const scope = findOwn($scopes, ident);
+        if (scope && rest.length < 2) {
+          const subIdent = rest[0];
+          const getValue = () => {
+            const type = attr(inputEl, "type");
+            if (type === "number" || type === "range") {
+              return Number(inputEl.value);
+            } else if (type === "checkbox") {
+              return inputEl.checked;
+            }
+            return inputEl.value;
+          };
+          let subUnwatch: (() => () => void) | undefined;
+          const bindValue = () => {
+            subUnwatch?.();
+            const updateEl = () => {
+              const type = attr(inputEl, "type");
+              let value = get(scope, ident);
+              if (subIdent) {
+                value = isObject(value) ? get(value, subIdent) : undefined;
+              }
+              if (type === "radio") {
+                inputEl.checked = value === inputEl.value;
+              } else if (type === "checkbox") {
+                inputEl.checked = !!value;
+              } else {
+                inputEl.value = toString(value);
+              }
+            };
+            updateEl();
+            if (subIdent) {
+              const v = get(scope, ident);
+              if (isObject(v)) {
+                subUnwatch = get(v, symWatch)(subIdent, updateEl);
+              }
+            }
+          };
+          bindValue();
+          const unwatch = scope[symWatch](ident, bindValue);
+          inputEl.addEventListener("input", () => {
+            if (subIdent) {
+              const v = get(scope, ident);
+              if (isObject(v)) {
+                const rewatch = subUnwatch?.();
+                set(v, subIdent, getValue());
+                rewatch?.();
+              }
+            } else {
+              const rewatch = unwatch();
+              set(scope, ident, getValue());
+              rewatch();
+            }
+          });
+        }
+      }
+    };
+    // node handler
     const handler = (node: ChildNode) => {
       if (node.nodeType === 1 /* element node */) {
         const el = node as Element;
@@ -362,7 +648,7 @@ function core(
 
         // nested <use-state> tag
         if (tagName === "use-state") {
-          Object.assign(el, { $scopes });
+          obj.assign(el, { $scopes });
           return false;
         }
 
@@ -382,122 +668,15 @@ function core(
 
         // list rendering
         if (commonAttrs.has("for")) {
-          const [iter, iterArrIdent] = attr(el, "for")!.split(" of ").map((s) =>
-            s.trim()
-          );
-          if (iter && iterArrIdent) {
-            const templateEl = el;
-            const keyProp = attr(templateEl, "key");
-            const placeholder = doc!.createComment("&")!;
-            const scope = findOwn($scopes, iterArrIdent) ?? $scopes[0];
-            let marker: Element[] = [];
-            let unwatch: (() => void) | undefined;
-            const renderList = () => {
-              unwatch?.(); // dispose the previous array watcher if exists
-              const arr = get(scope, iterArrIdent);
-              if (Array.isArray(arr)) {
-                let iterIdent = iter;
-                let iterIndexIdent = "";
-                if (isBlockExpr(iterIdent, "(", ")")) {
-                  [iterIdent, iterIndexIdent] = iterIdent.slice(1, -1)
-                    .split(",", 2)
-                    .map((s) => s.trim());
-                }
-                const render = () => {
-                  const map = new Map<string, Element>();
-                  for (const el of marker) {
-                    const key = attr(el, "key");
-                    key && map.set(key, el);
-                  }
-                  const listEls = arr.map((item, index) => {
-                    const iterScope: Record<string, unknown> = {};
-                    if (iterIdent) {
-                      iterScope[iterIdent] = item;
-                    }
-                    if (iterIndexIdent) {
-                      iterScope[iterIndexIdent] = index;
-                    }
-                    if (keyProp && map.size > 0) {
-                      let key = "";
-                      interpret(
-                        [iterScope, ...$scopes],
-                        keyProp,
-                        (ret) => {
-                          key = toString(ret);
-                        },
-                        false,
-                      );
-                      const sameKeyEl = map.get(key);
-                      if (sameKeyEl) {
-                        if (iterIndexIdent) {
-                          get(sameKeyEl, "$scope")[iterIndexIdent] = index;
-                        }
-                        return sameKeyEl;
-                      }
-                    }
-                    const listEl = templateEl.cloneNode(true) as Element;
-                    const lterScopeStore = createStore(iterScope);
-                    set(listEl, "$scope", lterScopeStore);
-                    reactive(listEl, lterScopeStore);
-                    return listEl;
-                  });
-                  marker.forEach((el) => el.remove());
-                  listEls.forEach((el) => placeholder.before(el));
-                  marker = listEls;
-                };
-                render();
-                // watch the array changes and re-render
-                unwatch = get(arr, symWatch)(symAnyKey, render);
-              } else if (marker.length > 0) {
-                marker.forEach((el) => el.remove());
-                marker.length = 0;
-              }
-            };
-            el.replaceWith(placeholder);
-            templateEl.removeAttribute("for");
-            renderList();
-            scope[symWatch](iterArrIdent, renderList);
-          }
+          renderList(el);
           return false;
         }
 
-        // render properties with state
-        const style = [attr(el, "style"), null];
-        for (const prop of commonAttrs) {
-          const isStyle = prop === "style";
-          interpret(
-            $scopes,
-            attr(el, prop) ?? "",
-            (v) => {
-              if (htmlBuiltinBooleanAttrs.has(prop)) {
-                if (v) {
-                  attr(el, prop, "");
-                } else {
-                  el.removeAttribute(prop);
-                }
-              } else {
-                let propName = prop;
-                let propValue = toString(v, true);
-                if (isStyle) {
-                  style[0] = propValue;
-                } else if (propName === "+style") {
-                  style[1] = propValue;
-                  propName = "style";
-                }
-                if (propName === "style") {
-                  propValue = style.filter(Boolean).join(";");
-                }
-                attr(el, propName, propValue);
-              }
-            },
-            true,
-            isStyle ? "state(" : undefined,
-            isStyle ? ")" : undefined,
-          );
-        }
+        // render properties
+        renderProperties(el, commonAttrs);
 
         // conditional rendering
-        let cProp = "";
+        let conditionalIdent = "";
         let notOp = false;
         for (let prop of boolAttrs) {
           notOp = prop.startsWith("!");
@@ -505,155 +684,29 @@ function core(
             prop = prop.slice(1);
           }
           if (findOwn($scopes, prop)) {
-            cProp = prop;
+            conditionalIdent = prop;
             break;
           }
         }
-        if (cProp) {
-          const scope = findOwn($scopes, cProp);
-          if (scope) {
-            const cEl = el;
-            const placeholder = doc!.createComment("&")!;
-            let anchor: ChildNode = el;
-            const switchEl = (nextEl: ChildNode) => {
-              if (nextEl !== anchor) {
-                anchor.replaceWith(nextEl);
-                anchor = nextEl;
-              }
-            };
-            const toggle = () => {
-              let ok = get(scope!, cProp!);
-              if (notOp) {
-                ok = !ok;
-              }
-              if (ok) {
-                switchEl(cEl);
-              } else {
-                switchEl(placeholder);
-              }
-            };
-            toggle();
-            scope[symWatch](cProp, toggle);
-          }
+        if (conditionalIdent) {
+          conditionalRender(el, conditionalIdent, notOp);
         }
 
         // bind scopes for event handlers
         if (eventAttrs.size > 0) {
-          const marker = new Set<string>();
-          for (const scope of $scopes) {
-            const keys = obj.keys(scope);
-            for (const key of keys) {
-              if (!marker.has(key)) {
-                marker.add(key);
-                if (!Object.hasOwn(el, key)) {
-                  Object.defineProperty(el, key, {
-                    get: () => get(scope, key),
-                    set: (value) => set(scope, key, value),
-                  });
-                }
-              }
-            }
-          }
-          // apply event modifiers if exists
-          for (const a of eventAttrs) {
-            let handler = attr(el, a);
-            if (handler) {
-              const [event, ...rest] = a.toLowerCase().split(".");
-              const modifiers = new Set(rest);
-              const addCode = (code: string) => {
-                handler = code + handler;
-              };
-              if (modifiers.size) {
-                if (modifiers.delete("once")) {
-                  addCode(`this.removeAttribute('${event}');`);
-                }
-                if (modifiers.delete("prevent")) {
-                  addCode("event.preventDefault();");
-                }
-                if (modifiers.delete("stop")) {
-                  addCode("event.stopPropagation();");
-                }
-                if (event.startsWith("onkey") && modifiers.size) {
-                  if (modifiers.delete("space")) {
-                    modifiers.add(" ");
-                  }
-                  addCode(
-                    "if(![" +
-                      ([...modifiers].map((k) =>
-                        "'" + (k.length > 1
-                          ? k.charAt(0).toUpperCase() + k.slice(1)
-                          : k) +
-                        "'"
-                      ).join(",")) +
-                      "].includes(event.key))return;",
-                  );
-                }
-                el.removeAttribute(a);
-                attr(el, event, handler);
-              }
-            }
-          }
+          bindEventScope(el);
+          applyEventModifiers(el, eventAttrs);
         }
 
-        // bind state for input, select and textarea elements
         if (
           tagName === "input" ||
           tagName === "select" ||
           tagName === "textarea"
         ) {
-          const inputEl = el as
-            | HTMLInputElement
-            | HTMLSelectElement
-            | HTMLTextAreaElement;
-          const name = attr(inputEl, "name");
-          if (name) {
-            const scope = findOwn($scopes, name);
-            if (scope) {
-              const type = attr(inputEl, "type");
-              const isCheckBox = type === "checkbox";
-              let getValue: () => unknown = () => inputEl.value;
-              if (type === "number") {
-                getValue = () => Number(inputEl.value);
-              } else if (isCheckBox) {
-                getValue = () => (inputEl as HTMLInputElement).checked;
-              }
-              const updateValue = () => {
-                const value = get(scope, name);
-                if (isCheckBox) {
-                  (inputEl as HTMLInputElement).checked = !!value;
-                } else {
-                  inputEl.value = toString(value);
-                }
-              };
-              updateValue();
-              const dispose = scope[symWatch](name, updateValue);
-              inputEl.addEventListener("input", () => {
-                const recover = dispose();
-                set(scope, name, getValue());
-                recover();
-              });
-            }
-          }
+          createModel(el as HTMLInputElement);
         }
       } else if (node.nodeType === 3 /* text node */) {
-        const text = node as Text;
-        const [segments, blocks] = parseBlocks(text.nodeValue!);
-        if (blocks === 0) {
-          return; // no blocks
-        }
-        const textNodes = segments.map((seg) => {
-          if (Array.isArray(seg)) {
-            const blockText = doc.createTextNode("");
-            interpret(
-              $scopes,
-              [[seg], 1],
-              (v) => blockText.nodeValue = toString(v, true),
-            );
-            return blockText;
-          }
-          return doc!.createTextNode(seg);
-        });
-        text.replaceWith(...textNodes.flat(1));
+        renderTextNode(node as Text);
       }
     };
     if (el !== root) {
@@ -661,7 +714,7 @@ function core(
     }
     walkNodes(el, handler);
   };
-  reactive(root);
+  statify(root);
 }
 
 const plugin = {
@@ -685,11 +738,9 @@ const plugin = {
         class extends HTMLElement {
           connectedCallback() {
             core(this, globalState);
+            this.style.visibility = "visible";
           }
         },
-      );
-      doc!.head.appendChild(doc!.createElement("style")).append(
-        "use-state{visibility: visible;}",
       );
     });
   },
