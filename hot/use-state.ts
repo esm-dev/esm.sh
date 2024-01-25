@@ -5,7 +5,6 @@ const obj = Object;
 const symWatch = Symbol();
 const symUnWatch = Symbol();
 const symAnyKey = Symbol();
-const regBlockExpr = /^(!+)?([\w$]+)\s*([\[\^+\-*/%<>|&.!?].+)?$/;
 
 const htmlBuiltinBooleanAttrs = new Set([
   "allowfullscreen",
@@ -66,7 +65,8 @@ function createStore<T extends object>(
     watchers.clear();
     return entries;
   };
-  const store = new Proxy(Array.isArray(init) ? [] : Object.create(null), {
+  const isArray = Array.isArray(init);
+  const store = new Proxy(isArray ? [] : Object.create(null), {
     get: (target, key) => {
       if (key === symWatch) {
         return watch;
@@ -82,16 +82,17 @@ function createStore<T extends object>(
         return true;
       }
       if (isObject(value) && !get(value, symWatch)) {
-        let oldWatchers:
-          | Iterable<[string | symbol, Set<() => void>]>
-          | undefined;
         if (isObject(old)) {
-          oldWatchers = get(old, symUnWatch)?.();
+          get(old, symUnWatch)?.();
         }
-        value = createStore(value, oldWatchers);
+        value = createStore(value);
       }
+      const oldLength = isArray ? target.length : 0;
       const ok = set(target, key, value);
       if (ok && filled) {
+        if (isArray && oldLength !== target.length) {
+          effectKeys.add("length");
+        }
         effectKeys.add(key);
         if (!effectPending) {
           effectPending = true;
@@ -110,30 +111,41 @@ function createStore<T extends object>(
 }
 
 /** split the given expression by blocks. */
-function parseBlocks(expr: string, blockStart = "{", blockEnd = "}") {
-  const texts: string[] = [];
-  const blocks: string[] = [];
+function parseBlocks(
+  text: string,
+  blockStart = "{",
+  blockEnd = "}",
+): [(string | Expr)[], number] {
+  const segments: (string | Expr)[] = [];
   let i = 0;
   let j = 0;
-  while (i < expr.length) {
-    j = expr.indexOf(blockStart, i);
+  let blocks = 0;
+  while (i < text.length) {
+    j = text.indexOf(blockStart, i);
     if (j === -1) {
-      texts.push(expr.slice(i));
+      segments.push(text.slice(i));
       break;
     }
-    texts.push(expr.slice(i, j));
-    i = expr.indexOf(blockEnd, j);
+    if (j > i) {
+      segments.push(text.slice(i, j));
+    }
+    i = text.indexOf(blockEnd, j);
     if (i === -1) {
-      texts[texts.length - 1] += expr.slice(j);
+      segments[segments.length - 1] += text.slice(j);
       break;
     }
-    const ident = expr.slice(j + blockStart.length, i).trim();
-    if (ident) {
-      blocks.push(ident);
+    const seg = text.slice(j + blockStart.length, i);
+    const trimmed = seg.trim();
+    if (trimmed) {
+      const e = tokenizeExpr(trimmed);
+      if (e) {
+        blocks++;
+      }
+      segments.push(e ?? seg);
     }
     i++;
   }
-  return [texts, blocks];
+  return [segments, blocks];
 }
 
 /** find the first object that has the given property. */
@@ -169,7 +181,8 @@ function walkNodes(
   { childNodes }: Element,
   handler: (node: ChildNode) => void | false,
 ) {
-  childNodes.forEach((node) => {
+  const nodes = [...childNodes]; // copy the node list in case the handler updates it
+  nodes.forEach((node) => {
     if (handler(node) !== false && node.nodeType === 1) {
       walkNodes(node as Element, handler);
     }
@@ -208,6 +221,44 @@ function toString(value: unknown, skipBoolean = false) {
   return (value as any).toString?.() ?? JSON.stringify(value);
 }
 
+type Expr = [
+  ident: string,
+  accesser: string | symbol | undefined,
+  op: boolean,
+  raw: string,
+];
+
+const regIdent = /^[a-zA-Z_$][\w$]+$/;
+const regExpr =
+  /^(!+)?([\w$]+)\s*(?:\.([\w$]+)|\[([\w$]+|'.+?'|".+?")\])?\s*([\[\^+\-*/%<>|&.!?].+)?$/;
+const exprCache = new Map<string, Expr>();
+const tokenizeExpr = (blockExpr: string) => {
+  const expr = exprCache.get(blockExpr);
+  if (expr) {
+    return expr;
+  }
+  const m = blockExpr.match(regExpr);
+  if (m) {
+    const [_, preOp, ident, dotAcc, bracketAcc, postOp] = m;
+    let accesser: Expr[1] = dotAcc;
+    if (bracketAcc) {
+      const c = bracketAcc.charCodeAt(0);
+      accesser = c === 39 /* ' */ || c === 34 /* " */
+        ? bracketAcc.slice(1, -1)
+        : (regIdent.test(bracketAcc) ? symAnyKey : bracketAcc);
+    }
+    const expr: Expr = [
+      ident,
+      accesser,
+      !!(preOp || accesser || postOp),
+      blockExpr,
+    ];
+    exprCache.set(blockExpr, expr);
+    return expr;
+  }
+  return null;
+};
+
 /** core logic of the <use-state> tag. */
 function core(
   root: Element,
@@ -238,89 +289,65 @@ function core(
   ];
   const interpret = (
     $scopes: Record<string, unknown>[],
-    expr: string,
+    expr: string | [(string | Expr)[], number],
     update: (nextValue: unknown) => void,
+    watch = true,
     blockStart?: string,
     blockEnd?: string,
   ) => {
-    const [texts, blocks] = parseBlocks(expr, blockStart, blockEnd);
-    if (blocks.length === 0) {
+    const [segments, blocks] = Array.isArray(expr)
+      ? expr
+      : parseBlocks(expr, blockStart, blockEnd);
+    if (blocks === 0) {
       return; // no blocks
     }
-    const exprCache = new Map<string, string[]>();
-    const tokenize = (blockExpr: string) => {
-      const expr = exprCache.get(blockExpr);
-      if (expr) {
-        return expr;
-      }
-      const m = blockExpr.match(regBlockExpr);
-      if (m) {
-        exprCache.set(blockExpr, m);
-      }
-      return m;
-    };
-    const parse = (expr: string) => {
-      const m = tokenize(expr);
-      if (m) {
-        const [_, op, ident, accesser] = m;
-        const scope = findOwn($scopes, ident) ?? $scopes[0];
-        return [scope, op, ident, accesser];
-      }
-      return null;
-    };
-    const createEffect = (expr: string, callback: (value: unknown) => void) => {
-      const ret = parse(expr);
-      if (ret) {
-        const [scope, op, ident, accesser] = ret;
-        let dispose: (() => void) | undefined;
-        const invoke = () => {
-          dispose?.();
-          const call = () => {
-            const value = get(scope, ident);
-            if (op || accesser) {
-              callback(new Function(ident, "return " + expr)(value));
-            } else {
-              callback(value);
-            }
-            return value;
-          };
-          const value = call();
-          const shouldWatchCurrentValueToo = accesser &&
-            (accesser.startsWith(".") || accesser.startsWith("[")) &&
-            isObject(value);
-          if (shouldWatchCurrentValueToo) {
-            dispose = get(value, symWatch)(symAnyKey, call);
+    const createEffect = (expr: Expr, callback: (value: unknown) => void) => {
+      const [ident, accesser, op, rawExpr] = expr;
+      const scope = findOwn($scopes, ident) ?? $scopes[0];
+      let dispose: (() => void) | undefined;
+      const invoke = () => {
+        dispose?.();
+        const call = () => {
+          const value = get(scope, ident);
+          if (op) {
+            callback(new Function(ident, "return " + rawExpr)(value));
+          } else {
+            callback(value);
           }
+          return value;
         };
-        invoke();
-        scope[symWatch]?.(ident, invoke);
+        const value = call();
+        if (watch && accesser && isObject(value)) {
+          dispose = get(value, symWatch)(accesser, call);
+        }
+      };
+      invoke();
+      if (watch) {
+        get(scope, symWatch)?.(ident, invoke);
       }
     };
     // singleton block
-    if (blocks.length === 1 && isBlockExpr(expr)) {
-      return createEffect(blocks[0], update);
+    if (blocks === 1 && segments.length === 1) {
+      return createEffect(segments[0] as Expr, update);
     }
-    const invokedBlocks = new Array(blocks.length);
-    const merge = () => {
-      const mergedValue = texts.map((text, i) => {
-        if (blocks[i]) {
-          return text + toString(invokedBlocks[i], true);
-        }
-        return text;
-      }).join("");
-      update(mergedValue);
-    };
-    let firstMerge = false;
-    blocks.map((blockExpr, i) => {
-      createEffect(blockExpr, (value) => {
-        invokedBlocks[i] = value;
-        if (firstMerge) {
-          merge();
-        }
-      });
+    const invokedSegments = segments.map((seg, i) => {
+      if (Array.isArray(seg)) {
+        let blockValue: string | undefined;
+        createEffect(seg, (v) => {
+          const s = toString(v, true);
+          if (!blockValue) {
+            blockValue = s;
+          } else {
+            invokedSegments[i] = s;
+            merge();
+          }
+        });
+        return blockValue;
+      }
+      return seg;
     });
+    const merge = () => update(invokedSegments.join(""));
     merge();
-    firstMerge = true;
   };
   const reactive = (el: Element, currentScope?: unknown) => {
     let $scopes = scopes;
@@ -355,24 +382,24 @@ function core(
 
         // list rendering
         if (commonAttrs.has("for")) {
-          const [iter, key] = attr(el, "for")!.split(" of ").map((s) =>
+          const [iter, iterArrIdent] = attr(el, "for")!.split(" of ").map((s) =>
             s.trim()
           );
-          if (iter && key) {
+          if (iter && iterArrIdent) {
             const templateEl = el;
             const keyProp = attr(templateEl, "key");
             const placeholder = doc!.createComment("&")!;
-            const scope = findOwn($scopes, key) ?? $scopes[0];
+            const scope = findOwn($scopes, iterArrIdent) ?? $scopes[0];
             let marker: Element[] = [];
             let unwatch: (() => void) | undefined;
             const renderList = () => {
               unwatch?.(); // dispose the previous array watcher if exists
-              const arr = get(scope, key);
+              const arr = get(scope, iterArrIdent);
               if (Array.isArray(arr)) {
-                let iterKey = iter;
-                let iterIndex = "";
-                if (isBlockExpr(iterKey, "(", ")")) {
-                  [iterKey, iterIndex] = iterKey.slice(1, -1)
+                let iterIdent = iter;
+                let iterIndexIdent = "";
+                if (isBlockExpr(iterIdent, "(", ")")) {
+                  [iterIdent, iterIndexIdent] = iterIdent.slice(1, -1)
                     .split(",", 2)
                     .map((s) => s.trim());
                 }
@@ -384,11 +411,11 @@ function core(
                   }
                   const listEls = arr.map((item, index) => {
                     const iterScope: Record<string, unknown> = {};
-                    if (iterKey) {
-                      iterScope[iterKey] = item;
+                    if (iterIdent) {
+                      iterScope[iterIdent] = item;
                     }
-                    if (iterIndex) {
-                      iterScope[iterIndex] = index;
+                    if (iterIndexIdent) {
+                      iterScope[iterIndexIdent] = index;
                     }
                     if (keyProp && map.size > 0) {
                       let key = "";
@@ -398,11 +425,12 @@ function core(
                         (ret) => {
                           key = toString(ret);
                         },
+                        false,
                       );
                       const sameKeyEl = map.get(key);
                       if (sameKeyEl) {
-                        if (iterIndex) {
-                          get(sameKeyEl, "$scope")[iterIndex] = index;
+                        if (iterIndexIdent) {
+                          get(sameKeyEl, "$scope")[iterIndexIdent] = index;
                         }
                         return sameKeyEl;
                       }
@@ -428,7 +456,7 @@ function core(
             el.replaceWith(placeholder);
             templateEl.removeAttribute("for");
             renderList();
-            scope[symWatch](key, renderList);
+            scope[symWatch](iterArrIdent, renderList);
           }
           return false;
         }
@@ -462,6 +490,7 @@ function core(
                 attr(el, propName, propValue);
               }
             },
+            true,
             isStyle ? "state(" : undefined,
             isStyle ? ")" : undefined,
           );
@@ -582,7 +611,13 @@ function core(
             if (scope) {
               const type = attr(inputEl, "type");
               const isCheckBox = type === "checkbox";
-              const update = () => {
+              let getValue: () => unknown = () => inputEl.value;
+              if (type === "number") {
+                getValue = () => Number(inputEl.value);
+              } else if (isCheckBox) {
+                getValue = () => (inputEl as HTMLInputElement).checked;
+              }
+              const updateValue = () => {
                 const value = get(scope, name);
                 if (isCheckBox) {
                   (inputEl as HTMLInputElement).checked = !!value;
@@ -590,28 +625,35 @@ function core(
                   inputEl.value = toString(value);
                 }
               };
-              let convert: (input: string) => unknown = String;
-              if (type === "number") {
-                convert = Number;
-              } else if (isCheckBox) {
-                convert = (_input) => (inputEl as HTMLInputElement).checked;
-              }
-              update();
-              const dispose = scope[symWatch](name, update);
+              updateValue();
+              const dispose = scope[symWatch](name, updateValue);
               inputEl.addEventListener("input", () => {
                 const recover = dispose();
-                set(scope, name, convert(inputEl.value));
+                set(scope, name, getValue());
                 recover();
               });
             }
           }
         }
       } else if (node.nodeType === 3 /* text node */) {
-        interpret(
-          $scopes,
-          node.textContent ?? "",
-          (v) => node.textContent = toString(v, true),
-        );
+        const text = node as Text;
+        const [segments, blocks] = parseBlocks(text.nodeValue!);
+        if (blocks === 0) {
+          return; // no blocks
+        }
+        const textNodes = segments.map((seg) => {
+          if (Array.isArray(seg)) {
+            const blockText = doc.createTextNode("");
+            interpret(
+              $scopes,
+              [[seg], 1],
+              (v) => blockText.nodeValue = toString(v, true),
+            );
+            return blockText;
+          }
+          return doc!.createTextNode(seg);
+        });
+        text.replaceWith(...textNodes.flat(1));
       }
     };
     if (el !== root) {
