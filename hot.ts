@@ -356,17 +356,17 @@ class Hot implements HotCore {
               return render(value);
             }
             let msg = res.statusText;
-            try {
-              const text = (await res.text()).trim();
-              if (text) {
-                msg = text;
-                if (text.trimStart().startsWith("{")) {
+            const text = (await res.text()).trim();
+            if (text) {
+              msg = text;
+              if (text.trimStart().startsWith("{")) {
+                try {
                   const { error, message } = parse(text);
                   msg = error?.[kMessage] ?? message ?? msg;
+                } catch (_) {
+                  // ignore
                 }
               }
-            } catch (_) {
-              // ignore
             }
             delete cache[src];
             render(new Error(msg));

@@ -128,126 +128,35 @@ export const serveHot = (options) => {
           return new Response("Content not found", { status: 404 });
         }
 
-        const {
-          url,
-          method,
-          token,
-          headers,
-          payload,
-          timeout,
-          cacheTtl,
-          select,
-          stream,
-        } = content;
-        const resolveEnv = (value) =>
-          value.replace(
-            /\$\{(.*?)\}/g,
-            (_, key) => {
-              key = key.trim().toLowerCase();
-              if (key.startsWith("env.")) {
-                const k = key.slice(4);
-                const { hostname } = new URL(url);
-                return (cfEnv ?? env)["[" + hostname + "]" + k] ??
-                  (cfEnv ?? env)[k] ??
-                  "";
-              }
-              if (key.startsWith("params.") && params) {
-                return params[key.slice(7)] ?? "";
-              }
-              return "";
-            },
-          );
-        const u = resolveEnv(url);
-        const m = method?.toUpperCase();
-        const h = new Headers(headers);
-        h.forEach((value, key) => {
-          h.set(key, resolveEnv(value));
-        });
-        if (token) {
-          h.set("authorization", "Bearer " + resolveEnv(token));
-        }
-        let body;
-        if (isObject(payload) || Array.isArray(payload)) {
-          body = resolveEnv(JSON.stringify(payload));
-          if (!h.has("content-type")) {
-            h.set("content-type", "application/json");
-          }
-        } else if (payload) {
-          body = resolveEnv(String(payload));
-        }
-        if (!m && body) {
-          m = "POST";
-        }
         // todo: check cookie
-        const cacheKey = src;
-        const cacheable = !stream && Number.isInteger(cacheTtl);
+        const cacheKey = content.src;
+        const cacheable = !content.stream && Number.isInteger(content.cacheTtl);
         if (cacheable) {
           const cached = contentCache.get(cacheKey);
           if (cached) {
             if (cached.expires > Date.now()) {
+              if (cached.data instanceof Promise) {
+                cached.data = await cached.data;
+              }
               return Response.json(cached.data);
             }
-            // clear cache if args changed or expired
+            // clear cache if expired
             contentCache.delete(cacheKey);
           }
         }
 
-        let signal = undefined;
-        if (Number.isInteger(timeout) && timeout > 0) {
-          const ac = new AbortController();
-          setTimeout(() => ac.abort(), timeout * 1000);
-          signal = ac.signal;
-        }
-
-        const res = await fetch(u, { method: m, headers: h, body, signal });
-        if (!res.ok || stream) {
-          const headers = new Headers();
-          res.headers.forEach((value, key) => {
-            if (key === "content-type" || key === "date" || key === "etag") {
-              headers.set(key, value);
-            }
-          });
-          return new Response(res.body, {
-            status: res.status,
-            statusText: res.statusText,
-            headers,
-          });
-        }
-
-        let data = await (isJSONResponse(res) ? res.json() : res.text());
-        if (isObject(data) && isNEString(select) && select !== "*") {
-          const ret = {};
-          const selectors = select.split(",")
-            .map((s) => s.trim()).filter(Boolean);
-          for (const s of selectors) {
-            let alias = s;
-            let selector = s;
-            if (selector.endsWith("!")) {
-              selector = selector.slice(0, -1);
-            }
-            const i = selector.indexOf(":");
-            if (i > 0) {
-              alias = selector.slice(0, i).trimEnd();
-              selector = selector.slice(i + 1).trimStart();
-            }
-            const value = lookupValue(data, resolveEnv(selector));
-            if (value !== undefined) {
-              ret[alias] = value;
-            }
-          }
-          if (selectors.length === 1 && selectors[0].endsWith("!")) {
-            data = Object.values(ret)[0] ?? null;
-          } else {
-            data = ret;
-          }
-        }
+        const promise = fetchContent(content, params,cfEnv);
         if (cacheable) {
           contentCache.set(cacheKey, {
-            data,
-            expires: Date.now() + cacheTtl * 1000,
+            data: promise,
+            expires: Date.now() + content.cacheTtl * 1000,
           });
         }
-        return Response.json(data);
+        try {
+          return Response.json(await promise);
+        } catch (error) {
+          console.error(error);
+        }
       }
 
       /** The FS index of current project */
@@ -535,7 +444,7 @@ export const serveHot = (options) => {
     });
 
     // - render `use-content`
-    rewriter.on("use-content[src]:not([live])", {
+    rewriter.on("use-content[src]", {
       async element(el) {
         const src = el.getAttribute("src");
         if (!src) {
@@ -563,7 +472,12 @@ export const serveHot = (options) => {
             : "";
         };
         const render = (data) => {
-          el.replace(process(data), { html: true });
+          const liveProp = el.getAttribute("live");
+          if (liveProp && parseInt(liveProp) > 0) {
+            el.setInnerContent(process(data), { html: true });
+          } else {
+            el.replace(process(data), { html: true });
+          }
         };
         try {
           const res = await fetcher(
@@ -575,16 +489,16 @@ export const serveHot = (options) => {
           );
           if (!res.ok) {
             let msg = res.statusText;
-            try {
-              const text = (await res.text()).trim();
-              if (text) {
-                msg = text;
-                if (text.startsWith("{")) {
+            const text = (await res.text()).trim();
+            if (text) {
+              msg = text;
+              if (text.startsWith("{")) {
+                try {
                   const { error, message } = JSON.parse(text);
                   msg = error?.message ?? message ?? msg;
-                }
+                } catch (_) {}
               }
-            } catch (_) {}
+            }
             render(new Error(msg));
           } else {
             render(await res.json());
@@ -639,6 +553,109 @@ export const serveHot = (options) => {
     // - transform html
     return rewriter.transform(res);
   }
+
+  const fetchContent = async (content, params,cfEnv) => {
+    const {
+      url,
+      method,
+      token,
+      headers,
+      payload,
+      timeout,
+      select,
+      stream,
+    } = content;
+    const resolveEnv = (value) =>
+      value.replace(
+        /\$\{(.*?)\}/g,
+        (_, key) => {
+          key = key.trim().toLowerCase();
+          if (key.startsWith("env.")) {
+            const k = key.slice(4);
+            const { hostname } = new URL(url);
+            return (cfEnv ?? env)["[" + hostname + "]" + k] ??
+              (cfEnv ?? env)[k] ??
+              "";
+          }
+          if (key.startsWith("params.") && params) {
+            return params[key.slice(7)] ?? "";
+          }
+          return "";
+        },
+      );
+    const u = resolveEnv(url);
+    const m = method?.toUpperCase();
+    const h = new Headers(headers);
+    h.forEach((value, key) => {
+      h.set(key, resolveEnv(value));
+    });
+    if (token) {
+      h.set("authorization", "Bearer " + resolveEnv(token));
+    }
+    let body;
+    if (isObject(payload) || Array.isArray(payload)) {
+      body = resolveEnv(JSON.stringify(payload));
+      if (!h.has("content-type")) {
+        h.set("content-type", "application/json");
+      }
+    } else if (payload) {
+      body = resolveEnv(String(payload));
+    }
+    if (!m && body) {
+      m = "POST";
+    }
+
+    let signal = undefined;
+    if (Number.isInteger(timeout) && timeout > 0) {
+      const ac = new AbortController();
+      setTimeout(() => ac.abort(), timeout * 1000);
+      signal = ac.signal;
+    }
+
+    const res = await fetch(u, { method: m, headers: h, body, signal });
+    if (!res.ok || stream) {
+      const headers = new Headers();
+      res.headers.forEach((value, key) => {
+        if (key === "content-type" || key === "date" || key === "etag") {
+          headers.set(key, value);
+        }
+      });
+      return new Response(res.body, {
+        status: res.status,
+        statusText: res.statusText,
+        headers,
+      });
+    }
+
+    let data = await (isJSONResponse(res) ? res.json() : res.text());
+    if (isObject(data) && isNEString(select) && select !== "*") {
+      const ret = {};
+      const selectors = select.split(",")
+        .map((s) => s.trim()).filter(Boolean);
+      for (const s of selectors) {
+        let alias = s;
+        let selector = s;
+        if (selector.endsWith("!")) {
+          selector = selector.slice(0, -1);
+        }
+        const i = selector.indexOf(":");
+        if (i > 0) {
+          alias = selector.slice(0, i).trimEnd();
+          selector = selector.slice(i + 1).trimStart();
+        }
+        const value = lookupValue(data, resolveEnv(selector));
+        if (value !== undefined) {
+          ret[alias] = value;
+        }
+      }
+      if (selectors.length === 1 && selectors[0].endsWith("!")) {
+        data = Object.values(ret)[0] ?? null;
+      } else {
+        data = ret;
+      }
+    }
+    return data;
+  };
 
   return fetcher;
 };
