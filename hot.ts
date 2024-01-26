@@ -88,7 +88,7 @@ class Hot implements HotCore {
   #vfs = new VFS(kHot, VERSION);
   #contentCache: Record<string, any> = {};
   #fired = false;
-  #firedSW: ServiceWorker | null = null;
+  #activatedSW: ServiceWorker | null = null;
 
   constructor(plugins: Plugin[] = []) {
     plugins.forEach((plugin) => plugin.setup(this));
@@ -123,8 +123,8 @@ class Hot implements HotCore {
 
   onFire(handler: (reg: ServiceWorker) => void) {
     if (doc) {
-      if (this.#firedSW) {
-        handler(this.#firedSW);
+      if (this.#activatedSW) {
+        handler(this.#activatedSW);
       } else {
         this.#fireListeners.push(handler);
       }
@@ -264,7 +264,7 @@ class Hot implements HotCore {
     for (const handler of this.#fireListeners) {
       handler(sw);
     }
-    this.#firedSW = sw;
+    this.#activatedSW = sw;
 
     // reload external css that may be handled by hot-loader
     if (firstActicve) {
@@ -311,7 +311,7 @@ class Hot implements HotCore {
         }
         const res = await fetch(url);
         const text = await res.text();
-        setInnerHtml(root, res.ok ? text : createErrorTag(text));
+        root.innerHTML = res.ok ? text : createErrorTag(text);
       };
       if (isDev && isSameOrigin(url)) {
         __hot_hmr_callbacks.add(pathname, () => load(true));
@@ -325,17 +325,24 @@ class Hot implements HotCore {
       if (!src) {
         return;
       }
+      if (el.hasAttribute("store")) {
+        return;
+      }
       const cache = this.#contentCache;
       const render = (data: unknown) => {
         if (data instanceof Error) {
-          setInnerHtml(el, createErrorTag(data[kMessage]));
+          el.innerHTML = createErrorTag(data[kMessage]);
           return;
         }
-        const mapExpr = attr(el, "map");
-        const value = mapExpr && !isNullish(data)
-          ? new Function("return " + mapExpr).call(data)
-          : data;
-        setInnerHtml(el, toString(value));
+        const mapKey = attr(el, "mapKey");
+        const content = toString(
+          mapKey && !isNullish(data) ? (data as any)[mapKey] : data,
+        );
+        if (el.hasAttribute("html")) {
+          el.innerHTML = content;
+        } else {
+          el.textContent = content;
+        }
       };
       const load = () => {
         const renderedData = cache[src];
@@ -561,11 +568,6 @@ function defineElement(
       }
     },
   );
-}
-
-/** set innerHTML of the given element. */
-function setInnerHtml(el: HTMLElement | ShadowRoot, html: string) {
-  el.innerHTML = html;
 }
 
 /** parse importmap from <script> with `type=importmap` */

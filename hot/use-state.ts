@@ -163,6 +163,11 @@ function set(target: object, key: PropertyKey, value: unknown) {
   return Reflect.set(target, key, value);
 }
 
+/** get the tag name of the given element. */
+function tagname(el: Element) {
+  return el.tagName.toLowerCase();
+}
+
 /** get the attribute value of the given element. */
 function attr(el: Element, name: string, value?: string) {
   if (!isNullish(value)) {
@@ -230,7 +235,7 @@ type Expr = [
 
 const regIdent = /^[a-zA-Z_$][\w$]+$/;
 const regExpr =
-  /^(!+)?([\w$]+)\s*(?:\.([\w$]+)|\[([\w$]+|'.+?'|".+?")\])?\s*([\[\^+\-*/%<>|&.!?].+)?$/;
+  /^(!*)([\w$]+)\s*(?:\.\s*([\w$]+)|\[\s*([\w$]+|'.+?'|".+?")\s*\])?\s*([\[\^+\-*/%<>=|&.!?].+)?$/;
 const exprCache = new Map<string, Expr>();
 const tokenizeExpr = (blockExpr: string) => {
   const expr = exprCache.get(blockExpr);
@@ -268,6 +273,16 @@ function core(
 ) {
   const inhertScopes = get(root, "$scopes") ??
     (globalState ? [globalState] : []);
+  const parent = root.parentElement;
+  if (parent && tagname(parent) === "use-content") {
+    const fec = parent.firstElementChild;
+    if (
+      fec && tagname(fec) === "script" &&
+      attr(fec, "type") === "application/json"
+    ) {
+      inhertScopes.unshift(createStore(JSON.parse(fec.textContent!)));
+    }
+  }
   const init = new Function(
     "$scope",
     "return " + (attr(root, "onload") ?? attr(root, "init") ?? "null"),
@@ -643,7 +658,7 @@ function core(
     const handler = (node: ChildNode) => {
       if (node.nodeType === 1 /* element node */) {
         const el = node as Element;
-        const tagName = el.tagName.toLowerCase();
+        const tagName = tagname(el);
         const props = attrs(el);
 
         // nested <use-state> tag

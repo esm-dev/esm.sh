@@ -43,87 +43,12 @@ export const serveHot = (options) => {
     switch (pathname) {
       /** Proxy content map requests */
       case "/@hot-content": {
-        const { src, filepath, location } = await req.json();
-        if (!isNEString(src)) {
+        const r = await req.json();
+        if (!isObject(r) || !isNEString(r.src)) {
           return new Response("Invalid request", { status: 400 });
         }
 
-        let contentMap = "";
-        let htmlFile = null;
-        if (filepath) {
-          htmlFile = await fs.open(root + filepath);
-        } else {
-          const searchList = ["/index.html"];
-          if (!location) {
-            location = "/";
-          }
-          if (location !== "/") {
-            searchList.unshift(location + ".html", location + "/index.html");
-          }
-          for (const path of searchList) {
-            htmlFile = await fs.open(root + path);
-            if (htmlFile) break;
-          }
-        }
-        if (!htmlFile) {
-          return new Response("Contentmap not found", { status: 404 });
-        }
-        const html = await readTextFromStream(htmlFile.body);
-        htmlFile.close();
-        await (new HTMLRewriter().on("script[type=contentmap]:not([src])", {
-          text(el) {
-            contentMap += el.text;
-          },
-        }).on("script[type=contentmap][src]", {
-          async element(el) {
-            const src = el.getAttribute("src");
-            if (src && !/^\/|\w+:/.test(src)) {
-              const { pathname } = new URL(src, url.origin + filepath);
-              const file = await fs.open(root + pathname);
-              if (file) {
-                const text = await readTextFromStream(file.body);
-                file.close();
-                contentMap = text;
-              }
-            }
-          },
-        }).transform(new Response(html))).arrayBuffer();
-        if (!contentMap) {
-          return new Response("Contentmap not found", { status: 404 });
-        }
-        try {
-          contentMap = JSON.parse(contentMap);
-        } catch (err) {
-          return new Response("Invalid contentmap", { status: 400 });
-        }
-        const { contents = {} } = contentMap ?? {};
-        const params = {};
-        let content = contents[src];
-        if (!content) {
-          for (const cid of Object.keys(contents)) {
-            if (
-              !cid.includes("{") || !cid.includes("}") || cid.includes("}{")
-            ) {
-              continue;
-            }
-            const paramkeys = [];
-            const re = cid.replace(/[\[\]\-+*?.()^$]/g, "\\$&").replace(
-              /\{(\w+?)\}/g,
-              (_, k) => {
-                paramkeys.push(k);
-                return "(.+?)";
-              },
-            );
-            const m = src.match(new RegExp("^" + re + "$"));
-            if (m) {
-              content = contents[cid];
-              for (let i = 1; i < m.length; i++) {
-                params[paramkeys[i - 1]] = m[i];
-              }
-              break;
-            }
-          }
-        }
+        const [content, params] = await queryContent(r);
         if (!content) {
           return new Response("Content not found", { status: 404 });
         }
@@ -135,22 +60,27 @@ export const serveHot = (options) => {
           const cached = contentCache.get(cacheKey);
           if (cached) {
             if (cached.expires > Date.now()) {
-              if (cached.data instanceof Promise) {
-                cached.data = await cached.data;
+              let data = cached.data;
+              if (data instanceof Promise) {
+                data = await data;
               }
-              return Response.json(cached.data);
+              return Response.json(data);
             }
             // clear cache if expired
             contentCache.delete(cacheKey);
           }
         }
 
-        const promise = fetchContent(content, params,cfEnv);
+        const promise = fetchContentData(content, params, cfEnv);
         if (cacheable) {
-          contentCache.set(cacheKey, {
-            data: promise,
+          const record = {
+            data: promise.then((data) => {
+              record.data = data;
+              return data;
+            }),
             expires: Date.now() + content.cacheTtl * 1000,
-          });
+          };
+          contentCache.set(cacheKey, record);
         }
         try {
           return Response.json(await promise);
@@ -450,33 +380,45 @@ export const serveHot = (options) => {
         if (!src) {
           return;
         }
-        const process = (data) => {
+        const preprocess = (data, stringify) => {
           if (data instanceof Error) {
+            console.error(data);
+            if (!stringify) {
+              return { error: { message: data.message } };
+            }
             return "<code style='color:red'>" + data.message + "</code>";
           }
-          const mapExpr = el.getAttribute("map");
+          const mapKey = el.getAttribute("mapKey");
           let value = data;
-          if (mapExpr && !isNullish(data)) {
-            if (cfEnv) {
-              // cloudflare workers disallow `new Function` and `eval`
-              value = lookupValue(
-                data,
-                mapExpr.trimStart().slice("this.".length),
-              );
-            } else {
-              value = new Function("return " + mapExpr).call(data);
-            }
+          if (mapKey && !isNullish(data)) {
+            value = data[mapKey];
+          }
+          if (!stringify) {
+            return value;
           }
           return !isNullish(value)
-            ? value.toString?.() ?? stringify(value)
+            ? value.toString?.() ?? JSON.stringify(value)
             : "";
         };
         const render = (data) => {
-          const liveProp = el.getAttribute("live");
-          if (liveProp && parseInt(liveProp) > 0) {
-            el.setInnerContent(process(data), { html: true });
+          const hasStoreProp = el.hasAttribute("store");
+          if (hasStoreProp) {
+            el.prepend(
+              `<script type="application/json">${
+                JSON.stringify(preprocess(data))
+              }</script>`,
+              { html: true },
+            );
           } else {
-            el.replace(process(data), { html: true });
+            const liveProp = el.getAttribute("live");
+            const contentOptions = el.hasAttribute("html")
+              ? { html: true }
+              : undefined;
+            if (liveProp && parseInt(liveProp) > 0) {
+              el.setInnerContent(preprocess(data, true), contentOptions);
+            } else {
+              el.replace(preprocess(data, true), contentOptions);
+            }
           }
         };
         try {
@@ -554,7 +496,87 @@ export const serveHot = (options) => {
     return rewriter.transform(res);
   }
 
-  const fetchContent = async (content, params,cfEnv) => {
+  const queryContent = async ({ src, location, filepath }) => {
+    let contentMap = "";
+    let htmlFile = null;
+    if (filepath) {
+      htmlFile = await fs.open(root + filepath);
+    } else {
+      const searchList = ["/index.html"];
+      if (!location) {
+        location = "/";
+      }
+      if (location !== "/") {
+        searchList.unshift(location + ".html", location + "/index.html");
+      }
+      for (const path of searchList) {
+        htmlFile = await fs.open(root + path);
+        if (htmlFile) break;
+      }
+    }
+    if (!htmlFile) {
+      return new Response("Contentmap not found", { status: 404 });
+    }
+    const html = await readTextFromStream(htmlFile.body);
+    htmlFile.close();
+    await (new HTMLRewriter().on("script[type=contentmap]:not([src])", {
+      text(el) {
+        contentMap += el.text;
+      },
+    }).on("script[type=contentmap][src]", {
+      async element(el) {
+        const src = el.getAttribute("src");
+        if (src && !/^\/|\w+:/.test(src)) {
+          const { pathname } = new URL(src, url.origin + filepath);
+          const file = await fs.open(root + pathname);
+          if (file) {
+            const text = await readTextFromStream(file.body);
+            file.close();
+            contentMap = text;
+          }
+        }
+      },
+    }).transform(new Response(html))).arrayBuffer();
+    if (!contentMap) {
+      return new Response("Contentmap not found", { status: 404 });
+    }
+    try {
+      contentMap = JSON.parse(contentMap);
+    } catch (err) {
+      return new Response("Invalid contentmap", { status: 400 });
+    }
+    const { contents = {} } = contentMap ?? {};
+    const params = {};
+    let content = contents[src];
+    if (!content) {
+      for (const cid of Object.keys(contents)) {
+        if (
+          !cid.includes("{") || !cid.includes("}") || cid.includes("}{")
+        ) {
+          continue;
+        }
+        const paramkeys = [];
+        const re = cid.replace(/[\[\]\-+*?.()^$]/g, "\\$&").replace(
+          /\{(\w+?)\}/g,
+          (_, k) => {
+            paramkeys.push(k);
+            return "(.+?)";
+          },
+        );
+        const m = src.match(new RegExp("^" + re + "$"));
+        if (m) {
+          content = contents[cid];
+          for (let i = 1; i < m.length; i++) {
+            params[paramkeys[i - 1]] = m[i];
+          }
+          break;
+        }
+      }
+    }
+    return [content, params];
+  };
+
+  const fetchContentData = async (content, params, cfEnv) => {
     const {
       url,
       method,
