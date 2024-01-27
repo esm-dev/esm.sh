@@ -1,0 +1,23 @@
+{
+  "name": "esm-compat",
+  "description": "Check the ES module compatibility of a browser.",
+  "version": "0.0.2",
+  "type": "module",
+  "module": "dist/compat.js",
+  "types": "types/compat.d.ts",
+  "scripts": {
+    "prepublishOnly": "node build.mjs",
+    "test": "node build.mjs && node test.mjs"
+  },
+  "files": [
+    "dist/compat.js",
+    "types/compat.d.ts"
+  ],
+  "devDependencies": {
+    "@types/ua-parser-js": "0.7.39",
+    "esbuild": "0.19.12",
+    "ua-parser-js": "1.0.37"
+  },
+  "repository": "https://github.com/esm-dev/esm.sh",
+  "license": "MIT"
+}

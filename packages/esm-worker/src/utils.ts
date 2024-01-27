@@ -1,5 +1,15 @@
-import type { HttpMetadata, WorkerStorage, WorkerStorageKV } from "../types/index.d.ts";
+import type {
+  HttpMetadata,
+  WorkerStorage,
+  WorkerStorageKV,
+} from "../types/index.d.ts";
+import { targets } from "esm-compat";
 import { fixedPkgVersions } from "./consts.ts";
+
+export function hasTargetSegment(path: string) {
+  const parts = path.slice(1).split("/");
+  return parts.length >= 2 && parts.some((p) => targets.has(p));
+}
 
 export function asKV(
   storage?: R2Bucket | WorkerStorage,
@@ -141,5 +151,7 @@ export async function hashText(s: string): Promise<string> {
     "SHA-1",
     new TextEncoder().encode(s),
   );
-  return Array.from(new Uint8Array(buffer)).map((b) => b.toString(16).padStart(2, "0")).join("");
+  return Array.from(new Uint8Array(buffer)).map((b) =>
+    b.toString(16).padStart(2, "0")
+  ).join("");
 }

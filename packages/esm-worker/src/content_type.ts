@@ -1,75 +1,94 @@
-import { splitBy } from "./utils.ts";
-
 // MIME types for web
-const mimeTypes: Record<string, string[]> = {
+const mimeTypes = {
   // application
-  "application/javascript": ["js", "mjs"],
-  "application/typescript": ["ts", "mts", "tsx"],
-  "application/wasm": ["wasm"],
-  "application/json": ["json", "map"],
-  "application/jsonc": ["jsonc"],
-  "application/pdf": ["pdf"],
-  "application/xml": ["xml", "plist", "tmLanguage", "tmTheme"],
-  "application/zip": ["zip"],
-  "application/gzip": ["gz"],
-  "application/tar": ["tar"],
-  "application/tar+gzip": ["tar.gz", "tgz"],
+  "a/javascript;": ["js", "mjs"],
+  "a/wasm": ["wasm"],
+  "a/json;": ["json", "map"],
+  "a/jsonc;": ["jsonc"],
+  "a/json5;": ["json5"],
+  "a/pdf": ["pdf"],
+  "a/xml;": ["xml", "plist", "tmLanguage", "tmTheme"],
+  "a/zip": ["zip"],
+  "a/gzip": ["gz"],
+  "a/tar": ["tar"],
+  "a/tar+gzip": ["tar.gz", "tgz"],
   // text
-  "text/html": ["html", "htm"],
-  "text/markdown": ["md", "markdown"],
-  "text/mdx": ["mdx"],
-  "text/jsx": ["jsx"],
-  "text/vue": ["vue"],
-  "text/svelte": ["svelte"],
-  "text/css": ["css"],
-  "text/less": ["less"],
-  "text/sass": ["sass", "scss"],
-  "text/stylus": ["stylus", "styl"],
-  "text/csv": ["csv"],
-  "text/yaml": ["yaml", "yml"],
-  "text/plain": ["txt", "glsl"],
+  "t/html": ["html", "htm"],
+  "t/markdown": ["md", "markdown"],
+  "t/mdx": ["mdx"],
+  "t/jsx": ["jsx"],
+  "t/typescript": ["ts", "mts"],
+  "t/tsx": ["tsx"],
+  "t/vue": ["vue"],
+  "t/svelte": ["svelte"],
+  "t/css": ["css"],
+  "t/less": ["less"],
+  "t/sass": ["sass", "scss"],
+  "t/stylus": ["stylus", "styl"],
+  "t/csv": ["csv"],
+  "t/yaml": ["yaml", "yml"],
+  "t/plain": ["txt", "glsl"],
+  "t/x-fragment": ["frag"],
+  "t/x-vertex": ["vert"],
   // font
-  "font/ttf": ["ttf"],
-  "font/otf": ["otf"],
-  "font/woff": ["woff"],
-  "font/woff2": ["woff2"],
-  "font/collection": ["ttc"],
+  "f/ttf": ["ttf"],
+  "f/otf": ["otf"],
+  "f/woff": ["woff"],
+  "f/woff2": ["woff2"],
+  "f/collection": ["ttc"],
   // image
-  "image/jpeg": ["jpg", "jpeg"],
-  "image/png": ["png"],
-  "image/gif": ["gif"],
-  "image/webp": ["webp"],
-  "image/avif": ["avif"],
-  "image/svg+xml": ["svg", "svgz"],
-  "image/x-icon": ["ico"],
+  "i/jpeg": ["jpg", "jpeg"],
+  "i/png": ["png"],
+  "i/apng": ["apng"],
+  "i/gif": ["gif"],
+  "i/webp": ["webp"],
+  "i/avif": ["avif"],
+  "i/svg+xml;": ["svg", "svgz"],
+  "i/x-icon": ["ico"],
   // audio
-  "audio/mp4": ["m4a"],
-  "audio/mpeg": ["mp3", "m3a"],
-  "audio/ogg": ["ogg", "oga"],
-  "audio/wav": ["wav"],
-  "audio/webm": ["weba"],
+  "u/mp4": ["m4a"],
+  "u/mpeg": ["mp3", "m3a"],
+  "u/ogg": ["ogg", "oga"],
+  "u/wav": ["wav"],
+  "u/webm": ["weba"],
   // video
-  "video/mp4": ["mp4", "m4v"],
-  "video/ogg": ["ogv"],
-  "video/webm": ["webm"],
-  // shader
-  "x-shader/x-fragment": ["frag"],
-  "x-shader/x-vertex": ["vert"],
+  "v/mp4": ["mp4", "m4v"],
+  "v/ogg": ["ogv"],
+  "v/webm": ["webm"],
+  "v/x-matroska": ["mkv"],
 };
+const alias = {
+  a: "application",
+  t: "text",
+  f: "font",
+  i: "image",
+  u: "audio",
+  v: "video",
+};
+const defaultType = "binary/octet-stream";
+const typesMap = Object.entries(mimeTypes).reduce(
+  (map, [mimeType, exts]) => {
+    const type = alias[mimeType.charAt(0)];
+    const endsWithSemicolon = mimeType.endsWith(";");
+    let suffix = mimeType.slice(1);
+    if (type === "text" || endsWithSemicolon) {
+      if (endsWithSemicolon) {
+        suffix = suffix.slice(0, -1);
+      }
+      suffix += "; charset=utf-8";
+    }
+    exts.forEach((ext) => map.set(ext, type + suffix));
+    return map;
+  },
+  new Map(),
+);
 
-const typesMap = new Map<string, string>();
-for (const contentType in mimeTypes) {
-  for (const ext of mimeTypes[contentType]) {
-    typesMap.set(ext, contentType);
-  }
-}
-
-/** get the content type by file name */
-export function getContentType(path: string): string {
-  const [pathname] = splitBy(path, "?");
-  let [, ext] = splitBy(pathname, ".", true);
-  if (ext === "gz" && pathname.endsWith(".tar.gz")) {
+export function getMimeType(filename: string): string {
+  const idx = filename.lastIndexOf(".");
+  if (idx < 0) return defaultType;
+  let ext = filename.slice(idx + 1);
+  if (ext === "gz" && filename.endsWith(".tar.gz")) {
     ext = "tar.gz";
   }
-  return typesMap.get(ext) ?? "application/octet-stream";
+  return typesMap.get(ext) ?? defaultType;
 }

@@ -14,10 +14,9 @@
   ],
   "devDependencies": {
     "@cloudflare/workers-types": "4.20231218.0",
-    "@types/ua-parser-js": "0.7.39",
     "compare-versions": "6.1.0",
-    "esbuild": "0.19.11",
-    "ua-parser-js": "1.0.37"
+    "esbuild": "0.19.12" ,
+    "esm-compat": "0.0.2"
   },
   "repository": "https://github.com/esm-dev/esm.sh",
   "license": "MIT"
