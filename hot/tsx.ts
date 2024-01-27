@@ -3,13 +3,13 @@ import initWasm, {
   type Targets,
   transform,
   transformCSS,
-} from "https://esm.sh/esm-compiler@0.4.2";
+} from "https://esm.sh/esm-compiler@0.4.4";
 
 let waiting: Promise<any> | null = null;
 const init = async () => {
   if (waiting === null) {
     waiting = initWasm(
-      fetch("https://esm.sh/esm-compiler@0.4.2/esm_compiler_bg.wasm"),
+      fetch("https://esm.sh/esm-compiler@0.4.4/esm_compiler_bg.wasm"),
     );
   }
   await waiting;
@@ -20,9 +20,9 @@ export default {
   setup(hot: Hot) {
     const { stringify } = JSON;
 
-    // add `?dev` to react/react-dom import url in development mode
     if (hot.isDev) {
-      hot.onFetch((url: URL, req: Request) => {
+      // add `?dev` to react/react-dom import url in development mode
+      const isProdReact = (url: URL, req: Request) => {
         if (
           url.hostname === "esm.sh" &&
           !url.searchParams.has("dev") &&
@@ -33,7 +33,8 @@ export default {
           return p.length <= 3 && (name === "react" || name === "react-dom");
         }
         return false;
-      }, (req: Request) => {
+      };
+      hot.onFetch(isProdReact, (req: Request) => {
         const url = new URL(req.url);
         url.searchParams.set("dev", "");
         return new Response(null, {
@@ -89,7 +90,7 @@ export default {
           return {
             code: [
               isDev && hmrRuntime &&
-              `import H from ${stringify(hmrRuntime)};import.meta.hot = H(${
+              `import Hmr from ${stringify(hmrRuntime)};import.meta.hot = Hmr(${
                 stringify(pathname)
               });`,
               "const d = document;",
