@@ -15,8 +15,9 @@
     }
 
     .editor {
+      border-bottom: 1px solid #fff;
       width: 100%;
-      height: 320px;
+      height: 210px;
     }
   </style>
 </head>
@@ -25,6 +26,7 @@
   <div class="editor" id="editor1"></div>
   <div class="editor" id="editor2"></div>
   <div class="editor" id="editor3"></div>
+  <div class="editor" id="editor4"></div>
   <script type="module">
     import { init, editor } from '/dist/editor.js';
     await init();
@@ -48,6 +50,14 @@
         '}'
       ].join('\n'),
       language: 'javascript',
+    })
+    editor.create(document.getElementById('editor4'), {
+      value: JSON.stringify({
+        "$schema": "https://raw.githubusercontent.com/denoland/vscode_deno/main/schemas/import_map.schema.json",
+        foo: 'bar',
+        baz: 'qux',
+      }, null, 2),
+      language: 'json',
     })
   </script>
 </body>

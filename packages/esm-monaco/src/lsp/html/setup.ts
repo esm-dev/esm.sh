@@ -1,12 +1,6 @@
 import * as monacoNS from "monaco-editor-core";
-import * as lsTypes from "../ls-types";
+import * as ls from "../ls-types";
 import type { CreateData, HTMLWorker } from "./worker";
-
-class HTMLCompletionAdapter extends lsTypes.CompletionAdapter<HTMLWorker> {
-  constructor(worker: lsTypes.WorkerAccessor<HTMLWorker>) {
-    super(worker, [".", ":", "<", '"', "=", "/"]);
-  }
-}
 
 export function setup(languageId: string, monaco: typeof monacoNS) {
   const languages = monaco.languages;
@@ -26,7 +20,6 @@ export function setup(languageId: string, monaco: typeof monacoNS) {
         contentUnformatted: "pre",
         indentInnerHtml: false,
         preserveNewLines: true,
-        maxPreserveNewLines: undefined,
         indentHandlebars: false,
         endWithNewline: false,
         extraLiners: "head, body, /html",
@@ -35,58 +28,55 @@ export function setup(languageId: string, monaco: typeof monacoNS) {
     },
   };
   const worker = monaco.editor.createWebWorker<HTMLWorker>({
-    moduleId: "lsp/css/worker",
+    moduleId: "lsp/html/worker",
     label: languageId,
     createData,
   });
-  const workerAccessor: lsTypes.WorkerAccessor<HTMLWorker> = (
+  const workerAccessor: ls.WorkerAccessor<HTMLWorker> = (
     ...uris: monacoNS.Uri[]
   ): Promise<HTMLWorker> => {
     return worker.withSyncedResources(uris);
   };
 
-  lsTypes.preclude(monaco);
+  ls.preclude(monaco);
   languages.registerCompletionItemProvider(
     languageId,
-    new HTMLCompletionAdapter(workerAccessor),
+    new ls.CompletionAdapter(workerAccessor, [".", ":", "<", '"', "=", "/"]),
   );
   languages.registerHoverProvider(
     languageId,
-    new lsTypes.HoverAdapter(workerAccessor),
+    new ls.HoverAdapter(workerAccessor),
   );
   languages.registerDocumentHighlightProvider(
     languageId,
-    new lsTypes.DocumentHighlightAdapter(workerAccessor),
+    new ls.DocumentHighlightAdapter(workerAccessor),
   );
   languages.registerLinkProvider(
     languageId,
-    new lsTypes.DocumentLinkAdapter(workerAccessor),
+    new ls.DocumentLinkAdapter(workerAccessor),
   );
   languages.registerFoldingRangeProvider(
     languageId,
-    new lsTypes.FoldingRangeAdapter(workerAccessor),
+    new ls.FoldingRangeAdapter(workerAccessor),
   );
   languages.registerDocumentSymbolProvider(
     languageId,
-    new lsTypes.DocumentSymbolAdapter(workerAccessor),
+    new ls.DocumentSymbolAdapter(workerAccessor),
   );
   languages.registerSelectionRangeProvider(
     languageId,
-    new lsTypes.SelectionRangeAdapter(workerAccessor),
+    new ls.SelectionRangeAdapter(workerAccessor),
   );
   languages.registerRenameProvider(
     languageId,
-    new lsTypes.RenameAdapter(workerAccessor),
+    new ls.RenameAdapter(workerAccessor),
   );
-  // only html
-  if (languageId === "html") {
-    languages.registerDocumentFormattingEditProvider(
-      languageId,
-      new lsTypes.DocumentFormattingEditProvider(workerAccessor),
-    );
-    languages.registerDocumentRangeFormattingEditProvider(
-      languageId,
-      new lsTypes.DocumentRangeFormattingEditProvider(workerAccessor),
-    );
-  }
+  languages.registerDocumentFormattingEditProvider(
+    languageId,
+    new ls.DocumentFormattingEditProvider(workerAccessor),
+  );
+  languages.registerDocumentRangeFormattingEditProvider(
+    languageId,
+    new ls.DocumentRangeFormattingEditProvider(workerAccessor),
+  );
 }
