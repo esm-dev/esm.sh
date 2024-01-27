@@ -57,6 +57,7 @@ var jsFeatures = []compat.JSFeature{
 	compat.ClassStaticBlocks,
 	compat.ClassStaticField,
 	compat.ConstAndLet,
+	compat.Decorators,
 	compat.DefaultArgument,
 	compat.Destructuring,
 	compat.DynamicImport,
@@ -64,9 +65,12 @@ var jsFeatures = []compat.JSFeature{
 	compat.ExportStarAs,
 	compat.ForAwait,
 	compat.ForOf,
+	compat.FunctionNameConfigurable,
+	compat.FunctionOrClassPropertyAccess,
 	compat.Generator,
 	compat.Hashbang,
 	compat.ImportAssertions,
+	compat.ImportAttributes,
 	compat.ImportMeta,
 	compat.InlineScript,
 	compat.LogicalAssignment,
@@ -92,6 +96,7 @@ var jsFeatures = []compat.JSFeature{
 	compat.TopLevelAwait,
 	compat.TypeofExoticObjectIsObject,
 	compat.UnicodeEscapes,
+	compat.Using,
 }
 
 func validateESMAFeatures(target api.Target) int {
