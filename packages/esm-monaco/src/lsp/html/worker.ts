@@ -1,0 +1,1 @@
+globalThis.onmessage = function (e) {};

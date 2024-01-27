@@ -1,0 +1,16 @@
+{
+  "compilerOptions": {
+    "lib": [
+      "DOM",
+      "DOM.Iterable",
+      "ESNext",
+      "WebWorker"
+    ],
+    "target": "ESNext",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "noEmit": true,
+    "allowImportingTsExtensions": true
+  },
+  "include": [ "src/**/*.ts" ]
+}
