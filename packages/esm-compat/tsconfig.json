@@ -5,9 +5,6 @@
       "DOM.Iterable",
       "ESNext",
     ],
-    "types": [
-      "@cloudflare/workers-types"
-    ],
     "target": "ESNext",
     "module": "ESNext",
     "moduleResolution": "bundler",
