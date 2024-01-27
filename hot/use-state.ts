@@ -148,9 +148,14 @@ function parseBlocks(
   return [segments, blocks];
 }
 
+function hasOwn(target: object, key: PropertyKey) {
+  // @ts-ignore Object.hasOwn
+  return obj.hasOwn ?? obj.hasOwnProperty.call(target, key);
+}
+
 /** find the first object that has the given property. */
 function findOwn(list: any[], key: PropertyKey) {
-  return list.find((o) => obj.hasOwn(o, key));
+  return list.find((o) => hasOwn(o, key));
 }
 
 /** get the given property of the given target. */
@@ -379,7 +384,7 @@ function core(
         for (const key of keys) {
           if (!marker.has(key)) {
             marker.add(key);
-            if (!obj.hasOwn(el, key)) {
+            if (!hasOwn(el, key)) {
               obj.defineProperty(el, key, {
                 get: () => get(scope, key),
                 set: (value) => set(scope, key, value),
