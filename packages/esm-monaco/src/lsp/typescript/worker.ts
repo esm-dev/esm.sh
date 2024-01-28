@@ -50,9 +50,9 @@ export class TypeScriptWorker implements ts.LanguageServiceHost {
   private _ctx: worker.IWorkerContext;
   private _libs: Record<string, string>;
   private _extraLibs: Record<string, ExtraLib> = Object.create(null);
-  private _languageService = ts.createLanguageService(this);
   private _compilerOptions: ts.CompilerOptions;
   private _inlayHintsOptions?: ts.UserPreferences;
+  private _languageService = ts.createLanguageService(this);
 
   constructor(ctx: worker.IWorkerContext, createData: CreateData) {
     this._ctx = ctx;
@@ -60,6 +60,53 @@ export class TypeScriptWorker implements ts.LanguageServiceHost {
     this._libs = createData.libs;
     this._extraLibs = createData.extraLibs ?? {};
     this._inlayHintsOptions = createData.inlayHintsOptions;
+  }
+
+  resolveModuleNameLiterals(
+    moduleLiterals: readonly ts.StringLiteralLike[],
+    containingFile: string,
+    redirectedReference: ts.ResolvedProjectReference | undefined,
+    options: ts.CompilerOptions,
+    containingSourceFile: ts.SourceFile,
+    reusedNames: readonly ts.StringLiteralLike[] | undefined,
+  ): readonly ts.ResolvedModuleWithFailedLookupLocations[] {
+    return moduleLiterals.map((literal) => {
+      const url = new URL(literal.text, containingFile);
+      return {
+        resolvedModule: {
+          resolvedFileName: url.toString(),
+          extension: TypeScriptWorker.getFileExtension(url.pathname),
+        },
+      } satisfies ts.ResolvedModuleWithFailedLookupLocations;
+    });
+  }
+
+  static getFileExtension(fileName: string): ts.Extension {
+    const suffix = fileName.substring(fileName.lastIndexOf(".") + 1);
+    switch (suffix) {
+      case "ts":
+        if (fileName.endsWith(".d.ts")) {
+          return ts.Extension.Dts;
+        }
+        return ts.Extension.Ts;
+      case "mts":
+        if (fileName.endsWith(".d.mts")) {
+          return ts.Extension.Dts;
+        }
+        return ts.Extension.Mts;
+      case "tsx":
+        return ts.Extension.Tsx;
+      case "js":
+        return ts.Extension.Js;
+      case "mjs":
+        return ts.Extension.Mjs;
+      case "jsx":
+        return ts.Extension.Jsx;
+      case "json":
+        return ts.Extension.Json;
+      default:
+        return ts.Extension.Ts;
+    }
   }
 
   // --- language service host ---------------

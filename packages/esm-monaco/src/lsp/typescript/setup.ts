@@ -29,10 +29,12 @@ export async function setup(
       );
       const createData: CreateData = {
         compilerOptions: {
-          allowJs: true,
           allowImportingTsExtensions: true,
+          allowJs: true,
+          module: 99, // ModuleKind.ESNext,
           moduleResolution: 100, // ModuleResolutionKind.Bundler,
-          target: 99, // ScriptTarget.Latest,
+          target: 99, // ScriptTarget.ESNext,
+          noEmit: true,
         },
         libs: libFiles.libs,
         extraLibs: libFiles.extraLibs,
