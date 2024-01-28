@@ -7,4 +7,15 @@ export function init(
   },
 ): Promise<editor.IStandaloneCodeEditor>;
 
+export function create(
+  container: HTMLElement,
+  options: editor.IStandaloneEditorConstructionOptions,
+): editor.IStandaloneCodeEditor;
+
+export function createModel(
+  value: string,
+  language?: string,
+  uri?: string | monaco.Uri,
+): editor.ITextModel;
+
 export * from "./manaco.api";

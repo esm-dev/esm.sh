@@ -68,13 +68,32 @@ export async function init(
   shikiToMonaco(highlighter, monaco);
 }
 
-const createEditor = monaco.editor.create;
-monaco.editor.create = function (container, options) {
-  return createEditor(container, {
+const _create = monaco.editor.create.bind(monaco.editor);
+const _createModel = monaco.editor.createModel.bind(monaco.editor);
+monaco.editor.create = create;
+monaco.editor.createModel = createModel;
+
+export function create(
+  container: HTMLElement,
+  options: monaco.editor.IStandaloneEditorConstructionOptions,
+) {
+  return _create(container, {
     minimap: { enabled: false },
     theme: defaultConfig.theme,
     ...options,
   });
-};
+}
+
+export function createModel(
+  value: string,
+  language?: string,
+  uri?: string | monaco.Uri,
+) {
+  return _createModel(
+    value,
+    language,
+    typeof uri === "string" ? monaco.Uri.parse(uri) : uri,
+  );
+}
 
 export * from "monaco-editor-core";
