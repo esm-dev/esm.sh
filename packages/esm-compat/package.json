@@ -15,7 +15,7 @@
   ],
   "devDependencies": {
     "@types/ua-parser-js": "0.7.39",
-    "esbuild": "0.19.12",
+    "esbuild": "0.20.0",
     "ua-parser-js": "1.0.37"
   },
   "repository": "https://github.com/esm-dev/esm.sh",

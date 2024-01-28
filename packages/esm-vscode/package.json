@@ -32,10 +32,10 @@
     "start": "DEBUG=true node build.mjs && rm -rf ~/.cache/esm.sh && code --extensionDevelopmentPath=$PWD ../esm-cli/templates/react"
   },
   "devDependencies": {
-    "@types/node": "20.10.4",
-    "@types/vscode": "1.84.2",
-    "@vscode/vsce": "2.22.0",
-    "esbuild": "0.19.8",
+    "@types/node": "20.11.8",
+    "@types/vscode": "1.85.0",
+    "@vscode/vsce": "2.23.0",
+    "esbuild": "0.20.0",
     "html5parser": "2.0.2",
     "typescript": "5.3.3"
   },
