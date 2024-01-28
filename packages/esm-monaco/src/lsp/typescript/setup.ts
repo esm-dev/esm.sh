@@ -29,9 +29,10 @@ export async function setup(
       );
       const createData: CreateData = {
         compilerOptions: {
-          allowNonTsExtensions: true,
-          target: 99, // ScriptTarget.Latest,
           allowJs: true,
+          allowImportingTsExtensions: true,
+          moduleResolution: 100, // ModuleResolutionKind.Bundler,
+          target: 99, // ScriptTarget.Latest,
         },
         libs: libFiles.libs,
         extraLibs: libFiles.extraLibs,

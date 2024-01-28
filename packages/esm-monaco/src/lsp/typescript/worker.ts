@@ -8,7 +8,6 @@ import type * as monacoNS from "monaco-editor-core";
 import * as worker from "monaco-editor-core/esm/vs/editor/editor.worker";
 import type { ExtraLib } from "./api";
 
-
 export interface CreateData {
   compilerOptions: ts.CompilerOptions;
   libs: Record<string, string>;
@@ -159,9 +158,7 @@ export class TypeScriptWorker implements ts.LanguageServiceHost {
       case "jsx":
         return ts.ScriptKind.JSX;
       default:
-        return this.getCompilationSettings().allowJs
-          ? ts.ScriptKind.JS
-          : ts.ScriptKind.TS;
+        return ts.ScriptKind.TS;
     }
   }
 
@@ -450,7 +447,7 @@ export class TypeScriptWorker implements ts.LanguageServiceHost {
   async getRenameInfo(
     fileName: string,
     position: number,
-    options: ts.RenameInfoOptions,
+    options: ts.UserPreferences,
   ): Promise<ts.RenameInfo> {
     if (this._fileNameIsLib(fileName)) {
       return {

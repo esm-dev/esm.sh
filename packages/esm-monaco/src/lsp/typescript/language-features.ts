@@ -145,7 +145,7 @@ export class DiagnosticsAdapter extends Adapter {
   constructor(
     private readonly _libFiles: LibFiles,
     private readonly _diagnosticsOptions: DiagnosticsOptions,
-    private readonly _onExtraLibsChange : IEvent<void>,
+    private readonly _onExtraLibsChange: IEvent<void>,
     private _selector: string,
     worker: (...uris: Uri[]) => Promise<TypeScriptWorker>,
   ) {
@@ -290,16 +290,6 @@ export class DiagnosticsAdapter extends Adapter {
           (this._diagnosticsOptions.diagnosticCodesToIgnore || [])
             .indexOf(d.code) ===
             -1,
-      );
-
-    // Fetch lib files if necessary
-    const relatedUris = diagnostics
-      .map((d) => d.relatedInformation || [])
-      .reduce((p, c) => c.concat(p), [])
-      .map((relatedInformation) =>
-        relatedInformation.file
-          ? M.Uri.parse(relatedInformation.file.fileName)
-          : null
       );
 
     if (model.isDisposed()) {
