@@ -98,10 +98,16 @@ export class LibFiles {
   }
 }
 
+// javascript and typescript share the setup data
+let setupData: SetupData | null = null;
+
 export const init = (
   monaco: typeof monacoNS,
-  languageId: string,
 ): SetupData => {
+  if (setupData) {
+    return setupData;
+  }
+
   const libFiles = new LibFiles(monaco);
   const extraLibsChangeEmitter = new monaco.Emitter<void>();
 
@@ -142,10 +148,12 @@ export const init = (
       };
     },
   };
-  monaco.languages[languageId] = api;
+  monaco.languages["typescript"] = api;
+  monaco.languages["javascript"] = api;
 
-  return {
+  setupData = {
     libFiles,
     onExtraLibsChange: extraLibsChangeEmitter.event,
   };
+  return setupData;
 };

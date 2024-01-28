@@ -7,7 +7,7 @@ const defaultConfig = {
   languages: ["html", "css", "json", "javascript", "typescript", "markdown"],
 };
 
-// @ts-ignore - MonacoEnvironment
+// @ts-expect-error global `MonacoEnvironment` variable not declared
 globalThis.MonacoEnvironment = {
   getWorker: (_, label: string) => {
     let filename = "./editor-worker.js";

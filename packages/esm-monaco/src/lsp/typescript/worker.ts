@@ -147,8 +147,8 @@ export class TypeScriptWorker implements ts.LanguageServiceHost {
     };
   }
 
-  getScriptKind?(fileName: string): ts.ScriptKind {
-    const suffix = fileName.substr(fileName.lastIndexOf(".") + 1);
+  getScriptKind(fileName: string): ts.ScriptKind {
+    const suffix = fileName.substring(fileName.lastIndexOf(".") + 1);
     switch (suffix) {
       case "ts":
         return ts.ScriptKind.TS;

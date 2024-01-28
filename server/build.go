@@ -785,15 +785,25 @@ rebuild:
 						fmt.Fprintf(header, `import __Process$ from "node:process";%s`, EOL)
 					} else if task.Target == "deno" {
 						fmt.Fprintf(header, `import __Process$ from "https://deno.land/std@%s/node/process.ts";%s`, task.Args.denoStdVersion, EOL)
-					} else if task.BundleDeps {
-						var js []byte
-						js, err = bundleNodePolyfill("process", "__Process$", "default", targets[task.Target])
-						if err != nil {
-							return
-						}
-						fmt.Fprintf(header, "%s", js)
 					} else {
-						fmt.Fprintf(header, `import __Process$ from "%s/v%d/node_process.js";%s`, cfg.CdnBasePath, task.BuildVersion, EOL)
+						var browserExclude bool
+						if len(npm.Browser) > 0 {
+							if name, ok := npm.Browser["process"]; ok {
+								browserExclude = name == ""
+							}
+						}
+						if !browserExclude {
+							if task.BundleDeps {
+								var js []byte
+								js, err = bundleNodePolyfill("process", "__Process$", "default", targets[task.Target])
+								if err != nil {
+									return
+								}
+								fmt.Fprintf(header, "%s", js)
+							} else {
+								fmt.Fprintf(header, `import __Process$ from "%s/v%d/node_process.js";%s`, cfg.CdnBasePath, task.BuildVersion, EOL)
+							}
+						}
 					}
 				}
 				if ids.Has("__Buffer$") {
@@ -801,15 +811,25 @@ rebuild:
 						fmt.Fprintf(header, `import { Buffer as __Buffer$ } from "node:buffer";%s`, EOL)
 					} else if task.Target == "deno" {
 						fmt.Fprintf(header, `import { Buffer as __Buffer$ } from "https://deno.land/std@%s/node/buffer.ts";%s`, task.Args.denoStdVersion, EOL)
-					} else if task.BundleDeps {
-						var js []byte
-						js, err = bundleNodePolyfill("buffer", "__Buffer$", "Buffer", targets[task.Target])
-						if err != nil {
-							return
-						}
-						fmt.Fprintf(header, "%s", js)
 					} else {
-						fmt.Fprintf(header, `import { Buffer as __Buffer$ } from "%s/v%d/buffer@6.0.3/%s/buffer.mjs";%s`, cfg.CdnBasePath, task.BuildVersion, task.Target, EOL)
+						var browserExclude bool
+						if len(npm.Browser) > 0 {
+							if name, ok := npm.Browser["buffer"]; ok {
+								browserExclude = name == ""
+							}
+						}
+						if !browserExclude {
+							if task.BundleDeps {
+								var js []byte
+								js, err = bundleNodePolyfill("buffer", "__Buffer$", "Buffer", targets[task.Target])
+								if err != nil {
+									return
+								}
+								fmt.Fprintf(header, "%s", js)
+							} else {
+								fmt.Fprintf(header, `import { Buffer as __Buffer$ } from "%s/v%d/buffer@6.0.3/%s/buffer.bundle.mjs";%s`, cfg.CdnBasePath, task.BuildVersion, task.Target, EOL)
+							}
+						}
 					}
 				}
 				if ids.Has("__global$") {

@@ -7,46 +7,59 @@ import type {
 } from "./worker";
 import type { SetupData } from "./api";
 
+// javascript and typescript share the same worker
+let worker:
+  | monacoNS.editor.MonacoWebWorker<TypeScriptWorker>
+  | Promise<monacoNS.editor.MonacoWebWorker<TypeScriptWorker>>
+  | null = null;
+
 export async function setup(
   languageId: string,
   monaco: typeof monacoNS,
   data: SetupData,
 ) {
   const languages = monaco.languages;
-  const isJavaScript = languageId === "javascript";
   const { libFiles, onExtraLibsChange } = data;
 
-  // TODO: check vfs first
-  libFiles.setLibs(
-    (await import(new URL("./libs.js", import.meta.url).href)).default,
-  );
+  if (!worker) {
+    worker = (async () => {
+      // TODO: check vfs first
+      libFiles.setLibs(
+        (await import(new URL("./libs.js", import.meta.url).href)).default,
+      );
+      const createData: CreateData = {
+        compilerOptions: {
+          allowNonTsExtensions: true,
+          target: 99, // ScriptTarget.Latest,
+          allowJs: true,
+        },
+        libs: libFiles.libs,
+        extraLibs: libFiles.extraLibs,
+      };
+      return monaco.editor.createWebWorker<TypeScriptWorker>({
+        moduleId: "lsp/typescript/worker",
+        label: languageId,
+        keepIdleModels: true,
+        createData,
+      });
+    })();
+  }
 
-  const createData: CreateData = {
-    compilerOptions: {
-      allowNonTsExtensions: true,
-      target: 99, // ScriptTarget.Latest,
-      allowJs: isJavaScript,
-    },
-    libs: libFiles.libs,
-    extraLibs: libFiles.extraLibs,
-  };
+  if (worker instanceof Promise) {
+    worker = await worker;
+  }
 
-  // should allow users to override diagnostics options?
-  const diagnosticsOptions: DiagnosticsOptions = {
-    noSemanticValidation: isJavaScript,
-    noSyntaxValidation: false,
-    onlyVisible: false,
-  };
-
-  const worker = monaco.editor.createWebWorker<TypeScriptWorker>({
-    moduleId: "lsp/typescript/worker",
-    label: languageId,
-    createData,
-  });
   const workerWithResources = (
     ...uris: monacoNS.Uri[]
   ): Promise<TypeScriptWorker> => {
-    return worker.withSyncedResources(uris);
+    return (worker as monacoNS.editor.MonacoWebWorker<TypeScriptWorker>)
+      .withSyncedResources(uris);
+  };
+
+  const diagnosticsOptions: DiagnosticsOptions = {
+    noSemanticValidation: languageId === "javascript",
+    noSyntaxValidation: false,
+    onlyVisible: false,
   };
 
   lf.preclude(monaco);

@@ -31,7 +31,7 @@
     import { init, editor, languages } from '/editor.js';
     await init();
 
-    languages.javascript.addExtraLib(`
+    languages.typescript.addExtraLib(`
       declare function log(message:string): void;
     `, 'log.d.ts')
     editor.create(document.getElementById('editor1'), {
@@ -47,13 +47,14 @@
       language: 'css',
     })
     editor.create(document.getElementById('editor3'), {
-      value: [
+      model: editor.createModel([
+        'import { hello } from "./greeting.ts"',
         'function x() {',
-        '  log("Hello world!");',
+        '  log(hello); // Hello world!',
         '}'
-      ].join('\n'),
-      language: 'javascript',
+      ].join('\n'), 'javascript', 'file:///index.js')
     })
+    editor.createModel('export const hello = "Hello world!" as const;', 'typescript', 'file:///greeting.ts')
     editor.create(document.getElementById('editor4'), {
       value: JSON.stringify({
         "$schema": "https://raw.githubusercontent.com/denoland/vscode_deno/main/schemas/import_map.schema.json",
