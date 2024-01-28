@@ -3,13 +3,24 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-declare global {
-    let MonacoEnvironment: Environment | undefined;
+interface TypescriptAPI {
+  addExtraLib(content: string, filePath?: string): IDisposable;
 }
 
-interface Window {
-    MonacoEnvironment?: Environment | undefined;
+export namespace languages {
+	export const javascript: TypescriptAPI
+	export const typescript: TypescriptAPI
 }
+
+// we don't need the global MonacoEnvironment variable
+//
+// declare global {
+//     let MonacoEnvironment: Environment | undefined;
+// }
+
+// interface Window {
+//     MonacoEnvironment?: Environment | undefined;
+// }
 
 export type Thenable<T> = PromiseLike<T>;
 

@@ -5,7 +5,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Monaco x Shiji</title>
-  <link rel="stylesheet" href="./dist/editor.css">
+  <link rel="stylesheet" href="/editor.css">
   <style>
     html,
     body {
@@ -28,9 +28,12 @@
   <div class="editor" id="editor3"></div>
   <div class="editor" id="editor4"></div>
   <script type="module">
-    import { init, editor } from '/dist/editor.js';
+    import { init, editor, languages } from '/editor.js';
     await init();
 
+    languages.javascript.addExtraLib(`
+      declare function log(message:string): void;
+    `, 'log.d.ts')
     editor.create(document.getElementById('editor1'), {
       value: '<h1>Hello world!</h1>',
       language: 'html',
@@ -46,7 +49,7 @@
     editor.create(document.getElementById('editor3'), {
       value: [
         'function x() {',
-        '  console.log("Hello world!");',
+        '  log("Hello world!");',
         '}'
       ].join('\n'),
       language: 'javascript',

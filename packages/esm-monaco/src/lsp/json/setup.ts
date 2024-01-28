@@ -1,10 +1,10 @@
-import * as monacoNS from "monaco-editor-core";
-import * as ls from "../ls-types";
-import { CreateData, JSONWorker } from "./worker";
+import type * as monacoNS from "monaco-editor-core";
+import * as lf from "../language-features";
+import type { CreateData, JSONWorker } from "./worker";
 
 export function setup(languageId: string, monaco: typeof monacoNS) {
-  const bus = new monaco.Emitter<void>();
   const languages = monaco.languages;
+  const events = new monaco.Emitter<void>();
   const createData: CreateData = {
     languageId,
     options: {
@@ -30,22 +30,23 @@ export function setup(languageId: string, monaco: typeof monacoNS) {
     label: languageId,
     createData,
   });
-  const workerAccessor: ls.WorkerAccessor<JSONWorker> = (
+  const workerAccessor: lf.WorkerAccessor<JSONWorker> = (
     ...uris: monacoNS.Uri[]
   ): Promise<JSONWorker> => {
     return worker.withSyncedResources(uris);
   };
 
-  class JSONDiagnosticsAdapter extends ls.DiagnosticsAdapter<JSONWorker> {
+  class JSONDiagnosticsAdapter extends lf.DiagnosticsAdapter<JSONWorker> {
     constructor(
       languageId: string,
-      worker: ls.WorkerAccessor<JSONWorker>,
+      worker: lf.WorkerAccessor<JSONWorker>,
     ) {
-      super(languageId, worker, bus.event);
-      monaco.editor.onWillDisposeModel((model) => {
+      super(languageId, worker, events.event);
+      const editor = monaco.editor;
+      editor.onWillDisposeModel((model) => {
         this._resetSchema(model.uri);
       });
-      monaco.editor.onDidChangeModelLanguage((event) => {
+      editor.onDidChangeModelLanguage((event) => {
         this._resetSchema(event.model.uri);
       });
     }
@@ -57,38 +58,38 @@ export function setup(languageId: string, monaco: typeof monacoNS) {
     }
   }
 
-  ls.preclude(monaco);
+  lf.preclude(monaco);
   languages.registerDocumentFormattingEditProvider(
     languageId,
-    new ls.DocumentFormattingEditProvider(workerAccessor),
+    new lf.DocumentFormattingEditProvider(workerAccessor),
   );
   languages.registerDocumentRangeFormattingEditProvider(
     languageId,
-    new ls.DocumentRangeFormattingEditProvider(workerAccessor),
+    new lf.DocumentRangeFormattingEditProvider(workerAccessor),
   );
   languages.registerCompletionItemProvider(
     languageId,
-    new ls.CompletionAdapter(workerAccessor, [" ", ":", '"']),
+    new lf.CompletionAdapter(workerAccessor, [" ", ":", '"']),
   );
   languages.registerHoverProvider(
     languageId,
-    new ls.HoverAdapter(workerAccessor),
+    new lf.HoverAdapter(workerAccessor),
   );
   languages.registerDocumentSymbolProvider(
     languageId,
-    new ls.DocumentSymbolAdapter(workerAccessor),
+    new lf.DocumentSymbolAdapter(workerAccessor),
   );
   languages.registerColorProvider(
     languageId,
-    new ls.DocumentColorAdapter(workerAccessor),
+    new lf.DocumentColorAdapter(workerAccessor),
   );
   languages.registerFoldingRangeProvider(
     languageId,
-    new ls.FoldingRangeAdapter(workerAccessor),
+    new lf.FoldingRangeAdapter(workerAccessor),
   );
   languages.registerSelectionRangeProvider(
     languageId,
-    new ls.SelectionRangeAdapter(workerAccessor),
+    new lf.SelectionRangeAdapter(workerAccessor),
   );
   new JSONDiagnosticsAdapter(languageId, workerAccessor);
 }

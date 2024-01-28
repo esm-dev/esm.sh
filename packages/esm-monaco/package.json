@@ -5,16 +5,22 @@
   "type": "module",
   "module": "dist/editor.js",
   "types": "types/editor.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/editor.js",
+      "types": "./types/editor.d.ts"
+    }
+  },
   "scripts": {
     "prepublishOnly": "node build.mjs",
-    "test": "node build.mjs && deno run -A serve.mjs"
+    "test": "node build.mjs && deno run -A test/serve.mjs"
   },
   "files": [
     "dist/",
     "types/"
   ],
   "devDependencies": {
-    "esbuild": "0.19.12",
+    "esbuild": "0.20.0",
     "monaco-editor-core": "0.45.0",
     "typescript": "5.3.3",
     "vscode-css-languageservice": "6.2.12",

@@ -1,5 +1,5 @@
-import * as monacoNS from "monaco-editor-core";
-import * as ls from "../ls-types";
+import type * as monacoNS from "monaco-editor-core";
+import * as lf from "../language-features";
 import type { CreateData, HTMLWorker } from "./worker";
 
 export function setup(languageId: string, monaco: typeof monacoNS) {
@@ -32,51 +32,51 @@ export function setup(languageId: string, monaco: typeof monacoNS) {
     label: languageId,
     createData,
   });
-  const workerAccessor: ls.WorkerAccessor<HTMLWorker> = (
+  const workerAccessor: lf.WorkerAccessor<HTMLWorker> = (
     ...uris: monacoNS.Uri[]
   ): Promise<HTMLWorker> => {
     return worker.withSyncedResources(uris);
   };
 
-  ls.preclude(monaco);
+  lf.preclude(monaco);
   languages.registerCompletionItemProvider(
     languageId,
-    new ls.CompletionAdapter(workerAccessor, [".", ":", "<", '"', "=", "/"]),
+    new lf.CompletionAdapter(workerAccessor, [".", ":", "<", '"', "=", "/"]),
   );
   languages.registerHoverProvider(
     languageId,
-    new ls.HoverAdapter(workerAccessor),
+    new lf.HoverAdapter(workerAccessor),
   );
   languages.registerDocumentHighlightProvider(
     languageId,
-    new ls.DocumentHighlightAdapter(workerAccessor),
+    new lf.DocumentHighlightAdapter(workerAccessor),
   );
   languages.registerLinkProvider(
     languageId,
-    new ls.DocumentLinkAdapter(workerAccessor),
+    new lf.DocumentLinkAdapter(workerAccessor),
   );
   languages.registerFoldingRangeProvider(
     languageId,
-    new ls.FoldingRangeAdapter(workerAccessor),
+    new lf.FoldingRangeAdapter(workerAccessor),
   );
   languages.registerDocumentSymbolProvider(
     languageId,
-    new ls.DocumentSymbolAdapter(workerAccessor),
+    new lf.DocumentSymbolAdapter(workerAccessor),
   );
   languages.registerSelectionRangeProvider(
     languageId,
-    new ls.SelectionRangeAdapter(workerAccessor),
+    new lf.SelectionRangeAdapter(workerAccessor),
   );
   languages.registerRenameProvider(
     languageId,
-    new ls.RenameAdapter(workerAccessor),
+    new lf.RenameAdapter(workerAccessor),
   );
   languages.registerDocumentFormattingEditProvider(
     languageId,
-    new ls.DocumentFormattingEditProvider(workerAccessor),
+    new lf.DocumentFormattingEditProvider(workerAccessor),
   );
   languages.registerDocumentRangeFormattingEditProvider(
     languageId,
-    new ls.DocumentRangeFormattingEditProvider(workerAccessor),
+    new lf.DocumentRangeFormattingEditProvider(workerAccessor),
   );
 }

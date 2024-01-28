@@ -1,4 +1,5 @@
 import { build as esbuild } from "esbuild";
+import { readdir, readFile, writeFile } from "node:fs/promises";
 
 const build = (/** @type {import("esbuild").BuildOptions} */ options) => {
   return esbuild({
@@ -16,6 +17,27 @@ const build = (/** @type {import("esbuild").BuildOptions} */ options) => {
   });
 };
 
+const bundleTypescriptLibs = async () => {
+  const dtsFiles = [];
+  const libDir = "node_modules/typescript/lib";
+  const entries = await readdir(libDir);
+  for (const entry of entries) {
+    if (entry.startsWith("lib.") && entry.endsWith(".d.ts")) {
+      dtsFiles.push(entry);
+    }
+  }
+  const libs = Object.fromEntries(
+    await Promise.all(dtsFiles.map(async (name) => {
+      return [name, await readFile(libDir + "/" + name, "utf-8")];
+    })),
+  );
+  await writeFile(
+    "dist/lsp/typescript/libs.json",
+    JSON.stringify(libs, undefined, 2),
+    "utf-8",
+  );
+};
+
 await build({
   entryPoints: [
     "src/editor.ts",
@@ -28,5 +50,7 @@ await build({
     "src/lsp/json/worker.ts",
     "src/lsp/typescript/setup.ts",
     "src/lsp/typescript/worker.ts",
+    "src/lsp/typescript/api.ts",
   ],
 });
+await bundleTypescriptLibs();
