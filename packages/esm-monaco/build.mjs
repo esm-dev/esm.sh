@@ -32,8 +32,8 @@ const bundleTypescriptLibs = async () => {
     })),
   );
   await writeFile(
-    "dist/lsp/typescript/libs.json",
-    JSON.stringify(libs, undefined, 2),
+    "dist/lsp/typescript/libs.js",
+    "export default " + JSON.stringify(libs, undefined, 2),
     "utf-8",
   );
 };

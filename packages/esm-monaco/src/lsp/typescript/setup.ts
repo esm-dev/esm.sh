@@ -18,8 +18,7 @@ export async function setup(
 
   // TODO: check vfs first
   libFiles.setLibs(
-    await fetch(new URL("./libs.json", import.meta.url))
-      .then((res) => res.text()).then(JSON.parse),
+    (await import(new URL("./libs.js", import.meta.url).href)).default,
   );
 
   const createData: CreateData = {
@@ -31,8 +30,6 @@ export async function setup(
     libs: libFiles.libs,
     extraLibs: libFiles.extraLibs,
   };
-
-  console.log(createData);
 
   // should allow users to override diagnostics options?
   const diagnosticsOptions: DiagnosticsOptions = {
