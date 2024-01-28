@@ -70,7 +70,11 @@ export async function init(
 
 const createEditor = monaco.editor.create;
 monaco.editor.create = function (container, options) {
-  return createEditor(container, { theme: defaultConfig.theme, ...options });
+  return createEditor(container, {
+    minimap: { enabled: false },
+    theme: defaultConfig.theme,
+    ...options,
+  });
 };
 
 export * from "monaco-editor-core";
