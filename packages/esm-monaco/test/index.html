@@ -17,7 +17,7 @@
     .editor {
       border-bottom: 1px solid #fff;
       width: 100%;
-      height: 210px;
+      height: 170px;
     }
   </style>
 </head>
@@ -27,13 +27,17 @@
   <div class="editor" id="editor2"></div>
   <div class="editor" id="editor3"></div>
   <div class="editor" id="editor4"></div>
+  <div class="editor" id="editor5"></div>
   <script type="module">
     import { init, create, languages, createModel } from '/editor.js';
     await init();
 
     languages.typescript.addExtraLib(`
+      /** log a message. */
       declare function log(message:string): void;
     `, 'log.d.ts')
+    createModel('export const hello = "Hello world!" as const;', 'typescript', 'file:///greeting.ts')
+
     create(document.getElementById('editor1'), {
       value: '<h1>Hello world!</h1>',
       language: 'html',
@@ -49,17 +53,25 @@
     create(document.getElementById('editor3'), {
       model: createModel([
         'import { hello } from "./greeting.ts"',
-        'function x() {',
+        '',
+        'function main() {',
         '  log(hello); // Hello world!',
-        '}'
+        '}',
+        'main()',
+        'export { hello } from "./greeting.ts"',
       ].join('\n'), 'typescript', 'file:///index.ts')
     })
-    createModel('export const hello = "Hello world!" as const;', 'typescript', 'file:///greeting.ts')
     create(document.getElementById('editor4'), {
+      model: createModel([
+        'import { hello } from "./index.ts"',
+        '',
+        'log(hello); // Hello world!'
+      ].join('\n'), 'javascript', 'file:///index.js')
+    })
+    create(document.getElementById('editor5'), {
       value: JSON.stringify({
         "$schema": "https://raw.githubusercontent.com/denoland/vscode_deno/main/schemas/import_map.schema.json",
-        foo: 'bar',
-        baz: 'qux',
+        imports: { "react": "https://esm.sh/react" },
       }, null, 2),
       language: 'json',
     })

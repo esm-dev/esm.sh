@@ -1,11 +1,12 @@
-import { editor } from "./manaco.api";
+import type { editor } from "./manaco.api";
+import type { BundledTheme, LanguageRegistration, ThemeRegistrationAny } from "./shiki";
 
-export function init(
-  root: HTMLElement,
-  options: editor.IStandaloneEditorConstructionOptions & {
-    languages?: string[];
-  },
-): Promise<editor.IStandaloneCodeEditor>;
+export interface InitOptions {
+  themes?: (BundledTheme | ThemeRegistrationAny)[];
+  customLanguages?: LanguageRegistration[];
+}
+
+export function init(options?: InitOptions): Promise<void>;
 
 export function create(
   container: HTMLElement,

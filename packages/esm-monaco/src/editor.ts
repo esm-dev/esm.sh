@@ -2,10 +2,7 @@ import * as monaco from "monaco-editor-core";
 import lspIndex from "./lsp/index";
 
 const shikiVersion = "1.0.0-beta.0";
-const defaultConfig = {
-  theme: "vitesse-dark",
-  languages: ["html", "css", "json", "javascript", "typescript", "markdown"],
-};
+const defaultConfig = { theme: "vitesse-dark" };
 
 // @ts-expect-error global `MonacoEnvironment` variable not declared
 globalThis.MonacoEnvironment = {
@@ -21,67 +18,95 @@ globalThis.MonacoEnvironment = {
   },
 };
 
-export async function init(
-  options: {
-    themes?: string[];
-    languages?: string[];
-  } = {},
-) {
+export async function init(options: {
+  themes?: string[];
+  customLanguages?: { name: string }[];
+} = {}) {
   if (options.themes?.length) {
     defaultConfig.theme = options.themes[0];
   }
   const [
-    { getHighlighter },
+    { getHighlighterCore },
+    { bundledLanguages },
+    { bundledThemes },
+    { default: loadWasm },
     { shikiToMonaco },
   ] = await Promise.all([
-    import(`https://esm.sh/shiki@${shikiVersion}`),
+    import(`https://esm.sh/@shikijs/core@${shikiVersion}`),
+    import(`https://esm.sh/shiki@${shikiVersion}/langs`),
+    import(`https://esm.sh/shiki@${shikiVersion}/themes`),
+    import(`https://esm.sh/shiki@${shikiVersion}/wasm?bundle`),
     import(`https://esm.sh/@shikijs/monaco@${shikiVersion}`),
   ]);
-  const themes = options.themes ?? [defaultConfig.theme];
-  const langs = options.languages ?? defaultConfig.languages;
-  const highlighter = await getHighlighter({ langs, themes });
-  if (langs) {
-    const setupDatas = Object.fromEntries(
-      await Promise.all(langs.map(async (id) => {
-        if (lspIndex[id]?.api) {
-          const { init } = await import(
-            new URL(`./lsp/${lspIndex[id].id}/api.js`, import.meta.url).href
-          );
-          return [id, init(monaco, id)];
-        }
-        return [id, null];
-      })),
-    );
-    for (const id of langs) {
-      monaco.languages.register({ id });
-      monaco.languages.onLanguage(id, async () => {
-        if (lspIndex[id]) {
-          const { setup } = await import(
-            new URL(`./lsp/${lspIndex[id].id}/setup.js`, import.meta.url)
-              .href
-          );
-          setup(id, monaco, setupDatas[id]);
-        }
-      });
+  const bundledLanguageIds = Object.keys(bundledLanguages);
+  const langs = [];
+  const themes = [];
+  if (options.customLanguages) {
+    for (const lang of options.customLanguages) {
+      if (
+        typeof lang === "object" && lang !== null && lang.name &&
+        !bundledLanguageIds.includes(lang.name)
+      ) {
+        bundledLanguageIds.push(lang.name);
+        langs.push(lang);
+      }
     }
+  }
+  for (const theme of options.themes ?? [defaultConfig.theme]) {
+    if (typeof theme === "string") {
+      if (bundledThemes[theme]) {
+        themes.push(bundledThemes[theme]());
+      }
+    } else if (typeof theme === "object" && theme !== null) {
+      themes.push(theme);
+    }
+  }
+  const highlighter = await getHighlighterCore({ langs, themes, loadWasm });
+  const setupDataMap = Object.fromEntries(
+    await Promise.all(
+      bundledLanguageIds.filter((id) => !!lspIndex[id]?.api).map(async (id) => {
+        const { init } = await import(
+          new URL(`./lsp/${lspIndex[id].id}/api.js`, import.meta.url).href
+        );
+        return [id, init(monaco, id)];
+      }),
+    ),
+  );
+  for (const id of bundledLanguageIds) {
+    monaco.languages.register({ id });
+    monaco.languages.onLanguage(id, async () => {
+      await highlighter.loadLanguage(bundledLanguages[id]()).then(() => {
+        // activate the highlighter for the language
+        shikiToMonaco(highlighter, monaco);
+      });
+      if (lspIndex[id]) {
+        const { setup } = await import(
+          new URL(`./lsp/${lspIndex[id].id}/setup.js`, import.meta.url)
+            .href
+        );
+        setup(id, monaco, setupDataMap[id]);
+      }
+    });
   }
   shikiToMonaco(highlighter, monaco);
 }
 
 const _create = monaco.editor.create.bind(monaco.editor);
 const _createModel = monaco.editor.createModel.bind(monaco.editor);
-monaco.editor.create = create;
-monaco.editor.createModel = createModel;
 
 export function create(
   container: HTMLElement,
-  options: monaco.editor.IStandaloneEditorConstructionOptions,
+  options?: monaco.editor.IStandaloneEditorConstructionOptions,
 ) {
-  return _create(container, {
-    minimap: { enabled: false },
-    theme: defaultConfig.theme,
-    ...options,
-  });
+  return _create(
+    container,
+    {
+      automaticLayout: true,
+      minimap: { enabled: false },
+      theme: defaultConfig.theme,
+      ...options,
+    } satisfies typeof options,
+  );
 }
 
 export function createModel(
@@ -95,5 +120,8 @@ export function createModel(
     typeof uri === "string" ? monaco.Uri.parse(uri) : uri,
   );
 }
+
+// override default create and createModel methods
+Object.assign(monaco.editor, { create, createModel });
 
 export * from "monaco-editor-core";
