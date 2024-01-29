@@ -1,8 +1,14 @@
 import type { editor } from "./manaco.api";
-import type { BundledTheme, LanguageRegistration, ThemeRegistrationAny } from "./shiki";
+import type {
+  BundledLanguage,
+  BundledTheme,
+  LanguageRegistration,
+  ThemeRegistrationAny,
+} from "./shiki";
 
 export interface InitOptions {
   themes?: (BundledTheme | ThemeRegistrationAny)[];
+  preloadLanguages?: BundledLanguage[];
   customLanguages?: LanguageRegistration[];
 }
 

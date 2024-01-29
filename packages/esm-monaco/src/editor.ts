@@ -20,6 +20,7 @@ globalThis.MonacoEnvironment = {
 
 export async function init(options: {
   themes?: string[];
+  preloadLanguages?: string[];
   customLanguages?: { name: string }[];
 } = {}) {
   if (options.themes?.length) {
@@ -39,6 +40,7 @@ export async function init(options: {
     import(`https://esm.sh/@shikijs/monaco@${shikiVersion}`),
   ]);
   const bundledLanguageIds = Object.keys(bundledLanguages);
+  const loadedLanguages = new Set<string>();
   const langs = [];
   const themes = [];
   if (options.customLanguages) {
@@ -48,6 +50,7 @@ export async function init(options: {
         !bundledLanguageIds.includes(lang.name)
       ) {
         bundledLanguageIds.push(lang.name);
+        loadedLanguages.add(lang.name);
         langs.push(lang);
       }
     }
@@ -60,6 +63,18 @@ export async function init(options: {
     } else if (typeof theme === "object" && theme !== null) {
       themes.push(theme);
     }
+  }
+  if (options.preloadLanguages) {
+    langs.push(
+      ...await Promise.all(
+        [...new Set(options.preloadLanguages)].filter((id) => !!bundledLanguages[id]).map(
+          (id) => {
+            loadedLanguages.add(id);
+            return bundledLanguages[id]();
+          },
+        ),
+      ),
+    );
   }
   const highlighter = await getHighlighterCore({ langs, themes, loadWasm });
   const setupDataMap = Object.fromEntries(
@@ -75,10 +90,13 @@ export async function init(options: {
   for (const id of bundledLanguageIds) {
     monaco.languages.register({ id });
     monaco.languages.onLanguage(id, async () => {
-      await highlighter.loadLanguage(bundledLanguages[id]()).then(() => {
-        // activate the highlighter for the language
-        shikiToMonaco(highlighter, monaco);
-      });
+      if (!loadedLanguages.has(id)) {
+        loadedLanguages.add(id);
+        highlighter.loadLanguage(bundledLanguages[id]()).then(() => {
+          // activate the highlighter for the language
+          shikiToMonaco(highlighter, monaco);
+        });
+      }
       if (lspIndex[id]) {
         const { setup } = await import(
           new URL(`./lsp/${lspIndex[id].id}/setup.js`, import.meta.url)

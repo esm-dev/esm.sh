@@ -30,7 +30,9 @@
   <div class="editor" id="editor5"></div>
   <script type="module">
     import { init, create, languages, createModel } from '/editor.js';
-    await init();
+    await init({
+      preloadLanguages: ['html', 'css', 'javascript', 'typescript', 'json'],
+    });
 
     languages.typescript.addExtraLib(`
       /** log a message. */
