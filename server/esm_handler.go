@@ -1116,8 +1116,9 @@ func esmHandler() rex.Handle {
 				select {
 				case output := <-c.C:
 					if output.err != nil {
-						if m := output.err.Error(); strings.Contains(m, "no such file or directory") ||
-							strings.Contains(m, "is not exported from package") {
+						msg := output.err.Error()
+						if strings.Contains(msg, "no such file or directory") ||
+							strings.Contains(msg, "is not exported from package") {
 							// redirect old build path (.js) to new build path (.mjs)
 							if strings.HasSuffix(reqPkg.SubPath, "/"+reqPkg.Name+".js") {
 								url := strings.TrimSuffix(ctx.R.URL.String(), ".js") + ".mjs"
@@ -1125,6 +1126,9 @@ func esmHandler() rex.Handle {
 							}
 							header.Set("Cache-Control", "public, max-age=31536000, immutable")
 							return rex.Status(404, "Module not found")
+						}
+						if strings.HasSuffix(msg, " not found") {
+							return rex.Status(404, msg)
 						}
 						return throwErrorJS(ctx, output.err, false)
 					}

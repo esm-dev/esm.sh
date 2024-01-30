@@ -265,7 +265,11 @@ func fetchPackageInfo(name string, version string) (info NpmPackageInfo, err err
 	defer resp.Body.Close()
 
 	if resp.StatusCode == 404 || resp.StatusCode == 401 {
-		err = fmt.Errorf("npm: package '%s' not found", name)
+		if isFullVersion {
+			err = fmt.Errorf("npm: version %s of '%s' not found", version, name)
+		} else {
+			err = fmt.Errorf("npm: package '%s' not found", name)
+		}
 		return
 	}
 
@@ -293,7 +297,7 @@ func fetchPackageInfo(name string, version string) (info NpmPackageInfo, err err
 	}
 
 	if len(h.Versions) == 0 {
-		err = fmt.Errorf("npm: versions of %s not found", name)
+		err = fmt.Errorf("npm: missing `versions` field")
 		return
 	}
 
@@ -333,7 +337,7 @@ func fetchPackageInfo(name string, version string) (info NpmPackageInfo, err err
 	}
 
 	if info.Version == "" {
-		err = fmt.Errorf("npm: version '%s' of %s not found", version, name)
+		err = fmt.Errorf("npm: version %s of '%s' not found", version, name)
 		return
 	}
 
