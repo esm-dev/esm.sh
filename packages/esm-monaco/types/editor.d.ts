@@ -1,4 +1,4 @@
-import type { editor, Uri } from "./manaco.api";
+import type { editor, IDisposable, Uri } from "./manaco.api";
 import type { BundledLanguage, BundledTheme } from "./shiki";
 import type { GrammarInfo } from "./tm-grammars";
 import type { ThemeInfo } from "./tm-themes";
@@ -21,5 +21,14 @@ export function createModel(
   language?: string,
   uri?: string | Uri,
 ): editor.ITextModel;
+
+interface TypescriptAPI {
+  addExtraLib(content: string, filePath?: string): IDisposable;
+}
+
+export namespace languages {
+  export const javascript: TypescriptAPI;
+  export const typescript: TypescriptAPI;
+}
 
 export * from "./manaco.api";

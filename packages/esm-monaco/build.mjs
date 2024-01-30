@@ -1,5 +1,5 @@
 import { build as esbuild } from "esbuild";
-import { readdir, readFile, writeFile,copyFile } from "node:fs/promises";
+import { copyFile, readdir, readFile, writeFile } from "node:fs/promises";
 
 const build = (/** @type {import("esbuild").BuildOptions} */ options) => {
   return esbuild({
@@ -38,6 +38,12 @@ const bundleTypescriptLibs = async () => {
   );
 };
 
+const copyFiles = (...files) => {
+  return Promise.all(files.map(async ([src, dest]) => {
+    copyFile(src, dest);
+  }));
+};
+
 await build({
   entryPoints: [
     "src/editor.ts",
@@ -54,5 +60,8 @@ await build({
   ],
 });
 await bundleTypescriptLibs();
-await copyFile("node_modules/tm-themes/index.d.ts", "types/tm-themes.d.ts");
-await copyFile("node_modules/tm-grammars/index.d.ts", "types/tm-grammars.d.ts");
+await copyFiles(
+  ["node_modules/tm-themes/index.d.ts", "types/tm-themes.d.ts"],
+  ["node_modules/tm-grammars/index.d.ts", "types/tm-grammars.d.ts"],
+  ["node_modules/monaco-editor-core/monaco.d.ts", "types/monaco.d.ts"],
+);
