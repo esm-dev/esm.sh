@@ -1,4 +1,4 @@
-import type { editor, IDisposable, Uri } from "./manaco.api";
+import type { editor, IDisposable, Uri } from "./monaco";
 import type { BundledLanguage, BundledTheme } from "./shiki";
 import type { GrammarInfo } from "./tm-grammars";
 import type { ThemeInfo } from "./tm-themes";
