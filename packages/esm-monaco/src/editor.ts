@@ -11,10 +11,13 @@ globalThis.MonacoEnvironment = {
     if (lspIndex[label]) {
       filename = `./lsp/${lspIndex[label].id}/worker.js`;
     }
-    return new Worker(
-      new URL(filename, import.meta.url),
-      { type: "module" },
-    );
+    const url = new URL(filename, import.meta.url);
+    if (url.hostname === "esm.sh") {
+      return import(url.href + "?worker").then(({ default: workerFactory }) =>
+        workerFactory()
+      );
+    }
+    return new Worker(url, { type: "module" });
   },
 };
 
