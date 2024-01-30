@@ -5,12 +5,24 @@ settings:
   excludeLinksFromLockfile: false
 
 devDependencies:
+  '@shikijs/core':
+    specifier: 1.0.0-beta.1
+    version: 1.0.0-beta.1
+  '@shikijs/monaco':
+    specifier: 1.0.0-beta.1
+    version: 1.0.0-beta.1
   esbuild:
     specifier: 0.20.0
     version: 0.20.0
   monaco-editor-core:
     specifier: 0.45.0
     version: 0.45.0
+  tm-grammars:
+    specifier: 1.1.0
+    version: 1.1.0
+  tm-themes:
+    specifier: 1.1.1
+    version: 1.1.1
   typescript:
     specifier: 5.3.3
     version: 5.3.3
@@ -236,6 +248,16 @@ packages:
     dev: true
     optional: true
 
+  /@shikijs/core@1.0.0-beta.1:
+    resolution: {integrity: sha512-z3gdznaRj/DJSLQdR2Gdx6AB3e5+Il/kSGdLTGHI7HnalgPL15RbGgBSdLHW8rKAz4+dezAcTdnxm8z6YTu7nA==}
+    dev: true
+
+  /@shikijs/monaco@1.0.0-beta.1:
+    resolution: {integrity: sha512-JyvfWrIFawfi6TLGV93MKv1zyFc5M8q5i+h/PdLi55UqY/SV9sRikEA+Ar/EoKfNhNOmxAUXV727l2tF+lBfTQ==}
+    dependencies:
+      '@shikijs/core': 1.0.0-beta.1
+    dev: true
+
   /@vscode/l10n@0.0.18:
     resolution: {integrity: sha512-KYSIHVmslkaCDyw013pphY+d7x1qV8IZupYfeIfzNA+nsaWHbn5uPuQRvdRFsa9zFzGeudPuoGoZ1Op4jrJXIQ==}
     dev: true
@@ -277,6 +299,14 @@ packages:
 
   /monaco-editor-core@0.45.0:
     resolution: {integrity: sha512-3eqO61jcP+YSMwVB47FNIjma51HNPepMpLsBE8pV4kFw/ynf3KEvSKAbm6HtueZnjVoatKFtSyKhXi7B58/8aA==}
+    dev: true
+
+  /tm-grammars@1.1.0:
+    resolution: {integrity: sha512-/8IAG866Ga+q+AlosAXil5pF4lKPZ3BAJoZbQ6/ZeS1wYjoC5Ez8HvErvHONANgdwnGXEf/c1sjYnAVctfFcGw==}
+    dev: true
+
+  /tm-themes@1.1.1:
+    resolution: {integrity: sha512-Cvmlo8TXNOLLxPKo+CU7dGbc7aCTvl91lmxB/Z1Jl5py/p8HvtahzbWhNKyIsFN2MAsSIoFHjyYAVH21L2Rulw==}
     dev: true
 
   /typescript@5.3.3:

@@ -1,15 +1,12 @@
-import type { editor } from "./manaco.api";
-import type {
-  BundledLanguage,
-  BundledTheme,
-  LanguageRegistration,
-  ThemeRegistrationAny,
-} from "./shiki";
+import type { editor, Uri } from "./manaco.api";
+import type { BundledLanguage, BundledTheme } from "./shiki";
+import type { GrammarInfo } from "./tm-grammars";
+import type { ThemeInfo } from "./tm-themes";
 
 export interface InitOptions {
-  themes?: (BundledTheme | ThemeRegistrationAny)[];
-  preloadLanguages?: BundledLanguage[];
-  customLanguages?: LanguageRegistration[];
+  themes?: (BundledTheme | ThemeInfo)[];
+  preloadGrammers?: BundledLanguage[];
+  customGrammers?: GrammarInfo[];
 }
 
 export function init(options?: InitOptions): Promise<void>;
@@ -22,7 +19,7 @@ export function create(
 export function createModel(
   value: string,
   language?: string,
-  uri?: string | monaco.Uri,
+  uri?: string | Uri,
 ): editor.ITextModel;
 
 export * from "./manaco.api";

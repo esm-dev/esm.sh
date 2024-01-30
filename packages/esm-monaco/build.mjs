@@ -1,5 +1,5 @@
 import { build as esbuild } from "esbuild";
-import { readdir, readFile, writeFile } from "node:fs/promises";
+import { readdir, readFile, writeFile,copyFile } from "node:fs/promises";
 
 const build = (/** @type {import("esbuild").BuildOptions} */ options) => {
   return esbuild({
@@ -54,3 +54,5 @@ await build({
   ],
 });
 await bundleTypescriptLibs();
+await copyFile("node_modules/tm-themes/index.d.ts", "types/tm-themes.d.ts");
+await copyFile("node_modules/tm-grammars/index.d.ts", "types/tm-grammars.d.ts");

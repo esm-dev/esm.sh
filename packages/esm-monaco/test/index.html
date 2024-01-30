@@ -31,7 +31,7 @@
   <script type="module">
     import { init, create, languages, createModel } from '/editor.js';
     await init({
-      preloadLanguages: ['html', 'css', 'javascript', 'typescript', 'json'],
+      preloadGrammars: ['html', 'css', 'javascript', 'typescript', 'json'],
     });
 
     languages.typescript.addExtraLib(`
