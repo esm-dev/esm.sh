@@ -79,29 +79,34 @@ export class TypeScriptWorker implements ts.LanguageServiceHost {
     reusedNames: readonly ts.StringLiteralLike[] | undefined,
   ): readonly ts.ResolvedModuleWithFailedLookupLocations[] {
     return moduleLiterals.map((literal) => {
-      const url = new URL(literal.text, containingFile);
-      const isFileProtocol = url.protocol === "file:";
-      if (isFileProtocol) {
-        for (const model of this._ctx.getMirrorModels()) {
-          if (url.href === model.uri.toString()) {
-            return {
-              resolvedModule: {
-                resolvedFileName: url.toString(),
-                extension: TypeScriptWorker.getFileExtension(url.pathname),
-              },
-            } satisfies ts.ResolvedModuleWithFailedLookupLocations;
+      if (
+        literal.text.startsWith("file:///") || literal.text.startsWith("/") ||
+        literal.text.startsWith(".")
+      ) {
+        const url = new URL(literal.text, containingFile);
+        const isFileProtocol = url.protocol === "file:";
+        if (isFileProtocol) {
+          for (const model of this._ctx.getMirrorModels()) {
+            if (url.href === model.uri.toString()) {
+              return {
+                resolvedModule: {
+                  resolvedFileName: url.toString(),
+                  extension: TypeScriptWorker.getFileExtension(url.pathname),
+                },
+              } satisfies ts.ResolvedModuleWithFailedLookupLocations;
+            }
           }
         }
-      }
-      if (isFileProtocol && !this._badModuleNames.has(url.href)) {
-        this._ctx.host.tryOpenModel(url.href).then((ok) => {
-          if (ok) {
-            this._ctx.host.refreshDiagnostics();
-          } else {
-            // file not found, don't try to reopen it
-            this._badModuleNames.add(url.href);
-          }
-        });
+        if (isFileProtocol && !this._badModuleNames.has(url.href)) {
+          this._ctx.host.tryOpenModel(url.href).then((ok) => {
+            if (ok) {
+              this._ctx.host.refreshDiagnostics();
+            } else {
+              // file not found, don't try to reopen it
+              this._badModuleNames.add(url.href);
+            }
+          });
+        }
       }
       return { resolvedModule: undefined };
     });

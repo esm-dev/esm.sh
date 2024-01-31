@@ -1,6 +1,6 @@
 import * as monaco from "monaco-editor-core";
 import lspIndex from "./lsp/index";
-import { allGrammars, allThemes, initShiki } from "./shiki";
+import { allThemes, getLanguageIdFromExtension, initShiki } from "./shiki";
 import { VFS } from "./vfs";
 
 let defaultTheme = "vitesse-dark";
@@ -64,9 +64,8 @@ export async function init(options: InitOptions = {}) {
 
   const setupDataMap = Object.fromEntries(
     await Promise.all(
-      allGrammars.filter((g) => !!lspIndex[g.name]?.api).map(
-        async (g) => {
-          const lang = g.name;
+      Object.keys(lspIndex).filter((lang) => !!lspIndex[lang]?.api).map(
+        async (lang) => {
           const { init } = await import(
             new URL(`./lsp/${lspIndex[lang].id}/api.js`, import.meta.url).href
           );
@@ -153,17 +152,8 @@ export function createModel(
     const url = new URL(uri, "file:///");
     uri = monaco.Uri.parse(url.href);
   }
-  if (!language) {
-    const lastDot = uri.path.lastIndexOf(".");
-    if (lastDot > 0) {
-      const ext = uri.path.slice(lastDot + 1);
-      const lang = allGrammars.find((g) =>
-        g.name === ext || g.aliases?.includes(ext)
-      );
-      if (lang) {
-        language = lang.name;
-      }
-    }
+  if (!language && uri) {
+    language = getLanguageIdFromExtension(uri.path);
   }
   const model: monaco.editor.ITextModel = _createModel(value, language, uri);
   const vfs = Reflect.get(monaco.editor, "vfs") as VFS | undefined;
@@ -196,18 +186,7 @@ export async function openModel(name: string | URL) {
   if (model) {
     return model;
   }
-  const idx = uri.path.lastIndexOf(".");
-  let language = undefined;
-  if (idx > 0) {
-    const ext = uri.path.slice(idx + 1);
-    const lang = allGrammars.find((g) =>
-      g.name === ext || g.aliases?.includes(ext)
-    );
-    if (lang) {
-      language = lang.name;
-    }
-  }
-  model = _createModel(value, language, uri);
+  model = _createModel(value, getLanguageIdFromExtension(uri.path), uri);
   let writeTimer: number | null = null;
   model.onDidChangeContent((e) => {
     if (writeTimer) {

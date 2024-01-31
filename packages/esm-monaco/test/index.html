@@ -25,8 +25,8 @@
 <body>
   <monaco-editor file="index.html" theme="inv" read-only></monaco-editor>
   <monaco-editor file="style.css"></monaco-editor>
-  <monaco-editor file="main.ts"></monaco-editor>
-  <monaco-editor file="index.js"></monaco-editor>
+  <monaco-editor file="App.tsx"></monaco-editor>
+  <monaco-editor file="main.jsx"></monaco-editor>
   <monaco-editor file="import_map.json"></monaco-editor>
   <monaco-editor file="tsconfig.json"></monaco-editor>
   <script type="module">
@@ -40,30 +40,50 @@
           'declare function log(message:string): void;',
         ],
         'greeting.ts': [
-          'export const hello = "Hello world!" as const;',
+          'export const message = "Hello world!" as const;',
         ],
-        'index.html': '<h1>Hello world!</h1>',
+        'index.html': ['<!DOCTYPE html>',
+          '<html>',
+          '<head>',
+          '<meta charset="utf-8">',
+          '<title>React App</title>',
+          '<link rel="stylesheet" href="./style.css">',
+          '</head>',
+          '<body>',
+          '<div id="root"></div>',
+          '<script type="module" src="./main.tsx"><\/script>',
+          '</body>',
+          '</html>'
+        ],
         'style.css': [
-          '.foo {',
+          'h1 {',
           '  font-style: italic;',
           '}'
         ],
-        'main.ts': [
-          'import { hello } from "./greeting.ts"',
+        'App.tsx': [
+          'import { useEffect } from "react"',
+          'import { message } from "./greeting.ts"',
           '',
-          'function main() {',
-          '  log(hello); // Hello world!',
-          '}',
-          'main()',
-          'export { hello } from "./greeting.ts"',
+          'export default function App() {',
+          '  useEffect(() => {',
+          '    log(message)',
+          '  }, [])',
+          '  return <h1>{message}</h1>;',
+          '}'
         ],
-        'index.js': [
-          'import { hello } from "./main.ts"',
+        'main.jsx': [
+          'import { createRoot } from "react-dom/client"',
+          'import App from "./App.tsx"',
           '',
-          'log(hello); // Hello world!'
+          'const root = createRoot(document.getElementById("root"))',
+          'root.render(<App />)'
         ],
         'import_map.json': JSON.stringify({
-          imports: { "react": "https://esm.sh/react" },
+          imports: {
+            "@jsxImportSource": "https://esm.sh/react@18.2.0",
+            "react": "https://esm.sh/react@18.2.0",
+            "react-dom/": "https://esm.sh/react-dom@18.2.0/",
+          },
         }, null, 2),
         'tsconfig.json': JSON.stringify({
           compilerOptions: {

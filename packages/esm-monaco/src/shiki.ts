@@ -15,6 +15,28 @@ import loadWasm from "@shikijs/core/wasm-inlined";
 const allGrammerNames = new Set(allGrammars.map((l) => l.name));
 const loadedGrammars = new Set<string>();
 
+// add some aliases for javascript and typescript
+const javascriptGrammar = allGrammars.find((g) => g.name === "javascript");
+const typescriptGrammar = allGrammars.find((g) => g.name === "typescript");
+javascriptGrammar.aliases?.push("mjs", "cjs", "jsx");
+typescriptGrammar.aliases?.push("mts", "cts", "tsx");
+
+export function getLanguageIdFromExtension(path: string) {
+  const idx = path.lastIndexOf(".");
+  if (idx > 0) {
+    const ext = path.slice(idx + 1);
+    if (ext === "tsx") {
+      return "typescript";
+    }
+    const lang = allGrammars.find((g) =>
+      g.name === ext || g.aliases?.includes(ext)
+    );
+    if (lang) {
+      return lang.name;
+    }
+  }
+}
+
 export async function initShiki(
   monaco: typeof monacoNs,
   options: {
