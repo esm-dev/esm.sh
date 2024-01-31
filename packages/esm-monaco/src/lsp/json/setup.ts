@@ -1,6 +1,7 @@
 import type * as monacoNS from "monaco-editor-core";
 import * as lf from "../language-features";
 import type { CreateData, JSONWorker } from "./worker";
+import { schemas } from "./schemas";
 
 export function setup(languageId: string, monaco: typeof monacoNS) {
   const languages = monaco.languages;
@@ -11,7 +12,7 @@ export function setup(languageId: string, monaco: typeof monacoNS) {
       settings: {
         validate: true,
         allowComments: true,
-        schemas: [], // TODO: add built-in schemas?
+        schemas,
         schemaRequest: "warning",
         schemaValidation: "warning",
         comments: "error",
