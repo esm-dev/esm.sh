@@ -15,4 +15,8 @@ export class VFS {
     content: string | Uint8Array,
     version?: number,
   ): Promise<void>;
+  watchFile?(
+    name: string | URL,
+    handler: (evt: { kind: string }) => void,
+  ): () => void;
 }

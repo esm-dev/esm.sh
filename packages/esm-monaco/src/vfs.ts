@@ -14,6 +14,10 @@ export interface VFSInterface {
     content: string | Uint8Array,
     version?: number,
   ): Promise<void>;
+  watchFile?(
+    name: string | URL,
+    handler: (evt: { kind: string }) => void,
+  ): () => void;
 }
 
 interface VFSItem {
@@ -29,6 +33,7 @@ interface VFSOptions {
 
 export class VFS implements VFSInterface {
   #db: Promise<IDBDatabase> | IDBDatabase;
+  #watchHandlers = new Map<string, Set<(evt: { kind: string }) => void>>();
 
   constructor(options: VFSOptions) {
     const req = indexedDB.open(
@@ -110,10 +115,32 @@ export class VFS implements VFSInterface {
     content: string | Uint8Array,
     version?: number,
   ) {
-    const url = new URL(name, "file:///");
+    const url = new URL(name, "file:///").href;
     const db = await this.#begin();
-    const item: VFSItem = { url: url.href, version: version ?? 0, content };
+    const item: VFSItem = { url, version: version ?? 0, content };
     await waitIDBRequest(db.put(item));
+    const handlers = this.#watchHandlers.get(url);
+    if (handlers) {
+      for (const handler of handlers) {
+        handler({ kind: "modify" });
+      }
+    }
+  }
+
+  watchFile(
+    name: string | URL,
+    handler: (evt: { kind: string }) => void,
+  ): () => void {
+    const url = new URL(name, "file:///").href;
+    let handlers = this.#watchHandlers.get(url);
+    if (!handlers) {
+      handlers = new Set();
+      this.#watchHandlers.set(url, handlers);
+    }
+    handlers.add(handler);
+    return () => {
+      handlers!.delete(handler);
+    };
   }
 }
 
