@@ -1,12 +1,21 @@
 import type * as monacoNS from "monaco-editor-core";
+import type ts from "typescript";
 
 export interface ExtraLib {
   content: string;
   version: number;
 }
 
+export interface ImportMap {
+  imports?: Record<string, string>;
+  scopes?: Record<string, Record<string, string>>;
+}
+
 export interface SetupData {
+  compilerOptions: ts.CompilerOptions;
+  importMap: ImportMap;
   libFiles: LibFiles;
+  onCompilerOptionsChange: monacoNS.IEvent<void>;
   onExtraLibsChange: monacoNS.IEvent<void>;
 }
 
@@ -98,29 +107,47 @@ export class LibFiles {
   }
 }
 
+export class EventTrigger {
+  private _fireTimer = null;
+
+  constructor(private _emitter: monacoNS.Emitter<void>) {}
+
+  public get event() {
+    return this._emitter.event;
+  }
+
+  public fire() {
+    if (this._fireTimer !== null) {
+      // already fired
+      return;
+    }
+    this._fireTimer = setTimeout(() => {
+      this._fireTimer = null;
+      this._emitter.fire();
+    }, 0) as any;
+  }
+}
+
 // javascript and typescript share the setup data
 let setupData: SetupData | null = null;
 
-export const init = (
-  monaco: typeof monacoNS,
-): SetupData => {
+export const init = async (monaco: typeof monacoNS): Promise<SetupData> => {
   if (setupData) {
     return setupData;
   }
 
-  const libFiles = new LibFiles(monaco);
-  const extraLibsChangeEmitter = new monaco.Emitter<void>();
-
-  let extraLibsChanged = false;
-  const fireExtraLibsChange = () => {
-    if (!extraLibsChanged) {
-      extraLibsChanged = true;
-      queueMicrotask(() => {
-        extraLibsChanged = false;
-        extraLibsChangeEmitter.fire();
-      });
-    }
+  const importMap: ImportMap = {};
+  const compilerOptions: ts.CompilerOptions = {
+    allowImportingTsExtensions: true,
+    allowJs: true,
+    module: 99, // ModuleKind.ESNext,
+    moduleResolution: 100, // ModuleResolutionKind.Bundler,
+    target: 99, // ScriptTarget.ESNext,
+    noEmit: true,
   };
+  const libFiles = new LibFiles(monaco);
+  const compilerOptionsChangeEmitter = new EventTrigger(new monaco.Emitter());
+  const extraLibsChangeEmitter = new EventTrigger(new monaco.Emitter());
 
   const api = {
     addExtraLib: (
@@ -138,11 +165,11 @@ export const init = (
         return { dispose: () => {} };
       }
 
-      fireExtraLibsChange();
+      extraLibsChangeEmitter.fire();
       return {
         dispose: () => {
           if (libFiles.removeExtraLib(filePath)) {
-            fireExtraLibsChange();
+            extraLibsChangeEmitter.fire();
           }
         },
       };
@@ -151,8 +178,43 @@ export const init = (
   monaco.languages["typescript"] = api;
   monaco.languages["javascript"] = api;
 
+  const vfs = Reflect.get(monaco.editor, "vfs");
+  if (vfs) {
+    try {
+      const tconfigjson = await vfs.readTextFile("tsconfig.json");
+      const { compilerOptions } = JSON.parse(tconfigjson);
+      const types = compilerOptions.types;
+      delete compilerOptions.types;
+      if (Array.isArray(types)) {
+        for (const type of types) {
+          // TODO: support type from http
+          try {
+            const dts = await vfs.readTextFile(type);
+            libFiles.addExtraLib(dts, type);
+          } catch (error) {
+            if (error instanceof vfs.ErrorNotFound) {
+              // ignore
+            } else {
+              console.error(error);
+            }
+          }
+        }
+      }
+      Object.assign(compilerOptions, compilerOptions);
+    } catch (error) {
+      if (error instanceof vfs.ErrorNotFound) {
+        // ignore
+      } else {
+        console.error(error);
+      }
+    }
+  }
+
   setupData = {
+    importMap,
+    compilerOptions,
     libFiles,
+    onCompilerOptionsChange: compilerOptionsChangeEmitter.event,
     onExtraLibsChange: extraLibsChangeEmitter.event,
   };
   return setupData;

@@ -30,8 +30,8 @@
   <monaco-editor file="import_map.json"></monaco-editor>
   <monaco-editor file="tsconfig.json"></monaco-editor>
   <script type="module">
-    import { init, IDBFS } from '/editor.js';
-    const vfs = new IDBFS({
+    import { init, VFS } from '/editor.js';
+    const vfs = new VFS({
       scope: "test",
       version: 1,
       initial: {

@@ -1,31 +1,39 @@
 const enc = new TextEncoder();
 const dec = new TextDecoder();
+const idbVer = 1;
 
-export interface VFS {
+export interface VFSInterface {
+  readonly ErrorNotFound: typeof ErrorNotFound;
   list(): Promise<string[]>;
   readFile(name: string | URL): Promise<Uint8Array>;
+  readFileWithVersion(name: string | URL): Promise<[Uint8Array, number]>;
   readTextFile(name: string | URL): Promise<string>;
-  writeFile(name: string | URL, data: string | Uint8Array): Promise<void>;
+  readTextFileWithVersion(name: string | URL): Promise<[string, number]>;
+  writeFile(
+    name: string | URL,
+    content: string | Uint8Array,
+    version?: number,
+  ): Promise<void>;
 }
 
-interface IDBFSItem {
+interface VFSItem {
   url: string;
-  data: string | Uint8Array;
+  version: number;
+  content: string | Uint8Array;
 }
 
-interface IDBFSOptions {
+interface VFSOptions {
   scope?: string;
-  version?: number;
   initial?: Record<string, string[] | string>;
 }
 
-export class IDBFS implements VFS {
+export class VFS implements VFSInterface {
   #db: Promise<IDBDatabase> | IDBDatabase;
 
-  constructor(options: IDBFSOptions) {
+  constructor(options: VFSOptions) {
     const req = indexedDB.open(
       "vfs:esm-monaco/" + (options.scope ?? "main"),
-      options.version,
+      idbVer,
     );
     req.onupgradeneeded = async () => {
       const db = req.result;
@@ -33,9 +41,10 @@ export class IDBFS implements VFS {
         const store = db.createObjectStore("files", { keyPath: "url" });
         for (const [name, data] of Object.entries(options.initial ?? {})) {
           const url = new URL(name, "file:///");
-          const item: IDBFSItem = {
+          const item: VFSItem = {
             url: url.href,
-            data: Array.isArray(data) ? data.join("\n") : data,
+            version: 0,
+            content: Array.isArray(data) ? data.join("\n") : data,
           };
           await waitIDBRequest(store.add(item));
         }
@@ -44,18 +53,22 @@ export class IDBFS implements VFS {
     this.#db = waitIDBRequest<IDBDatabase>(req).then((db) => this.#db = db);
   }
 
+  get ErrorNotFound() {
+    return ErrorNotFound;
+  }
+
   async #begin(readonly = false) {
     let db = this.#db;
     if (db instanceof Promise) {
       db = await db;
     }
+
     return db.transaction("files", readonly ? "readonly" : "readwrite")
       .objectStore("files");
   }
 
   async list() {
     const db = await this.#begin(true);
-    const list: string[] = [];
     const req = db.getAllKeys();
     return await waitIDBRequest<string[]>(req);
   }
@@ -63,25 +76,50 @@ export class IDBFS implements VFS {
   async #read(name: string | URL) {
     const url = new URL(name, "file:///");
     const db = await this.#begin(true);
-    const ret = await waitIDBRequest<IDBFSItem>(
+    const ret = await waitIDBRequest<VFSItem>(
       db.get(url.href),
     );
-    return ret.data;
+    if (!ret) {
+      throw new ErrorNotFound(name);
+    }
+    return ret;
   }
 
   async readFile(name: string | URL) {
-    return toUint8Array(await this.#read(name));
+    const { content } = await this.#read(name);
+    return toUint8Array(content);
+  }
+
+  async readFileWithVersion(name: string | URL) {
+    const { content, version } = await this.#read(name);
+    return [toUint8Array(content), version] as [Uint8Array, number];
   }
 
   async readTextFile(name: string | URL) {
-    return toString(await this.#read(name));
+    const { content } = await this.#read(name);
+    return toString(content);
   }
 
-  async writeFile(name: string | URL, data: string | Uint8Array) {
+  async readTextFileWithVersion(name: string | URL) {
+    const { content, version } = await this.#read(name);
+    return [toString(content), version] as [string, number];
+  }
+
+  async writeFile(
+    name: string | URL,
+    content: string | Uint8Array,
+    version?: number,
+  ) {
     const url = new URL(name, "file:///");
     const db = await this.#begin();
-    const item: IDBFSItem = { url: url.href, data };
+    const item: VFSItem = { url: url.href, version: version ?? 0, content };
     await waitIDBRequest(db.put(item));
+  }
+}
+
+export class ErrorNotFound extends Error {
+  constructor(name: string | URL) {
+    super("file not found: " + name.toString());
   }
 }
 

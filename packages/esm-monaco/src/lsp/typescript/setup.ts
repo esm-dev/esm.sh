@@ -1,17 +1,19 @@
 import type * as monacoNS from "monaco-editor-core";
-import * as lf from "./language-features";
+import { EventTrigger, SetupData } from "./api";
 import type {
   CreateData,
   DiagnosticsOptions,
+  Host,
   TypeScriptWorker,
 } from "./worker";
-import type { SetupData } from "./api";
+import * as lf from "./language-features";
 
 // javascript and typescript share the same worker
 let worker:
   | monacoNS.editor.MonacoWebWorker<TypeScriptWorker>
   | Promise<monacoNS.editor.MonacoWebWorker<TypeScriptWorker>>
   | null = null;
+let refreshDiagnosticEventEmitter: EventTrigger | null = null;
 
 export async function setup(
   languageId: string,
@@ -19,23 +21,22 @@ export async function setup(
   data: SetupData,
 ) {
   const languages = monaco.languages;
-  const { libFiles, onExtraLibsChange } = data;
+  const {
+    compilerOptions,
+    importMap,
+    libFiles,
+    onCompilerOptionsChange,
+    onExtraLibsChange,
+  } = data;
 
   if (!worker) {
     worker = (async () => {
-      // TODO: check vfs first
       libFiles.setLibs(
         (await import(new URL("./libs.js", import.meta.url).href)).default,
       );
       const createData: CreateData = {
-        compilerOptions: {
-          allowImportingTsExtensions: true,
-          allowJs: true,
-          module: 99, // ModuleKind.ESNext,
-          moduleResolution: 100, // ModuleResolutionKind.Bundler,
-          target: 99, // ScriptTarget.ESNext,
-          noEmit: true,
-        },
+        importMap,
+        compilerOptions,
         libs: libFiles.libs,
         extraLibs: libFiles.extraLibs,
       };
@@ -44,10 +45,27 @@ export async function setup(
         label: languageId,
         keepIdleModels: true,
         createData,
+        host: {
+          tryOpenModel: async (uri: string): Promise<boolean> => {
+            try {
+              // @ts-expect-error the `openModel` method is added by esm-monaco
+              monaco.editor.openModel(uri);
+            } catch (error) {
+              // @ts-expect-error the `vfs` member is added by esm-monaco
+              if (error instanceof monaco.editor.vfs.ErrorNotFound) {
+                return false;
+              }
+            }
+            return true; // model is opened or error is not NotFound
+          },
+          refreshDiagnostics: async () => {
+            refreshDiagnosticEventEmitter.fire();
+          },
+        } satisfies Host,
       });
     })();
+    refreshDiagnosticEventEmitter = new EventTrigger(new monaco.Emitter());
   }
-
   if (worker instanceof Promise) {
     worker = await worker;
   }
@@ -59,12 +77,35 @@ export async function setup(
       .withSyncedResources(uris);
   };
 
-  const diagnosticsOptions: DiagnosticsOptions = {
-    noSemanticValidation: languageId === "javascript",
-    noSyntaxValidation: false,
-    onlyVisible: false,
-  };
+  // tell the worker to update the compiler options when it changes.
+  let updateCompilerOptionsToken = 0;
+  onCompilerOptionsChange(async () => {
+    const myToken = ++updateCompilerOptionsToken;
+    const proxy =
+      await (worker as monacoNS.editor.MonacoWebWorker<TypeScriptWorker>)
+        .getProxy();
+    if (updateCompilerOptionsToken !== myToken) {
+      // avoid multiple calls
+      return;
+    }
+    proxy.updateCompilerOptions(compilerOptions, importMap);
+  });
 
+  // tell the worker to update the extra libs when it changes.
+  let updateExtraLibsToken = 0;
+  onExtraLibsChange(async () => {
+    const myToken = ++updateExtraLibsToken;
+    const proxy =
+      await (worker as monacoNS.editor.MonacoWebWorker<TypeScriptWorker>)
+        .getProxy();
+    if (updateExtraLibsToken !== myToken) {
+      // avoid multiple calls
+      return;
+    }
+    proxy.updateExtraLibs(libFiles.extraLibs);
+  });
+
+  // register language features
   lf.preclude(monaco);
   languages.registerCompletionItemProvider(
     languageId,
@@ -77,11 +118,11 @@ export async function setup(
   languages.registerHoverProvider(
     languageId,
     new lf.QuickInfoAdapter(workerWithResources),
-  ),
-    languages.registerDocumentHighlightProvider(
-      languageId,
-      new lf.DocumentHighlightAdapter(workerWithResources),
-    );
+  );
+  languages.registerDocumentHighlightProvider(
+    languageId,
+    new lf.DocumentHighlightAdapter(workerWithResources),
+  );
   languages.registerDefinitionProvider(
     languageId,
     new lf.DefinitionAdapter(libFiles, workerWithResources),
@@ -114,10 +155,20 @@ export async function setup(
     languageId,
     new lf.InlayHintsAdapter(workerWithResources),
   );
+
+  const diagnosticsOptions: DiagnosticsOptions = {
+    noSemanticValidation: languageId === "javascript",
+    noSyntaxValidation: false,
+    onlyVisible: false,
+  };
   new lf.DiagnosticsAdapter(
     libFiles,
     diagnosticsOptions,
-    onExtraLibsChange,
+    [
+      onExtraLibsChange,
+      onCompilerOptionsChange,
+      refreshDiagnosticEventEmitter.event,
+    ],
     languageId,
     workerWithResources,
   );

@@ -1,22 +1,18 @@
-export interface VFS {
-  list(): Promise<string[]>;
-  exists(path: string): Promise<boolean>;
-  readFile(path: string): Promise<Uint8Array>;
-  readTextFile(path: string): Promise<string>;
-  writeFile(path: string, data: string | Uint8Array): Promise<void>;
-}
-
-export interface IDBFSOptions {
+export interface VFSOptions {
   scope?: string;
   version?: number;
   initial?: Record<string, string[] | string>;
 }
 
-export class IDBFS implements VFS {
-  constructor(options: IDBFSOptions);
+export class VFS {
   list(): Promise<string[]>;
-  exists(path: string): Promise<boolean>;
-  readFile(path: string): Promise<Uint8Array>;
-  readTextFile(path: string): Promise<string>;
-  writeFile(path: string, data: string | Uint8Array): Promise<void>;
+  readFile(name: string | URL): Promise<Uint8Array>;
+  readFileWithVersion(name: string | URL): Promise<[Uint8Array, number]>;
+  readTextFile(name: string | URL): Promise<string>;
+  readTextFileWithVersion(name: string | URL): Promise<[string, number]>;
+  writeFile(
+    name: string | URL,
+    content: string | Uint8Array,
+    version?: number,
+  ): Promise<void>;
 }

@@ -45,20 +45,6 @@ export async function init(options: InitOptions = {}) {
     themes = [defaultTheme];
   }
 
-  const setupDataMap = Object.fromEntries(
-    await Promise.all(
-      allGrammars.filter((g) => !!lspIndex[g.name]?.api).map(
-        async (g) => {
-          const lang = g.name;
-          const { init } = await import(
-            new URL(`./lsp/${lspIndex[lang].id}/api.js`, import.meta.url).href
-          );
-          return [lang, init(monaco, lang)];
-        },
-      ),
-    ),
-  );
-
   if (options.vfs) {
     try {
       const list = await options.vfs.list();
@@ -75,6 +61,20 @@ export async function init(options: InitOptions = {}) {
     }
     Reflect.set(monaco.editor, "vfs", options.vfs);
   }
+
+  const setupDataMap = Object.fromEntries(
+    await Promise.all(
+      allGrammars.filter((g) => !!lspIndex[g.name]?.api).map(
+        async (g) => {
+          const lang = g.name;
+          const { init } = await import(
+            new URL(`./lsp/${lspIndex[lang].id}/api.js`, import.meta.url).href
+          );
+          return [lang, await init(monaco, lang)];
+        },
+      ),
+    ),
+  );
 
   await initShiki(monaco, {
     ...options,
@@ -94,9 +94,8 @@ export async function init(options: InitOptions = {}) {
     "monaco-editor",
     class extends HTMLElement {
       async connectedCallback() {
-        const opts = {};
         let file = "";
-
+        const opts = {};
         for (const attr of this.attributes) {
           let value: any = attr.value;
           if (attr.name === "file") {
@@ -119,13 +118,7 @@ export async function init(options: InitOptions = {}) {
         this.style.display = "block";
         const editor = create(this, opts);
         if (file && options.vfs) {
-          const url = new URL(file, "file:///");
-          const model = createModel(
-            await options.vfs.readTextFile(url),
-            undefined,
-            url,
-            true,
-          );
+          const model = await openModel(file);
           editor.setModel(model);
         }
       }
@@ -155,7 +148,6 @@ export function createModel(
   value: string,
   language?: string,
   uri?: string | URL | monaco.Uri,
-  fromVFS?: boolean,
 ) {
   if (typeof uri === "string" || uri instanceof URL) {
     const url = new URL(uri, "file:///");
@@ -177,25 +169,60 @@ export function createModel(
   const vfs = Reflect.get(monaco.editor, "vfs") as VFS | undefined;
   if (vfs && uri) {
     const path = uri.path;
-    if (!fromVFS) {
-      vfs.writeFile(path, value);
-    }
-    let syncTimer: number | null = null;
+    vfs.writeFile(path, value);
+    let writeTimer: number | null = null;
     model.onDidChangeContent((e) => {
-      if (syncTimer) {
-        clearTimeout(syncTimer);
+      if (writeTimer) {
+        clearTimeout(writeTimer);
       }
-      syncTimer = setTimeout(() => {
-        syncTimer = null;
-        vfs.writeFile(path, model.getValue());
+      writeTimer = setTimeout(() => {
+        writeTimer = null;
+        vfs.writeFile(path, model.getValue(), model.getVersionId());
       }, 500);
     });
   }
   return model;
 }
 
+export async function openModel(name: string | URL) {
+  const vfs = Reflect.get(monaco.editor, "vfs") as VFS | undefined;
+  if (!vfs) {
+    throw new Error("VFS not initialized");
+  }
+  const url = new URL(name, "file:///");
+  const uri = monaco.Uri.parse(url.href);
+  const [value, version] = await vfs.readTextFileWithVersion(url);
+  let model = monaco.editor.getModel(uri);
+  if (model) {
+    return model;
+  }
+  const idx = uri.path.lastIndexOf(".");
+  let language = undefined;
+  if (idx > 0) {
+    const ext = uri.path.slice(idx + 1);
+    const lang = allGrammars.find((g) =>
+      g.name === ext || g.aliases?.includes(ext)
+    );
+    if (lang) {
+      language = lang.name;
+    }
+  }
+  model = _createModel(value, language, uri);
+  let writeTimer: number | null = null;
+  model.onDidChangeContent((e) => {
+    if (writeTimer) {
+      clearTimeout(writeTimer);
+    }
+    writeTimer = setTimeout(() => {
+      writeTimer = null;
+      vfs.writeFile(uri.path, model.getValue(), version + model.getVersionId());
+    }, 500);
+  });
+  return model;
+}
+
 // override default create and createModel methods
-Object.assign(monaco.editor, { create, createModel });
+Object.assign(monaco.editor, { create, createModel, openModel });
 
 export * from "monaco-editor-core";
 export * from "./vfs";

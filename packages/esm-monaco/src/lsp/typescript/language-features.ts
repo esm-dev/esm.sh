@@ -145,7 +145,7 @@ export class DiagnosticsAdapter extends Adapter {
   constructor(
     private readonly _libFiles: LibFiles,
     private readonly _diagnosticsOptions: DiagnosticsOptions,
-    private readonly _onExtraLibsChange: IEvent<void>,
+    private readonly _events: IEvent<void>[],
     private _selector: string,
     worker: (...uris: Uri[]) => Promise<TypeScriptWorker>,
   ) {
@@ -230,17 +230,16 @@ export class DiagnosticsAdapter extends Adapter {
       },
     });
 
-    const recomputeDiagostics = () => {
+    const refreshDiagostics = () => {
       // redo diagnostics when options change
       for (const model of editor.getModels()) {
         onModelRemoved(model);
         onModelAdd(<IInternalEditorModel> model);
       }
     };
-    this._disposables.push(
-      this._onExtraLibsChange(recomputeDiagostics),
-    );
-
+    for (const when of this._events) {
+      this._disposables.push(when(refreshDiagostics));
+    }
     editor.getModels().forEach((model) =>
       onModelAdd(<IInternalEditorModel> model)
     );

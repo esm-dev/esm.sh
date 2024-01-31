@@ -6,13 +6,19 @@
 import ts from "typescript";
 import type * as monacoNS from "monaco-editor-core";
 import * as worker from "monaco-editor-core/esm/vs/editor/editor.worker";
-import type { ExtraLib } from "./api";
+import type { ExtraLib, ImportMap } from "./api";
 
 export interface CreateData {
+  importMap: ImportMap;
   compilerOptions: ts.CompilerOptions;
   libs: Record<string, string>;
   extraLibs?: Record<string, ExtraLib>;
   inlayHintsOptions?: ts.UserPreferences;
+}
+
+export interface Host {
+  tryOpenModel(uri: string): Promise<boolean>;
+  refreshDiagnostics: () => Promise<void>;
 }
 
 /** TypeScriptWorker removes all but the `fileName` property to avoid serializing circular JSON structures. */
@@ -47,14 +53,16 @@ export interface DiagnosticsEvents {
 }
 
 export class TypeScriptWorker implements ts.LanguageServiceHost {
-  private _ctx: worker.IWorkerContext;
+  private _ctx: monacoNS.worker.IWorkerContext<Host>;
+  private _compilerOptions: ts.CompilerOptions;
+  private _importMap: ImportMap;
   private _libs: Record<string, string>;
   private _extraLibs: Record<string, ExtraLib> = Object.create(null);
-  private _compilerOptions: ts.CompilerOptions;
   private _inlayHintsOptions?: ts.UserPreferences;
   private _languageService = ts.createLanguageService(this);
+  private _badModuleNames = new Set<string>();
 
-  constructor(ctx: worker.IWorkerContext, createData: CreateData) {
+  constructor(ctx: worker.IWorkerContext<Host>, createData: CreateData) {
     this._ctx = ctx;
     this._compilerOptions = createData.compilerOptions;
     this._libs = createData.libs;
@@ -72,12 +80,30 @@ export class TypeScriptWorker implements ts.LanguageServiceHost {
   ): readonly ts.ResolvedModuleWithFailedLookupLocations[] {
     return moduleLiterals.map((literal) => {
       const url = new URL(literal.text, containingFile);
-      return {
-        resolvedModule: {
-          resolvedFileName: url.toString(),
-          extension: TypeScriptWorker.getFileExtension(url.pathname),
-        },
-      } satisfies ts.ResolvedModuleWithFailedLookupLocations;
+      const isFileProtocol = url.protocol === "file:";
+      if (isFileProtocol) {
+        for (const model of this._ctx.getMirrorModels()) {
+          if (url.href === model.uri.toString()) {
+            return {
+              resolvedModule: {
+                resolvedFileName: url.toString(),
+                extension: TypeScriptWorker.getFileExtension(url.pathname),
+              },
+            } satisfies ts.ResolvedModuleWithFailedLookupLocations;
+          }
+        }
+      }
+      if (isFileProtocol && !this._badModuleNames.has(url.href)) {
+        this._ctx.host.tryOpenModel(url.href).then((ok) => {
+          if (ok) {
+            this._ctx.host.refreshDiagnostics();
+          } else {
+            // file not found, don't try to reopen it
+            this._badModuleNames.add(url.href);
+          }
+        });
+      }
+      return { resolvedModule: undefined };
     });
   }
 
@@ -537,6 +563,14 @@ export class TypeScriptWorker implements ts.LanguageServiceHost {
     }
   }
 
+  async updateCompilerOptions(
+    compilerOptions: ts.CompilerOptions,
+    importMap: ImportMap,
+  ): Promise<void> {
+    this._compilerOptions = compilerOptions;
+    this._importMap = importMap;
+  }
+
   async updateExtraLibs(extraLibs: Record<string, ExtraLib>): Promise<void> {
     this._extraLibs = extraLibs;
   }
@@ -573,12 +607,12 @@ export class TypeScriptWorker implements ts.LanguageServiceHost {
    */
   _fileNameIsLib(resource: monacoNS.Uri | string): boolean {
     if (typeof resource === "string") {
-      if (/^file:\/\/\//.test(resource)) {
+      if (resource.startsWith("file:///")) {
         return resource.substring(8) in this._libs;
       }
       return false;
     }
-    if (resource.path.indexOf("/lib.") === 0) {
+    if (resource.path.startsWith("/lib.")) {
       return resource.path.slice(1) in this._libs;
     }
     return false;
