@@ -129,13 +129,9 @@ export class EventTrigger {
 }
 
 // javascript and typescript share the setup data
-let setupData: SetupData | null = null;
+let setupData: SetupData | Promise<SetupData> | null = null;
 
-export const init = async (monaco: typeof monacoNS): Promise<SetupData> => {
-  if (setupData) {
-    return setupData;
-  }
-
+const createSetupData = async (monaco: typeof monacoNS): Promise<SetupData> => {
   const importMap: ImportMap = {};
   const compilerOptions: ts.CompilerOptions = {
     allowImportingTsExtensions: true,
@@ -182,9 +178,9 @@ export const init = async (monaco: typeof monacoNS): Promise<SetupData> => {
   if (vfs) {
     try {
       const tconfigjson = await vfs.readTextFile("tsconfig.json");
-      const { compilerOptions } = JSON.parse(tconfigjson);
-      const types = compilerOptions.types;
-      delete compilerOptions.types;
+      const tconfig = JSON.parse(tconfigjson);
+      const types = tconfig.compilerOptions.types;
+      delete tconfig.compilerOptions.types;
       if (Array.isArray(types)) {
         for (const type of types) {
           // TODO: support type from http
@@ -200,7 +196,7 @@ export const init = async (monaco: typeof monacoNS): Promise<SetupData> => {
           }
         }
       }
-      Object.assign(compilerOptions, compilerOptions);
+      Object.assign(compilerOptions, tconfig.compilerOptions);
     } catch (error) {
       if (error instanceof vfs.ErrorNotFound) {
         // ignore
@@ -210,12 +206,18 @@ export const init = async (monaco: typeof monacoNS): Promise<SetupData> => {
     }
   }
 
-  setupData = {
+  return {
     importMap,
     compilerOptions,
     libFiles,
     onCompilerOptionsChange: compilerOptionsChangeEmitter.event,
     onExtraLibsChange: extraLibsChangeEmitter.event,
   };
-  return setupData;
+};
+
+export const init = async (monaco: typeof monacoNS): Promise<SetupData> => {
+  if (setupData) {
+    return setupData;
+  }
+  return setupData = createSetupData(monaco);
 };
