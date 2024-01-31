@@ -11,7 +11,7 @@ export function setup(languageId: string, monaco: typeof monacoNS) {
     options: {
       settings: {
         validate: true,
-        allowComments: true,
+        allowComments: false,
         schemas,
         schemaRequest: "warning",
         schemaValidation: "warning",
