@@ -1045,6 +1045,8 @@ func (task *BuildTask) resolveExternal(specifier string, kind api.ResolveKind) (
 			resolvedPath = jsDataUrl(`export default Object.assign`)
 		case "has-own":
 			resolvedPath = jsDataUrl(`const hasOwn=Object.prototype.hasOwnProperty;export default Object.hasOwn ?? (o,p)=>hasOwn.call(o,p)`)
+		case "has-proto":
+			resolvedPath = jsDataUrl(`const foo={bar:{}};const O=Object;export default ()=>({__proto__:foo}).bar===foo.bar&&!({__proto__:null} instanceof O)`)
 		case "has-symbols":
 			resolvedPath = jsDataUrl(`export default ()=>true`)
 		case "function-bind":
