@@ -9,4 +9,5 @@ export default <Record<string, LspMeta>> {
   json: { id: "json" },
   javascript: { id: "typescript", api: true },
   typescript: { id: "typescript", api: true },
+  tsx: { id: "typescript", api: true },
 };

@@ -49,11 +49,11 @@ export async function init(options: InitOptions = {}) {
     try {
       const list = await options.vfs.list();
       for (const path of list) {
-        const ext = path.split(".").pop();
+        const lang = getLanguageIdFromExtension(path);
         const preloadGrammars = options.preloadGrammars ??
           (options.preloadGrammars = []);
-        if (ext && !preloadGrammars.includes(ext)) {
-          preloadGrammars.push(ext);
+        if (lang && !preloadGrammars.includes(lang)) {
+          preloadGrammars.push(lang);
         }
       }
     } catch {

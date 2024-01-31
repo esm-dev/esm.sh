@@ -25,9 +25,6 @@ export function getLanguageIdFromExtension(path: string) {
   const idx = path.lastIndexOf(".");
   if (idx > 0) {
     const ext = path.slice(idx + 1);
-    if (ext === "tsx") {
-      return "typescript";
-    }
     const lang = allGrammars.find((g) =>
       g.name === ext || g.aliases?.includes(ext)
     );
