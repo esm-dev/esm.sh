@@ -14,9 +14,11 @@ require (
 
 require (
 	github.com/andybalholm/brotli v1.0.6 // indirect
+	github.com/google/go-cmp v0.5.9 // indirect
 	github.com/rs/cors v1.10.1 // indirect
 	golang.org/x/crypto v0.16.0 // indirect
 	golang.org/x/net v0.10.0 // indirect
 	golang.org/x/sys v0.15.0 // indirect
 	golang.org/x/text v0.14.0 // indirect
+	gotest.tools/v3 v3.5.1 // indirect
 )
