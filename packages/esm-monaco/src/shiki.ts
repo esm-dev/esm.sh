@@ -5,12 +5,12 @@ import type {
   ThemeInput,
 } from "@shikijs/core";
 import { getHighlighterCore } from "@shikijs/core";
-import loadWasm from "@shikijs/core/wasm-inlined";
 import { shikiToMonaco } from "@shikijs/monaco";
 import { grammars as allGrammars } from "tm-grammars";
 import { themes as allThemes } from "tm-themes";
 import { version as tmGrammersVersion } from "../node_modules/tm-grammars/package.json";
 import { version as tmThemesVersion } from "../node_modules/tm-themes/package.json";
+import loadWasm from "@shikijs/core/wasm-inlined";
 
 const allGrammerNames = new Set(allGrammars.map((l) => l.name));
 const loadedGrammars = new Set<string>();
@@ -18,7 +18,7 @@ const loadedGrammars = new Set<string>();
 export async function initShiki(
   monaco: typeof monacoNs,
   options: {
-    themes?: string[];
+    themes?: (string | { name: string })[];
     preloadGrammars?: string[];
     customGrammars?: { name: string }[];
     onLanguage?: (id: string) => void | Promise<void>;
@@ -28,11 +28,12 @@ export async function initShiki(
   const langs: LanguageInput = [];
 
   if (options.preloadGrammars) {
+    const preloadGrammars = new Set(options.preloadGrammars);
     langs.push(
       ...await Promise.all(
         allGrammars.filter((g) =>
-          options.preloadGrammars.includes(g.name) ||
-          g.aliases?.some((a) => options.preloadGrammars.includes(a))
+          preloadGrammars.has(g.name) ||
+          g.aliases?.some((a) => preloadGrammars.has(a))
         ).map((g) => {
           loadedGrammars.add(g.name);
           return loadTMGrammer(g.name);
@@ -64,7 +65,7 @@ export async function initShiki(
             ).then((res) => res.json()),
           );
         }
-      } else if (typeof theme === "object" && theme !== null) {
+      } else if (typeof theme === "object" && theme !== null && theme.name) {
         themes.push(theme);
       }
     }

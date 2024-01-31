@@ -63,5 +63,8 @@ await bundleTypescriptLibs();
 await copyFiles(
   ["node_modules/tm-themes/index.d.ts", "types/tm-themes.d.ts"],
   ["node_modules/tm-grammars/index.d.ts", "types/tm-grammars.d.ts"],
-  ["node_modules/monaco-editor-core/monaco.d.ts", "types/monaco.d.ts"],
+  [
+    "node_modules/monaco-editor-core/esm/vs/editor/editor.api.d.ts",
+    "types/monaco.d.ts",
+  ],
 );

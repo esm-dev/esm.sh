@@ -14,69 +14,65 @@
       height: 100vh;
     }
 
-    .editor {
+    monaco-editor {
       border-bottom: 1px solid #fff;
       width: 100%;
-      height: 170px;
+      height: 150px;
     }
   </style>
 </head>
 
 <body>
-  <div class="editor" id="editor1"></div>
-  <div class="editor" id="editor2"></div>
-  <div class="editor" id="editor3"></div>
-  <div class="editor" id="editor4"></div>
-  <div class="editor" id="editor5"></div>
+  <monaco-editor file="index.html" theme="inv" read-only></monaco-editor>
+  <monaco-editor file="style.css"></monaco-editor>
+  <monaco-editor file="main.ts"></monaco-editor>
+  <monaco-editor file="index.js"></monaco-editor>
+  <monaco-editor file="import_map.json"></monaco-editor>
+  <monaco-editor file="tsconfig.json"></monaco-editor>
   <script type="module">
-    import { init, create, languages, createModel } from '/editor.js';
-    await init({
-      preloadGrammars: ['html', 'css', 'javascript', 'typescript', 'json'],
-    });
-
-    languages.typescript.addExtraLib(`
-      /** log a message. */
-      declare function log(message:string): void;
-    `, 'log.d.ts')
-    createModel('export const hello = "Hello world!" as const;', 'typescript', 'file:///greeting.ts')
-
-    create(document.getElementById('editor1'), {
-      value: '<h1>Hello world!</h1>',
-      language: 'html',
+    import { init, IDBFS } from '/editor.js';
+    const vfs = new IDBFS({
+      scope: "test",
+      version: 1,
+      initial: {
+        'log.d.ts': [
+          '/** log a message. */',
+          'declare function log(message:string): void;',
+        ],
+        'greeting.ts': [
+          'export const hello = "Hello world!" as const;',
+        ],
+        'index.html': '<h1>Hello world!</h1>',
+        'style.css': [
+          '.foo {',
+          '  font-style: italic;',
+          '}'
+        ],
+        'main.ts': [
+          'import { hello } from "./greeting.ts"',
+          '',
+          'function main() {',
+          '  log(hello); // Hello world!',
+          '}',
+          'main()',
+          'export { hello } from "./greeting.ts"',
+        ],
+        'index.js': [
+          'import { hello } from "./main.ts"',
+          '',
+          'log(hello); // Hello world!'
+        ],
+        'import_map.json': JSON.stringify({
+          imports: { "react": "https://esm.sh/react" },
+        }, null, 2),
+        'tsconfig.json': JSON.stringify({
+          compilerOptions: {
+            types: ["log.d.ts"],
+          }
+        }, null, 2)
+      }
     })
-    create(document.getElementById('editor2'), {
-      value: [
-        '.foo {',
-        '  font-style: italic;',
-        '}'
-      ].join('\n'),
-      language: 'css',
-    })
-    create(document.getElementById('editor3'), {
-      model: createModel([
-        'import { hello } from "./greeting.ts"',
-        '',
-        'function main() {',
-        '  log(hello); // Hello world!',
-        '}',
-        'main()',
-        'export { hello } from "./greeting.ts"',
-      ].join('\n'), 'typescript', 'file:///index.ts')
-    })
-    create(document.getElementById('editor4'), {
-      model: createModel([
-        'import { hello } from "./index.ts"',
-        '',
-        'log(hello); // Hello world!'
-      ].join('\n'), 'javascript', 'file:///index.js')
-    })
-    create(document.getElementById('editor5'), {
-      value: JSON.stringify({
-        "$schema": "https://raw.githubusercontent.com/denoland/vscode_deno/main/schemas/import_map.schema.json",
-        imports: { "react": "https://esm.sh/react" },
-      }, null, 2),
-      language: 'json',
-    })
+    await init({ vfs });
   </script>
 </body>
 
