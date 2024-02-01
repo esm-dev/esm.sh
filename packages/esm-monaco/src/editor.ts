@@ -13,9 +13,11 @@ interface InitOptions {
 }
 
 export async function init(options: InitOptions = {}) {
+  const editorWorkerUrl = workerUrl();
+
   Reflect.set(globalThis, "MonacoEnvironment", {
     getWorker: async (_workerId: string, label: string) => {
-      let url = new URL("./editor-worker.js", import.meta.url);
+      let url = editorWorkerUrl;
       let lsp = lspIndex[label];
       if (!lsp) {
         lsp = Object.values(lspIndex).find((lsp) => lsp.alias?.includes(label));
@@ -77,7 +79,7 @@ export async function init(options: InitOptions = {}) {
     "monaco-editor",
     class extends HTMLElement {
       #editor: monaco.editor.IStandaloneCodeEditor;
-      #text: string;
+      #textContent: string;
 
       get editor() {
         return this.#editor;
@@ -115,10 +117,10 @@ export async function init(options: InitOptions = {}) {
           "wordWrap",
           "wordWrapColumn",
         ];
-        for (const { name: attrName, value: attrVar } of this.attributes) {
+        for (const attrName of this.getAttributeNames()) {
           const key = optionKeys.find((k) => k.toLowerCase() === attrName);
           if (key) {
-            let value: any = attrVar;
+            let value: any = this.getAttribute(attrName);
             if (value === "") {
               value = attrName === "minimap" ? { enabled: true } : true;
             } else {
@@ -128,23 +130,32 @@ export async function init(options: InitOptions = {}) {
                 // ignore
               }
             }
+            if (key === "padding") {
+              value = { top: value, bottom: value };
+            }
             options[key] = value;
           }
         }
+        const width = parseInt(this.getAttribute("width"));
+        const height = parseInt(this.getAttribute("height"));
+        if (width > 0 && height > 0) {
+          this.style.width = `${width}px`;
+          this.style.height = `${height}px`;
+          options.dimension = { width, height };
+        }
         this.style.display = "block";
-        this.#text = this.textContent;
-        this.replaceChildren()
+        this.#textContent = this.textContent;
+        this.replaceChildren();
         this.#editor = monaco.editor.create(this, options);
       }
       async connectedCallback() {
         const file = this.getAttribute("file");
-        const language = this.getAttribute("language");
         if (file && options.vfs) {
           this.#editor.setModel(await options.vfs.openModel(file));
         } else {
           this.#editor.setModel(
             monaco.editor.createModel(
-              this.#text,
+              this.#textContent,
               this.getAttribute("language"),
             ),
           );
@@ -188,6 +199,14 @@ Object.assign(monaco.editor, {
     return _createModel(value, language, uri);
   },
 });
+
+function workerUrl() {
+  const m = workerUrl.toString().match(/import\(['"](.+?)['"]\)/);
+  if (!m) throw new Error("worker url not found");
+  const url = new URL(m[1], import.meta.url);
+  Reflect.set(url, "import", () => import("./editor-worker.js")); // trick for bundlers
+  return url;
+}
 
 export * from "monaco-editor-core";
 export * from "./vfs";

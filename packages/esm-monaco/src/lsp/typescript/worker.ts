@@ -44,7 +44,6 @@ export interface Diagnostic extends DiagnosticRelatedInformation {
   relatedInformation?: DiagnosticRelatedInformation[];
 }
 
-
 export class TypeScriptWorker implements ts.LanguageServiceHost {
   private _ctx: monacoNS.worker.IWorkerContext<Host>;
   private _compilerOptions: ts.CompilerOptions;
@@ -59,7 +58,7 @@ export class TypeScriptWorker implements ts.LanguageServiceHost {
     this._ctx = ctx;
     this._compilerOptions = createData.compilerOptions;
     this._libs = createData.libs;
-    this._extraLibs = createData.extraLibs  ;
+    this._extraLibs = createData.extraLibs;
     this._inlayHintsOptions = createData.inlayHintsOptions;
   }
 

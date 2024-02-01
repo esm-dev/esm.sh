@@ -13,7 +13,7 @@ const build = (/** @type {import("esbuild").BuildOptions} */ options) => {
     loader: {
       ".ttf": "dataurl",
     },
-    external: ["*/setup.js", "*/libs.js"],
+    external: ["*/setup.js", "*/libs.js", "*/worker.js", "*/editor-worker.js"],
     ...options,
   });
 };

@@ -88,5 +88,9 @@ export function setup(languageId: string, monaco: typeof monacoNS) {
 }
 
 export function workerUrl() {
-  return new URL("worker.js", import.meta.url).href;
+  const m = workerUrl.toString().match(/import\(['"](.+?)['"]\)/);
+  if (!m) throw new Error("worker url not found");
+  const url = new URL(m[1], import.meta.url);
+  Reflect.set(url, "import", () => import("./worker.js")); // trick for bundlers
+  return url;
 }
