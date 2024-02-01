@@ -6,7 +6,7 @@ export interface VFSOptions {
 }
 
 export class VFS {
-  open(name: string | URL): Promise<editor.ITextModel>;
+  openModel(name: string | URL): Promise<editor.ITextModel>;
   exists(name: string | URL): Promise<boolean>;
   list(): Promise<string[]>;
   readFile(name: string | URL): Promise<Uint8Array>;

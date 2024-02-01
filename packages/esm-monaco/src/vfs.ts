@@ -6,7 +6,7 @@ const idbVer = 1;
 
 export interface VFSInterface {
   readonly ErrorNotFound: typeof ErrorNotFound;
-  open(name: string | URL): Promise<monaco.editor.ITextModel>;
+  openModel(name: string | URL): Promise<monaco.editor.ITextModel>;
   exists(name: string | URL): Promise<boolean>;
   list(): Promise<string[]>;
   readFile(name: string | URL): Promise<Uint8Array>;
@@ -80,7 +80,7 @@ export class VFS implements VFSInterface {
       .objectStore("files");
   }
 
-  async open(name: string | URL) {
+  async openModel(name: string | URL) {
     const url = new URL(name, "file:///");
     const uri = monaco.Uri.parse(url.href);
     const { content, version } = await this.#read(url);

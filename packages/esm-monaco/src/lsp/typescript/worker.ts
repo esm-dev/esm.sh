@@ -23,10 +23,10 @@ export interface ImportMap {
 }
 
 export interface CreateData {
-  importMap: ImportMap;
   compilerOptions: ts.CompilerOptions;
   libs: Record<string, string>;
-  extraLibs?: Record<string, ExtraLib>;
+  extraLibs: Record<string, ExtraLib>;
+  importMap: ImportMap;
   inlayHintsOptions?: ts.UserPreferences;
 }
 
@@ -59,7 +59,7 @@ export class TypeScriptWorker implements ts.LanguageServiceHost {
     this._ctx = ctx;
     this._compilerOptions = createData.compilerOptions;
     this._libs = createData.libs;
-    this._extraLibs = createData.extraLibs ?? {};
+    this._extraLibs = createData.extraLibs  ;
     this._inlayHintsOptions = createData.inlayHintsOptions;
   }
 

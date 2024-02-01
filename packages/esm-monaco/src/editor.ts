@@ -43,6 +43,7 @@ export async function init(options: InitOptions = {}) {
   }
 
   if (options.vfs) {
+    Reflect.set(monaco.editor, "vfs", options.vfs);
     try {
       const list = await options.vfs.list();
       for (const path of list) {
@@ -56,7 +57,6 @@ export async function init(options: InitOptions = {}) {
     } catch {
       // ignore
     }
-    Reflect.set(monaco.editor, "vfs", options.vfs);
   }
 
   await initShiki(monaco, {
@@ -77,6 +77,7 @@ export async function init(options: InitOptions = {}) {
     "monaco-editor",
     class extends HTMLElement {
       #editor: monaco.editor.IStandaloneCodeEditor;
+      #text: string;
 
       get editor() {
         return this.#editor;
@@ -131,16 +132,21 @@ export async function init(options: InitOptions = {}) {
           }
         }
         this.style.display = "block";
+        this.#text = this.textContent;
+        this.replaceChildren()
         this.#editor = monaco.editor.create(this, options);
       }
       async connectedCallback() {
         const file = this.getAttribute("file");
         const language = this.getAttribute("language");
         if (file && options.vfs) {
-          this.#editor.setModel(await options.vfs.open(file));
-        } else if (language) {
+          this.#editor.setModel(await options.vfs.openModel(file));
+        } else {
           this.#editor.setModel(
-            monaco.editor.createModel(this.textContent, language),
+            monaco.editor.createModel(
+              this.#text,
+              this.getAttribute("language"),
+            ),
           );
         }
       }

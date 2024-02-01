@@ -1,8 +1,8 @@
 import type * as monacoNS from "monaco-editor-core";
 import type ts from "typescript";
+import type { VFS } from "../../vfs";
 import type { CreateData, Host, ImportMap, TypeScriptWorker } from "./worker";
 import * as lf from "./language-features";
-import type { VFS } from "../../vfs";
 
 // javascript and typescript share the same worker
 let worker:
@@ -33,7 +33,6 @@ class EventTrigger {
 }
 
 async function createWorker(monaco: typeof monacoNS) {
-  const importMap: ImportMap = {};
   const compilerOptions: ts.CompilerOptions = {
     allowImportingTsExtensions: true,
     allowJs: true,
@@ -42,8 +41,10 @@ async function createWorker(monaco: typeof monacoNS) {
     target: 99, // ScriptTarget.ESNext,
     noEmit: true,
   };
-
+  const importMap: ImportMap = {};
   const vfs = Reflect.get(monaco.editor, "vfs") as VFS | undefined;
+  const libsPromise = import("./libs.js").then((m) => m.default);
+
   if (vfs) {
     try {
       const tconfigjson = await vfs.readTextFile("tsconfig.json");
@@ -76,16 +77,14 @@ async function createWorker(monaco: typeof monacoNS) {
   }
   // todo: watch tsconfig.json
 
-  // load libs
-  const libs = (await import("./libs.js")).default;
-  lf.libFiles.setLibs(libs);
-
+  const libs = await libsPromise;
   const createData: CreateData = {
-    importMap,
     compilerOptions,
     libs,
     extraLibs: lf.libFiles.extraLibs,
+    importMap,
   };
+  lf.libFiles.setLibs(libs);
   return monaco.editor.createWebWorker<TypeScriptWorker>({
     moduleId: "lsp/typescript/worker",
     label: "typescript",
@@ -95,10 +94,10 @@ async function createWorker(monaco: typeof monacoNS) {
       tryOpenModel: async (uri: string): Promise<boolean> => {
         const vfs = Reflect.get(monaco.editor, "vfs") as VFS | undefined;
         if (!vfs) {
-          return true; // vfs is not enabled
+          return false; // vfs is not enabled
         }
         try {
-          await vfs.open(uri);
+          await vfs.openModel(uri);
         } catch (error) {
           if (error instanceof vfs.ErrorNotFound) {
             return false;
