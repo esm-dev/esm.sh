@@ -6,7 +6,21 @@
 import ts from "typescript";
 import type * as monacoNS from "monaco-editor-core";
 import * as worker from "monaco-editor-core/esm/vs/editor/editor.worker";
-import type { ExtraLib, ImportMap } from "./api";
+
+export interface Host {
+  tryOpenModel(uri: string): Promise<boolean>;
+  refreshDiagnostics: () => Promise<void>;
+}
+
+export interface ExtraLib {
+  content: string;
+  version: number;
+}
+
+export interface ImportMap {
+  imports?: Record<string, string>;
+  scopes?: Record<string, Record<string, string>>;
+}
 
 export interface CreateData {
   importMap: ImportMap;
@@ -14,11 +28,6 @@ export interface CreateData {
   libs: Record<string, string>;
   extraLibs?: Record<string, ExtraLib>;
   inlayHintsOptions?: ts.UserPreferences;
-}
-
-export interface Host {
-  tryOpenModel(uri: string): Promise<boolean>;
-  refreshDiagnostics: () => Promise<void>;
 }
 
 /** TypeScriptWorker removes all but the `fileName` property to avoid serializing circular JSON structures. */
@@ -35,22 +44,6 @@ export interface Diagnostic extends DiagnosticRelatedInformation {
   relatedInformation?: DiagnosticRelatedInformation[];
 }
 
-export interface DiagnosticsOptions {
-  noSemanticValidation?: boolean;
-  noSyntaxValidation?: boolean;
-  noSuggestionDiagnostics?: boolean;
-  /**
-   * Limit diagnostic computation to only visible files.
-   * Defaults to false.
-   */
-  onlyVisible?: boolean;
-  diagnosticCodesToIgnore?: number[];
-}
-
-export interface DiagnosticsEvents {
-  onDidChange: monacoNS.IEvent<void>;
-  onDidExtraLibsChange: monacoNS.IEvent<void>;
-}
 
 export class TypeScriptWorker implements ts.LanguageServiceHost {
   private _ctx: monacoNS.worker.IWorkerContext<Host>;
@@ -570,14 +563,12 @@ export class TypeScriptWorker implements ts.LanguageServiceHost {
 
   async updateCompilerOptions(
     compilerOptions: ts.CompilerOptions,
+    extraLibs: Record<string, ExtraLib>,
     importMap: ImportMap,
   ): Promise<void> {
     this._compilerOptions = compilerOptions;
-    this._importMap = importMap;
-  }
-
-  async updateExtraLibs(extraLibs: Record<string, ExtraLib>): Promise<void> {
     this._extraLibs = extraLibs;
+    this._importMap = importMap;
   }
 
   async provideInlayHints(

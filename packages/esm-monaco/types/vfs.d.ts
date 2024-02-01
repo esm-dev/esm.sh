@@ -1,22 +1,24 @@
+import { editor } from "./monaco";
+
 export interface VFSOptions {
   scope?: string;
-  version?: number;
-  initial?: Record<string, string[] | string>;
+  initial?: Record<string, string[] | string | Uint8Array>;
 }
 
 export class VFS {
+  open(name: string | URL): Promise<editor.ITextModel>;
+  exists(name: string | URL): Promise<boolean>;
   list(): Promise<string[]>;
   readFile(name: string | URL): Promise<Uint8Array>;
-  readFileWithVersion(name: string | URL): Promise<[Uint8Array, number]>;
   readTextFile(name: string | URL): Promise<string>;
-  readTextFileWithVersion(name: string | URL): Promise<[string, number]>;
   writeFile(
     name: string | URL,
     content: string | Uint8Array,
     version?: number,
   ): Promise<void>;
+  removeFile(name: string | URL): Promise<void>;
   watchFile?(
     name: string | URL,
-    handler: (evt: { kind: string }) => void,
+    handler: (evt: { kind: string; path: string }) => void,
   ): () => void;
 }

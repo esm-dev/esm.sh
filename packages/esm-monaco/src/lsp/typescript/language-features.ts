@@ -20,10 +20,9 @@ import type {
 import type {
   Diagnostic,
   DiagnosticRelatedInformation,
-  DiagnosticsOptions,
+  ExtraLib,
   TypeScriptWorker,
 } from "./worker";
-import type { LibFiles } from "./api";
 
 let M = {} as unknown as typeof import("monaco-editor-core");
 let outlineTypeTable: {
@@ -47,6 +46,96 @@ export function preclude(monaco: typeof M) {
   outlineTypeTable[Kind.localFunction] = languages.SymbolKind.Function;
   M = monaco;
 }
+
+export class LibFiles {
+  private _removedExtraLibs: Record<string, number> = {};
+
+  constructor(
+    private _libs: Record<string, string> = {},
+    private _extraLibs: Record<string, ExtraLib> = {},
+  ) {}
+
+  get libs() {
+    return this._libs;
+  }
+
+  get extraLibs() {
+    return this._extraLibs;
+  }
+
+  public setLibs(libs: Record<string, string>) {
+    this._libs = libs;
+  }
+
+  public setExtraLibs(extraLibs: Record<string, string>) {
+    const entries = Object.entries(extraLibs);
+    for (const [filePath, content] of entries) {
+      this.addExtraLib(content, filePath);
+    }
+  }
+
+  public addExtraLib(content: string, filePath: string): boolean {
+    if (
+      this._extraLibs[filePath] &&
+      this._extraLibs[filePath].content === content
+    ) {
+      return false;
+    }
+    let version = 1;
+    if (this._removedExtraLibs[filePath]) {
+      version = this._removedExtraLibs[filePath] + 1;
+    }
+    if (this._extraLibs[filePath]) {
+      version = this._extraLibs[filePath].version + 1;
+    }
+    this._extraLibs[filePath] = { content, version };
+    return true;
+  }
+
+  public removeExtraLib(filePath: string): boolean {
+    const lib = this._extraLibs[filePath];
+    if (lib) {
+      delete this._extraLibs[filePath];
+      this._removedExtraLibs[filePath] = lib.version;
+      return true;
+    }
+    return false;
+  }
+
+  public isLibFile(uri: Uri | null): boolean {
+    if (!uri) {
+      return false;
+    }
+    if (uri.path.indexOf("/lib.") === 0) {
+      return uri.path.slice(1) in this._libs;
+    }
+    return false;
+  }
+
+  public getOrCreateModel(fileName: string): editor.ITextModel | null {
+    const editor = M.editor;
+    const uri = M.Uri.parse(fileName);
+    const model = editor.getModel(uri);
+    if (model) {
+      return model;
+    }
+    if (this.isLibFile(uri)) {
+      return editor.createModel(
+        this._libs[uri.path.slice(1)],
+        "typescript",
+        uri,
+      );
+    }
+    const matchedLibFile = this._extraLibs[fileName];
+    if (matchedLibFile) {
+      return editor.createModel(matchedLibFile.content, "typescript", uri);
+    }
+    return null;
+  }
+}
+
+// global libFiles instance
+export const libFiles = new LibFiles();
 
 //#region utils copied from typescript to prevent loading the entire typescriptServices ---
 
@@ -122,6 +211,18 @@ export abstract class Adapter {
 
 // --- diagnostics --- ---
 
+export interface DiagnosticsOptions {
+  noSemanticValidation?: boolean;
+  noSyntaxValidation?: boolean;
+  noSuggestionDiagnostics?: boolean;
+  /**
+   * Limit diagnostic computation to only visible files.
+   * Defaults to false.
+   */
+  onlyVisible?: boolean;
+  diagnosticCodesToIgnore?: number[];
+}
+
 enum DiagnosticCategory {
   Warning = 0,
   Error = 1,
@@ -143,9 +244,8 @@ export class DiagnosticsAdapter extends Adapter {
   private _listener: { [uri: string]: IDisposable } = Object.create(null);
 
   constructor(
-    private readonly _libFiles: LibFiles,
     private readonly _diagnosticsOptions: DiagnosticsOptions,
-    private readonly _events: IEvent<void>[],
+    private readonly _onRefreshDiagnostic: IEvent<void>,
     private _selector: string,
     worker: (...uris: Uri[]) => Promise<TypeScriptWorker>,
   ) {
@@ -237,9 +337,7 @@ export class DiagnosticsAdapter extends Adapter {
         onModelAdd(<IInternalEditorModel> model);
       }
     };
-    for (const when of this._events) {
-      this._disposables.push(when(refreshDiagostics));
-    }
+    this._disposables.push(_onRefreshDiagnostic(refreshDiagostics));
     editor.getModels().forEach((model) =>
       onModelAdd(<IInternalEditorModel> model)
     );
@@ -352,7 +450,7 @@ export class DiagnosticsAdapter extends Adapter {
     relatedInformation.forEach((info) => {
       let relatedResource: editor.ITextModel | null = model;
       if (info.file) {
-        relatedResource = this._libFiles.getOrCreateModel(info.file.fileName);
+        relatedResource = libFiles.getOrCreateModel(info.file.fileName);
       }
 
       if (!relatedResource) {
@@ -768,7 +866,6 @@ export class DocumentHighlightAdapter extends Adapter
 
 export class DefinitionAdapter extends Adapter {
   constructor(
-    private readonly _libFiles: LibFiles,
     worker: (...uris: Uri[]) => Promise<TypeScriptWorker>,
   ) {
     super(worker);
@@ -802,7 +899,7 @@ export class DefinitionAdapter extends Adapter {
 
     const result: languages.Location[] = [];
     for (let entry of entries) {
-      const refModel = this._libFiles.getOrCreateModel(entry.fileName);
+      const refModel = libFiles.getOrCreateModel(entry.fileName);
       if (refModel) {
         result.push({
           uri: refModel.uri,
@@ -819,7 +916,6 @@ export class DefinitionAdapter extends Adapter {
 export class ReferenceAdapter extends Adapter
   implements languages.ReferenceProvider {
   constructor(
-    private readonly _libFiles: LibFiles,
     worker: (...uris: Uri[]) => Promise<TypeScriptWorker>,
   ) {
     super(worker);
@@ -854,7 +950,7 @@ export class ReferenceAdapter extends Adapter
 
     const result: languages.Location[] = [];
     for (let entry of entries) {
-      const refModel = this._libFiles.getOrCreateModel(entry.fileName);
+      const refModel = libFiles.getOrCreateModel(entry.fileName);
       if (refModel) {
         result.push({
           uri: refModel.uri,
@@ -1147,7 +1243,6 @@ export class CodeActionAdaptor extends FormatHelper
 
 export class RenameAdapter extends Adapter implements languages.RenameProvider {
   constructor(
-    private readonly _libFiles: LibFiles,
     worker: (...uris: Uri[]) => Promise<TypeScriptWorker>,
   ) {
     super(worker);
@@ -1195,7 +1290,7 @@ export class RenameAdapter extends Adapter implements languages.RenameProvider {
 
     const edits: languages.IWorkspaceTextEdit[] = [];
     for (const renameLocation of renameLocations) {
-      const model = this._libFiles.getOrCreateModel(renameLocation.fileName);
+      const model = libFiles.getOrCreateModel(renameLocation.fileName);
       if (model) {
         edits.push({
           resource: model.uri,

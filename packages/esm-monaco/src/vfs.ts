@@ -1,22 +1,25 @@
+import * as monaco from "monaco-editor-core";
+
 const enc = new TextEncoder();
 const dec = new TextDecoder();
 const idbVer = 1;
 
 export interface VFSInterface {
   readonly ErrorNotFound: typeof ErrorNotFound;
+  open(name: string | URL): Promise<monaco.editor.ITextModel>;
+  exists(name: string | URL): Promise<boolean>;
   list(): Promise<string[]>;
   readFile(name: string | URL): Promise<Uint8Array>;
-  readFileWithVersion(name: string | URL): Promise<[Uint8Array, number]>;
   readTextFile(name: string | URL): Promise<string>;
-  readTextFileWithVersion(name: string | URL): Promise<[string, number]>;
   writeFile(
     name: string | URL,
     content: string | Uint8Array,
     version?: number,
   ): Promise<void>;
+  removeFile(name: string | URL): Promise<void>;
   watchFile?(
     name: string | URL,
-    handler: (evt: { kind: string }) => void,
+    handler: (evt: { kind: string; path: string }) => void,
   ): () => void;
 }
 
@@ -28,12 +31,15 @@ interface VFSItem {
 
 interface VFSOptions {
   scope?: string;
-  initial?: Record<string, string[] | string>;
+  initial?: Record<string, string[] | string | Uint8Array>;
 }
 
 export class VFS implements VFSInterface {
   #db: Promise<IDBDatabase> | IDBDatabase;
-  #watchHandlers = new Map<string, Set<(evt: { kind: string }) => void>>();
+  #watchHandlers = new Map<
+    string,
+    Set<(evt: { kind: string; path: string }) => void>
+  >();
 
   constructor(options: VFSOptions) {
     const req = indexedDB.open(
@@ -49,7 +55,9 @@ export class VFS implements VFSInterface {
           const item: VFSItem = {
             url: url.href,
             version: 0,
-            content: Array.isArray(data) ? data.join("\n") : data,
+            content: Array.isArray(data) && !(data instanceof Uint8Array)
+              ? data.join("\n")
+              : data,
           };
           await waitIDBRequest(store.add(item));
         }
@@ -70,6 +78,38 @@ export class VFS implements VFSInterface {
 
     return db.transaction("files", readonly ? "readonly" : "readwrite")
       .objectStore("files");
+  }
+
+  async open(name: string | URL) {
+    const url = new URL(name, "file:///");
+    const uri = monaco.Uri.parse(url.href);
+    const { content, version } = await this.#read(url);
+    let model = monaco.editor.getModel(uri);
+    if (model) {
+      return model;
+    }
+    let writeTimer: number | null = null;
+    model = monaco.editor.createModel(toString(content), undefined, uri);
+    model.onDidChangeContent((e) => {
+      if (writeTimer !== null) {
+        return;
+      }
+      writeTimer = setTimeout(() => {
+        writeTimer = null;
+        this.writeFile(
+          uri.path,
+          model.getValue(),
+          version + model.getVersionId(),
+        );
+      }, 500);
+    });
+    return model;
+  }
+
+  async exists(name: string | URL): Promise<boolean> {
+    const url = new URL(name, "file:///").href;
+    const db = await this.#begin(true);
+    return waitIDBRequest<string>(db.getKey(url)).then((key) => !!key);
   }
 
   async list() {
@@ -95,19 +135,9 @@ export class VFS implements VFSInterface {
     return toUint8Array(content);
   }
 
-  async readFileWithVersion(name: string | URL) {
-    const { content, version } = await this.#read(name);
-    return [toUint8Array(content), version] as [Uint8Array, number];
-  }
-
   async readTextFile(name: string | URL) {
     const { content } = await this.#read(name);
     return toString(content);
-  }
-
-  async readTextFileWithVersion(name: string | URL) {
-    const { content, version } = await this.#read(name);
-    return [toString(content), version] as [string, number];
   }
 
   async writeFile(
@@ -115,21 +145,33 @@ export class VFS implements VFSInterface {
     content: string | Uint8Array,
     version?: number,
   ) {
-    const url = new URL(name, "file:///").href;
+    const { pathname, href } = new URL(name, "file:///");
     const db = await this.#begin();
-    const item: VFSItem = { url, version: version ?? 0, content };
+    const item: VFSItem = { url: href, version: version ?? 0, content };
     await waitIDBRequest(db.put(item));
-    const handlers = this.#watchHandlers.get(url);
+    const handlers = this.#watchHandlers.get(href);
     if (handlers) {
       for (const handler of handlers) {
-        handler({ kind: "modify" });
+        handler({ kind: "createOrModify", path: pathname });
+      }
+    }
+  }
+
+  async removeFile(name: string | URL): Promise<void> {
+    const { pathname, href } = new URL(name, "file:///");
+    const db = await this.#begin();
+    await waitIDBRequest(db.delete(href));
+    const handlers = this.#watchHandlers.get(href);
+    if (handlers) {
+      for (const handler of handlers) {
+        handler({ kind: "remove", path: pathname });
       }
     }
   }
 
   watchFile(
     name: string | URL,
-    handler: (evt: { kind: string }) => void,
+    handler: (evt: { kind: string; path: string }) => void,
   ): () => void {
     const url = new URL(name, "file:///").href;
     let handlers = this.#watchHandlers.get(url);

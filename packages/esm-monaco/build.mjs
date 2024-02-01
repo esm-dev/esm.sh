@@ -13,6 +13,7 @@ const build = (/** @type {import("esbuild").BuildOptions} */ options) => {
     loader: {
       ".ttf": "dataurl",
     },
+    external: ["*/setup.js", "*/libs.js"],
     ...options,
   });
 };
@@ -56,7 +57,6 @@ await build({
     "src/lsp/json/worker.ts",
     "src/lsp/typescript/setup.ts",
     "src/lsp/typescript/worker.ts",
-    "src/lsp/typescript/api.ts",
   ],
 });
 await bundleTypescriptLibs();

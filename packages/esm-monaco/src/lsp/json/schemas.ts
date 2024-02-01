@@ -13,6 +13,8 @@ export const schemas: SchemaConfiguration[] = [
   },
   {
     uri: "https://json.schemastore.org/tsconfig",
-    fileMatch: ["tsconfig.json"],
+    fileMatch: [
+      "tsconfig.json",
+    ],
   },
 ];

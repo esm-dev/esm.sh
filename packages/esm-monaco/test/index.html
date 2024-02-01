@@ -4,7 +4,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Monaco x Shiji</title>
+  <title>ESM&gt;Monaco</title>
   <link rel="stylesheet" href="/editor.css">
   <style>
     html,
@@ -23,7 +23,7 @@
 </head>
 
 <body>
-  <monaco-editor file="index.html" theme="inv" read-only></monaco-editor>
+  <monaco-editor file="index.html" theme="inv" readOnly></monaco-editor>
   <monaco-editor file="style.css"></monaco-editor>
   <monaco-editor file="App.tsx"></monaco-editor>
   <monaco-editor file="main.jsx"></monaco-editor>
@@ -33,7 +33,6 @@
     import { init, VFS } from '/editor.js';
     const vfs = new VFS({
       scope: "test",
-      version: 1,
       initial: {
         'log.d.ts': [
           '/** log a message. */',
@@ -45,13 +44,14 @@
         'index.html': ['<!DOCTYPE html>',
           '<html>',
           '<head>',
-          '<meta charset="utf-8">',
-          '<title>React App</title>',
-          '<link rel="stylesheet" href="./style.css">',
+          '  <meta charset="utf-8">',
+          '  <title>React App</title>',
+          '  <link rel="stylesheet" href="./style.css">',
+          '  \<script type="importmap" src="import_map.json"><\/script>',
           '</head>',
           '<body>',
-          '<div id="root"></div>',
-          '<script type="module" src="./main.tsx"><\/script>',
+          '  <div id="root"></div>',
+          '  <script type="module" src="./main.tsx"><\/script>',
           '</body>',
           '</html>'
         ],

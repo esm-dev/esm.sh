@@ -1,12 +1,8 @@
 import type * as monacoNS from "monaco-editor-core";
-import { EventTrigger, SetupData } from "./api";
-import type {
-  CreateData,
-  DiagnosticsOptions,
-  Host,
-  TypeScriptWorker,
-} from "./worker";
+import type ts from "typescript";
+import type { CreateData, Host, ImportMap, TypeScriptWorker } from "./worker";
 import * as lf from "./language-features";
+import type { VFS } from "../../vfs";
 
 // javascript and typescript share the same worker
 let worker:
@@ -15,56 +11,117 @@ let worker:
   | null = null;
 let refreshDiagnosticEventEmitter: EventTrigger | null = null;
 
-export async function setup(
-  languageId: string,
-  monaco: typeof monacoNS,
-  data: SetupData,
-) {
-  const languages = monaco.languages;
-  const {
-    compilerOptions,
+class EventTrigger {
+  private _fireTimer = null;
+
+  constructor(private _emitter: monacoNS.Emitter<void>) {}
+
+  public get event() {
+    return this._emitter.event;
+  }
+
+  public fire() {
+    if (this._fireTimer !== null) {
+      // already fired
+      return;
+    }
+    this._fireTimer = setTimeout(() => {
+      this._fireTimer = null;
+      this._emitter.fire();
+    }, 0) as any;
+  }
+}
+
+async function createWorker(monaco: typeof monacoNS) {
+  const importMap: ImportMap = {};
+  const compilerOptions: ts.CompilerOptions = {
+    allowImportingTsExtensions: true,
+    allowJs: true,
+    module: 99, // ModuleKind.ESNext,
+    moduleResolution: 100, // ModuleResolutionKind.Bundler,
+    target: 99, // ScriptTarget.ESNext,
+    noEmit: true,
+  };
+
+  const vfs = Reflect.get(monaco.editor, "vfs") as VFS | undefined;
+  if (vfs) {
+    try {
+      const tconfigjson = await vfs.readTextFile("tsconfig.json");
+      const tconfig = JSON.parse(tconfigjson);
+      const types = tconfig.compilerOptions.types;
+      delete tconfig.compilerOptions.types;
+      if (Array.isArray(types)) {
+        for (const type of types) {
+          // TODO: support type from http
+          try {
+            const dts = await vfs.readTextFile(type);
+            lf.libFiles.addExtraLib(dts, type);
+          } catch (error) {
+            if (error instanceof vfs.ErrorNotFound) {
+              // ignore
+            } else {
+              console.error(error);
+            }
+          }
+        }
+      }
+      Object.assign(compilerOptions, tconfig.compilerOptions);
+    } catch (error) {
+      if (error instanceof vfs.ErrorNotFound) {
+        // ignore
+      } else {
+        console.error(error);
+      }
+    }
+  }
+  // todo: watch tsconfig.json
+
+  // load libs
+  const libs = (await import("./libs.js")).default;
+  lf.libFiles.setLibs(libs);
+
+  const createData: CreateData = {
     importMap,
-    libFiles,
-    onCompilerOptionsChange,
-    onExtraLibsChange,
-  } = data;
+    compilerOptions,
+    libs,
+    extraLibs: lf.libFiles.extraLibs,
+  };
+  return monaco.editor.createWebWorker<TypeScriptWorker>({
+    moduleId: "lsp/typescript/worker",
+    label: "typescript",
+    keepIdleModels: true,
+    createData,
+    host: {
+      tryOpenModel: async (uri: string): Promise<boolean> => {
+        const vfs = Reflect.get(monaco.editor, "vfs") as VFS | undefined;
+        if (!vfs) {
+          return true; // vfs is not enabled
+        }
+        try {
+          await vfs.open(uri);
+        } catch (error) {
+          if (error instanceof vfs.ErrorNotFound) {
+            return false;
+          }
+        }
+        return true; // model is opened or error is not NotFound
+      },
+      refreshDiagnostics: async () => {
+        refreshDiagnosticEventEmitter?.fire();
+      },
+    } satisfies Host,
+  });
+}
+
+export async function setup(languageId: string, monaco: typeof monacoNS) {
+  const languages = monaco.languages;
+
+  if (!refreshDiagnosticEventEmitter) {
+    refreshDiagnosticEventEmitter = new EventTrigger(new monaco.Emitter());
+  }
 
   if (!worker) {
-    worker = (async () => {
-      libFiles.setLibs(
-        (await import(new URL("./libs.js", import.meta.url).href)).default,
-      );
-      const createData: CreateData = {
-        importMap,
-        compilerOptions,
-        libs: libFiles.libs,
-        extraLibs: libFiles.extraLibs,
-      };
-      return monaco.editor.createWebWorker<TypeScriptWorker>({
-        moduleId: "lsp/typescript/worker",
-        label: languageId,
-        keepIdleModels: true,
-        createData,
-        host: {
-          tryOpenModel: async (uri: string): Promise<boolean> => {
-            try {
-              // @ts-expect-error the `openModel` method is added by esm-monaco
-              monaco.editor.openModel(uri);
-            } catch (error) {
-              // @ts-expect-error the `vfs` member is added by esm-monaco
-              if (error instanceof monaco.editor.vfs.ErrorNotFound) {
-                return false;
-              }
-            }
-            return true; // model is opened or error is not NotFound
-          },
-          refreshDiagnostics: async () => {
-            refreshDiagnosticEventEmitter.fire();
-          },
-        } satisfies Host,
-      });
-    })();
-    refreshDiagnosticEventEmitter = new EventTrigger(new monaco.Emitter());
+    worker = createWorker(monaco);
   }
   if (worker instanceof Promise) {
     worker = await worker;
@@ -76,34 +133,6 @@ export async function setup(
     return (worker as monacoNS.editor.MonacoWebWorker<TypeScriptWorker>)
       .withSyncedResources(uris);
   };
-
-  // tell the worker to update the compiler options when it changes.
-  let updateCompilerOptionsToken = 0;
-  onCompilerOptionsChange(async () => {
-    const myToken = ++updateCompilerOptionsToken;
-    const proxy =
-      await (worker as monacoNS.editor.MonacoWebWorker<TypeScriptWorker>)
-        .getProxy();
-    if (updateCompilerOptionsToken !== myToken) {
-      // avoid multiple calls
-      return;
-    }
-    proxy.updateCompilerOptions(compilerOptions, importMap);
-  });
-
-  // tell the worker to update the extra libs when it changes.
-  let updateExtraLibsToken = 0;
-  onExtraLibsChange(async () => {
-    const myToken = ++updateExtraLibsToken;
-    const proxy =
-      await (worker as monacoNS.editor.MonacoWebWorker<TypeScriptWorker>)
-        .getProxy();
-    if (updateExtraLibsToken !== myToken) {
-      // avoid multiple calls
-      return;
-    }
-    proxy.updateExtraLibs(libFiles.extraLibs);
-  });
 
   // register language features
   lf.preclude(monaco);
@@ -125,11 +154,11 @@ export async function setup(
   );
   languages.registerDefinitionProvider(
     languageId,
-    new lf.DefinitionAdapter(libFiles, workerWithResources),
+    new lf.DefinitionAdapter(workerWithResources),
   );
   languages.registerReferenceProvider(
     languageId,
-    new lf.ReferenceAdapter(libFiles, workerWithResources),
+    new lf.ReferenceAdapter(workerWithResources),
   );
   languages.registerDocumentSymbolProvider(
     languageId,
@@ -137,7 +166,7 @@ export async function setup(
   );
   languages.registerRenameProvider(
     languageId,
-    new lf.RenameAdapter(libFiles, workerWithResources),
+    new lf.RenameAdapter(workerWithResources),
   );
   languages.registerDocumentRangeFormattingEditProvider(
     languageId,
@@ -156,20 +185,19 @@ export async function setup(
     new lf.InlayHintsAdapter(workerWithResources),
   );
 
-  const diagnosticsOptions: DiagnosticsOptions = {
+  const diagnosticsOptions: lf.DiagnosticsOptions = {
     noSemanticValidation: languageId === "javascript",
     noSyntaxValidation: false,
     onlyVisible: false,
   };
   new lf.DiagnosticsAdapter(
-    libFiles,
     diagnosticsOptions,
-    [
-      onExtraLibsChange,
-      onCompilerOptionsChange,
-      refreshDiagnosticEventEmitter.event,
-    ],
+    refreshDiagnosticEventEmitter.event,
     languageId,
     workerWithResources,
   );
+}
+
+export function workerUrl() {
+  return new URL("worker.js", import.meta.url).href;
 }

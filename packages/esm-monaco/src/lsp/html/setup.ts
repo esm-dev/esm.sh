@@ -80,3 +80,7 @@ export function setup(languageId: string, monaco: typeof monacoNS) {
     new lf.DocumentRangeFormattingEditProvider(workerAccessor),
   );
 }
+
+export function workerUrl() {
+  return new URL("worker.js", import.meta.url).href;
+}

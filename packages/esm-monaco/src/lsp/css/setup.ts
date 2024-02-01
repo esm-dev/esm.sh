@@ -86,3 +86,7 @@ export function setup(languageId: string, monaco: typeof monacoNS) {
     events.event,
   );
 }
+
+export function workerUrl() {
+  return new URL("worker.js", import.meta.url).href;
+}

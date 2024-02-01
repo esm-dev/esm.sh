@@ -13,22 +13,19 @@ interface InitOptions {
 }
 
 export async function init(options: InitOptions = {}) {
-  if (Reflect.has(globalThis, "MonacoEnvironment")) {
-    // already initialized
-    return;
-  }
-
   Reflect.set(globalThis, "MonacoEnvironment", {
-    getWorker: (_workerId: string, label: string) => {
-      let filename = "./editor-worker.js";
-      if (lspIndex[label]) {
-        filename = `./lsp/${lspIndex[label].id}/worker.js`;
+    getWorker: async (_workerId: string, label: string) => {
+      let url = new URL("./editor-worker.js", import.meta.url);
+      let lsp = lspIndex[label];
+      if (!lsp) {
+        lsp = Object.values(lspIndex).find((lsp) => lsp.alias?.includes(label));
       }
-      const url = new URL(filename, import.meta.url);
+      if (lsp) {
+        url = (await (lsp.import())).workerUrl();
+      }
       if (url.hostname === "esm.sh") {
-        return import(url.href + "?worker").then(({ default: workerFactory }) =>
-          workerFactory()
-        );
+        const { default: workerFactory } = await import(url.href + "?worker");
+        return workerFactory();
       }
       return new Worker(url, { type: "module" });
     },
@@ -62,29 +59,16 @@ export async function init(options: InitOptions = {}) {
     Reflect.set(monaco.editor, "vfs", options.vfs);
   }
 
-  const setupDataMap = Object.fromEntries(
-    await Promise.all(
-      Object.keys(lspIndex).filter((lang) => !!lspIndex[lang]?.api).map(
-        async (lang) => {
-          const { init } = await import(
-            new URL(`./lsp/${lspIndex[lang].id}/api.js`, import.meta.url).href
-          );
-          return [lang, await init(monaco, lang)];
-        },
-      ),
-    ),
-  );
-
   await initShiki(monaco, {
     ...options,
     themes,
     onLanguage: async (id: string) => {
-      if (lspIndex[id]) {
-        const { setup } = await import(
-          new URL(`./lsp/${lspIndex[id].id}/setup.js`, import.meta.url)
-            .href
-        );
-        setup(id, monaco, setupDataMap[id]);
+      let lsp = lspIndex[id];
+      if (!lsp) {
+        lsp = Object.values(lspIndex).find((lsp) => lsp.alias?.includes(id));
+      }
+      if (lsp) {
+        (await lsp.import()).setup(id, monaco);
       }
     },
   });
@@ -92,33 +76,72 @@ export async function init(options: InitOptions = {}) {
   customElements.define(
     "monaco-editor",
     class extends HTMLElement {
-      async connectedCallback() {
-        let file = "";
-        const opts = {};
-        for (const attr of this.attributes) {
-          let value: any = attr.value;
-          if (attr.name === "file") {
-            file = value;
-            continue;
-          }
-          if (value === "") {
-            value = true;
-          } else {
-            try {
-              value = JSON.parse(value);
-            } catch {
-              // ignore
+      #editor: monaco.editor.IStandaloneCodeEditor;
+
+      get editor() {
+        return this.#editor;
+      }
+
+      constructor() {
+        super();
+        const options: monaco.editor.IStandaloneEditorConstructionOptions = {};
+        const optionKeys = [
+          "autoDetectHighContrast",
+          "automaticLayout",
+          "contextmenu",
+          "cursorBlinking",
+          "detectIndentation",
+          "fontFamily",
+          "fontLigatures",
+          "fontSize",
+          "fontVariations",
+          "fontWeight",
+          "insertSpaces",
+          "letterSpacing",
+          "lineHeight",
+          "lineNumbers",
+          "linkedEditing",
+          "minimap",
+          "padding",
+          "readOnly",
+          "rulers",
+          "scrollbar",
+          "smoothScrolling",
+          "tabIndex",
+          "tabSize",
+          "theme",
+          "trimAutoWhitespace",
+          "wordWrap",
+          "wordWrapColumn",
+        ];
+        for (const { name: attrName, value: attrVar } of this.attributes) {
+          const key = optionKeys.find((k) => k.toLowerCase() === attrName);
+          if (key) {
+            let value: any = attrVar;
+            if (value === "") {
+              value = attrName === "minimap" ? { enabled: true } : true;
+            } else {
+              try {
+                value = JSON.parse(value);
+              } catch {
+                // ignore
+              }
             }
+            options[key] = value;
           }
-          opts[
-            attr.name.replace(/-[a-z]/g, (t) => t.slice(1).toUpperCase())
-          ] = value;
         }
         this.style.display = "block";
-        const editor = create(this, opts);
+        this.#editor = monaco.editor.create(this, options);
+      }
+      async connectedCallback() {
+        const file = this.getAttribute("file");
+        const language = this.getAttribute("language");
         if (file && options.vfs) {
-          const model = await openModel(file);
-          editor.setModel(model);
+          this.#editor.setModel(await options.vfs.open(file));
+        } else if (language) {
+          this.#editor.setModel(
+            monaco.editor.createModel(this.textContent, language),
+          );
         }
       }
     },
@@ -128,80 +151,37 @@ export async function init(options: InitOptions = {}) {
 const _create = monaco.editor.create;
 const _createModel = monaco.editor.createModel;
 
-export function create(
-  container: HTMLElement,
-  options?: monaco.editor.IStandaloneEditorConstructionOptions,
-): monaco.editor.IStandaloneCodeEditor {
-  return _create(
-    container,
-    {
-      automaticLayout: true,
-      minimap: { enabled: false },
-      theme: defaultTheme,
-      ...options,
-    } satisfies typeof options,
-  );
-}
-
-export function createModel(
-  value: string,
-  language?: string,
-  uri?: string | URL | monaco.Uri,
-) {
-  if (typeof uri === "string" || uri instanceof URL) {
-    const url = new URL(uri, "file:///");
-    uri = monaco.Uri.parse(url.href);
-  }
-  if (!language && uri) {
-    language = getLanguageIdFromExtension(uri.path);
-  }
-  const model: monaco.editor.ITextModel = _createModel(value, language, uri);
-  const vfs = Reflect.get(monaco.editor, "vfs") as VFS | undefined;
-  if (vfs && uri) {
-    const path = uri.path;
-    vfs.writeFile(path, value);
-    let writeTimer: number | null = null;
-    model.onDidChangeContent((e) => {
-      if (writeTimer) {
-        clearTimeout(writeTimer);
-      }
-      writeTimer = setTimeout(() => {
-        writeTimer = null;
-        vfs.writeFile(path, model.getValue(), model.getVersionId());
-      }, 500);
-    });
-  }
-  return model;
-}
-
-export async function openModel(name: string | URL) {
-  const vfs = Reflect.get(monaco.editor, "vfs") as VFS | undefined;
-  if (!vfs) {
-    throw new Error("VFS not initialized");
-  }
-  const url = new URL(name, "file:///");
-  const uri = monaco.Uri.parse(url.href);
-  const [value, version] = await vfs.readTextFileWithVersion(url);
-  let model = monaco.editor.getModel(uri);
-  if (model) {
-    return model;
-  }
-  model = _createModel(value, getLanguageIdFromExtension(uri.path), uri);
-  let writeTimer: number | null = null;
-  model.onDidChangeContent((e) => {
-    if (writeTimer) {
-      clearTimeout(writeTimer);
-    }
-    writeTimer = setTimeout(() => {
-      writeTimer = null;
-      vfs.writeFile(uri.path, model.getValue(), version + model.getVersionId());
-    }, 500);
-  });
-  return model;
-}
-
 // override default create and createModel methods
-Object.assign(monaco.editor, { create, createModel, openModel });
+Object.assign(monaco.editor, {
+  create: (
+    container: HTMLElement,
+    options?: monaco.editor.IStandaloneEditorConstructionOptions,
+  ): monaco.editor.IStandaloneCodeEditor => {
+    return _create(
+      container,
+      {
+        automaticLayout: true,
+        minimap: { enabled: false },
+        theme: defaultTheme,
+        ...options,
+      } satisfies typeof options,
+    );
+  },
+  createModel: (
+    value: string,
+    language?: string,
+    uri?: string | URL | monaco.Uri,
+  ) => {
+    if (typeof uri === "string" || uri instanceof URL) {
+      const url = new URL(uri, "file:///");
+      uri = monaco.Uri.parse(url.href);
+    }
+    if (!language && uri) {
+      language = getLanguageIdFromExtension(uri.path);
+    }
+    return _createModel(value, language, uri);
+  },
+});
 
 export * from "monaco-editor-core";
 export * from "./vfs";

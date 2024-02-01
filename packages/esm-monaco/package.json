@@ -19,18 +19,25 @@
     "dist/",
     "types/"
   ],
+  "browser": {
+    "process": false,
+    "buffer": false
+  },
   "devDependencies": {
-    "@shikijs/core": "1.0.0-beta.1",
-    "@shikijs/monaco": "1.0.0-beta.1",
+    "@shikijs/core": "1.0.0-beta.2",
+    "@shikijs/monaco": "1.0.0-beta.2",
     "esbuild": "0.20.0",
     "monaco-editor-core": "0.45.0",
-    "tm-grammars": "1.1.0",
+    "tm-grammars": "1.1.1",
     "tm-themes": "1.1.1",
     "typescript": "5.3.3",
     "vscode-css-languageservice": "6.2.12",
     "vscode-html-languageservice": "5.1.2",
     "vscode-json-languageservice": "5.3.9",
     "vscode-languageserver-types": "3.17.5"
+  },
+  "peerDependencies": {
+    "typescript": "*"
   },
   "repository": "https://github.com/esm-dev/esm.sh",
   "license": "MIT"
