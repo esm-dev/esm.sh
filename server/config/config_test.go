@@ -1,7 +1,6 @@
 package config
 
 import (
-	"gotest.tools/v3/assert"
 	"testing"
 )
 
@@ -41,9 +40,16 @@ func TestExtractPackageName(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			fullNameWithoutVersion, scope, nameWithoutVersionScope := extractPackageName(tt.packageName)
-			assert.Equal(t, fullNameWithoutVersion, tt.want.fullNameWithoutVersion)
-			assert.Equal(t, scope, tt.want.scope)
-			assert.Equal(t, nameWithoutVersionScope, tt.want.nameWithoutVersionScope)
+
+			if fullNameWithoutVersion != tt.want.fullNameWithoutVersion {
+				t.Errorf("%s not equal %s", fullNameWithoutVersion, tt.want.fullNameWithoutVersion)
+			}
+			if scope != tt.want.scope {
+				t.Errorf("%s not equal %s", scope, tt.want.scope)
+			}
+			if nameWithoutVersionScope != tt.want.nameWithoutVersionScope {
+				t.Errorf("%s not equal %s", nameWithoutVersionScope, tt.want.nameWithoutVersionScope)
+			}
 		})
 	}
 }
