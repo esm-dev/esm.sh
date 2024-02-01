@@ -15,25 +15,6 @@ import loadWasm from "@shikijs/core/wasm-inlined";
 const allGrammerNames = new Set(allGrammars.map((l) => l.name));
 const loadedGrammars = new Set<string>();
 
-// add some aliases for javascript and typescript
-const javascriptGrammar = allGrammars.find((g) => g.name === "javascript");
-const typescriptGrammar = allGrammars.find((g) => g.name === "typescript");
-javascriptGrammar.aliases?.push("mjs", "cjs", "jsx");
-typescriptGrammar.aliases?.push("mts", "cts", "tsx");
-
-export function getLanguageIdFromExtension(path: string) {
-  const idx = path.lastIndexOf(".");
-  if (idx > 0) {
-    const ext = path.slice(idx + 1);
-    const lang = allGrammars.find((g) =>
-      g.name === ext || g.aliases?.includes(ext)
-    );
-    if (lang) {
-      return lang.name;
-    }
-  }
-}
-
 export async function initShiki(
   monaco: typeof monacoNs,
   options: {
@@ -78,11 +59,7 @@ export async function initShiki(
     for (const theme of options.themes) {
       if (typeof theme === "string") {
         if (allThemes.some((t) => t.name === theme)) {
-          themes.push(
-            fetch(
-              `https://esm.sh/tm-themes@${tmThemesVersion}/themes/${theme}.json`,
-            ).then((res) => res.json()),
-          );
+          themes.push(loadTMTheme(theme));
         }
       } else if (typeof theme === "object" && theme !== null && theme.name) {
         themes.push(theme);
@@ -110,10 +87,35 @@ export async function initShiki(
   shikiToMonaco(highlighter, monaco);
 }
 
+function loadTMTheme(theme: string) {
+  return fetch(
+    `https://esm.sh/tm-themes@${tmThemesVersion}/themes/${theme}.json`,
+  ).then((res) => res.json());
+}
+
 function loadTMGrammer(lang: string) {
   return fetch(
     `https://esm.sh/tm-grammars@${tmGrammersVersion}/grammars/${lang}.json`,
   ).then((res) => res.json());
+}
+
+// add some aliases for javascript and typescript
+const javascriptGrammar = allGrammars.find((g) => g.name === "javascript");
+const typescriptGrammar = allGrammars.find((g) => g.name === "typescript");
+javascriptGrammar.aliases?.push("mjs", "cjs", "jsx");
+typescriptGrammar.aliases?.push("mts", "cts", "tsx");
+
+export function getLanguageIdFromExtension(path: string) {
+  const idx = path.lastIndexOf(".");
+  if (idx > 0) {
+    const ext = path.slice(idx + 1);
+    const lang = allGrammars.find((g) =>
+      g.name === ext || g.aliases?.includes(ext)
+    );
+    if (lang) {
+      return lang.name;
+    }
+  }
 }
 
 export { allGrammars, allThemes };

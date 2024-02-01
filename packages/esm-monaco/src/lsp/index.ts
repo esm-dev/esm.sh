@@ -1,7 +1,7 @@
 import type * as monacoNS from "monaco-editor-core";
 
 export interface LspLoader {
-  alias?: string[];
+  aliases?: string[];
   import: () => Promise<{
     setup: (languageId: string, monaco: typeof monacoNS) => Promise<void>;
     workerUrl: () => URL;
@@ -19,7 +19,7 @@ export default <Record<string, LspLoader>> {
     import: () => import("./lsp/json/setup.js"),
   },
   typescript: {
-    alias: ["javascript", "tsx"],
+    aliases: ["javascript", "tsx"],
     import: () => import("./lsp/typescript/setup.js"),
   },
 };

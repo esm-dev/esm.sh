@@ -20,13 +20,15 @@ export async function init(options: InitOptions = {}) {
       let url = editorWorkerUrl;
       let lsp = lspIndex[label];
       if (!lsp) {
-        lsp = Object.values(lspIndex).find((lsp) => lsp.alias?.includes(label));
+        lsp = Object.values(lspIndex).find((lsp) => lsp.aliases?.includes(label));
       }
       if (lsp) {
         url = (await (lsp.import())).workerUrl();
       }
       if (url.hostname === "esm.sh") {
-        const { default: workerFactory } = await import(url.href + "?worker");
+        const { default: workerFactory } = await import(
+          url.href.replace(/\.js$/, ".bundle.js") + "?worker"
+        );
         return workerFactory();
       }
       return new Worker(url, { type: "module" });
@@ -67,7 +69,7 @@ export async function init(options: InitOptions = {}) {
     onLanguage: async (id: string) => {
       let lsp = lspIndex[id];
       if (!lsp) {
-        lsp = Object.values(lspIndex).find((lsp) => lsp.alias?.includes(id));
+        lsp = Object.values(lspIndex).find((lsp) => lsp.aliases?.includes(id));
       }
       if (lsp) {
         (await lsp.import()).setup(id, monaco);
