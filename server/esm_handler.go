@@ -284,7 +284,7 @@ func esmHandler() rex.Handle {
 		}
 
 		// serve internal scripts
-		if pathname == "/build" || pathname == "/run" || pathname == "/hot" || strings.HasPrefix(pathname, "/hot/") {
+		if pathname == "/build" || pathname == "/run" || pathname == "/hot" {
 			if !hasBuildVerPrefix && !hasPinedVerParam {
 				url := fmt.Sprintf("%s%s/v%d%s", cdnOrigin, cfg.CdnBasePath, BUILD_VERSION, pathname)
 				if ctx.R.URL.RawQuery != "" {
@@ -294,107 +294,15 @@ func esmHandler() rex.Handle {
 				return rex.Redirect(url, http.StatusFound)
 			}
 
-			filename, version := utils.SplitByLastByte(pathname[1:], '@')
-			if strings.HasPrefix(filename, "hot/") {
-				if strings.HasSuffix(filename, ".d.ts") {
-					data, err := embedFS.ReadFile(filename)
-					if err != nil {
-						return rex.Status(404, "Not Found")
-					}
-					header.Set("Content-Type", "application/typescript; charset=utf-8")
-					header.Set("Cache-Control", "public, max-age=31536000, immutable")
-					return data
-				}
-				filename = strings.TrimSuffix(filename, ".ts")
-			}
-
+			filename := pathname[1:]
 			data, err := embedFS.ReadFile(fmt.Sprintf("%s.ts", filename))
 			if err != nil {
 				return rex.Status(404, "Not Found")
 			}
 
-			// the hot script
+			//  add 'X-TypeScript-Types' header for the `/hot` script
 			if pathname == "/hot" {
 				header.Set("X-TypeScript-Types", fmt.Sprintf("%s%s/v%d/hot.d.ts", cdnOrigin, cfg.CdnBasePath, buildVersion))
-				plugins := newStringSet()
-				pluginIds := []string{}
-				pluginImports := []string{}
-				pluginDts := []string{}
-				for i, name := range strings.Split(ctx.Form.Value("plugins"), ",") {
-					name = strings.TrimSpace(name)
-					name, version := utils.SplitByLastByte(name, '@')
-					if validatePackageName(name) {
-						if plugins.Has(name) {
-							continue
-						}
-						plugins.Add(name)
-						_, err := embedFS.ReadFile(fmt.Sprintf("hot/%s.ts", name))
-						if err == nil {
-							ver := ""
-							if version != "" {
-								if regexpFullVersion.MatchString(version) {
-									ver = fmt.Sprintf("@%s", version)
-								} else {
-									pluginImports = append(pluginImports, fmt.Sprintf(`console.warn("[esm.sh/hot] invalid version: %s@%s");`, name, version))
-								}
-							}
-							id := fmt.Sprintf("plugin_%d", i)
-							pluginIds = append(pluginIds, id)
-							pluginImports = append(pluginImports, fmt.Sprintf(`import %s from "./hot/%s%s";`, id, name, ver))
-							_, dts404 := embedFS.ReadFile(fmt.Sprintf("hot/%s.d.ts", name))
-							if dts404 == nil {
-								pluginDts = append(pluginDts, fmt.Sprintf("hot/%s.d.ts", name))
-							}
-						}
-					}
-				}
-				if len(pluginIds) > 0 {
-					data = bytes.Replace(
-						data,
-						[]byte("const plugins: Plugin[] = []"),
-						[]byte(fmt.Sprintf(`%sconst plugins: Plugin[] = [%s]`, strings.Join(pluginImports, "\n"), strings.Join(pluginIds, ", "))),
-						1,
-					)
-					target := getBuildTargetByUA(userAgent)
-					code, err := bundleHotScript(string(data), targets[target])
-					if err != nil {
-						return throwErrorJS(ctx, fmt.Errorf("transform error: %v", err), false)
-					}
-					header.Set("Content-Type", "application/javascript; charset=utf-8")
-					header.Set("Cache-Control", "public, max-age=31536000, immutable")
-					header.Add("Vary", "User-Agent")
-					if len(pluginDts) > 0 {
-						header.Set("X-TypeScript-Types", fmt.Sprintf("%s%s/v%d/hot.d.ts?refs=%s", cdnOrigin, cfg.CdnBasePath, buildVersion, strings.Join(pluginDts, ",")))
-					}
-					return code
-				}
-			}
-
-			if strings.HasPrefix(filename, "hot/") && ctx.Form.Has("standalone") {
-				entryCode := fmt.Sprintf(`import { standalone } from "./%s"; export default standalone();`, filename)
-				target := getBuildTargetByUA(userAgent)
-				code, err := bundleHotScript(entryCode, targets[target])
-				if err != nil {
-					return throwErrorJS(ctx, fmt.Errorf("transform error: %v", err), false)
-				}
-				header.Set("Content-Type", "application/javascript; charset=utf-8")
-				header.Set("Cache-Control", "public, max-age=31536000, immutable")
-				header.Add("Vary", "User-Agent")
-				return code
-			}
-
-			// check version/dts for hot plugins
-			if strings.HasPrefix(filename, "hot/") {
-				if version != "" && regexpFullVersion.MatchString(version) {
-					m := regexpVersionAnnotation.FindAllSubmatch(data, -1)
-					if len(m) > 0 {
-						data = bytes.ReplaceAll(data, []byte("@"+string(m[0][1])), []byte("@"+version))
-					}
-				}
-				_, err := embedFS.ReadFile(fmt.Sprintf("%s.d.ts", filename))
-				if err == nil {
-					header.Set("X-TypeScript-Types", fmt.Sprintf("%s%s/v%d/hot/%s.d.ts", cdnOrigin, cfg.CdnBasePath, buildVersion, path.Base(filename)))
-				}
 			}
 
 			target := getBuildTargetByUA(userAgent)

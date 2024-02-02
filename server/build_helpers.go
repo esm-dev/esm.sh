@@ -1,7 +1,6 @@
 package server
 
 import (
-	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -755,61 +754,6 @@ func bundleNodePolyfill(name string, globalName string, namedExport string, targ
 						return api.OnLoadResult{
 							Contents: &contents,
 							Loader:   api.LoaderJS,
-						}, nil
-					},
-				)
-			}}},
-	})
-	if ret.Errors != nil && len(ret.Errors) > 0 {
-		return nil, errors.New(ret.Errors[0].Text)
-	}
-	return ret.OutputFiles[0].Contents, nil
-}
-
-func bundleHotScript(code string, target api.Target) ([]byte, error) {
-	ret := api.Build(api.BuildOptions{
-		Stdin: &api.StdinOptions{
-			Contents: code,
-			Loader:   api.LoaderTS,
-		},
-		Write:             false,
-		Bundle:            true,
-		Target:            target,
-		Format:            api.FormatESModule,
-		Platform:          api.PlatformBrowser,
-		MinifyWhitespace:  true,
-		MinifyIdentifiers: true,
-		MinifySyntax:      true,
-		LegalComments:     api.LegalCommentsInline,
-		Plugins: []api.Plugin{{
-			Name: "esm",
-			Setup: func(build api.PluginBuild) {
-				build.OnResolve(
-					api.OnResolveOptions{Filter: ".*"},
-					func(args api.OnResolveArgs) (api.OnResolveResult, error) {
-						if args.Kind != api.ResolveJSDynamicImport && !isHttpSepcifier(args.Path) {
-							name, version := utils.SplitByLastByte(args.Path, '@')
-							data, err := embedFS.ReadFile(name + ".ts")
-							if err == nil {
-								if version != "" && regexpFullVersion.MatchString(version) {
-									m := regexpVersionAnnotation.FindAllSubmatch(data, -1)
-									if len(m) > 0 {
-										data = bytes.ReplaceAll(data, []byte("@"+string(m[0][1])), []byte("@"+version))
-									}
-								}
-								return api.OnResolveResult{Path: name + ".ts", PluginData: string(data), Namespace: "embed"}, nil
-							}
-						}
-						return api.OnResolveResult{Path: args.Path, External: true}, nil
-					},
-				)
-				build.OnLoad(
-					api.OnLoadOptions{Filter: ".*", Namespace: "embed"},
-					func(args api.OnLoadArgs) (api.OnLoadResult, error) {
-						contents := args.PluginData.(string)
-						return api.OnLoadResult{
-							Contents: &contents,
-							Loader:   api.LoaderTS,
 						}, nil
 					},
 				)

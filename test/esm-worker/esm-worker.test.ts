@@ -579,27 +579,7 @@ Deno.test("esm-worker", {
       res.headers.get("Content-Type"),
       "application/javascript; charset=utf-8",
     );
-
-    const res2 = await fetch(`${workerOrigin}/hot?plugins=vue@3.3.8`, {
-      headers: { "User-Agent": "Chrome/90.0.4430.212" },
-    });
-    const code = await res2.text();
-    assertStringIncludes(code, "vue@3.3.8");
-
-    const res3 = await fetch(`${workerOrigin}/hot/tsx`, {
-      headers: { "User-Agent": "Chrome/90.0.4430.212" },
-    });
-    assertEquals(res3.status, 200);
-    assertEquals(
-      res3.headers.get("Content-Type"),
-      "application/javascript; charset=utf-8",
-    );
-    assertStringIncludes(await res3.text(), "esm-compiler");
-
-    const res4 = await fetch(`${workerOrigin}/hot/vue@3.3.8`, {
-      headers: { "User-Agent": "Chrome/90.0.4430.212" },
-    });
-    assertStringIncludes(await res4.text(), "vue@3.3.8");
+    assertEquals(res.headers.get("x-typescript-types"), `${workerOrigin}/v${VERSION}/hot.d.ts`);
   });
 
   ac.abort();
