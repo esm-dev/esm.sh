@@ -35,7 +35,7 @@ async function runTest(name: string, retry?: boolean): Promise<number> {
   const args = [
     "test",
     "-A",
-    "--unstable",
+    "--unstable-fs",
     "--check",
     "--no-lock",
     "--reload=http://localhost:8080",
