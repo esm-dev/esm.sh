@@ -462,16 +462,6 @@ func esmHandler() rex.Handle {
 			}
 		}
 
-		// ban malicious requests by banList
-		// trim the leading `/` in pathname to get the package name
-		// e.g. /@ORG/PKG -> @ORG/PKG
-		packageFullName := pathname[1:]
-		pkgAllowed := cfg.AllowList.IsPackageAllowed(packageFullName)
-		pkgBanned := cfg.BanList.IsPackageBanned(packageFullName)
-		if !pkgAllowed || pkgBanned {
-			return rex.Status(403, "forbidden")
-		}
-
 		// check `/*pathname` or `/gh/*pathname` pattern
 		external := newStringSet()
 		if strings.HasPrefix(pathname, "/*") {
@@ -493,6 +483,12 @@ func esmHandler() rex.Handle {
 				status = 404
 			}
 			return rex.Status(status, message)
+		}
+
+		pkgAllowed := cfg.AllowList.IsPackageAllowed(reqPkg.Name)
+		pkgBanned := cfg.BanList.IsPackageBanned(reqPkg.Name)
+		if !pkgAllowed || pkgBanned {
+			return rex.Status(403, "forbidden")
 		}
 
 		// fix url related `import.meta.url`

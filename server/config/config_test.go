@@ -4,6 +4,56 @@ import (
 	"testing"
 )
 
+func TestExtractPackageName(t *testing.T) {
+	type want struct {
+		fullNameWithoutVersion  string
+		scope                   string
+		nameWithoutVersionScope string
+	}
+	tests := []struct {
+		name        string
+		packageName string
+		want        want
+	}{
+		{
+			name:        "PackageWithVersionAndNoScope",
+			packageName: "faker@1.5.0",
+			want:        want{fullNameWithoutVersion: "faker", scope: "", nameWithoutVersionScope: "faker"},
+		},
+		{
+			name:        "PackageWithVersionAndScope",
+			packageName: "@github/faker@1.5.0",
+			want:        want{fullNameWithoutVersion: "@github/faker", scope: "@github", nameWithoutVersionScope: "faker"},
+		},
+		{
+			name:        "ReactLoadedFromStable",
+			packageName: "react@18.2.0/es2022/react.mjs",
+			want:        want{fullNameWithoutVersion: "react", scope: "", nameWithoutVersionScope: "react"},
+		},
+		{
+			name:        "ScopedLoadedFromStable",
+			packageName: "@github/faker@0.0.1/es2022/faker.mjs",
+			want:        want{fullNameWithoutVersion: "@github/faker", scope: "@github", nameWithoutVersionScope: "faker"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			fullNameWithoutVersion, scope, nameWithoutVersionScope := extractPackageName(tt.packageName)
+
+			if fullNameWithoutVersion != tt.want.fullNameWithoutVersion {
+				t.Errorf("%s not equal %s", fullNameWithoutVersion, tt.want.fullNameWithoutVersion)
+			}
+			if scope != tt.want.scope {
+				t.Errorf("%s not equal %s", scope, tt.want.scope)
+			}
+			if nameWithoutVersionScope != tt.want.nameWithoutVersionScope {
+				t.Errorf("%s not equal %s", nameWithoutVersionScope, tt.want.nameWithoutVersionScope)
+			}
+		})
+	}
+}
+
 func TestAllowListAndBanList_IsPackageNotAllowedOrBanned(t *testing.T) {
 	type args struct {
 		fullName string
@@ -23,56 +73,56 @@ func TestAllowListAndBanList_IsPackageNotAllowedOrBanned(t *testing.T) {
 			want:      false,
 		},
 		{
-			name:      "AllowedScopeBannedScope",
+			name: "AllowedScopeBannedScope",
 			allowList: AllowList{
 				Scopes: []AllowScope{{
 					Name: "@github",
 				}},
 			},
-			banList:   BanList{
+			banList: BanList{
 				Scopes: []BanScope{{
 					Name: "@github",
 				}},
 			},
-			args:      args{fullName: "@github/faker"},
-			want:      true,
+			args: args{fullName: "@github/faker"},
+			want: true,
 		},
 		{
-			name:      "AllowedScopeBannedPackage",
+			name: "AllowedScopeBannedPackage",
 			allowList: AllowList{
 				Scopes: []AllowScope{{
 					Name: "@github",
 				}},
 			},
-			banList:   BanList{
+			banList: BanList{
 				Packages: []string{"@github/faker"},
 			},
-			args:      args{fullName: "@github/faker"},
-			want:      true,
+			args: args{fullName: "@github/faker"},
+			want: true,
 		},
 		{
-			name:      "AllowedPackageBannedPackage",
+			name: "AllowedPackageBannedPackage",
 			allowList: AllowList{
 				Packages: []string{"@github/faker"},
 			},
-			banList:   BanList{
+			banList: BanList{
 				Packages: []string{"faker"},
 			},
-			args:      args{fullName: "faker"},
-			want:      true,
+			args: args{fullName: "faker"},
+			want: true,
 		},
 		{
-			name:      "AllowedPackageBannedScope",
+			name: "AllowedPackageBannedScope",
 			allowList: AllowList{
 				Packages: []string{"faker"},
 			},
-			banList:   BanList{
+			banList: BanList{
 				Scopes: []BanScope{{
 					Name: "@github",
 				}},
 			},
-			args:      args{fullName: "@github/faker"},
-			want:      true,
+			args: args{fullName: "@github/faker"},
+			want: true,
 		},
 	}
 	for _, tt := range tests {
@@ -92,7 +142,6 @@ func TestAllowListAndBanList_IsPackageNotAllowedOrBanned(t *testing.T) {
 		})
 	}
 }
-
 
 func TestAllowList_IsPackageAllowed(t *testing.T) {
 	type args struct {
@@ -130,7 +179,7 @@ func TestAllowList_IsPackageAllowed(t *testing.T) {
 			name: "AllowedByScope",
 			allowList: AllowList{
 				Scopes: []AllowScope{{
-					Name:     "@github",
+					Name: "@github",
 				}},
 			},
 			args: args{fullName: "@github/perfect"},
@@ -140,7 +189,7 @@ func TestAllowList_IsPackageAllowed(t *testing.T) {
 			name: "NotAllowedByScope",
 			allowList: AllowList{
 				Scopes: []AllowScope{{
-					Name:     "@github",
+					Name: "@github",
 				}},
 			},
 			args: args{fullName: "@faker/perfect"},
@@ -150,7 +199,7 @@ func TestAllowList_IsPackageAllowed(t *testing.T) {
 			name: "NotAllowedByScope",
 			allowList: AllowList{
 				Scopes: []AllowScope{{
-					Name:     "@github",
+					Name: "@github",
 				}},
 			},
 			args: args{fullName: "@faker/perfect"},

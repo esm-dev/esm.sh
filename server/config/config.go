@@ -197,14 +197,14 @@ func fixConfig(c *Config) *Config {
 // nameWithoutVersionScope e.g. faker
 func extractPackageName(packageName string) (fullNameWithoutVersion string, scope string, nameWithoutVersionScope string) {
 	paths := strings.Split(packageName, "/")
-	if len(paths) < 2 {
-		// the package has no scope prefix
-		nameWithoutVersionScope = strings.Split(paths[0], "@")[0]
-		fullNameWithoutVersion = nameWithoutVersionScope
-	} else {
+	if strings.HasPrefix(packageName, "@") {
 		scope = paths[0]
 		nameWithoutVersionScope = strings.Split(paths[1], "@")[0]
 		fullNameWithoutVersion = fmt.Sprintf("%s/%s", scope, nameWithoutVersionScope)
+	} else {
+		// the package has no scope prefix
+		nameWithoutVersionScope = strings.Split(paths[0], "@")[0]
+		fullNameWithoutVersion = nameWithoutVersionScope
 	}
 
 	return fullNameWithoutVersion, scope, nameWithoutVersionScope
