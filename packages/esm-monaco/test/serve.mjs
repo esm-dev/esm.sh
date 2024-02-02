@@ -14,9 +14,31 @@ Deno.serve(async (req) => {
   }
   const ext = url.pathname.split(".").pop();
   try {
-    return new Response(
+    let body =
       (await Deno.open(new URL("../dist" + url.pathname, import.meta.url)))
-        .readable,
+        .readable;
+    if (url.pathname === "/lsp/typescript/worker.js") {
+      const ts = new TransformStream({
+        transform: async (chunk, controller) => {
+          const text = new TextDecoder().decode(chunk);
+          if (/from"typescript"/.test(text)) {
+            controller.enqueue(
+              new TextEncoder().encode(
+                text.replace(
+                  /from"typescript"/,
+                  'from"https://esm.sh/typescript@5.3.3?bundle"',
+                ),
+              ),
+            );
+          } else {
+            controller.enqueue(chunk);
+          }
+        },
+      });
+      body = body.pipeThrough(ts);
+    }
+    return new Response(
+      body,
       {
         headers: new Headers({
           "content-type": ext === "js" ? "application/javascript" : "text/css",

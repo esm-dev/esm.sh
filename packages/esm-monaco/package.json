@@ -1,7 +1,7 @@
 {
   "name": "esm-monaco",
   "description": "An Monaco Editor build with esm.sh",
-  "version": "0.0.0",
+  "version": "0.0.0-wip",
   "type": "module",
   "module": "dist/editor.js",
   "types": "types/editor.d.ts",
@@ -24,8 +24,8 @@
     "buffer": false
   },
   "devDependencies": {
-    "@shikijs/core": "1.0.0-beta.2",
-    "@shikijs/monaco": "1.0.0-beta.2",
+    "@shikijs/core": "1.0.0-beta.3",
+    "@shikijs/monaco": "1.0.0-beta.3",
     "esbuild": "0.20.0",
     "monaco-editor-core": "0.45.0",
     "tm-grammars": "1.1.1",
@@ -37,7 +37,7 @@
     "vscode-languageserver-types": "3.17.5"
   },
   "peerDependencies": {
-    "typescript": "*"
+    "typescript": ">= 5.0.0"
   },
   "repository": "https://github.com/esm-dev/esm.sh",
   "license": "MIT"

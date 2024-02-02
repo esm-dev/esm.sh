@@ -1,5 +1,5 @@
-import { build as esbuild } from "esbuild";
 import { copyFile, readdir, readFile, writeFile } from "node:fs/promises";
+import { build as esbuild } from "esbuild";
 
 const build = (/** @type {import("esbuild").BuildOptions} */ options) => {
   return esbuild({
@@ -13,7 +13,13 @@ const build = (/** @type {import("esbuild").BuildOptions} */ options) => {
     loader: {
       ".ttf": "dataurl",
     },
-    external: ["*/setup.js", "*/libs.js", "*/worker.js", "*/editor-worker.js"],
+    external: [
+      "typescript",
+      "*/setup.js",
+      "*/libs.js",
+      "*/worker.js",
+      "*/editor-worker.js",
+    ],
     ...options,
   });
 };
