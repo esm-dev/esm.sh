@@ -3,7 +3,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { serve } from "../vendor/hono-server@1.3.3.mjs";
-import { serveHot } from "../node.mjs";
+import { createESApp } from "../node.mjs";
 
 // - Show help message
 if (process.argv.includes("--help") || process.argv.includes("-h")) {
@@ -13,14 +13,14 @@ Usage: npx esm.sh [options] [dir]
 Options:
   --help, -h      Show help message
   --host          Host to listen on (default: "localhost")
-  --port, -p      Port number to listen on (default: 6000)
+  --port, -p      Port number to listen on (default: 3000)
 `;
   console.log(message);
   process.exit(0);
 }
 
 // - Parse command line arguments
-const args = { port: 6000 };
+const args = { port: 3000 };
 process.argv.slice(2).forEach((arg) => {
   if (!arg.startsWith("-")) {
     if (existsSync(arg)) {
@@ -40,7 +40,10 @@ process.argv.slice(2).forEach((arg) => {
 });
 
 // - Load project '.env' vars if exists
-const dotEnvPath = join(args.root ?? process.cwd(), ".env");
+let dotEnvPath = join(args.root ?? process.cwd(), ".env.local");
+if (!existsSync(dotEnvPath)) {
+  dotEnvPath = join(args.root ?? process.cwd(), ".env");
+}
 if (existsSync(dotEnvPath)) {
   let section = "";
   const env = Object.fromEntries(
@@ -78,8 +81,9 @@ if (existsSync(dotEnvPath)) {
 }
 
 // - Start server
+const esApp = createESApp(args);
 serve(
-  { ...args, fetch: serveHot(args) },
+  { ...args, fetch: esApp.fetch },
   (info) => {
     console.log(`Listening on http://${args.host ?? "localhost"}:${info.port}`);
   },

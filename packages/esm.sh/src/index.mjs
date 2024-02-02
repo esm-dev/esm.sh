@@ -16,10 +16,10 @@ const HOT_URL = "https://esm.sh/v135/hot";
 
 /**
  * Creates a fetch handler for serving hot applications.
- * @param {import("../types").ServeOptions} options
- * @returns {(req: Request, cfEnv?: Record<string, any>) => Promise<Response>} fetch handler
+ * @param {import("../types").ESAppOptions} options
+ * @returns {import("../types").ESApp} es app
  */
-export const serveHot = (options) => {
+export const createESApp = (options) => {
   const { root = "." } = options;
   const env = typeof Deno === "object" ? Deno.env.toObject() : process.env;
   const onFsNotify = fs.watch(root);
@@ -77,16 +77,14 @@ export const serveHot = (options) => {
             data: promise.then((data) => {
               record.data = data;
               return data;
+            }).catch((err) => {
+              contentCache.delete(cacheKey);
             }),
             expires: Date.now() + content.cacheTtl * 1000,
           };
           contentCache.set(cacheKey, record);
         }
-        try {
-          return Response.json(await promise);
-        } catch (error) {
-          console.error(error);
-        }
+        return Response.json(await promise);
       }
 
       /** The FS index of current project */
@@ -239,16 +237,22 @@ export const serveHot = (options) => {
                 {
                   headers: {
                     "content-type": "application/javascript; charset=utf-8",
+                    "cache-control": "public, max-age=0, must-revalidate",
                   },
                 },
               );
             }
             default: {
-              const htmls = ["/404.html", "/index.html"];
-              if (pathname !== "/") {
-                htmls.unshift(pathname + ".html", pathname + "/index.html");
+              const searchList = ["/404.html", "/index.html"];
+              if (pathname === "/") {
+                searchList.unshift("/index.html");
+              } else {
+                searchList.unshift(
+                  pathname + ".html",
+                  pathname + "/index.html",
+                );
               }
-              for (const path of htmls) {
+              for (const path of searchList) {
                 filepath = path;
                 file = await fs.open(root + filepath);
                 if (file) break;
@@ -333,6 +337,15 @@ export const serveHot = (options) => {
       delete HTMLRewriter.waiting;
     }
 
+    // - hide `use-state` tags
+    rewriter.on("head", {
+      element(el) {
+        el.append("<style>use-state{visibility: hidden}</style>", {
+          html: true,
+        });
+      },
+    });
+
     // - inject fs-based router index
     rewriter.on("meta[name=fs-router]", {
       async element(el) {
@@ -354,13 +367,13 @@ export const serveHot = (options) => {
         const src = el.getAttribute("src");
         if (src && !/^\/|\w+:/.test(src)) {
           const { pathname } = new URL(src, url.origin + filepath);
-          const file = await fs.open(root + pathname);
-          if (file) {
-            const text = await readTextFromStream(file.body);
-            file.close();
+          try {
+            const text = await fs.readTextFile(root + pathname);
             el.removeAttribute("src");
             el.setAttribute("data-src", src);
             el.setInnerContent(text);
+          } catch (error) {
+            // ignore
           }
         }
       },
@@ -490,8 +503,6 @@ export const serveHot = (options) => {
       });
     }
 
-    // - TODO: support css hmr
-
     // - transform html
     return rewriter.transform(res);
   }
@@ -519,7 +530,7 @@ export const serveHot = (options) => {
     }
     const html = await readTextFromStream(htmlFile.body);
     htmlFile.close();
-    await (new HTMLRewriter().on("script[type=contentmap]:not([src])", {
+    const reader = new HTMLRewriter().on("script[type=contentmap]:not([src])", {
       text(el) {
         contentMap += el.text;
       },
@@ -528,15 +539,18 @@ export const serveHot = (options) => {
         const src = el.getAttribute("src");
         if (src && !/^\/|\w+:/.test(src)) {
           const { pathname } = new URL(src, url.origin + filepath);
-          const file = await fs.open(root + pathname);
-          if (file) {
-            const text = await readTextFromStream(file.body);
-            file.close();
-            contentMap = text;
+          try {
+            contentMap = await fs.readTextFile(root + pathname);
+          } catch (error) {
+            // ignore
           }
         }
       },
-    }).transform(new Response(html))).arrayBuffer();
+    }).transform(new Response(html)).body.getReader();
+    while (true) {
+      const { done } = await reader.read();
+      if (done) break;
+    }
     if (!contentMap) {
       return new Response("Contentmap not found", { status: 404 });
     }
@@ -679,5 +693,5 @@ export const serveHot = (options) => {
     return data;
   };
 
-  return fetcher;
+  return { fetch: fetcher };
 };

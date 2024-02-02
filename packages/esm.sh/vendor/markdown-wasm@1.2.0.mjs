@@ -1,3 +1,9 @@
+/**
+ * markdown-wasm v1.2.0
+ * @link https://github.com/rsms/markdown-wasm
+ * @license MIT
+ */
+
 import { loadWasm } from "./wasm-loader.mjs";
 
 const wasmURL = "https://esm.sh/markdown-wasm@1.2.0/dist/markdown.wasm";
@@ -242,7 +248,9 @@ function J(e) {
     ? e
     : new Uint8Array(e);
 }
+
 export { V as ParseFlags, Y as parse };
+
 export default async function init() {
   D(await loadWasm(wasmURL, { a: x }));
 }

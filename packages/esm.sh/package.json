@@ -1,7 +1,7 @@
 {
   "name": "esm.sh",
   "version": "0.135.1",
-  "description": "The CLI tool for esm.sh hot applications.",
+  "description": "Build modern(es2015+) web apps with esm.sh",
   "type": "module",
   "main": "src/index.mjs",
   "module": "src/index.mjs",
@@ -19,7 +19,7 @@
   "sideEffects": [
     "./src/html-rewriter.mjs",
     "./deno.mjs",
-    "./index.mjs"
+    "./node.mjs"
   ],
   "scripts": {
     "start": "./bin/cli.mjs"

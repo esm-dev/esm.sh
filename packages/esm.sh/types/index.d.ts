@@ -6,13 +6,17 @@ export interface FsFile {
   close: () => Promise<void>;
 }
 
-/** The options for `serveHost` */
-export interface ServeOptions {
+/** The options for `ESApp` */
+export interface ESAppOptions {
   /** The root path, default to current working directory. */
   root?: string;
 }
 
+export interface ESApp {
+  fetch: (req: Request) => Promise<Response>;
+}
+
 /** Creates a fetch handler for serving hot applications. */
-export function serveHost(
+export function createESApp(
   options?: ServeOptions,
-): (req: Request) => Promise<Response>;
+): ESApp;

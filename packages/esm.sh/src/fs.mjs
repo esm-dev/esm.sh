@@ -1,4 +1,4 @@
-import { open, readdir, stat, watch } from "node:fs/promises";
+import { open, readdir, readFile, stat, watch } from "node:fs/promises";
 import { getMimeType } from "./mime.mjs";
 
 const nameFilter = (filename) => {
@@ -29,7 +29,7 @@ const fs = {
           } else {
             readable.cancel();
           }
-        }
+        },
       };
     } catch (error) {
       if (error.code === "ENOENT") {
@@ -89,6 +89,11 @@ const fs = {
       };
     };
   },
+
+  readTextFile: async (path) => {
+    return readFile(path, "utf-8");
+  },
+
   stat: (path) => {
     return stat(path);
   },
@@ -113,6 +118,7 @@ if (typeof Deno !== "undefined") {
       throw error;
     }
   };
+  fs.readTextFile = (path) => Deno.readTextFile(path);
 } else if (typeof Bun !== "undefined") {
   fs.open = async (path) => {
     const file = Bun.file(path);
@@ -128,6 +134,7 @@ if (typeof Deno !== "undefined") {
       close: () => {},
     };
   };
+  fs.readTextFile = (path) => Bun.file(path).text();
 }
 
 export default fs;

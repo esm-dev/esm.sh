@@ -1,4 +1,17 @@
-import type { CallbackMap, Hot } from "../server/embed/types/hot.d.ts";
+import type {  Hot } from "../server/embed/types/hot.d.ts";
+
+export interface CallbackMap<T extends Function> {
+  readonly map: Map<string, Set<T>>;
+  add: (path: string, callback: T) => void;
+  delete: (path: string, callback?: T) => void;
+}
+
+declare global {
+  var __hot_hmr_modules: Set<string>;
+  var __hot_hmr_callbacks: CallbackMap<(module: any) => void>;
+  var __hot_hmr_disposes: CallbackMap<() => void>;
+  interface HotAPI {}
+}
 
 class CallbackMapImpl<T extends Function> implements CallbackMap<T> {
   map = new Map<string, Set<T>>();
