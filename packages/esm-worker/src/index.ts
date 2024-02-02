@@ -708,14 +708,6 @@ async function fetchOrigin(
       resHeaders.set("Cache-Control", res.headers.get("Cache-Control")!);
     } else if (res.status === 400) {
       resHeaders.set("Cache-Control", immutableCache);
-    } else if (res.status === 404) {
-      const message = new TextDecoder().decode(buffer);
-      if (!/package .+ not found/.test(message)) {
-        resHeaders.set(
-          "Cache-Control",
-          immutableCache,
-        );
-      }
     }
     copyHeaders(resHeaders, res.headers, "Content-Type");
     return new Response(buffer, { status: res.status, headers: resHeaders });
