@@ -294,27 +294,43 @@ function parseImportMap() {
     return importMap;
   }
   const script = doc.querySelector("script[type=importmap]");
-  let json = null;
   if (script) {
     try {
-      json = parse(script.textContent!);
+      const json = parse(script.textContent!);
+      if (isObject(json)) {
+        const { imports, scopes } = json;
+        if (isObject(imports)) {
+          validateImports(imports);
+          importMap.imports = imports;
+        }
+        if (isObject(scopes)) {
+          validateScopes(scopes);
+          importMap.scopes = scopes;
+        }
+      }
     } catch (err) {
       console.error("Invalid importmap", err[kMessage]);
     }
   }
-  if (isObject(json)) {
-    const { imports, scopes } = json;
-    for (const k in imports) {
-      const url = imports[k];
-      if (url) {
-        importMap.imports[k] = url;
-      }
-    }
-    if (isObject(scopes)) {
-      importMap.scopes = scopes;
+  return importMap;
+}
+
+function validateScopes(imports: Record<string, unknown>) {
+  for (const [k, v] of Object.entries(imports)) {
+    if (isObject(v)) {
+      validateImports(v);
+    } else {
+      delete imports[k];
     }
   }
-  return importMap;
+}
+
+function validateImports(imports: Record<string, unknown>) {
+  for (const [k, v] of Object.entries(imports)) {
+    if (!v || typeof v !== "string") {
+      delete imports[k];
+    }
+  }
 }
 
 /** create a cache proxy object. */
