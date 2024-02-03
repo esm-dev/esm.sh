@@ -20,7 +20,9 @@ export async function init(options: InitOptions = {}) {
       let url = editorWorkerUrl;
       let lsp = lspIndex[label];
       if (!lsp) {
-        lsp = Object.values(lspIndex).find((lsp) => lsp.aliases?.includes(label));
+        lsp = Object.values(lspIndex).find((lsp) =>
+          lsp.aliases?.includes(label)
+        );
       }
       if (lsp) {
         url = (await (lsp.import())).workerUrl();
@@ -181,6 +183,7 @@ Object.assign(monaco.editor, {
       {
         automaticLayout: true,
         minimap: { enabled: false },
+        scrollBeyondLastLine: false,
         theme: defaultTheme,
         ...options,
       } satisfies typeof options,
