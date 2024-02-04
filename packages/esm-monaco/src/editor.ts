@@ -49,6 +49,7 @@ export async function init(options: InitOptions = {}) {
   }
 
   if (options.vfs) {
+    options.vfs.bindMonaco(monaco);
     Reflect.set(monaco.editor, "vfs", options.vfs);
     try {
       const list = await options.vfs.list();
@@ -120,6 +121,7 @@ export async function init(options: InitOptions = {}) {
           "trimAutoWhitespace",
           "wordWrap",
           "wordWrapColumn",
+          "wrappingIndent",
         ];
         for (const attrName of this.getAttributeNames()) {
           const key = optionKeys.find((k) => k.toLowerCase() === attrName);

@@ -68,8 +68,13 @@ export class LibFiles {
   }
 
   public setExtraLibs(extraLibs: Record<string, string>) {
-    const entries = Object.entries(extraLibs);
-    for (const [filePath, content] of entries) {
+    const toRemove = Object.keys(this._extraLibs).filter(
+      (key) => !extraLibs[key],
+    );
+    for (const key of toRemove) {
+      this.removeExtraLib(key);
+    }
+    for (const [filePath, content] of Object.entries(extraLibs)) {
       this.addExtraLib(content, filePath);
     }
   }
@@ -240,12 +245,12 @@ interface IInternalEditorModel extends editor.IModel {
 }
 
 export class DiagnosticsAdapter extends Adapter {
-  private _disposables: IDisposable[] = [];
-  private _listener: { [uri: string]: IDisposable } = Object.create(null);
+  // private _disposables: IDisposable[] = [];
+  private _listeners: { [uri: string]: IDisposable } = Object.create(null);
 
   constructor(
-    private readonly _diagnosticsOptions: DiagnosticsOptions,
-    private readonly _onRefreshDiagnostic: IEvent<void>,
+    private _diagnosticsOptions: DiagnosticsOptions,
+    onRefreshDiagnostic: IEvent<void>,
     private _selector: string,
     worker: (...uris: Uri[]) => Promise<TypeScriptWorker>,
   ) {
@@ -257,8 +262,8 @@ export class DiagnosticsAdapter extends Adapter {
         return;
       }
 
+      const { onlyVisible } = this._diagnosticsOptions;
       const maybeValidate = () => {
-        const { onlyVisible } = this._diagnosticsOptions;
         if (onlyVisible) {
           if (model.isAttachedToEditor()) {
             this._doValidate(model);
@@ -268,85 +273,75 @@ export class DiagnosticsAdapter extends Adapter {
         }
       };
 
-      let handle: number;
-      const changeSubscription = model.onDidChangeContent(() => {
-        clearTimeout(handle);
-        handle = window.setTimeout(maybeValidate, 500);
-      });
+      let timer: number | null = null;
+      const disposes = [
+        model.onDidChangeContent(() => {
+          if (timer !== null) {
+            return;
+          }
+          timer = setTimeout(() => {
+            timer = null;
+            maybeValidate();
+          }, 500);
+        }),
+      ];
 
-      const visibleSubscription = model.onDidChangeAttached(() => {
-        const { onlyVisible } = this._diagnosticsOptions;
-        if (onlyVisible) {
+      if (onlyVisible) {
+        disposes.push(model.onDidChangeAttached(() => {
           if (model.isAttachedToEditor()) {
             // this model is now attached to an editor
             // => compute diagnostics
-            maybeValidate();
+            this._doValidate(model);
           } else {
             // this model is no longer attached to an editor
             // => clear existing diagnostics
             editor.setModelMarkers(model, this._selector, []);
           }
-        }
-      });
+        }));
+      }
 
-      this._listener[model.uri.toString()] = {
+      this._listeners[model.uri.toString()] = {
         dispose() {
-          changeSubscription.dispose();
-          visibleSubscription.dispose();
-          clearTimeout(handle);
+          timer = null;
+          disposes.forEach((d) => d.dispose());
         },
       };
 
       maybeValidate();
     };
-
     const onModelRemoved = (model: editor.IModel): void => {
-      editor.setModelMarkers(model, this._selector, []);
       const key = model.uri.toString();
-      if (this._listener[key]) {
-        this._listener[key].dispose();
-        delete this._listener[key];
+      if (this._listeners[key]) {
+        this._listeners[key].dispose();
+        delete this._listeners[key];
       }
+      editor.setModelMarkers(model, this._selector, []);
     };
 
-    this._disposables.push(
-      editor.onDidCreateModel((model) =>
-        onModelAdd(<IInternalEditorModel> model)
-      ),
+    editor.onDidCreateModel((model) =>
+      onModelAdd(<IInternalEditorModel> model)
     );
-    this._disposables.push(editor.onWillDisposeModel(onModelRemoved));
-    this._disposables.push(
-      editor.onDidChangeModelLanguage((event) => {
-        onModelRemoved(event.model);
-        onModelAdd(<IInternalEditorModel> event.model);
-      }),
-    );
-
-    this._disposables.push({
-      dispose() {
-        for (const model of editor.getModels()) {
-          onModelRemoved(model);
-        }
-      },
+    editor.onWillDisposeModel(onModelRemoved);
+    editor.onDidChangeModelLanguage((event) => {
+      onModelRemoved(event.model);
+      onModelAdd(<IInternalEditorModel> event.model);
     });
-
-    const refreshDiagostics = () => {
-      // redo diagnostics when options change
+    onRefreshDiagnostic(() => {
       for (const model of editor.getModels()) {
         onModelRemoved(model);
         onModelAdd(<IInternalEditorModel> model);
       }
-    };
-    this._disposables.push(_onRefreshDiagnostic(refreshDiagostics));
+    });
+
     editor.getModels().forEach((model) =>
       onModelAdd(<IInternalEditorModel> model)
     );
   }
 
-  public dispose(): void {
-    this._disposables.forEach((d) => d && d.dispose());
-    this._disposables = [];
-  }
+  // public dispose(): void {
+  //   this._disposables.forEach((d) => d && d.dispose());
+  //   this._disposables = [];
+  // }
 
   private async _doValidate(model: editor.ITextModel): Promise<void> {
     const editor = M.editor;
@@ -397,11 +392,11 @@ export class DiagnosticsAdapter extends Adapter {
     editor.setModelMarkers(
       model,
       this._selector,
-      diagnostics.map((d) => this._convertDiagnostics(model, d)),
+      diagnostics.map((d) => DiagnosticsAdapter._convertDiagnostics(model, d)),
     );
   }
 
-  private _convertDiagnostics(
+  private static _convertDiagnostics(
     model: editor.ITextModel,
     diag: Diagnostic,
   ): editor.IMarkerData {
@@ -423,7 +418,9 @@ export class DiagnosticsAdapter extends Adapter {
     }
 
     return {
-      severity: this._tsDiagnosticCategoryToMarkerSeverity(diag.category),
+      severity: DiagnosticsAdapter._tsDiagnosticCategoryToMarkerSeverity(
+        diag.category,
+      ),
       startLineNumber,
       startColumn,
       endLineNumber,
@@ -431,14 +428,14 @@ export class DiagnosticsAdapter extends Adapter {
       message: flattenDiagnosticMessageText(diag.messageText, "\n"),
       code: diag.code.toString(),
       tags,
-      relatedInformation: this._convertRelatedInformation(
+      relatedInformation: DiagnosticsAdapter._convertRelatedInformation(
         model,
         diag.relatedInformation,
       ),
     };
   }
 
-  private _convertRelatedInformation(
+  private static _convertRelatedInformation(
     model: editor.ITextModel,
     relatedInformation?: DiagnosticRelatedInformation[],
   ): editor.IRelatedInformation[] {
@@ -477,7 +474,7 @@ export class DiagnosticsAdapter extends Adapter {
     return result;
   }
 
-  private _tsDiagnosticCategoryToMarkerSeverity(
+  private static _tsDiagnosticCategoryToMarkerSeverity(
     category: ts.DiagnosticCategory,
   ): MarkerSeverity {
     const MarkerSeverity = M.MarkerSeverity;
@@ -502,6 +499,7 @@ interface MyCompletionItem extends languages.CompletionItem {
   uri: Uri;
   position: Position;
   offset: number;
+  data?: any;
 }
 
 export class SuggestAdapter extends Adapter
@@ -568,6 +566,7 @@ export class SuggestAdapter extends Adapter
         insertText: entry.name,
         sortText: entry.sortText,
         kind: SuggestAdapter.convertKind(entry.kind),
+        data: entry.data,
         tags,
       };
     });
@@ -591,9 +590,26 @@ export class SuggestAdapter extends Adapter
       resource.toString(),
       offset,
       myItem.label,
+      myItem.data,
     );
     if (!details) {
       return myItem;
+    }
+    let additionalTextEdits: languages.TextEdit[] = [];
+    if (details.codeActions) {
+      const model = M.editor.getModel(resource);
+      if (model) {
+        details.codeActions.forEach((action) =>
+          action.changes.forEach((change) =>
+            change.textChanges.forEach(({ span, newText }) => {
+              additionalTextEdits.push({
+                range: this._textSpanToRange(model, span),
+                text: newText,
+              });
+            })
+          )
+        );
+      }
     }
     return <MyCompletionItem> {
       uri: resource,
@@ -601,6 +617,7 @@ export class SuggestAdapter extends Adapter
       label: details.name,
       kind: SuggestAdapter.convertKind(details.kind),
       detail: displayPartsToString(details.displayParts),
+      additionalTextEdits,
       documentation: {
         value: SuggestAdapter.createDocumentationString(details),
       },
@@ -636,6 +653,8 @@ export class SuggestAdapter extends Adapter
         return languages.CompletionItemKind.Interface;
       case Kind.warning:
         return languages.CompletionItemKind.File;
+      case Kind.externalSymbol:
+        return languages.CompletionItemKind.Event;
     }
 
     return languages.CompletionItemKind.Property;
@@ -661,7 +680,7 @@ function tagToString(tag: ts.JSDocTagInfo): string {
     tagLabel += `\`${paramName.text}\``;
     if (rest.length > 0) tagLabel += ` — ${rest.map((r) => r.text).join(" ")}`;
   } else if (Array.isArray(tag.text)) {
-    tagLabel += ` — ${tag.text.map((r) => r.text).join(" ")}`;
+    tagLabel += ` — ${tag.text.map((r) => r.text).join("")}`;
   } else if (tag.text) {
     tagLabel += ` — ${tag.text}`;
   }
@@ -1038,6 +1057,7 @@ export class Kind {
   public static const: string = "const";
   public static let: string = "let";
   public static warning: string = "warning";
+  public static externalSymbol = "external symbol";
 }
 
 // --- formatting ----

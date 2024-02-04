@@ -12,43 +12,50 @@ Deno.serve(async (req) => {
       },
     );
   }
-  const ext = url.pathname.split(".").pop();
   try {
-    let body =
-      (await Deno.open(new URL("../dist" + url.pathname, import.meta.url)))
-        .readable;
+    const fileUrl = new URL("../dist" + url.pathname, import.meta.url);
+    let body = (await Deno.open(fileUrl)).readable;
     if (url.pathname === "/lsp/typescript/worker.js") {
-      const ts = new TransformStream({
-        transform: async (chunk, controller) => {
-          const text = new TextDecoder().decode(chunk);
-          if (/from"typescript"/.test(text)) {
-            controller.enqueue(
-              new TextEncoder().encode(
-                text.replace(
-                  /from"typescript"/,
-                  'from"https://esm.sh/typescript@5.3.3?bundle"',
+      body = body.pipeThrough(
+        new TransformStream({
+          transform: async (chunk, controller) => {
+            const text = new TextDecoder().decode(chunk);
+            if (/from"typescript"/.test(text)) {
+              controller.enqueue(
+                new TextEncoder().encode(
+                  text.replace(
+                    /from"typescript"/,
+                    'from"https://esm.sh/typescript@5.3.3?bundle"',
+                  ),
                 ),
-              ),
-            );
-          } else {
-            controller.enqueue(chunk);
-          }
-        },
-      });
-      body = body.pipeThrough(ts);
+              );
+            } else {
+              controller.enqueue(chunk);
+            }
+          },
+        }),
+      );
     }
     return new Response(
       body,
       {
         headers: new Headers({
-          "content-type": ext === "js" ? "application/javascript" : "text/css",
+          "transfer-encoding": "chunked",
+          "content-type": fileUrl.pathname.endsWith(".css")
+            ? "text/css"
+            : "application/javascript",
           "cache-control": "public, max-age=0, revalidate",
         }),
       },
     );
   } catch (e) {
-    return new Response("Not found", {
-      status: 404,
+    if (e instanceof Deno.errors.NotFound) {
+      return new Response("Not found", {
+        status: 404,
+      });
+    }
+    return new Response(e.message, {
+      status: 500,
     });
   }
 });

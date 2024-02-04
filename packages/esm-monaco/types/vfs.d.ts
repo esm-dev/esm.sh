@@ -17,8 +17,10 @@ export class VFS {
     version?: number,
   ): Promise<void>;
   removeFile(name: string | URL): Promise<void>;
-  watchFile?(
-    name: string | URL,
-    handler: (evt: { kind: string; path: string }) => void,
-  ): () => void;
+  watch(name: string | URL, handler: (evt: WatchEvent) => void): () => void;
+}
+
+interface WatchEvent {
+  kind: "create" | "modify" | "remove";
+  path: string;
 }

@@ -24,7 +24,7 @@
 </head>
 
 <body>
-  <monaco-editor file="index.html" readOnly padding="8"></monaco-editor>
+  <monaco-editor file="index.html" padding="8"></monaco-editor>
   <monaco-editor file="style.css" padding="8"></monaco-editor>
   <monaco-editor file="App.tsx" padding="8"></monaco-editor>
   <monaco-editor file="main.jsx" padding="8"></monaco-editor>
@@ -62,11 +62,13 @@
           '}'
         ],
         'App.tsx': [
+          'import confetti from "https://esm.sh/canvas-confetti@1.6.0"',
           'import { useEffect } from "react"',
           'import { message } from "./greeting.ts"',
           '',
           'export default function App() {',
           '  useEffect(() => {',
+          '    confetti()',
           '    log(message)',
           '  }, [])',
           '  return <h1>{message}</h1>;',
@@ -88,7 +90,7 @@
         }, null, 2),
         'tsconfig.json': JSON.stringify({
           compilerOptions: {
-            types: ["log.d.ts"],
+            types: ["log.d.ts", "https://raw.githubusercontent.com/vitejs/vite/main/packages/vite/types/importMeta.d.ts"],
           }
         }, null, 2)
       }

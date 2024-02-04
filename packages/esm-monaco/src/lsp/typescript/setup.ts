@@ -1,14 +1,14 @@
 import type * as monacoNS from "monaco-editor-core";
 import type ts from "typescript";
+import { blankImportMap, parseImportMapFromJson } from "../../import-map";
 import type { VFS } from "../../vfs";
-import type { CreateData, Host, ImportMap, TypeScriptWorker } from "./worker";
+import type { CreateData, Host, TypeScriptWorker } from "./worker";
 import * as lf from "./language-features";
 
+type TSWorker = monacoNS.editor.MonacoWebWorker<TypeScriptWorker>;
+
 // javascript and typescript share the same worker
-let worker:
-  | monacoNS.editor.MonacoWebWorker<TypeScriptWorker>
-  | Promise<monacoNS.editor.MonacoWebWorker<TypeScriptWorker>>
-  | null = null;
+let worker: TSWorker | Promise<TSWorker> | null = null;
 let refreshDiagnosticEventEmitter: EventTrigger | null = null;
 
 class EventTrigger {
@@ -32,8 +32,101 @@ class EventTrigger {
   }
 }
 
+/** Convert string to URL. */
+function toUrl(name: string | URL) {
+  return typeof name === "string" ? new URL(name, "file:///") : name;
+}
+
+
+/** Load compiler options from tsconfig.json in VFS if exists. */
+async function loadCompilerOptions(vfs: VFS) {
+  const compilerOptions: ts.CompilerOptions = {};
+  try {
+    const tconfigjson = await vfs.readTextFile("tsconfig.json");
+    const tconfig = JSON.parse(tconfigjson);
+    const types = tconfig.compilerOptions.types;
+    delete tconfig.compilerOptions.types;
+    Array.isArray(types) && await Promise.all(types.map(async (type) => {
+      if (/^https?:\/\//.test(type)) {
+        const res = await vfs.fetch(type);
+        const dtsUrl = res.headers.get("x-typescript-types");
+        if (dtsUrl) {
+          res.body.cancel?.();
+          const res2 = await vfs.fetch(dtsUrl);
+          if (res2.ok) {
+            return [dtsUrl, await res2.text()];
+          } else {
+            console.error(
+              `Failed to fetch "${dtsUrl}": ` + await res2.text(),
+            );
+          }
+        } else if (res.ok) {
+          return [type, await res.text()];
+        } else {
+          console.error(
+            `Failed to fetch "${dtsUrl}": ` + await res.text(),
+          );
+        }
+      } else if (typeof type === "string") {
+        const dtsUrl = toUrl(type.replace(/\.d\.ts$/, "") + ".d.ts");
+        try {
+          return [dtsUrl.href, await vfs.readTextFile(dtsUrl)];
+        } catch (error) {
+          console.error(
+            `Failed to read "${dtsUrl.href}": ` + error.message,
+          );
+        }
+      }
+      return null;
+    })).then((entries) => {
+      compilerOptions.$types = entries.map(([url]) => url).filter((url) =>
+        url.startsWith("file://")
+      );
+      lf.libFiles.setExtraLibs(Object.fromEntries(entries.filter(Boolean)));
+    });
+    compilerOptions.$src = toUrl("tsconfig.json").href;
+    Object.assign(compilerOptions, tconfig.compilerOptions);
+  } catch (error) {
+    if (error instanceof vfs.ErrorNotFound) {
+      // ignore
+    } else {
+      console.error(error);
+    }
+  }
+  return compilerOptions;
+}
+
+/** Load import maps from the root index.html or external json file. */
+async function loadImportMap(vfs: VFS) {
+  try {
+    const indexHtml = await vfs.readTextFile("index.html");
+    const tplEl = document.createElement("template");
+    tplEl.innerHTML = indexHtml;
+    const scriptEl: HTMLScriptElement = tplEl.content.querySelector(
+      'script[type="importmap"]',
+    );
+    if (scriptEl) {
+      const im = parseImportMapFromJson(
+        scriptEl.src
+          ? await vfs.readTextFile(scriptEl.src)
+          : scriptEl.textContent,
+      );
+      im.$src = toUrl(scriptEl.src ? scriptEl.src : "index.html").href;
+      return im;
+    }
+  } catch (error) {
+    if (error instanceof vfs.ErrorNotFound) {
+      // ignore
+    } else {
+      console.error(error);
+    }
+  }
+  return blankImportMap();
+}
+
+/** Create the typescript worker. */
 async function createWorker(monaco: typeof monacoNS) {
-  const compilerOptions: ts.CompilerOptions = {
+  const defaultCompilerOptions: ts.CompilerOptions = {
     allowImportingTsExtensions: true,
     allowJs: true,
     module: 99, // ModuleKind.ESNext,
@@ -41,51 +134,33 @@ async function createWorker(monaco: typeof monacoNS) {
     target: 99, // ScriptTarget.ESNext,
     noEmit: true,
   };
-  const importMap: ImportMap = {};
   const vfs = Reflect.get(monaco.editor, "vfs") as VFS | undefined;
-  const libsPromise = import("./libs.js").then((m) => m.default);
+  const promises = [import("./libs.js").then((m) => m.default)];
+
+  let compilerOptions: ts.CompilerOptions = { ...defaultCompilerOptions };
+  let importMap = blankImportMap();
 
   if (vfs) {
-    try {
-      const tconfigjson = await vfs.readTextFile("tsconfig.json");
-      const tconfig = JSON.parse(tconfigjson);
-      const types = tconfig.compilerOptions.types;
-      delete tconfig.compilerOptions.types;
-      if (Array.isArray(types)) {
-        for (const type of types) {
-          // TODO: support type from http
-          try {
-            const dts = await vfs.readTextFile(type);
-            lf.libFiles.addExtraLib(dts, type);
-          } catch (error) {
-            if (error instanceof vfs.ErrorNotFound) {
-              // ignore
-            } else {
-              console.error(error);
-            }
-          }
-        }
-      }
-      Object.assign(compilerOptions, tconfig.compilerOptions);
-    } catch (error) {
-      if (error instanceof vfs.ErrorNotFound) {
-        // ignore
-      } else {
-        console.error(error);
-      }
-    }
+    promises.push(
+      loadCompilerOptions(vfs).then((options) => {
+        compilerOptions = { ...defaultCompilerOptions, ...options };
+      }),
+      loadImportMap(vfs).then((im) => {
+        importMap = im;
+      }),
+    );
   }
-  // todo: watch tsconfig.json
 
-  const libs = await libsPromise;
+  const [libs] = await Promise.all(promises);
+  lf.libFiles.setLibs(libs);
+
   const createData: CreateData = {
     compilerOptions,
     libs,
     extraLibs: lf.libFiles.extraLibs,
     importMap,
   };
-  lf.libFiles.setLibs(libs);
-  return monaco.editor.createWebWorker<TypeScriptWorker>({
+  const worker = monaco.editor.createWebWorker<TypeScriptWorker>({
     moduleId: "lsp/typescript/worker",
     label: "typescript",
     keepIdleModels: true,
@@ -110,6 +185,71 @@ async function createWorker(monaco: typeof monacoNS) {
       },
     } satisfies Host,
   });
+
+  const updateCompilerOptions: TypeScriptWorker["updateCompilerOptions"] =
+    async (options) => {
+      const proxy = await worker.getProxy();
+      await proxy.updateCompilerOptions(options);
+      refreshDiagnosticEventEmitter?.fire();
+    };
+
+  if (vfs) {
+    const watchTypes = () =>
+      (compilerOptions.$types as string[] ?? []).map((url) =>
+        vfs.watch(url, async (e) => {
+          if (e.kind === "remove") {
+            lf.libFiles.removeExtraLib(url);
+          } else {
+            const content = await vfs.readTextFile(url);
+            lf.libFiles.addExtraLib(content, url);
+          }
+          updateCompilerOptions({ extraLibs: lf.libFiles.extraLibs });
+        })
+      );
+    const watchImportMap = () => {
+      const { $src } = importMap;
+      if ($src && $src !== "file:///index.html") {
+        return vfs.watch($src, async (e) => {
+          if (e.kind === "remove") {
+            importMap = blankImportMap();
+          } else {
+            const content = await vfs.readTextFile($src);
+            const im = parseImportMapFromJson(content);
+            importMap = im;
+          }
+          updateCompilerOptions({ importMap });
+        });
+      }
+    };
+    let disposes = watchTypes();
+    let dispose = watchImportMap();
+    vfs.watch("tsconfig.json", async (e) => {
+      disposes.forEach((dispose) => dispose());
+      loadCompilerOptions(vfs).then((options) => {
+        const newOptions = { ...defaultCompilerOptions, ...options };
+        if (JSON.stringify(newOptions) !== JSON.stringify(compilerOptions)) {
+          compilerOptions = newOptions;
+          updateCompilerOptions({
+            compilerOptions,
+            extraLibs: lf.libFiles.extraLibs,
+          });
+        }
+        disposes = watchTypes();
+      });
+    });
+    vfs.watch("index.html", async (e) => {
+      dispose?.();
+      loadImportMap(vfs).then((im) => {
+        if (JSON.stringify(im) !== JSON.stringify(importMap)) {
+          importMap = im;
+          updateCompilerOptions({ importMap });
+        }
+        dispose = watchImportMap();
+      });
+    });
+  }
+
+  return worker;
 }
 
 export async function setup(languageId: string, monaco: typeof monacoNS) {
@@ -129,8 +269,7 @@ export async function setup(languageId: string, monaco: typeof monacoNS) {
   const workerWithResources = (
     ...uris: monacoNS.Uri[]
   ): Promise<TypeScriptWorker> => {
-    return (worker as monacoNS.editor.MonacoWebWorker<TypeScriptWorker>)
-      .withSyncedResources(uris);
+    return (worker as TSWorker).withSyncedResources(uris);
   };
 
   // register language features

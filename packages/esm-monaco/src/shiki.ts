@@ -26,6 +26,19 @@ export async function initShiki(
 ) {
   const themes: ThemeInput[] = [];
   const langs: LanguageInput = [];
+  const fetcher = Reflect.get(monaco.editor, "vfs")?.fetch ?? globalThis.fetch
+
+  function loadTMTheme(theme: string) {
+    return fetcher(
+      `https://esm.sh/tm-themes@${tmThemesVersion}/themes/${theme}.json`,
+    ).then((res) => res.json());
+  }
+
+  function loadTMGrammer(id: string) {
+    return fetcher(
+      `https://esm.sh/tm-grammars@${tmGrammersVersion}/grammars/${id}.json`,
+    ).then((res) => res.json());
+  }
 
   if (options.preloadGrammars) {
     const preloadGrammars = new Set(options.preloadGrammars);
@@ -85,18 +98,6 @@ export async function initShiki(
   }
 
   shikiToMonaco(highlighter, monaco);
-}
-
-function loadTMTheme(theme: string) {
-  return fetch(
-    `https://esm.sh/tm-themes@${tmThemesVersion}/themes/${theme}.json`,
-  ).then((res) => res.json());
-}
-
-function loadTMGrammer(lang: string) {
-  return fetch(
-    `https://esm.sh/tm-grammars@${tmGrammersVersion}/grammars/${lang}.json`,
-  ).then((res) => res.json());
 }
 
 // add some aliases for javascript and typescript
