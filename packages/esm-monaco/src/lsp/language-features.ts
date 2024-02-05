@@ -1,9 +1,9 @@
 /*---------------------------------------------------------------------------------------------
  *  Copyright (c) Microsoft Corporation. All rights reserved.
+ *  Copyright (c) X. <i@jex.me>
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import * as lsTypes from "vscode-languageserver-types";
 import type {
   CancellationToken,
   editor,
@@ -17,6 +17,7 @@ import type {
   Range,
   Uri,
 } from "monaco-editor-core";
+import * as lsTypes from "vscode-languageserver-types";
 
 let M = {} as unknown as typeof import("monaco-editor-core");
 export function preclude(monaco: typeof M) {
