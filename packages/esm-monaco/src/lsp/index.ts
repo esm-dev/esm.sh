@@ -1,9 +1,14 @@
 import type * as monacoNS from "monaco-editor-core";
+import type { VFS } from "./vfs";
 
 export interface LspLoader {
   aliases?: string[];
   import: () => Promise<{
-    setup: (languageId: string, monaco: typeof monacoNS) => Promise<void>;
+    setup: (
+      languageId: string,
+      monaco: typeof monacoNS,
+      vfs?: VFS,
+    ) => Promise<void>;
     workerUrl: () => URL;
   }>;
 }

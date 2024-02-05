@@ -1,7 +1,23 @@
 import { copyFile, readdir, readFile, writeFile } from "node:fs/promises";
 import { build as esbuild } from "esbuild";
+import { grammars as tmGrammars } from "tm-grammars";
+import { themes as tmThemes } from "tm-themes";
 
-const build = (/** @type {string[]} */ entryPoints) => {
+// add some aliases for javascript and typescript
+const javascriptGrammar = tmGrammars.find((g) => g.name === "javascript");
+const typescriptGrammar = tmGrammars.find((g) => g.name === "typescript");
+javascriptGrammar.aliases?.push("mjs", "cjs", "jsx");
+typescriptGrammar.aliases?.push("mts", "cts", "tsx");
+
+const tmDefine = {
+  "TM_THEMES": JSON.stringify(
+    tmThemes.map((v) => v.name),
+  ),
+  "TM_GRAMMARS": JSON.stringify(
+    tmGrammars.map((v) => ({ name: v.name, aliases: v.aliases })),
+  ),
+};
+const build = (/** @type {string[]} */ entryPoints, external, define) => {
   return esbuild({
     target: "esnext",
     format: "esm",
@@ -9,15 +25,17 @@ const build = (/** @type {string[]} */ entryPoints) => {
     outdir: "dist",
     bundle: true,
     logLevel: "info",
+    define,
     loader: {
       ".ttf": "dataurl",
     },
     external: [
       "typescript",
-      "*/setup.js",
       "*/libs.js",
       "*/worker.js",
       "*/editor-worker.js",
+      "*/setup.js",
+      ...(external ?? []),
     ],
     entryPoints,
   });
@@ -42,6 +60,15 @@ const bundleTypescriptLibs = async () => {
     "utf-8",
   );
 };
+const bundleEditorCSS = async () => {
+  const css = await readFile("dist/editor.css", "utf-8");
+  const js = await readFile("dist/editor.js", "utf-8");
+  await writeFile(
+    "dist/editor.js",
+    "export const _CSS = " + JSON.stringify(css) + "\n" + js,
+    "utf-8",
+  );
+};
 const copyDts = (...files) => {
   return Promise.all(files.map(async ([src, dest]) => {
     copyFile("node_modules/" + src, "types/" + dest);
@@ -56,7 +83,6 @@ await copyDts(
 );
 await build([
   "src/editor.ts",
-  // "src/shiki.ts",
   "src/editor-worker.ts",
   "src/lsp/html/setup.ts",
   "src/lsp/html/worker.ts",
@@ -67,3 +93,5 @@ await build([
   "src/lsp/typescript/setup.ts",
   "src/lsp/typescript/worker.ts",
 ]);
+await build(["src/index.ts"], ["*/editor.js"], tmDefine);
+await bundleEditorCSS();

@@ -37,7 +37,6 @@ function toUrl(name: string | URL) {
   return typeof name === "string" ? new URL(name, "file:///") : name;
 }
 
-
 /** Load compiler options from tsconfig.json in VFS if exists. */
 async function loadCompilerOptions(vfs: VFS) {
   const compilerOptions: ts.CompilerOptions = {};
@@ -125,7 +124,7 @@ async function loadImportMap(vfs: VFS) {
 }
 
 /** Create the typescript worker. */
-async function createWorker(monaco: typeof monacoNS) {
+async function createWorker(monaco: typeof monacoNS, vfs: VFS | undefined) {
   const defaultCompilerOptions: ts.CompilerOptions = {
     allowImportingTsExtensions: true,
     allowJs: true,
@@ -134,7 +133,6 @@ async function createWorker(monaco: typeof monacoNS) {
     target: 99, // ScriptTarget.ESNext,
     noEmit: true,
   };
-  const vfs = Reflect.get(monaco.editor, "vfs") as VFS | undefined;
   const promises = [import("./libs.js").then((m) => m.default)];
 
   let compilerOptions: ts.CompilerOptions = { ...defaultCompilerOptions };
@@ -167,7 +165,6 @@ async function createWorker(monaco: typeof monacoNS) {
     createData,
     host: {
       tryOpenModel: async (uri: string): Promise<boolean> => {
-        const vfs = Reflect.get(monaco.editor, "vfs") as VFS | undefined;
         if (!vfs) {
           return false; // vfs is not enabled
         }
@@ -252,7 +249,11 @@ async function createWorker(monaco: typeof monacoNS) {
   return worker;
 }
 
-export async function setup(languageId: string, monaco: typeof monacoNS) {
+export async function setup(
+  languageId: string,
+  monaco: typeof monacoNS,
+  vfs: VFS | undefined,
+) {
   const languages = monaco.languages;
 
   if (!refreshDiagnosticEventEmitter) {
@@ -260,7 +261,7 @@ export async function setup(languageId: string, monaco: typeof monacoNS) {
   }
 
   if (!worker) {
-    worker = createWorker(monaco);
+    worker = createWorker(monaco, vfs);
   }
   if (worker instanceof Promise) {
     worker = await worker;

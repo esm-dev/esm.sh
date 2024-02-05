@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ESM&gt;Monaco</title>
+  <link rel="modulepreload" href="/vfs.js">
+  <style>
+    html,
+    body {
+      margin: 0;
+      padding: 0;
+      height: 100vh;
+      overflow: hidden;
+    }
+
+    monaco-editor {
+      width: 100%;
+      height: 100%;
+    }
+  </style>
+</head>
+
+<body>
+  <monaco-editor file="App.tsx" padding="8"></monaco-editor>
+  <script type="module">
+    import { lazyMode } from '/index.js';
+    import { vfs } from '/vfs.js';
+    lazyMode({ vfs });
+  </script>
+</body>
+
+</html>

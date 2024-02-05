@@ -5,7 +5,6 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>ESM&gt;Monaco</title>
-  <link rel="stylesheet" href="/editor.css">
   <style>
     html,
     body {
@@ -14,89 +13,61 @@
       height: 100vh;
     }
 
-    monaco-editor {
-      display: none;
-      border-bottom: 1px solid #333;
-      width: 100%;
-      height: 150px;
+    body {
+      display: flex;
+      background-color: #111;
+    }
+
+    iframe {
+      box-sizing: border-box;
+      width: 33.33%;
+      height: 100%;
+      border: none;
+    }
+
+    iframe+iframe {
+      border-left: 1px solid #333;
+    }
+
+    lable {
+      position: fixed;
+      bottom: 30px;
+      background-color: #232323;
+      color: rgba(255, 255, 255, 0.9);
+      padding: 8px 12px 10px 12px;
+      border-radius: 8px;
+      border: 1px #454545 solid;
+      font-size: 16px;
+      font-weight: 500;
+      font-family: inter;
+      line-height: 1;
+    }
+
+    lable span {
+      opacity: 0.5;
+    }
+
+    #lazy-ssr {
+      left: 30px;
+    }
+
+    #lazy {
+      left: calc(33% + 30px);
+    }
+
+    #manual {
+      left: calc(66% + 30px);
     }
   </style>
 </head>
 
 <body>
-  <monaco-editor file="index.html" padding="8"></monaco-editor>
-  <monaco-editor file="style.css" padding="8"></monaco-editor>
-  <monaco-editor file="App.tsx" padding="8"></monaco-editor>
-  <monaco-editor file="main.jsx" padding="8"></monaco-editor>
-  <monaco-editor file="import_map.json" padding="8"></monaco-editor>
-  <monaco-editor file="tsconfig.json" padding="8"></monaco-editor>
-  <script type="module">
-    import { init, VFS } from '/editor.js';
-    const vfs = new VFS({
-      scope: "test",
-      initial: {
-        'log.d.ts': [
-          '/** log a message. */',
-          'declare function log(message:string): void;',
-        ],
-        'greeting.ts': [
-          'export const message = "Hello world!" as const;',
-        ],
-        'index.html': ['<!DOCTYPE html>',
-          '<html>',
-          '<head>',
-          '  <meta charset="utf-8">',
-          '  <title>React App</title>',
-          '  <link rel="stylesheet" href="./style.css">',
-          '  \<script type="importmap" src="import_map.json"><\/script>',
-          '</head>',
-          '<body>',
-          '  <div id="root"></div>',
-          '  <script type="module" src="./main.tsx"><\/script>',
-          '</body>',
-          '</html>'
-        ],
-        'style.css': [
-          'h1 {',
-          '  font-style: italic;',
-          '}'
-        ],
-        'App.tsx': [
-          'import confetti from "https://esm.sh/canvas-confetti@1.6.0"',
-          'import { useEffect } from "react"',
-          'import { message } from "./greeting.ts"',
-          '',
-          'export default function App() {',
-          '  useEffect(() => {',
-          '    confetti()',
-          '    log(message)',
-          '  }, [])',
-          '  return <h1>{message}</h1>;',
-          '}'
-        ],
-        'main.jsx': [
-          'import { createRoot } from "react-dom/client"',
-          'import App from "./App.tsx"',
-          '',
-          'const root = createRoot(document.getElementById("root"))',
-          'root.render(<App />)'
-        ],
-        'import_map.json': JSON.stringify({
-          imports: {
-            "@jsxImportSource": "https://esm.sh/react@18.2.0",
-            "react": "https://esm.sh/react@18.2.0",
-            "react-dom/": "https://esm.sh/react-dom@18.2.0/",
-          },
-        }, null, 2),
-        'tsconfig.json': JSON.stringify({
-          compilerOptions: {
-            types: ["log.d.ts", "https://raw.githubusercontent.com/vitejs/vite/main/packages/vite/types/importMeta.d.ts"],
-          }
-        }, null, 2)
-      }
-    })
-    await init({ vfs });
-  </script>
+  <iframe src="./lazy-ssr.html"></iframe>
+  <iframe src="./lazy.html"></iframe>
+  <iframe src="./manual.html"></iframe>
+  <lable id="lazy-ssr">Lazy Mode(SSR) <span></span></lable>
+  <lable id="lazy">Lazy Mode <span></span></lable>
+  <lable id="manual">Manual Mode <span></span></lable>
 </body>
 
 </html>

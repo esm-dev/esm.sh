@@ -248,6 +248,10 @@ let cacheDb: Promise<IDBDatabase> | IDBDatabase | null = null;
 
 /** Fetch with vfs cache. */
 export async function vfetch(url: string | URL): Promise<Response> {
+  if (!globalThis.indexedDB) {
+    // non-browser environment
+    return fetch(url);
+  }
   const db = await (cacheDb ?? (cacheDb = openDB("vfs:monaco-cache")));
   const tx = db.transaction("files", "readonly").objectStore("files");
   const caceUrl = toUrl(url).href;

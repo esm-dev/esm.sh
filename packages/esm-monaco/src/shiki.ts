@@ -1,52 +1,39 @@
-import type * as monacoNs from "monaco-editor-core";
-import type {
-  LanguageInput,
-  LanguageRegistration,
-  ThemeInput,
-} from "@shikijs/core";
+import type { ThemeInput } from "@shikijs/core";
+import type { LanguageInput, LanguageRegistration } from "@shikijs/core";
+import loadWasm from "@shikijs/core/wasm-inlined";
 import { getHighlighterCore } from "@shikijs/core";
-import { shikiToMonaco } from "@shikijs/monaco";
-import { grammars as allGrammars } from "tm-grammars";
-import { themes as allThemes } from "tm-themes";
 import { version as tmGrammersVersion } from "../node_modules/tm-grammars/package.json";
 import { version as tmThemesVersion } from "../node_modules/tm-themes/package.json";
-import loadWasm from "@shikijs/core/wasm-inlined";
+import { vfetch } from "./vfs";
 
-const allGrammerNames = new Set(allGrammars.map((l) => l.name));
-const loadedGrammars = new Set<string>();
+// @ts-expect-error `TM_GRAMMARS` is defined at build time
+const tmGrammars: { name: string; aliases?: string[] }[] = TM_GRAMMARS;
+// @ts-expect-error `TM_THEMES` is defined at build time
+const tmThemes: Set<string> = new Set(TM_THEMES);
 
-export async function initShiki(
-  monaco: typeof monacoNs,
-  options: {
-    themes?: (string | { name: string })[];
-    preloadGrammars?: string[];
-    customGrammars?: { name: string }[];
-    onLanguage?: (id: string) => void | Promise<void>;
-  },
-) {
-  const themes: ThemeInput[] = [];
+export const tmGrammerRegistry = new Set(tmGrammars.map((l) => l.name));
+export const loadedGrammars = new Set<string>();
+
+export interface ShikiInitOptions {
+  theme?: string | { name: string };
+  preloadGrammars?: string[];
+  customGrammars?: { name: string }[];
+}
+
+export async function initShiki({
+  theme = "vitesse-dark",
+  preloadGrammars = [],
+  customGrammars,
+}: ShikiInitOptions) {
   const langs: LanguageInput = [];
-  const fetcher = Reflect.get(monaco.editor, "vfs")?.fetch ?? globalThis.fetch
+  const themes: ThemeInput[] = [];
 
-  function loadTMTheme(theme: string) {
-    return fetcher(
-      `https://esm.sh/tm-themes@${tmThemesVersion}/themes/${theme}.json`,
-    ).then((res) => res.json());
-  }
-
-  function loadTMGrammer(id: string) {
-    return fetcher(
-      `https://esm.sh/tm-grammars@${tmGrammersVersion}/grammars/${id}.json`,
-    ).then((res) => res.json());
-  }
-
-  if (options.preloadGrammars) {
-    const preloadGrammars = new Set(options.preloadGrammars);
+  if (preloadGrammars) {
     langs.push(
       ...await Promise.all(
-        allGrammars.filter((g) =>
-          preloadGrammars.has(g.name) ||
-          g.aliases?.some((a) => preloadGrammars.has(a))
+        tmGrammars.filter((g) =>
+          preloadGrammars.includes(g.name) ||
+          g.aliases?.some((a) => preloadGrammars.includes(a))
         ).map((g) => {
           loadedGrammars.add(g.name);
           return loadTMGrammer(g.name);
@@ -55,62 +42,35 @@ export async function initShiki(
     );
   }
 
-  if (options.customGrammars) {
-    for (const lang of options.customGrammars) {
+  if (customGrammars) {
+    for (const lang of customGrammars) {
       if (
         typeof lang === "object" && lang !== null && lang.name &&
-        !allGrammerNames.has(lang.name)
+        !tmGrammerRegistry.has(lang.name)
       ) {
-        allGrammerNames.add(lang.name);
+        tmGrammerRegistry.add(lang.name);
         loadedGrammars.add(lang.name);
         langs.push(lang as LanguageRegistration);
       }
     }
   }
 
-  if (options.themes) {
-    for (const theme of options.themes) {
-      if (typeof theme === "string") {
-        if (allThemes.some((t) => t.name === theme)) {
-          themes.push(loadTMTheme(theme));
-        }
-      } else if (typeof theme === "object" && theme !== null && theme.name) {
-        themes.push(theme);
-      }
+  if (typeof theme === "string") {
+    if (tmThemes.has(theme)) {
+      themes.push(loadTMTheme(theme));
     }
+  } else if (typeof theme === "object" && theme !== null && theme.name) {
+    themes.push(theme);
   }
 
-  const highlighter = await getHighlighterCore({ themes, langs, loadWasm });
-
-  for (const id of allGrammerNames) {
-    monaco.languages.register({ id });
-    monaco.languages.onLanguage(id, async () => {
-      if (!loadedGrammars.has(id)) {
-        highlighter.loadLanguage(loadTMGrammer(id)).then(() => {
-          // activate the highlighter for the language
-          shikiToMonaco(highlighter, monaco);
-        });
-      }
-      if (options.onLanguage) {
-        await options.onLanguage(id);
-      }
-    });
-  }
-
-  shikiToMonaco(highlighter, monaco);
+  return getHighlighterCore({ themes, langs, loadWasm });
 }
 
-// add some aliases for javascript and typescript
-const javascriptGrammar = allGrammars.find((g) => g.name === "javascript");
-const typescriptGrammar = allGrammars.find((g) => g.name === "typescript");
-javascriptGrammar.aliases?.push("mjs", "cjs", "jsx");
-typescriptGrammar.aliases?.push("mts", "cts", "tsx");
-
-export function getLanguageIdFromExtension(path: string) {
+export function getLanguageIdFromPath(path: string) {
   const idx = path.lastIndexOf(".");
   if (idx > 0) {
     const ext = path.slice(idx + 1);
-    const lang = allGrammars.find((g) =>
+    const lang = tmGrammars.find((g) =>
       g.name === ext || g.aliases?.includes(ext)
     );
     if (lang) {
@@ -119,4 +79,16 @@ export function getLanguageIdFromExtension(path: string) {
   }
 }
 
-export { allGrammars, allThemes };
+export function loadTMTheme(theme: string) {
+  return vfetch(
+    `https://esm.sh/tm-themes@${tmThemesVersion}/themes/${theme}.json`,
+  ).then((res) => res.json());
+}
+
+export function loadTMGrammer(id: string) {
+  return vfetch(
+    `https://esm.sh/tm-grammars@${tmGrammersVersion}/grammars/${id}.json`,
+  ).then((res) => res.json());
+}
+
+export { tmGrammars, tmThemes };
