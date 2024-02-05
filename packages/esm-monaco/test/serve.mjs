@@ -16,19 +16,23 @@ Deno.serve(async (req) => {
     const fileUrl = new URL("../dist" + url.pathname, import.meta.url);
     let body = (await Deno.open(fileUrl)).readable;
     if (url.pathname === "/lsp/typescript/worker.js") {
+      let replaced = false;
       body = body.pipeThrough(
         new TransformStream({
           transform: async (chunk, controller) => {
+            if (replaced) {
+              controller.enqueue(chunk);
+              return;
+            }
             const text = new TextDecoder().decode(chunk);
-            if (/from"typescript"/.test(text)) {
-              controller.enqueue(
-                new TextEncoder().encode(
-                  text.replace(
-                    /from"typescript"/,
-                    'from"https://esm.sh/typescript@5.3.3?bundle"',
-                  ),
+            if (text.includes('from "typescript"')) {
+              controller.enqueue(new TextEncoder().encode(
+                text.replace(
+                  'from "typescript"',
+                  'from "https://esm.sh/typescript@5.3.3?bundle"',
                 ),
-              );
+              ));
+              replaced = true;
             } else {
               controller.enqueue(chunk);
             }
@@ -36,18 +40,14 @@ Deno.serve(async (req) => {
         }),
       );
     }
-    return new Response(
-      body,
-      {
-        headers: new Headers({
-          "transfer-encoding": "chunked",
-          "content-type": fileUrl.pathname.endsWith(".css")
-            ? "text/css"
-            : "application/javascript",
-          "cache-control": "public, max-age=0, revalidate",
-        }),
-      },
-    );
+    const headers = new Headers({
+      "transfer-encoding": "chunked",
+      "cache-control": "public, max-age=0, revalidate",
+      "content-type": fileUrl.pathname.endsWith(".css")
+        ? "text/css"
+        : "application/javascript",
+    });
+    return new Response(body, { headers });
   } catch (e) {
     if (e instanceof Deno.errors.NotFound) {
       return new Response("Not found", {

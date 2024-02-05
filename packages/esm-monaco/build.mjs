@@ -1,14 +1,13 @@
 import { copyFile, readdir, readFile, writeFile } from "node:fs/promises";
 import { build as esbuild } from "esbuild";
 
-const build = (/** @type {import("esbuild").BuildOptions} */ options) => {
+const build = (/** @type {string[]} */ entryPoints) => {
   return esbuild({
     target: "esnext",
     format: "esm",
     platform: "browser",
     outdir: "dist",
     bundle: true,
-    minify: true,
     logLevel: "info",
     loader: {
       ".ttf": "dataurl",
@@ -20,10 +19,9 @@ const build = (/** @type {import("esbuild").BuildOptions} */ options) => {
       "*/worker.js",
       "*/editor-worker.js",
     ],
-    ...options,
+    entryPoints,
   });
 };
-
 const bundleTypescriptLibs = async () => {
   const dtsFiles = [];
   const libDir = "node_modules/typescript/lib";
@@ -44,33 +42,28 @@ const bundleTypescriptLibs = async () => {
     "utf-8",
   );
 };
-
-const copyFiles = (...files) => {
+const copyDts = (...files) => {
   return Promise.all(files.map(async ([src, dest]) => {
-    copyFile(src, dest);
+    copyFile("node_modules/" + src, "types/" + dest);
   }));
 };
 
-await build({
-  entryPoints: [
-    "src/editor.ts",
-    "src/editor-worker.ts",
-    "src/lsp/html/setup.ts",
-    "src/lsp/html/worker.ts",
-    "src/lsp/css/setup.ts",
-    "src/lsp/css/worker.ts",
-    "src/lsp/json/setup.ts",
-    "src/lsp/json/worker.ts",
-    "src/lsp/typescript/setup.ts",
-    "src/lsp/typescript/worker.ts",
-  ],
-});
 await bundleTypescriptLibs();
-await copyFiles(
-  ["node_modules/tm-themes/index.d.ts", "types/tm-themes.d.ts"],
-  ["node_modules/tm-grammars/index.d.ts", "types/tm-grammars.d.ts"],
-  [
-    "node_modules/monaco-editor-core/esm/vs/editor/editor.api.d.ts",
-    "types/monaco.d.ts",
-  ],
+await copyDts(
+  ["tm-themes/index.d.ts", "tm-themes.d.ts"],
+  ["tm-grammars/index.d.ts", "tm-grammars.d.ts"],
+  ["monaco-editor-core/esm/vs/editor/editor.api.d.ts", "monaco.d.ts"],
 );
+await build([
+  "src/editor.ts",
+  // "src/shiki.ts",
+  "src/editor-worker.ts",
+  "src/lsp/html/setup.ts",
+  "src/lsp/html/worker.ts",
+  "src/lsp/css/setup.ts",
+  "src/lsp/css/worker.ts",
+  "src/lsp/json/setup.ts",
+  "src/lsp/json/worker.ts",
+  "src/lsp/typescript/setup.ts",
+  "src/lsp/typescript/worker.ts",
+]);
