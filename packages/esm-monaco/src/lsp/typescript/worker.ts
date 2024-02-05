@@ -1,5 +1,6 @@
 /*---------------------------------------------------------------------------------------------
  *  Copyright (c) Microsoft Corporation. All rights reserved.
+ *  Copyright (c) X. <i@jex.me>
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
@@ -45,8 +46,8 @@ export class TypeScriptWorker implements ts.LanguageServiceHost {
   private _ctx: monacoNS.worker.IWorkerContext<Host>;
   private _compilerOptions: ts.CompilerOptions;
   private _importMap: ImportMap;
-  private _blankImportMap: boolean;
   private _importMapVersion: number;
+  private _isBlankImportMap: boolean;
   private _libs: Record<string, string>;
   private _extraLibs: Record<string, ExtraLib>;
   private _inlayHintsOptions?: ts.UserPreferences;
@@ -64,8 +65,8 @@ export class TypeScriptWorker implements ts.LanguageServiceHost {
     this._ctx = ctx;
     this._compilerOptions = createData.compilerOptions;
     this._importMap = createData.importMap;
-    this._blankImportMap = isBlank(createData.importMap);
     this._importMapVersion = 0;
+    this._isBlankImportMap = isBlank(createData.importMap);
     this._libs = createData.libs;
     this._extraLibs = createData.extraLibs;
     this._inlayHintsOptions = createData.inlayHintsOptions;
@@ -217,7 +218,7 @@ export class TypeScriptWorker implements ts.LanguageServiceHost {
       literal,
     ): ts.ResolvedModuleWithFailedLookupLocations["resolvedModule"] => {
       let moduleName = literal.text;
-      if (!this._blankImportMap) {
+      if (!this._isBlankImportMap) {
         const resolved = resolve(this._importMap, moduleName, containingFile);
         moduleName = resolved.href;
       }
@@ -376,12 +377,34 @@ export class TypeScriptWorker implements ts.LanguageServiceHost {
         allowRenameOfImportPath: true,
       },
     );
+    // filter repeated auto-import suggestions from a types module
     if (completions) {
-      // filter auto-import suggestions from a types module
-      completions.entries = completions.entries.filter(({ data }) =>
-        !data || !TypeScriptWorker.isDts(data.fileName) ||
-        !data.fileName.toLocaleLowerCase().startsWith(data.moduleSpecifier)
-      );
+      const autoImports = new Set<string>();
+      completions.entries = completions.entries.filter((entry) => {
+        const { data } = entry;
+        if (
+          !data ||
+          !TypeScriptWorker.isDts(data.fileName)
+        ) {
+          return true;
+        }
+        if (
+          data.moduleSpecifier in this._importMap.imports ||
+          this._dtsMap.has(data.moduleSpecifier)
+        ) {
+          autoImports.add(data.exportName + " " + data.moduleSpecifier);
+          return true;
+        }
+        const specifier = this._getSpecifierFromDts(data.fileName);
+        if (
+          specifier &&
+          !autoImports.has(data.exportName + " " + specifier)
+        ) {
+          autoImports.add(data.exportName + " " + specifier);
+          return true;
+        }
+        return false;
+      });
     }
     return completions;
   }
@@ -393,7 +416,7 @@ export class TypeScriptWorker implements ts.LanguageServiceHost {
     data?: ts.CompletionEntryData,
   ): Promise<ts.CompletionEntryDetails | undefined> {
     try {
-      return this._languageService.getCompletionEntryDetails(
+      const detail = this._languageService.getCompletionEntryDetails(
         fileName,
         position,
         entryName,
@@ -402,9 +425,30 @@ export class TypeScriptWorker implements ts.LanguageServiceHost {
           semicolons: ts.SemicolonPreference.Insert,
         },
         undefined,
-        { includeCompletionsForModuleExports: true },
+        undefined,
         data,
       );
+      // fix the url of auto import suggestions from a types module
+      detail?.codeActions?.forEach((action) => {
+        if (action.description.startsWith("Add import from ")) {
+          const specifier = action.description.slice(17, -1);
+          const newSpecifier = this._getSpecifierFromDts(
+            TypeScriptWorker.isDts(specifier) ? specifier : specifier + ".d.ts",
+          );
+          if (newSpecifier) {
+            action.description = `Add type import from "${newSpecifier}"`;
+            action.changes.forEach((change) => {
+              change.textChanges.forEach((textChange) => {
+                textChange.newText = textChange.newText.replace(
+                  specifier,
+                  newSpecifier,
+                );
+              });
+            });
+          }
+        }
+      });
+      return detail;
     } catch (error) {
       return;
     }
@@ -667,8 +711,8 @@ export class TypeScriptWorker implements ts.LanguageServiceHost {
     }
     if (importMap) {
       this._importMap = importMap;
-      this._blankImportMap = isBlank(importMap);
       this._importMapVersion++;
+      this._isBlankImportMap = isBlank(importMap);
     }
     if (extraLibs) {
       this._extraLibs = extraLibs;
@@ -786,6 +830,21 @@ export class TypeScriptWorker implements ts.LanguageServiceHost {
       }
     }
     return null;
+  }
+
+  private _getSpecifierFromDts(filename: string): string | void {
+    for (const [specifier, dts] of this._dtsMap) {
+      if (filename === dts) {
+        if (!this._isBlankImportMap) {
+          for (const [key, value] of Object.entries(this._importMap.imports)) {
+            if (value === specifier && key !== "@jsxImportSource") {
+              return key;
+            }
+          }
+        }
+        return specifier;
+      }
+    }
   }
 }
 

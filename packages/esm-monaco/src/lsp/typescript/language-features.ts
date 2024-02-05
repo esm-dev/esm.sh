@@ -1,5 +1,6 @@
 /*---------------------------------------------------------------------------------------------
  *  Copyright (c) Microsoft Corporation. All rights reserved.
+ *  Copyright (c) X. <i@jex.me>
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
@@ -25,25 +26,22 @@ import type {
 } from "./worker";
 
 let M = {} as unknown as typeof import("monaco-editor-core");
-let outlineTypeTable: {
-  [kind: string]: languages.SymbolKind;
-} = Object.create(null);
 export function preclude(monaco: typeof M) {
-  const languages = monaco.languages;
-  outlineTypeTable[Kind.module] = languages.SymbolKind.Module;
-  outlineTypeTable[Kind.class] = languages.SymbolKind.Class;
-  outlineTypeTable[Kind.enum] = languages.SymbolKind.Enum;
-  outlineTypeTable[Kind.interface] = languages.SymbolKind.Interface;
-  outlineTypeTable[Kind.memberFunction] = languages.SymbolKind.Method;
-  outlineTypeTable[Kind.memberVariable] = languages.SymbolKind.Property;
-  outlineTypeTable[Kind.memberGetAccessor] = languages.SymbolKind.Property;
-  outlineTypeTable[Kind.memberSetAccessor] = languages.SymbolKind.Property;
-  outlineTypeTable[Kind.variable] = languages.SymbolKind.Variable;
-  outlineTypeTable[Kind.const] = languages.SymbolKind.Variable;
-  outlineTypeTable[Kind.localVariable] = languages.SymbolKind.Variable;
-  outlineTypeTable[Kind.variable] = languages.SymbolKind.Variable;
-  outlineTypeTable[Kind.function] = languages.SymbolKind.Function;
-  outlineTypeTable[Kind.localFunction] = languages.SymbolKind.Function;
+  const { SymbolKind } = monaco.languages;
+  outlineTypeTable[Kind.module] = SymbolKind.Module;
+  outlineTypeTable[Kind.class] = SymbolKind.Class;
+  outlineTypeTable[Kind.enum] = SymbolKind.Enum;
+  outlineTypeTable[Kind.interface] = SymbolKind.Interface;
+  outlineTypeTable[Kind.memberFunction] = SymbolKind.Method;
+  outlineTypeTable[Kind.memberVariable] = SymbolKind.Property;
+  outlineTypeTable[Kind.memberGetAccessor] = SymbolKind.Property;
+  outlineTypeTable[Kind.memberSetAccessor] = SymbolKind.Property;
+  outlineTypeTable[Kind.variable] = SymbolKind.Variable;
+  outlineTypeTable[Kind.const] = SymbolKind.Variable;
+  outlineTypeTable[Kind.localVariable] = SymbolKind.Variable;
+  outlineTypeTable[Kind.variable] = SymbolKind.Variable;
+  outlineTypeTable[Kind.function] = SymbolKind.Function;
+  outlineTypeTable[Kind.localFunction] = SymbolKind.Function;
   M = monaco;
 }
 
@@ -982,6 +980,8 @@ export class ReferenceAdapter extends Adapter
 }
 
 // --- outline ------
+
+const outlineTypeTable: { [kind: string]: languages.SymbolKind } = {};
 
 export class OutlineAdapter extends Adapter
   implements languages.DocumentSymbolProvider {
