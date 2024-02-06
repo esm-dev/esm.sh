@@ -11,7 +11,7 @@ const tmGrammars: { name: string; aliases?: string[] }[] = TM_GRAMMARS;
 // @ts-expect-error `TM_THEMES` is defined at build time
 const tmThemes: Set<string> = new Set(TM_THEMES);
 
-export const tmGrammerRegistry = new Set(tmGrammars.map((l) => l.name));
+export const grammarRegistry = new Set(tmGrammars.map((l) => l.name));
 export const loadedGrammars = new Set<string>();
 
 export interface ShikiInitOptions {
@@ -28,15 +28,16 @@ export async function initShiki({
   const langs: LanguageInput = [];
   const themes: ThemeInput[] = [];
 
-  if (preloadGrammars) {
+  if (preloadGrammars.length > 0) {
     langs.push(
       ...await Promise.all(
-        tmGrammars.filter((g) =>
-          preloadGrammars.includes(g.name) ||
-          g.aliases?.some((a) => preloadGrammars.includes(a))
-        ).map((g) => {
-          loadedGrammars.add(g.name);
-          return loadTMGrammer(g.name);
+        preloadGrammars.map((src) =>
+          src.startsWith("https://")
+            ? { name: src }
+            : tmGrammars.find((g) => g.name === src || g.aliases?.includes(src))
+        ).filter(Boolean).map(({ name }) => {
+          loadedGrammars.add(name);
+          return loadTMGrammer(name);
         }),
       ),
     );
@@ -46,9 +47,9 @@ export async function initShiki({
     for (const lang of customGrammars) {
       if (
         typeof lang === "object" && lang !== null && lang.name &&
-        !tmGrammerRegistry.has(lang.name)
+        !grammarRegistry.has(lang.name)
       ) {
-        tmGrammerRegistry.add(lang.name);
+        grammarRegistry.add(lang.name);
         loadedGrammars.add(lang.name);
         langs.push(lang as LanguageRegistration);
       }
@@ -56,14 +57,14 @@ export async function initShiki({
   }
 
   if (typeof theme === "string") {
-    if (tmThemes.has(theme)) {
+    if (tmThemes.has(theme) || theme.startsWith("https://")) {
       themes.push(loadTMTheme(theme));
     }
   } else if (typeof theme === "object" && theme !== null && theme.name) {
     themes.push(theme);
   }
 
-  return getHighlighterCore({ themes, langs, loadWasm });
+  return getHighlighterCore({ langs, themes, loadWasm });
 }
 
 export function getLanguageIdFromPath(path: string) {
@@ -79,16 +80,21 @@ export function getLanguageIdFromPath(path: string) {
   }
 }
 
-export function loadTMTheme(theme: string) {
-  return vfetch(
-    `https://esm.sh/tm-themes@${tmThemesVersion}/themes/${theme}.json`,
-  ).then((res) => res.json());
+export function loadTMTheme(src: string) {
+  const url = tmThemes.has(src)
+    ? `https://esm.sh/tm-themes@${tmThemesVersion}/themes/${src}.json`
+    : src;
+  return vfetch(url).then((res) => res.json());
 }
 
-export function loadTMGrammer(id: string) {
-  return vfetch(
-    `https://esm.sh/tm-grammars@${tmGrammersVersion}/grammars/${id}.json`,
-  ).then((res) => res.json());
+export function loadTMGrammer(src: string) {
+  const grammar = tmGrammars.find((g) =>
+    g.name === src || g.aliases?.includes(src)
+  );
+  const url = grammar
+    ? `https://esm.sh/tm-grammars@${tmGrammersVersion}/grammars/${grammar.name}.json`
+    : src;
+  return vfetch(url).then((res) => res.json());
 }
 
 export { tmGrammars, tmThemes };
