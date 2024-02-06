@@ -6,11 +6,13 @@ const DEFAULT_MAC_FONT_FAMILY = "Menlo, Monaco, 'Courier New', monospace";
 const DEFAULT_LINUX_FONT_FAMILY = "'Droid Sans Mono', 'monospace', monospace";
 const LINE_NUMBERS_COLOR = "rgba(222, 220, 213, 0.31)";
 const MINIMUM_LINE_HEIGHT = 8;
+const MINIMUM_MAX_DIGIT_WIDTH = 5;
 
 export interface RenderOptions
   extends editor.IStandaloneEditorConstructionOptions {
   lang: string;
   code: string;
+  filename?: string;
   theme?: string;
   userAgent?: string;
   fontMaxDigitWidth?: number;
@@ -20,6 +22,20 @@ export function render(
   highlighter: HighlighterCore,
   options: RenderOptions,
 ): string {
+  // non-browser environment
+  if (!globalThis.document?.createElement) {
+    if (!options.userAgent) {
+      throw new Error(
+        "`userAgent` option is required in non-browser environment",
+      );
+    }
+    if (!options.fontMaxDigitWidth) {
+      throw new Error(
+        "`fontMaxDigitWidth` option is required in non-browser environment",
+      );
+    }
+  }
+
   const userAgent = options.userAgent ?? globalThis.navigator?.userAgent ?? "";
   const isMacintosh = userAgent.includes("Macintosh");
   const isLinux = userAgent.includes("Linux");
@@ -49,25 +65,20 @@ export function render(
     fontMaxDigitWidth,
   } = options;
 
-  if (!fontMaxDigitWidth && !globalThis.document) {
-    throw new Error(
-      "`fontMaxDigitWidth` option is required in non-browser environment",
-    );
-  }
-
   let computedlineHeight = lineHeight || fontSize * GOLDEN_LINE_HEIGHT_RATIO;
   if (computedlineHeight < MINIMUM_LINE_HEIGHT) {
     computedlineHeight = computedlineHeight * fontSize;
   }
 
-  const maxDigitWidth = fontMaxDigitWidth ?? getMaxDigitWidth(
-    [fontWeight, fontSize + "px", fontFamily].join(" "),
-  );
-
   const lines = countLines(code);
   const lineNumbers = Array.from(
     { length: lines },
     (_, i) => `<code>${i + 1}</code>`,
+  );
+  const maxDigitWidth = Math.max(
+    fontMaxDigitWidth ??
+      getMaxDigitWidth([fontWeight, fontSize + "px", fontFamily].join(" ")),
+    MINIMUM_MAX_DIGIT_WIDTH,
   );
   const lineNumbersWidth = Math.round(
     Math.max(lineNumbersMinChars, String(lines).length) * maxDigitWidth,

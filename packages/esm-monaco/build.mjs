@@ -60,9 +60,16 @@ const bundleTypescriptLibs = async () => {
     "utf-8",
   );
 };
-const bundleEditorCSS = async () => {
+const modifyEditorJs = async () => {
   const css = await readFile("dist/editor.css", "utf-8");
-  const js = await readFile("dist/editor.js", "utf-8");
+  const js = (await readFile("dist/editor.js", "utf-8"))
+    // patch: try to get the `fontMaxDigitWidth` value from the `extraEditorClassName` option
+    // the option `fontMaxDigitWidth` uaually is set with SSR mode to keep the line numbers
+    // layout consistent with the client side.
+    .replace(
+      "* maxDigitWidth)",
+      "* (Number(options2.get(140).match(/font-max-digit-width-([\\d\\_]+)/)?.[1].replace('_','.')) || maxDigitWidth))",
+    );
   await writeFile(
     "dist/editor.js",
     "export const _CSS = " + JSON.stringify(css) + "\n" + js,
@@ -94,4 +101,4 @@ await build([
   "src/lsp/typescript/worker.ts",
 ]);
 await build(["src/index.ts"], ["*/editor.js"], tmDefine);
-await bundleEditorCSS();
+await modifyEditorJs();

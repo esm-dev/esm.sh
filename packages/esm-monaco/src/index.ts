@@ -3,7 +3,7 @@ import type { HighlighterCore } from "@shikijs/core";
 import { shikiToMonaco } from "@shikijs/monaco";
 import type { ShikiInitOptions } from "./shiki";
 import { getLanguageIdFromPath, initShiki } from "./shiki";
-import { loadedGrammars, loadTMGrammer, tmGrammerRegistry } from "./shiki";
+import { grammarRegistry, loadedGrammars, loadTMGrammer } from "./shiki";
 import { render, type RenderOptions } from "./render.js";
 import { VFS } from "./vfs";
 import lspIndex from "./lsp/index";
@@ -47,10 +47,6 @@ async function loadEditor(highlighter: HighlighterCore, vfs?: VFS) {
   const monaco = await import("./editor.js");
   const editorWorkerUrl = monaco.workerUrl();
 
-  if (vfs) {
-    vfs.bindMonaco(monaco);
-  }
-
   Reflect.set(globalThis, "MonacoEnvironment", {
     getWorker: async (_workerId: string, label: string) => {
       let url = editorWorkerUrl;
@@ -84,7 +80,11 @@ async function loadEditor(highlighter: HighlighterCore, vfs?: VFS) {
     document.head.appendChild(styleEl);
   }
 
-  for (const id of tmGrammerRegistry) {
+  if (vfs) {
+    vfs.bindMonaco(monaco);
+  }
+
+  for (const id of grammarRegistry) {
     monaco.languages.register({ id });
     monaco.languages.onLanguage(id, () => {
       if (!loadedGrammars.has(id)) {
@@ -92,7 +92,6 @@ async function loadEditor(highlighter: HighlighterCore, vfs?: VFS) {
         highlighter.loadLanguage(loadTMGrammer(id)).then(() => {
           // activate the highlighter for the language
           shikiToMonaco(highlighter, monaco);
-          console.log(`[monaco-shiki] grammar "${id}" loaded.`);
         });
       }
       let lsp = lspIndex[id];
@@ -139,7 +138,7 @@ export function init(options: InitOption = {}) {
   return loading;
 }
 
-export function lazyMode(options: InitOption & { ssr?: boolean } = {}) {
+export function lazyMode(options: InitOption = {}) {
   customElements.define(
     "monaco-editor",
     class extends HTMLElement {
@@ -149,9 +148,18 @@ export function lazyMode(options: InitOption & { ssr?: boolean } = {}) {
         return this.#editor;
       }
 
+      constructor() {
+        super();
+
+        this.style.display = "block";
+        this.style.position = "relative";
+      }
+
       async connectedCallback() {
-        const createOptions:
-          monacoNS.editor.IStandaloneEditorConstructionOptions = {};
+        const vfs = options.vfs;
+        const renderOptions: Partial<RenderOptions> = {};
+
+        // check editor/render options from attributes
         for (const attrName of this.getAttributeNames()) {
           const key = editorOptionKeys.find((k) =>
             k.toLowerCase() === attrName
@@ -170,72 +178,120 @@ export function lazyMode(options: InitOption & { ssr?: boolean } = {}) {
             if (key === "padding" && typeof value === "number") {
               value = { top: value, bottom: value };
             }
-            createOptions[key] = value;
+            renderOptions[key] = value;
           }
         }
-        const width = parseInt(this.getAttribute("width"));
-        const height = parseInt(this.getAttribute("height"));
+
+        // check editor options from the first script child
+        const optionsScript = this.children[0] as HTMLScriptElement;
+        if (
+          optionsScript &&
+          optionsScript.tagName === "SCRIPT" &&
+          optionsScript.type === "application/json"
+        ) {
+          const options = JSON.parse(optionsScript.textContent);
+          if (options.fontMaxDigitWidth) {
+            options.extraEditorClassName = [
+              options.extraEditorClassName,
+              "font-max-digit-width-" +
+              options.fontMaxDigitWidth.toString().replace(".", "_"),
+            ].filter(Boolean).join(" ");
+          }
+          Object.assign(renderOptions, options);
+          optionsScript.remove();
+        }
+
+        // set dimension from width and height attributes
+        const width = Number(this.getAttribute("width"));
+        const height = Number(this.getAttribute("height"));
         if (width > 0 && height > 0) {
           this.style.width = `${width}px`;
           this.style.height = `${height}px`;
-          createOptions.dimension = { width, height };
+          renderOptions.dimension = { width, height };
         }
-        this.style.position = "relative";
-        this.style.display = "block";
 
+        // the container element for monaco editor instance
         const containerEl = document.createElement("div");
         containerEl.className = "monaco-editor-container";
         containerEl.style.width = "100%";
         containerEl.style.height = "100%";
-        this.appendChild(containerEl);
+        this.insertBefore(containerEl, this.firstChild);
 
-        let placeHolderEl: HTMLElement | null = null;
-        if (options.ssr) {
-          placeHolderEl = this.querySelector(".monaco-editor-container");
-          this.appendChild(placeHolderEl); // move to the end
-        } else {
-          placeHolderEl = containerEl.cloneNode(true) as HTMLElement;
-          placeHolderEl.style.position = "absolute";
-          placeHolderEl.style.top = "0";
-          placeHolderEl.style.left = "0";
-          this.appendChild(placeHolderEl);
-        }
-
-        const file = this.getAttribute("file");
+        // crreate a highlighter instance for the renderer/editor
         const preloadGrammars = options.preloadGrammars ?? [];
-        if (file) {
-          preloadGrammars.push(getLanguageIdFromPath(file));
-        }
-        const highlighter = await initShiki({ ...options, preloadGrammars });
-        const vfs = options.vfs;
-        if (vfs && file && !options.ssr) {
-          placeHolderEl.innerHTML = render(
-            highlighter,
-            {
-              code: await vfs.readTextFile(file),
-              lang: getLanguageIdFromPath(file),
-              ...createOptions,
-            },
+        const file = renderOptions.filename ?? this.getAttribute("file");
+        if (renderOptions.lang || file) {
+          preloadGrammars.push(
+            renderOptions.lang ?? getLanguageIdFromPath(file),
           );
         }
-        if (placeHolderEl) {
-          placeHolderEl.style.opacity = "1";
-          placeHolderEl.style.transition = "opacity 0.3s";
+        const highlighter = await initShiki({ ...options, preloadGrammars });
+
+        // check the pre-rendered content, if not exists, render one
+        let preRenderEl = this.querySelector<HTMLElement>(
+          ".monaco-editor-prerender",
+        );
+        if (
+          !preRenderEl &&
+          ((file && vfs) || (renderOptions.code && renderOptions.lang))
+        ) {
+          let code = renderOptions.code;
+          let lang = renderOptions.lang;
+          if (vfs && file) {
+            code = await vfs.readTextFile(file);
+            lang = getLanguageIdFromPath(file);
+          }
+          preRenderEl = containerEl.cloneNode(true) as HTMLElement;
+          preRenderEl.className = "monaco-editor-prerender";
+          preRenderEl.style.position = "absolute";
+          preRenderEl.style.top = "0";
+          preRenderEl.style.left = "0";
+          preRenderEl.innerHTML = render(highlighter, {
+            ...renderOptions,
+            lang,
+            code,
+          });
+          this.appendChild(preRenderEl);
         }
+
+        // add a transition effect to hide the pre-rendered content
+        if (preRenderEl) {
+          preRenderEl.style.opacity = "1";
+          preRenderEl.style.transition = "opacity 0.3s";
+        }
+
+        // load monaco editor
         loadEditor(highlighter, vfs).then(async (monaco) => {
-          this.#editor = monaco.editor.create(containerEl, createOptions);
-          const file = this.getAttribute("file");
-          if (file && vfs) {
+          this.#editor = monaco.editor.create(containerEl, renderOptions);
+          if (vfs && file) {
             const model = await vfs.openModel(file);
-            this.#editor.setModel(model);
-            if (placeHolderEl) {
-              setTimeout(() => {
-                placeHolderEl.style.opacity = "0";
-                setTimeout(() => {
-                  placeHolderEl.remove();
-                }, 300);
-              }, 500);
+            if (
+              renderOptions.filename === file &&
+              renderOptions.code &&
+              renderOptions.code !== model.getValue()
+            ) {
+              // update the model value with the code from SSR
+              model.setValue(renderOptions.code);
             }
+            this.#editor.setModel(model);
+          } else if ((renderOptions.code && renderOptions.lang)) {
+            const model = monaco.editor.createModel(
+              renderOptions.code,
+              renderOptions.lang,
+              // @ts-expect-error the overwrited `createModel` method supports
+              // path as the third argument(URI)
+              renderOptions.filename,
+            );
+            this.#editor.setModel(model);
+          }
+          // hide the prerender element if exists
+          if (preRenderEl) {
+            setTimeout(() => {
+              preRenderEl.style.opacity = "0";
+              setTimeout(() => {
+                preRenderEl.remove();
+              }, 300);
+            }, 500);
           }
         });
       }
@@ -243,37 +299,24 @@ export function lazyMode(options: InitOption & { ssr?: boolean } = {}) {
   );
 }
 
-export async function renderToString(
-  options: RenderOptions & { filename?: string; theme?: string },
-) {
-  const attrs = [];
-  if (options.filename) {
-    attrs.push(`file="${options.filename}"`);
-    if (!options.lang) {
-      options.lang = getLanguageIdFromPath(options.filename);
-    }
+export async function renderToString(options: RenderOptions) {
+  if (options.filename && !options.lang) {
+    options.lang = getLanguageIdFromPath(options.filename);
   }
   const highlighter = await (ssrHighlighter ?? (ssrHighlighter = initShiki({
-    preloadGrammars: [options.lang],
     theme: options.theme,
+    preloadGrammars: [options.lang],
   })));
   if (!loadedGrammars.has(options.lang)) {
-    highlighter.loadLanguage(loadTMGrammer(options.lang));
-  }
-  for (const key of Object.keys(options)) {
-    if (editorOptionKeys.includes(key)) {
-      let value = options[key];
-      if (value !== undefined && value !== null) {
-        if (typeof value !== "string") {
-          value = JSON.stringify(value);
-        }
-        attrs.push(`${key}='${value}'`);
-      }
-    }
+    loadedGrammars.add(options.lang);
+    await highlighter.loadLanguage(loadTMGrammer(options.lang));
   }
   return [
-    `<monaco-editor ${attrs.join(" ")}>`,
-    `<div class="monaco-editor-container" style="width: 100%; height: 100%; position: absolute; top: 0px; left: 0px;">`,
+    `<monaco-editor>`,
+    `<script type="application/json" class="monaco-editor-options">${
+      JSON.stringify(options)
+    }</script>`,
+    `<div class="monaco-editor-prerender" style="width:100%;height:100%;position:absolute;top:0px;left:0px">`,
     render(highlighter, options),
     `</div>`,
     `</monaco-editor>`,
