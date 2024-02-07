@@ -14,6 +14,7 @@ const editorOptionKeys = [
   "contextmenu",
   "cursorBlinking",
   "detectIndentation",
+  "extraEditorClassName",
   "fontFamily",
   "fontLigatures",
   "fontSize",
@@ -127,7 +128,7 @@ export function init(options: InitOption = {}) {
           }
           options.preloadGrammars = preloadGrammars;
         } catch {
-          // ignore vsf error
+          // ignore vfs error
         }
       }
     };
@@ -143,6 +144,7 @@ export function lazyMode(options: InitOption = {}) {
     "monaco-editor",
     class extends HTMLElement {
       #editor: monacoNS.editor.IStandaloneCodeEditor;
+      #vfs?: VFS;
 
       get editor() {
         return this.#editor;
@@ -150,13 +152,12 @@ export function lazyMode(options: InitOption = {}) {
 
       constructor() {
         super();
-
         this.style.display = "block";
         this.style.position = "relative";
+        this.#vfs = options.vfs;
       }
 
       async connectedCallback() {
-        const vfs = options.vfs;
         const renderOptions: Partial<RenderOptions> = {};
 
         // check editor/render options from attributes
@@ -183,13 +184,16 @@ export function lazyMode(options: InitOption = {}) {
         }
 
         // check editor options from the first script child
-        const optionsScript = this.children[0] as HTMLScriptElement;
+        const optionsScript = this.children[0] as HTMLScriptElement | null;
         if (
           optionsScript &&
           optionsScript.tagName === "SCRIPT" &&
           optionsScript.type === "application/json"
         ) {
           const options = JSON.parse(optionsScript.textContent);
+          // we pass the `fontMaxDigitWidth` option to the editor as a
+          // custom class name. this is used for keeping the line numbers
+          // layout consistent between the SSR render and the client pre-render.
           if (options.fontMaxDigitWidth) {
             options.extraEditorClassName = [
               options.extraEditorClassName,
@@ -226,6 +230,7 @@ export function lazyMode(options: InitOption = {}) {
           );
         }
         const highlighter = await initShiki({ ...options, preloadGrammars });
+        const vfs = this.#vfs;
 
         // check the pre-rendered content, if not exists, render one
         let preRenderEl = this.querySelector<HTMLElement>(
