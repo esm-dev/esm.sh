@@ -5,69 +5,30 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>ESM&gt;Monaco</title>
+  <link rel="modulepreload" href="/vfs.js">
   <style>
     html,
     body {
       margin: 0;
       padding: 0;
       height: 100vh;
+      overflow: hidden;
     }
 
-    body {
-      display: flex;
-      background-color: #111;
-    }
-
-    iframe {
-      box-sizing: border-box;
-      width: 33.33%;
+    monaco-editor {
+      width: 100%;
       height: 100%;
-      border: none;
-    }
-
-    iframe+iframe {
-      border-left: 1px solid #333;
-    }
-
-    lable {
-      position: fixed;
-      bottom: 30px;
-      background-color: #232323;
-      color: rgba(255, 255, 255, 0.9);
-      padding: 8px 12px 10px 12px;
-      border-radius: 8px;
-      border: 1px #454545 solid;
-      font-size: 16px;
-      font-weight: 500;
-      font-family: inter;
-      line-height: 1;
-    }
-
-    lable span {
-      opacity: 0.5;
-    }
-
-    #lazy-ssr {
-      left: 30px;
-    }
-
-    #lazy {
-      left: calc(33% + 30px);
-    }
-
-    #manual {
-      left: calc(66% + 30px);
     }
   </style>
 </head>
 
 <body>
-  <iframe src="./lazy-ssr.html"></iframe>
-  <iframe src="./lazy.html"></iframe>
-  <iframe src="./manual.html"></iframe>
-  <lable id="lazy-ssr">Lazy Mode(SSR) <span></span></lable>
-  <lable id="lazy">Lazy Mode <span></span></lable>
-  <lable id="manual">Manual Mode <span></span></lable>
+  <monaco-editor file="App.tsx" padding="8"></monaco-editor>
+  <script type="module">
+    import { lazyMode } from '/index.js';
+    import { vfs } from '/vfs.js';
+    lazyMode({ vfs });
+  </script>
 </body>
 
 </html>
