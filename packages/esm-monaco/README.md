@@ -1,3 +1,0 @@
-# esm-monaco
-
-Working in progress...
