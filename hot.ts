@@ -131,26 +131,21 @@ class Hot implements HotCore {
       type: "module",
       updateViaCache: this.#isDev ? undefined : "all",
     });
-    const skipWaiting = () => reg.waiting?.postMessage(kSkipWaiting);
 
     // detect Service Worker update available and wait for it to become installed
-    let refreshing = false;
+    let isFirstInstall = false;
     reg.onupdatefound = () => {
       const { installing } = reg;
       if (installing) {
         installing.onstatechange = () => {
           const { waiting } = reg;
           if (waiting) {
-            // if there's an existing controller (previous Service Worker)
-            if (sw.controller) {
-              // todo: support custom prompt user interface to refresh the page
-              skipWaiting();
-            } else {
-              // otherwise it's the first install
-              skipWaiting();
+            waiting.postMessage(kSkipWaiting);
+            if (!sw.controller) {
+              // it's first install
               waiting.onstatechange = () => {
-                if (reg.active && !refreshing) {
-                  refreshing = true;
+                if (reg.active) {
+                  isFirstInstall = true;
                   this.#fireApp(reg.active);
                 }
               };
@@ -162,11 +157,11 @@ class Hot implements HotCore {
 
     // detect controller change and refresh the page
     sw.oncontrollerchange, () => {
-      !refreshing && loc.reload();
+      !isFirstInstall && loc.reload();
     };
 
     // if there's a waiting, send skip waiting message
-    skipWaiting();
+    reg.waiting?.postMessage(kSkipWaiting)
 
     // fire immediately if there's an active Service Worker
     if (reg.active) {
