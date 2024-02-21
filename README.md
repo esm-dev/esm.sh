@@ -21,23 +21,8 @@ from a URL:
 import Module from "https://esm.sh/PKG@SEMVER[/PATH]";
 ```
 
-or build a module with custom input(code):
-
-```js
-import { esm } from "https://esm.sh/build";
-
-const { render } = await esm`
-  /* @jsx h */
-  import { h } from "npm:preact@10.13.2";
-  import { renderToString } from "npm:preact-render-to-string@6.0.2";
-  export const render () => renderToString(<h1>Hello world!</h1>);
-`;
-console.log(render()); // "<h1>Hello world!</h1>"
-```
-
-> More usage check out [here](#building-module-with-custom-inputcode).
-
-You may want to use _**bare specifier**_ instead of URL with [import maps](https://github.com/WICG/import-maps):
+or use _**bare specifier**_ instead of URL with
+[import maps](https://github.com/WICG/import-maps):
 
 ```html
 <script type="importmap">
@@ -52,6 +37,8 @@ You may want to use _**bare specifier**_ instead of URL with [import maps](https
 </script>
 ```
 
+> More details check out [here](#using-import-maps).
+
 ### Importing from NPM
 
 ```js
@@ -63,8 +50,8 @@ You may also use a [semver](https://docs.npmjs.com/cli/v6/using-npm/semver) or a
 fixed version number, or omit the version/tag entirely to use the `latest` tag:
 
 ```js
-import React from "https://esm.sh/react";        // 18.2.0 (latest)
-import React from "https://esm.sh/react@^17";    // 17.0.2
+import React from "https://esm.sh/react"; // 18.2.0 (latest)
+import React from "https://esm.sh/react@^17"; // 17.0.2
 import React from "https://esm.sh/react@canary"; // 18.3.0-canary-e1ad4aa36-20230601
 ```
 
@@ -116,8 +103,7 @@ in combination with `?deps`:
 import useSWR from "https://esm.sh/swr?alias=react:preact/compat&deps=preact@10.5.14";
 ```
 
-The original idea came from
-[@lucacasonato](https://github.com/lucacasonato).
+The original idea came from [@lucacasonato](https://github.com/lucacasonato).
 
 ### Tree Shaking
 
@@ -136,7 +122,8 @@ ESM modules and not CJS modules.
 
 ### Bundling Strategy
 
-By default, esm.sh bundles sub-modules that ain't declared in the `exports` field.
+By default, esm.sh bundles sub-modules that ain't declared in the `exports`
+field.
 
 Bundling deps can reduce the number of network requests and improve performance.
 However, it may bundle shared code repeatedly. In extreme case, it may break the
@@ -147,20 +134,20 @@ this, you can add `?bundless` to disable the default bundling behavior:
 import "https://esm.sh/@pyscript/core?bundless";
 ```
 
-For package authors, you can specify the bundling strategy by adding the `esm.sh`
-field to `package.json`:
+For package authors, you can specify the bundling strategy by adding the
+`esm.sh` field to `package.json`:
 
 ```jsonc
 {
   "name": "foo",
   "esm.sh": {
-    "bundle": false, // disables bundling behavior
+    "bundle": false // disables bundling behavior
   }
 }
 ```
 
-esm.sh supports `?standalone` query to bundle all dependencies(except deps in `peerDependencies`)
-into a single JS file.
+esm.sh supports `?standalone` query to bundle all dependencies(except deps in
+`peerDependencies`) into a single JS file.
 
 ```js
 import { Button } from "https://esm.sh/antd?standalone";
@@ -300,20 +287,21 @@ package version.
 ### Escape Hatch: Raw Source Files
 
 In rare cases, you may want to request JS source files from packages, as-is,
-without transformation into ES modules. To do so, you need to add a `?raw`
-query to the request URL.
+without transformation into ES modules. To do so, you need to add a `?raw` query
+to the request URL.
 
-For example, you might need to register a package's source script as a service worker
-in a browser that [does not yet support](https://caniuse.com/mdn-api_serviceworker_ecmascript_modules)
+For example, you might need to register a package's source script as a service
+worker in a browser that
+[does not yet support](https://caniuse.com/mdn-api_serviceworker_ecmascript_modules)
 the `type: "module"` option:
 
 ```js
 await navigator.serviceWorker.register(
   new URL(
     "https://esm.sh/playground-elements/playground-service-worker.js?raw",
-    import.meta.url.href
+    import.meta.url.href,
   ),
-  { scope: '/' }
+  { scope: "/" },
 );
 ```
 
