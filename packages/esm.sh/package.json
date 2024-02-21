@@ -9,29 +9,18 @@
   "bin": "./bin/cli.mjs",
   "exports": {
     ".": {
-      "deno": "./deno.mjs",
-      "node": "./node.mjs",
       "import": "./src/index.mjs",
       "types": "./types/index.d.ts"
     },
     "./package.json": "./package.json"
   },
-  "sideEffects": [
-    "./src/html-rewriter.mjs",
-    "./deno.mjs",
-    "./node.mjs"
-  ],
   "scripts": {
     "start": "./bin/cli.mjs"
   },
   "files": [
     "bin/",
     "src/",
-    "templates/",
-    "types/",
-    "vendor/",
-    "deno.mjs",
-    "index.mjs"
+    "types/"
   ],
   "engines": {
     "node": ">=18.14.1"
