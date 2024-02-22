@@ -1,6 +1,8 @@
 package server
 
 import (
+	"crypto/sha1"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -104,10 +106,23 @@ func (task *BuildTask) getBuildVersion(pkg Pkg) string {
 }
 
 func (task *BuildTask) getSavepath() string {
+	id := task.ID()
 	if stableBuild[task.Pkg.Name] {
-		return path.Join(fmt.Sprintf("builds/v%d", STABLE_VERSION), strings.TrimPrefix(task.ID(), "stable/"))
+		id = path.Join(fmt.Sprintf("v%d", STABLE_VERSION), strings.TrimPrefix(id, "stable/"))
 	}
-	return path.Join("builds", task.ID())
+	return normalizeSavePath(path.Join("builds", id))
+}
+
+func normalizeSavePath(pathname string) string {
+	segs := strings.Split(pathname, "/")
+	for i, seg := range segs {
+		if strings.HasPrefix(seg, "X-") && len(seg) > 42 {
+			h := sha1.New()
+			h.Write([]byte(seg))
+			segs[i] = "X-" + hex.EncodeToString(h.Sum(nil))
+		}
+	}
+	return strings.Join(segs, "/")
 }
 
 func (task *BuildTask) getPackageInfo(name string) (pkg Pkg, p NpmPackageInfo, fromPackageJSON bool, err error) {

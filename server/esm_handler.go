@@ -203,7 +203,7 @@ func esmHandler() rex.Handle {
 			pathname = regexpLocPath.ReplaceAllString(pathname, "$1")
 		}
 
-		// serve modules added by the build API
+		// serve modules created by the build API
 		if strings.HasPrefix(pathname, "/+") {
 			hash, ext := utils.SplitByLastByte(pathname[2:], '.')
 			if len(hash) != 40 || ext != "mjs" {
@@ -561,6 +561,10 @@ func esmHandler() rex.Handle {
 			reqPkg.SubModule = utils.CleanPath(v)[1:]
 		}
 
+		// check request file type
+		// - raw: serve raw dist or npm dist files like CSS/map etc..
+		// - builds: serve js files built by esbuild
+		// - types: serve `.d.ts` files
 		var reqType string
 		if reqPkg.SubPath != "" {
 			ext := path.Ext(reqPkg.SubPath)
@@ -672,6 +676,7 @@ func esmHandler() rex.Handle {
 			if reqType == "types" {
 				savePath = path.Join("types", getTypesRoot(cdnOrigin), strings.TrimPrefix(savePath, "types/"))
 			}
+			savePath = normalizeSavePath(savePath)
 			fi, err := fs.Stat(savePath)
 			if err != nil {
 				if err == storage.ErrNotFound && strings.HasSuffix(pathname, ".map") {
@@ -681,7 +686,6 @@ func esmHandler() rex.Handle {
 					return rex.Status(500, err.Error())
 				}
 			}
-
 			if err == nil {
 				r, err := fs.OpenFile(savePath)
 				if err != nil {
@@ -860,8 +864,8 @@ func esmHandler() rex.Handle {
 			}
 		}
 
-		// check if it's build path
-		isBarePath := false
+		// check if it's a build file
+		isBuildFile := false
 		if hasBuildVerPrefix && (endsWith(reqPkg.SubPath, ".mjs", ".js", ".css")) {
 			a := strings.Split(reqPkg.SubModule, "/")
 			if len(a) > 0 {
@@ -873,7 +877,7 @@ func esmHandler() rex.Handle {
 						if submodule == pkgName+".css" {
 							reqPkg.SubModule = ""
 							target = maybeTarget
-							isBarePath = true
+							isBuildFile = true
 						} else {
 							url := fmt.Sprintf("%s%s/%s", cdnOrigin, cfg.CdnBasePath, reqPkg.String())
 							return rex.Redirect(url, http.StatusFound)
@@ -915,7 +919,7 @@ func esmHandler() rex.Handle {
 						}
 						reqPkg.SubModule = submodule
 						target = maybeTarget
-						isBarePath = true
+						isBuildFile = true
 					}
 				}
 			}
@@ -1001,7 +1005,7 @@ func esmHandler() rex.Handle {
 		fallback := false
 
 		if !hasBuild {
-			if !isBarePath && !isPined {
+			if !isBuildFile && !isPined {
 				// find previous build version
 				for i := 0; i < BUILD_VERSION; i++ {
 					id := fmt.Sprintf("v%d/%s", BUILD_VERSION-(i+1), strings.Join(strings.Split(buildId, "/")[1:], "/"))
@@ -1082,7 +1086,7 @@ func esmHandler() rex.Handle {
 			return rex.Redirect(url, code)
 		}
 
-		if isBarePath {
+		if isBuildFile {
 			savePath := task.getSavepath()
 			if strings.HasSuffix(reqPkg.SubPath, ".css") {
 				base, _ := utils.SplitByLastByte(savePath, '.')

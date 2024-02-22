@@ -12,7 +12,7 @@ import (
 type Pkg struct {
 	Name       string `json:"name"`
 	Version    string `json:"version"`
-	SubPath    string `json:"fullsubModule"`
+	SubPath    string `json:"subPath"`
 	SubModule  string `json:"subModule"`
 	FromGithub bool   `json:"fromGithub"`
 	FromEsmsh  bool   `json:"fromEsmsh"`
@@ -98,10 +98,6 @@ func validatePkgPath(pathname string) (pkg Pkg, extraQuery string, err error) {
 		pkg.Version = p.Version
 	}
 	return
-}
-
-func (pkg Pkg) Equels(other Pkg) bool {
-	return pkg.Name == other.Name && pkg.Version == other.Version && pkg.SubModule == other.SubModule
 }
 
 func (pkg Pkg) ImportPath() string {

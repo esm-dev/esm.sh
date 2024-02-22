@@ -81,59 +81,67 @@ func decodeBuildArgsPrefix(raw string) (args BuildArgs, err error) {
 	return
 }
 
-func encodeBuildArgsPrefix(args BuildArgs, pkg Pkg, forTypes bool) string {
+func encodeBuildArgsPrefix(args BuildArgs, pkg Pkg, isDts bool) string {
 	lines := []string{}
-	if !(stableBuild[pkg.Name] && pkg.SubModule == "") {
-		if len(args.alias) > 0 {
+	pkgDeps := newStringSet()
+	if len(args.alias)+len(args.deps)+args.external.Len() > 0 {
+		info, _, err := getPackageInfo("", pkg.Name, pkg.Version)
+		if err == nil {
+			for name := range info.Dependencies {
+				pkgDeps.Add(name)
+			}
+			for name := range info.PeerDependencies {
+				pkgDeps.Add(name)
+			}
+		} else {
+			pkgDeps.Add("_")
+		}
+	}
+	if len(args.alias) > 0 && pkgDeps.Len() > 0 {
+		var ss sort.StringSlice
+		for from, to := range args.alias {
+			if from != pkg.Name {
+				ss = append(ss, fmt.Sprintf("%s:%s", from, to))
+			}
+		}
+		if len(ss) > 0 {
+			ss.Sort()
+			lines = append(lines, fmt.Sprintf("a/%s", strings.Join(ss, ",")))
+		}
+	}
+	if len(args.deps) > 0 && pkgDeps.Len() > 0 {
+		var ss sort.StringSlice
+		for _, p := range args.deps {
+			if p.Name != pkg.Name {
+				ss = append(ss, fmt.Sprintf("%s@%s", p.Name, p.Version))
+			}
+		}
+		if len(ss) > 0 {
+			ss.Sort()
+			lines = append(lines, fmt.Sprintf("d/%s", strings.Join(ss, ",")))
+		}
+	}
+	if args.external.Len() > 0 && pkgDeps.Len() > 0 {
+		var ss sort.StringSlice
+		for _, name := range args.external.Values() {
+			if name != pkg.Name {
+				ss = append(ss, name)
+			}
+		}
+		if len(ss) > 0 {
+			ss.Sort()
+			lines = append(lines, fmt.Sprintf("e/%s", strings.Join(ss, ",")))
+		}
+	}
+	if !isDts {
+		if args.exports.Len() > 0 {
 			var ss sort.StringSlice
-			for name, to := range args.alias {
-				if name != pkg.Name {
-					ss = append(ss, fmt.Sprintf("%s:%s", name, to))
-				}
+			for _, name := range args.exports.Values() {
+				ss = append(ss, name)
 			}
 			if len(ss) > 0 {
 				ss.Sort()
-				lines = append(lines, fmt.Sprintf("a/%s", strings.Join(ss, ",")))
-			}
-		}
-		if len(args.deps) > 0 {
-			var ss sort.StringSlice
-			for _, p := range args.deps {
-				// react-dom always depends the same version of react
-				if pkg.Name == "react-dom" && p.Name == "react" {
-					continue
-				}
-				if p.Name != pkg.Name {
-					ss = append(ss, fmt.Sprintf("%s@%s", p.Name, p.Version))
-				}
-			}
-			if len(ss) > 0 {
-				ss.Sort()
-				lines = append(lines, fmt.Sprintf("d/%s", strings.Join(ss, ",")))
-			}
-		}
-		if args.external.Len() > 0 {
-			var ss sort.StringSlice
-			for _, name := range args.external.Values() {
-				if name != pkg.Name {
-					ss = append(ss, name)
-				}
-			}
-			if len(ss) > 0 {
-				ss.Sort()
-				lines = append(lines, fmt.Sprintf("e/%s", strings.Join(ss, ",")))
-			}
-		}
-		if !forTypes {
-			if args.exports.Len() > 0 {
-				var ss sort.StringSlice
-				for _, name := range args.exports.Values() {
-					ss = append(ss, name)
-				}
-				if len(ss) > 0 {
-					ss.Sort()
-					lines = append(lines, fmt.Sprintf("ts/%s", strings.Join(ss, ",")))
-				}
+				lines = append(lines, fmt.Sprintf("ts/%s", strings.Join(ss, ",")))
 			}
 		}
 	}
@@ -147,7 +155,7 @@ func encodeBuildArgsPrefix(args BuildArgs, pkg Pkg, forTypes bool) string {
 			lines = append(lines, fmt.Sprintf("c/%s", strings.Join(ss, ",")))
 		}
 	}
-	if !forTypes {
+	if !isDts {
 		if args.denoStdVersion != "" && args.denoStdVersion != denoStdVersion {
 			lines = append(lines, fmt.Sprintf("dsv/%s", args.denoStdVersion))
 		}

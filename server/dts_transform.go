@@ -53,7 +53,7 @@ func (task *BuildTask) transformDTS(dts string, aliasDepsPrefix string, marker *
 		pkgNameWithVersion,
 		aliasDepsPrefix,
 	}, strings.Split(subPath, "/")...), "/"))
-	savePath := path.Join("types", getTypesRoot(task.CdnOrigin), dtsPath)
+	savePath := normalizeSavePath(path.Join("types", getTypesRoot(task.CdnOrigin), dtsPath))
 	_, err = fs.Stat(savePath)
 	if err != nil && err != storage.ErrNotFound {
 		return
@@ -100,9 +100,11 @@ func (task *BuildTask) transformDTS(dts string, aliasDepsPrefix string, marker *
 	footer := bytes.NewBuffer(nil)
 	imports := newStringSet()
 	dtsBasePath := fmt.Sprintf("%s%s/v%d", task.CdnOrigin, cfg.CdnBasePath, task.BuildVersion)
+
 	if pkgName == "@types/node" {
 		fmt.Fprintf(buf, "/// <reference path=\"%s/node.ns.d.ts\" />\n", dtsBasePath)
 	}
+
 	err = walkDts(pass1Buf, buf, func(specifier string, kind string, position int) string {
 		// resove `declare module "xxx" {}`
 		if kind == "declareModule" {
