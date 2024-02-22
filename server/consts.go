@@ -9,9 +9,9 @@ const (
 )
 
 const (
-	nodejsMinVersion = 16
-	nodejsLatestLTS  = "18.16.0"
-	nodeTypesVersion = "18.16.19"
+	nodejsMinVersion = 20
+	nodejsLatestLTS  = "20.11.1"
+	nodeTypesVersion = "20.11.20"
 	denoStdVersion   = "0.177.1"
 )
 
