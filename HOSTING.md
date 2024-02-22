@@ -106,12 +106,3 @@ handle and cache esm.sh requests at edge(earth). We open sourced the code, you
 can use it to build your own esm CDN without deploying the server easily.
 
 More details check [esm-worker](./packages/esm-worker/README.md).
-
-## Deploy with Deno
-
-We also provide a server for [Deno](https://deno.land) which is powered by the
-[esm-worker](./packages/esm-worker/README.md).
-
-```bash
-deno run -A https://esm.sh/v135/server --port=8080
-```

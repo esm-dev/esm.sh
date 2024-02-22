@@ -51,7 +51,7 @@ Then you can import `React` from "http://localhost:8080/react"
 ./test/bootstrap.sh --clean
 ```
 
-All the tests are written in [Deno](https://deno.land), you can find them in [test/](./test) directory.
+All the tests are running in [Deno](https://deno.land), you can find them in [test/](./test) directory.
 
 ## Code of Conduct
 
