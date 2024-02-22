@@ -83,18 +83,17 @@ func decodeBuildArgsPrefix(raw string) (args BuildArgs, err error) {
 
 func encodeBuildArgsPrefix(args BuildArgs, pkg Pkg, isDts bool) string {
 	lines := []string{}
-	pkgDeps := newStringSet()
-	if len(args.alias)+len(args.deps)+args.external.Len() > 0 {
+	pkgDeps := newStringSet("_")
+	if len(args.alias)+len(args.deps)+args.external.Len() > 0 && cfg != nil {
 		info, _, err := getPackageInfo("", pkg.Name, pkg.Version)
 		if err == nil {
+			pkgDeps.Reset()
 			for name := range info.Dependencies {
 				pkgDeps.Add(name)
 			}
 			for name := range info.PeerDependencies {
 				pkgDeps.Add(name)
 			}
-		} else {
-			pkgDeps.Add("_")
 		}
 	}
 	if len(args.alias) > 0 && pkgDeps.Len() > 0 {
