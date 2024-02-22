@@ -296,11 +296,9 @@ class ESMWorker {
     }
 
     if (
-      pathname === "/server" ||
       pathname === "/build" ||
       pathname === "/run" ||
-      pathname === "/hot" ||
-      pathname.startsWith("/hot/")
+      pathname === "/hot"
     ) {
       if (!hasBuildVerPrefix && !hasBuildVerQuery) {
         return redirect(

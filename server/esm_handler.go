@@ -321,34 +321,6 @@ func esmHandler() rex.Handle {
 			return data
 		}
 
-		// serve server script
-		if pathname == "/server" {
-			if !hasBuildVerPrefix && !hasPinedVerParam {
-				url := fmt.Sprintf("%s%s/v%d/server", cdnOrigin, cfg.CdnBasePath, BUILD_VERSION)
-				return rex.Redirect(url, http.StatusFound)
-			}
-			var data []byte
-			var err error
-			cType := "application/javascript; charset=utf-8"
-			if strings.HasPrefix(userAgent, "Deno/") {
-				data, err = embedFS.ReadFile("server/embed/server.deno.ts")
-				if err != nil {
-					return err
-				}
-				cType = "application/typescript; charset=utf-8"
-			} else if userAgent == "undici" || strings.HasPrefix(userAgent, "Node/") || strings.HasPrefix(userAgent, "Bun/") {
-				data, err = embedFS.ReadFile("server/embed/server.node.js")
-				if err != nil {
-					return err
-				}
-			} else {
-				data = []byte("/* esm.sh - error */\nconsole.error('esm.sh server is not supported in browser environment.');")
-			}
-			header.Set("Content-Type", cType)
-			header.Set("Cache-Control", "public, max-age=31536000, immutable")
-			return data
-		}
-
 		// use embed polyfills/types if possible
 		if hasBuildVerPrefix && strings.Count(pathname, "/") == 1 {
 			if strings.HasSuffix(pathname, ".js") {
