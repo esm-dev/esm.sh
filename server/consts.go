@@ -103,11 +103,12 @@ var assetExts = map[string]bool{
 	"tgz":        true,
 }
 
-// native node packages, for `deno` target use `npm:package` to import (skip build)
+// native node packages, for `denonext` target use `npm:package` instead of url
 var nativeNodePackages = []string{
 	"@achingbrain/ssdp",
 	"default-gateway",
 	"fsevent",
+	"lightningcss",
 	"re2",
 	"zlib-sync",
 }

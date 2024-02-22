@@ -913,9 +913,14 @@ rebuild:
 			// to fix the source map
 			task.headerLines += strings.Count(header.String(), EOL)
 
+			ret, dropSourceMap := task.rewriteJS(jsContent)
+			if ret != nil {
+				jsContent = ret
+			}
+
 			finalContent := bytes.NewBuffer(nil)
 			finalContent.Write(header.Bytes())
-			finalContent.Write(rewriteJS(task, jsContent))
+			finalContent.Write(jsContent)
 
 			// check if package is deprecated
 			if task.Deprecated != "" {
@@ -923,9 +928,11 @@ rebuild:
 			}
 
 			// add sourcemap Url
-			finalContent.WriteString("//# sourceMappingURL=")
-			finalContent.WriteString(filepath.Base(task.ID()))
-			finalContent.WriteString(".map")
+			if !dropSourceMap {
+				finalContent.WriteString("//# sourceMappingURL=")
+				finalContent.WriteString(filepath.Base(task.ID()))
+				finalContent.WriteString(".map")
+			}
 
 			_, err = fs.WriteFile(task.getSavepath(), finalContent)
 			if err != nil {
