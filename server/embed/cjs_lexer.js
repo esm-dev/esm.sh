@@ -7,7 +7,7 @@ const enhancedResolve = require("enhanced-resolve");
 const identRegexp = /^[a-zA-Z_\$][a-zA-Z0-9_\$]*$/;
 const resolve = promisify(enhancedResolve.create({
   conditionNames: ["require", "node", "default"],
-  extensions: [".cjs", ".js", ".json", ".node"],
+  extensions: [".cjs", ".js", ".json"],
 }));
 const reservedWords = new Set([
   "abstract",
@@ -144,9 +144,11 @@ function getJSONKeys(jsonFile) {
 function verifyExports(names) {
   const exportDefault = names.includes("default");
   const exports = Array.from(
-    new Set(names.filter((name) =>
-      identRegexp.test(name) && !reservedWords.has(name)
-    )),
+    new Set(
+      names.filter((name) =>
+        identRegexp.test(name) && !reservedWords.has(name)
+      ),
+    ),
   );
   return {
     exportDefault,
@@ -188,8 +190,9 @@ async function parseCjsExports(input) {
   while (requires.length > 0) {
     const req = requires.pop();
     try {
-      const code = fs.readFileSync(req.path, "utf-8");
-      const results = parse(req.path, code, {
+      const filename = req.path.replace(/\0/g, "");
+      const code = fs.readFileSync(filename, "utf-8");
+      const results = parse(filename, code, {
         nodeEnv,
         callMode: req.callMode,
       });
@@ -217,7 +220,7 @@ async function parseCjsExports(input) {
           const mod = require(reexport);
           exports.push(...Object.keys(mod));
         } else {
-          const path = await resolve(dirname(req.path), reexport);
+          const path = await resolve(dirname(filename), reexport);
           if (path.endsWith(".json")) {
             exports.push(...getJSONKeys(path));
           } else {
@@ -226,13 +229,6 @@ async function parseCjsExports(input) {
         }
       }
     } catch (err) {
-      if (
-        err.message.includes(
-          "The argument 'path' must be a string or Uint8Array without null bytes",
-        )
-      ) {
-        return Promise.reject("could not read file '" + req.path + "'");
-      }
       return Promise.reject(err);
     }
   }
@@ -255,9 +251,11 @@ async function main() {
     const outout = await parseCjsExports(input);
     process.stdout.write(JSON.stringify(outout));
   } catch (err) {
-    process.stdout.write(JSON.stringify({ error: err.message, stack: err.stack }));
+    process.stdout.write(
+      JSON.stringify({ error: err.message, stack: err.stack }),
+    );
   }
   process.exit(0);
 }
 
-main()
+main();
