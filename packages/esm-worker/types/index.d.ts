@@ -47,6 +47,10 @@ export interface WorkerStorage {
   ): Promise<void>;
 }
 
+export const version: string;
+export const targets: Set<string>;
+export const getBuildTargetFromUA: (ua: string | null) => string;
+
 export function withESMWorker(middleware?: Middleware): {
   fetch: (
     req: Request,
@@ -57,11 +61,6 @@ export function withESMWorker(middleware?: Middleware): {
     },
   ) => Promise<Response>;
 };
-
-export const getBuildTargetFromUA: (ua: string | null) => string;
-export const targets: Set<string>;
-export const version: string;
-export default withESMWorker;
 
 export type Context<Data = Record<string, any>> = {
   cache: Cache;
