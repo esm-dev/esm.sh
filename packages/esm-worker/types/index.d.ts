@@ -50,15 +50,16 @@ export interface WorkerStorage {
 export const version: string;
 export const targets: Set<string>;
 export const getBuildTargetFromUA: (ua: string | null) => string;
+export const checkPreflight: (req: Request) => Response | undefined;
+export const corsHeaders: () => Headers;
+export const redirect: (url: URL | string, status: 301 | 302, cacheMaxAge?: number) => Response;
+export const hashText: (text: string) => Promise<string>;
 
 export function withESMWorker(middleware?: Middleware): {
   fetch: (
     req: Request,
     env: Env,
-    context: {
-      connInfo?: Record<string, any>;
-      waitUntil(promise: Promise<any>): void;
-    },
+    context: { waitUntil(promise: Promise<any>): void },
   ) => Promise<Response>;
 };
 
@@ -74,11 +75,7 @@ export type Context<Data = Record<string, any>> = {
 };
 
 export interface Middleware {
-  (
-    req: Request,
-    env: Env,
-    ctx: Context,
-  ): Response | void | Promise<Response | void>;
+  (req: Request, env: Env, ctx: Context): Response | void | Promise<Response | void>;
 }
 
 export type PackageInfo = {

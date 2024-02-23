@@ -1,8 +1,4 @@
-import type {
-  HttpMetadata,
-  WorkerStorage,
-  WorkerStorageKV,
-} from "../types/index.d.ts";
+import type { HttpMetadata, WorkerStorage, WorkerStorageKV } from "../types/index";
 import { targets } from "esm-compat";
 import { fixedPkgVersions } from "./consts.ts";
 
@@ -75,7 +71,7 @@ export function splitBy(
 export function redirect(
   url: URL | string,
   status: 301 | 302,
-  cacheMaxAge = 3600,
+  cacheMaxAge = 600,
 ) {
   const headers = corsHeaders();
   headers.set("Location", url.toString());
@@ -151,7 +147,5 @@ export async function hashText(s: string): Promise<string> {
     "SHA-1",
     new TextEncoder().encode(s),
   );
-  return Array.from(new Uint8Array(buffer)).map((b) =>
-    b.toString(16).padStart(2, "0")
-  ).join("");
+  return Array.from(new Uint8Array(buffer)).map((b) => b.toString(16).padStart(2, "0")).join("");
 }

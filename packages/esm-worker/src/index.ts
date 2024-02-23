@@ -1,3 +1,5 @@
+import { compareVersions, satisfies, validate } from "compare-versions";
+import { getBuildTargetFromUA, targets } from "esm-compat";
 import type {
   Context,
   HttpMetadata,
@@ -6,15 +8,7 @@ import type {
   PackageRegistryInfo,
   WorkerStorage,
 } from "../types/index.d.ts";
-import { compareVersions, satisfies, validate } from "compare-versions";
-import { getBuildTargetFromUA, targets } from "esm-compat";
-import {
-  assetsExts,
-  cssPackages,
-  STABLE_VERSION,
-  stableBuild,
-  VERSION,
-} from "./consts.ts";
+import { assetsExts, cssPackages, STABLE_VERSION, stableBuild, VERSION } from "./consts.ts";
 import { getMimeType } from "./content_type.ts";
 import {
   asKV,
@@ -538,20 +532,16 @@ function withESMWorker(middleware?: Middleware) {
         return redirect(
           new URL(`/${buildVersion}${pathname}${url.search}`, url),
           302,
-          7 * 24 * 3600,
         );
       }
-      return ctx.withCache(
-        () =>
-          fetchOrigin(
-            req,
-            env,
-            ctx,
-            `/${buildVersion}${pathname}${url.search}`,
-            corsHeaders(),
-          ),
-        { varyUA: true },
-      );
+      return ctx.withCache(() =>
+        fetchOrigin(
+          req,
+          env,
+          ctx,
+          `/${buildVersion}${pathname}${url.search}`,
+          corsHeaders(),
+        ), { varyUA: true });
     }
 
     const gh = pathname.startsWith("/gh/");
@@ -567,24 +557,22 @@ function withESMWorker(middleware?: Middleware) {
 
     if (
       hasBuildVerPrefix && (
-        pathname === "/node.ns.d.ts" || (
+        pathname === "/node.ns.d.ts" ||
+          pathname === "/hot.d.ts" || (
           pathname.startsWith("/node_") &&
           pathname.endsWith(".js") &&
           !pathname.slice(1).includes("/")
         )
       )
     ) {
-      return ctx.withCache(
-        () =>
-          fetchOriginWithKVCache(
-            req,
-            env,
-            ctx,
-            `/${buildVersion}${pathname}${url.search}`,
-            true,
-          ),
-        { varyUA: true },
-      );
+      return ctx.withCache(() =>
+        fetchOriginWithKVCache(
+          req,
+          env,
+          ctx,
+          `/${buildVersion}${pathname}${url.search}`,
+          true,
+        ), { varyUA: true });
     }
 
     let packageScope = "";
@@ -706,34 +694,24 @@ function withESMWorker(middleware?: Middleware) {
         const distVersion = regInfo["dist-tags"]
           ?.[packageVersion || "latest"];
         if (distVersion) {
-          const uri = `${prefix}${pkg}@${
-            fixPkgVersion(pkg, distVersion)
-          }${eq}${subPath}${url.search}`;
+          const uri = `${prefix}${pkg}@${fixPkgVersion(pkg, distVersion)}${eq}${subPath}${url.search}`;
           return redirect(new URL(uri, url), 302);
         }
         const versions = Object.keys(regInfo.versions ?? []).filter(validate)
           .sort(compareVersions);
         if (!packageVersion) {
-          const latestVersion = versions.filter((v) =>
-            !v.includes("-")
-          ).pop() ?? versions.pop();
+          const latestVersion = versions.filter((v) => !v.includes("-")).pop() ?? versions.pop();
           if (latestVersion) {
-            const uri = `${prefix}${pkg}@${
-              fixPkgVersion(pkg, latestVersion)
-            }${eq}${subPath}${url.search}`;
+            const uri = `${prefix}${pkg}@${fixPkgVersion(pkg, latestVersion)}${eq}${subPath}${url.search}`;
             return redirect(new URL(uri, url), 302);
           }
         }
         try {
-          const arr = packageVersion.includes("-")
-            ? versions
-            : versions.filter((v) => !v.includes("-"));
+          const arr = packageVersion.includes("-") ? versions : versions.filter((v) => !v.includes("-"));
           for (let i = arr.length - 1; i >= 0; i--) {
             const v = arr[i];
             if (satisfies(v, packageVersion)) {
-              const uri = `${prefix}${pkg}@${
-                fixPkgVersion(pkg, v)
-              }${eq}${subPath}${url.search}`;
+              const uri = `${prefix}${pkg}@${fixPkgVersion(pkg, v)}${eq}${subPath}${url.search}`;
               return redirect(new URL(uri, url), 302);
             }
           }
@@ -781,10 +759,7 @@ function withESMWorker(middleware?: Middleware) {
     // redirect to main css for CSS packages
     let css: string | undefined;
     if (!gh && (css = cssPackages[pkg]) && subPath === "") {
-      return redirect(
-        new URL(`/${pkg}@${packageVersion}/${css}`, url),
-        301,
-      );
+      return redirect(new URL(`/${pkg}@${packageVersion}/${css}`, url), 301);
     }
 
     // redirect to real package css file: `/PKG?css` -> `/v100/PKG/es2022/pkg.css`
@@ -804,7 +779,6 @@ function withESMWorker(middleware?: Middleware) {
           url,
         ),
         pined ? 301 : 302,
-        7 * 24 * 3600,
       );
     }
 
@@ -821,10 +795,7 @@ function withESMWorker(middleware?: Middleware) {
       // append missed build version prefix for dts
       // example: `/@types/react/index.d.ts` -> `/v100/@types/react/index.d.ts`
       if (subPath.endsWith(".d.ts") || subPath.endsWith(".d.mts")) {
-        return redirect(
-          new URL("/v" + VERSION + url.pathname, url),
-          301,
-        );
+        return redirect(new URL("/v" + VERSION + url.pathname, url), 301);
       }
       // use origin server response for `*.wasm?module`
       if (ext === "wasm" && url.searchParams.has("module")) {
@@ -867,8 +838,7 @@ function withESMWorker(middleware?: Middleware) {
         if (gh) {
           prefix += "/gh";
         }
-        const path =
-          `${prefix}/${pkg}@${packageVersion}${subPath}${url.search}`;
+        const path = `${prefix}/${pkg}@${packageVersion}${subPath}${url.search}`;
         return fetchOriginWithKVCache(req, env, ctx, path, true);
       });
     }
@@ -884,8 +854,7 @@ function withESMWorker(middleware?: Middleware) {
         prefix += "/gh";
       }
       const marker = hasExternalAllMarker ? "*" : "";
-      const path =
-        `${prefix}/${marker}${pkg}@${packageVersion}${subPath}${url.search}`;
+      const path = `${prefix}/${marker}${pkg}@${packageVersion}${subPath}${url.search}`;
       return fetchOriginWithKVCache(req, env, ctx, path);
     }, { varyUA: true });
   }
@@ -893,4 +862,4 @@ function withESMWorker(middleware?: Middleware) {
   return { fetch: handler };
 }
 
-export { getBuildTargetFromUA, targets, version, withESMWorker };
+export { checkPreflight, corsHeaders, getBuildTargetFromUA, hashText, redirect, targets, version, withESMWorker };
