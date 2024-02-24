@@ -90,7 +90,7 @@ func esmHandler() rex.Handle {
 			}
 			readme = bytes.ReplaceAll(readme, []byte("./server/embed/"), []byte(cfg.CdnBasePath+"/embed/"))
 			readme = bytes.ReplaceAll(readme, []byte("./HOSTING.md"), []byte("https://github.com/esm-dev/esm.sh/blob/master/HOSTING.md"))
-			readme = bytes.ReplaceAll(readme, []byte("https://esm.sh"), []byte("{origin}"+cfg.CdnBasePath))
+			readme = bytes.ReplaceAll(readme, []byte("https://esm.sh"), []byte(cdnOrigin+cfg.CdnBasePath))
 			readmeStrLit := utils.MustEncodeJSON(string(readme))
 			html := bytes.ReplaceAll(indexHTML, []byte("'# README'"), readmeStrLit)
 			html = bytes.ReplaceAll(html, []byte("{VERSION}"), []byte(fmt.Sprintf("%d", BUILD_VERSION)))
