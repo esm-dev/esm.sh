@@ -1,10 +1,6 @@
 import { serve } from "https://deno.land/std@0.180.0/http/server.ts";
 import { join } from "https://deno.land/std@0.180.0/path/mod.ts";
-import {
-  assert,
-  assertEquals,
-  assertStringIncludes,
-} from "https://deno.land/std@0.180.0/testing/asserts.ts";
+import { assert, assertEquals, assertStringIncludes } from "https://deno.land/std@0.180.0/testing/asserts.ts";
 
 async function run(name: string, ...args: string[]) {
   const cwd = join(
@@ -23,7 +19,7 @@ async function run(name: string, ...args: string[]) {
   }
 }
 
-// build and import esm worker
+// build esm worker
 await run("pnpm", "i");
 await run("node", "build.mjs");
 
@@ -45,6 +41,7 @@ const worker = withESMWorker(
 );
 
 const ac = new AbortController();
+const closeServer = () => ac.abort();
 
 // start the worker
 serve((req) => worker.fetch(req, env, { waitUntil: () => {} }), {
@@ -79,30 +76,21 @@ Deno.test("esm-worker", {
 
   await t.step("deno CLI", async () => {
     const res = await fetch(workerOrigin);
-    res.body?.cancel();
     assertEquals(res.status, 200);
-    assertEquals(
-      res.headers.get("Content-Type"),
-      "application/typescript; charset=utf-8",
-    );
+    assertEquals(res.headers.get("Content-Type"), "application/typescript; charset=utf-8");
+    assertStringIncludes(await res.text(), "Deno.");
   });
 
   await t.step("embed polyfills/types", async () => {
     const res = await fetch(`${workerOrigin}/v${VERSION}/node.ns.d.ts`);
     res.body?.cancel();
     assertEquals(res.status, 200);
-    assertEquals(
-      res.headers.get("Content-Type"),
-      "application/typescript; charset=utf-8",
-    );
+    assertEquals(res.headers.get("Content-Type"), "application/typescript; charset=utf-8");
 
     const res2 = await fetch(`${workerOrigin}/v${VERSION}/node_process.js`);
     res2.body?.cancel();
     assertEquals(res2.status, 200);
-    assertStringIncludes(
-      res2.headers.get("Content-Type")!,
-      "/javascript; charset=utf-8",
-    );
+    assertStringIncludes(res2.headers.get("Content-Type")!, "/javascript; charset=utf-8");
   });
 
   await t.step("npm modules", async () => {
@@ -111,30 +99,22 @@ Deno.test("esm-worker", {
     });
     res.body?.cancel();
     assertEquals(res.status, 302);
-    assert(
-      res.headers.get("Location")!.startsWith(`${workerOrigin}/react-dom@`),
-    );
-    assertEquals(res.headers.get("Cache-Control"), "public, max-age=3600");
+    assert(res.headers.get("Location")!.startsWith(`${workerOrigin}/react-dom@`));
+    assertEquals(res.headers.get("Cache-Control"), "public, max-age=600");
+
     const res2 = await fetch(res.headers.get("Location")!);
     const modUrl = new URL(res2.headers.get("X-Esm-Id")!, workerOrigin);
     res2.body?.cancel();
     assertEquals(res2.status, 200);
-    assertEquals(
-      res2.headers.get("Content-Type"),
-      "application/javascript; charset=utf-8",
-    );
+    assertEquals(res2.headers.get("Content-Type"), "application/javascript; charset=utf-8");
     assertEquals(res2.headers.get("Cache-Control"), "public, max-age=604800");
     assert(modUrl.pathname.endsWith("/denonext/react-dom.mjs"));
+
     const res3 = await fetch(modUrl);
     assertEquals(res3.status, 200);
-    assertEquals(
-      res3.headers.get("Content-Type"),
-      "application/javascript; charset=utf-8",
-    );
-    assertEquals(
-      res3.headers.get("Cache-Control"),
-      "public, max-age=31536000, immutable",
-    );
+    assertEquals(res3.headers.get("Content-Type"), "application/javascript; charset=utf-8");
+    assertEquals(res3.headers.get("Cache-Control"), "public, max-age=31536000, immutable");
+
     const modCode = await res3.text();
     assertStringIncludes(modCode, "/stable/react@");
     assertStringIncludes(modCode, "createElement");
@@ -142,13 +122,11 @@ Deno.test("esm-worker", {
     const dtsUrl = res2.headers.get("X-Typescript-Types")!;
     assert(dtsUrl.startsWith(workerOrigin));
     assert(dtsUrl.endsWith(".d.ts"));
+
     const res4 = await fetch(dtsUrl);
     res4.body?.cancel();
     assertEquals(res4.status, 200);
-    assertEquals(
-      res4.headers.get("Content-Type"),
-      "application/typescript; charset=utf-8",
-    );
+    assertEquals(res4.headers.get("Content-Type"), "application/typescript; charset=utf-8");
   });
 
   await t.step("npm modules (submodule)", async () => {
@@ -157,31 +135,22 @@ Deno.test("esm-worker", {
     });
     res.body?.cancel();
     assertEquals(res.status, 302);
-    assert(
-      res.headers.get("Location")!.startsWith(`${workerOrigin}/react-dom@`),
-    );
-    assertEquals(res.headers.get("Cache-Control"), "public, max-age=3600");
+    assert(res.headers.get("Location")!.startsWith(`${workerOrigin}/react-dom@`));
+    assertEquals(res.headers.get("Cache-Control"), "public, max-age=600");
+
     const res2 = await fetch(res.headers.get("Location")!);
     const modUrl = new URL(res2.headers.get("X-Esm-Id")!, workerOrigin);
     res2.body?.cancel();
     assertEquals(res2.status, 200);
-    assertEquals(
-      res2.headers.get("Content-Type"),
-      "application/javascript; charset=utf-8",
-    );
+    assertEquals(res2.headers.get("Content-Type"), "application/javascript; charset=utf-8");
     assertEquals(res2.headers.get("Cache-Control"), "public, max-age=604800");
     assert(/v\d+\/.+\.d\.ts$/.test(res2.headers.get("X-Typescript-Types")!));
     assert(modUrl.pathname.endsWith("/denonext/server.js"));
+
     const res3 = await fetch(modUrl);
     assertEquals(res3.status, 200);
-    assertEquals(
-      res3.headers.get("Content-Type"),
-      "application/javascript; charset=utf-8",
-    );
-    assertEquals(
-      res3.headers.get("Cache-Control"),
-      "public, max-age=31536000, immutable",
-    );
+    assertEquals(res3.headers.get("Content-Type"), "application/javascript; charset=utf-8");
+    assertEquals(res3.headers.get("Cache-Control"), "public, max-age=31536000, immutable");
     assertStringIncludes(await res3.text(), "renderToString");
   });
 
@@ -190,152 +159,80 @@ Deno.test("esm-worker", {
     res.body?.cancel();
     assertEquals(res.status, 302);
     assert(res.headers.get("Location")!.startsWith(`${workerOrigin}/react@`));
-    assertEquals(res.headers.get("Cache-Control"), "public, max-age=3600");
+    assertEquals(res.headers.get("Cache-Control"), "public, max-age=600");
+
     const res2 = await fetch(res.headers.get("Location")!);
     const modUrl = new URL(res2.headers.get("X-Esm-Id")!, workerOrigin);
     res2.body?.cancel();
     assertEquals(res2.status, 200);
-    assertEquals(
-      res2.headers.get("Content-Type"),
-      "application/javascript; charset=utf-8",
-    );
-    assertEquals(
-      res2.headers.get("Cache-Control"),
-      "public, max-age=31536000, immutable",
-    );
+    assertEquals(res2.headers.get("Content-Type"), "application/javascript; charset=utf-8");
+    assertEquals(res2.headers.get("Cache-Control"), "public, max-age=31536000, immutable");
     assertEquals(modUrl.origin, workerOrigin);
     assert(modUrl.pathname.startsWith("/stable/react@"));
     assert(modUrl.pathname.endsWith("/denonext/react.mjs"));
+
     const res3 = await fetch(modUrl);
     assertEquals(res3.status, 200);
-    assertEquals(
-      res3.headers.get("Content-Type"),
-      "application/javascript; charset=utf-8",
-    );
-    assertEquals(
-      res3.headers.get("Cache-Control"),
-      "public, max-age=31536000, immutable",
-    );
+    assertEquals(res3.headers.get("Content-Type"), "application/javascript; charset=utf-8");
+    assertEquals(res3.headers.get("Cache-Control"), "public, max-age=31536000, immutable");
     assertStringIncludes(await res3.text(), "createElement");
 
     const dtsUrl = res2.headers.get("X-Typescript-Types")!;
     assert(dtsUrl.startsWith(workerOrigin));
     assert(dtsUrl.endsWith(".d.ts"));
+
     const res4 = await fetch(dtsUrl);
     res4.body?.cancel();
     assertEquals(res4.status, 200);
-    assertEquals(
-      res4.headers.get("Content-Type"),
-      "application/typescript; charset=utf-8",
-    );
+    assertEquals(res4.headers.get("Content-Type"), "application/typescript; charset=utf-8");
   });
 
   await t.step("npm modules (pined)", async () => {
     const res1 = await fetch(`${workerOrigin}/react@18.2.0?target=es2022`);
     res1.body?.cancel();
     assertEquals(res1.status, 200);
-    assertEquals(
-      res1.headers.get("Content-Type"),
-      "application/javascript; charset=utf-8",
-    );
-    assertEquals(
-      res1.headers.get("Cache-Control"),
-      "public, max-age=31536000, immutable",
-    );
+    assertEquals(res1.headers.get("Content-Type"), "application/javascript; charset=utf-8");
+    assertEquals(res1.headers.get("Cache-Control"), "public, max-age=31536000, immutable");
     assert(/v\d+\/.+\.d\.ts$/.test(res1.headers.get("X-Typescript-Types")!));
-    assertEquals(
-      res1.headers.get("X-Esm-Id"),
-      "stable/react@18.2.0/es2022/react.mjs",
-    );
-    const res2 = await fetch(
-      new URL(res1.headers.get("X-Esm-Id")!, workerOrigin),
-    );
+    assertEquals(res1.headers.get("X-Esm-Id"), "stable/react@18.2.0/es2022/react.mjs");
+
+    const res2 = await fetch(new URL(res1.headers.get("X-Esm-Id")!, workerOrigin));
     assertEquals(res2.status, 200);
-    assertEquals(
-      res2.headers.get("Content-Type"),
-      "application/javascript; charset=utf-8",
-    );
-    assertEquals(
-      res2.headers.get("Cache-Control"),
-      "public, max-age=31536000, immutable",
-    );
+    assertEquals(res2.headers.get("Content-Type"), "application/javascript; charset=utf-8");
+    assertEquals(res2.headers.get("Cache-Control"), "public, max-age=31536000, immutable");
     assertStringIncludes(await res2.text(), "createElement");
 
-    const res3 = await fetch(
-      `${workerOrigin}/v100/react-dom@18.2.0?target=es2022`,
-    );
+    const res3 = await fetch(`${workerOrigin}/v100/react-dom@18.2.0?target=es2022`);
     res3.body?.cancel();
     assertEquals(res3.status, 200);
-    assertEquals(
-      res3.headers.get("Content-Type"),
-      "application/javascript; charset=utf-8",
-    );
-    assertEquals(
-      res3.headers.get("Cache-Control"),
-      "public, max-age=31536000, immutable",
-    );
+    assertEquals(res3.headers.get("Content-Type"), "application/javascript; charset=utf-8");
+    assertEquals(res3.headers.get("Cache-Control"), "public, max-age=31536000, immutable");
     assert(/v100\/.+\.d\.ts$/.test(res3.headers.get("X-Typescript-Types")!));
-    assertEquals(
-      res3.headers.get("X-Esm-Id"),
-      "v100/react-dom@18.2.0/es2022/react-dom.mjs",
-    );
+    assertEquals(res3.headers.get("X-Esm-Id"), "v100/react-dom@18.2.0/es2022/react-dom.mjs");
 
-    const res4 = await fetch(
-      `${workerOrigin}/react-dom@18.2.0?pin=v100&target=es2022`,
-    );
+    const res4 = await fetch(`${workerOrigin}/react-dom@18.2.0?pin=v100&target=es2022`);
     res4.body?.cancel();
     assertEquals(res4.status, 200);
-    assertEquals(
-      res4.headers.get("Content-Type"),
-      "application/javascript; charset=utf-8",
-    );
-    assertEquals(
-      res4.headers.get("Cache-Control"),
-      "public, max-age=31536000, immutable",
-    );
+    assertEquals(res4.headers.get("Content-Type"), "application/javascript; charset=utf-8");
+    assertEquals(res4.headers.get("Cache-Control"), "public, max-age=31536000, immutable");
     assert(/v100\/.+\.d\.ts$/.test(res4.headers.get("X-Typescript-Types")!));
-    assertEquals(
-      res4.headers.get("X-Esm-Id"),
-      "v100/react-dom@18.2.0/es2022/react-dom.mjs",
-    );
+    assertEquals(res4.headers.get("X-Esm-Id"), "v100/react-dom@18.2.0/es2022/react-dom.mjs");
 
-    const res5 = await fetch(
-      `${workerOrigin}/react-dom@18.2.0&pin=v100&target=es2022&dev/client`,
-    );
+    const res5 = await fetch(`${workerOrigin}/react-dom@18.2.0&pin=v100&target=es2022&dev/client`);
     res5.body?.cancel();
     assertEquals(res5.status, 200);
-    assertEquals(
-      res5.headers.get("Content-Type"),
-      "application/javascript; charset=utf-8",
-    );
-    assertEquals(
-      res5.headers.get("Cache-Control"),
-      "public, max-age=31536000, immutable",
-    );
+    assertEquals(res5.headers.get("Content-Type"), "application/javascript; charset=utf-8");
+    assertEquals(res5.headers.get("Cache-Control"), "public, max-age=31536000, immutable");
     assert(/v100\/.+\.d\.ts$/.test(res5.headers.get("X-Typescript-Types")!));
-    assertEquals(
-      res5.headers.get("X-Esm-Id"),
-      "v100/react-dom@18.2.0/es2022/client.development.js",
-    );
+    assertEquals(res5.headers.get("X-Esm-Id"), "v100/react-dom@18.2.0/es2022/client.development.js");
 
-    const res6 = await fetch(
-      `${workerOrigin}/react@18.2.0?pin=v100&target=es2022&dev/jsx-runtime`,
-    );
+    const res6 = await fetch(`${workerOrigin}/react@18.2.0?pin=v100&target=es2022&dev/jsx-runtime`);
     res6.body?.cancel();
     assertEquals(res6.status, 200);
-    assertEquals(
-      res6.headers.get("Content-Type"),
-      "application/javascript; charset=utf-8",
-    );
-    assertEquals(
-      res6.headers.get("Cache-Control"),
-      "public, max-age=31536000, immutable",
-    );
+    assertEquals(res6.headers.get("Content-Type"), "application/javascript; charset=utf-8");
+    assertEquals(res6.headers.get("Cache-Control"), "public, max-age=31536000, immutable");
     assert(/v\d+\/.+\.d\.ts$/.test(res6.headers.get("X-Typescript-Types")!));
-    assertEquals(
-      res6.headers.get("X-Esm-Id"),
-      "stable/react@18.2.0/es2022/jsx-runtime.development.js",
-    );
+    assertEquals(res6.headers.get("X-Esm-Id"), "stable/react@18.2.0/es2022/jsx-runtime.development.js");
   });
 
   await t.step("npm assets", async () => {
@@ -345,48 +242,26 @@ Deno.test("esm-worker", {
     res.body?.cancel();
     assertEquals(res.status, 302);
     assert(res.headers.get("Location")!.startsWith(`${workerOrigin}/react@`));
-    assertEquals(res.headers.get("Cache-Control"), "public, max-age=3600");
+    assertEquals(res.headers.get("Cache-Control"), "public, max-age=600");
     const res2 = await fetch(res.headers.get("Location")!);
     assertEquals(res2.status, 200);
-    assertEquals(
-      res2.headers.get("Content-Type"),
-      "application/json",
-    );
-    assertEquals(
-      res2.headers.get("Cache-Control"),
-      "public, max-age=31536000, immutable",
-    );
+    assertEquals(res2.headers.get("Content-Type"), "application/json");
+    assertEquals(res2.headers.get("Cache-Control"), "public, max-age=31536000, immutable");
     const pkgJson = await res2.json();
     assertEquals(pkgJson.name, "react");
   });
 
   await t.step("npm assets (raw)", async () => {
-    const res = await fetch(
-      `${workerOrigin}/playground-elements@0.18.1/playground-service-worker.js?raw`,
-    );
+    const res = await fetch(`${workerOrigin}/playground-elements@0.18.1/playground-service-worker.js?raw`);
     assertEquals(res.status, 200);
-    assertEquals(
-      res.headers.get("Content-Type"),
-      "application/javascript; charset=utf-8",
-    );
-    assertEquals(
-      res.headers.get("Cache-Control"),
-      "public, max-age=31536000, immutable",
-    );
+    assertEquals(res.headers.get("Content-Type"), "application/javascript; charset=utf-8");
+    assertEquals(res.headers.get("Cache-Control"), "public, max-age=31536000, immutable");
     assertStringIncludes(await res.text(), "!function(){");
 
-    const res2 = await fetch(
-      `${workerOrigin}/playground-elements@0.18.1&raw/playground-service-worker.js`,
-    );
+    const res2 = await fetch(`${workerOrigin}/playground-elements@0.18.1&raw/playground-service-worker.js`);
     assertEquals(res2.status, 200);
-    assertEquals(
-      res2.headers.get("Content-Type"),
-      "application/javascript; charset=utf-8",
-    );
-    assertEquals(
-      res2.headers.get("Cache-Control"),
-      "public, max-age=31536000, immutable",
-    );
+    assertEquals(res2.headers.get("Content-Type"), "application/javascript; charset=utf-8");
+    assertEquals(res2.headers.get("Cache-Control"), "public, max-age=31536000, immutable");
     assertStringIncludes(await res2.text(), "!function(){");
   });
 
@@ -398,30 +273,21 @@ Deno.test("esm-worker", {
     assertEquals(res.status, 302);
     const rUrl = res.headers.get("Location")!;
     assert(rUrl.startsWith(`${workerOrigin}/gh/microsoft/tslib@`));
-    assertEquals(res.headers.get("Cache-Control"), "public, max-age=3600");
+    assertEquals(res.headers.get("Cache-Control"), "public, max-age=600");
+
     const res2 = await fetch(res.headers.get("Location")!);
     const modUrl = new URL(res2.headers.get("X-Esm-Id")!, workerOrigin);
     res2.body?.cancel();
     assertEquals(res2.status, 200);
-    assertEquals(
-      res2.headers.get("Content-Type"),
-      "application/javascript; charset=utf-8",
-    );
+    assertEquals(res2.headers.get("Content-Type"), "application/javascript; charset=utf-8");
     assertEquals(res2.headers.get("Cache-Control"), "public, max-age=604800");
-    assert(
-      /v\d+\/gh\/.+\.d\.ts$/.test(res2.headers.get("X-Typescript-Types")!),
-    );
+    assert(/v\d+\/gh\/.+\.d\.ts$/.test(res2.headers.get("X-Typescript-Types")!));
     assert(modUrl.pathname.endsWith("/denonext/tslib.mjs"));
+
     const res3 = await fetch(modUrl);
     assertEquals(res3.status, 200);
-    assertEquals(
-      res3.headers.get("Content-Type"),
-      "application/javascript; charset=utf-8",
-    );
-    assertEquals(
-      res3.headers.get("Cache-Control"),
-      "public, max-age=31536000, immutable",
-    );
+    assertEquals(res3.headers.get("Content-Type"), "application/javascript; charset=utf-8");
+    assertEquals(res3.headers.get("Cache-Control"), "public, max-age=31536000, immutable");
     assertStringIncludes(await res3.text(), "export{");
   });
 
@@ -434,15 +300,13 @@ Deno.test("esm-worker", {
     assertEquals(res.status, 302);
     const rUrl = res.headers.get("Location")!;
     assert(rUrl.startsWith(`${workerOrigin}/gh/microsoft/fluentui-emoji@`));
-    assertEquals(res.headers.get("Cache-Control"), "public, max-age=3600");
+    assertEquals(res.headers.get("Cache-Control"), "public, max-age=600");
+
     const res2 = await fetch(rUrl);
     const svg = await res2.text();
     assertEquals(res2.status, 200);
     assertEquals(res2.headers.get("Content-Type"), "image/svg+xml");
-    assertEquals(
-      res2.headers.get("Cache-Control"),
-      "public, max-age=31536000, immutable",
-    );
+    assertEquals(res2.headers.get("Cache-Control"), "public, max-age=31536000, immutable");
     assertStringIncludes(svg, "<svg");
   });
 
@@ -450,14 +314,8 @@ Deno.test("esm-worker", {
     const res = await fetch(`${workerOrigin}/build`);
     res.body?.cancel();
     assertEquals(new URL(res.url).pathname, `/v${VERSION}/build`);
-    assertEquals(
-      res.headers.get("Cache-Control"),
-      "public, max-age=31536000, immutable",
-    );
-    assertEquals(
-      res.headers.get("Content-Type"),
-      "application/typescript; charset=utf-8",
-    );
+    assertEquals(res.headers.get("Cache-Control"), "public, max-age=31536000, immutable");
+    assertEquals(res.headers.get("Content-Type"), "application/typescript; charset=utf-8");
 
     const res2 = await fetch(`${workerOrigin}/build`, {
       method: "POST",
@@ -492,8 +350,7 @@ Deno.test("esm-worker", {
       importMap: JSON.stringify({
         imports: {
           "@jsxImportSource": "https://preact@10.13.2",
-          "preact-render-to-string":
-            "https://esm.sh/preact-render-to-string6.0.2",
+          "preact-render-to-string": "https://esm.sh/preact-render-to-string6.0.2",
         },
       }),
       hash: "",
@@ -507,32 +364,17 @@ Deno.test("esm-worker", {
       body: JSON.stringify(options),
     });
     const ret2 = await res3.json();
-    assertStringIncludes(
-      ret2.code,
-      `"https://preact@10.13.2/jsx-runtime"`,
-    );
-    assertStringIncludes(
-      ret2.code,
-      `"https://esm.sh/preact-render-to-string6.0.2"`,
-    );
+    assertStringIncludes(ret2.code, `"https://preact@10.13.2/jsx-runtime"`);
+    assertStringIncludes(ret2.code, `"https://esm.sh/preact-render-to-string6.0.2"`);
 
     const res4 = await fetch(`${workerOrigin}/+${options.hash}.mjs`, {
       headers: { "User-Agent": "Chrome/90.0.4430.212" },
     });
     assertEquals(res4.status, 200);
-    assertEquals(
-      res4.headers.get("Content-Type"),
-      "application/javascript; charset=utf-8",
-    );
+    assertEquals(res4.headers.get("Content-Type"), "application/javascript; charset=utf-8");
     const code = await res4.text();
-    assertStringIncludes(
-      code,
-      `"https://preact@10.13.2/jsx-runtime"`,
-    );
-    assertStringIncludes(
-      code,
-      `"https://esm.sh/preact-render-to-string6.0.2"`,
-    );
+    assertStringIncludes(code, `"https://preact@10.13.2/jsx-runtime"`);
+    assertStringIncludes(code, `"https://esm.sh/preact-render-to-string6.0.2"`);
   });
 
   await t.step("/esma-target", async () => {
@@ -575,15 +417,17 @@ Deno.test("esm-worker", {
       headers: { "User-Agent": "Chrome/90.0.4430.212" },
     });
     assertEquals(res.status, 200);
-    assertEquals(
-      res.headers.get("Content-Type"),
-      "application/javascript; charset=utf-8",
-    );
+    assertEquals(res.headers.get("Content-Type"), "application/javascript; charset=utf-8");
     assertEquals(res.headers.get("x-typescript-types"), `${workerOrigin}/v${VERSION}/hot.d.ts`);
+    assertStringIncludes(await res.text(), "fire");
+
+    const res2 = await fetch(`${workerOrigin}/v${VERSION}/hot.d.ts`);
+    res2.body?.cancel();
+    assertEquals(res2.status, 200);
+    assertEquals(res2.headers.get("Content-Type"), "application/typescript; charset=utf-8");
   });
 
-  ac.abort();
-  await new Promise((resolve) => setTimeout(resolve, 500));
+  closeServer();
 });
 
 async function computeHash(input: string): Promise<string> {

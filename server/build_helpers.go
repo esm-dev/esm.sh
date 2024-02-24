@@ -261,7 +261,7 @@ func (task *BuildTask) analyze(forceCjsOnly bool) (esm *ESMBuild, npm NpmPackage
 									}
 								}
 								*/
-								task.applyConditions(&npm, exports, npm.Type)
+								task.resolveConditions(&npm, exports, npm.Type)
 								break
 							} else if strings.HasSuffix(name, "*") && strings.HasPrefix("./"+pkg.SubModule, strings.TrimSuffix(name, "*")) {
 								/**
@@ -311,7 +311,7 @@ func (task *BuildTask) analyze(forceCjsOnly bool) (esm *ESMBuild, npm NpmPackage
 									hitExports = true
 								}
 								if hitExports {
-									task.applyConditions(&npm, exports, npm.Type)
+									task.resolveConditions(&npm, exports, npm.Type)
 									break
 								}
 							}
@@ -449,7 +449,7 @@ func (task *BuildTask) fixNpmPackage(p NpmPackageInfo) NpmPackageInfo {
 						".": "./esm/index.js"
 					}
 				*/
-				task.applyConditions(&p, v, p.Type)
+				task.resolveConditions(&p, v, p.Type)
 			} else {
 				/*
 					exports: {
@@ -457,13 +457,13 @@ func (task *BuildTask) fixNpmPackage(p NpmPackageInfo) NpmPackageInfo {
 						"import": "./esm/index.js"
 					}
 				*/
-				task.applyConditions(&p, om, p.Type)
+				task.resolveConditions(&p, om, p.Type)
 			}
 		} else if s, ok := exports.(string); ok {
 			/*
 			  exports: "./esm/index.js"
 			*/
-			task.applyConditions(&p, s, p.Type)
+			task.resolveConditions(&p, s, p.Type)
 		}
 	}
 
@@ -568,7 +568,7 @@ func (task *BuildTask) fixNpmPackage(p NpmPackageInfo) NpmPackageInfo {
 }
 
 // see https://nodejs.org/api/packages.html
-func (task *BuildTask) applyConditions(p *NpmPackageInfo, exports interface{}, pType string) {
+func (task *BuildTask) resolveConditions(p *NpmPackageInfo, exports interface{}, pType string) {
 	s, ok := exports.(string)
 	if ok {
 		if pType == "module" {
@@ -625,14 +625,14 @@ func (task *BuildTask) applyConditions(p *NpmPackageInfo, exports interface{}, p
 	for _, condition := range append(targetConditions, conditions...) {
 		v, ok := om.m[condition]
 		if ok {
-			task.applyConditions(p, v, "module")
+			task.resolveConditions(p, v, "module")
 			return
 		}
 	}
 	for _, condition := range append(targetConditions, "require", "node", "default") {
 		v, ok := om.m[condition]
 		if ok {
-			task.applyConditions(p, v, "commonjs")
+			task.resolveConditions(p, v, "commonjs")
 			break
 		}
 	}
