@@ -8,21 +8,19 @@ const d = document;
 const l = localStorage;
 const stringify = JSON.stringify;
 const modUrl = new URL(import.meta.url);
-const MiB = 10 << 20;
-const kRun = "esm.sh/run";
 const kScript = "script";
 const kImportmap = "importmap";
 const loaders = ["js", "jsx", "ts", "tsx", "babel"];
 const importMapSupported = HTMLScriptElement.supports?.(kImportmap);
 const imports: Record<string, string> = {};
 const scopes: Record<string, typeof imports> = {};
-const runScripts: { loader: string; source: string }[] = [];
+const runScripts: { el: HTMLElement; loader: string; source: string }[] = [];
 
 // lookup run scripts
 d.querySelectorAll(kScript).forEach((el) => {
   let loader: string | null = null;
   if (el.type === kImportmap) {
-    const v = JSON.parse(el.innerHTML);
+    const v = JSON.parse(el.textContent!);
     for (const k in v.imports) {
       if (!importMapSupported || k === "@jsxImportSource") {
         imports[k] = v.imports[k];
@@ -34,28 +32,25 @@ d.querySelectorAll(kScript).forEach((el) => {
   } else if (el.type.startsWith("text/")) {
     loader = el.type.slice(5);
     if (loaders.includes(loader)) {
-      const source = el.innerHTML.trim();
-      if (source.length > MiB) {
-        throw new Error(kRun + " " + source.length + " bytes exceeded limit.");
+      const source = el.textContent!.trim();
+      if (source.length <= 64 * 1024) { // 64KB exceeded limit
+        runScripts.push({ el, loader, source });
       }
-      runScripts.push({ loader, source });
     }
   }
 });
 
 // transform and insert run scripts
 const importMap = stringify({ imports, scopes });
-runScripts.forEach(async (input, idx) => {
+runScripts.forEach(async ({ el, loader, source }, idx) => {
   const buffer = new Uint8Array(
     await crypto.subtle.digest(
       "SHA-1",
-      new TextEncoder().encode(
-        input.loader + input.source + importMap,
-      ),
+      new TextEncoder().encode(loader + source + importMap),
     ),
   );
   const hash = [...buffer].map((b) => b.toString(16).padStart(2, "0")).join("");
-  const jsCacheKey = kRun + ":" + idx;
+  const jsCacheKey = "esm.sh/run:" + idx;
   const hashCacheKey = jsCacheKey + ".hash";
   let js = l.getItem(jsCacheKey);
   if (js && l.getItem(hashCacheKey) !== hash) {
@@ -69,11 +64,11 @@ runScripts.forEach(async (input, idx) => {
     } else {
       const res = await fetch(origin + "/transform", {
         method: "POST",
-        body: stringify({ ...input, importMap, hash }),
+        body: stringify({ loader, source, importMap, hash }),
       });
       const { code, error } = await res.json();
       if (error) {
-        throw new Error(kRun + " " + error.message);
+        throw new Error(error.message);
       }
       js = code;
     }
@@ -82,6 +77,6 @@ runScripts.forEach(async (input, idx) => {
   }
   const script = d.createElement(kScript);
   script.type = "module";
-  script.innerHTML = js!;
-  d.body.appendChild(script);
+  script.textContent = js!;
+  el.replaceWith(script);
 });
