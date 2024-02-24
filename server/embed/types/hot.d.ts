@@ -14,7 +14,7 @@ export interface FetchHandler {
 }
 
 export interface IncomingTest {
-  (url: URL, req: Request): boolean;
+  (url: URL, method: string, headers: Headers): boolean;
 }
 
 export interface VFile {
@@ -25,7 +25,6 @@ export interface VFile {
 
 export interface VFileMeta {
   [key: string]: any;
-  checksum?: string;
   contentType?: string;
 }
 
@@ -46,7 +45,7 @@ export interface HotCore {
   readonly vfs: VFS;
   fire(): Promise<void>;
   listen(swScript?: string): void;
-  onFetch(test: IncomingTest, handler: FetchHandler): this;
+  onFetch(test: IncomingTest | RegExp, handler: FetchHandler): this;
   onFire(handler: (reg: ServiceWorker) => void): this;
   waitUntil(promise: Promise<any>): void;
   use(...plugins: Plugin[]): this;

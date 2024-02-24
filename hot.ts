@@ -2,8 +2,6 @@
  *  Docs: https://til.esm.sh/hot
  */
 
-/// <reference lib="dom" />
-/// <reference lib="dom.iterable" />
 /// <reference lib="webworker" />
 
 import type { FetchHandler, HotCore, ImportMap, IncomingTest, Plugin, VFile } from "./server/embed/types/hot.d.ts";
@@ -12,9 +10,8 @@ const VERSION = 135;
 const doc: Document | undefined = globalThis.document;
 const loc = location;
 const parse = JSON.parse;
-const localhosts = new Set(["localhost", "127.0.0.1", "[::1]"]);
+const localhosts = new Set(["localhost", "127.0.0.1"]);
 const kHot = "esm.sh/hot";
-const kSkipWaiting = "SKIP_WAITING";
 const kMessage = "message";
 const kVfs = "vfs";
 
@@ -63,7 +60,7 @@ class VFS {
 class Hot implements HotCore {
   #cache: Cache | null = null;
   #importMap: Required<ImportMap> | null = null;
-  #fetchListeners: { test: IncomingTest; handler: FetchHandler }[] = [];
+  #fetchListeners: { test: IncomingTest | RegExp; handler: FetchHandler }[] = [];
   #fireListeners: ((sw: ServiceWorker) => void)[] = [];
   #isDev = localhosts.has(location.hostname);
   #promises: Promise<any>[] = [];
@@ -87,7 +84,7 @@ class Hot implements HotCore {
     return this.#vfs;
   }
 
-  onFetch(test: IncomingTest, handler: FetchHandler) {
+  onFetch(test: IncomingTest | RegExp, handler: FetchHandler) {
     if (!doc) {
       this.#fetchListeners.push({ test, handler });
     }
@@ -125,24 +122,21 @@ class Hot implements HotCore {
       updateViaCache: this.#isDev ? undefined : "all",
     });
 
+    let isFirstInstalled = false;
+
     // detect Service Worker update available and wait for it to become installed
-    let isFirstInstall = false;
     reg.onupdatefound = () => {
       const { installing } = reg;
       if (installing) {
         installing.onstatechange = () => {
           const { waiting } = reg;
-          if (waiting) {
-            waiting.postMessage(kSkipWaiting);
-            if (!sw.controller) {
-              // it's first install
-              waiting.onstatechange = () => {
-                if (reg.active) {
-                  isFirstInstall = true;
-                  this.#fireApp(reg.active);
-                }
-              };
-            }
+          if (waiting && !sw.controller) {
+            waiting.onstatechange = () => {
+              if (reg.active?.state === "activated") {
+                isFirstInstalled = true;
+                this.#fireApp(reg.active);
+              }
+            };
           }
         };
       }
@@ -150,11 +144,8 @@ class Hot implements HotCore {
 
     // detect controller change and refresh the page
     sw.oncontrollerchange, () => {
-      !isFirstInstall && loc.reload();
+      !isFirstInstalled && loc.reload();
     };
-
-    // if there's a waiting, send skip waiting message
-    reg.waiting?.postMessage(kSkipWaiting);
 
     // fire immediately if there's an active Service Worker
     if (reg.active) {
@@ -164,7 +155,7 @@ class Hot implements HotCore {
 
   async #fireApp(sw: ServiceWorker) {
     // update importmap in Service Worker
-    sw.postMessage(this.importMap);
+    sw.postMessage({ IMPORT_MAP: this.importMap });
 
     // wait until all promises resolved
     await Promise.all(this.#promises);
@@ -205,28 +196,20 @@ class Hot implements HotCore {
       };
       return createResponse(file.data, headers);
     };
-    const fetchWithCache = async (req: Request) => {
-      const cache = this.cache;
-      const cachedReq = await cache.match(req);
-      if (cachedReq) {
-        return cachedReq;
-      }
-      const res = await fetch(req.url);
-      if (res.status !== 200) {
-        return res;
-      }
-      await cache.put(req, res.clone());
-      return res;
-    };
+    const on: typeof addEventListener = addEventListener;
 
-    // @ts-expect-error missing dts
-    self.oninstall = (evt) => evt.waitUntil(Promise.all(this.#promises));
+    on("install", (evt) => {
+      // @ts-expect-error missing dts
+      skipWaiting();
+      evt.waitUntil(Promise.all(this.#promises));
+    });
 
-    // @ts-expect-error missing dts
-    self.onactivate = (evt) => evt.waitUntil(clients.claim());
+    on("activate", (evt) => {
+      // @ts-expect-error missing dts
+      evt.waitUntil(clients.claim());
+    });
 
-    // @ts-expect-error missing dts
-    self.onfetch = (evt: FetchEvent) => {
+    on("fetch", (evt) => {
       const { request } = evt;
       const respondWith = evt.respondWith.bind(evt);
       const url = new URL(request.url);
@@ -234,31 +217,26 @@ class Hot implements HotCore {
       const fetchListeners = this.#fetchListeners;
       if (fetchListeners.length > 0) {
         for (const { test, handler } of fetchListeners) {
-          if (test(url, request)) {
+          if (test instanceof RegExp ? test.test(url.pathname) : test(url, request.method, request.headers)) {
             return respondWith(handler(request));
           }
         }
       }
-      if (
-        url.hostname === "esm.sh" && /\w@\d+.\d+\.\d+(-|\/|\?|$)/.test(pathname)
-      ) {
-        return respondWith(fetchWithCache(request));
-      }
       if (isSameOrigin(url) && pathname.startsWith("/@hot/")) {
-        respondWith(serveVFS(pathname.slice(1)));
+        respondWith(serveVFS(pathname.slice(6)));
       }
-    };
+    });
 
-    // listen to SW `message` event for `skipWaiting` control on renderer process
-    // and importmap update
-    self.onmessage = ({ data }) => {
-      if (data === kSkipWaiting) {
-        // @ts-expect-error missing dts
-        self.skipWaiting();
-      } else if (isObject(data) && data.imports) {
-        this.#importMap = data as Required<ImportMap>;
+    // listen to `message` event for importmap updating
+    on(kMessage, (evt) => {
+      const { data } = evt;
+      if (isObject(data)) {
+        const im = data.IMPORT_MAP;
+        if (isObject(im)) {
+          this.#importMap = im as Required<ImportMap>;
+        }
       }
-    };
+    });
   }
 }
 
@@ -303,19 +281,19 @@ function parseImportMap() {
   return importMap;
 }
 
-function validateScopes(imports: Record<string, unknown>) {
+function validateImports(imports: Record<string, unknown>) {
   for (const [k, v] of Object.entries(imports)) {
-    if (isObject(v)) {
-      validateImports(v);
-    } else {
+    if (!v || typeof v !== "string") {
       delete imports[k];
     }
   }
 }
 
-function validateImports(imports: Record<string, unknown>) {
+function validateScopes(imports: Record<string, unknown>) {
   for (const [k, v] of Object.entries(imports)) {
-    if (!v || typeof v !== "string") {
+    if (isObject(v)) {
+      validateImports(v);
+    } else {
       delete imports[k];
     }
   }
