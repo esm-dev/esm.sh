@@ -26,7 +26,7 @@ await run("node", "build.mjs");
 const env = {
   ESM_ORIGIN: "http://localhost:8080",
 };
-const workerOrigin = "http://localhost:8787";
+const workerOrigin = "http://localhost:8081";
 const { withESMWorker } = await import(
   "../../packages/esm-worker/dist/index.js#" + Date.now().toString(36)
 );
@@ -45,7 +45,7 @@ const closeServer = () => ac.abort();
 
 // start the worker
 serve((req) => worker.fetch(req, env, { waitUntil: () => {} }), {
-  port: 8787,
+  port: 8081,
   signal: ac.signal,
 });
 
