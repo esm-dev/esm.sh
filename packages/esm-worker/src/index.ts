@@ -296,11 +296,12 @@ function withESMWorker(middleware?: Middleware) {
     const cache = await cachePromise;
     const withCache: Context["withCache"] = async (fetcher, options) => {
       const isHeadMethod = req.method === "HEAD";
-      const hasPinedTarget = targets.has(
-        url.searchParams.get("target") ?? "",
-      );
+      const hasPinedTarget = targets.has(url.searchParams.get("target") ?? "");
       const cacheKey = new URL(url);
-      const varyUA = options?.varyUA && !hasPinedTarget &&
+      const varyUA = options?.varyUA &&
+        !hasPinedTarget &&
+        !url.hostname.endsWith(".d.ts") &&
+        !url.hostname.endsWith(".d.mts") &&
         !url.searchParams.has("raw");
       if (varyUA) {
         const target = getBuildTargetFromUA(ua);
@@ -347,11 +348,6 @@ function withESMWorker(middleware?: Middleware) {
       waitUntil: (p: Promise<any>) => context.waitUntil(p),
       withCache,
     };
-
-    // for deno runtime
-    if (Reflect.has(context, "connInfo")) {
-      Object.assign(ctx, Reflect.get(context, "connInfo"));
-    }
 
     let pathname = decodeURIComponent(url.pathname);
 
@@ -558,7 +554,7 @@ function withESMWorker(middleware?: Middleware) {
     if (
       hasBuildVerPrefix && (
         pathname === "/node.ns.d.ts" ||
-          pathname === "/hot.d.ts" || (
+        pathname === "/hot.d.ts" || (
           pathname.startsWith("/node_") &&
           pathname.endsWith(".js") &&
           !pathname.slice(1).includes("/")
@@ -582,8 +578,7 @@ function withESMWorker(middleware?: Middleware) {
     let extraQuery = "";
 
     if (pathname.startsWith("/@")) {
-      const [scope, name, ...rest] = decodeURIComponent(pathname).slice(2)
-        .split("/");
+      const [scope, name, ...rest] = decodeURIComponent(pathname).slice(2).split("/");
       packageScope = "@" + scope;
       [packageName, packageVersion] = splitBy(name, "@");
       if (rest.length > 0) {
