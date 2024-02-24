@@ -6,14 +6,7 @@
 /// <reference lib="dom.iterable" />
 /// <reference lib="webworker" />
 
-import type {
-  FetchHandler,
-  HotCore,
-  ImportMap,
-  IncomingTest,
-  Plugin,
-  VFile,
-} from "./server/embed/types/hot.d.ts";
+import type { FetchHandler, HotCore, ImportMap, IncomingTest, Plugin, VFile } from "./server/embed/types/hot.d.ts";
 
 const VERSION = 135;
 const doc: Document | undefined = globalThis.document;
@@ -161,7 +154,7 @@ class Hot implements HotCore {
     };
 
     // if there's a waiting, send skip waiting message
-    reg.waiting?.postMessage(kSkipWaiting)
+    reg.waiting?.postMessage(kSkipWaiting);
 
     // fire immediately if there's an active Service Worker
     if (reg.active) {
@@ -365,4 +358,5 @@ function waitIDBRequest<T>(req: IDBRequest): Promise<T> {
   });
 }
 
-export default new Hot();
+export const hot = new Hot();
+export default hot;

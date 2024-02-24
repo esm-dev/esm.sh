@@ -58,4 +58,5 @@ declare global {
 
 export interface Hot extends HotCore, HotAPI {}
 
-export default Hot;
+export const hot: Hot;
+export default hot;
