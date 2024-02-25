@@ -4,20 +4,25 @@
 
 /// <reference lib="webworker" />
 
-import type { FetchHandler, HotCore, ImportMap, IncomingTest, Plugin, VFile } from "./server/embed/types/hot.d.ts";
+import type {
+  ArchiveEntry,
+  FetchHandler,
+  FireOptions,
+  HotCore,
+  IncomingTest,
+  Plugin,
+} from "./server/embed/types/hot.d.ts";
 
 const VERSION = 135;
 const doc: Document | undefined = globalThis.document;
 const loc = location;
-const parse = JSON.parse;
-const localhosts = new Set(["localhost", "127.0.0.1"]);
 const kHot = "esm.sh/hot";
 const kMessage = "message";
 const kVfs = "vfs";
 
-/** A virtual file system using indexed database. */
+/** class `VFS` implements the virtual file system by using indexed database. */
 class VFS {
-  #dbPromise: Promise<IDBDatabase>;
+  #db: IDBDatabase | Promise<IDBDatabase>;
 
   constructor(scope: string, version: number) {
     const req = indexedDB.open(scope, version);
@@ -27,27 +32,31 @@ class VFS {
         db.createObjectStore(kVfs, { keyPath: "name" });
       }
     };
-    this.#dbPromise = waitIDBRequest<IDBDatabase>(req);
+    this.#db = waitIDBRequest<IDBDatabase>(req);
   }
 
   async #begin(readonly = false) {
-    const db = await this.#dbPromise;
+    let db = this.#db;
+    if (db instanceof Promise) {
+      db = this.#db = await db;
+    }
     return db.transaction(kVfs, readonly ? "readonly" : "readwrite")
       .objectStore(kVfs);
   }
 
   async get(name: string) {
     const tx = await this.#begin(true);
-    return waitIDBRequest<VFile | undefined>(tx.get(name));
+    const ret = await waitIDBRequest<File & { content: ArrayBuffer } | undefined>(tx.get(name));
+    if (ret) {
+      return new File([ret.content], ret.name, ret);
+    }
   }
 
-  async put(name: string, data: VFile["data"], meta?: VFile["meta"]) {
-    const record: VFile = { name, data };
-    if (meta) {
-      record.meta = meta;
-    }
+  async put(file: File) {
+    const { name, type, lastModified } = file;
+    const vfile = { name, type, lastModified, content: await file.arrayBuffer() };
     const tx = await this.#begin();
-    return waitIDBRequest<string>(tx.put(record));
+    return waitIDBRequest<string>(tx.put(vfile));
   }
 
   async delete(name: string) {
@@ -56,28 +65,74 @@ class VFS {
   }
 }
 
-/** Hot class implements the `HotCore` interface. */
+class Archive {
+  #buffer: ArrayBuffer;
+  #entries: Record<string, ArchiveEntry> = {};
+
+  public checksum: number;
+
+  static invalidFormat = new Error("Invalid archive format");
+
+  constructor(buffer: ArrayBuffer) {
+    this.#buffer = buffer;
+    this.#parse();
+  }
+
+  #parse() {
+    const dv = new DataView(this.#buffer);
+    const decoder = new TextDecoder();
+    const readUint32 = (offset: number) => dv.getUint32(offset);
+    const readString = (offset: number, length: number) => decoder.decode(new Uint8Array(this.#buffer, offset, length));
+    if (this.#buffer.byteLength < 19 || readString(0, 11) !== "ESM_ARCHIVE") {
+      throw Archive.invalidFormat;
+    }
+    const length = readUint32(11);
+    if (length !== this.#buffer.byteLength) {
+      throw Archive.invalidFormat;
+    }
+    this.checksum = readUint32(15);
+    let offset = 19;
+    while (offset < dv.byteLength) {
+      const nameLen = dv.getUint16(offset);
+      offset += 2;
+      const name = readString(offset, nameLen);
+      offset += nameLen;
+      const typeLen = dv.getUint8(offset);
+      offset += 1;
+      const type = readString(offset, typeLen);
+      offset += typeLen;
+      const lastModified = readUint32(offset) * 1000; // convert to ms
+      offset += 4;
+      const size = readUint32(offset);
+      offset += 4;
+      this.#entries[name] = { name, type, lastModified, offset, size };
+      offset += size;
+    }
+  }
+
+  has(name: string) {
+    return name in this.#entries;
+  }
+
+  readFile(name: string) {
+    const info = this.#entries[name];
+    return info ? new File([this.#buffer.slice(info.offset, info.offset + info.size)], info.name, info) : null;
+  }
+}
+
+/** class `Hot` implements the `HotCore` interface. */
 class Hot implements HotCore {
   #cache: Cache | null = null;
-  #importMap: Required<ImportMap> | null = null;
-  #fetchListeners: { test: IncomingTest | RegExp; handler: FetchHandler }[] = [];
+  #fetchListeners: [test: IncomingTest | RegExp, handler: FetchHandler][] = [];
   #fireListeners: ((sw: ServiceWorker) => void)[] = [];
-  #isDev = localhosts.has(location.hostname);
   #promises: Promise<any>[] = [];
   #vfs = new VFS(kHot, VERSION);
-  #registeredSW: URL | null = null;
-  #activatedSW: ServiceWorker | null = null;
+  #swScript: string | null = null;
+  #swActive: ServiceWorker | null = null;
+  #archive: Archive | null = null;
 
   get cache() {
-    return this.#cache ?? (this.#cache = createCacheProxy(kHot + VERSION));
-  }
-
-  get importMap() {
-    return this.#importMap ?? (this.#importMap = parseImportMap());
-  }
-
-  get isDev() {
-    return this.#isDev;
+    return this.#cache ?? (this.#cache = createCacheProxy(kHot + "." + VERSION));
   }
 
   get vfs() {
@@ -85,44 +140,56 @@ class Hot implements HotCore {
   }
 
   onFetch(test: IncomingTest | RegExp, handler: FetchHandler) {
-    if (!doc) {
-      this.#fetchListeners.push({ test, handler });
-    }
+    this.#fetchListeners.push([test, handler]);
     return this;
   }
 
   onFire(handler: (reg: ServiceWorker) => void) {
-    if (doc) {
-      if (this.#activatedSW) {
-        handler(this.#activatedSW);
-      } else {
-        this.#fireListeners.push(handler);
-      }
+    if (this.#swActive) {
+      handler(this.#swActive);
+    } else {
+      this.#fireListeners.push(handler);
     }
     return this;
   }
 
-  waitUntil(promise: Promise<void>) {
-    this.#promises.push(promise);
+  waitUntil(...promises: readonly Promise<void>[]) {
+    this.#promises.push(...promises);
+    return this;
   }
 
-  async fire(swScript = "/sw.js") {
+  use(...plugins: readonly Plugin[]) {
+    plugins.forEach((plugin) => plugin.setup(this));
+    return this;
+  }
+
+  async fire(options: FireOptions = {}) {
     const sw = navigator.serviceWorker;
     if (!sw) {
-      throw new Error("Service Worker not supported.");
+      throw new Error("Service Worker not supported");
     }
 
-    if (this.#registeredSW) {
+    const { main, swScript = "/sw.js", swUpdateViaCache } = options;
+
+    // add preload link for the main module if it's provided
+    main && appendElement("link", { rel: "modulepreload", href: main });
+
+    if (this.#swScript === swScript) {
       return;
     }
-    this.#registeredSW = new URL(swScript, loc.href);
+    this.#swScript = swScript;
 
-    const reg = await sw.register(this.#registeredSW, {
+    // register Service Worker
+    const reg = await sw.register(this.#swScript, {
       type: "module",
-      updateViaCache: this.#isDev ? undefined : "all",
+      updateViaCache: swUpdateViaCache,
     });
-
-    let isFirstInstalled = false;
+    const tryFireApp = async () => {
+      if (reg.active?.state === "activated") {
+        await this.#fireApp(reg.active);
+        main && appendElement("script", { type: "module", src: main });
+      }
+    };
 
     // detect Service Worker update available and wait for it to become installed
     reg.onupdatefound = () => {
@@ -130,41 +197,51 @@ class Hot implements HotCore {
       if (installing) {
         installing.onstatechange = () => {
           const { waiting } = reg;
+          // it's the first install
           if (waiting && !sw.controller) {
-            waiting.onstatechange = () => {
-              if (reg.active?.state === "activated") {
-                isFirstInstalled = true;
-                this.#fireApp(reg.active);
-              }
-            };
+            waiting.onstatechange = tryFireApp;
           }
         };
       }
     };
 
     // detect controller change and refresh the page
-    sw.oncontrollerchange, () => {
-      !isFirstInstalled && loc.reload();
+    sw.oncontrollerchange = () => {
+      // TODO: show a toast message
+      loc.reload();
     };
 
-    // fire immediately if there's an active Service Worker
-    if (reg.active) {
-      this.#fireApp(reg.active);
-    }
+    // fire app immediately if there's an activated Service Worker
+    tryFireApp();
   }
 
-  async #fireApp(sw: ServiceWorker) {
-    // update importmap in Service Worker
-    sw.postMessage({ IMPORT_MAP: this.importMap });
+  async #fireApp(swActive: ServiceWorker) {
+    // download and send esm archive to Service Worker
+    queryElements<HTMLLinkElement>("link[rel='preload'][as='fetch'][type='application/esm-archive'][href]", (el) => {
+      this.#promises.push(
+        fetch(el.href).then((res) => {
+          if (res.ok) {
+            return res.arrayBuffer();
+          }
+          return Promise.reject(new Error(res.statusText ?? `<${res.status}>`));
+        }).then((arrayBuffer) => {
+          swActive.postMessage({ ESM_ARCHIVE: arrayBuffer });
+        }).catch((err) => {
+          console.error("Failed to fetch", el.href, err[kMessage]);
+        }),
+      );
+    });
 
     // wait until all promises resolved
     await Promise.all(this.#promises);
+    this.#promises = [];
 
     // fire all `fire` listeners
     for (const handler of this.#fireListeners) {
-      handler(sw);
+      handler(swActive);
     }
-    this.#activatedSW = sw;
+    this.#fetchListeners = [];
+    this.#swActive = swActive;
 
     // apply "[type=hot/module]" script tags
     queryElements<HTMLScriptElement>("script[type='hot/module']", (el) => {
@@ -174,13 +251,8 @@ class Hot implements HotCore {
     });
   }
 
-  use(...plugins: Plugin[]) {
-    plugins.forEach((plugin) => plugin.setup(this));
-    return this;
-  }
-
   listen() {
-    // @ts-expect-error missing dts
+    // @ts-expect-error missing types
     if (typeof clients === "undefined") {
       throw new Error("Service Worker scope not found.");
     }
@@ -191,21 +263,19 @@ class Hot implements HotCore {
       if (!file) {
         return createResponse("Not Found", {}, 404);
       }
-      const headers: HeadersInit = {
-        "content-type": file.meta?.contentType ?? "binary/octet-stream",
-      };
-      return createResponse(file.data, headers);
+      const headers: HeadersInit = { "content-type": file.type };
+      return createResponse(file, headers);
     };
     const on: typeof addEventListener = addEventListener;
 
     on("install", (evt) => {
-      // @ts-expect-error missing dts
+      // @ts-expect-error missing types
       skipWaiting();
       evt.waitUntil(Promise.all(this.#promises));
     });
 
     on("activate", (evt) => {
-      // @ts-expect-error missing dts
+      // @ts-expect-error missing types
       evt.waitUntil(clients.claim());
     });
 
@@ -215,25 +285,31 @@ class Hot implements HotCore {
       const url = new URL(request.url);
       const { pathname } = url;
       const fetchListeners = this.#fetchListeners;
+      const archive = this.#archive;
       if (fetchListeners.length > 0) {
-        for (const { test, handler } of fetchListeners) {
+        for (const [test, handler] of fetchListeners) {
           if (test instanceof RegExp ? test.test(url.pathname) : test(url, request.method, request.headers)) {
             return respondWith(handler(request));
           }
         }
       }
-      if (isSameOrigin(url) && pathname.startsWith("/@hot/")) {
+      if (url.origin === loc.origin && pathname.startsWith("/@hot/")) {
         respondWith(serveVFS(pathname.slice(6)));
+      }
+      if (archive?.has(request.url) || archive?.has(pathname)) {
+        const file = archive.readFile(request.url) ?? archive.readFile(pathname)!;
+        respondWith(createResponse(file, { "content-type": file.type }));
       }
     });
 
-    // listen to `message` event for importmap updating
     on(kMessage, (evt) => {
       const { data } = evt;
-      if (isObject(data)) {
-        const im = data.IMPORT_MAP;
-        if (isObject(im)) {
-          this.#importMap = im as Required<ImportMap>;
+      if (typeof data === "object" && data !== null) {
+        const buffer = data.ESM_ARCHIVE;
+        try {
+          this.#archive = new Archive(buffer);
+        } catch (err) {
+          console.error(err[kMessage]);
         }
       }
     });
@@ -247,56 +323,6 @@ function queryElements<T extends Element>(
 ) {
   // @ts-expect-error throw error if document is not available
   doc.querySelectorAll(selectors).forEach(callback);
-}
-
-/** parse importmap from <script> with `type=importmap` */
-function parseImportMap() {
-  const importMap: Required<ImportMap> = {
-    $support: HTMLScriptElement.supports?.("importmap"),
-    imports: {},
-    scopes: {},
-  };
-  if (!doc) {
-    return importMap;
-  }
-  const script = doc.querySelector("script[type=importmap]");
-  if (script) {
-    try {
-      const json = parse(script.textContent!);
-      if (isObject(json)) {
-        const { imports, scopes } = json;
-        if (isObject(imports)) {
-          validateImports(imports);
-          importMap.imports = imports;
-        }
-        if (isObject(scopes)) {
-          validateScopes(scopes);
-          importMap.scopes = scopes;
-        }
-      }
-    } catch (err) {
-      console.error("Invalid importmap", err[kMessage]);
-    }
-  }
-  return importMap;
-}
-
-function validateImports(imports: Record<string, unknown>) {
-  for (const [k, v] of Object.entries(imports)) {
-    if (!v || typeof v !== "string") {
-      delete imports[k];
-    }
-  }
-}
-
-function validateScopes(imports: Record<string, unknown>) {
-  for (const [k, v] of Object.entries(imports)) {
-    if (isObject(v)) {
-      validateImports(v);
-    } else {
-      delete imports[k];
-    }
-  }
 }
 
 /** create a cache proxy object. */
@@ -318,14 +344,13 @@ function createResponse(
   return new Response(body, { headers, status });
 }
 
-/** check if the given value is an object. */
-function isObject(v: unknown): v is Record<string, any> {
-  return typeof v === "object" && v !== null && !Array.isArray(v);
-}
-
-/** check if the given url has the same origin with current loc. */
-function isSameOrigin(url: URL) {
-  return url.origin === loc.origin;
+/** append an element to the document. */
+function appendElement(tag: string, attrs: Record<string, string>, pos: "head" | "body" = "head") {
+  const el = doc!.createElement(tag);
+  for (const [k, v] of Object.entries(attrs)) {
+    el[k] = v;
+  }
+  doc![pos].appendChild(el);
 }
 
 /** wait for the given IDBRequest. */

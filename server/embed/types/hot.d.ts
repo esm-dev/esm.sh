@@ -3,52 +3,43 @@ export interface Plugin {
   setup: (hot: HotCore) => void;
 }
 
-export interface ImportMap {
-  $support?: boolean;
-  imports?: Record<string, string>;
-  scopes?: Record<string, Record<string, string>>;
+export interface IncomingTest {
+  (url: URL, method: string, headers: Headers): boolean;
 }
 
 export interface FetchHandler {
   (req: Request): Response | Promise<Response>;
 }
 
-export interface IncomingTest {
-  (url: URL, method: string, headers: Headers): boolean;
-}
-
-export interface VFile {
+export interface ArchiveEntry {
   name: string;
-  data: string | Uint8Array;
-  meta?: VFileMeta;
-}
-
-export interface VFileMeta {
-  [key: string]: any;
-  contentType?: string;
+  type: string;
+  lastModified: number;
+  offset: number;
+  size: number;
 }
 
 export interface VFS {
-  get(name: string): Promise<VFile | undefined>;
-  put(
-    name: string,
-    data: string | Uint8Array,
-    meta?: VFile["meta"],
-  ): Promise<string>;
+  get(name: string): Promise<File | undefined>;
+  put(file: File): Promise<string>;
   delete(name: string): Promise<void>;
+}
+
+export interface FireOptions {
+  main?: string;
+  swScript?: string;
+  swUpdateViaCache?: ServiceWorkerUpdateViaCache;
 }
 
 export interface HotCore {
   readonly cache: Cache;
-  readonly importMap: Required<ImportMap>;
-  readonly isDev: boolean;
   readonly vfs: VFS;
-  fire(): Promise<void>;
-  listen(swScript?: string): void;
+  fire(options?: FireOptions): Promise<void>;
+  listen(): void;
   onFetch(test: IncomingTest | RegExp, handler: FetchHandler): this;
   onFire(handler: (reg: ServiceWorker) => void): this;
-  waitUntil(promise: Promise<any>): void;
-  use(...plugins: Plugin[]): this;
+  waitUntil(...promises: readonly Promise<any>[]): this;
+  use(...plugins: readonly Plugin[]): this;
 }
 
 declare global {
