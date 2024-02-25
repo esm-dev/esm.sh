@@ -10,5 +10,6 @@ export class Archive {
   readonly entries: ArchiveEntry[];
   static bundle(entries: File[]): Promise<Uint8Array>;
   constructor(buffer: ArrayBufferLike);
+  has(name: string): boolean;
   readFile(name: string): File;
 }

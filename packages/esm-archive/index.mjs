@@ -65,14 +65,6 @@ export class Archive {
     this.#parse();
   }
 
-  get checksum() {
-    return this.#checksum;
-  }
-
-  get entries() {
-    return Object.values(this.#entries).map(({ offset, ...rest }) => rest);
-  }
-
   #parse() {
     const dv = new DataView(this.#buffer);
     const decoder = new TextDecoder();
@@ -104,6 +96,18 @@ export class Archive {
       this.#entries[name] = { name, type, lastModified, offset, size };
       offset += size;
     }
+  }
+
+  get checksum() {
+    return this.#checksum;
+  }
+
+  get entries() {
+    return Object.values(this.#entries).map(({ offset, ...rest }) => rest);
+  }
+
+  has(name) {
+    return name in this.#entries;
   }
 
   readFile(name) {
