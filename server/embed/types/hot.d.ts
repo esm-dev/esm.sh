@@ -32,11 +32,9 @@ export interface FireOptions {
 }
 
 export interface HotCore {
-  readonly cache: Cache;
   readonly vfs: VFS;
   fire(options?: FireOptions): Promise<void>;
   listen(): void;
-  onFetch(test: IncomingTest | RegExp, handler: FetchHandler): this;
   onFire(handler: (reg: ServiceWorker) => void): this;
   waitUntil(...promises: readonly Promise<any>[]): this;
   use(...plugins: readonly Plugin[]): this;

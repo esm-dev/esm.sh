@@ -122,26 +122,15 @@ class Archive {
 
 /** class `Hot` implements the `HotCore` interface. */
 class Hot implements HotCore {
-  #cache: Cache | null = null;
-  #fetchListeners: [test: IncomingTest | RegExp, handler: FetchHandler][] = [];
-  #fireListeners: ((sw: ServiceWorker) => void)[] = [];
-  #promises: Promise<any>[] = [];
   #vfs = new VFS(kHot, VERSION);
   #swScript: string | null = null;
   #swActive: ServiceWorker | null = null;
   #archive: Archive | null = null;
-
-  get cache() {
-    return this.#cache ?? (this.#cache = createCacheProxy(kHot + "." + VERSION));
-  }
+  #fireListeners: ((sw: ServiceWorker) => void)[] = [];
+  #promises: Promise<any>[] = [];
 
   get vfs() {
     return this.#vfs;
-  }
-
-  onFetch(test: IncomingTest | RegExp, handler: FetchHandler) {
-    this.#fetchListeners.push([test, handler]);
-    return this;
   }
 
   onFire(handler: (reg: ServiceWorker) => void) {
@@ -240,7 +229,7 @@ class Hot implements HotCore {
     for (const handler of this.#fireListeners) {
       handler(swActive);
     }
-    this.#fetchListeners = [];
+    this.#fireListeners = [];
     this.#swActive = swActive;
 
     // apply "[type=hot/module]" script tags
@@ -284,21 +273,16 @@ class Hot implements HotCore {
       const respondWith = evt.respondWith.bind(evt);
       const url = new URL(request.url);
       const { pathname } = url;
-      const fetchListeners = this.#fetchListeners;
       const archive = this.#archive;
-      if (fetchListeners.length > 0) {
-        for (const [test, handler] of fetchListeners) {
-          if (test instanceof RegExp ? test.test(url.pathname) : test(url, request.method, request.headers)) {
-            return respondWith(handler(request));
-          }
-        }
-      }
       if (url.origin === loc.origin && pathname.startsWith("/@hot/")) {
         respondWith(serveVFS(pathname.slice(6)));
       }
-      if (archive?.has(request.url) || archive?.has(pathname)) {
-        const file = archive.readFile(request.url) ?? archive.readFile(pathname)!;
-        respondWith(createResponse(file, { "content-type": file.type }));
+      for (const key of [request.url, pathname]) {
+        if (archive?.has(key)) {
+          const file = archive.readFile(key)!;
+          respondWith(createResponse(file, { "content-type": file.type }));
+          break;
+        }
       }
     });
 
@@ -323,16 +307,6 @@ function queryElements<T extends Element>(
 ) {
   // @ts-expect-error throw error if document is not available
   doc.querySelectorAll(selectors).forEach(callback);
-}
-
-/** create a cache proxy object. */
-function createCacheProxy(cacheName: string) {
-  const cachePromise = caches.open(cacheName);
-  return new Proxy({}, {
-    get: (_, name) => async (...args: unknown[]) => {
-      return (await cachePromise as any)[name](...args);
-    },
-  }) as Cache;
 }
 
 /** create a response object. */
