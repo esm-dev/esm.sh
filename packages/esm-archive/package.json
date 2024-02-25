@@ -1,7 +1,7 @@
 {
-  "name": "esm-bundle",
+  "name": "esm-archive",
   "version": "0.0.1",
-  "description": "Bundling multiple files into a single binary blob.",
+  "description": "Archive multiple files into a single binary blob.",
   "type": "module",
   "main": "index.mjs",
   "module": "index.mjs",

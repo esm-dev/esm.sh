@@ -1,36 +1,37 @@
 import xxhash from "xxhash-wasm";
 
-export class Bundle {
+export class Archive {
   #buffer;
   #checksum;
   #entries = {};
 
-  static invalidBundle = new Error("Invalid bundle format");
+  static invalidFormat = new Error("Invalid archive format");
 
   static async bundle(entries) {
-    if (!Bundle.xxhash) {
-      Bundle.xxhash = xxhash();
+    if (!Archive.xxhash) {
+      Archive.xxhash = xxhash();
     }
-    if (Bundle.xxhash instanceof Promise) {
-      Bundle.xxhash = await Bundle.xxhash;
+    if (Archive.xxhash instanceof Promise) {
+      Archive.xxhash = await Archive.xxhash;
     }
     const encoder = new TextEncoder();
     const encode = (str) => encoder.encode(str);
-    const length = 18 +
+    const length = 19 +
       entries.reduce(
-        (acc, { name, type, content }) => acc + 11 + encode(name).length + encode(type).length + content.length,
+        (acc, { name, type, size }) => acc + 11 + encode(name).length + encode(type).length + size,
         0,
       );
     const buffer = new Uint8Array(length);
     const dv = new DataView(new ArrayBuffer(8));
-    const h32 = Bundle.xxhash.create32();
+    const h32 = Archive.xxhash.create32();
     dv.setUint32(0, length);
-    buffer.set(encode("HOT_BUNDLE"));
-    buffer.set(new Uint8Array(dv.buffer), 10);
-    let offset = 18;
+    buffer.set(encode("ESM_ARCHIVE"));
+    buffer.set(new Uint8Array(dv.buffer), 11);
+    let offset = 19;
     for (const entry of entries) {
       const name = encode(entry.name);
       const type = encode(entry.type);
+      const content = new Uint8Array(await entry.arrayBuffer());
       if (name.length > 0xffff || type.length > 0xff) {
         throw new Error("entry name or type too long");
       }
@@ -44,18 +45,18 @@ export class Bundle {
       buffer.set(type, offset);
       offset += type.length;
       dv.setUint32(0, Math.round((entry.lastModified ?? 0) / 1000)); // convert to seconds
-      dv.setUint32(4, entry.content.length);
+      dv.setUint32(4, content.length);
       buffer.set(new Uint8Array(dv.buffer), offset);
       offset += 8;
-      buffer.set(entry.content, offset);
-      offset += entry.content.length;
+      buffer.set(content, offset);
+      offset += content.length;
       h32.update(name);
       h32.update(type);
       h32.update(new Uint8Array(dv.buffer));
-      h32.update(entry.content);
+      h32.update(content);
     }
     dv.setUint32(0, h32.digest());
-    buffer.set(new Uint8Array(dv.buffer.slice(0, 4)), 14);
+    buffer.set(new Uint8Array(dv.buffer.slice(0, 4)), 15);
     return buffer;
   }
 
@@ -78,15 +79,15 @@ export class Bundle {
     const readString = (offset, length) => {
       return decoder.decode(new Uint8Array(this.#buffer, offset, length));
     };
-    if (this.#buffer.byteLength < 18 || readString(0, 10) !== "HOT_BUNDLE") {
-      throw Bundle.invalidBundle;
+    if (this.#buffer.byteLength < 19 || readString(0, 11) !== "ESM_ARCHIVE") {
+      throw Archive.invalidFormat;
     }
-    const length = dv.getUint32(10);
+    const length = dv.getUint32(11);
     if (length !== this.#buffer.byteLength) {
-      throw Bundle.invalidBundle;
+      throw Archive.invalidFormat;
     }
-    this.#checksum = dv.getUint32(14);
-    let offset = 18;
+    this.#checksum = dv.getUint32(15);
+    let offset = 19;
     while (offset < dv.byteLength) {
       const nameLen = dv.getUint16(offset);
       offset += 2;
@@ -98,15 +99,15 @@ export class Bundle {
       offset += typeLen;
       const lastModified = dv.getUint32(offset) * 1000; // convert to ms
       offset += 4;
-      const length = dv.getUint32(offset);
+      const size = dv.getUint32(offset);
       offset += 4;
-      this.#entries[name] = { name, type, lastModified, offset, length };
-      offset += length;
+      this.#entries[name] = { name, type, lastModified, offset, size };
+      offset += size;
     }
   }
 
   readFile(name) {
     const info = this.#entries[name];
-    return info ? new File([this.#buffer.slice(info.offset, info.offset + info.length)], info.name, info) : null;
+    return info ? new File([this.#buffer.slice(info.offset, info.offset + info.size)], info.name, info) : null;
   }
 }
