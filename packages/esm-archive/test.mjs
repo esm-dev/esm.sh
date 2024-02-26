@@ -1,3 +1,4 @@
+import { writeFileSync } from "fs";
 import { Archive, bundle } from "./index.mjs";
 
 const now = Date.now();
@@ -24,3 +25,10 @@ if (await archive.readFile("bar.txt").text() !== await file1.text()) throw new E
 
 console.log("ok");
 console.log("chekcsum", archive.checksum);
+
+writeFileSync(
+  "../../server/embed/esm-archive.bin",
+  await bundle([
+    new File(['export const foo = "bar";'], "/foo.js", { type: "application/javascript", lastModified: now }),
+  ]),
+);

@@ -9,7 +9,7 @@ export async function bundle(entries) {
   }
   const encoder = new TextEncoder();
   const encode = (str) => encoder.encode(str);
-  const length = 19 +
+  const length = 18 +
     entries.reduce(
       (acc, { name, type, size }) => acc + 11 + encode(name).length + encode(type).length + size,
       0,
@@ -18,9 +18,9 @@ export async function bundle(entries) {
   const dv = new DataView(new ArrayBuffer(8));
   const h32 = Archive.xxhash.create32();
   dv.setUint32(0, length);
-  buffer.set(encode("ESM_ARCHIVE"));
-  buffer.set(new Uint8Array(dv.buffer), 11);
-  let offset = 19;
+  buffer.set(encode("ESMARCHIVE"));
+  buffer.set(new Uint8Array(dv.buffer), 10);
+  let offset = 18;
   for (const entry of entries) {
     const name = encode(entry.name);
     const type = encode(entry.type);
@@ -49,7 +49,7 @@ export async function bundle(entries) {
     h32.update(content);
   }
   dv.setUint32(0, h32.digest());
-  buffer.set(new Uint8Array(dv.buffer.slice(0, 4)), 15);
+  buffer.set(new Uint8Array(dv.buffer.slice(0, 4)), 14);
   return buffer;
 }
 
@@ -58,7 +58,7 @@ export class Archive {
   #checksum;
   #entries = {};
 
-  static invalidFormat = new Error("Invalid archive format");
+  static invalidFormat = new Error("Invalid esm archive format");
 
   constructor(buffer) {
     this.#buffer = buffer.buffer ?? buffer;
@@ -68,18 +68,17 @@ export class Archive {
   #parse() {
     const dv = new DataView(this.#buffer);
     const decoder = new TextDecoder();
-    const readString = (offset, length) => {
-      return decoder.decode(new Uint8Array(this.#buffer, offset, length));
-    };
-    if (this.#buffer.byteLength < 19 || readString(0, 11) !== "ESM_ARCHIVE") {
+    const readUint32 = (offset) => dv.getUint32(offset);
+    const readString = (offset, length) => decoder.decode(new Uint8Array(this.#buffer, offset, length));
+    if (this.#buffer.byteLength < 18 || readString(0, 10) !== "ESMARCHIVE") {
       throw Archive.invalidFormat;
     }
-    const length = dv.getUint32(11);
+    const length = readUint32(10);
     if (length !== this.#buffer.byteLength) {
       throw Archive.invalidFormat;
     }
-    this.#checksum = dv.getUint32(15);
-    let offset = 19;
+    this.#checksum = readUint32(14);
+    let offset = 18;
     while (offset < dv.byteLength) {
       const nameLen = dv.getUint16(offset);
       offset += 2;
@@ -89,9 +88,9 @@ export class Archive {
       offset += 1;
       const type = readString(offset, typeLen);
       offset += typeLen;
-      const lastModified = dv.getUint32(offset) * 1000; // convert to ms
+      const lastModified = readUint32(offset) * 1000; // convert to ms
       offset += 4;
-      const size = dv.getUint32(offset);
+      const size = readUint32(offset);
       offset += 4;
       this.#entries[name] = { name, type, lastModified, offset, size };
       offset += size;
