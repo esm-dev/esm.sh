@@ -157,13 +157,13 @@ function verifyExports(names) {
 }
 
 async function parseCjsExports(input) {
-  const { cwd, importPath, invokeMode, nodeEnv = "production" } = input;
+  const { cwd, importPath, requireMode, nodeEnv = "production" } = input;
   const entry = importPath.startsWith("/") && /\.(js|cjs)$/.test(importPath)
     ? importPath
     : await resolve(cwd, importPath);
   const exports = [];
 
-  if (invokeMode) {
+  if (requireMode) {
     process.env.NODE_ENV = nodeEnv;
     const mod = require(entry);
     if (isObject(mod) || typeof mod === "function") {

@@ -15,7 +15,7 @@ import (
 )
 
 // allowlist for _invoke_ mode
-var invokeModeAllowList = []string{
+var requireModeAllowList = []string{
 	"@babel/types",
 	"cheerio",
 	"graceful-fs",
@@ -88,9 +88,9 @@ func cjsLexer(cwd string, importPath string, nodeEnv string) (ret cjsExportsResu
 	}
 
 	/* workaround for edge cases that can't be parsed by cjsLexer correctly */
-	for _, name := range invokeModeAllowList {
+	for _, name := range requireModeAllowList {
 		if importPath == name || strings.HasPrefix(importPath, name+"/") {
-			args["invokeMode"] = 1
+			args["requireMode"] = 1
 			break
 		}
 	}
