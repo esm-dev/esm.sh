@@ -3,14 +3,6 @@ export interface Plugin {
   setup: (hot: HotCore) => void;
 }
 
-export interface IncomingTest {
-  (url: URL, method: string, headers: Headers): boolean;
-}
-
-export interface FetchHandler {
-  (req: Request): Response | Promise<Response>;
-}
-
 export interface ArchiveEntry {
   name: string;
   type: string;
@@ -36,8 +28,9 @@ export interface HotCore {
   fire(options?: FireOptions): Promise<void>;
   listen(): void;
   onFire(handler: (reg: ServiceWorker) => void): this;
-  waitUntil(...promises: readonly Promise<any>[]): this;
+  onUpdateFound: () => void;
   use(...plugins: readonly Plugin[]): this;
+  waitUntil(...promises: readonly Promise<any>[]): this;
 }
 
 declare global {

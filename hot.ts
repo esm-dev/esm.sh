@@ -4,21 +4,15 @@
 
 /// <reference lib="webworker" />
 
-import type {
-  ArchiveEntry,
-  FetchHandler,
-  FireOptions,
-  HotCore,
-  IncomingTest,
-  Plugin,
-} from "./server/embed/types/hot.d.ts";
+import type { ArchiveEntry, FireOptions, HotCore, Plugin } from "./server/embed/types/hot.d.ts";
 
 const VERSION = 135;
 const doc: Document | undefined = globalThis.document;
-const loc = location;
 const kHot = "esm.sh/hot";
 const kMessage = "message";
 const kVfs = "vfs";
+const kTypeEsmArchive = "application/esm-archive";
+const kHotArchive = "#hot-archive";
 
 /** class `VFS` implements the virtual file system by using indexed database. */
 class VFS {
@@ -65,33 +59,37 @@ class VFS {
   }
 }
 
+/**
+ * class `Archive` implements the reader for esm-archive format.
+ * more details see https://www.npmjs.com/package/esm-archive
+ */
 class Archive {
   #buffer: ArrayBuffer;
   #entries: Record<string, ArchiveEntry> = {};
 
-  public checksum: number;
-
-  static invalidFormat = new Error("Invalid archive format");
+  static invalidFormat = new Error("Invalid esm-archive format");
 
   constructor(buffer: ArrayBuffer) {
     this.#buffer = buffer;
     this.#parse();
   }
 
+  public checksum: number;
+
   #parse() {
     const dv = new DataView(this.#buffer);
     const decoder = new TextDecoder();
     const readUint32 = (offset: number) => dv.getUint32(offset);
     const readString = (offset: number, length: number) => decoder.decode(new Uint8Array(this.#buffer, offset, length));
-    if (this.#buffer.byteLength < 19 || readString(0, 11) !== "ESM_ARCHIVE") {
+    if (this.#buffer.byteLength < 18 || readString(0, 10) !== "ESMARCHIVE") {
       throw Archive.invalidFormat;
     }
-    const length = readUint32(11);
+    const length = readUint32(10);
     if (length !== this.#buffer.byteLength) {
       throw Archive.invalidFormat;
     }
     this.checksum = readUint32(15);
-    let offset = 19;
+    let offset = 18;
     while (offset < dv.byteLength) {
       const nameLen = dv.getUint16(offset);
       offset += 2;
@@ -128,10 +126,13 @@ class Hot implements HotCore {
   #archive: Archive | null = null;
   #fireListeners: ((sw: ServiceWorker) => void)[] = [];
   #promises: Promise<any>[] = [];
+  #bc = new BroadcastChannel(kHot);
 
   get vfs() {
     return this.#vfs;
   }
+
+  onUpdateFound = () => location.reload();
 
   onFire(handler: (reg: ServiceWorker) => void) {
     if (this.#swActive) {
@@ -161,7 +162,9 @@ class Hot implements HotCore {
     const { main, swScript = "/sw.js", swUpdateViaCache } = options;
 
     // add preload link for the main module if it's provided
-    main && appendElement("link", { rel: "modulepreload", href: main });
+    if (main) {
+      appendElement("link", { rel: "modulepreload", href: main });
+    }
 
     if (this.#swScript === swScript) {
       return;
@@ -186,7 +189,7 @@ class Hot implements HotCore {
       if (installing) {
         installing.onstatechange = () => {
           const { waiting } = reg;
-          // it's the first install
+          // it's first install
           if (waiting && !sw.controller) {
             waiting.onstatechange = tryFireApp;
           }
@@ -194,11 +197,8 @@ class Hot implements HotCore {
       }
     };
 
-    // detect controller change and refresh the page
-    sw.oncontrollerchange = () => {
-      // TODO: show a toast message
-      loc.reload();
-    };
+    // detect controller change
+    sw.oncontrollerchange = this.onUpdateFound;
 
     // fire app immediately if there's an activated Service Worker
     tryFireApp();
@@ -206,7 +206,7 @@ class Hot implements HotCore {
 
   async #fireApp(swActive: ServiceWorker) {
     // download and send esm archive to Service Worker
-    queryElements<HTMLLinkElement>("link[rel='preload'][as='fetch'][type='application/esm-archive'][href]", (el) => {
+    queryElements<HTMLLinkElement>(`link[rel="preload"][as="fetch"][type="${kTypeEsmArchive}"][href]`, (el) => {
       this.#promises.push(
         fetch(el.href).then((res) => {
           if (res.ok) {
@@ -214,7 +214,12 @@ class Hot implements HotCore {
           }
           return Promise.reject(new Error(res.statusText ?? `<${res.status}>`));
         }).then((arrayBuffer) => {
-          swActive.postMessage({ ESM_ARCHIVE: arrayBuffer });
+          swActive.postMessage({ HOT_ARCHIVE: arrayBuffer });
+          this.#bc.onmessage = (evt) => {
+            if (evt.data === kHotArchive) {
+              this.onUpdateFound();
+            }
+          };
         }).catch((err) => {
           console.error("Failed to fetch", el.href, err[kMessage]);
         }),
@@ -247,6 +252,7 @@ class Hot implements HotCore {
     }
 
     const vfs = this.#vfs;
+    const on: typeof addEventListener = addEventListener;
     const serveVFS = async (name: string) => {
       const file = await vfs.get(name);
       if (!file) {
@@ -255,7 +261,14 @@ class Hot implements HotCore {
       const headers: HeadersInit = { "content-type": file.type };
       return createResponse(file, headers);
     };
-    const on: typeof addEventListener = addEventListener;
+
+    this.#promises.push(
+      vfs.get(kHotArchive).then(async (file) => {
+        if (file) {
+          this.#archive = new Archive(await file.arrayBuffer());
+        }
+      }).catch((err) => console.error(err[kMessage])),
+    );
 
     on("install", (evt) => {
       // @ts-expect-error missing types
@@ -274,7 +287,7 @@ class Hot implements HotCore {
       const url = new URL(request.url);
       const { pathname } = url;
       const archive = this.#archive;
-      if (url.origin === loc.origin && pathname.startsWith("/@hot/")) {
+      if (url.origin === location.origin && pathname.startsWith("/@hot/")) {
         respondWith(serveVFS(pathname.slice(6)));
       }
       for (const key of [request.url, pathname]) {
@@ -289,11 +302,18 @@ class Hot implements HotCore {
     on(kMessage, (evt) => {
       const { data } = evt;
       if (typeof data === "object" && data !== null) {
-        const buffer = data.ESM_ARCHIVE;
-        try {
-          this.#archive = new Archive(buffer);
-        } catch (err) {
-          console.error(err[kMessage]);
+        const buffer = data.HOT_ARCHIVE;
+        if (buffer instanceof ArrayBuffer) {
+          try {
+            const archive = new Archive(buffer);
+            if (archive.checksum !== this.#archive?.checksum) {
+              this.#archive = archive;
+              this.#bc.postMessage(kHotArchive);
+              vfs.put(new File([buffer], kHotArchive, { type: kTypeEsmArchive }));
+            }
+          } catch (err) {
+            console.error(err[kMessage]);
+          }
         }
       }
     });
