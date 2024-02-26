@@ -1,4 +1,4 @@
-import { Archive } from "./index.mjs";
+import { Archive, bundle } from "./index.mjs";
 
 const now = Date.now();
 const nowUnix = Math.round(now / 1000);
@@ -7,8 +7,8 @@ const randomString = () =>
 
 const file0 = new File([randomString()], "foo.txt", { type: "text/foo", lastModified: now });
 const file1 = new File([randomString()], "bar.txt", { type: "text/bar", lastModified: now });
-const bundle = await Archive.bundle([file0, file1]);
-const archive = new Archive(bundle);
+const data = await bundle([file0, file1]);
+const archive = new Archive(data);
 
 if (archive.entries.length !== 2) throw new Error("invalid entries");
 if (archive.entries[0].name !== "foo.txt") throw new Error("invalid entries");

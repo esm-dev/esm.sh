@@ -3,10 +3,10 @@
 Archive multiple files into a single binary blob.
 
 ```js
-import { Archive } from "esm-archive";
+import { Archive, bundle } from "esm-archive";
 
 // bundle some files
-const data = Archive.bundle([
+const data = bundle([
   new File(["bar"], "foo.txt", { type: "text/plain" }),
   new File(["foo"], "bar.txt", { type: "text/plain" }),
 ]);
@@ -28,10 +28,10 @@ This library does not compress the archived files. Here is an example of how to 
 using gzip, and `DecompressionStream` to decompress it again.
 
 ```js
-// bundle some files
-const data = Archive.bundle([/* ... */]);
+import { Archive, bundle } from "esm-archive";
 
 // compress the archive using CompressionStream
+const data = bundle([/* ... */]);
 const compressed = await new Response(data).body.pipeThrough(new CompressionStream("gzip")).arrayBuffer();
 
 // use the compressed archive

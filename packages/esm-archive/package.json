@@ -1,6 +1,6 @@
 {
   "name": "esm-archive",
-  "version": "0.0.2",
+  "version": "0.0.3",
   "description": "Archive multiple files into a single binary blob.",
   "type": "module",
   "main": "index.mjs",
