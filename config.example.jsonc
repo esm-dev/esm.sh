@@ -6,9 +6,6 @@
   // You don't need to provide a certificate, it will generate automatically by autocert.
   "tlsPort": 0,
 
-  // The port to listen server on for node service, default is 8088 (do not change if you don't know what you are doing).
-  "nsPort": 8088,
-
   // The build max concurrency, default is `runtime.NumCPU()`
   "buildConcurrency": 0,
 
@@ -51,13 +48,13 @@
   // Default behavior is to fetch all packages from the npm registry.
   "npmRegistryScope": "@my-scope",
 
+  // The npm token for private packages, default is empty.
+  "npmToken": "",
+
   // These two fields are used for basic authentication towards a private
   // package registry, default for both is empty.
   "npmUser": "",
   "npmPassword": "",
-
-  // The npm token for private packages, default is empty.
-  "npmToken": "",
 
   // Disable compressing the response, default is false.
   "noCompress": false,
