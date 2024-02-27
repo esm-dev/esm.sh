@@ -10,7 +10,7 @@ export async function bundle(entries) {
   const encoder = new TextEncoder();
   const encode = (str) => encoder.encode(str);
   const length = 18 +
-    entries.reduce(
+    Array.from(entries).reduce(
       (acc, { name, type, size }) => acc + 11 + encode(name).length + encode(type).length + size,
       0,
     );

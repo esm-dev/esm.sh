@@ -13,4 +13,4 @@ export class Archive {
   readFile(name: string): File;
 }
 
-export function bundle(entries: File[]): Promise<Uint8Array>;
+export function bundle(entries: FileList | File[]): Promise<Uint8Array>;
