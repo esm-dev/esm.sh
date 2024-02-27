@@ -18,8 +18,8 @@ archive.entries[0].name; // => "foo.txt"
 archive.entries[0].type; // => "text/plain"
 archive.entries[1].name; // => "bar.txt"
 archive.entries[1].type; // => "text/plain"
-archive.readFile("foo.txt"); // => File(["bar"], "foo.txt", { type: "text/plain" })
-archive.readFile("bar.txt"); // => File(["foo"], "bar.txt", { type: "text/plain" })
+archive.openFile("foo.txt"); // => File(["bar"], "foo.txt", { type: "text/plain" })
+archive.openFile("bar.txt"); // => File(["foo"], "bar.txt", { type: "text/plain" })
 ```
 
 ## Compression

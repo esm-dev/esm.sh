@@ -9,8 +9,8 @@ export class Archive {
   readonly checksum: number;
   readonly entries: ArchiveEntry[];
   constructor(buffer: ArrayBufferLike);
-  has(name: string): boolean;
-  readFile(name: string): File;
+  exists(name: string): boolean;
+  openFile(name: string): File;
 }
 
 export function bundle(entries: FileList | File[]): Promise<Uint8Array>;

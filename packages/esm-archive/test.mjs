@@ -20,8 +20,8 @@ if (archive.entries[1].name !== "bar.txt") throw new Error("invalid entries");
 if (archive.entries[1].type !== "text/bar") throw new Error("invalid entries");
 if (archive.entries[1].lastModified !== lastModified2) throw new Error("invalid entries");
 if (archive.entries[1].size !== file1.size) throw new Error("invalid entries");
-if (await archive.readFile("foo.txt").text() !== await file0.text()) throw new Error("invalid foo.txt");
-if (await archive.readFile("bar.txt").text() !== await file1.text()) throw new Error("invalid bar.txt");
+if (await archive.openFile("foo.txt").text() !== await file0.text()) throw new Error("invalid foo.txt");
+if (await archive.openFile("bar.txt").text() !== await file1.text()) throw new Error("invalid bar.txt");
 
 console.log("ok");
 console.log("chekcsum", archive.checksum);
@@ -29,6 +29,6 @@ console.log("chekcsum", archive.checksum);
 writeFileSync(
   "../../server/embed/esm-archive.bin",
   await bundle([
-    new File(['export const foo = "bar";'], "/foo.js", { type: "application/javascript", lastModified }),
+    new File(['export const foo = "bar";'], "http://localhost:8080/foo.js", { type: "application/javascript", lastModified }),
   ]),
 );

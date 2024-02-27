@@ -48,9 +48,16 @@ class VFS {
 
   async put(file: File) {
     const { name, type, lastModified } = file;
-    const vfile = { name, type, lastModified, content: await file.arrayBuffer() };
     const tx = await this.#begin();
-    return waitIDBRequest<string>(tx.put(vfile));
+    if (await waitIDBRequest<boolean>(tx.getKey(name))) {
+      return name;
+    }
+    return waitIDBRequest<string>(tx.put({
+      name,
+      type,
+      lastModified,
+      content: await file.arrayBuffer(),
+    }));
   }
 
   async delete(name: string) {
@@ -108,11 +115,11 @@ class Archive {
     }
   }
 
-  has(name: string) {
+  exists(name: string) {
     return name in this.#entries;
   }
 
-  readFile(name: string) {
+  openFile(name: string) {
     const info = this.#entries[name];
     return info ? new File([this.#buffer.slice(info.offset, info.offset + info.size)], info.name, info) : null;
   }
@@ -290,12 +297,9 @@ class Hot implements HotCore {
       if (url.origin === location.origin && pathname.startsWith("/@hot/")) {
         respondWith(serveVFS(pathname.slice(6)));
       }
-      for (const key of [request.url, pathname]) {
-        if (archive?.has(key)) {
-          const file = archive.readFile(key)!;
-          respondWith(createResponse(file, { "content-type": file.type }));
-          break;
-        }
+      if (archive?.exists(request.url)) {
+        const file = archive.openFile(request.url)!;
+        respondWith(createResponse(file, { "content-type": file.type }));
       }
     });
 

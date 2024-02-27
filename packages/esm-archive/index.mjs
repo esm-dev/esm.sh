@@ -105,11 +105,11 @@ export class Archive {
     return Object.values(this.#entries).map(({ offset, ...rest }) => rest);
   }
 
-  has(name) {
+  exists(name) {
     return name in this.#entries;
   }
 
-  readFile(name) {
+  openFile(name) {
     const info = this.#entries[name];
     return info ? new File([this.#buffer.slice(info.offset, info.offset + info.size)], info.name, info) : null;
   }
