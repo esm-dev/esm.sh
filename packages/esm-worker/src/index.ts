@@ -543,6 +543,12 @@ function withESMWorker(middleware?: Middleware) {
     const gh = pathname.startsWith("/gh/");
     if (gh) {
       pathname = "/@" + pathname.slice(4);
+    } else if (pathname.startsWith("/jsr/@")) {
+      const segs = pathname.split("/");
+      pathname = "/@jsr/" + segs[2].slice(1) + "__" + segs[3];
+      if (segs.length > 4) {
+        pathname += "/" + segs.slice(4).join("/");
+      }
     }
 
     // strip external all marker
@@ -608,12 +614,12 @@ function withESMWorker(middleware?: Middleware) {
       return err(`Invalid package name '${packageName}'`, 400);
     }
 
-    let pkg = packageName;
+    let pkgId = packageName;
     if (packageScope) {
-      pkg = packageScope + "/" + packageName;
+      pkgId = packageScope + "/" + packageName;
       if (gh) {
         // strip the leading `@`
-        pkg = pkg.slice(1);
+        pkgId = pkgId.slice(1);
       }
     }
 
@@ -626,7 +632,7 @@ function withESMWorker(middleware?: Middleware) {
         ) {
           packageVersion = packageVersion.slice(1);
         } else if (/^\d+$/.test(packageVersion)) {
-          packageVersion = "^" + packageVersion;
+          packageVersion = "~" + packageVersion;
         } else if (/^\d+.\d+$/.test(packageVersion)) {
           packageVersion = "~" + packageVersion;
         }
@@ -664,13 +670,17 @@ function withESMWorker(middleware?: Middleware) {
         if (env.NPM_TOKEN) {
           headers.set("Authorization", `Bearer ${env.NPM_TOKEN}`);
         }
+        let registry = env.NPM_REGISTRY ?? defaultNpmRegistry;
+        if (pkgId.startsWith("@jsr/")) {
+          registry = "https://npm.jsr.io";
+        }
         const res = await fetch(
-          new URL(pkg, env.NPM_REGISTRY ?? defaultNpmRegistry),
+          new URL(pkgId, registry),
           { headers },
         );
         if (!res.ok) {
           if (res.status === 404 || res.status === 401) {
-            return errPkgNotFound(pkg);
+            return errPkgNotFound(pkgId);
           }
           return new Response(res.body, {
             status: res.status,
@@ -685,11 +695,15 @@ function withESMWorker(middleware?: Middleware) {
         if (hasExternalAllMarker) {
           prefix += "*";
         }
+        let pkgName = pkgId;
+        if (pkgId.startsWith("@jsr/") && !hasTargetSegment(subPath)) {
+          pkgName = "jsr/@" + pkgName.slice(5).replace("__", "/");
+        }
         const eq = extraQuery ? "&" + extraQuery : "";
         const distVersion = regInfo["dist-tags"]
           ?.[packageVersion || "latest"];
         if (distVersion) {
-          const uri = `${prefix}${pkg}@${fixPkgVersion(pkg, distVersion)}${eq}${subPath}${url.search}`;
+          const uri = `${prefix}${pkgName}@${fixPkgVersion(pkgId, distVersion)}${eq}${subPath}${url.search}`;
           return redirect(new URL(uri, url), 302);
         }
         const versions = Object.keys(regInfo.versions ?? []).filter(validate)
@@ -697,7 +711,7 @@ function withESMWorker(middleware?: Middleware) {
         if (!packageVersion) {
           const latestVersion = versions.filter((v) => !v.includes("-")).pop() ?? versions.pop();
           if (latestVersion) {
-            const uri = `${prefix}${pkg}@${fixPkgVersion(pkg, latestVersion)}${eq}${subPath}${url.search}`;
+            const uri = `${prefix}${pkgName}@${fixPkgVersion(pkgId, latestVersion)}${eq}${subPath}${url.search}`;
             return redirect(new URL(uri, url), 302);
           }
         }
@@ -706,7 +720,7 @@ function withESMWorker(middleware?: Middleware) {
           for (let i = arr.length - 1; i >= 0; i--) {
             const v = arr[i];
             if (satisfies(v, packageVersion)) {
-              const uri = `${prefix}${pkg}@${fixPkgVersion(pkg, v)}${eq}${subPath}${url.search}`;
+              const uri = `${prefix}${pkgName}@${fixPkgVersion(pkgId, v)}${eq}${subPath}${url.search}`;
               return redirect(new URL(uri, url), 302);
             }
           }
@@ -720,7 +734,7 @@ function withESMWorker(middleware?: Middleware) {
 
     // redirect `/@types/PKG` to `.d.ts` files
     if (
-      pkg.startsWith("@types/") &&
+      pkgId.startsWith("@types/") &&
       (subPath === "" || !subPath.endsWith(".d.ts"))
     ) {
       return ctx.withCache(async () => {
@@ -733,12 +747,12 @@ function withESMWorker(middleware?: Middleware) {
             headers.set("Authorization", `Bearer ${env.NPM_TOKEN}`);
           }
           const res = await fetch(
-            new URL(pkg, env.NPM_REGISTRY ?? defaultNpmRegistry),
+            new URL(pkgId, env.NPM_REGISTRY ?? defaultNpmRegistry),
             { headers },
           );
           if (!res.ok) {
             if (res.status === 404 || res.status === 401) {
-              return errPkgNotFound(pkg);
+              return errPkgNotFound(pkgId);
             }
             return new Response(res.body, { status: res.status, headers });
           }
@@ -753,8 +767,8 @@ function withESMWorker(middleware?: Middleware) {
 
     // redirect to main css for CSS packages
     let css: string | undefined;
-    if (!gh && (css = cssPackages[pkg]) && subPath === "") {
-      return redirect(new URL(`/${pkg}@${packageVersion}/${css}`, url), 301);
+    if (!gh && (css = cssPackages[pkgId]) && subPath === "") {
+      return redirect(new URL(`/${pkgId}@${packageVersion}/${css}`, url), 301);
     }
 
     // redirect to real package css file: `/PKG?css` -> `/v100/PKG/es2022/pkg.css`
@@ -770,7 +784,7 @@ function withESMWorker(middleware?: Middleware) {
       const pined = hasBuildVerPrefix || hasBuildVerQuery;
       return redirect(
         new URL(
-          `${prefix}/${pkg}@${packageVersion}/${target}/${packageName}.css`,
+          `${prefix}/${pkgId}@${packageVersion}/${target}/${packageName}.css`,
           url,
         ),
         pined ? 301 : 302,
@@ -778,7 +792,7 @@ function withESMWorker(middleware?: Middleware) {
     }
 
     // redirect to real wasm file: `/v100/PKG/es2022/foo.wasm` -> `PKG/foo.wasm`
-    if (hasBuildVerPrefix && subPath.endsWith(".wasm")) {
+    if (hasBuildVerPrefix && hasTargetSegment(subPath) && (subPath.endsWith(".wasm") || subPath.endsWith(".json"))) {
       return ctx.withCache(() => {
         return fetchOrigin(req, env, ctx, url.pathname, corsHeaders());
       });
@@ -807,7 +821,7 @@ function withESMWorker(middleware?: Middleware) {
       if (assetsExts.has(ext)) {
         return ctx.withCache(() => {
           const prefix = gh ? "/gh" : "";
-          const pathname = `${prefix}/${pkg}@${packageVersion}${subPath}`;
+          const pathname = `${prefix}/${pkgId}@${packageVersion}${subPath}`;
           return fetchOriginWithR2Cache(req, ctx, env, pathname);
         });
       }
@@ -833,7 +847,7 @@ function withESMWorker(middleware?: Middleware) {
         if (gh) {
           prefix += "/gh";
         }
-        const path = `${prefix}/${pkg}@${packageVersion}${subPath}${url.search}`;
+        const path = `${prefix}/${pkgId}@${packageVersion}${subPath}${url.search}`;
         return fetchOriginWithKVCache(req, env, ctx, path, true);
       });
     }
@@ -842,14 +856,14 @@ function withESMWorker(middleware?: Middleware) {
       let prefix = "";
       if (hasBuildVerPrefix) {
         prefix += `/${buildVersion}`;
-      } else if (stableBuild.has(pkg)) {
+      } else if (stableBuild.has(pkgId)) {
         prefix += `/v${STABLE_VERSION}`;
       }
       if (gh) {
         prefix += "/gh";
       }
       const marker = hasExternalAllMarker ? "*" : "";
-      const path = `${prefix}/${marker}${pkg}@${packageVersion}${subPath}${url.search}`;
+      const path = `${prefix}/${marker}${pkgId}@${packageVersion}${subPath}${url.search}`;
       return fetchOriginWithKVCache(req, env, ctx, path);
     }, { varyUA: true });
   }

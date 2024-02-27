@@ -16,12 +16,19 @@ type Pkg struct {
 	SubModule  string `json:"subModule"`
 	FromGithub bool   `json:"fromGithub"`
 	FromEsmsh  bool   `json:"fromEsmsh"`
+	Deprecated string `json:"deprecated"`
 }
 
 func validatePkgPath(pathname string) (pkg Pkg, extraQuery string, err error) {
 	fromGithub := strings.HasPrefix(pathname, "/gh/") && strings.Count(pathname, "/") >= 3
 	if fromGithub {
 		pathname = "/@" + pathname[4:]
+	} else if strings.HasPrefix(pathname, "/jsr/@") && strings.Count(pathname, "/") >= 3 {
+		segs := strings.Split(pathname, "/")
+		pathname = "/@jsr/" + segs[2][1:] + "__" + segs[3]
+		if len(segs) > 4 {
+			pathname += "/" + strings.Join(segs[4:], "/")
+		}
 	}
 
 	pkgName, maybeVersion, subPath := splitPkgPath(pathname)
@@ -89,13 +96,10 @@ func validatePkgPath(pathname string) (pkg Pkg, extraQuery string, err error) {
 		}
 	}
 
-	if regexpFullVersion.MatchString(version) {
-		return
-	}
-
 	p, _, err := getPackageInfo("", pkgName, version)
 	if err == nil {
 		pkg.Version = p.Version
+		pkg.Deprecated = p.Deprecated
 	}
 	return
 }
@@ -108,11 +112,10 @@ func (pkg Pkg) ImportPath() string {
 }
 
 func (pkg Pkg) VersionName() string {
-	s := pkg.Name + "@" + pkg.Version
 	if pkg.FromGithub {
-		s = "gh/" + s
+		return "gh/" + pkg.Name + "@" + pkg.Version
 	}
-	return s
+	return pkg.Name + "@" + pkg.Version
 }
 
 func (pkg Pkg) String() string {

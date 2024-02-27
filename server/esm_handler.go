@@ -465,11 +465,15 @@ func esmHandler() rex.Handle {
 		}
 
 		// redirect to the url with full package version
-		if !hasBuildVerPrefix && !reqPkg.FromEsmsh && !strings.HasPrefix(pathname, fmt.Sprintf("%s/%s@%s", ghPrefix, reqPkg.Name, reqPkg.Version)) {
+		if !hasBuildVerPrefix && !reqPkg.FromEsmsh && !strings.Contains(pathname, "@"+reqPkg.Version) {
+			pkgName := reqPkg.Name
 			bvPrefix := ""
 			eaSign := ""
 			subPath := ""
 			query := ""
+			if strings.HasPrefix(pkgName, "@jsr/") {
+				pkgName = "jsr/@" + strings.ReplaceAll(pkgName[5:], "__", "/")
+			}
 			if endsWith(pathname, ".d.ts", ".d.mts") {
 				if outdatedBuildVersion != "" {
 					bvPrefix = fmt.Sprintf("/%s", outdatedBuildVersion)
@@ -486,26 +490,24 @@ func esmHandler() rex.Handle {
 			if ctx.R.URL.RawQuery != "" {
 				if extraQuery != "" {
 					query = "&" + ctx.R.URL.RawQuery
-					return rex.Redirect(fmt.Sprintf("%s%s%s%s/%s%s@%s%s%s", cdnOrigin, cfg.CdnBasePath, bvPrefix, ghPrefix, eaSign, reqPkg.Name, reqPkg.Version, query, subPath), http.StatusFound)
+					return rex.Redirect(fmt.Sprintf("%s%s%s%s/%s%s@%s%s%s", cdnOrigin, cfg.CdnBasePath, bvPrefix, ghPrefix, eaSign, pkgName, reqPkg.Version, query, subPath), http.StatusFound)
 				}
 				query = "?" + ctx.R.URL.RawQuery
 			}
-			return rex.Redirect(fmt.Sprintf("%s%s%s%s/%s%s@%s%s%s", cdnOrigin, cfg.CdnBasePath, bvPrefix, ghPrefix, eaSign, reqPkg.Name, reqPkg.Version, subPath, query), http.StatusFound)
+			return rex.Redirect(fmt.Sprintf("%s%s%s%s/%s%s@%s%s%s", cdnOrigin, cfg.CdnBasePath, bvPrefix, ghPrefix, eaSign, pkgName, reqPkg.Version, subPath, query), http.StatusFound)
 		}
 
 		// redirect to the url with full package version with build version prefix
-		if hasBuildVerPrefix && !strings.HasPrefix(pathname, fmt.Sprintf("%s/%s@%s", ghPrefix, reqPkg.Name, reqPkg.Version)) {
+		if hasBuildVerPrefix && !strings.Contains(pathname, "@"+reqPkg.Version) {
 			bvPrefix := ""
 			subPath := ""
 			query := ""
-			if hasBuildVerPrefix {
-				if stableBuild[reqPkg.Name] {
-					bvPrefix = "/stable"
-				} else if outdatedBuildVersion != "" {
-					bvPrefix = fmt.Sprintf("/%s", outdatedBuildVersion)
-				} else {
-					bvPrefix = fmt.Sprintf("/v%d", BUILD_VERSION)
-				}
+			if stableBuild[reqPkg.Name] {
+				bvPrefix = "/stable"
+			} else if outdatedBuildVersion != "" {
+				bvPrefix = fmt.Sprintf("/%s", outdatedBuildVersion)
+			} else {
+				bvPrefix = fmt.Sprintf("/v%d", BUILD_VERSION)
 			}
 			if reqPkg.SubPath != "" {
 				subPath = "/" + reqPkg.SubPath

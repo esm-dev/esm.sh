@@ -310,6 +310,31 @@ Deno.test("esm-worker", {
     assertStringIncludes(svg, "<svg");
   });
 
+  await t.step("jsr", async () => {
+    const res = await fetch(
+      `${workerOrigin}/jsr/@std/encoding/base64`,
+      { redirect: "manual" },
+    );
+    res.body?.cancel();
+    assertEquals(res.status, 302);
+    const rUrl = res.headers.get("Location")!;
+    assert(rUrl.startsWith(`${workerOrigin}/jsr/@std/encoding@`));
+    assertEquals(res.headers.get("Cache-Control"), "public, max-age=600");
+
+    const res2 = await fetch(rUrl);
+    const modUrl = new URL(res2.headers.get("X-Esm-Id")!, workerOrigin);
+    res2.body?.cancel();
+    assertEquals(res2.status, 200);
+    assertEquals(res2.headers.get("Content-Type"), "application/javascript; charset=utf-8");
+    assertEquals(res2.headers.get("Cache-Control"), "public, max-age=604800");
+    assert(/v\d+\/@jsr\/std__encoding@.+\.d\.ts$/.test(res2.headers.get("X-Typescript-Types")!));
+    assert(modUrl.pathname.endsWith("/denonext/base64.js"));
+
+    const { encodeBase64, decodeBase64 } = await import(rUrl);
+    assertEquals(encodeBase64("hello"), "aGVsbG8=");
+    assertEquals(new TextDecoder().decode(decodeBase64("aGVsbG8=")), "hello");
+  });
+
   await t.step("build", async () => {
     const res = await fetch(`${workerOrigin}/build`);
     res.body?.cancel();

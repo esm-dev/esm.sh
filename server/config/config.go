@@ -105,7 +105,7 @@ func fixConfig(c *Config) *Config {
 		c.Port = 8080
 	}
 	if c.CdnOrigin != "" {
-		_, e := url.Parse(c.NpmRegistry)
+		_, e := url.Parse(c.CdnOrigin)
 		if e != nil {
 			panic("invalid Cdnorigin url: " + e.Error())
 		}

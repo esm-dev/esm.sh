@@ -38,7 +38,6 @@ type BuildTask struct {
 	Dev          bool
 	BundleDeps   bool
 	NoBundle     bool
-	Deprecated   string
 	// internal
 	lock        sync.Mutex
 	id          string
@@ -54,66 +53,46 @@ type BuildTask struct {
 }
 
 func (task *BuildTask) Build() (esm *ESMBuild, err error) {
-	// check request package
-	if !task.Pkg.FromEsmsh && !task.Pkg.FromGithub {
-		var p NpmPackageInfo
-		p, _, err = getPackageInfo("", task.Pkg.Name, task.Pkg.Version)
-		if err != nil {
-			return
-		}
-		task.Deprecated = p.Deprecated
+	pkgVersionName := task.Pkg.VersionName()
+	task.wd = path.Join(cfg.WorkDir, fmt.Sprintf("npm/%s", pkgVersionName))
+	err = ensureDir(task.wd)
+	if err != nil {
+		return
 	}
 
-	pkgVersionName := task.Pkg.VersionName()
-	if task.wd == "" {
-		task.wd = path.Join(cfg.WorkDir, fmt.Sprintf("npm/%s", pkgVersionName))
-		err = ensureDir(task.wd)
+	var npmrc bytes.Buffer
+	npmrc.WriteString("@jsr:registry=https://npm.jsr.io\n")
+	if cfg.NpmRegistryScope != "" && cfg.NpmRegistry != "" {
+		npmrc.WriteString(fmt.Sprintf("%s:registry=%s\n", cfg.NpmRegistryScope, cfg.NpmRegistry))
+	} else if cfg.NpmRegistryScope == "" && cfg.NpmRegistry != "" {
+		npmrc.WriteString(fmt.Sprintf("registry=%s\n", cfg.NpmRegistry))
+	}
+	if cfg.NpmRegistry != "" && cfg.NpmToken != "" {
+		var tokenReg string
+		tokenReg, err = removeHttpPrefix(cfg.NpmRegistry)
 		if err != nil {
+			log.Errorf("Invalid npm registry in config: %v", err)
 			return
 		}
-
-		if cfg.NpmRegistry != "" || cfg.NpmToken != "" || (cfg.NpmUser != "" && cfg.NpmPassword != "") {
-			rcFilePath := path.Join(task.wd, ".npmrc")
-			if !fileExists(rcFilePath) {
-				var output bytes.Buffer
-
-				if cfg.NpmRegistryScope != "" && cfg.NpmRegistry != "" {
-					output.WriteString(fmt.Sprintf("%s:registry=%s\n", cfg.NpmRegistryScope, cfg.NpmRegistry))
-				} else if cfg.NpmRegistryScope == "" && cfg.NpmRegistry != "" {
-					output.WriteString(fmt.Sprintf("registry=%s\n", cfg.NpmRegistry))
-				}
-
-				if cfg.NpmRegistry != "" && cfg.NpmToken != "" {
-					var tokenReg string
-					tokenReg, err = removeHttpPrefix(cfg.NpmRegistry)
-					if err != nil {
-						log.Errorf("Invalid npm registry in config: %v", err)
-						return
-					}
-					output.WriteString(fmt.Sprintf("%s:_authToken=${ESM_NPM_TOKEN}\n", tokenReg))
-				}
-
-				if cfg.NpmRegistry != "" && cfg.NpmUser != "" && cfg.NpmPassword != "" {
-					var tokenReg string
-					tokenReg, err = removeHttpPrefix(cfg.NpmRegistry)
-					if err != nil {
-						log.Errorf("Invalid npm registry in config: %v", err)
-						return
-					}
-					output.WriteString(fmt.Sprintf("%s:username=${ESM_NPM_USER}\n", tokenReg))
-					output.WriteString(fmt.Sprintf("%s:_password=${ESM_NPM_PASSWORD}\n", tokenReg))
-				}
-				err = os.WriteFile(rcFilePath, output.Bytes(), 0644)
-				if err != nil {
-					log.Errorf("Failed to create .npmrc file: %v", err)
-					return
-				}
-			}
+		npmrc.WriteString(fmt.Sprintf("%s:_authToken=${ESM_NPM_TOKEN}\n", tokenReg))
+	}
+	if cfg.NpmRegistry != "" && cfg.NpmUser != "" && cfg.NpmPassword != "" {
+		var tokenReg string
+		tokenReg, err = removeHttpPrefix(cfg.NpmRegistry)
+		if err != nil {
+			log.Errorf("Invalid npm registry in config: %v", err)
+			return
 		}
+		npmrc.WriteString(fmt.Sprintf("%s:username=${ESM_NPM_USER}\n", tokenReg))
+		npmrc.WriteString(fmt.Sprintf("%s:_password=${ESM_NPM_PASSWORD}\n", tokenReg))
+	}
+	err = os.WriteFile(path.Join(task.wd, ".npmrc"), npmrc.Bytes(), 0644)
+	if err != nil {
+		log.Errorf("Failed to create .npmrc file: %v", err)
+		return
 	}
 
 	task.stage = "install"
-
 	err = installPackage(task.wd, task.Pkg)
 	if err != nil {
 		return
@@ -923,8 +902,8 @@ rebuild:
 			finalContent.Write(jsContent)
 
 			// check if package is deprecated
-			if task.Deprecated != "" {
-				fmt.Fprintf(finalContent, `console.warn("[npm] %%cdeprecated%%c %s@%s: %s", "color:red", "");%s`, task.Pkg.Name, task.Pkg.Version, strings.ReplaceAll(task.Deprecated, "\"", "\\\""), "\n")
+			if task.Pkg.Deprecated != "" {
+				fmt.Fprintf(finalContent, `console.warn("[npm] %%cdeprecated%%c %s@%s: %s", "color:red", "");%s`, task.Pkg.Name, task.Pkg.Version, strings.ReplaceAll(task.Pkg.Deprecated, "\"", "\\\""), "\n")
 			}
 
 			// add sourcemap Url
@@ -1145,7 +1124,7 @@ func (task *BuildTask) checkDTS() {
 		if len(versionParts) > 2 {
 			versions = []string{
 				"~" + strings.Join(versionParts[:2], "."), // minor
-				"^" + versionParts[0],                     // major
+				"~" + versionParts[0],                     // major
 				"latest",
 			}
 		}

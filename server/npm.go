@@ -236,25 +236,28 @@ func fetchPackageInfo(name string, version string) (info NpmPackageInfo, err err
 		}
 	}()
 
+	isJsrScope := strings.HasPrefix(name, "@jsr/")
 	url := cfg.NpmRegistry + name
-	if cfg.NpmRegistryScope != "" {
+	if isJsrScope {
+		url = "https://npm.jsr.io/" + name
+	} else if cfg.NpmRegistryScope != "" {
 		isInScope := strings.HasPrefix(name, cfg.NpmRegistryScope)
 		if !isInScope {
 			url = "https://registry.npmjs.org/" + name
 		}
 	}
 
-	if isFullVersion {
+	if isFullVersion && !isJsrScope {
 		url += "/" + version
 	}
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
 		return
 	}
-	if cfg.NpmToken != "" {
+	if cfg.NpmToken != "" && !isJsrScope {
 		req.Header.Set("Authorization", "Bearer "+cfg.NpmToken)
 	}
-	if cfg.NpmUser != "" && cfg.NpmPassword != "" {
+	if cfg.NpmUser != "" && cfg.NpmPassword != "" && !isJsrScope {
 		req.SetBasicAuth(cfg.NpmUser, cfg.NpmPassword)
 	}
 
@@ -279,13 +282,13 @@ func fetchPackageInfo(name string, version string) (info NpmPackageInfo, err err
 		return
 	}
 
-	if isFullVersion {
+	if isFullVersion && !isJsrScope {
 		err = json.NewDecoder(resp.Body).Decode(&info)
 		if err != nil {
 			return
 		}
 		if cache != nil {
-			cache.Set(cacheKey, utils.MustEncodeJSON(info), 24*time.Hour)
+			cache.Set(cacheKey, utils.MustEncodeJSON(info), 7*24*time.Hour)
 		}
 		return
 	}
