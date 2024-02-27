@@ -1,13 +1,10 @@
 # Self-Hosting
 
-[esm.sh](https://esm.sh) provides a fast, global content delivery network
-publicly which powered by [Cloudflare](https://cloudflare.com). You may also
-want to host esm.sh by yourself.
+[esm.sh](https://esm.sh) provides a fast, global CDN(content delivery network) publicly which is powered by
+[Cloudflare](https://cloudflare.com). You can also host esm.sh server by yourself.
 
-To serve esm.sh, You will need [Go](https://golang.org/dl) 1.18+ to run and
-compile the server. The server will install
-[Node.js](https://nodejs.org/en/download/) runtime automatically if it's not
-found on your host machine.
+To serve esm.sh, You will need [Go](https://golang.org/dl) 1.18+ to compile the server. The server will install
+[Node.js](https://nodejs.org/en/download/) runtime automatically if it's not found on your host machine.
 
 ## Recommended Host Machine (Single Server)
 
@@ -25,8 +22,7 @@ cd esm.sh
 
 ## Configration
 
-To configure the server, create a `config.json` file then pass it to the server
-bootstrap command. For example:
+To configure the server, create a `config.json` file then pass it to the server bootstrap command. For example:
 
 ```jsonc
 // config.json
@@ -40,8 +36,7 @@ bootstrap command. For example:
 }
 ```
 
-You can find all the server options in
-[config.exmaple.jsonc](./config.example.jsonc). (**Note**: the
+You can find all the server options in [config.exmaple.jsonc](./config.example.jsonc). (**Note**: the
 `config.example.jsonc` is not a valid JSON file, it's a JSONC file.)
 
 ## Run the Sever Locally
@@ -52,26 +47,16 @@ go run main.go --config=config.json --dev
 
 Then you can import `React` from http://localhost:8080/react
 
-## Deploy to Single Machine with the Quick Deploy Script
-
-Please ensure the [supervisor](http://supervisord.org/) has been installed on
-your host machine.
-
-```bash
-./scripts/deploy.sh --init
-```
-
 ## Deploy with Docker
 
-esm.sh provides an official docker image for deployment. You can pull the
-container image from https://ghcr.io/esm-dev/esm.sh:
+esm.sh provides a docker image for deployment. You can pull the container image from https://ghcr.io/esm-dev/esm.sh.
 
 ```bash
 docker pull ghcr.io/esm-dev/esm.sh      # latest version
 docker pull ghcr.io/esm-dev/esm.sh:v135 # specific version
 ```
 
-Then run the container:
+Run the container:
 
 ```bash
 docker run -p 8080:8080 \
@@ -99,10 +84,17 @@ ADD ./config.json /etc/esmd/config.json
 CMD ["esmd", "--config", "/etc/esmd/config.json"]
 ```
 
+## Deploy to Single Machine with the Quick Deploy Script
+
+Ensure the [supervisor](http://supervisord.org/) has been installed on your host machine.
+
+```bash
+./scripts/deploy.sh --init
+```
+
 ## Deploy with Cloudflare Workers
 
-We use [Cloudflare Workers](https://workers.cloudflare.com/) as the CDN layer to
-handle and cache esm.sh requests at edge(earth). We open sourced the code, you
-can use it to build your own esm CDN without deploying the server easily.
+We use [Cloudflare Workers](https://workers.cloudflare.com/) as the front layer to handle and cache esm.sh requests at
+edge(earth). We open sourced the code, you can use it to build your own esm.sh CDN running globally.
 
 More details check [esm-worker](./packages/esm-worker/README.md).

@@ -1,14 +1,10 @@
 # esm-worker
 
-A [Cloudflare worker](https://www.cloudflare.com/products/workers) handles all
-requests of esm.sh at the edge(earth).
+A [Cloudflare worker](https://www.cloudflare.com/products/workers) handles all requests of esm.sh at the edge(earth).
 
-- [Cache](https://developers.cloudflare.com/workers/runtime-apis/cache/)
-  everything at the edge
-- Store ES6 modules in
-  [KV](https://developers.cloudflare.com/workers/runtime-apis/kv)
-- Store NPM/GH assets in
-  [R2](https://developers.cloudflare.com/r2/api/workers/workers-api-reference)
+- [Cache](https://developers.cloudflare.com/workers/runtime-apis/cache/) everything at the edge
+- Store modules in [KV](https://developers.cloudflare.com/workers/runtime-apis/kv)
+- Store assets in [R2](https://developers.cloudflare.com/r2/api/workers/workers-api-reference)
 
 ## Installation
 
@@ -26,7 +22,7 @@ kv_namespaces = [
     binding = "KV",
     id = "YOUR_KV_ID",
     preview_id = "YOUR_PREVIEW_KV_ID"
-  },
+  }
   # your other namespaces...
 ]
 
@@ -43,20 +39,18 @@ preview_bucket_name = "YOUR_PREVIEW_BUCKET_NAME"
 
 Other optional configurations in secrets:
 
-- If you are using a self-hosting esm.sh server with `authSecret` option, you
-  need to add the following configuration:
+- If you are using a self-hosting esm.sh server with `authSecret` option, you need to add the following configuration:
   ```bash
   wrangler secret put ESM_TOKEN
   ```
-- If you are using a private npm registry, you need to add the following
-  configuration:
+- If you are using a private npm registry, you need to add the following configuration:
   ```bash
   wrangler secret put NPM_TOKEN
   ```
 
 ## Usage
 
-Wrap your Cloudflare worker with the `esm-worker` package:
+Wrap your Cloudflare worker with the `withESMWorker` function:
 
 ```typescript
 import { withESMWorker } from "esm-worker";
@@ -71,24 +65,27 @@ declare global {
 export default withESMWorker((req, env, ctx) => {
   const { url } = ctx;
 
-  // your routes override esm.sh routes
+  // using a custom homepage
   if (url.pathname === "/") {
-    // using a custom homepage
     return new Response("<h1>Welcome to esm.sh!</h1>", {
       headers: { "Content-Type": "text/html" },
     });
+  }
 
-    // using cache
+  // using the cache API
+  if (url.pathname === "/boom") {
     return ctx.withCache(() =>
       new Response("Boom!", {
         headers: { "Cache-Control": "public; max-age=3600" },
       })
     );
   }
+
+  // return void to let esm-worker handle the rest requests
 });
 ```
 
-## Deploy to Cloudflare Edge
+## Deploy to Cloudflare Workers
 
 ```bash
 wrangler deploy
