@@ -74,7 +74,7 @@ func esmHandler() rex.Handle {
 				t, ok := el.Value.(*queueTask)
 				if ok {
 					m := map[string]interface{}{
-						"bundle":    t.BundleDeps,
+						"bundle":    t.Bundle,
 						"consumers": t.consumers,
 						"createdAt": t.createdAt.Format(http.TimeFormat),
 						"dev":       t.Dev,
@@ -678,8 +678,8 @@ func esmHandler() rex.Handle {
 		}
 
 		isPkgCss := ctx.Form.Has("css")
-		bundleDeps := ctx.Form.Has("bundle") || ctx.Form.Has("standalone")
-		noBundle := !bundleDeps && ctx.Form.Has("no-bundle")
+		bundle := (ctx.Form.Has("bundle") && ctx.Form.Value("bundle") == "") || ctx.Form.Has("standalone")
+		noBundle := !bundle && (ctx.Form.Has("no-bundle") || ctx.Form.Value("bundle") == "false")
 		isDev := ctx.Form.Has("dev")
 		isWorker := ctx.Form.Has("worker")
 		noCheck := ctx.Form.Has("no-check") || ctx.Form.Has("no-dts")
@@ -743,7 +743,7 @@ func esmHandler() rex.Handle {
 					} else {
 						if strings.HasSuffix(submodule, ".bundle") {
 							submodule = strings.TrimSuffix(submodule, ".bundle")
-							bundleDeps = true
+							bundle = true
 						} else if strings.HasSuffix(submodule, ".nobundle") {
 							submodule = strings.TrimSuffix(submodule, ".nobundle")
 							noBundle = true
@@ -833,13 +833,13 @@ func esmHandler() rex.Handle {
 		}
 
 		task := &BuildTask{
-			Args:       buildArgs,
-			CdnOrigin:  cdnOrigin,
-			Pkg:        reqPkg,
-			Target:     target,
-			Dev:        isDev,
-			BundleDeps: bundleDeps || isWorker,
-			NoBundle:   noBundle,
+			Args:      buildArgs,
+			CdnOrigin: cdnOrigin,
+			Pkg:       reqPkg,
+			Target:    target,
+			Dev:       isDev,
+			Bundle:    bundle || isWorker,
+			NoBundle:  noBundle,
 		}
 
 		buildId := task.ID()

@@ -35,7 +35,7 @@ type BuildTask struct {
 	CdnOrigin   string
 	Target      string
 	Dev         bool
-	BundleDeps  bool
+	Bundle      bool
 	NoBundle    bool
 	lock        sync.Mutex
 	id          string
@@ -465,7 +465,7 @@ rebuild:
 						}
 
 						// bundles all dependencies in `bundle` mode, apart from peer dependencies and `?external` query
-						if task.BundleDeps && !task.Args.external.Has(getPkgName(specifier)) && !implicitExternal.Has(specifier) {
+						if task.Bundle && !task.Args.external.Has(getPkgName(specifier)) && !implicitExternal.Has(specifier) {
 							if internalNodeModules[specifier] {
 								if task.isServerTarget() {
 									return api.OnResolveResult{Path: task.resolveExternal(specifier, args.Kind), External: true}, nil
@@ -770,7 +770,7 @@ rebuild:
 							}
 						}
 						if !browserExclude {
-							if task.BundleDeps {
+							if task.Bundle {
 								var js []byte
 								js, err = bundleNodePolyfill("process", "__Process$", "default", targets[task.Target])
 								if err != nil {
@@ -796,7 +796,7 @@ rebuild:
 							}
 						}
 						if !browserExclude {
-							if task.BundleDeps {
+							if task.Bundle {
 								var js []byte
 								js, err = bundleNodePolyfill("buffer", "__Buffer$", "Buffer", targets[task.Target])
 								if err != nil {
