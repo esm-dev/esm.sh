@@ -94,51 +94,44 @@ var polyfilledInternalNodeModules = map[string]string{
 	"zlib":           "browserify-zlib@0.2.0",
 }
 
-func checkNodejs(installDir string) (nodeVer string, pnpmVer string, err error) {
-	var installed bool
-CheckNodejs:
-	nodeVer, major, err := getNodejsVersion()
-	if err != nil || major < nodejsMinVersion {
+func checkNodejs(installDir string) (nodeVersion string, pnpmVersion string, err error) {
+	nodeVersion, major, err := getNodejsVersion()
+	usingSystemNodejs := err == nil && major >= nodejsMinVersion
+
+	if !usingSystemNodejs {
 		PATH := os.Getenv("PATH")
 		nodeBinDir := path.Join(installDir, "bin")
 		if !strings.Contains(PATH, nodeBinDir) {
 			os.Setenv("PATH", fmt.Sprintf("%s%c%s", nodeBinDir, os.PathListSeparator, PATH))
-			goto CheckNodejs
-		} else if !installed {
-			err = os.RemoveAll(installDir)
-			if err != nil {
-				return
-			}
+		}
+		nodeVersion, major, err = getNodejsVersion()
+		if err != nil || major < nodejsMinVersion {
 			err = installNodejs(installDir, nodejsLatestLTS)
 			if err != nil {
 				return
 			}
 			log.Infof("nodejs %s installed", nodejsLatestLTS)
-			installed = true
-			goto CheckNodejs
-		} else {
-			if err == nil {
-				err = fmt.Errorf("bad nodejs version %s need %d+", nodeVer, nodejsMinVersion)
-			}
-			return
 		}
+		nodeVersion, major, err = getNodejsVersion()
+	}
+	if err == nil && major < nodejsMinVersion {
+		err = fmt.Errorf("bad nodejs version %s need %d+", nodeVersion, nodejsMinVersion)
+	}
+	if err != nil {
+		return
 	}
 
-CheckPnpm:
-	output, err := exec.Command("pnpm", "-v").CombinedOutput()
-	if err != nil {
-		if errors.Is(err, exec.ErrNotFound) {
-			output, err = exec.Command("npm", "install", "pnpm", "-g").CombinedOutput()
-			if err != nil {
-				err = fmt.Errorf("install pnpm: %s", strings.TrimSpace(string(output)))
-				return
-			}
-			goto CheckPnpm
+	pnpmOutput, err := exec.Command("pnpm", "-v").CombinedOutput()
+	if err != nil && errors.Is(err, exec.ErrNotFound) {
+		out, e := exec.Command("npm", "install", "pnpm", "-g").CombinedOutput()
+		if e != nil {
+			err = fmt.Errorf("failed to install pnpm: %v", string(out))
+			return
 		}
-		err = fmt.Errorf("bad pnpm version: %s", strings.TrimSpace(string(output)))
+		pnpmOutput, err = exec.Command("pnpm", "-v").CombinedOutput()
 	}
 	if err == nil {
-		pnpmVer = strings.TrimSpace(string(output))
+		pnpmVersion = strings.TrimSpace(string(pnpmOutput))
 	}
 	return
 }
@@ -155,7 +148,7 @@ func getNodejsVersion() (version string, major int, err error) {
 	return
 }
 
-func installNodejs(dir string, version string) (err error) {
+func installNodejs(installDir string, version string) (err error) {
 	arch := runtime.GOARCH
 	switch arch {
 	case "amd64":
@@ -189,7 +182,10 @@ func installNodejs(dir string, version string) (err error) {
 		return
 	}
 
-	cmd = exec.Command("mv", "-f", strings.TrimSuffix(path.Base(dlURL), ".tar.xz"), dir)
+	// remove old installation if exists
+	os.RemoveAll(installDir)
+
+	cmd = exec.Command("mv", "-f", strings.TrimSuffix(path.Base(dlURL), ".tar.xz"), installDir)
 	cmd.Dir = os.TempDir()
 	output, err = cmd.CombinedOutput()
 	if err != nil {

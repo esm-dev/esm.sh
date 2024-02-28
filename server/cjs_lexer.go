@@ -63,11 +63,6 @@ func initCJSLexerWorkDirectory() (err error) {
 		panic(err)
 	}
 	err = os.WriteFile(path.Join(wd, "cjs_lexer.js"), js, 0644)
-	if err != nil {
-		return
-	}
-
-	log.Infof("cjs lexer initialized")
 	return
 }
 

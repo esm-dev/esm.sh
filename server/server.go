@@ -94,7 +94,7 @@ func Serve(efs EmbedFS) {
 			cfg.NpmRegistry = strings.TrimRight(strings.TrimSpace(string(output)), "/") + "/"
 		}
 	}
-	log.Infof("nodejs v%s installed, registry: %s, pnpm: %s", nodeVer, cfg.NpmRegistry, pnpmVer)
+	log.Infof("nodejs: v%s, pnpm: %s, registry: %s", nodeVer, pnpmVer, cfg.NpmRegistry)
 
 	err = initCJSLexerWorkDirectory()
 	if err != nil {
@@ -161,12 +161,7 @@ func Serve(efs EmbedFS) {
 		},
 	})
 
-	if isDev {
-		log.Debugf("Server is ready on http://localhost:%d", cfg.Port)
-		log.Debugf("Testing page at http://localhost:%d?test", cfg.Port)
-	} else {
-		log.Info("Server is ready")
-	}
+	log.Infof("Server is ready on http://localhost:%d", cfg.Port)
 
 	c := make(chan os.Signal, 1)
 	signal.Notify(c, syscall.SIGTERM, syscall.SIGINT, syscall.SIGQUIT, syscall.SIGHUP, syscall.SIGABRT)
