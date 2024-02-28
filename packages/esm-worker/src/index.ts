@@ -609,12 +609,8 @@ function withESMWorker(middleware?: Middleware) {
 
     // redirect to commit-ish version
     if (
-      gh && !(
-        packageVersion && (
-          regexpCommitish.test(packageVersion) ||
-          regexpFullVersion.test(trimPrefix(packageVersion, "v"))
-        )
-      )
+      gh && !(packageVersion &&
+        (regexpCommitish.test(packageVersion) || regexpFullVersion.test(trimPrefix(packageVersion, "v"))))
     ) {
       return ctx.withCache(() =>
         fetchOrigin(

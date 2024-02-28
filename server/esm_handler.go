@@ -305,8 +305,10 @@ func esmHandler() rex.Handle {
 			return rex.Status(403, "forbidden")
 		}
 
+		hasTargetSegmentinPath := hasTargetSegment(reqPkg.SubPath)
+
 		// fix urls related to `import.meta.url`
-		if hasTargetSegment(reqPkg.SubPath) && endsWith(reqPkg.SubPath, ".wasm", ".json") {
+		if hasTargetSegmentinPath && endsWith(reqPkg.SubPath, ".wasm", ".json") {
 			extname := path.Ext(reqPkg.SubPath)
 			dir := path.Join(cfg.WorkDir, "npm", reqPkg.Name+"@"+reqPkg.Version)
 			if !dirExists(dir) {
@@ -384,7 +386,7 @@ func esmHandler() rex.Handle {
 		}
 
 		// redirect to the url with full package version
-		if !hasTargetSegment(reqPkg.SubPath) && !reqPkg.FromEsmsh && !strings.Contains(pathname, "@"+reqPkg.Version) {
+		if !hasTargetSegmentinPath && !reqPkg.FromEsmsh && !strings.Contains(pathname, "@"+reqPkg.Version) {
 			pkgName := reqPkg.Name
 			eaSign := ""
 			subPath := ""
@@ -410,7 +412,7 @@ func esmHandler() rex.Handle {
 		}
 
 		// redirect to the url with full package version with build version prefix
-		if hasTargetSegment(reqPkg.SubPath) && !strings.Contains(pathname, "@"+reqPkg.Version) {
+		if hasTargetSegmentinPath && !strings.Contains(pathname, "@"+reqPkg.Version) {
 			subPath := ""
 			query := ""
 			if reqPkg.SubPath != "" {
@@ -448,19 +450,19 @@ func esmHandler() rex.Handle {
 		if reqPkg.SubPath != "" {
 			ext := path.Ext(reqPkg.SubPath)
 			switch ext {
-			case ".mjs", ".js", ".jsx", ".ts", ".mts", ".tsx":
+			case ".js", ".mjs", ".jsx", ".ts", ".mts", ".tsx":
 				if endsWith(pathname, ".d.ts", ".d.mts") {
 					reqType = "types"
 				} else if ctx.R.URL.Query().Has("raw") {
 					reqType = "raw"
-				} else if hasTargetSegment(reqPkg.SubPath) {
+				} else if hasTargetSegmentinPath {
 					reqType = "builds"
 				}
 			case ".wasm":
 				if ctx.Form.Has("module") {
 					buf := &bytes.Buffer{}
 					wasmUrl := fmt.Sprintf("%s%s%s", cdnOrigin, cfg.CdnBasePath, pathname)
-					fmt.Fprintf(buf, "/* esm.sh - CompiledWasm */\n")
+					fmt.Fprintf(buf, "/* esm.sh - wasm module */\n")
 					fmt.Fprintf(buf, "const data = await fetch(%s).then(r => r.arrayBuffer());\nexport default new WebAssembly.Module(data);", strings.TrimSpace(string(utils.MustEncodeJSON(wasmUrl))))
 					header.Set("Cache-Control", "public, max-age=31536000, immutable")
 					header.Set("Content-Type", "application/javascript; charset=utf-8")
@@ -469,7 +471,7 @@ func esmHandler() rex.Handle {
 					reqType = "raw"
 				}
 			case ".css", ".map":
-				if hasTargetSegment(reqPkg.SubPath) {
+				if hasTargetSegmentinPath {
 					reqType = "builds"
 				} else {
 					reqType = "raw"
@@ -539,7 +541,7 @@ func esmHandler() rex.Handle {
 		}
 
 		// serve build files
-		if hasTargetSegment(reqPkg.SubPath) && (reqType == "builds" || reqType == "types") {
+		if hasTargetSegmentinPath && (reqType == "builds" || reqType == "types") {
 			savePath := path.Join(reqType, pathname)
 			if reqType == "types" {
 				savePath = path.Join("types", getTypesRoot(cdnOrigin), strings.TrimPrefix(savePath, "types/"))
@@ -704,8 +706,8 @@ func esmHandler() rex.Handle {
 			exports:           exports,
 		}
 
-		// parse and use `X-` prefix
-		if hasTargetSegment(reqPkg.SubPath) {
+		// parse `X-` prefix
+		if hasTargetSegmentinPath {
 			a := strings.Split(reqPkg.SubModule, "/")
 			if len(a) > 1 && strings.HasPrefix(a[0], "X-") {
 				reqPkg.SubModule = strings.Join(a[1:], "/")
@@ -724,7 +726,7 @@ func esmHandler() rex.Handle {
 
 		// check if it's a build file
 		isBuildFile := false
-		if hasTargetSegment(reqPkg.SubPath) && (endsWith(reqPkg.SubPath, ".mjs", ".js", ".css")) {
+		if hasTargetSegmentinPath && (endsWith(reqPkg.SubPath, ".mjs", ".js", ".css")) {
 			a := strings.Split(reqPkg.SubModule, "/")
 			if len(a) > 0 {
 				maybeTarget := a[0]
