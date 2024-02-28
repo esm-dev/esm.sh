@@ -1013,7 +1013,7 @@ func (task *BuildTask) resolveExternal(specifier string, kind api.ResolveKind) (
 		resolvedPath = task.getImportPath(subPkg, encodeBuildArgsPrefix(task.Args, subPkg, false))
 		if task.NoBundle {
 			n, e := utils.SplitByLastByte(resolvedPath, '.')
-			resolvedPath = n + ".bundless." + e
+			resolvedPath = n + ".nobundle." + e
 		}
 	}
 	// replace some polyfills with native APIs

@@ -41,7 +41,7 @@ func (task *BuildTask) ID() string {
 	if task.BundleDeps {
 		name += ".bundle"
 	} else if task.NoBundle {
-		name += ".bundless"
+		name += ".nobundle"
 	}
 
 	task.id = fmt.Sprintf(

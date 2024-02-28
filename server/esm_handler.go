@@ -678,8 +678,8 @@ func esmHandler() rex.Handle {
 		}
 
 		isPkgCss := ctx.Form.Has("css")
-		bundleDeps := ctx.Form.Has("bundle") || ctx.Form.Has("standalone") || ctx.Form.Has("bundle-deps")
-		noBundle := !bundleDeps && (ctx.Form.Has("bundless") || ctx.Form.Has("no-bundle"))
+		bundleDeps := ctx.Form.Has("bundle") || ctx.Form.Has("standalone")
+		noBundle := !bundleDeps && ctx.Form.Has("no-bundle")
 		isDev := ctx.Form.Has("dev")
 		isWorker := ctx.Form.Has("worker")
 		noCheck := ctx.Form.Has("no-check") || ctx.Form.Has("no-dts")
@@ -744,8 +744,8 @@ func esmHandler() rex.Handle {
 						if strings.HasSuffix(submodule, ".bundle") {
 							submodule = strings.TrimSuffix(submodule, ".bundle")
 							bundleDeps = true
-						} else if strings.HasSuffix(submodule, ".bundless") {
-							submodule = strings.TrimSuffix(submodule, ".bundless")
+						} else if strings.HasSuffix(submodule, ".nobundle") {
+							submodule = strings.TrimSuffix(submodule, ".nobundle")
 							noBundle = true
 						}
 						if strings.HasSuffix(submodule, ".development") {
