@@ -12,6 +12,7 @@ export interface ArchiveEntry {
 }
 
 export interface VFS {
+  has(name: string): Promise<boolean>;
   get(name: string): Promise<File | undefined>;
   put(file: File): Promise<string>;
   delete(name: string): Promise<void>;

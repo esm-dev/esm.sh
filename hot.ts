@@ -38,6 +38,11 @@ class VFS {
       .objectStore(kVfs);
   }
 
+  async has(name: string) {
+    const tx = await this.#begin(true);
+    return await waitIDBRequest<string>(tx.getKey(name)) === name;
+  }
+
   async get(name: string) {
     const tx = await this.#begin(true);
     const ret = await waitIDBRequest<File & { content: ArrayBuffer } | undefined>(tx.get(name));
@@ -48,16 +53,12 @@ class VFS {
 
   async put(file: File) {
     const { name, type, lastModified } = file;
-    const tx = await this.#begin();
-    if (await waitIDBRequest<boolean>(tx.getKey(name))) {
+    if (await this.has(name)) {
       return name;
     }
-    return waitIDBRequest<string>(tx.put({
-      name,
-      type,
-      lastModified,
-      content: await file.arrayBuffer(),
-    }));
+    const content = await file.arrayBuffer();
+    const tx = await this.#begin();
+    return waitIDBRequest<string>(tx.put({ name, type, lastModified, content }));
   }
 
   async delete(name: string) {
@@ -95,7 +96,7 @@ class Archive {
     if (length !== this.#buffer.byteLength) {
       throw Archive.invalidFormat;
     }
-    this.checksum = readUint32(15);
+    this.checksum = readUint32(14);
     let offset = 18;
     while (offset < dv.byteLength) {
       const nameLen = dv.getUint16(offset);
@@ -213,15 +214,13 @@ class Hot implements HotCore {
 
   async #fireApp(swActive: ServiceWorker) {
     // download and send esm archive to Service Worker
-    queryElements<HTMLLinkElement>(`link[rel="preload"][as="fetch"][type^="${kTypeEsmArchive}"][href]`, (el) => {
+    queryElements<HTMLLinkElement>(`link[rel=preload][as=fetch][type^="${kTypeEsmArchive}"][href]`, (el) => {
       this.#promises.push(
         fetch(el.href).then((res) => {
-          if (res.ok && el.type.endsWith("+gzip")) {
-            return new Response(res.body?.pipeThrough(new DecompressionStream("gzip")));
-          }
-          return res;
-        }).then((res) => {
           if (res.ok) {
+            if (el.type.endsWith("+gzip")) {
+              res = new Response(res.body?.pipeThrough(new DecompressionStream("gzip")));
+            }
             return res.arrayBuffer();
           }
           return Promise.reject(new Error(res.statusText ?? `<${res.status}>`));
@@ -270,8 +269,7 @@ class Hot implements HotCore {
       if (!file) {
         return createResponse("Not Found", {}, 404);
       }
-      const headers: HeadersInit = { "content-type": file.type };
-      return createResponse(file, headers);
+      return createResponse(file, { "content-type": file.type });
     };
 
     this.#promises.push(
@@ -294,7 +292,7 @@ class Hot implements HotCore {
     });
 
     on("fetch", (evt) => {
-      const { request } = evt;
+      const { request } = evt as FetchEvent;
       const respondWith = (res: Response | Promise<Response>) => evt.respondWith(res);
       const url = new URL(request.url);
       const { pathname } = url;
