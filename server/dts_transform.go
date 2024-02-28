@@ -44,10 +44,7 @@ func (task *BuildTask) transformDTS(dts string, aliasDepsPrefix string, marker *
 	if version != "" {
 		pkgNameWithVersion = pkgNameWithVersion + "@" + version
 	}
-	dir := fmt.Sprintf("/v%d", task.BuildVersion)
-	if task.Pkg.FromGithub {
-		dir += "/gh"
-	}
+	dir := "/" + task._ghPrefix()
 	dtsPath := utils.CleanPath(strings.Join(append([]string{
 		dir,
 		pkgNameWithVersion,
@@ -99,7 +96,7 @@ func (task *BuildTask) transformDTS(dts string, aliasDepsPrefix string, marker *
 	buf := bytes.NewBuffer(nil)
 	footer := bytes.NewBuffer(nil)
 	imports := newStringSet()
-	dtsBasePath := fmt.Sprintf("%s%s/v%d", task.CdnOrigin, cfg.CdnBasePath, task.BuildVersion)
+	dtsBasePath := fmt.Sprintf("%s%s", task.CdnOrigin, cfg.CdnBasePath)
 
 	if pkgName == "@types/node" {
 		fmt.Fprintf(buf, "/// <reference path=\"%s/node.ns.d.ts\" />\n", dtsBasePath)
@@ -261,12 +258,8 @@ func (task *BuildTask) transformDTS(dts string, aliasDepsPrefix string, marker *
 					res += "~.d.ts"
 				}
 			}
-			bv := task.BuildVersion
-			if stableBuild[info.Name] || stableBuild[strings.TrimPrefix(info.Name, "@types/")] {
-				bv = STABLE_VERSION
-			}
 			pkgPath := info.Name + "@" + info.Version + "/" + encodeBuildArgsPrefix(task.Args, Pkg{Name: info.Name}, true)
-			res = fmt.Sprintf("%s%s/v%d/%s%s", task.CdnOrigin, cfg.CdnBasePath, bv, pkgPath, res)
+			res = fmt.Sprintf("%s%s/%s%s", task.CdnOrigin, cfg.CdnBasePath, pkgPath, res)
 		}
 
 		if kind == "declareModule" && strings.HasSuffix(res, "/"+dts) {
@@ -275,8 +268,8 @@ func (task *BuildTask) transformDTS(dts string, aliasDepsPrefix string, marker *
 			if _, _, subPath := splitPkgPath(specifier); subPath != "" {
 				moduleName = moduleName + "/" + subPath
 			}
-			aliasDeclareModule(footer, fmt.Sprintf("%s/v%d/%s", baseUrl, task.BuildVersion, moduleName), res)
-			aliasDeclareModule(footer, fmt.Sprintf("%s/v%d/%s?*", baseUrl, task.BuildVersion, moduleName), res)
+			aliasDeclareModule(footer, fmt.Sprintf("%s/%s", baseUrl, moduleName), res)
+			aliasDeclareModule(footer, fmt.Sprintf("%s/%s?*", baseUrl, moduleName), res)
 			aliasDeclareModule(footer, fmt.Sprintf("%s/%s", baseUrl, moduleName), res)
 			aliasDeclareModule(footer, fmt.Sprintf("%s/%s?*", baseUrl, moduleName), res)
 		}

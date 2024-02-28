@@ -88,14 +88,6 @@ func validatePkgPath(pathname string) (pkg Pkg, extraQuery string, err error) {
 		return
 	}
 
-	// use fixed version
-	for prefix, fixedVersion := range fixedPkgVersions {
-		if strings.HasPrefix(pkgName+"@"+version, prefix) {
-			pkg.Version = fixedVersion
-			return
-		}
-	}
-
 	if cfg != nil {
 		p, _, err := getPackageInfo("", pkgName, version)
 		if err == nil {

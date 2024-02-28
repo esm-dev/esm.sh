@@ -8,7 +8,7 @@ import type {
   PackageRegistryInfo,
   WorkerStorage,
 } from "../types/index.d.ts";
-import { assetsExts, cssPackages, STABLE_VERSION, stableBuild, VERSION } from "./consts.ts";
+import { assetsExts, cssPackages, VERSION } from "./consts.ts";
 import { getMimeType } from "./content_type.ts";
 import {
   asKV,
@@ -17,7 +17,6 @@ import {
   corsHeaders,
   err,
   errPkgNotFound,
-  fixPkgVersion,
   hashText,
   hasTargetSegment,
   redirect,
@@ -55,14 +54,10 @@ async function fetchOrigin(
     "Content-Type",
     "Referer",
     "User-Agent",
-    "X-Esm-Worker-Version",
     "X-Forwarded-For",
     "X-Real-Ip",
     "X-Real-Origin",
   );
-  if (!headers.has("X-Esm-Worker-Version")) {
-    headers.set("X-Esm-Worker-Version", `v${VERSION}`);
-  }
   if (!headers.has("X-Real-Origin")) {
     headers.set("X-Real-Origin", ctx.url.origin);
   }
@@ -129,9 +124,7 @@ async function fetchOriginWithKVCache(
   gzip?: boolean,
 ): Promise<Response> {
   let storeKey = path.slice(1);
-  if (storeKey.startsWith("stable/")) {
-    storeKey = `v${STABLE_VERSION}/` + storeKey.slice(7);
-  } else if (storeKey.startsWith("+")) {
+  if (storeKey.startsWith("+")) {
     storeKey = `modules/` + storeKey;
   }
   const headers = corsHeaders();
@@ -279,7 +272,7 @@ async function fetchOriginWithR2Cache(
 }
 
 function withESMWorker(middleware?: Middleware) {
-  const cachePromise = caches.open(`esm.sh/v${VERSION}`);
+  const cachePromise = caches.open("esm.sh");
 
   async function handler(
     req: Request,
@@ -292,6 +285,14 @@ function withESMWorker(middleware?: Middleware) {
     }
 
     const url = new URL(req.url);
+    if (env.LEGACY_WORKER) {
+      const hasBuildVersionPrefix = url.pathname.startsWith("/v") && regexpBuildVersionPrefix.test(url.pathname);
+      const hasPinQuery = url.searchParams.has("pin") && regexpBuildVersion.test(url.searchParams.get("pin"));
+      if (hasBuildVersionPrefix || hasPinQuery) {
+        return env.LEGACY_WORKER.fetch(req.clone());
+      }
+    }
+
     const ua = req.headers.get("User-Agent");
     const cache = await cachePromise;
     const withCache: Context["withCache"] = async (fetcher, options) => {
@@ -309,7 +310,7 @@ function withESMWorker(middleware?: Middleware) {
         //! don't delete this line, it used to ensure KV/R2 cache respecting different UA
         url.searchParams.set("target", target);
       }
-      for (const key of ["x-real-origin", "x-esm-worker-version"]) {
+      for (const key of ["x-real-origin"]) {
         const value = req.headers.get(key);
         if (value) {
           cacheKey.searchParams.set(key, value);
@@ -354,21 +355,6 @@ function withESMWorker(middleware?: Middleware) {
     // strip trailing slash
     if (pathname !== "/" && pathname.endsWith("/")) {
       pathname = pathname.slice(0, -1);
-    }
-
-    // return the CLI script
-    if (
-      ua === "undici" ||
-      ua?.startsWith("Node/") ||
-      ua?.startsWith("Deno/") ||
-      ua?.startsWith("Bun/")
-    ) {
-      if (pathname === "/" || /^\/v\d+\/?$/.test(pathname)) {
-        return ctx.withCache(
-          () => fetchOrigin(req, env, ctx, pathname, corsHeaders()),
-          { varyUA: true },
-        );
-      }
     }
 
     switch (pathname) {
@@ -505,37 +491,17 @@ function withESMWorker(middleware?: Middleware) {
       );
     }
 
-    let buildVersion = "v" + VERSION;
-
-    // check pinned build version
-    const hasBuildVerPrefix = regexpBuildVersionPrefix.test(pathname);
-    const hasBuildVerQuery = !hasBuildVerPrefix &&
-      regexpBuildVersion.test(url.searchParams.get("pin") ?? "");
-    if (hasBuildVerPrefix) {
-      const a = pathname.split("/");
-      buildVersion = a[1];
-      pathname = "/" + a.slice(2).join("/");
-    } else if (hasBuildVerQuery) {
-      buildVersion = url.searchParams.get("pin")!;
-    }
-
     if (
       pathname === "/build" ||
       pathname === "/run" ||
       pathname === "/hot"
     ) {
-      if (!hasBuildVerPrefix && !hasBuildVerQuery) {
-        return redirect(
-          new URL(`/${buildVersion}${pathname}${url.search}`, url),
-          302,
-        );
-      }
       return ctx.withCache(() =>
         fetchOrigin(
           req,
           env,
           ctx,
-          `/${buildVersion}${pathname}${url.search}`,
+          `${pathname}${url.search}`,
           corsHeaders(),
         ), { varyUA: true });
     }
@@ -558,13 +524,11 @@ function withESMWorker(middleware?: Middleware) {
     }
 
     if (
-      hasBuildVerPrefix && (
-        pathname === "/node.ns.d.ts" ||
-        pathname === "/hot.d.ts" || (
-          pathname.startsWith("/node_") &&
-          pathname.endsWith(".js") &&
-          !pathname.slice(1).includes("/")
-        )
+      pathname === "/node.ns.d.ts" ||
+      pathname === "/hot.d.ts" || (
+        pathname.startsWith("/node_") &&
+        pathname.endsWith(".js") &&
+        !pathname.slice(1).includes("/")
       )
     ) {
       return ctx.withCache(() =>
@@ -572,7 +536,7 @@ function withESMWorker(middleware?: Middleware) {
           req,
           env,
           ctx,
-          `/${buildVersion}${pathname}${url.search}`,
+          `${pathname}${url.search}`,
           true,
         ), { varyUA: true });
     }
@@ -689,9 +653,6 @@ function withESMWorker(middleware?: Middleware) {
         }
         const regInfo: PackageRegistryInfo = await res.json();
         let prefix = "/";
-        if (hasBuildVerPrefix) {
-          prefix += buildVersion + "/";
-        }
         if (hasExternalAllMarker) {
           prefix += "*";
         }
@@ -703,7 +664,7 @@ function withESMWorker(middleware?: Middleware) {
         const distVersion = regInfo["dist-tags"]
           ?.[packageVersion || "latest"];
         if (distVersion) {
-          const uri = `${prefix}${pkgName}@${fixPkgVersion(pkgId, distVersion)}${eq}${subPath}${url.search}`;
+          const uri = `${prefix}${pkgName}@${distVersion}${eq}${subPath}${url.search}`;
           return redirect(new URL(uri, url), 302);
         }
         const versions = Object.keys(regInfo.versions ?? []).filter(validate)
@@ -711,7 +672,7 @@ function withESMWorker(middleware?: Middleware) {
         if (!packageVersion) {
           const latestVersion = versions.filter((v) => !v.includes("-")).pop() ?? versions.pop();
           if (latestVersion) {
-            const uri = `${prefix}${pkgName}@${fixPkgVersion(pkgId, latestVersion)}${eq}${subPath}${url.search}`;
+            const uri = `${prefix}${pkgName}@${latestVersion}${eq}${subPath}${url.search}`;
             return redirect(new URL(uri, url), 302);
           }
         }
@@ -720,7 +681,7 @@ function withESMWorker(middleware?: Middleware) {
           for (let i = arr.length - 1; i >= 0; i--) {
             const v = arr[i];
             if (satisfies(v, packageVersion)) {
-              const uri = `${prefix}${pkgName}@${fixPkgVersion(pkgId, v)}${eq}${subPath}${url.search}`;
+              const uri = `${prefix}${pkgName}@${v}${eq}${subPath}${url.search}`;
               return redirect(new URL(uri, url), 302);
             }
           }
@@ -738,7 +699,7 @@ function withESMWorker(middleware?: Middleware) {
       (subPath === "" || !subPath.endsWith(".d.ts"))
     ) {
       return ctx.withCache(async () => {
-        let p = `/${buildVersion}${pathname}`;
+        let p = pathname;
         if (subPath !== "") {
           p += "~.d.ts";
         } else {
@@ -757,9 +718,7 @@ function withESMWorker(middleware?: Middleware) {
             return new Response(res.body, { status: res.status, headers });
           }
           const pkgJson: PackageInfo = await res.json();
-          p += "/" +
-            (pkgJson.types || pkgJson.typings || pkgJson.main ||
-              "index.d.ts");
+          p += "/" + (pkgJson.types || pkgJson.typings || pkgJson.main || "index.d.ts");
         }
         return redirect(new URL(p, url), 301);
       });
@@ -773,7 +732,7 @@ function withESMWorker(middleware?: Middleware) {
 
     // redirect to real package css file: `/PKG?css` -> `/v100/PKG/es2022/pkg.css`
     if (url.searchParams.has("css") && subPath === "") {
-      let prefix = `/${buildVersion}`;
+      let prefix = "";
       if (gh) {
         prefix += "/gh";
       }
@@ -781,31 +740,25 @@ function withESMWorker(middleware?: Middleware) {
       if (!target || !targets.has(target)) {
         target = getBuildTargetFromUA(ua);
       }
-      const pined = hasBuildVerPrefix || hasBuildVerQuery;
       return redirect(
         new URL(
           `${prefix}/${pkgId}@${packageVersion}/${target}/${packageName}.css`,
           url,
         ),
-        pined ? 301 : 302,
+        301,
       );
     }
 
     // redirect to real wasm file: `/v100/PKG/es2022/foo.wasm` -> `PKG/foo.wasm`
-    if (hasBuildVerPrefix && hasTargetSegment(subPath) && (subPath.endsWith(".wasm") || subPath.endsWith(".json"))) {
+    if (hasTargetSegment(subPath) && (subPath.endsWith(".wasm") || subPath.endsWith(".json"))) {
       return ctx.withCache(() => {
         return fetchOrigin(req, env, ctx, url.pathname, corsHeaders());
       });
     }
 
-    // npm assets
-    if (!hasBuildVerPrefix && subPath !== "") {
+    // if it's npm asset
+    if (subPath !== "") {
       const ext = splitBy(subPath, ".", true)[1];
-      // append missed build version prefix for dts
-      // example: `/@types/react/index.d.ts` -> `/v100/@types/react/index.d.ts`
-      if (subPath.endsWith(".d.ts") || subPath.endsWith(".d.mts")) {
-        return redirect(new URL("/v" + VERSION + url.pathname, url), 301);
-      }
       // use origin server response for `*.wasm?module`
       if (ext === "wasm" && url.searchParams.has("module")) {
         return ctx.withCache(() => {
@@ -838,30 +791,19 @@ function withESMWorker(middleware?: Middleware) {
       url.searchParams.set("raw", "");
     }
 
-    if (
-      hasBuildVerPrefix &&
-      (subPath.endsWith(".d.ts") || hasTargetSegment(subPath))
-    ) {
+    let prefix = "";
+    if (gh) {
+      prefix += "/gh";
+    }
+
+    if (subPath.endsWith(".d.ts") || hasTargetSegment(subPath)) {
       return ctx.withCache(() => {
-        let prefix = `/${buildVersion}`;
-        if (gh) {
-          prefix += "/gh";
-        }
         const path = `${prefix}/${pkgId}@${packageVersion}${subPath}${url.search}`;
         return fetchOriginWithKVCache(req, env, ctx, path, true);
       });
     }
 
     return ctx.withCache(() => {
-      let prefix = "";
-      if (hasBuildVerPrefix) {
-        prefix += `/${buildVersion}`;
-      } else if (stableBuild.has(pkgId)) {
-        prefix += `/v${STABLE_VERSION}`;
-      }
-      if (gh) {
-        prefix += "/gh";
-      }
       const marker = hasExternalAllMarker ? "*" : "";
       const path = `${prefix}/${marker}${pkgId}@${packageVersion}${subPath}${url.search}`;
       return fetchOriginWithKVCache(req, env, ctx, path);

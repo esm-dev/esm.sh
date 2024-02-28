@@ -1,6 +1,5 @@
 import type { HttpMetadata, WorkerStorage, WorkerStorageKV } from "../types/index";
 import { targets } from "esm-compat";
-import { fixedPkgVersions } from "./consts.ts";
 
 export function hasTargetSegment(path: string) {
   const parts = path.slice(1).split("/");
@@ -37,15 +36,6 @@ export function asKV(
       await storage.put(key, value, { customMetadata: options?.metadata });
     },
   });
-}
-
-export function fixPkgVersion(pkg: string, version: string) {
-  for (const [k, v] of Object.entries(fixedPkgVersions)) {
-    if (`${pkg}@${version}`.startsWith(k)) {
-      return v;
-    }
-  }
-  return version;
 }
 
 export function trimPrefix(s: string, prefix: string): string {

@@ -1,27 +1,6 @@
 package server
 
-const (
-	// esm.sh build version
-	VERSION = 135
-	// esm.sh stable build version, used for UI libraries like react, to make sure the runtime is single copy
-	// change this carefully!
-	STABLE_VERSION = 128
-)
-
-const (
-	nodejsMinVersion = 20
-	nodejsLatestLTS  = "20.11.1"
-	nodeTypesVersion = "20.11.20"
-	denoStdVersion   = "0.177.1"
-)
-
-// fix some npm package versions
-var fixedPkgVersions = map[string]string{
-	"@types/react@17": "17.0.71",
-	"@types/react@18": "18.2.38",
-	"isomorphic-ws@4": "5.0.0",
-	"resolve@1.22":    "1.22.2", // 1.22.3+ will read package.json from disk
-}
+const VERSION = 135
 
 // css packages
 var cssPackages = map[string]string{
@@ -30,19 +9,6 @@ var cssPackages = map[string]string{
 	"normalize.css":    "normalize.css",
 	"modern-normalize": "modern-normalize.css",
 	"reset-css":        "reset.css",
-}
-
-// stable build for UI libraries like react, to make sure the runtime is single copy
-var stableBuild = map[string]bool{
-	"preact":            true,
-	"react":             true,
-	"solid-js":          true,
-	"svelte":            true,
-	"vue":               true,
-	"@vue/reactivity":   true,
-	"@vue/runtime-core": true,
-	"@vue/runtime-dom":  true,
-	"@vue/shared":       true,
 }
 
 var assetExts = map[string]bool{
@@ -111,8 +77,4 @@ var nativeNodePackages = []string{
 	"lightningcss",
 	"re2",
 	"zlib-sync",
-}
-
-var denoNextUnspportedNodeModules = map[string]bool{
-	"inspector": true,
 }

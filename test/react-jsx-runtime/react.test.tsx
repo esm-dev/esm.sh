@@ -17,10 +17,10 @@ Deno.test("react-jsx-runtime", async () => {
       html.includes("<main") && html.includes("</main>"),
   );
   const res = await fetch(
-    "http://localhost:8080/stable/react@18.2.0/deno/jsx-runtime.js",
+    "http://localhost:8080/react@18.2.0/deno/jsx-runtime.js",
   );
   assertStringIncludes(
     await res.text(),
-    `"/stable/react@18.2.0/deno/react.mjs"`,
+    `"/react@18.2.0/deno/react.mjs"`,
   );
 });

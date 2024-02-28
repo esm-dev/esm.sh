@@ -30,15 +30,13 @@ type ESMBuild struct {
 }
 
 type BuildTask struct {
-	Args         BuildArgs
-	Pkg          Pkg
-	CdnOrigin    string
-	Target       string
-	BuildVersion int
-	Dev          bool
-	BundleDeps   bool
-	NoBundle     bool
-	// internal
+	Args        BuildArgs
+	Pkg         Pkg
+	CdnOrigin   string
+	Target      string
+	Dev         bool
+	BundleDeps  bool
+	NoBundle    bool
 	lock        sync.Mutex
 	id          string
 	stage       string
@@ -164,7 +162,7 @@ func (task *BuildTask) build() (err error) {
 
 	if esm.TypesOnly {
 		dts := npm.Name + "@" + npm.Version + path.Join("/", npm.Types)
-		esm.Dts = fmt.Sprintf("/v%d%s/%s", task.BuildVersion, task.ghPrefix(), dts)
+		esm.Dts = fmt.Sprintf("%s%s", task._ghPrefix(), dts)
 		task.buildDTS(dts)
 		task.storeToDB()
 		return
@@ -498,7 +496,7 @@ rebuild:
 								if gitUrl.Scheme == "git+ssh" {
 									repo = gitUrl.Port() + "/" + repo
 								}
-								path := fmt.Sprintf("/v%d/gh/%s", task.BuildVersion, repo)
+								path := fmt.Sprintf("/gh/%s", repo)
 								if gitUrl.Fragment != "" {
 									path += "@" + url.QueryEscape(gitUrl.Fragment)
 								}
@@ -780,7 +778,7 @@ rebuild:
 								}
 								fmt.Fprintf(header, "%s", js)
 							} else {
-								fmt.Fprintf(header, `import __Process$ from "%s/v%d/node_process.js";%s`, cfg.CdnBasePath, task.BuildVersion, EOL)
+								fmt.Fprintf(header, `import __Process$ from "%s/node_process.js";%s`, cfg.CdnBasePath, EOL)
 							}
 						}
 					}
@@ -806,7 +804,7 @@ rebuild:
 								}
 								fmt.Fprintf(header, "%s", js)
 							} else {
-								fmt.Fprintf(header, `import { Buffer as __Buffer$ } from "%s/v%d/buffer@6.0.3/%s/buffer.bundle.mjs";%s`, cfg.CdnBasePath, task.BuildVersion, task.Target, EOL)
+								fmt.Fprintf(header, `import { Buffer as __Buffer$ } from "%s/buffer@6.0.3/%s/buffer.bundle.mjs";%s`, cfg.CdnBasePath, task.Target, EOL)
 							}
 						}
 					}
@@ -987,7 +985,7 @@ func (task *BuildTask) resolveExternal(specifier string, kind api.ResolveKind) (
 			} else {
 				_, err := embedFS.ReadFile(fmt.Sprintf("server/embed/polyfills/node_%s.js", specifier))
 				if err == nil {
-					resolvedPath = fmt.Sprintf("%s/v%d/node_%s.js", cfg.CdnBasePath, task.BuildVersion, specifier)
+					resolvedPath = fmt.Sprintf("%s/node_%s.js", cfg.CdnBasePath, specifier)
 				} else {
 					resolvedPath = fmt.Sprintf(
 						"%s/error.js?type=unsupported-node-builtin-module&name=%s&importer=%s",
@@ -1039,7 +1037,7 @@ func (task *BuildTask) resolveExternal(specifier string, kind api.ResolveKind) (
 			resolvedPath = jsDataUrl(`export default Function.prototype.bind`)
 		case "node-fetch":
 			if task.Target != "node" {
-				resolvedPath = fmt.Sprintf("%s/v%d/node_fetch.js", cfg.CdnBasePath, task.BuildVersion)
+				resolvedPath = fmt.Sprintf("%s/node_fetch.js", cfg.CdnBasePath)
 			}
 		}
 	}
@@ -1144,11 +1142,7 @@ func (task *BuildTask) checkDTS() {
 		}
 	}
 	if dts != "" {
-		bv := task.BuildVersion
-		if stableBuild[task.Pkg.Name] {
-			bv = STABLE_VERSION
-		}
-		task.esm.Dts = fmt.Sprintf("/v%d%s/%s", bv, task.ghPrefix(), dts)
+		task.esm.Dts = fmt.Sprintf("%s%s", task._ghPrefix(), dts)
 	}
 }
 

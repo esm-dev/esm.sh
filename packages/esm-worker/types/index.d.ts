@@ -4,6 +4,7 @@ declare global {
     ESM_TOKEN?: string;
     NPM_REGISTRY?: string;
     NPM_TOKEN?: string;
+    LEGACY_WORKER?: Fetcher;
   }
 }
 

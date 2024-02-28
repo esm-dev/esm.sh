@@ -14,6 +14,13 @@ import (
 	"github.com/ije/gox/utils"
 )
 
+const (
+	nodejsMinVersion = 20
+	nodejsLatestLTS  = "20.11.1"
+	nodeTypesVersion = "20.11.20"
+	denoStdVersion   = "0.177.1"
+)
+
 var internalNodeModules = map[string]bool{
 	"assert":              true,
 	"assert/strict":       true,
@@ -92,6 +99,10 @@ var polyfilledInternalNodeModules = map[string]string{
 	"util":           "util@0.12.5",
 	"vm":             "vm-browserify@1.1.2",
 	"zlib":           "browserify-zlib@0.2.0",
+}
+
+var denoNextUnspportedNodeModules = map[string]bool{
+	"inspector": true,
 }
 
 func checkNodejs(installDir string) (nodeVersion string, pnpmVersion string, err error) {

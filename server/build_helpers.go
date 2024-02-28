@@ -45,9 +45,8 @@ func (task *BuildTask) ID() string {
 	}
 
 	task.id = fmt.Sprintf(
-		"%s%s/%s@%s/%s%s/%s%s",
-		task.getBuildVersion(task.Pkg),
-		task.ghPrefix(),
+		"%s%s@%s/%s%s/%s%s",
+		task._ghPrefix(),
 		pkg.Name,
 		pkg.Version,
 		encodeBuildArgsPrefix(task.Args, task.Pkg, task.Target == "types"),
@@ -61,9 +60,9 @@ func (task *BuildTask) ID() string {
 	return task.id
 }
 
-func (task *BuildTask) ghPrefix() string {
+func (task *BuildTask) _ghPrefix() string {
 	if task.Pkg.FromGithub {
-		return "/gh"
+		return "gh/"
 	}
 	return ""
 }
@@ -86,9 +85,8 @@ func (task *BuildTask) getImportPath(pkg Pkg, buildArgsPrefix string) string {
 		name += ".development"
 	}
 	return fmt.Sprintf(
-		"%s/%s/%s@%s/%s%s/%s%s",
+		"%s/%s@%s/%s%s/%s%s",
 		cfg.CdnBasePath,
-		task.getBuildVersion(pkg),
 		pkg.Name,
 		pkg.Version,
 		buildArgsPrefix,
@@ -98,18 +96,8 @@ func (task *BuildTask) getImportPath(pkg Pkg, buildArgsPrefix string) string {
 	)
 }
 
-func (task *BuildTask) getBuildVersion(pkg Pkg) string {
-	if stableBuild[pkg.Name] {
-		return "stable"
-	}
-	return fmt.Sprintf("v%d", task.BuildVersion)
-}
-
 func (task *BuildTask) getSavepath() string {
 	id := task.ID()
-	if stableBuild[task.Pkg.Name] {
-		id = path.Join(fmt.Sprintf("v%d", STABLE_VERSION), strings.TrimPrefix(id, "stable/"))
-	}
 	return normalizeSavePath(path.Join("builds", id))
 }
 
@@ -644,9 +632,6 @@ func queryESMBuild(id string) (*ESMBuild, bool) {
 		var esm ESMBuild
 		err = json.Unmarshal(value, &esm)
 		if err == nil {
-			if strings.HasPrefix(id, "stable/") {
-				id = fmt.Sprintf("v%d/", STABLE_VERSION) + strings.TrimPrefix(id, "stable/")
-			}
 			if !esm.TypesOnly {
 				_, err = fs.Stat(path.Join("builds", id))
 			}

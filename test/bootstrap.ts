@@ -109,17 +109,19 @@ if (import.meta.main) {
         timeUsed += await runTest(testDir, true);
       }
     } else {
+      const dirs: string[] = [];
       for await (const entry of Deno.readDir("./test")) {
         if (entry.isDirectory && !entry.name.startsWith("_")) {
-          timeUsed += await runTest(entry.name);
+          dirs.push(entry.name);
         }
+      }
+      for (const dir of dirs.sort()) {
+        timeUsed += await runTest(dir);
       }
     }
     timeUsed = Math.ceil(timeUsed / 1000);
     console.log(
-      `Done! Total time spent: %c${Math.floor(timeUsed / 60)}m${
-        timeUsed % 60
-      }s`,
+      `Done! Total time spent: %c${Math.floor(timeUsed / 60)}m${timeUsed % 60}s`,
       "color: blue",
     );
     Deno.exit(0);

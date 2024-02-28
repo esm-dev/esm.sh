@@ -184,16 +184,12 @@ func getPackageInfo(wd string, name string, version string) (info NpmPackageInfo
 	if wd != "" {
 		pkgJsonPath := path.Join(wd, "node_modules", name, "package.json")
 		if fileExists(pkgJsonPath) && utils.ParseJSONFile(pkgJsonPath, &info) == nil {
-			info, err = fixPkgVersion(info)
 			fromPackageJSON = true
 			return
 		}
 	}
 
 	info, err = fetchPackageInfo(name, version)
-	if err == nil {
-		info, err = fixPkgVersion(info)
-	}
 	return
 }
 
@@ -481,15 +477,6 @@ func toTypesPackageName(pkgName string) string {
 		pkgName = strings.Replace(pkgName[1:], "/", "__", 1)
 	}
 	return "@types/" + pkgName
-}
-
-func fixPkgVersion(info NpmPackageInfo) (NpmPackageInfo, error) {
-	for prefix, ver := range fixedPkgVersions {
-		if strings.HasPrefix(info.Name+"@"+info.Version, prefix) {
-			return fetchPackageInfo(info.Name, ver)
-		}
-	}
-	return info, nil
 }
 
 func isTypesOnlyPackage(p NpmPackageInfo) bool {

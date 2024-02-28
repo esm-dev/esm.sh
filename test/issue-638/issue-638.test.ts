@@ -1,12 +1,8 @@
 import { assertEquals } from "https://deno.land/std@0.180.0/testing/asserts.ts";
 
-const { version } = await fetch("http://localhost:8080/status.json").then(
-  (r) => r.json(),
-);
-
 Deno.test("issue #638", async () => {
   const res = await fetch(
-    `http://localhost:8080/v${version}/@sqlite.org/sqlite-wasm@3.41.2/es2022/sqlite3.wasm`,
+    `http://localhost:8080/@sqlite.org/sqlite-wasm@3.41.2/es2022/sqlite3.wasm`,
     { redirect: "manual" },
   );
   assertEquals(res.status, 301);

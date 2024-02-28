@@ -1,9 +1,6 @@
-import { assertEquals,assertStringIncludes } from "https://deno.land/std@0.180.0/testing/asserts.ts";
+import { assertEquals, assertStringIncludes } from "https://deno.land/std@0.180.0/testing/asserts.ts";
 
 Deno.test("types only", async () => {
-  const { version } = await fetch("http://localhost:8080/status.json").then(
-    (r) => r.json(),
-  );
   const res = await fetch(
     "http://localhost:8080/@octokit-next/types-rest-api@2.5.0",
   );
@@ -13,9 +10,8 @@ Deno.test("types only", async () => {
     res.headers.get("content-type"),
     "application/javascript; charset=utf-8",
   );
-  const dtsUrl =
-    `http://localhost:8080/v${version}/@octokit-next/types-rest-api@2.5.0/index.d.ts`;
+  const dtsUrl = `http://localhost:8080/@octokit-next/types-rest-api@2.5.0/index.d.ts`;
   assertEquals(res.headers.get("x-typescript-types"), dtsUrl);
   const dts = await fetch(dtsUrl).then((r) => r.text());
-  assertStringIncludes(dts, `declare module "http://localhost:8080/v${version}/@octokit-next/types@2.5.0/index.d.ts"`)
+  assertStringIncludes(dts, `declare module "http://localhost:8080/@octokit-next/types@2.5.0/index.d.ts"`);
 });
