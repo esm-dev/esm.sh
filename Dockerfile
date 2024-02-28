@@ -1,8 +1,4 @@
-#####################################################
-#
 # Build Stage
-#
-#####################################################
 FROM golang:1.22-alpine AS build-stage
 
 ENV ESM_SH_VERSION v135_1
@@ -14,11 +10,7 @@ RUN git clone --branch $ESM_SH_VERSION --depth 1 $ESM_SH_GIT_URL /tmp/esm.sh
 WORKDIR /tmp/esm.sh
 RUN CGO_ENABLED=0 GOOS=linux go build -o esmd main.go
 
-#####################################################
-#
 # Release Stage
-#
-#####################################################
 FROM node:20-alpine AS release-stage
 
 RUN apk update && apk add --no-cache git libcap-utils
