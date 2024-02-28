@@ -26,9 +26,9 @@ RUN npm i -g pnpm
 
 COPY --from=build-stage /tmp/esm.sh/esmd /bin/esmd
 RUN setcap cap_net_bind_service=ep /bin/esmd
-RUN chown docker:docker /bin/esmd
+RUN chown node:node /bin/esmd
 
-USER docker
+USER node
 WORKDIR /
 EXPOSE 8080
 CMD ["esmd"]
