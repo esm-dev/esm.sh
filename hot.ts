@@ -213,15 +213,20 @@ class Hot implements HotCore {
 
   async #fireApp(swActive: ServiceWorker) {
     // download and send esm archive to Service Worker
-    queryElements<HTMLLinkElement>(`link[rel="preload"][as="fetch"][type="${kTypeEsmArchive}"][href]`, (el) => {
+    queryElements<HTMLLinkElement>(`link[rel="preload"][as="fetch"][type^="${kTypeEsmArchive}"][href]`, (el) => {
       this.#promises.push(
         fetch(el.href).then((res) => {
+          if (res.ok && el.type.endsWith("+gzip")) {
+            return new Response(res.body?.pipeThrough(new DecompressionStream("gzip")));
+          }
+          return res;
+        }).then((res) => {
           if (res.ok) {
             return res.arrayBuffer();
           }
           return Promise.reject(new Error(res.statusText ?? `<${res.status}>`));
         }).then((arrayBuffer) => {
-          swActive.postMessage({ HOT_ARCHIVE: arrayBuffer });
+          swActive.postMessage({ [kHotArchive]: arrayBuffer });
           this.#bc.onmessage = (evt) => {
             if (evt.data === kHotArchive) {
               this.onUpdateFound();
@@ -290,7 +295,7 @@ class Hot implements HotCore {
 
     on("fetch", (evt) => {
       const { request } = evt;
-      const respondWith = evt.respondWith.bind(evt);
+      const respondWith = (res: Response | Promise<Response>) => evt.respondWith(res);
       const url = new URL(request.url);
       const { pathname } = url;
       const archive = this.#archive;
@@ -306,7 +311,7 @@ class Hot implements HotCore {
     on(kMessage, (evt) => {
       const { data } = evt;
       if (typeof data === "object" && data !== null) {
-        const buffer = data.HOT_ARCHIVE;
+        const buffer = data[kHotArchive];
         if (buffer instanceof ArrayBuffer) {
           try {
             const archive = new Archive(buffer);
