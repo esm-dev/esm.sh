@@ -1,11 +1,6 @@
-import { assertEquals } from "https://deno.land/std@0.180.0/testing/asserts.ts";
+import { assertEquals } from "https://deno.land/std@0.210.0/testing/asserts.ts";
 
-import {
-  graphql,
-  GraphQLObjectType,
-  GraphQLSchema,
-  GraphQLString,
-} from "http://localhost:8080/graphql@16.6.0";
+import { graphql, GraphQLObjectType, GraphQLSchema, GraphQLString } from "http://localhost:8080/graphql@16.6.0";
 import * as graphqlImpl from "http://localhost:8080/graphql@16.6.0/graphql";
 
 Deno.test("graphql", async () => {

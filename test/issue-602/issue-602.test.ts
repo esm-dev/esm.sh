@@ -1,10 +1,6 @@
-import { assertEquals } from "https://deno.land/std@0.180.0/testing/asserts.ts";
+import { assertEquals } from "https://deno.land/std@0.210.0/testing/asserts.ts";
 
-import {
-  compress,
-  decompress,
-  init,
-} from "http://localhost:8080/@bokuweb/zstd-wasm@0.0.20";
+import { compress, decompress, init } from "http://localhost:8080/@bokuweb/zstd-wasm@0.0.20";
 
 Deno.test("issue #602", async () => {
   await init("http://localhost:8080/@bokuweb/zstd-wasm@0.0.20/dist/esm/wasm/zstd.wasm");

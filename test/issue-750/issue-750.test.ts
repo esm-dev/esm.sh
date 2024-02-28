@@ -1,4 +1,4 @@
-import { assert } from "https://deno.land/std@0.180.0/testing/asserts.ts";
+import { assert } from "https://deno.land/std@0.210.0/testing/asserts.ts";
 
 import * as element from "http://localhost:8080/@lume/element@0.10.1?target=esnext";
 import * as variable from "http://localhost:8080/@lume/variable@0.10.1";

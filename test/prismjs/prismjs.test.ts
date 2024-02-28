@@ -1,4 +1,4 @@
-import { assert } from "https://deno.land/std@0.180.0/testing/asserts.ts";
+import { assert } from "https://deno.land/std@0.210.0/testing/asserts.ts";
 
 import Prism from "http://localhost:8080/prismjs";
 import "http://localhost:8080/prismjs/components/prism-bash";

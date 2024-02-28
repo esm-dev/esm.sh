@@ -1,4 +1,4 @@
-import { assertEquals } from "https://deno.land/std@0.180.0/testing/asserts.ts";
+import { assertEquals } from "https://deno.land/std@0.210.0/testing/asserts.ts";
 
 import Pusher from "http://localhost:8080/pusher@5.1.2";
 

@@ -1,7 +1,4 @@
-import {
-  assertEquals,
-  assertStringIncludes,
-} from "https://deno.land/std@0.180.0/testing/asserts.ts";
+import { assertEquals, assertStringIncludes } from "https://deno.land/std@0.210.0/testing/asserts.ts";
 
 import { build, esm } from "http://localhost:8080/build";
 
@@ -115,9 +112,7 @@ Deno.test("build api (use sdk)", async (t) => {
 
   await t.step("use `esm` tag function", async () => {
     const message = "Hello world!";
-    const mod = await esm<{ default: string }>`export default ${
-      JSON.stringify(message)
-    };`;
+    const mod = await esm<{ default: string }>`export default ${JSON.stringify(message)};`;
     assertEquals(mod.default, message);
   });
 });

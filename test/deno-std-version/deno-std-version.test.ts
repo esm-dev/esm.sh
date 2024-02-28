@@ -1,4 +1,4 @@
-import { assertEquals, assertStringIncludes } from "https://deno.land/std@0.180.0/testing/asserts.ts";
+import { assertEquals, assertStringIncludes } from "https://deno.land/std@0.210.0/testing/asserts.ts";
 
 Deno.test("`?deno-std` query", async () => {
   const code = await fetch(

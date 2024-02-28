@@ -1,4 +1,4 @@
-import { assertStringIncludes } from "https://deno.land/std@0.180.0/testing/asserts.ts";
+import { assertStringIncludes } from "https://deno.land/std@0.210.0/testing/asserts.ts";
 
 Deno.test("support exports `development` condition", async () => {
   const code = await fetch("http://localhost:8080/react@18.2.0/es2022/react.development.mjs").then((

@@ -1,9 +1,6 @@
-import { assertEquals } from "https://deno.land/std@0.180.0/testing/asserts.ts";
+import { assertEquals } from "https://deno.land/std@0.210.0/testing/asserts.ts";
 
-import express, {
-  type Request,
-  type Response,
-} from "http://localhost:8080/express@4";
+import express, { type Request, type Response } from "http://localhost:8080/express@4";
 
 Deno.test(
   "express",

@@ -1,4 +1,4 @@
-import { assertEquals } from "https://deno.land/std@0.180.0/testing/asserts.ts";
+import { assertEquals } from "https://deno.land/std@0.210.0/testing/asserts.ts";
 
 import { codes } from "http://localhost:8080/keycode@2.2.1";
 import { loadWASM } from "http://localhost:8080/vscode-oniguruma@1.6.2";

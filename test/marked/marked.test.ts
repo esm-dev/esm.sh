@@ -1,7 +1,4 @@
-import {
-  assert,
-  assertEquals,
-} from "https://deno.land/std@0.180.0/testing/asserts.ts";
+import { assert, assertEquals } from "https://deno.land/std@0.210.0/testing/asserts.ts";
 
 import marked from "http://localhost:8080/marked@2?deps=@types/marked@2.0.0";
 import { safeLoadFront } from "http://localhost:8080/yaml-front-matter@4.1.1";
