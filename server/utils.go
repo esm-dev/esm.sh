@@ -14,10 +14,10 @@ import (
 	"time"
 
 	"github.com/Masterminds/semver/v3"
+	"github.com/ije/esbuild-internal/config"
 	"github.com/ije/esbuild-internal/js_ast"
 	"github.com/ije/esbuild-internal/js_parser"
 	"github.com/ije/esbuild-internal/logger"
-	"github.com/ije/esbuild-internal/config"
 )
 
 const EOL = "\n"
