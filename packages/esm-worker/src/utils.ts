@@ -6,6 +6,10 @@ export function hasTargetSegment(path: string) {
   return parts.length >= 2 && parts.some((p) => targets.has(p));
 }
 
+export function isDtsFile(path: string) {
+  return path.endsWith(".d.ts") || path.endsWith(".d.mts");
+}
+
 export function asKV(
   storage?: R2Bucket | WorkerStorage,
 ): WorkerStorageKV | undefined {

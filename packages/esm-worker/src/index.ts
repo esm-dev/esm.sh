@@ -19,6 +19,7 @@ import {
   errPkgNotFound,
   hashText,
   hasTargetSegment,
+  isDtsFile,
   redirect,
   splitBy,
   trimPrefix,
@@ -35,7 +36,11 @@ const defaultNpmRegistry = "https://registry.npmjs.org";
 const defaultEsmServerOrigin = "https://esm.sh";
 const immutableCache = "public, max-age=31536000, immutable";
 
-const noopStorage: WorkerStorage = {
+const dumpCache: Cache = {
+  match: () => Promise.resolve(null),
+  put: () => Promise.resolve(),
+} as any;
+const dumpStorage: WorkerStorage = {
   get: () => Promise.resolve(null),
   put: () => Promise.resolve(),
 };
@@ -129,14 +134,13 @@ async function fetchOriginWithKVCache(
   }
   const headers = corsHeaders();
   const [pathname] = splitBy(path, "?", true);
-  const R2 = Reflect.get(env, "R2") as R2Bucket | undefined ?? noopStorage;
+  const R2 = Reflect.get(env, "R2") as R2Bucket | undefined ?? dumpStorage;
   const KV = Reflect.get(env, "KV") as KVNamespace | undefined ?? asKV(R2);
   const fromWorker = req.headers.has("X-Real-Origin");
   const isModule = !(
     ctx.url.searchParams.has("raw") ||
-    pathname.endsWith(".d.ts") ||
-    pathname.endsWith(".d.mts") ||
-    pathname.endsWith(".map")
+    pathname.endsWith(".map") ||
+    isDtsFile(pathname)
   );
 
   if (!fromWorker) {
@@ -241,7 +245,7 @@ async function fetchOriginWithR2Cache(
   pathname: string,
 ): Promise<Response> {
   const resHeaders = corsHeaders();
-  const r2 = Reflect.get(env, "R2") as R2Bucket | undefined ?? noopStorage;
+  const r2 = Reflect.get(env, "R2") as R2Bucket | undefined ?? dumpStorage;
   const ret = await r2.get(pathname.slice(1));
   if (ret) {
     resHeaders.set(
@@ -272,13 +276,9 @@ async function fetchOriginWithR2Cache(
 }
 
 function withESMWorker(middleware?: Middleware) {
-  const cachePromise = caches.open("esm.sh");
+  const cache: Cache = (caches as any).default ?? dumpCache;
 
-  async function handler(
-    req: Request,
-    env: Env,
-    context: ExecutionContext,
-  ): Promise<Response> {
+  async function handler(req: Request, env: Env, cfCtx: ExecutionContext): Promise<Response> {
     const resp = checkPreflight(req);
     if (resp) {
       return resp;
@@ -294,27 +294,24 @@ function withESMWorker(middleware?: Middleware) {
     }
 
     const ua = req.headers.get("User-Agent");
-    const cache = await cachePromise;
     const withCache: Context["withCache"] = async (fetcher, options) => {
+      const { pathname, searchParams } = url;
       const isHeadMethod = req.method === "HEAD";
-      const hasPinedTarget = targets.has(url.searchParams.get("target") ?? "");
+      const hasPinedTarget = targets.has(searchParams.get("target") ?? "");
       const cacheKey = new URL(url);
       const varyUA = options?.varyUA &&
         !hasPinedTarget &&
-        !url.hostname.endsWith(".d.ts") &&
-        !url.hostname.endsWith(".d.mts") &&
-        !url.searchParams.has("raw");
+        !isDtsFile(pathname) &&
+        !searchParams.has("raw");
       if (varyUA) {
         const target = getBuildTargetFromUA(ua);
         cacheKey.searchParams.set("target", target);
         //! don't delete this line, it used to ensure KV/R2 cache respecting different UA
-        url.searchParams.set("target", target);
+        searchParams.set("target", target);
       }
-      for (const key of ["x-real-origin"]) {
-        const value = req.headers.get(key);
-        if (value) {
-          cacheKey.searchParams.set(key, value);
-        }
+      const realOrigin = req.headers.get("X-REAL-ORIGIN");
+      if (realOrigin) {
+        cacheKey.searchParams.set("X-REAL-ORIGIN", realOrigin);
       }
       let res = await cache.match(cacheKey);
       if (res) {
@@ -334,7 +331,7 @@ function withESMWorker(middleware?: Middleware) {
         res.ok &&
         res.headers.get("Cache-Control")?.startsWith("public, max-age=")
       ) {
-        context.waitUntil(cache.put(cacheKey, res.clone()));
+        cfCtx.waitUntil(cache.put(cacheKey, res.clone()));
       }
       if (isHeadMethod) {
         const { status, headers } = res;
@@ -346,7 +343,7 @@ function withESMWorker(middleware?: Middleware) {
       cache,
       url,
       data: {},
-      waitUntil: (p: Promise<any>) => context.waitUntil(p),
+      waitUntil: (p: Promise<any>) => cfCtx.waitUntil(p),
       withCache,
     };
 
@@ -398,10 +395,8 @@ function withESMWorker(middleware?: Middleware) {
     ) {
       const input = await req.text();
       const key = "esm-build-" + await hashText(input);
-      const storage = Reflect.get(env, "R2") as R2Bucket | undefined ??
-        noopStorage;
-      const KV = Reflect.get(env, "KV") as KVNamespace | undefined ??
-        asKV(storage);
+      const storage = Reflect.get(env, "R2") as R2Bucket | undefined ?? dumpStorage;
+      const KV = Reflect.get(env, "KV") as KVNamespace | undefined ?? asKV(storage);
       const { value } = await KV.getWithMetadata(key, "stream");
       if (value) {
         const headers = corsHeaders();
@@ -692,7 +687,7 @@ function withESMWorker(middleware?: Middleware) {
     // redirect `/@types/PKG` to `.d.ts` files
     if (
       pkgId.startsWith("@types/") &&
-      (subPath === "" || !subPath.endsWith(".d.ts"))
+      (subPath === "" || !isDtsFile(subPath))
     ) {
       return ctx.withCache(async () => {
         let p = pathname;
@@ -752,7 +747,7 @@ function withESMWorker(middleware?: Middleware) {
       });
     }
 
-    // if it's npm asset
+    // if it's a npm asset
     if (subPath !== "") {
       const ext = splitBy(subPath, ".", true)[1];
       // use origin server response for `*.wasm?module`
@@ -792,7 +787,7 @@ function withESMWorker(middleware?: Middleware) {
       prefix += "/gh";
     }
 
-    if (subPath.endsWith(".d.ts") || hasTargetSegment(subPath)) {
+    if (isDtsFile(subPath) || hasTargetSegment(subPath)) {
       return ctx.withCache(() => {
         const path = `${prefix}/${pkgId}@${packageVersion}${subPath}${url.search}`;
         return fetchOriginWithKVCache(req, env, ctx, path, true);
