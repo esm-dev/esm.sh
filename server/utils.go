@@ -244,7 +244,3 @@ func concatBytes(a, b []byte) []byte {
 	copy(c[len(a):], b)
 	return c
 }
-
-func jsDataUrl(code string) string {
-	return fmt.Sprintf("data:text/javascript;base64,%s", base64.StdEncoding.EncodeToString([]byte(code)))
-}

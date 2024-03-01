@@ -1,5 +1,3 @@
-// https://www.npmjs.com/package/fsevents
-
 export default {
   watch(_dir, _cb) {
     return Promise.resolve();
@@ -10,12 +8,7 @@ export default {
       path,
       type: "file",
       flags: 0x1_00_00_00_00,
-      changes: {
-        inode: false,
-        finder: false,
-        access: false,
-        xattrs: false,
-      },
+      changes: { inode: false, finder: false, access: false, xattrs: false },
     };
   },
 };

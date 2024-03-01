@@ -470,10 +470,10 @@ rebuild:
 								if task.isServerTarget() {
 									return api.OnResolveResult{Path: task.resolveExternal(specifier, args.Kind), External: true}, nil
 								}
-								data, err := embedFS.ReadFile(("server/embed/polyfills/node_" + specifier))
+								data, err := embedFS.ReadFile("server/embed/polyfills/node_" + specifier + ".js")
 								if err == nil {
 									return api.OnResolveResult{
-										Path:       "embed:polyfills/node_" + specifier,
+										Path:       "embed:polyfills/node_" + specifier + ".js",
 										Namespace:  "embed",
 										PluginData: data,
 									}, nil
@@ -1016,30 +1016,18 @@ func (task *BuildTask) resolveExternal(specifier string, kind api.ResolveKind) (
 			resolvedPath = n + ".nobundle." + e
 		}
 	}
-	// replace some polyfills with native APIs
+	// replace some npm polyfills with native APIs
 	if resolvedPath == "" {
-		switch specifier {
-		case "array-flatten":
-			resolvedPath = jsDataUrl(`export const flatten=(a,d)=>a.flat(typeof d<"u"?d:Infinity);export default flatten`)
-		case "array-includes":
-			resolvedPath = jsDataUrl(`export default (a,p,i)=>a.includes(p,i)`)
-		case "abort-controller":
-			resolvedPath = jsDataUrl(`export const AbortSignal=globalThis.AbortSignal;export const AbortController=globalThis.AbortController;export default AbortController`)
-		case "object-assign":
-			resolvedPath = jsDataUrl(`export default Object.assign`)
-		case "has-own":
-			resolvedPath = jsDataUrl(`const hasOwn=Object.prototype.hasOwnProperty;export default Object.hasOwn ?? (o,p)=>hasOwn.call(o,p)`)
-		case "has-proto":
-			resolvedPath = jsDataUrl(`const foo={bar:{}};const O=Object;export default ()=>({__proto__:foo}).bar===foo.bar&&!({__proto__:null} instanceof O)`)
-		case "has-symbols":
-			resolvedPath = jsDataUrl(`export default ()=>true`)
-		case "function-bind":
-			resolvedPath = jsDataUrl(`export default Function.prototype.bind`)
-		case "node-fetch":
-			if task.Target != "node" {
-				resolvedPath = fmt.Sprintf("%s/node_fetch.js", cfg.CdnBasePath)
-			}
+		data, err := embedFS.ReadFile(("server/embed/polyfills/npm_" + specifier + ".js"))
+		if err == nil {
+			resolvedPath = fmt.Sprintf("data:application/javascript;base64,%s", base64.StdEncoding.EncodeToString(data))
 		}
+	}
+	if resolvedPath == "" && !task.isServerTarget() && specifier == "fsevents" {
+		resolvedPath = fmt.Sprintf("%s/node_fsevents.js", cfg.CdnBasePath)
+	}
+	if resolvedPath == "" && task.Target != "node" && specifier == "node-fetch" {
+		resolvedPath = fmt.Sprintf("%s/node_fetch.js", cfg.CdnBasePath)
 	}
 	// common npm dependency
 	if resolvedPath == "" {
