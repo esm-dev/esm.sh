@@ -409,7 +409,7 @@ rebuild:
 						// externalize native node packages like fsevent
 						for _, name := range nativeNodePackages {
 							if specifier == name || strings.HasPrefix(specifier, name+"/") {
-								if task.isDenoTarget() {
+								if task.Target == "denonext" {
 									pkgName, _, subPath := splitPkgPath(specifier)
 									version := "latest"
 									if pkgName == task.Pkg.Name {
@@ -434,6 +434,12 @@ rebuild:
 										}
 										return api.OnResolveResult{Path: fmt.Sprintf("npm:%s", pkg.String()), External: true}, nil
 									}
+								}
+								if specifier == "fsevents" {
+									return api.OnResolveResult{
+										Path:     fmt.Sprintf("%s/node_fsevents.js", cfg.CdnBasePath),
+										External: true,
+									}, nil
 								}
 								return api.OnResolveResult{
 									Path:     fmt.Sprintf("%s/error.js?type=unsupported-npm-package&name=%s&importer=%s", cfg.CdnBasePath, specifier, task.Pkg),
@@ -1022,9 +1028,6 @@ func (task *BuildTask) resolveExternal(specifier string, kind api.ResolveKind) (
 		if err == nil {
 			resolvedPath = fmt.Sprintf("data:application/javascript;base64,%s", base64.StdEncoding.EncodeToString(data))
 		}
-	}
-	if resolvedPath == "" && !task.isServerTarget() && specifier == "fsevents" {
-		resolvedPath = fmt.Sprintf("%s/node_fsevents.js", cfg.CdnBasePath)
 	}
 	if resolvedPath == "" && task.Target != "node" && specifier == "node-fetch" {
 		resolvedPath = fmt.Sprintf("%s/node_fetch.js", cfg.CdnBasePath)
