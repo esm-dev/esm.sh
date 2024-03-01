@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/Masterminds/semver/v3"
+	"github.com/ije/esbuild-internal/config"
 	"github.com/ije/esbuild-internal/js_ast"
 	"github.com/ije/esbuild-internal/js_parser"
 	"github.com/ije/esbuild-internal/logger"
@@ -22,15 +23,13 @@ import (
 const EOL = "\n"
 
 var (
-	regexpFullVersion      = regexp.MustCompile(`^\d+\.\d+\.\d+[\w\.\+\-]*$`)
-	regexpFullVersionPath  = regexp.MustCompile(`(\w)@(v?\d+\.\d+\.\d+[\w\.\+\-]*|[0-9a-f]{10})(/|$)`)
-	regexpPathWithVersion  = regexp.MustCompile(`\w@[\*\~\^\w\.\+\-]+(/|$|&)`)
-	regexpBuildVersionPath = regexp.MustCompile(`^/v\d+(/|$)`)
-	regexpCliPath          = regexp.MustCompile(`^/v\d+\/?$`)
-	regexpLocPath          = regexp.MustCompile(`(\.js):\d+:\d+$`)
-	regexpJSIdent          = regexp.MustCompile(`^[a-zA-Z_$][\w$]*$`)
-	regexpGlobalIdent      = regexp.MustCompile(`__[a-zA-Z]+\$`)
-	regexpVarEqual         = regexp.MustCompile(`var ([a-zA-Z]+)\s*=\s*[a-zA-Z]+$`)
+	regexpFullVersion     = regexp.MustCompile(`^\d+\.\d+\.\d+[\w\.\+\-]*$`)
+	regexpFullVersionPath = regexp.MustCompile(`(\w)@(v?\d+\.\d+\.\d+[\w\.\+\-]*|[0-9a-f]{10})(/|$)`)
+	regexpPathWithVersion = regexp.MustCompile(`\w@[\*\~\^\w\.\+\-]+(/|$|&)`)
+	regexpLocPath         = regexp.MustCompile(`(\.js):\d+:\d+$`)
+	regexpJSIdent         = regexp.MustCompile(`^[a-zA-Z_$][\w$]*$`)
+	regexpGlobalIdent     = regexp.MustCompile(`__[a-zA-Z]+\$`)
+	regexpVarEqual        = regexp.MustCompile(`var ([a-zA-Z]+)\s*=\s*[a-zA-Z]+$`)
 )
 
 var httpClient = &http.Client{
@@ -204,13 +203,18 @@ func validateJS(filename string) (isESM bool, namedExports []string, err error) 
 		return
 	}
 	log := logger.NewDeferLog(logger.DeferLogNoVerboseOrDebug, nil)
+	parserOpts := js_parser.OptionsFromConfig(&config.Options{
+		TS: config.TSOptions{
+			Parse: endsWith(filename, ".ts", ".mts", ".cts", ".tsx"),
+		},
+	})
 	ast, pass := js_parser.Parse(log, logger.Source{
 		Index:          0,
 		KeyPath:        logger.Path{Text: "<stdin>"},
 		PrettyPath:     "<stdin>",
 		Contents:       string(data),
 		IdentifierName: "stdin",
-	}, js_parser.Options{})
+	}, parserOpts)
 	if !pass {
 		err = errors.New("invalid syntax, require javascript/typescript")
 		return
