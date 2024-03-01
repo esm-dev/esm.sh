@@ -1,12 +1,8 @@
 import xxhash from "xxhash-wasm";
 
+const xxhashPromise = xxhash();
+
 export async function bundle(entries) {
-  if (!Archive.xxhash) {
-    Archive.xxhash = xxhash();
-  }
-  if (Archive.xxhash instanceof Promise) {
-    Archive.xxhash = await Archive.xxhash;
-  }
   const encoder = new TextEncoder();
   const encode = (str) => encoder.encode(str);
   const length = 18 +
@@ -14,42 +10,43 @@ export async function bundle(entries) {
       (acc, { name, type, size }) => acc + 11 + encode(name).length + encode(type).length + size,
       0,
     );
-  const buffer = new Uint8Array(length);
+  const u8Array = (init) => new Uint8Array(init);
+  const buffer = u8Array(length);
+  const h32 = (await xxhashPromise).create32();
   const dv = new DataView(new ArrayBuffer(8));
-  const h32 = Archive.xxhash.create32();
-  dv.setUint32(0, length);
+  const setUint32 = (i, n) => dv.setUint32(i, n);
+  setUint32(0, length);
   buffer.set(encode("ESMARCHIVE"));
-  buffer.set(new Uint8Array(dv.buffer), 10);
+  buffer.set(u8Array(dv.buffer), 10);
   let offset = 18;
   for (const entry of entries) {
     const name = encode(entry.name);
     const type = encode(entry.type);
-    const content = new Uint8Array(await entry.arrayBuffer());
+    const content = u8Array(await entry.arrayBuffer());
     if (name.length > 0xffff || type.length > 0xff) {
       throw new Error("entry name or type too long");
     }
     dv.setUint16(0, name.length);
-    buffer.set(new Uint8Array(dv.buffer.slice(0, 2)), offset);
+    buffer.set(u8Array(dv.buffer.slice(0, 2)), offset);
     offset += 2;
     buffer.set(name, offset);
     offset += name.length;
-    buffer.set(new Uint8Array([type.length]), offset);
+    buffer.set(u8Array([type.length]), offset);
     offset += 1;
     buffer.set(type, offset);
     offset += type.length;
-    dv.setUint32(0, Math.round((entry.lastModified ?? 0) / 1000)); // convert to seconds
-    dv.setUint32(4, content.length);
-    buffer.set(new Uint8Array(dv.buffer), offset);
+    setUint32(0, Math.round((entry.lastModified ?? 0) / 1000)); // convert to seconds
+    setUint32(4, content.length);
+    buffer.set(u8Array(dv.buffer), offset);
     offset += 8;
     buffer.set(content, offset);
     offset += content.length;
-    h32.update(name);
-    h32.update(type);
-    h32.update(new Uint8Array(dv.buffer));
-    h32.update(content);
+    for (const chunk of [name, type, u8Array(dv.buffer), content]) {
+      h32.update(chunk);
+    }
   }
-  dv.setUint32(0, h32.digest());
-  buffer.set(new Uint8Array(dv.buffer.slice(0, 4)), 14);
+  setUint32(0, h32.digest());
+  buffer.set(u8Array(dv.buffer.slice(0, 4)), 14);
   return buffer;
 }
 
