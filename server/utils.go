@@ -204,8 +204,8 @@ func validateJS(filename string) (isESM bool, namedExports []string, err error) 
 	}
 	log := logger.NewDeferLog(logger.DeferLogNoVerboseOrDebug, nil)
 	parserOpts := js_parser.OptionsFromConfig(&config.Options{
-		TS: config.TSOptions {
-			Parse: true,
+		TS: config.TSOptions{
+			Parse: endsWith(filename, ".ts", ".mts", ".cts", ".tsx"),
 		},
 	})
 	ast, pass := js_parser.Parse(log, logger.Source{
