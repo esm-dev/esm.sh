@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/Masterminds/semver/v3"
+	"github.com/ije/esbuild-internal/config"
 	"github.com/ije/esbuild-internal/js_ast"
 	"github.com/ije/esbuild-internal/js_parser"
 	"github.com/ije/esbuild-internal/logger"
@@ -202,13 +203,18 @@ func validateJS(filename string) (isESM bool, namedExports []string, err error) 
 		return
 	}
 	log := logger.NewDeferLog(logger.DeferLogNoVerboseOrDebug, nil)
+	parserOpts := js_parser.OptionsFromConfig(&config.Options{
+		TS: config.TSOptions {
+			Parse: true,
+		},
+	})
 	ast, pass := js_parser.Parse(log, logger.Source{
 		Index:          0,
 		KeyPath:        logger.Path{Text: "<stdin>"},
 		PrettyPath:     "<stdin>",
 		Contents:       string(data),
 		IdentifierName: "stdin",
-	}, js_parser.Options{})
+	}, parserOpts)
 	if !pass {
 		err = errors.New("invalid syntax, require javascript/typescript")
 		return
