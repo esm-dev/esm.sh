@@ -1,5 +1,5 @@
 /*! 🔥 esm.sh/hot
- *  Docs: https://til.esm.sh/hot
+ *  Docs: https://docs.esm.sh/hot
  */
 
 /// <reference lib="webworker" />
