@@ -6,7 +6,7 @@ function panic() {
   );
 }
 
-export const isMainThread = true;
+export const isMainThread = globalThis === globalThis.window;
 export const parentPort = null;
 export const resourceLimits = {
   maxYoungGenerationSizeMb: 0,
@@ -14,7 +14,7 @@ export const resourceLimits = {
   codeRangeSizeMb: 0,
   stackSizeMb: 0,
 };
-export const SHARE_ENV = Symbol("worker_threads.SHARE_ENV");
+export const SHARE_ENV = Symbol("node:worker_threads_SHARE_ENV");
 export const threadId = 0;
 export const workerData = undefined;
 
