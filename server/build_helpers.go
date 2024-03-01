@@ -339,7 +339,7 @@ func (task *BuildTask) analyze(forceCjsOnly bool) (esm *ESMBuild, npm NpmPackage
 			esm.HasExportDefault = includes(namedExports, "default")
 			return
 		}
-		if erro != nil && erro.Error() != "not a module" {
+		if erro.Error() != "not a module" {
 			err = fmt.Errorf("esmLexer: %s", erro)
 			return
 		}

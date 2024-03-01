@@ -23,13 +23,15 @@ import (
 const EOL = "\n"
 
 var (
-	regexpFullVersion     = regexp.MustCompile(`^\d+\.\d+\.\d+[\w\.\+\-]*$`)
-	regexpFullVersionPath = regexp.MustCompile(`(\w)@(v?\d+\.\d+\.\d+[\w\.\+\-]*|[0-9a-f]{10})(/|$)`)
-	regexpPathWithVersion = regexp.MustCompile(`\w@[\*\~\^\w\.\+\-]+(/|$|&)`)
-	regexpLocPath         = regexp.MustCompile(`(\.js):\d+:\d+$`)
-	regexpJSIdent         = regexp.MustCompile(`^[a-zA-Z_$][\w$]*$`)
-	regexpGlobalIdent     = regexp.MustCompile(`__[a-zA-Z]+\$`)
-	regexpVarEqual        = regexp.MustCompile(`var ([a-zA-Z]+)\s*=\s*[a-zA-Z]+$`)
+	regexpFullVersion      = regexp.MustCompile(`^\d+\.\d+\.\d+[\w\.\+\-]*$`)
+	regexpFullVersionPath  = regexp.MustCompile(`(\w)@(v?\d+\.\d+\.\d+[\w\.\+\-]*|[0-9a-f]{10})(/|$)`)
+	regexpPathWithVersion  = regexp.MustCompile(`\w@[\*\~\^\w\.\+\-]+(/|$|&)`)
+	regexpBuildVersionPath = regexp.MustCompile(`^/v\d+(/|$)`)
+	regexpCliPath          = regexp.MustCompile(`^/v\d+\/?$`)
+	regexpLocPath          = regexp.MustCompile(`(\.js):\d+:\d+$`)
+	regexpJSIdent          = regexp.MustCompile(`^[a-zA-Z_$][\w$]*$`)
+	regexpGlobalIdent      = regexp.MustCompile(`__[a-zA-Z]+\$`)
+	regexpVarEqual         = regexp.MustCompile(`var ([a-zA-Z]+)\s*=\s*[a-zA-Z]+$`)
 )
 
 var httpClient = &http.Client{

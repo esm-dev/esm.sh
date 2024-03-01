@@ -87,7 +87,7 @@ func apiHandler() rex.Handle {
 					}
 				}
 				cdnOrigin := getCdnOrign(ctx)
-				id, err := build(input, cdnOrigin)
+				id, err := build(input)
 				if err != nil {
 					if strings.HasPrefix(err.Error(), "<400> ") {
 						return rex.Err(400, err.Error()[6:])
@@ -116,7 +116,7 @@ func apiHandler() rex.Handle {
 	}
 }
 
-func build(input BuildInput, cdnOrigin string) (id string, err error) {
+func build(input BuildInput) (id string, err error) {
 	loader := "tsx"
 	switch input.Loader {
 	case "js", "jsx", "ts", "tsx":
