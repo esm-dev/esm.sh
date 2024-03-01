@@ -14,26 +14,26 @@ import (
 )
 
 type Config struct {
-	Port             uint16    `json:"port,omitempty"`
-	TlsPort          uint16    `json:"tlsPort,omitempty"`
-	BuildConcurrency uint16    `json:"buildConcurrency,omitempty"`
-	BanList          BanList   `json:"banList,omitempty"`
-	AllowList        AllowList `json:"allowList,omitempty"`
-	AuthSecret       string    `json:"authSecret,omitempty"`
-	WorkDir          string    `json:"workDir,omitempty"`
-	Cache            string    `json:"cache,omitempty"`
-	Database         string    `json:"database,omitempty"`
-	Storage          string    `json:"storage,omitempty"`
-	LogLevel         string    `json:"logLevel,omitempty"`
-	LogDir           string    `json:"logDir,omitempty"`
-	CdnOrigin        string    `json:"cdnOrigin,omitempty"`
-	CdnBasePath      string    `json:"cdnBasePath,omitempty"`
-	NpmRegistry      string    `json:"npmRegistry,omitempty"`
-	NpmToken         string    `json:"npmToken,omitempty"`
-	NpmRegistryScope string    `json:"npmRegistryScope,omitempty"`
-	NpmUser          string    `json:"npmUser,omitempty"`
-	NpmPassword      string    `json:"npmPassword,omitempty"`
-	NoCompress       bool      `json:"noCompress,omitempty"`
+	Port               uint16    `json:"port,omitempty"`
+	TlsPort            uint16    `json:"tlsPort,omitempty"`
+	WorkDir            string    `json:"workDir,omitempty"`
+	CdnBasePath        string    `json:"cdnBasePath,omitempty"`
+	CdnOrigin          string    `json:"cdnOrigin,omitempty"`
+	AuthSecret         string    `json:"authSecret,omitempty"`
+	AllowList          AllowList `json:"allowList,omitempty"`
+	BanList            BanList   `json:"banList,omitempty"`
+	DisableCompression bool      `json:"disableCompression,omitempty"`
+	BuildConcurrency   uint16    `json:"buildConcurrency,omitempty"`
+	Cache              string    `json:"cache,omitempty"`
+	Storage            string    `json:"storage,omitempty"`
+	Database           string    `json:"database,omitempty"`
+	LogDir             string    `json:"logDir,omitempty"`
+	LogLevel           string    `json:"logLevel,omitempty"`
+	NpmPassword        string    `json:"npmPassword,omitempty"`
+	NpmRegistry        string    `json:"npmRegistry,omitempty"`
+	NpmRegistryScope   string    `json:"npmRegistryScope,omitempty"`
+	NpmToken           string    `json:"npmToken,omitempty"`
+	NpmUser            string    `json:"npmUser,omitempty"`
 }
 
 type BanList struct {
@@ -104,6 +104,9 @@ func fixConfig(c *Config) *Config {
 	if c.Port == 0 {
 		c.Port = 8080
 	}
+	if c.AuthSecret == "" {
+		c.AuthSecret = os.Getenv("AUTH_SECRET")
+	}
 	if c.CdnOrigin != "" {
 		_, e := url.Parse(c.CdnOrigin)
 		if e != nil {
@@ -138,6 +141,9 @@ func fixConfig(c *Config) *Config {
 		if v != "" {
 			c.CdnBasePath = utils.CleanPath(v)
 		}
+	}
+	if !c.DisableCompression {
+		c.DisableCompression = os.Getenv("DISABLE_COMPRESSION") != ""
 	}
 	if c.BuildConcurrency == 0 {
 		c.BuildConcurrency = uint16(runtime.NumCPU())
@@ -182,9 +188,6 @@ func fixConfig(c *Config) *Config {
 	}
 	if c.NpmPassword == "" {
 		c.NpmPassword = os.Getenv("NPM_PASSWORD")
-	}
-	if c.AuthSecret == "" {
-		c.AuthSecret = os.Getenv("SERVER_AUTH_SECRET")
 	}
 	return c
 }

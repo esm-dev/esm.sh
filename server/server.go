@@ -129,7 +129,7 @@ func Serve(efs EmbedFS) {
 	}
 	accessLogger.SetQuite(true) // quite in terminal
 
-	if !cfg.NoCompress {
+	if !cfg.DisableCompression {
 		rex.Use(rex.Compression())
 	}
 	rex.Use(

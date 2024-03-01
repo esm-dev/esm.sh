@@ -74,7 +74,8 @@ Available environment variables:
 - `NPM_REGISTRY_SCOPE`: The NPM registry scope, default is no scope.
 - `NPM_USER`: The NPM user for private packages.
 - `NPM_PASSWORD`: The NPM password for private packages.
-- `SERVER_AUTH_SECRET`: The server auth secret, default is no auth.
+- `AUTH_SECRET`: The server auth secret, default is no authrization check.
+- `DISABLE_COMPRESSION`: Disable compression, default is false.
 
 You can also create your own Dockerfile with `ghcr.io/esm-dev/esm.sh`:
 

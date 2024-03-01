@@ -6,6 +6,9 @@
   // You don't need to provide a certificate, it will generate automatically by autocert.
   "tlsPort": 0,
 
+  // The auth secret to validate the `Authorization` header of requests, default is no auth.
+  "authSecret": "",
+
   // The build max concurrency, default is `runtime.NumCPU()`
   "buildConcurrency": 0,
 
@@ -56,20 +59,15 @@
   "npmUser": "",
   "npmPassword": "",
 
-  // Disable compressing the response, default is false.
-  "noCompress": false,
-
-  // The auth secret to validate the `Authorization` header of requests, default is no auth.
-  "authSecret": "",
+  // Disable compression the response, default is false.
+  "disableCompression": false,
 
   // The list to ban some packages or scopes.
   "banList": {
     "packages": ["@some_scope/package_name"],
     "scopes": [{
       "name": "@your_scope",
-      "excludes": [
-        "package_name"
-      ]
+      "excludes": ["package_name"]
     }]
   },
 
