@@ -26,11 +26,12 @@ export interface FireOptions {
 
 export interface HotCore {
   readonly vfs: VFS;
+  use(...plugins: readonly Plugin[]): this;
   fire(options?: FireOptions): Promise<void>;
   listen(): void;
-  onFire(handler: (reg: ServiceWorker) => void): this;
+  onFetch(handler: (event: FetchEvent) => void): this;
+  onFire(handler: (sw: ServiceWorker) => void): this;
   onUpdateFound: () => void;
-  use(...plugins: readonly Plugin[]): this;
   waitUntil(...promises: readonly Promise<any>[]): this;
 }
 
