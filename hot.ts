@@ -141,6 +141,11 @@ class Hot implements HotCore {
     return this.#vfs;
   }
 
+  use(...plugins: readonly Plugin[]) {
+    plugins.forEach((plugin) => plugin.setup(this));
+    return this;
+  }
+
   onUpdateFound = () => location.reload();
 
   onFetch(handler: (event: FetchEvent) => void) {
@@ -159,11 +164,6 @@ class Hot implements HotCore {
 
   waitUntil(...promises: readonly Promise<void>[]) {
     this.#promises.push(...promises);
-    return this;
-  }
-
-  use(...plugins: readonly Plugin[]) {
-    plugins.forEach((plugin) => plugin.setup(this));
     return this;
   }
 
