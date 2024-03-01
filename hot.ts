@@ -1,5 +1,5 @@
 /*! 🔥 esm.sh/hot
- *  Docs: https://til.esm.sh/hot
+ *  Docs: https://docs.esm.sh/hot
  */
 
 /// <reference lib="webworker" />
@@ -132,6 +132,7 @@ class Hot implements HotCore {
   #swScript: string | null = null;
   #swActive: ServiceWorker | null = null;
   #archive: Archive | null = null;
+  #fetchListeners: ((event: FetchEvent) => void)[] = [];
   #fireListeners: ((sw: ServiceWorker) => void)[] = [];
   #promises: Promise<any>[] = [];
   #bc = new BroadcastChannel(kHot);
@@ -141,6 +142,11 @@ class Hot implements HotCore {
   }
 
   onUpdateFound = () => location.reload();
+
+  onFetch(handler: (event: FetchEvent) => void) {
+    this.#fetchListeners.push(handler);
+    return this;
+  }
 
   onFire(handler: (reg: ServiceWorker) => void) {
     if (this.#swActive) {
@@ -293,16 +299,28 @@ class Hot implements HotCore {
 
     on("fetch", (evt) => {
       const { request } = evt as FetchEvent;
-      const respondWith = (res: Response | Promise<Response>) => evt.respondWith(res);
       const url = new URL(request.url);
       const { pathname } = url;
       const archive = this.#archive;
+      const listeners = this.#fetchListeners;
+      let responded = false;
+      function respondWith(res: Response | Promise<Response>) {
+        responded = true;
+        evt.respondWith(res);
+      }
       if (url.origin === location.origin && pathname.startsWith("/@hot/")) {
         respondWith(serveVFS(pathname.slice(6)));
-      }
-      if (archive?.exists(request.url)) {
+      } else if (archive?.exists(request.url)) {
         const file = archive.openFile(request.url)!;
         respondWith(createResponse(file, { "content-type": file.type }));
+      } else if (listeners.length > 0) {
+        evt.respondWith = respondWith;
+        for (const handler of listeners) {
+          if (responded) {
+            break;
+          }
+          handler(evt);
+        }
       }
     });
 
