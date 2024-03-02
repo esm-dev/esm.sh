@@ -24,10 +24,10 @@ func esmHandler() rex.Handle {
 	startTime := time.Now()
 
 	return func(ctx *rex.Context) interface{} {
-		pathname := ctx.Path.String()
-		userAgent := ctx.R.UserAgent()
-		header := ctx.W.Header()
 		cdnOrigin := getCdnOrign(ctx)
+		pathname := ctx.Path.String()
+		header := ctx.W.Header()
+		userAgent := ctx.R.UserAgent()
 
 		// ban malicious requests
 		if strings.HasPrefix(pathname, ".") || strings.HasSuffix(pathname, ".php") {
@@ -145,6 +145,11 @@ func esmHandler() rex.Handle {
 			return rex.Status(404, "not found")
 		}
 
+		// strip loc suffix
+		if strings.ContainsRune(pathname, ':') {
+			pathname = regexpLocPath.ReplaceAllString(pathname, "$1")
+		}
+
 		// serve embed assets
 		if strings.HasPrefix(pathname, "/embed/") {
 			modTime := startTime
@@ -161,13 +166,8 @@ func esmHandler() rex.Handle {
 				data = bytes.ReplaceAll(data, []byte("{origin}"), []byte(cdnOrigin))
 				data = bytes.ReplaceAll(data, []byte("{basePath}"), []byte(cfg.CdnBasePath))
 			}
-			header.Set("Cache-Control", fmt.Sprintf("public, max-age=%d", 10*60))
+			header.Set("Cache-Control", "public, max-age=86400")
 			return rex.Content(pathname, modTime, bytes.NewReader(data))
-		}
-
-		// strip loc suffix
-		if strings.ContainsRune(pathname, ':') {
-			pathname = regexpLocPath.ReplaceAllString(pathname, "$1")
 		}
 
 		// serve modules created by the build API
@@ -195,6 +195,77 @@ func esmHandler() rex.Handle {
 			return rex.Content(savaPath, fi.ModTime(), r) // auto closed
 		}
 
+		// redirect to the url with version prefix
+		if (pathname == "/build" || pathname == "/run" || pathname == "/hot") && !regexpVersionPrefix.MatchString(pathname) {
+			url := fmt.Sprintf("%s%s/v%d%s", cdnOrigin, cfg.CdnBasePath, VERSION, pathname)
+			if ctx.R.URL.RawQuery != "" {
+				url += "?" + ctx.R.URL.RawQuery
+			}
+			return rex.Redirect(url, http.StatusFound)
+		}
+
+		// serve function scripts
+		if strings.HasPrefix(pathname, "/v") && strings.Count(pathname, "/") == 2 && endsWith(pathname, "/build", "/run", "/hot") && regexpVersionPrefix.MatchString(pathname) {
+			_, scriptName := utils.SplitByLastByte(pathname, '/')
+			data, err := embedFS.ReadFile(fmt.Sprintf("%s.ts", scriptName))
+			if err != nil {
+				return rex.Status(404, "Not Found")
+			}
+
+			// determine build target by `?target` query or `User-Agent` header
+			target := strings.ToLower(ctx.Form.Value("target"))
+			targetViaUA := targets[target] == 0
+			if targetViaUA {
+				target = getBuildTargetByUA(userAgent)
+			}
+
+			header.Set("Cache-Control", "public, max-age=31536000, immutable")
+			if target == "deno" || target == "denonext" {
+				header.Set("Content-Type", "application/typescript; charset=utf-8")
+			} else {
+				code, err := minify(string(data), targets[target], api.LoaderTS)
+				if err != nil {
+					return throwErrorJS(ctx, fmt.Errorf("transform error: %v", err), false)
+				}
+				data = code
+				header.Set("Content-Type", "application/javascript; charset=utf-8")
+			}
+			// add 'X-TypeScript-Types' header for the `/hot` script
+			if scriptName == "hot" {
+				header.Set("X-TypeScript-Types", fmt.Sprintf("%s%s/v%d/hot.d.ts", cdnOrigin, cfg.CdnBasePath, VERSION))
+			}
+			if targetViaUA {
+				addVary(header, "User-Agent")
+			}
+			return data
+		}
+
+		// use embed polyfills/types
+		if strings.HasPrefix(pathname, "/v") && strings.Count(pathname, "/") == 2 && endsWith(pathname, ".js", ".d.ts") && regexpVersionPrefix.MatchString(pathname) {
+			_, filename := utils.SplitByLastByte(pathname, '/')
+			if strings.HasSuffix(filename, ".js") {
+				data, err := embedFS.ReadFile("server/embed/polyfills/" + filename)
+				if err == nil {
+					target := getBuildTargetByUA(userAgent)
+					code, err := minify(string(data), targets[target], api.LoaderJS)
+					if err != nil {
+						return throwErrorJS(ctx, fmt.Errorf("transform error: %v", err), false)
+					}
+					header.Set("Content-Type", "application/javascript; charset=utf-8")
+					header.Set("Cache-Control", "public, max-age=31536000, immutable")
+					addVary(header, "User-Agent")
+					return rex.Content(filename, startTime, bytes.NewReader(code))
+				}
+			} else if strings.HasSuffix(filename, ".d.ts") {
+				data, err := embedFS.ReadFile("server/embed/types/" + filename)
+				if err == nil {
+					header.Set("Content-Type", "application/typescript; charset=utf-8")
+					header.Set("Cache-Control", "public, max-age=31536000, immutable")
+					return rex.Content(filename, startTime, bytes.NewReader(data))
+				}
+			}
+		}
+
 		// check extra query like `/react-dom@18.2.0&external=react&dev/client`
 		var extraQuery string
 		if strings.ContainsRune(pathname, '@') && regexpPathWithVersion.MatchString(pathname) {
@@ -208,70 +279,6 @@ func esmHandler() rex.Handle {
 						}
 						ctx.R.URL.RawQuery = strings.Join(qs, "&")
 					}
-				}
-			}
-		}
-
-		// serve internal scripts
-		if pathname == "/build" || pathname == "/run" || pathname == "/hot" {
-			filename := pathname[1:]
-			data, err := embedFS.ReadFile(fmt.Sprintf("%s.ts", filename))
-			if err != nil {
-				return rex.Status(404, "Not Found")
-			}
-
-			//  add 'X-TypeScript-Types' header for the `/hot` script
-			if pathname == "/hot" {
-				header.Set("X-TypeScript-Types", fmt.Sprintf("%s%s/hot.d.ts", cdnOrigin, cfg.CdnBasePath))
-			}
-
-			target := getBuildTargetByUA(userAgent)
-			if target == "deno" || target == "denonext" {
-				header.Set("Content-Type", "application/typescript; charset=utf-8")
-			} else {
-				code, err := minify(string(data), targets[target], api.LoaderTS)
-				if err != nil {
-					return throwErrorJS(ctx, fmt.Errorf("transform error: %v", err), false)
-				}
-				data = code
-				header.Set("Content-Type", "application/javascript; charset=utf-8")
-			}
-			header.Set("Cache-Control", "public, max-age=31536000, immutable")
-			addVary(header, "User-Agent")
-			return data
-		}
-
-		// use embed polyfills/types
-		if strings.Count(pathname, "/") == 1 {
-			if strings.HasSuffix(pathname, ".js") {
-				data, err := embedFS.ReadFile("server/embed/polyfills" + pathname)
-				if err == nil {
-					target := getBuildTargetByUA(userAgent)
-					code, err := minify(string(data), targets[target], api.LoaderJS)
-					if err != nil {
-						return throwErrorJS(ctx, fmt.Errorf("transform error: %v", err), false)
-					}
-					header.Set("Content-Type", "application/javascript; charset=utf-8")
-					header.Set("Cache-Control", "public, max-age=31536000, immutable")
-					addVary(header, "User-Agent")
-					return rex.Content(pathname, startTime, bytes.NewReader(code))
-				}
-			}
-			if strings.HasSuffix(pathname, ".d.ts") {
-				data, err := embedFS.ReadFile("server/embed/types" + pathname)
-				if err == nil {
-					fv := ctx.Form.Value("refs")
-					if fv != "" {
-						var refs = make([]string, strings.Count(fv, ",")+1)
-						for i, ref := range strings.Split(fv, ",") {
-							url := fmt.Sprintf("%s%s/%s", cdnOrigin, cfg.CdnBasePath, ref)
-							refs[i] = fmt.Sprintf("/// <reference path=\"%s\" />", url)
-						}
-						data = concatBytes([]byte(strings.Join(refs, "\n")), data)
-					}
-					header.Set("Content-Type", "application/typescript; charset=utf-8")
-					header.Set("Cache-Control", "public, max-age=31536000, immutable")
-					return rex.Content(pathname, startTime, bytes.NewReader(data))
 				}
 			}
 		}
@@ -583,19 +590,6 @@ func esmHandler() rex.Handle {
 			}
 		}
 
-		// determine build target by `?target` query or `User-Agent` header
-		target := strings.ToLower(ctx.Form.Value("target"))
-		targetFromUA := targets[target] == 0
-		if targetFromUA {
-			target = getBuildTargetByUA(userAgent)
-		}
-		if strings.HasPrefix(target, "es") && includes(nativeNodePackages, reqPkg.Name) {
-			return throwErrorJS(ctx, fmt.Errorf(
-				`unsupported npm package "%s": native node module is not supported in browser`,
-				reqPkg.Name,
-			), false)
-		}
-
 		// check `?alias` query
 		alias := map[string]string{}
 		if ctx.Form.Has("alias") {
@@ -657,6 +651,13 @@ func esmHandler() rex.Handle {
 					conditions.Add(p)
 				}
 			}
+		}
+
+		// determine build target by `?target` query or `User-Agent` header
+		target := strings.ToLower(ctx.Form.Value("target"))
+		targetViaUA := targets[target] == 0
+		if targetViaUA {
+			target = getBuildTargetByUA(userAgent)
 		}
 
 		// check deno/std version by `?deno-std=VER` query
@@ -960,7 +961,7 @@ func esmHandler() rex.Handle {
 			dtsUrl := fmt.Sprintf("%s%s/%s", cdnOrigin, cfg.CdnBasePath, esm.Dts)
 			header.Set("X-TypeScript-Types", dtsUrl)
 		}
-		if targetFromUA {
+		if targetViaUA {
 			addVary(header, "User-Agent")
 		}
 		header.Set("Cache-Control", "public, max-age=31536000, immutable")

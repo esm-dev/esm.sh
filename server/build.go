@@ -437,7 +437,7 @@ rebuild:
 								}
 								if specifier == "fsevents" {
 									return api.OnResolveResult{
-										Path:     fmt.Sprintf("%s/node_fsevents.js", cfg.CdnBasePath),
+										Path:     fmt.Sprintf("%s/v%d/node_fsevents.js", cfg.CdnBasePath, VERSION),
 										External: true,
 									}, nil
 								}
@@ -784,7 +784,7 @@ rebuild:
 								}
 								fmt.Fprintf(header, "%s", js)
 							} else {
-								fmt.Fprintf(header, `import __Process$ from "%s/node_process.js";%s`, cfg.CdnBasePath, EOL)
+								fmt.Fprintf(header, `import __Process$ from "%s/v%d/node_process.js";%s`, cfg.CdnBasePath, VERSION, EOL)
 							}
 						}
 					}
@@ -991,7 +991,7 @@ func (task *BuildTask) resolveExternal(specifier string, kind api.ResolveKind) (
 			} else {
 				_, err := embedFS.ReadFile(fmt.Sprintf("server/embed/polyfills/node_%s.js", specifier))
 				if err == nil {
-					resolvedPath = fmt.Sprintf("%s/node_%s.js", cfg.CdnBasePath, specifier)
+					resolvedPath = fmt.Sprintf("%s/v%d/node_%s.js", cfg.CdnBasePath, VERSION, specifier)
 				} else {
 					resolvedPath = fmt.Sprintf(
 						"%s/error.js?type=unsupported-node-builtin-module&name=%s&importer=%s",
@@ -1030,7 +1030,7 @@ func (task *BuildTask) resolveExternal(specifier string, kind api.ResolveKind) (
 		}
 	}
 	if resolvedPath == "" && task.Target != "node" && specifier == "node-fetch" {
-		resolvedPath = fmt.Sprintf("%s/node_fetch.js", cfg.CdnBasePath)
+		resolvedPath = fmt.Sprintf("%s/v%d/node_fetch.js", cfg.CdnBasePath, VERSION)
 	}
 	// common npm dependency
 	if resolvedPath == "" {

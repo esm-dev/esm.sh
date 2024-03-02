@@ -23,6 +23,7 @@ import (
 const EOL = "\n"
 
 var (
+	regexpVersionPrefix   = regexp.MustCompile(`^/v[1-9]\d+/`)
 	regexpFullVersion     = regexp.MustCompile(`^\d+\.\d+\.\d+[\w\.\+\-]*$`)
 	regexpFullVersionPath = regexp.MustCompile(`(\w)@(v?\d+\.\d+\.\d+[\w\.\+\-]*|[0-9a-f]{10})(/|$)`)
 	regexpPathWithVersion = regexp.MustCompile(`\w@[\*\~\^\w\.\+\-]+(/|$|&)`)

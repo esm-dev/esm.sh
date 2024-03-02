@@ -28,8 +28,9 @@ import {
 const regexpNpmNaming = /^[a-zA-Z0-9][\w\.\-]*$/;
 const regexpFullVersion = /^\d+\.\d+\.\d+/;
 const regexpCommitish = /^[a-f0-9]{10,}$/;
-const regexpBuildVersion = /^(v\d+|stable)$/;
-const regexpBuildVersionPrefix = /^\/(v\d+|stable)\//;
+const regexpInternalScript = /^\/v[1-9]\d+\/(build|run|hot)$/;
+const regexpInternalFile = /^\/v[1-9]\d+\/(?:node_\w+\.js|(?:node\.ns|hot)\.d\.ts)$/;
+const regexpVersionPrefix = /^\/v[1-9]\d+\//;
 
 const version = `v${VERSION}`;
 const defaultNpmRegistry = "https://registry.npmjs.org";
@@ -285,14 +286,6 @@ function withESMWorker(middleware?: Middleware) {
     }
 
     const url = new URL(req.url);
-    if (env.LEGACY_WORKER) {
-      const hasBuildVersionPrefix = url.pathname.startsWith("/v") && regexpBuildVersionPrefix.test(url.pathname);
-      const hasPinQuery = url.searchParams.has("pin") && regexpBuildVersion.test(url.searchParams.get("pin"));
-      if (hasBuildVersionPrefix || hasPinQuery) {
-        return env.LEGACY_WORKER.fetch(req.clone());
-      }
-    }
-
     const ua = req.headers.get("User-Agent");
     const withCache: Context["withCache"] = async (fetcher, options) => {
       const { pathname, searchParams } = url;
@@ -347,52 +340,24 @@ function withESMWorker(middleware?: Middleware) {
       withCache,
     };
 
-    let pathname = decodeURIComponent(url.pathname);
+    let pathname = url.pathname;
+
+    // ban malicious requests
+    if (pathname.startsWith("/.") || pathname.endsWith(".php")) {
+      return ctx.withCache(() =>
+        new Response(null, {
+          status: 404,
+          headers: { "cache-control": immutableCache },
+        })
+      );
+    }
 
     // strip trailing slash
     if (pathname !== "/" && pathname.endsWith("/")) {
       pathname = pathname.slice(0, -1);
     }
 
-    switch (pathname) {
-      case "/error.js":
-        return ctx.withCache(
-          () =>
-            fetchOrigin(
-              req,
-              env,
-              ctx,
-              pathname + url.search,
-              corsHeaders(),
-            ),
-          { varyUA: true },
-        );
-
-      case "/status.json":
-        return fetchOrigin(req, env, ctx, pathname, corsHeaders());
-
-      case "/esma-target":
-        return ctx.withCache(
-          () => {
-            const headers = corsHeaders();
-            headers.set("cache-control", immutableCache);
-            return new Response(getBuildTargetFromUA(ua), { headers });
-          },
-          { varyUA: true },
-        );
-    }
-
-    if (middleware) {
-      const resp = await middleware(req, env, ctx);
-      if (resp) {
-        return resp;
-      }
-    }
-
-    if (
-      req.method === "POST" &&
-      (pathname === "/build" || pathname === "/transform")
-    ) {
+    if (req.method === "POST" && (pathname === "/build" || pathname === "/transform")) {
       const input = await req.text();
       const key = "esm-build-" + await hashText(input);
       const storage = Reflect.get(env, "R2") as R2Bucket | undefined ?? dumpStorage;
@@ -426,41 +391,109 @@ function withESMWorker(middleware?: Middleware) {
       }
       const body = await res.arrayBuffer();
       ctx.waitUntil(KV.put(key, body));
-      return new Response(body, {
-        status: res.status,
-        headers: res.headers,
-      });
+      return new Response(body, { status: res.status, headers: res.headers });
+    }
+
+    switch (pathname) {
+      case "/error.js":
+        return ctx.withCache(() => fetchOrigin(req, env, ctx, pathname + url.search, corsHeaders()));
+
+      case "/status.json":
+        return fetchOrigin(req, env, ctx, pathname, corsHeaders());
+
+      case "/esma-target":
+        return ctx.withCache(
+          () => {
+            const headers = corsHeaders();
+            headers.set("cache-control", immutableCache);
+            return new Response(getBuildTargetFromUA(ua), { headers });
+          },
+          { varyUA: true },
+        );
+
+      case "/favicon.ico": {
+        return ctx.withCache(() =>
+          new Response(null, {
+            status: 404,
+            headers: { "cache-control": immutableCache },
+          })
+        );
+      }
+
+      case "/build":
+      case "/run":
+      case "/hot": {
+        return redirect(new URL(`/${version}${pathname}${url.search}`, url), 302);
+      }
+    }
+
+    if (middleware) {
+      const resp = await middleware(req, env, ctx);
+      if (resp) {
+        return resp;
+      }
     }
 
     if (req.method !== "GET" && req.method !== "HEAD") {
       return err("Method Not Allowed", 405);
     }
 
-    // ban malicious requests
-    if (
-      pathname === "/favicon.ico" ||
-      pathname.startsWith("/.") ||
-      pathname.endsWith(".php")
-    ) {
+    // return the default landing page or embed files
+    if (pathname === "/" || pathname.startsWith("/embed/")) {
+      return fetchOrigin(req, env, ctx, `${pathname}${url.search}`, corsHeaders());
+    }
+
+    // singleton build module
+    if (pathname.startsWith("/+")) {
       return ctx.withCache(
-        () =>
-          new Response(null, {
-            status: 404,
-            headers: { "cache-control": immutableCache },
-          }),
+        () => fetchOriginWithKVCache(req, env, ctx, pathname + url.search),
+        { varyUA: true },
       );
     }
 
-    // landing page or embed files
-    if (pathname === "/" || pathname.startsWith("/embed/")) {
-      return fetchOrigin(
-        req,
-        env,
-        ctx,
-        `${pathname}${url.search}`,
-        corsHeaders(),
-      );
+    const startsWithV = pathname.startsWith("/v");
+
+    if (
+      startsWithV &&
+      (pathname.endsWith("/build") || pathname.endsWith("/run") || pathname.endsWith("/hot")) &&
+      regexpInternalScript.test(pathname)
+    ) {
+      return ctx.withCache(() =>
+        fetchOriginWithKVCache(
+          req,
+          env,
+          ctx,
+          `${pathname}${url.search}`,
+          false,
+        ), { varyUA: true });
     }
+
+    if (
+      startsWithV &&
+      (pathname.endsWith(".d.ts") || pathname.endsWith(".js")) &&
+      regexpInternalFile.test(pathname)
+    ) {
+      return ctx.withCache(() =>
+        fetchOriginWithKVCache(
+          req,
+          env,
+          ctx,
+          `${pathname}${url.search}`,
+          true,
+        ), { varyUA: true });
+    }
+
+    // use legacy worker if the bild version is specified in the path or query
+    if (env.LEGACY_WORKER) {
+      const hasVersionPrefix = (startsWithV && regexpVersionPrefix.test(pathname)) || pathname.startsWith("/stable");
+      const hasPinQuery = url.searchParams.has("pin");
+      if (hasVersionPrefix || hasPinQuery) {
+        return env.LEGACY_WORKER.fetch(req.clone());
+      }
+    }
+
+    // decode pathname
+    pathname = decodeURIComponent(pathname);
 
     // fix `/jsx-runtime` suffix in query, normally it happens with import maps
     if (
@@ -478,29 +511,6 @@ function withESMWorker(middleware?: Middleware) {
       pathname = splitBy(pathname, ":")[0];
     }
 
-    // singleton build module
-    if (pathname.startsWith("/+")) {
-      return ctx.withCache(
-        () => fetchOriginWithKVCache(req, env, ctx, pathname + url.search),
-        { varyUA: true },
-      );
-    }
-
-    if (
-      pathname === "/build" ||
-      pathname === "/run" ||
-      pathname === "/hot"
-    ) {
-      return ctx.withCache(() =>
-        fetchOrigin(
-          req,
-          env,
-          ctx,
-          `${pathname}${url.search}`,
-          corsHeaders(),
-        ), { varyUA: true });
-    }
-
     const gh = pathname.startsWith("/gh/");
     if (gh) {
       pathname = "/@" + pathname.slice(4);
@@ -516,24 +526,6 @@ function withESMWorker(middleware?: Middleware) {
     const hasExternalAllMarker = pathname.startsWith("/*");
     if (hasExternalAllMarker) {
       pathname = "/" + pathname.slice(2);
-    }
-
-    if (
-      pathname === "/node.ns.d.ts" ||
-      pathname === "/hot.d.ts" || (
-        pathname.startsWith("/node_") &&
-        pathname.endsWith(".js") &&
-        !pathname.slice(1).includes("/")
-      )
-    ) {
-      return ctx.withCache(() =>
-        fetchOriginWithKVCache(
-          req,
-          env,
-          ctx,
-          `${pathname}${url.search}`,
-          true,
-        ), { varyUA: true });
     }
 
     let packageScope = "";
