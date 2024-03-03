@@ -37,11 +37,11 @@ const defaultNpmRegistry = "https://registry.npmjs.org";
 const defaultEsmServerOrigin = "https://esm.sh";
 const immutableCache = "public, max-age=31536000, immutable";
 
-const dumpCache: Cache = {
+const dummyCache: Cache = {
   match: () => Promise.resolve(null),
   put: () => Promise.resolve(),
 } as any;
-const dumpStorage: WorkerStorage = {
+const dummyStorage: WorkerStorage = {
   get: () => Promise.resolve(null),
   put: () => Promise.resolve(),
 };
@@ -135,7 +135,7 @@ async function fetchOriginWithKVCache(
   }
   const headers = corsHeaders();
   const [pathname] = splitBy(path, "?", true);
-  const R2 = Reflect.get(env, "R2") as R2Bucket | undefined ?? dumpStorage;
+  const R2 = Reflect.get(env, "R2") as R2Bucket | undefined ?? dummyStorage;
   const KV = Reflect.get(env, "KV") as KVNamespace | undefined ?? asKV(R2);
   const fromWorker = req.headers.has("X-Real-Origin");
   const isModule = !(
@@ -246,7 +246,7 @@ async function fetchOriginWithR2Cache(
   pathname: string,
 ): Promise<Response> {
   const resHeaders = corsHeaders();
-  const r2 = Reflect.get(env, "R2") as R2Bucket | undefined ?? dumpStorage;
+  const r2 = Reflect.get(env, "R2") as R2Bucket | undefined ?? dummyStorage;
   const ret = await r2.get(pathname.slice(1));
   if (ret) {
     resHeaders.set(
@@ -276,7 +276,7 @@ async function fetchOriginWithR2Cache(
   return res;
 }
 
-function withESMWorker(middleware?: Middleware, cache: Cache = (caches as any).default ?? dumpCache) {
+function withESMWorker(middleware?: Middleware, cache: Cache = (caches as any).default ?? dummyCache) {
   async function handler(req: Request, env: Env, cfCtx: ExecutionContext): Promise<Response> {
     const resp = checkPreflight(req);
     if (resp) {
@@ -358,7 +358,7 @@ function withESMWorker(middleware?: Middleware, cache: Cache = (caches as any).d
     if (req.method === "POST" && (pathname === "/build" || pathname === "/transform")) {
       const input = await req.text();
       const key = "esm-build-" + await hashText(input);
-      const storage = Reflect.get(env, "R2") as R2Bucket | undefined ?? dumpStorage;
+      const storage = Reflect.get(env, "R2") as R2Bucket | undefined ?? dummyStorage;
       const KV = Reflect.get(env, "KV") as KVNamespace | undefined ?? asKV(storage);
       const { value } = await KV.getWithMetadata(key, "stream");
       if (value) {
