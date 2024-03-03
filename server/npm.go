@@ -348,18 +348,23 @@ func fetchPackageInfo(name string, version string) (info NpmPackageInfo, err err
 }
 
 func installPackage(wd string, pkg Pkg) (err error) {
+	// skip install if pnpm lock file exists
+	if fileExists(path.Join(wd, "pnpm-lock.yaml")) && dirExists(path.Join(wd, "node_modules", pkg.Name)) {
+		return nil
+	}
+
 	pkgVersionName := pkg.VersionName()
+	lock := getInstallLock(pkgVersionName)
 
 	// only one install process allowed at the same time
-	lock := getInstallLock(pkgVersionName)
 	lock.Lock()
 	defer lock.Unlock()
 
 	// ensure package.json file to prevent read up-levels
-	packageFilePath := path.Join(wd, "package.json")
+	packageJsonFilepath := path.Join(wd, "package.json")
 	if pkg.FromEsmsh {
 		err = copyRawBuildFile(pkg.Name, "package.json", wd)
-	} else if pkg.FromGithub || !fileExists(packageFilePath) {
+	} else if pkg.FromGithub || !fileExists(packageJsonFilepath) {
 		fileContent := []byte("{}")
 		if pkg.FromGithub {
 			fileContent = []byte(fmt.Sprintf(
@@ -369,13 +374,14 @@ func installPackage(wd string, pkg Pkg) (err error) {
 			))
 		}
 		ensureDir(wd)
-		err = os.WriteFile(packageFilePath, fileContent, 0644)
+		err = os.WriteFile(packageJsonFilepath, fileContent, 0644)
 	}
 	if err != nil {
 		return fmt.Errorf("ensure package.json failed: %s", pkgVersionName)
 	}
 
-	for i := 0; i < 3; i++ {
+	attemptMaxTimes := 5
+	for i := 1; i <= attemptMaxTimes; i++ {
 		if pkg.FromEsmsh {
 			err = pnpmInstall(wd)
 			if err == nil {
@@ -398,21 +404,19 @@ func installPackage(wd string, pkg Pkg) (err error) {
 		} else {
 			err = pnpmInstall(wd, pkgVersionName)
 		}
-		packageFilePath := path.Join(wd, "node_modules", pkg.Name, "package.json")
-		if err == nil && !fileExists(packageFilePath) {
+		packageJsonFilepath := path.Join(wd, "node_modules", pkg.Name, "package.json")
+		if err == nil && !fileExists(packageJsonFilepath) {
 			if pkg.FromGithub {
-				ensureDir(path.Dir(packageFilePath))
-				err = os.WriteFile(packageFilePath, utils.MustEncodeJSON(pkg), 0644)
+				ensureDir(path.Dir(packageJsonFilepath))
+				err = os.WriteFile(packageJsonFilepath, utils.MustEncodeJSON(pkg), 0644)
 			} else {
 				err = fmt.Errorf("pnpm install %s: package.json not found", pkg)
 			}
 		}
-		if err == nil {
+		if err == nil || i == attemptMaxTimes {
 			break
 		}
-		if i < 2 {
-			time.Sleep(100 * time.Millisecond)
-		}
+		time.Sleep(time.Duration(i) * 100 * time.Millisecond)
 	}
 	return
 }
