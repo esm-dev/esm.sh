@@ -349,7 +349,7 @@ func fetchPackageInfo(name string, version string) (info NpmPackageInfo, err err
 
 func installPackage(wd string, pkg Pkg) (err error) {
 	// skip install if pnpm lock file exists
-	if fileExists(path.Join(wd, "pnpm-lock.yaml")) && dirExists(path.Join(wd, "node_modules", pkg.Name)) {
+	if fileExists(path.Join(wd, "pnpm-lock.yaml")) && fileExists(path.Join(wd, "node_modules", pkg.Name, "package.json")) {
 		return nil
 	}
 
