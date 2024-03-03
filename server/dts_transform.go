@@ -183,7 +183,7 @@ func (task *BuildTask) transformDTS(dts string, aliasDepsPrefix string, marker *
 			}
 		} else {
 			if res == "node" {
-				return fmt.Sprintf("%s/node.ns.d.ts", dtsBasePath)
+				return fmt.Sprintf("%s/v%d/node.ns.d.ts", dtsBasePath, VERSION)
 			}
 			if strings.HasPrefix(res, "node:") {
 				return fmt.Sprintf("%s/@types/node@%s/%s.d.ts", dtsBasePath, nodeTypesVersion, strings.TrimPrefix(res, "node:"))
