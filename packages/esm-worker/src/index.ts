@@ -276,9 +276,7 @@ async function fetchOriginWithR2Cache(
   return res;
 }
 
-function withESMWorker(middleware?: Middleware) {
-  const cache: Cache = (caches as any).default ?? dumpCache;
-
+function withESMWorker(middleware?: Middleware, cache: Cache = (caches as any).default ?? dumpCache) {
   async function handler(req: Request, env: Env, cfCtx: ExecutionContext): Promise<Response> {
     const resp = checkPreflight(req);
     if (resp) {

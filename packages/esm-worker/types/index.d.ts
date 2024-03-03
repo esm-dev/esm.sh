@@ -56,7 +56,7 @@ export const corsHeaders: () => Headers;
 export const redirect: (url: URL | string, status: 301 | 302, cacheMaxAge?: number) => Response;
 export const hashText: (text: string) => Promise<string>;
 
-export function withESMWorker(middleware?: Middleware): {
+export function withESMWorker(middleware?: Middleware, cache?: Cache): {
   fetch: (
     req: Request,
     env: Env,

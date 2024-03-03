@@ -7,6 +7,47 @@ const workerOrigin = "http://localhost:8081";
 const ac = new AbortController();
 const closeServer = () => ac.abort();
 
+const cache = {
+  _store: new Map(),
+  match(req: URL) {
+    return Promise.resolve(this._store.get(req.href) || null);
+  },
+  put(req: URL, res: Response) {
+    this._store.set(req.href, res);
+    return Promise.resolve();
+  },
+};
+
+const R2 = {
+  _store: new Map(),
+  async get(key: string): Promise<
+    {
+      body: ReadableStream<Uint8Array>;
+      httpMetadata?: any;
+      customMetadata?: Record<string, string>;
+    } | null
+  > {
+    const ret = this._store.get(key);
+    if (ret) {
+      return { ...ret, body: new Response(ret.value).body! };
+    }
+    return null;
+  },
+  async put(
+    key: string,
+    value: ArrayBufferLike | ArrayBuffer | ReadableStream,
+    options?: any,
+  ): Promise<void> {
+    this._store.set(key, { value: await new Response(value).arrayBuffer(), ...options });
+  },
+};
+
+const LEGACY_WORKER = {
+  fetch: (req: Request) => {
+    return new Response(req.url);
+  },
+};
+
 // build esm worker
 await run("pnpm", "i");
 await run("node", "build.mjs");
@@ -18,15 +59,10 @@ const worker = withESMWorker((_req: Request, _env: typeof env, ctx: { url: URL }
       headers: { "content-type": "text/html" },
     });
   }
-});
-const LEGACY_WORKER = {
-  fetch: (req: Request) => {
-    return new Response(req.url);
-  },
-};
+}, cache);
 
 // start the worker
-serve((req) => worker.fetch(req, { ...env, LEGACY_WORKER }, { waitUntil: () => {} }), {
+serve((req) => worker.fetch(req, { ...env, LEGACY_WORKER, R2: R2 }, { waitUntil: () => {} }), {
   port: 8081,
   signal: ac.signal,
 });
@@ -64,7 +100,7 @@ Deno.test("esm-worker", { sanitizeOps: false, sanitizeResources: false }, async 
     assertEquals(res2.status, 200);
     assertEquals(res2.headers.get("Content-Type"), "application/javascript; charset=utf-8");
 
-    const res3 = await fetch(`${workerOrigin}/v999999/node_process.js`);
+    const res3 = await fetch(`${workerOrigin}/v${VERSION + 1}/node_process.js`);
     res3.body?.cancel();
     assertEquals(res3.status, 404);
   });
@@ -104,17 +140,29 @@ Deno.test("esm-worker", { sanitizeOps: false, sanitizeResources: false }, async 
 
     const res5 = await fetch(`${workerOrigin}/react@17`);
     res5.body?.cancel();
+    assertEquals(res5.status, 200);
     const modUrl2 = new URL(res5.headers.get("X-Esm-Id")!, workerOrigin);
     const res6 = await fetch(modUrl2);
     assertEquals(res6.status, 200);
     assertStringIncludes(
       await res6.text(),
-      "data:application/javascript;base64,ZXhwb3J0IGRlZmF1bHQgT2JqZWN0LmFzc2lnbjsK",
+      `"data:application/javascript;base64,ZXhwb3J0IGRlZmF1bHQgT2JqZWN0LmFzc2lnbjsK"`,
     );
 
     const res7 = await fetch(`${workerOrigin}/postcss@8.4.16/es2022/lib/postcss.js`);
     assertEquals(res7.status, 200);
     assertStringIncludes(await res7.text(), `"/v${VERSION}/node_process.js"`);
+
+    const res8 = await fetch(`${workerOrigin}/react-dom@18?external=react`);
+    res8.body?.cancel();
+    assertEquals(res8.status, 200);
+    const modUrl3 = new URL(res8.headers.get("X-Esm-Id")!, workerOrigin);
+    const res9 = await fetch(modUrl3);
+    assertEquals(res9.status, 200);
+    assertStringIncludes(
+      await res9.text(),
+      `from "react"`,
+    );
   });
 
   await t.step("npm modules (submodule)", async () => {
