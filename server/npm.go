@@ -257,7 +257,10 @@ func fetchPackageInfo(name string, version string) (info NpmPackageInfo, err err
 		req.SetBasicAuth(cfg.NpmUser, cfg.NpmPassword)
 	}
 
-	resp, err := httpClient.Do(req)
+	c := &http.Client{
+		Timeout: 15 * time.Second,
+	}
+	resp, err := c.Do(req)
 	if err != nil {
 		return
 	}

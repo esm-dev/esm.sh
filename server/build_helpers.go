@@ -13,6 +13,10 @@ import (
 
 	"github.com/esm-dev/esm.sh/server/storage"
 	"github.com/evanw/esbuild/pkg/api"
+	"github.com/ije/esbuild-internal/config"
+	"github.com/ije/esbuild-internal/js_ast"
+	"github.com/ije/esbuild-internal/js_parser"
+	"github.com/ije/esbuild-internal/logger"
 	"github.com/ije/gox/utils"
 )
 
@@ -720,6 +724,55 @@ func copyRawBuildFile(id string, name string, dir string) (err error) {
 	return
 }
 
+func validateJS(filename string) (isESM bool, namedExports []string, err error) {
+	data, err := os.ReadFile(filename)
+	if err != nil {
+		return
+	}
+	log := logger.NewDeferLog(logger.DeferLogNoVerboseOrDebug, nil)
+	parserOpts := js_parser.OptionsFromConfig(&config.Options{
+		TS: config.TSOptions{
+			Parse: endsWith(filename, ".ts", ".mts", ".cts", ".tsx"),
+		},
+	})
+	ast, pass := js_parser.Parse(log, logger.Source{
+		Index:          0,
+		KeyPath:        logger.Path{Text: "<stdin>"},
+		PrettyPath:     "<stdin>",
+		Contents:       string(data),
+		IdentifierName: "stdin",
+	}, parserOpts)
+	if !pass {
+		err = errors.New("invalid syntax, require javascript/typescript")
+		return
+	}
+	isESM = ast.ExportsKind == js_ast.ExportsESM
+	namedExports = make([]string, len(ast.NamedExports))
+	i := 0
+	for name := range ast.NamedExports {
+		namedExports[i] = name
+		i++
+	}
+	return
+}
+
+func minify(code string, target api.Target, loader api.Loader) ([]byte, error) {
+	ret := api.Transform(code, api.TransformOptions{
+		Target:            target,
+		Format:            api.FormatESModule,
+		Platform:          api.PlatformBrowser,
+		MinifyWhitespace:  true,
+		MinifyIdentifiers: true,
+		MinifySyntax:      true,
+		LegalComments:     api.LegalCommentsInline,
+		Loader:            loader,
+	})
+	if ret.Errors != nil && len(ret.Errors) > 0 {
+		return nil, errors.New(ret.Errors[0].Text)
+	}
+	return ret.Code, nil
+}
+
 func bundleNodePolyfill(name string, globalName string, namedExport string, target api.Target) ([]byte, error) {
 	ret := api.Build(api.BuildOptions{
 		Stdin: &api.StdinOptions{
@@ -763,21 +816,4 @@ func bundleNodePolyfill(name string, globalName string, namedExport string, targ
 		return nil, errors.New(ret.Errors[0].Text)
 	}
 	return ret.OutputFiles[0].Contents, nil
-}
-
-func minify(code string, target api.Target, loader api.Loader) ([]byte, error) {
-	ret := api.Transform(code, api.TransformOptions{
-		Target:            target,
-		Format:            api.FormatESModule,
-		Platform:          api.PlatformBrowser,
-		MinifyWhitespace:  true,
-		MinifyIdentifiers: true,
-		MinifySyntax:      true,
-		LegalComments:     api.LegalCommentsInline,
-		Loader:            loader,
-	})
-	if ret.Errors != nil && len(ret.Errors) > 0 {
-		return nil, errors.New(ret.Errors[0].Text)
-	}
-	return ret.Code, nil
 }

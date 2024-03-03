@@ -1,24 +1,15 @@
 package server
 
 import (
-	"context"
 	"encoding/base64"
-	"errors"
 	"fmt"
-	"net"
-	"net/http"
 	"os"
 	"path/filepath"
 	"regexp"
 	"strconv"
 	"strings"
-	"time"
 
 	"github.com/Masterminds/semver/v3"
-	"github.com/ije/esbuild-internal/config"
-	"github.com/ije/esbuild-internal/js_ast"
-	"github.com/ije/esbuild-internal/js_parser"
-	"github.com/ije/esbuild-internal/logger"
 )
 
 const EOL = "\n"
@@ -33,30 +24,6 @@ var (
 	regexpGlobalIdent     = regexp.MustCompile(`__[a-zA-Z]+\$`)
 	regexpVarEqual        = regexp.MustCompile(`var ([a-zA-Z]+)\s*=\s*[a-zA-Z]+$`)
 )
-
-var httpClient = &http.Client{
-	Transport: &http.Transport{
-		Proxy: http.ProxyFromEnvironment,
-		DialContext: transportDialContext(&net.Dialer{
-			Timeout:   10 * time.Second,
-			KeepAlive: 30 * time.Second,
-		}),
-		ForceAttemptHTTP2:     true,
-		MaxIdleConns:          100,
-		IdleConnTimeout:       90 * time.Second,
-		ResponseHeaderTimeout: 10 * time.Second,
-		TLSHandshakeTimeout:   10 * time.Second,
-		ExpectContinueTimeout: 1 * time.Second,
-	},
-}
-
-func transportDialContext(dialer *net.Dialer) func(context.Context, string, string) (net.Conn, error) {
-	return dialer.DialContext
-}
-
-func fetch(url string) (res *http.Response, err error) {
-	return httpClient.Get(url)
-}
 
 // check the version of the given path is larger than the current version.
 func isFutureVersionPrefix(pathname string) bool {
@@ -206,45 +173,14 @@ func atobUrl(s string) (string, error) {
 	return string(data), nil
 }
 
-func validateJS(filename string) (isESM bool, namedExports []string, err error) {
-	data, err := os.ReadFile(filename)
-	if err != nil {
-		return
-	}
-	log := logger.NewDeferLog(logger.DeferLogNoVerboseOrDebug, nil)
-	parserOpts := js_parser.OptionsFromConfig(&config.Options{
-		TS: config.TSOptions{
-			Parse: endsWith(filename, ".ts", ".mts", ".cts", ".tsx"),
-		},
-	})
-	ast, pass := js_parser.Parse(log, logger.Source{
-		Index:          0,
-		KeyPath:        logger.Path{Text: "<stdin>"},
-		PrettyPath:     "<stdin>",
-		Contents:       string(data),
-		IdentifierName: "stdin",
-	}, parserOpts)
-	if !pass {
-		err = errors.New("invalid syntax, require javascript/typescript")
-		return
-	}
-	isESM = ast.ExportsKind == js_ast.ExportsESM
-	namedExports = make([]string, len(ast.NamedExports))
-	i := 0
-	for name := range ast.NamedExports {
-		namedExports[i] = name
-		i++
-	}
-	return
-}
-
 func removeHttpPrefix(s string) (string, error) {
-	for i, v := range s {
-		if v == ':' {
-			return s[i+1:], nil
-		}
+	if strings.HasPrefix(s, "http://") {
+		return s[7:], nil
+	} else if strings.HasPrefix(s, "https://") {
+		return s[8:], nil
+	} else {
+		return "", fmt.Errorf("not a http/https url: %s", s)
 	}
-	return "", fmt.Errorf("colon not found in string: %s", s)
 }
 
 func concatBytes(a, b []byte) []byte {
