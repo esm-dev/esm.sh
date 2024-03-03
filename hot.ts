@@ -127,14 +127,14 @@ class Archive {
 
 /** class `Hot` implements the `HotCore` interface. */
 class Hot implements HotCore {
-  _vfs = new VFS(kHot, VERSION);
-  _swScript: string | null = null;
-  _swActive: ServiceWorker | null = null;
-  _archive: Archive | null = null;
-  _fetchListeners: ((event: FetchEvent) => void)[] = [];
-  _fireListeners: ((sw: ServiceWorker) => void)[] = [];
-  _promises: Promise<any>[] = [];
-  _bc = new BroadcastChannel(kHot);
+  private _vfs = new VFS(kHot, VERSION);
+  private _swScript: string | null = null;
+  private _swActive: ServiceWorker | null = null;
+  private _archive: Archive | null = null;
+  private _fetchListeners: ((event: FetchEvent) => void)[] = [];
+  private _fireListeners: ((sw: ServiceWorker) => void)[] = [];
+  private _promises: Promise<any>[] = [];
+  private _bc = new BroadcastChannel(kHot);
 
   get vfs() {
     return this._vfs;
@@ -191,7 +191,7 @@ class Hot implements HotCore {
     });
     const tryFireApp = async () => {
       if (reg.active?.state === "activated") {
-        await this.#fireApp(reg.active);
+        await this._fireApp(reg.active);
         main && appendElement("script", { type: "module", src: main });
       }
     };
@@ -217,7 +217,7 @@ class Hot implements HotCore {
     tryFireApp();
   }
 
-  async #fireApp(swActive: ServiceWorker) {
+  private async _fireApp(swActive: ServiceWorker) {
     // download and send esm archive to Service Worker
     queryElements<HTMLLinkElement>(`link[rel=preload][as=fetch][type^="${kTypeEsmArchive}"][href]`, (el) => {
       this._promises.push(
@@ -365,12 +365,12 @@ function createResponse(
 }
 
 /** append an element to the document. */
-function appendElement(tag: string, attrs: Record<string, string>, pos: "head" | "body" = "head") {
+function appendElement(tag: string, attrs: Record<string, string>, parent: "head" | "body" = "head") {
   const el = doc!.createElement(tag);
   for (const [k, v] of Object.entries(attrs)) {
     el[k] = v;
   }
-  doc![pos].appendChild(el);
+  doc![parent].appendChild(el);
 }
 
 /** wait for the given IDBRequest. */
