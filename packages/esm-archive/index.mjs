@@ -51,30 +51,31 @@ export async function bundle(entries) {
 }
 
 export class Archive {
-  #buffer;
-  #checksum;
-  #entries = {};
+  _buf;
+  _checksum;
+  _entries;
 
   static invalidFormat = new Error("Invalid esm archive format");
 
   constructor(buffer) {
-    this.#buffer = buffer.buffer ?? buffer;
-    this.#parse();
+    this._buf = buffer.buffer ?? buffer;
+    this._entries = {};
+    this._parse();
   }
 
-  #parse() {
-    const dv = new DataView(this.#buffer);
+  _parse() {
+    const dv = new DataView(this._buf);
     const decoder = new TextDecoder();
     const readUint32 = (offset) => dv.getUint32(offset);
-    const readString = (offset, length) => decoder.decode(new Uint8Array(this.#buffer, offset, length));
-    if (this.#buffer.byteLength < 18 || readString(0, 10) !== "ESMARCHIVE") {
+    const readString = (offset, length) => decoder.decode(new Uint8Array(this._buf, offset, length));
+    if (this._buf.byteLength < 18 || readString(0, 10) !== "ESMARCHIVE") {
       throw Archive.invalidFormat;
     }
     const length = readUint32(10);
-    if (length !== this.#buffer.byteLength) {
+    if (length !== this._buf.byteLength) {
       throw Archive.invalidFormat;
     }
-    this.#checksum = readUint32(14);
+    this._checksum = readUint32(14);
     let offset = 18;
     while (offset < dv.byteLength) {
       const nameLen = dv.getUint16(offset);
@@ -89,25 +90,25 @@ export class Archive {
       offset += 4;
       const size = readUint32(offset);
       offset += 4;
-      this.#entries[name] = { name, type, lastModified, offset, size };
+      this._entries[name] = { name, type, lastModified, offset, size };
       offset += size;
     }
   }
 
   get checksum() {
-    return this.#checksum;
+    return this._checksum;
   }
 
   get entries() {
-    return Object.values(this.#entries).map(({ offset, ...rest }) => rest);
+    return Object.values(this._entries).map(({ offset, ...rest }) => rest);
   }
 
   exists(name) {
-    return name in this.#entries;
+    return name in this._entries;
   }
 
   openFile(name) {
-    const info = this.#entries[name];
-    return info ? new File([this.#buffer.slice(info.offset, info.offset + info.size)], info.name, info) : null;
+    const info = this._entries[name];
+    return info ? new File([this._buf.slice(info.offset, info.offset + info.size)], info.name, info) : null;
   }
 }

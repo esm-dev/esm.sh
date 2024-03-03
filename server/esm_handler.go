@@ -165,6 +165,7 @@ func esmHandler() rex.Handle {
 			if strings.HasSuffix(pathname, ".js") {
 				data = bytes.ReplaceAll(data, []byte("{origin}"), []byte(cdnOrigin))
 				data = bytes.ReplaceAll(data, []byte("{basePath}"), []byte(cfg.CdnBasePath))
+				data = bytes.ReplaceAll(data, []byte("{version}"), []byte(fmt.Sprintf("v%d", VERSION)))
 			}
 			header.Set("Cache-Control", "public, max-age=86400")
 			return rex.Content(pathname, modTime, bytes.NewReader(data))

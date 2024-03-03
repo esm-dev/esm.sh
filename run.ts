@@ -1,6 +1,6 @@
 /*! 🚀 esm.sh/run
  *
- * Add `<script type="module" src="https://esm.sh/run"></script>` to run jsx/ts in browser without build step.
+ * Add `<script src="https://esm.sh/run" type="module"></script>` to run jsx/ts in browser without build step.
  *
  */
 
@@ -33,7 +33,9 @@ d.querySelectorAll(kScript).forEach((el) => {
     loader = el.type.slice(5);
     if (loaders.includes(loader)) {
       const source = el.textContent!.trim();
-      if (source.length <= 64 * 1024) { // 64KB exceeded limit
+      if (source.length > 64 * 1024) {
+        console.warn("ignore", el, "reach 64KB limit.");
+      } else {
         runScripts.push({ el, loader, source });
       }
     }

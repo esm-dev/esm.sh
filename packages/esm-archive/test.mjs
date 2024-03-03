@@ -27,7 +27,7 @@ console.log("ok");
 console.log("chekcsum", archive.checksum);
 
 const buffer = await bundle([
-  new File(['export const foo = "bar";'], "http://localhost:8080/foo.js", {
+  new File(['export const foo = "bar";'], "/foo.js", {
     type: "application/javascript",
     lastModified,
   }),

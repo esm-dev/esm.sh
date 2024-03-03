@@ -24,10 +24,7 @@ export type BuildOutput = {
 
 const MiB = 10 << 20;
 
-async function fetchApi(
-  endpoint: string,
-  options: Record<string, any>,
-): Promise<any> {
+async function fetchApi(endpoint: string, options: Record<string, any>): Promise<any> {
   const apiName = endpoint.slice(1);
   if (options.source.length > MiB) {
     throw new Error(`esm.sh [${apiName}] <400> source exceeded limit.`);
@@ -48,9 +45,7 @@ async function fetchApi(
   }
   const ret = await res.json();
   if (ret.error) {
-    throw new Error(
-      `esm.sh [${apiName}] ${ret.error.message}`,
-    );
+    throw new Error(`esm.sh [${apiName}] ${ret.error.message}`);
   }
   return ret;
 }
@@ -81,15 +76,10 @@ export async function esm<T extends object = Record<string, any>>(
   const source = String.raw({ raw: strings }, ...values);
   const ret = await buildWithCache(source);
   const mod: T = await import(ret.url);
-  return {
-    ...mod,
-    _build: ret,
-  };
+  return { ...mod, _build: ret };
 }
 
-async function buildWithCache(
-  input: string | BuildInput,
-): Promise<BuildOutput> {
+async function buildWithCache(input: string | BuildInput): Promise<BuildOutput> {
   const key = await computeHash(
     typeof input === "string" ? input : JSON.stringify(input),
   );

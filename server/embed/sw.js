@@ -1,3 +1,3 @@
-import { hot } from "{origin}{basePath}/hot";
+import { hot } from "{origin}{basePath}/{version}/hot";
 
 hot.listen();
