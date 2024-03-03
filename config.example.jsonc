@@ -12,6 +12,9 @@
   // The build max concurrency, default is `runtime.NumCPU()`
   "buildConcurrency": 0,
 
+  // The max waiting time for the build to complete, default is 30 seconds.
+  "buildWaitTimeout": 30,
+
   // The work directory for the server app, default is "~/.esmd".
   "workDir": "~/.esmd",
 

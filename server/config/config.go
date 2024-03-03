@@ -24,6 +24,7 @@ type Config struct {
 	BanList            BanList   `json:"banList,omitempty"`
 	DisableCompression bool      `json:"disableCompression,omitempty"`
 	BuildConcurrency   uint16    `json:"buildConcurrency,omitempty"`
+	BuildWaitTimeout   uint16    `json:"buildWaitTimeout,omitempty"`
 	Cache              string    `json:"cache,omitempty"`
 	Storage            string    `json:"storage,omitempty"`
 	Database           string    `json:"database,omitempty"`
@@ -147,6 +148,9 @@ func fixConfig(c *Config) *Config {
 	}
 	if c.BuildConcurrency == 0 {
 		c.BuildConcurrency = uint16(runtime.NumCPU())
+	}
+	if c.BuildWaitTimeout == 0 {
+		c.BuildWaitTimeout = 30 // seconds
 	}
 	if c.Cache == "" {
 		c.Cache = "memory:default"
