@@ -352,6 +352,11 @@ func fetchPackageInfo(name string, version string) (info NpmPackageInfo, err err
 }
 
 func installPackage(wd string, pkg Pkg) (err error) {
+	// skip install if pnpm lock file exists
+	if fileExists(path.Join(wd, "pnpm-lock.yaml")) && fileExists(path.Join(wd, "node_modules", pkg.Name, "package.json")) {
+		return nil
+	}
+
 	pkgVersionName := pkg.VersionName()
 
 	// only one install process allowed at the same time
