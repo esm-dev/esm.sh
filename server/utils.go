@@ -10,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"strconv"
 	"strings"
 	"time"
 
@@ -23,7 +24,7 @@ import (
 const EOL = "\n"
 
 var (
-	regexpVersionPrefix   = regexp.MustCompile(`^/v[1-9]\d+/`)
+	regexpVersionPrefix   = regexp.MustCompile(`^/v([1-9]\d+)/`)
 	regexpFullVersion     = regexp.MustCompile(`^\d+\.\d+\.\d+[\w\.\+\-]*$`)
 	regexpFullVersionPath = regexp.MustCompile(`(\w)@(v?\d+\.\d+\.\d+[\w\.\+\-]*|[0-9a-f]{10})(/|$)`)
 	regexpPathWithVersion = regexp.MustCompile(`\w@[\*\~\^\w\.\+\-]+(/|$|&)`)
@@ -55,6 +56,13 @@ func transportDialContext(dialer *net.Dialer) func(context.Context, string, stri
 
 func fetch(url string) (res *http.Response, err error) {
 	return httpClient.Get(url)
+}
+
+// check the version of the given path is larger than the current version.
+func isFutureVersionPrefix(pathname string) bool {
+	m := regexpVersionPrefix.FindStringSubmatch(pathname)
+	i, _ := strconv.Atoi(m[1])
+	return i > VERSION
 }
 
 // isHttpSepcifier returns true if the import path is a remote URL.

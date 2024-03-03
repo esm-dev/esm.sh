@@ -63,6 +63,10 @@ Deno.test("esm-worker", { sanitizeOps: false, sanitizeResources: false }, async 
     res2.body?.cancel();
     assertEquals(res2.status, 200);
     assertEquals(res2.headers.get("Content-Type"), "application/javascript; charset=utf-8");
+
+    const res3 = await fetch(`${workerOrigin}/v999999/node_process.js`);
+    res3.body?.cancel();
+    assertEquals(res3.status, 404);
   });
 
   await t.step("npm modules", async () => {

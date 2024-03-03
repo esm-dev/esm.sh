@@ -206,6 +206,9 @@ func esmHandler() rex.Handle {
 
 		// serve function scripts
 		if strings.HasPrefix(pathname, "/v") && strings.Count(pathname, "/") == 2 && endsWith(pathname, "/build", "/run", "/hot") && regexpVersionPrefix.MatchString(pathname) {
+			if isFutureVersionPrefix(pathname) {
+				return rex.Status(404, "Not Found")
+			}
 			_, scriptName := utils.SplitByLastByte(pathname, '/')
 			data, err := embedFS.ReadFile(fmt.Sprintf("%s.ts", scriptName))
 			if err != nil {
@@ -242,6 +245,9 @@ func esmHandler() rex.Handle {
 
 		// use embed polyfills/types
 		if strings.HasPrefix(pathname, "/v") && strings.Count(pathname, "/") == 2 && endsWith(pathname, ".js", ".d.ts") && regexpVersionPrefix.MatchString(pathname) {
+			if isFutureVersionPrefix(pathname) {
+				return rex.Status(404, "Not Found")
+			}
 			_, filename := utils.SplitByLastByte(pathname, '/')
 			if strings.HasSuffix(filename, ".js") {
 				data, err := embedFS.ReadFile("server/embed/polyfills/" + filename)

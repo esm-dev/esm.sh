@@ -29,8 +29,8 @@ const regexpNpmNaming = /^[a-zA-Z0-9][\w\.\-]*$/;
 const regexpFullVersion = /^\d+\.\d+\.\d+/;
 const regexpCommitish = /^[a-f0-9]{10,}$/;
 const regexpInternalScript = /^\/v[1-9]\d+\/(build|run|hot)$/;
-const regexpInternalFile = /^\/v[1-9]\d+\/(?:node_\w+\.js|(?:node\.ns|hot)\.d\.ts)$/;
-const regexpVersionPrefix = /^\/v[1-9]\d+\//;
+const regexpEmbedFile = /^\/v[1-9]\d+\/(?:node_\w+\.js|(?:node\.ns|hot)\.d\.ts)$/;
+const regexpLegacyVersionPrefix = /^\/(v[1-9]\d+|stable)\//;
 
 const version = `v${VERSION}`;
 const defaultNpmRegistry = "https://registry.npmjs.org";
@@ -471,7 +471,7 @@ function withESMWorker(middleware?: Middleware) {
     if (
       startsWithV &&
       (pathname.endsWith(".d.ts") || pathname.endsWith(".js")) &&
-      regexpInternalFile.test(pathname)
+      regexpEmbedFile.test(pathname)
     ) {
       return ctx.withCache(() =>
         fetchOriginWithKVCache(
@@ -485,8 +485,9 @@ function withESMWorker(middleware?: Middleware) {
 
     // use legacy worker if the bild version is specified in the path or query
     if (env.LEGACY_WORKER) {
-      const hasVersionPrefix = (startsWithV && regexpVersionPrefix.test(pathname)) || pathname.startsWith("/stable");
-      const hasPinQuery = url.searchParams.has("pin");
+      const hasVersionPrefix = (startsWithV || pathname.startsWith("/stable/")) &&
+        regexpLegacyVersionPrefix.test(pathname);
+      const hasPinQuery = url.searchParams.has("pin") && (regexpLegacyVersionPrefix.test(url.searchParams.get("pin")));
       if (hasVersionPrefix || hasPinQuery) {
         return env.LEGACY_WORKER.fetch(req.clone());
       }
