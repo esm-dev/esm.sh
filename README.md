@@ -193,8 +193,8 @@ const worker = workerFactory();
 const worker = workerFactory({ name: "editor.worker" });
 ```
 
-You can import any module as a worker from esm.sh with the `?worker` query. The module will be loaded in a web worker
-as variable `$module`, then you can use it in the `inject` code.
+You can import any module as a worker from esm.sh with the `?worker` query. The module will be loaded in a web worker as
+variable `$module`, then you can use it in the `inject` code.
 
 For example, you can use the `xxhash-wasm` module to hash a string in a web worker:
 
@@ -203,9 +203,10 @@ import workerFactory from "https://esm.sh/xxhash-wasm@1.0.2?worker";
 
 const inject = `
 // variable '$module' is the xxhash-wasm module
-$module.default().then(hasher => {
-  self.postMessage(hasher.h64ToString(e.data));
-})
+self.onmessage = async e => {
+  const hasher = await $module.default()
+  self.postMessage(hasher.h64ToString(e.data))
+}
 `;
 const worker = workerFactory({ inject });
 worker.onmessage = (e) => console.log("hash:", e.data);
