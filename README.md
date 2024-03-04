@@ -187,19 +187,32 @@ esm.sh supports `?worker` query to load the module as a web worker:
 ```js
 import workerFactory from "https://esm.sh/monaco-editor/esm/vs/editor/editor.worker?worker";
 
+// create a worker
 const worker = workerFactory();
+// you can also rename the worker by adding the `name` option
+const worker = workerFactory({ name: "editor.worker" });
 ```
 
-You can pass some custom code snippet to the worker when calling the factory function:
+You can import any module as a worker from esm.sh with the `?worker` query. The module will be loaded in a web worker
+as variable `$module`, then you can use it in the `inject` code.
+
+For example, you can use the `xxhash-wasm` module to hash a string in a web worker:
 
 ```js
-const workerAddon = `
-self.onmessage = function (e) {
-  console.log(e.data)
-}
+import workerFactory from "https://esm.sh/xxhash-wasm@1.0.2?worker";
+
+const inject = `
+// variable '$module' is the xxhash-wasm module
+$module.default().then(hasher => {
+  self.postMessage(hasher.h64ToString(e.data));
+})
 `;
-const worker = workerFactory(workerAddon);
+const worker = workerFactory({ inject });
+worker.onmessage = (e) => console.log("hash:", e.data);
+worker.postMessage("The string that is being hashed");
 ```
+
+> Note: The `inject` must be a valid JavaScript code, and it will be executed in the worker context.
 
 ### Package CSS
 

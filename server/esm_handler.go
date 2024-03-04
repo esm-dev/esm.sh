@@ -3,7 +3,6 @@ package server
 import (
 	"bytes"
 	"fmt"
-	"io"
 	"net/http"
 	"net/url"
 	"os"
@@ -571,10 +570,6 @@ func esmHandler() rex.Handle {
 				}
 			}
 			if err == nil {
-				r, err := fs.OpenFile(savePath)
-				if err != nil {
-					return rex.Status(500, err.Error())
-				}
 				if reqType == "types" {
 					header.Set("Content-Type", "application/typescript; charset=utf-8")
 				} else if endsWith(pathname, ".js", ".mjs", ".jsx", ".ts", ".mts", ".tsx") {
@@ -584,14 +579,16 @@ func esmHandler() rex.Handle {
 				}
 				header.Set("Cache-Control", "public, max-age=31536000, immutable")
 				if ctx.Form.Has("worker") && reqType == "builds" {
-					defer r.Close()
-					buf, err := io.ReadAll(r)
-					if err != nil {
-						return rex.Status(500, err.Error())
-					}
-					code := bytes.TrimSuffix(buf, []byte(fmt.Sprintf(`//# sourceMappingURL=%s.map`, path.Base(savePath))))
-					header.Set("Content-Type", "application/javascript; charset=utf-8")
-					return fmt.Sprintf(`export default function workerFactory(inject) { const blob = new Blob([%s, typeof inject === "string" ? "\n// inject\n" + inject : ""], { type: "application/javascript" }); return new Worker(URL.createObjectURL(blob), { type: "module" })}`, utils.MustEncodeJSON(string(code)))
+					moduleUrl := fmt.Sprintf("%s%s%s", cdnOrigin, cfg.CdnBasePath, pathname)
+					return fmt.Sprintf(
+						`export default function workerFactory(injectOrOptions) { const options = typeof injectOrOptions === "string" ? { inject: injectOrOptions }: injectOrOptions ?? {}; const { inject, name = "%s" } = options; const blob = new Blob(['import * as $module from "%s";', inject].filter(Boolean), { type: "application/javascript" }); return new Worker(URL.createObjectURL(blob), { type: "module", name })}`,
+						moduleUrl,
+						moduleUrl,
+					)
+				}
+				r, err := fs.OpenFile(savePath)
+				if err != nil {
+					return rex.Status(500, err.Error())
 				}
 				return rex.Content(savePath, fi.ModTime(), r) // auto closed
 			}
@@ -848,7 +845,7 @@ func esmHandler() rex.Handle {
 			Pkg:       reqPkg,
 			Target:    target,
 			Dev:       isDev,
-			Bundle:    bundle || isWorker,
+			Bundle:    bundle,
 			NoBundle:  noBundle,
 		}
 
@@ -922,18 +919,16 @@ func esmHandler() rex.Handle {
 				return rex.Status(500, err.Error())
 			}
 			header.Set("Cache-Control", "public, max-age=31536000, immutable")
-			if isWorker && endsWith(savePath, ".mjs", ".js") {
-				buf, err := io.ReadAll(f)
-				f.Close()
-				if err != nil {
-					return rex.Status(500, err.Error())
-				}
-				code := bytes.TrimSuffix(buf, []byte(fmt.Sprintf(`//# sourceMappingURL=%s.map`, path.Base(savePath))))
-				header.Set("Content-Type", "application/javascript; charset=utf-8")
-				return fmt.Sprintf(`export default function workerFactory(inject) { const blob = new Blob([%s, typeof inject === "string" ? "\n// inject\n" + inject : ""], { type: "application/javascript" }); return new Worker(URL.createObjectURL(blob), { type: "module" })}`, utils.MustEncodeJSON(string(code)))
-			}
 			if endsWith(savePath, ".mjs", ".js") {
 				header.Set("Content-Type", "application/javascript; charset=utf-8")
+				if isWorker {
+					moduleUrl := fmt.Sprintf("%s%s/%s", cdnOrigin, cfg.CdnBasePath, buildId)
+					return fmt.Sprintf(
+						`export default function workerFactory(injectOrOptions) { const options = typeof injectOrOptions === "string" ? { inject: injectOrOptions }: injectOrOptions ?? {}; const { inject, name = "%s" } = options; const blob = new Blob(['import * as $module from "%s";', inject].filter(Boolean), { type: "application/javascript" }); return new Worker(URL.createObjectURL(blob), { type: "module", name })}`,
+						moduleUrl,
+						moduleUrl,
+					)
+				}
 			}
 			return rex.Content(savePath, fi.ModTime(), f) // auto closed
 		}
@@ -942,7 +937,12 @@ func esmHandler() rex.Handle {
 		fmt.Fprintf(buf, `/* esm.sh - %v */%s`, reqPkg, EOL)
 
 		if isWorker {
-			fmt.Fprintf(buf, `export { default } from "%s/%s?worker";`, cfg.CdnBasePath, buildId)
+			moduleUrl := fmt.Sprintf("%s%s/%s", cdnOrigin, cfg.CdnBasePath, buildId)
+			fmt.Fprintf(buf,
+				`export default function workerFactory(injectOrOptions) { const options = typeof injectOrOptions === "string" ? { inject: injectOrOptions }: injectOrOptions ?? {}; const { inject, name = "%s" } = options; const blob = new Blob(['import * as $module from "%s";', inject].filter(Boolean), { type: "application/javascript" }); return new Worker(URL.createObjectURL(blob), { type: "module", name })}`,
+				moduleUrl,
+				moduleUrl,
+			)
 		} else {
 			if len(esm.Deps) > 0 {
 				// TODO: lookup deps of deps?
