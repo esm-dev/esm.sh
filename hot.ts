@@ -304,18 +304,18 @@ class Hot implements HotCore {
       const pathOrHref = isSameOrigin ? pathname : request.url;
       const archive = this._archive;
       const listeners = this._fetchListeners;
-      let responded = false;
-      const respondWith = (res: Response | Promise<Response>) => {
-        responded = true;
-        evt.respondWith(res);
-      };
+      const respondWith = evt.respondWith.bind(evt);
       if (isSameOrigin && pathname.startsWith("/@hot/")) {
         respondWith(serveVFS(pathname.slice(6)));
       } else if (archive?.exists(pathOrHref)) {
         const file = archive.openFile(pathOrHref)!;
         respondWith(createResponse(file, { "content-type": file.type }));
       } else if (listeners.length > 0) {
-        evt.respondWith = respondWith;
+        let responded = false;
+        evt.respondWith = (res: Response | Promise<Response>) => {
+          responded = true;
+          respondWith(res);
+        };
         for (const handler of listeners) {
           if (responded) {
             break;
