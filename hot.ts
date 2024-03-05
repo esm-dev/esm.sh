@@ -16,7 +16,7 @@ const kHotArchive = "#hot-archive";
 
 /** class `VFS` implements the virtual file system by using indexed database. */
 class VFS {
-  #db: IDBDatabase | Promise<IDBDatabase>;
+  private _db: IDBDatabase | Promise<IDBDatabase>;
 
   constructor(scope: string, version: number) {
     const req = indexedDB.open(scope, version);
@@ -26,25 +26,24 @@ class VFS {
         db.createObjectStore(kVfs, { keyPath: "name" });
       }
     };
-    this.#db = waitIDBRequest<IDBDatabase>(req);
+    this._db = waitIDBRequest<IDBDatabase>(req);
   }
 
-  async #begin(readonly = false) {
-    let db = this.#db;
+  private async _tx(readonly = false) {
+    let db = this._db;
     if (db instanceof Promise) {
-      db = this.#db = await db;
+      db = this._db = await db;
     }
-    return db.transaction(kVfs, readonly ? "readonly" : "readwrite")
-      .objectStore(kVfs);
+    return db.transaction(kVfs, readonly ? "readonly" : "readwrite").objectStore(kVfs);
   }
 
   async has(name: string) {
-    const tx = await this.#begin(true);
+    const tx = await this._tx(true);
     return await waitIDBRequest<string>(tx.getKey(name)) === name;
   }
 
   async get(name: string) {
-    const tx = await this.#begin(true);
+    const tx = await this._tx(true);
     const ret = await waitIDBRequest<File & { content: ArrayBuffer } | undefined>(tx.get(name));
     if (ret) {
       return new File([ret.content], ret.name, ret);
@@ -57,12 +56,12 @@ class VFS {
       return name;
     }
     const content = await file.arrayBuffer();
-    const tx = await this.#begin();
+    const tx = await this._tx();
     return waitIDBRequest<string>(tx.put({ name, type, lastModified, content }));
   }
 
   async delete(name: string) {
-    const tx = await this.#begin();
+    const tx = await this._tx();
     return waitIDBRequest<void>(tx.delete(name));
   }
 }
@@ -72,28 +71,28 @@ class VFS {
  * more details see https://www.npmjs.com/package/esm-archive
  */
 class Archive {
-  #buffer: ArrayBuffer;
-  #entries: Record<string, ArchiveEntry> = {};
+  private _buf: ArrayBuffer;
+  private _files: Record<string, ArchiveEntry> = {};
 
   static invalidFormat = new Error("Invalid esm-archive format");
 
   constructor(buffer: ArrayBuffer) {
-    this.#buffer = buffer;
-    this.#parse();
+    this._buf = buffer;
+    this._parse();
   }
 
   public checksum: number;
 
-  #parse() {
-    const dv = new DataView(this.#buffer);
+  private _parse() {
+    const dv = new DataView(this._buf);
     const decoder = new TextDecoder();
     const readUint32 = (offset: number) => dv.getUint32(offset);
-    const readString = (offset: number, length: number) => decoder.decode(new Uint8Array(this.#buffer, offset, length));
-    if (this.#buffer.byteLength < 18 || readString(0, 10) !== "ESMARCHIVE") {
+    const readString = (offset: number, length: number) => decoder.decode(new Uint8Array(this._buf, offset, length));
+    if (this._buf.byteLength < 18 || readString(0, 10) !== "ESMARCHIVE") {
       throw Archive.invalidFormat;
     }
     const length = readUint32(10);
-    if (length !== this.#buffer.byteLength) {
+    if (length !== this._buf.byteLength) {
       throw Archive.invalidFormat;
     }
     this.checksum = readUint32(14);
@@ -111,59 +110,59 @@ class Archive {
       offset += 4;
       const size = readUint32(offset);
       offset += 4;
-      this.#entries[name] = { name, type, lastModified, offset, size };
+      this._files[name] = { name, type, lastModified, offset, size };
       offset += size;
     }
   }
 
-  exists(name: string) {
-    return name in this.#entries;
+  exists(filename: string) {
+    return filename in this._files;
   }
 
-  openFile(name: string) {
-    const info = this.#entries[name];
-    return info ? new File([this.#buffer.slice(info.offset, info.offset + info.size)], info.name, info) : null;
+  openFile(filename: string) {
+    const { name, offset, size, ...rest } = this._files[filename];
+    return new File([this._buf.slice(offset, offset + size)], name, rest);
   }
 }
 
 /** class `Hot` implements the `HotCore` interface. */
 class Hot implements HotCore {
-  #vfs = new VFS(kHot, VERSION);
-  #swScript: string | null = null;
-  #swActive: ServiceWorker | null = null;
-  #archive: Archive | null = null;
-  #fetchListeners: ((event: FetchEvent) => void)[] = [];
-  #fireListeners: ((sw: ServiceWorker) => void)[] = [];
-  #promises: Promise<any>[] = [];
-  #bc = new BroadcastChannel(kHot);
+  private _vfs = new VFS(kHot, VERSION);
+  private _swScript: string | null = null;
+  private _swActive: ServiceWorker | null = null;
+  private _archive: Archive | null = null;
+  private _fetchListeners: ((event: FetchEvent) => void)[] = [];
+  private _fireListeners: ((sw: ServiceWorker) => void)[] = [];
+  private _promises: Promise<any>[] = [];
+  private _bc = new BroadcastChannel(kHot);
 
   get vfs() {
-    return this.#vfs;
+    return this._vfs;
+  }
+
+  use(...plugins: readonly Plugin[]) {
+    plugins.forEach((plugin) => plugin.setup(this));
+    return this;
   }
 
   onUpdateFound = () => location.reload();
 
   onFetch(handler: (event: FetchEvent) => void) {
-    this.#fetchListeners.push(handler);
+    this._fetchListeners.push(handler);
     return this;
   }
 
   onFire(handler: (reg: ServiceWorker) => void) {
-    if (this.#swActive) {
-      handler(this.#swActive);
+    if (this._swActive) {
+      handler(this._swActive);
     } else {
-      this.#fireListeners.push(handler);
+      this._fireListeners.push(handler);
     }
     return this;
   }
 
   waitUntil(...promises: readonly Promise<void>[]) {
-    this.#promises.push(...promises);
-    return this;
-  }
-
-  use(...plugins: readonly Plugin[]) {
-    plugins.forEach((plugin) => plugin.setup(this));
+    this._promises.push(...promises);
     return this;
   }
 
@@ -180,19 +179,19 @@ class Hot implements HotCore {
       appendElement("link", { rel: "modulepreload", href: main });
     }
 
-    if (this.#swScript === swScript) {
+    if (this._swScript === swScript) {
       return;
     }
-    this.#swScript = swScript;
+    this._swScript = swScript;
 
     // register Service Worker
-    const reg = await sw.register(this.#swScript, {
+    const reg = await sw.register(this._swScript, {
       type: "module",
       updateViaCache: swUpdateViaCache,
     });
     const tryFireApp = async () => {
       if (reg.active?.state === "activated") {
-        await this.#fireApp(reg.active);
+        await this._fireApp(reg.active);
         main && appendElement("script", { type: "module", src: main });
       }
     };
@@ -218,10 +217,10 @@ class Hot implements HotCore {
     tryFireApp();
   }
 
-  async #fireApp(swActive: ServiceWorker) {
+  private async _fireApp(swActive: ServiceWorker) {
     // download and send esm archive to Service Worker
     queryElements<HTMLLinkElement>(`link[rel=preload][as=fetch][type^="${kTypeEsmArchive}"][href]`, (el) => {
-      this.#promises.push(
+      this._promises.push(
         fetch(el.href).then((res) => {
           if (res.ok) {
             if (el.type.endsWith("+gzip")) {
@@ -232,7 +231,7 @@ class Hot implements HotCore {
           return Promise.reject(new Error(res.statusText ?? `<${res.status}>`));
         }).then((arrayBuffer) => {
           swActive.postMessage({ [kHotArchive]: arrayBuffer });
-          this.#bc.onmessage = (evt) => {
+          this._bc.onmessage = (evt) => {
             if (evt.data === kHotArchive) {
               this.onUpdateFound();
             }
@@ -244,15 +243,15 @@ class Hot implements HotCore {
     });
 
     // wait until all promises resolved
-    await Promise.all(this.#promises);
-    this.#promises = [];
+    await Promise.all(this._promises);
+    this._promises = [];
 
     // fire all `fire` listeners
-    for (const handler of this.#fireListeners) {
+    for (const handler of this._fireListeners) {
       handler(swActive);
     }
-    this.#fireListeners = [];
-    this.#swActive = swActive;
+    this._fireListeners = [];
+    this._swActive = swActive;
 
     // apply "[type=hot/module]" script tags
     queryElements<HTMLScriptElement>("script[type='hot/module']", (el) => {
@@ -268,7 +267,7 @@ class Hot implements HotCore {
       throw new Error("Service Worker scope not found.");
     }
 
-    const vfs = this.#vfs;
+    const vfs = this._vfs;
     const on: typeof addEventListener = addEventListener;
     const serveVFS = async (name: string) => {
       const file = await vfs.get(name);
@@ -278,10 +277,10 @@ class Hot implements HotCore {
       return createResponse(file, { "content-type": file.type });
     };
 
-    this.#promises.push(
+    this._promises.push(
       vfs.get(kHotArchive).then(async (file) => {
         if (file) {
-          this.#archive = new Archive(await file.arrayBuffer());
+          this._archive = new Archive(await file.arrayBuffer());
         }
       }).catch((err) => console.error(err[kMessage])),
     );
@@ -289,7 +288,7 @@ class Hot implements HotCore {
     on("install", (evt) => {
       // @ts-expect-error missing types
       skipWaiting();
-      evt.waitUntil(Promise.all(this.#promises));
+      evt.waitUntil(Promise.all(this._promises));
     });
 
     on("activate", (evt) => {
@@ -301,20 +300,22 @@ class Hot implements HotCore {
       const { request } = evt as FetchEvent;
       const url = new URL(request.url);
       const { pathname } = url;
-      const archive = this.#archive;
-      const listeners = this.#fetchListeners;
-      let responded = false;
-      function respondWith(res: Response | Promise<Response>) {
-        responded = true;
-        evt.respondWith(res);
-      }
-      if (url.origin === location.origin && pathname.startsWith("/@hot/")) {
+      const isSameOrigin = url.origin === location.origin;
+      const pathOrHref = isSameOrigin ? pathname : request.url;
+      const archive = this._archive;
+      const listeners = this._fetchListeners;
+      const respondWith = evt.respondWith.bind(evt);
+      if (isSameOrigin && pathname.startsWith("/@hot/")) {
         respondWith(serveVFS(pathname.slice(6)));
-      } else if (archive?.exists(request.url)) {
-        const file = archive.openFile(request.url)!;
+      } else if (archive?.exists(pathOrHref)) {
+        const file = archive.openFile(pathOrHref)!;
         respondWith(createResponse(file, { "content-type": file.type }));
       } else if (listeners.length > 0) {
-        evt.respondWith = respondWith;
+        let responded = false;
+        evt.respondWith = (res: Response | Promise<Response>) => {
+          responded = true;
+          respondWith(res);
+        };
         for (const handler of listeners) {
           if (responded) {
             break;
@@ -331,9 +332,9 @@ class Hot implements HotCore {
         if (buffer instanceof ArrayBuffer) {
           try {
             const archive = new Archive(buffer);
-            if (archive.checksum !== this.#archive?.checksum) {
-              this.#archive = archive;
-              this.#bc.postMessage(kHotArchive);
+            if (archive.checksum !== this._archive?.checksum) {
+              this._archive = archive;
+              this._bc.postMessage(kHotArchive);
               vfs.put(new File([buffer], kHotArchive, { type: kTypeEsmArchive }));
             }
           } catch (err) {
@@ -364,12 +365,12 @@ function createResponse(
 }
 
 /** append an element to the document. */
-function appendElement(tag: string, attrs: Record<string, string>, pos: "head" | "body" = "head") {
+function appendElement(tag: string, attrs: Record<string, string>, parent: "head" | "body" = "head") {
   const el = doc!.createElement(tag);
   for (const [k, v] of Object.entries(attrs)) {
     el[k] = v;
   }
-  doc![pos].appendChild(el);
+  doc![parent].appendChild(el);
 }
 
 /** wait for the given IDBRequest. */
