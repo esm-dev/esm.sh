@@ -49,6 +49,8 @@ Then you can import `React` from http://localhost:8080/react
 
 ## Deploy with Docker
 
+[![Docker Image](https://img.shields.io/github/v/tag/esm-dev/esm.sh?label=Docker&display_name=tag&sort=semver&style=flat&colorA=232323&colorB=232323&logo=docker&logoColor=eeeeee)](https://github.com/esm-dev/esm.sh/pkgs/container/esm.sh)
+
 esm.sh provides a docker image for deployment. You can pull the container image from https://ghcr.io/esm-dev/esm.sh.
 
 ```bash
