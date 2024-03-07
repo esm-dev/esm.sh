@@ -22,7 +22,7 @@ const (
 	denoStdVersion   = "0.177.1"
 )
 
-var internalNodeModules = map[string]bool{
+var nodejsInternalModules = map[string]bool{
 	"assert":              true,
 	"assert/strict":       true,
 	"async_hooks":         true,

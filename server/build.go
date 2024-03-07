@@ -319,6 +319,7 @@ rebuild:
 				build.OnResolve(
 					api.OnResolveOptions{Filter: ".*"},
 					func(args api.OnResolveArgs) (api.OnResolveResult, error) {
+						// ban file urls
 						if strings.HasPrefix(args.Path, "file:") {
 							return api.OnResolveResult{
 								Path:     fmt.Sprintf("%s/error.js?type=unsupported-file-dependency&name=%s&importer=%s", cfg.CdnBasePath, strings.TrimPrefix(args.Path, "file:"), task.Pkg),
@@ -326,30 +327,32 @@ rebuild:
 							}, nil
 						}
 
+						// skip http modules
 						if strings.HasPrefix(args.Path, "data:") || strings.HasPrefix(args.Path, "https:") || strings.HasPrefix(args.Path, "http:") {
 							return api.OnResolveResult{Path: args.Path, External: true}, nil
 						}
 
-						// `?ignore-require`
+						// if `?ignore-require` present, ignore specifier that is a require call
 						if task.Args.ignoreRequire && args.Kind == api.ResolveJSRequireCall && npm.Module != "" {
 							return api.OnResolveResult{Path: args.Path, External: true}, nil
 						}
 
-						if implicitExternal.Has(args.Path) {
-							return api.OnResolveResult{Path: task.resolveExternal(args.Path, args.Kind), External: true}, nil
-						}
-
-						// externalize yarn PnP API
+						// ignore yarn PnP API
 						if args.Path == "pnpapi" {
 							return api.OnResolveResult{Path: args.Path, Namespace: "browser-exclude"}, nil
 						}
 
-						// clean up specifier
+						// it's implicit external
+						if implicitExternal.Has(args.Path) {
+							return api.OnResolveResult{Path: task.resolveExternal(args.Path, args.Kind), External: true}, nil
+						}
+
+						// normalize specifier
 						specifier := strings.TrimSuffix(args.Path, "/")
 						specifier = strings.TrimPrefix(specifier, "node:")
 						specifier = strings.TrimPrefix(specifier, "npm:")
 
-						// use `imports` field of package.json
+						// resolve specifier with package `imports` field
 						if v, ok := npm.Imports[specifier]; ok {
 							if s, ok := v.(string); ok {
 								specifier = s
@@ -369,7 +372,7 @@ rebuild:
 							}
 						}
 
-						// use `browser` field of package.json
+						// resolve specifier with package `browser` field
 						if len(npm.Browser) > 0 && !task.isServerTarget() {
 							spec := specifier
 							if strings.HasPrefix(specifier, "./") || strings.HasPrefix(specifier, "../") || specifier == ".." {
@@ -392,7 +395,7 @@ rebuild:
 							}
 						}
 
-						// use `?alias` query
+						// resolve specifier by checking `?alias` query
 						if len(task.Args.alias) > 0 {
 							if name, ok := task.Args.alias[specifier]; ok {
 								specifier = name
@@ -406,7 +409,7 @@ rebuild:
 							}
 						}
 
-						// externalize native node packages like fsevent
+						// ignore native node packages like 'fsevent'
 						for _, name := range nativeNodePackages {
 							if specifier == name || strings.HasPrefix(specifier, name+"/") {
 								if task.Target == "denonext" {
@@ -455,6 +458,7 @@ rebuild:
 							fullFilepath = filepath.Join(task.installDir, "node_modules", specifier)
 						}
 
+						// native node modules do not work via http import
 						if strings.HasSuffix(fullFilepath, ".node") && fileExists(fullFilepath) {
 							return api.OnResolveResult{
 								Path:     fmt.Sprintf("%s/error.js?type=unsupported-node-native-module&name=%s&importer=%s", cfg.CdnBasePath, path.Base(args.Path), task.Pkg),
@@ -462,17 +466,19 @@ rebuild:
 							}, nil
 						}
 
+						// bundles json module
 						if strings.HasSuffix(fullFilepath, ".json") && fileExists(fullFilepath) {
 							return api.OnResolveResult{Path: fullFilepath}, nil
 						}
 
+						// embed wasm as WebAssembly.Module
 						if strings.HasSuffix(fullFilepath, ".wasm") && fileExists(fullFilepath) {
 							return api.OnResolveResult{Path: fullFilepath, Namespace: "wasm"}, nil
 						}
 
 						// bundles all dependencies in `bundle` mode, apart from peer dependencies and `?external` query
 						if task.Bundle && !task.Args.external.Has(getPkgName(specifier)) && !implicitExternal.Has(specifier) {
-							if internalNodeModules[specifier] {
+							if nodejsInternalModules[specifier] {
 								if task.isServerTarget() {
 									return api.OnResolveResult{Path: task.resolveExternal(specifier, args.Kind), External: true}, nil
 								}
@@ -487,7 +493,7 @@ rebuild:
 								}
 							}
 							pkgName := getPkgName(specifier)
-							if !internalNodeModules[pkgName] {
+							if !nodejsInternalModules[pkgName] {
 								_, ok := npm.PeerDependencies[pkgName]
 								if !ok {
 									return api.OnResolveResult{}, nil
@@ -771,7 +777,9 @@ rebuild:
 					ids.Add(string(r))
 				}
 				if ids.Has("__Process$") {
-					if task.Target == "denonext" {
+					if task.Args.external.Has("node:process") || task.Args.external.Has("*") {
+						fmt.Fprintf(header, `import __Process$ from "node:process";%s`, EOL)
+					} else if task.Target == "denonext" {
 						fmt.Fprintf(header, `import __Process$ from "node:process";%s`, EOL)
 					} else if task.Target == "deno" {
 						fmt.Fprintf(header, `import __Process$ from "https://deno.land/std@%s/node/process.ts";%s`, task.Args.denoStdVersion, EOL)
@@ -797,7 +805,9 @@ rebuild:
 					}
 				}
 				if ids.Has("__Buffer$") {
-					if task.Target == "denonext" {
+					if task.Args.external.Has("node:buffer") || task.Args.external.Has("*") {
+						fmt.Fprintf(header, `import { Buffer as __Buffer$ } from "node:buffer";%s`, EOL)
+					} else if task.Target == "denonext" {
 						fmt.Fprintf(header, `import { Buffer as __Buffer$ } from "node:buffer";%s`, EOL)
 					} else if task.Target == "deno" {
 						fmt.Fprintf(header, `import { Buffer as __Buffer$ } from "https://deno.land/std@%s/node/buffer.ts";%s`, task.Args.denoStdVersion, EOL)
@@ -817,7 +827,7 @@ rebuild:
 								}
 								fmt.Fprintf(header, "%s", js)
 							} else {
-								fmt.Fprintf(header, `import { Buffer as __Buffer$ } from "%s/buffer@6.0.3/%s/buffer.bundle.mjs";%s`, cfg.CdnBasePath, task.Target, EOL)
+								fmt.Fprintf(header, `import { Buffer as __Buffer$ } from "%s/node_buffer.js";%s`, cfg.CdnBasePath, EOL)
 							}
 						}
 					}
@@ -843,7 +853,7 @@ rebuild:
 						isEsModule[i] = true
 						continue
 					}
-					if !isLocalSpecifier(specifier) && !internalNodeModules[specifier] {
+					if !isLocalSpecifier(specifier) && !nodejsInternalModules[specifier] {
 						if a := bytes.SplitN(jsContent, []byte(fmt.Sprintf(`("%s")`, specifier)), 2); len(a) == 2 {
 							p1 := a[0]
 							ret := regexpVarEqual.FindSubmatch(p1)
@@ -977,8 +987,10 @@ rebuild:
 
 func (task *BuildTask) resolveExternal(specifier string, kind api.ResolveKind) (resolvedPath string) {
 	// node builtin module
-	if internalNodeModules[specifier] && !task.Args.external.Has(getPkgName(specifier)) {
-		if task.Target == "node" {
+	if nodejsInternalModules[specifier] {
+		if task.Args.external.Has("node:"+specifier) || task.Args.external.Has("*") {
+			resolvedPath = fmt.Sprintf("node:%s", specifier)
+		} else if task.Target == "node" {
 			resolvedPath = fmt.Sprintf("node:%s", specifier)
 		} else if task.Target == "denonext" && !denoNextUnspportedNodeModules[specifier] {
 			resolvedPath = fmt.Sprintf("node:%s", specifier)

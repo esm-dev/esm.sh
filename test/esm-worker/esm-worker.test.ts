@@ -390,7 +390,7 @@ Deno.test("esm-worker", { sanitizeOps: false, sanitizeResources: false }, async 
     assertStringIncludes(code, `"https://esm.sh/preact-render-to-string6.0.2"`);
   });
 
-  await t.step("/esma-target", async () => {
+  await t.step("check esma target from user agent", async () => {
     const getTarget = async (ua: string) => {
       const rest = await fetch(`${workerOrigin}/esma-target`, {
         headers: { "User-Agent": ua },
