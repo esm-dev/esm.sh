@@ -660,7 +660,7 @@ func queryESMBuild(id string) (*ESMBuild, bool) {
 	return nil, false
 }
 
-var jsExts = []string{".mjs", ".js", ".jsx", ".mts", ".ts", ".tsx"}
+var jsExts = []string{".mjs", ".js", ".jsx", ".mts", ".ts", ".tsx", ".cjs"}
 
 func esmLexer(wd string, packageName string, moduleSpecifier string) (resolvedName string, namedExports []string, err error) {
 	pkgDir := path.Join(wd, "node_modules", packageName)
