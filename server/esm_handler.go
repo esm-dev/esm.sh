@@ -512,38 +512,20 @@ func esmHandler() rex.Handle {
 				if os.IsExist(err) {
 					return rex.Status(500, err.Error())
 				}
-				task := &BuildTask{
-					CdnOrigin: cdnOrigin,
-					Pkg:       reqPkg,
-					Args: BuildArgs{
-						alias:      map[string]string{},
-						deps:       PkgSlice{},
-						external:   newStringSet(),
-						exports:    newStringSet(),
-						conditions: newStringSet(),
-					},
-					Target: "raw",
+				// if the file not found, try to install the package
+				err = installPackage(path.Join(cfg.WorkDir, installDir), reqPkg)
+				if err != nil {
+					return rex.Status(500, err.Error())
 				}
-				c := buildQueue.Add(task, ctx.RemoteIP())
-				select {
-				case output := <-c.C:
-					if output.err != nil {
-						return rex.Status(500, "Fail to install package: "+output.err.Error())
+				// recheck the file
+				fi, err = os.Lstat(savePath)
+				if err != nil {
+					if os.IsExist(err) {
+						return rex.Status(500, err.Error())
 					}
-					fi, err = os.Lstat(savePath)
-					if err != nil {
-						if os.IsExist(err) {
-							return rex.Status(500, err.Error())
-						}
-						return rex.Status(404, "File Not Found")
-					}
-				case <-time.After(time.Duration(cfg.BuildWaitTimeout) * time.Second):
-					buildQueue.RemoveConsumer(task, c)
-					header.Set("Cache-Control", "private, no-store, no-cache, must-revalidate")
-					return rex.Status(http.StatusRequestTimeout, "timeout, we are downloading package hardly, please try again later!")
+					return rex.Status(404, "File Not Found")
 				}
 			}
-
 			content, err := os.Open(savePath)
 			if err != nil {
 				if os.IsExist(err) {
