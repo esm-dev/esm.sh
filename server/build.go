@@ -541,13 +541,18 @@ rebuild:
 							// is sub-module of current package and non-dynamic import
 							if strings.HasPrefix(fullFilepath, task.realWd) && args.Kind != api.ResolveJSDynamicImport && !noBundle {
 								relPath := "." + strings.TrimPrefix(fullFilepath, path.Join(task.installDir, "node_modules", npm.Name))
+								bareName := stripModuleExt(relPath)
+								if bareName == "./"+task.Pkg.SubModule {
+									// if meet scenarios in "lib/index.mjs" imports "lib/index.cjs"
+									// let esbuild to handle it
+									return api.OnResolveResult{}, nil
+								}
 								// split modules based on the `exports` defines in package.json,
 								// see https://nodejs.org/api/packages.html
 								if om, ok := npm.PkgExports.(*orderedMap); ok {
-									bareName := stripModuleExt(relPath)
 									for e := om.l.Front(); e != nil; e = e.Next() {
 										name, paths := om.Entry(e)
-										if !strings.HasPrefix(name, "./") {
+										if !(name == "." || strings.HasPrefix(name, "./")) {
 											continue
 										}
 										if strings.ContainsRune(name, '*') {
@@ -571,6 +576,7 @@ rebuild:
 													}
 												}
 											}
+											// fmt.Println(match, name, bareName, task.Pkg.SubModule)
 											if match {
 												exportPrefix, _ := utils.SplitByLastByte(name, '*')
 												url := path.Join(npm.Name, exportPrefix+strings.TrimPrefix(bareName, prefix))
