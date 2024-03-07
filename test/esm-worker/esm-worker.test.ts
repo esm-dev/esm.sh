@@ -1,4 +1,3 @@
-import { serve } from "https://deno.land/std@0.210.0/http/server.ts";
 import { join } from "https://deno.land/std@0.210.0/path/mod.ts";
 import { assert, assertEquals, assertStringIncludes } from "https://deno.land/std@0.210.0/testing/asserts.ts";
 
@@ -62,10 +61,10 @@ const worker = withESMWorker((_req: Request, _env: typeof env, ctx: { url: URL }
 }, cache);
 
 // start the worker
-serve((req) => worker.fetch(req, { ...env, LEGACY_WORKER, R2: R2 }, { waitUntil: () => {} }), {
-  port: 8081,
-  signal: ac.signal,
-});
+Deno.serve(
+  { port: 8081, signal: ac.signal },
+  (req) => worker.fetch(req, { ...env, LEGACY_WORKER, R2: R2 }, { waitUntil: () => {} }),
+);
 
 Deno.test("esm-worker", { sanitizeOps: false, sanitizeResources: false }, async (t) => {
   // wait for the server to start
