@@ -196,10 +196,16 @@ func esmHandler() rex.Handle {
 
 		// serve build adn run scripts
 		if pathname == "/build" || pathname == "/run" {
-			_, scriptName := utils.SplitByLastByte(pathname, '/')
-			data, err := embedFS.ReadFile(fmt.Sprintf("%s.ts", scriptName))
+			data, err := embedFS.ReadFile(fmt.Sprintf("%s.ts", pathname[1:]))
 			if err != nil {
 				return rex.Status(404, "Not Found")
+			}
+
+			etag := fmt.Sprintf(`"W/v%d"`, VERSION)
+			ifNoneMatch := ctx.R.Header.Get("If-None-Match")
+			if ifNoneMatch != "" && ifNoneMatch == etag {
+				header.Set("Cache-Control", "public, max-age=86400")
+				return rex.Status(http.StatusNotModified, "")
 			}
 
 			// determine build target by `?target` query or `User-Agent` header
@@ -225,44 +231,49 @@ func esmHandler() rex.Handle {
 				header.Set("Cache-Control", "public, max-age=31536000, immutable")
 			} else {
 				header.Set("Cache-Control", "public, max-age=86400")
-				header.Set("eTag", fmt.Sprintf(`"W/v%d"`, VERSION))
+				header.Set("ETag", etag)
 			}
 			return data
 		}
 
 		// use embed polyfills/types
 		if endsWith(pathname, ".js", ".d.ts") && strings.Count(pathname, "/") == 1 {
-			_, filename := utils.SplitByLastByte(pathname, '/')
-			if strings.HasSuffix(filename, ".js") {
-				data, err := embedFS.ReadFile("server/embed/polyfills/" + filename)
+			var data []byte
+			var err error
+			if strings.HasSuffix(pathname, ".js") {
+				data, err = embedFS.ReadFile("server/embed/polyfills" + pathname)
 				if err == nil {
+					header.Set("Content-Type", "application/javascript; charset=utf-8")
+				}
+			} else {
+				data, err = embedFS.ReadFile("server/embed/types" + pathname)
+				if err == nil {
+					header.Set("Content-Type", "application/typescript; charset=utf-8")
+				}
+			}
+			if err == nil {
+				etag := fmt.Sprintf(`"W/v%d"`, VERSION)
+				ifNoneMatch := ctx.R.Header.Get("If-None-Match")
+				if ifNoneMatch != "" && ifNoneMatch == etag {
+					header.Set("Cache-Control", "public, max-age=86400")
+					return rex.Status(http.StatusNotModified, "")
+				}
+				if ctx.Form.Value("v") != "" {
+					header.Set("Cache-Control", "public, max-age=31536000, immutable")
+				} else {
+					header.Set("Cache-Control", "public, max-age=86400")
+					header.Set("ETag", etag)
+				}
+				if strings.HasSuffix(pathname, ".js") {
 					target := getBuildTargetByUA(userAgent)
 					code, err := minify(string(data), targets[target], api.LoaderJS)
 					if err != nil {
 						return throwErrorJS(ctx, fmt.Errorf("transform error: %v", err), false)
 					}
-					if ctx.Form.Value("v") != "" {
-						header.Set("Cache-Control", "public, max-age=31536000, immutable")
-					} else {
-						header.Set("Cache-Control", "public, max-age=86400")
-						header.Set("eTag", fmt.Sprintf(`"W/v%d"`, VERSION))
-					}
-					header.Set("Content-Type", "application/javascript; charset=utf-8")
 					addVary(header, "User-Agent")
-					return rex.Content(filename, startTime, bytes.NewReader(code))
+					data = []byte(code)
 				}
-			} else {
-				data, err := embedFS.ReadFile("server/embed/types/" + filename)
-				if err == nil {
-					if ctx.Form.Value("v") != "" {
-						header.Set("Cache-Control", "public, max-age=31536000, immutable")
-					} else {
-						header.Set("Cache-Control", "public, max-age=86400")
-						header.Set("eTag", fmt.Sprintf(`"W/v%d"`, VERSION))
-					}
-					header.Set("Content-Type", "application/typescript; charset=utf-8")
-					return rex.Content(filename, startTime, bytes.NewReader(data))
-				}
+				return rex.Content(pathname, startTime, bytes.NewReader(data))
 			}
 		}
 
