@@ -6,7 +6,6 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
-	"strconv"
 	"strings"
 
 	"github.com/Masterminds/semver/v3"
@@ -15,7 +14,6 @@ import (
 const EOL = "\n"
 
 var (
-	regexpVersionPrefix   = regexp.MustCompile(`^/v([1-9]\d+)/`)
 	regexpFullVersion     = regexp.MustCompile(`^\d+\.\d+\.\d+[\w\.\+\-]*$`)
 	regexpFullVersionPath = regexp.MustCompile(`(\w)@(v?\d+\.\d+\.\d+[\w\.\+\-]*|[0-9a-f]{10})(/|$)`)
 	regexpPathWithVersion = regexp.MustCompile(`\w@[\*\~\^\w\.\+\-]+(/|$|&)`)
@@ -24,13 +22,6 @@ var (
 	regexpGlobalIdent     = regexp.MustCompile(`__[a-zA-Z]+\$`)
 	regexpVarEqual        = regexp.MustCompile(`var ([a-zA-Z]+)\s*=\s*[a-zA-Z]+$`)
 )
-
-// check the version of the given path is larger than the current version.
-func isFutureVersionPrefix(pathname string) bool {
-	m := regexpVersionPrefix.FindStringSubmatch(pathname)
-	i, _ := strconv.Atoi(m[1])
-	return i > VERSION
-}
 
 // isHttpSepcifier returns true if the import path is a remote URL.
 func isHttpSepcifier(importPath string) bool {

@@ -4,7 +4,7 @@
 
 /// <reference lib="webworker" />
 
-import type { ArchiveEntry, FireOptions, HotCore, Plugin } from "./server/embed/types/hot.d.ts";
+import type { ArchiveEntry, FireOptions, HotCore, Plugin } from "../types/hot";
 
 const VERSION = 135;
 const doc: Document | undefined = globalThis.document;
@@ -127,17 +127,16 @@ class Archive {
 
 /** class `Hot` implements the `HotCore` interface. */
 class Hot implements HotCore {
-  private _vfs = new VFS(kHot, VERSION);
+  private _vfs: VFS | null = null;
   private _swScript: string | null = null;
   private _swActive: ServiceWorker | null = null;
   private _archive: Archive | null = null;
   private _fetchListeners: ((event: FetchEvent) => void)[] = [];
   private _fireListeners: ((sw: ServiceWorker) => void)[] = [];
   private _promises: Promise<any>[] = [];
-  private _bc = new BroadcastChannel(kHot);
 
   get vfs() {
-    return this._vfs;
+    return this._vfs ?? (this._vfs = new VFS(kHot, VERSION));
   }
 
   use(...plugins: readonly Plugin[]) {
@@ -231,7 +230,7 @@ class Hot implements HotCore {
           return Promise.reject(new Error(res.statusText ?? `<${res.status}>`));
         }).then((arrayBuffer) => {
           swActive.postMessage({ [kHotArchive]: arrayBuffer });
-          this._bc.onmessage = (evt) => {
+          new BroadcastChannel(kHot).onmessage = (evt) => {
             if (evt.data === kHotArchive) {
               this.onUpdateFound();
             }
@@ -267,7 +266,8 @@ class Hot implements HotCore {
       throw new Error("Service Worker scope not found.");
     }
 
-    const vfs = this._vfs;
+    const bc = new BroadcastChannel(kHot);
+    const vfs = this.vfs;
     const on: typeof addEventListener = addEventListener;
     const serveVFS = async (name: string) => {
       const file = await vfs.get(name);
@@ -334,7 +334,7 @@ class Hot implements HotCore {
             const archive = new Archive(buffer);
             if (archive.checksum !== this._archive?.checksum) {
               this._archive = archive;
-              this._bc.postMessage(kHotArchive);
+              bc.postMessage(kHotArchive);
               vfs.put(new File([buffer], kHotArchive, { type: kTypeEsmArchive }));
             }
           } catch (err) {

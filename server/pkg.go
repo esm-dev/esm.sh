@@ -37,6 +37,11 @@ func validatePkgPath(pathname string) (pkg Pkg, extraQuery string, err error) {
 		return Pkg{}, "", fmt.Errorf("invalid package name '%s'", pkgName)
 	}
 
+	// redirect package hot to esm-hot
+	if pkgName == "hot" {
+		pkgName = "esm-hot"
+	}
+
 	version, extraQuery := utils.SplitByFirstByte(maybeVersion, '&')
 	if v, e := url.QueryUnescape(version); e == nil {
 		version = v

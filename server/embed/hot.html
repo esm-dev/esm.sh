@@ -6,12 +6,13 @@
   <meta name="viewport" content="width=device-width">
   <title>ESM&gt;Hot</title>
   <link rel="preload" href="/embed/esm-archive.gz" as="fetch" type="application/esm-archive+gzip" crossorigin="anonymous">
+  <link rel="modulepreload" href="/hot@0.0.3">
 </head>
 
 <body>
   <pre id="root">...</pre>
   <script type="module">
-    import { hot } from "/hot"
+    import { hot } from "/hot@0.0.3"
     hot.onFire(() => {
       hot.vfs.put(
         new File(["bar"], "foo.txt", { type: "text/plain" })

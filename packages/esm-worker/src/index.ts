@@ -1,3 +1,5 @@
+/// <reference types="@cloudflare/workers-types" />
+
 import { compareVersions, satisfies, validate } from "compare-versions";
 import { getBuildTargetFromUA, targets } from "esm-compat";
 import type {
@@ -28,8 +30,6 @@ import {
 const regexpNpmNaming = /^[a-zA-Z0-9][\w\.\-]*$/;
 const regexpFullVersion = /^\d+\.\d+\.\d+/;
 const regexpCommitish = /^[a-f0-9]{10,}$/;
-const regexpInternalScript = /^\/v[1-9]\d+\/(build|run|hot)$/;
-const regexpEmbedFile = /^\/v[1-9]\d+\/(?:node_\w+\.js|(?:node\.ns|hot)\.d\.ts)$/;
 const regexpLegacyVersionPrefix = /^\/(v[1-9]\d+|stable)\//;
 
 const version = `v${VERSION}`;
@@ -110,7 +110,7 @@ async function fetchOrigin(
     "X-Esm-Id",
     "X-Typescript-Types",
   );
-  const exposedHeaders = [];
+  const exposedHeaders: string[] = [];
   for (const key of ["X-Esm-Id", "X-Typescript-Types"]) {
     if (resHeaders.has(key)) {
       exposedHeaders.push(key);
@@ -157,9 +157,9 @@ async function fetchOriginWithKVCache(
         }
         headers.set("Content-Type", metadata.contentType);
         headers.set("Cache-Control", immutableCache);
-        const exposedHeaders = [];
-        if (metadata.buildId) {
-          headers.set("X-Esm-Id", metadata.buildId);
+        const exposedHeaders: string[] = [];
+        if (metadata.esmId) {
+          headers.set("X-Esm-Id", metadata.esmId);
           exposedHeaders.push("X-Esm-Id");
         }
         if (metadata.dts) {
@@ -196,16 +196,16 @@ async function fetchOriginWithKVCache(
   const buffer = await res.arrayBuffer();
   const contentType = res.headers.get("Content-Type") || getMimeType(path);
   const cacheControl = res.headers.get("Cache-Control");
-  const buildId = res.headers.get("X-Esm-Id");
-  const dts = res.headers.get("X-TypeScript-Types");
-  const exposedHeaders = [];
+  const esmId = res.headers.get("X-Esm-Id") ?? undefined;
+  const dts = res.headers.get("X-TypeScript-Types") ?? undefined;
+  const exposedHeaders: string[] = [];
 
   headers.set("Content-Type", contentType);
   if (cacheControl) {
     headers.set("Cache-Control", cacheControl);
   }
-  if (buildId) {
-    headers.set("X-Esm-Id", buildId);
+  if (esmId) {
+    headers.set("X-Esm-Id", esmId);
     exposedHeaders.push("X-Esm-Id");
   }
   if (dts) {
@@ -226,12 +226,12 @@ async function fetchOriginWithKVCache(
     } else {
       let value: ArrayBuffer | ReadableStream = buffer.slice(0);
       if (gzip && typeof CompressionStream !== "undefined") {
-        value = new Response(value).body.pipeThrough<Uint8Array>(
+        value = new Response(value).body!.pipeThrough<Uint8Array>(
           new CompressionStream("gzip"),
         );
       }
       ctx.waitUntil(KV.put(storeKey, value, {
-        metadata: { contentType, dts, buildId },
+        metadata: { contentType, dts, esmId },
       }));
     }
   }
@@ -417,12 +417,37 @@ function withESMWorker(middleware?: Middleware, cache: Cache = (caches as any).d
           })
         );
       }
+    }
 
-      case "/build":
-      case "/run":
-      case "/hot": {
-        return redirect(new URL(`/${version}${pathname}${url.search}`, url), 302);
+    if (
+      pathname === "/build" ||
+      pathname === "/run" ||
+      pathname === "/node.ns.d.ts" ||
+      (pathname.startsWith("/node_") && pathname.endsWith(".js"))
+    ) {
+      const ifNoneMatch = req.headers.get("If-None-Match");
+      const etag = `W/"${version}"`;
+      if (ifNoneMatch === etag) {
+        const headers = corsHeaders();
+        headers.set("Cache-Control", "public, max-age=86400");
+        return new Response(null, { status: 304, headers: corsHeaders() });
       }
+      url.searchParams.set("v", VERSION.toString());
+      const res = await ctx.withCache(() =>
+        fetchOriginWithKVCache(
+          req,
+          env,
+          ctx,
+          `${pathname}${url.search}`,
+          false,
+        ), { varyUA: true });
+      if (!res.ok) {
+        return res;
+      }
+      const headers = new Headers(res.headers);
+      headers.set("Cache-Control", "public, max-age=86400");
+      headers.set("Etag", etag);
+      return new Response(res.body, { status: res.status, headers });
     }
 
     if (middleware) {
@@ -449,43 +474,11 @@ function withESMWorker(middleware?: Middleware, cache: Cache = (caches as any).d
       );
     }
 
-    const startsWithV = pathname.startsWith("/v");
-
-    if (
-      startsWithV &&
-      (pathname.endsWith("/build") || pathname.endsWith("/run") || pathname.endsWith("/hot")) &&
-      regexpInternalScript.test(pathname)
-    ) {
-      return ctx.withCache(() =>
-        fetchOriginWithKVCache(
-          req,
-          env,
-          ctx,
-          `${pathname}${url.search}`,
-          false,
-        ), { varyUA: true });
-    }
-
-    if (
-      startsWithV &&
-      (pathname.endsWith(".d.ts") || pathname.endsWith(".js")) &&
-      regexpEmbedFile.test(pathname)
-    ) {
-      return ctx.withCache(() =>
-        fetchOriginWithKVCache(
-          req,
-          env,
-          ctx,
-          `${pathname}${url.search}`,
-          true,
-        ), { varyUA: true });
-    }
-
     // use legacy worker if the bild version is specified in the path or query
     if (env.LEGACY_WORKER) {
-      const hasVersionPrefix = (startsWithV || pathname.startsWith("/stable/")) &&
+      const hasVersionPrefix = (pathname.startsWith("/v") || pathname.startsWith("/stable/")) &&
         regexpLegacyVersionPrefix.test(pathname);
-      const hasPinQuery = url.searchParams.has("pin") && (regexpLegacyVersionPrefix.test(url.searchParams.get("pin")));
+      const hasPinQuery = url.searchParams.has("pin") && (regexpLegacyVersionPrefix.test(url.searchParams.get("pin")!));
       if (hasVersionPrefix || hasPinQuery) {
         return env.LEGACY_WORKER.fetch(req.clone());
       }
@@ -617,16 +610,19 @@ function withESMWorker(middleware?: Middleware, cache: Cache = (caches as any).d
           headers.set("Authorization", `Bearer ${env.NPM_TOKEN}`);
         }
         let registry = env.NPM_REGISTRY ?? defaultNpmRegistry;
-        if (pkgId.startsWith("@jsr/")) {
+        let pkgName = pkgId;
+        if (pkgName.startsWith("@jsr/")) {
           registry = "https://npm.jsr.io";
+        } else if (pkgName === "hot") {
+          pkgName = "esm-hot";
         }
         const res = await fetch(
-          new URL(pkgId, registry),
+          new URL(pkgName, registry),
           { headers },
         );
         if (!res.ok) {
           if (res.status === 404 || res.status === 401) {
-            return errPkgNotFound(pkgId);
+            return errPkgNotFound(pkgName);
           }
           return new Response(res.body, {
             status: res.status,
@@ -638,9 +634,10 @@ function withESMWorker(middleware?: Middleware, cache: Cache = (caches as any).d
         if (hasExternalAllMarker) {
           prefix += "*";
         }
-        let pkgName = pkgId;
-        if (pkgId.startsWith("@jsr/") && !hasTargetSegment(subPath)) {
+        if (pkgName.startsWith("@jsr/") && !hasTargetSegment(subPath)) {
           pkgName = "jsr/@" + pkgName.slice(5).replace("__", "/");
+        } else if (pkgName === "esm-hot") {
+          pkgName = "hot";
         }
         const eq = extraQuery ? "&" + extraQuery : "";
         const distVersion = regInfo["dist-tags"]
@@ -738,7 +735,7 @@ function withESMWorker(middleware?: Middleware, cache: Cache = (caches as any).d
       });
     }
 
-    // if it's a npm asset
+    // if it's npm asset
     if (subPath !== "") {
       const ext = splitBy(subPath, ".", true)[1];
       // use origin server response for `*.wasm?module`

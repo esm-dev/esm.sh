@@ -164,7 +164,6 @@ func esmHandler() rex.Handle {
 			if strings.HasSuffix(pathname, ".js") {
 				data = bytes.ReplaceAll(data, []byte("{origin}"), []byte(cdnOrigin))
 				data = bytes.ReplaceAll(data, []byte("{basePath}"), []byte(cfg.CdnBasePath))
-				data = bytes.ReplaceAll(data, []byte("{version}"), []byte(fmt.Sprintf("v%d", VERSION)))
 			}
 			header.Set("Cache-Control", "public, max-age=86400")
 			return rex.Content(pathname, modTime, bytes.NewReader(data))
@@ -195,20 +194,8 @@ func esmHandler() rex.Handle {
 			return rex.Content(savaPath, fi.ModTime(), r) // auto closed
 		}
 
-		// redirect to the url with version prefix
-		if (pathname == "/build" || pathname == "/run" || pathname == "/hot") && !regexpVersionPrefix.MatchString(pathname) {
-			url := fmt.Sprintf("%s%s/v%d%s", cdnOrigin, cfg.CdnBasePath, VERSION, pathname)
-			if ctx.R.URL.RawQuery != "" {
-				url += "?" + ctx.R.URL.RawQuery
-			}
-			return rex.Redirect(url, http.StatusFound)
-		}
-
-		// serve function scripts
-		if strings.HasPrefix(pathname, "/v") && strings.Count(pathname, "/") == 2 && endsWith(pathname, "/build", "/run", "/hot") && regexpVersionPrefix.MatchString(pathname) {
-			if isFutureVersionPrefix(pathname) {
-				return rex.Status(404, "Not Found")
-			}
+		// serve build adn run scripts
+		if pathname == "/build" || pathname == "/run" {
 			_, scriptName := utils.SplitByLastByte(pathname, '/')
 			data, err := embedFS.ReadFile(fmt.Sprintf("%s.ts", scriptName))
 			if err != nil {
@@ -221,8 +208,6 @@ func esmHandler() rex.Handle {
 			if targetViaUA {
 				target = getBuildTargetByUA(userAgent)
 			}
-
-			header.Set("Cache-Control", "public, max-age=31536000, immutable")
 			if target == "deno" || target == "denonext" {
 				header.Set("Content-Type", "application/typescript; charset=utf-8")
 			} else {
@@ -233,21 +218,20 @@ func esmHandler() rex.Handle {
 				data = code
 				header.Set("Content-Type", "application/javascript; charset=utf-8")
 			}
-			// add 'X-TypeScript-Types' header for the `/hot` script
-			if scriptName == "hot" {
-				header.Set("X-TypeScript-Types", fmt.Sprintf("%s%s/v%d/hot.d.ts", cdnOrigin, cfg.CdnBasePath, VERSION))
-			}
 			if targetViaUA {
 				addVary(header, "User-Agent")
+			}
+			if ctx.Form.Value("v") != "" {
+				header.Set("Cache-Control", "public, max-age=31536000, immutable")
+			} else {
+				header.Set("Cache-Control", "public, max-age=86400")
+				header.Set("eTag", fmt.Sprintf(`"W/v%d"`, VERSION))
 			}
 			return data
 		}
 
 		// use embed polyfills/types
-		if strings.HasPrefix(pathname, "/v") && strings.Count(pathname, "/") == 2 && endsWith(pathname, ".js", ".d.ts") && regexpVersionPrefix.MatchString(pathname) {
-			if isFutureVersionPrefix(pathname) {
-				return rex.Status(404, "Not Found")
-			}
+		if endsWith(pathname, ".js", ".d.ts") && strings.Count(pathname, "/") == 1 {
 			_, filename := utils.SplitByLastByte(pathname, '/')
 			if strings.HasSuffix(filename, ".js") {
 				data, err := embedFS.ReadFile("server/embed/polyfills/" + filename)
@@ -257,16 +241,26 @@ func esmHandler() rex.Handle {
 					if err != nil {
 						return throwErrorJS(ctx, fmt.Errorf("transform error: %v", err), false)
 					}
+					if ctx.Form.Value("v") != "" {
+						header.Set("Cache-Control", "public, max-age=31536000, immutable")
+					} else {
+						header.Set("Cache-Control", "public, max-age=86400")
+						header.Set("eTag", fmt.Sprintf(`"W/v%d"`, VERSION))
+					}
 					header.Set("Content-Type", "application/javascript; charset=utf-8")
-					header.Set("Cache-Control", "public, max-age=31536000, immutable")
 					addVary(header, "User-Agent")
 					return rex.Content(filename, startTime, bytes.NewReader(code))
 				}
-			} else if strings.HasSuffix(filename, ".d.ts") {
+			} else {
 				data, err := embedFS.ReadFile("server/embed/types/" + filename)
 				if err == nil {
+					if ctx.Form.Value("v") != "" {
+						header.Set("Cache-Control", "public, max-age=31536000, immutable")
+					} else {
+						header.Set("Cache-Control", "public, max-age=86400")
+						header.Set("eTag", fmt.Sprintf(`"W/v%d"`, VERSION))
+					}
 					header.Set("Content-Type", "application/typescript; charset=utf-8")
-					header.Set("Cache-Control", "public, max-age=31536000, immutable")
 					return rex.Content(filename, startTime, bytes.NewReader(data))
 				}
 			}
@@ -406,6 +400,8 @@ func esmHandler() rex.Handle {
 			query := ""
 			if strings.HasPrefix(pkgName, "@jsr/") {
 				pkgName = "jsr/@" + strings.ReplaceAll(pkgName[5:], "__", "/")
+			} else if pkgName == "esm-hot" {
+				pkgName = "hot"
 			}
 
 			if external.Has("*") {

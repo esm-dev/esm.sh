@@ -7,7 +7,6 @@ import (
 )
 
 //go:embed build.ts
-//go:embed hot.ts
 //go:embed README.md
 //go:embed run.ts
 //go:embed server/embed

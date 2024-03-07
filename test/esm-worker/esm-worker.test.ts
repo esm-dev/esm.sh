@@ -52,7 +52,7 @@ const LEGACY_WORKER = {
 await run("pnpm", "i");
 await run("node", "build.mjs");
 
-const { withESMWorker } = await import("../../packages/esm-worker/dist/index.js#" + Date.now().toString(36));
+const { withESMWorker, version } = await import("../../packages/esm-worker/dist/index.js#" + Date.now().toString(36));
 const worker = withESMWorker((_req: Request, _env: typeof env, ctx: { url: URL }) => {
   if (ctx.url.pathname === "/") {
     return new Response("<h1>Welcome to esm.sh!</h1>", {
@@ -81,28 +81,31 @@ Deno.test("esm-worker", { sanitizeOps: false, sanitizeResources: false }, async 
     assertStringIncludes(text, "<h1>Welcome to esm.sh!</h1>");
   });
 
-  let VERSION: number;
   await t.step("status.json", async () => {
     const res = await fetch(`${workerOrigin}/status.json`);
     const ret = await res.json();
     assertEquals(typeof ret.version, "number");
-    VERSION = ret.version;
   });
 
   await t.step("embed polyfills/types", async () => {
-    const res = await fetch(`${workerOrigin}/v${VERSION}/node.ns.d.ts`);
-    res.body?.cancel();
+    const res = await fetch(`${workerOrigin}/node.ns.d.ts`);
     assertEquals(res.status, 200);
     assertEquals(res.headers.get("Content-Type"), "application/typescript; charset=utf-8");
+    assertEquals(res.headers.get("Etag"), `W/"${version}"`);
+    assertEquals(res.headers.get("Cache-Control"), "public, max-age=86400");
+    assertStringIncludes(await res.text(), "declare class Buffer");
 
-    const res2 = await fetch(`${workerOrigin}/v${VERSION}/node_process.js`);
-    res2.body?.cancel();
+    const res2 = await fetch(`${workerOrigin}/node_process.js`);
     assertEquals(res2.status, 200);
     assertEquals(res2.headers.get("Content-Type"), "application/javascript; charset=utf-8");
+    assertEquals(res2.headers.get("Etag"), `W/"${version}"`);
+    assertEquals(res2.headers.get("Cache-Control"), "public, max-age=86400");
+    assertStringIncludes(res2.headers.get("Vary") ?? "", "User-Agent");
+    assertStringIncludes(await res2.text(), "nextTick");
 
-    const res3 = await fetch(`${workerOrigin}/v${VERSION + 1}/node_process.js`);
+    const res3 = await fetch(`${workerOrigin}/node_process.js`, { headers: { "If-None-Match": `W/"${version}"` } });
     res3.body?.cancel();
-    assertEquals(res3.status, 404);
+    assertEquals(res3.status, 304);
   });
 
   await t.step("npm modules", async () => {
@@ -151,7 +154,7 @@ Deno.test("esm-worker", { sanitizeOps: false, sanitizeResources: false }, async 
 
     const res7 = await fetch(`${workerOrigin}/postcss@8.4.16/es2022/lib/postcss.js`);
     assertEquals(res7.status, 200);
-    assertStringIncludes(await res7.text(), `"/v${VERSION}/node_process.js"`);
+    assertStringIncludes(await res7.text(), `"/node_process.js"`);
 
     const res8 = await fetch(`${workerOrigin}/react-dom@18?external=react`);
     res8.body?.cancel();
@@ -289,19 +292,45 @@ Deno.test("esm-worker", { sanitizeOps: false, sanitizeResources: false }, async 
     assertEquals(new TextDecoder().decode(decodeBase64("aGVsbG8=")), "hello");
   });
 
-  await t.step("build", async () => {
+  await t.step("hot", async () => {
+    const res = await fetch(
+      `${workerOrigin}/hot`,
+      { redirect: "manual" },
+    );
+    res.body?.cancel();
+    assertEquals(res.status, 302);
+    const rUrl = res.headers.get("Location")!;
+    assert(rUrl.startsWith(`${workerOrigin}/hot@`));
+    assertEquals(res.headers.get("Cache-Control"), "public, max-age=600");
+
+    const res2 = await fetch(rUrl);
+    const modUrl = new URL(res2.headers.get("X-Esm-Id")!, workerOrigin);
+    assertEquals(res2.status, 200);
+    assertEquals(res2.headers.get("Content-Type"), "application/javascript; charset=utf-8");
+    assertEquals(res2.headers.get("Cache-Control"), "public, max-age=31536000, immutable");
+    assert(/esm-hot@.+\.d\.ts$/.test(res2.headers.get("X-Typescript-Types")!));
+    assert(modUrl.pathname.endsWith("/denonext/esm-hot.mjs"));
+
+    const module = await import(rUrl);
+    assertEquals(Object.keys(module).sort(), ["default", "hot"]);
+  });
+
+  await t.step("build api", async () => {
     const res = await fetch(`${workerOrigin}/build`);
     res.body?.cancel();
-    assertEquals(new URL(res.url).pathname, `/v${VERSION}/build`);
-    assertEquals(res.headers.get("Cache-Control"), "public, max-age=31536000, immutable");
+    assertEquals(new URL(res.url).pathname, `/build`);
+    assertEquals(res.headers.get("Etag"), `W/"${version}"`);
+    assertEquals(res.headers.get("Cache-Control"), "public, max-age=86400");
     assertEquals(res.headers.get("Content-Type"), "application/typescript; charset=utf-8");
+    assertStringIncludes(res.headers.get("Vary") ?? "", "User-Agent");
 
-    const res5 = await fetch(`${workerOrigin}/v${VERSION}/build?target=es2022`);
-    res5.body?.cancel();
-    assertEquals(res5.headers.get("Cache-Control"), "public, max-age=31536000, immutable");
-    assertEquals(res5.headers.get("Content-Type"), "application/javascript; charset=utf-8");
+    const res2 = await fetch(`${workerOrigin}/build?target=es2022`);
+    res2.body?.cancel();
+    assertEquals(res2.headers.get("Etag"), `W/"${version}"`);
+    assertEquals(res2.headers.get("Cache-Control"), "public, max-age=86400");
+    assertEquals(res2.headers.get("Content-Type"), "application/javascript; charset=utf-8");
 
-    const res2 = await fetch(`${workerOrigin}/build`, {
+    const res3 = await fetch(`${workerOrigin}/build`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -312,7 +341,7 @@ Deno.test("esm-worker", { sanitizeOps: false, sanitizeResources: false }, async 
         `,
       }),
     });
-    const ret = await res2.json();
+    const ret = await res3.json();
     if (ret.error) {
       throw new Error(`<${ret.error.status}> ${ret.error.message}`);
     }
@@ -342,21 +371,21 @@ Deno.test("esm-worker", { sanitizeOps: false, sanitizeResources: false }, async 
     options.hash = await computeHash(
       options.loader + options.code + options.importMap,
     );
-    const res3 = await fetch(`${workerOrigin}/transform`, {
+    const res4 = await fetch(`${workerOrigin}/transform`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(options),
     });
-    const ret2 = await res3.json();
+    const ret2 = await res4.json();
     assertStringIncludes(ret2.code, `"https://preact@10.13.2/jsx-runtime"`);
     assertStringIncludes(ret2.code, `"https://esm.sh/preact-render-to-string6.0.2"`);
 
-    const res4 = await fetch(`${workerOrigin}/+${options.hash}.mjs`, {
+    const res5 = await fetch(`${workerOrigin}/+${options.hash}.mjs`, {
       headers: { "User-Agent": "Chrome/90.0.4430.212" },
     });
-    assertEquals(res4.status, 200);
-    assertEquals(res4.headers.get("Content-Type"), "application/javascript; charset=utf-8");
-    const code = await res4.text();
+    assertEquals(res5.status, 200);
+    assertEquals(res5.headers.get("Content-Type"), "application/javascript; charset=utf-8");
+    const code = await res5.text();
     assertStringIncludes(code, `"https://preact@10.13.2/jsx-runtime"`);
     assertStringIncludes(code, `"https://esm.sh/preact-render-to-string6.0.2"`);
   });
@@ -394,22 +423,6 @@ Deno.test("esm-worker", { sanitizeOps: false, sanitizeResources: false }, async 
       ),
       "/es2021/",
     );
-  });
-
-  await t.step("/hot", async () => {
-    const res = await fetch(`${workerOrigin}/hot`, {
-      headers: { "User-Agent": "Chrome/90.0.4430.212" },
-    });
-    assertEquals(res.status, 200);
-    assertEquals(res.url, `${workerOrigin}/v${VERSION}/hot`);
-    assertEquals(res.headers.get("Content-Type"), "application/javascript; charset=utf-8");
-    assertEquals(res.headers.get("X-Typescript-Types"), `${workerOrigin}/v${VERSION}/hot.d.ts`);
-    assertStringIncludes(await res.text(), "fire");
-
-    const res2 = await fetch(`${workerOrigin}/v${VERSION}/hot.d.ts`);
-    res2.body?.cancel();
-    assertEquals(res2.status, 200);
-    assertEquals(res2.headers.get("Content-Type"), "application/typescript; charset=utf-8");
   });
 
   await t.step("fallback to lagacy worker", async () => {

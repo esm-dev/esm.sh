@@ -10,12 +10,7 @@ export function isDtsFile(path: string) {
   return path.endsWith(".d.ts") || path.endsWith(".d.mts");
 }
 
-export function asKV(
-  storage?: R2Bucket | WorkerStorage,
-): WorkerStorageKV | undefined {
-  if (!storage) {
-    return undefined;
-  }
+export function asKV(storage: R2Bucket | WorkerStorage): WorkerStorageKV {
   return globalThis.__AS_KV__ ?? (globalThis.__AS_KV__ = {
     async getWithMetadata(
       key: string,
@@ -49,11 +44,7 @@ export function trimPrefix(s: string, prefix: string): string {
   return s;
 }
 
-export function splitBy(
-  s: string,
-  searchString: string,
-  fromLast = false,
-): [string, string] {
+export function splitBy(s: string, searchString: string, fromLast = false): [string, string] {
   const i = fromLast ? s.lastIndexOf(searchString) : s.indexOf(searchString);
   if (i >= 0) {
     return [s.slice(0, i), s.slice(i + searchString.length)];
@@ -62,11 +53,7 @@ export function splitBy(
 }
 
 /** create redirect response. */
-export function redirect(
-  url: URL | string,
-  status: 301 | 302,
-  cacheMaxAge = 600,
-) {
+export function redirect(url: URL | string, status: 301 | 302, cacheMaxAge = 600) {
   const headers = corsHeaders();
   headers.set("Location", url.toString());
   if (status === 301) {

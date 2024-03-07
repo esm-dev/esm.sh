@@ -6,8 +6,9 @@
   "module": "dist/compat.js",
   "types": "types/compat.d.ts",
   "scripts": {
-    "prepublishOnly": "node build.mjs",
-    "test": "node build.mjs && node test.mjs"
+    "prepublishOnly": "pnpm run build",
+    "build": "pnpm esbuild src/compat.ts --outdir=dist --format=esm --platform=browser",
+    "test": "pnpm run build && node test.mjs"
   },
   "files": [
     "dist/compat.js",

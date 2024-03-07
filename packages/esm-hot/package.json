@@ -1,0 +1,21 @@
+{
+  "name": "esm-hot",
+  "version": "0.0.3",
+  "description": "esm.sh/hot",
+  "type": "module",
+  "main": "dist/hot.js",
+  "module": "dist/hot.js",
+  "types": "types/hot.d.ts",
+  "scripts": {
+    "prepublishOnly": "pnpm esbuild src/hot.ts --outdir=dist --format=esm --platform=browser"
+  },
+  "repository": "https://github.com/esm-dev/esm.sh",
+  "license": "MIT",
+  "devDependencies": {
+    "esbuild": "^0.20.1"
+  },
+  "files": [
+    "dist/hot.js",
+    "types/hot.d.ts"
+  ]
+}

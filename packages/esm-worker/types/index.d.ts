@@ -4,13 +4,13 @@ declare global {
     ESM_TOKEN?: string;
     NPM_REGISTRY?: string;
     NPM_TOKEN?: string;
-    LEGACY_WORKER?: Fetcher;
+    LEGACY_WORKER?: { fetch: (req: Request) => Promise<Response> };
   }
 }
 
 export type HttpMetadata = {
   contentType: string;
-  buildId?: string;
+  esmId?: string;
   dts?: string;
 };
 

@@ -99,7 +99,7 @@ func (task *BuildTask) transformDTS(dts string, aliasDepsPrefix string, marker *
 	dtsBasePath := fmt.Sprintf("%s%s", task.CdnOrigin, cfg.CdnBasePath)
 
 	if pkgName == "@types/node" {
-		fmt.Fprintf(buf, "/// <reference path=\"%s/v%d/node.ns.d.ts\" />\n", dtsBasePath, VERSION)
+		fmt.Fprintf(buf, "/// <reference path=\"%s/node.ns.d.ts\" />\n", dtsBasePath)
 	}
 
 	err = walkDts(pass1Buf, buf, func(specifier string, kind string, position int) string {
@@ -183,7 +183,7 @@ func (task *BuildTask) transformDTS(dts string, aliasDepsPrefix string, marker *
 			}
 		} else {
 			if res == "node" {
-				return fmt.Sprintf("%s/v%d/node.ns.d.ts", dtsBasePath, VERSION)
+				return fmt.Sprintf("%s/node.ns.d.ts", dtsBasePath)
 			}
 			if strings.HasPrefix(res, "node:") {
 				return fmt.Sprintf("%s/@types/node@%s/%s.d.ts", dtsBasePath, nodeTypesVersion, strings.TrimPrefix(res, "node:"))
