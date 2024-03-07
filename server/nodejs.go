@@ -96,7 +96,6 @@ var polyfilledInternalNodeModules = map[string]string{
 	"sys":            "util@0.12.5",
 	"timers":         "timers-browserify@2.0.12",
 	"tty":            "tty-browserify@0.0.1",
-	"url":            "url@0.11.3",
 	"util":           "util@0.12.5",
 	"vm":             "vm-browserify@1.1.2",
 	"zlib":           "browserify-zlib@0.2.0",

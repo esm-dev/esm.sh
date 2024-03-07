@@ -476,10 +476,11 @@ rebuild:
 								if task.isServerTarget() {
 									return api.OnResolveResult{Path: task.resolveExternal(specifier, args.Kind), External: true}, nil
 								}
-								data, err := embedFS.ReadFile("server/embed/polyfills/node_" + specifier + ".js")
+								polyfillName := strings.Replace(specifier, "/", "__", -1)
+								data, err := embedFS.ReadFile("server/embed/polyfills/node_" + polyfillName + ".js")
 								if err == nil {
 									return api.OnResolveResult{
-										Path:       "embed:polyfills/node_" + specifier + ".js",
+										Path:       "embed:polyfills/node_" + polyfillName + ".js",
 										Namespace:  "embed",
 										PluginData: data,
 									}, nil
@@ -989,9 +990,10 @@ func (task *BuildTask) resolveExternal(specifier string, kind api.ResolveKind) (
 					resolvedPath = specifier
 				}
 			} else {
-				_, err := embedFS.ReadFile(fmt.Sprintf("server/embed/polyfills/node_%s.js", specifier))
+				polyfillName := strings.Replace(specifier, "/", "__", -1)
+				_, err := embedFS.ReadFile(fmt.Sprintf("server/embed/polyfills/node_%s.js", polyfillName))
 				if err == nil {
-					resolvedPath = fmt.Sprintf("%s/node_%s.js", cfg.CdnBasePath, specifier)
+					resolvedPath = fmt.Sprintf("%s/node_%s.js", cfg.CdnBasePath, polyfillName)
 				} else {
 					resolvedPath = fmt.Sprintf(
 						"%s/error.js?type=unsupported-node-builtin-module&name=%s&importer=%s",
