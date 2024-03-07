@@ -495,6 +495,12 @@ rebuild:
 							}
 						}
 
+						// resolve alias in dependencies
+						// e.g. " "@mark/html": "npm:@jsr/mark__html@^1.0.0"
+						if v, ok := npm.Dependencies[specifier]; ok && strings.HasPrefix(v, "npm:") {
+							specifier = v[4:]
+						}
+
 						// resolve github dependencies
 						if v, ok := npm.Dependencies[specifier]; ok && (strings.HasPrefix(v, "git+ssh://") || strings.HasPrefix(v, "git+https://") || strings.HasPrefix(v, "git://")) {
 							gitUrl, err := url.Parse(v)
@@ -1036,16 +1042,19 @@ func (task *BuildTask) resolveExternal(specifier string, kind api.ResolveKind) (
 	}
 	// common npm dependency
 	if resolvedPath == "" {
-		pkgName, _, subpath := splitPkgPath(specifier)
-		version := "latest"
-		if pkgName == task.Pkg.Name {
-			version = task.Pkg.Version
-		} else if pkg, ok := task.Args.deps.Get(pkgName); ok {
-			version = pkg.Version
-		} else if v, ok := task.npm.Dependencies[pkgName]; ok {
-			version = v
-		} else if v, ok := task.npm.PeerDependencies[pkgName]; ok {
-			version = v
+		pkgName, version, subpath := splitPkgPath(specifier)
+		if version == "" {
+			if pkgName == task.Pkg.Name {
+				version = task.Pkg.Version
+			} else if pkg, ok := task.Args.deps.Get(pkgName); ok {
+				version = pkg.Version
+			} else if v, ok := task.npm.Dependencies[pkgName]; ok {
+				version = v
+			} else if v, ok := task.npm.PeerDependencies[pkgName]; ok {
+				version = v
+			} else {
+				version = "latest"
+			}
 		}
 		if !regexpFullVersion.MatchString(version) {
 			p, _, err := getPackageInfo(task.installDir, pkgName, version)
