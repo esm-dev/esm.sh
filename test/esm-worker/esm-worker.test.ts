@@ -151,7 +151,7 @@ Deno.test("esm-worker", { sanitizeOps: false, sanitizeResources: false }, async 
       `"data:application/javascript;base64,ZXhwb3J0IGRlZmF1bHQgT2JqZWN0LmFzc2lnbjsK"`,
     );
 
-    const res7 = await fetch(`${workerOrigin}/postcss@8.4.16/es2022/lib/postcss.js`);
+    const res7 = await fetch(`${workerOrigin}/typescript@5.4.2/es2022/typescript.mjs`);
     assertEquals(res7.status, 200);
     assertStringIncludes(await res7.text(), `"/node_process.js"`);
 
@@ -230,8 +230,7 @@ Deno.test("esm-worker", { sanitizeOps: false, sanitizeResources: false }, async 
     const rUrl = res.headers.get("Location")!;
     assert(rUrl.startsWith(`${workerOrigin}/gh/microsoft/tslib@`));
     assertEquals(res.headers.get("Cache-Control"), "public, max-age=600");
-
-    const res2 = await fetch(res.headers.get("Location")!);
+    const res2 = await fetch(rUrl);
     const modUrl = new URL(res2.headers.get("X-Esm-Id")!, workerOrigin);
     res2.body?.cancel();
     assertEquals(res2.status, 200);

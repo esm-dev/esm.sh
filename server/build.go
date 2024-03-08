@@ -30,24 +30,25 @@ type ESMBuild struct {
 }
 
 type BuildTask struct {
-	Args        BuildArgs
-	Pkg         Pkg
-	CdnOrigin   string
-	Target      string
-	Dev         bool
-	Bundle      bool
-	NoBundle    bool
-	lock        sync.Mutex
-	id          string
-	stage       string
-	wd          string
-	realWd      string
-	installDir  string
-	imports     []string
-	requires    [][2]string
-	headerLines int // to fix the source map
-	esm         *ESMBuild
-	npm         NpmPackageInfo
+	Args       BuildArgs
+	Pkg        Pkg
+	CdnOrigin  string
+	Target     string
+	Dev        bool
+	Bundle     bool
+	NoBundle   bool
+	lock       sync.Mutex
+	npm        NpmPackageInfo
+	esm        *ESMBuild
+	id         string
+	stage      string
+	wd         string
+	installDir string
+	resolveDir string
+	imports    []string
+	requires   [][2]string
+	smOffset   int
+	subBuilds  *stringSet
 }
 
 func (task *BuildTask) Build() (esm *ESMBuild, err error) {
@@ -97,21 +98,18 @@ func (task *BuildTask) Build() (esm *ESMBuild, err error) {
 	}
 
 	if l, e := filepath.EvalSymlinks(path.Join(task.wd, "node_modules", task.Pkg.Name)); e == nil {
-		task.realWd = l
+		task.resolveDir = l
 		if task.Pkg.FromGithub || strings.HasPrefix(task.Pkg.Name, "@") {
 			task.installDir = path.Join(l, "../../..")
 		} else {
 			task.installDir = path.Join(l, "../..")
 		}
 	} else {
-		task.realWd = task.wd
+		task.resolveDir = task.wd
 		task.installDir = task.wd
 	}
 
-	if task.Target == "raw" {
-		return
-	}
-
+	task.subBuilds = newStringSet()
 	task.stage = "build"
 	err = task.build()
 	if err != nil {
@@ -539,7 +537,7 @@ rebuild:
 
 						if isLocalSpecifier(specifier) {
 							// is sub-module of current package and non-dynamic import
-							if strings.HasPrefix(fullFilepath, task.realWd) && args.Kind != api.ResolveJSDynamicImport && !noBundle {
+							if strings.HasPrefix(fullFilepath, task.resolveDir) && args.Kind != api.ResolveJSDynamicImport && !noBundle {
 								relPath := "." + strings.TrimPrefix(fullFilepath, path.Join(task.installDir, "node_modules", npm.Name))
 								bareName := stripModuleExt(relPath)
 								if bareName == "./"+task.Pkg.SubModule {
@@ -773,7 +771,7 @@ rebuild:
 			// remove shebang
 			if bytes.HasPrefix(jsContent, []byte("#!/")) {
 				jsContent = jsContent[bytes.IndexByte(jsContent, '\n')+1:]
-				task.headerLines--
+				task.smOffset--
 			}
 
 			// add nodejs compatibility
@@ -917,7 +915,7 @@ rebuild:
 			}
 
 			// to fix the source map
-			task.headerLines += strings.Count(header.String(), EOL)
+			task.smOffset += strings.Count(header.String(), EOL)
 
 			ret, dropSourceMap := task.rewriteJS(jsContent)
 			if ret != nil {
@@ -959,11 +957,11 @@ rebuild:
 			var sourceMap map[string]interface{}
 			if json.Unmarshal(file.Contents, &sourceMap) == nil {
 				if mapping, ok := sourceMap["mappings"].(string); ok {
-					fixedMapping := make([]byte, task.headerLines+len(mapping))
-					for i := 0; i < task.headerLines; i++ {
+					fixedMapping := make([]byte, task.smOffset+len(mapping))
+					for i := 0; i < task.smOffset; i++ {
 						fixedMapping[i] = ';'
 					}
-					copy(fixedMapping[task.headerLines:], mapping)
+					copy(fixedMapping[task.smOffset:], mapping)
 					sourceMap["mappings"] = string(fixedMapping)
 				}
 				buf := bytes.NewBuffer(nil)
@@ -1041,6 +1039,26 @@ func (task *BuildTask) resolveExternal(specifier string, kind api.ResolveKind) (
 			Version:   task.Pkg.Version,
 			SubPath:   subPath,
 			SubModule: toModuleBareName(subPath, true),
+		}
+		if task.subBuilds != nil {
+			subBuild := &BuildTask{
+				Args:       task.Args,
+				Pkg:        subPkg,
+				CdnOrigin:  task.CdnOrigin,
+				Target:     task.Target,
+				Dev:        task.Dev,
+				Bundle:     task.Bundle,
+				NoBundle:   task.NoBundle,
+				wd:         task.wd,
+				installDir: task.installDir,
+				resolveDir: task.resolveDir,
+				subBuilds:  task.subBuilds,
+			}
+			id := subBuild.ID()
+			if !task.subBuilds.Has(id) {
+				task.subBuilds.Add(id)
+				_ = subBuild.build()
+			}
 		}
 		resolvedPath = task.getImportPath(subPkg, encodeBuildArgsPrefix(task.Args, subPkg, false))
 		if task.NoBundle {

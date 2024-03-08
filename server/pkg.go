@@ -94,7 +94,8 @@ func validatePkgPath(pathname string) (pkg Pkg, extraQuery string, err error) {
 	}
 
 	if cfg != nil {
-		p, _, err := getPackageInfo("", pkgName, version)
+		var p NpmPackageInfo
+		p, _, err = getPackageInfo("", pkgName, version)
 		if err == nil {
 			pkg.Version = p.Version
 			pkg.Deprecated = p.Deprecated
