@@ -129,7 +129,7 @@ func (task *BuildTask) getPackageInfo(name string) (pkg Pkg, p NpmPackageInfo, f
 	} else {
 		version = "latest"
 	}
-	p, fromPackageJSON, err = getPackageInfo(task.resovleDir, pkgName, version)
+	p, fromPackageJSON, err = getPackageInfo(task.resolveDir, pkgName, version)
 	if err == nil {
 		pkg = Pkg{
 			Name:      p.Name,

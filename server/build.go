@@ -43,7 +43,7 @@ type BuildTask struct {
 	id         string
 	stage      string
 	wd         string
-	resovleDir string
+	resolveDir string
 	packageDir string
 	imports    []string
 	requires   [][2]string
@@ -100,13 +100,13 @@ func (task *BuildTask) Build() (esm *ESMBuild, err error) {
 	if l, e := filepath.EvalSymlinks(path.Join(task.wd, "node_modules", task.Pkg.Name)); e == nil {
 		task.packageDir = l
 		if task.Pkg.FromGithub || strings.HasPrefix(task.Pkg.Name, "@") {
-			task.resovleDir = path.Join(l, "../../..")
+			task.resolveDir = path.Join(l, "../../..")
 		} else {
-			task.resovleDir = path.Join(l, "../..")
+			task.resolveDir = path.Join(l, "../..")
 		}
 	} else {
 		task.packageDir = path.Join(task.wd, "node_modules", task.Pkg.Name)
-		task.resovleDir = task.wd
+		task.resolveDir = task.wd
 	}
 
 	task.subBuilds = newStringSet()
@@ -179,7 +179,7 @@ func (task *BuildTask) build() (err error) {
 			Pkg:    pkg,
 			Target: task.Target,
 			Dev:    task.Dev,
-			wd:     task.resovleDir,
+			wd:     task.resolveDir,
 		}
 		if !formJson {
 			err = installPackage(task.wd, t.Pkg)
@@ -369,7 +369,7 @@ rebuild:
 							spec := specifier
 							if strings.HasPrefix(specifier, "./") || strings.HasPrefix(specifier, "../") || specifier == ".." {
 								fullFilepath := filepath.Join(args.ResolveDir, specifier)
-								spec = "." + strings.TrimPrefix(fullFilepath, path.Join(task.resovleDir, "node_modules", npm.Name))
+								spec = "." + strings.TrimPrefix(fullFilepath, path.Join(task.resolveDir, "node_modules", npm.Name))
 							}
 							if _, ok := npm.Browser[spec]; !ok && path.Ext(spec) == "" {
 								spec += ".js"
@@ -380,7 +380,7 @@ rebuild:
 									return api.OnResolveResult{Path: args.Path, Namespace: "browser-exclude"}, nil
 								}
 								if strings.HasPrefix(name, "./") {
-									specifier = path.Join(task.resovleDir, "node_modules", npm.Name, name)
+									specifier = path.Join(task.resolveDir, "node_modules", npm.Name, name)
 								} else {
 									specifier = name
 								}
@@ -415,7 +415,7 @@ rebuild:
 										version = v
 									}
 									if !regexpFullVersion.MatchString(version) {
-										p, _, err := getPackageInfo(task.resovleDir, pkgName, version)
+										p, _, err := getPackageInfo(task.resolveDir, pkgName, version)
 										if err == nil {
 											version = p.Version
 										}
@@ -447,7 +447,7 @@ rebuild:
 						if isLocalSpecifier(specifier) {
 							fullFilepath = filepath.Join(args.ResolveDir, specifier)
 						} else {
-							fullFilepath = filepath.Join(task.resovleDir, "node_modules", specifier)
+							fullFilepath = filepath.Join(task.resolveDir, "node_modules", specifier)
 						}
 
 						// native node modules do not work via http import
@@ -530,7 +530,7 @@ rebuild:
 						}
 
 						if isLocalSpecifier(specifier) {
-							specifier = strings.TrimPrefix(fullFilepath, filepath.Join(task.resovleDir, "node_modules")+"/")
+							specifier = strings.TrimPrefix(fullFilepath, filepath.Join(task.resolveDir, "node_modules")+"/")
 							if strings.HasPrefix(specifier, npm.Name+"/") {
 								modulePath := "." + strings.TrimPrefix(specifier, npm.Name)
 								bareName := stripModuleExt(modulePath)
@@ -869,7 +869,7 @@ rebuild:
 									Pkg:    pkg,
 									Target: task.Target,
 									Dev:    task.Dev,
-									wd:     task.resovleDir,
+									wd:     task.resolveDir,
 								}
 								if !formJson {
 									e = installPackage(task.wd, t.Pkg)
@@ -1038,7 +1038,7 @@ func (task *BuildTask) resolveExternal(specifier string, kind api.ResolveKind) (
 				Bundle:     task.Bundle,
 				NoBundle:   task.NoBundle,
 				wd:         task.wd,
-				resovleDir: task.resovleDir,
+				resolveDir: task.resolveDir,
 				packageDir: task.packageDir,
 				subBuilds:  task.subBuilds,
 			}
@@ -1091,7 +1091,7 @@ func (task *BuildTask) resolveExternal(specifier string, kind api.ResolveKind) (
 			version = task.Pkg.Version
 		}
 		if !regexpFullVersion.MatchString(version) {
-			p, _, err := getPackageInfo(task.resovleDir, pkgName, version)
+			p, _, err := getPackageInfo(task.resolveDir, pkgName, version)
 			if err == nil {
 				version = p.Version
 			}
@@ -1160,7 +1160,7 @@ func (task *BuildTask) checkDTS() {
 			versions = append([]string{pkg.Version}, versions...)
 		}
 		for _, version := range versions {
-			p, _, err := getPackageInfo(task.resovleDir, typesPkgName, version)
+			p, _, err := getPackageInfo(task.resolveDir, typesPkgName, version)
 			if err == nil {
 				prefix := encodeBuildArgsPrefix(task.Args, Pkg{Name: p.Name}, true)
 				dts = task.toTypesPath(task.wd, p, version, prefix, submodule)
