@@ -196,7 +196,7 @@ func esmHandler() rex.Handle {
 
 		// serve build adn run scripts
 		if pathname == "/build" || pathname == "/run" {
-			data, err := embedFS.ReadFile(fmt.Sprintf("%s.ts", pathname[1:]))
+			data, err := embedFS.ReadFile(fmt.Sprintf("server/embed/%s.ts", pathname[1:]))
 			if err != nil {
 				return rex.Status(404, "Not Found")
 			}
