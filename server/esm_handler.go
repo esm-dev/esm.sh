@@ -74,7 +74,7 @@ func esmHandler() rex.Handle {
 				if ok {
 					m := map[string]interface{}{
 						"bundle":    t.Bundle,
-						"consumers": t.consumers,
+						"clients":   t.clients,
 						"createdAt": t.createdAt.Format(http.TimeFormat),
 						"dev":       t.Dev,
 						"inProcess": t.inProcess,
@@ -807,7 +807,7 @@ func esmHandler() rex.Handle {
 						return rex.Status(500, "types: "+output.err.Error())
 					}
 				case <-time.After(time.Duration(cfg.BuildWaitTimeout) * time.Second):
-					buildQueue.RemoveConsumer(task, c)
+					buildQueue.RemoveClient(task, c)
 					header.Set("Cache-Control", "private, no-store, no-cache, must-revalidate")
 					return rex.Status(http.StatusRequestTimeout, "timeout, we are transforming the types hardly, please try again later!")
 				}
@@ -863,7 +863,7 @@ func esmHandler() rex.Handle {
 				}
 				esm = output.meta
 			case <-time.After(time.Duration(cfg.BuildWaitTimeout) * time.Second):
-				buildQueue.RemoveConsumer(task, c)
+				buildQueue.RemoveClient(task, c)
 				header.Set("Cache-Control", "private, no-store, no-cache, must-revalidate")
 				return rex.Status(http.StatusRequestTimeout, "timeout, we are building the package hardly, please try again later!")
 			}

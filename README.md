@@ -118,26 +118,27 @@ that this feature is only supported for ESM modules and not CJS modules.
 
 By default, esm.sh bundles sub-modules that ain't declared in the `exports` field.
 
-Bundling deps can reduce the number of network requests and improve performance. However, it may bundle shared code
-repeatedly. In extreme case, it may break the side effects of the package, or change the `import.meta.url` pointing. To
+Bundling sub-modules can reduce the number of network requests for performance. However, it may bundle shared modules
+repeatedly. In extreme case, it may break the side effects of the package, or change the `import.meta.url` semantics. To
 avoid this, you can add `?bundle=false` to disable the default bundling behavior:
 
 ```js
 import "https://esm.sh/@pyscript/core?bundle=false";
 ```
 
-For package authors, you can specify the bundling strategy by adding the `esm.sh` field to `package.json`:
+For package authors, you can override the bundling strategy by adding the `esm.sh` field to `package.json`:
 
 ```jsonc
 {
   "name": "foo",
   "esm.sh": {
-    "bundle": false // disables bundling behavior
+    "bundle": false // disables the default bundling behavior
   }
 }
 ```
 
-esm.sh supports `?standalone` query to bundle all dependencies(except deps in `peerDependencies`) into a single JS file.
+esm.sh also supports `?standalone` query to bundle the module with all external dependencies(except in
+`peerDependencies`) into a single JS file.
 
 ```js
 import { Button } from "https://esm.sh/antd?standalone";

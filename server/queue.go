@@ -7,16 +7,16 @@ import (
 	"time"
 )
 
-// A Queue for esm build tasks
+// BuildQueue schedules build tasks of esm.sh
 type BuildQueue struct {
-	lock         sync.RWMutex
-	list         *list.List
-	tasks        map[string]*queueTask
-	processes    []*queueTask
-	maxProcesses int
+	lock        sync.RWMutex
+	list        *list.List
+	tasks       map[string]*queueTask
+	processes   []*queueTask
+	concurrency int
 }
 
-type BuildQueueConsumer struct {
+type BuildQueueClient struct {
 	IP string           `json:"ip"`
 	C  chan BuildOutput `json:"-"`
 }
@@ -28,11 +28,11 @@ type BuildOutput struct {
 
 type queueTask struct {
 	*BuildTask
-	inProcess bool
 	el        *list.Element
 	createdAt time.Time
 	startedAt time.Time
-	consumers []*BuildQueueConsumer
+	clients   []*BuildQueueClient
+	inProcess bool
 }
 
 func (t *queueTask) run() BuildOutput {
@@ -46,7 +46,11 @@ func (t *queueTask) run() BuildOutput {
 	select {
 	case output = <-c:
 		if output.err == nil {
-			log.Infof("build '%s' done in %v", t.ID(), time.Since(t.startedAt))
+			if t.subBuilds != nil && t.subBuilds.Len() > 0 {
+				log.Infof("build '%s' (%d sub-builds) done in %v", t.ID(), t.subBuilds.Len(), time.Since(t.startedAt))
+			} else {
+				log.Infof("build '%s' done in %v", t.ID(), time.Since(t.startedAt))
+			}
 		} else {
 			log.Errorf("build '%s': %v", t.ID(), output.err)
 		}
@@ -60,11 +64,11 @@ func (t *queueTask) run() BuildOutput {
 	return output
 }
 
-func newBuildQueue(maxProcesses int) *BuildQueue {
+func newBuildQueue(concurrency int) *BuildQueue {
 	q := &BuildQueue{
-		list:         list.New(),
-		tasks:        map[string]*queueTask{},
-		maxProcesses: maxProcesses,
+		list:        list.New(),
+		tasks:       map[string]*queueTask{},
+		concurrency: concurrency,
 	}
 	return q
 }
@@ -78,27 +82,27 @@ func (q *BuildQueue) Len() int {
 }
 
 // Add adds a new build task.
-func (q *BuildQueue) Add(task *BuildTask, consumerIp string) *BuildQueueConsumer {
-	c := &BuildQueueConsumer{consumerIp, make(chan BuildOutput, 1)}
+func (q *BuildQueue) Add(task *BuildTask, clientIp string) *BuildQueueClient {
+	client := &BuildQueueClient{clientIp, make(chan BuildOutput, 1)}
 	q.lock.Lock()
 	t, ok := q.tasks[task.ID()]
-	if ok && consumerIp != "" {
-		t.consumers = append(t.consumers, c)
+	if ok && clientIp != "" {
+		t.clients = append(t.clients, client)
 	}
 	q.lock.Unlock()
 
 	if ok {
-		return c
+		return client
 	}
 
 	task.stage = "pending"
 	t = &queueTask{
 		BuildTask: task,
 		createdAt: time.Now(),
-		consumers: []*BuildQueueConsumer{},
+		clients:   []*BuildQueueClient{},
 	}
-	if consumerIp != "" {
-		t.consumers = []*BuildQueueConsumer{c}
+	if clientIp != "" {
+		t.clients = []*BuildQueueClient{client}
 	}
 	q.lock.Lock()
 	t.el = q.list.PushBack(t)
@@ -107,31 +111,31 @@ func (q *BuildQueue) Add(task *BuildTask, consumerIp string) *BuildQueueConsumer
 
 	q.next()
 
-	return c
+	return client
 }
 
-func (q *BuildQueue) RemoveConsumer(task *BuildTask, c *BuildQueueConsumer) {
+func (q *BuildQueue) RemoveClient(task *BuildTask, c *BuildQueueClient) {
 	q.lock.Lock()
 	defer q.lock.Unlock()
 
 	t, ok := q.tasks[task.ID()]
 	if ok {
-		consumers := make([]*BuildQueueConsumer, len(t.consumers))
+		clients := make([]*BuildQueueClient, len(t.clients))
 		i := 0
-		for _, _c := range t.consumers {
+		for _, _c := range t.clients {
 			if _c != c {
-				consumers[i] = c
+				clients[i] = c
 				i++
 			}
 		}
-		t.consumers = consumers[0:i]
+		t.clients = clients[0:i]
 	}
 }
 
 func (q *BuildQueue) next() {
 	var nextTask *queueTask
 	q.lock.Lock()
-	if len(q.processes) < q.maxProcesses {
+	if len(q.processes) < q.concurrency {
 		for el := q.list.Front(); el != nil; el = el.Next() {
 			t, ok := el.Value.(*queueTask)
 			if ok && !t.inProcess {
@@ -176,7 +180,7 @@ func (q *BuildQueue) wait(t *queueTask) {
 	// call next task
 	q.next()
 
-	for _, c := range t.consumers {
+	for _, c := range t.clients {
 		c.C <- output
 	}
 }

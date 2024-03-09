@@ -92,7 +92,7 @@ func (task *BuildTask) transformDTS(dts string, aliasDepsPrefix string, marker *
 		internalDeclModules.Add(path)
 	}
 
-	installDir := task.installDir
+	resovleDir := task.resovleDir
 	buf := bytes.NewBuffer(nil)
 	footer := bytes.NewBuffer(nil)
 	imports := newStringSet()
@@ -212,9 +212,9 @@ func (task *BuildTask) transformDTS(dts string, aliasDepsPrefix string, marker *
 					break
 				}
 				subpath = toModuleBareName(pkg.SubPath, false)
-				info, fromPackageJSON, err = getPackageInfo(installDir, pkg.Name, version)
+				info, fromPackageJSON, err = getPackageInfo(resovleDir, pkg.Name, version)
 				if err != nil || ((info.Types == "" && info.Typings == "") && !strings.HasPrefix(info.Name, "@types/")) {
-					p, ok, e := getPackageInfo(installDir, toTypesPackageName(pkg.Name), version)
+					p, ok, e := getPackageInfo(resovleDir, toTypesPackageName(pkg.Name), version)
 					if e == nil {
 						info = p
 						fromPackageJSON = ok
@@ -229,8 +229,8 @@ func (task *BuildTask) transformDTS(dts string, aliasDepsPrefix string, marker *
 				return res
 			}
 
-			// use types with `exports` and `typesVersions` contidions
-			info = task.fixNpmPackage(info)
+			// resolve types with `exports` and `typesVersions` contidions
+			info = task.normalizeNpmPackage(info)
 
 			// use version defined in `?deps`
 			if pkg, ok := task.Args.deps.Get(depTypePkgName); ok {
@@ -239,7 +239,7 @@ func (task *BuildTask) transformDTS(dts string, aliasDepsPrefix string, marker *
 
 			// copy dependent dts files in the node_modules directory in current build context
 			if fromPackageJSON {
-				typesPath := task.toTypesPath(installDir, info, "", "", subpath)
+				typesPath := task.toTypesPath(resovleDir, info, "", "", subpath)
 				if strings.HasSuffix(typesPath, ".d.ts") && !strings.HasSuffix(typesPath, "~.d.ts") {
 					imports.Add(typesPath)
 				}

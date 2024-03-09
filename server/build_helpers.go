@@ -129,7 +129,7 @@ func (task *BuildTask) getPackageInfo(name string) (pkg Pkg, p NpmPackageInfo, f
 	} else {
 		version = "latest"
 	}
-	p, fromPackageJSON, err = getPackageInfo(task.installDir, pkgName, version)
+	p, fromPackageJSON, err = getPackageInfo(task.resovleDir, pkgName, version)
 	if err == nil {
 		pkg = Pkg{
 			Name:      p.Name,
@@ -158,16 +158,16 @@ func (task *BuildTask) analyze(forceCjsOnly bool) (esm *ESMBuild, npm NpmPackage
 	if err != nil {
 		return
 	}
-	npm = task.fixNpmPackage(p)
+
+	npm = task.normalizeNpmPackage(p)
+	esm = &ESMBuild{}
 
 	// Check if the supplied path name is actually a main export.
-	// See: https://github.com/esm-dev/esm.sh/issues/578
+	// See https://github.com/esm-dev/esm.sh/issues/578
 	if pkg.SubPath == path.Clean(npm.Main) || pkg.SubPath == path.Clean(npm.Module) {
 		task.Pkg.SubModule = ""
-		npm = task.fixNpmPackage(p)
+		npm = task.normalizeNpmPackage(p)
 	}
-
-	esm = &ESMBuild{}
 
 	defer func() {
 		esm.FromCJS = npm.Module == "" && npm.Main != ""
@@ -200,7 +200,7 @@ func (task *BuildTask) analyze(forceCjsOnly bool) (esm *ESMBuild, npm NpmPackage
 					// use parent package version if submodule package.json doesn't have version
 					p.Version = npm.Version
 				}
-				np := task.fixNpmPackage(p)
+				np := task.normalizeNpmPackage(p)
 				if np.Module != "" {
 					npm.Module = path.Join(pkg.SubModule, np.Module)
 				} else {
@@ -383,7 +383,7 @@ func (task *BuildTask) analyze(forceCjsOnly bool) (esm *ESMBuild, npm NpmPackage
 	return
 }
 
-func (task *BuildTask) fixNpmPackage(p NpmPackageInfo) NpmPackageInfo {
+func (task *BuildTask) normalizeNpmPackage(p NpmPackageInfo) NpmPackageInfo {
 	if task.Pkg.FromGithub {
 		p.Name = task.Pkg.Name
 		p.Version = task.Pkg.Version
