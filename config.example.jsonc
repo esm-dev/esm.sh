@@ -4,9 +4,10 @@
 
   // The port to listen server on for HTTPs, default is 0 (disabled). Change to 443 if you want to enable it.
   // You don't need to provide a certificate, it will generate automatically by autocert.
+  // Note: Docker users needs to provide tls certificate.
   "tlsPort": 0,
 
-  // The auth secret to validate the `Authorization` header of requests, default is no auth.
+  // The secret token to validate the `Authorization: Bearer $secret` header of requests, default is disabled.
   "authSecret": "",
 
   // The build max concurrency, default is `runtime.NumCPU()`
@@ -18,17 +19,17 @@
   // The work directory for the server app, default is "~/.esmd".
   "workDir": "~/.esmd",
 
-  // The cache url, default is "memory:default".
+  // The cache source, default is "memory:default".
   // You can also implement your own cache by implementing the `Cache` interface
   // in https://github.com/esm-dev/esm.sh/blob/main/server/storage/cache.go
   "cache": "memory:default",
 
-  // The database url, default is "bolt:~/.esmd/esm.db".
+  // The database source, default is "bolt:~/.esmd/esm.db".
   // You can also implement your own database by implementing the `DataBase` interface
   // in https://github.com/esm-dev/esm.sh/blob/main/server/storage/db.go
   "database": "bolt:~/.esmd/esm.db",
 
-  // The file storage url, default is "local:~/.esmd/storage".
+  // The file storage source, default is "local:~/.esmd/storage".
   // You can also implement your own file storage by implementing the `FileSystem` interface
   // in https://github.com/esm-dev/esm.sh/blob/main/server/storage/fs.go
   "storage": "local:~/.esmd/storage",
@@ -62,7 +63,7 @@
   "npmUser": "",
   "npmPassword": "",
 
-  // Disable compression the response, default is false.
+  // Disable gzip/brotli compression, default is false.
   "disableCompression": false,
 
   // The list to ban some packages or scopes.
