@@ -336,29 +336,6 @@ i {
   margin-top: 10px;
 }
 
-.test ul li {
-  min-height: 30px;
-}
-
-.test ul li>span,
-.test ul li>em,
-.test ul li>strong,
-.test ul li::before {
-  display: inline-block;
-  vertical-align: middle;
-  min-height: 30px;
-  line-height: 30px;
-}
-
-.test ul li>span,
-.test ul li>em {
-  margin-left: 10px;
-}
-
-.test ul li em {
-  color: #999;
-}
-
 @media (prefers-color-scheme: dark) {
   :root {
     color-scheme: dark;

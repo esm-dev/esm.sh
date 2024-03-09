@@ -31,12 +31,7 @@
     </main>
   </div>
   <script type="module">
-    const query = new URLSearchParams(location.search)
-    if (query.has('test')) {
-      import('./embed/testing.js')
-    } else {
-      import('./embed/index.js').then(({ render }) => render('# README'))
-    }
+    import('./embed/index.js').then(({ render }) => render('# README'))
   </script>
   <script nomodule>
     document.querySelector('main em').textContent = 'Please use a modern browser to view this site.'
