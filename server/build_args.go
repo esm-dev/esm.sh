@@ -162,7 +162,7 @@ func encodeBuildArgsPrefix(args BuildArgs, pkg Pkg, isDts bool) string {
 }
 
 func fixBuildArgs(args *BuildArgs, pkg Pkg) {
-	if len(args.alias) > 0 || len(args.deps) > 0 {
+	if len(args.alias) > 0 || len(args.deps) > 0 || args.external.Len() > 0 {
 		depTree := newStringSet(walkDeps(newStringSet(), pkg)...)
 		if len(args.alias) > 0 {
 			alias := map[string]string{}
@@ -185,6 +185,15 @@ func fixBuildArgs(args *BuildArgs, pkg Pkg) {
 				}
 			}
 			args.deps = deps
+		}
+		if args.external.Len() > 0 {
+			external := newStringSet()
+			for _, name := range args.external.Values() {
+				if depTree.Has(name) {
+					external.Add(name)
+				}
+			}
+			args.external = external
 		}
 	}
 }

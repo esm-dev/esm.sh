@@ -1106,7 +1106,7 @@ func (task *BuildTask) resolveExternal(specifier string, kind api.ResolveKind) (
 			alias:      task.Args.alias,
 			conditions: task.Args.conditions,
 			deps:       task.Args.deps,
-			external:   newStringSet(),
+			external:   task.Args.external,
 			exports:    newStringSet(),
 		}
 		fixBuildArgs(&args, pkg)
