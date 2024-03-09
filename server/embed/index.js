@@ -1,9 +1,9 @@
-import * as marked from "{origin}{basePath}/marked";
-import hljs from "{origin}{basePath}/highlight.js/lib/core";
-import javascript from "{origin}{basePath}/highlight.js/lib/languages/javascript";
-import json from "{origin}{basePath}/highlight.js/lib/languages/json";
-import xml from "{origin}{basePath}/highlight.js/lib/languages/xml";
-import bash from "{origin}{basePath}/highlight.js/lib/languages/bash";
+import * as marked from "{origin}{basePath}/marked@12.0.1";
+import hljs from "{origin}{basePath}/highlight.js@11.9.0/lib/core";
+import javascript from "{origin}{basePath}/highlight.js@11.9.0/lib/languages/javascript";
+import json from "{origin}{basePath}/highlight.js@11.9.0/lib/languages/json";
+import xml from "{origin}{basePath}/highlight.js@11.9.0/lib/languages/xml";
+import bash from "{origin}{basePath}/highlight.js@11.9.0/lib/languages/bash";
 
 export function render(md) {
   const mainEl = document.querySelector("main");
@@ -13,13 +13,20 @@ export function render(md) {
     block.innerHTML = block.innerHTML.replace(/(^|\n)\$ /g, "$1");
   });
 
-  const fragment = document.getElementById(location.hash.slice(1));
-  if (fragment) {
-    fragment.scrollIntoView();
+  // remove badges
+  document.querySelectorAll("a > img[src^='https://img.shields.io/']").forEach((img) => {
+    img.parentElement.remove();
+  })
+
+  // scroll to hashHeading
+  const hashHeading = document.getElementById(location.hash.slice(1));
+  if (hashHeading) {
+    hashHeading.scrollIntoView();
   }
 
   hljs.registerLanguage("javascript", javascript);
   hljs.registerLanguage("json", json);
+  hljs.registerLanguage("jsonc", json);
   hljs.registerLanguage("xml", xml);
   hljs.registerLanguage("bash", (hljs) => {
     const l = bash(hljs);
