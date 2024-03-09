@@ -68,14 +68,6 @@ func filter(a []string, fn func(s string) bool) []string {
 	return b[:i]
 }
 
-func cloneMap(m map[string]string) map[string]string {
-	n := make(map[string]string, len(m))
-	for k, v := range m {
-		n[k] = v
-	}
-	return n
-}
-
 func endsWith(s string, suffixs ...string) bool {
 	for _, suffix := range suffixs {
 		if strings.HasSuffix(s, suffix) {
@@ -94,12 +86,12 @@ func stripModuleExt(s string) string {
 	return s
 }
 
-func dirExists(filepath string) bool {
+func existsDir(filepath string) bool {
 	fi, err := os.Lstat(filepath)
 	return err == nil && fi.IsDir()
 }
 
-func fileExists(filepath string) bool {
+func existsFile(filepath string) bool {
 	fi, err := os.Lstat(filepath)
 	return err == nil && !fi.IsDir()
 }

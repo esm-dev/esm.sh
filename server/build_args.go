@@ -11,9 +11,9 @@ import (
 type BuildArgs struct {
 	alias             map[string]string
 	deps              PkgSlice
-	conditions        *stringSet
-	external          *stringSet
-	exports           *stringSet
+	conditions        *StringSet
+	external          *StringSet
+	exports           *StringSet
 	denoStdVersion    string
 	ignoreAnnotations bool
 	ignoreRequire     bool
@@ -83,20 +83,7 @@ func decodeBuildArgsPrefix(raw string) (args BuildArgs, err error) {
 
 func encodeBuildArgsPrefix(args BuildArgs, pkg Pkg, isDts bool) string {
 	lines := []string{}
-	pkgDeps := newStringSet("_")
-	if len(args.alias)+len(args.deps)+args.external.Len() > 0 && cfg != nil {
-		info, _, err := getPackageInfo("", pkg.Name, pkg.Version)
-		if err == nil {
-			pkgDeps.Reset()
-			for name := range info.Dependencies {
-				pkgDeps.Add(name)
-			}
-			for name := range info.PeerDependencies {
-				pkgDeps.Add(name)
-			}
-		}
-	}
-	if len(args.alias) > 0 && pkgDeps.Len() > 0 {
+	if len(args.alias) > 0 {
 		var ss sort.StringSlice
 		for from, to := range args.alias {
 			if from != pkg.Name {
@@ -108,7 +95,7 @@ func encodeBuildArgsPrefix(args BuildArgs, pkg Pkg, isDts bool) string {
 			lines = append(lines, fmt.Sprintf("a/%s", strings.Join(ss, ",")))
 		}
 	}
-	if len(args.deps) > 0 && pkgDeps.Len() > 0 {
+	if len(args.deps) > 0 {
 		var ss sort.StringSlice
 		for _, p := range args.deps {
 			if p.Name != pkg.Name {
@@ -120,7 +107,7 @@ func encodeBuildArgsPrefix(args BuildArgs, pkg Pkg, isDts bool) string {
 			lines = append(lines, fmt.Sprintf("d/%s", strings.Join(ss, ",")))
 		}
 	}
-	if args.external.Len() > 0 && pkgDeps.Len() > 0 {
+	if args.external.Len() > 0 {
 		var ss sort.StringSlice
 		for _, name := range args.external.Values() {
 			if name != pkg.Name {
@@ -172,4 +159,61 @@ func encodeBuildArgsPrefix(args BuildArgs, pkg Pkg, isDts bool) string {
 		return fmt.Sprintf("X-%s/", btoaUrl(strings.Join(lines, "\n")))
 	}
 	return ""
+}
+
+func fixBuildArgs(args *BuildArgs, pkg Pkg) {
+	if len(args.alias) > 0 || len(args.deps) > 0 {
+		depTree := newStringSet(walkDeps(newStringSet(), pkg)...)
+		if len(args.alias) > 0 {
+			alias := map[string]string{}
+			for from, to := range args.alias {
+				if depTree.Has(from) {
+					alias[from] = to
+				}
+			}
+			for _, to := range alias {
+				pkgName, _, _ := splitPkgPath(to)
+				depTree.Add(pkgName)
+			}
+			args.alias = alias
+		}
+		if len(args.deps) > 0 {
+			var deps PkgSlice
+			for _, p := range args.deps {
+				if depTree.Has(p.Name) {
+					deps = append(deps, p)
+				}
+			}
+			args.deps = deps
+		}
+	}
+}
+
+func walkDeps(marker *StringSet, pkg Pkg) (deps []string) {
+	if marker.Has(pkg.Name) {
+		return nil
+	}
+	marker.Add(pkg.Name)
+	p, _, err := getPackageInfo("", pkg.Name, pkg.Version)
+	if err != nil {
+		return nil
+	}
+	pkgDeps := map[string]string{}
+	for name, version := range p.Dependencies {
+		pkgDeps[name] = version
+	}
+	for name, version := range p.PeerDependencies {
+		pkgDeps[name] = version
+	}
+	ch := make(chan []string, len(pkgDeps))
+	for name, version := range pkgDeps {
+		deps = append(deps, name)
+		go func(c chan []string, marker *StringSet, name, version string) {
+			c <- walkDeps(marker, Pkg{Name: name, Version: version})
+		}(ch, marker, name, version)
+	}
+	for range pkgDeps {
+		deps = append(deps, <-ch...)
+	}
+	return
 }

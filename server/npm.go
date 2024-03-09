@@ -82,7 +82,7 @@ func (a *NpmPackageJSON) ToNpmPackage() *NpmPackageInfo {
 			esmConfig = v
 		}
 	}
-	var sideEffects *stringSet = nil
+	var sideEffects *StringSet = nil
 	sideEffectsFalse := false
 	if a.SideEffects != nil {
 		if s, ok := a.SideEffects.(string); ok {
@@ -149,7 +149,7 @@ type NpmPackageInfo struct {
 	Types            string
 	Typings          string
 	SideEffectsFalse bool
-	SideEffects      *stringSet
+	SideEffects      *StringSet
 	Browser          map[string]string
 	Dependencies     map[string]string
 	PeerDependencies map[string]string
@@ -179,9 +179,12 @@ func getPackageInfo(wd string, name string, version string) (info NpmPackageInfo
 		return
 	}
 
+	if wd == "" && regexpFullVersion.MatchString(version) && cfg != nil {
+		wd = path.Join(cfg.WorkDir, "npm", name+"@"+version)
+	}
 	if wd != "" {
 		pkgJsonPath := path.Join(wd, "node_modules", name, "package.json")
-		if fileExists(pkgJsonPath) && utils.ParseJSONFile(pkgJsonPath, &info) == nil {
+		if existsFile(pkgJsonPath) && utils.ParseJSONFile(pkgJsonPath, &info) == nil {
 			fromPackageJSON = true
 			return
 		}
@@ -204,10 +207,10 @@ func fetchPackageInfo(name string, version string) (info NpmPackageInfo, err err
 	if version == "" {
 		version = "latest"
 	}
-	isFullVersion := regexpFullVersion.MatchString(version)
 
 	cacheKey := fmt.Sprintf("npm:%s@%s", name, version)
 	lock := getFetchLock(cacheKey)
+
 	lock.Lock()
 	defer lock.Unlock()
 
@@ -241,6 +244,7 @@ func fetchPackageInfo(name string, version string) (info NpmPackageInfo, err err
 		}
 	}
 
+	isFullVersion := regexpFullVersion.MatchString(version)
 	if isFullVersion && !isJsrScope {
 		url += "/" + version
 	}
@@ -357,7 +361,7 @@ func installPackage(wd string, pkg Pkg) (err error) {
 	defer lock.Unlock()
 
 	// skip install if pnpm lock file exists
-	if fileExists(path.Join(wd, "pnpm-lock.yaml")) && fileExists(path.Join(wd, "node_modules", pkg.Name, "package.json")) {
+	if existsFile(path.Join(wd, "pnpm-lock.yaml")) && existsFile(path.Join(wd, "node_modules", pkg.Name, "package.json")) {
 		return nil
 	}
 
@@ -365,7 +369,7 @@ func installPackage(wd string, pkg Pkg) (err error) {
 	packageJsonFilepath := path.Join(wd, "package.json")
 	if pkg.FromEsmsh {
 		err = copyRawBuildFile(pkg.Name, "package.json", wd)
-	} else if pkg.FromGithub || !fileExists(packageJsonFilepath) {
+	} else if pkg.FromGithub || !existsFile(packageJsonFilepath) {
 		fileContent := []byte("{}")
 		if pkg.FromGithub {
 			fileContent = []byte(fmt.Sprintf(
@@ -397,7 +401,7 @@ func installPackage(wd string, pkg Pkg) (err error) {
 		} else if pkg.FromGithub {
 			err = pnpmInstall(wd)
 			// pnpm will ignore github package which has been installed without `package.json` file
-			if err == nil && !dirExists(path.Join(wd, "node_modules", pkg.Name)) {
+			if err == nil && !existsDir(path.Join(wd, "node_modules", pkg.Name)) {
 				err = ghInstall(wd, pkg.Name, pkg.Version)
 			}
 		} else if regexpFullVersion.MatchString(pkg.Version) {
@@ -406,7 +410,7 @@ func installPackage(wd string, pkg Pkg) (err error) {
 			err = pnpmInstall(wd, pkgVersionName)
 		}
 		packageJsonFilepath := path.Join(wd, "node_modules", pkg.Name, "package.json")
-		if err == nil && !fileExists(packageJsonFilepath) {
+		if err == nil && !existsFile(packageJsonFilepath) {
 			if pkg.FromGithub {
 				ensureDir(path.Dir(packageJsonFilepath))
 				err = os.WriteFile(packageJsonFilepath, utils.MustEncodeJSON(pkg), 0644)
@@ -496,4 +500,21 @@ func getInstallLock(key string) *sync.Mutex {
 func getFetchLock(key string) *sync.Mutex {
 	v, _ := fetchLocks.LoadOrStore(key, &sync.Mutex{})
 	return v.(*sync.Mutex)
+}
+
+func isDeprecated(pkgName string, version string) (string, bool) {
+	cacheKey := "deprecated:" + pkgName + "@" + version
+	ret, err := cache.Get(cacheKey)
+	if err == nil {
+		return string(ret), len(ret) > 0
+	}
+	if err != storage.ErrNotFound && err != storage.ErrExpired {
+		log.Error("cache:", err)
+	}
+	p, e := fetchPackageInfo(pkgName, version)
+	if e == nil {
+		cache.Set(cacheKey, []byte(p.Deprecated), time.Hour)
+		return p.Deprecated, len(p.Deprecated) > 0
+	}
+	return "", false
 }

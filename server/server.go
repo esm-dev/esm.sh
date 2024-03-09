@@ -48,7 +48,7 @@ func Serve(efs EmbedFS) {
 	flag.BoolVar(&isDev, "dev", false, "to run server in development mode")
 	flag.Parse()
 
-	if !fileExists(cfile) {
+	if !existsFile(cfile) {
 		cfg = config.Default()
 		fmt.Println("Config file not found, use default config")
 	} else {
@@ -67,7 +67,7 @@ func Serve(efs EmbedFS) {
 			fmt.Println(err)
 			os.Exit(1)
 		}
-		embedFS = &devFS{cwd}
+		embedFS = &DevFS{cwd}
 	} else {
 		os.Setenv("NO_COLOR", "1") // disable log color in production
 		embedFS = efs

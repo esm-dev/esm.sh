@@ -20,7 +20,7 @@ func (task *BuildTask) rewriteJS(js []byte) (ret []byte, dropSourceMap bool) {
 
 	case "tailwindcss":
 		preflightCSSFile := path.Join(task.wd, "node_modules", "tailwindcss/src/css/preflight.css")
-		if fileExists(preflightCSSFile) {
+		if existsFile(preflightCSSFile) {
 			data, err := os.ReadFile(preflightCSSFile)
 			if err == nil {
 				str, _ := json.Marshal(string(data))

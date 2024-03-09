@@ -25,7 +25,7 @@ func (task *BuildTask) TransformDTS(dts string) (n int, err error) {
 	return
 }
 
-func (task *BuildTask) transformDTS(dts string, aliasDepsPrefix string, marker *stringSet) (err error) {
+func (task *BuildTask) transformDTS(dts string, aliasDepsPrefix string, marker *StringSet) (err error) {
 	// don't transform repeatly
 	if marker.Has(aliasDepsPrefix + dts) {
 		return
@@ -158,18 +158,18 @@ func (task *BuildTask) transformDTS(dts string, aliasDepsPrefix string, marker *
 			res = strings.TrimSuffix(res, ".mjs")
 			res = strings.TrimSuffix(res, ".js")
 			if !strings.HasSuffix(res, ".d.ts") && !strings.HasSuffix(res, ".d.mts") {
-				if fileExists(path.Join(dtsDir, res+".d.ts")) {
+				if existsFile(path.Join(dtsDir, res+".d.ts")) {
 					res = res + ".d.ts"
-				} else if fileExists(path.Join(dtsDir, res+".d.mts")) {
+				} else if existsFile(path.Join(dtsDir, res+".d.mts")) {
 					res = res + ".d.mts"
-				} else if fileExists(path.Join(dtsDir, res, "index.d.ts")) {
+				} else if existsFile(path.Join(dtsDir, res, "index.d.ts")) {
 					res = strings.TrimSuffix(res, "/") + "/index.d.ts"
-				} else if fileExists(path.Join(dtsDir, res, "index.d.mts")) {
+				} else if existsFile(path.Join(dtsDir, res, "index.d.mts")) {
 					res = strings.TrimSuffix(res, "/") + "/index.d.mts"
 				} else {
 					var p NpmPackageInfo
 					packageJSONFile := path.Join(dtsDir, res, "package.json")
-					if fileExists(packageJSONFile) && utils.ParseJSONFile(packageJSONFile, &p) == nil {
+					if existsFile(packageJSONFile) && utils.ParseJSONFile(packageJSONFile, &p) == nil {
 						if p.Types != "" {
 							res = strings.TrimSuffix(res, "/") + utils.CleanPath(p.Types)
 						} else if p.Typings != "" {
@@ -412,18 +412,18 @@ func (task *BuildTask) toTypesPath(wd string, p NpmPackageInfo, version string, 
 
 	if endsWith(types, ".d") {
 		pkgDir := path.Join(wd, "node_modules", p.Name)
-		if fileExists(path.Join(pkgDir, types+".ts")) {
+		if existsFile(path.Join(pkgDir, types+".ts")) {
 			types = types + ".ts"
-		} else if fileExists(path.Join(pkgDir, types+".mts")) {
+		} else if existsFile(path.Join(pkgDir, types+".mts")) {
 			types = types + ".mts"
 		}
 	}
 
 	if !endsWith(types, ".d.ts", ".d.mts") && !strings.HasSuffix(types, "/*") {
 		pkgDir := path.Join(wd, "node_modules", p.Name)
-		if fileExists(path.Join(pkgDir, types, "index.d.ts")) {
+		if existsFile(path.Join(pkgDir, types, "index.d.ts")) {
 			types = types + "/index.d.ts"
-		} else if fileExists(path.Join(pkgDir, types+".d.ts")) {
+		} else if existsFile(path.Join(pkgDir, types+".d.ts")) {
 			types = types + ".d.ts"
 		} else {
 			types = types + "~.d.ts" // dynamic

@@ -13,39 +13,39 @@ import (
 	"sync"
 )
 
-type devFS struct {
+type DevFS struct {
 	cwd string
 }
 
-func (fs devFS) ReadFile(name string) ([]byte, error) {
+func (fs DevFS) ReadFile(name string) ([]byte, error) {
 	return os.ReadFile(path.Join(fs.cwd, name))
 }
 
-func (fs devFS) Lstat(name string) (os.FileInfo, error) {
+func (fs DevFS) Lstat(name string) (os.FileInfo, error) {
 	return os.Lstat(path.Join(fs.cwd, name))
 }
 
-type stringSet struct {
+type StringSet struct {
 	lock sync.RWMutex
 	set  map[string]struct{}
 }
 
-func newStringSet(keys ...string) *stringSet {
+func newStringSet(keys ...string) *StringSet {
 	set := make(map[string]struct{}, len(keys))
 	for _, key := range keys {
 		set[key] = struct{}{}
 	}
-	return &stringSet{set: set}
+	return &StringSet{set: set}
 }
 
-func (s *stringSet) Len() int {
+func (s *StringSet) Len() int {
 	s.lock.RLock()
 	defer s.lock.RUnlock()
 
 	return len(s.set)
 }
 
-func (s *stringSet) Has(key string) bool {
+func (s *StringSet) Has(key string) bool {
 	s.lock.RLock()
 	defer s.lock.RUnlock()
 
@@ -53,28 +53,28 @@ func (s *stringSet) Has(key string) bool {
 	return ok
 }
 
-func (s *stringSet) Add(key string) {
+func (s *StringSet) Add(key string) {
 	s.lock.Lock()
 	defer s.lock.Unlock()
 
 	s.set[key] = struct{}{}
 }
 
-func (s *stringSet) Remove(key string) {
+func (s *StringSet) Remove(key string) {
 	s.lock.Lock()
 	defer s.lock.Unlock()
 
 	delete(s.set, key)
 }
 
-func (s *stringSet) Reset() {
+func (s *StringSet) Reset() {
 	s.lock.Lock()
 	defer s.lock.Unlock()
 
 	s.set = map[string]struct{}{}
 }
 
-func (s *stringSet) Values() []string {
+func (s *StringSet) Values() []string {
 	s.lock.RLock()
 	defer s.lock.RUnlock()
 
@@ -87,7 +87,7 @@ func (s *stringSet) Values() []string {
 	return a
 }
 
-func (s *stringSet) SortedValues() []string {
+func (s *StringSet) SortedValues() []string {
 	values := sort.StringSlice(s.Values())
 	sort.Sort(values)
 	return values

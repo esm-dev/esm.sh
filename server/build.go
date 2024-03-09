@@ -48,7 +48,7 @@ type BuildTask struct {
 	imports    []string
 	requires   [][2]string
 	smOffset   int
-	subBuilds  *stringSet
+	subBuilds  *StringSet
 }
 
 func (task *BuildTask) Build() (esm *ESMBuild, err error) {
@@ -124,7 +124,7 @@ func (task *BuildTask) build() (err error) {
 	if strings.HasSuffix(task.Pkg.SubModule, ".json") {
 		nmDir := path.Join(task.wd, "node_modules")
 		jsonPath := path.Join(nmDir, task.Pkg.Name, task.Pkg.SubModule)
-		if fileExists(jsonPath) {
+		if existsFile(jsonPath) {
 			json, err := os.ReadFile(jsonPath)
 			if err != nil {
 				return err
@@ -274,7 +274,7 @@ func (task *BuildTask) build() (err error) {
 	if task.Target == "node" {
 		define = map[string]string{}
 	}
-	browserExclude := map[string]*stringSet{}
+	browserExclude := map[string]*StringSet{}
 	implicitExternal := newStringSet()
 
 	noBundle := task.NoBundle || (npm.SideEffects != nil && npm.SideEffects.Len() > 0)
@@ -451,7 +451,7 @@ rebuild:
 						}
 
 						// native node modules do not work via http import
-						if strings.HasSuffix(fullFilepath, ".node") && fileExists(fullFilepath) {
+						if strings.HasSuffix(fullFilepath, ".node") && existsFile(fullFilepath) {
 							return api.OnResolveResult{
 								Path:     fmt.Sprintf("%s/error.js?type=unsupported-node-native-module&name=%s&importer=%s", cfg.CdnBasePath, path.Base(args.Path), task.Pkg),
 								External: true,
@@ -459,12 +459,12 @@ rebuild:
 						}
 
 						// bundles json module
-						if strings.HasSuffix(fullFilepath, ".json") && fileExists(fullFilepath) {
+						if strings.HasSuffix(fullFilepath, ".json") && existsFile(fullFilepath) {
 							return api.OnResolveResult{Path: fullFilepath}, nil
 						}
 
 						// embed wasm as WebAssembly.Module
-						if strings.HasSuffix(fullFilepath, ".wasm") && fileExists(fullFilepath) {
+						if strings.HasSuffix(fullFilepath, ".wasm") && existsFile(fullFilepath) {
 							return api.OnResolveResult{Path: fullFilepath, Namespace: "wasm"}, nil
 						}
 
@@ -571,7 +571,6 @@ rebuild:
 														}
 													}
 												}
-												fmt.Println(match, name, bareName, task.Pkg.SubModule)
 												if match {
 													exportPrefix, _ := utils.SplitByLastByte(name, '*')
 													url := path.Join(npm.Name, exportPrefix+strings.TrimPrefix(bareName, prefix))
@@ -915,9 +914,9 @@ rebuild:
 			finalContent.Write(header.Bytes())
 			finalContent.Write(jsContent)
 
-			// check if package is deprecated
-			if task.Pkg.Deprecated != "" {
-				fmt.Fprintf(finalContent, `console.warn("[npm] %%cdeprecated%%c %s@%s: %s", "color:red", "");%s`, task.Pkg.Name, task.Pkg.Version, strings.ReplaceAll(task.Pkg.Deprecated, "\"", "\\\""), "\n")
+			deprecated, ok := isDeprecated(task.Pkg.Name, task.Pkg.Version)
+			if ok {
+				fmt.Fprintf(finalContent, `console.warn("[npm] %%cdeprecated%%c %s@%s: %s", "color:red", "");%s`, task.Pkg.Name, task.Pkg.Version, strings.ReplaceAll(deprecated, "\"", "\\\""), "\n")
 			}
 
 			// add sourcemap Url
@@ -1081,6 +1080,16 @@ func (task *BuildTask) resolveExternal(specifier string, kind api.ResolveKind) (
 				version = "latest"
 			}
 		}
+		// use version defined in `?deps` query if it exists
+		for _, dep := range task.Args.deps {
+			if pkgName == dep.Name {
+				version = dep.Version
+			}
+		}
+		// force the version of 'react' (as dependency) equals to 'react-dom'
+		if task.Pkg.Name == "react-dom" && pkgName == "react" {
+			version = task.Pkg.Version
+		}
 		if !regexpFullVersion.MatchString(version) {
 			p, _, err := getPackageInfo(task.resovleDir, pkgName, version)
 			if err == nil {
@@ -1094,22 +1103,13 @@ func (task *BuildTask) resolveExternal(specifier string, kind api.ResolveKind) (
 			SubModule: toModuleBareName(subpath, true),
 		}
 		args := BuildArgs{
-			alias:      cloneMap(task.Args.alias),
-			conditions: newStringSet(task.Args.conditions.Values()...),
-			external:   newStringSet(task.Args.external.Values()...),
+			alias:      task.Args.alias,
+			conditions: task.Args.conditions,
+			deps:       task.Args.deps,
+			external:   newStringSet(),
 			exports:    newStringSet(),
 		}
-		// force the dependency version of `react` equals to react-dom
-		if task.Pkg.Name == "react-dom" && specifier == "react" {
-			pkg.Version = task.Pkg.Version
-		}
-		// use version defined in `?deps` query
-		for _, dep := range task.Args.deps {
-			if specifier == dep.Name || strings.HasPrefix(specifier, dep.Name+"/") {
-				pkg.Version = dep.Version
-				break
-			}
-		}
+		fixBuildArgs(&args, pkg)
 		resolvedPath = task.getImportPath(pkg, encodeBuildArgsPrefix(args, pkg, false))
 	}
 

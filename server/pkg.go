@@ -16,7 +16,6 @@ type Pkg struct {
 	SubModule  string `json:"subModule"`
 	FromGithub bool   `json:"fromGithub"`
 	FromEsmsh  bool   `json:"fromEsmsh"`
-	Deprecated string `json:"deprecated"`
 }
 
 func validatePkgPath(pathname string) (pkg Pkg, extraQuery string, err error) {
@@ -93,12 +92,11 @@ func validatePkgPath(pathname string) (pkg Pkg, extraQuery string, err error) {
 		return
 	}
 
-	if cfg != nil {
+	if !regexpFullVersion.MatchString(pkg.Version) && cfg != nil {
 		var p NpmPackageInfo
-		p, _, err = getPackageInfo("", pkgName, version)
+		p, err = fetchPackageInfo(pkgName, version)
 		if err == nil {
 			pkg.Version = p.Version
-			pkg.Deprecated = p.Deprecated
 		}
 	}
 	return

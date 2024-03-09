@@ -152,7 +152,7 @@ func esmHandler() rex.Handle {
 		// serve embed assets
 		if strings.HasPrefix(pathname, "/embed/") {
 			modTime := startTime
-			if fs, ok := embedFS.(*devFS); ok {
+			if fs, ok := embedFS.(*DevFS); ok {
 				if fi, err := fs.Lstat("server" + pathname); err == nil {
 					modTime = fi.ModTime()
 				}
@@ -329,7 +329,7 @@ func esmHandler() rex.Handle {
 		if hasTargetSegmentinPath && endsWith(reqPkg.SubPath, ".wasm", ".json") {
 			extname := path.Ext(reqPkg.SubPath)
 			dir := path.Join(cfg.WorkDir, "npm", reqPkg.Name+"@"+reqPkg.Version)
-			if !dirExists(dir) {
+			if !existsDir(dir) {
 				err := installPackage(dir, reqPkg)
 				if err != nil {
 					return rex.Status(500, err.Error())

@@ -12,7 +12,7 @@ func TestGhInstall(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !fileExists(path.Join(dir, "node_modules/esm-dev/esm.sh/README.md")) {
+	if !existsFile(path.Join(dir, "node_modules/esm-dev/esm.sh/README.md")) {
 		t.Fatal("README.md not found")
 	}
 }

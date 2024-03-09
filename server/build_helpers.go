@@ -179,9 +179,9 @@ func (task *BuildTask) analyze(forceCjsOnly bool) (esm *ESMBuild, npm NpmPackage
 			if strings.HasSuffix(pkg.SubModule, "~.d.ts") {
 				submodule := strings.TrimSuffix(pkg.SubModule, "~.d.ts")
 				subDir := path.Join(wd, "node_modules", npm.Name, submodule)
-				if fileExists(path.Join(subDir, "index.d.ts")) {
+				if existsFile(path.Join(subDir, "index.d.ts")) {
 					npm.Types = path.Join(submodule, "index.d.ts")
-				} else if fileExists(path.Join(subDir + ".d.ts")) {
+				} else if existsFile(path.Join(subDir + ".d.ts")) {
 					npm.Types = submodule + ".d.ts"
 				}
 			} else {
@@ -190,7 +190,7 @@ func (task *BuildTask) analyze(forceCjsOnly bool) (esm *ESMBuild, npm NpmPackage
 		} else {
 			subDir := path.Join(wd, "node_modules", npm.Name, pkg.SubModule)
 			packageFile := path.Join(subDir, "package.json")
-			if fileExists(packageFile) {
+			if existsFile(packageFile) {
 				var p NpmPackageInfo
 				err = utils.ParseJSONFile(packageFile, &p)
 				if err != nil {
@@ -216,23 +216,23 @@ func (task *BuildTask) analyze(forceCjsOnly bool) (esm *ESMBuild, npm NpmPackage
 					npm.Types = path.Join(pkg.SubModule, p.Types)
 				} else if p.Typings != "" {
 					npm.Types = path.Join(pkg.SubModule, p.Typings)
-				} else if fileExists(path.Join(subDir, "index.d.ts")) {
+				} else if existsFile(path.Join(subDir, "index.d.ts")) {
 					npm.Types = path.Join(pkg.SubModule, "index.d.ts")
-				} else if fileExists(path.Join(subDir + ".d.ts")) {
+				} else if existsFile(path.Join(subDir + ".d.ts")) {
 					npm.Types = pkg.SubModule + ".d.ts"
 				}
 			} else {
 				fp := path.Join(wd, "node_modules", npm.Name, pkg.SubModule+".mjs")
-				if npm.Type == "module" || npm.Module != "" || fileExists(fp) {
+				if npm.Type == "module" || npm.Module != "" || existsFile(fp) {
 					// follow main module type
 					npm.Module = pkg.SubModule
 				} else {
 					npm.Main = pkg.SubModule
 				}
 				npm.Types = ""
-				if fileExists(path.Join(subDir, "index.d.ts")) {
+				if existsFile(path.Join(subDir, "index.d.ts")) {
 					npm.Types = path.Join(pkg.SubModule, "index.d.ts")
-				} else if fileExists(path.Join(subDir + ".d.ts")) {
+				} else if existsFile(path.Join(subDir + ".d.ts")) {
 					npm.Types = pkg.SubModule + ".d.ts"
 				}
 				// reslove sub-module using `exports` conditions if exists
@@ -461,9 +461,9 @@ func (task *BuildTask) normalizeNpmPackage(p NpmPackageInfo) NpmPackageInfo {
 
 	nmDir := path.Join(task.wd, "node_modules")
 	if p.Module == "" {
-		if p.JsNextMain != "" && fileExists(path.Join(nmDir, p.Name, p.JsNextMain)) {
+		if p.JsNextMain != "" && existsFile(path.Join(nmDir, p.Name, p.JsNextMain)) {
 			p.Module = p.JsNextMain
-		} else if p.ES2015 != "" && fileExists(path.Join(nmDir, p.Name, p.ES2015)) {
+		} else if p.ES2015 != "" && existsFile(path.Join(nmDir, p.Name, p.ES2015)) {
 			p.Module = p.ES2015
 		} else if p.Main != "" && (p.Type == "module" || strings.HasSuffix(p.Main, ".mjs")) {
 			p.Module = p.Main
@@ -471,11 +471,11 @@ func (task *BuildTask) normalizeNpmPackage(p NpmPackageInfo) NpmPackageInfo {
 	}
 
 	if p.Main == "" && p.Module == "" {
-		if fileExists(path.Join(nmDir, p.Name, "index.mjs")) {
+		if existsFile(path.Join(nmDir, p.Name, "index.mjs")) {
 			p.Module = "./index.mjs"
-		} else if fileExists(path.Join(nmDir, p.Name, "index.js")) {
+		} else if existsFile(path.Join(nmDir, p.Name, "index.js")) {
 			p.Main = "./index.js"
-		} else if fileExists(path.Join(nmDir, p.Name, "index.cjs")) {
+		} else if existsFile(path.Join(nmDir, p.Name, "index.cjs")) {
 			p.Main = "./index.cjs"
 		}
 	}
@@ -502,7 +502,7 @@ func (task *BuildTask) normalizeNpmPackage(p NpmPackageInfo) NpmPackageInfo {
 			}
 		}
 		if browserModule == "" && browserMain == "" {
-			if m := p.Browser["."]; m != "" && fileExists(path.Join(nmDir, p.Name, m)) {
+			if m := p.Browser["."]; m != "" && existsFile(path.Join(nmDir, p.Name, m)) {
 				isEsm, _, _ := validateJS(path.Join(nmDir, p.Name, m))
 				if isEsm {
 					browserModule = m
@@ -525,12 +525,12 @@ func (task *BuildTask) normalizeNpmPackage(p NpmPackageInfo) NpmPackageInfo {
 		} else {
 			name, _ := utils.SplitByLastByte(p.Main, '.')
 			maybeTypesPath := name + ".d.ts"
-			if fileExists(path.Join(nmDir, p.Name, maybeTypesPath)) {
+			if existsFile(path.Join(nmDir, p.Name, maybeTypesPath)) {
 				p.Types = maybeTypesPath
 			} else {
 				dir, _ := utils.SplitByLastByte(p.Main, '/')
 				maybeTypesPath := dir + "/index.d.ts"
-				if fileExists(path.Join(nmDir, p.Name, maybeTypesPath)) {
+				if existsFile(path.Join(nmDir, p.Name, maybeTypesPath)) {
 					p.Types = maybeTypesPath
 				}
 			}
@@ -544,12 +544,12 @@ func (task *BuildTask) normalizeNpmPackage(p NpmPackageInfo) NpmPackageInfo {
 		} else {
 			name, _ := utils.SplitByLastByte(p.Module, '.')
 			maybeTypesPath := name + ".d.ts"
-			if fileExists(path.Join(nmDir, p.Name, maybeTypesPath)) {
+			if existsFile(path.Join(nmDir, p.Name, maybeTypesPath)) {
 				p.Types = maybeTypesPath
 			} else {
 				dir, _ := utils.SplitByLastByte(p.Module, '/')
 				maybeTypesPath := dir + "/index.d.ts"
-				if fileExists(path.Join(nmDir, p.Name, maybeTypesPath)) {
+				if existsFile(path.Join(nmDir, p.Name, maybeTypesPath)) {
 					p.Types = maybeTypesPath
 				}
 			}
@@ -652,33 +652,33 @@ func queryESMBuild(id string) (*ESMBuild, bool) {
 func esmLexer(wd string, packageName string, moduleSpecifier string) (resolvedName string, namedExports []string, err error) {
 	pkgDir := path.Join(wd, "node_modules", packageName)
 	resolvedName = moduleSpecifier
-	if !fileExists(path.Join(pkgDir, resolvedName)) {
+	if !existsFile(path.Join(pkgDir, resolvedName)) {
 		for _, ext := range esExts {
 			name := moduleSpecifier + ext
-			if fileExists(path.Join(pkgDir, name)) {
+			if existsFile(path.Join(pkgDir, name)) {
 				resolvedName = name
 				break
 			}
 		}
 	}
-	if !fileExists(path.Join(pkgDir, resolvedName)) {
+	if !existsFile(path.Join(pkgDir, resolvedName)) {
 		if endsWith(resolvedName, esExts...) {
 			name, ext := utils.SplitByLastByte(resolvedName, '.')
 			fixedName := name + "/index." + ext
-			if fileExists(path.Join(pkgDir, fixedName)) {
+			if existsFile(path.Join(pkgDir, fixedName)) {
 				resolvedName = fixedName
 			}
-		} else if dirExists(path.Join(pkgDir, moduleSpecifier)) {
+		} else if existsDir(path.Join(pkgDir, moduleSpecifier)) {
 			for _, ext := range esExts {
 				name := path.Join(moduleSpecifier, "index"+ext)
-				if fileExists(path.Join(pkgDir, name)) {
+				if existsFile(path.Join(pkgDir, name)) {
 					resolvedName = name
 					break
 				}
 			}
 		}
 	}
-	if !fileExists(path.Join(pkgDir, resolvedName)) {
+	if !existsFile(path.Join(pkgDir, resolvedName)) {
 		for _, ext := range esExts {
 			if strings.HasSuffix(resolvedName, "index/index"+ext) {
 				resolvedName = strings.TrimSuffix(resolvedName, "/index"+ext) + ext
