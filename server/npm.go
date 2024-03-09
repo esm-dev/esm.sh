@@ -92,7 +92,7 @@ func (a *NpmPackageJSON) ToNpmPackage() *NpmPackageInfo {
 		} else if m, ok := a.SideEffects.([]interface{}); ok && len(m) > 0 {
 			sideEffects = newStringSet()
 			for _, v := range m {
-				if name, ok := v.(string); ok {
+				if name, ok := v.(string); ok && endsWith(name, esExts...) {
 					sideEffects.Add(name)
 				}
 			}
@@ -110,8 +110,6 @@ func (a *NpmPackageJSON) ToNpmPackage() *NpmPackageInfo {
 				om := newOrderedMap()
 				if om.UnmarshalJSON(rawExports) == nil {
 					pkgExports = om
-				} else {
-					pkgExports = v
 				}
 			}
 		}

@@ -23,6 +23,8 @@ var (
 	regexpVarEqual        = regexp.MustCompile(`var ([a-zA-Z]+)\s*=\s*[a-zA-Z]+$`)
 )
 
+var esExts = []string{".mjs", ".js", ".jsx", ".mts", ".ts", ".tsx", ".cjs"}
+
 // isHttpSepcifier returns true if the import path is a remote URL.
 func isHttpSepcifier(importPath string) bool {
 	return strings.HasPrefix(importPath, "https://") || strings.HasPrefix(importPath, "http://")
@@ -84,7 +86,7 @@ func endsWith(s string, suffixs ...string) bool {
 }
 
 func stripModuleExt(s string) string {
-	for _, ext := range jsExts {
+	for _, ext := range esExts {
 		if strings.HasSuffix(s, ext) {
 			return s[:len(s)-len(ext)]
 		}
