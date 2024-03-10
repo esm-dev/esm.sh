@@ -422,7 +422,9 @@ function withESMWorker(middleware?: Middleware, cache: Cache = (caches as any).d
     if (
       pathname === "/build" ||
       pathname === "/run" ||
+      pathname === "/hot" ||
       pathname === "/node.ns.d.ts" ||
+      pathname === "/hot.d.ts" ||
       (pathname.startsWith("/node_") && pathname.endsWith(".js"))
     ) {
       const ifNoneMatch = req.headers.get("If-None-Match");
@@ -613,8 +615,6 @@ function withESMWorker(middleware?: Middleware, cache: Cache = (caches as any).d
         let pkgName = pkgId;
         if (pkgName.startsWith("@jsr/")) {
           registry = "https://npm.jsr.io";
-        } else if (pkgName === "hot") {
-          pkgName = "esm-hot";
         }
         const res = await fetch(
           new URL(pkgName, registry),
@@ -636,8 +636,6 @@ function withESMWorker(middleware?: Middleware, cache: Cache = (caches as any).d
         }
         if (pkgName.startsWith("@jsr/") && !hasTargetSegment(subPath)) {
           pkgName = "jsr/@" + pkgName.slice(5).replace("__", "/");
-        } else if (pkgName === "esm-hot") {
-          pkgName = "hot";
         }
         const eq = extraQuery ? "&" + extraQuery : "";
         const distVersion = regInfo["dist-tags"]

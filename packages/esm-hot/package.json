@@ -1,7 +1,7 @@
 {
-  "name": "esm-hot",
+  "name": "@esm.sh/hot",
   "version": "0.0.3",
-  "description": "esm.sh/hot",
+  "description": "Empowering import maps.",
   "type": "module",
   "main": "dist/hot.js",
   "module": "dist/hot.js",

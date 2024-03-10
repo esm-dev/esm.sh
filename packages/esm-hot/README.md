@@ -1,3 +1,3 @@
-# esm-hot
+# esm.sh/hot
 
-A working in progress library for empowering import maps.
+A tiny library for empowering import maps.

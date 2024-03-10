@@ -195,7 +195,7 @@ func esmHandler() rex.Handle {
 		}
 
 		// serve build adn run scripts
-		if pathname == "/build" || pathname == "/run" {
+		if pathname == "/build" || pathname == "/run" || pathname == "/hot" {
 			data, err := embedFS.ReadFile(fmt.Sprintf("server/embed/%s.ts", pathname[1:]))
 			if err != nil {
 				return rex.Status(404, "Not Found")
@@ -232,6 +232,9 @@ func esmHandler() rex.Handle {
 			} else {
 				header.Set("Cache-Control", "public, max-age=86400")
 				header.Set("ETag", etag)
+			}
+			if pathname == "/hot" {
+				header.Set("X-Typescript-Types", fmt.Sprintf("%s%s/hot.d.ts", cdnOrigin, cfg.CdnBasePath))
 			}
 			return data
 		}
@@ -411,8 +414,6 @@ func esmHandler() rex.Handle {
 			query := ""
 			if strings.HasPrefix(pkgName, "@jsr/") {
 				pkgName = "jsr/@" + strings.ReplaceAll(pkgName[5:], "__", "/")
-			} else if pkgName == "esm-hot" {
-				pkgName = "hot"
 			}
 
 			if external.Has("*") {
@@ -674,7 +675,7 @@ func esmHandler() rex.Handle {
 		}
 
 		isPkgCss := ctx.Form.Has("css")
-		bundle := (ctx.Form.Has("bundle") && ctx.Form.Value("bundle") == "") || ctx.Form.Has("standalone")
+		bundle := (ctx.Form.Has("bundle") && ctx.Form.Value("bundle") != "false") || ctx.Form.Has("standalone")
 		noBundle := !bundle && (ctx.Form.Has("no-bundle") || ctx.Form.Value("bundle") == "false")
 		isDev := ctx.Form.Has("dev")
 		isWorker := ctx.Form.Has("worker")
