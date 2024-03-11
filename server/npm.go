@@ -385,7 +385,7 @@ func installPackage(wd string, pkg Pkg) (err error) {
 		return fmt.Errorf("ensure package.json failed: %s", pkgVersionName)
 	}
 
-	attemptMaxTimes := 5
+	attemptMaxTimes := 3
 	for i := 1; i <= attemptMaxTimes; i++ {
 		if pkg.FromEsmsh {
 			err = pnpmInstall(wd)
@@ -500,21 +500,4 @@ func getInstallLock(key string) *sync.Mutex {
 func getFetchLock(key string) *sync.Mutex {
 	v, _ := fetchLocks.LoadOrStore(key, &sync.Mutex{})
 	return v.(*sync.Mutex)
-}
-
-func isDeprecated(pkgName string, version string) (string, bool) {
-	cacheKey := "deprecated:" + pkgName + "@" + version
-	ret, err := cache.Get(cacheKey)
-	if err == nil {
-		return string(ret), len(ret) > 0
-	}
-	if err != storage.ErrNotFound && err != storage.ErrExpired {
-		log.Error("cache:", err)
-	}
-	p, e := fetchPackageInfo(pkgName, version)
-	if e == nil {
-		cache.Set(cacheKey, []byte(p.Deprecated), time.Hour)
-		return p.Deprecated, len(p.Deprecated) > 0
-	}
-	return "", false
 }

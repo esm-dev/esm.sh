@@ -70,6 +70,28 @@ Deno.test("esm-worker", { sanitizeOps: false, sanitizeResources: false }, async 
   // wait for the server to start
   await new Promise((resolve) => setTimeout(resolve, 100));
 
+  await t.step("bad url", async () => {
+    const res = await fetch(`${workerOrigin}/.git/HEAD`);
+    res.body?.cancel();
+    assertEquals(res.status, 404);
+
+    const res2 = await fetch(`${workerOrigin}/wp-admin/index.php`);
+    res2.body?.cancel();
+    assertEquals(res2.status, 404);
+
+    const res3 = await fetch(`${workerOrigin}//react@18`);
+    res3.body?.cancel();
+    assertEquals(res3.status, 400);
+
+    const res4 = await fetch(`${workerOrigin}/react~dom@18`);
+    res4.body?.cancel();
+    assertEquals(res4.status, 400);
+
+    const res5 = await fetch(`${workerOrigin}/react@17.17.17`);
+    res5.body?.cancel();
+    assertEquals(res5.status, 404);
+  });
+
   await t.step("custom homepage", async () => {
     const res = await fetch(workerOrigin, {
       headers: { "User-Agent": "Chrome/90.0.4430.212" },
@@ -101,7 +123,7 @@ Deno.test("esm-worker", { sanitizeOps: false, sanitizeResources: false }, async 
     assertEquals(res2.headers.get("Cache-Control"), "public, max-age=86400");
     assertStringIncludes(await res2.text(), "export interface Hot");
 
-    const res3 = await fetch(`${workerOrigin}/node_process.js`);
+    const res3 = await fetch(`${workerOrigin}/node/process.js`);
     assertEquals(res3.status, 200);
     assertEquals(res3.headers.get("Content-Type"), "application/javascript; charset=utf-8");
     assertEquals(res3.headers.get("Etag"), `W/"${version}"`);
@@ -109,9 +131,34 @@ Deno.test("esm-worker", { sanitizeOps: false, sanitizeResources: false }, async 
     assertStringIncludes(res3.headers.get("Vary") ?? "", "User-Agent");
     assertStringIncludes(await res3.text(), "nextTick");
 
-    const res4 = await fetch(`${workerOrigin}/node_process.js`, { headers: { "If-None-Match": `W/"${version}"` } });
+    const res4 = await fetch(`${workerOrigin}/node/process.js`, { headers: { "If-None-Match": `W/"${version}"` } });
     res4.body?.cancel();
     assertEquals(res4.status, 304);
+
+    const res5 = await fetch(`${workerOrigin}/node/fs.js`);
+    assertEquals(res5.status, 200);
+    assertEquals(res5.headers.get("Content-Type"), "application/javascript; charset=utf-8");
+    const js = await res5.text();
+    const m = js.match(/\.\/chunk-[a-f0-9]+\.js/);
+    assert(m);
+
+    const res6 = await fetch(`${workerOrigin}/node${m![0].slice(1)}`);
+    res6.body?.cancel();
+    assertEquals(res6.status, 200);
+    assertEquals(res6.headers.get("Content-Type"), "application/javascript; charset=utf-8");
+    assertEquals(res6.headers.get("Cache-Control"), "public, max-age=31536000, immutable");
+
+    const res7 = await fetch(`${workerOrigin}/npm_node-fetch.js`);
+    assertEquals(res7.status, 200);
+    assertEquals(res7.headers.get("Content-Type"), "application/javascript; charset=utf-8");
+    assertEquals(res7.headers.get("Etag"), `W/"${version}"`);
+    assertEquals(res7.headers.get("Cache-Control"), "public, max-age=86400");
+    assertStringIncludes(res7.headers.get("Vary") ?? "", "User-Agent");
+    assertStringIncludes(await res7.text(), "fetch");
+
+    const fs = await import(`${workerOrigin}/node/fs.js`);
+    fs.writeFileSync("foo.txt", "bar", "utf8");
+    assertEquals(fs.readFileSync("foo.txt", "utf8"), "bar");
   });
 
   await t.step("npm modules", async () => {
@@ -160,7 +207,7 @@ Deno.test("esm-worker", { sanitizeOps: false, sanitizeResources: false }, async 
 
     const res7 = await fetch(`${workerOrigin}/typescript@5.4.2/es2022/typescript.mjs`);
     assertEquals(res7.status, 200);
-    assertStringIncludes(await res7.text(), `"/node_process.js"`);
+    assertStringIncludes(await res7.text(), `"/node/process.js"`);
 
     const res8 = await fetch(`${workerOrigin}/react-dom@18?external=react`);
     res8.body?.cancel();

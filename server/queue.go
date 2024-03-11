@@ -2,7 +2,6 @@ package server
 
 import (
 	"container/list"
-	"fmt"
 	"sync"
 	"time"
 )
@@ -36,32 +35,17 @@ type queueTask struct {
 }
 
 func (t *queueTask) run() BuildOutput {
-	c := make(chan BuildOutput, 1)
-	go func(c chan BuildOutput) {
-		meta, err := t.Build()
-		c <- BuildOutput{meta, err}
-	}(c)
-
-	var output BuildOutput
-	select {
-	case output = <-c:
-		if output.err == nil {
-			if t.subBuilds != nil && t.subBuilds.Len() > 0 {
-				log.Infof("build '%s' (%d sub-builds) done in %v", t.ID(), t.subBuilds.Len(), time.Since(t.startedAt))
-			} else {
-				log.Infof("build '%s' done in %v", t.ID(), time.Since(t.startedAt))
-			}
+	meta, err := t.Build()
+	if err == nil {
+		if t.subBuilds != nil && t.subBuilds.Len() > 0 {
+			log.Infof("build '%s' (%d sub-builds) done in %v", t.ID(), t.subBuilds.Len(), time.Since(t.startedAt))
 		} else {
-			log.Errorf("build '%s': %v", t.ID(), output.err)
+			log.Infof("build '%s' done in %v", t.ID(), time.Since(t.startedAt))
 		}
-	case <-time.After(10 * time.Minute):
-		log.Errorf("build '%s': timeout(%v)", t.ID(), time.Since(t.startedAt))
-		output = BuildOutput{
-			err: fmt.Errorf("build '%s': timeout(%v)", t.ID(), time.Since(t.startedAt)),
-		}
+	} else {
+		log.Errorf("build '%s': %v", t.ID(), err)
 	}
-
-	return output
+	return BuildOutput{meta, err}
 }
 
 func newBuildQueue(concurrency int) *BuildQueue {

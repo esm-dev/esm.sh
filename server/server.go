@@ -1,9 +1,13 @@
 package server
 
 import (
+	"archive/tar"
+	"bytes"
+	"compress/gzip"
 	"embed"
 	"flag"
 	"fmt"
+	"io"
 	"net/http"
 	"os"
 	"os/exec"
@@ -25,6 +29,7 @@ var (
 	cache        storage.Cache
 	db           storage.DataBase
 	fs           storage.FileSystem
+	nodeLibs     map[string]string
 	buildQueue   *BuildQueue
 	log          *logx.Logger
 	embedFS      EmbedFS
@@ -59,6 +64,7 @@ func Serve(efs EmbedFS) {
 		}
 		fmt.Println("Config loaded from", cfile)
 	}
+	buildQueue = newBuildQueue(int(cfg.BuildConcurrency))
 
 	if isDev {
 		cfg.LogLevel = "debug"
@@ -80,6 +86,62 @@ func Serve(efs EmbedFS) {
 	}
 	log.SetLevelByName(cfg.LogLevel)
 
+	cache, err = storage.OpenCache(cfg.Cache)
+	if err != nil {
+		log.Fatalf("init storage(cache,%s): %v", cfg.Cache, err)
+	}
+
+	fs, err = storage.OpenFS(cfg.Storage)
+	if err != nil {
+		log.Fatalf("init storage(fs,%s): %v", cfg.Storage, err)
+	}
+
+	db, err = storage.OpenDB(cfg.Database)
+	if err != nil {
+		log.Fatalf("init storage(db,%s): %v", cfg.Database, err)
+	}
+
+	data, err := efs.ReadFile("server/embed/nodelibs.tar.gz")
+	if err != nil {
+		log.Fatal(err)
+	}
+	gr, err := gzip.NewReader(bytes.NewReader(data))
+	if err != nil {
+		log.Fatal(err)
+	}
+	tr := tar.NewReader(gr)
+	nodeLibs = make(map[string]string)
+	for {
+		h, err := tr.Next()
+		if err != nil {
+			break
+		}
+		if h.Typeflag == tar.TypeReg {
+			data, err := io.ReadAll(tr)
+			if err != nil {
+				log.Fatal(err)
+			}
+			nodeLibs[h.Name] = string(data)
+		}
+	}
+	node_async_hooks_js, err := efs.ReadFile("server/embed/polyfills/node_async_hooks.js")
+	if err != nil {
+		log.Fatal(err)
+	}
+	nodeLibs["node/async_hooks.js"] = string(node_async_hooks_js)
+	log.Debugf("%d node libs loaded", len(nodeLibs))
+
+	var accessLogger *logx.Logger
+	if cfg.LogDir == "" {
+		accessLogger = &logx.Logger{}
+	} else {
+		accessLogger, err = logx.New(fmt.Sprintf("file:%s?buffer=32k&fileDateFormat=20060102", path.Join(cfg.LogDir, "access.log")))
+		if err != nil {
+			log.Fatalf("initiate access logger: %v", err)
+		}
+	}
+	accessLogger.SetQuite(true) // quite in terminal
+
 	nodeInstallDir := os.Getenv("NODE_INSTALL_DIR")
 	if nodeInstallDir == "" {
 		nodeInstallDir = path.Join(cfg.WorkDir, "nodejs")
@@ -100,34 +162,6 @@ func Serve(efs EmbedFS) {
 	if err != nil {
 		log.Fatalf("init cjs-lexer: %v", err)
 	}
-
-	cache, err = storage.OpenCache(cfg.Cache)
-	if err != nil {
-		log.Fatalf("init storage(cache,%s): %v", cfg.Cache, err)
-	}
-
-	fs, err = storage.OpenFS(cfg.Storage)
-	if err != nil {
-		log.Fatalf("init storage(fs,%s): %v", cfg.Storage, err)
-	}
-
-	db, err = storage.OpenDB(cfg.Database)
-	if err != nil {
-		log.Fatalf("init storage(db,%s): %v", cfg.Database, err)
-	}
-
-	buildQueue = newBuildQueue(int(cfg.BuildConcurrency))
-
-	var accessLogger *logx.Logger
-	if cfg.LogDir == "" {
-		accessLogger = &logx.Logger{}
-	} else {
-		accessLogger, err = logx.New(fmt.Sprintf("file:%s?buffer=32k&fileDateFormat=20060102", path.Join(cfg.LogDir, "access.log")))
-		if err != nil {
-			log.Fatalf("initiate access logger: %v", err)
-		}
-	}
-	accessLogger.SetQuite(true) // quite in terminal
 
 	if !cfg.DisableCompression {
 		rex.Use(rex.Compression())

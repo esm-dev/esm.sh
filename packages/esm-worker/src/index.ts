@@ -425,16 +425,19 @@ function withESMWorker(middleware?: Middleware, cache: Cache = (caches as any).d
       pathname === "/hot" ||
       pathname === "/node.ns.d.ts" ||
       pathname === "/hot.d.ts" ||
-      (pathname.startsWith("/node_") && pathname.endsWith(".js"))
+      ((pathname.startsWith("/node/") || pathname.startsWith("/npm_")) && pathname.endsWith(".js"))
     ) {
-      const ifNoneMatch = req.headers.get("If-None-Match");
       const etag = `W/"${version}"`;
-      if (ifNoneMatch === etag) {
-        const headers = corsHeaders();
-        headers.set("Cache-Control", "public, max-age=86400");
-        return new Response(null, { status: 304, headers: corsHeaders() });
+      const isChunkjs = pathname.startsWith("/node/chunk-");
+      if (!isChunkjs) {
+        const ifNoneMatch = req.headers.get("If-None-Match");
+        if (ifNoneMatch === etag) {
+          const headers = corsHeaders();
+          headers.set("Cache-Control", "public, max-age=86400");
+          return new Response(null, { status: 304, headers: corsHeaders() });
+        }
+        url.searchParams.set("v", VERSION.toString());
       }
-      url.searchParams.set("v", VERSION.toString());
       const res = await ctx.withCache(() =>
         fetchOriginWithKVCache(
           req,
@@ -447,8 +450,12 @@ function withESMWorker(middleware?: Middleware, cache: Cache = (caches as any).d
         return res;
       }
       const headers = new Headers(res.headers);
-      headers.set("Cache-Control", "public, max-age=86400");
-      headers.set("Etag", etag);
+      if (isChunkjs) {
+        headers.set("Cache-Control", "public, max-age=31536000, immutable");
+      } else {
+        headers.set("Cache-Control", "public, max-age=86400");
+        headers.set("Etag", etag);
+      }
       return new Response(res.body, { status: res.status, headers });
     }
 

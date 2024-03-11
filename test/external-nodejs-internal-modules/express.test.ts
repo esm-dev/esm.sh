@@ -3,7 +3,7 @@ import { assertEquals, assertStringIncludes } from "https://deno.land/std@0.210.
 Deno.test("external-nodejs-internal-modules", async () => {
   const res = await fetch("http://localhost:8080/cheerio@0.22.0/es2022/cheerio.mjs");
   assertEquals(res.status, 200);
-  assertStringIncludes(await res.text(), ` from "/node_buffer.js"`);
+  assertStringIncludes(await res.text(), ` from "/node/buffer.js"`);
 
   const res2 = await fetch("http://localhost:8080/cheerio@0.22.0?target=es2022&external=node:buffer");
   res2.body?.cancel();

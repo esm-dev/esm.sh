@@ -29,7 +29,7 @@ func esmHandler() rex.Handle {
 		userAgent := ctx.R.UserAgent()
 
 		// ban malicious requests
-		if strings.HasPrefix(pathname, ".") || strings.HasSuffix(pathname, ".php") {
+		if strings.HasPrefix(pathname, "/.") || strings.HasSuffix(pathname, ".php") {
 			return rex.Status(404, "not found")
 		}
 
@@ -237,6 +237,39 @@ func esmHandler() rex.Handle {
 				header.Set("X-Typescript-Types", fmt.Sprintf("%s%s/hot.d.ts", cdnOrigin, cfg.CdnBasePath))
 			}
 			return data
+		}
+
+		// serve node libs
+		if strings.HasPrefix(pathname, "/node/") && strings.HasSuffix(pathname, ".js") {
+			lib, ok := nodeLibs[pathname[1:]]
+			if !ok {
+				// empty module
+				lib = "export default {}"
+			}
+			if strings.HasPrefix(pathname, "/node/chunk-") {
+				header.Set("Cache-Control", "public, max-age=31536000, immutable")
+			} else {
+				etag := fmt.Sprintf(`"W/v%d"`, VERSION)
+				ifNoneMatch := ctx.R.Header.Get("If-None-Match")
+				if ifNoneMatch != "" && ifNoneMatch == etag {
+					header.Set("Cache-Control", "public, max-age=86400")
+					return rex.Status(http.StatusNotModified, "")
+				}
+				if ctx.Form.Value("v") != "" {
+					header.Set("Cache-Control", "public, max-age=31536000, immutable")
+				} else {
+					header.Set("Cache-Control", "public, max-age=86400")
+					header.Set("ETag", etag)
+				}
+			}
+			target := getBuildTargetByUA(userAgent)
+			code, err := minify(lib, targets[target], api.LoaderJS)
+			if err != nil {
+				return throwErrorJS(ctx, fmt.Errorf("transform error: %v", err), false)
+			}
+			addVary(header, "User-Agent")
+			header.Set("Content-Type", "application/javascript; charset=utf-8")
+			return rex.Content(pathname, startTime, bytes.NewReader(code))
 		}
 
 		// use embed polyfills/types

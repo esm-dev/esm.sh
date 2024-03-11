@@ -41,6 +41,7 @@ type BuildTask struct {
 	npm        NpmPackageInfo
 	esm        *ESMBuild
 	id         string
+	deprecated string
 	stage      string
 	wd         string
 	resolveDir string
@@ -89,6 +90,15 @@ func (task *BuildTask) Build() (esm *ESMBuild, err error) {
 	if err != nil {
 		log.Errorf("Failed to create .npmrc file: %v", err)
 		return
+	}
+
+	if !task.Pkg.FromEsmsh && !task.Pkg.FromGithub && !strings.HasPrefix(task.Pkg.Name, "@jsr/") {
+		var info NpmPackageInfo
+		info, err = fetchPackageInfo(task.Pkg.Name, task.Pkg.Version)
+		if err != nil {
+			return
+		}
+		task.deprecated = info.Deprecated
 	}
 
 	task.stage = "install"
@@ -344,6 +354,12 @@ rebuild:
 						specifier = strings.TrimPrefix(specifier, "node:")
 						specifier = strings.TrimPrefix(specifier, "npm:")
 
+						// resolve alias in dependencies
+						// e.g. " "@mark/html": "npm:@jsr/mark__html@^1.0.0"
+						if v, ok := npm.Dependencies[specifier]; ok && strings.HasPrefix(v, "npm:") {
+							specifier = v[4:]
+						}
+
 						// resolve specifier with package `imports` field
 						if v, ok := npm.Imports[specifier]; ok {
 							if s, ok := v.(string); ok {
@@ -432,7 +448,7 @@ rebuild:
 								}
 								if specifier == "fsevents" {
 									return api.OnResolveResult{
-										Path:     fmt.Sprintf("%s/node_fsevents.js", cfg.CdnBasePath),
+										Path:     fmt.Sprintf("%s/npm_fsevents.js", cfg.CdnBasePath),
 										External: true,
 									}, nil
 								}
@@ -460,7 +476,7 @@ rebuild:
 
 						// bundles json module
 						if strings.HasSuffix(fullFilepath, ".json") && existsFile(fullFilepath) {
-							return api.OnResolveResult{Path: fullFilepath}, nil
+							return api.OnResolveResult{}, nil
 						}
 
 						// embed wasm as WebAssembly.Module
@@ -468,35 +484,28 @@ rebuild:
 							return api.OnResolveResult{Path: fullFilepath, Namespace: "wasm"}, nil
 						}
 
+						// externalize the _parent_ module
+						// e.g. "react/jsx-runtime" imports "react"
+						if task.Pkg.SubModule != "" && task.Pkg.Name == specifier && !task.Bundle {
+							return api.OnResolveResult{Path: task.resolveExternal(specifier, args.Kind), External: true}, nil
+						}
+
+						// it's the entry point
+						if specifier == entryPoint || specifier == task.Pkg.ImportPath() || specifier == path.Join(npm.Name, npm.Module) || specifier == path.Join(npm.Name, npm.Main) {
+							return api.OnResolveResult{}, nil
+						}
+
 						// bundles all dependencies in `bundle` mode, apart from peer dependencies and `?external` query
 						if task.Bundle && !task.Args.external.Has(getPkgName(specifier)) && !implicitExternal.Has(specifier) {
 							if nodejsInternalModules[specifier] {
-								if task.isServerTarget() {
-									return api.OnResolveResult{Path: task.resolveExternal(specifier, args.Kind), External: true}, nil
-								}
-								polyfillName := strings.Replace(specifier, "/", "__", -1)
-								data, err := embedFS.ReadFile("server/embed/polyfills/node_" + polyfillName + ".js")
-								if err == nil {
-									return api.OnResolveResult{
-										Path:       "embed:polyfills/node_" + polyfillName + ".js",
-										Namespace:  "embed",
-										PluginData: data,
-									}, nil
-								}
+								return api.OnResolveResult{Path: task.resolveExternal(specifier, args.Kind), External: true}, nil
+
 							}
 							pkgName := getPkgName(specifier)
-							if !nodejsInternalModules[pkgName] {
-								_, ok := npm.PeerDependencies[pkgName]
-								if !ok {
-									return api.OnResolveResult{}, nil
-								}
+							_, ok := npm.PeerDependencies[pkgName]
+							if !ok {
+								return api.OnResolveResult{}, nil
 							}
-						}
-
-						// resolve alias in dependencies
-						// e.g. " "@mark/html": "npm:@jsr/mark__html@^1.0.0"
-						if v, ok := npm.Dependencies[specifier]; ok && strings.HasPrefix(v, "npm:") {
-							specifier = v[4:]
 						}
 
 						// resolve github dependencies
@@ -516,17 +525,6 @@ rebuild:
 									External: true,
 								}, nil
 							}
-						}
-
-						// externalize the _parent_ module
-						// e.g. "react/jsx-runtime" imports "react"
-						if task.Pkg.SubModule != "" && task.Pkg.Name == specifier {
-							return api.OnResolveResult{Path: task.resolveExternal(specifier, args.Kind), External: true}, nil
-						}
-
-						// it's the entry point
-						if specifier == entryPoint || specifier == task.Pkg.ImportPath() || specifier == path.Join(npm.Name, npm.Module) || specifier == path.Join(npm.Name, npm.Main) {
-							return api.OnResolveResult{}, nil
 						}
 
 						if isLocalSpecifier(specifier) {
@@ -632,19 +630,6 @@ rebuild:
 
 						// dynamic external
 						return api.OnResolveResult{Path: task.resolveExternal(specifier, args.Kind), External: true}, nil
-					},
-				)
-
-				// for embed module bundle
-				build.OnLoad(
-					api.OnLoadOptions{Filter: ".*", Namespace: "embed"},
-					func(args api.OnLoadArgs) (api.OnLoadResult, error) {
-						data := args.PluginData.([]byte)
-						contents := string(data)
-						return api.OnLoadResult{
-							Contents: &contents,
-							Loader:   api.LoaderJS,
-						}, nil
 					},
 				)
 
@@ -783,16 +768,7 @@ rebuild:
 							}
 						}
 						if !browserExclude {
-							if task.Bundle {
-								var js []byte
-								js, err = bundleNodePolyfill("process", "__Process$", "default", targets[task.Target])
-								if err != nil {
-									return
-								}
-								fmt.Fprintf(header, "%s", js)
-							} else {
-								fmt.Fprintf(header, `import __Process$ from "%s/node_process.js";%s`, cfg.CdnBasePath, EOL)
-							}
+							fmt.Fprintf(header, `import __Process$ from "%s/node/process.js";%s`, cfg.CdnBasePath, EOL)
 						}
 					}
 				}
@@ -811,16 +787,7 @@ rebuild:
 							}
 						}
 						if !browserExclude {
-							if task.Bundle {
-								var js []byte
-								js, err = bundleNodePolyfill("buffer", "__Buffer$", "Buffer", targets[task.Target])
-								if err != nil {
-									return
-								}
-								fmt.Fprintf(header, "%s", js)
-							} else {
-								fmt.Fprintf(header, `import { Buffer as __Buffer$ } from "%s/node_buffer.js";%s`, cfg.CdnBasePath, EOL)
-							}
+							fmt.Fprintf(header, `import { Buffer as __Buffer$ } from "%s/node/buffer.js";%s`, cfg.CdnBasePath, EOL)
 						}
 					}
 				}
@@ -914,9 +881,8 @@ rebuild:
 			finalContent.Write(header.Bytes())
 			finalContent.Write(jsContent)
 
-			deprecated, ok := isDeprecated(task.Pkg.Name, task.Pkg.Version)
-			if ok {
-				fmt.Fprintf(finalContent, `console.warn("[npm] %%cdeprecated%%c %s@%s: %s", "color:red", "");%s`, task.Pkg.Name, task.Pkg.Version, strings.ReplaceAll(deprecated, "\"", "\\\""), "\n")
+			if task.deprecated != "" {
+				fmt.Fprintf(finalContent, `console.warn("[npm] %%cdeprecated%%c %s@%s: %s", "color:red", "");%s`, task.Pkg.Name, task.Pkg.Version, strings.ReplaceAll(task.deprecated, "\"", "\\\""), "\n")
 			}
 
 			// add sourcemap Url
@@ -989,30 +955,7 @@ func (task *BuildTask) resolveExternal(specifier string, kind api.ResolveKind) (
 		} else if task.Target == "deno" {
 			resolvedPath = fmt.Sprintf("https://deno.land/std@%s/node/%s.ts", task.Args.denoStdVersion, specifier)
 		} else {
-			polyfill, ok := polyfilledInternalNodeModules[specifier]
-			if ok {
-				p, _, e := validatePkgPath(polyfill)
-				if e == nil {
-					importPath := task.getImportPath(p, "")
-					extname := filepath.Ext(importPath)
-					resolvedPath = strings.TrimSuffix(importPath, extname) + extname
-				} else {
-					resolvedPath = specifier
-				}
-			} else {
-				polyfillName := strings.Replace(specifier, "/", "__", -1)
-				_, err := embedFS.ReadFile(fmt.Sprintf("server/embed/polyfills/node_%s.js", polyfillName))
-				if err == nil {
-					resolvedPath = fmt.Sprintf("%s/node_%s.js", cfg.CdnBasePath, polyfillName)
-				} else {
-					resolvedPath = fmt.Sprintf(
-						"%s/error.js?type=unsupported-node-builtin-module&name=%s&importer=%s",
-						cfg.CdnBasePath,
-						specifier,
-						task.Pkg,
-					)
-				}
-			}
+			resolvedPath = fmt.Sprintf("%s/node/%s.js", cfg.CdnBasePath, specifier)
 		}
 	}
 	// check `?external`
@@ -1038,6 +981,7 @@ func (task *BuildTask) resolveExternal(specifier string, kind api.ResolveKind) (
 				Bundle:     task.Bundle,
 				NoBundle:   task.NoBundle,
 				wd:         task.wd,
+				deprecated: task.deprecated,
 				resolveDir: task.resolveDir,
 				packageDir: task.packageDir,
 				subBuilds:  task.subBuilds,
@@ -1062,7 +1006,7 @@ func (task *BuildTask) resolveExternal(specifier string, kind api.ResolveKind) (
 		}
 	}
 	if resolvedPath == "" && task.Target != "node" && specifier == "node-fetch" {
-		resolvedPath = fmt.Sprintf("%s/node_fetch.js", cfg.CdnBasePath)
+		resolvedPath = fmt.Sprintf("%s/npm_node-fetch.js", cfg.CdnBasePath)
 	}
 	// common npm dependency
 	if resolvedPath == "" {

@@ -1,7 +1,7 @@
 import { assert } from "https://deno.land/std@0.210.0/testing/asserts.ts";
 
-import Ajv from "http://localhost:8080/ajv";
-import addFormats from "http://localhost:8080/ajv-formats";
+import Ajv from "http://localhost:8080/ajv@8.12.0";
+import addFormats from "http://localhost:8080/ajv-formats@2.1.1?deps=ajv@8.12.0";
 
 Deno.test("ajv", () => {
   const ajv = new Ajv({ strictTypes: false });

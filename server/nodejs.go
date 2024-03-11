@@ -76,31 +76,6 @@ var nodejsInternalModules = map[string]bool{
 	"zlib":                true,
 }
 
-// copy from https://github.com/webpack/webpack/blob/master/lib/ModuleNotFoundError.js#L13
-var polyfilledInternalNodeModules = map[string]string{
-	"assert":         "assert@2.1.0",
-	"buffer":         "buffer@6.0.3",
-	"console":        "console-browserify@1.2.0",
-	"constants":      "constants-browserify@1.0.0",
-	"crypto":         "crypto-browserify@3.12.0",
-	"domain":         "domain-browser@5.2.0",
-	"http":           "stream-http@3.2.0",
-	"https":          "https-browserify@1.0.0",
-	"os":             "os-browserify@0.3.0/browser",
-	"path":           "path-browserify@1.0.1",
-	"punycode":       "punycode@2.3.1",
-	"querystring":    "querystring-es3@0.2.1",
-	"stream":         "stream-browserify@3.0.0",
-	"stream/web":     "web-streams-polyfill@3.2.1",
-	"string_decoder": "string_decoder@1.3.0",
-	"sys":            "util@0.12.5",
-	"timers":         "timers-browserify@2.0.12",
-	"tty":            "tty-browserify@0.0.1",
-	"util":           "util@0.12.5",
-	"vm":             "vm-browserify@1.1.2",
-	"zlib":           "browserify-zlib@0.2.0",
-}
-
 var denoNextUnspportedNodeModules = map[string]bool{
 	"inspector": true,
 }

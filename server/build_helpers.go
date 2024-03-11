@@ -762,6 +762,7 @@ func minify(code string, target api.Target, loader api.Loader) ([]byte, error) {
 		MinifyWhitespace:  true,
 		MinifyIdentifiers: true,
 		MinifySyntax:      true,
+		KeepNames:         true,
 		LegalComments:     api.LegalCommentsInline,
 		Loader:            loader,
 	})
@@ -769,49 +770,4 @@ func minify(code string, target api.Target, loader api.Loader) ([]byte, error) {
 		return nil, errors.New(ret.Errors[0].Text)
 	}
 	return ret.Code, nil
-}
-
-func bundleNodePolyfill(name string, globalName string, namedExport string, target api.Target) ([]byte, error) {
-	ret := api.Build(api.BuildOptions{
-		Stdin: &api.StdinOptions{
-			Contents: fmt.Sprintf(`import * as e from "node_%s.js";globalThis.%s=e.%s`, name, globalName, namedExport),
-			Loader:   api.LoaderJS,
-		},
-		Write:             false,
-		Bundle:            true,
-		Target:            target,
-		Format:            api.FormatIIFE,
-		Platform:          api.PlatformBrowser,
-		MinifyWhitespace:  true,
-		MinifyIdentifiers: true,
-		MinifySyntax:      true,
-		Plugins: []api.Plugin{{
-			Name: "esm",
-			Setup: func(build api.PluginBuild) {
-				build.OnResolve(
-					api.OnResolveOptions{Filter: ".*"},
-					func(args api.OnResolveArgs) (api.OnResolveResult, error) {
-						return api.OnResolveResult{Path: path.Join("server/embed/polyfills/", args.Path), Namespace: "embed"}, nil
-					},
-				)
-				build.OnLoad(
-					api.OnLoadOptions{Filter: ".*", Namespace: "embed"},
-					func(args api.OnLoadArgs) (api.OnLoadResult, error) {
-						data, err := embedFS.ReadFile(args.Path)
-						if err != nil {
-							return api.OnLoadResult{}, err
-						}
-						contents := string(data)
-						return api.OnLoadResult{
-							Contents: &contents,
-							Loader:   api.LoaderJS,
-						}, nil
-					},
-				)
-			}}},
-	})
-	if ret.Errors != nil && len(ret.Errors) > 0 {
-		return nil, errors.New(ret.Errors[0].Text)
-	}
-	return ret.OutputFiles[0].Contents, nil
 }
