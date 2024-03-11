@@ -87,17 +87,21 @@ if [ "$v" != "" ]; then
   sshPort="$v"
 fi
 
-scriptsDir=$(dirname $0)
-sh $scriptsDir/build.sh
+cd $(dirname $0)
+sh build.sh
 
 if [ "$?" != "0" ]; then
   exit
 fi
 
+echo "--- compressing..."
+tar -czf esmd.tar.gz esmd
+
 echo "--- uploading..."
-scp -P $sshPort $scriptsDir/esmd $user@$host:/tmp/esmd
+scp -P $sshPort esmd.tar.gz $user@$host:/tmp/esmd.tar.gz
 if [ "$?" != "0" ]; then
-  rm -f $scriptsDir/esmd
+  rm -f esmd
+  rm -f esmd.tar.gz
   exit
 fi
 
@@ -115,9 +119,12 @@ ssh -p $sshPort $user@$host << EOF
     echo "\$1" >> \$SVCF
   }
 
+  cd /tmp
+  tar -xzf esmd.tar.gz
+
   supervisorctl stop esmd
   rm -f /usr/local/bin/esmd
-  mv -f /tmp/esmd /usr/local/bin/esmd
+  mv -f esmd /usr/local/bin/esmd
   chmod +x /usr/local/bin/esmd
 
   if [ "$init" == "yes" ]; then
@@ -139,4 +146,5 @@ ssh -p $sshPort $user@$host << EOF
   fi
 EOF
 
-rm -f $scriptsDir/esmd
+rm -f esmd
+rm -f esmd.tar.gz
