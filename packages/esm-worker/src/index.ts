@@ -11,7 +11,7 @@ import type {
   WorkerStorage,
 } from "../types/index.d.ts";
 import { assetsExts, cssPackages, VERSION } from "./consts.ts";
-import { getMimeType } from "./content_type.ts";
+import { getMimeType } from "./media_type.ts";
 import {
   asKV,
   checkPreflight,
