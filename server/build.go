@@ -954,6 +954,16 @@ func (task *BuildTask) resolveExternalModule(specifier string, kind api.ResolveK
 		if kind != api.ResolveJSDynamicImport {
 			task.imports = append(task.imports, resolvedPath)
 		}
+		// use relative path for sub-module of current package
+		if strings.HasPrefix(specifier, task.Pkg.Name+"/") {
+			rel, err := filepath.Rel(filepath.Dir("/"+task.ID()), resolvedPath)
+			if err == nil {
+				if !(strings.HasPrefix(rel, "./") || strings.HasPrefix(rel, "../")) {
+					rel = "./" + rel
+				}
+				resolvedPath = rel
+			}
+		}
 		// if it's `require("module")` call
 		if kind == api.ResolveJSRequireCall {
 			task.requires = append(task.requires, [2]string{specifier, resolvedPath})

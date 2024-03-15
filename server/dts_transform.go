@@ -96,7 +96,7 @@ func (task *BuildTask) transformDTS(dts string, aliasDepsPrefix string, marker *
 	buf := bytes.NewBuffer(nil)
 	footer := bytes.NewBuffer(nil)
 	imports := newStringSet()
-	dtsBasePath := fmt.Sprintf("%s%s", task.CdnOrigin, cfg.CdnBasePath)
+	dtsBasePath := task.CdnOrigin + cfg.CdnBasePath
 
 	if pkgName == "@types/node" {
 		fmt.Fprintf(buf, "/// <reference path=\"%s/node.ns.d.ts\" />\n", dtsBasePath)
@@ -259,19 +259,18 @@ func (task *BuildTask) transformDTS(dts string, aliasDepsPrefix string, marker *
 				}
 			}
 			pkgPath := info.Name + "@" + info.Version + "/" + encodeBuildArgsPrefix(task.Args, Pkg{Name: info.Name}, true)
-			res = fmt.Sprintf("%s%s/%s%s", task.CdnOrigin, cfg.CdnBasePath, pkgPath, res)
+			res = fmt.Sprintf("%s/%s%s", dtsBasePath, pkgPath, res)
 		}
 
 		if kind == "declareModule" && strings.HasSuffix(res, "/"+dts) {
-			baseUrl := task.CdnOrigin + cfg.CdnBasePath
 			moduleName := pkgNameWithVersion
 			if _, _, subPath := splitPkgPath(specifier); subPath != "" {
 				moduleName = moduleName + "/" + subPath
 			}
-			aliasDeclareModule(footer, fmt.Sprintf("%s/%s", baseUrl, moduleName), res)
-			aliasDeclareModule(footer, fmt.Sprintf("%s/%s?*", baseUrl, moduleName), res)
-			aliasDeclareModule(footer, fmt.Sprintf("%s/%s", baseUrl, moduleName), res)
-			aliasDeclareModule(footer, fmt.Sprintf("%s/%s?*", baseUrl, moduleName), res)
+			aliasDeclareModule(footer, fmt.Sprintf("%s/%s", dtsBasePath, moduleName), res)
+			aliasDeclareModule(footer, fmt.Sprintf("%s/%s?*", dtsBasePath, moduleName), res)
+			aliasDeclareModule(footer, fmt.Sprintf("%s/%s", dtsBasePath, moduleName), res)
+			aliasDeclareModule(footer, fmt.Sprintf("%s/%s?*", dtsBasePath, moduleName), res)
 		}
 
 		return res
