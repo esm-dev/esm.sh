@@ -1,4 +1,4 @@
-import { assertEquals } from "https://deno.land/std@0.210.0/testing/asserts.ts";
+import { assertEquals } from "https://deno.land/std@0.220.0/assert/mod.ts";
 
 import extractFiles from "http://localhost:8080/extract-files@12.0.0/extractFiles.mjs";
 

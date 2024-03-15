@@ -1,4 +1,4 @@
-import { assert } from "https://deno.land/std@0.210.0/testing/asserts.ts";
+import { assert } from "https://deno.land/std@0.220.0/assert/mod.ts";
 
 import { h } from "preact";
 import render from "preact-render-to-string";

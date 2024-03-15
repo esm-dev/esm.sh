@@ -1,4 +1,4 @@
-import { assertEquals } from "https://deno.land/std@0.210.0/testing/asserts.ts";
+import { assertEquals } from "https://deno.land/std@0.220.0/assert/mod.ts";
 
 Deno.test("issue #576", async () => {
   const res = await fetch(`http://localhost:8080/dedent@0.7.0`);

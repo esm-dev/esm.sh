@@ -1,4 +1,4 @@
-import { assertEquals, assertStringIncludes } from "https://deno.land/std@0.210.0/testing/asserts.ts";
+import { assertEquals, assertStringIncludes } from "https://deno.land/std@0.220.0/assert/mod.ts";
 import { Buffer } from "node:buffer";
 
 import init from "http://localhost:8080/esm-compiler@0.5.2";

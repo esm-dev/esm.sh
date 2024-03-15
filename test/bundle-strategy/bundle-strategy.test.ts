@@ -1,4 +1,4 @@
-import { assertStringIncludes } from "https://deno.land/std@0.210.0/testing/asserts.ts";
+import { assertStringIncludes } from "https://deno.land/std@0.220.0/assert/mod.ts";
 
 Deno.test("bundle deps", async () => {
   const code = await fetch(
@@ -14,12 +14,6 @@ Deno.test("no bundle", async () => {
   const code = await fetch(
     `http://localhost:8080/@pyscript/core@0.3.4/es2022/dist/py-terminal-XWbSa71s.nobundle.js`,
   ).then((res) => res.text());
-  assertStringIncludes(
-    code,
-    `/@pyscript/core@0.3.4/es2022/dist/core.nobundle.js`,
-  );
-  assertStringIncludes(
-    code,
-    `/@pyscript/core@0.3.4/es2022/dist/error-96hMSEw8.nobundle.js`,
-  );
+  assertStringIncludes(code, "./core.nobundle.js");
+  assertStringIncludes(code, "./error-96hMSEw8.nobundle.js");
 });

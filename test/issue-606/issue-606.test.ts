@@ -1,4 +1,4 @@
-import { assertEquals } from "https://deno.land/std@0.210.0/testing/asserts.ts";
+import { assertEquals } from "https://deno.land/std@0.220.0/assert/mod.ts";
 
 Deno.test("issue #606", async (t) => {
   await t.step("check dts of the main module", async () => {

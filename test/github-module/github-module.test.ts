@@ -1,8 +1,7 @@
-import { assertEquals } from "https://deno.land/std@0.210.0/testing/asserts.ts";
+import { assertExists } from "https://deno.land/std@0.220.0/assert/mod.ts";
 
-import sfMeta from "http://localhost:8080/gh/superfluid-finance/metadata";
+import * as tslib from "http://localhost:8080/gh/microsoft/tslib";
 
 Deno.test("github module", async () => {
-  const network = sfMeta.getNetworkByName("eth-goerli");
-  assertEquals(network?.name, "eth-goerli");
+  assertExists(tslib.__await);
 });

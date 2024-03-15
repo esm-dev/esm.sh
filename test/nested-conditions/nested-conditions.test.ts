@@ -1,4 +1,4 @@
-import { assertExists } from "https://deno.land/std@0.210.0/testing/asserts.ts";
+import { assertExists } from "https://deno.land/std@0.220.0/assert/mod.ts";
 
 Deno.test("Nested conditions", async () => {
   const utils = await import(

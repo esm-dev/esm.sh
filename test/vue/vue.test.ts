@@ -1,4 +1,4 @@
-import { assertEquals } from "https://deno.land/std@0.210.0/testing/asserts.ts";
+import { assertEquals } from "https://deno.land/std@0.220.0/assert/mod.ts";
 
 import { createSSRApp, h } from "http://localhost:8080/vue@3.2.47";
 import { renderToString, renderToWebStream } from "http://localhost:8080/vue@3.2.47/server-renderer";

@@ -1,4 +1,4 @@
-import { assertEquals } from "https://deno.land/std@0.210.0/testing/asserts.ts";
+import { assertEquals } from "https://deno.land/std@0.220.0/assert/mod.ts";
 
 import dayjs from "http://localhost:8080/dayjs@1.11.7";
 import relativeTime from "http://localhost:8080/dayjs@1.11.7/plugin/relativeTime.js";

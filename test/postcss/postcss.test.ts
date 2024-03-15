@@ -1,4 +1,4 @@
-import { assertStringIncludes } from "https://deno.land/std@0.210.0/testing/asserts.ts";
+import { assertStringIncludes } from "https://deno.land/std@0.220.0/assert/mod.ts";
 
 import postcss from "http://localhost:8080/postcss@8.4.16";
 import autoprefixer from "http://localhost:8080/autoprefixer@10.4.12?deps=postcss@8.4.16";
