@@ -12,7 +12,6 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/evanw/esbuild/pkg/api"
@@ -37,7 +36,6 @@ type BuildTask struct {
 	Dev        bool
 	Bundle     bool
 	NoBundle   bool
-	lock       sync.Mutex
 	npm        NpmPackageInfo
 	esm        *ESMBuild
 	id         string
@@ -50,6 +48,7 @@ type BuildTask struct {
 	requires   [][2]string
 	smOffset   int
 	subBuilds  *StringSet
+	subTasks   []chan struct{}
 }
 
 func (task *BuildTask) Build() (esm *ESMBuild, err error) {
@@ -346,7 +345,7 @@ rebuild:
 
 						// it's implicit external
 						if implicitExternal.Has(args.Path) {
-							return api.OnResolveResult{Path: task.resolveExternal(args.Path, args.Kind), External: true}, nil
+							return api.OnResolveResult{Path: task.resolveExternalModule(args.Path, args.Kind), External: true}, nil
 						}
 
 						// normalize specifier
@@ -506,7 +505,7 @@ rebuild:
 						// externalize the _parent_ module
 						// e.g. "react/jsx-runtime" imports "react"
 						if task.Pkg.SubModule != "" && task.Pkg.Name == specifier && !task.Bundle {
-							return api.OnResolveResult{Path: task.resolveExternal(specifier, args.Kind), External: true}, nil
+							return api.OnResolveResult{Path: task.resolveExternalModule(specifier, args.Kind), External: true}, nil
 						}
 
 						// it's the entry point
@@ -516,7 +515,7 @@ rebuild:
 
 						// it's nodejs internal module
 						if nodejsInternalModules[specifier] {
-							return api.OnResolveResult{Path: task.resolveExternal(specifier, args.Kind), External: true}, nil
+							return api.OnResolveResult{Path: task.resolveExternalModule(specifier, args.Kind), External: true}, nil
 						}
 
 						// bundles all dependencies in `bundle` mode, apart from peer dependencies and `?external` query
@@ -573,7 +572,7 @@ rebuild:
 												exportPrefix, _ := utils.SplitByLastByte(name, '*')
 												url := path.Join(npm.Name, exportPrefix+strings.TrimPrefix(bareName, prefix))
 												if i := task.Pkg.ImportPath(); url != i && url != i+"/index" {
-													return api.OnResolveResult{Path: task.resolveExternal(url, args.Kind), External: true}, nil
+													return api.OnResolveResult{Path: task.resolveExternalModule(url, args.Kind), External: true}, nil
 												}
 											}
 										} else {
@@ -596,7 +595,7 @@ rebuild:
 											if match {
 												url := path.Join(npm.Name, stripModuleExt(name))
 												if i := task.Pkg.ImportPath(); url != i && url != i+"/index" {
-													return api.OnResolveResult{Path: task.resolveExternal(url, args.Kind), External: true}, nil
+													return api.OnResolveResult{Path: task.resolveExternalModule(url, args.Kind), External: true}, nil
 												}
 											}
 										}
@@ -615,7 +614,7 @@ rebuild:
 											if len(p) == 3 && string(p[0]) == "export*from" && string(p[2]) == ";\n" {
 												url := string(p[1])
 												if !isLocalSpecifier(url) {
-													return api.OnResolveResult{Path: task.resolveExternal(url, args.Kind), External: true}, nil
+													return api.OnResolveResult{Path: task.resolveExternalModule(url, args.Kind), External: true}, nil
 												}
 											}
 										}
@@ -630,7 +629,7 @@ rebuild:
 						}
 
 						// dynamic external
-						return api.OnResolveResult{Path: task.resolveExternal(specifier, args.Kind), External: true}, nil
+						return api.OnResolveResult{Path: task.resolveExternalModule(specifier, args.Kind), External: true}, nil
 					},
 				)
 
@@ -930,13 +929,18 @@ rebuild:
 		}
 	}
 
+	// wait for sub-builds
+	for _, ch := range task.subTasks {
+		<-ch
+	}
+
 	record := newStringSet()
 	esm.Deps = filter(task.imports, func(dep string) bool {
 		if record.Has(dep) {
 			return false
 		}
 		record.Add(dep)
-		return strings.HasPrefix(dep, "/") || strings.HasPrefix(dep, "http:") || strings.HasPrefix(dep, "https:")
+		return strings.HasPrefix(dep, "/") || strings.HasPrefix(dep, "./") || strings.HasPrefix(dep, "http:") || strings.HasPrefix(dep, "https:")
 	})
 
 	task.checkDTS()
@@ -944,7 +948,19 @@ rebuild:
 	return
 }
 
-func (task *BuildTask) resolveExternal(specifier string, kind api.ResolveKind) (resolvedPath string) {
+func (task *BuildTask) resolveExternalModule(specifier string, kind api.ResolveKind) (resolvedPath string) {
+	defer func() {
+		// mark the resolved path for _preload_
+		if kind != api.ResolveJSDynamicImport {
+			task.imports = append(task.imports, resolvedPath)
+		}
+		// if it's `require("module")` call
+		if kind == api.ResolveJSRequireCall {
+			task.requires = append(task.requires, [2]string{specifier, resolvedPath})
+			resolvedPath = specifier
+		}
+	}()
+
 	// node builtin module
 	if nodejsInternalModules[specifier] {
 		if task.Args.external.Has("node:"+specifier) || task.Args.external.Has("*") {
@@ -958,13 +974,17 @@ func (task *BuildTask) resolveExternal(specifier string, kind api.ResolveKind) (
 		} else {
 			resolvedPath = fmt.Sprintf("%s/node/%s.js", cfg.CdnBasePath, specifier)
 		}
+		return
 	}
+
 	// check `?external`
-	if resolvedPath == "" && (task.Args.external.Has("*") || task.Args.external.Has(getPkgName(specifier))) {
+	if task.Args.external.Has("*") || task.Args.external.Has(getPkgName(specifier)) {
 		resolvedPath = specifier
+		return
 	}
-	// is sub-module of current package
-	if resolvedPath == "" && strings.HasPrefix(specifier, task.Pkg.Name+"/") {
+
+	// it's sub-module of current package
+	if strings.HasPrefix(specifier, task.Pkg.Name+"/") {
 		subPath := strings.TrimPrefix(specifier, task.Pkg.Name+"/")
 		subPkg := Pkg{
 			Name:      task.Pkg.Name,
@@ -990,7 +1010,12 @@ func (task *BuildTask) resolveExternal(specifier string, kind api.ResolveKind) (
 			id := subBuild.ID()
 			if !task.subBuilds.Has(id) {
 				task.subBuilds.Add(id)
-				_ = subBuild.build()
+				ch := make(chan struct{})
+				task.subTasks = append(task.subTasks, ch)
+				go func() {
+					subBuild.build()
+					ch <- struct{}{}
+				}()
 			}
 		}
 		resolvedPath = task.getImportPath(subPkg, encodeBuildArgsPrefix(task.Args, subPkg, false))
@@ -998,80 +1023,66 @@ func (task *BuildTask) resolveExternal(specifier string, kind api.ResolveKind) (
 			n, e := utils.SplitByLastByte(resolvedPath, '.')
 			resolvedPath = n + ".nobundle." + e
 		}
+		return
 	}
+
 	// replace some npm polyfills with native APIs
-	if resolvedPath == "" {
-		data, err := embedFS.ReadFile(("server/embed/polyfills/npm_" + specifier + ".js"))
-		if err == nil {
-			resolvedPath = fmt.Sprintf("data:application/javascript;base64,%s", base64.StdEncoding.EncodeToString(data))
-		}
-	}
-	if resolvedPath == "" && task.Target != "node" && specifier == "node-fetch" {
+	if specifier == "node-fetch" && task.Target != "node" {
 		resolvedPath = fmt.Sprintf("%s/npm_node-fetch.js", cfg.CdnBasePath)
+		return
 	}
+	data, err := embedFS.ReadFile(("server/embed/polyfills/npm_" + specifier + ".js"))
+	if err == nil {
+		resolvedPath = fmt.Sprintf("data:application/javascript;base64,%s", base64.StdEncoding.EncodeToString(data))
+		return
+	}
+
 	// common npm dependency
-	if resolvedPath == "" {
-		pkgName, version, subpath := splitPkgPath(specifier)
-		if version == "" {
-			if pkgName == task.Pkg.Name {
-				version = task.Pkg.Version
-			} else if pkg, ok := task.Args.deps.Get(pkgName); ok {
-				version = pkg.Version
-			} else if v, ok := task.npm.Dependencies[pkgName]; ok {
-				version = v
-			} else if v, ok := task.npm.PeerDependencies[pkgName]; ok {
-				version = v
-			} else {
-				version = "latest"
-			}
-		}
-		// use version defined in `?deps` query if it exists
-		for _, dep := range task.Args.deps {
-			if pkgName == dep.Name {
-				version = dep.Version
-			}
-		}
-		// force the version of 'react' (as dependency) equals to 'react-dom'
-		if task.Pkg.Name == "react-dom" && pkgName == "react" {
+	pkgName, version, subpath := splitPkgPath(specifier)
+	if version == "" {
+		if pkgName == task.Pkg.Name {
 			version = task.Pkg.Version
+		} else if pkg, ok := task.Args.deps.Get(pkgName); ok {
+			version = pkg.Version
+		} else if v, ok := task.npm.Dependencies[pkgName]; ok {
+			version = v
+		} else if v, ok := task.npm.PeerDependencies[pkgName]; ok {
+			version = v
+		} else {
+			version = "latest"
 		}
-		if !regexpFullVersion.MatchString(version) {
-			p, _, err := getPackageInfo(task.resolveDir, pkgName, version)
-			if err == nil {
-				version = p.Version
-			}
-		}
-		pkg := Pkg{
-			Name:      pkgName,
-			Version:   version,
-			SubPath:   subpath,
-			SubModule: toModuleBareName(subpath, true),
-		}
-		args := BuildArgs{
-			alias:      task.Args.alias,
-			conditions: task.Args.conditions,
-			deps:       task.Args.deps,
-			external:   task.Args.external,
-			exports:    newStringSet(),
-		}
-		fixBuildArgs(&args, pkg)
-		resolvedPath = task.getImportPath(pkg, encodeBuildArgsPrefix(args, pkg, false))
 	}
-
-	if kind != api.ResolveJSDynamicImport {
-		task.lock.Lock()
-		task.imports = append(task.imports, resolvedPath)
-		task.lock.Unlock()
+	// use version defined in `?deps` query if it exists
+	for _, dep := range task.Args.deps {
+		if pkgName == dep.Name {
+			version = dep.Version
+		}
 	}
-
-	// `require("module")`
-	if kind == api.ResolveJSRequireCall {
-		task.lock.Lock()
-		task.requires = append(task.requires, [2]string{specifier, resolvedPath})
-		task.lock.Unlock()
-		resolvedPath = specifier
+	// force the version of 'react' (as dependency) equals to 'react-dom'
+	if task.Pkg.Name == "react-dom" && pkgName == "react" {
+		version = task.Pkg.Version
 	}
-
+	if !regexpFullVersion.MatchString(version) {
+		p, _, err := getPackageInfo(task.resolveDir, pkgName, version)
+		if err == nil {
+			version = p.Version
+		}
+	}
+	pkg := Pkg{
+		Name:      pkgName,
+		Version:   version,
+		SubPath:   subpath,
+		SubModule: toModuleBareName(subpath, true),
+	}
+	args := BuildArgs{
+		alias:      task.Args.alias,
+		conditions: task.Args.conditions,
+		deps:       task.Args.deps,
+		external:   task.Args.external,
+		exports:    newStringSet(),
+	}
+	fixBuildArgs(&args, pkg)
+	resolvedPath = task.getImportPath(pkg, encodeBuildArgsPrefix(args, pkg, false))
 	return
 }
 
