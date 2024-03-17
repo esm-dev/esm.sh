@@ -11,7 +11,7 @@ import type {
   WorkerStorage,
 } from "../types/index.d.ts";
 import { assetsExts, cssPackages, VERSION } from "./consts.ts";
-import { getMimeType } from "./media_type.ts";
+import { getContentType } from "./media_type.ts";
 import {
   asKV,
   checkPreflight,
@@ -179,7 +179,7 @@ async function fetchOriginWithKVCache(
       const obj = await R2.get(storeKey);
       if (obj) {
         const contentType = obj.httpMetadata?.contentType ||
-          getMimeType(path);
+          getContentType(path);
         headers.set("Content-Type", contentType);
         headers.set("Cache-Control", immutableCache);
         headers.set("X-Content-Source", "esm-worker");
@@ -194,7 +194,7 @@ async function fetchOriginWithKVCache(
   }
 
   const buffer = await res.arrayBuffer();
-  const contentType = res.headers.get("Content-Type") || getMimeType(path);
+  const contentType = res.headers.get("Content-Type") || getContentType(path);
   const cacheControl = res.headers.get("Cache-Control");
   const esmId = res.headers.get("X-Esm-Id") ?? undefined;
   const dts = res.headers.get("X-TypeScript-Types") ?? undefined;
@@ -251,7 +251,7 @@ async function fetchOriginWithR2Cache(
   if (ret) {
     resHeaders.set(
       "Content-Type",
-      ret.httpMetadata?.contentType || getMimeType(pathname),
+      ret.httpMetadata?.contentType || getContentType(pathname),
     );
     resHeaders.set("Cache-Control", immutableCache);
     resHeaders.set("X-Content-Source", "esm-worker");
@@ -263,7 +263,7 @@ async function fetchOriginWithR2Cache(
   const res = await fetchOrigin(req, env, ctx, pathname, resHeaders);
   if (res.ok) {
     const contentType = res.headers.get("content-type") ||
-      getMimeType(pathname);
+      getContentType(pathname);
     const buffer = await res.arrayBuffer();
     ctx.waitUntil(r2.put(pathname.slice(1), buffer.slice(0), {
       httpMetadata: { contentType },
@@ -797,4 +797,14 @@ function withESMWorker(middleware?: Middleware, cache: Cache = (caches as any).d
   return { fetch: handler };
 }
 
-export { checkPreflight, corsHeaders, getBuildTargetFromUA, hashText, redirect, targets, version, withESMWorker };
+export {
+  checkPreflight,
+  corsHeaders,
+  getBuildTargetFromUA,
+  getContentType,
+  hashText,
+  redirect,
+  targets,
+  version,
+  withESMWorker,
+};

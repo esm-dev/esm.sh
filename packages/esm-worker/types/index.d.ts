@@ -50,6 +50,7 @@ export interface WorkerStorage {
 
 export const version: string;
 export const targets: Set<string>;
+export const getContentType: (filename: string, defaultType?: string) => string;
 export const getBuildTargetFromUA: (ua: string | null) => string;
 export const checkPreflight: (req: Request) => Response | undefined;
 export const corsHeaders: () => Headers;

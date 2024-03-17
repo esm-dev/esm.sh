@@ -65,7 +65,6 @@ const alias = {
   u: "audio",
   v: "video",
 };
-const defaultType = "binary/octet-stream";
 const typesMap = Object.entries(mimeTypes).reduce(
   (map, [mimeType, exts]) => {
     const type = alias[mimeType.charAt(0)];
@@ -83,7 +82,7 @@ const typesMap = Object.entries(mimeTypes).reduce(
   new Map(),
 );
 
-export function getMimeType(filename: string): string {
+export function getContentType(filename: string, defaultType = "binary/octet-stream"): string {
   const idx = filename.lastIndexOf(".");
   if (idx < 0) return defaultType;
   let ext = filename.slice(idx + 1);
