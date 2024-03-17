@@ -126,23 +126,27 @@ async function fetchOriginWithKVCache(
   req: Request,
   env: Env,
   ctx: Context,
-  path: string,
+  uri: string,
   gzip?: boolean,
 ): Promise<Response> {
-  let storeKey = path.slice(1);
+  let storeKey = uri.slice(1);
   if (storeKey.startsWith("+")) {
     storeKey = `modules/` + storeKey;
   }
   const headers = corsHeaders();
-  const [pathname] = splitBy(path, "?", true);
+  const [pathname] = splitBy(uri, "?", true);
   const R2 = Reflect.get(env, "R2") as R2Bucket | undefined ?? dummyStorage;
   const KV = Reflect.get(env, "KV") as KVNamespace | undefined ?? asKV(R2);
   const fromWorker = req.headers.has("X-Real-Origin");
-  const isModule = !(
-    ctx.url.searchParams.has("raw") ||
-    pathname.endsWith(".map") ||
-    isDtsFile(pathname)
-  );
+  const isRaw = ctx.url.searchParams.has("raw");
+  const isDts = isDtsFile(pathname);
+  const isModule = !(isRaw || isDts || pathname.endsWith(".map"));
+  if (!isModule) {
+    storeKey = pathname.slice(1);
+    if (storeKey.startsWith("*") && (isRaw || isDts)) {
+      storeKey = storeKey.slice(1);
+    }
+  }
 
   if (!fromWorker) {
     if (isModule) {
@@ -179,7 +183,7 @@ async function fetchOriginWithKVCache(
       const obj = await R2.get(storeKey);
       if (obj) {
         const contentType = obj.httpMetadata?.contentType ||
-          getContentType(path);
+          getContentType(pathname);
         headers.set("Content-Type", contentType);
         headers.set("Cache-Control", immutableCache);
         headers.set("X-Content-Source", "esm-worker");
@@ -188,13 +192,13 @@ async function fetchOriginWithKVCache(
     }
   }
 
-  const res = await fetchOrigin(req, env, ctx, path, headers);
+  const res = await fetchOrigin(req, env, ctx, uri, headers);
   if (!res.ok) {
     return res;
   }
 
   const buffer = await res.arrayBuffer();
-  const contentType = res.headers.get("Content-Type") || getContentType(path);
+  const contentType = res.headers.get("Content-Type") || getContentType(pathname);
   const cacheControl = res.headers.get("Cache-Control");
   const esmId = res.headers.get("X-Esm-Id") ?? undefined;
   const dts = res.headers.get("X-TypeScript-Types") ?? undefined;
