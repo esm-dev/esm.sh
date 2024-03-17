@@ -476,6 +476,12 @@ Deno.test("esm-worker", { sanitizeOps: false, sanitizeResources: false }, async 
   await t.step("fallback to lagacy worker", async () => {
     const res = await fetch(`${workerOrigin}/stable/react`);
     assertEquals(await res.text(), `${workerOrigin}/stable/react`);
+
+    const res2 = await fetch(`${workerOrigin}/v135/react-dom`);
+    assertEquals(await res2.text(), `${workerOrigin}/v135/react-dom`);
+
+    const res3 = await fetch(`${workerOrigin}/react-dom?pin=v135`);
+    assertEquals(await res3.text(), `${workerOrigin}/react-dom?pin=v135`);
   });
   closeServer();
 });

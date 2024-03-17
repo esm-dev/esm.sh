@@ -30,7 +30,7 @@ import {
 const regexpNpmNaming = /^[a-zA-Z0-9][\w\.\-]*$/;
 const regexpFullVersion = /^\d+\.\d+\.\d+/;
 const regexpCommitish = /^[a-f0-9]{10,}$/;
-const regexpLegacyVersionPrefix = /^\/(v[1-9]\d+|stable)\//;
+const regexpLegacyVersionPrefix = /^\/v\d+\//;
 
 const version = `v${VERSION}`;
 const defaultNpmRegistry = "https://registry.npmjs.org";
@@ -481,10 +481,10 @@ function withESMWorker(middleware?: Middleware, cache: Cache = (caches as any).d
 
     // use legacy worker if the bild version is specified in the path or query
     if (env.LEGACY_WORKER) {
-      const hasVersionPrefix = (pathname.startsWith("/v") || pathname.startsWith("/stable/")) &&
-        regexpLegacyVersionPrefix.test(pathname);
-      const hasPinQuery = url.searchParams.has("pin") && (regexpLegacyVersionPrefix.test(url.searchParams.get("pin")!));
-      if (hasVersionPrefix || hasPinQuery) {
+      const hasVersionPrefix = pathname.startsWith("/stable/") || (
+        pathname.startsWith("/v") && regexpLegacyVersionPrefix.test(pathname)
+      );
+      if (hasVersionPrefix || url.searchParams.has("pin")) {
         return env.LEGACY_WORKER.fetch(req.clone());
       }
     }
