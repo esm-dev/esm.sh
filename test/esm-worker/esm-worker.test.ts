@@ -1,4 +1,4 @@
-import { join } from "https://deno.land/std@0.210.0/path/mod.ts";
+import { join } from "https://deno.land/std@0.220.0/path/mod.ts";
 import { assert, assertEquals, assertStringIncludes } from "https://deno.land/std@0.220.0/assert/mod.ts";
 
 const env = { ESM_ORIGIN: "http://localhost:8080" };
