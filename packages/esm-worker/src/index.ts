@@ -408,15 +408,6 @@ function withESMWorker(middleware?: Middleware, cache: Cache = (caches as any).d
           },
           { varyUA: true },
         );
-
-      case "/favicon.ico": {
-        return ctx.withCache(() =>
-          new Response(null, {
-            status: 404,
-            headers: { "cache-control": immutableCache },
-          })
-        );
-      }
     }
 
     if (
@@ -470,12 +461,17 @@ function withESMWorker(middleware?: Middleware, cache: Cache = (caches as any).d
       return err("Method Not Allowed", 405);
     }
 
-    // return the default landing page or embed files
+    // return 404 for favicon.ico and robots.txt
+    if (pathname === "/favicon.ico" || pathname === "/robots.txt") {
+      return err("Not Found", 404);
+    }
+
+    // use the default landing page/embedded files
     if (pathname === "/" || pathname.startsWith("/embed/")) {
       return fetchOrigin(req, env, ctx, `${pathname}${url.search}`, corsHeaders());
     }
 
-    // singleton build module
+    // if it's a singleton build module
     if (pathname.startsWith("/+")) {
       return ctx.withCache(
         () => fetchOriginWithKVCache(req, env, ctx, pathname + url.search),
