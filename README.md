@@ -4,10 +4,9 @@
 
 A fast, smart, & global content delivery network (CDN) for modern(es2015+) web development.
 
-[![Docker Image](https://img.shields.io/github/v/tag/esm-dev/esm.sh?label=Docker&display_name=tag&sort=semver&style=flat&colorA=232323&colorB=232323&logo=docker&logoColor=eeeeee)](https://github.com/esm-dev/esm.sh/pkgs/container/esm.sh)
-[![Discord](https://img.shields.io/discord/1097820016893763684?style=flat&colorA=232323&colorB=232323&label=Chat&logo=discord&logoColor=eeeeee)](https://discord.gg/XDbjMeb7pb)
-[![Twitter](https://img.shields.io/twitter/follow/jexia_?label=%40jexia_&style=flat&colorA=232323&colorB=232323&logo=x&logoColor=eeeeee)](https://twitter.com/jexia_)
-[![Github Sponsors](https://img.shields.io/github/sponsors/ije?label=Sponsors&style=flat&colorA=232323&colorB=232323&logo=githubsponsors&logoColor=eeeeee)](https://github.com/sponsors/ije)
+[![Docker](https://img.shields.io/github/v/tag/esm-dev/esm.sh?label=Docker&display_name=tag&sort=semver&style=flat&colorA=232323&colorB=232323&logo=docker&logoColor=eeeeee)](https://github.com/esm-dev/esm.sh/pkgs/container/esm.sh)
+[![Discord](https://img.shields.io/discord/1097820016893763684?style=flat&colorA=232323&colorB=232323&label=Discord&logo=discord&logoColor=eeeeee)](https://discord.gg/XDbjMeb7pb)
+[![Sponsors](https://img.shields.io/github/sponsors/ije?label=Sponsors&style=flat&colorA=232323&colorB=232323&logo=githubsponsors&logoColor=eeeeee)](https://github.com/sponsors/ije)
 
 ## How to Use
 
