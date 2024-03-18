@@ -1097,7 +1097,7 @@ func (task *BuildTask) resolveExternalModule(specifier string, kind api.ResolveK
 }
 
 func (task *BuildTask) storeToDB() {
-	err := db.Put(task.ID(), utils.MustEncodeJSON(task.esm))
+	err := db.Put(task.ID(), mustEncodeJSON(task.esm))
 	if err != nil {
 		log.Errorf("db: %v", err)
 	}

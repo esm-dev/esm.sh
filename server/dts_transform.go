@@ -34,7 +34,7 @@ func (task *BuildTask) transformDTS(dts string, aliasDepsPrefix string, marker *
 
 	var pkgInfo NpmPackageInfo
 	pkgJsonPath := path.Join(task.wd, "node_modules", task.Pkg.Name, "package.json")
-	err = utils.ParseJSONFile(pkgJsonPath, &pkgInfo)
+	err = parseJSONFile(pkgJsonPath, &pkgInfo)
 	if err != nil {
 		return
 	}
@@ -169,7 +169,7 @@ func (task *BuildTask) transformDTS(dts string, aliasDepsPrefix string, marker *
 				} else {
 					var p NpmPackageInfo
 					packageJSONFile := path.Join(dtsDir, res, "package.json")
-					if existsFile(packageJSONFile) && utils.ParseJSONFile(packageJSONFile, &p) == nil {
+					if existsFile(packageJSONFile) && parseJSONFile(packageJSONFile, &p) == nil {
 						if p.Types != "" {
 							res = strings.TrimSuffix(res, "/") + utils.CleanPath(p.Types)
 						} else if p.Typings != "" {

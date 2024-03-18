@@ -58,7 +58,7 @@ func esmHandler() rex.Handle {
 			readme = bytes.ReplaceAll(readme, []byte("./server/embed/"), []byte(cfg.CdnBasePath+"/embed/"))
 			readme = bytes.ReplaceAll(readme, []byte("./HOSTING.md"), []byte("https://github.com/esm-dev/esm.sh/blob/main/HOSTING.md"))
 			readme = bytes.ReplaceAll(readme, []byte("https://esm.sh"), []byte(cdnOrigin+cfg.CdnBasePath))
-			readmeStrLit := utils.MustEncodeJSON(string(readme))
+			readmeStrLit := mustEncodeJSON(string(readme))
 			html := bytes.ReplaceAll(indexHTML, []byte("'# README'"), readmeStrLit)
 			html = bytes.ReplaceAll(html, []byte("{VERSION}"), []byte(fmt.Sprintf("%d", VERSION)))
 			html = bytes.ReplaceAll(html, []byte("{basePath}"), []byte(cfg.CdnBasePath))
@@ -517,7 +517,7 @@ func esmHandler() rex.Handle {
 					buf := &bytes.Buffer{}
 					wasmUrl := fmt.Sprintf("%s%s%s", cdnOrigin, cfg.CdnBasePath, pathname)
 					fmt.Fprintf(buf, "/* esm.sh - wasm module */\n")
-					fmt.Fprintf(buf, "const data = await fetch(%s).then(r => r.arrayBuffer());\nexport default new WebAssembly.Module(data);", strings.TrimSpace(string(utils.MustEncodeJSON(wasmUrl))))
+					fmt.Fprintf(buf, "const data = await fetch(%s).then(r => r.arrayBuffer());\nexport default new WebAssembly.Module(data);", strings.TrimSpace(string(mustEncodeJSON(wasmUrl))))
 					header.Set("Cache-Control", "public, max-age=31536000, immutable")
 					header.Set("Content-Type", "application/javascript; charset=utf-8")
 					return buf
@@ -1045,7 +1045,7 @@ func throwErrorJS(ctx *rex.Context, err error, static bool) interface{} {
 	fmt.Fprintf(
 		buf,
 		`throw new Error("[esm.sh] " + %s);%s`,
-		strings.TrimSpace(string(utils.MustEncodeJSON(err.Error()))),
+		strings.TrimSpace(string(mustEncodeJSON(err.Error()))),
 		"\n",
 	)
 	fmt.Fprintf(buf, "export default null;\n")

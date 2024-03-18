@@ -1,7 +1,9 @@
 package server
 
 import (
+	"bytes"
 	"encoding/base64"
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -173,4 +175,23 @@ func concatBytes(a, b []byte) []byte {
 	copy(c, a)
 	copy(c[len(a):], b)
 	return c
+}
+
+func mustEncodeJSON(v interface{}) []byte {
+	buf := bytes.NewBuffer(nil)
+	err := json.NewEncoder(buf).Encode(v)
+	if err != nil {
+		panic(err)
+	}
+	return buf.Bytes()
+}
+
+func parseJSONFile(filename string, v interface{}) (err error) {
+	var file *os.File
+	file, err = os.Open(filename)
+	if err != nil {
+		return
+	}
+	defer file.Close()
+	return json.NewDecoder(file).Decode(v)
 }

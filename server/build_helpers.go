@@ -154,7 +154,7 @@ func (task *BuildTask) analyze(forceCjsOnly bool) (esm *ESMBuild, npm NpmPackage
 	pkg := task.Pkg
 
 	var p NpmPackageInfo
-	err = utils.ParseJSONFile(path.Join(wd, "node_modules", pkg.Name, "package.json"), &p)
+	err = parseJSONFile(path.Join(wd, "node_modules", pkg.Name, "package.json"), &p)
 	if err != nil {
 		return
 	}
@@ -192,7 +192,7 @@ func (task *BuildTask) analyze(forceCjsOnly bool) (esm *ESMBuild, npm NpmPackage
 			packageFile := path.Join(subDir, "package.json")
 			if existsFile(packageFile) {
 				var p NpmPackageInfo
-				err = utils.ParseJSONFile(packageFile, &p)
+				err = parseJSONFile(packageFile, &p)
 				if err != nil {
 					return
 				}

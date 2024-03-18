@@ -67,7 +67,7 @@ func listRepoRefs(repo string) (refs []GitRef, err error) {
 	}
 
 	if cache != nil {
-		cache.Set(cacheKey, utils.MustEncodeJSON(refs), 10*time.Minute)
+		cache.Set(cacheKey, mustEncodeJSON(refs), 10*time.Minute)
 	}
 	return
 }

@@ -14,7 +14,6 @@ import (
 	"time"
 
 	"github.com/evanw/esbuild/pkg/api"
-	"github.com/ije/gox/utils"
 	"github.com/ije/rex"
 )
 
@@ -294,7 +293,7 @@ func build(input BuildInput) (id string, err error) {
 			}
 		}
 		if err == nil {
-			err = db.Put("publish-"+id, utils.MustEncodeJSON(map[string]interface{}{
+			err = db.Put("publish-"+id, mustEncodeJSON(map[string]interface{}{
 				"createdAt": time.Now().Unix(),
 			}))
 		}

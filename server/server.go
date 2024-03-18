@@ -20,7 +20,7 @@ import (
 	"github.com/esm-dev/esm.sh/server/config"
 	"github.com/esm-dev/esm.sh/server/storage"
 
-	logx "github.com/ije/gox/log"
+	logger "github.com/ije/gox/log"
 	"github.com/ije/rex"
 )
 
@@ -31,7 +31,7 @@ var (
 	fs           storage.FileSystem
 	nodeLibs     map[string]string
 	buildQueue   *BuildQueue
-	log          *logx.Logger
+	log          *logger.Logger
 	embedFS      EmbedFS
 	fetchLocks   sync.Map
 	installLocks sync.Map
@@ -79,7 +79,7 @@ func Serve(efs EmbedFS) {
 		embedFS = efs
 	}
 
-	log, err = logx.New(fmt.Sprintf("file:%s?buffer=32k", path.Join(cfg.LogDir, fmt.Sprintf("main-v%d.log", VERSION))))
+	log, err = logger.New(fmt.Sprintf("file:%s?buffer=32k", path.Join(cfg.LogDir, fmt.Sprintf("main-v%d.log", VERSION))))
 	if err != nil {
 		fmt.Printf("initiate logger: %v\n", err)
 		os.Exit(1)
@@ -131,22 +131,22 @@ func Serve(efs EmbedFS) {
 	nodeLibs["node/async_hooks.js"] = string(node_async_hooks_js)
 	log.Debugf("%d node libs loaded", len(nodeLibs))
 
-	var accessLogger *logx.Logger
+	var accessLogger *logger.Logger
 	if cfg.LogDir == "" {
-		accessLogger = &logx.Logger{}
+		accessLogger = &logger.Logger{}
 	} else {
-		accessLogger, err = logx.New(fmt.Sprintf("file:%s?buffer=32k&fileDateFormat=20060102", path.Join(cfg.LogDir, "access.log")))
+		accessLogger, err = logger.New(fmt.Sprintf("file:%s?buffer=32k&fileDateFormat=20060102", path.Join(cfg.LogDir, "access.log")))
 		if err != nil {
 			log.Fatalf("initiate access logger: %v", err)
 		}
 	}
 	accessLogger.SetQuite(true) // quite in terminal
 
-	nodeInstallDir := os.Getenv("NODE_INSTALL_DIR")
-	if nodeInstallDir == "" {
-		nodeInstallDir = path.Join(cfg.WorkDir, "nodejs")
+	nodejsInstallDir := os.Getenv("NODE_INSTALL_DIR")
+	if nodejsInstallDir == "" {
+		nodejsInstallDir = path.Join(cfg.WorkDir, "nodejs")
 	}
-	nodeVer, pnpmVer, err := checkNodejs(nodeInstallDir)
+	nodeVer, pnpmVer, err := checkNodejs(nodejsInstallDir)
 	if err != nil {
 		log.Fatalf("check nodejs: %v", err)
 	}
@@ -213,5 +213,5 @@ func Serve(efs EmbedFS) {
 
 func init() {
 	embedFS = &embed.FS{}
-	log = &logx.Logger{}
+	log = &logger.Logger{}
 }

@@ -10,8 +10,6 @@ import (
 	"path"
 	"strings"
 	"time"
-
-	"github.com/ije/gox/utils"
 )
 
 // allowlist for _invoke_ mode
@@ -98,7 +96,7 @@ func cjsLexer(cwd string, importPath string, nodeEnv string) (ret cjsExportsResu
 
 	cmd := exec.CommandContext(ctx, "node", "cjs_lexer.js")
 	cmd.Dir = path.Join(cfg.WorkDir, "ns")
-	cmd.Stdin = bytes.NewBuffer(utils.MustEncodeJSON(args))
+	cmd.Stdin = bytes.NewBuffer(mustEncodeJSON(args))
 	cmd.Stdout = &outBuf
 	cmd.Stderr = &errBuf
 

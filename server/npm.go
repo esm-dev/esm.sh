@@ -184,7 +184,7 @@ func getPackageInfo(wd string, name string, version string) (info NpmPackageInfo
 	}
 	if wd != "" {
 		pkgJsonPath := path.Join(wd, "node_modules", name, "package.json")
-		if existsFile(pkgJsonPath) && utils.ParseJSONFile(pkgJsonPath, &info) == nil {
+		if existsFile(pkgJsonPath) && parseJSONFile(pkgJsonPath, &info) == nil {
 			fromPackageJSON = true
 			return
 		}
@@ -289,7 +289,7 @@ func fetchPackageInfo(name string, version string) (info NpmPackageInfo, err err
 			return
 		}
 		if cache != nil {
-			cache.Set(cacheKey, utils.MustEncodeJSON(info), 7*24*time.Hour)
+			cache.Set(cacheKey, mustEncodeJSON(info), 7*24*time.Hour)
 		}
 		return
 	}
@@ -347,7 +347,7 @@ func fetchPackageInfo(name string, version string) (info NpmPackageInfo, err err
 
 	// cache package info for 10 minutes
 	if cache != nil {
-		cache.Set(cacheKey, utils.MustEncodeJSON(info), 10*time.Minute)
+		cache.Set(cacheKey, mustEncodeJSON(info), 10*time.Minute)
 	}
 	return
 }
@@ -413,7 +413,7 @@ func installPackage(wd string, pkg Pkg) (err error) {
 		if err == nil && !existsFile(packageJsonFilepath) {
 			if pkg.FromGithub {
 				ensureDir(path.Dir(packageJsonFilepath))
-				err = os.WriteFile(packageJsonFilepath, utils.MustEncodeJSON(pkg), 0644)
+				err = os.WriteFile(packageJsonFilepath, mustEncodeJSON(pkg), 0644)
 			} else {
 				err = fmt.Errorf("pnpm install %s: package.json not found", pkg)
 			}
