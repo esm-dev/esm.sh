@@ -138,11 +138,23 @@ i {
   font-style: italic;
 }
 
+.cover {
+  width: 100%;
+  height: 25vh;
+  overflow: hidden;
+  min-height: 300px;
+  background-color: #232323;
+  background-image: url("/embed/assets/og-image.svg");
+  background-position: center;
+  background-size: contain;
+  background-repeat: no-repeat;
+}
+
 .readme {
   width: 90%;
   max-width: 720px;
   margin: 0 auto;
-  padding: 120px 0 60px;
+  padding: 60px 0 60px;
 }
 
 .readme h1,
@@ -162,7 +174,7 @@ i {
   padding-bottom: 9px;
   border-bottom: 1px solid #eee;
   margin-top: 0.6rem;
-  font-size: 2.2rem;
+  font-size: 2.1rem;
 }
 
 .readme h2 {
@@ -340,34 +352,47 @@ i {
   :root {
     color-scheme: dark;
   }
+
   body {
     color: #e6e1d9 !important;
     background-color: #0e1011 !important;
   }
+
   .hljs {
     color: #cfcac2 !important;
   }
+
   .readme h1 {
     border-color: #323232;
   }
+
   .readme h1 .github {
     color: #999;
   }
+
   .readme h1 .github:hover {
     color: #eee;
   }
+
   .readme blockquote {
     background-color: #232323 !important;
     border-color: #323232 !important;
   }
+
   .readme pre {
     color: #cfcac2;
     background-color: #232323 !important;
   }
-  .hljs-keyword, .hljs-selector-tag, .hljs-subst {
+
+  .hljs-keyword,
+  .hljs-selector-tag,
+  .hljs-subst {
     color: #cfcac2 !important;
   }
-  .hljs-attribute, .hljs-name, .hljs-tag {
+
+  .hljs-attribute,
+  .hljs-name,
+  .hljs-tag {
     color: #71ffff !important;
   }
 }

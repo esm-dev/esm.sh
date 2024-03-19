@@ -15,11 +15,6 @@ export function render(md) {
     block.innerHTML = block.innerHTML.replace(/(^|\n)\$ /g, "$1");
   });
 
-  // remove badges
-  document.querySelectorAll("a > img[src^='https://img.shields.io/']").forEach((img) => {
-    img.parentElement.remove();
-  });
-
   // scroll to hashHeading
   const hashHeading = document.getElementById(location.hash.slice(1));
   if (hashHeading) {
