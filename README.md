@@ -1,12 +1,20 @@
 ![esm.sh](./server/embed/assets/og-image.svg)
 
+<p align="center">
+  <a href= "https://github.com/esm-dev/esm.sh/pkgs/container/esm.sh">
+    <img src="https://img.shields.io/github/v/tag/esm-dev/esm.sh?label=Docker&display_name=tag&sort=semver&style=flat&colorA=232323&colorB=232323&logo=docker&logoColor=eeeeee" alt="Docker" />
+  </a>
+  <a href="https://discord.gg/XDbjMeb7pb">
+    <img src="https://img.shields.io/discord/1097820016893763684?style=flat&colorA=232323&colorB=232323&label=Discord&logo=&logoColor=eeeeee" alt="Discord" />
+  </a>
+  <a href="https://github.com/sponsors/ije">
+    <img src="https://img.shields.io/github/sponsors/ije?label=Sponsors&style=flat&colorA=232323&colorB=232323&logo=&logoColor=eeeeee" alt="Sponsors" />
+  </a>
+</p>
+
 # esm.sh
 
 A fast, smart, & global content delivery network (CDN) for modern(es2015+) web development.
-
-[![Docker](https://img.shields.io/github/v/tag/esm-dev/esm.sh?label=Docker&display_name=tag&sort=semver&style=flat&colorA=232323&colorB=232323&logo=docker&logoColor=eeeeee)](https://github.com/esm-dev/esm.sh/pkgs/container/esm.sh)
-[![Discord](https://img.shields.io/discord/1097820016893763684?style=flat&colorA=232323&colorB=232323&label=Discord&logo=discord&logoColor=eeeeee)](https://discord.gg/XDbjMeb7pb)
-[![Sponsors](https://img.shields.io/github/sponsors/ije?label=Sponsors&style=flat&colorA=232323&colorB=232323&logo=githubsponsors&logoColor=eeeeee)](https://github.com/sponsors/ije)
 
 ## How to Use
 
