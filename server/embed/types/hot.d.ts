@@ -31,7 +31,7 @@ export interface HotCore {
   onFire(handler: (sw: ServiceWorker) => void): this;
   onUpdateFound: () => void;
   waitUntil(...promises: readonly Promise<any>[]): this;
-  fire(options?: FireOptions): Promise<void>;
+  fire(options?: FireOptions): Promise<ServiceWorker>;
   listen(): void;
 }
 

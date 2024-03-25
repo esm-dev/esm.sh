@@ -172,35 +172,45 @@ class Hot implements HotCore {
     }
 
     const { main, swScript = "/sw.js", swUpdateViaCache } = options;
+    if (this._swScript === swScript) {
+      throw new Error("Service Worker already registered");
+    }
+    this._swScript = swScript;
 
     // add preload link for the main module if it's provided
     if (main) {
       appendElement("link", { rel: "modulepreload", href: main });
     }
 
-    if (this._swScript === swScript) {
-      return;
-    }
-    this._swScript = swScript;
-
     // register Service Worker
-    const reg = await sw.register(this._swScript, {
+    const swr = await sw.register(this._swScript, {
       type: "module",
       updateViaCache: swUpdateViaCache,
     });
-    const tryFireApp = async () => {
-      if (reg.active?.state === "activated") {
-        await this._fireApp(reg.active);
-        main && appendElement("script", { type: "module", src: main });
+
+    let resolve: (sw: ServiceWorker) => void;
+    let reject: (err: any) => void;
+    let promise = new Promise<ServiceWorker>((res, rej) => {
+      resolve = res;
+      rej = rej;
+    });
+    const tryFireApp = () => {
+      if (swr.active?.state === "activated") {
+        const { active } = swr;
+        this._fireApp(active).then(() => {
+          main && appendElement("script", { type: "module", src: main });
+          resolve(active);
+        }).catch(reject);
       }
     };
 
     // detect Service Worker update available and wait for it to become installed
-    reg.onupdatefound = () => {
-      const { installing } = reg;
+    swr.onupdatefound = () => {
+      const { installing } = swr;
       if (installing) {
+        installing.onerror = reject;
         installing.onstatechange = () => {
-          const { waiting } = reg;
+          const { waiting } = swr;
           // it's first install
           if (waiting && !sw.controller) {
             waiting.onstatechange = tryFireApp;
@@ -214,6 +224,8 @@ class Hot implements HotCore {
 
     // fire app immediately if there's an activated Service Worker
     tryFireApp();
+
+    return promise;
   }
 
   private async _fireApp(swActive: ServiceWorker) {
@@ -243,14 +255,11 @@ class Hot implements HotCore {
 
     // wait until all promises resolved
     await Promise.all(this._promises);
-    this._promises = [];
 
     // fire all `fire` listeners
     for (const handler of this._fireListeners) {
       handler(swActive);
     }
-    this._fireListeners = [];
-    this._swActive = swActive;
 
     // apply "[type=hot/module]" script tags
     queryElements<HTMLScriptElement>("script[type='hot/module']", (el) => {
@@ -258,6 +267,10 @@ class Hot implements HotCore {
       copy.type = "module";
       el.replaceWith(copy);
     });
+
+    this._promises = [];
+    this._fireListeners = [];
+    this._swActive = swActive;
   }
 
   listen() {
