@@ -53,6 +53,3 @@ Then you can import `React` from "http://localhost:8080/react"
 
 All the tests are running in [Deno](https://deno.land), you can find them in [test/](./test) directory.
 
-## Code of Conduct
-
-All contributors are expected to follow our [Code of Conduct](CODE_OF_CONDUCT.md).
