@@ -1,6 +1,6 @@
 export interface Plugin {
-  name: string;
-  setup: (hot: HotCore) => void;
+  (hot: Omit<HotAPI, "fire" | "listen">): void;
+  displayName?: string;
 }
 
 export interface ArchiveEntry {
@@ -20,11 +20,11 @@ export interface VFS {
 
 export interface FireOptions {
   main?: string;
-  swScript?: string;
+  swModule?: string;
   swUpdateViaCache?: ServiceWorkerUpdateViaCache;
 }
 
-export interface HotCore {
+export interface HotAPI {
   readonly vfs: VFS;
   use(...plugins: readonly Plugin[]): this;
   onFetch(handler: (event: FetchEvent) => void): this;
@@ -35,11 +35,5 @@ export interface HotCore {
   listen(): void;
 }
 
-declare global {
-  interface HotAPI {}
-}
-
-export interface Hot extends HotCore, HotAPI {}
-
-export const hot: Hot;
+export const hot: HotAPI;
 export default hot;

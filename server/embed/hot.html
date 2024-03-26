@@ -6,25 +6,23 @@
   <meta name="viewport" content="width=device-width">
   <title>ESM&gt;Hot</title>
   <link rel="preload" href="/embed/hot_archive.gz" as="fetch" type="application/esm-archive+gzip"
-    crossorigin="anonymous">
+    crossorigin="anonymous" checksum="KS9wj4v1V81ZBYWklx4XYq0RNnM60NigipJJcrK4y7w=">
   <link rel="modulepreload" href="/hot">
 </head>
 
 <body>
   <pre id="root">...</pre>
   <script type="module">
-    import { hot } from "/hot"
+    import hot from "/hot"
     hot.onFire(() => {
-      hot.vfs.put(
-        new File(["bar"], "foo.txt", { type: "text/plain" })
-      ).then(() => {
+      hot.vfs.put(new File(["bar"], "foo.txt", { type: "text/plain" })).then(() => {
         fetch("/@hot/foo.txt").then(r => r.text()).then(text => {
           const strong = document.createElement("strong")
           strong.textContent = text
           root.append(strong, "...")
         })
       })
-    }).fire({ swScript: "/embed/hot_sw.js" }).then((sw) => {
+    }).fire({ swModule: "/embed/hot_sw.js" }).then((sw) => {
       import("/foo.js").then(({ foo }) => {
         const em = document.createElement("em")
         em.textContent = foo

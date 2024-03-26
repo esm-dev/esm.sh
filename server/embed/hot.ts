@@ -4,7 +4,7 @@
 
 /// <reference lib="webworker" />
 
-import type { ArchiveEntry, FireOptions, HotCore, Plugin } from "./types/hot";
+import type { ArchiveEntry, FireOptions, HotAPI, Plugin } from "./types/hot";
 
 const VERSION = 135;
 const doc: Document | undefined = globalThis.document;
@@ -125,10 +125,10 @@ class Archive {
   }
 }
 
-/** class `Hot` implements the `HotCore` interface. */
-class Hot implements HotCore {
+/** class `Hot` implements the `HotAPI` interface. */
+class Hot implements HotAPI {
   private _vfs: VFS | null = null;
-  private _swScript: string | null = null;
+  private _swModule: string | null = null;
   private _swActive: ServiceWorker | null = null;
   private _archive: Archive | null = null;
   private _fetchListeners: ((event: FetchEvent) => void)[] = [];
@@ -140,7 +140,7 @@ class Hot implements HotCore {
   }
 
   use(...plugins: readonly Plugin[]) {
-    plugins.forEach((plugin) => plugin.setup(this));
+    plugins.forEach((plugin) => plugin(this));
     return this;
   }
 
@@ -171,11 +171,11 @@ class Hot implements HotCore {
       throw new Error("Service Worker not supported");
     }
 
-    const { main, swScript = "/sw.js", swUpdateViaCache } = options;
-    if (this._swScript === swScript) {
+    const { main, swModule = "/sw.js", swUpdateViaCache } = options;
+    if (this._swModule === swModule) {
       throw new Error("Service Worker already registered");
     }
-    this._swScript = swScript;
+    this._swModule = swModule;
 
     // add preload link for the main module if it's provided
     if (main) {
@@ -183,7 +183,7 @@ class Hot implements HotCore {
     }
 
     // register Service Worker
-    const swr = await sw.register(this._swScript, {
+    const swr = await sw.register(this._swModule, {
       type: "module",
       updateViaCache: swUpdateViaCache,
     });
@@ -192,7 +192,7 @@ class Hot implements HotCore {
     let reject: (err: any) => void;
     let promise = new Promise<ServiceWorker>((res, rej) => {
       resolve = res;
-      rej = rej;
+      reject = rej;
     });
     const tryFireApp = () => {
       if (swr.active?.state === "activated") {
@@ -230,7 +230,7 @@ class Hot implements HotCore {
 
   private async _fireApp(swActive: ServiceWorker) {
     // download and send esm archive to Service Worker
-    queryElements<HTMLLinkElement>(`link[rel=preload][as=fetch][type^="${kTypeEsmArchive}"][href]`, (el) => {
+    queryElements<HTMLLinkElement>(`link[rel=preload][as=fetch][type^="${kTypeEsmArchive}"][href]`, (el, i) => {
       this._promises.push(
         fetch(el.href).then((res) => {
           if (res.ok) {
@@ -240,15 +240,16 @@ class Hot implements HotCore {
             return res.arrayBuffer();
           }
           return Promise.reject(new Error(res.statusText ?? `<${res.status}>`));
-        }).then((arrayBuffer) => {
-          swActive.postMessage({ [kHotArchive]: arrayBuffer });
-          new BroadcastChannel(kHot).onmessage = (evt) => {
-            if (evt.data === kHotArchive) {
-              this.onUpdateFound();
+        }).then(async (arrayBuffer) => {
+          const checksum = el.getAttribute("checksum");
+          if (checksum) {
+            const buf = await crypto.subtle.digest("SHA-256", arrayBuffer);
+            if (btoa(String.fromCharCode(...new Uint8Array(buf))) !== checksum) {
+              throw new Error("Checksum mismatch: " + checksum);
             }
-          };
-        }).catch((err) => {
-          console.error("Failed to fetch", el.href, err[kMessage]);
+          }
+          new BroadcastChannel(kHot).onmessage = (evt) => evt.data === 1 && this.onUpdateFound();
+          swActive.postMessage([i, arrayBuffer]);
         }),
       );
     });
@@ -279,7 +280,6 @@ class Hot implements HotCore {
       throw new Error("Service Worker scope not found.");
     }
 
-    const bc = new BroadcastChannel(kHot);
     const vfs = this.vfs;
     const on: typeof addEventListener = addEventListener;
     const serveVFS = async (name: string) => {
@@ -340,14 +340,14 @@ class Hot implements HotCore {
 
     on(kMessage, (evt) => {
       const { data } = evt;
-      if (typeof data === "object" && data !== null) {
-        const buffer = data[kHotArchive];
+      if (Array.isArray(data)) {
+        const [_idx, buffer] = data;
         if (buffer instanceof ArrayBuffer) {
           try {
             const archive = new Archive(buffer);
             if (archive.checksum !== this._archive?.checksum) {
               this._archive = archive;
-              bc.postMessage(kHotArchive);
+              new BroadcastChannel(kHot).postMessage(1);
               vfs.put(new File([buffer], kHotArchive, { type: kTypeEsmArchive }));
             }
           } catch (err) {
@@ -362,7 +362,7 @@ class Hot implements HotCore {
 /** query all elements by the given selectors. */
 function queryElements<T extends Element>(
   selectors: string,
-  callback: (value: T) => void,
+  callback: (value: T, index: number) => void,
 ) {
   // @ts-expect-error throw error if document is not available
   doc.querySelectorAll(selectors).forEach(callback);
