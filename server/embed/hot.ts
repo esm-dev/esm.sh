@@ -1,4 +1,4 @@
-/*! 🔥 esm.sh/hot - speeding up your modern web application with ESM modules.
+/*! 🔥 esm.sh/hot - speeding up your modern(es2015+) web application.
  *  Docs: https://docs.esm.sh/hot
  */
 
