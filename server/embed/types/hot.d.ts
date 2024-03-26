@@ -11,13 +11,6 @@ export interface ArchiveEntry {
   size: number;
 }
 
-export interface VFS {
-  has(name: string): Promise<boolean>;
-  get(name: string): Promise<File | undefined>;
-  put(file: File): Promise<string>;
-  delete(name: string): Promise<void>;
-}
-
 export interface FireOptions {
   main?: string;
   swModule?: string;
@@ -25,7 +18,6 @@ export interface FireOptions {
 }
 
 export interface HotAPI {
-  readonly vfs: VFS;
   use(...plugins: readonly Plugin[]): this;
   onFetch(handler: (event: FetchEvent) => void): this;
   onFire(handler: (sw: ServiceWorker) => void): this;

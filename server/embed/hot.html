@@ -15,13 +15,9 @@
   <script type="module">
     import hot from "/hot"
     hot.onFire(() => {
-      hot.vfs.put(new File(["bar"], "foo.txt", { type: "text/plain" })).then(() => {
-        fetch("/@hot/foo.txt").then(r => r.text()).then(text => {
-          const strong = document.createElement("strong")
-          strong.textContent = text
-          root.append(strong, "...")
-        })
-      })
+      const b = document.createElement("strong")
+      b.textContent = 'foo'
+      root.append(b, "...")
     }).fire({ swModule: "/embed/hot_sw.js" }).then((sw) => {
       import("/foo.js").then(({ foo }) => {
         const em = document.createElement("em")

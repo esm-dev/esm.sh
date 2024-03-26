@@ -1,4 +1,4 @@
-/*! 🔥 esm.sh/hot
+/*! 🔥 esm.sh/hot - speeding up your modern web application with ESM modules.
  *  Docs: https://docs.esm.sh/hot
  */
 
@@ -6,65 +6,10 @@
 
 import type { ArchiveEntry, FireOptions, HotAPI, Plugin } from "./types/hot";
 
-const VERSION = 135;
 const doc: Document | undefined = globalThis.document;
 const kHot = "esm.sh/hot";
 const kMessage = "message";
-const kVfs = "vfs";
 const kTypeEsmArchive = "application/esm-archive";
-const kHotArchive = "#hot-archive";
-
-/** class `VFS` implements the virtual file system by using indexed database. */
-class VFS {
-  private _db: IDBDatabase | Promise<IDBDatabase>;
-
-  constructor(scope: string, version: number) {
-    const req = indexedDB.open(scope, version);
-    req.onupgradeneeded = () => {
-      const db = req.result;
-      if (!db.objectStoreNames.contains(kVfs)) {
-        db.createObjectStore(kVfs, { keyPath: "name" });
-      }
-    };
-    this._db = waitIDBRequest<IDBDatabase>(req);
-  }
-
-  private async _tx(readonly = false) {
-    let db = this._db;
-    if (db instanceof Promise) {
-      db = this._db = await db;
-    }
-    return db.transaction(kVfs, readonly ? "readonly" : "readwrite").objectStore(kVfs);
-  }
-
-  async has(name: string) {
-    const tx = await this._tx(true);
-    return await waitIDBRequest<string>(tx.getKey(name)) === name;
-  }
-
-  async get(name: string) {
-    const tx = await this._tx(true);
-    const ret = await waitIDBRequest<File & { content: ArrayBuffer } | undefined>(tx.get(name));
-    if (ret) {
-      return new File([ret.content], ret.name, ret);
-    }
-  }
-
-  async put(file: File) {
-    const { name, type, lastModified } = file;
-    if (await this.has(name)) {
-      return name;
-    }
-    const content = await file.arrayBuffer();
-    const tx = await this._tx();
-    return waitIDBRequest<string>(tx.put({ name, type, lastModified, content }));
-  }
-
-  async delete(name: string) {
-    const tx = await this._tx();
-    return waitIDBRequest<void>(tx.delete(name));
-  }
-}
 
 /**
  * class `Archive` implements the reader for esm-archive format.
@@ -127,17 +72,12 @@ class Archive {
 
 /** class `Hot` implements the `HotAPI` interface. */
 class Hot implements HotAPI {
-  private _vfs: VFS | null = null;
   private _swModule: string | null = null;
   private _swActive: ServiceWorker | null = null;
   private _archive: Archive | null = null;
   private _fetchListeners: ((event: FetchEvent) => void)[] = [];
   private _fireListeners: ((sw: ServiceWorker) => void)[] = [];
   private _promises: Promise<any>[] = [];
-
-  get vfs() {
-    return this._vfs ?? (this._vfs = new VFS(kHot, VERSION));
-  }
 
   use(...plugins: readonly Plugin[]) {
     plugins.forEach((plugin) => plugin(this));
@@ -194,10 +134,10 @@ class Hot implements HotAPI {
       resolve = res;
       reject = rej;
     });
-    const tryFireApp = () => {
+    const tryFireApp = (firstInstall = false) => {
       if (swr.active?.state === "activated") {
         const { active } = swr;
-        this._fireApp(active).then(() => {
+        this._fireApp(active, firstInstall).then(() => {
           main && appendElement("script", { type: "module", src: main });
           resolve(active);
         }).catch(reject);
@@ -213,7 +153,7 @@ class Hot implements HotAPI {
           const { waiting } = swr;
           // it's first install
           if (waiting && !sw.controller) {
-            waiting.onstatechange = tryFireApp;
+            waiting.onstatechange = () => tryFireApp(true);
           }
         };
       }
@@ -228,34 +168,38 @@ class Hot implements HotAPI {
     return promise;
   }
 
-  private async _fireApp(swActive: ServiceWorker) {
-    // download and send esm archive to Service Worker
-    queryElements<HTMLLinkElement>(`link[rel=preload][as=fetch][type^="${kTypeEsmArchive}"][href]`, (el, i) => {
-      this._promises.push(
-        fetch(el.href).then((res) => {
-          if (res.ok) {
-            if (el.type.endsWith("+gzip")) {
-              res = new Response(res.body?.pipeThrough(new DecompressionStream("gzip")));
-            }
-            return res.arrayBuffer();
+  private async _fireApp(swActive: ServiceWorker, firstInstall = false) {
+    // download esm archive and and send it to the Service Worker if has any
+    queryElements<HTMLLinkElement>(`link[type^="${kTypeEsmArchive}"][href]`, (el, i) => {
+      const p = fetch(el.href).then((res) => {
+        if (res.ok) {
+          if (el.type.endsWith("+gzip")) {
+            res = new Response(res.body?.pipeThrough(new DecompressionStream("gzip")));
           }
-          return Promise.reject(new Error(res.statusText ?? `<${res.status}>`));
-        }).then(async (arrayBuffer) => {
-          const checksum = el.getAttribute("checksum");
-          if (checksum) {
-            const buf = await crypto.subtle.digest("SHA-256", arrayBuffer);
-            if (btoa(String.fromCharCode(...new Uint8Array(buf))) !== checksum) {
-              throw new Error("Checksum mismatch: " + checksum);
-            }
+          return res.arrayBuffer();
+        }
+        return Promise.reject(new Error(res.statusText ?? `<${res.status}>`));
+      }).then(async (arrayBuffer) => {
+        const checksum = el.getAttribute("checksum");
+        if (checksum) {
+          const buf = await crypto.subtle.digest("SHA-256", arrayBuffer);
+          if (btoa(String.fromCharCode(...new Uint8Array(buf))) !== checksum) {
+            throw new Error("Checksum mismatch: " + checksum);
           }
-          new BroadcastChannel(kHot).onmessage = (evt) => evt.data === 1 && this.onUpdateFound();
-          swActive.postMessage([i, arrayBuffer]);
-        }),
-      );
+        }
+        new BroadcastChannel(kHot).onmessage = (evt) => evt.data === 1 && this.onUpdateFound();
+        swActive.postMessage([i, arrayBuffer]);
+      });
+      // if it's first install, wait until the download finished
+      if (firstInstall) {
+        this._promises.push(p);
+      }
     });
 
     // wait until all promises resolved
-    await Promise.all(this._promises);
+    if (this._promises.length > 0) {
+      await Promise.all(this._promises);
+    }
 
     // fire all `fire` listeners
     for (const handler of this._fireListeners) {
@@ -280,22 +224,16 @@ class Hot implements HotAPI {
       throw new Error("Service Worker scope not found.");
     }
 
-    const vfs = this.vfs;
     const on: typeof addEventListener = addEventListener;
-    const serveVFS = async (name: string) => {
-      const file = await vfs.get(name);
-      if (!file) {
-        return createResponse("Not Found", {}, 404);
-      }
-      return createResponse(file, { "content-type": file.type });
-    };
-
+    const cache = caches.open(kHot);
     this._promises.push(
-      vfs.get(kHotArchive).then(async (file) => {
-        if (file) {
-          this._archive = new Archive(await file.arrayBuffer());
-        }
-      }).catch((err) => console.error(err[kMessage])),
+      cache.then((cache) =>
+        cache.match("/" + kTypeEsmArchive).then((res) => {
+          res?.arrayBuffer().then((buf) => {
+            this._archive = new Archive(buf);
+          });
+        })
+      ),
     );
 
     on("install", (evt) => {
@@ -318,9 +256,7 @@ class Hot implements HotAPI {
       const archive = this._archive;
       const listeners = this._fetchListeners;
       const respondWith = evt.respondWith.bind(evt);
-      if (isSameOrigin && pathname.startsWith("/@hot/")) {
-        respondWith(serveVFS(pathname.slice(6)));
-      } else if (archive?.exists(pathOrHref)) {
+      if (archive?.exists(pathOrHref)) {
         const file = archive.openFile(pathOrHref)!;
         respondWith(createResponse(file, { "content-type": file.type }));
       } else if (listeners.length > 0) {
@@ -348,7 +284,7 @@ class Hot implements HotAPI {
             if (archive.checksum !== this._archive?.checksum) {
               this._archive = archive;
               new BroadcastChannel(kHot).postMessage(1);
-              vfs.put(new File([buffer], kHotArchive, { type: kTypeEsmArchive }));
+              cache.then((cache) => cache.put("/" + kTypeEsmArchive, createResponse(buffer)));
             }
           } catch (err) {
             console.error(err[kMessage]);
@@ -384,14 +320,6 @@ function appendElement(tag: string, attrs: Record<string, string>, parent: "head
     el[k] = v;
   }
   doc![parent].appendChild(el);
-}
-
-/** wait for the given IDBRequest. */
-function waitIDBRequest<T>(req: IDBRequest): Promise<T> {
-  return new Promise((resolve, reject) => {
-    req.onsuccess = () => resolve(req.result);
-    req.onerror = () => reject(req.error);
-  });
 }
 
 export const hot = new Hot();
