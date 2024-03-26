@@ -5,7 +5,6 @@
 /// <reference lib="webworker" />
 
 import type { ArchiveEntry, FireOptions, Hot, Plugin } from "./types/hot.d.ts";
-export type * from "./types/hot.d.ts";
 
 const doc: Document | undefined = globalThis.document;
 const kHot = "esm.sh/hot";
