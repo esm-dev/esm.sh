@@ -173,13 +173,10 @@ class HotImpl implements Hot {
     // download esm archive and and send it to the Service Worker if has any
     queryElements<HTMLLinkElement>(`link[type^="${kTypeEsmArchive}"][href]`, (el, i) => {
       const p = fetch(el.href).then((res) => {
-        if (res.ok) {
-          if (el.type.endsWith("+gzip")) {
-            res = new Response(res.body?.pipeThrough(new DecompressionStream("gzip")));
-          }
-          return res.arrayBuffer();
+        if (!res.ok) {
+          throw new Error("Failed to download esm archive: " + (res.statusText ?? res.status));
         }
-        return Promise.reject(new Error(res.statusText ?? `<${res.status}>`));
+        return res.arrayBuffer();
       }).then(async (arrayBuffer) => {
         const checksum = el.getAttribute("checksum");
         if (checksum) {
@@ -188,8 +185,14 @@ class HotImpl implements Hot {
             throw new Error("Checksum mismatch: " + checksum);
           }
         }
-        new BroadcastChannel(kHot).onmessage = (evt) => evt.data === 1 && this.onUpdateFound();
-        swActive.postMessage([i, arrayBuffer]);
+        return new Promise<void>((resolve, reject) => {
+          new BroadcastChannel(kHot).onmessage = ({ data }) => {
+            data === 0 && reject(new Error("Invalid esm-archive format"));
+            data === 1 && resolve();
+            data === 2 && setTimeout(() => this.onUpdateFound(), 0);
+          };
+          swActive.postMessage([i, arrayBuffer, el.type.endsWith("+gzip")]);
+        });
       });
       // if it's first install, wait until the download finished
       if (firstInstall) {
@@ -226,6 +229,7 @@ class HotImpl implements Hot {
     }
 
     const on: typeof addEventListener = addEventListener;
+    const bc = new BroadcastChannel(kHot);
     const cache = caches.open(kHot);
     this._promises.push(
       cache.then((cache) =>
@@ -275,19 +279,30 @@ class HotImpl implements Hot {
       }
     });
 
-    on(kMessage, (evt) => {
+    on(kMessage, async (evt) => {
       const { data } = evt;
       if (Array.isArray(data)) {
-        const [_idx, buffer] = data;
+        const [_idx, buffer, gz] = data;
         if (buffer instanceof ArrayBuffer) {
           try {
-            const archive = new Archive(buffer);
+            let data = buffer;
+            if (gz) {
+              data = await createResponse(
+                createResponse(buffer).body!.pipeThrough(new DecompressionStream("gzip")),
+              ).arrayBuffer();
+            }
+            const archive = new Archive(data);
+            bc.postMessage(1);
             if (archive.checksum !== this._archive?.checksum) {
+              // ask clients to reload if the archive has changed
+              if (this._archive) {
+                bc.postMessage(2);
+              }
               this._archive = archive;
-              new BroadcastChannel(kHot).postMessage(1);
               cache.then((cache) => cache.put("/" + kTypeEsmArchive, createResponse(buffer)));
             }
           } catch (err) {
+            bc.postMessage(0);
             console.error(err[kMessage]);
           }
         }
