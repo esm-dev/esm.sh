@@ -4,7 +4,8 @@
 
 /// <reference lib="webworker" />
 
-import type { ArchiveEntry, FireOptions, HotAPI, Plugin } from "./types/hot";
+import type { ArchiveEntry, FireOptions, Hot, Plugin } from "./types/hot.d.ts";
+export type * from "./types/hot.d.ts";
 
 const doc: Document | undefined = globalThis.document;
 const kHot = "esm.sh/hot";
@@ -70,8 +71,8 @@ class Archive {
   }
 }
 
-/** class `Hot` implements the `HotAPI` interface. */
-class Hot implements HotAPI {
+/** class `HotImpl` implements the `Hot` interface. */
+class HotImpl implements Hot {
   private _swModule: string | null = null;
   private _swActive: ServiceWorker | null = null;
   private _archive: Archive | null = null;
@@ -322,5 +323,5 @@ function appendElement(tag: string, attrs: Record<string, string>, parent: "head
   doc![parent].appendChild(el);
 }
 
-export const hot = new Hot();
+export const hot = new HotImpl();
 export default hot;

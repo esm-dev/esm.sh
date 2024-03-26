@@ -1,5 +1,5 @@
 export interface Plugin {
-  (hot: Omit<HotAPI, "fire" | "listen">): void;
+  (hot: Omit<Hot, "fire" | "listen">): void;
   displayName?: string;
 }
 
@@ -17,7 +17,7 @@ export interface FireOptions {
   swUpdateViaCache?: ServiceWorkerUpdateViaCache;
 }
 
-export interface HotAPI {
+export interface Hot {
   use(...plugins: readonly Plugin[]): this;
   onFetch(handler: (event: FetchEvent) => void): this;
   onFire(handler: (sw: ServiceWorker) => void): this;
@@ -27,5 +27,5 @@ export interface HotAPI {
   listen(): void;
 }
 
-export const hot: HotAPI;
+export const hot: Hot;
 export default hot;
