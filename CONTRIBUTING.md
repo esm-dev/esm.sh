@@ -4,7 +4,7 @@ Welcome, and thank you for taking time in contributing to esm.sh project!
 
 ## Development setup
 
-You will need [Golang](https://golang.org/) 1.18+.
+You will need [Golang](https://golang.org/) 1.18+ and [Deno](https://deno.land) to run the server and tests.
 
 1. Fork this repository to your own GitHub account.
 2. Clone the repository to your local device.
