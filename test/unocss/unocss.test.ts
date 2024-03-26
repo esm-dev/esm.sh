@@ -3,7 +3,7 @@ import { assert } from "https://deno.land/std@0.220.0/assert/mod.ts";
 import { createGenerator } from "http://localhost:8080/@unocss/core@0.45";
 import presetUno from "http://localhost:8080/@unocss/preset-uno@0.45";
 import presetIcons from "http://localhost:8080/@unocss/preset-icons@0.45";
-import carbonIcons from "http://localhost:8080/@iconify-json/carbon@1.1/icons.json" assert {
+import carbonIcons from "http://localhost:8080/@iconify-json/carbon@1.1/icons.json" with {
   type: "json",
 };
 
