@@ -152,7 +152,7 @@ async function fetchOriginWithKVCache(
     if (isModule) {
       const { value, metadata } = await KV.getWithMetadata<HttpMetadata>(
         storeKey,
-        "stream",
+        { type: "stream", cacheTtl: 86400 },
       );
       if (value && metadata) {
         let body = value as ReadableStream<Uint8Array>;
@@ -364,7 +364,7 @@ function withESMWorker(middleware?: Middleware, cache: Cache = (caches as any).d
       const key = "esm-build-" + await hashText(input);
       const storage = Reflect.get(env, "R2") as R2Bucket | undefined ?? dummyStorage;
       const KV = Reflect.get(env, "KV") as KVNamespace | undefined ?? asKV(storage);
-      const { value } = await KV.getWithMetadata(key, "stream");
+      const { value } = await KV.getWithMetadata(key, { type: "stream", cacheTtl: 86400 });
       if (value) {
         const headers = corsHeaders();
         headers.set("content-type", "application/json");

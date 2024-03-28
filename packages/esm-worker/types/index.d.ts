@@ -18,7 +18,7 @@ export type HttpMetadata = {
 export interface WorkerStorageKV {
   getWithMetadata(
     key: string,
-    type: "stream",
+    options: { type: "stream"; cacheTtl?: number },
   ): Promise<
     { value: ReadableStream | null; metadata: HttpMetadata | null }
   >;

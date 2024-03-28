@@ -14,7 +14,7 @@ export function asKV(storage: R2Bucket | WorkerStorage): WorkerStorageKV {
   return globalThis.__AS_KV__ ?? (globalThis.__AS_KV__ = {
     async getWithMetadata(
       key: string,
-      _type: "stream",
+      _options: { type: "stream"; cacheTtl?: number },
     ): Promise<
       { value: ReadableStream | null; metadata: HttpMetadata | null }
     > {
