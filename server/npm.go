@@ -368,17 +368,9 @@ func installPackage(wd string, pkg Pkg) (err error) {
 	packageFilePath := path.Join(wd, "package.json")
 	if pkg.FromEsmsh {
 		err = copyRawBuildFile(pkg.Name, "package.json", wd)
-	} else if pkg.FromGithub || !fileExists(packageFilePath) {
-		fileContent := []byte("{}")
-		if pkg.FromGithub {
-			fileContent = []byte(fmt.Sprintf(
-				`{"dependencies": {"%s": "%s"}}`,
-				pkg.Name,
-				fmt.Sprintf("git+https://github.com/%s.git#%s", pkg.Name, pkg.Version),
-			))
-		}
+	} else if !fileExists(packageFilePath) {
 		ensureDir(wd)
-		err = os.WriteFile(packageFilePath, fileContent, 0644)
+		err = os.WriteFile(packageFilePath, []byte("{}"), 0644)
 	}
 	if err != nil {
 		return fmt.Errorf("ensure package.json failed: %s", pkgVersionName)
@@ -397,8 +389,9 @@ func installPackage(wd string, pkg Pkg) (err error) {
 				}
 			}
 		} else if pkg.FromGithub {
-			err = pnpmInstall(wd)
+			err = pnpmInstall(wd, fmt.Sprintf("github:%s#%s", pkg.Name, pkg.Version))
 			// pnpm will ignore github package which has been installed without `package.json` file
+			// so we install it manually
 			if err == nil && !dirExists(path.Join(wd, "node_modules", pkg.Name)) {
 				err = ghInstall(wd, pkg.Name, pkg.Version)
 			}

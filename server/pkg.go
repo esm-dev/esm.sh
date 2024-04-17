@@ -106,13 +106,6 @@ func validatePkgPath(pathname string) (pkg Pkg, extraQuery string, err error) {
 	return
 }
 
-func (pkg Pkg) ImportPath() string {
-	if pkg.SubModule != "" {
-		return pkg.Name + "/" + pkg.SubModule
-	}
-	return pkg.Name
-}
-
 func (pkg Pkg) VersionName() string {
 	if pkg.FromGithub {
 		return "gh/" + pkg.Name + "@" + pkg.Version
