@@ -12,8 +12,7 @@ A fast, smart, & global content delivery network (CDN) for modern(es2015+) web d
 
 ## How to Use
 
-esm.sh is a modern CDN that allows you to import
-[es6 modules](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Guide/Modules) from a URL:
+esm.sh is a modern CDN that allows you to import [es6 modules](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Guide/Modules) from a URL:
 
 ```js
 import Module from "https://esm.sh/PKG@SEMVER[/PATH]";
@@ -153,7 +152,7 @@ import React from "https://esm.sh/react?dev";
 
 With the `?dev` option, esm.sh builds a module with `process.env.NODE_ENV` set to `"development"` or based on the
 condition `development` in the `exports` field. This is useful for libraries that have different behavior in development
-and production. For example, React will use a different warning message in development mode.
+and production. For example, React uses a different warning message in development mode.
 
 ### ESBuild Options
 
@@ -193,10 +192,8 @@ const worker = workerFactory();
 const worker = workerFactory({ name: "editor.worker" });
 ```
 
-You can import any module as a worker from esm.sh with the `?worker` query. The module will be loaded in a web worker as
-variable `$module`, then you can use it in the `inject` code.
-
-For example, you can use the `xxhash-wasm` module to hash a string in a web worker:
+You can import any module as a worker from esm.sh with the `?worker` query. Plus, you can access the module's exports in the
+`inject` code. For example, uing the `xxhash-wasm` to hash strings in a worker:
 
 ```js
 import workerFactory from "https://esm.sh/xxhash-wasm@1.0.2?worker";
@@ -240,8 +237,7 @@ const { exports } = new WebAssembly.Instance(wasm, imports);
 [**Import Maps**](https://github.com/WICG/import-maps) has been supported by most modern browsers and Deno natively.
 This allows _**bare import specifiers**_, such as `import React from "react"`, to work.
 
-esm.sh supports `?external=foo,bar` query to specify external dependencies. With this query, esm.sh will not rewrite the
-import specifiers of the specified dependencies. For example:
+esm.sh introduces the `?external=foo,bar` query for specifying external dependencies. By employing this query, esm.sh maintains the import specifier intact, leaving it to the browser/Deno to resolve based on the import map. For example:
 
 ```json
 {
