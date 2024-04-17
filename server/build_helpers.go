@@ -88,9 +88,14 @@ func (task *BuildTask) getImportPath(pkg Pkg, buildArgsPrefix string) string {
 	if task.Dev {
 		name += ".development"
 	}
+	ghPrefix := ""
+	if pkg.FromGithub {
+		ghPrefix = "/gh"
+	}
 	return fmt.Sprintf(
-		"%s/%s@%s/%s%s/%s%s",
+		"%s%s/%s@%s/%s%s/%s%s",
 		cfg.CdnBasePath,
+		ghPrefix,
 		pkg.Name,
 		pkg.Version,
 		buildArgsPrefix,
@@ -369,7 +374,11 @@ func (task *BuildTask) analyze(forceCjsOnly bool) (esm *ESMBuild, npm NpmPackage
 			}
 		}
 		var ret cjsExportsResult
-		ret, err = cjsLexer(wd, pkg.ImportPath(), nodeEnv)
+		moduleName := npm.Name
+		if pkg.SubModule != "" {
+			moduleName += "/" + pkg.SubModule
+		}
+		ret, err = cjsLexer(wd, moduleName, nodeEnv)
 		if err == nil && ret.Error != "" {
 			err = fmt.Errorf("cjsLexer: %s", ret.Error)
 		}
@@ -385,7 +394,6 @@ func (task *BuildTask) analyze(forceCjsOnly bool) (esm *ESMBuild, npm NpmPackage
 
 func (task *BuildTask) normalizeNpmPackage(p NpmPackageInfo) NpmPackageInfo {
 	if task.Pkg.FromGithub {
-		p.Name = task.Pkg.Name
 		p.Version = task.Pkg.Version
 	} else {
 		p.Version = strings.TrimPrefix(p.Version, "v")
