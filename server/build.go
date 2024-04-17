@@ -352,9 +352,13 @@ rebuild:
 						}
 
 						// normalize specifier
-						specifier := strings.TrimSuffix(args.Path, "/")
-						specifier = strings.TrimPrefix(specifier, "node:")
+						specifier := strings.TrimPrefix(args.Path, "node:")
 						specifier = strings.TrimPrefix(specifier, "npm:")
+
+						// bundle "@babel/runtime/helpers/*"
+						if args.Kind == api.ResolveJSRequireCall && (strings.HasPrefix(specifier, "@babel/runtime/helpers/") || strings.Contains(args.Importer, "/@babel/runtime/helpers/")) && task.npm.Name != "@babel/runtime" {
+							return api.OnResolveResult{}, nil
+						}
 
 						// resolve alias in dependencies
 						// follow https://docs.npmjs.com/cli/v10/configuring-npm/package-json#git-urls-as-dependencies
@@ -888,7 +892,7 @@ rebuild:
 						}
 					}
 				}
-				fmt.Fprint(header, `var require=n=>{const e=m=>typeof m.default<"u"?m.default:m,c=m=>Object.assign({},m);switch(n){`)
+				fmt.Fprint(header, `var require=n=>{const e=m=>typeof m.default<"u"?m.default:m,c=m=>Object.assign({__esModule:true},m);switch(n){`)
 				record := newStringSet()
 				for i, d := range task.requires {
 					specifier := d[0]
