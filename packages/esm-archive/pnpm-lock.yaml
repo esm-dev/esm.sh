@@ -1,16 +1,22 @@
-lockfileVersion: '6.0'
+lockfileVersion: '9.0'
 
 settings:
   autoInstallPeers: true
   excludeLinksFromLockfile: false
 
-dependencies:
-  xxhash-wasm:
-    specifier: 1.0.2
-    version: 1.0.2
+importers:
+
+  .:
+    dependencies:
+      xxhash-wasm:
+        specifier: ^1.0.2
+        version: 1.0.2
 
 packages:
 
-  /xxhash-wasm@1.0.2:
+  xxhash-wasm@1.0.2:
     resolution: {integrity: sha512-ibF0Or+FivM9lNrg+HGJfVX8WJqgo+kCLDc4vx6xMeTce7Aj+DLttKbxxRR/gNLSAelRc1omAPlJ77N/Jem07A==}
-    dev: false
+
+snapshots:
+
+  xxhash-wasm@1.0.2: {}
