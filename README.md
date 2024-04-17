@@ -22,11 +22,11 @@ or use _**bare specifier**_ instead of URL with [import maps](https://github.com
 
 ```html
 <script type="importmap">
-  {
-    "imports": {
-      "react": "https://esm.sh/react@18.2.0"
-    }
+{
+  "imports": {
+    "react": "https://esm.sh/react@18.2.0"
   }
+}
 </script>
 <script type="module">
   import React from "react" // alias to https://esm.sh/react@18.2.0
