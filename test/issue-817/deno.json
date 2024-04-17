@@ -1,0 +1,13 @@
+{
+  "compilerOptions": {
+    "lib": [
+      "dom",
+      "deno.ns"
+    ]
+  },
+  "imports": {
+    "react": "http://localhost:8080/react@18.2.0",
+    "react/": "http://localhost:8080/react@18.2.0/",
+    "react-dom": "http://localhost:8080/react-dom@18.2.0"
+  }
+}
