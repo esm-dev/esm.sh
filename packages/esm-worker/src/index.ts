@@ -22,6 +22,7 @@ import {
   hashText,
   hasTargetSegment,
   isDtsFile,
+  normalizeSearchParams,
   redirect,
   splitBy,
   trimPrefix,
@@ -126,15 +127,16 @@ async function fetchOriginWithKVCache(
   req: Request,
   env: Env,
   ctx: Context,
-  uri: string,
+  pathname: string,
+  query?: string,
   gzip?: boolean,
 ): Promise<Response> {
-  let storeKey = uri.slice(1);
-  if (storeKey.startsWith("+")) {
-    storeKey = `modules/` + storeKey;
+  let uri = pathname;
+  if (query) {
+    uri += query;
   }
+  let storeKey = uri.slice(1);
   const headers = corsHeaders();
-  const [pathname] = splitBy(uri, "?", true);
   const R2 = Reflect.get(env, "R2") as R2Bucket | undefined ?? dummyStorage;
   const KV = Reflect.get(env, "KV") as KVNamespace | undefined ?? asKV(R2);
   const fromWorker = req.headers.has("X-Real-Origin");
@@ -182,8 +184,7 @@ async function fetchOriginWithKVCache(
     } else {
       const obj = await R2.get(storeKey);
       if (obj) {
-        const contentType = obj.httpMetadata?.contentType ||
-          getContentType(pathname);
+        const contentType = obj.httpMetadata?.contentType || getContentType(pathname);
         headers.set("Content-Type", contentType);
         headers.set("Cache-Control", immutableCache);
         headers.set("X-Content-Source", "esm-worker");
@@ -294,10 +295,7 @@ function withESMWorker(middleware?: Middleware, cache: Cache = (caches as any).d
       const isHeadMethod = req.method === "HEAD";
       const hasPinedTarget = targets.has(searchParams.get("target") ?? "");
       const cacheKey = new URL(url);
-      const varyUA = options?.varyUA &&
-        !hasPinedTarget &&
-        !isDtsFile(pathname) &&
-        !searchParams.has("raw");
+      const varyUA = options?.varyUA && !hasPinedTarget && !isDtsFile(pathname) && !searchParams.has("raw");
       if (varyUA) {
         const target = getBuildTargetFromUA(ua);
         cacheKey.searchParams.set("target", target);
@@ -423,6 +421,7 @@ function withESMWorker(middleware?: Middleware, cache: Cache = (caches as any).d
       ((pathname.startsWith("/node/") || pathname.startsWith("/npm_")) && pathname.endsWith(".js"))
     ) {
       const etag = `W/"${version}"`;
+      const varyUA = !pathname.endsWith(".ts") && !pathname.endsWith(".js");
       const isChunkjs = pathname.startsWith("/node/chunk-");
       if (!isChunkjs) {
         const ifNoneMatch = req.headers.get("If-None-Match");
@@ -433,14 +432,10 @@ function withESMWorker(middleware?: Middleware, cache: Cache = (caches as any).d
         }
         url.searchParams.set("v", VERSION.toString());
       }
-      const res = await ctx.withCache(() =>
-        fetchOriginWithKVCache(
-          req,
-          env,
-          ctx,
-          `${pathname}${url.search}`,
-          false,
-        ), { varyUA: true });
+      const res = await ctx.withCache(() => {
+        const target = url.searchParams.get("target");
+        return fetchOriginWithKVCache(req, env, ctx, pathname, target ? `?target=${target}` : void 0);
+      }, { varyUA });
       if (!res.ok) {
         return res;
       }
@@ -475,10 +470,13 @@ function withESMWorker(middleware?: Middleware, cache: Cache = (caches as any).d
       return fetchOrigin(req, env, ctx, `${pathname}${url.search}`, corsHeaders());
     }
 
-    // if it's a singleton build module
-    if (pathname.startsWith("/+")) {
+    // if it's a singleton build module which is created by https://esm.sh/run
+    if (pathname.startsWith("/+") && pathname.endsWith(".mjs")) {
       return ctx.withCache(
-        () => fetchOriginWithKVCache(req, env, ctx, pathname + url.search),
+        () => {
+          const target = url.searchParams.get("target");
+          return fetchOriginWithKVCache(req, env, ctx, pathname, target ? `?target=${target}` : void 0);
+        },
         { varyUA: true },
       );
     }
@@ -782,15 +780,16 @@ function withESMWorker(middleware?: Middleware, cache: Cache = (caches as any).d
 
     if (isDtsFile(subPath) || hasTargetSegment(subPath)) {
       return ctx.withCache(() => {
-        const path = `${prefix}/${pkgId}@${packageVersion}${subPath}${url.search}`;
-        return fetchOriginWithKVCache(req, env, ctx, path, true);
+        const pathname = `${prefix}/${pkgId}@${packageVersion}${subPath}`;
+        return fetchOriginWithKVCache(req, env, ctx, pathname, undefined, true);
       });
     }
 
     return ctx.withCache(() => {
       const marker = hasExternalAllMarker ? "*" : "";
-      const path = `${prefix}/${marker}${pkgId}@${packageVersion}${subPath}${url.search}`;
-      return fetchOriginWithKVCache(req, env, ctx, path);
+      const pathname = `${prefix}/${marker}${pkgId}@${packageVersion}${subPath}`;
+      normalizeSearchParams(url.searchParams);
+      return fetchOriginWithKVCache(req, env, ctx, pathname, url.search);
     }, { varyUA: true });
   }
 

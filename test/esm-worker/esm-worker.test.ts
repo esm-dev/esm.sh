@@ -128,7 +128,7 @@ Deno.test("esm-worker", { sanitizeOps: false, sanitizeResources: false }, async 
     assertEquals(res3.headers.get("Content-Type"), "application/javascript; charset=utf-8");
     assertEquals(res3.headers.get("Etag"), `W/"${version}"`);
     assertEquals(res3.headers.get("Cache-Control"), "public, max-age=86400");
-    assertStringIncludes(res3.headers.get("Vary") ?? "", "User-Agent");
+    assert(!res3.headers.get("Vary")?.includes("User-Agent"));
     assertStringIncludes(await res3.text(), "nextTick");
 
     const res4 = await fetch(`${workerOrigin}/node/process.js`, { headers: { "If-None-Match": `W/"${version}"` } });
@@ -153,7 +153,7 @@ Deno.test("esm-worker", { sanitizeOps: false, sanitizeResources: false }, async 
     assertEquals(res7.headers.get("Content-Type"), "application/javascript; charset=utf-8");
     assertEquals(res7.headers.get("Etag"), `W/"${version}"`);
     assertEquals(res7.headers.get("Cache-Control"), "public, max-age=86400");
-    assertStringIncludes(res7.headers.get("Vary") ?? "", "User-Agent");
+    assert(!res3.headers.get("Vary")?.includes("User-Agent"));
     assertStringIncludes(await res7.text(), "fetch");
 
     const fs = await import(`${workerOrigin}/node/fs.js`);
@@ -450,23 +450,25 @@ Deno.test("esm-worker", { sanitizeOps: false, sanitizeResources: false }, async 
   });
 
   await t.step("cache for different UAs", async () => {
-    const fetchModule = async (ua: string) => {
-      const rest = await fetch(`${workerOrigin}/react@18.2.0`, {
+    const fetchModule = async (pathname: string, ua: string) => {
+      const rest = await fetch(`${workerOrigin}` + pathname, {
         headers: { "User-Agent": ua },
       });
       return await rest.text();
     };
 
-    assertStringIncludes(await fetchModule("Deno/1.33.1"), "/deno/");
-    assertStringIncludes(await fetchModule("Deno/1.33.2"), "/denonext/");
+    assertStringIncludes(await fetchModule("/react@18.2.0", "Deno/1.33.1"), "/deno/");
+    assertStringIncludes(await fetchModule("/react@18.2.0", "Deno/1.33.2"), "/denonext/");
     assertStringIncludes(
       await fetchModule(
+        "/react@18.2.0",
         "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/116.0.0.0 Safari/537.36",
       ),
       "/es2022/",
     );
     assertStringIncludes(
       await fetchModule(
+        "/react@18.2.0",
         "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.3 Safari/605.1.15",
       ),
       "/es2021/",
@@ -483,6 +485,9 @@ Deno.test("esm-worker", { sanitizeOps: false, sanitizeResources: false }, async 
     const res3 = await fetch(`${workerOrigin}/react-dom?pin=v135`);
     assertEquals(await res3.text(), `${workerOrigin}/react-dom?pin=v135`);
   });
+
+  console.log("storage summary", [...R2._store.keys()]);
+
   closeServer();
 });
 

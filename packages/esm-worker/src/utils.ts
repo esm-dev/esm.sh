@@ -123,6 +123,44 @@ export function copyHeaders(dst: Headers, src: Headers, ...keys: string[]) {
   }
 }
 
+const allowedSearchParams = new Set([
+  "alias",
+  "bundle",
+  "conditions",
+  "css",
+  "deno-std",
+  "deps",
+  "dev",
+  "exports",
+  "external",
+  "ignore-annotations",
+  "ignore-require",
+  "importer",
+  "keep-names",
+  "name",
+  "no-bundle",
+  "no-check",
+  "no-dts",
+  "path",
+  "raw",
+  "standalone",
+  "target",
+  "type",
+  "v",
+  "worker",
+]);
+
+export function normalizeSearchParams(parmas: URLSearchParams) {
+  if (parmas.size > 0) {
+    for (const k of parmas.keys()) {
+      if (!allowedSearchParams.has(k)) {
+        parmas.delete(k);
+      }
+    }
+    parmas.sort();
+  }
+}
+
 export async function hashText(s: string): Promise<string> {
   const buffer = await crypto.subtle.digest(
     "SHA-1",
