@@ -659,8 +659,8 @@ func esmHandler() rex.Handle {
 
 		// check `?exports` query
 		exports := newStringSet()
-		if ctx.Form.Has("exports") || ctx.Form.Has("cjs-exports") {
-			value := ctx.Form.Value("exports") + "," + ctx.Form.Value("cjs-exports")
+		if ctx.Form.Has("exports") {
+			value := ctx.Form.Value("exports")
 			for _, p := range strings.Split(value, ",") {
 				p = strings.TrimSpace(p)
 				if regexpJSIdent.MatchString(p) {
