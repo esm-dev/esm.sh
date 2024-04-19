@@ -180,8 +180,7 @@ async function fetchOriginWithKVCache(
     } else {
       const obj = await R2.get(storeKey);
       if (obj) {
-        const contentType = obj.httpMetadata?.contentType ||
-          getMimeType(path);
+        const contentType = obj.httpMetadata?.contentType || getMimeType(pathname);
         headers.set("Content-Type", contentType);
         headers.set("Cache-Control", immutableCache);
         headers.set("X-Content-Source", "esm-worker");
@@ -196,7 +195,7 @@ async function fetchOriginWithKVCache(
   }
 
   const buffer = await res.arrayBuffer();
-  const contentType = res.headers.get("Content-Type") || getMimeType(path);
+  const contentType = res.headers.get("Content-Type") || getMimeType(pathname);
   const cacheControl = res.headers.get("Cache-Control");
   const buildId = res.headers.get("X-Esm-Id");
   const dts = res.headers.get("X-TypeScript-Types");
@@ -572,7 +571,7 @@ function withESMWorker(middleware?: Middleware) {
           req,
           env,
           ctx,
-          `/${buildVersion}${pathname}${url.search}`,
+          `/${buildVersion}${pathname}`,
           true,
         ), { varyUA: true });
     }
@@ -847,7 +846,7 @@ function withESMWorker(middleware?: Middleware) {
         if (gh) {
           prefix += "/gh";
         }
-        const path = `${prefix}/${pkgId}@${packageVersion}${subPath}${url.search}`;
+        const path = `${prefix}/${pkgId}@${packageVersion}${subPath}`;
         return fetchOriginWithKVCache(req, env, ctx, path, true);
       });
     }
@@ -863,7 +862,11 @@ function withESMWorker(middleware?: Middleware) {
         prefix += "/gh";
       }
       const marker = hasExternalAllMarker ? "*" : "";
-      const path = `${prefix}/${marker}${pkgId}@${packageVersion}${subPath}${url.search}`;
+      const target = url.searchParams.get("target");
+      let path = `${prefix}/${marker}${pkgId}@${packageVersion}${subPath}`;
+      if (target) {
+        path += "?target=" + target;
+      }
       return fetchOriginWithKVCache(req, env, ctx, path);
     }, { varyUA: true });
   }
