@@ -846,7 +846,7 @@ function withESMWorker(middleware?: Middleware) {
         if (gh) {
           prefix += "/gh";
         }
-        const path = `${prefix}/${pkgId}@${packageVersion}${subPath}`;
+        const path = `${prefix}/${pkgId}@${packageVersion}${subPath}${url.search}`;
         return fetchOriginWithKVCache(req, env, ctx, path, true);
       });
     }
@@ -862,11 +862,7 @@ function withESMWorker(middleware?: Middleware) {
         prefix += "/gh";
       }
       const marker = hasExternalAllMarker ? "*" : "";
-      const target = url.searchParams.get("target");
-      let path = `${prefix}/${marker}${pkgId}@${packageVersion}${subPath}`;
-      if (target) {
-        path += "?target=" + target;
-      }
+      let path = `${prefix}/${marker}${pkgId}@${packageVersion}${subPath}${url.search}`;
       return fetchOriginWithKVCache(req, env, ctx, path);
     }, { varyUA: true });
   }

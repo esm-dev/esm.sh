@@ -1,7 +1,7 @@
 {
   "name": "esm-worker",
   "description": "A Cloudflare worker handles all requests of esm.sh at the edge(earth).",
-  "version": "0.135.14",
+  "version": "0.135.16",
   "type": "module",
   "module": "dist/index.js",
   "types": "types/index.d.ts",
