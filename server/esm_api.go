@@ -18,15 +18,14 @@ import (
 )
 
 type BuildInput struct {
-	Source        string            `json:"source"`
-	Code          string            `json:"code"`
-	Loader        string            `json:"loader"`
-	Deps          map[string]string `json:"dependencies"`
-	Types         string            `json:"types"`
-	TransformOnly bool              `json:"transformOnly"`
-	Target        string            `json:"target"`
-	ImportMap     string            `json:"importMap"`
-	Hash          string            `json:"hash"`
+	Code      string            `json:"code,omitempty"`
+	Deps      map[string]string `json:"dependencies,omitempty"`
+	Hash      string            `json:"hash,omitempty"`
+	ImportMap string            `json:"importMap,omitempty"`
+	Loader    string            `json:"loader,omitempty"`
+	Source    string            `json:"source,omitempty"`
+	Target    string            `json:"target,omitempty"`
+	Types     string            `json:"types,omitempty"`
 }
 
 func apiHandler() rex.Handle {
@@ -49,13 +48,12 @@ func apiHandler() rex.Handle {
 				if len(input.Source) > 1024*1024 {
 					return rex.Err(429, "source is too large")
 				}
-				if !input.TransformOnly {
-					input.TransformOnly = ctx.Path.String() == "/transform"
-				}
-				if input.TransformOnly {
+				transformOnly := ctx.Path.String() == "/transform"
+				if transformOnly {
 					if targets[input.Target] == 0 {
 						input.Target = getBuildTargetByUA(ctx.R.UserAgent())
 					}
+					// check previous build
 					if input.Hash != "" {
 						if len(input.Hash) != 40 {
 							return rex.Err(400, "invalid hash")
@@ -86,7 +84,7 @@ func apiHandler() rex.Handle {
 					}
 				}
 				cdnOrigin := getCdnOrign(ctx)
-				id, err := build(input)
+				ret, err := build(input, transformOnly)
 				if err != nil {
 					if strings.HasPrefix(err.Error(), "<400> ") {
 						return rex.Err(400, err.Error()[6:])
@@ -94,18 +92,21 @@ func apiHandler() rex.Handle {
 					return rex.Err(500, "failed to save code")
 				}
 				ctx.W.Header().Set("Cache-Control", "private, no-store, no-cache, must-revalidate")
-				if input.TransformOnly {
+				if transformOnly {
+					code := ret
 					if input.Hash != "" {
-						go fs.WriteFile(fmt.Sprintf("publish/+%s.%s.mjs", input.Hash, input.Target), strings.NewReader(id))
+						go fs.WriteFile(fmt.Sprintf("publish/+%s.%s.mjs", input.Hash, input.Target), strings.NewReader(code))
 					}
 					return map[string]interface{}{
-						"code": id,
+						"code": code,
 					}
 				}
+				id := ret
 				return map[string]interface{}{
 					"id":        id,
 					"url":       fmt.Sprintf("%s/~%s", cdnOrigin, id),
 					"bundleUrl": fmt.Sprintf("%s/~%s?bundle", cdnOrigin, id),
+					"input":     input,
 				}
 			default:
 				return rex.Err(404, "not found")
@@ -115,7 +116,7 @@ func apiHandler() rex.Handle {
 	}
 }
 
-func build(input BuildInput) (id string, err error) {
+func build(input BuildInput, transformOnly bool) (idOrCode string, err error) {
 	loader := "tsx"
 	switch input.Loader {
 	case "js", "jsx", "ts", "tsx":
@@ -167,7 +168,7 @@ func build(input BuildInput) (id string, err error) {
 
 	onResolver := func(args api.OnResolveArgs) (api.OnResolveResult, error) {
 		path := args.Path
-		if input.TransformOnly {
+		if transformOnly {
 			if value, ok := imports[path]; ok {
 				path = value
 			} else {
@@ -240,7 +241,7 @@ func build(input BuildInput) (id string, err error) {
 		return "", errors.New("<400> failed to validate code: no output files")
 	}
 	code := ret.OutputFiles[0].Contents
-	if input.TransformOnly {
+	if transformOnly {
 		return string(code), nil
 	}
 	if len(code) == 0 {
@@ -264,11 +265,13 @@ func build(input BuildInput) (id string, err error) {
 	if input.Types != "" {
 		h.Write([]byte(input.Types))
 	}
-	id = hex.EncodeToString(h.Sum(nil))
+	id := hex.EncodeToString(h.Sum(nil))
+
 	record, err := db.Get("publish-" + id)
 	if err != nil {
 		return
 	}
+
 	if record == nil {
 		_, err = fs.WriteFile(path.Join("publish", id, "index.mjs"), bytes.NewReader(code))
 		if err == nil {
@@ -298,7 +301,8 @@ func build(input BuildInput) (id string, err error) {
 			}))
 		}
 	}
-	return
+
+	return id, err
 }
 
 func auth(secret string) rex.Handle {

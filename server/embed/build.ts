@@ -5,6 +5,11 @@ export type BuildInput = {
   types?: string;
 };
 
+export type ImprotMap = {
+  imports?: Record<string, string>;
+  scopes?: Record<string, Record<string, string>>;
+};
+
 export type TransformOptions = {
   target?:
     | "deno"
@@ -13,7 +18,7 @@ export type TransformOptions = {
     | "esnext"
     | `es201${5 | 6 | 7 | 8 | 9}`
     | `es202${0 | 1 | 2}`;
-  imports?: Record<string, string>;
+  importMap?: ImprotMap;
 };
 
 export type BuildOutput = {
@@ -65,7 +70,9 @@ export function transform(
   if (!options.source) {
     throw new Error("esm.sh [transform] <400> missing source");
   }
-  Reflect.set(options, "imports", JSON.stringify(options.imports || {}));
+  if (options.importMap) {
+    Reflect.set(options, "importMap", JSON.stringify(options.importMap));
+  }
   return fetchApi("/transform", options);
 }
 
