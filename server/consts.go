@@ -1,6 +1,6 @@
 package server
 
-const VERSION = 135
+const VERSION = 136
 
 // css packages
 var cssPackages = map[string]string{

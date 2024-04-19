@@ -268,8 +268,8 @@ you to use query params with trailing slash: change the query prefix `?` to `&` 
 ```json
 {
   "imports": {
-    "react-dom": "https://esm.sh/react-dom@18.2.0?pin=v135&dev",
-    "react-dom/": "https://esm.sh/react-dom@18.2.0&pin=v135&dev/"
+    "react-dom": "https://esm.sh/react-dom@18.2.0?dev",
+    "react-dom/": "https://esm.sh/react-dom@18.2.0&dev/"
   }
 }
 ```
