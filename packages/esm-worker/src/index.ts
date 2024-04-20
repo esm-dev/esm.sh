@@ -32,6 +32,7 @@ const regexpNpmNaming = /^[a-zA-Z0-9][\w\.\-]*$/;
 const regexpFullVersion = /^\d+\.\d+\.\d+/;
 const regexpCommitish = /^[a-f0-9]{10,}$/;
 const regexpLegacyVersionPrefix = /^\/v\d+\//;
+const regexpLegacyBuild = /^\/~[a-f0-9]{40}$/;
 
 const version = `v${VERSION}`;
 const defaultNpmRegistry = "https://registry.npmjs.org";
@@ -299,7 +300,6 @@ function withESMWorker(middleware?: Middleware, cache: Cache = (caches as any).d
       if (varyUA) {
         const target = getBuildTargetFromUA(ua);
         cacheKey.searchParams.set("target", target);
-        //! don't delete this line, it used to ensure KV/R2 cache respecting different UA
         searchParams.set("target", target);
       }
       const realOrigin = req.headers.get("X-REAL-ORIGIN");
@@ -315,15 +315,14 @@ function withESMWorker(middleware?: Middleware, cache: Cache = (caches as any).d
         return res;
       }
       res = await fetcher();
+      // since we add `?target` to the search params, the "User-Agent" part of `vary` header from the origin server is missed,
+      // so we need to add it manually
       if (varyUA) {
         const headers = new Headers(res.headers);
         headers.append("Vary", "User-Agent");
         res = new Response(res.body, { status: res.status, headers });
       }
-      if (
-        res.ok &&
-        res.headers.get("Cache-Control")?.startsWith("public, max-age=")
-      ) {
+      if (res.ok && res.headers.get("Cache-Control")?.startsWith("public, max-age=")) {
         cfCtx.waitUntil(cache.put(cacheKey, res.clone()));
       }
       if (isHeadMethod) {
@@ -357,41 +356,18 @@ function withESMWorker(middleware?: Middleware, cache: Cache = (caches as any).d
       pathname = pathname.slice(0, -1);
     }
 
-    if (req.method === "POST" && (pathname === "/build" || pathname === "/transform")) {
-      const input = await req.text();
-      const key = "esm-build-" + await hashText(input);
-      const storage = Reflect.get(env, "R2") as R2Bucket | undefined ?? dummyStorage;
-      const KV = Reflect.get(env, "KV") as KVNamespace | undefined ?? asKV(storage);
-      const { value } = await KV.getWithMetadata(key, { type: "stream", cacheTtl: 86400 });
-      if (value) {
-        const headers = corsHeaders();
-        headers.set("content-type", "application/json");
-        headers.set(
-          "cache-control",
-          "private, no-store, no-cache, must-revalidate",
-        );
-        headers.set("X-Content-Source", "esm-worker");
-        return new Response(value, {
-          headers,
-        });
-      }
-      const res = await fetchOrigin(
+    if (req.method === "POST" && pathname === "/transform") {
+      return await fetchOrigin(
         new Request(req.url, {
           method: "POST",
           headers: req.headers,
-          body: input,
+          body: req.body,
         }),
         env,
         ctx,
-        `${pathname}${url.search}`,
+        "/transform",
         corsHeaders(),
       );
-      if (res.status !== 200) {
-        return res;
-      }
-      const body = await res.arrayBuffer();
-      ctx.waitUntil(KV.put(key, body));
-      return new Response(body, { status: res.status, headers: res.headers });
     }
 
     switch (pathname) {
@@ -413,7 +389,6 @@ function withESMWorker(middleware?: Middleware, cache: Cache = (caches as any).d
     }
 
     if (
-      pathname === "/build" ||
       pathname === "/run" ||
       pathname === "/hot" ||
       pathname === "/node.ns.d.ts" ||
@@ -483,10 +458,13 @@ function withESMWorker(middleware?: Middleware, cache: Cache = (caches as any).d
 
     // use legacy worker if the bild version is specified in the path or query
     if (env.LEGACY_WORKER) {
-      const hasVersionPrefix = pathname.startsWith("/stable/") || (
-        pathname.startsWith("/v") && regexpLegacyVersionPrefix.test(pathname)
-      );
-      if (hasVersionPrefix || url.searchParams.has("pin")) {
+      if (
+        pathname == "/build" ||
+        url.searchParams.has("pin") ||
+        pathname.startsWith("/stable/") ||
+        (pathname.startsWith("/v") && regexpLegacyVersionPrefix.test(pathname)) ||
+        (pathname.startsWith("/~") && regexpLegacyBuild.test(pathname))
+      ) {
         return env.LEGACY_WORKER.fetch(req.clone());
       }
     }

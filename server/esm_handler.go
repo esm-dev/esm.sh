@@ -2,7 +2,11 @@ package server
 
 import (
 	"bytes"
+	"crypto/sha1"
+	"encoding/hex"
+	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"net/url"
 	"os"
@@ -23,10 +27,12 @@ func esmHandler() rex.Handle {
 	startTime := time.Now()
 
 	return func(ctx *rex.Context) interface{} {
-		cdnOrigin := getCdnOrign(ctx)
-		pathname := ctx.Path.String()
-		header := ctx.W.Header()
-		userAgent := ctx.R.UserAgent()
+		var (
+			cdnOrigin = getCdnOrign(ctx)
+			pathname  = ctx.Path.String()
+			header    = ctx.W.Header()
+			userAgent = ctx.R.UserAgent()
+		)
 
 		// ban malicious requests
 		if strings.HasPrefix(pathname, "/.") || strings.HasSuffix(pathname, ".php") {
@@ -41,6 +47,73 @@ func esmHandler() rex.Handle {
 				url := strings.TrimPrefix(ctx.R.URL.String(), cfg.CdnBasePath)
 				url = fmt.Sprintf("%s/%s", cfg.CdnBasePath, url)
 				return rex.Redirect(url, http.StatusMovedPermanently)
+			}
+		}
+
+		// handle POST requests
+		if ctx.R.Method == "POST" {
+			switch ctx.Path.String() {
+			case "/transform":
+				var input TransofrmInput
+				err := json.NewDecoder(io.LimitReader(ctx.R.Body, 2*1024*1024)).Decode(&input)
+				ctx.R.Body.Close()
+				if err != nil {
+					return rex.Err(400, "require valid json body")
+				}
+				if input.Code == "" {
+					return rex.Err(400, "Code is required")
+				}
+				if len(input.Code) > 1024*1024 {
+					return rex.Err(429, "Code is too large")
+				}
+				if targets[input.Target] == 0 {
+					input.Target = getBuildTargetByUA(ctx.R.UserAgent())
+				}
+				var loader string
+				extname := path.Ext(input.Filename)
+				switch extname {
+				case ".js", ".jsx", ".ts", ".tsx":
+					loader = extname[1:]
+				default:
+					loader = "js"
+				}
+				// check previous build
+				h := sha1.New()
+				h.Write([]byte(loader))
+				h.Write([]byte(input.Code))
+				h.Write([]byte(input.ImportMap))
+				hash := hex.EncodeToString(h.Sum(nil))
+
+				savePath := fmt.Sprintf("modules/+%s.%s.mjs", hash, input.Target)
+				_, err = fs.Stat(savePath)
+				if err == nil {
+					r, err := fs.OpenFile(savePath)
+					if err != nil {
+						return rex.Err(500, "failed to read code")
+					}
+					code, err := io.ReadAll(r)
+					r.Close()
+					if err != nil {
+						return rex.Err(500, "failed to read code")
+					}
+					return map[string]interface{}{
+						"code": string(code),
+					}
+				}
+				code, err := transform(input)
+				if err != nil {
+					if strings.HasPrefix(err.Error(), "<400> ") {
+						return rex.Err(400, err.Error()[6:])
+					}
+					return rex.Err(500, "failed to save code")
+				}
+				go fs.WriteFile(savePath, strings.NewReader(code))
+				ctx.W.Header().Set("Cache-Control", "private, no-store, no-cache, must-revalidate")
+				return map[string]interface{}{
+					"code": code,
+				}
+			default:
+				return rex.Err(404, "not found")
 			}
 		}
 
@@ -176,7 +249,7 @@ func esmHandler() rex.Handle {
 				return rex.Status(404, "not found")
 			}
 			target := getBuildTargetByUA(userAgent)
-			savaPath := fmt.Sprintf("publish/+%s.%s.%s", hash, target, ext)
+			savaPath := fmt.Sprintf("modules/+%s.%s.%s", hash, target, ext)
 			fi, err := fs.Stat(savaPath)
 			if err != nil {
 				if err == storage.ErrNotFound {
@@ -195,7 +268,7 @@ func esmHandler() rex.Handle {
 		}
 
 		// serve build adn run scripts
-		if pathname == "/build" || pathname == "/run" || pathname == "/hot" {
+		if pathname == "/run" || pathname == "/hot" {
 			data, err := embedFS.ReadFile(fmt.Sprintf("server/embed/%s.ts", pathname[1:]))
 			if err != nil {
 				return rex.Status(404, "Not Found")

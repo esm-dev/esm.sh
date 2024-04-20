@@ -10,11 +10,11 @@ const stringify = JSON.stringify;
 const modUrl = new URL(import.meta.url);
 const kScript = "script";
 const kImportmap = "importmap";
-const loaders = ["js", "jsx", "ts", "tsx", "babel"];
+const loaders = ["jsx", "ts", "tsx", "babel"];
 const importMapSupported = HTMLScriptElement.supports?.(kImportmap);
 const imports: Record<string, string> = {};
 const scopes: Record<string, typeof imports> = {};
-const runScripts: { el: HTMLElement; loader: string; source: string }[] = [];
+const runScripts: { el: HTMLElement; loader: string; code: string }[] = [];
 
 // lookup run scripts
 d.querySelectorAll(kScript).forEach((el) => {
@@ -32,11 +32,14 @@ d.querySelectorAll(kScript).forEach((el) => {
   } else if (el.type.startsWith("text/")) {
     loader = el.type.slice(5);
     if (loaders.includes(loader)) {
-      const source = el.textContent!.trim();
-      if (source.length > 64 * 1024) {
-        console.warn("ignore", el, "reach 64KB limit.");
+      const code = el.textContent!.trim();
+      if (code.length > 128 * 1024) {
+        console.warn("[esm.sh/run] reach 128KB limit:", el);
       } else {
-        runScripts.push({ el, loader, source });
+        if (loader === "babel") {
+          loader = "jsx";
+        }
+        runScripts.push({ el, loader, code });
       }
     }
   }
@@ -44,11 +47,12 @@ d.querySelectorAll(kScript).forEach((el) => {
 
 // transform and insert run scripts
 const importMap = stringify({ imports, scopes });
-runScripts.forEach(async ({ el, loader, source }, idx) => {
+runScripts.forEach(async ({ el, loader, code }, idx) => {
+  const filename = "source." + loader;
   const buffer = new Uint8Array(
     await crypto.subtle.digest(
       "SHA-1",
-      new TextEncoder().encode(loader + source + importMap),
+      new TextEncoder().encode(loader + code + importMap),
     ),
   );
   const hash = [...buffer].map((b) => b.toString(16).padStart(2, "0")).join("");
@@ -66,13 +70,13 @@ runScripts.forEach(async ({ el, loader, source }, idx) => {
     } else {
       const res = await fetch(origin + "/transform", {
         method: "POST",
-        body: stringify({ loader, source, importMap, hash }),
+        body: stringify({ filename, code, importMap, hash }),
       });
-      const { code, error } = await res.json();
-      if (error) {
-        throw new Error(error.message);
+      const ret = await res.json();
+      if (ret.error) {
+        throw new Error(ret.error.message);
       }
-      js = code;
+      js = ret.code;
     }
     l.setItem(jsCacheKey, js!);
     l.setItem(hashCacheKey, hash);

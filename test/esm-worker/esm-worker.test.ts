@@ -363,50 +363,13 @@ Deno.test("esm-worker", { sanitizeOps: false, sanitizeResources: false }, async 
     assertStringIncludes(await res2.text(), "esm.sh/hot");
   });
 
-  await t.step("build api", async () => {
-    const res = await fetch(`${workerOrigin}/build`);
-    res.body?.cancel();
-    assertEquals(new URL(res.url).pathname, `/build`);
-    assertEquals(res.headers.get("Etag"), `W/"${version}"`);
-    assertEquals(res.headers.get("Cache-Control"), "public, max-age=86400");
-    assertEquals(res.headers.get("Content-Type"), "application/typescript; charset=utf-8");
-    assertStringIncludes(res.headers.get("Vary") ?? "", "User-Agent");
-
-    const res2 = await fetch(`${workerOrigin}/build?target=es2022`);
-    res2.body?.cancel();
-    assertEquals(res2.headers.get("Etag"), `W/"${version}"`);
-    assertEquals(res2.headers.get("Cache-Control"), "public, max-age=86400");
-    assertEquals(res2.headers.get("Content-Type"), "application/javascript; charset=utf-8");
-
-    const res3 = await fetch(`${workerOrigin}/build`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        code: `/* @jsx h */
-          import { h } from "preact@10.13.2";
-          import { renderToString } from "preact-render-to-string@6.0.2";
-          export default () => renderToString(<h1>Hello world!</h1>);
-        `,
-      }),
-    });
-    const ret = await res3.json();
-    if (ret.error) {
-      throw new Error(`<${ret.error.status}> ${ret.error.message}`);
-    }
-    const { default: render } = await import(
-      new URL(
-        `${new URL(ret.url).pathname}/denonext/mod.mjs`,
-        workerOrigin,
-      ).href
-    );
-    assertEquals(render(), "<h1>Hello world!</h1>");
-
+  await t.step("transform api", async () => {
     const options = {
       code: `
         import { renderToString } from "preact-render-to-string";
         export default () => renderToString(<h1>Hello world!</h1>);
       `,
-      loader: "jsx",
+      filename: "source.jsx",
       target: "es2022",
       importMap: JSON.stringify({
         imports: {
@@ -414,26 +377,24 @@ Deno.test("esm-worker", { sanitizeOps: false, sanitizeResources: false }, async 
           "preact-render-to-string": "https://esm.sh/preact-render-to-string6.0.2",
         },
       }),
-      hash: "",
     };
-    options.hash = await computeHash(
-      options.loader + options.code + options.importMap,
-    );
-    const res4 = await fetch(`${workerOrigin}/transform`, {
+    const hash = await computeHash("jsx" + options.code + options.importMap);
+    const res1 = await fetch(`${workerOrigin}/transform`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(options),
     });
-    const ret2 = await res4.json();
-    assertStringIncludes(ret2.code, `"https://preact@10.13.2/jsx-runtime"`);
-    assertStringIncludes(ret2.code, `"https://esm.sh/preact-render-to-string6.0.2"`);
+    const ret = await res1.json();
+    assertStringIncludes(ret.code, `"https://preact@10.13.2/jsx-runtime"`);
+    assertStringIncludes(ret.code, `"https://esm.sh/preact-render-to-string6.0.2"`);
 
-    const res5 = await fetch(`${workerOrigin}/+${options.hash}.mjs`, {
+    const res2 = await fetch(`${workerOrigin}/+${hash}.mjs`, {
       headers: { "User-Agent": "Chrome/90.0.4430.212" },
     });
-    assertEquals(res5.status, 200);
-    assertEquals(res5.headers.get("Content-Type"), "application/javascript; charset=utf-8");
-    const code = await res5.text();
+    assertEquals(res2.status, 200);
+    assertEquals(res2.headers.get("Content-Type"), "application/javascript; charset=utf-8");
+    assertStringIncludes(res2.headers.get("Vary") ?? "", "User-Agent");
+    const code = await res2.text();
     assertStringIncludes(code, `"https://preact@10.13.2/jsx-runtime"`);
     assertStringIncludes(code, `"https://esm.sh/preact-render-to-string6.0.2"`);
   });
@@ -475,7 +436,7 @@ Deno.test("esm-worker", { sanitizeOps: false, sanitizeResources: false }, async 
     );
   });
 
-  await t.step("fallback to lagacy worker", async () => {
+  await t.step("fallback to legacy worker", async () => {
     const res = await fetch(`${workerOrigin}/stable/react`);
     assertEquals(await res.text(), `${workerOrigin}/stable/react`);
 
@@ -484,6 +445,12 @@ Deno.test("esm-worker", { sanitizeOps: false, sanitizeResources: false }, async 
 
     const res3 = await fetch(`${workerOrigin}/react-dom?pin=v135`);
     assertEquals(await res3.text(), `${workerOrigin}/react-dom?pin=v135`);
+
+    const res4 = await fetch(`${workerOrigin}/build`);
+    assertEquals(await res4.text(), `${workerOrigin}/build`);
+
+    const res5 = await fetch(`${workerOrigin}/~41f4075e7fabb79f155504bd2d73c678b218111f`);
+    assertEquals(await res5.text(), `${workerOrigin}/~41f4075e7fabb79f155504bd2d73c678b218111f`);
   });
 
   console.log("storage summary", [...R2._store.keys()]);

@@ -180,7 +180,6 @@ func Serve(efs EmbedFS) {
 			AllowCredentials: false,
 		}),
 		auth(cfg.AuthSecret),
-		apiHandler(),
 		esmHandler(),
 	)
 
@@ -214,4 +213,13 @@ func Serve(efs EmbedFS) {
 func init() {
 	embedFS = &embed.FS{}
 	log = &logger.Logger{}
+}
+
+func auth(secret string) rex.Handle {
+	return func(ctx *rex.Context) interface{} {
+		if secret != "" && ctx.R.Header.Get("Authorization") != "Bearer "+secret {
+			return rex.Status(401, "Unauthorized")
+		}
+		return nil
+	}
 }
