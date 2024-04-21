@@ -450,10 +450,10 @@ func esmHandler() rex.Handle {
 			return rex.Status(403, "forbidden")
 		}
 
-		hasTargetSegmentinPath := hasTargetSegment(reqPkg.SubPath)
+		pathHasTargetSegment := hasTargetSegment(reqPkg.SubPath)
 
 		// fix urls related to `import.meta.url`
-		if hasTargetSegmentinPath && endsWith(reqPkg.SubPath, ".wasm", ".json") {
+		if pathHasTargetSegment && endsWith(reqPkg.SubPath, ".wasm", ".json") {
 			extname := path.Ext(reqPkg.SubPath)
 			dir := path.Join(cfg.WorkDir, "npm", reqPkg.Name+"@"+reqPkg.Version)
 			if !existsDir(dir) {
@@ -531,7 +531,7 @@ func esmHandler() rex.Handle {
 		}
 
 		// redirect to the url with full package version
-		if !hasTargetSegmentinPath && !reqPkg.FromEsmsh && !strings.Contains(pathname, "@"+reqPkg.Version) {
+		if !pathHasTargetSegment && !strings.Contains(pathname, "@"+reqPkg.Version) {
 			pkgName := reqPkg.Name
 			eaSign := ""
 			subPath := ""
@@ -557,7 +557,7 @@ func esmHandler() rex.Handle {
 		}
 
 		// redirect to the url with full package version with build version prefix
-		if hasTargetSegmentinPath && !strings.Contains(pathname, "@"+reqPkg.Version) {
+		if pathHasTargetSegment && !strings.Contains(pathname, "@"+reqPkg.Version) {
 			subPath := ""
 			query := ""
 			if reqPkg.SubPath != "" {
@@ -600,7 +600,7 @@ func esmHandler() rex.Handle {
 					reqType = "types"
 				} else if ctx.R.URL.Query().Has("raw") {
 					reqType = "raw"
-				} else if hasTargetSegmentinPath {
+				} else if pathHasTargetSegment {
 					reqType = "builds"
 				}
 			case ".wasm":
@@ -616,7 +616,7 @@ func esmHandler() rex.Handle {
 					reqType = "raw"
 				}
 			case ".css", ".map":
-				if hasTargetSegmentinPath {
+				if pathHasTargetSegment {
 					reqType = "builds"
 				} else {
 					reqType = "raw"
@@ -668,7 +668,7 @@ func esmHandler() rex.Handle {
 		}
 
 		// serve build files
-		if hasTargetSegmentinPath && (reqType == "builds" || reqType == "types") {
+		if pathHasTargetSegment && (reqType == "builds" || reqType == "types") {
 			savePath := path.Join(reqType, pathname)
 			if reqType == "types" {
 				savePath = path.Join("types", getTypesRoot(cdnOrigin), strings.TrimPrefix(savePath, "types/"))
@@ -798,6 +798,16 @@ func esmHandler() rex.Handle {
 			}
 		}
 
+		// check `?jsx-rutnime` query
+		var jsxRuntime *Pkg = nil
+		if v := ctx.Form.Value("jsx-runtime"); v != "" {
+			m, _, err := validatePkgPath(v)
+			if err != nil {
+				return rex.Status(400, fmt.Sprintf("Invalid jsx-runtime query: %v not found", v))
+			}
+			jsxRuntime = &m
+		}
+
 		isPkgCss := ctx.Form.Has("css")
 		bundle := (ctx.Form.Has("bundle") && ctx.Form.Value("bundle") != "false") || ctx.Form.Has("standalone")
 		noBundle := !bundle && (ctx.Form.Has("no-bundle") || ctx.Form.Value("bundle") == "false")
@@ -818,15 +828,16 @@ func esmHandler() rex.Handle {
 			conditions:        conditions,
 			denoStdVersion:    dsv,
 			deps:              deps,
+			exports:           exports,
 			external:          external,
 			ignoreAnnotations: ignoreAnnotations,
 			ignoreRequire:     ignoreRequire,
+			jsxRuntime:        jsxRuntime,
 			keepNames:         keepNames,
-			exports:           exports,
 		}
 
 		// parse `X-` prefix
-		if hasTargetSegmentinPath {
+		if pathHasTargetSegment {
 			a := strings.Split(reqPkg.SubModule, "/")
 			if len(a) > 1 && strings.HasPrefix(a[0], "X-") {
 				reqPkg.SubModule = strings.Join(a[1:], "/")
@@ -845,7 +856,7 @@ func esmHandler() rex.Handle {
 
 		// check if it's a build file
 		isBuildFile := false
-		if hasTargetSegmentinPath && (endsWith(reqPkg.SubPath, ".mjs", ".js", ".css")) {
+		if pathHasTargetSegment && (endsWith(reqPkg.SubPath, ".mjs", ".js", ".css")) {
 			a := strings.Split(reqPkg.SubModule, "/")
 			if len(a) > 0 {
 				maybeTarget := a[0]
@@ -1123,7 +1134,7 @@ func addVary(header http.Header, key string) {
 func hasTargetSegment(path string) bool {
 	parts := strings.Split(path, "/")
 	for _, part := range parts {
-		if targets[part] > 0 {
+		if _, ok := targets[part]; ok {
 			return true
 		}
 	}

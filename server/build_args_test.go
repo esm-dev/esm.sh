@@ -26,6 +26,7 @@ func TestEncodeBuildArgs(t *testing.T) {
 			exports:           exports,
 			conditions:        conditions,
 			denoStdVersion:    "0.128.0",
+			jsxRuntime:        &Pkg{Version: "18.2.0", Name: "react"},
 			ignoreRequire:     true,
 			keepNames:         true,
 			ignoreAnnotations: true,
@@ -54,6 +55,9 @@ func TestEncodeBuildArgs(t *testing.T) {
 	}
 	if args.denoStdVersion != "0.128.0" {
 		t.Fatal("invalid denoStdVersion")
+	}
+	if args.jsxRuntime.String() != "react@18.2.0" {
+		t.Fatal("invalid jsxRuntime")
 	}
 	if !args.ignoreRequire {
 		t.Fatal("ignoreRequire should be true")

@@ -15,7 +15,6 @@ type Pkg struct {
 	SubPath    string `json:"subPath"`
 	SubModule  string `json:"subModule"`
 	FromGithub bool   `json:"fromGithub"`
-	FromEsmsh  bool   `json:"fromEsmsh"`
 }
 
 func validatePkgPath(pathname string) (pkg Pkg, extraQuery string, err error) {
@@ -31,8 +30,7 @@ func validatePkgPath(pathname string) (pkg Pkg, extraQuery string, err error) {
 	}
 
 	pkgName, maybeVersion, subPath := splitPkgPath(pathname)
-	fromEsmsh := strings.HasPrefix(pkgName, "~") && valid.IsHexString(pkgName[1:])
-	if !fromEsmsh && !validatePackageName(pkgName) {
+	if !validatePackageName(pkgName) {
 		return Pkg{}, "", fmt.Errorf("invalid package name '%s'", pkgName)
 	}
 
@@ -47,12 +45,6 @@ func validatePkgPath(pathname string) (pkg Pkg, extraQuery string, err error) {
 		SubPath:    subPath,
 		SubModule:  toModuleBareName(subPath, true),
 		FromGithub: fromGithub,
-		FromEsmsh:  fromEsmsh,
-	}
-
-	if fromEsmsh {
-		pkg.Version = "0.0.0"
-		return
 	}
 
 	if fromGithub {

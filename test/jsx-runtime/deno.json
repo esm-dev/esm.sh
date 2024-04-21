@@ -1,0 +1,10 @@
+{
+  "compilerOptions": {
+    "jsx": "react-jsx",
+    "jsxImportSource": "http://localhost:8080/react@18.2.0",
+    "lib": [
+      "dom",
+      "deno.ns"
+    ]
+  }
+}

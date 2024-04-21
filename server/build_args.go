@@ -10,13 +10,14 @@ import (
 
 type BuildArgs struct {
 	alias             map[string]string
-	deps              PkgSlice
 	conditions        *StringSet
-	external          *StringSet
-	exports           *StringSet
 	denoStdVersion    string
+	deps              PkgSlice
+	exports           *StringSet
+	external          *StringSet
 	ignoreAnnotations bool
 	ignoreRequire     bool
+	jsxRuntime        *Pkg
 	keepNames         bool
 }
 
@@ -66,6 +67,11 @@ func decodeBuildArgsPrefix(raw string) (args BuildArgs, err error) {
 				}
 			} else if strings.HasPrefix(p, "dsv/") {
 				args.denoStdVersion = strings.TrimPrefix(p, "dsv/")
+			} else if strings.HasPrefix(p, "jsx/") {
+				p, _, e := validatePkgPath(strings.TrimPrefix(p, "jsx/"))
+				if e == nil {
+					args.jsxRuntime = &p
+				}
 			} else {
 				switch p {
 				case "ir":
@@ -154,6 +160,9 @@ func encodeBuildArgsPrefix(args BuildArgs, pkg Pkg, isDts bool) string {
 		if args.ignoreAnnotations {
 			lines = append(lines, "ia")
 		}
+	}
+	if args.jsxRuntime != nil {
+		lines = append(lines, fmt.Sprintf("jsx/%s", args.jsxRuntime.String()))
 	}
 	if len(lines) > 0 {
 		return fmt.Sprintf("X-%s/", btoaUrl(strings.Join(lines, "\n")))

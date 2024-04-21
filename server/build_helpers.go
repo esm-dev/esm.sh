@@ -6,12 +6,10 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"os"
 	"path"
 	"strings"
 
-	"github.com/esm-dev/esm.sh/server/storage"
 	"github.com/evanw/esbuild/pkg/api"
 	"github.com/ije/esbuild-internal/config"
 	"github.com/ije/esbuild-internal/js_ast"
@@ -29,9 +27,6 @@ func (task *BuildTask) ID() string {
 	name := strings.TrimSuffix(path.Base(pkg.Name), ".js")
 	extname := ".mjs"
 
-	if pkg.FromEsmsh {
-		name = "mod"
-	}
 	if pkg.SubModule != "" {
 		name = pkg.SubModule
 		extname = ".js"
@@ -77,9 +72,6 @@ func (task *BuildTask) getImportPath(pkg Pkg, buildArgsPrefix string) string {
 	if pkg.SubModule != "" {
 		name = pkg.SubModule
 		extname = ".js"
-	}
-	if pkg.FromEsmsh {
-		name = "mod"
 	}
 	// workaround for es5-ext weird "/#/" path
 	if pkg.Name == "es5-ext" {
@@ -182,22 +174,22 @@ func (task *BuildTask) analyze(forceCjsOnly bool) (esm *ESMBuild, npm NpmPackage
 	if pkg.SubModule != "" {
 		if endsWith(pkg.SubModule, ".d.ts", ".d.mts") {
 			if strings.HasSuffix(pkg.SubModule, "~.d.ts") {
-				submodule := strings.TrimSuffix(pkg.SubModule, "~.d.ts")
-				subDir := path.Join(wd, "node_modules", npm.Name, submodule)
-				if existsFile(path.Join(subDir, "index.d.ts")) {
-					npm.Types = path.Join(submodule, "index.d.ts")
-				} else if existsFile(path.Join(subDir + ".d.ts")) {
-					npm.Types = submodule + ".d.ts"
+				subModule := strings.TrimSuffix(pkg.SubModule, "~.d.ts")
+				subModulePath := path.Join(wd, "node_modules", npm.Name, subModule)
+				if existsFile(path.Join(subModulePath, "index.d.ts")) {
+					npm.Types = path.Join(subModule, "index.d.ts")
+				} else if existsFile(path.Join(subModulePath + ".d.ts")) {
+					npm.Types = subModule + ".d.ts"
 				}
 			} else {
 				npm.Types = pkg.SubModule
 			}
 		} else {
-			subDir := path.Join(wd, "node_modules", npm.Name, pkg.SubModule)
-			packageFile := path.Join(subDir, "package.json")
-			if existsFile(packageFile) {
+			subModulePath := path.Join(wd, "node_modules", npm.Name, pkg.SubModule)
+			subModulePackageJson := path.Join(subModulePath, "package.json")
+			if existsFile(subModulePackageJson) {
 				var p NpmPackageInfo
-				err = parseJSONFile(packageFile, &p)
+				err = parseJSONFile(subModulePackageJson, &p)
 				if err != nil {
 					return
 				}
@@ -221,28 +213,28 @@ func (task *BuildTask) analyze(forceCjsOnly bool) (esm *ESMBuild, npm NpmPackage
 					npm.Types = path.Join(pkg.SubModule, p.Types)
 				} else if p.Typings != "" {
 					npm.Types = path.Join(pkg.SubModule, p.Typings)
-				} else if existsFile(path.Join(subDir, "index.d.ts")) {
+				} else if existsFile(path.Join(subModulePath, "index.d.ts")) {
 					npm.Types = path.Join(pkg.SubModule, "index.d.ts")
-				} else if existsFile(path.Join(subDir + ".d.ts")) {
+				} else if existsFile(path.Join(subModulePath + ".d.ts")) {
 					npm.Types = pkg.SubModule + ".d.ts"
 				}
 			} else {
-				fp := path.Join(wd, "node_modules", npm.Name, pkg.SubModule+".mjs")
-				if npm.Type == "module" || npm.Module != "" || existsFile(fp) {
-					// follow main module type
+				isTsx := endsWith(subModulePath, ".jsx", ".ts", ".tsx")
+				if npm.Type == "module" || npm.Module != "" || isTsx || existsFile(subModulePath+".mjs") {
+					// follow main module type or it's a `.mjs` file
 					npm.Module = pkg.SubModule
 				} else {
 					npm.Main = pkg.SubModule
 				}
 				npm.Types = ""
-				if existsFile(path.Join(subDir, "index.d.ts")) {
+				if existsFile(path.Join(subModulePath, "index.d.ts")) {
 					npm.Types = path.Join(pkg.SubModule, "index.d.ts")
-				} else if existsFile(path.Join(subDir + ".d.ts")) {
+				} else if existsFile(path.Join(subModulePath + ".d.ts")) {
 					npm.Types = pkg.SubModule + ".d.ts"
 				}
 				// reslove sub-module using `exports` conditions if exists
-				if npm.PkgExports != nil {
-					if om, ok := npm.PkgExports.(*orderedMap); ok {
+				if npm.Exports != nil && !isTsx {
+					if om, ok := npm.Exports.(*orderedMap); ok {
 						for e := om.l.Front(); e != nil; e = e.Next() {
 							name, exports := om.Entry(e)
 							if name == "./"+pkg.SubModule || name == "./"+pkg.SubModule+".js" || name == "./"+pkg.SubModule+".mjs" {
@@ -394,6 +386,10 @@ func (task *BuildTask) analyze(forceCjsOnly bool) (esm *ESMBuild, npm NpmPackage
 
 func (task *BuildTask) normalizeNpmPackage(p NpmPackageInfo) NpmPackageInfo {
 	if task.Pkg.FromGithub {
+		if p.Name != task.Pkg.Name {
+			p.PkgName = p.Name
+			p.Name = task.Pkg.Name
+		}
 		p.Version = task.Pkg.Version
 	} else {
 		p.Version = strings.TrimPrefix(p.Version, "v")
@@ -434,7 +430,7 @@ func (task *BuildTask) normalizeNpmPackage(p NpmPackageInfo) NpmPackageInfo {
 		}
 	}
 
-	if exports := p.PkgExports; exports != nil {
+	if exports := p.Exports; exports != nil {
 		if om, ok := exports.(*orderedMap); ok {
 			v, ok := om.m["."]
 			if ok {
@@ -709,27 +705,6 @@ func esmLexer(wd string, packageName string, moduleSpecifier string) (resolvedNa
 	return
 }
 
-func copyRawBuildFile(id string, name string, dir string) (err error) {
-	var r io.ReadCloser
-	var f *os.File
-	r, err = fs.OpenFile(path.Join("publish", strings.TrimPrefix(id, "~"), name))
-	if err != nil {
-		if err == storage.ErrNotFound {
-			return nil
-		}
-		return fmt.Errorf("open file failed: %s", name)
-	}
-	defer r.Close()
-	ensureDir(dir)
-	f, err = os.OpenFile(path.Join(dir, name), os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0644)
-	if err != nil {
-		return err
-	}
-	defer f.Close()
-	_, err = io.Copy(f, r)
-	return
-}
-
 func validateJS(filename string) (isESM bool, namedExports []string, err error) {
 	data, err := os.ReadFile(filename)
 	if err != nil {
@@ -737,6 +712,9 @@ func validateJS(filename string) (isESM bool, namedExports []string, err error) 
 	}
 	log := logger.NewDeferLog(logger.DeferLogNoVerboseOrDebug, nil)
 	parserOpts := js_parser.OptionsFromConfig(&config.Options{
+		JSX: config.JSXOptions{
+			Parse: endsWith(filename, ".jsx", ".tsx"),
+		},
 		TS: config.TSOptions{
 			Parse: endsWith(filename, ".ts", ".mts", ".cts", ".tsx"),
 		},

@@ -136,6 +136,7 @@ const allowedSearchParams = new Set([
   "ignore-annotations",
   "ignore-require",
   "importer",
+  "jsx-runtime",
   "keep-names",
   "name",
   "no-bundle",

@@ -47,7 +47,8 @@ type NpmPackageJSON struct {
 	PeerDependencies map[string]string      `json:"peerDependencies,omitempty"`
 	Imports          map[string]interface{} `json:"imports,omitempty"`
 	TypesVersions    map[string]interface{} `json:"typesVersions,omitempty"`
-	PkgExports       json.RawMessage        `json:"exports,omitempty"`
+	Exports          json.RawMessage        `json:"exports,omitempty"`
+	Files            []string               `json:"files,omitempty"`
 	Deprecated       interface{}            `json:"deprecated,omitempty"`
 	ESMConfig        interface{}            `json:"esm.sh,omitempty"`
 }
@@ -98,18 +99,18 @@ func (a *NpmPackageJSON) ToNpmPackage() *NpmPackageInfo {
 			}
 		}
 	}
-	var pkgExports interface{} = nil
-	if rawExports := a.PkgExports; rawExports != nil {
+	var exports interface{} = nil
+	if rawExports := a.Exports; rawExports != nil {
 		var v interface{}
 		if json.Unmarshal(rawExports, &v) == nil {
 			if s, ok := v.(string); ok {
 				if len(s) > 0 {
-					pkgExports = s
+					exports = s
 				}
 			} else if _, ok := v.(map[string]interface{}); ok {
 				om := newOrderedMap()
 				if om.UnmarshalJSON(rawExports) == nil {
-					pkgExports = om
+					exports = om
 				}
 			}
 		}
@@ -131,7 +132,8 @@ func (a *NpmPackageJSON) ToNpmPackage() *NpmPackageInfo {
 		PeerDependencies: a.PeerDependencies,
 		Imports:          a.Imports,
 		TypesVersions:    a.TypesVersions,
-		PkgExports:       pkgExports,
+		Exports:          exports,
+		Files:            a.Files,
 		Deprecated:       deprecated,
 		ESMConfig:        esmConfig,
 	}
@@ -140,6 +142,7 @@ func (a *NpmPackageJSON) ToNpmPackage() *NpmPackageInfo {
 // NpmPackage defines the package.json
 type NpmPackageInfo struct {
 	Name             string
+	PkgName          string
 	Version          string
 	Type             string
 	Main             string
@@ -155,7 +158,8 @@ type NpmPackageInfo struct {
 	PeerDependencies map[string]string
 	Imports          map[string]interface{}
 	TypesVersions    map[string]interface{}
-	PkgExports       interface{}
+	Exports          interface{}
+	Files            []string
 	Deprecated       string
 	ESMConfig        map[string]interface{}
 }
@@ -352,7 +356,7 @@ func fetchPackageInfo(name string, version string) (info NpmPackageInfo, err err
 	return
 }
 
-func installPackage(wd string, pkg Pkg) (err error) {
+func installPackage(dir string, pkg Pkg) (err error) {
 	pkgVersionName := pkg.VersionName()
 	lock := getInstallLock(pkgVersionName)
 
@@ -361,17 +365,15 @@ func installPackage(wd string, pkg Pkg) (err error) {
 	defer lock.Unlock()
 
 	// skip install if pnpm lock file exists
-	if existsFile(path.Join(wd, "pnpm-lock.yaml")) && existsFile(path.Join(wd, "node_modules", pkg.Name, "package.json")) {
+	if existsFile(path.Join(dir, "pnpm-lock.yaml")) && existsFile(path.Join(dir, "node_modules", pkg.Name, "package.json")) {
 		return nil
 	}
 
 	// ensure package.json file to prevent read up-levels
-	packageJsonFilepath := path.Join(wd, "package.json")
-	if pkg.FromEsmsh {
-		err = copyRawBuildFile(pkg.Name, "package.json", wd)
-	} else if !existsFile(packageJsonFilepath) {
-		ensureDir(wd)
-		err = os.WriteFile(packageJsonFilepath, []byte("{}"), 0644)
+	packageJsonFp := path.Join(dir, "package.json")
+	if !existsFile(packageJsonFp) {
+		ensureDir(dir)
+		err = os.WriteFile(packageJsonFp, []byte("{}"), 0644)
 	}
 	if err != nil {
 		return fmt.Errorf("ensure package.json failed: %s", pkgVersionName)
@@ -379,37 +381,35 @@ func installPackage(wd string, pkg Pkg) (err error) {
 
 	attemptMaxTimes := 3
 	for i := 1; i <= attemptMaxTimes; i++ {
-		if pkg.FromEsmsh {
-			err = pnpmInstall(wd)
+		if pkg.FromGithub {
+			err = os.WriteFile(packageJsonFp, []byte(fmt.Sprintf(`{"dependencies":{"%s":"github:%s#%s"}}`, pkg.Name, pkg.Name, pkg.Version)), 0644)
 			if err == nil {
-				installDir := path.Join(wd, "node_modules", pkg.Name)
-				for _, name := range []string{"package.json", "index.mjs", "index.d.ts"} {
-					err = copyRawBuildFile(pkg.Name, name, installDir)
-					if err != nil {
-						break
+				err = pnpmInstall(dir)
+			}
+			// pnpm will ignore github package which has been installed without `package.json` file
+			// so we install it manually
+			if err == nil {
+				packageJsonFp := path.Join(dir, "node_modules", pkg.Name, "package.json")
+				if !existsFile(packageJsonFp) {
+					ensureDir(path.Dir(packageJsonFp))
+					err = os.WriteFile(packageJsonFp, mustEncodeJSON(pkg), 0644)
+				} else {
+					var p NpmPackageInfo
+					err = parseJSONFile(packageJsonFp, &p)
+					if err == nil && len(p.Files) > 0 {
+						// install github package with ignoring `files` field
+						err = ghInstall(dir, pkg.Name, pkg.Version)
 					}
 				}
 			}
-		} else if pkg.FromGithub {
-			err = pnpmInstall(wd, fmt.Sprintf("github:%s#%s", pkg.Name, pkg.Version))
-			// pnpm will ignore github package which has been installed without `package.json` file
-			// so we install it manually
-			if err == nil && !existsDir(path.Join(wd, "node_modules", pkg.Name)) {
-				err = ghInstall(wd, pkg.Name, pkg.Version)
-			}
 		} else if regexpFullVersion.MatchString(pkg.Version) {
-			err = pnpmInstall(wd, pkgVersionName, "--prefer-offline")
+			err = pnpmInstall(dir, pkgVersionName, "--prefer-offline")
 		} else {
-			err = pnpmInstall(wd, pkgVersionName)
+			err = pnpmInstall(dir, pkgVersionName)
 		}
-		packageJsonFilepath := path.Join(wd, "node_modules", pkg.Name, "package.json")
-		if err == nil && !existsFile(packageJsonFilepath) {
-			if pkg.FromGithub {
-				ensureDir(path.Dir(packageJsonFilepath))
-				err = os.WriteFile(packageJsonFilepath, mustEncodeJSON(pkg), 0644)
-			} else {
-				err = fmt.Errorf("pnpm install %s: package.json not found", pkg)
-			}
+		packageJsonFp := path.Join(dir, "node_modules", pkg.Name, "package.json")
+		if err == nil && !existsFile(packageJsonFp) {
+			err = fmt.Errorf("pnpm install %s: package.json not found", pkg)
 		}
 		if err == nil || i == attemptMaxTimes {
 			break
@@ -419,7 +419,7 @@ func installPackage(wd string, pkg Pkg) (err error) {
 	return
 }
 
-func pnpmInstall(wd string, packages ...string) (err error) {
+func pnpmInstall(dir string, packages ...string) (err error) {
 	var args []string
 	if len(packages) > 0 {
 		args = append([]string{"add"}, packages...)
@@ -433,7 +433,7 @@ func pnpmInstall(wd string, packages ...string) (err error) {
 	)
 	start := time.Now()
 	cmd := exec.Command("pnpm", args...)
-	cmd.Dir = wd
+	cmd.Dir = dir
 	if cfg.NpmToken != "" {
 		cmd.Env = append(os.Environ(), "ESM_NPM_TOKEN="+cfg.NpmToken)
 	}
