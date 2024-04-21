@@ -39,7 +39,7 @@ or use _**bare specifier**_ instead of URL with [import maps](https://github.com
 
 - **[NPM(default)](https://npmjs.com)**:
   ```js
-  // examples
+  // Example
   import React from "https://esm.sh/react"; // 18.2.0 (latest)
   import React from "https://esm.sh/react@17"; // 17.0.2
   import React from "https://esm.sh/react@canary"; // 18.3.0-canary-e1ad4aa36-20230601
@@ -47,13 +47,13 @@ or use _**bare specifier**_ instead of URL with [import maps](https://github.com
   ```
 - **[Github](https://github.com)**:
   ```js
-  // examples
+  // Example
   import tslib from "https://esm.sh/gh/microsoft/tslib@2.6.0";
   fetch("https://esm.sh/gh/microsoft/fluentui-emoji/assets/Party%20popper/Color/party_popper_color.svg");
   ```
 - **[JSR](https://jsr.io)**:
   ```js
-  // examples
+  // Example
   import { encodeBase64, decodeBase64 } from "https://esm.sh/jsr/@std/encoding@0.222.0/base64";
   import { html } from "https://esm.sh/jsr/@mark/html@1";
   ```
@@ -170,8 +170,10 @@ import workerFactory from "https://esm.sh/monaco-editor/esm/vs/editor/editor.wor
 
 // create a worker
 const worker = workerFactory();
-// you can also rename the worker by adding the `name` option
+// rename the worker by adding the `name` option
 const worker = workerFactory({ name: "editor.worker" });
+// inject code into the worker
+const worker = workerFactory({ inject: "self.onmessage = e => self.postMessage(e.data)" });
 ```
 
 You can import any module as a worker from esm.sh with the `?worker` query. Plus, you can access the module's exports in the
@@ -182,8 +184,9 @@ import workerFactory from "https://esm.sh/xxhash-wasm@1.0.2?worker";
 
 const inject = `
 // variable '$module' is the xxhash-wasm module
+const xxhash = $module.default
 self.onmessage = async e => {
-  const hasher = await $module.default()
+  const hasher = await xxhash()
   self.postMessage(hasher.h64ToString(e.data))
 }
 `;
