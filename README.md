@@ -15,7 +15,7 @@ A fast, smart, & global content delivery network (CDN) for modern(es2015+) web d
 esm.sh is a modern CDN that allows you to import [es6 modules](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Guide/Modules) from a URL:
 
 ```js
-import Module from "https://esm.sh/PKG@SEMVER[/PATH]";
+import Module from "https://esm.sh/PKG[@SEMVER][/PATH]";
 ```
 
 or use _**bare specifier**_ instead of URL with [import maps](https://github.com/WICG/import-maps):
@@ -35,46 +35,28 @@ or use _**bare specifier**_ instead of URL with [import maps](https://github.com
 
 > More details check out [here](#using-import-maps).
 
-### Importing from NPM
+### Supported Registries
 
-```js
-import React from "https://esm.sh/react@18.2.0";
-```
-
-You may also use a [semver](https://docs.npmjs.com/cli/v6/using-npm/semver) or a
-[dist-tag](https://docs.npmjs.com/cli/v8/commands/npm-dist-tag) instead of a fixed version number, or omit the
-version/tag entirely to use the `latest` tag:
-
-```js
-import React from "https://esm.sh/react"; // 18.2.0 (latest)
-import React from "https://esm.sh/react@^17"; // 17.0.2
-import React from "https://esm.sh/react@canary"; // 18.3.0-canary-e1ad4aa36-20230601
-```
-
-You can import submodules of a package:
-
-```js
-import { renderToString } from "https://esm.sh/react-dom@18.2.0/server";
-```
-
-or fetch non-module as following:
-
-```js
-const pkg = await fetch("https://esm.sh/react@18.2.0/package.json").then(
-  (res) => res.json(),
-);
-```
-
-### Importing from GitHub
-
-esm.sh supports to import modules/assets from a github repo: `/gh/OWNER/REPO[@TAG]/PATH`. For example:
-
-```js
-import tslib from "https://esm.sh/gh/microsoft/tslib@2.6.0";
-```
-
-or load a svg image from a github repo:
-https://esm.sh/gh/microsoft/fluentui-emoji/assets/Party%20popper/Color/party_popper_color.svg
+- **[NPM(default)](https://npmjs.com)**:
+  ```js
+  // examples
+  import React from "https://esm.sh/react"; // 18.2.0 (latest)
+  import React from "https://esm.sh/react@17"; // 17.0.2
+  import React from "https://esm.sh/react@canary"; // 18.3.0-canary-e1ad4aa36-20230601
+  import { renderToString } from "https://esm.sh/react-dom@18.2.0/server"; // submodules
+  ```
+- **[Github](https://github.com)**:
+  ```js
+  // examples
+  import tslib from "https://esm.sh/gh/microsoft/tslib@2.6.0";
+  fetch("https://esm.sh/gh/microsoft/fluentui-emoji/assets/Party%20popper/Color/party_popper_color.svg");
+  ```
+- **[JSR](https://jsr.io)**:
+  ```js
+  // examples
+  import { encodeBase64, decodeBase64 } from "https://esm.sh/jsr/@std/encoding@0.222.0/base64";
+  import { html } from "https://esm.sh/jsr/@mark/html@1";
+  ```
 
 ### Specifying Dependencies
 
@@ -344,56 +326,6 @@ Nodejs(18+) supports http importing under the `--experimental-network-imports` f
 yet.
 
 We highly recommend [Reejs](https://ree.js.org/) as the runtime with esm.sh that works both in Nodejs and Bun.
-
-## Building Module with Custom Input(code)
-
-This is an **_experimental_** API that allows you to build a module with custom input(code).
-
-- Imports NPM/GH packages
-- Supports TS/JSX syntaxes
-- Bundle mulitple modules into a single JS file
-
-```js
-import build from "https://esm.sh/build";
-
-const ret = await build({
-  dependencies: {
-    "preact": "^10.13.2",
-    "preact-render-to-string": "^6.0.2",
-  },
-  code: `
-    /* @jsx h */
-    import { h } from "preact";
-    import { renderToString } from "preact-render-to-string";
-    export const render () => renderToString(<h1>Hello world!</h1>);
-  `,
-  // for types checking and LSP completion
-  types: `
-    export function render(): string;
-  `,
-});
-
-// import module
-const { render } = await import(ret.url);
-// import bundled module
-const { render } = await import(ret.bundleUrl);
-
-render(); // "<h1>Hello world!</h1>"
-```
-
-or use the `esm` tag function to build and import js/ts snippet quickly in browser with npm packages:
-
-```js
-import { esm } from "https://esm.sh/build";
-
-const { render } = await esm`
-  /* @jsx h */
-  import { h } from "npm:preact@10.13.2";
-  import { renderToString } from "npm:preact-render-to-string@6.0.2";
-  export const render () => renderToString(<h1>Hello world!</h1>);
-`;
-console.log(render()); // "<h1>Hello world!</h1>"
-```
 
 ## Global CDN
 
