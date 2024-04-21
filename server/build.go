@@ -367,6 +367,13 @@ rebuild:
 						// e.g. "react": "github:facebook/react#v18.2.0"
 						pName, _, pPath := splitPkgPath(specifier)
 						if v, ok := npm.Dependencies[pName]; ok {
+							// ban file urls
+							if strings.HasPrefix(v, "file:") {
+								return api.OnResolveResult{
+									Path:     fmt.Sprintf("/error.js?type=unsupported-file-dependency&name=%s&importer=%s", strings.TrimPrefix(v, "file:"), task.Pkg),
+									External: true,
+								}, nil
+							}
 							if strings.HasPrefix(v, "npm:") {
 								specifier = v[4:]
 								if pPath != "" {
