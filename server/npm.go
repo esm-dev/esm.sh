@@ -50,7 +50,7 @@ type NpmPackageJSON struct {
 	Exports          json.RawMessage        `json:"exports,omitempty"`
 	Files            []string               `json:"files,omitempty"`
 	Deprecated       interface{}            `json:"deprecated,omitempty"`
-	ESMConfig        interface{}            `json:"esm.sh,omitempty"`
+	Esmsh            interface{}            `json:"esm.sh,omitempty"`
 }
 
 func (a *NpmPackageJSON) ToNpmPackage() *NpmPackageInfo {
@@ -77,10 +77,10 @@ func (a *NpmPackageJSON) ToNpmPackage() *NpmPackageInfo {
 			deprecated = s
 		}
 	}
-	esmConfig := map[string]interface{}{}
-	if a.ESMConfig != nil {
-		if v, ok := a.ESMConfig.(map[string]interface{}); ok {
-			esmConfig = v
+	esmsh := map[string]interface{}{}
+	if a.Esmsh != nil {
+		if v, ok := a.Esmsh.(map[string]interface{}); ok {
+			esmsh = v
 		}
 	}
 	var sideEffects *StringSet = nil
@@ -135,7 +135,7 @@ func (a *NpmPackageJSON) ToNpmPackage() *NpmPackageInfo {
 		Exports:          exports,
 		Files:            a.Files,
 		Deprecated:       deprecated,
-		ESMConfig:        esmConfig,
+		Esmsh:            esmsh,
 	}
 }
 
@@ -161,7 +161,7 @@ type NpmPackageInfo struct {
 	Exports          interface{}
 	Files            []string
 	Deprecated       string
-	ESMConfig        map[string]interface{}
+	Esmsh            map[string]interface{}
 }
 
 func (a *NpmPackageInfo) UnmarshalJSON(b []byte) error {

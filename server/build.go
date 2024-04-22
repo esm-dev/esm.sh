@@ -262,6 +262,20 @@ func (task *BuildTask) build() (err error) {
 		}
 	}
 
+	pkgSideEffects := api.SideEffectsTrue
+	if npm.SideEffectsFalse {
+		pkgSideEffects = api.SideEffectsFalse
+	}
+
+	noBundle := task.NoBundle || (npm.SideEffects != nil && npm.SideEffects.Len() > 0)
+	if npm.Esmsh != nil {
+		if v, ok := npm.Esmsh["bundle"]; ok {
+			if b, ok := v.(bool); ok && !b {
+				noBundle = true
+			}
+		}
+	}
+
 	nodeEnv := "production"
 	if task.Dev {
 		nodeEnv = "development"
@@ -290,20 +304,6 @@ func (task *BuildTask) build() (err error) {
 	browserExclude := map[string]*StringSet{}
 	implicitExternal := newStringSet()
 
-	noBundle := task.NoBundle || (npm.SideEffects != nil && npm.SideEffects.Len() > 0)
-	if npm.ESMConfig != nil {
-		if v, ok := npm.ESMConfig["bundle"]; ok {
-			if b, ok := v.(bool); ok && !b {
-				noBundle = true
-			}
-		}
-	}
-
-	pkgSideEffects := api.SideEffectsTrue
-	if npm.SideEffectsFalse {
-		pkgSideEffects = api.SideEffectsFalse
-	}
-
 	esmPlugin := api.Plugin{
 		Name: "esm",
 		Setup: func(build api.PluginBuild) {
@@ -320,30 +320,42 @@ func (task *BuildTask) build() (err error) {
 
 					// skip http modules
 					if strings.HasPrefix(args.Path, "data:") || strings.HasPrefix(args.Path, "https:") || strings.HasPrefix(args.Path, "http:") {
-						return api.OnResolveResult{Path: args.Path, External: true}, nil
+						return api.OnResolveResult{
+							Path:     args.Path,
+							External: true,
+						}, nil
 					}
 
 					// if `?ignore-require` present, ignore specifier that is a require call
 					if task.Args.ignoreRequire && args.Kind == api.ResolveJSRequireCall && npm.Module != "" {
-						return api.OnResolveResult{Path: args.Path, External: true}, nil
+						return api.OnResolveResult{
+							Path:     args.Path,
+							External: true,
+						}, nil
 					}
 
 					// ignore yarn PnP API
 					if args.Path == "pnpapi" {
-						return api.OnResolveResult{Path: args.Path, Namespace: "browser-exclude"}, nil
+						return api.OnResolveResult{
+							Path:      args.Path,
+							Namespace: "browser-exclude",
+						}, nil
 					}
 
 					// it's implicit external
 					if implicitExternal.Has(args.Path) {
-						return api.OnResolveResult{Path: task.resolveExternalModule(args.Path, args.Kind), External: true}, nil
+						return api.OnResolveResult{
+							Path:     task.resolveExternalModule(args.Path, args.Kind),
+							External: true,
+						}, nil
 					}
 
 					// normalize specifier
 					specifier := strings.TrimPrefix(args.Path, "node:")
 					specifier = strings.TrimPrefix(specifier, "npm:")
 
-					// bundle "@babel/runtime/helpers/*"
-					if args.Kind == api.ResolveJSRequireCall && (strings.HasPrefix(specifier, "@babel/runtime/helpers/") || strings.Contains(args.Importer, "/@babel/runtime/helpers/")) && task.npm.Name != "@babel/runtime" {
+					// bundle "@babel/runtime/*"
+					if (args.Kind == api.ResolveJSRequireCall || !noBundle) && task.npm.Name != "@babel/runtime" && (strings.HasPrefix(specifier, "@babel/runtime/") || strings.Contains(args.Importer, "/@babel/runtime/")) {
 						return api.OnResolveResult{}, nil
 					}
 
@@ -443,7 +455,10 @@ func (task *BuildTask) build() (err error) {
 						if name, ok := npm.Browser[spec]; ok {
 							if name == "" {
 								// browser exclude
-								return api.OnResolveResult{Path: args.Path, Namespace: "browser-exclude"}, nil
+								return api.OnResolveResult{
+									Path:      args.Path,
+									Namespace: "browser-exclude",
+								}, nil
 							}
 							if strings.HasPrefix(name, "./") {
 								specifier = path.Join(task.resolveDir, "node_modules", npm.Name, name)
@@ -493,7 +508,10 @@ func (task *BuildTask) build() (err error) {
 										SubModule: toModuleBareName(subPath, true),
 										SubPath:   subPath,
 									}
-									return api.OnResolveResult{Path: fmt.Sprintf("npm:%s", pkg.String()), External: true}, nil
+									return api.OnResolveResult{
+										Path:     fmt.Sprintf("npm:%s", pkg.String()),
+										External: true,
+									}, nil
 								}
 							}
 							if specifier == "fsevents" {
@@ -531,13 +549,20 @@ func (task *BuildTask) build() (err error) {
 
 					// embed wasm as WebAssembly.Module
 					if strings.HasSuffix(fullFilepath, ".wasm") && existsFile(fullFilepath) {
-						return api.OnResolveResult{Path: fullFilepath, Namespace: "wasm"}, nil
+						return api.OnResolveResult{
+							Path:      fullFilepath,
+							Namespace: "wasm",
+						}, nil
 					}
 
 					// externalize the _parent_ module
 					// e.g. "react/jsx-runtime" imports "react"
 					if task.Pkg.SubModule != "" && task.Pkg.Name == specifier && !task.Bundle {
-						return api.OnResolveResult{Path: task.resolveExternalModule(specifier, args.Kind), External: true}, nil
+						return api.OnResolveResult{
+							Path:        task.resolveExternalModule(specifier, args.Kind),
+							External:    true,
+							SideEffects: pkgSideEffects,
+						}, nil
 					}
 
 					// it's the entry point
@@ -547,7 +572,10 @@ func (task *BuildTask) build() (err error) {
 
 					// it's nodejs internal module
 					if nodejsInternalModules[specifier] {
-						return api.OnResolveResult{Path: task.resolveExternalModule(specifier, args.Kind), External: true}, nil
+						return api.OnResolveResult{
+							Path:     task.resolveExternalModule(specifier, args.Kind),
+							External: true,
+						}, nil
 					}
 
 					// bundles all dependencies in `bundle` mode, apart from peer dependencies and `?external` query
@@ -616,7 +644,11 @@ func (task *BuildTask) build() (err error) {
 											exportPrefix, _ := utils.SplitByLastByte(name, '*')
 											url := path.Join(npm.Name, exportPrefix+strings.TrimPrefix(bareName, prefix))
 											if i := moduleName; url != i && url != i+"/index" {
-												return api.OnResolveResult{Path: task.resolveExternalModule(url, args.Kind), External: true, SideEffects: pkgSideEffects}, nil
+												return api.OnResolveResult{
+													Path:        task.resolveExternalModule(url, args.Kind),
+													External:    true,
+													SideEffects: pkgSideEffects,
+												}, nil
 											}
 										}
 									} else {
@@ -639,7 +671,11 @@ func (task *BuildTask) build() (err error) {
 										if match {
 											url := path.Join(npm.Name, stripModuleExt(name))
 											if i := moduleName; url != i && url != i+"/index" {
-												return api.OnResolveResult{Path: task.resolveExternalModule(url, args.Kind), External: true, SideEffects: pkgSideEffects}, nil
+												return api.OnResolveResult{
+													Path:        task.resolveExternalModule(url, args.Kind),
+													External:    true,
+													SideEffects: pkgSideEffects,
+												}, nil
 											}
 										}
 									}
@@ -658,7 +694,11 @@ func (task *BuildTask) build() (err error) {
 										if len(p) == 3 && string(p[0]) == "export*from" && string(p[2]) == ";\n" {
 											url := string(p[1])
 											if !isLocalSpecifier(url) {
-												return api.OnResolveResult{Path: task.resolveExternalModule(url, args.Kind), External: true}, nil
+												return api.OnResolveResult{
+													Path:        task.resolveExternalModule(url, args.Kind),
+													External:    true,
+													SideEffects: pkgSideEffects,
+												}, nil
 											}
 										}
 									}
@@ -672,22 +712,16 @@ func (task *BuildTask) build() (err error) {
 						}
 					}
 
-					// workaround for github packages that havn specified `name` field
-					if task.Pkg.FromGithub && specifier == npm.PkgName {
-						pkg := Pkg{
-							Name:       npm.Name,
-							Version:    npm.Version,
-							FromGithub: true,
-						}
-						resolvedPath := task.getImportPath(pkg, encodeBuildArgsPrefix(task.Args, pkg, false))
-						if args.Kind != api.ResolveJSDynamicImport {
-							task.imports = append(task.imports, [2]string{resolvedPath, resolvedPath})
-						}
-						return api.OnResolveResult{Path: resolvedPath, External: true, SideEffects: pkgSideEffects}, nil
-					}
-
 					// dynamic external
-					return api.OnResolveResult{Path: task.resolveExternalModule(specifier, args.Kind), External: true}, nil
+					sideEffects := api.SideEffectsFalse
+					if specifier == npm.Name || specifier == npm.PkgName || strings.HasPrefix(specifier, npm.Name+"/") || strings.HasPrefix(specifier, npm.Name+"/") {
+						sideEffects = pkgSideEffects
+					}
+					return api.OnResolveResult{
+						Path:        task.resolveExternalModule(specifier, args.Kind),
+						External:    true,
+						SideEffects: sideEffects,
+					}, nil
 				},
 			)
 
@@ -721,7 +755,6 @@ func (task *BuildTask) build() (err error) {
 		},
 	}
 
-rebuild:
 	options := api.BuildOptions{
 		Outdir:            "/esbuild",
 		Write:             false,
@@ -735,25 +768,25 @@ rebuild:
 		KeepNames:         task.Args.keepNames,         // prevent class/function names erasing
 		IgnoreAnnotations: task.Args.ignoreAnnotations, // some libs maybe use wrong side-effect annotations
 		Conditions:        task.Args.conditions.Values(),
-		// prevent features that can not be polyfilled
-		Supported: map[string]bool{
-			"bigint":          true,
-			"top-level-await": true,
-		},
-		Plugins: []api.Plugin{esmPlugin},
-		// for css bundling
-		Loader: map[string]api.Loader{
-			".svg":   api.LoaderDataURL,
-			".png":   api.LoaderDataURL,
-			".webp":  api.LoaderDataURL,
-			".gif":   api.LoaderDataURL,
-			".ttf":   api.LoaderDataURL,
-			".eot":   api.LoaderDataURL,
-			".woff":  api.LoaderDataURL,
-			".woff2": api.LoaderDataURL,
-		},
-		SourceRoot: "/",
-		Sourcemap:  api.SourceMapExternal,
+		Plugins:           []api.Plugin{esmPlugin},
+		SourceRoot:        "/",
+		Sourcemap:         api.SourceMapExternal,
+	}
+	// ignore features that can not be polyfilled
+	options.Supported = map[string]bool{
+		"bigint":          true,
+		"top-level-await": true,
+	}
+	// bundling image/font assets
+	options.Loader = map[string]api.Loader{
+		".svg":   api.LoaderDataURL,
+		".png":   api.LoaderDataURL,
+		".webp":  api.LoaderDataURL,
+		".gif":   api.LoaderDataURL,
+		".ttf":   api.LoaderDataURL,
+		".eot":   api.LoaderDataURL,
+		".woff":  api.LoaderDataURL,
+		".woff2": api.LoaderDataURL,
 	}
 	if task.Target == "node" {
 		options.Platform = api.PlatformNode
@@ -787,6 +820,8 @@ rebuild:
 	} else if entryPoint != "" {
 		options.EntryPoints = []string{entryPoint}
 	}
+
+rebuild:
 	result := api.Build(options)
 	if len(result.Errors) > 0 {
 		// mark the missing module as external to exclude it from the bundle
@@ -1084,6 +1119,17 @@ func (task *BuildTask) resolveExternalModule(specifier string, kind api.ResolveK
 			resolvedPath = specifier
 		}
 	}()
+
+	// it's current package from github
+	if npm := task.npm; task.Pkg.FromGithub && (specifier == npm.Name || specifier == npm.PkgName) {
+		pkg := Pkg{
+			Name:       npm.Name,
+			Version:    npm.Version,
+			FromGithub: true,
+		}
+		resolvedPath = task.getImportPath(pkg, encodeBuildArgsPrefix(task.Args, pkg, false))
+		return
+	}
 
 	// node builtin module
 	if nodejsInternalModules[specifier] {

@@ -35,7 +35,7 @@ func TestPackageJsonParse(t *testing.T) {
 	if info.SideEffectsFalse != true {
 		t.Fatal("invalid sideEffects")
 	}
-	if info.ESMConfig["bundle"] != false {
+	if info.Esmsh["bundle"] != false {
 		t.Fatal("invalid esm.sh config")
 	}
 }
