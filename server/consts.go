@@ -78,3 +78,8 @@ var nativeNodePackages = []string{
 	"re2",
 	"zlib-sync",
 }
+
+// force to use `npm:` specifier for `denonext` target to fix `createRequire` issue
+var forceNpmSpecifiers = map[string]bool{
+	"css-tree": true,
+}

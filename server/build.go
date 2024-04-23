@@ -482,6 +482,14 @@ func (task *BuildTask) build() (err error) {
 						}
 					}
 
+					// force to use `npm:` specifier for `denonext` target
+					if forceNpmSpecifiers[specifier] && task.Target == "denonext" {
+						return api.OnResolveResult{
+							Path:     fmt.Sprintf("npm:%s", specifier),
+							External: true,
+						}, nil
+					}
+
 					// ignore native node packages like 'fsevent'
 					for _, name := range nativeNodePackages {
 						if specifier == name || strings.HasPrefix(specifier, name+"/") {
