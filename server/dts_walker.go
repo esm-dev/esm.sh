@@ -33,7 +33,7 @@ func walkDts(r io.Reader, buf *bytes.Buffer, resolve func(specifier string, kind
 	for scanner.Scan() {
 		token, trimedSpaces := trimSpace(scanner.Bytes())
 		buf.Write(trimedSpaces)
-	Re:
+	CheckCommentScope:
 		if !commentScope && bytes.HasPrefix(token, bytesCommentStart) {
 			commentScope = true
 		}
@@ -45,7 +45,7 @@ func walkDts(r io.Reader, buf *bytes.Buffer, resolve func(specifier string, kind
 				if rest := token[endIndex+2:]; len(rest) > 0 {
 					token, trimedSpaces = trimSpace(rest)
 					buf.Write(trimedSpaces)
-					goto Re
+					goto CheckCommentScope
 				}
 			} else {
 				buf.Write(token)
