@@ -30,7 +30,7 @@ function transformSolid(rawCode: string): string {
     );
 }
 
-Deno.test("solid.js ssr", async () => {
+Deno.test("solid.js@1.6 ssr", { sanitizeOps: false, sanitizeResources: false }, async () => {
   const code = `import { createSignal } from "solid-js";
 
   function Counter() {

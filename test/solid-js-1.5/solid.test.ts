@@ -23,7 +23,7 @@ function transformSolid(rawCode: string): string {
     .replaceAll(`"solid-js/web"`, `"http://localhost:8080/solid-js@1.5.1/web"`);
 }
 
-Deno.test("solid-js@1.5.1 ssr", async () => {
+Deno.test("solid-js@1.5 ssr", async () => {
   const code = `import { createSignal } from "solid-js";
 
   function Counter() {
