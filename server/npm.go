@@ -249,9 +249,11 @@ func fetchPackageInfo(name string, version string) (info NpmPackageInfo, err err
 	}
 
 	isFullVersion := regexpFullVersion.MatchString(version)
-	if isFullVersion && !isJsrScope {
+	isGithubRegistry := strings.Contains(url, "npm.pkg.github.com")
+	if isFullVersion && !isJsrScope && !isGithubRegistry {
 		url += "/" + version
 	}
+
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
 		return
