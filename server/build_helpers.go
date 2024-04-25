@@ -187,7 +187,7 @@ func (task *BuildTask) analyze(forceCjsOnly bool) (esm *ESMBuild, npm NpmPackage
 		} else {
 			subModulePath := path.Join(wd, "node_modules", npm.Name, pkg.SubModule)
 			subModulePackageJson := path.Join(subModulePath, "package.json")
-			if existsFile(subModulePackageJson) {
+			if npm.Exports == nil && existsDir(subModulePath) && existsFile(subModulePackageJson) {
 				var p NpmPackageInfo
 				err = parseJSONFile(subModulePackageJson, &p)
 				if err != nil {

@@ -665,13 +665,25 @@ func (task *BuildTask) build() (err error) {
 											// exports: "./foo": "./foo.js"
 											match = true
 										} else if m, ok := paths.(*orderedMap); ok {
-											// exports: "./foo": { "import": "./foo.js" }
+										Loop:
 											for e := m.l.Front(); e != nil; e = e.Next() {
 												_, value := m.Entry(e)
 												if s, ok := value.(string); ok {
+													// exports: "./foo": { "import": "./foo.js" }
 													if stripModuleExt(s) == bareName {
 														match = true
 														break
+													}
+												} else if m, ok := value.(*orderedMap); ok {
+													// exports: "./foo": { "import": { default: "./foo.js" } }
+													for e := m.l.Front(); e != nil; e = e.Next() {
+														_, value := m.Entry(e)
+														if s, ok := value.(string); ok {
+															if stripModuleExt(s) == bareName {
+																match = true
+																break Loop
+															}
+														}
 													}
 												}
 											}
