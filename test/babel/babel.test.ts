@@ -23,5 +23,5 @@ Deno.test("babel/core", async () => {
   assertStringIncludes(result!.code as string, `from "solid-js/web"`);
   assertStringIncludes(result!.code as string, `from "solid-refresh"`);
   assertStringIncludes(result!.code as string, `const _tmpl$ = "<h1>Foo</h1>"`);
-  assertStringIncludes(result!.code as string, `if (import.meta.hot) {`);
+  assertStringIncludes(result!.code as string, "if (import.meta.hot) {");
 });
