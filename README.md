@@ -39,23 +39,24 @@ or use _**bare specifier**_ instead of URL with [import maps](https://github.com
 
 - **[NPM(default)](https://npmjs.com)**:
   ```js
-  // Example
-  import React from "https://esm.sh/react"; // 18.2.0 (latest)
-  import React from "https://esm.sh/react@17"; // 17.0.2
-  import React from "https://esm.sh/react@canary"; // 18.3.0-canary-e1ad4aa36-20230601
-  import { renderToString } from "https://esm.sh/react-dom@18.2.0/server"; // submodules
+  // Examples
+  import React from "https://esm.sh/react" // 18.3.0 (latest)
+  import React from "https://esm.sh/react@17" // 17.0.2
+  import React from "https://esm.sh/react@beta" // 19.0.0-beta-94eed63c49-20240425
+  import { renderToString } from "https://esm.sh/react-dom@18.3.0/server" // submodules
   ```
-- **[Github](https://github.com)**:
+- **[Github](https://github.com)** (starts with `/gh/`):
   ```js
-  // Example
-  import tslib from "https://esm.sh/gh/microsoft/tslib@2.6.0";
-  fetch("https://esm.sh/gh/microsoft/fluentui-emoji/assets/Party%20popper/Color/party_popper_color.svg");
+  // Examples
+  import tslib from "https://esm.sh/gh/microsoft/tslib@2.6.0" // '2.6.0' is the git tag name
+  // or fetch a static file from github
+  fetch("https://esm.sh/gh/microsoft/fluentui-emoji/assets/Party%20popper/Color/party_popper_color.svg")
   ```
-- **[JSR](https://jsr.io)**:
+- **[JSR](https://jsr.io)** (starts with `/jsr/`):
   ```js
-  // Example
-  import { encodeBase64, decodeBase64 } from "https://esm.sh/jsr/@std/encoding@0.222.0/base64";
-  import { html } from "https://esm.sh/jsr/@mark/html@1";
+  // Examples
+  import * as mod from "https://esm.sh/jsr/@std/encoding@0.222.0/base64"
+  import { html } from "https://esm.sh/jsr/@mark/html@1"
   ```
 
 ### Specifying Dependencies
