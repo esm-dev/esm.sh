@@ -162,10 +162,10 @@ Deno.test("esm-worker", { sanitizeOps: false, sanitizeResources: false }, async 
   });
 
   await t.step("npm modules", async () => {
-    const res = await fetch(`${workerOrigin}/react-dom`, { redirect: "manual" });
+    const res = await fetch(`${workerOrigin}/react`, { redirect: "manual" });
     res.body?.cancel();
     assertEquals(res.status, 302);
-    assert(res.headers.get("Location")!.startsWith(`${workerOrigin}/react-dom@`));
+    assert(res.headers.get("Location")!.startsWith(`${workerOrigin}/react@`));
     assertEquals(res.headers.get("Cache-Control"), "public, max-age=600");
 
     const res2 = await fetch(res.headers.get("Location")!);
@@ -174,16 +174,13 @@ Deno.test("esm-worker", { sanitizeOps: false, sanitizeResources: false }, async 
     assertEquals(res2.status, 200);
     assertEquals(res2.headers.get("Content-Type"), "application/javascript; charset=utf-8");
     assertEquals(res2.headers.get("Cache-Control"), "public, max-age=31536000, immutable");
-    assert(modUrl.pathname.endsWith("/denonext/react-dom.mjs"));
+    assert(modUrl.pathname.endsWith("/denonext/react.mjs"));
 
     const res3 = await fetch(modUrl);
     assertEquals(res3.status, 200);
     assertEquals(res3.headers.get("Content-Type"), "application/javascript; charset=utf-8");
     assertEquals(res3.headers.get("Cache-Control"), "public, max-age=31536000, immutable");
-
-    const js = await res3.text();
-    assertStringIncludes(js, "/react@");
-    assertStringIncludes(js, "createElement");
+    assertStringIncludes(await res3.text(), "createElement");
 
     const dtsUrl = res2.headers.get("X-Typescript-Types")!;
     assert(dtsUrl.startsWith(workerOrigin));
@@ -194,31 +191,33 @@ Deno.test("esm-worker", { sanitizeOps: false, sanitizeResources: false }, async 
     assertEquals(res4.status, 200);
     assertEquals(res4.headers.get("Content-Type"), "application/typescript; charset=utf-8");
 
-    const res5 = await fetch(`${workerOrigin}/react@17`);
-    res5.body?.cancel();
+    const res5 = await fetch(`${workerOrigin}/react@^18.2.0`);
     assertEquals(res5.status, 200);
-    const modUrl2 = new URL(res5.headers.get("X-Esm-Id")!, workerOrigin);
-    const res6 = await fetch(modUrl2);
+    assertEquals(res5.headers.get("Cache-Control"), "public, max-age=600");
+    assertStringIncludes(await res5.text(), `"/react@18.`);
+
+    const res6 = await fetch(`${workerOrigin}/react@17.0.2`);
+    res6.body?.cancel();
     assertEquals(res6.status, 200);
+    const modUrl2 = new URL(res6.headers.get("X-Esm-Id")!, workerOrigin);
+    const res7 = await fetch(modUrl2);
+    assertEquals(res7.status, 200);
     assertStringIncludes(
-      await res6.text(),
+      await res7.text(),
       `"data:application/javascript;base64,ZXhwb3J0IGRlZmF1bHQgT2JqZWN0LmFzc2lnbjsK"`,
     );
 
-    const res7 = await fetch(`${workerOrigin}/typescript@5.4.2/es2022/typescript.mjs`);
-    assertEquals(res7.status, 200);
-    assertStringIncludes(await res7.text(), `"/node/process.js"`);
-
-    const res8 = await fetch(`${workerOrigin}/react-dom@18?external=react`);
+    const res8 = await fetch(`${workerOrigin}/react-dom@18.2.0?external=react`);
     res8.body?.cancel();
     assertEquals(res8.status, 200);
     const modUrl3 = new URL(res8.headers.get("X-Esm-Id")!, workerOrigin);
     const res9 = await fetch(modUrl3);
     assertEquals(res9.status, 200);
-    assertStringIncludes(
-      await res9.text(),
-      `from "react"`,
-    );
+    assertStringIncludes(await res9.text(), `from "react"`);
+
+    const res10 = await fetch(`${workerOrigin}/typescript@5.4.2/es2022/typescript.mjs`);
+    assertEquals(res10.status, 200);
+    assertStringIncludes(await res10.text(), `"/node/process.js"`);
   });
 
   await t.step("npm modules (submodule)", async () => {

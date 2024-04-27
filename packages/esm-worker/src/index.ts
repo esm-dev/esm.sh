@@ -28,8 +28,9 @@ import {
   trimPrefix,
 } from "./utils.ts";
 
-const regexpNpmNaming = /^[a-zA-Z0-9][\w\.\-]*$/;
+const regexpNpmNaming = /^[a-zA-Z0-9][\w\-\.]*$/;
 const regexpFullVersion = /^\d+\.\d+\.\d+/;
+const regexpCaretVersion = /^\^\d+\.\d+\.\d+/;
 const regexpCommitish = /^[a-f0-9]{10,}$/;
 const regexpLegacyVersionPrefix = /^\/v\d+\//;
 const regexpLegacyBuild = /^\/~[a-f0-9]{40}$/;
@@ -84,10 +85,7 @@ async function fetchOrigin(
   const buffer = await res.arrayBuffer();
   if (!res.ok) {
     // CF default error page(html)
-    if (
-      res.status === 500 &&
-      res.headers.get("Content-Type")?.startsWith("text/html")
-    ) {
+    if (res.status === 500 && res.headers.get("Content-Type")?.startsWith("text/html")) {
       return new Response("Bad Gateway", { status: 502, headers: resHeaders });
     }
     // redirects
@@ -536,11 +534,11 @@ function withESMWorker(middleware?: Middleware, cache: Cache = (caches as any).d
       return err("Invalid path", 400);
     }
 
-    const fromEsmsh = packageName.startsWith("~") &&
-      regexpCommitish.test(packageName.slice(1));
-    if (!fromEsmsh && !regexpNpmNaming.test(packageName)) {
+    if (!regexpNpmNaming.test(packageName)) {
       return err(`Invalid package name '${packageName}'`, 400);
     }
+
+    const isTargetUrl = hasTargetSegment(subPath);
 
     let pkgId = packageName;
     if (packageScope) {
@@ -551,7 +549,7 @@ function withESMWorker(middleware?: Middleware, cache: Cache = (caches as any).d
       }
     }
 
-    // format package version
+    // normalize package version
     if (packageVersion) {
       [packageVersion, extraQuery] = splitBy(packageVersion, "&");
       if (!gh) {
@@ -567,14 +565,12 @@ function withESMWorker(middleware?: Middleware, cache: Cache = (caches as any).d
       }
     }
 
-    if (fromEsmsh) {
-      packageVersion = "0.0.0";
-    }
-
-    // redirect to commit-ish version
+    // redirect to commit-ish version for GitHub packages
     if (
-      gh && !(packageVersion &&
-        (regexpCommitish.test(packageVersion) || regexpFullVersion.test(trimPrefix(packageVersion, "v"))))
+      gh && !(packageVersion && (
+        regexpCommitish.test(packageVersion) ||
+        regexpFullVersion.test(trimPrefix(packageVersion, "v"))
+      ))
     ) {
       return ctx.withCache(() =>
         fetchOrigin(
@@ -588,7 +584,14 @@ function withESMWorker(middleware?: Middleware, cache: Cache = (caches as any).d
     }
 
     // redirect to specific version
-    if (!gh && !(packageVersion && regexpFullVersion.test(packageVersion))) {
+    let isCaretVersion = false;
+    if (
+      !gh && (!packageVersion ||
+        (
+          !regexpFullVersion.test(packageVersion) &&
+          !(isCaretVersion = regexpCaretVersion.test(packageVersion))
+        ))
+    ) {
       return ctx.withCache(async () => {
         const headers = new Headers();
         if (env.NPM_TOKEN) {
@@ -599,10 +602,7 @@ function withESMWorker(middleware?: Middleware, cache: Cache = (caches as any).d
         if (pkgName.startsWith("@jsr/")) {
           registry = "https://npm.jsr.io";
         }
-        const res = await fetch(
-          new URL(pkgName, registry),
-          { headers },
-        );
+        const res = await fetch(new URL(pkgName, registry), { headers });
         if (!res.ok) {
           if (res.status === 404 || res.status === 401) {
             return errPkgNotFound(pkgName);
@@ -617,7 +617,7 @@ function withESMWorker(middleware?: Middleware, cache: Cache = (caches as any).d
         if (hasExternalAllMarker) {
           prefix += "*";
         }
-        if (pkgName.startsWith("@jsr/") && !hasTargetSegment(subPath)) {
+        if (pkgName.startsWith("@jsr/") && !isTargetUrl) {
           pkgName = "jsr/@" + pkgName.slice(5).replace("__", "/");
         }
         const eq = extraQuery ? "&" + extraQuery : "";
@@ -654,10 +654,7 @@ function withESMWorker(middleware?: Middleware, cache: Cache = (caches as any).d
     }
 
     // redirect `/@types/PKG` to `.d.ts` files
-    if (
-      pkgId.startsWith("@types/") &&
-      (subPath === "" || !isDtsFile(subPath))
-    ) {
+    if (pkgId.startsWith("@types/") && (subPath === "" || !isDtsFile(subPath))) {
       return ctx.withCache(async () => {
         let p = pathname;
         if (subPath !== "") {
@@ -709,14 +706,14 @@ function withESMWorker(middleware?: Middleware, cache: Cache = (caches as any).d
       );
     }
 
-    // redirect to real wasm file: `/v100/PKG/es2022/foo.wasm` -> `PKG/foo.wasm`
-    if (hasTargetSegment(subPath) && (subPath.endsWith(".wasm") || subPath.endsWith(".json"))) {
+    // redirect to real wasm file: `/PKG/es2022/foo.wasm` -> `PKG/foo.wasm`
+    if (isTargetUrl && (subPath.endsWith(".wasm") || subPath.endsWith(".json"))) {
       return ctx.withCache(() => {
         return fetchOrigin(req, env, ctx, url.pathname, corsHeaders());
       });
     }
 
-    // if it's npm asset
+    // if it's npm asset file
     if (subPath !== "") {
       const ext = splitBy(subPath, ".", true)[1];
       // use origin server response for `*.wasm?module`
@@ -756,17 +753,21 @@ function withESMWorker(middleware?: Middleware, cache: Cache = (caches as any).d
       prefix += "/gh";
     }
 
-    if (isDtsFile(subPath) || hasTargetSegment(subPath)) {
+    if (isDtsFile(subPath) || isTargetUrl) {
       return ctx.withCache(() => {
         const pathname = `${prefix}/${pkgId}@${packageVersion}${subPath}`;
         return fetchOriginWithKVCache(req, env, ctx, pathname, undefined, true);
       });
     }
 
-    return ctx.withCache(() => {
+    return ctx.withCache(async () => {
       const marker = hasExternalAllMarker ? "*" : "";
       const pathname = `${prefix}/${marker}${pkgId}@${packageVersion}${subPath}`;
       normalizeSearchParams(url.searchParams);
+      if (isCaretVersion) {
+        const res = await fetchOrigin(req, env, ctx, pathname + url.search, corsHeaders());
+        return res;
+      }
       return fetchOriginWithKVCache(req, env, ctx, pathname, url.search);
     }, { varyUA: true });
   }

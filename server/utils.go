@@ -16,16 +16,18 @@ import (
 const EOL = "\n"
 
 var (
-	regexpFullVersion     = regexp.MustCompile(`^\d+\.\d+\.\d+[\w\.\+\-]*$`)
-	regexpFullVersionPath = regexp.MustCompile(`(\w)@(v?\d+\.\d+\.\d+[\w\.\+\-]*|[0-9a-f]{10})(/|$)`)
-	regexpPathWithVersion = regexp.MustCompile(`\w@[\*\~\^\w\.\+\-]+(/|$|&)`)
-	regexpLocPath         = regexp.MustCompile(`(\.m?js):\d+:\d+$`)
-	regexpJSIdent         = regexp.MustCompile(`^[a-zA-Z_$][\w$]*$`)
-	regexpGlobalIdent     = regexp.MustCompile(`__[a-zA-Z]+\$`)
-	regexpVarEqual        = regexp.MustCompile(`var ([a-zA-Z]+)\s*=\s*[a-zA-Z]+$`)
+	regexpFullVersion      = regexp.MustCompile(`^\d+\.\d+\.\d+[\w\.\+\-]*$`)
+	regexpFullVersionPath  = regexp.MustCompile(`(\w)@(v?\d+\.\d+\.\d+[\w\.\+\-]*|[0-9a-f]{10})(/|$)`)
+	regexpCaretVersionPath = regexp.MustCompile(`\w@\^(v?\d+\.\d+\.\d+[\w\.\+\-]*|[0-9a-f]{10})(/|$)`)
+	regexpLocPath          = regexp.MustCompile(`(\.m?js):\d+:\d+$`)
+	regexpJSIdent          = regexp.MustCompile(`^[a-zA-Z_$][\w$]*$`)
+	regexpGlobalIdent      = regexp.MustCompile(`__[a-zA-Z]+\$`)
+	regexpVarEqual         = regexp.MustCompile(`var ([a-zA-Z]+)\s*=\s*[a-zA-Z]+$`)
 )
 
-var esExts = []string{".mjs", ".js", ".jsx", ".mts", ".ts", ".tsx", ".cjs"}
+var (
+	esExts = []string{".mjs", ".js", ".jsx", ".mts", ".ts", ".tsx", ".cjs"}
+)
 
 // isHttpSepcifier returns true if the import path is a remote URL.
 func isHttpSepcifier(importPath string) bool {
