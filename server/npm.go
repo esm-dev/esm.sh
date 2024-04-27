@@ -249,8 +249,9 @@ func fetchPackageInfo(name string, version string) (info NpmPackageInfo, err err
 	}
 
 	isFullVersion := regexpFullVersion.MatchString(version)
-	isGithubRegistry := strings.Contains(url, "npm.pkg.github.com")
-	if isFullVersion && !isJsrScope && !isGithubRegistry {
+	isVersionUrl := isFullVersion && strings.HasPrefix(url, "https://registry.npmjs.org/")
+	if isVersionUrl {
+		// npmjs.org support url like `https://registry.npmjs.org/<name>/<version>`
 		url += "/" + version
 	}
 
@@ -289,7 +290,7 @@ func fetchPackageInfo(name string, version string) (info NpmPackageInfo, err err
 		return
 	}
 
-	if isFullVersion && !isJsrScope {
+	if isVersionUrl {
 		err = json.NewDecoder(resp.Body).Decode(&info)
 		if err != nil {
 			return
