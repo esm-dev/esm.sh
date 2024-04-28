@@ -1,19 +1,9 @@
 # Self-Hosting
 
-[esm.sh](https://esm.sh) provides a fast, global CDN(content delivery network) publicly which is powered by
-[Cloudflare](https://cloudflare.com). You can also host esm.sh server by yourself.
+[esm.sh](https://esm.sh) provides a global fast CDN publicly which is powered by
+[Cloudflare](https://cloudflare.com). You can also host esm.sh service by yourself.
 
-To serve esm.sh, You will need [Go](https://golang.org/dl) 1.18+ to compile the server. The server will install
-[Node.js](https://nodejs.org/en/download/) runtime automatically if it's not found on your host machine.
-
-## Recommended Host Machine (Single Server)
-
-- Linux system with git installed
-- 4x CPU cores or more
-- 8GB RAM or more
-- 100GB disk space or more
-
-## Clone code
+## Clone the Source Code
 
 ```baseh
 git clone https://github.com/esm-dev/esm.sh
@@ -41,11 +31,28 @@ You can find all the server options in [config.exmaple.jsonc](./config.example.j
 
 ## Run the Sever Locally
 
+You will need [Go](https://golang.org/dl) 1.18+ to compile the server.
+
 ```bash
 go run main.go --config=config.json --dev
 ```
 
 Then you can import `React` from http://localhost:8080/react
+
+## Deploy the Server to a Single Machine
+
+Ensure the [supervisor](http://supervisord.org/) has been installed on your host machine.
+
+```bash
+./scripts/deploy.sh --init
+```
+
+Recommended host machine requirements:
+
+- Linux system with `git` and `supervisor` installed
+- 4x CPU cores or more
+- 8GB RAM or more
+- 100GB disk space or more
 
 ## Deploy with Docker
 
@@ -87,17 +94,9 @@ ADD ./config.json /etc/esmd/config.json
 CMD ["esmd", "--config", "/etc/esmd/config.json"]
 ```
 
-## Deploy to Single Machine with the Quick Deploy Script
-
-Ensure the [supervisor](http://supervisord.org/) has been installed on your host machine.
-
-```bash
-./scripts/deploy.sh --init
-```
-
 ## Deploy with Cloudflare Workers
 
 We use [Cloudflare Workers](https://workers.cloudflare.com/) as the front layer to handle and cache esm.sh requests at
-edge(earth). We open sourced the code, you can use it to build your own esm.sh CDN running globally.
+edge(earth). And we open sourced the code, you can use it to build your own esm.sh CDN that's running globally.
 
 More details check [esm-worker](./packages/esm-worker/README.md).
