@@ -8,14 +8,14 @@
 
 # esm.sh
 
-A fast, smart, & global content delivery network (CDN) for modern(es2015+) web development.
+A global fast and smart CDN(aka content delivery network) for modern(es2015+) web development.
 
 ## How to Use
 
-esm.sh is a modern CDN that allows you to import [es6 modules](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Guide/Modules) from a URL:
+esm.sh allows you to import [es6 modules](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Guide/Modules) from a URL directly in the browser or Deno. No install/build step needed.
 
 ```js
-import Module from "https://esm.sh/PKG[@SEMVER][/PATH]";
+import * as mod from "https://esm.sh/PKG[@SEMVER][/PATH]";
 ```
 
 or use _**bare specifier**_ instead of URL with [import maps](https://github.com/WICG/import-maps):
@@ -40,23 +40,23 @@ or use _**bare specifier**_ instead of URL with [import maps](https://github.com
 - **[NPM(default)](https://npmjs.com)**:
   ```js
   // Examples
-  import React from "https://esm.sh/react" // 18.3.0 (latest)
-  import React from "https://esm.sh/react@17" // 17.0.2
-  import React from "https://esm.sh/react@beta" // 19.0.0-beta-94eed63c49-20240425
-  import { renderToString } from "https://esm.sh/react-dom@18.3.0/server" // submodules
+  import React from "https://esm.sh/react"; // 18.3.0 (latest)
+  import React from "https://esm.sh/react@17"; // 17.0.2
+  import React from "https://esm.sh/react@beta"; // 19.0.0-beta-94eed63c49-20240425
+  import { renderToString } from "https://esm.sh/react-dom@18.3.0/server"; // submodules
   ```
 - **[Github](https://github.com)** (starts with `/gh/`):
   ```js
   // Examples
-  import tslib from "https://esm.sh/gh/microsoft/tslib@2.6.0" // '2.6.0' is the git tag name
-  // or fetch a static file from github
-  fetch("https://esm.sh/gh/microsoft/fluentui-emoji/assets/Party%20popper/Color/party_popper_color.svg")
+  import tslib from "https://esm.sh/gh/microsoft/tslib@2.6.0"; // '2.6.0' is the git tag name
+  // or fetch an asset file from github
+  fetch("https://esm.sh/gh/microsoft/fluentui-emoji/assets/Party%20popper/Color/party_popper_color.svg");
   ```
 - **[JSR](https://jsr.io)** (starts with `/jsr/`):
   ```js
   // Examples
-  import * as mod from "https://esm.sh/jsr/@std/encoding@0.222.0/base64"
-  import { html } from "https://esm.sh/jsr/@mark/html@1"
+  import * as mod from "https://esm.sh/jsr/@std/encoding@0.222.0/base64";
+  import { html } from "https://esm.sh/jsr/@mark/html@1";
   ```
 
 ### Specifying Dependencies
@@ -167,32 +167,32 @@ Other supported options of esbuild:
 esm.sh supports `?worker` query to load the module as a web worker:
 
 ```js
-import workerFactory from "https://esm.sh/monaco-editor/esm/vs/editor/editor.worker?worker";
+import createWorker from "https://esm.sh/monaco-editor/esm/vs/editor/editor.worker?worker";
 
 // create a worker
-const worker = workerFactory();
+const worker = createWorker();
 // rename the worker by adding the `name` option
-const worker = workerFactory({ name: "editor.worker" });
+const worker = createWorker({ name: "editor.worker" });
 // inject code into the worker
-const worker = workerFactory({ inject: "self.onmessage = e => self.postMessage(e.data)" });
+const worker = createWorker({ inject: "self.onmessage = (e) => self.postMessage(e.data)" });
 ```
 
 You can import any module as a worker from esm.sh with the `?worker` query. Plus, you can access the module's exports in the
 `inject` code. For example, uing the `xxhash-wasm` to hash strings in a worker:
 
 ```js
-import workerFactory from "https://esm.sh/xxhash-wasm@1.0.2?worker";
+import createWorker from "https://esm.sh/xxhash-wasm@1.0.2?worker";
 
+// variable '$module' is the imported 'xxhash-wasm' module
 const inject = `
-// variable '$module' is the xxhash-wasm module
 const xxhash = $module.default
-self.onmessage = async e => {
+self.onmessage = async (e) => {
   const hasher = await xxhash()
   self.postMessage(hasher.h64ToString(e.data))
 }
 `;
-const worker = workerFactory({ inject });
-worker.onmessage = (e) => console.log("hash:", e.data);
+const worker = createWorker({ inject });
+worker.onmessage = (e) => console.log("hash is", e.data);
 worker.postMessage("The string that is being hashed");
 ```
 
@@ -216,7 +216,7 @@ import wasm from "https://esm.sh/@dqbd/tiktoken@1.0.3/tiktoken_bg.wasm?module";
 const { exports } = new WebAssembly.Instance(wasm, imports);
 ```
 
-> Note: The `?module` query requires the top-level-await feature to be supported by the runtime/browser.
+> Note: The `*.wams?module` pattern requires the [top-level-await](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Operators/await#top_level_await) feature to be supported by the browser.
 
 ## Using Import Maps
 
@@ -278,7 +278,7 @@ await navigator.serviceWorker.register(
 );
 ```
 
-You may alternatively use `raw.esm.sh` as the origin, which is equivalent to `esm.sh/PATH?raw`:
+You may alternatively use `raw.esm.sh` as the origin, which is equivalent to `esm.sh/<PATH>?raw`:
 
 ```html
 <playground-project sandbox-base-url="https://raw.esm.sh/playground-elements/"></playground-project>
@@ -314,7 +314,7 @@ in Deno. ([link](https://deno.land/manual/typescript/types#using-x-typescript-ty
 
 ![Figure #1](./server/embed/assets/sceenshot-deno-types.png)
 
-In case the type definitions provided by the `X-TypeScript-Types` header are incorrect, you can disable it by adding the
+In case the type definitions provided by the `X-TypeScript-Types` header is incorrect, you can disable it by adding the
 `?no-dts` query to the module import URL:
 
 ```js
