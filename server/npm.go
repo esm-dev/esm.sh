@@ -237,6 +237,11 @@ func fetchPackageInfo(name string, version string) (info NpmPackageInfo, err err
 		}
 	}()
 
+	if cfg == nil {
+		err = fmt.Errorf("unknown npm registry")
+		return
+	}
+
 	isJsrScope := strings.HasPrefix(name, "@jsr/")
 	url := cfg.NpmRegistry + name
 	if isJsrScope {
