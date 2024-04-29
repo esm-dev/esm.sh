@@ -216,7 +216,7 @@ import wasm from "https://esm.sh/@dqbd/tiktoken@1.0.3/tiktoken_bg.wasm?module";
 const { exports } = new WebAssembly.Instance(wasm, imports);
 ```
 
-> Note: The `*.wams?module` pattern requires the [top-level-await](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Operators/await#top_level_await) feature to be supported by the browser.
+> Note: The `*.wasm?module` pattern requires the [top-level-await](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Operators/await#top_level_await) feature to be supported by the browser.
 
 ## Using Import Maps
 
