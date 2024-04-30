@@ -53,7 +53,8 @@ func TestPkgPath(t *testing.T) {
 	if pkgName != "react-dom" || pkgVersion != "18.2.0" || subPath != "server" {
 		t.Fatal("invalid splitPkgPath('react@18.2.0/server')")
 	}
-	pkg, q, err := validatePkgPath("react@18.2.0")
+
+	pkg, q, _, err := validatePkgPath("react@18.2.0")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -64,7 +65,7 @@ func TestPkgPath(t *testing.T) {
 		t.Fatalf("invalid pkg('%v'), should be 'react@18.2.0'", pkg)
 	}
 
-	pkg, q, err = validatePkgPath("react-dom@18.2.0/client")
+	pkg, q, _, err = validatePkgPath("react-dom@18.2.0/client")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -75,7 +76,7 @@ func TestPkgPath(t *testing.T) {
 		t.Fatalf("invalid pkg('%v'), should be 'react-dom@18.2.0/client'", pkg)
 	}
 
-	pkg, q, err = validatePkgPath("react-dom@18.2.0&dev/client.js")
+	pkg, q, _, err = validatePkgPath("react-dom@18.2.0&dev/client.js")
 	if err != nil {
 		t.Fatal(err)
 	}

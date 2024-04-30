@@ -144,7 +144,7 @@ func (a SortedPaths) Swap(i, j int) {
 
 // The orderedMap type, has similar operations as the default map type
 // copied from https://gitlab.com/c0b/go-ordered-json
-type orderedMap struct {
+type OrderedMap struct {
 	lock sync.RWMutex
 	m    map[string]interface{}
 	l    *list.List
@@ -152,8 +152,8 @@ type orderedMap struct {
 }
 
 // Create a new orderedMap
-func newOrderedMap() *orderedMap {
-	return &orderedMap{
+func newOrderedMap() *OrderedMap {
+	return &OrderedMap{
 		m:    make(map[string]interface{}),
 		l:    list.New(),
 		keys: make(map[string]*list.Element),
@@ -162,7 +162,7 @@ func newOrderedMap() *orderedMap {
 
 // Set sets value for particular key, this will remember the order of keys inserted
 // but if the key already exists, the order is not updated.
-func (om *orderedMap) Set(key string, value interface{}) {
+func (om *OrderedMap) Set(key string, value interface{}) {
 	om.lock.Lock()
 	defer om.lock.Unlock()
 	if _, ok := om.m[key]; !ok {
@@ -172,13 +172,13 @@ func (om *orderedMap) Set(key string, value interface{}) {
 }
 
 // Entry returns the key and value by the given list element
-func (om *orderedMap) Entry(e *list.Element) (string, interface{}) {
+func (om *OrderedMap) Entry(e *list.Element) (string, interface{}) {
 	key := e.Value.(string)
 	return key, om.m[key]
 }
 
 // UnmarshalJSON implements type json.Unmarshaler interface, so can be called in json.Unmarshal(data, om)
-func (om *orderedMap) UnmarshalJSON(data []byte) error {
+func (om *OrderedMap) UnmarshalJSON(data []byte) error {
 	dec := json.NewDecoder(bytes.NewReader(data))
 	dec.UseNumber()
 
@@ -191,7 +191,7 @@ func (om *orderedMap) UnmarshalJSON(data []byte) error {
 		return fmt.Errorf("expect JSON object open with '{'")
 	}
 
-	err = om.parseobject(dec)
+	err = om.parseObject(dec)
 	if err != nil {
 		return err
 	}
@@ -204,7 +204,7 @@ func (om *orderedMap) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
-func (om *orderedMap) parseobject(dec *json.Decoder) (err error) {
+func (om *OrderedMap) parseObject(dec *json.Decoder) (err error) {
 	var t json.Token
 	for dec.More() {
 		t, err = dec.Token()
@@ -225,7 +225,7 @@ func (om *orderedMap) parseobject(dec *json.Decoder) (err error) {
 		}
 
 		var value interface{}
-		value, err = handledelim(t, dec)
+		value, err = handleDelim(t, dec)
 		if err != nil {
 			return err
 		}
@@ -246,7 +246,7 @@ func (om *orderedMap) parseobject(dec *json.Decoder) (err error) {
 	return nil
 }
 
-func parsearray(dec *json.Decoder) (arr []interface{}, err error) {
+func parseArray(dec *json.Decoder) (arr []interface{}, err error) {
 	var t json.Token
 	arr = make([]interface{}, 0)
 	for dec.More() {
@@ -256,7 +256,7 @@ func parsearray(dec *json.Decoder) (arr []interface{}, err error) {
 		}
 
 		var value interface{}
-		value, err = handledelim(t, dec)
+		value, err = handleDelim(t, dec)
 		if err != nil {
 			return
 		}
@@ -274,19 +274,19 @@ func parsearray(dec *json.Decoder) (arr []interface{}, err error) {
 	return
 }
 
-func handledelim(t json.Token, dec *json.Decoder) (res interface{}, err error) {
+func handleDelim(t json.Token, dec *json.Decoder) (res interface{}, err error) {
 	if delim, ok := t.(json.Delim); ok {
 		switch delim {
 		case '{':
 			om2 := newOrderedMap()
-			err = om2.parseobject(dec)
+			err = om2.parseObject(dec)
 			if err != nil {
 				return
 			}
 			return om2, nil
 		case '[':
 			var value []interface{}
-			value, err = parsearray(dec)
+			value, err = parseArray(dec)
 			if err != nil {
 				return
 			}

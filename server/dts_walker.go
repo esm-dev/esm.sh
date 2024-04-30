@@ -57,7 +57,7 @@ func walkDts(r io.Reader, buf *bytes.Buffer, resolve func(specifier string, kind
 				format := string(a[0][1])
 				path := string(a[0][3])
 				if format == "path" || format == "types" {
-					if format == "path" && !isLocalSpecifier(path) {
+					if format == "path" && !isRelativeSpecifier(path) {
 						path = "./" + path
 					}
 					kind := "referenceTypes"

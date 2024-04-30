@@ -30,6 +30,10 @@ func (task *BuildTask) ID() string {
 	if pkg.SubModule != "" {
 		name = pkg.SubModule
 		extname = ".js"
+		// workaround for es5-ext weird "/#/" path
+		if pkg.Name == "es5-ext" {
+			name = strings.ReplaceAll(name, "/#/", "/%23/")
+		}
 	}
 	if task.Target == "raw" {
 		extname = ""
@@ -72,10 +76,10 @@ func (task *BuildTask) getImportPath(pkg Pkg, buildArgsPrefix string) string {
 	if pkg.SubModule != "" {
 		name = pkg.SubModule
 		extname = ".js"
-	}
-	// workaround for es5-ext weird "/#/" path
-	if pkg.Name == "es5-ext" {
-		name = strings.ReplaceAll(name, "/#/", "/$$/")
+		// workaround for es5-ext weird "/#/" path
+		if pkg.Name == "es5-ext" {
+			name = strings.ReplaceAll(name, "/#/", "/%23/")
+		}
 	}
 	if task.Dev {
 		name += ".development"
@@ -234,7 +238,7 @@ func (task *BuildTask) analyze(forceCjsOnly bool) (esm *ESMBuild, npm NpmPackage
 				}
 				// reslove sub-module using `exports` conditions if exists
 				if npm.Exports != nil && !isTsx {
-					if om, ok := npm.Exports.(*orderedMap); ok {
+					if om, ok := npm.Exports.(*OrderedMap); ok {
 						for e := om.l.Front(); e != nil; e = e.Next() {
 							name, exports := om.Entry(e)
 							if name == "./"+pkg.SubModule || name == "./"+pkg.SubModule+".js" || name == "./"+pkg.SubModule+".mjs" {
@@ -263,7 +267,7 @@ func (task *BuildTask) analyze(forceCjsOnly bool) (esm *ESMBuild, npm NpmPackage
 								*/
 								suffix := strings.TrimPrefix("./"+pkg.SubModule, strings.TrimSuffix(name, "*"))
 								hitExports := false
-								if om, ok := exports.(*orderedMap); ok {
+								if om, ok := exports.(*OrderedMap); ok {
 									newExports := newOrderedMap()
 									for e := om.l.Front(); e != nil; e = e.Next() {
 										key, value := om.Entry(e)
@@ -404,7 +408,7 @@ func (task *BuildTask) normalizeNpmPackage(p NpmPackageInfo) NpmPackageInfo {
 		for c, e := range p.TypesVersions {
 			if c == "*" && strings.HasPrefix(c, ">") || strings.HasPrefix(c, ">=") {
 				if usedCondition == "" || c == "*" || c > usedCondition {
-					if om, ok := e.(*orderedMap); ok {
+					if om, ok := e.(*OrderedMap); ok {
 						d, ok := om.m["*"]
 						if !ok {
 							d, ok = om.m["."]
@@ -431,7 +435,7 @@ func (task *BuildTask) normalizeNpmPackage(p NpmPackageInfo) NpmPackageInfo {
 	}
 
 	if exports := p.Exports; exports != nil {
-		if om, ok := exports.(*orderedMap); ok {
+		if om, ok := exports.(*OrderedMap); ok {
 			v, ok := om.m["."]
 			if ok {
 				/*
@@ -575,7 +579,7 @@ func (task *BuildTask) resolveConditions(p *NpmPackageInfo, exports interface{},
 		return
 	}
 
-	om, ok := exports.(*orderedMap)
+	om, ok := exports.(*OrderedMap)
 	if !ok {
 		return
 	}

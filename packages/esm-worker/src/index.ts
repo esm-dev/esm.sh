@@ -141,7 +141,7 @@ async function fetchOriginWithKVCache(
   const fromWorker = req.headers.has("X-Real-Origin");
   const isRaw = ctx.url.searchParams.has("raw");
   const isDts = isDtsFile(pathname);
-  const isModule = !(isRaw || isDts || pathname.endsWith(".map"));
+  const isModule = !(isRaw || isDts || pathname.endsWith(".mjs.map") || pathname.endsWith(".js.map"));
   if (!isModule) {
     storeKey = pathname.slice(1);
     if (storeKey.startsWith("*") && (isRaw || isDts)) {

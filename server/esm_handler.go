@@ -419,7 +419,7 @@ func esmHandler() rex.Handle {
 		}
 
 		// get package info
-		reqPkg, extraQuery, err := validatePkgPath(pathname)
+		reqPkg, extraQuery, caretVersion, err := validatePkgPath(pathname)
 		if err != nil {
 			status := 500
 			message := err.Error()
@@ -447,7 +447,6 @@ func esmHandler() rex.Handle {
 		}
 
 		isTargetUrl := hasTargetSegment(reqPkg.SubPath)
-		isCaretVersion := false
 		ghPrefix := ""
 
 		if reqPkg.FromGithub {
@@ -519,7 +518,7 @@ func esmHandler() rex.Handle {
 				} else if isTargetUrl {
 					resType = "build"
 				}
-			case ".css", ".map":
+			case ".css", ".mjs.map", ".js.map":
 				if isTargetUrl {
 					resType = "build"
 				} else {
@@ -535,8 +534,7 @@ func esmHandler() rex.Handle {
 		// redirect to the url with full package version
 		if !strings.Contains(pathname, reqPkg.VersionName()) {
 			if !isTargetUrl {
-				isCaretVersion = regexpCaretVersionPath.MatchString(pathname)
-				skipRedirect := isCaretVersion && resType == "main" && !reqPkg.FromGithub
+				skipRedirect := caretVersion && resType == "main" && !reqPkg.FromGithub
 				if !skipRedirect {
 					pkgName := reqPkg.Name
 					eaSign := ""
@@ -678,7 +676,7 @@ func esmHandler() rex.Handle {
 			savePath = normalizeSavePath(savePath)
 			fi, err := fs.Stat(savePath)
 			if err != nil {
-				if err == storage.ErrNotFound && strings.HasSuffix(pathname, ".map") {
+				if err == storage.ErrNotFound && endsWith(pathname, ".mjs.map", ".js.map") {
 					return rex.Status(404, "Not found")
 				}
 				if err != storage.ErrNotFound {
@@ -690,7 +688,7 @@ func esmHandler() rex.Handle {
 					header.Set("Content-Type", ctTypescript)
 				} else if endsWith(pathname, ".js", ".mjs", ".jsx", ".ts", ".mts", ".tsx") {
 					header.Set("Content-Type", ctJavascript)
-				} else if strings.HasSuffix(savePath, ".map") {
+				} else if endsWith(savePath, ".mjs.map", ".js.map") {
 					header.Set("Content-Type", "application/json; charset=utf-8")
 				}
 				header.Set("Cache-Control", ccImmutable)
@@ -732,7 +730,7 @@ func esmHandler() rex.Handle {
 			for _, p := range strings.Split(ctx.Form.Value("deps"), ",") {
 				p = strings.TrimSpace(p)
 				if p != "" {
-					m, _, err := validatePkgPath(p)
+					m, _, _, err := validatePkgPath(p)
 					if err != nil {
 						if strings.HasSuffix(err.Error(), "not found") {
 							continue
@@ -803,7 +801,7 @@ func esmHandler() rex.Handle {
 		// check `?jsx-rutnime` query
 		var jsxRuntime *Pkg = nil
 		if v := ctx.Form.Value("jsx-runtime"); v != "" {
-			m, _, err := validatePkgPath(v)
+			m, _, _, err := validatePkgPath(v)
 			if err != nil {
 				return rex.Status(400, fmt.Sprintf("Invalid jsx-runtime query: %v not found", v))
 			}
@@ -949,14 +947,8 @@ func esmHandler() rex.Handle {
 							isDev = true
 						}
 						isMjs := strings.HasSuffix(reqPkg.SubPath, ".mjs")
-						if strings.HasPrefix(reqPkg.Name, "~") {
+						if isMjs && submodule == pkgName {
 							submodule = ""
-						} else if isMjs && submodule == pkgName {
-							submodule = ""
-						}
-						// workaround for es5-ext weird "/#/" path
-						if submodule != "" && reqPkg.Name == "es5-ext" {
-							submodule = strings.ReplaceAll(submodule, "/$$/", "/#/")
 						}
 						reqPkg.SubModule = submodule
 						target = maybeTarget
@@ -1099,7 +1091,7 @@ func esmHandler() rex.Handle {
 		if targetViaUA {
 			addVary(header, "User-Agent")
 		}
-		if isCaretVersion {
+		if caretVersion {
 			header.Set("Cache-Control", cc10min)
 		} else {
 			header.Set("Cache-Control", ccImmutable)

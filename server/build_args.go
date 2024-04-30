@@ -42,7 +42,7 @@ func decodeBuildArgsPrefix(raw string) (args BuildArgs, err error) {
 				}
 			} else if strings.HasPrefix(p, "d/") {
 				for _, p := range strings.Split(strings.TrimPrefix(strings.TrimPrefix(p, "d/"), "deps:"), ",") {
-					m, _, err := validatePkgPath(p)
+					m, _, _, err := validatePkgPath(p)
 					if err != nil {
 						if strings.HasSuffix(err.Error(), "not found") {
 							continue
@@ -68,7 +68,7 @@ func decodeBuildArgsPrefix(raw string) (args BuildArgs, err error) {
 			} else if strings.HasPrefix(p, "dsv/") {
 				args.denoStdVersion = strings.TrimPrefix(p, "dsv/")
 			} else if strings.HasPrefix(p, "jsx/") {
-				p, _, e := validatePkgPath(strings.TrimPrefix(p, "jsx/"))
+				p, _, _, e := validatePkgPath(strings.TrimPrefix(p, "jsx/"))
 				if e == nil {
 					args.jsxRuntime = &p
 				}

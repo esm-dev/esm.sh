@@ -354,74 +354,6 @@ func (task *BuildTask) build() (err error) {
 					specifier := strings.TrimPrefix(args.Path, "node:")
 					specifier = strings.TrimPrefix(specifier, "npm:")
 
-					// bundle "@babel/runtime/*"
-					if (args.Kind == api.ResolveJSRequireCall || !noBundle) && task.npm.Name != "@babel/runtime" && (strings.HasPrefix(specifier, "@babel/runtime/") || strings.Contains(args.Importer, "/@babel/runtime/")) {
-						return api.OnResolveResult{}, nil
-					}
-
-					// resolve alias in dependencies
-					// follow https://docs.npmjs.com/cli/v10/configuring-npm/package-json#git-urls-as-dependencies
-					// e.g. "@mark/html": "npm:@jsr/mark__html@^1.0.0"
-					// e.g. "tslib": "git+https://github.com/microsoft/tslib.git#v2.3.0"
-					// e.g. "react": "github:facebook/react#v18.2.0"
-					pName, _, pPath := splitPkgPath(specifier)
-					if v, ok := npm.Dependencies[pName]; ok {
-						// ban file urls
-						if strings.HasPrefix(v, "file:") {
-							return api.OnResolveResult{
-								Path:     fmt.Sprintf("/error.js?type=unsupported-file-dependency&name=%s&importer=%s", strings.TrimPrefix(v, "file:"), task.Pkg),
-								External: true,
-							}, nil
-						}
-						if strings.HasPrefix(v, "npm:") {
-							specifier = v[4:]
-							if pPath != "" {
-								specifier += "/" + pPath
-							}
-						} else if strings.HasPrefix(v, "git+ssh://") || strings.HasPrefix(v, "git+https://") || strings.HasPrefix(v, "git://") {
-							gitUrl, err := url.Parse(v)
-							if err != nil || gitUrl.Hostname() != "github.com" {
-								// todo: support more git hosts
-								return api.OnResolveResult{
-									Path:     fmt.Sprintf("/error.js?type=unsupported-file-dependency&name=%s&importer=%s", v, task.Pkg),
-									External: true,
-								}, nil
-							}
-							repo := strings.TrimSuffix(gitUrl.Path[1:], ".git")
-							if gitUrl.Scheme == "git+ssh" {
-								repo = gitUrl.Port() + "/" + repo
-							}
-							path := fmt.Sprintf("/gh/%s", repo)
-							if gitUrl.Fragment != "" {
-								path += "@" + strings.TrimPrefix(url.QueryEscape(gitUrl.Fragment), "semver:")
-							}
-							if pPath != "" {
-								path += "/" + pPath
-							}
-							return api.OnResolveResult{
-								Path:     path,
-								External: true,
-							}, nil
-						} else if strings.HasPrefix(v, "github:") || strings.ContainsRune(v, '/') {
-							repo, version := utils.SplitByLastByte(v, '#')
-							pkg := Pkg{
-								Name:       strings.TrimPrefix(repo, "github:"),
-								Version:    strings.TrimPrefix(url.QueryEscape(version), "semver:"),
-								SubModule:  toModuleBareName(pPath, true),
-								SubPath:    pPath,
-								FromGithub: true,
-							}
-							resolvedPath := task.getImportPath(pkg, encodeBuildArgsPrefix(task.Args, pkg, false))
-							if args.Kind != api.ResolveJSDynamicImport {
-								task.imports = append(task.imports, [2]string{resolvedPath, resolvedPath})
-							}
-							return api.OnResolveResult{
-								Path:     resolvedPath,
-								External: true,
-							}, nil
-						}
-					}
-
 					// resolve specifier with package `imports` field
 					if v, ok := npm.Imports[specifier]; ok {
 						if s, ok := v.(string); ok {
@@ -445,7 +377,7 @@ func (task *BuildTask) build() (err error) {
 					// resolve specifier with package `browser` field
 					if len(npm.Browser) > 0 && !task.isServerTarget() {
 						spec := specifier
-						if strings.HasPrefix(specifier, "./") || strings.HasPrefix(specifier, "../") || specifier == ".." {
+						if isRelativeSpecifier(specifier) {
 							fullFilepath := filepath.Join(args.ResolveDir, specifier)
 							spec = "." + strings.TrimPrefix(fullFilepath, path.Join(task.resolveDir, "node_modules", npm.Name))
 						}
@@ -536,7 +468,9 @@ func (task *BuildTask) build() (err error) {
 					}
 
 					var fullFilepath string
-					if isLocalSpecifier(specifier) {
+					if strings.HasPrefix(specifier, "/") {
+						fullFilepath = specifier
+					} else if isRelativeSpecifier(specifier) {
 						fullFilepath = filepath.Join(args.ResolveDir, specifier)
 					} else {
 						fullFilepath = filepath.Join(task.resolveDir, "node_modules", specifier)
@@ -595,7 +529,12 @@ func (task *BuildTask) build() (err error) {
 						}
 					}
 
-					if isLocalSpecifier(specifier) {
+					// bundle "@babel/runtime/*"
+					if (args.Kind == api.ResolveJSRequireCall || !noBundle) && task.npm.Name != "@babel/runtime" && (strings.HasPrefix(specifier, "@babel/runtime/") || strings.Contains(args.Importer, "/@babel/runtime/")) {
+						return api.OnResolveResult{}, nil
+					}
+
+					if strings.HasPrefix(specifier, "/") || isRelativeSpecifier(specifier) {
 						specifier = strings.TrimPrefix(fullFilepath, filepath.Join(task.resolveDir, "node_modules")+"/")
 						if strings.HasPrefix(specifier, ".pnpm") {
 							a := strings.Split(specifier, "/node_modules/")
@@ -621,7 +560,7 @@ func (task *BuildTask) build() (err error) {
 
 							// split modules based on the `exports` defines in package.json,
 							// see https://nodejs.org/api/packages.html
-							if om, ok := npm.Exports.(*orderedMap); ok {
+							if om, ok := npm.Exports.(*OrderedMap); ok {
 								for e := om.l.Front(); e != nil; e = e.Next() {
 									name, paths := om.Entry(e)
 									if !(name == "." || strings.HasPrefix(name, "./")) {
@@ -635,7 +574,7 @@ func (task *BuildTask) build() (err error) {
 											// exports: "./*": "./dist/*.js"
 											prefix, suffix = utils.SplitByLastByte(s, '*')
 											match = strings.HasPrefix(bareName, prefix) && (suffix == "" || strings.HasSuffix(modulePath, suffix))
-										} else if m, ok := paths.(*orderedMap); ok {
+										} else if m, ok := paths.(*OrderedMap); ok {
 											// exports: "./*": { "import": "./dist/*.js" }
 											for e := m.l.Front(); e != nil; e = e.Next() {
 												_, value := m.Entry(e)
@@ -664,7 +603,7 @@ func (task *BuildTask) build() (err error) {
 										if s, ok := paths.(string); ok && stripModuleExt(s) == bareName {
 											// exports: "./foo": "./foo.js"
 											match = true
-										} else if m, ok := paths.(*orderedMap); ok {
+										} else if m, ok := paths.(*OrderedMap); ok {
 										Loop:
 											for e := m.l.Front(); e != nil; e = e.Next() {
 												_, value := m.Entry(e)
@@ -674,7 +613,7 @@ func (task *BuildTask) build() (err error) {
 														match = true
 														break
 													}
-												} else if m, ok := value.(*orderedMap); ok {
+												} else if m, ok := value.(*OrderedMap); ok {
 													// exports: "./foo": { "import": { default: "./foo.js" } }
 													for e := m.l.Front(); e != nil; e = e.Next() {
 														_, value := m.Entry(e)
@@ -713,7 +652,7 @@ func (task *BuildTask) build() (err error) {
 										p := bytes.Split(out, []byte("\""))
 										if len(p) == 3 && string(p[0]) == "export*from" && string(p[2]) == ";\n" {
 											url := string(p[1])
-											if !isLocalSpecifier(url) {
+											if !isRelativeSpecifier(url) {
 												return api.OnResolveResult{
 													Path:        task.resolveExternalModule(url, args.Kind),
 													External:    true,
@@ -890,11 +829,19 @@ rebuild:
 	for _, file := range result.OutputFiles {
 		if strings.HasSuffix(file.Path, ".js") {
 			jsContent := file.Contents
+			extraBanner := ""
+			if nodeEnv == "" {
+				extraBanner = " development"
+			}
+			if task.Bundle {
+				extraBanner = " standalone"
+			}
 			header := bytes.NewBufferString(fmt.Sprintf(
-				"/* esm.sh - esbuild bundle(%s) %s %s */\n",
+				"/* esm.sh(v%d) - %s %s%s */\n",
+				VERSION,
 				task.Pkg.String(),
 				strings.ToLower(task.Target),
-				nodeEnv,
+				extraBanner,
 			))
 
 			// filter tree-shaking imports
@@ -980,7 +927,7 @@ rebuild:
 						isEsModule[i] = true
 						continue
 					}
-					if !isLocalSpecifier(specifier) && !nodejsInternalModules[specifier] {
+					if !isRelativeSpecifier(specifier) && !nodejsInternalModules[specifier] {
 						if a := bytes.SplitN(jsContent, []byte(fmt.Sprintf(`("%s")`, specifier)), 2); len(a) == 2 {
 							p1 := a[0]
 							ret := regexpVarEqual.FindSubmatch(p1)
@@ -1243,28 +1190,76 @@ func (task *BuildTask) resolveExternalModule(specifier string, kind api.ResolveK
 			version = "latest"
 		}
 	}
-	// use version defined in `?deps` query if it exists
-	for _, dep := range task.Args.deps {
-		if pkgName == dep.Name {
-			version = dep.Version
-		}
-	}
 	// force the version of 'react' (as dependency) equals to 'react-dom'
 	if task.Pkg.Name == "react-dom" && pkgName == "react" {
 		version = task.Pkg.Version
 	}
-	if !regexpFullVersion.MatchString(version) {
-		p, _, err := getPackageInfo(task.resolveDir, pkgName, version)
-		if err == nil {
-			version = p.Version
-		}
-	}
+
 	pkg := Pkg{
 		Name:      pkgName,
 		Version:   version,
 		SubPath:   subpath,
 		SubModule: toModuleBareName(subpath, true),
 	}
+	caretVersion := false
+
+	// resolve alias in dependencies
+	// follow https://docs.npmjs.com/cli/v10/configuring-npm/package-json#git-urls-as-dependencies
+	// e.g. "@mark/html": "npm:@jsr/mark__html@^1.0.0"
+	// e.g. "tslib": "git+https://github.com/microsoft/tslib.git#v2.3.0"
+	// e.g. "react": "github:facebook/react#v18.2.0"
+	{
+		// ban file specifier
+		if strings.HasPrefix(version, "file:") {
+			resolvedPath = fmt.Sprintf("/error.js?type=unsupported-file-dependency&name=%s&importer=%s", pkgName, task.Pkg)
+			return
+		}
+		if strings.HasPrefix(version, "npm:") {
+			pkg.Name, pkg.Version, _ = splitPkgPath(version[4:])
+		} else if strings.HasPrefix(version, "git+ssh://") || strings.HasPrefix(version, "git+https://") || strings.HasPrefix(version, "git://") {
+			gitUrl, err := url.Parse(version)
+			if err != nil || gitUrl.Hostname() != "github.com" {
+				resolvedPath = fmt.Sprintf("/error.js?type=unsupported-git-dependency&name=%s&importer=%s", pkgName, task.Pkg)
+				return
+			}
+			repo := strings.TrimSuffix(gitUrl.Path[1:], ".git")
+			if gitUrl.Scheme == "git+ssh" {
+				repo = gitUrl.Port() + "/" + repo
+			}
+			pkg.FromGithub = true
+			pkg.Name = repo
+			pkg.Version = strings.TrimPrefix(url.QueryEscape(gitUrl.Fragment), "semver:")
+		} else if strings.HasPrefix(version, "github:") || (!strings.HasPrefix(version, "@") && strings.ContainsRune(version, '/')) {
+			repo, fragment := utils.SplitByLastByte(strings.TrimPrefix(version, "github:"), '#')
+			pkg.FromGithub = true
+			pkg.Name = repo
+			pkg.Version = strings.TrimPrefix(url.QueryEscape(fragment), "semver:")
+		}
+	}
+
+	// fetch the latest version of the package based on the semver range
+	if !pkg.FromGithub {
+		if strings.HasPrefix(version, "^") && regexpFullVersion.MatchString(version[1:]) {
+			caretVersion = true
+			pkg.Version = version[1:]
+		} else if !regexpFullVersion.MatchString(version) {
+			p, _, err := getPackageInfo(task.resolveDir, pkgName, version)
+			if err == nil {
+				pkg.Version = p.Version
+			}
+		}
+	} else if pkg.Version == "" {
+		refs, err := listRepoRefs(fmt.Sprintf("https://github.com/%s", pkg.Name))
+		if err == nil {
+			for _, ref := range refs {
+				if ref.Ref == "HEAD" {
+					pkg.Version = ref.Sha[:16]
+					break
+				}
+			}
+		}
+	}
+
 	args := BuildArgs{
 		alias:      task.Args.alias,
 		conditions: task.Args.conditions,
@@ -1273,7 +1268,46 @@ func (task *BuildTask) resolveExternalModule(specifier string, kind api.ResolveK
 		exports:    newStringSet(),
 	}
 	fixBuildArgs(&args, pkg)
-	resolvedPath = task.getImportPath(pkg, encodeBuildArgsPrefix(args, pkg, false))
+	if caretVersion {
+		resolvedPath = cfg.CdnBasePath + "/" + pkg.Name + "@^" + pkg.Version
+		if pkg.SubModule != "" {
+			resolvedPath += "/" + pkg.SubModule
+		}
+		// workaround for es5-ext weird "/#/" path
+		if pkg.Name == "es5-ext" {
+			resolvedPath = strings.ReplaceAll(resolvedPath, "/#/", "/%23/")
+		}
+		params := []string{"target=" + task.Target}
+		if len(args.alias) > 0 {
+			var alias []string
+			for k, v := range args.alias {
+				alias = append(alias, fmt.Sprintf("%s:%s", k, v))
+			}
+			params = append(params, "alias="+strings.Join(alias, ","))
+		}
+		if args.conditions.Len() > 0 {
+			params = append(params, "conditions="+strings.Join(args.conditions.Values(), ","))
+		}
+		if args.deps.Len() > 0 {
+			var deps []string
+			for _, v := range args.deps {
+				deps = append(deps, v.String())
+			}
+			params = append(params, "deps="+strings.Join(deps, ","))
+		}
+		if args.external.Len() > 0 {
+			params = append(params, "external="+strings.Join(args.external.Values(), ","))
+		}
+		if task.Dev {
+			params = append(params, "dev")
+		}
+		if task.isDenoTarget() {
+			params = append(params, "no-dts")
+		}
+		resolvedPath += "?" + strings.Join(params, "&")
+	} else {
+		resolvedPath = task.getImportPath(pkg, encodeBuildArgsPrefix(args, pkg, false))
+	}
 	return
 }
 

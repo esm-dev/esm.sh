@@ -16,13 +16,12 @@ import (
 const EOL = "\n"
 
 var (
-	regexpFullVersion      = regexp.MustCompile(`^\d+\.\d+\.\d+[\w\.\+\-]*$`)
-	regexpFullVersionPath  = regexp.MustCompile(`(\w)@(v?\d+\.\d+\.\d+[\w\.\+\-]*|[0-9a-f]{10})(/|$)`)
-	regexpCaretVersionPath = regexp.MustCompile(`\w@\^(v?\d+\.\d+\.\d+[\w\.\+\-]*|[0-9a-f]{10})(/|$)`)
-	regexpLocPath          = regexp.MustCompile(`(\.m?js):\d+:\d+$`)
-	regexpJSIdent          = regexp.MustCompile(`^[a-zA-Z_$][\w$]*$`)
-	regexpGlobalIdent      = regexp.MustCompile(`__[a-zA-Z]+\$`)
-	regexpVarEqual         = regexp.MustCompile(`var ([a-zA-Z]+)\s*=\s*[a-zA-Z]+$`)
+	regexpFullVersion     = regexp.MustCompile(`^\d+\.\d+\.\d+[\w\.\+\-]*$`)
+	regexpFullVersionPath = regexp.MustCompile(`(\w)@(v?\d+\.\d+\.\d+[\w\.\+\-]*|[0-9a-f]{7})(/|$)`)
+	regexpLocPath         = regexp.MustCompile(`(\.m?js):\d+:\d+$`)
+	regexpJSIdent         = regexp.MustCompile(`^[a-zA-Z_$][\w$]*$`)
+	regexpGlobalIdent     = regexp.MustCompile(`__[a-zA-Z]+\$`)
+	regexpVarEqual        = regexp.MustCompile(`var ([a-zA-Z]+)\s*=\s*[a-zA-Z]+$`)
 )
 
 var (
@@ -34,11 +33,12 @@ func isHttpSepcifier(importPath string) bool {
 	return strings.HasPrefix(importPath, "https://") || strings.HasPrefix(importPath, "http://")
 }
 
-// isLocalSpecifier returns true if the import path is a local path.
-func isLocalSpecifier(importPath string) bool {
-	return strings.HasPrefix(importPath, "file://") || strings.HasPrefix(importPath, "/") || strings.HasPrefix(importPath, "./") || strings.HasPrefix(importPath, "../") || importPath == "." || importPath == ".."
+// isRelativeSpecifier returns true if the import path is a local path.
+func isRelativeSpecifier(importPath string) bool {
+	return strings.HasPrefix(importPath, "./") || strings.HasPrefix(importPath, "../") || importPath == "." || importPath == ".."
 }
 
+// semverLessThan returns true if the version a is less than the version b.
 func semverLessThan(a string, b string) bool {
 	return semver.MustParse(a).LessThan(semver.MustParse(b))
 }
@@ -56,6 +56,7 @@ func includes(a []string, s string) bool {
 	return false
 }
 
+// filter returns a new array with all elements that pass the test implemented by the provided function.
 func filter(a []string, fn func(s string) bool) []string {
 	l := len(a)
 	if l == 0 {
@@ -72,6 +73,7 @@ func filter(a []string, fn func(s string) bool) []string {
 	return b[:i]
 }
 
+// endsWith returns true if the given string ends with any of the suffixes.
 func endsWith(s string, suffixs ...string) bool {
 	for _, suffix := range suffixs {
 		if strings.HasSuffix(s, suffix) {
@@ -81,6 +83,7 @@ func endsWith(s string, suffixs ...string) bool {
 	return false
 }
 
+// stripModuleExt strips the module extension from the given string.
 func stripModuleExt(s string) string {
 	for _, ext := range esExts {
 		if strings.HasSuffix(s, ext) {
@@ -90,16 +93,19 @@ func stripModuleExt(s string) string {
 	return s
 }
 
+// existsDir returns true if the given path is a directory.
 func existsDir(filepath string) bool {
 	fi, err := os.Lstat(filepath)
 	return err == nil && fi.IsDir()
 }
 
+// existsFile returns true if the given path is a file.
 func existsFile(filepath string) bool {
 	fi, err := os.Lstat(filepath)
 	return err == nil && !fi.IsDir()
 }
 
+// ensureDir creates a directory if it does not exist.
 func ensureDir(dir string) (err error) {
 	_, err = os.Lstat(dir)
 	if err != nil && os.IsNotExist(err) {
@@ -108,6 +114,7 @@ func ensureDir(dir string) (err error) {
 	return
 }
 
+// findFiles returns a list of files in the given directory.
 func findFiles(root string, dir string, fn func(p string) bool) ([]string, error) {
 	rootDir, err := filepath.Abs(root)
 	if err != nil {
@@ -147,10 +154,12 @@ func findFiles(root string, dir string, fn func(p string) bool) ([]string, error
 	return files, nil
 }
 
+// btoaUrl converts a string to a base64 string.
 func btoaUrl(s string) string {
 	return strings.TrimRight(base64.URLEncoding.EncodeToString([]byte(s)), "=")
 }
 
+// atobUrl converts a base64 string to a string.
 func atobUrl(s string) (string, error) {
 	if l := len(s) % 4; l > 0 {
 		s += strings.Repeat("=", 4-l)
@@ -162,6 +171,7 @@ func atobUrl(s string) (string, error) {
 	return string(data), nil
 }
 
+// removeHttpPrefix removes the http/https prefix from the given string.
 func removeHttpPrefix(s string) (string, error) {
 	if strings.HasPrefix(s, "http://") {
 		return s[7:], nil
@@ -172,6 +182,7 @@ func removeHttpPrefix(s string) (string, error) {
 	}
 }
 
+// concatBytes concatenates two byte slices.
 func concatBytes(a, b []byte) []byte {
 	c := make([]byte, len(a)+len(b))
 	copy(c, a)
@@ -179,6 +190,7 @@ func concatBytes(a, b []byte) []byte {
 	return c
 }
 
+// mustEncodeJSON encodes the given value to a JSON byte slice.
 func mustEncodeJSON(v interface{}) []byte {
 	buf := bytes.NewBuffer(nil)
 	err := json.NewEncoder(buf).Encode(v)
@@ -188,6 +200,7 @@ func mustEncodeJSON(v interface{}) []byte {
 	return buf.Bytes()
 }
 
+// parseJSONFile parses the given JSON file and stores the result in the value pointed to by v.
 func parseJSONFile(filename string, v interface{}) (err error) {
 	var file *os.File
 	file, err = os.Open(filename)

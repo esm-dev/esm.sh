@@ -3,8 +3,10 @@ package server
 import (
 	"fmt"
 	"net/url"
+	"sort"
 	"strings"
 
+	"github.com/Masterminds/semver/v3"
 	"github.com/ije/gox/utils"
 	"github.com/ije/gox/valid"
 )
@@ -17,7 +19,7 @@ type Pkg struct {
 	FromGithub bool   `json:"fromGithub"`
 }
 
-func validatePkgPath(pathname string) (pkg Pkg, extraQuery string, err error) {
+func validatePkgPath(pathname string) (pkg Pkg, extraQuery string, caretVersion bool, err error) {
 	fromGithub := strings.HasPrefix(pathname, "/gh/") && strings.Count(pathname, "/") >= 3
 	if fromGithub {
 		pathname = "/@" + pathname[4:]
@@ -31,7 +33,8 @@ func validatePkgPath(pathname string) (pkg Pkg, extraQuery string, err error) {
 
 	pkgName, maybeVersion, subPath := splitPkgPath(pathname)
 	if !validatePackageName(pkgName) {
-		return Pkg{}, "", fmt.Errorf("invalid package name '%s'", pkgName)
+		err = fmt.Errorf("invalid package name '%s'", pkgName)
+		return
 	}
 
 	version, extraQuery := utils.SplitByFirstByte(maybeVersion, '&')
@@ -47,10 +50,15 @@ func validatePkgPath(pathname string) (pkg Pkg, extraQuery string, err error) {
 		FromGithub: fromGithub,
 	}
 
+	// workaround for es5-ext weird "/#/" path
+	if pkg.SubModule != "" && pkg.Name == "es5-ext" {
+		pkg.SubModule = strings.ReplaceAll(pkg.SubModule, "/%23/", "/#/")
+	}
+
 	if fromGithub {
 		// strip the leading `@`
 		pkg.Name = pkg.Name[1:]
-		if (valid.IsHexString(pkg.Version) && len(pkg.Version) >= 10) || regexpFullVersion.MatchString(strings.TrimPrefix(pkg.Version, "v")) {
+		if (valid.IsHexString(pkg.Version) && len(pkg.Version) >= 7) || regexpFullVersion.MatchString(strings.TrimPrefix(pkg.Version, "v")) {
 			return
 		}
 		var refs []GitRef
@@ -61,16 +69,39 @@ func validatePkgPath(pathname string) (pkg Pkg, extraQuery string, err error) {
 		if pkg.Version == "" {
 			for _, ref := range refs {
 				if ref.Ref == "HEAD" {
-					pkg.Version = ref.Sha[:10]
+					pkg.Version = ref.Sha[:16]
 					return
 				}
 			}
-		} else if strings.HasPrefix(pkg.Version, "semver:") {
-			// TODO: support semver
 		} else {
+			// try to find the exact tag or branch
 			for _, ref := range refs {
 				if ref.Ref == "refs/tags/"+pkg.Version || ref.Ref == "refs/heads/"+pkg.Version {
-					pkg.Version = ref.Sha[:10]
+					pkg.Version = ref.Sha[:16]
+					return
+				}
+			}
+			// try to find the semver tag
+			var c *semver.Constraints
+			c, err = semver.NewConstraint(strings.TrimPrefix(pkg.Version, "semver:"))
+			if err == nil {
+				vs := make([]*semver.Version, len(refs))
+				i := 0
+				for _, ref := range refs {
+					if strings.HasPrefix(ref.Ref, "refs/tags/") {
+						v, e := semver.NewVersion(strings.TrimPrefix(ref.Ref, "refs/tags/"))
+						if e == nil && c.Check(v) {
+							vs[i] = v
+							i++
+						}
+					}
+				}
+				if i > 0 {
+					vs = vs[:i]
+					if i > 1 {
+						sort.Sort(semver.Collection(vs))
+					}
+					pkg.Version = vs[i-1].String()
 					return
 				}
 			}
@@ -79,7 +110,9 @@ func validatePkgPath(pathname string) (pkg Pkg, extraQuery string, err error) {
 		return
 	}
 
-	if !regexpFullVersion.MatchString(pkg.Version) && cfg != nil {
+	caretVersion = strings.HasPrefix(pkg.Version, "^") && regexpFullVersion.MatchString(pkg.Version[1:])
+
+	if caretVersion || !regexpFullVersion.MatchString(pkg.Version) {
 		var p NpmPackageInfo
 		p, err = fetchPackageInfo(pkgName, version)
 		if err == nil {
