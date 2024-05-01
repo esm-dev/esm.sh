@@ -354,20 +354,6 @@ function withESMWorker(middleware?: Middleware, cache: Cache = (caches as any).d
       pathname = pathname.slice(0, -1);
     }
 
-    if (req.method === "POST" && pathname === "/transform") {
-      return await fetchOrigin(
-        new Request(req.url, {
-          method: "POST",
-          headers: req.headers,
-          body: req.body,
-        }),
-        env,
-        ctx,
-        "/transform",
-        corsHeaders(),
-      );
-    }
-
     switch (pathname) {
       case "/error.js":
         return ctx.withCache(() => fetchOrigin(req, env, ctx, pathname + url.search, corsHeaders()));
@@ -429,17 +415,65 @@ function withESMWorker(middleware?: Middleware, cache: Cache = (caches as any).d
       }
     }
 
+    if (req.method === "POST") {
+      if (pathname === "/transform" || pathname === "/purge") {
+        const res = await fetchOrigin(
+          new Request(req.url, {
+            method: "POST",
+            headers: req.headers,
+            body: req.body,
+          }),
+          env,
+          ctx,
+          pathname,
+          corsHeaders(),
+        );
+        if (pathname === "/purge") {
+          const deletedFiles: string[] = await res.json();
+          const headers = new Headers(res.headers);
+          if (deletedFiles.length > 0) {
+            const KV = Reflect.get(env, "KV") as KVNamespace | undefined;
+            const R2 = Reflect.get(env, "R2") as R2Bucket | undefined;
+            if (R2?.delete) {
+              // delete the source map files in R2 storage
+              await R2.delete(deletedFiles.filter((k) => !k.endsWith(".css")).map((k) => k + ".map"));
+            }
+            if (KV?.delete && deletedFiles.length <= 42) {
+              await Promise.all(deletedFiles.map((k) => KV.delete(k)));
+            } else {
+              headers.set("X-KV-Purged", "false");
+            }
+          }
+          headers.delete("Content-Length");
+          return new Response(JSON.stringify(deletedFiles), { headers });
+        }
+        return res;
+      } else if (pathname === "/purge-kv") {
+        const keys = await req.json();
+        if (!Array.isArray(keys) || keys.length === 0 || keys.length > 42) {
+          return err("No keys or too many keys", 400);
+        }
+        const KV = Reflect.get(env, "KV") as KVNamespace | undefined;
+        if (!KV?.delete) {
+          return err("KV namespace not found", 500);
+        }
+        await Promise.all(keys.map((k) => KV.delete(k)));
+        return new Response(`Deleted ${keys.length} keys`, { status: 200 });
+      }
+      return err("Not Found", 404);
+    }
+
     if (req.method !== "GET" && req.method !== "HEAD") {
       return err("Method Not Allowed", 405);
     }
 
-    // return 404 for favicon.ico and robots.txt
-    if (pathname === "/favicon.ico" || pathname === "/robots.txt") {
+    // return 404 for robots.txt
+    if (pathname === "/robots.txt") {
       return err("Not Found", 404);
     }
 
     // use the default landing page/embedded files
-    if (pathname === "/" || pathname.startsWith("/embed/")) {
+    if (pathname === "/" || pathname === "/favicon.ico" || pathname.startsWith("/embed/")) {
       return fetchOrigin(req, env, ctx, `${pathname}${url.search}`, corsHeaders());
     }
 
@@ -753,7 +787,7 @@ function withESMWorker(middleware?: Middleware, cache: Cache = (caches as any).d
       prefix += "/gh";
     }
 
-    if (isDtsFile(subPath) || isTargetUrl) {
+    if (isTargetUrl || isDtsFile(subPath)) {
       return ctx.withCache(() => {
         const pathname = `${prefix}/${pkgId}@${packageVersion}${subPath}`;
         return fetchOriginWithKVCache(req, env, ctx, pathname, undefined, true);

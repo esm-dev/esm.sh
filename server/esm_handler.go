@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"net/url"
 	"os"
 	"path"
 	"sort"
@@ -97,7 +96,7 @@ func esmHandler() rex.Handle {
 				savePath := fmt.Sprintf("modules/+%s.%s.mjs", hash, input.Target)
 				_, err = fs.Stat(savePath)
 				if err == nil {
-					r, err := fs.OpenFile(savePath)
+					r, err := fs.Open(savePath)
 					if err != nil {
 						return rex.Err(500, "failed to read code")
 					}
@@ -123,7 +122,40 @@ func esmHandler() rex.Handle {
 					"code": code,
 				}
 			case "/purge":
-				return "TODO: purge"
+				packageName := ctx.Form.Value("package")
+				version := ctx.Form.Value("version")
+				github := ctx.Form.Has("github")
+				if packageName == "" {
+					return rex.Err(400, "packageName is required")
+				}
+				prefix := packageName + "@"
+				if github {
+					prefix = fmt.Sprintf("gh/%s", packageName)
+				}
+				if version != "" {
+					prefix += version
+				}
+				deletedKVs, err := db.DeleteAll(prefix)
+				if err != nil {
+					return rex.Err(500, err.Error())
+				}
+				ret := []string{}
+				for _, kv := range deletedKVs {
+					var esmb ESMBuild
+					key := string(kv[0])
+					if json.Unmarshal(kv[1], &esmb) == nil {
+						savePath := fmt.Sprintf("builds/%s", key)
+						go fs.Remove(savePath)
+						go fs.Remove(savePath + ".map")
+						if esmb.PackageCSS {
+							cssKey := strings.TrimSuffix(key, path.Ext(key)) + ".css"
+							go fs.Remove(fmt.Sprintf("builds/%s", cssKey))
+							ret = append(ret, cssKey)
+						}
+						ret = append(ret, key)
+					}
+				}
+				return ret
 			default:
 				return rex.Err(404, "not found")
 			}
@@ -318,22 +350,22 @@ func esmHandler() rex.Handle {
 				return rex.Status(404, "not found")
 			}
 			target := getBuildTargetByUA(userAgent)
-			savaPath := fmt.Sprintf("modules/+%s.%s.%s", hash, target, ext)
-			fi, err := fs.Stat(savaPath)
+			savePath := fmt.Sprintf("modules/+%s.%s.%s", hash, target, ext)
+			fi, err := fs.Stat(savePath)
 			if err != nil {
 				if err == storage.ErrNotFound {
 					return rex.Status(404, "not found")
 				}
 				return rex.Status(500, err.Error())
 			}
-			r, err := fs.OpenFile(savaPath)
+			r, err := fs.Open(savePath)
 			if err != nil {
 				return rex.Status(500, err.Error())
 			}
 			header.Set("Content-Type", ctJavascript)
 			header.Set("Cache-Control", ccImmutable)
 			addVary(header, "User-Agent")
-			return rex.Content(savaPath, fi.ModTime(), r) // auto closed
+			return rex.Content(savePath, fi.ModTime(), r) // auto closed
 		}
 
 		// serve node libs
@@ -671,7 +703,7 @@ func esmHandler() rex.Handle {
 		if isTargetUrl && (resType == "build" || resType == "types") {
 			savePath := path.Join("builds", pathname)
 			if resType == "types" {
-				savePath = path.Join("types", getTypesRoot(cdnOrigin), strings.TrimPrefix(savePath, "types/"))
+				savePath = path.Join("types", pathname)
 			}
 			savePath = normalizeSavePath(savePath)
 			fi, err := fs.Stat(savePath)
@@ -700,7 +732,7 @@ func esmHandler() rex.Handle {
 						moduleUrl,
 					)
 				}
-				r, err := fs.OpenFile(savePath)
+				r, err := fs.Open(savePath)
 				if err != nil {
 					return rex.Status(500, err.Error())
 				}
@@ -840,8 +872,7 @@ func esmHandler() rex.Handle {
 		if resType == "types" {
 			findDts := func() (savePath string, fi storage.FileStat, err error) {
 				savePath = path.Join(fmt.Sprintf(
-					"types/%s%s/%s@%s/%s",
-					getTypesRoot(cdnOrigin),
+					"types%s/%s@%s/%s",
 					ghPrefix,
 					reqPkg.Name,
 					reqPkg.Version,
@@ -865,10 +896,9 @@ func esmHandler() rex.Handle {
 			_, _, err := findDts()
 			if err == storage.ErrNotFound {
 				task := &BuildTask{
-					Args:      buildArgs,
-					CdnOrigin: cdnOrigin,
-					Pkg:       reqPkg,
-					Target:    "types",
+					Args:   buildArgs,
+					Pkg:    reqPkg,
+					Target: "types",
 				}
 				c := buildQueue.Add(task, ctx.RemoteIP())
 				select {
@@ -889,7 +919,7 @@ func esmHandler() rex.Handle {
 				}
 				return rex.Status(500, err.Error())
 			}
-			r, err := fs.OpenFile(savePath)
+			r, err := fs.Open(savePath)
 			if err != nil {
 				return rex.Status(500, err.Error())
 			}
@@ -960,13 +990,12 @@ func esmHandler() rex.Handle {
 
 		// build and return the module
 		task := &BuildTask{
-			Args:      buildArgs,
-			CdnOrigin: cdnOrigin,
-			Pkg:       reqPkg,
-			Target:    target,
-			Dev:       isDev,
-			Bundle:    bundle,
-			NoBundle:  noBundle,
+			Args:     buildArgs,
+			Pkg:      reqPkg,
+			Target:   target,
+			Dev:      isDev,
+			Bundle:   bundle,
+			NoBundle: noBundle,
 		}
 		buildId := task.ID()
 		esm, hasBuild := queryESMBuild(buildId)
@@ -1034,7 +1063,7 @@ func esmHandler() rex.Handle {
 				}
 				return rex.Status(500, err.Error())
 			}
-			f, err := fs.OpenFile(savePath)
+			f, err := fs.Open(savePath)
 			if err != nil {
 				return rex.Status(500, err.Error())
 			}
@@ -1152,12 +1181,4 @@ func throwErrorJS(ctx *rex.Context, message string, static bool) interface{} {
 	}
 	ctx.W.Header().Set("Content-Type", ctJavascript)
 	return rex.Status(500, buf)
-}
-
-func getTypesRoot(cdnOrigin string) string {
-	url, err := url.Parse(cdnOrigin)
-	if err != nil {
-		return "-"
-	}
-	return strings.ReplaceAll(url.Host, ":", "_")
 }

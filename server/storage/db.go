@@ -12,6 +12,7 @@ type DataBase interface {
 	Get(key string) ([]byte, error)
 	Put(key string, value []byte) error
 	Delete(key string) error
+	DeleteAll(prefix string) ([][2][]byte, error)
 	Close() error
 }
 

@@ -31,7 +31,6 @@ type ESMBuild struct {
 type BuildTask struct {
 	Args       BuildArgs
 	Pkg        Pkg
-	CdnOrigin  string
 	Target     string
 	Dev        bool
 	Bundle     bool
@@ -1134,7 +1133,6 @@ func (task *BuildTask) resolveExternalModule(specifier string, kind api.ResolveK
 			subBuild := &BuildTask{
 				Args:       task.Args,
 				Pkg:        subPkg,
-				CdnOrigin:  task.CdnOrigin,
 				Target:     task.Target,
 				Dev:        task.Dev,
 				Bundle:     task.Bundle,

@@ -35,7 +35,7 @@ func (fs *localFSLayer) Stat(name string) (FileStat, error) {
 	return fi, nil
 }
 
-func (fs *localFSLayer) OpenFile(name string) (file io.ReadSeekCloser, err error) {
+func (fs *localFSLayer) Open(name string) (file io.ReadSeekCloser, err error) {
 	fullPath := path.Join(fs.root, name)
 	file, err = os.Open(fullPath)
 	if err != nil && os.IsNotExist(err) {
@@ -58,6 +58,11 @@ func (fs *localFSLayer) WriteFile(name string, content io.Reader) (written int64
 	defer file.Close()
 
 	written, err = io.Copy(file, content)
+	return
+}
+
+func (fs *localFSLayer) Remove(name string) (err error) {
+	err = os.Remove(path.Join(fs.root, name))
 	return
 }
 

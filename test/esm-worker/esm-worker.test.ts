@@ -398,6 +398,22 @@ Deno.test("esm-worker", { sanitizeOps: false, sanitizeResources: false }, async 
     assertStringIncludes(code, `"https://esm.sh/preact-render-to-string6.0.2"`);
   });
 
+  await t.step("purge api", async () => {
+    const fd = new FormData();
+    fd.append("package", "react");
+    fd.append("version", "18");
+    const res = await fetch(`${workerOrigin}/purge`, {
+      method: "POST",
+      body: fd,
+    });
+    assertEquals(res.status, 200);
+    assertEquals(res.headers.get("Content-Type"), "application/json; charset=utf-8");
+    const ret = await res.json();
+    assert(Array.isArray(ret));
+    assert((ret as unknown[]).length > 0);
+    console.log("purged", ret);
+  });
+
   await t.step("check esma target from user agent", async () => {
     const getTarget = async (ua: string) => {
       const rest = await fetch(`${workerOrigin}/esma-target`, {

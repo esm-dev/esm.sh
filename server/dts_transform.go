@@ -50,7 +50,7 @@ func (task *BuildTask) transformDTS(dts string, aliasDepsPrefix string, marker *
 		pkgNameWithVersion,
 		aliasDepsPrefix,
 	}, strings.Split(subPath, "/")...), "/"))
-	savePath := normalizeSavePath(path.Join("types", getTypesRoot(task.CdnOrigin), dtsPath))
+	savePath := normalizeSavePath(path.Join("types", dtsPath))
 	_, err = fs.Stat(savePath)
 	if err != nil && err != storage.ErrNotFound {
 		return
@@ -92,11 +92,24 @@ func (task *BuildTask) transformDTS(dts string, aliasDepsPrefix string, marker *
 		internalDeclModules.Add(path)
 	}
 
+	origin := cfg.CdnOrigin
+	if origin == "" {
+		port := cfg.Port
+		if port == 0 {
+			port = 8080
+		}
+		if port == 80 {
+			origin = "http://localhost"
+		} else {
+			origin = fmt.Sprintf("http://localhost:%d", port)
+		}
+	}
+
 	resolveDir := task.resolveDir
 	buf := bytes.NewBuffer(nil)
 	footer := bytes.NewBuffer(nil)
 	imports := newStringSet()
-	dtsBasePath := task.CdnOrigin + cfg.CdnBasePath
+	dtsBasePath := origin + cfg.CdnBasePath
 
 	if pkgName == "@types/node" {
 		fmt.Fprintf(buf, "/// <reference path=\"%s/node.ns.d.ts\" />\n", dtsBasePath)

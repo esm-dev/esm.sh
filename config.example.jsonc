@@ -40,11 +40,11 @@
   // The log level, default is "info", you can also set it to "debug" to enable debug logs.
   "logLevel": "info",
 
-  // The origin of CDN, default is using the origin of the request.
+  // The origin of the CDN, default is using the origin of the request.
   // Use to fix origin with reverse proxy, for examle "https://esm.sh"
   "cdnOrigin": "",
 
-  // The base path of CDN, default is "/".
+  // The base path of the CDN, default is "/".
   "cdnBasePath": "/",
 
   // The npm registry, default is "https://registry.npmjs.org/".

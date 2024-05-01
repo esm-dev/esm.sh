@@ -41,7 +41,7 @@ func TestLocalFS(t *testing.T) {
 		t.Fatalf("invalid file size(%d), shoud be 3", fi.Size())
 	}
 
-	f, err := fs.OpenFile("foo.txt")
+	f, err := fs.Open("foo.txt")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -56,12 +56,17 @@ func TestLocalFS(t *testing.T) {
 		t.Fatalf("invalid file content('%s'), shoud be 'bar'", string(data))
 	}
 
-	_, err = fs.Stat("fo0.txt")
+	err = fs.Remove("foo.txt")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	_, err = fs.Stat("foo.txt")
 	if err != ErrNotFound {
 		t.Fatalf("File should be not existent")
 	}
 
-	_, err = fs.OpenFile("fo0.txt")
+	_, err = fs.Open("foo.txt")
 	if err != ErrNotFound {
 		t.Fatalf("File should be not existent")
 	}

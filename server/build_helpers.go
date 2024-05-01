@@ -641,14 +641,14 @@ func (task *BuildTask) resolveConditions(p *NpmPackageInfo, exports interface{},
 func queryESMBuild(id string) (*ESMBuild, bool) {
 	value, err := db.Get(id)
 	if err == nil && value != nil {
-		var esm ESMBuild
-		err = json.Unmarshal(value, &esm)
+		var esmb ESMBuild
+		err = json.Unmarshal(value, &esmb)
 		if err == nil {
-			if !esm.TypesOnly {
+			if !esmb.TypesOnly {
 				_, err = fs.Stat(path.Join("builds", id))
 			}
 			if err == nil || os.IsExist(err) {
-				return &esm, true
+				return &esmb, true
 			}
 		}
 		// delete the invalid db entry
