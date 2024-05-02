@@ -136,8 +136,8 @@ async function fetchOriginWithKVCache(
   }
   let storeKey = uri.slice(1);
   const headers = corsHeaders();
-  const R2 = Reflect.get(env, "R2") as R2Bucket | undefined ?? dummyStorage;
-  const KV = Reflect.get(env, "KV") as KVNamespace | undefined ?? asKV(R2);
+  const R2 = env.R2 ?? dummyStorage;
+  const KV = env.KV ?? asKV(R2);
   const fromWorker = req.headers.has("X-Real-Origin");
   const isRaw = ctx.url.searchParams.has("raw");
   const isDts = isDtsFile(pathname);
@@ -250,7 +250,7 @@ async function fetchOriginWithR2Cache(
   pathname: string,
 ): Promise<Response> {
   const resHeaders = corsHeaders();
-  const r2 = Reflect.get(env, "R2") as R2Bucket | undefined ?? dummyStorage;
+  const r2 = env.R2 ?? dummyStorage;
   const ret = await r2.get(pathname.slice(1));
   if (ret) {
     resHeaders.set(
@@ -432,16 +432,16 @@ function withESMWorker(middleware?: Middleware, cache: Cache = (caches as any).d
           const deletedFiles: string[] = await res.json();
           const headers = new Headers(res.headers);
           if (deletedFiles.length > 0) {
-            const KV = Reflect.get(env, "KV") as KVNamespace | undefined;
-            const R2 = Reflect.get(env, "R2") as R2Bucket | undefined;
-            if (R2?.delete) {
-              // delete the source map files in R2 storage
-              await R2.delete(deletedFiles.filter((k) => !k.endsWith(".css")).map((k) => k + ".map"));
-            }
-            if (KV?.delete && deletedFiles.length <= 42) {
-              await Promise.all(deletedFiles.map((k) => KV.delete(k)));
+            const kv = env.KV;
+            const r2 = env.R2;
+            if (kv?.delete && deletedFiles.length <= 42) {
+              await Promise.all(deletedFiles.map((k) => kv.delete(k)));
             } else {
               headers.set("X-KV-Purged", "false");
+            }
+            if (r2?.delete) {
+              // delete the source map files in R2 storage
+              await r2.delete(deletedFiles.filter((k) => !k.endsWith(".css")).map((k) => k + ".map"));
             }
           }
           headers.delete("Content-Length");
@@ -453,12 +453,12 @@ function withESMWorker(middleware?: Middleware, cache: Cache = (caches as any).d
         if (!Array.isArray(keys) || keys.length === 0 || keys.length > 42) {
           return err("No keys or too many keys", 400);
         }
-        const KV = Reflect.get(env, "KV") as KVNamespace | undefined;
-        if (!KV?.delete) {
+        const kv = env.KV;
+        if (!kv?.delete) {
           return err("KV namespace not found", 500);
         }
-        await Promise.all(keys.map((k) => KV.delete(k)));
-        return new Response(`Deleted ${keys.length} keys`, { status: 200 });
+        await Promise.all(keys.map((k) => kv.delete(k)));
+        return new Response(`Deleted ${keys.length} files`);
       }
       return err("Not Found", 404);
     }
@@ -806,9 +806,9 @@ function withESMWorker(middleware?: Middleware, cache: Cache = (caches as any).d
   return {
     fetch: (req: Request, env: Env, ctx: ExecutionContext) =>
       onFetch(req, env, ctx).catch((e) => {
-        const R2 = Reflect.get(env, "R2") as R2Bucket | undefined;
-        if (R2) {
-          ctx.waitUntil(R2.put(
+        const r2 = env.R2;
+        if (r2) {
+          ctx.waitUntil(r2.put(
             `errors/${new Date().toISOString().split("T")[0]}/${Date.now()}.log`,
             JSON.stringify({
               url: req.url,

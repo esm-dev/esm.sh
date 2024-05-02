@@ -15,9 +15,7 @@ export function asKV(storage: R2Bucket | WorkerStorage): WorkerStorageKV {
     async getWithMetadata(
       key: string,
       _options: { type: "stream"; cacheTtl?: number },
-    ): Promise<
-      { value: ReadableStream | null; metadata: HttpMetadata | null }
-    > {
+    ): Promise<{ value: ReadableStream | null; metadata: HttpMetadata | null }> {
       const ret = await storage.get(key);
       if (ret === null) {
         return { value: null, metadata: null };

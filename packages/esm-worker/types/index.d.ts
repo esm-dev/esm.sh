@@ -4,6 +4,8 @@ declare global {
     ESM_TOKEN?: string;
     NPM_REGISTRY?: string;
     NPM_TOKEN?: string;
+    KV?: KVNamespace;
+    R2?: R2Bucket;
     LEGACY_WORKER?: { fetch: (req: Request) => Promise<Response> };
   }
 }
@@ -19,9 +21,7 @@ export interface WorkerStorageKV {
   getWithMetadata(
     key: string,
     options: { type: "stream"; cacheTtl?: number },
-  ): Promise<
-    { value: ReadableStream | null; metadata: HttpMetadata | null }
-  >;
+  ): Promise<{ value: ReadableStream | null; metadata: HttpMetadata | null }>;
   put(
     key: string,
     value: string | ArrayBufferLike | ArrayBuffer | ReadableStream,
@@ -70,10 +70,7 @@ export type Context<Data = Record<string, any>> = {
   data: Data;
   url: URL;
   waitUntil(promise: Promise<any>): void;
-  withCache(
-    fetcher: () => Promise<Response> | Response,
-    options?: { varyUA: boolean },
-  ): Promise<Response>;
+  withCache(fetcher: () => Promise<Response> | Response, options?: { varyUA: boolean }): Promise<Response>;
 };
 
 export interface Middleware {
