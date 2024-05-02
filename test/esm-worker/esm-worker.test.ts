@@ -17,6 +17,27 @@ const cache = {
   },
 };
 
+const KV = {
+  _store: new Map(),
+  async getWithMetadata(
+    key: string,
+    _options: { type: "stream"; cacheTtl?: number },
+  ): Promise<{ value: ReadableStream | null; metadata: any }> {
+    const ret = this._store.get(key);
+    if (ret) {
+      return { value: new Response(ret.value).body!, metadata: ret.httpMetadata };
+    }
+    return { value: null, metadata: null };
+  },
+  async put(
+    key: string,
+    value: string | ArrayBufferLike | ArrayBuffer | ReadableStream,
+    options?: { expirationTtl?: number; metadata?: any },
+  ): Promise<void> {
+    this._store.set(key, { value: await new Response(value).arrayBuffer(), ...options });
+  },
+};
+
 const R2 = {
   _store: new Map(),
   async get(key: string): Promise<
@@ -63,7 +84,7 @@ const worker = withESMWorker((_req: Request, _env: typeof env, ctx: { url: URL }
 // start the worker
 Deno.serve(
   { port: 8081, signal: ac.signal },
-  (req) => worker.fetch(req, { ...env, R2, LEGACY_WORKER }, { waitUntil: () => {} }),
+  (req) => worker.fetch(req, { ...env, KV, R2, LEGACY_WORKER }, { waitUntil: () => {} }),
 );
 
 Deno.test("esm-worker", { sanitizeOps: false, sanitizeResources: false }, async (t) => {
@@ -116,12 +137,12 @@ Deno.test("esm-worker", { sanitizeOps: false, sanitizeResources: false }, async 
     assertEquals(res.headers.get("Cache-Control"), "public, max-age=86400");
     assertStringIncludes(await res.text(), "declare class Buffer");
 
-    const res2 = await fetch(`${workerOrigin}/hot.d.ts`);
+    const res2 = await fetch(`${workerOrigin}/sw.d.ts`);
     assertEquals(res2.status, 200);
     assertEquals(res2.headers.get("Content-Type"), "application/typescript; charset=utf-8");
     assertEquals(res2.headers.get("Etag"), `W/"${version}"`);
     assertEquals(res2.headers.get("Cache-Control"), "public, max-age=86400");
-    assertStringIncludes(await res2.text(), "export interface Hot");
+    assertStringIncludes(await res2.text(), "export interface SW");
 
     const res3 = await fetch(`${workerOrigin}/node/process.js`);
     assertEquals(res3.status, 200);
@@ -275,9 +296,7 @@ Deno.test("esm-worker", { sanitizeOps: false, sanitizeResources: false }, async 
   });
 
   await t.step("gh modules", async () => {
-    const res = await fetch(`${workerOrigin}/gh/microsoft/tslib`, {
-      redirect: "manual",
-    });
+    const res = await fetch(`${workerOrigin}/gh/microsoft/tslib`, { redirect: "manual" });
     res.body?.cancel();
     assertEquals(res.status, 302);
     const rUrl = res.headers.get("Location")!;
@@ -343,23 +362,30 @@ Deno.test("esm-worker", { sanitizeOps: false, sanitizeResources: false }, async 
     assertEquals(new TextDecoder().decode(decodeBase64("aGVsbG8=")), "hello");
   });
 
-  await t.step("hot", async () => {
-    const res = await fetch(`${workerOrigin}/hot`);
+  await t.step("builtin scripts", async () => {
+    const res = await fetch(`${workerOrigin}/sw`);
     res.body?.cancel();
-    assertEquals(new URL(res.url).pathname, "/hot");
+    assertEquals(new URL(res.url).pathname, "/sw");
     assertEquals(res.headers.get("Etag"), `W/"${version}"`);
     assertEquals(res.headers.get("Cache-Control"), "public, max-age=86400");
-    assertEquals(res.headers.get("Content-Type"), "application/typescript; charset=utf-8");
+    assertEquals(res.headers.get("Content-Type"), "application/javascript; charset=utf-8");
     assertStringIncludes(res.headers.get("Vary") ?? "", "User-Agent");
     const dtsUrl = res.headers.get("X-Typescript-Types")!;
     assert(dtsUrl.startsWith(workerOrigin));
     assert(dtsUrl.endsWith(".d.ts"));
 
-    const res2 = await fetch(`${workerOrigin}/hot?target=es2022`);
+    const res2 = await fetch(`${workerOrigin}/sw?target=es2022`);
     assertEquals(res2.headers.get("Etag"), `W/"${version}"`);
     assertEquals(res2.headers.get("Cache-Control"), "public, max-age=86400");
     assertEquals(res2.headers.get("Content-Type"), "application/javascript; charset=utf-8");
-    assertStringIncludes(await res2.text(), "esm.sh/hot");
+    assertStringIncludes(await res2.text(), "esm.sh/sw");
+
+    const res3 = await fetch(`${workerOrigin}/run`);
+    assertEquals(res3.headers.get("Etag"), `W/"${version}"`);
+    assertEquals(res3.headers.get("Cache-Control"), "public, max-age=86400");
+    assertEquals(res3.headers.get("Content-Type"), "application/javascript; charset=utf-8");
+    assertStringIncludes(res.headers.get("Vary") ?? "", "User-Agent");
+    assertStringIncludes(await res3.text(), "esm.sh/run");
   });
 
   await t.step("transform api", async () => {
@@ -468,7 +494,18 @@ Deno.test("esm-worker", { sanitizeOps: false, sanitizeResources: false }, async 
     assertEquals(await res5.text(), `${workerOrigin}/~41f4075e7fabb79f155504bd2d73c678b218111f`);
   });
 
-  console.log("storage summary", [...R2._store.keys()]);
+  console.log("storage summary:");
+  console.log(
+    "KV",
+    [...KV._store.keys()].map((k) => {
+      const v = KV._store.get(k)!;
+      if (v.expirationTtl) {
+        return k + " (ttl/" + v.expirationTtl + ")";
+      }
+      return k + " (immutable)";
+    }),
+  );
+  console.log("R2", [...R2._store.keys()]);
 
   closeServer();
 });

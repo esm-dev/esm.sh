@@ -164,7 +164,7 @@ func esmHandler() rex.Handle {
 		// static routes
 		switch pathname {
 		case "/":
-			eTag := fmt.Sprintf(`"W/v%d"`, VERSION)
+			eTag := fmt.Sprintf(`W/"v%d"`, VERSION)
 			ifNoneMatch := ctx.R.Header.Get("If-None-Match")
 			if ifNoneMatch != "" && ifNoneMatch == eTag {
 				return rex.Status(http.StatusNotModified, "")
@@ -279,14 +279,14 @@ func esmHandler() rex.Handle {
 			pathname = regexpLocPath.ReplaceAllString(pathname, "$1")
 		}
 
-		// serve run and hot scripts
-		if pathname == "/run" || pathname == "/hot" {
+		// serve run and sw scripts
+		if pathname == "/run" || pathname == "/sw" {
 			data, err := embedFS.ReadFile(fmt.Sprintf("server/embed/%s.ts", pathname[1:]))
 			if err != nil {
 				return rex.Status(404, "Not Found")
 			}
 
-			etag := fmt.Sprintf(`"W/v%d"`, VERSION)
+			etag := fmt.Sprintf(`W/"v%d"`, VERSION)
 			ifNoneMatch := ctx.R.Header.Get("If-None-Match")
 			if ifNoneMatch != "" && ifNoneMatch == etag {
 				return rex.Status(http.StatusNotModified, "")
@@ -298,16 +298,11 @@ func esmHandler() rex.Handle {
 			if targetViaUA {
 				target = getBuildTargetByUA(userAgent)
 			}
-			if target == "deno" || target == "denonext" {
-				header.Set("Content-Type", ctTypescript)
-			} else {
-				code, err := minify(string(data), targets[target], api.LoaderTS)
-				if err != nil {
-					return throwErrorJS(ctx, fmt.Sprintf("Transform error: %v", err), false)
-				}
-				data = code
-				header.Set("Content-Type", ctJavascript)
+			code, err := minify(string(data), targets[target], api.LoaderTS)
+			if err != nil {
+				return throwErrorJS(ctx, fmt.Sprintf("Transform error: %v", err), false)
 			}
+			header.Set("Content-Type", ctJavascript)
 			if targetViaUA {
 				addVary(header, "User-Agent")
 			}
@@ -317,10 +312,10 @@ func esmHandler() rex.Handle {
 				header.Set("Cache-Control", cc1day)
 				header.Set("ETag", etag)
 			}
-			if pathname == "/hot" {
-				header.Set("X-Typescript-Types", fmt.Sprintf("%s%s/hot.d.ts", cdnOrigin, cfg.CdnBasePath))
+			if pathname == "/sw" {
+				header.Set("X-Typescript-Types", fmt.Sprintf("%s%s/sw.d.ts", cdnOrigin, cfg.CdnBasePath))
 			}
-			return data
+			return code
 		}
 
 		// serve embed assets
@@ -378,7 +373,7 @@ func esmHandler() rex.Handle {
 			if strings.HasPrefix(pathname, "/node/chunk-") {
 				header.Set("Cache-Control", ccImmutable)
 			} else {
-				etag := fmt.Sprintf(`"W/v%d"`, VERSION)
+				etag := fmt.Sprintf(`W/"v%d"`, VERSION)
 				ifNoneMatch := ctx.R.Header.Get("If-None-Match")
 				if ifNoneMatch != "" && ifNoneMatch == etag {
 					return rex.Status(http.StatusNotModified, "")
@@ -404,19 +399,14 @@ func esmHandler() rex.Handle {
 		if endsWith(pathname, ".js", ".d.ts") && strings.Count(pathname, "/") == 1 {
 			var data []byte
 			var err error
-			if strings.HasSuffix(pathname, ".js") {
-				data, err = embedFS.ReadFile("server/embed/polyfills" + pathname)
-				if err == nil {
-					header.Set("Content-Type", ctJavascript)
-				}
-			} else {
+			isDts := strings.HasSuffix(pathname, ".d.ts")
+			if isDts {
 				data, err = embedFS.ReadFile("server/embed/types" + pathname)
-				if err == nil {
-					header.Set("Content-Type", ctTypescript)
-				}
+			} else {
+				data, err = embedFS.ReadFile("server/embed/polyfills" + pathname)
 			}
 			if err == nil {
-				etag := fmt.Sprintf(`"W/v%d"`, VERSION)
+				etag := fmt.Sprintf(`W/"v%d"`, VERSION)
 				ifNoneMatch := ctx.R.Header.Get("If-None-Match")
 				if ifNoneMatch != "" && ifNoneMatch == etag {
 					return rex.Status(http.StatusNotModified, "")
@@ -427,14 +417,17 @@ func esmHandler() rex.Handle {
 					header.Set("Cache-Control", cc1day)
 					header.Set("ETag", etag)
 				}
-				if strings.HasSuffix(pathname, ".js") {
+				if isDts {
+					header.Set("Content-Type", ctTypescript)
+				} else {
 					target := getBuildTargetByUA(userAgent)
 					code, err := minify(string(data), targets[target], api.LoaderJS)
 					if err != nil {
 						return throwErrorJS(ctx, fmt.Sprintf("Transform error: %v", err), false)
 					}
-					addVary(header, "User-Agent")
 					data = []byte(code)
+					header.Set("Content-Type", ctJavascript)
+					addVary(header, "User-Agent")
 				}
 				return rex.Content(pathname, startTime, bytes.NewReader(data))
 			}

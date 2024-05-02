@@ -1,15 +1,8 @@
 /// <reference types="@cloudflare/workers-types" />
 
+import type { Context, HttpMetadata, Middleware, PackageInfo, PackageRegistryInfo } from "../types/index.d.ts";
 import { compareVersions, satisfies, validate } from "compare-versions";
 import { getBuildTargetFromUA, targets } from "esm-compat";
-import type {
-  Context,
-  HttpMetadata,
-  Middleware,
-  PackageInfo,
-  PackageRegistryInfo,
-  WorkerStorage,
-} from "../types/index.d.ts";
 import { assetsExts, cssPackages, VERSION } from "./consts.ts";
 import { getContentType } from "./media_type.ts";
 import {
@@ -28,6 +21,11 @@ import {
   trimPrefix,
 } from "./utils.ts";
 
+const version = `v${VERSION}`;
+const defaultNpmRegistry = "https://registry.npmjs.org";
+const defaultEsmServerOrigin = "https://esm.sh";
+const ccImmutable = "public, max-age=31536000, immutable";
+
 const regexpNpmNaming = /^[a-zA-Z0-9][\w\-\.]*$/;
 const regexpFullVersion = /^\d+\.\d+\.\d+/;
 const regexpCaretVersion = /^\^\d+\.\d+\.\d+/;
@@ -35,18 +33,7 @@ const regexpCommitish = /^[a-f0-9]{10,}$/;
 const regexpLegacyVersionPrefix = /^\/v\d+\//;
 const regexpLegacyBuild = /^\/~[a-f0-9]{40}$/;
 
-const version = `v${VERSION}`;
-const defaultNpmRegistry = "https://registry.npmjs.org";
-const defaultEsmServerOrigin = "https://esm.sh";
-const immutableCache = "public, max-age=31536000, immutable";
-
-async function fetchOrigin(
-  req: Request,
-  env: Env,
-  ctx: Context,
-  uri: string,
-  resHeaders: Headers,
-): Promise<Response> {
+async function fetchOrigin(req: Request, env: Env, ctx: Context, uri: string, resHeaders: Headers): Promise<Response> {
   const headers = new Headers();
   copyHeaders(
     headers,
@@ -73,7 +60,6 @@ async function fetchOrigin(
       redirect: "manual",
     },
   );
-  const buffer = await res.arrayBuffer();
   if (!res.ok) {
     // CF default error page(html)
     if (res.status === 500 && res.headers.get("Content-Type")?.startsWith("text/html")) {
@@ -83,21 +69,15 @@ async function fetchOrigin(
     if (res.status === 301 || res.status === 302) {
       return redirect(res.headers.get("Location")!, res.status);
     }
-    // fix cache-control by status code
-    if (res.headers.has("Cache-Control")) {
-      resHeaders.set("Cache-Control", res.headers.get("Cache-Control")!);
-    } else if (res.status === 400) {
-      resHeaders.set("Cache-Control", immutableCache);
-    }
-    copyHeaders(resHeaders, res.headers, "Content-Type");
-    return new Response(buffer, { status: res.status, headers: resHeaders });
+    copyHeaders(resHeaders, res.headers, "Cache-Control", "Content-Type");
+    return new Response(res.body, { status: res.status, headers: resHeaders });
   }
   copyHeaders(
     resHeaders,
     res.headers,
     "Cache-Control",
     "Content-Type",
-    "Content-Length",
+    "ETag",
     "X-Esm-Id",
     "X-Typescript-Types",
   );
@@ -110,7 +90,7 @@ async function fetchOrigin(
   if (exposedHeaders.length > 0) {
     resHeaders.set("Access-Control-Expose-Headers", exposedHeaders.join(", "));
   }
-  return new Response(buffer, { headers: resHeaders });
+  return new Response(res.body, { headers: resHeaders });
 }
 
 async function fetchOriginWithKVCache(
@@ -153,7 +133,7 @@ async function fetchOriginWithKVCache(
           body = body.pipeThrough(new DecompressionStream("gzip"));
         }
         headers.set("Content-Type", metadata.contentType);
-        headers.set("Cache-Control", immutableCache);
+        headers.set("Cache-Control", ccImmutable);
         const exposedHeaders: string[] = [];
         if (metadata.esmId) {
           headers.set("X-Esm-Id", metadata.esmId);
@@ -174,7 +154,7 @@ async function fetchOriginWithKVCache(
       if (obj) {
         const contentType = obj.httpMetadata?.contentType || getContentType(pathname);
         headers.set("Content-Type", contentType);
-        headers.set("Cache-Control", immutableCache);
+        headers.set("Cache-Control", ccImmutable);
         headers.set("X-Content-Source", "esm-worker");
         return new Response(obj.body, { headers });
       }
@@ -212,7 +192,8 @@ async function fetchOriginWithKVCache(
   let body = res.body!;
 
   // save the file to KV/R2 if it's immutable
-  if (!fromWorker && R2 && cacheControl?.includes("immutable")) {
+  if (!fromWorker && R2 && cacheControl && cacheControl !== "public, max-age=0, must-revalidate") {
+    const ccImmutable = cacheControl?.includes("immutable");
     let bodyCopy: ReadableStream<Uint8Array>;
     [body, bodyCopy] = body.tee();
     if (isModule) {
@@ -221,8 +202,17 @@ async function fetchOriginWithKVCache(
       if (gzip && typeof CompressionStream !== "undefined") {
         storeSteam = storeSteam.pipeThrough<Uint8Array>(new CompressionStream("gzip"));
       }
-      ctx.waitUntil(kv.put(storeKey, storeSteam, { metadata: { contentType, dts, esmId } }));
-    } else {
+      let expirationTtl: number | undefined;
+      if (!ccImmutable) {
+        cacheControl?.split(",").forEach((v) => {
+          const [key, val] = v.split("=");
+          if (key.trim() === "max-age") {
+            expirationTtl = parseInt(val.trim(), 10);
+          }
+        });
+      }
+      ctx.waitUntil(kv.put(storeKey, storeSteam, { expirationTtl, metadata: { contentType, dts, esmId } }));
+    } else if (ccImmutable) {
       ctx.waitUntil(R2.put(storeKey, bodyCopy, { httpMetadata: { contentType } }));
     }
   }
@@ -230,24 +220,17 @@ async function fetchOriginWithKVCache(
   return new Response(body, { headers });
 }
 
-async function fetchOriginWithR2Cache(
-  req: Request,
-  ctx: Context,
-  env: Env,
-  pathname: string,
-): Promise<Response> {
-  const resHeaders = corsHeaders();
+async function fetchOriginWithR2Cache(req: Request, ctx: Context, env: Env, pathname: string): Promise<Response> {
+  const headers = corsHeaders();
   const ret = await env.R2?.get(pathname.slice(1));
   if (ret) {
-    resHeaders.set("Content-Type", ret.httpMetadata?.contentType || getContentType(pathname));
-    resHeaders.set("Cache-Control", immutableCache);
-    resHeaders.set("X-Content-Source", "esm-worker");
-    return new Response(ret.body as ReadableStream<Uint8Array>, {
-      headers: resHeaders,
-    });
+    headers.set("Content-Type", ret.httpMetadata?.contentType || getContentType(pathname));
+    headers.set("Cache-Control", ccImmutable);
+    headers.set("X-Content-Source", "esm-worker");
+    return new Response(ret.body, { headers });
   }
 
-  const res = await fetchOrigin(req, env, ctx, pathname, resHeaders);
+  const res = await fetchOrigin(req, env, ctx, pathname, headers);
   if (res.ok) {
     const contentType = res.headers.get("content-type") || getContentType(pathname);
     let body = res.body!;
@@ -258,10 +241,10 @@ async function fetchOriginWithR2Cache(
         httpMetadata: { contentType },
       }));
     }
-    resHeaders.set("Content-Type", contentType);
-    resHeaders.set("Cache-Control", immutableCache);
-    resHeaders.set("X-Content-Source", "origin-server");
-    return new Response(body, { headers: resHeaders });
+    headers.set("Content-Type", contentType);
+    headers.set("Cache-Control", ccImmutable);
+    headers.set("X-Content-Source", "origin-server");
+    return new Response(body, { headers });
   }
   return res;
 }
@@ -330,7 +313,7 @@ function withESMWorker(middleware?: Middleware, cache: Cache = (caches as any).d
       return ctx.withCache(() =>
         new Response(null, {
           status: 404,
-          headers: { "cache-control": immutableCache },
+          headers: { "cache-control": ccImmutable },
         })
       );
     }
@@ -351,7 +334,7 @@ function withESMWorker(middleware?: Middleware, cache: Cache = (caches as any).d
         return ctx.withCache(
           () => {
             const headers = corsHeaders();
-            headers.set("cache-control", immutableCache);
+            headers.set("cache-control", ccImmutable);
             return new Response(getBuildTargetFromUA(ua), { headers });
           },
           { varyUA: true },
@@ -360,9 +343,9 @@ function withESMWorker(middleware?: Middleware, cache: Cache = (caches as any).d
 
     if (
       pathname === "/run" ||
-      pathname === "/hot" ||
+      pathname === "/sw" ||
       pathname === "/node.ns.d.ts" ||
-      pathname === "/hot.d.ts" ||
+      pathname === "/sw.d.ts" ||
       ((pathname.startsWith("/node/") || pathname.startsWith("/npm_")) && pathname.endsWith(".js"))
     ) {
       const etag = `W/"${version}"`;
@@ -377,21 +360,10 @@ function withESMWorker(middleware?: Middleware, cache: Cache = (caches as any).d
         }
         url.searchParams.set("v", VERSION.toString());
       }
-      const res = await ctx.withCache(() => {
+      return ctx.withCache(() => {
         const target = url.searchParams.get("target");
         return fetchOriginWithKVCache(req, env, ctx, pathname, target ? `?target=${target}` : void 0);
       }, { varyUA });
-      if (!res.ok) {
-        return res;
-      }
-      const headers = new Headers(res.headers);
-      if (isChunkjs) {
-        headers.set("Cache-Control", "public, max-age=31536000, immutable");
-      } else {
-        headers.set("Cache-Control", "public, max-age=86400");
-        headers.set("Etag", etag);
-      }
-      return new Response(res.body, { status: res.status, headers });
     }
 
     if (middleware) {
@@ -601,13 +573,8 @@ function withESMWorker(middleware?: Middleware, cache: Cache = (caches as any).d
     }
 
     // redirect to specific version
-    let isCaretVersion = false;
     if (
-      !gh && (!packageVersion ||
-        (
-          !regexpFullVersion.test(packageVersion) &&
-          !(isCaretVersion = regexpCaretVersion.test(packageVersion))
-        ))
+      !gh && (!packageVersion || (!regexpFullVersion.test(packageVersion) && !regexpCaretVersion.test(packageVersion)))
     ) {
       return ctx.withCache(async () => {
         const headers = new Headers();
@@ -781,10 +748,6 @@ function withESMWorker(middleware?: Middleware, cache: Cache = (caches as any).d
       const marker = hasExternalAllMarker ? "*" : "";
       const pathname = `${prefix}/${marker}${pkgId}@${packageVersion}${subPath}`;
       normalizeSearchParams(url.searchParams);
-      if (isCaretVersion) {
-        const res = await fetchOrigin(req, env, ctx, pathname + url.search, corsHeaders());
-        return res;
-      }
       return fetchOriginWithKVCache(req, env, ctx, pathname, url.search);
     }, { varyUA: true });
   }

@@ -28,7 +28,7 @@ export function asKV(storage: R2Bucket | WorkerStorage): WorkerStorageKV {
     async put(
       key: string,
       value: ArrayBuffer | Uint8Array | ReadableStream,
-      options?: { metadata?: HttpMetadata },
+      options?: { expirationTtl?: number; metadata?: HttpMetadata },
     ): Promise<void> {
       await storage.put(key, value, { customMetadata: options?.metadata });
     },
@@ -154,6 +154,10 @@ export function normalizeSearchParams(parmas: URLSearchParams) {
       if (!allowedSearchParams.has(k)) {
         parmas.delete(k);
       }
+    }
+    // remove 'target' if 'raw' is set
+    if (parmas.has("raw") && parmas.has("target")) {
+      parmas.delete("target");
     }
     parmas.sort();
   }

@@ -25,7 +25,7 @@ export interface WorkerStorageKV {
   put(
     key: string,
     value: string | ArrayBufferLike | ArrayBuffer | ReadableStream,
-    options?: { metadata?: HttpMetadata | null },
+    options?: { expirationTtl?: number; metadata?: HttpMetadata | null },
   ): Promise<void>;
 }
 

@@ -1,13 +1,13 @@
-/*! 🔥 esm.sh/hot - speeding up your modern(es2015+) web application.
- *  Docs: https://docs.esm.sh/hot
+/*! esm.sh/sw - speeding up your modern(es2015+) web application with service worker.
+ *  Docs: https://docs.esm.sh/sw
  */
 
 /// <reference lib="webworker" />
 
-import type { ArchiveEntry, FireOptions, Hot, Plugin } from "./types/hot.d.ts";
+import type { ArchiveEntry, FireOptions, Plugin, SW } from "./types/sw.d.ts";
 
 const doc: Document | undefined = globalThis.document;
-const kHot = "esm.sh/hot";
+const kSw = "esm.sh/sw";
 const kMessage = "message";
 const kTypeEsmArchive = "application/esm-archive";
 
@@ -70,8 +70,8 @@ class Archive {
   }
 }
 
-/** class `HotImpl` implements the `Hot` interface. */
-class HotImpl implements Hot {
+/** class `SWImpl` implements the `SW` interface. */
+class SWImpl implements SW {
   private _swModule: string | null = null;
   private _swActive: ServiceWorker | null = null;
   private _archive: Archive | null = null;
@@ -185,7 +185,7 @@ class HotImpl implements Hot {
           }
         }
         return new Promise<void>((resolve, reject) => {
-          new BroadcastChannel(kHot).onmessage = ({ data }) => {
+          new BroadcastChannel(kSw).onmessage = ({ data }) => {
             data === 0 && reject(new Error("Invalid esm-archive format"));
             data === 1 && resolve();
             data === 2 && setTimeout(() => this.onUpdateFound(), 0);
@@ -209,8 +209,8 @@ class HotImpl implements Hot {
       handler(swActive);
     }
 
-    // apply "[type=hot/module]" script tags
-    queryElements<HTMLScriptElement>("script[type='hot/module']", (el) => {
+    // apply script tags with type="esm" to type="module"
+    queryElements<HTMLScriptElement>("script[type='esm']", (el) => {
       const copy = el.cloneNode(true) as HTMLScriptElement;
       copy.type = "module";
       el.replaceWith(copy);
@@ -228,8 +228,8 @@ class HotImpl implements Hot {
     }
 
     const on: typeof addEventListener = addEventListener;
-    const bc = new BroadcastChannel(kHot);
-    const cache = caches.open(kHot);
+    const bc = new BroadcastChannel(kSw);
+    const cache = caches.open(kSw);
     this._promises.push(
       cache.then((cache) =>
         cache.match("/" + kTypeEsmArchive).then((res) => {
@@ -337,5 +337,5 @@ function appendElement(tag: string, attrs: Record<string, string>, parent: "head
   doc![parent].appendChild(el);
 }
 
-export const hot = new HotImpl();
-export default hot;
+export const sw = new SWImpl();
+export default sw;
