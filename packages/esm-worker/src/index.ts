@@ -40,15 +40,6 @@ const defaultNpmRegistry = "https://registry.npmjs.org";
 const defaultEsmServerOrigin = "https://esm.sh";
 const immutableCache = "public, max-age=31536000, immutable";
 
-const dummyCache: Cache = {
-  match: () => Promise.resolve(null),
-  put: () => Promise.resolve(),
-} as any;
-const dummyStorage: WorkerStorage = {
-  get: () => Promise.resolve(null),
-  put: () => Promise.resolve(),
-};
-
 async function fetchOrigin(
   req: Request,
   env: Env,
@@ -130,18 +121,18 @@ async function fetchOriginWithKVCache(
   query?: string,
   gzip?: boolean,
 ): Promise<Response> {
+  const R2 = env.R2;
+  const headers = corsHeaders();
+  const fromWorker = req.headers.has("X-Real-Origin");
+  const isRaw = ctx.url.searchParams.has("raw");
+  const isDts = isDtsFile(pathname);
+  const isModule = !(isRaw || isDts || pathname.endsWith(".mjs.map") || pathname.endsWith(".js.map"));
+
   let uri = pathname;
   if (query) {
     uri += query;
   }
   let storeKey = uri.slice(1);
-  const headers = corsHeaders();
-  const R2 = env.R2 ?? dummyStorage;
-  const KV = env.KV ?? asKV(R2);
-  const fromWorker = req.headers.has("X-Real-Origin");
-  const isRaw = ctx.url.searchParams.has("raw");
-  const isDts = isDtsFile(pathname);
-  const isModule = !(isRaw || isDts || pathname.endsWith(".mjs.map") || pathname.endsWith(".js.map"));
   if (!isModule) {
     storeKey = pathname.slice(1);
     if (storeKey.startsWith("*") && (isRaw || isDts)) {
@@ -149,9 +140,10 @@ async function fetchOriginWithKVCache(
     }
   }
 
-  if (!fromWorker) {
+  if (!fromWorker && R2) {
     if (isModule) {
-      const { value, metadata } = await KV.getWithMetadata<HttpMetadata>(
+      const kv = env.KV ?? asKV(R2);
+      const { value, metadata } = await kv.getWithMetadata<HttpMetadata>(
         storeKey,
         { type: "stream", cacheTtl: 86400 },
       );
@@ -172,10 +164,7 @@ async function fetchOriginWithKVCache(
           exposedHeaders.push("X-TypeScript-Types");
         }
         if (exposedHeaders.length > 0) {
-          headers.set(
-            "Access-Control-Expose-Headers",
-            exposedHeaders.join(", "),
-          );
+          headers.set("Access-Control-Expose-Headers", exposedHeaders.join(", "));
         }
         headers.set("X-Content-Source", "esm-worker");
         return new Response(body, { headers });
@@ -197,7 +186,6 @@ async function fetchOriginWithKVCache(
     return res;
   }
 
-  const buffer = await res.arrayBuffer();
   const contentType = res.headers.get("Content-Type") || getContentType(pathname);
   const cacheControl = res.headers.get("Cache-Control");
   const esmId = res.headers.get("X-Esm-Id") ?? undefined;
@@ -221,26 +209,25 @@ async function fetchOriginWithKVCache(
   }
   headers.set("X-Content-Source", "origin-server");
 
-  // save to KV/R2 if immutable
-  if (!fromWorker && cacheControl?.includes("immutable")) {
-    if (!isModule) {
-      ctx.waitUntil(R2.put(storeKey, buffer.slice(0), {
-        httpMetadata: { contentType },
-      }));
-    } else {
-      let value: ArrayBuffer | ReadableStream = buffer.slice(0);
+  let body = res.body!;
+
+  // save the file to KV/R2 if it's immutable
+  if (!fromWorker && R2 && cacheControl?.includes("immutable")) {
+    let bodyCopy: ReadableStream<Uint8Array>;
+    [body, bodyCopy] = body.tee();
+    if (isModule) {
+      const kv = env.KV ?? asKV(R2);
+      let storeSteam = bodyCopy;
       if (gzip && typeof CompressionStream !== "undefined") {
-        value = new Response(value).body!.pipeThrough<Uint8Array>(
-          new CompressionStream("gzip"),
-        );
+        storeSteam = storeSteam.pipeThrough<Uint8Array>(new CompressionStream("gzip"));
       }
-      ctx.waitUntil(KV.put(storeKey, value, {
-        metadata: { contentType, dts, esmId },
-      }));
+      ctx.waitUntil(kv.put(storeKey, storeSteam, { metadata: { contentType, dts, esmId } }));
+    } else {
+      ctx.waitUntil(R2.put(storeKey, bodyCopy, { httpMetadata: { contentType } }));
     }
   }
 
-  return new Response(buffer, { headers });
+  return new Response(body, { headers });
 }
 
 async function fetchOriginWithR2Cache(
@@ -250,13 +237,9 @@ async function fetchOriginWithR2Cache(
   pathname: string,
 ): Promise<Response> {
   const resHeaders = corsHeaders();
-  const r2 = env.R2 ?? dummyStorage;
-  const ret = await r2.get(pathname.slice(1));
+  const ret = await env.R2?.get(pathname.slice(1));
   if (ret) {
-    resHeaders.set(
-      "Content-Type",
-      ret.httpMetadata?.contentType || getContentType(pathname),
-    );
+    resHeaders.set("Content-Type", ret.httpMetadata?.contentType || getContentType(pathname));
     resHeaders.set("Cache-Control", immutableCache);
     resHeaders.set("X-Content-Source", "esm-worker");
     return new Response(ret.body as ReadableStream<Uint8Array>, {
@@ -266,21 +249,24 @@ async function fetchOriginWithR2Cache(
 
   const res = await fetchOrigin(req, env, ctx, pathname, resHeaders);
   if (res.ok) {
-    const contentType = res.headers.get("content-type") ||
-      getContentType(pathname);
-    const buffer = await res.arrayBuffer();
-    ctx.waitUntil(r2.put(pathname.slice(1), buffer.slice(0), {
-      httpMetadata: { contentType },
-    }));
+    const contentType = res.headers.get("content-type") || getContentType(pathname);
+    let body = res.body!;
+    if (env.R2) {
+      let bodyCopy: ReadableStream<Uint8Array>;
+      [body, bodyCopy] = body.tee();
+      ctx.waitUntil(env.R2.put(pathname.slice(1), bodyCopy, {
+        httpMetadata: { contentType },
+      }));
+    }
     resHeaders.set("Content-Type", contentType);
     resHeaders.set("Cache-Control", immutableCache);
     resHeaders.set("X-Content-Source", "origin-server");
-    return new Response(buffer, { headers: resHeaders });
+    return new Response(body, { headers: resHeaders });
   }
   return res;
 }
 
-function withESMWorker(middleware?: Middleware, cache: Cache = (caches as any).default ?? dummyCache) {
+function withESMWorker(middleware?: Middleware, cache: Cache = (caches as any).default) {
   async function onFetch(req: Request, env: Env, cfCtx: ExecutionContext): Promise<Response> {
     const res = checkPreflight(req);
     if (res) {

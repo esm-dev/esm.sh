@@ -63,7 +63,7 @@ const worker = withESMWorker((_req: Request, _env: typeof env, ctx: { url: URL }
 // start the worker
 Deno.serve(
   { port: 8081, signal: ac.signal },
-  (req) => worker.fetch(req, { ...env, LEGACY_WORKER, R2: R2 }, { waitUntil: () => {} }),
+  (req) => worker.fetch(req, { ...env, R2, LEGACY_WORKER }, { waitUntil: () => {} }),
 );
 
 Deno.test("esm-worker", { sanitizeOps: false, sanitizeResources: false }, async (t) => {
