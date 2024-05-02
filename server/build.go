@@ -69,14 +69,14 @@ func (task *BuildTask) queryBuild() (*BuildResult, bool) {
 	return nil, false
 }
 
-func (task *BuildTask) Build() (esm *BuildResult, err error) {
-	pkgVersionName := task.pkg.VersionName()
-	task.wd = path.Join(cfg.WorkDir, fmt.Sprintf("npm/%s", pkgVersionName))
+func (task *BuildTask) Build() (ret *BuildResult, err error) {
+	task.wd = path.Join(cfg.WorkDir, fmt.Sprintf("npm/%s", task.pkg.VersionName()))
 	err = ensureDir(task.wd)
 	if err != nil {
 		return
 	}
 
+	// create `.npmrc` file
 	var npmrc bytes.Buffer
 	npmrc.WriteString("@jsr:registry=https://npm.jsr.io\n")
 	if cfg.NpmRegistryScope != "" && cfg.NpmRegistry != "" {
@@ -109,6 +109,7 @@ func (task *BuildTask) Build() (esm *BuildResult, err error) {
 		return
 	}
 
+	// check if the package is deprecated
 	if !task.pkg.FromGithub && !strings.HasPrefix(task.pkg.Name, "@jsr/") {
 		var info NpmPackageInfo
 		info, err = fetchPackageInfo(task.pkg.Name, task.pkg.Version)
@@ -118,12 +119,14 @@ func (task *BuildTask) Build() (esm *BuildResult, err error) {
 		task.deprecated = info.Deprecated
 	}
 
+	// install the package
 	task.stage = "install"
 	err = installPackage(task.wd, task.pkg)
 	if err != nil {
 		return
 	}
 
+	// resolve the package real install path
 	if l, e := filepath.EvalSymlinks(path.Join(task.wd, "node_modules", task.pkg.Name)); e == nil {
 		task.packageDir = l
 		if task.pkg.FromGithub || strings.HasPrefix(task.pkg.Name, "@") {
@@ -136,16 +139,17 @@ func (task *BuildTask) Build() (esm *BuildResult, err error) {
 		task.resolveDir = task.wd
 	}
 
+	// build the module
 	task.subBuilds = newStringSet()
 	task.stage = "build"
-	res, err := task.build()
-	if err == nil {
-		err = db.Put(task.ID(), mustEncodeJSON(res))
-		if err != nil {
-			log.Errorf("db: %v", err)
-		}
+	ret, err = task.build()
+	if err != nil {
+		return
 	}
-	return res, err
+	if e := db.Put(task.ID(), mustEncodeJSON(ret)); e != nil {
+		log.Errorf("db: %v", e)
+	}
+	return
 }
 
 func (task *BuildTask) build() (result *BuildResult, err error) {

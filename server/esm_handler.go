@@ -135,12 +135,12 @@ func esmHandler() rex.Handle {
 				if version != "" {
 					prefix += version
 				}
-				deletedKVs, err := db.DeleteAll(prefix)
+				deletedRecords, err := db.DeleteAll(prefix)
 				if err != nil {
 					return rex.Err(500, err.Error())
 				}
-				deletedFiles := []string{}
-				for _, kv := range deletedKVs {
+				removedFiles := []string{}
+				for _, kv := range deletedRecords {
 					var ret BuildResult
 					filename := string(kv[0])
 					if json.Unmarshal(kv[1], &ret) == nil {
@@ -150,12 +150,12 @@ func esmHandler() rex.Handle {
 						if ret.PackageCSS {
 							cssFilename := strings.TrimSuffix(filename, path.Ext(filename)) + ".css"
 							go fs.Remove(fmt.Sprintf("builds/%s", cssFilename))
-							deletedFiles = append(deletedFiles, cssFilename)
+							removedFiles = append(removedFiles, cssFilename)
 						}
-						deletedFiles = append(deletedFiles, filename)
+						removedFiles = append(removedFiles, filename)
 					}
 				}
-				return deletedFiles
+				return removedFiles
 			default:
 				return rex.Err(404, "not found")
 			}
@@ -298,6 +298,12 @@ func esmHandler() rex.Handle {
 			if targetViaUA {
 				target = getBuildTargetByUA(userAgent)
 			}
+
+			// inject `fire()` to the sw script when `?fire` is attached
+			if pathname == "/sw" && ctx.Form.Has("fire") {
+				data = concatBytes(data, []byte("\nsw.fire();\n"))
+			}
+
 			code, err := minify(string(data), targets[target], api.LoaderTS)
 			if err != nil {
 				return throwErrorJS(ctx, fmt.Sprintf("Transform error: %v", err), false)

@@ -358,11 +358,24 @@ function withESMWorker(middleware?: Middleware, cache: Cache = (caches as any).d
           headers.set("Cache-Control", "public, max-age=86400");
           return new Response(null, { status: 304, headers: corsHeaders() });
         }
-        url.searchParams.set("v", VERSION.toString());
       }
       return ctx.withCache(() => {
         const target = url.searchParams.get("target");
-        return fetchOriginWithKVCache(req, env, ctx, pathname, target ? `?target=${target}` : void 0);
+        const v = url.searchParams.get("v");
+        const query: string[] = [];
+        if (target) {
+          query.push(`target=${target}`);
+        }
+        if (v) {
+          const n = parseInt(v, 10);
+          if (n >= 136 && n <= VERSION) {
+            query.push(`v=${v}`);
+          }
+        }
+        if (pathname === "/sw" && url.searchParams.has("fire")) {
+          query.push("fire");
+        }
+        return fetchOriginWithKVCache(req, env, ctx, pathname, query.length > 0 ? "?" + query.join("&") : undefined);
       }, { varyUA });
     }
 
@@ -439,7 +452,7 @@ function withESMWorker(middleware?: Middleware, cache: Cache = (caches as any).d
     if (pathname.startsWith("/+") && pathname.endsWith(".mjs")) {
       return ctx.withCache(() => {
         const target = url.searchParams.get("target");
-        return fetchOriginWithKVCache(req, env, ctx, pathname, target ? `?target=${target}` : void 0);
+        return fetchOriginWithKVCache(req, env, ctx, pathname, target ? `?target=${target}` : undefined);
       }, { varyUA: true });
     }
 

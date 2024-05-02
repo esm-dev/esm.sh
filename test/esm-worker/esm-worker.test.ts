@@ -380,12 +380,15 @@ Deno.test("esm-worker", { sanitizeOps: false, sanitizeResources: false }, async 
     assertEquals(res2.headers.get("Content-Type"), "application/javascript; charset=utf-8");
     assertStringIncludes(await res2.text(), "esm.sh/sw");
 
-    const res3 = await fetch(`${workerOrigin}/run`);
-    assertEquals(res3.headers.get("Etag"), `W/"${version}"`);
-    assertEquals(res3.headers.get("Cache-Control"), "public, max-age=86400");
-    assertEquals(res3.headers.get("Content-Type"), "application/javascript; charset=utf-8");
+    const res3 = await fetch(`${workerOrigin}/sw?fire`);
+    assertStringIncludes(await res3.text(), ".fire();");
+
+    const res4 = await fetch(`${workerOrigin}/run`);
+    assertEquals(res4.headers.get("Etag"), `W/"${version}"`);
+    assertEquals(res4.headers.get("Cache-Control"), "public, max-age=86400");
+    assertEquals(res4.headers.get("Content-Type"), "application/javascript; charset=utf-8");
     assertStringIncludes(res.headers.get("Vary") ?? "", "User-Agent");
-    assertStringIncludes(await res3.text(), "esm.sh/run");
+    assertStringIncludes(await res4.text(), "esm.sh/run");
   });
 
   await t.step("transform api", async () => {
