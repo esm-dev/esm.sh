@@ -88,7 +88,7 @@ export function errPkgNotFound(pkg: string) {
   );
 }
 
-export function checkPreflight(req: Request): Response | undefined {
+export function checkPreflight(req: Request): Response | void {
   if (req.method === "OPTIONS" && req.headers.has("Origin")) {
     const headers = new Headers({
       "Access-Control-Allow-Origin": "*",
@@ -104,7 +104,6 @@ export function checkPreflight(req: Request): Response | undefined {
     headers.append("Vary", "Access-Control-Request-Headers");
     return new Response(null, { headers });
   }
-  return void 0;
 }
 
 export function corsHeaders() {

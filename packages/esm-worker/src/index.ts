@@ -281,10 +281,10 @@ async function fetchOriginWithR2Cache(
 }
 
 function withESMWorker(middleware?: Middleware, cache: Cache = (caches as any).default ?? dummyCache) {
-  async function handler(req: Request, env: Env, cfCtx: ExecutionContext): Promise<Response> {
-    const resp = checkPreflight(req);
-    if (resp) {
-      return resp;
+  async function onFetch(req: Request, env: Env, cfCtx: ExecutionContext): Promise<Response> {
+    const res = checkPreflight(req);
+    if (res) {
+      return res;
     }
 
     const url = new URL(req.url);
@@ -479,13 +479,10 @@ function withESMWorker(middleware?: Middleware, cache: Cache = (caches as any).d
 
     // if it's a singleton build module which is created by https://esm.sh/run
     if (pathname.startsWith("/+") && pathname.endsWith(".mjs")) {
-      return ctx.withCache(
-        () => {
-          const target = url.searchParams.get("target");
-          return fetchOriginWithKVCache(req, env, ctx, pathname, target ? `?target=${target}` : void 0);
-        },
-        { varyUA: true },
-      );
+      return ctx.withCache(() => {
+        const target = url.searchParams.get("target");
+        return fetchOriginWithKVCache(req, env, ctx, pathname, target ? `?target=${target}` : void 0);
+      }, { varyUA: true });
     }
 
     // use legacy worker if the bild version is specified in the path or query
@@ -806,7 +803,24 @@ function withESMWorker(middleware?: Middleware, cache: Cache = (caches as any).d
     }, { varyUA: true });
   }
 
-  return { fetch: handler };
+  return {
+    fetch: (req: Request, env: Env, ctx: ExecutionContext) =>
+      onFetch(req, env, ctx).catch((e) => {
+        const R2 = Reflect.get(env, "R2") as R2Bucket | undefined;
+        if (R2) {
+          ctx.waitUntil(R2.put(
+            `errors/${new Date().toISOString().split("T")[0]}/${Date.now()}.log`,
+            JSON.stringify({
+              url: req.url,
+              headers: Object.fromEntries(req.headers.entries()),
+              message: e.message,
+              stack: e.stack,
+            }),
+          ));
+        }
+        return err(e.message, 500);
+      }),
+  };
 }
 
 export {
