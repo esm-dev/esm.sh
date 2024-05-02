@@ -21,8 +21,8 @@ type BuildQueueClient struct {
 }
 
 type BuildOutput struct {
-	meta *ESMBuild
-	err  error
+	result *BuildResult
+	err    error
 }
 
 type queueTask struct {

@@ -139,23 +139,23 @@ func esmHandler() rex.Handle {
 				if err != nil {
 					return rex.Err(500, err.Error())
 				}
-				ret := []string{}
+				deletedFiles := []string{}
 				for _, kv := range deletedKVs {
-					var esmb ESMBuild
-					key := string(kv[0])
-					if json.Unmarshal(kv[1], &esmb) == nil {
-						savePath := fmt.Sprintf("builds/%s", key)
+					var ret BuildResult
+					filename := string(kv[0])
+					if json.Unmarshal(kv[1], &ret) == nil {
+						savePath := fmt.Sprintf("builds/%s", filename)
 						go fs.Remove(savePath)
 						go fs.Remove(savePath + ".map")
-						if esmb.PackageCSS {
-							cssKey := strings.TrimSuffix(key, path.Ext(key)) + ".css"
-							go fs.Remove(fmt.Sprintf("builds/%s", cssKey))
-							ret = append(ret, cssKey)
+						if ret.PackageCSS {
+							cssFilename := strings.TrimSuffix(filename, path.Ext(filename)) + ".css"
+							go fs.Remove(fmt.Sprintf("builds/%s", cssFilename))
+							deletedFiles = append(deletedFiles, cssFilename)
 						}
-						ret = append(ret, key)
+						deletedFiles = append(deletedFiles, filename)
 					}
 				}
-				return ret
+				return deletedFiles
 			default:
 				return rex.Err(404, "not found")
 			}
@@ -197,20 +197,20 @@ func esmHandler() rex.Handle {
 				t, ok := el.Value.(*queueTask)
 				if ok {
 					m := map[string]interface{}{
-						"bundle":    t.Bundle,
+						"bundle":    t.bundle,
 						"clients":   t.clients,
 						"createdAt": t.createdAt.Format(http.TimeFormat),
-						"dev":       t.Dev,
+						"dev":       t.dev,
 						"inProcess": t.inProcess,
-						"pkg":       t.Pkg.String(),
+						"pkg":       t.pkg.String(),
 						"stage":     t.stage,
-						"target":    t.Target,
+						"target":    t.target,
 					}
 					if !t.startedAt.IsZero() {
 						m["startedAt"] = t.startedAt.Format(http.TimeFormat)
 					}
-					if len(t.Args.deps) > 0 {
-						m["deps"] = t.Args.deps.String()
+					if len(t.args.deps) > 0 {
+						m["deps"] = t.args.deps.String()
 					}
 					q[i] = m
 					i++
@@ -889,9 +889,9 @@ func esmHandler() rex.Handle {
 			_, _, err := findDts()
 			if err == storage.ErrNotFound {
 				task := &BuildTask{
-					Args:   buildArgs,
-					Pkg:    reqPkg,
-					Target: "types",
+					args:   buildArgs,
+					pkg:    reqPkg,
+					target: "types",
 				}
 				c := buildQueue.Add(task, ctx.RemoteIP())
 				select {
@@ -983,15 +983,15 @@ func esmHandler() rex.Handle {
 
 		// build and return the module
 		task := &BuildTask{
-			Args:     buildArgs,
-			Pkg:      reqPkg,
-			Target:   target,
-			Dev:      isDev,
-			Bundle:   bundle,
-			NoBundle: noBundle,
+			args:     buildArgs,
+			pkg:      reqPkg,
+			target:   target,
+			dev:      isDev,
+			bundle:   bundle,
+			noBundle: noBundle,
 		}
-		buildId := task.ID()
-		esm, hasBuild := queryESMBuild(buildId)
+		esmId := task.ID()
+		ret, hasBuild := task.queryBuild()
 		if !hasBuild {
 			c := buildQueue.Add(task, ctx.RemoteIP())
 			select {
@@ -1013,7 +1013,7 @@ func esmHandler() rex.Handle {
 					}
 					return throwErrorJS(ctx, output.err.Error(), false)
 				}
-				esm = output.meta
+				ret = output.result
 			case <-time.After(time.Duration(cfg.BuildWaitTimeout) * time.Second):
 				buildQueue.RemoveClient(task, c)
 				header.Set("Cache-Control", ccMustRevalidate)
@@ -1022,8 +1022,8 @@ func esmHandler() rex.Handle {
 		}
 
 		// should redirect to `*.d.ts` file
-		if esm.TypesOnly {
-			dtsUrl := fmt.Sprintf("%s%s/%s", cdnOrigin, cfg.CdnBasePath, esm.Dts)
+		if ret.TypesOnly {
+			dtsUrl := fmt.Sprintf("%s%s/%s", cdnOrigin, cfg.CdnBasePath, ret.Dts)
 			header.Set("X-TypeScript-Types", dtsUrl)
 			header.Set("Content-Type", ctJavascript)
 			header.Set("Cache-Control", ccImmutable)
@@ -1035,10 +1035,10 @@ func esmHandler() rex.Handle {
 
 		// redirect to package css from `?css`
 		if isPkgCss && reqPkg.SubModule == "" {
-			if !esm.PackageCSS {
+			if !ret.PackageCSS {
 				return rex.Status(404, "Package CSS not found")
 			}
-			url := fmt.Sprintf("%s%s/%s.css", cdnOrigin, cfg.CdnBasePath, strings.TrimSuffix(buildId, path.Ext(buildId)))
+			url := fmt.Sprintf("%s%s/%s.css", cdnOrigin, cfg.CdnBasePath, strings.TrimSuffix(esmId, path.Ext(esmId)))
 			return rex.Redirect(url, 301)
 		}
 
@@ -1064,7 +1064,7 @@ func esmHandler() rex.Handle {
 			if endsWith(savePath, ".mjs", ".js") {
 				header.Set("Content-Type", ctJavascript)
 				if isWorker {
-					moduleUrl := fmt.Sprintf("%s%s/%s", cdnOrigin, cfg.CdnBasePath, buildId)
+					moduleUrl := fmt.Sprintf("%s%s/%s", cdnOrigin, cfg.CdnBasePath, esmId)
 					return fmt.Sprintf(
 						`export default function workerFactory(injectOrOptions) { const options = typeof injectOrOptions === "string" ? { inject: injectOrOptions }: injectOrOptions ?? {}; const { inject, name = "%s" } = options; const blob = new Blob(['import * as $module from "%s";', inject].filter(Boolean), { type: "application/javascript" }); return new Worker(URL.createObjectURL(blob), { type: "module", name })}`,
 						moduleUrl,
@@ -1079,35 +1079,35 @@ func esmHandler() rex.Handle {
 		fmt.Fprintf(buf, `/* esm.sh - %v */%s`, reqPkg, EOL)
 
 		if isWorker {
-			moduleUrl := fmt.Sprintf("%s%s/%s", cdnOrigin, cfg.CdnBasePath, buildId)
+			moduleUrl := fmt.Sprintf("%s%s/%s", cdnOrigin, cfg.CdnBasePath, esmId)
 			fmt.Fprintf(buf,
 				`export default function workerFactory(injectOrOptions) { const options = typeof injectOrOptions === "string" ? { inject: injectOrOptions }: injectOrOptions ?? {}; const { inject, name = "%s" } = options; const blob = new Blob(['import * as $module from "%s";', inject].filter(Boolean), { type: "application/javascript" }); return new Worker(URL.createObjectURL(blob), { type: "module", name })}`,
 				moduleUrl,
 				moduleUrl,
 			)
 		} else {
-			if len(esm.Deps) > 0 {
+			if len(ret.Deps) > 0 {
 				// TODO: lookup deps of deps?
-				for _, dep := range esm.Deps {
+				for _, dep := range ret.Deps {
 					if strings.HasPrefix(dep, "/") && cfg.CdnBasePath != "" {
 						dep = cfg.CdnBasePath + dep
 					}
 					fmt.Fprintf(buf, `import "%s";%s`, dep, EOL)
 				}
 			}
-			header.Set("X-Esm-Id", buildId)
-			fmt.Fprintf(buf, `export * from "%s/%s";%s`, cfg.CdnBasePath, buildId, EOL)
-			if (esm.FromCJS || esm.HasExportDefault) && (exports.Len() == 0 || exports.Has("default")) {
-				fmt.Fprintf(buf, `export { default } from "%s/%s";%s`, cfg.CdnBasePath, buildId, EOL)
+			header.Set("X-Esm-Id", esmId)
+			fmt.Fprintf(buf, `export * from "%s/%s";%s`, cfg.CdnBasePath, esmId, EOL)
+			if (ret.FromCJS || ret.HasExportDefault) && (exports.Len() == 0 || exports.Has("default")) {
+				fmt.Fprintf(buf, `export { default } from "%s/%s";%s`, cfg.CdnBasePath, esmId, EOL)
 			}
-			if esm.FromCJS && exports.Len() > 0 {
-				fmt.Fprintf(buf, `import __cjs_exports$ from "%s/%s";%s`, cfg.CdnBasePath, buildId, EOL)
+			if ret.FromCJS && exports.Len() > 0 {
+				fmt.Fprintf(buf, `import __cjs_exports$ from "%s/%s";%s`, cfg.CdnBasePath, esmId, EOL)
 				fmt.Fprintf(buf, `export const { %s } = __cjs_exports$;%s`, strings.Join(exports.Values(), ", "), EOL)
 			}
 		}
 
-		if esm.Dts != "" && !noCheck && !isWorker {
-			dtsUrl := fmt.Sprintf("%s%s/%s", cdnOrigin, cfg.CdnBasePath, esm.Dts)
+		if ret.Dts != "" && !noCheck && !isWorker {
+			dtsUrl := fmt.Sprintf("%s%s/%s", cdnOrigin, cfg.CdnBasePath, ret.Dts)
 			header.Set("X-TypeScript-Types", dtsUrl)
 		}
 		if targetViaUA {

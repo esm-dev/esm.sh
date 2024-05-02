@@ -16,7 +16,7 @@ import (
 )
 
 func (task *BuildTask) TransformDTS(dts string) (n int, err error) {
-	buildArgsPrefix := encodeBuildArgsPrefix(task.Args, task.Pkg, true)
+	buildArgsPrefix := encodeBuildArgsPrefix(task.args, task.pkg, true)
 	marker := newStringSet()
 	err = task.transformDTS(dts, buildArgsPrefix, marker)
 	if err == nil {
@@ -33,7 +33,7 @@ func (task *BuildTask) transformDTS(dts string, aliasDepsPrefix string, marker *
 	marker.Add(aliasDepsPrefix + dts)
 
 	var pkgInfo NpmPackageInfo
-	pkgJsonPath := path.Join(task.wd, "node_modules", task.Pkg.Name, "package.json")
+	pkgJsonPath := path.Join(task.wd, "node_modules", task.pkg.Name, "package.json")
 	err = parseJSONFile(pkgJsonPath, &pkgInfo)
 	if err != nil {
 		return
@@ -126,7 +126,7 @@ func (task *BuildTask) transformDTS(dts string, aliasDepsPrefix string, marker *
 			}
 		}
 
-		if task.Args.external.Has("*") && !strings.HasPrefix(pkgName, "@types/") && !isRelativeSpecifier(specifier) {
+		if task.args.external.Has("*") && !strings.HasPrefix(pkgName, "@types/") && !isRelativeSpecifier(specifier) {
 			return specifier
 		}
 
@@ -140,7 +140,7 @@ func (task *BuildTask) transformDTS(dts string, aliasDepsPrefix string, marker *
 
 		// fix some weird import paths
 		if kind == "importCall" {
-			if task.Pkg.Name == "@mdx-js/mdx" {
+			if task.pkg.Name == "@mdx-js/mdx" {
 				if (strings.Contains(dts, "plugin/recma-document") || strings.Contains(dts, "plugin/recma-jsx-rewrite")) && res == "@types/estree" {
 					res = "@types/estree-jsx"
 				}
@@ -151,12 +151,12 @@ func (task *BuildTask) transformDTS(dts string, aliasDepsPrefix string, marker *
 		}
 
 		// use `?alias`
-		to, ok := task.Args.alias[res]
+		to, ok := task.args.alias[res]
 		if ok {
 			res = to
 		}
 
-		if internalDeclModules.Has(res) || task.Args.external.Has(getPkgName(res)) {
+		if internalDeclModules.Has(res) || task.args.external.Has(getPkgName(res)) {
 			return res
 		}
 
@@ -246,7 +246,7 @@ func (task *BuildTask) transformDTS(dts string, aliasDepsPrefix string, marker *
 			info = task.normalizeNpmPackage(info)
 
 			// use version defined in `?deps`
-			if pkg, ok := task.Args.deps.Get(depTypePkgName); ok {
+			if pkg, ok := task.args.deps.Get(depTypePkgName); ok {
 				info.Version = pkg.Version
 			}
 
@@ -271,7 +271,7 @@ func (task *BuildTask) transformDTS(dts string, aliasDepsPrefix string, marker *
 					res += "~.d.ts"
 				}
 			}
-			pkgPath := info.Name + "@" + info.Version + "/" + encodeBuildArgsPrefix(task.Args, Pkg{Name: info.Name}, true)
+			pkgPath := info.Name + "@" + info.Version + "/" + encodeBuildArgsPrefix(task.args, Pkg{Name: info.Name}, true)
 			res = fmt.Sprintf("%s/%s%s", dtsBasePath, pkgPath, res)
 		}
 
@@ -390,15 +390,15 @@ func (task *BuildTask) toTypesPath(wd string, p NpmPackageInfo, version string, 
 	var types string
 	if subpath != "" {
 		t := &BuildTask{
-			Args: task.Args,
-			Pkg: Pkg{
+			args: task.args,
+			pkg: Pkg{
 				Name:      p.Name,
 				Version:   p.Version,
 				SubModule: subpath,
 				SubPath:   subpath,
 			},
-			Target: task.Target,
-			Dev:    false,
+			target: task.target,
+			dev:    false,
 			wd:     wd,
 		}
 		_, p, _, e := t.analyze(false)

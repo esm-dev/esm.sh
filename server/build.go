@@ -18,25 +18,14 @@ import (
 	"github.com/ije/gox/utils"
 )
 
-type ESMBuild struct {
-	NamedExports     []string `json:"-"`
-	HasExportDefault bool     `json:"d,omitempty"`
-	FromCJS          bool     `json:"c,omitempty"`
-	Dts              string   `json:"t,omitempty"`
-	TypesOnly        bool     `json:"o,omitempty"`
-	PackageCSS       bool     `json:"s,omitempty"`
-	Deps             []string `json:"p,omitempty"`
-}
-
 type BuildTask struct {
-	Args       BuildArgs
-	Pkg        Pkg
-	Target     string
-	Dev        bool
-	Bundle     bool
-	NoBundle   bool
+	pkg        Pkg
 	npm        NpmPackageInfo
-	esm        *ESMBuild
+	args       BuildArgs
+	target     string
+	dev        bool
+	bundle     bool
+	noBundle   bool
 	id         string
 	deprecated string
 	stage      string
@@ -50,8 +39,38 @@ type BuildTask struct {
 	subTasks   []chan struct{}
 }
 
-func (task *BuildTask) Build() (esm *ESMBuild, err error) {
-	pkgVersionName := task.Pkg.VersionName()
+type BuildResult struct {
+	Deps             []string `json:"p,omitempty"`
+	Dts              string   `json:"t,omitempty"`
+	FromCJS          bool     `json:"c,omitempty"`
+	HasExportDefault bool     `json:"d,omitempty"`
+	NamedExports     []string `json:"-"`
+	PackageCSS       bool     `json:"s,omitempty"`
+	TypesOnly        bool     `json:"o,omitempty"`
+}
+
+func (task *BuildTask) queryBuild() (*BuildResult, bool) {
+	id := task.ID()
+	value, err := db.Get(id)
+	if err == nil && value != nil {
+		var b BuildResult
+		err = json.Unmarshal(value, &b)
+		if err == nil {
+			if !b.TypesOnly {
+				_, err = fs.Stat(path.Join("builds", id))
+			}
+			if err == nil || os.IsExist(err) {
+				return &b, true
+			}
+		}
+		// delete the invalid db entry
+		db.Delete(id)
+	}
+	return nil, false
+}
+
+func (task *BuildTask) Build() (esm *BuildResult, err error) {
+	pkgVersionName := task.pkg.VersionName()
 	task.wd = path.Join(cfg.WorkDir, fmt.Sprintf("npm/%s", pkgVersionName))
 	err = ensureDir(task.wd)
 	if err != nil {
@@ -90,9 +109,9 @@ func (task *BuildTask) Build() (esm *ESMBuild, err error) {
 		return
 	}
 
-	if !task.Pkg.FromGithub && !strings.HasPrefix(task.Pkg.Name, "@jsr/") {
+	if !task.pkg.FromGithub && !strings.HasPrefix(task.pkg.Name, "@jsr/") {
 		var info NpmPackageInfo
-		info, err = fetchPackageInfo(task.Pkg.Name, task.Pkg.Version)
+		info, err = fetchPackageInfo(task.pkg.Name, task.pkg.Version)
 		if err != nil {
 			return
 		}
@@ -100,65 +119,67 @@ func (task *BuildTask) Build() (esm *ESMBuild, err error) {
 	}
 
 	task.stage = "install"
-	err = installPackage(task.wd, task.Pkg)
+	err = installPackage(task.wd, task.pkg)
 	if err != nil {
 		return
 	}
 
-	if l, e := filepath.EvalSymlinks(path.Join(task.wd, "node_modules", task.Pkg.Name)); e == nil {
+	if l, e := filepath.EvalSymlinks(path.Join(task.wd, "node_modules", task.pkg.Name)); e == nil {
 		task.packageDir = l
-		if task.Pkg.FromGithub || strings.HasPrefix(task.Pkg.Name, "@") {
+		if task.pkg.FromGithub || strings.HasPrefix(task.pkg.Name, "@") {
 			task.resolveDir = path.Join(l, "../../..")
 		} else {
 			task.resolveDir = path.Join(l, "../..")
 		}
 	} else {
-		task.packageDir = path.Join(task.wd, "node_modules", task.Pkg.Name)
+		task.packageDir = path.Join(task.wd, "node_modules", task.pkg.Name)
 		task.resolveDir = task.wd
 	}
 
 	task.subBuilds = newStringSet()
 	task.stage = "build"
-	err = task.build()
-	if err != nil {
-		return
+	res, err := task.build()
+	if err == nil {
+		err = db.Put(task.ID(), mustEncodeJSON(res))
+		if err != nil {
+			log.Errorf("db: %v", err)
+		}
 	}
-
-	return task.esm, nil
+	return res, err
 }
 
-func (task *BuildTask) build() (err error) {
+func (task *BuildTask) build() (result *BuildResult, err error) {
 	// build json
-	if strings.HasSuffix(task.Pkg.SubModule, ".json") {
+	if strings.HasSuffix(task.pkg.SubModule, ".json") {
 		nmDir := path.Join(task.wd, "node_modules")
-		jsonPath := path.Join(nmDir, task.Pkg.Name, task.Pkg.SubModule)
+		jsonPath := path.Join(nmDir, task.pkg.Name, task.pkg.SubModule)
 		if existsFile(jsonPath) {
 			json, err := os.ReadFile(jsonPath)
 			if err != nil {
-				return err
+				return nil, err
 			}
 			buffer := bytes.NewBufferString("export default ")
 			buffer.Write(json)
 			_, err = fs.WriteFile(task.getSavepath(), buffer)
 			if err != nil {
-				return err
+				return nil, err
 			}
-			task.esm = &ESMBuild{
+			result := &BuildResult{
 				HasExportDefault: true,
 			}
-			task.storeToDB()
-			return nil
+			return result, nil
 		}
 	}
 
-	esm, npm, reexport, err := task.analyze(false)
+	var npm NpmPackageInfo
+	var reexport string
+	result, npm, reexport, err = task.analyze(false)
 	if err != nil && !strings.HasPrefix(err.Error(), "cjsLexer: Can't resolve") {
-		return
+		return nil, err
 	}
 	task.npm = npm
-	task.esm = esm
 
-	if task.Target == "types" {
+	if task.target == "types" {
 		if npm.Types != "" {
 			dts := npm.Name + "@" + npm.Version + path.Join("/", npm.Types)
 			task.buildDTS(dts)
@@ -166,11 +187,10 @@ func (task *BuildTask) build() (err error) {
 		return
 	}
 
-	if esm.TypesOnly {
+	if result.TypesOnly {
 		dts := npm.Name + "@" + npm.Version + path.Join("/", npm.Types)
-		esm.Dts = fmt.Sprintf("%s%s", task._ghPrefix(), dts)
+		result.Dts = fmt.Sprintf("%s%s", task._ghPrefix(), dts)
 		task.buildDTS(dts)
-		task.storeToDB()
 		return
 	}
 
@@ -183,14 +203,14 @@ func (task *BuildTask) build() (err error) {
 		}
 		// Check if the package has default export
 		t := &BuildTask{
-			Args:   task.Args,
-			Pkg:    pkg,
-			Target: task.Target,
-			Dev:    task.Dev,
+			args:   task.args,
+			pkg:    pkg,
+			target: task.target,
+			dev:    task.dev,
 			wd:     task.resolveDir,
 		}
 		if !formJson {
-			err = installPackage(task.wd, t.Pkg)
+			err = installPackage(task.wd, t.pkg)
 			if err != nil {
 				return
 			}
@@ -202,7 +222,7 @@ func (task *BuildTask) build() (err error) {
 		}
 
 		buf := bytes.NewBuffer(nil)
-		importPath := task.getImportPath(t.Pkg, encodeBuildArgsPrefix(task.Args, task.Pkg, false))
+		importPath := task.getImportPath(t.pkg, encodeBuildArgsPrefix(task.args, task.pkg, false))
 		fmt.Fprintf(buf, `export * from "%s";`, importPath)
 		if m.HasExportDefault {
 			fmt.Fprintf(buf, "\n")
@@ -213,14 +233,13 @@ func (task *BuildTask) build() (err error) {
 		if err != nil {
 			return
 		}
-		task.checkDTS()
-		task.storeToDB()
+		result.Dts = task.checkDTS()
 		return
 	}
 
 	defer func() {
 		if err != nil {
-			esm = nil
+			result = nil
 		}
 	}()
 
@@ -228,15 +247,15 @@ func (task *BuildTask) build() (err error) {
 	var input *api.StdinOptions
 
 	moduleName := npm.Name
-	if task.Pkg.SubModule != "" {
-		moduleName += "/" + task.Pkg.SubModule
+	if task.pkg.SubModule != "" {
+		moduleName += "/" + task.pkg.SubModule
 	}
 
 	if npm.Module == "" {
 		buf := bytes.NewBuffer(nil)
 		fmt.Fprintf(buf, `import * as __module from "%s";`, moduleName)
-		if len(esm.NamedExports) > 0 {
-			fmt.Fprintf(buf, `export const { %s } = __module;`, strings.Join(esm.NamedExports, ","))
+		if len(result.NamedExports) > 0 {
+			fmt.Fprintf(buf, `export const { %s } = __module;`, strings.Join(result.NamedExports, ","))
 		}
 		fmt.Fprintf(buf, "const { default: __default, ...__rest } = __module;")
 		fmt.Fprintf(buf, "export default (__default !== undefined ? __default : __rest);")
@@ -248,9 +267,9 @@ func (task *BuildTask) build() (err error) {
 			Sourcefile: "build.js",
 		}
 	} else {
-		if task.Args.exports.Len() > 0 {
+		if task.args.exports.Len() > 0 {
 			buf := bytes.NewBuffer(nil)
-			fmt.Fprintf(buf, `export { %s } from "%s";`, strings.Join(task.Args.exports.Values(), ","), moduleName)
+			fmt.Fprintf(buf, `export { %s } from "%s";`, strings.Join(task.args.exports.Values(), ","), moduleName)
 			input = &api.StdinOptions{
 				Contents:   buf.String(),
 				ResolveDir: task.wd,
@@ -266,7 +285,7 @@ func (task *BuildTask) build() (err error) {
 		pkgSideEffects = api.SideEffectsFalse
 	}
 
-	noBundle := task.NoBundle || (npm.SideEffects != nil && npm.SideEffects.Len() > 0)
+	noBundle := task.noBundle || (npm.SideEffects != nil && npm.SideEffects.Len() > 0)
 	if npm.Esmsh != nil {
 		if v, ok := npm.Esmsh["bundle"]; ok {
 			if b, ok := v.(bool); ok && !b {
@@ -276,7 +295,7 @@ func (task *BuildTask) build() (err error) {
 	}
 
 	nodeEnv := "production"
-	if task.Dev {
+	if task.dev {
 		nodeEnv = "development"
 	}
 	define := map[string]string{
@@ -296,7 +315,7 @@ func (task *BuildTask) build() (err error) {
 		"global.require.resolve":      "__rResolve$",
 		"global.process.env.NODE_ENV": fmt.Sprintf(`"%s"`, nodeEnv),
 	}
-	if task.Target == "node" {
+	if task.target == "node" {
 		define = map[string]string{}
 	}
 	imports := []string{}
@@ -312,7 +331,7 @@ func (task *BuildTask) build() (err error) {
 					// ban file urls
 					if strings.HasPrefix(args.Path, "file:") {
 						return api.OnResolveResult{
-							Path:     fmt.Sprintf("/error.js?type=unsupported-file-dependency&name=%s&importer=%s", strings.TrimPrefix(args.Path, "file:"), task.Pkg),
+							Path:     fmt.Sprintf("/error.js?type=unsupported-file-dependency&name=%s&importer=%s", strings.TrimPrefix(args.Path, "file:"), task.pkg),
 							External: true,
 						}, nil
 					}
@@ -326,7 +345,7 @@ func (task *BuildTask) build() (err error) {
 					}
 
 					// if `?ignore-require` present, ignore specifier that is a require call
-					if task.Args.ignoreRequire && args.Kind == api.ResolveJSRequireCall && npm.Module != "" {
+					if task.args.ignoreRequire && args.Kind == api.ResolveJSRequireCall && npm.Module != "" {
 						return api.OnResolveResult{
 							Path:     args.Path,
 							External: true,
@@ -400,13 +419,13 @@ func (task *BuildTask) build() (err error) {
 					}
 
 					// resolve specifier by checking `?alias` query
-					if len(task.Args.alias) > 0 {
-						if name, ok := task.Args.alias[specifier]; ok {
+					if len(task.args.alias) > 0 {
+						if name, ok := task.args.alias[specifier]; ok {
 							specifier = name
 						} else {
 							pkgName, _, subpath := splitPkgPath(specifier)
 							if subpath != "" {
-								if name, ok := task.Args.alias[pkgName]; ok {
+								if name, ok := task.args.alias[pkgName]; ok {
 									specifier = name + "/" + subpath
 								}
 							}
@@ -414,7 +433,7 @@ func (task *BuildTask) build() (err error) {
 					}
 
 					// force to use `npm:` specifier for `denonext` target
-					if forceNpmSpecifiers[specifier] && task.Target == "denonext" {
+					if forceNpmSpecifiers[specifier] && task.target == "denonext" {
 						return api.OnResolveResult{
 							Path:     fmt.Sprintf("npm:%s", specifier),
 							External: true,
@@ -424,11 +443,11 @@ func (task *BuildTask) build() (err error) {
 					// ignore native node packages like 'fsevent'
 					for _, name := range nativeNodePackages {
 						if specifier == name || strings.HasPrefix(specifier, name+"/") {
-							if task.Target == "denonext" {
+							if task.target == "denonext" {
 								pkgName, _, subPath := splitPkgPath(specifier)
 								version := "latest"
-								if pkgName == task.Pkg.Name {
-									version = task.Pkg.Version
+								if pkgName == task.pkg.Name {
+									version = task.pkg.Version
 								} else if v, ok := npm.Dependencies[pkgName]; ok {
 									version = v
 								} else if v, ok := npm.PeerDependencies[pkgName]; ok {
@@ -460,7 +479,7 @@ func (task *BuildTask) build() (err error) {
 								}, nil
 							}
 							return api.OnResolveResult{
-								Path:     fmt.Sprintf("/error.js?type=unsupported-npm-package&name=%s&importer=%s", specifier, task.Pkg),
+								Path:     fmt.Sprintf("/error.js?type=unsupported-npm-package&name=%s&importer=%s", specifier, task.pkg),
 								External: true,
 							}, nil
 						}
@@ -478,7 +497,7 @@ func (task *BuildTask) build() (err error) {
 					// native node modules do not work via http import
 					if strings.HasSuffix(fullFilepath, ".node") && existsFile(fullFilepath) {
 						return api.OnResolveResult{
-							Path:     fmt.Sprintf("/error.js?type=unsupported-node-native-module&name=%s&importer=%s", path.Base(args.Path), task.Pkg),
+							Path:     fmt.Sprintf("/error.js?type=unsupported-node-native-module&name=%s&importer=%s", path.Base(args.Path), task.pkg),
 							External: true,
 						}, nil
 					}
@@ -498,7 +517,7 @@ func (task *BuildTask) build() (err error) {
 
 					// externalize the _parent_ module
 					// e.g. "react/jsx-runtime" imports "react"
-					if task.Pkg.SubModule != "" && task.Pkg.Name == specifier && !task.Bundle {
+					if task.pkg.SubModule != "" && task.pkg.Name == specifier && !task.bundle {
 						return api.OnResolveResult{
 							Path:        task.resolveExternalModule(specifier, args.Kind),
 							External:    true,
@@ -520,7 +539,7 @@ func (task *BuildTask) build() (err error) {
 					}
 
 					// bundles all dependencies in `bundle` mode, apart from peer dependencies and `?external` query
-					if task.Bundle && !task.Args.external.Has(getPkgName(specifier)) && !implicitExternal.Has(specifier) {
+					if task.bundle && !task.args.external.Has(getPkgName(specifier)) && !implicitExternal.Has(specifier) {
 						pkgName := getPkgName(specifier)
 						_, ok := npm.PeerDependencies[pkgName]
 						if !ok {
@@ -553,7 +572,7 @@ func (task *BuildTask) build() (err error) {
 
 							// if meets scenarios in "lib/index.mjs" imports "lib/index.cjs"
 							// let esbuild to handle it
-							if bareName == "./"+task.Pkg.SubModule {
+							if bareName == "./"+task.pkg.SubModule {
 								return api.OnResolveResult{}, nil
 							}
 
@@ -718,14 +737,14 @@ func (task *BuildTask) build() (err error) {
 		Write:             false,
 		Bundle:            true,
 		Format:            api.FormatESModule,
-		Target:            targets[task.Target],
+		Target:            targets[task.target],
 		Platform:          api.PlatformBrowser,
-		MinifyWhitespace:  !task.Dev,
-		MinifyIdentifiers: !task.Dev,
-		MinifySyntax:      !task.Dev,
-		KeepNames:         task.Args.keepNames,         // prevent class/function names erasing
-		IgnoreAnnotations: task.Args.ignoreAnnotations, // some libs maybe use wrong side-effect annotations
-		Conditions:        task.Args.conditions.Values(),
+		MinifyWhitespace:  !task.dev,
+		MinifyIdentifiers: !task.dev,
+		MinifySyntax:      !task.dev,
+		KeepNames:         task.args.keepNames,         // prevent class/function names erasing
+		IgnoreAnnotations: task.args.ignoreAnnotations, // some libs maybe use wrong side-effect annotations
+		Conditions:        task.args.conditions.Values(),
 		Plugins:           []api.Plugin{esmPlugin},
 		SourceRoot:        "/",
 		Sourcemap:         api.SourceMapExternal,
@@ -746,28 +765,28 @@ func (task *BuildTask) build() (err error) {
 		".woff":  api.LoaderDataURL,
 		".woff2": api.LoaderDataURL,
 	}
-	if task.Target == "node" {
+	if task.target == "node" {
 		options.Platform = api.PlatformNode
 	} else {
 		options.Define = define
 	}
 	if !task.isDenoTarget() {
 		options.JSX = api.JSXAutomatic
-		if task.Args.jsxRuntime != nil {
-			if task.Args.external.Has(task.Args.jsxRuntime.Name) || task.Args.external.Has("*") {
-				options.JSXImportSource = task.Args.jsxRuntime.Name
+		if task.args.jsxRuntime != nil {
+			if task.args.external.Has(task.args.jsxRuntime.Name) || task.args.external.Has("*") {
+				options.JSXImportSource = task.args.jsxRuntime.Name
 			} else {
-				options.JSXImportSource = "https://esm.sh/" + task.Args.jsxRuntime.String()
+				options.JSXImportSource = "https://esm.sh/" + task.args.jsxRuntime.String()
 			}
-		} else if task.Args.external.Has("react") {
+		} else if task.args.external.Has("react") {
 			options.JSXImportSource = "react"
-		} else if task.Args.external.Has("preact") {
+		} else if task.args.external.Has("preact") {
 			options.JSXImportSource = "preact"
-		} else if task.Args.external.Has("*") {
+		} else if task.args.external.Has("*") {
 			options.JSXImportSource = "react"
-		} else if pkg, ok := task.Args.deps.Get("react"); ok {
+		} else if pkg, ok := task.args.deps.Get("react"); ok {
 			options.JSXImportSource = "https://esm.sh/react@" + pkg.Version
-		} else if pkg, ok := task.Args.deps.Get("preact"); ok {
+		} else if pkg, ok := task.args.deps.Get("preact"); ok {
 			options.JSXImportSource = "https://esm.sh/preact@" + pkg.Version
 		} else {
 			options.JSXImportSource = "https://esm.sh/react"
@@ -780,10 +799,10 @@ func (task *BuildTask) build() (err error) {
 	}
 
 rebuild:
-	result := api.Build(options)
-	if len(result.Errors) > 0 {
+	ret := api.Build(options)
+	if len(ret.Errors) > 0 {
 		// mark the missing module as external to exclude it from the bundle
-		msg := result.Errors[0].Text
+		msg := ret.Errors[0].Text
 		if strings.HasPrefix(msg, "Could not resolve \"") {
 			// current package/module can not be marked as external
 			if strings.Contains(msg, fmt.Sprintf("Could not resolve \"%s\"", moduleName)) {
@@ -819,27 +838,27 @@ rebuild:
 		return
 	}
 
-	for _, w := range result.Warnings {
+	for _, w := range ret.Warnings {
 		if strings.HasPrefix(w.Text, "Could not resolve \"") {
 			log.Warnf("esbuild(%s): %s", task.ID(), w.Text)
 		}
 	}
 
-	for _, file := range result.OutputFiles {
+	for _, file := range ret.OutputFiles {
 		if strings.HasSuffix(file.Path, ".js") {
 			jsContent := file.Contents
 			extraBanner := ""
 			if nodeEnv == "" {
 				extraBanner = " development"
 			}
-			if task.Bundle {
+			if task.bundle {
 				extraBanner = " standalone"
 			}
 			header := bytes.NewBufferString(fmt.Sprintf(
 				"/* esm.sh(v%d) - %s %s%s */\n",
 				VERSION,
-				task.Pkg.String(),
-				strings.ToLower(task.Target),
+				task.pkg.String(),
+				strings.ToLower(task.target),
 				extraBanner,
 			))
 
@@ -862,18 +881,18 @@ rebuild:
 			}
 
 			// add nodejs compatibility
-			if task.Target != "node" {
+			if task.target != "node" {
 				ids := newStringSet()
 				for _, r := range regexpGlobalIdent.FindAll(jsContent, -1) {
 					ids.Add(string(r))
 				}
 				if ids.Has("__Process$") {
-					if task.Args.external.Has("node:process") || task.Args.external.Has("*") {
+					if task.args.external.Has("node:process") || task.args.external.Has("*") {
 						fmt.Fprintf(header, `import __Process$ from "node:process";%s`, EOL)
-					} else if task.Target == "denonext" {
+					} else if task.target == "denonext" {
 						fmt.Fprintf(header, `import __Process$ from "node:process";%s`, EOL)
-					} else if task.Target == "deno" {
-						fmt.Fprintf(header, `import __Process$ from "https://deno.land/std@%s/node/process.ts";%s`, task.Args.denoStdVersion, EOL)
+					} else if task.target == "deno" {
+						fmt.Fprintf(header, `import __Process$ from "https://deno.land/std@%s/node/process.ts";%s`, task.args.denoStdVersion, EOL)
 					} else {
 						var browserExclude bool
 						if len(npm.Browser) > 0 {
@@ -887,12 +906,12 @@ rebuild:
 					}
 				}
 				if ids.Has("__Buffer$") {
-					if task.Args.external.Has("node:buffer") || task.Args.external.Has("*") {
+					if task.args.external.Has("node:buffer") || task.args.external.Has("*") {
 						fmt.Fprintf(header, `import { Buffer as __Buffer$ } from "node:buffer";%s`, EOL)
-					} else if task.Target == "denonext" {
+					} else if task.target == "denonext" {
 						fmt.Fprintf(header, `import { Buffer as __Buffer$ } from "node:buffer";%s`, EOL)
-					} else if task.Target == "deno" {
-						fmt.Fprintf(header, `import { Buffer as __Buffer$ } from "https://deno.land/std@%s/node/buffer.ts";%s`, task.Args.denoStdVersion, EOL)
+					} else if task.target == "deno" {
+						fmt.Fprintf(header, `import { Buffer as __Buffer$ } from "https://deno.land/std@%s/node/buffer.ts";%s`, task.args.denoStdVersion, EOL)
 					} else {
 						var browserExclude bool
 						if len(npm.Browser) > 0 {
@@ -946,14 +965,14 @@ rebuild:
 								isEsModule[i] = true
 							} else {
 								t := &BuildTask{
-									Args:   task.Args,
-									Pkg:    pkg,
-									Target: task.Target,
-									Dev:    task.Dev,
+									args:   task.args,
+									pkg:    pkg,
+									target: task.target,
+									dev:    task.dev,
 									wd:     task.resolveDir,
 								}
 								if !formJson {
-									e = installPackage(task.wd, t.Pkg)
+									e = installPackage(task.wd, t.pkg)
 								}
 								if e == nil {
 									m, _, _, e := t.analyze(true)
@@ -996,7 +1015,7 @@ rebuild:
 			finalContent.Write(jsContent)
 
 			if task.deprecated != "" {
-				fmt.Fprintf(finalContent, `console.warn("[npm] %%cdeprecated%%c %s@%s: %s", "color:red", "");%s`, task.Pkg.Name, task.Pkg.Version, strings.ReplaceAll(task.deprecated, "\"", "\\\""), "\n")
+				fmt.Fprintf(finalContent, `console.warn("[npm] %%cdeprecated%%c %s@%s: %s", "color:red", "");%s`, task.pkg.Name, task.pkg.Version, strings.ReplaceAll(task.deprecated, "\"", "\\\""), "\n")
 			}
 
 			// add sourcemap Url
@@ -1013,14 +1032,14 @@ rebuild:
 		}
 	}
 
-	for _, file := range result.OutputFiles {
+	for _, file := range ret.OutputFiles {
 		if strings.HasSuffix(file.Path, ".css") {
 			savePath := task.getSavepath()
 			_, err = fs.WriteFile(strings.TrimSuffix(savePath, path.Ext(savePath))+".css", bytes.NewReader(file.Contents))
 			if err != nil {
 				return
 			}
-			esm.PackageCSS = true
+			result.PackageCSS = true
 		} else if strings.HasSuffix(file.Path, ".js.map") {
 			var sourceMap map[string]interface{}
 			if json.Unmarshal(file.Contents, &sourceMap) == nil {
@@ -1049,16 +1068,14 @@ rebuild:
 	}
 
 	record := newStringSet()
-	esm.Deps = filter(imports, func(dep string) bool {
+	result.Deps = filter(imports, func(dep string) bool {
 		if record.Has(dep) {
 			return false
 		}
 		record.Add(dep)
 		return strings.HasPrefix(dep, "/") || strings.HasPrefix(dep, "http:") || strings.HasPrefix(dep, "https:")
 	})
-
-	task.checkDTS()
-	task.storeToDB()
+	result.Dts = task.checkDTS()
 	return
 }
 
@@ -1087,26 +1104,26 @@ func (task *BuildTask) resolveExternalModule(specifier string, kind api.ResolveK
 	}()
 
 	// it's current package from github
-	if npm := task.npm; task.Pkg.FromGithub && (specifier == npm.Name || specifier == npm.PkgName) {
+	if npm := task.npm; task.pkg.FromGithub && (specifier == npm.Name || specifier == npm.PkgName) {
 		pkg := Pkg{
 			Name:       npm.Name,
 			Version:    npm.Version,
 			FromGithub: true,
 		}
-		resolvedPath = task.getImportPath(pkg, encodeBuildArgsPrefix(task.Args, pkg, false))
+		resolvedPath = task.getImportPath(pkg, encodeBuildArgsPrefix(task.args, pkg, false))
 		return
 	}
 
 	// node builtin module
 	if nodejsInternalModules[specifier] {
-		if task.Args.external.Has("node:"+specifier) || task.Args.external.Has("*") {
+		if task.args.external.Has("node:"+specifier) || task.args.external.Has("*") {
 			resolvedPath = fmt.Sprintf("node:%s", specifier)
-		} else if task.Target == "node" {
+		} else if task.target == "node" {
 			resolvedPath = fmt.Sprintf("node:%s", specifier)
-		} else if task.Target == "denonext" && !denoNextUnspportedNodeModules[specifier] {
+		} else if task.target == "denonext" && !denoNextUnspportedNodeModules[specifier] {
 			resolvedPath = fmt.Sprintf("node:%s", specifier)
-		} else if task.Target == "deno" {
-			resolvedPath = fmt.Sprintf("https://deno.land/std@%s/node/%s.ts", task.Args.denoStdVersion, specifier)
+		} else if task.target == "deno" {
+			resolvedPath = fmt.Sprintf("https://deno.land/std@%s/node/%s.ts", task.args.denoStdVersion, specifier)
 		} else {
 			resolvedPath = fmt.Sprintf("%s/node/%s.js", cfg.CdnBasePath, specifier)
 		}
@@ -1114,7 +1131,7 @@ func (task *BuildTask) resolveExternalModule(specifier string, kind api.ResolveK
 	}
 
 	// check `?external`
-	if task.Args.external.Has("*") || task.Args.external.Has(getPkgName(specifier)) {
+	if task.args.external.Has("*") || task.args.external.Has(getPkgName(specifier)) {
 		resolvedPath = specifier
 		return
 	}
@@ -1123,20 +1140,20 @@ func (task *BuildTask) resolveExternalModule(specifier string, kind api.ResolveK
 	if strings.HasPrefix(specifier, task.npm.Name+"/") {
 		subPath := strings.TrimPrefix(specifier, task.npm.Name+"/")
 		subPkg := Pkg{
-			Name:       task.Pkg.Name,
-			Version:    task.Pkg.Version,
+			Name:       task.pkg.Name,
+			Version:    task.pkg.Version,
 			SubPath:    subPath,
 			SubModule:  toModuleBareName(subPath, false),
-			FromGithub: task.Pkg.FromGithub,
+			FromGithub: task.pkg.FromGithub,
 		}
 		if task.subBuilds != nil {
 			subBuild := &BuildTask{
-				Args:       task.Args,
-				Pkg:        subPkg,
-				Target:     task.Target,
-				Dev:        task.Dev,
-				Bundle:     task.Bundle,
-				NoBundle:   task.NoBundle,
+				args:       task.args,
+				pkg:        subPkg,
+				target:     task.target,
+				dev:        task.dev,
+				bundle:     task.bundle,
+				noBundle:   task.noBundle,
 				wd:         task.wd,
 				deprecated: task.deprecated,
 				resolveDir: task.resolveDir,
@@ -1154,8 +1171,8 @@ func (task *BuildTask) resolveExternalModule(specifier string, kind api.ResolveK
 				}()
 			}
 		}
-		resolvedPath = task.getImportPath(subPkg, encodeBuildArgsPrefix(task.Args, subPkg, false))
-		if task.NoBundle {
+		resolvedPath = task.getImportPath(subPkg, encodeBuildArgsPrefix(task.args, subPkg, false))
+		if task.noBundle {
 			n, e := utils.SplitByLastByte(resolvedPath, '.')
 			resolvedPath = n + ".nobundle." + e
 		}
@@ -1163,7 +1180,7 @@ func (task *BuildTask) resolveExternalModule(specifier string, kind api.ResolveK
 	}
 
 	// replace some npm polyfills with native APIs
-	if specifier == "node-fetch" && task.Target != "node" {
+	if specifier == "node-fetch" && task.target != "node" {
 		resolvedPath = fmt.Sprintf("%s/npm_node-fetch.js", cfg.CdnBasePath)
 		return
 	}
@@ -1176,9 +1193,9 @@ func (task *BuildTask) resolveExternalModule(specifier string, kind api.ResolveK
 	// common npm dependency
 	pkgName, version, subpath := splitPkgPath(specifier)
 	if version == "" {
-		if pkgName == task.Pkg.Name {
-			version = task.Pkg.Version
-		} else if pkg, ok := task.Args.deps.Get(pkgName); ok {
+		if pkgName == task.pkg.Name {
+			version = task.pkg.Version
+		} else if pkg, ok := task.args.deps.Get(pkgName); ok {
 			version = pkg.Version
 		} else if v, ok := task.npm.Dependencies[pkgName]; ok {
 			version = v
@@ -1189,8 +1206,8 @@ func (task *BuildTask) resolveExternalModule(specifier string, kind api.ResolveK
 		}
 	}
 	// force the version of 'react' (as dependency) equals to 'react-dom'
-	if task.Pkg.Name == "react-dom" && pkgName == "react" {
-		version = task.Pkg.Version
+	if task.pkg.Name == "react-dom" && pkgName == "react" {
+		version = task.pkg.Version
 	}
 
 	pkg := Pkg{
@@ -1209,7 +1226,7 @@ func (task *BuildTask) resolveExternalModule(specifier string, kind api.ResolveK
 	{
 		// ban file specifier
 		if strings.HasPrefix(version, "file:") {
-			resolvedPath = fmt.Sprintf("/error.js?type=unsupported-file-dependency&name=%s&importer=%s", pkgName, task.Pkg)
+			resolvedPath = fmt.Sprintf("/error.js?type=unsupported-file-dependency&name=%s&importer=%s", pkgName, task.pkg)
 			return
 		}
 		if strings.HasPrefix(version, "npm:") {
@@ -1217,7 +1234,7 @@ func (task *BuildTask) resolveExternalModule(specifier string, kind api.ResolveK
 		} else if strings.HasPrefix(version, "git+ssh://") || strings.HasPrefix(version, "git+https://") || strings.HasPrefix(version, "git://") {
 			gitUrl, err := url.Parse(version)
 			if err != nil || gitUrl.Hostname() != "github.com" {
-				resolvedPath = fmt.Sprintf("/error.js?type=unsupported-git-dependency&name=%s&importer=%s", pkgName, task.Pkg)
+				resolvedPath = fmt.Sprintf("/error.js?type=unsupported-git-dependency&name=%s&importer=%s", pkgName, task.pkg)
 				return
 			}
 			repo := strings.TrimSuffix(gitUrl.Path[1:], ".git")
@@ -1259,10 +1276,10 @@ func (task *BuildTask) resolveExternalModule(specifier string, kind api.ResolveK
 	}
 
 	args := BuildArgs{
-		alias:      task.Args.alias,
-		conditions: task.Args.conditions,
-		deps:       task.Args.deps,
-		external:   task.Args.external,
+		alias:      task.args.alias,
+		conditions: task.args.conditions,
+		deps:       task.args.deps,
+		external:   task.args.external,
 		exports:    newStringSet(),
 	}
 	fixBuildArgs(&args, pkg)
@@ -1275,7 +1292,7 @@ func (task *BuildTask) resolveExternalModule(specifier string, kind api.ResolveK
 		if pkg.Name == "es5-ext" {
 			resolvedPath = strings.ReplaceAll(resolvedPath, "/#/", "/%23/")
 		}
-		params := []string{"target=" + task.Target}
+		params := []string{"target=" + task.target}
 		if len(args.alias) > 0 {
 			var alias []string
 			for k, v := range args.alias {
@@ -1296,7 +1313,7 @@ func (task *BuildTask) resolveExternalModule(specifier string, kind api.ResolveK
 		if args.external.Len() > 0 {
 			params = append(params, "external="+strings.Join(args.external.Values(), ","))
 		}
-		if task.Dev {
+		if task.dev {
 			params = append(params, "dev")
 		}
 		if task.isDenoTarget() {
@@ -1309,22 +1326,15 @@ func (task *BuildTask) resolveExternalModule(specifier string, kind api.ResolveK
 	return
 }
 
-func (task *BuildTask) storeToDB() {
-	err := db.Put(task.ID(), mustEncodeJSON(task.esm))
-	if err != nil {
-		log.Errorf("db: %v", err)
-	}
-}
-
-func (task *BuildTask) checkDTS() {
-	name := task.Pkg.Name
-	submodule := task.Pkg.SubModule
+func (task *BuildTask) checkDTS() string {
+	name := task.pkg.Name
+	submodule := task.pkg.SubModule
 	var dts string
 	if task.npm.Types != "" {
-		dts = task.toTypesPath(task.wd, task.npm, "", encodeBuildArgsPrefix(task.Args, task.Pkg, true), submodule)
+		dts = task.toTypesPath(task.wd, task.npm, "", encodeBuildArgsPrefix(task.args, task.pkg, true), submodule)
 	} else if !strings.HasPrefix(name, "@types/") {
 		versions := []string{"latest"}
-		versionParts := strings.Split(task.Pkg.Version, ".")
+		versionParts := strings.Split(task.pkg.Version, ".")
 		if len(versionParts) > 2 {
 			versions = []string{
 				"~" + strings.Join(versionParts[:2], "."), // minor
@@ -1333,7 +1343,7 @@ func (task *BuildTask) checkDTS() {
 			}
 		}
 		typesPkgName := toTypesPackageName(name)
-		pkg, ok := task.Args.deps.Get(typesPkgName)
+		pkg, ok := task.args.deps.Get(typesPkgName)
 		if ok {
 			// use the version of the `?deps` query if it exists
 			versions = append([]string{pkg.Version}, versions...)
@@ -1341,15 +1351,16 @@ func (task *BuildTask) checkDTS() {
 		for _, version := range versions {
 			p, _, err := getPackageInfo(task.resolveDir, typesPkgName, version)
 			if err == nil {
-				prefix := encodeBuildArgsPrefix(task.Args, Pkg{Name: p.Name}, true)
+				prefix := encodeBuildArgsPrefix(task.args, Pkg{Name: p.Name}, true)
 				dts = task.toTypesPath(task.wd, p, version, prefix, submodule)
 				break
 			}
 		}
 	}
 	if dts != "" {
-		task.esm.Dts = fmt.Sprintf("%s%s", task._ghPrefix(), dts)
+		return fmt.Sprintf("%s%s", task._ghPrefix(), dts)
 	}
+	return ""
 }
 
 func (task *BuildTask) buildDTS(dts string) {

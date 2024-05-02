@@ -3,7 +3,6 @@ package server
 import (
 	"crypto/sha1"
 	"encoding/hex"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
@@ -23,7 +22,7 @@ func (task *BuildTask) ID() string {
 		return task.id
 	}
 
-	pkg := task.Pkg
+	pkg := task.pkg
 	name := strings.TrimSuffix(path.Base(pkg.Name), ".js")
 	extname := ".mjs"
 
@@ -35,15 +34,15 @@ func (task *BuildTask) ID() string {
 			name = strings.ReplaceAll(name, "/#/", "/%23/")
 		}
 	}
-	if task.Target == "raw" {
+	if task.target == "raw" {
 		extname = ""
 	}
-	if task.Dev {
+	if task.dev {
 		name += ".development"
 	}
-	if task.Bundle {
+	if task.bundle {
 		name += ".bundle"
-	} else if task.NoBundle {
+	} else if task.noBundle {
 		name += ".nobundle"
 	}
 
@@ -52,19 +51,19 @@ func (task *BuildTask) ID() string {
 		task._ghPrefix(),
 		pkg.Name,
 		pkg.Version,
-		encodeBuildArgsPrefix(task.Args, task.Pkg, task.Target == "types"),
-		task.Target,
+		encodeBuildArgsPrefix(task.args, task.pkg, task.target == "types"),
+		task.target,
 		name,
 		extname,
 	)
-	if task.Target == "types" {
+	if task.target == "types" {
 		task.id = strings.TrimSuffix(task.id, extname)
 	}
 	return task.id
 }
 
 func (task *BuildTask) _ghPrefix() string {
-	if task.Pkg.FromGithub {
+	if task.pkg.FromGithub {
 		return "gh/"
 	}
 	return ""
@@ -81,7 +80,7 @@ func (task *BuildTask) getImportPath(pkg Pkg, buildArgsPrefix string) string {
 			name = strings.ReplaceAll(name, "/#/", "/%23/")
 		}
 	}
-	if task.Dev {
+	if task.dev {
 		name += ".development"
 	}
 	ghPrefix := ""
@@ -95,7 +94,7 @@ func (task *BuildTask) getImportPath(pkg Pkg, buildArgsPrefix string) string {
 		pkg.Name,
 		pkg.Version,
 		buildArgsPrefix,
-		task.Target,
+		task.target,
 		name,
 		extname,
 	)
@@ -121,7 +120,7 @@ func normalizeSavePath(pathname string) string {
 func (task *BuildTask) getPackageInfo(name string) (pkg Pkg, p NpmPackageInfo, fromPackageJSON bool, err error) {
 	pkgName, _, subpath := splitPkgPath(name)
 	var version string
-	if pkg, ok := task.Args.deps.Get(pkgName); ok {
+	if pkg, ok := task.args.deps.Get(pkgName); ok {
 		version = pkg.Version
 	} else if v, ok := task.npm.Dependencies[pkgName]; ok {
 		version = v
@@ -143,16 +142,16 @@ func (task *BuildTask) getPackageInfo(name string) (pkg Pkg, p NpmPackageInfo, f
 }
 
 func (task *BuildTask) isServerTarget() bool {
-	return task.Target == "deno" || task.Target == "denonext" || task.Target == "node"
+	return task.target == "deno" || task.target == "denonext" || task.target == "node"
 }
 
 func (task *BuildTask) isDenoTarget() bool {
-	return task.Target == "deno" || task.Target == "denonext"
+	return task.target == "deno" || task.target == "denonext"
 }
 
-func (task *BuildTask) analyze(forceCjsOnly bool) (esm *ESMBuild, npm NpmPackageInfo, reexport string, err error) {
+func (task *BuildTask) analyze(forceCjsOnly bool) (ret *BuildResult, npm NpmPackageInfo, reexport string, err error) {
 	wd := task.wd
-	pkg := task.Pkg
+	pkg := task.pkg
 
 	var p NpmPackageInfo
 	err = parseJSONFile(path.Join(wd, "node_modules", pkg.Name, "package.json"), &p)
@@ -161,18 +160,18 @@ func (task *BuildTask) analyze(forceCjsOnly bool) (esm *ESMBuild, npm NpmPackage
 	}
 
 	npm = task.normalizeNpmPackage(p)
-	esm = &ESMBuild{}
+	ret = &BuildResult{}
 
 	// Check if the supplied path name is actually a main export.
 	// See https://github.com/esm-dev/esm.sh/issues/578
 	if pkg.SubPath == path.Clean(npm.Main) || pkg.SubPath == path.Clean(npm.Module) {
-		task.Pkg.SubModule = ""
+		task.pkg.SubModule = ""
 		npm = task.normalizeNpmPackage(p)
 	}
 
 	defer func() {
-		esm.FromCJS = npm.Module == "" && npm.Main != ""
-		esm.TypesOnly = isTypesOnlyPackage(npm)
+		ret.FromCJS = npm.Module == "" && npm.Main != ""
+		ret.TypesOnly = isTypesOnlyPackage(npm)
 	}()
 
 	if pkg.SubModule != "" {
@@ -315,12 +314,12 @@ func (task *BuildTask) analyze(forceCjsOnly bool) (esm *ESMBuild, npm NpmPackage
 		}
 	}
 
-	if task.Target == "types" || isTypesOnlyPackage(npm) {
+	if task.target == "types" || isTypesOnlyPackage(npm) {
 		return
 	}
 
 	nodeEnv := "production"
-	if task.Dev {
+	if task.dev {
 		nodeEnv = "development"
 	}
 
@@ -328,8 +327,8 @@ func (task *BuildTask) analyze(forceCjsOnly bool) (esm *ESMBuild, npm NpmPackage
 		modulePath, namedExports, erro := esmLexer(wd, npm.Name, npm.Module)
 		if erro == nil {
 			npm.Module = modulePath
-			esm.NamedExports = namedExports
-			esm.HasExportDefault = includes(namedExports, "default")
+			ret.NamedExports = namedExports
+			ret.HasExportDefault = includes(namedExports, "default")
 			return
 		}
 		if erro.Error() != "not a module" {
@@ -340,17 +339,17 @@ func (task *BuildTask) analyze(forceCjsOnly bool) (esm *ESMBuild, npm NpmPackage
 		npm.Main = npm.Module
 		npm.Module = ""
 
-		var ret cjsExportsResult
-		ret, err = cjsLexer(wd, path.Join(wd, "node_modules", pkg.Name, modulePath), nodeEnv)
-		if err == nil && ret.Error != "" {
-			err = fmt.Errorf("cjsLexer: %s", ret.Error)
+		var cjs cjsExportsResult
+		cjs, err = cjsLexer(wd, path.Join(wd, "node_modules", pkg.Name, modulePath), nodeEnv)
+		if err == nil && cjs.Error != "" {
+			err = fmt.Errorf("cjsLexer: %s", cjs.Error)
 		}
 		if err != nil {
 			return
 		}
-		reexport = ret.Reexport
-		esm.HasExportDefault = ret.ExportDefault
-		esm.NamedExports = ret.Exports
+		reexport = cjs.Reexport
+		ret.HasExportDefault = cjs.ExportDefault
+		ret.NamedExports = cjs.Exports
 		log.Warnf("fake ES module '%s' of '%s'", npm.Main, npm.Name)
 		return
 	}
@@ -369,32 +368,32 @@ func (task *BuildTask) analyze(forceCjsOnly bool) (esm *ESMBuild, npm NpmPackage
 				return
 			}
 		}
-		var ret cjsExportsResult
+		var cjs cjsExportsResult
 		moduleName := npm.Name
 		if pkg.SubModule != "" {
 			moduleName += "/" + pkg.SubModule
 		}
-		ret, err = cjsLexer(wd, moduleName, nodeEnv)
-		if err == nil && ret.Error != "" {
-			err = fmt.Errorf("cjsLexer: %s", ret.Error)
+		cjs, err = cjsLexer(wd, moduleName, nodeEnv)
+		if err == nil && cjs.Error != "" {
+			err = fmt.Errorf("cjsLexer: %s", cjs.Error)
 		}
 		if err != nil {
 			return
 		}
-		reexport = ret.Reexport
-		esm.HasExportDefault = ret.ExportDefault
-		esm.NamedExports = ret.Exports
+		reexport = cjs.Reexport
+		ret.HasExportDefault = cjs.ExportDefault
+		ret.NamedExports = cjs.Exports
 	}
 	return
 }
 
 func (task *BuildTask) normalizeNpmPackage(p NpmPackageInfo) NpmPackageInfo {
-	if task.Pkg.FromGithub {
-		if p.Name != task.Pkg.Name {
+	if task.pkg.FromGithub {
+		if p.Name != task.pkg.Name {
 			p.PkgName = p.Name
-			p.Name = task.Pkg.Name
+			p.Name = task.pkg.Name
 		}
-		p.Version = task.Pkg.Version
+		p.Version = task.pkg.Version
 	} else {
 		p.Version = strings.TrimPrefix(p.Version, "v")
 	}
@@ -605,7 +604,7 @@ func (task *BuildTask) resolveConditions(p *NpmPackageInfo, exports interface{},
 	if pType == "module" || hasRequireCondition || hasNodeCondition {
 		conditions = append(conditions, "default")
 	}
-	switch task.Target {
+	switch task.target {
 	case "deno", "denonext":
 		targetConditions = []string{"deno", "worker"}
 		conditions = append(conditions, "browser")
@@ -616,11 +615,11 @@ func (task *BuildTask) resolveConditions(p *NpmPackageInfo, exports interface{},
 	case "node":
 		targetConditions = []string{"node"}
 	}
-	if task.Dev {
+	if task.dev {
 		targetConditions = append(targetConditions, "development")
 	}
-	if task.Args.conditions.Len() > 0 {
-		targetConditions = append(task.Args.conditions.Values(), targetConditions...)
+	if task.args.conditions.Len() > 0 {
+		targetConditions = append(task.args.conditions.Values(), targetConditions...)
 	}
 	for _, condition := range append(targetConditions, conditions...) {
 		v, ok := om.m[condition]
@@ -636,25 +635,6 @@ func (task *BuildTask) resolveConditions(p *NpmPackageInfo, exports interface{},
 			break
 		}
 	}
-}
-
-func queryESMBuild(id string) (*ESMBuild, bool) {
-	value, err := db.Get(id)
-	if err == nil && value != nil {
-		var esmb ESMBuild
-		err = json.Unmarshal(value, &esmb)
-		if err == nil {
-			if !esmb.TypesOnly {
-				_, err = fs.Stat(path.Join("builds", id))
-			}
-			if err == nil || os.IsExist(err) {
-				return &esmb, true
-			}
-		}
-		// delete the invalid db entry
-		db.Delete(id)
-	}
-	return nil, false
 }
 
 func esmLexer(wd string, packageName string, moduleSpecifier string) (resolvedName string, namedExports []string, err error) {
