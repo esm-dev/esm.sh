@@ -43,7 +43,7 @@ type BuildResult struct {
 	Deps             []string `json:"p,omitempty"`
 	Dts              string   `json:"t,omitempty"`
 	FromCJS          bool     `json:"c,omitempty"`
-	HasExportDefault bool     `json:"d,omitempty"`
+	HasDefaultExport bool     `json:"d,omitempty"`
 	NamedExports     []string `json:"-"`
 	PackageCSS       bool     `json:"s,omitempty"`
 	TypesOnly        bool     `json:"o,omitempty"`
@@ -169,7 +169,7 @@ func (task *BuildTask) build() (result *BuildResult, err error) {
 				return nil, err
 			}
 			result := &BuildResult{
-				HasExportDefault: true,
+				HasDefaultExport: true,
 			}
 			return result, nil
 		}
@@ -228,7 +228,7 @@ func (task *BuildTask) build() (result *BuildResult, err error) {
 		buf := bytes.NewBuffer(nil)
 		importPath := task.getImportPath(t.pkg, encodeBuildArgsPrefix(task.args, task.pkg, false))
 		fmt.Fprintf(buf, `export * from "%s";`, importPath)
-		if m.HasExportDefault {
+		if m.HasDefaultExport {
 			fmt.Fprintf(buf, "\n")
 			fmt.Fprintf(buf, `export { default } from "%s";`, importPath)
 		}

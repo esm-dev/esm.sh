@@ -38,14 +38,14 @@ var requireModeAllowList = []string{
 	"web-streams-ponyfill",
 }
 
-func initCJSLexerWorkDirectory() (err error) {
+func initCJSLexerNodeApp() (err error) {
 	wd := path.Join(cfg.WorkDir, "ns")
 	err = ensureDir(wd)
 	if err != nil {
 		return err
 	}
 
-	// install services
+	// install dependencies
 	cmd := exec.Command("pnpm", "i", "enhanced-resolve@5.16.0", "esm-cjs-lexer@0.10.0")
 	cmd.Dir = wd
 	var output []byte
@@ -55,7 +55,7 @@ func initCJSLexerWorkDirectory() (err error) {
 		return
 	}
 
-	// create ns script
+	// create cjs_lexer.js
 	js, err := embedFS.ReadFile("server/embed/cjs_lexer.js")
 	if err != nil {
 		panic(err)
@@ -64,25 +64,25 @@ func initCJSLexerWorkDirectory() (err error) {
 	return
 }
 
-type cjsExportsResult struct {
-	Reexport      string   `json:"reexport,omitempty"`
-	ExportDefault bool     `json:"exportDefault"`
-	Exports       []string `json:"exports"`
-	Error         string   `json:"error"`
-	Stack         string   `json:"stack"`
+type cjsLexerResult struct {
+	Reexport         string   `json:"reexport,omitempty"`
+	HasDefaultExport bool     `json:"hasDefaultExport"`
+	NamedExports     []string `json:"namedExports"`
+	Error            string   `json:"error"`
+	Stack            string   `json:"stack"`
 }
 
-func cjsLexer(cwd string, importPath string, nodeEnv string) (ret cjsExportsResult, err error) {
+func cjsLexer(cwd string, specifier string, nodeEnv string) (ret cjsLexerResult, err error) {
 	start := time.Now()
 	args := map[string]interface{}{
-		"cwd":        cwd,
-		"importPath": importPath,
-		"nodeEnv":    nodeEnv,
+		"cwd":       cwd,
+		"specifier": specifier,
+		"nodeEnv":   nodeEnv,
 	}
 
 	/* workaround for edge cases that can't be parsed by cjsLexer correctly */
 	for _, name := range requireModeAllowList {
-		if importPath == name || strings.HasPrefix(importPath, name+"/") {
+		if specifier == name || strings.HasPrefix(specifier, name+"/") {
 			args["requireMode"] = 1
 			break
 		}
@@ -94,7 +94,7 @@ func cjsLexer(cwd string, importPath string, nodeEnv string) (ret cjsExportsResu
 	var outBuf bytes.Buffer
 	var errBuf bytes.Buffer
 
-	cmd := exec.CommandContext(ctx, "node", "cjs_lexer.js")
+	cmd := exec.CommandContext(ctx, "node", "--experimental-permission", "--allow-fs-read=*", "cjs_lexer.js")
 	cmd.Dir = path.Join(cfg.WorkDir, "ns")
 	cmd.Stdin = bytes.NewBuffer(mustEncodeJSON(args))
 	cmd.Stdout = &outBuf
@@ -120,7 +120,7 @@ func cjsLexer(cwd string, importPath string, nodeEnv string) (ret cjsExportsResu
 			log.Errorf("[cjsLexer] %s", ret.Error)
 		}
 	} else {
-		log.Debugf("[cjsLexer] parse %s in %s", importPath, time.Since(start))
+		log.Debugf("[cjsLexer] parse %s in %s", specifier, time.Since(start))
 	}
 
 	return

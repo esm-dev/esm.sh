@@ -1103,7 +1103,7 @@ func esmHandler() rex.Handle {
 			}
 			header.Set("X-Esm-Id", esmId)
 			fmt.Fprintf(buf, `export * from "%s/%s";%s`, cfg.CdnBasePath, esmId, EOL)
-			if (ret.FromCJS || ret.HasExportDefault) && (exports.Len() == 0 || exports.Has("default")) {
+			if (ret.FromCJS || ret.HasDefaultExport) && (exports.Len() == 0 || exports.Has("default")) {
 				fmt.Fprintf(buf, `export { default } from "%s/%s";%s`, cfg.CdnBasePath, esmId, EOL)
 			}
 			if ret.FromCJS && exports.Len() > 0 {
@@ -1171,7 +1171,7 @@ func hasTargetSegment(path string) bool {
 func throwErrorJS(ctx *rex.Context, message string, static bool) interface{} {
 	buf := bytes.NewBuffer(nil)
 	fmt.Fprintf(buf, "/* esm.sh - error */\n")
-	fmt.Fprintf(buf, "throw new Error(%s);\n", strings.TrimSpace("[esm.sh] "+message))
+	fmt.Fprintf(buf, "throw new Error(%s);\n", mustEncodeJSON(strings.TrimSpace("[esm.sh] "+message)))
 	fmt.Fprintf(buf, "export default null;\n")
 	if static {
 		ctx.W.Header().Set("Cache-Control", ccImmutable)

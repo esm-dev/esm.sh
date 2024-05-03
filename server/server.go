@@ -137,7 +137,7 @@ func Serve(efs EmbedFS) {
 	} else {
 		accessLogger, err = logger.New(fmt.Sprintf("file:%s?buffer=32k&fileDateFormat=20060102", path.Join(cfg.LogDir, "access.log")))
 		if err != nil {
-			log.Fatalf("initiate access logger: %v", err)
+			log.Fatalf("failed to initialize access logger: %v", err)
 		}
 	}
 	accessLogger.SetQuite(true) // quite in terminal
@@ -148,7 +148,7 @@ func Serve(efs EmbedFS) {
 	}
 	nodeVer, pnpmVer, err := checkNodejs(nodejsInstallDir)
 	if err != nil {
-		log.Fatalf("check nodejs: %v", err)
+		log.Fatalf("nodejs: %v", err)
 	}
 	if cfg.NpmRegistry == "" {
 		output, err := exec.Command("npm", "config", "get", "registry").CombinedOutput()
@@ -158,9 +158,9 @@ func Serve(efs EmbedFS) {
 	}
 	log.Infof("nodejs: v%s, pnpm: %s, registry: %s", nodeVer, pnpmVer, cfg.NpmRegistry)
 
-	err = initCJSLexerWorkDirectory()
+	err = initCJSLexerNodeApp()
 	if err != nil {
-		log.Fatalf("init cjs-lexer: %v", err)
+		log.Fatalf("failed to initialize the cjs_lexer node app: %v", err)
 	}
 
 	if !cfg.DisableCompression {

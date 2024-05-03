@@ -328,7 +328,7 @@ func (task *BuildTask) analyze(forceCjsOnly bool) (ret *BuildResult, npm NpmPack
 		if erro == nil {
 			npm.Module = modulePath
 			ret.NamedExports = namedExports
-			ret.HasExportDefault = includes(namedExports, "default")
+			ret.HasDefaultExport = includes(namedExports, "default")
 			return
 		}
 		if erro.Error() != "not a module" {
@@ -339,7 +339,7 @@ func (task *BuildTask) analyze(forceCjsOnly bool) (ret *BuildResult, npm NpmPack
 		npm.Main = npm.Module
 		npm.Module = ""
 
-		var cjs cjsExportsResult
+		var cjs cjsLexerResult
 		cjs, err = cjsLexer(wd, path.Join(wd, "node_modules", pkg.Name, modulePath), nodeEnv)
 		if err == nil && cjs.Error != "" {
 			err = fmt.Errorf("cjsLexer: %s", cjs.Error)
@@ -348,8 +348,8 @@ func (task *BuildTask) analyze(forceCjsOnly bool) (ret *BuildResult, npm NpmPack
 			return
 		}
 		reexport = cjs.Reexport
-		ret.HasExportDefault = cjs.ExportDefault
-		ret.NamedExports = cjs.Exports
+		ret.HasDefaultExport = cjs.HasDefaultExport
+		ret.NamedExports = cjs.NamedExports
 		log.Warnf("fake ES module '%s' of '%s'", npm.Main, npm.Name)
 		return
 	}
@@ -368,7 +368,8 @@ func (task *BuildTask) analyze(forceCjsOnly bool) (ret *BuildResult, npm NpmPack
 				return
 			}
 		}
-		var cjs cjsExportsResult
+
+		var cjs cjsLexerResult
 		moduleName := npm.Name
 		if pkg.SubModule != "" {
 			moduleName += "/" + pkg.SubModule
@@ -381,8 +382,8 @@ func (task *BuildTask) analyze(forceCjsOnly bool) (ret *BuildResult, npm NpmPack
 			return
 		}
 		reexport = cjs.Reexport
-		ret.HasExportDefault = cjs.ExportDefault
-		ret.NamedExports = cjs.Exports
+		ret.HasDefaultExport = cjs.HasDefaultExport
+		ret.NamedExports = cjs.NamedExports
 	}
 	return
 }

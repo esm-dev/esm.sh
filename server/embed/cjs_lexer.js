@@ -4,11 +4,7 @@ const { promisify } = require("util");
 const { parse } = require("esm-cjs-lexer");
 const enhancedResolve = require("enhanced-resolve");
 
-const identRegexp = /^[a-zA-Z_\$][a-zA-Z0-9_\$]*$/;
-const resolve = promisify(enhancedResolve.create({
-  conditionNames: ["require", "node", "default"],
-  extensions: [".cjs", ".js", ".json"],
-}));
+const identRegexp = /^[a-zA-Z_\$][\w\$]*$/;
 const reservedWords = new Set([
   "abstract",
   "arguments",
@@ -142,26 +138,27 @@ function getJSONKeys(jsonFile) {
 }
 
 function verifyExports(names) {
-  const exportDefault = names.includes("default");
-  const exports = Array.from(
-    new Set(
-      names.filter((name) =>
-        identRegexp.test(name) && !reservedWords.has(name)
-      ),
-    ),
+  const hasDefaultExport = names.includes("default");
+  const namedExports = Array.from(
+    new Set(names.filter((name) => identRegexp.test(name) && !reservedWords.has(name))),
   );
   return {
-    exportDefault,
-    exports,
+    hasDefaultExport,
+    namedExports,
   };
 }
 
-async function parseCjsExports(input) {
-  const { cwd, importPath, requireMode, nodeEnv = "production" } = input;
-  const entry = importPath.startsWith("/") && /\.(js|cjs)$/.test(importPath)
-    ? importPath
-    : await resolve(cwd, importPath);
-  const exports = [];
+async function parseExports(input) {
+  const { cwd, specifier, requireMode, nodeEnv = "production" } = input;
+  const resolve = promisify(enhancedResolve.create({
+    conditionNames: ["require", "node", "default"],
+    extensions: [".cjs", ".js", ".json"],
+    restrictions: [dirname(cwd)],
+  }));
+  const entry = specifier.startsWith("/") && /\.(js|cjs)$/.test(specifier)
+    ? specifier
+    : await resolve(cwd, specifier);
+  const names = [];
 
   if (requireMode) {
     process.env.NODE_ENV = nodeEnv;
@@ -169,21 +166,19 @@ async function parseCjsExports(input) {
     if (isObject(mod) || typeof mod === "function") {
       for (const key of Object.keys(mod)) {
         if (typeof key === "string" && key !== "") {
-          exports.push(key);
+          names.push(key);
         }
       }
     }
-    return verifyExports(exports);
+    return verifyExports(names);
   }
 
   if (entry.endsWith(".json")) {
     return verifyExports(getJSONKeys(entry));
   }
 
-  if (
-    !entry.endsWith(".js") && !entry.endsWith(".cjs") && !entry.endsWith(".mjs")
-  ) {
-    return verifyExports(exports);
+  if (!entry.endsWith(".js") && !entry.endsWith(".cjs") && !entry.endsWith(".mjs")) {
+    return verifyExports(names);
   }
 
   const requires = [{ path: entry, callMode: false }];
@@ -192,37 +187,37 @@ async function parseCjsExports(input) {
     try {
       const filename = req.path.replace(/\0/g, "");
       const code = fs.readFileSync(filename, "utf-8");
-      const results = parse(filename, code, {
+      const result = parse(filename, code, {
         nodeEnv,
         callMode: req.callMode,
       });
       if (
-        results.reexports.length === 1 &&
-        /^[a-z@]/i.test(results.reexports[0]) &&
-        !results.reexports[0].endsWith("()") &&
-        !builtInNodeModules.has(results.reexports[0]) &&
-        results.exports.length === 0 &&
-        exports.length === 0
+        result.reexports.length === 1
+        && /^[a-z@]/i.test(result.reexports[0])
+        && !result.reexports[0].endsWith("()")
+        && !builtInNodeModules.has(result.reexports[0])
+        && result.exports.length === 0
+        && names.length === 0
       ) {
         return {
-          reexport: results.reexports[0],
-          exportDefault: false,
-          exports: [],
+          reexport: result.reexports[0],
+          hasDefaultExport: false,
+          namedExports: [],
         };
       }
-      exports.push(...results.exports);
-      for (let reexport of results.reexports) {
+      names.push(...result.exports);
+      for (let reexport of result.reexports) {
         const callMode = reexport.endsWith("()");
         if (callMode) {
           reexport = reexport.slice(0, -2);
         }
         if (builtInNodeModules.has(reexport)) {
           const mod = require(reexport);
-          exports.push(...Object.keys(mod));
+          names.push(...Object.keys(mod));
         } else {
           const path = await resolve(dirname(filename), reexport);
           if (path.endsWith(".json")) {
-            exports.push(...getJSONKeys(path));
+            names.push(...getJSONKeys(path));
           } else {
             requires.push({ path, callMode });
           }
@@ -233,7 +228,7 @@ async function parseCjsExports(input) {
     }
   }
 
-  return verifyExports(exports);
+  return verifyExports(names);
 }
 
 function readStdin() {
@@ -248,12 +243,10 @@ function readStdin() {
 async function main() {
   try {
     const input = JSON.parse(await readStdin());
-    const outout = await parseCjsExports(input);
-    process.stdout.write(JSON.stringify(outout));
+    const output = await parseExports(input);
+    process.stdout.write(JSON.stringify(output));
   } catch (err) {
-    process.stdout.write(
-      JSON.stringify({ error: err.message, stack: err.stack }),
-    );
+    process.stdout.write(JSON.stringify({ error: err.message, stack: err.stack }));
   }
   process.exit(0);
 }
