@@ -9,7 +9,7 @@ A [Cloudflare worker](https://www.cloudflare.com/products/workers) handles all r
 ## Installation
 
 ```bash
-npm install esm-worker@^0.135.0
+npm install esm-worker@0.135
 ```
 
 ## Configuration

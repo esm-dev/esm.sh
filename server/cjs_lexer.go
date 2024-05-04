@@ -16,7 +16,7 @@ import (
 
 const cjsLexerPkg = "esm-cjs-lexer@0.10.0"
 
-// allowlist for _invoke_ mode
+// use `require()` to get the module's exports that are not statically analyzable by esm-cjs-lexer
 var requireModeAllowList = []string{
 	"@babel/types",
 	"cheerio",
