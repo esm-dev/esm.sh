@@ -10,7 +10,11 @@ import (
 	"path"
 	"strings"
 	"time"
+
+	"github.com/evanw/esbuild/pkg/api"
 )
+
+const cjsLexerPkg = "esm-cjs-lexer@0.10.0"
 
 // allowlist for _invoke_ mode
 var requireModeAllowList = []string{
@@ -39,14 +43,13 @@ var requireModeAllowList = []string{
 }
 
 func initCJSLexerNodeApp() (err error) {
-	wd := path.Join(cfg.WorkDir, "ns")
+	wd := path.Join(cfg.WorkDir, "npm/"+cjsLexerPkg)
 	err = ensureDir(wd)
 	if err != nil {
 		return err
 	}
 
-	// install dependencies
-	cmd := exec.Command("pnpm", "i", "enhanced-resolve@5.16.0", "esm-cjs-lexer@0.10.0")
+	cmd := exec.Command("pnpm", "add", "--prefer-offline", cjsLexerPkg)
 	cmd.Dir = wd
 	var output []byte
 	output, err = cmd.CombinedOutput()
@@ -55,12 +58,17 @@ func initCJSLexerNodeApp() (err error) {
 		return
 	}
 
-	// create cjs_lexer.js
 	js, err := embedFS.ReadFile("server/embed/cjs_lexer.js")
 	if err != nil {
-		panic(err)
+		return
 	}
-	err = os.WriteFile(path.Join(wd, "cjs_lexer.js"), js, 0644)
+
+	minJs, err := minify(string(js), api.ESNext, api.LoaderJS)
+	if err != nil {
+		return
+	}
+
+	err = os.WriteFile(path.Join(wd, "cjs_lexer.js"), minJs, 0644)
 	return
 }
 
@@ -72,10 +80,10 @@ type cjsLexerResult struct {
 	Stack            string   `json:"stack"`
 }
 
-func cjsLexer(cwd string, specifier string, nodeEnv string) (ret cjsLexerResult, err error) {
+func cjsLexer(wd string, specifier string, nodeEnv string) (ret cjsLexerResult, err error) {
 	start := time.Now()
 	args := map[string]interface{}{
-		"cwd":       cwd,
+		"wd":        wd,
 		"specifier": specifier,
 		"nodeEnv":   nodeEnv,
 	}
@@ -94,8 +102,14 @@ func cjsLexer(cwd string, specifier string, nodeEnv string) (ret cjsLexerResult,
 	var outBuf bytes.Buffer
 	var errBuf bytes.Buffer
 
-	cmd := exec.CommandContext(ctx, "node", "--experimental-permission", "--allow-fs-read=*", "cjs_lexer.js")
-	cmd.Dir = path.Join(cfg.WorkDir, "ns")
+	cmd := exec.CommandContext(
+		ctx,
+		"node",
+		"--experimental-permission",
+		"--allow-fs-read="+cfg.WorkDir+"/npm/*",
+		"cjs_lexer.js",
+	)
+	cmd.Dir = path.Join(cfg.WorkDir, "npm/"+cjsLexerPkg)
 	cmd.Stdin = bytes.NewBuffer(mustEncodeJSON(args))
 	cmd.Stdout = &outBuf
 	cmd.Stderr = &errBuf
