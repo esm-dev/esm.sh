@@ -1,7 +1,7 @@
 # Build Stage
 FROM golang:1.22-alpine AS build-stage
 
-ENV ESM_SH_VERSION v135_1
+ENV ESM_SH_VERSION v136
 ENV ESM_SH_GIT_URL https://github.com/esm-dev/esm.sh
 
 RUN apk update && apk add --no-cache git
@@ -11,7 +11,7 @@ WORKDIR /tmp/esm.sh
 RUN CGO_ENABLED=0 GOOS=linux go build -o esmd main.go
 
 # Release Stage
-FROM node:20-alpine AS release-stage
+FROM node:22-alpine AS release-stage
 
 RUN apk update && apk add --no-cache git libcap-utils
 RUN npm i -g pnpm

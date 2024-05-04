@@ -16,9 +16,8 @@ import (
 )
 
 const (
-	nodejsMinVersion = 20
-	nodejsLatestLTS  = "20.11.1"
-	nodeTypesVersion = "20.11.20"
+	nodejsMinVersion = 22
+	nodeTypesVersion = "20.12.8"
 	denoStdVersion   = "0.177.1"
 )
 
@@ -76,15 +75,11 @@ var nodejsInternalModules = map[string]bool{
 	"zlib":                true,
 }
 
-var denoNextUnspportedNodeModules = map[string]bool{
-	"inspector": true,
-}
-
 func checkNodejs(installDir string) (nodeVersion string, pnpmVersion string, err error) {
 	nodeVersion, major, err := getNodejsVersion()
-	usingSystemNodejs := err == nil && major >= nodejsMinVersion
+	useSystemNodejs := err == nil && major >= nodejsMinVersion
 
-	if !usingSystemNodejs {
+	if !useSystemNodejs {
 		PATH := os.Getenv("PATH")
 		nodeBinDir := path.Join(installDir, "bin")
 		if !strings.Contains(PATH, nodeBinDir) {
@@ -92,11 +87,16 @@ func checkNodejs(installDir string) (nodeVersion string, pnpmVersion string, err
 		}
 		nodeVersion, major, err = getNodejsVersion()
 		if err != nil || major < nodejsMinVersion {
-			err = installNodejs(installDir, nodejsLatestLTS)
+			var latestVersion string
+			latestVersion, err = getNodejsLatestVersion()
 			if err != nil {
 				return
 			}
-			log.Infof("nodejs %s installed", nodejsLatestLTS)
+			err = installNodejs(installDir, latestVersion)
+			if err != nil {
+				return
+			}
+			log.Infof("nodejs %s installed", latestVersion)
 		}
 		nodeVersion, major, err = getNodejsVersion()
 	}
@@ -134,6 +134,27 @@ func getNodejsVersion() (version string, major int, err error) {
 	return
 }
 
+func getNodejsLatestVersion() (verison string, err error) {
+	var res *http.Response
+	res, err = http.Get(fmt.Sprintf("https://nodejs.org/download/release/latest-v%d.x/", nodejsMinVersion))
+	if err != nil {
+		return
+	}
+	defer res.Body.Close()
+	var body []byte
+	body, err = io.ReadAll(res.Body)
+	if err != nil {
+		return
+	}
+	i := strings.Index(string(body), fmt.Sprintf("node-v%d.", nodejsMinVersion))
+	if i < 0 {
+		err = fmt.Errorf("no nodejs version found")
+		return
+	}
+	verison, _ = utils.SplitByFirstByte(string(body[i+5:]), '-')
+	return
+}
+
 func installNodejs(installDir string, version string) (err error) {
 	arch := runtime.GOARCH
 	switch arch {
@@ -142,7 +163,7 @@ func installNodejs(installDir string, version string) (err error) {
 	case "386":
 		arch = "x86"
 	}
-	dlURL := fmt.Sprintf("https://nodejs.org/dist/v%s/node-v%s-%s-%s.tar.xz", version, version, runtime.GOOS, arch)
+	dlURL := fmt.Sprintf("https://nodejs.org/dist/%s/node-%s-%s-%s.tar.xz", version, version, runtime.GOOS, arch)
 	resp, err := http.Get(dlURL)
 	if err != nil {
 		err = fmt.Errorf("download nodejs: %v", err)

@@ -79,6 +79,11 @@ var nativeNodePackages = []string{
 	"zlib-sync",
 }
 
+// unsupported node modules for `denonext` target
+var denoNextUnspportedNodeModules = map[string]bool{
+	"inspector": true,
+}
+
 // force to use `npm:` specifier for `denonext` target to fix `createRequire` issue
 var forceNpmSpecifiers = map[string]bool{
 	"css-tree": true,
