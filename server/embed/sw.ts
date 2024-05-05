@@ -8,7 +8,6 @@ import type { ArchiveEntry, FireOptions, Plugin, SW } from "./types/sw.d.ts";
 
 const doc: Document | undefined = globalThis.document;
 const kSw = "esm.sh/sw";
-const kMessage = "message";
 const kTypeEsmArchive = "application/esm-archive";
 
 /**
@@ -72,7 +71,6 @@ class Archive {
 
 /** class `SWImpl` implements the `SW` interface. */
 class SWImpl implements SW {
-  private _swModule: string | null = null;
   private _swActive: ServiceWorker | null = null;
   private _archive: Archive | null = null;
   private _fetchListeners: ((event: FetchEvent) => void)[] = [];
@@ -106,74 +104,59 @@ class SWImpl implements SW {
   }
 
   async fire(options: FireOptions = {}) {
-    const sw = navigator.serviceWorker;
-    if (!sw) {
-      throw new Error("Service Worker not supported");
+    const serviceWorker = navigator.serviceWorker;
+    if (!serviceWorker) {
+      panic("Service Worker not supported");
     }
-
-    const { main, swModule = "/sw.js", swUpdateViaCache } = options;
-    if (this._swModule === swModule) {
-      throw new Error("Service Worker already registered");
-    }
-    this._swModule = swModule;
 
     // add preload link for the main module if it's provided
-    if (main) {
-      appendElement("link", { rel: "modulepreload", href: main });
-    }
-
-    // register Service Worker
-    const swr = await sw.register(this._swModule, {
-      type: "module",
-      updateViaCache: swUpdateViaCache,
-    });
-
-    let resolve: (sw: ServiceWorker) => void;
-    let reject: (err: any) => void;
-    let promise = new Promise<ServiceWorker>((res, rej) => {
-      resolve = res;
-      reject = rej;
-    });
-    const tryFireApp = (firstInstall = false) => {
-      if (swr.active?.state === "activated") {
-        const { active } = swr;
-        this._fireApp(active, firstInstall).then(() => {
-          main && appendElement("script", { type: "module", src: main });
-          resolve(active);
-        }).catch(reject);
-      }
-    };
-
-    // detect Service Worker update available and wait for it to become installed
-    swr.onupdatefound = () => {
-      const { installing } = swr;
-      if (installing) {
-        installing.onerror = reject;
-        installing.onstatechange = () => {
-          const { waiting } = swr;
-          // it's first install
-          if (waiting && !sw.controller) {
-            waiting.onstatechange = () => tryFireApp(true);
-          }
-        };
-      }
-    };
+    options.main && appendElement("link", { rel: "modulepreload", href: options.main });
 
     // detect controller change
-    sw.oncontrollerchange = this.onUpdateFound;
+    serviceWorker.oncontrollerchange = () => this.onUpdateFound();
 
-    // fire app immediately if there's an activated Service Worker
-    tryFireApp();
+    return new Promise<ServiceWorker>(async (resolve, reject) => {
+      const swr = await serviceWorker.register(options.swModule ?? "/sw.js", {
+        type: "module",
+        updateViaCache: options.swUpdateViaCache,
+      });
+      const onActive = (firstInstall = false) => {
+        if (swr.active?.state === "activated") {
+          const active = swr.active;
+          this._onFire(active, firstInstall).then(() => {
+            // add main script tag if it's provided
+            options.main && appendElement("script", { type: "module", src: options.main });
+            resolve(active);
+          }).catch(reject);
+        }
+      };
 
-    return promise;
+      // detect Service Worker install/update available and wait for it to become installed
+      swr.onupdatefound = () => {
+        const installing = swr.installing;
+        if (installing) {
+          installing.onerror = reject;
+          installing.onstatechange = () => {
+            const waiting = swr.waiting;
+            // it's first install
+            if (waiting && !serviceWorker.controller) {
+              waiting.onstatechange = () => onActive(true);
+            }
+          };
+        }
+      };
+
+      // fire app immediately if there's an activated Service Worker
+      onActive();
+    });
   }
 
-  private async _fireApp(swActive: ServiceWorker, firstInstall = false) {
-    // download esm archive and and send it to the Service Worker if has any
+  private async _onFire(swActive: ServiceWorker, firstInstall = false) {
+    // download esm-archive and and send it to the Service Worker if has any
     queryElements<HTMLLinkElement>(`link[type^="${kTypeEsmArchive}"][href]`, (el, i) => {
       const p = fetch(el.href).then((res) => {
         if (!res.ok) {
-          throw new Error("Failed to download esm archive: " + (res.statusText ?? res.status));
+          panic("Failed to download esm-archive: " + (res.statusText ?? res.status));
         }
         return res.arrayBuffer();
       }).then(async (arrayBuffer) => {
@@ -181,7 +164,7 @@ class SWImpl implements SW {
         if (checksum) {
           const buf = await crypto.subtle.digest("SHA-256", arrayBuffer);
           if (btoa(String.fromCharCode(...new Uint8Array(buf))) !== checksum) {
-            throw new Error("Checksum mismatch: " + checksum);
+            panic("Checksum mismatch: " + checksum);
           }
         }
         return new Promise<void>((resolve, reject) => {
@@ -224,7 +207,7 @@ class SWImpl implements SW {
   listen() {
     // @ts-expect-error missing types
     if (typeof clients === "undefined") {
-      throw new Error("Service Worker scope not found.");
+      panic("Service Worker scope not found.");
     }
 
     const on: typeof addEventListener = addEventListener;
@@ -232,11 +215,11 @@ class SWImpl implements SW {
     const cache = caches.open(kSw);
     this._promises.push(
       cache.then((cache) =>
-        cache.match("/" + kTypeEsmArchive).then((res) => {
+        cache.match("/" + kTypeEsmArchive).then((res) =>
           res?.arrayBuffer().then((buf) => {
             this._archive = new Archive(buf);
-          });
-        })
+          })
+        )
       ),
     );
 
@@ -278,7 +261,7 @@ class SWImpl implements SW {
       }
     });
 
-    on(kMessage, async (evt) => {
+    on("message", async (evt) => {
       const { data } = evt;
       if (Array.isArray(data)) {
         const [_idx, buffer, gz] = data;
@@ -298,11 +281,11 @@ class SWImpl implements SW {
                 bc.postMessage(2);
               }
               this._archive = archive;
-              cache.then((cache) => cache.put("/" + kTypeEsmArchive, createResponse(buffer)));
+              cache.then((cache) => cache.put("/" + kTypeEsmArchive, createResponse(data)));
             }
           } catch (err) {
             bc.postMessage(0);
-            console.error(err[kMessage]);
+            console.error(err);
           }
         }
       }
@@ -315,7 +298,7 @@ function queryElements<T extends Element>(
   selectors: string,
   callback: (value: T, index: number) => void,
 ) {
-  // @ts-expect-error throw error if document is not available
+  // @ts-expect-error throw error if the `document` is undefined
   doc.querySelectorAll(selectors).forEach(callback);
 }
 
@@ -328,13 +311,18 @@ function createResponse(
   return new Response(body, { headers, status });
 }
 
-/** append an element to the document. */
-function appendElement(tag: string, attrs: Record<string, string>, parent: "head" | "body" = "head") {
-  const el = doc!.createElement(tag);
+/** append an element to the head. */
+function appendElement(tagName: string, attrs: Record<string, string>) {
+  const el = doc!.createElement(tagName);
   for (const [k, v] of Object.entries(attrs)) {
     el[k] = v;
   }
-  doc![parent].appendChild(el);
+  doc!.head.appendChild(el);
+}
+
+/** panic with the given message. */
+function panic(message: string) {
+  throw new Error(message);
 }
 
 export const sw = new SWImpl();
