@@ -225,11 +225,15 @@ class SWImpl implements SW {
       cache.then((cache) =>
         cache.match("/" + kTypeEsmArchive).then((res) =>
           res?.arrayBuffer().then((buf) => {
+<<<<<<< HEAD
             try {
               this._archive = new Archive(buf);
             } catch (err) {
               // ignore
             }
+=======
+            this._archive = new Archive(buf);
+>>>>>>> ba8eb0e (sw: fix esm-archive cache)
           })
         )
       ),
