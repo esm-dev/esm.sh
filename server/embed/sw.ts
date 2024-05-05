@@ -169,9 +169,17 @@ class SWImpl implements SW {
         }
         return new Promise<void>((resolve, reject) => {
           new BroadcastChannel(kSw).onmessage = ({ data }) => {
-            data === 0 && reject(new Error("Invalid esm-archive format"));
-            data === 1 && resolve();
-            data === 2 && setTimeout(() => this.onUpdateFound(), 0);
+            if (data === 0) {
+              reject(new Error("Invalid esm-archive format"));
+            } else if (data === 1) {
+              if (firstInstall) {
+                resolve();
+              } else {
+                this.onUpdateFound();
+              }
+            } else if (data === 2) {
+              resolve();
+            }
           };
           swActive.postMessage([i, arrayBuffer, el.type.endsWith("+gzip")]);
         });
@@ -217,7 +225,11 @@ class SWImpl implements SW {
       cache.then((cache) =>
         cache.match("/" + kTypeEsmArchive).then((res) =>
           res?.arrayBuffer().then((buf) => {
-            this._archive = new Archive(buf);
+            try {
+              this._archive = new Archive(buf);
+            } catch (err) {
+              // ignore
+            }
           })
         )
       ),
@@ -274,15 +286,13 @@ class SWImpl implements SW {
               ).arrayBuffer();
             }
             const archive = new Archive(data);
-            bc.postMessage(1);
-            if (archive.checksum !== this._archive?.checksum) {
-              // ask clients to reload if the archive has changed
-              if (this._archive) {
-                bc.postMessage(2);
-              }
+            const currentArchive = this._archive;
+            const stale = !currentArchive || archive.checksum !== currentArchive.checksum;
+            if (stale) {
               this._archive = archive;
               cache.then((cache) => cache.put("/" + kTypeEsmArchive, createResponse(data)));
             }
+            bc.postMessage(stale ? 1 : 2);
           } catch (err) {
             bc.postMessage(0);
             console.error(err);
