@@ -26,6 +26,7 @@ type GitRef struct {
 // list repo refs using `git ls-remote repo`
 func listRepoRefs(repo string) (refs []GitRef, err error) {
 	cacheKey := fmt.Sprintf("git ls-remote %s", repo)
+
 	lock := getFetchLock(cacheKey)
 	lock.Lock()
 	defer lock.Unlock()
