@@ -254,7 +254,7 @@ class SWImpl implements SW {
       const pathOrHref = isSameOrigin ? pathname : request.url;
       const archive = this._archive;
       const listeners = this._fetchListeners;
-      const respondWith = evt.respondWith.bind(evt);
+      const respondWith = (res: Response | Promise<Response>) => evt.respondWith(res);
       if (archive?.exists(pathOrHref)) {
         const file = archive.openFile(pathOrHref)!;
         respondWith(createResponse(file, { "content-type": file.type }));

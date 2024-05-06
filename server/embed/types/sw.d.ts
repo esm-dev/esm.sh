@@ -1,14 +1,14 @@
-export interface Plugin {
-  (sw: Omit<SW, "fire" | "listen">): void;
-  displayName?: string;
-}
-
 export interface ArchiveEntry {
   name: string;
   type: string;
   lastModified: number;
   offset: number;
   size: number;
+}
+
+export interface Plugin {
+  (sw: Omit<SW, "fire" | "listen">): void;
+  displayName?: string;
 }
 
 export interface FireOptions {
