@@ -650,31 +650,25 @@ function withESMWorker(middleware?: Middleware, cache: Cache = (caches as any).d
       });
     }
 
-    // redirect `/@types/PKG` to `.d.ts` files
-    if (pkgId.startsWith("@types/") && (subPath === "" || !isDtsFile(subPath))) {
+    // redirect `/@types/PKG` to it's main dts file
+    if (pkgId.startsWith("@types/") && subPath === "") {
       return ctx.withCache(async () => {
-        let p = pathname;
-        if (subPath !== "") {
-          p += "~.d.ts";
-        } else {
-          const headers = new Headers();
-          if (env.NPM_TOKEN) {
-            headers.set("Authorization", `Bearer ${env.NPM_TOKEN}`);
-          }
-          const res = await fetch(
-            new URL(pkgId, env.NPM_REGISTRY ?? defaultNpmRegistry),
-            { headers },
-          );
-          if (!res.ok) {
-            if (res.status === 404 || res.status === 401) {
-              return errPkgNotFound(pkgId);
-            }
-            return new Response(res.body, { status: res.status, headers });
-          }
-          const pkgJson: PackageInfo = await res.json();
-          p += "/" + (pkgJson.types || pkgJson.typings || pkgJson.main || "index.d.ts");
+        const headers = new Headers();
+        if (env.NPM_TOKEN) {
+          headers.set("Authorization", `Bearer ${env.NPM_TOKEN}`);
         }
-        return redirect(new URL(p, url), 301);
+        const res = await fetch(
+          new URL(pkgId, env.NPM_REGISTRY ?? defaultNpmRegistry),
+          { headers },
+        );
+        if (!res.ok) {
+          if (res.status === 404 || res.status === 401) {
+            return errPkgNotFound(pkgId);
+          }
+          return new Response(res.body, { status: res.status, headers });
+        }
+        const pkgJson: PackageInfo = await res.json();
+        return redirect(new URL("/" + (pkgJson.types || pkgJson.typings || pkgJson.main || "index.d.ts"), url), 301);
       });
     }
 
