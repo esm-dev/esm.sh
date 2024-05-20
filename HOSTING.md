@@ -18,9 +18,6 @@ To configure the server, create a `config.json` file then pass it to the server 
 // config.json
 {
   "port": 8080,
-  "workDir": "/var/www/esmd",
-  "storage": "local:/var/www/esmd/storage",
-  "origin": "https://esm.sh",
   "npmRegistry": "https://registry.npmjs.org/",
   "npmToken": "xxxxxx"
 }
@@ -76,15 +73,15 @@ docker run -p 8080:8080 \
 
 Available environment variables:
 
-- `CDN_ORIGIN`: The origin of CDN, default is using the origin of the request.
-- `CDN_BASE_PATH`: The base path of CDN, default is "/".
-- `NPM_REGISTRY`: The NPM registry, default is "https://registry.npmjs.org/".
-- `NPM_TOKEN`: The NPM token for private packages.
-- `NPM_REGISTRY_SCOPE`: The NPM registry scope, default is no scope.
-- `NPM_USER`: The NPM user for private packages.
-- `NPM_PASSWORD`: The NPM password for private packages.
 - `AUTH_SECRET`: The server auth secret, default is no authrization check.
-- `DISABLE_COMPRESSION`: Disable compression, default is false.
+- `BASE_PATH`: The base path of CDN, default is "/".
+- `DISABLE_COMPRESSION`: Disable http compression, default is false.
+- `DISABLE_SOURCEMAP`: Disable generating source map for build js files, default is false.
+- `LOG_LEVEL`: The log level, available values are ["debug", "info", "warn", "error"], default is "info".
+- `NPM_REGISTRY`: The global NPM registry, default is "https://registry.npmjs.org/".
+- `NPM_TOKEN`: The access token for the global NPM registry.
+- `NPM_USER`: The access user for the global NPM registry.
+- `NPM_PASSWORD`: The access password for the global NPM registry.
 
 You can also create your own Dockerfile with `ghcr.io/esm-dev/esm.sh`:
 
@@ -93,10 +90,3 @@ FROM ghcr.io/esm-dev/esm.sh:v135
 ADD ./config.json /etc/esmd/config.json
 CMD ["esmd", "--config", "/etc/esmd/config.json"]
 ```
-
-## Deploy with Cloudflare Workers
-
-We use [Cloudflare Workers](https://workers.cloudflare.com/) as the front layer to handle and cache esm.sh requests at
-edge(earth). And we open sourced the code, you can use it to build your own esm.sh CDN that's running globally.
-
-More details check [esm-worker](./packages/esm-worker/README.md).

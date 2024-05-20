@@ -26,7 +26,7 @@ var (
 	bytesStripleSlash = []byte{'/', '/', '/'}
 )
 
-func walkDts(r io.Reader, buf *bytes.Buffer, resolve func(specifier string, kind string, position int) string) (err error) {
+func walkDts(r io.Reader, buf *bytes.Buffer, resolve func(specifier string, kind string, position int) (resovledPath string, err error)) (err error) {
 	var commentScope bool
 	var importExportScope bool
 	scanner := bufio.NewScanner(r)
@@ -64,7 +64,11 @@ func walkDts(r io.Reader, buf *bytes.Buffer, resolve func(specifier string, kind
 					if format == "path" {
 						kind = "referencePath"
 					}
-					res := resolve(path, kind, buf.Len())
+					var res string
+					res, err = resolve(path, kind, buf.Len())
+					if err != nil {
+						return
+					}
 					if format == "types" && isHttpSepcifier(res) {
 						format = "path"
 					}
@@ -112,7 +116,12 @@ func walkDts(r io.Reader, buf *bytes.Buffer, resolve func(specifier string, kind
 							if len(a) == 3 {
 								buf.Write(a[0])
 								buf.Write(q)
-								buf.WriteString(resolve(string(a[1]), "importExpr", buf.Len()))
+								var res string
+								res, err = resolve(string(a[1]), "importExpr", buf.Len())
+								if err != nil {
+									return
+								}
+								buf.WriteString(res)
 								buf.Write(q)
 								buf.Write(a[2])
 							} else {
@@ -128,16 +137,24 @@ func walkDts(r io.Reader, buf *bytes.Buffer, resolve func(specifier string, kind
 									a = bytes.Split(importCallExpr, q)
 								}
 								if len(a) == 3 {
-									buf := bytes.NewBuffer(nil)
-									buf.Write(a[0])
-									buf.Write(q)
-									buf.WriteString(resolve(string(a[1]), "importCall", buf.Len()))
-									buf.Write(q)
-									buf.Write(a[2])
-									return buf.Bytes()
+									tmp := bytes.NewBuffer(nil)
+									tmp.Write(a[0])
+									tmp.Write(q)
+									var res string
+									res, err = resolve(string(a[1]), "importCall", buf.Len())
+									if err != nil {
+										return importCallExpr
+									}
+									tmp.WriteString(res)
+									tmp.Write(q)
+									tmp.Write(a[2])
+									return tmp.Bytes()
 								}
 								return importCallExpr
 							}))
+							if err != nil {
+								return
+							}
 						} else {
 							buf.Write(inlineToken)
 						}
@@ -151,7 +168,12 @@ func walkDts(r io.Reader, buf *bytes.Buffer, resolve func(specifier string, kind
 						if len(a) == 3 {
 							buf.Write(a[0])
 							buf.Write(q)
-							buf.WriteString(resolve(string(a[1]), "declareModule", buf.Len()))
+							var res string
+							res, err = resolve(string(a[1]), "declareModule", buf.Len())
+							if err != nil {
+								return
+							}
+							buf.WriteString(res)
 							buf.Write(q)
 							buf.Write(a[2])
 						} else {
@@ -166,13 +188,18 @@ func walkDts(r io.Reader, buf *bytes.Buffer, resolve func(specifier string, kind
 								a = bytes.Split(importCallExpr, q)
 							}
 							if len(a) == 3 {
-								buf := bytes.NewBuffer(nil)
-								buf.Write(a[0])
-								buf.Write(q)
-								buf.WriteString(resolve(string(a[1]), "importCall", buf.Len()))
-								buf.Write(q)
-								buf.Write(a[2])
-								return buf.Bytes()
+								tmp := bytes.NewBuffer(nil)
+								tmp.Write(a[0])
+								tmp.Write(q)
+								var res string
+								res, err = resolve(string(a[1]), "importCall", buf.Len())
+								if err != nil {
+									return importCallExpr
+								}
+								tmp.WriteString(res)
+								tmp.Write(q)
+								tmp.Write(a[2])
+								return tmp.Bytes()
 							}
 							return importCallExpr
 						}))

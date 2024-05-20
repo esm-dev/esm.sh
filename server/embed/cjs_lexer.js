@@ -181,7 +181,7 @@ function verifyExports(names) {
 }
 
 async function parseExports(input) {
-  const { wd, specifier, requireMode, nodeEnv = "production" } = input;
+  const [buildPkgName, wd, specifier, nodeEnv, requireMode] = input;
   const exportNames = [];
   const entry = specifier.startsWith("/") ? specifier : resolve(specifier);
 
@@ -211,8 +211,11 @@ async function parseExports(input) {
         return path;
       }
     }
-    if (specifier.startsWith(".") && containingFilename) {
-      return join(dirname(containingFilename), specifier);
+    if (specifier.startsWith("./") || specifier.startsWith("../")) {
+      if (containingFilename) {
+        return join(dirname(containingFilename), specifier);
+      }
+      return join(wd, "node_modules", buildPkgName, specifier);
     }
     const segments = specifier.split("/");
     let pkgName = segments[0];
@@ -273,7 +276,9 @@ async function parseExports(input) {
       }
     }
 
-    throw new Error(`Cannot resolve module '${specifier}'` + (containingFilename ? ` from '${containingFilename}' ` : "") + " in " + wd);
+    throw new Error(
+      `Cannot resolve module '${specifier}'` + (containingFilename ? ` from '${containingFilename}' ` : "") + " in " + wd,
+    );
   }
 
   if (requireMode) {

@@ -10,16 +10,16 @@ import (
 
 var regReadTailwindPreflightCSS = regexp.MustCompile(`[a-zA-Z.]+\.readFileSync\(.+?/preflight\.css"\),\s*"utf-?8"\)`)
 
-func (task *BuildTask) rewriteJS(js []byte) (ret []byte, dropSourceMap bool) {
-	switch task.pkg.Name {
+func (ctx *BuildContext) rewriteJS(js []byte) (ret []byte, dropSourceMap bool) {
+	switch ctx.pkg.Name {
 	case "axios", "cross-fetch", "whatwg-fetch":
-		if task.isDenoTarget() {
+		if ctx.isDenoTarget() {
 			xhr := []byte("\nimport \"https://deno.land/x/xhr@0.3.0/mod.ts\";")
 			return concatBytes(js, xhr), false
 		}
 
 	case "tailwindcss":
-		preflightCSSFile := path.Join(task.wd, "node_modules", "tailwindcss/src/css/preflight.css")
+		preflightCSSFile := path.Join(ctx.wd, "node_modules", "tailwindcss/src/css/preflight.css")
 		if existsFile(preflightCSSFile) {
 			data, err := os.ReadFile(preflightCSSFile)
 			if err == nil {
@@ -29,7 +29,7 @@ func (task *BuildTask) rewriteJS(js []byte) (ret []byte, dropSourceMap bool) {
 		}
 
 	case "iconv-lite":
-		if task.isDenoTarget() && semverLessThan(task.pkg.Version, "0.5.0") {
+		if ctx.isDenoTarget() && semverLessThan(ctx.pkg.Version, "0.5.0") {
 			old := "__Process$.versions.node"
 			new := "__Process$.versions.nope"
 			return bytes.Replace(js, []byte(old), []byte(new), 1), false

@@ -19,6 +19,7 @@ import (
 
 	"github.com/evanw/esbuild/pkg/api"
 	"github.com/ije/gox/utils"
+	"github.com/ije/gox/valid"
 	"github.com/ije/rex"
 )
 
@@ -31,31 +32,27 @@ var (
 	ctTypescript     = "application/typescript; charset=utf-8"
 )
 
-func esmHandler() rex.Handle {
+func router() rex.Handle {
 	startTime := time.Now()
 
 	return func(ctx *rex.Context) interface{} {
-		var (
-			cdnOrigin = getCdnOrign(ctx)
-			pathname  = ctx.Path.String()
-			header    = ctx.W.Header()
-			userAgent = ctx.R.UserAgent()
-		)
+		pathname := ctx.Path.String()
+		header := ctx.W.Header()
+		userAgent := ctx.R.UserAgent()
+
+		cdnOrigin := ctx.R.Header.Get("X-Real-Origin")
+		// use current host as cdn origin if not set
+		if cdnOrigin == "" {
+			proto := "http"
+			if ctx.R.TLS != nil {
+				proto = "https"
+			}
+			cdnOrigin = fmt.Sprintf("%s://%s", proto, ctx.R.Host)
+		}
 
 		// ban malicious requests
 		if strings.HasPrefix(pathname, "/.") || strings.HasSuffix(pathname, ".php") {
 			return rex.Status(404, "not found")
-		}
-
-		// Build prefix may only be served from "${cfg.CdnBasePath}/..."
-		if cfg.CdnBasePath != "" {
-			if strings.HasPrefix(pathname, cfg.CdnBasePath) {
-				pathname = strings.TrimPrefix(pathname, cfg.CdnBasePath)
-			} else {
-				url := strings.TrimPrefix(ctx.R.URL.String(), cfg.CdnBasePath)
-				url = fmt.Sprintf("%s/%s", cfg.CdnBasePath, url)
-				return rex.Redirect(url, http.StatusFound)
-			}
 		}
 
 		// handle POST requests
@@ -93,7 +90,7 @@ func esmHandler() rex.Handle {
 				hash := hex.EncodeToString(h.Sum(nil))
 
 				// if previous build exists, return it directly
-				savePath := fmt.Sprintf("modules/+%s.%s.mjs", hash, input.Target)
+				savePath := fmt.Sprintf("modules/%s.%s.mjs", hash, input.Target)
 				_, err = fs.Stat(savePath)
 				if err == nil {
 					r, err := fs.Open(savePath)
@@ -125,15 +122,19 @@ func esmHandler() rex.Handle {
 				packageName := ctx.Form.Value("package")
 				version := ctx.Form.Value("version")
 				github := ctx.Form.Has("github")
+				zoneId := ctx.Form.Value("zone-id")
 				if packageName == "" {
 					return rex.Err(400, "packageName is required")
 				}
 				prefix := packageName + "@"
+				if version != "" {
+					prefix += version
+				}
 				if github {
 					prefix = fmt.Sprintf("gh/%s", packageName)
 				}
-				if version != "" {
-					prefix += version
+				if zoneId != "" {
+					prefix = fmt.Sprintf("%s/%s", zoneId, prefix)
 				}
 				deletedRecords, err := db.DeleteAll(prefix)
 				if err != nil {
@@ -177,34 +178,31 @@ func esmHandler() rex.Handle {
 			if err != nil {
 				return err
 			}
-			readme = bytes.ReplaceAll(readme, []byte("./server/embed/"), []byte(cfg.CdnBasePath+"/embed/"))
+			readme = bytes.ReplaceAll(readme, []byte("./server/embed/"), []byte("/embed/"))
 			readme = bytes.ReplaceAll(readme, []byte("./HOSTING.md"), []byte("https://github.com/esm-dev/esm.sh/blob/main/HOSTING.md"))
-			readme = bytes.ReplaceAll(readme, []byte("https://esm.sh"), []byte(cdnOrigin+cfg.CdnBasePath))
+			readme = bytes.ReplaceAll(readme, []byte("https://esm.sh"), []byte(cdnOrigin))
 			readmeStrLit := mustEncodeJSON(string(readme))
 			html := bytes.ReplaceAll(indexHTML, []byte("'# README'"), readmeStrLit)
 			html = bytes.ReplaceAll(html, []byte("{VERSION}"), []byte(fmt.Sprintf("%d", VERSION)))
-			html = bytes.ReplaceAll(html, []byte("{basePath}"), []byte(cfg.CdnBasePath))
 			header.Set("Cache-Control", ccMustRevalidate)
 			header.Set("ETag", eTag)
 			return rex.Content("index.html", startTime, bytes.NewReader(html))
 
 		case "/status.json":
-			q := make([]map[string]interface{}, buildQueue.list.Len())
+			q := make([]map[string]interface{}, buildQueue.queue.Len())
 			i := 0
 
 			buildQueue.lock.RLock()
-			for el := buildQueue.list.Front(); el != nil; el = el.Next() {
-				t, ok := el.Value.(*queueTask)
+			for el := buildQueue.queue.Front(); el != nil; el = el.Next() {
+				t, ok := el.Value.(*QueueTask)
 				if ok {
 					m := map[string]interface{}{
-						"bundle":    t.bundle,
 						"clients":   t.clients,
 						"createdAt": t.createdAt.Format(http.TimeFormat),
-						"dev":       t.dev,
 						"inProcess": t.inProcess,
+						"path":      t.path,
 						"pkg":       t.pkg.String(),
 						"stage":     t.stage,
-						"target":    t.target,
 					}
 					if !t.startedAt.IsZero() {
 						m["startedAt"] = t.startedAt.Format(http.TimeFormat)
@@ -310,7 +308,7 @@ func esmHandler() rex.Handle {
 			}
 			header.Set("Content-Type", ctJavascript)
 			if targetViaUA {
-				addVary(header, "User-Agent")
+				appendVaryHeader(header, "User-Agent")
 			}
 			if ctx.Form.Value("v") != "" {
 				header.Set("Cache-Control", ccImmutable)
@@ -319,7 +317,7 @@ func esmHandler() rex.Handle {
 				header.Set("ETag", etag)
 			}
 			if pathname == "/sw" {
-				header.Set("X-Typescript-Types", fmt.Sprintf("%s%s/sw.d.ts", cdnOrigin, cfg.CdnBasePath))
+				header.Set("X-Typescript-Types", fmt.Sprintf("%s/sw.d.ts", cdnOrigin))
 			}
 			return code
 		}
@@ -327,7 +325,7 @@ func esmHandler() rex.Handle {
 		// serve embed assets
 		if strings.HasPrefix(pathname, "/embed/") {
 			modTime := startTime
-			if fs, ok := embedFS.(*DevFS); ok {
+			if fs, ok := embedFS.(*MockEmbedFS); ok {
 				if fi, err := fs.Lstat("server" + pathname); err == nil {
 					modTime = fi.ModTime()
 				}
@@ -338,7 +336,6 @@ func esmHandler() rex.Handle {
 			}
 			if strings.HasSuffix(pathname, ".js") {
 				data = bytes.ReplaceAll(data, []byte("{origin}"), []byte(cdnOrigin))
-				data = bytes.ReplaceAll(data, []byte("{basePath}"), []byte(cfg.CdnBasePath))
 			}
 			header.Set("Cache-Control", cc1day)
 			return rex.Content(pathname, modTime, bytes.NewReader(data))
@@ -351,7 +348,7 @@ func esmHandler() rex.Handle {
 				return rex.Status(404, "not found")
 			}
 			target := getBuildTargetByUA(userAgent)
-			savePath := fmt.Sprintf("modules/+%s.%s.%s", hash, target, ext)
+			savePath := fmt.Sprintf("modules/%s.%s.%s", hash, target, ext)
 			fi, err := fs.Stat(savePath)
 			if err != nil {
 				if err == storage.ErrNotFound {
@@ -365,7 +362,7 @@ func esmHandler() rex.Handle {
 			}
 			header.Set("Content-Type", ctJavascript)
 			header.Set("Cache-Control", ccImmutable)
-			addVary(header, "User-Agent")
+			appendVaryHeader(header, "User-Agent")
 			return rex.Content(savePath, fi.ModTime(), r) // auto closed
 		}
 
@@ -396,7 +393,7 @@ func esmHandler() rex.Handle {
 			if err != nil {
 				return throwErrorJS(ctx, fmt.Sprintf("Transform error: %v", err), false)
 			}
-			addVary(header, "User-Agent")
+			appendVaryHeader(header, "User-Agent")
 			header.Set("Content-Type", ctJavascript)
 			return rex.Content(pathname, startTime, bytes.NewReader(code))
 		}
@@ -433,14 +430,14 @@ func esmHandler() rex.Handle {
 					}
 					data = []byte(code)
 					header.Set("Content-Type", ctJavascript)
-					addVary(header, "User-Agent")
+					appendVaryHeader(header, "User-Agent")
 				}
 				return rex.Content(pathname, startTime, bytes.NewReader(data))
 			}
 		}
 
 		// check `/*pathname` or `/gh/*pathname` pattern
-		external := newStringSet()
+		external := NewStringSet()
 		if strings.HasPrefix(pathname, "/*") {
 			external.Add("*")
 			pathname = "/" + pathname[2:]
@@ -449,8 +446,43 @@ func esmHandler() rex.Handle {
 			pathname = "/gh/" + pathname[5:]
 		}
 
+		var npmrc *NpmRC
+		if rc := ctx.R.Header.Get("X-Npmrc"); rc != "" {
+			rc, err := NewNpmRcFromJSON([]byte(rc))
+			if err != nil {
+				return rex.Status(400, "Invalid Npmrc Header")
+			}
+			npmrc = rc
+		} else {
+			npmrc = NewNpmRcFromConfig(config)
+		}
+
+		zoneId := ctx.R.Header.Get("X-Zone-Id")
+		if zoneId != "" && !valid.IsDomain(zoneId) {
+			zoneId = ""
+		}
+		if zoneId != "" {
+			pkgName, _, _, _ := splitPkgPath(pathname)
+			scopeName := ""
+			if strings.HasPrefix(pkgName, "@") {
+				return pkgName[:strings.Index(pkgName, "/")]
+			}
+			if scopeName != "" {
+				reg, ok := npmrc.Registries[scopeName]
+				if !ok || (reg.Registry == jsrRegistry && reg.Token == "" && (reg.User == "" || reg.Password == "")) {
+					zoneId = ""
+				}
+			} else if npmrc.Registry == npmRegistry && npmrc.Token == "" && (npmrc.User == "" || npmrc.Password == "") {
+				zoneId = ""
+			}
+		}
+		if zoneId != "" {
+			npmrc.zoneId = zoneId
+			cdnOrigin = fmt.Sprintf("https://%s", zoneId)
+		}
+
 		// get package info
-		reqPkg, extraQuery, caretVersion, err := validatePkgPath(pathname)
+		pkg, extraQuery, caretVersion, isTargetUrl, err := validatePkgPath(npmrc, pathname)
 		if err != nil {
 			status := 500
 			message := err.Error()
@@ -471,64 +503,57 @@ func esmHandler() rex.Handle {
 			ctx.R.URL.RawQuery = strings.Join(qs, "&")
 		}
 
-		pkgAllowed := cfg.AllowList.IsPackageAllowed(reqPkg.Name)
-		pkgBanned := cfg.BanList.IsPackageBanned(reqPkg.Name)
+		pkgAllowed := config.AllowList.IsPackageAllowed(pkg.Name)
+		pkgBanned := config.BanList.IsPackageBanned(pkg.Name)
 		if !pkgAllowed || pkgBanned {
 			return rex.Status(403, "forbidden")
 		}
 
-		isTargetUrl := hasTargetSegment(reqPkg.SubPath)
 		ghPrefix := ""
 
-		if reqPkg.FromGithub {
+		if pkg.FromGithub {
 			ghPrefix = "/gh"
 		}
 
-		// redirect `/@types/PKG` to it's `main` dts file
-		if strings.HasPrefix(reqPkg.Name, "@types/") && (reqPkg.SubModule == "" || !strings.HasSuffix(reqPkg.SubModule, ".d.ts")) {
-			url := fmt.Sprintf("%s%s%s", cdnOrigin, cfg.CdnBasePath, pathname)
-			if reqPkg.SubModule == "" {
-				info, _, err := getPackageInfo("", reqPkg.Name, reqPkg.Version)
-				if err != nil {
-					return rex.Status(500, err.Error())
-				}
-				types := "index.d.ts"
-				if info.Types != "" {
-					types = info.Types
-				} else if info.Typings != "" {
-					types = info.Typings
-				} else if info.Main != "" && strings.HasSuffix(info.Main, ".d.ts") {
-					types = info.Main
-				}
-				url += "/" + types
-			} else {
-				url += "~.d.ts"
+		// redirect `/@types/PKG` to it's main dts file
+		if strings.HasPrefix(pkg.Name, "@types/") && pkg.SubModule == "" {
+			info, err := npmrc.getPackageInfo(pkg.Name, pkg.Version)
+			if err != nil {
+				return rex.Status(500, err.Error())
 			}
-			return rex.Redirect(url, http.StatusFound)
+			types := "index.d.ts"
+			if info.Types != "" {
+				types = info.Types
+			} else if info.Typings != "" {
+				types = info.Typings
+			} else if info.Main != "" && strings.HasSuffix(info.Main, ".d.ts") {
+				types = info.Main
+			}
+			return rex.Redirect(fmt.Sprintf("%s/%s", cdnOrigin, types), http.StatusFound)
 		}
 
 		// redirect to main css path for CSS packages
-		if css := cssPackages[reqPkg.Name]; css != "" && reqPkg.SubModule == "" {
-			url := fmt.Sprintf("%s%s/%s/%s", cdnOrigin, cfg.CdnBasePath, reqPkg.String(), css)
+		if css := cssPackages[pkg.Name]; css != "" && pkg.SubModule == "" {
+			url := fmt.Sprintf("%s/%s/%s", cdnOrigin, pkg.String(), css)
 			return rex.Redirect(url, http.StatusFound)
 		}
 
 		// support `https://esm.sh/react?dev&target=es2020/jsx-runtime` pattern for jsx transformer
 		for _, jsxRuntime := range []string{"jsx-runtime", "jsx-dev-runtime"} {
 			if strings.HasSuffix(ctx.R.URL.RawQuery, "/"+jsxRuntime) {
-				if reqPkg.SubModule == "" {
-					reqPkg.SubModule = jsxRuntime
+				if pkg.SubModule == "" {
+					pkg.SubModule = jsxRuntime
 				} else {
-					reqPkg.SubModule = reqPkg.SubModule + "/" + jsxRuntime
+					pkg.SubModule = pkg.SubModule + "/" + jsxRuntime
 				}
-				pathname = fmt.Sprintf("/%s/%s", reqPkg.Name, reqPkg.SubModule)
+				pathname = fmt.Sprintf("/%s/%s", pkg.Name, pkg.SubModule)
 				ctx.R.URL.RawQuery = strings.TrimSuffix(ctx.R.URL.RawQuery, "/"+jsxRuntime)
 			}
 		}
 
 		// or use `?path=$PATH` query to override the pathname
 		if v := ctx.Form.Value("path"); v != "" {
-			reqPkg.SubModule = utils.CleanPath(v)[1:]
+			pkg.SubModule = utils.CleanPath(v)[1:]
 		}
 
 		// check the response file type
@@ -536,8 +561,8 @@ func esmHandler() rex.Handle {
 		// - build: serve es module files
 		// - types: serve `.d.ts` files
 		resType := "main"
-		if reqPkg.SubPath != "" {
-			ext := path.Ext(reqPkg.SubPath)
+		if pkg.SubPath != "" {
+			ext := path.Ext(pkg.SubPath)
 			switch ext {
 			case ".js", ".mjs", ".jsx", ".ts", ".mts", ".tsx":
 				if endsWith(pathname, ".d.ts", ".d.mts") {
@@ -563,11 +588,11 @@ func esmHandler() rex.Handle {
 		}
 
 		// redirect to the url with full package version
-		if !strings.Contains(pathname, reqPkg.VersionName()) {
+		if !strings.Contains(pathname, pkg.FullName()) {
 			if !isTargetUrl {
-				skipRedirect := caretVersion && resType == "main" && !reqPkg.FromGithub
+				skipRedirect := caretVersion && resType == "main" && !pkg.FromGithub
 				if !skipRedirect {
-					pkgName := reqPkg.Name
+					pkgName := pkg.Name
 					eaSign := ""
 					subPath := ""
 					query := ""
@@ -577,37 +602,37 @@ func esmHandler() rex.Handle {
 					if external.Has("*") {
 						eaSign = "*"
 					}
-					if reqPkg.SubPath != "" {
-						subPath = "/" + reqPkg.SubPath
+					if pkg.SubPath != "" {
+						subPath = "/" + pkg.SubPath
 					}
 					header.Set("Cache-Control", cc10min)
 					if rawQuery := ctx.R.URL.RawQuery; rawQuery != "" {
 						if extraQuery != "" {
 							query = "&" + rawQuery
-							return rex.Redirect(fmt.Sprintf("%s%s%s/%s%s@%s%s%s", cdnOrigin, cfg.CdnBasePath, ghPrefix, eaSign, pkgName, reqPkg.Version, query, subPath), http.StatusFound)
+							return rex.Redirect(fmt.Sprintf("%s%s/%s%s@%s%s%s", cdnOrigin, ghPrefix, eaSign, pkgName, pkg.Version, query, subPath), http.StatusFound)
 						}
 						query = "?" + rawQuery
 					}
-					return rex.Redirect(fmt.Sprintf("%s%s%s/%s%s@%s%s%s", cdnOrigin, cfg.CdnBasePath, ghPrefix, eaSign, pkgName, reqPkg.Version, subPath, query), http.StatusFound)
+					return rex.Redirect(fmt.Sprintf("%s%s/%s%s@%s%s%s", cdnOrigin, ghPrefix, eaSign, pkgName, pkg.Version, subPath, query), http.StatusFound)
 				}
 			} else {
 				subPath := ""
 				query := ""
-				if reqPkg.SubPath != "" {
-					subPath = "/" + reqPkg.SubPath
+				if pkg.SubPath != "" {
+					subPath = "/" + pkg.SubPath
 				}
 				if ctx.R.URL.RawQuery != "" {
 					query = "?" + ctx.R.URL.RawQuery
 				}
 				header.Set("Cache-Control", cc10min)
-				return rex.Redirect(fmt.Sprintf("%s%s/%s%s%s", cdnOrigin, cfg.CdnBasePath, reqPkg.VersionName(), subPath, query), http.StatusFound)
+				return rex.Redirect(fmt.Sprintf("%s/%s%s%s", cdnOrigin, pkg.FullName(), subPath, query), http.StatusFound)
 			}
 		}
 
 		// serve `*.wasm` as a es module (nees top-level-await support)
-		if resType == "raw" && strings.HasSuffix(reqPkg.SubPath, ".wasm") && ctx.Form.Has("module") {
+		if resType == "raw" && strings.HasSuffix(pkg.SubPath, ".wasm") && ctx.Form.Has("module") {
 			buf := &bytes.Buffer{}
-			wasmUrl := fmt.Sprintf("%s%s%s", cdnOrigin, cfg.CdnBasePath, pathname)
+			wasmUrl := cdnOrigin + pathname
 			fmt.Fprintf(buf, "/* esm.sh - wasm module */\n")
 			fmt.Fprintf(buf, "const data = await fetch(%s).then(r => r.arrayBuffer());\nexport default new WebAssembly.Module(data);", strings.TrimSpace(string(mustEncodeJSON(wasmUrl))))
 			header.Set("Cache-Control", ccImmutable)
@@ -617,15 +642,15 @@ func esmHandler() rex.Handle {
 
 		// fix url that is related to `import.meta.url`
 		if resType == "raw" && isTargetUrl {
-			extname := path.Ext(reqPkg.SubPath)
-			dir := path.Join(cfg.WorkDir, "npm", reqPkg.Name+"@"+reqPkg.Version)
+			extname := path.Ext(pkg.SubPath)
+			dir := path.Join(npmrc.Dir(), pkg.FullName())
 			if !existsDir(dir) {
-				err := installPackage(dir, reqPkg)
+				err := npmrc.installPackage(pkg)
 				if err != nil {
 					return rex.Status(500, err.Error())
 				}
 			}
-			pkgRoot := path.Join(dir, "node_modules", reqPkg.Name)
+			pkgRoot := path.Join(dir, "node_modules", pkg.Name)
 			files, err := findFiles(pkgRoot, "", func(fp string) bool {
 				return strings.HasSuffix(fp, extname)
 			})
@@ -638,14 +663,14 @@ func esmHandler() rex.Handle {
 			} else if l > 1 {
 				sort.Sort(sort.Reverse(PathSlice(files)))
 				for _, f := range files {
-					if strings.HasSuffix(reqPkg.SubPath, f) {
+					if strings.HasSuffix(pkg.SubPath, f) {
 						file = f
 						break
 					}
 				}
 				if file == "" {
 					for _, f := range files {
-						if path.Base(reqPkg.SubPath) == path.Base(f) {
+						if path.Base(pkg.SubPath) == path.Base(f) {
 							file = f
 							break
 						}
@@ -655,21 +680,20 @@ func esmHandler() rex.Handle {
 			if file == "" {
 				return rex.Status(404, "File not found")
 			}
-			url := fmt.Sprintf("%s%s/%s@%s/%s", cdnOrigin, cfg.CdnBasePath, reqPkg.Name, reqPkg.Version, file)
+			url := fmt.Sprintf("%s/%s@%s/%s", cdnOrigin, pkg.Name, pkg.Version, file)
 			return rex.Redirect(url, http.StatusMovedPermanently)
 		}
 
 		// serve raw dist or npm dist files like CSS/map etc..
 		if resType == "raw" {
-			installDir := fmt.Sprintf("npm/%s", reqPkg.VersionName())
-			savePath := path.Join(cfg.WorkDir, installDir, "node_modules", reqPkg.Name, reqPkg.SubPath)
+			savePath := path.Join(npmrc.Dir(), pkg.FullName(), "node_modules", pkg.Name, pkg.SubPath)
 			fi, err := os.Lstat(savePath)
 			if err != nil {
 				if os.IsExist(err) {
 					return rex.Status(500, err.Error())
 				}
 				// if the file not found, try to install the package
-				err = installPackage(path.Join(cfg.WorkDir, installDir), reqPkg)
+				err = npmrc.installPackage(pkg)
 				if err != nil {
 					return rex.Status(500, err.Error())
 				}
@@ -681,6 +705,9 @@ func esmHandler() rex.Handle {
 					}
 					return rex.Status(404, "File Not Found")
 				}
+			}
+			if fi.Size() > 100*1024*1024 {
+				return rex.Status(403, "File Too Large")
 			}
 			content, err := os.Open(savePath)
 			if err != nil {
@@ -699,15 +726,17 @@ func esmHandler() rex.Handle {
 		}
 
 		// serve build/types files
-		if isTargetUrl && (resType == "build" || resType == "types") {
-			savePath := path.Join("builds", pathname)
-			if resType == "types" {
+		if (isTargetUrl && resType == "build") || resType == "types" {
+			var savePath string
+			if resType == "build" {
+				savePath = path.Join("builds", pathname)
+			} else {
 				savePath = path.Join("types", pathname)
 			}
-			savePath = normalizeSavePath(savePath)
+			savePath = normalizeSavePath(zoneId, savePath)
 			fi, err := fs.Stat(savePath)
 			if err != nil {
-				if err == storage.ErrNotFound && endsWith(pathname, ".mjs.map", ".js.map") {
+				if err == storage.ErrNotFound && strings.HasPrefix(pathname, ".map") {
 					return rex.Status(404, "Not found")
 				}
 				if err != storage.ErrNotFound {
@@ -716,15 +745,29 @@ func esmHandler() rex.Handle {
 			}
 			if err == nil {
 				if resType == "types" {
-					header.Set("Content-Type", ctTypescript)
-				} else if endsWith(pathname, ".js", ".mjs", ".jsx", ".ts", ".mts", ".tsx") {
-					header.Set("Content-Type", ctJavascript)
-				} else if endsWith(savePath, ".mjs.map", ".js.map") {
-					header.Set("Content-Type", "application/json; charset=utf-8")
+					_, err := fs.Stat(savePath + ".vo")
+					if err != nil && err != storage.ErrNotFound {
+						return rex.Status(500, err.Error())
+					}
+					if err == nil {
+						r, err := fs.Open(savePath)
+						if err != nil {
+							return rex.Status(500, err.Error())
+						}
+						defer r.Close()
+						buffer, err := io.ReadAll(r)
+						if err != nil {
+							return rex.Status(500, err.Error())
+						}
+						header.Set("Content-Type", ctTypescript)
+						header.Set("Cache-Control", ccImmutable)
+						return bytes.ReplaceAll(buffer, []byte("__ESM_CDN_ORIGIN__"), []byte(cdnOrigin))
+					}
 				}
-				header.Set("Cache-Control", ccImmutable)
 				if ctx.Form.Has("worker") && resType == "build" {
-					moduleUrl := fmt.Sprintf("%s%s%s", cdnOrigin, cfg.CdnBasePath, pathname)
+					moduleUrl := cdnOrigin + pathname
+					header.Set("Content-Type", ctJavascript)
+					header.Set("Cache-Control", ccImmutable)
 					return fmt.Sprintf(
 						`export default function workerFactory(injectOrOptions) { const options = typeof injectOrOptions === "string" ? { inject: injectOrOptions }: injectOrOptions ?? {}; const { inject, name = "%s" } = options; const blob = new Blob(['import * as $module from "%s";', inject].filter(Boolean), { type: "application/javascript" }); return new Worker(URL.createObjectURL(blob), { type: "module", name })}`,
 						moduleUrl,
@@ -735,6 +778,14 @@ func esmHandler() rex.Handle {
 				if err != nil {
 					return rex.Status(500, err.Error())
 				}
+				if resType == "types" {
+					header.Set("Content-Type", ctTypescript)
+				} else if strings.HasPrefix(pathname, ".map") {
+					header.Set("Content-Type", "application/json; charset=utf-8")
+				} else {
+					header.Set("Content-Type", ctJavascript)
+				}
+				header.Set("Cache-Control", ccImmutable)
 				return rex.Content(savePath, fi.ModTime(), r) // auto closed
 			}
 		}
@@ -748,7 +799,7 @@ func esmHandler() rex.Handle {
 					name, to := utils.SplitByFirstByte(p, ':')
 					name = strings.TrimSpace(name)
 					to = strings.TrimSpace(to)
-					if name != "" && to != "" && name != reqPkg.Name {
+					if name != "" && to != "" && name != pkg.Name {
 						alias[name] = to
 					}
 				}
@@ -761,18 +812,18 @@ func esmHandler() rex.Handle {
 			for _, p := range strings.Split(ctx.Form.Value("deps"), ",") {
 				p = strings.TrimSpace(p)
 				if p != "" {
-					m, _, _, err := validatePkgPath(p)
+					m, _, _, _, err := validatePkgPath(npmrc, p)
 					if err != nil {
 						if strings.HasSuffix(err.Error(), "not found") {
 							continue
 						}
 						return rex.Status(400, fmt.Sprintf("Invalid deps query: %v not found", p))
 					}
-					if reqPkg.Name == "react-dom" && m.Name == "react" {
+					if pkg.Name == "react-dom" && m.Name == "react" {
 						// the `react` version always matches `react-dom` version
 						continue
 					}
-					if !deps.Has(m.Name) && m.Name != reqPkg.Name {
+					if !deps.Has(m.Name) && m.Name != pkg.Name {
 						deps = append(deps, m)
 					}
 				}
@@ -780,7 +831,7 @@ func esmHandler() rex.Handle {
 		}
 
 		// check `?exports` query
-		exports := newStringSet()
+		exports := NewStringSet()
 		if ctx.Form.Has("exports") {
 			value := ctx.Form.Value("exports")
 			for _, p := range strings.Split(value, ",") {
@@ -792,7 +843,7 @@ func esmHandler() rex.Handle {
 		}
 
 		// check `?conditions` query
-		conditions := newStringSet()
+		conditions := NewStringSet()
 		if ctx.Form.Has("conditions") {
 			for _, p := range strings.Split(ctx.Form.Value("conditions"), ",") {
 				p = strings.TrimSpace(p)
@@ -809,13 +860,6 @@ func esmHandler() rex.Handle {
 			target = getBuildTargetByUA(userAgent)
 		}
 
-		// check deno/std version by `?deno-std=VER` query
-		dsv := denoStdVersion
-		fv := ctx.Form.Value("deno-std")
-		if fv != "" && regexpFullVersion.MatchString(fv) && semverLessThan(fv, denoStdVersion) && target == "deno" {
-			dsv = fv
-		}
-
 		// check `?external` query
 		for _, p := range strings.Split(ctx.Form.Value("external"), ",") {
 			p = strings.TrimSpace(p)
@@ -829,84 +873,44 @@ func esmHandler() rex.Handle {
 			}
 		}
 
-		// check `?jsx-rutnime` query
-		var jsxRuntime *Pkg = nil
-		if v := ctx.Form.Value("jsx-runtime"); v != "" {
-			m, _, _, err := validatePkgPath(v)
-			if err != nil {
-				return rex.Status(400, fmt.Sprintf("Invalid jsx-runtime query: %v not found", v))
-			}
-			jsxRuntime = &m
-		}
-
-		bundle := (ctx.Form.Has("bundle") && ctx.Form.Value("bundle") != "false") || ctx.Form.Has("standalone")
-		ignoreAnnotations := ctx.Form.Has("ignore-annotations")
-		ignoreRequire := ctx.Form.Has("ignore-require") || reqPkg.Name == "@unocss/preset-icons"
-		isDev := ctx.Form.Has("dev")
-		isPkgCss := ctx.Form.Has("css")
-		isWorker := ctx.Form.Has("worker")
-		keepNames := ctx.Form.Has("keep-names")
-		noBundle := !bundle && (ctx.Form.Has("no-bundle") || ctx.Form.Value("bundle") == "false")
-		noCheck := ctx.Form.Has("no-check") || ctx.Form.Has("no-dts")
-
-		// force react/jsx-dev-runtime and react-refresh into `dev` mode
-		if !isDev && ((reqPkg.Name == "react" && reqPkg.SubModule == "jsx-dev-runtime") || reqPkg.Name == "react-refresh") {
-			isDev = true
-		}
-
 		buildArgs := BuildArgs{
-			alias:             alias,
-			conditions:        conditions,
-			denoStdVersion:    dsv,
-			deps:              deps,
-			exports:           exports,
-			external:          external,
-			ignoreAnnotations: ignoreAnnotations,
-			ignoreRequire:     ignoreRequire,
-			jsxRuntime:        jsxRuntime,
-			keepNames:         keepNames,
+			alias:      alias,
+			conditions: conditions,
+			deps:       deps,
+			exports:    exports,
+			external:   external,
 		}
 
 		// build and return dts
 		if resType == "types" {
 			findDts := func() (savePath string, fi storage.FileStat, err error) {
+				args := ""
+				if a := encodeBuildArgs(buildArgs, pkg, true); a != "" {
+					args = "X-" + a
+				}
 				savePath = path.Join(fmt.Sprintf(
 					"types%s/%s@%s/%s",
 					ghPrefix,
-					reqPkg.Name,
-					reqPkg.Version,
-					encodeBuildArgsPrefix(buildArgs, reqPkg, true),
-				), reqPkg.SubPath)
-				if strings.HasSuffix(savePath, "~.d.ts") {
-					savePath = strings.TrimSuffix(savePath, "~.d.ts")
-					_, err := fs.Stat(path.Join(savePath, "index.d.ts"))
-					if err != nil && err != storage.ErrNotFound {
-						return "", nil, err
-					}
-					if err == nil {
-						savePath = path.Join(savePath, "index.d.ts")
-					} else {
-						savePath += ".d.ts"
-					}
-				}
+					pkg.Name,
+					pkg.Version,
+					args,
+				), pkg.SubPath)
 				fi, err = fs.Stat(savePath)
 				return savePath, fi, err
 			}
 			_, _, err := findDts()
 			if err == storage.ErrNotFound {
-				task := &BuildTask{
-					args:   buildArgs,
-					pkg:    reqPkg,
-					target: "types",
-				}
-				c := buildQueue.Add(task, ctx.RemoteIP())
+				buildCtx := NewBuildContext(zoneId, npmrc, pkg, buildArgs, "types", BundleDefault, false, false)
+				c := buildQueue.Add(buildCtx, ctx.RemoteIP())
 				select {
 				case output := <-c.C:
 					if output.err != nil {
+						if output.err.Error() == "types not found" {
+							return rex.Status(404, "Types Not Found")
+						}
 						return rex.Status(500, "types: "+output.err.Error())
 					}
-				case <-time.After(time.Duration(cfg.BuildWaitTimeout) * time.Second):
-					buildQueue.RemoveClient(task, c)
+				case <-time.After(time.Duration(config.BuildTimeout) * time.Second):
 					header.Set("Cache-Control", ccMustRevalidate)
 					return rex.Status(http.StatusRequestTimeout, "timeout, we are transforming the types hardly, please try again later!")
 				}
@@ -914,9 +918,27 @@ func esmHandler() rex.Handle {
 			savePath, fi, err := findDts()
 			if err != nil {
 				if err == storage.ErrNotFound {
-					return rex.Status(404, "Types not found")
+					return rex.Status(404, "Types Not Found")
 				}
 				return rex.Status(500, err.Error())
+			}
+			_, err = fs.Stat(savePath + ".vo")
+			if err != nil && err != storage.ErrNotFound {
+				return rex.Status(500, err.Error())
+			}
+			if err == nil {
+				r, err := fs.Open(savePath)
+				if err != nil {
+					return rex.Status(500, err.Error())
+				}
+				defer r.Close()
+				buffer, err := io.ReadAll(r)
+				if err != nil {
+					return rex.Status(500, err.Error())
+				}
+				header.Set("Content-Type", ctTypescript)
+				header.Set("Cache-Control", ccImmutable)
+				return bytes.ReplaceAll(buffer, []byte("__ESM_CDN_ORIGIN__"), []byte(cdnOrigin))
 			}
 			r, err := fs.Open(savePath)
 			if err != nil {
@@ -928,78 +950,108 @@ func esmHandler() rex.Handle {
 		}
 
 		// check `X-` prefix
+		var hasXPrefix bool
 		if isTargetUrl {
-			a := strings.Split(reqPkg.SubModule, "/")
+			a := strings.Split(pkg.SubModule, "/")
 			if len(a) > 1 && strings.HasPrefix(a[0], "X-") {
-				reqPkg.SubModule = strings.Join(a[1:], "/")
-				args, err := decodeBuildArgsPrefix(a[0])
+				pkg.SubModule = strings.Join(a[1:], "/")
+				args, err := decodeBuildArgs(npmrc, strings.TrimPrefix(a[0], "X-"))
 				if err != nil {
 					return throwErrorJS(ctx, err.Error(), false)
 				}
-				reqPkg.SubPath = strings.Join(strings.Split(reqPkg.SubPath, "/")[1:], "/")
-				if args.denoStdVersion == "" {
-					// ensure deno/std version used
-					args.denoStdVersion = denoStdVersion
-				}
+				pkg.SubPath = strings.Join(strings.Split(pkg.SubPath, "/")[1:], "/")
 				buildArgs = args
+				hasXPrefix = true
 			}
 		}
 
-		// check if it's a module
-		isModuleUrl := false
-		if isTargetUrl && (endsWith(reqPkg.SubPath, ".mjs", ".js", ".css")) {
-			a := strings.Split(reqPkg.SubModule, "/")
+		if !hasXPrefix {
+			// check `?jsx-rutnime` query
+			var jsxRuntime *Pkg = nil
+			if v := ctx.Form.Value("jsx-runtime"); v != "" {
+				m, _, _, _, err := validatePkgPath(npmrc, v)
+				if err != nil {
+					return rex.Status(400, fmt.Sprintf("Invalid jsx-runtime query: %v not found", v))
+				}
+				jsxRuntime = &m
+			}
+
+			externalRequire := ctx.Form.Has("external-require")
+			// force "unocss/preset-icons" to external `require` calls
+			if !externalRequire && pkg.Name == "@unocss/preset-icons" {
+				externalRequire = true
+			}
+
+			buildArgs.externalRequire = externalRequire
+			buildArgs.jsxRuntime = jsxRuntime
+			buildArgs.keepNames = ctx.Form.Has("keep-names")
+			buildArgs.ignoreAnnotations = ctx.Form.Has("ignore-annotations")
+		}
+
+		bundleMode := BundleDefault
+		if (ctx.Form.Has("bundle") && ctx.Form.Value("bundle") != "false") || ctx.Form.Has("bundle-all") || ctx.Form.Has("bundle-deps") || ctx.Form.Has("standalone") {
+			bundleMode = BundleAll
+		} else if ctx.Form.Value("bundle") == "false" || ctx.Form.Has("no-bundle") {
+			bundleMode = BundleFalse
+		}
+
+		isDev := ctx.Form.Has("dev")
+		isPkgCss := ctx.Form.Has("css")
+		isWorker := ctx.Form.Has("worker")
+		noDts := ctx.Form.Has("no-dts") || ctx.Form.Has("no-check")
+
+		// force react/jsx-dev-runtime and react-refresh into `dev` mode
+		if !isDev && ((pkg.Name == "react" && pkg.SubModule == "jsx-dev-runtime") || pkg.Name == "react-refresh") {
+			isDev = true
+		}
+
+		// check if it's a build file
+		// var isBuildFile bool
+		if isTargetUrl && (endsWith(pkg.SubPath, ".mjs", ".js", ".css")) {
+			a := strings.Split(pkg.SubModule, "/")
 			if len(a) > 0 {
 				maybeTarget := a[0]
 				if _, ok := targets[maybeTarget]; ok {
 					submodule := strings.Join(a[1:], "/")
-					pkgName := strings.TrimSuffix(path.Base(reqPkg.Name), ".js")
-					if strings.HasSuffix(submodule, ".css") && !strings.HasSuffix(reqPkg.SubPath, ".js") {
+					pkgName := strings.TrimSuffix(path.Base(pkg.Name), ".js")
+					if strings.HasSuffix(submodule, ".css") && !strings.HasSuffix(pkg.SubPath, ".js") {
 						if submodule == pkgName+".css" {
-							reqPkg.SubModule = ""
+							pkg.SubModule = ""
 							target = maybeTarget
-							isModuleUrl = true
+							isBuildFile = true
 						} else {
-							url := fmt.Sprintf("%s%s/%s", cdnOrigin, cfg.CdnBasePath, reqPkg.String())
+							url := fmt.Sprintf("%s/%s", cdnOrigin, pkg.String())
 							return rex.Redirect(url, http.StatusFound)
 						}
 					} else {
 						if strings.HasSuffix(submodule, ".bundle") {
 							submodule = strings.TrimSuffix(submodule, ".bundle")
-							bundle = true
+							bundleMode = BundleAll
 						} else if strings.HasSuffix(submodule, ".nobundle") {
 							submodule = strings.TrimSuffix(submodule, ".nobundle")
-							noBundle = true
+							bundleMode = BundleFalse
 						}
 						if strings.HasSuffix(submodule, ".development") {
 							submodule = strings.TrimSuffix(submodule, ".development")
 							isDev = true
 						}
-						isMjs := strings.HasSuffix(reqPkg.SubPath, ".mjs")
+						isMjs := strings.HasSuffix(pkg.SubPath, ".mjs")
 						if isMjs && submodule == pkgName {
 							submodule = ""
 						}
-						reqPkg.SubModule = submodule
+						pkg.SubModule = submodule
 						target = maybeTarget
-						isModuleUrl = true
+						isBuildFile = true
 					}
 				}
 			}
 		}
 
-		// build and return the module
-		task := &BuildTask{
-			args:     buildArgs,
-			pkg:      reqPkg,
-			target:   target,
-			dev:      isDev,
-			bundle:   bundle,
-			noBundle: noBundle,
-		}
-		esmId := task.ID()
-		ret, hasBuild := task.queryBuild()
+		buildCtx := NewBuildContext(zoneId, npmrc, pkg, buildArgs, target, bundleMode, isDev, !config.DisableSourceMap)
+		esmPath := buildCtx.Path()
+		ret, hasBuild := buildCtx.Query()
 		if !hasBuild {
-			c := buildQueue.Add(task, ctx.RemoteIP())
+			c := buildQueue.Add(buildCtx, ctx.RemoteIP())
 			select {
 			case output := <-c.C:
 				if output.err != nil {
@@ -1007,7 +1059,7 @@ func esmHandler() rex.Handle {
 					if strings.Contains(msg, "no such file or directory") ||
 						strings.Contains(msg, "is not exported from package") {
 						// redirect old build path (.js) to new build path (.mjs)
-						if strings.HasSuffix(reqPkg.SubPath, "/"+reqPkg.Name+".js") {
+						if strings.HasSuffix(pkg.SubPath, "/"+pkg.Name+".js") {
 							url := strings.TrimSuffix(ctx.R.URL.String(), ".js") + ".mjs"
 							return rex.Redirect(url, http.StatusFound)
 						}
@@ -1020,8 +1072,7 @@ func esmHandler() rex.Handle {
 					return throwErrorJS(ctx, output.err.Error(), false)
 				}
 				ret = output.result
-			case <-time.After(time.Duration(cfg.BuildWaitTimeout) * time.Second):
-				buildQueue.RemoveClient(task, c)
+			case <-time.After(time.Duration(config.BuildTimeout) * time.Second):
 				header.Set("Cache-Control", ccMustRevalidate)
 				return rex.Status(http.StatusRequestTimeout, "timeout, we are building the package hardly, please try again later!")
 			}
@@ -1029,7 +1080,7 @@ func esmHandler() rex.Handle {
 
 		// should redirect to `*.d.ts` file
 		if ret.TypesOnly {
-			dtsUrl := fmt.Sprintf("%s%s/%s", cdnOrigin, cfg.CdnBasePath, ret.Dts)
+			dtsUrl := cdnOrigin + ret.Dts
 			header.Set("X-TypeScript-Types", dtsUrl)
 			header.Set("Content-Type", ctJavascript)
 			header.Set("Cache-Control", ccImmutable)
@@ -1040,18 +1091,18 @@ func esmHandler() rex.Handle {
 		}
 
 		// redirect to package css from `?css`
-		if isPkgCss && reqPkg.SubModule == "" {
+		if isPkgCss && pkg.SubModule == "" {
 			if !ret.PackageCSS {
 				return rex.Status(404, "Package CSS not found")
 			}
-			url := fmt.Sprintf("%s%s/%s.css", cdnOrigin, cfg.CdnBasePath, strings.TrimSuffix(esmId, path.Ext(esmId)))
+			url := fmt.Sprintf("%s%s.css", cdnOrigin, strings.TrimSuffix(esmPath, path.Ext(esmPath)))
 			return rex.Redirect(url, 301)
 		}
 
 		// if it's a module url, return the module content
-		if isModuleUrl {
-			savePath := task.getSavepath()
-			if strings.HasSuffix(reqPkg.SubPath, ".css") {
+		if isBuildFile {
+			savePath := buildCtx.getSavepath()
+			if strings.HasSuffix(pkg.SubPath, ".css") {
 				base, _ := utils.SplitByLastByte(savePath, '.')
 				savePath = base + ".css"
 			}
@@ -1070,7 +1121,7 @@ func esmHandler() rex.Handle {
 			if endsWith(savePath, ".mjs", ".js") {
 				header.Set("Content-Type", ctJavascript)
 				if isWorker {
-					moduleUrl := fmt.Sprintf("%s%s/%s", cdnOrigin, cfg.CdnBasePath, esmId)
+					moduleUrl := cdnOrigin + esmPath
 					return fmt.Sprintf(
 						`export default function workerFactory(injectOrOptions) { const options = typeof injectOrOptions === "string" ? { inject: injectOrOptions }: injectOrOptions ?? {}; const { inject, name = "%s" } = options; const blob = new Blob(['import * as $module from "%s";', inject].filter(Boolean), { type: "application/javascript" }); return new Worker(URL.createObjectURL(blob), { type: "module", name })}`,
 						moduleUrl,
@@ -1082,10 +1133,10 @@ func esmHandler() rex.Handle {
 		}
 
 		buf := bytes.NewBuffer(nil)
-		fmt.Fprintf(buf, `/* esm.sh - %v */%s`, reqPkg, EOL)
+		fmt.Fprintf(buf, `/* esm.sh - %v */%s`, pkg, EOL)
 
 		if isWorker {
-			moduleUrl := fmt.Sprintf("%s%s/%s", cdnOrigin, cfg.CdnBasePath, esmId)
+			moduleUrl := cdnOrigin + esmPath
 			fmt.Fprintf(buf,
 				`export default function workerFactory(injectOrOptions) { const options = typeof injectOrOptions === "string" ? { inject: injectOrOptions }: injectOrOptions ?? {}; const { inject, name = "%s" } = options; const blob = new Blob(['import * as $module from "%s";', inject].filter(Boolean), { type: "application/javascript" }); return new Worker(URL.createObjectURL(blob), { type: "module", name })}`,
 				moduleUrl,
@@ -1093,31 +1144,27 @@ func esmHandler() rex.Handle {
 			)
 		} else {
 			if len(ret.Deps) > 0 {
-				// TODO: lookup deps of deps?
 				for _, dep := range ret.Deps {
-					if strings.HasPrefix(dep, "/") && cfg.CdnBasePath != "" {
-						dep = cfg.CdnBasePath + dep
-					}
 					fmt.Fprintf(buf, `import "%s";%s`, dep, EOL)
 				}
 			}
-			header.Set("X-Esm-Id", esmId)
-			fmt.Fprintf(buf, `export * from "%s/%s";%s`, cfg.CdnBasePath, esmId, EOL)
+			header.Set("x-esm-path", esmPath)
+			fmt.Fprintf(buf, `export * from "%s";%s`, esmPath, EOL)
 			if (ret.FromCJS || ret.HasDefaultExport) && (exports.Len() == 0 || exports.Has("default")) {
-				fmt.Fprintf(buf, `export { default } from "%s/%s";%s`, cfg.CdnBasePath, esmId, EOL)
+				fmt.Fprintf(buf, `export { default } from "%s";%s`, esmPath, EOL)
 			}
 			if ret.FromCJS && exports.Len() > 0 {
-				fmt.Fprintf(buf, `import __cjs_exports$ from "%s/%s";%s`, cfg.CdnBasePath, esmId, EOL)
+				fmt.Fprintf(buf, `import __cjs_exports$ from "%s";%s`, esmPath, EOL)
 				fmt.Fprintf(buf, `export const { %s } = __cjs_exports$;%s`, strings.Join(exports.Values(), ", "), EOL)
 			}
 		}
 
-		if ret.Dts != "" && !noCheck && !isWorker {
-			dtsUrl := fmt.Sprintf("%s%s/%s", cdnOrigin, cfg.CdnBasePath, ret.Dts)
+		if ret.Dts != "" && !noDts && !isWorker {
+			dtsUrl := cdnOrigin + ret.Dts
 			header.Set("X-TypeScript-Types", dtsUrl)
 		}
 		if targetViaUA {
-			addVary(header, "User-Agent")
+			appendVaryHeader(header, "User-Agent")
 		}
 		if caretVersion {
 			header.Set("Cache-Control", cc10min)
@@ -1133,39 +1180,13 @@ func esmHandler() rex.Handle {
 	}
 }
 
-func getCdnOrign(ctx *rex.Context) string {
-	cdnOrigin := ctx.R.Header.Get("X-Real-Origin")
-	if cdnOrigin == "" {
-		cdnOrigin = cfg.CdnOrigin
-	}
-	if cdnOrigin == "" {
-		proto := "http"
-		if ctx.R.TLS != nil {
-			proto = "https"
-		}
-		// use the request host as the origin if not set in config.json
-		cdnOrigin = fmt.Sprintf("%s://%s", proto, ctx.R.Host)
-	}
-	return cdnOrigin
-}
-
-func addVary(header http.Header, key string) {
+func appendVaryHeader(header http.Header, key string) {
 	vary := header.Get("Vary")
 	if vary == "" {
 		header.Set("Vary", key)
 	} else {
 		header.Set("Vary", vary+", "+key)
 	}
-}
-
-func hasTargetSegment(path string) bool {
-	parts := strings.Split(path, "/")
-	for _, part := range parts {
-		if _, ok := targets[part]; ok {
-			return true
-		}
-	}
-	return false
 }
 
 func throwErrorJS(ctx *rex.Context, message string, static bool) interface{} {

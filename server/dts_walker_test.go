@@ -54,18 +54,18 @@ import React = require("https://esm.sh/@types/react@1.0.0/index.d.ts");
 `
 
 	buf := bytes.NewBuffer(nil)
-	err := walkDts(bytes.NewReader([]byte(rawDts)), buf, func(name string, kind string, position int) string {
+	err := walkDts(bytes.NewReader([]byte(rawDts)), buf, func(name string, kind string, position int) (string, error) {
 		if kind == "importExpr" || kind == "importCall" {
 			if name == "react" || name == "react-dom" {
-				return fmt.Sprintf("https://esm.sh/@types/%s@1.0.0/index.d.ts", name)
+				return fmt.Sprintf("https://esm.sh/@types/%s@1.0.0/index.d.ts", name), nil
 			}
-			pkgName, _, subPath := splitPkgPath(name)
+			pkgName, _, subPath, _ := splitPkgPath(name)
 			if subPath != "" {
-				return fmt.Sprintf("https://esm.sh/%s@1.0.0/%s.d.ts", pkgName, subPath)
+				return fmt.Sprintf("https://esm.sh/%s@1.0.0/%s.d.ts", pkgName, subPath), nil
 			}
-			return fmt.Sprintf("https://esm.sh/%s@1.0.0/index.d.ts", pkgName)
+			return fmt.Sprintf("https://esm.sh/%s@1.0.0/index.d.ts", pkgName), nil
 		}
-		return name
+		return name, nil
 	})
 	if err != nil {
 		t.Fatal(err)

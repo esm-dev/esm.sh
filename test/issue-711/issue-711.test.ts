@@ -8,7 +8,7 @@ Deno.test("issue #711", async () => {
     },
   });
   await res.body?.cancel();
-  const buildId = res.headers.get("x-esm-id")!;
+  const buildId = res.headers.get("x-esm-path")!;
   assertStringIncludes(buildId, "/es2021/");
   const res2 = await fetch(`http://localhost:8080/${buildId}`);
   res2.body?.cancel();

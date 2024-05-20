@@ -8,17 +8,17 @@
 
 # esm.sh
 
-A global fast and smart CDN(aka content delivery network) for modern(es2015+) web development.
+A global fast and smart CDN(aka content delivery network) for modern(es6+) web development.
 
 ## How to Use
 
-esm.sh allows you to import [es6 modules](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Guide/Modules) from a URL directly in the browser or Deno. No install/build step needed.
+esm.sh allows you to import [JavaScirpt(ES6) modules](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Guide/Modules) from NPM/GitHub in browser. No installation/build steps needed.
 
 ```js
 import * as mod from "https://esm.sh/PKG[@SEMVER][/PATH]";
 ```
 
-or use _**bare specifier**_ instead of URL with [import maps](https://github.com/WICG/import-maps):
+With [import maps](https://github.com/WICG/import-maps), you can even use bare import specifiers intead of full URLs.
 
 ```html
 <script type="importmap">
@@ -37,7 +37,7 @@ or use _**bare specifier**_ instead of URL with [import maps](https://github.com
 
 ### Supported Registries
 
-- **[NPM(default)](https://npmjs.com)**:
+- **[NPM](https://npmjs.com)**:
   ```js
   // Examples
   import React from "https://esm.sh/react"; // 18.3.0 (latest)
@@ -120,11 +120,10 @@ For package authors, you can override the bundling strategy by adding the `esm.s
 }
 ```
 
-esm.sh also supports `?standalone` query to bundle the module with all external dependencies(except in
-`peerDependencies`) into a single JS file.
+esm.sh also supports `?bundle=all` query to bundle the module with all external dependencies(except in `peerDependencies`) into a single JS file.
 
 ```js
-import { Button } from "https://esm.sh/antd?standalone";
+import { Button } from "https://esm.sh/antd?bundle=all";
 ```
 
 ### Development Mode
@@ -140,11 +139,10 @@ and production. For example, React uses a different warning message in developme
 ### ESBuild Options
 
 By default, esm.sh checks the `User-Agent` header to determine the build target. You can also specify the `target` by
-adding `?target`, available targets are: **es2015** - **es2022**, **esnext**, **deno**, **denonext**, **node** and
-**bun**.
+adding `?target`, available targets are: **es2015** - **es2022**, **esnext**, **deno**, **denonext**, and **node**.
 
 ```js
-import React from "https://esm.sh/react?target=es2020";
+import React from "https://esm.sh/react?target=esnext";
 ```
 
 Other supported options of esbuild:
@@ -171,7 +169,7 @@ import createWorker from "https://esm.sh/monaco-editor/esm/vs/editor/editor.work
 
 // create a worker
 const worker = createWorker();
-// rename the worker by adding the `name` option
+// rename the worker by adding the `name` option for debugging
 const worker = createWorker({ name: "editor.worker" });
 // inject code into the worker
 const worker = createWorker({ inject: "self.onmessage = (e) => self.postMessage(e.data)" });
@@ -185,7 +183,7 @@ import createWorker from "https://esm.sh/xxhash-wasm@1.0.2?worker";
 
 // variable '$module' is the imported 'xxhash-wasm' module
 const inject = `
-const xxhash = $module.default
+const { default: xxhash } = $module
 self.onmessage = async (e) => {
   const hasher = await xxhash()
   self.postMessage(hasher.h64ToString(e.data))
@@ -196,7 +194,7 @@ worker.onmessage = (e) => console.log("hash is", e.data);
 worker.postMessage("The string that is being hashed");
 ```
 
-> Note: The `inject` must be a valid JavaScript code, and it will be executed in the worker context.
+> Note: The `inject` parameter must be a valid JavaScript code, and it will be executed in the worker context.
 
 ### Package CSS
 
@@ -299,13 +297,6 @@ app.get("/", (req, res) => {
   res.send("Hello World");
 });
 app.listen(3000);
-```
-
-For users using deno `< 1.33.2`, esm.sh uses [deno.land/std@0.177.1/node](https://deno.land/std@0.177.1/node) as the
-node compatibility layer. You can specify a different version by adding the `?deno-std=$VER` query:
-
-```js
-import postcss from "https://esm.sh/express?deno-std=0.128.0";
 ```
 
 Deno supports type definitions for modules with a `types` field in their `package.json` file through the

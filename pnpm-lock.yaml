@@ -1,0 +1,30 @@
+lockfileVersion: '9.0'
+
+settings:
+  autoInstallPeers: true
+  excludeLinksFromLockfile: false
+
+importers:
+
+  .:
+    dependencies:
+      esm-cjs-lexer:
+        specifier: 0.10.0
+        version: 0.10.0
+      help:
+        specifier: ^3.0.2
+        version: 3.0.2
+
+packages:
+
+  esm-cjs-lexer@0.10.0:
+    resolution: {integrity: sha512-ECG2Roj0TpcS1JqFxjgiCFFOsGQKO70tpPHwQ6s54l+m5FUCcQgKethCgF0jayS7/MDWmwpxzDal13/o3jcHlw==}
+
+  help@3.0.2:
+    resolution: {integrity: sha512-jDd0MU+9xzvOQRC6CIzdjvb+agCvpzQY/Fp11quDnugDO4QQzh134EsLkRQMvFIJBleFkvnXagHFm4MTefkkpA==}
+
+snapshots:
+
+  esm-cjs-lexer@0.10.0: {}
+
+  help@3.0.2: {}

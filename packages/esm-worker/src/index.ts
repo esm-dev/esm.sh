@@ -1,12 +1,9 @@
-/// <reference types="@cloudflare/workers-types" />
-
 import type { Context, HttpMetadata, Middleware, PackageInfo, PackageRegistryInfo } from "../types/index.d.ts";
 import { compareVersions, satisfies, validate } from "compare-versions";
 import { getBuildTargetFromUA, targets } from "esm-compat";
 import { assetsExts, cssPackages, VERSION } from "./consts.ts";
 import { getContentType } from "./media_type.ts";
 import {
-  asKV,
   checkPreflight,
   copyHeaders,
   corsHeaders,
@@ -15,6 +12,7 @@ import {
   hashText,
   hasTargetSegment,
   isDtsFile,
+  mockKV,
   normalizeSearchParams,
   redirect,
   splitBy,
@@ -22,8 +20,8 @@ import {
 } from "./utils.ts";
 
 const version = `v${VERSION}`;
-const defaultNpmRegistry = "https://registry.npmjs.org";
 const defaultEsmServerOrigin = "https://esm.sh";
+const defaultNpmRegistry = "https://registry.npmjs.org";
 const ccImmutable = "public, max-age=31536000, immutable";
 
 const regexpNpmNaming = /^[a-zA-Z0-9][\w\-\.]*$/;
@@ -48,11 +46,11 @@ async function fetchOrigin(req: Request, env: Env, ctx: Context, uri: string, re
   if (!headers.has("X-Real-Origin")) {
     headers.set("X-Real-Origin", ctx.url.origin);
   }
-  if (env.ESM_TOKEN) {
-    headers.set("Authorization", `Bearer ${env.ESM_TOKEN}`);
+  if (env.ESM_SERVER_TOKEN) {
+    headers.set("Authorization", `Bearer ${env.ESM_SERVER_TOKEN}`);
   }
   const res = await fetch(
-    new URL(uri, env.ESM_ORIGIN ?? defaultEsmServerOrigin),
+    new URL(uri, env.ESM_SERVER_ORIGIN ?? defaultEsmServerOrigin),
     {
       method: req.method === "HEAD" ? "GET" : req.method,
       body: req.body,
@@ -78,11 +76,11 @@ async function fetchOrigin(req: Request, env: Env, ctx: Context, uri: string, re
     "Cache-Control",
     "Content-Type",
     "ETag",
-    "X-Esm-Id",
+    "x-esm-path",
     "X-Typescript-Types",
   );
   const exposedHeaders: string[] = [];
-  for (const key of ["X-Esm-Id", "X-Typescript-Types"]) {
+  for (const key of ["x-esm-path", "X-Typescript-Types"]) {
     if (resHeaders.has(key)) {
       exposedHeaders.push(key);
     }
@@ -103,26 +101,26 @@ async function fetchOriginWithKVCache(
 ): Promise<Response> {
   const R2 = env.R2;
   const headers = corsHeaders();
-  const fromWorker = req.headers.has("X-Real-Origin");
   const isRaw = ctx.url.searchParams.has("raw");
   const isDts = isDtsFile(pathname);
-  const isModule = !(isRaw || isDts || pathname.endsWith(".mjs.map") || pathname.endsWith(".js.map"));
+  const isAsset = isRaw || isDts || pathname.endsWith(".mjs.map") || pathname.endsWith(".js.map");
+  const isFromAnotherWorker = req.headers.has("X-Real-Origin");
 
   let uri = pathname;
   if (query) {
     uri += query;
   }
   let storeKey = uri.slice(1);
-  if (!isModule) {
-    storeKey = pathname.slice(1);
+  if (isAsset) {
+    storeKey = pathname.slice(1); // ignore query
     if (storeKey.startsWith("*") && (isRaw || isDts)) {
       storeKey = storeKey.slice(1);
     }
   }
 
-  if (!fromWorker && R2) {
-    if (isModule) {
-      const kv = env.KV ?? asKV(R2);
+  if (!isFromAnotherWorker && R2) {
+    if (!isAsset) {
+      const kv = env.KV ?? mockKV(R2);
       const { value, metadata } = await kv.getWithMetadata<HttpMetadata>(
         storeKey,
         { type: "stream", cacheTtl: 86400 },
@@ -136,8 +134,8 @@ async function fetchOriginWithKVCache(
         headers.set("Cache-Control", ccImmutable);
         const exposedHeaders: string[] = [];
         if (metadata.esmId) {
-          headers.set("X-Esm-Id", metadata.esmId);
-          exposedHeaders.push("X-Esm-Id");
+          headers.set("x-esm-path", metadata.esmId);
+          exposedHeaders.push("x-esm-path");
         }
         if (metadata.dts) {
           headers.set("X-TypeScript-Types", metadata.dts);
@@ -168,7 +166,7 @@ async function fetchOriginWithKVCache(
 
   const contentType = res.headers.get("Content-Type") || getContentType(pathname);
   const cacheControl = res.headers.get("Cache-Control");
-  const esmId = res.headers.get("X-Esm-Id") ?? undefined;
+  const esmId = res.headers.get("x-esm-path") ?? undefined;
   const dts = res.headers.get("X-TypeScript-Types") ?? undefined;
   const exposedHeaders: string[] = [];
 
@@ -177,8 +175,8 @@ async function fetchOriginWithKVCache(
     headers.set("Cache-Control", cacheControl);
   }
   if (esmId) {
-    headers.set("X-Esm-Id", esmId);
-    exposedHeaders.push("X-Esm-Id");
+    headers.set("x-esm-path", esmId);
+    exposedHeaders.push("x-esm-path");
   }
   if (dts) {
     headers.set("X-TypeScript-Types", dts);
@@ -191,13 +189,13 @@ async function fetchOriginWithKVCache(
 
   let body = res.body!;
 
-  // save the file to KV/R2 if it's immutable
-  if (!fromWorker && R2 && cacheControl && cacheControl !== "public, max-age=0, must-revalidate") {
+  // save the file to KV/R2 if the `cache-control` header is not `public, max-age=0, must-revalidate`
+  if (!isFromAnotherWorker && R2 && cacheControl && cacheControl !== "public, max-age=0, must-revalidate") {
     const ccImmutable = cacheControl?.includes("immutable");
     let bodyCopy: ReadableStream<Uint8Array>;
     [body, bodyCopy] = body.tee();
-    if (isModule) {
-      const kv = env.KV ?? asKV(R2);
+    if (!isAsset) {
+      const kv = env.KV ?? mockKV(R2);
       let storeSteam = bodyCopy;
       if (gzip && typeof CompressionStream !== "undefined") {
         storeSteam = storeSteam.pipeThrough<Uint8Array>(new CompressionStream("gzip"));
@@ -488,6 +486,7 @@ function withESMWorker(middleware?: Middleware, cache: Cache = (caches as any).d
       pathname = splitBy(pathname, ":")[0];
     }
 
+    // fix pathname for GitHub/jsr registry
     const gh = pathname.startsWith("/gh/");
     if (gh) {
       pathname = "/@" + pathname.slice(4);
@@ -510,21 +509,22 @@ function withESMWorker(middleware?: Middleware, cache: Cache = (caches as any).d
     let packageVersion = "";
     let subPath = "";
     let extraQuery = "";
+    let isTargetUrl = false;
 
     if (pathname.startsWith("/@")) {
-      const [scope, name, ...rest] = decodeURIComponent(pathname).slice(2).split("/");
-      packageScope = "@" + scope;
+      const [, scope, name, ...rest] = pathname.split("/");
+      packageScope = scope;
       [packageName, packageVersion] = splitBy(name, "@");
       if (rest.length > 0) {
         subPath = "/" + rest.join("/");
+        isTargetUrl = hasTargetSegment(rest);
       }
     } else {
-      const [name, ...rest] = decodeURIComponent(pathname).slice(1).split(
-        "/",
-      );
+      const [, name, ...rest] = pathname.split("/");
       [packageName, packageVersion] = splitBy(name, "@");
       if (rest.length > 0) {
         subPath = "/" + rest.join("/");
+        isTargetUrl = hasTargetSegment(rest);
       }
     }
 
@@ -539,8 +539,6 @@ function withESMWorker(middleware?: Middleware, cache: Cache = (caches as any).d
     if (!regexpNpmNaming.test(packageName)) {
       return err(`Invalid package name '${packageName}'`, 400);
     }
-
-    const isTargetUrl = hasTargetSegment(subPath);
 
     let pkgId = packageName;
     if (packageScope) {
@@ -762,9 +760,9 @@ function withESMWorker(middleware?: Middleware, cache: Cache = (caches as any).d
   return {
     fetch: (req: Request, env: Env, ctx: ExecutionContext) =>
       onFetch(req, env, ctx).catch((e) => {
-        const r2 = env.R2;
-        if (r2) {
-          ctx.waitUntil(r2.put(
+        const { R2 } = env;
+        if (R2) {
+          ctx.waitUntil(R2.put(
             `errors/${new Date().toISOString().split("T")[0]}/${Date.now()}.log`,
             JSON.stringify({
               url: req.url,

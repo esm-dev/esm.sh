@@ -17,19 +17,15 @@ npm install esm-worker@0.135
 You need to add following configuration to your `wrangler.toml`:
 
 ```toml
-kv_namespaces = [
-  {
-    binding = "KV",
-    id = "YOUR_KV_ID",
-    preview_id = "YOUR_PREVIEW_KV_ID"
-  }
-  # your other namespaces...
-]
-
 [vars]
-ESM_ORIGIN = "https://esm.sh" # change to your self-hosting esm.sh server if needed
+ESM_SERVER_ORIGIN = "https://esm.sh/" # change to your self-hosting esm.sh server
 NPM_REGISTRY = "https://registry.npmjs.org/" # change to your private npm registry if needed
 # your other vars...
+
+[[kv_namespaces]]
+binding = "KV"
+id = "YOUR_KV_ID"
+preview_id = "YOUR_PREVIEW_KV_ID"
 
 [[r2_buckets]]
 binding = "R2"
@@ -41,7 +37,7 @@ Other optional configurations in secrets:
 
 - If you are using a self-hosting esm.sh server with `authSecret` option, you need to add the following configuration:
   ```bash
-  wrangler secret put ESM_TOKEN
+  wrangler secret put ESM_SERVER_TOKEN
   ```
 - If you are using a private npm registry, you need to add the following configuration:
   ```bash
@@ -81,7 +77,7 @@ export default withESMWorker((req, env, ctx) => {
     );
   }
 
-  // return void to let esm-worker handle the rest requests
+  // return `undefined` to let esm-worker handle the rest requests
 });
 ```
 

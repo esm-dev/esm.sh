@@ -19,7 +19,7 @@ type Pkg struct {
 	FromGithub bool   `json:"fromGithub"`
 }
 
-func validatePkgPath(pathname string) (pkg Pkg, extraQuery string, caretVersion bool, err error) {
+func validatePkgPath(rc *NpmRC, pathname string) (pkg Pkg, extraQuery string, caretVersion bool, hasTarget bool, err error) {
 	fromGithub := strings.HasPrefix(pathname, "/gh/") && strings.Count(pathname, "/") >= 3
 	if fromGithub {
 		pathname = "/@" + pathname[4:]
@@ -31,7 +31,7 @@ func validatePkgPath(pathname string) (pkg Pkg, extraQuery string, caretVersion 
 		}
 	}
 
-	pkgName, maybeVersion, subPath := splitPkgPath(pathname)
+	pkgName, maybeVersion, subPath, hasTarget := splitPkgPath(pathname)
 	if !validatePackageName(pkgName) {
 		err = fmt.Errorf("invalid package name '%s'", pkgName)
 		return
@@ -113,8 +113,8 @@ func validatePkgPath(pathname string) (pkg Pkg, extraQuery string, caretVersion 
 	caretVersion = strings.HasPrefix(pkg.Version, "^") && regexpFullVersion.MatchString(pkg.Version[1:])
 
 	if caretVersion || !regexpFullVersion.MatchString(pkg.Version) {
-		var p NpmPackageInfo
-		p, err = fetchPackageInfo(pkgName, version)
+		var p PackageJSON
+		p, err = rc.fetchPackageInfo(pkgName, version)
 		if err == nil {
 			pkg.Version = p.Version
 		}
@@ -122,7 +122,14 @@ func validatePkgPath(pathname string) (pkg Pkg, extraQuery string, caretVersion 
 	return
 }
 
-func (pkg Pkg) VersionName() string {
+func (pkg Pkg) ghPrefix() string {
+	if pkg.FromGithub {
+		return "gh/"
+	}
+	return ""
+}
+
+func (pkg Pkg) FullName() string {
 	if pkg.FromGithub {
 		return "gh/" + pkg.Name + "@" + pkg.Version
 	}
@@ -130,7 +137,7 @@ func (pkg Pkg) VersionName() string {
 }
 
 func (pkg Pkg) String() string {
-	s := pkg.VersionName()
+	s := pkg.FullName()
 	if pkg.SubModule != "" {
 		s += "/" + pkg.SubModule
 	}
@@ -196,24 +203,44 @@ func toModuleBareName(path string, stripIndexSuffier bool) string {
 	return ""
 }
 
-func splitPkgPath(specifier string) (pkgName string, version string, subPath string) {
+func splitPkgPath(specifier string) (pkgName string, version string, subPath string, hasTarget bool) {
 	a := strings.Split(strings.TrimPrefix(specifier, "/"), "/")
-	pkgNameWithVersion := a[0]
-	subPath = strings.Join(a[1:], "/")
-	if strings.HasPrefix(pkgNameWithVersion, "@") && len(a) > 1 {
-		pkgNameWithVersion = a[0] + "/" + a[1]
+	nameAndVersion := ""
+	if strings.HasPrefix(specifier, "@") && len(a) > 1 {
+		nameAndVersion = a[0] + "/" + a[1]
 		subPath = strings.Join(a[2:], "/")
+		if endsWith(subPath, ".js", ".mjs", ".css") {
+			hasTarget = hasTargetSegment(a[2:])
+		}
+	} else {
+		nameAndVersion = a[0]
+		subPath = strings.Join(a[1:], "/")
+		if endsWith(subPath, ".js", ".mjs", ".css") {
+			hasTarget = hasTargetSegment(a[1:])
+		}
 	}
-	if len(pkgNameWithVersion) > 0 && pkgNameWithVersion[0] == '@' {
-		pkgName, version = utils.SplitByLastByte(pkgNameWithVersion[1:], '@')
+	if len(nameAndVersion) > 0 && nameAndVersion[0] == '@' {
+		pkgName, version = utils.SplitByLastByte(nameAndVersion[1:], '@')
 		pkgName = "@" + pkgName
 	} else {
-		pkgName, version = utils.SplitByLastByte(pkgNameWithVersion, '@')
+		pkgName, version = utils.SplitByLastByte(nameAndVersion, '@')
 	}
 	return
 }
 
+func hasTargetSegment(segments []string) bool {
+	if len(segments) < 2 {
+		return false
+	}
+	if strings.HasPrefix(segments[0], "X-") && len(segments) > 2 {
+		_, ok := targets[segments[1]]
+		return ok
+	}
+	_, ok := targets[segments[0]]
+	return ok
+}
+
 func getPkgName(specifier string) string {
-	name, _, _ := splitPkgPath(specifier)
+	name, _, _, _ := splitPkgPath(specifier)
 	return name
 }

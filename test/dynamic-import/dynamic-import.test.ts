@@ -5,7 +5,7 @@ Deno.test("dynamic-import", async () => {
   res.body?.cancel();
   assertEquals(res.status, 200);
 
-  const esmId = res.headers.get("x-esm-id");
+  const esmId = res.headers.get("x-esm-path");
   const res2 = await fetch(`http://localhost:8080/${esmId}`);
   assertEquals(res.status, 200);
 

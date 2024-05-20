@@ -1,17 +1,24 @@
 import type { HttpMetadata, WorkerStorage, WorkerStorageKV } from "../types/index";
 import { targets } from "esm-compat";
 
-export function hasTargetSegment(path: string) {
-  const parts = path.slice(1).split("/");
-  return parts.length >= 2 && parts.some((p) => targets.has(p));
+export function hasTargetSegment(segments: string[]) {
+  const len = segments.length;
+  if (len < 2) {
+    return false;
+  }
+  const s0 = segments[0];
+  if (s0.startsWith("X-") && len > 2) {
+    return targets.has(segments[1]);
+  }
+  return targets.has(s0);
 }
 
 export function isDtsFile(path: string) {
   return path.endsWith(".d.ts") || path.endsWith(".d.mts");
 }
 
-export function asKV(storage: R2Bucket | WorkerStorage): WorkerStorageKV {
-  return globalThis.__AS_KV__ ?? (globalThis.__AS_KV__ = {
+export function mockKV(storage: R2Bucket | WorkerStorage): WorkerStorageKV {
+  return globalThis.__MOCK_KV__ ?? (globalThis.__MOCK_KV__ = {
     async getWithMetadata(
       key: string,
       _options: { type: "stream"; cacheTtl?: number },
@@ -123,6 +130,8 @@ export function copyHeaders(dst: Headers, src: Headers, ...keys: string[]) {
 const allowedSearchParams = new Set([
   "alias",
   "bundle",
+  "bundle-deps",
+  "bundle-all",
   "conditions",
   "css",
   "deno-std",

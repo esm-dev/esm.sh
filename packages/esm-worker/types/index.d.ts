@@ -1,7 +1,9 @@
+/// <reference types="@cloudflare/workers-types" />
+
 declare global {
   interface Env {
-    ESM_ORIGIN?: string;
-    ESM_TOKEN?: string;
+    ESM_SERVER_ORIGIN?: string;
+    ESM_SERVER_TOKEN?: string;
     NPM_REGISTRY?: string;
     NPM_TOKEN?: string;
     KV?: KVNamespace;

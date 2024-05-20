@@ -1,23 +1,14 @@
 package server
 
 import (
-	"archive/tar"
-	"bytes"
-	"compress/gzip"
-	"embed"
 	"flag"
 	"fmt"
-	"io"
 	"net/http"
 	"os"
-	"os/exec"
 	"os/signal"
 	"path"
-	"strings"
-	"sync"
 	"syscall"
 
-	"github.com/esm-dev/esm.sh/server/config"
 	"github.com/esm-dev/esm.sh/server/storage"
 
 	logger "github.com/ije/gox/log"
@@ -25,21 +16,13 @@ import (
 )
 
 var (
-	cfg          *config.Config
-	cache        storage.Cache
-	db           storage.DataBase
-	fs           storage.FileSystem
-	nodeLibs     map[string]string
-	buildQueue   *BuildQueue
-	log          *logger.Logger
-	embedFS      EmbedFS
-	fetchLocks   sync.Map
-	installLocks sync.Map
+	buildQueue *BuildQueue
+	config     *Config
+	cache      storage.Cache
+	db         storage.DataBase
+	fs         storage.FileSystem
+	log        *logger.Logger
 )
-
-type EmbedFS interface {
-	ReadFile(name string) ([]byte, error)
-}
 
 // Serve serves ESM server
 func Serve(efs EmbedFS) {
@@ -54,88 +37,64 @@ func Serve(efs EmbedFS) {
 	flag.Parse()
 
 	if !existsFile(cfile) {
-		cfg = config.Default()
+		config = DefaultConfig()
 		fmt.Println("Config file not found, use default config")
 	} else {
-		cfg, err = config.Load(cfile)
+		config, err = LoadConfig(cfile)
 		if err != nil {
 			fmt.Println(err.Error())
 			os.Exit(1)
 		}
 		fmt.Println("Config loaded from", cfile)
 	}
-	buildQueue = newBuildQueue(int(cfg.BuildConcurrency))
+	buildQueue = NewBuildQueue(int(config.BuildConcurrency))
 
 	if isDev {
-		cfg.LogLevel = "debug"
+		config.LogLevel = "debug"
 		cwd, err := os.Getwd()
 		if err != nil {
 			fmt.Println(err)
 			os.Exit(1)
 		}
-		embedFS = &DevFS{cwd}
+		embedFS = &MockEmbedFS{cwd}
 	} else {
 		os.Setenv("NO_COLOR", "1") // disable log color in production
 		embedFS = efs
 	}
 
-	log, err = logger.New(fmt.Sprintf("file:%s?buffer=32k", path.Join(cfg.LogDir, fmt.Sprintf("main-v%d.log", VERSION))))
+	log, err = logger.New(fmt.Sprintf("file:%s?buffer=32k", path.Join(config.LogDir, fmt.Sprintf("main-v%d.log", VERSION))))
 	if err != nil {
 		fmt.Printf("initiate logger: %v\n", err)
 		os.Exit(1)
 	}
-	log.SetLevelByName(cfg.LogLevel)
+	log.SetLevelByName(config.LogLevel)
 
-	cache, err = storage.OpenCache(cfg.Cache)
+	cache, err = storage.OpenCache(config.Cache)
 	if err != nil {
-		log.Fatalf("init storage(cache,%s): %v", cfg.Cache, err)
-	}
-
-	fs, err = storage.OpenFS(cfg.Storage)
-	if err != nil {
-		log.Fatalf("init storage(fs,%s): %v", cfg.Storage, err)
+		log.Fatalf("init cache(%s): %v", config.Cache, err)
 	}
 
-	db, err = storage.OpenDB(cfg.Database)
+	fs, err = storage.OpenFS(config.Storage)
 	if err != nil {
-		log.Fatalf("init storage(db,%s): %v", cfg.Database, err)
+		log.Fatalf("init fs(%s): %v", config.Storage, err)
 	}
 
-	data, err := efs.ReadFile("server/embed/nodelibs.tar.gz")
+	db, err = storage.OpenDB(config.Database)
 	if err != nil {
-		log.Fatal(err)
+		log.Fatalf("init db(%s): %v", config.Database, err)
 	}
-	gr, err := gzip.NewReader(bytes.NewReader(data))
+
+	err = loadNodeLibs(efs)
 	if err != nil {
-		log.Fatal(err)
+		log.Fatalf("load node libs: %v", err)
 	}
-	tr := tar.NewReader(gr)
-	nodeLibs = make(map[string]string)
-	for {
-		h, err := tr.Next()
-		if err != nil {
-			break
-		}
-		if h.Typeflag == tar.TypeReg {
-			data, err := io.ReadAll(tr)
-			if err != nil {
-				log.Fatal(err)
-			}
-			nodeLibs[h.Name] = string(data)
-		}
-	}
-	node_async_hooks_js, err := efs.ReadFile("server/embed/polyfills/node_async_hooks.js")
-	if err != nil {
-		log.Fatal(err)
-	}
-	nodeLibs["node/async_hooks.js"] = string(node_async_hooks_js)
 	log.Debugf("%d node libs loaded", len(nodeLibs))
 
 	var accessLogger *logger.Logger
-	if cfg.LogDir == "" {
+	if config.LogDir == "" {
 		accessLogger = &logger.Logger{}
 	} else {
-		accessLogger, err = logger.New(fmt.Sprintf("file:%s?buffer=32k&fileDateFormat=20060102", path.Join(cfg.LogDir, "access.log")))
+		accessLogger, err = logger.New(fmt.Sprintf("file:%s?buffer=32k&fileDateFormat=20060102", path.Join(config.LogDir, "access.log")))
 		if err != nil {
 			log.Fatalf("failed to initialize access logger: %v", err)
 		}
@@ -144,26 +103,21 @@ func Serve(efs EmbedFS) {
 
 	nodejsInstallDir := os.Getenv("NODE_INSTALL_DIR")
 	if nodejsInstallDir == "" {
-		nodejsInstallDir = path.Join(cfg.WorkDir, "nodejs")
+		nodejsInstallDir = path.Join(config.WorkDir, "nodejs")
 	}
 	nodeVer, pnpmVer, err := checkNodejs(nodejsInstallDir)
 	if err != nil {
 		log.Fatalf("nodejs: %v", err)
 	}
-	if cfg.NpmRegistry == "" {
-		output, err := exec.Command("npm", "config", "get", "registry").CombinedOutput()
-		if err == nil {
-			cfg.NpmRegistry = strings.TrimRight(strings.TrimSpace(string(output)), "/") + "/"
-		}
-	}
-	log.Infof("nodejs: v%s, pnpm: %s, registry: %s", nodeVer, pnpmVer, cfg.NpmRegistry)
+	log.Infof("nodejs: v%s, pnpm: %s, registry: %s", nodeVer, pnpmVer, config.NpmRegistry)
 
 	err = initCJSLexerNodeApp()
 	if err != nil {
 		log.Fatalf("failed to initialize the cjs_lexer node app: %v", err)
 	}
+	log.Infof("%s initialized", cjsLexerPkg)
 
-	if !cfg.DisableCompression {
+	if !config.DisableCompression {
 		rex.Use(rex.Compression())
 	}
 	rex.Use(
@@ -179,22 +133,22 @@ func Serve(efs EmbedFS) {
 			ExposedHeaders:   []string{"X-TypeScript-Types"},
 			AllowCredentials: false,
 		}),
-		auth(cfg.AuthSecret),
-		esmHandler(),
+		auth(config.AuthSecret),
+		router(),
 	)
 
 	C := rex.Serve(rex.ServerConfig{
-		Port: uint16(cfg.Port),
+		Port: uint16(config.Port),
 		TLS: rex.TLSConfig{
-			Port: uint16(cfg.TlsPort),
+			Port: uint16(config.TlsPort),
 			AutoTLS: rex.AutoTLSConfig{
-				AcceptTOS: cfg.TlsPort > 0 && !isDev,
-				CacheDir:  path.Join(cfg.WorkDir, "autotls"),
+				AcceptTOS: config.TlsPort > 0 && !isDev,
+				CacheDir:  path.Join(config.WorkDir, "autotls"),
 			},
 		},
 	})
 
-	log.Infof("Server is ready on http://localhost:%d", cfg.Port)
+	log.Infof("Server is ready on http://localhost:%d", config.Port)
 
 	c := make(chan os.Signal, 1)
 	signal.Notify(c, syscall.SIGTERM, syscall.SIGINT, syscall.SIGQUIT, syscall.SIGHUP, syscall.SIGABRT)
@@ -211,7 +165,7 @@ func Serve(efs EmbedFS) {
 }
 
 func init() {
-	embedFS = &embed.FS{}
+	config = &Config{}
 	log = &logger.Logger{}
 }
 

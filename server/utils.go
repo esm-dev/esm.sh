@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"regexp"
 	"strings"
@@ -16,16 +17,15 @@ import (
 const EOL = "\n"
 
 var (
-	regexpFullVersion     = regexp.MustCompile(`^\d+\.\d+\.\d+[\w\.\+\-]*$`)
-	regexpFullVersionPath = regexp.MustCompile(`(\w)@(v?\d+\.\d+\.\d+[\w\.\+\-]*|[0-9a-f]{7})(/|$)`)
-	regexpLocPath         = regexp.MustCompile(`(\.m?js):\d+:\d+$`)
-	regexpJSIdent         = regexp.MustCompile(`^[a-zA-Z_$][\w$]*$`)
-	regexpGlobalIdent     = regexp.MustCompile(`__[a-zA-Z]+\$`)
-	regexpVarEqual        = regexp.MustCompile(`var ([a-zA-Z]+)\s*=\s*[a-zA-Z]+$`)
+	regexpFullVersion = regexp.MustCompile(`^\d+\.\d+\.\d+[\w\.\+\-]*$`)
+	regexpLocPath     = regexp.MustCompile(`:\d+:\d+$`)
+	regexpJSIdent     = regexp.MustCompile(`^[a-zA-Z_$][\w$]*$`)
+	regexpGlobalIdent = regexp.MustCompile(`__[a-zA-Z]+\$`)
+	regexpVarEqual    = regexp.MustCompile(`var ([a-zA-Z]+)\s*=\s*[a-zA-Z]+$`)
 )
 
 var (
-	esExts = []string{".mjs", ".js", ".jsx", ".mts", ".ts", ".tsx", ".cjs"}
+	jsExts = []string{".mjs", ".js", ".jsx", ".mts", ".ts", ".tsx", ".cjs"}
 )
 
 // isHttpSepcifier returns true if the import path is a remote URL.
@@ -85,7 +85,7 @@ func endsWith(s string, suffixs ...string) bool {
 
 // stripModuleExt strips the module extension from the given string.
 func stripModuleExt(s string) string {
-	for _, ext := range esExts {
+	for _, ext := range jsExts {
 		if strings.HasSuffix(s, ext) {
 			return s[:len(s)-len(ext)]
 		}
@@ -171,15 +171,30 @@ func atobUrl(s string) (string, error) {
 	return string(data), nil
 }
 
-// removeHttpPrefix removes the http/https prefix from the given string.
-func removeHttpPrefix(s string) (string, error) {
-	if strings.HasPrefix(s, "http://") {
-		return s[7:], nil
-	} else if strings.HasPrefix(s, "https://") {
-		return s[8:], nil
-	} else {
-		return "", fmt.Errorf("not a http/https url: %s", s)
+// removeHttpUrlProtocol removes the `http[s]:` protocol from the given url.
+func removeHttpUrlProtocol(url string) string {
+	if strings.HasPrefix(url, "https://") {
+		return url[6:]
 	}
+	if strings.HasPrefix(url, "http://") {
+		return url[5:]
+	}
+	return url
+}
+
+// toEnvName converts the given string to an environment variable name.
+func toEnvName(s string) string {
+	runes := []rune(s)
+	for i, r := range runes {
+		if (r >= '0' && r <= '9') || (r >= 'A' && r <= 'Z') {
+			runes[i] = r
+		} else if r >= 'a' && r <= 'z' {
+			runes[i] = r - 'a' + 'A'
+		} else {
+			runes[i] = '_'
+		}
+	}
+	return string(runes)
 }
 
 // concatBytes concatenates two byte slices.
@@ -209,4 +224,25 @@ func parseJSONFile(filename string, v interface{}) (err error) {
 	}
 	defer file.Close()
 	return json.NewDecoder(file).Decode(v)
+}
+
+func run(cmd string, args ...string) (output []byte, err error) {
+	var outBuf bytes.Buffer
+	var errBuf bytes.Buffer
+	c := exec.Command(cmd, args...)
+	c.Stdout = &outBuf
+	c.Stderr = &errBuf
+	err = c.Run()
+	if err != nil {
+		if errBuf.Len() > 0 {
+			err = fmt.Errorf("%s: %s", err, errBuf.String())
+		}
+		return
+	}
+	if errBuf.Len() > 0 {
+		err = fmt.Errorf("%s", errBuf.String())
+		return
+	}
+	output = outBuf.Bytes()
+	return
 }
