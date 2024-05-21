@@ -626,7 +626,7 @@ func validatePackageName(name string) bool {
 }
 
 // added by @jimisaacs
-func toTypesPackageName(pkgName string) string {
+func toTypesPkgName(pkgName string) string {
 	if strings.HasPrefix(pkgName, "@") {
 		pkgName = strings.Replace(pkgName[1:], "/", "__", 1)
 	}

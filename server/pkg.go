@@ -31,7 +31,7 @@ func validatePkgPath(rc *NpmRC, pathname string) (pkg Pkg, extraQuery string, ca
 		}
 	}
 
-	pkgName, maybeVersion, subPath, hasTarget := splitPkgPath(pathname)
+	pkgName, maybeVersion, subPath, hasTarget := splitPkgPath(strings.TrimPrefix(pathname, "/"))
 	if !validatePackageName(pkgName) {
 		err = fmt.Errorf("invalid package name '%s'", pkgName)
 		return
@@ -204,7 +204,7 @@ func toModuleBareName(path string, stripIndexSuffier bool) string {
 }
 
 func splitPkgPath(specifier string) (pkgName string, version string, subPath string, hasTarget bool) {
-	a := strings.Split(strings.TrimPrefix(specifier, "/"), "/")
+	a := strings.Split(specifier, "/")
 	nameAndVersion := ""
 	if strings.HasPrefix(specifier, "@") && len(a) > 1 {
 		nameAndVersion = a[0] + "/" + a[1]

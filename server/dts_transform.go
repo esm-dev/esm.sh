@@ -17,8 +17,8 @@ import (
 
 // transformDTS transforms a `.d.ts` file for deno/editor-lsp
 func transformDTS(ctx *BuildContext, dts string, buildArgsPrefix string, marker *StringSet) (n int, err error) {
-	root := marker == nil
-	if root {
+	isRoot := marker == nil
+	if isRoot {
 		marker = NewStringSet()
 	}
 	// don't transform repeatly
@@ -48,7 +48,7 @@ func transformDTS(ctx *BuildContext, dts string, buildArgsPrefix string, marker 
 	if err != nil {
 		// if the dts file does not exist, print a warning but continue to build
 		if os.IsNotExist(err) {
-			if root {
+			if isRoot {
 				err = fmt.Errorf("types not found")
 			} else {
 				log.Warnf("dts file not found: %s", dtsFilePath)
@@ -125,13 +125,11 @@ func transformDTS(ctx *BuildContext, dts string, buildArgsPrefix string, marker 
 			return relPath, nil
 		}
 
-		depPkgName, _, subPath, _ := splitPkgPath(utils.CleanPath(specifier))
+		depPkgName, _, subPath, _ := splitPkgPath(specifier)
 		specifier = depPkgName
 		if subPath != "" {
 			specifier += "/" + subPath
 		}
-
-		fmt.Println(specifier)
 
 		// respect `?alias` query
 		alias, ok := ctx.args.alias[depPkgName]
@@ -145,24 +143,22 @@ func transformDTS(ctx *BuildContext, dts string, buildArgsPrefix string, marker 
 			return specifier, nil
 		}
 
-		if _, ok := ctx.pkgJson.Dependencies["@types/"+depPkgName]; ok {
-			depPkgName = "@types/" + depPkgName
+		typesPkgName := toTypesPkgName(depPkgName)
+		if _, ok := ctx.pkgJson.Dependencies[typesPkgName]; ok {
+			depPkgName = typesPkgName
 			specifier = fmt.Sprintf("%s/%s", depPkgName, subPath)
-		} else if _, ok := ctx.pkgJson.Dependencies["@types/"+depPkgName]; ok {
-			depPkgName = "@types/" + depPkgName
+		} else if _, ok := ctx.pkgJson.PeerDependencies[typesPkgName]; ok {
+			depPkgName = typesPkgName
 			specifier = fmt.Sprintf("%s/%s", depPkgName, subPath)
 		}
 
 		_, p, _, err := ctx.lookupDep(depPkgName)
 		if (err == nil && p.Types == "" && p.Typings == "") || (err != nil && strings.HasSuffix(err.Error(), "not found") && !strings.HasSuffix(depPkgName, "@types/")) {
-			depPkgName = toTypesPackageName("@types/" + depPkgName)
+			depPkgName = toTypesPkgName(depPkgName)
 			specifier = fmt.Sprintf("%s/%s", depPkgName, subPath)
 			_, p, _, err = ctx.lookupDep(depPkgName)
 		}
 		if err != nil {
-			if strings.HasSuffix(err.Error(), "not found") {
-				return specifier, nil
-			}
 			return "", err
 		}
 

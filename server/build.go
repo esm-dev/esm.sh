@@ -1347,7 +1347,7 @@ func (ctx *BuildContext) checkTypes(entry PackageEntry) string {
 			versionParts[0] + "." + versionParts[1], // major.minor
 			versionParts[0],                         // major
 		}
-		typesPkgName := toTypesPackageName(ctx.pkgJson.Name)
+		typesPkgName := toTypesPkgName(ctx.pkgJson.Name)
 		pkg, ok := ctx.args.deps.Get(typesPkgName)
 		if ok {
 			// use the version of the `?deps` query if it exists

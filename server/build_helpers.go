@@ -125,13 +125,25 @@ func (ctx *BuildContext) isServerTarget() bool {
 
 func (ctx *BuildContext) lookupDep(specifier string) (pkg Pkg, p PackageJSON, installed bool, err error) {
 	pkgName, version, subpath, _ := splitPkgPath(specifier)
+	if _pkg, ok := ctx.args.deps.Get(pkgName); ok {
+		p, err = ctx.npmrc.getPackageInfo(pkgName, _pkg.Version)
+		if err == nil {
+			pkg = Pkg{
+				Name:      pkgName,
+				Version:   p.Version,
+				SubPath:   subpath,
+				SubModule: toModuleBareName(subpath, true),
+			}
+		}
+		return
+	}
 	pkgJsonPath := path.Join(ctx.wd, "node_modules", ".pnpm", "node_modules", pkgName, "package.json")
 	if !existsFile(pkgJsonPath) {
 		pkgJsonPath = path.Join(ctx.wd, "node_modules", pkgName, "package.json")
 	}
 	if parseJSONFile(pkgJsonPath, &p) == nil {
 		pkg = Pkg{
-			Name:      p.Name,
+			Name:      pkgName,
 			Version:   p.Version,
 			SubPath:   subpath,
 			SubModule: toModuleBareName(subpath, true),
@@ -140,9 +152,7 @@ func (ctx *BuildContext) lookupDep(specifier string) (pkg Pkg, p PackageJSON, in
 		return
 	}
 	if version == "" {
-		if pkg, ok := ctx.args.deps.Get(pkgName); ok {
-			version = pkg.Version
-		} else if v, ok := ctx.pkgJson.Dependencies[pkgName]; ok {
+		if v, ok := ctx.pkgJson.Dependencies[pkgName]; ok {
 			if strings.HasPrefix(v, "npm:") {
 				pkgName, version, _, _ = splitPkgPath(v[4:])
 			} else {
@@ -157,7 +167,7 @@ func (ctx *BuildContext) lookupDep(specifier string) (pkg Pkg, p PackageJSON, in
 	p, err = ctx.npmrc.getPackageInfo(pkgName, version)
 	if err == nil {
 		pkg = Pkg{
-			Name:      p.Name,
+			Name:      pkgName,
 			Version:   p.Version,
 			SubPath:   subpath,
 			SubModule: toModuleBareName(subpath, true),
