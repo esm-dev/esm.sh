@@ -10,12 +10,12 @@ import (
 type BuildQueue struct {
 	lock        sync.RWMutex
 	queue       *list.List
-	tasks       map[string]*QueueTask
+	tasks       map[string]*BuildTask
 	wip         int32
 	concurrency int32
 }
 
-type QueueTask struct {
+type BuildTask struct {
 	*BuildContext
 	el        *list.Element
 	clients   []*QueueClient
@@ -24,47 +24,23 @@ type QueueTask struct {
 	inProcess bool
 }
 
-type QueueClient struct {
-	C  chan BuildOutput `json:"-"`
-	IP string           `json:"ip"`
-}
-
 type BuildOutput struct {
 	result BuildResult
 	err    error
 }
 
+type QueueClient struct {
+	C  chan BuildOutput `json:"-"`
+	IP string           `json:"ip"`
+}
+
 func NewBuildQueue(concurrency int) *BuildQueue {
 	q := &BuildQueue{
 		queue:       list.New(),
-		tasks:       map[string]*QueueTask{},
+		tasks:       map[string]*BuildTask{},
 		concurrency: int32(concurrency),
 	}
 	return q
-}
-
-func (t *QueueTask) build() BuildOutput {
-	t.inProcess = true
-	t.startedAt = time.Now()
-	ret, err := t.Build()
-	if err == nil {
-		if t.subBuilds != nil && t.subBuilds.Len() > 0 {
-			log.Infof("build '%s' (%d sub-builds) done in %v", t.Path(), t.subBuilds.Len(), time.Since(t.startedAt))
-		} else {
-			log.Infof("build '%s' done in %v", t.Path(), time.Since(t.startedAt))
-		}
-	} else {
-		log.Errorf("build '%s': %v", t.Path(), err)
-	}
-	return BuildOutput{ret, err}
-}
-
-// Len returns the number of tasks of the queue.
-func (q *BuildQueue) Len() int {
-	q.lock.RLock()
-	defer q.lock.RUnlock()
-
-	return q.queue.Len()
 }
 
 // Add adds a new build task to the queue.
@@ -74,24 +50,19 @@ func (q *BuildQueue) Add(ctx *BuildContext, clientIp string) *QueueClient {
 	// check if the task is already in the queue
 	q.lock.RLock()
 	t, ok := q.tasks[ctx.Path()]
-	if ok && clientIp != "" {
-		t.clients = append(t.clients, client)
-	}
 	q.lock.RUnlock()
 
 	if ok {
+		t.clients = append(t.clients, client)
 		return client
 	}
 
-	ctx.stage = "pending"
-	t = &QueueTask{
+	t = &BuildTask{
 		BuildContext: ctx,
 		createdAt:    time.Now(),
-		clients:      []*QueueClient{},
+		clients:      []*QueueClient{client},
 	}
-	if clientIp != "" {
-		t.clients = []*QueueClient{client}
-	}
+	ctx.stage = "pending"
 
 	q.lock.Lock()
 	t.el = q.queue.PushBack(t)
@@ -104,12 +75,12 @@ func (q *BuildQueue) Add(ctx *BuildContext, clientIp string) *QueueClient {
 }
 
 func (q *BuildQueue) next() {
-	var nextTask *QueueTask
+	var nextTask *BuildTask
 
 	q.lock.RLock()
 	if q.wip < q.concurrency {
 		for el := q.queue.Front(); el != nil; el = el.Next() {
-			t, ok := el.Value.(*QueueTask)
+			t, ok := el.Value.(*BuildTask)
 			if ok && !t.inProcess {
 				nextTask = t
 				break
@@ -118,19 +89,31 @@ func (q *BuildQueue) next() {
 	}
 	q.lock.RUnlock()
 
-	if nextTask == nil {
-		return
+	if nextTask != nil {
+		q.lock.Lock()
+		q.wip += 1
+		nextTask.inProcess = true
+		nextTask.startedAt = time.Now()
+		q.lock.Unlock()
+		go q.build(nextTask)
 	}
-
-	q.lock.Lock()
-	q.wip += 1
-	q.lock.Unlock()
-
-	go q.run(nextTask)
 }
 
-func (q *BuildQueue) run(t *QueueTask) {
-	output := t.build()
+func (q *BuildQueue) build(t *BuildTask) {
+	ret, err := t.Build()
+	if err == nil {
+		if t.target == "types" {
+			log.Infof("build '%s'(types) done in %v", t.Path(), time.Since(t.startedAt))
+		} else if t.subBuilds != nil && t.subBuilds.Len() > 0 {
+			log.Infof("build '%s'(%d sub-builds) done in %v", t.Path(), t.subBuilds.Len(), time.Since(t.startedAt))
+		} else {
+			log.Infof("build '%s' done in %v", t.Path(), time.Since(t.startedAt))
+		}
+	} else {
+		log.Errorf("build '%s': %v", t.Path(), err)
+	}
+
+	output := BuildOutput{ret, err}
 	for _, c := range t.clients {
 		c.C <- output
 	}
