@@ -1359,6 +1359,77 @@ mod tests {
   }
 
   #[test]
+  fn parse_cjs_exports_case_21_12() {
+    // Webpack 3 minified UMD output from https://github.com/highcharts/highcharts-react/blob/08e5ac19b9da5ba7d5b463919691e0b1db0fb34c/dist/highcharts-react.min.js#L1C1-L2C49
+    // with irrelevant parts manually removed.
+    // Formatted with Deno to avoid ast changes from prettier.
+    let source = r#"
+    !function (e, t) {
+      "object" == typeof exports && "object" == typeof module
+        ? module.exports = t(require("react"))
+        : "function" == typeof define && define.amd
+        ? define(["react"], t)
+        : "object" == typeof exports
+        ? exports.HighchartsReact = t(require("react"))
+        : e.HighchartsReact = t(e.React);
+    }("undefined" != typeof self ? self : this, function (e) {
+      return function (e) {
+        function t(n) {
+          if (r[n]) return r[n].exports;
+          var o = r[n] = { i: n, l: !1, exports: {} };
+          return e[n].call(o.exports, o, o.exports, t), o.l = !0, o.exports;
+        }
+        var r = {};
+        return t.m = e,
+          t.c = r,
+          t.d = function (e, r, n) {
+            t.o(e, r) ||
+              Object.defineProperty(e, r, {
+                configurable: !1,
+                enumerable: !0,
+                get: n,
+              });
+          },
+          t.n = function (e) {
+            var r = e && e.__esModule
+              ? function () {
+                return e.default;
+              }
+              : function () {
+                return e;
+              };
+            return t.d(r, "a", r), r;
+          },
+          t.o = function (e, t) {
+            return Object.prototype.hasOwnProperty.call(e, t);
+          },
+          t.p = "",
+          t(t.s = 0);
+      }([function (e, t, r) {
+        "use strict";
+        Object.defineProperty(t, "__esModule", { value: !0 }),
+          r.d(t, "HighchartsReact", function () {
+            return c;
+          });
+        var n = r(1),
+          o = r.n(n),
+          c = function (e) {
+            return o.a.createElement("div", e.containerProps);
+          };
+        t.default = c;
+      }, function (t, r) {
+        t.exports = e;
+      }]);
+    });
+    "#;
+    let swc = SWC::parse("index.cjs", source).expect("could not parse module");
+    let (exports, _) = swc
+      .parse_cjs_exports("production", true)
+      .expect("could not parse exports");
+    assert_eq!(exports.join(","), "HighchartsReact,default");
+  }
+
+  #[test]
   fn parse_cjs_exports_case_22() {
     let source = r#"
       var url = module.exports = {};

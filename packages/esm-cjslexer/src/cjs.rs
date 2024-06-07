@@ -1212,7 +1212,7 @@ impl CJSLexer {
                     ..
                   } = function.as_ref()
                   {
-                    if let Some(Stmt::Decl(Decl::Fn(FnDecl { function, .. }))) = stmts.get(1) {
+                    let mut check_function = |function: &Box<Function>| {
                       if let Function {
                         body: Some(BlockStmt { stmts, .. }),
                         ..
@@ -1294,6 +1294,11 @@ impl CJSLexer {
                           }
                         }
                       }
+                    };
+                    if let Some(Stmt::Decl(Decl::Fn(FnDecl { function, .. }))) = stmts.get(0) {
+                      check_function(function);
+                    } else if let Some(Stmt::Decl(Decl::Fn(FnDecl { function, .. }))) = stmts.get(1) {
+                      check_function(function);
                     }
                   }
                 }
@@ -1382,7 +1387,6 @@ impl CJSLexer {
                           },
                         ..
                       }))) = stmts.get(first_stmt_index + 1)
-                      // }))) = stmts.get(2)
                       {
                         let webpack_require_props =
                           self.get_webpack_require_props_from_stmts(stmts, webpack_require_sym);
