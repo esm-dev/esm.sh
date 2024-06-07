@@ -14,7 +14,7 @@ declare global {
 
 export type HttpMetadata = {
   contentType: string;
-  esmId?: string;
+  esmPath?: string;
   dts?: string;
 };
 

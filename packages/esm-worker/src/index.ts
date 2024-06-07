@@ -76,11 +76,11 @@ async function fetchOrigin(req: Request, env: Env, ctx: Context, uri: string, re
     "Cache-Control",
     "Content-Type",
     "ETag",
-    "x-esm-path",
-    "X-Typescript-Types",
+    "X-ESM-Path",
+    "X-TypeScript-Types",
   );
   const exposedHeaders: string[] = [];
-  for (const key of ["x-esm-path", "X-Typescript-Types"]) {
+  for (const key of ["X-ESM-Path", "X-TypeScript-Types"]) {
     if (resHeaders.has(key)) {
       exposedHeaders.push(key);
     }
@@ -133,9 +133,9 @@ async function fetchOriginWithKVCache(
         headers.set("Content-Type", metadata.contentType);
         headers.set("Cache-Control", ccImmutable);
         const exposedHeaders: string[] = [];
-        if (metadata.esmId) {
-          headers.set("x-esm-path", metadata.esmId);
-          exposedHeaders.push("x-esm-path");
+        if (metadata.esmPath) {
+          headers.set("X-ESM-Path", metadata.esmPath);
+          exposedHeaders.push("X-ESM-Path");
         }
         if (metadata.dts) {
           headers.set("X-TypeScript-Types", metadata.dts);
@@ -166,7 +166,7 @@ async function fetchOriginWithKVCache(
 
   const contentType = res.headers.get("Content-Type") || getContentType(pathname);
   const cacheControl = res.headers.get("Cache-Control");
-  const esmId = res.headers.get("x-esm-path") ?? undefined;
+  const esmPath = res.headers.get("X-ESM-Path") ?? undefined;
   const dts = res.headers.get("X-TypeScript-Types") ?? undefined;
   const exposedHeaders: string[] = [];
 
@@ -174,9 +174,9 @@ async function fetchOriginWithKVCache(
   if (cacheControl) {
     headers.set("Cache-Control", cacheControl);
   }
-  if (esmId) {
-    headers.set("x-esm-path", esmId);
-    exposedHeaders.push("x-esm-path");
+  if (esmPath) {
+    headers.set("X-ESM-Path", esmPath);
+    exposedHeaders.push("X-ESM-Path");
   }
   if (dts) {
     headers.set("X-TypeScript-Types", dts);
@@ -209,7 +209,7 @@ async function fetchOriginWithKVCache(
           }
         });
       }
-      ctx.waitUntil(kv.put(storeKey, storeSteam, { expirationTtl, metadata: { contentType, dts, esmId } }));
+      ctx.waitUntil(kv.put(storeKey, storeSteam, { expirationTtl, metadata: { contentType, dts, esmPath: esmPath } }));
     } else if (ccImmutable) {
       ctx.waitUntil(R2.put(storeKey, bodyCopy, { httpMetadata: { contentType } }));
     }
@@ -342,7 +342,6 @@ function withESMWorker(middleware?: Middleware, cache: Cache = (caches as any).d
     if (
       pathname === "/run" ||
       pathname === "/sw" ||
-      pathname === "/node.ns.d.ts" ||
       pathname === "/sw.d.ts" ||
       ((pathname.startsWith("/node/") || pathname.startsWith("/npm_")) && pathname.endsWith(".js"))
     ) {
