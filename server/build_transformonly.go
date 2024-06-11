@@ -9,20 +9,27 @@ import (
 	"github.com/evanw/esbuild/pkg/api"
 )
 
-type TransofrmInput struct {
+type TransformInput struct {
 	Code      string `json:"code,omitempty"`
 	ImportMap string `json:"importMap,omitempty"`
 	Filename  string `json:"filename,omitempty"`
 	Target    string `json:"target,omitempty"`
+	SourceMap bool   `json:"sourceMap,omitempty"`
 }
 
-func transform(input TransofrmInput) (code string, err error) {
+type TransformOutput struct {
+	Code string `json:"code"`
+	Map  string `json:"map,omitempty"`
+}
+
+func transform(input TransformInput) (out TransformOutput, err error) {
 	target := api.ESNext
 	if input.Target != "" {
 		if t, ok := targets[input.Target]; ok {
 			target = t
 		} else {
-			return "", errors.New("<400> invalid target")
+			err = errors.New("<400> invalid target")
+			return
 		}
 	}
 
@@ -112,12 +119,24 @@ func transform(input TransofrmInput) (code string, err error) {
 			},
 		},
 	}
+	if input.SourceMap {
+		opts.Sourcemap = api.SourceMapExternal
+	}
 	ret := api.Build(opts)
 	if len(ret.Errors) > 0 {
-		return "", errors.New("<400> failed to validate code: " + ret.Errors[0].Text)
+		err = errors.New("<400> failed to validate code: " + ret.Errors[0].Text)
+		return
 	}
 	if len(ret.OutputFiles) == 0 {
-		return "", errors.New("<400> failed to validate code: no output files")
+		err = errors.New("<400> failed to validate code: no output files")
+		return
 	}
-	return string(ret.OutputFiles[0].Contents), nil
+	for _, file := range ret.OutputFiles {
+		if strings.HasSuffix(file.Path, ".js") {
+			out.Code = string(file.Contents)
+		} else if strings.HasSuffix(file.Path, ".map") {
+			out.Map = string(file.Contents)
+		}
+	}
+	return
 }

@@ -105,7 +105,7 @@ func cjsLexer(npmrc *NpmRC, pkgName string, wd string, specifier string, nodeEnv
 
 	/* workaround for edge cases that can't be parsed by cjsLexer correctly */
 	for _, name := range requireModeAllowList {
-		if specifier == name || strings.HasPrefix(specifier, name+"/") {
+		if pkgName == name || specifier == name || strings.HasPrefix(specifier, name+"/") {
 			args = append(args, true)
 			break
 		}
@@ -145,9 +145,9 @@ func cjsLexer(npmrc *NpmRC, pkgName string, wd string, specifier string, nodeEnv
 
 	if ret.Error != "" {
 		if ret.Stack != "" {
-			log.Errorf("[cjsLexer] %s\n---\n%s\n---", ret.Error, ret.Stack)
+			log.Errorf("[cjsLexer] %s\n---\nArguments: %v\n%s\na---", ret.Error, args, ret.Stack)
 		} else {
-			log.Errorf("[cjsLexer] %s", ret.Error)
+			log.Errorf("[cjsLexer] %s\nArguments: %v", ret.Error, args)
 		}
 	} else {
 		go func() {
@@ -155,7 +155,7 @@ func cjsLexer(npmrc *NpmRC, pkgName string, wd string, specifier string, nodeEnv
 				os.WriteFile(cacheFileName, outBuf.Bytes(), 0644)
 			}
 		}()
-		log.Debugf("[cjsLexer] parse %s in %s", specifier, time.Since(start))
+		log.Debugf("[cjsLexer] parse %s in %s", path.Join(pkgName, specifier), time.Since(start))
 	}
 
 	return

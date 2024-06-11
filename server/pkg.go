@@ -129,7 +129,7 @@ func (pkg Pkg) ghPrefix() string {
 	return ""
 }
 
-func (pkg Pkg) FullName() string {
+func (pkg Pkg) Fullname() string {
 	if pkg.FromGithub {
 		return "gh/" + pkg.Name + "@" + pkg.Version
 	}
@@ -137,7 +137,7 @@ func (pkg Pkg) FullName() string {
 }
 
 func (pkg Pkg) String() string {
-	s := pkg.FullName()
+	s := pkg.Fullname()
 	if pkg.SubModule != "" {
 		s += "/" + pkg.SubModule
 	}
@@ -209,15 +209,11 @@ func splitPkgPath(specifier string) (pkgName string, version string, subPath str
 	if strings.HasPrefix(specifier, "@") && len(a) > 1 {
 		nameAndVersion = a[0] + "/" + a[1]
 		subPath = strings.Join(a[2:], "/")
-		if endsWith(subPath, ".js", ".mjs", ".css") {
-			hasTarget = hasTargetSegment(a[2:])
-		}
+		hasTarget = hasTargetSegment(a[2:])
 	} else {
 		nameAndVersion = a[0]
 		subPath = strings.Join(a[1:], "/")
-		if endsWith(subPath, ".js", ".mjs", ".css") {
-			hasTarget = hasTargetSegment(a[1:])
-		}
+		hasTarget = hasTargetSegment(a[1:])
 	}
 	if len(nameAndVersion) > 0 && nameAndVersion[0] == '@' {
 		pkgName, version = utils.SplitByLastByte(nameAndVersion[1:], '@')

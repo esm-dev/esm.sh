@@ -28,12 +28,12 @@ var (
 func Serve(efs EmbedFS) {
 	var (
 		cfile string
-		isDev bool
+		debug bool
 		err   error
 	)
 
 	flag.StringVar(&cfile, "config", "config.json", "the config file path")
-	flag.BoolVar(&isDev, "dev", false, "to run server in development mode")
+	flag.BoolVar(&debug, "debug", false, "to run server in DEUBG mode")
 	flag.Parse()
 
 	if !existsFile(cfile) {
@@ -49,7 +49,7 @@ func Serve(efs EmbedFS) {
 	}
 	buildQueue = NewBuildQueue(int(config.BuildConcurrency))
 
-	if isDev {
+	if debug {
 		config.LogLevel = "debug"
 		cwd, err := os.Getwd()
 		if err != nil {
@@ -142,7 +142,7 @@ func Serve(efs EmbedFS) {
 		TLS: rex.TLSConfig{
 			Port: uint16(config.TlsPort),
 			AutoTLS: rex.AutoTLSConfig{
-				AcceptTOS: config.TlsPort > 0 && !isDev,
+				AcceptTOS: config.TlsPort > 0 && !debug,
 				CacheDir:  path.Join(config.WorkDir, "autotls"),
 			},
 		},

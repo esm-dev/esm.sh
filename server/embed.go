@@ -61,6 +61,12 @@ func loadNodeLibs(fs EmbedFS) (err error) {
 		return
 	}
 	nodeLibs["node/async_hooks.js"] = string(node_async_hooks_js)
+	// extra libs
+	node_filename_resolver_js, err := fs.ReadFile("server/embed/polyfills/node_filename_resolver.js")
+	if err != nil {
+		return
+	}
+	nodeLibs["node/filename_resolver.js"] = string(node_filename_resolver_js)
 	return nil
 }
 

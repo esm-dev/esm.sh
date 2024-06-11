@@ -13,7 +13,7 @@ type BuildArgs struct {
 	deps              PkgSlice
 	external          *StringSet
 	exports           *StringSet
-	conditions        *StringSet
+	conditions        []string
 	jsxRuntime        *Pkg
 	keepNames         bool
 	ignoreAnnotations bool
@@ -24,9 +24,8 @@ func decodeBuildArgs(npmrc *NpmRC, argsString string) (args BuildArgs, err error
 	s, err := atobUrl(argsString)
 	if err == nil {
 		args = BuildArgs{
-			external:   NewStringSet(),
-			exports:    NewStringSet(),
-			conditions: NewStringSet(),
+			external: NewStringSet(),
+			exports:  NewStringSet(),
 		}
 		for _, p := range strings.Split(s, "\n") {
 			if strings.HasPrefix(p, "a") {
@@ -61,9 +60,7 @@ func decodeBuildArgs(npmrc *NpmRC, argsString string) (args BuildArgs, err error
 					args.exports.Add(name)
 				}
 			} else if strings.HasPrefix(p, "c") {
-				for _, name := range strings.Split(p[1:], ",") {
-					args.conditions.Add(name)
-				}
+				args.conditions = append(args.conditions, strings.Split(p[1:], ",")...)
 			} else if strings.HasPrefix(p, "x") {
 				p, _, _, _, e := validatePkgPath(npmrc, p[1:])
 				if e == nil {
@@ -134,9 +131,9 @@ func encodeBuildArgs(args BuildArgs, pkg Pkg, isDts bool) string {
 			}
 		}
 	}
-	if args.conditions.Len() > 0 {
+	if len(args.conditions) > 0 {
 		var ss sort.StringSlice
-		for _, name := range args.conditions.Values() {
+		for _, name := range args.conditions {
 			ss = append(ss, name)
 		}
 		if len(ss) > 0 {

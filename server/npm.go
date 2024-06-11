@@ -437,14 +437,14 @@ do:
 }
 
 func (rc *NpmRC) installPackage(pkg Pkg) (err error) {
-	dir := path.Join(rc.Dir(), pkg.FullName())
+	dir := path.Join(rc.Dir(), pkg.Fullname())
 	lock := getInstallLock(dir)
 
 	// only one install process allowed at the same time
 	lock.Lock()
 	defer lock.Unlock()
 
-	// skip install if pnpm lock file exists
+	// skip installation if the pnpm-lock file exists
 	if existsFile(path.Join(dir, "pnpm-lock.yaml")) && existsFile(path.Join(dir, "node_modules", pkg.Name, "package.json")) {
 		return nil
 	}
@@ -463,7 +463,7 @@ func (rc *NpmRC) installPackage(pkg Pkg) (err error) {
 		err = os.WriteFile(packageJsonFp, []byte("{}"), 0644)
 	}
 	if err != nil {
-		return fmt.Errorf("ensure package.json failed: %s", pkg.FullName())
+		return fmt.Errorf("ensure package.json failed: %s", pkg.Fullname())
 	}
 
 	attemptMaxTimes := 3
@@ -490,9 +490,9 @@ func (rc *NpmRC) installPackage(pkg Pkg) (err error) {
 				}
 			}
 		} else if regexpFullVersion.MatchString(pkg.Version) {
-			err = rc.pnpm(dir, pkg.FullName(), "--prefer-offline")
+			err = rc.pnpm(dir, pkg.Fullname(), "--prefer-offline")
 		} else {
-			err = rc.pnpm(dir, pkg.FullName())
+			err = rc.pnpm(dir, pkg.Fullname())
 		}
 		packageJsonFp := path.Join(dir, "node_modules", pkg.Name, "package.json")
 		if err == nil && !existsFile(packageJsonFp) {
@@ -501,7 +501,7 @@ func (rc *NpmRC) installPackage(pkg Pkg) (err error) {
 		if err == nil || i == attemptMaxTimes {
 			break
 		}
-		time.Sleep(time.Duration(i) * 100 * time.Millisecond)
+		time.Sleep(time.Duration(i) * time.Second)
 	}
 	return
 }
@@ -522,12 +522,14 @@ func (rc *NpmRC) pnpm(dir string, packages ...string) (err error) {
 		args,
 		"--no-color",
 		"--ignore-scripts",
-		"--loglevel", "error",
+		"--loglevel=error",
 	)
 	start := time.Now()
-	errout := new(bytes.Buffer)
+	out := &bytes.Buffer{}
+	errout := &bytes.Buffer{}
 	cmd := exec.Command("pnpm", args...)
 	cmd.Dir = dir
+	cmd.Stdout = out
 	cmd.Stderr = errout
 	cmd.WaitDelay = 10 * time.Minute
 
@@ -563,10 +565,10 @@ func (rc *NpmRC) pnpm(dir string, packages ...string) (err error) {
 	}
 	err = cmd.Run()
 	if err == nil && errout.Len() > 0 {
-		err = fmt.Errorf("%s", errout.String())
+		return fmt.Errorf("%s", errout.String())
 	}
 	if err != nil {
-		return fmt.Errorf("pnpm %s: %s", strings.Join(args, " "), err)
+		return fmt.Errorf("pnpm %s: %s", strings.Join(args, " "), out.String())
 	}
 	if len(packages) > 0 {
 		log.Debug("pnpm add", strings.Join(packages, ","), "in", time.Since(start))

@@ -18,7 +18,7 @@
       const b = document.createElement("strong")
       b.textContent = "foo"
       root.append(b, "...")
-    }).fire({ swModule: "/embed/sw.js" }).then((sw) => {
+    }).fire({ sw: { module: "/embed/sw.js" } }).then((sw) => {
       import("/foo.js").then(({ foo }) => {
         const em = document.createElement("em")
         em.textContent = foo

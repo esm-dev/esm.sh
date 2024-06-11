@@ -2,7 +2,6 @@ package server
 
 import (
 	"bytes"
-	"container/list"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -124,17 +123,14 @@ func (a SortedPaths) Swap(i, j int) {
 // copied from https://gitlab.com/c0b/go-ordered-json
 type OrderedMap struct {
 	lock sync.RWMutex
-	l    *list.List
+	keys []string
 	m    map[string]interface{}
-	keys map[string]*list.Element // the double linked list for delete and lookup to be O(1)
 }
 
 // Create a new orderedMap
 func newOrderedMap() *OrderedMap {
 	return &OrderedMap{
-		l:    list.New(),
-		m:    make(map[string]interface{}),
-		keys: make(map[string]*list.Element),
+		m: make(map[string]interface{}),
 	}
 }
 
@@ -144,15 +140,15 @@ func (om *OrderedMap) Set(key string, value interface{}) {
 	om.lock.Lock()
 	defer om.lock.Unlock()
 	if _, ok := om.m[key]; !ok {
-		om.keys[key] = om.l.PushBack(key)
+		om.keys = append(om.keys, key)
 	}
 	om.m[key] = value
 }
 
-// Entry returns the key and value by the given list element
-func (om *OrderedMap) Entry(e *list.Element) (string, interface{}) {
-	key := e.Value.(string)
-	return key, om.m[key]
+func (om *OrderedMap) Get(key string) interface{} {
+	om.lock.RLock()
+	defer om.lock.RUnlock()
+	return om.m[key]
 }
 
 // UnmarshalJSON implements type json.Unmarshaler interface, so can be called in json.Unmarshal(data, om)
@@ -208,8 +204,7 @@ func (om *OrderedMap) parseObject(dec *json.Decoder) (err error) {
 			return err
 		}
 
-		// om.keys = append(om.keys, key)
-		om.keys[key] = om.l.PushBack(key)
+		om.keys = append(om.keys, key)
 		om.m[key] = value
 	}
 

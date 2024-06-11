@@ -132,7 +132,7 @@ function isObject(v) {
   return typeof v === "object" && v !== null && !Array.isArray(v);
 }
 
-function resolveExport(v) {
+function resolveConditions(v) {
   if (Array.isArray(v)) {
     for (const e of v) {
       if (isObject(e)) {
@@ -245,7 +245,7 @@ async function parseExports(input) {
       const pkg = JSON.parse(readFileSync(pkgJson, "utf-8"));
       if (subModule === "") {
         if (isObject(pkg.exports) && pkg.exports["."]) {
-          const path = resolveExport(pkg.exports["."]);
+          const path = resolveConditions(pkg.exports["."]);
           if (path) {
             return join(pkgDir, path);
           }
@@ -255,7 +255,7 @@ async function parseExports(input) {
       } else {
         if (isObject(pkg.exports)) {
           if (pkg.exports["./" + subModule]) {
-            const path = resolveExport(pkg.exports["./" + subModule]);
+            const path = resolveConditions(pkg.exports["./" + subModule]);
             if (path) {
               return join(pkgDir, path);
             }
@@ -264,7 +264,7 @@ async function parseExports(input) {
           for (const key of Object.keys(pkg.exports)) {
             if (key.startsWith("./") && key.endsWith("/*")) {
               if (("./" + subModule).startsWith(key.slice(0, -1))) {
-                const path = resolveExport(pkg.exports[key]);
+                const path = resolveConditions(pkg.exports[key]);
                 if (path) {
                   return join(pkgDir, path.replace("*", subModule.slice(2, -1)));
                 }

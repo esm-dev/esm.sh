@@ -21,11 +21,7 @@ var (
 	regexpLocPath     = regexp.MustCompile(`:\d+:\d+$`)
 	regexpJSIdent     = regexp.MustCompile(`^[a-zA-Z_$][\w$]*$`)
 	regexpGlobalIdent = regexp.MustCompile(`__[a-zA-Z]+\$`)
-	regexpVarEqual    = regexp.MustCompile(`var ([a-zA-Z]+)\s*=\s*[a-zA-Z]+$`)
-)
-
-var (
-	jsExts = []string{".mjs", ".js", ".jsx", ".mts", ".ts", ".tsx", ".cjs"}
+	regexpVarEqual    = regexp.MustCompile(`var ([\w$]+)\s*=\s*[\w$]+$`)
 )
 
 // isHttpSepcifier returns true if the import path is a remote URL.
@@ -56,23 +52,6 @@ func includes(a []string, s string) bool {
 	return false
 }
 
-// filter returns a new array with all elements that pass the test implemented by the provided function.
-func filter(a []string, fn func(s string) bool) []string {
-	l := len(a)
-	if l == 0 {
-		return nil
-	}
-	b := make([]string, l)
-	i := 0
-	for _, v := range a {
-		if fn(v) {
-			b[i] = v
-			i++
-		}
-	}
-	return b[:i]
-}
-
 // endsWith returns true if the given string ends with any of the suffixes.
 func endsWith(s string, suffixs ...string) bool {
 	for _, suffix := range suffixs {
@@ -81,16 +60,6 @@ func endsWith(s string, suffixs ...string) bool {
 		}
 	}
 	return false
-}
-
-// stripModuleExt strips the module extension from the given string.
-func stripModuleExt(s string) string {
-	for _, ext := range jsExts {
-		if strings.HasSuffix(s, ext) {
-			return s[:len(s)-len(ext)]
-		}
-	}
-	return s
 }
 
 // existsDir returns true if the given path is a directory.
@@ -112,6 +81,15 @@ func ensureDir(dir string) (err error) {
 		err = os.MkdirAll(dir, 0755)
 	}
 	return
+}
+
+// relPath returns a relative path from the base path to the target path.
+func relPath(basePath, targetPath string) (string, error) {
+	rp, err := filepath.Rel(basePath, targetPath)
+	if err == nil && !isRelativeSpecifier(rp) {
+		rp = "./" + rp
+	}
+	return rp, err
 }
 
 // findFiles returns a list of files in the given directory.
@@ -217,8 +195,7 @@ func mustEncodeJSON(v interface{}) []byte {
 
 // parseJSONFile parses the given JSON file and stores the result in the value pointed to by v.
 func parseJSONFile(filename string, v interface{}) (err error) {
-	var file *os.File
-	file, err = os.Open(filename)
+	file, err := os.Open(filename)
 	if err != nil {
 		return
 	}
@@ -226,6 +203,7 @@ func parseJSONFile(filename string, v interface{}) (err error) {
 	return json.NewDecoder(file).Decode(v)
 }
 
+// run executes the given command and returns the output.
 func run(cmd string, args ...string) (output []byte, err error) {
 	var outBuf bytes.Buffer
 	var errBuf bytes.Buffer

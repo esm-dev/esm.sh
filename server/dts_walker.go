@@ -6,19 +6,21 @@ import (
 	"fmt"
 	"io"
 	"regexp"
+	"strings"
 )
 
 var (
-	regexpImportExportExpr  = regexp.MustCompile(`^(import|export)(\s+type)?\s*('|"|[a-zA-Z0-9_\$]+(\s+from|,\s*\{)|\*|\{)`)
-	regexpFromExpr          = regexp.MustCompile(`(\}|\*|\s)from\s*('|")`)
-	regexpImportPathExpr    = regexp.MustCompile(`^import\s*('|")`)
-	regexpImportCallExpr    = regexp.MustCompile(`(import|require)\(('|").+?('|")\)`)
-	regexpDeclareModuleExpr = regexp.MustCompile(`declare\s+module\s*('|").+?('|")`)
-	regexpReferenceTag      = regexp.MustCompile(`<reference\s+(path|types)\s*=\s*('|")(.+?)('|")\s*/?>`)
+	regexpImportFromExpr    = regexp.MustCompile(`^import(\s+type)?\s*('|"|[\w\$]+|\*|\{)`)
+	regexpExportFromExpr    = regexp.MustCompile(`^export(\s+type)?\s*(\*|\{)`)
+	regexpFromExpr          = regexp.MustCompile(`(\}|\*|\s)from\s*['"]`)
+	regexpImportPathExpr    = regexp.MustCompile(`^import\s*['"]`)
+	regexpImportCallExpr    = regexp.MustCompile(`(import|require)\(['"][^'"]+['"]\)`)
+	regexpDeclareModuleExpr = regexp.MustCompile(`^declare\s+module\s*['"].+?['"]`)
+	regexpReferenceTag      = regexp.MustCompile(`^\s*<reference\s+(path|types)\s*=\s*['"](.+?)['"].+>`)
 )
 
 var (
-	bytesSigleQoute   = []byte{'\''}
+	bytesSingleQoute  = []byte{'\''}
 	bytesDoubleQoute  = []byte{'"'}
 	bytesCommentStart = []byte{'/', '*'}
 	bytesCommentEnd   = []byte{'*', '/'}
@@ -27,38 +29,41 @@ var (
 )
 
 func walkDts(r io.Reader, buf *bytes.Buffer, resolve func(specifier string, kind string, position int) (resovledPath string, err error)) (err error) {
-	var commentScope bool
-	var importExportScope bool
+	var multiLineComment bool
+	var importExportExpr bool
+	// var declareModuleScope bool
 	scanner := bufio.NewScanner(r)
 	for scanner.Scan() {
-		token, trimedSpaces := trimSpace(scanner.Bytes())
+		line, trimedSpaces := trimSpace(scanner.Bytes())
 		buf.Write(trimedSpaces)
 	CheckCommentScope:
-		if !commentScope && bytes.HasPrefix(token, bytesCommentStart) {
-			commentScope = true
+		if !multiLineComment && bytes.HasPrefix(line, bytesCommentStart) {
+			multiLineComment = true
 		}
-		if commentScope {
-			endIndex := bytes.Index(token, bytesCommentEnd)
+		if multiLineComment {
+			endIndex := bytes.Index(line, bytesCommentEnd)
 			if endIndex > -1 {
-				commentScope = false
-				buf.Write(token[:endIndex+2])
-				if rest := token[endIndex+2:]; len(rest) > 0 {
-					token, trimedSpaces = trimSpace(rest)
+				multiLineComment = false
+				buf.Write(line[:endIndex+2])
+				if rest := line[endIndex+2:]; len(rest) > 0 {
+					line, trimedSpaces = trimSpace(rest)
 					buf.Write(trimedSpaces)
 					goto CheckCommentScope
 				}
 			} else {
-				buf.Write(token)
+				buf.Write(line)
 			}
-		} else if bytes.HasPrefix(token, bytesStripleSlash) {
-			rest := bytes.TrimPrefix(token, bytesStripleSlash)
+		} else if bytes.HasPrefix(line, bytesStripleSlash) {
+			rest := bytes.TrimPrefix(line, bytesStripleSlash)
 			if regexpReferenceTag.Match(rest) {
 				a := regexpReferenceTag.FindAllSubmatch(rest, 1)
 				format := string(a[0][1])
-				path := string(a[0][3])
+				path := string(a[0][2])
 				if format == "path" || format == "types" {
-					if format == "path" && !isRelativeSpecifier(path) {
-						path = "./" + path
+					if format == "path" {
+						if !isRelativeSpecifier(path) {
+							path = "./" + path
+						}
 					}
 					kind := "referenceTypes"
 					if format == "path" {
@@ -69,30 +74,29 @@ func walkDts(r io.Reader, buf *bytes.Buffer, resolve func(specifier string, kind
 					if err != nil {
 						return
 					}
-					if format == "types" && isHttpSepcifier(res) {
+					if format == "types" && strings.HasPrefix(res, "{ESM_CDN_ORIGIN}") {
 						format = "path"
 					}
 					fmt.Fprintf(buf, `/// <reference %s="%s" />`, format, res)
 				} else {
-					buf.Write(token)
+					buf.Write(line)
 				}
 			} else {
-				buf.Write(token)
+				buf.Write(line)
 			}
-		} else if bytes.HasPrefix(token, bytesDoubleSlash) {
-			buf.Write(token)
+		} else if bytes.HasPrefix(line, bytesDoubleSlash) {
+			buf.Write(line)
 		} else {
 			var i int
-			inlineScanner := bufio.NewScanner(bytes.NewReader(token))
-			inlineScanner.Split(splitInlineToken)
-			for inlineScanner.Scan() {
+			exprScanner := bufio.NewScanner(bytes.NewReader(line))
+			exprScanner.Split(splitExpr)
+			for exprScanner.Scan() {
 				if i > 0 {
 					buf.WriteByte(';')
 				}
-				inlineToken, trimedSpaces := trimSpace(inlineScanner.Bytes())
-				buf.Write(trimedSpaces)
-				if len(inlineToken) > 0 {
-
+				expr, trimedLeftSpaces := trimSpace(exprScanner.Bytes())
+				buf.Write(trimedLeftSpaces)
+				if len(expr) > 0 {
 					// TypeScript may start raising a diagnostic when ESM declaration files use `export =`
 					// see https://github.com/microsoft/TypeScript/issues/51321
 					// if bytes.HasPrefix(inlineToken, []byte("export=")) || bytes.HasPrefix(inlineToken, []byte("export =")) {
@@ -102,86 +106,10 @@ func walkDts(r io.Reader, buf *bytes.Buffer, resolve func(specifier string, kind
 					// 	continue
 					// }
 
-					if !importExportScope && regexpImportExportExpr.Match(inlineToken) {
-						importExportScope = true
-					}
-					if importExportScope {
-						if regexpFromExpr.Match(inlineToken) || regexpImportPathExpr.Match(inlineToken) {
-							q := bytesSigleQoute
-							a := bytes.Split(inlineToken, q)
-							if len(a) != 3 {
-								q = bytesDoubleQoute
-								a = bytes.Split(inlineToken, q)
-							}
-							if len(a) == 3 {
-								buf.Write(a[0])
-								buf.Write(q)
-								var res string
-								res, err = resolve(string(a[1]), "importExpr", buf.Len())
-								if err != nil {
-									return
-								}
-								buf.WriteString(res)
-								buf.Write(q)
-								buf.Write(a[2])
-							} else {
-								buf.Write(inlineToken)
-							}
-							importExportScope = false
-						} else if regexpImportCallExpr.Match(inlineToken) {
-							buf.Write(regexpImportCallExpr.ReplaceAllFunc(inlineToken, func(importCallExpr []byte) []byte {
-								q := bytesSigleQoute
-								a := bytes.Split(importCallExpr, q)
-								if len(a) != 3 {
-									q = bytesDoubleQoute
-									a = bytes.Split(importCallExpr, q)
-								}
-								if len(a) == 3 {
-									tmp := bytes.NewBuffer(nil)
-									tmp.Write(a[0])
-									tmp.Write(q)
-									var res string
-									res, err = resolve(string(a[1]), "importCall", buf.Len())
-									if err != nil {
-										return importCallExpr
-									}
-									tmp.WriteString(res)
-									tmp.Write(q)
-									tmp.Write(a[2])
-									return tmp.Bytes()
-								}
-								return importCallExpr
-							}))
-							if err != nil {
-								return
-							}
-						} else {
-							buf.Write(inlineToken)
-						}
-					} else if bytes.HasPrefix(inlineToken, []byte("declare")) && regexpDeclareModuleExpr.Match(token) {
-						q := bytesSigleQoute
-						a := bytes.Split(inlineToken, q)
-						if len(a) != 3 {
-							q = bytesDoubleQoute
-							a = bytes.Split(inlineToken, q)
-						}
-						if len(a) == 3 {
-							buf.Write(a[0])
-							buf.Write(q)
-							var res string
-							res, err = resolve(string(a[1]), "declareModule", buf.Len())
-							if err != nil {
-								return
-							}
-							buf.WriteString(res)
-							buf.Write(q)
-							buf.Write(a[2])
-						} else {
-							buf.Write(inlineToken)
-						}
-					} else if regexpImportCallExpr.Match(inlineToken) {
-						buf.Write(regexpImportCallExpr.ReplaceAllFunc(inlineToken, func(importCallExpr []byte) []byte {
-							q := bytesSigleQoute
+					// resoving `import('lib')`
+					if regexpImportCallExpr.Match(expr) {
+						expr = regexpImportCallExpr.ReplaceAllFunc(expr, func(importCallExpr []byte) []byte {
+							q := bytesSingleQoute
 							a := bytes.Split(importCallExpr, q)
 							if len(a) != 3 {
 								q = bytesDoubleQoute
@@ -202,17 +130,66 @@ func walkDts(r io.Reader, buf *bytes.Buffer, resolve func(specifier string, kind
 								return tmp.Bytes()
 							}
 							return importCallExpr
-						}))
-					} else {
-						buf.Write(inlineToken)
+						})
 					}
-				}
-				if i > 0 && importExportScope {
-					importExportScope = false
+
+					if !importExportExpr && (bytes.HasPrefix(expr, []byte("import")) && regexpImportFromExpr.Match(expr)) || (bytes.HasPrefix(expr, []byte("export")) && regexpExportFromExpr.Match(expr)) {
+						importExportExpr = true
+					}
+					if bytes.HasPrefix(expr, []byte("declare")) && regexpDeclareModuleExpr.Match(expr) {
+						q := bytesSingleQoute
+						a := bytes.Split(expr, q)
+						if len(a) != 3 {
+							q = bytesDoubleQoute
+							a = bytes.Split(expr, q)
+						}
+						if len(a) == 3 {
+							buf.Write(a[0])
+							buf.Write(q)
+							var res string
+							res, err = resolve(string(a[1]), "declareModule", buf.Len())
+							if err != nil {
+								return
+							}
+							buf.WriteString(res)
+							buf.Write(q)
+							buf.Write(a[2])
+						} else {
+							buf.Write(expr)
+						}
+					} else if importExportExpr {
+						if regexpFromExpr.Match(expr) || (bytes.HasPrefix(expr, []byte("import")) && regexpImportPathExpr.Match(expr)) {
+							q := bytesSingleQoute
+							a := bytes.Split(expr, q)
+							if len(a) != 3 {
+								q = bytesDoubleQoute
+								a = bytes.Split(expr, q)
+							}
+							if len(a) == 3 {
+								buf.Write(a[0])
+								buf.Write(q)
+								var res string
+								res, err = resolve(string(a[1]), "importExpr", buf.Len())
+								if err != nil {
+									return
+								}
+								buf.WriteString(res)
+								buf.Write(q)
+								buf.Write(a[2])
+							} else {
+								buf.Write(expr)
+							}
+							importExportExpr = false
+						} else {
+							buf.Write(expr)
+						}
+					} else {
+						buf.Write(expr)
+					}
 				}
 				i++
 			}
-			err = inlineScanner.Err()
+			err = exprScanner.Err()
 			if err != nil {
 				return
 			}
@@ -223,7 +200,8 @@ func walkDts(r io.Reader, buf *bytes.Buffer, resolve func(specifier string, kind
 	return
 }
 
-func splitInlineToken(data []byte, atEOF bool) (advance int, token []byte, err error) {
+// A split function for a Scanner
+func splitExpr(data []byte, atEOF bool) (advance int, token []byte, err error) {
 	var commentScope bool
 	var stringScope byte
 	for i := 0; i < len(data); i++ {

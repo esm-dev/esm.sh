@@ -8,11 +8,10 @@ import (
 
 // BuildQueue schedules build tasks of esm.sh
 type BuildQueue struct {
-	lock        sync.RWMutex
-	queue       *list.List
-	tasks       map[string]*BuildTask
-	wip         int32
-	concurrency int32
+	lock  sync.RWMutex
+	queue *list.List
+	tasks map[string]*BuildTask
+	idles int32
 }
 
 type BuildTask struct {
@@ -30,15 +29,15 @@ type BuildOutput struct {
 }
 
 type QueueClient struct {
-	C  chan BuildOutput `json:"-"`
-	IP string           `json:"ip"`
+	C  chan BuildOutput
+	IP string
 }
 
 func NewBuildQueue(concurrency int) *BuildQueue {
 	q := &BuildQueue{
-		queue:       list.New(),
-		tasks:       map[string]*BuildTask{},
-		concurrency: int32(concurrency),
+		queue: list.New(),
+		tasks: map[string]*BuildTask{},
+		idles: int32(concurrency),
 	}
 	return q
 }
@@ -78,7 +77,7 @@ func (q *BuildQueue) next() {
 	var nextTask *BuildTask
 
 	q.lock.RLock()
-	if q.wip < q.concurrency {
+	if q.idles > 0 {
 		for el := q.queue.Front(); el != nil; el = el.Next() {
 			t, ok := el.Value.(*BuildTask)
 			if ok && !t.inProcess {
@@ -91,7 +90,7 @@ func (q *BuildQueue) next() {
 
 	if nextTask != nil {
 		q.lock.Lock()
-		q.wip += 1
+		q.idles -= 1
 		nextTask.inProcess = true
 		nextTask.startedAt = time.Now()
 		q.lock.Unlock()
@@ -119,7 +118,7 @@ func (q *BuildQueue) build(t *BuildTask) {
 	}
 
 	q.lock.Lock()
-	q.wip -= 1
+	q.idles += 1
 	q.queue.Remove(t.el)
 	delete(q.tasks, t.Path())
 	q.lock.Unlock()

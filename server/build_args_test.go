@@ -7,12 +7,11 @@ import (
 func TestEncodeBuildArgs(t *testing.T) {
 	external := NewStringSet()
 	exports := NewStringSet()
-	conditions := NewStringSet()
+	conditions := []string{"react-server"}
 	external.Add("baz")
 	external.Add("bar")
 	exports.Add("baz")
 	exports.Add("bar")
-	conditions.Add("react-server")
 	buildArgsString := encodeBuildArgs(
 		BuildArgs{
 			alias: map[string]string{"a": "b"},
@@ -49,7 +48,7 @@ func TestEncodeBuildArgs(t *testing.T) {
 	if args.exports.Len() != 2 {
 		t.Fatal("invalid exports")
 	}
-	if args.conditions.Len() != 1 {
+	if len(args.conditions) != 1 || args.conditions[0] != "react-server" {
 		t.Fatal("invalid conditions")
 	}
 	if args.jsxRuntime.String() != "react@18.2.0" {
