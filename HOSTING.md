@@ -31,7 +31,7 @@ You can find all the server options in [config.exmaple.jsonc](./config.example.j
 You will need [Go](https://golang.org/dl) 1.18+ to compile the server.
 
 ```bash
-go run main.go --config=config.json --dev
+go run main.go --config=config.json
 ```
 
 Then you can import `React` from http://localhost:8080/react
