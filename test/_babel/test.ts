@@ -5,7 +5,7 @@ import babelPresetTS from "http://localhost:8080/@babel/preset-typescript@7.21.0
 import babelPresetSolid from "http://localhost:8080/babel-preset-solid@1.6.12";
 import solidRefresh from "http://localhost:8080/solid-refresh@0.5.2/babel";
 
-Deno.test("babel/core", async () => {
+Deno.test("babel with solid plugins", async () => {
   const code = `
     import { createSignal, type Component } from "solid-js";
     const Foo: Component = () => {

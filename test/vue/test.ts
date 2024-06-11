@@ -10,13 +10,7 @@ const app = createSSRApp({
   },
 });
 
-Deno.test("Vue", async () => {
-  assertEquals(
-    await renderToString(app),
-    "<div>The Progressive JavaScript Framework</div>",
-  );
-  assertEquals(
-    await new Response(renderToWebStream(app)).text(),
-    "<div>The Progressive JavaScript Framework</div>",
-  );
+Deno.test("Vue (3.2)", async () => {
+  assertEquals(await renderToString(app), "<div>The Progressive JavaScript Framework</div>");
+  assertEquals(await new Response(renderToWebStream(app)).text(), "<div>The Progressive JavaScript Framework</div>");
 });

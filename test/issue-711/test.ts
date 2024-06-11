@@ -1,4 +1,4 @@
-import { assertEquals, assertStringIncludes } from "https://deno.land/std@0.220.0/assert/mod.ts";
+import { assert, assertEquals, assertStringIncludes } from "https://deno.land/std@0.220.0/assert/mod.ts";
 
 Deno.test("issue #711", async () => {
   const res = await fetch("http://localhost:8080/@pyscript/core@0.1.5/core.js", {
@@ -8,9 +8,10 @@ Deno.test("issue #711", async () => {
     },
   });
   await res.body?.cancel();
-  const buildId = res.headers.get("x-esm-path")!;
-  assertStringIncludes(buildId, "/es2021/");
-  const res2 = await fetch(`http://localhost:8080/${buildId}`);
+  const esmPath = res.headers.get("x-esm-path")!;
+  assert(esmPath);
+  assertStringIncludes(esmPath, "/es2021/");
+  const res2 = await fetch(`http://localhost:8080/${esmPath}`);
   res2.body?.cancel();
   assertEquals(res2.headers.get("content-type"), "application/javascript; charset=utf-8");
 });
