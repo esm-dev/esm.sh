@@ -1,6 +1,0 @@
-{
-	"dependencies": {
-		"esm-cjs-lexer": "0.10.0",
-		"help": "^3.0.2"
-	}
-}
