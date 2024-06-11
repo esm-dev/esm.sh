@@ -33,14 +33,14 @@ More server options please check [config.exmaple.jsonc](./config.example.jsonc).
 ## Running the Server from Source Code
 
 ```bash
-go run main.go --dev
+go run main.go --debug
 ```
 
 Then you can import `React` from "http://localhost:8080/react"
 
 ## Running Integration Tests
 
-We use [Deno](https://deno.land) to run all the integration tests. Make sure you have Deno installed on your machine.
+We use [Deno](https://deno.land) to run all the integration testing cases. Make sure you have Deno installed on your machine.
 
 ```bash
 # Run all tests
