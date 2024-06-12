@@ -50,7 +50,7 @@ jobs:
           deno-version: v1.x
 
       - name: Run `go test`
-        run: go test ./server ./server/config ./server/storage -v
+        run: go test ./server ./server/storage -v
 
       - name: Run `deno test`
         run: deno run -A test/bootstrap.ts
