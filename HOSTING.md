@@ -41,7 +41,10 @@ Then you can import `React` from http://localhost:8080/react
 Ensure the [supervisor](http://supervisord.org/) has been installed on your host machine.
 
 ```bash
+# first time deploy
 ./scripts/deploy.sh --init
+# update the server
+./scripts/deploy.sh
 ```
 
 Recommended host machine requirements:
