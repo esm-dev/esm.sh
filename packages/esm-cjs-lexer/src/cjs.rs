@@ -86,7 +86,7 @@ impl CJSLexer {
         self.idents.insert(name.into(), IdentKind::Lit(lit.clone()));
       }
       Expr::Ident(id) => {
-        let conflict = if let Some(val) = self.idents.get(id.sym.as_ref().into()) {
+        let conflict = if let Some(val) = self.idents.get(id.sym.as_ref()) {
           if let IdentKind::Alias(rename) = val {
             rename.eq(name)
           } else {
@@ -152,7 +152,7 @@ impl CJSLexer {
       Expr::Paren(ParenExpr { expr, .. }) => return self.as_str(expr),
       Expr::Lit(Lit::Str(Str { value, .. })) => return Some(value.as_ref().into()),
       Expr::Ident(id) => {
-        if let Some(value) = self.idents.get(id.sym.as_ref().into()) {
+        if let Some(value) = self.idents.get(id.sym.as_ref()) {
           match value {
             IdentKind::Lit(Lit::Str(Str { value, .. })) => return Some(value.as_ref().into()),
             IdentKind::Alias(id) => return self.as_str(&Expr::Ident(quote_ident(id))),
@@ -175,7 +175,7 @@ impl CJSLexer {
       Expr::Paren(ParenExpr { expr, .. }) => return self.as_num(expr),
       Expr::Lit(Lit::Num(Number { value, .. })) => return Some(*value),
       Expr::Ident(id) => {
-        if let Some(value) = self.idents.get(id.sym.as_ref().into()) {
+        if let Some(value) = self.idents.get(id.sym.as_ref()) {
           match value {
             IdentKind::Lit(Lit::Num(Number { value, .. })) => return Some(*value),
             IdentKind::Alias(id) => return self.as_num(&Expr::Ident(quote_ident(id))),
@@ -193,7 +193,7 @@ impl CJSLexer {
       Expr::Paren(ParenExpr { expr, .. }) => return self.as_bool(expr),
       Expr::Lit(Lit::Bool(Bool { value, .. })) => return Some(*value),
       Expr::Ident(id) => {
-        if let Some(value) = self.idents.get(id.sym.as_ref().into()) {
+        if let Some(value) = self.idents.get(id.sym.as_ref()) {
           match value {
             IdentKind::Lit(Lit::Bool(Bool { value, .. })) => return Some(*value),
             IdentKind::Alias(id) => return self.as_bool(&Expr::Ident(quote_ident(id))),
@@ -211,7 +211,7 @@ impl CJSLexer {
       Expr::Paren(ParenExpr { expr, .. }) => return self.as_null(expr),
       Expr::Lit(Lit::Null(_)) => return Some(true),
       Expr::Ident(id) => {
-        if let Some(value) = self.idents.get(id.sym.as_ref().into()) {
+        if let Some(value) = self.idents.get(id.sym.as_ref()) {
           match value {
             IdentKind::Lit(Lit::Null(_)) => return Some(true),
             IdentKind::Alias(id) => return self.as_null(&Expr::Ident(quote_ident(id))),
@@ -229,7 +229,7 @@ impl CJSLexer {
       Expr::Paren(ParenExpr { expr, .. }) => return self.as_obj(expr),
       Expr::Object(ObjectLit { props, .. }) => Some(props.to_vec()),
       Expr::Ident(id) => {
-        if let Some(value) = self.idents.get(id.sym.as_ref().into()) {
+        if let Some(value) = self.idents.get(id.sym.as_ref()) {
           match value {
             IdentKind::Object(props) => return Some(props.to_vec()),
             IdentKind::Alias(id) => return self.as_obj(&Expr::Ident(quote_ident(id))),
@@ -247,7 +247,7 @@ impl CJSLexer {
       Expr::Paren(ParenExpr { expr, .. }) => return self.as_reexport(expr),
       Expr::Call(call) => is_require_call(&call),
       Expr::Ident(id) => {
-        if let Some(value) = self.idents.get(id.sym.as_ref().into()) {
+        if let Some(value) = self.idents.get(id.sym.as_ref()) {
           match value {
             IdentKind::Reexport(file) => return Some(file.to_owned()),
             IdentKind::Alias(id) => return self.as_reexport(&Expr::Ident(quote_ident(id))),
@@ -265,7 +265,7 @@ impl CJSLexer {
       Expr::Paren(ParenExpr { expr, .. }) => return self.as_class(expr),
       Expr::Class(ClassExpr { class, .. }) => Some(class.as_ref().clone()),
       Expr::Ident(id) => {
-        if let Some(value) = self.idents.get(id.sym.as_ref().into()) {
+        if let Some(value) = self.idents.get(id.sym.as_ref()) {
           match value {
             IdentKind::Class(class) => return Some(class.clone()),
             IdentKind::Alias(id) => return self.as_class(&Expr::Ident(quote_ident(id))),
@@ -292,7 +292,7 @@ impl CJSLexer {
         }
       }
       Expr::Ident(id) => {
-        if let Some(value) = self.idents.get(id.sym.as_ref().into()) {
+        if let Some(value) = self.idents.get(id.sym.as_ref()) {
           match value {
             IdentKind::Fn(desc) => return Some(desc.clone()),
             IdentKind::Alias(id) => return self.as_function(&Expr::Ident(quote_ident(id))),
@@ -364,7 +364,7 @@ impl CJSLexer {
     match expr {
       Expr::Paren(ParenExpr { expr, .. }) => return self.is_true(expr),
       Expr::Ident(id) => {
-        if let Some(value) = self.idents.get(id.sym.as_ref().into()) {
+        if let Some(value) = self.idents.get(id.sym.as_ref()) {
           match value {
             IdentKind::Lit(lit) => return self.is_true(&Expr::Lit(lit.clone())),
             IdentKind::Alias(id) => return self.is_true(&Expr::Ident(quote_ident(id))),
@@ -410,8 +410,8 @@ impl CJSLexer {
         if is_member(init, "module", "exports") {
           self.exports_alias.insert(id.id.sym.as_ref().to_owned());
         } else if let Expr::Assign(assign) = init.as_ref() {
-          if let Some(expr) = get_expr_from_pat_or_expr(&assign.left) {
-            if is_member(expr, "module", "exports") {
+          if let Some(member) = get_member_expr_from_assign_target(&assign.left) {
+            if is_member(&Expr::Member(member.clone()), "module", "exports") {
               self.exports_alias.insert(id.id.sym.as_ref().to_owned());
             }
           }
@@ -458,18 +458,15 @@ impl CJSLexer {
         if let Some(member_prop_name) = self.get_exports_prop_name(bin.left.as_ref()) {
           if let Expr::Paren(ParenExpr { expr, .. }) = bin.right.as_ref() {
             if let Expr::Assign(assign) = expr.as_ref() {
-              let left_expr = match &assign.left {
-                PatOrExpr::Expr(expr) => Some(expr.as_ref()),
-                PatOrExpr::Pat(pat) => match pat.as_ref() {
-                  Pat::Expr(expr) => Some(expr.as_ref()),
-                  _ => None,
-                },
-              };
-              if let Some(left_expr) = left_expr {
-                if assign.op == AssignOp::Assign {
-                  if let Some(prop_name) = self.get_exports_prop_name(left_expr) {
-                    if prop_name.eq(&member_prop_name) {
-                      return Some(member_prop_name);
+              if let AssignTarget::Simple(expr) = &assign.left {
+                if let SimpleAssignTarget::Member(MemberExpr { obj, prop, .. }) = expr {
+                  if let Expr::Ident(obj) = obj.as_ref() {
+                    if self.is_exports_ident(obj.sym.as_ref()) {
+                      if let Some(prop_name) = get_prop_name(prop) {
+                        if prop_name.eq(&member_prop_name) {
+                          return Some(member_prop_name);
+                        }
+                      }
                     }
                   }
                 }
@@ -485,15 +482,17 @@ impl CJSLexer {
 
   fn get_exports_from_assign(&mut self, assign: &AssignExpr) {
     if assign.op == AssignOp::Assign {
-      let left_expr = match &assign.left {
-        PatOrExpr::Expr(expr) => Some(expr.as_ref()),
-        PatOrExpr::Pat(pat) => match pat.as_ref() {
-          Pat::Expr(expr) => Some(expr.as_ref()),
-          _ => None,
-        },
+      let member = if let AssignTarget::Simple(simple) = &assign.left {
+        if let SimpleAssignTarget::Member(member) = &simple {
+          Some(member)
+        } else {
+          None
+        }
+      } else {
+        None
       };
-      if let Some(Expr::Member(MemberExpr { obj, prop, .. })) = left_expr {
-        let prop = get_prop_name(prop);
+      if let Some(MemberExpr { obj, prop, .. }) = member {
+        let prop = get_prop_name(&prop);
         if let Some(prop) = prop {
           match obj.as_ref() {
             Expr::Ident(obj) => {
@@ -582,15 +581,13 @@ impl CJSLexer {
         // This doesn't feel right but is what ends up matching
         // t.default = "default-export"
         // May be an swc ast bug
-        if let PatOrExpr::Pat(pat) = &left {
-          if let Pat::Expr(expr) = &**pat {
-            if let Expr::Member(MemberExpr { obj, prop, .. }) = &**expr {
-              if let Expr::Ident(Ident { sym, .. }) = &**obj {
-                if sym.as_ref().eq(webpack_exports_sym) {
-                  if let MemberProp::Ident(prop) = prop {
-                    if prop.sym.as_ref().eq("default") {
-                      self.exports.insert("default".to_string());
-                    }
+        if let AssignTarget::Simple(simple) = &left {
+          if let SimpleAssignTarget::Member(MemberExpr { obj, prop, .. }) = &simple {
+            if let Expr::Ident(Ident { sym, .. }) = &**obj {
+              if sym.as_ref().eq(webpack_exports_sym) {
+                if let MemberProp::Ident(prop) = prop {
+                  if prop.sym.as_ref().eq("default") {
+                    self.exports.insert("default".to_string());
                   }
                 }
               }
@@ -690,20 +687,18 @@ impl CJSLexer {
                     left,
                     ..
                   }) => {
-                    if let PatOrExpr::Pat(pat) = left {
-                      if let Pat::Expr(expr) = &**pat {
-                        if let Expr::Member(MemberExpr {
-                          obj,
-                          prop: MemberProp::Ident(Ident { sym: prop_sym, .. }),
-                          ..
-                        }) = &**expr
-                        {
-                          if let Expr::Ident(Ident { sym, .. }) = &**obj {
-                            if sym.as_ref().eq(<str as AsRef<str>>::as_ref(webpack_require_sym)) {
-                              let prop_sym_ref = prop_sym.as_ref();
-                              if prop_sym_ref.eq("r") || prop_sym_ref.eq("d") {
-                                return 1;
-                              }
+                    if let AssignTarget::Simple(simple) = &left {
+                      if let SimpleAssignTarget::Member(MemberExpr {
+                        obj,
+                        prop: MemberProp::Ident(Ident { sym: prop_sym, .. }),
+                        ..
+                      }) = &simple
+                      {
+                        if let Expr::Ident(Ident { sym, .. }) = &**obj {
+                          if sym.as_ref().eq(<str as AsRef<str>>::as_ref(webpack_require_sym)) {
+                            let prop_sym_ref = prop_sym.as_ref();
+                            if prop_sym_ref.eq("r") || prop_sym_ref.eq("d") {
+                              return 1;
                             }
                           }
                         }
@@ -726,20 +721,18 @@ impl CJSLexer {
               left,
               ..
             }) => {
-              if let PatOrExpr::Pat(pat) = left {
-                if let Pat::Expr(expr) = &**pat {
-                  if let Expr::Member(MemberExpr {
-                    obj,
-                    prop: MemberProp::Ident(Ident { sym: prop_sym, .. }),
-                    ..
-                  }) = &**expr
-                  {
-                    if let Expr::Ident(Ident { sym, .. }) = &**obj {
-                      if sym.as_ref().eq(<str as AsRef<str>>::as_ref(webpack_require_sym)) {
-                        let prop_sym_ref = prop_sym.as_ref();
-                        if prop_sym_ref.eq("r") || prop_sym_ref.eq("d") {
-                          return 1;
-                        }
+              if let AssignTarget::Simple(simple) = &left {
+                if let SimpleAssignTarget::Member(MemberExpr {
+                  obj,
+                  prop: MemberProp::Ident(Ident { sym: prop_sym, .. }),
+                  ..
+                }) = &simple
+                {
+                  if let Expr::Ident(Ident { sym, .. }) = &**obj {
+                    if sym.as_ref().eq(<str as AsRef<str>>::as_ref(webpack_require_sym)) {
+                      let prop_sym_ref = prop_sym.as_ref();
+                      if prop_sym_ref.eq("r") || prop_sym_ref.eq("d") {
+                        return 1;
                       }
                     }
                   }
@@ -890,18 +883,11 @@ impl CJSLexer {
           match expr.as_ref() {
             Expr::Assign(assign) => {
               if assign.op == AssignOp::Assign {
-                let left_expr = match &assign.left {
-                  PatOrExpr::Expr(expr) => Some(expr.as_ref()),
-                  PatOrExpr::Pat(pat) => match pat.as_ref() {
-                    Pat::Expr(expr) => Some(expr.as_ref()),
-                    _ => None,
-                  },
-                };
-                if let Some(expr) = left_expr {
-                  match expr {
+                match &assign.left {
+                  AssignTarget::Simple(simple) => match simple {
                     // var foo = 'boo'
                     // foo = 'bar'
-                    Expr::Ident(id) => {
+                    SimpleAssignTarget::Ident(BindingIdent { id, .. }) => {
                       let id = id.sym.as_ref();
                       if self.idents.contains_key(id) {
                         self.mark_ident(id, &assign.right.as_ref())
@@ -909,12 +895,12 @@ impl CJSLexer {
                     }
                     // var foo = {}
                     // foo.bar = 'bar'
-                    Expr::Member(MemberExpr { obj, prop, .. }) => {
-                      let key = get_prop_name(prop);
+                    SimpleAssignTarget::Member(MemberExpr { obj, prop, .. }) => {
+                      let key = get_prop_name(&prop);
                       if let Some(key) = key {
                         if let Expr::Ident(obj_id) = obj.as_ref() {
                           let obj_name = obj_id.sym.as_ref();
-                          if let Some(mut props) = self.as_obj(obj) {
+                          if let Some(mut props) = self.as_obj(&obj) {
                             props.push(PropOrSpread::Prop(Box::new(Prop::KeyValue(KeyValueProp {
                               key: PropName::Ident(quote_ident(&key)),
                               value: Box::new(Expr::Lit(Lit::Bool(Bool {
@@ -923,7 +909,7 @@ impl CJSLexer {
                               }))),
                             }))));
                             self.idents.insert(obj_name.into(), IdentKind::Object(props));
-                          } else if let Some(FnDesc { stmts, mut extends }) = self.as_function(obj) {
+                          } else if let Some(FnDesc { stmts, mut extends }) = self.as_function(&obj) {
                             extends.push(key.to_owned());
                             self
                               .idents
@@ -933,8 +919,9 @@ impl CJSLexer {
                       }
                     }
                     _ => {}
-                  }
-                }
+                  },
+                  _ => {}
+                };
               }
             }
             _ => {}
@@ -1824,16 +1811,13 @@ fn is_tslib_export_star_call(call: &CallExpr) -> bool {
   false
 }
 
-fn get_expr_from_pat_or_expr(v: &PatOrExpr) -> Option<&Expr> {
+fn get_member_expr_from_assign_target(v: &AssignTarget) -> Option<&MemberExpr> {
   match v {
-    PatOrExpr::Expr(left_expr) => Some(left_expr),
-    PatOrExpr::Pat(pat) => {
-      if let Pat::Expr(left_expr) = pat.as_ref() {
-        Some(left_expr)
-      } else {
-        None
-      }
-    }
+    AssignTarget::Simple(s) => match s {
+      SimpleAssignTarget::Member(member) => Some(member),
+      _ => None,
+    },
+    _ => None,
   }
 }
 
