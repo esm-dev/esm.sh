@@ -14,9 +14,9 @@
     "types/index.d.ts"
   ],
   "devDependencies": {
-    "@cloudflare/workers-types": "4.20240502.0",
+    "@cloudflare/workers-types": "4.20240605.0",
     "compare-versions": "6.1.0",
-    "esbuild": "0.21.1" ,
+    "esbuild": "0.21.5" ,
     "esm-compat": "0.0.2"
   },
   "repository": "https://github.com/esm-dev/esm.sh",
