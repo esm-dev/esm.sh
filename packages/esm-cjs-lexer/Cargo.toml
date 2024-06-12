@@ -13,26 +13,26 @@ crate-type = ["cdylib", "rlib"]
 default = ["console_error_panic_hook"]
 
 [dependencies]
-anyhow = "1.0.79"
-indexmap = "2.1.0"
-serde = { version = "1.0.195", features = ["derive"] }
+anyhow = "1.0.86"
+indexmap = "2.2.6"
+serde = { version = "1.0.203", features = ["derive"] }
 
 # swc
 # docs: https://swc.rs
 # crate: https://crates.io/search?q=swc
-swc_common = { version = "0.33.12", features = ["sourcemap"] }
-swc_ecmascript = { version = "0.237.21", features = ["parser", "visit"] }
-swc_ecma_ast = "0.110.17"
-swc_ecma_visit = "0.96.17"
+swc_common = { version = "0.33.26", features = ["sourcemap"] }
+swc_ecmascript = { version = "0.242.0", features = ["parser", "visit"] }
+swc_ecma_ast = "0.113.7"
+swc_ecma_visit = "0.99.1"
 
 # wasm-bindgen
 # docs: https://rustwasm.github.io/docs/wasm-bindgen
-wasm-bindgen = {version = "0.2.90", features = ["serde-serialize"]}
-serde-wasm-bindgen = "0.6.3"
+wasm-bindgen = {version = "0.2.92", features = ["serde-serialize"]}
+serde-wasm-bindgen = "0.6.5"
 console_error_panic_hook = { version = "0.1.7", optional = true }
 # We get build error without this
 # https://docs.rs/getrandom/latest/getrandom/#webassembly-support
-getrandom = { version = "0.2.12", features = ["js"] }
+getrandom = { version = "0.2.15", features = ["js"] }
 
 [profile.release]
 # less code to include into binary
