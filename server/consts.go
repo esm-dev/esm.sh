@@ -2,15 +2,7 @@ package server
 
 const VERSION = 136
 
-// css packages
-var cssPackages = map[string]string{
-	"@unocss/reset":    "tailwind.css",
-	"inter-ui":         "inter.css",
-	"normalize.css":    "normalize.css",
-	"modern-normalize": "modern-normalize.css",
-	"reset-css":        "reset.css",
-}
-
+// asset extensions
 var assetExts = map[string]bool{
 	"wasm":       true,
 	"css":        true,
@@ -69,22 +61,11 @@ var assetExts = map[string]bool{
 	"tgz":        true,
 }
 
-// native node packages, for `denonext` target use `npm:package` instead of url
-var nativeNodePackages = []string{
-	"@achingbrain/ssdp",
-	"default-gateway",
-	"fsevent",
-	"lightningcss",
-	"re2",
-	"zlib-sync",
-}
-
-// unsupported node modules for `denonext` target
-var denoNextUnspportedNodeModules = map[string]bool{
-	"inspector": true,
-}
-
-// force to use `npm:` specifier for `denonext` target to fix `createRequire` issue
-var forceNpmSpecifiers = map[string]bool{
-	"css-tree": true,
+// css packages
+var cssPackages = map[string]string{
+	"@unocss/reset":    "tailwind.css",
+	"inter-ui":         "inter.css",
+	"normalize.css":    "normalize.css",
+	"modern-normalize": "modern-normalize.css",
+	"reset-css":        "reset.css",
 }

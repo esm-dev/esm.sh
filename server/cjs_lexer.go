@@ -14,7 +14,7 @@ import (
 	"github.com/evanw/esbuild/pkg/api"
 )
 
-const cjsLexerPkg = "esm-cjs-lexer@0.10.0"
+const cjsLexerPkg = "esm-cjs-lexer@0.10.1"
 
 // use `require()` to get the module's exports that are not statically analyzable by esm-cjs-lexer
 var requireModeAllowList = []string{
@@ -43,18 +43,26 @@ var requireModeAllowList = []string{
 }
 
 func initCJSLexerNodeApp() (err error) {
-	wd := path.Join(cfg.WorkDir, "npm/"+cjsLexerPkg)
+	wd := path.Join(config.WorkDir, "npm", cjsLexerPkg)
 	err = ensureDir(wd)
 	if err != nil {
 		return err
 	}
 
+	// ensure 'package.json' file to prevent read up-levels
+	packageJsonFp := path.Join(wd, "package.json")
+	if !existsFile(packageJsonFp) {
+		err = os.WriteFile(packageJsonFp, []byte("{}"), 0644)
+		if err != nil {
+			return
+		}
+	}
+
 	cmd := exec.Command("pnpm", "add", "--prefer-offline", cjsLexerPkg)
 	cmd.Dir = wd
-	var output []byte
-	output, err = cmd.CombinedOutput()
+	err = cmd.Run()
 	if err != nil {
-		err = fmt.Errorf("install services: %v %s", err, string(output))
+		err = fmt.Errorf("install %s: %v", cjsLexerPkg, err)
 		return
 	}
 
@@ -73,29 +81,37 @@ func initCJSLexerNodeApp() (err error) {
 }
 
 type cjsLexerResult struct {
-	Reexport         string   `json:"reexport,omitempty"`
+	ReExport         string   `json:"reexport,omitempty"`
 	HasDefaultExport bool     `json:"hasDefaultExport"`
 	NamedExports     []string `json:"namedExports"`
 	Error            string   `json:"error"`
 	Stack            string   `json:"stack"`
 }
 
-func cjsLexer(wd string, specifier string, nodeEnv string) (ret cjsLexerResult, err error) {
-	start := time.Now()
-	args := map[string]interface{}{
-		"wd":        wd,
-		"specifier": specifier,
-		"nodeEnv":   nodeEnv,
+func cjsLexer(npmrc *NpmRC, pkgName string, wd string, specifier string, nodeEnv string) (ret cjsLexerResult, err error) {
+	// check cache first
+	cacheFileName := path.Join(wd, ".cjs_lexer", fmt.Sprintf("%s_%s.json", btoaUrl(specifier), nodeEnv[0:1]))
+	if existsFile(cacheFileName) && parseJSONFile(cacheFileName, &ret) == nil {
+		return
+	}
+
+	// change the args order carefully, because the order is used in ./embed/cjs_lexer.js
+	args := []interface{}{
+		pkgName,
+		wd,
+		specifier,
+		nodeEnv,
 	}
 
 	/* workaround for edge cases that can't be parsed by cjsLexer correctly */
 	for _, name := range requireModeAllowList {
-		if specifier == name || strings.HasPrefix(specifier, name+"/") {
-			args["requireMode"] = 1
+		if pkgName == name || specifier == name || strings.HasPrefix(specifier, name+"/") {
+			args = append(args, true)
 			break
 		}
 	}
 
+	start := time.Now()
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
@@ -106,10 +122,10 @@ func cjsLexer(wd string, specifier string, nodeEnv string) (ret cjsLexerResult, 
 		ctx,
 		"node",
 		"--experimental-permission",
-		"--allow-fs-read="+cfg.WorkDir+"/npm/*",
+		"--allow-fs-read="+npmrc.Dir()+"/*",
 		"cjs_lexer.js",
 	)
-	cmd.Dir = path.Join(cfg.WorkDir, "npm/"+cjsLexerPkg)
+	cmd.Dir = path.Join(npmrc.config.WorkDir, "npm", cjsLexerPkg)
 	cmd.Stdin = bytes.NewBuffer(mustEncodeJSON(args))
 	cmd.Stdout = &outBuf
 	cmd.Stderr = &errBuf
@@ -129,12 +145,17 @@ func cjsLexer(wd string, specifier string, nodeEnv string) (ret cjsLexerResult, 
 
 	if ret.Error != "" {
 		if ret.Stack != "" {
-			log.Errorf("[cjsLexer] %s\n---\n%s\n---", ret.Error, ret.Stack)
+			log.Errorf("[cjsLexer] %s\n---\nArguments: %v\n%s\na---", ret.Error, args, ret.Stack)
 		} else {
-			log.Errorf("[cjsLexer] %s", ret.Error)
+			log.Errorf("[cjsLexer] %s\nArguments: %v", ret.Error, args)
 		}
 	} else {
-		log.Debugf("[cjsLexer] parse %s in %s", specifier, time.Since(start))
+		go func() {
+			if ensureDir(path.Dir(cacheFileName)) == nil {
+				os.WriteFile(cacheFileName, outBuf.Bytes(), 0644)
+			}
+		}()
+		log.Debugf("[cjsLexer] parse %s in %s", path.Join(pkgName, specifier), time.Since(start))
 	}
 
 	return

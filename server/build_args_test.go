@@ -5,15 +5,14 @@ import (
 )
 
 func TestEncodeBuildArgs(t *testing.T) {
-	external := newStringSet()
-	exports := newStringSet()
-	conditions := newStringSet()
+	external := NewStringSet()
+	exports := NewStringSet()
+	conditions := []string{"react-server"}
 	external.Add("baz")
 	external.Add("bar")
 	exports.Add("baz")
 	exports.Add("bar")
-	conditions.Add("react-server")
-	prefix := encodeBuildArgsPrefix(
+	buildArgsString := encodeBuildArgs(
 		BuildArgs{
 			alias: map[string]string{"a": "b"},
 			deps: PkgSlice{
@@ -25,16 +24,15 @@ func TestEncodeBuildArgs(t *testing.T) {
 			external:          external,
 			exports:           exports,
 			conditions:        conditions,
-			denoStdVersion:    "0.128.0",
 			jsxRuntime:        &Pkg{Version: "18.2.0", Name: "react"},
-			ignoreRequire:     true,
+			externalRequire:   true,
 			keepNames:         true,
 			ignoreAnnotations: true,
 		},
 		Pkg{Name: "foo"},
 		false,
 	)
-	args, err := decodeBuildArgsPrefix(prefix)
+	args, err := decodeBuildArgs(nil, buildArgsString)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -50,16 +48,13 @@ func TestEncodeBuildArgs(t *testing.T) {
 	if args.exports.Len() != 2 {
 		t.Fatal("invalid exports")
 	}
-	if args.conditions.Len() != 1 {
+	if len(args.conditions) != 1 || args.conditions[0] != "react-server" {
 		t.Fatal("invalid conditions")
-	}
-	if args.denoStdVersion != "0.128.0" {
-		t.Fatal("invalid denoStdVersion")
 	}
 	if args.jsxRuntime.String() != "react@18.2.0" {
 		t.Fatal("invalid jsxRuntime")
 	}
-	if !args.ignoreRequire {
+	if !args.externalRequire {
 		t.Fatal("ignoreRequire should be true")
 	}
 	if !args.keepNames {

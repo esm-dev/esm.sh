@@ -10,29 +10,27 @@ import (
 
 type BuildArgs struct {
 	alias             map[string]string
-	conditions        *StringSet
-	denoStdVersion    string
 	deps              PkgSlice
-	exports           *StringSet
 	external          *StringSet
-	ignoreAnnotations bool
-	ignoreRequire     bool
+	exports           *StringSet
+	conditions        []string
 	jsxRuntime        *Pkg
 	keepNames         bool
+	ignoreAnnotations bool
+	externalRequire   bool
 }
 
-func decodeBuildArgsPrefix(raw string) (args BuildArgs, err error) {
-	s, err := atobUrl(strings.TrimPrefix(strings.TrimSuffix(raw, "/"), "X-"))
+func decodeBuildArgs(npmrc *NpmRC, argsString string) (args BuildArgs, err error) {
+	s, err := atobUrl(argsString)
 	if err == nil {
 		args = BuildArgs{
-			external:   newStringSet(),
-			exports:    newStringSet(),
-			conditions: newStringSet(),
+			external: NewStringSet(),
+			exports:  NewStringSet(),
 		}
 		for _, p := range strings.Split(s, "\n") {
-			if strings.HasPrefix(p, "a/") {
+			if strings.HasPrefix(p, "a") {
 				args.alias = map[string]string{}
-				for _, p := range strings.Split(strings.TrimPrefix(strings.TrimPrefix(p, "a/"), "alias:"), ",") {
+				for _, p := range strings.Split(p[1:], ",") {
 					name, to := utils.SplitByFirstByte(p, ':')
 					name = strings.TrimSpace(name)
 					to = strings.TrimSpace(to)
@@ -40,9 +38,9 @@ func decodeBuildArgsPrefix(raw string) (args BuildArgs, err error) {
 						args.alias[name] = to
 					}
 				}
-			} else if strings.HasPrefix(p, "d/") {
-				for _, p := range strings.Split(strings.TrimPrefix(strings.TrimPrefix(p, "d/"), "deps:"), ",") {
-					m, _, _, err := validatePkgPath(p)
+			} else if strings.HasPrefix(p, "d") {
+				for _, p := range strings.Split(p[1:], ",") {
+					m, _, _, _, err := validatePkgPath(npmrc, p)
 					if err != nil {
 						if strings.HasSuffix(err.Error(), "not found") {
 							continue
@@ -53,32 +51,28 @@ func decodeBuildArgsPrefix(raw string) (args BuildArgs, err error) {
 						args.deps = append(args.deps, m)
 					}
 				}
-			} else if strings.HasPrefix(p, "e/") {
-				for _, name := range strings.Split(strings.TrimPrefix(p, "e/"), ",") {
+			} else if strings.HasPrefix(p, "e") {
+				for _, name := range strings.Split(p[1:], ",") {
 					args.external.Add(name)
 				}
-			} else if strings.HasPrefix(p, "ts/") {
-				for _, name := range strings.Split(strings.TrimPrefix(p, "ts/"), ",") {
+			} else if strings.HasPrefix(p, "s") {
+				for _, name := range strings.Split(p[1:], ",") {
 					args.exports.Add(name)
 				}
-			} else if strings.HasPrefix(p, "c/") {
-				for _, name := range strings.Split(strings.TrimPrefix(p, "c/"), ",") {
-					args.conditions.Add(name)
-				}
-			} else if strings.HasPrefix(p, "dsv/") {
-				args.denoStdVersion = strings.TrimPrefix(p, "dsv/")
-			} else if strings.HasPrefix(p, "jsx/") {
-				p, _, _, e := validatePkgPath(strings.TrimPrefix(p, "jsx/"))
+			} else if strings.HasPrefix(p, "c") {
+				args.conditions = append(args.conditions, strings.Split(p[1:], ",")...)
+			} else if strings.HasPrefix(p, "x") {
+				p, _, _, _, e := validatePkgPath(npmrc, p[1:])
 				if e == nil {
 					args.jsxRuntime = &p
 				}
 			} else {
 				switch p {
-				case "ir":
-					args.ignoreRequire = true
-				case "kn":
+				case "r":
+					args.externalRequire = true
+				case "k":
 					args.keepNames = true
-				case "ia":
+				case "i":
 					args.ignoreAnnotations = true
 				}
 			}
@@ -87,7 +81,7 @@ func decodeBuildArgsPrefix(raw string) (args BuildArgs, err error) {
 	return
 }
 
-func encodeBuildArgsPrefix(args BuildArgs, pkg Pkg, isDts bool) string {
+func encodeBuildArgs(args BuildArgs, pkg Pkg, isDts bool) string {
 	lines := []string{}
 	if len(args.alias) > 0 {
 		var ss sort.StringSlice
@@ -98,7 +92,7 @@ func encodeBuildArgsPrefix(args BuildArgs, pkg Pkg, isDts bool) string {
 		}
 		if len(ss) > 0 {
 			ss.Sort()
-			lines = append(lines, fmt.Sprintf("a/%s", strings.Join(ss, ",")))
+			lines = append(lines, fmt.Sprintf("a%s", strings.Join(ss, ",")))
 		}
 	}
 	if len(args.deps) > 0 {
@@ -110,7 +104,7 @@ func encodeBuildArgsPrefix(args BuildArgs, pkg Pkg, isDts bool) string {
 		}
 		if len(ss) > 0 {
 			ss.Sort()
-			lines = append(lines, fmt.Sprintf("d/%s", strings.Join(ss, ",")))
+			lines = append(lines, fmt.Sprintf("d%s", strings.Join(ss, ",")))
 		}
 	}
 	if args.external.Len() > 0 {
@@ -122,7 +116,7 @@ func encodeBuildArgsPrefix(args BuildArgs, pkg Pkg, isDts bool) string {
 		}
 		if len(ss) > 0 {
 			ss.Sort()
-			lines = append(lines, fmt.Sprintf("e/%s", strings.Join(ss, ",")))
+			lines = append(lines, fmt.Sprintf("e%s", strings.Join(ss, ",")))
 		}
 	}
 	if !isDts {
@@ -133,46 +127,43 @@ func encodeBuildArgsPrefix(args BuildArgs, pkg Pkg, isDts bool) string {
 			}
 			if len(ss) > 0 {
 				ss.Sort()
-				lines = append(lines, fmt.Sprintf("ts/%s", strings.Join(ss, ",")))
+				lines = append(lines, fmt.Sprintf("s%s", strings.Join(ss, ",")))
 			}
 		}
 	}
-	if args.conditions.Len() > 0 {
+	if len(args.conditions) > 0 {
 		var ss sort.StringSlice
-		for _, name := range args.conditions.Values() {
+		for _, name := range args.conditions {
 			ss = append(ss, name)
 		}
 		if len(ss) > 0 {
 			ss.Sort()
-			lines = append(lines, fmt.Sprintf("c/%s", strings.Join(ss, ",")))
+			lines = append(lines, fmt.Sprintf("c%s", strings.Join(ss, ",")))
 		}
 	}
 	if !isDts {
-		if args.denoStdVersion != "" && args.denoStdVersion != denoStdVersion {
-			lines = append(lines, fmt.Sprintf("dsv/%s", args.denoStdVersion))
-		}
-		if args.ignoreRequire {
-			lines = append(lines, "ir")
+		if args.externalRequire {
+			lines = append(lines, "r")
 		}
 		if args.keepNames {
-			lines = append(lines, "kn")
+			lines = append(lines, "k")
 		}
 		if args.ignoreAnnotations {
-			lines = append(lines, "ia")
+			lines = append(lines, "i")
 		}
 	}
 	if args.jsxRuntime != nil {
-		lines = append(lines, fmt.Sprintf("jsx/%s", args.jsxRuntime.String()))
+		lines = append(lines, fmt.Sprintf("x%s", args.jsxRuntime.String()))
 	}
 	if len(lines) > 0 {
-		return fmt.Sprintf("X-%s/", btoaUrl(strings.Join(lines, "\n")))
+		return btoaUrl(strings.Join(lines, "\n"))
 	}
 	return ""
 }
 
-func fixBuildArgs(args *BuildArgs, pkg Pkg) {
+func fixBuildArgs(npmrc *NpmRC, args *BuildArgs, pkg Pkg) {
 	if len(args.alias) > 0 || len(args.deps) > 0 || args.external.Len() > 0 {
-		depTree := newStringSet(walkDeps(newStringSet(), pkg)...)
+		depTree := NewStringSet(walkDeps(npmrc, NewStringSet(), pkg)...)
 		if len(args.alias) > 0 {
 			alias := map[string]string{}
 			for from, to := range args.alias {
@@ -181,7 +172,7 @@ func fixBuildArgs(args *BuildArgs, pkg Pkg) {
 				}
 			}
 			for _, to := range alias {
-				pkgName, _, _ := splitPkgPath(to)
+				pkgName, _, _, _ := splitPkgPath(to)
 				depTree.Add(pkgName)
 			}
 			args.alias = alias
@@ -196,7 +187,7 @@ func fixBuildArgs(args *BuildArgs, pkg Pkg) {
 			args.deps = deps
 		}
 		if args.external.Len() > 0 {
-			external := newStringSet()
+			external := NewStringSet()
 			for _, name := range args.external.Values() {
 				if depTree.Has(name) {
 					external.Add(name)
@@ -207,12 +198,12 @@ func fixBuildArgs(args *BuildArgs, pkg Pkg) {
 	}
 }
 
-func walkDeps(marker *StringSet, pkg Pkg) (deps []string) {
+func walkDeps(npmrc *NpmRC, marker *StringSet, pkg Pkg) (deps []string) {
 	if marker.Has(pkg.Name) {
 		return nil
 	}
 	marker.Add(pkg.Name)
-	p, _, err := getPackageInfo("", pkg.Name, pkg.Version)
+	p, err := npmrc.getPackageInfo(pkg.Name, pkg.Version)
 	if err != nil {
 		return nil
 	}
@@ -227,7 +218,7 @@ func walkDeps(marker *StringSet, pkg Pkg) (deps []string) {
 	for name, version := range pkgDeps {
 		deps = append(deps, name)
 		go func(c chan []string, marker *StringSet, name, version string) {
-			c <- walkDeps(marker, Pkg{Name: name, Version: version})
+			c <- walkDeps(npmrc, marker, Pkg{Name: name, Version: version})
 		}(ch, marker, name, version)
 	}
 	for range pkgDeps {

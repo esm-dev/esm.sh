@@ -116,9 +116,9 @@ class SWImpl implements SW {
     serviceWorker.oncontrollerchange = () => this.onUpdateFound();
 
     return new Promise<ServiceWorker>(async (resolve, reject) => {
-      const swr = await serviceWorker.register(options.swModule ?? "/sw.js", {
+      const swr = await serviceWorker.register(options.sw?.module ?? "/sw.js", {
         type: "module",
-        updateViaCache: options.swUpdateViaCache,
+        updateViaCache: options.sw?.updateViaCache,
       });
       const onActive = (firstInstall = false) => {
         if (swr.active?.state === "activated") {

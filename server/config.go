@@ -1,40 +1,36 @@
-package config
+package server
 
 import (
 	"encoding/json"
 	"fmt"
-	"net/url"
 	"os"
 	"path"
 	"path/filepath"
 	"runtime"
 	"strings"
-
-	"github.com/ije/gox/utils"
 )
 
 type Config struct {
-	Port               uint16    `json:"port,omitempty"`
-	TlsPort            uint16    `json:"tlsPort,omitempty"`
-	WorkDir            string    `json:"workDir,omitempty"`
-	CdnBasePath        string    `json:"cdnBasePath,omitempty"`
-	CdnOrigin          string    `json:"cdnOrigin,omitempty"`
-	AuthSecret         string    `json:"authSecret,omitempty"`
-	AllowList          AllowList `json:"allowList,omitempty"`
-	BanList            BanList   `json:"banList,omitempty"`
-	DisableCompression bool      `json:"disableCompression,omitempty"`
-	BuildConcurrency   uint16    `json:"buildConcurrency,omitempty"`
-	BuildWaitTimeout   uint16    `json:"buildWaitTimeout,omitempty"`
-	Cache              string    `json:"cache,omitempty"`
-	Storage            string    `json:"storage,omitempty"`
-	Database           string    `json:"database,omitempty"`
-	LogDir             string    `json:"logDir,omitempty"`
-	LogLevel           string    `json:"logLevel,omitempty"`
-	NpmPassword        string    `json:"npmPassword,omitempty"`
-	NpmRegistry        string    `json:"npmRegistry,omitempty"`
-	NpmRegistryScope   string    `json:"npmRegistryScope,omitempty"`
-	NpmToken           string    `json:"npmToken,omitempty"`
-	NpmUser            string    `json:"npmUser,omitempty"`
+	Port               uint16                 `json:"port"`
+	TlsPort            uint16                 `json:"tlsPort"`
+	WorkDir            string                 `json:"workDir"`
+	AuthSecret         string                 `json:"authSecret"`
+	AllowList          AllowList              `json:"allowList"`
+	BanList            BanList                `json:"banList"`
+	BuildConcurrency   uint16                 `json:"buildConcurrency"`
+	BuildTimeout       uint16                 `json:"buildTimeout"`
+	DisableSourceMap   bool                   `json:"disableSourceMap"`
+	DisableCompression bool                   `json:"disableCompression"`
+	Cache              string                 `json:"cache"`
+	Storage            string                 `json:"storage"`
+	Database           string                 `json:"database"`
+	LogDir             string                 `json:"logDir"`
+	LogLevel           string                 `json:"logLevel"`
+	NpmRegistry        string                 `json:"npmRegistry"`
+	NpmToken           string                 `json:"npmToken"`
+	NpmUser            string                 `json:"npmUser"`
+	NpmPassword        string                 `json:"npmPassword"`
+	NpmRegistries      map[string]NpmRegistry `json:"npmRegistries"`
 }
 
 type BanList struct {
@@ -56,26 +52,20 @@ type AllowScope struct {
 	Name string `json:"name"`
 }
 
-// Load loads config from the given file. Panic if failed to load.
-func Load(filename string) (*Config, error) {
-	var (
-		cfg     *Config
-		cfgFile *os.File
-		err     error
-	)
-
-	cfgFile, err = os.Open(filename)
+// LoadConfig loads config from the given file. Panic if failed to load.
+func LoadConfig(filename string) (cfg *Config, err error) {
+	file, err := os.Open(filename)
 	if err != nil {
 		return nil, fmt.Errorf("fail to read config file: %w", err)
 	}
-	defer cfgFile.Close()
+	defer file.Close()
 
-	err = json.NewDecoder(cfgFile).Decode(&cfg)
+	err = json.NewDecoder(file).Decode(&cfg)
 	if err != nil {
 		return nil, fmt.Errorf("fail to parse config: %w", err)
 	}
 
-	// fix config
+	// ensure `workDir`
 	if cfg.WorkDir == "" {
 		homeDir, err := os.UserHomeDir()
 		if err != nil {
@@ -91,7 +81,7 @@ func Load(filename string) (*Config, error) {
 	return fixConfig(cfg), nil
 }
 
-func Default() *Config {
+func DefaultConfig() *Config {
 	homeDir, err := os.UserHomeDir()
 	if err != nil {
 		panic(err)
@@ -108,49 +98,17 @@ func fixConfig(c *Config) *Config {
 	if c.AuthSecret == "" {
 		c.AuthSecret = os.Getenv("AUTH_SECRET")
 	}
-	if c.CdnOrigin != "" {
-		_, e := url.Parse(c.CdnOrigin)
-		if e != nil {
-			panic("invalid Cdnorigin url: " + e.Error())
-		}
-		c.CdnOrigin = strings.TrimRight(c.CdnOrigin, "/")
-	} else {
-		v := os.Getenv("CDN_ORIGIN")
-		if v != "" {
-			if _, e := url.Parse(v); e == nil {
-				c.CdnOrigin = strings.TrimRight(v, "/")
-			}
-		}
-	}
-	if c.CdnBasePath != "" {
-		a := strings.Split(c.CdnBasePath, "/")
-		path := make([]string, len(a))
-		n := 0
-		for _, p := range a {
-			if p != "" && p != "." {
-				path[n] = p
-				n++
-			}
-		}
-		if n > 0 {
-			c.CdnBasePath = "/" + strings.Join(path[:n], "/")
-		} else {
-			c.CdnBasePath = ""
-		}
-	} else {
-		v := os.Getenv("CDN_BASE_PATH")
-		if v != "" {
-			c.CdnBasePath = utils.CleanPath(v)
-		}
-	}
 	if !c.DisableCompression {
 		c.DisableCompression = os.Getenv("DISABLE_COMPRESSION") != ""
+	}
+	if !c.DisableSourceMap {
+		c.DisableSourceMap = os.Getenv("DISABLE_SOURCEMAP") != ""
 	}
 	if c.BuildConcurrency == 0 {
 		c.BuildConcurrency = uint16(runtime.NumCPU())
 	}
-	if c.BuildWaitTimeout == 0 {
-		c.BuildWaitTimeout = 30 // seconds
+	if c.BuildTimeout == 0 {
+		c.BuildTimeout = 30 // seconds
 	}
 	if c.Cache == "" {
 		c.Cache = "memory:default"
@@ -165,27 +123,25 @@ func fixConfig(c *Config) *Config {
 		c.LogDir = path.Join(c.WorkDir, "log")
 	}
 	if c.LogLevel == "" {
-		c.LogLevel = "info"
+		c.LogLevel = os.Getenv("LOG_LEVEL")
+		if c.LogLevel == "" {
+			c.LogLevel = "info"
+		}
 	}
 	if c.NpmRegistry != "" {
-		_, e := url.Parse(c.NpmRegistry)
-		if e != nil {
-			panic("invalid npm registry url: " + e.Error())
+		if isHttpSepcifier(c.NpmRegistry) {
+			c.NpmRegistry = strings.TrimRight(c.NpmRegistry, "/") + "/"
 		}
-		c.NpmRegistry = strings.TrimRight(c.NpmRegistry, "/") + "/"
 	} else {
 		v := os.Getenv("NPM_REGISTRY")
-		if v != "" {
-			if _, e := url.Parse(v); e == nil {
-				c.NpmRegistry = strings.TrimRight(v, "/") + "/"
-			}
+		if v != "" && isHttpSepcifier(v) {
+			c.NpmRegistry = strings.TrimRight(v, "/") + "/"
+		} else {
+			c.NpmRegistry = npmRegistry
 		}
 	}
 	if c.NpmToken == "" {
 		c.NpmToken = os.Getenv("NPM_TOKEN")
-	}
-	if c.NpmRegistryScope == "" {
-		c.NpmRegistryScope = os.Getenv("NPM_REGISTRY_SCOPE")
 	}
 	if c.NpmUser == "" {
 		c.NpmUser = os.Getenv("NPM_USER")
@@ -193,11 +149,22 @@ func fixConfig(c *Config) *Config {
 	if c.NpmPassword == "" {
 		c.NpmPassword = os.Getenv("NPM_PASSWORD")
 	}
+	if len(c.NpmRegistries) > 0 {
+		regs := make(map[string]NpmRegistry)
+		for scope, rc := range c.NpmRegistries {
+			if strings.HasPrefix(scope, "@") && isHttpSepcifier(rc.Registry) {
+				rc.Registry = strings.TrimRight(rc.Registry, "/") + "/"
+				regs[scope] = rc
+			} else {
+				fmt.Printf("[error] invalid npm registry for scope %s: %s\n", scope, rc.Registry)
+			}
+		}
+		c.NpmRegistries = regs
+	}
 	return c
 }
 
-// extractPackageName Will take a packageName as input extract key
-// parts and return them
+// extractPackageName Will take a packageName as input extract key parts and return them
 //
 // fullNameWithoutVersion  e.g. @github/faker
 // scope                   e.g. @github
@@ -269,6 +236,5 @@ func isPackageExcluded(name string, excludes []string) bool {
 			return true
 		}
 	}
-
 	return false
 }

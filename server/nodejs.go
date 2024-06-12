@@ -17,23 +17,23 @@ import (
 
 const (
 	nodejsMinVersion = 22
-	nodeTypesVersion = "20.12.8"
-	denoStdVersion   = "0.177.1"
+	nodeTypesVersion = "20.12.12"
 )
 
 var nodejsInternalModules = map[string]bool{
 	"assert":              true,
 	"assert/strict":       true,
 	"async_hooks":         true,
+	"buffer":              true,
 	"child_process":       true,
 	"cluster":             true,
-	"buffer":              true,
 	"console":             true,
 	"constants":           true,
 	"crypto":              true,
 	"dgram":               true,
 	"diagnostics_channel": true,
 	"dns":                 true,
+	"dns/promises":        true,
 	"domain":              true,
 	"events":              true,
 	"fs":                  true,
@@ -55,6 +55,7 @@ var nodejsInternalModules = map[string]bool{
 	"readline":            true,
 	"repl":                true,
 	"stream":              true,
+	"stream/consumers":    true,
 	"stream/promises":     true,
 	"stream/web":          true,
 	"string_decoder":      true,
@@ -107,14 +108,13 @@ func checkNodejs(installDir string) (nodeVersion string, pnpmVersion string, err
 		return
 	}
 
-	pnpmOutput, err := exec.Command("pnpm", "-v").CombinedOutput()
+	pnpmOutput, err := run("pnpm", "-v")
 	if err != nil && errors.Is(err, exec.ErrNotFound) {
-		out, e := exec.Command("npm", "install", "pnpm", "-g").CombinedOutput()
-		if e != nil {
-			err = fmt.Errorf("failed to install pnpm: %v", string(out))
+		_, err = run("npm", "install", "pnpm", "-g")
+		if err != nil {
 			return
 		}
-		pnpmOutput, err = exec.Command("pnpm", "-v").CombinedOutput()
+		pnpmOutput, err = run("pnpm", "-v")
 	}
 	if err == nil {
 		pnpmVersion = strings.TrimSpace(string(pnpmOutput))
@@ -123,7 +123,7 @@ func checkNodejs(installDir string) (nodeVersion string, pnpmVersion string, err
 }
 
 func getNodejsVersion() (version string, major int, err error) {
-	output, err := exec.Command("node", "--version").CombinedOutput()
+	output, err := run("node", "--version")
 	if err != nil {
 		return
 	}
@@ -181,11 +181,8 @@ func installNodejs(installDir string, version string) (err error) {
 
 	cmd := exec.Command("tar", "-xJf", path.Base(dlURL))
 	cmd.Dir = os.TempDir()
-	output, err := cmd.CombinedOutput()
+	err = cmd.Run()
 	if err != nil {
-		if len(output) > 0 {
-			err = errors.New(string(output))
-		}
 		return
 	}
 
@@ -194,11 +191,6 @@ func installNodejs(installDir string, version string) (err error) {
 
 	cmd = exec.Command("mv", "-f", strings.TrimSuffix(path.Base(dlURL), ".tar.xz"), installDir)
 	cmd.Dir = os.TempDir()
-	output, err = cmd.CombinedOutput()
-	if err != nil {
-		if len(output) > 0 {
-			err = errors.New(string(output))
-		}
-	}
+	err = cmd.Run()
 	return
 }

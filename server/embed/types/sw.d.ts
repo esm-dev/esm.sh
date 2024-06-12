@@ -13,8 +13,11 @@ export interface Plugin {
 
 export interface FireOptions {
   main?: string;
-  swModule?: string;
-  swUpdateViaCache?: ServiceWorkerUpdateViaCache;
+  buildTarget?: `es20${15 | 16 | 17 | 18 | 19 | 20 | 21 | 22}`;
+  sw?: {
+    module?: string;
+    updateViaCache?: ServiceWorkerUpdateViaCache;
+  };
 }
 
 export interface SW {
