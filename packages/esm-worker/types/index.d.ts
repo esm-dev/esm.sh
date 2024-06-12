@@ -1,9 +1,14 @@
+/// <reference types="@cloudflare/workers-types" />
+
 declare global {
   interface Env {
-    ESM_ORIGIN?: string;
-    ESM_TOKEN?: string;
+    ESM_SERVER_ORIGIN?: string;
+    ESM_SERVER_TOKEN?: string;
+    NPMRC?: string;
     NPM_REGISTRY?: string;
     NPM_TOKEN?: string;
+    ALLOW_LIST?: string;
+    SOURCE_MAP?: "on" | "off";
     KV?: KVNamespace;
     R2?: R2Bucket;
     LEGACY_WORKER?: { fetch: (req: Request) => Promise<Response> };
@@ -12,7 +17,7 @@ declare global {
 
 export type HttpMetadata = {
   contentType: string;
-  esmId?: string;
+  esmPath?: string;
   dts?: string;
 };
 
@@ -50,11 +55,8 @@ export interface WorkerStorage {
 
 export const version: string;
 export const targets: Set<string>;
-export const getContentType: (filename: string, defaultType?: string) => string;
 export const getBuildTargetFromUA: (ua: string | null) => string;
-export const checkPreflight: (req: Request) => Response | undefined;
-export const corsHeaders: () => Headers;
-export const redirect: (url: URL | string, status: 301 | 302, cacheMaxAge?: number) => Response;
+export const getContentType: (filename: string, defaultType?: string) => string;
 export const hashText: (text: string) => Promise<string>;
 
 export function withESMWorker(middleware?: Middleware, cache?: Cache): {
@@ -71,6 +73,7 @@ export type Context<Data = Record<string, any>> = {
   url: URL;
   waitUntil(promise: Promise<any>): void;
   withCache(fetcher: () => Promise<Response> | Response, options?: { varyUA: boolean }): Promise<Response>;
+  corsHeaders(headers?: Headers): Headers;
 };
 
 export interface Middleware {

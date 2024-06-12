@@ -1,17 +1,24 @@
 import type { HttpMetadata, WorkerStorage, WorkerStorageKV } from "../types/index";
 import { targets } from "esm-compat";
 
-export function hasTargetSegment(path: string) {
-  const parts = path.slice(1).split("/");
-  return parts.length >= 2 && parts.some((p) => targets.has(p));
+export function hasTargetSegment(segments: string[]) {
+  const len = segments.length;
+  if (len < 2) {
+    return false;
+  }
+  const s0 = segments[0];
+  if (s0.startsWith("X-") && len > 2) {
+    return targets.has(segments[1]);
+  }
+  return targets.has(s0);
 }
 
 export function isDtsFile(path: string) {
   return path.endsWith(".d.ts") || path.endsWith(".d.mts");
 }
 
-export function asKV(storage: R2Bucket | WorkerStorage): WorkerStorageKV {
-  return globalThis.__AS_KV__ ?? (globalThis.__AS_KV__ = {
+export function mockKV(storage: R2Bucket | WorkerStorage): WorkerStorageKV {
+  return globalThis.__MOCK_KV__ ?? (globalThis.__MOCK_KV__ = {
     async getWithMetadata(
       key: string,
       _options: { type: "stream"; cacheTtl?: number },
@@ -51,29 +58,21 @@ export function splitBy(s: string, searchString: string, fromLast = false): [str
 }
 
 /** create redirect response. */
-export function redirect(url: URL | string, status: 301 | 302, cacheMaxAge = 600) {
-  const headers = corsHeaders();
+export function redirect(url: URL | string, headers: Headers, status: 301 | 302 = 302, cacheMaxAge = 600) {
   headers.set("Location", url.toString());
   if (status === 301) {
     headers.set("Cache-Control", "public, max-age=31536000, immutable");
   } else {
-    headers.set(
-      "Cache-Control",
-      `public, max-age=${cacheMaxAge}`,
-    );
+    headers.set("Cache-Control", `public, max-age=${cacheMaxAge}`);
   }
   return new Response(null, { status, headers });
 }
 
-export function err(message: string, status: number = 500) {
-  return new Response(
-    message,
-    { status, headers: corsHeaders() },
-  );
+export function err(message: string, headers: Headers, status: number = 500) {
+  return new Response(message, { status, headers });
 }
 
-export function errPkgNotFound(pkg: string) {
-  const headers = corsHeaders();
+export function errPkgNotFound(pkg: string, headers: Headers) {
   headers.set("Content-Type", "application/javascript; charset=utf-8");
   headers.set("Cache-Control", "private, no-cache, no-store, must-revalidate");
   return new Response(
@@ -86,33 +85,13 @@ export function errPkgNotFound(pkg: string) {
   );
 }
 
-export function checkPreflight(req: Request): Response | void {
-  if (req.method === "OPTIONS" && req.headers.has("Origin")) {
-    const headers = new Headers({
-      "Access-Control-Allow-Origin": "*",
-      "Access-Control-Allow-Methods": req.headers.get(
-        "Access-Control-Request-Method",
-      )!,
-      "Access-Control-Allow-Headers": req.headers.get(
-        "Access-Control-Request-Headers",
-      )!,
-    });
-    headers.append("Vary", "Origin");
-    headers.append("Vary", "Access-Control-Request-Method");
-    headers.append("Vary", "Access-Control-Request-Headers");
-    return new Response(null, { headers });
-  }
-}
-
-export function corsHeaders() {
-  return new Headers({
-    "Access-Control-Allow-Origin": "*",
-    "Access-Control-Allow-Methods": "*",
-    "Vary": "Origin",
-  });
-}
-
 export function copyHeaders(dst: Headers, src: Headers, ...keys: string[]) {
+  if (keys.length === 0) {
+    for (const [k, v] of src) {
+      dst.set(k, v);
+    }
+    return;
+  }
   for (const k of keys) {
     if (src.has(k)) {
       dst.set(k, src.get(k)!);
@@ -123,6 +102,8 @@ export function copyHeaders(dst: Headers, src: Headers, ...keys: string[]) {
 const allowedSearchParams = new Set([
   "alias",
   "bundle",
+  "bundle-deps",
+  "bundle-all",
   "conditions",
   "css",
   "deno-std",
