@@ -255,7 +255,7 @@ func (ctx *BuildContext) buildModule() (result BuildResult, err error) {
 			return
 		}
 		buf := bytes.NewBuffer(nil)
-		importPath := ctx.getImportPath(pkg, ctx.getBuildArgsAsPathSegment(pkg, false))
+		importPath := ctx.getImportPath(pkg, ctx.getBuildArgsPrefix(pkg, false))
 		fmt.Fprintf(buf, `export * from "%s";`, importPath)
 		if r.HasDefaultExport {
 			fmt.Fprintf(buf, "\n")
@@ -1231,7 +1231,7 @@ func (ctx *BuildContext) lookupTypes(entry BuildEntry) string {
 			"/%s%s/%s%s",
 			ctx.pkg.ghPrefix(),
 			ctx.pkg.Fullname(),
-			ctx.getBuildArgsAsPathSegment(ctx.pkg, true),
+			ctx.getBuildArgsPrefix(ctx.pkg, true),
 			strings.TrimPrefix(entry.dts, "./"),
 		)
 	}
@@ -1274,7 +1274,7 @@ func (ctx *BuildContext) lookupTypes(entry BuildEntry) string {
 
 func (ctx *BuildContext) transformDTS(types string) (err error) {
 	start := time.Now()
-	buildArgsPrefix := ctx.getBuildArgsAsPathSegment(ctx.pkg, true)
+	buildArgsPrefix := ctx.getBuildArgsPrefix(ctx.pkg, true)
 	n, err := transformDTS(ctx, types, buildArgsPrefix, nil)
 	if err != nil {
 		return

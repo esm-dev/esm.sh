@@ -62,7 +62,7 @@ func TestPkgPath(t *testing.T) {
 		t.Fatal("split pkg path: 'react-dom@18.2.0/es2022/server.js'")
 	}
 
-	pkg, q, _, _, err := validatePkgPath(nil, "react@18.2.0")
+	pkg, q, _, _, err := validateESMPath(nil, "react@18.2.0")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -73,7 +73,7 @@ func TestPkgPath(t *testing.T) {
 		t.Fatalf("invalid pkg('%v'), should be 'react@18.2.0'", pkg)
 	}
 
-	pkg, q, _, _, err = validatePkgPath(nil, "react-dom@18.2.0/client")
+	pkg, q, _, _, err = validateESMPath(nil, "react-dom@18.2.0/client")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -84,7 +84,7 @@ func TestPkgPath(t *testing.T) {
 		t.Fatalf("invalid pkg('%v'), should be 'react-dom@18.2.0/client'", pkg)
 	}
 
-	pkg, q, _, _, err = validatePkgPath(nil, "react-dom@18.2.0&dev/client.js")
+	pkg, q, _, _, err = validateESMPath(nil, "react-dom@18.2.0&dev/client.js")
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -52,6 +52,7 @@ const (
 func router() rex.Handle {
 	startTime := time.Now()
 	globalETag := fmt.Sprintf(`W/"v%d"`, VERSION)
+	globalNpmrc := NewNpmRcFromConfig(config)
 
 	return func(ctx *rex.Context) interface{} {
 		pathname := ctx.Path.String()
@@ -485,7 +486,7 @@ func router() rex.Handle {
 			}
 			npmrc = rc
 		} else {
-			npmrc = NewNpmRcFromConfig(config)
+			npmrc = globalNpmrc
 		}
 
 		zoneId := ctx.R.Header.Get("X-Zone-Id")
@@ -513,7 +514,7 @@ func router() rex.Handle {
 		}
 
 		// get package info
-		pkg, extraQuery, caretVersion, isTargetUrl, err := validatePkgPath(npmrc, pathname)
+		pkg, extraQuery, caretVersion, isTargetUrl, err := validateESMPath(npmrc, pathname)
 		if err != nil {
 			status := 500
 			message := err.Error()
@@ -841,7 +842,7 @@ func router() rex.Handle {
 			for _, v := range strings.Split(query.Get("deps"), ",") {
 				v = strings.TrimSpace(v)
 				if v != "" {
-					p, _, _, _, err := validatePkgPath(npmrc, v)
+					p, _, _, _, err := validateESMPath(npmrc, v)
 					if err != nil {
 						return rex.Status(400, fmt.Sprintf("Invalid deps query: %v not found", v))
 					}
@@ -908,7 +909,7 @@ func router() rex.Handle {
 			exports:    exports,
 			external:   external,
 		}
-		isPArgs := false // args in pathname: `PKG@VERSION/X-${args}/SUBPATH`
+		xArgs := false // args in pathname: `PKG@VERSION/X-${args}/esnext/SUBPATH`
 		if resType == ResBuild || resType == ResTypes {
 			a := strings.Split(pkg.SubModule, "/")
 			if len(a) > 1 && strings.HasPrefix(a[0], "X-") {
@@ -920,7 +921,7 @@ func router() rex.Handle {
 				pkg.SubPath = strings.Join(strings.Split(pkg.SubPath, "/")[1:], "/")
 				pkg.SubModule = toModuleBareName(pkg.SubPath, true)
 				buildArgs = args
-				isPArgs = true
+				xArgs = true
 			}
 		}
 
@@ -980,11 +981,11 @@ func router() rex.Handle {
 
 		}
 
-		if !isPArgs {
+		if !xArgs {
 			// check `?jsx-rutnime` query
 			var jsxRuntime *Pkg = nil
 			if v := query.Get("jsx-runtime"); v != "" {
-				m, _, _, _, err := validatePkgPath(npmrc, v)
+				m, _, _, _, err := validateESMPath(npmrc, v)
 				if err != nil {
 					return rex.Status(400, fmt.Sprintf("Invalid jsx-runtime query: %v not found", v))
 				}

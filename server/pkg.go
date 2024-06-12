@@ -19,7 +19,7 @@ type Pkg struct {
 	FromGithub bool   `json:"fromGithub"`
 }
 
-func validatePkgPath(rc *NpmRC, pathname string) (pkg Pkg, extraQuery string, isCaretVersion bool, hasTarget bool, err error) {
+func validateESMPath(rc *NpmRC, pathname string) (pkg Pkg, extraQuery string, isCaretVersion bool, hasTarget bool, err error) {
 	fromGithub := strings.HasPrefix(pathname, "/gh/") && strings.Count(pathname, "/") >= 3
 	if fromGithub {
 		pathname = "/@" + pathname[4:]

@@ -40,7 +40,7 @@ func decodeBuildArgs(npmrc *NpmRC, argsString string) (args BuildArgs, err error
 				}
 			} else if strings.HasPrefix(p, "d") {
 				for _, p := range strings.Split(p[1:], ",") {
-					m, _, _, _, err := validatePkgPath(npmrc, p)
+					m, _, _, _, err := validateESMPath(npmrc, p)
 					if err != nil {
 						if strings.HasSuffix(err.Error(), "not found") {
 							continue
@@ -62,7 +62,7 @@ func decodeBuildArgs(npmrc *NpmRC, argsString string) (args BuildArgs, err error
 			} else if strings.HasPrefix(p, "c") {
 				args.conditions = append(args.conditions, strings.Split(p[1:], ",")...)
 			} else if strings.HasPrefix(p, "x") {
-				p, _, _, _, e := validatePkgPath(npmrc, p[1:])
+				p, _, _, _, e := validateESMPath(npmrc, p[1:])
 				if e == nil {
 					args.jsxRuntime = &p
 				}

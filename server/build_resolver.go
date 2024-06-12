@@ -82,7 +82,7 @@ func (ctx *BuildContext) Path() string {
 			ctx.path = fmt.Sprintf(
 				"/%s/%s%s",
 				pkg.Fullname(),
-				ctx.getBuildArgsAsPathSegment(pkg, true),
+				ctx.getBuildArgsPrefix(pkg, true),
 				pkg.SubPath,
 			)
 		} else {
@@ -114,7 +114,7 @@ func (ctx *BuildContext) Path() string {
 	ctx.path = fmt.Sprintf(
 		"/%s/%s%s/%s%s",
 		pkg.Fullname(),
-		ctx.getBuildArgsAsPathSegment(ctx.pkg, ctx.target == "types"),
+		ctx.getBuildArgsPrefix(ctx.pkg, ctx.target == "types"),
 		ctx.target,
 		name,
 		extname,
@@ -136,15 +136,9 @@ func (ctx *BuildContext) getImportPath(pkg Pkg, buildArgsPrefix string) string {
 	if ctx.dev {
 		name += ".development"
 	}
-	ghPrefix := ""
-	if pkg.FromGithub {
-		ghPrefix = "/gh"
-	}
 	return fmt.Sprintf(
-		"%s/%s@%s/%s%s/%s%s",
-		ghPrefix,
-		pkg.Name,
-		pkg.Version,
+		"/%s/%s%s/%s%s",
+		pkg.Fullname(),
 		buildArgsPrefix,
 		ctx.target,
 		name,
@@ -156,7 +150,7 @@ func (ctx *BuildContext) getSavepath() string {
 	return normalizeSavePath(ctx.zoneId, path.Join("builds", ctx.Path()))
 }
 
-func (ctx *BuildContext) getBuildArgsAsPathSegment(pkg Pkg, isDts bool) string {
+func (ctx *BuildContext) getBuildArgsPrefix(pkg Pkg, isDts bool) string {
 	if a := encodeBuildArgs(ctx.args, pkg, isDts); a != "" {
 		return "X-" + a + "/"
 	}
@@ -676,7 +670,7 @@ func (ctx *BuildContext) resolveExternalModule(specifier string, kind api.Resolv
 			Version:    npm.Version,
 			FromGithub: true,
 		}
-		resolvedPath = ctx.getImportPath(pkg, ctx.getBuildArgsAsPathSegment(pkg, false))
+		resolvedPath = ctx.getImportPath(pkg, ctx.getBuildArgsPrefix(pkg, false))
 		return
 	}
 
@@ -741,7 +735,7 @@ func (ctx *BuildContext) resolveExternalModule(specifier string, kind api.Resolv
 				}()
 			}
 		}
-		resolvedPath = ctx.getImportPath(subPkg, ctx.getBuildArgsAsPathSegment(subPkg, false))
+		resolvedPath = ctx.getImportPath(subPkg, ctx.getBuildArgsPrefix(subPkg, false))
 		if ctx.bundleMode == BundleFalse {
 			n, e := utils.SplitByLastByte(resolvedPath, '.')
 			resolvedPath = n + ".nobundle." + e
