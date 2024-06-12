@@ -1,4 +1,4 @@
-import { assert } from "https://deno.land/std@0.220.0/assert/mod.ts";
+import { assertEquals, assertStringIncludes } from "https://deno.land/std@0.220.0/assert/mod.ts";
 
 import { h } from "preact";
 import render from "preact-render-to-string";
@@ -24,5 +24,14 @@ Deno.test("external", () => {
     );
   };
   const html = render(<App />);
-  assert(html == "<main><p>just now</p></main>");
+  assertEquals(html, "<main><p>just now</p></main>");
+});
+
+Deno.test("types with ?external", async () => {
+  const res = await fetch(`http://localhost:8080/swr@1.3.0/X-ZXJlYWN0/dist/use-swr.d.ts`);
+  assertEquals(res.status, 200);
+  assertEquals(res.headers.get("Content-type"), "application/typescript; charset=utf-8");
+  const ts = await res.text();
+  assertStringIncludes(ts, '/// <reference types="react" />');
+  assertStringIncludes(ts, 'import("react")');
 });

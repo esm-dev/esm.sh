@@ -1,7 +1,7 @@
 import { join } from "https://deno.land/std@0.220.0/path/mod.ts";
 import { assert, assertEquals, assertStringIncludes } from "https://deno.land/std@0.220.0/assert/mod.ts";
 
-const env = { ESM_ORIGIN: "http://localhost:8080" };
+const env = { ESM_SERVER_ORIGIN: "http://localhost:8080" };
 const workerOrigin = "http://localhost:8081";
 const ac = new AbortController();
 const closeServer = () => ac.abort();
@@ -130,13 +130,6 @@ Deno.test("esm-worker", { sanitizeOps: false, sanitizeResources: false }, async 
   });
 
   await t.step("embed polyfills/types", async () => {
-    const res = await fetch(`${workerOrigin}/node.ns.d.ts`);
-    assertEquals(res.status, 200);
-    assertEquals(res.headers.get("Content-Type"), "application/typescript; charset=utf-8");
-    assertEquals(res.headers.get("Etag"), `W/"${version}"`);
-    assertEquals(res.headers.get("Cache-Control"), "public, max-age=86400");
-    assertStringIncludes(await res.text(), "declare class Buffer");
-
     const res2 = await fetch(`${workerOrigin}/sw.d.ts`);
     assertEquals(res2.status, 200);
     assertEquals(res2.headers.get("Content-Type"), "application/typescript; charset=utf-8");
@@ -190,7 +183,7 @@ Deno.test("esm-worker", { sanitizeOps: false, sanitizeResources: false }, async 
     assertEquals(res.headers.get("Cache-Control"), "public, max-age=600");
 
     const res2 = await fetch(res.headers.get("Location")!);
-    const modUrl = new URL(res2.headers.get("X-Esm-Id")!, workerOrigin);
+    const modUrl = new URL(res2.headers.get("x-esm-path")!, workerOrigin);
     res2.body?.cancel();
     assertEquals(res2.status, 200);
     assertEquals(res2.headers.get("Content-Type"), "application/javascript; charset=utf-8");
@@ -220,7 +213,7 @@ Deno.test("esm-worker", { sanitizeOps: false, sanitizeResources: false }, async 
     const res6 = await fetch(`${workerOrigin}/react@17.0.2`);
     res6.body?.cancel();
     assertEquals(res6.status, 200);
-    const modUrl2 = new URL(res6.headers.get("X-Esm-Id")!, workerOrigin);
+    const modUrl2 = new URL(res6.headers.get("x-esm-path")!, workerOrigin);
     const res7 = await fetch(modUrl2);
     assertEquals(res7.status, 200);
     assertStringIncludes(
@@ -231,7 +224,7 @@ Deno.test("esm-worker", { sanitizeOps: false, sanitizeResources: false }, async 
     const res8 = await fetch(`${workerOrigin}/react-dom@18.2.0?external=react`);
     res8.body?.cancel();
     assertEquals(res8.status, 200);
-    const modUrl3 = new URL(res8.headers.get("X-Esm-Id")!, workerOrigin);
+    const modUrl3 = new URL(res8.headers.get("x-esm-path")!, workerOrigin);
     const res9 = await fetch(modUrl3);
     assertEquals(res9.status, 200);
     assertStringIncludes(await res9.text(), `from "react"`);
@@ -251,7 +244,7 @@ Deno.test("esm-worker", { sanitizeOps: false, sanitizeResources: false }, async 
     assertEquals(res.headers.get("Cache-Control"), "public, max-age=600");
 
     const res2 = await fetch(res.headers.get("Location")!);
-    const modUrl = new URL(res2.headers.get("X-Esm-Id")!, workerOrigin);
+    const modUrl = new URL(res2.headers.get("x-esm-path")!, workerOrigin);
     res2.body?.cancel();
     assertEquals(res2.status, 200);
     assertEquals(res2.headers.get("Content-Type"), "application/javascript; charset=utf-8");
@@ -303,7 +296,7 @@ Deno.test("esm-worker", { sanitizeOps: false, sanitizeResources: false }, async 
     assert(rUrl.startsWith(`${workerOrigin}/gh/microsoft/tslib@`));
     assertEquals(res.headers.get("Cache-Control"), "public, max-age=600");
     const res2 = await fetch(rUrl);
-    const modUrl = new URL(res2.headers.get("X-Esm-Id")!, workerOrigin);
+    const modUrl = new URL(res2.headers.get("x-esm-path")!, workerOrigin);
     res2.body?.cancel();
     assertEquals(res2.status, 200);
     assertEquals(res2.headers.get("Content-Type"), "application/javascript; charset=utf-8");
@@ -349,7 +342,7 @@ Deno.test("esm-worker", { sanitizeOps: false, sanitizeResources: false }, async 
     assertEquals(res.headers.get("Cache-Control"), "public, max-age=600");
 
     const res2 = await fetch(rUrl);
-    const modUrl = new URL(res2.headers.get("X-Esm-Id")!, workerOrigin);
+    const modUrl = new URL(res2.headers.get("x-esm-path")!, workerOrigin);
     res2.body?.cancel();
     assertEquals(res2.status, 200);
     assertEquals(res2.headers.get("Content-Type"), "application/javascript; charset=utf-8");
@@ -477,6 +470,19 @@ Deno.test("esm-worker", { sanitizeOps: false, sanitizeResources: false }, async 
         "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.3 Safari/605.1.15",
       ),
       "/es2021/",
+    );
+  });
+
+  await t.step("fix urls", async () => {
+    const res = await fetch(
+      `${workerOrigin}/lightningcss-wasm@1.19.0/es2022/lightningcss_node.wasm`,
+      { redirect: "manual" },
+    );
+    res.body?.cancel();
+    assertEquals(res.status, 301);
+    assertEquals(
+      res.headers.get("location"),
+      `${workerOrigin}/lightningcss-wasm@1.19.0/lightningcss_node.wasm`,
     );
   });
 
