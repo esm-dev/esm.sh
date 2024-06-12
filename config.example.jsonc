@@ -7,14 +7,14 @@
   // Note: Docker users needs to provide tls certificate.
   "tlsPort": 0,
 
-  // The secret token to validate the `Authorization: Bearer $secret` header of requests, default is disabled.
+  // The secret token to validate the `Authorization: Bearer <secret>` header of requests, default is disabled.
   "authSecret": "",
 
   // The build max concurrency, default is `runtime.NumCPU()`
   "buildConcurrency": 0,
 
   // The max waiting time for the build to complete, default is 30 seconds.
-  "buildWaitTimeout": 30,
+  "buildTimeout": 30,
 
   // The work directory for the server app, default is "~/.esmd".
   "workDir": "~/.esmd",
@@ -37,49 +37,51 @@
   // The log directory, default is "~/.esmd/log".
   "logDir": "~/.esmd/log",
 
-  // The log level, default is "info", you can also set it to "debug" to enable debug logs.
+  // The log level, available values are ["debug", "info", "warn", "error"], default is "info".
   "logLevel": "info",
 
-  // The origin of the CDN, default is using the origin of the request.
-  // Use to fix origin with reverse proxy, for examle "https://esm.sh"
-  "cdnOrigin": "",
-
-  // The base path of the CDN, default is "/".
-  "cdnBasePath": "/",
-
-  // The npm registry, default is "https://registry.npmjs.org/".
+  // The global npm registry, default is "https://registry.npmjs.org/".
   "npmRegistry": "https://registry.npmjs.org/",
 
-  // The scope applied to the npm registry. This will ensure only packages
-  // with this scope get downloaded from the registry, default is empty.
-  // Default behavior is to fetch all packages from the npm registry.
-  "npmRegistryScope": "@my-scope",
-
-  // The npm token for private packages, default is empty.
+  // The npm access token for the global npm registry, default is empty.
   "npmToken": "",
 
-  // These two fields are used for basic authentication towards a private
-  // package registry, default for both is empty.
+  // These two fields are used for basic authentication towards the global npm registry,
+  // default for both is empty.
   "npmUser": "",
   "npmPassword": "",
 
-  // Disable gzip/brotli compression, default is false.
+  // Registries for scoped packages. This will ensure packages with these scopes get downloaded
+  // from specific registry, default is empty.
+  "npmRegistries": {
+    "@scope_name": {
+      "registry": "https://your-registry.com/",
+      "token": "xxx",
+      "user": "username",
+      "password": "xxx"
+    }
+  },
+
+  // Disable http compression, default is false.
   "disableCompression": false,
+
+  // Disable generating source map for build js files, default is false.
+  "disableSourceMap": false,
 
   // The list to ban some packages or scopes.
   "banList": {
-    "packages": ["@some_scope/package_name"],
+    "packages": ["@scope_name/package_name"],
     "scopes": [{
-      "name": "@your_scope",
+      "name": "@scope_name",
       "excludes": ["package_name"]
     }]
   },
 
   // The list to only allow some packages or scopes.
   "allowList": {
-    "packages": ["@some_scope/package_name"],
+    "packages": ["@scope_name/package_name"],
     "scopes": [{
-      "name": "@your_scope"
+      "name": "@scope_name"
     }]
   }
 }
