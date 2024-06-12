@@ -11,7 +11,7 @@ self.onmessage = (e) => {
 }
 `;
 
-Deno.test("worker (legacy api)", async () => {
+Deno.test("web-worker (legacy api)", async () => {
   const worker = workerFactory(inject);
   const hashText = await new Promise((resolve, reject) => {
     const t = setTimeout(() => {
@@ -27,7 +27,7 @@ Deno.test("worker (legacy api)", async () => {
   worker.terminate();
 });
 
-Deno.test("worker", async () => {
+Deno.test("web-worker", async () => {
   const worker = workerFactory({ inject, name: "xxhash-wasm" });
   const hashText = await new Promise((resolve, reject) => {
     const t = setTimeout(() => {
