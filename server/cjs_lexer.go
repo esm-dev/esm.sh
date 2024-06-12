@@ -14,7 +14,7 @@ import (
 	"github.com/evanw/esbuild/pkg/api"
 )
 
-const cjsLexerPkg = "esm-cjs-lexer@0.10.0"
+const cjsLexerPkg = "esm-cjs-lexer@0.10.1"
 
 // use `require()` to get the module's exports that are not statically analyzable by esm-cjs-lexer
 var requireModeAllowList = []string{
