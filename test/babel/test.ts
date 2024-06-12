@@ -1,7 +1,7 @@
 import { assertStringIncludes } from "https://deno.land/std@0.220.0/assert/mod.ts";
 
-import { transformAsync } from "http://localhost:8080/@babel/core@7.21.3";
-import babelPresetTS from "http://localhost:8080/@babel/preset-typescript@7.21.0";
+import { transformAsync } from "http://localhost:8080/@babel/core@^7.24.7";
+import babelPresetTS from "http://localhost:8080/@babel/preset-typescript@^7.24.7";
 import babelPresetSolid from "http://localhost:8080/babel-preset-solid@1.6.12";
 import solidRefresh from "http://localhost:8080/solid-refresh@0.5.2/babel";
 
