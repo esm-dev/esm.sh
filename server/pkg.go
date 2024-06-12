@@ -19,7 +19,7 @@ type Pkg struct {
 	FromGithub bool   `json:"fromGithub"`
 }
 
-func validatePkgPath(rc *NpmRC, pathname string) (pkg Pkg, extraQuery string, caretVersion bool, hasTarget bool, err error) {
+func validatePkgPath(rc *NpmRC, pathname string) (pkg Pkg, extraQuery string, isCaretVersion bool, hasTarget bool, err error) {
 	fromGithub := strings.HasPrefix(pathname, "/gh/") && strings.Count(pathname, "/") >= 3
 	if fromGithub {
 		pathname = "/@" + pathname[4:]
@@ -110,9 +110,8 @@ func validatePkgPath(rc *NpmRC, pathname string) (pkg Pkg, extraQuery string, ca
 		return
 	}
 
-	caretVersion = strings.HasPrefix(pkg.Version, "^") && regexpFullVersion.MatchString(pkg.Version[1:])
-
-	if caretVersion || !regexpFullVersion.MatchString(pkg.Version) {
+	isCaretVersion = strings.HasPrefix(pkg.Version, "^")
+	if isCaretVersion || !regexpFullVersion.MatchString(pkg.Version) {
 		var p PackageJSON
 		p, err = rc.fetchPackageInfo(pkgName, version)
 		if err == nil {

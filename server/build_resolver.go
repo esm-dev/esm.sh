@@ -786,7 +786,7 @@ func (ctx *BuildContext) resolveExternalModule(specifier string, kind api.Resolv
 		SubPath:   subpath,
 		SubModule: toModuleBareName(subpath, true),
 	}
-	caretVersion := false
+	isCaretVersion := strings.HasPrefix(version, "^")
 
 	// resolve alias in dependencies
 	// follow https://docs.npmjs.com/cli/v10/configuring-npm/package-json#git-urls-as-dependencies
@@ -822,26 +822,24 @@ func (ctx *BuildContext) resolveExternalModule(specifier string, kind api.Resolv
 		}
 	}
 
-	// fetch the latest version of the package based on the semver range
-	if !pkg.FromGithub {
-		if strings.HasPrefix(version, "^") && regexpFullVersion.MatchString(version[1:]) {
-			caretVersion = true
-			pkg.Version = version[1:]
-		} else if !regexpFullVersion.MatchString(version) {
-			_, p, _, err := ctx.lookupDep(pkgName + "@" + version)
+	if pkg.FromGithub {
+		// fetch the latest tag as the version of the repository
+		if pkg.Version == "" {
+			refs, err := listRepoRefs(fmt.Sprintf("https://github.com/%s", pkg.Name))
 			if err == nil {
-				pkg.Version = p.Version
-			}
-		}
-	} else if pkg.Version == "" {
-		refs, err := listRepoRefs(fmt.Sprintf("https://github.com/%s", pkg.Name))
-		if err == nil {
-			for _, ref := range refs {
-				if ref.Ref == "HEAD" {
-					pkg.Version = ref.Sha[:16]
-					break
+				for _, ref := range refs {
+					if ref.Ref == "HEAD" {
+						pkg.Version = ref.Sha[:16]
+						break
+					}
 				}
 			}
+		}
+	} else if !isCaretVersion && !regexpFullVersion.MatchString(version) {
+		// fetch the latest version of the package based on the semver range
+		_, p, _, err := ctx.lookupDep(pkgName + "@" + version)
+		if err == nil {
+			pkg.Version = p.Version
 		}
 	}
 
@@ -853,11 +851,8 @@ func (ctx *BuildContext) resolveExternalModule(specifier string, kind api.Resolv
 		exports:    NewStringSet(),
 	}
 	fixBuildArgs(ctx.npmrc, &args, pkg)
-	if caretVersion {
-		resolvedPath = "/" + pkg.Name + "@^" + pkg.Version
-		if pkg.SubModule != "" {
-			resolvedPath += "/" + pkg.SubModule
-		}
+	if isCaretVersion {
+		resolvedPath = "/" + pkg.String()
 		// workaround for es5-ext weird "/#/" path
 		if pkg.Name == "es5-ext" {
 			resolvedPath = strings.ReplaceAll(resolvedPath, "/#/", "/%23/")
