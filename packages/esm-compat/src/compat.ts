@@ -343,7 +343,7 @@ const jsTable: Record<string, Record<string, Version>> = {
   },
   ForOf: {
     // Note: The latest version of "IE" failed 9 tests including: for..of loops: iterator closing, break
-    // Note: The latest version of "Rhino" failed 4 tests including: for..of loops: iterator closing, break
+    // Note: The latest version of "Rhino" failed 2 tests including: for..of loops: iterator closing, break
     Chrome: [51, 0, 0],
     Deno: [1, 0, 0],
     Edge: [15, 0, 0],
@@ -357,7 +357,6 @@ const jsTable: Record<string, Record<string, Version>> = {
   },
   FunctionNameConfigurable: {
     // Note: The latest version of "IE" failed this test: function "name" property: isn't writable, is configurable
-    // Note: The latest version of "Rhino" failed this test: function "name" property: isn't writable, is configurable
     Chrome: [43, 0, 0],
     Deno: [1, 0, 0],
     Edge: [12, 0, 0],
@@ -367,6 +366,7 @@ const jsTable: Record<string, Record<string, Version>> = {
     IOS: [10, 0, 0],
     Node: [4, 0, 0],
     Opera: [30, 0, 0],
+    Rhino: [1, 7, 15],
     Safari: [10, 0, 0],
   },
   FunctionOrClassPropertyAccess: {
@@ -386,7 +386,7 @@ const jsTable: Record<string, Record<string, Version>> = {
   Generator: {
     // Note: The latest version of "Hermes" failed 3 tests including: generators: computed shorthand generators, classes
     // Note: The latest version of "IE" failed 27 tests including: generators: %GeneratorPrototype%
-    // Note: The latest version of "Rhino" failed 15 tests including: generators: %GeneratorPrototype%
+    // Note: The latest version of "Rhino" failed 11 tests including: generators: %GeneratorPrototype%
     Chrome: [50, 0, 0],
     Deno: [1, 0, 0],
     Edge: [13, 0, 0],
@@ -399,7 +399,6 @@ const jsTable: Record<string, Record<string, Version>> = {
   },
   Hashbang: {
     // Note: The latest version of "IE" failed this test: Hashbang Grammar
-    // Note: The latest version of "Rhino" failed this test: Hashbang Grammar
     Chrome: [74, 0, 0],
     Deno: [1, 0, 0],
     Edge: [79, 0, 0],
@@ -408,17 +407,23 @@ const jsTable: Record<string, Record<string, Version>> = {
     IOS: [13, 4, 0],
     Node: [12, 5, 0],
     Opera: [62, 0, 0],
+    Rhino: [1, 7, 15],
     Safari: [13, 1, 0],
   },
   ImportAssertions: {
     Chrome: [91, 0, 0],
     Deno: [1, 17, 0],
     Edge: [91, 0, 0],
-    Node: [16, 14, 0],
+    Node: [22, 0, 0],
   },
   ImportAttributes: {
+    Chrome: [123, 0, 0],
     Deno: [1, 37, 0],
+    Edge: [123, 0, 0],
+    IOS: [17, 2, 0],
     Node: [20, 10, 0],
+    Opera: [109, 0, 0],
+    Safari: [17, 2, 0],
   },
   ImportMeta: {
     Chrome: [64, 0, 0],
@@ -538,7 +543,7 @@ const jsTable: Record<string, Record<string, Version>> = {
   },
   OptionalCatchBinding: {
     // Note: The latest version of "IE" failed 3 tests including: optional catch binding: await
-    // Note: The latest version of "Rhino" failed 3 tests including: optional catch binding: await
+    // Note: The latest version of "Rhino" failed this test: optional catch binding: await
     Chrome: [66, 0, 0],
     Deno: [1, 0, 0],
     Edge: [79, 0, 0],
@@ -566,7 +571,6 @@ const jsTable: Record<string, Record<string, Version>> = {
   },
   RegexpDotAllFlag: {
     // Note: The latest version of "IE" failed this test: s (dotAll) flag for regular expressions
-    // Note: The latest version of "Rhino" failed this test: s (dotAll) flag for regular expressions
     Chrome: [62, 0, 0],
     Deno: [1, 0, 0],
     Edge: [79, 0, 0],
@@ -576,6 +580,7 @@ const jsTable: Record<string, Record<string, Version>> = {
     IOS: [11, 3, 0],
     Node: [8, 10, 0],
     Opera: [49, 0, 0],
+    Rhino: [1, 7, 15],
     Safari: [11, 1, 0],
   },
   RegexpLookbehindAssertions: {
@@ -620,7 +625,7 @@ const jsTable: Record<string, Record<string, Version>> = {
   RegexpSetNotation: {},
   RegexpStickyAndUnicodeFlags: {
     // Note: The latest version of "IE" failed 6 tests including: RegExp "y" and "u" flags: "u" flag
-    // Note: The latest version of "Rhino" failed 6 tests including: RegExp "y" and "u" flags: "u" flag
+    // Note: The latest version of "Rhino" failed 4 tests including: RegExp "y" and "u" flags: "u" flag
     Chrome: [50, 0, 0],
     Deno: [1, 0, 0],
     Edge: [13, 0, 0],
@@ -646,7 +651,7 @@ const jsTable: Record<string, Record<string, Version>> = {
   RestArgument: {
     // Note: The latest version of "Hermes" failed this test: rest parameters: function 'length' property
     // Note: The latest version of "IE" failed 5 tests including: rest parameters: arguments object interaction
-    // Note: The latest version of "Rhino" failed 5 tests including: rest parameters: arguments object interaction
+    // Note: The latest version of "Rhino" failed 2 tests including: rest parameters: arguments object interaction
     Chrome: [47, 0, 0],
     Deno: [1, 0, 0],
     Edge: [12, 0, 0],
@@ -660,7 +665,7 @@ const jsTable: Record<string, Record<string, Version>> = {
   TemplateLiteral: {
     // Note: The latest version of "Hermes" failed this test: template literals: TemplateStrings call site caching
     // Note: The latest version of "IE" failed 7 tests including: template literals: TemplateStrings call site caching
-    // Note: The latest version of "Rhino" failed 2 tests including: template literals: basic functionality
+    // Note: The latest version of "Rhino" failed this test: template literals: toString conversion
     Chrome: [41, 0, 0],
     Deno: [1, 0, 0],
     Edge: [13, 0, 0],
@@ -697,7 +702,6 @@ const jsTable: Record<string, Record<string, Version>> = {
   },
   UnicodeEscapes: {
     // Note: The latest version of "IE" failed 2 tests including: Unicode code point escapes: in identifiers
-    // Note: The latest version of "Rhino" failed 4 tests including: Unicode code point escapes: in identifiers
     Chrome: [44, 0, 0],
     Deno: [1, 0, 0],
     Edge: [12, 0, 0],
@@ -707,6 +711,7 @@ const jsTable: Record<string, Record<string, Version>> = {
     IOS: [9, 0, 0],
     Node: [4, 0, 0],
     Opera: [31, 0, 0],
+    Rhino: [1, 7, 15],
     Safari: [9, 0, 0],
   },
   Using: {},
