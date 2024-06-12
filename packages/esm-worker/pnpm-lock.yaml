@@ -18,8 +18,8 @@ importers:
         specifier: 0.21.5
         version: 0.21.5
       esm-compat:
-        specifier: 0.0.2
-        version: 0.0.2
+        specifier: 0.0.3
+        version: 0.0.3
 
 packages:
 
@@ -172,8 +172,8 @@ packages:
     engines: {node: '>=12'}
     hasBin: true
 
-  esm-compat@0.0.2:
-    resolution: {integrity: sha512-bhxQnjc8r2V8E3IksGC7MCNTTLVQfXv6F0aYDmvijPoEAhJ53sAA/R/wktA9buMNgxfEo1aRKCSRrM0L62Hc1w==}
+  esm-compat@0.0.3:
+    resolution: {integrity: sha512-zyl2pKnnb/UgEjziMZRxEgRvyX8tnrU47E2FUSMcAJaaV0Hoxp5z9ParlNLJDiGlH9NV8wG1ZaLprJkyi9KyYA==}
 
 snapshots:
 
@@ -276,4 +276,4 @@ snapshots:
       '@esbuild/win32-ia32': 0.21.5
       '@esbuild/win32-x64': 0.21.5
 
-  esm-compat@0.0.2: {}
+  esm-compat@0.0.3: {}

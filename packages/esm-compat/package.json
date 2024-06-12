@@ -1,7 +1,7 @@
 {
   "name": "esm-compat",
   "description": "Check the ES module compatibility of a browser.",
-  "version": "0.0.2",
+  "version": "0.0.3",
   "type": "module",
   "module": "dist/compat.js",
   "types": "types/compat.d.ts",
