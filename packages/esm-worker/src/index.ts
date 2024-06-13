@@ -21,6 +21,7 @@ const version = `v${VERSION}`;
 const globalEtag = `W/"${version}"`;
 const defaultEsmServerOrigin = "https://esm.sh";
 const defaultNpmRegistry = "https://registry.npmjs.org";
+const jsrNpmRegistry = "https://npm.jsr.io";
 const ccImmutable = "public, max-age=31536000, immutable";
 
 const regexpNpmNaming = /^[a-zA-Z0-9][\w\-\.]*$/;
@@ -48,6 +49,9 @@ async function fetchOrigin(req: Request, env: Env, ctx: Context, uri: string): P
   }
   if (env.ESM_SERVER_TOKEN) {
     headers.set("Authorization", `Bearer ${env.ESM_SERVER_TOKEN}`);
+  }
+  if (env.NPMRC) {
+    headers.set("X-Npmrc", env.NPMRC);
   }
   const res = await fetch(
     new URL(uri, env.ESM_SERVER_ORIGIN ?? defaultEsmServerOrigin),
@@ -435,7 +439,7 @@ function withESMWorker(middleware?: Middleware, cache: Cache = (caches as any).d
     // fix pathname for GitHub/jsr registry
     const gh = pathname.startsWith("/gh/");
     if (gh) {
-      pathname = "/@" + pathname.slice(4);
+      pathname = pathname.slice(3);
     } else if (pathname.startsWith("/jsr/@")) {
       const segs = pathname.split("/");
       pathname = "/@jsr/" + segs[2].slice(1) + "__" + segs[3];
@@ -457,7 +461,7 @@ function withESMWorker(middleware?: Middleware, cache: Cache = (caches as any).d
     let extraQuery = "";
     let isTargetUrl = false;
 
-    if (pathname.startsWith("/@")) {
+    if (gh || pathname.startsWith("/@")) {
       const [, scope, name, ...rest] = pathname.split("/");
       packageScope = scope;
       [packageName, packageVersion] = splitBy(name, "@");
@@ -481,18 +485,8 @@ function withESMWorker(middleware?: Middleware, cache: Cache = (caches as any).d
     if (packageName === "") {
       return err("Invalid path", ctx.corsHeaders(), 400);
     }
-
     if (!regexpNpmNaming.test(packageName)) {
       return err(`Invalid package name '${packageName}'`, ctx.corsHeaders(), 400);
-    }
-
-    let pkgId = packageName;
-    if (packageScope) {
-      pkgId = packageScope + "/" + packageName;
-      if (gh) {
-        // strip the leading `@`
-        pkgId = pkgId.slice(1);
-      }
     }
 
     // normalize package version
@@ -525,19 +519,28 @@ function withESMWorker(middleware?: Middleware, cache: Cache = (caches as any).d
       });
     }
 
+    const pkgFullname = (packageScope ? packageScope + "/" : "") + packageName;
+
     // redirect to specific version
     if (
       !gh && (!packageVersion || (!regexpFullVersion.test(packageVersion) && !regexpCaretVersion.test(packageVersion)))
     ) {
       return ctx.withCache(async () => {
         const headers = new Headers();
-        if (env.NPM_TOKEN) {
-          headers.set("Authorization", `Bearer ${env.NPM_TOKEN}`);
+        const npmrc = ctx.npmrc;
+        let { registry, token, user, password } = npmrc;
+        let pkgName = pkgFullname;
+        if (pkgName.startsWith("@")) {
+          const [scope] = pkgName.split("/");
+          const reg = npmrc.registries[scope];
+          if (reg) {
+            ({ registry, token, user, password } = reg);
+          }
         }
-        let registry = env.NPM_REGISTRY ?? defaultNpmRegistry;
-        let pkgName = pkgId;
-        if (pkgName.startsWith("@jsr/")) {
-          registry = "https://npm.jsr.io";
+        if (token) {
+          headers.set("Authorization", "Bearer " + token);
+        } else if (user && password) {
+          headers.set("Authorization", "Basic " + btoa(`${user}:${password}`));
         }
         const res = await fetch(new URL(pkgName, registry), { headers });
         if (!res.ok) {
@@ -558,8 +561,7 @@ function withESMWorker(middleware?: Middleware, cache: Cache = (caches as any).d
           pkgName = "jsr/@" + pkgName.slice(5).replace("__", "/");
         }
         const eq = extraQuery ? "&" + extraQuery : "";
-        const distVersion = regInfo["dist-tags"]
-          ?.[packageVersion || "latest"];
+        const distVersion = regInfo["dist-tags"]?.[packageVersion || "latest"];
         if (distVersion) {
           const uri = `${prefix}${pkgName}@${distVersion}${eq}${subPath}${url.search}`;
           return redirect(new URL(uri, url), ctx.corsHeaders());
@@ -591,19 +593,12 @@ function withESMWorker(middleware?: Middleware, cache: Cache = (caches as any).d
     }
 
     // redirect `/@types/PKG` to it's main dts file
-    if (pkgId.startsWith("@types/") && subPath === "") {
+    if (pkgFullname.startsWith("@types/") && subPath === "") {
       return ctx.withCache(async () => {
-        const headers = new Headers();
-        if (env.NPM_TOKEN) {
-          headers.set("Authorization", `Bearer ${env.NPM_TOKEN}`);
-        }
-        const res = await fetch(
-          new URL(pkgId, env.NPM_REGISTRY ?? defaultNpmRegistry),
-          { headers },
-        );
+        const res = await fetch(new URL(pkgFullname, defaultNpmRegistry));
         if (!res.ok) {
           if (res.status === 404 || res.status === 401) {
-            return errPkgNotFound(pkgId, ctx.corsHeaders());
+            return errPkgNotFound(pkgFullname, ctx.corsHeaders());
           }
           return new Response("Failed to get package info: " + await res.text(), {
             status: res.status,
@@ -621,8 +616,8 @@ function withESMWorker(middleware?: Middleware, cache: Cache = (caches as any).d
 
     // redirect to main css for CSS packages
     let css: string | undefined;
-    if (!gh && (css = cssPackages[pkgId]) && subPath === "") {
-      return redirect(new URL(`/${pkgId}@${packageVersion}/${css}`, url), ctx.corsHeaders(), 301);
+    if (!gh && (css = cssPackages[pkgFullname]) && subPath === "") {
+      return redirect(new URL(`/${pkgFullname}@${packageVersion}/${css}`, url), ctx.corsHeaders(), 301);
     }
 
     // redirect to real package css file: `/PKG?css` -> `/v100/PKG/es2022/pkg.css`
@@ -636,7 +631,7 @@ function withESMWorker(middleware?: Middleware, cache: Cache = (caches as any).d
         target = getBuildTargetFromUA(h.get("User-Agent"));
       }
       return redirect(
-        new URL(`${prefix}/${pkgId}@${packageVersion}/${target}/${packageName}.css`, url),
+        new URL(`${prefix}/${pkgFullname}@${packageVersion}/${target}/${packageName}.css`, url),
         ctx.corsHeaders(),
         301,
       );
@@ -665,7 +660,7 @@ function withESMWorker(middleware?: Middleware, cache: Cache = (caches as any).d
       if (assetsExts.has(ext)) {
         return ctx.withCache(() => {
           const prefix = gh ? "/gh" : "";
-          const pathname = `${prefix}/${pkgId}@${packageVersion}${subPath}`;
+          const pathname = `${prefix}/${pkgFullname}@${packageVersion}${subPath}`;
           return fetchOriginWithR2Cache(req, ctx, env, pathname);
         });
       }
@@ -689,48 +684,50 @@ function withESMWorker(middleware?: Middleware, cache: Cache = (caches as any).d
 
     if (isTargetUrl || isDtsFile(subPath)) {
       return ctx.withCache(() => {
-        const pathname = `${prefix}/${pkgId}@${packageVersion}${subPath}`;
+        const pathname = `${prefix}/${pkgFullname}@${packageVersion}${subPath}`;
         return fetchOriginWithKVCache(req, env, ctx, pathname, undefined, true);
       });
     }
 
     return ctx.withCache(async () => {
       const marker = hasExternalAllMarker ? "*" : "";
-      const pathname = `${prefix}/${marker}${pkgId}@${packageVersion}${subPath}`;
+      const pathname = `${prefix}/${marker}${pkgFullname}@${packageVersion}${subPath}`;
       normalizeSearchParams(url.searchParams);
       return fetchOriginWithKVCache(req, env, ctx, pathname, url.search);
     }, { varyUA: true });
   };
 
+  const corsHeaders = (origin: string | null, headers?: Headers) => {
+    const h = new Headers(headers);
+    if (allowList !== null) {
+      if (!origin || !allowList.has(origin)) {
+        return h;
+      }
+      h.set("Access-Control-Allow-Origin", origin);
+      h.set("Vary", "Origin");
+    } else {
+      h.set("Access-Control-Allow-Origin", "*");
+    }
+    h.set("Access-Control-Allow-Methods", "HEAD, GET, POST");
+    return h;
+  };
+
+  let npmrc: Npmrc | null = null;
   let allowList: Set<string> | null = null;
 
   return {
     fetch: (req: Request, env: Env, exeCtx: ExecutionContext): Response | Promise<Response> => {
-      const corsHeaders = (headers?: Headers) => {
-        const h = new Headers(headers);
-        if (env.ALLOW_LIST) {
-          if (allowList === null) {
-            allowList = new Set(
-              env.ALLOW_LIST.split(",").map((v) => v.trim()).filter(Boolean).map((v) => ["https://" + v, "http://" + v])
-                .flat(),
-            );
-          }
-          const origin = req.headers.get("Origin");
-          if (!origin || !allowList.has(origin)) {
-            return h;
-          }
-          h.set("Access-Control-Allow-Origin", origin);
-          h.set("Vary", "Origin");
-        } else {
-          h.set("Access-Control-Allow-Origin", "*");
-        }
-        h.set("Access-Control-Allow-Methods", "HEAD, GET, POST");
-        return h;
-      };
+      // parse env.ALLOW_LIST to a Set if it's defined
+      if (allowList === null && env.ALLOW_LIST) {
+        allowList = new Set(
+          env.ALLOW_LIST.split(",").map((v) => v.trim()).filter(Boolean).map((v) => ["https://" + v, "http://" + v])
+            .flat(),
+        );
+      }
 
       // handle preflight request
       if (req.method === "OPTIONS") {
-        const headers = corsHeaders();
+        const headers = corsHeaders(req.headers.get("Origin"));
         if (!headers.has("Access-Control-Allow-Origin")) {
           return new Response(null, { status: 403 });
         }
@@ -784,11 +781,42 @@ function withESMWorker(middleware?: Middleware, cache: Cache = (caches as any).d
         }
         return res;
       };
+      if (npmrc === null) {
+        npmrc = {
+          registry: env.NPM_REGISTRY ?? defaultNpmRegistry,
+          registries: { "@jsr": { registry: jsrNpmRegistry } },
+        };
+        if (env.NPM_TOKEN) {
+          npmrc.token = env.NPM_TOKEN;
+        } else if (env.NPM_USER && env.NPM_PASSWORD) {
+          npmrc.user = env.NPM_USER;
+          npmrc.password = env.NPM_PASSWORD;
+        }
+        if (env.NPMRC) {
+          try {
+            const v: Npmrc = JSON.parse(env.NPMRC);
+            if (typeof v === "object" && v !== null) {
+              npmrc = v;
+              if (!npmrc.registry) {
+                npmrc.registry = defaultNpmRegistry;
+              }
+              if (!npmrc.registries) {
+                npmrc.registries = {};
+              }
+              if (!npmrc.registries["@jsr"]) {
+                npmrc.registries["@jsr"] = { registry: jsrNpmRegistry };
+              }
+            }
+          } catch {
+            // ignore
+          }
+        }
+      }
       const ctx: Context = {
         cache,
-        corsHeaders,
-        data: {},
+        npmrc: npmrc!,
         url,
+        corsHeaders: (header) => corsHeaders(req.headers.get("Origin"), header),
         waitUntil: (p: Promise<any>) => exeCtx.waitUntil(p),
         withCache,
       };

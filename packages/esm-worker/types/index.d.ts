@@ -7,11 +7,22 @@ declare global {
     NPMRC?: string;
     NPM_REGISTRY?: string;
     NPM_TOKEN?: string;
+    NPM_USER?: string;
+    NPM_PASSWORD?: string;
     ALLOW_LIST?: string;
     SOURCE_MAP?: "on" | "off";
     KV?: KVNamespace;
     R2?: R2Bucket;
     LEGACY_WORKER?: { fetch: (req: Request) => Promise<Response> };
+  }
+  interface NpmRegistry {
+    registry: string;
+    token?: string;
+    user?: string;
+    password?: string;
+  }
+  interface Npmrc extends NpmRegistry {
+    registries: Record<string, NpmRegistry>;
   }
 }
 
@@ -67,9 +78,9 @@ export function withESMWorker(middleware?: Middleware, cache?: Cache): {
   ) => Promise<Response>;
 };
 
-export type Context<Data = Record<string, any>> = {
+export type Context = {
   cache: Cache;
-  data: Data;
+  npmrc: Npmrc;
   url: URL;
   waitUntil(promise: Promise<any>): void;
   withCache(fetcher: () => Promise<Response> | Response, options?: { varyUA: boolean }): Promise<Response>;
