@@ -6,6 +6,6 @@ import * as mod from "~/PKG[@SEMVER][/PATH]";
 // change the test name and the test assertions
 Deno.test("foo", () => {
   assert("foo" in mod);
-  assertEquals(typeof mod.foo(), "function");
+  assertEquals(typeof mod.foo, "function");
   assertStringIncludes(mod.foo(), "bar");
 });
