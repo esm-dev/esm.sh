@@ -11,7 +11,7 @@ declare global {
     NPM_USER?: string;
     NPM_PASSWORD?: string;
     ALLOW_LIST?: string;
-    SOURCE_MAP?: "on" | "off";
+    SOURCE_MAP?: "on" | "off"; // default: "on"
     KV?: KVNamespace;
     R2?: R2Bucket;
     LEGACY_WORKER?: { fetch: (req: Request) => Promise<Response> };

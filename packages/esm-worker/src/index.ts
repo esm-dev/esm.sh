@@ -493,6 +493,11 @@ function withESMWorker(middleware?: Middleware, cache: Cache = (caches as any).d
       return err(`Invalid package name '${packageName}'`, ctx.corsHeaders(), 400);
     }
 
+    // hide source map files
+    if (isTargetUrl && env.SOURCE_MAP === "off" && subPath.endsWith(".map")) {
+      return err("Source map is disabled", ctx.corsHeaders(), 404);
+    }
+
     // normalize package version
     if (packageVersion) {
       [packageVersion, extraQuery] = splitBy(packageVersion, "&");
