@@ -125,7 +125,7 @@ func cjsLexer(npmrc *NpmRC, pkgName string, wd string, specifier string, nodeEnv
 		"--allow-fs-read="+npmrc.Dir()+"/*",
 		"cjs_lexer.js",
 	)
-	cmd.Dir = path.Join(npmrc.config.WorkDir, "npm", cjsLexerPkg)
+	cmd.Dir = path.Join(config.WorkDir, "npm", cjsLexerPkg)
 	cmd.Stdin = bytes.NewBuffer(mustEncodeJSON(args))
 	cmd.Stdout = &outBuf
 	cmd.Stderr = &errBuf

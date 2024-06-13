@@ -188,18 +188,16 @@ type NpmRegistry struct {
 type NpmRC struct {
 	NpmRegistry
 	Registries map[string]NpmRegistry `json:"registries"`
-	config     *Config
 	zoneId     string
 }
 
-func NewNpmRcFromConfig(cfg *Config) *NpmRC {
+func NewNpmRcFromConfig() *NpmRC {
 	rc := &NpmRC{
-		config: cfg,
 		NpmRegistry: NpmRegistry{
-			Registry: cfg.NpmRegistry,
-			Token:    cfg.NpmToken,
-			User:     cfg.NpmUser,
-			Password: cfg.NpmPassword,
+			Registry: config.NpmRegistry,
+			Token:    config.NpmToken,
+			User:     config.NpmUser,
+			Password: config.NpmPassword,
 		},
 		Registries: map[string]NpmRegistry{
 			"@jsr": {
@@ -207,8 +205,8 @@ func NewNpmRcFromConfig(cfg *Config) *NpmRC {
 			},
 		},
 	}
-	if len(cfg.NpmRegistries) > 0 {
-		for scope, reg := range cfg.NpmRegistries {
+	if len(config.NpmRegistries) > 0 {
+		for scope, reg := range config.NpmRegistries {
 			rc.Registries[scope] = NpmRegistry{
 				Registry: reg.Registry,
 				Token:    reg.Token,
@@ -226,14 +224,32 @@ func NewNpmRcFromJSON(jsonData []byte) (npmrc *NpmRC, err error) {
 	if err != nil {
 		return nil, err
 	}
+	if rc.Registry == "" {
+		rc.Registry = config.NpmRegistry
+	} else if !strings.HasSuffix(rc.Registry, "/") {
+		rc.Registry += "/"
+	}
+	if rc.Registries == nil {
+		rc.Registries = map[string]NpmRegistry{}
+	}
+	if _, ok := rc.Registries["@jsr"]; !ok {
+		rc.Registries["@jsr"] = NpmRegistry{
+			Registry: jsrRegistry,
+		}
+	}
+	for _, reg := range rc.Registries {
+		if reg.Registry != "" && !strings.HasSuffix(reg.Registry, "/") {
+			reg.Registry += "/"
+		}
+	}
 	return &rc, nil
 }
 
 func (rc *NpmRC) Dir() string {
 	if rc.zoneId != "" {
-		return path.Join(rc.config.WorkDir, "npm-"+rc.zoneId)
+		return path.Join(config.WorkDir, "npm-"+rc.zoneId)
 	}
-	return path.Join(rc.config.WorkDir, "npm")
+	return path.Join(config.WorkDir, "npm")
 }
 
 func (rc *NpmRC) getPackageInfo(name string, version string) (info PackageJSON, err error) {
@@ -325,8 +341,7 @@ func (rc *NpmRC) fetchPackageInfo(name string, version string) (info PackageJSON
 
 	if token != "" {
 		req.Header.Set("Authorization", "Bearer "+token)
-	}
-	if user != "" && password != "" {
+	} else if user != "" && password != "" {
 		req.SetBasicAuth(user, password)
 	}
 
@@ -528,6 +543,7 @@ func (rc *NpmRC) pnpm(dir string, packages ...string) (err error) {
 	out := &bytes.Buffer{}
 	errout := &bytes.Buffer{}
 	cmd := exec.Command("pnpm", args...)
+	cmd.Env = os.Environ()
 	cmd.Dir = dir
 	cmd.Stdout = out
 	cmd.Stderr = errout
@@ -536,23 +552,21 @@ func (rc *NpmRC) pnpm(dir string, packages ...string) (err error) {
 	// for security, we don't put token and password in the `.npmrc` file
 	// instead, we pass them as environment variables to the `pnpm` subprocess
 	if rc.Token != "" {
-		cmd.Env = append(os.Environ(), "ESM_NPM_TOKEN="+rc.Token)
-	}
-	if rc.User != "" && rc.Password != "" {
+		cmd.Env = append(cmd.Environ(), "ESM_NPM_TOKEN="+rc.Token)
+	} else if rc.User != "" && rc.Password != "" {
 		data := []byte(rc.Password)
 		password := make([]byte, base64.StdEncoding.EncodedLen(len(data)))
 		base64.StdEncoding.Encode(password, data)
 		cmd.Env = append(
-			os.Environ(),
+			cmd.Environ(),
 			"ESM_NPM_USER="+rc.User,
 			"ESM_NPM_PASSWORD="+string(password),
 		)
 	}
 	for scope, reg := range rc.Registries {
 		if reg.Token != "" {
-			cmd.Env = append(cmd.Env, fmt.Sprintf("ESM_NPM_TOKEN_%s=%s", toEnvName(scope[1:]), reg.Token))
-		}
-		if reg.User != "" && reg.Password != "" {
+			cmd.Env = append(cmd.Environ(), fmt.Sprintf("ESM_NPM_TOKEN_%s=%s", toEnvName(scope[1:]), reg.Token))
+		} else if reg.User != "" && reg.Password != "" {
 			data := []byte(reg.Password)
 			password := make([]byte, base64.StdEncoding.EncodedLen(len(data)))
 			base64.StdEncoding.Encode(password, data)

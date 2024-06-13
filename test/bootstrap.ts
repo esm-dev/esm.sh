@@ -39,7 +39,7 @@ async function runTest(name: string, retry?: boolean): Promise<number> {
     "--unstable-fs",
     "--check",
     "--no-lock",
-    "--reload=http://localhost:8080",
+    "--reload=http://localhost:8081",
     "--location=http://0.0.0.0/",
   ];
   const dir = `test/${name}/`;

@@ -52,7 +52,6 @@ const (
 func router() rex.Handle {
 	startTime := time.Now()
 	globalETag := fmt.Sprintf(`W/"v%d"`, VERSION)
-	globalNpmrc := NewNpmRcFromConfig(config)
 
 	return func(ctx *rex.Context) interface{} {
 		pathname := ctx.Path.String()
@@ -486,26 +485,26 @@ func router() rex.Handle {
 			}
 			npmrc = rc
 		} else {
-			npmrc = globalNpmrc
+			npmrc = NewNpmRcFromConfig()
 		}
 
 		zoneId := ctx.R.Header.Get("X-Zone-Id")
-		if zoneId != "" && !valid.IsDomain(zoneId) {
-			zoneId = ""
-		}
 		if zoneId != "" {
-			pkgName, _, _, _ := splitPkgPath(pathname[1:])
-			scopeName := ""
-			if strings.HasPrefix(pkgName, "@") {
-				return pkgName[:strings.Index(pkgName, "/")]
-			}
-			if scopeName != "" {
-				reg, ok := npmrc.Registries[scopeName]
-				if !ok || (reg.Registry == jsrRegistry && reg.Token == "" && (reg.User == "" || reg.Password == "")) {
+			if !valid.IsDomain(zoneId) {
+				zoneId = ""
+			} else {
+				var scopeName string
+				if pkgName := getPkgName(pathname[1:]); strings.HasPrefix(pkgName, "@") {
+					scopeName = pkgName[:strings.Index(pkgName, "/")]
+				}
+				if scopeName != "" {
+					reg, ok := npmrc.Registries[scopeName]
+					if !ok || (reg.Registry == jsrRegistry && reg.Token == "" && (reg.User == "" || reg.Password == "")) {
+						zoneId = ""
+					}
+				} else if npmrc.Registry == npmRegistry && npmrc.Token == "" && (npmrc.User == "" || npmrc.Password == "") {
 					zoneId = ""
 				}
-			} else if npmrc.Registry == npmRegistry && npmrc.Token == "" && (npmrc.User == "" || npmrc.Password == "") {
-				zoneId = ""
 			}
 		}
 		if zoneId != "" {

@@ -1,7 +1,11 @@
-import { join } from "https://deno.land/std@0.220.0/path/mod.ts";
+import { dirname, join } from "https://deno.land/std@0.220.0/path/mod.ts";
 import { assert, assertEquals, assertStringIncludes } from "https://deno.land/std@0.220.0/assert/mod.ts";
 
-const env = { ESM_SERVER_ORIGIN: "http://localhost:8080" };
+const testRegisterToken = "1E372D421838559CE40E4CF955B3A40E30EEB7AA";
+const env = {
+  ESM_SERVER_ORIGIN: "http://localhost:8080",
+  NPMRC: `{ "registries": { "@private": { "registry": "http://localhost:8082/", "token": "${testRegisterToken}" }}}`,
+};
 const workerOrigin = "http://localhost:8081";
 const ac = new AbortController();
 const closeServer = () => ac.abort();
@@ -85,6 +89,73 @@ const worker = withESMWorker((_req: Request, _env: typeof env, ctx: { url: URL }
 Deno.serve(
   { port: 8081, signal: ac.signal },
   (req) => worker.fetch(req, { ...env, KV, R2, LEGACY_WORKER }, { waitUntil: () => {} }),
+);
+
+// start the private registry
+Deno.serve(
+  { port: 8082, signal: ac.signal },
+  (req) => {
+    const auth = req.headers.get("authorization");
+    if (auth !== "Bearer " + testRegisterToken) {
+      return new Response("unauthorized", { status: 401 });
+    }
+
+    const url = new URL(req.url);
+    const pathname = decodeURIComponent(url.pathname);
+
+    if (pathname === "/@private/hello/1.0.0.tgz") {
+      try {
+        const buf = Deno.readFileSync(join(dirname(new URL(import.meta.url).pathname), "hello-1.0.0.tgz"));
+        return new Response(buf, {
+          headers: {
+            "content-type": "application/octet-stream",
+            "content-length": buf.byteLength.toString(),
+          },
+        });
+      } catch (error) {
+        console.error(error);
+        return new Response(error.message, { status: 500 });
+      }
+    }
+
+    if (pathname === "/@private/hello") {
+      return Response.json({
+        "name": "@private/hello",
+        "description": "Hello world!",
+        "dist-tags": {
+          "latest": "1.0.0",
+        },
+        "versions": {
+          "1.0.0": {
+            "name": "@private/hello",
+            "description": "Hello world!",
+            "version": "1.0.0",
+            "type": "module",
+            "module": "dist/index.js",
+            "types": "dist/index.d.ts",
+            "files": [
+              "dist/",
+            ],
+            "dist": {
+              "tarball": "http://localhost:8082/@private/hello/1.0.0.tgz",
+              // shasum -a 1 hello-1.0.0.tgz
+              "shasum": "E308F75E8F8D4E67853C8BC11E66E217805FC7D7",
+              // openssl dgst -binary -sha512 hello-1.0.0.tgz | openssl base64
+              "integrity":
+                "sha512-lgXANkhDdsvlhWaqrMN3L+d5S0X621h8NFrDA/V4eITPRUhH6YW3OWYG6NSa+n+peubBh7UHAXhtcsxdXUiYMA==",
+            },
+          },
+        },
+        "time": {
+          "created": "2024-06-14T00:00:00.000Z",
+          "modified": "2024-06-14T00:00:00.000Z",
+          "1.0.0": "2024-06-14T00:00:00.000Z",
+        },
+      });
+    }
+
+    return new Response("not found", { status: 404 });
+  },
 );
 
 Deno.test("esm-worker", { sanitizeOps: false, sanitizeResources: false }, async (t) => {
@@ -387,9 +458,9 @@ Deno.test("esm-worker", { sanitizeOps: false, sanitizeResources: false }, async 
   await t.step("transform api", async () => {
     const options = {
       code: `
-        import { renderToString } from "preact-render-to-string";
-        export default () => renderToString(<h1>Hello world!</h1>);
-      `,
+      import { renderToString } from "preact-render-to-string";
+      export default () => renderToString(<h1>Hello world!</h1>);
+    `,
       filename: "source.jsx",
       target: "es2022",
       importMap: JSON.stringify({
@@ -484,6 +555,32 @@ Deno.test("esm-worker", { sanitizeOps: false, sanitizeResources: false }, async 
       res.headers.get("location"),
       `${workerOrigin}/lightningcss-wasm@1.19.0/lightningcss_node.wasm`,
     );
+  });
+
+  await t.step("private registry", async () => {
+    const res0 = await fetch(`http://localhost:8082/@private/hello`);
+    res0.body?.cancel();
+    assertEquals(res0.status, 401);
+
+    const res1 = await fetch(`http://localhost:8082/@private/hello`, {
+      headers: { authorization: "Bearer " + testRegisterToken },
+    });
+    assertEquals(res1.status, 200);
+    const pkg = await res1.json();
+    assertEquals(pkg.name, "@private/hello");
+
+    const res2 = await fetch(`http://localhost:8082/@private/hello/1.0.0.tgz`);
+    res2.body?.cancel();
+    assertEquals(res2.status, 401);
+
+    const res3 = await fetch(`http://localhost:8082/@private/hello/1.0.0.tgz`, {
+      headers: { authorization: "Bearer " + testRegisterToken },
+    });
+    res3.body?.cancel();
+    assertEquals(res3.status, 200);
+
+    const { messsage } = await import(`${workerOrigin}/@private/hello`);
+    assertEquals(messsage, "Hello world!");
   });
 
   await t.step("fallback to legacy worker", async () => {

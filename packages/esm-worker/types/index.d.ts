@@ -4,6 +4,7 @@ declare global {
   interface Env {
     ESM_SERVER_ORIGIN?: string;
     ESM_SERVER_TOKEN?: string;
+    ZONE_ID?: string;
     NPMRC?: string;
     NPM_REGISTRY?: string;
     NPM_TOKEN?: string;

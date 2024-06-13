@@ -7,6 +7,7 @@ import {
   copyHeaders,
   err,
   errPkgNotFound,
+  getUrlOrigin,
   hashText,
   hasTargetSegment,
   isDtsFile,
@@ -49,6 +50,9 @@ async function fetchOrigin(req: Request, env: Env, ctx: Context, uri: string): P
   }
   if (env.ESM_SERVER_TOKEN) {
     headers.set("Authorization", `Bearer ${env.ESM_SERVER_TOKEN}`);
+  }
+  if (env.ZONE_ID) {
+    headers.set("X-Zone-Id", env.ZONE_ID);
   }
   if (env.NPMRC) {
     headers.set("X-Npmrc", env.NPMRC);
@@ -783,7 +787,7 @@ function withESMWorker(middleware?: Middleware, cache: Cache = (caches as any).d
       };
       if (npmrc === null) {
         npmrc = {
-          registry: env.NPM_REGISTRY ?? defaultNpmRegistry,
+          registry: env.NPM_REGISTRY ? getUrlOrigin(env.NPM_REGISTRY) : defaultNpmRegistry,
           registries: { "@jsr": { registry: jsrNpmRegistry } },
         };
         if (env.NPM_TOKEN) {
@@ -797,7 +801,9 @@ function withESMWorker(middleware?: Middleware, cache: Cache = (caches as any).d
             const v: Npmrc = JSON.parse(env.NPMRC);
             if (typeof v === "object" && v !== null) {
               npmrc = v;
-              if (!npmrc.registry) {
+              if (npmrc.registry) {
+                npmrc.registry = getUrlOrigin(npmrc.registry);
+              } else {
                 npmrc.registry = defaultNpmRegistry;
               }
               if (!npmrc.registries) {
@@ -805,6 +811,12 @@ function withESMWorker(middleware?: Middleware, cache: Cache = (caches as any).d
               }
               if (!npmrc.registries["@jsr"]) {
                 npmrc.registries["@jsr"] = { registry: jsrNpmRegistry };
+              }
+              for (const key in npmrc.registries) {
+                const reg = npmrc.registries[key];
+                if (reg.registry) {
+                  reg.registry = getUrlOrigin(reg.registry);
+                }
               }
             }
           } catch {
@@ -835,7 +847,7 @@ function withESMWorker(middleware?: Middleware, cache: Cache = (caches as any).d
             }),
           ));
         }
-        return err(e.message, corsHeaders());
+        return err(e.message, ctx.corsHeaders());
       });
     },
   };

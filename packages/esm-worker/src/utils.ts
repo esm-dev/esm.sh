@@ -99,6 +99,10 @@ export function copyHeaders(dst: Headers, src: Headers, ...keys: string[]) {
   }
 }
 
+export function getUrlOrigin(url: string): string {
+  return new URL(url).origin;
+}
+
 const allowedSearchParams = new Set([
   "alias",
   "bundle",
