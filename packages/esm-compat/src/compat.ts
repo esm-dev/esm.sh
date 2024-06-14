@@ -776,6 +776,13 @@ export const getBuildTargetFromUA = (userAgent: string | null) => {
   if (!userAgent || userAgent.startsWith("curl/")) {
     return "esnext";
   }
+  if (userAgent.startsWith("esm/")) {
+    const t = userAgent.slice(4);
+    if (targets.has(t)) {
+      return t;
+    }
+    return "esnext";
+  }
   if (userAgent.startsWith("Deno/")) {
     const v = userAgent.slice(5).match(rVersion);
     if (v) {
@@ -788,6 +795,7 @@ export const getBuildTargetFromUA = (userAgent: string | null) => {
   }
   if (
     userAgent === "undici" ||
+    userAgent.startsWith("Node.js/") ||
     userAgent.startsWith("Node/") ||
     userAgent.startsWith("Bun/")
   ) {

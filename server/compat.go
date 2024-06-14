@@ -189,6 +189,13 @@ func getBuildTargetByUA(ua string) string {
 	if ua == "" || strings.HasPrefix(ua, "curl/") {
 		return "esnext"
 	}
+	if strings.HasPrefix(ua, "esm/") {
+		t := ua[4:]
+		if _, ok := targets[t]; ok {
+			return t
+		}
+		return "esnext"
+	}
 	if strings.HasPrefix(ua, "Deno/") {
 		uaVersion, err := semver.NewVersion(strings.TrimPrefix(ua, "Deno/"))
 		if err == nil && uaVersion.LessThan(v1_33_2) {
@@ -196,7 +203,7 @@ func getBuildTargetByUA(ua string) string {
 		}
 		return "denonext"
 	}
-	if ua == "undici" || strings.HasPrefix(ua, "Node/") || strings.HasPrefix(ua, "Bun/") {
+	if ua == "undici" || strings.HasPrefix(ua, "Node.js/") || strings.HasPrefix(ua, "Node/") || strings.HasPrefix(ua, "Bun/") {
 		return "node"
 	}
 	name, version := getBrowserInfo(ua)
