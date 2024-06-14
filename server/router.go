@@ -227,15 +227,11 @@ func router() rex.Handle {
 						"clients":   t.clients,
 						"createdAt": t.createdAt.Format(http.TimeFormat),
 						"inProcess": t.inProcess,
-						"path":      t.path,
-						"pkg":       t.pkg.String(),
+						"path":      t.Path(),
 						"stage":     t.stage,
 					}
 					if !t.startedAt.IsZero() {
 						m["startedAt"] = t.startedAt.Format(http.TimeFormat)
-					}
-					if len(t.args.deps) > 0 {
-						m["deps"] = t.args.deps.String()
 					}
 					q[i] = m
 					i++
@@ -836,7 +832,7 @@ func router() rex.Handle {
 		}
 
 		// check `?deps` query
-		deps := PkgSlice{}
+		deps := map[string]string{}
 		if query.Has("deps") {
 			for _, v := range strings.Split(query.Get("deps"), ",") {
 				v = strings.TrimSpace(v)
@@ -849,8 +845,8 @@ func router() rex.Handle {
 						// the `react` version always matches `react-dom` version
 						continue
 					}
-					if !deps.Has(p.Name) && p.Name != pkg.Name {
-						deps = append(deps, p)
+					if p.Name != pkg.Name {
+						deps[p.Name] = p.Version
 					}
 				}
 			}
@@ -908,7 +904,9 @@ func router() rex.Handle {
 			exports:    exports,
 			external:   external,
 		}
-		xArgs := false // args in pathname: `PKG@VERSION/X-${args}/esnext/SUBPATH`
+
+		// check if the build args from pathname: `PKG@VERSION/X-${args}/esnext/SUBPATH`
+		isBuildArgsFromPath := false
 		if resType == ResBuild || resType == ResTypes {
 			a := strings.Split(pkg.SubModule, "/")
 			if len(a) > 1 && strings.HasPrefix(a[0], "X-") {
@@ -920,7 +918,7 @@ func router() rex.Handle {
 				pkg.SubPath = strings.Join(strings.Split(pkg.SubPath, "/")[1:], "/")
 				pkg.SubModule = toModuleBareName(pkg.SubPath, true)
 				buildArgs = args
-				xArgs = true
+				isBuildArgsFromPath = true
 			}
 		}
 
@@ -980,7 +978,7 @@ func router() rex.Handle {
 
 		}
 
-		if !xArgs {
+		if !isBuildArgsFromPath {
 			// check `?jsx-rutnime` query
 			var jsxRuntime *Pkg = nil
 			if v := query.Get("jsx-runtime"); v != "" {
@@ -992,7 +990,7 @@ func router() rex.Handle {
 			}
 
 			externalRequire := query.Has("external-require")
-			// force "unocss/preset-icons" to external `require` calls
+			// workaround: force "unocss/preset-icons" to external `require` calls
 			if !externalRequire && pkg.Name == "@unocss/preset-icons" {
 				externalRequire = true
 			}

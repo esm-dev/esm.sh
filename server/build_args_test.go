@@ -15,11 +15,11 @@ func TestEncodeBuildArgs(t *testing.T) {
 	buildArgsString := encodeBuildArgs(
 		BuildArgs{
 			alias: map[string]string{"a": "b"},
-			deps: PkgSlice{
-				Pkg{Name: "c", Version: "1.0.0"},
-				Pkg{Name: "d", Version: "1.0.0"},
-				Pkg{Name: "e", Version: "1.0.0"},
-				Pkg{Name: "foo", Version: "1.0.0"}, // to be ignored
+			deps: map[string]string{
+				"c":   "1.0.0",
+				"d":   "1.0.0",
+				"e":   "1.0.0",
+				"foo": "1.0.0", // to be ignored
 			},
 			external:          external,
 			exports:           exports,

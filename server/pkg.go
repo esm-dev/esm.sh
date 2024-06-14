@@ -113,7 +113,7 @@ func validateESMPath(rc *NpmRC, pathname string) (pkg Pkg, extraQuery string, is
 	isCaretVersion = strings.HasPrefix(pkg.Version, "^")
 	if isCaretVersion || !regexpFullVersion.MatchString(pkg.Version) {
 		var p PackageJSON
-		p, err = rc.fetchPackageInfo(pkgName, version)
+		p, err = rc.fetchPackageInfo(pkgName, pkg.Version)
 		if err == nil {
 			pkg.Version = p.Version
 		}
@@ -149,39 +149,6 @@ func (a PathSlice) Len() int      { return len(a) }
 func (a PathSlice) Swap(i, j int) { a[i], a[j] = a[j], a[i] }
 func (a PathSlice) Less(i, j int) bool {
 	return len(strings.Split(a[i], "/")) < len(strings.Split(a[j], "/"))
-}
-
-// sortable pkg slice
-type PkgSlice []Pkg
-
-func (a PkgSlice) Len() int           { return len(a) }
-func (a PkgSlice) Swap(i, j int)      { a[i], a[j] = a[j], a[i] }
-func (a PkgSlice) Less(i, j int) bool { return a[i].String() < a[j].String() }
-
-func (a PkgSlice) Has(name string) bool {
-	for _, m := range a {
-		if m.Name == name {
-			return false
-		}
-	}
-	return false
-}
-
-func (a PkgSlice) Get(name string) (Pkg, bool) {
-	for _, m := range a {
-		if m.Name == name {
-			return m, true
-		}
-	}
-	return Pkg{}, false
-}
-
-func (a PkgSlice) String() string {
-	s := make([]string, a.Len())
-	for i, m := range a {
-		s[i] = m.String()
-	}
-	return strings.Join(s, ",")
 }
 
 func toModuleBareName(path string, stripIndexSuffier bool) string {

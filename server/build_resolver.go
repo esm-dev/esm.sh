@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net/url"
 	"path"
+	"sort"
 	"strings"
 
 	"github.com/evanw/esbuild/pkg/api"
@@ -181,8 +182,8 @@ func (ctx *BuildContext) existsPkgFile(fp ...string) bool {
 
 func (ctx *BuildContext) lookupDep(specifier string) (pkg Pkg, p PackageJSON, installed bool, err error) {
 	pkgName, version, subpath, _ := splitPkgPath(specifier)
-	if _pkg, ok := ctx.args.deps.Get(pkgName); ok {
-		p, err = ctx.npmrc.getPackageInfo(pkgName, _pkg.Version)
+	if depVersion, ok := ctx.args.deps[pkgName]; ok {
+		p, err = ctx.npmrc.getPackageInfo(pkgName, depVersion)
 		if err == nil {
 			pkg = Pkg{
 				Name:      pkgName,
@@ -759,8 +760,8 @@ func (ctx *BuildContext) resolveExternalModule(specifier string, kind api.Resolv
 	if version == "" {
 		if pkgName == ctx.pkg.Name {
 			version = ctx.pkg.Version
-		} else if pkg, ok := ctx.args.deps.Get(pkgName); ok {
-			version = pkg.Version
+		} else if pkgVerson, ok := ctx.args.deps[pkgName]; ok {
+			version = pkgVerson
 		} else if v, ok := ctx.pkgJson.Dependencies[pkgName]; ok {
 			version = v
 		} else if v, ok := ctx.pkgJson.PeerDependencies[pkgName]; ok {
@@ -859,18 +860,27 @@ func (ctx *BuildContext) resolveExternalModule(specifier string, kind api.Resolv
 			}
 			params = append(params, "alias="+strings.Join(alias, ","))
 		}
-		if args.deps.Len() > 0 {
-			var deps []string
-			for _, v := range args.deps {
-				deps = append(deps, v.String())
+		if len(args.deps) > 0 {
+			var deps sort.StringSlice
+			for n, v := range args.deps {
+				deps = append(deps, n+"@"+v)
 			}
+			deps.Sort()
 			params = append(params, "deps="+strings.Join(deps, ","))
 		}
 		if args.external.Len() > 0 {
-			params = append(params, "external="+strings.Join(args.external.Values(), ","))
+			external := make(sort.StringSlice, args.external.Len())
+			for i, e := range args.external.Values() {
+				external[i] = e
+			}
+			external.Sort()
+			params = append(params, "external="+strings.Join(external, ","))
 		}
 		if len(args.conditions) > 0 {
-			params = append(params, "conditions="+strings.Join(args.conditions, ","))
+			conditions := make(sort.StringSlice, len(args.conditions))
+			copy(conditions, args.conditions)
+			conditions.Sort()
+			params = append(params, "conditions="+strings.Join(conditions, ","))
 		}
 		if ctx.dev {
 			params = append(params, "dev")

@@ -10,7 +10,7 @@ import (
 
 type BuildArgs struct {
 	alias             map[string]string
-	deps              PkgSlice
+	deps              map[string]string
 	external          *StringSet
 	exports           *StringSet
 	conditions        []string
@@ -39,18 +39,12 @@ func decodeBuildArgs(npmrc *NpmRC, argsString string) (args BuildArgs, err error
 					}
 				}
 			} else if strings.HasPrefix(p, "d") {
+				deps := map[string]string{}
 				for _, p := range strings.Split(p[1:], ",") {
-					m, _, _, _, err := validateESMPath(npmrc, p)
-					if err != nil {
-						if strings.HasSuffix(err.Error(), "not found") {
-							continue
-						}
-						return args, err
-					}
-					if !args.deps.Has(m.Name) {
-						args.deps = append(args.deps, m)
-					}
+					pkgName, pkgVersion, _, _ := splitPkgPath(p)
+					deps[pkgName] = pkgVersion
 				}
+				args.deps = deps
 			} else if strings.HasPrefix(p, "e") {
 				for _, name := range strings.Split(p[1:], ",") {
 					args.external.Add(name)
@@ -97,9 +91,9 @@ func encodeBuildArgs(args BuildArgs, pkg Pkg, isDts bool) string {
 	}
 	if len(args.deps) > 0 {
 		var ss sort.StringSlice
-		for _, p := range args.deps {
-			if p.Name != pkg.Name {
-				ss = append(ss, fmt.Sprintf("%s@%s", p.Name, p.Version))
+		for name, version := range args.deps {
+			if name != pkg.Name {
+				ss = append(ss, fmt.Sprintf("%s@%s", name, version))
 			}
 		}
 		if len(ss) > 0 {
@@ -178,13 +172,13 @@ func fixBuildArgs(npmrc *NpmRC, args *BuildArgs, pkg Pkg) {
 			args.alias = alias
 		}
 		if len(args.deps) > 0 {
-			var deps PkgSlice
-			for _, p := range args.deps {
-				if depTree.Has(p.Name) {
-					deps = append(deps, p)
+			newDeps := map[string]string{}
+			for name, version := range args.deps {
+				if depTree.Has(name) {
+					newDeps[name] = version
 				}
 			}
-			args.deps = deps
+			args.deps = newDeps
 		}
 		if args.external.Len() > 0 {
 			external := NewStringSet()

@@ -875,10 +875,10 @@ func (ctx *BuildContext) buildModule() (result BuildResult, err error) {
 			options.JSXImportSource = "preact"
 		} else if ctx.args.external.Has("*") {
 			options.JSXImportSource = "react"
-		} else if pkg, ok := ctx.args.deps.Get("react"); ok {
-			options.JSXImportSource = "/react@" + pkg.Version
-		} else if pkg, ok := ctx.args.deps.Get("preact"); ok {
-			options.JSXImportSource = "/preact@" + pkg.Version
+		} else if pkgVersion, ok := ctx.args.deps["react"]; ok {
+			options.JSXImportSource = "/react@" + pkgVersion
+		} else if pkgVersion, ok := ctx.args.deps["preact"]; ok {
+			options.JSXImportSource = "/preact@" + pkgVersion
 		} else {
 			options.JSXImportSource = "/react"
 		}
@@ -1244,10 +1244,10 @@ func (ctx *BuildContext) lookupTypes(entry BuildEntry) string {
 			versionParts[0],                         // major
 		}
 		typesPkgName := toTypesPkgName(ctx.pkgJson.Name)
-		pkg, ok := ctx.args.deps.Get(typesPkgName)
+		pkgVersion, ok := ctx.args.deps[typesPkgName]
 		if ok {
 			// use the version of the `?deps` query if it exists
-			versions = append([]string{pkg.Version}, versions...)
+			versions = append([]string{pkgVersion}, versions...)
 		}
 		for _, version := range versions {
 			p, err := ctx.npmrc.getPackageInfo(typesPkgName, version)
