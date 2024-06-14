@@ -99,7 +99,39 @@ async function fetchOrigin(req: Request, env: Env, ctx: Context, uri: string): P
   return new Response(res.body, { headers: resHeaders });
 }
 
-async function fetchOriginWithKVCache(
+async function fetchAssetFile(req: Request, ctx: Context, env: Env, pathname: string): Promise<Response> {
+  const ret = await env.R2?.get(pathname.slice(1));
+  if (ret) {
+    const headers = ctx.corsHeaders();
+    headers.set("Content-Type", ret.httpMetadata?.contentType || getContentType(pathname));
+    headers.set("Cache-Control", ccImmutable);
+    headers.set("X-Content-Source", "esm-worker");
+    return new Response(ret.body, { headers });
+  }
+
+  const res = await fetchOrigin(req, env, ctx, pathname);
+  if (!res.ok) {
+    copyHeaders(res.headers, ctx.corsHeaders());
+    return res;
+  }
+
+  const headers = ctx.corsHeaders(res.headers);
+  const contentType = res.headers.get("content-type") || getContentType(pathname);
+  let body = res.body!;
+  if (env.R2) {
+    let bodyCopy: ReadableStream<Uint8Array>;
+    [body, bodyCopy] = body.tee();
+    ctx.waitUntil(env.R2.put(pathname.slice(1), bodyCopy, {
+      httpMetadata: { contentType },
+    }));
+  }
+  headers.set("Content-Type", contentType);
+  headers.set("Cache-Control", ccImmutable);
+  headers.set("X-Content-Source", "esm-origin-server");
+  return new Response(body, { headers });
+}
+
+async function fetchESM(
   req: Request,
   env: Env,
   ctx: Context,
@@ -111,7 +143,7 @@ async function fetchOriginWithKVCache(
   const isRaw = ctx.url.searchParams.has("raw");
   const isDts = isDtsFile(pathname);
   const isAsset = isRaw || isDts || pathname.endsWith(".mjs.map") || pathname.endsWith(".js.map");
-  const isFromAnotherWorker = req.headers.has("X-Real-Origin");
+  const isFromUpWorker = req.headers.has("X-Real-Origin");
 
   let uri = pathname;
   if (query) {
@@ -119,13 +151,18 @@ async function fetchOriginWithKVCache(
   }
   let storeKey = uri.slice(1);
   if (isAsset) {
-    storeKey = pathname.slice(1); // ignore query
-    if (storeKey.startsWith("*") && (isRaw || isDts)) {
+    // ignore query string for asset files
+    storeKey = pathname.slice(1);
+    // ignore the leading `*` for raw files
+    if ((isRaw || isDts) && storeKey.startsWith("*")) {
       storeKey = storeKey.slice(1);
     }
   }
+  if (env.ZONE_ID) {
+    storeKey = env.ZONE_ID + "/" + storeKey;
+  }
 
-  if (!isFromAnotherWorker && R2) {
+  if (!isFromUpWorker && R2) {
     if (!isAsset) {
       const kv = env.KV ?? mockKV(R2);
       const { value, metadata } = await kv.getWithMetadata<HttpMetadata>(
@@ -197,10 +234,10 @@ async function fetchOriginWithKVCache(
   if (exposedHeaders.length > 0) {
     headers.set("Access-Control-Expose-Headers", exposedHeaders.join(", "));
   }
-  headers.set("X-Content-Source", "origin-server");
+  headers.set("X-Content-Source", "esm-origin-server");
 
   // save the file to KV/R2 if the `cache-control` header is not `public, max-age=0, must-revalidate`
-  if (!isFromAnotherWorker && R2 && cacheControl && cacheControl !== "public, max-age=0, must-revalidate") {
+  if (!isFromUpWorker && R2 && cacheControl && cacheControl !== "public, max-age=0, must-revalidate") {
     const ccImmutable = cacheControl?.includes("immutable");
     let bodyCopy: ReadableStream<Uint8Array>;
     [body, bodyCopy] = body.tee();
@@ -225,38 +262,6 @@ async function fetchOriginWithKVCache(
     }
   }
 
-  return new Response(body, { headers });
-}
-
-async function fetchOriginWithR2Cache(req: Request, ctx: Context, env: Env, pathname: string): Promise<Response> {
-  const ret = await env.R2?.get(pathname.slice(1));
-  if (ret) {
-    const headers = ctx.corsHeaders();
-    headers.set("Content-Type", ret.httpMetadata?.contentType || getContentType(pathname));
-    headers.set("Cache-Control", ccImmutable);
-    headers.set("X-Content-Source", "esm-worker");
-    return new Response(ret.body, { headers });
-  }
-
-  const res = await fetchOrigin(req, env, ctx, pathname);
-  if (!res.ok) {
-    copyHeaders(res.headers, ctx.corsHeaders());
-    return res;
-  }
-
-  const headers = ctx.corsHeaders(res.headers);
-  const contentType = res.headers.get("content-type") || getContentType(pathname);
-  let body = res.body!;
-  if (env.R2) {
-    let bodyCopy: ReadableStream<Uint8Array>;
-    [body, bodyCopy] = body.tee();
-    ctx.waitUntil(env.R2.put(pathname.slice(1), bodyCopy, {
-      httpMetadata: { contentType },
-    }));
-  }
-  headers.set("Content-Type", contentType);
-  headers.set("Cache-Control", ccImmutable);
-  headers.set("X-Content-Source", "origin-server");
   return new Response(body, { headers });
 }
 
@@ -312,7 +317,7 @@ function withESMWorker(middleware?: Middleware, cache: Cache = (caches as any).d
       pathname === "/sw.d.ts" ||
       ((pathname.startsWith("/node/") || pathname.startsWith("/npm_")) && pathname.endsWith(".js"))
     ) {
-      const varyUA = !pathname.endsWith(".ts") && !pathname.endsWith(".js");
+      const varyUA = !pathname.endsWith(".ts");
       const isChunkjs = pathname.startsWith("/node/chunk-");
       if (!isChunkjs) {
         const ifNoneMatch = h.get("If-None-Match");
@@ -338,7 +343,7 @@ function withESMWorker(middleware?: Middleware, cache: Cache = (caches as any).d
         if (pathname === "/sw" && url.searchParams.has("fire")) {
           query.push("fire");
         }
-        return fetchOriginWithKVCache(req, env, ctx, pathname, query.length > 0 ? "?" + query.join("&") : undefined);
+        return fetchESM(req, env, ctx, pathname, query.length > 0 ? "?" + query.join("&") : undefined);
       }, { varyUA });
     }
 
@@ -405,7 +410,7 @@ function withESMWorker(middleware?: Middleware, cache: Cache = (caches as any).d
     if (pathname.startsWith("/+") && pathname.endsWith(".mjs")) {
       return ctx.withCache(() => {
         const target = url.searchParams.get("target");
-        return fetchOriginWithKVCache(req, env, ctx, pathname, target ? `?target=${target}` : undefined);
+        return fetchESM(req, env, ctx, pathname, target ? `?target=${target}` : undefined);
       }, { varyUA: true });
     }
 
@@ -569,10 +574,10 @@ function withESMWorker(middleware?: Middleware, cache: Cache = (caches as any).d
         if (pkgName.startsWith("@jsr/") && !isTargetUrl) {
           pkgName = "jsr/@" + pkgName.slice(5).replace("__", "/");
         }
-        const eq = extraQuery ? "&" + extraQuery : "";
+        const xq = extraQuery ? "&" + extraQuery : "";
         const distVersion = regInfo["dist-tags"]?.[packageVersion || "latest"];
         if (distVersion) {
-          const uri = `${prefix}${pkgName}@${distVersion}${eq}${subPath}${url.search}`;
+          const uri = `${prefix}${pkgName}@${distVersion}${xq}${subPath}${url.search}`;
           return redirect(new URL(uri, url), ctx.corsHeaders());
         }
         const versions = Object.keys(regInfo.versions ?? []).filter(validate)
@@ -580,7 +585,7 @@ function withESMWorker(middleware?: Middleware, cache: Cache = (caches as any).d
         if (!packageVersion) {
           const latestVersion = versions.filter((v) => !v.includes("-")).pop() ?? versions.pop();
           if (latestVersion) {
-            const uri = `${prefix}${pkgName}@${latestVersion}${eq}${subPath}${url.search}`;
+            const uri = `${prefix}${pkgName}@${latestVersion}${xq}${subPath}${url.search}`;
             return redirect(new URL(uri, url), ctx.corsHeaders());
           }
         }
@@ -589,7 +594,7 @@ function withESMWorker(middleware?: Middleware, cache: Cache = (caches as any).d
           for (let i = arr.length - 1; i >= 0; i--) {
             const v = arr[i];
             if (satisfies(v, packageVersion)) {
-              const uri = `${prefix}${pkgName}@${v}${eq}${subPath}${url.search}`;
+              const uri = `${prefix}${pkgName}@${v}${xq}${subPath}${url.search}`;
               return redirect(new URL(uri, url), ctx.corsHeaders());
             }
           }
@@ -670,18 +675,20 @@ function withESMWorker(middleware?: Middleware, cache: Cache = (caches as any).d
         return ctx.withCache(() => {
           const prefix = gh ? "/gh" : "";
           const pathname = `${prefix}/${pkgFullname}@${packageVersion}${subPath}`;
-          return fetchOriginWithR2Cache(req, ctx, env, pathname);
+          return fetchAssetFile(req, ctx, env, pathname);
         });
       }
     }
 
-    // apply extraQuery
+    // apply extraQuery if exists
     if (extraQuery) {
       const params = new URLSearchParams(extraQuery);
       params.forEach((val, key) => {
         url.searchParams.set(key, val);
       });
     }
+
+    // add `raw` search param to the url if the hostname is `raw.esm.sh`
     if (url.hostname === "raw.esm.sh") {
       url.searchParams.set("raw", "");
     }
@@ -694,7 +701,7 @@ function withESMWorker(middleware?: Middleware, cache: Cache = (caches as any).d
     if (isTargetUrl || isDtsFile(subPath)) {
       return ctx.withCache(() => {
         const pathname = `${prefix}/${pkgFullname}@${packageVersion}${subPath}`;
-        return fetchOriginWithKVCache(req, env, ctx, pathname, undefined, true);
+        return fetchESM(req, env, ctx, pathname, undefined, true);
       });
     }
 
@@ -702,7 +709,7 @@ function withESMWorker(middleware?: Middleware, cache: Cache = (caches as any).d
       const marker = hasExternalAllMarker ? "*" : "";
       const pathname = `${prefix}/${marker}${pkgFullname}@${packageVersion}${subPath}`;
       normalizeSearchParams(url.searchParams);
-      return fetchOriginWithKVCache(req, env, ctx, pathname, url.search);
+      return fetchESM(req, env, ctx, pathname, url.search);
     }, { varyUA: true });
   };
 
@@ -713,7 +720,7 @@ function withESMWorker(middleware?: Middleware, cache: Cache = (caches as any).d
         return h;
       }
       h.set("Access-Control-Allow-Origin", origin);
-      h.set("Vary", "Origin");
+      h.append("Vary", "Origin");
     } else {
       h.set("Access-Control-Allow-Origin", "*");
     }
@@ -745,7 +752,7 @@ function withESMWorker(middleware?: Middleware, cache: Cache = (caches as any).d
         const h = req.headers.get("Access-Control-Request-Headers");
         if (h) {
           headers.set("Access-Control-Allow-Headers", h);
-          headers.set("Vary", "Access-Control-Allow-Headers");
+          headers.append("Vary", "Access-Control-Allow-Headers");
         }
         return new Response(null, { status: 204, headers });
       }
@@ -755,16 +762,20 @@ function withESMWorker(middleware?: Middleware, cache: Cache = (caches as any).d
         const { pathname, searchParams } = url;
         const isHeadMethod = req.method === "HEAD";
         const hasPinedTarget = targets.has(searchParams.get("target") ?? "");
+        const realOrigin = req.headers.get("X-REAL-ORIGIN");
         const cacheKey = new URL(url); // clone
         const varyUA = options?.varyUA && !hasPinedTarget && !isDtsFile(pathname) && !searchParams.has("raw");
         if (varyUA) {
           const target = getBuildTargetFromUA(req.headers.get("User-Agent"));
           cacheKey.searchParams.set("target", target);
+          // add `?target` to the url search params to avoid the origin server checking the `User-Agent` header
           searchParams.set("target", target);
         }
-        const realOrigin = req.headers.get("X-REAL-ORIGIN");
         if (realOrigin) {
-          cacheKey.searchParams.set("X-REAL-ORIGIN", realOrigin);
+          cacheKey.searchParams.set("x-origin", realOrigin);
+        }
+        if (env.ZONE_ID) {
+          cacheKey.searchParams.set("x-zone-id", env.ZONE_ID);
         }
         let res = await cache.match(cacheKey);
         if (res) {
@@ -775,11 +786,11 @@ function withESMWorker(middleware?: Middleware, cache: Cache = (caches as any).d
           return res;
         }
         res = await fetcher();
-        // since we add `?target` to the url search params in the work,
-        // the "User-Agent" part of `vary` header from the origin server is missed,
-        // we need to add it manually
         if (varyUA) {
-          res.headers.set("Vary", "User-Agent");
+          // since we add `?target` to the url search params in the worker,
+          // the "User-Agent" part of `vary` header from the origin server is missed,
+          // we need to add it manually.
+          res.headers.append("Vary", "User-Agent");
         }
         if (res.ok && res.headers.get("Cache-Control")?.startsWith("public, max-age=")) {
           exeCtx.waitUntil(cache.put(cacheKey, res.clone()));
