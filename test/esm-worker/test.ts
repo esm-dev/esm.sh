@@ -213,7 +213,7 @@ Deno.test("esm-worker", { sanitizeOps: false, sanitizeResources: false }, async 
     assertEquals(res3.headers.get("Content-Type"), "application/javascript; charset=utf-8");
     assertEquals(res3.headers.get("Etag"), `W/"${version}"`);
     assertEquals(res3.headers.get("Cache-Control"), "public, max-age=86400");
-    assert(!res3.headers.get("Vary")?.includes("User-Agent"));
+    assertStringIncludes(res3.headers.get("Vary")!, "User-Agent");
     assertStringIncludes(await res3.text(), "nextTick");
 
     const res4 = await fetch(`${workerOrigin}/node/process.js`, { headers: { "If-None-Match": `W/"${version}"` } });
@@ -238,7 +238,7 @@ Deno.test("esm-worker", { sanitizeOps: false, sanitizeResources: false }, async 
     assertEquals(res7.headers.get("Content-Type"), "application/javascript; charset=utf-8");
     assertEquals(res7.headers.get("Etag"), `W/"${version}"`);
     assertEquals(res7.headers.get("Cache-Control"), "public, max-age=86400");
-    assert(!res3.headers.get("Vary")?.includes("User-Agent"));
+    assertStringIncludes(res7.headers.get("Vary")!, "User-Agent");
     assertStringIncludes(await res7.text(), "fetch");
 
     const fs = await import(`${workerOrigin}/node/fs.js`);
@@ -303,6 +303,10 @@ Deno.test("esm-worker", { sanitizeOps: false, sanitizeResources: false }, async 
     const res10 = await fetch(`${workerOrigin}/typescript@5.4.2/es2022/typescript.mjs`);
     assertEquals(res10.status, 200);
     assertStringIncludes(await res10.text(), `"/node/process.js"`);
+
+    const res11 = await fetch(`${workerOrigin}/typescript@5.4.2/es2022/typescript.mjs.map`);
+    assertEquals(res11.status, 200);
+    assertEquals(res11.headers.get("Content-Type"), "application/json; charset=utf-8");
   });
 
   await t.step("npm modules (submodule)", async () => {
@@ -328,6 +332,10 @@ Deno.test("esm-worker", { sanitizeOps: false, sanitizeResources: false }, async 
     assertEquals(res3.headers.get("Content-Type"), "application/javascript; charset=utf-8");
     assertEquals(res3.headers.get("Cache-Control"), "public, max-age=31536000, immutable");
     assertStringIncludes(await res3.text(), "renderToString");
+
+    const res4 = await fetch(new URL(modUrl.pathname + ".map", modUrl));
+    assertEquals(res4.status, 200);
+    assertEquals(res4.headers.get("Content-Type"), "application/json; charset=utf-8");
   });
 
   await t.step("npm assets", async () => {
@@ -458,9 +466,9 @@ Deno.test("esm-worker", { sanitizeOps: false, sanitizeResources: false }, async 
   await t.step("transform api", async () => {
     const options = {
       code: `
-      import { renderToString } from "preact-render-to-string";
-      export default () => renderToString(<h1>Hello world!</h1>);
-    `,
+        import { renderToString } from "preact-render-to-string";
+        export default () => renderToString(<h1>Hello world!</h1>);
+      `,
       filename: "source.jsx",
       target: "es2022",
       importMap: JSON.stringify({
@@ -469,8 +477,9 @@ Deno.test("esm-worker", { sanitizeOps: false, sanitizeResources: false }, async 
           "preact-render-to-string": "https://esm.sh/preact-render-to-string6.0.2",
         },
       }),
+      sourceMap: true,
     };
-    const hash = await computeHash("jsx" + options.code + options.importMap);
+    const hash = await computeHash("jsx" + options.code + options.importMap + options.target + options.sourceMap);
     const res1 = await fetch(`${workerOrigin}/transform`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -479,16 +488,27 @@ Deno.test("esm-worker", { sanitizeOps: false, sanitizeResources: false }, async 
     const ret = await res1.json();
     assertStringIncludes(ret.code, `"https://preact@10.13.2/jsx-runtime"`);
     assertStringIncludes(ret.code, `"https://esm.sh/preact-render-to-string6.0.2"`);
+    assertStringIncludes(ret.map, `"mappings":`);
+
+    console.log("transformed", hash, ret);
 
     const res2 = await fetch(`${workerOrigin}/+${hash}.mjs`, {
       headers: { "User-Agent": "Chrome/90.0.4430.212" },
     });
     assertEquals(res2.status, 200);
     assertEquals(res2.headers.get("Content-Type"), "application/javascript; charset=utf-8");
-    assertStringIncludes(res2.headers.get("Vary") ?? "", "User-Agent");
-    const code = await res2.text();
-    assertStringIncludes(code, `"https://preact@10.13.2/jsx-runtime"`);
-    assertStringIncludes(code, `"https://esm.sh/preact-render-to-string6.0.2"`);
+
+    const js = await res2.text();
+    assertEquals(js, ret.code);
+
+    const res3 = await fetch(`${workerOrigin}/+${hash}.mjs.map`, {
+      headers: { "User-Agent": "Chrome/90.0.4430.212" },
+    });
+    assertEquals(res3.status, 200);
+    assertEquals(res3.headers.get("Content-Type"), "application/json; charset=utf-8");
+
+    const map = await res3.text();
+    assertEquals(map, ret.map);
   });
 
   await t.step("purge api", async () => {
@@ -509,10 +529,10 @@ Deno.test("esm-worker", { sanitizeOps: false, sanitizeResources: false }, async 
 
   await t.step("check esma target from user agent", async () => {
     const getTarget = async (ua: string) => {
-      const rest = await fetch(`${workerOrigin}/esma-target`, {
+      const res = await fetch(`${workerOrigin}/esma-target`, {
         headers: { "User-Agent": ua },
       });
-      return await rest.text();
+      return await res.text();
     };
     assertEquals(await getTarget("Deno/1.33.1"), "deno");
     assertEquals(await getTarget("Deno/1.33.2"), "denonext");
@@ -520,10 +540,11 @@ Deno.test("esm-worker", { sanitizeOps: false, sanitizeResources: false }, async 
 
   await t.step("cache for different UAs", async () => {
     const fetchModule = async (pathname: string, ua: string) => {
-      const rest = await fetch(`${workerOrigin}` + pathname, {
+      const res = await fetch(`${workerOrigin}` + pathname, {
         headers: { "User-Agent": ua },
       });
-      return await rest.text();
+      assertStringIncludes(res.headers.get("Vary") ?? "", "User-Agent");
+      return await res.text();
     };
 
     assertStringIncludes(await fetchModule("/react@18.2.0", "Deno/1.33.1"), "/deno/");
@@ -542,6 +563,7 @@ Deno.test("esm-worker", { sanitizeOps: false, sanitizeResources: false }, async 
       ),
       "/es2021/",
     );
+    assertStringIncludes(await fetchModule("/react@18.2.0", "esm/es2022"), "/es2022/");
   });
 
   await t.step("fix urls", async () => {
