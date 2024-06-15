@@ -280,7 +280,7 @@ func (ctx *BuildContext) resolveEntry(pkg Pkg) (entry BuildEntry) {
 							exportEntry = ctx.resolveConditionExportEntry(om, ctx.pkgJson.Type)
 						}
 						break
-					} else if diff, ok := matchAsteriskExport(name, pkg); ok {
+					} else if diff, ok := matchAsteriskExports(name, pkg); ok {
 						if s, ok := conditions.(string); ok {
 							/**
 							exports: {
@@ -303,7 +303,7 @@ func (ctx *BuildContext) resolveEntry(pkg Pkg) (entry BuildEntry) {
 								},
 							}
 							*/
-							exportEntry = ctx.resolveConditionExportEntry(resloveAsteriskExport(om, diff), ctx.pkgJson.Type)
+							exportEntry = ctx.resolveConditionExportEntry(resloveAsteriskPathMapping(om, diff), ctx.pkgJson.Type)
 						}
 					}
 				}
@@ -501,49 +501,74 @@ func (ctx *BuildContext) resolveEntry(pkg Pkg) (entry BuildEntry) {
 		}
 	}
 
-	// check `typesVersions` field
+	// resovle dts from `typesVersions` field if it's defined
 	// see https://www.typescriptlang.org/docs/handbook/declaration-files/publishing.html#version-selection-with-typesversions
-	// if typesVersions := pkgJson.TypesVersions; len(typesVersions) > 0 {
-	// 	conditions := make(sort.StringSlice, len(typesVersions))
-	// 	i := 0
-	// 	for c := range typesVersions {
-	// 		if strings.HasPrefix(c, ">") {
-	// 			conditions[i] = c
-	// 			i++
-	// 		}
-	// 	}
-	// 	conditions = conditions[:i]
-	// 	search := []string{"*"}
-	// 	if conditions.Len() > 0 {
-	// 		conditions.Sort()
-	// 		search = []string{conditions[conditions.Len()-1], "*"}
-	// 	}
-	// 	for _, c := range search {
-	// 		if e, ok := typesVersions[c]; ok {
-	// 			if m, ok := e.(map[string]interface{}); ok {
-	// 				d, ok := m["*"]
-	// 				if !ok {
-	// 					d, ok = m["."]
-	// 				}
-	// 				if ok {
-	// 					if a, ok := d.([]interface{}); ok && len(a) > 0 {
-	// 						if t, ok := a[0].(string); ok {
-	// 							if strings.HasSuffix(t, "/*") {
-	// 								f := entry.dts
-	// 								if f == "" {
-	// 									f = "index.d.ts"
-	// 								}
-	// 								t = path.Join(t[:len(t)-1], f)
-	// 							}
-	// 							entry.dts = t
-	// 							break
-	// 						}
-	// 					}
-	// 				}
-	// 			}
-	// 		}
-	// 	}
-	// }
+	if typesVersions := ctx.pkgJson.TypesVersions; len(typesVersions) > 0 && entry.dts != "" {
+		versions := make(sort.StringSlice, len(typesVersions))
+		i := 0
+		for c := range typesVersions {
+			if strings.HasPrefix(c, ">") {
+				versions[i] = c
+				i++
+			}
+		}
+		versions = versions[:i]
+		if versions.Len() > 0 {
+			versions.Sort()
+			latestVersion := ctx.pkgJson.TypesVersions[versions[versions.Len()-1]]
+			if mapping, ok := latestVersion.(map[string]interface{}); ok {
+				var paths interface{}
+				var matched bool
+				var exact bool
+				var suffix string
+				dts := normalizeEntryPath(entry.dts)
+				paths, matched = mapping[dts]
+				if !matched {
+					// try to match the dts wihout leading "./"
+					paths, matched = mapping[strings.TrimPrefix(dts, "./")]
+				}
+				if matched {
+					exact = true
+				}
+				if !matched {
+					for key, value := range mapping {
+						if strings.HasSuffix(key, "/*") {
+							key = normalizeEntryPath(key)
+							if strings.HasPrefix(dts, strings.TrimSuffix(key, "/*")) {
+								paths = value
+								matched = true
+								suffix = strings.TrimPrefix(dts, strings.TrimSuffix(key, "*"))
+								break
+							}
+						}
+					}
+				}
+				if !matched {
+					paths, matched = mapping["*"]
+				}
+				if matched {
+					if a, ok := paths.([]interface{}); ok && len(a) > 0 {
+						if path, ok := a[0].(string); ok {
+							path = normalizeEntryPath(path)
+							if exact {
+								entry.dts = path
+							} else {
+								prefix, _ := utils.SplitByLastByte(path, '*')
+								if suffix != "" {
+									entry.dts = prefix + suffix
+								} else if strings.HasPrefix(dts, prefix) {
+									diff := strings.TrimPrefix(dts, prefix)
+									entry.dts = strings.ReplaceAll(path, "*", diff)
+								} else {
+									entry.dts = prefix + dts[2:]
+								}
+							}
+						}
+					}
+				}
+			}
+		}
+	}
 
 	// check the `browser` field
 	if len(ctx.pkgJson.Browser) > 0 && ctx.isBrowserTarget() {
@@ -1036,9 +1061,9 @@ func (ctx *BuildContext) esmLexer(specifier string) (isESM bool, namedExports []
 	return
 }
 
-func matchAsteriskExport(epxortName string, pkg Pkg) (diff string, match bool) {
-	if strings.ContainsRune(epxortName, '*') {
-		prefix, _ := utils.SplitByLastByte(epxortName, '*')
+func matchAsteriskExports(epxortsKey string, pkg Pkg) (diff string, match bool) {
+	if strings.ContainsRune(epxortsKey, '*') {
+		prefix, _ := utils.SplitByLastByte(epxortsKey, '*')
 		if subModule := "./" + pkg.SubModule; strings.HasPrefix(subModule, prefix) {
 			return strings.TrimPrefix(subModule, prefix), true
 		}
@@ -1046,14 +1071,14 @@ func matchAsteriskExport(epxortName string, pkg Pkg) (diff string, match bool) {
 	return "", false
 }
 
-func resloveAsteriskExport(om *OrderedMap, diff string) *OrderedMap {
+func resloveAsteriskPathMapping(om *OrderedMap, diff string) *OrderedMap {
 	resovedConditions := newOrderedMap()
 	for _, key := range om.keys {
 		value := om.Get(key)
 		if s, ok := value.(string); ok {
 			resovedConditions.Set(key, strings.ReplaceAll(s, "*", diff))
 		} else if om, ok := value.(*OrderedMap); ok {
-			resovedConditions.Set(key, resloveAsteriskExport(om, diff))
+			resovedConditions.Set(key, resloveAsteriskPathMapping(om, diff))
 		}
 	}
 	return resovedConditions
@@ -1077,9 +1102,7 @@ func getAllExportsPaths(om *OrderedMap) []string {
 // make sure the entry is a relative specifier with extension
 func normalizeBuildEntry(ctx *BuildContext, entry *BuildEntry) {
 	if entry.esm != "" {
-		if !strings.HasPrefix(entry.esm, "./") {
-			entry.esm = "./" + entry.esm
-		}
+		entry.esm = normalizeEntryPath(entry.esm)
 		if !endsWith(entry.esm, ".mjs", ".js") {
 			if ctx.existsPkgFile(entry.esm + ".mjs") {
 				entry.esm = entry.esm + ".mjs"
@@ -1094,9 +1117,7 @@ func normalizeBuildEntry(ctx *BuildContext, entry *BuildEntry) {
 	}
 
 	if entry.cjs != "" {
-		if !strings.HasPrefix(entry.cjs, "./") {
-			entry.cjs = "./" + entry.cjs
-		}
+		entry.cjs = normalizeEntryPath(entry.cjs)
 		if !endsWith(entry.cjs, ".cjs", ".js") {
 			if ctx.existsPkgFile(entry.cjs + ".cjs") {
 				entry.cjs = entry.cjs + ".cjs"
@@ -1120,9 +1141,16 @@ func normalizeBuildEntry(ctx *BuildContext, entry *BuildEntry) {
 		}
 	}
 
-	if entry.dts != "" && !strings.HasPrefix(entry.dts, "./") {
-		entry.dts = "./" + entry.dts
+	if entry.dts != "" {
+		entry.dts = normalizeEntryPath(entry.dts)
 	}
+}
+
+func normalizeEntryPath(pathname string) string {
+	if isRelativeSpecifier(pathname) {
+		return pathname
+	}
+	return "./" + strings.TrimPrefix(pathname, "/")
 }
 
 func normalizeSavePath(zoneId string, pathname string) string {

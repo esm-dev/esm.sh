@@ -91,7 +91,12 @@ func (a *PackageJSONRaw) ToNpmPackage() *PackageJSON {
 	sideEffectsFalse := false
 	if a.SideEffects != nil {
 		if s, ok := a.SideEffects.(string); ok {
-			sideEffectsFalse = s == "false"
+			if s == "false" {
+				sideEffectsFalse = true
+			} else if endsWith(s, jsExts...) {
+				sideEffects = NewStringSet()
+				sideEffects.Add(s)
+			}
 		} else if b, ok := a.SideEffects.(bool); ok {
 			sideEffectsFalse = !b
 		} else if m, ok := a.SideEffects.([]interface{}); ok && len(m) > 0 {
