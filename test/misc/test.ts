@@ -1,4 +1,4 @@
-import { assertEquals } from "https://deno.land/std@0.220.0/assert/mod.ts";
+import { assertEquals, assertStringIncludes } from "https://deno.land/std@0.220.0/assert/mod.ts";
 
 import { BigInteger } from "http://localhost:8080/jsbn@1.1.0";
 import { Netmask } from "http://localhost:8080/netmask@2.0.2";
@@ -16,4 +16,10 @@ Deno.test("misc", () => {
   assertEquals(typeof hljs.highlight, "function");
   assertEquals(typeof createTheme, "function");
   assertEquals(compareVersions("1.12.0", "v1.12.0"), 0);
+});
+
+Deno.test("dts-transformer: support `.d` extension", async () => {
+  const res = await fetch("http://localhost:8080/tailwindcss@3.3.5/types/index.d.ts");
+  const dts = await res.text();
+  assertStringIncludes(dts, "'./config.d.ts'");
 });

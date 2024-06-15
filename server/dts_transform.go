@@ -63,6 +63,7 @@ func transformDTS(ctx *BuildContext, dts string, buildArgsPrefix string, marker 
 			} else if specifier == ".." {
 				specifier = "../"
 			}
+			specifier = strings.TrimSuffix(specifier, ".d")
 			if !endsWith(specifier, ".d.ts", ".d.mts") {
 				var p PackageJSON
 				var hasTypes bool
