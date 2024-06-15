@@ -13,12 +13,11 @@ import (
 
 // transformDTS transforms a `.d.ts` file for deno/editor-lsp
 func transformDTS(ctx *BuildContext, dts string, buildArgsPrefix string, marker *StringSet) (n int, err error) {
-	pkg := ctx.pkg
 	isRoot := marker == nil
 	if isRoot {
 		marker = NewStringSet()
 	}
-	dtsPath := path.Join("/"+pkg.ghPrefix(), pkg.Fullname(), buildArgsPrefix, dts)
+	dtsPath := path.Join("/"+ctx.pkg.ghPrefix(), ctx.pkg.Fullname(), buildArgsPrefix, dts)
 	if marker.Has(dtsPath) {
 		// don't transform repeatly
 		return
@@ -32,7 +31,7 @@ func transformDTS(ctx *BuildContext, dts string, buildArgsPrefix string, marker 
 		return
 	}
 
-	dtsFilePath := path.Join(ctx.wd, "node_modules", pkg.Name, dts)
+	dtsFilePath := path.Join(ctx.wd, "node_modules", ctx.pkg.Name, dts)
 	dtsWD := path.Dir(dtsFilePath)
 	dtsFile, err := os.Open(dtsFilePath)
 	if err != nil {
@@ -54,7 +53,7 @@ func transformDTS(ctx *BuildContext, dts string, buildArgsPrefix string, marker 
 	hasReferenceNodeTypes := false
 
 	err = walkDts(dtsFile, buffer, func(specifier string, kind string, position int) (string, error) {
-		if pkg.Name == "@types/node" {
+		if ctx.pkg.Name == "@types/node" {
 			return specifier, nil
 		}
 
@@ -119,6 +118,36 @@ func transformDTS(ctx *BuildContext, dts string, buildArgsPrefix string, marker 
 		specifier = depPkgName
 		if subPath != "" {
 			specifier += "/" + subPath
+		}
+
+		if depPkgName == ctx.pkg.Name {
+			if strings.ContainsRune(subPath, '*') {
+				return fmt.Sprintf(
+					"{ESM_CDN_ORIGIN}/%s%s/%s%s",
+					ctx.pkg.ghPrefix(),
+					ctx.pkg.Fullname(),
+					ctx.getBuildArgsPrefix(ctx.pkg, true),
+					subPath,
+				), nil
+			} else {
+				depPkg := Pkg{
+					Name:      depPkgName,
+					Version:   ctx.pkg.Version,
+					SubPath:   subPath,
+					SubModule: subPath,
+				}
+				entry := ctx.resolveEntry(depPkg)
+				if entry.dts != "" {
+					return fmt.Sprintf(
+						"{ESM_CDN_ORIGIN}/%s%s/%s%s",
+						ctx.pkg.ghPrefix(),
+						ctx.pkg.Fullname(),
+						ctx.getBuildArgsPrefix(ctx.pkg, true),
+						strings.TrimPrefix(entry.dts, "./"),
+					), nil
+				}
+			}
+			return specifier, nil
 		}
 
 		// respect `?alias` query
