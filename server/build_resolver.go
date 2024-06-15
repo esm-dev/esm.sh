@@ -910,9 +910,7 @@ func (ctx *BuildContext) resolveExternalModule(specifier string, kind api.Resolv
 		if ctx.dev {
 			params = append(params, "dev")
 		}
-		if ctx.isDenoTarget() {
-			params = append(params, "no-dts")
-		}
+		params = append(params, "no-dts")
 		resolvedPath += "?" + strings.Join(params, "&")
 	} else {
 		buildArgsPrefix := ""
