@@ -95,7 +95,7 @@ func router() rex.Handle {
 					return rex.Err(429, "Code is too large")
 				}
 				if targets[input.Target] == 0 {
-					input.Target = getBuildTargetByUA(ctx.R.UserAgent())
+					input.Target = "esnext"
 				}
 				var loader string
 				extname := path.Ext(input.Filename)
@@ -110,26 +110,32 @@ func router() rex.Handle {
 				h.Write([]byte(loader))
 				h.Write([]byte(input.Code))
 				h.Write([]byte(input.ImportMap))
+				h.Write([]byte(input.Target))
+				h.Write([]byte(fmt.Sprintf("%v", input.SourceMap)))
 				hash := hex.EncodeToString(h.Sum(nil))
 
 				// if previous build exists, return it directly
-				savePath := fmt.Sprintf("modules/%s.%s.mjs", hash, input.Target)
-				if existsFile(savePath) {
-					code, err := os.ReadFile(savePath)
+				savePath := fmt.Sprintf("modules/%s.mjs", hash)
+				if file, err := fs.Open(savePath); err == nil {
+					data, err := io.ReadAll(file)
+					file.Close()
 					if err != nil {
 						return rex.Err(500, "failed to read code")
 					}
 					output := TransformOutput{
-						Code: string(code),
+						Code: string(data),
 					}
-					if mapPath := savePath + ".map"; existsFile(mapPath) {
-						data, err := os.ReadFile(mapPath)
+					file, err = fs.Open(savePath + ".map")
+					if err == nil {
+						data, err = io.ReadAll(file)
+						file.Close()
 						if err == nil {
 							output.Map = string(data)
 						}
 					}
 					return output
 				}
+
 				output, err := transform(input)
 				if err != nil {
 					if strings.HasPrefix(err.Error(), "<400> ") {
@@ -315,8 +321,8 @@ func router() rex.Handle {
 			// determine build target by `?target` query or `User-Agent` header
 			query := ctx.R.URL.Query()
 			target := strings.ToLower(query.Get("target"))
-			targetViaUA := targets[target] == 0
-			if targetViaUA {
+			targetByUA := targets[target] == 0
+			if targetByUA {
 				target = getBuildTargetByUA(userAgent)
 			}
 
@@ -325,12 +331,16 @@ func router() rex.Handle {
 				data = concatBytes(data, []byte("\nsw.fire();\n"))
 			}
 
+			if pathname == "/run" {
+				data = bytes.ReplaceAll(data, []byte("$TARGET"), []byte(fmt.Sprintf(`"%s"`, target)))
+			}
+
 			code, err := minify(string(data), targets[target], api.LoaderTS)
 			if err != nil {
 				return throwErrorJS(ctx, fmt.Sprintf("Transform error: %v", err), false)
 			}
 			header.Set("Content-Type", ctJavaScript)
-			if targetViaUA {
+			if targetByUA {
 				appendVaryHeader(header, "User-Agent")
 			}
 			if query.Get("v") != "" {
@@ -368,27 +378,29 @@ func router() rex.Handle {
 
 		// serve modules created by the build API
 		if strings.HasPrefix(pathname, "/+") {
-			hash, ext := utils.SplitByLastByte(pathname[2:], '.')
-			if len(hash) != 40 || ext != "mjs" {
-				return rex.Status(404, "not found")
+			hash, ext := utils.SplitByFirstByte(pathname[2:], '.')
+			if len(hash) != 40 {
+				return rex.Status(404, "Not Found")
 			}
-			target := getBuildTargetByUA(userAgent)
-			savePath := fmt.Sprintf("modules/%s.%s.%s", hash, target, ext)
+			savePath := fmt.Sprintf("modules/%s.%s", hash, ext)
 			fi, err := fs.Stat(savePath)
 			if err != nil {
 				if err == storage.ErrNotFound {
-					return rex.Status(404, "not found")
+					return rex.Status(404, "Not Found")
 				}
 				return rex.Status(500, err.Error())
 			}
-			r, err := fs.Open(savePath)
+			f, err := fs.Open(savePath)
 			if err != nil {
 				return rex.Status(500, err.Error())
 			}
-			header.Set("Content-Type", ctJavaScript)
+			if strings.HasSuffix(pathname, ".map") {
+				header.Set("Content-Type", ctJSON)
+			} else {
+				header.Set("Content-Type", ctJavaScript)
+			}
 			header.Set("Cache-Control", ccImmutable)
-			appendVaryHeader(header, "User-Agent")
-			return rex.Content(savePath, fi.ModTime(), r) // auto closed
+			return rex.Content(savePath, fi.ModTime(), f) // auto closed
 		}
 
 		// serve node libs
@@ -605,7 +617,7 @@ func router() rex.Handle {
 				} else {
 					resType = ResRaw
 				}
-			case ".mjs.map", ".js.map":
+			case ".map":
 				if isTargetUrl {
 					resType = ResBuildMap
 				} else {
@@ -879,8 +891,8 @@ func router() rex.Handle {
 
 		// determine build target by `?target` query or `User-Agent` header
 		target := strings.ToLower(query.Get("target"))
-		targetViaUA := targets[target] == 0
-		if targetViaUA {
+		targetByUA := targets[target] == 0
+		if targetByUA {
 			target = getBuildTargetByUA(userAgent)
 		}
 
@@ -1174,7 +1186,7 @@ func router() rex.Handle {
 			dtsUrl := cdnOrigin + ret.Dts
 			header.Set("X-TypeScript-Types", dtsUrl)
 		}
-		if targetViaUA {
+		if targetByUA {
 			appendVaryHeader(header, "User-Agent")
 		}
 		if caretVersion {

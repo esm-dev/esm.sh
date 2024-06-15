@@ -52,7 +52,7 @@ runScripts.forEach(async ({ el, loader, code }, idx) => {
   const buffer = new Uint8Array(
     await crypto.subtle.digest(
       "SHA-1",
-      new TextEncoder().encode(loader + code + importMap),
+      new TextEncoder().encode(loader + code + importMap + $TARGET + "true"),
     ),
   );
   const hash = [...buffer].map((b) => b.toString(16).padStart(2, "0")).join("");
@@ -70,7 +70,7 @@ runScripts.forEach(async ({ el, loader, code }, idx) => {
     } else {
       const res = await fetch(origin + "/transform", {
         method: "POST",
-        body: stringify({ filename, code, importMap, hash }),
+        body: stringify({ filename, code, importMap, target: $TARGET, sourceMap: true }),
       });
       const ret = await res.json();
       if (ret.error) {
