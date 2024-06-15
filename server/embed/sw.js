@@ -1,3 +1,3 @@
-import sw from "{origin}{basePath}/sw";
+import sw from "{origin}/sw";
 
 sw.listen();

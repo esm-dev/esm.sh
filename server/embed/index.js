@@ -1,9 +1,9 @@
-import * as marked from "{origin}{basePath}/marked@12.0.1";
-import hljs from "{origin}{basePath}/highlight.js@11.9.0/lib/core";
-import javascript from "{origin}{basePath}/highlight.js@11.9.0/lib/languages/javascript";
-import json from "{origin}{basePath}/highlight.js@11.9.0/lib/languages/json";
-import xml from "{origin}{basePath}/highlight.js@11.9.0/lib/languages/xml";
-import bash from "{origin}{basePath}/highlight.js@11.9.0/lib/languages/bash";
+import * as marked from "{origin}/marked@12.0.1";
+import hljs from "{origin}/highlight.js@11.9.0/lib/core";
+import javascript from "{origin}/highlight.js@11.9.0/lib/languages/javascript";
+import json from "{origin}/highlight.js@11.9.0/lib/languages/json";
+import xml from "{origin}/highlight.js@11.9.0/lib/languages/xml";
+import bash from "{origin}/highlight.js@11.9.0/lib/languages/bash";
 
 export function render(md) {
   const mainEl = document.querySelector("main");
@@ -20,6 +20,8 @@ export function render(md) {
   if (hashHeading) {
     hashHeading.scrollIntoView();
   }
+
+  console.log(hljs)
 
   hljs.registerLanguage("javascript", javascript);
   hljs.registerLanguage("json", json);
