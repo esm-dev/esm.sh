@@ -578,6 +578,25 @@ func (ctx *BuildContext) buildModule() (result BuildResult, err error) {
 								}
 							}
 
+							// resolve specifier with package `browser` field
+							if len(ctx.pkgJson.Browser) > 0 && ctx.isBrowserTarget() {
+								if path, ok := ctx.pkgJson.Browser[moduleSpecifier]; ok {
+									if path == "" {
+										return api.OnResolveResult{
+											Path:      args.Path,
+											Namespace: "browser-exclude",
+										}, nil
+									}
+									if !isRelativeSpecifier(path) {
+										return api.OnResolveResult{
+											Path:     ctx.resolveExternalModule(path, args.Kind),
+											External: true,
+										}, nil
+									}
+									moduleSpecifier = path
+								}
+							}
+
 							bareName := stripModuleExt(moduleSpecifier)
 
 							// split modules based on the `exports` field of package.json
@@ -758,6 +777,10 @@ func (ctx *BuildContext) buildModule() (result BuildResult, err error) {
 							return
 						}
 						js := string(regexpGlobalIdent.ReplaceAllFunc(r.Code, func(b []byte) []byte {
+							id := string(b)
+							if id != "__filename$" && id != "__dirname$" {
+								return b
+							}
 							filename := strings.TrimPrefix(args.Path, path.Join(ctx.wd, "node_modules")+"/")
 							if strings.HasPrefix(filename, ".pnpm") {
 								a := strings.Split(filename, "/node_modules/")
@@ -784,14 +807,15 @@ func (ctx *BuildContext) buildModule() (result BuildResult, err error) {
 									registry = reg.Registry
 								}
 							}
-							tarballs.Add(fmt.Sprintf("%s %s %s", registry, pkgName, pkgVersion))
-							s := string(b)
-							if s == "__filename$" {
+							if !ctx.isBrowserTarget() {
+								tarballs.Add(fmt.Sprintf("%s %s %s", registry, pkgName, pkgVersion))
+							}
+							if id == "__filename$" {
 								if ctx.isBrowserTarget() {
 									return []byte(fmt.Sprintf(`"/https/esm.sh/%s"`, filename))
 								}
 								return []byte(fmt.Sprintf(`__filename$("%s")`, filename))
-							} else if s == "__dirname$" {
+							} else if id == "__dirname$" {
 								dirname, _ := utils.SplitByLastByte(filename, '/')
 								if ctx.isBrowserTarget() {
 									return []byte(fmt.Sprintf(`"/https/esm.sh/%s"`, dirname))
