@@ -8,7 +8,7 @@
 
 # esm.sh
 
-A global, fast & smart content delivery network(CDN) for modern(es6+) web development.
+A global, fast & smart content delivery network(CDN) for modern(es2015+) web development.
 
 ## How to Use
 
