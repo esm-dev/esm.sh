@@ -21,8 +21,6 @@ export function render(md) {
     hashHeading.scrollIntoView();
   }
 
-  console.log(hljs)
-
   hljs.registerLanguage("javascript", javascript);
   hljs.registerLanguage("json", json);
   hljs.registerLanguage("jsonc", json);
