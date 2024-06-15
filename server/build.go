@@ -334,11 +334,13 @@ func (ctx *BuildContext) buildModule() (result BuildResult, err error) {
 				func(args api.OnResolveArgs) (api.OnResolveResult, error) {
 					// if it's the entry module
 					if args.Path == entryPoint || args.Path == entryModuleSpecifier {
-						if entry.esm != "" {
-							return api.OnResolveResult{Path: path.Join(ctx.pnpmPkgDir, entry.esm)}, nil
-						}
-						if entry.cjs != "" {
-							return api.OnResolveResult{Path: path.Join(ctx.pnpmPkgDir, entry.cjs)}, nil
+						if args.Path == entryModuleSpecifier {
+							if entry.esm != "" {
+								return api.OnResolveResult{Path: path.Join(ctx.pnpmPkgDir, entry.esm)}, nil
+							}
+							if entry.cjs != "" {
+								return api.OnResolveResult{Path: path.Join(ctx.pnpmPkgDir, entry.cjs)}, nil
+							}
 						}
 						return api.OnResolveResult{}, nil
 					}
@@ -525,7 +527,7 @@ func (ctx *BuildContext) buildModule() (result BuildResult, err error) {
 					}
 
 					// bundle "@babel/runtime/*"
-					if (args.Kind == api.ResolveJSRequireCall || !noBundle) && ctx.pkgJson.Name != "@babel/runtime" && (strings.HasPrefix(specifier, "@babel/runtime/") || strings.Contains(args.Importer, "/@babel/runtime/")) {
+					if (args.Kind != api.ResolveJSDynamicImport && !noBundle) && ctx.pkgJson.Name != "@babel/runtime" && (strings.HasPrefix(specifier, "@babel/runtime/") || strings.Contains(args.Importer, "/@babel/runtime/")) {
 						return api.OnResolveResult{}, nil
 					}
 
@@ -610,10 +612,10 @@ func (ctx *BuildContext) buildModule() (result BuildResult, err error) {
 										}
 										if match {
 											exportPrefix, _ := utils.SplitByLastByte(exportName, '*')
-											url := path.Join(ctx.pkgJson.Name, exportPrefix+strings.TrimPrefix(bareName, prefix))
-											if i := entryModuleSpecifier; url != i && url != i+"/index" {
+											exportModuleName := path.Join(ctx.pkgJson.Name, exportPrefix+strings.TrimPrefix(bareName, prefix))
+											if exportModuleName != entryModuleSpecifier && exportModuleName != entryModuleSpecifier+"/index" {
 												return api.OnResolveResult{
-													Path:        ctx.resolveExternalModule(url, args.Kind),
+													Path:        ctx.resolveExternalModule(exportModuleName, args.Kind),
 													External:    true,
 													SideEffects: pkgSideEffects,
 												}, nil
@@ -637,10 +639,10 @@ func (ctx *BuildContext) buildModule() (result BuildResult, err error) {
 											}
 										}
 										if match {
-											url := path.Join(ctx.pkgJson.Name, stripModuleExt(exportName))
-											if i := entryModuleSpecifier; url != i && url != i+"/index" {
+											exportModuleName := path.Join(ctx.pkgJson.Name, stripModuleExt(exportName))
+											if exportModuleName != entryModuleSpecifier && exportModuleName != entryModuleSpecifier+"/index" {
 												return api.OnResolveResult{
-													Path:        ctx.resolveExternalModule(url, args.Kind),
+													Path:        ctx.resolveExternalModule(exportModuleName, args.Kind),
 													External:    true,
 													SideEffects: pkgSideEffects,
 												}, nil
@@ -650,7 +652,13 @@ func (ctx *BuildContext) buildModule() (result BuildResult, err error) {
 								}
 							}
 
+							// module file path
 							moduleFilepath := path.Join(ctx.pnpmPkgDir, moduleSpecifier)
+
+							// if it's the entry module
+							if moduleSpecifier == entry.cjs || moduleSpecifier == entry.esm {
+								return api.OnResolveResult{Path: moduleFilepath}, nil
+							}
 
 							// split the module that is an alias of a dependency
 							// means this file just include a single line(js): `export * from "dep"`
@@ -678,9 +686,7 @@ func (ctx *BuildContext) buildModule() (result BuildResult, err error) {
 							// bundle the internal module if it's not a dynamic import or `?bundle=false` query present
 							if args.Kind != api.ResolveJSDynamicImport && !noBundle {
 								if existsFile(moduleFilepath) {
-									return api.OnResolveResult{
-										Path: moduleFilepath,
-									}, nil
+									return api.OnResolveResult{Path: moduleFilepath}, nil
 								}
 								// let esbuild to handle it
 								return api.OnResolveResult{}, nil
