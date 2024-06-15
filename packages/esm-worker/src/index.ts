@@ -238,7 +238,7 @@ async function fetchESM(
 
   // save the file to KV/R2 if the `cache-control` header is not `public, max-age=0, must-revalidate`
   if (!isFromUpWorker && R2 && cacheControl && cacheControl !== "public, max-age=0, must-revalidate") {
-    const ccImmutable = cacheControl?.includes("immutable");
+    const immutable = cacheControl?.includes("immutable");
     let bodyCopy: ReadableStream<Uint8Array>;
     [body, bodyCopy] = body.tee();
     if (!isAsset) {
@@ -248,7 +248,7 @@ async function fetchESM(
         storeSteam = storeSteam.pipeThrough<Uint8Array>(new CompressionStream("gzip"));
       }
       let expirationTtl: number | undefined;
-      if (!ccImmutable) {
+      if (!immutable) {
         cacheControl?.split(",").forEach((v) => {
           const [key, val] = v.split("=");
           if (key.trim() === "max-age") {
@@ -257,7 +257,7 @@ async function fetchESM(
         });
       }
       ctx.waitUntil(kv.put(storeKey, storeSteam, { expirationTtl, metadata: { contentType, dts, esmPath: esmPath } }));
-    } else if (ccImmutable) {
+    } else if (immutable) {
       ctx.waitUntil(R2.put(storeKey, bodyCopy, { httpMetadata: { contentType } }));
     }
   }
@@ -296,14 +296,9 @@ function withESMWorker(middleware?: Middleware, cache: Cache = (caches as any).d
         });
 
       case "/esma-target":
-        return ctx.withCache(
-          () => {
-            const headers = ctx.corsHeaders();
-            headers.set("Cache-Control", ccImmutable);
-            return new Response(getBuildTargetFromUA(h.get("User-Agent")), { headers });
-          },
-          { varyUA: true },
-        );
+        const headers = ctx.corsHeaders();
+        headers.set("Cache-Control", "private, max-age=600"); // 10 minutes
+        return new Response(getBuildTargetFromUA(h.get("User-Agent")), { headers });
 
       case "/status.json":
         const res = await fetchOrigin(req, env, ctx, pathname);
@@ -327,10 +322,9 @@ function withESMWorker(middleware?: Middleware, cache: Cache = (caches as any).d
           return new Response(null, { status: 304, headers });
         }
       }
-      return ctx.withCache(() => {
-        const target = url.searchParams.get("target");
-        const v = url.searchParams.get("v");
+      return ctx.withCache((target) => {
         const query: string[] = [];
+        const v = url.searchParams.get("v");
         if (target) {
           query.push(`target=${target}`);
         }
@@ -407,11 +401,10 @@ function withESMWorker(middleware?: Middleware, cache: Cache = (caches as any).d
     }
 
     // if it's a singleton build module which is created by https://esm.sh/run
-    if (pathname.startsWith("/+") && pathname.endsWith(".mjs")) {
+    if (pathname.startsWith("/+") && (pathname.endsWith(".mjs") || pathname.endsWith(".mjs.map"))) {
       return ctx.withCache(() => {
-        const target = url.searchParams.get("target");
-        return fetchESM(req, env, ctx, pathname, target ? `?target=${target}` : undefined);
-      }, { varyUA: true });
+        return fetchESM(req, env, ctx, pathname);
+      });
     }
 
     // use legacy worker if the bild version is specified in the path or query
@@ -705,11 +698,15 @@ function withESMWorker(middleware?: Middleware, cache: Cache = (caches as any).d
       });
     }
 
-    return ctx.withCache(async () => {
+    return ctx.withCache(async (target) => {
       const marker = hasExternalAllMarker ? "*" : "";
       const pathname = `${prefix}/${marker}${pkgFullname}@${packageVersion}${subPath}`;
-      normalizeSearchParams(url.searchParams);
-      return fetchESM(req, env, ctx, pathname, url.search);
+      const params = url.searchParams;
+      normalizeSearchParams(params);
+      if (target) {
+        params.set("target", target);
+      }
+      return fetchESM(req, env, ctx, pathname, "?" + params.toString());
     }, { varyUA: true });
   };
 
@@ -764,12 +761,10 @@ function withESMWorker(middleware?: Middleware, cache: Cache = (caches as any).d
         const hasPinedTarget = targets.has(searchParams.get("target") ?? "");
         const realOrigin = req.headers.get("X-REAL-ORIGIN");
         const cacheKey = new URL(url); // clone
-        const varyUA = options?.varyUA && !hasPinedTarget && !isDtsFile(pathname) && !searchParams.has("raw");
-        if (varyUA) {
-          const target = getBuildTargetFromUA(req.headers.get("User-Agent"));
-          cacheKey.searchParams.set("target", target);
-          // add `?target` to the url search params to avoid the origin server checking the `User-Agent` header
-          searchParams.set("target", target);
+        let targetFromUA: string | undefined;
+        if (options?.varyUA && !hasPinedTarget && !isDtsFile(pathname) && !searchParams.has("raw")) {
+          targetFromUA = getBuildTargetFromUA(req.headers.get("User-Agent"));
+          cacheKey.searchParams.set("target", targetFromUA);
         }
         if (realOrigin) {
           cacheKey.searchParams.set("x-origin", realOrigin);
@@ -785,11 +780,8 @@ function withESMWorker(middleware?: Middleware, cache: Cache = (caches as any).d
           }
           return res;
         }
-        res = await fetcher();
-        if (varyUA) {
-          // since we add `?target` to the url search params in the worker,
-          // the "User-Agent" part of `vary` header from the origin server is missed,
-          // we need to add it manually.
+        res = await fetcher(targetFromUA);
+        if (targetFromUA) {
           res.headers.append("Vary", "User-Agent");
         }
         if (res.ok && res.headers.get("Cache-Control")?.startsWith("public, max-age=")) {

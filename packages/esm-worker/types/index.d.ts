@@ -84,7 +84,10 @@ export type Context = {
   npmrc: Npmrc;
   url: URL;
   waitUntil(promise: Promise<any>): void;
-  withCache(fetcher: () => Promise<Response> | Response, options?: { varyUA: boolean }): Promise<Response>;
+  withCache(
+    fetcher: (targetFromUA?: string) => Promise<Response> | Response,
+    options?: { varyUA: boolean },
+  ): Promise<Response>;
   corsHeaders(headers?: Headers): Headers;
 };
 
