@@ -19,6 +19,7 @@ type Config struct {
 	BanList            BanList                `json:"banList"`
 	BuildConcurrency   uint16                 `json:"buildConcurrency"`
 	BuildTimeout       uint16                 `json:"buildTimeout"`
+	Minify             json.RawMessage        `json:"minify"`
 	DisableSourceMap   bool                   `json:"disableSourceMap"`
 	DisableCompression bool                   `json:"disableCompression"`
 	Cache              string                 `json:"cache"`
@@ -99,10 +100,13 @@ func fixConfig(c *Config) *Config {
 		c.AuthSecret = os.Getenv("AUTH_SECRET")
 	}
 	if !c.DisableCompression {
-		c.DisableCompression = os.Getenv("DISABLE_COMPRESSION") != ""
+		c.DisableCompression = os.Getenv("DISABLE_COMPRESSION") == "true"
 	}
 	if !c.DisableSourceMap {
-		c.DisableSourceMap = os.Getenv("DISABLE_SOURCEMAP") != ""
+		c.DisableSourceMap = os.Getenv("DISABLE_SOURCEMAP") == "true"
+	}
+	if c.Minify == nil && os.Getenv("MINIFY") == "false" {
+		c.Minify = []byte("false")
 	}
 	if c.BuildConcurrency == 0 {
 		c.BuildConcurrency = uint16(runtime.NumCPU())

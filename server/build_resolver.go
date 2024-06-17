@@ -21,6 +21,11 @@ type BuildEntry struct {
 	dts string
 }
 
+// isEmpty checks if the entry is empty
+func (entry *BuildEntry) isEmpty() bool {
+	return entry.esm == "" && entry.cjs == "" && entry.dts == ""
+}
+
 // hasEntry checks if the entrypoint of the given type exists
 func (entry *BuildEntry) hasEntry(entryType string) bool {
 	switch entryType {
@@ -576,18 +581,18 @@ func (ctx *BuildContext) resolveEntry(pkg Pkg) (entry BuildEntry) {
 		normalizeBuildEntry(ctx, &entry)
 		if entry.esm != "" {
 			m, ok := ctx.pkgJson.Browser[entry.esm]
-			if ok && m != "" {
+			if ok && isRelativeSpecifier(m) {
 				entry.esm = m
 			}
 		}
 		if entry.cjs != "" {
 			m, ok := ctx.pkgJson.Browser[entry.cjs]
-			if ok && m != "" {
+			if ok && isRelativeSpecifier(m) {
 				entry.cjs = m
 			}
 		}
 		if pkg.SubModule == "" {
-			if m, ok := ctx.pkgJson.Browser["."]; ok && m != "" {
+			if m, ok := ctx.pkgJson.Browser["."]; ok && isRelativeSpecifier(m) {
 				if ctx.pkgJson.Type == "module" || strings.HasSuffix(m, ".mjs") {
 					entry.esm = m
 				} else {
@@ -922,6 +927,62 @@ func (ctx *BuildContext) resolveExternalModule(specifier string, kind api.Resolv
 	return
 }
 
+func (ctx *BuildContext) resloveDTS(entry BuildEntry) (string, error) {
+	if entry.dts != "" {
+		if !ctx.existsPkgFile(entry.dts) {
+			return "", nil
+		}
+		return fmt.Sprintf(
+			"/%s%s/%s%s",
+			ctx.pkg.ghPrefix(),
+			ctx.pkg.Fullname(),
+			ctx.getBuildArgsPrefix(ctx.pkg, true),
+			strings.TrimPrefix(entry.dts, "./"),
+		), nil
+	}
+
+	// use types from package "@types/[task.npm.Name]" if it exists
+	if ctx.pkgJson.Types == "" && !strings.HasPrefix(ctx.pkgJson.Name, "@types/") && regexpFullVersion.MatchString(ctx.pkgJson.Version) {
+		versionParts := strings.Split(ctx.pkgJson.Version, ".")
+		versions := []string{
+			versionParts[0] + "." + versionParts[1], // major.minor
+			versionParts[0],                         // major
+		}
+		typesPkgName := toTypesPkgName(ctx.pkgJson.Name)
+		pkgVersion, ok := ctx.args.deps[typesPkgName]
+		if ok {
+			// use the version of the `?deps` query if it exists
+			versions = append([]string{pkgVersion}, versions...)
+		}
+		for _, version := range versions {
+			p, err := ctx.npmrc.getPackageInfo(typesPkgName, version)
+			if err == nil {
+				typesPkg := Pkg{
+					Name:      typesPkgName,
+					Version:   p.Version,
+					SubPath:   ctx.pkg.SubPath,
+					SubModule: ctx.pkg.SubModule,
+				}
+				b := NewBuildContext(ctx.zoneId, ctx.npmrc, typesPkg, ctx.args, "types", BundleFalse, false, false)
+				err := b.install()
+				if err != nil {
+					return "", err
+				}
+				dts, err := b.resloveDTS(b.resolveEntry(typesPkg))
+				if err != nil {
+					return "", err
+				}
+				if dts != "" {
+					// use tilde semver range instead of the exact version
+					return strings.ReplaceAll(dts, fmt.Sprintf("%s@%s", typesPkgName, p.Version), fmt.Sprintf("%s@~%s", typesPkgName, p.Version)), nil
+				}
+			}
+		}
+	}
+
+	return "", nil
+}
+
 func (ctx *BuildContext) normalizePackageJSON(p PackageJSON) PackageJSON {
 	if ctx.pkg.FromGithub {
 		// if the name in package.json is not the same as the repository name
@@ -992,14 +1053,6 @@ func (ctx *BuildContext) normalizePackageJSON(p PackageJSON) PackageJSON {
 }
 
 func (ctx *BuildContext) lexer(entry *BuildEntry, forceCjsOnly bool) (ret BuildResult, reexport string, err error) {
-	pkgJson := ctx.pkgJson
-	typesOnly := strings.HasPrefix(pkgJson.Name, "@types/") || (entry.esm == "" && entry.cjs == "" && entry.dts != "")
-
-	if typesOnly {
-		ret.TypesOnly = true
-		return
-	}
-
 	if entry.esm != "" && !forceCjsOnly {
 		isESM, namedExports, erro := ctx.esmLexer(entry.esm)
 		if erro != nil {
@@ -1025,7 +1078,7 @@ func (ctx *BuildContext) lexer(entry *BuildEntry, forceCjsOnly bool) (ret BuildR
 		entry.cjs = entry.esm
 		entry.esm = ""
 		reexport = r.ReExport
-		log.Warnf("fake ES module '%s' of '%s'", entry.cjs, pkgJson.Name)
+		log.Warnf("fake ES module '%s' of '%s'", entry.cjs, ctx.pkgJson.Name)
 		return
 	}
 

@@ -14,9 +14,9 @@ export function __dirname$(dirname) {
 
 export async function __downloadPackageTarball$(tar) {
   const [registry, pkgName, pkgVersion] = tar.split(" ");
-  const cwd = path.join(os.homedir(), ".cache/esm.sh", pkgName + "@" + pkgVersion);
+  const savePath = path.join(os.homedir(), ".cache/esm.sh", pkgName + "@" + pkgVersion);
   try {
-    await fs.promises.access(path.join(cwd, "package.json"));
+    await fs.promises.access(path.join(savePath, "package.json"));
     return;
   } catch (error) {
     if (error.code !== "ENOENT") {
@@ -33,14 +33,12 @@ export async function __downloadPackageTarball$(tar) {
   const DecompressionStream = globalThis.DecompressionStream || await import("node:stream/web").DecompressionStream;
   const readable = Readable.fromWeb(res.body.pipeThrough(new DecompressionStream("gzip")));
   try {
-    // ensure the `cwd` directory exists
-    await fs.promises.mkdir(cwd, { recursive: true });
+    // ensure the `savePath` directory exists
+    await fs.promises.mkdir(savePath, { recursive: true });
   } catch {
     // ignore
   }
   await new Promise((resolve, reject) => {
-    readable.pipe(extract({ C: cwd, strip: 1 }))
-      .on("end", resolve)
-      .on("error", reject);
+    readable.pipe(extract({ C: savePath, strip: 1 })).on("error", reject).on("end", resolve);
   });
 }

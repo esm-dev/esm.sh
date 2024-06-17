@@ -197,7 +197,11 @@ func transformDTS(ctx *BuildContext, dts string, buildArgsPrefix string, marker 
 			exports:  NewStringSet(),
 		}
 		b := NewBuildContext(ctx.zoneId, ctx.npmrc, depPkg, args, "types", BundleFalse, false, false)
-		dts, err := b.LookupTypes()
+		err = b.install()
+		if err != nil {
+			return "", err
+		}
+		dts, err = b.resloveDTS(b.resolveEntry(depPkg))
 		if err != nil {
 			return "", err
 		}

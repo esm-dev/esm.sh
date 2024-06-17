@@ -14,6 +14,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/esm-dev/esm.sh/server/storage"
 	"github.com/evanw/esbuild/pkg/api"
 	"github.com/ije/gox/utils"
 )
@@ -111,8 +112,8 @@ func (ctx *BuildContext) Query() (BuildResult, bool) {
 			} else {
 				_, err = fs.Stat(normalizeSavePath(ctx.zoneId, path.Join("types", b.Dts)))
 			}
-			// ensure the build files exist
-			if err == nil || os.IsExist(err) {
+			// ensure the build file exists
+			if err == nil || err != storage.ErrNotFound {
 				return b, true
 			}
 		}
@@ -175,9 +176,14 @@ func (ctx *BuildContext) Build() (ret BuildResult, err error) {
 }
 
 func (ctx *BuildContext) install() (err error) {
-	if ctx.wd == "" {
+	if ctx.wd == "" || ctx.pkgJson.Name == "" {
 		ctx.wd = path.Join(ctx.npmrc.Dir(), ctx.pkg.Fullname())
 		ctx.pkgDir = path.Join(ctx.wd, "node_modules", ctx.pkg.Name)
+		if rp, e := os.Readlink(ctx.pkgDir); e == nil {
+			ctx.pnpmPkgDir = path.Join(path.Dir(ctx.pkgDir), rp)
+		} else {
+			ctx.pnpmPkgDir = ctx.pkgDir
+		}
 		err = ctx.npmrc.installPackage(ctx.pkg)
 		if err != nil {
 			return
@@ -188,11 +194,6 @@ func (ctx *BuildContext) install() (err error) {
 			return
 		}
 		ctx.pkgJson = ctx.normalizePackageJSON(pkgJson)
-		if rp, e := os.Readlink(ctx.pkgDir); e == nil {
-			ctx.pnpmPkgDir = path.Join(path.Dir(ctx.pkgDir), rp)
-		} else {
-			ctx.pnpmPkgDir = ctx.pkgDir
-		}
 	}
 	return
 }
@@ -222,16 +223,22 @@ func (ctx *BuildContext) buildModule() (result BuildResult, err error) {
 	}
 
 	entry := ctx.resolveEntry(ctx.pkg)
+	if entry.isEmpty() {
+		err = fmt.Errorf("could not resolve entry")
+		return
+	}
 	log.Debugf("build(%s): Entry%+v", ctx.pkg, entry)
 
-	result, reexport, err := ctx.lexer(&entry, false)
-	if err != nil && !strings.HasPrefix(err.Error(), "cjsLexer: Can't resolve") {
+	typesOnly := strings.HasPrefix(ctx.pkgJson.Name, "@types/") || (entry.esm == "" && entry.cjs == "" && entry.dts != "")
+	if typesOnly {
+		result.TypesOnly = true
+		result.Dts = "/" + ctx.pkg.ghPrefix() + ctx.pkg.Fullname() + entry.dts[1:]
+		ctx.transformDTS(entry.dts)
 		return
 	}
 
-	if result.TypesOnly {
-		result.Dts = "/" + ctx.pkg.ghPrefix() + ctx.pkg.Fullname() + entry.dts[1:]
-		ctx.transformDTS(entry.dts)
+	result, reexport, err := ctx.lexer(&entry, false)
+	if err != nil && !strings.HasPrefix(err.Error(), "cjsLexer: Can't resolve") {
 		return
 	}
 
@@ -265,7 +272,7 @@ func (ctx *BuildContext) buildModule() (result BuildResult, err error) {
 		if err != nil {
 			return
 		}
-		result.Dts = ctx.lookupTypes(entry)
+		result.Dts, err = ctx.resloveDTS(entry)
 		return
 	}
 
@@ -278,10 +285,6 @@ func (ctx *BuildContext) buildModule() (result BuildResult, err error) {
 	}
 
 	if entry.esm == "" {
-		if entry.cjs == "" {
-			err = fmt.Errorf("could not resolve \"%s\"", entryModuleSpecifier)
-			return
-		}
 		buf := bytes.NewBuffer(nil)
 		fmt.Fprintf(buf, `import * as __module from "%s";`, entryModuleSpecifier)
 		if len(result.NamedExports) > 0 {
@@ -862,6 +865,7 @@ func (ctx *BuildContext) buildModule() (result BuildResult, err error) {
 	if ctx.isDenoTarget() {
 		conditions = append(conditions, "deno")
 	}
+	minify := config.Minify == nil || !bytes.Equal(config.Minify, []byte("false"))
 	options := api.BuildOptions{
 		Outdir:            "/esbuild",
 		Write:             false,
@@ -870,9 +874,9 @@ func (ctx *BuildContext) buildModule() (result BuildResult, err error) {
 		Format:            api.FormatESModule,
 		Target:            targets[ctx.target],
 		Platform:          api.PlatformBrowser,
-		MinifyWhitespace:  !ctx.dev,
-		MinifyIdentifiers: !ctx.dev,
-		MinifySyntax:      !ctx.dev,
+		MinifyWhitespace:  minify,
+		MinifyIdentifiers: minify,
+		MinifySyntax:      minify,
 		KeepNames:         ctx.args.keepNames,         // prevent class/function names erasing
 		IgnoreAnnotations: ctx.args.ignoreAnnotations, // some libs maybe use wrong side-effect annotations
 		Conditions:        conditions,
@@ -1207,20 +1211,7 @@ rebuild:
 	deps.Sort()
 
 	result.Deps = deps
-	result.Dts = ctx.lookupTypes(entry)
-	return
-}
-
-func (ctx *BuildContext) LookupTypes() (dts string, err error) {
-	// install the package
-	ctx.stage = "install"
-	err = ctx.install()
-	if err != nil {
-		return
-	}
-
-	entry := ctx.resolveEntry(ctx.pkg)
-	dts = ctx.lookupTypes(entry)
+	result.Dts, err = ctx.resloveDTS(entry)
 	return
 }
 
@@ -1250,56 +1241,6 @@ func (ctx *BuildContext) buildTypes() (ret BuildResult, err error) {
 		ret.Dts = "/" + ctx.pkg.ghPrefix() + ctx.pkg.Fullname() + dts[1:]
 	}
 	return
-}
-
-func (ctx *BuildContext) lookupTypes(entry BuildEntry) string {
-	if entry.dts != "" {
-		if !ctx.existsPkgFile(entry.dts) {
-			return ""
-		}
-		return fmt.Sprintf(
-			"/%s%s/%s%s",
-			ctx.pkg.ghPrefix(),
-			ctx.pkg.Fullname(),
-			ctx.getBuildArgsPrefix(ctx.pkg, true),
-			strings.TrimPrefix(entry.dts, "./"),
-		)
-	}
-
-	// use types from package "@types/[task.npm.Name]" if it exists
-	if ctx.pkgJson.Types == "" && !strings.HasPrefix(ctx.pkgJson.Name, "@types/") && regexpFullVersion.MatchString(ctx.pkgJson.Version) {
-		versionParts := strings.Split(ctx.pkgJson.Version, ".")
-		versions := []string{
-			versionParts[0] + "." + versionParts[1], // major.minor
-			versionParts[0],                         // major
-		}
-		typesPkgName := toTypesPkgName(ctx.pkgJson.Name)
-		pkgVersion, ok := ctx.args.deps[typesPkgName]
-		if ok {
-			// use the version of the `?deps` query if it exists
-			versions = append([]string{pkgVersion}, versions...)
-		}
-		for _, version := range versions {
-			p, err := ctx.npmrc.getPackageInfo(typesPkgName, version)
-			if err == nil {
-				typesPkg := Pkg{
-					Name:      typesPkgName,
-					Version:   p.Version,
-					SubPath:   ctx.pkg.SubPath,
-					SubModule: ctx.pkg.SubModule,
-				}
-				b := NewBuildContext(ctx.zoneId, ctx.npmrc, typesPkg, ctx.args, "types", BundleFalse, false, false)
-				dts, _ := b.LookupTypes()
-				if dts != "" {
-					// use tilde semver range instead of the exact version
-					return strings.ReplaceAll(dts, fmt.Sprintf("%s@%s", typesPkgName, p.Version), fmt.Sprintf("%s@~%s", typesPkgName, p.Version))
-				}
-				break
-			}
-		}
-	}
-
-	return ""
 }
 
 func (ctx *BuildContext) transformDTS(types string) (err error) {

@@ -490,8 +490,6 @@ Deno.test("esm-worker", { sanitizeOps: false, sanitizeResources: false }, async 
     assertStringIncludes(ret.code, `"https://esm.sh/preact-render-to-string6.0.2"`);
     assertStringIncludes(ret.map, `"mappings":`);
 
-    console.log("transformed", hash, ret);
-
     const res2 = await fetch(`${workerOrigin}/+${hash}.mjs`, {
       headers: { "User-Agent": "Chrome/90.0.4430.212" },
     });

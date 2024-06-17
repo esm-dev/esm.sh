@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"io"
 	"regexp"
-	"strings"
 )
 
 var (
@@ -74,9 +73,9 @@ func walkDts(r io.Reader, buf *bytes.Buffer, resolve func(specifier string, kind
 					if err != nil {
 						return
 					}
-					if format == "types" && strings.HasPrefix(res, "{ESM_CDN_ORIGIN}") {
-						format = "path"
-					}
+					// if format == "types" && strings.HasPrefix(res, "{ESM_CDN_ORIGIN}") {
+					// 	format = "path"
+					// }
 					fmt.Fprintf(buf, `/// <reference %s="%s" />`, format, res)
 				} else {
 					buf.Write(line)
