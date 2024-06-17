@@ -77,8 +77,9 @@ docker run -p 8080:8080 \
 Available environment variables:
 
 - `AUTH_SECRET`: The server auth secret, default is no authrization check.
-- `DISABLE_COMPRESSION`: Disable http compression, default is false.
-- `DISABLE_SOURCEMAP`: Disable generating source map for build js files, default is false.
+- `DISABLE_COMPRESSION`: Disable http compression, default is `false`.
+- `DISABLE_SOURCEMAP`: Disable generating source map for build JS/CSS files, default is `false`.
+- `MINIFY`: Minify the build JS/CSS files, default is `true`.
 - `LOG_LEVEL`: The log level, available values are ["debug", "info", "warn", "error"], default is "info".
 - `NPM_REGISTRY`: The global NPM registry, default is "https://registry.npmjs.org/".
 - `NPM_TOKEN`: The access token for the global NPM registry.

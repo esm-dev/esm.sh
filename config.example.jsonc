@@ -62,6 +62,9 @@
     }
   },
 
+  // Whether to minify the build JS/CSS files, default is true.
+  "minify": true,
+
   // Disable http compression, default is false.
   "disableCompression": false,
 
