@@ -177,16 +177,16 @@ func (ctx *BuildContext) Build() (ret BuildResult, err error) {
 
 func (ctx *BuildContext) install() (err error) {
 	if ctx.wd == "" || ctx.pkgJson.Name == "" {
+		err = ctx.npmrc.installPackage(ctx.pkg)
+		if err != nil {
+			return
+		}
 		ctx.wd = path.Join(ctx.npmrc.Dir(), ctx.pkg.Fullname())
 		ctx.pkgDir = path.Join(ctx.wd, "node_modules", ctx.pkg.Name)
 		if rp, e := os.Readlink(ctx.pkgDir); e == nil {
 			ctx.pnpmPkgDir = path.Join(path.Dir(ctx.pkgDir), rp)
 		} else {
 			ctx.pnpmPkgDir = ctx.pkgDir
-		}
-		err = ctx.npmrc.installPackage(ctx.pkg)
-		if err != nil {
-			return
 		}
 		var pkgJson PackageJSON
 		err = parseJSONFile(path.Join(ctx.pkgDir, "package.json"), &pkgJson)
