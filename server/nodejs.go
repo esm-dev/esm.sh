@@ -17,7 +17,8 @@ import (
 
 const (
 	nodejsMinVersion = 22
-	nodeTypesVersion = "20.12.12"
+	pnpmMinVersion   = "9.0.0"
+	nodeTypesVersion = "20.14.4"
 )
 
 var nodejsInternalModules = map[string]bool{
@@ -109,7 +110,7 @@ func checkNodejs(installDir string) (nodeVersion string, pnpmVersion string, err
 	}
 
 	pnpmOutput, err := run("pnpm", "-v")
-	if err != nil && errors.Is(err, exec.ErrNotFound) {
+	if (err != nil && errors.Is(err, exec.ErrNotFound)) || (err == nil && semverLessThan(strings.TrimSpace(string(pnpmOutput)), pnpmMinVersion)) {
 		_, err = run("npm", "install", "pnpm", "-g")
 		if err != nil {
 			return

@@ -457,29 +457,29 @@ do:
 }
 
 func (rc *NpmRC) installPackage(pkg Pkg) (err error) {
-	dir := path.Join(rc.Dir(), pkg.Fullname())
-	lock := getInstallLock(dir)
+	installDir := path.Join(rc.Dir(), pkg.Fullname())
 
-	// only one install process allowed at the same time
+	// only one installation process allowed at the same time for the same package
+	lock := getInstallLock(installDir)
 	lock.Lock()
 	defer lock.Unlock()
 
 	// skip installation if the pnpm-lock file exists
-	if existsFile(path.Join(dir, "pnpm-lock.yaml")) && existsFile(path.Join(dir, "node_modules", pkg.Name, "package.json")) {
+	if existsFile(path.Join(installDir, "pnpm-lock.yaml")) && existsFile(path.Join(installDir, "node_modules", pkg.Name, "package.json")) {
 		return nil
 	}
 
 	// create '.npmrc' file
-	err = rc.createDotNpmRcFile(dir)
+	err = rc.createDotNpmRcFile(installDir)
 	if err != nil {
 		err = fmt.Errorf("failed to create .npmrc file: %v", err)
 		return
 	}
 
 	// ensure 'package.json' file to prevent read up-levels
-	packageJsonFp := path.Join(dir, "package.json")
+	packageJsonFp := path.Join(installDir, "package.json")
 	if !existsFile(packageJsonFp) {
-		ensureDir(dir)
+		ensureDir(installDir)
 		err = os.WriteFile(packageJsonFp, []byte("{}"), 0644)
 	}
 	if err != nil {
@@ -491,12 +491,12 @@ func (rc *NpmRC) installPackage(pkg Pkg) (err error) {
 		if pkg.FromGithub {
 			err = os.WriteFile(packageJsonFp, []byte(fmt.Sprintf(`{"dependencies":{"%s":"github:%s#%s"}}`, pkg.Name, pkg.Name, pkg.Version)), 0644)
 			if err == nil {
-				err = rc.pnpm(dir)
+				err = rc.pnpm(installDir)
 			}
 			// pnpm will ignore github package which has been installed without `package.json` file
 			// so we install it manually
 			if err == nil {
-				packageJsonFp := path.Join(dir, "node_modules", pkg.Name, "package.json")
+				packageJsonFp := path.Join(installDir, "node_modules", pkg.Name, "package.json")
 				if !existsFile(packageJsonFp) {
 					ensureDir(path.Dir(packageJsonFp))
 					err = os.WriteFile(packageJsonFp, mustEncodeJSON(pkg), 0644)
@@ -505,16 +505,16 @@ func (rc *NpmRC) installPackage(pkg Pkg) (err error) {
 					err = parseJSONFile(packageJsonFp, &p)
 					if err == nil && len(p.Files) > 0 {
 						// install github package with ignoring `files` field
-						err = ghInstall(dir, pkg.Name, pkg.Version)
+						err = ghInstall(installDir, pkg.Name, pkg.Version)
 					}
 				}
 			}
 		} else if regexpFullVersion.MatchString(pkg.Version) {
-			err = rc.pnpm(dir, pkg.Fullname(), "--prefer-offline")
+			err = rc.pnpm(installDir, pkg.Fullname(), "--prefer-offline")
 		} else {
-			err = rc.pnpm(dir, pkg.Fullname())
+			err = rc.pnpm(installDir, pkg.Fullname())
 		}
-		packageJsonFp := path.Join(dir, "node_modules", pkg.Name, "package.json")
+		packageJsonFp := path.Join(installDir, "node_modules", pkg.Name, "package.json")
 		if err == nil && !existsFile(packageJsonFp) {
 			err = fmt.Errorf("pnpm install %s: package.json not found", pkg)
 		}
