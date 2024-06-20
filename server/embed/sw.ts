@@ -116,9 +116,10 @@ class SWImpl implements SW {
     serviceWorker.oncontrollerchange = () => this.onUpdateFound();
 
     return new Promise<ServiceWorker>(async (resolve, reject) => {
-      const swr = await serviceWorker.register(options.sw?.module ?? "/sw.js", {
+      const swr = await serviceWorker.register(options.swModule ?? "/sw.js", {
         type: "module",
-        updateViaCache: options.sw?.updateViaCache,
+        scope: options.swScope,
+        updateViaCache: options.swUpdateViaCache,
       });
       const onActive = (firstInstall = false) => {
         if (swr.active?.state === "activated") {
@@ -151,10 +152,10 @@ class SWImpl implements SW {
     });
   }
 
-  private async _onFire(swActive: ServiceWorker, firstInstall = false) {
+  private async _onFire(swActive: ServiceWorker, firstInstall: boolean) {
     // download esm-archive and and send it to the Service Worker if has any
     queryElements<HTMLLinkElement>(`link[type^="${kTypeEsmArchive}"][href]`, (el, i) => {
-      const p = fetch(el.href).then((res) => {
+      const waiting = fetch(el.href).then((res) => {
         if (!res.ok) {
           panic("Failed to download esm-archive: " + (res.statusText ?? res.status));
         }
@@ -184,9 +185,9 @@ class SWImpl implements SW {
           swActive.postMessage([i, arrayBuffer, el.type.endsWith("+gzip")]);
         });
       });
-      // if it's first install, wait until the download finished
+      // if it's first install, wait until the esm-archive downloaded
       if (firstInstall) {
-        this._promises.push(p);
+        this._promises.push(waiting);
       }
     });
 
@@ -220,10 +221,10 @@ class SWImpl implements SW {
 
     const on: typeof addEventListener = addEventListener;
     const bc = new BroadcastChannel(kSw);
-    const cache = caches.open(kSw);
+    const cachePromise = caches.open(kSw);
     this._promises.push(
-      cache.then((cache) =>
-        cache.match("/" + kTypeEsmArchive).then((res) =>
+      cachePromise.then((cache) =>
+        cache.match("/+" + kTypeEsmArchive).then((res) =>
           res?.arrayBuffer().then((buf) => {
             try {
               this._archive = new Archive(buf);
@@ -290,7 +291,7 @@ class SWImpl implements SW {
             const stale = !currentArchive || archive.checksum !== currentArchive.checksum;
             if (stale) {
               this._archive = archive;
-              cache.then((cache) => cache.put("/" + kTypeEsmArchive, createResponse(data)));
+              cachePromise.then((cache) => cache.put("/+" + kTypeEsmArchive, createResponse(data)));
             }
             bc.postMessage(stale ? 1 : 2);
           } catch (err) {
