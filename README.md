@@ -263,26 +263,12 @@ you to use query params with trailing slash: change the query prefix `?` to `&` 
 In rare cases, you may want to request JS source files from packages, as-is, without transformation into ES modules. To
 do so, you need to add a `?raw` query to the request URL.
 
-For example, you might need to register a package's source script as a service worker in a browser that
-[does not yet support](https://caniuse.com/mdn-api_serviceworker_ecmascript_modules) the `type: "module"` option:
-
-```js
-await navigator.serviceWorker.register(
-  new URL(
-    "https://esm.sh/playground-elements/playground-service-worker.js?raw",
-    import.meta.url.href,
-  ),
-  { scope: "/" },
-);
-```
-
-You may alternatively use `raw.esm.sh` as the origin, which is equivalent to `esm.sh/<PATH>?raw`:
-
 ```html
-<playground-project sandbox-base-url="https://raw.esm.sh/playground-elements/"></playground-project>
+<script src="https://esm.sh/p5/lib/p5.min.js?raw"></script>
 ```
 
-so that transitive references in the raw assets will also be raw requests.
+> You may alternatively use `raw.esm.sh/<PATH>` as the origin, which is equivalent to `esm.sh/<PATH>?raw`,
+> that transitive references in the raw assets will also be raw requests.
 
 ## Deno Compatibility
 
