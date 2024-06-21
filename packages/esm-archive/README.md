@@ -1,6 +1,6 @@
 # esm-archive
 
-Bundle multiple files into a single binary blob.
+Bundles multiple files into a single binary blob.
 
 ```js
 import { Archive, bundle } from "esm-archive";
@@ -11,7 +11,7 @@ const data = bundle([
   new File(["foo"], "bar.txt", { type: "text/plain" }),
 ]);
 
-// use the archive
+// read the archive
 const archive = new Archive(data);
 archive.checksum; // a 32-bit checksum of the archive
 archive.entries.length; // => 2
@@ -31,11 +31,11 @@ using gzip, and `DecompressionStream` to decompress it again.
 ```js
 import { Archive, bundle } from "esm-archive";
 
-// compress the archive using CompressionStream
+// compress the archive using `CompressionStream`
 const data = bundle([/* ... */]);
 const compressed = await readAll(new Blob([data]).stream().pipeThrough(new CompressionStream("gzip")));
 
-// use the compressed archive
+// decompress the compressed archive
 const decompressed = await readAll(new Blob([compressed]).stream().pipeThrough(new DecompressionStream("gzip")));
 const archive = new Archive(decompressed);
 ```
