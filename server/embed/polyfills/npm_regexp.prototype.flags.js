@@ -1,1 +1,1 @@
-export default (reg) => reg.flags;
+export default r=>r.flags;

@@ -289,7 +289,7 @@ Deno.test("esm-worker", { sanitizeOps: false, sanitizeResources: false }, async 
     assertEquals(res7.status, 200);
     assertStringIncludes(
       await res7.text(),
-      `"data:text/javascript;base64,ZXhwb3J0IGRlZmF1bHQgT2JqZWN0LmFzc2lnbjsK"`,
+      `"data:text/javascript;base64,ZXhwb3J0IGRlZmF1bHQgT2JqZWN0LmFzc2lnbg=="`,
     );
 
     const res8 = await fetch(`${workerOrigin}/react-dom@18.2.0?external=react`);

@@ -1,1 +1,1 @@
-export default (v) => v instanceof RegExp;
+export default v=>v instanceof RegExp;

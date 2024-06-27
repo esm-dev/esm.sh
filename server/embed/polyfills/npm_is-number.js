@@ -1,1 +1,1 @@
-export default (v) => typeof v === "number";
+export default v=>typeof v==="number";

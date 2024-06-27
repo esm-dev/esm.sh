@@ -1,1 +1,1 @@
-export default (a, predicate, thisArg) => a.filter(predicate, thisArg);
+export default (a,p,t)=>a.filter(p,t);

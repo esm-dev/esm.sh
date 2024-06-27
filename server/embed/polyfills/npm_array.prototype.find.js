@@ -1,1 +1,1 @@
-export default (a, predicate, thisArg) => a.find(predicate, thisArg);
+export default (a,p,t)=>a.find(p,t);

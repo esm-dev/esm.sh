@@ -1,1 +1,1 @@
-export default (s, l, c) => s.padStart(l, c);
+export default (s,l,c)=>s.padStart(l,c);

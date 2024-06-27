@@ -1,6 +1,7 @@
 package server
 
 import (
+	"bytes"
 	"crypto/sha1"
 	"encoding/base64"
 	"encoding/hex"
@@ -784,6 +785,8 @@ func (ctx *BuildContext) resolveExternalModule(specifier string, kind api.Resolv
 	} else {
 		data, err := embedFS.ReadFile(("server/embed/polyfills/npm_" + specifier + ".js"))
 		if err == nil {
+			data = bytes.ReplaceAll(data, []byte{';', '\n'}, []byte{';'})
+			data = bytes.TrimSuffix(data, []byte{';'})
 			resolvedPath = fmt.Sprintf("data:text/javascript;base64,%s", base64.StdEncoding.EncodeToString(data))
 			return
 		}

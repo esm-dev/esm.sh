@@ -1,1 +1,1 @@
-export default () => typeof Symbol.toStringTag === "symbol";
+export default ()=>typeof Symbol.toStringTag==="symbol";
