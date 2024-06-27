@@ -427,6 +427,17 @@ func (ctx *BuildContext) buildModule() (result BuildResult, err error) {
 						}
 					}
 
+					if specifier != "node-fetch" && args.Kind != api.ResolveJSRequireCall && args.Kind != api.ResolveJSRequireResolve {
+						data, err := embedFS.ReadFile(("server/embed/polyfills/npm_" + specifier + ".js"))
+						if err == nil {
+							return api.OnResolveResult{
+								Path:       args.Path,
+								PluginData: data,
+								Namespace:  "purge-polyfill",
+							}, nil
+						}
+					}
+
 					// resolve specifier with package `browser` field
 					if !isRelativeSpecifier(specifier) && len(ctx.pkgJson.Browser) > 0 && ctx.isBrowserTarget() {
 						if name, ok := ctx.pkgJson.Browser[specifier]; ok {
@@ -729,21 +740,21 @@ func (ctx *BuildContext) buildModule() (result BuildResult, err error) {
 				},
 			)
 
-			// for wasm module exclude
+			// purge polyfill
 			build.OnLoad(
-				api.OnLoadOptions{Filter: ".*", Namespace: "wasm"},
+				api.OnLoadOptions{Filter: ".*", Namespace: "purge-polyfill"},
 				func(args api.OnLoadArgs) (ret api.OnLoadResult, err error) {
-					wasm, err := os.ReadFile(args.Path)
-					if err != nil {
+					data, ok := args.PluginData.([]byte)
+					if !ok {
+						err = fmt.Errorf("purge-polyfill: invalid plugin data")
 						return
 					}
-					wasm64 := base64.StdEncoding.EncodeToString(wasm)
-					code := fmt.Sprintf("export default Uint8Array.from(atob('%s'), c => c.charCodeAt(0))", wasm64)
-					return api.OnLoadResult{Contents: &code, Loader: api.LoaderJS}, nil
+					contents := string(data)
+					return api.OnLoadResult{Contents: &contents, Loader: api.LoaderJS}, nil
 				},
 			)
 
-			// for browser exclude
+			// browser exclude
 			build.OnLoad(
 				api.OnLoadOptions{Filter: ".*", Namespace: "browser-exclude"},
 				func(args api.OnLoadArgs) (ret api.OnLoadResult, err error) {
@@ -757,6 +768,21 @@ func (ctx *BuildContext) buildModule() (result BuildResult, err error) {
 				},
 			)
 
+			// wasm module exclude
+			build.OnLoad(
+				api.OnLoadOptions{Filter: ".*", Namespace: "wasm"},
+				func(args api.OnLoadArgs) (ret api.OnLoadResult, err error) {
+					wasm, err := os.ReadFile(args.Path)
+					if err != nil {
+						return
+					}
+					wasm64 := base64.StdEncoding.EncodeToString(wasm)
+					code := fmt.Sprintf("export default Uint8Array.from(atob('%s'), c => c.charCodeAt(0))", wasm64)
+					return api.OnLoadResult{Contents: &code, Loader: api.LoaderJS}, nil
+				},
+			)
+
+			// resolve `__filename` and `__dirname`
 			build.OnLoad(
 				api.OnLoadOptions{Filter: "\\.c?js$"},
 				func(args api.OnLoadArgs) (ret api.OnLoadResult, err error) {
@@ -833,6 +859,7 @@ func (ctx *BuildContext) buildModule() (result BuildResult, err error) {
 					return api.OnLoadResult{Contents: &js, Loader: api.LoaderJS}, nil
 				},
 			)
+
 		},
 	}
 
@@ -960,7 +987,6 @@ rebuild:
 			}
 		}
 		err = errors.New("esbuild: " + msg)
-		fmt.Println(ret.Errors[0].Location)
 		return
 	}
 

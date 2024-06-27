@@ -775,14 +775,18 @@ func (ctx *BuildContext) resolveExternalModule(specifier string, kind api.Resolv
 	}
 
 	// replace some npm polyfills with native APIs
-	if specifier == "node-fetch" && ctx.target != "node" {
-		resolvedPath = "/npm_node-fetch.js"
-		return
-	}
-	data, err := embedFS.ReadFile(("server/embed/polyfills/npm_" + specifier + ".js"))
-	if err == nil {
-		resolvedPath = fmt.Sprintf("data:application/javascript;base64,%s", base64.StdEncoding.EncodeToString(data))
-		return
+
+	if specifier == "node-fetch" {
+		if ctx.target != "node" {
+			resolvedPath = "/npm_node-fetch.js"
+			return
+		}
+	} else {
+		data, err := embedFS.ReadFile(("server/embed/polyfills/npm_" + specifier + ".js"))
+		if err == nil {
+			resolvedPath = fmt.Sprintf("data:text/javascript;base64,%s", base64.StdEncoding.EncodeToString(data))
+			return
+		}
 	}
 
 	// common npm dependency

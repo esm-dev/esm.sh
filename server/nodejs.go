@@ -17,8 +17,8 @@ import (
 
 const (
 	nodejsMinVersion = 22
-	pnpmMinVersion   = "9.0.0"
 	nodeTypesVersion = "20.14.4"
+	pnpmMinVersion   = "9.0.0"
 )
 
 var nodejsInternalModules = map[string]bool{
