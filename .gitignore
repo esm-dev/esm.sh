@@ -1,14 +1,9 @@
 .DS_Store
-.env
 .esmd/
 .idea/
 .vscode/
 *.log
-*.vsix
 config.json
-dist/
 esmd
 node_modules/
-pkg/
-target/
-Thumbs.db
+dist/
