@@ -76,7 +76,7 @@ const LEGACY_WORKER = {
 await run("pnpm", "i");
 await run("node", "build.mjs");
 
-const { withESMWorker, version } = await import("../../packages/esm-worker/dist/index.js#" + Date.now().toString(36));
+const { withESMWorker, version } = await import("../../worker/dist/index.js#" + Date.now().toString(36));
 const worker = withESMWorker((_req: Request, _env: typeof env, ctx: { url: URL }) => {
   if (ctx.url.pathname === "/") {
     return new Response("<h1>Welcome to esm.sh!</h1>", {
@@ -647,7 +647,7 @@ async function computeHash(input: string): Promise<string> {
 }
 
 async function run(name: string, ...args: string[]) {
-  const cwd = join(new URL(import.meta.url).pathname, "../../../packages/esm-worker");
+  const cwd = join(new URL(import.meta.url).pathname, "../../../worker");
   const command = new Deno.Command(name, {
     args,
     stdin: "inherit",

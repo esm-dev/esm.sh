@@ -19,7 +19,7 @@ const toJS = (s) =>JSON.parse(s.split("\n").map((line ) => {
   return s.trim();
 }).join("\n").replace(/,\n}/g, "\n}"));
 
-const goCode = readFileSync("../../server/consts.go", "utf8");
+const goCode = readFileSync("../server/consts.go", "utf8");
 const [, version] = goCode.match(/VERSION = (\d+)/);
 const [, cssPackages] = goCode.match(/cssPackages = map\[string\]string(\{[\s\S]+?\})/);
 const [, assetExts] = goCode.match(/assetExts = map\[string\]bool(\{[\s\S]+?\})/);
