@@ -27,6 +27,7 @@ var (
 	bytesStripleSlash = []byte{'/', '/', '/'}
 )
 
+// Walks through a .d.ts file and resolves import paths.
 func walkDts(r io.Reader, buf *bytes.Buffer, resolve func(specifier string, kind string, position int) (resovledPath string, err error)) (err error) {
 	var multiLineComment bool
 	var importExportExpr bool

@@ -24,7 +24,7 @@ import (
 const npmRegistry = "https://registry.npmjs.org/"
 const jsrRegistry = "https://npm.jsr.io/"
 
-// ref https://github.com/npm/validate-npm-package-name
+// base https://github.com/npm/validate-npm-package-name
 var npmNaming = valid.Validator{valid.FromTo{'a', 'z'}, valid.FromTo{'A', 'Z'}, valid.FromTo{'0', '9'}, valid.Eq('.'), valid.Eq('-'), valid.Eq('_')}
 
 // NpmPackageVerions defines versions of a NPM package

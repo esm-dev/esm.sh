@@ -12,9 +12,7 @@ import (
 	"github.com/ije/esbuild-internal/logger"
 )
 
-var (
-	jsExts = []string{".mjs", ".js", ".jsx", ".mts", ".ts", ".tsx", ".cjs"}
-)
+var jsExts = []string{".mjs", ".js", ".jsx", ".mts", ".ts", ".tsx", ".cjs"}
 
 // stripModuleExt strips the module extension from the given string.
 func stripModuleExt(s string, exts ...string) string {
@@ -29,7 +27,8 @@ func stripModuleExt(s string, exts ...string) string {
 	return s
 }
 
-func validateJS(filename string) (isESM bool, namedExports []string, err error) {
+// validateJSFile validates the given javascript file.
+func validateJSFile(filename string) (isESM bool, namedExports []string, err error) {
 	data, err := os.ReadFile(filename)
 	if err != nil {
 		return
@@ -64,6 +63,7 @@ func validateJS(filename string) (isESM bool, namedExports []string, err error) 
 	return
 }
 
+// minify minifies the given javascript code.
 func minify(code string, target api.Target, loader api.Loader) ([]byte, error) {
 	ret := api.Transform(code, api.TransformOptions{
 		Target:            target,

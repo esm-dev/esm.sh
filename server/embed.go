@@ -8,11 +8,13 @@ import (
 	"io"
 	"os"
 	"path"
+	"strings"
 )
 
 var (
-	embedFS  EmbedFS
-	nodeLibs map[string]string
+	embedFS      EmbedFS
+	nodeLibs     map[string]string
+	npmPolyfills map[string][]byte
 )
 
 type EmbedFS interface {
@@ -32,7 +34,7 @@ func (fs MockEmbedFS) Lstat(name string) (os.FileInfo, error) {
 }
 
 func loadNodeLibs(fs EmbedFS) (err error) {
-	data, err := fs.ReadFile("server/embed/nodelibs.tar.gz")
+	data, err := fs.ReadFile("server/embed/node-libs.tar.gz")
 	if err != nil {
 		return
 	}
@@ -41,7 +43,6 @@ func loadNodeLibs(fs EmbedFS) (err error) {
 		return
 	}
 	tr := tar.NewReader(gr)
-	nodeLibs = make(map[string]string)
 	for {
 		h, err := tr.Next()
 		if err != nil {
@@ -70,7 +71,39 @@ func loadNodeLibs(fs EmbedFS) (err error) {
 	return nil
 }
 
+func loadNpmPolyfills(fs EmbedFS) (err error) {
+	data, err := fs.ReadFile("server/embed/npm-polyfills.tar.gz")
+	if err != nil {
+		return
+	}
+	gr, err := gzip.NewReader(bytes.NewReader(data))
+	if err != nil {
+		return
+	}
+	tr := tar.NewReader(gr)
+	for {
+		h, err := tr.Next()
+		if err != nil {
+			break
+		}
+		if h.Typeflag == tar.TypeReg {
+			data, err := io.ReadAll(tr)
+			if err != nil {
+				return err
+			}
+			if strings.HasSuffix(h.Name, ".mjs") {
+				name := strings.TrimSuffix(path.Base(h.Name), ".mjs")
+				data = bytes.ReplaceAll(data, []byte{';', '\n'}, []byte{';'})
+				data = bytes.TrimSuffix(data, []byte{';'})
+				npmPolyfills[name] = data
+			}
+		}
+	}
+	return nil
+}
+
 func init() {
 	embedFS = &embed.FS{}
 	nodeLibs = make(map[string]string)
+	npmPolyfills = make(map[string][]byte)
 }

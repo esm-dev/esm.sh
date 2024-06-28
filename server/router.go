@@ -49,6 +49,15 @@ const (
 	ctCSS            = "text/css; charset=utf-8"
 )
 
+func auth(secret string) rex.Handle {
+	return func(ctx *rex.Context) interface{} {
+		if secret != "" && ctx.R.Header.Get("Authorization") != "Bearer "+secret {
+			return rex.Status(401, "Unauthorized")
+		}
+		return nil
+	}
+}
+
 func router() rex.Handle {
 	startTime := time.Now()
 	globalETag := fmt.Sprintf(`W/"v%d"`, VERSION)
@@ -1200,15 +1209,6 @@ func router() rex.Handle {
 			return []byte{}
 		}
 		return buf
-	}
-}
-
-func appendVaryHeader(header http.Header, key string) {
-	vary := header.Get("Vary")
-	if vary == "" {
-		header.Set("Vary", key)
-	} else {
-		header.Set("Vary", vary+", "+key)
 	}
 }
 

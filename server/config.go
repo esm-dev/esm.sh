@@ -10,6 +10,7 @@ import (
 	"strings"
 )
 
+// Config represents the configuration of esm.sh server.
 type Config struct {
 	Port               uint16                 `json:"port"`
 	TlsPort            uint16                 `json:"tlsPort"`

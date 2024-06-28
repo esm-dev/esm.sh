@@ -1,5 +1,6 @@
 package server
 
+// esm.sh version
 const VERSION = 136
 
 // asset extensions

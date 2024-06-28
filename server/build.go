@@ -427,15 +427,12 @@ func (ctx *BuildContext) buildModule() (result BuildResult, err error) {
 						}
 					}
 
-					if specifier != "node-fetch" && args.Kind != api.ResolveJSRequireCall && args.Kind != api.ResolveJSRequireResolve {
-						data, err := embedFS.ReadFile(("server/embed/polyfills/npm_" + specifier + ".js"))
-						if err == nil {
-							return api.OnResolveResult{
-								Path:       args.Path,
-								PluginData: data,
-								Namespace:  "purge-polyfill",
-							}, nil
-						}
+					if data, ok := npmPolyfills[specifier]; ok && args.Kind == api.ResolveJSImportStatement {
+						return api.OnResolveResult{
+							Path:       args.Path,
+							PluginData: data,
+							Namespace:  "purge-polyfill",
+						}, nil
 					}
 
 					// resolve specifier with package `browser` field

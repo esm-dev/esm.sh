@@ -23,7 +23,7 @@ var (
 	log        *logger.Logger
 )
 
-// Serve serves ESM server
+// Serve serves the esm.sh server
 func Serve(efs EmbedFS) {
 	var (
 		cfile string
@@ -88,6 +88,12 @@ func Serve(efs EmbedFS) {
 		log.Fatalf("load node libs: %v", err)
 	}
 	log.Debugf("%d node libs loaded", len(nodeLibs))
+
+	err = loadNpmPolyfills(efs)
+	if err != nil {
+		log.Fatalf("load npm polyfills: %v", err)
+	}
+	log.Debugf("%d npm polyfills loaded", len(npmPolyfills))
 
 	var accessLogger *logger.Logger
 	if config.LogDir == "" {
@@ -159,18 +165,4 @@ func Serve(efs EmbedFS) {
 	db.Close()
 	log.FlushBuffer()
 	accessLogger.FlushBuffer()
-}
-
-func init() {
-	config = &Config{}
-	log = &logger.Logger{}
-}
-
-func auth(secret string) rex.Handle {
-	return func(ctx *rex.Context) interface{} {
-		if secret != "" && ctx.R.Header.Get("Authorization") != "Bearer "+secret {
-			return rex.Status(401, "Unauthorized")
-		}
-		return nil
-	}
 }

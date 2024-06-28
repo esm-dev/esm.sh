@@ -5,6 +5,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -158,6 +159,16 @@ func removeHttpUrlProtocol(url string) string {
 		return url[5:]
 	}
 	return url
+}
+
+// appendVaryHeader appends the given key to the `Vary` header.
+func appendVaryHeader(header http.Header, key string) {
+	vary := header.Get("Vary")
+	if vary == "" {
+		header.Set("Vary", key)
+	} else {
+		header.Set("Vary", vary+", "+key)
+	}
 }
 
 // toEnvName converts the given string to an environment variable name.
