@@ -24,7 +24,7 @@ Create a `config.json` file in the project root directory following the example 
   "port": 8080,
   "workDir": ".esmd",
   "npmRegistry": "https://registry.npmjs.org/", // change to your own registry if needed
-  "npmToken": "xxxxxx" // remove this line if you don't need a token
+  "npmToken": "xxxxxx" ,// remove this line if you don't have one
 }
 ```
 
