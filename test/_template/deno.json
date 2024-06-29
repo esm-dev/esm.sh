@@ -1,6 +1,5 @@
 {
   "imports": {
-    "assert": "https://deno.land/std@0.220.0/assert/mod.ts",
-    "~/": "http://localhost:8080/"
+    "esm.sh/": "http://localhost:8080/"
   }
 }

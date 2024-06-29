@@ -1,11 +1,10 @@
-// related issue: https://github.com/esm-dev/esm.sh/issues/[ISSUE_NUMBER]
+import { assert, assertEquals, assertStringIncludes } from "jsr:@std/assert";
 
 // change the import path to the module you want to test
-import * as mod from "~/PKG[@SEMVER][/PATH]";
-import { assert, assertEquals, assertStringIncludes } from "assert";
+import * as mod from "esm.sh/PKG[@SEMVER][/PATH]";
 
-// change the test name and the test assertions
-Deno.test("TEST NAME", async () => {
+// related issue: https://github.com/esm-dev/esm.sh/issues/ISSUE_NUMBER
+Deno.test("issue #ISSUE_NUMBER", async () => {
   assert("foo" in mod);
   assertEquals(typeof mod.foo, "function");
   assertStringIncludes(mod.foo(), "bar");
