@@ -3,6 +3,8 @@ package server
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -89,27 +91,31 @@ type cjsLexerResult struct {
 }
 
 func cjsLexer(npmrc *NpmRC, pkgName string, wd string, specifier string, nodeEnv string) (ret cjsLexerResult, err error) {
-	// check cache first
-	cacheFileName := path.Join(wd, ".cjs_lexer", fmt.Sprintf("%s_%s.json", btoaUrl(specifier), nodeEnv[0:1]))
+	h := sha256.New()
+	h.Write([]byte(cjsLexerPkg))
+	h.Write([]byte(specifier))
+	h.Write([]byte(nodeEnv))
+	cacheFileName := path.Join(wd, ".cjs_lexer", base64.RawURLEncoding.EncodeToString(h.Sum(nil))+".json")
+
+	// check the cache first
 	if existsFile(cacheFileName) && parseJSONFile(cacheFileName, &ret) == nil {
 		return
 	}
 
-	// change the args order carefully, because the order is used in ./embed/cjs_lexer.js
+	// change the args order carefully, the order is used in ./embed/cjs_lexer.js
 	args := []interface{}{
 		pkgName,
 		wd,
 		specifier,
 		nodeEnv,
 	}
-
-	/* workaround for edge cases that can't be parsed by cjsLexer correctly */
 	for _, name := range requireModeAllowList {
 		if pkgName == name || specifier == name || strings.HasPrefix(specifier, name+"/") {
 			args = append(args, true)
 			break
 		}
 	}
+	argsData := mustEncodeJSON(args)
 
 	start := time.Now()
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
@@ -126,7 +132,7 @@ func cjsLexer(npmrc *NpmRC, pkgName string, wd string, specifier string, nodeEnv
 		"cjs_lexer.js",
 	)
 	cmd.Dir = path.Join(config.WorkDir, "npm", cjsLexerPkg)
-	cmd.Stdin = bytes.NewBuffer(mustEncodeJSON(args))
+	cmd.Stdin = bytes.NewBuffer(argsData)
 	cmd.Stdout = &outBuf
 	cmd.Stderr = &errBuf
 
