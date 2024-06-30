@@ -201,20 +201,20 @@ func transformDTS(ctx *BuildContext, dts string, buildArgsPrefix string, marker 
 		if err != nil {
 			return "", err
 		}
-		dts, err = b.resloveDTS(b.resolveEntry(depPkg))
+		d, err := b.resloveDTS(b.resolveEntry(depPkg))
 		if err != nil {
 			return "", err
 		}
 
 		if kind == "declareModule" {
-			if dts != "" {
-				return fmt.Sprintf("{ESM_CDN_ORIGIN}%s", dts), nil
+			if d != "" {
+				return fmt.Sprintf("{ESM_CDN_ORIGIN}%s", d), nil
 			}
 			return fmt.Sprintf("{ESM_CDN_ORIGIN}/%s", depPkg.String()), nil
 		}
 
-		if dts != "" {
-			return fmt.Sprintf("{ESM_CDN_ORIGIN}%s", dts), nil
+		if d != "" {
+			return fmt.Sprintf("{ESM_CDN_ORIGIN}%s", d), nil
 		}
 		return fmt.Sprintf("{ESM_CDN_ORIGIN}%s", b.Path()), nil
 	})
