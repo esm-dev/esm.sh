@@ -9,8 +9,8 @@ importers:
   .:
     devDependencies:
       '@cloudflare/workers-types':
-        specifier: 4.20240605.0
-        version: 4.20240605.0
+        specifier: 4.20240620.0
+        version: 4.20240620.0
       compare-versions:
         specifier: 6.1.0
         version: 6.1.0
@@ -18,13 +18,13 @@ importers:
         specifier: 0.21.5
         version: 0.21.5
       esm-compat:
-        specifier: 0.0.5
-        version: 0.0.5
+        specifier: 0.0.6
+        version: 0.0.6
 
 packages:
 
-  '@cloudflare/workers-types@4.20240605.0':
-    resolution: {integrity: sha512-zJw4Q6CnkaQ5JZmHRkNiSs5GfiRgUIUL8BIHPQkd2XUHZkIBv9M9yc0LKEwMYGpCFC+oSOltet6c9RjP9uQ99g==}
+  '@cloudflare/workers-types@4.20240620.0':
+    resolution: {integrity: sha512-CQD8YS6evRob7LChvIX3gE3zYo0KVgaLDOu1SwNP1BVIS2Sa0b+FC8S1e1hhrNN8/E4chYlVN+FDAgA4KRDUEQ==}
 
   '@esbuild/aix-ppc64@0.21.5':
     resolution: {integrity: sha512-1SDgH6ZSPTlggy1yI6+Dbkiz8xzpHJEVAlF/AM1tHPLsf5STom9rwtjE4hKAF20FfXXNTFqEYXyJNWh1GiZedQ==}
@@ -172,15 +172,15 @@ packages:
     engines: {node: '>=12'}
     hasBin: true
 
-  esm-compat@0.0.5:
-    resolution: {integrity: sha512-BQWvf6U1Zv95ZCYxgA2IF2S1XOIyC8ZJFZkepoOBz/ShmT03VZ5Y7n0kspWo7P2YdpYy3dZM0zM78VZIxTq6dA==}
+  esm-compat@0.0.6:
+    resolution: {integrity: sha512-liYYt9/xvDHmeRom3VAsbtL3F+5MIjidC1hpQdg6w3b+DSSbMqg1JyunFy+EA1I5U4EWI9bvf+TmCww/Z2I3eg==}
 
   ua-parser-js@1.0.38:
     resolution: {integrity: sha512-Aq5ppTOfvrCMgAPneW1HfWj66Xi7XL+/mIy996R1/CLS/rcyJQm6QZdsKrUeivDFQ+Oc9Wyuwor8Ze8peEoUoQ==}
 
 snapshots:
 
-  '@cloudflare/workers-types@4.20240605.0': {}
+  '@cloudflare/workers-types@4.20240620.0': {}
 
   '@esbuild/aix-ppc64@0.21.5':
     optional: true
@@ -279,7 +279,7 @@ snapshots:
       '@esbuild/win32-ia32': 0.21.5
       '@esbuild/win32-x64': 0.21.5
 
-  esm-compat@0.0.5:
+  esm-compat@0.0.6:
     dependencies:
       ua-parser-js: 1.0.38
 
