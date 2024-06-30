@@ -570,7 +570,7 @@ func router() rex.Handle {
 			} else if info.Main != "" && strings.HasSuffix(info.Main, ".d.ts") {
 				types = info.Main
 			}
-			return rex.Redirect(fmt.Sprintf("%s/%s", cdnOrigin, types), http.StatusFound)
+			return rex.Redirect(fmt.Sprintf("%s/%s@%s%s", cdnOrigin, info.Name, info.Version, utils.CleanPath(types)), http.StatusFound)
 		}
 
 		// redirect to main css path for CSS packages
