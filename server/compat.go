@@ -231,5 +231,5 @@ func getBuildTargetByUA(ua string) string {
 			}
 		}
 	}
-	return "esnext"
+	return "es2015"
 }
