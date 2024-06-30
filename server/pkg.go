@@ -31,7 +31,7 @@ func validateESMPath(rc *NpmRC, pathname string) (pkg Pkg, extraQuery string, is
 		}
 	}
 
-	pkgName, maybeVersion, subPath, hasTarget := splitPkgPath(strings.TrimPrefix(pathname, "/"))
+	pkgName, maybeVersion, subPath, hasTarget := splitPkgPath(pathname)
 	if !validatePackageName(pkgName) {
 		err = fmt.Errorf("invalid package name '%s'", pkgName)
 		return
@@ -169,10 +169,10 @@ func toModuleBareName(path string, stripIndexSuffier bool) string {
 	return ""
 }
 
-func splitPkgPath(specifier string) (pkgName string, version string, subPath string, hasTarget bool) {
-	a := strings.Split(specifier, "/")
+func splitPkgPath(pathname string) (pkgName string, version string, subPath string, hasTarget bool) {
+	a := strings.Split(strings.TrimPrefix(pathname, "/"), "/")
 	nameAndVersion := ""
-	if strings.HasPrefix(specifier, "@") && len(a) > 1 {
+	if strings.HasPrefix(a[0], "@") && len(a) > 1 {
 		nameAndVersion = a[0] + "/" + a[1]
 		subPath = strings.Join(a[2:], "/")
 		hasTarget = hasTargetSegment(a[2:])

@@ -72,21 +72,6 @@ func router() rex.Handle {
 			return rex.Status(404, "not found")
 		}
 
-		// strip trailing slash
-		if pathname != "/" && strings.HasSuffix(pathname, "/") {
-			pathname = strings.TrimRight(pathname, "/")
-		}
-
-		cdnOrigin := ctx.R.Header.Get("X-Real-Origin")
-		// use current host as cdn origin if not set
-		if cdnOrigin == "" {
-			proto := "http"
-			if ctx.R.TLS != nil {
-				proto = "https"
-			}
-			cdnOrigin = fmt.Sprintf("%s://%s", proto, ctx.R.Host)
-		}
-
 		// handle POST requests
 		if ctx.R.Method == "POST" {
 			switch ctx.Path.String() {
@@ -172,35 +157,43 @@ func router() rex.Handle {
 					prefix += version
 				}
 				if github {
-					prefix = "/gh/" + packageName + "@"
+					prefix = "/gh" + prefix
 				}
 				if zoneId != "" {
 					prefix = zoneId + prefix
 				}
-				deletedRecords, err := db.DeleteAll(prefix)
+				deletedKeys, err := db.DeleteAll(prefix)
 				if err != nil {
 					return rex.Err(500, err.Error())
 				}
-				removedFiles := []string{}
-				for _, kv := range deletedRecords {
-					var ret BuildResult
-					filename := string(kv[0])
-					if json.Unmarshal(kv[1], &ret) == nil {
-						savePath := fmt.Sprintf("builds/%s", filename)
-						go fs.Remove(savePath)
-						go fs.Remove(savePath + ".map")
-						if ret.PackageCSS {
-							cssFilename := strings.TrimSuffix(filename, path.Ext(filename)) + ".css"
-							go fs.Remove(fmt.Sprintf("builds/%s", cssFilename))
-							removedFiles = append(removedFiles, cssFilename)
-						}
-						removedFiles = append(removedFiles, filename)
+				for _, esmPath := range deletedKeys {
+					if zoneId != "" {
+						esmPath = esmPath[len(zoneId):]
 					}
+					pkgName, version, _, _ := splitPkgPath(esmPath)
+					go fs.RemoveAll(fmt.Sprintf("builds/%s@%s/", pkgName, version))
+					go fs.RemoveAll(fmt.Sprintf("types/%s@%s/", pkgName, version))
+					log.Info("purged", esmPath)
 				}
-				return removedFiles
+				return deletedKeys
 			default:
 				return rex.Err(404, "not found")
 			}
+		}
+
+		// strip trailing slash
+		if pathname != "/" && strings.HasSuffix(pathname, "/") {
+			pathname = strings.TrimRight(pathname, "/")
+		}
+
+		cdnOrigin := ctx.R.Header.Get("X-Real-Origin")
+		// use current host as cdn origin if not set
+		if cdnOrigin == "" {
+			proto := "http"
+			if ctx.R.TLS != nil {
+				proto = "https"
+			}
+			cdnOrigin = fmt.Sprintf("%s://%s", proto, ctx.R.Host)
 		}
 
 		// static routes

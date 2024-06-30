@@ -50,16 +50,16 @@ func (i *boltDB) Delete(key string) error {
 	})
 }
 
-func (i *boltDB) DeleteAll(prefix string) (deletedKVs [][2][]byte, err error) {
+func (i *boltDB) DeleteAll(prefix string) (deletedKeys []string, err error) {
 	err = i.db.Update(func(tx *bolt.Tx) error {
 		bucket := tx.Bucket(defaultBucket)
 		cursor := bucket.Cursor()
 		prefixBytes := []byte(prefix)
-		for k, v := cursor.Seek(prefixBytes); k != nil && bytes.HasPrefix(k, prefixBytes); k, v = cursor.Next() {
-			deletedKVs = append(deletedKVs, [2][]byte{k, v})
+		for k, _ := cursor.Seek(prefixBytes); k != nil && bytes.HasPrefix(k, prefixBytes); k, _ = cursor.Next() {
+			deletedKeys = append(deletedKeys, string(k))
 		}
-		for _, kv := range deletedKVs {
-			err := bucket.Delete(kv[0])
+		for _, k := range deletedKeys {
+			err := bucket.Delete([]byte(k))
 			if err != nil {
 				return err
 			}

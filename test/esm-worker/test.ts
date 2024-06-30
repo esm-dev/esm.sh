@@ -520,9 +520,7 @@ Deno.test("esm-worker", { sanitizeOps: false, sanitizeResources: false }, async 
     assertEquals(res.status, 200);
     assertEquals(res.headers.get("Content-Type"), "application/json; charset=utf-8");
     const ret = await res.json();
-    assert(Array.isArray(ret));
-    assert((ret as unknown[]).length > 0);
-    console.log("purged", ret);
+    assertEquals(ret, ["/react@18.3.1/denonext/react.mjs"]);
   });
 
   await t.step("check esma target from user agent", async () => {

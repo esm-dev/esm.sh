@@ -66,6 +66,11 @@ func (fs *localFSLayer) Remove(name string) (err error) {
 	return
 }
 
+func (fs *localFSLayer) RemoveAll(dirname string) (err error) {
+	err = os.RemoveAll(path.Join(fs.root, dirname))
+	return
+}
+
 func ensureDir(dir string) (err error) {
 	_, err = os.Lstat(dir)
 	if err != nil && os.IsNotExist(err) {

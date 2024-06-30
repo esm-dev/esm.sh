@@ -37,14 +37,18 @@ func Serve(efs EmbedFS) {
 
 	if !existsFile(cfile) {
 		config = DefaultConfig()
-		fmt.Println("Config file not found, use default config")
+		if cfile != "config.json" {
+			fmt.Println("Config file not found, use default config")
+		}
 	} else {
 		config, err = LoadConfig(cfile)
 		if err != nil {
 			fmt.Println(err.Error())
 			os.Exit(1)
 		}
-		fmt.Println("Config loaded from", cfile)
+		if debug {
+			fmt.Println("Config loaded from", cfile)
+		}
 	}
 	buildQueue = NewBuildQueue(int(config.BuildConcurrency))
 
@@ -114,13 +118,13 @@ func Serve(efs EmbedFS) {
 	if err != nil {
 		log.Fatalf("nodejs: %v", err)
 	}
-	log.Infof("nodejs: v%s, pnpm: %s, registry: %s", nodeVer, pnpmVer, config.NpmRegistry)
+	log.Debugf("nodejs: v%s, pnpm: %s, registry: %s", nodeVer, pnpmVer, config.NpmRegistry)
 
 	err = initCJSLexerNodeApp()
 	if err != nil {
 		log.Fatalf("failed to initialize the cjs_lexer node app: %v", err)
 	}
-	log.Infof("%s initialized", cjsLexerPkg)
+	log.Debugf("%s initialized", cjsLexerPkg)
 
 	if !config.DisableCompression {
 		rex.Use(rex.Compression())
