@@ -200,12 +200,12 @@ Deno.test("esm-worker", { sanitizeOps: false, sanitizeResources: false }, async 
   });
 
   await t.step("embed polyfills/types", async () => {
-    const res2 = await fetch(`${workerOrigin}/sw.d.ts`);
+    const res2 = await fetch(`${workerOrigin}/hot.d.ts`);
     assertEquals(res2.status, 200);
     assertEquals(res2.headers.get("Content-Type"), "application/typescript; charset=utf-8");
     assertEquals(res2.headers.get("Etag"), `W/"${version}"`);
     assertEquals(res2.headers.get("Cache-Control"), "public, max-age=86400");
-    assertStringIncludes(await res2.text(), "export interface SW");
+    assertStringIncludes(await res2.text(), "export interface Hot");
 
     const res3 = await fetch(`${workerOrigin}/node/process.js`);
     assertEquals(res3.status, 200);
@@ -434,9 +434,9 @@ Deno.test("esm-worker", { sanitizeOps: false, sanitizeResources: false }, async 
   });
 
   await t.step("builtin scripts", async () => {
-    const res = await fetch(`${workerOrigin}/sw`);
+    const res = await fetch(`${workerOrigin}/hot`);
     res.body?.cancel();
-    assertEquals(new URL(res.url).pathname, "/sw");
+    assertEquals(new URL(res.url).pathname, "/hot");
     assertEquals(res.headers.get("Etag"), `W/"${version}"`);
     assertEquals(res.headers.get("Cache-Control"), "public, max-age=86400");
     assertEquals(res.headers.get("Content-Type"), "application/javascript; charset=utf-8");
@@ -445,21 +445,18 @@ Deno.test("esm-worker", { sanitizeOps: false, sanitizeResources: false }, async 
     assert(dtsUrl.startsWith(workerOrigin));
     assert(dtsUrl.endsWith(".d.ts"));
 
-    const res2 = await fetch(`${workerOrigin}/sw?target=es2022`);
+    const res2 = await fetch(`${workerOrigin}/hot?target=es2022`);
     assertEquals(res2.headers.get("Etag"), `W/"${version}"`);
     assertEquals(res2.headers.get("Cache-Control"), "public, max-age=86400");
     assertEquals(res2.headers.get("Content-Type"), "application/javascript; charset=utf-8");
-    assertStringIncludes(await res2.text(), "esm.sh/sw");
+    assertStringIncludes(await res2.text(), "esm.sh/hot");
 
-    const res3 = await fetch(`${workerOrigin}/sw?fire`);
-    assertStringIncludes(await res3.text(), ".fire();");
-
-    const res4 = await fetch(`${workerOrigin}/run`);
-    assertEquals(res4.headers.get("Etag"), `W/"${version}"`);
-    assertEquals(res4.headers.get("Cache-Control"), "public, max-age=86400");
-    assertEquals(res4.headers.get("Content-Type"), "application/javascript; charset=utf-8");
-    assertStringIncludes(res.headers.get("Vary") ?? "", "User-Agent");
-    assertStringIncludes(await res4.text(), "esm.sh/run");
+    const res3 = await fetch(`${workerOrigin}/run`);
+    assertEquals(res3.headers.get("Etag"), `W/"${version}"`);
+    assertEquals(res3.headers.get("Cache-Control"), "public, max-age=86400");
+    assertEquals(res3.headers.get("Content-Type"), "application/javascript; charset=utf-8");
+    assertStringIncludes(res3.headers.get("Vary") ?? "", "User-Agent");
+    assertStringIncludes(await res3.text(), "esm.sh/run");
   });
 
   await t.step("transform api", async () => {

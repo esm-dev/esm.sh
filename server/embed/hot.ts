@@ -1,13 +1,13 @@
-/*! esm.sh/sw - speeding up your modern(es2015+) web application with service worker.
- *  Docs: https://docs.esm.sh/sw
+/*! 🔥 esm.sh/hot - speeding up your modern(es2015+) web application with service worker.
+ *  Docs: https://docs.esm.sh/hot
  */
 
 /// <reference lib="webworker" />
 
-import type { ArchiveEntry, FireOptions, Plugin, SW } from "./types/sw.d.ts";
+import type { ArchiveEntry, FireOptions, Hot, Plugin } from "./types/hot.d.ts";
 
 const doc: Document | undefined = globalThis.document;
-const kSw = "esm.sh/sw";
+const kSw = "esm.sh/hot";
 const kTypeEsmArchive = "application/esm-archive";
 
 /**
@@ -69,8 +69,8 @@ class Archive {
   }
 }
 
-/** class `SWImpl` implements the `SW` interface. */
-class SWImpl implements SW {
+/** class `HotImpl` implements the `Hot` interface. */
+class HotImpl implements Hot {
   private _swActive: ServiceWorker | null = null;
   private _archive: Archive | null = null;
   private _fetchListeners: ((event: FetchEvent) => void)[] = [];
@@ -165,7 +165,7 @@ class SWImpl implements SW {
         if (checksum) {
           const buf = await crypto.subtle.digest("SHA-256", arrayBuffer);
           if (btoa(String.fromCharCode(...new Uint8Array(buf))) !== checksum) {
-            panic("Checksum mismatch: " + checksum);
+            panic("Invalid esm-archive: the checksum does not match");
           }
         }
         return new Promise<void>((resolve, reject) => {
@@ -200,13 +200,6 @@ class SWImpl implements SW {
     for (const handler of this._fireListeners) {
       handler(swActive);
     }
-
-    // apply script tags with type="esm" to type="module"
-    queryElements<HTMLScriptElement>("script[type='esm']", (el) => {
-      const copy = el.cloneNode(true) as HTMLScriptElement;
-      copy.type = "module";
-      el.replaceWith(copy);
-    });
 
     this._promises = [];
     this._fireListeners = [];
@@ -309,8 +302,7 @@ function queryElements<T extends Element>(
   selectors: string,
   callback: (value: T, index: number) => void,
 ) {
-  // @ts-expect-error throw error if the `document` is undefined
-  doc.querySelectorAll(selectors).forEach(callback);
+  doc!.querySelectorAll<T>(selectors).forEach(callback);
 }
 
 /** create a response object. */
@@ -336,5 +328,14 @@ function panic(message: string) {
   throw new Error(message);
 }
 
-export const sw = new SWImpl();
-export default sw;
+// fire the `main` module if it's provided in the script tag with `src` attribute equals to current script url
+// e.g. <script type="module" src="https://esm.sh/hot" main="/main.mjs"></script>
+doc && queryElements<HTMLScriptElement>("script[src='https://esm.sh'][main]", (el) => {
+  const main = el.getAttribute("main");
+  if (main) {
+    hot.fire({ main });
+  }
+});
+
+export const hot = new HotImpl();
+export default hot;

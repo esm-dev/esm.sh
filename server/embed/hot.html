@@ -4,21 +4,21 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width">
-  <title>ESM&gt;SW</title>
-  <link rel="preload" href="/embed/sw_archive.gz" as="fetch" type="application/esm-archive+gzip" crossorigin="anonymous"
+  <title>ESM&gt;Hot</title>
+  <link rel="preload" href="/embed/hot.gz" as="fetch" type="application/esm-archive+gzip" crossorigin="anonymous"
     checksum="AKCuzL3hssl8CkIuq52VmfZmJL1MLlgm0HHejAfoutY=">
-  <link rel="modulepreload" href="/sw">
+  <link rel="modulepreload" href="/hot">
 </head>
 
 <body>
   <pre id="root">...</pre>
   <script type="module">
-    import sw from "/sw"
-    sw.onFire(() => {
+    import hot from "/hot"
+    hot.onFire(() => {
       const b = document.createElement("strong")
       b.textContent = "foo"
       root.append(b, "...")
-    }).fire({ swModule: "/embed/sw.js" }).then((sw) => {
+    }).fire({ swModule: "/embed/hot-sw.js" }).then((_sw) => {
       import("/foo.js").then(({ foo }) => {
         const em = document.createElement("em")
         em.textContent = foo

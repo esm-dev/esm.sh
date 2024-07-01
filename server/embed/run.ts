@@ -52,6 +52,7 @@ runScripts.forEach(async ({ el, loader, code }, idx) => {
   const buffer = new Uint8Array(
     await crypto.subtle.digest(
       "SHA-1",
+      // @ts-expect-error `$TARGET` is injected by esbuild
       new TextEncoder().encode(loader + code + importMap + $TARGET + "false"),
     ),
   );
@@ -70,9 +71,10 @@ runScripts.forEach(async ({ el, loader, code }, idx) => {
     } else {
       const res = await fetch(origin + "/transform", {
         method: "POST",
+        // @ts-expect-error `$TARGET` is injected by esbuild
         body: stringify({ filename, code, importMap, target: $TARGET }),
       });
-      const ret = await res.json();
+      const ret: any = await res.json();
       if (ret.error) {
         throw new Error(ret.error.message);
       }

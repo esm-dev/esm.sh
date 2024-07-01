@@ -308,8 +308,8 @@ function withESMWorker(middleware?: Middleware, cache: Cache = (caches as any).d
 
     if (
       pathname === "/run" ||
-      pathname === "/sw" ||
-      pathname === "/sw.d.ts" ||
+      pathname === "/hot" ||
+      pathname === "/hot.d.ts" ||
       ((pathname.startsWith("/node/") || pathname.startsWith("/npm_")) && pathname.endsWith(".js"))
     ) {
       const varyUA = !pathname.endsWith(".ts");
@@ -333,9 +333,6 @@ function withESMWorker(middleware?: Middleware, cache: Cache = (caches as any).d
           if (n >= 136 && n <= VERSION) {
             query.push(`v=${v}`);
           }
-        }
-        if (pathname === "/sw" && url.searchParams.has("fire")) {
-          query.push("fire");
         }
         return fetchESM(req, env, ctx, pathname, query.length > 0 ? "?" + query.join("&") : undefined);
       }, { varyUA });

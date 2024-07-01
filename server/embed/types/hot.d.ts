@@ -7,7 +7,7 @@ export interface ArchiveEntry {
 }
 
 export interface Plugin {
-  (sw: Omit<SW, "fire" | "listen">): void;
+  (hot: Omit<Hot, "fire" | "listen">): void;
   displayName?: string;
 }
 
@@ -19,7 +19,7 @@ export interface FireOptions {
   swUpdateViaCache?: ServiceWorkerUpdateViaCache;
 }
 
-export interface SW {
+export interface Hot {
   use(...plugins: readonly Plugin[]): this;
   onFetch(handler: (event: FetchEvent) => void): this;
   onFire(handler: (sw: ServiceWorker) => void): this;
@@ -29,5 +29,5 @@ export interface SW {
   listen(): void;
 }
 
-export const sw: SW;
-export default sw;
+export const hot: Hot;
+export default hot;

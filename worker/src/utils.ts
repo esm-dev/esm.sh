@@ -1,4 +1,4 @@
-import type { HttpMetadata, WorkerStorage, WorkerStorageKV } from "../types/index";
+import type { HttpMetadata, WorkerStorage, WorkerStorageKV } from "../types/index.d.ts";
 import { targets } from "esm-compat";
 
 export function hasTargetSegment(segments: string[]) {
