@@ -1,10 +1,9 @@
-import { assert, assertEquals, assertStringIncludes } from "https://deno.land/std@0.220.0/assert/mod.ts";
+import { assert, assertEquals, assertStringIncludes } from "jsr:@std/assert";
 
 Deno.test("issue #711", async () => {
   const res = await fetch("http://localhost:8080/@pyscript/core@0.1.5/core.js", {
     headers: {
-      "User-Agent":
-        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.3 Safari/605.1.15",
+      "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.3 Safari/605.1.15",
     },
   });
   await res.body?.cancel();

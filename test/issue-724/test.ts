@@ -1,4 +1,4 @@
-import { assertEquals } from "https://deno.land/std@0.220.0/assert/mod.ts";
+import { assertEquals } from "jsr:@std/assert";
 import addClass from "http://localhost:8080/dom-helpers@3.4.0/class/addClass?target=es2022";
 
 Deno.test("issue #724", () => {

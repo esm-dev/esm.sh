@@ -1,4 +1,4 @@
-import { assertEquals, assertStringIncludes } from "https://deno.land/std@0.220.0/assert/mod.ts";
+import { assertEquals, assertStringIncludes } from "jsr:@std/assert";
 
 Deno.test("external-nodejs-internal-modules", async () => {
   const res = await fetch("http://localhost:8080/cheerio@0.22.0/es2022/cheerio.mjs");

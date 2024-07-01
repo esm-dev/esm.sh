@@ -1,4 +1,4 @@
-import { assertEquals } from "https://deno.land/std@0.220.0/assert/mod.ts";
+import { assertEquals } from "jsr:@std/assert";
 
 import { customElement } from "http://localhost:8080/lit@2.7.2/decorators";
 import { map } from "http://localhost:8080/lit@2.7.2/directives/map";

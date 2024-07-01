@@ -1,4 +1,4 @@
-import { assertStringIncludes } from "https://deno.land/std@0.220.0/assert/mod.ts";
+import { assertStringIncludes } from "jsr:@std/assert";
 
 import { compile } from "http://localhost:8080/@mdx-js/mdx@2.1.3";
 

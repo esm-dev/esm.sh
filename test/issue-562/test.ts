@@ -1,4 +1,4 @@
-import { assertEquals } from "https://deno.land/std@0.220.0/assert/mod.ts";
+import { assertEquals } from "jsr:@std/assert";
 
 import { upnpNat } from "http://localhost:8080/@achingbrain/nat-port-mapper@1.0.7";
 

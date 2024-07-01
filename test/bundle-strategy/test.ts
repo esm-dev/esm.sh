@@ -1,4 +1,4 @@
-import { assertStringIncludes } from "https://deno.land/std@0.220.0/assert/mod.ts";
+import { assertStringIncludes } from "jsr:@std/assert";
 
 Deno.test("bundle deps", async () => {
   const code = await fetch("http://localhost:8080/buffer@6.0.3/es2022/buffer.bundle.mjs").then((res) => res.text());

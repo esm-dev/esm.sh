@@ -1,4 +1,4 @@
-import { assert } from "https://deno.land/std@0.220.0/assert/mod.ts";
+import { assert } from "jsr:@std/assert";
 
 import React from "http://localhost:8080/react@18.2.0";
 import { renderToString } from "http://localhost:8080/react-dom@18.2.0/server";

@@ -1,4 +1,4 @@
-import { assertEquals } from "https://deno.land/std@0.220.0/assert/mod.ts";
+import { assertEquals } from "jsr:@std/assert";
 
 import { micromark } from "http://localhost:8080/micromark@3.2.0";
 import { frontmatter, frontmatterHtml } from "http://localhost:8080/micromark-extension-frontmatter@1.1.1";

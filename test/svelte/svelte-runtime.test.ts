@@ -1,4 +1,4 @@
-import { assert } from "https://deno.land/std@0.220.0/assert/mod.ts";
+import { assert } from "jsr:@std/assert";
 
 import { onMount } from "http://localhost:8080/svelte@4.2.15?target=es2022";
 import { onMount as onMount_ } from "http://localhost:8080/svelte@4.2.15/internal?target=es2022";

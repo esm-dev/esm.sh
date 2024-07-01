@@ -1,4 +1,4 @@
-import { assertEquals } from "https://deno.land/std@0.220.0/assert/mod.ts";
+import { assertEquals } from "jsr:@std/assert";
 
 import { filterCookies } from "http://localhost:8080/@supabase/auth-helpers-shared@0.3.0";
 

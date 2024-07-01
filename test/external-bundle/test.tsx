@@ -1,4 +1,4 @@
-import { assert } from "https://deno.land/std@0.220.0/assert/mod.ts";
+import { assert } from "jsr:@std/assert";
 
 import * as ajv from "http://localhost:8080/ajv@8.12.0?bundle&external=fast-deep-equal";
 

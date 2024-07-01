@@ -1,4 +1,4 @@
-import { assertExists } from "https://deno.land/std@0.220.0/assert/mod.ts";
+import { assertExists } from "jsr:@std/assert";
 
 import * as dynamicCSS from "http://localhost:8080/rc-util@5.27.2/es/Dom/dynamicCSS.js";
 

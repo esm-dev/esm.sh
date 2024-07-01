@@ -1,4 +1,4 @@
-import { assertExists } from "https://deno.land/std@0.220.0/assert/mod.ts";
+import { assertExists } from "jsr:@std/assert";
 
 import * as tslib from "http://localhost:8080/gh/microsoft/tslib";
 

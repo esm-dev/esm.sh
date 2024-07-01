@@ -1,4 +1,4 @@
-import { assertEquals } from "https://deno.land/std@0.220.0/assert/mod.ts";
+import { assertEquals } from "jsr:@std/assert";
 import { Document } from "https://deno.land/x/deno_dom@v0.1.38/deno-dom-wasm.ts";
 
 // add virtual document object to globalThis which is required by html-dom-parser

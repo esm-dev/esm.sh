@@ -1,4 +1,4 @@
-import { assertEquals, assertStringIncludes } from "https://deno.land/std@0.220.0/assert/mod.ts";
+import { assertEquals, assertStringIncludes } from "jsr:@std/assert";
 
 Deno.test("dynamic-import", async () => {
   const res = await fetch("http://localhost:8080/esm-monaco@0.0.0-beta.11/lsp/html/setup?target=es2022");

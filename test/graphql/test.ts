@@ -1,4 +1,4 @@
-import { assertEquals } from "https://deno.land/std@0.220.0/assert/mod.ts";
+import { assertEquals } from "jsr:@std/assert";
 
 import { graphql, GraphQLObjectType, GraphQLSchema, GraphQLString } from "http://localhost:8080/graphql@16.6.0";
 import * as graphqlImpl from "http://localhost:8080/graphql@16.6.0/graphql";

@@ -1,4 +1,4 @@
-import { assert } from "https://deno.land/std@0.220.0/assert/mod.ts";
+import { assert } from "jsr:@std/assert";
 
 Deno.test("issue #596", async () => {
   const code = await fetch(

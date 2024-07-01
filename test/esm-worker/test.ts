@@ -1,5 +1,5 @@
 import { dirname, join } from "https://deno.land/std@0.220.0/path/mod.ts";
-import { assert, assertEquals, assertStringIncludes } from "https://deno.land/std@0.220.0/assert/mod.ts";
+import { assert, assertEquals, assertStringIncludes } from "jsr:@std/assert";
 
 const testRegisterToken = "1E372D421838559CE40E4CF955B3A40E30EEB7AA";
 const env = {
@@ -141,8 +141,7 @@ Deno.serve(
               // shasum -a 1 hello-1.0.0.tgz
               "shasum": "E308F75E8F8D4E67853C8BC11E66E217805FC7D7",
               // openssl dgst -binary -sha512 hello-1.0.0.tgz | openssl base64
-              "integrity":
-                "sha512-lgXANkhDdsvlhWaqrMN3L+d5S0X621h8NFrDA/V4eITPRUhH6YW3OWYG6NSa+n+peubBh7UHAXhtcsxdXUiYMA==",
+              "integrity": "sha512-lgXANkhDdsvlhWaqrMN3L+d5S0X621h8NFrDA/V4eITPRUhH6YW3OWYG6NSa+n+peubBh7UHAXhtcsxdXUiYMA==",
             },
           },
         },

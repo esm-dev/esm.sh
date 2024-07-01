@@ -1,4 +1,4 @@
-import { assertEquals } from "https://deno.land/std@0.220.0/assert/mod.ts";
+import { assertEquals } from "jsr:@std/assert";
 
 Deno.test("issue #578", async () => {
   const res = await fetch(`http://localhost:8080/katex@0.16.4/dist/katex.mjs?target=esnext`);

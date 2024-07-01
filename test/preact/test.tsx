@@ -1,4 +1,4 @@
-import { assertEquals } from "https://deno.land/std@0.220.0/assert/mod.ts";
+import { assertEquals } from "jsr:@std/assert";
 
 import { h } from "http://localhost:8080/preact@10.14.0";
 import { useState } from "http://localhost:8080/preact@10.14.0/hooks";

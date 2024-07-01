@@ -1,4 +1,4 @@
-import { assertStringIncludes } from "https://deno.land/std@0.220.0/assert/mod.ts";
+import { assertStringIncludes } from "jsr:@std/assert";
 
 Deno.test("issue #671", async () => {
   const res = await fetch(

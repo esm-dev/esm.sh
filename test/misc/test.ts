@@ -1,4 +1,4 @@
-import { assertEquals, assertStringIncludes } from "https://deno.land/std@0.220.0/assert/mod.ts";
+import { assertEquals, assertStringIncludes } from "jsr:@std/assert";
 
 import { BigInteger } from "http://localhost:8080/jsbn@1.1.0";
 import { Netmask } from "http://localhost:8080/netmask@2.0.2";

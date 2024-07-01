@@ -1,4 +1,4 @@
-import { assert, assertStringIncludes } from "https://deno.land/std@0.220.0/assert/mod.ts";
+import { assert, assertStringIncludes } from "jsr:@std/assert";
 
 import { renderToString } from "http://localhost:8080/react-dom@18.2.0/server";
 

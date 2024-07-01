@@ -1,4 +1,4 @@
-import { assert, assertEquals, assertStringIncludes } from "https://deno.land/std@0.220.0/assert/mod.ts";
+import { assert, assertEquals, assertStringIncludes } from "jsr:@std/assert";
 
 import * as t from "http://localhost:8080/io-ts@2.2.21";
 import { isRight } from "http://localhost:8080/fp-ts@2.16.6/lib/Either";

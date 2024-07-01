@@ -1,4 +1,4 @@
-import { assert, assertEquals } from "https://deno.land/std@0.220.0/assert/mod.ts";
+import { assert, assertEquals } from "jsr:@std/assert";
 
 Deno.test("package css", async () => {
   const res = await fetch("http://localhost:8080/monaco-editor@0.40.0?css&target=es2022");
