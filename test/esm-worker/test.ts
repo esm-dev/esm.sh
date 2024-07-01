@@ -529,6 +529,7 @@ Deno.test("esm-worker", { sanitizeOps: false, sanitizeResources: false }, async 
     };
     assertEquals(await getTarget("Deno/1.33.1"), "deno");
     assertEquals(await getTarget("Deno/1.33.2"), "denonext");
+    assertEquals(await getTarget("ES/2022"), "es2022");
   });
 
   await t.step("cache for different UAs", async () => {
@@ -556,7 +557,7 @@ Deno.test("esm-worker", { sanitizeOps: false, sanitizeResources: false }, async 
       ),
       "/es2021/",
     );
-    assertStringIncludes(await fetchModule("/react@18.2.0", "esm/es2022"), "/es2022/");
+    assertStringIncludes(await fetchModule("/react@18.2.0", "ES/2022"), "/es2022/");
   });
 
   await t.step("fix urls", async () => {

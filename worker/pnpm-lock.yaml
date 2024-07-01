@@ -18,8 +18,8 @@ importers:
         specifier: 0.21.5
         version: 0.21.5
       esm-compat:
-        specifier: 0.0.6
-        version: 0.0.6
+        specifier: 0.0.8
+        version: 0.0.8
 
 packages:
 
@@ -172,8 +172,8 @@ packages:
     engines: {node: '>=12'}
     hasBin: true
 
-  esm-compat@0.0.6:
-    resolution: {integrity: sha512-liYYt9/xvDHmeRom3VAsbtL3F+5MIjidC1hpQdg6w3b+DSSbMqg1JyunFy+EA1I5U4EWI9bvf+TmCww/Z2I3eg==}
+  esm-compat@0.0.8:
+    resolution: {integrity: sha512-7/07wQV3iimCLGEMp7wgtIatzPzt31IALzs3miZtGb17BPc5xs7tkxTOoJQqRlAoAsKfTu6X8am5so54hxa25w==}
 
   ua-parser-js@1.0.38:
     resolution: {integrity: sha512-Aq5ppTOfvrCMgAPneW1HfWj66Xi7XL+/mIy996R1/CLS/rcyJQm6QZdsKrUeivDFQ+Oc9Wyuwor8Ze8peEoUoQ==}
@@ -279,7 +279,7 @@ snapshots:
       '@esbuild/win32-ia32': 0.21.5
       '@esbuild/win32-x64': 0.21.5
 
-  esm-compat@0.0.6:
+  esm-compat@0.0.8:
     dependencies:
       ua-parser-js: 1.0.38
 

@@ -189,15 +189,15 @@ func getBuildTargetByUA(ua string) string {
 	if ua == "" || strings.HasPrefix(ua, "curl/") {
 		return "esnext"
 	}
-	if strings.HasPrefix(ua, "esm/") {
-		t := ua[4:]
+	if strings.HasPrefix(ua, "ES/") {
+		t := "es" + ua[3:]
 		if _, ok := targets[t]; ok {
 			return t
 		}
 		return "esnext"
 	}
 	if strings.HasPrefix(ua, "Deno/") {
-		uaVersion, err := semver.NewVersion(strings.TrimPrefix(ua, "Deno/"))
+		uaVersion, err := semver.NewVersion(ua[5:])
 		if err == nil && uaVersion.LessThan(v1_33_2) {
 			return "deno"
 		}
