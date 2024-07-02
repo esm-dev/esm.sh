@@ -25,10 +25,15 @@ Deno.test("redirects", async () => {
   const res5 = await fetch("http://localhost:8080/react@18.3.1", { redirect: "manual" });
   res5.body?.cancel();
   assertEquals(res5.status, 200);
+  assertEquals(res5.headers.get("cache-control"), "public, max-age=31536000, immutable");
+
   const res6 = await fetch("http://localhost:8080/react@^18.3.1", { redirect: "manual" });
   res6.body?.cancel();
   assertEquals(res6.status, 200);
+  assertEquals(res6.headers.get("cache-control"), "public, max-age=600");
+
   const res7 = await fetch("http://localhost:8080/jsr/@std/encoding@1.0.0", { redirect: "manual" });
   res7.body?.cancel();
   assertEquals(res7.status, 200);
+  assertEquals(res7.headers.get("cache-control"), "public, max-age=31536000, immutable");
 });
