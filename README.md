@@ -55,8 +55,8 @@ With [import maps](https://github.com/WICG/import-maps), you can even use bare i
 - **[JSR](https://jsr.io)** (starts with `/jsr/`):
   ```js
   // Examples
-  import * as mod from "https://esm.sh/jsr/@std/encoding@0.222.0/base64";
-  import { html } from "https://esm.sh/jsr/@mark/html@1";
+  import { encodeBase64 } from "https://esm.sh/jsr/@std/encoding@1.0.0/base64";
+  import { Hono } from "https://esm.sh/jsr/@hono/hono@4";
   ```
 
 ### Specifying Dependencies
