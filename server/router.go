@@ -530,7 +530,7 @@ func router() rex.Handle {
 			return rex.Status(status, message)
 		}
 
-		// apply _extra query_ to the url
+		// apply extra query to the url
 		if extraQuery != "" {
 			qs := []string{extraQuery}
 			if ctx.R.URL.RawQuery != "" {
@@ -546,7 +546,6 @@ func router() rex.Handle {
 		}
 
 		ghPrefix := ""
-
 		if pkg.FromGithub {
 			ghPrefix = "/gh"
 		}
@@ -631,7 +630,7 @@ func router() rex.Handle {
 		}
 
 		// redirect to the url with full package version
-		if !strings.Contains(pathname, pkg.Fullname()) {
+		if !strings.Contains(pathname, "@"+pkg.Version) {
 			if !isTargetUrl {
 				skipRedirect := caretVersion && resType == ResBare && !pkg.FromGithub
 				if !skipRedirect {
