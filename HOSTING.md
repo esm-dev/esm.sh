@@ -23,7 +23,7 @@ To configure the server, create a `config.json` file then pass it to the server 
 }
 ```
 
-You can find all the server options in [config.exmaple.jsonc](./config.example.jsonc). (**Note**: the
+You can find all the server options in [config.example.jsonc](./config.example.jsonc). (**Note**: the
 `config.example.jsonc` is not a valid JSON file, it's a JSONC file.)
 
 ## Run the Server Locally
