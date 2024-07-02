@@ -309,7 +309,7 @@ func router() rex.Handle {
 		}
 
 		// serve run and hot scripts
-		if pathname == "/run" || pathname == "/hot" {
+		if pathname == "/tsx" || pathname == "/hot" {
 			data, err := embedFS.ReadFile(fmt.Sprintf("server/embed/%s.ts", pathname[1:]))
 			if err != nil {
 				return rex.Status(404, "Not Found")
@@ -328,7 +328,7 @@ func router() rex.Handle {
 				target = getBuildTargetByUA(userAgent)
 			}
 
-			if pathname == "/run" {
+			if pathname == "/tsx" {
 				data = bytes.ReplaceAll(data, []byte("$TARGET"), []byte(fmt.Sprintf(`"%s"`, target)))
 			}
 

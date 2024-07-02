@@ -307,7 +307,7 @@ function withESMWorker(middleware?: Middleware, cache: Cache = (caches as any).d
     }
 
     if (
-      pathname === "/run" ||
+      pathname === "/tsx" ||
       pathname === "/hot" ||
       pathname === "/hot.d.ts" ||
       ((pathname.startsWith("/node/") || pathname.startsWith("/npm_")) && pathname.endsWith(".js"))
@@ -397,7 +397,7 @@ function withESMWorker(middleware?: Middleware, cache: Cache = (caches as any).d
       return fetchOrigin(req, env, ctx, `${pathname}${url.search}`);
     }
 
-    // if it's a singleton build module which is created by https://esm.sh/run
+    // if it's a singleton build module which is created by https://esm.sh/tsx
     if (pathname.startsWith("/+") && (pathname.endsWith(".mjs") || pathname.endsWith(".mjs.map"))) {
       return ctx.withCache(() => {
         return fetchESM(req, env, ctx, pathname);
