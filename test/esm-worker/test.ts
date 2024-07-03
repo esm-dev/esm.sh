@@ -199,13 +199,13 @@ Deno.test("esm-worker", { sanitizeOps: false, sanitizeResources: false }, async 
     assertEquals(typeof ret.version, "number");
   });
 
-  await t.step("embed polyfills/types", async () => {
-    const res2 = await fetch(`${workerOrigin}/hot.d.ts`);
+  await t.step("embed scripts/polyfills/types", async () => {
+    const res2 = await fetch(`${workerOrigin}/run.d.ts`);
     assertEquals(res2.status, 200);
     assertEquals(res2.headers.get("Content-Type"), "application/typescript; charset=utf-8");
     assertEquals(res2.headers.get("Etag"), `W/"${version}"`);
     assertEquals(res2.headers.get("Cache-Control"), "public, max-age=86400");
-    assertStringIncludes(await res2.text(), "export interface Hot");
+    assertStringIncludes(await res2.text(), "export interface InstallOptions");
 
     const res3 = await fetch(`${workerOrigin}/node/process.js`);
     assertEquals(res3.status, 200);
@@ -434,9 +434,9 @@ Deno.test("esm-worker", { sanitizeOps: false, sanitizeResources: false }, async 
   });
 
   await t.step("builtin scripts", async () => {
-    const res = await fetch(`${workerOrigin}/hot`);
+    const res = await fetch(`${workerOrigin}/run`);
     res.body?.cancel();
-    assertEquals(new URL(res.url).pathname, "/hot");
+    assertEquals(new URL(res.url).pathname, "/run");
     assertEquals(res.headers.get("Etag"), `W/"${version}"`);
     assertEquals(res.headers.get("Cache-Control"), "public, max-age=86400");
     assertEquals(res.headers.get("Content-Type"), "application/javascript; charset=utf-8");
@@ -445,11 +445,11 @@ Deno.test("esm-worker", { sanitizeOps: false, sanitizeResources: false }, async 
     assert(dtsUrl.startsWith(workerOrigin));
     assert(dtsUrl.endsWith(".d.ts"));
 
-    const res2 = await fetch(`${workerOrigin}/hot?target=es2022`);
+    const res2 = await fetch(`${workerOrigin}/run?target=es2022`);
     assertEquals(res2.headers.get("Etag"), `W/"${version}"`);
     assertEquals(res2.headers.get("Cache-Control"), "public, max-age=86400");
     assertEquals(res2.headers.get("Content-Type"), "application/javascript; charset=utf-8");
-    assertStringIncludes(await res2.text(), "esm.sh/hot");
+    assertStringIncludes(await res2.text(), "esm.sh/run");
 
     const res3 = await fetch(`${workerOrigin}/tsx`);
     assertEquals(res3.headers.get("Etag"), `W/"${version}"`);

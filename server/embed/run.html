@@ -1,0 +1,23 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width">
+  <title>ESM&gt;Run</title>
+  <link rel="preload" href="/embed/esm.gz" as="fetch" type="application/esm-archive+gzip" crossorigin="anonymous"
+    checksum="0vWqL+4hwLCP28yNjWs/Ot0+xhWlsVxiPh4VHmuUTf0=">
+  <link rel="modulepreload" href="/run">
+</head>
+
+<body>
+  <h1></h1>
+  <script type="module">
+    import { install } from "/run"
+    install({ main: "/main.mjs", swModule: "/embed/run-sw.js" }).then((sw) => {
+      console.log("[esm.sh/run] ServiceWorker:", sw)
+    })
+  </script>
+</body>
+
+</html>

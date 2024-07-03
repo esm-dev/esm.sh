@@ -308,8 +308,8 @@ func router() rex.Handle {
 			pathname = regexpLocPath.ReplaceAllString(pathname, "$1")
 		}
 
-		// serve run and hot scripts
-		if pathname == "/tsx" || pathname == "/hot" {
+		// serve the `run` script
+		if pathname == "/run" || pathname == "/tsx" {
 			data, err := embedFS.ReadFile(fmt.Sprintf("server/embed/%s.ts", pathname[1:]))
 			if err != nil {
 				return rex.Status(404, "Not Found")
@@ -348,8 +348,8 @@ func router() rex.Handle {
 					header.Set("ETag", globalETag)
 				}
 			}
-			if pathname == "/hot" {
-				header.Set("X-Typescript-Types", fmt.Sprintf("%s/hot.d.ts", cdnOrigin))
+			if pathname == "/run" {
+				header.Set("X-Typescript-Types", fmt.Sprintf("%s/run.d.ts", cdnOrigin))
 			}
 			return code
 		}
