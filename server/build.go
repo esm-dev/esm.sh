@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"os"
 	"path"
+	"path/filepath"
 	"regexp"
 	"sort"
 	"strings"
@@ -184,7 +185,12 @@ func (ctx *BuildContext) install() (err error) {
 		ctx.wd = path.Join(ctx.npmrc.Dir(), ctx.pkg.Fullname())
 		ctx.pkgDir = path.Join(ctx.wd, "node_modules", ctx.pkg.Name)
 		if rp, e := os.Readlink(ctx.pkgDir); e == nil {
+			rp = MakePathOsAgnostic(rp)
+			if filepath.IsAbs(rp) {
+				ctx.pnpmPkgDir = rp
+			} else {
 			ctx.pnpmPkgDir = path.Join(path.Dir(ctx.pkgDir), rp)
+			}
 		} else {
 			ctx.pnpmPkgDir = ctx.pkgDir
 		}

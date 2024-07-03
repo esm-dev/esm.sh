@@ -73,12 +73,13 @@ func LoadConfig(filename string) (cfg *Config, err error) {
 		if err != nil {
 			return nil, fmt.Errorf("fail to get current user home directory: %w", err)
 		}
-		cfg.WorkDir = path.Join(homeDir, ".esmd")
+		cfg.WorkDir = path.Join(MakePathOsAgnostic(homeDir), ".esmd")
 	} else {
-		cfg.WorkDir, err = filepath.Abs(cfg.WorkDir)
+		absWorkingDir, err := filepath.Abs(cfg.WorkDir)
 		if err != nil {
 			return nil, fmt.Errorf("fail to get absolute path of the work directory: %w", err)
 		}
+		cfg.WorkDir = absWorkingDir
 	}
 	return fixConfig(cfg), nil
 }
@@ -89,7 +90,7 @@ func DefaultConfig() *Config {
 		panic(err)
 	}
 	return fixConfig(&Config{
-		WorkDir: path.Join(homeDir, ".esmd"),
+		WorkDir: path.Join(MakePathOsAgnostic(homeDir), ".esmd"),
 	})
 }
 
