@@ -8,19 +8,14 @@ export interface ArchiveEntry {
   size: number;
 }
 
-export interface InstallOptions {
+export interface RunOptions {
   main?: string;
-  buildTarget?: `es20${15 | 16 | 17 | 18 | 19 | 20 | 21 | 22}`;
+  buildTarget?: `es20${15 | 16 | 17 | 18 | 19 | 20 | 21 | 22}` | "esnext";
   swModule?: string;
   swScope?: string;
   swUpdateViaCache?: ServiceWorkerUpdateViaCache;
   onUpdateFound?: () => void;
 }
 
-export interface FireOptions {
-  waitPromise?: Promise<void>;
-  fetch?: (request: Request) => Promise<Response> | Response;
-}
-
-export function install(options?: InstallOptions): Promise<ServiceWorker>;
-export function fire(options?: FireOptions): void;
+export function run(options?: RunOptions): Promise<ServiceWorker>;
+export default run;

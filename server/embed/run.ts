@@ -2,10 +2,13 @@
  *  Docs: https://docs.esm.sh/run
  */
 
-import type { ArchiveEntry, FireOptions, InstallOptions } from "./types/run.d.ts";
+import type { ArchiveEntry, RunOptions } from "./types/run.d.ts";
 
-const doc: Document | undefined = globalThis.document;
-const kSw = "esm.sh/run";
+const global = globalThis;
+const document: Document | undefined = global.document;
+const clients: Clients | undefined = global.clients;
+const modUrl = import.meta.url;
+const kRun = "esm.sh/run";
 const kTypeEsmArchive = "application/esm-archive";
 
 /**
@@ -67,131 +70,115 @@ class Archive {
   }
 }
 
-export async function install({
+export async function run({
   main,
   onUpdateFound = () => location.reload(),
   swModule,
   swScope,
   swUpdateViaCache,
-}: InstallOptions = {}): Promise<ServiceWorker> {
+}: RunOptions = {}): Promise<ServiceWorker> {
   const serviceWorker = navigator.serviceWorker;
-  if (!serviceWorker) {
-    panic("Service Worker not supported");
-  }
+  const hasController = serviceWorker.controller !== null;
 
-  // add preload link for the main module if it's provided
-  main && appendElement("link", { rel: "modulepreload", href: main });
-
-  // detect controller change
-  serviceWorker.oncontrollerchange = onUpdateFound;
+  const reg = await serviceWorker.register(swModule ?? "/sw.js", {
+    type: "module",
+    scope: swScope,
+    updateViaCache: swUpdateViaCache,
+  });
 
   return new Promise<ServiceWorker>(async (resolve, reject) => {
-    const swr = await serviceWorker.register(swModule ?? "/sw.js", {
-      type: "module",
-      scope: swScope,
-      updateViaCache: swUpdateViaCache,
-    });
-    const run = async (firstInstall = false) => {
-      if (swr.active?.state === "activated") {
-        let dl: Promise<void> | undefined;
+    const run = async () => {
+      if (reg.active?.state === "activated") {
+        let dl: Promise<boolean> | undefined;
         // download esm-archive and and send it to the Service Worker if has any
         queryElement<HTMLLinkElement>(`link[type^="${kTypeEsmArchive}"][href]`, (el) => {
           dl = fetch(el.href).then((res) => {
             if (!res.ok) {
-              panic("Failed to download esm-archive: " + (res.statusText ?? res.status));
+              throw new Error("Failed to download esm-archive: " + (res.statusText ?? res.status));
             }
             return res.arrayBuffer();
           }).then(async (arrayBuffer) => {
-            const checksum = getAttr(el, "checksum");
+            const checksum = attr(el, "checksum");
             if (checksum) {
               const buf = await crypto.subtle.digest("SHA-256", arrayBuffer);
               if (btoa(String.fromCharCode(...new Uint8Array(buf))) !== checksum) {
-                panic("Invalid esm-archive: the checksum does not match");
+                throw new Error("Invalid esm-archive: the checksum does not match");
               }
             }
-            return new Promise<void>((resolve, reject) => {
-              new BroadcastChannel(kSw).onmessage = ({ data }) => {
+            return new Promise<boolean>((res, rej) => {
+              new BroadcastChannel(kRun).onmessage = ({ data }) => {
                 if (data === 0) {
-                  reject(new Error("Invalid esm-archive format"));
-                } else if (data === 1) {
-                  if (firstInstall) {
-                    resolve();
-                  } else {
-                    onUpdateFound();
-                  }
-                } else if (data === 2) {
-                  resolve();
+                  rej(new Error("Failed to load esm-archive"));
+                } else {
+                  res(data === 2);
                 }
               };
-              swr.active!.postMessage([0x127, arrayBuffer, el.type.endsWith("+gzip")]);
+              reg.active!.postMessage([0x7f, arrayBuffer, el.type.endsWith("+gzip")]);
             });
           });
         });
-        // if it's first install, wait until the esm-archive downloaded
-        if (firstInstall && dl) {
-          await dl.catch(reject);
+        if (dl) {
+          if (hasController) {
+            dl.then((isStale) => isStale && onUpdateFound());
+          } else {
+            // if there's no controller, wait for the esm-archive to be loaded
+            await dl.catch(reject);
+          }
         }
         // add main script tag if it's provided
-        main && appendElement("script", { type: "module", src: main });
-        resolve(swr.active!);
+        if (main) {
+          import(main);
+        }
+        resolve(reg.active!);
       }
     };
 
     // detect Service Worker install/update available and wait for it to become installed
-    swr.onupdatefound = () => {
-      const installing = swr.installing;
+    reg.onupdatefound = () => {
+      const installing = reg.installing;
       if (installing) {
-        installing.onerror = reject;
+        installing.onerror = (e) => reject(e.error);
         installing.onstatechange = () => {
-          const waiting = swr.waiting;
-          // it's first install
-          if (waiting && !serviceWorker.controller) {
-            waiting.onstatechange = () => run(true);
+          const waiting = reg.waiting;
+          if (waiting) {
+            waiting.onstatechange = hasController ? onUpdateFound : run;
           }
         };
       }
     };
 
-    // run the app immediately if there's an activated Service Worker
-    run();
+    // run the app immediately if the Service Worker is already installed
+    if (hasController) {
+      run();
+    }
   });
 }
 
-export function fire({
-  fetch: onFetch,
-  waitPromise,
-}: FireOptions = {}) {
-  // @ts-expect-error missing types
-  if (typeof clients === "undefined") {
-    panic("Service Worker scope not found.");
-  }
-
+function fire() {
+  // esm-archive bundles modules specified in the import map
   let esmArchive: Archive | undefined;
 
   const on: typeof addEventListener = addEventListener;
-  const bc = new BroadcastChannel(kSw);
-  const cachePromise = caches.open(kSw);
-  const queryEsmArchive = cachePromise.then((cache) =>
-    cache.match("/+" + kTypeEsmArchive).then((res) =>
-      res?.arrayBuffer().then((buf) => {
-        try {
-          esmArchive = new Archive(buf);
-        } catch (err) {
-          // ignore
-        }
-      })
-    )
-  );
+  const bc = new BroadcastChannel(kRun);
+  const cachePromise = caches.open(kRun);
 
   on("install", (evt) => {
     // @ts-expect-error `skipWaiting` is a global function in Service Worker
     skipWaiting();
-    evt.waitUntil(waitPromise ? Promise.all([waitPromise, queryEsmArchive]) : queryEsmArchive);
+    // query the esm-archive from cache and load it into memory if exists
+    evt.waitUntil(cachePromise.then((cache) =>
+      cache.match("/+" + kTypeEsmArchive).then((res) =>
+        res?.arrayBuffer().then((buf) => {
+          esmArchive = new Archive(buf);
+        })
+      )
+    ));
   });
 
   on("activate", (evt) => {
-    // @ts-expect-error `clients` is a global variable in Service Worker
-    evt.waitUntil(clients.claim());
+    // When a service worker is initially registered, pages won't use it until they next load.
+    // The `clients.claim()` method causes those pages to be controlled immediately.
+    evt.waitUntil(clients!.claim());
   });
 
   on("fetch", (evt) => {
@@ -205,8 +192,6 @@ export function fire({
     if (archive?.exists(pathOrHref)) {
       const file = archive.openFile(pathOrHref)!;
       respondWith(createResponse(file, { "content-type": file.type }));
-    } else if (onFetch) {
-      respondWith(onFetch(request));
     }
   });
 
@@ -214,7 +199,7 @@ export function fire({
     const { data } = evt;
     if (Array.isArray(data)) {
       const [HEAD, buffer, gz] = data;
-      if (HEAD === 0x127 && buffer instanceof ArrayBuffer) {
+      if (HEAD === 0x7f && buffer instanceof ArrayBuffer) {
         try {
           let data = buffer;
           if (gz) {
@@ -223,13 +208,12 @@ export function fire({
             ).arrayBuffer();
           }
           const archive = new Archive(data);
-          const currentArchive = esmArchive;
-          const stale = !currentArchive || archive.checksum !== currentArchive.checksum;
-          if (stale) {
+          const isStale = !esmArchive || archive.checksum !== esmArchive.checksum;
+          if (isStale) {
             esmArchive = archive;
             cachePromise.then((cache) => cache.put("/+" + kTypeEsmArchive, createResponse(data, { "content-type": kTypeEsmArchive })));
           }
-          bc.postMessage(stale ? 1 : 2);
+          bc.postMessage(isStale ? 2 : 1);
         } catch (err) {
           bc.postMessage(0);
           console.error(err);
@@ -239,19 +223,19 @@ export function fire({
   });
 }
 
-/** query all elements by the given selectors. */
+/** query the element with the given selector and run the callback if found. */
 function queryElement<T extends Element>(
-  selectors: string,
+  selector: string,
   callback: (el: T) => void,
 ) {
-  const el = doc!.querySelector<T>(selectors);
+  const el = document!.querySelector<T>(selector);
   if (el) {
     callback(el);
   }
 }
 
 /** get the attribute value of the given element. */
-function getAttr(el: Element, name: string) {
+function attr(el: Element, name: string) {
   return el.getAttribute(name);
 }
 
@@ -264,26 +248,22 @@ function createResponse(
   return new Response(body, { headers, status });
 }
 
-/** append an element to the head. */
-function appendElement(tagName: string, attrs: Record<string, string>) {
-  const el = doc!.createElement(tagName);
-  for (const [k, v] of Object.entries(attrs)) {
-    el[k] = v;
-  }
-  doc!.head.appendChild(el);
+if (document) {
+  // run the `main` module if it's provided in the script tag with `src` attribute equals to current script url
+  // e.g. <script type="module" src="https://esm.sh/run" main="/main.mjs"></script>
+  queryElement<HTMLScriptElement>("script[type='module'][src][main]", (el) => {
+    const src = el.src;
+    const main = attr(el, "main");
+    if (src && main && new URL(src, location.href).href === modUrl) {
+      run({ main, swModule: attr(el, "sw") ?? undefined });
+    }
+  });
+  // compatibility with esm.sh/run (v1) which has been renamed to esm.sh/tsx
+  queryElement<HTMLScriptElement>("script[type^='text/']", () => {
+    import(new URL("/tsx", modUrl).href);
+  });
+} else if (clients) {
+  fire();
 }
 
-/** panic with the given message. */
-function panic(message: string) {
-  throw new Error(message);
-}
-
-// run the `main` module if it's provided in the script tag with `src` attribute equals to current script url
-// e.g. <script type="module" src="https://esm.sh/run" main="/main.mjs"></script>
-doc && queryElement<HTMLScriptElement>("script[main]", (el) => {
-  const src = el.src;
-  const main = getAttr(el, "main");
-  if (main && src && new URL(src, location.href).href === import.meta.url) {
-    install({ main, swModule: getAttr(el, "sw") ?? undefined });
-  }
-});
+export default run;

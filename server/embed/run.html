@@ -12,12 +12,7 @@
 
 <body>
   <h1></h1>
-  <script type="module">
-    import { install } from "/run"
-    install({ main: "/main.mjs", swModule: "/embed/run-sw.js" }).then((sw) => {
-      console.log("[esm.sh/run] ServiceWorker:", sw)
-    })
-  </script>
+  <script type="module" src="/run" main="/main.mjs" sw="/embed/run-sw.js"></script>
 </body>
 
 </html>
