@@ -16,8 +16,8 @@
   "devDependencies": {
     "@cloudflare/workers-types": "4.20240620.0",
     "compare-versions": "6.1.0",
-    "esbuild": "0.21.5" ,
-    "esm-compat": "0.0.8"
+    "esbuild": "0.23.0" ,
+    "esm-compat": "0.1.0"
   },
   "repository": "https://github.com/esm-dev/esm.sh",
   "license": "MIT"
