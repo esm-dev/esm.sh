@@ -23,6 +23,8 @@ var targets = map[string]api.Target{
 	"es2020":   api.ES2020,
 	"es2021":   api.ES2021,
 	"es2022":   api.ES2022,
+	"es2023":   api.ES2023,
+	"es2024":   api.ES2024,
 	"esnext":   api.ESNext,
 	"deno":     api.ESNext,
 	"denonext": api.ESNext,
@@ -119,6 +121,10 @@ func validateESMAFeatures(target api.Target) int {
 		constraints[compat.ES] = compat.Semver{Parts: []int{2021}}
 	case api.ES2022:
 		constraints[compat.ES] = compat.Semver{Parts: []int{2022}}
+	case api.ES2023:
+		constraints[compat.ES] = compat.Semver{Parts: []int{2023}}
+	case api.ES2024:
+		constraints[compat.ES] = compat.Semver{Parts: []int{2024}}
 	case api.ESNext:
 	default:
 		panic("invalid target")
@@ -140,8 +146,6 @@ func validateEngineFeatures(engine api.Engine) int {
 				version.Parts = append(version.Parts, patch)
 			}
 			switch engine.Name {
-			case api.EngineNode:
-				constraints[compat.Node] = version
 			case api.EngineChrome:
 				constraints[compat.Chrome] = version
 			case api.EngineEdge:
@@ -150,10 +154,10 @@ func validateEngineFeatures(engine api.Engine) int {
 				constraints[compat.Firefox] = version
 			case api.EngineIOS:
 				constraints[compat.IOS] = version
-			case api.EngineSafari:
-				constraints[compat.Safari] = version
 			case api.EngineOpera:
 				constraints[compat.Opera] = version
+			case api.EngineSafari:
+				constraints[compat.Safari] = version
 			default:
 				panic("invalid engine name")
 			}
@@ -216,6 +220,8 @@ func getBuildTargetByUA(ua string) string {
 			Version: version,
 		})
 		for _, target := range []string{
+			"es2024",
+			"es2023",
 			"es2022",
 			"es2021",
 			"es2020",

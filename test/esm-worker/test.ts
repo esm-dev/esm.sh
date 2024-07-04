@@ -205,7 +205,7 @@ Deno.test("esm-worker", { sanitizeOps: false, sanitizeResources: false }, async 
     assertEquals(res2.headers.get("Content-Type"), "application/typescript; charset=utf-8");
     assertEquals(res2.headers.get("Etag"), `W/"${version}"`);
     assertEquals(res2.headers.get("Cache-Control"), "public, max-age=86400");
-    assertStringIncludes(await res2.text(), "export interface InstallOptions");
+    assertStringIncludes(await res2.text(), "export interface RunOptions");
 
     const res3 = await fetch(`${workerOrigin}/node/process.js`);
     assertEquals(res3.status, 200);
@@ -548,7 +548,7 @@ Deno.test("esm-worker", { sanitizeOps: false, sanitizeResources: false }, async 
         "/react@18.2.0",
         "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/116.0.0.0 Safari/537.36",
       ),
-      "/es2022/",
+      "/es2023/",
     );
     assertStringIncludes(
       await fetchModule(

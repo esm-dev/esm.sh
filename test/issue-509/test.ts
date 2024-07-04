@@ -7,5 +7,5 @@ Deno.test("issue #509", async () => {
     },
   });
   const text = await res.text();
-  assertStringIncludes(text, "/es2022/");
+  assertStringIncludes(text, "/es2023/");
 });
