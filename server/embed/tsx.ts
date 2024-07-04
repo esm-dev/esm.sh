@@ -37,7 +37,7 @@ d.querySelectorAll(kScript).forEach((el) => {
         console.warn("[esm.sh/tsx] reach 128KB limit:", el);
       } else {
         if (loader === "babel") {
-          loader = "jsx";
+          loader = "tsx";
         }
         tsxScripts.push({ el, loader, code });
       }
