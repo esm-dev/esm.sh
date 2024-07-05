@@ -8,59 +8,8 @@ const global = globalThis;
 const document: Document | undefined = global.document;
 const clients: Clients | undefined = global.clients;
 const kRun = "esm.sh/run";
-const kVFSdbStoreName = "files";
 
-class VFS {
-  private _db: Promise<IDBDatabase> | IDBDatabase;
-
-  constructor() {
-    this._db = this._openDB();
-  }
-
-  private _openDB(): Promise<IDBDatabase> {
-    const req = indexedDB.open(kRun);
-    req.onupgradeneeded = () => {
-      const db = req.result;
-      if (!db.objectStoreNames.contains(kVFSdbStoreName)) {
-        db.createObjectStore(kVFSdbStoreName, { keyPath: "url" });
-      }
-    };
-    return promisifyIDBRequest<IDBDatabase>(req).then((db) => {
-      // reopen the db on 'close' event
-      db.onclose = () => {
-        this._db = this._openDB();
-      };
-      return this._db = db;
-    });
-  }
-
-  private async _tx(readonly = false) {
-    const db = await this._db;
-    return db.transaction(kVFSdbStoreName, readonly ? "readonly" : "readwrite").objectStore(kVFSdbStoreName);
-  }
-
-  async readFile(name: string | URL): Promise<Uint8Array | null> {
-    const db = await this._tx(true);
-    const ret = await promisifyIDBRequest<VFile | undefined>(db.get(normalizeUrl(name)));
-    return ret?.content ?? null;
-  }
-
-  async writeFile(
-    url: string | URL,
-    content: Uint8Array,
-    options?: { contentType?: string; lastModified?: number },
-  ): Promise<void> {
-    const db = await this._tx();
-    const file: VFile = {
-      ...options,
-      url: normalizeUrl(url),
-      content,
-    };
-    return promisifyIDBRequest(db.put(file));
-  }
-}
-
-export async function run({
+async function run({
   main,
   onUpdateFound = () => location.reload(),
   swModule,
@@ -141,24 +90,61 @@ export async function run({
 function fire() {
   const on: typeof addEventListener = addEventListener;
   const bc = new BroadcastChannel(kRun);
-  const vfs = new VFS();
+  const vfsDBStoreName = "files";
   const esmBundleSavePath = ".esm-bundle.json";
 
+  let vfsDB: Promise<IDBDatabase> | IDBDatabase = openVFSDB();
+  async function openVFSDB() {
+    const req = indexedDB.open(kRun);
+    req.onupgradeneeded = () => {
+      const db = req.result;
+      if (!db.objectStoreNames.contains(vfsDBStoreName)) {
+        db.createObjectStore(vfsDBStoreName, { keyPath: "url" });
+      }
+    };
+    const db = await promisifyIDBRequest<IDBDatabase>(req);
+    // reopen the db on 'close' event
+    db.onclose = () => (vfsDB = openVFSDB());
+    return vfsDB = db;
+  }
+  async function _tx(readonly = false) {
+    const db = await vfsDB;
+    return db.transaction(vfsDBStoreName, readonly ? "readonly" : "readwrite").objectStore(vfsDBStoreName);
+  }
+  async function readFileFromVFS(name: string | URL): Promise<Uint8Array | null> {
+    const db = await _tx(true);
+    const ret = await promisifyIDBRequest<VFile | undefined>(db.get(normalizeUrl(name)));
+    return ret?.content ?? null;
+  }
+  async function writeFileToVFS(
+    url: string | URL,
+    content: Uint8Array,
+    options?: { contentType?: string; lastModified?: number },
+  ): Promise<void> {
+    const db = await _tx();
+    const file: VFile = {
+      ...options,
+      url: normalizeUrl(url),
+      content,
+    };
+    return promisifyIDBRequest(db.put(file));
+  }
+
   let imports: Record<string, string> | undefined;
-  const loadImportsFromVFS = async () => {
-    const jsonContent = await vfs.readFile(esmBundleSavePath);
+  async function loadImportsFromVFS() {
+    const jsonContent = await readFileFromVFS(esmBundleSavePath);
     if (jsonContent) {
       imports = await parseImports(jsonContent.buffer);
     }
-  };
-  const parseImports = async (jsonContent: ArrayBuffer): Promise<Record<string, string>> => {
-    const v = JSON.parse(new TextDecoder().decode(jsonContent!));
+  }
+  async function parseImports(jsonContent: ArrayBuffer): Promise<Record<string, string>> {
+    const v = JSON.parse(new TextDecoder().decode(jsonContent));
     if (typeof v !== "object" || v === null) {
       throw new Error("Invalid esm-bundle: the content is not an object");
     }
-    v.$checksum = await shasum(jsonContent!);
+    v.$checksum = await shasum(jsonContent);
     return v;
-  };
+  }
 
   on("install", (evt) => {
     // @ts-expect-error `skipWaiting` is a global function in Service Worker
@@ -194,7 +180,7 @@ function fire() {
           const isStale = !imports || imports.$checksum !== newImports.$checksum;
           if (isStale) {
             imports = newImports;
-            vfs.writeFile(esmBundleSavePath, new Uint8Array(buffer));
+            writeFileToVFS(esmBundleSavePath, new Uint8Array(buffer));
           }
           bc.postMessage(isStale ? 2 : 1);
         } catch (err) {
@@ -237,6 +223,7 @@ function normalizeUrl(url: string | URL) {
   return (typeof url === "string" ? new URL(url, "file:///") : url).href;
 }
 
+/** checksum the given input ArrayBuffer with SHA-256 algorithm. */
 async function shasum(input: ArrayBuffer): Promise<string> {
   const buf = await crypto.subtle.digest("SHA-256", input);
   return btoa(String.fromCharCode(...new Uint8Array(buf)));
@@ -252,7 +239,7 @@ if (document) {
       run({ main, swModule: attr(el, "sw") ?? undefined });
     }
   });
-  // compatibility with esm.sh/run (v1) which has been renamed to esm.sh/tsx
+  // compatibility with esm.sh/run(v1) which has been renamed to 'esm.sh/tsx'
   queryElement<HTMLScriptElement>("script[type^='text/']", () => {
     import("https://esm.sh/tsx");
   });
@@ -260,4 +247,4 @@ if (document) {
   fire();
 }
 
-export default run;
+export { run, run as default };
