@@ -1,11 +1,10 @@
 /// <reference lib="webworker" />
 
-export interface ArchiveEntry {
-  name: string;
-  type: string;
-  lastModified: number;
-  offset: number;
-  size: number;
+export interface VFile {
+  url: string;
+  content: Uint8Array;
+  contentType?: string;
+  lastModified?: number;
 }
 
 export interface RunOptions {
@@ -13,7 +12,6 @@ export interface RunOptions {
   buildTarget?: `es20${15 | 16 | 17 | 18 | 19 | 20 | 21 | 22 | 23 | 24}` | "esnext";
   swModule?: string;
   swScope?: string;
-  swUpdateViaCache?: ServiceWorkerUpdateViaCache;
   onUpdateFound?: () => void;
 }
 
