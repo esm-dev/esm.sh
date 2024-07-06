@@ -87,13 +87,15 @@ async function run({
   });
 }
 
-function fire() {
+function listen() {
   const on: typeof addEventListener = addEventListener;
   const bc = new BroadcastChannel(kRun);
-  const vfsDBStoreName = "files";
   const esmBundleSavePath = ".esm-bundle.json";
+  const vfsDBStoreName = "files";
 
   let vfsDB: Promise<IDBDatabase> | IDBDatabase = openVFSDB();
+  let imports: Record<string, string> | undefined;
+
   async function openVFSDB() {
     const req = indexedDB.open(kRun);
     req.onupgradeneeded = () => {
@@ -103,19 +105,24 @@ function fire() {
       }
     };
     const db = await promisifyIDBRequest<IDBDatabase>(req);
-    // reopen the db on 'close' event
-    db.onclose = () => (vfsDB = openVFSDB());
+    db.onclose = () => {
+      // reopen the db on 'close' event
+      vfsDB = openVFSDB();
+    };
     return vfsDB = db;
   }
+
   async function _tx(readonly = false) {
     const db = await vfsDB;
     return db.transaction(vfsDBStoreName, readonly ? "readonly" : "readwrite").objectStore(vfsDBStoreName);
   }
+
   async function readFileFromVFS(name: string | URL): Promise<Uint8Array | null> {
     const db = await _tx(true);
     const ret = await promisifyIDBRequest<VFile | undefined>(db.get(normalizeUrl(name)));
     return ret?.content ?? null;
   }
+
   async function writeFileToVFS(
     url: string | URL,
     content: Uint8Array,
@@ -130,13 +137,13 @@ function fire() {
     return promisifyIDBRequest(db.put(file));
   }
 
-  let imports: Record<string, string> | undefined;
   async function loadImportsFromVFS() {
     const jsonContent = await readFileFromVFS(esmBundleSavePath);
     if (jsonContent) {
       imports = await parseImports(jsonContent.buffer);
     }
   }
+
   async function parseImports(jsonContent: ArrayBuffer): Promise<Record<string, string>> {
     const v = JSON.parse(new TextDecoder().decode(jsonContent));
     if (typeof v !== "object" || v === null) {
@@ -244,7 +251,7 @@ if (document) {
     import("https://esm.sh/tsx");
   });
 } else if (clients) {
-  fire();
+  listen();
 }
 
 export { run, run as default };
