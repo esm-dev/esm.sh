@@ -930,7 +930,12 @@ func router() rex.Handle {
 			}
 		}
 
-		// build and return dts
+		// fix the build args that are from the query
+		if !isBuildArgsFromPath {
+			fixBuildArgs(npmrc, &buildArgs, pkg)
+		}
+
+		// build and return `.d.ts`
 		if resType == ResTypes {
 			findDts := func() (savePath string, fi storage.FileStat, err error) {
 				args := ""
@@ -990,11 +995,11 @@ func router() rex.Handle {
 			// check `?jsx-rutnime` query
 			var jsxRuntime *Pkg = nil
 			if v := query.Get("jsx-runtime"); v != "" {
-				m, _, _, _, err := validateESMPath(npmrc, v)
+				p, _, _, _, err := validateESMPath(npmrc, v)
 				if err != nil {
 					return rex.Status(400, fmt.Sprintf("Invalid jsx-runtime query: %v not found", v))
 				}
-				jsxRuntime = &m
+				jsxRuntime = &p
 			}
 
 			externalRequire := query.Has("external-require")

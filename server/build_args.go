@@ -155,6 +155,7 @@ func encodeBuildArgs(args BuildArgs, pkg Pkg, isDts bool) string {
 	return ""
 }
 
+// fixBuildArgs removes invalid alias, deps, external from the build args
 func fixBuildArgs(npmrc *NpmRC, args *BuildArgs, pkg Pkg) {
 	if len(args.alias) > 0 || len(args.deps) > 0 || args.external.Len() > 0 {
 		depTree := NewStringSet(walkDeps(npmrc, NewStringSet(), pkg)...)
