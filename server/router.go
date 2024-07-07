@@ -103,7 +103,7 @@ func router() rex.Handle {
 				h := sha1.New()
 				h.Write([]byte(loader))
 				h.Write([]byte(input.Code))
-				h.Write([]byte(input.ImportMap))
+				h.Write(input.ImportMap)
 				h.Write([]byte(input.Target))
 				h.Write([]byte(fmt.Sprintf("%v", input.SourceMap)))
 				hash := hex.EncodeToString(h.Sum(nil))
@@ -308,8 +308,8 @@ func router() rex.Handle {
 			pathname = regexpLocPath.ReplaceAllString(pathname, "$1")
 		}
 
-		// serve the `run` script
-		if pathname == "/run" || pathname == "/tsx" {
+		// serve the internal script
+		if pathname == "/run" || pathname == "/sw" || pathname == "/tsx" {
 			data, err := embedFS.ReadFile(fmt.Sprintf("server/embed/%s.ts", pathname[1:]))
 			if err != nil {
 				return rex.Status(404, "Not Found")
@@ -348,7 +348,7 @@ func router() rex.Handle {
 					header.Set("ETag", globalETag)
 				}
 			}
-			if pathname == "/run" {
+			if pathname == "/run" || pathname == "/sw" {
 				header.Set("X-Typescript-Types", fmt.Sprintf("%s/run.d.ts", cdnOrigin))
 			}
 			return code

@@ -7,32 +7,24 @@
 const d = document;
 const l = localStorage;
 const stringify = JSON.stringify;
-const modUrl = new URL(import.meta.url);
+const loaders = new Set(["jsx", "ts", "tsx", "babel"]);
 const kScript = "script";
-const kImportmap = "importmap";
-const loaders = ["jsx", "ts", "tsx", "babel"];
-const importMapSupported = HTMLScriptElement.supports?.(kImportmap);
-const imports: Record<string, string> = {};
-const scopes: Record<string, typeof imports> = {};
-const tsxScripts: { el: HTMLElement; loader: string; code: string }[] = [];
 
-// lookup tsx scripts
+let tsxScripts: { el: HTMLElement; loader: string; code: string }[] = [];
+let importMap: Record<string, any> = {};
+
+// lookup import map and tsx scripts
 d.querySelectorAll(kScript).forEach((el) => {
-  let loader: string | null = null;
-  if (el.type === kImportmap) {
-    const v = JSON.parse(el.textContent!);
-    for (const k in v.imports) {
-      if (!importMapSupported || k === "@jsxImportSource") {
-        imports[k] = v.imports[k];
-      }
+  const { type, textContent } = el;
+  if (type === "importmap") {
+    const v = JSON.parse(textContent!);
+    if (v && typeof v === "object") {
+      Object.assign(importMap, v);
     }
-    if (!importMapSupported) {
-      Object.assign(scopes, v.scopes);
-    }
-  } else if (el.type.startsWith("text/")) {
-    loader = el.type.slice(5);
-    if (loaders.includes(loader)) {
-      const code = el.textContent!.trim();
+  } else if (type.startsWith("text/")) {
+    let loader = type.slice(5);
+    if (loaders.has(loader)) {
+      const code = textContent!.trim();
       if (code.length > 128 * 1024) {
         console.warn("[esm.sh/tsx] reach 128KB limit:", el);
       } else {
@@ -46,14 +38,13 @@ d.querySelectorAll(kScript).forEach((el) => {
 });
 
 // transform and insert tsx scripts
-const importMap = stringify({ imports, scopes });
 tsxScripts.forEach(async ({ el, loader, code }, idx) => {
   const filename = "source." + loader;
   const buffer = new Uint8Array(
     await crypto.subtle.digest(
       "SHA-1",
       // @ts-expect-error `$TARGET` is injected by esbuild
-      new TextEncoder().encode(loader + code + importMap + $TARGET + "false"),
+      new TextEncoder().encode(loader + code + stringify(importMap) + $TARGET + "false"),
     ),
   );
   const hash = [...buffer].map((b) => b.toString(16).padStart(2, "0")).join("");
@@ -64,12 +55,11 @@ tsxScripts.forEach(async ({ el, loader, code }, idx) => {
     js = null;
   }
   if (!js) {
-    const { origin } = modUrl;
-    const res = await fetch(origin + `/+${hash}.mjs`);
+    const res = await fetch(urlFromCurrentModule(`/+${hash}.mjs`));
     if (res.ok) {
       js = await res.text();
     } else {
-      const res = await fetch(origin + "/transform", {
+      const res = await fetch(urlFromCurrentModule("/transform"), {
         method: "POST",
         // @ts-expect-error `$TARGET` is injected by esbuild
         body: stringify({ filename, code, importMap, target: $TARGET }),
@@ -88,3 +78,7 @@ tsxScripts.forEach(async ({ el, loader, code }, idx) => {
   script.textContent = js!;
   el.replaceWith(script);
 });
+
+function urlFromCurrentModule(path: string) {
+  return new URL(path, import.meta.url);
+}

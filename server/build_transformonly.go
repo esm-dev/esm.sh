@@ -9,12 +9,17 @@ import (
 	"github.com/evanw/esbuild/pkg/api"
 )
 
+type ImportMap struct {
+	Imports map[string]string            `json:"imports"`
+	Scopes  map[string]map[string]string `json:"scopes"`
+}
+
 type TransformInput struct {
-	Code      string `json:"code,omitempty"`
-	ImportMap string `json:"importMap,omitempty"`
-	Filename  string `json:"filename,omitempty"`
-	Target    string `json:"target,omitempty"`
-	SourceMap bool   `json:"sourceMap,omitempty"`
+	Code      string          `json:"code"`
+	ImportMap json.RawMessage `json:"importMap"`
+	Filename  string          `json:"filename"`
+	Target    string          `json:"target"`
+	SourceMap bool            `json:"sourceMap"`
 }
 
 type TransformOutput struct {
@@ -44,27 +49,27 @@ func transform(input TransformInput) (out TransformOutput, err error) {
 		loader = api.LoaderTSX
 	}
 
+	var importMap ImportMap
+	err = json.Unmarshal(input.ImportMap, &importMap)
+	if err != nil {
+		return
+	}
+
 	imports := map[string]string{}
 	trailingSlashImports := map[string]string{}
 	jsxImportSource := ""
 
-	var im map[string]interface{}
-	if json.Unmarshal([]byte(input.ImportMap), &im) == nil {
-		v, ok := im["imports"]
-		if ok {
-			m, ok := v.(map[string]interface{})
-			if ok {
-				for key, v := range m {
-					if value, ok := v.(string); ok && value != "" {
-						if strings.HasSuffix(key, "/") {
-							trailingSlashImports[key] = value
-						} else {
-							if key == "@jsxImportSource" {
-								jsxImportSource = value
-							}
-							imports[key] = value
-						}
+	// todo: use importMap.Scopes
+	if len(importMap.Imports) > 0 {
+		for key, value := range importMap.Imports {
+			if value != "" {
+				if strings.HasSuffix(key, "/") {
+					trailingSlashImports[key] = value
+				} else {
+					if key == "@jsxImportSource" {
+						jsxImportSource = value
 					}
+					imports[key] = value
 				}
 			}
 		}
