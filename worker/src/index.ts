@@ -307,9 +307,10 @@ function withESMWorker(middleware?: Middleware, cache: Cache = (caches as any).d
     }
 
     if (
-      pathname === "/tsx" ||
       pathname === "/run" ||
       pathname === "/run.d.ts" ||
+      pathname === "/sw" ||
+      pathname === "/tsx" ||
       ((pathname.startsWith("/node/") || pathname.startsWith("/npm_")) && pathname.endsWith(".js"))
     ) {
       const varyUA = !pathname.endsWith(".ts");

@@ -4,39 +4,54 @@
 
 import type { RunOptions, VFile } from "./types/run.d.ts";
 
-const global = globalThis;
-const document: Document | undefined = global.document;
-const clients: Clients | undefined = global.clients;
+const document: Document | undefined = window.document;
 const kRun = "esm.sh/run";
+const kImportmap = "importmap";
 
-async function run({
-  main,
-  onUpdateFound = () => location.reload(),
-  swModule,
-  swScope,
-}: RunOptions = {}): Promise<ServiceWorker> {
+async function run(options: RunOptions = {}): Promise<ServiceWorker> {
   const serviceWorker = navigator.serviceWorker;
   const hasController = serviceWorker.controller !== null;
-
-  const reg = await serviceWorker.register(swModule ?? "/sw.js", {
-    type: "module",
-    scope: swScope,
-  });
-
+  const {
+    main,
+    onUpdateFound = () => location.reload(),
+    swModule,
+    swScope,
+  } = options;
   return new Promise<ServiceWorker>(async (resolve, reject) => {
+    const reg = await serviceWorker.register(swModule ?? "/sw.js", {
+      type: "module",
+      scope: swScope,
+    });
     const run = async () => {
       if (reg.active?.state === "activated") {
-        let dl: Promise<boolean> | undefined;
+        const importMapSupported = HTMLScriptElement.supports?.(kImportmap);
+        const imports: Record<string, string> = {};
+        const scopes: Record<string, typeof imports> = {};
+        let p: Promise<boolean> | undefined;
+        queryElement<HTMLScriptElement>('script[type="importmap"]', (el) => {
+          try {
+            const json = JSON.parse(el.textContent!);
+            for (const scope in json.scopes) {
+              scopes[scope] = { ...imports, ...json.imports };
+            }
+            Object.assign(imports, json.imports);
+          } catch (e) {
+            console.error("Failed to parse importmap:", e);
+          }
+        });
         queryElement<HTMLLinkElement>("link[rel='preload'][as='fetch'][type='application/esm-bundle'][href]", (el) => {
-          dl = fetch(el.href).then((res) => {
+          p = fetch(el.href).then((res) => {
             if (!res.ok) {
               throw new Error("Failed to download esm-bundle: " + (res.statusText ?? res.status));
             }
             return res.arrayBuffer();
           }).then(async (arrayBuffer) => {
             const checksumAttr = attr(el, "checksum");
-            if (checksumAttr && await shasum(arrayBuffer) !== checksumAttr) {
-              throw new Error("Invalid esm-bundle: the checksum does not match");
+            if (checksumAttr) {
+              const checksum = btoa(String.fromCharCode(...new Uint8Array(await crypto.subtle.digest("SHA-256", arrayBuffer))));
+              if (checksum !== checksumAttr) {
+                throw new Error("Invalid esm-bundle: the checksum does not match");
+              }
             }
             return new Promise<boolean>((res, rej) => {
               new BroadcastChannel(kRun).onmessage = ({ data }) => {
@@ -50,15 +65,15 @@ async function run({
             });
           });
         });
-        if (dl) {
+        if (p) {
           if (hasController) {
-            dl.then((isStale) => isStale && onUpdateFound());
+            p.then((isStale) => isStale && onUpdateFound());
           } else {
-            // if there's no controller, wait for the esm-bundle to be loaded
-            await dl.catch(reject);
+            // if there's no controller, wait for the esm-bundle to be applied
+            await p.catch(reject);
           }
         }
-        // add main script tag if it's provided
+        // import the main module if provided
         if (main) {
           import(main);
         }
@@ -87,118 +102,6 @@ async function run({
   });
 }
 
-function listen() {
-  const on: typeof addEventListener = addEventListener;
-  const bc = new BroadcastChannel(kRun);
-  const esmBundleSavePath = ".esm-bundle.json";
-  const vfsDBStoreName = "files";
-
-  let vfsDB: Promise<IDBDatabase> | IDBDatabase = openVFSDB();
-  let imports: Record<string, string> | undefined;
-
-  async function openVFSDB() {
-    const req = indexedDB.open(kRun);
-    req.onupgradeneeded = () => {
-      const db = req.result;
-      if (!db.objectStoreNames.contains(vfsDBStoreName)) {
-        db.createObjectStore(vfsDBStoreName, { keyPath: "url" });
-      }
-    };
-    const db = await promisifyIDBRequest<IDBDatabase>(req);
-    db.onclose = () => {
-      // reopen the db on 'close' event
-      vfsDB = openVFSDB();
-    };
-    return vfsDB = db;
-  }
-
-  async function _tx(readonly = false) {
-    const db = await vfsDB;
-    return db.transaction(vfsDBStoreName, readonly ? "readonly" : "readwrite").objectStore(vfsDBStoreName);
-  }
-
-  async function readFileFromVFS(name: string | URL): Promise<Uint8Array | null> {
-    const db = await _tx(true);
-    const ret = await promisifyIDBRequest<VFile | undefined>(db.get(normalizeUrl(name)));
-    return ret?.content ?? null;
-  }
-
-  async function writeFileToVFS(
-    url: string | URL,
-    content: Uint8Array,
-    options?: { contentType?: string; lastModified?: number },
-  ): Promise<void> {
-    const db = await _tx();
-    const file: VFile = {
-      ...options,
-      url: normalizeUrl(url),
-      content,
-    };
-    return promisifyIDBRequest(db.put(file));
-  }
-
-  async function loadImportsFromVFS() {
-    const jsonContent = await readFileFromVFS(esmBundleSavePath);
-    if (jsonContent) {
-      imports = await parseImports(jsonContent.buffer);
-    }
-  }
-
-  async function parseImports(jsonContent: ArrayBuffer): Promise<Record<string, string>> {
-    const v = JSON.parse(new TextDecoder().decode(jsonContent));
-    if (typeof v !== "object" || v === null) {
-      throw new Error("Invalid esm-bundle: the content is not an object");
-    }
-    v.$checksum = await shasum(jsonContent);
-    return v;
-  }
-
-  on("install", (evt) => {
-    // @ts-expect-error `skipWaiting` is a global function in Service Worker
-    skipWaiting();
-    // query the esm-bundle from cache and load it into memory if exists
-    evt.waitUntil(loadImportsFromVFS());
-  });
-
-  on("activate", (evt) => {
-    // When a service worker is initially registered, pages won't use it until they next load.
-    // The `clients.claim()` method causes those pages to be controlled immediately.
-    evt.waitUntil(clients!.claim());
-  });
-
-  on("fetch", (evt) => {
-    const { request } = evt as FetchEvent;
-    const url = new URL(request.url);
-    const { pathname } = url;
-    const isSameOrigin = url.origin === location.origin;
-    const pathOrHref = isSameOrigin ? pathname : request.url;
-    if (imports && pathOrHref in imports) {
-      evt.respondWith(createResponse(imports[pathOrHref], { "content-type": "application/javascript; charset=utf-8" }));
-    }
-  });
-
-  on("message", async (evt) => {
-    const { data } = evt;
-    if (Array.isArray(data)) {
-      const [HEAD, buffer] = data;
-      if (HEAD === 0x7f && buffer instanceof ArrayBuffer) {
-        try {
-          const newImports = await parseImports(buffer);
-          const isStale = !imports || imports.$checksum !== newImports.$checksum;
-          if (isStale) {
-            imports = newImports;
-            writeFileToVFS(esmBundleSavePath, new Uint8Array(buffer));
-          }
-          bc.postMessage(isStale ? 2 : 1);
-        } catch (err) {
-          bc.postMessage(0);
-          console.error(err);
-        }
-      }
-    }
-  });
-}
-
 /** get the attribute value of the given element. */
 function attr(el: Element, name: string) {
   return el.getAttribute(name);
@@ -212,46 +115,19 @@ function queryElement<T extends Element>(selector: string, callback: (el: T) => 
   }
 }
 
-/** create a response object. */
-function createResponse(body: BodyInit | null, headers?: HeadersInit, status?: number): Response {
-  return new Response(body, { headers, status });
-}
+// run the `main` module if it's provided in the script tag with `src` attribute equals to current script url
+// e.g. <script type="module" src="https://esm.sh/run" main="/main.mjs" sw="/sw.mjs"></script>
+queryElement<HTMLScriptElement>("script[type='module'][src][main]", (el) => {
+  const src = el.src;
+  const main = attr(el, "main");
+  if (src === import.meta.url && main) {
+    run({ main, swModule: attr(el, "sw") ?? undefined });
+  }
+});
 
-/** promisify the given IDBRequest. */
-function promisifyIDBRequest<T>(req: IDBRequest): Promise<T> {
-  return new Promise((resolve, reject) => {
-    req.onsuccess = () => resolve(req.result);
-    req.onerror = () => reject(req.error);
-  });
-}
-
-/** normalize the given URL string or URL object. */
-function normalizeUrl(url: string | URL) {
-  return (typeof url === "string" ? new URL(url, "file:///") : url).href;
-}
-
-/** checksum the given input ArrayBuffer with SHA-256 algorithm. */
-async function shasum(input: ArrayBuffer): Promise<string> {
-  const buf = await crypto.subtle.digest("SHA-256", input);
-  return btoa(String.fromCharCode(...new Uint8Array(buf)));
-}
-
-if (document) {
-  // run the `main` module if it's provided in the script tag with `src` attribute equals to current script url
-  // e.g. <script type="module" src="https://esm.sh/run" main="/main.mjs" sw="/sw.mjs"></script>
-  queryElement<HTMLScriptElement>("script[type='module'][src][main]", (el) => {
-    const src = el.src;
-    const main = attr(el, "main");
-    if (src === import.meta.url && main) {
-      run({ main, swModule: attr(el, "sw") ?? undefined });
-    }
-  });
-  // compatibility with esm.sh/run(v1) which has been renamed to 'esm.sh/tsx'
-  queryElement<HTMLScriptElement>("script[type^='text/']", () => {
-    import("https://esm.sh/tsx");
-  });
-} else if (clients) {
-  listen();
-}
+// compatibility with esm.sh/run(v1) which has been renamed to 'esm.sh/tsx'
+queryElement<HTMLScriptElement>("script[type^='text/']", () => {
+  import(new URL("/tsx", import.meta.url).href);
+});
 
 export { run, run as default };
