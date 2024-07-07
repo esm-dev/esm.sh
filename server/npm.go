@@ -250,14 +250,14 @@ func NewNpmRcFromJSON(jsonData []byte) (npmrc *NpmRC, err error) {
 	return &rc, nil
 }
 
-func (rc *NpmRC) Dir() string {
+func (rc *NpmRC) NpmDir() string {
 	if rc.zoneId != "" {
 		return path.Join(config.WorkDir, "npm-"+rc.zoneId)
 	}
 	return path.Join(config.WorkDir, "npm")
 }
 
-func (rc *NpmRC) getPackageInfo(name string, version string) (info PackageJSON, err error) {
+func (rc *NpmRC) getPackageInfo(name string, semver string) (info PackageJSON, err error) {
 	if name == "@types/node" {
 		info = PackageJSON{
 			Name:    "@types/node",
@@ -267,32 +267,37 @@ func (rc *NpmRC) getPackageInfo(name string, version string) (info PackageJSON, 
 		return
 	}
 
-	if regexpFullVersion.MatchString(version) {
-		pkgJsonPath := path.Join(rc.Dir(), name+"@"+version, "node_modules", name, "package.json")
+	// strip leading `=` or `v` from semver
+	if (strings.HasPrefix(semver, "=") || strings.HasPrefix(semver, "v")) && regexpFullVersion.MatchString(semver[1:]) {
+		semver = semver[1:]
+	}
+
+	if regexpFullVersion.MatchString(semver) {
+		pkgJsonPath := path.Join(rc.NpmDir(), name+"@"+semver, "node_modules", name, "package.json")
 		if existsFile(pkgJsonPath) && parseJSONFile(pkgJsonPath, &info) == nil {
 			return
 		}
 	}
 
-	info, err = rc.fetchPackageInfo(name, version)
+	info, err = rc.fetchPackageInfo(name, semver)
 	return
 }
 
-func (rc *NpmRC) fetchPackageInfo(name string, version string) (info PackageJSON, err error) {
+func (rc *NpmRC) fetchPackageInfo(name string, semverOrDistTag string) (info PackageJSON, err error) {
 	a := strings.Split(strings.Trim(name, "/"), "/")
 	name = a[0]
 	if strings.HasPrefix(name, "@") && len(a) > 1 {
 		name = a[0] + "/" + a[1]
 	}
 
-	if strings.HasPrefix(version, "=") || strings.HasPrefix(version, "v") {
-		version = version[1:]
-	}
-	if version == "" {
-		version = "latest"
+	if semverOrDistTag == "" {
+		semverOrDistTag = "latest"
+	} else if (strings.HasPrefix(semverOrDistTag, "=") || strings.HasPrefix(semverOrDistTag, "v")) && regexpFullVersion.MatchString(semverOrDistTag[1:]) {
+		// strip leading `=` or `v` from semver
+		semverOrDistTag = semverOrDistTag[1:]
 	}
 
-	cacheKey := fmt.Sprintf("npm:%s/%s@%s", rc.zoneId, name, version)
+	cacheKey := fmt.Sprintf("npm:%s/%s@%s", rc.zoneId, name, semverOrDistTag)
 	lock := getFetchLock(cacheKey)
 	lock.Lock()
 	defer lock.Unlock()
@@ -332,11 +337,11 @@ func (rc *NpmRC) fetchPackageInfo(name string, version string) (info PackageJSON
 		}
 	}
 
-	isFullVersion := regexpFullVersion.MatchString(version)
+	isFullVersion := regexpFullVersion.MatchString(semverOrDistTag)
 	isFullVersionFromNpmjsOrg := isFullVersion && strings.HasPrefix(url, npmRegistry)
 	if isFullVersionFromNpmjsOrg {
 		// npm registry supports url like `https://registry.npmjs.org/<name>/<version>`
-		url += "/" + version
+		url += "/" + semverOrDistTag
 	}
 
 	req, err := http.NewRequest("GET", url, nil)
@@ -368,7 +373,7 @@ do:
 
 	if resp.StatusCode == 404 || resp.StatusCode == 401 {
 		if isFullVersionFromNpmjsOrg {
-			err = fmt.Errorf("version %s of '%s' not found", version, name)
+			err = fmt.Errorf("version %s of '%s' not found", semverOrDistTag, name)
 		} else {
 			err = fmt.Errorf("package '%s' not found", name)
 		}
@@ -405,22 +410,22 @@ do:
 
 	var jsonBytes []byte
 
-	distVersion, ok := h.DistTags[version]
+	distVersion, ok := h.DistTags[semverOrDistTag]
 	if ok {
 		d := h.Versions[distVersion]
 		info = *d.ToNpmPackage()
 		jsonBytes = mustEncodeJSON(d)
 	} else {
 		var c *semver.Constraints
-		c, err = semver.NewConstraint(version)
-		if err != nil && version != "latest" {
+		c, err = semver.NewConstraint(semverOrDistTag)
+		if err != nil && semverOrDistTag != "latest" {
 			return rc.fetchPackageInfo(name, "latest")
 		}
 		vs := make([]*semver.Version, len(h.Versions))
 		i := 0
 		for v := range h.Versions {
 			// ignore prerelease versions
-			if !strings.ContainsRune(version, '-') && strings.ContainsRune(v, '-') {
+			if !strings.ContainsRune(semverOrDistTag, '-') && strings.ContainsRune(v, '-') {
 				continue
 			}
 			var ver *semver.Version
@@ -445,7 +450,7 @@ do:
 	}
 
 	if info.Version == "" {
-		err = fmt.Errorf("version %s of '%s' not found", version, name)
+		err = fmt.Errorf("version %s of '%s' not found", semverOrDistTag, name)
 		return
 	}
 
@@ -456,17 +461,21 @@ do:
 	return
 }
 
-func (rc *NpmRC) installPackage(pkg Pkg) (err error) {
-	installDir := path.Join(rc.Dir(), pkg.Fullname())
+func (rc *NpmRC) installPackage(pkg Pkg) (pkgJson PackageJSON, err error) {
+	installDir := path.Join(rc.NpmDir(), pkg.Fullname())
+	pkgJsonFilepath := path.Join(installDir, "node_modules", pkg.Name, "package.json")
 
 	// only one installation process allowed at the same time for the same package
 	lock := getInstallLock(installDir)
 	lock.Lock()
 	defer lock.Unlock()
 
-	// skip installation if the pnpm-lock file exists
-	if existsFile(path.Join(installDir, "pnpm-lock.yaml")) && existsFile(path.Join(installDir, "node_modules", pkg.Name, "package.json")) {
-		return nil
+	// skip installation if the package has been installed
+	if existsFile(pkgJsonFilepath) {
+		err = parseJSONFile(pkgJsonFilepath, &pkgJson)
+		if err == nil {
+			return
+		}
 	}
 
 	// create '.npmrc' file
@@ -483,7 +492,8 @@ func (rc *NpmRC) installPackage(pkg Pkg) (err error) {
 		err = os.WriteFile(packageJsonFp, []byte("{}"), 0644)
 	}
 	if err != nil {
-		return fmt.Errorf("ensure package.json failed: %s", pkg.Fullname())
+		err = fmt.Errorf("ensure package.json failed: %s", pkg.Fullname())
+		return
 	}
 
 	attemptMaxTimes := 3
@@ -514,9 +524,11 @@ func (rc *NpmRC) installPackage(pkg Pkg) (err error) {
 		} else {
 			err = rc.pnpm(installDir, pkg.Fullname())
 		}
-		packageJsonFp := path.Join(installDir, "node_modules", pkg.Name, "package.json")
-		if err == nil && !existsFile(packageJsonFp) {
-			err = fmt.Errorf("pnpm install %s: package.json not found", pkg)
+		if err == nil {
+			err = parseJSONFile(pkgJsonFilepath, &pkgJson)
+			if err != nil {
+				err = fmt.Errorf("pnpm install %s: package.json not found", pkg)
+			}
 		}
 		if err == nil || i == attemptMaxTimes {
 			break

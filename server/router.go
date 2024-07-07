@@ -473,12 +473,12 @@ func router() rex.Handle {
 		}
 
 		// check `/*pathname` or `/gh/*pathname` pattern
-		external := NewStringSet()
+		externalAll := false
 		if strings.HasPrefix(pathname, "/*") {
-			external.Add("*")
+			externalAll = true
 			pathname = "/" + pathname[2:]
 		} else if strings.HasPrefix(pathname, "/gh/*") {
-			external.Add("*")
+			externalAll = true
 			pathname = "/gh/" + pathname[5:]
 		}
 
@@ -635,14 +635,14 @@ func router() rex.Handle {
 				skipRedirect := caretVersion && resType == ResBare && !pkg.FromGithub
 				if !skipRedirect {
 					pkgName := pkg.Name
-					eaSign := ""
+					asteriskPrefix := ""
 					subPath := ""
 					query := ""
 					if strings.HasPrefix(pkgName, "@jsr/") {
 						pkgName = "jsr/@" + strings.ReplaceAll(pkgName[5:], "__", "/")
 					}
-					if external.Has("*") {
-						eaSign = "*"
+					if externalAll {
+						asteriskPrefix = "*"
 					}
 					if pkg.SubPath != "" {
 						subPath = "/" + pkg.SubPath
@@ -651,11 +651,11 @@ func router() rex.Handle {
 					if rawQuery := ctx.R.URL.RawQuery; rawQuery != "" {
 						if extraQuery != "" {
 							query = "&" + rawQuery
-							return rex.Redirect(fmt.Sprintf("%s%s/%s%s@%s%s%s", cdnOrigin, ghPrefix, eaSign, pkgName, pkg.Version, query, subPath), http.StatusFound)
+							return rex.Redirect(fmt.Sprintf("%s%s/%s%s@%s%s%s", cdnOrigin, ghPrefix, asteriskPrefix, pkgName, pkg.Version, query, subPath), http.StatusFound)
 						}
 						query = "?" + rawQuery
 					}
-					return rex.Redirect(fmt.Sprintf("%s%s/%s%s@%s%s%s", cdnOrigin, ghPrefix, eaSign, pkgName, pkg.Version, subPath, query), http.StatusFound)
+					return rex.Redirect(fmt.Sprintf("%s%s/%s%s@%s%s%s", cdnOrigin, ghPrefix, asteriskPrefix, pkgName, pkg.Version, subPath, query), http.StatusFound)
 				}
 			} else {
 				subPath := ""
@@ -685,9 +685,9 @@ func router() rex.Handle {
 		// fix url that is related to `import.meta.url`
 		if resType == ResRaw && isTargetUrl && !query.Has("raw") {
 			extname := path.Ext(pkg.SubPath)
-			dir := path.Join(npmrc.Dir(), pkg.Fullname())
+			dir := path.Join(npmrc.NpmDir(), pkg.Fullname())
 			if !existsDir(dir) {
-				err := npmrc.installPackage(pkg)
+				_, err := npmrc.installPackage(pkg)
 				if err != nil {
 					return rex.Status(500, err.Error())
 				}
@@ -728,14 +728,14 @@ func router() rex.Handle {
 
 		// serve package raw files
 		if resType == ResRaw {
-			savePath := path.Join(npmrc.Dir(), pkg.Fullname(), "node_modules", pkg.Name, pkg.SubPath)
+			savePath := path.Join(npmrc.NpmDir(), pkg.Fullname(), "node_modules", pkg.Name, pkg.SubPath)
 			fi, err := os.Lstat(savePath)
 			if err != nil {
 				if os.IsExist(err) {
 					return rex.Status(500, err.Error())
 				}
 				// if the file not found, try to install the package
-				err = npmrc.installPackage(pkg)
+				_, err = npmrc.installPackage(pkg)
 				if err != nil {
 					return rex.Status(500, err.Error())
 				}
@@ -850,7 +850,7 @@ func router() rex.Handle {
 						return rex.Status(400, fmt.Sprintf("Invalid deps query: %v not found", v))
 					}
 					if pkg.Name == "react-dom" && p.Name == "react" {
-						// the `react` version always matches `react-dom` version
+						// make sure react-dom and react are in the same version
 						continue
 					}
 					if p.Name != pkg.Name {
@@ -893,11 +893,12 @@ func router() rex.Handle {
 		}
 
 		// check `?external` query
+		external := NewStringSet()
 		for _, p := range strings.Split(query.Get("external"), ",") {
 			p = strings.TrimSpace(p)
 			if p == "*" {
 				external.Reset()
-				external.Add("*")
+				externalAll = true
 				break
 			}
 			if p != "" {
@@ -906,11 +907,12 @@ func router() rex.Handle {
 		}
 
 		buildArgs := BuildArgs{
-			alias:      alias,
-			conditions: conditions,
-			deps:       deps,
-			exports:    exports,
-			external:   external,
+			alias:       alias,
+			conditions:  conditions,
+			deps:        deps,
+			exports:     exports,
+			externalAll: externalAll,
+			external:    external,
 		}
 
 		// check if the build args from pathname: `PKG@VERSION/X-${args}/esnext/SUBPATH`
@@ -921,7 +923,7 @@ func router() rex.Handle {
 				pkg.SubModule = strings.Join(a[1:], "/")
 				args, err := decodeBuildArgs(npmrc, strings.TrimPrefix(a[0], "X-"))
 				if err != nil {
-					return throwErrorJS(ctx, err.Error(), false)
+					return throwErrorJS(ctx, "Invalid build args: "+a[0], false)
 				}
 				pkg.SubPath = strings.Join(strings.Split(pkg.SubPath, "/")[1:], "/")
 				pkg.SubModule = toModuleBareName(pkg.SubPath, true)
@@ -932,7 +934,10 @@ func router() rex.Handle {
 
 		// fix the build args that are from the query
 		if !isBuildArgsFromPath {
-			fixBuildArgs(npmrc, &buildArgs, pkg)
+			err := fixBuildArgs(npmrc, &buildArgs, pkg)
+			if err != nil {
+				return throwErrorJS(ctx, err.Error(), false)
+			}
 		}
 
 		// build and return `.d.ts`

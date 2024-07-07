@@ -11,6 +11,7 @@ import (
 type BuildArgs struct {
 	alias             map[string]string
 	deps              map[string]string
+	externalAll       bool
 	external          *StringSet
 	exports           *StringSet
 	conditions        []string
@@ -62,12 +63,15 @@ func decodeBuildArgs(npmrc *NpmRC, argsString string) (args BuildArgs, err error
 				}
 			} else {
 				switch p {
+				case "*":
+					args.externalAll = true
 				case "r":
 					args.externalRequire = true
 				case "k":
 					args.keepNames = true
 				case "i":
 					args.ignoreAnnotations = true
+
 				}
 			}
 		}
@@ -100,6 +104,9 @@ func encodeBuildArgs(args BuildArgs, pkg Pkg, isDts bool) string {
 			ss.Sort()
 			lines = append(lines, fmt.Sprintf("d%s", strings.Join(ss, ",")))
 		}
+	}
+	if args.externalAll {
+		lines = append(lines, "*")
 	}
 	if args.external.Len() > 0 {
 		var ss sort.StringSlice
@@ -156,26 +163,30 @@ func encodeBuildArgs(args BuildArgs, pkg Pkg, isDts bool) string {
 }
 
 // fixBuildArgs removes invalid alias, deps, external from the build args
-func fixBuildArgs(npmrc *NpmRC, args *BuildArgs, pkg Pkg) {
+func fixBuildArgs(npmrc *NpmRC, args *BuildArgs, pkg Pkg) error {
 	if len(args.alias) > 0 || len(args.deps) > 0 || args.external.Len() > 0 {
-		depTree := NewStringSet(walkDeps(npmrc, NewStringSet(), pkg)...)
+		deps, err := walkDeps(NewStringSet(), npmrc, pkg)
+		if err != nil {
+			return err
+		}
+		depsSet := NewStringSet(deps...)
 		if len(args.alias) > 0 {
 			alias := map[string]string{}
 			for from, to := range args.alias {
-				if depTree.Has(from) {
+				if depsSet.Has(from) {
 					alias[from] = to
 				}
 			}
 			for _, to := range alias {
 				pkgName, _, _, _ := splitPkgPath(to)
-				depTree.Add(pkgName)
+				depsSet.Add(pkgName)
 			}
 			args.alias = alias
 		}
 		if len(args.deps) > 0 {
 			newDeps := map[string]string{}
 			for name, version := range args.deps {
-				if depTree.Has(name) {
+				if depsSet.Has(name) {
 					newDeps[name] = version
 				}
 			}
@@ -184,23 +195,29 @@ func fixBuildArgs(npmrc *NpmRC, args *BuildArgs, pkg Pkg) {
 		if args.external.Len() > 0 {
 			external := NewStringSet()
 			for _, name := range args.external.Values() {
-				if depTree.Has(name) {
+				if strings.HasPrefix(name, "node:") || depsSet.Has(name) {
 					external.Add(name)
 				}
 			}
 			args.external = external
 		}
 	}
+	return nil
 }
 
-func walkDeps(npmrc *NpmRC, marker *StringSet, pkg Pkg) (deps []string) {
-	if marker.Has(pkg.Name) {
-		return nil
+func walkDeps(ctx *StringSet, npmrc *NpmRC, pkg Pkg) (deps []string, err error) {
+	if ctx.Has(pkg.Name) {
+		return
 	}
-	marker.Add(pkg.Name)
-	p, err := npmrc.getPackageInfo(pkg.Name, pkg.Version)
+	ctx.Add(pkg.Name)
+	var p PackageJSON
+	if pkg.FromGithub {
+		p, err = npmrc.installPackage(pkg)
+	} else {
+		p, err = npmrc.getPackageInfo(pkg.Name, pkg.Version)
+	}
 	if err != nil {
-		return nil
+		return
 	}
 	pkgDeps := map[string]string{}
 	for name, version := range p.Dependencies {
@@ -209,15 +226,13 @@ func walkDeps(npmrc *NpmRC, marker *StringSet, pkg Pkg) (deps []string) {
 	for name, version := range p.PeerDependencies {
 		pkgDeps[name] = version
 	}
-	ch := make(chan []string, len(pkgDeps))
 	for name, version := range pkgDeps {
+		subDeps, err := walkDeps(ctx, npmrc, Pkg{Name: name, Version: version})
+		if err != nil {
+			return nil, err
+		}
 		deps = append(deps, name)
-		go func(c chan []string, marker *StringSet, name, version string) {
-			c <- walkDeps(npmrc, marker, Pkg{Name: name, Version: version})
-		}(ch, marker, name, version)
-	}
-	for range pkgDeps {
-		deps = append(deps, <-ch...)
+		deps = append(deps, subDeps...)
 	}
 	return
 }

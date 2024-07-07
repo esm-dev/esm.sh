@@ -673,7 +673,7 @@ func (ctx *BuildContext) resolveConditionExportEntry(conditions *OrderedMap, mTy
 	return
 }
 
-func (ctx *BuildContext) resolveExternalModule(specifier string, kind api.ResolveKind) (resolvedPath string) {
+func (ctx *BuildContext) resolveExternalModule(specifier string, kind api.ResolveKind) (resolvedPath string, err error) {
 	defer func() {
 		fullResolvedPath := resolvedPath
 		// use relative path for sub-module of current package
@@ -707,7 +707,7 @@ func (ctx *BuildContext) resolveExternalModule(specifier string, kind api.Resolv
 
 	// node builtin module
 	if nodejsInternalModules[specifier] {
-		if ctx.args.external.Has("node:"+specifier) || ctx.args.external.Has("*") {
+		if ctx.args.external.Has("node:"+specifier) || ctx.args.externalAll {
 			resolvedPath = fmt.Sprintf("node:%s", specifier)
 		} else if ctx.target == "node" {
 			resolvedPath = fmt.Sprintf("node:%s", specifier)
@@ -722,7 +722,7 @@ func (ctx *BuildContext) resolveExternalModule(specifier string, kind api.Resolv
 	}
 
 	// check `?external`
-	if ctx.args.external.Has("*") || ctx.args.external.Has(getPkgName(specifier)) {
+	if ctx.args.externalAll || ctx.args.external.Has(getPkgName(specifier)) {
 		resolvedPath = specifier
 		return
 	}
@@ -799,6 +799,7 @@ func (ctx *BuildContext) resolveExternalModule(specifier string, kind api.Resolv
 			version = "latest"
 		}
 	}
+
 	// force the version of 'react' (as dependency) equals to 'react-dom'
 	if ctx.pkg.Name == "react-dom" && pkgName == "react" {
 		version = ctx.pkg.Version
@@ -826,8 +827,8 @@ func (ctx *BuildContext) resolveExternalModule(specifier string, kind api.Resolv
 		if strings.HasPrefix(version, "npm:") {
 			pkg.Name, pkg.Version, _, _ = splitPkgPath(version[4:])
 		} else if strings.HasPrefix(version, "git+ssh://") || strings.HasPrefix(version, "git+https://") || strings.HasPrefix(version, "git://") {
-			gitUrl, err := url.Parse(version)
-			if err != nil || gitUrl.Hostname() != "github.com" {
+			gitUrl, e := url.Parse(version)
+			if e != nil || gitUrl.Hostname() != "github.com" {
 				resolvedPath = fmt.Sprintf("/error.js?type=unsupported-git-dependency&name=%s&importer=%s", pkgName, ctx.pkg)
 				return
 			}
@@ -849,32 +850,39 @@ func (ctx *BuildContext) resolveExternalModule(specifier string, kind api.Resolv
 	if pkg.FromGithub {
 		// fetch the latest tag as the version of the repository
 		if pkg.Version == "" {
-			refs, err := listRepoRefs(fmt.Sprintf("https://github.com/%s", pkg.Name))
-			if err == nil {
-				for _, ref := range refs {
-					if ref.Ref == "HEAD" {
-						pkg.Version = ref.Sha[:16]
-						break
-					}
+			var refs []GitRef
+			refs, err = listRepoRefs(fmt.Sprintf("https://github.com/%s", pkg.Name))
+			if err != nil {
+				return
+			}
+			for _, ref := range refs {
+				if ref.Ref == "HEAD" {
+					pkg.Version = ref.Sha[:16]
+					break
 				}
 			}
 		}
 	} else if !isCaretVersion && !regexpFullVersion.MatchString(version) {
 		// fetch the latest version of the package based on the semver range
-		_, p, _, err := ctx.lookupDep(pkgName + "@" + version)
-		if err == nil {
-			pkg.Version = p.Version
+		var p PackageJSON
+		_, p, _, err = ctx.lookupDep(pkgName + "@" + version)
+		if err != nil {
+			return
 		}
+		pkg.Version = p.Version
 	}
 
 	args := BuildArgs{
 		alias:      ctx.args.alias,
-		conditions: ctx.args.conditions,
 		deps:       ctx.args.deps,
 		external:   ctx.args.external,
+		conditions: ctx.args.conditions,
 		exports:    NewStringSet(),
 	}
-	fixBuildArgs(ctx.npmrc, &args, pkg)
+	err = fixBuildArgs(ctx.npmrc, &args, pkg)
+	if err != nil {
+		return
+	}
 	if isCaretVersion {
 		resolvedPath = "/" + pkg.String()
 		// workaround for es5-ext weird "/#/" path

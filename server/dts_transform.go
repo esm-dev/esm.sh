@@ -170,7 +170,7 @@ func transformDTS(ctx *BuildContext, dts string, buildArgsPrefix string, marker 
 		}
 
 		// respect `?external` query
-		if ctx.args.external.Has("*") || ctx.args.external.Has(depPkgName) {
+		if ctx.args.externalAll || ctx.args.external.Has(depPkgName) {
 			return specifier, nil
 		}
 

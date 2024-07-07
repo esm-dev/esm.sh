@@ -128,7 +128,7 @@ func cjsLexer(npmrc *NpmRC, pkgName string, wd string, specifier string, nodeEnv
 		ctx,
 		"node",
 		"--experimental-permission",
-		"--allow-fs-read="+npmrc.Dir()+"/*",
+		"--allow-fs-read="+npmrc.NpmDir()+"/*",
 		"cjs_lexer.js",
 	)
 	cmd.Dir = path.Join(config.WorkDir, "npm", cjsLexerPkg)
