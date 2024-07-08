@@ -5,10 +5,10 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width" />
   <title>ESM&gt;CDN</title>
-  <link rel="icon" type="image/svg+xml" href="./embed/assets/favicon.svg">
+  <link rel="icon" type="image/svg+xml" href="/embed/assets/favicon.svg">
   <meta name="description" content="A global, fast & smart content delivery network(CDN) for modern(es6+) web development." />
   <meta name="keywords" content="js,javascript,typescript,modern,web,dev,development,es,module,esm,es2015,es6,deno,npm,github,global,cdn,infrastructure,esbuild" />
-  <link rel="stylesheet" href="./embed/style.css">
+  <link rel="stylesheet" href="/embed/style.css">
 </head>
 
 <body>
@@ -31,7 +31,7 @@
     </main>
   </div>
   <script type="module">
-    import('./embed/index.js').then(({ render }) => render('# README'))
+    import('/embed/index.js').then(({ render }) => render('# README'))
   </script>
   <script nomodule>
     document.querySelector('main em').textContent = 'Please use a modern browser to view this site.'

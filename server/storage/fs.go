@@ -12,6 +12,7 @@ import (
 
 type FileSystem interface {
 	Stat(path string) (stat FileStat, err error)
+	List(dir string) (files []string, err error)
 	Open(path string) (content io.ReadSeekCloser, err error)
 	WriteFile(path string, r io.Reader) (written int64, err error)
 	Remove(path string) error

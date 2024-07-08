@@ -118,12 +118,10 @@ func findFiles(root string, dir string, fn func(p string) bool) ([]string, error
 			if err != nil {
 				return nil, err
 			}
-			n := len(files)
-			files = make([]string, n+len(subFiles))
-			for i, f := range subFiles {
-				files[i+n] = f
-			}
-			copy(files, subFiles)
+			newFiles := make([]string, len(files)+len(subFiles))
+			copy(newFiles, files)
+			copy(newFiles[len(files):], subFiles)
+			files = newFiles
 		} else {
 			if fn(path) {
 				files = append(files, path)

@@ -145,19 +145,15 @@ func router() rex.Handle {
 				ctx.W.Header().Set("Cache-Control", ccMustRevalidate)
 				return output
 			case "/purge":
-				zoneId := ctx.Form.Value("zone-id")
+				zoneId := ctx.Form.Value("zoneId")
 				packageName := ctx.Form.Value("package")
 				version := ctx.Form.Value("version")
-				github := ctx.Form.Has("github")
 				if packageName == "" {
-					return rex.Err(400, "packageName is required")
+					return rex.Err(400, "param `package` is required")
 				}
 				prefix := "/" + packageName + "@"
 				if version != "" {
 					prefix += version
-				}
-				if github {
-					prefix = "/gh" + prefix
 				}
 				if zoneId != "" {
 					prefix = zoneId + prefix
@@ -166,16 +162,58 @@ func router() rex.Handle {
 				if err != nil {
 					return rex.Err(500, err.Error())
 				}
+				deletedPkgs := NewStringSet()
 				for _, esmPath := range deletedKeys {
+					pathname := esmPath
 					if zoneId != "" {
-						esmPath = esmPath[len(zoneId):]
+						pathname = pathname[len(zoneId):]
 					}
-					pkgName, version, _, _ := splitPkgPath(esmPath)
-					go fs.RemoveAll(fmt.Sprintf("builds/%s@%s/", pkgName, version))
-					go fs.RemoveAll(fmt.Sprintf("types/%s@%s/", pkgName, version))
-					log.Info("purged", esmPath)
+					fromGithub := strings.HasPrefix(pathname, "/gh/")
+					if fromGithub {
+						pathname = pathname[3:]
+					}
+					pkgName, version, _, _ := splitPkgPath(pathname)
+					pkgId := pkgName + "@" + version
+					if fromGithub {
+						pkgId = "gh/" + pkgId
+					}
+					if zoneId != "" {
+						pkgId = zoneId + "/" + pkgId
+					}
+					deletedPkgs.Add(pkgId)
 				}
-				return deletedKeys
+				deletedFiles := []string{}
+				for _, pkgId := range deletedPkgs.Values() {
+					buildPrefix := fmt.Sprintf("builds/%s", pkgId)
+					buildFiles, err := fs.List(buildPrefix)
+					if err == nil && len(buildFiles) > 0 {
+						err = fs.RemoveAll(buildPrefix)
+						if err != nil {
+							return rex.Err(500, "FS error")
+						}
+						for i, filepath := range buildFiles {
+							buildFiles[i] = fmt.Sprintf("%s/%s", pkgId, filepath)
+						}
+						deletedFiles = append(deletedFiles, buildFiles...)
+					}
+					dtsPrefix := fmt.Sprintf("types/%s", pkgId)
+					dtsFiles, err := fs.List(dtsPrefix)
+					if err == nil && len(dtsFiles) > 0 {
+						err = fs.RemoveAll(dtsPrefix)
+						if err != nil {
+							return rex.Err(500, "FS error")
+						}
+						for i, filepath := range dtsFiles {
+							dtsFiles[i] = fmt.Sprintf("%s/%s", pkgId, filepath)
+						}
+						deletedFiles = append(deletedFiles, dtsFiles...)
+					}
+					log.Info("purged", pkgId)
+				}
+				return map[string]interface{}{
+					"deletedPkgs":  deletedPkgs.Values(),
+					"deletedFiles": deletedFiles,
+				}
 			default:
 				return rex.Err(404, "not found")
 			}
