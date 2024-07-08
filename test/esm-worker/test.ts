@@ -467,15 +467,15 @@ Deno.test("esm-worker", { sanitizeOps: false, sanitizeResources: false }, async 
       `,
       filename: "source.jsx",
       target: "es2022",
-      importMap: JSON.stringify({
+      importMap: {
         imports: {
           "@jsxImportSource": "https://preact@10.13.2",
           "preact-render-to-string": "https://esm.sh/preact-render-to-string6.0.2",
         },
-      }),
+      },
       sourceMap: true,
     };
-    const hash = await computeHash("jsx" + options.code + options.importMap + options.target + options.sourceMap);
+    const hash = await computeHash("jsx" + options.code + JSON.stringify(options.importMap) + options.target + options.sourceMap);
     const res1 = await fetch(`${workerOrigin}/transform`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -514,10 +514,11 @@ Deno.test("esm-worker", { sanitizeOps: false, sanitizeResources: false }, async 
       body: fd,
     });
     assertEquals(res.status, 200);
-    assertEquals(res.headers.get("Content-Type"), "application/json; charset=utf-8");
-    const ret = await res.json();
-    assert(Array.isArray(ret));
-    assert(ret.length > 0);
+    const ret: any = await res.json();
+    assert(Array.isArray(ret.deletedPkgs));
+    assert(Array.isArray(ret.deletedFiles));
+    assert(ret.deletedPkgs.length > 0);
+    assert(ret.deletedFiles.length > 0);
   });
 
   await t.step("check esma target from user agent", async () => {
