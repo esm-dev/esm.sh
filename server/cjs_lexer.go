@@ -121,14 +121,15 @@ func cjsLexer(npmrc *NpmRC, pkgName string, wd string, specifier string, nodeEnv
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	var outBuf bytes.Buffer
-	var errBuf bytes.Buffer
-
+	var (
+		outBuf bytes.Buffer
+		errBuf bytes.Buffer
+	)
 	cmd := exec.CommandContext(
 		ctx,
 		"node",
 		"--experimental-permission",
-		"--allow-fs-read="+npmrc.NpmDir()+"/*",
+		"--allow-fs-read="+npmrc.NpmDir(),
 		"cjs_lexer.js",
 	)
 	cmd.Dir = path.Join(config.WorkDir, "npm", cjsLexerPkg)

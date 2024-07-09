@@ -1073,6 +1073,8 @@ func (ctx *BuildContext) lexer(entry *BuildEntry, forceCjsOnly bool) (ret BuildR
 			return
 		}
 
+		log.Warnf("fake ES module '%s' of '%s'", entry.esm, ctx.pkgJson.Name)
+
 		var r cjsLexerResult
 		r, err = ctx.cjsLexer(entry.esm)
 		if err != nil {
@@ -1085,7 +1087,6 @@ func (ctx *BuildContext) lexer(entry *BuildEntry, forceCjsOnly bool) (ret BuildR
 		entry.cjs = entry.esm
 		entry.esm = ""
 		reexport = r.ReExport
-		log.Warnf("fake ES module '%s' of '%s'", entry.cjs, ctx.pkgJson.Name)
 		return
 	}
 
