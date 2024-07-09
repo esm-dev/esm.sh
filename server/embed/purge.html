@@ -9,7 +9,7 @@
 </head>
 
 <body>
-  <h1>Purge</h1>
+  <h1>Purge Build</h1>
   <form>
     <label>
       <input type="text" name="package" placeholder="Package" required>
@@ -36,9 +36,11 @@
       const res = await fetch("/purge", { method: "POST", body: form })
       if (!res.ok) {
         alert("Failed to purge", await res.text())
+        return
       }
       const result = await res.json()
       codeEl.textContent = JSON.stringify(result, null, 2)
+      formEl.reset()
       formEl.style.display = "none"
       preEl.style.display = "block"
       pEl.style.display = "block"
