@@ -13,7 +13,10 @@ declare global {
     ALLOW_LIST?: string;
     SOURCE_MAP?: "on" | "off"; // default: "on"
     KV?: KVNamespace;
+    KV_NAMESPACE_ID?: string;
     R2?: R2Bucket;
+    CF_ACCOUNT_ID?: string;
+    CF_API_TOKEN?: string;
     LEGACY_WORKER?: { fetch: (req: Request) => Promise<Response> };
   }
   interface NpmRegistry {

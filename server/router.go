@@ -177,9 +177,6 @@ func router() rex.Handle {
 					if fromGithub {
 						pkgId = "gh/" + pkgId
 					}
-					if zoneId != "" {
-						pkgId = zoneId + "/" + pkgId
-					}
 					deletedPkgs.Add(pkgId)
 				}
 				deletedFiles := []string{}
@@ -210,10 +207,14 @@ func router() rex.Handle {
 					}
 					log.Info("purged", pkgId)
 				}
-				return map[string]interface{}{
+				ret := map[string]interface{}{
 					"deletedPkgs":  deletedPkgs.Values(),
 					"deletedFiles": deletedFiles,
 				}
+				if zoneId != "" {
+					ret["zoneId"] = zoneId
+				}
+				return ret
 			default:
 				return rex.Err(404, "not found")
 			}

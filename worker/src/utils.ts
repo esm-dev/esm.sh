@@ -35,7 +35,7 @@ export function mockKV(storage: R2Bucket | WorkerStorage): WorkerStorageKV {
     async put(
       key: string,
       value: ArrayBuffer | Uint8Array | ReadableStream,
-      options?: { expirationTtl?: number; metadata?: HttpMetadata },
+      options?: { metadata?: HttpMetadata },
     ): Promise<void> {
       await storage.put(key, value, { customMetadata: options?.metadata });
     },

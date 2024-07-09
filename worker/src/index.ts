@@ -99,7 +99,7 @@ async function fetchOrigin(req: Request, env: Env, ctx: Context, uri: string): P
   return new Response(res.body, { headers: resHeaders });
 }
 
-async function fetchAssetFile(req: Request, ctx: Context, env: Env, pathname: string): Promise<Response> {
+async function fetchAsset(req: Request, ctx: Context, env: Env, pathname: string): Promise<Response> {
   const ret = await env.R2?.get(pathname.slice(1));
   if (ret) {
     const headers = ctx.corsHeaders();
@@ -131,7 +131,7 @@ async function fetchAssetFile(req: Request, ctx: Context, env: Env, pathname: st
   return new Response(body, { headers });
 }
 
-async function fetchESM(
+async function fetchESMBuild(
   req: Request,
   env: Env,
   ctx: Context,
@@ -142,7 +142,7 @@ async function fetchESM(
   const R2 = env.R2;
   const isRaw = ctx.url.searchParams.has("raw");
   const isDts = isDtsFile(pathname);
-  const isAsset = isRaw || isDts || pathname.endsWith(".mjs.map") || pathname.endsWith(".js.map");
+  const isStatic = isRaw || isDts || pathname.endsWith(".mjs.map") || pathname.endsWith(".js.map");
   const isFromUpWorker = req.headers.has("X-Real-Origin");
 
   let uri = pathname;
@@ -150,7 +150,7 @@ async function fetchESM(
     uri += query;
   }
   let storeKey = uri.slice(1);
-  if (isAsset) {
+  if (isStatic) {
     // ignore query string for asset files
     storeKey = pathname.slice(1);
     // ignore the leading `*` for raw files
@@ -163,7 +163,7 @@ async function fetchESM(
   }
 
   if (!isFromUpWorker && R2) {
-    if (!isAsset) {
+    if (!isStatic) {
       const kv = env.KV ?? mockKV(R2);
       const { value, metadata } = await kv.getWithMetadata<HttpMetadata>(
         storeKey,
@@ -236,28 +236,18 @@ async function fetchESM(
   }
   headers.set("X-Content-Source", "esm-origin-server");
 
-  // save the file to KV/R2 if the `cache-control` header is not `public, max-age=0, must-revalidate`
-  if (!isFromUpWorker && R2 && cacheControl && cacheControl !== "public, max-age=0, must-revalidate") {
-    const immutable = cacheControl?.includes("immutable");
+  // save the file to KV/R2 if the `cache-control` header is set to `public, max-age=31536000, immutable`
+  if (!isFromUpWorker && R2 && cacheControl && cacheControl === ccImmutable) {
     let bodyCopy: ReadableStream<Uint8Array>;
     [body, bodyCopy] = body.tee();
-    if (!isAsset) {
+    if (!isStatic) {
       const kv = env.KV ?? mockKV(R2);
       let storeSteam = bodyCopy;
       if (gzip && typeof CompressionStream !== "undefined") {
         storeSteam = storeSteam.pipeThrough<Uint8Array>(new CompressionStream("gzip"));
       }
-      let expirationTtl: number | undefined;
-      if (!immutable) {
-        cacheControl?.split(",").forEach((v) => {
-          const [key, val] = v.split("=");
-          if (key.trim() === "max-age") {
-            expirationTtl = parseInt(val.trim(), 10);
-          }
-        });
-      }
-      ctx.waitUntil(kv.put(storeKey, storeSteam, { expirationTtl, metadata: { contentType, dts, esmPath: esmPath } }));
-    } else if (immutable) {
+      ctx.waitUntil(kv.put(storeKey, storeSteam, { metadata: { contentType, dts, esmPath } }));
+    } else {
       ctx.waitUntil(R2.put(storeKey, bodyCopy, { httpMetadata: { contentType } }));
     }
   }
@@ -280,11 +270,6 @@ function withESMWorker(middleware?: Middleware, cache: Cache = (caches as any).d
           headers: { "cache-control": ccImmutable },
         })
       );
-    }
-
-    // strip trailing slash
-    if (pathname !== "/" && pathname.endsWith("/")) {
-      pathname = pathname.slice(0, -1);
     }
 
     switch (pathname) {
@@ -335,7 +320,7 @@ function withESMWorker(middleware?: Middleware, cache: Cache = (caches as any).d
             query.push(`v=${v}`);
           }
         }
-        return fetchESM(req, env, ctx, pathname, query.length > 0 ? "?" + query.join("&") : undefined);
+        return fetchESMBuild(req, env, ctx, pathname, query.length > 0 ? "?" + query.join("&") : undefined);
       }, { varyUA });
     }
 
@@ -347,41 +332,53 @@ function withESMWorker(middleware?: Middleware, cache: Cache = (caches as any).d
     }
 
     if (req.method === "POST") {
-      if (pathname === "/transform" || pathname === "/purge") {
-        const res = await fetchOrigin(req, env, ctx, pathname);
-        if (pathname === "/purge") {
-          const deletedFiles: string[] = await res.json();
-          const headers = new Headers(res.headers);
-          if (deletedFiles.length > 0) {
-            const kv = env.KV;
-            const r2 = env.R2;
-            if (kv?.delete && deletedFiles.length <= 42) {
-              await Promise.all(deletedFiles.map((k) => kv.delete(k)));
-            } else {
-              headers.set("X-KV-Purged", "false");
+      switch (pathname) {
+        case "/transform": {
+          const res = await fetchOrigin(req, env, ctx, pathname);
+          copyHeaders(res.headers, ctx.corsHeaders());
+          return res;
+        }
+        case "/purge": {
+          const res = await fetchOrigin(req, env, ctx, pathname);
+          const ret: { zoneId?: string; deletedFiles: string[] } = await res.json();
+          const { zoneId, deletedFiles } = ret;
+          if (deletedFiles && deletedFiles.length > 0) {
+            const { R2, CF_ACCOUNT_ID, KV_NAMESPACE_ID, CF_API_TOKEN } = env;
+            const promises: Promise<any>[] = [];
+            if (R2) {
+              let keys = deletedFiles.filter((name) => !name.endsWith(".mjs") && !name.endsWith(".js"));
+              if (zoneId) {
+                keys = keys.map((name) => zoneId + "/" + name);
+              }
+              promises.push(R2.delete(keys));
             }
-            if (r2?.delete) {
-              // delete the source map files in R2 storage
-              await r2.delete(deletedFiles.filter((k) => !k.endsWith(".css")).map((k) => k + ".map"));
+            if (CF_ACCOUNT_ID && KV_NAMESPACE_ID && CF_API_TOKEN) {
+              promises.push((async () => {
+                let keys = deletedFiles.filter((name) => name.endsWith(".mjs") || name.endsWith(".js"));
+                if (zoneId) {
+                  keys = keys.map((name) => zoneId + "/" + name);
+                }
+                const res = await fetch(
+                  `https://api.cloudflare.com/client/v4/accounts/${CF_ACCOUNT_ID}/storage/kv/namespaces/${KV_NAMESPACE_ID}/bulk`,
+                  {
+                    method: "DELETE",
+                    headers: { "Content-Type": "application/json", Authorization: "Bearer " + CF_API_TOKEN },
+                    body: JSON.stringify({ keys }),
+                  },
+                );
+                const ret: any = await res.json();
+                if (!ret.success) {
+                  throw new Error(ret.errors[0].message);
+                }
+              })());
             }
+            await Promise.all(promises);
           }
-          headers.delete("Content-Length");
-          return new Response(JSON.stringify(deletedFiles), { headers });
+          return Response.json(ret, { headers: ctx.corsHeaders() });
         }
-        return res;
-      } else if (pathname === "/purge-kv") {
-        const keys = await req.json();
-        if (!Array.isArray(keys) || keys.length === 0 || keys.length > 42) {
-          return err("No keys or too many keys", ctx.corsHeaders(), 400);
-        }
-        const kv = env.KV;
-        if (!kv?.delete) {
-          return err("KV namespace not found", ctx.corsHeaders());
-        }
-        await Promise.all(keys.map((k) => kv.delete(k)));
-        return new Response(`Deleted ${keys.length} files`);
+        default:
+          return err("Not Found", ctx.corsHeaders(), 404);
       }
-      return err("Not Found", ctx.corsHeaders(), 404);
     }
 
     if (req.method !== "GET" && req.method !== "HEAD") {
@@ -401,7 +398,7 @@ function withESMWorker(middleware?: Middleware, cache: Cache = (caches as any).d
     // if it's a singleton build module which is created by https://esm.sh/tsx
     if (pathname.startsWith("/+") && (pathname.endsWith(".mjs") || pathname.endsWith(".mjs.map"))) {
       return ctx.withCache(() => {
-        return fetchESM(req, env, ctx, pathname);
+        return fetchESMBuild(req, env, ctx, pathname);
       });
     }
 
@@ -416,6 +413,11 @@ function withESMWorker(middleware?: Middleware, cache: Cache = (caches as any).d
       ) {
         return env.LEGACY_WORKER.fetch(req.clone());
       }
+    }
+
+    // strip trailing slash
+    if (pathname !== "/" && pathname.endsWith("/")) {
+      pathname = pathname.slice(0, -1);
     }
 
     // decode entries `%5E` -> `^`
@@ -666,7 +668,7 @@ function withESMWorker(middleware?: Middleware, cache: Cache = (caches as any).d
         return ctx.withCache(() => {
           const prefix = gh ? "/gh" : "";
           const pathname = `${prefix}/${pkgFullname}@${packageVersion}${subPath}`;
-          return fetchAssetFile(req, ctx, env, pathname);
+          return fetchAsset(req, ctx, env, pathname);
         });
       }
     }
@@ -692,7 +694,7 @@ function withESMWorker(middleware?: Middleware, cache: Cache = (caches as any).d
     if (isTargetUrl || isDtsFile(subPath)) {
       return ctx.withCache(() => {
         const pathname = `${prefix}/${pkgFullname}@${packageVersion}${subPath}`;
-        return fetchESM(req, env, ctx, pathname, undefined, true);
+        return fetchESMBuild(req, env, ctx, pathname, undefined, true);
       });
     }
 
@@ -704,7 +706,7 @@ function withESMWorker(middleware?: Middleware, cache: Cache = (caches as any).d
       if (target) {
         params.set("target", target);
       }
-      return fetchESM(req, env, ctx, pathname, "?" + params.toString());
+      return fetchESMBuild(req, env, ctx, pathname, "?" + params.toString());
     }, { varyUA: true });
   };
 
@@ -727,7 +729,7 @@ function withESMWorker(middleware?: Middleware, cache: Cache = (caches as any).d
   let allowList: Set<string> | null = null;
 
   return {
-    fetch: (req: Request, env: Env, exeCtx: ExecutionContext): Response | Promise<Response> => {
+    fetch: (req: Request, env: Env, workerCtx: ExecutionContext): Response | Promise<Response> => {
       // parse env.ALLOW_LIST to a Set if it's defined
       if (allowList === null && env.ALLOW_LIST) {
         allowList = new Set(
@@ -773,8 +775,7 @@ function withESMWorker(middleware?: Middleware, cache: Cache = (caches as any).d
         let res = await cache.match(cacheKey);
         if (res) {
           if (isHeadMethod) {
-            const { status, headers } = res;
-            return new Response(null, { status, headers });
+            return new Response(null, { status: 204, headers: res.headers });
           }
           return res;
         }
@@ -783,7 +784,7 @@ function withESMWorker(middleware?: Middleware, cache: Cache = (caches as any).d
           res.headers.append("Vary", "User-Agent");
         }
         if (res.ok && res.headers.get("Cache-Control")?.startsWith("public, max-age=")) {
-          exeCtx.waitUntil(cache.put(cacheKey, res.clone()));
+          workerCtx.waitUntil(cache.put(cacheKey, res.clone()));
         }
         if (isHeadMethod) {
           const { status, headers } = res;
@@ -835,7 +836,7 @@ function withESMWorker(middleware?: Middleware, cache: Cache = (caches as any).d
         npmrc: npmrc!,
         url,
         corsHeaders: (header) => corsHeaders(req.headers.get("Origin"), header),
-        waitUntil: (p: Promise<any>) => exeCtx.waitUntil(p),
+        waitUntil: (p: Promise<any>) => workerCtx.waitUntil(p),
         withCache,
       };
 
@@ -843,7 +844,7 @@ function withESMWorker(middleware?: Middleware, cache: Cache = (caches as any).d
         const { R2 } = env;
         if (R2) {
           // save the error log to R2 storage
-          exeCtx.waitUntil(R2.put(
+          workerCtx.waitUntil(R2.put(
             `errors/${new Date().toISOString().split("T")[0]}/${Date.now()}.log`,
             JSON.stringify({
               url: req.url,

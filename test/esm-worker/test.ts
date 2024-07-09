@@ -64,6 +64,15 @@ const R2 = {
   ): Promise<void> {
     this._store.set(key, { value: await new Response(value).arrayBuffer(), ...options });
   },
+  async delete(key: string | string[]): Promise<void> {
+    if (Array.isArray(key)) {
+      for (const k of key) {
+        this._store.delete(k);
+      }
+    } else {
+      this._store.delete(key);
+    }
+  },
 };
 
 const LEGACY_WORKER = {
