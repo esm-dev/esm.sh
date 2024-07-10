@@ -6,8 +6,6 @@ import type { RunOptions } from "./types/run.d.ts";
 
 const document: Document | undefined = window.document;
 const kRun = "esm.sh/run";
-const kImportmap = "importmap";
-const localhosts = ["localhost", "127.0.0.1"];
 
 function run(options: RunOptions = {}): Promise<ServiceWorker> {
   const serviceWorker = navigator.serviceWorker;
@@ -17,27 +15,20 @@ function run(options: RunOptions = {}): Promise<ServiceWorker> {
   const hasController = serviceWorker.controller !== null;
   const onUpdateFound = options.onUpdateFound ?? (() => location.reload());
   return new Promise<ServiceWorker>(async (resolve, reject) => {
-    let sw = options.sw;
-    if (options.devSW && localhosts.includes(location.hostname)) {
-      sw = options.devSW;
-    }
-    const reg = await serviceWorker.register(sw ?? "/sw.js", {
+    const reg = await serviceWorker.register(options.sw ?? "/sw.js", {
       type: "module",
       scope: options.swScope,
     });
     const run = async () => {
       if (reg.active?.state === "activated") {
-        const importMapSupported = HTMLScriptElement.supports?.(kImportmap);
-        const imports: Record<string, string> = {};
-        const scopes: Record<string, typeof imports> = {};
         let p: Promise<boolean> | undefined;
+        let importMap: Record<string, any> | null = null;
         queryElement<HTMLScriptElement>('script[type="importmap"]', (el) => {
           try {
             const json = JSON.parse(el.textContent!);
-            for (const scope in json.scopes) {
-              scopes[scope] = { ...imports, ...json.imports };
+            if (json && typeof json === "object") {
+              importMap = json;
             }
-            Object.assign(imports, json.imports);
           } catch (e) {
             console.error("Failed to parse importmap:", e);
           }
@@ -126,14 +117,21 @@ queryElement<HTMLScriptElement>("script[type='module'][src][main]", (el) => {
   const src = el.src;
   const main = attr(el, "main");
   if (src === import.meta.url && main) {
-    const options: RunOptions = { main, sw: attr(el, "sw"), devSW: attr(el, "dev-sw") };
-    const updateui = attr(el, "updateui");
-    if (updateui) {
-      const el = document!.querySelector<HTMLElement>(updateui);
-      if (!el) {
-        throw new Error("Could not find the `updateui` element");
-      }
-      options.onUpdateFound = () => el.style.display = "block";
+    const options: RunOptions = { main, sw: attr(el, "sw") };
+    const updateprompt = attr(el, "updateprompt");
+    if (updateprompt) {
+      queryElement<HTMLElement>(updateprompt, (el) => {
+        options.onUpdateFound = () => {
+          if (el instanceof HTMLDialogElement) {
+            el.showModal();
+          } else {
+            el.hidden = false;
+            if (el.hasAttribute("popover")) {
+              el.showPopover?.();
+            }
+          }
+        };
+      });
     }
     run(options);
   }

@@ -9,7 +9,6 @@ export interface VFile {
 
 export interface RunOptions {
   main?: string;
-  devSW?: string | null;
   sw?: string | null;
   swScope?: string;
   onUpdateFound?: () => void;
