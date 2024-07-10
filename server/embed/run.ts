@@ -9,19 +9,13 @@ const kRun = "esm.sh/run";
 const kImportmap = "importmap";
 const localhosts = ["localhost", "127.0.0.1"];
 
-async function run(options: RunOptions = {}): Promise<ServiceWorker> {
+function run(options: RunOptions = {}): Promise<ServiceWorker> {
   const serviceWorker = navigator.serviceWorker;
   if (!serviceWorker) {
-    throw new Error("Service Worker is restricted to running across HTTPS for security reasons");
+    throw new Error("Service Worker is restricted to running across HTTPS for security reasons.");
   }
   const hasController = serviceWorker.controller !== null;
-  const onUpdateFound = () => {
-    console.log("Service Worker update found");
-    (options.onUpdateFound ?? (() => location.reload()))();
-  };
-  if (hasController) {
-    serviceWorker.oncontrollerchange = onUpdateFound;
-  }
+  const onUpdateFound = options.onUpdateFound ?? (() => location.reload());
   return new Promise<ServiceWorker>(async (resolve, reject) => {
     let sw = options.sw;
     if (options.devSW && localhosts.includes(location.hostname)) {
@@ -78,7 +72,7 @@ async function run(options: RunOptions = {}): Promise<ServiceWorker> {
           if (hasController) {
             p.then((isStale) => isStale && onUpdateFound());
           } else {
-            // if there's no controller, wait for the esm-bundle to be applied
+            // if there's no controller(first install), wait for the esm-bundle to be loaded
             await p.catch(reject);
           }
         }
@@ -90,23 +84,25 @@ async function run(options: RunOptions = {}): Promise<ServiceWorker> {
       }
     };
 
-    // detect Service Worker install/update available and wait for it to become installed
-    reg.onupdatefound = () => {
-      const installing = reg.installing;
-      if (installing) {
-        installing.onerror = (e) => reject(e.error);
-        installing.onstatechange = () => {
-          const waiting = reg.waiting;
-          if (waiting) {
-            waiting.onstatechange = hasController ? onUpdateFound : run;
-          }
-        };
-      }
-    };
-
-    // run the app immediately if the Service Worker is already installed
     if (hasController) {
+      // run the app immediately if the Service Worker is already installed
       run();
+      // listen for the new service worker to take over
+      serviceWorker.oncontrollerchange = onUpdateFound;
+    } else {
+      // wait for the new service worker to be installed
+      reg.onupdatefound = () => {
+        const installing = reg.installing;
+        if (installing) {
+          installing.onerror = (e) => reject(e.error);
+          installing.onstatechange = () => {
+            const waiting = reg.waiting;
+            if (waiting) {
+              waiting.onstatechange = run;
+            }
+          };
+        }
+      };
     }
   });
 }

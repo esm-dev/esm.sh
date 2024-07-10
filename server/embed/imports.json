@@ -1,3 +1,3 @@
 {
-  "/main.mjs": "document.querySelector('h1').textContent = 'Hello, World!'"
+  "/main.mjs": "document.querySelector('h1').textContent = 'Hello world!'"
 }
