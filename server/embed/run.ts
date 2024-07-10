@@ -2,26 +2,29 @@
  *  Docs: https://docs.esm.sh/run
  */
 
-import type { RunOptions, VFile } from "./types/run.d.ts";
+import type { RunOptions } from "./types/run.d.ts";
 
 const document: Document | undefined = window.document;
 const kRun = "esm.sh/run";
 const kImportmap = "importmap";
+const localhosts = ["localhost", "127.0.0.1"];
 
 async function run(options: RunOptions = {}): Promise<ServiceWorker> {
   const serviceWorker = navigator.serviceWorker;
-  const hasController = serviceWorker.controller !== null;
-  const {
-    main,
-    onUpdateFound = () => location.reload(),
-    swModule,
-    swScope,
-  } = options;
+  if (!serviceWorker) {
+    throw new Error("Service Worker is restricted to running across HTTPS for security reasons");
+  }
   return new Promise<ServiceWorker>(async (resolve, reject) => {
-    const reg = await serviceWorker.register(swModule ?? "/sw.js", {
+    let sw = options.sw;
+    if (options.devSW && localhosts.includes(location.hostname)) {
+      sw = options.devSW;
+    }
+    const reg = await serviceWorker.register(sw ?? "/sw.js", {
       type: "module",
-      scope: swScope,
+      scope: options.swScope,
     });
+    const hasController = serviceWorker.controller !== null;
+    const onUpdateFound = options.onUpdateFound ?? (() => location.reload());
     const run = async () => {
       if (reg.active?.state === "activated") {
         const importMapSupported = HTMLScriptElement.supports?.(kImportmap);
@@ -74,8 +77,8 @@ async function run(options: RunOptions = {}): Promise<ServiceWorker> {
           }
         }
         // import the main module if provided
-        if (main) {
-          import(main);
+        if (options.main) {
+          import(options.main);
         }
         resolve(reg.active!);
       }
@@ -121,7 +124,7 @@ queryElement<HTMLScriptElement>("script[type='module'][src][main]", (el) => {
   const src = el.src;
   const main = attr(el, "main");
   if (src === import.meta.url && main) {
-    run({ main, swModule: attr(el, "sw") ?? undefined });
+    run({ main, sw: attr(el, "sw") ?? undefined, devSW: attr(el, "dev-sw") ?? undefined });
   }
 });
 
