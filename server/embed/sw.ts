@@ -24,7 +24,7 @@ async function openVFSDB() {
   };
   const db = await promisifyIDBRequest<IDBDatabase>(req);
   db.onclose = () => {
-    // reopen the db on 'close' event
+    // reopen the db when it's closed
     vfsDB = openVFSDB();
   };
   return vfsDB = db;
@@ -142,7 +142,7 @@ async function shasum(input: ArrayBuffer): Promise<string> {
 }
 
 function run() {
-  throw new Error("calling run() in a service worker is not allowed");
+  throw new Error("calling `run()` in the service worker scope is not allowed");
 }
 
 export { run, run as default };

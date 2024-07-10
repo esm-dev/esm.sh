@@ -14,6 +14,14 @@ async function run(options: RunOptions = {}): Promise<ServiceWorker> {
   if (!serviceWorker) {
     throw new Error("Service Worker is restricted to running across HTTPS for security reasons");
   }
+  const hasController = serviceWorker.controller !== null;
+  const onUpdateFound = () => {
+    console.log("Service Worker update found");
+    (options.onUpdateFound ?? (() => location.reload()))();
+  };
+  if (hasController) {
+    serviceWorker.oncontrollerchange = onUpdateFound;
+  }
   return new Promise<ServiceWorker>(async (resolve, reject) => {
     let sw = options.sw;
     if (options.devSW && localhosts.includes(location.hostname)) {
@@ -23,8 +31,6 @@ async function run(options: RunOptions = {}): Promise<ServiceWorker> {
       type: "module",
       scope: options.swScope,
     });
-    const hasController = serviceWorker.controller !== null;
-    const onUpdateFound = options.onUpdateFound ?? (() => location.reload());
     const run = async () => {
       if (reg.active?.state === "activated") {
         const importMapSupported = HTMLScriptElement.supports?.(kImportmap);
@@ -124,7 +130,16 @@ queryElement<HTMLScriptElement>("script[type='module'][src][main]", (el) => {
   const src = el.src;
   const main = attr(el, "main");
   if (src === import.meta.url && main) {
-    run({ main, sw: attr(el, "sw") ?? undefined, devSW: attr(el, "dev-sw") ?? undefined });
+    const options: RunOptions = { main, sw: attr(el, "sw"), devSW: attr(el, "dev-sw") };
+    const updateui = attr(el, "updateui");
+    if (updateui) {
+      const el = document!.querySelector<HTMLElement>(updateui);
+      if (!el) {
+        throw new Error("Could not find the `updateui` element");
+      }
+      options.onUpdateFound = () => el.style.display = "block";
+    }
+    run(options);
   }
 });
 
