@@ -10,7 +10,7 @@ You will need [Golang](https://golang.org/)(1.21+) and [Deno](https://deno.land)
 2. Clone the repository to your local device.
 3. Create a new branch (`git checkout -b BRANCH_NAME`).
 4. Change code then run tests
-5. Push your branch to Github after **all tests passed**.
+5. Push your branch to GitHub after **all tests passed**.
 6. Make a [pull request](https://github.com/esm-dev/esm.sh/pulls).
 7. Merge to master branch by our maintainers.
 
