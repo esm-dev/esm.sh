@@ -780,7 +780,7 @@ func (ctx *BuildContext) resolveExternalModule(specifier string, kind api.Resolv
 		return
 	}
 	if specifier == "node-fetch" && ctx.target != "node" {
-		resolvedPath = "/npm_node-fetch.js"
+		resolvedPath = "/node/fetch.js"
 		return
 	}
 

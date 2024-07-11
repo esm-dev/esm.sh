@@ -296,7 +296,7 @@ function withESMWorker(middleware?: Middleware, cache: Cache = (caches as any).d
       pathname === "/run.d.ts" ||
       pathname === "/sw" ||
       pathname === "/tsx" ||
-      ((pathname.startsWith("/node/") || pathname.startsWith("/npm_")) && pathname.endsWith(".js"))
+      (pathname.startsWith("/node/") && pathname.endsWith(".js"))
     ) {
       const varyUA = !pathname.endsWith(".ts");
       const isChunkjs = pathname.startsWith("/node/chunk-");

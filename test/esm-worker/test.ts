@@ -241,14 +241,6 @@ Deno.test("esm-worker", { sanitizeOps: false, sanitizeResources: false }, async 
     assertEquals(res6.headers.get("Content-Type"), "application/javascript; charset=utf-8");
     assertEquals(res6.headers.get("Cache-Control"), "public, max-age=31536000, immutable");
 
-    const res7 = await fetch(`${workerOrigin}/npm_node-fetch.js`);
-    assertEquals(res7.status, 200);
-    assertEquals(res7.headers.get("Content-Type"), "application/javascript; charset=utf-8");
-    assertEquals(res7.headers.get("Etag"), `W/"${version}"`);
-    assertEquals(res7.headers.get("Cache-Control"), "public, max-age=86400");
-    assertStringIncludes(res7.headers.get("Vary")!, "User-Agent");
-    assertStringIncludes(await res7.text(), "fetch");
-
     const fs = await import(`${workerOrigin}/node/fs.js`);
     fs.writeFileSync("foo.txt", "bar", "utf8");
     assertEquals(fs.readFileSync("foo.txt", "utf8"), "bar");

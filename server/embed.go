@@ -18,11 +18,16 @@ var (
 )
 
 type EmbedFS interface {
+	ReadDir(name string) ([]os.DirEntry, error)
 	ReadFile(name string) ([]byte, error)
 }
 
 type MockEmbedFS struct {
 	cwd string
+}
+
+func (fs MockEmbedFS) ReadDir(name string) ([]os.DirEntry, error) {
+	return os.ReadDir(path.Join(fs.cwd, name))
 }
 
 func (fs MockEmbedFS) ReadFile(name string) ([]byte, error) {
@@ -57,46 +62,38 @@ func loadNodeLibs(fs EmbedFS) (err error) {
 		}
 	}
 	// override some libs
-	node_async_hooks_js, err := fs.ReadFile("server/embed/polyfills/node_async_hooks.js")
+	entries, err := fs.ReadDir("server/embed/polyfills")
 	if err != nil {
 		return
 	}
-	nodeLibs["node/async_hooks.js"] = string(node_async_hooks_js)
-	// extra libs
-	node_filename_resolver_js, err := fs.ReadFile("server/embed/polyfills/node_filename_resolver.js")
-	if err != nil {
-		return
+	for _, entry := range entries {
+		name := entry.Name()
+		if !entry.IsDir() && strings.HasPrefix(name, "node_") && strings.HasSuffix(name, ".js") {
+			data, err := fs.ReadFile("server/embed/polyfills/" + name)
+			if err != nil {
+				return err
+			}
+			nodeLibs["node/"+name[5:]] = string(data)
+		}
 	}
-	nodeLibs["node/filename_resolver.js"] = string(node_filename_resolver_js)
 	return nil
 }
 
 func loadNpmPolyfills(fs EmbedFS) (err error) {
-	data, err := fs.ReadFile("server/embed/npm-polyfills.tar.gz")
+	entries, err := fs.ReadDir("server/embed/polyfills/npm")
 	if err != nil {
 		return
 	}
-	gr, err := gzip.NewReader(bytes.NewReader(data))
-	if err != nil {
-		return
-	}
-	tr := tar.NewReader(gr)
-	for {
-		h, err := tr.Next()
-		if err != nil {
-			break
-		}
-		if h.Typeflag == tar.TypeReg {
-			data, err := io.ReadAll(tr)
+	for _, entry := range entries {
+		name := entry.Name()
+		if !entry.IsDir() && strings.HasSuffix(name, ".mjs") {
+			data, err := fs.ReadFile("server/embed/polyfills/npm/" + name)
 			if err != nil {
 				return err
 			}
-			if strings.HasSuffix(h.Name, ".mjs") {
-				name := strings.TrimSuffix(path.Base(h.Name), ".mjs")
-				data = bytes.ReplaceAll(data, []byte{';', '\n'}, []byte{';'})
-				data = bytes.TrimSuffix(data, []byte{';'})
-				npmPolyfills[name] = data
-			}
+			data = bytes.ReplaceAll(data, []byte{';', '\n'}, []byte{';'})
+			data = bytes.TrimSuffix(data, []byte{';'})
+			npmPolyfills[strings.TrimSuffix(name, ".mjs")] = data
 		}
 	}
 	return nil

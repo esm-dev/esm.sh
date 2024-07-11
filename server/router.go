@@ -472,16 +472,9 @@ func router() rex.Handle {
 			return rex.Content(pathname, startTime, bytes.NewReader(code))
 		}
 
-		// use embed polyfills/types
-		if endsWith(pathname, ".js", ".d.ts") && strings.Count(pathname, "/") == 1 {
-			var data []byte
-			var err error
-			isDts := strings.HasSuffix(pathname, ".d.ts")
-			if isDts {
-				data, err = embedFS.ReadFile("server/embed/types" + pathname)
-			} else {
-				data, err = embedFS.ReadFile("server/embed/polyfills" + pathname)
-			}
+		// use embed types
+		if strings.HasSuffix(pathname, ".d.ts") && strings.Count(pathname, "/") == 1 {
+			data, err := embedFS.ReadFile("server/embed/types" + pathname)
 			if err == nil {
 				ifNoneMatch := ctx.R.Header.Get("If-None-Match")
 				if ifNoneMatch != "" && ifNoneMatch == globalETag {
@@ -495,18 +488,7 @@ func router() rex.Handle {
 						header.Set("ETag", globalETag)
 					}
 				}
-				if isDts {
-					header.Set("Content-Type", ctTypeScript)
-				} else {
-					target := getBuildTargetByUA(userAgent)
-					code, err := minify(string(data), targets[target], api.LoaderJS)
-					if err != nil {
-						return throwErrorJS(ctx, fmt.Sprintf("Transform error: %v", err), false)
-					}
-					data = []byte(code)
-					header.Set("Content-Type", ctJavaScript)
-					appendVaryHeader(header, "User-Agent")
-				}
+				header.Set("Content-Type", ctTypeScript)
 				return rex.Content(pathname, startTime, bytes.NewReader(data))
 			}
 		}

@@ -448,10 +448,11 @@ func (ctx *BuildContext) buildModule() (result BuildResult, err error) {
 						}
 					}
 
-					// use polyfilled 'fsevents' module for browser
+					// use the polyfilled 'fsevents' module for browser
 					if specifier == "fsevents" && ctx.isBrowserTarget() {
+						data := npmPolyfills[specifier]
 						return api.OnResolveResult{
-							Path:     "npm_fsevents.js",
+							Path:     fmt.Sprintf("data:text/javascript;base64,%s", base64.StdEncoding.EncodeToString(data)),
 							External: true,
 						}, nil
 					}
