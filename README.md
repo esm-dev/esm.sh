@@ -12,7 +12,7 @@ A global, fast & smart content delivery network(CDN) for modern(es2015+) web dev
 
 ## How to Use
 
-esm.sh serves [JavaScirpt modules](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Guide/Modules) on [NPM](https://npmjs.com), [Github](https://github.com), and [JSR](https://jsr.io) with a simple URL. No installation/build steps needed.
+esm.sh serves [JavaScript modules](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Guide/Modules) on [NPM](https://npmjs.com), [GitHub](https://github.com), and [JSR](https://jsr.io) with a simple URL. No installation/build steps needed.
 
 ```js
 import * as mod from "https://esm.sh/PKG[@SEMVER][/PATH]";
@@ -45,7 +45,7 @@ With [import maps](https://github.com/WICG/import-maps), you can even use bare i
   import React from "https://esm.sh/react@beta"; // 19.0.0-beta-94eed63c49-20240425
   import { renderToString } from "https://esm.sh/react-dom@18.3.0/server"; // submodules
   ```
-- **[Github](https://github.com)** (starts with `/gh/`):
+- **[GitHub](https://github.com)** (starts with `/gh/`):
   ```js
   // Examples
   import tslib from "https://esm.sh/gh/microsoft/tslib@2.6.0"; // '2.6.0' is the git tag
