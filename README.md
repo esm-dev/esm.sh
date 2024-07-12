@@ -12,28 +12,30 @@ A global, fast & smart content delivery network(CDN) for modern(es2015+) web dev
 
 ## How to Use
 
-esm.sh serves [JavaScript modules](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Guide/Modules) on [NPM](https://npmjs.com), [GitHub](https://github.com), and [JSR](https://jsr.io) with a simple URL. No installation/build steps needed.
+esm.sh allows you to import [JavaScript ES modules](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Guide/Modules) on [NPM](https://npmjs.com), [GitHub](https://github.com), and [JSR](https://jsr.io) with a simple URL. **No installation/build steps needed.**
 
 ```js
 import * as mod from "https://esm.sh/PKG[@SEMVER][/PATH]";
 ```
 
-With [import maps](https://github.com/WICG/import-maps), you can even use bare import specifiers intead of URLs.
+With [import maps](https://github.com/WICG/import-maps), you can even use bare import specifiers intead of URLs:
 
 ```html
 <script type="importmap">
 {
   "imports": {
     "react": "https://esm.sh/react@18.2.0"
+    "react-dom/": "https://esm.sh/react-dom@18.2.0/"
   }
 }
 </script>
 <script type="module">
-  import React from "react"; // alias to https://esm.sh/react@18.2.0
+  import React from "react"; // → https://esm.sh/react@18.2.0
+  import { render } from "react-dom/client"; // → https://esm.sh/react-dom@18.2.0/client
 </script>
 ```
 
-> More details check out [here](#using-import-maps).
+> More details about the import map usage can be found in the [**Using Import Maps**](#using-import-maps) section.
 
 ### Supported Registries
 
