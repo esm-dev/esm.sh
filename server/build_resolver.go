@@ -203,7 +203,7 @@ func (ctx *BuildContext) lookupDep(specifier string) (pkg Pkg, p PackageJSON, in
 	if !existsFile(pkgJsonPath) {
 		pkgJsonPath = path.Join(ctx.wd, "node_modules", pkgName, "package.json")
 	}
-	if existsFile(pkgJsonPath) && parseJSONFile(pkgJsonPath, &p) == nil {
+	if existsFile(pkgJsonPath) && utils.ParseJSONFile(pkgJsonPath, &p) == nil {
 		pkg = Pkg{
 			Name:      pkgName,
 			Version:   p.Version,
@@ -326,7 +326,7 @@ func (ctx *BuildContext) resolveEntry(pkg Pkg) (entry BuildEntry) {
 		}
 
 		var p PackageJSON
-		if parseJSONFile(path.Join(pkgDir, subModule, "package.json"), &p) == nil {
+		if utils.ParseJSONFile(path.Join(pkgDir, subModule, "package.json"), &p) == nil {
 			if entry.esm == "" && p.Module != "" {
 				entry.esm = "./" + path.Join(subModule, p.Module)
 			}

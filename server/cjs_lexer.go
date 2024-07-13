@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/evanw/esbuild/pkg/api"
+	"github.com/ije/gox/utils"
 )
 
 const cjsLexerPkg = "esm-cjs-lexer@0.11.2"
@@ -98,7 +99,7 @@ func cjsLexer(npmrc *NpmRC, pkgName string, wd string, specifier string, nodeEnv
 	cacheFileName := path.Join(wd, ".cjs_lexer", base64.RawURLEncoding.EncodeToString(h.Sum(nil))+".json")
 
 	// check the cache first
-	if existsFile(cacheFileName) && parseJSONFile(cacheFileName, &ret) == nil {
+	if existsFile(cacheFileName) && utils.ParseJSONFile(cacheFileName, &ret) == nil {
 		return
 	}
 
@@ -115,7 +116,7 @@ func cjsLexer(npmrc *NpmRC, pkgName string, wd string, specifier string, nodeEnv
 			break
 		}
 	}
-	argsData := mustEncodeJSON(args)
+	argsData := utils.MustEncodeJSON(args)
 
 	start := time.Now()
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)

@@ -253,7 +253,7 @@ func router() rex.Handle {
 			readme = bytes.ReplaceAll(readme, []byte("./server/embed/"), []byte("/embed/"))
 			readme = bytes.ReplaceAll(readme, []byte("./HOSTING.md"), []byte("https://github.com/esm-dev/esm.sh/blob/main/HOSTING.md"))
 			readme = bytes.ReplaceAll(readme, []byte("https://esm.sh"), []byte(cdnOrigin))
-			readmeStrLit := mustEncodeJSON(string(readme))
+			readmeStrLit := utils.MustEncodeJSON(string(readme))
 			html := bytes.ReplaceAll(indexHTML, []byte("'# README'"), readmeStrLit)
 			html = bytes.ReplaceAll(html, []byte("{VERSION}"), []byte(fmt.Sprintf("%d", VERSION)))
 			header.Set("Cache-Control", ccMustRevalidate)
@@ -697,7 +697,7 @@ func router() rex.Handle {
 			buf := &bytes.Buffer{}
 			wasmUrl := cdnOrigin + pathname
 			fmt.Fprintf(buf, "/* esm.sh - wasm module */\n")
-			fmt.Fprintf(buf, "const data = await fetch(%s).then(r => r.arrayBuffer());\nexport default new WebAssembly.Module(data);", strings.TrimSpace(string(mustEncodeJSON(wasmUrl))))
+			fmt.Fprintf(buf, "const data = await fetch(%s).then(r => r.arrayBuffer());\nexport default new WebAssembly.Module(data);", strings.TrimSpace(string(utils.MustEncodeJSON(wasmUrl))))
 			header.Set("Cache-Control", ccImmutable)
 			header.Set("Content-Type", ctJavaScript)
 			return buf
@@ -1233,7 +1233,7 @@ func router() rex.Handle {
 func throwErrorJS(ctx *rex.Context, message string, static bool) interface{} {
 	buf := bytes.NewBuffer(nil)
 	fmt.Fprintf(buf, "/* esm.sh - error */\n")
-	fmt.Fprintf(buf, "throw new Error(%s);\n", strings.TrimSpace(string(mustEncodeJSON(strings.TrimSpace("[esm.sh] "+message)))))
+	fmt.Fprintf(buf, "throw new Error(%s);\n", strings.TrimSpace(string(utils.MustEncodeJSON(strings.TrimSpace("[esm.sh] "+message)))))
 	fmt.Fprintf(buf, "export default null;\n")
 	if static {
 		ctx.W.Header().Set("Cache-Control", ccImmutable)

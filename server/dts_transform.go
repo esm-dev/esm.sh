@@ -9,6 +9,7 @@ import (
 	"sync"
 
 	"github.com/esm-dev/esm.sh/server/storage"
+	"github.com/ije/gox/utils"
 )
 
 // transformDTS transforms a `.d.ts` file for deno/editor-lsp
@@ -67,7 +68,7 @@ func transformDTS(ctx *BuildContext, dts string, buildArgsPrefix string, marker 
 			if !endsWith(specifier, ".d.ts", ".d.mts") {
 				var p PackageJSON
 				var hasTypes bool
-				if parseJSONFile(path.Join(dtsWD, specifier, "package.json"), &p) == nil {
+				if utils.ParseJSONFile(path.Join(dtsWD, specifier, "package.json"), &p) == nil {
 					dir := path.Join("/", path.Dir(dts))
 					if p.Types != "" {
 						specifier, _ = relPath(dir, "/"+path.Join(dir, specifier, p.Types))

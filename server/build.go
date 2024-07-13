@@ -169,7 +169,7 @@ func (ctx *BuildContext) Build() (ret BuildResult, err error) {
 	if ctx.zoneId != "" {
 		key = ctx.zoneId + key
 	}
-	if e := db.Put(key, mustEncodeJSON(ret)); e != nil {
+	if e := db.Put(key, utils.MustEncodeJSON(ret)); e != nil {
 		log.Errorf("db: %v", e)
 	}
 	return

@@ -274,7 +274,7 @@ func (rc *NpmRC) getPackageInfo(name string, semver string) (info PackageJSON, e
 
 	if regexpFullVersion.MatchString(semver) {
 		pkgJsonPath := path.Join(rc.NpmDir(), name+"@"+semver, "node_modules", name, "package.json")
-		if existsFile(pkgJsonPath) && parseJSONFile(pkgJsonPath, &info) == nil {
+		if existsFile(pkgJsonPath) && utils.ParseJSONFile(pkgJsonPath, &info) == nil {
 			return
 		}
 	}
@@ -392,7 +392,7 @@ do:
 			return
 		}
 		if cache != nil {
-			cache.Set(cacheKey, mustEncodeJSON(info), 7*24*time.Hour)
+			cache.Set(cacheKey, utils.MustEncodeJSON(info), 7*24*time.Hour)
 		}
 		return
 	}
@@ -414,7 +414,7 @@ do:
 	if ok {
 		d := h.Versions[distVersion]
 		info = *d.ToNpmPackage()
-		jsonBytes = mustEncodeJSON(d)
+		jsonBytes = utils.MustEncodeJSON(d)
 	} else {
 		var c *semver.Constraints
 		c, err = semver.NewConstraint(semverOrDistTag)
@@ -445,7 +445,7 @@ do:
 			}
 			d := h.Versions[vs[i-1].String()]
 			info = *d.ToNpmPackage()
-			jsonBytes = mustEncodeJSON(d)
+			jsonBytes = utils.MustEncodeJSON(d)
 		}
 	}
 
@@ -472,7 +472,7 @@ func (rc *NpmRC) installPackage(pkg Pkg) (pkgJson PackageJSON, err error) {
 
 	// skip installation if the package has been installed
 	if existsFile(pkgJsonFilepath) {
-		err = parseJSONFile(pkgJsonFilepath, &pkgJson)
+		err = utils.ParseJSONFile(pkgJsonFilepath, &pkgJson)
 		if err == nil {
 			return
 		}
@@ -509,10 +509,10 @@ func (rc *NpmRC) installPackage(pkg Pkg) (pkgJson PackageJSON, err error) {
 				packageJsonFp := path.Join(installDir, "node_modules", pkg.Name, "package.json")
 				if !existsFile(packageJsonFp) {
 					ensureDir(path.Dir(packageJsonFp))
-					err = os.WriteFile(packageJsonFp, mustEncodeJSON(pkg), 0644)
+					err = os.WriteFile(packageJsonFp, utils.MustEncodeJSON(pkg), 0644)
 				} else {
 					var p PackageJSON
-					err = parseJSONFile(packageJsonFp, &p)
+					err = utils.ParseJSONFile(packageJsonFp, &p)
 					if err == nil && len(p.Files) > 0 {
 						// install github package with ignoring `files` field
 						err = ghInstall(installDir, pkg.Name, pkg.Version)
@@ -525,7 +525,7 @@ func (rc *NpmRC) installPackage(pkg Pkg) (pkgJson PackageJSON, err error) {
 			err = rc.pnpm(installDir, pkg.Fullname())
 		}
 		if err == nil {
-			err = parseJSONFile(pkgJsonFilepath, &pkgJson)
+			err = utils.ParseJSONFile(pkgJsonFilepath, &pkgJson)
 			if err != nil {
 				err = fmt.Errorf("pnpm install %s: package.json not found", pkg)
 			}
