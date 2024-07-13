@@ -71,6 +71,14 @@ func (s *StringSet) Values() []string {
 	return a
 }
 
+type PathSlice []string
+
+func (a PathSlice) Len() int      { return len(a) }
+func (a PathSlice) Swap(i, j int) { a[i], a[j] = a[j], a[i] }
+func (a PathSlice) Less(i, j int) bool {
+	return len(strings.Split(a[i], "/")) < len(strings.Split(a[j], "/"))
+}
+
 type StringOrMap struct {
 	Str string
 	Map map[string]interface{}

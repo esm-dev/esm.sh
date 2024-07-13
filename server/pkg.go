@@ -121,18 +121,12 @@ func validateESMPath(rc *NpmRC, pathname string) (pkg Pkg, extraQuery string, is
 	return
 }
 
-func (pkg Pkg) ghPrefix() string {
-	if pkg.FromGithub {
-		return "gh/"
-	}
-	return ""
-}
-
 func (pkg Pkg) Fullname() string {
+	s := pkg.Name + "@" + pkg.Version
 	if pkg.FromGithub {
-		return "gh/" + pkg.Name + "@" + pkg.Version
+		return "gh/" + s
 	}
-	return pkg.Name + "@" + pkg.Version
+	return s
 }
 
 func (pkg Pkg) String() string {
@@ -141,14 +135,6 @@ func (pkg Pkg) String() string {
 		s += "/" + pkg.SubModule
 	}
 	return s
-}
-
-type PathSlice []string
-
-func (a PathSlice) Len() int      { return len(a) }
-func (a PathSlice) Swap(i, j int) { a[i], a[j] = a[j], a[i] }
-func (a PathSlice) Less(i, j int) bool {
-	return len(strings.Split(a[i], "/")) < len(strings.Split(a[j], "/"))
 }
 
 func toModuleBareName(path string, stripIndexSuffier bool) string {

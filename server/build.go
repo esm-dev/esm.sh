@@ -228,7 +228,7 @@ func (ctx *BuildContext) buildModule() (result BuildResult, err error) {
 	typesOnly := strings.HasPrefix(ctx.pkgJson.Name, "@types/") || (entry.esm == "" && entry.cjs == "" && entry.dts != "")
 	if typesOnly {
 		result.TypesOnly = true
-		result.Dts = "/" + ctx.pkg.ghPrefix() + ctx.pkg.Fullname() + entry.dts[1:]
+		result.Dts = "/" + ctx.pkg.Fullname() + entry.dts[1:]
 		ctx.transformDTS(entry.dts)
 		return
 	}
@@ -1290,7 +1290,7 @@ func (ctx *BuildContext) buildTypes() (ret BuildResult, err error) {
 	ctx.stage = "build"
 	err = ctx.transformDTS(dts)
 	if err == nil {
-		ret.Dts = "/" + ctx.pkg.ghPrefix() + ctx.pkg.Fullname() + dts[1:]
+		ret.Dts = "/" + ctx.pkg.Fullname() + dts[1:]
 	}
 	return
 }

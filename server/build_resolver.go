@@ -940,8 +940,7 @@ func (ctx *BuildContext) resloveDTS(entry BuildEntry) (string, error) {
 			return "", nil
 		}
 		return fmt.Sprintf(
-			"/%s%s/%s%s",
-			ctx.pkg.ghPrefix(),
+			"/%s/%s%s",
 			ctx.pkg.Fullname(),
 			ctx.getBuildArgsPrefix(ctx.pkg, true),
 			strings.TrimPrefix(entry.dts, "./"),

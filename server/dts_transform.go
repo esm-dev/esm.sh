@@ -17,7 +17,7 @@ func transformDTS(ctx *BuildContext, dts string, buildArgsPrefix string, marker 
 	if isRoot {
 		marker = NewStringSet()
 	}
-	dtsPath := path.Join("/"+ctx.pkg.ghPrefix(), ctx.pkg.Fullname(), buildArgsPrefix, dts)
+	dtsPath := path.Join("/"+ctx.pkg.Fullname(), buildArgsPrefix, dts)
 	if marker.Has(dtsPath) {
 		// don't transform repeatly
 		return
@@ -124,8 +124,7 @@ func transformDTS(ctx *BuildContext, dts string, buildArgsPrefix string, marker 
 		if depPkgName == ctx.pkg.Name {
 			if strings.ContainsRune(subPath, '*') {
 				return fmt.Sprintf(
-					"{ESM_CDN_ORIGIN}/%s%s/%s%s",
-					ctx.pkg.ghPrefix(),
+					"{ESM_CDN_ORIGIN}/%s/%s%s",
 					ctx.pkg.Fullname(),
 					ctx.getBuildArgsPrefix(ctx.pkg, true),
 					subPath,
@@ -140,8 +139,7 @@ func transformDTS(ctx *BuildContext, dts string, buildArgsPrefix string, marker 
 				entry := ctx.resolveEntry(depPkg)
 				if entry.dts != "" {
 					return fmt.Sprintf(
-						"{ESM_CDN_ORIGIN}/%s%s/%s%s",
-						ctx.pkg.ghPrefix(),
+						"{ESM_CDN_ORIGIN}/%s/%s%s",
 						ctx.pkg.Fullname(),
 						ctx.getBuildArgsPrefix(ctx.pkg, true),
 						strings.TrimPrefix(entry.dts, "./"),
