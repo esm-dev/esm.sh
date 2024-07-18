@@ -1,13 +1,12 @@
 # esm-npm-polyfills
 
-Using _native_ APIs instead of importing from NPM.
+Using _native_ APIs instead of importing polyfill from NPM.
 
 - [abort-controller](https://www.npmjs.com/package/abort-controller) → [abort-controller.mjs](./abort-controller.mjs)
 - [array-every](https://www.npmjs.com/package/array-every) → [array-every.mjs](./array-every.mjs)
 - [array-flatten](https://www.npmjs.com/package/array-flatten) → [array-flatten.mjs](./array-flatten.mjs)
 - [array-includes](https://www.npmjs.com/package/array-includes) → [array-includes.mjs](./array-includes.mjs)
 - [array.prototype.find](https://www.npmjs.com/package/array.prototype.find) → [array.prototype.find.mjs](./array.prototype.find.mjs)
-- [define-properties](https://www.npmjs.com/package/define-properties) → [define-properties.mjs](./define-properties.mjs)
 - [define-property](https://www.npmjs.com/package/define-property) → [define-property.mjs](./define-property.mjs)
 - [es-define-property](https://www.npmjs.com/package/es-define-property) → [es-define-property.mjs](./es-define-property.mjs)
 - [filter-array](https://www.npmjs.com/package/filter-array) → [filter-array.mjs](./filter-array.mjs)
