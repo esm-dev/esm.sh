@@ -487,7 +487,7 @@ function withESMWorker(middleware?: Middleware, cache: Cache = (caches as any).d
     if (packageName === "") {
       return err("Invalid path", ctx.corsHeaders(), 400);
     }
-    if (!regexpNpmNaming.test(packageName)) {
+    if (!regexpNpmNaming.test(packageName) || packageVersion.endsWith(".") || packageVersion.endsWith("-")) {
       return err(`Invalid package name '${packageName}'`, ctx.corsHeaders(), 400);
     }
 
@@ -510,6 +510,9 @@ function withESMWorker(middleware?: Middleware, cache: Cache = (caches as any).d
           packageVersion = "~" + packageVersion;
         }
       }
+    }
+    if (packageVersion && packageVersion.endsWith(".")) {
+      return err(`Invalid package version '${packageVersion}'`, ctx.corsHeaders(), 400);
     }
 
     // redirect to commit-ish version for GitHub packages
@@ -592,10 +595,10 @@ function withESMWorker(middleware?: Middleware, cache: Cache = (caches as any).d
             }
           }
         } catch (_) {
-          // error of `satisfies` function
-          return err(`Invalid package version '${packageVersion}'`, ctx.corsHeaders());
+          // not a semver version
+          return err(`Invalid package version '${packageVersion}'`, ctx.corsHeaders(), 400);
         }
-        return err("Could not get the package version", ctx.corsHeaders());
+        return err("Could not get the package version", ctx.corsHeaders(), 404);
       });
     }
 
