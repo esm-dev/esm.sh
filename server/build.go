@@ -1053,32 +1053,20 @@ rebuild:
 				if ids.Has("__Process$") {
 					if ctx.args.external.Has("node:process") || ctx.args.externalAll {
 						fmt.Fprintf(header, `import __Process$ from "node:process";%s`, EOL)
+					} else if ctx.isBrowserTarget() {
+						if len(ctx.pkgJson.Browser) == 0 {
+							fmt.Fprintf(header, `import __Process$ from "/node/process.js";%s`, EOL)
+							imports.Add("/node/process.js")
+						}
 					} else if ctx.target == "denonext" {
 						fmt.Fprintf(header, `import __Process$ from "node:process";%s`, EOL)
 					} else if ctx.target == "deno" {
 						fmt.Fprintf(header, `import __Process$ from "https://deno.land/std@0.177.1/node/process.ts";%s`, EOL)
-					} else if ctx.isBrowserTarget() {
-						var browserExclude bool
-						if len(ctx.pkgJson.Browser) > 0 {
-							if name, ok := ctx.pkgJson.Browser["process"]; ok {
-								browserExclude = name == ""
-							} else if name, ok := ctx.pkgJson.Browser["node:process"]; ok {
-								browserExclude = name == ""
-							}
-						}
-						if !browserExclude {
-							fmt.Fprintf(header, `import __Process$ from "/node/process.js";%s`, EOL)
-							imports.Add("/node/process.js")
-						}
 					}
 				}
 				if ids.Has("__Buffer$") {
 					if ctx.args.external.Has("node:buffer") || ctx.args.externalAll {
 						fmt.Fprintf(header, `import { Buffer as __Buffer$ } from "node:buffer";%s`, EOL)
-					} else if ctx.target == "denonext" {
-						fmt.Fprintf(header, `import { Buffer as __Buffer$ } from "node:buffer";%s`, EOL)
-					} else if ctx.target == "deno" {
-						fmt.Fprintf(header, `import { Buffer as __Buffer$ } from "https://deno.land/std@0.177.1/node/buffer.ts";%s`, EOL)
 					} else if ctx.isBrowserTarget() {
 						var browserExclude bool
 						if len(ctx.pkgJson.Browser) > 0 {
@@ -1092,6 +1080,10 @@ rebuild:
 							fmt.Fprintf(header, `import { Buffer as __Buffer$ } from "/node/buffer.js";%s`, EOL)
 							imports.Add("/node/buffer.js")
 						}
+					} else if ctx.target == "denonext" {
+						fmt.Fprintf(header, `import { Buffer as __Buffer$ } from "node:buffer";%s`, EOL)
+					} else if ctx.target == "deno" {
+						fmt.Fprintf(header, `import { Buffer as __Buffer$ } from "https://deno.land/std@0.177.1/node/buffer.ts";%s`, EOL)
 					}
 				}
 				if ids.Has("__global$") {
