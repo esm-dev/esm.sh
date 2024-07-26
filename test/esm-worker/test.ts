@@ -300,11 +300,13 @@ Deno.test("esm-worker", { sanitizeOps: false, sanitizeResources: false }, async 
     assertEquals(res9.status, 200);
     assertStringIncludes(await res9.text(), `from "react"`);
 
-    const res10 = await fetch(`${workerOrigin}/typescript@5.4.2/es2022/typescript.mjs`);
+    const res10 = await fetch(`${workerOrigin}/typescript@5.5.4/es2022/typescript.mjs`);
+    const js = await res10.text();
     assertEquals(res10.status, 200);
-    assertStringIncludes(await res10.text(), `"/node/process.js"`);
+    assertStringIncludes(js, `__Process$`);
+    assert(!js.includes("/node/process.js"));
 
-    const res11 = await fetch(`${workerOrigin}/typescript@5.4.2/es2022/typescript.mjs.map`);
+    const res11 = await fetch(`${workerOrigin}/typescript@5.5.4/es2022/typescript.mjs.map`);
     assertEquals(res11.status, 200);
     assertEquals(res11.headers.get("Content-Type"), "application/json; charset=utf-8");
   });
