@@ -71,14 +71,6 @@ func (s *StringSet) Values() []string {
 	return a
 }
 
-type PathSlice []string
-
-func (a PathSlice) Len() int      { return len(a) }
-func (a PathSlice) Swap(i, j int) { a[i], a[j] = a[j], a[i] }
-func (a PathSlice) Less(i, j int) bool {
-	return len(strings.Split(a[i], "/")) < len(strings.Split(a[j], "/"))
-}
-
 type StringOrMap struct {
 	Str string
 	Map map[string]interface{}
@@ -107,13 +99,15 @@ func (a *StringOrMap) MainValue() string {
 	return ""
 }
 
-type SortedPaths []string
+type SortablePaths []string
 
-func (a SortedPaths) Len() int {
+func (a SortablePaths) Len() int {
 	return len(a)
 }
-
-func (a SortedPaths) Less(i, j int) bool {
+func (a SortablePaths) Swap(i, j int) {
+	a[i], a[j] = a[j], a[i]
+}
+func (a SortablePaths) Less(i, j int) bool {
 	iParts := strings.Split(a[i], "/")
 	jParts := strings.Split(a[j], "/")
 	for k := 0; k < len(iParts) && k < len(jParts); k++ {
@@ -122,10 +116,6 @@ func (a SortedPaths) Less(i, j int) bool {
 		}
 	}
 	return len(iParts) < len(jParts)
-}
-
-func (a SortedPaths) Swap(i, j int) {
-	a[i], a[j] = a[j], a[i]
 }
 
 // copied from https://gitlab.com/c0b/go-ordered-json

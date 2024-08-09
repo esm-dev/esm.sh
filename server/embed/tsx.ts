@@ -18,8 +18,8 @@ d.querySelectorAll(kScript).forEach((el) => {
   const { type, textContent } = el;
   if (type === "importmap") {
     const v = JSON.parse(textContent!);
-    if (v && typeof v === "object") {
-      Object.assign(importMap, v);
+    if (v && v.imports) {
+      importMap.imports = v.imports;
     }
   } else if (type.startsWith("text/")) {
     let loader = type.slice(5);
@@ -39,12 +39,13 @@ d.querySelectorAll(kScript).forEach((el) => {
 
 // transform and insert tsx scripts
 tsxScripts.forEach(async ({ el, loader, code }, idx) => {
+  // @ts-expect-error `$TARGET` is injected by esbuild
+  const target: string = $TARGET;
   const filename = "source." + loader;
   const buffer = new Uint8Array(
     await crypto.subtle.digest(
       "SHA-1",
-      // @ts-expect-error `$TARGET` is injected by esbuild
-      new TextEncoder().encode(loader + code + stringify(importMap) + $TARGET + "false"),
+      new TextEncoder().encode(loader + code + stringify(importMap) + target + "false"),
     ),
   );
   const hash = [...buffer].map((b) => b.toString(16).padStart(2, "0")).join("");
@@ -61,8 +62,7 @@ tsxScripts.forEach(async ({ el, loader, code }, idx) => {
     } else {
       const res = await fetch(urlFromCurrentModule("/transform"), {
         method: "POST",
-        // @ts-expect-error `$TARGET` is injected by esbuild
-        body: stringify({ filename, code, importMap, target: $TARGET }),
+        body: stringify({ filename, code, importMap, target }),
       });
       const ret: any = await res.json();
       if (ret.error) {

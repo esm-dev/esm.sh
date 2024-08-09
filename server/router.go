@@ -348,15 +348,15 @@ func router() rex.Handle {
 		}
 
 		// serve the internal script
-		if pathname == "/run" || pathname == "/sw" || pathname == "/tsx" {
-			data, err := embedFS.ReadFile(fmt.Sprintf("server/embed/%s.ts", pathname[1:]))
-			if err != nil {
-				return rex.Status(404, "Not Found")
-			}
-
+		if pathname == "/run" || pathname == "/tsx" {
 			ifNoneMatch := ctx.R.Header.Get("If-None-Match")
 			if ifNoneMatch != "" && ifNoneMatch == globalETag {
 				return rex.Status(http.StatusNotModified, "")
+			}
+
+			data, err := embedFS.ReadFile(fmt.Sprintf("server/embed/%s.ts", pathname[1:]))
+			if err != nil {
+				return rex.Status(404, "Not Found")
 			}
 
 			// determine build target by `?target` query or `User-Agent` header
@@ -367,6 +367,7 @@ func router() rex.Handle {
 				target = getBuildTargetByUA(userAgent)
 			}
 
+			// replace `$TARGET` with the target
 			if pathname == "/tsx" {
 				data = bytes.ReplaceAll(data, []byte("$TARGET"), []byte(fmt.Sprintf(`"%s"`, target)))
 			}
@@ -387,7 +388,7 @@ func router() rex.Handle {
 					header.Set("ETag", globalETag)
 				}
 			}
-			if pathname == "/run" || pathname == "/sw" {
+			if pathname == "/run" {
 				header.Set("X-Typescript-Types", fmt.Sprintf("%s/run.d.ts", cdnOrigin))
 			}
 			return code
@@ -724,7 +725,7 @@ func router() rex.Handle {
 			if l := len(files); l == 1 {
 				file = files[0]
 			} else if l > 1 {
-				sort.Sort(sort.Reverse(PathSlice(files)))
+				sort.Sort(sort.Reverse(SortablePaths(files)))
 				for _, f := range files {
 					if strings.HasSuffix(pkg.SubPath, f) {
 						file = f

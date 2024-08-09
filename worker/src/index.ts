@@ -294,7 +294,6 @@ function withESMWorker(middleware?: Middleware, cache: Cache = (caches as any).d
     if (
       pathname === "/run" ||
       pathname === "/run.d.ts" ||
-      pathname === "/sw" ||
       pathname === "/tsx" ||
       (pathname.startsWith("/node/") && pathname.endsWith(".js"))
     ) {
@@ -334,6 +333,11 @@ function withESMWorker(middleware?: Middleware, cache: Cache = (caches as any).d
     if (req.method === "POST") {
       switch (pathname) {
         case "/transform": {
+          const res = await fetchOrigin(req, env, ctx, pathname);
+          copyHeaders(res.headers, ctx.corsHeaders());
+          return res;
+        }
+        case "/bundle": {
           const res = await fetchOrigin(req, env, ctx, pathname);
           copyHeaders(res.headers, ctx.corsHeaders());
           return res;

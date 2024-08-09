@@ -811,7 +811,7 @@ func (ctx *BuildContext) resolveExternalModule(specifier string, kind api.Resolv
 		SubPath:   subpath,
 		SubModule: toModuleBareName(subpath, true),
 	}
-	isCaretVersion := strings.HasPrefix(version, "^")
+	isCaretRange := strings.HasPrefix(version, "^")
 
 	// resolve alias in dependencies
 	// follow https://docs.npmjs.com/cli/v10/configuring-npm/package-json#git-urls-as-dependencies
@@ -862,7 +862,7 @@ func (ctx *BuildContext) resolveExternalModule(specifier string, kind api.Resolv
 				}
 			}
 		}
-	} else if !isCaretVersion && !regexpFullVersion.MatchString(version) {
+	} else if !isCaretRange && !regexpFullVersion.MatchString(version) {
 		// fetch the latest version of the package based on the semver range
 		var p PackageJSON
 		_, p, _, err = ctx.lookupDep(pkgName + "@" + version)
@@ -883,7 +883,7 @@ func (ctx *BuildContext) resolveExternalModule(specifier string, kind api.Resolv
 	if err != nil {
 		return
 	}
-	if isCaretVersion {
+	if isCaretRange {
 		resolvedPath = "/" + pkg.String()
 		// workaround for es5-ext weird "/#/" path
 		if pkg.Name == "es5-ext" {

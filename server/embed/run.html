@@ -5,17 +5,23 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width">
   <title>ESM&gt;Run</title>
-  <link rel="preload" href="/embed/imports.json" as="fetch" type="application/esm-bundle" crossorigin="anonymous"
-    checksum="xiFA2nBBO98UDWzgbmZd4b9XW9ZsAftoMbYJa494rWI=">
+  <script type="importmap">
+    {
+      "imports": {
+        "canvas-confetti": "http://localhost:8080/canvas-confetti@1.6.0"
+      }
+    }
+  </script>
   <link rel="modulepreload" href="/run">
 </head>
 
 <body>
-  <h1></h1>
-  <div id="updateprompt" hidden>
+  <div id="root"></div>
+  <div id="update-prompt" hidden>
     Update available. Click <a href="#" onclick="location.reload()">here</a> to reload.
   </div>
-  <script type="module" src="/run" main="/main.mjs" sw="/embed/sw.js" updateprompt="#updateprompt"></script>
+  <script type="module" src="/run" main="/embed/run-demo.jsx" sw="/embed/run-demo-sw.js"
+    updateprompt="#update-prompt"></script>
 </body>
 
 </html>

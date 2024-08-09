@@ -1,12 +1,5 @@
 /// <reference lib="webworker" />
 
-export interface VFile {
-  url: string;
-  content: Uint8Array;
-  contentType?: string;
-  lastModified?: number;
-}
-
 export interface RunOptions {
   main?: string;
   sw?: string | null;
