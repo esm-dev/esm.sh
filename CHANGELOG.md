@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+- Use semver versioning for depdency resolving
+- Introduce `esm.sh/run` v2
+
 ## v135
 
 - Introduce https://esm.sh/run
