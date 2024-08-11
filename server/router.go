@@ -368,9 +368,7 @@ func router() rex.Handle {
 			}
 
 			// replace `$TARGET` with the target
-			if pathname == "/tsx" {
-				data = bytes.ReplaceAll(data, []byte("$TARGET"), []byte(fmt.Sprintf(`"%s"`, target)))
-			}
+			data = bytes.ReplaceAll(data, []byte("$TARGET"), []byte(fmt.Sprintf(`"%s"`, target)))
 
 			code, err := minify(string(data), targets[target], api.LoaderTS)
 			if err != nil {
@@ -611,7 +609,7 @@ func router() rex.Handle {
 		// parse raw query string
 		query := ctx.R.URL.Query()
 
-		// or use `?path=$PATH` query to override the pathname
+		// use `?path=$PATH` query to override the pathname
 		if v := query.Get("path"); v != "" {
 			pkg.SubModule = utils.CleanPath(v)[1:]
 		}
@@ -761,7 +759,6 @@ func router() rex.Handle {
 				if err != nil {
 					return rex.Status(500, err.Error())
 				}
-				// recheck the file
 				fi, err = os.Lstat(savePath)
 				if err != nil {
 					if os.IsExist(err) {
@@ -771,7 +768,7 @@ func router() rex.Handle {
 				}
 			}
 			// limit the file size up to 50MB
-			if fi.Size() > 50*1024*1024 {
+			if fi.Size() > assetMaxSize {
 				return rex.Status(403, "File Too Large")
 			}
 			f, err := os.Open(savePath)

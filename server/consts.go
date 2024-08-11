@@ -2,6 +2,7 @@ package server
 
 // esm.sh version
 const VERSION = 136
+const assetMaxSize = 50 * 1024 * 1024 // limit asset size to 50mb
 
 // asset extensions
 var assetExts = map[string]bool{
