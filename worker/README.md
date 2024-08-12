@@ -2,10 +2,6 @@
 
 A [Cloudflare worker](https://www.cloudflare.com/products/workers) handles all requests of esm.sh at the edge(earth).
 
-- [Cache](https://developers.cloudflare.com/workers/runtime-apis/cache/) everything at the edge
-- Store modules in [KV](https://developers.cloudflare.com/workers/runtime-apis/kv)
-- Store assets in [R2](https://developers.cloudflare.com/r2/api/workers/workers-api-reference)
-
 ## Installation
 
 ```bash
@@ -21,11 +17,6 @@ You need to add following configuration to your `wrangler.toml`:
 ESM_SERVER_ORIGIN = "https://esm.sh/" # change to your self-hosting esm.sh server
 NPM_REGISTRY = "https://registry.npmjs.org/" # change to your private npm registry if needed
 # your other vars...
-
-[[kv_namespaces]]
-binding = "KV"
-id = "YOUR_KV_ID"
-preview_id = "YOUR_PREVIEW_KV_ID"
 
 [[r2_buckets]]
 binding = "R2"

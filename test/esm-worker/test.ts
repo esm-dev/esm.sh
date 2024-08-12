@@ -21,27 +21,6 @@ const cache = {
   },
 };
 
-const KV = {
-  _store: new Map(),
-  async getWithMetadata(
-    key: string,
-    _options: { type: "stream"; cacheTtl?: number },
-  ): Promise<{ value: ReadableStream | null; metadata: any }> {
-    const ret = this._store.get(key);
-    if (ret) {
-      return { value: new Response(ret.value).body!, metadata: ret.httpMetadata };
-    }
-    return { value: null, metadata: null };
-  },
-  async put(
-    key: string,
-    value: string | ArrayBufferLike | ArrayBuffer | ReadableStream,
-    options?: { expirationTtl?: number; metadata?: any },
-  ): Promise<void> {
-    this._store.set(key, { value: await new Response(value).arrayBuffer(), ...options });
-  },
-};
-
 const R2 = {
   _store: new Map(),
   async get(key: string): Promise<
@@ -97,7 +76,7 @@ const worker = withESMWorker((_req: Request, _env: typeof env, ctx: { url: URL }
 // start the worker
 Deno.serve(
   { port: 8081, signal: ac.signal },
-  (req) => worker.fetch(req, { ...env, KV, R2, LEGACY_WORKER }, { waitUntil: () => {} }),
+  (req) => worker.fetch(req, { ...env, R2, LEGACY_WORKER }, { waitUntil: () => {} }),
 );
 
 // start the private registry
@@ -621,16 +600,6 @@ Deno.test("esm-worker", { sanitizeOps: false, sanitizeResources: false }, async 
   });
 
   console.log("storage summary:");
-  console.log(
-    "KV",
-    [...KV._store.keys()].map((k) => {
-      const v = KV._store.get(k)!;
-      if (v.expirationTtl) {
-        return k + " (ttl/" + v.expirationTtl + ")";
-      }
-      return k + " (immutable)";
-    }),
-  );
   console.log("R2", [...R2._store.keys()]);
 
   closeServer();

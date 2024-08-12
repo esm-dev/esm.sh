@@ -1,4 +1,3 @@
-import type { HttpMetadata, WorkerStorage, WorkerStorageKV } from "../types/index.d.ts";
 import { targets } from "esm-compat";
 
 export function hasTargetSegment(segments: string[]) {
@@ -15,31 +14,6 @@ export function hasTargetSegment(segments: string[]) {
 
 export function isDtsFile(path: string) {
   return path.endsWith(".d.ts") || path.endsWith(".d.mts");
-}
-
-export function mockKV(storage: R2Bucket | WorkerStorage): WorkerStorageKV {
-  return globalThis.__MOCK_KV__ ?? (globalThis.__MOCK_KV__ = {
-    async getWithMetadata(
-      key: string,
-      _options: { type: "stream"; cacheTtl?: number },
-    ): Promise<{ value: ReadableStream | null; metadata: HttpMetadata | null }> {
-      const ret = await storage.get(key);
-      if (ret === null) {
-        return { value: null, metadata: null };
-      }
-      return {
-        value: ret.body,
-        metadata: ret.customMetadata as HttpMetadata | undefined ?? null,
-      };
-    },
-    async put(
-      key: string,
-      value: ArrayBuffer | Uint8Array | ReadableStream,
-      options?: { metadata?: HttpMetadata },
-    ): Promise<void> {
-      await storage.put(key, value, { customMetadata: options?.metadata });
-    },
-  });
 }
 
 export function trimPrefix(s: string, prefix: string): string {

@@ -1,4 +1,4 @@
-import type { Context, HttpMetadata, Middleware, PackageInfo, PackageRegistryInfo } from "../types/index.d.ts";
+import type { Context, Middleware, PackageInfo, PackageRegistryInfo } from "../types/index.d.ts";
 import { compareVersions, satisfies, validate } from "compare-versions";
 import { getBuildTargetFromUA, targets } from "esm-compat";
 import { assetsExts, cssPackages, VERSION } from "./consts.ts";
@@ -11,7 +11,6 @@ import {
   hashText,
   hasTargetSegment,
   isDtsFile,
-  mockKV,
   normalizeSearchParams,
   redirect,
   splitBy,
@@ -33,6 +32,7 @@ const regexpLegacyVersionPrefix = /^\/v\d+\//;
 const regexpLegacyBuild = /^\/~[a-f0-9]{40}$/;
 const regexpLocSuffix = /:\d+:\d+$/;
 
+/** fetch data from the origin server */
 async function fetchOrigin(req: Request, env: Env, ctx: Context, uri: string): Promise<Response> {
   const headers = new Headers();
   copyHeaders(
@@ -99,8 +99,11 @@ async function fetchOrigin(req: Request, env: Env, ctx: Context, uri: string): P
   return new Response(res.body, { headers: resHeaders });
 }
 
+/** fetch asset files like *.wasm, *.json, etc. */
 async function fetchAsset(req: Request, ctx: Context, env: Env, pathname: string): Promise<Response> {
-  const ret = await env.R2?.get(pathname.slice(1));
+  const R2 = env.R2;
+  const storeKey = pathname.slice(1);
+  const ret = await R2?.get(storeKey);
   if (ret) {
     const headers = ctx.corsHeaders();
     headers.set("Content-Type", ret.httpMetadata?.contentType || getContentType(pathname));
@@ -117,28 +120,26 @@ async function fetchAsset(req: Request, ctx: Context, env: Env, pathname: string
 
   const headers = ctx.corsHeaders(res.headers);
   const contentType = res.headers.get("content-type") || getContentType(pathname);
-  let body = res.body!;
-  if (env.R2) {
-    let bodyCopy: ReadableStream<Uint8Array>;
-    [body, bodyCopy] = body.tee();
-    ctx.waitUntil(env.R2.put(pathname.slice(1), bodyCopy, {
-      httpMetadata: { contentType },
-    }));
-  }
   headers.set("Content-Type", contentType);
   headers.set("Cache-Control", ccImmutable);
   headers.set("X-Content-Source", "esm-origin-server");
-  return new Response(body, { headers });
+
+  if (R2) {
+    const putOptions: R2PutOptions = { httpMetadata: { contentType } };
+    if (typeof FixedLengthStream === "function" && res.body instanceof FixedLengthStream) {
+      const [body1, body2] = res.body.tee();
+      ctx.waitUntil(R2.put(storeKey, body1, putOptions));
+      return new Response(body2, { headers });
+    }
+    const buffer = await res.arrayBuffer();
+    ctx.waitUntil(R2.put(storeKey, buffer, putOptions));
+    return new Response(buffer, { headers });
+  }
+  return new Response(res.body, { headers });
 }
 
-async function fetchESMBuild(
-  req: Request,
-  env: Env,
-  ctx: Context,
-  pathname: string,
-  query?: string,
-  gzip?: boolean,
-): Promise<Response> {
+/** fetch build files like *.js, *.mjs, *.css, etc. */
+async function fetchBuild(req: Request, env: Env, ctx: Context, pathname: string, query?: string): Promise<Response> {
   const R2 = env.R2;
   const isRaw = ctx.url.searchParams.has("raw");
   const isDts = isDtsFile(pathname);
@@ -163,27 +164,27 @@ async function fetchESMBuild(
   }
 
   if (!isFromUpWorker && R2) {
-    if (!isStatic) {
-      const kv = env.KV ?? mockKV(R2);
-      const { value, metadata } = await kv.getWithMetadata<HttpMetadata>(
-        storeKey,
-        { type: "stream", cacheTtl: 86400 },
-      );
-      if (value && metadata) {
-        let body = value as ReadableStream<Uint8Array>;
-        if (gzip && typeof DecompressionStream !== "undefined") {
-          body = body.pipeThrough(new DecompressionStream("gzip"));
-        }
+    const obj = await R2.get(storeKey);
+    if (obj) {
+      const contentType = obj.httpMetadata?.contentType || getContentType(pathname);
+      if (isStatic) {
         const headers = ctx.corsHeaders();
-        headers.set("Content-Type", metadata.contentType);
+        headers.set("Content-Type", contentType);
+        headers.set("Cache-Control", ccImmutable);
+        headers.set("X-Content-Source", "esm-worker");
+        return new Response(obj.body, { headers });
+      } else {
+        const { body, customMetadata } = obj;
+        const headers = ctx.corsHeaders();
+        headers.set("Content-Type", contentType);
         headers.set("Cache-Control", ccImmutable);
         const exposedHeaders: string[] = [];
-        if (metadata.esmPath) {
-          headers.set("X-ESM-Path", metadata.esmPath);
+        if (customMetadata?.esmPath) {
+          headers.set("X-ESM-Path", customMetadata.esmPath);
           exposedHeaders.push("X-ESM-Path");
         }
-        if (metadata.dts) {
-          headers.set("X-TypeScript-Types", metadata.dts);
+        if (customMetadata?.dts) {
+          headers.set("X-TypeScript-Types", customMetadata.dts);
           exposedHeaders.push("X-TypeScript-Types");
         }
         if (exposedHeaders.length > 0) {
@@ -191,16 +192,6 @@ async function fetchESMBuild(
         }
         headers.set("X-Content-Source", "esm-worker");
         return new Response(body, { headers });
-      }
-    } else {
-      const obj = await R2.get(storeKey);
-      if (obj) {
-        const contentType = obj.httpMetadata?.contentType || getContentType(pathname);
-        const headers = ctx.corsHeaders();
-        headers.set("Content-Type", contentType);
-        headers.set("Cache-Control", ccImmutable);
-        headers.set("X-Content-Source", "esm-worker");
-        return new Response(obj.body, { headers });
       }
     }
   }
@@ -210,7 +201,6 @@ async function fetchESMBuild(
     copyHeaders(res.headers, ctx.corsHeaders());
     return res;
   }
-  let body = res.body!;
 
   const headers = ctx.corsHeaders(res.headers);
   const contentType = res.headers.get("Content-Type") || getContentType(pathname);
@@ -237,22 +227,26 @@ async function fetchESMBuild(
   headers.set("X-Content-Source", "esm-origin-server");
 
   // save the file to KV/R2 if the `cache-control` header is set to `public, max-age=31536000, immutable`
-  if (!isFromUpWorker && R2 && cacheControl && cacheControl === ccImmutable) {
-    let bodyCopy: ReadableStream<Uint8Array>;
-    [body, bodyCopy] = body.tee();
-    if (!isStatic) {
-      const kv = env.KV ?? mockKV(R2);
-      let storeSteam = bodyCopy;
-      if (gzip && typeof CompressionStream !== "undefined") {
-        storeSteam = storeSteam.pipeThrough<Uint8Array>(new CompressionStream("gzip"));
-      }
-      ctx.waitUntil(kv.put(storeKey, storeSteam, { metadata: { contentType, dts, esmPath } }));
-    } else {
-      ctx.waitUntil(R2.put(storeKey, bodyCopy, { httpMetadata: { contentType } }));
+  if (!isFromUpWorker && R2 && cacheControl === ccImmutable) {
+    const customMetadata: Record<string, string> = {};
+    const putOptions: R2PutOptions = { httpMetadata: { contentType }, customMetadata };
+    if (esmPath) {
+      customMetadata.esmPath = esmPath;
     }
+    if (dts) {
+      customMetadata.dts = dts;
+    }
+    if (typeof FixedLengthStream === "function" && res.body instanceof FixedLengthStream) {
+      const [body1, body2] = res.body.tee();
+      ctx.waitUntil(R2.put(storeKey, body1, putOptions));
+      return new Response(body2, { headers });
+    }
+    const buffer = await res.arrayBuffer();
+    ctx.waitUntil(R2.put(storeKey, buffer, putOptions));
+    return new Response(buffer, { headers });
   }
 
-  return new Response(body, { headers });
+  return new Response(res.body, { headers });
 }
 
 function withESMWorker(middleware?: Middleware, cache: Cache = (caches as any).default) {
@@ -319,7 +313,7 @@ function withESMWorker(middleware?: Middleware, cache: Cache = (caches as any).d
             query.push(`v=${v}`);
           }
         }
-        return fetchESMBuild(req, env, ctx, pathname, query.length > 0 ? "?" + query.join("&") : undefined);
+        return fetchBuild(req, env, ctx, pathname, query.length > 0 ? "?" + query.join("&") : undefined);
       }, { varyUA });
     }
 
@@ -347,36 +341,11 @@ function withESMWorker(middleware?: Middleware, cache: Cache = (caches as any).d
           const ret: { zoneId?: string; deletedFiles: string[] } = await res.json();
           const { zoneId, deletedFiles } = ret;
           if (deletedFiles && deletedFiles.length > 0) {
-            const { R2, CF_ACCOUNT_ID, KV_NAMESPACE_ID, CF_API_TOKEN } = env;
-            const promises: Promise<any>[] = [];
+            const { R2 } = env;
             if (R2) {
-              let keys = deletedFiles.filter((name) => !name.endsWith(".mjs") && !name.endsWith(".js"));
-              if (zoneId) {
-                keys = keys.map((name) => zoneId + "/" + name);
-              }
-              promises.push(R2.delete(keys));
+              const keys = zoneId ? deletedFiles.map((name) => zoneId + "/" + name) : deletedFiles;
+              await R2.delete(keys);
             }
-            if (CF_ACCOUNT_ID && KV_NAMESPACE_ID && CF_API_TOKEN) {
-              promises.push((async () => {
-                let keys = deletedFiles.filter((name) => name.endsWith(".mjs") || name.endsWith(".js"));
-                if (zoneId) {
-                  keys = keys.map((name) => zoneId + "/" + name);
-                }
-                const res = await fetch(
-                  `https://api.cloudflare.com/client/v4/accounts/${CF_ACCOUNT_ID}/storage/kv/namespaces/${KV_NAMESPACE_ID}/bulk`,
-                  {
-                    method: "DELETE",
-                    headers: { "Content-Type": "application/json", Authorization: "Bearer " + CF_API_TOKEN },
-                    body: JSON.stringify({ keys }),
-                  },
-                );
-                const ret: any = await res.json();
-                if (!ret.success) {
-                  throw new Error(ret.errors[0].message);
-                }
-              })());
-            }
-            await Promise.all(promises);
           }
           return Response.json(ret, { headers: ctx.corsHeaders() });
         }
@@ -402,7 +371,7 @@ function withESMWorker(middleware?: Middleware, cache: Cache = (caches as any).d
     // if it's a singleton build module which is created by https://esm.sh/tsx
     if (pathname.startsWith("/+") && (pathname.endsWith(".mjs") || pathname.endsWith(".mjs.map"))) {
       return ctx.withCache(() => {
-        return fetchESMBuild(req, env, ctx, pathname);
+        return fetchBuild(req, env, ctx, pathname);
       });
     }
 
@@ -701,7 +670,7 @@ function withESMWorker(middleware?: Middleware, cache: Cache = (caches as any).d
     if (isTargetUrl || isDtsFile(subPath)) {
       return ctx.withCache(() => {
         const pathname = `${prefix}/${pkgFullname}@${packageVersion}${subPath}`;
-        return fetchESMBuild(req, env, ctx, pathname, undefined, true);
+        return fetchBuild(req, env, ctx, pathname, undefined);
       });
     }
 
@@ -713,7 +682,7 @@ function withESMWorker(middleware?: Middleware, cache: Cache = (caches as any).d
       if (target) {
         params.set("target", target);
       }
-      return fetchESMBuild(req, env, ctx, pathname, "?" + params.toString());
+      return fetchBuild(req, env, ctx, pathname, "?" + params.toString());
     }, { varyUA: true });
   };
 

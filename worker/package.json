@@ -14,8 +14,8 @@
     "types/index.d.ts"
   ],
   "devDependencies": {
-    "@cloudflare/workers-types": "4.20240620.0",
-    "compare-versions": "6.1.0",
+    "@cloudflare/workers-types": "4.20240806.0",
+    "compare-versions": "6.1.1",
     "esbuild": "0.23.0" ,
     "esm-compat": "0.1.0"
   },
