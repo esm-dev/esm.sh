@@ -1,5 +1,5 @@
-/*! 🔥 esm.sh/run - speeding up your modern(es2015+) web application with service worker.
- *  Docs: https://docs.esm.sh/run
+/*! 🔥 esm.sh/run - jsx/ts just works™️ in browser
+ *  @doc https://docs.esm.sh/run
  */
 
 import type { RunOptions } from "./types/run.d.ts";
@@ -13,9 +13,8 @@ function run(options: RunOptions = {}): Promise<ServiceWorker> {
   if (!serviceWorker) {
     throw new Error("Service Worker is restricted to running across HTTPS for security reasons.");
   }
-  const hasController = serviceWorker.controller !== null;
-  const onUpdateFound = options.onUpdateFound ?? (() => location.reload());
   return new Promise<ServiceWorker>(async (resolve, reject) => {
+    const hasController = serviceWorker.controller !== null;
     const reg = await serviceWorker.register(options.sw ?? "/sw.js", {
       type: "module",
       scope: options.swScope,
@@ -35,7 +34,7 @@ function run(options: RunOptions = {}): Promise<ServiceWorker> {
         });
         // import the main module if provided
         if (options.main) {
-          import(options.main);
+          queueMicrotask(() => import(options.main!));
         }
         resolve(active);
       }
@@ -45,7 +44,7 @@ function run(options: RunOptions = {}): Promise<ServiceWorker> {
       // run the app immediately if the Service Worker is already installed
       run();
       // listen for the new service worker to take over
-      serviceWorker.oncontrollerchange = onUpdateFound;
+      serviceWorker.oncontrollerchange = options.onUpdateFound ?? (() => location.reload());
     } else {
       // wait for the new service worker to be installed
       reg.onupdatefound = () => {
@@ -65,12 +64,56 @@ function run(options: RunOptions = {}): Promise<ServiceWorker> {
 }
 
 function setupServiceWorker() {
+  // @ts-expect-error `$TARGET` is injected by esbuild
+  const target: string = $TARGET;
   const on = global.addEventListener;
   const importMap: { imports: Record<string, string> } = { imports: {} };
+  const regexpTsx = /\.(jsx|ts|mts|tsx)$/;
+  const cachePromise = caches.open("esm.sh/run");
+  const stringify = JSON.stringify;
+
+  async function tsx(url: URL, code: string) {
+    const cache = await cachePromise;
+    const filename = url.pathname.split("/").pop()!;
+    const extname = filename.split(".").pop()!;
+    const buffer = new Uint8Array(
+      await crypto.subtle.digest(
+        "SHA-1",
+        new TextEncoder().encode(extname + code + stringify(importMap) + target + "false"),
+      ),
+    );
+    const id = [...buffer].map((b) => b.toString(16).padStart(2, "0")).join("");
+    const cacheKey = new URL(url);
+    cacheKey.searchParams.set("_tsxid", id);
+
+    let res = await cache.match(cacheKey);
+    if (res) {
+      return res;
+    }
+
+    res = await fetch(urlFromCurrentModule(`/+${id}.mjs`));
+    if (res.status === 404) {
+      res = await fetch(urlFromCurrentModule("/transform"), {
+        method: "POST",
+        body: stringify({ filename, code, importMap, target }),
+      });
+      const ret = await res.json();
+      if (ret.error) {
+        throw new Error(ret.error.message);
+      }
+      res = new Response(ret.code, { headers: { "Content-Type": "application/javascript; charset=utf-8" } });
+    }
+    if (!res.ok) {
+      return res;
+    }
+
+    cache.put(cacheKey, res.clone());
+    return res;
+  }
 
   on("install", (evt) => {
-    // @ts-expect-error The `skipWaiting` method of the `ServiceWorkerGlobalScope` interface
-    // forces the waiting service worker to become the active service worker.
+    // @ts-ignore The `skipWaiting` method forces the waiting service worker to become
+    // the active service worker.
     skipWaiting();
   });
 
@@ -85,7 +128,14 @@ function setupServiceWorker() {
     if (request.url.startsWith(location.origin)) {
       const url = new URL(request.url);
       const pathname = url.pathname;
-      if (/\.(jsx|ts|mts|tsx)$/.test(pathname)) {
+      if (regexpTsx.test(pathname)) {
+        evt.respondWith((async () => {
+          const res = await fetch(request);
+          if (!res.ok || (/^(text|application)\/javascript/.test(res.headers.get("Content-Type") ?? ""))) {
+            return res;
+          }
+          return tsx(url, await res.text());
+        })());
       }
     }
   });
@@ -114,6 +164,11 @@ function queryElement<T extends Element>(selector: string, callback: (el: T) => 
   }
 }
 
+/** create a URL object from the given path in the current module. */
+function urlFromCurrentModule(path: string) {
+  return new URL(path, import.meta.url);
+}
+
 if (document) {
   // run the `main` module if it's provided in the script tag with `src` attribute equals to current script url
   // e.g. <script type="module" src="https://esm.sh/run" main="/main.mjs" sw="/sw.mjs"></script>
@@ -140,7 +195,7 @@ if (document) {
   });
   // compatibility with esm.sh/run(v1) which has been renamed to 'esm.sh/tsx'
   queryElement<HTMLScriptElement>("script[type^='text/']", () => {
-    import(new URL("/tsx", import.meta.url).href);
+    import(urlFromCurrentModule("/tsx").href);
   });
 } else if (clients) {
   setupServiceWorker();

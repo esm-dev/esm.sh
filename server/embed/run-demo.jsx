@@ -1,4 +1,7 @@
-import confetti from "canvas-confetti";
+import { render } from "preact";
+import { App } from "./run-demo-app.jsx";
 
-// document.querySelector('h1').textContent = 'Hello world!'
-confetti();
+render(
+  <App />,
+  document.querySelector("#root"),
+);
