@@ -1,5 +1,5 @@
-/*! 🔥 esm.sh/run - jsx/ts just works™️ in browser
- *  @doc https://docs.esm.sh/run
+/*! 🔥 esm.sh/run - ts/jsx just works™️ in browser.
+ *! 📚 https://docs.esm.sh/run
  */
 
 import type { RunOptions } from "./types/run.d.ts";
