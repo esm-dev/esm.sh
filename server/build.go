@@ -1057,6 +1057,8 @@ rebuild:
 						if len(ctx.pkgJson.Browser) == 0 {
 							fmt.Fprintf(header, `import __Process$ from "/node/process.js";%s`, EOL)
 							imports.Add("/node/process.js")
+						} else {
+							fmt.Fprintf(header, `const __Process$ = {};%s`, EOL)
 						}
 					} else if ctx.target == "denonext" {
 						fmt.Fprintf(header, `import __Process$ from "node:process";%s`, EOL)
