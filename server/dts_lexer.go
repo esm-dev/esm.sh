@@ -27,7 +27,18 @@ var (
 	bytesStripleSlash = []byte{'/', '/', '/'}
 )
 
-func parseDts(r io.Reader, w *bytes.Buffer, resolve func(specifier string, kind string, position int) (resovledPath string, err error)) (err error) {
+type TsImportKind uint8
+
+const (
+	TsReferenceTypes TsImportKind = iota
+	TsReferencePath
+	TsImportFrom
+	TsImportCall
+	TsDeclareModule
+)
+
+// a simple dts lexer for resolving import path
+func parseDts(r io.Reader, w *bytes.Buffer, resolve func(specifier string, kind TsImportKind, position int) (resovledPath string, err error)) (err error) {
 	var multiLineComment bool
 	var importExportExpr bool
 	scanner := bufio.NewScanner(r)
@@ -63,9 +74,9 @@ func parseDts(r io.Reader, w *bytes.Buffer, resolve func(specifier string, kind 
 							path = "./" + path
 						}
 					}
-					kind := "referenceTypes"
+					kind := TsReferenceTypes
 					if format == "path" {
-						kind = "referencePath"
+						kind = TsReferencePath
 					}
 					var res string
 					res, err = resolve(path, kind, w.Len())
@@ -105,7 +116,7 @@ func parseDts(r io.Reader, w *bytes.Buffer, resolve func(specifier string, kind 
 								tmp.Write(a[0])
 								tmp.Write(q)
 								var res string
-								res, err = resolve(string(a[1]), "importCall", w.Len())
+								res, err = resolve(string(a[1]), TsImportCall, w.Len())
 								if err != nil {
 									return importCallExpr
 								}
@@ -132,7 +143,7 @@ func parseDts(r io.Reader, w *bytes.Buffer, resolve func(specifier string, kind 
 							w.Write(a[0])
 							w.Write(q)
 							var res string
-							res, err = resolve(string(a[1]), "declareModule", w.Len())
+							res, err = resolve(string(a[1]), TsDeclareModule, w.Len())
 							if err != nil {
 								return
 							}
@@ -154,7 +165,7 @@ func parseDts(r io.Reader, w *bytes.Buffer, resolve func(specifier string, kind 
 								w.Write(a[0])
 								w.Write(q)
 								var res string
-								res, err = resolve(string(a[1]), "importExpr", w.Len())
+								res, err = resolve(string(a[1]), TsImportFrom, w.Len())
 								if err != nil {
 									return
 								}

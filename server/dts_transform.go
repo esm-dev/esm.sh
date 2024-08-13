@@ -53,7 +53,7 @@ func transformDTS(ctx *BuildContext, dts string, buildArgsPrefix string, marker 
 	referenceNodeTypes := false
 	hasReferenceNodeTypes := false
 
-	err = parseDts(dtsFile, buffer, func(specifier string, kind string, position int) (string, error) {
+	err = parseDts(dtsFile, buffer, func(specifier string, kind TsImportKind, position int) (string, error) {
 		if ctx.pkg.Name == "@types/node" {
 			return specifier, nil
 		}
@@ -106,7 +106,7 @@ func transformDTS(ctx *BuildContext, dts string, buildArgsPrefix string, marker 
 			return specifier, nil
 		}
 
-		if (kind == "referenceTypes" || kind == "referencePath") && specifier == "node" {
+		if (kind == TsReferencePath || kind == TsReferenceTypes) && specifier == "node" {
 			hasReferenceNodeTypes = true
 			return fmt.Sprintf("{ESM_CDN_ORIGIN}/@types/node@%s/index.d.ts", nodeTypesVersion), nil
 		}
@@ -205,7 +205,7 @@ func transformDTS(ctx *BuildContext, dts string, buildArgsPrefix string, marker 
 			return "", err
 		}
 
-		if kind == "declareModule" {
+		if kind == TsDeclareModule {
 			if d != "" {
 				return fmt.Sprintf("{ESM_CDN_ORIGIN}%s", d), nil
 			}

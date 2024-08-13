@@ -70,8 +70,8 @@ import ReactDOM = { client: import('https://esm.sh/react-dom@1.0.0/client.d.ts')
 `
 
 	buf := bytes.NewBuffer(nil)
-	err := parseDts(bytes.NewReader([]byte(rawDts)), buf, func(name string, kind string, position int) (string, error) {
-		if kind == "importExpr" || kind == "importCall" {
+	err := parseDts(bytes.NewReader([]byte(rawDts)), buf, func(name string, kind TsImportKind, position int) (string, error) {
+		if kind == TsImportFrom || kind == TsImportCall {
 			if name == "react" || name == "react-dom" {
 				return fmt.Sprintf("https://esm.sh/@types/%s@1.0.0/index.d.ts", name), nil
 			}
