@@ -1,6 +1,6 @@
 # esm-npm-polyfills
 
-Using _native_ APIs instead of importing polyfill from NPM.
+Using _native_ APIs instead of importing polyfills from NPM.
 
 - [abort-controller](https://www.npmjs.com/package/abort-controller) → [abort-controller.mjs](./abort-controller.mjs)
 - [array-every](https://www.npmjs.com/package/array-every) → [array-every.mjs](./array-every.mjs)

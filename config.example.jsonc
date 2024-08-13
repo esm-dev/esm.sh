@@ -1,19 +1,19 @@
 {
-  // The port to listen server on for HTTP, default is 8080.
+  // The port to listen server on for HTTP requests, default is 8080.
   "port": 8080,
 
-  // The port to listen server on for HTTPs, default is 0 (disabled). Change to 443 if you want to enable it.
-  // You don't need to provide a certificate, it will generate automatically by autocert.
-  // Note: Docker users needs to provide tls certificate.
+  // The port to listen server on for HTTPs requests, default is 0 (disabled). Change to 443 if you want to enable it.
+  // You don't need to provide a certificate, it will be generated and updated automatically by autocert.
+  // Note: if you are running the server in a docker container, you need to expose this port as 443 as well.
   "tlsPort": 0,
 
-  // The secret token to validate the `Authorization: Bearer <secret>` header of requests, default is disabled.
+  // The secret token to validate the `Authorization: Bearer <secret>` header of incoming requests, default is disabled.
   "authSecret": "",
 
-  // The build max concurrency, default is `runtime.NumCPU()`
+  // The concurrency number for the build process, default equals to the number of CPU cores.
   "buildConcurrency": 0,
 
-  // The max waiting time for the build to complete, default is 30 seconds.
+  // The maxmum waiting time for a build to complete, default is 30 seconds.
   "buildTimeout": 30,
 
   // The work directory for the server app, default is "~/.esmd".
@@ -37,7 +37,7 @@
   // The log directory, default is "~/.esmd/log".
   "logDir": "~/.esmd/log",
 
-  // The log level, available values are ["debug", "info", "warn", "error"], default is "info".
+  // The log level, default is "info"(available values are ["debug", "info", "warn", "error"]).
   "logLevel": "info",
 
   // The global npm registry, default is "https://registry.npmjs.org/".
