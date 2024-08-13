@@ -53,7 +53,7 @@ func transformDTS(ctx *BuildContext, dts string, buildArgsPrefix string, marker 
 	referenceNodeTypes := false
 	hasReferenceNodeTypes := false
 
-	err = walkDts(dtsFile, buffer, func(specifier string, kind string, position int) (string, error) {
+	err = parseDts(dtsFile, buffer, func(specifier string, kind string, position int) (string, error) {
 		if ctx.pkg.Name == "@types/node" {
 			return specifier, nil
 		}

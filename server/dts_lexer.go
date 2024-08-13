@@ -27,15 +27,13 @@ var (
 	bytesStripleSlash = []byte{'/', '/', '/'}
 )
 
-// Walks through a .d.ts file and resolves import paths.
-func walkDts(r io.Reader, buf *bytes.Buffer, resolve func(specifier string, kind string, position int) (resovledPath string, err error)) (err error) {
+func parseDts(r io.Reader, w *bytes.Buffer, resolve func(specifier string, kind string, position int) (resovledPath string, err error)) (err error) {
 	var multiLineComment bool
 	var importExportExpr bool
-	// var declareModuleScope bool
 	scanner := bufio.NewScanner(r)
 	for scanner.Scan() {
 		line, trimedSpaces := trimSpace(scanner.Bytes())
-		buf.Write(trimedSpaces)
+		w.Write(trimedSpaces)
 	CheckCommentScope:
 		if !multiLineComment && bytes.HasPrefix(line, bytesCommentStart) {
 			multiLineComment = true
@@ -44,14 +42,14 @@ func walkDts(r io.Reader, buf *bytes.Buffer, resolve func(specifier string, kind
 			endIndex := bytes.Index(line, bytesCommentEnd)
 			if endIndex > -1 {
 				multiLineComment = false
-				buf.Write(line[:endIndex+2])
+				w.Write(line[:endIndex+2])
 				if rest := line[endIndex+2:]; len(rest) > 0 {
 					line, trimedSpaces = trimSpace(rest)
-					buf.Write(trimedSpaces)
+					w.Write(trimedSpaces)
 					goto CheckCommentScope
 				}
 			} else {
-				buf.Write(line)
+				w.Write(line)
 			}
 		} else if bytes.HasPrefix(line, bytesStripleSlash) {
 			rest := bytes.TrimPrefix(line, bytesStripleSlash)
@@ -70,43 +68,30 @@ func walkDts(r io.Reader, buf *bytes.Buffer, resolve func(specifier string, kind
 						kind = "referencePath"
 					}
 					var res string
-					res, err = resolve(path, kind, buf.Len())
+					res, err = resolve(path, kind, w.Len())
 					if err != nil {
 						return
 					}
-					// if format == "types" && strings.HasPrefix(res, "{ESM_CDN_ORIGIN}") {
-					// 	format = "path"
-					// }
-					fmt.Fprintf(buf, `/// <reference %s="%s" />`, format, res)
+					fmt.Fprintf(w, `/// <reference %s="%s" />`, format, res)
 				} else {
-					buf.Write(line)
+					w.Write(line)
 				}
 			} else {
-				buf.Write(line)
+				w.Write(line)
 			}
 		} else if bytes.HasPrefix(line, bytesDoubleSlash) {
-			buf.Write(line)
+			w.Write(line)
 		} else {
 			var i int
 			exprScanner := bufio.NewScanner(bytes.NewReader(line))
 			exprScanner.Split(splitExpr)
 			for exprScanner.Scan() {
 				if i > 0 {
-					buf.WriteByte(';')
+					w.WriteByte(';')
 				}
 				expr, trimedLeftSpaces := trimSpace(exprScanner.Bytes())
-				buf.Write(trimedLeftSpaces)
+				w.Write(trimedLeftSpaces)
 				if len(expr) > 0 {
-					// TypeScript may start raising a diagnostic when ESM declaration files use `export =`
-					// see https://github.com/microsoft/TypeScript/issues/51321
-					// if bytes.HasPrefix(inlineToken, []byte("export=")) || bytes.HasPrefix(inlineToken, []byte("export =")) {
-					// 	buf.WriteString("// ")
-					// 	buf.Write(inlineToken)
-					// 	i++
-					// 	continue
-					// }
-
-					// resoving `import('lib')`
 					if regexpImportCallExpr.Match(expr) {
 						expr = regexpImportCallExpr.ReplaceAllFunc(expr, func(importCallExpr []byte) []byte {
 							q := bytesSingleQoute
@@ -120,7 +105,7 @@ func walkDts(r io.Reader, buf *bytes.Buffer, resolve func(specifier string, kind
 								tmp.Write(a[0])
 								tmp.Write(q)
 								var res string
-								res, err = resolve(string(a[1]), "importCall", buf.Len())
+								res, err = resolve(string(a[1]), "importCall", w.Len())
 								if err != nil {
 									return importCallExpr
 								}
@@ -144,18 +129,18 @@ func walkDts(r io.Reader, buf *bytes.Buffer, resolve func(specifier string, kind
 							a = bytes.Split(expr, q)
 						}
 						if len(a) == 3 {
-							buf.Write(a[0])
-							buf.Write(q)
+							w.Write(a[0])
+							w.Write(q)
 							var res string
-							res, err = resolve(string(a[1]), "declareModule", buf.Len())
+							res, err = resolve(string(a[1]), "declareModule", w.Len())
 							if err != nil {
 								return
 							}
-							buf.WriteString(res)
-							buf.Write(q)
-							buf.Write(a[2])
+							w.WriteString(res)
+							w.Write(q)
+							w.Write(a[2])
 						} else {
-							buf.Write(expr)
+							w.Write(expr)
 						}
 					} else if importExportExpr {
 						if regexpFromExpr.Match(expr) || (bytes.HasPrefix(expr, []byte("import")) && regexpImportPathExpr.Match(expr)) {
@@ -166,25 +151,25 @@ func walkDts(r io.Reader, buf *bytes.Buffer, resolve func(specifier string, kind
 								a = bytes.Split(expr, q)
 							}
 							if len(a) == 3 {
-								buf.Write(a[0])
-								buf.Write(q)
+								w.Write(a[0])
+								w.Write(q)
 								var res string
-								res, err = resolve(string(a[1]), "importExpr", buf.Len())
+								res, err = resolve(string(a[1]), "importExpr", w.Len())
 								if err != nil {
 									return
 								}
-								buf.WriteString(res)
-								buf.Write(q)
-								buf.Write(a[2])
+								w.WriteString(res)
+								w.Write(q)
+								w.Write(a[2])
 							} else {
-								buf.Write(expr)
+								w.Write(expr)
 							}
 							importExportExpr = false
 						} else {
-							buf.Write(expr)
+							w.Write(expr)
 						}
 					} else {
-						buf.Write(expr)
+						w.Write(expr)
 					}
 				}
 				i++
@@ -194,7 +179,7 @@ func walkDts(r io.Reader, buf *bytes.Buffer, resolve func(specifier string, kind
 				return
 			}
 		}
-		buf.WriteByte('\n')
+		w.WriteByte('\n')
 	}
 	err = scanner.Err()
 	return
