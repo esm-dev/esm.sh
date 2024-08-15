@@ -2,6 +2,7 @@ package server
 
 import (
 	"fmt"
+	"path"
 	"sort"
 	"strings"
 
@@ -15,7 +16,7 @@ type BuildArgs struct {
 	external          *StringSet
 	exports           *StringSet
 	conditions        []string
-	jsxRuntime        *Pkg
+	jsxRuntime        *Module
 	keepNames         bool
 	ignoreAnnotations bool
 	externalRequire   bool
@@ -79,7 +80,7 @@ func decodeBuildArgs(npmrc *NpmRC, argsString string) (args BuildArgs, err error
 	return
 }
 
-func encodeBuildArgs(args BuildArgs, pkg Pkg, isDts bool) string {
+func encodeBuildArgs(args BuildArgs, pkg Module, isDts bool) string {
 	lines := []string{}
 	if len(args.alias) > 0 {
 		var ss sort.StringSlice
@@ -163,13 +164,13 @@ func encodeBuildArgs(args BuildArgs, pkg Pkg, isDts bool) string {
 }
 
 // fixBuildArgs removes invalid alias, deps, external from the build args
-func fixBuildArgs(npmrc *NpmRC, args *BuildArgs, pkg Pkg) error {
+func fixBuildArgs(npmrc *NpmRC, installDir string, args *BuildArgs, pkg Module) error {
 	if len(args.alias) > 0 || len(args.deps) > 0 || args.external.Len() > 0 {
-		deps, err := walkDeps(NewStringSet(), npmrc, pkg)
+		depsSet := NewStringSet()
+		err := walkDeps(npmrc, installDir, pkg, depsSet)
 		if err != nil {
 			return err
 		}
-		depsSet := NewStringSet(deps...)
 		if len(args.alias) > 0 {
 			alias := map[string]string{}
 			for from, to := range args.alias {
@@ -177,9 +178,13 @@ func fixBuildArgs(npmrc *NpmRC, args *BuildArgs, pkg Pkg) error {
 					alias[from] = to
 				}
 			}
-			for _, to := range alias {
+			for from, to := range alias {
 				pkgName, _, _, _ := splitPkgPath(to)
-				depsSet.Add(pkgName)
+				if pkgName == pkg.Name {
+					delete(alias, from)
+				} else {
+					depsSet.Add(pkgName)
+				}
 			}
 			args.alias = alias
 		}
@@ -205,16 +210,20 @@ func fixBuildArgs(npmrc *NpmRC, args *BuildArgs, pkg Pkg) error {
 	return nil
 }
 
-func walkDeps(ctx *StringSet, npmrc *NpmRC, pkg Pkg) (deps []string, err error) {
-	if ctx.Has(pkg.Name) {
+func walkDeps(npmrc *NpmRC, installDir string, pkg Module, mark *StringSet) (err error) {
+	if mark.Has(pkg.Name) {
 		return
 	}
-	ctx.Add(pkg.Name)
+	mark.Add(pkg.Name)
 	var p PackageJSON
-	if pkg.FromGithub {
-		p, err = npmrc.installPackage(pkg)
+	pkgJsonPath := path.Join(installDir, "node_modules", ".pnpm", "node_modules", pkg.Name, "package.json")
+	if !existsFile(pkgJsonPath) {
+		pkgJsonPath = path.Join(installDir, "node_modules", pkg.Name, "package.json")
+	}
+	if existsFile(pkgJsonPath) {
+		err = utils.ParseJSONFile(pkgJsonPath, &p)
 	} else {
-		p, err = npmrc.getPackageInfo(pkg.Name, pkg.Version)
+		return nil
 	}
 	if err != nil {
 		return
@@ -227,12 +236,13 @@ func walkDeps(ctx *StringSet, npmrc *NpmRC, pkg Pkg) (deps []string, err error) 
 		pkgDeps[name] = version
 	}
 	for name, version := range pkgDeps {
-		subDeps, err := walkDeps(ctx, npmrc, Pkg{Name: name, Version: version})
-		if err != nil {
-			return nil, err
+		if strings.HasPrefix(name, "@types/") || strings.HasPrefix(name, "@babel/") || strings.HasPrefix(name, "is-") {
+			continue
 		}
-		deps = append(deps, name)
-		deps = append(deps, subDeps...)
+		err := walkDeps(npmrc, installDir, Module{Name: name, Version: version}, mark)
+		if err != nil {
+			return err
+		}
 	}
 	return
 }

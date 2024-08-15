@@ -28,26 +28,26 @@ const (
 )
 
 type BuildContext struct {
-	zoneId        string
-	npmrc         *NpmRC
-	pkg           Pkg
-	pkgJson       PackageJSON
-	pkgDeprecated string
-	args          BuildArgs
-	target        string
-	bundleMode    BundleMode
-	dev           bool
-	sourceMap     bool
-	wd            string
-	pkgDir        string
-	pnpmPkgDir    string
-	path          string
-	stage         string
-	imports       [][2]string
-	requires      [][3]string
-	smOffset      int
-	subBuilds     *StringSet
-	wg            sync.WaitGroup
+	zoneId       string
+	npmrc        *NpmRC
+	module       Module
+	packageJson  PackageJSON
+	isDeprecated string
+	args         BuildArgs
+	target       string
+	bundleMode   BundleMode
+	dev          bool
+	sourceMap    bool
+	wd           string
+	pkgDir       string
+	pnpmPkgDir   string
+	path         string
+	stage        string
+	imports      [][2]string
+	requires     [][3]string
+	smOffset     int
+	subBuilds    *StringSet
+	wg           sync.WaitGroup
 }
 
 type BuildResult struct {
@@ -83,11 +83,11 @@ var loaders = map[string]api.Loader{
 	".woff2": api.LoaderDataURL,
 }
 
-func NewBuildContext(zoneId string, npmrc *NpmRC, pkg Pkg, args BuildArgs, target string, bundleMode BundleMode, dev bool, sourceMap bool) *BuildContext {
+func NewBuildContext(zoneId string, npmrc *NpmRC, module Module, args BuildArgs, target string, bundleMode BundleMode, dev bool, sourceMap bool) *BuildContext {
 	return &BuildContext{
 		zoneId:     zoneId,
 		npmrc:      npmrc,
-		pkg:        pkg,
+		module:     module,
 		args:       args,
 		target:     target,
 		dev:        dev,
@@ -135,13 +135,13 @@ func (ctx *BuildContext) Build() (ret BuildResult, err error) {
 	}
 
 	// check if the package is deprecated
-	if ctx.pkgDeprecated == "" && !ctx.pkg.FromGithub && !strings.HasPrefix(ctx.pkg.Name, "@jsr/") {
+	if ctx.isDeprecated == "" && !ctx.module.FromGithub && !strings.HasPrefix(ctx.module.Name, "@jsr/") {
 		var info PackageJSON
-		info, err = ctx.npmrc.fetchPackageInfo(ctx.pkg.Name, ctx.pkg.Version)
+		info, err = ctx.npmrc.fetchPackageInfo(ctx.module.Name, ctx.module.Version)
 		if err != nil {
 			return
 		}
-		ctx.pkgDeprecated = info.Deprecated
+		ctx.isDeprecated = info.Deprecated
 	}
 
 	// install the package
@@ -176,15 +176,15 @@ func (ctx *BuildContext) Build() (ret BuildResult, err error) {
 }
 
 func (ctx *BuildContext) install() (err error) {
-	if ctx.wd == "" || ctx.pkgJson.Name == "" {
+	if ctx.wd == "" || ctx.packageJson.Name == "" {
 		var pkgJson PackageJSON
-		pkgJson, err = ctx.npmrc.installPackage(ctx.pkg)
+		pkgJson, err = ctx.npmrc.installPackage(ctx.module)
 		if err != nil {
 			return
 		}
-		ctx.pkgJson = ctx.normalizePackageJSON(pkgJson)
-		ctx.wd = path.Join(ctx.npmrc.NpmDir(), ctx.pkg.Fullname())
-		ctx.pkgDir = path.Join(ctx.wd, "node_modules", ctx.pkg.Name)
+		ctx.packageJson = ctx.normalizePackageJSON(pkgJson)
+		ctx.wd = path.Join(ctx.npmrc.NpmDir(), ctx.module.Fullname())
+		ctx.pkgDir = path.Join(ctx.wd, "node_modules", ctx.module.Name)
 		if rp, e := os.Readlink(ctx.pkgDir); e == nil {
 			ctx.pnpmPkgDir = path.Join(path.Dir(ctx.pkgDir), rp)
 		} else {
@@ -196,9 +196,9 @@ func (ctx *BuildContext) install() (err error) {
 
 func (ctx *BuildContext) buildModule() (result BuildResult, err error) {
 	// build json
-	if strings.HasSuffix(ctx.pkg.SubModule, ".json") {
+	if strings.HasSuffix(ctx.module.SubModule, ".json") {
 		nmDir := path.Join(ctx.wd, "node_modules")
-		jsonPath := path.Join(nmDir, ctx.pkg.Name, ctx.pkg.SubModule)
+		jsonPath := path.Join(nmDir, ctx.module.Name, ctx.module.SubModule)
 		if existsFile(jsonPath) {
 			var jsonData []byte
 			jsonData, err = os.ReadFile(jsonPath)
@@ -218,17 +218,17 @@ func (ctx *BuildContext) buildModule() (result BuildResult, err error) {
 		}
 	}
 
-	entry := ctx.resolveEntry(ctx.pkg)
+	entry := ctx.resolveEntry(ctx.module)
 	if entry.isEmpty() {
 		err = fmt.Errorf("could not resolve entry")
 		return
 	}
-	log.Debugf("build(%s): Entry%+v", ctx.pkg, entry)
+	log.Debugf("build(%s): Entry%+v", ctx.module, entry)
 
-	typesOnly := strings.HasPrefix(ctx.pkgJson.Name, "@types/") || (entry.esm == "" && entry.cjs == "" && entry.dts != "")
+	typesOnly := strings.HasPrefix(ctx.packageJson.Name, "@types/") || (entry.esm == "" && entry.cjs == "" && entry.dts != "")
 	if typesOnly {
 		result.TypesOnly = true
-		result.Dts = "/" + ctx.pkg.Fullname() + entry.dts[1:]
+		result.Dts = "/" + ctx.module.Fullname() + entry.dts[1:]
 		ctx.transformDTS(entry.dts)
 		return
 	}
@@ -240,7 +240,7 @@ func (ctx *BuildContext) buildModule() (result BuildResult, err error) {
 
 	// cjs reexport
 	if reexport != "" {
-		pkg, _, _, e := ctx.lookupDep(reexport)
+		pkg, _, e := ctx.lookupDep(reexport, false)
 		if e != nil {
 			err = e
 			return
@@ -275,9 +275,9 @@ func (ctx *BuildContext) buildModule() (result BuildResult, err error) {
 	var entryPoint string
 	var input *api.StdinOptions
 
-	entryModuleSpecifier := ctx.pkg.Name
-	if ctx.pkg.SubModule != "" {
-		entryModuleSpecifier += "/" + ctx.pkg.SubModule
+	entryModuleSpecifier := ctx.module.Name
+	if ctx.module.SubModule != "" {
+		entryModuleSpecifier += "/" + ctx.module.SubModule
 	}
 
 	if entry.esm == "" {
@@ -308,13 +308,13 @@ func (ctx *BuildContext) buildModule() (result BuildResult, err error) {
 	}
 
 	pkgSideEffects := api.SideEffectsTrue
-	if ctx.pkgJson.SideEffectsFalse {
+	if ctx.packageJson.SideEffectsFalse {
 		pkgSideEffects = api.SideEffectsFalse
 	}
 
-	noBundle := ctx.bundleMode == BundleFalse || (ctx.pkgJson.SideEffects != nil && ctx.pkgJson.SideEffects.Len() > 0)
-	if ctx.pkgJson.Esmsh != nil {
-		if v, ok := ctx.pkgJson.Esmsh["bundle"]; ok {
+	noBundle := ctx.bundleMode == BundleFalse || (ctx.packageJson.SideEffects != nil && ctx.packageJson.SideEffects.Len() > 0)
+	if ctx.packageJson.Esmsh != nil {
+		if v, ok := ctx.packageJson.Esmsh["bundle"]; ok {
 			if b, ok := v.(bool); ok && !b {
 				noBundle = true
 			}
@@ -347,7 +347,7 @@ func (ctx *BuildContext) buildModule() (result BuildResult, err error) {
 					// ban file urls
 					if strings.HasPrefix(args.Path, "file:") {
 						return api.OnResolveResult{
-							Path:     fmt.Sprintf("/error.js?type=unsupported-file-dependency&name=%s&importer=%s", strings.TrimPrefix(args.Path, "file:"), ctx.pkg),
+							Path:     fmt.Sprintf("/error.js?type=unsupported-file-dependency&name=%s&importer=%s", strings.TrimPrefix(args.Path, "file:"), ctx.module),
 							External: true,
 						}, nil
 					}
@@ -404,8 +404,8 @@ func (ctx *BuildContext) buildModule() (result BuildResult, err error) {
 					}
 
 					// resolve specifier with package `imports` field
-					if len(ctx.pkgJson.Imports) > 0 {
-						if v, ok := ctx.pkgJson.Imports[specifier]; ok {
+					if len(ctx.packageJson.Imports) > 0 {
+						if v, ok := ctx.packageJson.Imports[specifier]; ok {
 							if s, ok := v.(string); ok {
 								specifier = s
 							} else if m, ok := v.(map[string]interface{}); ok {
@@ -436,8 +436,8 @@ func (ctx *BuildContext) buildModule() (result BuildResult, err error) {
 					}
 
 					// resolve specifier with package `browser` field
-					if !isRelativeSpecifier(specifier) && len(ctx.pkgJson.Browser) > 0 && ctx.isBrowserTarget() {
-						if name, ok := ctx.pkgJson.Browser[specifier]; ok {
+					if !isRelativeSpecifier(specifier) && len(ctx.packageJson.Browser) > 0 && ctx.isBrowserTarget() {
+						if name, ok := ctx.packageJson.Browser[specifier]; ok {
 							if name == "" {
 								return api.OnResolveResult{
 									Path:      args.Path,
@@ -461,11 +461,11 @@ func (ctx *BuildContext) buildModule() (result BuildResult, err error) {
 					if forceNpmSpecifiers[specifier] && ctx.target == "denonext" {
 						version := ""
 						pkgName, _, subPath, _ := splitPkgPath(specifier)
-						if pkgName == ctx.pkg.Name {
-							version = ctx.pkg.Version
-						} else if v, ok := ctx.pkgJson.Dependencies[pkgName]; ok && regexpFullVersion.MatchString(v) {
+						if pkgName == ctx.module.Name {
+							version = ctx.module.Version
+						} else if v, ok := ctx.packageJson.Dependencies[pkgName]; ok && regexpFullVersion.MatchString(v) {
 							version = v
-						} else if v, ok := ctx.pkgJson.PeerDependencies[pkgName]; ok && regexpFullVersion.MatchString(v) {
+						} else if v, ok := ctx.packageJson.PeerDependencies[pkgName]; ok && regexpFullVersion.MatchString(v) {
 							version = v
 						}
 						p := pkgName
@@ -493,7 +493,7 @@ func (ctx *BuildContext) buildModule() (result BuildResult, err error) {
 					// node native modules do not work via http import
 					if strings.HasSuffix(fullFilepath, ".node") && existsFile(fullFilepath) {
 						return api.OnResolveResult{
-							Path:     fmt.Sprintf("/error.js?type=unsupported-node-native-module&name=%s&importer=%s", path.Base(args.Path), ctx.pkg),
+							Path:     fmt.Sprintf("/error.js?type=unsupported-node-native-module&name=%s&importer=%s", path.Base(args.Path), ctx.module),
 							External: true,
 						}, nil
 					}
@@ -513,8 +513,8 @@ func (ctx *BuildContext) buildModule() (result BuildResult, err error) {
 
 					// externalize the _parent_ module
 					// e.g. "react/jsx-runtime" imports "react"
-					if ctx.pkg.SubModule != "" && specifier == ctx.pkg.Name && ctx.bundleMode != BundleAll {
-						externalPath, err := ctx.resolveExternalModule(ctx.pkg.Name, args.Kind)
+					if ctx.module.SubModule != "" && specifier == ctx.module.Name && ctx.bundleMode != BundleAll {
+						externalPath, err := ctx.resolveExternalModule(ctx.module.Name, args.Kind)
 						if err != nil {
 							return api.OnResolveResult{}, err
 						}
@@ -540,14 +540,14 @@ func (ctx *BuildContext) buildModule() (result BuildResult, err error) {
 					// bundles all dependencies in `bundle` mode, apart from peer dependencies and `?external` query]
 					if ctx.bundleMode == BundleAll && !ctx.args.external.Has(getPkgName(specifier)) && !implicitExternal.Has(specifier) {
 						pkgName := getPkgName(specifier)
-						_, ok := ctx.pkgJson.PeerDependencies[pkgName]
+						_, ok := ctx.packageJson.PeerDependencies[pkgName]
 						if !ok {
 							return api.OnResolveResult{}, nil
 						}
 					}
 
 					// bundle "@babel/runtime/*"
-					if (args.Kind != api.ResolveJSDynamicImport && !noBundle) && ctx.pkgJson.Name != "@babel/runtime" && (strings.HasPrefix(specifier, "@babel/runtime/") || strings.Contains(args.Importer, "/@babel/runtime/")) {
+					if (args.Kind != api.ResolveJSDynamicImport && !noBundle) && ctx.packageJson.Name != "@babel/runtime" && (strings.HasPrefix(specifier, "@babel/runtime/") || strings.Contains(args.Importer, "/@babel/runtime/")) {
 						return api.OnResolveResult{}, nil
 					}
 
@@ -559,11 +559,11 @@ func (ctx *BuildContext) buildModule() (result BuildResult, err error) {
 								specifier = a[1]
 							}
 						}
-						pkgName := ctx.pkgJson.Name
+						pkgName := ctx.packageJson.Name
 						isInternalModule := strings.HasPrefix(specifier, pkgName+"/")
-						if !isInternalModule && ctx.pkgJson.PkgName != "" {
+						if !isInternalModule && ctx.packageJson.PkgName != "" {
 							// github packages may have different package name with the repository name
-							pkgName = ctx.pkgJson.PkgName
+							pkgName = ctx.packageJson.PkgName
 							isInternalModule = strings.HasPrefix(specifier, pkgName+"/")
 						}
 						if isInternalModule {
@@ -577,9 +577,9 @@ func (ctx *BuildContext) buildModule() (result BuildResult, err error) {
 
 							if path.Ext(fullFilepath) == "" || !existsFile(fullFilepath) {
 								subPath := utils.CleanPath(moduleSpecifier)[1:]
-								entry := ctx.resolveEntry(Pkg{
-									Name:      ctx.pkg.Name,
-									Version:   ctx.pkg.Version,
+								entry := ctx.resolveEntry(Module{
+									Name:      ctx.module.Name,
+									Version:   ctx.module.Version,
 									SubModule: toModuleBareName(subPath, true),
 									SubPath:   subPath,
 								})
@@ -599,8 +599,8 @@ func (ctx *BuildContext) buildModule() (result BuildResult, err error) {
 							}
 
 							// resolve specifier with package `browser` field
-							if len(ctx.pkgJson.Browser) > 0 && ctx.isBrowserTarget() {
-								if path, ok := ctx.pkgJson.Browser[moduleSpecifier]; ok {
+							if len(ctx.packageJson.Browser) > 0 && ctx.isBrowserTarget() {
+								if path, ok := ctx.packageJson.Browser[moduleSpecifier]; ok {
 									if path == "" {
 										return api.OnResolveResult{
 											Path:      args.Path,
@@ -624,7 +624,7 @@ func (ctx *BuildContext) buildModule() (result BuildResult, err error) {
 							bareName := stripModuleExt(moduleSpecifier)
 
 							// split modules based on the `exports` field of package.json
-							if om, ok := ctx.pkgJson.Exports.(*OrderedMap); ok {
+							if om, ok := ctx.packageJson.Exports.(*OrderedMap); ok {
 								for _, exportName := range om.keys {
 									v := om.Get(exportName)
 									if !(exportName == "." || strings.HasPrefix(exportName, "./")) {
@@ -655,7 +655,7 @@ func (ctx *BuildContext) buildModule() (result BuildResult, err error) {
 										}
 										if match {
 											exportPrefix, _ := utils.SplitByLastByte(exportName, '*')
-											exportModuleName := path.Join(ctx.pkgJson.Name, exportPrefix+strings.TrimPrefix(bareName, prefix))
+											exportModuleName := path.Join(ctx.packageJson.Name, exportPrefix+strings.TrimPrefix(bareName, prefix))
 											if exportModuleName != entryModuleSpecifier && exportModuleName != entryModuleSpecifier+"/index" {
 												externalPath, err := ctx.resolveExternalModule(exportModuleName, args.Kind)
 												if err != nil {
@@ -686,7 +686,7 @@ func (ctx *BuildContext) buildModule() (result BuildResult, err error) {
 											}
 										}
 										if match {
-											exportModuleName := path.Join(ctx.pkgJson.Name, stripModuleExt(exportName))
+											exportModuleName := path.Join(ctx.packageJson.Name, stripModuleExt(exportName))
 											if exportModuleName != entryModuleSpecifier && exportModuleName != entryModuleSpecifier+"/index" {
 												externalPath, err := ctx.resolveExternalModule(exportModuleName, args.Kind)
 												if err != nil {
@@ -751,7 +751,7 @@ func (ctx *BuildContext) buildModule() (result BuildResult, err error) {
 
 					// dynamic external
 					sideEffects := api.SideEffectsFalse
-					if specifier == ctx.pkgJson.Name || specifier == ctx.pkgJson.PkgName || strings.HasPrefix(specifier, ctx.pkgJson.Name+"/") || strings.HasPrefix(specifier, ctx.pkgJson.Name+"/") {
+					if specifier == ctx.packageJson.Name || specifier == ctx.packageJson.PkgName || strings.HasPrefix(specifier, ctx.packageJson.Name+"/") || strings.HasPrefix(specifier, ctx.packageJson.Name+"/") {
 						sideEffects = pkgSideEffects
 					}
 					externalPath, err := ctx.resolveExternalModule(specifier, args.Kind)
@@ -845,10 +845,10 @@ func (ctx *BuildContext) buildModule() (result BuildResult, err error) {
 							}
 							pkgName, _, subPath, _ := splitPkgPath(filename)
 							pkgVersion := ""
-							if ctx.pkgJson.Name == pkgName {
-								pkgVersion = ctx.pkgJson.Version
+							if ctx.packageJson.Name == pkgName {
+								pkgVersion = ctx.packageJson.Version
 							} else {
-								_, pkgJson, _, err := ctx.lookupDep(pkgName)
+								_, pkgJson, err := ctx.lookupDep(pkgName, false)
 								if err != nil {
 									return b
 								}
@@ -1033,7 +1033,7 @@ rebuild:
 			header := bytes.NewBufferString(fmt.Sprintf(
 				"/* esm.sh(v%d) - %s %s%s */\n",
 				VERSION,
-				ctx.pkg.String(),
+				ctx.module.String(),
 				strings.ToLower(ctx.target),
 				extraBanner,
 			))
@@ -1054,7 +1054,7 @@ rebuild:
 					if ctx.args.external.Has("node:process") || ctx.args.externalAll {
 						fmt.Fprintf(header, `import __Process$ from "node:process";%s`, EOL)
 					} else if ctx.isBrowserTarget() {
-						if len(ctx.pkgJson.Browser) == 0 {
+						if len(ctx.packageJson.Browser) == 0 {
 							fmt.Fprintf(header, `import __Process$ from "/node/process.js";%s`, EOL)
 							imports.Add("/node/process.js")
 						} else {
@@ -1071,10 +1071,10 @@ rebuild:
 						fmt.Fprintf(header, `import { Buffer as __Buffer$ } from "node:buffer";%s`, EOL)
 					} else if ctx.isBrowserTarget() {
 						var browserExclude bool
-						if len(ctx.pkgJson.Browser) > 0 {
-							if name, ok := ctx.pkgJson.Browser["buffer"]; ok {
+						if len(ctx.packageJson.Browser) > 0 {
+							if name, ok := ctx.packageJson.Browser["buffer"]; ok {
 								browserExclude = name == ""
-							} else if name, ok := ctx.pkgJson.Browser["node:buffer"]; ok {
+							} else if name, ok := ctx.packageJson.Browser["node:buffer"]; ok {
 								browserExclude = name == ""
 							}
 						}
@@ -1149,7 +1149,7 @@ rebuild:
 								}
 							}
 						}
-						pkg, p, _, e := ctx.lookupDep(specifier)
+						pkg, p, e := ctx.lookupDep(specifier, false)
 						if e == nil {
 							p = ctx.normalizePackageJSON(p)
 							if p.Type == "module" || p.Module != "" {
@@ -1196,8 +1196,8 @@ rebuild:
 			finalContent := bytes.NewBuffer(header.Bytes())
 			finalContent.Write(jsContent)
 
-			if ctx.pkgDeprecated != "" {
-				fmt.Fprintf(finalContent, `console.warn("%%c[esm.sh]%%c %%cdeprecated%%c %s@%s: %s", "color:grey", "", "color:red", "");%s`, ctx.pkg.Name, ctx.pkg.Version, strings.ReplaceAll(ctx.pkgDeprecated, "\"", "\\\""), "\n")
+			if ctx.isDeprecated != "" {
+				fmt.Fprintf(finalContent, `console.warn("%%c[esm.sh]%%c %%cdeprecated%%c %s@%s: %s", "color:grey", "", "color:red", "");%s`, ctx.module.Name, ctx.module.Version, strings.ReplaceAll(ctx.isDeprecated, "\"", "\\\""), "\n")
 			}
 
 			// add sourcemap Url
@@ -1270,10 +1270,10 @@ func (ctx *BuildContext) buildTypes() (ret BuildResult, err error) {
 	}
 
 	var dts string
-	if endsWith(ctx.pkg.SubPath, ".d.ts", "d.mts") {
-		dts = "./" + ctx.pkg.SubPath
+	if endsWith(ctx.module.SubPath, ".d.ts", "d.mts") {
+		dts = "./" + ctx.module.SubPath
 	} else {
-		entry := ctx.resolveEntry(ctx.pkg)
+		entry := ctx.resolveEntry(ctx.module)
 		if entry.dts == "" {
 			err = errors.New("types not found")
 			return
@@ -1284,14 +1284,14 @@ func (ctx *BuildContext) buildTypes() (ret BuildResult, err error) {
 	ctx.stage = "build"
 	err = ctx.transformDTS(dts)
 	if err == nil {
-		ret.Dts = "/" + ctx.pkg.Fullname() + dts[1:]
+		ret.Dts = "/" + ctx.module.Fullname() + dts[1:]
 	}
 	return
 }
 
 func (ctx *BuildContext) transformDTS(types string) (err error) {
 	start := time.Now()
-	buildArgsPrefix := ctx.getBuildArgsPrefix(ctx.pkg, true)
+	buildArgsPrefix := ctx.getBuildArgsPrefix(ctx.module, true)
 	n, err := transformDTS(ctx, types, buildArgsPrefix, nil)
 	if err != nil {
 		return

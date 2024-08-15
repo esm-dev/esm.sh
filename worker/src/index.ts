@@ -25,8 +25,7 @@ const jsrNpmRegistry = "https://npm.jsr.io";
 const ccImmutable = "public, max-age=31536000, immutable";
 
 const regexpNpmNaming = /^[a-zA-Z0-9][\w\-\.]*$/;
-const regexpFullVersion = /^\d+\.\d+\.\d+/;
-const regexpCaretVersion = /^\^\d+\.\d+\.\d+/;
+const regexpFullVersion = /^\d+\.\d+\.\d+[\w\-\.\+]*$/;
 const regexpCommitish = /^[a-f0-9]{10,}$/;
 const regexpLegacyVersionPrefix = /^\/v\d+\//;
 const regexpLegacyBuild = /^\/~[a-f0-9]{40}$/;
@@ -465,7 +464,7 @@ function withESMWorker(middleware?: Middleware, cache: Cache = (caches as any).d
     }
 
     // hide source map files
-    if (isTargetUrl && env.SOURCE_MAP === "off" && subPath.endsWith(".map")) {
+    if (isTargetUrl && subPath.endsWith(".map") && env.SOURCE_MAP === "off") {
       return err("Source map is disabled", ctx.corsHeaders(), 404);
     }
 
@@ -473,15 +472,15 @@ function withESMWorker(middleware?: Middleware, cache: Cache = (caches as any).d
     if (packageVersion) {
       [packageVersion, extraQuery] = splitBy(packageVersion, "&");
       if (!gh) {
-        if (
-          packageVersion.startsWith("=") || packageVersion.startsWith("v")
-        ) {
+        if (packageVersion.startsWith("=") || packageVersion.startsWith("v")) {
           packageVersion = packageVersion.slice(1);
-        } else if (/^\d+$/.test(packageVersion)) {
-          packageVersion = "~" + packageVersion;
-        } else if (/^\d+.\d+$/.test(packageVersion)) {
-          packageVersion = "~" + packageVersion;
         }
+      }
+      if (extraQuery) {
+        const params = new URLSearchParams(extraQuery);
+        params.forEach((val, key) => {
+          url.searchParams.set(key, val);
+        });
       }
     }
     if (packageVersion && packageVersion.endsWith(".")) {
@@ -503,11 +502,25 @@ function withESMWorker(middleware?: Middleware, cache: Cache = (caches as any).d
     }
 
     const pkgFullname = (packageScope ? packageScope + "/" : "") + packageName;
+    const isFixedVersion = !!packageVersion && regexpFullVersion.test(packageVersion);
 
-    // redirect to specific version
-    if (
-      !gh && (!packageVersion || (!regexpFullVersion.test(packageVersion) && !regexpCaretVersion.test(packageVersion)))
-    ) {
+    if (!isFixedVersion && !gh) {
+      if (
+        (
+          !isTargetUrl &&
+          !(subPath !== "" && assetsExts.has(splitBy(subPath, ".", true)[1])) &&
+          !subPath.endsWith(".d.ts") &&
+          !subPath.endsWith(".d.mts") &&
+          !url.searchParams.has("raw")
+        )
+      ) {
+        return ctx.withCache(async () => {
+          const res = await fetchOrigin(req, env, ctx, url.pathname + url.search);
+          copyHeaders(res.headers, ctx.corsHeaders());
+          return res;
+        });
+      }
+      // redirect to specific version
       return ctx.withCache(async () => {
         const headers = new Headers();
         const npmrc = ctx.npmrc;
@@ -629,7 +642,7 @@ function withESMWorker(middleware?: Middleware, cache: Cache = (caches as any).d
       });
     }
 
-    // if it's npm asset file
+    // assets files
     if (subPath !== "") {
       const ext = splitBy(subPath, ".", true)[1];
       // use origin server response for `*.wasm?module`
@@ -647,19 +660,6 @@ function withESMWorker(middleware?: Middleware, cache: Cache = (caches as any).d
           return fetchAsset(req, ctx, env, pathname);
         });
       }
-    }
-
-    // apply extraQuery if exists
-    if (extraQuery) {
-      const params = new URLSearchParams(extraQuery);
-      params.forEach((val, key) => {
-        url.searchParams.set(key, val);
-      });
-    }
-
-    // add `raw` search param to the url if the hostname is `raw.esm.sh`
-    if (url.hostname === "raw.esm.sh") {
-      url.searchParams.set("raw", "");
     }
 
     let prefix = "";
@@ -730,45 +730,7 @@ function withESMWorker(middleware?: Middleware, cache: Cache = (caches as any).d
         return new Response(null, { status: 204, headers });
       }
 
-      const url = new URL(req.url);
-      const withCache: Context["withCache"] = async (fetcher, options) => {
-        const { pathname, searchParams } = url;
-        const isHeadMethod = req.method === "HEAD";
-        const hasPinedTarget = targets.has(searchParams.get("target") ?? "");
-        const realOrigin = req.headers.get("X-REAL-ORIGIN");
-        const cacheKey = new URL(url); // clone
-        let targetFromUA: string | undefined;
-        if (options?.varyUA && !hasPinedTarget && !isDtsFile(pathname) && !searchParams.has("raw")) {
-          targetFromUA = getBuildTargetFromUA(req.headers.get("User-Agent"));
-          cacheKey.searchParams.set("target", targetFromUA);
-        }
-        if (realOrigin) {
-          cacheKey.searchParams.set("x-origin", realOrigin);
-        }
-        if (env.ZONE_ID) {
-          cacheKey.searchParams.set("x-zone-id", env.ZONE_ID);
-        }
-        let res = await cache.match(cacheKey);
-        if (res) {
-          if (isHeadMethod) {
-            return new Response(null, { status: 204, headers: res.headers });
-          }
-          return res;
-        }
-        res = await fetcher(targetFromUA);
-        if (targetFromUA) {
-          res.headers.append("Vary", "User-Agent");
-        }
-        if (res.ok && res.headers.get("Cache-Control")?.startsWith("public, max-age=")) {
-          workerCtx.waitUntil(cache.put(cacheKey, res.clone()));
-        }
-        if (isHeadMethod) {
-          const { status, headers } = res;
-          return new Response(null, { status, headers });
-        }
-        return res;
-      };
-      if (npmrc === null) {
+      if (!npmrc) {
         npmrc = {
           registry: env.NPM_REGISTRY ? getUrlOrigin(env.NPM_REGISTRY) : defaultNpmRegistry,
           registries: { "@jsr": { registry: jsrNpmRegistry } },
@@ -807,13 +769,56 @@ function withESMWorker(middleware?: Middleware, cache: Cache = (caches as any).d
           }
         }
       }
+
+      const url = new URL(req.url);
+      // add `raw` search param to the url if the hostname is `raw.esm.sh`
+      if (url.hostname === "raw.esm.sh") {
+        url.searchParams.set("raw", "");
+      }
+
       const ctx: Context = {
         cache,
         npmrc: npmrc!,
         url,
         corsHeaders: (header) => corsHeaders(req.headers.get("Origin"), header),
         waitUntil: (p: Promise<any>) => workerCtx.waitUntil(p),
-        withCache,
+        withCache: async (fetcher, options) => {
+          const { pathname, searchParams } = url;
+          const isHeadMethod = req.method === "HEAD";
+          const hasPinedTarget = targets.has(searchParams.get("target") ?? "");
+          const realOrigin = req.headers.get("X-REAL-ORIGIN");
+          const cacheKey = new URL(url); // clone
+          let targetFromUA: string | undefined;
+          if (options?.varyUA && !hasPinedTarget && !isDtsFile(pathname) && !searchParams.has("raw")) {
+            targetFromUA = getBuildTargetFromUA(req.headers.get("User-Agent"));
+            cacheKey.searchParams.set("target", targetFromUA);
+          }
+          if (realOrigin) {
+            cacheKey.searchParams.set("x-origin", realOrigin);
+          }
+          if (env.ZONE_ID) {
+            cacheKey.searchParams.set("x-zone-id", env.ZONE_ID);
+          }
+          let res = await cache.match(cacheKey);
+          if (res) {
+            if (isHeadMethod) {
+              return new Response(null, { status: 204, headers: res.headers });
+            }
+            return res;
+          }
+          res = await fetcher(targetFromUA);
+          if (targetFromUA) {
+            res.headers.append("Vary", "User-Agent");
+          }
+          if (res.ok && res.headers.get("Cache-Control")?.startsWith("public, max-age=")) {
+            workerCtx.waitUntil(cache.put(cacheKey, res.clone()));
+          }
+          if (isHeadMethod) {
+            const { status, headers } = res;
+            return new Response(null, { status, headers });
+          }
+          return res;
+        },
       };
 
       return onFetch(req, env, ctx).catch((e) => {

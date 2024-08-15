@@ -18,7 +18,7 @@ func transformDTS(ctx *BuildContext, dts string, buildArgsPrefix string, marker 
 	if isRoot {
 		marker = NewStringSet()
 	}
-	dtsPath := path.Join("/"+ctx.pkg.Fullname(), buildArgsPrefix, dts)
+	dtsPath := path.Join("/"+ctx.module.Fullname(), buildArgsPrefix, dts)
 	if marker.Has(dtsPath) {
 		// don't transform repeatly
 		return
@@ -32,7 +32,7 @@ func transformDTS(ctx *BuildContext, dts string, buildArgsPrefix string, marker 
 		return
 	}
 
-	dtsFilePath := path.Join(ctx.wd, "node_modules", ctx.pkg.Name, dts)
+	dtsFilePath := path.Join(ctx.wd, "node_modules", ctx.module.Name, dts)
 	dtsWD := path.Dir(dtsFilePath)
 	dtsFile, err := os.Open(dtsFilePath)
 	if err != nil {
@@ -49,13 +49,17 @@ func transformDTS(ctx *BuildContext, dts string, buildArgsPrefix string, marker 
 	}
 
 	buffer := bytes.NewBuffer(nil)
-	internalDeps := NewStringSet()
-	referenceNodeTypes := false
-	hasReferenceNodeTypes := false
+	internalDts := NewStringSet()
+	withNodeBuiltinModule := false
+	hasReferenceTypesNode := false
 
 	err = parseDts(dtsFile, buffer, func(specifier string, kind TsImportKind, position int) (string, error) {
-		if ctx.pkg.Name == "@types/node" {
+		if ctx.module.Name == "@types/node" {
 			return specifier, nil
+		}
+
+		if strings.HasPrefix(specifier, "./node_modules/") {
+			specifier = specifier[14:]
 		}
 
 		if isRelativeSpecifier(specifier) {
@@ -99,7 +103,7 @@ func transformDTS(ctx *BuildContext, dts string, buildArgsPrefix string, marker 
 			}
 
 			if endsWith(specifier, ".d.ts", ".d.mts") {
-				internalDeps.Add(specifier)
+				internalDts.Add(specifier)
 			} else {
 				specifier += ".d.ts"
 			}
@@ -107,12 +111,12 @@ func transformDTS(ctx *BuildContext, dts string, buildArgsPrefix string, marker 
 		}
 
 		if (kind == TsReferencePath || kind == TsReferenceTypes) && specifier == "node" {
-			hasReferenceNodeTypes = true
+			hasReferenceTypesNode = true
 			return fmt.Sprintf("{ESM_CDN_ORIGIN}/@types/node@%s/index.d.ts", nodeTypesVersion), nil
 		}
 
 		if specifier == "node" || strings.HasPrefix(specifier, "node:") || nodejsInternalModules[specifier] {
-			referenceNodeTypes = true
+			withNodeBuiltinModule = true
 			return specifier, nil
 		}
 
@@ -122,18 +126,18 @@ func transformDTS(ctx *BuildContext, dts string, buildArgsPrefix string, marker 
 			specifier += "/" + subPath
 		}
 
-		if depPkgName == ctx.pkg.Name {
+		if depPkgName == ctx.module.Name {
 			if strings.ContainsRune(subPath, '*') {
 				return fmt.Sprintf(
 					"{ESM_CDN_ORIGIN}/%s/%s%s",
-					ctx.pkg.Fullname(),
-					ctx.getBuildArgsPrefix(ctx.pkg, true),
+					ctx.module.Fullname(),
+					ctx.getBuildArgsPrefix(ctx.module, true),
 					subPath,
 				), nil
 			} else {
-				depPkg := Pkg{
+				depPkg := Module{
 					Name:      depPkgName,
-					Version:   ctx.pkg.Version,
+					Version:   ctx.module.Version,
 					SubPath:   subPath,
 					SubModule: subPath,
 				}
@@ -141,8 +145,8 @@ func transformDTS(ctx *BuildContext, dts string, buildArgsPrefix string, marker 
 				if entry.dts != "" {
 					return fmt.Sprintf(
 						"{ESM_CDN_ORIGIN}/%s/%s%s",
-						ctx.pkg.Fullname(),
-						ctx.getBuildArgsPrefix(ctx.pkg, true),
+						ctx.module.Fullname(),
+						ctx.getBuildArgsPrefix(ctx.module, true),
 						strings.TrimPrefix(entry.dts, "./"),
 					), nil
 				}
@@ -174,19 +178,22 @@ func transformDTS(ctx *BuildContext, dts string, buildArgsPrefix string, marker 
 		}
 
 		typesPkgName := toTypesPkgName(depPkgName)
-		if _, ok := ctx.pkgJson.Dependencies[typesPkgName]; ok {
+		if _, ok := ctx.packageJson.Dependencies[typesPkgName]; ok {
 			depPkgName = typesPkgName
-		} else if _, ok := ctx.pkgJson.PeerDependencies[typesPkgName]; ok {
+		} else if _, ok := ctx.packageJson.PeerDependencies[typesPkgName]; ok {
 			depPkgName = typesPkgName
 		}
 
-		_, p, _, err := ctx.lookupDep(depPkgName)
+		_, p, err := ctx.lookupDep(depPkgName, true)
 		if err != nil {
+			if kind == TsDeclareModule && strings.HasSuffix(err.Error(), " not found") {
+				return specifier, nil
+			}
 			return "", err
 		}
 
-		depPkg := Pkg{
-			Name:      depPkgName,
+		dtsModule := Module{
+			Name:      p.Name,
 			Version:   p.Version,
 			SubPath:   subPath,
 			SubModule: subPath,
@@ -195,26 +202,25 @@ func transformDTS(ctx *BuildContext, dts string, buildArgsPrefix string, marker 
 			external: NewStringSet(),
 			exports:  NewStringSet(),
 		}
-		b := NewBuildContext(ctx.zoneId, ctx.npmrc, depPkg, args, "types", BundleFalse, false, false)
+		b := NewBuildContext(ctx.zoneId, ctx.npmrc, dtsModule, args, "types", BundleFalse, false, false)
 		err = b.install()
 		if err != nil {
 			return "", err
 		}
-		d, err := b.resloveDTS(b.resolveEntry(depPkg))
+
+		dtsPath, err := b.resloveDTS(b.resolveEntry(dtsModule))
 		if err != nil {
 			return "", err
 		}
 
-		if kind == TsDeclareModule {
-			if d != "" {
-				return fmt.Sprintf("{ESM_CDN_ORIGIN}%s", d), nil
-			}
-			return fmt.Sprintf("{ESM_CDN_ORIGIN}/%s", depPkg.String()), nil
+		if dtsPath != "" {
+			return fmt.Sprintf("{ESM_CDN_ORIGIN}%s", dtsPath), nil
 		}
 
-		if d != "" {
-			return fmt.Sprintf("{ESM_CDN_ORIGIN}%s", d), nil
+		if kind == TsDeclareModule {
+			return fmt.Sprintf("{ESM_CDN_ORIGIN}/%s", dtsModule.String()), nil
 		}
+
 		return fmt.Sprintf("{ESM_CDN_ORIGIN}%s", b.Path()), nil
 	})
 	if err != nil {
@@ -222,9 +228,9 @@ func transformDTS(ctx *BuildContext, dts string, buildArgsPrefix string, marker 
 	}
 	dtsFile.Close()
 
-	if referenceNodeTypes && !hasReferenceNodeTypes {
-		refTag := []byte(fmt.Sprintf("/// <reference path=\"{ESM_CDN_ORIGIN}/@types/node@%s/index.d.ts\" />\n", nodeTypesVersion))
-		buffer = bytes.NewBuffer(concatBytes(refTag, buffer.Bytes()))
+	if withNodeBuiltinModule && !hasReferenceTypesNode {
+		ref := []byte(fmt.Sprintf("/// <reference path=\"{ESM_CDN_ORIGIN}/@types/node@%s/index.d.ts\" />\n", nodeTypesVersion))
+		buffer = bytes.NewBuffer(concatBytes(ref, buffer.Bytes()))
 	}
 
 	_, err = fs.WriteFile(savePath, bytes.NewBuffer(ctx.rewriteDTS(dts, buffer.Bytes())))
@@ -234,7 +240,7 @@ func transformDTS(ctx *BuildContext, dts string, buildArgsPrefix string, marker 
 
 	var wg sync.WaitGroup
 	var errors []error
-	for _, s := range internalDeps.Values() {
+	for _, s := range internalDts.Values() {
 		wg.Add(1)
 		go func(s string) {
 			j, err := transformDTS(ctx, "./"+path.Join(path.Dir(dts), s), buildArgsPrefix, marker)

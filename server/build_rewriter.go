@@ -28,7 +28,7 @@ var forceNpmSpecifiers = map[string]bool{
 }
 
 func (ctx *BuildContext) rewriteJS(in []byte) (out []byte, dropSourceMap bool) {
-	switch ctx.pkg.Name {
+	switch ctx.module.Name {
 	case "axios", "cross-fetch", "whatwg-fetch":
 		if ctx.isDenoTarget() {
 			xhr := []byte("\nimport \"https://deno.land/x/xhr@0.3.0/mod.ts\";")
@@ -46,7 +46,7 @@ func (ctx *BuildContext) rewriteJS(in []byte) (out []byte, dropSourceMap bool) {
 		}
 
 	case "iconv-lite":
-		if ctx.isDenoTarget() && semverLessThan(ctx.pkg.Version, "0.5.0") {
+		if ctx.isDenoTarget() && semverLessThan(ctx.module.Version, "0.5.0") {
 			old := "__Process$.versions.node"
 			new := "__Process$.versions.nope"
 			return bytes.Replace(in, []byte(old), []byte(new), 1), false
@@ -57,7 +57,7 @@ func (ctx *BuildContext) rewriteJS(in []byte) (out []byte, dropSourceMap bool) {
 
 func (ctx *BuildContext) rewriteDTS(dts string, in []byte) []byte {
 	// fix preact/compat types
-	if ctx.pkg.Name == "preact" && dts == "./compat/src/index.d.ts" {
+	if ctx.module.Name == "preact" && dts == "./compat/src/index.d.ts" {
 		if !bytes.Contains(in, []byte("export type PropsWithChildren")) {
 			return bytes.ReplaceAll(
 				in,

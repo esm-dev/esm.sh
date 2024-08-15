@@ -290,7 +290,7 @@ func (rc *NpmRC) fetchPackageInfo(name string, semverOrDistTag string) (info Pac
 		name = a[0] + "/" + a[1]
 	}
 
-	if semverOrDistTag == "" {
+	if semverOrDistTag == "" || semverOrDistTag == "*" {
 		semverOrDistTag = "latest"
 	} else if (strings.HasPrefix(semverOrDistTag, "=") || strings.HasPrefix(semverOrDistTag, "v")) && regexpFullVersion.MatchString(semverOrDistTag[1:]) {
 		// strip leading `=` or `v` from semver
@@ -461,7 +461,7 @@ do:
 	return
 }
 
-func (rc *NpmRC) installPackage(pkg Pkg) (pkgJson PackageJSON, err error) {
+func (rc *NpmRC) installPackage(pkg Module) (pkgJson PackageJSON, err error) {
 	installDir := path.Join(rc.NpmDir(), pkg.Fullname())
 	pkgJsonFilepath := path.Join(installDir, "node_modules", pkg.Name, "package.json")
 

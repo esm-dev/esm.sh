@@ -227,17 +227,11 @@ Deno.test("esm-worker", { sanitizeOps: false, sanitizeResources: false }, async 
 
   await t.step("npm modules", async () => {
     const res = await fetch(`${workerOrigin}/react`, { redirect: "manual" });
-    res.body?.cancel();
-    assertEquals(res.status, 302);
-    assert(res.headers.get("Location")!.startsWith(`${workerOrigin}/react@`));
+    const modUrl = new URL(res.headers.get("x-esm-path")!, workerOrigin);
+    assertEquals(res.status, 200);
+    assertEquals(res.headers.get("Content-Type"), "application/javascript; charset=utf-8");
     assertEquals(res.headers.get("Cache-Control"), "public, max-age=600");
-
-    const res2 = await fetch(res.headers.get("Location")!);
-    const modUrl = new URL(res2.headers.get("x-esm-path")!, workerOrigin);
-    res2.body?.cancel();
-    assertEquals(res2.status, 200);
-    assertEquals(res2.headers.get("Content-Type"), "application/javascript; charset=utf-8");
-    assertEquals(res2.headers.get("Cache-Control"), "public, max-age=31536000, immutable");
+    assert(/react@.+\/denonext\/react\.mjs"/.test(await res.text()));
     assert(modUrl.pathname.endsWith("/denonext/react.mjs"));
 
     const res3 = await fetch(modUrl);
@@ -246,7 +240,7 @@ Deno.test("esm-worker", { sanitizeOps: false, sanitizeResources: false }, async 
     assertEquals(res3.headers.get("Cache-Control"), "public, max-age=31536000, immutable");
     assertStringIncludes(await res3.text(), "createElement");
 
-    const dtsUrl = res2.headers.get("X-Typescript-Types")!;
+    const dtsUrl = res.headers.get("X-Typescript-Types")!;
     assert(dtsUrl.startsWith(workerOrigin));
     assert(dtsUrl.endsWith(".d.ts"));
 
@@ -294,18 +288,12 @@ Deno.test("esm-worker", { sanitizeOps: false, sanitizeResources: false }, async 
     const res = await fetch(`${workerOrigin}/react-dom@18/server`, {
       redirect: "manual",
     });
-    res.body?.cancel();
-    assertEquals(res.status, 302);
-    assert(res.headers.get("Location")!.startsWith(`${workerOrigin}/react-dom@`));
+    const modUrl = new URL(res.headers.get("x-esm-path")!, workerOrigin);
+    assertEquals(res.status, 200);
+    assertEquals(res.headers.get("Content-Type"), "application/javascript; charset=utf-8");
     assertEquals(res.headers.get("Cache-Control"), "public, max-age=600");
-
-    const res2 = await fetch(res.headers.get("Location")!);
-    const modUrl = new URL(res2.headers.get("x-esm-path")!, workerOrigin);
-    res2.body?.cancel();
-    assertEquals(res2.status, 200);
-    assertEquals(res2.headers.get("Content-Type"), "application/javascript; charset=utf-8");
-    assertEquals(res2.headers.get("Cache-Control"), "public, max-age=31536000, immutable");
-    assert(/\.d\.ts$/.test(res2.headers.get("X-Typescript-Types")!));
+    assert(/\/react-dom@.+\.d\.ts$/.test(res.headers.get("X-Typescript-Types")!));
+    assert(/\/react-dom@.+\/denonext\/server\.js"/.test(await res.text()));
     assert(modUrl.pathname.endsWith("/denonext/server.js"));
 
     const res3 = await fetch(modUrl);
@@ -350,18 +338,12 @@ Deno.test("esm-worker", { sanitizeOps: false, sanitizeResources: false }, async 
 
   await t.step("gh modules", async () => {
     const res = await fetch(`${workerOrigin}/gh/microsoft/tslib`, { redirect: "manual" });
-    res.body?.cancel();
-    assertEquals(res.status, 302);
-    const rUrl = res.headers.get("Location")!;
-    assert(rUrl.startsWith(`${workerOrigin}/gh/microsoft/tslib@`));
+    const modUrl = new URL(res.headers.get("x-esm-path")!, workerOrigin);
+    assertEquals(res.status, 200);
+    assertEquals(res.headers.get("Content-Type"), "application/javascript; charset=utf-8");
     assertEquals(res.headers.get("Cache-Control"), "public, max-age=600");
-    const res2 = await fetch(rUrl);
-    const modUrl = new URL(res2.headers.get("x-esm-path")!, workerOrigin);
-    res2.body?.cancel();
-    assertEquals(res2.status, 200);
-    assertEquals(res2.headers.get("Content-Type"), "application/javascript; charset=utf-8");
-    assertEquals(res2.headers.get("Cache-Control"), "public, max-age=31536000, immutable");
-    assert(/gh\/.+\.d\.ts$/.test(res2.headers.get("X-Typescript-Types")!));
+    assert(/\/gh\/microsoft\/tslib@.+\.d\.ts$/.test(res.headers.get("X-Typescript-Types")!));
+    assert(/\/gh\/microsoft\/tslib@.+\/denonext\/tslib\.mjs"/.test(await res.text()));
     assert(modUrl.pathname.endsWith("/denonext/tslib.mjs"));
 
     const res3 = await fetch(modUrl);
@@ -378,11 +360,11 @@ Deno.test("esm-worker", { sanitizeOps: false, sanitizeResources: false }, async 
     );
     res.body?.cancel();
     assertEquals(res.status, 302);
-    const rUrl = res.headers.get("Location")!;
-    assert(rUrl.startsWith(`${workerOrigin}/gh/microsoft/fluentui-emoji@`));
+    const redirectTo = res.headers.get("Location")!;
+    assert(redirectTo.startsWith(`${workerOrigin}/gh/microsoft/fluentui-emoji@`));
     assertEquals(res.headers.get("Cache-Control"), "public, max-age=600");
 
-    const res2 = await fetch(rUrl);
+    const res2 = await fetch(redirectTo);
     const svg = await res2.text();
     assertEquals(res2.status, 200);
     assertEquals(res2.headers.get("Content-Type"), "image/svg+xml");
@@ -395,22 +377,15 @@ Deno.test("esm-worker", { sanitizeOps: false, sanitizeResources: false }, async 
       `${workerOrigin}/jsr/@std/encoding/base64`,
       { redirect: "manual" },
     );
-    res.body?.cancel();
-    assertEquals(res.status, 302);
-    const rUrl = res.headers.get("Location")!;
-    assert(rUrl.startsWith(`${workerOrigin}/jsr/@std/encoding@`));
+    const modUrl = new URL(res.headers.get("x-esm-path")!, workerOrigin);
+    assertEquals(res.status, 200);
+    assertEquals(res.headers.get("Content-Type"), "application/javascript; charset=utf-8");
     assertEquals(res.headers.get("Cache-Control"), "public, max-age=600");
-
-    const res2 = await fetch(rUrl);
-    const modUrl = new URL(res2.headers.get("x-esm-path")!, workerOrigin);
-    res2.body?.cancel();
-    assertEquals(res2.status, 200);
-    assertEquals(res2.headers.get("Content-Type"), "application/javascript; charset=utf-8");
-    assertEquals(res2.headers.get("Cache-Control"), "public, max-age=31536000, immutable");
-    assert(/@jsr\/std__encoding@.+\.d\.ts$/.test(res2.headers.get("X-Typescript-Types")!));
+    assert(/@jsr\/std__encoding@.+\.d\.ts$/.test(res.headers.get("X-Typescript-Types")!));
+    assert(/@jsr\/std__encoding@.+\/denonext\/base64\.js"/.test(await res.text()));
     assert(modUrl.pathname.endsWith("/denonext/base64.js"));
 
-    const { encodeBase64, decodeBase64 } = await import(rUrl);
+    const { encodeBase64, decodeBase64 } = await import(modUrl.href);
     assertEquals(encodeBase64("hello"), "aGVsbG8=");
     assertEquals(new TextDecoder().decode(decodeBase64("aGVsbG8=")), "hello");
   });
