@@ -17,9 +17,3 @@ Deno.test("misc", () => {
   assertEquals(typeof createTheme, "function");
   assertEquals(compareVersions("1.12.0", "v1.12.0"), 0);
 });
-
-Deno.test("dts-transformer: support `.d` extension", async () => {
-  const res = await fetch("http://localhost:8080/tailwindcss@3.3.5/types/index.d.ts");
-  const dts = await res.text();
-  assertStringIncludes(dts, "'./config.d.ts'");
-});

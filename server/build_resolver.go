@@ -88,7 +88,7 @@ func (ctx *BuildContext) Path() string {
 		if strings.HasSuffix(pkg.SubPath, ".d.ts") {
 			ctx.path = fmt.Sprintf(
 				"/%s/%s%s",
-				pkg.Fullname(),
+				pkg.PackageName(),
 				ctx.getBuildArgsPrefix(pkg, true),
 				pkg.SubPath,
 			)
@@ -98,14 +98,14 @@ func (ctx *BuildContext) Path() string {
 		return ctx.path
 	}
 
-	name := strings.TrimSuffix(path.Base(pkg.Name), ".js")
+	name := strings.TrimSuffix(path.Base(pkg.PkgName), ".js")
 	extname := ".mjs"
 
 	if pkg.SubModule != "" {
 		name = pkg.SubModule
 		extname = ".js"
 		// workaround for es5-ext "../#/.." path
-		if pkg.Name == "es5-ext" {
+		if pkg.PkgName == "es5-ext" {
 			name = strings.ReplaceAll(name, "/#/", "/%23/")
 		}
 	}
@@ -120,7 +120,7 @@ func (ctx *BuildContext) Path() string {
 	}
 	ctx.path = fmt.Sprintf(
 		"/%s/%s%s/%s%s",
-		pkg.Fullname(),
+		pkg.PackageName(),
 		ctx.getBuildArgsPrefix(ctx.module, ctx.target == "types"),
 		ctx.target,
 		name,
@@ -129,14 +129,14 @@ func (ctx *BuildContext) Path() string {
 	return ctx.path
 }
 
-func (ctx *BuildContext) getImportPath(pkg Module, buildArgsPrefix string) string {
-	name := strings.TrimSuffix(path.Base(pkg.Name), ".js")
+func (ctx *BuildContext) getImportPath(module Module, buildArgsPrefix string) string {
+	name := strings.TrimSuffix(path.Base(module.PkgName), ".js")
 	extname := ".mjs"
-	if pkg.SubModule != "" {
-		name = pkg.SubModule
+	if module.SubModule != "" {
+		name = module.SubModule
 		extname = ".js"
 		// workaround for es5-ext "../#/.." path
-		if pkg.Name == "es5-ext" {
+		if module.PkgName == "es5-ext" {
 			name = strings.ReplaceAll(name, "/#/", "/%23/")
 		}
 	}
@@ -145,7 +145,7 @@ func (ctx *BuildContext) getImportPath(pkg Module, buildArgsPrefix string) strin
 	}
 	return fmt.Sprintf(
 		"/%s/%s%s/%s%s",
-		pkg.Fullname(),
+		module.PackageName(),
 		buildArgsPrefix,
 		ctx.target,
 		name,
@@ -193,10 +193,10 @@ lookup:
 		pkgJson, err = ctx.npmrc.getPackageInfo(pkgName, v)
 		if err == nil {
 			module = Module{
-				Name:      pkgName,
-				Version:   pkgJson.Version,
-				SubPath:   subpath,
-				SubModule: toModuleBareName(subpath, true),
+				PkgName:    pkgName,
+				PkgVersion: pkgJson.Version,
+				SubPath:    subpath,
+				SubModule:  toModuleBareName(subpath, true),
 			}
 		}
 		return
@@ -207,10 +207,10 @@ lookup:
 	}
 	if existsFile(pkgJsonPath) && utils.ParseJSONFile(pkgJsonPath, &pkgJson) == nil {
 		module = Module{
-			Name:      pkgName,
-			Version:   pkgJson.Version,
-			SubPath:   subpath,
-			SubModule: toModuleBareName(subpath, true),
+			PkgName:    pkgName,
+			PkgVersion: pkgJson.Version,
+			SubPath:    subpath,
+			SubModule:  toModuleBareName(subpath, true),
 		}
 		return
 	}
@@ -230,10 +230,10 @@ lookup:
 	pkgJson, err = ctx.npmrc.getPackageInfo(pkgName, version)
 	if err == nil {
 		module = Module{
-			Name:      pkgName,
-			Version:   pkgJson.Version,
-			SubPath:   subpath,
-			SubModule: toModuleBareName(subpath, true),
+			PkgName:    pkgName,
+			PkgVersion: pkgJson.Version,
+			SubPath:    subpath,
+			SubModule:  toModuleBareName(subpath, true),
 		}
 	}
 	if err != nil && strings.HasSuffix(err.Error(), " not found") && dts && !strings.HasPrefix(pkgName, "@types/") {
@@ -243,18 +243,18 @@ lookup:
 	return
 }
 
-func (ctx *BuildContext) resolveEntry(pkg Module) (entry BuildEntry) {
+func (ctx *BuildContext) resolveEntry(module Module) (entry BuildEntry) {
 	pkgDir := ctx.pkgDir
 
-	if pkg.SubModule != "" {
-		subModule := pkg.SubModule
+	if module.SubModule != "" {
+		subModule := module.SubModule
 
-		if endsWith(pkg.SubPath, ".d.ts", ".d.mts") {
-			entry.dts = "./" + pkg.SubPath
+		if endsWith(module.SubPath, ".d.ts", ".d.mts") {
+			entry.dts = "./" + module.SubPath
 			return
 		}
-		if endsWith(pkg.SubPath, ".jsx", ".ts", ".tsx") {
-			entry.esm = "./" + pkg.SubPath
+		if endsWith(module.SubPath, ".jsx", ".ts", ".tsx") {
+			entry.esm = "./" + module.SubPath
 			return
 		}
 
@@ -290,7 +290,7 @@ func (ctx *BuildContext) resolveEntry(pkg Module) (entry BuildEntry) {
 							exportEntry = ctx.resolveConditionExportEntry(om, ctx.packageJson.Type)
 						}
 						break
-					} else if diff, ok := matchAsteriskExports(name, pkg); ok {
+					} else if diff, ok := matchAsteriskExports(name, module); ok {
 						if s, ok := conditions.(string); ok {
 							/**
 							exports: {
@@ -596,7 +596,7 @@ func (ctx *BuildContext) resolveEntry(pkg Module) (entry BuildEntry) {
 				entry.cjs = m
 			}
 		}
-		if pkg.SubModule == "" {
+		if module.SubModule == "" {
 			if m, ok := ctx.packageJson.Browser["."]; ok && isRelativeSpecifier(m) {
 				if ctx.packageJson.Type == "module" || strings.HasSuffix(m, ".mjs") {
 					entry.esm = m
@@ -702,8 +702,8 @@ func (ctx *BuildContext) resolveExternalModule(specifier string, kind api.Resolv
 	// it's current package from github
 	if npm := ctx.packageJson; ctx.module.FromGithub && (specifier == npm.Name || specifier == npm.PkgName) {
 		pkg := Module{
-			Name:       npm.Name,
-			Version:    npm.Version,
+			PkgName:    npm.Name,
+			PkgVersion: npm.Version,
 			FromGithub: true,
 		}
 		resolvedPath = ctx.getImportPath(pkg, ctx.getBuildArgsPrefix(pkg, false))
@@ -736,8 +736,8 @@ func (ctx *BuildContext) resolveExternalModule(specifier string, kind api.Resolv
 	if strings.HasPrefix(specifier, ctx.packageJson.Name+"/") {
 		subPath := strings.TrimPrefix(specifier, ctx.packageJson.Name+"/")
 		subPkg := Module{
-			Name:       ctx.module.Name,
-			Version:    ctx.module.Version,
+			PkgName:    ctx.module.PkgName,
+			PkgVersion: ctx.module.PkgVersion,
 			SubPath:    subPath,
 			SubModule:  toModuleBareName(subPath, false),
 			FromGithub: ctx.module.FromGithub,
@@ -792,8 +792,8 @@ func (ctx *BuildContext) resolveExternalModule(specifier string, kind api.Resolv
 	// common npm dependency
 	pkgName, version, subpath, _ := splitPkgPath(specifier)
 	if version == "" {
-		if pkgName == ctx.module.Name {
-			version = ctx.module.Version
+		if pkgName == ctx.module.PkgName {
+			version = ctx.module.PkgVersion
 		} else if pkgVerson, ok := ctx.args.deps[pkgName]; ok {
 			version = pkgVerson
 		} else if v, ok := ctx.packageJson.Dependencies[pkgName]; ok {
@@ -806,15 +806,15 @@ func (ctx *BuildContext) resolveExternalModule(specifier string, kind api.Resolv
 	}
 
 	// force the version of 'react' (as dependency) equals to 'react-dom'
-	if ctx.module.Name == "react-dom" && pkgName == "react" {
-		version = ctx.module.Version
+	if ctx.module.PkgName == "react-dom" && pkgName == "react" {
+		version = ctx.module.PkgVersion
 	}
 
 	pkg := Module{
-		Name:      pkgName,
-		Version:   version,
-		SubPath:   subpath,
-		SubModule: toModuleBareName(subpath, true),
+		PkgName:    pkgName,
+		PkgVersion: version,
+		SubPath:    subpath,
+		SubModule:  toModuleBareName(subpath, true),
 	}
 
 	// resolve alias in dependencies
@@ -829,7 +829,7 @@ func (ctx *BuildContext) resolveExternalModule(specifier string, kind api.Resolv
 			return
 		}
 		if strings.HasPrefix(version, "npm:") {
-			pkg.Name, pkg.Version, _, _ = splitPkgPath(version[4:])
+			pkg.PkgName, pkg.PkgVersion, _, _ = splitPkgPath(version[4:])
 		} else if strings.HasPrefix(version, "git+ssh://") || strings.HasPrefix(version, "git+https://") || strings.HasPrefix(version, "git://") {
 			gitUrl, e := url.Parse(version)
 			if e != nil || gitUrl.Hostname() != "github.com" {
@@ -841,26 +841,26 @@ func (ctx *BuildContext) resolveExternalModule(specifier string, kind api.Resolv
 				repo = gitUrl.Port() + "/" + repo
 			}
 			pkg.FromGithub = true
-			pkg.Name = repo
-			pkg.Version = strings.TrimPrefix(url.QueryEscape(gitUrl.Fragment), "semver:")
+			pkg.PkgName = repo
+			pkg.PkgVersion = strings.TrimPrefix(url.QueryEscape(gitUrl.Fragment), "semver:")
 		} else if strings.HasPrefix(version, "github:") || (!strings.HasPrefix(version, "@") && strings.ContainsRune(version, '/')) {
 			repo, fragment := utils.SplitByLastByte(strings.TrimPrefix(version, "github:"), '#')
 			pkg.FromGithub = true
-			pkg.Name = repo
-			pkg.Version = strings.TrimPrefix(url.QueryEscape(fragment), "semver:")
+			pkg.PkgName = repo
+			pkg.PkgVersion = strings.TrimPrefix(url.QueryEscape(fragment), "semver:")
 		}
 	}
 
 	// fetch the latest tag as the version of the repository
-	if pkg.FromGithub && pkg.Version == "" {
+	if pkg.FromGithub && pkg.PkgVersion == "" {
 		var refs []GitRef
-		refs, err = listRepoRefs(fmt.Sprintf("https://github.com/%s", pkg.Name))
+		refs, err = listRepoRefs(fmt.Sprintf("https://github.com/%s", pkg.PkgName))
 		if err != nil {
 			return
 		}
 		for _, ref := range refs {
 			if ref.Ref == "HEAD" {
-				pkg.Version = ref.Sha[:16]
+				pkg.PkgVersion = ref.Sha[:16]
 				break
 			}
 		}
@@ -868,9 +868,9 @@ func (ctx *BuildContext) resolveExternalModule(specifier string, kind api.Resolv
 
 	var isFixedVersion bool
 	if pkg.FromGithub {
-		isFixedVersion = (valid.IsHexString(pkg.Version) && len(pkg.Version) >= 7) || regexpFullVersion.MatchString(strings.TrimPrefix(pkg.Version, "v"))
+		isFixedVersion = (valid.IsHexString(pkg.PkgVersion) && len(pkg.PkgVersion) >= 7) || regexpFullVersion.MatchString(strings.TrimPrefix(pkg.PkgVersion, "v"))
 	} else {
-		isFixedVersion = regexpFullVersion.MatchString(pkg.Version)
+		isFixedVersion = regexpFullVersion.MatchString(pkg.PkgVersion)
 	}
 	args := BuildArgs{
 		alias:      ctx.args.alias,
@@ -894,19 +894,19 @@ func (ctx *BuildContext) resolveExternalModule(specifier string, kind api.Resolv
 		return
 	}
 
-	if strings.ContainsRune(pkg.Version, '|') || strings.ContainsRune(pkg.Version, ' ') {
+	if strings.ContainsRune(pkg.PkgVersion, '|') || strings.ContainsRune(pkg.PkgVersion, ' ') {
 		// fetch the latest version of the package based on the semver range
 		var p PackageJSON
 		_, p, err = ctx.lookupDep(pkgName+"@"+version, false)
 		if err != nil {
 			return
 		}
-		pkg.Version = "^" + p.Version
+		pkg.PkgVersion = "^" + p.Version
 	}
 
 	resolvedPath = "/" + pkg.String()
 	// workaround for es5-ext "../#/.." path
-	if pkg.Name == "es5-ext" {
+	if pkg.PkgName == "es5-ext" {
 		resolvedPath = strings.ReplaceAll(resolvedPath, "/#/", "/%23/")
 	}
 	params := []string{}
@@ -957,7 +957,7 @@ func (ctx *BuildContext) resloveDTS(entry BuildEntry) (string, error) {
 		}
 		return fmt.Sprintf(
 			"/%s/%s%s",
-			ctx.module.Fullname(),
+			ctx.module.PackageName(),
 			ctx.getBuildArgsPrefix(ctx.module, true),
 			strings.TrimPrefix(entry.dts, "./"),
 		), nil
@@ -984,10 +984,10 @@ func (ctx *BuildContext) resloveDTS(entry BuildEntry) (string, error) {
 			p, err := ctx.npmrc.getPackageInfo(typesPkgName, version)
 			if err == nil {
 				dtsModule := Module{
-					Name:      typesPkgName,
-					Version:   p.Version,
-					SubPath:   ctx.module.SubPath,
-					SubModule: ctx.module.SubModule,
+					PkgName:    typesPkgName,
+					PkgVersion: p.Version,
+					SubPath:    ctx.module.SubPath,
+					SubModule:  ctx.module.SubModule,
 				}
 				b := NewBuildContext(ctx.zoneId, ctx.npmrc, dtsModule, ctx.args, "types", BundleFalse, false, false)
 				err := b.install()
@@ -1012,11 +1012,11 @@ func (ctx *BuildContext) resloveDTS(entry BuildEntry) (string, error) {
 func (ctx *BuildContext) normalizePackageJSON(p PackageJSON) PackageJSON {
 	if ctx.module.FromGithub {
 		// if the name in package.json is not the same as the repository name
-		if p.Name != ctx.module.Name {
+		if p.Name != ctx.module.PkgName {
 			p.PkgName = p.Name
-			p.Name = ctx.module.Name
+			p.Name = ctx.module.PkgName
 		}
-		p.Version = ctx.module.Version
+		p.Version = ctx.module.PkgVersion
 	} else {
 		p.Version = strings.TrimPrefix(p.Version, "v")
 	}
@@ -1124,7 +1124,7 @@ func (ctx *BuildContext) lexer(entry *BuildEntry, forceCjsOnly bool) (ret BuildR
 }
 
 func (ctx *BuildContext) cjsLexer(specifier string) (cjs cjsLexerResult, err error) {
-	cjs, err = cjsLexer(ctx.npmrc, ctx.module.Name, ctx.wd, specifier, ctx.getNodeEnv())
+	cjs, err = cjsLexer(ctx.npmrc, ctx.module.PkgName, ctx.wd, specifier, ctx.getNodeEnv())
 	if err == nil && cjs.Error != "" {
 		err = fmt.Errorf("cjsLexer: %s", cjs.Error)
 	}
@@ -1132,7 +1132,7 @@ func (ctx *BuildContext) cjsLexer(specifier string) (cjs cjsLexerResult, err err
 }
 
 func (ctx *BuildContext) esmLexer(specifier string) (isESM bool, namedExports []string, err error) {
-	isESM, namedExports, err = validateJSFile(path.Join(ctx.wd, "node_modules", ctx.module.Name, specifier))
+	isESM, namedExports, err = validateJSFile(path.Join(ctx.wd, "node_modules", ctx.module.PkgName, specifier))
 	if err != nil {
 		err = fmt.Errorf("esmLexer: %v", err)
 	}
