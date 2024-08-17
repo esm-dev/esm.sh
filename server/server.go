@@ -17,10 +17,10 @@ import (
 var (
 	buildQueue *BuildQueue
 	config     *Config
+	log        *logger.Logger
 	cache      storage.Cache
 	db         storage.DataBase
 	fs         storage.FileSystem
-	log        *logger.Logger
 )
 
 // Serve serves the esm.sh server

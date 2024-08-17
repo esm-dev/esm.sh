@@ -461,9 +461,9 @@ do:
 	return
 }
 
-func (rc *NpmRC) installPackage(pkg Module) (pkgJson PackageJSON, err error) {
-	installDir := path.Join(rc.NpmDir(), pkg.Fullname())
-	pkgJsonFilepath := path.Join(installDir, "node_modules", pkg.Name, "package.json")
+func (rc *NpmRC) installPackage(module Module) (pkgJson PackageJSON, err error) {
+	installDir := path.Join(rc.NpmDir(), module.PackageName())
+	pkgJsonFilepath := path.Join(installDir, "node_modules", module.PkgName, "package.json")
 
 	// only one installation process allowed at the same time for the same package
 	lock := getInstallLock(installDir)
@@ -492,42 +492,42 @@ func (rc *NpmRC) installPackage(pkg Module) (pkgJson PackageJSON, err error) {
 		err = os.WriteFile(packageJsonFp, []byte("{}"), 0644)
 	}
 	if err != nil {
-		err = fmt.Errorf("ensure package.json failed: %s", pkg.Fullname())
+		err = fmt.Errorf("ensure package.json failed: %s", module.PackageName())
 		return
 	}
 
 	attemptMaxTimes := 3
 	for i := 1; i <= attemptMaxTimes; i++ {
-		if pkg.FromGithub {
-			err = os.WriteFile(packageJsonFp, []byte(fmt.Sprintf(`{"dependencies":{"%s":"github:%s#%s"}}`, pkg.Name, pkg.Name, pkg.Version)), 0644)
+		if module.FromGithub {
+			err = os.WriteFile(packageJsonFp, []byte(fmt.Sprintf(`{"dependencies":{"%s":"github:%s#%s"}}`, module.PkgName, module.PkgName, module.PkgVersion)), 0644)
 			if err == nil {
 				err = rc.pnpm(installDir)
 			}
 			// pnpm will ignore github package which has been installed without `package.json` file
 			// so we install it manually
 			if err == nil {
-				packageJsonFp := path.Join(installDir, "node_modules", pkg.Name, "package.json")
+				packageJsonFp := path.Join(installDir, "node_modules", module.PkgName, "package.json")
 				if !existsFile(packageJsonFp) {
 					ensureDir(path.Dir(packageJsonFp))
-					err = os.WriteFile(packageJsonFp, utils.MustEncodeJSON(pkg), 0644)
+					err = os.WriteFile(packageJsonFp, utils.MustEncodeJSON(module), 0644)
 				} else {
 					var p PackageJSON
 					err = utils.ParseJSONFile(packageJsonFp, &p)
 					if err == nil && len(p.Files) > 0 {
 						// install github package with ignoring `files` field
-						err = ghInstall(installDir, pkg.Name, pkg.Version)
+						err = ghInstall(installDir, module.PkgName, module.PkgVersion)
 					}
 				}
 			}
-		} else if regexpFullVersion.MatchString(pkg.Version) {
-			err = rc.pnpm(installDir, pkg.Fullname(), "--prefer-offline")
+		} else if regexpFullVersion.MatchString(module.PkgVersion) {
+			err = rc.pnpm(installDir, module.PackageName(), "--prefer-offline")
 		} else {
-			err = rc.pnpm(installDir, pkg.Fullname())
+			err = rc.pnpm(installDir, module.PackageName())
 		}
 		if err == nil {
 			err = utils.ParseJSONFile(pkgJsonFilepath, &pkgJson)
 			if err != nil {
-				err = fmt.Errorf("pnpm install %s: package.json not found", pkg)
+				err = fmt.Errorf("pnpm install %s: package.json not found", module)
 			}
 		}
 		if err == nil || i == attemptMaxTimes {

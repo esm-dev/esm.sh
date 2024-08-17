@@ -58,7 +58,7 @@ func decodeBuildArgs(npmrc *NpmRC, argsString string) (args BuildArgs, err error
 			} else if strings.HasPrefix(p, "c") {
 				args.conditions = append(args.conditions, strings.Split(p[1:], ",")...)
 			} else if strings.HasPrefix(p, "x") {
-				p, _, _, _, e := validateESMPath(npmrc, p[1:])
+				p, _, _, _, e := validateModulePath(npmrc, p[1:])
 				if e == nil {
 					args.jsxRuntime = &p
 				}
@@ -85,7 +85,7 @@ func encodeBuildArgs(args BuildArgs, pkg Module, isDts bool) string {
 	if len(args.alias) > 0 {
 		var ss sort.StringSlice
 		for from, to := range args.alias {
-			if from != pkg.Name {
+			if from != pkg.PkgName {
 				ss = append(ss, fmt.Sprintf("%s:%s", from, to))
 			}
 		}
@@ -97,7 +97,7 @@ func encodeBuildArgs(args BuildArgs, pkg Module, isDts bool) string {
 	if len(args.deps) > 0 {
 		var ss sort.StringSlice
 		for name, version := range args.deps {
-			if name != pkg.Name {
+			if name != pkg.PkgName {
 				ss = append(ss, fmt.Sprintf("%s@%s", name, version))
 			}
 		}
@@ -112,7 +112,7 @@ func encodeBuildArgs(args BuildArgs, pkg Module, isDts bool) string {
 	if args.external.Len() > 0 {
 		var ss sort.StringSlice
 		for _, name := range args.external.Values() {
-			if name != pkg.Name {
+			if name != pkg.PkgName {
 				ss = append(ss, name)
 			}
 		}
@@ -164,10 +164,10 @@ func encodeBuildArgs(args BuildArgs, pkg Module, isDts bool) string {
 }
 
 // fixBuildArgs removes invalid alias, deps, external from the build args
-func fixBuildArgs(npmrc *NpmRC, installDir string, args *BuildArgs, pkg Module) error {
+func fixBuildArgs(npmrc *NpmRC, installDir string, args *BuildArgs, module Module) error {
 	if len(args.alias) > 0 || len(args.deps) > 0 || args.external.Len() > 0 {
 		depsSet := NewStringSet()
-		err := walkDeps(npmrc, installDir, pkg, depsSet)
+		err := walkDeps(npmrc, installDir, module, depsSet)
 		if err != nil {
 			return err
 		}
@@ -180,7 +180,7 @@ func fixBuildArgs(npmrc *NpmRC, installDir string, args *BuildArgs, pkg Module) 
 			}
 			for from, to := range alias {
 				pkgName, _, _, _ := splitPkgPath(to)
-				if pkgName == pkg.Name {
+				if pkgName == module.PkgName {
 					delete(alias, from)
 				} else {
 					depsSet.Add(pkgName)
@@ -191,6 +191,10 @@ func fixBuildArgs(npmrc *NpmRC, installDir string, args *BuildArgs, pkg Module) 
 		if len(args.deps) > 0 {
 			newDeps := map[string]string{}
 			for name, version := range args.deps {
+				if module.PkgName == "react-dom" && name == "react" {
+					// react version should be the same as react-dom
+					continue
+				}
 				if depsSet.Has(name) {
 					newDeps[name] = version
 				}
@@ -210,20 +214,23 @@ func fixBuildArgs(npmrc *NpmRC, installDir string, args *BuildArgs, pkg Module) 
 	return nil
 }
 
-func walkDeps(npmrc *NpmRC, installDir string, pkg Module, mark *StringSet) (err error) {
-	if mark.Has(pkg.Name) {
+func walkDeps(npmrc *NpmRC, installDir string, module Module, mark *StringSet) (err error) {
+	if mark.Has(module.PkgName) {
 		return
 	}
-	mark.Add(pkg.Name)
+	mark.Add(module.PkgName)
 	var p PackageJSON
-	pkgJsonPath := path.Join(installDir, "node_modules", ".pnpm", "node_modules", pkg.Name, "package.json")
+	pkgJsonPath := path.Join(installDir, "node_modules", ".pnpm", "node_modules", module.PkgName, "package.json")
 	if !existsFile(pkgJsonPath) {
-		pkgJsonPath = path.Join(installDir, "node_modules", pkg.Name, "package.json")
+		pkgJsonPath = path.Join(installDir, "node_modules", module.PkgName, "package.json")
 	}
 	if existsFile(pkgJsonPath) {
 		err = utils.ParseJSONFile(pkgJsonPath, &p)
+	} else if regexpFullVersion.MatchString(module.PkgVersion) || module.FromGithub {
+		p, err = npmrc.installPackage(module)
 	} else {
 		return nil
+		// p, err = npmrc.getPackageInfo(module.PkgName, module.PkgVersion)
 	}
 	if err != nil {
 		return
@@ -239,7 +246,7 @@ func walkDeps(npmrc *NpmRC, installDir string, pkg Module, mark *StringSet) (err
 		if strings.HasPrefix(name, "@types/") || strings.HasPrefix(name, "@babel/") || strings.HasPrefix(name, "is-") {
 			continue
 		}
-		err := walkDeps(npmrc, installDir, Module{Name: name, Version: version}, mark)
+		err := walkDeps(npmrc, installDir, Module{PkgName: name, PkgVersion: version}, mark)
 		if err != nil {
 			return err
 		}

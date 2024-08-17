@@ -24,12 +24,12 @@ func TestEncodeBuildArgs(t *testing.T) {
 			external:          external,
 			exports:           exports,
 			conditions:        conditions,
-			jsxRuntime:        &Module{Version: "18.2.0", Name: "react"},
+			jsxRuntime:        &Module{PkgVersion: "18.2.0", PkgName: "react"},
 			externalRequire:   true,
 			keepNames:         true,
 			ignoreAnnotations: true,
 		},
-		Module{Name: "foo"},
+		Module{PkgName: "foo"},
 		false,
 	)
 	args, err := decodeBuildArgs(nil, buildArgsString)

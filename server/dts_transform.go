@@ -18,7 +18,7 @@ func transformDTS(ctx *BuildContext, dts string, buildArgsPrefix string, marker 
 	if isRoot {
 		marker = NewStringSet()
 	}
-	dtsPath := path.Join("/"+ctx.module.Fullname(), buildArgsPrefix, dts)
+	dtsPath := path.Join("/"+ctx.module.PackageName(), buildArgsPrefix, dts)
 	if marker.Has(dtsPath) {
 		// don't transform repeatly
 		return
@@ -32,7 +32,7 @@ func transformDTS(ctx *BuildContext, dts string, buildArgsPrefix string, marker 
 		return
 	}
 
-	dtsFilePath := path.Join(ctx.wd, "node_modules", ctx.module.Name, dts)
+	dtsFilePath := path.Join(ctx.wd, "node_modules", ctx.module.PkgName, dts)
 	dtsWD := path.Dir(dtsFilePath)
 	dtsFile, err := os.Open(dtsFilePath)
 	if err != nil {
@@ -54,7 +54,7 @@ func transformDTS(ctx *BuildContext, dts string, buildArgsPrefix string, marker 
 	hasReferenceTypesNode := false
 
 	err = parseDts(dtsFile, buffer, func(specifier string, kind TsImportKind, position int) (string, error) {
-		if ctx.module.Name == "@types/node" {
+		if ctx.module.PkgName == "@types/node" {
 			return specifier, nil
 		}
 
@@ -126,26 +126,25 @@ func transformDTS(ctx *BuildContext, dts string, buildArgsPrefix string, marker 
 			specifier += "/" + subPath
 		}
 
-		if depPkgName == ctx.module.Name {
+		if depPkgName == ctx.module.PkgName {
 			if strings.ContainsRune(subPath, '*') {
 				return fmt.Sprintf(
 					"{ESM_CDN_ORIGIN}/%s/%s%s",
-					ctx.module.Fullname(),
+					ctx.module.PackageName(),
 					ctx.getBuildArgsPrefix(ctx.module, true),
 					subPath,
 				), nil
 			} else {
-				depPkg := Module{
-					Name:      depPkgName,
-					Version:   ctx.module.Version,
-					SubPath:   subPath,
-					SubModule: subPath,
-				}
-				entry := ctx.resolveEntry(depPkg)
+				entry := ctx.resolveEntry(Module{
+					PkgName:    depPkgName,
+					PkgVersion: ctx.module.PkgVersion,
+					SubPath:    subPath,
+					SubModule:  subPath,
+				})
 				if entry.dts != "" {
 					return fmt.Sprintf(
 						"{ESM_CDN_ORIGIN}/%s/%s%s",
-						ctx.module.Fullname(),
+						ctx.module.PackageName(),
 						ctx.getBuildArgsPrefix(ctx.module, true),
 						strings.TrimPrefix(entry.dts, "./"),
 					), nil
@@ -193,10 +192,10 @@ func transformDTS(ctx *BuildContext, dts string, buildArgsPrefix string, marker 
 		}
 
 		dtsModule := Module{
-			Name:      p.Name,
-			Version:   p.Version,
-			SubPath:   subPath,
-			SubModule: subPath,
+			PkgName:    p.Name,
+			PkgVersion: p.Version,
+			SubPath:    subPath,
+			SubModule:  subPath,
 		}
 		args := BuildArgs{
 			external: NewStringSet(),
