@@ -1113,14 +1113,14 @@ rebuild:
 			}
 
 			if len(ctx.requires) > 0 {
-				record := NewStringSet()
 				requires := make([][3]string, 0, len(ctx.requires))
+				mark := NewStringSet()
 				for _, r := range ctx.requires {
 					specifier := r[0]
-					if record.Has(specifier) {
+					if mark.Has(specifier) {
 						continue
 					}
-					record.Add(specifier)
+					mark.Add(specifier)
 					requires = append(requires, r)
 				}
 				isEsModule := make([]bool, len(requires))
@@ -1171,14 +1171,13 @@ rebuild:
 				fmt.Fprint(header, `var require=n=>{const e=m=>typeof m.default<"u"?m.default:m,c=m=>Object.assign({__esModule:true},m);switch(n){`)
 				for i, r := range requires {
 					specifier := r[0]
-					esModule := isEsModule[i]
-					if esModule {
+					if isEsModule[i] {
 						fmt.Fprintf(header, `case"%s":return c(__%x$);`, specifier, i)
 					} else {
 						fmt.Fprintf(header, `case"%s":return e(__%x$);`, specifier, i)
 					}
 				}
-				fmt.Fprintf(header, `default:throw new Error("module \""+n+"\" not found");}};%s`, EOL)
+				fmt.Fprintf(header, `default:console.error('module "+n+" not found');return null;}};%s`, EOL)
 			}
 
 			// check imports
