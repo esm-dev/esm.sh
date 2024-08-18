@@ -9,6 +9,7 @@ Deno.test("build target from UA", async () => {
   };
   assertEquals(await getTarget("Deno/1.33.1"), "deno");
   assertEquals(await getTarget("Deno/1.33.2"), "denonext");
+  assertEquals(await getTarget("HeadlessChrome/109"), "es2021");
   assertEquals(
     await getTarget(
       "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/116.0.0.0 Safari/537.36",
