@@ -6,8 +6,12 @@ github.com/davecgh/go-spew v1.1.1 h1:vj9j/u1bqnvCEfJOwUhtlOARqs3+rkHYY13jYWTU97c
 github.com/davecgh/go-spew v1.1.1/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
 github.com/evanw/esbuild v0.23.0 h1:PLUwTn2pzQfIBRrMKcD3M0g1ALOKIHMDefdFCk7avwM=
 github.com/evanw/esbuild v0.23.0/go.mod h1:D2vIQZqV/vIf/VRHtViaUtViZmG7o+kKmlBfVQuRi48=
+github.com/evanw/esbuild v0.23.1 h1:ociewhY6arjTarKLdrXfDTgy25oxhTZmzP8pfuBTfTA=
+github.com/evanw/esbuild v0.23.1/go.mod h1:D2vIQZqV/vIf/VRHtViaUtViZmG7o+kKmlBfVQuRi48=
 github.com/ije/esbuild-internal v0.23.0 h1:H8b9yVV411GKvh5pNdaotX7aEVuApnhwBMekirpT3O0=
 github.com/ije/esbuild-internal v0.23.0/go.mod h1:s7HvKZ4ZGifyzvgWpSwnJOQTr6b+bsgfNBZ8HAEwwSM=
+github.com/ije/esbuild-internal v0.23.1 h1:OUZwdyIT7tPq9xXjmJ6EYPbGxfYjuYSQcWR3sy+b/z0=
+github.com/ije/esbuild-internal v0.23.1/go.mod h1:s7HvKZ4ZGifyzvgWpSwnJOQTr6b+bsgfNBZ8HAEwwSM=
 github.com/ije/gox v0.6.2 h1:6jviCiE8EPr9JD9unSOuqex6WSriZzeCdrIfg7RLGgQ=
 github.com/ije/gox v0.6.2/go.mod h1:HeDdgw2DUqWKHUyRjy9pdS4ESVxxv+0N5iOufd1JGRs=
 github.com/ije/rex v1.11.0 h1:J1n/HeIDRdQf9igenHvLLKmUToxyQFTk/z4DyFFrXUo=
