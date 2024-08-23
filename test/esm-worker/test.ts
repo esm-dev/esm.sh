@@ -504,6 +504,20 @@ Deno.test("esm-worker", { sanitizeOps: false, sanitizeResources: false }, async 
     assertStringIncludes(
       await fetchModule(
         "/react@18.2.0",
+        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/90.0.0.0 Safari/537.36",
+      ),
+      "/es2021/",
+    );
+    assertStringIncludes(
+      await fetchModule(
+        "/react@18.2.0",
+        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.0.0 Safari/537.36",
+      ),
+      "/es2023/",
+    );
+    assertStringIncludes(
+      await fetchModule(
+        "/react@18.2.0",
         "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/116.0.0.0 Safari/537.36",
       ),
       "/es2023/",
@@ -514,6 +528,13 @@ Deno.test("esm-worker", { sanitizeOps: false, sanitizeResources: false }, async 
         "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.3 Safari/605.1.15",
       ),
       "/es2021/",
+    );
+    assertStringIncludes(
+      await fetchModule(
+        "/react@18.2.0",
+        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.6 Safari/605.1.1",
+      ),
+      "/es2023/",
     );
     assertStringIncludes(await fetchModule("/react@18.2.0", "ES/2022"), "/es2022/");
   });
