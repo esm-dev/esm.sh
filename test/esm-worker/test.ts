@@ -91,9 +91,9 @@ Deno.serve(
     const url = new URL(req.url);
     const pathname = decodeURIComponent(url.pathname);
 
-    if (pathname === "/@private/hello/1.0.0.tgz") {
+    if (pathname === "/@private/pkg/1.0.0.tgz") {
       try {
-        const buf = Deno.readFileSync(join(dirname(new URL(import.meta.url).pathname), "hello-1.0.0.tgz"));
+        const buf = Deno.readFileSync(join(dirname(new URL(import.meta.url).pathname), "pkg-1.0.0.tgz"));
         return new Response(buf, {
           headers: {
             "content-type": "application/octet-stream",
@@ -106,17 +106,17 @@ Deno.serve(
       }
     }
 
-    if (pathname === "/@private/hello") {
+    if (pathname === "/@private/pkg") {
       return Response.json({
-        "name": "@private/hello",
-        "description": "Hello world!",
+        "name": "@private/pkg",
+        "description": "My private package",
         "dist-tags": {
           "latest": "1.0.0",
         },
         "versions": {
           "1.0.0": {
-            "name": "@private/hello",
-            "description": "Hello world!",
+            "name": "@private/pkg",
+            "description": "My private package",
             "version": "1.0.0",
             "type": "module",
             "module": "dist/index.js",
@@ -125,11 +125,11 @@ Deno.serve(
               "dist/",
             ],
             "dist": {
-              "tarball": "http://localhost:8082/@private/hello/1.0.0.tgz",
-              // shasum -a 1 hello-1.0.0.tgz
-              "shasum": "E308F75E8F8D4E67853C8BC11E66E217805FC7D7",
-              // openssl dgst -binary -sha512 hello-1.0.0.tgz | openssl base64
-              "integrity": "sha512-lgXANkhDdsvlhWaqrMN3L+d5S0X621h8NFrDA/V4eITPRUhH6YW3OWYG6NSa+n+peubBh7UHAXhtcsxdXUiYMA==",
+              "tarball": "http://localhost:8082/@private/pkg/1.0.0.tgz",
+              // shasum -a 1 pkg-1.0.0.tgz
+              "shasum": "71080422342aac4549dca324bf4361596288ba17",
+              // openssl dgst -binary -sha512 pkg-1.0.0.tgz | openssl base64
+              "integrity": "sha512-sYRCpe+Q0gh6RfBhHsUveq3ihSADt64X8Ag7DCpAlcKrwI/wUF4yrEYlzb9eEJO0t/89Lb+ZSmG7qU4DMsBkrg==",
             },
           },
         },
@@ -393,29 +393,33 @@ Deno.test("esm-worker", { sanitizeOps: false, sanitizeResources: false }, async 
   });
 
   await t.step("builtin scripts", async () => {
-    const res = await fetch(`${workerOrigin}/run`);
-    res.body?.cancel();
-    assertEquals(new URL(res.url).pathname, "/run");
+    const res = await fetch(`${workerOrigin}/run`, { redirect: "manual" });
+    assert(res.ok);
+    assert(!res.redirected);
     assertEquals(res.headers.get("Etag"), `W/"${version}"`);
     assertEquals(res.headers.get("Cache-Control"), "public, max-age=86400");
     assertEquals(res.headers.get("Content-Type"), "application/javascript; charset=utf-8");
     assertStringIncludes(res.headers.get("Vary") ?? "", "User-Agent");
+    assertStringIncludes(res.headers.get("Vary") ?? "", "Referer");
+    assertStringIncludes(await res.text(), '("/transform")');
+
     const dtsUrl = res.headers.get("X-Typescript-Types")!;
     assert(dtsUrl.startsWith(workerOrigin));
     assert(dtsUrl.endsWith(".d.ts"));
 
-    const res2 = await fetch(`${workerOrigin}/run?target=es2022`);
-    assertEquals(res2.headers.get("Etag"), `W/"${version}"`);
-    assertEquals(res2.headers.get("Cache-Control"), "public, max-age=86400");
-    assertEquals(res2.headers.get("Content-Type"), "application/javascript; charset=utf-8");
-    assertStringIncludes(await res2.text(), "esm.sh/run");
+    const res2 = await fetch(`${workerOrigin}/run?target=es2022`, { headers: { "referer": "http://localhost:8080/sw.js" } });
+    const code = await res2.text();
+    assert(!res2.headers.get("Vary")?.includes("User-Agent"));
+    assertStringIncludes(res.headers.get("Vary") ?? "", "Referer");
+    assertStringIncludes(code, 'from"/esm-compiler@');
+    assertStringIncludes(code, '/es2022/esm_compiler.mjs"');
 
-    const res3 = await fetch(`${workerOrigin}/tsx`);
-    assertEquals(res3.headers.get("Etag"), `W/"${version}"`);
-    assertEquals(res3.headers.get("Cache-Control"), "public, max-age=86400");
-    assertEquals(res3.headers.get("Content-Type"), "application/javascript; charset=utf-8");
-    assertStringIncludes(res3.headers.get("Vary") ?? "", "User-Agent");
-    assertStringIncludes(await res3.text(), "esm.sh/tsx");
+    const res4 = await fetch(`${workerOrigin}/tsx`);
+    assertEquals(res4.headers.get("Etag"), `W/"${version}"`);
+    assertEquals(res4.headers.get("Cache-Control"), "public, max-age=86400");
+    assertEquals(res4.headers.get("Content-Type"), "application/javascript; charset=utf-8");
+    assertStringIncludes(res4.headers.get("Vary") ?? "", "User-Agent");
+    assertStringIncludes(await res4.text(), "esm.sh/tsx");
   });
 
   await t.step("transform api", async () => {
@@ -486,7 +490,6 @@ Deno.test("esm-worker", { sanitizeOps: false, sanitizeResources: false }, async 
         headers: { "User-Agent": ua },
       });
       res.body?.cancel();
-      console.log(res.headers.get("Vary"));
       assertStringIncludes(res.headers.get("Vary") ?? "", "User-Agent");
       return res.headers.get("x-esm-path")!;
     };
@@ -541,29 +544,29 @@ Deno.test("esm-worker", { sanitizeOps: false, sanitizeResources: false }, async 
   });
 
   await t.step("private registry", async () => {
-    const res0 = await fetch(`http://localhost:8082/@private/hello`);
+    const res0 = await fetch(`http://localhost:8082/@private/pkg`);
     res0.body?.cancel();
     assertEquals(res0.status, 401);
 
-    const res1 = await fetch(`http://localhost:8082/@private/hello`, {
+    const res1 = await fetch(`http://localhost:8082/@private/pkg`, {
       headers: { authorization: "Bearer " + testRegisterToken },
     });
     assertEquals(res1.status, 200);
     const pkg = await res1.json();
-    assertEquals(pkg.name, "@private/hello");
+    assertEquals(pkg.name, "@private/pkg");
 
-    const res2 = await fetch(`http://localhost:8082/@private/hello/1.0.0.tgz`);
+    const res2 = await fetch(`http://localhost:8082/@private/pkg/1.0.0.tgz`);
     res2.body?.cancel();
     assertEquals(res2.status, 401);
 
-    const res3 = await fetch(`http://localhost:8082/@private/hello/1.0.0.tgz`, {
+    const res3 = await fetch(`http://localhost:8082/@private/pkg/1.0.0.tgz`, {
       headers: { authorization: "Bearer " + testRegisterToken },
     });
     res3.body?.cancel();
     assertEquals(res3.status, 200);
 
-    const { messsage } = await import(`${workerOrigin}/@private/hello`);
-    assertEquals(messsage, "Hello world!");
+    const { key } = await import(`${workerOrigin}/@private/pkg`);
+    assertEquals(key, "secret");
   });
 
   await t.step("fallback to legacy worker", async () => {
@@ -584,6 +587,7 @@ Deno.test("esm-worker", { sanitizeOps: false, sanitizeResources: false }, async 
   });
 
   console.log("storage summary:");
+  console.log("Cache", [...cache._store.keys()].map((url) => `${url} (${cache._store.get(url)!.headers.get("Cache-Control")})`));
   console.log("R2", [...R2._store.keys()]);
 
   closeServer();

@@ -277,9 +277,7 @@ func router() rex.Handle {
 			html := bytes.ReplaceAll(indexHTML, []byte("'# README'"), readmeStrLit)
 			html = bytes.ReplaceAll(html, []byte("{VERSION}"), []byte(fmt.Sprintf("%d", VERSION)))
 			header.Set("Cache-Control", ccMustRevalidate)
-			if globalETag != "" {
-				header.Set("ETag", globalETag)
-			}
+			header.Set("Etag", globalETag)
 			return rex.Content("index.html", startTime, bytes.NewReader(html))
 
 		case "/status.json":
@@ -386,22 +384,70 @@ func router() rex.Handle {
 			// replace `$TARGET` with the target
 			data = bytes.ReplaceAll(data, []byte("$TARGET"), []byte(fmt.Sprintf(`"%s"`, target)))
 
-			code, err := minify(string(data), targets[target], api.LoaderTS)
-			if err != nil {
-				return throwErrorJS(ctx, fmt.Sprintf("Transform error: %v", err), false)
+			var code []byte
+			if pathname == "/run" {
+				referer := ctx.R.Header.Get("Referer")
+				isLocalhost := strings.HasPrefix(referer, "http://localhost:") || strings.HasPrefix(referer, "http://localhost/")
+				ret := api.Build(api.BuildOptions{
+					Stdin: &api.StdinOptions{
+						Sourcefile: "run.ts",
+						Loader:     api.LoaderTS,
+						Contents:   string(data),
+					},
+					Target:            targets[target],
+					Format:            api.FormatESModule,
+					Platform:          api.PlatformBrowser,
+					MinifyWhitespace:  true,
+					MinifyIdentifiers: true,
+					MinifySyntax:      true,
+					Bundle:            true,
+					Write:             false,
+					Outfile:           "-",
+					LegalComments:     api.LegalCommentsExternal,
+					Plugins: []api.Plugin{{
+						Name: "loader",
+						Setup: func(build api.PluginBuild) {
+							build.OnResolve(api.OnResolveOptions{Filter: ".*"}, func(args api.OnResolveArgs) (api.OnResolveResult, error) {
+								if strings.HasPrefix(args.Path, "/") {
+									return api.OnResolveResult{Path: args.Path, External: true}, nil
+								}
+								if args.Path == "./run-tsx" {
+									return api.OnResolveResult{Path: args.Path, Namespace: "tsx"}, nil
+								}
+								return api.OnResolveResult{}, nil
+							})
+							build.OnLoad(api.OnLoadOptions{Filter: ".*", Namespace: "tsx"}, func(args api.OnLoadArgs) (api.OnLoadResult, error) {
+								sourceFile := "server/embed/run-tsx.ts"
+								if isLocalhost {
+									sourceFile = "server/embed/run-tsx.dev.ts"
+								}
+								data, err := embedFS.ReadFile(sourceFile)
+								if err != nil {
+									return api.OnLoadResult{}, err
+								}
+								sourceCode := string(bytes.ReplaceAll(data, []byte("$TARGET"), []byte(target)))
+								return api.OnLoadResult{Contents: &sourceCode, Loader: api.LoaderTS}, nil
+							})
+						},
+					}},
+				})
+				if ret.Errors != nil {
+					return throwErrorJS(ctx, fmt.Sprintf("Transform error: %v", ret.Errors), false)
+				}
+				code = concatBytes(ret.OutputFiles[0].Contents, ret.OutputFiles[1].Contents)
+				appendVaryHeader(header, "Referer")
+			} else {
+				code, err = minify(string(data), targets[target], api.LoaderTS)
+				if err != nil {
+					return throwErrorJS(ctx, fmt.Sprintf("Transform error: %v", err), false)
+				}
 			}
-			header.Set("Content-Type", ctJavaScript)
 			if targetByUA {
 				appendVaryHeader(header, "User-Agent")
 			}
-			if query.Get("v") != "" {
-				header.Set("Cache-Control", ccImmutable)
-			} else {
-				header.Set("Cache-Control", cc1day)
-				if globalETag != "" {
-					header.Set("ETag", globalETag)
-				}
-			}
+			header.Set("Content-Type", ctJavaScript)
+			header.Set("Cache-Control", cc1day)
+			header.Set("Etag", globalETag)
 			if pathname == "/run" {
 				header.Set("X-Typescript-Types", fmt.Sprintf("%s/run.d.ts", cdnOrigin))
 			}
@@ -468,14 +514,8 @@ func router() rex.Handle {
 				if ifNoneMatch != "" && ifNoneMatch == globalETag {
 					return rex.Status(http.StatusNotModified, "")
 				}
-				if query := ctx.R.URL.Query(); query.Get("v") != "" {
-					header.Set("Cache-Control", ccImmutable)
-				} else {
-					header.Set("Cache-Control", cc1day)
-					if globalETag != "" {
-						header.Set("ETag", globalETag)
-					}
-				}
+				header.Set("Cache-Control", cc1day)
+				header.Set("Etag", globalETag)
 			}
 			target := getBuildTargetByUA(userAgent)
 			code, err := minify(lib, targets[target], api.LoaderJS)
@@ -495,14 +535,8 @@ func router() rex.Handle {
 				if ifNoneMatch != "" && ifNoneMatch == globalETag {
 					return rex.Status(http.StatusNotModified, "")
 				}
-				if query := ctx.R.URL.Query(); query.Get("v") != "" {
-					header.Set("Cache-Control", ccImmutable)
-				} else {
-					header.Set("Cache-Control", cc1day)
-					if globalETag != "" {
-						header.Set("ETag", globalETag)
-					}
-				}
+				header.Set("Cache-Control", cc1day)
+				header.Set("Etag", globalETag)
 				header.Set("Content-Type", ctTypeScript)
 				return rex.Content(pathname, startTime, bytes.NewReader(data))
 			}

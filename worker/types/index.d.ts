@@ -26,25 +26,12 @@ declare global {
   }
 }
 
-// compatibility with Cloudflare KV
-export interface WorkerStorageKV {
-  getWithMetadata(
-    key: string,
-    options: { type: "stream"; cacheTtl?: number },
-  ): Promise<{ value: ReadableStream | null; metadata: HttpMetadata | null }>;
-  put(
-    key: string,
-    value: string | ArrayBufferLike | ArrayBuffer | ReadableStream,
-    options?: { expirationTtl?: number; metadata?: HttpMetadata | null },
-  ): Promise<void>;
-}
-
 // compatibility with Cloudflare R2
 export interface WorkerStorage {
   get(key: string): Promise<
     {
       body: ReadableStream<Uint8Array>;
-      httpMetadata?: HttpMetadata;
+      httpMetadata?: R2HTTPMetadata;
       customMetadata?: Record<string, string>;
     } | null
   >;
@@ -52,7 +39,7 @@ export interface WorkerStorage {
     key: string,
     value: ArrayBufferLike | ArrayBuffer | ReadableStream,
     options?: {
-      httpMetadata?: HttpMetadata;
+      httpMetadata?: R2HTTPMetadata;
       customMetadata?: Record<string, string>;
     },
   ): Promise<void>;
@@ -78,8 +65,8 @@ export type Context = {
   url: URL;
   waitUntil(promise: Promise<any>): void;
   withCache(
-    fetcher: (targetFromUA?: string) => Promise<Response> | Response,
-    options?: { varyUA: boolean },
+    fetcher: (targetFromUA: string | null) => Promise<Response> | Response,
+    options?: { varyUA?: boolean; varyReferer?: boolean },
   ): Promise<Response>;
   corsHeaders(headers?: Headers): Headers;
 };
