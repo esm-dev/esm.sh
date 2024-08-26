@@ -11,12 +11,12 @@ const ac = new AbortController();
 const closeServer = () => ac.abort();
 
 const cache = {
-  _store: new Map(),
+  _store: new Map<string, Response>(),
   match(req: URL) {
-    return Promise.resolve(this._store.get(req.href) || null);
+    return Promise.resolve(cache._store.get(req.href)?.clone() || null);
   },
   put(req: URL, res: Response) {
-    this._store.set(req.href, res);
+    cache._store.set(req.href, res);
     return Promise.resolve();
   },
 };
@@ -257,17 +257,17 @@ Deno.test("esm-worker", { sanitizeOps: false, sanitizeResources: false }, async 
     const res6 = await fetch(`${workerOrigin}/react@17.0.2`);
     res6.body?.cancel();
     assertEquals(res6.status, 200);
+    assertEquals(res6.headers.get("Cache-Control"), "public, max-age=31536000, immutable");
     const modUrl2 = new URL(res6.headers.get("x-esm-path")!, workerOrigin);
     const res7 = await fetch(modUrl2);
     assertEquals(res7.status, 200);
-    assertStringIncludes(
-      await res7.text(),
-      `"data:text/javascript;base64,ZXhwb3J0IGRlZmF1bHQgT2JqZWN0LmFzc2lnbg=="`,
-    );
+    // inline "object.assign" polyfill
+    assertStringIncludes(await res7.text(), `from "data:text/javascript;base64,ZXhwb3J0IGRlZmF1bHQgT2JqZWN0LmFzc2lnbg=="`);
 
     const res8 = await fetch(`${workerOrigin}/react-dom@18.2.0?external=react`);
     res8.body?.cancel();
     assertEquals(res8.status, 200);
+    assertEquals(res8.headers.get("Cache-Control"), "public, max-age=31536000, immutable");
     const modUrl3 = new URL(res8.headers.get("x-esm-path")!, workerOrigin);
     const res9 = await fetch(modUrl3);
     assertEquals(res9.status, 200);
@@ -276,11 +276,13 @@ Deno.test("esm-worker", { sanitizeOps: false, sanitizeResources: false }, async 
     const res10 = await fetch(`${workerOrigin}/typescript@5.5.4/es2022/typescript.mjs`);
     const js = await res10.text();
     assertEquals(res10.status, 200);
+    assertEquals(res10.headers.get("Cache-Control"), "public, max-age=31536000, immutable");
     assertStringIncludes(js, `__Process$`);
     assert(!js.includes("/node/process.js"));
 
     const res11 = await fetch(`${workerOrigin}/typescript@5.5.4/es2022/typescript.mjs.map`);
     assertEquals(res11.status, 200);
+    assertEquals(res11.headers.get("Cache-Control"), "public, max-age=31536000, immutable");
     assertEquals(res11.headers.get("Content-Type"), "application/json; charset=utf-8");
   });
 
@@ -478,65 +480,51 @@ Deno.test("esm-worker", { sanitizeOps: false, sanitizeResources: false }, async 
     assert(ret.deletedFiles.length > 0);
   });
 
-  await t.step("check esma target from user agent", async () => {
-    const getTarget = async (ua: string) => {
-      const res = await fetch(`${workerOrigin}/esma-target`, {
+  await t.step("module with different UAs", async () => {
+    const fetchModule = async (ua: string) => {
+      const res = await fetch(`${workerOrigin}/react@18.2.0`, {
         headers: { "User-Agent": ua },
       });
-      return await res.text();
-    };
-    assertEquals(await getTarget("Deno/1.33.1"), "deno");
-    assertEquals(await getTarget("Deno/1.33.2"), "denonext");
-    assertEquals(await getTarget("ES/2022"), "es2022");
-  });
-
-  await t.step("cache for different UAs", async () => {
-    const fetchModule = async (pathname: string, ua: string) => {
-      const res = await fetch(`${workerOrigin}` + pathname, {
-        headers: { "User-Agent": ua },
-      });
+      res.body?.cancel();
+      console.log(res.headers.get("Vary"));
       assertStringIncludes(res.headers.get("Vary") ?? "", "User-Agent");
-      return await res.text();
+      return res.headers.get("x-esm-path")!;
     };
 
-    assertStringIncludes(await fetchModule("/react@18.2.0", "Deno/1.33.1"), "/deno/");
-    assertStringIncludes(await fetchModule("/react@18.2.0", "Deno/1.33.2"), "/denonext/");
     assertStringIncludes(
       await fetchModule(
-        "/react@18.2.0",
         "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/90.0.0.0 Safari/537.36",
       ),
       "/es2021/",
     );
     assertStringIncludes(
       await fetchModule(
-        "/react@18.2.0",
         "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.0.0 Safari/537.36",
       ),
       "/es2023/",
     );
     assertStringIncludes(
       await fetchModule(
-        "/react@18.2.0",
         "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/116.0.0.0 Safari/537.36",
       ),
       "/es2023/",
     );
+    assertStringIncludes(await fetchModule("HeadlessChrome/109"), "/es2023/");
     assertStringIncludes(
       await fetchModule(
-        "/react@18.2.0",
         "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.3 Safari/605.1.15",
       ),
       "/es2021/",
     );
     assertStringIncludes(
       await fetchModule(
-        "/react@18.2.0",
         "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.6 Safari/605.1.1",
       ),
       "/es2023/",
     );
-    assertStringIncludes(await fetchModule("/react@18.2.0", "ES/2022"), "/es2022/");
+    assertStringIncludes(await fetchModule("Deno/1.33.1"), "/deno/");
+    assertStringIncludes(await fetchModule("Deno/1.33.2"), "/denonext/");
+    assertStringIncludes(await fetchModule("ES/2022"), "/es2022/");
   });
 
   await t.step("fix urls", async () => {

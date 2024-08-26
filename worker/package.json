@@ -14,10 +14,10 @@
     "types/index.d.ts"
   ],
   "devDependencies": {
-    "@cloudflare/workers-types": "4.20240806.0",
+    "@cloudflare/workers-types": "4.20240821.1",
     "compare-versions": "6.1.1",
-    "esbuild": "0.23.0" ,
-    "esm-compat": "0.1.0"
+    "esbuild": "0.23.1" ,
+    "esm-compat": "0.2.1"
   },
   "repository": "https://github.com/esm-dev/esm.sh",
   "license": "MIT"

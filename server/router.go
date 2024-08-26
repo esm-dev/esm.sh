@@ -313,10 +313,6 @@ func router() rex.Handle {
 				"uptime":     time.Since(startTime).String(),
 			}
 
-		case "/esma-target":
-			header.Set("Cache-Control", ccMustRevalidate)
-			return getBuildTargetByUA(userAgent)
-
 		case "/error.js":
 			switch query := ctx.R.URL.Query(); query.Get("type") {
 			case "resolve":

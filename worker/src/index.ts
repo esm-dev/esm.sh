@@ -273,11 +273,6 @@ function withESMWorker(middleware?: Middleware, cache: Cache = (caches as any).d
           return res;
         });
 
-      case "/esma-target":
-        const headers = ctx.corsHeaders();
-        headers.set("Cache-Control", "private, max-age=600"); // 10 minutes
-        return new Response(getBuildTargetFromUA(h.get("User-Agent")), { headers });
-
       case "/status.json":
         const res = await fetchOrigin(req, env, ctx, pathname);
         copyHeaders(res.headers, ctx.corsHeaders());
@@ -801,6 +796,9 @@ function withESMWorker(middleware?: Middleware, cache: Cache = (caches as any).d
           }
           let res = await cache.match(cacheKey);
           if (res) {
+            if (targetFromUA) {
+              res.headers.append("Vary", "User-Agent");
+            }
             if (isHeadMethod) {
               return new Response(null, { status: 204, headers: res.headers });
             }
