@@ -1,6 +1,25 @@
 // @ts-expect-error $TARGET is defined at build time
-import { init, transform } from "/esm-compiler@0.7.2/$TARGET/esm_compiler.mjs";
-const wasmPromise = loadWasm("/esm-compiler@0.7.2/pkg/esm_compiler_bg.wasm");
+import init, { transform } from "/esm-compiler@0.7.2/$TARGET/esm-compiler.mjs";
+
+let wasmPromise: Promise<void> | undefined;
+
+export async function tsx(
+  pathname: string,
+  code: string,
+  importMap: { imports?: Record<string, string> },
+  target: string,
+): Promise<Response> {
+  if (!wasmPromise) {
+    wasmPromise = loadWasm("/esm-compiler@0.7.2/pkg/esm_compiler_bg.wasm");
+  }
+  try {
+    await wasmPromise;
+    const ret = transform(pathname, code, { importMap, target });
+    return new Response(ret.code, { headers: { "Content-Type": "application/javascript; charset=utf-8" } });
+  } catch (err) {
+    return new Response(err.message, { status: 500 });
+  }
+}
 
 async function loadWasm(url: string) {
   // up to 3 attempts in case of network failure
@@ -15,20 +34,5 @@ async function loadWasm(url: string) {
         console.error(err);
       }
     }
-  }
-}
-
-export async function tsx(
-  pathname: string,
-  code: string,
-  importMap: { imports?: Record<string, string> },
-  target: string,
-): Promise<Response> {
-  try {
-    await wasmPromise;
-    const ret = transform(pathname, code, { importMap, target });
-    return new Response(ret.code, { headers: { "Content-Type": "application/javascript; charset=utf-8" } });
-  } catch (err) {
-    return new Response(err.message, { status: 500 });
   }
 }

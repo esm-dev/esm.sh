@@ -1,1 +1,1 @@
-import "{origin}/run";
+import "/run";

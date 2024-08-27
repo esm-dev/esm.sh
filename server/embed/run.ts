@@ -94,7 +94,7 @@ function setupServiceWorker() {
               return res;
             }
             return res.text().then(async (code) => {
-              const filename = url.pathname.split("/").pop()!;
+              const filename = pathname.split("/").pop()!;
               const extname = filename.split(".").pop()!;
               const buffer = new Uint8Array(
                 await crypto.subtle.digest(
@@ -110,7 +110,7 @@ function setupServiceWorker() {
               if (res) {
                 return res;
               }
-              res = await tsx(filename, code, importMap, target, id);
+              res = await tsx(pathname, code, importMap, target, id);
               if (!res.ok) {
                 return res;
               }
