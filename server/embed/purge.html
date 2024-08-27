@@ -9,7 +9,7 @@
 </head>
 
 <body>
-  <h1>Purge Build</h1>
+  <h1>Purge ESM Build</h1>
   <form>
     <label>
       <input type="text" name="package" placeholder="Package" required>
@@ -24,12 +24,14 @@
   </form>
   <pre style="display: none;"><code></code></pre>
   <p style="display: none;"><button>Close</button></p>
+
   <script>
     const formEl = document.querySelector("form")
     const preEl = document.querySelector("pre")
     const codeEl = document.querySelector("pre code")
     const pEl = document.querySelector("p")
-    const closeButtonEl = document.querySelector("p button")
+    const buttonEl = document.querySelector("p button")
+
     formEl.addEventListener("submit", async (event) => {
       event.preventDefault()
       const form = new FormData(formEl)
@@ -45,7 +47,8 @@
       preEl.style.display = "block"
       pEl.style.display = "block"
     })
-    closeButtonEl.addEventListener("click", () => {
+
+    buttonEl.addEventListener("click", () => {
       codeEl.textContent = ""
       formEl.style.display = "block"
       preEl.style.display = "none"

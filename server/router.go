@@ -466,9 +466,6 @@ func router() rex.Handle {
 			if err != nil {
 				return rex.Status(404, "not found")
 			}
-			if strings.HasSuffix(pathname, ".js") {
-				data = bytes.ReplaceAll(data, []byte("{origin}"), []byte(cdnOrigin))
-			}
 			header.Set("Cache-Control", cc1day)
 			return rex.Content(pathname, modTime, bytes.NewReader(data))
 		}
