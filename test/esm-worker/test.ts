@@ -412,7 +412,7 @@ Deno.test("esm-worker", { sanitizeOps: false, sanitizeResources: false }, async 
     assert(!res2.headers.get("Vary")?.includes("User-Agent"));
     assertStringIncludes(res.headers.get("Vary") ?? "", "Referer");
     assertStringIncludes(code, 'from"/esm-compiler@');
-    assertStringIncludes(code, '/es2022/esm_compiler.mjs"');
+    assertStringIncludes(code, '/es2022/esm-compiler.mjs"');
 
     const res4 = await fetch(`${workerOrigin}/tsx`);
     assertEquals(res4.headers.get("Etag"), `W/"${version}"`);
