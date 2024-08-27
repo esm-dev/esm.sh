@@ -39,6 +39,17 @@ Deno.test("Fix wasm URL", async () => {
     res.headers.get("location"),
     "http://localhost:8080/lightningcss-wasm@1.19.0/lightningcss_node.wasm",
   );
+
+  const res2 = await fetch(
+    "http://localhost:8080/esm-compiler@0.7.2/es2024/esm_compiler_bg.wasm",
+    { redirect: "manual" },
+  );
+  res2.body?.cancel();
+  assertEquals(res2.status, 301);
+  assertEquals(
+    res2.headers.get("location"),
+    "http://localhost:8080/esm-compiler@0.7.2/pkg/esm_compiler_bg.wasm",
+  );
 });
 
 Deno.test("Fix json URL", async () => {
