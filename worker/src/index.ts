@@ -3,19 +3,8 @@ import { compareVersions, satisfies, validate } from "compare-versions";
 import { getBuildTargetFromUA, targets } from "esm-compat";
 import { assetsExts, cssPackages, VERSION } from "./consts.ts";
 import { getContentType } from "./media_type.ts";
-import {
-  copyHeaders,
-  err,
-  errPkgNotFound,
-  getUrlOrigin,
-  hashText,
-  hasTargetSegment,
-  isDtsFile,
-  normalizeSearchParams,
-  redirect,
-  splitBy,
-  trimPrefix,
-} from "./utils.ts";
+import { isDtsFile, normalizeSearchParams, redirect, splitBy, trimPrefix } from "./utils.ts";
+import { copyHeaders, err, errPkgNotFound, getUrlOrigin, hashText, hasTargetSegment } from "./utils.ts";
 
 const version = `v${VERSION}`;
 const globalEtag = `W/"${version}"`;
@@ -249,7 +238,25 @@ async function fetchBuild(req: Request, env: Env, ctx: Context, pathname: string
 }
 
 function withESMWorker(middleware?: Middleware, cache: Cache = (caches as any).default) {
-  const onFetch = async (req: Request, env: Env, ctx: Context): Promise<Response> => {
+  let npmrc: Npmrc | null = null;
+  let allowList: Set<string> | null = null;
+
+  function corsHeaders(origin: string | null, headers?: Headers) {
+    const h = new Headers(headers);
+    if (allowList !== null) {
+      if (!origin || !allowList.has(origin)) {
+        return h;
+      }
+      h.set("Access-Control-Allow-Origin", origin);
+      h.append("Vary", "Origin");
+    } else {
+      h.set("Access-Control-Allow-Origin", "*");
+    }
+    h.set("Access-Control-Allow-Methods", "HEAD, GET, POST");
+    return h;
+  }
+
+  async function respondWith(req: Request, env: Env, ctx: Context): Promise<Response> {
     const h = req.headers;
     const url = ctx.url;
 
@@ -674,25 +681,7 @@ function withESMWorker(middleware?: Middleware, cache: Cache = (caches as any).d
       }
       return fetchBuild(req, env, ctx, pathname, "?" + params.toString());
     }, { varyUA: true });
-  };
-
-  const corsHeaders = (origin: string | null, headers?: Headers) => {
-    const h = new Headers(headers);
-    if (allowList !== null) {
-      if (!origin || !allowList.has(origin)) {
-        return h;
-      }
-      h.set("Access-Control-Allow-Origin", origin);
-      h.append("Vary", "Origin");
-    } else {
-      h.set("Access-Control-Allow-Origin", "*");
-    }
-    h.set("Access-Control-Allow-Methods", "HEAD, GET, POST");
-    return h;
-  };
-
-  let npmrc: Npmrc | null = null;
-  let allowList: Set<string> | null = null;
+  }
 
   return {
     fetch: (req: Request, env: Env, workerCtx: ExecutionContext): Response | Promise<Response> => {
@@ -720,7 +709,8 @@ function withESMWorker(middleware?: Middleware, cache: Cache = (caches as any).d
         return new Response(null, { status: 204, headers });
       }
 
-      if (!npmrc) {
+      // prepare npmrc config
+      if (npmrc === null) {
         npmrc = {
           registry: env.NPM_REGISTRY ? getUrlOrigin(env.NPM_REGISTRY) : defaultNpmRegistry,
           registries: { "@jsr": { registry: jsrNpmRegistry } },
@@ -760,12 +750,17 @@ function withESMWorker(middleware?: Middleware, cache: Cache = (caches as any).d
         }
       }
 
-      const url = new URL(req.url);
-      // add `raw` search param to the url if the hostname is `raw.esm.sh`
-      if (url.hostname === "raw.esm.sh") {
-        url.searchParams.set("raw", "");
+      // check if the request 'referer' against the allow list
+      if (allowList !== null) {
+        const referer = req.headers.get("Referer");
+        if (referer) {
+          if (!allowList.has(new URL(referer).origin)) {
+            return new Response("Forbidden", { status: 403 });
+          }
+        }
       }
 
+      const url = new URL(req.url);
       const ctx: Context = {
         cache,
         npmrc: npmrc!,
@@ -774,19 +769,20 @@ function withESMWorker(middleware?: Middleware, cache: Cache = (caches as any).d
         waitUntil: (p: Promise<any>) => workerCtx.waitUntil(p),
         withCache: async (fetcher, options) => {
           const { pathname, searchParams } = url;
+          const cacheKey = new URL(url); // clone
           const isHeadMethod = req.method === "HEAD";
           const targetArg = searchParams.get("target");
           const hasPinedTarget = !!targetArg && targets.has(targetArg);
           const realOrigin = req.headers.get("X-Real-Origin");
-          const cacheKey = new URL(url); // clone
           let targetFromUA: string | undefined;
           let referer: string | null | undefined;
+          let res: Response | undefined;
           if (options?.varyUA && !hasPinedTarget && !isDtsFile(pathname) && !searchParams.has("raw")) {
             targetFromUA = getBuildTargetFromUA(req.headers.get("User-Agent"));
             cacheKey.searchParams.set("target", targetFromUA);
           }
           if (options?.varyReferer) {
-            referer = req.headers.get("referer");
+            referer = req.headers.get("Referer");
             cacheKey.searchParams.set(
               "referer",
               referer?.startsWith("http://localhost:") || referer?.startsWith("http://localhost/") ? "localhost" : "*",
@@ -798,7 +794,7 @@ function withESMWorker(middleware?: Middleware, cache: Cache = (caches as any).d
           if (env.ZONE_ID) {
             cacheKey.searchParams.set("X-Zone-Id", env.ZONE_ID);
           }
-          let res = await cache.match(cacheKey);
+          res = await cache.match(cacheKey);
           if (res) {
             if (targetFromUA) {
               res.headers.append("Vary", "User-Agent");
@@ -825,11 +821,15 @@ function withESMWorker(middleware?: Middleware, cache: Cache = (caches as any).d
         },
       };
 
-      return onFetch(req, env, ctx).catch((e) => {
-        const { R2 } = env;
-        if (R2) {
-          // save the error log to R2 storage
-          workerCtx.waitUntil(R2.put(
+      // add `raw` search param to the url if the hostname is `raw.esm.sh`
+      if (url.hostname === "raw.esm.sh") {
+        url.searchParams.set("raw", "");
+      }
+
+      return respondWith(req, env, ctx).catch((e) => {
+        if (env.R2) {
+          // store the error to R2 storage
+          workerCtx.waitUntil(env.R2.put(
             `errors/${new Date().toISOString().split("T")[0]}/${Date.now()}.log`,
             JSON.stringify({
               url: req.url,
