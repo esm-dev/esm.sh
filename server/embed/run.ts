@@ -93,7 +93,30 @@ function setupServiceWorker() {
             if (!res.ok || (/^(text|application)\/javascript/.test(res.headers.get("Content-Type") ?? ""))) {
               return res;
             }
-            return res.text().then((code) => tsx(url, code, importMap, target, cachePromise));
+            return res.text().then(async (code) => {
+              const filename = url.pathname.split("/").pop()!;
+              const extname = filename.split(".").pop()!;
+              const buffer = new Uint8Array(
+                await crypto.subtle.digest(
+                  "SHA-1",
+                  new TextEncoder().encode(extname + code + JSON.stringify(importMap) + target + "false"),
+                ),
+              );
+              const id = [...buffer].map((b) => b.toString(16).padStart(2, "0")).join("");
+              const cache = await cachePromise;
+              const cacheKey = new URL(url);
+              cacheKey.searchParams.set("_tsxid", id);
+              let res = await cache.match(cacheKey);
+              if (res) {
+                return res;
+              }
+              res = await tsx(filename, code, importMap, target, id);
+              if (!res.ok) {
+                return res;
+              }
+              cache.put(cacheKey, res.clone());
+              return res;
+            });
           }),
         );
       }
