@@ -94,12 +94,15 @@ func encodeBuildArgsPrefix(args BuildArgs, pkg Pkg, isDts bool) string {
 			for name := range info.PeerDependencies {
 				pkgDeps.Add(name)
 			}
+			if pkg.SubPath != "" {
+				pkgDeps.Add(pkg.Name)
+			}
 		}
 	}
 	if len(args.alias) > 0 && pkgDeps.Len() > 0 {
 		var ss sort.StringSlice
 		for from, to := range args.alias {
-			if from != pkg.Name {
+			if from != pkg.Name || pkg.SubPath != "" {
 				ss = append(ss, fmt.Sprintf("%s:%s", from, to))
 			}
 		}
@@ -111,7 +114,7 @@ func encodeBuildArgsPrefix(args BuildArgs, pkg Pkg, isDts bool) string {
 	if len(args.deps) > 0 && pkgDeps.Len() > 0 {
 		var ss sort.StringSlice
 		for _, p := range args.deps {
-			if p.Name != pkg.Name {
+			if p.Name != pkg.Name || pkg.SubPath != "" {
 				ss = append(ss, fmt.Sprintf("%s@%s", p.Name, p.Version))
 			}
 		}
@@ -123,7 +126,7 @@ func encodeBuildArgsPrefix(args BuildArgs, pkg Pkg, isDts bool) string {
 	if args.external.Len() > 0 && (args.external.Has("*") || pkgDeps.Len() > 0) {
 		var ss sort.StringSlice
 		for _, name := range args.external.Values() {
-			if name != pkg.Name {
+			if name != pkg.Name || pkg.SubPath != "" {
 				ss = append(ss, name)
 			}
 		}

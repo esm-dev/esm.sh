@@ -30,5 +30,8 @@ Deno.test("external all", () => {
 Deno.test("external all 2", async () => {
   const res = await fetch("http://localhost:8080/*preact@10.23.2/jsx-runtime");
   const code = await res.text();
-  assertStringIncludes(code, "preact@10.23.2/X-ZS8q/");
+  assertStringIncludes(code, "preact@10.23.2/X-ZS8q/denonext/");
+  const res2 = await fetch("http://localhost:8080/*preact@10.23.2");
+  const code2 = await res2.text();
+  assertStringIncludes(code2, "preact@10.23.2/denonext/preact.mjs");
 });
