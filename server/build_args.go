@@ -58,7 +58,7 @@ func decodeBuildArgs(npmrc *NpmRC, argsString string) (args BuildArgs, err error
 			} else if strings.HasPrefix(p, "c") {
 				args.conditions = append(args.conditions, strings.Split(p[1:], ",")...)
 			} else if strings.HasPrefix(p, "x") {
-				p, _, _, _, e := validateModulePath(npmrc, p[1:])
+				p, _, _, _, e := praseESMPath(npmrc, p[1:])
 				if e == nil {
 					args.jsxRuntime = &p
 				}
@@ -226,7 +226,7 @@ func walkDeps(npmrc *NpmRC, installDir string, module Module, mark *StringSet) (
 	}
 	if existsFile(pkgJsonPath) {
 		err = utils.ParseJSONFile(pkgJsonPath, &p)
-	} else if regexpFullVersion.MatchString(module.PkgVersion) || module.FromGithub {
+	} else if regexpFullVersion.MatchString(module.PkgVersion) || module.GhPrefix {
 		p, err = npmrc.installPackage(module)
 	} else {
 		return nil

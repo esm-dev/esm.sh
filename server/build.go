@@ -135,7 +135,7 @@ func (ctx *BuildContext) Build() (ret BuildResult, err error) {
 	}
 
 	// check if the package is deprecated
-	if ctx.isDeprecated == "" && !ctx.module.FromGithub && !strings.HasPrefix(ctx.module.PkgName, "@jsr/") {
+	if ctx.isDeprecated == "" && !ctx.module.GhPrefix && !strings.HasPrefix(ctx.module.PkgName, "@jsr/") {
 		var info PackageJSON
 		info, err = ctx.npmrc.fetchPackageInfo(ctx.module.PkgName, ctx.module.PkgVersion)
 		if err != nil {
@@ -196,9 +196,9 @@ func (ctx *BuildContext) install() (err error) {
 
 func (ctx *BuildContext) buildModule() (result BuildResult, err error) {
 	// build json
-	if strings.HasSuffix(ctx.module.SubModule, ".json") {
+	if strings.HasSuffix(ctx.module.SubModuleName, ".json") {
 		nmDir := path.Join(ctx.wd, "node_modules")
-		jsonPath := path.Join(nmDir, ctx.module.PkgName, ctx.module.SubModule)
+		jsonPath := path.Join(nmDir, ctx.module.PkgName, ctx.module.SubModuleName)
 		if existsFile(jsonPath) {
 			var jsonData []byte
 			jsonData, err = os.ReadFile(jsonPath)
@@ -276,8 +276,8 @@ func (ctx *BuildContext) buildModule() (result BuildResult, err error) {
 	var input *api.StdinOptions
 
 	entryModuleSpecifier := ctx.module.PkgName
-	if ctx.module.SubModule != "" {
-		entryModuleSpecifier += "/" + ctx.module.SubModule
+	if ctx.module.SubModuleName != "" {
+		entryModuleSpecifier += "/" + ctx.module.SubModuleName
 	}
 
 	if entry.esm == "" {
@@ -513,7 +513,7 @@ func (ctx *BuildContext) buildModule() (result BuildResult, err error) {
 
 					// externalize the _parent_ module
 					// e.g. "react/jsx-runtime" imports "react"
-					if ctx.module.SubModule != "" && specifier == ctx.module.PkgName && ctx.bundleMode != BundleAll {
+					if ctx.module.SubModuleName != "" && specifier == ctx.module.PkgName && ctx.bundleMode != BundleAll {
 						externalPath, err := ctx.resolveExternalModule(ctx.module.PkgName, args.Kind)
 						if err != nil {
 							return api.OnResolveResult{}, err
@@ -578,10 +578,10 @@ func (ctx *BuildContext) buildModule() (result BuildResult, err error) {
 							if path.Ext(fullFilepath) == "" || !existsFile(fullFilepath) {
 								subPath := utils.CleanPath(moduleSpecifier)[1:]
 								entry := ctx.resolveEntry(Module{
-									PkgName:    ctx.module.PkgName,
-									PkgVersion: ctx.module.PkgVersion,
-									SubModule:  toModuleBareName(subPath, true),
-									SubPath:    subPath,
+									PkgName:       ctx.module.PkgName,
+									PkgVersion:    ctx.module.PkgVersion,
+									SubModuleName: toModuleBareName(subPath, true),
+									SubPath:       subPath,
 								})
 								if args.Kind == api.ResolveJSImportStatement || args.Kind == api.ResolveJSDynamicImport {
 									if entry.esm != "" {

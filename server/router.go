@@ -18,6 +18,7 @@ import (
 
 	"github.com/Masterminds/semver/v3"
 	"github.com/esm-dev/esm.sh/server/storage"
+	"github.com/pkg/errors"
 
 	"github.com/evanw/esbuild/pkg/api"
 	"github.com/ije/gox/utils"
@@ -52,11 +53,12 @@ const (
 )
 
 type Module struct {
-	PkgName    string `json:"pkgName"`
-	PkgVersion string `json:"pkgVersion"`
-	SubPath    string `json:"subPath"`
-	SubModule  string `json:"subModule"`
-	FromGithub bool   `json:"fromGithub"`
+	PkgName       string `json:"pkgName"`
+	PkgVersion    string `json:"pkgVersion"`
+	SubPath       string `json:"subPath"`
+	SubModuleName string `json:"subModule"`
+	GhPrefix      bool   `json:"gh"`
+	PrPrefix      bool   `json:"pr"`
 }
 
 func (pkg Module) PackageName() string {
@@ -64,7 +66,7 @@ func (pkg Module) PackageName() string {
 	if pkg.PkgVersion != "" && pkg.PkgVersion != "*" && pkg.PkgVersion != "latest" {
 		s += "@" + pkg.PkgVersion
 	}
-	if pkg.FromGithub {
+	if pkg.GhPrefix {
 		return "gh/" + s
 	}
 	return s
@@ -72,8 +74,8 @@ func (pkg Module) PackageName() string {
 
 func (pkg Module) String() string {
 	s := pkg.PackageName()
-	if pkg.SubModule != "" {
-		s += "/" + pkg.SubModule
+	if pkg.SubModuleName != "" {
+		s += "/" + pkg.SubModuleName
 	}
 	return s
 }
@@ -584,12 +586,11 @@ func router() rex.Handle {
 			cdnOrigin = fmt.Sprintf("https://%s", zoneId)
 		}
 
-		// get package info
-		module, extraQuery, isFixedVersion, isTargetUrl, err := validateModulePath(npmrc, pathname)
+		module, extraQuery, isFixedVersion, isTargetUrl, err := praseESMPath(npmrc, pathname)
 		if err != nil {
 			status := 500
 			message := err.Error()
-			if message == "invalid path" {
+			if strings.HasPrefix(message, "invalid") {
 				status = 400
 			} else if strings.HasSuffix(message, " not found") {
 				status = 404
@@ -613,12 +614,12 @@ func router() rex.Handle {
 		}
 
 		ghPrefix := ""
-		if module.FromGithub {
+		if module.GhPrefix {
 			ghPrefix = "/gh"
 		}
 
 		// redirect `/@types/PKG` to it's main dts file
-		if strings.HasPrefix(module.PkgName, "@types/") && module.SubModule == "" {
+		if strings.HasPrefix(module.PkgName, "@types/") && module.SubModuleName == "" {
 			info, err := npmrc.getPackageInfo(module.PkgName, module.PkgVersion)
 			if err != nil {
 				return rex.Status(500, err.Error())
@@ -635,7 +636,7 @@ func router() rex.Handle {
 		}
 
 		// redirect to main css path for CSS packages
-		if css := cssPackages[module.PkgName]; css != "" && module.SubModule == "" {
+		if css := cssPackages[module.PkgName]; css != "" && module.SubModuleName == "" {
 			url := fmt.Sprintf("%s/%s/%s", cdnOrigin, module.String(), css)
 			return rex.Redirect(url, http.StatusFound)
 		}
@@ -643,12 +644,12 @@ func router() rex.Handle {
 		// support `https://esm.sh/react?dev&target=es2020/jsx-runtime` pattern for jsx transformer
 		for _, jsxRuntime := range []string{"jsx-runtime", "jsx-dev-runtime"} {
 			if strings.HasSuffix(ctx.R.URL.RawQuery, "/"+jsxRuntime) {
-				if module.SubModule == "" {
-					module.SubModule = jsxRuntime
+				if module.SubModuleName == "" {
+					module.SubModuleName = jsxRuntime
 				} else {
-					module.SubModule = module.SubModule + "/" + jsxRuntime
+					module.SubModuleName = module.SubModuleName + "/" + jsxRuntime
 				}
-				pathname = fmt.Sprintf("/%s/%s", module.PkgName, module.SubModule)
+				pathname = fmt.Sprintf("/%s/%s", module.PkgName, module.SubModuleName)
 				ctx.R.URL.RawQuery = strings.TrimSuffix(ctx.R.URL.RawQuery, "/"+jsxRuntime)
 			}
 		}
@@ -658,7 +659,7 @@ func router() rex.Handle {
 
 		// use `?path=$PATH` query to override the pathname
 		if v := query.Get("path"); v != "" {
-			module.SubModule = utils.CleanPath(v)[1:]
+			module.SubModuleName = utils.CleanPath(v)[1:]
 		}
 
 		// check the response type
@@ -918,16 +919,16 @@ func router() rex.Handle {
 			for _, v := range strings.Split(query.Get("deps"), ",") {
 				v = strings.TrimSpace(v)
 				if v != "" {
-					p, _, _, _, err := validateModulePath(npmrc, v)
+					m, _, _, _, err := praseESMPath(npmrc, v)
 					if err != nil {
 						return rex.Status(400, fmt.Sprintf("Invalid deps query: %v not found", v))
 					}
-					if module.PkgName == "react-dom" && p.PkgName == "react" {
+					if module.PkgName == "react-dom" && m.PkgName == "react" {
 						// make sure react-dom and react are in the same version
 						continue
 					}
-					if p.PkgName != module.PkgName {
-						deps[p.PkgName] = p.PkgVersion
+					if m.PkgName != module.PkgName {
+						deps[m.PkgName] = m.PkgVersion
 					}
 				}
 			}
@@ -991,15 +992,15 @@ func router() rex.Handle {
 		// check if the build args from pathname: `PKG@VERSION/X-${args}/esnext/SUBPATH`
 		isBuildArgsFromPath := false
 		if resType == ResBuild || resType == ResDTS {
-			a := strings.Split(module.SubModule, "/")
+			a := strings.Split(module.SubModuleName, "/")
 			if len(a) > 1 && strings.HasPrefix(a[0], "X-") {
-				module.SubModule = strings.Join(a[1:], "/")
+				module.SubModuleName = strings.Join(a[1:], "/")
 				args, err := decodeBuildArgs(npmrc, strings.TrimPrefix(a[0], "X-"))
 				if err != nil {
 					return throwErrorJS(ctx, "Invalid build args: "+a[0], false)
 				}
 				module.SubPath = strings.Join(strings.Split(module.SubPath, "/")[1:], "/")
-				module.SubModule = toModuleBareName(module.SubPath, true)
+				module.SubModuleName = toModuleBareName(module.SubPath, true)
 				buildArgs = args
 				isBuildArgsFromPath = true
 			}
@@ -1073,11 +1074,11 @@ func router() rex.Handle {
 			// check `?jsx-rutnime` query
 			var jsxRuntime *Module = nil
 			if v := query.Get("jsx-runtime"); v != "" {
-				p, _, _, _, err := validateModulePath(npmrc, v)
+				m, _, _, _, err := praseESMPath(npmrc, v)
 				if err != nil {
 					return rex.Status(400, fmt.Sprintf("Invalid jsx-runtime query: %v not found", v))
 				}
-				jsxRuntime = &p
+				jsxRuntime = &m
 			}
 
 			externalRequire := query.Has("external-require")
@@ -1105,12 +1106,12 @@ func router() rex.Handle {
 		noDts := query.Has("no-dts") || query.Has("no-check")
 
 		// force react/jsx-dev-runtime and react-refresh into `dev` mode
-		if !isDev && ((module.PkgName == "react" && module.SubModule == "jsx-dev-runtime") || module.PkgName == "react-refresh") {
+		if !isDev && ((module.PkgName == "react" && module.SubModuleName == "jsx-dev-runtime") || module.PkgName == "react-refresh") {
 			isDev = true
 		}
 
 		if resType == ResBuild {
-			a := strings.Split(module.SubModule, "/")
+			a := strings.Split(module.SubModuleName, "/")
 			if len(a) > 0 {
 				maybeTarget := a[0]
 				if _, ok := targets[maybeTarget]; ok {
@@ -1129,7 +1130,7 @@ func router() rex.Handle {
 					basename := strings.TrimSuffix(path.Base(module.PkgName), ".js")
 					if strings.HasSuffix(submodule, ".css") && !strings.HasSuffix(module.SubPath, ".js") {
 						if submodule == basename+".css" {
-							module.SubModule = ""
+							module.SubModuleName = ""
 							target = maybeTarget
 						} else {
 							url := fmt.Sprintf("%s/%s", cdnOrigin, module.String())
@@ -1140,7 +1141,7 @@ func router() rex.Handle {
 						if isMjs && submodule == basename {
 							submodule = ""
 						}
-						module.SubModule = submodule
+						module.SubModuleName = submodule
 						target = maybeTarget
 					}
 				}
@@ -1190,7 +1191,7 @@ func router() rex.Handle {
 		}
 
 		// redirect to package css from `?css`
-		if isPkgCss && module.SubModule == "" {
+		if isPkgCss && module.SubModuleName == "" {
 			if !ret.PackageCSS {
 				return rex.Status(404, "Package CSS not found")
 			}
@@ -1291,22 +1292,59 @@ func auth(secret string) rex.Handle {
 	}
 }
 
-func validateModulePath(rc *NpmRC, pathname string) (pkg Module, extraQuery string, isFixedVersion bool, hasTarget bool, err error) {
-	fromGithub := strings.HasPrefix(pathname, "/gh/") && strings.Count(pathname, "/") >= 3
-	if fromGithub {
+func praseESMPath(rc *NpmRC, pathname string) (module Module, extraQuery string, isFixedVersion bool, hasTargetSegment bool, err error) {
+	// see https://pkg.pr.new
+	if strings.HasPrefix(pathname, "/pr/") {
+		pkgName, rest := utils.SplitByFirstByte(pathname[4:], '@')
+		if rest == "" {
+			err = errors.New("invalid path")
+			return
+		}
+		version, subPath := utils.SplitByFirstByte(rest, '/')
+		if !valid.IsHexString(version) || len(version) < 7 {
+			err = errors.New("invalid path")
+			return
+		}
+		module = Module{
+			PkgName:       pkgName,
+			PkgVersion:    version,
+			SubPath:       subPath,
+			SubModuleName: toModuleBareName(subPath, true),
+			PrPrefix:      true,
+		}
+		isFixedVersion = true
+		return
+	}
+
+	ghPrefix := strings.HasPrefix(pathname, "/gh/")
+	if ghPrefix {
+		if len(pathname) == 4 {
+			err = errors.New("invalid path")
+			return
+		}
+		// add a leading `@` to the package name
 		pathname = "/@" + pathname[4:]
-	} else if strings.HasPrefix(pathname, "/jsr/@") && strings.Count(pathname, "/") >= 3 {
-		segs := strings.Split(pathname, "/")
-		pathname = "/@jsr/" + segs[2][1:] + "__" + segs[3]
-		if len(segs) > 4 {
-			pathname += "/" + strings.Join(segs[4:], "/")
+	} else if strings.HasPrefix(pathname, "/jsr/") {
+		segs := strings.Split(pathname[5:], "/")
+		if len(segs) < 2 || !strings.HasPrefix(segs[0], "@") {
+			err = errors.New("invalid path")
+			return
+		}
+		pathname = "/@jsr/" + segs[0][1:] + "__" + segs[1]
+		if len(segs) > 2 {
+			pathname += "/" + strings.Join(segs[2:], "/")
 		}
 	}
 
-	pkgName, maybeVersion, subPath, hasTarget := splitPkgPath(pathname)
+	pkgName, maybeVersion, subPath, hasTargetSegment := splitPkgPath(pathname)
 	if !validatePackageName(pkgName) {
 		err = fmt.Errorf("invalid package name '%s'", pkgName)
 		return
+	}
+
+	// strip the leading `@` added before
+	if ghPrefix {
+		pkgName = pkgName[1:]
 	}
 
 	version, extraQuery := utils.SplitByFirstByte(maybeVersion, '&')
@@ -1314,49 +1352,47 @@ func validateModulePath(rc *NpmRC, pathname string) (pkg Module, extraQuery stri
 		version = v
 	}
 
-	pkg = Module{
-		PkgName:    pkgName,
-		PkgVersion: version,
-		SubPath:    subPath,
-		SubModule:  toModuleBareName(subPath, true),
-		FromGithub: fromGithub,
+	module = Module{
+		PkgName:       pkgName,
+		PkgVersion:    version,
+		SubPath:       subPath,
+		SubModuleName: toModuleBareName(subPath, true),
+		GhPrefix:      ghPrefix,
 	}
 
 	// workaround for es5-ext "../#/.." path
-	if pkg.SubModule != "" && pkg.PkgName == "es5-ext" {
-		pkg.SubModule = strings.ReplaceAll(pkg.SubModule, "/%23/", "/#/")
+	if module.SubModuleName != "" && module.PkgName == "es5-ext" {
+		module.SubModuleName = strings.ReplaceAll(module.SubModuleName, "/%23/", "/#/")
 	}
 
-	if fromGithub {
-		// strip the leading `@`
-		pkg.PkgName = pkg.PkgName[1:]
-		if (valid.IsHexString(pkg.PkgVersion) && len(pkg.PkgVersion) >= 7) || regexpFullVersion.MatchString(strings.TrimPrefix(pkg.PkgVersion, "v")) {
+	if ghPrefix {
+		if (valid.IsHexString(module.PkgVersion) && len(module.PkgVersion) >= 7) || regexpFullVersion.MatchString(strings.TrimPrefix(module.PkgVersion, "v")) {
 			isFixedVersion = true
 			return
 		}
 		var refs []GitRef
-		refs, err = listRepoRefs(fmt.Sprintf("https://github.com/%s", pkg.PkgName))
+		refs, err = listRepoRefs(fmt.Sprintf("https://github.com/%s", module.PkgName))
 		if err != nil {
 			return
 		}
-		if pkg.PkgVersion == "" {
+		if module.PkgVersion == "" {
 			for _, ref := range refs {
 				if ref.Ref == "HEAD" {
-					pkg.PkgVersion = ref.Sha[:16]
+					module.PkgVersion = ref.Sha[:7]
 					return
 				}
 			}
 		} else {
 			// try to find the exact tag or branch
 			for _, ref := range refs {
-				if ref.Ref == "refs/tags/"+pkg.PkgVersion || ref.Ref == "refs/heads/"+pkg.PkgVersion {
-					pkg.PkgVersion = ref.Sha[:16]
+				if ref.Ref == "refs/tags/"+module.PkgVersion || ref.Ref == "refs/heads/"+module.PkgVersion {
+					module.PkgVersion = ref.Sha[:7]
 					return
 				}
 			}
 			// try to find the semver tag
 			var c *semver.Constraints
-			c, err = semver.NewConstraint(strings.TrimPrefix(pkg.PkgVersion, "semver:"))
+			c, err = semver.NewConstraint(strings.TrimPrefix(module.PkgVersion, "semver:"))
 			if err == nil {
 				vs := make([]*semver.Version, len(refs))
 				i := 0
@@ -1374,7 +1410,7 @@ func validateModulePath(rc *NpmRC, pathname string) (pkg Module, extraQuery stri
 					if i > 1 {
 						sort.Sort(semver.Collection(vs))
 					}
-					pkg.PkgVersion = vs[i-1].String()
+					module.PkgVersion = vs[i-1].String()
 					return
 				}
 			}
@@ -1383,12 +1419,12 @@ func validateModulePath(rc *NpmRC, pathname string) (pkg Module, extraQuery stri
 		return
 	}
 
-	isFixedVersion = regexpFullVersion.MatchString(pkg.PkgVersion)
+	isFixedVersion = regexpFullVersion.MatchString(module.PkgVersion)
 	if !isFixedVersion {
 		var p PackageJSON
-		p, err = rc.fetchPackageInfo(pkgName, pkg.PkgVersion)
+		p, err = rc.fetchPackageInfo(pkgName, module.PkgVersion)
 		if err == nil {
-			pkg.PkgVersion = p.Version
+			module.PkgVersion = p.Version
 		}
 	}
 	return
@@ -1426,17 +1462,17 @@ func toModuleBareName(path string, stripIndexSuffier bool) string {
 	return ""
 }
 
-func splitPkgPath(pathname string) (pkgName string, version string, subPath string, hasTarget bool) {
+func splitPkgPath(pathname string) (pkgName string, version string, subPath string, hasTargetSegment bool) {
 	a := strings.Split(strings.TrimPrefix(pathname, "/"), "/")
 	nameAndVersion := ""
 	if strings.HasPrefix(a[0], "@") && len(a) > 1 {
 		nameAndVersion = a[0] + "/" + a[1]
 		subPath = strings.Join(a[2:], "/")
-		hasTarget = hasTargetSegment(a[2:])
+		hasTargetSegment = checkTargetSegment(a[2:])
 	} else {
 		nameAndVersion = a[0]
 		subPath = strings.Join(a[1:], "/")
-		hasTarget = hasTargetSegment(a[1:])
+		hasTargetSegment = checkTargetSegment(a[1:])
 	}
 	if len(nameAndVersion) > 0 && nameAndVersion[0] == '@' {
 		pkgName, version = utils.SplitByLastByte(nameAndVersion[1:], '@')
@@ -1450,7 +1486,7 @@ func splitPkgPath(pathname string) (pkgName string, version string, subPath stri
 	return
 }
 
-func hasTargetSegment(segments []string) bool {
+func checkTargetSegment(segments []string) bool {
 	if len(segments) < 2 {
 		return false
 	}

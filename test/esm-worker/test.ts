@@ -162,7 +162,7 @@ Deno.test("esm-worker", { sanitizeOps: false, sanitizeResources: false }, async 
     res3.body?.cancel();
     assertEquals(res3.status, 400);
 
-    const res4 = await fetch(`${workerOrigin}/react~dom@18`);
+    const res4 = await fetch(`${workerOrigin}/react>dom@18`);
     res4.body?.cancel();
     assertEquals(res4.status, 400);
 

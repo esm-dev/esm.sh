@@ -24,8 +24,7 @@ import (
 const npmRegistry = "https://registry.npmjs.org/"
 const jsrRegistry = "https://npm.jsr.io/"
 
-// base https://github.com/npm/validate-npm-package-name
-var npmNaming = valid.Validator{valid.FromTo{'a', 'z'}, valid.FromTo{'A', 'Z'}, valid.FromTo{'0', '9'}, valid.Eq('.'), valid.Eq('-'), valid.Eq('_')}
+var npmNaming = valid.Validator{valid.FromTo{'a', 'z'}, valid.FromTo{'A', 'Z'}, valid.FromTo{'0', '9'}, valid.Eq('_'), valid.Eq('$'), valid.Eq('.'), valid.Eq('-'), valid.Eq('+'), valid.Eq('!'), valid.Eq('~'), valid.Eq('*'), valid.Eq('('), valid.Eq(')')}
 
 // NpmPackageVerions defines versions of a NPM package
 type NpmPackageVerions struct {
@@ -498,7 +497,7 @@ func (rc *NpmRC) installPackage(module Module) (pkgJson PackageJSON, err error) 
 
 	attemptMaxTimes := 3
 	for i := 1; i <= attemptMaxTimes; i++ {
-		if module.FromGithub {
+		if module.GhPrefix {
 			err = os.WriteFile(packageJsonFp, []byte(fmt.Sprintf(`{"dependencies":{"%s":"github:%s#%s"}}`, module.PkgName, module.PkgName, module.PkgVersion)), 0644)
 			if err == nil {
 				err = rc.pnpm(installDir)
@@ -509,7 +508,10 @@ func (rc *NpmRC) installPackage(module Module) (pkgJson PackageJSON, err error) 
 				packageJsonFp := path.Join(installDir, "node_modules", module.PkgName, "package.json")
 				if !existsFile(packageJsonFp) {
 					ensureDir(path.Dir(packageJsonFp))
-					err = os.WriteFile(packageJsonFp, utils.MustEncodeJSON(module), 0644)
+					err = os.WriteFile(packageJsonFp, utils.MustEncodeJSON(PackageJSONRaw{
+						Name:    module.PkgName,
+						Version: module.PkgVersion,
+					}), 0644)
 				} else {
 					var p PackageJSON
 					err = utils.ParseJSONFile(packageJsonFp, &p)
@@ -644,18 +646,16 @@ func (rc *NpmRC) createDotNpmRcFile(dir string) error {
 	return os.WriteFile(path.Join(dir, ".npmrc"), buf.Bytes(), 0644)
 }
 
-// ref https://github.com/npm/validate-npm-package-name
-func validatePackageName(name string) bool {
-	scope := ""
-	nameWithoutScope := name
-	if strings.HasPrefix(name, "@") {
-		scope, nameWithoutScope = utils.SplitByFirstByte(name, '/')
-		scope = scope[1:]
-	}
-	if (scope != "" && !npmNaming.Is(scope)) || (nameWithoutScope == "" || !npmNaming.Is(nameWithoutScope)) || len(name) > 214 {
+// based on https://github.com/npm/validate-npm-package-name
+func validatePackageName(pkgName string) bool {
+	if len(pkgName) > 214 {
 		return false
 	}
-	return true
+	if strings.HasPrefix(pkgName, "@") {
+		scope, name := utils.SplitByFirstByte(pkgName, '/')
+		return npmNaming.Is(scope[1:]) && npmNaming.Is(name)
+	}
+	return npmNaming.Is(pkgName)
 }
 
 // added by @jimisaacs
