@@ -120,7 +120,7 @@ func encodeBuildArgsPrefix(args BuildArgs, pkg Pkg, isDts bool) string {
 			lines = append(lines, fmt.Sprintf("d/%s", strings.Join(ss, ",")))
 		}
 	}
-	if args.external.Len() > 0 && pkgDeps.Len() > 0 {
+	if args.external.Len() > 0 && (args.external.Has("*") || pkgDeps.Len() > 0) {
 		var ss sort.StringSlice
 		for _, name := range args.external.Values() {
 			if name != pkg.Name {
