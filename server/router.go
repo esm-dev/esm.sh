@@ -5,6 +5,7 @@ import (
 	"crypto/sha1"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -18,7 +19,6 @@ import (
 
 	"github.com/Masterminds/semver/v3"
 	"github.com/esm-dev/esm.sh/server/storage"
-	"github.com/pkg/errors"
 
 	"github.com/evanw/esbuild/pkg/api"
 	"github.com/ije/gox/utils"
@@ -1415,7 +1415,7 @@ func praseESMPath(rc *NpmRC, pathname string) (module Module, extraQuery string,
 				}
 			}
 		}
-		err = fmt.Errorf("tag or branch not found")
+		err = errors.New("tag or branch not found")
 		return
 	}
 

@@ -128,7 +128,7 @@ func (ctx *BuildContext) Build() (ret BuildResult, err error) {
 		return ctx.buildTypes()
 	}
 
-	// query the build result from db
+	// query previous build
 	ret, ok := ctx.Query()
 	if ok {
 		return
@@ -220,7 +220,7 @@ func (ctx *BuildContext) buildModule() (result BuildResult, err error) {
 
 	entry := ctx.resolveEntry(ctx.module)
 	if entry.isEmpty() {
-		err = fmt.Errorf("could not resolve entry")
+		err = fmt.Errorf("could not resolve build entry")
 		return
 	}
 	log.Debugf("build(%s): Entry%+v", ctx.module, entry)

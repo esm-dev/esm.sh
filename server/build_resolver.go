@@ -680,22 +680,24 @@ func (ctx *BuildContext) resolveConditionExportEntry(conditions *OrderedMap, mTy
 
 func (ctx *BuildContext) resolveExternalModule(specifier string, kind api.ResolveKind) (resolvedPath string, err error) {
 	defer func() {
-		fullResolvedPath := resolvedPath
-		// use relative path for sub-module of current package
-		if strings.HasPrefix(specifier, ctx.packageJson.Name+"/") {
-			rp, err := relPath(path.Dir(ctx.Path()), resolvedPath)
-			if err == nil {
-				resolvedPath = rp
+		if err == nil {
+			fullResolvedPath := resolvedPath
+			// use relative path for sub-module of current package
+			if strings.HasPrefix(specifier, ctx.packageJson.Name+"/") {
+				rp, err := relPath(path.Dir(ctx.Path()), resolvedPath)
+				if err == nil {
+					resolvedPath = rp
+				}
 			}
-		}
-		// mark the resolved path for _preload_
-		if kind != api.ResolveJSDynamicImport {
-			ctx.imports = append(ctx.imports, [2]string{fullResolvedPath, resolvedPath})
-		}
-		// if it's `require("module")` call
-		if kind == api.ResolveJSRequireCall {
-			ctx.requires = append(ctx.requires, [3]string{specifier, fullResolvedPath, resolvedPath})
-			resolvedPath = specifier
+			// mark the resolved path for _preload_
+			if kind != api.ResolveJSDynamicImport {
+				ctx.imports = append(ctx.imports, [2]string{fullResolvedPath, resolvedPath})
+			}
+			// if it's `require("module")` call
+			if kind == api.ResolveJSRequireCall {
+				ctx.requires = append(ctx.requires, [3]string{specifier, fullResolvedPath, resolvedPath})
+				resolvedPath = specifier
+			}
 		}
 	}()
 
@@ -732,7 +734,7 @@ func (ctx *BuildContext) resolveExternalModule(specifier string, kind api.Resolv
 		return
 	}
 
-	// it's sub-module of current package
+	// it's a sub-module of current package
 	if strings.HasPrefix(specifier, ctx.packageJson.Name+"/") {
 		subPath := strings.TrimPrefix(specifier, ctx.packageJson.Name+"/")
 		subPkg := Module{
