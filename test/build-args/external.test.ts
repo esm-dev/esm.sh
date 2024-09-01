@@ -4,6 +4,14 @@ Deno.test("`?external` query", async () => {
   const res1 = await fetch("http://localhost:8080/react-dom@18.3.1?external=react");
   const code1 = await res1.text();
   assertStringIncludes(code1, '"/react-dom@18.3.1/X-ZXJlYWN0/denonext/react-dom.mjs"');
+
+  const res2 = await fetch("http://localhost:8080/*preact@10.23.2/jsx-runtime");
+  const code2 = await res2.text();
+  assertStringIncludes(code2, '"/preact@10.23.2/X-Kg/denonext/jsx-runtime.js"');
+
+  const res3 = await fetch("http://localhost:8080/preact@10.23.2/hooks?external=preact");
+  const code3 = await res3.text();
+  assertStringIncludes(code3, '"/preact@10.23.2/X-ZXByZWFjdA/denonext/hooks.js"');
 });
 
 Deno.test("drop invalid `?external`", async () => {
@@ -14,6 +22,10 @@ Deno.test("drop invalid `?external`", async () => {
   const res2 = await fetch("http://localhost:8080/react-dom@18.3.1?target=es2022&external=foo,bar,preact");
   const code2 = await res2.text();
   assertStringIncludes(code2, '"/react-dom@18.3.1/es2022/react-dom.mjs"');
+
+  const res3 = await fetch("http://localhost:8080/react-dom@18.3.1?external=react-dom");
+  const code3 = await res3.text();
+  assertStringIncludes(code3, '"/react-dom@18.3.1/denonext/react-dom.mjs"');
 });
 
 Deno.test("types with `?external`", async () => {
