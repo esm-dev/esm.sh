@@ -257,7 +257,7 @@ func (ctx *BuildContext) buildModule() (result BuildResult, err error) {
 		if err != nil {
 			return
 		}
-		importUrl := ctx.getImportPath(mod, ctx.getBuildArgsPrefix(mod, false))
+		importUrl := ctx.getImportPath(mod, ctx.getBuildArgsPrefix(false))
 		buf := bytes.NewBuffer(nil)
 		fmt.Fprintf(buf, `export * from "%s";`, importUrl)
 		if r.HasDefaultExport {
@@ -1290,7 +1290,7 @@ func (ctx *BuildContext) buildTypes() (ret BuildResult, err error) {
 
 func (ctx *BuildContext) transformDTS(types string) (err error) {
 	start := time.Now()
-	buildArgsPrefix := ctx.getBuildArgsPrefix(ctx.module, true)
+	buildArgsPrefix := ctx.getBuildArgsPrefix(true)
 	n, err := transformDTS(ctx, types, buildArgsPrefix, nil)
 	if err != nil {
 		return

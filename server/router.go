@@ -1018,7 +1018,7 @@ func router() rex.Handle {
 		if resType == ResDTS {
 			findDts := func() (savePath string, fi storage.FileStat, err error) {
 				args := ""
-				if a := encodeBuildArgs(buildArgs, module, true); a != "" {
+				if a := encodeBuildArgs(buildArgs, true); a != "" {
 					args = "X-" + a
 				}
 				savePath = normalizeSavePath(zoneId, path.Join(fmt.Sprintf(

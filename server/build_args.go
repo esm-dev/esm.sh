@@ -80,14 +80,12 @@ func decodeBuildArgs(npmrc *NpmRC, argsString string) (args BuildArgs, err error
 	return
 }
 
-func encodeBuildArgs(args BuildArgs, pkg Module, isDts bool) string {
+func encodeBuildArgs(args BuildArgs, isDts bool) string {
 	lines := []string{}
 	if len(args.alias) > 0 {
 		var ss sort.StringSlice
 		for from, to := range args.alias {
-			if from != pkg.PkgName {
-				ss = append(ss, fmt.Sprintf("%s:%s", from, to))
-			}
+			ss = append(ss, fmt.Sprintf("%s:%s", from, to))
 		}
 		if len(ss) > 0 {
 			ss.Sort()
@@ -97,9 +95,7 @@ func encodeBuildArgs(args BuildArgs, pkg Module, isDts bool) string {
 	if len(args.deps) > 0 {
 		var ss sort.StringSlice
 		for name, version := range args.deps {
-			if name != pkg.PkgName {
-				ss = append(ss, fmt.Sprintf("%s@%s", name, version))
-			}
+			ss = append(ss, fmt.Sprintf("%s@%s", name, version))
 		}
 		if len(ss) > 0 {
 			ss.Sort()
@@ -112,9 +108,7 @@ func encodeBuildArgs(args BuildArgs, pkg Module, isDts bool) string {
 	if args.external.Len() > 0 {
 		var ss sort.StringSlice
 		for _, name := range args.external.Values() {
-			if name != pkg.PkgName {
-				ss = append(ss, name)
-			}
+			ss = append(ss, name)
 		}
 		if len(ss) > 0 {
 			ss.Sort()
@@ -189,23 +183,27 @@ func fixBuildArgs(npmrc *NpmRC, installDir string, args *BuildArgs, module Modul
 			args.alias = alias
 		}
 		if len(args.deps) > 0 {
-			newDeps := map[string]string{}
+			deps := map[string]string{}
 			for name, version := range args.deps {
 				if module.PkgName == "react-dom" && name == "react" {
 					// react version should be the same as react-dom
 					continue
 				}
 				if depsSet.Has(name) {
-					newDeps[name] = version
+					if name != module.PkgName {
+						deps[name] = version
+					}
 				}
 			}
-			args.deps = newDeps
+			args.deps = deps
 		}
 		if args.external.Len() > 0 {
 			external := NewStringSet()
 			for _, name := range args.external.Values() {
 				if strings.HasPrefix(name, "node:") || depsSet.Has(name) {
-					external.Add(name)
+					if name != module.PkgName || module.SubPath != "" {
+						external.Add(name)
+					}
 				}
 			}
 			args.external = external
