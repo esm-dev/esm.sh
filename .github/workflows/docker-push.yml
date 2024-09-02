@@ -37,4 +37,4 @@ jobs:
           context: .
           platforms: linux/amd64,linux/arm64
           push: true
-          tags: ghcr.io/esm-dev/esm.sh:latest,ghcr.io/esm-dev/esm.sh:v135_2
+          tags: ghcr.io/esm-dev/esm.sh:latest,ghcr.io/esm-dev/esm.sh:v135_4
