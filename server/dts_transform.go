@@ -131,21 +131,21 @@ func transformDTS(ctx *BuildContext, dts string, buildArgsPrefix string, marker 
 				return fmt.Sprintf(
 					"{ESM_CDN_ORIGIN}/%s/%s%s",
 					ctx.module.PackageName(),
-					ctx.getBuildArgsPrefix(ctx.module, true),
+					ctx.getBuildArgsPrefix(true),
 					subPath,
 				), nil
 			} else {
 				entry := ctx.resolveEntry(Module{
-					PkgName:    depPkgName,
-					PkgVersion: ctx.module.PkgVersion,
-					SubPath:    subPath,
-					SubModule:  subPath,
+					PkgName:       depPkgName,
+					PkgVersion:    ctx.module.PkgVersion,
+					SubPath:       subPath,
+					SubModuleName: subPath,
 				})
 				if entry.dts != "" {
 					return fmt.Sprintf(
 						"{ESM_CDN_ORIGIN}/%s/%s%s",
 						ctx.module.PackageName(),
-						ctx.getBuildArgsPrefix(ctx.module, true),
+						ctx.getBuildArgsPrefix(true),
 						strings.TrimPrefix(entry.dts, "./"),
 					), nil
 				}
@@ -192,10 +192,10 @@ func transformDTS(ctx *BuildContext, dts string, buildArgsPrefix string, marker 
 		}
 
 		dtsModule := Module{
-			PkgName:    p.Name,
-			PkgVersion: p.Version,
-			SubPath:    subPath,
-			SubModule:  subPath,
+			PkgName:       p.Name,
+			PkgVersion:    p.Version,
+			SubPath:       subPath,
+			SubModuleName: subPath,
 		}
 		args := BuildArgs{
 			external: NewStringSet(),

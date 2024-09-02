@@ -75,7 +75,7 @@ func listRepoRefs(repo string) (refs []GitRef, err error) {
 
 func ghInstall(wd, name, hash string) (err error) {
 	c := &http.Client{
-		Timeout: 30 * time.Second,
+		Timeout: 5 * time.Minute,
 	}
 	url := fmt.Sprintf(`https://codeload.github.com/%s/tar.gz/%s`, name, hash)
 	res, err := c.Get(url)

@@ -13,9 +13,9 @@ const defaultNpmRegistry = "https://registry.npmjs.org";
 const jsrNpmRegistry = "https://npm.jsr.io";
 const ccImmutable = "public, max-age=31536000, immutable";
 
-const regexpNpmNaming = /^[a-zA-Z0-9][\w\-\.]*$/;
-const regexpFullVersion = /^\d+\.\d+\.\d+[\w\-\.\+]*$/;
-const regexpCommitish = /^[a-f0-9]{10,}$/;
+const regexpNpmNaming = /^[\w\-+.$!*~()]*$/;
+const regexpFullVersion = /^\d+\.\d+\.\d+[\w\-.+]*$/;
+const regexpCommitish = /^[a-f0-9]{7,}$/;
 const regexpLegacyVersionPrefix = /^\/v\d+\//;
 const regexpLegacyBuild = /^\/~[a-f0-9]{40}$/;
 const regexpLocSuffix = /:\d+:\d+$/;
@@ -127,7 +127,7 @@ async function fetchAsset(req: Request, ctx: Context, env: Env, pathname: string
 }
 
 /** fetch build files like *.js, *.mjs, *.css, etc. */
-async function fetchBuild(req: Request, env: Env, ctx: Context, pathname: string, query?: string): Promise<Response> {
+async function fetchBuildDist(req: Request, env: Env, ctx: Context, pathname: string, query?: string): Promise<Response> {
   const R2 = env.R2;
   const isRaw = ctx.url.searchParams.has("raw");
   const isDts = isDtsFile(pathname);
@@ -305,7 +305,7 @@ function withESMWorker(middleware?: Middleware, cache: Cache = (caches as any).d
       return ctx.withCache((target) => {
         let query = target ? "?target=" + target : undefined;
         if (isChunkjs) {
-          return fetchBuild(req, env, ctx, pathname, query);
+          return fetchBuildDist(req, env, ctx, pathname, query);
         }
         return fetchOrigin(req, env, ctx, pathname, query);
       }, {
@@ -368,7 +368,7 @@ function withESMWorker(middleware?: Middleware, cache: Cache = (caches as any).d
     // if it's a singleton build module which is created by https://esm.sh/tsx
     if (pathname.startsWith("/+") && (pathname.endsWith(".mjs") || pathname.endsWith(".mjs.map"))) {
       return ctx.withCache(() => {
-        return fetchBuild(req, env, ctx, pathname);
+        return fetchBuildDist(req, env, ctx, pathname);
       });
     }
 
@@ -667,7 +667,7 @@ function withESMWorker(middleware?: Middleware, cache: Cache = (caches as any).d
     if (isTargetUrl || isDtsFile(subPath)) {
       return ctx.withCache(() => {
         const pathname = `${prefix}/${pkgFullname}@${packageVersion}${subPath}`;
-        return fetchBuild(req, env, ctx, pathname);
+        return fetchBuildDist(req, env, ctx, pathname);
       });
     }
 
@@ -679,7 +679,7 @@ function withESMWorker(middleware?: Middleware, cache: Cache = (caches as any).d
       if (target) {
         params.set("target", target);
       }
-      return fetchBuild(req, env, ctx, pathname, "?" + params.toString());
+      return fetchBuildDist(req, env, ctx, pathname, "?" + params.toString());
     }, { varyUA: true });
   }
 

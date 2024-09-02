@@ -42,23 +42,27 @@ With [import maps](https://github.com/WICG/import-maps), you can even use bare i
 - **[NPM](https://npmjs.com)**:
   ```js
   // Examples
-  import React from "https://esm.sh/react"; // 18.3.0 (latest)
+  import React from "https://esm.sh/react"; // latest
   import React from "https://esm.sh/react@17"; // 17.0.2
-  import React from "https://esm.sh/react@beta"; // 19.0.0-beta-94eed63c49-20240425
-  import { renderToString } from "https://esm.sh/react-dom@18.3.0/server"; // submodules
-  ```
-- **[GitHub](https://github.com)** (starts with `/gh/`):
-  ```js
-  // Examples
-  import tslib from "https://esm.sh/gh/microsoft/tslib@2.6.0"; // '2.6.0' is the git tag
-  // or fetch an asset file from github
-  fetch("https://esm.sh/gh/microsoft/fluentui-emoji/assets/Party%20popper/Color/party_popper_color.svg");
+  import React from "https://esm.sh/react@beta"; // latest beta
+  import { renderToString } from "https://esm.sh/react-dom/server"; // sub-modules
   ```
 - **[JSR](https://jsr.io)** (starts with `/jsr/`):
   ```js
   // Examples
   import { encodeBase64 } from "https://esm.sh/jsr/@std/encoding@1.0.0/base64";
   import { Hono } from "https://esm.sh/jsr/@hono/hono@4";
+  ```
+- **[GitHub](https://github.com)** (starts with `/gh/`):
+  ```js
+  // Examples
+  import tslib from "https://esm.sh/gh/microsoft/tslib"; // latest
+  import tslib from "https://esm.sh/gh/microsoft/tslib@2.6.0"; // the version '2.6.0' is a git tag
+  ```
+- **[pkg.pr.new](https://pkg.pr.new)** (starts with `/pr/`):
+  ```js
+  // Examples
+  import { Bench } from "https://esm.sh/pr/tinylibs/tinybench/tinybench@a832a55";
   ```
 
 ### Specifying Dependencies

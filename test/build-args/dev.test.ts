@@ -1,6 +1,6 @@
 import { assertStringIncludes } from "jsr:@std/assert";
 
-Deno.test('`NODE_ENV==="development"`', async () => {
+Deno.test("?dev", async () => {
   const res = await fetch("http://localhost:8080/react@18.2.0?dev&target=es2022");
   assertStringIncludes(await res.text(), `"/react@18.2.0/es2022/react.development.mjs"`);
 

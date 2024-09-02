@@ -16,10 +16,9 @@ func TestEncodeBuildArgs(t *testing.T) {
 		BuildArgs{
 			alias: map[string]string{"a": "b"},
 			deps: map[string]string{
-				"c":   "1.0.0",
-				"d":   "1.0.0",
-				"e":   "1.0.0",
-				"foo": "1.0.0", // to be ignored
+				"c": "1.0.0",
+				"d": "1.0.0",
+				"e": "1.0.0",
 			},
 			external:          external,
 			exports:           exports,
@@ -29,7 +28,6 @@ func TestEncodeBuildArgs(t *testing.T) {
 			keepNames:         true,
 			ignoreAnnotations: true,
 		},
-		Module{PkgName: "foo"},
 		false,
 	)
 	args, err := decodeBuildArgs(nil, buildArgsString)

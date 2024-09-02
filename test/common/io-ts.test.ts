@@ -18,6 +18,9 @@ const string = new t.Type<string, string, unknown>(
 Deno.test("io-ts", async () => {
   assert(isRight(string.decode("a string")));
   assert(!isRight(string.decode(null)));
+});
+
+Deno.test("io-ts types", async () => {
   const res = await fetch("http://localhost:8080/fp-ts@2.16.6/lib/Extend.d.ts");
   assertEquals(res.status, 200);
   assertEquals(res.headers.get("Content-Type"), "application/typescript; charset=utf-8");
