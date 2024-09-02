@@ -1,9 +1,10 @@
 .DS_Store
 .idea/
 .vscode/
-*.log
-config.json
-esmd
 .esmd/
 node_modules/
 dist/
+*.log
+config.json
+!test/config.json
+esmd

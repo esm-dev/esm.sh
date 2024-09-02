@@ -1,13 +1,8 @@
 {
-  "compilerOptions": {
-    "lib": [
-      "dom",
-      "deno.ns"
-    ]
-  },
   "imports": {
+    "esm.sh/": "http://localhost:8080/",
     "react": "http://localhost:8080/react@18.2.0",
-    "react/": "http://localhost:8080/react@18.2.0/",
+    "react/jsx-runtime": "http://localhost:8080/react@18.2.0/jsx-runtime",
     "react-dom": "http://localhost:8080/react-dom@18.2.0"
   }
 }

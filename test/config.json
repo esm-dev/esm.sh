@@ -1,0 +1,4 @@
+{
+  "buildTimeout": 600,
+  "workDir": ".esmd"
+}
