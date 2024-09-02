@@ -102,7 +102,7 @@ func encodeBuildArgsPrefix(args BuildArgs, pkg Pkg, isDts bool) string {
 	if len(args.alias) > 0 && pkgDeps.Len() > 0 {
 		var ss sort.StringSlice
 		for from, to := range args.alias {
-			if from != pkg.Name || pkg.SubPath != "" {
+			if from != pkg.Name {
 				ss = append(ss, fmt.Sprintf("%s:%s", from, to))
 			}
 		}
@@ -114,7 +114,7 @@ func encodeBuildArgsPrefix(args BuildArgs, pkg Pkg, isDts bool) string {
 	if len(args.deps) > 0 && pkgDeps.Len() > 0 {
 		var ss sort.StringSlice
 		for _, p := range args.deps {
-			if p.Name != pkg.Name || pkg.SubPath != "" {
+			if p.Name != pkg.Name {
 				ss = append(ss, fmt.Sprintf("%s@%s", p.Name, p.Version))
 			}
 		}
