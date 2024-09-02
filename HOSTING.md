@@ -49,7 +49,7 @@ Ensure the [supervisor](http://supervisord.org/) has been installed on your host
 
 Recommended host machine requirements:
 
-- Linux system with `git` and `supervisor` installed
+- Linux system with `git`, `git-lfs` and `supervisor` installed
 - 4x CPU cores or more
 - 8GB RAM or more
 - 100GB disk space or more
