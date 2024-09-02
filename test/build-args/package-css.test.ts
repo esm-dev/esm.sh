@@ -1,6 +1,6 @@
 import { assert, assertEquals } from "jsr:@std/assert";
 
-Deno.test("?css", async () => {
+Deno.test("package css", async () => {
   const res = await fetch("http://localhost:8080/monaco-editor@0.40.0?css&target=es2022", { redirect: "manual" });
   assertEquals(res.status, 301);
   assertEquals(res.headers.get("location"), "http://localhost:8080/monaco-editor@0.40.0/es2022/monaco-editor.css");

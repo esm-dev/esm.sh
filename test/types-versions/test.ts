@@ -1,4 +1,4 @@
-import { assertEquals, assertStringIncludes } from "jsr:@std/assert";
+import { assertEquals, assertStringIncludes } from "assert";
 
 Deno.test("typesVersions", async () => {
   const res = await fetch("http://localhost:8080/redux-saga@1.2.0/index.d.ts");
