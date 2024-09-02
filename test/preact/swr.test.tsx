@@ -1,6 +1,4 @@
-import { assert } from "jsr:@std/assert";
-
-import { h } from "http://localhost:8080/preact@10.7.2";
+import { assertEquals } from "jsr:@std/assert";
 import render from "http://localhost:8080/preact-render-to-string@5.2.0?deps=preact@10.7.2";
 import useSWR from "http://localhost:8080/swr@1.3.0?alias=react:preact/compat&deps=preact@10.7.2";
 
@@ -24,5 +22,5 @@ Deno.test("preact-swr", () => {
     );
   };
   const html = render(<App />);
-  assert(html == "<main><p>just now</p></main>");
+  assertEquals(html, "<main><p>just now</p></main>");
 });

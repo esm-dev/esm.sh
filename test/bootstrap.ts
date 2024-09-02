@@ -85,18 +85,16 @@ async function existsFile(path: string): Promise<boolean> {
 }
 
 if (import.meta.main) {
-  const rootDir = new URL(import.meta.url).pathname.split("/").slice(0, -2)
-    .join("/");
-  Deno.chdir(rootDir);
+  Deno.chdir(new URL("../", import.meta.url).pathname);
   const tests = Deno.args.filter((arg) => !arg.startsWith("-"));
   const clean = Deno.args.includes("--clean");
   if (clean) {
     try {
       console.log("Cleaning up...");
       await Promise.all([
-        Deno.remove("./.esmd/log", { recursive: true }),
-        Deno.remove("./.esmd/storage", { recursive: true }),
-        Deno.remove("./.esmd/esm.db"),
+        Deno.remove(".esmd/log", { recursive: true }),
+        Deno.remove(".esmd/storage", { recursive: true }),
+        Deno.remove(".esmd/esm.db"),
       ]);
     } catch (_) {
       // ignore

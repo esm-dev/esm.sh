@@ -1,9 +1,0 @@
-{
-  "compilerOptions": {
-    "lib": [
-      "dom",
-      "deno.ns"
-    ],
-    "jsxFactory": "h"
-  }
-}
