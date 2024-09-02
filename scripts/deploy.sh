@@ -10,10 +10,6 @@ fi
 port="80"
 tlsPort="0"
 workDir="/etc/esmd"
-cacheUrl=""
-fsUrl=""
-dbUrl=""
-origin=""
 npmRegistry=""
 npmToken=""
 authSecret=""
@@ -31,22 +27,6 @@ if [ "$init" == "yes" ]; then
   read -p "? workDir (ensure you have the r/w permission of it, default is '${workDir}'): " v
   if [ "$v" != "" ]; then
     workDir="$v"
-  fi
-  read -p "? cache (default is 'memory:main'): " v
-  if [ "$v" != "" ]; then
-    cacheUrl="$v"
-  fi
-  read -p "? file storage (default is 'local:\$workDir/storage'): " v
-  if [ "$v" != "" ]; then
-    fsUrl="$v"
-  fi
-  read -p "? database (default is 'postdb:\$workDir/esm.db'): " v
-  if [ "$v" != "" ]; then
-    dbUrl="$v"
-  fi
-  read -p "? server origin (optional): " v
-  if [ "$v" != "" ]; then
-    origin="$v"
   fi
   read -p "? npm registry (optional): " v
   if [ "$v" != "" ]; then
@@ -94,10 +74,8 @@ if [ "$?" != "0" ]; then
   exit
 fi
 
-echo "--- compressing..."
-tar -czf esmd.tar.gz esmd
-
 echo "--- uploading..."
+tar -czf esmd.tar.gz esmd
 scp -P $sshPort esmd.tar.gz $user@$host:/tmp/esmd.tar.gz
 if [ "$?" != "0" ]; then
   rm -f esmd
@@ -107,16 +85,16 @@ fi
 
 echo "--- installing..."
 ssh -p $sshPort $user@$host << EOF
-  SVVer=\$(supervisorctl version)
+  SVV=\$(supervisorctl version)
   if [ "\$?" != "0" ]; then
-    echo "error: missing supervisor!"
+    echo "error: supervisor not installed!"
     exit
   fi
-  echo "supervisor \$SVVer"
+  echo "supervisor \$SVV"
 
-  SVCF=/etc/supervisor/conf.d/esmd.conf
+  SVCONF=/etc/supervisor/conf.d/esmd.conf
   writeSVConfLine () {
-    echo "\$1" >> \$SVCF
+    echo "\$1" >> \$SVCONF
   }
 
   cd /tmp
@@ -128,12 +106,14 @@ ssh -p $sshPort $user@$host << EOF
   chmod +x /usr/local/bin/esmd
 
   if [ "$init" == "yes" ]; then
-    echo fs.inotify.max_user_watches=524288 | sudo tee -a /etc/sysctl.conf && sudo sysctl -p
-    if [ -f \$SVCF ]; then
-      rm -f \$SVCF
+    echo "fs.inotify.max_user_watches=524288" | sudo tee -a /etc/sysctl.conf
+    sudo sysctl -p
+    git lfs install
+    if [ -f \$SVCONF ]; then
+      rm -f \$SVCONF
     fi
     mkdir -p /etc/esmd
-    echo "{\"port\":${port},\"tlsPort\":${tlsPort},\"workDir\":\"${workDir}\",\"cache\":\"${cacheUrl}\",\"storage\":\"${fsUrl}\",\"database\":\"${dbUrl}\",\"origin\":\"${origin}\",\"npmRegistry\":\"${npmRegistry}\",\"npmToken\":\"${npmToken}\",\"authSecret\":\"${authSecret}\"}" >> /etc/esmd/config.json
+    echo "{\"port\":${port},\"tlsPort\":${tlsPort},\"workDir\":\"${workDir}\",\"npmRegistry\":\"${npmRegistry}\",\"npmToken\":\"${npmToken}\",\"authSecret\":\"${authSecret}\"}" >> /etc/esmd/config.json
     writeSVConfLine "[program:esmd]"
     writeSVConfLine "command=/usr/local/bin/esmd --config=/etc/esmd/config.json"
     writeSVConfLine "directory=/tmp"
