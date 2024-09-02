@@ -59,11 +59,6 @@ With [import maps](https://github.com/WICG/import-maps), you can even use bare i
   import tslib from "https://esm.sh/gh/microsoft/tslib"; // latest
   import tslib from "https://esm.sh/gh/microsoft/tslib@2.6.0"; // the version '2.6.0' is a git tag
   ```
-- **[pkg.pr.new](https://pkg.pr.new)** (starts with `/pr/`):
-  ```js
-  // Examples
-  import { Bench } from "https://esm.sh/pr/tinylibs/tinybench/tinybench@a832a55";
-  ```
 
 ### Specifying Dependencies
 
