@@ -5,7 +5,7 @@ const (
 	VERSION = 135
 	// esm.sh stable build version, used for UI libraries like react, to make sure the runtime is single copy
 	// change this carefully!
-	STABLE_VERSION = 128
+	STABLE_VERSION = 135
 )
 
 const (
