@@ -1,9 +1,9 @@
 import { assertStringIncludes } from "jsr:@std/assert";
 
-import { transformAsync } from "http://localhost:8080/@babel/core@^7.24.7";
-import babelPresetTS from "http://localhost:8080/@babel/preset-typescript@^7.24.7";
-import babelPresetSolid from "http://localhost:8080/babel-preset-solid@1.6.12";
-import solidRefresh from "http://localhost:8080/solid-refresh@0.5.2/babel";
+import { transformAsync } from "http://localhost:8080/@babel/core@^7.24.7?target=es2022";
+import babelPresetTS from "http://localhost:8080/@babel/preset-typescript@^7.24.7?target=es2022";
+import babelPresetSolid from "http://localhost:8080/babel-preset-solid@1.6.12?target=es2022";
+import solidRefresh from "http://localhost:8080/solid-refresh@0.5.2/babel?target=es2022";
 
 Deno.test("babel with solid plugins", async () => {
   const code = `

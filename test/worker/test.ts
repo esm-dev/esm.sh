@@ -226,13 +226,14 @@ Deno.test("esm-worker", { sanitizeOps: false, sanitizeResources: false }, async 
   });
 
   await t.step("npm modules", async () => {
-    const res = await fetch(`${workerOrigin}/react`, { redirect: "manual" });
+    const res = await fetch(`${workerOrigin}/react`, { headers: { "User-Agent": "ES/2022" } });
     const modUrl = new URL(res.headers.get("x-esm-path")!, workerOrigin);
+    assert(modUrl.pathname.endsWith("/es2022/react.mjs"));
     assertEquals(res.status, 200);
     assertEquals(res.headers.get("Content-Type"), "application/javascript; charset=utf-8");
     assertEquals(res.headers.get("Cache-Control"), "public, max-age=600");
-    assert(/react@.+\/denonext\/react\.mjs"/.test(await res.text()));
-    assert(modUrl.pathname.endsWith("/denonext/react.mjs"));
+    assertStringIncludes(res.headers.get("X-Typescript-Types")!, "/@types/react@");
+    assertStringIncludes(await res.text(), modUrl.pathname);
 
     const res3 = await fetch(modUrl);
     assertEquals(res3.status, 200);
@@ -249,7 +250,7 @@ Deno.test("esm-worker", { sanitizeOps: false, sanitizeResources: false }, async 
     assertEquals(res4.status, 200);
     assertEquals(res4.headers.get("Content-Type"), "application/typescript; charset=utf-8");
 
-    const res5 = await fetch(`${workerOrigin}/react@^18.2.0`);
+    const res5 = await fetch(`${workerOrigin}/react@^18.2.0`, { headers: { "User-Agent": "ES/2022" } });
     assertEquals(res5.status, 200);
     assertEquals(res5.headers.get("Cache-Control"), "public, max-age=600");
     assertStringIncludes(await res5.text(), `"/react@18.`);
@@ -288,15 +289,15 @@ Deno.test("esm-worker", { sanitizeOps: false, sanitizeResources: false }, async 
 
   await t.step("npm modules (submodule)", async () => {
     const res = await fetch(`${workerOrigin}/react-dom@18/server`, {
-      redirect: "manual",
+      headers: { "User-Agent": "ES/2022" },
     });
     const modUrl = new URL(res.headers.get("x-esm-path")!, workerOrigin);
+    assert(modUrl.pathname.endsWith("/es2022/server.js"));
     assertEquals(res.status, 200);
     assertEquals(res.headers.get("Content-Type"), "application/javascript; charset=utf-8");
     assertEquals(res.headers.get("Cache-Control"), "public, max-age=600");
-    assert(/\/react-dom@.+\.d\.ts$/.test(res.headers.get("X-Typescript-Types")!));
-    assert(/\/react-dom@.+\/denonext\/server\.js"/.test(await res.text()));
-    assert(modUrl.pathname.endsWith("/denonext/server.js"));
+    assertStringIncludes(res.headers.get("X-Typescript-Types")!, "/@types/react-dom@");
+    assertStringIncludes(await res.text(), modUrl.pathname);
 
     const res3 = await fetch(modUrl);
     assertEquals(res3.status, 200);
@@ -339,14 +340,14 @@ Deno.test("esm-worker", { sanitizeOps: false, sanitizeResources: false }, async 
   });
 
   await t.step("gh modules", async () => {
-    const res = await fetch(`${workerOrigin}/gh/microsoft/tslib`, { redirect: "manual" });
+    const res = await fetch(`${workerOrigin}/gh/microsoft/tslib`, { headers: { "User-Agent": "ES/2022" } });
     const modUrl = new URL(res.headers.get("x-esm-path")!, workerOrigin);
+    assert(modUrl.pathname.endsWith("/es2022/tslib.mjs"));
     assertEquals(res.status, 200);
     assertEquals(res.headers.get("Content-Type"), "application/javascript; charset=utf-8");
     assertEquals(res.headers.get("Cache-Control"), "public, max-age=600");
-    assert(/\/gh\/microsoft\/tslib@.+\.d\.ts$/.test(res.headers.get("X-Typescript-Types")!));
-    assert(/\/gh\/microsoft\/tslib@.+\/denonext\/tslib\.mjs"/.test(await res.text()));
-    assert(modUrl.pathname.endsWith("/denonext/tslib.mjs"));
+    assertStringIncludes(res.headers.get("X-Typescript-Types")!, "/gh/microsoft/tslib@");
+    assertStringIncludes(await res.text(), modUrl.pathname);
 
     const res3 = await fetch(modUrl);
     assertEquals(res3.status, 200);
@@ -377,15 +378,15 @@ Deno.test("esm-worker", { sanitizeOps: false, sanitizeResources: false }, async 
   await t.step("jsr", async () => {
     const res = await fetch(
       `${workerOrigin}/jsr/@std/encoding/base64`,
-      { redirect: "manual" },
+      { headers: { "User-Agent": "ES/2022" } },
     );
     const modUrl = new URL(res.headers.get("x-esm-path")!, workerOrigin);
+    assert(modUrl.pathname.endsWith("/es2022/base64.js"));
     assertEquals(res.status, 200);
     assertEquals(res.headers.get("Content-Type"), "application/javascript; charset=utf-8");
     assertEquals(res.headers.get("Cache-Control"), "public, max-age=600");
-    assert(/@jsr\/std__encoding@.+\.d\.ts$/.test(res.headers.get("X-Typescript-Types")!));
-    assert(/@jsr\/std__encoding@.+\/denonext\/base64\.js"/.test(await res.text()));
-    assert(modUrl.pathname.endsWith("/denonext/base64.js"));
+    assertStringIncludes(res.headers.get("X-Typescript-Types")!, "/@jsr/std__encoding@");
+    assertStringIncludes(await res.text(), modUrl.pathname);
 
     const { encodeBase64, decodeBase64 } = await import(modUrl.href);
     assertEquals(encodeBase64("hello"), "aGVsbG8=");
@@ -530,17 +531,60 @@ Deno.test("esm-worker", { sanitizeOps: false, sanitizeResources: false }, async 
     assertStringIncludes(await fetchModule("ES/2022"), "/es2022/");
   });
 
-  await t.step("fix urls", async () => {
-    const res = await fetch(
-      `${workerOrigin}/lightningcss-wasm@1.19.0/es2022/lightningcss_node.wasm`,
-      { redirect: "manual" },
-    );
+  await t.step("CORS", async () => {
+    const res = await fetch(`${workerOrigin}/react@18.2.0`, {
+      headers: {
+        "Origin": "https://example.com",
+      },
+    });
     res.body?.cancel();
-    assertEquals(res.status, 301);
-    assertEquals(
-      res.headers.get("location"),
-      `${workerOrigin}/lightningcss-wasm@1.19.0/lightningcss_node.wasm`,
-    );
+    assertEquals(res.headers.get("Access-Control-Allow-Origin"), "*");
+    assertEquals(res.headers.get("Access-Control-Expose-Headers"), "X-Esm-Path, X-TypeScript-Types");
+  });
+
+  await t.step("fix urls", async () => {
+    {
+      const res = await fetch(`${workerOrigin}/react`, { redirect: "manual" });
+      res.body?.cancel();
+      assertEquals(res.status, 302);
+      assertEquals(res.headers.get("cache-control"), "public, max-age=600");
+      assertEquals(res.headers.get("Vary"), "User-Agent");
+      assertStringIncludes(res.headers.get("location")!, `${workerOrigin}/react@`);
+    }
+    {
+      const res = await fetch(`${workerOrigin}/react@18`, { redirect: "manual" });
+      res.body?.cancel();
+      assertEquals(res.status, 302);
+      assertEquals(res.headers.get("cache-control"), "public, max-age=600");
+      assertEquals(res.headers.get("Vary"), "User-Agent");
+      assertStringIncludes(res.headers.get("location")!, `${workerOrigin}/react@18.`);
+    }
+    {
+      const res = await fetch(`${workerOrigin}/react@18/es2022/react.mjs`, { redirect: "manual" });
+      res.body?.cancel();
+      assertEquals(res.status, 302);
+      assertEquals(res.headers.get("cache-control"), "public, max-age=600");
+      assertStringIncludes(res.headers.get("location")!, `${workerOrigin}/react@18.`);
+      assertStringIncludes(res.headers.get("location")!, "/es2022/react.mjs");
+    }
+    "`/#/` in pathname";
+    {
+      const res = await fetch(`${workerOrigin}/es5-ext@^0.10.50/string/%23/contains?target=denonext`, { redirect: "manual" });
+      res.body?.cancel();
+      assertEquals(res.status, 302);
+      assertEquals(res.headers.get("cache-control"), "public, max-age=600");
+      assertStringIncludes(res.headers.get("location")!, `${workerOrigin}/es5-ext@0.10.`);
+      assertStringIncludes(res.headers.get("location")!, "/string/%23/contains");
+    }
+    {
+      const res = await fetch(
+        `${workerOrigin}/lightningcss-wasm@1.19.0/es2022/lightningcss_node.wasm`,
+        { redirect: "manual" },
+      );
+      res.body?.cancel();
+      assertEquals(res.status, 301);
+      assertEquals(res.headers.get("location"), `${workerOrigin}/lightningcss-wasm@1.19.0/lightningcss_node.wasm`);
+    }
   });
 
   await t.step("private registry", async () => {
