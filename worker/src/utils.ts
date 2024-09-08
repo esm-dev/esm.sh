@@ -1,5 +1,13 @@
 import { targets } from "esm-compat";
 
+export function isObject(v: unknown): v is Record<string, unknown> {
+  return v !== null && typeof v === "object" && !Array.isArray(v);
+}
+
+export function isDtsFile(path: string) {
+  return path.endsWith(".d.ts") || path.endsWith(".d.mts");
+}
+
 export function hasTargetSegment(segments: string[]) {
   const len = segments.length;
   if (len < 2) {
@@ -10,10 +18,6 @@ export function hasTargetSegment(segments: string[]) {
     return targets.has(segments[1]);
   }
   return targets.has(s0);
-}
-
-export function isDtsFile(path: string) {
-  return path.endsWith(".d.ts") || path.endsWith(".d.mts");
 }
 
 export function trimPrefix(s: string, prefix: string): string {
