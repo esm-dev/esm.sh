@@ -59,20 +59,20 @@ export function withESMWorker(middleware?: Middleware, cache?: Cache): {
   ) => Promise<Response>;
 };
 
-export type Context = {
+export interface Context extends ExecutionContext {
   cache: Cache;
   npmrc: Npmrc;
   url: URL;
-  waitUntil(promise: Promise<any>): void;
+  corsHeaders(headers?: Headers): Headers;
   withCache(
     fetcher: (targetFromUA: string | null) => Promise<Response> | Response,
     options?: { varyUA?: boolean; varyReferer?: boolean },
   ): Promise<Response>;
-  corsHeaders(headers?: Headers): Headers;
-};
+  next: () => Response;
+}
 
 export interface Middleware {
-  (req: Request, env: Env, ctx: Context): Response | void | Promise<Response | void>;
+  (req: Request, env: Env, ctx: Context): Response | Promise<Response>;
 }
 
 export type PackageInfo = {

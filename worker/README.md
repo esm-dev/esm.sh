@@ -37,7 +37,7 @@ Other optional configurations in secrets:
 
 ## Usage
 
-Wrap your Cloudflare worker with the `withESMWorker` function:
+Wraps your Cloudflare worker with the `withESMWorker` function:
 
 ```typescript
 import { withESMWorker } from "esm-worker";
@@ -52,14 +52,14 @@ declare global {
 export default withESMWorker((req, env, ctx) => {
   const { url } = ctx;
 
-  // using a custom homepage
+  // use a custom homepage
   if (url.pathname === "/") {
     return new Response("<h1>Welcome to esm.sh!</h1>", {
       headers: { "Content-Type": "text/html" },
     });
   }
 
-  // using the cache API
+  // use the cache API
   if (url.pathname === "/boom") {
     return ctx.withCache(() =>
       new Response("Boom!", {
@@ -68,7 +68,8 @@ export default withESMWorker((req, env, ctx) => {
     );
   }
 
-  // esm-worker handles the rest
+  // let esm-worker handles the rest
+  return ctx.next();
 });
 ```
 

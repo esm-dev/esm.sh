@@ -136,12 +136,12 @@ func Serve(efs EmbedFS) {
 		rex.Cors(rex.CORS{
 			AllowedOrigins:   []string{"*"},
 			AllowedMethods:   []string{"HEAD", "GET", "POST"},
-			ExposedHeaders:   []string{"ETag", "X-ESM-Path", "X-TypeScript-Types"},
+			ExposedHeaders:   []string{"X-Esm-Path", "X-TypeScript-Types"},
 			MaxAge:           86400, // 24 hours
 			AllowCredentials: false,
 		}),
 		auth(config.AuthSecret),
-		router(),
+		routes(),
 	)
 
 	C := rex.Serve(rex.ServerConfig{

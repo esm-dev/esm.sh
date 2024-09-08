@@ -34,9 +34,9 @@ type BuildContext struct {
 	packageJson  PackageJSON
 	isDeprecated string
 	args         BuildArgs
-	target       string
 	bundleMode   BundleMode
 	dev          bool
+	target       string
 	sourceMap    bool
 	wd           string
 	pkgDir       string
@@ -1024,16 +1024,18 @@ rebuild:
 		if strings.HasSuffix(file.Path, ".js") {
 			jsContent := file.Contents
 			extraBanner := ""
-			if nodeEnv == "" {
-				extraBanner = " development"
+			if ctx.dev {
+				extraBanner += " development"
 			}
 			if ctx.bundleMode == BundleAll {
-				extraBanner = " bundle-all"
+				extraBanner += " bundle-all"
+			} else if ctx.bundleMode == BundleFalse {
+				extraBanner += " bundle-false"
 			}
 			header := bytes.NewBufferString(fmt.Sprintf(
-				"/* esm.sh(v%d) - %s %s%s */\n",
-				VERSION,
+				"/* esm.sh - %s (v%d %s%s) */\n",
 				ctx.module.String(),
+				VERSION,
 				strings.ToLower(ctx.target),
 				extraBanner,
 			))
@@ -1054,11 +1056,19 @@ rebuild:
 					if ctx.args.external.Has("node:process") || ctx.args.externalAll {
 						fmt.Fprintf(header, `import __Process$ from "node:process";%s`, EOL)
 					} else if ctx.isBrowserTarget() {
-						if len(ctx.packageJson.Browser) == 0 {
+						if len(ctx.packageJson.Browser) > 0 {
+							var browserExclude bool
+							if name, ok := ctx.packageJson.Browser["process"]; ok {
+								browserExclude = name == ""
+							} else if name, ok := ctx.packageJson.Browser["node:process"]; ok {
+								browserExclude = name == ""
+							}
+							if !browserExclude {
+								fmt.Fprintf(header, `const __Process$ = {env:{}};%s`, EOL)
+							}
+						} else {
 							fmt.Fprintf(header, `import __Process$ from "/node/process.js";%s`, EOL)
 							imports.Add("/node/process.js")
-						} else {
-							fmt.Fprintf(header, `const __Process$ = {};%s`, EOL)
 						}
 					} else if ctx.target == "denonext" {
 						fmt.Fprintf(header, `import __Process$ from "node:process";%s`, EOL)

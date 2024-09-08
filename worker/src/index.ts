@@ -3,8 +3,8 @@ import { compareVersions, satisfies, validate } from "compare-versions";
 import { getBuildTargetFromUA, targets } from "esm-compat";
 import { assetsExts, cssPackages, VERSION } from "./consts.ts";
 import { getContentType } from "./media_type.ts";
-import { isDtsFile, normalizeSearchParams, redirect, splitBy, trimPrefix } from "./utils.ts";
-import { copyHeaders, err, errPkgNotFound, getUrlOrigin, hashText, hasTargetSegment } from "./utils.ts";
+import { isDtsFile, isObject, normalizeSearchParams, redirect, splitBy, trimPrefix } from "./utils.ts";
+import { copyHeaders, err, errPkgNotFound, getUrlOrigin, hasTargetSegment } from "./utils.ts";
 
 const version = `v${VERSION}`;
 const globalEtag = `W/"${version}"`;
@@ -72,11 +72,11 @@ async function fetchOrigin(req: Request, env: Env, ctx: Context, pathname: strin
     "Cache-Control",
     "Content-Type",
     "ETag",
-    "X-ESM-Path",
+    "X-Esm-Path",
     "X-TypeScript-Types",
   );
   const exposedHeaders: string[] = [];
-  for (const key of ["ETag", "X-ESM-Path", "X-TypeScript-Types"]) {
+  for (const key of ["X-Esm-Path", "X-TypeScript-Types"]) {
     if (resHeaders.has(key)) {
       exposedHeaders.push(key);
     }
@@ -96,7 +96,7 @@ async function fetchAsset(req: Request, ctx: Context, env: Env, pathname: string
     const headers = ctx.corsHeaders();
     headers.set("Content-Type", ret.httpMetadata?.contentType || getContentType(pathname));
     headers.set("Cache-Control", ccImmutable);
-    headers.set("X-Content-Source", "esm-worker");
+    headers.set("Content-Source", "R2");
     return new Response(ret.body, { headers });
   }
 
@@ -110,7 +110,6 @@ async function fetchAsset(req: Request, ctx: Context, env: Env, pathname: string
   const contentType = res.headers.get("content-type") || getContentType(pathname);
   headers.set("Content-Type", contentType);
   headers.set("Cache-Control", ccImmutable);
-  headers.set("X-Content-Source", "esm-origin-server");
 
   if (R2) {
     const putOptions: R2PutOptions = { httpMetadata: { contentType } };
@@ -159,7 +158,7 @@ async function fetchBuildDist(req: Request, env: Env, ctx: Context, pathname: st
         const headers = ctx.corsHeaders();
         headers.set("Content-Type", contentType);
         headers.set("Cache-Control", ccImmutable);
-        headers.set("X-Content-Source", "esm-worker");
+        headers.set("Content-Source", "R2");
         return new Response(obj.body, { headers });
       } else {
         const { body, customMetadata } = obj;
@@ -168,8 +167,8 @@ async function fetchBuildDist(req: Request, env: Env, ctx: Context, pathname: st
         headers.set("Cache-Control", ccImmutable);
         const exposedHeaders: string[] = [];
         if (customMetadata?.esmPath) {
-          headers.set("X-ESM-Path", customMetadata.esmPath);
-          exposedHeaders.push("X-ESM-Path");
+          headers.set("X-Esm-Path", customMetadata.esmPath);
+          exposedHeaders.push("X-Esm-Path");
         }
         if (customMetadata?.dts) {
           headers.set("X-TypeScript-Types", customMetadata.dts);
@@ -178,7 +177,7 @@ async function fetchBuildDist(req: Request, env: Env, ctx: Context, pathname: st
         if (exposedHeaders.length > 0) {
           headers.set("Access-Control-Expose-Headers", exposedHeaders.join(", "));
         }
-        headers.set("X-Content-Source", "esm-worker");
+        headers.set("Content-Source", "R2");
         return new Response(body, { headers });
       }
     }
@@ -193,7 +192,7 @@ async function fetchBuildDist(req: Request, env: Env, ctx: Context, pathname: st
   const headers = ctx.corsHeaders(res.headers);
   const contentType = res.headers.get("Content-Type") || getContentType(pathname);
   const cacheControl = res.headers.get("Cache-Control");
-  const esmPath = res.headers.get("X-ESM-Path") ?? undefined;
+  const esmPath = res.headers.get("X-Esm-Path") ?? undefined;
   const dts = res.headers.get("X-TypeScript-Types") ?? undefined;
   const exposedHeaders: string[] = [];
 
@@ -202,8 +201,8 @@ async function fetchBuildDist(req: Request, env: Env, ctx: Context, pathname: st
     headers.set("Cache-Control", cacheControl);
   }
   if (esmPath) {
-    headers.set("X-ESM-Path", esmPath);
-    exposedHeaders.push("X-ESM-Path");
+    headers.set("X-Esm-Path", esmPath);
+    exposedHeaders.push("X-Esm-Path");
   }
   if (dts) {
     headers.set("X-TypeScript-Types", dts);
@@ -212,7 +211,6 @@ async function fetchBuildDist(req: Request, env: Env, ctx: Context, pathname: st
   if (exposedHeaders.length > 0) {
     headers.set("Access-Control-Expose-Headers", exposedHeaders.join(", "));
   }
-  headers.set("X-Content-Source", "esm-origin-server");
 
   // save the file to KV/R2 if the `cache-control` header is set to `public, max-age=31536000, immutable`
   if (!isFromUpWorker && R2 && cacheControl === ccImmutable) {
@@ -328,11 +326,6 @@ function withESMWorker(middleware?: Middleware, cache: Cache = (caches as any).d
           copyHeaders(res.headers, ctx.corsHeaders());
           return res;
         }
-        case "/bundle": {
-          const res = await fetchOrigin(req, env, ctx, pathname);
-          copyHeaders(res.headers, ctx.corsHeaders());
-          return res;
-        }
         case "/purge": {
           const res = await fetchOrigin(req, env, ctx, pathname);
           const ret: { zoneId?: string; deletedFiles: string[] } = await res.json();
@@ -376,12 +369,12 @@ function withESMWorker(middleware?: Middleware, cache: Cache = (caches as any).d
     if (env.LEGACY_WORKER) {
       if (
         pathname == "/build" ||
-        url.searchParams.has("pin") ||
         pathname.startsWith("/stable/") ||
         (pathname.startsWith("/v") && regexpLegacyVersionPrefix.test(pathname)) ||
-        (pathname.startsWith("/~") && regexpLegacyBuild.test(pathname))
+        (pathname.startsWith("/~") && regexpLegacyBuild.test(pathname)) ||
+        url.searchParams.has("pin")
       ) {
-        return env.LEGACY_WORKER.fetch(req.clone());
+        return env.LEGACY_WORKER.fetch(req);
       }
     }
 
@@ -426,52 +419,52 @@ function withESMWorker(middleware?: Middleware, cache: Cache = (caches as any).d
       pathname = "/" + pathname.slice(2);
     }
 
-    let packageScope = "";
-    let packageName = "";
-    let packageVersion = "";
+    let pScope = "";
+    let pName = "";
+    let pVersion = "";
     let subPath = "";
     let extraQuery = "";
-    let isTargetUrl = false;
+    let isModuleFullPath = false;
 
     if (gh || pathname.startsWith("/@")) {
       const [, scope, name, ...rest] = pathname.split("/");
-      packageScope = scope;
-      [packageName, packageVersion] = splitBy(name, "@");
+      pScope = scope;
+      [pName, pVersion] = splitBy(name, "@");
       if (rest.length > 0) {
         subPath = "/" + rest.join("/");
-        isTargetUrl = hasTargetSegment(rest);
+        isModuleFullPath = hasTargetSegment(rest);
       }
     } else {
       const [, name, ...rest] = pathname.split("/");
-      [packageName, packageVersion] = splitBy(name, "@");
+      [pName, pVersion] = splitBy(name, "@");
       if (rest.length > 0) {
         subPath = "/" + rest.join("/");
-        isTargetUrl = hasTargetSegment(rest);
+        isModuleFullPath = hasTargetSegment(rest);
       }
     }
 
-    if (packageScope !== "" && !regexpNpmNaming.test(packageScope.slice(1))) {
-      return err(`Invalid scope name '${packageScope}'`, ctx.corsHeaders(), 400);
+    if (pScope !== "" && !regexpNpmNaming.test(pScope.slice(1))) {
+      return err(`Invalid scope name '${pScope}'`, ctx.corsHeaders(), 400);
     }
 
-    if (packageName === "") {
+    if (pName === "") {
       return err("Invalid path", ctx.corsHeaders(), 400);
     }
-    if (!regexpNpmNaming.test(packageName) || packageVersion.endsWith(".") || packageVersion.endsWith("-")) {
-      return err(`Invalid package name '${packageName}'`, ctx.corsHeaders(), 400);
+    if (!regexpNpmNaming.test(pName) || pVersion.endsWith(".") || pVersion.endsWith("-")) {
+      return err(`Invalid package name '${pName}'`, ctx.corsHeaders(), 400);
     }
 
     // hide source map files
-    if (isTargetUrl && subPath.endsWith(".map") && env.SOURCE_MAP === "off") {
+    if (isModuleFullPath && subPath.endsWith(".map") && env.SOURCE_MAP === "off") {
       return err("Source map is disabled", ctx.corsHeaders(), 404);
     }
 
     // normalize package version
-    if (packageVersion) {
-      [packageVersion, extraQuery] = splitBy(packageVersion, "&");
+    if (pVersion) {
+      [pVersion, extraQuery] = splitBy(pVersion, "&");
       if (!gh) {
-        if (packageVersion.startsWith("=") || packageVersion.startsWith("v")) {
-          packageVersion = packageVersion.slice(1);
+        if (pVersion.startsWith("=") || pVersion.startsWith("v")) {
+          pVersion = pVersion.slice(1);
         }
       }
       if (extraQuery) {
@@ -481,15 +474,15 @@ function withESMWorker(middleware?: Middleware, cache: Cache = (caches as any).d
         });
       }
     }
-    if (packageVersion && packageVersion.endsWith(".")) {
-      return err(`Invalid package version '${packageVersion}'`, ctx.corsHeaders(), 400);
+    if (pVersion && pVersion.endsWith(".")) {
+      return err(`Invalid package version '${pVersion}'`, ctx.corsHeaders(), 400);
     }
 
     // redirect to commit-ish version for GitHub packages
     if (
-      gh && !(packageVersion && (
-        regexpCommitish.test(packageVersion) ||
-        regexpFullVersion.test(trimPrefix(packageVersion, "v"))
+      gh && !(pVersion && (
+        regexpCommitish.test(pVersion) ||
+        regexpFullVersion.test(trimPrefix(pVersion, "v"))
       ))
     ) {
       return ctx.withCache(async () => {
@@ -499,30 +492,14 @@ function withESMWorker(middleware?: Middleware, cache: Cache = (caches as any).d
       });
     }
 
-    const pkgFullname = (packageScope ? packageScope + "/" : "") + packageName;
-    const isFixedVersion = !!packageVersion && regexpFullVersion.test(packageVersion);
+    const pkgName = (pScope ? pScope + "/" : "") + pName;
+    const isFixedVersion = !!pVersion && regexpFullVersion.test(pVersion);
 
     if (!isFixedVersion && !gh) {
-      if (
-        (
-          !isTargetUrl &&
-          !(subPath !== "" && assetsExts.has(splitBy(subPath, ".", true)[1])) &&
-          !isDtsFile(subPath) &&
-          !url.searchParams.has("raw")
-        )
-      ) {
-        return ctx.withCache(async () => {
-          const res = await fetchOrigin(req, env, ctx, url.pathname, url.search);
-          copyHeaders(res.headers, ctx.corsHeaders());
-          return res;
-        });
-      }
-      // redirect to specific version
-      return ctx.withCache(async () => {
+      const redirectToSepcificVersion = async (targetFromUA: string | null) => {
         const headers = new Headers();
         const npmrc = ctx.npmrc;
         let { registry, token, user, password } = npmrc;
-        let pkgName = pkgFullname;
         if (pkgName.startsWith("@")) {
           const [scope] = pkgName.split("/");
           const reg = npmrc.registries[scope];
@@ -550,48 +527,80 @@ function withESMWorker(middleware?: Middleware, cache: Cache = (caches as any).d
         if (hasExternalAllMarker) {
           prefix += "*";
         }
-        if (pkgName.startsWith("@jsr/") && !isTargetUrl) {
-          pkgName = "jsr/@" + pkgName.slice(5).replace("__", "/");
+        if (pkgName.startsWith("@jsr/") && !isModuleFullPath) {
+          prefix += "jsr/@" + pkgName.slice(5).replace("__", "/");
+        } else {
+          prefix += pkgName;
+        }
+        let q = url.search;
+        if (targetFromUA && url.searchParams.get("target") === targetFromUA) {
+          url.searchParams.delete("target");
+          q = url.search;
         }
         const xq = extraQuery ? "&" + extraQuery : "";
-        const distVersion = regInfo["dist-tags"]?.[packageVersion || "latest"];
+        const distVersion = regInfo["dist-tags"]?.[pVersion || "latest"];
         if (distVersion) {
-          const uri = `${prefix}${pkgName}@${distVersion}${xq}${subPath}${url.search}`;
-          return redirect(new URL(uri, url), ctx.corsHeaders());
+          return redirect(
+            new URL(prefix + "@" + distVersion + xq + subPath + q, url),
+            ctx.corsHeaders(),
+          );
         }
-        const versions = Object.keys(regInfo.versions ?? []).filter(validate)
-          .sort(compareVersions);
-        if (!packageVersion) {
+        const versions = Object.keys(regInfo.versions ?? []).filter(validate).sort(compareVersions);
+        if (!pVersion) {
           const latestVersion = versions.filter((v) => !v.includes("-")).pop() ?? versions.pop();
           if (latestVersion) {
-            const uri = `${prefix}${pkgName}@${latestVersion}${xq}${subPath}${url.search}`;
-            return redirect(new URL(uri, url), ctx.corsHeaders());
+            return redirect(
+              new URL(prefix + "@" + latestVersion + xq + subPath + q, url),
+              ctx.corsHeaders(),
+            );
           }
         }
         try {
-          const arr = packageVersion.includes("-") ? versions : versions.filter((v) => !v.includes("-"));
+          const arr = pVersion.includes("-") ? versions : versions.filter((v) => !v.includes("-"));
           for (let i = arr.length - 1; i >= 0; i--) {
             const v = arr[i];
-            if (satisfies(v, packageVersion)) {
-              const uri = `${prefix}${pkgName}@${v}${xq}${subPath}${url.search}`;
-              return redirect(new URL(uri, url), ctx.corsHeaders());
+            if (satisfies(v, pVersion)) {
+              return redirect(
+                new URL(prefix + "@" + v + xq + subPath + q, url),
+                ctx.corsHeaders(),
+              );
             }
           }
         } catch (_) {
           // not a semver version
-          return err(`Invalid package version '${packageVersion}'`, ctx.corsHeaders(), 400);
+          return err(`Invalid package version '${pVersion}'`, ctx.corsHeaders(), 400);
         }
         return err("Could not get the package version", ctx.corsHeaders(), 404);
-      });
+      };
+      if (
+        (
+          !isModuleFullPath &&
+          !(subPath !== "" && assetsExts.has(splitBy(subPath, ".", true)[1])) &&
+          !isDtsFile(subPath) &&
+          !url.searchParams.has("raw")
+        )
+      ) {
+        return ctx.withCache(async (targetFromUA) => {
+          if (targetFromUA === "denonext" || targetFromUA === "deno") {
+            return redirectToSepcificVersion(targetFromUA);
+          }
+          const res = await fetchOrigin(req, env, ctx, url.pathname, url.search);
+          copyHeaders(res.headers, ctx.corsHeaders());
+          return res;
+        }, {
+          varyUA: true,
+        });
+      }
+      return ctx.withCache(redirectToSepcificVersion);
     }
 
     // redirect `/@types/PKG` to it's main dts file
-    if (pkgFullname.startsWith("@types/") && subPath === "") {
+    if (pkgName.startsWith("@types/") && subPath === "") {
       return ctx.withCache(async () => {
-        const res = await fetch(new URL(pkgFullname, defaultNpmRegistry));
+        const res = await fetch(new URL(pkgName, defaultNpmRegistry));
         if (!res.ok) {
           if (res.status === 404 || res.status === 401) {
-            return errPkgNotFound(pkgFullname, ctx.corsHeaders());
+            return errPkgNotFound(pkgName, ctx.corsHeaders());
           }
           return new Response("Failed to get package info: " + await res.text(), {
             status: res.status,
@@ -609,8 +618,8 @@ function withESMWorker(middleware?: Middleware, cache: Cache = (caches as any).d
 
     // redirect to main css for CSS packages
     let css: string | undefined;
-    if (!gh && (css = cssPackages[pkgFullname]) && subPath === "") {
-      return redirect(new URL(`/${pkgFullname}@${packageVersion}/${css}`, url), ctx.corsHeaders(), 301);
+    if (!gh && (css = cssPackages[pkgName]) && subPath === "") {
+      return redirect(new URL(`/${pkgName}@${pVersion}/${css}`, url), ctx.corsHeaders(), 301);
     }
 
     // redirect to real package css file: `/PKG?css` -> `/v100/PKG/es2022/pkg.css`
@@ -624,14 +633,14 @@ function withESMWorker(middleware?: Middleware, cache: Cache = (caches as any).d
         target = getBuildTargetFromUA(h.get("User-Agent"));
       }
       return redirect(
-        new URL(`${prefix}/${pkgFullname}@${packageVersion}/${target}/${packageName}.css`, url),
+        new URL(`${prefix}/${pkgName}@${pVersion}/${target}/${pName}.css`, url),
         ctx.corsHeaders(),
         301,
       );
     }
 
     // redirect to real wasm file: `/PKG/es2022/foo.wasm` -> `PKG/foo.wasm`
-    if (isTargetUrl && (subPath.endsWith(".wasm") || subPath.endsWith(".json"))) {
+    if (isModuleFullPath && (subPath.endsWith(".wasm") || subPath.endsWith(".json"))) {
       return ctx.withCache(async () => {
         const res = await fetchOrigin(req, env, ctx, url.pathname);
         copyHeaders(res.headers, ctx.corsHeaders());
@@ -653,7 +662,7 @@ function withESMWorker(middleware?: Middleware, cache: Cache = (caches as any).d
       if (assetsExts.has(ext)) {
         return ctx.withCache(() => {
           const prefix = gh ? "/gh" : "";
-          const pathname = `${prefix}/${pkgFullname}@${packageVersion}${subPath}`;
+          const pathname = `${prefix}/${pkgName}@${pVersion}${subPath}`;
           return fetchAsset(req, ctx, env, pathname);
         });
       }
@@ -664,16 +673,16 @@ function withESMWorker(middleware?: Middleware, cache: Cache = (caches as any).d
       prefix += "/gh";
     }
 
-    if (isTargetUrl || isDtsFile(subPath)) {
+    if (isModuleFullPath || isDtsFile(subPath)) {
       return ctx.withCache(() => {
-        const pathname = `${prefix}/${pkgFullname}@${packageVersion}${subPath}`;
+        const pathname = `${prefix}/${pkgName}@${pVersion}${subPath}`;
         return fetchBuildDist(req, env, ctx, pathname);
       });
     }
 
     return ctx.withCache(async (target) => {
       const marker = hasExternalAllMarker ? "*" : "";
-      const pathname = `${prefix}/${marker}${pkgFullname}@${packageVersion}${subPath}`;
+      const pathname = `${prefix}/${marker}${pkgName}@${pVersion}${subPath}`;
       const params = url.searchParams;
       normalizeSearchParams(params);
       if (target) {
@@ -724,7 +733,7 @@ function withESMWorker(middleware?: Middleware, cache: Cache = (caches as any).d
         if (env.NPMRC) {
           try {
             const v: Npmrc = JSON.parse(env.NPMRC);
-            if (typeof v === "object" && v !== null) {
+            if (isObject(v)) {
               npmrc = v;
               if (npmrc.registry) {
                 npmrc.registry = getUrlOrigin(npmrc.registry);
@@ -762,11 +771,11 @@ function withESMWorker(middleware?: Middleware, cache: Cache = (caches as any).d
 
       const url = new URL(req.url);
       const ctx: Context = {
+        ...workerCtx,
         cache,
-        npmrc: npmrc!,
+        npmrc,
         url,
         corsHeaders: (header) => corsHeaders(req.headers.get("Origin"), header),
-        waitUntil: (p: Promise<any>) => workerCtx.waitUntil(p),
         withCache: async (fetcher, options) => {
           const { pathname, searchParams } = url;
           const cacheKey = new URL(url); // clone
@@ -819,6 +828,7 @@ function withESMWorker(middleware?: Middleware, cache: Cache = (caches as any).d
           }
           return res;
         },
+        next: () => null as unknown as Response,
       };
 
       // add `raw` search param to the url if the hostname is `raw.esm.sh`
@@ -845,4 +855,4 @@ function withESMWorker(middleware?: Middleware, cache: Cache = (caches as any).d
   };
 }
 
-export { getBuildTargetFromUA, getContentType, hashText, targets, version, withESMWorker };
+export { getBuildTargetFromUA, getContentType, targets, version, withESMWorker };
