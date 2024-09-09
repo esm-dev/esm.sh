@@ -110,6 +110,7 @@ func Serve(efs EmbedFS) {
 	}
 	accessLogger.SetQuite(true) // quite in terminal
 
+	// check nodejs environment
 	nodejsInstallDir := os.Getenv("NODE_INSTALL_DIR")
 	if nodejsInstallDir == "" {
 		nodejsInstallDir = path.Join(config.WorkDir, "nodejs")
@@ -120,20 +121,20 @@ func Serve(efs EmbedFS) {
 	}
 	log.Debugf("nodejs: v%s, pnpm: %s, registry: %s", nodeVer, pnpmVer, config.NpmRegistry)
 
+	// init cjs_lexer node app
 	err = initCJSLexerNodeApp()
 	if err != nil {
 		log.Fatalf("failed to initialize the cjs_lexer node app: %v", err)
 	}
 	log.Debugf("%s initialized", cjsLexerPkg)
 
-	if !config.DisableCompression {
-		rex.Use(rex.Compression())
-	}
+	// set rex middlewares
 	rex.Use(
-		rex.ErrorLogger(log),
+		rex.Logger(log),
 		rex.AccessLogger(accessLogger),
+		rex.Optional(rex.Compress(), !config.DisableCompression),
 		rex.Header("Server", "esm.sh"),
-		rex.Cors(rex.CORS{
+		rex.Cors(rex.CorsOptions{
 			AllowedOrigins:   []string{"*"},
 			AllowedMethods:   []string{"HEAD", "GET", "POST"},
 			ExposedHeaders:   []string{"X-Esm-Path", "X-TypeScript-Types"},
@@ -144,6 +145,7 @@ func Serve(efs EmbedFS) {
 		routes(),
 	)
 
+	// start server
 	C := rex.Serve(rex.ServerConfig{
 		Port: uint16(config.Port),
 		TLS: rex.TLSConfig{
@@ -154,7 +156,6 @@ func Serve(efs EmbedFS) {
 			},
 		},
 	})
-
 	log.Infof("Server is ready on http://localhost:%d", config.Port)
 
 	c := make(chan os.Signal, 1)

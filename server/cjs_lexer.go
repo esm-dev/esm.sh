@@ -46,7 +46,7 @@ var requireModeAllowList = []string{
 }
 
 func initCJSLexerNodeApp() (err error) {
-	wd := path.Join(config.WorkDir, "npm", cjsLexerPkg)
+	wd := path.Join(config.WorkDir, "pnpm-store", cjsLexerPkg)
 	err = ensureDir(wd)
 	if err != nil {
 		return err
@@ -130,10 +130,10 @@ func cjsLexer(npmrc *NpmRC, pkgName string, wd string, specifier string, nodeEnv
 		ctx,
 		"node",
 		"--experimental-permission",
-		"--allow-fs-read="+npmrc.NpmDir(),
+		"--allow-fs-read="+npmrc.StoreDir(),
 		"cjs_lexer.js",
 	)
-	cmd.Dir = path.Join(config.WorkDir, "npm", cjsLexerPkg)
+	cmd.Dir = path.Join(config.WorkDir, "pnpm-store", cjsLexerPkg)
 	cmd.Stdin = bytes.NewBuffer(argsData)
 	cmd.Stdout = &outBuf
 	cmd.Stderr = &errBuf

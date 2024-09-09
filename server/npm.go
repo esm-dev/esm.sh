@@ -249,11 +249,11 @@ func NewNpmRcFromJSON(jsonData []byte) (npmrc *NpmRC, err error) {
 	return &rc, nil
 }
 
-func (rc *NpmRC) NpmDir() string {
+func (rc *NpmRC) StoreDir() string {
 	if rc.zoneId != "" {
-		return path.Join(config.WorkDir, "npm-"+rc.zoneId)
+		return path.Join(config.WorkDir, "pnpm-store-"+rc.zoneId)
 	}
-	return path.Join(config.WorkDir, "npm")
+	return path.Join(config.WorkDir, "pnpm-store")
 }
 
 func (rc *NpmRC) getPackageInfo(name string, semver string) (info PackageJSON, err error) {
@@ -272,7 +272,7 @@ func (rc *NpmRC) getPackageInfo(name string, semver string) (info PackageJSON, e
 	}
 
 	if regexpFullVersion.MatchString(semver) {
-		pkgJsonPath := path.Join(rc.NpmDir(), name+"@"+semver, "node_modules", name, "package.json")
+		pkgJsonPath := path.Join(rc.StoreDir(), name+"@"+semver, "node_modules", name, "package.json")
 		if existsFile(pkgJsonPath) && utils.ParseJSONFile(pkgJsonPath, &info) == nil {
 			return
 		}
@@ -461,7 +461,7 @@ do:
 }
 
 func (rc *NpmRC) installPackage(module Module) (pkgJson PackageJSON, err error) {
-	installDir := path.Join(rc.NpmDir(), module.PackageName())
+	installDir := path.Join(rc.StoreDir(), module.PackageName())
 	pkgJsonFilepath := path.Join(installDir, "node_modules", module.PkgName, "package.json")
 
 	// only one installation process allowed at the same time for the same package
@@ -500,7 +500,7 @@ func (rc *NpmRC) installPackage(module Module) (pkgJson PackageJSON, err error) 
 		if module.GhPrefix {
 			err = os.WriteFile(packageJsonFp, []byte(fmt.Sprintf(`{"dependencies":{"%s":"github:%s#%s"}}`, module.PkgName, module.PkgName, module.PkgVersion)), 0644)
 			if err == nil {
-				err = rc.pnpm(installDir)
+				err = rc.pnpmi(installDir)
 			}
 			// pnpm will ignore github package which has been installed without `package.json` file
 			// so we install it manually
@@ -522,9 +522,9 @@ func (rc *NpmRC) installPackage(module Module) (pkgJson PackageJSON, err error) 
 				}
 			}
 		} else if regexpFullVersion.MatchString(module.PkgVersion) {
-			err = rc.pnpm(installDir, module.PackageName(), "--prefer-offline")
+			err = rc.pnpmi(installDir, module.PackageName(), "--prefer-offline")
 		} else {
-			err = rc.pnpm(installDir, module.PackageName())
+			err = rc.pnpmi(installDir, module.PackageName())
 		}
 		if err == nil {
 			err = utils.ParseJSONFile(pkgJsonFilepath, &pkgJson)
@@ -540,24 +540,19 @@ func (rc *NpmRC) installPackage(module Module) (pkgJson PackageJSON, err error) 
 	return
 }
 
-func (rc *NpmRC) pnpm(dir string, packages ...string) (err error) {
-	var args []string
-	if len(packages) > 0 {
-		args = append([]string{"add"}, packages...)
-	} else {
-		args = []string{
-			"install",
-			"--no-optional",
-			"--ignore-pnpmfile",
-			"--ignore-workspace",
-		}
-	}
-	args = append(
-		args,
+func (rc *NpmRC) pnpmi(dir string, packages ...string) (err error) {
+	args := []string{
+		"i",
+		"--no-lockfile",
 		"--no-color",
+		"--ignore-pnpmfile",
+		"--ignore-workspace",
 		"--ignore-scripts",
 		"--loglevel=error",
-	)
+	}
+	if len(packages) > 0 {
+		args = append(args, packages...)
+	}
 	start := time.Now()
 	out := &bytes.Buffer{}
 	errout := &bytes.Buffer{}

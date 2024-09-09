@@ -183,7 +183,7 @@ func (ctx *BuildContext) install() (err error) {
 			return
 		}
 		ctx.packageJson = ctx.normalizePackageJSON(pkgJson)
-		ctx.wd = path.Join(ctx.npmrc.NpmDir(), ctx.module.PackageName())
+		ctx.wd = path.Join(ctx.npmrc.StoreDir(), ctx.module.PackageName())
 		ctx.pkgDir = path.Join(ctx.wd, "node_modules", ctx.module.PkgName)
 		if rp, e := os.Readlink(ctx.pkgDir); e == nil {
 			ctx.pnpmPkgDir = path.Join(path.Dir(ctx.pkgDir), rp)

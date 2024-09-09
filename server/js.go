@@ -75,7 +75,7 @@ func minify(code string, target api.Target, loader api.Loader) ([]byte, error) {
 		LegalComments:     api.LegalCommentsInline,
 		Loader:            loader,
 	})
-	if ret.Errors != nil && len(ret.Errors) > 0 {
+	if len(ret.Errors) > 0 {
 		return nil, errors.New(ret.Errors[0].Text)
 	}
 	return ret.Code, nil

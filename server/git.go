@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"compress/gzip"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -51,7 +52,7 @@ func listRepoRefs(repo string) (refs []GitRef, err error) {
 	err = cmd.Run()
 	if err != nil {
 		if errOut.Len() > 0 {
-			return nil, fmt.Errorf(errOut.String())
+			return nil, errors.New(errOut.String())
 		}
 		return nil, err
 	}

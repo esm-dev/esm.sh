@@ -1,4 +1,4 @@
-/*! 🔥 esm.sh/run - ts/jsx just works™️ in browser. (📚 https://docs.esm.sh/run) */
+/*! 🔥 esm.sh/run - ts/jsx just works™️ in browser. */
 
 import type { RunOptions } from "./types/run.d.ts";
 import { tsx } from "./run-tsx";
