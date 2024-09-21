@@ -142,7 +142,7 @@ func Serve(efs EmbedFS) {
 			AllowCredentials: false,
 		}),
 		auth(config.AuthSecret),
-		routes(),
+		routes(debug),
 	)
 
 	// start server

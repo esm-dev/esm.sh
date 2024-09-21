@@ -187,14 +187,7 @@ Deno.test("esm-worker", { sanitizeOps: false, sanitizeResources: false }, async 
     assertEquals(typeof ret.version, "number");
   });
 
-  await t.step("embed scripts/polyfills/types", async () => {
-    const res2 = await fetch(`${workerOrigin}/run.d.ts`);
-    assertEquals(res2.status, 200);
-    assertEquals(res2.headers.get("Content-Type"), "application/typescript; charset=utf-8");
-    assertEquals(res2.headers.get("Etag"), `W/"${version}"`);
-    assertEquals(res2.headers.get("Cache-Control"), "public, max-age=86400");
-    assertStringIncludes(await res2.text(), "export interface RunOptions");
-
+  await t.step("node polyfills", async () => {
     const res3 = await fetch(`${workerOrigin}/node/process.js`);
     assertEquals(res3.status, 200);
     assertEquals(res3.headers.get("Content-Type"), "application/javascript; charset=utf-8");
@@ -401,19 +394,7 @@ Deno.test("esm-worker", { sanitizeOps: false, sanitizeResources: false }, async 
     assertEquals(res.headers.get("Cache-Control"), "public, max-age=86400");
     assertEquals(res.headers.get("Content-Type"), "application/javascript; charset=utf-8");
     assertStringIncludes(res.headers.get("Vary") ?? "", "User-Agent");
-    assertStringIncludes(res.headers.get("Vary") ?? "", "Referer");
-    assertStringIncludes(await res.text(), '("/transform")');
-
-    const dtsUrl = res.headers.get("X-Typescript-Types")!;
-    assert(dtsUrl.startsWith(workerOrigin));
-    assert(dtsUrl.endsWith(".d.ts"));
-
-    const res2 = await fetch(`${workerOrigin}/run?target=es2022`, { headers: { "referer": "http://localhost:8080/sw.js" } });
-    const code = await res2.text();
-    assert(!res2.headers.get("Vary")?.includes("User-Agent"));
-    assertStringIncludes(res.headers.get("Vary") ?? "", "Referer");
-    assertStringIncludes(code, 'from"/esm-compiler@');
-    assertStringIncludes(code, '/es2022/esm-compiler.mjs"');
+    assertStringIncludes(await res.text(), "esm.sh/run");
 
     const res4 = await fetch(`${workerOrigin}/tsx`);
     assertEquals(res4.headers.get("Etag"), `W/"${version}"`);
@@ -429,7 +410,7 @@ Deno.test("esm-worker", { sanitizeOps: false, sanitizeResources: false }, async 
         import { renderToString } from "preact-render-to-string";
         export default () => renderToString(<h1>Hello world!</h1>);
       `,
-      filename: "source.jsx",
+      lang: "jsx",
       target: "es2022",
       importMap: {
         imports: {
@@ -437,14 +418,18 @@ Deno.test("esm-worker", { sanitizeOps: false, sanitizeResources: false }, async 
           "preact-render-to-string": "https://esm.sh/preact-render-to-string6.0.2",
         },
       },
-      sourceMap: true,
+      sourceMap: "external",
+      minify: true,
     };
-    const hash = await computeHash("jsx" + options.code + JSON.stringify(options.importMap) + options.target + options.sourceMap);
+    const hash = await computeHash(
+      options.lang + options.code + options.target + JSON.stringify(options.importMap) + options.sourceMap + options.minify,
+    );
     const res1 = await fetch(`${workerOrigin}/transform`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(options),
     });
+    assertEquals(res1.status, 200);
     const ret = await res1.json();
     assertStringIncludes(ret.code, `"https://preact@10.13.2/jsx-runtime"`);
     assertStringIncludes(ret.code, `"https://esm.sh/preact-render-to-string6.0.2"`);
@@ -455,16 +440,12 @@ Deno.test("esm-worker", { sanitizeOps: false, sanitizeResources: false }, async 
     });
     assertEquals(res2.status, 200);
     assertEquals(res2.headers.get("Content-Type"), "application/javascript; charset=utf-8");
-
     const js = await res2.text();
     assertEquals(js, ret.code);
 
-    const res3 = await fetch(`${workerOrigin}/+${hash}.mjs.map`, {
-      headers: { "User-Agent": "Chrome/90.0.4430.212" },
-    });
+    const res3 = await fetch(`${workerOrigin}/+${hash}.mjs.map`);
     assertEquals(res3.status, 200);
     assertEquals(res3.headers.get("Content-Type"), "application/json; charset=utf-8");
-
     const map = await res3.text();
     assertEquals(map, ret.map);
   });

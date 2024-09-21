@@ -157,8 +157,8 @@ func encodeBuildArgs(args BuildArgs, isDts bool) string {
 	return ""
 }
 
-// fixBuildArgs removes invalid alias, deps, external from the build args
-func fixBuildArgs(npmrc *NpmRC, installDir string, args *BuildArgs, module Module) error {
+// normalizeBuildArgs removes invalid alias, deps, external from the build args
+func normalizeBuildArgs(npmrc *NpmRC, installDir string, args *BuildArgs, module Module) error {
 	if len(args.alias) > 0 || len(args.deps) > 0 || args.external.Len() > 0 {
 		depsSet := NewStringSet()
 		err := walkDeps(npmrc, installDir, module, depsSet)

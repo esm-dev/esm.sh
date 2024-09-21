@@ -29,6 +29,7 @@ async function fetchOrigin(req: Request, env: Env, ctx: Context, pathname: strin
     "Content-Type",
     "Referer",
     "User-Agent",
+    "If-None-Match",
     "X-Forwarded-For",
     "X-Real-Ip",
     "X-Real-Origin",
@@ -284,9 +285,10 @@ function withESMWorker(middleware?: Middleware, cache: Cache = (caches as any).d
         return res;
     }
 
+    // built-in modules/scripts
     if (
       pathname === "/run" ||
-      pathname === "/run.d.ts" ||
+      pathname === "/run-helper" ||
       pathname === "/tsx" ||
       (pathname.startsWith("/node/") && pathname.endsWith(".js"))
     ) {
@@ -307,8 +309,7 @@ function withESMWorker(middleware?: Middleware, cache: Cache = (caches as any).d
         }
         return fetchOrigin(req, env, ctx, pathname, query);
       }, {
-        varyUA: !pathname.endsWith(".d.ts"),
-        varyReferer: pathname === "/run",
+        varyUA: true,
       });
     }
 
@@ -784,18 +785,10 @@ function withESMWorker(middleware?: Middleware, cache: Cache = (caches as any).d
           const hasPinedTarget = !!targetArg && targets.has(targetArg);
           const realOrigin = req.headers.get("X-Real-Origin");
           let targetFromUA: string | undefined;
-          let referer: string | null | undefined;
           let res: Response | undefined;
           if (options?.varyUA && !hasPinedTarget && !isDtsFile(pathname) && !searchParams.has("raw")) {
             targetFromUA = getBuildTargetFromUA(req.headers.get("User-Agent"));
             cacheKey.searchParams.set("target", targetFromUA);
-          }
-          if (options?.varyReferer) {
-            referer = req.headers.get("Referer");
-            cacheKey.searchParams.set(
-              "referer",
-              referer?.startsWith("http://localhost:") || referer?.startsWith("http://localhost/") ? "localhost" : "*",
-            );
           }
           if (realOrigin) {
             cacheKey.searchParams.set("X-Origin", realOrigin);
@@ -816,9 +809,6 @@ function withESMWorker(middleware?: Middleware, cache: Cache = (caches as any).d
           res = await fetcher(targetFromUA ?? (hasPinedTarget ? targetArg : null));
           if (targetFromUA) {
             res.headers.append("Vary", "User-Agent");
-          }
-          if (options?.varyReferer) {
-            res.headers.append("Vary", "Referer");
           }
           if (res.ok && res.headers.get("Cache-Control")?.startsWith("public, max-age=")) {
             workerCtx.waitUntil(cache.put(cacheKey, res.clone()));

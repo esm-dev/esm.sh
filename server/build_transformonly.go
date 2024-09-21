@@ -3,7 +3,6 @@ package server
 import (
 	"encoding/json"
 	"errors"
-	"path"
 	"strings"
 
 	"github.com/evanw/esbuild/pkg/api"
@@ -15,11 +14,13 @@ type ImportMap struct {
 }
 
 type TransformInput struct {
-	Code      string          `json:"code"`
-	ImportMap json.RawMessage `json:"importMap"`
-	Filename  string          `json:"filename"`
-	Target    string          `json:"target"`
-	SourceMap bool            `json:"sourceMap"`
+	Lang            string          `json:"lang"`
+	Code            string          `json:"code"`
+	ImportMap       json.RawMessage `json:"importMap"`
+	JsxImportSource string          `json:"jsxImportSource"`
+	Target          string          `json:"target"`
+	SourceMap       string          `json:"sourceMap"`
+	Minify          bool            `json:"minify"`
 }
 
 type TransformOutput struct {
@@ -39,38 +40,35 @@ func transform(input TransformInput) (out TransformOutput, err error) {
 	}
 
 	loader := api.LoaderJS
-	extname := path.Ext(input.Filename)
-	switch extname {
-	case ".jsx":
+	switch input.Lang {
+	case "jsx":
 		loader = api.LoaderJSX
-	case ".ts":
+	case "ts":
 		loader = api.LoaderTS
-	case ".tsx":
+	case "tsx":
 		loader = api.LoaderTSX
 	}
 
 	var importMap ImportMap
-	err = json.Unmarshal(input.ImportMap, &importMap)
-	if err != nil {
-		return
+	if len(input.ImportMap) > 0 {
+		if json.Unmarshal(input.ImportMap, &importMap) != nil {
+			err = errors.New("<400> invalid import map")
+		}
 	}
 
 	imports := map[string]string{}
 	trailingSlashImports := map[string]string{}
-	jsxImportSource := ""
+	jsxImportSource := input.JsxImportSource
 
-	// todo: use importMap.Scopes
-	if len(importMap.Imports) > 0 {
-		for key, value := range importMap.Imports {
-			if value != "" {
-				if strings.HasSuffix(key, "/") {
-					trailingSlashImports[key] = value
-				} else {
-					if key == "@jsxImportSource" {
-						jsxImportSource = value
-					}
-					imports[key] = value
+	for key, value := range importMap.Imports {
+		if value != "" {
+			if strings.HasSuffix(key, "/") {
+				trailingSlashImports[key] = value
+			} else {
+				if key == "@jsxImportSource" {
+					jsxImportSource = value
 				}
+				imports[key] = value
 			}
 		}
 	}
@@ -95,26 +93,24 @@ func transform(input TransformInput) (out TransformOutput, err error) {
 	stdin := &api.StdinOptions{
 		Contents:   input.Code,
 		ResolveDir: "/",
-		Sourcefile: input.Filename,
+		Sourcefile: "source." + input.Lang,
 		Loader:     loader,
 	}
-	jsx := api.JSXTransform
-	if jsxImportSource != "" {
-		jsx = api.JSXAutomatic
+	if jsxImportSource == "" {
+		jsxImportSource = "react"
 	}
 	opts := api.BuildOptions{
-		Outdir:           "/esbuild",
-		Stdin:            stdin,
-		Platform:         api.PlatformBrowser,
-		Format:           api.FormatESModule,
-		Target:           target,
-		JSX:              jsx,
-		JSXImportSource:  jsxImportSource,
-		Bundle:           true,
-		TreeShaking:      api.TreeShakingFalse,
-		MinifyWhitespace: true,
-		MinifySyntax:     true,
-		Write:            false,
+		Outdir:            "/esbuild",
+		Stdin:             stdin,
+		Platform:          api.PlatformBrowser,
+		Format:            api.FormatESModule,
+		Target:            target,
+		JSX:               api.JSXAutomatic,
+		JSXImportSource:   jsxImportSource,
+		MinifyWhitespace:  input.Minify,
+		MinifySyntax:      input.Minify,
+		MinifyIdentifiers: input.Minify,
+		Bundle:            true,
 		Plugins: []api.Plugin{
 			{
 				Name: "resolver",
@@ -123,9 +119,12 @@ func transform(input TransformInput) (out TransformOutput, err error) {
 				},
 			},
 		},
+		Write: false,
 	}
-	if input.SourceMap {
+	if input.SourceMap == "external" {
 		opts.Sourcemap = api.SourceMapExternal
+	} else if input.SourceMap == "inline" {
+		opts.Sourcemap = api.SourceMapInline
 	}
 	ret := api.Build(opts)
 	if len(ret.Errors) > 0 {

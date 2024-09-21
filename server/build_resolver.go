@@ -882,7 +882,7 @@ func (ctx *BuildContext) resolveExternalModule(specifier string, kind api.Resolv
 		exports:    NewStringSet(),
 	}
 
-	err = fixBuildArgs(ctx.npmrc, ctx.wd, &args, module)
+	err = normalizeBuildArgs(ctx.npmrc, ctx.wd, &args, module)
 	if err != nil {
 		return
 	}

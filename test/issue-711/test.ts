@@ -10,7 +10,7 @@ Deno.test("issue #711", async () => {
   const esmPath = res.headers.get("x-esm-path")!;
   assert(esmPath);
   assertStringIncludes(esmPath, "/es2021/");
-  const res2 = await fetch(`http://localhost:8080/${esmPath}`);
+  const res2 = await fetch("http://localhost:8080" + esmPath);
   res2.body?.cancel();
   assertEquals(res2.headers.get("content-type"), "application/javascript; charset=utf-8");
 });

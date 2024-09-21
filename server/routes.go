@@ -80,7 +80,7 @@ func (pkg Module) String() string {
 	return s
 }
 
-func routes() rex.Handle {
+func routes(debug bool) rex.Handle {
 	startTime := time.Now()
 	globalETag := fmt.Sprintf(`W/"v%d"`, VERSION)
 
@@ -111,21 +111,15 @@ func routes() rex.Handle {
 				if targets[input.Target] == 0 {
 					input.Target = "esnext"
 				}
-				var loader string
-				extname := path.Ext(input.Filename)
-				switch extname {
-				case ".js", ".jsx", ".ts", ".tsx":
-					loader = extname[1:]
-				default:
-					loader = "js"
-				}
 
 				h := sha1.New()
-				h.Write([]byte(loader))
+				h.Write([]byte(input.Lang))
 				h.Write([]byte(input.Code))
-				h.Write(input.ImportMap)
 				h.Write([]byte(input.Target))
-				h.Write([]byte(fmt.Sprintf("%v", input.SourceMap)))
+				h.Write(input.ImportMap)
+				h.Write([]byte(input.JsxImportSource))
+				h.Write([]byte(input.SourceMap))
+				h.Write([]byte(fmt.Sprintf("%v", input.Minify)))
 				hash := hex.EncodeToString(h.Sum(nil))
 
 				// if previous build exists, return it directly
@@ -362,15 +356,10 @@ func routes() rex.Handle {
 		}
 
 		// serve the internal script
-		if pathname == "/run" || pathname == "/tsx" {
+		if pathname == "/run" || pathname == "/run-helper" || pathname == "/tsx" {
 			ifNoneMatch := ctx.R.Header.Get("If-None-Match")
-			if ifNoneMatch != "" && ifNoneMatch == globalETag {
+			if ifNoneMatch == globalETag && !debug {
 				return rex.Status(http.StatusNotModified, nil)
-			}
-
-			data, err := embedFS.ReadFile(fmt.Sprintf("server/embed/%s.ts", pathname[1:]))
-			if err != nil {
-				return rex.Status(404, "Not Found")
 			}
 
 			// determine build target by `?target` query or `User-Agent` header
@@ -380,127 +369,27 @@ func routes() rex.Handle {
 				target = getBuildTargetByUA(ctx.UserAgent())
 			}
 
-			// replace `$TARGET` with the target
-			data = bytes.ReplaceAll(data, []byte("$TARGET"), []byte(fmt.Sprintf(`"%s"`, target)))
+			js, err := buildEmbedTS(pathname[1:]+".ts", target, debug)
+			if err != nil {
+				return throwErrorJS(ctx, fmt.Sprintf("Transform error: %v", err), false)
+			}
 
-			var code []byte
-			if pathname == "/run" {
-				referer := ctx.R.Header.Get("Referer")
-				isLocalhost := strings.HasPrefix(referer, "http://localhost:") || strings.HasPrefix(referer, "http://localhost/")
-				ret := api.Build(api.BuildOptions{
-					Stdin: &api.StdinOptions{
-						Sourcefile: "run.ts",
-						Loader:     api.LoaderTS,
-						Contents:   string(data),
-					},
-					Target:            targets[target],
-					Format:            api.FormatESModule,
-					Platform:          api.PlatformBrowser,
-					MinifyWhitespace:  true,
-					MinifyIdentifiers: true,
-					MinifySyntax:      true,
-					Bundle:            true,
-					Write:             false,
-					Outfile:           "-",
-					LegalComments:     api.LegalCommentsExternal,
-					Plugins: []api.Plugin{{
-						Name: "loader",
-						Setup: func(build api.PluginBuild) {
-							build.OnResolve(api.OnResolveOptions{Filter: ".*"}, func(args api.OnResolveArgs) (api.OnResolveResult, error) {
-								if strings.HasPrefix(args.Path, "/") {
-									return api.OnResolveResult{Path: args.Path, External: true}, nil
-								}
-								if args.Path == "./run-tsx" {
-									return api.OnResolveResult{Path: args.Path, Namespace: "tsx"}, nil
-								}
-								return api.OnResolveResult{}, nil
-							})
-							build.OnLoad(api.OnLoadOptions{Filter: ".*", Namespace: "tsx"}, func(args api.OnLoadArgs) (api.OnLoadResult, error) {
-								sourceFile := "server/embed/run-tsx.ts"
-								if isLocalhost {
-									sourceFile = "server/embed/run-tsx.dev.ts"
-								}
-								data, err := embedFS.ReadFile(sourceFile)
-								if err != nil {
-									return api.OnLoadResult{}, err
-								}
-								sourceCode := string(bytes.ReplaceAll(data, []byte("$TARGET"), []byte(target)))
-								return api.OnLoadResult{Contents: &sourceCode, Loader: api.LoaderTS}, nil
-							})
-						},
-					}},
-				})
-				if ret.Errors != nil {
-					return throwErrorJS(ctx, fmt.Sprintf("Transform error: %v", ret.Errors), false)
-				}
-				code = concatBytes(ret.OutputFiles[0].Contents, ret.OutputFiles[1].Contents)
-				appendVaryHeader(ctx.W.Header(), "Referer")
+			if debug {
+				ctx.SetHeader("Cache-Control", ccMustRevalidate)
 			} else {
-				code, err = minify(string(data), targets[target], api.LoaderTS)
-				if err != nil {
-					return throwErrorJS(ctx, fmt.Sprintf("Transform error: %v", err), false)
-				}
+				ctx.SetHeader("Cache-Control", cc1day)
+				ctx.SetHeader("Etag", globalETag)
 			}
 			if targetFromUA {
 				appendVaryHeader(ctx.W.Header(), "User-Agent")
 			}
 			ctx.SetHeader("Content-Type", ctJavaScript)
-			ctx.SetHeader("Cache-Control", cc1day)
-			ctx.SetHeader("Etag", globalETag)
-			if pathname == "/run" {
-				ctx.SetHeader("X-Typescript-Types", fmt.Sprintf("%s/run.d.ts", cdnOrigin))
-			}
-			return code
+			return js
 		}
 
 		if strings.HasPrefix(pathname, "/http://") || strings.HasPrefix(pathname, "/https://") {
 			fmt.Println(pathname[1:])
-			url, err := url.ParseRequestURI(pathname[1:])
-			if err != nil {
-				return rex.Status(400, "Invalid URL")
-			}
-			if url.Hostname() == "localhost" {
-				if url.Path == "" || url.Path == "/" {
-					ifNoneMatch := ctx.R.Header.Get("If-None-Match")
-					if ifNoneMatch != "" && ifNoneMatch == globalETag {
-						return rex.Status(http.StatusNotModified, nil)
-					}
-					html, err := embedFS.ReadFile("server/embed/run-localhost.html")
-					if err != nil {
-						return err
-					}
-					ctx.SetHeader("Content-Type", ctHtml)
-					ctx.SetHeader("Etag", globalETag)
-					ctx.SetHeader("Cache-Control", cc1day)
-					return rex.Content("index.html", startTime, bytes.NewReader(html))
-				} else if url.Path == "/.sw" {
-					ifNoneMatch := ctx.R.Header.Get("If-None-Match")
-					if ifNoneMatch != "" && ifNoneMatch == globalETag {
-						return rex.Status(http.StatusNotModified, nil)
-					}
-					ts, err := embedFS.ReadFile("server/embed/run-localhost-sw.ts")
-					if err != nil {
-						return err
-					}
-					// determine build target by `?target` query or `User-Agent` header
-					target := strings.ToLower(ctx.Query().Get("target"))
-					targetFromUA := targets[target] == 0
-					if targetFromUA {
-						target = getBuildTargetByUA(ctx.UserAgent())
-					}
-					// replace `$TARGET` with the target
-					ts = bytes.ReplaceAll(ts, []byte("$TARGET"), []byte(fmt.Sprintf(`"%s"`, target)))
-					js, err := minify(string(ts), targets[target], api.LoaderTS)
-					if err != nil {
-						return throwErrorJS(ctx, fmt.Sprintf("Transform error: %v", err), false)
-					}
-					ctx.SetHeader("Content-Type", ctJavaScript)
-					ctx.SetHeader("Etag", globalETag)
-					ctx.SetHeader("Cache-Control", cc1day)
-					return rex.Content("sw.js", startTime, bytes.NewReader(js))
-				}
-			}
-			return url
+			return pathname
 		}
 
 		// serve embed assets
@@ -557,11 +446,15 @@ func routes() rex.Handle {
 				ctx.SetHeader("Cache-Control", ccImmutable)
 			} else {
 				ifNoneMatch := ctx.R.Header.Get("If-None-Match")
-				if ifNoneMatch != "" && ifNoneMatch == globalETag {
+				if ifNoneMatch == globalETag && !debug {
 					return rex.Status(http.StatusNotModified, nil)
 				}
-				ctx.SetHeader("Cache-Control", cc1day)
-				ctx.SetHeader("Etag", globalETag)
+				if debug {
+					ctx.SetHeader("Cache-Control", ccMustRevalidate)
+				} else {
+					ctx.SetHeader("Cache-Control", cc1day)
+					ctx.SetHeader("Etag", globalETag)
+				}
 			}
 			target := getBuildTargetByUA(ctx.UserAgent())
 			code, err := minify(lib, targets[target], api.LoaderJS)
@@ -573,29 +466,17 @@ func routes() rex.Handle {
 			return rex.Content(pathname, startTime, bytes.NewReader(code))
 		}
 
-		// use embed types
-		if strings.HasSuffix(pathname, ".d.ts") && strings.Count(pathname, "/") == 1 {
-			data, err := embedFS.ReadFile("server/embed/types" + pathname)
-			if err == nil {
-				ifNoneMatch := ctx.R.Header.Get("If-None-Match")
-				if ifNoneMatch != "" && ifNoneMatch == globalETag {
-					return rex.Status(http.StatusNotModified, nil)
-				}
-				ctx.SetHeader("Content-Type", ctTypeScript)
-				ctx.SetHeader("Cache-Control", cc1day)
-				ctx.SetHeader("Etag", globalETag)
-				return rex.Content(pathname, startTime, bytes.NewReader(data))
-			}
-		}
-
 		// check `/*pathname` or `/gh/*pathname` pattern
-		externalAll := false
+		asteriskPrefix := ""
 		if strings.HasPrefix(pathname, "/*") {
-			externalAll = true
+			asteriskPrefix = "*"
 			pathname = "/" + pathname[2:]
 		} else if strings.HasPrefix(pathname, "/gh/*") {
-			externalAll = true
+			asteriskPrefix = "*"
 			pathname = "/gh/" + pathname[5:]
+		} else if strings.HasPrefix(pathname, "/pr/*") {
+			asteriskPrefix = "*"
+			pathname = "/pr/" + pathname[5:]
 		}
 
 		var npmrc *NpmRC
@@ -767,14 +648,10 @@ func routes() rex.Handle {
 			if resType != ResModuleBareName {
 				pkgName := module.PkgName
 				pkgVersion := module.PkgVersion
-				asteriskPrefix := ""
 				subPath := ""
 				qs := ""
 				if strings.HasPrefix(pkgName, "@jsr/") {
 					pkgName = "jsr/@" + strings.ReplaceAll(pkgName[5:], "__", "/")
-				}
-				if externalAll {
-					asteriskPrefix = "*"
 				}
 				if module.SubPath != "" {
 					subPath = "/" + module.SubPath
@@ -965,14 +842,10 @@ func routes() rex.Handle {
 		if !isFixedVersion && (target == "denonext" || target == "deno") {
 			pkgName := module.PkgName
 			pkgVersion := module.PkgVersion
-			asteriskPrefix := ""
 			subPath := ""
 			qs := ""
 			if strings.HasPrefix(pkgName, "@jsr/") {
 				pkgName = "jsr/@" + strings.ReplaceAll(pkgName[5:], "__", "/")
-			}
-			if externalAll {
-				asteriskPrefix = "*"
 			}
 			if module.SubPath != "" {
 				subPath = "/" + module.SubPath
@@ -1065,6 +938,7 @@ func routes() rex.Handle {
 
 		// check `?external` query
 		external := NewStringSet()
+		externalAll := asteriskPrefix == "*"
 		for _, p := range strings.Split(query.Get("external"), ",") {
 			p = strings.TrimSpace(p)
 			if p == "*" {
@@ -1086,8 +960,8 @@ func routes() rex.Handle {
 			external:    external,
 		}
 
-		// check if the build args from pathname: `PKG@VERSION/X-${args}/esnext/SUBPATH`
-		isBuildArgsFromPath := false
+		// match path `PKG@VERSION/X-${args}/esnext/SUBPATH`
+		argsX := false
 		if resType == ResBuild || resType == ResDTS {
 			a := strings.Split(module.SubModuleName, "/")
 			if len(a) > 1 && strings.HasPrefix(a[0], "X-") {
@@ -1099,13 +973,13 @@ func routes() rex.Handle {
 				module.SubPath = strings.Join(strings.Split(module.SubPath, "/")[1:], "/")
 				module.SubModuleName = toModuleBareName(module.SubPath, true)
 				buildArgs = args
-				isBuildArgsFromPath = true
+				argsX = true
 			}
 		}
 
 		// fix the build args that are from the query
-		if !isBuildArgsFromPath {
-			err := fixBuildArgs(npmrc, path.Join(npmrc.StoreDir(), module.PackageName()), &buildArgs, module)
+		if !argsX {
+			err := normalizeBuildArgs(npmrc, path.Join(npmrc.StoreDir(), module.PackageName()), &buildArgs, module)
 			if err != nil {
 				return throwErrorJS(ctx, err.Error(), false)
 			}
@@ -1167,7 +1041,7 @@ func routes() rex.Handle {
 
 		}
 
-		if !isBuildArgsFromPath {
+		if !argsX {
 			// check `?jsx-rutnime` query
 			var jsxRuntime *Module = nil
 			if v := query.Get("jsx-runtime"); v != "" {
