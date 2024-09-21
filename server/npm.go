@@ -460,9 +460,9 @@ do:
 	return
 }
 
-func (rc *NpmRC) installPackage(module Module) (pkgJson PackageJSON, err error) {
-	installDir := path.Join(rc.StoreDir(), module.PackageName())
-	pkgJsonFilepath := path.Join(installDir, "node_modules", module.PkgName, "package.json")
+func (rc *NpmRC) installPackage(url EsmURL) (pkgJson PackageJSON, err error) {
+	installDir := path.Join(rc.StoreDir(), url.PackageName())
+	pkgJsonFilepath := path.Join(installDir, "node_modules", url.PkgName, "package.json")
 
 	// only one installation process allowed at the same time for the same package
 	lock := getInstallLock(installDir)
@@ -491,45 +491,45 @@ func (rc *NpmRC) installPackage(module Module) (pkgJson PackageJSON, err error) 
 		err = os.WriteFile(packageJsonFp, []byte("{}"), 0644)
 	}
 	if err != nil {
-		err = fmt.Errorf("ensure package.json failed: %s", module.PackageName())
+		err = fmt.Errorf("ensure package.json failed: %s", url.PackageName())
 		return
 	}
 
 	attemptMaxTimes := 3
 	for i := 1; i <= attemptMaxTimes; i++ {
-		if module.GhPrefix {
-			err = os.WriteFile(packageJsonFp, []byte(fmt.Sprintf(`{"dependencies":{"%s":"github:%s#%s"}}`, module.PkgName, module.PkgName, module.PkgVersion)), 0644)
+		if url.GhPrefix {
+			err = os.WriteFile(packageJsonFp, []byte(fmt.Sprintf(`{"dependencies":{"%s":"github:%s#%s"}}`, url.PkgName, url.PkgName, url.PkgVersion)), 0644)
 			if err == nil {
 				err = rc.pnpmi(installDir)
 			}
 			// pnpm will ignore github package which has been installed without `package.json` file
 			// so we install it manually
 			if err == nil {
-				packageJsonFp := path.Join(installDir, "node_modules", module.PkgName, "package.json")
+				packageJsonFp := path.Join(installDir, "node_modules", url.PkgName, "package.json")
 				if !existsFile(packageJsonFp) {
 					ensureDir(path.Dir(packageJsonFp))
 					err = os.WriteFile(packageJsonFp, utils.MustEncodeJSON(PackageJSONRaw{
-						Name:    module.PkgName,
-						Version: module.PkgVersion,
+						Name:    url.PkgName,
+						Version: url.PkgVersion,
 					}), 0644)
 				} else {
 					var p PackageJSON
 					err = utils.ParseJSONFile(packageJsonFp, &p)
 					if err == nil && len(p.Files) > 0 {
 						// install github package with ignoring `files` field
-						err = ghInstall(installDir, module.PkgName, module.PkgVersion)
+						err = ghInstall(installDir, url.PkgName, url.PkgVersion)
 					}
 				}
 			}
-		} else if regexpFullVersion.MatchString(module.PkgVersion) {
-			err = rc.pnpmi(installDir, module.PackageName(), "--prefer-offline")
+		} else if regexpFullVersion.MatchString(url.PkgVersion) {
+			err = rc.pnpmi(installDir, url.PackageName(), "--prefer-offline")
 		} else {
-			err = rc.pnpmi(installDir, module.PackageName())
+			err = rc.pnpmi(installDir, url.PackageName())
 		}
 		if err == nil {
 			err = utils.ParseJSONFile(pkgJsonFilepath, &pkgJson)
 			if err != nil {
-				err = fmt.Errorf("pnpm install %s: package.json not found", module)
+				err = fmt.Errorf("pnpm install %s: package.json not found", url)
 			}
 		}
 		if err == nil || i == attemptMaxTimes {

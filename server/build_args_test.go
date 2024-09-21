@@ -23,7 +23,7 @@ func TestEncodeBuildArgs(t *testing.T) {
 			external:          external,
 			exports:           exports,
 			conditions:        conditions,
-			jsxRuntime:        &Module{PkgVersion: "18.2.0", PkgName: "react"},
+			jsxRuntime:        &EsmURL{PkgVersion: "18.2.0", PkgName: "react"},
 			externalRequire:   true,
 			keepNames:         true,
 			ignoreAnnotations: true,
