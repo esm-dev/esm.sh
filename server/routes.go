@@ -965,7 +965,6 @@ func routes(debug bool) rex.Handle {
 		if resType == BuildUrl || resType == DtsUrl {
 			a := strings.Split(esmUrl.SubModuleName, "/")
 			if len(a) > 1 && strings.HasPrefix(a[0], "X-") {
-				esmUrl.SubModuleName = strings.Join(a[1:], "/")
 				args, err := decodeBuildArgs(npmrc, strings.TrimPrefix(a[0], "X-"))
 				if err != nil {
 					return throwErrorJS(ctx, "Invalid build args: "+a[0], false)
@@ -993,10 +992,8 @@ func routes(debug bool) rex.Handle {
 					args = "X-" + a
 				}
 				savePath = normalizeSavePath(zoneId, path.Join(fmt.Sprintf(
-					"types%s/%s@%s/%s",
-					ghPrefix,
-					esmUrl.PkgName,
-					esmUrl.PkgVersion,
+					"types/%s/%s",
+					esmUrl.PackageName(),
 					args,
 				), esmUrl.SubPath))
 				fi, err = fs.Stat(savePath)

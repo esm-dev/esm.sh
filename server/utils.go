@@ -191,6 +191,19 @@ func concatBytes(a, b []byte) []byte {
 	return c
 }
 
+// pathJoin joins the given path segments with `/`.
+func pathJoin(path ...string) string {
+	a := make([]string, len(path))
+	j := 0
+	for _, p := range path {
+		if p != "" && p != "." {
+			a[j] = p
+			j++
+		}
+	}
+	return strings.Join(a[:j], "/")
+}
+
 // run executes the given command and returns the output.
 func run(cmd string, args ...string) (output []byte, err error) {
 	var outBuf bytes.Buffer

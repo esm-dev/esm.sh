@@ -248,12 +248,12 @@ func (ctx *BuildContext) resolveEntry(url EsmURL) (entry BuildEntry) {
 
 	if url.SubModuleName != "" {
 		if endsWith(url.SubPath, ".d.ts", ".d.mts") {
-			entry.dts = "./" + url.SubPath
+			entry.dts = normalizeEntryPath(url.SubPath)
 			return
 		}
 
 		if endsWith(url.SubPath, ".jsx", ".ts", ".tsx") {
-			entry.esm = "./" + url.SubPath
+			entry.esm = normalizeEntryPath(url.SubPath)
 			return
 		}
 
@@ -334,16 +334,16 @@ func (ctx *BuildContext) resolveEntry(url EsmURL) (entry BuildEntry) {
 		var p PackageJSON
 		if utils.ParseJSONFile(path.Join(pkgDir, subModule, "package.json"), &p) == nil {
 			if entry.esm == "" && p.Module != "" {
-				entry.esm = "./" + path.Join(subModule, p.Module)
+				entry.esm = "./" + pathJoin(subModule, p.Module)
 			}
 			if entry.cjs == "" && p.Main != "" {
-				entry.cjs = "./" + path.Join(subModule, p.Main)
+				entry.cjs = "./" + pathJoin(subModule, p.Main)
 			}
 			if entry.dts == "" {
 				if p.Types != "" {
-					entry.dts = "./" + path.Join(subModule, p.Types)
+					entry.dts = "./" + pathJoin(subModule, p.Types)
 				} else if p.Typings != "" {
-					entry.dts = "./" + path.Join(subModule, p.Typings)
+					entry.dts = "./" + pathJoin(subModule, p.Typings)
 				}
 			}
 		}
@@ -1222,16 +1222,19 @@ func normalizeBuildEntry(ctx *BuildContext, entry *BuildEntry) {
 		}
 	}
 
+	if entry.esm != "" {
+		entry.esm = normalizeEntryPath(entry.esm)
+	}
+	if entry.cjs != "" {
+		entry.cjs = normalizeEntryPath(entry.cjs)
+	}
 	if entry.dts != "" {
 		entry.dts = normalizeEntryPath(entry.dts)
 	}
 }
 
-func normalizeEntryPath(pathname string) string {
-	if isRelativeSpecifier(pathname) {
-		return pathname
-	}
-	return "./" + strings.TrimPrefix(pathname, "/")
+func normalizeEntryPath(path string) string {
+	return "." + utils.CleanPath(path)
 }
 
 func normalizeSavePath(zoneId string, pathname string) string {

@@ -655,7 +655,7 @@ func (ctx *BuildContext) buildModule() (result BuildResult, err error) {
 										}
 										if match {
 											exportPrefix, _ := utils.SplitByLastByte(exportName, '*')
-											exportModuleName := path.Join(ctx.packageJson.Name, exportPrefix+strings.TrimPrefix(bareName, prefix))
+											exportModuleName := pathJoin(ctx.packageJson.Name, exportPrefix+strings.TrimPrefix(bareName, prefix))
 											if exportModuleName != entryModuleSpecifier && exportModuleName != entryModuleSpecifier+"/index" {
 												externalPath, err := ctx.resolveExternalModule(exportModuleName, args.Kind)
 												if err != nil {
@@ -686,7 +686,7 @@ func (ctx *BuildContext) buildModule() (result BuildResult, err error) {
 											}
 										}
 										if match {
-											exportModuleName := path.Join(ctx.packageJson.Name, stripModuleExt(exportName))
+											exportModuleName := pathJoin(ctx.packageJson.Name, stripModuleExt(exportName))
 											if exportModuleName != entryModuleSpecifier && exportModuleName != entryModuleSpecifier+"/index" {
 												externalPath, err := ctx.resolveExternalModule(exportModuleName, args.Kind)
 												if err != nil {

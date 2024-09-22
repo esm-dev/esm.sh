@@ -4,7 +4,6 @@ import (
 	"io"
 	"net/url"
 	"os"
-	"path"
 	"path/filepath"
 )
 
@@ -24,7 +23,7 @@ type localFSLayer struct {
 }
 
 func (fs *localFSLayer) Stat(name string) (FileStat, error) {
-	fullPath := path.Join(fs.root, name)
+	fullPath := filepath.Join(fs.root, filepath.Clean(name))
 	fi, err := os.Lstat(fullPath)
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -36,11 +35,11 @@ func (fs *localFSLayer) Stat(name string) (FileStat, error) {
 }
 
 func (fs *localFSLayer) List(dir string) (files []string, err error) {
-	return findFiles(filepath.Join(fs.root, dir), "")
+	return findFiles(filepath.Join(fs.root, filepath.Clean(dir)), "")
 }
 
 func (fs *localFSLayer) Open(name string) (file io.ReadSeekCloser, err error) {
-	fullPath := path.Join(fs.root, name)
+	fullPath := filepath.Join(fs.root, filepath.Clean(name))
 	file, err = os.Open(fullPath)
 	if err != nil && os.IsNotExist(err) {
 		err = ErrNotFound
@@ -49,8 +48,8 @@ func (fs *localFSLayer) Open(name string) (file io.ReadSeekCloser, err error) {
 }
 
 func (fs *localFSLayer) WriteFile(name string, content io.Reader) (written int64, err error) {
-	fullPath := path.Join(fs.root, name)
-	err = ensureDir(path.Dir(fullPath))
+	fullPath := filepath.Join(fs.root, filepath.Clean(name))
+	err = ensureDir(filepath.Dir(fullPath))
 	if err != nil {
 		return
 	}
@@ -66,12 +65,12 @@ func (fs *localFSLayer) WriteFile(name string, content io.Reader) (written int64
 }
 
 func (fs *localFSLayer) Remove(name string) (err error) {
-	err = os.Remove(path.Join(fs.root, name))
+	err = os.Remove(filepath.Join(fs.root, filepath.Clean(name)))
 	return
 }
 
 func (fs *localFSLayer) RemoveAll(dirname string) (err error) {
-	err = os.RemoveAll(path.Join(fs.root, dirname))
+	err = os.RemoveAll(filepath.Join(fs.root, filepath.Clean(dirname)))
 	return
 }
 
