@@ -296,7 +296,7 @@ Deno supports type definitions for modules with a `types` field in their `packag
 `X-TypeScript-Types` header. This makes it possible to have type checking and auto-completion when using those modules
 in Deno. ([link](https://deno.land/manual/typescript/types#using-x-typescript-types-header)).
 
-![Figure #1](./server/embed/assets/sceenshot-deno-types.png)
+![Figure #1](./server/embed/assets/sceenshot-x-typescript-types.png)
 
 In case the type definitions provided by the `X-TypeScript-Types` header is incorrect, you can disable it by adding the
 `?no-dts` query to the module import URL:
@@ -317,7 +317,7 @@ We highly recommend [Reejs](https://ree.js.org/) as the runtime with esm.sh that
 
 ## Global CDN
 
-<img width="150" align="right" src="./server/embed/assets/cf.svg" />
+<img width="150" align="right" src="./server/embed/assets/cf-logo.svg" />
 
 The Global CDN of esm.sh is provided by [Cloudflare](https://cloudflare.com), one of the world's largest and fastest
 cloud network platforms.
