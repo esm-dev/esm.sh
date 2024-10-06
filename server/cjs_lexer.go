@@ -45,7 +45,7 @@ var requireModeAllowList = []string{
 	"web-streams-ponyfill",
 }
 
-func initCJSLexerNodeApp() (err error) {
+func initCJSLexer() (err error) {
 	wd := path.Join(config.WorkDir, "pnpm-store", cjsLexerPkg)
 	err = ensureDir(wd)
 	if err != nil {
@@ -69,7 +69,7 @@ func initCJSLexerNodeApp() (err error) {
 		return
 	}
 
-	js, err := embedFS.ReadFile("server/embed/cjs_lexer.js")
+	js, err := embedFS.ReadFile("server/embed/internal/cjs_lexer.js")
 	if err != nil {
 		return
 	}

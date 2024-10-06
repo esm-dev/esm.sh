@@ -72,11 +72,12 @@ func minify(code string, target api.Target, loader api.Loader) ([]byte, error) {
 		MinifyWhitespace:  true,
 		MinifyIdentifiers: true,
 		MinifySyntax:      true,
-		LegalComments:     api.LegalCommentsInline,
+		LegalComments:     api.LegalCommentsExternal,
 		Loader:            loader,
 	})
 	if len(ret.Errors) > 0 {
 		return nil, errors.New(ret.Errors[0].Text)
 	}
-	return ret.Code, nil
+
+	return concatBytes(ret.LegalComments, ret.Code), nil
 }

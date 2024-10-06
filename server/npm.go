@@ -257,6 +257,7 @@ func (rc *NpmRC) StoreDir() string {
 }
 
 func (rc *NpmRC) getPackageInfo(name string, semver string) (info PackageJSON, err error) {
+	// use fixed version for `@types/node`
 	if name == "@types/node" {
 		info = PackageJSON{
 			Name:    "@types/node",
@@ -266,12 +267,13 @@ func (rc *NpmRC) getPackageInfo(name string, semver string) (info PackageJSON, e
 		return
 	}
 
-	// strip leading `=` or `v` from semver
-	if (strings.HasPrefix(semver, "=") || strings.HasPrefix(semver, "v")) && regexpFullVersion.MatchString(semver[1:]) {
+	// strip leading `=` or `v`
+	if (strings.HasPrefix(semver, "=") || strings.HasPrefix(semver, "v")) && regexpVersionStrict.MatchString(semver[1:]) {
 		semver = semver[1:]
 	}
 
-	if regexpFullVersion.MatchString(semver) {
+	// check if the package has been installed
+	if regexpVersionStrict.MatchString(semver) {
 		pkgJsonPath := path.Join(rc.StoreDir(), name+"@"+semver, "node_modules", name, "package.json")
 		if existsFile(pkgJsonPath) && utils.ParseJSONFile(pkgJsonPath, &info) == nil {
 			return
@@ -291,7 +293,7 @@ func (rc *NpmRC) fetchPackageInfo(name string, semverOrDistTag string) (info Pac
 
 	if semverOrDistTag == "" || semverOrDistTag == "*" {
 		semverOrDistTag = "latest"
-	} else if (strings.HasPrefix(semverOrDistTag, "=") || strings.HasPrefix(semverOrDistTag, "v")) && regexpFullVersion.MatchString(semverOrDistTag[1:]) {
+	} else if (strings.HasPrefix(semverOrDistTag, "=") || strings.HasPrefix(semverOrDistTag, "v")) && regexpVersionStrict.MatchString(semverOrDistTag[1:]) {
 		// strip leading `=` or `v` from semver
 		semverOrDistTag = semverOrDistTag[1:]
 	}
@@ -336,7 +338,7 @@ func (rc *NpmRC) fetchPackageInfo(name string, semverOrDistTag string) (info Pac
 		}
 	}
 
-	isFullVersion := regexpFullVersion.MatchString(semverOrDistTag)
+	isFullVersion := regexpVersionStrict.MatchString(semverOrDistTag)
 	isFullVersionFromNpmjsOrg := isFullVersion && strings.HasPrefix(url, npmRegistry)
 	if isFullVersionFromNpmjsOrg {
 		// npm registry supports url like `https://registry.npmjs.org/<name>/<version>`
@@ -521,7 +523,7 @@ func (rc *NpmRC) installPackage(url EsmURL) (pkgJson PackageJSON, err error) {
 					}
 				}
 			}
-		} else if regexpFullVersion.MatchString(url.PkgVersion) {
+		} else if regexpVersionStrict.MatchString(url.PkgVersion) {
 			err = rc.pnpmi(installDir, url.PackageName(), "--prefer-offline")
 		} else {
 			err = rc.pnpmi(installDir, url.PackageName())

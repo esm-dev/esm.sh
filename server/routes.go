@@ -3,6 +3,7 @@ package server
 import (
 	"bytes"
 	"crypto/sha1"
+	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -14,15 +15,20 @@ import (
 	"path"
 	"sort"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/Masterminds/semver/v3"
 	"github.com/esm-dev/esm.sh/server/storage"
-
 	"github.com/evanw/esbuild/pkg/api"
+	"github.com/ije/esbuild-internal/xxhash"
+	"github.com/ije/gox/crypto/rs"
 	"github.com/ije/gox/utils"
 	"github.com/ije/gox/valid"
 	"github.com/ije/rex"
+	"go.etcd.io/bbolt"
+	"golang.org/x/net/html"
+	"golang.org/x/net/html/atom"
 )
 
 const (
@@ -111,6 +117,9 @@ func routes(debug bool) rex.Handle {
 				if targets[input.Target] == 0 {
 					input.Target = "esnext"
 				}
+				if input.Lang == "" && input.Filename != "" {
+					_, input.Lang = utils.SplitByLastByte(input.Filename, '.')
+				}
 
 				h := sha1.New()
 				h.Write([]byte(input.Lang))
@@ -144,20 +153,29 @@ func routes(debug bool) rex.Handle {
 					return output
 				}
 
-				output, err := transform(input)
-				if err != nil {
-					if strings.HasPrefix(err.Error(), "<400> ") {
-						return rex.Err(400, err.Error()[6:])
+				var npmrc *NpmRC
+				if rc := ctx.R.Header.Get("X-Npmrc"); rc != "" {
+					rc, err := NewNpmRcFromJSON([]byte(rc))
+					if err != nil {
+						return rex.Status(400, "Invalid Npmrc Header")
 					}
-					return rex.Err(500, "failed to save code")
+					npmrc = rc
+				} else {
+					npmrc = NewNpmRcFromConfig()
+				}
+
+				output, err := transform(npmrc, input)
+				if err != nil {
+					return rex.Err(400, err.Error())
 				}
 				if len(output.Map) > 0 {
-					output.Code = fmt.Sprintf("%s//# sourceMappingURL=%s", output.Code, path.Base(savePath)+".map")
+					output.Code = fmt.Sprintf("%s//# sourceMappingURL=+%s", output.Code, path.Base(savePath)+".map")
 					go fs.WriteFile(savePath+".map", strings.NewReader(output.Map))
 				}
 				go fs.WriteFile(savePath, strings.NewReader(output.Code))
 				ctx.SetHeader("Cache-Control", ccMustRevalidate)
 				return output
+
 			case "/purge":
 				zoneId := ctx.FormValue("zoneId")
 				packageName := ctx.FormValue("package")
@@ -298,11 +316,24 @@ func routes(debug bool) rex.Handle {
 			}
 			buildQueue.lock.RUnlock()
 
+			disk := "ok"
+			tmpFilepath := path.Join(os.TempDir(), rs.Hex.String(32))
+			err := os.WriteFile(tmpFilepath, make([]byte, 1024*1024), 0644)
+			if err != nil {
+				if errors.Is(err, syscall.ENOSPC) {
+					disk = "full"
+				} else {
+					disk = "error"
+				}
+			}
+			os.Remove(tmpFilepath)
+
 			ctx.SetHeader("Cache-Control", ccMustRevalidate)
 			return map[string]interface{}{
 				"buildQueue": q[:i],
 				"version":    VERSION,
 				"uptime":     time.Since(startTime).String(),
+				"disk":       disk,
 			}
 
 		case "/error.js":
@@ -342,7 +373,7 @@ func routes(debug bool) rex.Handle {
 			}
 
 		case "/favicon.ico":
-			favicon, err := embedFS.ReadFile("server/embed/favicon.ico")
+			favicon, err := embedFS.ReadFile("server/embed/assets/favicon.ico")
 			if err != nil {
 				return err
 			}
@@ -385,11 +416,6 @@ func routes(debug bool) rex.Handle {
 			}
 			ctx.SetHeader("Content-Type", ctJavaScript)
 			return js
-		}
-
-		if strings.HasPrefix(pathname, "/http://") || strings.HasPrefix(pathname, "/https://") {
-			fmt.Println(pathname[1:])
-			return pathname
 		}
 
 		// serve embed assets
@@ -466,19 +492,6 @@ func routes(debug bool) rex.Handle {
 			return rex.Content(pathname, startTime, bytes.NewReader(code))
 		}
 
-		// check `/*pathname` or `/gh/*pathname` pattern
-		asteriskPrefix := ""
-		if strings.HasPrefix(pathname, "/*") {
-			asteriskPrefix = "*"
-			pathname = "/" + pathname[2:]
-		} else if strings.HasPrefix(pathname, "/gh/*") {
-			asteriskPrefix = "*"
-			pathname = "/gh/" + pathname[5:]
-		} else if strings.HasPrefix(pathname, "/pr/*") {
-			asteriskPrefix = "*"
-			pathname = "/pr/" + pathname[5:]
-		}
-
 		var npmrc *NpmRC
 		if rc := ctx.R.Header.Get("X-Npmrc"); rc != "" {
 			rc, err := NewNpmRcFromJSON([]byte(rc))
@@ -512,6 +525,195 @@ func routes(debug bool) rex.Handle {
 		if zoneId != "" {
 			npmrc.zoneId = zoneId
 			cdnOrigin = fmt.Sprintf("https://%s", zoneId)
+		}
+
+		if strings.HasPrefix(pathname, "/http://") || strings.HasPrefix(pathname, "/https://") {
+			query := ctx.Query()
+			urlRaw := pathname[1:]
+			u, err := url.Parse(urlRaw)
+			if err != nil {
+				return rex.Status(400, "Invalid URL")
+			}
+			hostname := u.Hostname()
+			if !regexpDomain.MatchString(hostname) {
+				return rex.Status(400, "Invalid URL")
+			}
+			extname := path.Ext(u.Path)
+			isCss := extname == ".css"
+			if !(isCss || includes(jsExts, extname) || extname == ".vue" || extname == ".svelte") {
+				return rex.Redirect(urlRaw, http.StatusMovedPermanently)
+			}
+			var importMapJson []byte
+			v := query.Get("v")
+			im := query.Get("im")
+			if len(im) > 1 {
+				imPath, err := atobUrl(im[1:])
+				if err != nil {
+					return rex.Status(400, "Invalid `im` Param")
+				}
+				imUrl, err := url.Parse(u.Scheme + "://" + u.Host + imPath)
+				if err != nil {
+					return rex.Status(400, "Invalid `im` Param")
+				}
+				h := xxhash.New()
+				h.Write([]byte(imPath))
+				h.Write([]byte(v))
+				imKey := strings.TrimRight(base64.RawURLEncoding.EncodeToString(h.Sum(nil)), "=")
+				err = imDB.View(func(tx *bbolt.Tx) error {
+					importMapJson = tx.Bucket([]byte("maps")).Get([]byte(u.Host + "?" + imKey))
+					return nil
+				})
+				if err != nil {
+					log.Errorf("Failed to read im.db: %v", err)
+					return rex.Status(500, "Server Internal Error")
+				}
+				v = im[0:1] + imKey
+				if importMapJson == nil {
+					c := &http.Client{
+						Timeout: 1 * time.Minute,
+					}
+					req := &http.Request{
+						Method: "GET",
+						URL:    imUrl,
+						Header: map[string][]string{
+							"User-Agent": {ctx.UserAgent()},
+						},
+					}
+					res, err := c.Do(req)
+					if err != nil || res.StatusCode != 200 {
+						return rex.Status(500, "Failed to fetch import map")
+					}
+					defer res.Body.Close()
+					nodes, err := html.ParseFragment(res.Body, &html.Node{Type: html.ElementNode, Data: "head", DataAtom: atom.Head})
+					if err != nil {
+						return rex.Status(500, "Failed to parse import map")
+					}
+					for _, node := range nodes {
+						if node.Type == html.ElementNode && node.DataAtom == atom.Script && getAttr(node, "type") == "importmap" {
+							text := node.FirstChild
+							if text.Type == html.TextNode && len(strings.TrimSpace(text.Data)) > 0 {
+								var im ImportMap
+								err := json.Unmarshal([]byte(text.Data), &im)
+								if err != nil {
+									return rex.Status(400, "Invalid import map")
+								}
+								importMapJson, _ = json.Marshal(im)
+								err = imDB.Update(func(tx *bbolt.Tx) error {
+									return tx.Bucket([]byte("maps")).Put([]byte(u.Host+"?"+imKey), importMapJson)
+								})
+								if err != nil {
+									log.Errorf("Failed to update im.db: %v", err)
+									return rex.Status(500, "Server Internal Error")
+								}
+							}
+							break
+						}
+					}
+				}
+			}
+			if len(v) > 1 && importMapJson == nil {
+				if !regexpVersion.MatchString(v) {
+					return rex.Status(400, "Invalid Version Param")
+				}
+				imDB.View(func(tx *bbolt.Tx) error {
+					importMapJson = tx.Bucket([]byte("maps")).Get([]byte(u.Host + "?" + v[1:]))
+					return nil
+				})
+			}
+			// determine build target by `?target` query or `User-Agent` header
+			target := strings.ToLower(query.Get("target"))
+			targetFromUA := targets[target] == 0
+			if targetFromUA {
+				target = getBuildTargetByUA(ctx.UserAgent())
+			}
+			h := sha1.New()
+			h.Write([]byte(urlRaw))
+			h.Write([]byte(v))
+			h.Write([]byte(target))
+			savePath := normalizeSavePath(zoneId, path.Join("modules", hex.EncodeToString(h.Sum(nil))+".mjs"))
+			_, err = fs.Stat(savePath)
+			if err != nil && err != storage.ErrNotFound {
+				return rex.Status(500, err.Error())
+			}
+			var code string
+			if err == nil {
+				f, err := fs.Open(savePath)
+				if err != nil {
+					return rex.Status(500, err.Error())
+				}
+				defer f.Close()
+				data, err := io.ReadAll(f)
+				if err != nil {
+					return rex.Status(500, err.Error())
+				}
+				code = string(data)
+			} else {
+				c := &http.Client{
+					Timeout: 1 * time.Minute,
+				}
+				req := &http.Request{
+					Method: "GET",
+					URL:    u,
+					Header: map[string][]string{
+						"User-Agent": {ctx.UserAgent()},
+					},
+				}
+				res, err := c.Do(req)
+				if err != nil {
+					return rex.Status(500, "Failed to fetch source code")
+				}
+				defer res.Body.Close()
+				if res.StatusCode != 200 {
+					if res.StatusCode == 404 {
+						return rex.Status(404, "Not Found")
+					}
+					return rex.Status(res.StatusCode, "Failed to fetch source code")
+				}
+				sourceCode, err := io.ReadAll(res.Body)
+				if err != nil {
+					return rex.Status(500, "Failed to fetch source code")
+				}
+				out, err := transform(npmrc, TransformInput{
+					Filename:         u.Path,
+					Code:             string(sourceCode),
+					Target:           target,
+					ImportMap:        importMapJson,
+					Minify:           true,
+					vArg:             v,
+					supportImportMap: importMapJson != nil && len(v) > 1 && v[0] == 'y',
+				})
+				if err != nil {
+					return rex.Status(500, err.Error())
+				}
+				go fs.WriteFile(savePath, strings.NewReader(out.Code))
+				code = out.Code
+			}
+			if isCss && query.Has("module") {
+				code = fmt.Sprintf("var style = document.createElement('style');\nstyle.textContent = %s;\ndocument.head.appendChild(style);\nexport default null;", utils.MustEncodeJSON(code))
+			}
+			ctx.SetHeader("Cache-Control", ccImmutable)
+			if isCss && !query.Has("module") {
+				ctx.SetHeader("Content-Type", ctCSS)
+			} else {
+				ctx.SetHeader("Content-Type", ctJavaScript)
+			}
+			if targetFromUA {
+				appendVaryHeader(ctx.W.Header(), "User-Agent")
+			}
+			return code
+		}
+
+		// check `/*pathname` pattern
+		asteriskPrefix := ""
+		if strings.HasPrefix(pathname, "/*") {
+			asteriskPrefix = "*"
+			pathname = "/" + pathname[2:]
+		} else if strings.HasPrefix(pathname, "/gh/*") {
+			asteriskPrefix = "*"
+			pathname = "/gh/" + pathname[5:]
+		} else if strings.HasPrefix(pathname, "/pr/*") {
+			asteriskPrefix = "*"
+			pathname = "/pr/" + pathname[5:]
 		}
 
 		esmUrl, extraQuery, isFixedVersion, isModuleFullpath, err := praseESMPath(npmrc, pathname)
@@ -587,7 +789,7 @@ func routes(debug bool) rex.Handle {
 			ctx.R.URL.RawQuery = strings.Join(qs, "&")
 		}
 
-		// get the query
+		// parse the query
 		query := ctx.Query()
 
 		// use `?path=$PATH` query to override the pathname
@@ -1333,7 +1535,7 @@ func praseESMPath(rc *NpmRC, pathname string) (esmUrl EsmURL, extraQuery string,
 	}
 
 	if ghPrefix {
-		if (valid.IsHexString(esmUrl.PkgVersion) && len(esmUrl.PkgVersion) >= 7) || regexpFullVersion.MatchString(strings.TrimPrefix(esmUrl.PkgVersion, "v")) {
+		if (valid.IsHexString(esmUrl.PkgVersion) && len(esmUrl.PkgVersion) >= 7) || regexpVersionStrict.MatchString(strings.TrimPrefix(esmUrl.PkgVersion, "v")) {
 			isFixedVersion = true
 			return
 		}
@@ -1386,7 +1588,7 @@ func praseESMPath(rc *NpmRC, pathname string) (esmUrl EsmURL, extraQuery string,
 		return
 	}
 
-	isFixedVersion = regexpFullVersion.MatchString(esmUrl.PkgVersion)
+	isFixedVersion = regexpVersionStrict.MatchString(esmUrl.PkgVersion)
 	if !isFixedVersion {
 		var p PackageJSON
 		p, err = rc.fetchPackageInfo(pkgName, esmUrl.PkgVersion)
@@ -1463,6 +1665,15 @@ func checkTargetSegment(segments []string) bool {
 	}
 	_, ok := targets[segments[0]]
 	return ok
+}
+
+func getAttr(node *html.Node, name string) string {
+	for _, attr := range node.Attr {
+		if attr.Key == name {
+			return attr.Val
+		}
+	}
+	return ""
 }
 
 func getPkgName(specifier string) string {

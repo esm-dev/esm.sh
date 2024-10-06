@@ -224,7 +224,7 @@ func walkDeps(npmrc *NpmRC, installDir string, url EsmURL, mark *StringSet) (err
 	}
 	if existsFile(pkgJsonPath) {
 		err = utils.ParseJSONFile(pkgJsonPath, &p)
-	} else if regexpFullVersion.MatchString(url.PkgVersion) || url.GhPrefix {
+	} else if regexpVersionStrict.MatchString(url.PkgVersion) || url.GhPrefix {
 		p, err = npmrc.installPackage(url)
 	} else {
 		return nil

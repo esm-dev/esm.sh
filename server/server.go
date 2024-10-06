@@ -9,15 +9,16 @@ import (
 	"syscall"
 
 	"github.com/esm-dev/esm.sh/server/storage"
-
 	logger "github.com/ije/gox/log"
 	"github.com/ije/rex"
+	"go.etcd.io/bbolt"
 )
 
 var (
 	buildQueue *BuildQueue
 	config     *Config
 	log        *logger.Logger
+	imDB       *bbolt.DB
 	cache      storage.Cache
 	db         storage.DataBase
 	fs         storage.FileSystem
@@ -74,17 +75,29 @@ func Serve(efs EmbedFS) {
 
 	cache, err = storage.OpenCache(config.Cache)
 	if err != nil {
-		log.Fatalf("init cache(%s): %v", config.Cache, err)
+		log.Fatalf("open cache(%s): %v", config.Cache, err)
 	}
 
 	fs, err = storage.OpenFS(config.Storage)
 	if err != nil {
-		log.Fatalf("init fs(%s): %v", config.Storage, err)
+		log.Fatalf("open fs(%s): %v", config.Storage, err)
 	}
 
 	db, err = storage.OpenDB(config.Database)
 	if err != nil {
-		log.Fatalf("init db(%s): %v", config.Database, err)
+		log.Fatalf("open db(%s): %v", config.Database, err)
+	}
+
+	imDB, err = bbolt.Open(path.Join(config.WorkDir, "im.db"), 0644, nil)
+	if err != nil {
+		log.Fatalf("open im.db: %v", err)
+	}
+	err = imDB.Update(func(tx *bbolt.Tx) error {
+		_, err := tx.CreateBucketIfNotExists([]byte("maps"))
+		return err
+	})
+	if err != nil {
+		log.Fatalf("init im.db: %v", err)
 	}
 
 	err = loadNodeLibs(efs)
@@ -121,10 +134,10 @@ func Serve(efs EmbedFS) {
 	}
 	log.Debugf("nodejs: v%s, pnpm: %s, registry: %s", nodeVer, pnpmVer, config.NpmRegistry)
 
-	// init cjs_lexer node app
-	err = initCJSLexerNodeApp()
+	// init cjs lexer
+	err = initCJSLexer()
 	if err != nil {
-		log.Fatalf("failed to initialize the cjs_lexer node app: %v", err)
+		log.Fatalf("failed to initialize cjs_lexer: %v", err)
 	}
 	log.Debugf("%s initialized", cjsLexerPkg)
 

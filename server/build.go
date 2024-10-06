@@ -463,9 +463,9 @@ func (ctx *BuildContext) buildModule() (result BuildResult, err error) {
 						pkgName, _, subPath, _ := splitPkgPath(specifier)
 						if pkgName == ctx.url.PkgName {
 							version = ctx.url.PkgVersion
-						} else if v, ok := ctx.packageJson.Dependencies[pkgName]; ok && regexpFullVersion.MatchString(v) {
+						} else if v, ok := ctx.packageJson.Dependencies[pkgName]; ok && regexpVersionStrict.MatchString(v) {
 							version = v
-						} else if v, ok := ctx.packageJson.PeerDependencies[pkgName]; ok && regexpFullVersion.MatchString(v) {
+						} else if v, ok := ctx.packageJson.PeerDependencies[pkgName]; ok && regexpVersionStrict.MatchString(v) {
 							version = v
 						}
 						p := pkgName

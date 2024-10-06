@@ -1,4 +1,4 @@
-import { dirname, join } from "https://deno.land/std@0.220.0/path/mod.ts";
+import { dirname, join } from "jsr:@std/path";
 import { assert, assertEquals, assertStringIncludes } from "jsr:@std/assert";
 
 const testRegisterToken = "1E372D421838559CE40E4CF955B3A40E30EEB7AA";

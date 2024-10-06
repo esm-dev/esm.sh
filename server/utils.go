@@ -17,21 +17,25 @@ import (
 const EOL = "\n"
 
 var (
-	regexpFullVersion = regexp.MustCompile(`^\d+\.\d+\.\d+[\w\.\+\-]*$`)
-	regexpLocPath     = regexp.MustCompile(`:\d+:\d+$`)
-	regexpJSIdent     = regexp.MustCompile(`^[a-zA-Z_$][\w$]*$`)
-	regexpGlobalIdent = regexp.MustCompile(`__[a-zA-Z]+\$`)
-	regexpVarEqual    = regexp.MustCompile(`var ([\w$]+)\s*=\s*[\w$]+$`)
+	regexpVersion       = regexp.MustCompile(`^[\w\.\+\-]+$`)
+	regexpVersionStrict = regexp.MustCompile(`^\d+\.\d+\.\d+[\w\.\+\-]*$`)
+	regexpVuePath       = regexp.MustCompile(`/\*?vue@([\w\.\+\-]+)($|/)`)
+	regexpSveltePath    = regexp.MustCompile(`/\*?svelte@([\w\.\+\-]+)($|/)`)
+	regexpLocPath       = regexp.MustCompile(`:\d+:\d+$`)
+	regexpJSIdent       = regexp.MustCompile(`^[a-zA-Z_$][\w$]*$`)
+	regexpGlobalIdent   = regexp.MustCompile(`__[a-zA-Z]+\$`)
+	regexpVarEqual      = regexp.MustCompile(`var ([\w$]+)\s*=\s*[\w$]+$`)
+	regexpDomain        = regexp.MustCompile(`^[a-z0-9\-]+(\.[a-z0-9\-]+)*\.[a-z]+$`)
 )
 
-// isHttpSepcifier returns true if the import path is a remote URL.
-func isHttpSepcifier(importPath string) bool {
-	return strings.HasPrefix(importPath, "https://") || strings.HasPrefix(importPath, "http://")
+// isHttpSepcifier returns true if the specifier is a remote URL.
+func isHttpSepcifier(specifier string) bool {
+	return strings.HasPrefix(specifier, "https://") || strings.HasPrefix(specifier, "http://")
 }
 
-// isRelativeSpecifier returns true if the import path is a local path.
-func isRelativeSpecifier(importPath string) bool {
-	return strings.HasPrefix(importPath, "./") || strings.HasPrefix(importPath, "../") || importPath == "." || importPath == ".."
+// isRelativeSpecifier returns true if the specifier is a local path.
+func isRelativeSpecifier(specifier string) bool {
+	return strings.HasPrefix(specifier, "./") || strings.HasPrefix(specifier, "../") || specifier == "." || specifier == ".."
 }
 
 // semverLessThan returns true if the version a is less than the version b.

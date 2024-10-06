@@ -1,4 +1,4 @@
-const { readFileSync, existsSync, writeFileSync } = require("fs");
+const { readFileSync, existsSync } = require("fs");
 const { dirname, join } = require("path");
 const { parse } = require("esm-cjs-lexer");
 const { env, stdin, stdout } = process;
@@ -368,7 +368,7 @@ function readStdin() {
   });
 }
 
-async function main() {
+async function lexer() {
   try {
     const input = JSON.parse(await readStdin());
     const output = await parseExports(input);
@@ -379,4 +379,4 @@ async function main() {
   process.exit(0);
 }
 
-main();
+lexer();
