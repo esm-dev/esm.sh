@@ -8,11 +8,11 @@
 
 # esm.sh
 
-A global, fast & smart content delivery network(CDN) for modern(es2015+) web development.
+A global, fast & smart content delivery network(CDN) for modern web development.
 
 ## How to Use
 
-esm.sh allows you to import [JavaScript ES modules](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Guide/Modules) on [NPM](https://npmjs.com), [GitHub](https://github.com), and [JSR](https://jsr.io) with a simple URL. **No installation/build steps needed.**
+esm.sh allows you to import [JavaScript modules](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Guide/Modules) from http URLs, **no installation/build steps needed.**
 
 ```js
 import * as mod from "https://esm.sh/PKG[@SEMVER][/PATH]";
@@ -22,12 +22,12 @@ With [import maps](https://github.com/WICG/import-maps), you can even use bare i
 
 ```html
 <script type="importmap">
-{
-  "imports": {
-    "react": "https://esm.sh/react@18.2.0"
-    "react-dom/": "https://esm.sh/react-dom@18.2.0/"
+  {
+    "imports": {
+      "react": "https://esm.sh/react@18.2.0",
+      "react-dom/": "https://esm.sh/react-dom@18.2.0/"
+    }
   }
-}
 </script>
 <script type="module">
   import React from "react"; // → https://esm.sh/react@18.2.0
@@ -35,7 +35,7 @@ With [import maps](https://github.com/WICG/import-maps), you can even use bare i
 </script>
 ```
 
-> More details about the import map usage can be found in the [**Using Import Maps**](#using-import-maps) section.
+> More details about the import map usages can be found in the [**Using Import Maps**](#using-import-maps) section.
 
 ### Supported Registries
 
@@ -63,8 +63,7 @@ With [import maps](https://github.com/WICG/import-maps), you can even use bare i
 ### Specifying Dependencies
 
 By default, esm.sh rewrites import specifiers based on the package dependencies. To specify the version of these
-dependencies, you can add the `?deps=PACKAGE@VERSION` query. To specify multiple dependencies, separate them with a
-comma, like this: `?deps=react@17.0.2,react-dom@17.0.2`.
+dependencies, you can add `?deps=PACKAGE@VERSION` to the import URL. To specify multiple dependencies, separate them with commas, like this: `?deps=react@17.0.2,react-dom@17.0.2`.
 
 ```js
 import React from "https://esm.sh/react@17.0.2";
@@ -72,6 +71,8 @@ import useSWR from "https://esm.sh/swr?deps=react@17.0.2";
 ```
 
 ### Aliasing Dependencies
+
+You can also alias dependencies by adding `?alias=PACKAGE:ALIAS` to the import URL. This is useful when you want to use a different package for a dependency.
 
 ```js
 import useSWR from "https://esm.sh/swr?alias=react:preact/compat";
@@ -93,8 +94,8 @@ import { __await, __rest } from "https://esm.sh/tslib"; // 7.3KB
 import { __await, __rest } from "https://esm.sh/tslib?exports=__await,__rest"; // 489B
 ```
 
-By using this feature, you can take advantage of tree shaking with esbuild and achieve a smaller bundle size. **Note**
-that this feature is only supported for ESM modules and not CJS modules.
+By using this feature, you can take advantage of tree shaking with esbuild and achieve a smaller bundle size. **Note,
+this feature doesn't work with CommonJS modules.**
 
 ### Bundling Strategy
 
