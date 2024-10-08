@@ -545,29 +545,35 @@ func routes(debug bool) rex.Handle {
 			}
 			var importMapJson []byte
 			v := query.Get("v")
+			if v == "" {
+				v = "0"
+			} else if !regexpVersion.MatchString(v) || len(v) > 32 {
+				return rex.Status(400, "Invalid Version Param")
+			}
 			im := query.Get("im")
 			if len(im) > 1 {
-				imPath, err := atobUrl(im[1:])
+				imLoc, err := atobUrl(im[1:])
 				if err != nil {
 					return rex.Status(400, "Invalid `im` Param")
 				}
-				imUrl, err := url.Parse(u.Scheme + "://" + u.Host + imPath)
+				imUrl, err := url.Parse(u.Scheme + "://" + u.Host + imLoc)
 				if err != nil {
 					return rex.Status(400, "Invalid `im` Param")
 				}
-				h := xxhash.New()
-				h.Write([]byte(imPath))
-				h.Write([]byte(v))
-				imKey := strings.TrimRight(base64.RawURLEncoding.EncodeToString(h.Sum(nil)), "=")
 				err = imDB.View(func(tx *bbolt.Tx) error {
-					importMapJson = tx.Bucket([]byte("maps")).Get([]byte(u.Host + "?" + imKey))
+					imHashKey := tx.Bucket(keyAlias).Get([]byte(u.Host + "?" + im[1:]))
+					if imHashKey != nil {
+						importMapJson = tx.Bucket(keyImportMaps).Get([]byte(u.Hostname() + "?" + string(imHashKey)))
+						if importMapJson != nil {
+							v = im[0:1] + string(imHashKey) + "." + v
+						}
+					}
 					return nil
 				})
 				if err != nil {
 					log.Errorf("Failed to read im.db: %v", err)
 					return rex.Status(500, "Server Internal Error")
 				}
-				v = im[0:1] + imKey
 				if importMapJson == nil {
 					c := &http.Client{
 						Timeout: 1 * time.Minute,
@@ -592,14 +598,26 @@ func routes(debug bool) rex.Handle {
 						if node.Type == html.ElementNode && node.DataAtom == atom.Script && getAttr(node, "type") == "importmap" {
 							text := node.FirstChild
 							if text.Type == html.TextNode && len(strings.TrimSpace(text.Data)) > 0 {
-								var im ImportMap
-								err := json.Unmarshal([]byte(text.Data), &im)
+								var importMap ImportMap
+								err := json.Unmarshal([]byte(text.Data), &importMap)
 								if err != nil {
 									return rex.Status(400, "Invalid import map")
 								}
-								importMapJson, _ = json.Marshal(im)
+								importMapJson = []byte(strings.TrimSpace(text.Data))
 								err = imDB.Update(func(tx *bbolt.Tx) error {
-									return tx.Bucket([]byte("maps")).Put([]byte(u.Host+"?"+imKey), importMapJson)
+									h := xxhash.New()
+									h.Write(importMapJson)
+									imHashKey := strings.TrimRight(base64.RawURLEncoding.EncodeToString(h.Sum(nil)), "=")
+									err := tx.Bucket(keyAlias).Put([]byte(u.Host+"?"+im[1:]), []byte(imHashKey))
+									if err != nil {
+										return err
+									}
+									err = tx.Bucket(keyImportMaps).Put([]byte(u.Hostname()+"?"+imHashKey), importMapJson)
+									if err != nil {
+										return err
+									}
+									v = im[0:1] + imHashKey + "." + v
+									return nil
 								})
 								if err != nil {
 									log.Errorf("Failed to update im.db: %v", err)
@@ -611,12 +629,10 @@ func routes(debug bool) rex.Handle {
 					}
 				}
 			}
-			if len(v) > 1 && importMapJson == nil {
-				if !regexpVersion.MatchString(v) {
-					return rex.Status(400, "Invalid Version Param")
-				}
+			if len(v) > 10 && importMapJson == nil {
 				imDB.View(func(tx *bbolt.Tx) error {
-					importMapJson = tx.Bucket([]byte("maps")).Get([]byte(u.Host + "?" + v[1:]))
+					imHashKey, _ := utils.SplitByFirstByte(v[1:], '.')
+					importMapJson = tx.Bucket(keyImportMaps).Get([]byte(u.Hostname() + "?" + imHashKey))
 					return nil
 				})
 			}

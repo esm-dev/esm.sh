@@ -93,7 +93,11 @@ func Serve(efs EmbedFS) {
 		log.Fatalf("open im.db: %v", err)
 	}
 	err = imDB.Update(func(tx *bbolt.Tx) error {
-		_, err := tx.CreateBucketIfNotExists([]byte("maps"))
+		_, err := tx.CreateBucketIfNotExists(keyAlias)
+		if err != nil {
+			return err
+		}
+		_, err = tx.CreateBucketIfNotExists(keyImportMaps)
 		return err
 	})
 	if err != nil {

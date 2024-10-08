@@ -28,6 +28,11 @@ var (
 	regexpDomain        = regexp.MustCompile(`^[a-z0-9\-]+(\.[a-z0-9\-]+)*\.[a-z]+$`)
 )
 
+var (
+	keyImportMaps = []byte("importmaps")
+	keyAlias      = []byte("alias")
+)
+
 // isHttpSepcifier returns true if the specifier is a remote URL.
 func isHttpSepcifier(specifier string) bool {
 	return strings.HasPrefix(specifier, "https://") || strings.HasPrefix(specifier, "http://")

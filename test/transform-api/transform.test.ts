@@ -54,10 +54,10 @@ Deno.test("transform api(remote module, react)", async () => {
   assertStringIncludes(res1.headers.get("Vary")!, "User-Agent");
   const js1 = await res1.text();
   assertStringIncludes(js1, 'from"https://esm.sh/react-dom@18.3.1/client";');
-  assertStringIncludes(js1, 'from"./App.tsx?v=yxPLvIjKGgDU"');
+  assertStringIncludes(js1, 'from"./App.tsx?v=yzNdidn909K0.0"');
   assertStringIncludes(js1, 'from"https://esm.sh/react@18.3.1/jsx-runtime";');
 
-  const res2 = await fetch(`http://localhost:8080/https://ije.github.io/esm-run-demo/react/App.tsx?v=yxPLvIjKGgDU`);
+  const res2 = await fetch(`http://localhost:8080/https://ije.github.io/esm-run-demo/react/App.tsx?v=yzNdidn909K0.0`);
   assertEquals(res2.status, 200);
   assertEquals(res2.headers.get("Content-Type"), "application/javascript; charset=utf-8");
   assertEquals(res2.headers.get("Cache-Control"), "public, max-age=31536000, immutable");
@@ -75,10 +75,10 @@ Deno.test("transform api(remote module, preact)", async () => {
   assertStringIncludes(res1.headers.get("Vary")!, "User-Agent");
   const js1 = await res1.text();
   assertStringIncludes(js1, 'from"preact";');
-  assertStringIncludes(js1, 'from"./App.tsx?v=yde-FkCGd8yY"');
+  assertStringIncludes(js1, 'from"./App.tsx?v=yGDxwAxwEw4E.0"');
   assertStringIncludes(js1, 'from"https://esm.sh/preact@10.24.1/jsx-runtime";');
 
-  const res2 = await fetch(`http://localhost:8080/https://ije.github.io/esm-run-demo/preact/App.tsx?v=yde-FkCGd8yY`);
+  const res2 = await fetch(`http://localhost:8080/https://ije.github.io/esm-run-demo/preact/App.tsx?v=yGDxwAxwEw4E.0`);
   assertEquals(res2.status, 200);
   assertEquals(res2.headers.get("Content-Type"), "application/javascript; charset=utf-8");
   assertEquals(res2.headers.get("Cache-Control"), "public, max-age=31536000, immutable");
@@ -96,9 +96,9 @@ Deno.test("transform api(remote module, vue)", async () => {
   assertStringIncludes(res1.headers.get("Vary")!, "User-Agent");
   const js1 = await res1.text();
   assertStringIncludes(js1, 'from"vue";');
-  assertStringIncludes(js1, 'from"./App.vue?v=yLLMBMIgjtM0"');
+  assertStringIncludes(js1, 'from"./App.vue?v=yLyjjiG-2hIA.0"');
 
-  const res2 = await fetch(`http://localhost:8080/https://ije.github.io/esm-run-demo/vue/App.vue?v=yLLMBMIgjtM0`);
+  const res2 = await fetch(`http://localhost:8080/https://ije.github.io/esm-run-demo/vue/App.vue?v=yLyjjiG-2hIA.0`);
   assertEquals(res2.status, 200);
   assertEquals(res2.headers.get("Content-Type"), "application/javascript; charset=utf-8");
   assertEquals(res2.headers.get("Cache-Control"), "public, max-age=31536000, immutable");
@@ -116,9 +116,9 @@ Deno.test("transform api(remote module, svelte)", async () => {
   assertEquals(res1.headers.get("cache-control"), "public, max-age=31536000, immutable");
   assertStringIncludes(res1.headers.get("Vary")!, "User-Agent");
   const js1 = await res1.text();
-  assertStringIncludes(js1, 'from"./App.svelte?v=yyDeJ46SLhhs"');
+  assertStringIncludes(js1, 'from"./App.svelte?v=yovt3PukidMY.0"');
 
-  const res2 = await fetch(`http://localhost:8080/https://ije.github.io/esm-run-demo/svelte/App.svelte?v=yyDeJ46SLhhs`);
+  const res2 = await fetch(`http://localhost:8080/https://ije.github.io/esm-run-demo/svelte/App.svelte?v=yovt3PukidMY.0`);
   assertEquals(res2.status, 200);
   assertEquals(res2.headers.get("Content-Type"), "application/javascript; charset=utf-8");
   assertEquals(res2.headers.get("Cache-Control"), "public, max-age=31536000, immutable");
@@ -137,10 +137,10 @@ Deno.test("transform api(remote module, non-support import maps)", async () => {
   assertStringIncludes(res1.headers.get("Vary")!, "User-Agent");
   const js1 = await res1.text();
   assertStringIncludes(js1, 'from"https://esm.sh/preact@10.24.1";');
-  assertStringIncludes(js1, 'from"./App.tsx?v=Nde-FkCGd8yY"');
+  assertStringIncludes(js1, 'from"./App.tsx?v=NGDxwAxwEw4E.0"');
   assertStringIncludes(js1, 'from"https://esm.sh/preact@10.24.1/jsx-runtime";');
 
-  const res2 = await fetch(`http://localhost:8080/https://ije.github.io/esm-run-demo/preact/App.tsx?v=Nde-FkCGd8yY`);
+  const res2 = await fetch(`http://localhost:8080/https://ije.github.io/esm-run-demo/preact/App.tsx?v=NGDxwAxwEw4E.0`);
   assertEquals(res2.status, 200);
   assertEquals(res2.headers.get("Content-Type"), "application/javascript; charset=utf-8");
   assertEquals(res2.headers.get("Cache-Control"), "public, max-age=31536000, immutable");
