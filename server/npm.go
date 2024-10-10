@@ -497,7 +497,7 @@ func (rc *NpmRC) installPackage(url EsmURL) (pkgJson PackageJSON, err error) {
 		return
 	}
 
-	attemptMaxTimes := 3
+	attemptMaxTimes := 5
 	for i := 1; i <= attemptMaxTimes; i++ {
 		if url.GhPrefix {
 			err = os.WriteFile(packageJsonFp, []byte(fmt.Sprintf(`{"dependencies":{"%s":"github:%s#%s"}}`, url.PkgName, url.PkgName, url.PkgVersion)), 0644)
@@ -537,7 +537,7 @@ func (rc *NpmRC) installPackage(url EsmURL) (pkgJson PackageJSON, err error) {
 		if err == nil || i == attemptMaxTimes {
 			break
 		}
-		time.Sleep(time.Duration(i) * time.Second)
+		time.Sleep(time.Duration(i) * 100 * time.Millisecond)
 	}
 	return
 }

@@ -527,6 +527,69 @@ func routes(debug bool) rex.Handle {
 			cdnOrigin = fmt.Sprintf("https://%s", zoneId)
 		}
 
+		if pathname == "/uno" {
+			referer := ctx.R.Header.Get("Referer")
+			appendVaryHeader(ctx.W.Header(), "Referer")
+			if referer == "" {
+				return rex.Redirect("https://unocss.dev", http.StatusFound)
+			}
+			u, err := url.Parse(referer)
+			if err != nil {
+				return rex.Status(400, "Invalid Referer")
+			}
+			hostname := u.Hostname()
+			if !regexpDomain.MatchString(hostname) {
+				return rex.Status(400, "Invalid Referer")
+			}
+			// determine build target by `?target` query or `User-Agent` header
+			query := ctx.Query()
+			target := strings.ToLower(query.Get("target"))
+			targetFromUA := targets[target] == 0
+			if targetFromUA {
+				target = getBuildTargetByUA(ctx.UserAgent())
+			}
+			v := query.Get("v")
+			h := sha1.New()
+			h.Write([]byte(referer))
+			h.Write([]byte(v))
+			h.Write([]byte(target))
+			savePath := normalizeSavePath(zoneId, path.Join("modules", hex.EncodeToString(h.Sum(nil))+".mjs"))
+			_, err = fs.Stat(savePath)
+			if err != nil && err != storage.ErrNotFound {
+				return rex.Status(500, err.Error())
+			}
+			var resp interface{}
+			if err == nil {
+				f, err := fs.Open(savePath)
+				if err != nil {
+					return rex.Status(500, err.Error())
+				}
+				resp = f // auto closed
+			} else {
+				c := &http.Client{
+					Timeout: 1 * time.Minute,
+				}
+				req := &http.Request{
+					Method: "GET",
+					URL:    u,
+					Header: map[string][]string{
+						"User-Agent": {ctx.UserAgent()},
+					},
+				}
+				res, err := c.Do(req)
+				if err != nil || res.StatusCode != 200 {
+					return rex.Status(500, "Failed to fetch referer page")
+				}
+				defer res.Body.Close()
+			}
+			ctx.SetHeader("Cache-Control", ccImmutable)
+			ctx.SetHeader("Content-Type", ctCSS)
+			if targetFromUA {
+				appendVaryHeader(ctx.W.Header(), "User-Agent")
+			}
+			return resp
+		}
+
 		if strings.HasPrefix(pathname, "/http://") || strings.HasPrefix(pathname, "/https://") {
 			query := ctx.Query()
 			urlRaw := pathname[1:]
@@ -563,7 +626,7 @@ func routes(debug bool) rex.Handle {
 				err = imDB.View(func(tx *bbolt.Tx) error {
 					imHashKey := tx.Bucket(keyAlias).Get([]byte(u.Host + "?" + im[1:]))
 					if imHashKey != nil {
-						importMapJson = tx.Bucket(keyImportMaps).Get([]byte(u.Hostname() + "?" + string(imHashKey)))
+						importMapJson = tx.Bucket(keyImportMaps).Get([]byte(u.Host + "?" + string(imHashKey)))
 						if importMapJson != nil {
 							v = im[0:1] + string(imHashKey) + "." + v
 						}
@@ -586,10 +649,13 @@ func routes(debug bool) rex.Handle {
 						},
 					}
 					res, err := c.Do(req)
-					if err != nil || res.StatusCode != 200 {
+					if err != nil {
 						return rex.Status(500, "Failed to fetch import map")
 					}
 					defer res.Body.Close()
+					if res.StatusCode != 200 {
+						return rex.Status(500, "Failed to fetch import map")
+					}
 					nodes, err := html.ParseFragment(res.Body, &html.Node{Type: html.ElementNode, Data: "head", DataAtom: atom.Head})
 					if err != nil {
 						return rex.Status(500, "Failed to parse import map")
@@ -612,7 +678,7 @@ func routes(debug bool) rex.Handle {
 									if err != nil {
 										return err
 									}
-									err = tx.Bucket(keyImportMaps).Put([]byte(u.Hostname()+"?"+imHashKey), importMapJson)
+									err = tx.Bucket(keyImportMaps).Put([]byte(u.Host+"?"+imHashKey), importMapJson)
 									if err != nil {
 										return err
 									}
@@ -629,12 +695,16 @@ func routes(debug bool) rex.Handle {
 					}
 				}
 			}
-			if len(v) > 10 && importMapJson == nil {
-				imDB.View(func(tx *bbolt.Tx) error {
+			if importMapJson == nil && len(v) > 10 && strings.ContainsRune(v, '.') {
+				err = imDB.View(func(tx *bbolt.Tx) error {
 					imHashKey, _ := utils.SplitByFirstByte(v[1:], '.')
-					importMapJson = tx.Bucket(keyImportMaps).Get([]byte(u.Hostname() + "?" + imHashKey))
+					importMapJson = tx.Bucket(keyImportMaps).Get([]byte(u.Host + "?" + imHashKey))
 					return nil
 				})
+				if err != nil {
+					log.Errorf("Failed to read im.db: %v", err)
+					return rex.Status(500, "Server Internal Error")
+				}
 			}
 			// determine build target by `?target` query or `User-Agent` header
 			target := strings.ToLower(query.Get("target"))
@@ -651,18 +721,13 @@ func routes(debug bool) rex.Handle {
 			if err != nil && err != storage.ErrNotFound {
 				return rex.Status(500, err.Error())
 			}
-			var code string
+			var resp interface{}
 			if err == nil {
 				f, err := fs.Open(savePath)
 				if err != nil {
 					return rex.Status(500, err.Error())
 				}
-				defer f.Close()
-				data, err := io.ReadAll(f)
-				if err != nil {
-					return rex.Status(500, err.Error())
-				}
-				code = string(data)
+				resp = f // auto closed
 			} else {
 				c := &http.Client{
 					Timeout: 1 * time.Minute,
@@ -695,17 +760,17 @@ func routes(debug bool) rex.Handle {
 					Target:           target,
 					ImportMap:        importMapJson,
 					Minify:           true,
-					vArg:             v,
+					globalVersion:    v,
 					supportImportMap: importMapJson != nil && len(v) > 1 && v[0] == 'y',
 				})
 				if err != nil {
 					return rex.Status(500, err.Error())
 				}
 				go fs.WriteFile(savePath, strings.NewReader(out.Code))
-				code = out.Code
+				resp = out.Code
 			}
 			if isCss && query.Has("module") {
-				code = fmt.Sprintf("var style = document.createElement('style');\nstyle.textContent = %s;\ndocument.head.appendChild(style);\nexport default null;", utils.MustEncodeJSON(code))
+				resp = fmt.Sprintf("var style = document.createElement('style');\nstyle.textContent = %s;\ndocument.head.appendChild(style);\nexport default null;", utils.MustEncodeJSON(resp))
 			}
 			ctx.SetHeader("Cache-Control", ccImmutable)
 			if isCss && !query.Has("module") {
@@ -716,7 +781,7 @@ func routes(debug bool) rex.Handle {
 			if targetFromUA {
 				appendVaryHeader(ctx.W.Header(), "User-Agent")
 			}
-			return code
+			return resp
 		}
 
 		// check `/*pathname` pattern

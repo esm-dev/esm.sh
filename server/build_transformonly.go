@@ -31,8 +31,9 @@ type TransformInput struct {
 	Target           string          `json:"target"`
 	SourceMap        string          `json:"sourceMap"`
 	Minify           bool            `json:"minify"`
-	vArg             string          `json:"-"`
+	globalVersion    string          `json:"-"`
 	supportImportMap bool            `json:"-"`
+	unocss           bool            `json:"-"`
 }
 
 type TransformOutput struct {
@@ -89,6 +90,21 @@ func transform(npmrc *NpmRC, input TransformInput) (out TransformOutput, err err
 	case "tsx":
 		loader = api.LoaderTSX
 	case "css":
+		if input.unocss {
+			// we use the import map to pass the content for unocss generator
+			data := ""
+			for _, value := range imports {
+				data += value + "\n"
+			}
+			// pre-process uno.css
+			o, e := preTransform(npmrc, "esm-unocss", "0.1.0", data, sourceCode, "@iconify/json@2.2.258")
+			if e != nil {
+				log.Error("failed to generate uno.css:", e)
+				err = errors.New("failed to generate uno.css")
+				return
+			}
+			sourceCode = o.Code
+		}
 		loader = api.LoaderCSS
 	case "vue":
 		vueVersion := "3"
@@ -228,12 +244,12 @@ func transform(npmrc *NpmRC, input TransformInput) (out TransformOutput, err err
 							if strings.HasSuffix(path, ".css") {
 								path += "?module"
 							}
-							if input.vArg != "" && isRelativeSpecifier(path) {
+							if input.globalVersion != "" && isRelativeSpecifier(path) {
 								q := "?"
 								if strings.Contains(path, "?") {
 									q = "&"
 								}
-								path += q + "v=" + input.vArg
+								path += q + "v=" + input.globalVersion
 							}
 						}
 						return api.OnResolveResult{
@@ -264,11 +280,20 @@ func transform(npmrc *NpmRC, input TransformInput) (out TransformOutput, err err
 	return
 }
 
-func preTransform(npmrc *NpmRC, loaderName string, loaderVersion string, filename, sourceCode string) (output *TransformOutput, err error) {
+func preTransform(npmrc *NpmRC, loaderName string, loaderVersion string, specifier string, sourceCode string, deps ...string) (output *TransformOutput, err error) {
 	pkgInfo, e := npmrc.installPackage(EsmURL{PkgName: loaderName, PkgVersion: loaderVersion})
 	if e != nil {
 		err = errors.New("failed to install " + loaderName + "@" + loaderVersion)
 		return
+	}
+	if len(deps) > 0 {
+		for _, dep := range deps {
+			e = npmrc.pnpmi(path.Join(npmrc.StoreDir(), loaderName+"@"+loaderVersion), dep)
+			if e != nil {
+				err = errors.New("failed to install " + dep)
+				return
+			}
+		}
 	}
 	dirname := path.Join(npmrc.StoreDir(), loaderName+"@"+pkgInfo.Version)
 	loaderJsFp := path.Join(dirname, "loader.mjs")
@@ -299,7 +324,7 @@ func preTransform(npmrc *NpmRC, loaderName string, loaderVersion string, filenam
 		"loader.mjs",
 	)
 	cmd.Dir = dirname
-	cmd.Stdin = bytes.NewReader(utils.MustEncodeJSON([]string{filename, sourceCode}))
+	cmd.Stdin = bytes.NewReader(utils.MustEncodeJSON([]string{specifier, sourceCode}))
 	cmd.Stdout = &outBuf
 	cmd.Stderr = &errBuf
 
