@@ -6,10 +6,10 @@ function panic() {
   );
 }
 
-export const performance = window.performance;
-export const PerformanceObserver = window.PerformanceObserver;
-export const PerformanceEntry = window.PerformanceEntry;
-export const PerformanceObserverEntryList = window.PerformanceObserverEntryList;
+export const performance = globalThis.performance;
+export const PerformanceObserver = globalThis.PerformanceObserver;
+export const PerformanceEntry = globalThis.PerformanceEntry;
+export const PerformanceObserverEntryList = globalThis.PerformanceObserverEntryList;
 
 export class PerformanceNodeTiming extends PerformanceEntry {
   constructor() {

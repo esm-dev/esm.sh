@@ -28,11 +28,11 @@ export function waitForDebugger() {
   panic();
 }
 
-export const console = window.console;
+export const console = globalThis.console;
 
 export default {
   close,
-  console: window.console,
+  console: globalThis.console,
   open,
   url,
   waitForDebugger,
