@@ -308,12 +308,11 @@ import unescape from "https://esm.sh/lodash/unescape?no-dts";
 This will prevent the `X-TypeScript-Types` header from being included in the network request, and you can manually
 specify the types for the imported module.
 
-## Supporting Nodejs/Bun
+## Supporting Node.js/Bun
 
-Nodejs(18+) supports http importing under the `--experimental-network-imports` flag. Bun doesn't support http modules
-yet.
+Node.js and Bun don't currently support http modules.
 
-We highly recommend [Reejs](https://ree.js.org/) as the runtime with esm.sh that works both in Nodejs and Bun.
+We highly recommend [Reejs](https://ree.js.org/) as the runtime with esm.sh that works both in Node.js and Bun.
 
 ## Global CDN
 
