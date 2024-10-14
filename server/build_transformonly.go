@@ -23,17 +23,21 @@ type ImportMap struct {
 }
 
 type TransformInput struct {
-	Filename         string          `json:"filename"`
-	Lang             string          `json:"lang"`
-	Code             string          `json:"code"`
-	ImportMap        json.RawMessage `json:"importMap"`
-	JsxImportSource  string          `json:"jsxImportSource"`
-	Target           string          `json:"target"`
-	SourceMap        string          `json:"sourceMap"`
-	Minify           bool            `json:"minify"`
-	globalVersion    string          `json:"-"`
-	supportImportMap bool            `json:"-"`
-	unocss           bool            `json:"-"`
+	Filename        string          `json:"filename"`
+	Lang            string          `json:"lang"`
+	Code            string          `json:"code"`
+	ImportMap       json.RawMessage `json:"importMap"`
+	JsxImportSource string          `json:"jsxImportSource"`
+	Target          string          `json:"target"`
+	SourceMap       string          `json:"sourceMap"`
+	Minify          bool            `json:"minify"`
+}
+
+type TransformOptions struct {
+	TransformInput
+	importMap     ImportMap `json:"-"`
+	globalVersion string    `json:"-"`
+	unocss        bool      `json:"-"`
 }
 
 type TransformOutput struct {
@@ -41,10 +45,10 @@ type TransformOutput struct {
 	Map  string `json:"map,omitempty"`
 }
 
-func transform(npmrc *NpmRC, input TransformInput) (out TransformOutput, err error) {
+func transform(npmrc *NpmRC, options TransformOptions) (out TransformOutput, err error) {
 	target := api.ESNext
-	if input.Target != "" {
-		if t, ok := targets[input.Target]; ok {
+	if options.Target != "" {
+		if t, ok := targets[options.Target]; ok {
 			target = t
 		} else {
 			err = errors.New("invalid target")
@@ -52,37 +56,29 @@ func transform(npmrc *NpmRC, input TransformInput) (out TransformOutput, err err
 		}
 	}
 
-	var importMap ImportMap
-	if len(input.ImportMap) > 0 {
-		if json.Unmarshal(input.ImportMap, &importMap) != nil {
-			err = errors.New("invalid import map")
-		}
-	}
-	if input.supportImportMap {
-		importMap.Support = true
-	}
-
 	imports := map[string]string{}
 	trailingSlashImports := map[string]string{}
-	jsxImportSource := input.JsxImportSource
+	jsxImportSource := options.JsxImportSource
 
-	for key, value := range importMap.Imports {
-		if value != "" {
-			if strings.HasSuffix(key, "/") {
-				trailingSlashImports[key] = value
-			} else {
-				imports[key] = value
+	if len(options.importMap.Imports) > 0 {
+		for key, value := range options.importMap.Imports {
+			if value != "" {
+				if strings.HasSuffix(key, "/") {
+					trailingSlashImports[key] = value
+				} else {
+					imports[key] = value
+				}
 			}
 		}
 	}
 
 	loader := api.LoaderJS
-	sourceCode := input.Code
+	sourceCode := options.Code
 
-	if input.Lang == "" && input.Filename != "" {
-		_, input.Lang = utils.SplitByLastByte(input.Filename, '.')
+	if options.Lang == "" && options.Filename != "" {
+		_, options.Lang = utils.SplitByLastByte(options.Filename, '.')
 	}
-	switch input.Lang {
+	switch options.Lang {
 	case "jsx":
 		loader = api.LoaderJSX
 	case "ts":
@@ -90,14 +86,14 @@ func transform(npmrc *NpmRC, input TransformInput) (out TransformOutput, err err
 	case "tsx":
 		loader = api.LoaderTSX
 	case "css":
-		if input.unocss {
+		if options.unocss {
 			// we use the import map to pass the content for unocss generator
 			data := ""
 			for _, value := range imports {
 				data += value + "\n"
 			}
 			// pre-process uno.css
-			o, e := preTransform(npmrc, "esm-unocss", "0.1.0", data, sourceCode, "@iconify/json@2.2.258")
+			o, e := preTransform(npmrc, "esm-unocss", "0.2.0", data, sourceCode, "--prefer-offline", "@iconify/json@2.2.260")
 			if e != nil {
 				log.Error("failed to generate uno.css:", e)
 				err = errors.New("failed to generate uno.css")
@@ -128,7 +124,7 @@ func transform(npmrc *NpmRC, input TransformInput) (out TransformOutput, err err
 			return
 		}
 		// pre-process Vue SFC
-		o, e := preTransform(npmrc, "vue", vueVersion, input.Filename, sourceCode)
+		o, e := preTransform(npmrc, "vue", vueVersion, options.Filename, sourceCode)
 		if e != nil {
 			log.Error("failed to transform vue:", e)
 			err = errors.New("failed to transform vue")
@@ -157,7 +153,7 @@ func transform(npmrc *NpmRC, input TransformInput) (out TransformOutput, err err
 			return
 		}
 		// pre-process svelte component
-		o, e := preTransform(npmrc, "svelte", svelteVersion, input.Filename, sourceCode)
+		o, e := preTransform(npmrc, "svelte", svelteVersion, options.Filename, sourceCode)
 		if e != nil {
 			log.Error("failed to transform svelte:", e)
 			err = errors.New("failed to transform svelte")
@@ -180,15 +176,15 @@ func transform(npmrc *NpmRC, input TransformInput) (out TransformOutput, err err
 	}
 
 	sourceMap := api.SourceMapNone
-	if input.SourceMap == "external" {
+	if options.SourceMap == "external" {
 		sourceMap = api.SourceMapExternal
-	} else if input.SourceMap == "inline" {
+	} else if options.SourceMap == "inline" {
 		sourceMap = api.SourceMapInline
 	}
 
-	filename := input.Filename
+	filename := options.Filename
 	if filename == "" {
-		filename = "source." + input.Lang
+		filename = "source." + options.Lang
 	}
 	stdin := &api.StdinOptions{
 		Sourcefile: filename,
@@ -203,9 +199,9 @@ func transform(npmrc *NpmRC, input TransformInput) (out TransformOutput, err err
 		Target:            target,
 		JSX:               api.JSXAutomatic,
 		JSXImportSource:   strings.TrimSuffix(jsxImportSource, "/"),
-		MinifyWhitespace:  input.Minify,
-		MinifySyntax:      input.Minify,
-		MinifyIdentifiers: input.Minify,
+		MinifyWhitespace:  options.Minify,
+		MinifySyntax:      options.Minify,
+		MinifyIdentifiers: options.Minify,
 		Sourcemap:         sourceMap,
 		Write:             false,
 		Bundle:            true,
@@ -217,14 +213,14 @@ func transform(npmrc *NpmRC, input TransformInput) (out TransformOutput, err err
 						path := args.Path
 						if loader != api.LoaderCSS {
 							if value, ok := imports[path]; ok {
-								if !importMap.Support {
+								if !options.importMap.Support {
 									path = value
 								}
 							} else {
 								matched := false
 								for key, value := range trailingSlashImports {
 									if strings.HasPrefix(path, key) {
-										if !importMap.Support {
+										if !options.importMap.Support {
 											path = value + path[len(key):]
 										}
 										matched = true
@@ -244,12 +240,12 @@ func transform(npmrc *NpmRC, input TransformInput) (out TransformOutput, err err
 							if strings.HasSuffix(path, ".css") {
 								path += "?module"
 							}
-							if input.globalVersion != "" && isRelativeSpecifier(path) {
+							if options.globalVersion != "" && isRelativeSpecifier(path) {
 								q := "?"
 								if strings.Contains(path, "?") {
 									q = "&"
 								}
-								path += q + "v=" + input.globalVersion
+								path += q + "v=" + options.globalVersion
 							}
 						}
 						return api.OnResolveResult{
@@ -287,12 +283,10 @@ func preTransform(npmrc *NpmRC, loaderName string, loaderVersion string, specifi
 		return
 	}
 	if len(deps) > 0 {
-		for _, dep := range deps {
-			e = npmrc.pnpmi(path.Join(npmrc.StoreDir(), loaderName+"@"+loaderVersion), dep)
-			if e != nil {
-				err = errors.New("failed to install " + dep)
-				return
-			}
+		err = npmrc.pnpmi(path.Join(npmrc.StoreDir(), loaderName+"@"+loaderVersion), deps...)
+		if err != nil {
+			err = errors.New("failed to install " + strings.Join(deps, " "))
+			return
 		}
 	}
 	dirname := path.Join(npmrc.StoreDir(), loaderName+"@"+pkgInfo.Version)

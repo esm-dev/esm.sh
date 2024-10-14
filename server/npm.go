@@ -524,7 +524,7 @@ func (rc *NpmRC) installPackage(url EsmURL) (pkgJson PackageJSON, err error) {
 				}
 			}
 		} else if regexpVersionStrict.MatchString(url.PkgVersion) {
-			err = rc.pnpmi(installDir, url.PackageName(), "--prefer-offline")
+			err = rc.pnpmi(installDir, "--prefer-offline", url.PackageName())
 		} else {
 			err = rc.pnpmi(installDir, url.PackageName())
 		}
@@ -601,7 +601,7 @@ func (rc *NpmRC) pnpmi(dir string, packages ...string) (err error) {
 		return fmt.Errorf("pnpm %s: %s", strings.Join(args, " "), out.String())
 	}
 	if len(packages) > 0 {
-		log.Debug("pnpm add", strings.Join(packages, ","), "in", time.Since(start))
+		log.Debug("pnpm add", strings.Join(packages, " "), "in", time.Since(start))
 	} else {
 		log.Debug("pnpm install in", time.Since(start))
 	}
