@@ -60,8 +60,8 @@ function tsx() {
     }
     if (!js) {
       if (isLocalhost) {
-        const { transform } = await (esmCompiler ?? (esmCompiler = loadEsmCompiler()));
-        const ret = transform("source." + lang, code, { target, importMap, minify: true, sourceMap: "inline" });
+        const { transform } = await (esmCompiler ?? (esmCompiler = initEsmTsx()));
+        const ret = transform("script-" + idx + "." + lang, code, { target, importMap, minify: true, sourceMap: "inline" });
         js = ret.code;
       } else {
         const res = await fetch(urlFromCurrentModule(`/+${hash}.mjs`));
@@ -92,11 +92,11 @@ function tsx() {
   });
 }
 
-async function loadEsmCompiler() {
-  const pkg = "/esm-compiler@0.9.2";
+async function initEsmTsx() {
+  const pkg = "/esm-tsx@1.1.1";
   const [m, w] = await Promise.all([
-    import(pkg + "/$TARGET/esm-compiler.mjs"),
-    fetch(urlFromCurrentModule(pkg + "/pkg/esm_compiler_bg.wasm")),
+    import(pkg + "/$TARGET/esm-tsx.mjs"),
+    fetch(urlFromCurrentModule(pkg + "/pkg/esm_tsx_bg.wasm")),
   ]);
   await m.default(w);
   return m;
