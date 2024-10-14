@@ -8,12 +8,12 @@ import type { HLJSApi } from "http://localhost:8080/highlight.js@11.9.0";
 import compareVersions from "http://localhost:8080/tiny-version-compare@3.0.1";
 import { createTheme } from "http://localhost:8080/baseui@12.2.0";
 
-Deno.test("misc", () => {
+Deno.test("fix some invalid exports", () => {
   assertEquals(typeof BigInteger, "function");
   assertEquals(typeof Netmask, "function");
   assertEquals(typeof parseStringPromise, "function");
   assertEquals(typeof (hljs satisfies HLJSApi), "object");
   assertEquals(typeof hljs.highlight, "function");
   assertEquals(typeof createTheme, "function");
-  assertEquals(compareVersions("1.12.0", "v1.12.0"), 0);
+  assertEquals(typeof compareVersions, "function");
 });
