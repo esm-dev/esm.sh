@@ -288,7 +288,6 @@ function withESMWorker(middleware?: Middleware, cache: Cache = (caches as any).d
     // built-in modules/scripts
     if (
       pathname === "/run" ||
-      pathname === "/run-helper" ||
       pathname === "/tsx" ||
       (pathname.startsWith("/node/") && pathname.endsWith(".js"))
     ) {

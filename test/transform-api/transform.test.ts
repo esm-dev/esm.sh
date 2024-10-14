@@ -57,7 +57,7 @@ Deno.test("transform api(remote module, react)", async () => {
   assertStringIncludes(js1, 'from"./App.tsx?v=yzNdidn909K0.0"');
   assertStringIncludes(js1, 'from"https://esm.sh/react@18.3.1/jsx-runtime";');
 
-  const res2 = await fetch(`http://localhost:8080/https://ije.github.io/esm-run-demo/react/App.tsx?v=yzNdidn909K0.0`);
+  const res2 = await fetch("http://localhost:8080/https://ije.github.io/esm-run-demo/react/App.tsx?v=yzNdidn909K0.0");
   assertEquals(res2.status, 200);
   assertEquals(res2.headers.get("Content-Type"), "application/javascript; charset=utf-8");
   assertEquals(res2.headers.get("Cache-Control"), "public, max-age=31536000, immutable");
@@ -78,7 +78,7 @@ Deno.test("transform api(remote module, preact)", async () => {
   assertStringIncludes(js1, 'from"./App.tsx?v=yGDxwAxwEw4E.0"');
   assertStringIncludes(js1, 'from"https://esm.sh/preact@10.24.1/jsx-runtime";');
 
-  const res2 = await fetch(`http://localhost:8080/https://ije.github.io/esm-run-demo/preact/App.tsx?v=yGDxwAxwEw4E.0`);
+  const res2 = await fetch("http://localhost:8080/https://ije.github.io/esm-run-demo/preact/App.tsx?v=yGDxwAxwEw4E.0");
   assertEquals(res2.status, 200);
   assertEquals(res2.headers.get("Content-Type"), "application/javascript; charset=utf-8");
   assertEquals(res2.headers.get("Cache-Control"), "public, max-age=31536000, immutable");
@@ -98,7 +98,7 @@ Deno.test("transform api(remote module, vue)", async () => {
   assertStringIncludes(js1, 'from"vue";');
   assertStringIncludes(js1, 'from"./App.vue?v=yLyjjiG-2hIA.0"');
 
-  const res2 = await fetch(`http://localhost:8080/https://ije.github.io/esm-run-demo/vue/App.vue?v=yLyjjiG-2hIA.0`);
+  const res2 = await fetch("http://localhost:8080/https://ije.github.io/esm-run-demo/vue/App.vue?v=yLyjjiG-2hIA.0");
   assertEquals(res2.status, 200);
   assertEquals(res2.headers.get("Content-Type"), "application/javascript; charset=utf-8");
   assertEquals(res2.headers.get("Cache-Control"), "public, max-age=31536000, immutable");
@@ -118,7 +118,7 @@ Deno.test("transform api(remote module, svelte)", async () => {
   const js1 = await res1.text();
   assertStringIncludes(js1, 'from"./App.svelte?v=yovt3PukidMY.0"');
 
-  const res2 = await fetch(`http://localhost:8080/https://ije.github.io/esm-run-demo/svelte/App.svelte?v=yovt3PukidMY.0`);
+  const res2 = await fetch("http://localhost:8080/https://ije.github.io/esm-run-demo/svelte/App.svelte?v=yovt3PukidMY.0");
   assertEquals(res2.status, 200);
   assertEquals(res2.headers.get("Content-Type"), "application/javascript; charset=utf-8");
   assertEquals(res2.headers.get("Cache-Control"), "public, max-age=31536000, immutable");
@@ -140,13 +140,35 @@ Deno.test("transform api(remote module, non-support import maps)", async () => {
   assertStringIncludes(js1, 'from"./App.tsx?v=NGDxwAxwEw4E.0"');
   assertStringIncludes(js1, 'from"https://esm.sh/preact@10.24.1/jsx-runtime";');
 
-  const res2 = await fetch(`http://localhost:8080/https://ije.github.io/esm-run-demo/preact/App.tsx?v=NGDxwAxwEw4E.0`);
+  const res2 = await fetch("http://localhost:8080/https://ije.github.io/esm-run-demo/preact/App.tsx?v=NGDxwAxwEw4E.0");
   assertEquals(res2.status, 200);
   assertEquals(res2.headers.get("Content-Type"), "application/javascript; charset=utf-8");
   assertEquals(res2.headers.get("Cache-Control"), "public, max-age=31536000, immutable");
   assertStringIncludes(res2.headers.get("Vary")!, "User-Agent");
   const js2 = await res2.text();
   assertStringIncludes(js2, 'from"https://esm.sh/preact@10.24.1/jsx-runtime";');
+});
+
+Deno.test("transform api(uno)", async () => {
+  const res1 = await fetch("http://localhost:8080/uno", {
+    headers: {
+      referer: "https://ije.github.io/esm-run-demo/unocss/",
+    },
+  });
+  assertEquals(res1.status, 200);
+  assertEquals(res1.headers.get("Content-Type"), "text/css; charset=utf-8");
+  assertEquals(res1.headers.get("Cache-Control"), "public, max-age=31536000, immutable");
+  assertStringIncludes(res1.headers.get("Vary")!, "Referer");
+  assertStringIncludes(res1.headers.get("Vary")!, "User-Agent");
+  const css1 = await res1.text();
+  assertStringIncludes(css1, ".btn{");
+  assertStringIncludes(css1, ".btn:hover{");
+  assertStringIncludes(css1, "background-color:rgb(59 130 246");
+  assertStringIncludes(css1, "@keyframes spin");
+  assertStringIncludes(css1, ".animate-spin{animation:spin 1s ease infinite}");
+  assertStringIncludes(css1, "@font-face{");
+  assertStringIncludes(css1, "https://fonts.gstatic.com/s/inter/");
+  assertStringIncludes(css1, "font-family:Inter,ui-sans-serif,");
 });
 
 async function computeHash(input: string): Promise<string> {

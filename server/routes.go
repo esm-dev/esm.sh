@@ -163,8 +163,17 @@ func routes(debug bool) rex.Handle {
 					npmrc = NewNpmRcFromConfig()
 				}
 
+				importMap := ImportMap{Imports: map[string]string{}}
+				if len(input.ImportMap) > 0 {
+					err = json.Unmarshal(input.ImportMap, &importMap)
+					if err != nil {
+						return rex.Err(400, "Invalid ImportMap")
+					}
+				}
+
 				output, err := transform(npmrc, TransformOptions{
 					TransformInput: input,
+					importMap:      importMap,
 				})
 				if err != nil {
 					return rex.Err(400, err.Error())
@@ -387,8 +396,8 @@ func routes(debug bool) rex.Handle {
 			pathname = regexpLocPath.ReplaceAllString(pathname, "$1")
 		}
 
-		// serve the internal script
-		if pathname == "/run" || pathname == "/run-helper" || pathname == "/tsx" {
+		// serve internal scripts
+		if pathname == "/run" || pathname == "/tsx" {
 			ifNoneMatch := ctx.R.Header.Get("If-None-Match")
 			if ifNoneMatch == globalETag && !debug {
 				return rex.Status(http.StatusNotModified, nil)
