@@ -9,10 +9,10 @@
     const main = el.getAttribute("main");
     const { hostname, href, pathname, search } = location;
     if (src === modUrl && main) {
-      if (hostname === "localhost" || hostname === "127.0.0.1") {
+      if (hostname === "localhost" || hostname === "127.0.0.1" || /^192\.168\.\d+\.\d+$/.test(hostname)) {
         fetch(main).then((res) => {
           if (res.ok) {
-            if (res.headers.get("server") === "esm.sh/dev") {
+            if (res.headers.get("server") === "esm.sh/run") {
               import(main);
             } else {
               alert("Please serve your app with `npx esm.sh run` for local development.");
