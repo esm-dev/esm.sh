@@ -10,11 +10,6 @@ import (
 
 var regReadTailwindPreflightCSS = regexp.MustCompile(`[a-zA-Z.]+\.readFileSync\(.+?/preflight\.css"\),\s*"utf-?8"\)`)
 
-// unsupported node modules for `denonext` target
-var denoNextUnspportedNodeModules = map[string]bool{
-	"inspector": true,
-}
-
 // force to use `npm:` specifier for `denonext` target to support node native module or fix `createRequire` issue
 var forceNpmSpecifiers = map[string]bool{
 	"@achingbrain/ssdp": true,

@@ -715,11 +715,7 @@ func (ctx *BuildContext) resolveExternalModule(specifier string, kind api.Resolv
 
 	// node builtin module
 	if nodejsInternalModules[specifier] {
-		if ctx.args.external.Has("node:"+specifier) || ctx.args.externalAll {
-			resolvedPath = fmt.Sprintf("node:%s", specifier)
-		} else if ctx.target == "node" {
-			resolvedPath = fmt.Sprintf("node:%s", specifier)
-		} else if ctx.target == "denonext" && !denoNextUnspportedNodeModules[specifier] {
+		if ctx.args.externalAll || ctx.target == "node" || ctx.target == "denonext" || ctx.args.external.Has("node:"+specifier) {
 			resolvedPath = fmt.Sprintf("node:%s", specifier)
 		} else if ctx.target == "deno" {
 			resolvedPath = fmt.Sprintf("https://deno.land/std@0.177.1/node/%s.ts", specifier)
