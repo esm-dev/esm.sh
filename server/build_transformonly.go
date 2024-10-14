@@ -35,9 +35,9 @@ type TransformInput struct {
 
 type TransformOptions struct {
 	TransformInput
-	importMap     ImportMap `json:"-"`
-	globalVersion string    `json:"-"`
-	unocss        bool      `json:"-"`
+	importMap     ImportMap
+	globalVersion string
+	unocss        bool
 }
 
 type TransformOutput struct {
@@ -276,16 +276,16 @@ func transform(npmrc *NpmRC, options TransformOptions) (out TransformOutput, err
 	return
 }
 
-func preTransform(npmrc *NpmRC, loaderName string, loaderVersion string, specifier string, sourceCode string, deps ...string) (output *TransformOutput, err error) {
+func preTransform(npmrc *NpmRC, loaderName string, loaderVersion string, specifier string, sourceCode string, npmDeps ...string) (output *TransformOutput, err error) {
 	pkgInfo, e := npmrc.installPackage(EsmURL{PkgName: loaderName, PkgVersion: loaderVersion})
 	if e != nil {
 		err = errors.New("failed to install " + loaderName + "@" + loaderVersion)
 		return
 	}
-	if len(deps) > 0 {
-		err = npmrc.pnpmi(path.Join(npmrc.StoreDir(), loaderName+"@"+loaderVersion), deps...)
+	if len(npmDeps) > 0 {
+		err = npmrc.pnpmi(path.Join(npmrc.StoreDir(), loaderName+"@"+loaderVersion), npmDeps...)
 		if err != nil {
-			err = errors.New("failed to install " + strings.Join(deps, " "))
+			err = errors.New("failed to install " + strings.Join(npmDeps, " "))
 			return
 		}
 	}

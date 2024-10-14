@@ -6,7 +6,7 @@ import (
 	"strings"
 
 	"github.com/evanw/esbuild/pkg/api"
-	C "github.com/ije/esbuild-internal/config"
+	esbuild_config "github.com/ije/esbuild-internal/config"
 	"github.com/ije/esbuild-internal/js_ast"
 	"github.com/ije/esbuild-internal/js_parser"
 	"github.com/ije/esbuild-internal/logger"
@@ -34,11 +34,11 @@ func validateJSFile(filename string) (isESM bool, namedExports []string, err err
 		return
 	}
 	log := logger.NewDeferLog(logger.DeferLogNoVerboseOrDebug, nil)
-	parserOpts := js_parser.OptionsFromConfig(&C.Options{
-		JSX: C.JSXOptions{
+	parserOpts := js_parser.OptionsFromConfig(&esbuild_config.Options{
+		JSX: esbuild_config.JSXOptions{
 			Parse: endsWith(filename, ".jsx", ".tsx"),
 		},
-		TS: C.TSOptions{
+		TS: esbuild_config.TSOptions{
 			Parse: endsWith(filename, ".ts", ".mts", ".cts", ".tsx"),
 		},
 	})
