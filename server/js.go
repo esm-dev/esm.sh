@@ -81,3 +81,36 @@ func minify(code string, target api.Target, loader api.Loader) ([]byte, error) {
 
 	return concatBytes(ret.LegalComments, ret.Code), nil
 }
+
+func buildRemoteModule(url string) ([]byte, error) {
+	ret := api.Build(api.BuildOptions{
+		EntryPoints:       []string{url},
+		Bundle:            true,
+		Format:            api.FormatESModule,
+		Target:            api.ESNext,
+		Platform:          api.PlatformBrowser,
+		MinifyWhitespace:  true,
+		MinifyIdentifiers: true,
+		MinifySyntax:      true,
+		JSX:               api.JSXPreserve,
+		LegalComments:     api.LegalCommentsNone,
+		Plugins: []api.Plugin{
+			{
+				Name: "http-loader",
+				Setup: func(build api.PluginBuild) {
+					build.OnResolve(api.OnResolveOptions{Filter: ".*"}, func(args api.OnResolveArgs) (api.OnResolveResult, error) {
+						return api.OnResolveResult{}, nil
+					})
+					build.OnLoad(api.OnLoadOptions{Filter: ".*"}, func(args api.OnLoadArgs) (api.OnLoadResult, error) {
+						code := ""
+						return api.OnLoadResult{Contents: &code}, nil
+					})
+				},
+			},
+		},
+	})
+	if len(ret.Errors) > 0 {
+		return nil, errors.New(ret.Errors[0].Text)
+	}
+	return ret.OutputFiles[0].Contents, nil
+}

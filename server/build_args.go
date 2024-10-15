@@ -16,7 +16,7 @@ type BuildArgs struct {
 	external          *StringSet
 	exports           *StringSet
 	conditions        []string
-	jsxRuntime        *EsmURL
+	jsxRuntime        *ESM
 	keepNames         bool
 	ignoreAnnotations bool
 	externalRequire   bool
@@ -158,7 +158,7 @@ func encodeBuildArgs(args BuildArgs, isDts bool) string {
 }
 
 // normalizeBuildArgs removes invalid alias, deps, external from the build args
-func normalizeBuildArgs(npmrc *NpmRC, installDir string, args *BuildArgs, url EsmURL) error {
+func normalizeBuildArgs(npmrc *NpmRC, installDir string, args *BuildArgs, url ESM) error {
 	if len(args.alias) > 0 || len(args.deps) > 0 || args.external.Len() > 0 {
 		depsSet := NewStringSet()
 		err := walkDeps(npmrc, installDir, url, depsSet)
@@ -212,7 +212,7 @@ func normalizeBuildArgs(npmrc *NpmRC, installDir string, args *BuildArgs, url Es
 	return nil
 }
 
-func walkDeps(npmrc *NpmRC, installDir string, url EsmURL, mark *StringSet) (err error) {
+func walkDeps(npmrc *NpmRC, installDir string, url ESM, mark *StringSet) (err error) {
 	if mark.Has(url.PkgName) {
 		return
 	}
@@ -244,7 +244,7 @@ func walkDeps(npmrc *NpmRC, installDir string, url EsmURL, mark *StringSet) (err
 		if strings.HasPrefix(name, "@types/") || strings.HasPrefix(name, "@babel/") || strings.HasPrefix(name, "is-") {
 			continue
 		}
-		err := walkDeps(npmrc, installDir, EsmURL{PkgName: name, PkgVersion: version}, mark)
+		err := walkDeps(npmrc, installDir, ESM{PkgName: name, PkgVersion: version}, mark)
 		if err != nil {
 			return err
 		}

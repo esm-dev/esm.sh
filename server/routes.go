@@ -57,7 +57,7 @@ const (
 	RawUrl
 )
 
-type EsmURL struct {
+type ESM struct {
 	GhPrefix      bool
 	PrPrefix      bool
 	PkgName       string
@@ -66,21 +66,21 @@ type EsmURL struct {
 	SubModuleName string
 }
 
-func (pkg EsmURL) PackageName() string {
-	s := pkg.PkgName
-	if pkg.PkgVersion != "" && pkg.PkgVersion != "*" && pkg.PkgVersion != "latest" {
-		s += "@" + pkg.PkgVersion
+func (m ESM) PackageName() string {
+	s := m.PkgName
+	if m.PkgVersion != "" && m.PkgVersion != "*" && m.PkgVersion != "latest" {
+		s += "@" + m.PkgVersion
 	}
-	if pkg.GhPrefix {
+	if m.GhPrefix {
 		return "gh/" + s
 	}
 	return s
 }
 
-func (pkg EsmURL) String() string {
-	s := pkg.PackageName()
-	if pkg.SubModuleName != "" {
-		s += "/" + pkg.SubModuleName
+func (m ESM) String() string {
+	s := m.PackageName()
+	if m.SubModuleName != "" {
+		s += "/" + m.SubModuleName
 	}
 	return s
 }
@@ -1460,7 +1460,7 @@ func routes(debug bool) rex.Handle {
 
 		if !argsX {
 			// check `?jsx-rutnime` query
-			var jsxRuntime *EsmURL = nil
+			var jsxRuntime *ESM = nil
 			if v := query.Get("jsx-runtime"); v != "" {
 				m, _, _, _, err := praseESMPath(npmrc, v)
 				if err != nil {
@@ -1679,7 +1679,7 @@ func auth(secret string) rex.Handle {
 	}
 }
 
-func praseESMPath(rc *NpmRC, pathname string) (esmUrl EsmURL, extraQuery string, isFixedVersion bool, hasTargetSegment bool, err error) {
+func praseESMPath(rc *NpmRC, pathname string) (esmUrl ESM, extraQuery string, isFixedVersion bool, hasTargetSegment bool, err error) {
 	// see https://pkg.pr.new
 	if strings.HasPrefix(pathname, "/pr/") {
 		pkgName, rest := utils.SplitByFirstByte(pathname[4:], '@')
@@ -1692,7 +1692,7 @@ func praseESMPath(rc *NpmRC, pathname string) (esmUrl EsmURL, extraQuery string,
 			err = errors.New("invalid path")
 			return
 		}
-		esmUrl = EsmURL{
+		esmUrl = ESM{
 			PkgName:       pkgName,
 			PkgVersion:    version,
 			SubPath:       subPath,
@@ -1739,7 +1739,7 @@ func praseESMPath(rc *NpmRC, pathname string) (esmUrl EsmURL, extraQuery string,
 		version = v
 	}
 
-	esmUrl = EsmURL{
+	esmUrl = ESM{
 		PkgName:       pkgName,
 		PkgVersion:    version,
 		SubPath:       subPath,

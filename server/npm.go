@@ -462,7 +462,7 @@ do:
 	return
 }
 
-func (rc *NpmRC) installPackage(url EsmURL) (pkgJson PackageJSON, err error) {
+func (rc *NpmRC) installPackage(url ESM) (pkgJson PackageJSON, err error) {
 	installDir := path.Join(rc.StoreDir(), url.PackageName())
 	pkgJsonFilepath := path.Join(installDir, "node_modules", url.PkgName, "package.json")
 

@@ -277,7 +277,7 @@ func transform(npmrc *NpmRC, options TransformOptions) (out TransformOutput, err
 }
 
 func preTransform(npmrc *NpmRC, loaderName string, loaderVersion string, specifier string, sourceCode string, npmDeps ...string) (output *TransformOutput, err error) {
-	pkgInfo, e := npmrc.installPackage(EsmURL{PkgName: loaderName, PkgVersion: loaderVersion})
+	pkgInfo, e := npmrc.installPackage(ESM{PkgName: loaderName, PkgVersion: loaderVersion})
 	if e != nil {
 		err = errors.New("failed to install " + loaderName + "@" + loaderVersion)
 		return
