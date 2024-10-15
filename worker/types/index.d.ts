@@ -66,7 +66,7 @@ export interface Context extends ExecutionContext {
   corsHeaders(headers?: Headers): Headers;
   withCache(
     fetcher: (targetFromUA: string | null) => Promise<Response> | Response,
-    options?: { varyUA?: boolean; varyReferer?: boolean },
+    options?: { varyUA?: boolean },
   ): Promise<Response>;
   next: () => Response;
 }

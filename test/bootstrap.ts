@@ -6,7 +6,7 @@ async function startServer(onStart: () => Promise<void>, verbose: boolean) {
     Deno.exit(code);
   }
   const p = new Deno.Command("./esmd", {
-    args: ["--debug"],
+    args: [],
     stdout: verbose ? "inherit" : "null",
     stderr: "inherit",
   }).spawn();

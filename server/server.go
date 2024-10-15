@@ -9,15 +9,16 @@ import (
 	"syscall"
 
 	"github.com/esm-dev/esm.sh/server/storage"
-
 	logger "github.com/ije/gox/log"
 	"github.com/ije/rex"
+	"go.etcd.io/bbolt"
 )
 
 var (
 	buildQueue *BuildQueue
 	config     *Config
 	log        *logger.Logger
+	imDB       *bbolt.DB
 	cache      storage.Cache
 	db         storage.DataBase
 	fs         storage.FileSystem
@@ -74,17 +75,33 @@ func Serve(efs EmbedFS) {
 
 	cache, err = storage.OpenCache(config.Cache)
 	if err != nil {
-		log.Fatalf("init cache(%s): %v", config.Cache, err)
+		log.Fatalf("open cache(%s): %v", config.Cache, err)
 	}
 
 	fs, err = storage.OpenFS(config.Storage)
 	if err != nil {
-		log.Fatalf("init fs(%s): %v", config.Storage, err)
+		log.Fatalf("open fs(%s): %v", config.Storage, err)
 	}
 
 	db, err = storage.OpenDB(config.Database)
 	if err != nil {
-		log.Fatalf("init db(%s): %v", config.Database, err)
+		log.Fatalf("open db(%s): %v", config.Database, err)
+	}
+
+	imDB, err = bbolt.Open(path.Join(config.WorkDir, "im.db"), 0644, nil)
+	if err != nil {
+		log.Fatalf("open im.db: %v", err)
+	}
+	err = imDB.Update(func(tx *bbolt.Tx) error {
+		_, err := tx.CreateBucketIfNotExists(keyAlias)
+		if err != nil {
+			return err
+		}
+		_, err = tx.CreateBucketIfNotExists(keyImportMaps)
+		return err
+	})
+	if err != nil {
+		log.Fatalf("init im.db: %v", err)
 	}
 
 	err = loadNodeLibs(efs)
@@ -110,6 +127,7 @@ func Serve(efs EmbedFS) {
 	}
 	accessLogger.SetQuite(true) // quite in terminal
 
+	// check nodejs environment
 	nodejsInstallDir := os.Getenv("NODE_INSTALL_DIR")
 	if nodejsInstallDir == "" {
 		nodejsInstallDir = path.Join(config.WorkDir, "nodejs")
@@ -120,20 +138,20 @@ func Serve(efs EmbedFS) {
 	}
 	log.Debugf("nodejs: v%s, pnpm: %s, registry: %s", nodeVer, pnpmVer, config.NpmRegistry)
 
-	err = initCJSLexerNodeApp()
+	// init cjs lexer
+	err = initCJSLexer()
 	if err != nil {
-		log.Fatalf("failed to initialize the cjs_lexer node app: %v", err)
+		log.Fatalf("failed to initialize cjs_lexer: %v", err)
 	}
 	log.Debugf("%s initialized", cjsLexerPkg)
 
-	if !config.DisableCompression {
-		rex.Use(rex.Compression())
-	}
+	// set rex middlewares
 	rex.Use(
-		rex.ErrorLogger(log),
+		rex.Logger(log),
 		rex.AccessLogger(accessLogger),
+		rex.Optional(rex.Compress(), !config.DisableCompression),
 		rex.Header("Server", "esm.sh"),
-		rex.Cors(rex.CORS{
+		rex.Cors(rex.CorsOptions{
 			AllowedOrigins:   []string{"*"},
 			AllowedMethods:   []string{"HEAD", "GET", "POST"},
 			ExposedHeaders:   []string{"X-Esm-Path", "X-TypeScript-Types"},
@@ -141,9 +159,10 @@ func Serve(efs EmbedFS) {
 			AllowCredentials: false,
 		}),
 		auth(config.AuthSecret),
-		routes(),
+		routes(debug),
 	)
 
+	// start server
 	C := rex.Serve(rex.ServerConfig{
 		Port: uint16(config.Port),
 		TLS: rex.TLSConfig{
@@ -154,7 +173,6 @@ func Serve(efs EmbedFS) {
 			},
 		},
 	})
-
 	log.Infof("Server is ready on http://localhost:%d", config.Port)
 
 	c := make(chan os.Signal, 1)

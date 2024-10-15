@@ -4,7 +4,7 @@ Welcome, and thank you for taking time in contributing to esm.sh project!
 
 ## Development Setup
 
-You will need [Golang](https://golang.org/)(1.21+) and [Deno](https://deno.land)(1.40+) installed on a Linux or macOS machine.
+You will need [Golang](https://golang.org/)(1.22+) and [Deno](https://deno.land)(1.40+) installed on a Linux or macOS machine.
 
 1. Fork this repository to your own GitHub account.
 2. Clone the repository to your local device.
@@ -47,7 +47,7 @@ We use [Deno](https://deno.land) to run all the integration testing cases. Make 
 ./test/bootstrap.ts
 
 # Run a test for a specific case (directory name)
-./test/bootstrap.ts preact
+./test/bootstrap.ts react-18
 
 # Run tests with `clean` option (purge previous builds)
 ./test/bootstrap.ts --clean

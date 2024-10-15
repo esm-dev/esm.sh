@@ -45,8 +45,8 @@ var requireModeAllowList = []string{
 	"web-streams-ponyfill",
 }
 
-func initCJSLexerNodeApp() (err error) {
-	wd := path.Join(config.WorkDir, "npm", cjsLexerPkg)
+func initCJSLexer() (err error) {
+	wd := path.Join(config.WorkDir, "pnpm-store", cjsLexerPkg)
 	err = ensureDir(wd)
 	if err != nil {
 		return err
@@ -69,7 +69,7 @@ func initCJSLexerNodeApp() (err error) {
 		return
 	}
 
-	js, err := embedFS.ReadFile("server/embed/cjs_lexer.js")
+	js, err := embedFS.ReadFile("server/embed/internal/cjs_lexer.js")
 	if err != nil {
 		return
 	}
@@ -130,10 +130,10 @@ func cjsLexer(npmrc *NpmRC, pkgName string, wd string, specifier string, nodeEnv
 		ctx,
 		"node",
 		"--experimental-permission",
-		"--allow-fs-read="+npmrc.NpmDir(),
+		"--allow-fs-read="+npmrc.StoreDir(),
 		"cjs_lexer.js",
 	)
-	cmd.Dir = path.Join(config.WorkDir, "npm", cjsLexerPkg)
+	cmd.Dir = path.Join(config.WorkDir, "pnpm-store", cjsLexerPkg)
 	cmd.Stdin = bytes.NewBuffer(argsData)
 	cmd.Stdout = &outBuf
 	cmd.Stderr = &errBuf

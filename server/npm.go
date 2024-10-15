@@ -249,14 +249,15 @@ func NewNpmRcFromJSON(jsonData []byte) (npmrc *NpmRC, err error) {
 	return &rc, nil
 }
 
-func (rc *NpmRC) NpmDir() string {
+func (rc *NpmRC) StoreDir() string {
 	if rc.zoneId != "" {
-		return path.Join(config.WorkDir, "npm-"+rc.zoneId)
+		return path.Join(config.WorkDir, "pnpm-store-"+rc.zoneId)
 	}
-	return path.Join(config.WorkDir, "npm")
+	return path.Join(config.WorkDir, "pnpm-store")
 }
 
 func (rc *NpmRC) getPackageInfo(name string, semver string) (info PackageJSON, err error) {
+	// use fixed version for `@types/node`
 	if name == "@types/node" {
 		info = PackageJSON{
 			Name:    "@types/node",
@@ -266,13 +267,14 @@ func (rc *NpmRC) getPackageInfo(name string, semver string) (info PackageJSON, e
 		return
 	}
 
-	// strip leading `=` or `v` from semver
-	if (strings.HasPrefix(semver, "=") || strings.HasPrefix(semver, "v")) && regexpFullVersion.MatchString(semver[1:]) {
+	// strip leading `=` or `v`
+	if (strings.HasPrefix(semver, "=") || strings.HasPrefix(semver, "v")) && regexpVersionStrict.MatchString(semver[1:]) {
 		semver = semver[1:]
 	}
 
-	if regexpFullVersion.MatchString(semver) {
-		pkgJsonPath := path.Join(rc.NpmDir(), name+"@"+semver, "node_modules", name, "package.json")
+	// check if the package has been installed
+	if regexpVersionStrict.MatchString(semver) {
+		pkgJsonPath := path.Join(rc.StoreDir(), name+"@"+semver, "node_modules", name, "package.json")
 		if existsFile(pkgJsonPath) && utils.ParseJSONFile(pkgJsonPath, &info) == nil {
 			return
 		}
@@ -291,7 +293,7 @@ func (rc *NpmRC) fetchPackageInfo(name string, semverOrDistTag string) (info Pac
 
 	if semverOrDistTag == "" || semverOrDistTag == "*" {
 		semverOrDistTag = "latest"
-	} else if (strings.HasPrefix(semverOrDistTag, "=") || strings.HasPrefix(semverOrDistTag, "v")) && regexpFullVersion.MatchString(semverOrDistTag[1:]) {
+	} else if (strings.HasPrefix(semverOrDistTag, "=") || strings.HasPrefix(semverOrDistTag, "v")) && regexpVersionStrict.MatchString(semverOrDistTag[1:]) {
 		// strip leading `=` or `v` from semver
 		semverOrDistTag = semverOrDistTag[1:]
 	}
@@ -336,7 +338,7 @@ func (rc *NpmRC) fetchPackageInfo(name string, semverOrDistTag string) (info Pac
 		}
 	}
 
-	isFullVersion := regexpFullVersion.MatchString(semverOrDistTag)
+	isFullVersion := regexpVersionStrict.MatchString(semverOrDistTag)
 	isFullVersionFromNpmjsOrg := isFullVersion && strings.HasPrefix(url, npmRegistry)
 	if isFullVersionFromNpmjsOrg {
 		// npm registry supports url like `https://registry.npmjs.org/<name>/<version>`
@@ -460,9 +462,9 @@ do:
 	return
 }
 
-func (rc *NpmRC) installPackage(module Module) (pkgJson PackageJSON, err error) {
-	installDir := path.Join(rc.NpmDir(), module.PackageName())
-	pkgJsonFilepath := path.Join(installDir, "node_modules", module.PkgName, "package.json")
+func (rc *NpmRC) installPackage(url ESM) (pkgJson PackageJSON, err error) {
+	installDir := path.Join(rc.StoreDir(), url.PackageName())
+	pkgJsonFilepath := path.Join(installDir, "node_modules", url.PkgName, "package.json")
 
 	// only one installation process allowed at the same time for the same package
 	lock := getInstallLock(installDir)
@@ -491,73 +493,68 @@ func (rc *NpmRC) installPackage(module Module) (pkgJson PackageJSON, err error) 
 		err = os.WriteFile(packageJsonFp, []byte("{}"), 0644)
 	}
 	if err != nil {
-		err = fmt.Errorf("ensure package.json failed: %s", module.PackageName())
+		err = fmt.Errorf("ensure package.json failed: %s", url.PackageName())
 		return
 	}
 
-	attemptMaxTimes := 3
+	attemptMaxTimes := 5
 	for i := 1; i <= attemptMaxTimes; i++ {
-		if module.GhPrefix {
-			err = os.WriteFile(packageJsonFp, []byte(fmt.Sprintf(`{"dependencies":{"%s":"github:%s#%s"}}`, module.PkgName, module.PkgName, module.PkgVersion)), 0644)
+		if url.GhPrefix {
+			err = os.WriteFile(packageJsonFp, []byte(fmt.Sprintf(`{"dependencies":{"%s":"github:%s#%s"}}`, url.PkgName, url.PkgName, url.PkgVersion)), 0644)
 			if err == nil {
-				err = rc.pnpm(installDir)
+				err = rc.pnpmi(installDir)
 			}
 			// pnpm will ignore github package which has been installed without `package.json` file
 			// so we install it manually
 			if err == nil {
-				packageJsonFp := path.Join(installDir, "node_modules", module.PkgName, "package.json")
+				packageJsonFp := path.Join(installDir, "node_modules", url.PkgName, "package.json")
 				if !existsFile(packageJsonFp) {
 					ensureDir(path.Dir(packageJsonFp))
 					err = os.WriteFile(packageJsonFp, utils.MustEncodeJSON(PackageJSONRaw{
-						Name:    module.PkgName,
-						Version: module.PkgVersion,
+						Name:    url.PkgName,
+						Version: url.PkgVersion,
 					}), 0644)
 				} else {
 					var p PackageJSON
 					err = utils.ParseJSONFile(packageJsonFp, &p)
 					if err == nil && len(p.Files) > 0 {
 						// install github package with ignoring `files` field
-						err = ghInstall(installDir, module.PkgName, module.PkgVersion)
+						err = ghInstall(installDir, url.PkgName, url.PkgVersion)
 					}
 				}
 			}
-		} else if regexpFullVersion.MatchString(module.PkgVersion) {
-			err = rc.pnpm(installDir, module.PackageName(), "--prefer-offline")
+		} else if regexpVersionStrict.MatchString(url.PkgVersion) {
+			err = rc.pnpmi(installDir, "--prefer-offline", url.PackageName())
 		} else {
-			err = rc.pnpm(installDir, module.PackageName())
+			err = rc.pnpmi(installDir, url.PackageName())
 		}
 		if err == nil {
 			err = utils.ParseJSONFile(pkgJsonFilepath, &pkgJson)
 			if err != nil {
-				err = fmt.Errorf("pnpm install %s: package.json not found", module)
+				err = fmt.Errorf("pnpm install %s: package.json not found", url)
 			}
 		}
 		if err == nil || i == attemptMaxTimes {
 			break
 		}
-		time.Sleep(time.Duration(i) * time.Second)
+		time.Sleep(time.Duration(i) * 100 * time.Millisecond)
 	}
 	return
 }
 
-func (rc *NpmRC) pnpm(dir string, packages ...string) (err error) {
-	var args []string
-	if len(packages) > 0 {
-		args = append([]string{"add"}, packages...)
-	} else {
-		args = []string{
-			"install",
-			"--no-optional",
-			"--ignore-pnpmfile",
-			"--ignore-workspace",
-		}
-	}
-	args = append(
-		args,
+func (rc *NpmRC) pnpmi(dir string, packages ...string) (err error) {
+	args := []string{
+		"i",
+		"--no-lockfile",
 		"--no-color",
+		"--ignore-pnpmfile",
+		"--ignore-workspace",
 		"--ignore-scripts",
 		"--loglevel=error",
-	)
+	}
+	if len(packages) > 0 {
+		args = append(args, packages...)
+	}
 	start := time.Now()
 	out := &bytes.Buffer{}
 	errout := &bytes.Buffer{}
@@ -604,7 +601,7 @@ func (rc *NpmRC) pnpm(dir string, packages ...string) (err error) {
 		return fmt.Errorf("pnpm %s: %s", strings.Join(args, " "), out.String())
 	}
 	if len(packages) > 0 {
-		log.Debug("pnpm add", strings.Join(packages, ","), "in", time.Since(start))
+		log.Debug("pnpm add", strings.Join(packages, " "), "in", time.Since(start))
 	} else {
 		log.Debug("pnpm install in", time.Since(start))
 	}

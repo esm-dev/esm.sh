@@ -12,31 +12,56 @@ import (
 	"strings"
 
 	"github.com/Masterminds/semver/v3"
+	"github.com/ije/gox/valid"
 )
 
 const EOL = "\n"
+const MB = 1 << 20
 
 var (
-	regexpFullVersion = regexp.MustCompile(`^\d+\.\d+\.\d+[\w\.\+\-]*$`)
-	regexpLocPath     = regexp.MustCompile(`:\d+:\d+$`)
-	regexpJSIdent     = regexp.MustCompile(`^[a-zA-Z_$][\w$]*$`)
-	regexpGlobalIdent = regexp.MustCompile(`__[a-zA-Z]+\$`)
-	regexpVarEqual    = regexp.MustCompile(`var ([\w$]+)\s*=\s*[\w$]+$`)
+	regexpVersion       = regexp.MustCompile(`^[\w\.\+\-]+$`)
+	regexpVersionStrict = regexp.MustCompile(`^\d+\.\d+\.\d+[\w\.\+\-]*$`)
+	regexpVuePath       = regexp.MustCompile(`/\*?vue@([\w\.\+\-]+)($|/)`)
+	regexpSveltePath    = regexp.MustCompile(`/\*?svelte@([\w\.\+\-]+)($|/)`)
+	regexpLocPath       = regexp.MustCompile(`:\d+:\d+$`)
+	regexpJSIdent       = regexp.MustCompile(`^[a-zA-Z_$][\w$]*$`)
+	regexpGlobalIdent   = regexp.MustCompile(`__[a-zA-Z]+\$`)
+	regexpVarEqual      = regexp.MustCompile(`var ([\w$]+)\s*=\s*[\w$]+$`)
+	regexpDomain        = regexp.MustCompile(`^[a-z0-9\-]+(\.[a-z0-9\-]+)*\.[a-z]+$`)
 )
 
-// isHttpSepcifier returns true if the import path is a remote URL.
-func isHttpSepcifier(importPath string) bool {
-	return strings.HasPrefix(importPath, "https://") || strings.HasPrefix(importPath, "http://")
+var (
+	keyImportMaps = []byte("importmaps")
+	keyAlias      = []byte("alias")
+)
+
+// isHttpSepcifier returns true if the specifier is a remote URL.
+func isHttpSepcifier(specifier string) bool {
+	return strings.HasPrefix(specifier, "https://") || strings.HasPrefix(specifier, "http://")
 }
 
-// isRelativeSpecifier returns true if the import path is a local path.
-func isRelativeSpecifier(importPath string) bool {
-	return strings.HasPrefix(importPath, "./") || strings.HasPrefix(importPath, "../") || importPath == "." || importPath == ".."
+// isRelativeSpecifier returns true if the specifier is a local path.
+func isRelativeSpecifier(specifier string) bool {
+	return strings.HasPrefix(specifier, "./") || strings.HasPrefix(specifier, "../") || specifier == "." || specifier == ".."
 }
 
 // semverLessThan returns true if the version a is less than the version b.
 func semverLessThan(a string, b string) bool {
 	return semver.MustParse(a).LessThan(semver.MustParse(b))
+}
+
+// check if the given hostname is a local address.
+func isLocalhost(hostname string) bool {
+	return hostname == "localhost" || hostname == "127.0.0.1" || (valid.IsIPv4(hostname) && strings.HasPrefix(hostname, "192.168."))
+}
+
+func isW3CStandardAttribute(attr string) bool {
+	switch attr {
+	case "id", "href", "src", "name", "placeholder", "rel", "role", "selected", "checked", "slot", "style", "tilte", "type", "value", "width", "height", "hidden", "dir", "dragable", "lang", "spellcheck", "tabindex", "translate", "popover":
+		return true
+	default:
+		return strings.HasPrefix(attr, "aria-") || strings.HasPrefix(attr, "data-")
+	}
 }
 
 // includes returns true if the given string is included in the given array.
