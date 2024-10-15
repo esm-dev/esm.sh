@@ -93,7 +93,7 @@ func transform(npmrc *NpmRC, options TransformOptions) (out TransformOutput, err
 				data += value + "\n"
 			}
 			// pre-process uno.css
-			o, e := preTransform(npmrc, "esm-unocss", "0.2.0", data, sourceCode, "--prefer-offline", "@iconify/json@2.2.260")
+			o, e := preTransform(npmrc, "esm-unocss", "0.2.3", data, sourceCode, "--prefer-offline", "@iconify/json@2.2.260")
 			if e != nil {
 				log.Error("failed to generate uno.css:", e)
 				err = errors.New("failed to generate uno.css")
@@ -277,23 +277,25 @@ func transform(npmrc *NpmRC, options TransformOptions) (out TransformOutput, err
 }
 
 func preTransform(npmrc *NpmRC, loaderName string, loaderVersion string, specifier string, sourceCode string, npmDeps ...string) (output *TransformOutput, err error) {
-	pkgInfo, e := npmrc.installPackage(ESM{PkgName: loaderName, PkgVersion: loaderVersion})
-	if e != nil {
-		err = errors.New("failed to install " + loaderName + "@" + loaderVersion)
-		return
-	}
-	if len(npmDeps) > 0 {
-		err = npmrc.pnpmi(path.Join(npmrc.StoreDir(), loaderName+"@"+loaderVersion), npmDeps...)
+	wd := path.Join(npmrc.StoreDir(), loaderName+"@"+loaderVersion)
+	if !existsFile(path.Join(wd, "package.json")) {
+		_, err = npmrc.installPackage(ESM{PkgName: loaderName, PkgVersion: loaderVersion})
 		if err != nil {
-			err = errors.New("failed to install " + strings.Join(npmDeps, " "))
+			err = errors.New("failed to install " + loaderName + "@" + loaderVersion)
 			return
 		}
+		if len(npmDeps) > 0 {
+			err = npmrc.pnpmi(wd, npmDeps...)
+			if err != nil {
+				err = errors.New("failed to install " + strings.Join(npmDeps, " "))
+				return
+			}
+		}
 	}
-	dirname := path.Join(npmrc.StoreDir(), loaderName+"@"+pkgInfo.Version)
-	loaderJsFp := path.Join(dirname, "loader.mjs")
+	loaderJsFp := path.Join(wd, "loader.mjs")
 	if !existsFile(loaderJsFp) {
 		var loaderJS []byte
-		major, _ := utils.SplitByFirstByte(pkgInfo.Version, '.')
+		major, _ := utils.SplitByFirstByte(loaderVersion, '.')
 		loaderJS, err = embedFS.ReadFile(fmt.Sprintf("server/embed/internal/%s_loader@%s.js", loaderName, major))
 		if err != nil {
 			err = fmt.Errorf("could not find %s loader", loaderName)
@@ -310,14 +312,8 @@ func preTransform(npmrc *NpmRC, loaderName string, loaderVersion string, specifi
 
 	var outBuf bytes.Buffer
 	var errBuf bytes.Buffer
-	cmd := exec.CommandContext(
-		ctx,
-		"node",
-		"--experimental-permission",
-		"--allow-fs-read="+npmrc.StoreDir(),
-		"loader.mjs",
-	)
-	cmd.Dir = dirname
+	cmd := exec.CommandContext(ctx, "node", "loader.mjs")
+	cmd.Dir = wd
 	cmd.Stdin = bytes.NewReader(utils.MustEncodeJSON([]string{specifier, sourceCode}))
 	cmd.Stdout = &outBuf
 	cmd.Stderr = &errBuf

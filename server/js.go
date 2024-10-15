@@ -2,8 +2,13 @@ package server
 
 import (
 	"errors"
+	"io"
+	"net/http"
+	"net/url"
 	"os"
+	"path"
 	"strings"
+	"time"
 
 	"github.com/evanw/esbuild/pkg/api"
 	esbuild_config "github.com/ije/esbuild-internal/config"
@@ -82,28 +87,88 @@ func minify(code string, target api.Target, loader api.Loader) ([]byte, error) {
 	return concatBytes(ret.LegalComments, ret.Code), nil
 }
 
-func buildRemoteModule(url string) ([]byte, error) {
+// buildRemoteModule builds the remote module and it's submodules.
+func buildRemoteModule(entry string, ua string) ([]byte, error) {
+	if !isHttpSepcifier(entry) {
+		return nil, errors.New("require a remote module")
+	}
+	entryUrl, err := url.Parse(entry)
+	if err != nil {
+		return nil, errors.New("invalid enrtry, require a valid url")
+	}
+	httpClient := &http.Client{
+		Timeout: time.Minute,
+	}
 	ret := api.Build(api.BuildOptions{
-		EntryPoints:       []string{url},
-		Bundle:            true,
-		Format:            api.FormatESModule,
-		Target:            api.ESNext,
-		Platform:          api.PlatformBrowser,
-		MinifyWhitespace:  true,
-		MinifyIdentifiers: true,
-		MinifySyntax:      true,
-		JSX:               api.JSXPreserve,
-		LegalComments:     api.LegalCommentsNone,
+		EntryPoints:      []string{entry},
+		Bundle:           true,
+		Format:           api.FormatESModule,
+		Target:           api.ESNext,
+		Platform:         api.PlatformBrowser,
+		MinifyWhitespace: true,
+		MinifySyntax:     true,
+		JSX:              api.JSXPreserve,
+		LegalComments:    api.LegalCommentsNone,
 		Plugins: []api.Plugin{
 			{
 				Name: "http-loader",
 				Setup: func(build api.PluginBuild) {
 					build.OnResolve(api.OnResolveOptions{Filter: ".*"}, func(args api.OnResolveArgs) (api.OnResolveResult, error) {
-						return api.OnResolveResult{}, nil
+						path := args.Path
+						if isRelativeSpecifier(args.Path) && isHttpSepcifier(args.Importer) {
+							u, e := url.Parse(args.Importer)
+							if e == nil {
+								path = u.ResolveReference(&url.URL{Path: args.Path}).String()
+							}
+						}
+						if isHttpSepcifier(path) {
+							u, e := url.Parse(path)
+							if e == nil {
+								if u.Host == entryUrl.Host && u.Scheme == entryUrl.Scheme {
+									return api.OnResolveResult{Path: path, Namespace: "http"}, nil
+								}
+							}
+						}
+						return api.OnResolveResult{Path: path, External: true}, nil
 					})
-					build.OnLoad(api.OnLoadOptions{Filter: ".*"}, func(args api.OnLoadArgs) (api.OnLoadResult, error) {
-						code := ""
-						return api.OnLoadResult{Contents: &code}, nil
+					build.OnLoad(api.OnLoadOptions{Filter: ".*", Namespace: "http"}, func(args api.OnLoadArgs) (api.OnLoadResult, error) {
+						url, err := url.Parse(args.Path)
+						if err != nil {
+							return api.OnLoadResult{}, err
+						}
+						req := &http.Request{
+							Method: "GET",
+							URL:    url,
+							Header: map[string][]string{
+								"User-Agent": {ua},
+							},
+						}
+						resp, err := httpClient.Do(req)
+						if err != nil {
+							return api.OnLoadResult{}, errors.New("failed to read remote module " + args.Path + ": " + err.Error())
+						}
+						defer resp.Body.Close()
+						data, err := io.ReadAll(resp.Body)
+						if err != nil {
+							return api.OnLoadResult{}, errors.New("failed to read remote module " + args.Path)
+						}
+						loader := api.LoaderJS
+						switch path.Ext(url.Path) {
+						case ".js", ".cjs", ".mjs":
+							loader = api.LoaderJS
+						case ".ts", ".cts", ".mts":
+							loader = api.LoaderTS
+						case ".jsx":
+							loader = api.LoaderJSX
+						case ".tsx":
+							loader = api.LoaderTSX
+						case ".css":
+							loader = api.LoaderCSS
+						case ".json":
+							loader = api.LoaderJSON
+						}
+						code := string(data)
+						return api.OnLoadResult{Contents: &code, Loader: loader}, nil
 					})
 				},
 			},

@@ -543,11 +543,11 @@ func routes(debug bool) rex.Handle {
 			if referer == "" {
 				return rex.Redirect("https://unocss.dev", http.StatusFound)
 			}
-			u, err := url.Parse(referer)
+			refererUrl, err := url.Parse(referer)
 			if err != nil {
 				return rex.Status(400, "Invalid Referer")
 			}
-			hostname := u.Hostname()
+			hostname := refererUrl.Hostname()
 			if isLocalhost(hostname) {
 				ctx.SetHeader("Cache-Control", ccImmutable)
 				ctx.SetHeader("Content-Type", ctCSS)
@@ -585,7 +585,7 @@ func routes(debug bool) rex.Handle {
 				}
 				req := &http.Request{
 					Method: "GET",
-					URL:    u,
+					URL:    refererUrl,
 					Header: map[string][]string{
 						"User-Agent": {ctx.UserAgent()},
 					},
@@ -673,15 +673,24 @@ func routes(debug bool) rex.Handle {
 						}
 					}
 				}
+				if len(importMap.Imports) > 0 {
+					for k := range importMap.Imports {
+						url := refererUrl.ResolveReference(&url.URL{Path: k})
+						code, err := buildRemoteModule(url.String(), ctx.UserAgent())
+						if err == nil {
+							importMap.Imports[k] = string(code)
+						}
+					}
+				}
 				if len(attrs) > 0 {
 					importMap.Imports["."] = strings.Join(attrs, "\n")
 				}
 				out, err := transform(npmrc, TransformOptions{
 					TransformInput: TransformInput{
-						Filename: "uno.css",
-						Code:     configCSS,
-						Target:   target,
-						Minify:   true,
+						Lang:   "css",
+						Code:   configCSS,
+						Target: target,
+						Minify: true,
 					},
 					importMap: importMap,
 					unocss:    true,

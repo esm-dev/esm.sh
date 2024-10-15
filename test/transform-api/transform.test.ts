@@ -169,6 +169,8 @@ Deno.test("transform api(uno)", async () => {
   assertStringIncludes(css1, "@font-face{");
   assertStringIncludes(css1, "https://fonts.gstatic.com/s/inter/");
   assertStringIncludes(css1, "font-family:Inter,ui-sans-serif,");
+  assertStringIncludes(css1, '.i-carbon-logo-github{--un-icon:url("data:image/svg+xml;utf8,');
+  assertStringIncludes(css1, ".all\\:transition-40 *{");
 });
 
 async function computeHash(input: string): Promise<string> {
