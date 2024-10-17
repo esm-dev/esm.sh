@@ -1,6 +1,8 @@
 package server
 
 import (
+	"archive/tar"
+	"compress/gzip"
 	"errors"
 	"fmt"
 	"io"
@@ -142,6 +144,10 @@ func getNodejsLatestVersion() (verison string, err error) {
 		return
 	}
 	defer res.Body.Close()
+	if res.StatusCode != 200 {
+		err = fmt.Errorf("http.get: %s", http.StatusText(res.StatusCode))
+		return
+	}
 	var body []byte
 	body, err = io.ReadAll(res.Body)
 	if err != nil {
@@ -158,13 +164,22 @@ func getNodejsLatestVersion() (verison string, err error) {
 
 func installNodejs(installDir string, version string) (err error) {
 	arch := runtime.GOARCH
+	goos := runtime.GOOS
 	switch arch {
+	case "arm64":
+		arch = "arm64"
 	case "amd64":
 		arch = "x64"
 	case "386":
 		arch = "x86"
 	}
-	dlURL := fmt.Sprintf("https://nodejs.org/dist/%s/node-%s-%s-%s.tar.xz", version, version, runtime.GOOS, arch)
+
+	if goos == "windows" {
+		err = fmt.Errorf("download nodejs: don't support windows yet")
+		return
+	}
+
+	dlURL := fmt.Sprintf("https://nodejs.org/dist/%s/node-%s-%s-%s.tar.gz", version, version, goos, arch)
 	resp, err := http.Get(dlURL)
 	if err != nil {
 		err = fmt.Errorf("download nodejs: %v", err)
@@ -172,26 +187,46 @@ func installNodejs(installDir string, version string) (err error) {
 	}
 	defer resp.Body.Close()
 
-	savePath := path.Join(os.TempDir(), path.Base(dlURL))
-	f, err := os.Create(savePath)
-	if err != nil {
-		return
-	}
-	io.Copy(f, resp.Body)
-	f.Close()
-
-	cmd := exec.Command("tar", "-xJf", path.Base(dlURL))
-	cmd.Dir = os.TempDir()
-	err = cmd.Run()
-	if err != nil {
+	if resp.StatusCode != 200 {
+		err = fmt.Errorf("download nodejs: %s", http.StatusText(resp.StatusCode))
 		return
 	}
 
-	// remove old installation if exists
-	os.RemoveAll(installDir)
+	defer func() {
+		if err != nil {
+			err = fmt.Errorf("extract %s: %v", path.Base(dlURL), err)
+		}
+	}()
 
-	cmd = exec.Command("mv", "-f", strings.TrimSuffix(path.Base(dlURL), ".tar.xz"), installDir)
-	cmd.Dir = os.TempDir()
-	err = cmd.Run()
+	// extract
+	gr, err := gzip.NewReader(resp.Body)
+	if err != nil {
+		return
+	}
+	defer gr.Close()
+	tr := tar.NewReader(gr)
+	for {
+		var header *tar.Header
+		header, err = tr.Next()
+		if err == io.EOF {
+			break
+		}
+		if err == nil {
+			filePath := path.Join(installDir, header.Name)
+			if header.Typeflag == tar.TypeDir {
+				err = os.MkdirAll(filePath, 0755)
+			} else if header.Typeflag == tar.TypeReg {
+				var file *os.File
+				file, err = os.OpenFile(filePath, os.O_CREATE|os.O_WRONLY, os.FileMode(header.Mode))
+				if err == nil {
+					_, err = io.Copy(file, tr)
+					file.Close()
+				}
+			}
+		}
+		if err != nil {
+			return
+		}
+	}
 	return
 }
