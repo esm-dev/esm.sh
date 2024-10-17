@@ -93,7 +93,7 @@ func transform(npmrc *NpmRC, options TransformOptions) (out TransformOutput, err
 				data += value + "\n"
 			}
 			// pre-process uno.css
-			o, e := preTransform(npmrc, "esm-unocss", "0.2.3", data, sourceCode, "--prefer-offline", "@iconify/json@2.2.260")
+			o, e := preTransform(npmrc, "esm-unocss", "0.3.0", data, sourceCode, "--prefer-offline", "@iconify/json@2.2.260")
 			if e != nil {
 				log.Error("failed to generate uno.css:", e)
 				err = errors.New("failed to generate uno.css")
