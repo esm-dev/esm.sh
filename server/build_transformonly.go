@@ -164,7 +164,7 @@ func transform(npmrc *NpmRC, options TransformOptions) (out TransformOutput, err
 
 	if jsxImportSource == "" && (loader == api.LoaderJSX || loader == api.LoaderTSX) {
 		var ok bool
-		for _, key := range []string{"@jsxRuntime", "@jsxImportSource", "react", "preact"} {
+		for _, key := range []string{"@jsxRuntime", "@jsxImportSource", "preact", "react"} {
 			jsxImportSource, ok = imports[key]
 			if ok {
 				break

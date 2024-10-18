@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ESM&gt;Run</title>
+  <script type="importmap">
+    {
+      "imports": {
+        "preact": "https://esm.sh/preact@10.24.1"
+      }
+    }
+  </script>
+  <link rel="stylesheet" href="https://esm.sh/uno">
+  <style type="uno/css">
+    @import "@unocss/preset-uno" preset;
+    @import "@unocss/preset-icons" preset;
+    @import "@unocss/preset-web-fonts" preset;
+
+    :theme {
+      --color-primary: #3b82f6;
+      --font-family-sans: webfont("Inter");
+      --animation-duration-spin: 1s;
+      --animation-timing-spin: ease;
+    }
+
+    @keyframes spin {
+      from {
+        transform: rotate(0deg);
+      }
+      to {
+        transform: rotate(360deg);
+      }
+    }
+
+    .btn {
+      --uno: py-2 px-4 font-sans rounded-lg shadow-md text-white bg-primary hover:text-gray-200;
+    }
+  </style>
+</head>
+<body>
+  <div id="root">Loading...</div>
+  <div class="absolute bottom-5 w-full flex justify-center">
+    <button class="btn animate-spin">Click Me</button>
+  </div>
+  <script type="module" src="https://esm.sh/run" main="./main.tsx"></script>
+</body>
+</html>
