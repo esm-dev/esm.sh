@@ -109,7 +109,7 @@ func (h *H) ServeHtml(w http.ResponseWriter, r *http.Request, htmlFile *ServeFil
 		}
 		w.Write(tokenizer.Raw())
 	}
-	fmt.Fprintf(w, `<script type="module">import createHotContext from"/@hmr";createHotContext("%s").watch("%s",()=>location.reload())</script>`, htmlFile.pathname, htmlFile.pathname)
+	fmt.Fprintf(w, `<script type="module">import createHotContext from"/@hmr";createHotContext("%s").watch(()=>location.reload())</script>`, htmlFile.pathname)
 }
 
 func (h *H) ServeUnoCSS(w http.ResponseWriter, r *http.Request) {

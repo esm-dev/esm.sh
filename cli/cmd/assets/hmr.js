@@ -94,17 +94,21 @@ class HotContext {
   lock() {
     this.#locked = true;
   }
-  accept(cb) {
+  accept(callback = () => {}) {
     if (this.#locked) {
       return;
     }
-    addWatcher(this.#id, (kind) => kind === "remove" ? cb() : import(this.#id).then(cb));
+    addWatcher(this.#id, (kind) => kind === "remove" ? callback() : import(this.#id).then(callback));
   }
-  watch(filename, cb) {
+  watch(idOrCallback, callback = () => {}) {
     if (this.#locked) {
       return;
     }
-    addWatcher(filename, cb);
+    if (typeof idOrCallback === "function") {
+      callback = idOrCallback;
+      idOrCallback = this.#id;
+    }
+    addWatcher(idOrCallback, callback);
   }
 }
 
