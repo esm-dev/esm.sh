@@ -1871,10 +1871,10 @@ func splitPkgPath(pathname string) (pkgName string, version string, subPath stri
 		hasTargetSegment = checkTargetSegment(a[1:])
 	}
 	if len(nameAndVersion) > 0 && nameAndVersion[0] == '@' {
-		pkgName, version = utils.SplitByLastByte(nameAndVersion[1:], '@')
+		pkgName, version = utils.SplitByFirstByte(nameAndVersion[1:], '@')
 		pkgName = "@" + pkgName
 	} else {
-		pkgName, version = utils.SplitByLastByte(nameAndVersion, '@')
+		pkgName, version = utils.SplitByFirstByte(nameAndVersion, '@')
 	}
 	if version != "" {
 		version = strings.TrimSpace(version)
