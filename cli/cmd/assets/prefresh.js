@@ -1,5 +1,5 @@
-// react-refresh
-// @link https://github.com/facebook/react/issues/16604#issuecomment-528663101
+// Fast-refresh for Preact!
+// @see https://github.com/preactjs/prefresh
 
 import "https://esm.sh/@prefresh/core@1.5.2?external=*";
 
