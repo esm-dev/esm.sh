@@ -182,17 +182,17 @@ func toModuleBareName(path string, stripIndexSuffier bool) string {
 
 func splitPkgPath(specifier string) (pkgName string, version string, subPath string) {
 	a := strings.Split(strings.TrimPrefix(specifier, "/"), "/")
-	pkgNameWithVersion := a[0]
+	name := a[0]
 	subPath = strings.Join(a[1:], "/")
-	if strings.HasPrefix(pkgNameWithVersion, "@") && len(a) > 1 {
-		pkgNameWithVersion = a[0] + "/" + a[1]
+	if strings.HasPrefix(name, "@") && len(a) > 1 {
+		name = a[0] + "/" + a[1]
 		subPath = strings.Join(a[2:], "/")
 	}
-	if len(pkgNameWithVersion) > 0 && pkgNameWithVersion[0] == '@' {
-		pkgName, version = utils.SplitByLastByte(pkgNameWithVersion[1:], '@')
+	if len(name) > 0 && name[0] == '@' {
+		pkgName, version = utils.SplitByFirstByte(name[1:], '@')
 		pkgName = "@" + pkgName
 	} else {
-		pkgName, version = utils.SplitByLastByte(pkgNameWithVersion, '@')
+		pkgName, version = utils.SplitByFirstByte(name, '@')
 	}
 	return
 }

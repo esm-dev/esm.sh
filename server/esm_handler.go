@@ -139,36 +139,37 @@ func esmHandler() rex.Handle {
 			return getBuildTargetByUA(userAgent)
 
 		case "/error.js":
-			switch ctx.Form.Value("type") {
+			query := ctx.R.URL.Query()
+			switch query.Get("type") {
 			case "resolve":
 				return throwErrorJS(ctx, fmt.Errorf(
 					`could not resolve "%s" (Imported by "%s")`,
-					ctx.Form.Value("name"),
-					ctx.Form.Value("importer"),
+					query.Get("name"),
+					query.Get("importer"),
 				), true)
 			case "unsupported-node-builtin-module":
 				return throwErrorJS(ctx, fmt.Errorf(
 					`unsupported Node builtin module "%s" (Imported by "%s")`,
-					ctx.Form.Value("name"),
-					ctx.Form.Value("importer"),
+					query.Get("name"),
+					query.Get("importer"),
 				), true)
 			case "unsupported-node-native-module":
 				return throwErrorJS(ctx, fmt.Errorf(
 					`unsupported node native module "%s" (Imported by "%s")`,
-					ctx.Form.Value("name"),
-					ctx.Form.Value("importer"),
+					query.Get("name"),
+					query.Get("importer"),
 				), true)
 			case "unsupported-npm-package":
 				return throwErrorJS(ctx, fmt.Errorf(
 					`unsupported NPM package "%s" (Imported by "%s")`,
-					ctx.Form.Value("name"),
-					ctx.Form.Value("importer"),
+					query.Get("name"),
+					query.Get("importer"),
 				), true)
 			case "unsupported-file-dependency":
 				return throwErrorJS(ctx, fmt.Errorf(
 					`unsupported file dependency "%s" (Imported by "%s")`,
-					ctx.Form.Value("name"),
-					ctx.Form.Value("importer"),
+					query.Get("name"),
+					query.Get("importer"),
 				), true)
 			default:
 				return throwErrorJS(ctx, fmt.Errorf("unknown error"), true)
@@ -229,23 +230,6 @@ func esmHandler() rex.Handle {
 			return rex.Content(savaPath, fi.ModTime(), r) // auto closed
 		}
 
-		// check extra query like `/react-dom@18.2.0&external=react&dev/client`
-		var extraQuery string
-		if strings.ContainsRune(pathname, '@') && regexpPathWithVersion.MatchString(pathname) {
-			if _, v := utils.SplitByLastByte(pathname, '@'); v != "" {
-				if _, e := utils.SplitByFirstByte(v, '&'); e != "" {
-					extraQuery, _ = utils.SplitByFirstByte(e, '/')
-					if extraQuery != "" {
-						qs := []string{extraQuery}
-						if ctx.R.URL.RawQuery != "" {
-							qs = append(qs, ctx.R.URL.RawQuery)
-						}
-						ctx.R.URL.RawQuery = strings.Join(qs, "&")
-					}
-				}
-			}
-		}
-
 		var hasBuildVerPrefix bool
 		var hasPinedVerParam bool
 		var hasStablePrefix bool
@@ -272,9 +256,9 @@ func esmHandler() rex.Handle {
 			hasBuildVerPrefix = true
 			outdatedBuildVersion = a[1]
 			buildVersion = v
-		} else {
+		} else if strings.Contains(ctx.R.URL.RawQuery, "pin=") {
 			// Otherwise check "?pin=" query
-			pin := ctx.Form.Value("pin")
+			pin := ctx.R.URL.Query().Get("pin")
 			if pin != "" && strings.HasPrefix(pin, "v") {
 				i, err := strconv.Atoi(pin[1:])
 				if err == nil && i > 0 && i < BUILD_VERSION {
@@ -341,7 +325,7 @@ func esmHandler() rex.Handle {
 			if strings.HasSuffix(pathname, ".d.ts") {
 				data, err := embedFS.ReadFile("server/embed/types" + pathname)
 				if err == nil {
-					fv := ctx.Form.Value("refs")
+					fv := ctx.R.URL.Query().Get("refs")
 					if fv != "" {
 						var refs = make([]string, strings.Count(fv, ",")+1)
 						for i, ref := range strings.Split(fv, ",") {
@@ -379,6 +363,15 @@ func esmHandler() rex.Handle {
 			}
 			return rex.Status(status, message)
 		}
+
+		if extraQuery != "" {
+			qs := []string{extraQuery}
+			if ctx.R.URL.RawQuery != "" {
+				qs = append(qs, ctx.R.URL.RawQuery)
+			}
+			ctx.R.URL.RawQuery = strings.Join(qs, "&")
+		}
+		query := ctx.R.URL.Query()
 
 		pkgAllowed := cfg.AllowList.IsPackageAllowed(reqPkg.Name)
 		pkgBanned := cfg.BanList.IsPackageBanned(reqPkg.Name)
@@ -532,7 +525,7 @@ func esmHandler() rex.Handle {
 		}
 
 		// or use `?path=$PATH` query to override the pathname
-		if v := ctx.Form.Value("path"); v != "" {
+		if v := query.Get("path"); v != "" {
 			reqPkg.SubModule = utils.CleanPath(v)[1:]
 		}
 
@@ -672,7 +665,7 @@ func esmHandler() rex.Handle {
 		}
 
 		// determine build target by `?target` query or `User-Agent` header
-		target := strings.ToLower(ctx.Form.Value("target"))
+		target := strings.ToLower(query.Get("target"))
 		targetFromUA := targets[target] == 0
 		if targetFromUA {
 			target = getBuildTargetByUA(userAgent)
@@ -687,7 +680,7 @@ func esmHandler() rex.Handle {
 		// check `?alias` query
 		alias := map[string]string{}
 		if ctx.Form.Has("alias") {
-			for _, p := range strings.Split(ctx.Form.Value("alias"), ",") {
+			for _, p := range strings.Split(query.Get("alias"), ",") {
 				p = strings.TrimSpace(p)
 				if p != "" {
 					name, to := utils.SplitByFirstByte(p, ':')
@@ -703,7 +696,7 @@ func esmHandler() rex.Handle {
 		// check `?deps` query
 		deps := PkgSlice{}
 		if ctx.Form.Has("deps") {
-			for _, p := range strings.Split(ctx.Form.Value("deps"), ",") {
+			for _, p := range strings.Split(query.Get("deps"), ",") {
 				p = strings.TrimSpace(p)
 				if p != "" {
 					m, _, err := validatePkgPath(p)
@@ -727,7 +720,7 @@ func esmHandler() rex.Handle {
 		// check `?exports` query
 		exports := newStringSet()
 		if (ctx.Form.Has("exports") || ctx.Form.Has("cjs-exports")) && !stableBuild[reqPkg.Name] {
-			value := ctx.Form.Value("exports") + "," + ctx.Form.Value("cjs-exports")
+			value := query.Get("exports") + "," + query.Get("cjs-exports")
 			for _, p := range strings.Split(value, ",") {
 				p = strings.TrimSpace(p)
 				if regexpJSIdent.MatchString(p) {
@@ -739,7 +732,7 @@ func esmHandler() rex.Handle {
 		// check `?conditions` query
 		conditions := newStringSet()
 		if ctx.Form.Has("conditions") {
-			for _, p := range strings.Split(ctx.Form.Value("conditions"), ",") {
+			for _, p := range strings.Split(query.Get("conditions"), ",") {
 				p = strings.TrimSpace(p)
 				if p != "" {
 					conditions.Add(p)
@@ -749,13 +742,13 @@ func esmHandler() rex.Handle {
 
 		// check deno/std version by `?deno-std=VER` query
 		dsv := denoStdVersion
-		fv := ctx.Form.Value("deno-std")
+		fv := query.Get("deno-std")
 		if fv != "" && regexpFullVersion.MatchString(fv) && semverLessThan(fv, denoStdVersion) && target == "deno" {
 			dsv = fv
 		}
 
 		// check `?external` query
-		for _, p := range strings.Split(ctx.Form.Value("external"), ",") {
+		for _, p := range strings.Split(query.Get("external"), ",") {
 			p = strings.TrimSpace(p)
 			if p == "*" {
 				external.Reset()
