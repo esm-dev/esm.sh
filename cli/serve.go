@@ -36,19 +36,24 @@ type LoaderOutput struct {
 	Error string `json:"error"`
 }
 
-type ServeFile struct {
-	pathname string
-	file     *os.File
-}
-
 type ImportMap struct {
 	Src     string                       `json:"$src,omitempty"`
 	Imports map[string]string            `json:"imports,omitempty"`
 	Scopes  map[string]map[string]string `json:"scopes,omitempty"`
 }
 
-func (h *H) ServeHtml(w http.ResponseWriter, r *http.Request, htmlFile *ServeFile) {
-	tokenizer := html.NewTokenizer(htmlFile.file)
+func (h *H) ServeHtml(w http.ResponseWriter, r *http.Request, pathname string) {
+	htmlFile, err := os.Open(filepath.Join(h.rootDir, pathname))
+	if err != nil {
+		if os.IsNotExist(err) {
+			http.Error(w, "Not Found", 404)
+		} else {
+			http.Error(w, "Internal Server Error", 500)
+		}
+		return
+	}
+	defer htmlFile.Close()
+	tokenizer := html.NewTokenizer(htmlFile)
 	skipStyle := false
 	for {
 		tt := tokenizer.Next()
@@ -81,7 +86,7 @@ func (h *H) ServeHtml(w http.ResponseWriter, r *http.Request, htmlFile *ServeFil
 						if attr.Key != "main" {
 							if attr.Key == "src" {
 								mainAttr, _ = utils.SplitByFirstByte(mainAttr, '?')
-								w.Write([]byte(fmt.Sprintf(` src="%s"`, mainAttr+"?im="+btoaUrl(htmlFile.pathname))))
+								w.Write([]byte(fmt.Sprintf(` src="%s"`, mainAttr+"?im="+btoaUrl(pathname))))
 							} else {
 								if attr.Val == "" {
 									w.Write([]byte(fmt.Sprintf(` %s`, attr.Key)))
@@ -107,7 +112,7 @@ func (h *H) ServeHtml(w http.ResponseWriter, r *http.Request, htmlFile *ServeFil
 				// replace `<link rel="stylesheet" href="https://esm.sh/uno">`
 				// with `<link rel="stylesheet" href="/@unocss">`
 				if (strings.HasPrefix(hrefAttr, "http://") || strings.HasPrefix(hrefAttr, "https://")) && strings.HasSuffix(hrefAttr, "/uno") && relAttr == "stylesheet" {
-					w.Write([]byte(fmt.Sprintf(`<link rel="stylesheet" href="/@unocss?ctx=%s">`, btoaUrl(htmlFile.pathname))))
+					w.Write([]byte(fmt.Sprintf(`<link rel="stylesheet" href="/@unocss?ctx=%s">`, btoaUrl(pathname))))
 					continue
 				}
 			} else if token.DataAtom == atom.Style {
@@ -120,18 +125,18 @@ func (h *H) ServeHtml(w http.ResponseWriter, r *http.Request, htmlFile *ServeFil
 				}
 				// hide `<style type="uno/css">...</style>`
 				if typeAttr == "uno/css" {
-					skipStyle = true
-					continue
+					// skipStyle = true
+					// continue
 				}
 			}
 		}
 		w.Write(tokenizer.Raw())
 	}
 	// reload the page when the html file is modified
-	fmt.Fprintf(w, `<script type="module">import createHotContext from"/@hmr";createHotContext("%s").watch(()=>location.reload())</script>`, htmlFile.pathname)
+	fmt.Fprintf(w, `<script type="module">import createHotContext from"/@hmr";createHotContext("%s").watch(()=>location.reload())</script>`, pathname)
 }
 
-func (h *H) ServeTSX(w http.ResponseWriter, r *http.Request, sourceFile *ServeFile) {
+func (h *H) ServeTSX(w http.ResponseWriter, r *http.Request, pathname string) {
 	im, err := atobUrl(r.URL.Query().Get("im"))
 	if err != nil {
 		http.Error(w, "Bad Request", 400)
@@ -184,9 +189,13 @@ func (h *H) ServeTSX(w http.ResponseWriter, r *http.Request, sourceFile *ServeFi
 			}
 		}
 	}
-	code, err := io.ReadAll(sourceFile.file)
+	code, err := os.ReadFile(filepath.Join(h.rootDir, pathname))
 	if err != nil {
-		http.Error(w, "Internal Server Error", 500)
+		if os.IsNotExist(err) {
+			http.Error(w, "Not Found", 404)
+		} else {
+			http.Error(w, "Internal Server Error", 500)
+		}
 		return
 	}
 	sha := sha1.New()
@@ -196,8 +205,8 @@ func (h *H) ServeTSX(w http.ResponseWriter, r *http.Request, sourceFile *ServeFi
 		w.WriteHeader(http.StatusNotModified)
 		return
 	}
-	cacheKey := fmt.Sprintf("unocss-%s", sourceFile.pathname)
-	etagCacheKey := fmt.Sprintf("unocss-%s.cache", sourceFile.pathname)
+	cacheKey := fmt.Sprintf("unocss-%s", pathname)
+	etagCacheKey := fmt.Sprintf("unocss-%s.cache", pathname)
 	if v, ok := h.cache.Load(cacheKey); ok {
 		if e, ok := h.cache.Load(etagCacheKey); ok {
 			if e.(string) == etag {
@@ -211,7 +220,7 @@ func (h *H) ServeTSX(w http.ResponseWriter, r *http.Request, sourceFile *ServeFi
 		}
 	}
 	var output LoaderOutput
-	err = h.runjs("tsx-loader", []any{sourceFile.pathname, string(code), importMap}, &output)
+	err = h.runjs("tsx-loader", []any{pathname, string(code), importMap}, &output)
 	if err != nil {
 		fmt.Println(err)
 		http.Error(w, "Internal Server Error", 500)
@@ -232,8 +241,15 @@ func (h *H) ServeTSX(w http.ResponseWriter, r *http.Request, sourceFile *ServeFi
 	w.Write(js)
 }
 
-func (h *H) ServeVue(w http.ResponseWriter, r *http.Request, file *os.File)    {}
-func (h *H) ServeSvelte(w http.ResponseWriter, r *http.Request, file *os.File) {}
+func (h *H) ServeVue(w http.ResponseWriter, r *http.Request, pathname string) {
+	w.WriteHeader(http.StatusNotImplemented)
+	w.Write([]byte("Not Implemented"))
+}
+
+func (h *H) ServeSvelte(w http.ResponseWriter, r *http.Request, pathname string) {
+	w.WriteHeader(http.StatusNotImplemented)
+	w.Write([]byte("Not Implemented"))
+}
 
 func (h *H) ServeUnoCSS(w http.ResponseWriter, r *http.Request) {
 	ctx, err := atobUrl(r.URL.Query().Get("ctx"))
@@ -500,7 +516,8 @@ func (h *H) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			http.Redirect(w, r, pathname+"/", http.StatusMovedPermanently)
 			return
 		}
-		filename = filepath.Join(filename, "index.html")
+		pathname = pathname + "/index.html"
+		filename = filepath.Join(h.rootDir, pathname)
 		fi, err = os.Lstat(filename)
 	}
 	if err != nil {
@@ -515,47 +532,43 @@ func (h *H) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Forbidden", http.StatusForbidden)
 		return
 	}
-	etag := fmt.Sprintf("w/\"%d%d%d\"", fi.ModTime().Unix(), fi.Size(), VERSION)
-	if r.Header.Get("If-None-Match") == etag {
-		w.WriteHeader(http.StatusNotModified)
-		return
-	}
-	file, err := os.Open(filename)
-	if err != nil {
-		http.Error(w, "Internal Server Error", 500)
-		return
-	}
-	defer file.Close()
-	mtype := getMIMEType(filename)
-	header := w.Header()
-	if mtype != "" {
-		header.Set("Content-Type", mtype)
-	}
-	header.Set("Cache-Control", "max-age=0, must-revalidate")
-	header.Set("Etag", etag)
 	switch filepath.Ext(filename) {
 	case ".html":
-		filename, _ = filepath.Rel(h.rootDir, filename)
-		h.ServeHtml(w, r, &ServeFile{utils.CleanPath(filename), file})
-		return
+		h.ServeHtml(w, r, pathname)
 	case ".js", ".mjs", ".jsx", ".ts", ".mts", ".tsx":
-		filename, _ = filepath.Rel(h.rootDir, filename)
-		h.ServeTSX(w, r, &ServeFile{utils.CleanPath(filename), file})
-		return
+		h.ServeTSX(w, r, pathname)
 	case ".vue":
-		h.ServeVue(w, r, file)
-		return
+		h.ServeVue(w, r, pathname)
 	case ".svelte":
-		h.ServeSvelte(w, r, file)
-		return
+		h.ServeSvelte(w, r, pathname)
+	default:
+		etag := fmt.Sprintf("w/\"%d%d%d\"", fi.ModTime().Unix(), fi.Size(), VERSION)
+		if r.Header.Get("If-None-Match") == etag {
+			w.WriteHeader(http.StatusNotModified)
+			return
+		}
+		file, err := os.Open(filename)
+		if err != nil {
+			http.Error(w, "Internal Server Error", 500)
+			return
+		}
+		defer file.Close()
+		mtype := getMIMEType(filename)
+		header := w.Header()
+		if mtype != "" {
+			header.Set("Content-Type", mtype)
+		}
+		header.Set("Cache-Control", "max-age=0, must-revalidate")
+		header.Set("Etag", etag)
+		io.Copy(w, file)
 	}
-	io.Copy(w, file)
 }
 
 func (h *H) runjs(jsName string, intput any, output any) (err error) {
 	start := time.Now()
+	debug := os.Getenv("DEBUG") == "1"
 	defer func() {
-		if err == nil && os.Getenv("DEBUG") == "1" {
+		if err == nil && debug {
 			fmt.Println("[debug]", "runjs:"+jsName, time.Since(start))
 		}
 	}()
@@ -569,9 +582,9 @@ func (h *H) runjs(jsName string, intput any, output any) (err error) {
 		err = errors.New("js code not found")
 		return
 	}
-	jsPath := filepath.Join(homeDir, ".cache", "esm.sh", "run", fmt.Sprintf("%s-%d.js", jsName, VERSION))
+	jsPath := filepath.Join(homeDir, ".esm.sh", "run", fmt.Sprintf("%s-%d.js", jsName, VERSION))
 	fi, err := os.Stat(jsPath)
-	if (err != nil && os.IsNotExist(err)) || (err == nil && fi.Size() != int64(len(jsCode))) {
+	if (err != nil && os.IsNotExist(err)) || (err == nil && fi.Size() != int64(len(jsCode))) || debug {
 		os.MkdirAll(filepath.Dir(jsPath), 0755)
 		err = os.WriteFile(jsPath, jsCode, 0644)
 		if err != nil {
