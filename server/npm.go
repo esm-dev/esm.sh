@@ -36,23 +36,23 @@ type NpmPackageVerions struct {
 type PackageJSONRaw struct {
 	Name             string                 `json:"name"`
 	Version          string                 `json:"version"`
-	Type             string                 `json:"type,omitempty"`
-	Main             string                 `json:"main,omitempty"`
-	Browser          StringOrMap            `json:"browser,omitempty"`
-	Module           StringOrMap            `json:"module,omitempty"`
-	ES2015           StringOrMap            `json:"es2015,omitempty"`
-	JsNextMain       string                 `json:"jsnext:main,omitempty"`
-	Types            string                 `json:"types,omitempty"`
-	Typings          string                 `json:"typings,omitempty"`
-	SideEffects      interface{}            `json:"sideEffects,omitempty"`
-	Dependencies     map[string]string      `json:"dependencies,omitempty"`
-	PeerDependencies map[string]string      `json:"peerDependencies,omitempty"`
-	Imports          map[string]interface{} `json:"imports,omitempty"`
-	TypesVersions    map[string]interface{} `json:"typesVersions,omitempty"`
-	Exports          json.RawMessage        `json:"exports,omitempty"`
-	Files            []string               `json:"files,omitempty"`
-	Deprecated       interface{}            `json:"deprecated,omitempty"`
-	Esmsh            interface{}            `json:"esm.sh,omitempty"`
+	Type             string                 `json:"type"`
+	Main             string                 `json:"main"`
+	Browser          StringOrMap            `json:"browser"`
+	Module           StringOrMap            `json:"module"`
+	ES2015           StringOrMap            `json:"es2015"`
+	JsNextMain       string                 `json:"jsnext:main"`
+	Types            string                 `json:"types"`
+	Typings          string                 `json:"typings"`
+	SideEffects      interface{}            `json:"sideEffects"`
+	Dependencies     map[string]string      `json:"dependencies"`
+	PeerDependencies map[string]string      `json:"peerDependencies"`
+	Imports          map[string]interface{} `json:"imports"`
+	TypesVersions    map[string]interface{} `json:"typesVersions"`
+	Exports          json.RawMessage        `json:"exports"`
+	Files            []string               `json:"files"`
+	Deprecated       interface{}            `json:"deprecated"`
+	Esmsh            interface{}            `json:"esm.sh"`
 }
 
 // ToNpmPackage converts PackageJSONRaw to PackageJSON

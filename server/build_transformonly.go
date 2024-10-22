@@ -307,27 +307,32 @@ func preTransform(npmrc *NpmRC, loaderName string, loaderVersion string, specifi
 		}
 	}
 
+	stdin := bytes.NewBuffer(nil)
+	stdout := bytes.NewBuffer(nil)
+	stderr := bytes.NewBuffer(nil)
+	err = json.NewEncoder(stdin).Encode([]string{specifier, sourceCode})
+	if err != nil {
+		return
+	}
+
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	var outBuf bytes.Buffer
-	var errBuf bytes.Buffer
 	cmd := exec.CommandContext(ctx, "node", "loader.mjs")
 	cmd.Dir = wd
-	cmd.Stdin = bytes.NewReader(utils.MustEncodeJSON([]string{specifier, sourceCode}))
-	cmd.Stdout = &outBuf
-	cmd.Stderr = &errBuf
-
+	cmd.Stdin = stdin
+	cmd.Stdout = stdout
+	cmd.Stderr = stderr
 	err = cmd.Run()
 	if err != nil {
-		if errBuf.Len() > 0 {
-			err = fmt.Errorf("preTransform: %s", errBuf.String())
+		if stderr.Len() > 0 {
+			err = fmt.Errorf("preTransform: %s", stderr.String())
 		}
 		return
 	}
 
 	var ret TransformOutput
-	err = json.Unmarshal(outBuf.Bytes(), &ret)
+	err = json.NewDecoder(stdout).Decode(&ret)
 	if err != nil {
 		return
 	}

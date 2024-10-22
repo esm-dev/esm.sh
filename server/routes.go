@@ -676,7 +676,7 @@ func routes(debug bool) rex.Handle {
 				if len(importMap.Imports) > 0 {
 					for k := range importMap.Imports {
 						url := refererUrl.ResolveReference(&url.URL{Path: k})
-						code, err := buildRemoteModule(url.String(), ctx.UserAgent())
+						code, err := bundleRemoteModules(url.String(), ctx.UserAgent())
 						if err == nil {
 							importMap.Imports[k] = string(code)
 						}

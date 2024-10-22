@@ -116,16 +116,19 @@ func cjsLexer(npmrc *NpmRC, pkgName string, wd string, specifier string, nodeEnv
 			break
 		}
 	}
-	argsData := utils.MustEncodeJSON(args)
+
+	stdin := bytes.NewBuffer(nil)
+	stdout := bytes.NewBuffer(nil)
+	stderr := bytes.NewBuffer(nil)
+	err = json.NewEncoder(stdin).Encode(args)
+	if err != nil {
+		return
+	}
 
 	start := time.Now()
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	var (
-		outBuf bytes.Buffer
-		errBuf bytes.Buffer
-	)
 	cmd := exec.CommandContext(
 		ctx,
 		"node",
@@ -134,19 +137,18 @@ func cjsLexer(npmrc *NpmRC, pkgName string, wd string, specifier string, nodeEnv
 		"cjs_lexer.js",
 	)
 	cmd.Dir = path.Join(config.WorkDir, "pnpm-store", cjsLexerPkg)
-	cmd.Stdin = bytes.NewBuffer(argsData)
-	cmd.Stdout = &outBuf
-	cmd.Stderr = &errBuf
-
+	cmd.Stdin = stdin
+	cmd.Stdout = stdout
+	cmd.Stderr = stderr
 	err = cmd.Run()
 	if err != nil {
-		if errBuf.Len() > 0 {
-			err = fmt.Errorf("cjsLexer: %s", errBuf.String())
+		if stderr.Len() > 0 {
+			err = fmt.Errorf("cjsLexer: %s", stderr.String())
 		}
 		return
 	}
 
-	err = json.Unmarshal(outBuf.Bytes(), &ret)
+	err = json.Unmarshal(stdout.Bytes(), &ret)
 	if err != nil {
 		return
 	}
@@ -160,7 +162,7 @@ func cjsLexer(npmrc *NpmRC, pkgName string, wd string, specifier string, nodeEnv
 	} else {
 		go func() {
 			if ensureDir(path.Dir(cacheFileName)) == nil {
-				os.WriteFile(cacheFileName, outBuf.Bytes(), 0644)
+				os.WriteFile(cacheFileName, stdout.Bytes(), 0644)
 			}
 		}()
 		log.Debugf("[cjsLexer] parse %s in %s", path.Join(pkgName, specifier), time.Since(start))

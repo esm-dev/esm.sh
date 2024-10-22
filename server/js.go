@@ -87,8 +87,8 @@ func minify(code string, target api.Target, loader api.Loader) ([]byte, error) {
 	return concatBytes(ret.LegalComments, ret.Code), nil
 }
 
-// buildRemoteModule builds the remote module and it's submodules.
-func buildRemoteModule(entry string, ua string) ([]byte, error) {
+// bundleRemoteModules builds the remote module and it's submodules.
+func bundleRemoteModules(entry string, ua string) ([]byte, error) {
 	if !isHttpSepcifier(entry) {
 		return nil, errors.New("require a remote module")
 	}

@@ -44,6 +44,15 @@ func btoaUrl(s string) string {
 	return base64.RawURLEncoding.EncodeToString([]byte(s))
 }
 
+// atobUrl converts a base64 string to a string.
+func atobUrl(s string) (string, error) {
+	data, err := base64.RawURLEncoding.DecodeString(s)
+	if err != nil {
+		return "", err
+	}
+	return string(data), nil
+}
+
 var lock sync.Mutex
 
 func getDenoPath() (denoPath string, err error) {
@@ -120,16 +129,4 @@ func bundleModule(entry string) ([]byte, error) {
 		return nil, errors.New(ret.Errors[0].Text)
 	}
 	return ret.OutputFiles[0].Contents, nil
-}
-
-// atobUrl converts a base64 string to a string.
-func atobUrl(s string) (string, error) {
-	if l := len(s) % 4; l > 0 {
-		s += strings.Repeat("=", 4-l)
-	}
-	data, err := base64.URLEncoding.DecodeString(s)
-	if err != nil {
-		return "", err
-	}
-	return string(data), nil
 }
