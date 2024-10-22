@@ -6,7 +6,7 @@ const messageQueue = [];
 let ws = null;
 
 /** connect to the dev server */
-function connect() {
+function connect(recoveryMode) {
   const wsUrl = `${location.protocol === "https:" ? "wss" : "ws"}://${location.host}/@hmr-ws`;
   const socket = new WebSocket(wsUrl);
   const ping = (callback) => {
@@ -14,7 +14,8 @@ function connect() {
       const ws = new WebSocket(wsUrl);
       ws.addEventListener("open", callback);
       ws.addEventListener("error", () => {
-        ping(callback); // retry
+        // retry
+        ping(callback);
       });
     }, 500);
   };
@@ -26,7 +27,13 @@ function connect() {
 
   socket.addEventListener("open", () => {
     ws = socket;
-    messageQueue.splice(0, messageQueue.length).forEach((msg) => socket.send(msg));
+    if (recoveryMode) {
+      for (const [id] of watchers) {
+        socket.send("watch:" + id);
+      }
+    } else {
+      messageQueue.splice(0, messageQueue.length).forEach((msg) => socket.send(msg));
+    }
     console.log("%c[HMR]", "color:#999", "listening for file changes...");
   });
 
@@ -34,8 +41,8 @@ function connect() {
     if (ws !== null) {
       ws = null;
       console.log("[HMR] closed.");
-      // reconnect
-      connect();
+      // recovery the connection
+      connect(true);
     } else {
       // ping to reload the page
       ping(() => location.reload());
@@ -53,7 +60,8 @@ function connect() {
           `color:${colors[kind]}`,
           `${JSON.stringify(id)}`,
         );
-        watchers.get(id)?.forEach((cb) => cb(kind));
+        watchers.get(id)?.forEach((cb) => cb(kind, id));
+        watchers.get("*")?.forEach((cb) => cb(kind, id));
       } else if (command[0] === "error") {
         console.error("[HMR]", command.slice(1).join(":"));
       }
@@ -87,9 +95,11 @@ function addWatcher(id, watchCallback) {
  */
 class HotContext {
   #id;
+  #im;
   #locked = false;
-  constructor(id) {
+  constructor(id, im) {
     this.#id = id;
+    this.#im = im;
   }
   lock() {
     this.#locked = true;
@@ -98,7 +108,13 @@ class HotContext {
     if (this.#locked) {
       return;
     }
-    addWatcher(this.#id, (kind) => kind === "remove" ? callback() : import(this.#id).then(callback));
+    addWatcher(this.#id, (kind) => {
+      if (kind === "remove") {
+        callback();
+      } else {
+        import(this.#id + "?im=" + this.#im + "&t=" + Date.now().toString(36)).then(callback);
+      }
+    });
   }
   watch(idOrCallback, callback = () => {}) {
     if (this.#locked) {
@@ -117,14 +133,15 @@ class HotContext {
  * @param {string} id
  * @returns {HotContext}
  */
-export default function createHotContext(id) {
-  let ctx = registry.get(id);
+export default function createHotContext(id, im) {
+  const key = id +"?im="+im
+  let ctx = registry.get(key);
   if (ctx) {
     ctx.lock();
     return ctx;
   }
-  ctx = new HotContext(id);
-  registry.set(id, ctx);
+  ctx = new HotContext(id, im);
+  registry.set(key, ctx);
   return ctx;
 }
 

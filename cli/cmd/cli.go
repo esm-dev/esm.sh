@@ -12,8 +12,8 @@ import (
 const helpMessage = `Usage: esm.sh [command] [options]
 
 Commands:
-	run    Serve the current directory
-	add    Add NPM packages to the 'importmap' script of the root index.html
+  run  Serve the current directory
+  add  Add NPM packages to the 'importmap' script of the root index.html
 `
 
 //go:embed assets
@@ -33,5 +33,7 @@ func main() {
 		default:
 			fmt.Print(helpMessage)
 		}
+	} else {
+		fmt.Print(helpMessage)
 	}
 }

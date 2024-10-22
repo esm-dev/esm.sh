@@ -14,7 +14,7 @@ var mimeTypes = map[string][]string{
 	"application/jsonc;":      {"jsonc"},
 	"application/pdf":         {"pdf"},
 	"application/tar":         {"tar"},
-	"application/tar+gzip":    {"tar.gz", "tgz"},
+	"application/tar+gzip":    {"tgz"},
 	"application/wasm":        {"wasm"},
 	"application/xml;":        {"xml", "plist", "tmLanguage", "tmTheme"},
 	"application/zip":         {"zip"},
@@ -73,5 +73,9 @@ func init() {
 
 // getMIMEType returns the MIME type for a given filename.
 func getMIMEType(filename string) string {
-	return mimeTypesMap[path.Ext(filename)]
+	extname := path.Ext(filename)
+	if extname == ".gz" && strings.HasSuffix(filename, ".tar.gz") {
+		return "application/tar+gzip"
+	}
+	return mimeTypesMap[extname]
 }
