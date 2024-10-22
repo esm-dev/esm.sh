@@ -89,7 +89,7 @@ func routes(debug bool) rex.Handle {
 	startTime := time.Now()
 	globalETag := fmt.Sprintf(`W/"v%d"`, VERSION)
 
-	return func(ctx *rex.Context) interface{} {
+	return func(ctx *rex.Context) any {
 		pathname := ctx.Pathname()
 
 		// ban malicious requests
@@ -249,7 +249,7 @@ func routes(debug bool) rex.Handle {
 					}
 					log.Info("purged", pkgId)
 				}
-				ret := map[string]interface{}{
+				ret := map[string]any{
 					"deletedPkgs":  deletedPkgs.Values(),
 					"deletedFiles": deletedFiles,
 				}
@@ -303,15 +303,19 @@ func routes(debug bool) rex.Handle {
 			return rex.Content("index.html", startTime, bytes.NewReader(html))
 
 		case "/status.json":
-			q := make([]map[string]interface{}, buildQueue.queue.Len())
+			q := make([]map[string]any, buildQueue.queue.Len())
 			i := 0
 
 			buildQueue.lock.RLock()
 			for el := buildQueue.queue.Front(); el != nil; el = el.Next() {
 				t, ok := el.Value.(*BuildTask)
+				clientIps := make([]string, len(t.clients))
+				for idx, c := range t.clients {
+					clientIps[idx] = c.IP
+				}
 				if ok {
-					m := map[string]interface{}{
-						"clients":   t.clients,
+					m := map[string]any{
+						"clients":   clientIps,
 						"createdAt": t.createdAt.Format(http.TimeFormat),
 						"inProcess": t.inProcess,
 						"path":      t.Path(),
@@ -339,7 +343,7 @@ func routes(debug bool) rex.Handle {
 			os.Remove(tmpFilepath)
 
 			ctx.SetHeader("Cache-Control", ccMustRevalidate)
-			return map[string]interface{}{
+			return map[string]any{
 				"buildQueue": q[:i],
 				"version":    VERSION,
 				"uptime":     time.Since(startTime).String(),
@@ -572,7 +576,7 @@ func routes(debug bool) rex.Handle {
 			if err != nil && err != storage.ErrNotFound {
 				return rex.Status(500, err.Error())
 			}
-			var resp interface{}
+			var resp any
 			if err == nil {
 				f, err := fs.Open(savePath)
 				if err != nil {
@@ -856,7 +860,7 @@ func routes(debug bool) rex.Handle {
 			if err != nil && err != storage.ErrNotFound {
 				return rex.Status(500, err.Error())
 			}
-			var resp interface{}
+			var resp any
 			if err == nil {
 				f, err := fs.Open(savePath)
 				if err != nil {
@@ -1680,7 +1684,7 @@ func routes(debug bool) rex.Handle {
 }
 
 func auth(secret string) rex.Handle {
-	return func(ctx *rex.Context) interface{} {
+	return func(ctx *rex.Context) any {
 		if secret != "" && ctx.R.Header.Get("Authorization") != "Bearer "+secret {
 			return rex.Status(401, "Unauthorized")
 		}
@@ -1826,7 +1830,7 @@ func praseESMPath(rc *NpmRC, pathname string) (esmUrl ESM, extraQuery string, is
 	return
 }
 
-func throwErrorJS(ctx *rex.Context, message string, static bool) interface{} {
+func throwErrorJS(ctx *rex.Context, message string, static bool) any {
 	buf := bytes.NewBuffer(nil)
 	fmt.Fprintf(buf, "/* esm.sh - error */\n")
 	fmt.Fprintf(buf, "throw new Error(%s);\n", strings.TrimSpace(string(utils.MustEncodeJSON(strings.TrimSpace("[esm.sh] "+message)))))

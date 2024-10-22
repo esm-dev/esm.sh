@@ -183,6 +183,7 @@ Deno.test("esm-worker", { sanitizeOps: false, sanitizeResources: false }, async 
 
   await t.step("status.json", async () => {
     const res = await fetch(`${workerOrigin}/status.json`);
+    assertEquals(res.status, 200);
     const ret = await res.json();
     assertEquals(typeof ret.version, "number");
   });
