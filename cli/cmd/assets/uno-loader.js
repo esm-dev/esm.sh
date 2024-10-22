@@ -1,4 +1,4 @@
-import { generate } from "npm:esm-unocss@0.4.1";
+import { generate } from "npm:esm-unocss@0.5.0";
 
 const output = (data) => Deno.stdout.write(new TextEncoder().encode(JSON.stringify(data)));
 
