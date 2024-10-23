@@ -23,7 +23,7 @@ import (
 
 type H struct {
 	assets  *embed.FS
-	loader  *Loader
+	loader  *LoaderWorker
 	rootDir string
 	wsConns map[*websocket.Conn]map[string]int64
 	rwlock  sync.RWMutex
@@ -589,7 +589,7 @@ func (h *H) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func (h *H) getLoader() (loader *Loader, err error) {
+func (h *H) getLoader() (loader *LoaderWorker, err error) {
 	h.lock.Lock()
 	defer h.lock.Unlock()
 	if h.loader != nil {
@@ -600,7 +600,7 @@ func (h *H) getLoader() (loader *Loader, err error) {
 		return
 
 	}
-	loader = &Loader{}
+	loader = &LoaderWorker{}
 	err = loader.Start(loaderJs)
 	if err != nil {
 		return nil, err

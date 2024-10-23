@@ -17,15 +17,14 @@ import (
 	"time"
 )
 
-type Loader struct {
+type LoaderWorker struct {
 	stdin     io.Writer
 	stdout    io.Reader
 	outReader *bufio.Reader
-	cmd       *exec.Cmd
 	lock      sync.Mutex
 }
 
-func (l *Loader) Start(loaderjs []byte) (err error) {
+func (lw *LoaderWorker) Start(loaderjs []byte) (err error) {
 	homeDir, err := os.UserHomeDir()
 	if err != nil {
 		return
@@ -46,15 +45,14 @@ func (l *Loader) Start(loaderjs []byte) (err error) {
 	}
 
 	cmd := exec.Command(denoPath, "run", "--no-lock", "-A", jsPath)
-	cmd.Stdin, l.stdin = io.Pipe()
-	l.stdout, cmd.Stdout = io.Pipe()
+	cmd.Stdin, lw.stdin = io.Pipe()
+	lw.stdout, cmd.Stdout = io.Pipe()
 	err = cmd.Start()
 	if err != nil {
-		l.stdin = nil
-		l.stdout = nil
+		lw.stdin = nil
+		lw.stdout = nil
 	} else {
-		l.cmd = cmd
-		l.outReader = bufio.NewReader(l.stdout)
+		lw.outReader = bufio.NewReader(lw.stdout)
 		if os.Getenv("DEBUG") == "1" {
 			denoVersion, _ := exec.Command(denoPath, "-v").Output()
 			fmt.Printf("Loader started (runtime: %s)\n", strings.TrimSpace(string(denoVersion)))
@@ -63,11 +61,11 @@ func (l *Loader) Start(loaderjs []byte) (err error) {
 	return
 }
 
-func (l *Loader) Load(loaderType string, args ...any) (code string, err error) {
+func (lw *LoaderWorker) Load(loaderType string, args ...any) (code string, err error) {
 	// only one load can be invoked at a time
-	l.lock.Lock()
-	defer l.lock.Unlock()
-	if l.stdin == nil {
+	lw.lock.Lock()
+	defer lw.lock.Unlock()
+	if lw.outReader == nil {
 		return "", errors.New("loader not started")
 	}
 	if os.Getenv("DEBUG") == "1" {
@@ -79,12 +77,12 @@ func (l *Loader) Load(loaderType string, args ...any) (code string, err error) {
 	loaderArgs := make([]any, len(args)+1)
 	loaderArgs[0] = loaderType
 	copy(loaderArgs[1:], args)
-	err = json.NewEncoder(l.stdin).Encode(loaderArgs)
+	err = json.NewEncoder(lw.stdin).Encode(loaderArgs)
 	if err != nil {
 		return
 	}
 	for {
-		line, err := l.outReader.ReadBytes('\n')
+		line, err := lw.outReader.ReadBytes('\n')
 		if err != nil {
 			return "", err
 		}
@@ -101,12 +99,6 @@ func (l *Loader) Load(loaderType string, args ...any) (code string, err error) {
 				return ret, nil
 			}
 		}
-	}
-}
-
-func (l *Loader) Kill() {
-	if l.cmd != nil {
-		l.cmd.Process.Kill()
 	}
 }
 
