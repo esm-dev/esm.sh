@@ -13,10 +13,10 @@
   </script>
   <link rel="stylesheet" href="https://esm.sh/uno">
   <style type="uno/css">
-    @import "@unocss/reset" tailwind;
-    @import "@unocss/preset-uno" _;
-    @import "@unocss/preset-icons" _;
-    @import "@unocss/preset-web-fonts" google;
+    @import "reset" eric-meyer;
+    @import "preset-uno" _;
+    @import "preset-icons" _;
+    @import "preset-web-fonts" google;
 
     :theme {
       --color-primary: #3b82f6;
@@ -40,7 +40,7 @@
   </style>
 </head>
 <body>
-  <div id="root"><p class="flex justify-center text-gray-400">Loading...</p></div>
+  <div id="root"><p class="flex justify-center text-gray-400 mt8">Loading...</p></div>
   <div class="absolute bottom-5 w-full flex justify-center">
     <button class="btn">Click Me</button>
   </div>

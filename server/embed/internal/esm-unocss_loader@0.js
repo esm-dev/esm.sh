@@ -15,8 +15,8 @@ function readStdin() {
 async function load() {
   try {
     const [data, configCSS] = JSON.parse(await readStdin());
-    const { css } = await generate(data, configCSS ? { configCSS } : undefined);
-    stdout.write(JSON.stringify({ code: css }));
+    const code = await generate(data, configCSS ? { configCSS } : undefined);
+    stdout.write(JSON.stringify({ code }));
   } catch (err) {
     stdout.write(JSON.stringify({ error: err.message, stack: err.stack }));
   }
