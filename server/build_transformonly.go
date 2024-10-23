@@ -132,7 +132,7 @@ func transform(npmrc *NpmRC, options TransformOptions) (out TransformOutput, err
 		}
 		sourceCode = o.Code
 	case "svelte":
-		svelteVersion := "4"
+		svelteVersion := "5"
 		sveltePath, ok := imports["svelte"]
 		if ok {
 			a := regexpSveltePath.FindAllStringSubmatch(sveltePath, 1)

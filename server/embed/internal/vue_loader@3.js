@@ -108,7 +108,6 @@ async function load() {
       ].join(""));
     }
     output.push("export default __sfc__;");
-
     stdout.write(JSON.stringify({ code: output.join("\n") }));
   } catch (err) {
     stdout.write(JSON.stringify({ error: err.message, stack: err.stack }));
