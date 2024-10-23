@@ -190,7 +190,7 @@ func getBrowserInfo(ua string) (name string, version string) {
 }
 
 func getBuildTargetByUA(ua string) string {
-	if ua == "" || strings.HasPrefix(ua, "curl/") {
+	if ua == "" || strings.HasPrefix(ua, "curl/") || strings.HasPrefix(ua, "Visual Studio Code") {
 		return "esnext"
 	}
 	if strings.HasPrefix(ua, "ES/") {

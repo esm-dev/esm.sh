@@ -45,14 +45,14 @@ Deno.test("external nodejs internal modules", async () => {
   const res2 = await fetch("http://localhost:8080/cheerio@0.22.0?target=es2022&external=node:buffer");
   res2.body?.cancel();
   assertEquals(res2.status, 200);
-  const res3 = await fetch("http://localhost:8080/" + res2.headers.get("x-esm-path"));
+  const res3 = await fetch("http://localhost:8080" + res2.headers.get("x-esm-path"));
   assertEquals(res3.status, 200);
   assertStringIncludes(await res3.text(), ` from "node:buffer"`);
 
   const res4 = await fetch("http://localhost:8080/*cheerio@0.22.0?target=es2022");
   res4.body?.cancel();
   assertEquals(res4.status, 200);
-  const res5 = await fetch("http://localhost:8080/" + res4.headers.get("x-esm-path"));
+  const res5 = await fetch("http://localhost:8080" + res4.headers.get("x-esm-path"));
   assertEquals(res5.status, 200);
   assertStringIncludes(await res5.text(), ` from "node:buffer"`);
 });

@@ -1,6 +1,16 @@
-import { assertEquals, assertStringIncludes } from "jsr:@std/assert";
+import { assert, assertEquals, assertStringIncludes } from "jsr:@std/assert";
 
-Deno.test("fix bare module path", async () => {
+Deno.test("query as version suffix", async () => {
+  const res = await fetch("http://localhost:8080/react-dom@18.3.1&dev&target=es2022&deps=react@18.3.1/client");
+  const code = await res.text();
+  assertEquals(res.status, 200);
+  assertEquals(res.headers.get("cache-control"), "public, max-age=31536000, immutable");
+  assertEquals(res.headers.get("content-type"), "application/javascript; charset=utf-8");
+  assert(!res.headers.get("vary")!.includes("User-Agent"));
+  assertStringIncludes(code, "/react-dom@18.3.1/es2022/client.development.js");
+});
+
+Deno.test("redirect semver versioning module for deno target", async () => {
   "deno target";
   {
     const res = await fetch("http://localhost:8080/preact", { redirect: "manual" });
@@ -11,29 +21,20 @@ Deno.test("fix bare module path", async () => {
     assertStringIncludes(res.headers.get("vary")!, "User-Agent");
   }
 
-  "`/#/` in pathname";
-  {
-    const res = await fetch("http://localhost:8080/es5-ext@^0.10.50/string/%23/contains?target=denonext", { redirect: "manual" });
-    res.body?.cancel();
-    assertEquals(res.status, 302);
-    assertEquals(res.headers.get("cache-control"), "public, max-age=600");
-    assertStringIncludes(res.headers.get("location")!, "http://localhost:8080/es5-ext@0.10.");
-    assertStringIncludes(res.headers.get("location")!, "/string/%23/contains");
-  }
-
   "browser target";
   {
     const res = await fetch("http://localhost:8080/preact", { redirect: "manual", headers: { "User-Agent": "ES/2022" } });
     const code = await res.text();
     assertEquals(res.status, 200);
     assertEquals(res.headers.get("cache-control"), "public, max-age=600");
+    assertEquals(res.headers.get("content-type"), "application/javascript; charset=utf-8");
     assertStringIncludes(res.headers.get("vary")!, "User-Agent");
     assertStringIncludes(code, "/preact@");
     assertStringIncludes(code, "/es2022/");
   }
 });
 
-Deno.test("fix asset URL", async () => {
+Deno.test("redirect asset URLs", async () => {
   const res = await fetch("http://localhost:8080/preact/package.json", { redirect: "manual" });
   res.body?.cancel();
   assertEquals(res.status, 302);
@@ -59,7 +60,7 @@ Deno.test("fix asset URL", async () => {
   assertStringIncludes(pkg4.name, "preact");
 });
 
-Deno.test("Fix wasm URL", async () => {
+Deno.test("Fix wasm URLs with target segment", async () => {
   const res = await fetch(
     "http://localhost:8080/lightningcss-wasm@1.19.0/deno/lightningcss_node.wasm",
     { redirect: "manual" },
@@ -83,7 +84,7 @@ Deno.test("Fix wasm URL", async () => {
   );
 });
 
-Deno.test("Fix json URL", async () => {
+Deno.test("Fix json URLs with target segment", async () => {
   const res = await fetch(
     "http://localhost:8080/lightningcss-wasm@1.19.0/deno/package.json",
     { redirect: "manual" },
@@ -94,6 +95,15 @@ Deno.test("Fix json URL", async () => {
     res.headers.get("location"),
     "http://localhost:8080/lightningcss-wasm@1.19.0/package.json",
   );
+});
+
+Deno.test("fix `/#/` path", async () => {
+  const res = await fetch("http://localhost:8080/es5-ext@^0.10.50/string/%23/contains?target=denonext", { redirect: "manual" });
+  res.body?.cancel();
+  assertEquals(res.status, 302);
+  assertEquals(res.headers.get("cache-control"), "public, max-age=600");
+  assertStringIncludes(res.headers.get("location")!, "http://localhost:8080/es5-ext@0.10.");
+  assertStringIncludes(res.headers.get("location")!, "/string/%23/contains");
 });
 
 Deno.test("dts-transformer: support `.d` extension", async () => {
