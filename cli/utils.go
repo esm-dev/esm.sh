@@ -3,14 +3,7 @@ package cli
 import (
 	"encoding/base64"
 	"errors"
-	"fmt"
-	"net/http"
-	"os"
-	"os/exec"
-	"path/filepath"
-	"runtime"
 	"strings"
-	"sync"
 
 	"github.com/evanw/esbuild/pkg/api"
 )
@@ -51,51 +44,6 @@ func atobUrl(s string) (string, error) {
 		return "", err
 	}
 	return string(data), nil
-}
-
-var lock sync.Mutex
-
-func getDenoPath() (denoPath string, err error) {
-	lock.Lock()
-	defer lock.Unlock()
-
-	denoPath, err = exec.LookPath("deno")
-	if err != nil {
-		fmt.Println("Installing deno...")
-		denoPath, err = installDeno()
-	}
-	return
-}
-
-func installDeno() (denoPath string, err error) {
-	installScriptUrl := "https://deno.land/install.sh"
-	scriptExe := "sh"
-	if runtime.GOOS == "windows" {
-		installScriptUrl = "https://deno.land/install.ps1"
-		scriptExe = "iex"
-	}
-	res, err := http.Get(installScriptUrl)
-	if err != nil {
-		return "", err
-	}
-	if res.StatusCode != 200 {
-		return "", errors.New("failed to get latest deno version")
-	}
-	defer res.Body.Close()
-	cmd := exec.Command(scriptExe)
-	cmd.Stdin = res.Body
-	err = cmd.Run()
-	if err != nil {
-		return "", err
-	}
-	if runtime.GOOS == "windows" {
-		return exec.LookPath("deno")
-	}
-	homeDir, err := os.UserHomeDir()
-	if err != nil {
-		return "", err
-	}
-	return filepath.Join(homeDir, ".deno/bin"), nil
 }
 
 // bundleModule builds the remote module and it's submodules.

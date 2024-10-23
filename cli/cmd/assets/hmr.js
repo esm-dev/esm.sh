@@ -2,7 +2,7 @@ const registry = new Map();
 const watchers = new Map();
 const messageQueue = [];
 
-/** @type {WebSocket|null} */
+/** @type { WebSocket | null } */
 let ws = null;
 
 /** connect to the dev server */
@@ -28,8 +28,8 @@ function connect(recoveryMode) {
   socket.addEventListener("open", () => {
     ws = socket;
     if (recoveryMode) {
-      for (const [id] of watchers) {
-        socket.send("watch:" + id);
+      for (const ctx of registry.values()) {
+        socket.send("watch:" + ctx.id);
       }
     } else {
       messageQueue.splice(0, messageQueue.length).forEach((msg) => socket.send(msg));
@@ -81,12 +81,13 @@ function sendMessage(msg) {
   }
 }
 
-function addWatcher(id, watchCallback) {
-  sendMessage("watch:" + id);
-  if (watchers.has(id)) {
-    watchers.get(id).push(watchCallback);
-  } else {
-    watchers.set(id, [watchCallback]);
+function addWatcher(id, callback) {
+  if (typeof id === "string" && typeof callback === "function") {
+    if (watchers.has(id)) {
+      watchers.get(id).push(callback);
+    } else {
+      watchers.set(id, [callback]);
+    }
   }
 }
 
@@ -101,10 +102,13 @@ class HotContext {
     this.#id = id;
     this.#im = im;
   }
+  get id() {
+    return this.#id;
+  }
   lock() {
     this.#locked = true;
   }
-  accept(callback = () => {}) {
+  accept(callback) {
     if (this.#locked) {
       return;
     }
@@ -116,15 +120,19 @@ class HotContext {
       }
     });
   }
-  watch(idOrCallback, callback = () => {}) {
+  watch(idOrIdsOrCallback, callback) {
     if (this.#locked) {
       return;
     }
-    if (typeof idOrCallback === "function") {
-      callback = idOrCallback;
-      idOrCallback = this.#id;
+    if (typeof idOrIdsOrCallback === "function") {
+      addWatcher(this.#id, idOrIdsOrCallback);
+    } else if (Array.isArray(idOrIdsOrCallback)) {
+      for (const id of idOrIdsOrCallback) {
+        addWatcher(id, callback);
+      }
+    } else {
+      addWatcher(idOrIdsOrCallback, callback);
     }
-    addWatcher(idOrCallback, callback);
   }
 }
 
@@ -134,7 +142,7 @@ class HotContext {
  * @returns {HotContext}
  */
 export default function createHotContext(id, im) {
-  const key = id +"?im="+im
+  const key = id + "?im=" + im;
   let ctx = registry.get(key);
   if (ctx) {
     ctx.lock();
@@ -142,6 +150,7 @@ export default function createHotContext(id, im) {
   }
   ctx = new HotContext(id, im);
   registry.set(key, ctx);
+  sendMessage("watch:" + id);
   return ctx;
 }
 
