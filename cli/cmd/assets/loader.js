@@ -11,11 +11,9 @@ async function unocss(configCSS, data) {
     uno = await init(configCSS);
     uno.configCSS = configCSS;
   }
-  if (await uno.update(data)) {
-    const ret = await uno.generate();
-    return ret.css;
-  }
-  return "";
+  await uno.update(data);
+  const ret = await uno.generate();
+  return ret.css;
 }
 
 let esmTsx;

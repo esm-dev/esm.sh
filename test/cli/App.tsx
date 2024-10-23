@@ -1,6 +1,6 @@
 export function App() {
   return (
-    <div class="h-full text-center flex select-none all:transition-40">
+    <div class="h-full text-center flex select-none all:transition-40 font-sans">
       <div class="ma">
         <h2 class="text-5xl fw100">UnoCSS</h2>
         <p class="op30 text-lg fw300 m1">
