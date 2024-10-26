@@ -88,7 +88,7 @@ func minify(code string, target api.Target, loader api.Loader) ([]byte, error) {
 }
 
 // bundleRemoteModules builds the remote module and it's submodules.
-func bundleRemoteModules(entry string, ua string) ([]byte, error) {
+func bundleRemoteModules(entry string, externalDynamicImports bool, ua string) ([]byte, error) {
 	if !isHttpSepcifier(entry) {
 		return nil, errors.New("require a remote module")
 	}
@@ -97,7 +97,7 @@ func bundleRemoteModules(entry string, ua string) ([]byte, error) {
 		return nil, errors.New("invalid enrtry, require a valid url")
 	}
 	httpClient := &http.Client{
-		Timeout: time.Minute,
+		Timeout: 30 * time.Second,
 	}
 	ret := api.Build(api.BuildOptions{
 		EntryPoints:      []string{entry},
@@ -120,6 +120,9 @@ func bundleRemoteModules(entry string, ua string) ([]byte, error) {
 							if e == nil {
 								path = u.ResolveReference(&url.URL{Path: args.Path}).String()
 							}
+						}
+						if args.Kind == api.ResolveJSDynamicImport && externalDynamicImports {
+							return api.OnResolveResult{Path: path, External: true}, nil
 						}
 						if isHttpSepcifier(path) {
 							u, e := url.Parse(path)

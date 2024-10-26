@@ -17,6 +17,7 @@ import (
 )
 
 type ImportMap struct {
+	Src     string                       `json:"$src,omitempty"`
 	Support bool                         `json:"$support,omitempty"`
 	Imports map[string]string            `json:"imports,omitempty"`
 	Scopes  map[string]map[string]string `json:"scopes,omitempty"`
@@ -35,9 +36,9 @@ type TransformInput struct {
 
 type TransformOptions struct {
 	TransformInput
+	unocssInput   []string
 	importMap     ImportMap
 	globalVersion string
-	unocss        bool
 }
 
 type TransformOutput struct {
@@ -86,14 +87,9 @@ func transform(npmrc *NpmRC, options TransformOptions) (out TransformOutput, err
 	case "tsx":
 		loader = api.LoaderTSX
 	case "css":
-		if options.unocss {
-			// we use the import map to pass the content for unocss generator
-			data := ""
-			for _, value := range imports {
-				data += value + "\n"
-			}
+		if options.unocssInput != nil {
 			// pre-process uno.css
-			o, e := preTransform(npmrc, "esm-unocss", "0.7.0", data, sourceCode, "--prefer-offline", "@iconify/json@2.2.260")
+			o, e := preTransform(npmrc, "esm-unocss", "0.8.0", strings.Join(options.unocssInput, "\n"), sourceCode, "--prefer-offline", "@iconify/json@2.2.260")
 			if e != nil {
 				log.Error("failed to generate uno.css:", e)
 				err = errors.New("failed to generate uno.css")

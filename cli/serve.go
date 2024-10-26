@@ -60,11 +60,14 @@ func (h *H) ServeHtml(w http.ResponseWriter, r *http.Request, pathname string) {
 			if token.DataAtom == atom.Script {
 				var srcAttr string
 				var mainAttr string
+				var configAttr string
 				for _, attr := range token.Attr {
 					if attr.Key == "src" {
 						srcAttr = attr.Val
 					} else if attr.Key == "main" {
 						mainAttr = attr.Val
+					} else if attr.Key == "config" {
+						configAttr = attr.Val
 					}
 				}
 				// add `im` query to the main script
@@ -106,21 +109,21 @@ func (h *H) ServeHtml(w http.ResponseWriter, r *http.Request, pathname string) {
 					w.Write([]byte(">"))
 					continue
 				}
-			} else if token.DataAtom == atom.Link {
-				var relAttr string
-				var hrefAttr string
-				for _, attr := range token.Attr {
-					if attr.Key == "rel" {
-						relAttr = attr.Val
-					} else if attr.Key == "href" {
-						hrefAttr = attr.Val
-					}
-				}
-				// replace `<link rel="stylesheet" href="https://esm.sh/uno">`
+				// replace `<script rel="stylesheet" href="https://esm.sh/uno"></script>`
 				// with `<link rel="stylesheet" href="/@unocss">`
-				if (strings.HasPrefix(hrefAttr, "http://") || strings.HasPrefix(hrefAttr, "https://")) && strings.HasSuffix(hrefAttr, "/uno") && relAttr == "stylesheet" {
-					unocssLink = "/@unocss?ctx=" + btoaUrl(pathname)
+				if (strings.HasPrefix(srcAttr, "http://") || strings.HasPrefix(srcAttr, "https://")) && strings.HasSuffix(srcAttr, "/uno") {
+					unocssLink = "/@unocss?p=" + btoaUrl(pathname)
+					if configAttr != "" {
+						unocssLink += "&c=" + btoaUrl(configAttr)
+					}
 					w.Write([]byte(fmt.Sprintf(`<link id="@unocss" rel="stylesheet" href="%s">`, unocssLink)))
+					tok := tokenizer.Next()
+					if tok == html.TextToken {
+						tokenizer.Next()
+					}
+					if tok == html.ErrorToken {
+						break
+					}
 					continue
 				}
 			} else if token.DataAtom == atom.Style {
@@ -133,11 +136,12 @@ func (h *H) ServeHtml(w http.ResponseWriter, r *http.Request, pathname string) {
 				}
 				// strip `<style type="uno/css">...</style>`
 				if typeAttr == "uno/css" {
-					for {
-						tok := tokenizer.Next()
-						if tok == html.ErrorToken || tok == html.EndTagToken {
-							break
-						}
+					tok := tokenizer.Next()
+					if tok == html.TextToken {
+						tokenizer.Next()
+					}
+					if tok == html.ErrorToken {
+						break
 					}
 					continue
 				}
@@ -269,12 +273,12 @@ func (h *H) ServeSvelte(w http.ResponseWriter, r *http.Request, pathname string)
 }
 
 func (h *H) ServeUnoCSS(w http.ResponseWriter, r *http.Request) {
-	ctx, err := atobUrl(r.URL.Query().Get("ctx"))
+	page, err := atobUrl(r.URL.Query().Get("p"))
 	if err != nil {
 		http.Error(w, "Bad Request", 400)
 		return
 	}
-	imHtmlFilename := filepath.Join(h.rootDir, string(ctx))
+	imHtmlFilename := filepath.Join(h.rootDir, page)
 	imHtmlFile, err := os.Open(imHtmlFilename)
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -285,9 +289,26 @@ func (h *H) ServeUnoCSS(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer imHtmlFile.Close()
+	configCSS := ""
+	c := r.URL.Query().Get("c")
+	if c != "" {
+		configCSSFilename, err := atobUrl(c)
+		if err != nil {
+			http.Error(w, "Bad Request", 400)
+			return
+		}
+		configCSSFilename = filepath.Join(filepath.Dir(imHtmlFilename), configCSSFilename)
+		data, err := os.ReadFile(configCSSFilename)
+		if err != nil && os.IsExist(err) {
+			http.Error(w, "Internal Server Error", 500)
+			return
+		}
+		if len(data) > 0 {
+			configCSS = string(data)
+		}
+	}
 	tokenizer := html.NewTokenizer(imHtmlFile)
 	inHead := false
-	configCSS := ""
 	input := []string{}
 	scripts := []string{}
 	for {
@@ -309,7 +330,7 @@ func (h *H) ServeUnoCSS(w http.ResponseWriter, r *http.Request) {
 							tokenizer.Next()
 							innerText := bytes.TrimSpace(tokenizer.Text())
 							if len(innerText) > 0 {
-								configCSS = string(innerText)
+								configCSS += string(innerText)
 							}
 							break
 						}
@@ -379,8 +400,8 @@ func (h *H) ServeUnoCSS(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusNotModified)
 		return
 	}
-	cacheKey := fmt.Sprintf("unocss-%s", ctx)
-	etagCacheKey := fmt.Sprintf("unocss-%s.etag", ctx)
+	cacheKey := fmt.Sprintf("unocss-%s", page)
+	etagCacheKey := fmt.Sprintf("unocss-%s.etag", page)
 	if v, ok := h.cache.Load(cacheKey); ok {
 		if e, ok := h.cache.Load(etagCacheKey); ok {
 			if e.(string) == etag {

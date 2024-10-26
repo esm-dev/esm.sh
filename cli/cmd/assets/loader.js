@@ -7,7 +7,7 @@ const error = (message) => Deno.stdout.write(enc.encode(">>!" + JSON.stringify(m
 let uno;
 async function unocss(configCSS, data) {
   if (!uno || uno.configCSS !== configCSS) {
-    const { init } = await import("npm:esm-unocss@0.7.0");
+    const { init } = await import("npm:esm-unocss@0.8.0");
     uno = await init(configCSS);
     uno.configCSS = configCSS;
   }

@@ -287,9 +287,10 @@ function withESMWorker(middleware?: Middleware, cache: Cache = (caches as any).d
 
     // built-in modules/scripts
     if (
-      pathname === "/run" ||
-      pathname === "/tsx" ||
-      (pathname.startsWith("/node/") && pathname.endsWith(".js"))
+      pathname === "/run"
+      || pathname === "/tsx"
+      || pathname === "/uno"
+      || (pathname.startsWith("/node/") && pathname.endsWith(".js"))
     ) {
       const isChunkjs = pathname.startsWith("/node/chunk-");
       if (!isChunkjs) {
@@ -368,11 +369,11 @@ function withESMWorker(middleware?: Middleware, cache: Cache = (caches as any).d
     // use legacy worker if the bild version is specified in the path or query
     if (env.LEGACY_WORKER) {
       if (
-        pathname == "/build" ||
-        pathname.startsWith("/stable/") ||
-        (pathname.startsWith("/v") && regexpLegacyVersionPrefix.test(pathname)) ||
-        (pathname.startsWith("/~") && regexpLegacyBuild.test(pathname)) ||
-        url.searchParams.has("pin")
+        pathname == "/build"
+        || pathname.startsWith("/stable/")
+        || (pathname.startsWith("/v") && regexpLegacyVersionPrefix.test(pathname))
+        || (pathname.startsWith("/~") && regexpLegacyBuild.test(pathname))
+        || url.searchParams.has("pin")
       ) {
         return env.LEGACY_WORKER.fetch(req);
       }
@@ -481,8 +482,8 @@ function withESMWorker(middleware?: Middleware, cache: Cache = (caches as any).d
     // redirect to commit-ish version for GitHub packages
     if (
       gh && !(pVersion && (
-        regexpCommitish.test(pVersion) ||
-        regexpFullVersion.test(trimPrefix(pVersion, "v"))
+        regexpCommitish.test(pVersion)
+        || regexpFullVersion.test(trimPrefix(pVersion, "v"))
       ))
     ) {
       return ctx.withCache(async () => {
@@ -574,10 +575,10 @@ function withESMWorker(middleware?: Middleware, cache: Cache = (caches as any).d
       };
       if (
         (
-          !isModuleFullPath &&
-          !(subPath !== "" && assetsExts.has(splitBy(subPath, ".", true)[1])) &&
-          !isDtsFile(subPath) &&
-          !url.searchParams.has("raw")
+          !isModuleFullPath
+          && !(subPath !== "" && assetsExts.has(splitBy(subPath, ".", true)[1]))
+          && !isDtsFile(subPath)
+          && !url.searchParams.has("raw")
         )
       ) {
         return ctx.withCache(async (targetFromUA) => {

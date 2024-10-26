@@ -397,12 +397,19 @@ Deno.test("esm-worker", { sanitizeOps: false, sanitizeResources: false }, async 
     assertStringIncludes(res.headers.get("Vary") ?? "", "User-Agent");
     assertStringIncludes(await res.text(), "esm.sh/run");
 
-    const res4 = await fetch(`${workerOrigin}/tsx`);
-    assertEquals(res4.headers.get("Etag"), `W/"${version}"`);
-    assertEquals(res4.headers.get("Cache-Control"), "public, max-age=86400");
-    assertEquals(res4.headers.get("Content-Type"), "application/javascript; charset=utf-8");
-    assertStringIncludes(res4.headers.get("Vary") ?? "", "User-Agent");
-    assertStringIncludes(await res4.text(), "esm.sh/tsx");
+    const res2 = await fetch(`${workerOrigin}/tsx`);
+    assertEquals(res2.headers.get("Etag"), `W/"${version}"`);
+    assertEquals(res2.headers.get("Cache-Control"), "public, max-age=86400");
+    assertEquals(res2.headers.get("Content-Type"), "application/javascript; charset=utf-8");
+    assertStringIncludes(res2.headers.get("Vary") ?? "", "User-Agent");
+    assertStringIncludes(await res2.text(), "esm.sh/tsx");
+
+    const res3 = await fetch(`${workerOrigin}/uno`);
+    assertEquals(res3.headers.get("Etag"), `W/"${version}"`);
+    assertEquals(res3.headers.get("Cache-Control"), "public, max-age=86400");
+    assertEquals(res3.headers.get("Content-Type"), "application/javascript; charset=utf-8");
+    assertStringIncludes(res3.headers.get("Vary") ?? "", "User-Agent");
+    assertStringIncludes(await res3.text(), "/uno.css?ctx=");
   });
 
   await t.step("transform api", async () => {

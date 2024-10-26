@@ -46,7 +46,7 @@ Deno.test("transform api", async () => {
 });
 
 Deno.test("transform api(remote module, react)", async () => {
-  const im = "y" + btoa("/esm-run-demo/react/").replace(/\+/g, "-").replace(/\//g, "_").replace(/=/g, "");
+  const im = "y" + btoaUrl("/esm-run-demo/react/");
   const res1 = await fetch(`http://localhost:8080/https://ije.github.io/esm-run-demo/react/main.tsx?im=${im}`);
   assertEquals(res1.status, 200);
   assertEquals(res1.headers.get("Content-Type"), "application/javascript; charset=utf-8");
@@ -67,7 +67,7 @@ Deno.test("transform api(remote module, react)", async () => {
 });
 
 Deno.test("transform api(remote module, preact)", async () => {
-  const im = "y" + btoa("/esm-run-demo/preact/").replace(/\+/g, "-").replace(/\//g, "_").replace(/=/g, "");
+  const im = "y" + btoaUrl("/esm-run-demo/preact/");
   const res1 = await fetch(`http://localhost:8080/https://ije.github.io/esm-run-demo/preact/main.tsx?im=${im}`);
   assertEquals(res1.status, 200);
   assertEquals(res1.headers.get("Content-Type"), "application/javascript; charset=utf-8");
@@ -88,7 +88,7 @@ Deno.test("transform api(remote module, preact)", async () => {
 });
 
 Deno.test("transform api(remote module, vue)", async () => {
-  const im = "y" + btoa("/esm-run-demo/vue/").replace(/\+/g, "-").replace(/\//g, "_").replace(/=/g, "");
+  const im = "y" + btoaUrl("/esm-run-demo/vue/");
   const res1 = await fetch(`http://localhost:8080/https://ije.github.io/esm-run-demo/vue/main.ts?im=${im}`);
   assertEquals(res1.status, 200);
   assertEquals(res1.headers.get("Content-Type"), "application/javascript; charset=utf-8");
@@ -109,7 +109,7 @@ Deno.test("transform api(remote module, vue)", async () => {
 });
 
 Deno.test("transform api(remote module, svelte)", async () => {
-  const im = "y" + btoa("/esm-run-demo/svelte/").replace(/\+/g, "-").replace(/\//g, "_").replace(/=/g, "");
+  const im = "y" + btoaUrl("/esm-run-demo/svelte/");
   const res1 = await fetch(`http://localhost:8080/https://ije.github.io/esm-run-demo/svelte/main.ts?im=${im}`);
   assertEquals(res1.status, 200);
   assertEquals(res1.headers.get("Content-Type"), "application/javascript; charset=utf-8");
@@ -129,7 +129,7 @@ Deno.test("transform api(remote module, svelte)", async () => {
 });
 
 Deno.test("transform api(remote module, non-support import maps)", async () => {
-  const im = "N" + btoa("/esm-run-demo/preact/").replace(/\+/g, "-").replace(/\//g, "_").replace(/=/g, "");
+  const im = "N" + btoaUrl("/esm-run-demo/preact/");
   const res1 = await fetch(`http://localhost:8080/https://ije.github.io/esm-run-demo/preact/main.tsx?im=${im}`);
   assertEquals(res1.status, 200);
   assertEquals(res1.headers.get("Content-Type"), "application/javascript; charset=utf-8");
@@ -149,29 +149,34 @@ Deno.test("transform api(remote module, non-support import maps)", async () => {
   assertStringIncludes(js2, 'from"https://esm.sh/preact@10.24.1/jsx-runtime";');
 });
 
-Deno.test("transform api(uno)", async () => {
-  const res1 = await fetch("http://localhost:8080/uno", {
-    headers: {
-      referer: "https://ije.github.io/esm-run-demo/unocss/",
-    },
-  });
+Deno.test("transform api(uno.css)", async () => {
+  const res1 = await fetch(
+    "http://localhost:8080/uno.css?p="
+      + btoaUrl("https://ije.github.io/esm-run-demo/unocss/")
+      + "&c="
+      + btoaUrl("./uno.css"),
+  );
   assertEquals(res1.status, 200);
   assertEquals(res1.headers.get("Content-Type"), "text/css; charset=utf-8");
   assertEquals(res1.headers.get("Cache-Control"), "public, max-age=31536000, immutable");
-  assertStringIncludes(res1.headers.get("Vary")!, "Referer");
   assertStringIncludes(res1.headers.get("Vary")!, "User-Agent");
   const css1 = await res1.text();
+  assertStringIncludes(css1, "time,mark,audio,video{"); // eric-meyer reset css
   assertStringIncludes(css1, ".btn{");
   assertStringIncludes(css1, ".btn:hover{");
   assertStringIncludes(css1, "background-color:rgb(59 130 246");
   assertStringIncludes(css1, "@keyframes spin");
-  assertStringIncludes(css1, ".animate-spin{animation:spin 1s ease infinite}");
+  assertStringIncludes(css1, ".btn:hover{animation:spin 1s ease infinite}");
   assertStringIncludes(css1, "@font-face{");
   assertStringIncludes(css1, "https://fonts.gstatic.com/s/inter/");
   assertStringIncludes(css1, "font-family:Inter,ui-sans-serif,");
   assertStringIncludes(css1, '.i-carbon-logo-github{--un-icon:url("data:image/svg+xml;utf8,');
   assertStringIncludes(css1, ".all\\:transition-40 *{");
 });
+
+function btoaUrl(url: string): string {
+  return btoa(url).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+}
 
 async function computeHash(input: string): Promise<string> {
   const buffer = new Uint8Array(

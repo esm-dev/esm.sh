@@ -401,7 +401,7 @@ func routes(debug bool) rex.Handle {
 		}
 
 		// serve internal scripts
-		if pathname == "/run" || pathname == "/tsx" {
+		if pathname == "/run" || pathname == "/tsx" || pathname == "/uno" {
 			ifNoneMatch := ctx.R.Header.Get("If-None-Match")
 			if ifNoneMatch == globalETag && !debug {
 				return rex.Status(http.StatusNotModified, nil)
@@ -541,34 +541,37 @@ func routes(debug bool) rex.Handle {
 			cdnOrigin = fmt.Sprintf("https://%s", zoneId)
 		}
 
-		if pathname == "/uno" {
-			referer := ctx.R.Header.Get("Referer")
-			appendVaryHeader(ctx.W.Header(), "Referer")
-			if referer == "" {
+		if pathname == "/uno.css" {
+			query := ctx.Query()
+			p := query.Get("p")
+			if p == "" {
 				return rex.Redirect("https://unocss.dev", http.StatusFound)
 			}
-			refererUrl, err := url.Parse(referer)
+			page, err := atobUrl(p)
 			if err != nil {
-				return rex.Status(400, "Invalid Referer")
+				return rex.Status(400, "Invalid page url")
 			}
-			hostname := refererUrl.Hostname()
+			pageUrl, err := url.Parse(page)
+			if err != nil {
+				return rex.Status(400, "Invalid page url")
+			}
+			hostname := pageUrl.Hostname()
 			if isLocalhost(hostname) {
 				ctx.SetHeader("Cache-Control", ccImmutable)
 				ctx.SetHeader("Content-Type", ctCSS)
-				return "body:after{position:fixed;top:0;left:0;z-index:9999;padding:18px 32px;width:100vw;content:'esm.sh/uno doesn't support local development, try serving your app with `npx esm.sh run`.';font-size:14px;background:rgba(255,232,232,.9);color:#f00;backdrop-filter:blur(8px)}"
+				return "body:after{position:fixed;top:0;left:0;z-index:9999;padding:18px 32px;width:100vw;content:'esm.sh/uno doesn't support local development, try serving your app with `esm.sh run`.';font-size:14px;background:rgba(255,232,232,.9);color:#f00;backdrop-filter:blur(8px)}"
 			}
 			if !regexpDomain.MatchString(hostname) {
-				return rex.Status(400, "Invalid Referer")
+				return rex.Status(400, "Invalid page url")
 			}
 			// determine build target by `?target` query or `User-Agent` header
-			query := ctx.Query()
 			target := strings.ToLower(query.Get("target"))
 			targetFromUA := targets[target] == 0
 			if targetFromUA {
 				target = getBuildTargetByUA(ctx.UserAgent())
 			}
 			h := sha1.New()
-			h.Write([]byte(referer))
+			h.Write([]byte(page))
 			h.Write([]byte(query.Get("v")))
 			h.Write([]byte(target))
 			savePath := normalizeSavePath(zoneId, path.Join("modules", hex.EncodeToString(h.Sum(nil))+".css"))
@@ -584,26 +587,62 @@ func routes(debug bool) rex.Handle {
 				}
 				resp = f // auto closed
 			} else {
-				c := &http.Client{
+				client := &http.Client{
 					Timeout: 1 * time.Minute,
 				}
 				req := &http.Request{
 					Method: "GET",
-					URL:    refererUrl,
+					URL:    pageUrl,
 					Header: map[string][]string{
 						"User-Agent": {ctx.UserAgent()},
 					},
 				}
-				res, err := c.Do(req)
-				if err != nil || res.StatusCode != 200 {
-					return rex.Status(500, "Failed to fetch referer page")
+				res, err := client.Do(req)
+				if err != nil {
+					return rex.Status(500, "Failed to fetch page html")
 				}
 				defer res.Body.Close()
+				if res.StatusCode != 200 {
+					if res.StatusCode == 404 {
+						return rex.Status(404, "Page html not found")
+					}
+					return rex.Status(500, "Failed to fetch page html")
+				}
+				configCSS := ""
+				c := query.Get("c")
+				if c != "" {
+					configPath, err := atobUrl(c)
+					if err != nil {
+						return rex.Status(400, "Invalid config css page")
+					}
+					req := &http.Request{
+						Method: "GET",
+						URL:    pageUrl.ResolveReference(&url.URL{Path: configPath}),
+						Header: map[string][]string{
+							"User-Agent": {ctx.UserAgent()},
+						},
+					}
+					res, err := client.Do(req)
+					if err != nil {
+						return rex.Status(500, "Failed to fetch config css")
+					}
+					defer res.Body.Close()
+					// ignore non-exist config css
+					if res.StatusCode != 404 {
+						if res.StatusCode != 200 {
+							return rex.Status(500, "Failed to fetch config css")
+						}
+						css, err := io.ReadAll(res.Body)
+						if err != nil {
+							return rex.Status(500, "Failed to fetch config css")
+						}
+						configCSS = string(css)
+					}
+				}
 				tokenizer := html.NewTokenizer(io.LimitReader(res.Body, 2*MB))
 				inHead := false
-				configCSS := ""
-				attrs := []string{}
-				importMap := ImportMap{Imports: map[string]string{}}
+				input := []string{}
+				jsEntries := map[string]struct{}{}
 				for {
 					tt := tokenizer.Next()
 					if tt == html.ErrorToken {
@@ -623,7 +662,7 @@ func routes(debug bool) rex.Handle {
 										tokenizer.Next()
 										innerText := bytes.TrimSpace(tokenizer.Text())
 										if len(innerText) > 0 {
-											configCSS = string(innerText)
+											configCSS += string(innerText)
 										}
 										break
 									}
@@ -649,14 +688,15 @@ func routes(debug bool) rex.Handle {
 							}
 							if srcAttr == "" {
 								tokenizer.Next()
-								attrs = append(attrs, string(tokenizer.Text()))
+								// inline script content
+								input = append(input, string(tokenizer.Text()))
 							} else {
 								if mainAttr != "" {
 									if !isHttpSepcifier(mainAttr) {
-										importMap.Imports[mainAttr] = ""
+										jsEntries[mainAttr] = struct{}{}
 									}
 								} else if !isHttpSepcifier(srcAttr) {
-									importMap.Imports[srcAttr] = ""
+									jsEntries[srcAttr] = struct{}{}
 								}
 							}
 						} else {
@@ -664,9 +704,9 @@ func routes(debug bool) rex.Handle {
 								var key, val []byte
 								key, val, moreAttr = tokenizer.TagAttr()
 								if bytes.Equal(key, []byte("class")) {
-									attrs = append(attrs, "\""+string(val)+"\"")
+									input = append(input, "\""+string(val)+"\"")
 								} else if !isW3CStandardAttribute(string(key)) {
-									attrs = append(attrs, string(key)+"=\""+string(val)+"\"")
+									input = append(input, string(key)+"=\""+string(val)+"\"")
 								}
 							}
 						}
@@ -677,17 +717,12 @@ func routes(debug bool) rex.Handle {
 						}
 					}
 				}
-				if len(importMap.Imports) > 0 {
-					for k := range importMap.Imports {
-						url := refererUrl.ResolveReference(&url.URL{Path: k})
-						code, err := bundleRemoteModules(url.String(), ctx.UserAgent())
-						if err == nil {
-							importMap.Imports[k] = string(code)
-						}
+				for src := range jsEntries {
+					url := pageUrl.ResolveReference(&url.URL{Path: src})
+					code, err := bundleRemoteModules(url.String(), false, ctx.UserAgent())
+					if err == nil {
+						input = append(input, string(code))
 					}
-				}
-				if len(attrs) > 0 {
-					importMap.Imports["."] = strings.Join(attrs, "\n")
 				}
 				out, err := transform(npmrc, TransformOptions{
 					TransformInput: TransformInput{
@@ -696,8 +731,7 @@ func routes(debug bool) rex.Handle {
 						Target: target,
 						Minify: true,
 					},
-					importMap: importMap,
-					unocss:    true,
+					unocssInput: input,
 				})
 				if err != nil {
 					return rex.Status(500, "Failed to generate uno.css")
@@ -721,11 +755,11 @@ func routes(debug bool) rex.Handle {
 				return rex.Status(400, "Invalid URL")
 			}
 			hostname := u.Hostname()
-			if (u.Scheme != "http" && u.Scheme != "https") || !regexpDomain.MatchString(hostname) || isLocalhost(hostname) {
-				return rex.Status(400, "Invalid URL")
-			}
 			extname := path.Ext(u.Path)
 			isCss := extname == ".css"
+			if (u.Scheme != "http" && u.Scheme != "https") || isLocalhost(hostname) || !regexpDomain.MatchString(hostname) {
+				return rex.Status(400, "Invalid URL")
+			}
 			if !(isCss || includes(jsExts, extname) || extname == ".vue" || extname == ".svelte") {
 				return rex.Redirect(urlRaw, http.StatusMovedPermanently)
 			}
