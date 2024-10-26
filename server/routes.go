@@ -3,7 +3,6 @@ package server
 import (
 	"bytes"
 	"crypto/sha1"
-	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -20,13 +19,11 @@ import (
 
 	"github.com/Masterminds/semver/v3"
 	"github.com/esm-dev/esm.sh/server/storage"
-	"github.com/evanw/esbuild/pkg/api"
-	"github.com/ije/esbuild-internal/xxhash"
+	esbuild "github.com/evanw/esbuild/pkg/api"
 	"github.com/ije/gox/crypto/rs"
 	"github.com/ije/gox/utils"
 	"github.com/ije/gox/valid"
 	"github.com/ije/rex"
-	"go.etcd.io/bbolt"
 	"golang.org/x/net/html"
 )
 
@@ -497,7 +494,7 @@ func routes(debug bool) rex.Handle {
 				}
 			}
 			target := getBuildTargetByUA(ctx.UserAgent())
-			code, err := minify(lib, targets[target], api.LoaderJS)
+			code, err := minify(lib, targets[target], esbuild.LoaderJS)
 			if err != nil {
 				return throwErrorJS(ctx, fmt.Sprintf("Transform error: %v", err), false)
 			}
@@ -547,11 +544,11 @@ func routes(debug bool) rex.Handle {
 			if p == "" {
 				return rex.Redirect("https://unocss.dev", http.StatusFound)
 			}
-			page, err := atobUrl(p)
+			pageUrlRaw, err := atobUrl(p)
 			if err != nil {
 				return rex.Status(400, "Invalid page url")
 			}
-			pageUrl, err := url.Parse(page)
+			pageUrl, err := url.Parse(pageUrlRaw)
 			if err != nil {
 				return rex.Status(400, "Invalid page url")
 			}
@@ -571,7 +568,7 @@ func routes(debug bool) rex.Handle {
 				target = getBuildTargetByUA(ctx.UserAgent())
 			}
 			h := sha1.New()
-			h.Write([]byte(page))
+			h.Write([]byte(pageUrlRaw))
 			h.Write([]byte(query.Get("v")))
 			h.Write([]byte(target))
 			savePath := normalizeSavePath(zoneId, path.Join("modules", hex.EncodeToString(h.Sum(nil))+".css"))
@@ -587,17 +584,8 @@ func routes(debug bool) rex.Handle {
 				}
 				resp = f // auto closed
 			} else {
-				client := &http.Client{
-					Timeout: 1 * time.Minute,
-				}
-				req := &http.Request{
-					Method: "GET",
-					URL:    pageUrl,
-					Header: map[string][]string{
-						"User-Agent": {ctx.UserAgent()},
-					},
-				}
-				res, err := client.Do(req)
+				fetcher := newFetcher(ctx.UserAgent(), 15*time.Second)
+				res, err := fetcher.Fetch(pageUrl)
 				if err != nil {
 					return rex.Status(500, "Failed to fetch page html")
 				}
@@ -615,14 +603,7 @@ func routes(debug bool) rex.Handle {
 					if err != nil {
 						return rex.Status(400, "Invalid config css page")
 					}
-					req := &http.Request{
-						Method: "GET",
-						URL:    pageUrl.ResolveReference(&url.URL{Path: configPath}),
-						Header: map[string][]string{
-							"User-Agent": {ctx.UserAgent()},
-						},
-					}
-					res, err := client.Do(req)
+					res, err := fetcher.Fetch(pageUrl.ResolveReference(&url.URL{Path: configPath}))
 					if err != nil {
 						return rex.Status(500, "Failed to fetch config css")
 					}
@@ -640,9 +621,9 @@ func routes(debug bool) rex.Handle {
 					}
 				}
 				tokenizer := html.NewTokenizer(io.LimitReader(res.Body, 2*MB))
-				inHead := false
 				input := []string{}
 				jsEntries := map[string]struct{}{}
+				importMap := ImportMap{}
 				for {
 					tt := tokenizer.Next()
 					if tt == html.ErrorToken {
@@ -650,78 +631,71 @@ func routes(debug bool) rex.Handle {
 					}
 					if tt == html.StartTagToken {
 						name, moreAttr := tokenizer.TagName()
-						if bytes.Equal(name, []byte("head")) {
-							inHead = true
-						}
-						if inHead {
-							if bytes.Equal(name, []byte("style")) {
-								for moreAttr {
-									var key, val []byte
-									key, val, moreAttr = tokenizer.TagAttr()
-									if bytes.Equal(key, []byte("type")) && bytes.Equal(val, []byte("uno/css")) {
-										tokenizer.Next()
-										innerText := bytes.TrimSpace(tokenizer.Text())
-										if len(innerText) > 0 {
-											configCSS += string(innerText)
-										}
-										break
+						switch string(name) {
+						case "style":
+							for moreAttr {
+								var key, val []byte
+								key, val, moreAttr = tokenizer.TagAttr()
+								if bytes.Equal(key, []byte("type")) && bytes.Equal(val, []byte("uno/css")) {
+									tokenizer.Next()
+									innerText := bytes.TrimSpace(tokenizer.Text())
+									if len(innerText) > 0 {
+										configCSS += string(innerText)
 									}
+									break
 								}
 							}
-						} else if bytes.Equal(name, []byte("script")) {
+						case "script":
 							srcAttr := ""
 							mainAttr := ""
+							typeAttr := ""
 							for moreAttr {
 								var key, val []byte
 								key, val, moreAttr = tokenizer.TagAttr()
 								if bytes.Equal(key, []byte("src")) {
 									srcAttr = string(val)
-									if mainAttr != "" || !strings.HasSuffix(srcAttr, "/run") {
-										break
-									}
 								} else if bytes.Equal(key, []byte("main")) {
 									mainAttr = string(val)
-									if srcAttr != "" {
-										break
-									}
+								} else if bytes.Equal(key, []byte("type")) {
+									typeAttr = string(val)
 								}
 							}
-							if srcAttr == "" {
+							if typeAttr == "importmap" {
 								tokenizer.Next()
+								innerText := bytes.TrimSpace(tokenizer.Text())
+								if len(innerText) > 0 {
+									err := json.Unmarshal(innerText, &importMap)
+									if err == nil {
+										importMap.Src = pageUrl.Path
+									}
+								}
+							} else if srcAttr == "" {
 								// inline script content
+								tokenizer.Next()
 								input = append(input, string(tokenizer.Text()))
 							} else {
-								if mainAttr != "" {
-									if !isHttpSepcifier(mainAttr) {
+								if mainAttr != "" && isHttpSepcifier(srcAttr) {
+									if !isHttpSepcifier(mainAttr) && endsWith(mainAttr, jsExts...) {
 										jsEntries[mainAttr] = struct{}{}
 									}
-								} else if !isHttpSepcifier(srcAttr) {
+								} else if !isHttpSepcifier(srcAttr) && endsWith(srcAttr, jsExts...) {
 									jsEntries[srcAttr] = struct{}{}
 								}
 							}
-						} else {
-							for moreAttr {
-								var key, val []byte
-								key, val, moreAttr = tokenizer.TagAttr()
-								if bytes.Equal(key, []byte("class")) {
-									input = append(input, "\""+string(val)+"\"")
-								} else if !isW3CStandardAttribute(string(key)) {
-									input = append(input, string(key)+"=\""+string(val)+"\"")
-								}
-							}
-						}
-					} else if tt == html.EndTagToken {
-						name, _ := tokenizer.TagName()
-						if bytes.Equal(name, []byte("head")) {
-							inHead = false
+						case "link", "meta", "title", "base", "head", "noscript", "slot", "template", "option":
+							// ignore
+						default:
+							input = append(input, string(tokenizer.Raw()))
 						}
 					}
 				}
 				for src := range jsEntries {
 					url := pageUrl.ResolveReference(&url.URL{Path: src})
-					code, err := bundleRemoteModules(url.String(), false, ctx.UserAgent())
+					_, _, sourceCodes, err := bundleRemoteModule(npmrc, url.String(), importMap, fetcher)
 					if err == nil {
-						input = append(input, string(code))
+						for _, code := range sourceCodes {
+							input = append(input, string(code))
+						}
 					}
 				}
 				out, err := transform(npmrc, TransformOptions{
@@ -763,49 +737,49 @@ func routes(debug bool) rex.Handle {
 			if !(isCss || includes(jsExts, extname) || extname == ".vue" || extname == ".svelte") {
 				return rex.Redirect(urlRaw, http.StatusMovedPermanently)
 			}
-			var importMapJson []byte
+			im := query.Get("im")
 			v := query.Get("v")
 			if v == "" {
 				v = "0"
 			} else if !regexpVersion.MatchString(v) || len(v) > 32 {
 				return rex.Status(400, "Invalid Version Param")
 			}
-			im := query.Get("im")
-			if len(im) > 1 {
-				imLoc, err := atobUrl(im[1:])
+			// determine build target by `?target` query or `User-Agent` header
+			target := strings.ToLower(query.Get("target"))
+			targetFromUA := targets[target] == 0
+			if targetFromUA {
+				target = getBuildTargetByUA(ctx.UserAgent())
+			}
+			h := sha1.New()
+			h.Write([]byte(urlRaw))
+			h.Write([]byte(im))
+			h.Write([]byte(v))
+			h.Write([]byte(target))
+			savePath := normalizeSavePath(zoneId, path.Join("modules", hex.EncodeToString(h.Sum(nil))+".mjs"))
+			_, err = fs.Stat(savePath)
+			if err != nil && err != storage.ErrNotFound {
+				return rex.Status(500, err.Error())
+			}
+			var resp any
+			if err == nil {
+				f, err := fs.Open(savePath)
 				if err != nil {
-					return rex.Status(400, "Invalid `im` Param")
+					return rex.Status(500, err.Error())
 				}
-				imUrl, err := url.Parse(u.Scheme + "://" + u.Host + imLoc)
-				if err != nil {
-					return rex.Status(400, "Invalid `im` Param")
-				}
-				err = imDB.View(func(tx *bbolt.Tx) error {
-					imHashKey := tx.Bucket(keyAlias).Get([]byte(u.Host + "?" + im[1:]))
-					if imHashKey != nil {
-						importMapJson = tx.Bucket(keyImportMaps).Get([]byte(u.Host + "?" + string(imHashKey)))
-						if importMapJson != nil {
-							v = im[0:1] + string(imHashKey) + "." + v
-						}
+				resp = f // auto closed
+			} else {
+				fetcher := newFetcher(ctx.UserAgent(), 15*time.Second)
+				importMap := ImportMap{}
+				if len(im) > 1 {
+					imPath, err := atobUrl(im[1:])
+					if err != nil {
+						return rex.Status(400, "Invalid `im` Param")
 					}
-					return nil
-				})
-				if err != nil {
-					log.Errorf("Failed to read im.db: %v", err)
-					return rex.Status(500, "Server Internal Error")
-				}
-				if importMapJson == nil {
-					c := &http.Client{
-						Timeout: 1 * time.Minute,
+					imUrl, err := url.Parse(u.Scheme + "://" + u.Host + imPath)
+					if err != nil {
+						return rex.Status(400, "Invalid `im` Param")
 					}
-					req := &http.Request{
-						Method: "GET",
-						URL:    imUrl,
-						Header: map[string][]string{
-							"User-Agent": {ctx.UserAgent()},
-						},
-					}
-					res, err := c.Do(req)
+					res, err := fetcher.Fetch(imUrl)
 					if err != nil {
 						return rex.Status(500, "Failed to fetch import map")
 					}
@@ -836,111 +810,30 @@ func routes(debug bool) rex.Handle {
 								tokenizer.Next()
 								innerText := bytes.TrimSpace(tokenizer.Text())
 								if len(innerText) > 0 {
-									var importMap ImportMap
 									err := json.Unmarshal(innerText, &importMap)
 									if err != nil {
 										return rex.Status(400, "Invalid import map")
 									}
-									importMapJson = innerText
-									err = imDB.Update(func(tx *bbolt.Tx) error {
-										h := xxhash.New()
-										h.Write(importMapJson)
-										imHashKey := strings.TrimRight(base64.RawURLEncoding.EncodeToString(h.Sum(nil)), "=")
-										err := tx.Bucket(keyAlias).Put([]byte(u.Host+"?"+im[1:]), []byte(imHashKey))
-										if err != nil {
-											return err
-										}
-										err = tx.Bucket(keyImportMaps).Put([]byte(u.Host+"?"+imHashKey), importMapJson)
-										if err != nil {
-											return err
-										}
-										v = im[0:1] + imHashKey + "." + v
-										return nil
-									})
-									if err != nil {
-										log.Errorf("Failed to update im.db: %v", err)
-										return rex.Status(500, "Server Internal Error")
-									}
+									importMap.Src, _ = atobUrl(im[1:])
+									importMap.Support = im[0] == 'y'
 								}
 								break
 							}
 						}
 					}
 				}
-			}
-			if importMapJson == nil && len(v) > 10 && strings.ContainsRune(v, '.') {
-				err = imDB.View(func(tx *bbolt.Tx) error {
-					imHashKey, _ := utils.SplitByFirstByte(v[1:], '.')
-					importMapJson = tx.Bucket(keyImportMaps).Get([]byte(u.Host + "?" + imHashKey))
-					return nil
-				})
+				js, css, _, err := bundleRemoteModule(npmrc, urlRaw, importMap, fetcher)
 				if err != nil {
-					log.Errorf("Failed to read im.db: %v", err)
-					return rex.Status(500, "Server Internal Error")
+					return rex.Status(500, "Failed to build module")
 				}
-			}
-			// determine build target by `?target` query or `User-Agent` header
-			target := strings.ToLower(query.Get("target"))
-			targetFromUA := targets[target] == 0
-			if targetFromUA {
-				target = getBuildTargetByUA(ctx.UserAgent())
-			}
-			h := sha1.New()
-			h.Write([]byte(urlRaw))
-			h.Write([]byte(v))
-			h.Write([]byte(target))
-			savePath := normalizeSavePath(zoneId, path.Join("modules", hex.EncodeToString(h.Sum(nil))+".mjs"))
-			_, err = fs.Stat(savePath)
-			if err != nil && err != storage.ErrNotFound {
-				return rex.Status(500, err.Error())
-			}
-			var resp any
-			if err == nil {
-				f, err := fs.Open(savePath)
-				if err != nil {
-					return rex.Status(500, err.Error())
-				}
-				resp = f // auto closed
-			} else {
-				c := &http.Client{
-					Timeout: 1 * time.Minute,
-				}
-				req := &http.Request{
-					Method: "GET",
-					URL:    u,
-					Header: map[string][]string{
-						"User-Agent": {ctx.UserAgent()},
-					},
-				}
-				res, err := c.Do(req)
-				if err != nil {
-					return rex.Status(500, "Failed to fetch source code")
-				}
-				defer res.Body.Close()
-				if res.StatusCode != 200 {
-					if res.StatusCode == 404 {
-						return rex.Status(404, "Not Found")
-					}
-					return rex.Status(res.StatusCode, "Failed to fetch source code")
-				}
-				sourceCode, err := io.ReadAll(res.Body)
-				if err != nil {
-					return rex.Status(500, "Failed to fetch source code")
-				}
-				var importMap ImportMap
-				if importMapJson != nil {
-					err = json.Unmarshal(importMapJson, &importMap)
-					if err != nil {
-						return rex.Status(500, "Invalid import map")
-					}
-					if len(v) > 1 && v[0] == 'y' {
-						importMap.Support = true
-					}
+				code := string(js)
+				if len(css) > 0 {
+					code += fmt.Sprintf("\nvar style=document.createElement('style');style.textContent=%s;document.head.appendChild(style);", utils.MustEncodeJSON(css))
 				}
 				out, err := transform(npmrc, TransformOptions{
 					TransformInput: TransformInput{
 						Filename: u.Path,
-						Code:     string(sourceCode),
+						Code:     code,
 						Target:   target,
 						Minify:   true,
 					},

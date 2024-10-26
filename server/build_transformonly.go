@@ -1,27 +1,13 @@
 package server
 
 import (
-	"bytes"
-	"context"
 	"encoding/json"
 	"errors"
-	"fmt"
-	"os"
-	"os/exec"
-	"path"
 	"strings"
-	"time"
 
-	"github.com/evanw/esbuild/pkg/api"
+	esbuild "github.com/evanw/esbuild/pkg/api"
 	"github.com/ije/gox/utils"
 )
-
-type ImportMap struct {
-	Src     string                       `json:"$src,omitempty"`
-	Support bool                         `json:"$support,omitempty"`
-	Imports map[string]string            `json:"imports,omitempty"`
-	Scopes  map[string]map[string]string `json:"scopes,omitempty"`
-}
 
 type TransformInput struct {
 	Filename        string          `json:"filename"`
@@ -47,7 +33,7 @@ type TransformOutput struct {
 }
 
 func transform(npmrc *NpmRC, options TransformOptions) (out TransformOutput, err error) {
-	target := api.ESNext
+	target := esbuild.ESNext
 	if options.Target != "" {
 		if t, ok := targets[options.Target]; ok {
 			target = t
@@ -57,39 +43,24 @@ func transform(npmrc *NpmRC, options TransformOptions) (out TransformOutput, err
 		}
 	}
 
-	imports := map[string]string{}
-	trailingSlashImports := map[string]string{}
-	jsxImportSource := options.JsxImportSource
-
-	if len(options.importMap.Imports) > 0 {
-		for key, value := range options.importMap.Imports {
-			if value != "" {
-				if strings.HasSuffix(key, "/") {
-					trailingSlashImports[key] = value
-				} else {
-					imports[key] = value
-				}
-			}
-		}
-	}
-
-	loader := api.LoaderJS
+	loader := esbuild.LoaderJS
 	sourceCode := options.Code
+	jsxImportSource := options.JsxImportSource
 
 	if options.Lang == "" && options.Filename != "" {
 		_, options.Lang = utils.SplitByLastByte(options.Filename, '.')
 	}
 	switch options.Lang {
 	case "jsx":
-		loader = api.LoaderJSX
+		loader = esbuild.LoaderJSX
 	case "ts":
-		loader = api.LoaderTS
+		loader = esbuild.LoaderTS
 	case "tsx":
-		loader = api.LoaderTSX
+		loader = esbuild.LoaderTSX
 	case "css":
 		if options.unocssInput != nil {
 			// pre-process uno.css
-			o, e := preTransform(npmrc, "esm-unocss", "0.8.0", strings.Join(options.unocssInput, "\n"), sourceCode, "--prefer-offline", "@iconify/json@2.2.260")
+			o, e := npmrc.preTransform("unocss", "", strings.Join(options.unocssInput, "\n"), sourceCode, "esm-unocss@0.8.0", "@iconify/json@2.2.260")
 			if e != nil {
 				log.Error("failed to generate uno.css:", e)
 				err = errors.New("failed to generate uno.css")
@@ -97,30 +68,15 @@ func transform(npmrc *NpmRC, options TransformOptions) (out TransformOutput, err
 			}
 			sourceCode = o.Code
 		}
-		loader = api.LoaderCSS
+		loader = esbuild.LoaderCSS
 	case "vue":
-		vueVersion := "3"
-		vueRuntimeModuleName, ok := imports["vue"]
-		if ok {
-			a := regexpVuePath.FindAllStringSubmatch(vueRuntimeModuleName, 1)
-			if len(a) > 0 {
-				vueVersion = a[0][1]
-			}
-		}
-		if !regexpVersionStrict.MatchString(vueVersion) {
-			info, e := npmrc.getPackageInfo("vue", vueVersion)
-			if e != nil {
-				err = e
-				return
-			}
-			vueVersion = info.Version
-		}
-		if semverLessThan(vueVersion, "3.0.0") {
-			err = errors.New("unsupported vue version, only 3.0.0+ is supported")
+		var vueVersion string
+		vueVersion, err = npmrc.getVueLoaderVersion(options.importMap)
+		if err != nil {
 			return
 		}
 		// pre-process Vue SFC
-		o, e := preTransform(npmrc, "vue", vueVersion, options.Filename, sourceCode)
+		o, e := npmrc.preTransform("vue", vueVersion, options.Filename, sourceCode)
 		if e != nil {
 			log.Error("failed to transform vue:", e)
 			err = errors.New("failed to transform vue")
@@ -128,28 +84,13 @@ func transform(npmrc *NpmRC, options TransformOptions) (out TransformOutput, err
 		}
 		sourceCode = o.Code
 	case "svelte":
-		svelteVersion := "5"
-		sveltePath, ok := imports["svelte"]
-		if ok {
-			a := regexpSveltePath.FindAllStringSubmatch(sveltePath, 1)
-			if len(a) > 0 {
-				svelteVersion = a[0][1]
-			}
-		}
-		if !regexpVersionStrict.MatchString(svelteVersion) {
-			info, e := npmrc.getPackageInfo("svelte", svelteVersion)
-			if e != nil {
-				err = e
-				return
-			}
-			svelteVersion = info.Version
-		}
-		if semverLessThan(svelteVersion, "4.0.0") {
-			err = errors.New("unsupported svelte version, only 4.0.0+ is supported")
+		var svelteVersion string
+		svelteVersion, err = npmrc.getSvelteLoaderVersion(options.importMap)
+		if err != nil {
 			return
 		}
 		// pre-process svelte component
-		o, e := preTransform(npmrc, "svelte", svelteVersion, options.Filename, sourceCode)
+		o, e := npmrc.preTransform("svelte", svelteVersion, options.Filename, sourceCode)
 		if e != nil {
 			log.Error("failed to transform svelte:", e)
 			err = errors.New("failed to transform svelte")
@@ -158,10 +99,10 @@ func transform(npmrc *NpmRC, options TransformOptions) (out TransformOutput, err
 		sourceCode = o.Code
 	}
 
-	if jsxImportSource == "" && (loader == api.LoaderJSX || loader == api.LoaderTSX) {
+	if jsxImportSource == "" && (loader == esbuild.LoaderJSX || loader == esbuild.LoaderTSX) {
 		var ok bool
 		for _, key := range []string{"@jsxRuntime", "@jsxImportSource", "preact", "react"} {
-			jsxImportSource, ok = imports[key]
+			jsxImportSource, ok = options.importMap.Resolve(key)
 			if ok {
 				break
 			}
@@ -171,80 +112,58 @@ func transform(npmrc *NpmRC, options TransformOptions) (out TransformOutput, err
 		}
 	}
 
-	sourceMap := api.SourceMapNone
+	sourceMap := esbuild.SourceMapNone
 	if options.SourceMap == "external" {
-		sourceMap = api.SourceMapExternal
+		sourceMap = esbuild.SourceMapExternal
 	} else if options.SourceMap == "inline" {
-		sourceMap = api.SourceMapInline
+		sourceMap = esbuild.SourceMapInline
 	}
 
 	filename := options.Filename
 	if filename == "" {
 		filename = "source." + options.Lang
 	}
-	stdin := &api.StdinOptions{
+	stdin := &esbuild.StdinOptions{
 		Sourcefile: filename,
 		Contents:   sourceCode,
 		Loader:     loader,
 	}
-	opts := api.BuildOptions{
-		Outdir:            "/esbuild",
+	opts := esbuild.BuildOptions{
 		Stdin:             stdin,
-		Platform:          api.PlatformBrowser,
-		Format:            api.FormatESModule,
+		Platform:          esbuild.PlatformBrowser,
+		Format:            esbuild.FormatESModule,
 		Target:            target,
-		JSX:               api.JSXAutomatic,
+		JSX:               esbuild.JSXAutomatic,
 		JSXImportSource:   strings.TrimSuffix(jsxImportSource, "/"),
 		MinifyWhitespace:  options.Minify,
 		MinifySyntax:      options.Minify,
 		MinifyIdentifiers: options.Minify,
 		Sourcemap:         sourceMap,
-		Write:             false,
 		Bundle:            true,
-		Plugins: []api.Plugin{
+		Outdir:            "/esbuild",
+		Write:             false,
+		Plugins: []esbuild.Plugin{
 			{
 				Name: "resolver",
-				Setup: func(build api.PluginBuild) {
-					build.OnResolve(api.OnResolveOptions{Filter: ".*"}, func(args api.OnResolveArgs) (api.OnResolveResult, error) {
-						path := args.Path
-						if loader != api.LoaderCSS {
-							if value, ok := imports[path]; ok {
-								if !options.importMap.Support {
-									path = value
+				Setup: func(build esbuild.PluginBuild) {
+					build.OnResolve(esbuild.OnResolveOptions{Filter: ".*"}, func(args esbuild.OnResolveArgs) (esbuild.OnResolveResult, error) {
+						path, _ := options.importMap.Resolve(args.Path)
+						if strings.HasSuffix(path, ".css") {
+							path += "?module"
+						}
+						if isRelativeSpecifier(path) {
+							if options.importMap.Src != "" {
+								suffix := "N"
+								if options.importMap.Support {
+									suffix = "y"
 								}
-							} else {
-								matched := false
-								for key, value := range trailingSlashImports {
-									if strings.HasPrefix(path, key) {
-										if !options.importMap.Support {
-											path = value + path[len(key):]
-										}
-										matched = true
-										break
-									}
-								}
-								// if not match leading slash imports, try to match regular imports
-								if !matched {
-									for key, value := range imports {
-										if strings.HasPrefix(path, key+"/") {
-											path = value + "/" + path[len(key+"/"):]
-											break
-										}
-									}
-								}
+								path = appendQueryString(path, "im", suffix+btoaUrl(options.importMap.Src))
 							}
-							if strings.HasSuffix(path, ".css") {
-								path += "?module"
-							}
-							if options.globalVersion != "" && isRelativeSpecifier(path) {
-								q := "?"
-								if strings.Contains(path, "?") {
-									q = "&"
-								}
-								path += q + "v=" + options.globalVersion
+							if options.globalVersion != "" {
+								path = appendQueryString(path, "v", options.globalVersion)
 							}
 						}
-						return api.OnResolveResult{
+						return esbuild.OnResolveResult{
 							Path:     path,
 							External: true,
 						}, nil
@@ -253,7 +172,7 @@ func transform(npmrc *NpmRC, options TransformOptions) (out TransformOutput, err
 			},
 		},
 	}
-	ret := api.Build(opts)
+	ret := esbuild.Build(opts)
 	if len(ret.Errors) > 0 {
 		err = errors.New("failed to validate code: " + ret.Errors[0].Text)
 		return
@@ -269,70 +188,5 @@ func transform(npmrc *NpmRC, options TransformOptions) (out TransformOutput, err
 			out.Map = string(file.Contents)
 		}
 	}
-	return
-}
-
-func preTransform(npmrc *NpmRC, loaderName string, loaderVersion string, specifier string, sourceCode string, npmDeps ...string) (output *TransformOutput, err error) {
-	wd := path.Join(npmrc.StoreDir(), loaderName+"@"+loaderVersion)
-	if !existsFile(path.Join(wd, "package.json")) {
-		_, err = npmrc.installPackage(ESM{PkgName: loaderName, PkgVersion: loaderVersion})
-		if err != nil {
-			err = errors.New("failed to install " + loaderName + "@" + loaderVersion)
-			return
-		}
-		if len(npmDeps) > 0 {
-			err = npmrc.pnpmi(wd, npmDeps...)
-			if err != nil {
-				err = errors.New("failed to install " + strings.Join(npmDeps, " "))
-				return
-			}
-		}
-	}
-	loaderJsFp := path.Join(wd, "loader.mjs")
-	if !existsFile(loaderJsFp) {
-		var loaderJS []byte
-		major, _ := utils.SplitByFirstByte(loaderVersion, '.')
-		loaderJS, err = embedFS.ReadFile(fmt.Sprintf("server/embed/internal/%s_loader@%s.js", loaderName, major))
-		if err != nil {
-			err = fmt.Errorf("could not find %s loader", loaderName)
-			return
-		}
-		err = os.WriteFile(loaderJsFp, loaderJS, 0644)
-		if err != nil {
-			return
-		}
-	}
-
-	stdin := bytes.NewBuffer(nil)
-	stdout := bytes.NewBuffer(nil)
-	stderr := bytes.NewBuffer(nil)
-	err = json.NewEncoder(stdin).Encode([]string{specifier, sourceCode})
-	if err != nil {
-		return
-	}
-
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
-
-	cmd := exec.CommandContext(ctx, "node", "loader.mjs")
-	cmd.Dir = wd
-	cmd.Stdin = stdin
-	cmd.Stdout = stdout
-	cmd.Stderr = stderr
-	err = cmd.Run()
-	if err != nil {
-		if stderr.Len() > 0 {
-			err = fmt.Errorf("preTransform: %s", stderr.String())
-		}
-		return
-	}
-
-	var ret TransformOutput
-	err = json.NewDecoder(stdout).Decode(&ret)
-	if err != nil {
-		return
-	}
-
-	output = &ret
 	return
 }

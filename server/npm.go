@@ -2,8 +2,10 @@ package server
 
 import (
 	"bytes"
+	"context"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -251,9 +253,9 @@ func NewNpmRcFromJSON(jsonData []byte) (npmrc *NpmRC, err error) {
 
 func (rc *NpmRC) StoreDir() string {
 	if rc.zoneId != "" {
-		return path.Join(config.WorkDir, "pnpm-store-"+rc.zoneId)
+		return path.Join(config.WorkDir, "npm-"+rc.zoneId)
 	}
-	return path.Join(config.WorkDir, "pnpm-store")
+	return path.Join(config.WorkDir, "npm")
 }
 
 func (rc *NpmRC) getPackageInfo(name string, semver string) (info PackageJSON, err error) {
@@ -641,6 +643,133 @@ func (rc *NpmRC) createDotNpmRcFile(dir string) error {
 		return err
 	}
 	return os.WriteFile(path.Join(dir, ".npmrc"), buf.Bytes(), 0644)
+}
+
+func (npmrc *NpmRC) getSvelteLoaderVersion(importMap ImportMap) (svelteVersion string, err error) {
+	svelteVersion = "5"
+	if len(importMap.Imports) > 0 {
+		sveltePath, ok := importMap.Imports["svelte"]
+		if ok {
+			a := regexpSveltePath.FindAllStringSubmatch(sveltePath, 1)
+			if len(a) > 0 {
+				svelteVersion = a[0][1]
+			}
+		}
+	}
+	if !regexpVersionStrict.MatchString(svelteVersion) {
+		var info PackageJSON
+		info, err = npmrc.getPackageInfo("svelte", svelteVersion)
+		if err != nil {
+			return
+		}
+		svelteVersion = info.Version
+	}
+	if semverLessThan(svelteVersion, "4.0.0") {
+		err = errors.New("unsupported svelte version, only 4.0.0+ is supported")
+	}
+	return
+}
+
+func (npmrc *NpmRC) getVueLoaderVersion(importMap ImportMap) (vueVersion string, err error) {
+	vueVersion = "3"
+	if len(importMap.Imports) > 0 {
+		vuePath, ok := importMap.Imports["vue"]
+		if ok {
+			a := regexpVuePath.FindAllStringSubmatch(vuePath, 1)
+			if len(a) > 0 {
+				vueVersion = a[0][1]
+			}
+		}
+	}
+	if !regexpVersionStrict.MatchString(vueVersion) {
+		var info PackageJSON
+		info, err = npmrc.getPackageInfo("vue", vueVersion)
+		if err != nil {
+			return
+		}
+		vueVersion = info.Version
+	}
+	if semverLessThan(vueVersion, "3.0.0") {
+		err = errors.New("unsupported vue version, only 3.0.0+ is supported")
+	}
+	return
+}
+
+func (npmrc *NpmRC) preTransform(loaderName string, loaderVersion string, specifier string, sourceCode string, npmDeps ...string) (output *TransformOutput, err error) {
+	var wd string
+	if loaderVersion == "" {
+		wd = path.Join(npmrc.StoreDir(), npmDeps[0])
+	} else {
+		wd = path.Join(npmrc.StoreDir(), loaderName+"@"+loaderVersion)
+	}
+	if !existsFile(path.Join(wd, "package.json")) {
+		if loaderVersion != "" {
+			_, err = npmrc.installPackage(ESM{PkgName: loaderName, PkgVersion: loaderVersion})
+			if err != nil {
+				err = errors.New("failed to install " + loaderName + "@" + loaderVersion)
+				return
+			}
+		}
+		if len(npmDeps) > 0 {
+			ensureDir(wd)
+			err = npmrc.pnpmi(wd, append([]string{"--prefer-offline"}, npmDeps...)...)
+			if err != nil {
+				err = errors.New("failed to install " + strings.Join(npmDeps, " "))
+				return
+			}
+		}
+	}
+	loaderJsFp := path.Join(wd, "loader.mjs")
+	if !existsFile(loaderJsFp) {
+		var loaderJS []byte
+		if loaderVersion != "" {
+			major, _ := utils.SplitByFirstByte(loaderVersion, '.')
+			loaderJS, err = embedFS.ReadFile(fmt.Sprintf("server/embed/internal/%s_loader@%s.js", loaderName, major))
+		} else {
+			loaderJS, err = embedFS.ReadFile(fmt.Sprintf("server/embed/internal/%s_loader.js", loaderName))
+		}
+		if err != nil {
+			err = fmt.Errorf("could not find %s loader", loaderName)
+			return
+		}
+		err = os.WriteFile(loaderJsFp, loaderJS, 0644)
+		if err != nil {
+			return
+		}
+	}
+
+	stdin := bytes.NewBuffer(nil)
+	stdout := bytes.NewBuffer(nil)
+	stderr := bytes.NewBuffer(nil)
+	err = json.NewEncoder(stdin).Encode([]string{specifier, sourceCode})
+	if err != nil {
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	cmd := exec.CommandContext(ctx, "node", "loader.mjs")
+	cmd.Dir = wd
+	cmd.Stdin = stdin
+	cmd.Stdout = stdout
+	cmd.Stderr = stderr
+	err = cmd.Run()
+	if err != nil {
+		if stderr.Len() > 0 {
+			err = fmt.Errorf("preTransform: %s", stderr.String())
+		}
+		return
+	}
+
+	var ret TransformOutput
+	err = json.NewDecoder(stdout).Decode(&ret)
+	if err != nil {
+		return
+	}
+
+	output = &ret
+	return
 }
 
 // based on https://github.com/npm/validate-npm-package-name

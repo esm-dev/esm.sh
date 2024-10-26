@@ -20,7 +20,6 @@ async function load() {
   } catch (err) {
     stdout.write(JSON.stringify({ error: err.message, stack: err.stack }));
   }
-
   process.exit(0);
 }
 

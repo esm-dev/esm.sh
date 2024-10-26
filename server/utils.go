@@ -30,11 +30,6 @@ var (
 	regexpDomain        = regexp.MustCompile(`^[a-z0-9\-]+(\.[a-z0-9\-]+)*\.[a-z]+$`)
 )
 
-var (
-	keyImportMaps = []byte("importmaps")
-	keyAlias      = []byte("alias")
-)
-
 // isHttpSepcifier returns true if the specifier is a remote URL.
 func isHttpSepcifier(specifier string) bool {
 	return strings.HasPrefix(specifier, "https://") || strings.HasPrefix(specifier, "http://")
@@ -53,16 +48,6 @@ func semverLessThan(a string, b string) bool {
 // checks if the given hostname is a local address.
 func isLocalhost(hostname string) bool {
 	return hostname == "localhost" || hostname == "127.0.0.1" || (valid.IsIPv4(hostname) && strings.HasPrefix(hostname, "192.168."))
-}
-
-// checks if the given attribute name is a W3C standard attribute.
-func isW3CStandardAttribute(attr string) bool {
-	switch attr {
-	case "id", "href", "src", "name", "placeholder", "rel", "role", "selected", "checked", "slot", "style", "tilte", "type", "value", "width", "height", "hidden", "dir", "dragable", "lang", "spellcheck", "tabindex", "translate", "popover":
-		return true
-	default:
-		return strings.HasPrefix(attr, "aria-") || strings.HasPrefix(attr, "data-")
-	}
 }
 
 // includes returns true if the given string is included in the given array.
@@ -212,6 +197,18 @@ func concatBytes(a, b []byte) []byte {
 	copy(c, a)
 	copy(c[len(a):], b)
 	return c
+}
+
+// appendQueryString appends a query string to the given url.
+func appendQueryString(url string, key string, value string) string {
+	q := key
+	if value != "" {
+		q += "=" + value
+	}
+	if strings.ContainsRune(url, '?') {
+		return url + "&" + q
+	}
+	return url + "?" + q
 }
 
 // run executes the given command and returns the output.

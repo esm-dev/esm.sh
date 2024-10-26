@@ -409,7 +409,7 @@ Deno.test("esm-worker", { sanitizeOps: false, sanitizeResources: false }, async 
     assertEquals(res3.headers.get("Cache-Control"), "public, max-age=86400");
     assertEquals(res3.headers.get("Content-Type"), "application/javascript; charset=utf-8");
     assertStringIncludes(res3.headers.get("Vary") ?? "", "User-Agent");
-    assertStringIncludes(await res3.text(), "/uno.css?ctx=");
+    assertStringIncludes(await res3.text(), "esm.sh/uno");
   });
 
   await t.step("transform api", async () => {

@@ -3,21 +3,19 @@ package server
 import (
 	"errors"
 	"io"
-	"net/http"
 	"net/url"
 	"os"
 	"path"
 	"strings"
-	"time"
 
-	"github.com/evanw/esbuild/pkg/api"
+	esbuild "github.com/evanw/esbuild/pkg/api"
 	esbuild_config "github.com/ije/esbuild-internal/config"
 	"github.com/ije/esbuild-internal/js_ast"
 	"github.com/ije/esbuild-internal/js_parser"
 	"github.com/ije/esbuild-internal/logger"
 )
 
-var jsExts = []string{".mjs", ".js", ".jsx", ".mts", ".ts", ".tsx", ".cjs"}
+var jsExts = []string{".js", ".mjs", ".jsx", ".ts", ".mts", ".tsx", ".cjs", ".cts"}
 
 // stripModuleExt strips the module extension from the given string.
 func stripModuleExt(s string, exts ...string) string {
@@ -69,15 +67,15 @@ func validateJSFile(filename string) (isESM bool, namedExports []string, err err
 }
 
 // minify minifies the given javascript code.
-func minify(code string, target api.Target, loader api.Loader) ([]byte, error) {
-	ret := api.Transform(code, api.TransformOptions{
+func minify(code string, target esbuild.Target, loader esbuild.Loader) ([]byte, error) {
+	ret := esbuild.Transform(code, esbuild.TransformOptions{
 		Target:            target,
-		Format:            api.FormatESModule,
-		Platform:          api.PlatformBrowser,
+		Format:            esbuild.FormatESModule,
+		Platform:          esbuild.PlatformBrowser,
 		MinifyWhitespace:  true,
 		MinifyIdentifiers: true,
 		MinifySyntax:      true,
-		LegalComments:     api.LegalCommentsExternal,
+		LegalComments:     esbuild.LegalCommentsExternal,
 		Loader:            loader,
 	})
 	if len(ret.Errors) > 0 {
@@ -87,98 +85,119 @@ func minify(code string, target api.Target, loader api.Loader) ([]byte, error) {
 	return concatBytes(ret.LegalComments, ret.Code), nil
 }
 
-// bundleRemoteModules builds the remote module and it's submodules.
-func bundleRemoteModules(entry string, externalDynamicImports bool, ua string) ([]byte, error) {
+// bundleRemoteModule builds the remote module and it's submodules.
+func bundleRemoteModule(npmrc *NpmRC, entry string, importMap ImportMap, fetcher *Fetcher) (js []byte, css []byte, sourceCodes [][]byte, err error) {
 	if !isHttpSepcifier(entry) {
-		return nil, errors.New("require a remote module")
+		err = errors.New("require a remote module")
+		return
 	}
 	entryUrl, err := url.Parse(entry)
 	if err != nil {
-		return nil, errors.New("invalid enrtry, require a valid url")
+		err = errors.New("invalid enrtry, require a valid url")
+		return
 	}
-	httpClient := &http.Client{
-		Timeout: 30 * time.Second,
-	}
-	ret := api.Build(api.BuildOptions{
+	ret := esbuild.Build(esbuild.BuildOptions{
 		EntryPoints:      []string{entry},
+		Target:           esbuild.ESNext,
+		Format:           esbuild.FormatESModule,
+		Platform:         esbuild.PlatformBrowser,
+		JSX:              esbuild.JSXPreserve,
 		Bundle:           true,
-		Format:           api.FormatESModule,
-		Target:           api.ESNext,
-		Platform:         api.PlatformBrowser,
 		MinifyWhitespace: true,
-		MinifySyntax:     true,
-		JSX:              api.JSXPreserve,
-		LegalComments:    api.LegalCommentsNone,
-		Plugins: []api.Plugin{
+		Outdir:           "/esbuild",
+		Write:            false,
+		Plugins: []esbuild.Plugin{
 			{
 				Name: "http-loader",
-				Setup: func(build api.PluginBuild) {
-					build.OnResolve(api.OnResolveOptions{Filter: ".*"}, func(args api.OnResolveArgs) (api.OnResolveResult, error) {
-						path := args.Path
+				Setup: func(build esbuild.PluginBuild) {
+					build.OnResolve(esbuild.OnResolveOptions{Filter: ".*"}, func(args esbuild.OnResolveArgs) (esbuild.OnResolveResult, error) {
+						path, _ := importMap.Resolve(args.Path)
 						if isRelativeSpecifier(args.Path) && isHttpSepcifier(args.Importer) {
 							u, e := url.Parse(args.Importer)
 							if e == nil {
 								path = u.ResolveReference(&url.URL{Path: args.Path}).String()
 							}
 						}
-						if args.Kind == api.ResolveJSDynamicImport && externalDynamicImports {
-							return api.OnResolveResult{Path: path, External: true}, nil
-						}
 						if isHttpSepcifier(path) {
 							u, e := url.Parse(path)
 							if e == nil {
 								if u.Host == entryUrl.Host && u.Scheme == entryUrl.Scheme {
-									return api.OnResolveResult{Path: path, Namespace: "http"}, nil
+									return esbuild.OnResolveResult{Path: path, Namespace: "http"}, nil
 								}
 							}
 						}
-						return api.OnResolveResult{Path: path, External: true}, nil
+						return esbuild.OnResolveResult{Path: path, External: true}, nil
 					})
-					build.OnLoad(api.OnLoadOptions{Filter: ".*", Namespace: "http"}, func(args api.OnLoadArgs) (api.OnLoadResult, error) {
+					build.OnLoad(esbuild.OnLoadOptions{Filter: ".*", Namespace: "http"}, func(args esbuild.OnLoadArgs) (esbuild.OnLoadResult, error) {
 						url, err := url.Parse(args.Path)
 						if err != nil {
-							return api.OnLoadResult{}, err
+							return esbuild.OnLoadResult{}, err
 						}
-						req := &http.Request{
-							Method: "GET",
-							URL:    url,
-							Header: map[string][]string{
-								"User-Agent": {ua},
-							},
-						}
-						resp, err := httpClient.Do(req)
+						resp, err := fetcher.Fetch(url)
 						if err != nil {
-							return api.OnLoadResult{}, errors.New("failed to read remote module " + args.Path + ": " + err.Error())
+							return esbuild.OnLoadResult{}, errors.New("failed to fetch module " + args.Path + ": " + err.Error())
 						}
 						defer resp.Body.Close()
+						if resp.StatusCode != 200 {
+							return esbuild.OnLoadResult{}, errors.New("failed to fetch module " + args.Path + ": " + resp.Status)
+						}
 						data, err := io.ReadAll(resp.Body)
 						if err != nil {
-							return api.OnLoadResult{}, errors.New("failed to read remote module " + args.Path)
+							return esbuild.OnLoadResult{}, errors.New("failed to fetch module " + args.Path)
 						}
-						loader := api.LoaderJS
-						switch path.Ext(url.Path) {
-						case ".js", ".cjs", ".mjs":
-							loader = api.LoaderJS
-						case ".ts", ".cts", ".mts":
-							loader = api.LoaderTS
-						case ".jsx":
-							loader = api.LoaderJSX
-						case ".tsx":
-							loader = api.LoaderTSX
-						case ".css":
-							loader = api.LoaderCSS
-						case ".json":
-							loader = api.LoaderJSON
-						}
+						sourceCodes = append(sourceCodes, data)
 						code := string(data)
-						return api.OnLoadResult{Contents: &code, Loader: loader}, nil
+						loader := esbuild.LoaderJS
+						switch path.Ext(url.Path) {
+						case ".js", ".mjs", ".cjs":
+							loader = esbuild.LoaderJS
+						case ".ts", ".mts", ".cts":
+							loader = esbuild.LoaderTS
+						case ".jsx":
+							loader = esbuild.LoaderJSX
+						case ".tsx":
+							loader = esbuild.LoaderTSX
+						case ".css":
+							loader = esbuild.LoaderCSS
+						case ".json":
+							loader = esbuild.LoaderJSON
+						case ".vue":
+							vueVersion, err := npmrc.getVueLoaderVersion(importMap)
+							if err != nil {
+								return esbuild.OnLoadResult{}, err
+							}
+							ret, err := npmrc.preTransform("vue", vueVersion, args.Path, code)
+							if err != nil {
+								return esbuild.OnLoadResult{}, err
+							}
+							code = ret.Code
+						case ".svelte":
+							svelteVersion, err := npmrc.getSvelteLoaderVersion(importMap)
+							if err != nil {
+								return esbuild.OnLoadResult{}, err
+							}
+							ret, err := npmrc.preTransform("svelte", svelteVersion, args.Path, code)
+							if err != nil {
+								return esbuild.OnLoadResult{}, err
+							}
+							code = ret.Code
+						}
+						return esbuild.OnLoadResult{Contents: &code, Loader: loader}, nil
 					})
 				},
 			},
 		},
 	})
 	if len(ret.Errors) > 0 {
-		return nil, errors.New(ret.Errors[0].Text)
+		err = errors.New(ret.Errors[0].Text)
+		return
 	}
-	return ret.OutputFiles[0].Contents, nil
+	for _, file := range ret.OutputFiles {
+		if strings.HasSuffix(file.Path, ".js") {
+			js = file.Contents
+		} else if strings.HasSuffix(file.Path, ".css") {
+			css = file.Contents
+		}
+	}
+	return
 }

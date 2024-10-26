@@ -11,14 +11,12 @@ import (
 	"github.com/esm-dev/esm.sh/server/storage"
 	logger "github.com/ije/gox/log"
 	"github.com/ije/rex"
-	"go.etcd.io/bbolt"
 )
 
 var (
 	buildQueue *BuildQueue
 	config     *Config
 	log        *logger.Logger
-	imDB       *bbolt.DB
 	cache      storage.Cache
 	db         storage.DataBase
 	fs         storage.FileSystem
@@ -86,22 +84,6 @@ func Serve(efs EmbedFS) {
 	db, err = storage.OpenDB(config.Database)
 	if err != nil {
 		log.Fatalf("open db(%s): %v", config.Database, err)
-	}
-
-	imDB, err = bbolt.Open(path.Join(config.WorkDir, "im.db"), 0644, nil)
-	if err != nil {
-		log.Fatalf("open im.db: %v", err)
-	}
-	err = imDB.Update(func(tx *bbolt.Tx) error {
-		_, err := tx.CreateBucketIfNotExists(keyAlias)
-		if err != nil {
-			return err
-		}
-		_, err = tx.CreateBucketIfNotExists(keyImportMaps)
-		return err
-	})
-	if err != nil {
-		log.Fatalf("init im.db: %v", err)
 	}
 
 	err = loadNodeLibs(efs)
