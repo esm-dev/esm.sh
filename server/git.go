@@ -78,7 +78,7 @@ func ghInstall(wd, name, hash string) (err error) {
 	c := &http.Client{
 		Timeout: 5 * time.Minute,
 	}
-	url := fmt.Sprintf(`https://codeload.github.com/%s/tar.gz/%s`, name, hash)
+	url := fmt.Sprintf("https://codeload.github.com/%s/tar.gz/%s", name, hash)
 	res, err := c.Get(url)
 	if err != nil {
 		return

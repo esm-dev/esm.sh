@@ -11,7 +11,7 @@ type ImportMap struct {
 
 func (m ImportMap) Resolve(path string) (string, bool) {
 	imports := m.Imports
-	// todo: use scopes
+	// todo: check `scopes`
 	if len(imports) > 0 {
 		if v, ok := imports[path]; ok {
 			if m.Support {
@@ -33,6 +33,8 @@ func (m ImportMap) Resolve(path string) (string, bool) {
 					nonTrailingSlashImports = append(nonTrailingSlashImports, [2]string{k, v})
 				}
 			}
+			// expand match
+			// e.g. `"react": "https://esm.sh/react@18` -> `"react/": "https://esm.sh/react@18/`
 			for _, p := range nonTrailingSlashImports {
 				k, v := p[0], p[1]
 				if strings.HasPrefix(path, k+"/") {
