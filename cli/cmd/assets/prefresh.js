@@ -1,7 +1,7 @@
 // Fast-refresh for Preact!
 // @see https://github.com/preactjs/prefresh
 
-import "https://esm.sh/@prefresh/core@1.5.2?external=*";
+import "https://esm.sh/*@prefresh/core@1.5.2";
 
 const __PREFRESH__ = globalThis.__PREFRESH__;
 const __REFRESH_RUNTIME__ = {

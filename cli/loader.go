@@ -15,13 +15,15 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/ije/gox/log"
 )
 
 type LoaderWorker struct {
+	lock      sync.Mutex
 	stdin     io.Writer
 	stdout    io.Reader
 	outReader *bufio.Reader
-	lock      sync.Mutex
 }
 
 func (lw *LoaderWorker) Start(loaderjs []byte) (err error) {
@@ -55,7 +57,7 @@ func (lw *LoaderWorker) Start(loaderjs []byte) (err error) {
 		lw.outReader = bufio.NewReader(lw.stdout)
 		if os.Getenv("DEBUG") == "1" {
 			denoVersion, _ := exec.Command(denoPath, "-v").Output()
-			fmt.Printf("Loader started (runtime: %s)\n", strings.TrimSpace(string(denoVersion)))
+			fmt.Println(log.Grey(fmt.Sprintf("[debug] loader started (runtime: %s)", strings.TrimSpace(string(denoVersion)))))
 		}
 	}
 	return
@@ -71,7 +73,7 @@ func (lw *LoaderWorker) Load(loaderType string, args ...any) (code string, err e
 	if os.Getenv("DEBUG") == "1" {
 		start := time.Now()
 		defer func() {
-			fmt.Printf("Loader.Load(%s) took %s\n", loaderType, time.Since(start))
+			fmt.Println(log.Grey(fmt.Sprintf("[debug] loader(%s) took %s", loaderType, time.Since(start))))
 		}()
 	}
 	loaderArgs := make([]any, len(args)+1)

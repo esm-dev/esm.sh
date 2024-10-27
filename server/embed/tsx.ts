@@ -8,8 +8,8 @@ const d = document;
 const l = localStorage;
 const stringify = JSON.stringify;
 const loaders = new Set(["jsx", "ts", "tsx", "babel"]);
-const isLocalhost = false;
 const target = "$TARGET"; // `$TARGET` is injected at build time
+const isLocalhost = false;
 
 function tsx() {
   let tsxScripts: { el: HTMLElement; lang: string; code: string }[] = [];
@@ -93,7 +93,7 @@ function tsx() {
 }
 
 async function initEsmTsx() {
-  const pkg = "/esm-tsx@1.1.1";
+  const pkg = "/esm-tsx@1.2.5";
   const [m, w] = await Promise.all([
     import(pkg + "/$TARGET/esm-tsx.mjs"),
     fetch(urlFromCurrentModule(pkg + "/pkg/esm_tsx_bg.wasm")),

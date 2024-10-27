@@ -18,13 +18,26 @@ async function unocss(configCSS, data) {
 let esmTsx;
 async function tsx(filename, importMap) {
   if (!esmTsx) {
-    esmTsx = import("npm:esm-tsx@1.2.3").then(async ({ init, transform }) => {
+    esmTsx = import("npm:esm-tsx@1.2.5").then(async ({ init, transform }) => {
       await init();
       return { transform };
     });
   }
+
   const { transform } = await esmTsx;
   const imports = importMap?.imports;
+  if (imports) {
+    const resolved = imports["react-dom"];
+    if (resolved && /^https?:\/\/\w/.test(resolved)) {
+      const url = new URL(resolved);
+      const query = url.searchParams;
+      if (!query.has("dev")) {
+        query.set("dev", "TRUE");
+        importMap.imports["react-dom"] = url.toString().replace("dev=TRUE", "dev");
+      }
+    }
+  }
+
   return transform({
     filename,
     code: await Deno.readTextFile("." + filename),

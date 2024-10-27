@@ -19,11 +19,11 @@ const __REFRESH__ = () => {
   }
   timer = setTimeout(() => {
     timer = null;
-    runtime.performReactRefresh();
+    RefreshRuntime.performReactRefresh();
   }, 30);
 };
 
-runtime.injectIntoGlobalHook(globalThis);
+RefreshRuntime.injectIntoGlobalHook(globalThis);
 globalThis.$RefreshReg$ = () => {};
 globalThis.$RefreshSig$ = () => type => type;
 
