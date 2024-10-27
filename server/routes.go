@@ -540,26 +540,22 @@ func routes(debug bool) rex.Handle {
 
 		if pathname == "/uno.css" {
 			query := ctx.Query()
-			p := query.Get("p")
-			if p == "" {
-				return rex.Redirect("https://unocss.dev", http.StatusFound)
-			}
-			pageUrlRaw, err := atobUrl(p)
+			ctxUrlRaw, err := atobUrl(query.Get("ctx"))
 			if err != nil {
-				return rex.Status(400, "Invalid page url")
+				return rex.Status(400, "Invalid context url")
 			}
-			pageUrl, err := url.Parse(pageUrlRaw)
+			ctxUrl, err := url.Parse(ctxUrlRaw)
 			if err != nil {
-				return rex.Status(400, "Invalid page url")
+				return rex.Status(400, "Invalid context url")
 			}
-			hostname := pageUrl.Hostname()
+			hostname := ctxUrl.Hostname()
 			if isLocalhost(hostname) {
 				ctx.SetHeader("Cache-Control", ccImmutable)
 				ctx.SetHeader("Content-Type", ctCSS)
 				return "body:after{position:fixed;top:0;left:0;z-index:9999;padding:18px 32px;width:100vw;content:'esm.sh/uno doesn't support local development, try serving your app with `esm.sh run`.';font-size:14px;background:rgba(255,232,232,.9);color:#f00;backdrop-filter:blur(8px)}"
 			}
 			if !regexpDomain.MatchString(hostname) {
-				return rex.Status(400, "Invalid page url")
+				return rex.Status(400, "Invalid context url")
 			}
 			// determine build target by `?target` query or `User-Agent` header
 			target := strings.ToLower(query.Get("target"))
@@ -568,7 +564,7 @@ func routes(debug bool) rex.Handle {
 				target = getBuildTargetByUA(ctx.UserAgent())
 			}
 			h := sha1.New()
-			h.Write([]byte(pageUrlRaw))
+			h.Write([]byte(ctxUrlRaw))
 			h.Write([]byte(query.Get("v")))
 			h.Write([]byte(target))
 			savePath := normalizeSavePath(zoneId, path.Join("modules", hex.EncodeToString(h.Sum(nil))+".css"))
@@ -585,7 +581,7 @@ func routes(debug bool) rex.Handle {
 				resp = f // auto closed
 			} else {
 				fetcher := newFetcher(ctx.UserAgent(), 15*time.Second)
-				res, err := fetcher.Fetch(pageUrl)
+				res, err := fetcher.Fetch(ctxUrl)
 				if err != nil {
 					return rex.Status(500, "Failed to fetch page html")
 				}
@@ -596,31 +592,8 @@ func routes(debug bool) rex.Handle {
 					}
 					return rex.Status(500, "Failed to fetch page html")
 				}
-				configCSS := ""
-				c := query.Get("c")
-				if c != "" {
-					configPath, err := atobUrl(c)
-					if err != nil {
-						return rex.Status(400, "Invalid config css page")
-					}
-					res, err := fetcher.Fetch(pageUrl.ResolveReference(&url.URL{Path: configPath}))
-					if err != nil {
-						return rex.Status(500, "Failed to fetch config css")
-					}
-					defer res.Body.Close()
-					// ignore non-exist config css
-					if res.StatusCode != 404 {
-						if res.StatusCode != 200 {
-							return rex.Status(500, "Failed to fetch config css")
-						}
-						css, err := io.ReadAll(res.Body)
-						if err != nil {
-							return rex.Status(500, "Failed to fetch config css")
-						}
-						configCSS = string(css)
-					}
-				}
 				tokenizer := html.NewTokenizer(io.LimitReader(res.Body, 2*MB))
+				configCSS := ""
 				input := []string{}
 				jsEntries := map[string]struct{}{}
 				importMap := ImportMap{}
@@ -666,7 +639,7 @@ func routes(debug bool) rex.Handle {
 								if len(innerText) > 0 {
 									err := json.Unmarshal(innerText, &importMap)
 									if err == nil {
-										importMap.Src = pageUrl.Path
+										importMap.Src = ctxUrl.Path
 									}
 								}
 							} else if srcAttr == "" {
@@ -689,8 +662,33 @@ func routes(debug bool) rex.Handle {
 						}
 					}
 				}
+				if configCSS == "" {
+					res, err := fetcher.Fetch(ctxUrl.ResolveReference(&url.URL{Path: "./uno.css"}))
+					if err != nil {
+						return rex.Status(500, "Failed to lookup config css")
+					}
+					if res.StatusCode == 404 {
+						res.Body.Close()
+						res, err = fetcher.Fetch(ctxUrl.ResolveReference(&url.URL{Path: "/uno.css"}))
+						if err != nil {
+							return rex.Status(500, "Failed to lookup config css")
+						}
+					}
+					defer res.Body.Close()
+					// ignore non-exist config css
+					if res.StatusCode != 404 {
+						if res.StatusCode != 200 {
+							return rex.Status(500, "Failed to fetch config css")
+						}
+						css, err := io.ReadAll(res.Body)
+						if err != nil {
+							return rex.Status(500, "Failed to fetch config css")
+						}
+						configCSS = string(css)
+					}
+				}
 				for src := range jsEntries {
-					url := pageUrl.ResolveReference(&url.URL{Path: src})
+					url := ctxUrl.ResolveReference(&url.URL{Path: src})
 					_, _, sourceCodes, err := bundleRemoteModule(npmrc, url.String(), importMap, fetcher)
 					if err == nil {
 						for _, code := range sourceCodes {

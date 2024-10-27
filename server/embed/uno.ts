@@ -12,11 +12,7 @@
     const unocssUrl = new URL("/uno.css", currentScript.src);
     const q = unocssUrl.searchParams;
     const v = document.querySelector<HTMLMetaElement>("meta[name=version]")?.content;
-    const c = currentScript.getAttribute("config");
-    q.set("p", btoaUrl(origin + pathname));
-    if (c) {
-      q.set("c", btoaUrl(c));
-    }
+    q.set("ctx", btoaUrl(origin + pathname));
     if (v) {
       q.set("v", v);
     }

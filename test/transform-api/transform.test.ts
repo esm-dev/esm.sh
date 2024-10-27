@@ -109,10 +109,8 @@ Deno.test("transform api(remote module, import maps is not supported)", async ()
 
 Deno.test("transform api(uno.css)", async () => {
   const res1 = await fetch(
-    "http://localhost:8080/uno.css?p="
-      + btoaUrl("https://ije.github.io/esm-run-demo/unocss/")
-      + "&c="
-      + btoaUrl("./uno.css"),
+    "http://localhost:8080/uno.css?ctx="
+      + btoaUrl("https://ije.github.io/esm-run-demo/unocss/"),
   );
   assertEquals(res1.status, 200);
   assertEquals(res1.headers.get("Content-Type"), "text/css; charset=utf-8");
