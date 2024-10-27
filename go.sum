@@ -10,8 +10,8 @@ github.com/gorilla/websocket v1.5.3 h1:saDtZ6Pbx/0u+bgYQ3q96pZgCzfhKXGPqt7kZ72aN
 github.com/gorilla/websocket v1.5.3/go.mod h1:YR8l580nyteQvAITg2hZ9XVh4b55+EU/adAjf1fMHhE=
 github.com/ije/esbuild-internal v0.24.0 h1:ekQilnTP0YQBpqHwaZwpIWH/YbehY4xctKW8gU+AmGQ=
 github.com/ije/esbuild-internal v0.24.0/go.mod h1:s7HvKZ4ZGifyzvgWpSwnJOQTr6b+bsgfNBZ8HAEwwSM=
-github.com/ije/gox v0.6.3 h1:deQW+euX6ZRmSYz3eFRkQvAKYDdWgSJECOBEETmk2oc=
-github.com/ije/gox v0.6.3/go.mod h1:HeDdgw2DUqWKHUyRjy9pdS4ESVxxv+0N5iOufd1JGRs=
+github.com/ije/gox v0.6.4 h1:5zzqcumoNBQP/X6hR0J4Vc5B/W8Ma4JkhzCwW0WMv/w=
+github.com/ije/gox v0.6.4/go.mod h1:HeDdgw2DUqWKHUyRjy9pdS4ESVxxv+0N5iOufd1JGRs=
 github.com/ije/rex v1.13.0 h1:k+nZ8Qyy181oo2+P8u1fKZpdnPcfMVK/u67CC2D1cUg=
 github.com/ije/rex v1.13.0/go.mod h1:LP5XsqaqHuoRwXBf6ExIGFKFKceG3zYMLJpQV9lfcBg=
 github.com/mileusna/useragent v1.3.5 h1:SJM5NzBmh/hO+4LGeATKpaEX9+b4vcGg2qXGLiNGDws=
