@@ -71,6 +71,9 @@ func (m ESM) PackageName() string {
 	if m.GhPrefix {
 		return "gh/" + s
 	}
+	if m.PrPrefix {
+		return "pr/" + s
+	}
 	return s
 }
 
@@ -822,7 +825,7 @@ func routes(debug bool) rex.Handle {
 				}
 				js, css, _, err := bundleRemoteModule(npmrc, urlRaw, importMap, fetcher)
 				if err != nil {
-					return rex.Status(500, "Failed to build module")
+					return rex.Status(500, "Failed to build module:"+err.Error())
 				}
 				code := string(js)
 				if len(css) > 0 {

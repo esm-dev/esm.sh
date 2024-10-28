@@ -1,4 +1,4 @@
-import { generate } from "esm-unocss";
+import { transform } from "esm-vue-sfc-compiler";
 const { stdin, stdout } = process;
 
 function readStdin() {
@@ -13,8 +13,8 @@ function readStdin() {
 }
 
 try {
-  const [data, configCSS] = JSON.parse(await readStdin());
-  const code = await generate(data, configCSS ? { configCSS } : undefined);
+  const [filename, srouceCode] = JSON.parse(await readStdin());
+  const code = await transform(filename, srouceCode);
   stdout.write(JSON.stringify({ code }));
 } catch (err) {
   stdout.write(JSON.stringify({ error: err.message, stack: err.stack }));

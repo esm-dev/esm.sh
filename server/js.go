@@ -162,21 +162,21 @@ func bundleRemoteModule(npmrc *NpmRC, entry string, importMap ImportMap, fetcher
 						case ".json":
 							loader = esbuild.LoaderJSON
 						case ".vue":
-							vueVersion, err := npmrc.getVueLoaderVersion(importMap)
+							vueVersion, err := npmrc.getVueVersion(importMap)
 							if err != nil {
 								return esbuild.OnLoadResult{}, err
 							}
-							ret, err := npmrc.preTransform("vue", vueVersion, args.Path, code)
+							ret, err := preLoad(npmrc, "vue", args.Path, code, PackageID{"@vue/compiler-sfc", vueVersion}, "esm-vue-sfc-compiler@0.1.0")
 							if err != nil {
 								return esbuild.OnLoadResult{}, err
 							}
 							code = ret.Code
 						case ".svelte":
-							svelteVersion, err := npmrc.getSvelteLoaderVersion(importMap)
+							svelteVersion, err := npmrc.getSvelteVersion(importMap)
 							if err != nil {
 								return esbuild.OnLoadResult{}, err
 							}
-							ret, err := npmrc.preTransform("svelte", svelteVersion, args.Path, code)
+							ret, err := preLoad(npmrc, "svelte", args.Path, code, PackageID{"svelte", svelteVersion})
 							if err != nil {
 								return esbuild.OnLoadResult{}, err
 							}

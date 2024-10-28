@@ -2,7 +2,6 @@ package server
 
 import (
 	"bytes"
-	"context"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
@@ -55,6 +54,15 @@ type PackageJSONRaw struct {
 	Files            []string               `json:"files"`
 	Deprecated       interface{}            `json:"deprecated"`
 	Esmsh            interface{}            `json:"esm.sh"`
+}
+
+type PackageID struct {
+	Name    string
+	Version string
+}
+
+func (p *PackageID) String() string {
+	return p.Name + "@" + p.Version
 }
 
 // ToNpmPackage converts PackageJSONRaw to PackageJSON
@@ -645,7 +653,7 @@ func (rc *NpmRC) createDotNpmRcFile(dir string) error {
 	return os.WriteFile(path.Join(dir, ".npmrc"), buf.Bytes(), 0644)
 }
 
-func (npmrc *NpmRC) getSvelteLoaderVersion(importMap ImportMap) (svelteVersion string, err error) {
+func (npmrc *NpmRC) getSvelteVersion(importMap ImportMap) (svelteVersion string, err error) {
 	svelteVersion = "5"
 	if len(importMap.Imports) > 0 {
 		sveltePath, ok := importMap.Imports["svelte"]
@@ -670,7 +678,7 @@ func (npmrc *NpmRC) getSvelteLoaderVersion(importMap ImportMap) (svelteVersion s
 	return
 }
 
-func (npmrc *NpmRC) getVueLoaderVersion(importMap ImportMap) (vueVersion string, err error) {
+func (npmrc *NpmRC) getVueVersion(importMap ImportMap) (vueVersion string, err error) {
 	vueVersion = "3"
 	if len(importMap.Imports) > 0 {
 		vuePath, ok := importMap.Imports["vue"]
@@ -692,83 +700,6 @@ func (npmrc *NpmRC) getVueLoaderVersion(importMap ImportMap) (vueVersion string,
 	if semverLessThan(vueVersion, "3.0.0") {
 		err = errors.New("unsupported vue version, only 3.0.0+ is supported")
 	}
-	return
-}
-
-func (npmrc *NpmRC) preTransform(loaderName string, loaderVersion string, specifier string, sourceCode string, npmDeps ...string) (output *TransformOutput, err error) {
-	var wd string
-	if loaderVersion == "" {
-		wd = path.Join(npmrc.StoreDir(), npmDeps[0])
-	} else {
-		wd = path.Join(npmrc.StoreDir(), loaderName+"@"+loaderVersion)
-	}
-	if !existsFile(path.Join(wd, "package.json")) {
-		if loaderVersion != "" {
-			_, err = npmrc.installPackage(ESM{PkgName: loaderName, PkgVersion: loaderVersion})
-			if err != nil {
-				err = errors.New("failed to install " + loaderName + "@" + loaderVersion)
-				return
-			}
-		}
-		if len(npmDeps) > 0 {
-			ensureDir(wd)
-			err = npmrc.pnpmi(wd, append([]string{"--prefer-offline"}, npmDeps...)...)
-			if err != nil {
-				err = errors.New("failed to install " + strings.Join(npmDeps, " "))
-				return
-			}
-		}
-	}
-	loaderJsFp := path.Join(wd, "loader.mjs")
-	if !existsFile(loaderJsFp) {
-		var loaderJS []byte
-		if loaderVersion != "" {
-			major, _ := utils.SplitByFirstByte(loaderVersion, '.')
-			loaderJS, err = embedFS.ReadFile(fmt.Sprintf("server/embed/internal/%s_loader@%s.js", loaderName, major))
-		} else {
-			loaderJS, err = embedFS.ReadFile(fmt.Sprintf("server/embed/internal/%s_loader.js", loaderName))
-		}
-		if err != nil {
-			err = fmt.Errorf("could not find %s loader", loaderName)
-			return
-		}
-		err = os.WriteFile(loaderJsFp, loaderJS, 0644)
-		if err != nil {
-			return
-		}
-	}
-
-	stdin := bytes.NewBuffer(nil)
-	stdout := bytes.NewBuffer(nil)
-	stderr := bytes.NewBuffer(nil)
-	err = json.NewEncoder(stdin).Encode([]string{specifier, sourceCode})
-	if err != nil {
-		return
-	}
-
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
-
-	cmd := exec.CommandContext(ctx, "node", "loader.mjs")
-	cmd.Dir = wd
-	cmd.Stdin = stdin
-	cmd.Stdout = stdout
-	cmd.Stderr = stderr
-	err = cmd.Run()
-	if err != nil {
-		if stderr.Len() > 0 {
-			err = fmt.Errorf("preTransform: %s", stderr.String())
-		}
-		return
-	}
-
-	var ret TransformOutput
-	err = json.NewDecoder(stdout).Decode(&ret)
-	if err != nil {
-		return
-	}
-
-	output = &ret
 	return
 }
 
