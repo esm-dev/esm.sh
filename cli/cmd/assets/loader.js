@@ -1,18 +1,18 @@
 import { TextLineStream } from "jsr:@std/streams@1.0.7/text-line-stream";
 
 const enc = new TextEncoder();
-const output = (data) => Deno.stdout.write(enc.encode(">>>" + JSON.stringify(data) + "\n"));
-const error = (message) => Deno.stdout.write(enc.encode(">>!" + JSON.stringify(message) + "\n"));
+const output = (data, type = ">") => Deno.stdout.write(enc.encode(">>" + type + JSON.stringify(data) + "\n"));
+const error = (message) => output(message, "!");
 
 let uno;
 async function unocss(configCSS, data) {
   if (!uno || uno.configCSS !== configCSS) {
-    const { init } = await import("npm:esm-unocss@0.8.0");
-    uno = await init(configCSS);
+    uno = import("npm:esm-unocss@0.8.0").then(({ init }) => init(configCSS));
     uno.configCSS = configCSS;
   }
-  await uno.update(data);
-  return await uno.generate();
+  const { update, generate } = await uno;
+  await update(data);
+  return await generate();
 }
 
 let esmTsx;
@@ -23,21 +23,23 @@ async function tsx(filename, importMap) {
       return { transform };
     });
   }
-
   const { transform } = await esmTsx;
   const imports = importMap?.imports;
   if (imports) {
-    const resolved = imports["react-dom"];
-    if (resolved && /^https?:\/\/\w/.test(resolved)) {
-      const url = new URL(resolved);
-      const query = url.searchParams;
-      if (!query.has("dev")) {
-        query.set("dev", "TRUE");
-        importMap.imports["react-dom"] = url.toString().replace("dev=TRUE", "dev");
+    for (const [specifier, resolved] of Object.entries(imports)) {
+      if (
+        (specifier === "react-dom" || specifier.startsWith("react-dom/"))
+        && (resolved.startsWith("https://") || resolved.startsWith("http://"))
+      ) {
+        const url = new URL(resolved);
+        const query = url.searchParams;
+        if (!query.has("dev")) {
+          query.set("dev", "true");
+          importMap.imports["react-dom"] = url.origin + url.pathname + url.query.replace("dev=true", "dev");
+        }
       }
     }
   }
-
   return transform({
     filename,
     code: await Deno.readTextFile("." + filename),
@@ -62,7 +64,7 @@ for await (const line of Deno.stdin.readable.pipeThrough(new TextDecoderStream()
         output(await tsx(...args));
         break;
       default:
-        error(`Unknown loader type: ${type}`);
+        error("Unknown loader type: " + type);
     }
   } catch (e) {
     error(e.message);
