@@ -4,8 +4,8 @@
 @import "@unocss/preset-web-fonts";
 
 :theme {
-  --color-primary: #3b82f6;
-  --font-family-sans: webfont("Inter");
+  --color-primary: #232323;
+  --font-family-sans: webfont("Inter:400,500,600");
   --animation-duration-spin: 1s;
   --animation-timing-spin: ease;
 }
@@ -21,5 +21,5 @@
 }
 
 .btn {
-  --uno: py-2 px-4 font-sans rounded-lg shadow-md text-white bg-primary hover:animate-spin border-none;
+  --uno: py-2 px-4 font-sans rounded-lg shadow-md text-white bg-primary border-none;
 }
