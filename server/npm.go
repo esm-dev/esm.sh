@@ -102,7 +102,7 @@ func (a *PackageJSONRaw) ToNpmPackage() *PackageJSON {
 		if s, ok := a.SideEffects.(string); ok {
 			if s == "false" {
 				sideEffectsFalse = true
-			} else if endsWith(s, jsExts...) {
+			} else if endsWith(s, esExts...) {
 				sideEffects = NewStringSet()
 				sideEffects.Add(s)
 			}
@@ -111,7 +111,7 @@ func (a *PackageJSONRaw) ToNpmPackage() *PackageJSON {
 		} else if m, ok := a.SideEffects.([]interface{}); ok && len(m) > 0 {
 			sideEffects = NewStringSet()
 			for _, v := range m {
-				if name, ok := v.(string); ok && endsWith(name, jsExts...) {
+				if name, ok := v.(string); ok && endsWith(name, esExts...) {
 					sideEffects.Add(name)
 				}
 			}

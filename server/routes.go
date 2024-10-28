@@ -651,10 +651,10 @@ func routes(debug bool) rex.Handle {
 								input = append(input, string(tokenizer.Text()))
 							} else {
 								if mainAttr != "" && isHttpSepcifier(srcAttr) {
-									if !isHttpSepcifier(mainAttr) && endsWith(mainAttr, jsExts...) {
+									if !isHttpSepcifier(mainAttr) && endsWith(mainAttr, esExts...) {
 										jsEntries[mainAttr] = struct{}{}
 									}
-								} else if !isHttpSepcifier(srcAttr) && endsWith(srcAttr, jsExts...) {
+								} else if !isHttpSepcifier(srcAttr) && endsWith(srcAttr, esExts...) {
 									jsEntries[srcAttr] = struct{}{}
 								}
 							}
@@ -735,7 +735,7 @@ func routes(debug bool) rex.Handle {
 			if (u.Scheme != "http" && u.Scheme != "https") || isLocalhost(hostname) || !regexpDomain.MatchString(hostname) {
 				return rex.Status(400, "Invalid URL")
 			}
-			if !(isCss || includes(jsExts, extname) || extname == ".vue" || extname == ".svelte") {
+			if !(isCss || includes(esExts, extname) || extname == ".vue" || extname == ".svelte") {
 				return rex.Redirect(urlRaw, http.StatusMovedPermanently)
 			}
 			im := query.Get("im")

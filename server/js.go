@@ -15,12 +15,12 @@ import (
 	"github.com/ije/esbuild-internal/logger"
 )
 
-var jsExts = []string{".js", ".mjs", ".jsx", ".ts", ".mts", ".tsx", ".cjs", ".cts"}
+var esExts = []string{".js", ".mjs", ".jsx", ".ts", ".mts", ".tsx", ".cjs", ".cts"}
 
 // stripModuleExt strips the module extension from the given string.
 func stripModuleExt(s string, exts ...string) string {
 	if len(exts) == 0 {
-		exts = jsExts
+		exts = esExts
 	}
 	for _, ext := range exts {
 		if strings.HasSuffix(s, ext) {
@@ -30,8 +30,8 @@ func stripModuleExt(s string, exts ...string) string {
 	return s
 }
 
-// validateJSFile validates the given javascript file.
-func validateJSFile(filename string) (isESM bool, namedExports []string, err error) {
+// validateJsModuleFromFile validates javascript/typescript module from the given file.
+func validateJsModuleFromFile(filename string) (isESM bool, namedExports []string, err error) {
 	data, err := os.ReadFile(filename)
 	if err != nil {
 		return
