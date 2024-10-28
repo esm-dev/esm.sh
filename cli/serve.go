@@ -146,6 +146,7 @@ func (h *H) ServeHtml(w http.ResponseWriter, r *http.Request, pathname string) {
 	// reload the page when the html file is modified
 	fmt.Fprintf(w, `<script type="module">import createHotContext from"/@hmr";const hot=createHotContext("%s");hot.watch(()=>location.reload());`, pathname)
 	if unocssLink != "" {
+		// reload the unocss when the module dependency tree is changed
 		fmt.Fprintf(w, `hot.watch("*",(kind,filename)=>{if(/\.(jsx|tsx|vue|svelte)$/i.test(filename)){document.getElementById("@unocss").href="%s&t="+Date.now().toString(36)}})`, unocssLink)
 	}
 	w.Write([]byte("</script>"))

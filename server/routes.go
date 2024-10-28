@@ -101,7 +101,7 @@ func routes(debug bool) rex.Handle {
 		if ctx.R.Method == "POST" {
 			switch pathname {
 			case "/transform":
-				var input TransformInput
+				var input TransformOptions
 				err := json.NewDecoder(io.LimitReader(ctx.R.Body, 2*MB)).Decode(&input)
 				ctx.R.Body.Close()
 				if err != nil {
@@ -171,9 +171,9 @@ func routes(debug bool) rex.Handle {
 					}
 				}
 
-				output, err := transform(npmrc, TransformOptions{
-					TransformInput: input,
-					importMap:      importMap,
+				output, err := transform(npmrc, ResolvedTransformOptions{
+					TransformOptions: input,
+					importMap:        importMap,
 				})
 				if err != nil {
 					return rex.Err(400, err.Error())
@@ -699,14 +699,16 @@ func routes(debug bool) rex.Handle {
 						}
 					}
 				}
-				out, err := transform(npmrc, TransformOptions{
-					TransformInput: TransformInput{
+				out, err := transform(npmrc, ResolvedTransformOptions{
+					TransformOptions: TransformOptions{
 						Lang:   "css",
-						Code:   configCSS,
 						Target: target,
 						Minify: true,
 					},
-					unocssInput: input,
+					unocss: &UnoCSSTransformOptions{
+						input:     input,
+						configCSS: configCSS,
+					},
 				})
 				if err != nil {
 					return rex.Status(500, "Failed to generate uno.css")
@@ -831,8 +833,8 @@ func routes(debug bool) rex.Handle {
 				if len(css) > 0 {
 					code += fmt.Sprintf("\nvar style=document.createElement('style');style.textContent=%s;document.head.appendChild(style);", utils.MustEncodeJSON(css))
 				}
-				out, err := transform(npmrc, TransformOptions{
-					TransformInput: TransformInput{
+				out, err := transform(npmrc, ResolvedTransformOptions{
+					TransformOptions: TransformOptions{
 						Filename: u.Path,
 						Code:     code,
 						Target:   target,

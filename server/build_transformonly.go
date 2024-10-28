@@ -16,7 +16,7 @@ import (
 	"github.com/ije/gox/utils"
 )
 
-type TransformInput struct {
+type TransformOptions struct {
 	Filename        string          `json:"filename"`
 	Lang            string          `json:"lang"`
 	Code            string          `json:"code"`
@@ -27,11 +27,16 @@ type TransformInput struct {
 	Minify          bool            `json:"minify"`
 }
 
-type TransformOptions struct {
-	TransformInput
-	unocssInput   []string
+type ResolvedTransformOptions struct {
+	TransformOptions
+	unocss        *UnoCSSTransformOptions
 	importMap     ImportMap
 	globalVersion string
+}
+
+type UnoCSSTransformOptions struct {
+	input     []string
+	configCSS string
 }
 
 type TransformOutput struct {
@@ -39,7 +44,7 @@ type TransformOutput struct {
 	Map  string `json:"map,omitempty"`
 }
 
-func transform(npmrc *NpmRC, options TransformOptions) (out TransformOutput, err error) {
+func transform(npmrc *NpmRC, options ResolvedTransformOptions) (out TransformOutput, err error) {
 	target := esbuild.ESNext
 	if options.Target != "" {
 		if t, ok := targets[options.Target]; ok {
@@ -65,9 +70,9 @@ func transform(npmrc *NpmRC, options TransformOptions) (out TransformOutput, err
 	case "tsx":
 		loader = esbuild.LoaderTSX
 	case "css":
-		if options.unocssInput != nil {
+		if options.unocss != nil {
 			// pre-process uno.css
-			o, e := preLoad(npmrc, "unocss", strings.Join(options.unocssInput, "\n"), sourceCode, PackageID{"esm-unocss", "0.8.0"}, "@iconify/json@2.2.260")
+			o, e := preLoad(npmrc, "unocss", strings.Join(options.unocss.input, "\n"), options.unocss.configCSS, PackageID{"esm-unocss", "0.8.0"}, "@iconify/json@2.2.260")
 			if e != nil {
 				log.Error("failed to generate uno.css:", e)
 				err = errors.New("failed to generate uno.css")
