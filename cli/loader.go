@@ -73,7 +73,11 @@ func (lw *LoaderWorker) Load(loaderType string, args ...any) (code string, err e
 	if os.Getenv("DEBUG") == "1" {
 		start := time.Now()
 		defer func() {
-			fmt.Println(log.Grey(fmt.Sprintf("[debug] loader(%s) took %s", loaderType, time.Since(start))))
+			if loaderType == "unocss" {
+				fmt.Println(log.Grey(fmt.Sprintf("[debug] load 'uno.css' in %s", time.Since(start))))
+			} else {
+				fmt.Println(log.Grey(fmt.Sprintf("[debug] load '%s' in %s", args[0], time.Since(start))))
+			}
 		}()
 	}
 	loaderArgs := make([]any, len(args)+1)

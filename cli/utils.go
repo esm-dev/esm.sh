@@ -5,8 +5,10 @@ import (
 	"errors"
 	"strings"
 
-	"github.com/evanw/esbuild/pkg/api"
+	esbuild "github.com/evanw/esbuild/pkg/api"
 )
+
+var esExts = []string{".js", ".mjs", ".jsx", ".ts", ".mts", ".tsx", ".cjs", ".cts"}
 
 // isHttpSepcifier returns true if the specifier is a remote URL.
 func isHttpSepcifier(specifier string) bool {
@@ -18,18 +20,19 @@ func isRelativeSpecifier(specifier string) bool {
 	return strings.HasPrefix(specifier, "./") || strings.HasPrefix(specifier, "../")
 }
 
+// isAbsolutePathSpecifier returns true if the specifier is an absolute path.
 func isAbsolutePathSpecifier(specifier string) bool {
 	return strings.HasPrefix(specifier, "/") || strings.HasPrefix(specifier, "file://")
 }
 
-// checks if the given attribute name is a W3C standard attribute.
-func isW3CStandardAttribute(attr string) bool {
-	switch attr {
-	case "id", "href", "src", "name", "placeholder", "rel", "role", "selected", "checked", "slot", "style", "tilte", "type", "value", "width", "height", "hidden", "dir", "dragable", "lang", "spellcheck", "tabindex", "translate", "popover":
-		return true
-	default:
-		return strings.HasPrefix(attr, "aria-") || strings.HasPrefix(attr, "data-")
+// endsWith returns true if the given string ends with any of the suffixes.
+func endsWith(s string, suffixs ...string) bool {
+	for _, suffix := range suffixs {
+		if strings.HasSuffix(s, suffix) {
+			return true
+		}
 	}
+	return false
 }
 
 // btoaUrl converts a string to a base64 string.
@@ -46,35 +49,34 @@ func atobUrl(s string) (string, error) {
 	return string(data), nil
 }
 
-// bundleModule builds the remote module and it's submodules.
-func bundleModule(entry string) ([]byte, error) {
-	ret := api.Build(api.BuildOptions{
+func walkDependencyTree(entry string, importMap ImportMap) (tree map[string][]byte, err error) {
+	ret := esbuild.Build(esbuild.BuildOptions{
 		EntryPoints:      []string{entry},
+		Target:           esbuild.ESNext,
+		Format:           esbuild.FormatESModule,
+		Platform:         esbuild.PlatformBrowser,
+		JSX:              esbuild.JSXPreserve,
 		Bundle:           true,
-		Format:           api.FormatESModule,
-		Target:           api.ESNext,
-		Platform:         api.PlatformBrowser,
 		MinifyWhitespace: true,
-		MinifySyntax:     true,
-		JSX:              api.JSXPreserve,
-		LegalComments:    api.LegalCommentsNone,
-		Plugins: []api.Plugin{
+		Outdir:           "/esbuild",
+		Write:            false,
+		Plugins: []esbuild.Plugin{
 			{
-				Name: "external-resolver",
-				Setup: func(build api.PluginBuild) {
-					build.OnResolve(api.OnResolveOptions{Filter: ".*"}, func(args api.OnResolveArgs) (api.OnResolveResult, error) {
-						path := args.Path
+				Name: "loader",
+				Setup: func(build esbuild.PluginBuild) {
+					build.OnResolve(esbuild.OnResolveOptions{Filter: ".*"}, func(args esbuild.OnResolveArgs) (esbuild.OnResolveResult, error) {
+						path, _ := importMap.Resolve(args.Path)
 						if isHttpSepcifier(args.Path) || (!isRelativeSpecifier(args.Path) && !isAbsolutePathSpecifier(args.Path)) {
-							return api.OnResolveResult{Path: path, External: true}, nil
+							return esbuild.OnResolveResult{Path: path, External: true}, nil
 						}
-						return api.OnResolveResult{}, nil
+						return esbuild.OnResolveResult{}, nil
 					})
 				},
 			},
 		},
 	})
 	if len(ret.Errors) > 0 {
-		return nil, errors.New(ret.Errors[0].Text)
+		err = errors.New(ret.Errors[0].Text)
 	}
-	return ret.OutputFiles[0].Contents, nil
+	return
 }

@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/gorilla/websocket"
+	"github.com/ije/gox/log"
 	"github.com/ije/gox/utils"
 	"golang.org/x/net/html"
 	"golang.org/x/net/html/atom"
@@ -29,12 +30,6 @@ type H struct {
 	rwlock  sync.RWMutex
 	lock    sync.RWMutex
 	cache   sync.Map
-}
-
-type ImportMap struct {
-	Src     string                       `json:"$src,omitempty"`
-	Imports map[string]string            `json:"imports,omitempty"`
-	Scopes  map[string]map[string]string `json:"scopes,omitempty"`
 }
 
 func (h *H) ServeHtml(w http.ResponseWriter, r *http.Request, pathname string) {
@@ -153,7 +148,7 @@ func (h *H) ServeHtml(w http.ResponseWriter, r *http.Request, pathname string) {
 	fmt.Fprintf(w, `<script>console.log("%%c💚 Built with esm.sh/run, uncheck \"Disable cache\" in Network tab for better DX!", "color:green")</script>`)
 }
 
-func (h *H) ServeTSX(w http.ResponseWriter, r *http.Request, pathname string) {
+func (h *H) ServeModule(w http.ResponseWriter, r *http.Request, pathname string) {
 	im, err := atobUrl(r.URL.Query().Get("im"))
 	if err != nil {
 		http.Error(w, "Bad Request", 400)
@@ -190,7 +185,10 @@ func (h *H) ServeTSX(w http.ResponseWriter, r *http.Request, pathname string) {
 				if typeAttr == "importmap" {
 					tokenizer.Next()
 					if json.Unmarshal(tokenizer.Text(), &importMap) != nil {
-						http.Error(w, "Invalid import map", 400)
+						header := w.Header()
+						header.Set("Content-Type", "application/javascript; charset=utf-8")
+						header.Set("Cache-Control", "max-age=0, must-revalidate")
+						w.Write([]byte(`throw new Error("Failed to parse import map: invalid JSON")`))
 						return
 					}
 					importMap.Src = "file://" + im
@@ -222,8 +220,8 @@ func (h *H) ServeTSX(w http.ResponseWriter, r *http.Request, pathname string) {
 		w.WriteHeader(http.StatusNotModified)
 		return
 	}
-	cacheKey := fmt.Sprintf("tsx-%s", pathname)
-	etagCacheKey := fmt.Sprintf("tsx-%s.etag", pathname)
+	cacheKey := fmt.Sprintf("module-%s", pathname)
+	etagCacheKey := fmt.Sprintf("module-%s.etag", pathname)
 	if v, ok := h.cache.Load(cacheKey); ok {
 		if e, ok := h.cache.Load(etagCacheKey); ok {
 			if e.(string) == etag {
@@ -238,13 +236,13 @@ func (h *H) ServeTSX(w http.ResponseWriter, r *http.Request, pathname string) {
 	}
 	loader, err := h.getLoader()
 	if err != nil {
-		fmt.Println(err)
+		fmt.Println(log.Red(err.Error()))
 		http.Error(w, "Internal Server Error", 500)
 		return
 	}
-	js, err := loader.Load("tsx", pathname, importMap)
+	js, err := loader.Load("module", pathname, importMap)
 	if err != nil {
-		fmt.Println(err)
+		fmt.Println(log.Red(err.Error()))
 		http.Error(w, "Internal Server Error", 500)
 		return
 	}
@@ -255,16 +253,6 @@ func (h *H) ServeTSX(w http.ResponseWriter, r *http.Request, pathname string) {
 	header.Set("Cache-Control", "max-age=0, must-revalidate")
 	header.Set("Etag", etag)
 	w.Write([]byte(js))
-}
-
-func (h *H) ServeVue(w http.ResponseWriter, r *http.Request, pathname string) {
-	w.WriteHeader(http.StatusNotImplemented)
-	w.Write([]byte("Not Implemented"))
-}
-
-func (h *H) ServeSvelte(w http.ResponseWriter, r *http.Request, pathname string) {
-	w.WriteHeader(http.StatusNotImplemented)
-	w.Write([]byte("Not Implemented"))
 }
 
 func (h *H) ServeUnoCSS(w http.ResponseWriter, r *http.Request) {
@@ -286,9 +274,9 @@ func (h *H) ServeUnoCSS(w http.ResponseWriter, r *http.Request) {
 	defer imHtmlFile.Close()
 	configCSS := ""
 	tokenizer := html.NewTokenizer(imHtmlFile)
-	inHead := false
 	input := []string{}
-	scripts := []string{}
+	jsEntries := map[string]struct{}{}
+	importMap := ImportMap{}
 	for {
 		tt := tokenizer.Next()
 		if tt == html.ErrorToken {
@@ -296,69 +284,61 @@ func (h *H) ServeUnoCSS(w http.ResponseWriter, r *http.Request) {
 		}
 		if tt == html.StartTagToken {
 			name, moreAttr := tokenizer.TagName()
-			if bytes.Equal(name, []byte("head")) {
-				inHead = true
-			}
-			if inHead {
-				if bytes.Equal(name, []byte("style")) {
-					for moreAttr {
-						var key, val []byte
-						key, val, moreAttr = tokenizer.TagAttr()
-						if bytes.Equal(key, []byte("type")) && bytes.Equal(val, []byte("uno/css")) {
-							tokenizer.Next()
-							innerText := bytes.TrimSpace(tokenizer.Text())
-							if len(innerText) > 0 {
-								configCSS += string(innerText)
-							}
-							break
+			switch string(name) {
+			case "style":
+				for moreAttr {
+					var key, val []byte
+					key, val, moreAttr = tokenizer.TagAttr()
+					if bytes.Equal(key, []byte("type")) && bytes.Equal(val, []byte("uno/css")) {
+						tokenizer.Next()
+						innerText := bytes.TrimSpace(tokenizer.Text())
+						if len(innerText) > 0 {
+							configCSS += string(innerText)
 						}
+						break
 					}
 				}
-			} else if bytes.Equal(name, []byte("script")) {
+			case "script":
 				srcAttr := ""
 				mainAttr := ""
+				typeAttr := ""
 				for moreAttr {
 					var key, val []byte
 					key, val, moreAttr = tokenizer.TagAttr()
 					if bytes.Equal(key, []byte("src")) {
 						srcAttr = string(val)
-						if mainAttr != "" || !strings.HasSuffix(srcAttr, "/run") {
-							break
-						}
 					} else if bytes.Equal(key, []byte("main")) {
 						mainAttr = string(val)
-						if srcAttr != "" {
-							break
-						}
+					} else if bytes.Equal(key, []byte("type")) {
+						typeAttr = string(val)
 					}
 				}
-				if srcAttr == "" {
+				if typeAttr == "importmap" {
+					tokenizer.Next()
+					innerText := bytes.TrimSpace(tokenizer.Text())
+					if len(innerText) > 0 {
+						err := json.Unmarshal(innerText, &importMap)
+						if err == nil {
+							importMap.Src = ctx
+						}
+					}
+				} else if srcAttr == "" {
+					// inline script content
 					tokenizer.Next()
 					input = append(input, string(tokenizer.Text()))
 				} else {
-					if mainAttr != "" {
-						if !isHttpSepcifier(mainAttr) {
-							scripts = append(scripts, mainAttr)
+					if mainAttr != "" && isHttpSepcifier(srcAttr) {
+						if !isHttpSepcifier(mainAttr) && endsWith(mainAttr, esExts...) {
+							jsEntries[mainAttr] = struct{}{}
 						}
-					} else if !isHttpSepcifier(srcAttr) {
-						scripts = append(scripts, srcAttr)
+					} else if !isHttpSepcifier(srcAttr) && endsWith(srcAttr, esExts...) {
+						jsEntries[srcAttr] = struct{}{}
 					}
 				}
-			} else {
-				for moreAttr {
-					var key, val []byte
-					key, val, moreAttr = tokenizer.TagAttr()
-					if bytes.Equal(key, []byte("class")) {
-						input = append(input, "\""+string(val)+"\"")
-					} else if !isW3CStandardAttribute(string(key)) {
-						input = append(input, string(key)+"=\""+string(val)+"\"")
-					}
-				}
-			}
-		} else if tt == html.EndTagToken {
-			name, _ := tokenizer.TagName()
-			if bytes.Equal(name, []byte("head")) {
-				inHead = false
+			case "link", "meta", "title", "base", "head", "noscript", "slot", "template", "option":
+				// ignore
+			default:
+				input = append(input, string(tokenizer.Raw()))
 			}
 		}
 	}
@@ -376,10 +356,12 @@ func (h *H) ServeUnoCSS(w http.ResponseWriter, r *http.Request) {
 			configCSS = string(data)
 		}
 	}
-	for _, entry := range scripts {
-		code, err := bundleModule(filepath.Join(filepath.Dir(imHtmlFilename), entry))
+	for entry := range jsEntries {
+		tree, err := walkDependencyTree(filepath.Join(filepath.Dir(imHtmlFilename), entry), importMap)
 		if err == nil {
-			input = append(input, string(code))
+			for _, code := range tree {
+				input = append(input, string(code))
+			}
 		}
 	}
 	sha := sha1.New()
@@ -503,7 +485,7 @@ func (h *H) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	case "/@unocss":
 		h.ServeUnoCSS(w, r)
 		return
-	case "/@hmr", "/@refresh", "/@prefresh":
+	case "/@hmr", "/@refresh", "/@prefresh", "/@vdr":
 		h.ServeInternalJS(w, r, pathname[2:])
 		return
 	case "/@hmr-ws":
@@ -573,12 +555,8 @@ func (h *H) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		header.Set("Cache-Control", "max-age=0, must-revalidate")
 		header.Set("Etag", etag)
 		h.ServeHtml(w, r, pathname)
-	case ".js", ".mjs", ".jsx", ".ts", ".mts", ".tsx":
-		h.ServeTSX(w, r, pathname)
-	case ".vue":
-		h.ServeVue(w, r, pathname)
-	case ".svelte":
-		h.ServeSvelte(w, r, pathname)
+	case ".js", ".mjs", ".jsx", ".ts", ".mts", ".tsx", ".vue", ".svelte":
+		h.ServeModule(w, r, pathname)
 	default:
 		etag := fmt.Sprintf("w/\"%d-%d-%d\"", fi.ModTime().UnixMilli(), fi.Size(), VERSION)
 		if r.Header.Get("If-None-Match") == etag {

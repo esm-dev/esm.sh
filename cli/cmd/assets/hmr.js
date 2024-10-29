@@ -1,6 +1,7 @@
 const registry = new Map();
 const watchers = new Map();
 const messageQueue = [];
+const keepAliveTimeout = 30000;
 
 /** @type { WebSocket | null } */
 let ws = null;
@@ -19,6 +20,12 @@ function connect(recoveryMode) {
       });
     }, 500);
   };
+  const keepAlive = () => {
+    if (ws?.readyState === WebSocket.OPEN) {
+      ws.send("ping");
+      setTimeout(keepAlive, keepAliveTimeout);
+    }
+  }
   const colors = {
     modify: "#056CF0",
     create: "#20B44B",
@@ -34,6 +41,7 @@ function connect(recoveryMode) {
     } else {
       messageQueue.splice(0, messageQueue.length).forEach((msg) => socket.send(msg));
     }
+    setTimeout(keepAlive, keepAliveTimeout);
     console.log("%c[HMR]", "color:#999", "listening for file changes...");
   });
 
@@ -72,6 +80,7 @@ function connect(recoveryMode) {
 /**
  * send message to the dev server
  * @param {string} msg
+ * @returns {void}
  */
 function sendMessage(msg) {
   if (ws?.readyState === WebSocket.OPEN) {
@@ -81,6 +90,12 @@ function sendMessage(msg) {
   }
 }
 
+/**
+ * add a watcher
+ * @param {string} id
+ * @param {function} callback
+ * @returns {void}
+ */
 function addWatcher(id, callback) {
   if (typeof id === "string" && typeof callback === "function") {
     if (watchers.has(id)) {
@@ -91,9 +106,7 @@ function addWatcher(id, callback) {
   }
 }
 
-/**
- * hot context
- */
+/** HotContext class */
 class HotContext {
   #id;
   #im;
@@ -139,6 +152,7 @@ class HotContext {
 /**
  * create a hot context
  * @param {string} id
+ * @param {string} im
  * @returns {HotContext}
  */
 export default function createHotContext(id, im) {
