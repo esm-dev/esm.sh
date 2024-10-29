@@ -86,7 +86,7 @@ func minify(code string, target esbuild.Target, loader esbuild.Loader) ([]byte, 
 }
 
 // bundleRemoteModule builds the remote module and it's submodules.
-func bundleRemoteModule(npmrc *NpmRC, entry string, importMap ImportMap, fetcher *Fetcher) (js []byte, css []byte, sourceCodes [][]byte, err error) {
+func bundleRemoteModule(npmrc *NpmRC, entry string, importMap ImportMap, fetcher *Fetcher) (js []byte, css []byte, dependencyTree map[string][]byte, err error) {
 	if !isHttpSepcifier(entry) {
 		err = errors.New("require a remote module")
 		return
@@ -145,7 +145,10 @@ func bundleRemoteModule(npmrc *NpmRC, entry string, importMap ImportMap, fetcher
 						if err != nil {
 							return esbuild.OnLoadResult{}, errors.New("failed to fetch module " + args.Path)
 						}
-						sourceCodes = append(sourceCodes, data)
+						if dependencyTree == nil {
+							dependencyTree = make(map[string][]byte)
+						}
+						dependencyTree[args.Path] = data
 						code := string(data)
 						loader := esbuild.LoaderJS
 						switch path.Ext(url.Path) {
@@ -162,21 +165,13 @@ func bundleRemoteModule(npmrc *NpmRC, entry string, importMap ImportMap, fetcher
 						case ".json":
 							loader = esbuild.LoaderJSON
 						case ".vue":
-							vueVersion, err := npmrc.getVueVersion(importMap)
-							if err != nil {
-								return esbuild.OnLoadResult{}, err
-							}
-							ret, err := preLoad(npmrc, "vue", args.Path, code, PackageID{"@vue/compiler-sfc", vueVersion}, "esm-vue-sfc-compiler@0.1.0")
+							ret, err := transformVue(npmrc, args.Path, code, importMap)
 							if err != nil {
 								return esbuild.OnLoadResult{}, err
 							}
 							code = ret.Code
 						case ".svelte":
-							svelteVersion, err := npmrc.getSvelteVersion(importMap)
-							if err != nil {
-								return esbuild.OnLoadResult{}, err
-							}
-							ret, err := preLoad(npmrc, "svelte", args.Path, code, PackageID{"svelte", svelteVersion})
+							ret, err := transformSvelte(npmrc, args.Path, code, importMap)
 							if err != nil {
 								return esbuild.OnLoadResult{}, err
 							}

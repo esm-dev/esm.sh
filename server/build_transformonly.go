@@ -72,7 +72,7 @@ func transform(npmrc *NpmRC, options ResolvedTransformOptions) (out TransformOut
 	case "css":
 		if options.unocss != nil {
 			// pre-process uno.css
-			o, e := preLoad(npmrc, "unocss", strings.Join(options.unocss.input, "\n"), options.unocss.configCSS, PackageID{"esm-unocss", "0.8.0"}, "@iconify/json@2.2.260")
+			o, e := runLoader(npmrc, "unocss", strings.Join(options.unocss.input, "\n"), options.unocss.configCSS, PackageID{"esm-unocss", "0.8.0"}, "@iconify/json@2.2.260")
 			if e != nil {
 				log.Error("failed to generate uno.css:", e)
 				err = errors.New("failed to generate uno.css")
@@ -82,13 +82,8 @@ func transform(npmrc *NpmRC, options ResolvedTransformOptions) (out TransformOut
 		}
 		loader = esbuild.LoaderCSS
 	case "vue":
-		var vueVersion string
-		vueVersion, err = npmrc.getVueVersion(options.importMap)
-		if err != nil {
-			return
-		}
 		// pre-process Vue SFC
-		o, e := preLoad(npmrc, "vue", options.Filename, sourceCode, PackageID{"@vue/compiler-sfc", vueVersion}, "esm-vue-sfc-compiler@0.1.0")
+		o, e := transformVue(npmrc, options.Filename, sourceCode, options.importMap)
 		if e != nil {
 			log.Error("failed to transform vue:", e)
 			err = errors.New("failed to transform vue")
@@ -96,13 +91,8 @@ func transform(npmrc *NpmRC, options ResolvedTransformOptions) (out TransformOut
 		}
 		sourceCode = o.Code
 	case "svelte":
-		var svelteVersion string
-		svelteVersion, err = npmrc.getSvelteVersion(options.importMap)
-		if err != nil {
-			return
-		}
 		// pre-process svelte component
-		o, e := preLoad(npmrc, "svelte", options.Filename, sourceCode, PackageID{"svelte", svelteVersion})
+		o, e := transformSvelte(npmrc, options.Filename, sourceCode, options.importMap)
 		if e != nil {
 			log.Error("failed to transform svelte:", e)
 			err = errors.New("failed to transform svelte")
@@ -203,7 +193,7 @@ func transform(npmrc *NpmRC, options ResolvedTransformOptions) (out TransformOut
 	return
 }
 
-func preLoad(npmrc *NpmRC, loaderName string, specifier string, sourceCode string, mainDependency PackageID, extraDeps ...string) (output *TransformOutput, err error) {
+func runLoader(npmrc *NpmRC, loaderName string, specifier string, sourceCode string, mainDependency PackageID, extraDeps ...string) (output *TransformOutput, err error) {
 	wd := path.Join(npmrc.StoreDir(), mainDependency.String())
 	loaderJsFilename := path.Join(wd, "loader.mjs")
 	if !existsFile(loaderJsFilename) {
@@ -258,4 +248,22 @@ func preLoad(npmrc *NpmRC, loaderName string, specifier string, sourceCode strin
 
 	output = &ret
 	return
+}
+
+func transformVue(npmrc *NpmRC, specifier string, sourceCode string, importMap ImportMap) (output *TransformOutput, err error) {
+	var vueVersion string
+	vueVersion, err = npmrc.getVueVersion(importMap)
+	if err != nil {
+		return
+	}
+	return runLoader(npmrc, "vue", specifier, sourceCode, PackageID{"@vue/compiler-sfc", vueVersion}, "esm-vue-sfc-compiler@0.4.7")
+}
+
+func transformSvelte(npmrc *NpmRC, specifier string, sourceCode string, importMap ImportMap) (output *TransformOutput, err error) {
+	var svelteVersion string
+	svelteVersion, err = npmrc.getSvelteVersion(importMap)
+	if err != nil {
+		return
+	}
+	return runLoader(npmrc, "svelte", specifier, sourceCode, PackageID{"svelte", svelteVersion})
 }

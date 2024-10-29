@@ -692,9 +692,9 @@ func routes(debug bool) rex.Handle {
 				}
 				for src := range jsEntries {
 					url := ctxUrl.ResolveReference(&url.URL{Path: src})
-					_, _, sourceCodes, err := bundleRemoteModule(npmrc, url.String(), importMap, fetcher)
+					_, _, tree, err := bundleRemoteModule(npmrc, url.String(), importMap, fetcher)
 					if err == nil {
-						for _, code := range sourceCodes {
+						for _, code := range tree {
 							input = append(input, string(code))
 						}
 					}

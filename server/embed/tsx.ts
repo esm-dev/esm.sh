@@ -93,7 +93,7 @@ function tsx() {
 }
 
 async function initEsmTsx() {
-  const pkg = "/esm-tsx@1.2.5";
+  const pkg = "/esm-tsx@1.3.1";
   const [m, w] = await Promise.all([
     import(pkg + "/$TARGET/esm-tsx.mjs"),
     fetch(urlFromCurrentModule(pkg + "/pkg/esm_tsx_bg.wasm")),
