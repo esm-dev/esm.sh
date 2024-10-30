@@ -2,6 +2,7 @@ const registry = new Map();
 const watchers = new Map();
 const messageQueue = [];
 const keepAliveTimeout = 30000;
+const dummy = () => {}
 
 /** @type { WebSocket | null } */
 let ws = null;
@@ -25,7 +26,7 @@ function connect(recoveryMode) {
       ws.send("ping");
       setTimeout(keepAlive, keepAliveTimeout);
     }
-  }
+  };
   const colors = {
     modify: "#056CF0",
     create: "#20B44B",
@@ -35,8 +36,8 @@ function connect(recoveryMode) {
   socket.addEventListener("open", () => {
     ws = socket;
     if (recoveryMode) {
-      for (const ctx of registry.values()) {
-        socket.send("watch:" + ctx.id);
+      for (const id of watchers.keys()) {
+        socket.send("watch:" + id);
       }
     } else {
       messageQueue.splice(0, messageQueue.length).forEach((msg) => socket.send(msg));
@@ -77,11 +78,7 @@ function connect(recoveryMode) {
   });
 }
 
-/**
- * send message to the dev server
- * @param {string} msg
- * @returns {void}
- */
+/** send message to the dev server */
 function sendMessage(msg) {
   if (ws?.readyState === WebSocket.OPEN) {
     ws.send(msg);
@@ -90,18 +87,16 @@ function sendMessage(msg) {
   }
 }
 
-/**
- * add a watcher
- * @param {string} id
- * @param {function} callback
- * @returns {void}
- */
-function addWatcher(id, callback) {
+/** watch for file changes */
+function watch(id, callback) {
   if (typeof id === "string" && typeof callback === "function") {
     if (watchers.has(id)) {
       watchers.get(id).push(callback);
     } else {
       watchers.set(id, [callback]);
+      if (id !== "*") {
+        sendMessage("watch:" + id);
+      }
     }
   }
 }
@@ -125,7 +120,7 @@ class HotContext {
     if (this.#locked) {
       return;
     }
-    addWatcher(this.#id, (kind) => {
+    watch(this.#id, (kind) => {
       if (kind === "remove") {
         callback();
       } else {
@@ -138,23 +133,18 @@ class HotContext {
       return;
     }
     if (typeof idOrIdsOrCallback === "function") {
-      addWatcher(this.#id, idOrIdsOrCallback);
+      watch(this.#id, idOrIdsOrCallback);
     } else if (Array.isArray(idOrIdsOrCallback)) {
       for (const id of idOrIdsOrCallback) {
-        addWatcher(id, callback);
+        watch(id, callback);
       }
     } else {
-      addWatcher(idOrIdsOrCallback, callback);
+      watch(idOrIdsOrCallback, callback);
     }
   }
 }
 
-/**
- * create a hot context
- * @param {string} id
- * @param {string} im
- * @returns {HotContext}
- */
+/** create a hot context */
 export default function createHotContext(id, im) {
   const key = id + "?im=" + im;
   let ctx = registry.get(key);
@@ -164,7 +154,7 @@ export default function createHotContext(id, im) {
   }
   ctx = new HotContext(id, im);
   registry.set(key, ctx);
-  sendMessage("watch:" + id);
+  watch(id, dummy);
   return ctx;
 }
 
