@@ -20,7 +20,7 @@ const MB = 1 << 20
 
 var (
 	regexpVersion       = regexp.MustCompile(`^[\w\+\-\.]+$`)
-	regexpVersionStrict = regexp.MustCompile(`^\d+\.\d+\.\d+(-[\w\+\-\.]+)$`)
+	regexpVersionStrict = regexp.MustCompile(`^\d+\.\d+\.\d+(-[\w\+\-\.]+)?$`)
 	regexpVuePath       = regexp.MustCompile(`/\*?vue@([~\^]?[\w\+\-\.]+)(/|\?|&|$)`)
 	regexpSveltePath    = regexp.MustCompile(`/\*?svelte@([~\^]?[\w\+\-\.]+)(/|\?|&|$)`)
 	regexpLocPath       = regexp.MustCompile(`:\d+:\d+$`)
