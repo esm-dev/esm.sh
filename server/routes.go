@@ -101,33 +101,33 @@ func routes(debug bool) rex.Handle {
 		if ctx.R.Method == "POST" {
 			switch pathname {
 			case "/transform":
-				var input TransformOptions
-				err := json.NewDecoder(io.LimitReader(ctx.R.Body, 2*MB)).Decode(&input)
+				var options TransformOptions
+				err := json.NewDecoder(io.LimitReader(ctx.R.Body, 2*MB)).Decode(&options)
 				ctx.R.Body.Close()
 				if err != nil {
 					return rex.Err(400, "require valid json body")
 				}
-				if input.Code == "" {
+				if options.Code == "" {
 					return rex.Err(400, "Code is required")
 				}
-				if len(input.Code) > MB {
+				if len(options.Code) > MB {
 					return rex.Err(429, "Code is too large")
 				}
-				if targets[input.Target] == 0 {
-					input.Target = "esnext"
+				if targets[options.Target] == 0 {
+					options.Target = "esnext"
 				}
-				if input.Lang == "" && input.Filename != "" {
-					_, input.Lang = utils.SplitByLastByte(input.Filename, '.')
+				if options.Lang == "" && options.Filename != "" {
+					_, options.Lang = utils.SplitByLastByte(options.Filename, '.')
 				}
 
 				h := sha1.New()
-				h.Write([]byte(input.Lang))
-				h.Write([]byte(input.Code))
-				h.Write([]byte(input.Target))
-				h.Write(input.ImportMap)
-				h.Write([]byte(input.JsxImportSource))
-				h.Write([]byte(input.SourceMap))
-				h.Write([]byte(fmt.Sprintf("%v", input.Minify)))
+				h.Write([]byte(options.Lang))
+				h.Write([]byte(options.Code))
+				h.Write([]byte(options.Target))
+				h.Write(options.ImportMap)
+				h.Write([]byte(options.JsxImportSource))
+				h.Write([]byte(options.SourceMap))
+				h.Write([]byte(fmt.Sprintf("%v", options.Minify)))
 				hash := hex.EncodeToString(h.Sum(nil))
 
 				// if previous build exists, return it directly
@@ -164,15 +164,15 @@ func routes(debug bool) rex.Handle {
 				}
 
 				importMap := ImportMap{Imports: map[string]string{}}
-				if len(input.ImportMap) > 0 {
-					err = json.Unmarshal(input.ImportMap, &importMap)
+				if len(options.ImportMap) > 0 {
+					err = json.Unmarshal(options.ImportMap, &importMap)
 					if err != nil {
 						return rex.Err(400, "Invalid ImportMap")
 					}
 				}
 
-				output, err := transform(npmrc, ResolvedTransformOptions{
-					TransformOptions: input,
+				output, err := transform(npmrc, &ResolvedTransformOptions{
+					TransformOptions: options,
 					importMap:        importMap,
 				})
 				if err != nil {
@@ -699,15 +699,16 @@ func routes(debug bool) rex.Handle {
 						}
 					}
 				}
-				out, err := transform(npmrc, ResolvedTransformOptions{
+				out, err := transform(npmrc, &ResolvedTransformOptions{
 					TransformOptions: TransformOptions{
 						Lang:   "css",
 						Target: target,
 						Minify: true,
 					},
-					unocss: &UnoCSSTransformOptions{
-						input:     input,
+					unocss: UnoCSSGenerateOptions{
+						generate:  true,
 						configCSS: configCSS,
+						content:   input,
 					},
 				})
 				if err != nil {
@@ -833,7 +834,7 @@ func routes(debug bool) rex.Handle {
 				if len(css) > 0 {
 					code += fmt.Sprintf("\nvar style=document.createElement('style');style.textContent=%s;document.head.appendChild(style);", utils.MustEncodeJSON(css))
 				}
-				out, err := transform(npmrc, ResolvedTransformOptions{
+				out, err := transform(npmrc, &ResolvedTransformOptions{
 					TransformOptions: TransformOptions{
 						Filename: u.Path,
 						Code:     code,

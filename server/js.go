@@ -165,14 +165,26 @@ func bundleRemoteModule(npmrc *NpmRC, entry string, importMap ImportMap, fetcher
 						case ".json":
 							loader = esbuild.LoaderJSON
 						case ".vue":
-							ret, err := transformVue(npmrc, args.Path, code, importMap)
+							ret, err := transformVue(npmrc, &ResolvedTransformOptions{
+								TransformOptions: TransformOptions{
+									Filename: args.Path,
+									Code:     code,
+								},
+								importMap: importMap,
+							})
 							if err != nil {
 								return esbuild.OnLoadResult{}, err
 							}
 							code = ret.Code
 							loader = esbuild.LoaderTS
 						case ".svelte":
-							ret, err := transformSvelte(npmrc, args.Path, code, importMap)
+							ret, err := transformSvelte(npmrc, &ResolvedTransformOptions{
+								TransformOptions: TransformOptions{
+									Filename: args.Path,
+									Code:     code,
+								},
+								importMap: importMap,
+							})
 							if err != nil {
 								return esbuild.OnLoadResult{}, err
 							}

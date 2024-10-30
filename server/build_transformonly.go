@@ -22,14 +22,15 @@ type TransformOptions struct {
 
 type ResolvedTransformOptions struct {
 	TransformOptions
-	unocss        *UnoCSSTransformOptions
+	unocss        UnoCSSGenerateOptions
 	importMap     ImportMap
 	globalVersion string
 }
 
-type UnoCSSTransformOptions struct {
-	input     []string
+type UnoCSSGenerateOptions struct {
+	generate  bool
 	configCSS string
+	content   []string
 }
 
 type TransformOutput struct {
@@ -37,7 +38,7 @@ type TransformOutput struct {
 	Map  string `json:"map"`
 }
 
-func transform(npmrc *NpmRC, options ResolvedTransformOptions) (out TransformOutput, err error) {
+func transform(npmrc *NpmRC, options *ResolvedTransformOptions) (out TransformOutput, err error) {
 	target := esbuild.ESNext
 	if options.Target != "" {
 		if t, ok := targets[options.Target]; ok {
@@ -63,8 +64,8 @@ func transform(npmrc *NpmRC, options ResolvedTransformOptions) (out TransformOut
 	case "tsx":
 		loader = esbuild.LoaderTSX
 	case "css":
-		if options.unocss != nil {
-			o, e := generateUnoCSS(npmrc, strings.Join(options.unocss.input, "\n"), options.unocss.configCSS)
+		if options.unocss.generate {
+			o, e := generateUnoCSS(npmrc, options)
 			if e != nil {
 				log.Error("failed to generate uno.css:", e)
 				err = errors.New("failed to generate uno.css")
@@ -74,7 +75,7 @@ func transform(npmrc *NpmRC, options ResolvedTransformOptions) (out TransformOut
 		}
 		loader = esbuild.LoaderCSS
 	case "vue":
-		o, e := transformVue(npmrc, options.Filename, sourceCode, options.importMap)
+		o, e := transformVue(npmrc, options)
 		if e != nil {
 			log.Error("failed to transform vue:", e)
 			err = errors.New("failed to transform vue")
@@ -85,7 +86,7 @@ func transform(npmrc *NpmRC, options ResolvedTransformOptions) (out TransformOut
 			loader = esbuild.LoaderTS
 		}
 	case "svelte":
-		o, e := transformSvelte(npmrc, options.Filename, sourceCode, options.importMap)
+		o, e := transformSvelte(npmrc, options)
 		if e != nil {
 			log.Error("failed to transform svelte:", e)
 			err = errors.New("failed to transform svelte")

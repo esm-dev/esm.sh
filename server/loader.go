@@ -19,7 +19,7 @@ type LoaderOutput struct {
 	Error string `json:"error"`
 }
 
-func runLoader(npmrc *NpmRC, loaderName string, specifier string, sourceCode string, mainDependency PackageId, extraDeps ...string) (output LoaderOutput, err error) {
+func runLoader(npmrc *NpmRC, loaderName string, args []string, mainDependency PackageId, extraDeps ...string) (output *LoaderOutput, err error) {
 	wd := path.Join(npmrc.StoreDir(), mainDependency.String())
 	loaderJsFilename := path.Join(wd, "loader.mjs")
 	if !existsFile(loaderJsFilename) {
@@ -45,7 +45,7 @@ func runLoader(npmrc *NpmRC, loaderName string, specifier string, sourceCode str
 	stdin := bytes.NewBuffer(nil)
 	stdout := bytes.NewBuffer(nil)
 	stderr := bytes.NewBuffer(nil)
-	err = json.NewEncoder(stdin).Encode([]string{specifier, sourceCode})
+	err = json.NewEncoder(stdin).Encode(args)
 	if err != nil {
 		return
 	}
@@ -66,31 +66,35 @@ func runLoader(npmrc *NpmRC, loaderName string, specifier string, sourceCode str
 		return
 	}
 
-	err = json.NewDecoder(stdout).Decode(&output)
-	if err == nil && output.Error != "" {
-		err = errors.New(output.Error)
+	var out LoaderOutput
+	err = json.NewDecoder(stdout).Decode(&out)
+	if err != nil {
+		return
 	}
-	return
+	if out.Error != "" {
+		return nil, errors.New(out.Error)
+	}
+	return &out, nil
 }
 
-func transformVue(npmrc *NpmRC, specifier string, sourceCode string, importMap ImportMap) (output LoaderOutput, err error) {
+func transformVue(npmrc *NpmRC, options *ResolvedTransformOptions) (output *LoaderOutput, err error) {
 	var vueVersion string
-	vueVersion, err = npmrc.getVueVersion(importMap)
+	vueVersion, err = npmrc.getVueVersion(options.importMap)
 	if err != nil {
 		return
 	}
-	return runLoader(npmrc, "vue", specifier, sourceCode, PackageId{"@vue/compiler-sfc", vueVersion}, "esm-vue-sfc-compiler@0.4.7")
+	return runLoader(npmrc, "vue", []string{options.Filename, options.Code}, PackageId{"@vue/compiler-sfc", vueVersion}, "esm-vue-sfc-compiler@0.4.8")
 }
 
-func transformSvelte(npmrc *NpmRC, specifier string, sourceCode string, importMap ImportMap) (output LoaderOutput, err error) {
+func transformSvelte(npmrc *NpmRC, options *ResolvedTransformOptions) (output *LoaderOutput, err error) {
 	var svelteVersion string
-	svelteVersion, err = npmrc.getSvelteVersion(importMap)
+	svelteVersion, err = npmrc.getSvelteVersion(options.importMap)
 	if err != nil {
 		return
 	}
-	return runLoader(npmrc, "svelte", specifier, sourceCode, PackageId{"svelte", svelteVersion})
+	return runLoader(npmrc, "svelte", []string{options.Filename, options.Code}, PackageId{"svelte", svelteVersion})
 }
 
-func generateUnoCSS(npmrc *NpmRC, content string, configCSS string) (output LoaderOutput, err error) {
-	return runLoader(npmrc, "unocss", content, configCSS, PackageId{"esm-unocss", "0.8.0"}, "@iconify/json@2.2.260")
+func generateUnoCSS(npmrc *NpmRC, options *ResolvedTransformOptions) (output *LoaderOutput, err error) {
+	return runLoader(npmrc, "unocss", []string{options.unocss.configCSS, strings.Join(options.unocss.content, "\n")}, PackageId{"esm-unocss", "0.8.0"}, "@iconify/json@2.2.260")
 }
