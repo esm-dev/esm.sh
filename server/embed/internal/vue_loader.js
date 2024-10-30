@@ -14,10 +14,10 @@ function readStdin() {
 
 try {
   const [filename, srouceCode] = JSON.parse(await readStdin());
-  const code = await transform(filename, srouceCode);
-  stdout.write(JSON.stringify({ code }));
+  const ret = await transform(filename, srouceCode);
+  stdout.write(JSON.stringify(ret));
 } catch (err) {
-  stdout.write(JSON.stringify({ error: err.message, stack: err.stack }));
+  stdout.write(JSON.stringify({ error: err.message }));
 }
 
 process.exit(0);

@@ -27,6 +27,15 @@ const jsrRegistry = "https://npm.jsr.io/"
 
 var npmNaming = valid.Validator{valid.Range{'a', 'z'}, valid.Range{'A', 'Z'}, valid.Range{'0', '9'}, valid.Eq('_'), valid.Eq('$'), valid.Eq('.'), valid.Eq('-'), valid.Eq('+'), valid.Eq('!'), valid.Eq('~'), valid.Eq('*'), valid.Eq('('), valid.Eq(')')}
 
+type PackageId struct {
+	Name    string
+	Version string
+}
+
+func (p *PackageId) String() string {
+	return p.Name + "@" + p.Version
+}
+
 // NpmPackageVerions defines versions of a NPM package
 type NpmPackageVerions struct {
 	DistTags map[string]string         `json:"dist-tags"`
@@ -54,15 +63,6 @@ type PackageJSONRaw struct {
 	Files            []string               `json:"files"`
 	Deprecated       interface{}            `json:"deprecated"`
 	Esmsh            interface{}            `json:"esm.sh"`
-}
-
-type PackageID struct {
-	Name    string
-	Version string
-}
-
-func (p *PackageID) String() string {
-	return p.Name + "@" + p.Version
 }
 
 // ToNpmPackage converts PackageJSONRaw to PackageJSON

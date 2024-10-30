@@ -1,0 +1,96 @@
+package server
+
+import (
+	"bytes"
+	"context"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"os"
+	"os/exec"
+	"path"
+	"strings"
+	"time"
+)
+
+type LoaderOutput struct {
+	Lang  string `json:"lang"`
+	Code  string `json:"code"`
+	Error string `json:"error"`
+}
+
+func runLoader(npmrc *NpmRC, loaderName string, specifier string, sourceCode string, mainDependency PackageId, extraDeps ...string) (output LoaderOutput, err error) {
+	wd := path.Join(npmrc.StoreDir(), mainDependency.String())
+	loaderJsFilename := path.Join(wd, "loader.mjs")
+	if !existsFile(loaderJsFilename) {
+		var loaderJS []byte
+		loaderJS, err = embedFS.ReadFile(fmt.Sprintf("server/embed/internal/%s_loader.js", loaderName))
+		if err != nil {
+			err = fmt.Errorf("could not find loader: %s", loaderName)
+			return
+		}
+		ensureDir(wd)
+		err = os.WriteFile(loaderJsFilename, loaderJS, 0644)
+		if err != nil {
+			err = fmt.Errorf("could not write loader.js")
+			return
+		}
+		err = npmrc.pnpmi(wd, append([]string{"--prefer-offline", mainDependency.String()}, extraDeps...)...)
+		if err != nil {
+			err = errors.New("failed to install " + mainDependency.String() + " " + strings.Join(extraDeps, " "))
+			return
+		}
+	}
+
+	stdin := bytes.NewBuffer(nil)
+	stdout := bytes.NewBuffer(nil)
+	stderr := bytes.NewBuffer(nil)
+	err = json.NewEncoder(stdin).Encode([]string{specifier, sourceCode})
+	if err != nil {
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	cmd := exec.CommandContext(ctx, "node", "loader.mjs")
+	cmd.Dir = wd
+	cmd.Stdin = stdin
+	cmd.Stdout = stdout
+	cmd.Stderr = stderr
+	err = cmd.Run()
+	if err != nil {
+		if stderr.Len() > 0 {
+			err = fmt.Errorf("preLoad: %s", stderr.String())
+		}
+		return
+	}
+
+	err = json.NewDecoder(stdout).Decode(&output)
+	if err == nil && output.Error != "" {
+		err = errors.New(output.Error)
+	}
+	return
+}
+
+func transformVue(npmrc *NpmRC, specifier string, sourceCode string, importMap ImportMap) (output LoaderOutput, err error) {
+	var vueVersion string
+	vueVersion, err = npmrc.getVueVersion(importMap)
+	if err != nil {
+		return
+	}
+	return runLoader(npmrc, "vue", specifier, sourceCode, PackageId{"@vue/compiler-sfc", vueVersion}, "esm-vue-sfc-compiler@0.4.7")
+}
+
+func transformSvelte(npmrc *NpmRC, specifier string, sourceCode string, importMap ImportMap) (output LoaderOutput, err error) {
+	var svelteVersion string
+	svelteVersion, err = npmrc.getSvelteVersion(importMap)
+	if err != nil {
+		return
+	}
+	return runLoader(npmrc, "svelte", specifier, sourceCode, PackageId{"svelte", svelteVersion})
+}
+
+func generateUnoCSS(npmrc *NpmRC, content string, configCSS string) (output LoaderOutput, err error) {
+	return runLoader(npmrc, "unocss", content, configCSS, PackageId{"esm-unocss", "0.8.0"}, "@iconify/json@2.2.260")
+}

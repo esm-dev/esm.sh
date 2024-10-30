@@ -84,7 +84,7 @@ func initCJSLexer() (err error) {
 }
 
 type cjsLexerResult struct {
-	ReExport         string   `json:"reexport,omitempty"`
+	ReExport         string   `json:"reexport"`
 	HasDefaultExport bool     `json:"hasDefaultExport"`
 	NamedExports     []string `json:"namedExports"`
 	Error            string   `json:"error"`

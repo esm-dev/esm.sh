@@ -170,6 +170,7 @@ func bundleRemoteModule(npmrc *NpmRC, entry string, importMap ImportMap, fetcher
 								return esbuild.OnLoadResult{}, err
 							}
 							code = ret.Code
+							loader = esbuild.LoaderTS
 						case ".svelte":
 							ret, err := transformSvelte(npmrc, args.Path, code, importMap)
 							if err != nil {

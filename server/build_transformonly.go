@@ -1,16 +1,9 @@
 package server
 
 import (
-	"bytes"
-	"context"
 	"encoding/json"
 	"errors"
-	"fmt"
-	"os"
-	"os/exec"
-	"path"
 	"strings"
-	"time"
 
 	esbuild "github.com/evanw/esbuild/pkg/api"
 	"github.com/ije/gox/utils"
@@ -41,7 +34,7 @@ type UnoCSSTransformOptions struct {
 
 type TransformOutput struct {
 	Code string `json:"code"`
-	Map  string `json:"map,omitempty"`
+	Map  string `json:"map"`
 }
 
 func transform(npmrc *NpmRC, options ResolvedTransformOptions) (out TransformOutput, err error) {
@@ -71,8 +64,7 @@ func transform(npmrc *NpmRC, options ResolvedTransformOptions) (out TransformOut
 		loader = esbuild.LoaderTSX
 	case "css":
 		if options.unocss != nil {
-			// pre-process uno.css
-			o, e := runLoader(npmrc, "unocss", strings.Join(options.unocss.input, "\n"), options.unocss.configCSS, PackageID{"esm-unocss", "0.8.0"}, "@iconify/json@2.2.260")
+			o, e := generateUnoCSS(npmrc, strings.Join(options.unocss.input, "\n"), options.unocss.configCSS)
 			if e != nil {
 				log.Error("failed to generate uno.css:", e)
 				err = errors.New("failed to generate uno.css")
@@ -82,7 +74,6 @@ func transform(npmrc *NpmRC, options ResolvedTransformOptions) (out TransformOut
 		}
 		loader = esbuild.LoaderCSS
 	case "vue":
-		// pre-process Vue SFC
 		o, e := transformVue(npmrc, options.Filename, sourceCode, options.importMap)
 		if e != nil {
 			log.Error("failed to transform vue:", e)
@@ -90,8 +81,10 @@ func transform(npmrc *NpmRC, options ResolvedTransformOptions) (out TransformOut
 			return
 		}
 		sourceCode = o.Code
+		if o.Lang == "ts" {
+			loader = esbuild.LoaderTS
+		}
 	case "svelte":
-		// pre-process svelte component
 		o, e := transformSvelte(npmrc, options.Filename, sourceCode, options.importMap)
 		if e != nil {
 			log.Error("failed to transform svelte:", e)
@@ -191,79 +184,4 @@ func transform(npmrc *NpmRC, options ResolvedTransformOptions) (out TransformOut
 		}
 	}
 	return
-}
-
-func runLoader(npmrc *NpmRC, loaderName string, specifier string, sourceCode string, mainDependency PackageID, extraDeps ...string) (output *TransformOutput, err error) {
-	wd := path.Join(npmrc.StoreDir(), mainDependency.String())
-	loaderJsFilename := path.Join(wd, "loader.mjs")
-	if !existsFile(loaderJsFilename) {
-		var loaderJS []byte
-		loaderJS, err = embedFS.ReadFile(fmt.Sprintf("server/embed/internal/%s_loader.js", loaderName))
-		if err != nil {
-			err = fmt.Errorf("could not find loader: %s", loaderName)
-			return
-		}
-		ensureDir(wd)
-		err = os.WriteFile(loaderJsFilename, loaderJS, 0644)
-		if err != nil {
-			err = fmt.Errorf("could not write loader.js")
-			return
-		}
-		err = npmrc.pnpmi(wd, append([]string{"--prefer-offline", mainDependency.String()}, extraDeps...)...)
-		if err != nil {
-			err = errors.New("failed to install " + mainDependency.String() + " " + strings.Join(extraDeps, " "))
-			return
-		}
-	}
-
-	stdin := bytes.NewBuffer(nil)
-	stdout := bytes.NewBuffer(nil)
-	stderr := bytes.NewBuffer(nil)
-	err = json.NewEncoder(stdin).Encode([]string{specifier, sourceCode})
-	if err != nil {
-		return
-	}
-
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
-
-	cmd := exec.CommandContext(ctx, "node", "loader.mjs")
-	cmd.Dir = wd
-	cmd.Stdin = stdin
-	cmd.Stdout = stdout
-	cmd.Stderr = stderr
-	err = cmd.Run()
-	if err != nil {
-		if stderr.Len() > 0 {
-			err = fmt.Errorf("preLoad: %s", stderr.String())
-		}
-		return
-	}
-
-	var ret TransformOutput
-	err = json.NewDecoder(stdout).Decode(&ret)
-	if err != nil {
-		return
-	}
-
-	output = &ret
-	return
-}
-
-func transformVue(npmrc *NpmRC, specifier string, sourceCode string, importMap ImportMap) (output *TransformOutput, err error) {
-	var vueVersion string
-	vueVersion, err = npmrc.getVueVersion(importMap)
-	if err != nil {
-		return
-	}
-	return runLoader(npmrc, "vue", specifier, sourceCode, PackageID{"@vue/compiler-sfc", vueVersion}, "esm-vue-sfc-compiler@0.4.7")
-}
-
-func transformSvelte(npmrc *NpmRC, specifier string, sourceCode string, importMap ImportMap) (output *TransformOutput, err error) {
-	var svelteVersion string
-	svelteVersion, err = npmrc.getSvelteVersion(importMap)
-	if err != nil {
-		return
-	}
-	return runLoader(npmrc, "svelte", specifier, sourceCode, PackageID{"svelte", svelteVersion})
 }

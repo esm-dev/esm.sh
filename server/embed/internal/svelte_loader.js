@@ -26,7 +26,7 @@ try {
   const { js } = compile(code, options);
   stdout.write(JSON.stringify({ code: js.code }));
 } catch (err) {
-  stdout.write(JSON.stringify({ error: err.message, stack: err.stack }));
+  stdout.write(JSON.stringify({ error: err.message }));
 }
 
 process.exit(0);

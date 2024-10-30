@@ -17,7 +17,7 @@ try {
   const code = await generate(data, configCSS ? { configCSS } : undefined);
   stdout.write(JSON.stringify({ code }));
 } catch (err) {
-  stdout.write(JSON.stringify({ error: err.message, stack: err.stack }));
+  stdout.write(JSON.stringify({ error: err.message }));
 }
 
 process.exit(0);
