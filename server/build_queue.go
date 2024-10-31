@@ -48,7 +48,7 @@ func (q *BuildQueue) Add(ctx *BuildContext, clientIp string) *QueueClient {
 
 	// check if the task is already in the queue
 	q.lock.RLock()
-	t, ok := q.tasks[ctx.Path()]
+	t, ok := q.tasks[ctx.Pathname()]
 	q.lock.RUnlock()
 
 	if ok {
@@ -65,7 +65,7 @@ func (q *BuildQueue) Add(ctx *BuildContext, clientIp string) *QueueClient {
 
 	q.lock.Lock()
 	t.el = q.queue.PushBack(t)
-	q.tasks[ctx.Path()] = t
+	q.tasks[ctx.Pathname()] = t
 	q.lock.Unlock()
 
 	q.next()
@@ -102,14 +102,14 @@ func (q *BuildQueue) build(t *BuildTask) {
 	ret, err := t.Build()
 	if err == nil {
 		if t.target == "types" {
-			log.Infof("build '%s'(types) done in %v", t.Path(), time.Since(t.startedAt))
+			log.Infof("build '%s'(types) done in %v", t.Pathname(), time.Since(t.startedAt))
 		} else if t.subBuilds != nil && t.subBuilds.Len() > 0 {
-			log.Infof("build '%s'(%d sub-builds) done in %v", t.Path(), t.subBuilds.Len(), time.Since(t.startedAt))
+			log.Infof("build '%s'(%d sub-builds) done in %v", t.Pathname(), t.subBuilds.Len(), time.Since(t.startedAt))
 		} else {
-			log.Infof("build '%s' done in %v", t.Path(), time.Since(t.startedAt))
+			log.Infof("build '%s' done in %v", t.Pathname(), time.Since(t.startedAt))
 		}
 	} else {
-		log.Errorf("build '%s': %v", t.Path(), err)
+		log.Errorf("build '%s': %v", t.Pathname(), err)
 	}
 
 	output := BuildOutput{ret, err}
@@ -120,7 +120,7 @@ func (q *BuildQueue) build(t *BuildTask) {
 	q.lock.Lock()
 	q.idles += 1
 	q.queue.Remove(t.el)
-	delete(q.tasks, t.Path())
+	delete(q.tasks, t.Pathname())
 	q.lock.Unlock()
 
 	// call next task

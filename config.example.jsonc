@@ -13,26 +13,22 @@
   // The concurrency number for the build process, default equals to the number of CPU cores.
   "buildConcurrency": 0,
 
-  // The maxmum waiting time for a build to complete, default is 30 seconds.
-  "buildTimeout": 30,
+  // The wait time for incoming requests to wait for the build process to finish, default is 30 seconds.
+  "buildWaitTime": 30,
 
-  // The work directory for the server app, default is "~/.esmd".
+  // The work directory for the server, default is "~/.esmd".
   "workDir": "~/.esmd",
 
-  // The cache source, default is "memory:default".
-  // You can also implement your own cache by implementing the `Cache` interface
-  // in https://github.com/esm-dev/esm.sh/blob/main/server/storage/cache.go
-  "cache": "memory:default",
+  // The database source, default is "bolt://~/.esmd/esm.db".
+  // Currently only bolt is supported.
+  "database": "bolt://~/.esmd/esm.db",
 
-  // The database source, default is "bolt:~/.esmd/esm.db".
-  // You can also implement your own database by implementing the `DataBase` interface
-  // in https://github.com/esm-dev/esm.sh/blob/main/server/storage/db.go
-  "database": "bolt:~/.esmd/esm.db",
-
-  // The file storage source, default is "local:~/.esmd/storage".
-  // You can also implement your own file storage by implementing the `FileSystem` interface
-  // in https://github.com/esm-dev/esm.sh/blob/main/server/storage/fs.go
-  "storage": "local:~/.esmd/storage",
+  // The build storage source, default is "file://~/.esmd/storage".
+  // Supported storage types are "fs" and "s3".
+  // Examples:
+  // - "fs:///path/to/storage"
+  // - "s3://r2.cloudflarestorage.com/esm"
+  "buildStorage": "fs://~/.esmd/storage",
 
   // The log directory, default is "~/.esmd/log".
   "logDir": "~/.esmd/log",

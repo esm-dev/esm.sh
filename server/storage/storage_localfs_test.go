@@ -10,13 +10,13 @@ import (
 
 func TestLocalFS(t *testing.T) {
 	root := filepath.Clean(os.TempDir())
-	fs, err := OpenFS("local:" + root)
+	fs, err := Open("local:" + root)
 	if err != nil {
 		t.Error(err)
 		return
 	}
 
-	lfs, ok := fs.(*localFSLayer)
+	lfs, ok := fs.(*localFS)
 	if !ok {
 		t.Fatal("not a local FS")
 	}
@@ -24,7 +24,7 @@ func TestLocalFS(t *testing.T) {
 		t.Fatalf("invalid root '%s', should be '%s'", lfs.root, root)
 	}
 
-	n, err := fs.WriteFile("foo.txt", bytes.NewBufferString("bar"))
+	n, err := fs.Put("foo.txt", bytes.NewBufferString("bar"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -41,7 +41,7 @@ func TestLocalFS(t *testing.T) {
 		t.Fatalf("invalid file size(%d), shoud be 3", fi.Size())
 	}
 
-	f, err := fs.Open("foo.txt")
+	f, err := fs.Get("foo.txt")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -66,7 +66,7 @@ func TestLocalFS(t *testing.T) {
 		t.Fatalf("File should be not existent")
 	}
 
-	_, err = fs.Open("foo.txt")
+	_, err = fs.Get("foo.txt")
 	if err != ErrNotFound {
 		t.Fatalf("File should be not existent")
 	}

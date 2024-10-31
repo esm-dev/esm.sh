@@ -23,7 +23,7 @@ const (
 	pnpmMinVersion   = "9.0.0"
 )
 
-var nodejsInternalModules = map[string]bool{
+var nodeInternalModules = map[string]bool{
 	"assert":              true,
 	"assert/strict":       true,
 	"async_hooks":         true,
@@ -77,6 +77,24 @@ var nodejsInternalModules = map[string]bool{
 	"webcrypto":           true,
 	"worker_threads":      true,
 	"zlib":                true,
+}
+
+func normalizeImportSpecifier(specifier string) string {
+	specifier = strings.TrimPrefix(specifier, "npm:")
+	specifier = strings.TrimPrefix(specifier, "./node_modules/")
+	if specifier == "." {
+		specifier = "./index"
+	} else if specifier == ".." {
+		specifier = "../index"
+	}
+	if nodeInternalModules[specifier] {
+		return "node:" + specifier
+	}
+	return specifier
+}
+
+func isNodeInternalModule(specifier string) bool {
+	return strings.HasPrefix(specifier, "node:") && nodeInternalModules[specifier[5:]]
 }
 
 func checkNodejs(installDir string) (nodeVersion string, pnpmVersion string, err error) {

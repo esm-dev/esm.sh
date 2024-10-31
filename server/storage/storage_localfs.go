@@ -9,20 +9,20 @@ import (
 
 type localFSDriver struct{}
 
-func (driver *localFSDriver) Open(root string, options url.Values) (FileSystem, error) {
+func (driver *localFSDriver) Open(root string, options url.Values) (Storage, error) {
 	root = filepath.Clean(root)
 	err := ensureDir(root)
 	if err != nil {
 		return nil, err
 	}
-	return &localFSLayer{root}, nil
+	return &localFS{root}, nil
 }
 
-type localFSLayer struct {
+type localFS struct {
 	root string
 }
 
-func (fs *localFSLayer) Stat(name string) (FileStat, error) {
+func (fs *localFS) Stat(name string) (Stat, error) {
 	fullPath := filepath.Join(fs.root, filepath.Clean(name))
 	fi, err := os.Lstat(fullPath)
 	if err != nil {
@@ -34,20 +34,20 @@ func (fs *localFSLayer) Stat(name string) (FileStat, error) {
 	return fi, nil
 }
 
-func (fs *localFSLayer) List(dir string) (files []string, err error) {
+func (fs *localFS) List(dir string) (files []string, err error) {
 	return findFiles(filepath.Join(fs.root, filepath.Clean(dir)), "")
 }
 
-func (fs *localFSLayer) Open(name string) (file io.ReadSeekCloser, err error) {
+func (fs *localFS) Get(name string) (content io.ReadSeekCloser, err error) {
 	fullPath := filepath.Join(fs.root, filepath.Clean(name))
-	file, err = os.Open(fullPath)
+	content, err = os.Open(fullPath)
 	if err != nil && os.IsNotExist(err) {
 		err = ErrNotFound
 	}
 	return
 }
 
-func (fs *localFSLayer) WriteFile(name string, content io.Reader) (written int64, err error) {
+func (fs *localFS) Put(name string, content io.Reader) (written int64, err error) {
 	fullPath := filepath.Join(fs.root, filepath.Clean(name))
 	err = ensureDir(filepath.Dir(fullPath))
 	if err != nil {
@@ -64,16 +64,17 @@ func (fs *localFSLayer) WriteFile(name string, content io.Reader) (written int64
 	return
 }
 
-func (fs *localFSLayer) Remove(name string) (err error) {
+func (fs *localFS) Remove(name string) (err error) {
 	err = os.Remove(filepath.Join(fs.root, filepath.Clean(name)))
 	return
 }
 
-func (fs *localFSLayer) RemoveAll(dirname string) (err error) {
+func (fs *localFS) RemoveAll(dirname string) (err error) {
 	err = os.RemoveAll(filepath.Join(fs.root, filepath.Clean(dirname)))
 	return
 }
 
+// ensureDir ensures the given directory exists.
 func ensureDir(dir string) (err error) {
 	_, err = os.Lstat(dir)
 	if err != nil && os.IsNotExist(err) {
@@ -112,5 +113,5 @@ func findFiles(root string, parentDir string) ([]string, error) {
 }
 
 func init() {
-	RegisterFileSystem("local", &localFSDriver{})
+	Register("fs", &localFSDriver{})
 }

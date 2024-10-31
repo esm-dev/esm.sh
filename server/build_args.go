@@ -16,7 +16,7 @@ type BuildArgs struct {
 	external          *StringSet
 	exports           *StringSet
 	conditions        []string
-	jsxRuntime        *ESM
+	jsxRuntime        *ESMPath
 	keepNames         bool
 	ignoreAnnotations bool
 	externalRequire   bool
@@ -158,7 +158,7 @@ func encodeBuildArgs(args BuildArgs, isDts bool) string {
 }
 
 // normalizeBuildArgs removes invalid alias, deps, external from the build args
-func normalizeBuildArgs(npmrc *NpmRC, installDir string, args *BuildArgs, url ESM) error {
+func normalizeBuildArgs(npmrc *NpmRC, installDir string, args *BuildArgs, url ESMPath) error {
 	if len(args.alias) > 0 || len(args.deps) > 0 || args.external.Len() > 0 {
 		depsSet := NewStringSet()
 		err := walkDeps(npmrc, installDir, url, depsSet)
@@ -212,20 +212,24 @@ func normalizeBuildArgs(npmrc *NpmRC, installDir string, args *BuildArgs, url ES
 	return nil
 }
 
-func walkDeps(npmrc *NpmRC, installDir string, url ESM, mark *StringSet) (err error) {
-	if mark.Has(url.PkgName) {
+func walkDeps(npmrc *NpmRC, installDir string, esm ESMPath, mark *StringSet) (err error) {
+	if mark.Has(esm.PkgName) {
 		return
 	}
-	mark.Add(url.PkgName)
-	var p PackageJSON
-	pkgJsonPath := path.Join(installDir, "node_modules", ".pnpm", "node_modules", url.PkgName, "package.json")
+	mark.Add(esm.PkgName)
+	var p *PackageJSON
+	pkgJsonPath := path.Join(installDir, "node_modules", ".pnpm", "node_modules", esm.PkgName, "package.json")
 	if !existsFile(pkgJsonPath) {
-		pkgJsonPath = path.Join(installDir, "node_modules", url.PkgName, "package.json")
+		pkgJsonPath = path.Join(installDir, "node_modules", esm.PkgName, "package.json")
 	}
 	if existsFile(pkgJsonPath) {
-		err = utils.ParseJSONFile(pkgJsonPath, &p)
-	} else if regexpVersionStrict.MatchString(url.PkgVersion) || url.GhPrefix {
-		p, err = npmrc.installPackage(url)
+		var raw PackageJSONRaw
+		err = utils.ParseJSONFile(pkgJsonPath, &raw)
+		if err == nil {
+			p = raw.ToNpmPackage()
+		}
+	} else if regexpVersionStrict.MatchString(esm.PkgVersion) || esm.GhPrefix {
+		p, err = npmrc.installPackage(esm)
 	} else {
 		return nil
 		// p, err = npmrc.getPackageInfo(module.PkgName, module.PkgVersion)
@@ -244,7 +248,7 @@ func walkDeps(npmrc *NpmRC, installDir string, url ESM, mark *StringSet) (err er
 		if strings.HasPrefix(name, "@types/") || strings.HasPrefix(name, "@babel/") || strings.HasPrefix(name, "is-") {
 			continue
 		}
-		err := walkDeps(npmrc, installDir, ESM{PkgName: name, PkgVersion: version}, mark)
+		err := walkDeps(npmrc, installDir, ESMPath{PkgName: name, PkgVersion: version}, mark)
 		if err != nil {
 			return err
 		}

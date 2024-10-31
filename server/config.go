@@ -19,12 +19,11 @@ type Config struct {
 	AllowList          AllowList              `json:"allowList"`
 	BanList            BanList                `json:"banList"`
 	BuildConcurrency   uint16                 `json:"buildConcurrency"`
-	BuildTimeout       uint16                 `json:"buildTimeout"`
+	BuildWaitTime      uint16                 `json:"buildWaitTime"`
+	BuildStorage       string                 `json:"buildStorage"`
 	Minify             json.RawMessage        `json:"minify"`
 	DisableSourceMap   bool                   `json:"disableSourceMap"`
 	DisableCompression bool                   `json:"disableCompression"`
-	Cache              string                 `json:"cache"`
-	Storage            string                 `json:"storage"`
 	Database           string                 `json:"database"`
 	LogDir             string                 `json:"logDir"`
 	LogLevel           string                 `json:"logLevel"`
@@ -112,17 +111,14 @@ func fixConfig(c *Config) *Config {
 	if c.BuildConcurrency == 0 {
 		c.BuildConcurrency = uint16(runtime.NumCPU())
 	}
-	if c.BuildTimeout == 0 {
-		c.BuildTimeout = 30 // seconds
-	}
-	if c.Cache == "" {
-		c.Cache = "memory:default"
+	if c.BuildWaitTime == 0 {
+		c.BuildWaitTime = 30 // seconds
 	}
 	if c.Database == "" {
-		c.Database = fmt.Sprintf("bolt:%s", path.Join(c.WorkDir, "esm.db"))
+		c.Database = fmt.Sprintf("bolt://%s", path.Join(c.WorkDir, "esm.db"))
 	}
-	if c.Storage == "" {
-		c.Storage = fmt.Sprintf("local:%s", path.Join(c.WorkDir, "storage"))
+	if c.BuildStorage == "" {
+		c.BuildStorage = fmt.Sprintf("fs://%s", path.Join(c.WorkDir, "storage"))
 	}
 	if c.LogDir == "" {
 		c.LogDir = path.Join(c.WorkDir, "log")

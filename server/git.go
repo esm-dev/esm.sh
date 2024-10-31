@@ -2,9 +2,9 @@ package server
 
 import (
 	"archive/tar"
+	"bufio"
 	"bytes"
 	"compress/gzip"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -15,7 +15,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/esm-dev/esm.sh/server/storage"
 	"github.com/ije/gox/utils"
 )
 
@@ -26,50 +25,42 @@ type GitRef struct {
 
 // list repo refs using `git ls-remote repo`
 func listRepoRefs(repo string) (refs []GitRef, err error) {
-	cacheKey := fmt.Sprintf("git ls-remote %s", repo)
+	ret, err := fetchSync(fmt.Sprintf("git ls-remote %s", repo), 10*time.Minute, func() (io.Reader, error) {
+		cmd := exec.Command("git", "ls-remote", repo)
+		out := bytes.NewBuffer(nil)
+		errOut := bytes.NewBuffer(nil)
+		cmd.Stdout = out
+		cmd.Stderr = errOut
+		err = cmd.Run()
+		if err != nil {
+			if errOut.Len() > 0 {
+				return nil, errors.New(errOut.String())
+			}
+			return nil, err
+		}
+		return out, nil
+	})
+	if err != nil {
+		return
+	}
 
-	lock := getFetchLock(cacheKey)
-	lock.Lock()
-	defer lock.Unlock()
-
-	// check cache firstly
-	if cache != nil {
-		var data []byte
-		data, err = cache.Get(cacheKey)
-		if err == nil && json.Unmarshal(data, &refs) == nil {
+	r := bufio.NewReader(ret)
+	for {
+		var line []byte
+		line, err = r.ReadBytes('\n')
+		if err == io.EOF {
+			err = nil
+			break
+		}
+		if err != nil {
+			refs = nil
 			return
 		}
-		if err != nil && err != storage.ErrNotFound && err != storage.ErrExpired {
-			log.Error("cache:", err)
-		}
-	}
-
-	cmd := exec.Command("git", "ls-remote", repo)
-	out := bytes.NewBuffer(nil)
-	errOut := bytes.NewBuffer(nil)
-	cmd.Stdout = out
-	cmd.Stderr = errOut
-	err = cmd.Run()
-	if err != nil {
-		if errOut.Len() > 0 {
-			return nil, errors.New(errOut.String())
-		}
-		return nil, err
-	}
-	refs = []GitRef{}
-	for _, line := range strings.Split(out.String(), "\n") {
-		if line == "" {
-			continue
-		}
-		sha, ref := utils.SplitByLastByte(line, '\t')
+		sha, ref := utils.SplitByLastByte(string(bytes.TrimSpace(line)), '\t')
 		refs = append(refs, GitRef{
 			Ref: ref,
 			Sha: sha,
 		})
-	}
-
-	if cache != nil {
-		cache.Set(cacheKey, utils.MustEncodeJSON(refs), 10*time.Minute)
 	}
 	return
 }

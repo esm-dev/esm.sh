@@ -39,48 +39,48 @@ const (
 	ctHtml           = "text/html; charset=utf-8"
 )
 
-type UrlKind uint8
+type ESMPathKind uint8
 
 const (
 	// module entry
-	EntryUrl UrlKind = iota
+	ESMEntry ESMPathKind = iota
 	// js/css build
-	BuildUrl
+	ESMBuild
 	// source map
-	SourceMapUrl
+	ESMSourceMap
 	// *.d.ts
-	DtsUrl
+	ESMDts
 	// package raw file
-	RawUrl
+	RawFile
 )
 
-type ESM struct {
-	GhPrefix      bool
-	PrPrefix      bool
-	PkgName       string
-	PkgVersion    string
-	SubPath       string
-	SubModuleName string
+type ESMPath struct {
+	GhPrefix    bool
+	PrPrefix    bool
+	PkgName     string
+	PkgVersion  string
+	SubPath     string
+	SubBareName string
 }
 
-func (m ESM) PackageName() string {
-	s := m.PkgName
-	if m.PkgVersion != "" && m.PkgVersion != "*" && m.PkgVersion != "latest" {
-		s += "@" + m.PkgVersion
+func (path ESMPath) PackageName() string {
+	s := path.PkgName
+	if path.PkgVersion != "" && path.PkgVersion != "*" && path.PkgVersion != "latest" {
+		s += "@" + path.PkgVersion
 	}
-	if m.GhPrefix {
+	if path.GhPrefix {
 		return "gh/" + s
 	}
-	if m.PrPrefix {
+	if path.PrPrefix {
 		return "pr/" + s
 	}
 	return s
 }
 
-func (m ESM) String() string {
-	s := m.PackageName()
-	if m.SubModuleName != "" {
-		s += "/" + m.SubModuleName
+func (path ESMPath) String() string {
+	s := path.PackageName()
+	if path.SubBareName != "" {
+		s += "/" + path.SubBareName
 	}
 	return s
 }
@@ -132,7 +132,7 @@ func routes(debug bool) rex.Handle {
 
 				// if previous build exists, return it directly
 				savePath := fmt.Sprintf("modules/%s.mjs", hash)
-				if file, err := fs.Open(savePath); err == nil {
+				if file, err := buildStorage.Get(savePath); err == nil {
 					data, err := io.ReadAll(file)
 					file.Close()
 					if err != nil {
@@ -141,7 +141,7 @@ func routes(debug bool) rex.Handle {
 					output := TransformOutput{
 						Code: string(data),
 					}
-					file, err = fs.Open(savePath + ".map")
+					file, err = buildStorage.Get(savePath + ".map")
 					if err == nil {
 						data, err = io.ReadAll(file)
 						file.Close()
@@ -180,9 +180,9 @@ func routes(debug bool) rex.Handle {
 				}
 				if len(output.Map) > 0 {
 					output.Code = fmt.Sprintf("%s//# sourceMappingURL=+%s", output.Code, path.Base(savePath)+".map")
-					go fs.WriteFile(savePath+".map", strings.NewReader(output.Map))
+					go buildStorage.Put(savePath+".map", strings.NewReader(output.Map))
 				}
-				go fs.WriteFile(savePath, strings.NewReader(output.Code))
+				go buildStorage.Put(savePath, strings.NewReader(output.Code))
 				ctx.SetHeader("Cache-Control", ccMustRevalidate)
 				return output
 
@@ -205,8 +205,8 @@ func routes(debug bool) rex.Handle {
 					return rex.Err(500, err.Error())
 				}
 				deletedPkgs := NewStringSet()
-				for _, esmPath := range deletedKeys {
-					pathname := esmPath
+				for _, key := range deletedKeys {
+					pathname := key
 					if zoneId != "" {
 						pathname = pathname[len(zoneId):]
 					}
@@ -224,9 +224,9 @@ func routes(debug bool) rex.Handle {
 				deletedFiles := []string{}
 				for _, pkgId := range deletedPkgs.Values() {
 					buildPrefix := fmt.Sprintf("builds/%s", pkgId)
-					buildFiles, err := fs.List(buildPrefix)
+					buildFiles, err := buildStorage.List(buildPrefix)
 					if err == nil && len(buildFiles) > 0 {
-						err = fs.RemoveAll(buildPrefix)
+						err = buildStorage.RemoveAll(buildPrefix)
 						if err != nil {
 							return rex.Err(500, "FS error")
 						}
@@ -236,9 +236,9 @@ func routes(debug bool) rex.Handle {
 						deletedFiles = append(deletedFiles, buildFiles...)
 					}
 					dtsPrefix := fmt.Sprintf("types/%s", pkgId)
-					dtsFiles, err := fs.List(dtsPrefix)
+					dtsFiles, err := buildStorage.List(dtsPrefix)
 					if err == nil && len(dtsFiles) > 0 {
-						err = fs.RemoveAll(dtsPrefix)
+						err = buildStorage.RemoveAll(dtsPrefix)
 						if err != nil {
 							return rex.Err(500, "FS error")
 						}
@@ -318,7 +318,7 @@ func routes(debug bool) rex.Handle {
 						"clients":   clientIps,
 						"createdAt": t.createdAt.Format(http.TimeFormat),
 						"inProcess": t.inProcess,
-						"path":      t.Path(),
+						"path":      t.Pathname(),
 						"stage":     t.stage,
 					}
 					if !t.startedAt.IsZero() {
@@ -455,14 +455,14 @@ func routes(debug bool) rex.Handle {
 				return rex.Status(404, "Not Found")
 			}
 			savePath := fmt.Sprintf("modules/%s.%s", hash, ext)
-			fi, err := fs.Stat(savePath)
+			fi, err := buildStorage.Stat(savePath)
 			if err != nil {
 				if err == storage.ErrNotFound {
 					return rex.Status(404, "Not Found")
 				}
 				return rex.Status(500, err.Error())
 			}
-			f, err := fs.Open(savePath)
+			f, err := buildStorage.Get(savePath)
 			if err != nil {
 				return rex.Status(500, err.Error())
 			}
@@ -571,13 +571,13 @@ func routes(debug bool) rex.Handle {
 			h.Write([]byte(query.Get("v")))
 			h.Write([]byte(target))
 			savePath := normalizeSavePath(zoneId, path.Join("modules", hex.EncodeToString(h.Sum(nil))+".css"))
-			_, err = fs.Stat(savePath)
+			_, err = buildStorage.Stat(savePath)
 			if err != nil && err != storage.ErrNotFound {
 				return rex.Status(500, err.Error())
 			}
 			var resp any
 			if err == nil {
-				f, err := fs.Open(savePath)
+				f, err := buildStorage.Get(savePath)
 				if err != nil {
 					return rex.Status(500, err.Error())
 				}
@@ -714,7 +714,7 @@ func routes(debug bool) rex.Handle {
 				if err != nil {
 					return rex.Status(500, "Failed to generate uno.css")
 				}
-				go fs.WriteFile(savePath, strings.NewReader(out.Code))
+				go buildStorage.Put(savePath, strings.NewReader(out.Code))
 				resp = out.Code
 			}
 			ctx.SetHeader("Cache-Control", ccImmutable)
@@ -760,13 +760,13 @@ func routes(debug bool) rex.Handle {
 			h.Write([]byte(v))
 			h.Write([]byte(target))
 			savePath := normalizeSavePath(zoneId, path.Join("modules", hex.EncodeToString(h.Sum(nil))+".mjs"))
-			_, err = fs.Stat(savePath)
+			_, err = buildStorage.Stat(savePath)
 			if err != nil && err != storage.ErrNotFound {
 				return rex.Status(500, err.Error())
 			}
 			var resp any
 			if err == nil {
-				f, err := fs.Open(savePath)
+				f, err := buildStorage.Get(savePath)
 				if err != nil {
 					return rex.Status(500, err.Error())
 				}
@@ -847,7 +847,7 @@ func routes(debug bool) rex.Handle {
 				if err != nil {
 					return rex.Status(500, err.Error())
 				}
-				go fs.WriteFile(savePath, strings.NewReader(out.Code))
+				go buildStorage.Put(savePath, strings.NewReader(out.Code))
 				resp = out.Code
 			}
 			if isCss && query.Has("module") {
@@ -878,7 +878,7 @@ func routes(debug bool) rex.Handle {
 			pathname = "/pr/" + pathname[5:]
 		}
 
-		esmUrl, extraQuery, isFixedVersion, isModuleFullpath, err := praseESMPath(npmrc, pathname)
+		esm, extraQuery, isFixedVersion, isModuleFullpath, err := praseESMPath(npmrc, pathname)
 		if err != nil {
 			status := 500
 			message := err.Error()
@@ -890,20 +890,20 @@ func routes(debug bool) rex.Handle {
 			return rex.Status(status, message)
 		}
 
-		pkgAllowed := config.AllowList.IsPackageAllowed(esmUrl.PkgName)
-		pkgBanned := config.BanList.IsPackageBanned(esmUrl.PkgName)
+		pkgAllowed := config.AllowList.IsPackageAllowed(esm.PkgName)
+		pkgBanned := config.BanList.IsPackageBanned(esm.PkgName)
 		if !pkgAllowed || pkgBanned {
 			return rex.Status(403, "forbidden")
 		}
 
 		ghPrefix := ""
-		if esmUrl.GhPrefix {
+		if esm.GhPrefix {
 			ghPrefix = "/gh"
 		}
 
 		// redirect `/@types/PKG` to it's main dts file
-		if strings.HasPrefix(esmUrl.PkgName, "@types/") && esmUrl.SubModuleName == "" {
-			info, err := npmrc.getPackageInfo(esmUrl.PkgName, esmUrl.PkgVersion)
+		if strings.HasPrefix(esm.PkgName, "@types/") && esm.SubBareName == "" {
+			info, err := npmrc.getPackageInfo(esm.PkgName, esm.PkgVersion)
 			if err != nil {
 				return rex.Status(500, err.Error())
 			}
@@ -919,8 +919,8 @@ func routes(debug bool) rex.Handle {
 		}
 
 		// redirect to main css path for CSS packages
-		if css := cssPackages[esmUrl.PkgName]; css != "" && esmUrl.SubModuleName == "" {
-			url := fmt.Sprintf("%s/%s/%s", cdnOrigin, esmUrl.String(), css)
+		if css := cssPackages[esm.PkgName]; css != "" && esm.SubBareName == "" {
+			url := fmt.Sprintf("%s/%s/%s", cdnOrigin, esm.String(), css)
 			return rex.Redirect(url, http.StatusFound)
 		}
 
@@ -930,13 +930,13 @@ func routes(debug bool) rex.Handle {
 		// support `https://esm.sh/react?dev&target=es2020/jsx-runtime` pattern for jsx transformer
 		for _, jsxRuntime := range []string{"/jsx-runtime", "/jsx-dev-runtime"} {
 			if strings.HasSuffix(rawQuery, jsxRuntime) {
-				if esmUrl.SubPath == "" {
-					esmUrl.SubPath = jsxRuntime[1:]
+				if esm.SubPath == "" {
+					esm.SubPath = jsxRuntime[1:]
 				} else {
-					esmUrl.SubPath = esmUrl.SubPath + jsxRuntime
+					esm.SubPath = esm.SubPath + jsxRuntime
 				}
-				esmUrl.SubModuleName = esmUrl.SubPath
-				pathname = fmt.Sprintf("/%s/%s", esmUrl.PkgName, esmUrl.SubPath)
+				esm.SubBareName = esm.SubPath
+				pathname = fmt.Sprintf("/%s/%s", esm.PkgName, esm.SubPath)
 				ctx.R.URL.RawQuery = strings.TrimSuffix(rawQuery, jsxRuntime)
 				break
 			}
@@ -956,43 +956,43 @@ func routes(debug bool) rex.Handle {
 
 		// use `?path=$PATH` query to override the pathname
 		if v := query.Get("path"); v != "" {
-			esmUrl.SubPath = utils.CleanPath(v)[1:]
-			esmUrl.SubModuleName = toModuleBareName(esmUrl.SubPath, true)
+			esm.SubPath = utils.CleanPath(v)[1:]
+			esm.SubBareName = toModuleBareName(esm.SubPath, true)
 		}
 
 		// check the response type
-		resType := EntryUrl
-		if esmUrl.SubPath != "" {
-			ext := path.Ext(esmUrl.SubPath)
+		resType := ESMEntry
+		if esm.SubPath != "" {
+			ext := path.Ext(esm.SubPath)
 			switch ext {
 			case ".js", ".mjs":
 				if isModuleFullpath {
-					resType = BuildUrl
+					resType = ESMBuild
 				}
 			case ".ts", ".mts":
 				if endsWith(pathname, ".d.ts", ".d.mts") {
-					resType = DtsUrl
+					resType = ESMDts
 				}
 			case ".css":
 				if isModuleFullpath {
-					resType = BuildUrl
+					resType = ESMBuild
 				} else {
-					resType = RawUrl
+					resType = RawFile
 				}
 			case ".map":
 				if isModuleFullpath {
-					resType = SourceMapUrl
+					resType = ESMSourceMap
 				} else {
-					resType = RawUrl
+					resType = RawFile
 				}
 			default:
 				if ext != "" && assetExts[ext[1:]] {
-					resType = RawUrl
+					resType = RawFile
 				}
 			}
 		}
 		if query.Has("raw") {
-			resType = RawUrl
+			resType = RawFile
 		}
 
 		// redirect to the url with fixed package version
@@ -1000,27 +1000,27 @@ func routes(debug bool) rex.Handle {
 			if isModuleFullpath {
 				subPath := ""
 				query := ""
-				if esmUrl.SubPath != "" {
-					subPath = "/" + esmUrl.SubPath
+				if esm.SubPath != "" {
+					subPath = "/" + esm.SubPath
 				}
 				if rawQuery != "" {
 					query = "?" + rawQuery
 				}
 				ctx.SetHeader("Cache-Control", cc10mins)
-				return rex.Redirect(fmt.Sprintf("%s/%s%s%s", cdnOrigin, esmUrl.PackageName(), subPath, query), http.StatusFound)
+				return rex.Redirect(fmt.Sprintf("%s/%s%s%s", cdnOrigin, esm.PackageName(), subPath, query), http.StatusFound)
 			}
-			if resType != EntryUrl {
-				pkgName := esmUrl.PkgName
-				pkgVersion := esmUrl.PkgVersion
+			if resType != ESMEntry {
+				pkgName := esm.PkgName
+				pkgVersion := esm.PkgVersion
 				subPath := ""
 				qs := ""
 				if strings.HasPrefix(pkgName, "@jsr/") {
 					pkgName = "jsr/@" + strings.ReplaceAll(pkgName[5:], "__", "/")
 				}
-				if esmUrl.SubPath != "" {
-					subPath = "/" + esmUrl.SubPath
+				if esm.SubPath != "" {
+					subPath = "/" + esm.SubPath
 					// workaround for es5-ext "../#/.." path
-					if esmUrl.PkgName == "es5-ext" {
+					if esm.PkgName == "es5-ext" {
 						subPath = strings.ReplaceAll(subPath, "/#/", "/%23/")
 					}
 				}
@@ -1035,7 +1035,7 @@ func routes(debug bool) rex.Handle {
 			}
 		} else {
 			// serve `*.wasm` as an es6 module when `?module` query is set (requires `top-level-await` support)
-			if resType == RawUrl && strings.HasSuffix(esmUrl.SubPath, ".wasm") && query.Has("module") {
+			if resType == RawFile && strings.HasSuffix(esm.SubPath, ".wasm") && query.Has("module") {
 				buf := &bytes.Buffer{}
 				wasmUrl := cdnOrigin + pathname
 				fmt.Fprintf(buf, "/* esm.sh - wasm module */\n")
@@ -1046,16 +1046,16 @@ func routes(debug bool) rex.Handle {
 			}
 
 			// fix url that is related to `import.meta.url`
-			if resType == RawUrl && isModuleFullpath && !query.Has("raw") {
-				extname := path.Ext(esmUrl.SubPath)
-				dir := path.Join(npmrc.StoreDir(), esmUrl.PackageName())
+			if resType == RawFile && isModuleFullpath && !query.Has("raw") {
+				extname := path.Ext(esm.SubPath)
+				dir := path.Join(npmrc.StoreDir(), esm.PackageName())
 				if !existsDir(dir) {
-					_, err := npmrc.installPackage(esmUrl)
+					_, err := npmrc.installPackage(esm)
 					if err != nil {
 						return rex.Status(500, err.Error())
 					}
 				}
-				pkgRoot := path.Join(dir, "node_modules", esmUrl.PkgName)
+				pkgRoot := path.Join(dir, "node_modules", esm.PkgName)
 				files, err := findFiles(pkgRoot, "", func(fp string) bool {
 					return strings.HasSuffix(fp, extname)
 				})
@@ -1068,14 +1068,14 @@ func routes(debug bool) rex.Handle {
 				} else if l > 1 {
 					sort.Sort(sort.Reverse(SortablePaths(files)))
 					for _, f := range files {
-						if strings.HasSuffix(esmUrl.SubPath, f) {
+						if strings.HasSuffix(esm.SubPath, f) {
 							file = f
 							break
 						}
 					}
 					if file == "" {
 						for _, f := range files {
-							if path.Base(esmUrl.SubPath) == path.Base(f) {
+							if path.Base(esm.SubPath) == path.Base(f) {
 								file = f
 								break
 							}
@@ -1085,20 +1085,20 @@ func routes(debug bool) rex.Handle {
 				if file == "" {
 					return rex.Status(404, "File not found")
 				}
-				url := fmt.Sprintf("%s/%s@%s/%s", cdnOrigin, esmUrl.PkgName, esmUrl.PkgVersion, file)
+				url := fmt.Sprintf("%s/%s@%s/%s", cdnOrigin, esm.PkgName, esm.PkgVersion, file)
 				return rex.Redirect(url, http.StatusMovedPermanently)
 			}
 
 			// serve package raw files
-			if resType == RawUrl {
-				savePath := path.Join(npmrc.StoreDir(), esmUrl.PackageName(), "node_modules", esmUrl.PkgName, esmUrl.SubPath)
+			if resType == RawFile {
+				savePath := path.Join(npmrc.StoreDir(), esm.PackageName(), "node_modules", esm.PkgName, esm.SubPath)
 				fi, err := os.Lstat(savePath)
 				if err != nil {
 					if os.IsExist(err) {
 						return rex.Status(500, err.Error())
 					}
 					// if the file not found, try to install the package
-					_, err = npmrc.installPackage(esmUrl)
+					_, err = npmrc.installPackage(esm)
 					if err != nil {
 						return rex.Status(500, err.Error())
 					}
@@ -1140,17 +1140,17 @@ func routes(debug bool) rex.Handle {
 			}
 
 			// serve build/dts files
-			if resType == BuildUrl || resType == SourceMapUrl || resType == DtsUrl {
+			if resType == ESMBuild || resType == ESMSourceMap || resType == ESMDts {
 				var savePath string
-				if resType == DtsUrl {
+				if resType == ESMDts {
 					savePath = path.Join("types", pathname)
 				} else {
 					savePath = path.Join("builds", pathname)
 				}
 				savePath = normalizeSavePath(zoneId, savePath)
-				fi, err := fs.Stat(savePath)
+				fi, err := buildStorage.Stat(savePath)
 				if err != nil {
-					if err == storage.ErrNotFound && resType == SourceMapUrl {
+					if err == storage.ErrNotFound && resType == ESMSourceMap {
 						return rex.Status(404, "Not found")
 					}
 					if err != storage.ErrNotFound {
@@ -1158,7 +1158,7 @@ func routes(debug bool) rex.Handle {
 					}
 				}
 				if err == nil {
-					if query.Has("worker") && resType == BuildUrl {
+					if query.Has("worker") && resType == ESMBuild {
 						moduleUrl := cdnOrigin + pathname
 						ctx.SetHeader("Content-Type", ctJavaScript)
 						ctx.SetHeader("Cache-Control", ccImmutable)
@@ -1168,13 +1168,13 @@ func routes(debug bool) rex.Handle {
 							moduleUrl,
 						)
 					}
-					r, err := fs.Open(savePath)
+					r, err := buildStorage.Get(savePath)
 					if err != nil {
 						return rex.Status(500, err.Error())
 					}
-					if resType == DtsUrl {
+					if resType == ESMDts {
 						ctx.SetHeader("Content-Type", ctTypeScript)
-					} else if resType == SourceMapUrl {
+					} else if resType == ESMSourceMap {
 						ctx.SetHeader("Content-Type", ctJSON)
 					} else if strings.HasSuffix(pathname, ".css") {
 						ctx.SetHeader("Content-Type", ctCSS)
@@ -1182,7 +1182,7 @@ func routes(debug bool) rex.Handle {
 						ctx.SetHeader("Content-Type", ctJavaScript)
 					}
 					ctx.SetHeader("Cache-Control", ccImmutable)
-					if resType == DtsUrl {
+					if resType == ESMDts {
 						buffer, err := io.ReadAll(r)
 						r.Close()
 						if err != nil {
@@ -1204,17 +1204,17 @@ func routes(debug bool) rex.Handle {
 
 		// redirect to the url with fixed package version for `deno` and `denonext` target
 		if !isFixedVersion && (target == "denonext" || target == "deno") {
-			pkgName := esmUrl.PkgName
-			pkgVersion := esmUrl.PkgVersion
+			pkgName := esm.PkgName
+			pkgVersion := esm.PkgVersion
 			subPath := ""
 			qs := ""
 			if strings.HasPrefix(pkgName, "@jsr/") {
 				pkgName = "jsr/@" + strings.ReplaceAll(pkgName[5:], "__", "/")
 			}
-			if esmUrl.SubPath != "" {
-				subPath = "/" + esmUrl.SubPath
+			if esm.SubPath != "" {
+				subPath = "/" + esm.SubPath
 				// workaround for es5-ext "../#/.." path
-				if esmUrl.PkgName == "es5-ext" {
+				if esm.PkgName == "es5-ext" {
 					subPath = strings.ReplaceAll(subPath, "/#/", "/%23/")
 				}
 			}
@@ -1247,7 +1247,7 @@ func routes(debug bool) rex.Handle {
 					name, to := utils.SplitByFirstByte(p, ':')
 					name = strings.TrimSpace(name)
 					to = strings.TrimSpace(to)
-					if name != "" && to != "" && name != esmUrl.PkgName {
+					if name != "" && to != "" && name != esm.PkgName {
 						alias[name] = to
 					}
 				}
@@ -1264,11 +1264,11 @@ func routes(debug bool) rex.Handle {
 					if err != nil {
 						return rex.Status(400, fmt.Sprintf("Invalid deps query: %v not found", v))
 					}
-					if esmUrl.PkgName == "react-dom" && m.PkgName == "react" {
+					if esm.PkgName == "react-dom" && m.PkgName == "react" {
 						// make sure react-dom and react are in the same version
 						continue
 					}
-					if m.PkgName != esmUrl.PkgName {
+					if m.PkgName != esm.PkgName {
 						deps[m.PkgName] = m.PkgVersion
 					}
 				}
@@ -1326,15 +1326,15 @@ func routes(debug bool) rex.Handle {
 
 		// match path `PKG@VERSION/X-${args}/esnext/SUBPATH`
 		argsX := false
-		if resType == BuildUrl || resType == DtsUrl {
-			a := strings.Split(esmUrl.SubModuleName, "/")
+		if resType == ESMBuild || resType == ESMDts {
+			a := strings.Split(esm.SubBareName, "/")
 			if len(a) > 1 && strings.HasPrefix(a[0], "X-") {
 				args, err := decodeBuildArgs(npmrc, strings.TrimPrefix(a[0], "X-"))
 				if err != nil {
 					return throwErrorJS(ctx, "Invalid build args: "+a[0], false)
 				}
-				esmUrl.SubPath = strings.Join(strings.Split(esmUrl.SubPath, "/")[1:], "/")
-				esmUrl.SubModuleName = toModuleBareName(esmUrl.SubPath, true)
+				esm.SubPath = strings.Join(strings.Split(esm.SubPath, "/")[1:], "/")
+				esm.SubBareName = toModuleBareName(esm.SubPath, true)
 				buildArgs = args
 				argsX = true
 			}
@@ -1342,30 +1342,30 @@ func routes(debug bool) rex.Handle {
 
 		// fix the build args that are from the query
 		if !argsX {
-			err := normalizeBuildArgs(npmrc, path.Join(npmrc.StoreDir(), esmUrl.PackageName()), &buildArgs, esmUrl)
+			err := normalizeBuildArgs(npmrc, path.Join(npmrc.StoreDir(), esm.PackageName()), &buildArgs, esm)
 			if err != nil {
 				return throwErrorJS(ctx, err.Error(), false)
 			}
 		}
 
 		// build and return `.d.ts`
-		if resType == DtsUrl {
-			findDts := func() (savePath string, fi storage.FileStat, err error) {
+		if resType == ESMDts {
+			findDts := func() (savePath string, stat storage.Stat, err error) {
 				args := ""
 				if a := encodeBuildArgs(buildArgs, true); a != "" {
 					args = "X-" + a
 				}
 				savePath = normalizeSavePath(zoneId, path.Join(fmt.Sprintf(
 					"types/%s/%s",
-					esmUrl.PackageName(),
+					esm.PackageName(),
 					args,
-				), esmUrl.SubPath))
-				fi, err = fs.Stat(savePath)
-				return savePath, fi, err
+				), esm.SubPath))
+				stat, err = buildStorage.Stat(savePath)
+				return savePath, stat, err
 			}
 			_, _, err := findDts()
 			if err == storage.ErrNotFound {
-				buildCtx := NewBuildContext(zoneId, npmrc, esmUrl, buildArgs, "types", BundleDefault, false, false)
+				buildCtx := NewBuildContext(zoneId, npmrc, esm, buildArgs, "types", BundleDefault, false, false)
 				c := buildQueue.Add(buildCtx, ctx.RemoteIP())
 				select {
 				case output := <-c.C:
@@ -1375,7 +1375,7 @@ func routes(debug bool) rex.Handle {
 						}
 						return rex.Status(500, "types: "+output.err.Error())
 					}
-				case <-time.After(time.Duration(config.BuildTimeout) * time.Second):
+				case <-time.After(time.Duration(config.BuildWaitTime) * time.Second):
 					ctx.SetHeader("Cache-Control", ccMustRevalidate)
 					return rex.Status(http.StatusRequestTimeout, "timeout, we are transforming the types hardly, please try again later!")
 				}
@@ -1387,7 +1387,7 @@ func routes(debug bool) rex.Handle {
 				}
 				return rex.Status(500, err.Error())
 			}
-			r, err := fs.Open(savePath)
+			r, err := buildStorage.Get(savePath)
 			if err != nil {
 				return rex.Status(500, err.Error())
 			}
@@ -1404,7 +1404,7 @@ func routes(debug bool) rex.Handle {
 
 		if !argsX {
 			// check `?jsx-rutnime` query
-			var jsxRuntime *ESM = nil
+			var jsxRuntime *ESMPath = nil
 			if v := query.Get("jsx-runtime"); v != "" {
 				m, _, _, _, err := praseESMPath(npmrc, v)
 				if err != nil {
@@ -1415,7 +1415,7 @@ func routes(debug bool) rex.Handle {
 
 			externalRequire := query.Has("external-require")
 			// workaround: force "unocss/preset-icons" to external `require` calls
-			if !externalRequire && esmUrl.PkgName == "@unocss/preset-icons" {
+			if !externalRequire && esm.PkgName == "@unocss/preset-icons" {
 				externalRequire = true
 			}
 
@@ -1438,12 +1438,12 @@ func routes(debug bool) rex.Handle {
 		noDts := query.Has("no-dts") || query.Has("no-check")
 
 		// force react/jsx-dev-runtime and react-refresh into `dev` mode
-		if !isDev && ((esmUrl.PkgName == "react" && esmUrl.SubModuleName == "jsx-dev-runtime") || esmUrl.PkgName == "react-refresh") {
+		if !isDev && ((esm.PkgName == "react" && esm.SubBareName == "jsx-dev-runtime") || esm.PkgName == "react-refresh") {
 			isDev = true
 		}
 
-		if resType == BuildUrl {
-			a := strings.Split(esmUrl.SubModuleName, "/")
+		if resType == ESMBuild {
+			a := strings.Split(esm.SubBareName, "/")
 			if len(a) > 0 {
 				maybeTarget := a[0]
 				if _, ok := targets[maybeTarget]; ok {
@@ -1459,28 +1459,28 @@ func routes(debug bool) rex.Handle {
 						submodule = strings.TrimSuffix(submodule, ".development")
 						isDev = true
 					}
-					basename := strings.TrimSuffix(path.Base(esmUrl.PkgName), ".js")
-					if strings.HasSuffix(submodule, ".css") && !strings.HasSuffix(esmUrl.SubPath, ".js") {
+					basename := strings.TrimSuffix(path.Base(esm.PkgName), ".js")
+					if strings.HasSuffix(submodule, ".css") && !strings.HasSuffix(esm.SubPath, ".js") {
 						if submodule == basename+".css" {
-							esmUrl.SubModuleName = ""
+							esm.SubBareName = ""
 							target = maybeTarget
 						} else {
-							url := fmt.Sprintf("%s/%s", cdnOrigin, esmUrl.String())
+							url := fmt.Sprintf("%s/%s", cdnOrigin, esm.String())
 							return rex.Redirect(url, http.StatusFound)
 						}
 					} else {
-						isMjs := strings.HasSuffix(esmUrl.SubPath, ".mjs")
+						isMjs := strings.HasSuffix(esm.SubPath, ".mjs")
 						if isMjs && submodule == basename {
 							submodule = ""
 						}
-						esmUrl.SubModuleName = submodule
+						esm.SubBareName = submodule
 						target = maybeTarget
 					}
 				}
 			}
 		}
 
-		buildCtx := NewBuildContext(zoneId, npmrc, esmUrl, buildArgs, target, bundleMode, isDev, !config.DisableSourceMap)
+		buildCtx := NewBuildContext(zoneId, npmrc, esm, buildArgs, target, bundleMode, isDev, !config.DisableSourceMap)
 		ret, hasBuild := buildCtx.Query()
 		if !hasBuild {
 			c := buildQueue.Add(buildCtx, ctx.RemoteIP())
@@ -1491,7 +1491,7 @@ func routes(debug bool) rex.Handle {
 					if strings.Contains(msg, "no such file or directory") ||
 						strings.Contains(msg, "is not exported from package") {
 						// redirect old build path (.js) to new build path (.mjs)
-						if strings.HasSuffix(esmUrl.SubPath, "/"+esmUrl.PkgName+".js") {
+						if strings.HasSuffix(esm.SubPath, "/"+esm.PkgName+".js") {
 							url := strings.TrimSuffix(ctx.R.URL.String(), ".js") + ".mjs"
 							return rex.Redirect(url, http.StatusFound)
 						}
@@ -1504,7 +1504,7 @@ func routes(debug bool) rex.Handle {
 					return throwErrorJS(ctx, output.err.Error(), false)
 				}
 				ret = output.result
-			case <-time.After(time.Duration(config.BuildTimeout) * time.Second):
+			case <-time.After(time.Duration(config.BuildWaitTime) * time.Second):
 				ctx.SetHeader("Cache-Control", ccMustRevalidate)
 				return rex.Status(http.StatusRequestTimeout, "timeout, we are building the package hardly, please try again later!")
 			}
@@ -1523,29 +1523,29 @@ func routes(debug bool) rex.Handle {
 		}
 
 		// redirect to package css from `?css`
-		if isPkgCss && esmUrl.SubModuleName == "" {
+		if isPkgCss && esm.SubBareName == "" {
 			if !ret.PackageCSS {
 				return rex.Status(404, "Package CSS not found")
 			}
-			url := fmt.Sprintf("%s%s.css", cdnOrigin, strings.TrimSuffix(buildCtx.Path(), ".mjs"))
+			url := fmt.Sprintf("%s%s.css", cdnOrigin, strings.TrimSuffix(buildCtx.Pathname(), ".mjs"))
 			return rex.Redirect(url, 301)
 		}
 
 		// if the response type is `ResBuild`, return the build js/css content
-		if resType == BuildUrl {
+		if resType == ESMBuild {
 			savePath := buildCtx.getSavepath()
-			if strings.HasSuffix(esmUrl.SubPath, ".css") {
+			if strings.HasSuffix(esm.SubPath, ".css") {
 				path, _ := utils.SplitByLastByte(savePath, '.')
 				savePath = path + ".css"
 			}
-			fi, err := fs.Stat(savePath)
+			fi, err := buildStorage.Stat(savePath)
 			if err != nil {
 				if err == storage.ErrNotFound {
 					return rex.Status(404, "File not found")
 				}
 				return rex.Status(500, err.Error())
 			}
-			f, err := fs.Open(savePath)
+			f, err := buildStorage.Get(savePath)
 			if err != nil {
 				return rex.Status(500, err.Error())
 			}
@@ -1556,7 +1556,7 @@ func routes(debug bool) rex.Handle {
 				ctx.SetHeader("Content-Type", ctJavaScript)
 				if isWorker {
 					f.Close()
-					moduleUrl := cdnOrigin + buildCtx.Path()
+					moduleUrl := cdnOrigin + buildCtx.Pathname()
 					return fmt.Sprintf(
 						`export default function workerFactory(injectOrOptions) { const options = typeof injectOrOptions === "string" ? { inject: injectOrOptions }: injectOrOptions ?? {}; const { inject, name = "%s" } = options; const blob = new Blob(['import * as $module from "%s";', inject].filter(Boolean), { type: "application/javascript" }); return new Worker(URL.createObjectURL(blob), { type: "module", name })}`,
 						moduleUrl,
@@ -1568,10 +1568,10 @@ func routes(debug bool) rex.Handle {
 		}
 
 		buf := bytes.NewBuffer(nil)
-		fmt.Fprintf(buf, `/* esm.sh - %v */%s`, esmUrl, EOL)
+		fmt.Fprintf(buf, `/* esm.sh - %v */%s`, esm, EOL)
 
 		if isWorker {
-			moduleUrl := cdnOrigin + buildCtx.Path()
+			moduleUrl := cdnOrigin + buildCtx.Pathname()
 			fmt.Fprintf(buf,
 				`export default function workerFactory(injectOrOptions) { const options = typeof injectOrOptions === "string" ? { inject: injectOrOptions }: injectOrOptions ?? {}; const { inject, name = "%s" } = options; const blob = new Blob(['import * as $module from "%s";', inject].filter(Boolean), { type: "application/javascript" }); return new Worker(URL.createObjectURL(blob), { type: "module", name })}`,
 				moduleUrl,
@@ -1583,13 +1583,13 @@ func routes(debug bool) rex.Handle {
 					fmt.Fprintf(buf, `import "%s";%s`, dep, EOL)
 				}
 			}
-			ctx.SetHeader("X-ESM-Path", buildCtx.Path())
-			fmt.Fprintf(buf, `export * from "%s";%s`, buildCtx.Path(), EOL)
+			ctx.SetHeader("X-ESM-Path", buildCtx.Pathname())
+			fmt.Fprintf(buf, `export * from "%s";%s`, buildCtx.Pathname(), EOL)
 			if (ret.FromCJS || ret.HasDefaultExport) && (exports.Len() == 0 || exports.Has("default")) {
-				fmt.Fprintf(buf, `export { default } from "%s";%s`, buildCtx.Path(), EOL)
+				fmt.Fprintf(buf, `export { default } from "%s";%s`, buildCtx.Pathname(), EOL)
 			}
 			if ret.FromCJS && exports.Len() > 0 {
-				fmt.Fprintf(buf, `import __cjs_exports$ from "%s";%s`, buildCtx.Path(), EOL)
+				fmt.Fprintf(buf, `import __cjs_exports$ from "%s";%s`, buildCtx.Pathname(), EOL)
 				fmt.Fprintf(buf, `export const { %s } = __cjs_exports$;%s`, strings.Join(exports.Values(), ", "), EOL)
 			}
 		}
@@ -1623,7 +1623,7 @@ func auth(secret string) rex.Handle {
 	}
 }
 
-func praseESMPath(rc *NpmRC, pathname string) (esmUrl ESM, extraQuery string, isFixedVersion bool, hasTargetSegment bool, err error) {
+func praseESMPath(npmrc *NpmRC, pathname string) (esm ESMPath, extraQuery string, isFixedVersion bool, hasTargetSegment bool, err error) {
 	// see https://pkg.pr.new
 	if strings.HasPrefix(pathname, "/pr/") {
 		pkgName, rest := utils.SplitByFirstByte(pathname[4:], '@')
@@ -1636,12 +1636,12 @@ func praseESMPath(rc *NpmRC, pathname string) (esmUrl ESM, extraQuery string, is
 			err = errors.New("invalid path")
 			return
 		}
-		esmUrl = ESM{
-			PkgName:       pkgName,
-			PkgVersion:    version,
-			SubPath:       subPath,
-			SubModuleName: toModuleBareName(subPath, true),
-			PrPrefix:      true,
+		esm = ESMPath{
+			PkgName:     pkgName,
+			PkgVersion:  version,
+			SubPath:     subPath,
+			SubBareName: toModuleBareName(subPath, true),
+			PrPrefix:    true,
 		}
 		isFixedVersion = true
 		return
@@ -1683,47 +1683,47 @@ func praseESMPath(rc *NpmRC, pathname string) (esmUrl ESM, extraQuery string, is
 		version = v
 	}
 
-	esmUrl = ESM{
-		PkgName:       pkgName,
-		PkgVersion:    version,
-		SubPath:       subPath,
-		SubModuleName: toModuleBareName(subPath, true),
-		GhPrefix:      ghPrefix,
+	esm = ESMPath{
+		PkgName:     pkgName,
+		PkgVersion:  version,
+		SubPath:     subPath,
+		SubBareName: toModuleBareName(subPath, true),
+		GhPrefix:    ghPrefix,
 	}
 
 	// workaround for es5-ext "../#/.." path
-	if esmUrl.SubModuleName != "" && esmUrl.PkgName == "es5-ext" {
-		esmUrl.SubModuleName = strings.ReplaceAll(esmUrl.SubModuleName, "/%23/", "/#/")
+	if esm.SubBareName != "" && esm.PkgName == "es5-ext" {
+		esm.SubBareName = strings.ReplaceAll(esm.SubBareName, "/%23/", "/#/")
 	}
 
 	if ghPrefix {
-		if (valid.IsHexString(esmUrl.PkgVersion) && len(esmUrl.PkgVersion) >= 7) || regexpVersionStrict.MatchString(strings.TrimPrefix(esmUrl.PkgVersion, "v")) {
+		if (valid.IsHexString(esm.PkgVersion) && len(esm.PkgVersion) >= 7) || regexpVersionStrict.MatchString(strings.TrimPrefix(esm.PkgVersion, "v")) {
 			isFixedVersion = true
 			return
 		}
 		var refs []GitRef
-		refs, err = listRepoRefs(fmt.Sprintf("https://github.com/%s", esmUrl.PkgName))
+		refs, err = listRepoRefs(fmt.Sprintf("https://github.com/%s", esm.PkgName))
 		if err != nil {
 			return
 		}
-		if esmUrl.PkgVersion == "" {
+		if esm.PkgVersion == "" {
 			for _, ref := range refs {
 				if ref.Ref == "HEAD" {
-					esmUrl.PkgVersion = ref.Sha[:7]
+					esm.PkgVersion = ref.Sha[:7]
 					return
 				}
 			}
 		} else {
 			// try to find the exact tag or branch
 			for _, ref := range refs {
-				if ref.Ref == "refs/tags/"+esmUrl.PkgVersion || ref.Ref == "refs/heads/"+esmUrl.PkgVersion {
-					esmUrl.PkgVersion = ref.Sha[:7]
+				if ref.Ref == "refs/tags/"+esm.PkgVersion || ref.Ref == "refs/heads/"+esm.PkgVersion {
+					esm.PkgVersion = ref.Sha[:7]
 					return
 				}
 			}
 			// try to find the semver tag
 			var c *semver.Constraints
-			c, err = semver.NewConstraint(strings.TrimPrefix(esmUrl.PkgVersion, "semver:"))
+			c, err = semver.NewConstraint(strings.TrimPrefix(esm.PkgVersion, "semver:"))
 			if err == nil {
 				vs := make([]*semver.Version, len(refs))
 				i := 0
@@ -1741,7 +1741,7 @@ func praseESMPath(rc *NpmRC, pathname string) (esmUrl ESM, extraQuery string, is
 					if i > 1 {
 						sort.Sort(semver.Collection(vs))
 					}
-					esmUrl.PkgVersion = vs[i-1].String()
+					esm.PkgVersion = vs[i-1].String()
 					return
 				}
 			}
@@ -1750,12 +1750,12 @@ func praseESMPath(rc *NpmRC, pathname string) (esmUrl ESM, extraQuery string, is
 		return
 	}
 
-	isFixedVersion = regexpVersionStrict.MatchString(esmUrl.PkgVersion)
+	isFixedVersion = regexpVersionStrict.MatchString(esm.PkgVersion)
 	if !isFixedVersion {
-		var p PackageJSON
-		p, err = rc.fetchPackageInfo(pkgName, esmUrl.PkgVersion)
+		var p *PackageJSON
+		p, err = npmrc.fetchPackageInfo(pkgName, esm.PkgVersion)
 		if err == nil {
-			esmUrl.PkgVersion = p.Version
+			esm.PkgVersion = p.Version
 		}
 	}
 	return

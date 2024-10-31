@@ -14,12 +14,11 @@ import (
 )
 
 var (
-	buildQueue *BuildQueue
-	config     *Config
-	log        *logger.Logger
-	cache      storage.Cache
-	db         storage.DataBase
-	fs         storage.FileSystem
+	config       *Config
+	log          *logger.Logger
+	buildQueue   *BuildQueue
+	buildStorage storage.Storage
+	db           DataBase
 )
 
 // Serve serves the esm.sh server
@@ -31,7 +30,7 @@ func Serve(efs EmbedFS) {
 	)
 
 	flag.StringVar(&cfile, "config", "config.json", "the config file path")
-	flag.BoolVar(&debug, "debug", false, "to run server in DEUBG mode")
+	flag.BoolVar(&debug, "debug", false, "run the server in DEUBG mode")
 	flag.Parse()
 
 	if !existsFile(cfile) {
@@ -49,7 +48,6 @@ func Serve(efs EmbedFS) {
 			fmt.Println("Config loaded from", cfile)
 		}
 	}
-	buildQueue = NewBuildQueue(int(config.BuildConcurrency))
 
 	if debug {
 		config.LogLevel = "debug"
@@ -64,26 +62,33 @@ func Serve(efs EmbedFS) {
 		embedFS = efs
 	}
 
-	log, err = logger.New(fmt.Sprintf("file:%s?buffer=32k", path.Join(config.LogDir, fmt.Sprintf("main-v%d.log", VERSION))))
+	log, err = logger.New(fmt.Sprintf("file:%s?buffer=32k&fileDateFormat=20060102", path.Join(config.LogDir, fmt.Sprintf("main-v%d.log", VERSION))))
 	if err != nil {
 		fmt.Printf("initiate logger: %v\n", err)
 		os.Exit(1)
 	}
 	log.SetLevelByName(config.LogLevel)
 
-	cache, err = storage.OpenCache(config.Cache)
-	if err != nil {
-		log.Fatalf("open cache(%s): %v", config.Cache, err)
+	var accessLogger *logger.Logger
+	if config.LogDir == "" {
+		accessLogger = &logger.Logger{}
+	} else {
+		accessLogger, err = logger.New(fmt.Sprintf("file:%s?buffer=32k&fileDateFormat=20060102", path.Join(config.LogDir, "access.log")))
+		if err != nil {
+			log.Fatalf("failed to initialize access logger: %v", err)
+		}
 	}
+	// quite in terminal
+	accessLogger.SetQuite(true)
 
-	fs, err = storage.OpenFS(config.Storage)
-	if err != nil {
-		log.Fatalf("open fs(%s): %v", config.Storage, err)
-	}
-
-	db, err = storage.OpenDB(config.Database)
+	db, err = OpenDB(config.Database)
 	if err != nil {
 		log.Fatalf("open db(%s): %v", config.Database, err)
+	}
+
+	buildStorage, err = storage.Open(config.BuildStorage)
+	if err != nil {
+		log.Fatalf("open fs(%s): %v", config.BuildStorage, err)
 	}
 
 	err = loadNodeLibs(efs)
@@ -97,17 +102,6 @@ func Serve(efs EmbedFS) {
 		log.Fatalf("load npm polyfills: %v", err)
 	}
 	log.Debugf("%d npm polyfills loaded", len(npmPolyfills))
-
-	var accessLogger *logger.Logger
-	if config.LogDir == "" {
-		accessLogger = &logger.Logger{}
-	} else {
-		accessLogger, err = logger.New(fmt.Sprintf("file:%s?buffer=32k&fileDateFormat=20060102", path.Join(config.LogDir, "access.log")))
-		if err != nil {
-			log.Fatalf("failed to initialize access logger: %v", err)
-		}
-	}
-	accessLogger.SetQuite(true) // quite in terminal
 
 	// check nodejs environment
 	nodejsInstallDir := os.Getenv("NODE_INSTALL_DIR")
@@ -126,6 +120,9 @@ func Serve(efs EmbedFS) {
 		log.Fatalf("failed to initialize cjs_lexer: %v", err)
 	}
 	log.Debugf("%s initialized", cjsLexerPkg)
+
+	// init build queue
+	buildQueue = NewBuildQueue(int(config.BuildConcurrency))
 
 	// set rex middlewares
 	rex.Use(
