@@ -300,7 +300,11 @@ func (npmrc *NpmRC) fetchPackageInfo(packageName string, semverOrDistTag string)
 	start := time.Now()
 	defer func() {
 		if packageJson != nil {
-			log.Debugf("lookup package(%s@%s) in %v", packageName, packageJson.Version, time.Since(start))
+			if semverOrDistTag == packageJson.Version {
+				log.Debugf("lookup package(%s@%s) in %v", packageName, semverOrDistTag, time.Since(start))
+			} else {
+				log.Debugf("lookup package(%s@%s → %s@%s) in %v", packageName, semverOrDistTag, packageName, packageJson.Version, time.Since(start))
+			}
 		}
 	}()
 
@@ -700,9 +704,9 @@ func validatePackageName(pkgName string) bool {
 	}
 	if strings.HasPrefix(pkgName, "@") {
 		scope, name := utils.SplitByFirstByte(pkgName, '/')
-		return npmNaming.Is(scope[1:]) && npmNaming.Is(name)
+		return npmNaming.Match(scope[1:]) && npmNaming.Match(name)
 	}
-	return npmNaming.Is(pkgName)
+	return npmNaming.Match(pkgName)
 }
 
 // added by @jimisaacs

@@ -16,24 +16,41 @@
   // The wait time for incoming requests to wait for the build process to finish, default is 30 seconds.
   "buildWaitTime": 30,
 
+  // The storage options.
+  // Examples:
+  // - Use local file system as a storage:
+  //   "storage": {
+  //     "type": "fs",
+  //     "endpoint": "/path/to/storage"
+  //   }
+  // - Use S3-compatible storage:
+  //   "storage": {
+  //     "type": "s3",
+  //     "endpoint": "https://bucket.s3.amazonaws.com",
+  //     "region": "us-west-1",
+  //     "accessKeyID": "...",
+  //     "secretAccessKey": "..."
+  //   }
+  "storage": {
+    // storage type, supported types are ["fs", "s3"], default is "fs".
+    "type": "fs",
+    // storage endpoint, default is "~/.esmd/storage".
+    "endpoint": "~/.esmd/storage",
+    // storage region for s3, default is empty.
+    "region": "",
+    // storage access key id for s3, default is empty.
+    "accessKeyID": "",
+    // storage secret access key for s3, default is empty
+    "secretAccessKey": ""
+  },
+
   // The work directory for the server, default is "~/.esmd".
   "workDir": "~/.esmd",
-
-  // The database source, default is "bolt://~/.esmd/esm.db".
-  // Currently only bolt is supported.
-  "database": "bolt://~/.esmd/esm.db",
-
-  // The build storage source, default is "file://~/.esmd/storage".
-  // Supported storage types are "fs" and "s3".
-  // Examples:
-  // - "fs:///path/to/storage"
-  // - "s3://r2.cloudflarestorage.com/esm"
-  "buildStorage": "fs://~/.esmd/storage",
 
   // The log directory, default is "~/.esmd/log".
   "logDir": "~/.esmd/log",
 
-  // The log level, default is "info"(available values are ["debug", "info", "warn", "error"]).
+  // The log level, available values are ["debug", "info", "warn", "error"], default is "info".
   "logLevel": "info",
 
   // The global npm registry, default is "https://registry.npmjs.org/".
@@ -52,22 +69,24 @@
   "npmRegistries": {
     "@scope_name": {
       "registry": "https://your-registry.com/",
-      "token": "xxx",
+      // add access token for authentication
+      "token": "...",
+      // or use basic authentication
       "user": "username",
-      "password": "xxx"
+      "password": "..."
     }
   },
 
-  // Whether to minify the build JS/CSS files, default is true.
+  // compress http response body with gzip/brotli, default is true.
+  "compress": true,
+
+  // Enable minify for built js/css files, default is true,
   "minify": true,
 
-  // Disable http compression, default is false.
-  "disableCompression": false,
+  // generate source map for built js/css files, default is true.
+  "sourceMap": true,
 
-  // Disable generating source map for build js files, default is false.
-  "disableSourceMap": false,
-
-  // The list to ban some packages or scopes.
+  // The list to ban some packages or scopes, default no ban.
   "banList": {
     "packages": ["@scope_name/package_name"],
     "scopes": [{
@@ -76,7 +95,7 @@
     }]
   },
 
-  // The list to only allow some packages or scopes.
+  // The list to only allow some packages or scopes, default allow all.
   "allowList": {
     "packages": ["@scope_name/package_name"],
     "scopes": [{

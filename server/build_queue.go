@@ -24,7 +24,7 @@ type BuildTask struct {
 }
 
 type BuildOutput struct {
-	result BuildResult
+	result *BuildMeta
 	err    error
 }
 

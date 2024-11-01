@@ -329,13 +329,16 @@ function withESMWorker(middleware?: Middleware, cache: Cache = (caches as any).d
         }
         case "/purge": {
           const res = await fetchOrigin(req, env, ctx, pathname);
-          const ret: { zoneId?: string; deletedFiles: string[] } = await res.json();
-          const { zoneId, deletedFiles } = ret;
-          if (deletedFiles && deletedFiles.length > 0) {
+          if (!res.ok) {
+            copyHeaders(res.headers, ctx.corsHeaders());
+            return res;
+          }
+          const ret: { deleted: string[] } = await res.json();
+          const { deleted } = ret;
+          if (Array.isArray(deleted) && deleted.length > 0) {
             const { R2 } = env;
             if (R2) {
-              const keys = zoneId ? deletedFiles.map((name) => zoneId + "/" + name) : deletedFiles;
-              await R2.delete(keys);
+              await R2.delete(deleted);
             }
           }
           return Response.json(ret, { headers: ctx.corsHeaders() });

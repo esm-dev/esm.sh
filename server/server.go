@@ -14,11 +14,10 @@ import (
 )
 
 var (
-	config       *Config
-	log          *logger.Logger
-	buildQueue   *BuildQueue
-	buildStorage storage.Storage
-	db           DataBase
+	config     *Config
+	log        *logger.Logger
+	buildQueue *BuildQueue
+	esmStorage storage.Storage
 )
 
 // Serve serves the esm.sh server
@@ -81,14 +80,9 @@ func Serve(efs EmbedFS) {
 	// quite in terminal
 	accessLogger.SetQuite(true)
 
-	db, err = OpenDB(config.Database)
+	esmStorage, err = storage.New(&config.Storage)
 	if err != nil {
-		log.Fatalf("open db(%s): %v", config.Database, err)
-	}
-
-	buildStorage, err = storage.Open(config.BuildStorage)
-	if err != nil {
-		log.Fatalf("open fs(%s): %v", config.BuildStorage, err)
+		log.Fatalf("failed to initialize build storage(%s): %v", config.Storage.Type, err)
 	}
 
 	err = loadNodeLibs(efs)
@@ -128,8 +122,6 @@ func Serve(efs EmbedFS) {
 	rex.Use(
 		rex.Logger(log),
 		rex.AccessLogger(accessLogger),
-		rex.Optional(rex.Compress(), !config.DisableCompression),
-		rex.Header("Server", "esm.sh"),
 		rex.Cors(rex.CorsOptions{
 			AllowedOrigins:   []string{"*"},
 			AllowedMethods:   []string{"HEAD", "GET", "POST"},
@@ -137,6 +129,8 @@ func Serve(efs EmbedFS) {
 			MaxAge:           86400, // 24 hours
 			AllowCredentials: false,
 		}),
+		rex.Header("Server", "esm.sh"),
+		rex.Optional(rex.Compress(), string(config.Compress) != "false"),
 		auth(config.AuthSecret),
 		routes(debug),
 	)
@@ -163,7 +157,6 @@ func Serve(efs EmbedFS) {
 	}
 
 	// release resources
-	db.Close()
 	log.FlushBuffer()
 	accessLogger.FlushBuffer()
 }

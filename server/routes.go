@@ -132,7 +132,7 @@ func routes(debug bool) rex.Handle {
 
 				// if previous build exists, return it directly
 				savePath := fmt.Sprintf("modules/%s.mjs", hash)
-				if file, err := buildStorage.Get(savePath); err == nil {
+				if file, err := esmStorage.Get(savePath); err == nil {
 					data, err := io.ReadAll(file)
 					file.Close()
 					if err != nil {
@@ -141,7 +141,7 @@ func routes(debug bool) rex.Handle {
 					output := TransformOutput{
 						Code: string(data),
 					}
-					file, err = buildStorage.Get(savePath + ".map")
+					file, err = esmStorage.Get(savePath + ".map")
 					if err == nil {
 						data, err = io.ReadAll(file)
 						file.Close()
@@ -180,9 +180,9 @@ func routes(debug bool) rex.Handle {
 				}
 				if len(output.Map) > 0 {
 					output.Code = fmt.Sprintf("%s//# sourceMappingURL=+%s", output.Code, path.Base(savePath)+".map")
-					go buildStorage.Put(savePath+".map", strings.NewReader(output.Map))
+					go esmStorage.Put(savePath+".map", strings.NewReader(output.Map))
 				}
-				go buildStorage.Put(savePath, strings.NewReader(output.Code))
+				go esmStorage.Put(savePath, strings.NewReader(output.Code))
 				ctx.SetHeader("Cache-Control", ccMustRevalidate)
 				return output
 
@@ -193,70 +193,27 @@ func routes(debug bool) rex.Handle {
 				if packageName == "" {
 					return rex.Err(400, "param `package` is required")
 				}
-				prefix := "/" + packageName + "@"
-				if version != "" {
-					prefix += version
+				if version != "" && !regexpVersionStrict.MatchString(version) {
+					return rex.Err(400, "invalid version")
 				}
+				prefix := ""
 				if zoneId != "" {
-					prefix = zoneId + prefix
+					prefix = zoneId + "/"
 				}
-				deletedKeys, err := db.DeleteAll(prefix)
+				deletedBuildFiles, err := esmStorage.DeleteAll(prefix + "builds/" + packageName + "@" + version)
 				if err != nil {
 					return rex.Err(500, err.Error())
 				}
-				deletedPkgs := NewStringSet()
-				for _, key := range deletedKeys {
-					pathname := key
-					if zoneId != "" {
-						pathname = pathname[len(zoneId):]
-					}
-					fromGithub := strings.HasPrefix(pathname, "/gh/")
-					if fromGithub {
-						pathname = pathname[3:]
-					}
-					pkgName, version, _, _ := splitPkgPath(pathname)
-					pkgId := pkgName + "@" + version
-					if fromGithub {
-						pkgId = "gh/" + pkgId
-					}
-					deletedPkgs.Add(pkgId)
+				deletedDTSFiles, err := esmStorage.DeleteAll(prefix + "types/" + packageName + "@" + version)
+				if err != nil {
+					return rex.Err(500, err.Error())
 				}
-				deletedFiles := []string{}
-				for _, pkgId := range deletedPkgs.Values() {
-					buildPrefix := fmt.Sprintf("builds/%s", pkgId)
-					buildFiles, err := buildStorage.List(buildPrefix)
-					if err == nil && len(buildFiles) > 0 {
-						err = buildStorage.RemoveAll(buildPrefix)
-						if err != nil {
-							return rex.Err(500, "FS error")
-						}
-						for i, filepath := range buildFiles {
-							buildFiles[i] = fmt.Sprintf("%s/%s", pkgId, filepath)
-						}
-						deletedFiles = append(deletedFiles, buildFiles...)
-					}
-					dtsPrefix := fmt.Sprintf("types/%s", pkgId)
-					dtsFiles, err := buildStorage.List(dtsPrefix)
-					if err == nil && len(dtsFiles) > 0 {
-						err = buildStorage.RemoveAll(dtsPrefix)
-						if err != nil {
-							return rex.Err(500, "FS error")
-						}
-						for i, filepath := range dtsFiles {
-							dtsFiles[i] = fmt.Sprintf("%s/%s", pkgId, filepath)
-						}
-						deletedFiles = append(deletedFiles, dtsFiles...)
-					}
-					log.Info("purged", pkgId)
-				}
-				ret := map[string]any{
-					"deletedPkgs":  deletedPkgs.Values(),
-					"deletedFiles": deletedFiles,
-				}
-				if zoneId != "" {
-					ret["zoneId"] = zoneId
-				}
-				return ret
+				deleteKeys := make([]string, len(deletedBuildFiles)+len(deletedDTSFiles))
+				copy(deleteKeys, deletedBuildFiles)
+				copy(deleteKeys[len(deletedBuildFiles):], deletedDTSFiles)
+				log.Infof("Purged %d files for %s@%s (ip: %s)", len(deleteKeys), packageName, version, ctx.RemoteIP())
+				return map[string]any{"deleted": deleteKeys}
+
 			default:
 				return rex.Err(404, "not found")
 			}
@@ -455,14 +412,14 @@ func routes(debug bool) rex.Handle {
 				return rex.Status(404, "Not Found")
 			}
 			savePath := fmt.Sprintf("modules/%s.%s", hash, ext)
-			fi, err := buildStorage.Stat(savePath)
+			fi, err := esmStorage.Stat(savePath)
 			if err != nil {
 				if err == storage.ErrNotFound {
 					return rex.Status(404, "Not Found")
 				}
 				return rex.Status(500, err.Error())
 			}
-			f, err := buildStorage.Get(savePath)
+			f, err := esmStorage.Get(savePath)
 			if err != nil {
 				return rex.Status(500, err.Error())
 			}
@@ -571,20 +528,19 @@ func routes(debug bool) rex.Handle {
 			h.Write([]byte(query.Get("v")))
 			h.Write([]byte(target))
 			savePath := normalizeSavePath(zoneId, path.Join("modules", hex.EncodeToString(h.Sum(nil))+".css"))
-			_, err = buildStorage.Stat(savePath)
+			_, err = esmStorage.Stat(savePath)
 			if err != nil && err != storage.ErrNotFound {
 				return rex.Status(500, err.Error())
 			}
 			var resp any
 			if err == nil {
-				f, err := buildStorage.Get(savePath)
+				f, err := esmStorage.Get(savePath)
 				if err != nil {
 					return rex.Status(500, err.Error())
 				}
 				resp = f // auto closed
 			} else {
-				fetcher := newFetcher(ctx.UserAgent(), 15*time.Second)
-				res, err := fetcher.Fetch(ctxUrl)
+				res, err := defaultFetchClient.Fetch(ctxUrl)
 				if err != nil {
 					return rex.Status(500, "Failed to fetch page html")
 				}
@@ -666,13 +622,13 @@ func routes(debug bool) rex.Handle {
 					}
 				}
 				if configCSS == "" {
-					res, err := fetcher.Fetch(ctxUrl.ResolveReference(&url.URL{Path: "./uno.css"}))
+					res, err := defaultFetchClient.Fetch(ctxUrl.ResolveReference(&url.URL{Path: "./uno.css"}))
 					if err != nil {
 						return rex.Status(500, "Failed to lookup config css")
 					}
 					if res.StatusCode == 404 {
 						res.Body.Close()
-						res, err = fetcher.Fetch(ctxUrl.ResolveReference(&url.URL{Path: "/uno.css"}))
+						res, err = defaultFetchClient.Fetch(ctxUrl.ResolveReference(&url.URL{Path: "/uno.css"}))
 						if err != nil {
 							return rex.Status(500, "Failed to lookup config css")
 						}
@@ -692,7 +648,7 @@ func routes(debug bool) rex.Handle {
 				}
 				for src := range jsEntries {
 					url := ctxUrl.ResolveReference(&url.URL{Path: src})
-					_, _, tree, err := bundleRemoteModule(npmrc, url.String(), importMap, fetcher)
+					_, _, tree, err := bundleRemoteModule(npmrc, url.String(), importMap)
 					if err == nil {
 						for _, code := range tree {
 							input = append(input, string(code))
@@ -714,7 +670,7 @@ func routes(debug bool) rex.Handle {
 				if err != nil {
 					return rex.Status(500, "Failed to generate uno.css")
 				}
-				go buildStorage.Put(savePath, strings.NewReader(out.Code))
+				go esmStorage.Put(savePath, strings.NewReader(out.Code))
 				resp = out.Code
 			}
 			ctx.SetHeader("Cache-Control", ccImmutable)
@@ -760,19 +716,18 @@ func routes(debug bool) rex.Handle {
 			h.Write([]byte(v))
 			h.Write([]byte(target))
 			savePath := normalizeSavePath(zoneId, path.Join("modules", hex.EncodeToString(h.Sum(nil))+".mjs"))
-			_, err = buildStorage.Stat(savePath)
+			_, err = esmStorage.Stat(savePath)
 			if err != nil && err != storage.ErrNotFound {
 				return rex.Status(500, err.Error())
 			}
 			var resp any
 			if err == nil {
-				f, err := buildStorage.Get(savePath)
+				f, err := esmStorage.Get(savePath)
 				if err != nil {
 					return rex.Status(500, err.Error())
 				}
 				resp = f // auto closed
 			} else {
-				fetcher := newFetcher(ctx.UserAgent(), 15*time.Second)
 				importMap := ImportMap{}
 				if len(im) > 1 {
 					imPath, err := atobUrl(im[1:])
@@ -783,7 +738,7 @@ func routes(debug bool) rex.Handle {
 					if err != nil {
 						return rex.Status(400, "Invalid `im` Param")
 					}
-					res, err := fetcher.Fetch(imUrl)
+					res, err := defaultFetchClient.Fetch(imUrl)
 					if err != nil {
 						return rex.Status(500, "Failed to fetch import map")
 					}
@@ -826,7 +781,7 @@ func routes(debug bool) rex.Handle {
 						}
 					}
 				}
-				js, css, _, err := bundleRemoteModule(npmrc, urlRaw, importMap, fetcher)
+				js, css, _, err := bundleRemoteModule(npmrc, urlRaw, importMap)
 				if err != nil {
 					return rex.Status(500, "Failed to build module:"+err.Error())
 				}
@@ -847,7 +802,7 @@ func routes(debug bool) rex.Handle {
 				if err != nil {
 					return rex.Status(500, err.Error())
 				}
-				go buildStorage.Put(savePath, strings.NewReader(out.Code))
+				go esmStorage.Put(savePath, strings.NewReader(out.Code))
 				resp = out.Code
 			}
 			if isCss && query.Has("module") {
@@ -1148,7 +1103,7 @@ func routes(debug bool) rex.Handle {
 					savePath = path.Join("builds", pathname)
 				}
 				savePath = normalizeSavePath(zoneId, savePath)
-				fi, err := buildStorage.Stat(savePath)
+				fi, err := esmStorage.Stat(savePath)
 				if err != nil {
 					if err == storage.ErrNotFound && resType == ESMSourceMap {
 						return rex.Status(404, "Not found")
@@ -1168,7 +1123,7 @@ func routes(debug bool) rex.Handle {
 							moduleUrl,
 						)
 					}
-					r, err := buildStorage.Get(savePath)
+					r, err := esmStorage.Get(savePath)
 					if err != nil {
 						return rex.Status(500, err.Error())
 					}
@@ -1360,12 +1315,12 @@ func routes(debug bool) rex.Handle {
 					esm.PackageName(),
 					args,
 				), esm.SubPath))
-				stat, err = buildStorage.Stat(savePath)
+				stat, err = esmStorage.Stat(savePath)
 				return savePath, stat, err
 			}
 			_, _, err := findDts()
 			if err == storage.ErrNotFound {
-				buildCtx := NewBuildContext(zoneId, npmrc, esm, buildArgs, "types", BundleDefault, false, false)
+				buildCtx := NewBuildContext(zoneId, npmrc, esm, buildArgs, "types", BundleDefault, false, false, false)
 				c := buildQueue.Add(buildCtx, ctx.RemoteIP())
 				select {
 				case output := <-c.C:
@@ -1387,7 +1342,7 @@ func routes(debug bool) rex.Handle {
 				}
 				return rex.Status(500, err.Error())
 			}
-			r, err := buildStorage.Get(savePath)
+			r, err := esmStorage.Get(savePath)
 			if err != nil {
 				return rex.Status(500, err.Error())
 			}
@@ -1480,9 +1435,12 @@ func routes(debug bool) rex.Handle {
 			}
 		}
 
-		buildCtx := NewBuildContext(zoneId, npmrc, esm, buildArgs, target, bundleMode, isDev, !config.DisableSourceMap)
-		ret, hasBuild := buildCtx.Query()
-		if !hasBuild {
+		buildCtx := NewBuildContext(zoneId, npmrc, esm, buildArgs, target, bundleMode, isDev, string(config.SourceMap) != "false", string(config.Minify) != "false")
+		ret, err := buildCtx.Query()
+		if err != nil {
+			return throwErrorJS(ctx, err.Error(), false)
+		}
+		if ret == nil {
 			c := buildQueue.Add(buildCtx, ctx.RemoteIP())
 			select {
 			case output := <-c.C:
@@ -1524,7 +1482,7 @@ func routes(debug bool) rex.Handle {
 
 		// redirect to package css from `?css`
 		if isPkgCss && esm.SubBareName == "" {
-			if !ret.PackageCSS {
+			if !ret.CSS {
 				return rex.Status(404, "Package CSS not found")
 			}
 			url := fmt.Sprintf("%s%s.css", cdnOrigin, strings.TrimSuffix(buildCtx.Pathname(), ".mjs"))
@@ -1538,14 +1496,14 @@ func routes(debug bool) rex.Handle {
 				path, _ := utils.SplitByLastByte(savePath, '.')
 				savePath = path + ".css"
 			}
-			fi, err := buildStorage.Stat(savePath)
+			fi, err := esmStorage.Stat(savePath)
 			if err != nil {
 				if err == storage.ErrNotFound {
 					return rex.Status(404, "File not found")
 				}
 				return rex.Status(500, err.Error())
 			}
-			f, err := buildStorage.Get(savePath)
+			f, err := esmStorage.Get(savePath)
 			if err != nil {
 				return rex.Status(500, err.Error())
 			}

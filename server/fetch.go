@@ -19,18 +19,19 @@ type CacheItem struct {
 	exp  time.Time
 }
 
-type Fetcher struct {
-	client *http.Client
-	ua     string
+type FetchClient struct {
+	client    *http.Client
+	userAgent string
 }
 
-func newFetcher(ua string, timeout time.Duration) *Fetcher {
-	return &Fetcher{&http.Client{
-		Timeout: timeout,
-	}, ua}
+var defaultFetchClient = &FetchClient{
+	client: &http.Client{
+		Timeout: 30 * time.Second,
+	},
+	userAgent: "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36",
 }
 
-func (f *Fetcher) Fetch(url *url.URL) (resp *http.Response, err error) {
+func (f *FetchClient) Fetch(url *url.URL) (resp *http.Response, err error) {
 	req := &http.Request{
 		Method:     "GET",
 		URL:        url,
@@ -39,7 +40,7 @@ func (f *Fetcher) Fetch(url *url.URL) (resp *http.Response, err error) {
 		ProtoMajor: 1,
 		ProtoMinor: 1,
 		Header: http.Header{
-			"User-Agent": []string{f.ua},
+			"User-Agent": []string{f.userAgent},
 		},
 	}
 	return f.client.Do(req)
@@ -54,10 +55,10 @@ func fetchSync(key string, cacheTtl time.Duration, fn func() (io.Reader, error))
 	// check cache first
 	if v, ok := fetchCache.Load(key); ok {
 		item := v.(*CacheItem)
-		if item.exp.After(time.Now()) {
-			return bytes.NewReader(item.data), nil
+		if item.exp.Before(time.Now()) {
+			fetchCache.Delete(key)
 		}
-		fetchCache.Delete(key)
+		return bytes.NewReader(item.data), nil
 	}
 
 	r, err = fn()

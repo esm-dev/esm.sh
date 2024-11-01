@@ -370,10 +370,7 @@ Deno.test("esm-worker", { sanitizeOps: false, sanitizeResources: false }, async 
   });
 
   await t.step("jsr", async () => {
-    const res = await fetch(
-      `${workerOrigin}/jsr/@std/encoding/base64`,
-      { headers: { "User-Agent": "ES/2022" } },
-    );
+    const res = await fetch(`${workerOrigin}/jsr/@std/encoding/base64`, { headers: { "User-Agent": "ES/2022" } });
     const modUrl = new URL(res.headers.get("x-esm-path")!, workerOrigin);
     assert(modUrl.pathname.endsWith("/es2022/base64.js"));
     assertEquals(res.status, 200);
@@ -459,19 +456,19 @@ Deno.test("esm-worker", { sanitizeOps: false, sanitizeResources: false }, async 
   });
 
   await t.step("purge api", async () => {
+    await fetch(`${workerOrigin}/react@18.3.1`, { headers: { "User-Agent": "ES/2022" } });
     const fd = new FormData();
     fd.append("package", "react");
-    fd.append("version", "18");
+    fd.append("version", "18.3.1");
     const res = await fetch(`${workerOrigin}/purge`, {
       method: "POST",
       body: fd,
     });
     assertEquals(res.status, 200);
     const ret: any = await res.json();
-    assert(Array.isArray(ret.deletedPkgs));
-    assert(Array.isArray(ret.deletedFiles));
-    assert(ret.deletedPkgs.length > 0);
-    assert(ret.deletedFiles.length > 0);
+    console.log(ret);
+    assert(Array.isArray(ret.deleted));
+    assert(ret.deleted.length > 0);
   });
 
   await t.step("module with different UAs", async () => {

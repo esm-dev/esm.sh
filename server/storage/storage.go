@@ -2,26 +2,30 @@ package storage
 
 import (
 	"errors"
-	"fmt"
 	"io"
-	"net/url"
-	"sync"
 	"time"
 )
 
 var (
 	ErrNotFound = errors.New("not found")
 	ErrExpired  = errors.New("record is expired")
-	drivers     = sync.Map{}
 )
 
+type StorageOptions struct {
+	Type            string `json:"type"`
+	Endpint         string `json:"endpoint"`
+	Region          string `json:"region"`
+	AccessKeyID     string `json:"accessKeyID"`
+	SecretAccessKey string `json:"secretAccessKey"`
+}
+
 type Storage interface {
-	Stat(path string) (stat Stat, err error)
-	List(prefix string) (files []string, err error)
-	Get(path string) (content io.ReadSeekCloser, err error)
-	Put(path string, r io.Reader) (written int64, err error)
-	Remove(path string) error
-	RemoveAll(dir string) error
+	Stat(key string) (stat Stat, err error)
+	List(prefix string) (keys []string, err error)
+	Get(key string) (content io.ReadCloser, err error)
+	Put(key string, r io.Reader) error
+	Delete(keys ...string) error
+	DeleteAll(prefix string) (deletedKeys []string, err error)
 }
 
 type Stat interface {
@@ -29,28 +33,13 @@ type Stat interface {
 	ModTime() time.Time
 }
 
-type Driver interface {
-	Open(root string, options url.Values) (conn Storage, err error)
-}
-
-func Open(storageUrl string) (Storage, error) {
-	u, err := url.Parse(storageUrl)
-	if err != nil {
-		return nil, err
+func New(options *StorageOptions) (storage Storage, err error) {
+	switch options.Type {
+	case "fs":
+		return NewFSStorage(options)
+	case "s3":
+		return NewS3Storage(options)
+	default:
+		return nil, errors.New("unsupported storage type")
 	}
-	driver, ok := drivers.Load(u.Scheme)
-	if ok {
-		return driver.(Driver).Open(u.Path, u.Query())
-	}
-	return nil, fmt.Errorf("unregistered storage '%s'", u.Scheme)
-}
-
-func Register(name string, driver Driver) error {
-	_, ok := drivers.Load(name)
-	if ok {
-		return fmt.Errorf("fs driver '%s' has been registered", name)
-	}
-
-	drivers.Store(name, driver)
-	return nil
 }

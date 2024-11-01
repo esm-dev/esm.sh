@@ -8,30 +8,31 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+
+	"github.com/esm-dev/esm.sh/server/storage"
 )
 
 // Config represents the configuration of esm.sh server.
 type Config struct {
-	Port               uint16                 `json:"port"`
-	TlsPort            uint16                 `json:"tlsPort"`
-	WorkDir            string                 `json:"workDir"`
-	AuthSecret         string                 `json:"authSecret"`
-	AllowList          AllowList              `json:"allowList"`
-	BanList            BanList                `json:"banList"`
-	BuildConcurrency   uint16                 `json:"buildConcurrency"`
-	BuildWaitTime      uint16                 `json:"buildWaitTime"`
-	BuildStorage       string                 `json:"buildStorage"`
-	Minify             json.RawMessage        `json:"minify"`
-	DisableSourceMap   bool                   `json:"disableSourceMap"`
-	DisableCompression bool                   `json:"disableCompression"`
-	Database           string                 `json:"database"`
-	LogDir             string                 `json:"logDir"`
-	LogLevel           string                 `json:"logLevel"`
-	NpmRegistry        string                 `json:"npmRegistry"`
-	NpmToken           string                 `json:"npmToken"`
-	NpmUser            string                 `json:"npmUser"`
-	NpmPassword        string                 `json:"npmPassword"`
-	NpmRegistries      map[string]NpmRegistry `json:"npmRegistries"`
+	Port             uint16                 `json:"port"`
+	TlsPort          uint16                 `json:"tlsPort"`
+	WorkDir          string                 `json:"workDir"`
+	AuthSecret       string                 `json:"authSecret"`
+	AllowList        AllowList              `json:"allowList"`
+	BanList          BanList                `json:"banList"`
+	BuildConcurrency uint16                 `json:"buildConcurrency"`
+	BuildWaitTime    uint16                 `json:"buildWaitTime"`
+	Storage          storage.StorageOptions `json:"storage"`
+	Minify           json.RawMessage        `json:"minify"`
+	SourceMap        json.RawMessage        `json:"sourceMap"`
+	Compress         json.RawMessage        `json:"compress"`
+	LogDir           string                 `json:"logDir"`
+	LogLevel         string                 `json:"logLevel"`
+	NpmRegistry      string                 `json:"npmRegistry"`
+	NpmToken         string                 `json:"npmToken"`
+	NpmUser          string                 `json:"npmUser"`
+	NpmPassword      string                 `json:"npmPassword"`
+	NpmRegistries    map[string]NpmRegistry `json:"npmRegistries"`
 }
 
 type BanList struct {
@@ -99,11 +100,11 @@ func fixConfig(c *Config) *Config {
 	if c.AuthSecret == "" {
 		c.AuthSecret = os.Getenv("AUTH_SECRET")
 	}
-	if !c.DisableCompression {
-		c.DisableCompression = os.Getenv("DISABLE_COMPRESSION") == "true"
+	if c.Compress == nil && os.Getenv("COMPRESS") == "false" {
+		c.Compress = []byte("false")
 	}
-	if !c.DisableSourceMap {
-		c.DisableSourceMap = os.Getenv("DISABLE_SOURCEMAP") == "true"
+	if c.SourceMap == nil && (os.Getenv("SOURCEMAP") == "false" || os.Getenv("SOURCE_MAP") == "false") {
+		c.SourceMap = []byte("false")
 	}
 	if c.Minify == nil && os.Getenv("MINIFY") == "false" {
 		c.Minify = []byte("false")
@@ -114,11 +115,28 @@ func fixConfig(c *Config) *Config {
 	if c.BuildWaitTime == 0 {
 		c.BuildWaitTime = 30 // seconds
 	}
-	if c.Database == "" {
-		c.Database = fmt.Sprintf("bolt://%s", path.Join(c.WorkDir, "esm.db"))
+	if c.Storage.Type == "" {
+		storageType := os.Getenv("STORAGE_TYPE")
+		if storageType == "" {
+			storageType = "fs"
+		}
+		c.Storage.Type = storageType
 	}
-	if c.BuildStorage == "" {
-		c.BuildStorage = fmt.Sprintf("fs://%s", path.Join(c.WorkDir, "storage"))
+	if c.Storage.Endpint == "" {
+		storageEndpint := os.Getenv("STORAGE_ENDPOINT")
+		if storageEndpint == "" {
+			storageEndpint = path.Join(c.WorkDir, "storage")
+		}
+		c.Storage.Endpint = storageEndpint
+	}
+	if c.Storage.Region == "" {
+		c.Storage.Region = os.Getenv("STORAGE_REGION")
+	}
+	if c.Storage.AccessKeyID == "" {
+		c.Storage.AccessKeyID = os.Getenv("STORAGE_ACCESS_KEY_ID")
+	}
+	if c.Storage.SecretAccessKey == "" {
+		c.Storage.SecretAccessKey = os.Getenv("STORAGE_SECRET_ACCESS_KEY")
 	}
 	if c.LogDir == "" {
 		c.LogDir = path.Join(c.WorkDir, "log")

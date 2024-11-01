@@ -37,6 +37,7 @@ type BuildContext struct {
 	target      string
 	dev         bool
 	sourceMap   bool
+	minify      bool
 	wd          string
 	pkgDir      string
 	pnpmPkgDir  string
@@ -50,14 +51,14 @@ type BuildContext struct {
 	wg          sync.WaitGroup
 }
 
-type BuildResult struct {
-	Deps             []string `json:"p,omitempty"`
-	Dts              string   `json:"t,omitempty"`
-	FromCJS          bool     `json:"c,omitempty"`
-	HasDefaultExport bool     `json:"d,omitempty"`
+type BuildMeta struct {
+	Deps             []string `json:"deps,omitempty"`
+	FromCJS          bool     `json:"fromCJS,omitempty"`
+	CSS              bool     `json:"css,omitempty"`
+	TypesOnly        bool     `json:"typesOnly,omitempty"`
+	Dts              string   `json:"dts,omitempty"`
+	HasDefaultExport bool     `json:"hasDefaultExport,omitempty"`
 	NamedExports     []string `json:"-"`
-	PackageCSS       bool     `json:"s,omitempty"`
-	TypesOnly        bool     `json:"o,omitempty"`
 }
 
 var loaders = map[string]api.Loader{
@@ -83,7 +84,7 @@ var loaders = map[string]api.Loader{
 	".woff2": api.LoaderDataURL,
 }
 
-func NewBuildContext(zoneId string, npmrc *NpmRC, esm ESMPath, args BuildArgs, target string, bundleMode BundleMode, dev bool, sourceMap bool) *BuildContext {
+func NewBuildContext(zoneId string, npmrc *NpmRC, esm ESMPath, args BuildArgs, target string, bundleMode BundleMode, dev bool, sourceMap bool, minify bool) *BuildContext {
 	return &BuildContext{
 		zoneId:     zoneId,
 		npmrc:      npmrc,
@@ -92,45 +93,39 @@ func NewBuildContext(zoneId string, npmrc *NpmRC, esm ESMPath, args BuildArgs, t
 		target:     target,
 		dev:        dev,
 		sourceMap:  sourceMap,
+		minify:     minify,
 		bundleMode: bundleMode,
 		subBuilds:  NewStringSet(),
 	}
 }
 
-func (ctx *BuildContext) Query() (BuildResult, bool) {
-	key := ctx.Pathname()
-	if ctx.zoneId != "" {
-		key = ctx.zoneId + key
+func (ctx *BuildContext) Query() (*BuildMeta, error) {
+	key := ctx.getSavepath() + ".meta"
+	value, err := esmStorage.Get(key)
+	if err != nil && err != storage.ErrNotFound {
+		return nil, err
 	}
-	value, err := db.Get(key)
-	if err == nil && value != nil {
-		var b BuildResult
-		err = json.Unmarshal(value, &b)
+	if err == nil {
+		var b BuildMeta
+		err = json.NewDecoder(value).Decode(&b)
 		if err == nil {
-			if !b.TypesOnly {
-				_, err = buildStorage.Stat(ctx.getSavepath())
-			} else {
-				_, err = buildStorage.Stat(normalizeSavePath(ctx.zoneId, path.Join("types", b.Dts)))
-			}
-			// ensure the build file exists
-			if err == nil || err != storage.ErrNotFound {
-				return b, true
-			}
+			return &b, nil
+		} else {
+			// remove the invalid build result
+			esmStorage.Delete(key)
 		}
-		// delete the invalid db entry
-		db.Delete(key)
 	}
-	return BuildResult{}, false
+	return nil, nil
 }
 
-func (ctx *BuildContext) Build() (ret BuildResult, err error) {
+func (ctx *BuildContext) Build() (ret *BuildMeta, err error) {
 	if ctx.target == "types" {
 		return ctx.buildTypes()
 	}
 
 	// query previous build
-	ret, ok := ctx.Query()
-	if ok {
+	ret, err = ctx.Query()
+	if err != nil || ret != nil {
 		return
 	}
 
@@ -151,9 +146,9 @@ func (ctx *BuildContext) Build() (ret BuildResult, err error) {
 		return
 	}
 
-	// query again after installation (in case the `normalizePackageJSON` method has changed the sub-module path)
-	ret, ok = ctx.Query()
-	if ok {
+	// query again after installation (in case the sub-module path has been changed by the `normalizePackageJSON` function)
+	ret, err = ctx.Query()
+	if err != nil || ret != nil {
 		return
 	}
 
@@ -165,11 +160,13 @@ func (ctx *BuildContext) Build() (ret BuildResult, err error) {
 	}
 
 	// save the build result into db
-	key := ctx.Pathname()
-	if ctx.zoneId != "" {
-		key = ctx.zoneId + key
+	key := ctx.getSavepath() + ".meta"
+	buf := bytes.NewBuffer(nil)
+	err = json.NewEncoder(buf).Encode(ret)
+	if err != nil {
+		return
 	}
-	if e := db.Put(key, utils.MustEncodeJSON(ret)); e != nil {
+	if e := esmStorage.Put(key, buf); e != nil {
 		log.Errorf("db: %v", e)
 	}
 	return
@@ -193,7 +190,7 @@ func (ctx *BuildContext) install() (err error) {
 	return
 }
 
-func (ctx *BuildContext) buildModule() (result BuildResult, err error) {
+func (ctx *BuildContext) buildModule() (result *BuildMeta, err error) {
 	// build json
 	if strings.HasSuffix(ctx.esm.SubBareName, ".json") {
 		nmDir := path.Join(ctx.wd, "node_modules")
@@ -206,11 +203,11 @@ func (ctx *BuildContext) buildModule() (result BuildResult, err error) {
 			}
 			buffer := bytes.NewBufferString("export default ")
 			buffer.Write(jsonData)
-			_, err = buildStorage.Put(ctx.getSavepath(), buffer)
+			err = esmStorage.Put(ctx.getSavepath(), buffer)
 			if err != nil {
 				return
 			}
-			result = BuildResult{
+			result = &BuildMeta{
 				HasDefaultExport: true,
 			}
 			return
@@ -226,8 +223,10 @@ func (ctx *BuildContext) buildModule() (result BuildResult, err error) {
 
 	typesOnly := strings.HasPrefix(ctx.packageJson.Name, "@types/") || (entry.esm == "" && entry.cjs == "" && entry.dts != "")
 	if typesOnly {
-		result.TypesOnly = true
-		result.Dts = "/" + ctx.esm.PackageName() + entry.dts[1:]
+		result = &BuildMeta{
+			TypesOnly: true,
+			Dts:       "/" + ctx.esm.PackageName() + entry.dts[1:],
+		}
 		ctx.transformDTS(entry.dts)
 		return
 	}
@@ -245,25 +244,24 @@ func (ctx *BuildContext) buildModule() (result BuildResult, err error) {
 			return
 		}
 		// create a new build context to check if the reexported module has default export
-		b := NewBuildContext(ctx.zoneId, ctx.npmrc, mod, ctx.args, ctx.target, BundleFalse, ctx.dev, false)
+		b := NewBuildContext(ctx.zoneId, ctx.npmrc, mod, ctx.args, ctx.target, BundleFalse, ctx.dev, false, false)
 		err = b.install()
 		if err != nil {
 			return
 		}
-		var r BuildResult
 		entry := b.resolveEntry(mod)
-		r, _, err = b.lexer(&entry, false)
+		result, _, err = b.lexer(&entry, false)
 		if err != nil {
 			return
 		}
 		importUrl := ctx.getImportPath(mod, ctx.getBuildArgsPrefix(false))
 		buf := bytes.NewBuffer(nil)
 		fmt.Fprintf(buf, `export * from "%s";`, importUrl)
-		if r.HasDefaultExport {
+		if result.HasDefaultExport {
 			fmt.Fprintf(buf, "\n")
 			fmt.Fprintf(buf, `export { default } from "%s";`, importUrl)
 		}
-		_, err = buildStorage.Put(ctx.getSavepath(), buf)
+		err = esmStorage.Put(ctx.getSavepath(), buf)
 		if err != nil {
 			return
 		}
@@ -916,7 +914,6 @@ func (ctx *BuildContext) buildModule() (result BuildResult, err error) {
 	if ctx.isDenoTarget() {
 		conditions = append(conditions, "deno")
 	}
-	minify := config.Minify == nil || !bytes.Equal(config.Minify, []byte("false"))
 	options := api.BuildOptions{
 		Outdir:            "/esbuild",
 		Write:             false,
@@ -925,9 +922,9 @@ func (ctx *BuildContext) buildModule() (result BuildResult, err error) {
 		Format:            api.FormatESModule,
 		Target:            targets[ctx.target],
 		Platform:          api.PlatformBrowser,
-		MinifyWhitespace:  minify,
-		MinifyIdentifiers: minify,
-		MinifySyntax:      minify,
+		MinifyWhitespace:  ctx.minify,
+		MinifyIdentifiers: ctx.minify,
+		MinifySyntax:      ctx.minify,
 		KeepNames:         ctx.args.keepNames,         // prevent class/function names erasing
 		IgnoreAnnotations: ctx.args.ignoreAnnotations, // some libs maybe use wrong side-effect annotations
 		Conditions:        conditions,
@@ -1163,7 +1160,7 @@ rebuild:
 							if pkgJson.Type == "module" || pkgJson.Module != "" {
 								isEsModule[i] = true
 							} else {
-								b := NewBuildContext(ctx.zoneId, ctx.npmrc, esm, ctx.args, ctx.target, BundleFalse, ctx.dev, false)
+								b := NewBuildContext(ctx.zoneId, ctx.npmrc, esm, ctx.args, ctx.target, BundleFalse, ctx.dev, false, false)
 								err = b.install()
 								if err == nil {
 									entry := b.resolveEntry(esm)
@@ -1216,7 +1213,7 @@ rebuild:
 				finalContent.WriteString(".map")
 			}
 
-			_, err = buildStorage.Put(ctx.getSavepath(), finalContent)
+			err = esmStorage.Put(ctx.getSavepath(), finalContent)
 			if err != nil {
 				return
 			}
@@ -1226,11 +1223,11 @@ rebuild:
 	for _, file := range ret.OutputFiles {
 		if strings.HasSuffix(file.Path, ".css") {
 			savePath := ctx.getSavepath()
-			_, err = buildStorage.Put(strings.TrimSuffix(savePath, path.Ext(savePath))+".css", bytes.NewReader(file.Contents))
+			err = esmStorage.Put(strings.TrimSuffix(savePath, path.Ext(savePath))+".css", bytes.NewReader(file.Contents))
 			if err != nil {
 				return
 			}
-			result.PackageCSS = true
+			result.CSS = true
 		} else if ctx.sourceMap && strings.HasSuffix(file.Path, ".js.map") {
 			var sourceMap map[string]interface{}
 			if json.Unmarshal(file.Contents, &sourceMap) == nil {
@@ -1244,7 +1241,7 @@ rebuild:
 				}
 				buf := bytes.NewBuffer(nil)
 				if json.NewEncoder(buf).Encode(sourceMap) == nil {
-					_, err = buildStorage.Put(ctx.getSavepath()+".map", buf)
+					err = esmStorage.Put(ctx.getSavepath()+".map", buf)
 					if err != nil {
 						return
 					}
@@ -1272,7 +1269,7 @@ rebuild:
 	return
 }
 
-func (ctx *BuildContext) buildTypes() (ret BuildResult, err error) {
+func (ctx *BuildContext) buildTypes() (ret *BuildMeta, err error) {
 	// install the package
 	ctx.stage = "install"
 	err = ctx.install()
@@ -1295,7 +1292,10 @@ func (ctx *BuildContext) buildTypes() (ret BuildResult, err error) {
 	ctx.stage = "build"
 	err = ctx.transformDTS(dts)
 	if err == nil {
-		ret.Dts = "/" + ctx.esm.PackageName() + dts[1:]
+		ret = &BuildMeta{
+			Dts: "/" + ctx.esm.PackageName() + dts[1:],
+		}
+
 	}
 	return
 }

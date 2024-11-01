@@ -86,7 +86,7 @@ func minify(code string, target esbuild.Target, loader esbuild.Loader) ([]byte, 
 }
 
 // bundleRemoteModule builds the remote module and it's submodules.
-func bundleRemoteModule(npmrc *NpmRC, entry string, importMap ImportMap, fetcher *Fetcher) (js []byte, css []byte, dependencyTree map[string][]byte, err error) {
+func bundleRemoteModule(npmrc *NpmRC, entry string, importMap ImportMap) (js []byte, css []byte, dependencyTree map[string][]byte, err error) {
 	if !isHttpSepcifier(entry) {
 		err = errors.New("require a remote module")
 		return
@@ -133,15 +133,15 @@ func bundleRemoteModule(npmrc *NpmRC, entry string, importMap ImportMap, fetcher
 						if err != nil {
 							return esbuild.OnLoadResult{}, err
 						}
-						resp, err := fetcher.Fetch(url)
+						res, err := defaultFetchClient.Fetch(url)
 						if err != nil {
 							return esbuild.OnLoadResult{}, errors.New("failed to fetch module " + args.Path + ": " + err.Error())
 						}
-						defer resp.Body.Close()
-						if resp.StatusCode != 200 {
-							return esbuild.OnLoadResult{}, errors.New("failed to fetch module " + args.Path + ": " + resp.Status)
+						defer res.Body.Close()
+						if res.StatusCode != 200 {
+							return esbuild.OnLoadResult{}, errors.New("failed to fetch module " + args.Path + ": " + res.Status)
 						}
-						data, err := io.ReadAll(resp.Body)
+						data, err := io.ReadAll(res.Body)
 						if err != nil {
 							return esbuild.OnLoadResult{}, errors.New("failed to fetch module " + args.Path)
 						}

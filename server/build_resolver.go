@@ -990,7 +990,7 @@ func (ctx *BuildContext) resloveDTS(entry BuildEntry) (string, error) {
 					SubPath:     ctx.esm.SubPath,
 					SubBareName: ctx.esm.SubBareName,
 				}
-				b := NewBuildContext(ctx.zoneId, ctx.npmrc, dtsModule, ctx.args, "types", BundleFalse, false, false)
+				b := NewBuildContext(ctx.zoneId, ctx.npmrc, dtsModule, ctx.args, "types", BundleFalse, false, false, false)
 				err := b.install()
 				if err != nil {
 					return "", err
@@ -1077,7 +1077,7 @@ func (ctx *BuildContext) normalizePackageJSON(p *PackageJSON) {
 	}
 }
 
-func (ctx *BuildContext) lexer(entry *BuildEntry, forceCjsOnly bool) (ret BuildResult, reexport string, err error) {
+func (ctx *BuildContext) lexer(entry *BuildEntry, forceCjsOnly bool) (ret *BuildMeta, reexport string, err error) {
 	if entry.esm != "" && !forceCjsOnly {
 		isESM, namedExports, erro := ctx.esmLexer(entry.esm)
 		if erro != nil {
@@ -1086,8 +1086,10 @@ func (ctx *BuildContext) lexer(entry *BuildEntry, forceCjsOnly bool) (ret BuildR
 		}
 
 		if isESM {
-			ret.NamedExports = namedExports
-			ret.HasDefaultExport = includes(namedExports, "default")
+			ret = &BuildMeta{
+				NamedExports:     namedExports,
+				HasDefaultExport: includes(namedExports, "default"),
+			}
 			return
 		}
 
@@ -1099,9 +1101,11 @@ func (ctx *BuildContext) lexer(entry *BuildEntry, forceCjsOnly bool) (ret BuildR
 			return
 		}
 
-		ret.HasDefaultExport = r.HasDefaultExport
-		ret.NamedExports = r.NamedExports
-		ret.FromCJS = true
+		ret = &BuildMeta{
+			HasDefaultExport: r.HasDefaultExport,
+			NamedExports:     r.NamedExports,
+			FromCJS:          true,
+		}
 		entry.cjs = entry.esm
 		entry.esm = ""
 		reexport = r.ReExport
@@ -1114,9 +1118,11 @@ func (ctx *BuildContext) lexer(entry *BuildEntry, forceCjsOnly bool) (ret BuildR
 		if err != nil {
 			return
 		}
-		ret.HasDefaultExport = cjs.HasDefaultExport
-		ret.NamedExports = cjs.NamedExports
-		ret.FromCJS = true
+		ret = &BuildMeta{
+			HasDefaultExport: cjs.HasDefaultExport,
+			NamedExports:     cjs.NamedExports,
+			FromCJS:          true,
+		}
 		reexport = cjs.ReExport
 	}
 	return
