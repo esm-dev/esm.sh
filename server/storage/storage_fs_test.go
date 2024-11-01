@@ -12,7 +12,7 @@ import (
 
 func TestFSStorage(t *testing.T) {
 	root := path.Join(os.TempDir(), "storage_test_"+rs.Hex.String(8))
-	fs, err := NewFSStorage(&StorageOptions{Type: "fs", Endpint: root})
+	fs, err := NewFSStorage(&StorageOptions{Type: "fs", Endpoint: root})
 	if err != nil {
 		t.Fatal(err)
 	}

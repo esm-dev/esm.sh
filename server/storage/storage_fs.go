@@ -11,10 +11,10 @@ import (
 )
 
 func NewFSStorage(options *StorageOptions) (storage Storage, err error) {
-	if options.Endpint == "" {
+	if options.Endpoint == "" {
 		return nil, errors.New("endpoint is required")
 	}
-	root, err := filepath.Abs(options.Endpint)
+	root, err := filepath.Abs(options.Endpoint)
 	if err != nil {
 		return nil, err
 	}

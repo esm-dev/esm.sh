@@ -84,6 +84,7 @@ func Serve(efs EmbedFS) {
 	if err != nil {
 		log.Fatalf("failed to initialize build storage(%s): %v", config.Storage.Type, err)
 	}
+	log.Debugf("storage initialized, type: %s, endpoint: %s", config.Storage.Type, config.Storage.Endpoint)
 
 	err = loadNodeLibs(efs)
 	if err != nil {

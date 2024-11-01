@@ -2,9 +2,6 @@ package storage
 
 import (
 	"bytes"
-	"crypto/hmac"
-	"crypto/sha256"
-	"encoding/hex"
 	"encoding/xml"
 	"errors"
 	"fmt"
@@ -19,10 +16,10 @@ import (
 )
 
 func NewS3Storage(options *StorageOptions) (Storage, error) {
-	if options.Endpint == "" {
+	if options.Endpoint == "" {
 		return nil, errors.New("missing endpoint")
 	}
-	u, err := url.Parse(options.Endpint)
+	u, err := url.Parse(options.Endpoint)
 	if err != nil {
 		return nil, err
 	}
@@ -306,28 +303,9 @@ func (s3 *s3Storage) sign(req *http.Request) {
 			canonicalHeaders[i] = key + ":" + strings.Join(req.Header.Values(key), ",")
 		}
 	}
-	canonicalRequest := strings.Join([]string{req.Method, req.URL.EscapedPath(), req.URL.Query().Encode(), strings.Join(canonicalHeaders, "\n") + "\n", strings.Join(signedHeaders, ";"), req.Header.Get("X-Amz-Content-Sha256")}, "\n")
+	canonicalRequest := strings.Join([]string{req.Method, escapePath(req.URL.EscapedPath()), req.URL.Query().Encode(), strings.Join(canonicalHeaders, "\n") + "\n", strings.Join(signedHeaders, ";"), req.Header.Get("X-Amz-Content-Sha256")}, "\n")
 	stringToSign := strings.Join([]string{"AWS4-HMAC-SHA256", datetime, scope, toHex(sha256Sum(canonicalRequest))}, "\n")
 	signingKey := hmacSum(hmacSum(hmacSum(hmacSum([]byte("AWS4"+s3.secretAccessKey), date), s3.region), "s3"), "aws4_request")
 	signature := hmacSum(signingKey, stringToSign)
 	req.Header.Set("Authorization", strings.Join([]string{"AWS4-HMAC-SHA256 Credential=" + s3.accessKeyID + "/" + scope, "SignedHeaders=" + strings.Join(signedHeaders, ";"), "Signature=" + toHex(signature)}, ", "))
-}
-
-// sha256Sum returns the SHA-256 checksum of the given data.
-func sha256Sum(stringToSum string) []byte {
-	hash := sha256.New()
-	hash.Write([]byte(stringToSum))
-	return hash.Sum(nil)
-}
-
-// hmacSum signs the given string with the provided key using HMAC-SHA256.
-func hmacSum(key []byte, stringToSign string) []byte {
-	hash := hmac.New(sha256.New, key)
-	hash.Write([]byte(stringToSign))
-	return hash.Sum(nil)
-}
-
-// toHex returns the hexadecimal representation of the given data.
-func toHex(data []byte) string {
-	return hex.EncodeToString(data)
 }

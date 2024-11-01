@@ -14,9 +14,9 @@ func TestS3Storage(t *testing.T) {
 	}
 	s3, err := NewS3Storage(&StorageOptions{
 		Type:            "s3",
-		Endpint:         endpint,
+		Endpoint:        endpint,
 		Region:          os.Getenv("GO_TEST_S3_REGION"),
-		AccessKeyID:     os.Getenv("GO_TEST_S3_ACCESS_KEYI_ID"),
+		AccessKeyID:     os.Getenv("GO_TEST_S3_ACCESS_KEY_ID"),
 		SecretAccessKey: os.Getenv("GO_TEST_S3_SECRET_ACCESS_KEY"),
 	})
 	if err != nil {

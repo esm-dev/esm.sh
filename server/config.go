@@ -122,12 +122,12 @@ func fixConfig(c *Config) *Config {
 		}
 		c.Storage.Type = storageType
 	}
-	if c.Storage.Endpint == "" {
+	if c.Storage.Endpoint == "" {
 		storageEndpint := os.Getenv("STORAGE_ENDPOINT")
 		if storageEndpint == "" {
 			storageEndpint = path.Join(c.WorkDir, "storage")
 		}
-		c.Storage.Endpint = storageEndpint
+		c.Storage.Endpoint = storageEndpint
 	}
 	if c.Storage.Region == "" {
 		c.Storage.Region = os.Getenv("STORAGE_REGION")

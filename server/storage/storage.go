@@ -13,7 +13,7 @@ var (
 
 type StorageOptions struct {
 	Type            string `json:"type"`
-	Endpint         string `json:"endpoint"`
+	Endpoint        string `json:"endpoint"`
 	Region          string `json:"region"`
 	AccessKeyID     string `json:"accessKeyID"`
 	SecretAccessKey string `json:"secretAccessKey"`
