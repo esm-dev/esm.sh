@@ -213,7 +213,7 @@ func (s3 *s3Storage) Delete(keys ...string) (err error) {
 		}
 	} else {
 		buf := new(bytes.Buffer)
-		buf.WriteString(`<Delete>`)
+		buf.WriteString("<Delete>")
 		for _, key := range keys {
 			buf.WriteString("<Object><Key>")
 			buf.WriteString(html.EscapeString(key))
@@ -247,7 +247,7 @@ func (s3 *s3Storage) DeleteAll(prefix string) (deletedKeys []string, err error) 
 		return []string{}, nil
 	}
 	buf := new(bytes.Buffer)
-	buf.WriteString(`<Delete>`)
+	buf.WriteString("<Delete>")
 	for _, key := range keysToDelete {
 		buf.WriteString("<Object><Key>")
 		buf.WriteString(html.EscapeString(key))

@@ -253,7 +253,7 @@ func routes(debug bool) rex.Handle {
 			readme = bytes.ReplaceAll(readme, []byte("./HOSTING.md"), []byte("https://github.com/esm-dev/esm.sh/blob/main/HOSTING.md"))
 			readme = bytes.ReplaceAll(readme, []byte("https://esm.sh"), []byte(cdnOrigin))
 			readmeStrLit := utils.MustEncodeJSON(string(readme))
-			html := bytes.ReplaceAll(indexHTML, []byte("'# README'"), readmeStrLit)
+			html := bytes.ReplaceAll(indexHTML, []byte("$README"), readmeStrLit)
 			html = bytes.ReplaceAll(html, []byte("{VERSION}"), []byte(fmt.Sprintf("%d", VERSION)))
 			ctx.SetHeader("Cache-Control", ccMustRevalidate)
 			ctx.SetHeader("Etag", globalETag)

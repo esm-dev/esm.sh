@@ -8,7 +8,7 @@ require (
 	github.com/gorilla/websocket v1.5.3
 	github.com/ije/esbuild-internal v0.24.0
 	github.com/ije/gox v0.7.0
-	github.com/ije/rex v1.13.1
+	github.com/ije/rex v1.13.3
 	github.com/mileusna/useragent v1.3.5
 	golang.org/x/net v0.30.0
 )

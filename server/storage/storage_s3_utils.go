@@ -28,7 +28,7 @@ func escapePath(path string) string {
 	var buf bytes.Buffer
 	for i := 0; i < len(path); i++ {
 		c := path[i]
-		if noEscape[c] || c == '/' {
+		if c == '/' || noEscape[c] {
 			buf.WriteByte(c)
 		} else {
 			fmt.Fprintf(&buf, "%%%02X", c)

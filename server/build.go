@@ -1028,9 +1028,8 @@ rebuild:
 				extraBanner += " bundle-false"
 			}
 			header := bytes.NewBufferString(fmt.Sprintf(
-				"/* esm.sh - %s (v%d %s%s) */\n",
+				"/* esm.sh - %s (%s%s) */\n",
 				ctx.esm.String(),
-				VERSION,
 				strings.ToLower(ctx.target),
 				extraBanner,
 			))
