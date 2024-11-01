@@ -29,7 +29,7 @@ import (
 
 const (
 	ccMustRevalidate = "public, max-age=0, must-revalidate"
-	cc10mins         = "public, max-age=600"
+	cc1hour          = "public, max-age=3600"
 	cc1day           = "public, max-age=86400"
 	ccImmutable      = "public, max-age=31536000, immutable"
 	ctJavaScript     = "application/javascript; charset=utf-8"
@@ -961,7 +961,7 @@ func routes(debug bool) rex.Handle {
 				if rawQuery != "" {
 					query = "?" + rawQuery
 				}
-				ctx.SetHeader("Cache-Control", cc10mins)
+				ctx.SetHeader("Cache-Control", cc1hour)
 				return rex.Redirect(fmt.Sprintf("%s/%s%s%s", cdnOrigin, esm.PackageName(), subPath, query), http.StatusFound)
 			}
 			if resType != ESMEntry {
@@ -985,7 +985,7 @@ func routes(debug bool) rex.Handle {
 				if rawQuery != "" {
 					qs = "?" + rawQuery
 				}
-				ctx.SetHeader("Cache-Control", cc10mins)
+				ctx.SetHeader("Cache-Control", cc1hour)
 				return rex.Redirect(fmt.Sprintf("%s%s/%s%s@%s%s%s", cdnOrigin, ghPrefix, asteriskPrefix, pkgName, pkgVersion, subPath, qs), http.StatusFound)
 			}
 		} else {
@@ -1186,7 +1186,7 @@ func routes(debug bool) rex.Handle {
 			if rawQuery != "" {
 				qs = "?" + rawQuery
 			}
-			ctx.SetHeader("Cache-Control", cc10mins)
+			ctx.SetHeader("Cache-Control", cc1hour)
 			if targetFromUA {
 				appendVaryHeader(ctx.W.Header(), "User-Agent")
 			}
@@ -1562,7 +1562,7 @@ func routes(debug bool) rex.Handle {
 		if isFixedVersion {
 			ctx.SetHeader("Cache-Control", ccImmutable)
 		} else {
-			ctx.SetHeader("Cache-Control", cc10mins)
+			ctx.SetHeader("Cache-Control", cc1hour)
 		}
 		ctx.SetHeader("Content-Type", ctJavaScript)
 		if ctx.R.Method == http.MethodHead {
