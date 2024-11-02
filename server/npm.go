@@ -46,23 +46,23 @@ type NpmPackageVerions struct {
 type PackageJSONRaw struct {
 	Name             string                 `json:"name"`
 	Version          string                 `json:"version"`
-	Type             string                 `json:"type"`
-	Main             string                 `json:"main"`
-	Browser          StringOrMap            `json:"browser"`
-	Module           StringOrMap            `json:"module"`
-	ES2015           StringOrMap            `json:"es2015"`
-	JsNextMain       string                 `json:"jsnext:main"`
-	Types            string                 `json:"types"`
-	Typings          string                 `json:"typings"`
-	SideEffects      interface{}            `json:"sideEffects"`
-	Dependencies     map[string]string      `json:"dependencies"`
-	PeerDependencies map[string]string      `json:"peerDependencies"`
-	Imports          map[string]interface{} `json:"imports"`
-	TypesVersions    map[string]interface{} `json:"typesVersions"`
-	Exports          json.RawMessage        `json:"exports"`
-	Files            []string               `json:"files"`
-	Deprecated       interface{}            `json:"deprecated"`
-	Esmsh            interface{}            `json:"esm.sh"`
+	Type             string                 `json:"type,omitempty"`
+	Main             string                 `json:"main,omitempty"`
+	Module           StringOrMap            `json:"module,omitempty"`
+	ES2015           StringOrMap            `json:"es2015,omitempty"`
+	JsNextMain       string                 `json:"jsnext:main,omitempty"`
+	Browser          StringOrMap            `json:"browser,omitempty"`
+	Types            string                 `json:"types,omitempty"`
+	Typings          string                 `json:"typings,omitempty"`
+	SideEffects      interface{}            `json:"sideEffects,omitempty"`
+	Dependencies     map[string]string      `json:"dependencies,omitempty"`
+	PeerDependencies map[string]string      `json:"peerDependencies,omitempty"`
+	Imports          map[string]interface{} `json:"imports,omitempty"`
+	TypesVersions    map[string]interface{} `json:"typesVersions,omitempty"`
+	Exports          json.RawMessage        `json:"exports,omitempty"`
+	Files            []string               `json:"files,omitempty"`
+	Deprecated       interface{}            `json:"deprecated,omitempty"`
+	Esmsh            interface{}            `json:"esm.sh,omitempty"`
 }
 
 // ToNpmPackage converts PackageJSONRaw to PackageJSON
@@ -151,7 +151,6 @@ func (a *PackageJSONRaw) ToNpmPackage() *PackageJSON {
 		Imports:          a.Imports,
 		TypesVersions:    a.TypesVersions,
 		Exports:          exports,
-		Files:            a.Files,
 		Deprecated:       deprecated,
 		Esmsh:            esmsh,
 	}
@@ -461,7 +460,7 @@ func (npmrc *NpmRC) fetchPackageInfo(packageName string, semverOrDistTag string)
 
 func (rc *NpmRC) installPackage(esm ESMPath) (packageJson *PackageJSON, err error) {
 	installDir := path.Join(rc.StoreDir(), esm.PackageName())
-	installedPackageJsonPath := path.Join(installDir, "node_modules", esm.PkgName, "package.json")
+	packageJsonPath := path.Join(installDir, "node_modules", esm.PkgName, "package.json")
 
 	// only one installation process allowed at the same time for the same package
 	v, _ := installLocks.LoadOrStore(esm.PackageName(), &sync.Mutex{})
@@ -470,9 +469,9 @@ func (rc *NpmRC) installPackage(esm ESMPath) (packageJson *PackageJSON, err erro
 	defer lock.Unlock()
 
 	// skip installation if the package has been installed
-	if existsFile(installedPackageJsonPath) {
+	if existsFile(packageJsonPath) {
 		var raw PackageJSONRaw
-		err = utils.ParseJSONFile(installedPackageJsonPath, &raw)
+		err = utils.ParseJSONFile(packageJsonPath, &raw)
 		if err == nil {
 			packageJson = raw.ToNpmPackage()
 			return
@@ -497,52 +496,49 @@ func (rc *NpmRC) installPackage(esm ESMPath) (packageJson *PackageJSON, err erro
 		return
 	}
 
-	attemptMaxTimes := 5
-	for i := 1; i <= attemptMaxTimes; i++ {
-		if esm.GhPrefix {
-			err = os.WriteFile(packageJsonRc, []byte(fmt.Sprintf(`{"dependencies":{"%s":"github:%s#%s"}}`, esm.PkgName, esm.PkgName, esm.PkgVersion)), 0644)
-			if err == nil {
-				err = rc.pnpmi(installDir)
-			}
-			// pnpm will ignore github package which has been installed without `package.json` file
-			// so we install it manually
-			if err == nil {
-				if !existsFile(installedPackageJsonPath) {
-					ensureDir(path.Dir(installedPackageJsonPath))
-					packageJson := fmt.Sprintf(`{"name":"%s","version":"%s"}`, esm.PkgName, esm.PkgVersion)
-					err = os.WriteFile(installedPackageJsonPath, []byte(packageJson), 0644)
-				} else {
-					var p PackageJSONRaw
-					err = utils.ParseJSONFile(installedPackageJsonPath, &p)
-					if err == nil && len(p.Files) > 0 {
-						// install github package with ignoring `files` field
-						err = ghInstall(installDir, esm.PkgName, esm.PkgVersion)
-					}
-				}
-			}
-		} else if regexpVersionStrict.MatchString(esm.PkgVersion) {
-			err = rc.pnpmi(installDir, "--prefer-offline", esm.PackageName())
-		} else {
-			err = rc.pnpmi(installDir, esm.PackageName())
+	if esm.GhPrefix {
+		err = os.WriteFile(packageJsonRc, []byte(fmt.Sprintf(`{"dependencies":{"%s":"github:%s#%s"}}`, esm.PkgName, esm.PkgName, esm.PkgVersion)), 0644)
+		if err == nil {
+			err = rc.pnpmi(installDir)
 		}
 		if err == nil {
-			var raw PackageJSONRaw
-			err = utils.ParseJSONFile(installedPackageJsonPath, &raw)
-			if err != nil {
-				if os.IsNotExist(err) {
-					err = fmt.Errorf("pnpm i %s: package.json not found", esm.PackageName())
-				} else {
-					err = fmt.Errorf("pnpm i %s: %v", esm.PackageName(), err)
-				}
-			} else {
-				packageJson = raw.ToNpmPackage()
+			// ensure 'package.json' file if not exists after installing from github
+			if !existsFile(packageJsonPath) {
+				ensureDir(path.Dir(packageJsonPath))
+				packageJson := fmt.Sprintf(`{"name":"%s","version":"%s"}`, esm.PkgName, esm.PkgVersion)
+				err = os.WriteFile(packageJsonPath, []byte(packageJson), 0644)
 			}
 		}
-		if err == nil || i == attemptMaxTimes {
-			break
-		}
-		time.Sleep(time.Duration(i) * 100 * time.Millisecond)
+	} else if regexpVersionStrict.MatchString(esm.PkgVersion) {
+		err = rc.pnpmi(installDir, "--prefer-offline", esm.PackageName())
+	} else {
+		err = rc.pnpmi(installDir, esm.PackageName())
 	}
+	if err != nil {
+		return
+	}
+
+	var raw PackageJSONRaw
+	err = utils.ParseJSONFile(packageJsonPath, &raw)
+	if err != nil {
+		if os.IsNotExist(err) {
+			err = fmt.Errorf("pnpm i %s: package.json not found", esm.PackageName())
+		} else {
+			err = fmt.Errorf("pnpm i %s: %v", esm.PackageName(), err)
+		}
+		return
+	}
+
+	// pnpm ignore files are not in 'files' field of the 'package.json'
+	// let's download the package from github and extract it
+	if esm.GhPrefix && len(raw.Files) > 0 {
+		err = ghInstall(installDir, esm.PkgName, esm.PkgVersion)
+		if err != nil {
+			return
+		}
+	}
+
+	packageJson = raw.ToNpmPackage()
 	return
 }
 

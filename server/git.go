@@ -5,6 +5,7 @@ import (
 	"bufio"
 	"bytes"
 	"compress/gzip"
+	"context"
 	"errors"
 	"fmt"
 	"io"
@@ -66,17 +67,24 @@ func listRepoRefs(repo string) (refs []GitRef, err error) {
 }
 
 func ghInstall(wd, name, hash string) (err error) {
-	c := &http.Client{
-		Timeout: 5 * time.Minute,
-	}
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
+	defer cancel()
 	url := fmt.Sprintf("https://codeload.github.com/%s/tar.gz/%s", name, hash)
-	res, err := c.Get(url)
+	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
+	if err != nil {
+		return
+	}
+	res, err := http.DefaultClient.Do(req)
 	if err != nil {
 		return
 	}
 	defer res.Body.Close()
 
-	// unzip tarball
+	if res.StatusCode != 200 {
+		return fmt.Errorf("fetch %s failed: %s", url, res.Status)
+	}
+
+	// ungzip tarball
 	unziped, err := gzip.NewReader(res.Body)
 	if err != nil {
 		return
@@ -94,16 +102,22 @@ func ghInstall(wd, name, hash string) (err error) {
 			return err
 		}
 		// strip tarball root dir
-		hname := strings.Join(strings.Split(h.Name, "/")[1:], "/")
-		if strings.HasPrefix(hname, ".") {
+		name := strings.Join(strings.Split(h.Name, "/")[1:], "/")
+		if strings.HasPrefix(name, ".") {
 			continue
 		}
-		fp := path.Join(rootDir, hname)
+		fp := path.Join(rootDir, name)
 		if h.Typeflag == tar.TypeDir {
 			ensureDir(fp)
 			continue
 		}
 		if h.Typeflag != tar.TypeReg {
+			continue
+		}
+		extname := path.Ext(fp)
+		if !(extname != "" && (assetExts[extname[1:]] || includes(esExts, extname))) {
+			// skip source files
+			// skip non-asset files
 			continue
 		}
 		f, err := os.OpenFile(fp, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0644)

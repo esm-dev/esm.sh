@@ -2,6 +2,7 @@ package server
 
 import (
 	"bytes"
+	"context"
 	"io"
 	"net/http"
 	"net/url"
@@ -20,14 +21,12 @@ type CacheItem struct {
 }
 
 type FetchClient struct {
-	client    *http.Client
+	*http.Client
 	userAgent string
 }
 
 var defaultFetchClient = &FetchClient{
-	client: &http.Client{
-		Timeout: 30 * time.Second,
-	},
+	Client:    &http.Client{},
 	userAgent: "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36",
 }
 
@@ -43,10 +42,12 @@ func (f *FetchClient) Fetch(url *url.URL) (resp *http.Response, err error) {
 			"User-Agent": []string{f.userAgent},
 		},
 	}
-	return f.client.Do(req)
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	return f.Do(req.WithContext(ctx))
 }
 
-func fetchSync(key string, cacheTtl time.Duration, fn func() (io.Reader, error)) (r io.Reader, err error) {
+func fetchSync(key string, cacheTtl time.Duration, fetch func() (io.Reader, error)) (r io.Reader, err error) {
 	v, _ := fetchLocks.LoadOrStore(key, &sync.Mutex{})
 	lock := v.(*sync.Mutex)
 	lock.Lock()
@@ -61,7 +62,7 @@ func fetchSync(key string, cacheTtl time.Duration, fn func() (io.Reader, error))
 		return bytes.NewReader(item.data), nil
 	}
 
-	r, err = fn()
+	r, err = fetch()
 	if err != nil {
 		return
 	}
