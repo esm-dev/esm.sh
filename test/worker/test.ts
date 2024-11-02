@@ -225,7 +225,7 @@ Deno.test("esm-worker", { sanitizeOps: false, sanitizeResources: false }, async 
     assert(modUrl.pathname.endsWith("/es2022/react.mjs"));
     assertEquals(res.status, 200);
     assertEquals(res.headers.get("Content-Type"), "application/javascript; charset=utf-8");
-    assertEquals(res.headers.get("Cache-Control"), "public, max-age=600");
+    assertEquals(res.headers.get("Cache-Control"), "public, max-age=3600");
     assertStringIncludes(res.headers.get("X-Typescript-Types")!, "/@types/react@");
     assertStringIncludes(await res.text(), modUrl.pathname);
 
@@ -246,7 +246,7 @@ Deno.test("esm-worker", { sanitizeOps: false, sanitizeResources: false }, async 
 
     const res5 = await fetch(`${workerOrigin}/react@^18.2.0`, { headers: { "User-Agent": "ES/2022" } });
     assertEquals(res5.status, 200);
-    assertEquals(res5.headers.get("Cache-Control"), "public, max-age=600");
+    assertEquals(res5.headers.get("Cache-Control"), "public, max-age=3600");
     assertStringIncludes(await res5.text(), `"/react@18.`);
 
     const res6 = await fetch(`${workerOrigin}/react@17.0.2`);
@@ -289,7 +289,7 @@ Deno.test("esm-worker", { sanitizeOps: false, sanitizeResources: false }, async 
     assert(modUrl.pathname.endsWith("/es2022/server.js"));
     assertEquals(res.status, 200);
     assertEquals(res.headers.get("Content-Type"), "application/javascript; charset=utf-8");
-    assertEquals(res.headers.get("Cache-Control"), "public, max-age=600");
+    assertEquals(res.headers.get("Cache-Control"), "public, max-age=3600");
     assertStringIncludes(res.headers.get("X-Typescript-Types")!, "/@types/react-dom@");
     assertStringIncludes(await res.text(), modUrl.pathname);
 
@@ -309,7 +309,7 @@ Deno.test("esm-worker", { sanitizeOps: false, sanitizeResources: false }, async 
     res.body?.cancel();
     assertEquals(res.status, 302);
     assert(res.headers.get("Location")!.startsWith(`${workerOrigin}/react@`));
-    assertEquals(res.headers.get("Cache-Control"), "public, max-age=600");
+    assertEquals(res.headers.get("Cache-Control"), "public, max-age=3600");
     const res2 = await fetch(res.headers.get("Location")!);
 
     assertEquals(res2.status, 200);
@@ -339,7 +339,7 @@ Deno.test("esm-worker", { sanitizeOps: false, sanitizeResources: false }, async 
     assert(modUrl.pathname.endsWith("/es2022/tslib.mjs"));
     assertEquals(res.status, 200);
     assertEquals(res.headers.get("Content-Type"), "application/javascript; charset=utf-8");
-    assertEquals(res.headers.get("Cache-Control"), "public, max-age=600");
+    assertEquals(res.headers.get("Cache-Control"), "public, max-age=3600");
     assertStringIncludes(res.headers.get("X-Typescript-Types")!, "/gh/microsoft/tslib@");
     assertStringIncludes(await res.text(), modUrl.pathname);
 
@@ -359,7 +359,7 @@ Deno.test("esm-worker", { sanitizeOps: false, sanitizeResources: false }, async 
     assertEquals(res.status, 302);
     const redirectTo = res.headers.get("Location")!;
     assert(redirectTo.startsWith(`${workerOrigin}/gh/microsoft/fluentui-emoji@`));
-    assertEquals(res.headers.get("Cache-Control"), "public, max-age=600");
+    assertEquals(res.headers.get("Cache-Control"), "public, max-age=3600");
 
     const res2 = await fetch(redirectTo);
     const svg = await res2.text();
@@ -375,7 +375,7 @@ Deno.test("esm-worker", { sanitizeOps: false, sanitizeResources: false }, async 
     assert(modUrl.pathname.endsWith("/es2022/base64.js"));
     assertEquals(res.status, 200);
     assertEquals(res.headers.get("Content-Type"), "application/javascript; charset=utf-8");
-    assertEquals(res.headers.get("Cache-Control"), "public, max-age=600");
+    assertEquals(res.headers.get("Cache-Control"), "public, max-age=3600");
     assertStringIncludes(res.headers.get("X-Typescript-Types")!, "/@jsr/std__encoding@");
     assertStringIncludes(await res.text(), modUrl.pathname);
 
@@ -533,7 +533,7 @@ Deno.test("esm-worker", { sanitizeOps: false, sanitizeResources: false }, async 
       const res = await fetch(`${workerOrigin}/react`, { redirect: "manual" });
       res.body?.cancel();
       assertEquals(res.status, 302);
-      assertEquals(res.headers.get("cache-control"), "public, max-age=600");
+      assertEquals(res.headers.get("cache-control"), "public, max-age=3600");
       assertEquals(res.headers.get("Vary"), "User-Agent");
       assertStringIncludes(res.headers.get("location")!, `${workerOrigin}/react@`);
     }
@@ -541,7 +541,7 @@ Deno.test("esm-worker", { sanitizeOps: false, sanitizeResources: false }, async 
       const res = await fetch(`${workerOrigin}/react@18`, { redirect: "manual" });
       res.body?.cancel();
       assertEquals(res.status, 302);
-      assertEquals(res.headers.get("cache-control"), "public, max-age=600");
+      assertEquals(res.headers.get("cache-control"), "public, max-age=3600");
       assertEquals(res.headers.get("Vary"), "User-Agent");
       assertStringIncludes(res.headers.get("location")!, `${workerOrigin}/react@18.`);
     }
@@ -549,7 +549,7 @@ Deno.test("esm-worker", { sanitizeOps: false, sanitizeResources: false }, async 
       const res = await fetch(`${workerOrigin}/react@18/es2022/react.mjs`, { redirect: "manual" });
       res.body?.cancel();
       assertEquals(res.status, 302);
-      assertEquals(res.headers.get("cache-control"), "public, max-age=600");
+      assertEquals(res.headers.get("cache-control"), "public, max-age=3600");
       assertStringIncludes(res.headers.get("location")!, `${workerOrigin}/react@18.`);
       assertStringIncludes(res.headers.get("location")!, "/es2022/react.mjs");
     }
@@ -558,7 +558,7 @@ Deno.test("esm-worker", { sanitizeOps: false, sanitizeResources: false }, async 
       const res = await fetch(`${workerOrigin}/es5-ext@^0.10.50/string/%23/contains?target=denonext`, { redirect: "manual" });
       res.body?.cancel();
       assertEquals(res.status, 302);
-      assertEquals(res.headers.get("cache-control"), "public, max-age=600");
+      assertEquals(res.headers.get("cache-control"), "public, max-age=3600");
       assertStringIncludes(res.headers.get("location")!, `${workerOrigin}/es5-ext@0.10.`);
       assertStringIncludes(res.headers.get("location")!, "/string/%23/contains");
     }

@@ -16,7 +16,7 @@ Deno.test("redirect semver versioning module for deno target", async () => {
     const res = await fetch("http://localhost:8080/preact", { redirect: "manual" });
     res.body?.cancel();
     assertEquals(res.status, 302);
-    assertEquals(res.headers.get("cache-control"), "public, max-age=600");
+    assertEquals(res.headers.get("cache-control"), "public, max-age=3600");
     assertStringIncludes(res.headers.get("location")!, "http://localhost:8080/preact@");
     assertStringIncludes(res.headers.get("vary")!, "User-Agent");
   }
@@ -26,7 +26,7 @@ Deno.test("redirect semver versioning module for deno target", async () => {
     const res = await fetch("http://localhost:8080/preact", { redirect: "manual", headers: { "User-Agent": "ES/2022" } });
     const code = await res.text();
     assertEquals(res.status, 200);
-    assertEquals(res.headers.get("cache-control"), "public, max-age=600");
+    assertEquals(res.headers.get("cache-control"), "public, max-age=3600");
     assertEquals(res.headers.get("content-type"), "application/javascript; charset=utf-8");
     assertStringIncludes(res.headers.get("vary")!, "User-Agent");
     assertStringIncludes(code, "/preact@");
@@ -38,7 +38,7 @@ Deno.test("redirect asset URLs", async () => {
   const res = await fetch("http://localhost:8080/preact/package.json", { redirect: "manual" });
   res.body?.cancel();
   assertEquals(res.status, 302);
-  assertEquals(res.headers.get("cache-control"), "public, max-age=600");
+  assertEquals(res.headers.get("cache-control"), "public, max-age=3600");
   assertStringIncludes(res.headers.get("location")!, "http://localhost:8080/preact@");
 
   const res2 = await fetch(res.headers.get("location")!, { redirect: "manual" });
@@ -50,7 +50,7 @@ Deno.test("redirect asset URLs", async () => {
   const res3 = await fetch("http://localhost:8080/preact@10/package.json", { redirect: "manual" });
   res3.body?.cancel();
   assertEquals(res3.status, 302);
-  assertEquals(res3.headers.get("cache-control"), "public, max-age=600");
+  assertEquals(res3.headers.get("cache-control"), "public, max-age=3600");
   assertStringIncludes(res3.headers.get("location")!, "http://localhost:8080/preact@10.");
 
   const res4 = await fetch(res.headers.get("location")!, { redirect: "manual" });
@@ -101,7 +101,7 @@ Deno.test("fix `/#/` path", async () => {
   const res = await fetch("http://localhost:8080/es5-ext@^0.10.50/string/%23/contains?target=denonext", { redirect: "manual" });
   res.body?.cancel();
   assertEquals(res.status, 302);
-  assertEquals(res.headers.get("cache-control"), "public, max-age=600");
+  assertEquals(res.headers.get("cache-control"), "public, max-age=3600");
   assertStringIncludes(res.headers.get("location")!, "http://localhost:8080/es5-ext@0.10.");
   assertStringIncludes(res.headers.get("location")!, "/string/%23/contains");
 });
