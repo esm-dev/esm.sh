@@ -7,6 +7,7 @@
   <script type="importmap">
     {
       "imports": {
+        "~/": "./app/",
         "preact": "https://esm.sh/preact@10.24.1"
       }
     }
@@ -14,7 +15,9 @@
   <script src="https://esm.sh/uno"></script>
 </head>
 <body>
-  <div id="root"><p class="flex justify-center items-center text-gray-400 h-screen">Loading...</p></div>
-  <script type="module" src="https://esm.sh/run" main="./src/main.tsx"></script>
+  <div id="root">
+    <p class="flex justify-center items-center text-gray-400 h-screen">Loading...</p>
+  </div>
+  <script type="module" src="https://esm.sh/run" main="./app/main.tsx"></script>
 </body>
 </html>

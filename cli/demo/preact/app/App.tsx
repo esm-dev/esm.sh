@@ -1,3 +1,5 @@
+import { Button } from "~/components/Button.tsx";
+
 export function App() {
   return (
     <>
@@ -15,7 +17,7 @@ export function App() {
         </div>
       </div>
       <div class="fixed bottom-5 w-full flex justify-center font-sans">
-        <button class="btn">Click Me</button>
+        <Button>Click Me</Button>
       </div>
     </>
   );

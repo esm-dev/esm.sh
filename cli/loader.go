@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/ije/gox/log"
+	"github.com/ije/gox/utils"
 )
 
 type LoaderWorker struct {
@@ -63,13 +64,16 @@ func (lw *LoaderWorker) Start(loaderjs []byte) (err error) {
 	return
 }
 
-func (lw *LoaderWorker) Load(loaderType string, args ...any) (code string, err error) {
+func (lw *LoaderWorker) Load(loaderType string, args []any) (lang string, code string, err error) {
 	// only one load can be invoked at a time
 	lw.lock.Lock()
 	defer lw.lock.Unlock()
+
 	if lw.outReader == nil {
-		return "", errors.New("loader not started")
+		err = errors.New("loader not started")
+		return
 	}
+
 	if os.Getenv("DEBUG") == "1" {
 		start := time.Now()
 		defer func() {
@@ -80,6 +84,7 @@ func (lw *LoaderWorker) Load(loaderType string, args ...any) (code string, err e
 			}
 		}()
 	}
+
 	loaderArgs := make([]any, len(args)+1)
 	loaderArgs[0] = loaderType
 	copy(loaderArgs[1:], args)
@@ -88,21 +93,26 @@ func (lw *LoaderWorker) Load(loaderType string, args ...any) (code string, err e
 		return
 	}
 	for {
-		line, err := lw.outReader.ReadBytes('\n')
+		var line []byte
+		line, err = lw.outReader.ReadBytes('\n')
 		if err != nil {
-			return "", err
+			return
 		}
 		if len(line) > 3 {
-			if bytes.HasPrefix(line, []byte(">>>\"")) || bytes.HasPrefix(line, []byte(">>!\"")) {
-				var ret string
-				err = json.Unmarshal(line[3:], &ret)
+			if bytes.HasPrefix(line, []byte(">>>")) {
+				var s string
+				t, j := utils.SplitByFirstByte(string(line[3:]), ':')
+				err = json.Unmarshal([]byte(j), &s)
 				if err != nil {
-					return "", err
+					return
 				}
-				if line[2] == '!' {
-					return "", errors.New(ret)
+				if t == "error" {
+					err = errors.New(s)
+					return
 				}
-				return ret, nil
+				lang = t
+				code = s
+				return
 			}
 		}
 	}
