@@ -3,8 +3,8 @@
   "port": 8080,
 
   // The port to listen server on for HTTPs requests, default is 0 (disabled). Change to 443 if you want to enable it.
-  // You don't need to provide a certificate, it will be generated and updated automatically by autocert.
-  // Note: if you are running the server in a docker container, you need to expose this port as 443 as well.
+  // You don't need to provide a certificate, the server uses ACME protocol to get a free certificate from Let's Encrypt.
+  // Note: if you are running the server in a docker container, you need to expose the port as well.
   "tlsPort": 0,
 
   // The secret token to validate the `Authorization: Bearer <secret>` header of incoming requests, default is disabled.
@@ -18,7 +18,7 @@
 
   // The storage options.
   // Examples:
-  // - Use local file system as a storage:
+  // - Use local file system as the storage:
   //   "storage": {
   //     "type": "fs",
   //     "endpoint": "/path/to/storage"
@@ -28,21 +28,28 @@
   //     "type": "s3",
   //     "endpoint": "https://bucket.s3.amazonaws.com",
   //     "region": "us-west-1",
-  //     "accessKeyID": "...",
-  //     "secretAccessKey": "..."
+  //     "accessKeyID": "***",
+  //     "secretAccessKey": "***"
   //   }
   "storage": {
     // storage type, supported types are ["fs", "s3"], default is "fs".
     "type": "fs",
     // storage endpoint, default is "~/.esmd/storage".
     "endpoint": "~/.esmd/storage",
-    // storage region for s3, default is empty.
+    // storage region for s3.
     "region": "",
-    // storage access key id for s3, default is empty.
+    // storage access key id for s3.
     "accessKeyID": "",
-    // storage secret access key for s3, default is empty
+    // storage secret access key for s3.
     "secretAccessKey": ""
   },
+
+  // Cache raw files in the storage, default is false.
+  // The server cleans up pnpm store periodically, to avoid unnecessary `pnpm install` when accessing
+  // package raw files, you can enable this option to cache the raw files in the storage.
+  // Note: this option will increase the storage usage, we recommend to enable it when you are using
+  // a S3-compatible storage.
+  "cacheRawFile": false,
 
   // The work directory for the server, default is "~/.esmd".
   "workDir": "~/.esmd",
@@ -70,10 +77,10 @@
     "@scope_name": {
       "registry": "https://your-registry.com/",
       // add access token for authentication
-      "token": "...",
+      "token": "***",
       // or use basic authentication
       "user": "username",
-      "password": "..."
+      "password": "***"
     }
   },
 

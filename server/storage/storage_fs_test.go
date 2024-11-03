@@ -37,11 +37,15 @@ func TestFSStorage(t *testing.T) {
 		t.Fatalf("invalid file size(%d), shoud be 13", fi.Size())
 	}
 
-	f, err := fs.Get("foo.txt")
+	f, fi, err := fs.Get("foo.txt")
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer f.Close()
+
+	if fi.Size() != 13 {
+		t.Fatalf("invalid file size(%d), shoud be 13", fi.Size())
+	}
 
 	data, err := io.ReadAll(f)
 	if err != nil {
@@ -84,7 +88,7 @@ func TestFSStorage(t *testing.T) {
 		t.Fatalf("File should be not existent")
 	}
 
-	_, err = fs.Get("foo.txt")
+	_, _, err = fs.Get("foo.txt")
 	if err != ErrNotFound {
 		t.Fatalf("File should be not existent")
 	}

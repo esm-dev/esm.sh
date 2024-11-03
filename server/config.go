@@ -23,6 +23,7 @@ type Config struct {
 	BuildConcurrency uint16                 `json:"buildConcurrency"`
 	BuildWaitTime    uint16                 `json:"buildWaitTime"`
 	Storage          storage.StorageOptions `json:"storage"`
+	CacheRawFile     bool                   `json:"cacheRawFile"`
 	Minify           json.RawMessage        `json:"minify"`
 	SourceMap        json.RawMessage        `json:"sourceMap"`
 	Compress         json.RawMessage        `json:"compress"`

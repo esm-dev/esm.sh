@@ -22,7 +22,7 @@ type StorageOptions struct {
 type Storage interface {
 	Stat(key string) (stat Stat, err error)
 	List(prefix string) (keys []string, err error)
-	Get(key string) (content io.ReadCloser, err error)
+	Get(key string) (content io.ReadCloser, stat Stat, err error)
 	Put(key string, r io.Reader) error
 	Delete(keys ...string) error
 	DeleteAll(prefix string) (deletedKeys []string, err error)

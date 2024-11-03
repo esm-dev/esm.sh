@@ -46,12 +46,19 @@ func (fs *fsStorage) List(prefix string) (keys []string, err error) {
 	return findFiles(filepath.Join(fs.root, dir), dir)
 }
 
-func (fs *fsStorage) Get(key string) (content io.ReadCloser, err error) {
+func (fs *fsStorage) Get(key string) (content io.ReadCloser, stat Stat, err error) {
 	filename := filepath.Join(fs.root, key)
-	content, err = os.Open(filename)
+	file, err := os.Open(filename)
 	if err != nil && os.IsNotExist(err) {
 		err = ErrNotFound
 	}
+	if err == nil {
+		stat, err = file.Stat()
+	}
+	if err != nil {
+		return
+	}
+	content = file
 	return
 }
 

@@ -84,12 +84,12 @@ func (e S3Error) Error() string {
 
 // S3ObjectMeta implements the Stat interface.
 type S3ObjectMeta struct {
-	contentSize  int64
-	lastModified time.Time
+	contentLength int64
+	lastModified  time.Time
 }
 
 func (s *S3ObjectMeta) Size() int64 {
-	return s.contentSize
+	return s.contentLength
 }
 
 func (s *S3ObjectMeta) ModTime() time.Time {
@@ -125,8 +125,8 @@ func (s3 *s3Storage) Stat(name string) (stat Stat, err error) {
 	size, _ := strconv.ParseInt(contentLengthHeader, 10, 64)
 	lastModified, _ := time.Parse(time.RFC1123, lastModifiedHeader)
 	return &S3ObjectMeta{
-		contentSize:  size,
-		lastModified: lastModified,
+		contentLength: size,
+		lastModified:  lastModified,
 	}, nil
 }
 
@@ -158,9 +158,9 @@ func (s3 *s3Storage) List(prefix string) (keys []string, err error) {
 	return
 }
 
-func (s3 *s3Storage) Get(name string) (content io.ReadCloser, err error) {
+func (s3 *s3Storage) Get(name string) (content io.ReadCloser, stat Stat, err error) {
 	if name == "" {
-		return nil, errors.New("name is required")
+		return nil, nil, errors.New("name is required")
 	}
 	req, _ := http.NewRequest("GET", s3.apiEndpoint+"/"+name, nil)
 	s3.sign(req)
@@ -175,9 +175,24 @@ func (s3 *s3Storage) Get(name string) (content io.ReadCloser, err error) {
 	}
 	if resp.StatusCode >= 400 {
 		defer resp.Body.Close()
-		return nil, parseS3Error(resp)
+		return nil, nil, parseS3Error(resp)
 	}
-	return resp.Body, nil
+	contentLengthHeader := resp.Header.Get("Content-Length")
+	lastModifiedHeader := resp.Header.Get("Last-Modified")
+	if contentLengthHeader == "" {
+		err = errors.New("missing content size header")
+		return
+	}
+	if lastModifiedHeader == "" {
+		err = errors.New("missing last modified header")
+		return
+	}
+	size, _ := strconv.ParseInt(contentLengthHeader, 10, 64)
+	lastModified, _ := time.Parse(time.RFC1123, lastModifiedHeader)
+	return resp.Body, &S3ObjectMeta{
+		contentLength: size,
+		lastModified:  lastModified,
+	}, nil
 }
 
 func (s3 *s3Storage) Put(name string, content io.Reader) (err error) {
@@ -186,6 +201,20 @@ func (s3 *s3Storage) Put(name string, content io.Reader) (err error) {
 	}
 	req, _ := http.NewRequest("PUT", s3.apiEndpoint+"/"+name, content)
 	s3.sign(req)
+	if buf, ok := content.(*bytes.Buffer); ok {
+		req.ContentLength = int64(buf.Len())
+	} else if seeker, ok := content.(io.Seeker); ok {
+		var size int64
+		size, err = seeker.Seek(0, io.SeekEnd)
+		if err != nil {
+			return
+		}
+		_, err = seeker.Seek(0, io.SeekStart)
+		if err != nil {
+			return
+		}
+		req.ContentLength = size
+	}
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		return

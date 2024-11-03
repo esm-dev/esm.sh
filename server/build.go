@@ -101,19 +101,19 @@ func NewBuildContext(zoneId string, npmrc *NpmRC, esm ESMPath, args BuildArgs, t
 
 func (ctx *BuildContext) Query() (*BuildMeta, error) {
 	key := ctx.getSavepath() + ".meta"
-	value, err := esmStorage.Get(key)
+	r, _, err := esmStorage.Get(key)
 	if err != nil && err != storage.ErrNotFound {
 		return nil, err
 	}
 	if err == nil {
 		var b BuildMeta
-		err = json.NewDecoder(value).Decode(&b)
+		err = json.NewDecoder(r).Decode(&b)
+		r.Close()
 		if err == nil {
 			return &b, nil
-		} else {
-			// remove the invalid build result
-			esmStorage.Delete(key)
 		}
+		// delete the invalid build meta
+		esmStorage.Delete(key)
 	}
 	return nil, nil
 }
