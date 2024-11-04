@@ -1034,10 +1034,10 @@ func routes(debug bool) rex.Handle {
 
 			// serve package raw files
 			if resType == RawFile {
-				var cachePath string
-				var cacheHit bool
 				var stat storage.Stat
 				var content io.ReadCloser
+				var cachePath string
+				var cacheHit bool
 				if config.CacheRawFile {
 					cachePath = path.Join("raw", esm.PackageName(), esm.SubPath)
 					content, stat, err = esmStorage.Get(cachePath)
@@ -1046,7 +1046,7 @@ func routes(debug bool) rex.Handle {
 				if !cacheHit {
 					savePath := path.Join(npmrc.StoreDir(), esm.PackageName(), "node_modules", esm.PkgName, esm.SubPath)
 					stat, err = os.Lstat(savePath)
-					if err != nil && os.IsExist(err) {
+					if err != nil && os.IsNotExist(err) {
 						// if the file not found, try to install the package and retry
 						_, err = npmrc.installPackage(esm)
 						if err != nil {
