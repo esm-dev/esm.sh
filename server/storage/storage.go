@@ -7,8 +7,7 @@ import (
 )
 
 var (
-	ErrNotFound = errors.New("not found")
-	ErrExpired  = errors.New("record is expired")
+	ErrNotFound = errors.New("file not found")
 )
 
 type StorageOptions struct {
