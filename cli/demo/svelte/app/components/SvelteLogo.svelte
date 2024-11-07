@@ -1,7 +1,7 @@
 <svg
   xmlns="http://www.w3.org/2000/svg"
-  width="79.8"
-  height="96"
+  width="83.11"
+  height="100"
   viewBox="0 0 256 308"
 >
   <path

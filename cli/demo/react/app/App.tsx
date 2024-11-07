@@ -1,23 +1,21 @@
-import { Button } from "~/components/Button.tsx";
+import { ReactLogo } from "~/components/Logo.tsx";
 
 export function App() {
   return (
     <>
-      <div className="flex flex-col justify-center items-center gap-1 h-screen font-sans all:transition-100">
-        <h2 className="text-5xl fw500">esm.sh</h2>
-        <p className="text-gray-400 text-lg fw400">
+      <div className="center-box absolute op15">
+        <ReactLogo />
+      </div>
+      <div className="center-box relative gap-1">
+        <h1 className="font-sans text-5xl fw500 select-none" style={{ color: "#61DAFB" }}>esm.sh</h1>
+        <p className="font-sans text-lg fw400 text-gray-400">
           The <span className="fw600">no-build</span> cdn for modern web development.
         </p>
-        <div className="mt2 flex justify-center text-2xl text-gray-400 hover:text-gray-700">
-          <a
-            className="i-carbon-logo-github text-inherit hover:animate-spin"
-            href="https://github.com/esm-dev/esm.sh"
-            target="_blank"
-          />
+        <div className="flex justify-center gap-3 mt2 text-2xl all:transition-300">
+          <a className="logo i-tabler-world" href="https://esm.sh" target="_blank" title="Website" />
+          <a className="logo i-tabler-brand-bluesky" href="https://bsky.app/profile/esm.sh" target="_blank" title="Bluesky" />
+          <a className="logo i-tabler-brand-github" href="https://github.com/esm-dev/esm.sh" target="_blank" title="Github" />
         </div>
-      </div>
-      <div className="fixed bottom-5 w-full flex justify-center font-sans">
-        <Button>Click Me</Button>
       </div>
     </>
   );
