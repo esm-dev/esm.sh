@@ -10,8 +10,8 @@ github.com/ije/esbuild-internal v0.24.0 h1:ekQilnTP0YQBpqHwaZwpIWH/YbehY4xctKW8g
 github.com/ije/esbuild-internal v0.24.0/go.mod h1:s7HvKZ4ZGifyzvgWpSwnJOQTr6b+bsgfNBZ8HAEwwSM=
 github.com/ije/gox v0.7.0 h1:XVF3hPcW/KXHFNOldgcIoX1I4Lm0D9NAX7/si2AxAuA=
 github.com/ije/gox v0.7.0/go.mod h1:3GTaK8WXf6oxRbrViLqKNLTNcMR871Dz0zoujFNmG48=
-github.com/ije/rex v1.13.3 h1:Y1OIZvchzsN5eGb5EIvzEuk8ngQVhHdSgGHJxslajnY=
-github.com/ije/rex v1.13.3/go.mod h1:WMh4LIu2I2IQEowMN9cZwOws4NDfPIdxojs5l+mhhU8=
+github.com/ije/rex v1.13.4 h1:zqcvN7c7kyf+cRMe6BXwHaoIQ7EQPBp8JZZ/RAbRuFo=
+github.com/ije/rex v1.13.4/go.mod h1:WMh4LIu2I2IQEowMN9cZwOws4NDfPIdxojs5l+mhhU8=
 github.com/mileusna/useragent v1.3.5 h1:SJM5NzBmh/hO+4LGeATKpaEX9+b4vcGg2qXGLiNGDws=
 github.com/mileusna/useragent v1.3.5/go.mod h1:3d8TOmwL/5I8pJjyVDteHtgDGcefrFUX4ccGOMKNYYc=
 github.com/rs/cors v1.11.1 h1:eU3gRzXLRK57F5rKMGMZURNdIG4EoAmX8k94r9wXWHA=
