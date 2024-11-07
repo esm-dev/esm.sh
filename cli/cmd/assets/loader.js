@@ -1,6 +1,8 @@
 import { TextLineStream } from "jsr:@std/streams@1.0.7/text-line-stream";
 
 const enc = new TextEncoder();
+const regexpVuePath = /^\/\*?vue@([~\^]?[\w\+\-\.]+)(\/|\?|&|$)/;
+const regexpSveltePath = /^\/\*?svelte@([~\^]?[\w\+\-\.]+)(\/|\?|&|$)/;
 const output = (type, data) => Deno.stdout.write(enc.encode(">>>" + type + ":" + JSON.stringify(data) + "\n"));
 
 let tsx, unoGenerators;
@@ -22,12 +24,13 @@ async function transformModule(filename, importMap) {
       }
     }
   }
-  let sourceCode = await Deno.readTextFile("." + filename);
-  let lang = undefined; // by default use file extension to determine lang
+  let lang = undefined;
+  let code = await Deno.readTextFile("." + filename);
+  let preprocessSM = undefined;
   if (filename.endsWith(".vue")) {
-    const ret = await transformVue(filename, sourceCode, importMap, true);
-    lang = ret[0];
-    sourceCode = ret[1];
+    [lang, code, preprocessSM] = await transformVue(filename, code, importMap, true);
+  } else if (filename.endsWith(".svelte")) {
+    [lang, code, preprocessSM] = await transformSvelte(filename, code, importMap, true);
   }
   if (!tsx) {
     tsx = import("npm:@esm.sh/tsx@1.0.1").then(async ({ init, transform }) => {
@@ -36,18 +39,26 @@ async function transformModule(filename, importMap) {
     });
   }
   const { transform } = await tsx;
-  return transform({
+  const ret = transform({
     filename,
     lang,
-    code: sourceCode,
+    code,
     importMap,
-    sourceMap: "inline",
+    sourceMap: preprocessSM ? "external" : "inline",
     dev: {
       hmr: { runtime: "/@hmr" },
       refresh: imports?.react && !imports?.preact ? { runtime: "/@refresh" } : undefined,
       prefresh: imports?.preact ? { runtime: "/@prefresh" } : undefined,
     },
-  }).code;
+  });
+  let js = ret.code;
+  if (ret.map) {
+    if (preprocessSM) {
+      // todo: merge preprocess source map
+    }
+    js += "\n//# sourceMappingURL=data:application/json;base64," + btoa(ret.map);
+  }
+  return js;
 }
 
 async function transformVue(filename, sourceCode, importMap, isDev) {
@@ -57,20 +68,48 @@ async function transformVue(filename, sourceCode, importMap, isDev) {
     isDev,
     devRuntime: isDev ? "/@vdr" : undefined,
   });
-  return [ret.lang, ret.code];
+  return [ret.lang, ret.code, ret.map];
+}
+
+async function transformSvelte(filename, sourceCode, importMap, isDev) {
+  const { compile } = await import(`npm:svelte@${getSvelteVersion(importMap)}/compiler`);
+  const { js } = compile(sourceCode, {
+    filename,
+    css: "injected",
+    dev: isDev,
+    hmr: isDev, // svelte 5 specific option
+  });
+  return ["ts", js.code, js.map];
 }
 
 function getVueVersion(importMap) {
   const vueUrl = importMap?.imports?.vue;
-  if (vueUrl && (vueUrl.startsWith("https://") || vueUrl.startsWith("http://"))) {
+  if (vueUrl && isHttpSpecifier(vueUrl)) {
     const url = new URL(vueUrl);
-    const m = url.pathname.match(/^\/\*?vue@([~\^]?[\w\+\-\.]+)(\/|\?|&|$)/);
+    const m = url.pathname.match(regexpVuePath);
     if (m) {
       return m[1];
     }
   }
   // default to vue@3
   return "3";
+}
+
+function getSvelteVersion(importMap) {
+  const svelteUrl = importMap?.imports?.svelte;
+  if (svelteUrl && isHttpSpecifier(svelteUrl)) {
+    const url = new URL(svelteUrl);
+    const m = url.pathname.match(regexpSveltePath);
+    if (m) {
+      return m[1];
+    }
+  }
+  // default to svelte@5
+  return "5";
+}
+
+function isHttpSpecifier(specifier) {
+  return typeof specifier === "string" && specifier.startsWith("https://") || specifier.startsWith("http://");
 }
 
 async function unocss(config, content) {
@@ -99,9 +138,16 @@ for await (const line of Deno.stdin.readable.pipeThrough(new TextDecoderStream()
       case "module":
         output("js", await transformModule(...args));
         break;
-      case "vue":
-        output(...(await transformVue(...args)));
+      case "vue": {
+        const [lang, code] = await transformVue(...args);
+        output(lang, code);
         break;
+      }
+      case "svelte": {
+        const [lang, code] = await transformSvelte(...args);
+        output(lang, code);
+        break;
+      }
       default:
         output("error", "Unknown loader type: " + type);
     }
