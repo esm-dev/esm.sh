@@ -3,17 +3,21 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>ESM&gt;Run</title>
+  <title>ESM&gt;Run Demo(Vue)</title>
   <script type="importmap">
     {
       "imports": {
-        "svelte": "https://esm.sh/svelte@4.2.19"
+        "~/": "./app/",
+        "svelte": "https://esm.sh/svelte@5.1.12?no-bundle"
       }
     }
   </script>
+  <script src="https://esm.sh/uno"></script>
 </head>
 <body>
-  <div id="root">Loading...</div>
+  <div id="root">
+    <p class="flex justify-center items-center text-gray-400 h-screen">Loading...</p>
+  </div>
+  <script type="module" src="https://esm.sh/run" main="./app/main.ts"></script>
 </body>
-<script type="module" main="./main.ts"></script>
 </html>

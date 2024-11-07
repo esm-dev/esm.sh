@@ -161,7 +161,8 @@ func (h *H) ServeHtml(w http.ResponseWriter, r *http.Request, pathname string) {
 }
 
 func (h *H) ServeModule(w http.ResponseWriter, r *http.Request, pathname string) {
-	im, err := atobUrl(r.URL.Query().Get("im"))
+	query := r.URL.Query()
+	im, err := atobUrl(query.Get("im"))
 	if err != nil {
 		http.Error(w, "Bad Request", 400)
 		return
@@ -233,7 +234,7 @@ func (h *H) ServeModule(w http.ResponseWriter, r *http.Request, pathname string)
 		return
 	}
 	etag := fmt.Sprintf("w/\"%d-%d-%d-%x\"", fi.ModTime().UnixMilli(), fi.Size(), VERSION, sha.Sum(nil))
-	if r.Header.Get("If-None-Match") == etag {
+	if r.Header.Get("If-None-Match") == etag && !query.Has("t") {
 		w.WriteHeader(http.StatusNotModified)
 		return
 	}
@@ -244,9 +245,10 @@ func (h *H) ServeModule(w http.ResponseWriter, r *http.Request, pathname string)
 			if e.(string) == etag {
 				header := w.Header()
 				header.Set("Content-Type", "application/javascript; charset=utf-8")
-				header.Set("Cache-Control", "max-age=0, must-revalidate")
-				header.Set("Etag", etag)
-				header.Set("X-Cache-Status", "HIT")
+				if !query.Has("t") {
+					header.Set("Cache-Control", "max-age=0, must-revalidate")
+					header.Set("Etag", etag)
+				}
 				w.Write(js.([]byte))
 				return
 			}
@@ -268,13 +270,16 @@ func (h *H) ServeModule(w http.ResponseWriter, r *http.Request, pathname string)
 	h.loadCache.Store(etagCacheKey, etag)
 	header := w.Header()
 	header.Set("Content-Type", "application/javascript; charset=utf-8")
-	header.Set("Cache-Control", "max-age=0, must-revalidate")
-	header.Set("Etag", etag)
+	if !query.Has("t") {
+		header.Set("Cache-Control", "max-age=0, must-revalidate")
+		header.Set("Etag", etag)
+	}
 	w.Write([]byte(js))
 }
 
 func (h *H) ServeUnoCSS(w http.ResponseWriter, r *http.Request) {
-	ctx, err := atobUrl(r.URL.Query().Get("ctx"))
+	query := r.URL.Query()
+	ctx, err := atobUrl(query.Get("ctx"))
 	if err != nil {
 		http.Error(w, "Bad Request", 400)
 		return
@@ -395,7 +400,7 @@ func (h *H) ServeUnoCSS(w http.ResponseWriter, r *http.Request) {
 		sha.Write([]byte(s))
 	}
 	etag := fmt.Sprintf("w\"%x\"", sha.Sum(nil))
-	if r.Header.Get("If-None-Match") == etag {
+	if r.Header.Get("If-None-Match") == etag && !query.Has("t") {
 		w.WriteHeader(http.StatusNotModified)
 		return
 	}
@@ -406,9 +411,10 @@ func (h *H) ServeUnoCSS(w http.ResponseWriter, r *http.Request) {
 			if e.(string) == etag {
 				header := w.Header()
 				header.Set("Content-Type", "text/css; charset=utf-8")
-				header.Set("Cache-Control", "max-age=0, must-revalidate")
-				header.Set("Etag", etag)
-				header.Set("X-Cache-Status", "HIT")
+				if !query.Has("t") {
+					header.Set("Cache-Control", "max-age=0, must-revalidate")
+					header.Set("Etag", etag)
+				}
 				w.Write(css.([]byte))
 				return
 			}
@@ -437,8 +443,10 @@ func (h *H) ServeUnoCSS(w http.ResponseWriter, r *http.Request) {
 	h.loadCache.Store(etagCacheKey, etag)
 	header := w.Header()
 	header.Set("Content-Type", "text/css; charset=utf-8")
-	header.Set("Cache-Control", "max-age=0, must-revalidate")
-	header.Set("Etag", etag)
+	if !query.Has("t") {
+		header.Set("Cache-Control", "max-age=0, must-revalidate")
+		header.Set("Etag", etag)
+	}
 	w.Write([]byte(css))
 }
 

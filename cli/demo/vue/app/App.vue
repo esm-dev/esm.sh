@@ -7,7 +7,7 @@
     <VueLogo></VueLogo>
   </div>
   <div class="center-box relative gap-1">
-    <h2 class="font-sans text-5xl fw500 select-none">esm.sh</h2>
+    <h1 class="font-sans text-5xl fw500 select-none">esm.sh</h1>
     <p class="font-sans text-lg fw400 text-gray-400">
       The <span class="fw600">no-build</span> cdn for modern web development.
     </p>
@@ -20,7 +20,7 @@
 </template>
 
 <style scoped>
-  h2 {
+  h1 {
     color: #42b883;
   }
 </style>

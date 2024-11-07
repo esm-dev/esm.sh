@@ -72,14 +72,18 @@ async function transformVue(filename, sourceCode, importMap, isDev) {
 }
 
 async function transformSvelte(filename, sourceCode, importMap, isDev) {
-  const { compile } = await import(`npm:svelte@${getSvelteVersion(importMap)}/compiler`);
+  const { compile, VERSION } = await import(`npm:svelte@${getSvelteVersion(importMap)}/compiler`);
+  const majorVersion = parseInt(VERSION.split(".")[0]);
+  if (majorVersion < 5) {
+    throw new Error("Unsupported Svelte version: " + VERSION + ". Please use svelte@5 or higher.");
+  }
   const { js } = compile(sourceCode, {
     filename,
     css: "injected",
     dev: isDev,
-    hmr: isDev, // svelte 5 specific option
+    hmr: isDev,
   });
-  return ["ts", js.code, js.map];
+  return ["js", js.code, js.map];
 }
 
 function getVueVersion(importMap) {
