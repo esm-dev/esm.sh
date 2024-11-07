@@ -1,6 +1,4 @@
-import { compile, VERSION } from "svelte/compiler";
-
-const majorVersion = Number(VERSION.split(".")[0]);
+import { compile } from "svelte/compiler";
 const { stdin, stdout } = process;
 
 function readStdin() {
@@ -16,13 +14,7 @@ function readStdin() {
 
 try {
   const [filename, code] = JSON.parse(await readStdin());
-  const options = { filename, css: "injected" };
-  if (majorVersion >= 5) {
-    options.generate = "client";
-  } else {
-    options.generate = "dom";
-  }
-  const { js } = compile(code, options);
+  const { js } = compile(code, { filename, css: "injected" });
   stdout.write(JSON.stringify({ code: js.code }));
 } catch (err) {
   stdout.write(JSON.stringify({ error: err.message }));

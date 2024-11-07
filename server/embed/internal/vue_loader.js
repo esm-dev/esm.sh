@@ -14,8 +14,8 @@ function readStdin() {
 
 try {
   const [filename, srouceCode] = JSON.parse(await readStdin());
-  const ret = await transform(filename, srouceCode);
-  stdout.write(JSON.stringify(ret));
+  const { lang, code } = await transform(filename, srouceCode);
+  stdout.write(JSON.stringify({ lang, code }));
 } catch (err) {
   stdout.write(JSON.stringify({ error: err.message }));
 }
