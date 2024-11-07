@@ -1,10 +1,10 @@
 const { readFileSync, existsSync } = require("fs");
 const { dirname, join } = require("path");
-const { parse } = require("esm-cjs-lexer");
+const { parse } = require("@esm.sh/cjs-module-lexer");
 const { env, stdin, stdout } = process;
 
 const identRegexp = /^[a-zA-Z_\$][\w\$]*$/;
-const reservedWords = new Set([
+const jsReservedWords = new Set([
   "abstract",
   "arguments",
   "await",
@@ -172,7 +172,7 @@ function getJSONKeys(jsonFile) {
 function verifyExports(names) {
   const hasDefaultExport = names.includes("default");
   const namedExports = Array.from(
-    new Set(names.filter((name) => identRegexp.test(name) && !reservedWords.has(name))),
+    new Set(names.filter((name) => identRegexp.test(name) && !jsReservedWords.has(name))),
   );
   return {
     hasDefaultExport,

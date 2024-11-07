@@ -1,4 +1,4 @@
-import { transform } from "esm-vue-sfc-compiler";
+import { transform } from "@esm.sh/vue-loader";
 const { stdin, stdout } = process;
 
 function readStdin() {

@@ -75,7 +75,7 @@ import ReactDOM = { client: import('https://esm.sh/react-dom@1.0.0/client.d.ts')
 			if name == "react" || name == "react-dom" {
 				return fmt.Sprintf("https://esm.sh/@types/%s@1.0.0/index.d.ts", name), nil
 			}
-			if isRelativeSpecifier(name) {
+			if isRelPathSpecifier(name) {
 				return name + "/index.d.ts", nil
 			}
 			pkgName, _, subPath, _ := splitPkgPath(name)

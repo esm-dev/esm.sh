@@ -83,7 +83,7 @@ func transformVue(npmrc *NpmRC, options *ResolvedTransformOptions) (output *Load
 	if err != nil {
 		return
 	}
-	return runLoader(npmrc, "vue", []string{options.Filename, options.Code}, PackageId{"@vue/compiler-sfc", vueVersion}, "esm-vue-sfc-compiler@0.4.8")
+	return runLoader(npmrc, "vue", []string{options.Filename, options.Code}, PackageId{"@vue/compiler-sfc", vueVersion}, "@esm.sh/vue-loader@1.0.3")
 }
 
 func transformSvelte(npmrc *NpmRC, options *ResolvedTransformOptions) (output *LoaderOutput, err error) {
@@ -96,5 +96,5 @@ func transformSvelte(npmrc *NpmRC, options *ResolvedTransformOptions) (output *L
 }
 
 func generateUnoCSS(npmrc *NpmRC, options *ResolvedTransformOptions) (output *LoaderOutput, err error) {
-	return runLoader(npmrc, "unocss", []string{options.unocss.configCSS, strings.Join(options.unocss.content, "\n")}, PackageId{"esm-unocss", "0.8.0"}, "@iconify/json@2.2.260")
+	return runLoader(npmrc, "unocss", []string{options.unocss.configCSS, strings.Join(options.unocss.content, "\n")}, PackageId{"@esm.sh/unocss", "0.1.0"}, "@iconify/json@2.2.260")
 }

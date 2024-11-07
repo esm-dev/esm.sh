@@ -1,23 +1,30 @@
 package server
 
-import "strings"
+import (
+	"net/url"
+	"strings"
+)
 
 type ImportMap struct {
 	Src     string                       `json:"$src,omitempty"`
 	Support bool                         `json:"$support,omitempty"`
 	Imports map[string]string            `json:"imports,omitempty"`
 	Scopes  map[string]map[string]string `json:"scopes,omitempty"`
+	srcUrl  *url.URL
 }
 
 func (m ImportMap) Resolve(path string) (string, bool) {
 	imports := m.Imports
+	if m.srcUrl == nil && m.Src != "" {
+		m.srcUrl, _ = url.Parse(m.Src)
+	}
 	// todo: check `scopes`
 	if len(imports) > 0 {
 		if v, ok := imports[path]; ok {
 			if m.Support {
 				return path, true
 			}
-			return v, true
+			return m.toAbsPath(v), true
 		}
 		if strings.ContainsRune(path, '/') {
 			nonTrailingSlashImports := make([][2]string, 0, len(imports))
@@ -27,7 +34,7 @@ func (m ImportMap) Resolve(path string) (string, bool) {
 						if m.Support {
 							return path, true
 						}
-						return v + path[len(k):], true
+						return m.toAbsPath(v + path[len(k):]), true
 					}
 				} else {
 					nonTrailingSlashImports = append(nonTrailingSlashImports, [2]string{k, v})
@@ -38,10 +45,20 @@ func (m ImportMap) Resolve(path string) (string, bool) {
 			for _, p := range nonTrailingSlashImports {
 				k, v := p[0], p[1]
 				if strings.HasPrefix(path, k+"/") {
-					return v + path[len(k):], true
+					return m.toAbsPath(v + path[len(k):]), true
 				}
 			}
 		}
 	}
 	return path, false
+}
+
+func (m ImportMap) toAbsPath(path string) string {
+	if isRelPathSpecifier(path) {
+		if m.srcUrl != nil {
+			return m.srcUrl.ResolveReference(&url.URL{Path: path}).String()
+		}
+		return path
+	}
+	return path
 }

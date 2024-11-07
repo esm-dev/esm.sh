@@ -35,9 +35,14 @@ func isHttpSepcifier(specifier string) bool {
 	return strings.HasPrefix(specifier, "https://") || strings.HasPrefix(specifier, "http://")
 }
 
-// isRelativeSpecifier returns true if the specifier is a local path.
-func isRelativeSpecifier(specifier string) bool {
+// isRelPathSpecifier returns true if the specifier is a local path.
+func isRelPathSpecifier(specifier string) bool {
 	return strings.HasPrefix(specifier, "./") || strings.HasPrefix(specifier, "../")
+}
+
+// isAbsPathSpecifier returns true if the specifier is an absolute path.
+func isAbsPathSpecifier(specifier string) bool {
+	return strings.HasPrefix(specifier, "/") || strings.HasPrefix(specifier, "file://")
 }
 
 // semverLessThan returns true if the version a is less than the version b.
@@ -97,7 +102,7 @@ func ensureDir(dir string) (err error) {
 // relPath returns a relative path from the base path to the target path.
 func relPath(basePath, targetPath string) (string, error) {
 	rp, err := filepath.Rel(basePath, targetPath)
-	if err == nil && !isRelativeSpecifier(rp) {
+	if err == nil && !isRelPathSpecifier(rp) {
 		rp = "./" + rp
 	}
 	return rp, err

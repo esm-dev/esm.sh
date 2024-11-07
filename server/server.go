@@ -110,11 +110,11 @@ func Serve(efs EmbedFS) {
 	log.Debugf("nodejs: v%s, pnpm: %s, registry: %s", nodeVer, pnpmVer, config.NpmRegistry)
 
 	// init cjs lexer
-	err = initCJSLexer()
+	err = initCJSModuleLexer()
 	if err != nil {
 		log.Fatalf("failed to initialize cjs_lexer: %v", err)
 	}
-	log.Debugf("%s initialized", cjsLexerPkg)
+	log.Debugf("%s initialized", cjsModuleLexerPkg)
 
 	// init build queue
 	buildQueue = NewBuildQueue(int(config.BuildConcurrency))

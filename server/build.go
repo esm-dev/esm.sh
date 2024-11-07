@@ -389,7 +389,7 @@ func (ctx *BuildContext) buildModule() (result *BuildMeta, err error) {
 					specifier := normalizeImportSpecifier(args.Path)
 
 					// resolve specifier by checking `?alias` query
-					if len(ctx.args.alias) > 0 && !isRelativeSpecifier(specifier) {
+					if len(ctx.args.alias) > 0 && !isRelPathSpecifier(specifier) {
 						pkgName, _, subpath, _ := splitPkgPath(specifier)
 						if name, ok := ctx.args.alias[pkgName]; ok {
 							specifier = name
@@ -432,7 +432,7 @@ func (ctx *BuildContext) buildModule() (result *BuildMeta, err error) {
 					}
 
 					// resolve specifier with package `browser` field
-					if !isRelativeSpecifier(specifier) && len(ctx.packageJson.Browser) > 0 && ctx.isBrowserTarget() {
+					if !isRelPathSpecifier(specifier) && len(ctx.packageJson.Browser) > 0 && ctx.isBrowserTarget() {
 						if name, ok := ctx.packageJson.Browser[specifier]; ok {
 							if name == "" {
 								return api.OnResolveResult{
@@ -480,7 +480,7 @@ func (ctx *BuildContext) buildModule() (result *BuildMeta, err error) {
 					var fullFilepath string
 					if strings.HasPrefix(specifier, "/") {
 						fullFilepath = specifier
-					} else if isRelativeSpecifier(specifier) {
+					} else if isRelPathSpecifier(specifier) {
 						fullFilepath = path.Join(args.ResolveDir, specifier)
 					} else {
 						fullFilepath = path.Join(ctx.wd, "node_modules", ".pnpm", "node_modules", specifier)
@@ -547,7 +547,7 @@ func (ctx *BuildContext) buildModule() (result *BuildMeta, err error) {
 						return api.OnResolveResult{}, nil
 					}
 
-					if strings.HasPrefix(specifier, "/") || isRelativeSpecifier(specifier) {
+					if strings.HasPrefix(specifier, "/") || isRelPathSpecifier(specifier) {
 						specifier = strings.TrimPrefix(fullFilepath, path.Join(ctx.wd, "node_modules")+"/")
 						if strings.HasPrefix(specifier, ".pnpm") {
 							a := strings.Split(specifier, "/node_modules/")
@@ -603,7 +603,7 @@ func (ctx *BuildContext) buildModule() (result *BuildMeta, err error) {
 											Namespace: "browser-exclude",
 										}, nil
 									}
-									if !isRelativeSpecifier(path) {
+									if !isRelPathSpecifier(path) {
 										externalPath, err := ctx.resolveExternalModule(path, args.Kind)
 										if err != nil {
 											return api.OnResolveResult{}, err
@@ -718,7 +718,7 @@ func (ctx *BuildContext) buildModule() (result *BuildMeta, err error) {
 										p := bytes.Split(out, []byte("\""))
 										if len(p) == 3 && string(p[0]) == "export*from" && string(p[2]) == ";\n" {
 											url := string(p[1])
-											if !isRelativeSpecifier(url) {
+											if !isRelPathSpecifier(url) {
 												externalPath, err := ctx.resolveExternalModule(url, args.Kind)
 												if err != nil {
 													return api.OnResolveResult{}, err
@@ -1137,7 +1137,7 @@ rebuild:
 						isEsModule[i] = true
 						continue
 					}
-					if !isRelativeSpecifier(specifier) && !isNodeInternalModule(specifier) {
+					if !isRelPathSpecifier(specifier) && !isNodeInternalModule(specifier) {
 						if a := bytes.SplitN(jsContent, []byte(fmt.Sprintf(`("%s")`, specifier)), 2); len(a) >= 2 {
 							ret := regexpVarEqual.FindSubmatch(a[0])
 							if len(ret) == 2 {

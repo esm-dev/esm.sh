@@ -14,7 +14,7 @@ const isLocalhost = false;
 function tsx() {
   let tsxScripts: { el: HTMLElement; lang: string; code: string }[] = [];
   let importMap: Record<string, object> = {};
-  let esmCompiler: Promise<{ transform: (filename: string, code: string, options: Record<string, unknown>) => { code: string } }>;
+  let tsx: Promise<{ transform: (filename: string, code: string, options: Record<string, unknown>) => { code: string } }>;
 
   // lookup import map and tsx scripts
   d.querySelectorAll("script").forEach((el) => {
@@ -60,7 +60,7 @@ function tsx() {
     }
     if (!js) {
       if (isLocalhost) {
-        const { transform } = await (esmCompiler ?? (esmCompiler = initEsmTsx()));
+        const { transform } = await (tsx ?? (tsx = initTsx()));
         const ret = transform("script-" + idx + "." + lang, code, { target, importMap, minify: true, sourceMap: "inline" });
         js = ret.code;
       } else {
@@ -92,11 +92,11 @@ function tsx() {
   });
 }
 
-async function initEsmTsx() {
-  const pkg = "/esm-tsx@1.3.1";
+async function initTsx() {
+  const pkg = "/@esm.sh/tsx@1.0.1";
   const [m, w] = await Promise.all([
-    import(pkg + "/$TARGET/esm-tsx.mjs"),
-    fetch(urlFromCurrentModule(pkg + "/pkg/esm_tsx_bg.wasm")),
+    import(pkg + "/$TARGET/@esm.sh/tsx.mjs"),
+    fetch(urlFromCurrentModule(pkg + "/pkg/tsx_bg.wasm")),
   ]);
   await m.default(w);
   return m;

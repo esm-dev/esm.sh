@@ -1,4 +1,4 @@
-import { generate } from "esm-unocss";
+import { generate } from "@esm.sh/unocss";
 const { stdin, stdout } = process;
 
 function readStdin() {

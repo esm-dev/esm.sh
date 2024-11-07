@@ -112,7 +112,7 @@ func bundleRemoteModule(npmrc *NpmRC, entry string, importMap ImportMap) (js []b
 				Setup: func(build esbuild.PluginBuild) {
 					build.OnResolve(esbuild.OnResolveOptions{Filter: ".*"}, func(args esbuild.OnResolveArgs) (esbuild.OnResolveResult, error) {
 						path, _ := importMap.Resolve(args.Path)
-						if isRelativeSpecifier(args.Path) && isHttpSepcifier(args.Importer) {
+						if isHttpSepcifier(args.Importer) && (isRelPathSpecifier(args.Path) || isAbsPathSpecifier(args.Path)) {
 							u, e := url.Parse(args.Importer)
 							if e == nil {
 								path = u.ResolveReference(&url.URL{Path: args.Path}).String()

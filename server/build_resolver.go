@@ -590,18 +590,18 @@ func (ctx *BuildContext) resolveEntry(esm ESMPath) (entry BuildEntry) {
 		normalizeBuildEntry(ctx, &entry)
 		if entry.esm != "" {
 			m, ok := ctx.packageJson.Browser[entry.esm]
-			if ok && isRelativeSpecifier(m) {
+			if ok && isRelPathSpecifier(m) {
 				entry.esm = m
 			}
 		}
 		if entry.cjs != "" {
 			m, ok := ctx.packageJson.Browser[entry.cjs]
-			if ok && isRelativeSpecifier(m) {
+			if ok && isRelPathSpecifier(m) {
 				entry.cjs = m
 			}
 		}
 		if esm.SubBareName == "" {
-			if m, ok := ctx.packageJson.Browser["."]; ok && isRelativeSpecifier(m) {
+			if m, ok := ctx.packageJson.Browser["."]; ok && isRelPathSpecifier(m) {
 				if ctx.packageJson.Type == "module" || strings.HasSuffix(m, ".mjs") {
 					entry.esm = m
 				} else {
@@ -1095,7 +1095,7 @@ func (ctx *BuildContext) lexer(entry *BuildEntry, forceCjsOnly bool) (ret *Build
 
 		log.Warnf("fake ES module '%s' of '%s'", entry.esm, ctx.packageJson.Name)
 
-		var r cjsLexerResult
+		var r cjsModuleLexerResult
 		r, err = ctx.cjsLexer(entry.esm)
 		if err != nil {
 			return
@@ -1113,7 +1113,7 @@ func (ctx *BuildContext) lexer(entry *BuildEntry, forceCjsOnly bool) (ret *Build
 	}
 
 	if entry.cjs != "" {
-		var cjs cjsLexerResult
+		var cjs cjsModuleLexerResult
 		cjs, err = ctx.cjsLexer(entry.cjs)
 		if err != nil {
 			return
@@ -1128,8 +1128,8 @@ func (ctx *BuildContext) lexer(entry *BuildEntry, forceCjsOnly bool) (ret *Build
 	return
 }
 
-func (ctx *BuildContext) cjsLexer(specifier string) (cjs cjsLexerResult, err error) {
-	cjs, err = cjsLexer(ctx.npmrc, ctx.esm.PkgName, ctx.wd, specifier, ctx.getNodeEnv())
+func (ctx *BuildContext) cjsLexer(specifier string) (cjs cjsModuleLexerResult, err error) {
+	cjs, err = cjsModuleLexer(ctx.npmrc, ctx.esm.PkgName, ctx.wd, specifier, ctx.getNodeEnv())
 	if err == nil && cjs.Error != "" {
 		err = fmt.Errorf("cjsLexer: %s", cjs.Error)
 	}

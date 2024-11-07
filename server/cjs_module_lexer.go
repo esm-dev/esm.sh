@@ -17,9 +17,9 @@ import (
 	"github.com/ije/gox/utils"
 )
 
-const cjsLexerPkg = "esm-cjs-lexer@0.11.2"
+const cjsModuleLexerPkg = "@esm.sh/cjs-module-lexer@1.0.0"
 
-// use `require()` to get the module's exports that are not statically analyzable by esm-cjs-lexer
+// use `require()` to get the module's exports that are not statically analyzable by @esm.sh/cjs-module-lexer
 var requireModeAllowList = []string{
 	"@babel/types",
 	"cheerio",
@@ -45,8 +45,8 @@ var requireModeAllowList = []string{
 	"web-streams-ponyfill",
 }
 
-func initCJSLexer() (err error) {
-	wd := path.Join(config.WorkDir, "npm", cjsLexerPkg)
+func initCJSModuleLexer() (err error) {
+	wd := path.Join(config.WorkDir, "npm", cjsModuleLexerPkg)
 	err = ensureDir(wd)
 	if err != nil {
 		return err
@@ -61,15 +61,15 @@ func initCJSLexer() (err error) {
 		}
 	}
 
-	cmd := exec.Command("pnpm", "add", "--prefer-offline", cjsLexerPkg)
+	cmd := exec.Command("pnpm", "add", "--prefer-offline", cjsModuleLexerPkg)
 	cmd.Dir = wd
 	err = cmd.Run()
 	if err != nil {
-		err = fmt.Errorf("install %s: %v", cjsLexerPkg, err)
+		err = fmt.Errorf("install %s: %v", cjsModuleLexerPkg, err)
 		return
 	}
 
-	js, err := embedFS.ReadFile("server/embed/internal/cjs_lexer.js")
+	js, err := embedFS.ReadFile("server/embed/internal/cjs_module_lexer.js")
 	if err != nil {
 		return
 	}
@@ -79,11 +79,11 @@ func initCJSLexer() (err error) {
 		return
 	}
 
-	err = os.WriteFile(path.Join(wd, "cjs_lexer.js"), minJs, 0644)
+	err = os.WriteFile(path.Join(wd, "cjs_module_lexer.js"), minJs, 0644)
 	return
 }
 
-type cjsLexerResult struct {
+type cjsModuleLexerResult struct {
 	ReExport         string   `json:"reexport"`
 	HasDefaultExport bool     `json:"hasDefaultExport"`
 	NamedExports     []string `json:"namedExports"`
@@ -91,19 +91,21 @@ type cjsLexerResult struct {
 	Stack            string   `json:"stack"`
 }
 
-func cjsLexer(npmrc *NpmRC, pkgName string, wd string, specifier string, nodeEnv string) (ret cjsLexerResult, err error) {
+func cjsModuleLexer(npmrc *NpmRC, pkgName string, wd string, specifier string, nodeEnv string) (ret cjsModuleLexerResult, err error) {
 	h := sha256.New()
-	h.Write([]byte(cjsLexerPkg))
+	h.Write([]byte(cjsModuleLexerPkg))
+	h.Write([]byte(pkgName))
+	h.Write([]byte(wd))
 	h.Write([]byte(specifier))
 	h.Write([]byte(nodeEnv))
-	cacheFileName := path.Join(wd, ".cjs_lexer", base64.RawURLEncoding.EncodeToString(h.Sum(nil))+".json")
+	cacheFileName := path.Join(wd, ".cjs_module_lexer", base64.RawURLEncoding.EncodeToString(h.Sum(nil))+".json")
 
 	// check the cache first
 	if existsFile(cacheFileName) && utils.ParseJSONFile(cacheFileName, &ret) == nil {
 		return
 	}
 
-	// change the args order carefully, the order is used in ./embed/cjs_lexer.js
+	// change the args order carefully, the order is used in ./embed/cjs_module_lexer.js
 	args := []interface{}{
 		pkgName,
 		wd,
@@ -134,16 +136,16 @@ func cjsLexer(npmrc *NpmRC, pkgName string, wd string, specifier string, nodeEnv
 		"node",
 		"--experimental-permission",
 		"--allow-fs-read="+npmrc.StoreDir(),
-		"cjs_lexer.js",
+		"cjs_module_lexer.js",
 	)
-	cmd.Dir = path.Join(config.WorkDir, "npm", cjsLexerPkg)
+	cmd.Dir = path.Join(config.WorkDir, "npm", cjsModuleLexerPkg)
 	cmd.Stdin = stdin
 	cmd.Stdout = stdout
 	cmd.Stderr = stderr
 	err = cmd.Run()
 	if err != nil {
 		if stderr.Len() > 0 {
-			err = fmt.Errorf("cjsLexer: %s", stderr.String())
+			err = fmt.Errorf("cjsModuleLexer: %s", stderr.String())
 		}
 		return
 	}
@@ -155,9 +157,9 @@ func cjsLexer(npmrc *NpmRC, pkgName string, wd string, specifier string, nodeEnv
 
 	if ret.Error != "" {
 		if ret.Stack != "" {
-			log.Errorf("[cjsLexer] %s\n---\nArguments: %v\n%s\na---", ret.Error, args, ret.Stack)
+			log.Errorf("[cjsModuleLexer] %s\n---\nArguments: %v\n%s\na---", ret.Error, args, ret.Stack)
 		} else {
-			log.Errorf("[cjsLexer] %s\nArguments: %v", ret.Error, args)
+			log.Errorf("[cjsModuleLexer] %s\nArguments: %v", ret.Error, args)
 		}
 	} else {
 		go func() {
@@ -165,7 +167,7 @@ func cjsLexer(npmrc *NpmRC, pkgName string, wd string, specifier string, nodeEnv
 				os.WriteFile(cacheFileName, stdout.Bytes(), 0644)
 			}
 		}()
-		log.Debugf("[cjsLexer] parse %s in %s", path.Join(pkgName, specifier), time.Since(start))
+		log.Debugf("[cjsModuleLexer] parse %s in %s", path.Join(pkgName, specifier), time.Since(start))
 	}
 
 	return

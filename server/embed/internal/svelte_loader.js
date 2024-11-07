@@ -1,6 +1,6 @@
 import { compile, VERSION } from "svelte/compiler";
 
-const version = Number(VERSION.split(".")[0]);
+const majorVersion = Number(VERSION.split(".")[0]);
 const { stdin, stdout } = process;
 
 function readStdin() {
@@ -17,8 +17,7 @@ function readStdin() {
 try {
   const [filename, code] = JSON.parse(await readStdin());
   const options = { filename, css: "injected" };
-  if (version >= 5) {
-    options.runes = true;
+  if (majorVersion >= 5) {
     options.generate = "client";
   } else {
     options.generate = "dom";

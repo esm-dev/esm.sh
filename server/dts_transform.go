@@ -61,7 +61,7 @@ func transformDTS(ctx *BuildContext, dts string, buildArgsPrefix string, marker 
 		// normalize specifier
 		specifier = normalizeImportSpecifier(specifier)
 
-		if isRelativeSpecifier(specifier) {
+		if isRelPathSpecifier(specifier) {
 			specifier = strings.TrimSuffix(specifier, ".d")
 			if !endsWith(specifier, ".d.ts", ".d.mts") {
 				var p PackageJSONRaw

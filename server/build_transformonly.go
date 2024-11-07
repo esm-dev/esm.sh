@@ -147,7 +147,7 @@ func transform(npmrc *NpmRC, options *ResolvedTransformOptions) (out TransformOu
 						if strings.HasSuffix(path, ".css") {
 							path += "?module"
 						}
-						if isRelativeSpecifier(path) {
+						if isAbsPathSpecifier(path) || isRelPathSpecifier(path) {
 							if options.importMap.Src != "" {
 								suffix := "N"
 								if options.importMap.Support {
