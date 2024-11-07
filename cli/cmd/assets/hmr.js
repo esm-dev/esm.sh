@@ -122,7 +122,7 @@ class HotContext {
     }
     watch(this.#id, (kind) => {
       if (kind === "remove") {
-        callback();
+        location.reload();
       } else {
         import(this.#id + "?im=" + this.#im + "&t=" + Date.now().toString(36)).then(callback);
       }

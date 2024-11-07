@@ -3,7 +3,8 @@ import { TextLineStream } from "jsr:@std/streams@1.0.7/text-line-stream";
 const enc = new TextEncoder();
 const output = (type, data) => Deno.stdout.write(enc.encode(">>>" + type + ":" + JSON.stringify(data) + "\n"));
 
-let esmTsx;
+let tsx, unoGenerators;
+
 async function transformModule(filename, importMap) {
   const imports = importMap?.imports;
   if (imports) {
@@ -24,22 +25,17 @@ async function transformModule(filename, importMap) {
   let sourceCode = await Deno.readTextFile("." + filename);
   let lang = undefined; // by default use file extension to determine lang
   if (filename.endsWith(".vue")) {
-    const { transform } = await import("npm:esm-vue-sfc-compiler@0.4.7");
-    const ret = await transform(filename, sourceCode, {
-      imports: { "@vue/compiler-sfc": import("npm:@vue/compiler-sfc@" + getVueVersion(importMap)) },
-      devRuntime: "/@vdr",
-      isDev: true,
-    });
-    sourceCode = ret.code;
-    lang = ret.lang;
+    const ret = await transformVue(filename, sourceCode, importMap, true);
+    lang = ret[0];
+    sourceCode = ret[1];
   }
-  if (!esmTsx) {
-    esmTsx = import("npm:esm-tsx@1.3.1").then(async ({ init, transform }) => {
+  if (!tsx) {
+    tsx = import("npm:@esm.sh/tsx@1.0.1").then(async ({ init, transform }) => {
       await init();
       return { transform };
     });
   }
-  const { transform } = await esmTsx;
+  const { transform } = await tsx;
   return transform({
     filename,
     lang,
@@ -54,35 +50,39 @@ async function transformModule(filename, importMap) {
   }).code;
 }
 
-async function transformVueSFC(filename, sourceCode, importMap) {
-  const { transform } = await import("npm:esm-vue-sfc-compiler@0.4.8");
+async function transformVue(filename, sourceCode, importMap, isDev) {
+  const { transform } = await import("npm:@esm.sh/vue-loader@1.0.3");
   const ret = await transform(filename, sourceCode, {
     imports: { "@vue/compiler-sfc": import("npm:@vue/compiler-sfc@" + getVueVersion(importMap)) },
+    isDev,
+    devRuntime: isDev ? "/@vdr" : undefined,
   });
   return [ret.lang, ret.code];
 }
 
 function getVueVersion(importMap) {
-  let vueVersion = undefined;
   const vueUrl = importMap?.imports?.vue;
   if (vueUrl && (vueUrl.startsWith("https://") || vueUrl.startsWith("http://"))) {
     const url = new URL(vueUrl);
     const m = url.pathname.match(/^\/\*?vue@([~\^]?[\w\+\-\.]+)(\/|\?|&|$)/);
     if (m) {
-      vueVersion = m[1];
+      return m[1];
     }
   }
-  if (!vueVersion) {
-    throw new Error("'vue' not specified in the import map or invalid version");
-  }
-  return vueVersion;
+  // default to vue@3
+  return "3";
 }
 
-let uno;
-async function unocss(configCSS, content) {
-  if (!uno || uno.configCSS !== configCSS) {
-    uno = import("npm:esm-unocss@0.8.0").then(({ init }) => init(configCSS));
-    uno.configCSS = configCSS;
+async function unocss(config, content) {
+  if (!unoGenerators) {
+    unoGenerators = new Map();
+  }
+  const generatorKey = config?.filename ?? "-";
+  let uno = unoGenerators.get(generatorKey);
+  if (!uno || uno.configCSS !== config?.css) {
+    uno = import("npm:@esm.sh/unocss@0.1.0").then(({ init }) => init(config?.css));
+    uno.configCSS = config?.css;
+    unoGenerators.set(generatorKey, uno);
   }
   const { update, generate } = await uno;
   await update(content);
@@ -100,7 +100,7 @@ for await (const line of Deno.stdin.readable.pipeThrough(new TextDecoderStream()
         output("js", await transformModule(...args));
         break;
       case "vue":
-        output(...(await transformVueSFC(...args)));
+        output(...(await transformVue(...args)));
         break;
       default:
         output("error", "Unknown loader type: " + type);

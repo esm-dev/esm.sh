@@ -12,13 +12,13 @@ func isHttpSepcifier(specifier string) bool {
 	return strings.HasPrefix(specifier, "https://") || strings.HasPrefix(specifier, "http://")
 }
 
-// isRelativeSpecifier returns true if the specifier is a local path.
-func isRelativeSpecifier(specifier string) bool {
+// isRelPathSpecifier returns true if the specifier is a local path.
+func isRelPathSpecifier(specifier string) bool {
 	return strings.HasPrefix(specifier, "./") || strings.HasPrefix(specifier, "../")
 }
 
-// isAbsolutePathSpecifier returns true if the specifier is an absolute path.
-func isAbsolutePathSpecifier(specifier string) bool {
+// isAbsPathSpecifier returns true if the specifier is an absolute path.
+func isAbsPathSpecifier(specifier string) bool {
 	return strings.HasPrefix(specifier, "/") || strings.HasPrefix(specifier, "file://")
 }
 

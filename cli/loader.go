@@ -58,7 +58,7 @@ func (lw *LoaderWorker) Start(loaderjs []byte) (err error) {
 		lw.outReader = bufio.NewReader(lw.stdout)
 		if os.Getenv("DEBUG") == "1" {
 			denoVersion, _ := exec.Command(denoPath, "-v").Output()
-			fmt.Println(log.Grey(fmt.Sprintf("[debug] loader started (runtime: %s)", strings.TrimSpace(string(denoVersion)))))
+			fmt.Println(log.Grey(fmt.Sprintf("[debug] loader process started (runtime: %s)", strings.TrimSpace(string(denoVersion)))))
 		}
 	}
 	return
@@ -78,9 +78,9 @@ func (lw *LoaderWorker) Load(loaderType string, args []any) (lang string, code s
 		start := time.Now()
 		defer func() {
 			if loaderType == "unocss" {
-				fmt.Println(log.Grey(fmt.Sprintf("[debug] load 'uno.css' in %s", time.Since(start))))
+				fmt.Println(log.Grey(fmt.Sprintf("[debug] load 'uno.css' in %s (loader: unocss)", time.Since(start))))
 			} else {
-				fmt.Println(log.Grey(fmt.Sprintf("[debug] load '%s' in %s", args[0], time.Since(start))))
+				fmt.Println(log.Grey(fmt.Sprintf("[debug] load '%s' in %s (loader: %s)", args[0], time.Since(start), loaderType)))
 			}
 		}()
 	}
@@ -101,17 +101,21 @@ func (lw *LoaderWorker) Load(loaderType string, args []any) (lang string, code s
 		if len(line) > 3 {
 			if bytes.HasPrefix(line, []byte(">>>")) {
 				var s string
-				t, j := utils.SplitByFirstByte(string(line[3:]), ':')
-				err = json.Unmarshal([]byte(j), &s)
+				t, d := utils.SplitByFirstByte(string(line[3:]), ':')
+				err = json.Unmarshal([]byte(d), &s)
 				if err != nil {
 					return
 				}
+				if t == "debug" {
+					fmt.Println(log.Grey(s))
+					continue
+				}
 				if t == "error" {
 					err = errors.New(s)
-					return
+				} else {
+					lang = t
+					code = s
 				}
-				lang = t
-				code = s
 				return
 			}
 		}

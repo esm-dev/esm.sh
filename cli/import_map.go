@@ -7,7 +7,6 @@ import (
 
 type ImportMap struct {
 	Src     string                       `json:"$src,omitempty"`
-	Support bool                         `json:"$support,omitempty"`
 	Imports map[string]string            `json:"imports,omitempty"`
 	Scopes  map[string]map[string]string `json:"scopes,omitempty"`
 	srcUrl  *url.URL
@@ -21,9 +20,6 @@ func (m ImportMap) Resolve(path string) (string, bool) {
 	// todo: check `scopes`
 	if len(imports) > 0 {
 		if v, ok := imports[path]; ok {
-			if m.Support {
-				return path, true
-			}
 			return m.toAbsPath(v), true
 		}
 		if strings.ContainsRune(path, '/') {
@@ -31,9 +27,6 @@ func (m ImportMap) Resolve(path string) (string, bool) {
 			for k, v := range imports {
 				if strings.HasSuffix(k, "/") {
 					if strings.HasPrefix(path, k) {
-						if m.Support {
-							return path, true
-						}
 						return m.toAbsPath(v + path[len(k):]), true
 					}
 				} else {
@@ -54,7 +47,7 @@ func (m ImportMap) Resolve(path string) (string, bool) {
 }
 
 func (m ImportMap) toAbsPath(path string) string {
-	if isRelativeSpecifier(path) {
+	if isRelPathSpecifier(path) {
 		if m.srcUrl != nil {
 			return m.srcUrl.ResolveReference(&url.URL{Path: path}).String()
 		}

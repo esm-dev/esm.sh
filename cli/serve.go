@@ -3,12 +3,14 @@ package cli
 import (
 	"bytes"
 	"embed"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -21,17 +23,16 @@ import (
 	"github.com/ije/gox/log"
 	"github.com/ije/gox/utils"
 	"golang.org/x/net/html"
-	"golang.org/x/net/html/atom"
 )
 
 type H struct {
-	assets  *embed.FS
-	loader  *LoaderWorker
-	rootDir string
-	wsConns map[*websocket.Conn]map[string]int64
-	rwlock  sync.RWMutex
-	lock    sync.RWMutex
-	cache   sync.Map
+	assets    *embed.FS
+	loader    *LoaderWorker
+	rootDir   string
+	wsConns   map[*websocket.Conn]map[string]int64
+	rwlock    sync.RWMutex
+	lock      sync.RWMutex
+	loadCache sync.Map
 }
 
 func (h *H) ServeHtml(w http.ResponseWriter, r *http.Request, pathname string) {
@@ -45,37 +46,40 @@ func (h *H) ServeHtml(w http.ResponseWriter, r *http.Request, pathname string) {
 		return
 	}
 	defer htmlFile.Close()
+
 	tokenizer := html.NewTokenizer(htmlFile)
-	unocssLink := ""
+	unocss := ""
+	hasInlineUnoConfigCSS := false
+
 	for {
 		tt := tokenizer.Next()
 		if tt == html.ErrorToken {
 			break
 		}
 		if tt == html.StartTagToken {
-			token := tokenizer.Token()
-			if token.DataAtom == atom.Script {
-				var srcAttr string
-				var mainAttr string
-				for _, attr := range token.Attr {
-					if attr.Key == "src" {
-						srcAttr = attr.Val
-					} else if attr.Key == "main" {
-						mainAttr = attr.Val
-					}
-				}
+			tagName, moreAttr := tokenizer.TagName()
+			attrs := map[string]string{}
+			for moreAttr {
+				var key, val []byte
+				key, val, moreAttr = tokenizer.TagAttr()
+				attrs[string(key)] = string(val)
+			}
+			switch string(tagName) {
+			case "script":
+				srcAttr := attrs["src"]
+				mainAttr := attrs["main"]
 				// add `im` query to the main script
-				if isRelativeSpecifier(srcAttr) || strings.HasPrefix(srcAttr, "/") {
+				if isRelPathSpecifier(srcAttr) || strings.HasPrefix(srcAttr, "/") {
 					w.Write([]byte("<script"))
-					for _, attr := range token.Attr {
-						if attr.Key == "src" {
+					for attrKey, attrVal := range attrs {
+						if attrKey == "src" {
 							srcAttr, _ = utils.SplitByFirstByte(srcAttr, '?')
 							w.Write([]byte(fmt.Sprintf(` src="%s?im=%s"`, srcAttr, btoaUrl(pathname))))
 						} else {
-							if attr.Val == "" {
-								w.Write([]byte(fmt.Sprintf(` %s`, attr.Key)))
+							if attrVal == "" {
+								w.Write([]byte(fmt.Sprintf(` %s`, attrKey)))
 							} else {
-								w.Write([]byte(fmt.Sprintf(` %s="%s"`, attr.Key, attr.Val)))
+								w.Write([]byte(fmt.Sprintf(` %s="%s"`, attrKey, attrVal)))
 							}
 						}
 					}
@@ -86,16 +90,16 @@ func (h *H) ServeHtml(w http.ResponseWriter, r *http.Request, pathname string) {
 				// with `<script type="module" src="$main"></script>`
 				if (strings.HasPrefix(srcAttr, "http://") || strings.HasPrefix(srcAttr, "https://")) && strings.HasSuffix(srcAttr, "/run") && mainAttr != "" {
 					w.Write([]byte("<script"))
-					for _, attr := range token.Attr {
-						if attr.Key != "main" {
-							if attr.Key == "src" {
+					for attrKey, attrVal := range attrs {
+						if attrKey != "main" {
+							if attrKey == "src" {
 								mainAttr, _ = utils.SplitByFirstByte(mainAttr, '?')
 								w.Write([]byte(fmt.Sprintf(` src="%s"`, mainAttr+"?im="+btoaUrl(pathname))))
 							} else {
-								if attr.Val == "" {
-									w.Write([]byte(fmt.Sprintf(` %s`, attr.Key)))
+								if attrVal == "" {
+									w.Write([]byte(fmt.Sprintf(` %s`, attrKey)))
 								} else {
-									w.Write([]byte(fmt.Sprintf(` %s="%s"`, attr.Key, attr.Val)))
+									w.Write([]byte(fmt.Sprintf(` %s="%s"`, attrKey, attrVal)))
 								}
 							}
 						}
@@ -106,8 +110,8 @@ func (h *H) ServeHtml(w http.ResponseWriter, r *http.Request, pathname string) {
 				// replace `<script src="https://esm.sh/uno"></script>`
 				// with `<link rel="stylesheet" href="/@unocss">`
 				if (strings.HasPrefix(srcAttr, "http://") || strings.HasPrefix(srcAttr, "https://")) && strings.HasSuffix(srcAttr, "/uno") {
-					unocssLink = "/@unocss?ctx=" + btoaUrl(pathname)
-					w.Write([]byte(fmt.Sprintf(`<link id="@unocss" rel="stylesheet" href="%s">`, unocssLink)))
+					unocss = "/@unocss?ctx=" + btoaUrl(pathname)
+					w.Write([]byte(fmt.Sprintf(`<link id="@unocss" rel="stylesheet" href="%s">`, unocss)))
 					tok := tokenizer.Next()
 					if tok == html.TextToken {
 						tokenizer.Next()
@@ -117,16 +121,10 @@ func (h *H) ServeHtml(w http.ResponseWriter, r *http.Request, pathname string) {
 					}
 					continue
 				}
-			} else if token.DataAtom == atom.Style {
-				var typeAttr string
-				for _, attr := range token.Attr {
-					if attr.Key == "type" {
-						typeAttr = attr.Val
-						break
-					}
-				}
+			case "style":
 				// strip `<style type="uno/css">...</style>`
-				if typeAttr == "uno/css" {
+				if attrs["type"] == "uno/css" {
+					hasInlineUnoConfigCSS = true
 					tok := tokenizer.Next()
 					if tok == html.TextToken {
 						tokenizer.Next()
@@ -142,9 +140,21 @@ func (h *H) ServeHtml(w http.ResponseWriter, r *http.Request, pathname string) {
 	}
 	// reload the page when the html file is modified
 	fmt.Fprintf(w, `<script type="module">import createHotContext from"/@hmr";const hot=createHotContext("%s");hot.watch(()=>location.reload());`, pathname)
-	if unocssLink != "" {
+	if unocss != "" {
 		// reload the unocss when the module dependency tree is changed
-		fmt.Fprintf(w, `hot.watch("*",(kind,filename)=>{if(/\.(js|mjs|jsx|ts|mts|tsx|vue|svelte)$/i.test(filename)){document.getElementById("@unocss").href="%s&t="+Date.now().toString(36)}})`, unocssLink)
+		fmt.Fprintf(w, `hot.watch("*",(kind,filename)=>{if(/\.(js|mjs|jsx|ts|mts|tsx|vue|svelte)$/i.test(filename)){document.getElementById("@unocss").href="%s&t="+Date.now().toString(36)}});`, unocss)
+		if !hasInlineUnoConfigCSS {
+			u := &url.URL{Path: pathname}
+			u = u.ResolveReference(&url.URL{Path: "uno.css"})
+			filename := filepath.Join(h.rootDir, u.Path)
+			if _, err := os.Stat(filename); err != nil && os.IsNotExist(err) {
+				u = &url.URL{Path: "/uno.css"}
+				filename = filepath.Join(h.rootDir, u.Path)
+			}
+			if _, err := os.Stat(filename); err == nil || os.IsExist(err) {
+				fmt.Fprintf(w, `hot.watch("%s",()=>location.reload());`, u.Path)
+			}
+		}
 	}
 	w.Write([]byte("</script>"))
 	fmt.Fprintf(w, `<script>console.log("%%c💚 Built with esm.sh/run, please uncheck \"Disable cache\" in Network tab for better DX!", "color:green")</script>`)
@@ -175,12 +185,14 @@ func (h *H) ServeModule(w http.ResponseWriter, r *http.Request, pathname string)
 			break
 		}
 		if tt == html.StartTagToken {
-			token := tokenizer.Token()
-			if token.DataAtom == atom.Script {
+			tagName, moreAttr := tokenizer.TagName()
+			if string(tagName) == "script" {
 				var typeAttr string
-				for _, attr := range token.Attr {
-					if attr.Key == "type" {
-						typeAttr = attr.Val
+				for moreAttr {
+					var key, val []byte
+					key, val, moreAttr = tokenizer.TagAttr()
+					if string(key) == "type" {
+						typeAttr = string(val)
 						break
 					}
 				}
@@ -196,7 +208,7 @@ func (h *H) ServeModule(w http.ResponseWriter, r *http.Request, pathname string)
 					importMap.Src = "file://" + im
 					break
 				}
-			} else if token.DataAtom == atom.Body {
+			} else if string(tagName) == "body" {
 				break
 			}
 		} else if tt == html.EndTagToken {
@@ -227,8 +239,8 @@ func (h *H) ServeModule(w http.ResponseWriter, r *http.Request, pathname string)
 	}
 	cacheKey := fmt.Sprintf("module-%s", pathname)
 	etagCacheKey := fmt.Sprintf("module-%s.etag", pathname)
-	if js, ok := h.cache.Load(cacheKey); ok {
-		if e, ok := h.cache.Load(etagCacheKey); ok {
+	if js, ok := h.loadCache.Load(cacheKey); ok {
+		if e, ok := h.loadCache.Load(etagCacheKey); ok {
 			if e.(string) == etag {
 				header := w.Header()
 				header.Set("Content-Type", "application/javascript; charset=utf-8")
@@ -252,8 +264,8 @@ func (h *H) ServeModule(w http.ResponseWriter, r *http.Request, pathname string)
 		http.Error(w, "Internal Server Error", 500)
 		return
 	}
-	h.cache.Store(cacheKey, []byte(js))
-	h.cache.Store(etagCacheKey, etag)
+	h.loadCache.Store(cacheKey, []byte(js))
+	h.loadCache.Store(etagCacheKey, etag)
 	header := w.Header()
 	header.Set("Content-Type", "application/javascript; charset=utf-8")
 	header.Set("Cache-Control", "max-age=0, must-revalidate")
@@ -279,6 +291,7 @@ func (h *H) ServeUnoCSS(w http.ResponseWriter, r *http.Request) {
 	}
 	defer imHtmlFile.Close()
 	configCSS := ""
+	configFilename := ""
 	content := []string{}
 	jsEntries := map[string]struct{}{}
 	importMap := ImportMap{}
@@ -299,7 +312,8 @@ func (h *H) ServeUnoCSS(w http.ResponseWriter, r *http.Request) {
 						tokenizer.Next()
 						innerText := bytes.TrimSpace(tokenizer.Text())
 						if len(innerText) > 0 {
-							configCSS += string(innerText)
+							configFilename = imHtmlFilename
+							configCSS = string(innerText)
 						}
 						break
 					}
@@ -349,16 +363,17 @@ func (h *H) ServeUnoCSS(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	if configCSS == "" {
-		configCSSFilename := filepath.Join(filepath.Dir(imHtmlFilename), "uno.css")
-		if _, err := os.Stat(configCSSFilename); err != nil && os.IsNotExist(err) {
-			configCSSFilename = filepath.Join(h.rootDir, "uno.css")
+		filename := filepath.Join(filepath.Dir(imHtmlFilename), "uno.css")
+		if _, err := os.Stat(filename); err != nil && os.IsNotExist(err) {
+			filename = filepath.Join(h.rootDir, "uno.css")
 		}
-		data, err := os.ReadFile(configCSSFilename)
+		data, err := os.ReadFile(filename)
 		if err != nil && os.IsExist(err) {
 			http.Error(w, "Internal Server Error", 500)
 			return
 		}
 		if len(data) > 0 {
+			configFilename = filename
 			configCSS = string(data)
 		}
 	}
@@ -386,8 +401,8 @@ func (h *H) ServeUnoCSS(w http.ResponseWriter, r *http.Request) {
 	}
 	cacheKey := fmt.Sprintf("unocss-%s", ctx)
 	etagCacheKey := fmt.Sprintf("unocss-%s.etag", ctx)
-	if css, ok := h.cache.Load(cacheKey); ok {
-		if e, ok := h.cache.Load(etagCacheKey); ok {
+	if css, ok := h.loadCache.Load(cacheKey); ok {
+		if e, ok := h.loadCache.Load(etagCacheKey); ok {
 			if e.(string) == etag {
 				header := w.Header()
 				header.Set("Content-Type", "text/css; charset=utf-8")
@@ -405,14 +420,21 @@ func (h *H) ServeUnoCSS(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Internal Server Error", 500)
 		return
 	}
-	_, css, err := loader.Load("unocss", []any{configCSS, strings.Join(content, "\n")})
+	var config map[string]any = nil
+	if configFilename != "" {
+		config = map[string]any{
+			"filename": configFilename,
+			"css":      configCSS,
+		}
+	}
+	_, css, err := loader.Load("unocss", []any{config, strings.Join(content, "\n")})
 	if err != nil {
 		fmt.Println(err)
 		http.Error(w, "Internal Server Error", 500)
 		return
 	}
-	h.cache.Store(cacheKey, []byte(css))
-	h.cache.Store(etagCacheKey, etag)
+	h.loadCache.Store(cacheKey, []byte(css))
+	h.loadCache.Store(etagCacheKey, etag)
 	header := w.Header()
 	header.Set("Content-Type", "text/css; charset=utf-8")
 	header.Set("Cache-Control", "max-age=0, must-revalidate")
@@ -508,16 +530,16 @@ func (h *H) analyzeDependencyTree(entry string, importMap ImportMap) (tree map[s
 				Setup: func(build esbuild.PluginBuild) {
 					build.OnResolve(esbuild.OnResolveOptions{Filter: ".*"}, func(args esbuild.OnResolveArgs) (esbuild.OnResolveResult, error) {
 						path, resolved := importMap.Resolve(args.Path)
-						if resolved && isAbsolutePathSpecifier(path) {
-							path = filepath.Join(h.rootDir, path)
-						}
-						if isHttpSepcifier(path) || (!isRelativeSpecifier(path) && !isAbsolutePathSpecifier(path)) {
+						if isHttpSepcifier(path) || (!isRelPathSpecifier(path) && !isAbsPathSpecifier(path)) {
 							return esbuild.OnResolveResult{Path: path, External: true}, nil
 						}
-						if endsWith(path, moduleExts...) {
-							return esbuild.OnResolveResult{Path: path, Namespace: "module"}, nil
+						if resolved {
+							if endsWith(path, moduleExts...) {
+								return esbuild.OnResolveResult{Path: filepath.Join(h.rootDir, path), Namespace: "module", PluginData: path}, nil
+							}
+							return esbuild.OnResolveResult{Path: filepath.Join(h.rootDir, path)}, nil
 						}
-						return esbuild.OnResolveResult{Path: path}, nil
+						return esbuild.OnResolveResult{}, nil
 					})
 					build.OnLoad(esbuild.OnLoadOptions{Filter: ".*", Namespace: "module"}, func(args esbuild.OnLoadArgs) (esbuild.OnLoadResult, error) {
 						data, err := os.ReadFile(args.Path)
@@ -527,7 +549,8 @@ func (h *H) analyzeDependencyTree(entry string, importMap ImportMap) (tree map[s
 						tree[args.Path] = data
 						contents := string(data)
 						loader := esbuild.LoaderJS
-						ext := filepath.Ext(args.Path)
+						pathname := args.PluginData.(string)
+						ext := filepath.Ext(pathname)
 						switch ext {
 						case ".jsx":
 							loader = esbuild.LoaderJSX
@@ -536,14 +559,36 @@ func (h *H) analyzeDependencyTree(entry string, importMap ImportMap) (tree map[s
 						case ".tsx":
 							loader = esbuild.LoaderTSX
 						case ".vue", ".svelte":
+							sha := xxhash.New()
+							sha.Write(data)
+							etag := hex.EncodeToString(sha.Sum(nil))
+							cacheKey := fmt.Sprintf("preload-%s", pathname)
+							etagCacheKey := fmt.Sprintf("preload-%s.etag", pathname)
+							langCacheKey := fmt.Sprintf("preload-%s.lang", pathname)
+							if js, ok := h.loadCache.Load(cacheKey); ok {
+								if e, ok := h.loadCache.Load(etagCacheKey); ok {
+									if e.(string) == etag {
+										contents = string(js.([]byte))
+										if lang, ok := h.loadCache.Load(langCacheKey); ok {
+											if lang.(string) == "ts" {
+												loader = esbuild.LoaderTS
+											}
+										}
+										break
+									}
+								}
+							}
 							preloader, err := h.getLoader()
 							if err != nil {
 								return esbuild.OnLoadResult{}, err
 							}
-							lang, code, err := preloader.Load(ext[1:], []any{args.Path, contents, importMap})
+							lang, code, err := preloader.Load(ext[1:], []any{pathname, contents, importMap})
 							if err != nil {
 								return esbuild.OnLoadResult{}, err
 							}
+							h.loadCache.Store(cacheKey, []byte(code))
+							h.loadCache.Store(etagCacheKey, etag)
+							h.loadCache.Store(langCacheKey, lang)
 							contents = code
 							if lang == "ts" {
 								loader = esbuild.LoaderTS
@@ -571,20 +616,31 @@ func (h *H) watchFS() {
 				fi, err := os.Lstat(filepath.Join(h.rootDir, filename))
 				if err != nil {
 					if os.IsNotExist(err) {
-						conn.WriteMessage(websocket.TextMessage, []byte("remove:"+filename))
 						watchList[filename] = 0
+						h.purgeLoadCache(filename)
+						conn.WriteMessage(websocket.TextMessage, []byte("remove:"+filename))
 					}
 				} else if modtime := fi.ModTime().UnixMilli(); modtime > mtime {
 					kind := "modify"
 					if mtime == 0 {
 						kind = "create"
 					}
-					conn.WriteMessage(websocket.TextMessage, []byte(kind+":"+filename))
 					watchList[filename] = modtime
+					conn.WriteMessage(websocket.TextMessage, []byte(kind+":"+filename))
 				}
 			}
 		}
 		h.rwlock.RUnlock()
+	}
+}
+
+func (h *H) purgeLoadCache(filename string) {
+	h.loadCache.Delete(fmt.Sprintf("module-%s", filename))
+	h.loadCache.Delete(fmt.Sprintf("module-%s.etag", filename))
+	if strings.HasSuffix(filename, ".vue") || strings.HasSuffix(filename, ".svelte") {
+		h.loadCache.Delete(fmt.Sprintf("preload-%s", filename))
+		h.loadCache.Delete(fmt.Sprintf("preload-%s.etag", filename))
+		h.loadCache.Delete(fmt.Sprintf("preload-%s.lang", filename))
 	}
 }
 
