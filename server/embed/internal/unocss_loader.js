@@ -13,8 +13,8 @@ function readStdin() {
 }
 
 try {
-  const [configCSS, data] = JSON.parse(await readStdin());
-  const code = await generate(data, configCSS ? { configCSS } : undefined);
+  const [configCSS, content] = JSON.parse(await readStdin());
+  const code = await generate(content, configCSS ? { configCSS } : undefined);
   stdout.write(JSON.stringify({ code }));
 } catch (err) {
   stdout.write(JSON.stringify({ error: err.message }));

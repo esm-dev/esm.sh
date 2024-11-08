@@ -78,7 +78,7 @@ func (lw *LoaderWorker) Load(loaderType string, args []any) (lang string, code s
 		start := time.Now()
 		defer func() {
 			if loaderType == "unocss" {
-				fmt.Println(log.Grey(fmt.Sprintf("[debug] load 'uno.css' in %s (loader: unocss)", time.Since(start))))
+				fmt.Println(log.Grey(fmt.Sprintf("[debug] load '/@uno.css' in %s (loader: unocss)", time.Since(start))))
 			} else {
 				fmt.Println(log.Grey(fmt.Sprintf("[debug] load '%s' in %s (loader: %s)", args[0], time.Since(start), loaderType)))
 			}

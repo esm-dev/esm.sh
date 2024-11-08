@@ -96,5 +96,5 @@ func transformSvelte(npmrc *NpmRC, options *ResolvedTransformOptions) (output *L
 }
 
 func generateUnoCSS(npmrc *NpmRC, options *ResolvedTransformOptions) (output *LoaderOutput, err error) {
-	return runLoader(npmrc, "unocss", []string{options.unocss.configCSS, strings.Join(options.unocss.content, "\n")}, PackageId{"@esm.sh/unocss", "0.1.0"}, "@iconify/json@2.2.260")
+	return runLoader(npmrc, "unocss", []string{options.unocss.configCSS, strings.Join(options.unocss.content, "\n")}, PackageId{"@esm.sh/unocss", "0.2.1"}, "@iconify/json@2.2.269")
 }

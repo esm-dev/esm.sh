@@ -116,19 +116,31 @@ function isHttpSpecifier(specifier) {
   return typeof specifier === "string" && specifier.startsWith("https://") || specifier.startsWith("http://");
 }
 
-async function unocss(config, content) {
+async function unocss(config, content, id) {
   if (!unoGenerators) {
     unoGenerators = new Map();
   }
-  const generatorKey = config?.filename ?? "-";
+  const generatorKey = config?.filename ?? ".";
   let uno = unoGenerators.get(generatorKey);
   if (!uno || uno.configCSS !== config?.css) {
-    uno = import("npm:@esm.sh/unocss@0.1.0").then(({ init }) => init(config?.css));
+    uno = import("npm:@esm.sh/unocss@0.2.1").then(({ init }) => init(config?.css));
     uno.configCSS = config?.css;
     unoGenerators.set(generatorKey, uno);
   }
   const { update, generate } = await uno;
-  await update(content);
+  if (id) {
+    if (!(await update(content, id))) {
+      return "";
+    }
+  } else {
+    if (typeof content === "object" && content !== null) {
+      for (const [id, code] of Array.isArray(content) ? content : Object.entries(content)) {
+        await update(code, id);
+      }
+    } else if (typeof content === "string") {
+      await update(content);
+    }
+  }
   return await generate();
 }
 

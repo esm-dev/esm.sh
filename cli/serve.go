@@ -108,9 +108,9 @@ func (h *H) ServeHtml(w http.ResponseWriter, r *http.Request, pathname string) {
 					continue
 				}
 				// replace `<script src="https://esm.sh/uno"></script>`
-				// with `<link rel="stylesheet" href="/@unocss">`
+				// with `<link rel="stylesheet" href="/@uno.css">`
 				if (strings.HasPrefix(srcAttr, "http://") || strings.HasPrefix(srcAttr, "https://")) && strings.HasSuffix(srcAttr, "/uno") {
-					unocss = "/@unocss?ctx=" + btoaUrl(pathname)
+					unocss = "/@uno.css?ctx=" + btoaUrl(pathname)
 					w.Write([]byte(fmt.Sprintf(`<link id="@unocss" rel="stylesheet" href="%s">`, unocss)))
 					tok := tokenizer.Next()
 					if tok == html.TextToken {
@@ -659,10 +659,10 @@ func (h *H) purgeLoadCache(filename string) {
 func (h *H) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	pathname := r.URL.Path
 	switch pathname {
-	case "/@unocss":
-		h.ServeUnoCSS(w, r)
 	case "/@hmr", "/@refresh", "/@prefresh", "/@vdr":
 		h.ServeInternalJS(w, r, pathname[2:])
+	case "/@uno.css":
+		h.ServeUnoCSS(w, r)
 	case "/@hmr-ws":
 		if h.watchData == nil {
 			h.watchData = make(map[*websocket.Conn]map[string]int64)
