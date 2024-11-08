@@ -29,7 +29,7 @@ type H struct {
 	assets    *embed.FS
 	loader    *LoaderWorker
 	rootDir   string
-	wsConns   map[*websocket.Conn]map[string]int64
+	watchData map[*websocket.Conn]map[string]int64
 	rwlock    sync.RWMutex
 	lock      sync.RWMutex
 	loadCache sync.Map
@@ -485,11 +485,11 @@ func (h *H) ServeHmrWS(w http.ResponseWriter, r *http.Request) {
 	defer conn.Close()
 	watchList := make(map[string]int64)
 	h.rwlock.Lock()
-	h.wsConns[conn] = watchList
+	h.watchData[conn] = watchList
 	h.rwlock.Unlock()
 	defer func() {
 		h.rwlock.Lock()
-		delete(h.wsConns, conn)
+		delete(h.watchData, conn)
 		h.rwlock.Unlock()
 	}()
 	for {
@@ -509,7 +509,7 @@ func (h *H) ServeHmrWS(w http.ResponseWriter, r *http.Request) {
 							// file not found, watch if it's created
 							watchList[filename] = 0
 						} else {
-							conn.WriteMessage(websocket.TextMessage, []byte("error:cound not watch "+filename))
+							conn.WriteMessage(websocket.TextMessage, []byte("error:could not watch "+filename))
 						}
 					} else {
 						watchList[filename] = fi.ModTime().UnixMilli()
@@ -619,14 +619,18 @@ func (h *H) watchFS() {
 	for {
 		time.Sleep(100 * time.Millisecond)
 		h.rwlock.RLock()
-		for conn, watchList := range h.wsConns {
+		for conn, watchList := range h.watchData {
 			for filename, mtime := range watchList {
 				fi, err := os.Lstat(filepath.Join(h.rootDir, filename))
 				if err != nil {
 					if os.IsNotExist(err) {
-						watchList[filename] = 0
-						h.purgeLoadCache(filename)
-						conn.WriteMessage(websocket.TextMessage, []byte("remove:"+filename))
+						if watchList[filename] > 0 {
+							watchList[filename] = 0
+							h.purgeLoadCache(filename)
+							conn.WriteMessage(websocket.TextMessage, []byte("remove:"+filename))
+						}
+					} else {
+						fmt.Println(log.Red("watch: " + err.Error()))
 					}
 				} else if modtime := fi.ModTime().UnixMilli(); modtime > mtime {
 					kind := "modify"
@@ -660,8 +664,8 @@ func (h *H) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	case "/@hmr", "/@refresh", "/@prefresh", "/@vdr":
 		h.ServeInternalJS(w, r, pathname[2:])
 	case "/@hmr-ws":
-		if h.wsConns == nil {
-			h.wsConns = make(map[*websocket.Conn]map[string]int64)
+		if h.watchData == nil {
+			h.watchData = make(map[*websocket.Conn]map[string]int64)
 			go h.watchFS()
 		}
 		h.ServeHmrWS(w, r)
