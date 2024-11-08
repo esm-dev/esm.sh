@@ -1,12 +1,12 @@
 <script setup>
-  import VueLogo from "~/components/VueLogo.vue"
+  import VueLogo from "~/components/Logo.vue"
 </script>
 
 <template>
   <div class="center-box absolute op15">
     <VueLogo></VueLogo>
   </div>
-  <div class="center-box relative gap-1">
+  <div class="center-box relative">
     <h1 class="font-sans text-5xl fw500 select-none">esm.sh</h1>
     <p class="font-sans text-lg fw400 text-gray-400">
       The <span class="fw600">no-build</span> cdn for modern web development.

@@ -1,12 +1,12 @@
 <script>
-  import SvelteLogo from "~/components/SvelteLogo.svelte"
+  import SvelteLogo from "~/components/Logo.svelte"
 </script>
 
 <div class="center-box absolute op15">
   <SvelteLogo />
 </div>
 
-<div class="center-box relative gap-1">
+<div class="center-box relative">
   <h1 class="font-sans text-5xl fw500 select-none">esm.sh</h1>
   <p class="font-sans text-lg fw400 text-gray-400">
     The <span class="fw600">no-build</span> cdn for modern web development.
