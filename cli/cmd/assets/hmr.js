@@ -2,7 +2,7 @@ const registry = new Map();
 const watchers = new Map();
 const messageQueue = [];
 const keepAliveTimeout = 30000;
-const dummy = () => {}
+const dummy = () => {};
 
 /** @type { WebSocket | null } */
 let ws = null;
@@ -124,7 +124,14 @@ class HotContext {
       if (kind === "remove") {
         location.reload();
       } else {
-        import(this.#id + "?im=" + this.#im + "&t=" + Date.now().toString(36)).then(callback);
+        let url = this.#id + "?t=" + Date.now().toString(36);
+        if (this.#im) {
+          url += "&im=" + this.#im;
+        }
+        if (this.#id.endsWith(".css")) {
+          url += "&module";
+        }
+        import(url).then(callback);
       }
     });
   }

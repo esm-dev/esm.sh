@@ -48,8 +48,9 @@ func (h *H) ServeHtml(w http.ResponseWriter, r *http.Request, pathname string) {
 	defer htmlFile.Close()
 
 	tokenizer := html.NewTokenizer(htmlFile)
-	unocss := ""
 	hasInlineUnoConfigCSS := false
+	unocss := ""
+	cssLinks := []string{}
 
 	for {
 		tt := tokenizer.Next()
@@ -134,6 +135,12 @@ func (h *H) ServeHtml(w http.ResponseWriter, r *http.Request, pathname string) {
 					}
 					continue
 				}
+			case "link":
+				if attrs["rel"] == "stylesheet" {
+					if src := attrs["href"]; isAbsPathSpecifier(src) || isRelPathSpecifier(src) {
+						cssLinks = append(cssLinks, src)
+					}
+				}
 			}
 		}
 		w.Write(tokenizer.Raw())
@@ -143,6 +150,7 @@ func (h *H) ServeHtml(w http.ResponseWriter, r *http.Request, pathname string) {
 	if unocss != "" {
 		// reload the unocss when the module dependency tree is changed
 		fmt.Fprintf(w, `hot.watch("*",(kind,filename)=>{if(/\.(js|mjs|jsx|ts|mts|tsx|vue|svelte)$/i.test(filename)){document.getElementById("@unocss").href="%s&t="+Date.now().toString(36)}});`, unocss)
+		// reload the page when the uno.css file is modified
 		if !hasInlineUnoConfigCSS {
 			u := &url.URL{Path: pathname}
 			u = u.ResolveReference(&url.URL{Path: "uno.css"})
@@ -154,6 +162,14 @@ func (h *H) ServeHtml(w http.ResponseWriter, r *http.Request, pathname string) {
 			if _, err := os.Stat(filename); err == nil || os.IsExist(err) {
 				fmt.Fprintf(w, `hot.watch("%s",()=>location.reload());`, u.Path)
 			}
+		}
+	}
+	if len(cssLinks) > 0 {
+		// reload the page when the css file is modified
+		for _, cssLink := range cssLinks {
+			u := &url.URL{Path: pathname}
+			u = u.ResolveReference(&url.URL{Path: cssLink})
+			fmt.Fprintf(w, `const linkEl=document.querySelector('link[rel="stylesheet"][href="%s"]');hot.watch("%s",(kind,filename)=>{if(kind==="modify")linkEl.href=filename+"?t="+Date.now().toString(36)});`, cssLink, u.Path)
 		}
 	}
 	w.Write([]byte("</script>"))
@@ -275,6 +291,44 @@ func (h *H) ServeModule(w http.ResponseWriter, r *http.Request, pathname string)
 		header.Set("Etag", etag)
 	}
 	w.Write([]byte(js))
+}
+
+func (h *H) ServeCSSModule(w http.ResponseWriter, r *http.Request, pathname string, query url.Values) {
+	ret := esbuild.Build(esbuild.BuildOptions{
+		EntryPoints:      []string{filepath.Join(h.rootDir, pathname)},
+		Write:            false,
+		MinifyWhitespace: true,
+		MinifySyntax:     true,
+		Target:           esbuild.ESNext,
+		Bundle:           true,
+	})
+	if len(ret.Errors) > 0 {
+		fmt.Println(log.Red(ret.Errors[0].Text))
+		http.Error(w, "Internal Server Error", 500)
+		return
+	}
+	css := bytes.TrimSpace(ret.OutputFiles[0].Contents)
+	fmt.Println("css", string(css))
+	sha := xxhash.New()
+	sha.Write(css)
+	etag := fmt.Sprintf("w/\"%x-%d\"", sha.Sum(nil), VERSION)
+	if r.Header.Get("If-None-Match") == etag && !query.Has("t") {
+		w.WriteHeader(http.StatusNotModified)
+		return
+	}
+	header := w.Header()
+	header.Set("Content-Type", "application/javascript; charset=utf-8")
+	if !query.Has("t") {
+		header.Set("Cache-Control", "max-age=0, must-revalidate")
+		header.Set("Etag", etag)
+	}
+	fmt.Fprintf(w, `const CSS=%s;`, string(utils.MustEncodeJSON(string(css))))
+	w.Write([]byte(`let styleEl;`))
+	w.Write([]byte(`function applyCSS(css){if(styleEl)styleEl.textContent=css;else{styleEl=document.createElement("style");styleEl.textContent=css;document.head.appendChild(styleEl);}}`))
+	w.Write([]byte(`!(new URL(import.meta.url)).searchParams.has("t")&&applyCSS(CSS);`))
+	w.Write([]byte(`import createHotContext from"/@hmr";`))
+	fmt.Fprintf(w, `createHotContext("%s").accept(m=>applyCSS(m.default));`, pathname)
+	w.Write([]byte(`export default CSS;`))
 }
 
 func (h *H) ServeUnoCSS(w http.ResponseWriter, r *http.Request) {
@@ -708,8 +762,22 @@ func (h *H) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		case ".js", ".mjs", ".jsx", ".ts", ".mts", ".tsx", ".vue", ".svelte":
 			h.ServeModule(w, r, pathname)
 		default:
+			query := r.URL.Query()
+			if strings.HasSuffix(pathname, ".css") {
+				if query.Has("module") {
+					h.ServeCSSModule(w, r, pathname, query)
+					return
+				}
+			}
+			if query.Has("url") {
+				header := w.Header()
+				header.Set("Content-Type", "application/javascript; charset=utf-8")
+				header.Set("Cache-Control", "public, max-age=31536000, immutable")
+				w.Write([]byte(`const url = new URL(import.meta.url);url.searchParams.delete("url");export default url.href;`))
+				return
+			}
 			etag := fmt.Sprintf("w/\"%d-%d-%d\"", fi.ModTime().UnixMilli(), fi.Size(), VERSION)
-			if r.Header.Get("If-None-Match") == etag {
+			if r.Header.Get("If-None-Match") == etag && !query.Has("t") {
 				w.WriteHeader(http.StatusNotModified)
 				return
 			}
@@ -725,8 +793,10 @@ func (h *H) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			}
 			header := w.Header()
 			header.Set("Content-Type", mtype)
-			header.Set("Cache-Control", "max-age=0, must-revalidate")
-			header.Set("Etag", etag)
+			if !query.Has("t") {
+				header.Set("Cache-Control", "max-age=0, must-revalidate")
+				header.Set("Etag", etag)
+			}
 			io.Copy(w, file)
 		}
 	}
