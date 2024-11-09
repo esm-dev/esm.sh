@@ -20,7 +20,7 @@ import (
 	esbuild "github.com/evanw/esbuild/pkg/api"
 	"github.com/gorilla/websocket"
 	"github.com/ije/esbuild-internal/xxhash"
-	"github.com/ije/gox/log"
+	"github.com/ije/gox/term"
 	"github.com/ije/gox/utils"
 	"golang.org/x/net/html"
 )
@@ -272,13 +272,13 @@ func (h *H) ServeModule(w http.ResponseWriter, r *http.Request, pathname string)
 	}
 	loader, err := h.getLoader()
 	if err != nil {
-		fmt.Println(log.Red(err.Error()))
+		fmt.Println(term.Red(err.Error()))
 		http.Error(w, "Internal Server Error", 500)
 		return
 	}
 	_, js, err := loader.Load("module", []any{pathname, importMap})
 	if err != nil {
-		fmt.Println(log.Red(err.Error()))
+		fmt.Println(term.Red(err.Error()))
 		http.Error(w, "Internal Server Error", 500)
 		return
 	}
@@ -303,12 +303,11 @@ func (h *H) ServeCSSModule(w http.ResponseWriter, r *http.Request, pathname stri
 		Bundle:           true,
 	})
 	if len(ret.Errors) > 0 {
-		fmt.Println(log.Red(ret.Errors[0].Text))
+		fmt.Println(term.Red(ret.Errors[0].Text))
 		http.Error(w, "Internal Server Error", 500)
 		return
 	}
 	css := bytes.TrimSpace(ret.OutputFiles[0].Contents)
-	fmt.Println("css", string(css))
 	sha := xxhash.New()
 	sha.Write(css)
 	etag := fmt.Sprintf("w/\"%x-%d\"", sha.Sum(nil), VERSION)
@@ -684,7 +683,7 @@ func (h *H) watchFS() {
 							conn.WriteMessage(websocket.TextMessage, []byte("remove:"+filename))
 						}
 					} else {
-						fmt.Println(log.Red("watch: " + err.Error()))
+						fmt.Println(term.Red("watch: " + err.Error()))
 					}
 				} else if modtime := fi.ModTime().UnixMilli(); modtime > mtime {
 					kind := "modify"
@@ -835,15 +834,15 @@ func Serve(assets *embed.FS, rootDir string, port int) (err error) {
 		}
 	}
 	if err != nil {
-		os.Stderr.WriteString(log.Red(err.Error()))
+		os.Stderr.WriteString(term.Red(err.Error()))
 		return err
 	}
 	server := &http.Server{Addr: fmt.Sprintf(":%d", port), Handler: &H{assets: assets, rootDir: rootDir}}
 	ln, err := net.Listen("tcp", server.Addr)
 	if err != nil {
-		os.Stderr.WriteString(log.Red(err.Error()))
+		os.Stderr.WriteString(term.Red(err.Error()))
 		return err
 	}
-	fmt.Printf(log.Green("Server is ready on http://localhost:%d\n"), port)
+	fmt.Printf(term.Green("Server is ready on http://localhost:%d\n"), port)
 	return server.Serve(ln)
 }

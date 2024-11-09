@@ -1,4 +1,4 @@
-<script>
+<script lang="ts">
   import SvelteLogo from "~/components/Logo.svelte"
 </script>
 

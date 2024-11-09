@@ -1,4 +1,4 @@
-<script setup>
+<script setup lang="ts">
   import VueLogo from "~/components/Logo.vue"
 </script>
 
