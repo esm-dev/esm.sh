@@ -8,7 +8,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"net"
 	"net/http"
 	"net/url"
 	"os"
@@ -25,7 +24,7 @@ import (
 	"golang.org/x/net/html"
 )
 
-type H struct {
+type Server struct {
 	efs       *embed.FS
 	loader    *LoaderWorker
 	rootDir   string
@@ -35,7 +34,7 @@ type H struct {
 	loadCache sync.Map
 }
 
-func (h *H) ServeHtml(w http.ResponseWriter, r *http.Request, pathname string) {
+func (h *Server) ServeHtml(w http.ResponseWriter, r *http.Request, pathname string) {
 	htmlFile, err := os.Open(filepath.Join(h.rootDir, pathname))
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -176,7 +175,7 @@ func (h *H) ServeHtml(w http.ResponseWriter, r *http.Request, pathname string) {
 	fmt.Fprintf(w, `<script>console.log("%%c💚 Built with esm.sh/run, please uncheck \"Disable cache\" in Network tab for better DX!", "color:green")</script>`)
 }
 
-func (h *H) ServeModule(w http.ResponseWriter, r *http.Request, pathname string) {
+func (h *Server) ServeModule(w http.ResponseWriter, r *http.Request, pathname string) {
 	query := r.URL.Query()
 	im, err := atobUrl(query.Get("im"))
 	if err != nil {
@@ -293,7 +292,7 @@ func (h *H) ServeModule(w http.ResponseWriter, r *http.Request, pathname string)
 	w.Write([]byte(js))
 }
 
-func (h *H) ServeCSSModule(w http.ResponseWriter, r *http.Request, pathname string, query url.Values) {
+func (h *Server) ServeCSSModule(w http.ResponseWriter, r *http.Request, pathname string, query url.Values) {
 	ret := esbuild.Build(esbuild.BuildOptions{
 		EntryPoints:      []string{filepath.Join(h.rootDir, pathname)},
 		Write:            false,
@@ -330,7 +329,7 @@ func (h *H) ServeCSSModule(w http.ResponseWriter, r *http.Request, pathname stri
 	w.Write([]byte(`export default CSS;`))
 }
 
-func (h *H) ServeUnoCSS(w http.ResponseWriter, r *http.Request) {
+func (h *Server) ServeUnoCSS(w http.ResponseWriter, r *http.Request) {
 	query := r.URL.Query()
 	ctx, err := atobUrl(query.Get("ctx"))
 	if err != nil {
@@ -503,7 +502,7 @@ func (h *H) ServeUnoCSS(w http.ResponseWriter, r *http.Request) {
 	w.Write([]byte(css))
 }
 
-func (h *H) ServeInternalJS(w http.ResponseWriter, r *http.Request, name string) {
+func (h *Server) ServeInternalJS(w http.ResponseWriter, r *http.Request, name string) {
 	data, err := h.efs.ReadFile("internal/" + name + ".js")
 	if err != nil {
 		http.Error(w, "Internal Server Error", 500)
@@ -521,7 +520,7 @@ func (h *H) ServeInternalJS(w http.ResponseWriter, r *http.Request, name string)
 	w.Write(data)
 }
 
-func (h *H) ServeHmrWS(w http.ResponseWriter, r *http.Request) {
+func (h *Server) ServeHmrWS(w http.ResponseWriter, r *http.Request) {
 	if r.Header.Get("Upgrade") != "websocket" {
 		http.Error(w, "Bad Request", 400)
 		return
@@ -573,7 +572,7 @@ func (h *H) ServeHmrWS(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func (h *H) analyzeDependencyTree(entry string, importMap ImportMap) (tree map[string][]byte, err error) {
+func (h *Server) analyzeDependencyTree(entry string, importMap ImportMap) (tree map[string][]byte, err error) {
 	tree = make(map[string][]byte)
 	ret := esbuild.Build(esbuild.BuildOptions{
 		EntryPoints:      []string{entry},
@@ -668,7 +667,7 @@ func (h *H) analyzeDependencyTree(entry string, importMap ImportMap) (tree map[s
 	return
 }
 
-func (h *H) watchFS() {
+func (h *Server) watchFS() {
 	for {
 		time.Sleep(100 * time.Millisecond)
 		h.rwlock.RLock()
@@ -699,7 +698,7 @@ func (h *H) watchFS() {
 	}
 }
 
-func (h *H) purgeLoadCache(filename string) {
+func (h *Server) purgeLoadCache(filename string) {
 	h.loadCache.Delete(fmt.Sprintf("module-%s", filename))
 	h.loadCache.Delete(fmt.Sprintf("module-%s.etag", filename))
 	if strings.HasSuffix(filename, ".vue") || strings.HasSuffix(filename, ".svelte") {
@@ -709,7 +708,7 @@ func (h *H) purgeLoadCache(filename string) {
 	}
 }
 
-func (h *H) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+func (h *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	pathname := r.URL.Path
 	switch pathname {
 	case "/@hmr", "/@refresh", "/@prefresh", "/@vdr":
@@ -801,7 +800,7 @@ func (h *H) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func (h *H) getLoader() (loader *LoaderWorker, err error) {
+func (h *Server) getLoader() (loader *LoaderWorker, err error) {
 	h.lock.Lock()
 	defer h.lock.Unlock()
 	if h.loader != nil {
@@ -818,31 +817,4 @@ func (h *H) getLoader() (loader *LoaderWorker, err error) {
 	}
 	h.loader = loader
 	return
-}
-
-func Serve(efs *embed.FS, rootDir string, port int) (err error) {
-	if rootDir == "" {
-		rootDir, err = os.Getwd()
-	} else {
-		rootDir, err = filepath.Abs(rootDir)
-		if err == nil {
-			var fi os.FileInfo
-			fi, err = os.Stat(rootDir)
-			if err == nil && !fi.IsDir() {
-				err = fmt.Errorf("stat %s: not a directory", rootDir)
-			}
-		}
-	}
-	if err != nil {
-		os.Stderr.WriteString(term.Red(err.Error()))
-		return err
-	}
-	server := &http.Server{Addr: fmt.Sprintf(":%d", port), Handler: &H{efs: efs, rootDir: rootDir}}
-	ln, err := net.Listen("tcp", server.Addr)
-	if err != nil {
-		os.Stderr.WriteString(term.Red(err.Error()))
-		return err
-	}
-	fmt.Printf(term.Green("Server is ready on http://localhost:%d\n"), port)
-	return server.Serve(ln)
 }

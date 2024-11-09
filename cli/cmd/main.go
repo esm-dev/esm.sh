@@ -2,7 +2,6 @@ package main
 
 import (
 	"embed"
-	"flag"
 	"fmt"
 	"os"
 
@@ -29,9 +28,7 @@ func main() {
 		case "init":
 			cli.Init(&efs)
 		case "run":
-			port := flag.Int("port", 3000, "port to serve on")
-			flag.Parse()
-			cli.Serve(&efs, flag.Arg(1), *port)
+			cli.Run(&efs)
 		case "add":
 			if len(os.Args) > 2 {
 				cli.Add(os.Args[2:])

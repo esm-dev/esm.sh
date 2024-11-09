@@ -36,28 +36,34 @@ var langVariants = []string{
 func Init(efs *embed.FS) {
 	framework := flag.String("framework", "", "javascript framework")
 	cssFramework := flag.String("css-framework", "", "CSS framework")
-	lang := flag.String("lang", "javascript", "language")
-	flag.Parse()
-	projectName := flag.Arg(1)
+	lang := flag.String("lang", "", "language")
+	args := parseCommandFlag()
+
+	projectName := ""
+	if len(args) > 0 {
+		projectName = args[0]
+	}
 	if projectName == "" {
 		projectName = termInput("Project name:", "esm-app")
 	}
+
 	if *framework == "" {
 		*framework = termSelect("Select a framework:", frameworks)
+	} else if !includes(frameworks, *framework) {
+		fmt.Println("Invalid framework: ", *framework)
+		os.Exit(1)
+	}
+
+	if *cssFramework == "" {
 		*cssFramework = termSelect("Select a CSS framework:", cssFrameworks)
+	} else if !includes(cssFrameworks, *cssFramework) {
+		*cssFramework = cssFrameworks[0]
+	}
+
+	if *lang == "" {
 		*lang = termSelect("Select a variant:", langVariants)
-	} else {
-		valid := false
-		for _, name := range frameworks {
-			if name == *framework {
-				valid = true
-				break
-			}
-		}
-		if !valid {
-			fmt.Println("Invalid framework: ", *framework)
-			os.Exit(1)
-		}
+	} else if !includes(langVariants, *lang) {
+		*lang = langVariants[0]
 	}
 
 	_, err := os.Lstat(projectName)
@@ -314,4 +320,13 @@ func getRawInput() byte {
 	}
 
 	return buf[0]
+}
+
+func includes(arr []string, value string) bool {
+	for _, v := range arr {
+		if v == value {
+			return true
+		}
+	}
+	return false
 }

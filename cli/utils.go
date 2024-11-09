@@ -2,6 +2,8 @@ package cli
 
 import (
 	"encoding/base64"
+	"flag"
+	"os"
 	"strings"
 )
 
@@ -44,4 +46,23 @@ func atobUrl(s string) (string, error) {
 		return "", err
 	}
 	return string(data), nil
+}
+
+func parseCommandFlag() []string {
+	flag.CommandLine.Parse(os.Args[2:])
+
+	args := make([]string, 0, len(os.Args)-2)
+	nextVaule := false
+	for _, arg := range os.Args[2:] {
+		if !strings.HasPrefix(arg, "-") {
+			if !nextVaule {
+				args = append(args, arg)
+			} else {
+				nextVaule = false
+			}
+		} else if !strings.Contains(arg, "=") {
+			nextVaule = true
+		}
+	}
+	return args
 }
