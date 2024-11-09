@@ -124,11 +124,12 @@ func Init(efs *embed.FS) {
 		fmt.Println(term.Red("✘ Failed to create project: " + err.Error()))
 		os.Exit(1)
 	}
+
 	fmt.Println(" ")
 	fmt.Println(term.Dim("Project created successfully."))
 	fmt.Println(term.Dim("To start the development server:"))
 	fmt.Println(" ")
-	fmt.Println(term.Dim("$ ") + "cd " + projectName + term.Dim(" && ") + "esm.sh run")
+	fmt.Println(term.Dim("$ ") + "cd " + projectName + " && esm.sh run")
 	fmt.Println(" ")
 }
 
