@@ -33,7 +33,7 @@ async function transformModule(filename, importMap) {
     [lang, code, preprocessSM] = await transformSvelte(filename, code, importMap, true);
   }
   if (!tsx) {
-    tsx = import("npm:@esm.sh/tsx@1.0.1").then(async ({ init, transform }) => {
+    tsx = import("npm:@esm.sh/tsx@1.0.2").then(async ({ init, transform }) => {
       await init();
       return { transform };
     });
