@@ -14,12 +14,8 @@ import (
 
 func Run(efs *embed.FS) (err error) {
 	port := flag.Int("port", 3000, "port to serve on")
-	args := parseCommandFlag()
+	rootDir, _ := parseCommandFlag()
 
-	rootDir := ""
-	if len(args) > 0 {
-		rootDir = args[0]
-	}
 	if rootDir == "" {
 		rootDir, err = os.Getwd()
 	} else {

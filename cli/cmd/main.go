@@ -8,7 +8,7 @@ import (
 	"github.com/esm-dev/esm.sh/cli"
 )
 
-const helpMessage = "\033[90mesm.sh - The no-build CDN for modern web development.\033[0m" + `
+const helpMessage = "\033[30mesm.sh - The no-build CDN for modern web development.\033[0m" + `
 
 Usage: esm.sh [command] [options]
 
@@ -30,9 +30,7 @@ func main() {
 		case "run":
 			cli.Run(&efs)
 		case "add":
-			if len(os.Args) > 2 {
-				cli.Add(os.Args[2:])
-			}
+			cli.Add()
 		default:
 			fmt.Print(helpMessage)
 		}

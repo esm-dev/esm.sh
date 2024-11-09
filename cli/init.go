@@ -37,12 +37,8 @@ func Init(efs *embed.FS) {
 	framework := flag.String("framework", "", "javascript framework")
 	cssFramework := flag.String("css-framework", "", "CSS framework")
 	lang := flag.String("lang", "", "language")
-	args := parseCommandFlag()
+	projectName, _ := parseCommandFlag()
 
-	projectName := ""
-	if len(args) > 0 {
-		projectName = args[0]
-	}
 	if projectName == "" {
 		projectName = termInput("Project name:", "esm-app")
 	}

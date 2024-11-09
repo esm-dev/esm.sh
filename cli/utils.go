@@ -48,7 +48,7 @@ func atobUrl(s string) (string, error) {
 	return string(data), nil
 }
 
-func parseCommandFlag() []string {
+func parseCommandFlag() (string, []string) {
 	flag.CommandLine.Parse(os.Args[2:])
 
 	args := make([]string, 0, len(os.Args)-2)
@@ -64,5 +64,8 @@ func parseCommandFlag() []string {
 			nextVaule = true
 		}
 	}
-	return args
+	if len(args) == 0 {
+		return "", nil
+	}
+	return args[0], args[1:]
 }
