@@ -26,7 +26,7 @@ import (
 )
 
 type H struct {
-	assets    *embed.FS
+	efs       *embed.FS
 	loader    *LoaderWorker
 	rootDir   string
 	watchData map[*websocket.Conn]map[string]int64
@@ -504,7 +504,7 @@ func (h *H) ServeUnoCSS(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *H) ServeInternalJS(w http.ResponseWriter, r *http.Request, name string) {
-	data, err := h.assets.ReadFile("assets/" + name + ".js")
+	data, err := h.efs.ReadFile("internal/" + name + ".js")
 	if err != nil {
 		http.Error(w, "Internal Server Error", 500)
 		return
@@ -807,7 +807,7 @@ func (h *H) getLoader() (loader *LoaderWorker, err error) {
 	if h.loader != nil {
 		return h.loader, nil
 	}
-	loaderJs, err := h.assets.ReadFile("assets/loader.js")
+	loaderJs, err := h.efs.ReadFile("internal/loader.js")
 	if err != nil {
 		return
 	}
@@ -820,7 +820,7 @@ func (h *H) getLoader() (loader *LoaderWorker, err error) {
 	return
 }
 
-func Serve(assets *embed.FS, rootDir string, port int) (err error) {
+func Serve(efs *embed.FS, rootDir string, port int) (err error) {
 	if rootDir == "" {
 		rootDir, err = os.Getwd()
 	} else {
@@ -837,7 +837,7 @@ func Serve(assets *embed.FS, rootDir string, port int) (err error) {
 		os.Stderr.WriteString(term.Red(err.Error()))
 		return err
 	}
-	server := &http.Server{Addr: fmt.Sprintf(":%d", port), Handler: &H{assets: assets, rootDir: rootDir}}
+	server := &http.Server{Addr: fmt.Sprintf(":%d", port), Handler: &H{efs: efs, rootDir: rootDir}}
 	ln, err := net.Listen("tcp", server.Addr)
 	if err != nil {
 		os.Stderr.WriteString(term.Red(err.Error()))

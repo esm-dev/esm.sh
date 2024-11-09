@@ -19,19 +19,19 @@ Commands:
   add   Add NPM packages to the "importmap" script
 `
 
-//go:embed assets
+//go:embed internal
 //go:embed demo
-var assets embed.FS
+var efs embed.FS
 
 func main() {
 	if len(os.Args) > 1 {
 		switch os.Args[1] {
 		case "init":
-			cli.Init(&assets)
+			cli.Init(&efs)
 		case "run":
 			port := flag.Int("port", 3000, "port to serve on")
 			flag.Parse()
-			cli.Serve(&assets, flag.Arg(1), *port)
+			cli.Serve(&efs, flag.Arg(1), *port)
 		case "add":
 			if len(os.Args) > 2 {
 				cli.Add(os.Args[2:])
