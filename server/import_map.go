@@ -3,6 +3,8 @@ package server
 import (
 	"net/url"
 	"strings"
+
+	"github.com/ije/gox/utils"
 )
 
 type ImportMap struct {
@@ -44,8 +46,13 @@ func (m ImportMap) Resolve(path string) (string, bool) {
 			// e.g. `"react": "https://esm.sh/react@18` -> `"react/": "https://esm.sh/react@18/`
 			for _, p := range nonTrailingSlashImports {
 				k, v := p[0], p[1]
+				p, q := utils.SplitByLastByte(v, '?')
 				if strings.HasPrefix(path, k+"/") {
-					return m.toAbsPath(v + path[len(k):]), true
+					url := p + path[len(k):]
+					if q != "" {
+						url += "?" + q
+					}
+					return m.toAbsPath(url), true
 				}
 			}
 		}
