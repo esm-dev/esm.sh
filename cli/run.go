@@ -33,12 +33,15 @@ func Run(efs *embed.FS) (err error) {
 		return err
 	}
 
-	server := &http.Server{Addr: fmt.Sprintf(":%d", *port), Handler: &Server{efs: efs, rootDir: rootDir}}
-	ln, err := net.Listen("tcp", server.Addr)
+	serv := &http.Server{
+		Addr:    fmt.Sprintf(":%d", *port),
+		Handler: &DevServer{efs: efs, rootDir: rootDir},
+	}
+	ln, err := net.Listen("tcp", serv.Addr)
 	if err != nil {
 		os.Stderr.WriteString(term.Red(err.Error()))
 		return err
 	}
 	fmt.Printf(term.Green("Server is ready on http://localhost:%d\n"), *port)
-	return server.Serve(ln)
+	return serv.Serve(ln)
 }
