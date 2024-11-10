@@ -42,7 +42,7 @@ func (fs *fsStorage) Stat(key string) (stat Stat, err error) {
 }
 
 func (fs *fsStorage) List(prefix string) (keys []string, err error) {
-	dir := strings.TrimSuffix(utils.CleanPath(prefix)[1:], "/")
+	dir := strings.TrimSuffix(utils.NormalizePathname(prefix)[1:], "/")
 	return findFiles(filepath.Join(fs.root, dir), dir)
 }
 
@@ -87,7 +87,7 @@ func (fs *fsStorage) Delete(keys ...string) (err error) {
 }
 
 func (fs *fsStorage) DeleteAll(prefix string) (deletedKeys []string, err error) {
-	dir := strings.TrimSuffix(utils.CleanPath(prefix)[1:], "/")
+	dir := strings.TrimSuffix(utils.NormalizePathname(prefix)[1:], "/")
 	if dir == "" {
 		return nil, errors.New("prefix is required")
 	}

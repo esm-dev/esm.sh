@@ -858,7 +858,7 @@ func routes(debug bool) rex.Handle {
 			} else if info.Main != "" && strings.HasSuffix(info.Main, ".d.ts") {
 				types = info.Main
 			}
-			return rex.Redirect(fmt.Sprintf("%s/%s@%s%s", cdnOrigin, info.Name, info.Version, utils.CleanPath(types)), http.StatusFound)
+			return rex.Redirect(fmt.Sprintf("%s/%s@%s%s", cdnOrigin, info.Name, info.Version, utils.NormalizePathname(types)), http.StatusFound)
 		}
 
 		// redirect to main css path for CSS packages
@@ -899,7 +899,7 @@ func routes(debug bool) rex.Handle {
 
 		// use `?path=$PATH` query to override the pathname
 		if v := query.Get("path"); v != "" {
-			esm.SubPath = utils.CleanPath(v)[1:]
+			esm.SubPath = utils.NormalizePathname(v)[1:]
 			esm.SubBareName = toModuleBareName(esm.SubPath, true)
 		}
 

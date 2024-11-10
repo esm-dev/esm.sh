@@ -1041,7 +1041,7 @@ func (ctx *BuildContext) normalizePackageJSON(p *PackageJSON) {
 	if subModule := ctx.esm.SubBareName; subModule != "" {
 		isPkgMainModule := false
 		check := func(s string) bool {
-			return isPkgMainModule || (s != "" && subModule == utils.CleanPath(stripModuleExt(s))[1:])
+			return isPkgMainModule || (s != "" && subModule == utils.NormalizePathname(stripModuleExt(s))[1:])
 		}
 		if p.Exports != nil {
 			if s, ok := p.Exports.(string); ok {
@@ -1236,7 +1236,7 @@ func normalizeBuildEntry(ctx *BuildContext, entry *BuildEntry) {
 }
 
 func normalizeEntryPath(path string) string {
-	return "." + utils.CleanPath(path)
+	return "." + utils.NormalizePathname(path)
 }
 
 func normalizeSavePath(zoneId string, pathname string) string {

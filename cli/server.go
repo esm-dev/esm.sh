@@ -559,7 +559,6 @@ func (d *DevServer) ServeHmrWS(w http.ResponseWriter, r *http.Request) {
 			if strings.HasPrefix(msg, "watch:") {
 				filename := msg[6:]
 				if filename != "" {
-					filename := utils.CleanPath(filename)
 					fi, err := os.Lstat(filepath.Join(d.rootDir, filename))
 					if err != nil {
 						if os.IsNotExist(err) {
@@ -804,7 +803,7 @@ func (d *DevServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 					if len(metaData) > 0 {
 						j, err := json.Marshal(metaData)
 						if err != nil {
-							w.Write([]byte("console.warn('Failed to serialize metadata')"))
+							w.Write([]byte("console.warn('Failed to serialize metadata');"))
 							w.Write([]byte("export const meta = {};"))
 						} else {
 							w.Write([]byte("export const meta = "))

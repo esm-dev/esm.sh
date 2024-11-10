@@ -572,7 +572,7 @@ func (ctx *BuildContext) buildModule() (result *BuildMeta, err error) {
 							moduleSpecifier := "." + strings.TrimPrefix(specifier, pkgName)
 
 							if path.Ext(fullFilepath) == "" || !existsFile(fullFilepath) {
-								subPath := utils.CleanPath(moduleSpecifier)[1:]
+								subPath := utils.NormalizePathname(moduleSpecifier)[1:]
 								entry := ctx.resolveEntry(ESMPath{
 									PkgName:     ctx.esm.PkgName,
 									PkgVersion:  ctx.esm.PkgVersion,
