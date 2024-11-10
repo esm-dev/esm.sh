@@ -239,8 +239,6 @@ loop:
 func termSelect(propmt string, items []string) (selected string) {
 	fmt.Print(term.Cyan("? "))
 	fmt.Println(propmt)
-	current := 0
-	printSelectUI(items, current)
 
 	defer func() {
 		term.MoveCursorUp(len(items) + 1)
@@ -258,6 +256,9 @@ func termSelect(propmt string, items []string) (selected string) {
 	term.HideCursor()
 	defer term.ShowCursor()
 
+	current := 0
+	printSelectItems(items, current)
+
 	for {
 		key := getRawInput()
 		switch key {
@@ -271,21 +272,21 @@ func termSelect(propmt string, items []string) (selected string) {
 			return
 		case 65, 16, 'p': // Up, ctrl+p, p
 			if current > 0 {
-				term.MoveCursorUp(len(items))
 				current--
-				printSelectUI(items, current)
+				term.MoveCursorUp(len(items))
+				printSelectItems(items, current)
 			}
 		case 66, 14, 'n': // Down, ctrl+n, n
 			if current < len(items)-1 {
-				term.MoveCursorUp(len(items))
 				current++
-				printSelectUI(items, current)
+				term.MoveCursorUp(len(items))
+				printSelectItems(items, current)
 			}
 		}
 	}
 }
 
-func printSelectUI(items []string, selected int) {
+func printSelectItems(items []string, selected int) {
 	for i, name := range items {
 		if i == selected {
 			fmt.Println("\r> ", name)
