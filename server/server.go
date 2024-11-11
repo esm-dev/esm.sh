@@ -61,7 +61,7 @@ func Serve(efs EmbedFS) {
 		embedFS = efs
 	}
 
-	log, err = logger.New(fmt.Sprintf("file:%s?buffer=32k&fileDateFormat=20060102", path.Join(config.LogDir, fmt.Sprintf("main-v%d.log", VERSION))))
+	log, err = logger.New(fmt.Sprintf("file:%s?buffer=32k&fileDateFormat=20060102", path.Join(config.LogDir, "server.log")))
 	if err != nil {
 		fmt.Printf("initiate logger: %v\n", err)
 		os.Exit(1)

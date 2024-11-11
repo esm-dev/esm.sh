@@ -3,6 +3,7 @@ package server
 import (
 	"encoding/json"
 	"errors"
+	"net/url"
 	"strings"
 
 	esbuild "github.com/evanw/esbuild/pkg/api"
@@ -54,7 +55,9 @@ func transform(npmrc *NpmRC, options *ResolvedTransformOptions) (out TransformOu
 	jsxImportSource := options.JsxImportSource
 
 	if options.Lang == "" && options.Filename != "" {
-		_, options.Lang = utils.SplitByLastByte(options.Filename, '.')
+		filename, _ := utils.SplitByFirstByte(options.Filename, '?')
+		_, basename := utils.SplitByLastByte(filename, '/')
+		_, options.Lang = utils.SplitByLastByte(basename, '.')
 	}
 	switch options.Lang {
 	case "jsx":
@@ -147,12 +150,16 @@ func transform(npmrc *NpmRC, options *ResolvedTransformOptions) (out TransformOu
 						if strings.HasSuffix(path, ".css") {
 							path += "?module"
 						}
-						if isAbsPathSpecifier(path) || isRelPathSpecifier(path) {
-							if options.importMap.Src != "" {
-								path = appendQueryString(path, "im", btoaUrl(options.importMap.Src))
-							}
-							if options.globalVersion != "" {
-								path = appendQueryString(path, "v", options.globalVersion)
+						if isHttpSepcifier(path) && isHttpSepcifier(options.Filename) {
+							u1, e1 := url.Parse(path)
+							u2, e2 := url.Parse(options.Filename)
+							if e1 == nil && e2 == nil && u1.Scheme == u2.Scheme && u1.Host == u2.Host {
+								if options.importMap.Src != "" {
+									path = appendQueryString(path, "im", btoaUrl(options.importMap.Src))
+								}
+								if options.globalVersion != "" {
+									path = appendQueryString(path, "v", options.globalVersion)
+								}
 							}
 						}
 						return esbuild.OnResolveResult{
