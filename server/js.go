@@ -2,7 +2,6 @@ package server
 
 import (
 	"errors"
-	"fmt"
 	"io"
 	"net/url"
 	"os"
@@ -203,7 +202,6 @@ func bundleRemoteModule(npmrc *NpmRC, entry string, importMap ImportMap, collect
 						case ".md", ".markdown":
 							// TODO: transform markdown to js
 						}
-						fmt.Println("load", args.Path, "as", loader)
 						return esbuild.OnLoadResult{Contents: &code, Loader: loader}, nil
 					})
 				},
