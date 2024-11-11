@@ -21,11 +21,7 @@
       const v = $<HTMLMetaElement>("meta[name=version]")?.content;
       mainUrl.search = "";
       if ($("script[type=importmap]")) {
-        q.set(
-          "im",
-          (HTMLScriptElement.supports("importmap") ? "y" : "N")
-            + btoa(pathname).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, ""),
-        );
+        q.set("im", btoa(pathname).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, ""));
       }
       if (v) {
         q.set("v", v);

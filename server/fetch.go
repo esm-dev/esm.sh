@@ -2,7 +2,6 @@ package server
 
 import (
 	"bytes"
-	"context"
 	"io"
 	"net/http"
 	"net/url"
@@ -26,7 +25,7 @@ type FetchClient struct {
 }
 
 var defaultFetchClient = &FetchClient{
-	Client:    &http.Client{},
+	Client:    &http.Client{Timeout: 30 * time.Second},
 	userAgent: "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36",
 }
 
@@ -42,9 +41,7 @@ func (f *FetchClient) Fetch(url *url.URL) (resp *http.Response, err error) {
 			"User-Agent": []string{f.userAgent},
 		},
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
-	return f.Do(req.WithContext(ctx))
+	return f.Do(req)
 }
 
 func fetchSync(key string, cacheTtl time.Duration, fetch func() (io.Reader, error)) (r io.Reader, err error) {

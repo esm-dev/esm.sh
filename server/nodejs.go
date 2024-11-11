@@ -19,7 +19,7 @@ import (
 
 const (
 	nodejsMinVersion = 22
-	nodeTypesVersion = "20.14.4"
+	nodeTypesVersion = "22.9.0"
 	pnpmMinVersion   = "9.0.0"
 )
 

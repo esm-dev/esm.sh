@@ -149,11 +149,7 @@ func transform(npmrc *NpmRC, options *ResolvedTransformOptions) (out TransformOu
 						}
 						if isAbsPathSpecifier(path) || isRelPathSpecifier(path) {
 							if options.importMap.Src != "" {
-								suffix := "N"
-								if options.importMap.Support {
-									suffix = "y"
-								}
-								path = appendQueryString(path, "im", suffix+btoaUrl(options.importMap.Src))
+								path = appendQueryString(path, "im", btoaUrl(options.importMap.Src))
 							}
 							if options.globalVersion != "" {
 								path = appendQueryString(path, "v", options.globalVersion)

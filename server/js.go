@@ -2,6 +2,7 @@ package server
 
 import (
 	"errors"
+	"fmt"
 	"io"
 	"net/url"
 	"os"
@@ -86,7 +87,7 @@ func minify(code string, target esbuild.Target, loader esbuild.Loader) ([]byte, 
 }
 
 // bundleRemoteModule builds the remote module and it's submodules.
-func bundleRemoteModule(npmrc *NpmRC, entry string, importMap ImportMap) (js []byte, css []byte, dependencyTree map[string][]byte, err error) {
+func bundleRemoteModule(npmrc *NpmRC, entry string, importMap ImportMap, collectDependencies bool) (js []byte, css []byte, dependencyTree map[string][]byte, err error) {
 	if !isHttpSepcifier(entry) {
 		err = errors.New("require a remote module")
 		return
@@ -112,21 +113,29 @@ func bundleRemoteModule(npmrc *NpmRC, entry string, importMap ImportMap) (js []b
 				Setup: func(build esbuild.PluginBuild) {
 					build.OnResolve(esbuild.OnResolveOptions{Filter: ".*"}, func(args esbuild.OnResolveArgs) (esbuild.OnResolveResult, error) {
 						path, _ := importMap.Resolve(args.Path)
-						if isHttpSepcifier(args.Importer) && (isRelPathSpecifier(args.Path) || isAbsPathSpecifier(args.Path)) {
+						if isHttpSepcifier(args.Importer) && (isRelPathSpecifier(path) || isAbsPathSpecifier(path)) {
 							u, e := url.Parse(args.Importer)
 							if e == nil {
-								path = u.ResolveReference(&url.URL{Path: args.Path}).String()
+								path = u.ResolveReference(&url.URL{Path: path}).String()
 							}
 						}
-						if isHttpSepcifier(path) {
+						if isHttpSepcifier(path) && (args.Kind != esbuild.ResolveJSDynamicImport || collectDependencies) {
 							u, e := url.Parse(path)
 							if e == nil {
-								if u.Host == entryUrl.Host && u.Scheme == entryUrl.Scheme {
-									return esbuild.OnResolveResult{Path: path, Namespace: "http"}, nil
+								if u.Scheme == entryUrl.Scheme && u.Host == entryUrl.Host {
+									if (endsWith(u.Path, esExts...) || endsWith(u.Path, ".css", ".json", ".vue", ".svelte", ".md", ".markdown")) && !u.Query().Has("url") {
+										return esbuild.OnResolveResult{Path: path, Namespace: "http"}, nil
+									} else {
+										return esbuild.OnResolveResult{Path: path, Namespace: "url"}, nil
+									}
 								}
 							}
 						}
 						return esbuild.OnResolveResult{Path: path, External: true}, nil
+					})
+					build.OnLoad(esbuild.OnLoadOptions{Filter: ".*", Namespace: "url"}, func(args esbuild.OnLoadArgs) (esbuild.OnLoadResult, error) {
+						js := `export default ` + "`" + args.Path + "`"
+						return esbuild.OnLoadResult{Contents: &js, Loader: esbuild.LoaderJS}, nil
 					})
 					build.OnLoad(esbuild.OnLoadOptions{Filter: ".*", Namespace: "http"}, func(args esbuild.OnLoadArgs) (esbuild.OnLoadResult, error) {
 						url, err := url.Parse(args.Path)
@@ -143,17 +152,17 @@ func bundleRemoteModule(npmrc *NpmRC, entry string, importMap ImportMap) (js []b
 						}
 						data, err := io.ReadAll(res.Body)
 						if err != nil {
-							return esbuild.OnLoadResult{}, errors.New("failed to fetch module " + args.Path)
+							return esbuild.OnLoadResult{}, errors.New("failed to fetch module " + args.Path + ": " + err.Error())
 						}
-						if dependencyTree == nil {
-							dependencyTree = make(map[string][]byte)
+						if collectDependencies {
+							if dependencyTree == nil {
+								dependencyTree = make(map[string][]byte)
+							}
+							dependencyTree[args.Path] = data
 						}
-						dependencyTree[args.Path] = data
 						code := string(data)
 						loader := esbuild.LoaderJS
 						switch path.Ext(url.Path) {
-						case ".js", ".mjs", ".cjs":
-							loader = esbuild.LoaderJS
 						case ".ts", ".mts", ".cts":
 							loader = esbuild.LoaderTS
 						case ".jsx":
@@ -176,7 +185,9 @@ func bundleRemoteModule(npmrc *NpmRC, entry string, importMap ImportMap) (js []b
 								return esbuild.OnLoadResult{}, err
 							}
 							code = ret.Code
-							loader = esbuild.LoaderTS
+							if ret.Lang == "ts" {
+								loader = esbuild.LoaderTS
+							}
 						case ".svelte":
 							ret, err := transformSvelte(npmrc, &ResolvedTransformOptions{
 								TransformOptions: TransformOptions{
@@ -189,7 +200,10 @@ func bundleRemoteModule(npmrc *NpmRC, entry string, importMap ImportMap) (js []b
 								return esbuild.OnLoadResult{}, err
 							}
 							code = ret.Code
+						case ".md", ".markdown":
+							// TODO: transform markdown to js
 						}
+						fmt.Println("load", args.Path, "as", loader)
 						return esbuild.OnLoadResult{Contents: &code, Loader: loader}, nil
 					})
 				},

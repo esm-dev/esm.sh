@@ -376,12 +376,8 @@ func routes(debug bool) rex.Handle {
 				return throwErrorJS(ctx, fmt.Sprintf("Transform error: %v", err), false)
 			}
 
-			if debug {
-				ctx.SetHeader("Cache-Control", ccMustRevalidate)
-			} else {
-				ctx.SetHeader("Cache-Control", cc1day)
-				ctx.SetHeader("Etag", globalETag)
-			}
+			ctx.SetHeader("Cache-Control", cc1day)
+			ctx.SetHeader("Etag", globalETag)
 			if targetFromUA {
 				appendVaryHeader(ctx.W.Header(), "User-Agent")
 			}
@@ -439,12 +435,8 @@ func routes(debug bool) rex.Handle {
 				if ifNoneMatch == globalETag && !debug {
 					return rex.Status(http.StatusNotModified, nil)
 				}
-				if debug {
-					ctx.SetHeader("Cache-Control", ccMustRevalidate)
-				} else {
-					ctx.SetHeader("Cache-Control", cc1day)
-					ctx.SetHeader("Etag", globalETag)
-				}
+				ctx.SetHeader("Cache-Control", cc1day)
+				ctx.SetHeader("Etag", globalETag)
 			}
 			target := getBuildTargetByUA(ctx.UserAgent())
 			code, err := minify(lib, targets[target], esbuild.LoaderJS)
@@ -501,14 +493,20 @@ func routes(debug bool) rex.Handle {
 			if err != nil {
 				return rex.Status(400, "Invalid context url")
 			}
-			hostname := ctxUrl.Hostname()
-			if isLocalhost(hostname) {
-				ctx.SetHeader("Cache-Control", ccImmutable)
-				ctx.SetHeader("Content-Type", ctCSS)
-				return "body:after{position:fixed;top:0;left:0;z-index:9999;padding:18px 32px;width:100vw;content:'esm.sh/uno doesn't support local development, try serving your app with `esm.sh run`.';font-size:14px;background:rgba(255,232,232,.9);color:#f00;backdrop-filter:blur(8px)}"
-			}
-			if !regexpDomain.MatchString(hostname) {
+			if ctxUrl.Scheme != "http" && ctxUrl.Scheme != "https" {
 				return rex.Status(400, "Invalid context url")
+			}
+			hostname := ctxUrl.Hostname()
+			// disallow localhost or ip address for production
+			if !debug {
+				if isLocalhost(hostname) {
+					ctx.SetHeader("Cache-Control", ccImmutable)
+					ctx.SetHeader("Content-Type", ctCSS)
+					return "body:after{position:fixed;top:0;left:0;z-index:9999;padding:18px 32px;width:100vw;content:'esm.sh/uno doesn't support local development, try serving your app with `esm.sh run`.';font-size:14px;background:rgba(255,232,232,.9);color:#f00;backdrop-filter:blur(8px)}"
+				}
+				if !regexpDomain.MatchString(hostname) {
+					return rex.Status(400, "Invalid context url")
+				}
 			}
 			// determine build target by `?target` query or `User-Agent` header
 			target := strings.ToLower(query.Get("target"))
@@ -635,7 +633,7 @@ func routes(debug bool) rex.Handle {
 				}
 				for src := range jsEntries {
 					url := ctxUrl.ResolveReference(&url.URL{Path: src})
-					_, _, tree, err := bundleRemoteModule(npmrc, url.String(), importMap)
+					_, _, tree, err := bundleRemoteModule(npmrc, url.String(), importMap, true)
 					if err == nil {
 						for _, code := range tree {
 							input = append(input, string(code))
@@ -675,12 +673,18 @@ func routes(debug bool) rex.Handle {
 			if err != nil {
 				return rex.Status(400, "Invalid URL")
 			}
-			hostname := u.Hostname()
-			extname := path.Ext(u.Path)
-			isCss := extname == ".css"
-			if (u.Scheme != "http" && u.Scheme != "https") || isLocalhost(hostname) || !regexpDomain.MatchString(hostname) {
+			if u.Scheme != "http" && u.Scheme != "https" {
 				return rex.Status(400, "Invalid URL")
 			}
+			hostname := u.Hostname()
+			// disallow localhost or ip address for production
+			if !debug {
+				if isLocalhost(hostname) || !regexpDomain.MatchString(hostname) {
+					return rex.Status(400, "Invalid URL")
+				}
+			}
+			extname := path.Ext(u.Path)
+			isCss := extname == ".css"
 			if !(isCss || includes(esExts, extname) || extname == ".vue" || extname == ".svelte") {
 				return rex.Redirect(urlRaw, http.StatusMovedPermanently)
 			}
@@ -710,8 +714,8 @@ func routes(debug bool) rex.Handle {
 			var body io.Reader = content
 			if err == storage.ErrNotFound {
 				importMap := ImportMap{}
-				if len(im) > 1 {
-					imPath, err := atobUrl(im[1:])
+				if len(im) > 0 {
+					imPath, err := atobUrl(im)
 					if err != nil {
 						return rex.Status(400, "Invalid `im` Param")
 					}
@@ -754,21 +758,20 @@ func routes(debug bool) rex.Handle {
 									if err != nil {
 										return rex.Status(400, "Invalid import map")
 									}
-									importMap.Src, _ = atobUrl(im[1:])
-									importMap.Support = im[0] == 'y'
+									importMap.Src, _ = atobUrl(im)
 								}
 								break
 							}
 						}
 					}
 				}
-				js, css, _, err := bundleRemoteModule(npmrc, urlRaw, importMap)
+				js, css, _, err := bundleRemoteModule(npmrc, urlRaw, importMap, false)
 				if err != nil {
-					return rex.Status(500, "Failed to build module:"+err.Error())
+					return rex.Status(500, "Failed to build module: "+err.Error())
 				}
 				code := string(js)
 				if len(css) > 0 {
-					code += fmt.Sprintf("\nvar style=document.createElement('style');style.textContent=%s;document.head.appendChild(style);", utils.MustEncodeJSON(css))
+					code += fmt.Sprintf(`globalThis.document.head.insertAdjacentHTML("beforeend","<style>"+%s+"</style>")`, utils.MustEncodeJSON(string(css)))
 				}
 				out, err := transform(npmrc, &ResolvedTransformOptions{
 					TransformOptions: TransformOptions{
