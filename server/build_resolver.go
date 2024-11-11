@@ -993,6 +993,9 @@ func (ctx *BuildContext) resloveDTS(entry BuildEntry) (string, error) {
 				b := NewBuildContext(ctx.zoneId, ctx.npmrc, dtsModule, ctx.args, "types", BundleFalse, false, false, false)
 				err := b.install()
 				if err != nil {
+					if strings.Contains(err.Error(), "ERR_PNPM_NO_MATCHING_VERSION") {
+						return "", nil
+					}
 					return "", err
 				}
 				dts, err := b.resloveDTS(b.resolveEntry(dtsModule))
