@@ -508,7 +508,7 @@ func routes(debug bool) rex.Handle {
 					ctx.SetHeader("Content-Type", ctCSS)
 					return "body:after{position:fixed;top:0;left:0;z-index:9999;padding:18px 32px;width:100vw;content:'esm.sh/uno doesn't support local development, try serving your app with `esm.sh run`.';font-size:14px;background:rgba(255,232,232,.9);color:#f00;backdrop-filter:blur(8px)}"
 				}
-				if !regexpDomain.MatchString(hostname) {
+				if !regexpDomain.MatchString(hostname) || ctxUrl.Host == ctx.R.Host {
 					return rex.Status(400, "Invalid context url")
 				}
 			}
@@ -683,7 +683,7 @@ func routes(debug bool) rex.Handle {
 			hostname := u.Hostname()
 			// disallow localhost or ip address for production
 			if !debug {
-				if isLocalhost(hostname) || !regexpDomain.MatchString(hostname) {
+				if isLocalhost(hostname) || !regexpDomain.MatchString(hostname) || u.Host == ctx.R.Host {
 					return rex.Status(400, "Invalid URL")
 				}
 			}
