@@ -77,9 +77,23 @@ Deno.test("transform", async (t) => {
     }
   });
 
+  // wait for the server(8083) to ready
   await new Promise((resolve) => setTimeout(resolve, 100));
 
-  await t.step("transform api(remote module, react)", async () => {
+  await t.step("transform remote module: vanilla", async () => {
+    const im = btoaUrl("/vanilla/");
+    const res = await fetch(`http://localhost:8080/http://localhost:8083/vanilla/app/main.ts?im=${im}`);
+    assertEquals(res.status, 200);
+    assertEquals(res.headers.get("Content-Type"), "application/javascript; charset=utf-8");
+    assertEquals(res.headers.get("Cache-Control"), "public, max-age=31536000, immutable");
+    assertStringIncludes(res.headers.get("Vary")!, "User-Agent");
+    const js = await res.text();
+    assertStringIncludes(js, "String.raw");
+    assertStringIncludes(js, '`\n<div class="center-box relative">');
+    assertStringIncludes(js, 'globalThis.document.head.insertAdjacentHTML("beforeend",`<style>*{margin:0;padding:0;box-sizing:border-box}');
+  });
+
+  await t.step("transform remote module: react", async () => {
     const im = btoaUrl("/react/");
     const res = await fetch(`http://localhost:8080/http://localhost:8083/react/app/main.tsx?im=${im}`);
     assertEquals(res.status, 200);
@@ -92,7 +106,7 @@ Deno.test("transform", async (t) => {
     assertStringIncludes(js, '("h1",{style:{color:"#61DAFB"},children:"esm.sh"})');
   });
 
-  await t.step("transform api(remote module, preact)", async () => {
+  await t.step("transform remote module: preact", async () => {
     const im = btoaUrl("/preact/");
     const res = await fetch(`http://localhost:8080/http://localhost:8083/preact/app/main.tsx?im=${im}`);
     assertEquals(res.status, 200);
@@ -105,7 +119,7 @@ Deno.test("transform", async (t) => {
     assertStringIncludes(js, '("h1",{style:{color:"#673AB8"},children:"esm.sh"})');
   });
 
-  await t.step("transform api(remote module, vue)", async () => {
+  await t.step("transform remote module: vue", async () => {
     const im = btoaUrl("/vue/");
     const res = await fetch(`http://localhost:8080/http://localhost:8083/vue/app/main.ts?im=${im}`);
     assertEquals(res.status, 200);
@@ -114,13 +128,15 @@ Deno.test("transform", async (t) => {
     assertStringIncludes(res.headers.get("Vary")!, "User-Agent");
     const js = await res.text();
     assertStringIncludes(js, 'from"https://esm.sh/vue@3.5.8";');
+    assertStringIncludes(js, '="http://localhost:8083/vue/assets/github.svg"');
     assertStringIncludes(js, "h1[data-v-");
     assertStringIncludes(js, "color: #42b883;");
     assertStringIncludes(js, 'globalThis.document.head.insertAdjacentHTML("beforeend",`<style>*{margin:0;padding:0;box-sizing:border-box}');
     assertStringIncludes(js, ">esm.sh</h1>");
+    assertStringIncludes(js, '("svg",');
   });
 
-  await t.step("transform api(remote module, svelte)", async () => {
+  await t.step("transform remote module: svelte", async () => {
     const im = btoaUrl("/svelte/");
     const res = await fetch(`http://localhost:8080/http://localhost:8083/svelte/app/main.ts?im=${im}`);
     assertEquals(res.status, 200);
@@ -129,30 +145,128 @@ Deno.test("transform", async (t) => {
     assertStringIncludes(res.headers.get("Vary")!, "User-Agent");
     const js = await res.text();
     assertStringIncludes(js, 'from"https://esm.sh/svelte@5.1.12/internal/client?no-bundle";');
+    assertStringIncludes(js, "<svg ");
+    assertStringIncludes(js, "color:#ff4000;");
+    assertStringIncludes(js, 'globalThis.document.head.insertAdjacentHTML("beforeend",`<style>*{margin:0;padding:0;box-sizing:border-box}');
+    assertStringIncludes(js, ">esm.sh</h1>");
   });
 
-  await t.step("transform api(uno.css)", async () => {
-    const res = await fetch(
-      "http://localhost:8080/uno.css?ctx="
-        + btoaUrl("http://localhost:8083/with-unocss/vue/"),
-    );
-    assertEquals(res.status, 200);
-    assertEquals(res.headers.get("Content-Type"), "text/css; charset=utf-8");
-    assertEquals(res.headers.get("Cache-Control"), "public, max-age=31536000, immutable");
-    assertStringIncludes(res.headers.get("Vary")!, "User-Agent");
-    const css = await res.text();
-    assertStringIncludes(css, "time,mark,audio,video{"); // eric-meyer reset css
-    assertStringIncludes(css, ".center-box{");
-    assertStringIncludes(css, ".logo{");
-    assertStringIncludes(css, ".logo:hover{");
-    assertStringIncludes(css, "@font-face{");
-    assertStringIncludes(css, "https://fonts.gstatic.com/s/inter/");
-    assertStringIncludes(css, ".font-sans{font-family:Inter,");
-    assertStringIncludes(css, '.i-tabler-brand-github{--un-icon:url("data:image/svg+xml;utf8,');
-    assertStringIncludes(css, ".text-primary{--un-text-opacity:1;color:rgb(66 184 131 / var(--un-text-opacity))}");
-    assertStringIncludes(css, ".text-gray-400{--un-text-opacity:1;color:rgb(156 163 175 / var(--un-text-opacity))}");
-    assertStringIncludes(css, ".fw400{font-weight:400}.fw500{font-weight:500}.fw600{font-weight:600}");
-    assertStringIncludes(css, ".all\\:transition-300 *{");
+  await t.step("generate unocss", async () => {
+    {
+      const res = await fetch(
+        "http://localhost:8080/uno.css?ctx="
+          + btoaUrl("http://localhost:8083/with-unocss/vanilla/"),
+      );
+      assertEquals(res.status, 200);
+      assertEquals(res.headers.get("Content-Type"), "text/css; charset=utf-8");
+      assertEquals(res.headers.get("Cache-Control"), "public, max-age=31536000, immutable");
+      assertStringIncludes(res.headers.get("Vary")!, "User-Agent");
+      const css = await res.text();
+      assertStringIncludes(css, "time,mark,audio,video{"); // eric-meyer reset css
+      assertStringIncludes(css, ".center-box{");
+      assertStringIncludes(css, ".logo{");
+      assertStringIncludes(css, ".logo:hover{");
+      assertStringIncludes(css, "@font-face{");
+      assertStringIncludes(css, "https://fonts.gstatic.com/s/inter/");
+      assertStringIncludes(css, ".font-sans{font-family:Inter,");
+      assertStringIncludes(css, '.i-tabler-brand-github{--un-icon:url("data:image/svg+xml;utf8,');
+      assertStringIncludes(css, ".text-primary{--un-text-opacity:1;color:rgb(35 35 35 / var(--un-text-opacity))}");
+      assertStringIncludes(css, ".text-gray-400{--un-text-opacity:1;color:rgb(156 163 175 / var(--un-text-opacity))}");
+      assertStringIncludes(css, ".fw400{font-weight:400}.fw500{font-weight:500}.fw600{font-weight:600}");
+      assertStringIncludes(css, ".all\\:transition-300 *{");
+    }
+    {
+      const res = await fetch(
+        "http://localhost:8080/uno.css?ctx="
+          + btoaUrl("http://localhost:8083/with-unocss/react/"),
+      );
+      assertEquals(res.status, 200);
+      assertEquals(res.headers.get("Content-Type"), "text/css; charset=utf-8");
+      assertEquals(res.headers.get("Cache-Control"), "public, max-age=31536000, immutable");
+      assertStringIncludes(res.headers.get("Vary")!, "User-Agent");
+      const css = await res.text();
+      assertStringIncludes(css, "time,mark,audio,video{"); // eric-meyer reset css
+      assertStringIncludes(css, ".center-box{");
+      assertStringIncludes(css, ".logo{");
+      assertStringIncludes(css, ".logo:hover{");
+      assertStringIncludes(css, "@font-face{");
+      assertStringIncludes(css, "https://fonts.gstatic.com/s/inter/");
+      assertStringIncludes(css, ".font-sans{font-family:Inter,");
+      assertStringIncludes(css, '.i-tabler-brand-github{--un-icon:url("data:image/svg+xml;utf8,');
+      assertStringIncludes(css, ".text-primary{--un-text-opacity:1;color:rgb(97 218 251 / var(--un-text-opacity))}");
+      assertStringIncludes(css, ".text-gray-400{--un-text-opacity:1;color:rgb(156 163 175 / var(--un-text-opacity))}");
+      assertStringIncludes(css, ".fw400{font-weight:400}.fw500{font-weight:500}.fw600{font-weight:600}");
+      assertStringIncludes(css, ".all\\:transition-300 *{");
+    }
+    {
+      const res = await fetch(
+        "http://localhost:8080/uno.css?ctx="
+          + btoaUrl("http://localhost:8083/with-unocss/preact/"),
+      );
+      assertEquals(res.status, 200);
+      assertEquals(res.headers.get("Content-Type"), "text/css; charset=utf-8");
+      assertEquals(res.headers.get("Cache-Control"), "public, max-age=31536000, immutable");
+      assertStringIncludes(res.headers.get("Vary")!, "User-Agent");
+      const css = await res.text();
+      assertStringIncludes(css, "time,mark,audio,video{"); // eric-meyer reset css
+      assertStringIncludes(css, ".center-box{");
+      assertStringIncludes(css, ".logo{");
+      assertStringIncludes(css, ".logo:hover{");
+      assertStringIncludes(css, "@font-face{");
+      assertStringIncludes(css, "https://fonts.gstatic.com/s/inter/");
+      assertStringIncludes(css, ".font-sans{font-family:Inter,");
+      assertStringIncludes(css, '.i-tabler-brand-github{--un-icon:url("data:image/svg+xml;utf8,');
+      assertStringIncludes(css, ".text-primary{--un-text-opacity:1;color:rgb(103 58 184 / var(--un-text-opacity))}");
+      assertStringIncludes(css, ".text-gray-400{--un-text-opacity:1;color:rgb(156 163 175 / var(--un-text-opacity))}");
+      assertStringIncludes(css, ".fw400{font-weight:400}.fw500{font-weight:500}.fw600{font-weight:600}");
+      assertStringIncludes(css, ".all\\:transition-300 *{");
+    }
+    {
+      const res = await fetch(
+        "http://localhost:8080/uno.css?ctx="
+          + btoaUrl("http://localhost:8083/with-unocss/vue/"),
+      );
+      assertEquals(res.status, 200);
+      assertEquals(res.headers.get("Content-Type"), "text/css; charset=utf-8");
+      assertEquals(res.headers.get("Cache-Control"), "public, max-age=31536000, immutable");
+      assertStringIncludes(res.headers.get("Vary")!, "User-Agent");
+      const css = await res.text();
+      assertStringIncludes(css, "time,mark,audio,video{"); // eric-meyer reset css
+      assertStringIncludes(css, ".center-box{");
+      assertStringIncludes(css, ".logo{");
+      assertStringIncludes(css, ".logo:hover{");
+      assertStringIncludes(css, "@font-face{");
+      assertStringIncludes(css, "https://fonts.gstatic.com/s/inter/");
+      assertStringIncludes(css, ".font-sans{font-family:Inter,");
+      assertStringIncludes(css, '.i-tabler-brand-github{--un-icon:url("data:image/svg+xml;utf8,');
+      assertStringIncludes(css, ".text-primary{--un-text-opacity:1;color:rgb(66 184 131 / var(--un-text-opacity))}");
+      assertStringIncludes(css, ".text-gray-400{--un-text-opacity:1;color:rgb(156 163 175 / var(--un-text-opacity))}");
+      assertStringIncludes(css, ".fw400{font-weight:400}.fw500{font-weight:500}.fw600{font-weight:600}");
+      assertStringIncludes(css, ".all\\:transition-300 *{");
+    }
+    {
+      const res = await fetch(
+        "http://localhost:8080/uno.css?ctx="
+          + btoaUrl("http://localhost:8083/with-unocss/svelte/"),
+      );
+      assertEquals(res.status, 200);
+      assertEquals(res.headers.get("Content-Type"), "text/css; charset=utf-8");
+      assertEquals(res.headers.get("Cache-Control"), "public, max-age=31536000, immutable");
+      assertStringIncludes(res.headers.get("Vary")!, "User-Agent");
+      const css = await res.text();
+      assertStringIncludes(css, "time,mark,audio,video{"); // eric-meyer reset css
+      assertStringIncludes(css, ".center-box{");
+      assertStringIncludes(css, ".logo{");
+      assertStringIncludes(css, ".logo:hover{");
+      assertStringIncludes(css, "@font-face{");
+      assertStringIncludes(css, "https://fonts.gstatic.com/s/inter/");
+      assertStringIncludes(css, ".font-sans{font-family:Inter,");
+      assertStringIncludes(css, '.i-tabler-brand-github{--un-icon:url("data:image/svg+xml;utf8,');
+      assertStringIncludes(css, ".text-primary{--un-text-opacity:1;color:rgb(255 64 0 / var(--un-text-opacity))}");
+      assertStringIncludes(css, ".text-gray-400{--un-text-opacity:1;color:rgb(156 163 175 / var(--un-text-opacity))}");
+      assertStringIncludes(css, ".fw400{font-weight:400}.fw500{font-weight:500}.fw600{font-weight:600}");
+      assertStringIncludes(css, ".all\\:transition-300 *{");
+    }
   });
 
   ac.abort();
