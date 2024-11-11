@@ -4,20 +4,8 @@
 @import "@unocss/preset-web-fonts";
 
 :theme {
-  --color-primary: #232323;
+  --color-primary: #61DAFB;
   --font-family-sans: webfont("Inter:400,500,600");
-  --animation-duration-spin: 1s;
-  --animation-timing-spin: ease;
-}
-
-@keyframes spin {
-  from {
-    transform: rotate(0deg);
-  }
-
-  to {
-    transform: rotate(360deg);
-  }
 }
 
 .center-box {

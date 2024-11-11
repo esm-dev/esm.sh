@@ -7,7 +7,7 @@ export function App() {
         <ReactLogo />
       </div>
       <div className="center-box relative">
-        <h1 className="font-sans text-5xl fw500 select-none" style={{ color: "#61DAFB" }}>esm.sh</h1>
+        <h1 className="font-sans text-5xl fw500 text-primary select-none">esm.sh</h1>
         <p className="font-sans text-lg fw400 text-gray-400 text-center">
           The <span className="fw600">no-build</span> cdn for modern web development.
         </p>
