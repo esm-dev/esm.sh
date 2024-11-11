@@ -8,7 +8,7 @@ import (
 // MIME types for web
 var mimeTypes = map[string][]string{
 	"application/gzip":        {"gz"},
-	"application/javascript;": {"js", "mjs"},
+	"application/javascript;": {"js", "mjs", "cjs"},
 	"application/json;":       {"json", "map"},
 	"application/json5;":      {"json5"},
 	"application/jsonc;":      {"jsonc"},
@@ -48,7 +48,7 @@ var mimeTypes = map[string][]string{
 	"text/stylus":             {"stylus", "styl"},
 	"text/svelte":             {"svelte"},
 	"text/tsx":                {"tsx"},
-	"text/typescript":         {"ts", "mts"},
+	"text/typescript":         {"ts", "mts", "cts"},
 	"text/vue":                {"vue"},
 	"text/x-fragment":         {"frag"},
 	"text/x-vertex":           {"vert"},

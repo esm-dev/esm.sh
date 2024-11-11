@@ -7,7 +7,7 @@ const output = (type, data) => Deno.stdout.write(enc.encode(">>>" + type + ":" +
 
 let tsx, unoGenerators;
 
-async function transformModule(filename, importMap) {
+async function transformModule(filename, importMap, sourceCode) {
   const imports = importMap?.imports;
   if (imports) {
     for (const [specifier, resolved] of Object.entries(imports)) {
@@ -24,16 +24,16 @@ async function transformModule(filename, importMap) {
       }
     }
   }
-  let lang = undefined;
-  let code = await Deno.readTextFile("." + filename);
+  let lang = filename.endsWith(".md?jsx") ? "jsx" : undefined;
+  let code = sourceCode ?? await Deno.readTextFile("." + filename);
   let preprocessSM = undefined;
-  if (filename.endsWith(".vue")) {
-    [lang, code, preprocessSM] = await transformVue(filename, code, importMap, true);
-  } else if (filename.endsWith(".svelte")) {
+  if (filename.endsWith(".svelte") || filename.endsWith(".md?svelte")) {
     [lang, code, preprocessSM] = await transformSvelte(filename, code, importMap, true);
+  } else if (filename.endsWith(".vue") || filename.endsWith(".md?vue")) {
+    [lang, code, preprocessSM] = await transformVue(filename, code, importMap, true);
   }
   if (!tsx) {
-    tsx = import("npm:@esm.sh/tsx@1.0.2").then(async ({ init, transform }) => {
+    tsx = import("npm:@esm.sh/tsx@1.0.4").then(async ({ init, transform }) => {
       await init();
       return { transform };
     });

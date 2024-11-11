@@ -124,7 +124,7 @@ class HotContext {
       if (kind === "remove") {
         location.reload();
       } else {
-        let url = this.#id + "?t=" + Date.now().toString(36);
+        let url = this.#id + (this.#id.includes("?") ? "&" : "?") + "t=" + Date.now().toString(36);
         if (this.#im) {
           url += "&im=" + this.#im;
         }

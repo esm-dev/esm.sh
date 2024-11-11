@@ -180,7 +180,7 @@ func (d *DevServer) ServeHtml(w http.ResponseWriter, r *http.Request, pathname s
 	fmt.Fprintf(w, `<script>console.log("%%c💚 Built with esm.sh/run, please uncheck \"Disable cache\" in Network tab for better DX!", "color:green")</script>`)
 }
 
-func (d *DevServer) ServeModule(w http.ResponseWriter, r *http.Request, pathname string) {
+func (d *DevServer) ServeModule(w http.ResponseWriter, r *http.Request, pathname string, sourceCode []byte) {
 	query := r.URL.Query()
 	im, err := atobUrl(query.Get("im"))
 	if err != nil {
@@ -239,21 +239,32 @@ func (d *DevServer) ServeModule(w http.ResponseWriter, r *http.Request, pathname
 			}
 		}
 	}
-	fi, err := os.Lstat(filepath.Join(d.rootDir, pathname))
-	if err != nil {
-		if os.IsNotExist(err) {
-			http.Error(w, "Not Found", 404)
-		} else {
-			http.Error(w, "Internal Server Error", 500)
+	var modTime uint64
+	var size int64
+	if sourceCode != nil {
+		sha := xxhash.New()
+		sha.Write(sourceCode)
+		modTime = sha.Sum64()
+		size = int64(len(sourceCode))
+	} else {
+		fi, err := os.Lstat(filepath.Join(d.rootDir, pathname))
+		if err != nil {
+			if os.IsNotExist(err) {
+				http.Error(w, "Not Found", 404)
+			} else {
+				http.Error(w, "Internal Server Error", 500)
+			}
+			return
 		}
-		return
+		modTime = uint64(fi.ModTime().UnixMilli())
+		size = fi.Size()
 	}
 	sha := xxhash.New()
 	if json.NewEncoder(sha).Encode(importMap) != nil {
 		http.Error(w, "Internal Server Error", 500)
 		return
 	}
-	etag := fmt.Sprintf("w/\"%d-%d-%d-%x\"", fi.ModTime().UnixMilli(), fi.Size(), VERSION, sha.Sum(nil))
+	etag := fmt.Sprintf("w/\"%d-%d-%d-%x\"", modTime, size, VERSION, sha.Sum(nil))
 	if r.Header.Get("If-None-Match") == etag && !query.Has("t") {
 		w.WriteHeader(http.StatusNotModified)
 		return
@@ -280,7 +291,11 @@ func (d *DevServer) ServeModule(w http.ResponseWriter, r *http.Request, pathname
 		http.Error(w, "Internal Server Error", 500)
 		return
 	}
-	_, js, err := loader.Load("module", []any{pathname, importMap})
+	args := []any{pathname, importMap}
+	if sourceCode != nil {
+		args = append(args, string(sourceCode))
+	}
+	_, js, err := loader.Load("module", args)
 	if err != nil {
 		fmt.Println(term.Red(err.Error()))
 		http.Error(w, "Internal Server Error", 500)
@@ -557,18 +572,19 @@ func (d *DevServer) ServeHmrWS(w http.ResponseWriter, r *http.Request) {
 		if messageType == websocket.TextMessage {
 			msg := string(data)
 			if strings.HasPrefix(msg, "watch:") {
-				filename := msg[6:]
-				if filename != "" {
+				pathname := msg[6:]
+				if pathname != "" {
+					filename, _ := utils.SplitByFirstByte(pathname, '?')
 					fi, err := os.Lstat(filepath.Join(d.rootDir, filename))
 					if err != nil {
 						if os.IsNotExist(err) {
 							// file not found, watch if it's created
-							watchList[filename] = 0
+							watchList[pathname] = 0
 						} else {
-							conn.WriteMessage(websocket.TextMessage, []byte("error:could not watch "+filename))
+							conn.WriteMessage(websocket.TextMessage, []byte("error:could not watch "+pathname))
 						}
 					} else {
-						watchList[filename] = fi.ModTime().UnixMilli()
+						watchList[pathname] = fi.ModTime().UnixMilli()
 					}
 				}
 			}
@@ -676,14 +692,15 @@ func (d *DevServer) watchFS() {
 		time.Sleep(100 * time.Millisecond)
 		d.rwlock.RLock()
 		for conn, watchList := range d.watchData {
-			for filename, mtime := range watchList {
+			for pathname, mtime := range watchList {
+				filename, _ := utils.SplitByFirstByte(pathname, '?')
 				fi, err := os.Lstat(filepath.Join(d.rootDir, filename))
 				if err != nil {
 					if os.IsNotExist(err) {
-						if watchList[filename] > 0 {
-							watchList[filename] = 0
-							d.purgeLoadCache(filename)
-							conn.WriteMessage(websocket.TextMessage, []byte("remove:"+filename))
+						if watchList[pathname] > 0 {
+							watchList[pathname] = 0
+							d.purgeLoadCache(pathname)
+							conn.WriteMessage(websocket.TextMessage, []byte("remove:"+pathname))
 						}
 					} else {
 						fmt.Println(term.Red("watch: " + err.Error()))
@@ -693,8 +710,8 @@ func (d *DevServer) watchFS() {
 					if mtime == 0 {
 						kind = "create"
 					}
-					watchList[filename] = modtime
-					conn.WriteMessage(websocket.TextMessage, []byte(kind+":"+filename))
+					watchList[pathname] = modtime
+					conn.WriteMessage(websocket.TextMessage, []byte(kind+":"+pathname))
 				}
 			}
 		}
@@ -749,7 +766,15 @@ func (d *DevServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "Forbidden", http.StatusForbidden)
 			return
 		}
-		switch filepath.Ext(filename) {
+		query := r.URL.Query()
+		if query.Has("url") {
+			header := w.Header()
+			header.Set("Content-Type", "application/javascript; charset=utf-8")
+			header.Set("Cache-Control", "public, max-age=31536000, immutable")
+			w.Write([]byte(`const url = new URL(import.meta.url);url.searchParams.delete("url");export default url.href;`))
+			return
+		}
+		switch extname := filepath.Ext(filename); extname {
 		case ".html":
 			etag := fmt.Sprintf("w/\"%d-%d-%d\"", fi.ModTime().UnixMilli(), fi.Size(), VERSION)
 			if r.Header.Get("If-None-Match") == etag {
@@ -762,17 +787,20 @@ func (d *DevServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			header.Set("Etag", etag)
 			d.ServeHtml(w, r, pathname)
 		case ".js", ".mjs", ".jsx", ".ts", ".mts", ".tsx", ".vue", ".svelte":
-			d.ServeModule(w, r, pathname)
+			if !query.Has("raw") {
+				d.ServeModule(w, r, pathname, nil)
+				return
+			}
+			fallthrough
 		default:
-			query := r.URL.Query()
-			if strings.HasSuffix(pathname, ".css") {
+			if extname == ".css" {
 				if query.Has("module") {
 					d.ServeCSSModule(w, r, pathname, query)
 					return
 				}
 			}
-			if strings.HasSuffix(pathname, ".md") || strings.HasSuffix(pathname, ".markdown") {
-				if query.Has("module") {
+			if extname == ".md" {
+				if !query.Has("raw") {
 					if d.gfm == nil {
 						d.initGFM()
 					}
@@ -800,6 +828,49 @@ func (d *DevServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 						header.Set("Etag", etag)
 					}
 					metaData := meta.Get(context)
+					if query.Has("jsx") {
+						tokenizer := html.NewTokenizer(&buf)
+						jsxBuf := bytes.NewBuffer([]byte("export default function Markdown() { return <>"))
+						for {
+							tt := tokenizer.Next()
+							if tt == html.ErrorToken {
+								if tokenizer.Err() != io.EOF {
+									w.WriteHeader(500)
+									fmt.Fprintf(w, "throw new Error(\"Failed to transform markdown to jsx component: %v\");xport default null;", tokenizer.Err())
+									return
+								}
+								break
+							}
+							tagName, _ := tokenizer.TagName()
+							switch string(tagName) {
+							case "area", "base", "br", "col", "embed", "hr", "img", "input", "keygen", "link", "meta", "param", "source", "track", "wbr":
+								if tt == html.StartTagToken {
+									jsxBuf.WriteByte('<')
+									jsxBuf.Write(tagName)
+									jsxBuf.WriteByte('/')
+									jsxBuf.WriteByte('>')
+								} else {
+									jsxBuf.Write(tokenizer.Raw())
+								}
+							case "script", "style":
+								// ignore script tag
+							default:
+								jsxBuf.Write(tokenizer.Raw())
+							}
+						}
+						jsxBuf.WriteString("</>}")
+						d.ServeModule(w, r, pathname+"?jsx", jsxBuf.Bytes())
+						return
+					} else if query.Has("svelte") {
+						d.ServeModule(w, r, pathname+"?svelte", buf.Bytes())
+						return
+					} else if query.Has("vue") {
+						vueBuf := bytes.NewBuffer([]byte("<template>"))
+						buf.WriteTo(vueBuf)
+						vueBuf.WriteString("</template>")
+						d.ServeModule(w, r, pathname+"?vue", vueBuf.Bytes())
+						return
+					}
 					if len(metaData) > 0 {
 						j, err := json.Marshal(metaData)
 						if err != nil {
@@ -819,13 +890,6 @@ func (d *DevServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 					w.Write([]byte("export default html;"))
 					return
 				}
-			}
-			if query.Has("url") {
-				header := w.Header()
-				header.Set("Content-Type", "application/javascript; charset=utf-8")
-				header.Set("Cache-Control", "public, max-age=31536000, immutable")
-				w.Write([]byte(`const url = new URL(import.meta.url);url.searchParams.delete("url");export default url.href;`))
-				return
 			}
 			etag := fmt.Sprintf("w/\"%d-%d-%d\"", fi.ModTime().UnixMilli(), fi.Size(), VERSION)
 			if r.Header.Get("If-None-Match") == etag && !query.Has("t") {
