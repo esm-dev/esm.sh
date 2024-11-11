@@ -40,12 +40,11 @@ func (m ImportMap) Resolve(path string) (string, bool) {
 			for _, p := range nonTrailingSlashImports {
 				k, v := p[0], p[1]
 				p, q := utils.SplitByLastByte(v, '?')
+				if q != "" {
+					q = "?" + q
+				}
 				if strings.HasPrefix(path, k+"/") {
-					url := p + path[len(k):]
-					if q != "" {
-						url += "?" + q
-					}
-					return m.toAbsPath(url), true
+					return m.toAbsPath(p+path[len(k):]) + q, true
 				}
 			}
 		}
