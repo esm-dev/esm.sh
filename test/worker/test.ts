@@ -1,15 +1,18 @@
-import { dirname, join } from "jsr:@std/path";
 import { assert, assertEquals, assertStringIncludes } from "jsr:@std/assert";
+import { dirname, join } from "jsr:@std/path";
+import { contentType } from "jsr:@std/media-types";
 
-const testRegisterToken = "1E372D421838559CE40E4CF955B3A40E30EEB7AA";
+const testNmpToken = "1E372D421838559CE40E4CF955B3A40E30EEB7AA";
 const env = {
   ESM_SERVER_ORIGIN: "http://localhost:8080",
-  NPMRC: `{ "registries": { "@private": { "registry": "http://localhost:8082/", "token": "${testRegisterToken}" }}}`,
+  NPMRC: `{ "registries": { "@private": { "registry": "http://localhost:8082/", "token": "${testNmpToken}" }}}`,
 };
 const workerOrigin = "http://localhost:8081";
 const ac = new AbortController();
-const closeServer = () => ac.abort();
+const modUrl = new URL(import.meta.url);
+const demoRootDir = join(modUrl.pathname, "../../../cli/cmd/demo");
 
+// mock CF worker cache
 const cache = {
   _store: new Map<string, Response>(),
   match(req: URL) {
@@ -21,6 +24,7 @@ const cache = {
   },
 };
 
+// mock CF R2
 const R2 = {
   _store: new Map(),
   async get(key: string): Promise<
@@ -73,18 +77,18 @@ const worker = withESMWorker((_req: Request, _env: typeof env, ctx: { url: URL }
   }
 }, cache);
 
-// start the worker
+// serve the worker
 Deno.serve(
   { port: 8081, signal: ac.signal },
   (req) => worker.fetch(req, { ...env, R2, LEGACY_WORKER }, { waitUntil: () => {} }),
 );
 
-// start the private registry
+// serve a private registry
 Deno.serve(
   { port: 8082, signal: ac.signal },
   (req) => {
     const auth = req.headers.get("authorization");
-    if (auth !== "Bearer " + testRegisterToken) {
+    if (auth !== "Bearer " + testNmpToken) {
       return new Response("unauthorized", { status: 401 });
     }
 
@@ -145,8 +149,34 @@ Deno.serve(
   },
 );
 
+// serve the demo apps
+Deno.serve({
+  port: 8083,
+  signal: ac.signal,
+}, async req => {
+  let { pathname } = new URL(req.url);
+  if (pathname.endsWith("/")) {
+    pathname += "index.html";
+  }
+  try {
+    const file = join(demoRootDir, pathname);
+    const f = await Deno.open(file);
+    return new Response(f.readable, {
+      headers: {
+        "Content-Type": contentType(pathname) ?? "application/octet-stream",
+        "User-Agent": "es/2022",
+      },
+    });
+  } catch (e) {
+    if (e instanceof Deno.errors.NotFound) {
+      return new Response("Not Found", { status: 404 });
+    }
+    return new Response("Internal Server Error", { status: 500 });
+  }
+});
+
 Deno.test("esm-worker", { sanitizeOps: false, sanitizeResources: false }, async (t) => {
-  // wait for the server to start
+  // wait for the server to ready
   await new Promise((resolve) => setTimeout(resolve, 100));
 
   await t.step("bad url", async () => {
@@ -409,50 +439,90 @@ Deno.test("esm-worker", { sanitizeOps: false, sanitizeResources: false }, async 
     assertStringIncludes(await res3.text(), "esm.sh/uno");
   });
 
-  await t.step("transform api", async () => {
-    const options = {
-      code: `
-        import { renderToString } from "preact-render-to-string";
-        export default () => renderToString(<h1>Hello world!</h1>);
-      `,
-      lang: "jsx",
-      target: "es2022",
-      importMap: {
-        imports: {
-          "@jsxImportSource": "https://preact@10.13.2",
-          "preact-render-to-string": "https://esm.sh/preact-render-to-string6.0.2",
+  await t.step("transform", async () => {
+    "transform API";
+    {
+      const options = {
+        code: `
+          import { renderToString } from "preact-render-to-string";
+          export default () => renderToString(<h1>Hello world!</h1>);
+        `,
+        lang: "jsx",
+        target: "es2022",
+        importMap: {
+          imports: {
+            "@jsxImportSource": "https://preact@10.13.2",
+            "preact-render-to-string": "https://esm.sh/preact-render-to-string6.0.2",
+          },
         },
-      },
-      sourceMap: "external",
-      minify: true,
-    };
-    const hash = await computeHash(
-      options.lang + options.code + options.target + JSON.stringify(options.importMap) + options.sourceMap + options.minify,
-    );
-    const res1 = await fetch(`${workerOrigin}/transform`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(options),
-    });
-    assertEquals(res1.status, 200);
-    const ret = await res1.json();
-    assertStringIncludes(ret.code, `"https://preact@10.13.2/jsx-runtime"`);
-    assertStringIncludes(ret.code, `"https://esm.sh/preact-render-to-string6.0.2"`);
-    assertStringIncludes(ret.map, `"mappings":`);
+        sourceMap: "external",
+        minify: true,
+      };
+      const hash = await computeHash(
+        options.lang + options.code + options.target + JSON.stringify(options.importMap) + options.sourceMap + options.minify,
+      );
+      const res1 = await fetch(`${workerOrigin}/transform`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(options),
+      });
+      assertEquals(res1.status, 200);
+      const ret = await res1.json();
+      assertStringIncludes(ret.code, `"https://preact@10.13.2/jsx-runtime"`);
+      assertStringIncludes(ret.code, `"https://esm.sh/preact-render-to-string6.0.2"`);
+      assertStringIncludes(ret.map, `"mappings":`);
 
-    const res2 = await fetch(`${workerOrigin}/+${hash}.mjs`, {
-      headers: { "User-Agent": "Chrome/90.0.4430.212" },
-    });
-    assertEquals(res2.status, 200);
-    assertEquals(res2.headers.get("Content-Type"), "application/javascript; charset=utf-8");
-    const js = await res2.text();
-    assertEquals(js, ret.code);
+      const res2 = await fetch(`${workerOrigin}/+${hash}.mjs`, {
+        headers: { "User-Agent": "Chrome/90.0.4430.212" },
+      });
+      assertEquals(res2.status, 200);
+      assertEquals(res2.headers.get("Content-Type"), "application/javascript; charset=utf-8");
+      const js = await res2.text();
+      assertEquals(js, ret.code);
 
-    const res3 = await fetch(`${workerOrigin}/+${hash}.mjs.map`);
-    assertEquals(res3.status, 200);
-    assertEquals(res3.headers.get("Content-Type"), "application/json; charset=utf-8");
-    const map = await res3.text();
-    assertEquals(map, ret.map);
+      const res3 = await fetch(`${workerOrigin}/+${hash}.mjs.map`);
+      assertEquals(res3.status, 200);
+      assertEquals(res3.headers.get("Content-Type"), "application/json; charset=utf-8");
+      const map = await res3.text();
+      assertEquals(map, ret.map);
+    }
+    "transform http module";
+    {
+      const im = btoaUrl("/react/");
+      const res = await fetch(`${workerOrigin}/http://localhost:8083/react/app/main.tsx?im=${im}`);
+      assertEquals(res.status, 200);
+      assertEquals(res.headers.get("Content-Type"), "application/javascript; charset=utf-8");
+      assertEquals(res.headers.get("Cache-Control"), "public, max-age=31536000, immutable");
+      assertStringIncludes(res.headers.get("Vary")!, "User-Agent");
+      const js = await res.text();
+      assertStringIncludes(js, 'from"https://esm.sh/react-dom@18.3.1/client";');
+      assertStringIncludes(js, 'from"https://esm.sh/react@18.3.1/jsx-runtime";');
+      assertStringIncludes(js, '("h1",{style:{color:"#61DAFB"},children:"esm.sh"})');
+    }
+    "generate uno.css";
+    {
+      const res = await fetch(
+        `${workerOrigin}/uno.css?ctx=`
+          + btoaUrl("http://localhost:8083/with-unocss/react/"),
+      );
+      assertEquals(res.status, 200);
+      assertEquals(res.headers.get("Content-Type"), "text/css; charset=utf-8");
+      assertEquals(res.headers.get("Cache-Control"), "public, max-age=31536000, immutable");
+      assertStringIncludes(res.headers.get("Vary")!, "User-Agent");
+      const css = await res.text();
+      assertStringIncludes(css, "time,mark,audio,video{"); // eric-meyer reset css
+      assertStringIncludes(css, ".center-box{");
+      assertStringIncludes(css, ".logo{");
+      assertStringIncludes(css, ".logo:hover{");
+      assertStringIncludes(css, "@font-face{");
+      assertStringIncludes(css, "https://fonts.gstatic.com/s/inter/");
+      assertStringIncludes(css, ".font-sans{font-family:Inter,");
+      assertStringIncludes(css, '.i-tabler-brand-github{--un-icon:url("data:image/svg+xml;utf8,');
+      assertStringIncludes(css, ".text-primary{--un-text-opacity:1;color:rgb(97 218 251 / var(--un-text-opacity))}");
+      assertStringIncludes(css, ".text-gray-400{--un-text-opacity:1;color:rgb(156 163 175 / var(--un-text-opacity))}");
+      assertStringIncludes(css, ".fw400{font-weight:400}.fw500{font-weight:500}.fw600{font-weight:600}");
+      assertStringIncludes(css, ".all\\:transition-300 *{");
+    }
   });
 
   await t.step("purge api", async () => {
@@ -579,7 +649,7 @@ Deno.test("esm-worker", { sanitizeOps: false, sanitizeResources: false }, async 
     assertEquals(res0.status, 401);
 
     const res1 = await fetch(`http://localhost:8082/@private/pkg`, {
-      headers: { authorization: "Bearer " + testRegisterToken },
+      headers: { authorization: "Bearer " + testNmpToken },
     });
     assertEquals(res1.status, 200);
     const pkg = await res1.json();
@@ -590,7 +660,7 @@ Deno.test("esm-worker", { sanitizeOps: false, sanitizeResources: false }, async 
     assertEquals(res2.status, 401);
 
     const res3 = await fetch(`http://localhost:8082/@private/pkg/1.0.0.tgz`, {
-      headers: { authorization: "Bearer " + testRegisterToken },
+      headers: { authorization: "Bearer " + testNmpToken },
     });
     res3.body?.cancel();
     assertEquals(res3.status, 200);
@@ -620,8 +690,12 @@ Deno.test("esm-worker", { sanitizeOps: false, sanitizeResources: false }, async 
   console.log("Cache", [...cache._store.keys()].map((url) => `${url} (${cache._store.get(url)!.headers.get("Cache-Control")})`));
   console.log("R2", [...R2._store.keys()]);
 
-  closeServer();
+  ac.abort();
 });
+
+function btoaUrl(url: string): string {
+  return btoa(url).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+}
 
 async function computeHash(input: string): Promise<string> {
   const buffer = new Uint8Array(
