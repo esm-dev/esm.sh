@@ -645,7 +645,7 @@ func routes(debug bool) rex.Handle {
 						}
 					}
 				}
-				out, err := generateUnoCSS(npmrc, configCSS, content)
+				out, err := generateUnoCSS(npmrc, []string{configCSS, strings.Join(content, "\n")})
 				if err != nil {
 					return rex.Status(500, "Failed to generate uno.css")
 				}

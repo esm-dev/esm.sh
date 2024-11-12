@@ -140,7 +140,6 @@ func RenderMarkdown(md []byte, kind string) (code []byte, err error) {
 		jsxBuf.Write([]byte("export default function Markdown() { return <>"))
 		htmlBuf.WriteTo(jsxBuf)
 		jsxBuf.Write([]byte("</>}"))
-		fmt.Println(jsxBuf.String())
 		return jsxBuf.Bytes(), nil
 	case "svelte":
 		htmlBuf.Write([]byte("<script module>"))

@@ -63,7 +63,7 @@ func transform(npmrc *NpmRC, options *ResolvedTransformOptions) (out TransformOu
 	case "css":
 		loader = esbuild.LoaderCSS
 	case "vue":
-		o, e := transformVue(npmrc, options.importMap, options.Filename, options.Code)
+		o, e := transformVue(npmrc, options.importMap, []string{options.Filename, options.Code})
 		if e != nil {
 			log.Error("failed to transform vue:", e)
 			err = errors.New("failed to transform vue")
@@ -74,7 +74,7 @@ func transform(npmrc *NpmRC, options *ResolvedTransformOptions) (out TransformOu
 			loader = esbuild.LoaderTS
 		}
 	case "svelte":
-		o, e := transformSvelte(npmrc, options.importMap, options.Filename, options.Code)
+		o, e := transformSvelte(npmrc, options.importMap, []string{options.Filename, options.Code})
 		if e != nil {
 			log.Error("failed to transform svelte:", e)
 			err = errors.New("failed to transform svelte")

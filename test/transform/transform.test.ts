@@ -124,7 +124,7 @@ Deno.test("transform", async (t) => {
     const res = await fetch(`http://localhost:8080/http://localhost:8083/vue/app/main.ts?im=${im}`);
     assertEquals(res.status, 200);
     assertEquals(res.headers.get("Content-Type"), "application/javascript; charset=utf-8");
-    assertEquals(res.headers.get("cache-control"), "public, max-age=31536000, immutable");
+    assertEquals(res.headers.get("Cache-Control"), "public, max-age=31536000, immutable");
     assertStringIncludes(res.headers.get("Vary")!, "User-Agent");
     const js = await res.text();
     assertStringIncludes(js, 'from"https://esm.sh/vue@3.5.8";');
@@ -141,7 +141,7 @@ Deno.test("transform", async (t) => {
     const res = await fetch(`http://localhost:8080/http://localhost:8083/svelte/app/main.ts?im=${im}`);
     assertEquals(res.status, 200);
     assertEquals(res.headers.get("Content-Type"), "application/javascript; charset=utf-8");
-    assertEquals(res.headers.get("cache-control"), "public, max-age=31536000, immutable");
+    assertEquals(res.headers.get("Cache-Control"), "public, max-age=31536000, immutable");
     assertStringIncludes(res.headers.get("Vary")!, "User-Agent");
     const js = await res.text();
     assertStringIncludes(js, 'from"https://esm.sh/svelte@5.1.12/internal/client?no-bundle";');
@@ -157,10 +157,66 @@ Deno.test("transform", async (t) => {
       const res = await fetch(`http://localhost:8080/http://localhost:8083/with-markdown/vanilla/app/main.ts?im=${im}`);
       assertEquals(res.status, 200);
       assertEquals(res.headers.get("Content-Type"), "application/javascript; charset=utf-8");
-      assertEquals(res.headers.get("cache-control"), "public, max-age=31536000, immutable");
+      assertEquals(res.headers.get("Cache-Control"), "public, max-age=31536000, immutable");
       assertStringIncludes(res.headers.get("Vary")!, "User-Agent");
       const js = await res.text();
       assertStringIncludes(js, `h1 id="esmsh">esm.sh</h1>`);
+      assertStringIncludes(
+        js,
+        'globalThis.document.head.insertAdjacentHTML("beforeend",`<style>*{margin:0;padding:0;box-sizing:border-box}',
+      );
+    }
+    {
+      const im = btoaUrl("/with-markdown/preact/");
+      const res = await fetch(`http://localhost:8080/http://localhost:8083/with-markdown/preact/app/main.tsx?im=${im}`);
+      assertEquals(res.status, 200);
+      assertEquals(res.headers.get("Content-Type"), "application/javascript; charset=utf-8");
+      assertEquals(res.headers.get("Cache-Control"), "public, max-age=31536000, immutable");
+      assertStringIncludes(res.headers.get("Vary")!, "User-Agent");
+      const js = await res.text();
+      assertStringIncludes(js, `"h1",{id:"esmsh",children:"esm.sh"}`);
+      assertStringIncludes(
+        js,
+        'globalThis.document.head.insertAdjacentHTML("beforeend",`<style>*{margin:0;padding:0;box-sizing:border-box}',
+      );
+    }
+    {
+      const im = btoaUrl("/with-markdown/react/");
+      const res = await fetch(`http://localhost:8080/http://localhost:8083/with-markdown/react/app/main.tsx?im=${im}`);
+      assertEquals(res.status, 200);
+      assertEquals(res.headers.get("Content-Type"), "application/javascript; charset=utf-8");
+      assertEquals(res.headers.get("Cache-Control"), "public, max-age=31536000, immutable");
+      assertStringIncludes(res.headers.get("Vary")!, "User-Agent");
+      const js = await res.text();
+      assertStringIncludes(js, `"h1",{id:"esmsh",children:"esm.sh"}`);
+      assertStringIncludes(
+        js,
+        'globalThis.document.head.insertAdjacentHTML("beforeend",`<style>*{margin:0;padding:0;box-sizing:border-box}',
+      );
+    }
+    {
+      const im = btoaUrl("/with-markdown/svelte/");
+      const res = await fetch(`http://localhost:8080/http://localhost:8083/with-markdown/svelte/app/main.ts?im=${im}`);
+      assertEquals(res.status, 200);
+      assertEquals(res.headers.get("Content-Type"), "application/javascript; charset=utf-8");
+      assertEquals(res.headers.get("Cache-Control"), "public, max-age=31536000, immutable");
+      assertStringIncludes(res.headers.get("Vary")!, "User-Agent");
+      const js = await res.text();
+      assertStringIncludes(js, `<h1 id="esmsh">esm.sh</h1>`);
+      assertStringIncludes(
+        js,
+        'globalThis.document.head.insertAdjacentHTML("beforeend",`<style>*{margin:0;padding:0;box-sizing:border-box}',
+      );
+    }
+    {
+      const im = btoaUrl("/with-markdown/vue/");
+      const res = await fetch(`http://localhost:8080/http://localhost:8083/with-markdown/vue/app/main.ts?im=${im}`);
+      assertEquals(res.status, 200);
+      assertEquals(res.headers.get("Content-Type"), "application/javascript; charset=utf-8");
+      assertEquals(res.headers.get("Cache-Control"), "public, max-age=31536000, immutable");
+      assertStringIncludes(res.headers.get("Vary")!, "User-Agent");
+      const js = await res.text();
+      assertStringIncludes(js, `("h1",{id:"esmsh"},"esm.sh"`);
       assertStringIncludes(
         js,
         'globalThis.document.head.insertAdjacentHTML("beforeend",`<style>*{margin:0;padding:0;box-sizing:border-box}',

@@ -14,6 +14,7 @@ import (
 	"github.com/ije/esbuild-internal/js_ast"
 	"github.com/ije/esbuild-internal/js_parser"
 	"github.com/ije/esbuild-internal/logger"
+	"github.com/ije/gox/utils"
 )
 
 var esExts = []string{".js", ".mjs", ".jsx", ".ts", ".mts", ".tsx", ".cjs", ".cts"}
@@ -116,7 +117,13 @@ func bundleHttpModule(npmrc *NpmRC, entry string, importMap common.ImportMap, co
 						if isHttpSepcifier(args.Importer) && (isRelPathSpecifier(path) || isAbsPathSpecifier(path)) {
 							u, e := url.Parse(args.Importer)
 							if e == nil {
-								path = u.ResolveReference(&url.URL{Path: path}).String()
+								var query string
+								path, query = utils.SplitByFirstByte(path, '?')
+								if query != "" {
+									query = "?" + query
+								}
+								u = u.ResolveReference(&url.URL{Path: path})
+								path = u.Scheme + "://" + u.Host + u.Path + query
 							}
 						}
 						if isHttpSepcifier(path) && (args.Kind != esbuild.ResolveJSDynamicImport || collectDependencies) {
@@ -176,13 +183,13 @@ func bundleHttpModule(npmrc *NpmRC, entry string, importMap common.ImportMap, co
 						case ".json":
 							loader = esbuild.LoaderJSON
 						case ".svelte":
-							ret, err := transformSvelte(npmrc, importMap, args.Path, code)
+							ret, err := transformSvelte(npmrc, importMap, []string{args.Path, code})
 							if err != nil {
 								return esbuild.OnLoadResult{}, err
 							}
 							code = ret.Code
 						case ".vue":
-							ret, err := transformVue(npmrc, importMap, args.Path, code)
+							ret, err := transformVue(npmrc, importMap, []string{args.Path, code})
 							if err != nil {
 								return esbuild.OnLoadResult{}, err
 							}
@@ -204,7 +211,7 @@ func bundleHttpModule(npmrc *NpmRC, entry string, importMap common.ImportMap, co
 								if err != nil {
 									return esbuild.OnLoadResult{}, err
 								}
-								ret, err := transformSvelte(npmrc, importMap, args.Path, svelteCode)
+								ret, err := transformSvelte(npmrc, importMap, []string{args.Path, string(svelteCode)})
 								if err != nil {
 									return esbuild.OnLoadResult{}, err
 								}
@@ -214,7 +221,7 @@ func bundleHttpModule(npmrc *NpmRC, entry string, importMap common.ImportMap, co
 								if err != nil {
 									return esbuild.OnLoadResult{}, err
 								}
-								ret, err := transformVue(npmrc, importMap, args.Path, vueCode)
+								ret, err := transformVue(npmrc, importMap, []string{args.Path, string(vueCode)})
 								if err != nil {
 									return esbuild.OnLoadResult{}, err
 								}

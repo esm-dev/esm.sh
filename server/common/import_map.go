@@ -15,6 +15,11 @@ type ImportMap struct {
 }
 
 func (m ImportMap) Resolve(path string) (string, bool) {
+	var query string
+	path, query = utils.SplitByFirstByte(path, '?')
+	if query != "" {
+		query = "?" + query
+	}
 	imports := m.Imports
 	if m.srcUrl == nil && m.Src != "" {
 		m.srcUrl, _ = url.Parse(m.Src)
@@ -22,14 +27,14 @@ func (m ImportMap) Resolve(path string) (string, bool) {
 	// todo: check `scopes`
 	if len(imports) > 0 {
 		if v, ok := imports[path]; ok {
-			return m.toAbsPath(v), true
+			return m.toAbsPath(v) + query, true
 		}
 		if strings.ContainsRune(path, '/') {
 			nonTrailingSlashImports := make([][2]string, 0, len(imports))
 			for k, v := range imports {
 				if strings.HasSuffix(k, "/") {
 					if strings.HasPrefix(path, k) {
-						return m.toAbsPath(v + path[len(k):]), true
+						return m.toAbsPath(v+path[len(k):]) + query, true
 					}
 				} else {
 					nonTrailingSlashImports = append(nonTrailingSlashImports, [2]string{k, v})
@@ -42,6 +47,11 @@ func (m ImportMap) Resolve(path string) (string, bool) {
 				p, q := utils.SplitByLastByte(v, '?')
 				if q != "" {
 					q = "?" + q
+					if query != "" {
+						q += "&" + query[1:]
+					}
+				} else if query != "" {
+					q = query
 				}
 				if strings.HasPrefix(path, k+"/") {
 					return m.toAbsPath(p+path[len(k):]) + q, true
@@ -49,7 +59,7 @@ func (m ImportMap) Resolve(path string) (string, bool) {
 			}
 		}
 	}
-	return path, false
+	return path + query, false
 }
 
 func (m ImportMap) toAbsPath(path string) string {

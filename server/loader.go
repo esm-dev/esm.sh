@@ -21,7 +21,7 @@ type LoaderOutput struct {
 	Error string `json:"error"`
 }
 
-func runLoader(npmrc *NpmRC, loaderName string, args []any, mainDependency PackageId, extraDeps ...string) (output *LoaderOutput, err error) {
+func runLoader(npmrc *NpmRC, loaderName string, args []string, mainDependency PackageId, extraDeps ...string) (output *LoaderOutput, err error) {
 	wd := path.Join(npmrc.StoreDir(), mainDependency.String())
 	loaderJsFilename := path.Join(wd, "loader.mjs")
 	if !existsFile(loaderJsFilename) {
@@ -79,7 +79,7 @@ func runLoader(npmrc *NpmRC, loaderName string, args []any, mainDependency Packa
 	return &out, nil
 }
 
-func transformVue(npmrc *NpmRC, importMap common.ImportMap, args ...any) (output *LoaderOutput, err error) {
+func transformVue(npmrc *NpmRC, importMap common.ImportMap, args []string) (output *LoaderOutput, err error) {
 	var vueVersion string
 	vueVersion, err = npmrc.getVueVersion(importMap)
 	if err != nil {
@@ -88,7 +88,7 @@ func transformVue(npmrc *NpmRC, importMap common.ImportMap, args ...any) (output
 	return runLoader(npmrc, "vue", args, PackageId{"@vue/compiler-sfc", vueVersion}, "@esm.sh/vue-loader@1.0.3")
 }
 
-func transformSvelte(npmrc *NpmRC, importMap common.ImportMap, args ...any) (output *LoaderOutput, err error) {
+func transformSvelte(npmrc *NpmRC, importMap common.ImportMap, args []string) (output *LoaderOutput, err error) {
 	var svelteVersion string
 	svelteVersion, err = npmrc.getSvelteVersion(importMap)
 	if err != nil {
@@ -97,6 +97,6 @@ func transformSvelte(npmrc *NpmRC, importMap common.ImportMap, args ...any) (out
 	return runLoader(npmrc, "svelte", args, PackageId{"svelte", svelteVersion})
 }
 
-func generateUnoCSS(npmrc *NpmRC, args ...any) (output *LoaderOutput, err error) {
+func generateUnoCSS(npmrc *NpmRC, args []string) (output *LoaderOutput, err error) {
 	return runLoader(npmrc, "unocss", args, PackageId{"@esm.sh/unocss", "0.2.1"}, "@iconify/json@2.2.269")
 }
