@@ -204,18 +204,6 @@ func concatBytes(a, b []byte) []byte {
 	return c
 }
 
-// appendQueryString appends a query string to the given url.
-func appendQueryString(url string, key string, value string) string {
-	q := key
-	if value != "" {
-		q += "=" + value
-	}
-	if strings.ContainsRune(url, '?') {
-		return url + "&" + q
-	}
-	return url + "?" + q
-}
-
 // run executes the given command and returns the output.
 func run(cmd string, args ...string) (output []byte, err error) {
 	var outBuf bytes.Buffer

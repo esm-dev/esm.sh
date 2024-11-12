@@ -154,17 +154,6 @@ func routes(debug bool) rex.Handle {
 					return output
 				}
 
-				var npmrc *NpmRC
-				if rc := ctx.R.Header.Get("X-Npmrc"); rc != "" {
-					rc, err := NewNpmRcFromJSON([]byte(rc))
-					if err != nil {
-						return rex.Status(400, "Invalid Npmrc Header")
-					}
-					npmrc = rc
-				} else {
-					npmrc = NewNpmRcFromConfig()
-				}
-
 				importMap := common.ImportMap{Imports: map[string]string{}}
 				if len(options.ImportMap) > 0 {
 					err = json.Unmarshal(options.ImportMap, &importMap)
@@ -173,7 +162,7 @@ func routes(debug bool) rex.Handle {
 					}
 				}
 
-				output, err := transform(npmrc, &ResolvedTransformOptions{
+				output, err := transform(&ResolvedTransformOptions{
 					TransformOptions: options,
 					importMap:        importMap,
 				})
@@ -786,7 +775,7 @@ func routes(debug bool) rex.Handle {
 				if jsx {
 					lang = "jsx"
 				}
-				out, err := transform(npmrc, &ResolvedTransformOptions{
+				out, err := transform(&ResolvedTransformOptions{
 					TransformOptions: TransformOptions{
 						Filename: u.String(),
 						Lang:     lang,

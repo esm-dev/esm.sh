@@ -34,7 +34,7 @@ func RenderMarkdown(md []byte, kind string) (code []byte, err error) {
 	context := parser.NewContext()
 	err = gfm.Convert(md, &unSafeHtmlBuf, parser.WithContext(context))
 	if err != nil {
-		return
+		return nil, fmt.Errorf("failed to convert markdown to HTML: %v", err)
 	}
 	metaData := meta.Get(context)
 	if len(metaData) > 0 {
@@ -54,7 +54,7 @@ func RenderMarkdown(md []byte, kind string) (code []byte, err error) {
 		tt := tokenizer.Next()
 		if tt == html.ErrorToken {
 			if tokenizer.Err() != io.EOF {
-				return nil, fmt.Errorf("failed to transform markdown to jsx component: %v", tokenizer.Err())
+				return nil, fmt.Errorf("failed to transform markdown to %s: %v", kind, tokenizer.Err())
 			}
 			break
 		}

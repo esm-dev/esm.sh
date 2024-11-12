@@ -3,7 +3,6 @@ package server
 import (
 	"encoding/json"
 	"errors"
-	"net/url"
 	"strings"
 
 	"github.com/esm-dev/esm.sh/server/common"
@@ -33,7 +32,7 @@ type TransformOutput struct {
 	Map  string `json:"map"`
 }
 
-func transform(npmrc *NpmRC, options *ResolvedTransformOptions) (out TransformOutput, err error) {
+func transform(options *ResolvedTransformOptions) (out *TransformOutput, err error) {
 	target := esbuild.ESNext
 	if options.Target != "" {
 		if t, ok := targets[options.Target]; ok {
@@ -54,6 +53,8 @@ func transform(npmrc *NpmRC, options *ResolvedTransformOptions) (out TransformOu
 		_, options.Lang = utils.SplitByLastByte(basename, '.')
 	}
 	switch options.Lang {
+	case "js":
+		loader = esbuild.LoaderJS
 	case "jsx":
 		loader = esbuild.LoaderJSX
 	case "ts":
@@ -62,26 +63,9 @@ func transform(npmrc *NpmRC, options *ResolvedTransformOptions) (out TransformOu
 		loader = esbuild.LoaderTSX
 	case "css":
 		loader = esbuild.LoaderCSS
-	case "vue":
-		o, e := transformVue(npmrc, options.importMap, []string{options.Filename, options.Code})
-		if e != nil {
-			log.Error("failed to transform vue:", e)
-			err = errors.New("failed to transform vue")
-			return
-		}
-		sourceCode = o.Code
-		if o.Lang == "ts" {
-			loader = esbuild.LoaderTS
-		}
-	case "svelte":
-		o, e := transformSvelte(npmrc, options.importMap, []string{options.Filename, options.Code})
-		if e != nil {
-			log.Error("failed to transform svelte:", e)
-			err = errors.New("failed to transform svelte")
-			return
-		}
-		sourceCode = o.Code
-	case "md":
+	default:
+		err = errors.New("unsupported language:" + options.Lang)
+		return
 	}
 
 	if jsxImportSource == "" && (loader == esbuild.LoaderJSX || loader == esbuild.LoaderTSX) {
@@ -133,31 +117,7 @@ func transform(npmrc *NpmRC, options *ResolvedTransformOptions) (out TransformOu
 				Setup: func(build esbuild.PluginBuild) {
 					build.OnResolve(esbuild.OnResolveOptions{Filter: ".*"}, func(args esbuild.OnResolveArgs) (esbuild.OnResolveResult, error) {
 						path, _ := options.importMap.Resolve(args.Path)
-						if strings.HasSuffix(path, ".css") {
-							path += "?module"
-						}
-						if isHttpSepcifier(path) && isHttpSepcifier(options.Filename) {
-							orig, e1 := url.Parse(options.Filename)
-							u, e2 := url.Parse(path)
-							if e1 == nil && e2 == nil && u.Scheme == orig.Scheme && u.Host == orig.Host {
-								if strings.HasPrefix(u.Path, ".css") {
-									path = appendQueryString(path, "module", "")
-								} else if endsWith(u.Path, esExts...) || endsWith(u.Path, ".vue", ".svelet", ".md") {
-									if !strings.HasPrefix(u.Path, ".md") || endsWith(path, "?jsx", "?svelte", "?vue") {
-										if options.importMap.Src != "" {
-											path = appendQueryString(path, "im", btoaUrl(options.importMap.Src))
-										}
-										if options.globalVersion != "" {
-											path = appendQueryString(path, "v", options.globalVersion)
-										}
-									}
-								}
-							}
-						}
-						return esbuild.OnResolveResult{
-							Path:     path,
-							External: true,
-						}, nil
+						return esbuild.OnResolveResult{Path: path, External: true}, nil
 					})
 				},
 			},
@@ -172,6 +132,7 @@ func transform(npmrc *NpmRC, options *ResolvedTransformOptions) (out TransformOu
 		err = errors.New("failed to validate code: no output files")
 		return
 	}
+	out = &TransformOutput{}
 	for _, file := range ret.OutputFiles {
 		if strings.HasSuffix(file.Path, ".js") || strings.HasSuffix(file.Path, ".css") {
 			out.Code = string(file.Contents)
