@@ -195,7 +195,7 @@ func transformDTS(ctx *BuildContext, dts string, buildArgsPrefix string, marker 
 			external: NewStringSet(),
 			exports:  NewStringSet(),
 		}
-		b := NewBuildContext(ctx.zoneId, ctx.npmrc, dtsModule, args, "types", BundleFalse, false, false, false)
+		b := NewBuildContext(ctx.zoneId, ctx.npmrc, dtsModule, args, "types", BundleFalse, false)
 		err = b.install()
 		if err != nil {
 			return "", err

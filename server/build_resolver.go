@@ -753,7 +753,6 @@ func (ctx *BuildContext) resolveExternalModule(specifier string, kind api.Resolv
 				args:        ctx.args,
 				target:      ctx.target,
 				dev:         ctx.dev,
-				sourceMap:   ctx.sourceMap,
 				wd:          ctx.wd,
 				pkgDir:      ctx.pkgDir,
 				pnpmPkgDir:  ctx.pnpmPkgDir,
@@ -990,7 +989,7 @@ func (ctx *BuildContext) resloveDTS(entry BuildEntry) (string, error) {
 					SubPath:     ctx.esm.SubPath,
 					SubBareName: ctx.esm.SubBareName,
 				}
-				b := NewBuildContext(ctx.zoneId, ctx.npmrc, dtsModule, ctx.args, "types", BundleFalse, false, false, false)
+				b := NewBuildContext(ctx.zoneId, ctx.npmrc, dtsModule, ctx.args, "types", BundleFalse, false)
 				err := b.install()
 				if err != nil {
 					if strings.Contains(err.Error(), "ERR_PNPM_NO_MATCHING_VERSION") {

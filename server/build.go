@@ -36,8 +36,6 @@ type BuildContext struct {
 	bundleMode  BundleMode
 	target      string
 	dev         bool
-	sourceMap   bool
-	minify      bool
 	wd          string
 	pkgDir      string
 	pnpmPkgDir  string
@@ -84,7 +82,7 @@ var loaders = map[string]api.Loader{
 	".woff2": api.LoaderDataURL,
 }
 
-func NewBuildContext(zoneId string, npmrc *NpmRC, esm ESMPath, args BuildArgs, target string, bundleMode BundleMode, dev bool, sourceMap bool, minify bool) *BuildContext {
+func NewBuildContext(zoneId string, npmrc *NpmRC, esm ESMPath, args BuildArgs, target string, bundleMode BundleMode, dev bool) *BuildContext {
 	return &BuildContext{
 		zoneId:     zoneId,
 		npmrc:      npmrc,
@@ -92,8 +90,6 @@ func NewBuildContext(zoneId string, npmrc *NpmRC, esm ESMPath, args BuildArgs, t
 		args:       args,
 		target:     target,
 		dev:        dev,
-		sourceMap:  sourceMap,
-		minify:     minify,
 		bundleMode: bundleMode,
 		subBuilds:  NewStringSet(),
 	}
@@ -244,7 +240,7 @@ func (ctx *BuildContext) buildModule() (result *BuildMeta, err error) {
 			return
 		}
 		// create a new build context to check if the reexported module has default export
-		b := NewBuildContext(ctx.zoneId, ctx.npmrc, mod, ctx.args, ctx.target, BundleFalse, ctx.dev, false, false)
+		b := NewBuildContext(ctx.zoneId, ctx.npmrc, mod, ctx.args, ctx.target, BundleFalse, ctx.dev)
 		err = b.install()
 		if err != nil {
 			return
@@ -922,9 +918,9 @@ func (ctx *BuildContext) buildModule() (result *BuildMeta, err error) {
 		Format:            api.FormatESModule,
 		Target:            targets[ctx.target],
 		Platform:          api.PlatformBrowser,
-		MinifyWhitespace:  ctx.minify,
-		MinifyIdentifiers: ctx.minify,
-		MinifySyntax:      ctx.minify,
+		MinifyWhitespace:  config.Minify,
+		MinifyIdentifiers: config.Minify,
+		MinifySyntax:      config.Minify,
 		KeepNames:         ctx.args.keepNames,         // prevent class/function names erasing
 		IgnoreAnnotations: ctx.args.ignoreAnnotations, // some libs maybe use wrong side-effect annotations
 		Conditions:        conditions,
@@ -940,7 +936,7 @@ func (ctx *BuildContext) buildModule() (result *BuildMeta, err error) {
 	if ctx.target == "node" {
 		options.Platform = api.PlatformNode
 	}
-	if ctx.sourceMap {
+	if config.SourceMap {
 		options.Sourcemap = api.SourceMapExternal
 	}
 	if !ctx.isDenoTarget() {
@@ -1159,7 +1155,7 @@ rebuild:
 							if pkgJson.Type == "module" || pkgJson.Module != "" {
 								isEsModule[i] = true
 							} else {
-								b := NewBuildContext(ctx.zoneId, ctx.npmrc, esm, ctx.args, ctx.target, BundleFalse, ctx.dev, false, false)
+								b := NewBuildContext(ctx.zoneId, ctx.npmrc, esm, ctx.args, ctx.target, BundleFalse, ctx.dev)
 								err = b.install()
 								if err == nil {
 									entry := b.resolveEntry(esm)
@@ -1206,7 +1202,7 @@ rebuild:
 			}
 
 			// add sourcemap Url
-			if ctx.sourceMap && !dropSourceMap {
+			if config.SourceMap && !dropSourceMap {
 				finalContent.WriteString("//# sourceMappingURL=")
 				finalContent.WriteString(path.Base(ctx.Pathname()))
 				finalContent.WriteString(".map")
@@ -1227,7 +1223,7 @@ rebuild:
 				return
 			}
 			result.CSS = true
-		} else if ctx.sourceMap && strings.HasSuffix(file.Path, ".js.map") {
+		} else if config.SourceMap && strings.HasSuffix(file.Path, ".js.map") {
 			var sourceMap map[string]interface{}
 			if json.Unmarshal(file.Contents, &sourceMap) == nil {
 				if mapping, ok := sourceMap["mappings"].(string); ok {

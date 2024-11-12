@@ -131,7 +131,7 @@ func Serve(efs EmbedFS) {
 			AllowCredentials: false,
 		}),
 		rex.Header("Server", "esm.sh"),
-		rex.Optional(rex.Compress(), string(config.Compress) != "false"),
+		rex.Optional(rex.Compress(), config.Compress),
 		auth(config.AuthSecret),
 		routes(debug),
 	)

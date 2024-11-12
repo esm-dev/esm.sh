@@ -80,7 +80,7 @@ Deno.test("transform", async (t) => {
   // wait for the server(8083) to ready
   await new Promise((resolve) => setTimeout(resolve, 100));
 
-  await t.step("transform remote module: vanilla", async () => {
+  await t.step("transform http module: vanilla", async () => {
     const im = btoaUrl("/vanilla/");
     const res = await fetch(`http://localhost:8080/http://localhost:8083/vanilla/app/main.ts?im=${im}`);
     assertEquals(res.status, 200);
@@ -93,7 +93,7 @@ Deno.test("transform", async (t) => {
     assertStringIncludes(js, 'globalThis.document.head.insertAdjacentHTML("beforeend",`<style>*{margin:0;padding:0;box-sizing:border-box}');
   });
 
-  await t.step("transform remote module: react", async () => {
+  await t.step("transform http module: react", async () => {
     const im = btoaUrl("/react/");
     const res = await fetch(`http://localhost:8080/http://localhost:8083/react/app/main.tsx?im=${im}`);
     assertEquals(res.status, 200);
@@ -106,7 +106,7 @@ Deno.test("transform", async (t) => {
     assertStringIncludes(js, '("h1",{style:{color:"#61DAFB"},children:"esm.sh"})');
   });
 
-  await t.step("transform remote module: preact", async () => {
+  await t.step("transform http module: preact", async () => {
     const im = btoaUrl("/preact/");
     const res = await fetch(`http://localhost:8080/http://localhost:8083/preact/app/main.tsx?im=${im}`);
     assertEquals(res.status, 200);
@@ -119,7 +119,7 @@ Deno.test("transform", async (t) => {
     assertStringIncludes(js, '("h1",{style:{color:"#673AB8"},children:"esm.sh"})');
   });
 
-  await t.step("transform remote module: vue", async () => {
+  await t.step("transform http module: vue", async () => {
     const im = btoaUrl("/vue/");
     const res = await fetch(`http://localhost:8080/http://localhost:8083/vue/app/main.ts?im=${im}`);
     assertEquals(res.status, 200);
@@ -136,7 +136,7 @@ Deno.test("transform", async (t) => {
     assertStringIncludes(js, '("svg",');
   });
 
-  await t.step("transform remote module: svelte", async () => {
+  await t.step("transform http module: svelte", async () => {
     const im = btoaUrl("/svelte/");
     const res = await fetch(`http://localhost:8080/http://localhost:8083/svelte/app/main.ts?im=${im}`);
     assertEquals(res.status, 200);
@@ -149,6 +149,23 @@ Deno.test("transform", async (t) => {
     assertStringIncludes(js, "color:#ff4000;");
     assertStringIncludes(js, 'globalThis.document.head.insertAdjacentHTML("beforeend",`<style>*{margin:0;padding:0;box-sizing:border-box}');
     assertStringIncludes(js, ">esm.sh</h1>");
+  });
+
+  await t.step("transform http module: markdown", async () => {
+    {
+      const im = btoaUrl("/with-markdown/vanilla/");
+      const res = await fetch(`http://localhost:8080/http://localhost:8083/with-markdown/vanilla/app/main.ts?im=${im}`);
+      assertEquals(res.status, 200);
+      assertEquals(res.headers.get("Content-Type"), "application/javascript; charset=utf-8");
+      assertEquals(res.headers.get("cache-control"), "public, max-age=31536000, immutable");
+      assertStringIncludes(res.headers.get("Vary")!, "User-Agent");
+      const js = await res.text();
+      assertStringIncludes(js, `h1 id="esmsh">esm.sh</h1>`);
+      assertStringIncludes(
+        js,
+        'globalThis.document.head.insertAdjacentHTML("beforeend",`<style>*{margin:0;padding:0;box-sizing:border-box}',
+      );
+    }
   });
 
   await t.step("generate unocss", async () => {

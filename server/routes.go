@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"github.com/Masterminds/semver/v3"
+	"github.com/esm-dev/esm.sh/server/common"
 	"github.com/esm-dev/esm.sh/server/storage"
 	esbuild "github.com/evanw/esbuild/pkg/api"
 	"github.com/ije/gox/crypto/rs"
@@ -164,7 +165,7 @@ func routes(debug bool) rex.Handle {
 					npmrc = NewNpmRcFromConfig()
 				}
 
-				importMap := ImportMap{Imports: map[string]string{}}
+				importMap := common.ImportMap{Imports: map[string]string{}}
 				if len(options.ImportMap) > 0 {
 					err = json.Unmarshal(options.ImportMap, &importMap)
 					if err != nil {
@@ -542,9 +543,9 @@ func routes(debug bool) rex.Handle {
 				}
 				tokenizer := html.NewTokenizer(io.LimitReader(res.Body, 2*MB))
 				configCSS := ""
-				input := []string{}
+				content := []string{}
 				jsEntries := map[string]struct{}{}
-				importMap := ImportMap{}
+				importMap := common.ImportMap{}
 				for {
 					tt := tokenizer.Next()
 					if tt == html.ErrorToken {
@@ -593,7 +594,7 @@ func routes(debug bool) rex.Handle {
 							} else if srcAttr == "" {
 								// inline script content
 								tokenizer.Next()
-								input = append(input, string(tokenizer.Text()))
+								content = append(content, string(tokenizer.Text()))
 							} else {
 								if mainAttr != "" && isHttpSepcifier(srcAttr) {
 									if !isHttpSepcifier(mainAttr) && endsWith(mainAttr, esExts...) {
@@ -606,7 +607,7 @@ func routes(debug bool) rex.Handle {
 						case "link", "meta", "title", "base", "head", "noscript", "slot", "template", "option":
 							// ignore
 						default:
-							input = append(input, string(tokenizer.Raw()))
+							content = append(content, string(tokenizer.Raw()))
 						}
 					}
 				}
@@ -637,30 +638,34 @@ func routes(debug bool) rex.Handle {
 				}
 				for src := range jsEntries {
 					url := ctxUrl.ResolveReference(&url.URL{Path: src})
-					_, _, tree, err := bundleRemoteModule(npmrc, url.String(), importMap, true)
+					_, _, _, tree, err := bundleHttpModule(npmrc, url.String(), importMap, true)
 					if err == nil {
 						for _, code := range tree {
-							input = append(input, string(code))
+							content = append(content, string(code))
 						}
 					}
 				}
-				out, err := transform(npmrc, &ResolvedTransformOptions{
-					TransformOptions: TransformOptions{
-						Lang:   "css",
-						Target: target,
-						Minify: true,
-					},
-					unocss: UnoCSSGenerateOptions{
-						generate:  true,
-						configCSS: configCSS,
-						content:   input,
-					},
-				})
+				out, err := generateUnoCSS(npmrc, configCSS, content)
 				if err != nil {
 					return rex.Status(500, "Failed to generate uno.css")
 				}
-				body = bytes.NewReader([]byte(out.Code))
-				go esmStorage.Put(savePath, strings.NewReader(out.Code))
+				ret := esbuild.Build(esbuild.BuildOptions{
+					Stdin: &esbuild.StdinOptions{
+						Sourcefile: "uno.css",
+						Contents:   out.Code,
+						Loader:     esbuild.LoaderCSS,
+					},
+					Write:            false,
+					MinifyWhitespace: config.Minify,
+					MinifySyntax:     config.Minify,
+					Target:           targets[target],
+				})
+				if len(ret.Errors) > 0 {
+					return rex.Status(500, ret.Errors[0].Text)
+				}
+				css := ret.OutputFiles[0].Contents
+				body = bytes.NewReader(css)
+				go esmStorage.Put(savePath, bytes.NewReader(css))
 			}
 			ctx.SetHeader("Cache-Control", ccImmutable)
 			ctx.SetHeader("Content-Type", ctCSS)
@@ -717,7 +722,7 @@ func routes(debug bool) rex.Handle {
 			}
 			var body io.Reader = content
 			if err == storage.ErrNotFound {
-				importMap := ImportMap{}
+				importMap := common.ImportMap{}
 				if len(im) > 0 {
 					imPath, err := atobUrl(im)
 					if err != nil {
@@ -769,7 +774,7 @@ func routes(debug bool) rex.Handle {
 						}
 					}
 				}
-				js, css, _, err := bundleRemoteModule(npmrc, urlRaw, importMap, false)
+				js, jsx, css, _, err := bundleHttpModule(npmrc, urlRaw, importMap, false)
 				if err != nil {
 					return rex.Status(500, "Failed to build module: "+err.Error())
 				}
@@ -777,9 +782,14 @@ func routes(debug bool) rex.Handle {
 				if len(css) > 0 {
 					code += fmt.Sprintf(`globalThis.document.head.insertAdjacentHTML("beforeend","<style>"+%s+"</style>")`, utils.MustEncodeJSON(string(css)))
 				}
+				lang := "js"
+				if jsx {
+					lang = "jsx"
+				}
 				out, err := transform(npmrc, &ResolvedTransformOptions{
 					TransformOptions: TransformOptions{
 						Filename: u.String(),
+						Lang:     lang,
 						Code:     code,
 						Target:   target,
 						Minify:   true,
@@ -1322,7 +1332,7 @@ func routes(debug bool) rex.Handle {
 				if err != storage.ErrNotFound {
 					return rex.Status(500, err.Error())
 				}
-				buildCtx := NewBuildContext(zoneId, npmrc, esm, buildArgs, "types", BundleDefault, false, false, false)
+				buildCtx := NewBuildContext(zoneId, npmrc, esm, buildArgs, "types", BundleDefault, false)
 				c := buildQueue.Add(buildCtx, ctx.RemoteIP())
 				select {
 				case output := <-c.C:
@@ -1432,7 +1442,7 @@ func routes(debug bool) rex.Handle {
 			}
 		}
 
-		buildCtx := NewBuildContext(zoneId, npmrc, esm, buildArgs, target, bundleMode, isDev, string(config.SourceMap) != "false", string(config.Minify) != "false")
+		buildCtx := NewBuildContext(zoneId, npmrc, esm, buildArgs, target, bundleMode, isDev)
 		ret, err := buildCtx.Query()
 		if err != nil {
 			return throwErrorJS(ctx, err.Error(), false)

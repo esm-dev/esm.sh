@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/Masterminds/semver/v3"
+	"github.com/esm-dev/esm.sh/server/common"
 	"github.com/ije/gox/utils"
 	"github.com/ije/gox/valid"
 )
@@ -643,7 +644,7 @@ func (rc *NpmRC) createDotNpmRcFile(dir string) error {
 	return os.WriteFile(path.Join(dir, ".npmrc"), buf.Bytes(), 0644)
 }
 
-func (npmrc *NpmRC) getSvelteVersion(importMap ImportMap) (svelteVersion string, err error) {
+func (npmrc *NpmRC) getSvelteVersion(importMap common.ImportMap) (svelteVersion string, err error) {
 	svelteVersion = "5"
 	if len(importMap.Imports) > 0 {
 		sveltePath, ok := importMap.Imports["svelte"]
@@ -668,7 +669,7 @@ func (npmrc *NpmRC) getSvelteVersion(importMap ImportMap) (svelteVersion string,
 	return
 }
 
-func (npmrc *NpmRC) getVueVersion(importMap ImportMap) (vueVersion string, err error) {
+func (npmrc *NpmRC) getVueVersion(importMap common.ImportMap) (vueVersion string, err error) {
 	vueVersion = "3"
 	if len(importMap.Imports) > 0 {
 		vuePath, ok := importMap.Imports["vue"]

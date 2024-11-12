@@ -8,6 +8,7 @@ import (
 	"path"
 	"strings"
 
+	"github.com/esm-dev/esm.sh/server/common"
 	esbuild "github.com/evanw/esbuild/pkg/api"
 	esbuild_config "github.com/ije/esbuild-internal/config"
 	"github.com/ije/esbuild-internal/js_ast"
@@ -85,10 +86,10 @@ func minify(code string, target esbuild.Target, loader esbuild.Loader) ([]byte, 
 	return concatBytes(ret.LegalComments, ret.Code), nil
 }
 
-// bundleRemoteModule builds the remote module and it's submodules.
-func bundleRemoteModule(npmrc *NpmRC, entry string, importMap ImportMap, collectDependencies bool) (js []byte, css []byte, dependencyTree map[string][]byte, err error) {
+// bundleHttpModule builds the http module and it's submodules.
+func bundleHttpModule(npmrc *NpmRC, entry string, importMap common.ImportMap, collectDependencies bool) (js []byte, jsx bool, css []byte, dependencyTree map[string][]byte, err error) {
 	if !isHttpSepcifier(entry) {
-		err = errors.New("require a remote module")
+		err = errors.New("require a http module")
 		return
 	}
 	entryUrl, err := url.Parse(entry)
@@ -122,7 +123,7 @@ func bundleRemoteModule(npmrc *NpmRC, entry string, importMap ImportMap, collect
 							u, e := url.Parse(path)
 							if e == nil {
 								if u.Scheme == entryUrl.Scheme && u.Host == entryUrl.Host {
-									if (endsWith(u.Path, esExts...) || endsWith(u.Path, ".css", ".json", ".vue", ".svelte", ".md", ".markdown")) && !u.Query().Has("url") {
+									if (endsWith(u.Path, esExts...) || endsWith(u.Path, ".css", ".json", ".vue", ".svelte", ".md")) && !u.Query().Has("url") {
 										return esbuild.OnResolveResult{Path: path, Namespace: "http"}, nil
 									} else {
 										return esbuild.OnResolveResult{Path: path, Namespace: "url"}, nil
@@ -165,21 +166,23 @@ func bundleRemoteModule(npmrc *NpmRC, entry string, importMap ImportMap, collect
 						case ".ts", ".mts", ".cts":
 							loader = esbuild.LoaderTS
 						case ".jsx":
+							jsx = true
 							loader = esbuild.LoaderJSX
 						case ".tsx":
+							jsx = true
 							loader = esbuild.LoaderTSX
 						case ".css":
 							loader = esbuild.LoaderCSS
 						case ".json":
 							loader = esbuild.LoaderJSON
+						case ".svelte":
+							ret, err := transformSvelte(npmrc, importMap, args.Path, code)
+							if err != nil {
+								return esbuild.OnLoadResult{}, err
+							}
+							code = ret.Code
 						case ".vue":
-							ret, err := transformVue(npmrc, &ResolvedTransformOptions{
-								TransformOptions: TransformOptions{
-									Filename: args.Path,
-									Code:     code,
-								},
-								importMap: importMap,
-							})
+							ret, err := transformVue(npmrc, importMap, args.Path, code)
 							if err != nil {
 								return esbuild.OnLoadResult{}, err
 							}
@@ -187,20 +190,42 @@ func bundleRemoteModule(npmrc *NpmRC, entry string, importMap ImportMap, collect
 							if ret.Lang == "ts" {
 								loader = esbuild.LoaderTS
 							}
-						case ".svelte":
-							ret, err := transformSvelte(npmrc, &ResolvedTransformOptions{
-								TransformOptions: TransformOptions{
-									Filename: args.Path,
-									Code:     code,
-								},
-								importMap: importMap,
-							})
-							if err != nil {
-								return esbuild.OnLoadResult{}, err
+						case ".md":
+							query := url.Query()
+							if query.Has("jsx") {
+								jsx, err := common.RenderMarkdown([]byte(code), "jsx")
+								if err != nil {
+									return esbuild.OnLoadResult{}, err
+								}
+								code = string(jsx)
+								loader = esbuild.LoaderJSX
+							} else if query.Has("svelte") {
+								svelteCode, err := common.RenderMarkdown([]byte(code), "svelte")
+								if err != nil {
+									return esbuild.OnLoadResult{}, err
+								}
+								ret, err := transformSvelte(npmrc, importMap, args.Path, svelteCode)
+								if err != nil {
+									return esbuild.OnLoadResult{}, err
+								}
+								code = ret.Code
+							} else if query.Has("vue") {
+								vueCode, err := common.RenderMarkdown([]byte(code), "vue")
+								if err != nil {
+									return esbuild.OnLoadResult{}, err
+								}
+								ret, err := transformVue(npmrc, importMap, args.Path, vueCode)
+								if err != nil {
+									return esbuild.OnLoadResult{}, err
+								}
+								code = ret.Code
+							} else {
+								js, err := common.RenderMarkdown([]byte(code), "js")
+								if err != nil {
+									return esbuild.OnLoadResult{}, err
+								}
+								code = string(js)
 							}
-							code = ret.Code
-						case ".md", ".markdown":
-							// TODO: transform markdown to js
 						}
 						return esbuild.OnLoadResult{Contents: &code, Loader: loader}, nil
 					})

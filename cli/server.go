@@ -16,15 +16,12 @@ import (
 	"sync"
 	"time"
 
+	"github.com/esm-dev/esm.sh/server/common"
 	esbuild "github.com/evanw/esbuild/pkg/api"
 	"github.com/gorilla/websocket"
 	"github.com/ije/esbuild-internal/xxhash"
 	"github.com/ije/gox/term"
 	"github.com/ije/gox/utils"
-	"github.com/yuin/goldmark"
-	meta "github.com/yuin/goldmark-meta"
-	"github.com/yuin/goldmark/extension"
-	"github.com/yuin/goldmark/parser"
 	"golang.org/x/net/html"
 )
 
@@ -36,7 +33,6 @@ type DevServer struct {
 	rwlock    sync.RWMutex
 	lock      sync.RWMutex
 	loadCache sync.Map
-	gfm       goldmark.Markdown
 }
 
 func (d *DevServer) ServeHtml(w http.ResponseWriter, r *http.Request, pathname string) {
@@ -198,7 +194,7 @@ func (d *DevServer) ServeModule(w http.ResponseWriter, r *http.Request, pathname
 		return
 	}
 	defer imHtmlFile.Close()
-	var importMap ImportMap
+	var importMap common.ImportMap
 	tokenizer := html.NewTokenizer(imHtmlFile)
 	for {
 		tt := tokenizer.Next()
@@ -297,7 +293,7 @@ func (d *DevServer) ServeModule(w http.ResponseWriter, r *http.Request, pathname
 	}
 	_, js, err := loader.Load("module", args)
 	if err != nil {
-		fmt.Println(term.Red(err.Error()))
+		fmt.Println(term.Red("[loader] " + err.Error()))
 		http.Error(w, "Internal Server Error", 500)
 		return
 	}
@@ -371,7 +367,7 @@ func (d *DevServer) ServeUnoCSS(w http.ResponseWriter, r *http.Request) {
 	configFilename := ""
 	content := []string{}
 	jsEntries := map[string]struct{}{}
-	importMap := ImportMap{}
+	importMap := common.ImportMap{}
 	tokenizer := html.NewTokenizer(imHtmlFile)
 	for {
 		tt := tokenizer.Next()
@@ -592,7 +588,7 @@ func (d *DevServer) ServeHmrWS(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func (d *DevServer) analyzeDependencyTree(entry string, importMap ImportMap) (tree map[string][]byte, err error) {
+func (d *DevServer) analyzeDependencyTree(entry string, importMap common.ImportMap) (tree map[string][]byte, err error) {
 	tree = make(map[string][]byte)
 	ret := esbuild.Build(esbuild.BuildOptions{
 		EntryPoints:      []string{entry},
@@ -801,93 +797,55 @@ func (d *DevServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			}
 			if extname == ".md" {
 				if !query.Has("raw") {
-					if d.gfm == nil {
-						d.initGFM()
-					}
-					etag := fmt.Sprintf("w/\"%d-%d-%d\"", fi.ModTime().UnixMilli(), fi.Size(), VERSION)
-					if r.Header.Get("If-None-Match") == etag && !query.Has("t") {
-						w.WriteHeader(http.StatusNotModified)
-						return
-					}
 					markdown, err := os.ReadFile(filename)
 					if err != nil {
 						http.Error(w, "Internal Server Error", 500)
 						return
 					}
-					header := w.Header()
-					header.Set("Content-Type", "application/javascript; charset=utf-8")
-					var buf bytes.Buffer
-					context := parser.NewContext()
-					if err := d.gfm.Convert(markdown, &buf, parser.WithContext(context)); err != nil {
-						w.WriteHeader(500)
-						fmt.Fprintf(w, "throw new Error(\"Failed to parse markdown:\" + %s); export default null;", utils.MustEncodeJSON(err.Error()))
-						return
-					}
-					if !query.Has("t") {
-						header.Set("Cache-Control", "max-age=0, must-revalidate")
-						header.Set("Etag", etag)
-					}
-					metaData := meta.Get(context)
 					if query.Has("jsx") {
-						tokenizer := html.NewTokenizer(&buf)
-						jsxBuf := bytes.NewBuffer([]byte("export default function Markdown() { return <>"))
-						for {
-							tt := tokenizer.Next()
-							if tt == html.ErrorToken {
-								if tokenizer.Err() != io.EOF {
-									w.WriteHeader(500)
-									fmt.Fprintf(w, "throw new Error(\"Failed to transform markdown to jsx component: %v\");xport default null;", tokenizer.Err())
-									return
-								}
-								break
-							}
-							tagName, _ := tokenizer.TagName()
-							switch string(tagName) {
-							case "area", "base", "br", "col", "embed", "hr", "img", "input", "keygen", "link", "meta", "param", "source", "track", "wbr":
-								if tt == html.StartTagToken {
-									jsxBuf.WriteByte('<')
-									jsxBuf.Write(tagName)
-									jsxBuf.WriteByte('/')
-									jsxBuf.WriteByte('>')
-								} else {
-									jsxBuf.Write(tokenizer.Raw())
-								}
-							case "script", "style":
-								// ignore script tag
-							default:
-								jsxBuf.Write(tokenizer.Raw())
-							}
-						}
-						jsxBuf.WriteString("</>}")
-						d.ServeModule(w, r, pathname+"?jsx", jsxBuf.Bytes())
-						return
-					} else if query.Has("svelte") {
-						d.ServeModule(w, r, pathname+"?svelte", buf.Bytes())
-						return
-					} else if query.Has("vue") {
-						vueBuf := bytes.NewBuffer([]byte("<template>"))
-						buf.WriteTo(vueBuf)
-						vueBuf.WriteString("</template>")
-						d.ServeModule(w, r, pathname+"?vue", vueBuf.Bytes())
-						return
-					}
-					if len(metaData) > 0 {
-						j, err := json.Marshal(metaData)
+						jsxCode, err := common.RenderMarkdown(markdown, "jsx")
 						if err != nil {
-							w.Write([]byte("console.warn('Failed to serialize metadata');"))
-							w.Write([]byte("export const meta = {};"))
-						} else {
-							w.Write([]byte("export const meta = "))
-							w.Write(j)
-							w.Write([]byte{';'})
+							http.Error(w, "Failed to render markdown to jsx", 500)
+							return
 						}
+						d.ServeModule(w, r, pathname+"?jsx", jsxCode)
+					} else if query.Has("svelte") {
+						svelteCode, err := common.RenderMarkdown(markdown, "svelte")
+						if err != nil {
+							http.Error(w, "Failed to render markdown to svelte component", 500)
+							return
+						}
+						d.ServeModule(w, r, pathname+"?svelte", svelteCode)
+					} else if query.Has("vue") {
+						vueCode, err := common.RenderMarkdown(markdown, "vue")
+						if err != nil {
+							http.Error(w, "Failed to render markdown to vue component", 500)
+							return
+						}
+						d.ServeModule(w, r, pathname+"?vue", vueCode)
 					} else {
-						w.Write([]byte("export const meta = {};"))
+						js, err := common.RenderMarkdown(markdown, "js")
+						if err != nil {
+							http.Error(w, "Failed to render markdown", 500)
+							return
+						}
+						etag := fmt.Sprintf("w/\"%d-%d-%d\"", fi.ModTime().UnixMilli(), fi.Size(), VERSION)
+						if r.Header.Get("If-None-Match") == etag && !query.Has("t") {
+							w.WriteHeader(http.StatusNotModified)
+							return
+						}
+						if r.Header.Get("If-None-Match") == etag && !query.Has("t") {
+							w.WriteHeader(http.StatusNotModified)
+							return
+						}
+						header := w.Header()
+						header.Set("Content-Type", "application/javascript; charset=utf-8")
+						if !query.Has("t") {
+							header.Set("Cache-Control", "max-age=0, must-revalidate")
+							header.Set("Etag", etag)
+						}
+						w.Write(js)
 					}
-					w.Write([]byte("export const html = "))
-					json.NewEncoder(w).Encode(buf.String())
-					w.Write([]byte{';'})
-					w.Write([]byte("export default html;"))
 					return
 				}
 			}
@@ -915,21 +873,6 @@ func (d *DevServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			io.Copy(w, file)
 		}
 	}
-}
-
-func (d *DevServer) initGFM() {
-	d.lock.Lock()
-	defer d.lock.Unlock()
-
-	d.gfm = goldmark.New(
-		goldmark.WithExtensions(
-			extension.GFM,
-			meta.New(meta.WithStoresInDocument()),
-		),
-		goldmark.WithParserOptions(
-			parser.WithAutoHeadingID(),
-		),
-	)
 }
 
 func (d *DevServer) getLoader() (loader *LoaderWorker, err error) {

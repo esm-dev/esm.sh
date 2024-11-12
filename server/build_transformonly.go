@@ -6,6 +6,7 @@ import (
 	"net/url"
 	"strings"
 
+	"github.com/esm-dev/esm.sh/server/common"
 	esbuild "github.com/evanw/esbuild/pkg/api"
 	"github.com/ije/gox/utils"
 )
@@ -23,15 +24,8 @@ type TransformOptions struct {
 
 type ResolvedTransformOptions struct {
 	TransformOptions
-	unocss        UnoCSSGenerateOptions
-	importMap     ImportMap
+	importMap     common.ImportMap
 	globalVersion string
-}
-
-type UnoCSSGenerateOptions struct {
-	generate  bool
-	configCSS string
-	content   []string
 }
 
 type TransformOutput struct {
@@ -67,18 +61,9 @@ func transform(npmrc *NpmRC, options *ResolvedTransformOptions) (out TransformOu
 	case "tsx":
 		loader = esbuild.LoaderTSX
 	case "css":
-		if options.unocss.generate {
-			o, e := generateUnoCSS(npmrc, options)
-			if e != nil {
-				log.Error("failed to generate uno.css:", e)
-				err = errors.New("failed to generate uno.css")
-				return
-			}
-			sourceCode = o.Code
-		}
 		loader = esbuild.LoaderCSS
 	case "vue":
-		o, e := transformVue(npmrc, options)
+		o, e := transformVue(npmrc, options.importMap, options.Filename, options.Code)
 		if e != nil {
 			log.Error("failed to transform vue:", e)
 			err = errors.New("failed to transform vue")
@@ -89,13 +74,14 @@ func transform(npmrc *NpmRC, options *ResolvedTransformOptions) (out TransformOu
 			loader = esbuild.LoaderTS
 		}
 	case "svelte":
-		o, e := transformSvelte(npmrc, options)
+		o, e := transformSvelte(npmrc, options.importMap, options.Filename, options.Code)
 		if e != nil {
 			log.Error("failed to transform svelte:", e)
 			err = errors.New("failed to transform svelte")
 			return
 		}
 		sourceCode = o.Code
+	case "md":
 	}
 
 	if jsxImportSource == "" && (loader == esbuild.LoaderJSX || loader == esbuild.LoaderTSX) {
@@ -151,14 +137,20 @@ func transform(npmrc *NpmRC, options *ResolvedTransformOptions) (out TransformOu
 							path += "?module"
 						}
 						if isHttpSepcifier(path) && isHttpSepcifier(options.Filename) {
-							u1, e1 := url.Parse(path)
-							u2, e2 := url.Parse(options.Filename)
-							if e1 == nil && e2 == nil && u1.Scheme == u2.Scheme && u1.Host == u2.Host {
-								if options.importMap.Src != "" {
-									path = appendQueryString(path, "im", btoaUrl(options.importMap.Src))
-								}
-								if options.globalVersion != "" {
-									path = appendQueryString(path, "v", options.globalVersion)
+							orig, e1 := url.Parse(options.Filename)
+							u, e2 := url.Parse(path)
+							if e1 == nil && e2 == nil && u.Scheme == orig.Scheme && u.Host == orig.Host {
+								if strings.HasPrefix(u.Path, ".css") {
+									path = appendQueryString(path, "module", "")
+								} else if endsWith(u.Path, esExts...) || endsWith(u.Path, ".vue", ".svelet", ".md") {
+									if !strings.HasPrefix(u.Path, ".md") || endsWith(path, "?jsx", "?svelte", "?vue") {
+										if options.importMap.Src != "" {
+											path = appendQueryString(path, "im", btoaUrl(options.importMap.Src))
+										}
+										if options.globalVersion != "" {
+											path = appendQueryString(path, "v", options.globalVersion)
+										}
+									}
 								}
 							}
 						}

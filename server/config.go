@@ -1,6 +1,7 @@
 package server
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -24,9 +25,6 @@ type Config struct {
 	BuildWaitTime    uint16                 `json:"buildWaitTime"`
 	Storage          storage.StorageOptions `json:"storage"`
 	CacheRawFile     bool                   `json:"cacheRawFile"`
-	Minify           json.RawMessage        `json:"minify"`
-	SourceMap        json.RawMessage        `json:"sourceMap"`
-	Compress         json.RawMessage        `json:"compress"`
 	LogDir           string                 `json:"logDir"`
 	LogLevel         string                 `json:"logLevel"`
 	NpmRegistry      string                 `json:"npmRegistry"`
@@ -34,6 +32,12 @@ type Config struct {
 	NpmUser          string                 `json:"npmUser"`
 	NpmPassword      string                 `json:"npmPassword"`
 	NpmRegistries    map[string]NpmRegistry `json:"npmRegistries"`
+	MinifyRaw        json.RawMessage        `json:"minify"`
+	SourceMapRaw     json.RawMessage        `json:"sourceMap"`
+	CompressRaw      json.RawMessage        `json:"compress"`
+	Minify           bool                   `json:"-"`
+	SourceMap        bool                   `json:"-"`
+	Compress         bool                   `json:"-"`
 }
 
 type BanList struct {
@@ -56,32 +60,35 @@ type AllowScope struct {
 }
 
 // LoadConfig loads config from the given file. Panic if failed to load.
-func LoadConfig(filename string) (cfg *Config, err error) {
+func LoadConfig(filename string) (*Config, error) {
 	file, err := os.Open(filename)
 	if err != nil {
 		return nil, fmt.Errorf("fail to read config file: %w", err)
 	}
 	defer file.Close()
 
-	err = json.NewDecoder(file).Decode(&cfg)
+	var c Config
+	err = json.NewDecoder(file).Decode(&c)
 	if err != nil {
 		return nil, fmt.Errorf("fail to parse config: %w", err)
 	}
 
 	// ensure `workDir`
-	if cfg.WorkDir == "" {
+	if c.WorkDir == "" {
 		homeDir, err := os.UserHomeDir()
 		if err != nil {
 			return nil, fmt.Errorf("fail to get current user home directory: %w", err)
 		}
-		cfg.WorkDir = path.Join(homeDir, ".esmd")
+		c.WorkDir = path.Join(homeDir, ".esmd")
 	} else {
-		cfg.WorkDir, err = filepath.Abs(cfg.WorkDir)
+		c.WorkDir, err = filepath.Abs(c.WorkDir)
 		if err != nil {
 			return nil, fmt.Errorf("fail to get absolute path of the work directory: %w", err)
 		}
 	}
-	return fixConfig(cfg), nil
+
+	normalizeConfig(&c)
+	return &c, nil
 }
 
 func DefaultConfig() *Config {
@@ -89,26 +96,17 @@ func DefaultConfig() *Config {
 	if err != nil {
 		panic(err)
 	}
-	return fixConfig(&Config{
-		WorkDir: path.Join(homeDir, ".esmd"),
-	})
+	c := &Config{WorkDir: path.Join(homeDir, ".esmd")}
+	normalizeConfig(c)
+	return c
 }
 
-func fixConfig(c *Config) *Config {
+func normalizeConfig(c *Config) {
 	if c.Port == 0 {
 		c.Port = 8080
 	}
 	if c.AuthSecret == "" {
 		c.AuthSecret = os.Getenv("AUTH_SECRET")
-	}
-	if c.Compress == nil && os.Getenv("COMPRESS") == "false" {
-		c.Compress = []byte("false")
-	}
-	if c.SourceMap == nil && (os.Getenv("SOURCEMAP") == "false" || os.Getenv("SOURCE_MAP") == "false") {
-		c.SourceMap = []byte("false")
-	}
-	if c.Minify == nil && os.Getenv("MINIFY") == "false" {
-		c.Minify = []byte("false")
 	}
 	if c.BuildConcurrency == 0 {
 		c.BuildConcurrency = uint16(runtime.NumCPU())
@@ -181,7 +179,9 @@ func fixConfig(c *Config) *Config {
 		}
 		c.NpmRegistries = regs
 	}
-	return c
+	c.Compress = !(bytes.Equal(c.CompressRaw, []byte("false")) || os.Getenv("COMPRESS") == "false")
+	c.SourceMap = !(bytes.Equal(c.SourceMapRaw, []byte("false")) || (os.Getenv("SOURCEMAP") == "false" || os.Getenv("SOURCE_MAP") == "false"))
+	c.Minify = !(bytes.Equal(c.MinifyRaw, []byte("false")) || os.Getenv("MINIFY") == "false")
 }
 
 // extractPackageName Will take a packageName as input extract key parts and return them

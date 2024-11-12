@@ -1,4 +1,4 @@
-package cli
+package common
 
 import (
 	"net/url"
@@ -53,7 +53,7 @@ func (m ImportMap) Resolve(path string) (string, bool) {
 }
 
 func (m ImportMap) toAbsPath(path string) string {
-	if isRelPathSpecifier(path) {
+	if strings.HasPrefix(path, "./") || strings.HasPrefix(path, "../") {
 		if m.srcUrl != nil {
 			return m.srcUrl.ResolveReference(&url.URL{Path: path}).String()
 		}
