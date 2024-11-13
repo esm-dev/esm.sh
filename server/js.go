@@ -173,11 +173,11 @@ func bundleHttpModule(npmrc *NpmRC, entry string, importMap common.ImportMap, co
 						case ".ts", ".mts", ".cts":
 							loader = esbuild.LoaderTS
 						case ".jsx":
-							jsx = true
 							loader = esbuild.LoaderJSX
-						case ".tsx":
 							jsx = true
+						case ".tsx":
 							loader = esbuild.LoaderTSX
+							jsx = true
 						case ".css":
 							loader = esbuild.LoaderCSS
 						case ".json":
@@ -200,12 +200,13 @@ func bundleHttpModule(npmrc *NpmRC, entry string, importMap common.ImportMap, co
 						case ".md":
 							query := url.Query()
 							if query.Has("jsx") {
-								jsx, err := common.RenderMarkdown([]byte(code), "jsx")
+								jsxCode, err := common.RenderMarkdown([]byte(code), "jsx")
 								if err != nil {
 									return esbuild.OnLoadResult{}, err
 								}
-								code = string(jsx)
+								code = string(jsxCode)
 								loader = esbuild.LoaderJSX
+								jsx = true
 							} else if query.Has("svelte") {
 								svelteCode, err := common.RenderMarkdown([]byte(code), "svelte")
 								if err != nil {

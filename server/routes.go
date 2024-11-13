@@ -662,8 +662,7 @@ func routes(debug bool) rex.Handle {
 
 		if strings.HasPrefix(pathname, "/http://") || strings.HasPrefix(pathname, "/https://") {
 			query := ctx.Query()
-			urlRaw := pathname[1:]
-			u, err := url.Parse(urlRaw)
+			u, err := url.Parse(pathname[1:])
 			if err != nil {
 				return rex.Status(400, "Invalid URL")
 			}
@@ -678,15 +677,12 @@ func routes(debug bool) rex.Handle {
 				}
 			}
 			extname := path.Ext(u.Path)
-			isCss := extname == ".css"
-			if !(isCss || includes(esExts, extname) || extname == ".vue" || extname == ".svelte") {
-				return rex.Redirect(urlRaw, http.StatusMovedPermanently)
+			if !(includes(esExts, extname) || extname == ".vue" || extname == ".svelte" || extname == ".md" || extname == ".css") {
+				return rex.Redirect(u.String(), http.StatusMovedPermanently)
 			}
 			im := query.Get("im")
 			v := query.Get("v")
-			if v == "" {
-				v = "0"
-			} else if !regexpVersion.MatchString(v) || len(v) > 32 {
+			if v != "" && (!regexpVersion.MatchString(v) || len(v) > 32) {
 				return rex.Status(400, "Invalid Version Param")
 			}
 			// determine build target by `?target` query or `User-Agent` header
@@ -695,7 +691,7 @@ func routes(debug bool) rex.Handle {
 				target = "es2022"
 			}
 			h := sha1.New()
-			h.Write([]byte(urlRaw))
+			h.Write([]byte(u.String()))
 			h.Write([]byte(im))
 			h.Write([]byte(v))
 			h.Write([]byte(target))
@@ -758,7 +754,15 @@ func routes(debug bool) rex.Handle {
 						}
 					}
 				}
-				js, jsx, css, _, err := bundleHttpModule(npmrc, urlRaw, importMap, false)
+				if extname == ".md" {
+					for _, kind := range []string{"jsx", "svelte", "vue"} {
+						if query.Has(kind) {
+							u.RawQuery = kind
+							break
+						}
+					}
+				}
+				js, jsx, css, _, err := bundleHttpModule(npmrc, u.String(), importMap, false)
 				if err != nil {
 					return rex.Status(500, "Failed to build module: "+err.Error())
 				}
@@ -787,7 +791,7 @@ func routes(debug bool) rex.Handle {
 				body = bytes.NewReader([]byte(out.Code))
 				go esmStorage.Put(savePath, strings.NewReader(out.Code))
 			}
-			if isCss && query.Has("module") {
+			if extname == ".css" && query.Has("module") {
 				css, err := io.ReadAll(body)
 				if closer, ok := body.(io.Closer); ok {
 					closer.Close()
@@ -798,7 +802,7 @@ func routes(debug bool) rex.Handle {
 				body = strings.NewReader(fmt.Sprintf("var style = document.createElement('style');\nstyle.textContent = %s;\ndocument.head.appendChild(style);\nexport default null;", utils.MustEncodeJSON(string(css))))
 			}
 			ctx.SetHeader("Cache-Control", ccImmutable)
-			if isCss && !query.Has("module") {
+			if extname == ".css" {
 				ctx.SetHeader("Content-Type", ctCSS)
 			} else {
 				ctx.SetHeader("Content-Type", ctJavaScript)
