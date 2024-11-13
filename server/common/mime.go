@@ -1,4 +1,4 @@
-package cli
+package common
 
 import (
 	"path"
@@ -14,7 +14,7 @@ var mimeTypes = map[string][]string{
 	"application/jsonc;":      {"jsonc"},
 	"application/pdf":         {"pdf"},
 	"application/tar":         {"tar"},
-	"application/tar+gzip":    {"tgz"},
+	"application/tar+gzip":    {"tgz", "tar.gz"},
 	"application/wasm":        {"wasm"},
 	"application/xml;":        {"xml", "plist", "tmLanguage", "tmTheme"},
 	"application/zip":         {"zip"},
@@ -56,7 +56,6 @@ var mimeTypes = map[string][]string{
 	"video/mp4":               {"mp4", "m4v"},
 	"video/ogg":               {"ogv"},
 	"video/webm":              {"webm"},
-	"video/x-matroska":        {"mkv"},
 }
 var mimeTypesMap = map[string]string{}
 
@@ -71,11 +70,11 @@ func init() {
 	}
 }
 
-// getMIMEType returns the MIME type for a given filename.
-func getMIMEType(filename string) string {
+// ContentType returns the MIME type for a given filename.
+func ContentType(filename string) string {
 	extname := path.Ext(filename)
 	if extname == ".gz" && strings.HasSuffix(filename, ".tar.gz") {
-		return "application/tar+gzip"
+		extname = ".tar.gz"
 	}
 	return mimeTypesMap[extname]
 }

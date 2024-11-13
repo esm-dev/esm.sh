@@ -1090,6 +1090,10 @@ func routes(debug bool) rex.Handle {
 				if cacheHit {
 					ctx.SetHeader("X-Raw-File-Cache-Status", "HIT")
 				}
+				contentType := common.ContentType(esm.SubPath)
+				if contentType != "" {
+					ctx.SetHeader("Content-Type", contentType)
+				}
 				return rex.Content(esm.SubPath, stat.ModTime(), content) // auto closed
 			}
 

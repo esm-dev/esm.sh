@@ -314,7 +314,7 @@ func (d *DevServer) ServeCSSModule(w http.ResponseWriter, r *http.Request, pathn
 		Write:            false,
 		MinifyWhitespace: true,
 		MinifySyntax:     true,
-		Target:           esbuild.ESNext,
+		Target:           esbuild.ES2022,
 		Bundle:           true,
 	})
 	if len(ret.Errors) > 0 {
@@ -592,7 +592,7 @@ func (d *DevServer) analyzeDependencyTree(entry string, importMap common.ImportM
 	tree = make(map[string][]byte)
 	ret := esbuild.Build(esbuild.BuildOptions{
 		EntryPoints:      []string{entry},
-		Target:           esbuild.ESNext,
+		Target:           esbuild.ES2022,
 		Format:           esbuild.FormatESModule,
 		Platform:         esbuild.PlatformBrowser,
 		JSX:              esbuild.JSXPreserve,
@@ -860,12 +860,12 @@ func (d *DevServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 			defer file.Close()
-			mtype := getMIMEType(filename)
-			if mtype == "" {
-				mtype = "application/octet-stream"
+			contentType := common.ContentType(filename)
+			if contentType == "" {
+				contentType = "application/octet-stream"
 			}
 			header := w.Header()
-			header.Set("Content-Type", mtype)
+			header.Set("Content-Type", contentType)
 			if !query.Has("t") {
 				header.Set("Cache-Control", "max-age=0, must-revalidate")
 				header.Set("Etag", etag)
