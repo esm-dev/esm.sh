@@ -68,7 +68,7 @@ const LEGACY_WORKER = {
 await run("pnpm", "i");
 await run("node", "build.mjs");
 
-const { withESMWorker, version } = await import("../../worker/dist/index.js#" + Date.now().toString(36));
+const { withESMWorker, VERSION } = await import("../../worker/dist/index.js#" + Date.now().toString(36));
 const worker = withESMWorker((_req: Request, _env: typeof env, ctx: { url: URL }) => {
   if (ctx.url.pathname === "/") {
     return new Response("<h1>Welcome to esm.sh!</h1>", {
@@ -222,12 +222,12 @@ Deno.test("esm-worker", { sanitizeOps: false, sanitizeResources: false }, async 
     const res3 = await fetch(`${workerOrigin}/node/process.js`);
     assertEquals(res3.status, 200);
     assertEquals(res3.headers.get("Content-Type"), "application/javascript; charset=utf-8");
-    assertEquals(res3.headers.get("Etag"), `W/"${version}"`);
+    assertEquals(res3.headers.get("Etag"), `W/"${VERSION}"`);
     assertEquals(res3.headers.get("Cache-Control"), "public, max-age=86400");
     assertStringIncludes(res3.headers.get("Vary")!, "User-Agent");
     assertStringIncludes(await res3.text(), "nextTick");
 
-    const res4 = await fetch(`${workerOrigin}/node/process.js`, { headers: { "If-None-Match": `W/"${version}"` } });
+    const res4 = await fetch(`${workerOrigin}/node/process.js`, { headers: { "If-None-Match": `W/"${VERSION}"` } });
     res4.body?.cancel();
     assertEquals(res4.status, 304);
 
@@ -418,21 +418,21 @@ Deno.test("esm-worker", { sanitizeOps: false, sanitizeResources: false }, async 
     const res = await fetch(`${workerOrigin}/run`, { redirect: "manual" });
     assert(res.ok);
     assert(!res.redirected);
-    assertEquals(res.headers.get("Etag"), `W/"${version}"`);
+    assertEquals(res.headers.get("Etag"), `W/"${VERSION}"`);
     assertEquals(res.headers.get("Cache-Control"), "public, max-age=86400");
     assertEquals(res.headers.get("Content-Type"), "application/javascript; charset=utf-8");
     assertStringIncludes(res.headers.get("Vary") ?? "", "User-Agent");
     assertStringIncludes(await res.text(), "esm.sh/run");
 
     const res2 = await fetch(`${workerOrigin}/tsx`);
-    assertEquals(res2.headers.get("Etag"), `W/"${version}"`);
+    assertEquals(res2.headers.get("Etag"), `W/"${VERSION}"`);
     assertEquals(res2.headers.get("Cache-Control"), "public, max-age=86400");
     assertEquals(res2.headers.get("Content-Type"), "application/javascript; charset=utf-8");
     assertStringIncludes(res2.headers.get("Vary") ?? "", "User-Agent");
     assertStringIncludes(await res2.text(), "esm.sh/tsx");
 
     const res3 = await fetch(`${workerOrigin}/uno`);
-    assertEquals(res3.headers.get("Etag"), `W/"${version}"`);
+    assertEquals(res3.headers.get("Etag"), `W/"${VERSION}"`);
     assertEquals(res3.headers.get("Cache-Control"), "public, max-age=86400");
     assertEquals(res3.headers.get("Content-Type"), "application/javascript; charset=utf-8");
     assertStringIncludes(res3.headers.get("Vary") ?? "", "User-Agent");
@@ -440,7 +440,7 @@ Deno.test("esm-worker", { sanitizeOps: false, sanitizeResources: false }, async 
   });
 
   await t.step("transform", async () => {
-    "transform API";
+    // transform API
     {
       const options = {
         code: `
@@ -486,7 +486,7 @@ Deno.test("esm-worker", { sanitizeOps: false, sanitizeResources: false }, async 
       const map = await res3.text();
       assertEquals(map, ret.map);
     }
-    "transform http module";
+    // transform http modules
     {
       const im = btoaUrl("/react/");
       const res = await fetch(`${workerOrigin}/http://localhost:8083/react/app/main.tsx?im=${im}`);
@@ -498,7 +498,7 @@ Deno.test("esm-worker", { sanitizeOps: false, sanitizeResources: false }, async 
       assertStringIncludes(js, 'from"https://esm.sh/react@18.3.1/jsx-runtime";');
       assertStringIncludes(js, '("h1",{style:{color:"#61DAFB"},children:"esm.sh"})');
     }
-    "generate uno.css";
+    // generate uno.css
     {
       const res = await fetch(
         `${workerOrigin}/uno.css?ctx=`
@@ -539,54 +539,24 @@ Deno.test("esm-worker", { sanitizeOps: false, sanitizeResources: false }, async 
     assert(ret.deleted.length > 0);
   });
 
-  await t.step("module with different UAs", async () => {
+  await t.step("target from UA", async () => {
     const fetchModule = async (ua: string) => {
-      const res = await fetch(`${workerOrigin}/react@18.2.0`, {
+      const res = await fetch(`${workerOrigin}/react@18.3.1`, {
         headers: { "User-Agent": ua },
       });
       res.body?.cancel();
       assertStringIncludes(res.headers.get("Vary") ?? "", "User-Agent");
       return res.headers.get("x-esm-path")!;
     };
-
-    assertStringIncludes(
-      await fetchModule(
-        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/90.0.0.0 Safari/537.36",
-      ),
-      "/es2021/",
-    );
-    assertStringIncludes(
-      await fetchModule(
-        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.0.0 Safari/537.36",
-      ),
-      "/es2023/",
-    );
-    assertStringIncludes(
-      await fetchModule(
-        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/116.0.0.0 Safari/537.36",
-      ),
-      "/es2023/",
-    );
-    assertStringIncludes(await fetchModule("HeadlessChrome/109"), "/es2023/");
-    assertStringIncludes(
-      await fetchModule(
-        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.3 Safari/605.1.15",
-      ),
-      "/es2021/",
-    );
-    assertStringIncludes(
-      await fetchModule(
-        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.6 Safari/605.1.1",
-      ),
-      "/es2023/",
-    );
+    assertStringIncludes(await fetchModule("Node/16.0.0"), "/node/");
     assertStringIncludes(await fetchModule("Deno/1.33.1"), "/deno/");
     assertStringIncludes(await fetchModule("Deno/1.33.2"), "/denonext/");
-    assertStringIncludes(await fetchModule("ES/2022"), "/es2022/");
+    assertStringIncludes(await fetchModule("ES/2024"), "/es2024/");
+    assertStringIncludes(await fetchModule("whatever"), "/es2022/");
   });
 
   await t.step("CORS", async () => {
-    const res = await fetch(`${workerOrigin}/react@18.2.0`, {
+    const res = await fetch(`${workerOrigin}/react@18.3.1`, {
       headers: {
         "Origin": "https://example.com",
       },
@@ -597,39 +567,25 @@ Deno.test("esm-worker", { sanitizeOps: false, sanitizeResources: false }, async 
   });
 
   await t.step("fix urls", async () => {
-    {
-      const res = await fetch(`${workerOrigin}/react`, { redirect: "manual" });
-      res.body?.cancel();
-      assertEquals(res.status, 302);
-      assertEquals(res.headers.get("cache-control"), "public, max-age=3600");
-      assertEquals(res.headers.get("Vary"), "User-Agent");
-      assertStringIncludes(res.headers.get("location")!, `${workerOrigin}/react@`);
-    }
+    // redirect to specific version for deno
     {
       const res = await fetch(`${workerOrigin}/react@18`, { redirect: "manual" });
       res.body?.cancel();
       assertEquals(res.status, 302);
-      assertEquals(res.headers.get("cache-control"), "public, max-age=3600");
+      assertEquals(res.headers.get("Cache-Control"), "public, max-age=3600");
       assertEquals(res.headers.get("Vary"), "User-Agent");
       assertStringIncludes(res.headers.get("location")!, `${workerOrigin}/react@18.`);
     }
+    // semver version for browsers
     {
-      const res = await fetch(`${workerOrigin}/react@18/es2022/react.mjs`, { redirect: "manual" });
-      res.body?.cancel();
-      assertEquals(res.status, 302);
-      assertEquals(res.headers.get("cache-control"), "public, max-age=3600");
-      assertStringIncludes(res.headers.get("location")!, `${workerOrigin}/react@18.`);
-      assertStringIncludes(res.headers.get("location")!, "/es2022/react.mjs");
+      const res = await fetch(`${workerOrigin}/react@18`, { redirect: "manual", headers: { "User-Agent": "ES/2022" } });
+      assertEquals(res.status, 200);
+      assertEquals(res.headers.get("Content-Type"), "application/javascript; charset=utf-8");
+      assertEquals(res.headers.get("Cache-Control"), "public, max-age=3600");
+      assertStringIncludes(res.headers.get("Vary")!, "User-Agent");
+      assertStringIncludes(await res.text(), "/es2022/react.mjs");
     }
-    "`/#/` in pathname";
-    {
-      const res = await fetch(`${workerOrigin}/es5-ext@^0.10.50/string/%23/contains?target=denonext`, { redirect: "manual" });
-      res.body?.cancel();
-      assertEquals(res.status, 302);
-      assertEquals(res.headers.get("cache-control"), "public, max-age=3600");
-      assertStringIncludes(res.headers.get("location")!, `${workerOrigin}/es5-ext@0.10.`);
-      assertStringIncludes(res.headers.get("location")!, "/string/%23/contains");
-    }
+    // new URL("lib.wasm", import.meta.url)
     {
       const res = await fetch(
         `${workerOrigin}/lightningcss-wasm@1.19.0/es2022/lightningcss_node.wasm`,
