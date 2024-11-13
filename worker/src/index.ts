@@ -312,12 +312,7 @@ function withESMWorker(middleware?: Middleware, cache: Cache = (caches as any).d
 
     // esm.sh/run routes
     if (pathname === "/uno.css" || pathname.startsWith("/http://") || pathname.startsWith("/https://")) {
-      return ctx.withCache((target) => {
-        if (target) {
-          url.searchParams.set("target", target);
-        }
-        return fetchBuildDist(req, env, ctx, pathname, url.search);
-      }, { varyUA: true });
+      return ctx.withCache(() => fetchBuildDist(req, env, ctx, pathname, url.search));
     }
 
     // if it's a singleton build module which is built by https://esm.sh/tsx

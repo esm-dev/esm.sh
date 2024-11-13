@@ -493,7 +493,6 @@ Deno.test("esm-worker", { sanitizeOps: false, sanitizeResources: false }, async 
       assertEquals(res.status, 200);
       assertEquals(res.headers.get("Content-Type"), "application/javascript; charset=utf-8");
       assertEquals(res.headers.get("Cache-Control"), "public, max-age=31536000, immutable");
-      assertStringIncludes(res.headers.get("Vary")!, "User-Agent");
       const js = await res.text();
       assertStringIncludes(js, 'from"https://esm.sh/react-dom@18.3.1/client";');
       assertStringIncludes(js, 'from"https://esm.sh/react@18.3.1/jsx-runtime";');
@@ -508,7 +507,6 @@ Deno.test("esm-worker", { sanitizeOps: false, sanitizeResources: false }, async 
       assertEquals(res.status, 200);
       assertEquals(res.headers.get("Content-Type"), "text/css; charset=utf-8");
       assertEquals(res.headers.get("Cache-Control"), "public, max-age=31536000, immutable");
-      assertStringIncludes(res.headers.get("Vary")!, "User-Agent");
       const css = await res.text();
       assertStringIncludes(css, "time,mark,audio,video{"); // eric-meyer reset css
       assertStringIncludes(css, ".center-box{");

@@ -504,9 +504,8 @@ func routes(debug bool) rex.Handle {
 			}
 			// determine build target by `?target` query or `User-Agent` header
 			target := strings.ToLower(query.Get("target"))
-			targetFromUA := targets[target] == 0
-			if targetFromUA {
-				target = getBuildTargetByUA(ctx.UserAgent())
+			if targets[target] == 0 {
+				target = "es2022"
 			}
 			h := sha1.New()
 			h.Write([]byte(ctxUrlRaw))
@@ -658,9 +657,6 @@ func routes(debug bool) rex.Handle {
 			}
 			ctx.SetHeader("Cache-Control", ccImmutable)
 			ctx.SetHeader("Content-Type", ctCSS)
-			if targetFromUA {
-				appendVaryHeader(ctx.W.Header(), "User-Agent")
-			}
 			return body // auto closed
 		}
 
@@ -695,9 +691,8 @@ func routes(debug bool) rex.Handle {
 			}
 			// determine build target by `?target` query or `User-Agent` header
 			target := strings.ToLower(query.Get("target"))
-			targetFromUA := targets[target] == 0
-			if targetFromUA {
-				target = getBuildTargetByUA(ctx.UserAgent())
+			if targets[target] == 0 {
+				target = "es2022"
 			}
 			h := sha1.New()
 			h.Write([]byte(urlRaw))
@@ -807,9 +802,6 @@ func routes(debug bool) rex.Handle {
 				ctx.SetHeader("Content-Type", ctCSS)
 			} else {
 				ctx.SetHeader("Content-Type", ctJavaScript)
-			}
-			if targetFromUA {
-				appendVaryHeader(ctx.W.Header(), "User-Agent")
 			}
 			return body // auto closed
 		}

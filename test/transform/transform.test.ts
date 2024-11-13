@@ -86,7 +86,6 @@ Deno.test("transform", async (t) => {
     assertEquals(res.status, 200);
     assertEquals(res.headers.get("Content-Type"), "application/javascript; charset=utf-8");
     assertEquals(res.headers.get("Cache-Control"), "public, max-age=31536000, immutable");
-    assertStringIncludes(res.headers.get("Vary")!, "User-Agent");
     const js = await res.text();
     assertStringIncludes(js, "String.raw");
     assertStringIncludes(js, '`\n<div class="center-box relative">');
@@ -99,7 +98,6 @@ Deno.test("transform", async (t) => {
     assertEquals(res.status, 200);
     assertEquals(res.headers.get("Content-Type"), "application/javascript; charset=utf-8");
     assertEquals(res.headers.get("Cache-Control"), "public, max-age=31536000, immutable");
-    assertStringIncludes(res.headers.get("Vary")!, "User-Agent");
     const js = await res.text();
     assertStringIncludes(js, 'from"https://esm.sh/react-dom@18.3.1/client";');
     assertStringIncludes(js, 'from"https://esm.sh/react@18.3.1/jsx-runtime";');
@@ -112,7 +110,6 @@ Deno.test("transform", async (t) => {
     assertEquals(res.status, 200);
     assertEquals(res.headers.get("Content-Type"), "application/javascript; charset=utf-8");
     assertEquals(res.headers.get("Cache-Control"), "public, max-age=31536000, immutable");
-    assertStringIncludes(res.headers.get("Vary")!, "User-Agent");
     const js = await res.text();
     assertStringIncludes(js, 'from"https://esm.sh/preact@10.24.1";');
     assertStringIncludes(js, 'from"https://esm.sh/preact@10.24.1/jsx-runtime";');
@@ -125,7 +122,6 @@ Deno.test("transform", async (t) => {
     assertEquals(res.status, 200);
     assertEquals(res.headers.get("Content-Type"), "application/javascript; charset=utf-8");
     assertEquals(res.headers.get("Cache-Control"), "public, max-age=31536000, immutable");
-    assertStringIncludes(res.headers.get("Vary")!, "User-Agent");
     const js = await res.text();
     assertStringIncludes(js, 'from"https://esm.sh/vue@3.5.8";');
     assertStringIncludes(js, '="http://localhost:8083/vue/assets/github.svg"');
@@ -142,7 +138,6 @@ Deno.test("transform", async (t) => {
     assertEquals(res.status, 200);
     assertEquals(res.headers.get("Content-Type"), "application/javascript; charset=utf-8");
     assertEquals(res.headers.get("Cache-Control"), "public, max-age=31536000, immutable");
-    assertStringIncludes(res.headers.get("Vary")!, "User-Agent");
     const js = await res.text();
     assertStringIncludes(js, 'from"https://esm.sh/svelte@5.1.12/internal/client?no-bundle";');
     assertStringIncludes(js, "<svg ");
@@ -158,7 +153,6 @@ Deno.test("transform", async (t) => {
       assertEquals(res.status, 200);
       assertEquals(res.headers.get("Content-Type"), "application/javascript; charset=utf-8");
       assertEquals(res.headers.get("Cache-Control"), "public, max-age=31536000, immutable");
-      assertStringIncludes(res.headers.get("Vary")!, "User-Agent");
       const js = await res.text();
       assertStringIncludes(js, `h1 id="esmsh">esm.sh</h1>`);
       assertStringIncludes(
@@ -172,7 +166,6 @@ Deno.test("transform", async (t) => {
       assertEquals(res.status, 200);
       assertEquals(res.headers.get("Content-Type"), "application/javascript; charset=utf-8");
       assertEquals(res.headers.get("Cache-Control"), "public, max-age=31536000, immutable");
-      assertStringIncludes(res.headers.get("Vary")!, "User-Agent");
       const js = await res.text();
       assertStringIncludes(js, `"h1",{id:"esmsh",children:"esm.sh"}`);
       assertStringIncludes(
@@ -186,7 +179,6 @@ Deno.test("transform", async (t) => {
       assertEquals(res.status, 200);
       assertEquals(res.headers.get("Content-Type"), "application/javascript; charset=utf-8");
       assertEquals(res.headers.get("Cache-Control"), "public, max-age=31536000, immutable");
-      assertStringIncludes(res.headers.get("Vary")!, "User-Agent");
       const js = await res.text();
       assertStringIncludes(js, `"h1",{id:"esmsh",children:"esm.sh"}`);
       assertStringIncludes(
@@ -200,7 +192,6 @@ Deno.test("transform", async (t) => {
       assertEquals(res.status, 200);
       assertEquals(res.headers.get("Content-Type"), "application/javascript; charset=utf-8");
       assertEquals(res.headers.get("Cache-Control"), "public, max-age=31536000, immutable");
-      assertStringIncludes(res.headers.get("Vary")!, "User-Agent");
       const js = await res.text();
       assertStringIncludes(js, `<h1 id="esmsh">esm.sh</h1>`);
       assertStringIncludes(
@@ -214,7 +205,6 @@ Deno.test("transform", async (t) => {
       assertEquals(res.status, 200);
       assertEquals(res.headers.get("Content-Type"), "application/javascript; charset=utf-8");
       assertEquals(res.headers.get("Cache-Control"), "public, max-age=31536000, immutable");
-      assertStringIncludes(res.headers.get("Vary")!, "User-Agent");
       const js = await res.text();
       assertStringIncludes(js, `("h1",{id:"esmsh"},"esm.sh"`);
       assertStringIncludes(
@@ -233,7 +223,6 @@ Deno.test("transform", async (t) => {
       assertEquals(res.status, 200);
       assertEquals(res.headers.get("Content-Type"), "text/css; charset=utf-8");
       assertEquals(res.headers.get("Cache-Control"), "public, max-age=31536000, immutable");
-      assertStringIncludes(res.headers.get("Vary")!, "User-Agent");
       const css = await res.text();
       assertStringIncludes(css, "time,mark,audio,video{"); // eric-meyer reset css
       assertStringIncludes(css, ".center-box{");
@@ -256,7 +245,6 @@ Deno.test("transform", async (t) => {
       assertEquals(res.status, 200);
       assertEquals(res.headers.get("Content-Type"), "text/css; charset=utf-8");
       assertEquals(res.headers.get("Cache-Control"), "public, max-age=31536000, immutable");
-      assertStringIncludes(res.headers.get("Vary")!, "User-Agent");
       const css = await res.text();
       assertStringIncludes(css, "time,mark,audio,video{"); // eric-meyer reset css
       assertStringIncludes(css, ".center-box{");
@@ -279,7 +267,6 @@ Deno.test("transform", async (t) => {
       assertEquals(res.status, 200);
       assertEquals(res.headers.get("Content-Type"), "text/css; charset=utf-8");
       assertEquals(res.headers.get("Cache-Control"), "public, max-age=31536000, immutable");
-      assertStringIncludes(res.headers.get("Vary")!, "User-Agent");
       const css = await res.text();
       assertStringIncludes(css, "time,mark,audio,video{"); // eric-meyer reset css
       assertStringIncludes(css, ".center-box{");
@@ -302,7 +289,6 @@ Deno.test("transform", async (t) => {
       assertEquals(res.status, 200);
       assertEquals(res.headers.get("Content-Type"), "text/css; charset=utf-8");
       assertEquals(res.headers.get("Cache-Control"), "public, max-age=31536000, immutable");
-      assertStringIncludes(res.headers.get("Vary")!, "User-Agent");
       const css = await res.text();
       assertStringIncludes(css, "time,mark,audio,video{"); // eric-meyer reset css
       assertStringIncludes(css, ".center-box{");
@@ -325,7 +311,6 @@ Deno.test("transform", async (t) => {
       assertEquals(res.status, 200);
       assertEquals(res.headers.get("Content-Type"), "text/css; charset=utf-8");
       assertEquals(res.headers.get("Cache-Control"), "public, max-age=31536000, immutable");
-      assertStringIncludes(res.headers.get("Vary")!, "User-Agent");
       const css = await res.text();
       assertStringIncludes(css, "time,mark,audio,video{"); // eric-meyer reset css
       assertStringIncludes(css, ".center-box{");
