@@ -1596,6 +1596,7 @@ func praseESMPath(npmrc *NpmRC, pathname string) (esm ESMPath, extraQuery string
 			PrPrefix:    true,
 		}
 		isFixedVersion = true
+		hasTargetSegment = checkTargetSegment(strings.Split(subPath, "/"))
 		return
 	}
 
