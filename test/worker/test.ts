@@ -343,7 +343,7 @@ Deno.test("esm-worker", { sanitizeOps: false, sanitizeResources: false }, async 
     const res2 = await fetch(res.headers.get("Location")!);
 
     assertEquals(res2.status, 200);
-    assertEquals(res2.headers.get("Content-Type"), "application/json");
+    assertEquals(res2.headers.get("Content-Type"), "application/json; charset=utf-8");
     assertEquals(res2.headers.get("Cache-Control"), "public, max-age=31536000, immutable");
     const pkgJson = await res2.json();
     assertEquals(pkgJson.name, "react");
@@ -394,7 +394,7 @@ Deno.test("esm-worker", { sanitizeOps: false, sanitizeResources: false }, async 
     const res2 = await fetch(redirectTo);
     const svg = await res2.text();
     assertEquals(res2.status, 200);
-    assertEquals(res2.headers.get("Content-Type"), "image/svg+xml");
+    assertEquals(res2.headers.get("Content-Type"), "image/svg+xml; charset=utf-8");
     assertEquals(res2.headers.get("Cache-Control"), "public, max-age=31536000, immutable");
     assertStringIncludes(svg, "<svg");
   });

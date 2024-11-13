@@ -5,6 +5,6 @@ Deno.test("github assets", async () => {
     "http://localhost:8080/gh/microsoft/fluentui-emoji/assets/Alien/Flat/alien_flat.svg",
   );
   assertEquals(res.status, 200);
-  assertEquals(res.headers.get("content-type"), "image/svg+xml");
+  assertEquals(res.headers.get("content-type"), "image/svg+xml; charset=utf-8");
   assertStringIncludes(await res.text(), "<svg");
 });
