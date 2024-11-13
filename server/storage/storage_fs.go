@@ -10,6 +10,7 @@ import (
 	"github.com/ije/gox/utils"
 )
 
+// NewFSStorage creates a new storage instance that stores files on the local filesystem.
 func NewFSStorage(options *StorageOptions) (storage Storage, err error) {
 	if options.Endpoint == "" {
 		return nil, errors.New("endpoint is required")

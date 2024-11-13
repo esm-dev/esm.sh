@@ -68,6 +68,7 @@ func init() {
 			mimeTypesMap["."+ext] = k
 		}
 	}
+	mimeTypes = nil
 }
 
 // ContentType returns the MIME type for a given filename.

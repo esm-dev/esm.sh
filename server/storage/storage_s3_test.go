@@ -8,10 +8,6 @@ import (
 )
 
 func TestS3Storage(t *testing.T) {
-	os.Setenv("GO_TEST_S3_ENDPOINT", "https://d5197bc43c609ab3101c8fc931edb5e7.r2.cloudflarestorage.com/esm-dev")
-	os.Setenv("GO_TEST_S3_ACCESS_KEY_ID", "3216f30c76c54bbf7bbc5ee7c7b1353f")
-	os.Setenv("GO_TEST_S3_SECRET_ACCESS_KEY", "d398da3375f93b467adc913ffc8394acc7126e3112434c9a286a208f8d430810")
-
 	endpint := os.Getenv("GO_TEST_S3_ENDPOINT")
 	if endpint == "" {
 		t.Skip("env GO_TEST_S3_ENDPOINT not set")

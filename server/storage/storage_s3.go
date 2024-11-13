@@ -15,6 +15,7 @@ import (
 	"time"
 )
 
+// NewS3Storage creates a new S3-compatible storage.
 func NewS3Storage(options *StorageOptions) (Storage, error) {
 	if options.Endpoint == "" {
 		return nil, errors.New("missing endpoint")
@@ -40,6 +41,7 @@ func NewS3Storage(options *StorageOptions) (Storage, error) {
 	}, nil
 }
 
+// A S3-compatible storage.
 type s3Storage struct {
 	apiEndpoint     string
 	region          string
@@ -47,13 +49,13 @@ type s3Storage struct {
 	secretAccessKey string
 }
 
-type S3ListResult struct {
+type s3ListResult struct {
 	Contents []struct {
 		Key string
 	}
 }
 
-type S3DeleteResult struct {
+type s3DeleteResult struct {
 	Deleted []struct {
 		Key string
 	}
@@ -64,13 +66,27 @@ type S3DeleteResult struct {
 	}
 }
 
-type S3Error struct {
+// s3ObjectMeta implements the Stat interface.
+type s3ObjectMeta struct {
+	contentLength int64
+	lastModified  time.Time
+}
+
+func (s *s3ObjectMeta) Size() int64 {
+	return s.contentLength
+}
+
+func (s *s3ObjectMeta) ModTime() time.Time {
+	return s.lastModified
+}
+
+type s3Error struct {
 	Code    string
 	Message string
 }
 
-func parseS3Error(resp *http.Response) S3Error {
-	var s3Error S3Error
+func parseS3Error(resp *http.Response) s3Error {
+	var s3Error s3Error
 	if xml.NewDecoder(resp.Body).Decode(&s3Error) != nil {
 		s3Error.Code = "error"
 		s3Error.Message = fmt.Sprintf("unexpected status code: %d", resp.StatusCode)
@@ -78,22 +94,8 @@ func parseS3Error(resp *http.Response) S3Error {
 	return s3Error
 }
 
-func (e S3Error) Error() string {
+func (e s3Error) Error() string {
 	return e.Code + ": " + e.Message
-}
-
-// S3ObjectMeta implements the Stat interface.
-type S3ObjectMeta struct {
-	contentLength int64
-	lastModified  time.Time
-}
-
-func (s *S3ObjectMeta) Size() int64 {
-	return s.contentLength
-}
-
-func (s *S3ObjectMeta) ModTime() time.Time {
-	return s.lastModified
 }
 
 func (s3 *s3Storage) Stat(name string) (stat Stat, err error) {
@@ -124,7 +126,7 @@ func (s3 *s3Storage) Stat(name string) (stat Stat, err error) {
 	}
 	size, _ := strconv.ParseInt(contentLengthHeader, 10, 64)
 	lastModified, _ := time.Parse(time.RFC1123, lastModifiedHeader)
-	return &S3ObjectMeta{
+	return &s3ObjectMeta{
 		contentLength: size,
 		lastModified:  lastModified,
 	}, nil
@@ -146,7 +148,7 @@ func (s3 *s3Storage) List(prefix string) (keys []string, err error) {
 	if resp.StatusCode >= 400 {
 		return nil, parseS3Error(resp)
 	}
-	var ret S3ListResult
+	var ret s3ListResult
 	err = xml.NewDecoder(resp.Body).Decode(&ret)
 	if err != nil {
 		return
@@ -189,7 +191,7 @@ func (s3 *s3Storage) Get(name string) (content io.ReadCloser, stat Stat, err err
 	}
 	size, _ := strconv.ParseInt(contentLengthHeader, 10, 64)
 	lastModified, _ := time.Parse(time.RFC1123, lastModifiedHeader)
-	return resp.Body, &S3ObjectMeta{
+	return resp.Body, &s3ObjectMeta{
 		contentLength: size,
 		lastModified:  lastModified,
 	}, nil
@@ -293,7 +295,7 @@ func (s3 *s3Storage) DeleteAll(prefix string) (deletedKeys []string, err error) 
 	if resp.StatusCode >= 400 {
 		return nil, parseS3Error(resp)
 	}
-	var ret S3DeleteResult
+	var ret s3DeleteResult
 	err = xml.NewDecoder(resp.Body).Decode(&ret)
 	if err != nil {
 		return
