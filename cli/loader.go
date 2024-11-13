@@ -27,7 +27,7 @@ type LoaderWorker struct {
 	outReader *bufio.Reader
 }
 
-func (lw *LoaderWorker) Start(loaderjs []byte) (err error) {
+func (l *LoaderWorker) Start(loaderjs []byte) (err error) {
 	homeDir, err := os.UserHomeDir()
 	if err != nil {
 		return
@@ -41,6 +41,7 @@ func (lw *LoaderWorker) Start(loaderjs []byte) (err error) {
 			return
 		}
 	}
+
 	denoPath, err := getDenoPath()
 	if err != nil {
 		err = errors.New("deno not found, please install deno first")
@@ -48,28 +49,32 @@ func (lw *LoaderWorker) Start(loaderjs []byte) (err error) {
 	}
 
 	cmd := exec.Command(denoPath, "run", "--no-lock", "-A", jsPath)
-	cmd.Stdin, lw.stdin = io.Pipe()
-	lw.stdout, cmd.Stdout = io.Pipe()
+	cmd.Stdin, l.stdin = io.Pipe()
+	l.stdout, cmd.Stdout = io.Pipe()
 	err = cmd.Start()
 	if err != nil {
-		lw.stdin = nil
-		lw.stdout = nil
+		l.stdin = nil
+		l.stdout = nil
 	} else {
-		lw.outReader = bufio.NewReader(lw.stdout)
+		l.outReader = bufio.NewReader(l.stdout)
 		if os.Getenv("DEBUG") == "1" {
 			denoVersion, _ := exec.Command(denoPath, "-v").Output()
 			fmt.Println(term.Dim(fmt.Sprintf("[debug] loader process started (runtime: %s)", strings.TrimSpace(string(denoVersion)))))
 		}
 	}
+
+	// pre-install npm deps
+	cmd = exec.Command(denoPath, "cache", "npm:@esm.sh/unocss@0.2.2", "npm:@esm.sh/tsx@1.0.4", "npm:@esm.sh/vue-loader@1.0.3")
+	cmd.Start()
 	return
 }
 
-func (lw *LoaderWorker) Load(loaderType string, args []any) (lang string, code string, err error) {
+func (l *LoaderWorker) Load(loaderType string, args []any) (lang string, code string, err error) {
 	// only one load can be invoked at a time
-	lw.lock.Lock()
-	defer lw.lock.Unlock()
+	l.lock.Lock()
+	defer l.lock.Unlock()
 
-	if lw.outReader == nil {
+	if l.outReader == nil {
 		err = errors.New("loader not started")
 		return
 	}
@@ -88,13 +93,13 @@ func (lw *LoaderWorker) Load(loaderType string, args []any) (lang string, code s
 	loaderArgs := make([]any, len(args)+1)
 	loaderArgs[0] = loaderType
 	copy(loaderArgs[1:], args)
-	err = json.NewEncoder(lw.stdin).Encode(loaderArgs)
+	err = json.NewEncoder(l.stdin).Encode(loaderArgs)
 	if err != nil {
 		return
 	}
 	for {
 		var line []byte
-		line, err = lw.outReader.ReadBytes('\n')
+		line, err = l.outReader.ReadBytes('\n')
 		if err != nil {
 			return
 		}

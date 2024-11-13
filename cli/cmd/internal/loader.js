@@ -123,7 +123,7 @@ async function unocss(config, content, id) {
   const generatorKey = config?.filename ?? ".";
   let uno = unoGenerators.get(generatorKey);
   if (!uno || uno.configCSS !== config?.css) {
-    uno = import("npm:@esm.sh/unocss@0.2.1").then(({ init }) => init(config?.css));
+    uno = import("npm:@esm.sh/unocss@0.2.2").then(({ init }) => init(config?.css));
     uno.configCSS = config?.css;
     unoGenerators.set(generatorKey, uno);
   }
