@@ -1,0 +1,17 @@
+@import "@unocss/reset/eric-meyer.css";
+@import "@unocss/preset-uno";
+@import "@unocss/preset-icons";
+@import "@unocss/preset-web-fonts";
+
+:theme {
+  --color-primary: #ff4000;
+  --font-family-sans: webfont("Inter:400,500,600");
+}
+
+.center-box {
+  --uno: flex flex-col items-center justify-center w-screen h-screen;
+}
+
+.logo {
+  --uno: text-gray-400 hover:text-gray-700;
+}

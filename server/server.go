@@ -9,18 +9,15 @@ import (
 	"syscall"
 
 	"github.com/esm-dev/esm.sh/server/storage"
-
 	logger "github.com/ije/gox/log"
 	"github.com/ije/rex"
 )
 
 var (
-	buildQueue *BuildQueue
 	config     *Config
 	log        *logger.Logger
-	cache      storage.Cache
-	db         storage.DataBase
-	fs         storage.FileSystem
+	buildQueue *BuildQueue
+	esmStorage storage.Storage
 )
 
 // Serve serves the esm.sh server
@@ -32,7 +29,7 @@ func Serve(efs EmbedFS) {
 	)
 
 	flag.StringVar(&cfile, "config", "config.json", "the config file path")
-	flag.BoolVar(&debug, "debug", false, "to run server in DEUBG mode")
+	flag.BoolVar(&debug, "debug", false, "run the server in DEUBG mode")
 	flag.Parse()
 
 	if !existsFile(cfile) {
@@ -50,7 +47,6 @@ func Serve(efs EmbedFS) {
 			fmt.Println("Config loaded from", cfile)
 		}
 	}
-	buildQueue = NewBuildQueue(int(config.BuildConcurrency))
 
 	if debug {
 		config.LogLevel = "debug"
@@ -65,27 +61,30 @@ func Serve(efs EmbedFS) {
 		embedFS = efs
 	}
 
-	log, err = logger.New(fmt.Sprintf("file:%s?buffer=32k", path.Join(config.LogDir, fmt.Sprintf("main-v%d.log", VERSION))))
+	log, err = logger.New(fmt.Sprintf("file:%s?buffer=32k&fileDateFormat=20060102", path.Join(config.LogDir, "server.log")))
 	if err != nil {
 		fmt.Printf("initiate logger: %v\n", err)
 		os.Exit(1)
 	}
 	log.SetLevelByName(config.LogLevel)
 
-	cache, err = storage.OpenCache(config.Cache)
-	if err != nil {
-		log.Fatalf("init cache(%s): %v", config.Cache, err)
+	var accessLogger *logger.Logger
+	if config.LogDir == "" {
+		accessLogger = &logger.Logger{}
+	} else {
+		accessLogger, err = logger.New(fmt.Sprintf("file:%s?buffer=32k&fileDateFormat=20060102", path.Join(config.LogDir, "access.log")))
+		if err != nil {
+			log.Fatalf("failed to initialize access logger: %v", err)
+		}
 	}
+	// quite in terminal
+	accessLogger.SetQuite(true)
 
-	fs, err = storage.OpenFS(config.Storage)
+	esmStorage, err = storage.New(&config.Storage)
 	if err != nil {
-		log.Fatalf("init fs(%s): %v", config.Storage, err)
+		log.Fatalf("failed to initialize build storage(%s): %v", config.Storage.Type, err)
 	}
-
-	db, err = storage.OpenDB(config.Database)
-	if err != nil {
-		log.Fatalf("init db(%s): %v", config.Database, err)
-	}
+	log.Debugf("storage initialized, type: %s, endpoint: %s", config.Storage.Type, config.Storage.Endpoint)
 
 	err = loadNodeLibs(efs)
 	if err != nil {
@@ -99,17 +98,7 @@ func Serve(efs EmbedFS) {
 	}
 	log.Debugf("%d npm polyfills loaded", len(npmPolyfills))
 
-	var accessLogger *logger.Logger
-	if config.LogDir == "" {
-		accessLogger = &logger.Logger{}
-	} else {
-		accessLogger, err = logger.New(fmt.Sprintf("file:%s?buffer=32k&fileDateFormat=20060102", path.Join(config.LogDir, "access.log")))
-		if err != nil {
-			log.Fatalf("failed to initialize access logger: %v", err)
-		}
-	}
-	accessLogger.SetQuite(true) // quite in terminal
-
+	// check nodejs environment
 	nodejsInstallDir := os.Getenv("NODE_INSTALL_DIR")
 	if nodejsInstallDir == "" {
 		nodejsInstallDir = path.Join(config.WorkDir, "nodejs")
@@ -120,30 +109,34 @@ func Serve(efs EmbedFS) {
 	}
 	log.Debugf("nodejs: v%s, pnpm: %s, registry: %s", nodeVer, pnpmVer, config.NpmRegistry)
 
-	err = initCJSLexerNodeApp()
+	// init cjs lexer
+	err = initCJSModuleLexer()
 	if err != nil {
-		log.Fatalf("failed to initialize the cjs_lexer node app: %v", err)
+		log.Fatalf("failed to initialize cjs_lexer: %v", err)
 	}
-	log.Debugf("%s initialized", cjsLexerPkg)
+	log.Debugf("%s initialized", cjsModuleLexerPkg)
 
-	if !config.DisableCompression {
-		rex.Use(rex.Compression())
-	}
+	// init build queue
+	buildQueue = NewBuildQueue(int(config.BuildConcurrency))
+
+	// set rex middlewares
 	rex.Use(
-		rex.ErrorLogger(log),
+		rex.Logger(log),
 		rex.AccessLogger(accessLogger),
-		rex.Header("Server", "esm.sh"),
-		rex.Cors(rex.CORS{
+		rex.Cors(rex.CorsOptions{
 			AllowedOrigins:   []string{"*"},
 			AllowedMethods:   []string{"HEAD", "GET", "POST"},
 			ExposedHeaders:   []string{"X-Esm-Path", "X-TypeScript-Types"},
 			MaxAge:           86400, // 24 hours
 			AllowCredentials: false,
 		}),
+		rex.Header("Server", "esm.sh"),
+		rex.Optional(rex.Compress(), config.Compress),
 		auth(config.AuthSecret),
-		routes(),
+		routes(debug),
 	)
 
+	// start server
 	C := rex.Serve(rex.ServerConfig{
 		Port: uint16(config.Port),
 		TLS: rex.TLSConfig{
@@ -154,7 +147,6 @@ func Serve(efs EmbedFS) {
 			},
 		},
 	})
-
 	log.Infof("Server is ready on http://localhost:%d", config.Port)
 
 	c := make(chan os.Signal, 1)
@@ -166,7 +158,6 @@ func Serve(efs EmbedFS) {
 	}
 
 	// release resources
-	db.Close()
 	log.FlushBuffer()
 	accessLogger.FlushBuffer()
 }

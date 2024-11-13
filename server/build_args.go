@@ -16,7 +16,7 @@ type BuildArgs struct {
 	external          *StringSet
 	exports           *StringSet
 	conditions        []string
-	jsxRuntime        *Module
+	jsxRuntime        *ESMPath
 	keepNames         bool
 	ignoreAnnotations bool
 	externalRequire   bool
@@ -157,11 +157,11 @@ func encodeBuildArgs(args BuildArgs, isDts bool) string {
 	return ""
 }
 
-// fixBuildArgs removes invalid alias, deps, external from the build args
-func fixBuildArgs(npmrc *NpmRC, installDir string, args *BuildArgs, module Module) error {
+// normalizeBuildArgs removes invalid alias, deps, external from the build args
+func normalizeBuildArgs(npmrc *NpmRC, installDir string, args *BuildArgs, url ESMPath) error {
 	if len(args.alias) > 0 || len(args.deps) > 0 || args.external.Len() > 0 {
 		depsSet := NewStringSet()
-		err := walkDeps(npmrc, installDir, module, depsSet)
+		err := walkDeps(npmrc, installDir, url, depsSet)
 		if err != nil {
 			return err
 		}
@@ -174,7 +174,7 @@ func fixBuildArgs(npmrc *NpmRC, installDir string, args *BuildArgs, module Modul
 			}
 			for from, to := range alias {
 				pkgName, _, _, _ := splitPkgPath(to)
-				if pkgName == module.PkgName {
+				if pkgName == url.PkgName {
 					delete(alias, from)
 				} else {
 					depsSet.Add(pkgName)
@@ -185,12 +185,12 @@ func fixBuildArgs(npmrc *NpmRC, installDir string, args *BuildArgs, module Modul
 		if len(args.deps) > 0 {
 			deps := map[string]string{}
 			for name, version := range args.deps {
-				if module.PkgName == "react-dom" && name == "react" {
+				if url.PkgName == "react-dom" && name == "react" {
 					// react version should be the same as react-dom
 					continue
 				}
 				if depsSet.Has(name) {
-					if name != module.PkgName {
+					if name != url.PkgName {
 						deps[name] = version
 					}
 				}
@@ -201,7 +201,7 @@ func fixBuildArgs(npmrc *NpmRC, installDir string, args *BuildArgs, module Modul
 			external := NewStringSet()
 			for _, name := range args.external.Values() {
 				if strings.HasPrefix(name, "node:") || depsSet.Has(name) {
-					if name != module.PkgName || module.SubPath != "" {
+					if name != url.PkgName || url.SubPath != "" {
 						external.Add(name)
 					}
 				}
@@ -212,20 +212,24 @@ func fixBuildArgs(npmrc *NpmRC, installDir string, args *BuildArgs, module Modul
 	return nil
 }
 
-func walkDeps(npmrc *NpmRC, installDir string, module Module, mark *StringSet) (err error) {
-	if mark.Has(module.PkgName) {
+func walkDeps(npmrc *NpmRC, installDir string, esm ESMPath, mark *StringSet) (err error) {
+	if mark.Has(esm.PkgName) {
 		return
 	}
-	mark.Add(module.PkgName)
-	var p PackageJSON
-	pkgJsonPath := path.Join(installDir, "node_modules", ".pnpm", "node_modules", module.PkgName, "package.json")
+	mark.Add(esm.PkgName)
+	var p *PackageJSON
+	pkgJsonPath := path.Join(installDir, "node_modules", ".pnpm", "node_modules", esm.PkgName, "package.json")
 	if !existsFile(pkgJsonPath) {
-		pkgJsonPath = path.Join(installDir, "node_modules", module.PkgName, "package.json")
+		pkgJsonPath = path.Join(installDir, "node_modules", esm.PkgName, "package.json")
 	}
 	if existsFile(pkgJsonPath) {
-		err = utils.ParseJSONFile(pkgJsonPath, &p)
-	} else if regexpFullVersion.MatchString(module.PkgVersion) || module.GhPrefix {
-		p, err = npmrc.installPackage(module)
+		var raw PackageJSONRaw
+		err = utils.ParseJSONFile(pkgJsonPath, &raw)
+		if err == nil {
+			p = raw.ToNpmPackage()
+		}
+	} else if regexpVersionStrict.MatchString(esm.PkgVersion) || esm.GhPrefix {
+		p, err = npmrc.installPackage(esm)
 	} else {
 		return nil
 		// p, err = npmrc.getPackageInfo(module.PkgName, module.PkgVersion)
@@ -244,7 +248,7 @@ func walkDeps(npmrc *NpmRC, installDir string, module Module, mark *StringSet) (
 		if strings.HasPrefix(name, "@types/") || strings.HasPrefix(name, "@babel/") || strings.HasPrefix(name, "is-") {
 			continue
 		}
-		err := walkDeps(npmrc, installDir, Module{PkgName: name, PkgVersion: version}, mark)
+		err := walkDeps(npmrc, installDir, ESMPath{PkgName: name, PkgVersion: version}, mark)
 		if err != nil {
 			return err
 		}

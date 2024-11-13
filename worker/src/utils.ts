@@ -36,7 +36,7 @@ export function splitBy(s: string, searchString: string, fromLast = false): [str
 }
 
 /** create redirect response. */
-export function redirect(url: URL | string, headers: Headers, status: 301 | 302 = 302, cacheMaxAge = 600) {
+export function redirect(url: URL | string, headers: Headers, status: 301 | 302 = 302, cacheMaxAge = 3600) {
   headers.set("Location", url.toString());
   if (status === 301) {
     headers.set("Cache-Control", "public, max-age=31536000, immutable");

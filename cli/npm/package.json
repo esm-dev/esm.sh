@@ -1,0 +1,11 @@
+{
+  "name": "esm.sh",
+  "version": "0.136.0",
+  "description": "The CLI tool for esm.sh apps.",
+  "bin": {
+    "esm.sh": "bin/esm.sh"
+  },
+  "scripts": {
+    "postinstall": "node install.mjs"
+  }
+}

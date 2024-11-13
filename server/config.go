@@ -1,6 +1,7 @@
 package server
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -8,31 +9,35 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+
+	"github.com/esm-dev/esm.sh/server/storage"
 )
 
 // Config represents the configuration of esm.sh server.
 type Config struct {
-	Port               uint16                 `json:"port"`
-	TlsPort            uint16                 `json:"tlsPort"`
-	WorkDir            string                 `json:"workDir"`
-	AuthSecret         string                 `json:"authSecret"`
-	AllowList          AllowList              `json:"allowList"`
-	BanList            BanList                `json:"banList"`
-	BuildConcurrency   uint16                 `json:"buildConcurrency"`
-	BuildTimeout       uint16                 `json:"buildTimeout"`
-	Minify             json.RawMessage        `json:"minify"`
-	DisableSourceMap   bool                   `json:"disableSourceMap"`
-	DisableCompression bool                   `json:"disableCompression"`
-	Cache              string                 `json:"cache"`
-	Storage            string                 `json:"storage"`
-	Database           string                 `json:"database"`
-	LogDir             string                 `json:"logDir"`
-	LogLevel           string                 `json:"logLevel"`
-	NpmRegistry        string                 `json:"npmRegistry"`
-	NpmToken           string                 `json:"npmToken"`
-	NpmUser            string                 `json:"npmUser"`
-	NpmPassword        string                 `json:"npmPassword"`
-	NpmRegistries      map[string]NpmRegistry `json:"npmRegistries"`
+	Port             uint16                 `json:"port"`
+	TlsPort          uint16                 `json:"tlsPort"`
+	WorkDir          string                 `json:"workDir"`
+	AuthSecret       string                 `json:"authSecret"`
+	AllowList        AllowList              `json:"allowList"`
+	BanList          BanList                `json:"banList"`
+	BuildConcurrency uint16                 `json:"buildConcurrency"`
+	BuildWaitTime    uint16                 `json:"buildWaitTime"`
+	Storage          storage.StorageOptions `json:"storage"`
+	CacheRawFile     bool                   `json:"cacheRawFile"`
+	LogDir           string                 `json:"logDir"`
+	LogLevel         string                 `json:"logLevel"`
+	NpmRegistry      string                 `json:"npmRegistry"`
+	NpmToken         string                 `json:"npmToken"`
+	NpmUser          string                 `json:"npmUser"`
+	NpmPassword      string                 `json:"npmPassword"`
+	NpmRegistries    map[string]NpmRegistry `json:"npmRegistries"`
+	MinifyRaw        json.RawMessage        `json:"minify"`
+	SourceMapRaw     json.RawMessage        `json:"sourceMap"`
+	CompressRaw      json.RawMessage        `json:"compress"`
+	Minify           bool                   `json:"-"`
+	SourceMap        bool                   `json:"-"`
+	Compress         bool                   `json:"-"`
 }
 
 type BanList struct {
@@ -55,32 +60,35 @@ type AllowScope struct {
 }
 
 // LoadConfig loads config from the given file. Panic if failed to load.
-func LoadConfig(filename string) (cfg *Config, err error) {
+func LoadConfig(filename string) (*Config, error) {
 	file, err := os.Open(filename)
 	if err != nil {
 		return nil, fmt.Errorf("fail to read config file: %w", err)
 	}
 	defer file.Close()
 
-	err = json.NewDecoder(file).Decode(&cfg)
+	var c Config
+	err = json.NewDecoder(file).Decode(&c)
 	if err != nil {
 		return nil, fmt.Errorf("fail to parse config: %w", err)
 	}
 
 	// ensure `workDir`
-	if cfg.WorkDir == "" {
+	if c.WorkDir == "" {
 		homeDir, err := os.UserHomeDir()
 		if err != nil {
 			return nil, fmt.Errorf("fail to get current user home directory: %w", err)
 		}
-		cfg.WorkDir = path.Join(homeDir, ".esmd")
+		c.WorkDir = path.Join(homeDir, ".esmd")
 	} else {
-		cfg.WorkDir, err = filepath.Abs(cfg.WorkDir)
+		c.WorkDir, err = filepath.Abs(c.WorkDir)
 		if err != nil {
 			return nil, fmt.Errorf("fail to get absolute path of the work directory: %w", err)
 		}
 	}
-	return fixConfig(cfg), nil
+
+	normalizeConfig(&c)
+	return &c, nil
 }
 
 func DefaultConfig() *Config {
@@ -88,41 +96,46 @@ func DefaultConfig() *Config {
 	if err != nil {
 		panic(err)
 	}
-	return fixConfig(&Config{
-		WorkDir: path.Join(homeDir, ".esmd"),
-	})
+	c := &Config{WorkDir: path.Join(homeDir, ".esmd")}
+	normalizeConfig(c)
+	return c
 }
 
-func fixConfig(c *Config) *Config {
+func normalizeConfig(c *Config) {
 	if c.Port == 0 {
 		c.Port = 8080
 	}
 	if c.AuthSecret == "" {
 		c.AuthSecret = os.Getenv("AUTH_SECRET")
 	}
-	if !c.DisableCompression {
-		c.DisableCompression = os.Getenv("DISABLE_COMPRESSION") == "true"
-	}
-	if !c.DisableSourceMap {
-		c.DisableSourceMap = os.Getenv("DISABLE_SOURCEMAP") == "true"
-	}
-	if c.Minify == nil && os.Getenv("MINIFY") == "false" {
-		c.Minify = []byte("false")
-	}
 	if c.BuildConcurrency == 0 {
 		c.BuildConcurrency = uint16(runtime.NumCPU())
 	}
-	if c.BuildTimeout == 0 {
-		c.BuildTimeout = 30 // seconds
+	if c.BuildWaitTime == 0 {
+		c.BuildWaitTime = 30 // seconds
 	}
-	if c.Cache == "" {
-		c.Cache = "memory:default"
+	if c.Storage.Type == "" {
+		storageType := os.Getenv("STORAGE_TYPE")
+		if storageType == "" {
+			storageType = "fs"
+		}
+		c.Storage.Type = storageType
 	}
-	if c.Database == "" {
-		c.Database = fmt.Sprintf("bolt:%s", path.Join(c.WorkDir, "esm.db"))
+	if c.Storage.Endpoint == "" {
+		storageEndpint := os.Getenv("STORAGE_ENDPOINT")
+		if storageEndpint == "" {
+			storageEndpint = path.Join(c.WorkDir, "storage")
+		}
+		c.Storage.Endpoint = storageEndpint
 	}
-	if c.Storage == "" {
-		c.Storage = fmt.Sprintf("local:%s", path.Join(c.WorkDir, "storage"))
+	if c.Storage.Region == "" {
+		c.Storage.Region = os.Getenv("STORAGE_REGION")
+	}
+	if c.Storage.AccessKeyID == "" {
+		c.Storage.AccessKeyID = os.Getenv("STORAGE_ACCESS_KEY_ID")
+	}
+	if c.Storage.SecretAccessKey == "" {
+		c.Storage.SecretAccessKey = os.Getenv("STORAGE_SECRET_ACCESS_KEY")
 	}
 	if c.LogDir == "" {
 		c.LogDir = path.Join(c.WorkDir, "log")
@@ -166,7 +179,9 @@ func fixConfig(c *Config) *Config {
 		}
 		c.NpmRegistries = regs
 	}
-	return c
+	c.Compress = !(bytes.Equal(c.CompressRaw, []byte("false")) || os.Getenv("COMPRESS") == "false")
+	c.SourceMap = !(bytes.Equal(c.SourceMapRaw, []byte("false")) || (os.Getenv("SOURCEMAP") == "false" || os.Getenv("SOURCE_MAP") == "false"))
+	c.Minify = !(bytes.Equal(c.MinifyRaw, []byte("false")) || os.Getenv("MINIFY") == "false")
 }
 
 // extractPackageName Will take a packageName as input extract key parts and return them

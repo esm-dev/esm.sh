@@ -3,141 +3,138 @@ package server
 import (
 	"encoding/json"
 	"errors"
-	"path"
 	"strings"
 
-	"github.com/evanw/esbuild/pkg/api"
+	"github.com/esm-dev/esm.sh/server/common"
+	esbuild "github.com/evanw/esbuild/pkg/api"
+	"github.com/ije/gox/utils"
 )
 
-type ImportMap struct {
-	Imports map[string]string            `json:"imports"`
-	Scopes  map[string]map[string]string `json:"scopes"`
+type TransformOptions struct {
+	Filename        string          `json:"filename"`
+	Lang            string          `json:"lang"`
+	Code            string          `json:"code"`
+	ImportMap       json.RawMessage `json:"importMap"`
+	JsxImportSource string          `json:"jsxImportSource"`
+	Target          string          `json:"target"`
+	SourceMap       string          `json:"sourceMap"`
+	Minify          bool            `json:"minify"`
 }
 
-type TransformInput struct {
-	Code      string          `json:"code"`
-	ImportMap json.RawMessage `json:"importMap"`
-	Filename  string          `json:"filename"`
-	Target    string          `json:"target"`
-	SourceMap bool            `json:"sourceMap"`
+type ResolvedTransformOptions struct {
+	TransformOptions
+	importMap     common.ImportMap
+	globalVersion string
 }
 
 type TransformOutput struct {
 	Code string `json:"code"`
-	Map  string `json:"map,omitempty"`
+	Map  string `json:"map"`
 }
 
-func transform(input TransformInput) (out TransformOutput, err error) {
-	target := api.ESNext
-	if input.Target != "" {
-		if t, ok := targets[input.Target]; ok {
+func transform(options *ResolvedTransformOptions) (out *TransformOutput, err error) {
+	target := esbuild.ESNext
+	if options.Target != "" {
+		if t, ok := targets[options.Target]; ok {
 			target = t
 		} else {
-			err = errors.New("<400> invalid target")
+			err = errors.New("invalid target")
 			return
 		}
 	}
 
-	loader := api.LoaderJS
-	extname := path.Ext(input.Filename)
-	switch extname {
-	case ".jsx":
-		loader = api.LoaderJSX
-	case ".ts":
-		loader = api.LoaderTS
-	case ".tsx":
-		loader = api.LoaderTSX
-	}
+	loader := esbuild.LoaderJS
+	sourceCode := options.Code
+	jsxImportSource := options.JsxImportSource
 
-	var importMap ImportMap
-	err = json.Unmarshal(input.ImportMap, &importMap)
-	if err != nil {
+	if options.Lang == "" && options.Filename != "" {
+		filename, _ := utils.SplitByFirstByte(options.Filename, '?')
+		_, basename := utils.SplitByLastByte(filename, '/')
+		_, options.Lang = utils.SplitByLastByte(basename, '.')
+	}
+	switch options.Lang {
+	case "js":
+		loader = esbuild.LoaderJS
+	case "jsx":
+		loader = esbuild.LoaderJSX
+	case "ts":
+		loader = esbuild.LoaderTS
+	case "tsx":
+		loader = esbuild.LoaderTSX
+	case "css":
+		loader = esbuild.LoaderCSS
+	default:
+		err = errors.New("unsupported language:" + options.Lang)
 		return
 	}
 
-	imports := map[string]string{}
-	trailingSlashImports := map[string]string{}
-	jsxImportSource := ""
-
-	// todo: use importMap.Scopes
-	if len(importMap.Imports) > 0 {
-		for key, value := range importMap.Imports {
-			if value != "" {
-				if strings.HasSuffix(key, "/") {
-					trailingSlashImports[key] = value
-				} else {
-					if key == "@jsxImportSource" {
-						jsxImportSource = value
-					}
-					imports[key] = value
-				}
+	if jsxImportSource == "" && (loader == esbuild.LoaderJSX || loader == esbuild.LoaderTSX) {
+		var ok bool
+		for _, key := range []string{"@jsxRuntime", "@jsxImportSource", "preact", "react"} {
+			jsxImportSource, ok = options.importMap.Resolve(key)
+			if ok {
+				break
 			}
+		}
+		if !ok {
+			jsxImportSource = "react"
 		}
 	}
 
-	onResolver := func(args api.OnResolveArgs) (api.OnResolveResult, error) {
-		path := args.Path
-		if value, ok := imports[path]; ok {
-			path = value
-		} else {
-			for key, value := range trailingSlashImports {
-				if strings.HasPrefix(path, key) {
-					path = value + path[len(key):]
-					break
-				}
-			}
-		}
-		return api.OnResolveResult{
-			Path:     path,
-			External: true,
-		}, nil
+	sourceMap := esbuild.SourceMapNone
+	if options.SourceMap == "external" {
+		sourceMap = esbuild.SourceMapExternal
+	} else if options.SourceMap == "inline" {
+		sourceMap = esbuild.SourceMapInline
 	}
-	stdin := &api.StdinOptions{
-		Contents:   input.Code,
-		ResolveDir: "/",
-		Sourcefile: input.Filename,
+
+	filename := options.Filename
+	if filename == "" {
+		filename = "source." + options.Lang
+	}
+	stdin := &esbuild.StdinOptions{
+		Sourcefile: filename,
+		Contents:   sourceCode,
 		Loader:     loader,
 	}
-	jsx := api.JSXTransform
-	if jsxImportSource != "" {
-		jsx = api.JSXAutomatic
-	}
-	opts := api.BuildOptions{
-		Outdir:           "/esbuild",
-		Stdin:            stdin,
-		Platform:         api.PlatformBrowser,
-		Format:           api.FormatESModule,
-		Target:           target,
-		JSX:              jsx,
-		JSXImportSource:  jsxImportSource,
-		Bundle:           true,
-		TreeShaking:      api.TreeShakingFalse,
-		MinifyWhitespace: true,
-		MinifySyntax:     true,
-		Write:            false,
-		Plugins: []api.Plugin{
+	opts := esbuild.BuildOptions{
+		Stdin:             stdin,
+		Platform:          esbuild.PlatformBrowser,
+		Format:            esbuild.FormatESModule,
+		Target:            target,
+		JSX:               esbuild.JSXAutomatic,
+		JSXImportSource:   strings.TrimSuffix(jsxImportSource, "/"),
+		MinifyWhitespace:  options.Minify,
+		MinifySyntax:      options.Minify,
+		MinifyIdentifiers: options.Minify,
+		Sourcemap:         sourceMap,
+		Bundle:            true,
+		Outdir:            "/esbuild",
+		Write:             false,
+		Plugins: []esbuild.Plugin{
 			{
 				Name: "resolver",
-				Setup: func(build api.PluginBuild) {
-					build.OnResolve(api.OnResolveOptions{Filter: ".*"}, onResolver)
+				Setup: func(build esbuild.PluginBuild) {
+					build.OnResolve(esbuild.OnResolveOptions{Filter: ".*"}, func(args esbuild.OnResolveArgs) (esbuild.OnResolveResult, error) {
+						path, _ := options.importMap.Resolve(args.Path)
+						return esbuild.OnResolveResult{Path: path, External: true}, nil
+					})
 				},
 			},
 		},
 	}
-	if input.SourceMap {
-		opts.Sourcemap = api.SourceMapExternal
-	}
-	ret := api.Build(opts)
+	ret := esbuild.Build(opts)
 	if len(ret.Errors) > 0 {
-		err = errors.New("<400> failed to validate code: " + ret.Errors[0].Text)
+		err = errors.New("failed to validate code: " + ret.Errors[0].Text)
 		return
 	}
 	if len(ret.OutputFiles) == 0 {
-		err = errors.New("<400> failed to validate code: no output files")
+		err = errors.New("failed to validate code: no output files")
 		return
 	}
+	out = &TransformOutput{}
 	for _, file := range ret.OutputFiles {
-		if strings.HasSuffix(file.Path, ".js") {
+		if strings.HasSuffix(file.Path, ".js") || strings.HasSuffix(file.Path, ".css") {
 			out.Code = string(file.Contents)
 		} else if strings.HasSuffix(file.Path, ".map") {
 			out.Map = string(file.Contents)

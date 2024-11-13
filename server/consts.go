@@ -6,6 +6,7 @@ const assetMaxSize = 50 * 1024 * 1024 // limit asset size to 50mb
 
 // asset extensions
 var assetExts = map[string]bool{
+	"node":       true,
 	"wasm":       true,
 	"css":        true,
 	"less":       true,
@@ -22,7 +23,6 @@ var assetExts = map[string]bool{
 	"tmTheme":    true,
 	"yml":        true,
 	"yaml":       true,
-	"pdf":        true,
 	"txt":        true,
 	"glsl":       true,
 	"frag":       true,
@@ -53,13 +53,7 @@ var assetExts = map[string]bool{
 	"oga":        true,
 	"wav":        true,
 	"weba":       true,
-	"mp4":        true,
-	"m4v":        true,
-	"ogv":        true,
-	"webm":       true,
-	"zip":        true,
 	"gz":         true,
-	"tar":        true,
 	"tgz":        true,
 }
 

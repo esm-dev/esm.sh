@@ -12,31 +12,47 @@ import (
 	"strings"
 
 	"github.com/Masterminds/semver/v3"
+	"github.com/ije/gox/valid"
 )
 
 const EOL = "\n"
+const MB = 1 << 20
 
 var (
-	regexpFullVersion = regexp.MustCompile(`^\d+\.\d+\.\d+[\w\.\+\-]*$`)
-	regexpLocPath     = regexp.MustCompile(`:\d+:\d+$`)
-	regexpJSIdent     = regexp.MustCompile(`^[a-zA-Z_$][\w$]*$`)
-	regexpGlobalIdent = regexp.MustCompile(`__[a-zA-Z]+\$`)
-	regexpVarEqual    = regexp.MustCompile(`var ([\w$]+)\s*=\s*[\w$]+$`)
+	regexpVersion       = regexp.MustCompile(`^[\w\+\-\.]+$`)
+	regexpVersionStrict = regexp.MustCompile(`^\d+\.\d+\.\d+(-[\w\+\-\.]+)?$`)
+	regexpVuePath       = regexp.MustCompile(`/\*?vue@([~\^]?[\w\+\-\.]+)(/|\?|&|$)`)
+	regexpSveltePath    = regexp.MustCompile(`/\*?svelte@([~\^]?[\w\+\-\.]+)(/|\?|&|$)`)
+	regexpLocPath       = regexp.MustCompile(`:\d+:\d+$`)
+	regexpJSIdent       = regexp.MustCompile(`^[a-zA-Z_$][\w$]*$`)
+	regexpGlobalIdent   = regexp.MustCompile(`__[a-zA-Z]+\$`)
+	regexpVarEqual      = regexp.MustCompile(`var ([\w$]+)\s*=\s*[\w$]+$`)
+	regexpDomain        = regexp.MustCompile(`^[a-z0-9\-]+(\.[a-z0-9\-]+)*\.[a-z]+$`)
 )
 
-// isHttpSepcifier returns true if the import path is a remote URL.
-func isHttpSepcifier(importPath string) bool {
-	return strings.HasPrefix(importPath, "https://") || strings.HasPrefix(importPath, "http://")
+// isHttpSepcifier returns true if the specifier is a remote URL.
+func isHttpSepcifier(specifier string) bool {
+	return strings.HasPrefix(specifier, "https://") || strings.HasPrefix(specifier, "http://")
 }
 
-// isRelativeSpecifier returns true if the import path is a local path.
-func isRelativeSpecifier(importPath string) bool {
-	return strings.HasPrefix(importPath, "./") || strings.HasPrefix(importPath, "../") || importPath == "." || importPath == ".."
+// isRelPathSpecifier returns true if the specifier is a local path.
+func isRelPathSpecifier(specifier string) bool {
+	return strings.HasPrefix(specifier, "./") || strings.HasPrefix(specifier, "../")
+}
+
+// isAbsPathSpecifier returns true if the specifier is an absolute path.
+func isAbsPathSpecifier(specifier string) bool {
+	return strings.HasPrefix(specifier, "/") || strings.HasPrefix(specifier, "file://")
 }
 
 // semverLessThan returns true if the version a is less than the version b.
 func semverLessThan(a string, b string) bool {
 	return semver.MustParse(a).LessThan(semver.MustParse(b))
+}
+
+// checks if the given hostname is a local address.
+func isLocalhost(hostname string) bool {
+	return hostname == "localhost" || hostname == "127.0.0.1" || (valid.IsIPv4(hostname) && strings.HasPrefix(hostname, "192.168."))
 }
 
 // includes returns true if the given string is included in the given array.
@@ -86,7 +102,7 @@ func ensureDir(dir string) (err error) {
 // relPath returns a relative path from the base path to the target path.
 func relPath(basePath, targetPath string) (string, error) {
 	rp, err := filepath.Rel(basePath, targetPath)
-	if err == nil && !isRelativeSpecifier(rp) {
+	if err == nil && !isRelPathSpecifier(rp) {
 		rp = "./" + rp
 	}
 	return rp, err
@@ -132,15 +148,12 @@ func findFiles(root string, dir string, fn func(p string) bool) ([]string, error
 
 // btoaUrl converts a string to a base64 string.
 func btoaUrl(s string) string {
-	return strings.TrimRight(base64.URLEncoding.EncodeToString([]byte(s)), "=")
+	return base64.RawURLEncoding.EncodeToString([]byte(s))
 }
 
 // atobUrl converts a base64 string to a string.
 func atobUrl(s string) (string, error) {
-	if l := len(s) % 4; l > 0 {
-		s += strings.Repeat("=", 4-l)
-	}
-	data, err := base64.URLEncoding.DecodeString(s)
+	data, err := base64.RawURLEncoding.DecodeString(s)
 	if err != nil {
 		return "", err
 	}

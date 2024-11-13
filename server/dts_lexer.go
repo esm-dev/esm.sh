@@ -70,7 +70,7 @@ func parseDts(r io.Reader, w *bytes.Buffer, resolve func(specifier string, kind 
 				path := string(a[0][2])
 				if format == "path" || format == "types" {
 					if format == "path" {
-						if !isRelativeSpecifier(path) {
+						if !isRelPathSpecifier(path) {
 							path = "./" + path
 						}
 					}
