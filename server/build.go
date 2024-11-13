@@ -1021,7 +1021,11 @@ rebuild:
 				header.WriteString("pkg.pr.new/")
 			}
 			header.WriteString(ctx.esm.PkgName)
-			header.WriteString("@")
+			if ctx.esm.GhPrefix {
+				header.WriteByte('#')
+			} else {
+				header.WriteByte('@')
+			}
 			header.WriteString(ctx.esm.PkgVersion)
 			if ctx.esm.SubBareName != "" {
 				header.WriteByte('/')
