@@ -115,7 +115,7 @@ func ghInstall(wd, name, hash string) (err error) {
 			continue
 		}
 		extname := path.Ext(fp)
-		if !(extname != "" && (assetExts[extname[1:]] || includes(esExts, extname))) {
+		if !(extname != "" && (assetExts[extname[1:]] || contains(moduleExts, extname))) {
 			// skip source files
 			// skip non-asset files
 			continue

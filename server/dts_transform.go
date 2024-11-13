@@ -170,7 +170,7 @@ func transformDTS(ctx *BuildContext, dts string, buildArgsPrefix string, marker 
 			return specifier, nil
 		}
 
-		typesPkgName := toTypesPkgName(depPkgName)
+		typesPkgName := toTypesPackageName(depPkgName)
 		if _, ok := ctx.packageJson.Dependencies[typesPkgName]; ok {
 			depPkgName = typesPkgName
 		} else if _, ok := ctx.packageJson.PeerDependencies[typesPkgName]; ok {

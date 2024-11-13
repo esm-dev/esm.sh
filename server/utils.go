@@ -19,15 +19,15 @@ const EOL = "\n"
 const MB = 1 << 20
 
 var (
-	regexpVersion       = regexp.MustCompile(`^[\w\+\-\.]+$`)
-	regexpVersionStrict = regexp.MustCompile(`^\d+\.\d+\.\d+(-[\w\+\-\.]+)?$`)
-	regexpVuePath       = regexp.MustCompile(`/\*?vue@([~\^]?[\w\+\-\.]+)(/|\?|&|$)`)
-	regexpSveltePath    = regexp.MustCompile(`/\*?svelte@([~\^]?[\w\+\-\.]+)(/|\?|&|$)`)
-	regexpLocPath       = regexp.MustCompile(`:\d+:\d+$`)
-	regexpJSIdent       = regexp.MustCompile(`^[a-zA-Z_$][\w$]*$`)
-	regexpGlobalIdent   = regexp.MustCompile(`__[a-zA-Z]+\$`)
-	regexpVarEqual      = regexp.MustCompile(`var ([\w$]+)\s*=\s*[\w$]+$`)
-	regexpDomain        = regexp.MustCompile(`^[a-z0-9\-]+(\.[a-z0-9\-]+)*\.[a-z]+$`)
+	regexpVersion          = regexp.MustCompile(`^[\w\+\-\.]+$`)
+	regexpVersionStrict    = regexp.MustCompile(`^\d+\.\d+\.\d+(-[\w\+\-\.]+)?$`)
+	regexpLocPath          = regexp.MustCompile(`:\d+:\d+$`)
+	regexpJSIdent          = regexp.MustCompile(`^[a-zA-Z_$][\w$]*$`)
+	regexpESMInternalIdent = regexp.MustCompile(`__[a-zA-Z]+\$`)
+	regexpVarDecl          = regexp.MustCompile(`var ([\w$]+)\s*=\s*[\w$]+$`)
+	regexpDomain           = regexp.MustCompile(`^[a-z0-9\-]+(\.[a-z0-9\-]+)*\.[a-z]+$`)
+	regexpSveltePath       = regexp.MustCompile(`/\*?svelte@([~\^]?[\w\+\-\.]+)(/|\?|&|$)`)
+	regexpVuePath          = regexp.MustCompile(`/\*?vue@([~\^]?[\w\+\-\.]+)(/|\?|&|$)`)
 )
 
 // isHttpSepcifier returns true if the specifier is a remote URL.
@@ -55,8 +55,8 @@ func isLocalhost(hostname string) bool {
 	return hostname == "localhost" || hostname == "127.0.0.1" || (valid.IsIPv4(hostname) && strings.HasPrefix(hostname, "192.168."))
 }
 
-// includes returns true if the given string is included in the given array.
-func includes(a []string, s string) bool {
+// contains returns true if the given string is included in the given array.
+func contains(a []string, s string) bool {
 	if len(a) == 0 {
 		return false
 	}
@@ -158,17 +158,6 @@ func atobUrl(s string) (string, error) {
 		return "", err
 	}
 	return string(data), nil
-}
-
-// removeHttpUrlProtocol removes the `http[s]:` protocol from the given url.
-func removeHttpUrlProtocol(url string) string {
-	if strings.HasPrefix(url, "https://") {
-		return url[6:]
-	}
-	if strings.HasPrefix(url, "http://") {
-		return url[5:]
-	}
-	return url
 }
 
 // appendVaryHeader appends the given key to the `Vary` header.

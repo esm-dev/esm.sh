@@ -239,7 +239,7 @@ lookup:
 		}
 	}
 	if err != nil && strings.HasSuffix(err.Error(), " not found") && dts && !strings.HasPrefix(pkgName, "@types/") {
-		pkgName = toTypesPkgName(pkgName)
+		pkgName = toTypesPackageName(pkgName)
 		goto lookup
 	}
 	return
@@ -974,7 +974,7 @@ func (ctx *BuildContext) resloveDTS(entry BuildEntry) (string, error) {
 			versionParts[0] + "." + versionParts[1], // major.minor
 			versionParts[0],                         // major
 		}
-		typesPkgName := toTypesPkgName(packageJson.Name)
+		typesPkgName := toTypesPackageName(packageJson.Name)
 		pkgVersion, ok := ctx.args.deps[typesPkgName]
 		if ok {
 			// use the version of the `?deps` query if it exists
@@ -1090,7 +1090,7 @@ func (ctx *BuildContext) lexer(entry *BuildEntry, forceCjsOnly bool) (ret *Build
 		if isESM {
 			ret = &BuildMeta{
 				NamedExports:     namedExports,
-				HasDefaultExport: includes(namedExports, "default"),
+				HasDefaultExport: contains(namedExports, "default"),
 			}
 			return
 		}
@@ -1139,7 +1139,7 @@ func (ctx *BuildContext) cjsLexer(specifier string) (cjs cjsModuleLexerResult, e
 }
 
 func (ctx *BuildContext) esmLexer(specifier string) (isESM bool, namedExports []string, err error) {
-	isESM, namedExports, err = validateModuleFromFile(path.Join(ctx.wd, "node_modules", ctx.esm.PkgName, specifier))
+	isESM, namedExports, err = validateModuleFile(path.Join(ctx.wd, "node_modules", ctx.esm.PkgName, specifier))
 	if err != nil {
 		err = fmt.Errorf("esmLexer: %v", err)
 	}
@@ -1216,7 +1216,7 @@ func normalizeBuildEntry(ctx *BuildContext, entry *BuildEntry) {
 		}
 		// check if the cjs entry is an ESM
 		if entry.cjs != "" && strings.HasSuffix(entry.cjs, ".js") {
-			isESM, _, _ := validateModuleFromFile(path.Join(ctx.pkgDir, entry.cjs))
+			isESM, _, _ := validateModuleFile(path.Join(ctx.pkgDir, entry.cjs))
 			if isESM {
 				if entry.esm == "" {
 					entry.esm = entry.cjs

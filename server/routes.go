@@ -585,10 +585,10 @@ func routes(debug bool) rex.Handle {
 								content = append(content, string(tokenizer.Text()))
 							} else {
 								if mainAttr != "" && isHttpSepcifier(srcAttr) {
-									if !isHttpSepcifier(mainAttr) && endsWith(mainAttr, esExts...) {
+									if !isHttpSepcifier(mainAttr) && endsWith(mainAttr, moduleExts...) {
 										jsEntries[mainAttr] = struct{}{}
 									}
-								} else if !isHttpSepcifier(srcAttr) && endsWith(srcAttr, esExts...) {
+								} else if !isHttpSepcifier(srcAttr) && endsWith(srcAttr, moduleExts...) {
 									jsEntries[srcAttr] = struct{}{}
 								}
 							}
@@ -677,7 +677,7 @@ func routes(debug bool) rex.Handle {
 				}
 			}
 			extname := path.Ext(u.Path)
-			if !(includes(esExts, extname) || extname == ".vue" || extname == ".svelte" || extname == ".md" || extname == ".css") {
+			if !(contains(moduleExts, extname) || extname == ".vue" || extname == ".svelte" || extname == ".md" || extname == ".css") {
 				return rex.Redirect(u.String(), http.StatusMovedPermanently)
 			}
 			im := query.Get("im")
@@ -1767,22 +1767,4 @@ func throwErrorJS(ctx *rex.Context, message string, static bool) any {
 	}
 	ctx.SetHeader("Content-Type", ctJavaScript)
 	return rex.Status(500, buf)
-}
-
-func toModuleBareName(path string, stripIndexSuffier bool) string {
-	if path != "" {
-		subModule := path
-		if strings.HasSuffix(subModule, ".mjs") {
-			subModule = strings.TrimSuffix(subModule, ".mjs")
-		} else if strings.HasSuffix(subModule, ".cjs") {
-			subModule = strings.TrimSuffix(subModule, ".cjs")
-		} else {
-			subModule = strings.TrimSuffix(subModule, ".js")
-		}
-		if stripIndexSuffier {
-			subModule = strings.TrimSuffix(subModule, "/index")
-		}
-		return subModule
-	}
-	return ""
 }

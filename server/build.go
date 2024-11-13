@@ -823,7 +823,7 @@ func (ctx *BuildContext) buildModule() (result *BuildMeta, err error) {
 							ret.Errors = r.Errors
 							return
 						}
-						js := string(regexpGlobalIdent.ReplaceAllFunc(r.Code, func(b []byte) []byte {
+						js := string(regexpESMInternalIdent.ReplaceAllFunc(r.Code, func(b []byte) []byte {
 							id := string(b)
 							if id != "__filename$" && id != "__dirname$" {
 								return b
@@ -1042,7 +1042,7 @@ rebuild:
 			// add nodejs compatibility
 			if ctx.target != "node" {
 				ids := NewStringSet()
-				for _, r := range regexpGlobalIdent.FindAll(jsContent, -1) {
+				for _, r := range regexpESMInternalIdent.FindAll(jsContent, -1) {
 					ids.Add(string(r))
 				}
 				if ids.Has("__Process$") {
@@ -1138,7 +1138,7 @@ rebuild:
 					}
 					if !isRelPathSpecifier(specifier) && !isNodeInternalModule(specifier) {
 						if a := bytes.SplitN(jsContent, []byte(fmt.Sprintf(`("%s")`, specifier)), 2); len(a) >= 2 {
-							ret := regexpVarEqual.FindSubmatch(a[0])
+							ret := regexpVarDecl.FindSubmatch(a[0])
 							if len(ret) == 2 {
 								r, e := regexp.Compile(fmt.Sprintf(`[^\w$]%s(\(|\.default[^\w$=])`, string(ret[1])))
 								if e == nil {
@@ -1164,7 +1164,7 @@ rebuild:
 									entry := b.resolveEntry(esm)
 									if entry.esm == "" {
 										ret, _, e := b.lexer(&entry, true)
-										if e == nil && includes(ret.NamedExports, "__esModule") {
+										if e == nil && contains(ret.NamedExports, "__esModule") {
 											isEsModule[i] = true
 										}
 									}
