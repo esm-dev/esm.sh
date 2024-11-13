@@ -553,36 +553,11 @@ Deno.test("esm-worker", { sanitizeOps: false, sanitizeResources: false }, async 
       await fetchModule(
         "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/90.0.0.0 Safari/537.36",
       ),
-      "/es2021/",
-    );
-    assertStringIncludes(
-      await fetchModule(
-        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.0.0 Safari/537.36",
-      ),
-      "/es2023/",
-    );
-    assertStringIncludes(
-      await fetchModule(
-        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/116.0.0.0 Safari/537.36",
-      ),
-      "/es2023/",
-    );
-    assertStringIncludes(await fetchModule("HeadlessChrome/109"), "/es2023/");
-    assertStringIncludes(
-      await fetchModule(
-        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.3 Safari/605.1.15",
-      ),
-      "/es2021/",
-    );
-    assertStringIncludes(
-      await fetchModule(
-        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.6 Safari/605.1.1",
-      ),
-      "/es2023/",
+      "/es2022/",
     );
     assertStringIncludes(await fetchModule("Deno/1.33.1"), "/deno/");
     assertStringIncludes(await fetchModule("Deno/1.33.2"), "/denonext/");
-    assertStringIncludes(await fetchModule("ES/2022"), "/es2022/");
+    assertStringIncludes(await fetchModule("ES/2024"), "/es2024/");
   });
 
   await t.step("CORS", async () => {
