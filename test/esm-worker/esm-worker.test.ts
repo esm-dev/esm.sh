@@ -452,6 +452,21 @@ Deno.test("esm-worker", {
     assertEquals(res2.headers.get("Content-Type"), "application/typescript; charset=utf-8");
   });
 
+  await t.step("/fix-urls", async () => {
+    // fix legacy url: `/v111/PKG/es2022/PKG.js` -> `/v111/PKG/es2022/PKG.mjs`
+    {
+      const res = await fetch(`${workerOrigin}/v64/many-keys-weakmap@1.0.0/es2021/many-keys-weakmap.js`, {
+        headers: {
+          "User-Agent":
+            "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/116.0.0.0 Safari/537.36",
+        },
+      });
+      assertEquals(res.status, 200);
+      assertEquals(res.headers.get("Content-Type"), "application/javascript; charset=utf-8");
+      assertStringIncludes(await res.text(), "ManyKeysWeakMap");
+    }
+  });
+
   closeServer();
 });
 

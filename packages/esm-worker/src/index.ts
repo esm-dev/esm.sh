@@ -1,13 +1,6 @@
 import { compareVersions, satisfies, validate } from "compare-versions";
 import { getBuildTargetFromUA, targets } from "esm-compat";
-import type {
-  Context,
-  HttpMetadata,
-  Middleware,
-  PackageInfo,
-  PackageRegistryInfo,
-  WorkerStorage,
-} from "../types/index.d.ts";
+import type { Context, HttpMetadata, Middleware, PackageInfo, PackageRegistryInfo, WorkerStorage } from "../types/index.d.ts";
 import { assetsExts, cssPackages, STABLE_VERSION, stableBuild, VERSION } from "./consts.ts";
 import { getMimeType } from "./content_type.ts";
 import {
@@ -82,8 +75,8 @@ async function fetchOrigin(
   if (!res.ok) {
     // CF default error page(html)
     if (
-      res.status === 500 &&
-      res.headers.get("Content-Type")?.startsWith("text/html")
+      res.status === 500
+      && res.headers.get("Content-Type")?.startsWith("text/html")
     ) {
       return new Response("Bad Gateway", { status: 502, headers: resHeaders });
     }
@@ -140,10 +133,10 @@ async function fetchOriginWithKVCache(
   const KV = Reflect.get(env, "KV") as KVNamespace | undefined ?? asKV(R2);
   const fromWorker = req.headers.has("X-Real-Origin");
   const isModule = !(
-    ctx.url.searchParams.has("raw") ||
-    pathname.endsWith(".d.ts") ||
-    pathname.endsWith(".d.mts") ||
-    pathname.endsWith(".map")
+    ctx.url.searchParams.has("raw")
+    || pathname.endsWith(".d.ts")
+    || pathname.endsWith(".d.mts")
+    || pathname.endsWith(".map")
   );
 
   if (!fromWorker) {
@@ -263,8 +256,8 @@ async function fetchOriginWithR2Cache(
 
   const res = await fetchOrigin(req, env, ctx, pathname, resHeaders);
   if (res.ok) {
-    const contentType = res.headers.get("content-type") ||
-      getMimeType(pathname);
+    const contentType = res.headers.get("content-type")
+      || getMimeType(pathname);
     const buffer = await res.arrayBuffer();
     ctx.waitUntil(r2.put(pathname.slice(1), buffer.slice(0), {
       httpMetadata: { contentType },
@@ -297,15 +290,15 @@ function withESMWorker(middleware?: Middleware) {
       const isHeadMethod = req.method === "HEAD";
       const hasPinedTarget = targets.has(url.searchParams.get("target") ?? "");
       const cacheKey = new URL(url);
-      const varyUA = options?.varyUA &&
-        !hasPinedTarget &&
-        !url.hostname.endsWith(".d.ts") &&
-        !url.hostname.endsWith(".d.mts") &&
-        !url.searchParams.has("raw");
+      const varyUA = options?.varyUA
+        && !hasPinedTarget
+        && !url.hostname.endsWith(".d.ts")
+        && !url.hostname.endsWith(".d.mts")
+        && !url.searchParams.has("raw");
       if (varyUA) {
         const target = getBuildTargetFromUA(ua);
         cacheKey.searchParams.set("target", target);
-        //! don't delete this line, it used to ensure KV/R2 cache respecting different UA
+        // ! don't delete this line, it used to ensure KV/R2 cache respecting different UA
         url.searchParams.set("target", target);
       }
       for (const key of ["x-real-origin", "x-esm-worker-version"]) {
@@ -329,8 +322,8 @@ function withESMWorker(middleware?: Middleware) {
         res = new Response(res.body, { status: res.status, headers });
       }
       if (
-        res.ok &&
-        res.headers.get("Cache-Control")?.startsWith("public, max-age=")
+        res.ok
+        && res.headers.get("Cache-Control")?.startsWith("public, max-age=")
       ) {
         context.waitUntil(cache.put(cacheKey, res.clone()));
       }
@@ -357,10 +350,10 @@ function withESMWorker(middleware?: Middleware) {
 
     // return the CLI script
     if (
-      ua === "undici" ||
-      ua?.startsWith("Node/") ||
-      ua?.startsWith("Deno/") ||
-      ua?.startsWith("Bun/")
+      ua === "undici"
+      || ua?.startsWith("Node/")
+      || ua?.startsWith("Deno/")
+      || ua?.startsWith("Bun/")
     ) {
       if (pathname === "/" || /^\/v\d+\/?$/.test(pathname)) {
         return ctx.withCache(
@@ -406,15 +399,15 @@ function withESMWorker(middleware?: Middleware) {
     }
 
     if (
-      req.method === "POST" &&
-      (pathname === "/build" || pathname === "/transform")
+      req.method === "POST"
+      && (pathname === "/build" || pathname === "/transform")
     ) {
       const input = await req.text();
       const key = "esm-build-" + await hashText(input);
-      const storage = Reflect.get(env, "R2") as R2Bucket | undefined ??
-        noopStorage;
-      const KV = Reflect.get(env, "KV") as KVNamespace | undefined ??
-        asKV(storage);
+      const storage = Reflect.get(env, "R2") as R2Bucket | undefined
+        ?? noopStorage;
+      const KV = Reflect.get(env, "KV") as KVNamespace | undefined
+        ?? asKV(storage);
       const { value } = await KV.getWithMetadata(key, "stream");
       if (value) {
         const headers = corsHeaders();
@@ -456,9 +449,9 @@ function withESMWorker(middleware?: Middleware) {
 
     // ban malicious requests
     if (
-      pathname === "/favicon.ico" ||
-      pathname.startsWith("/.") ||
-      pathname.endsWith(".php")
+      pathname === "/favicon.ico"
+      || pathname.startsWith("/.")
+      || pathname.endsWith(".php")
     ) {
       return ctx.withCache(
         () =>
@@ -482,8 +475,8 @@ function withESMWorker(middleware?: Middleware) {
 
     // fix `/jsx-runtime` suffix in query, normally it happens with import maps
     if (
-      url.search.endsWith("/jsx-runtime") ||
-      url.search.endsWith("/jsx-dev-runtime")
+      url.search.endsWith("/jsx-runtime")
+      || url.search.endsWith("/jsx-dev-runtime")
     ) {
       const [q, jsxRuntime] = splitBy(url.search, "/", true);
       pathname = pathname + "/" + jsxRuntime;
@@ -508,8 +501,7 @@ function withESMWorker(middleware?: Middleware) {
 
     // check pinned build version
     const hasBuildVerPrefix = regexpBuildVersionPrefix.test(pathname);
-    const hasBuildVerQuery = !hasBuildVerPrefix &&
-      regexpBuildVersion.test(url.searchParams.get("pin") ?? "");
+    const hasBuildVerQuery = !hasBuildVerPrefix && regexpBuildVersion.test(url.searchParams.get("pin") ?? "");
     if (hasBuildVerPrefix) {
       const a = pathname.split("/");
       buildVersion = a[1];
@@ -518,11 +510,7 @@ function withESMWorker(middleware?: Middleware) {
       buildVersion = url.searchParams.get("pin")!;
     }
 
-    if (
-      pathname === "/build" ||
-      pathname === "/run" ||
-      pathname === "/hot"
-    ) {
+    if (pathname === "/build" || pathname === "/run" || pathname === "/hot") {
       if (!hasBuildVerPrefix && !hasBuildVerQuery) {
         return redirect(
           new URL(`/${buildVersion}${pathname}${url.search}`, url),
@@ -558,11 +546,11 @@ function withESMWorker(middleware?: Middleware) {
 
     if (
       hasBuildVerPrefix && (
-        pathname === "/node.ns.d.ts" ||
-        pathname === "/hot.d.ts" || (
-          pathname.startsWith("/node_") &&
-          pathname.endsWith(".js") &&
-          !pathname.slice(1).includes("/")
+        pathname === "/node.ns.d.ts"
+        || pathname === "/hot.d.ts" || (
+          pathname.startsWith("/node_")
+          && pathname.endsWith(".js")
+          && !pathname.slice(1).includes("/")
         )
       )
     ) {
@@ -607,8 +595,8 @@ function withESMWorker(middleware?: Middleware) {
       return err("Invalid path", 400);
     }
 
-    const fromEsmsh = packageName.startsWith("~") &&
-      regexpCommitish.test(packageName.slice(1));
+    const fromEsmsh = packageName.startsWith("~")
+      && regexpCommitish.test(packageName.slice(1));
     if (!fromEsmsh && !regexpNpmNaming.test(packageName)) {
       return err(`Invalid package name '${packageName}'`, 400);
     }
@@ -646,8 +634,8 @@ function withESMWorker(middleware?: Middleware) {
     if (
       gh && !(
         packageVersion && (
-          regexpCommitish.test(packageVersion) ||
-          regexpFullVersion.test(trimPrefix(packageVersion, "v"))
+          regexpCommitish.test(packageVersion)
+          || regexpFullVersion.test(trimPrefix(packageVersion, "v"))
         )
       )
     ) {
@@ -733,8 +721,8 @@ function withESMWorker(middleware?: Middleware) {
 
     // redirect `/@types/PKG` to `.d.ts` files
     if (
-      pkgId.startsWith("@types/") &&
-      (subPath === "" || !subPath.endsWith(".d.ts"))
+      pkgId.startsWith("@types/")
+      && (subPath === "" || !subPath.endsWith(".d.ts"))
     ) {
       return ctx.withCache(async () => {
         let p = `/${buildVersion}${pathname}`;
@@ -756,9 +744,9 @@ function withESMWorker(middleware?: Middleware) {
             return new Response(res.body, { status: res.status, headers });
           }
           const pkgJson: PackageInfo = await res.json();
-          p += "/" +
-            (pkgJson.types || pkgJson.typings || pkgJson.main ||
-              "index.d.ts");
+          p += "/"
+            + (pkgJson.types || pkgJson.typings || pkgJson.main
+              || "index.d.ts");
         }
         return redirect(new URL(p, url), 301);
       });
@@ -838,9 +826,22 @@ function withESMWorker(middleware?: Middleware) {
     }
 
     if (
-      hasBuildVerPrefix &&
-      (subPath.endsWith(".d.ts") || hasTargetSegment(subPath))
+      hasBuildVerPrefix
+      && (subPath.endsWith(".d.ts") || hasTargetSegment(subPath))
     ) {
+      // fix legacy url: `/v111/PKG/es2022/PKG.js` -> `/v111/PKG/es2022/PKG.mjs`
+      // caused by https://github.com/esm-dev/esm.sh/releases/tag/v112
+      if (buildVersion !== "stable" && subPath.endsWith("/" + packageName + ".js")) {
+        if (Number(buildVersion.slice(1)) < 112) {
+          const a = subPath.slice(1).split("/");
+          if (a.shift()?.startsWith("X-")) {
+            a.shift();
+          }
+          if (a.length === 1) {
+            subPath = subPath.slice(0, -3) + ".mjs";
+          }
+        }
+      }
       return ctx.withCache(() => {
         let prefix = `/${buildVersion}`;
         if (gh) {
