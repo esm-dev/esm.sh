@@ -187,7 +187,7 @@ func (ctx *BuildContext) existsPkgFile(fp ...string) bool {
 }
 
 func (ctx *BuildContext) lookupDep(specifier string, dts bool) (esm ESMPath, packageJson *PackageJSON, err error) {
-	pkgName, version, subpath, _ := splitPkgPath(specifier)
+	pkgName, version, subpath, _ := splitESMPath(specifier)
 lookup:
 	if v, ok := ctx.args.deps[pkgName]; ok {
 		packageJson, err = ctx.npmrc.getPackageInfo(pkgName, v)
@@ -219,7 +219,7 @@ lookup:
 	if version == "" {
 		if v, ok := ctx.packageJson.Dependencies[pkgName]; ok {
 			if strings.HasPrefix(v, "npm:") {
-				pkgName, version, _, _ = splitPkgPath(v[4:])
+				pkgName, version, _, _ = splitESMPath(v[4:])
 			} else {
 				version = v
 			}
@@ -790,7 +790,7 @@ func (ctx *BuildContext) resolveExternalModule(specifier string, kind api.Resolv
 	}
 
 	// common npm dependency
-	pkgName, version, subpath, _ := splitPkgPath(specifier)
+	pkgName, version, subpath, _ := splitESMPath(specifier)
 	if version == "" {
 		if pkgName == ctx.esm.PkgName {
 			version = ctx.esm.PkgVersion
@@ -829,7 +829,7 @@ func (ctx *BuildContext) resolveExternalModule(specifier string, kind api.Resolv
 			return
 		}
 		if strings.HasPrefix(version, "npm:") {
-			module.PkgName, module.PkgVersion, _, _ = splitPkgPath(version[4:])
+			module.PkgName, module.PkgVersion, _, _ = splitESMPath(version[4:])
 		} else if strings.HasPrefix(version, "git+ssh://") || strings.HasPrefix(version, "git+https://") || strings.HasPrefix(version, "git://") {
 			gitUrl, e := url.Parse(version)
 			if e != nil || gitUrl.Hostname() != "github.com" {

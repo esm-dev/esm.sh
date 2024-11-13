@@ -43,7 +43,7 @@ func decodeBuildArgs(npmrc *NpmRC, argsString string) (args BuildArgs, err error
 			} else if strings.HasPrefix(p, "d") {
 				deps := map[string]string{}
 				for _, p := range strings.Split(p[1:], ",") {
-					pkgName, pkgVersion, _, _ := splitPkgPath(p)
+					pkgName, pkgVersion, _, _ := splitESMPath(p)
 					deps[pkgName] = pkgVersion
 				}
 				args.deps = deps
@@ -173,7 +173,7 @@ func normalizeBuildArgs(npmrc *NpmRC, installDir string, args *BuildArgs, url ES
 				}
 			}
 			for from, to := range alias {
-				pkgName, _, _, _ := splitPkgPath(to)
+				pkgName, _, _, _ := splitESMPath(to)
 				if pkgName == url.PkgName {
 					delete(alias, from)
 				} else {

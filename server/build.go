@@ -386,7 +386,7 @@ func (ctx *BuildContext) buildModule() (result *BuildMeta, err error) {
 
 					// resolve specifier by checking `?alias` query
 					if len(ctx.args.alias) > 0 && !isRelPathSpecifier(specifier) {
-						pkgName, _, subpath, _ := splitPkgPath(specifier)
+						pkgName, _, subpath, _ := splitESMPath(specifier)
 						if name, ok := ctx.args.alias[pkgName]; ok {
 							specifier = name
 							if subpath != "" {
@@ -452,7 +452,7 @@ func (ctx *BuildContext) buildModule() (result *BuildMeta, err error) {
 					// force to use `npm:` specifier for `denonext` target
 					if forceNpmSpecifiers[specifier] && ctx.target == "denonext" {
 						version := ""
-						pkgName, _, subPath, _ := splitPkgPath(specifier)
+						pkgName, _, subPath, _ := splitESMPath(specifier)
 						if pkgName == ctx.esm.PkgName {
 							version = ctx.esm.PkgVersion
 						} else if v, ok := ctx.packageJson.Dependencies[pkgName]; ok && regexpVersionStrict.MatchString(v) {
@@ -835,7 +835,7 @@ func (ctx *BuildContext) buildModule() (result *BuildMeta, err error) {
 									filename = a[1]
 								}
 							}
-							pkgName, _, subPath, _ := splitPkgPath(filename)
+							pkgName, _, subPath, _ := splitESMPath(filename)
 							pkgVersion := ""
 							if ctx.packageJson.Name == pkgName {
 								pkgVersion = ctx.packageJson.Version

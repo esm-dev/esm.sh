@@ -823,7 +823,7 @@ func routes(debug bool) rex.Handle {
 			pathname = "/pr/" + pathname[5:]
 		}
 
-		esm, extraQuery, isFixedVersion, isModuleFullpath, err := praseESMPath(npmrc, pathname)
+		esm, extraQuery, isFixedVersion, isBuildPath, err := praseESMPath(npmrc, pathname)
 		if err != nil {
 			status := 500
 			message := err.Error()
@@ -913,7 +913,7 @@ func routes(debug bool) rex.Handle {
 			ext := path.Ext(esm.SubPath)
 			switch ext {
 			case ".js", ".mjs":
-				if isModuleFullpath {
+				if isBuildPath {
 					resType = ESMBuild
 				}
 			case ".ts", ".mts":
@@ -921,13 +921,13 @@ func routes(debug bool) rex.Handle {
 					resType = ESMDts
 				}
 			case ".css":
-				if isModuleFullpath {
+				if isBuildPath {
 					resType = ESMBuild
 				} else {
 					resType = RawFile
 				}
 			case ".map":
-				if isModuleFullpath {
+				if isBuildPath {
 					resType = ESMSourceMap
 				} else {
 					resType = RawFile
@@ -944,7 +944,7 @@ func routes(debug bool) rex.Handle {
 
 		// redirect to the url with fixed package version
 		if !isFixedVersion {
-			if isModuleFullpath {
+			if isBuildPath {
 				subPath := ""
 				query := ""
 				if esm.SubPath != "" {
@@ -993,7 +993,7 @@ func routes(debug bool) rex.Handle {
 			}
 
 			// fix url that is related to `import.meta.url`
-			if resType == RawFile && isModuleFullpath && !query.Has("raw") {
+			if resType == RawFile && isBuildPath && !query.Has("raw") {
 				extname := path.Ext(esm.SubPath)
 				dir := path.Join(npmrc.StoreDir(), esm.PackageName())
 				if !existsDir(dir) {
@@ -1575,7 +1575,7 @@ func auth(secret string) rex.Handle {
 	}
 }
 
-func praseESMPath(npmrc *NpmRC, pathname string) (esm ESMPath, extraQuery string, isFixedVersion bool, hasTargetSegment bool, err error) {
+func praseESMPath(npmrc *NpmRC, pathname string) (esm ESMPath, extraQuery string, isFixedVersion bool, isBuildPath bool, err error) {
 	// see https://pkg.pr.new
 	if strings.HasPrefix(pathname, "/pr/") {
 		pkgName, rest := utils.SplitByFirstByte(pathname[4:], '@')
@@ -1596,7 +1596,7 @@ func praseESMPath(npmrc *NpmRC, pathname string) (esm ESMPath, extraQuery string
 			PrPrefix:    true,
 		}
 		isFixedVersion = true
-		hasTargetSegment = checkTargetSegment(strings.Split(subPath, "/"))
+		isBuildPath = validateBuildPath(strings.Split(subPath, "/"))
 		return
 	}
 
@@ -1620,7 +1620,7 @@ func praseESMPath(npmrc *NpmRC, pathname string) (esm ESMPath, extraQuery string
 		}
 	}
 
-	pkgName, maybeVersion, subPath, hasTargetSegment := splitPkgPath(pathname)
+	pkgName, maybeVersion, subPath, isBuildPath := splitESMPath(pathname)
 	if !validatePackageName(pkgName) {
 		err = fmt.Errorf("invalid package name '%s'", pkgName)
 		return
@@ -1714,6 +1714,52 @@ func praseESMPath(npmrc *NpmRC, pathname string) (esm ESMPath, extraQuery string
 	return
 }
 
+func splitESMPath(pathname string) (pkgName string, version string, subPath string, isBuildPath bool) {
+	a := strings.Split(strings.TrimPrefix(pathname, "/"), "/")
+	nameAndVersion := ""
+	if strings.HasPrefix(a[0], "@") && len(a) > 1 {
+		nameAndVersion = a[0] + "/" + a[1]
+		subPath = strings.Join(a[2:], "/")
+		isBuildPath = validateBuildPath(a[2:])
+	} else {
+		nameAndVersion = a[0]
+		subPath = strings.Join(a[1:], "/")
+		isBuildPath = validateBuildPath(a[1:])
+	}
+	if len(nameAndVersion) > 0 && nameAndVersion[0] == '@' {
+		pkgName, version = utils.SplitByFirstByte(nameAndVersion[1:], '@')
+		pkgName = "@" + pkgName
+	} else {
+		pkgName, version = utils.SplitByFirstByte(nameAndVersion, '@')
+	}
+	if version != "" {
+		version = strings.TrimSpace(version)
+	}
+	return
+}
+
+func validateBuildPath(segments []string) bool {
+	if len(segments) < 2 {
+		return false
+	}
+	if strings.HasPrefix(segments[0], "X-") && len(segments) > 2 {
+		_, ok := targets[segments[1]]
+		if ok {
+			return endsWith(segments[len(segments)-1], ".mjs", ".js", ".css", ".map")
+		}
+	}
+	_, ok := targets[segments[0]]
+	if ok {
+		return endsWith(segments[len(segments)-1], ".mjs", ".js", ".css", ".map")
+	}
+	return false
+}
+
+func getPkgName(specifier string) string {
+	name, _, _, _ := splitESMPath(specifier)
+	return name
+}
+
 func throwErrorJS(ctx *rex.Context, message string, static bool) any {
 	buf := bytes.NewBuffer(nil)
 	fmt.Fprintf(buf, "/* esm.sh - error */\n")
@@ -1744,45 +1790,4 @@ func toModuleBareName(path string, stripIndexSuffier bool) string {
 		return subModule
 	}
 	return ""
-}
-
-func splitPkgPath(pathname string) (pkgName string, version string, subPath string, hasTargetSegment bool) {
-	a := strings.Split(strings.TrimPrefix(pathname, "/"), "/")
-	nameAndVersion := ""
-	if strings.HasPrefix(a[0], "@") && len(a) > 1 {
-		nameAndVersion = a[0] + "/" + a[1]
-		subPath = strings.Join(a[2:], "/")
-		hasTargetSegment = checkTargetSegment(a[2:])
-	} else {
-		nameAndVersion = a[0]
-		subPath = strings.Join(a[1:], "/")
-		hasTargetSegment = checkTargetSegment(a[1:])
-	}
-	if len(nameAndVersion) > 0 && nameAndVersion[0] == '@' {
-		pkgName, version = utils.SplitByFirstByte(nameAndVersion[1:], '@')
-		pkgName = "@" + pkgName
-	} else {
-		pkgName, version = utils.SplitByFirstByte(nameAndVersion, '@')
-	}
-	if version != "" {
-		version = strings.TrimSpace(version)
-	}
-	return
-}
-
-func checkTargetSegment(segments []string) bool {
-	if len(segments) < 2 {
-		return false
-	}
-	if strings.HasPrefix(segments[0], "X-") && len(segments) > 2 {
-		_, ok := targets[segments[1]]
-		return ok
-	}
-	_, ok := targets[segments[0]]
-	return ok
-}
-
-func getPkgName(specifier string) string {
-	name, _, _, _ := splitPkgPath(specifier)
-	return name
 }

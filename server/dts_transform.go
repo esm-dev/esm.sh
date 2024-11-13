@@ -114,7 +114,7 @@ func transformDTS(ctx *BuildContext, dts string, buildArgsPrefix string, marker 
 			return specifier, nil
 		}
 
-		depPkgName, _, subPath, _ := splitPkgPath(specifier)
+		depPkgName, _, subPath, _ := splitESMPath(specifier)
 		specifier = depPkgName
 		if subPath != "" {
 			specifier += "/" + subPath
@@ -150,7 +150,7 @@ func transformDTS(ctx *BuildContext, dts string, buildArgsPrefix string, marker 
 		// respect `?alias` query
 		alias, ok := ctx.args.alias[depPkgName]
 		if ok {
-			aliasPkgName, _, aliasSubPath, _ := splitPkgPath(alias)
+			aliasPkgName, _, aliasSubPath, _ := splitESMPath(alias)
 			depPkgName = aliasPkgName
 			if aliasSubPath != "" {
 				if subPath != "" {
