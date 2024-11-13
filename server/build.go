@@ -1014,11 +1014,20 @@ rebuild:
 	for _, file := range ret.OutputFiles {
 		if strings.HasSuffix(file.Path, ".js") {
 			jsContent := file.Contents
-			extraBanner := ""
-			if ctx.esm.SubBareName != "" {
-				extraBanner = "/" + ctx.esm.SubBareName
+			header := bytes.NewBufferString("/* esm.sh - ")
+			if ctx.esm.GhPrefix {
+				header.WriteString("github:")
+			} else if ctx.esm.PrPrefix {
+				header.WriteString("pkg.pr.new/")
 			}
-			header := bytes.NewBufferString(fmt.Sprintf("/* esm.sh - %s%s */\n", ctx.esm.PackageName(), extraBanner))
+			header.WriteString(ctx.esm.PkgName)
+			header.WriteString("@")
+			header.WriteString(ctx.esm.PkgVersion)
+			if ctx.esm.SubBareName != "" {
+				header.WriteByte('/')
+				header.WriteString(ctx.esm.SubBareName)
+			}
+			header.WriteString(" */\n")
 
 			// remove shebang
 			if bytes.HasPrefix(jsContent, []byte("#!/")) {
