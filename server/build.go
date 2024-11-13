@@ -126,7 +126,7 @@ func (ctx *BuildContext) Build() (ret *BuildMeta, err error) {
 	}
 
 	// check if the package is deprecated
-	if ctx.deprecated == "" && !ctx.esm.GhPrefix && !strings.HasPrefix(ctx.esm.PkgName, "@jsr/") {
+	if ctx.deprecated == "" && !ctx.esm.GhPrefix && !ctx.esm.PrPrefix && !strings.HasPrefix(ctx.esm.PkgName, "@jsr/") {
 		var info *PackageJSON
 		info, err = ctx.npmrc.fetchPackageInfo(ctx.esm.PkgName, ctx.esm.PkgVersion)
 		if err != nil {

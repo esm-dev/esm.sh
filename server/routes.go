@@ -841,9 +841,11 @@ func routes(debug bool) rex.Handle {
 			return rex.Status(403, "forbidden")
 		}
 
-		ghPrefix := ""
+		registryPrefix := ""
 		if esm.GhPrefix {
-			ghPrefix = "/gh"
+			registryPrefix = "/gh"
+		} else if esm.PrPrefix {
+			registryPrefix = "/pr"
 		}
 
 		// redirect `/@types/PKG` to it's main dts file
@@ -976,7 +978,7 @@ func routes(debug bool) rex.Handle {
 					qs = "?" + rawQuery
 				}
 				ctx.SetHeader("Cache-Control", cc1hour)
-				return rex.Redirect(fmt.Sprintf("%s%s/%s%s@%s%s%s", cdnOrigin, ghPrefix, asteriskPrefix, pkgName, pkgVersion, subPath, qs), http.StatusFound)
+				return rex.Redirect(fmt.Sprintf("%s%s/%s%s@%s%s%s", cdnOrigin, registryPrefix, asteriskPrefix, pkgName, pkgVersion, subPath, qs), http.StatusFound)
 			}
 		} else {
 			// serve `*.wasm` as an es6 module when `?module` query is set (requires `top-level-await` support)
@@ -1188,7 +1190,7 @@ func routes(debug bool) rex.Handle {
 			if targetFromUA {
 				appendVaryHeader(ctx.W.Header(), "User-Agent")
 			}
-			return rex.Redirect(fmt.Sprintf("%s%s/%s%s@%s%s%s", cdnOrigin, ghPrefix, asteriskPrefix, pkgName, pkgVersion, subPath, qs), http.StatusFound)
+			return rex.Redirect(fmt.Sprintf("%s%s/%s%s@%s%s%s", cdnOrigin, registryPrefix, asteriskPrefix, pkgName, pkgVersion, subPath, qs), http.StatusFound)
 		}
 
 		// check `?alias` query
@@ -1582,7 +1584,7 @@ func praseESMPath(npmrc *NpmRC, pathname string) (esm ESMPath, extraQuery string
 			return
 		}
 		version, subPath := utils.SplitByFirstByte(rest, '/')
-		if !valid.IsHexString(version) || len(version) < 7 {
+		if version == "" || !valid.IsHexString(version) {
 			err = errors.New("invalid path")
 			return
 		}

@@ -232,7 +232,6 @@ func walkDeps(npmrc *NpmRC, installDir string, esm ESMPath, mark *StringSet) (er
 		p, err = npmrc.installPackage(esm)
 	} else {
 		return nil
-		// p, err = npmrc.getPackageInfo(module.PkgName, module.PkgVersion)
 	}
 	if err != nil {
 		return

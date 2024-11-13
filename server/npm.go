@@ -500,7 +500,7 @@ func (rc *NpmRC) installPackage(esm ESMPath) (packageJson *PackageJSON, err erro
 	if esm.GhPrefix {
 		err = os.WriteFile(packageJsonRc, []byte(fmt.Sprintf(`{"dependencies":{"%s":"github:%s#%s"}}`, esm.PkgName, esm.PkgName, esm.PkgVersion)), 0644)
 		if err == nil {
-			err = rc.pnpmi(installDir)
+			err = rc.pnpmi(installDir, "--prefer-offline")
 		}
 		if err == nil {
 			// ensure 'package.json' file if not exists after installing from github
@@ -509,6 +509,11 @@ func (rc *NpmRC) installPackage(esm ESMPath) (packageJson *PackageJSON, err erro
 				packageJson := fmt.Sprintf(`{"name":"%s","version":"%s"}`, esm.PkgName, esm.PkgVersion)
 				err = os.WriteFile(packageJsonPath, []byte(packageJson), 0644)
 			}
+		}
+	} else if esm.PrPrefix {
+		err = os.WriteFile(packageJsonRc, []byte(fmt.Sprintf(`{"dependencies":{"%s":"https://pkg.pr.new/%s@%s"}}`, esm.PkgName, esm.PkgName, esm.PkgVersion)), 0644)
+		if err == nil {
+			err = rc.pnpmi(installDir, "--prefer-offline")
 		}
 	} else if regexpVersionStrict.MatchString(esm.PkgVersion) {
 		err = rc.pnpmi(installDir, "--prefer-offline", esm.PackageName())
