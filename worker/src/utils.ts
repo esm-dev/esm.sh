@@ -1,4 +1,50 @@
-import { targets } from "esm-compat";
+export const targets = new Set([
+  "es2015",
+  "es2016",
+  "es2017",
+  "es2018",
+  "es2019",
+  "es2020",
+  "es2021",
+  "es2022",
+  "es2023",
+  "es2024",
+  "esnext",
+  "deno",
+  "denonext",
+  "node",
+]);
+
+const allowedQueryKeys = new Set([
+  "alias",
+  "bundle",
+  "conditions",
+  "css",
+  "ctx",
+  "deps",
+  "dev",
+  "exports",
+  "external",
+  "ignore-annotations",
+  "ignore-require",
+  "im",
+  "importer",
+  "jsx-runtime",
+  "jsx",
+  "keep-names",
+  "name",
+  "no-dts",
+  "path",
+  "raw",
+  "standalone",
+  "svelte",
+  "target",
+  "type",
+  "url",
+  "v",
+  "vue",
+  "worker",
+]);
 
 export function isObject(v: unknown): v is Record<string, unknown> {
   return v !== null && typeof v === "object" && !Array.isArray(v);
@@ -18,6 +64,43 @@ export function hasTargetSegment(segments: string[]) {
     return targets.has(segments[1]);
   }
   return targets.has(s0);
+}
+
+export function getBuildTargetFromUA(ua: string | null): string {
+  if (!ua) {
+    return "es2022";
+  }
+  if (ua.startsWith("ES/")) {
+    const t = "es" + ua.slice(3);
+    if (targets.has(t)) {
+      return t;
+    }
+  }
+  if (ua.startsWith("Deno/")) {
+    const v = ua.slice(5).split(".");
+    if (v.length >= 3) {
+      const version = v.map(Number) as [number, number, number];
+      if (!versionLargeThan(version, [1, 33, 1])) {
+        return "deno";
+      }
+    }
+    return "denonext";
+  }
+  if (
+    ua === "undici"
+    || ua.startsWith("Node.js/")
+    || ua.startsWith("Node/")
+    || ua.startsWith("Bun/")
+  ) {
+    return "node";
+  }
+  return "es2022";
+}
+
+function versionLargeThan(v1: [number, number, number], v2: [number, number, number]) {
+  return v1[0] > v2[0]
+    || (v1[0] === v2[0] && v1[1] > v2[1])
+    || (v1[0] === v2[0] && v1[1] === v2[1] && v1[2] > v2[2]);
 }
 
 export function trimPrefix(s: string, prefix: string): string {
@@ -81,40 +164,10 @@ export function getUrlOrigin(url: string): string {
   return new URL(url).origin;
 }
 
-const allowedSearchParams = new Set([
-  "alias",
-  "bundle",
-  "bundle-deps",
-  "bundle-all",
-  "conditions",
-  "css",
-  "deno-std",
-  "deps",
-  "dev",
-  "exports",
-  "external",
-  "ignore-annotations",
-  "ignore-require",
-  "importer",
-  "jsx-runtime",
-  "keep-names",
-  "name",
-  "no-bundle",
-  "no-check",
-  "no-dts",
-  "path",
-  "raw",
-  "standalone",
-  "target",
-  "type",
-  "v",
-  "worker",
-]);
-
 export function normalizeSearchParams(parmas: URLSearchParams) {
   if (parmas.size > 0) {
     for (const k of parmas.keys()) {
-      if (!allowedSearchParams.has(k)) {
+      if (!allowedQueryKeys.has(k)) {
         parmas.delete(k);
       }
     }

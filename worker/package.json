@@ -1,13 +1,12 @@
 {
   "name": "esm-worker",
-  "description": "A Cloudflare worker handles all requests of esm.sh at the edge(earth).",
-  "version": "0.136.0-beta.0",
+  "description": "A Cloudflare worker handles requests of esm.sh at the edge.",
+  "version": "0.136.0",
   "type": "module",
   "module": "dist/index.js",
   "types": "types/index.d.ts",
   "scripts": {
-    "prepublishOnly": "node build.mjs",
-    "build": "node build.mjs"
+    "prepublishOnly": "node build.mjs"
   },
   "files": [
     "dist/index.js",

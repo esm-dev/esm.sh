@@ -3,7 +3,7 @@ import { compareVersions, satisfies, validate } from "compare-versions";
 import { assetsExts, cssPackages, VERSION } from "./consts.ts";
 import { getContentType } from "./media_type.ts";
 import { isDtsFile, isObject, normalizeSearchParams, redirect, splitBy, trimPrefix } from "./utils.ts";
-import { copyHeaders, err, errPkgNotFound, getUrlOrigin, hasTargetSegment } from "./utils.ts";
+import { copyHeaders, err, errPkgNotFound, getBuildTargetFromUA, getUrlOrigin, hasTargetSegment, targets } from "./utils.ts";
 
 const version = `v${VERSION}`;
 const globalEtag = `W/"${version}"`;
@@ -847,4 +847,4 @@ function withESMWorker(middleware?: Middleware, cache: Cache = (caches as any).d
   };
 }
 
-export { getBuildTargetFromUA, getContentType, targets, version, withESMWorker };
+export { version as VERSION, withESMWorker };
