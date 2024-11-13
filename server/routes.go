@@ -1744,15 +1744,10 @@ func validateBuildPath(segments []string) bool {
 	}
 	if strings.HasPrefix(segments[0], "X-") && len(segments) > 2 {
 		_, ok := targets[segments[1]]
-		if ok {
-			return endsWith(segments[len(segments)-1], ".mjs", ".js", ".css", ".map")
-		}
+		return ok
 	}
 	_, ok := targets[segments[0]]
-	if ok {
-		return endsWith(segments[len(segments)-1], ".mjs", ".js", ".css", ".map")
-	}
-	return false
+	return ok
 }
 
 func getPkgName(specifier string) string {
