@@ -32,8 +32,8 @@ func stripModuleExt(s string, exts ...string) string {
 	return s
 }
 
-// validateJsModuleFromFile validates javascript/typescript module from the given file.
-func validateJsModuleFromFile(filename string) (isESM bool, namedExports []string, err error) {
+// validateModuleFromFile validates javascript/typescript module from the given file.
+func validateModuleFromFile(filename string) (isESM bool, namedExports []string, err error) {
 	data, err := os.ReadFile(filename)
 	if err != nil {
 		return
@@ -69,7 +69,7 @@ func validateJsModuleFromFile(filename string) (isESM bool, namedExports []strin
 }
 
 // minify minifies the given javascript code.
-func minify(code string, target esbuild.Target, loader esbuild.Loader) ([]byte, error) {
+func minify(code string, loader esbuild.Loader, target esbuild.Target) ([]byte, error) {
 	ret := esbuild.Transform(code, esbuild.TransformOptions{
 		Target:            target,
 		Format:            esbuild.FormatESModule,
@@ -87,7 +87,7 @@ func minify(code string, target esbuild.Target, loader esbuild.Loader) ([]byte, 
 	return concatBytes(ret.LegalComments, ret.Code), nil
 }
 
-// bundleHttpModule builds the http module and it's submodules.
+// bundleHttpModule bundles the http module and it's submodules.
 func bundleHttpModule(npmrc *NpmRC, entry string, importMap common.ImportMap, collectDependencies bool) (js []byte, jsx bool, css []byte, dependencyTree map[string][]byte, err error) {
 	if !isHttpSepcifier(entry) {
 		err = errors.New("require a http module")

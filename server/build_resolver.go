@@ -1139,7 +1139,7 @@ func (ctx *BuildContext) cjsLexer(specifier string) (cjs cjsModuleLexerResult, e
 }
 
 func (ctx *BuildContext) esmLexer(specifier string) (isESM bool, namedExports []string, err error) {
-	isESM, namedExports, err = validateJsModuleFromFile(path.Join(ctx.wd, "node_modules", ctx.esm.PkgName, specifier))
+	isESM, namedExports, err = validateModuleFromFile(path.Join(ctx.wd, "node_modules", ctx.esm.PkgName, specifier))
 	if err != nil {
 		err = fmt.Errorf("esmLexer: %v", err)
 	}
@@ -1216,7 +1216,7 @@ func normalizeBuildEntry(ctx *BuildContext, entry *BuildEntry) {
 		}
 		// check if the cjs entry is an ESM
 		if entry.cjs != "" && strings.HasSuffix(entry.cjs, ".js") {
-			isESM, _, _ := validateJsModuleFromFile(path.Join(ctx.pkgDir, entry.cjs))
+			isESM, _, _ := validateModuleFromFile(path.Join(ctx.pkgDir, entry.cjs))
 			if isESM {
 				if entry.esm == "" {
 					entry.esm = entry.cjs

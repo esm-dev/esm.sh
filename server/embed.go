@@ -117,7 +117,7 @@ func buildEmbedTS(filename string, target string, debug bool) (js []byte, err er
 	// replace `$TARGET` with the target
 	data = bytes.ReplaceAll(data, []byte("$TARGET"), []byte(target))
 
-	js, err = minify(string(data), targets[target], api.LoaderTS)
+	js, err = minify(string(data), api.LoaderTS, targets[target])
 	if err == nil && !debug {
 		buildCache.Store(cacheKey, js)
 	}

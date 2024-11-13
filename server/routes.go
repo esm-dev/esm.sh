@@ -433,7 +433,7 @@ func routes(debug bool) rex.Handle {
 				ctx.SetHeader("Etag", globalETag)
 			}
 			target := getBuildTargetByUA(ctx.UserAgent())
-			code, err := minify(lib, targets[target], esbuild.LoaderJS)
+			code, err := minify(lib, esbuild.LoaderJS, targets[target])
 			if err != nil {
 				return throwErrorJS(ctx, fmt.Sprintf("Transform error: %v", err), false)
 			}

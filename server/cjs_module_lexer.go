@@ -74,7 +74,7 @@ func initCJSModuleLexer() (err error) {
 		return
 	}
 
-	minJs, err := minify(string(js), api.ESNext, api.LoaderJS)
+	minJs, err := minify(string(js), api.LoaderJS, api.ESNext)
 	if err != nil {
 		return
 	}

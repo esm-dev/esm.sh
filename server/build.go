@@ -709,7 +709,7 @@ func (ctx *BuildContext) buildModule() (result *BuildMeta, err error) {
 							if ioErr == nil && fi.Size() < 128 {
 								data, ioErr := os.ReadFile(moduleFilepath)
 								if ioErr == nil {
-									out, esbErr := minify(string(data), api.ESNext, api.LoaderJS)
+									out, esbErr := minify(string(data), api.LoaderJS, api.ESNext)
 									if esbErr == nil {
 										p := bytes.Split(out, []byte("\""))
 										if len(p) == 3 && string(p[0]) == "export*from" && string(p[2]) == ";\n" {
