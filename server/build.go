@@ -1015,20 +1015,10 @@ rebuild:
 		if strings.HasSuffix(file.Path, ".js") {
 			jsContent := file.Contents
 			extraBanner := ""
-			if ctx.dev {
-				extraBanner += " development"
+			if ctx.esm.SubBareName != "" {
+				extraBanner = "/" + ctx.esm.SubBareName
 			}
-			if ctx.bundleMode == BundleAll {
-				extraBanner += " bundle-all"
-			} else if ctx.bundleMode == BundleFalse {
-				extraBanner += " bundle-false"
-			}
-			header := bytes.NewBufferString(fmt.Sprintf(
-				"/* esm.sh - %s (%s%s) */\n",
-				ctx.esm.String(),
-				strings.ToLower(ctx.target),
-				extraBanner,
-			))
+			header := bytes.NewBufferString(fmt.Sprintf("/* esm.sh - %s%s */\n", ctx.esm.PackageName(), extraBanner))
 
 			// remove shebang
 			if bytes.HasPrefix(jsContent, []byte("#!/")) {
