@@ -304,37 +304,37 @@ func routes(debug bool) rex.Handle {
 		case "/error.js":
 			switch query := ctx.Query(); query.Get("type") {
 			case "resolve":
-				return throwErrorJS(ctx, fmt.Sprintf(
+				return errorJS(ctx, fmt.Sprintf(
 					`Could not resolve "%s" (Imported by "%s")`,
 					query.Get("name"),
 					query.Get("importer"),
-				), true)
+				))
 			case "unsupported-node-builtin-module":
-				return throwErrorJS(ctx, fmt.Sprintf(
+				return errorJS(ctx, fmt.Sprintf(
 					`Unsupported Node builtin module "%s" (Imported by "%s")`,
 					query.Get("name"),
 					query.Get("importer"),
-				), true)
+				))
 			case "unsupported-node-native-module":
-				return throwErrorJS(ctx, fmt.Sprintf(
+				return errorJS(ctx, fmt.Sprintf(
 					`Unsupported node native module "%s" (Imported by "%s")`,
 					query.Get("name"),
 					query.Get("importer"),
-				), true)
+				))
 			case "unsupported-npm-package":
-				return throwErrorJS(ctx, fmt.Sprintf(
+				return errorJS(ctx, fmt.Sprintf(
 					`Unsupported NPM package "%s" (Imported by "%s")`,
 					query.Get("name"),
 					query.Get("importer"),
-				), true)
+				))
 			case "unsupported-file-dependency":
-				return throwErrorJS(ctx, fmt.Sprintf(
+				return errorJS(ctx, fmt.Sprintf(
 					`Unsupported file dependency "%s" (Imported by "%s")`,
 					query.Get("name"),
 					query.Get("importer"),
-				), true)
+				))
 			default:
-				return throwErrorJS(ctx, "Unknown error", true)
+				return rex.Status(500, "Unknown error")
 			}
 
 		case "/favicon.ico":
@@ -383,7 +383,7 @@ func routes(debug bool) rex.Handle {
 
 			js, err := buildEmbedTS(pathname[1:]+".ts", target, debug)
 			if err != nil {
-				return throwErrorJS(ctx, fmt.Sprintf("Transform error: %v", err), false)
+				return rex.Status(500, fmt.Sprintf("Transform error: %v", err))
 			}
 
 			ctx.SetHeader("Cache-Control", cc1day)
@@ -435,7 +435,7 @@ func routes(debug bool) rex.Handle {
 			target := getBuildTargetByUA(ctx.UserAgent())
 			code, err := minify(lib, esbuild.LoaderJS, targets[target])
 			if err != nil {
-				return throwErrorJS(ctx, fmt.Sprintf("Transform error: %v", err), false)
+				return rex.Status(500, fmt.Sprintf("Transform error: %v", err))
 			}
 			ctx.SetHeader("Content-Type", ctJavaScript)
 			appendVaryHeader(ctx.W.Header(), "User-Agent")
@@ -459,7 +459,7 @@ func routes(debug bool) rex.Handle {
 				zoneId = ""
 			} else {
 				var scopeName string
-				if pkgName := getPkgName(pathname[1:]); strings.HasPrefix(pkgName, "@") {
+				if pkgName := toPackageName(pathname[1:]); strings.HasPrefix(pkgName, "@") {
 					scopeName = pkgName[:strings.Index(pkgName, "/")]
 				}
 				if scopeName != "" {
@@ -1286,7 +1286,7 @@ func routes(debug bool) rex.Handle {
 			if len(a) > 1 && strings.HasPrefix(a[0], "X-") {
 				args, err := decodeBuildArgs(npmrc, strings.TrimPrefix(a[0], "X-"))
 				if err != nil {
-					return throwErrorJS(ctx, "Invalid build args: "+a[0], false)
+					return rex.Status(500, "Invalid build args: "+a[0])
 				}
 				esm.SubPath = strings.Join(strings.Split(esm.SubPath, "/")[1:], "/")
 				esm.SubBareName = toModuleBareName(esm.SubPath, true)
@@ -1299,7 +1299,7 @@ func routes(debug bool) rex.Handle {
 		if !argsX {
 			err := normalizeBuildArgs(npmrc, path.Join(npmrc.StoreDir(), esm.PackageName()), &buildArgs, esm)
 			if err != nil {
-				return throwErrorJS(ctx, err.Error(), false)
+				return rex.Status(500, err.Error())
 			}
 		}
 
@@ -1436,7 +1436,7 @@ func routes(debug bool) rex.Handle {
 		buildCtx := NewBuildContext(zoneId, npmrc, esm, buildArgs, target, bundleMode, isDev)
 		ret, err := buildCtx.Query()
 		if err != nil {
-			return throwErrorJS(ctx, err.Error(), false)
+			return rex.Status(500, err.Error())
 		}
 		if ret == nil {
 			c := buildQueue.Add(buildCtx, ctx.RemoteIP())
@@ -1445,19 +1445,23 @@ func routes(debug bool) rex.Handle {
 				if output.err != nil {
 					msg := output.err.Error()
 					if strings.Contains(msg, "no such file or directory") ||
-						strings.Contains(msg, "is not exported from package") {
+						strings.Contains(msg, "is not exported from package") ||
+						strings.Contains(msg, "ERR_PNPM_FETCH_404") {
 						// redirect old build path (.js) to new build path (.mjs)
 						if strings.HasSuffix(esm.SubPath, "/"+esm.PkgName+".js") {
 							url := strings.TrimSuffix(ctx.R.URL.String(), ".js") + ".mjs"
 							return rex.Redirect(url, http.StatusFound)
 						}
 						ctx.SetHeader("Cache-Control", ccImmutable)
-						return rex.Status(404, "Module not found")
+						return rex.Status(404, "Package or version not found")
 					}
 					if strings.HasSuffix(msg, " not found") {
 						return rex.Status(404, msg)
 					}
-					return throwErrorJS(ctx, output.err.Error(), false)
+					if strings.Contains(msg, "ERR_PNPM") {
+						return rex.Status(500, "Failed to install package")
+					}
+					return rex.Status(500, msg)
 				}
 				ret = output.result
 			case <-time.After(time.Duration(config.BuildWaitTime) * time.Second):
@@ -1750,21 +1754,17 @@ func validateBuildPath(segments []string) bool {
 	return ok
 }
 
-func getPkgName(specifier string) string {
+func toPackageName(specifier string) string {
 	name, _, _, _ := splitESMPath(specifier)
 	return name
 }
 
-func throwErrorJS(ctx *rex.Context, message string, static bool) any {
+func errorJS(ctx *rex.Context, message string) any {
 	buf := bytes.NewBuffer(nil)
 	fmt.Fprintf(buf, "/* esm.sh - error */\n")
 	fmt.Fprintf(buf, "throw new Error(%s);\n", strings.TrimSpace(string(utils.MustEncodeJSON(strings.TrimSpace("[esm.sh] "+message)))))
 	fmt.Fprintf(buf, "export default null;\n")
-	if static {
-		ctx.SetHeader("Cache-Control", ccImmutable)
-	} else {
-		ctx.SetHeader("Cache-Control", ccMustRevalidate)
-	}
 	ctx.SetHeader("Content-Type", ctJavaScript)
-	return rex.Status(500, buf)
+	ctx.SetHeader("Cache-Control", ccImmutable)
+	return buf
 }

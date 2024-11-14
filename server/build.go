@@ -530,8 +530,8 @@ func (ctx *BuildContext) buildModule() (result *BuildMeta, err error) {
 					}
 
 					// bundles all dependencies in `bundle` mode, apart from peer dependencies and `?external` query]
-					if ctx.bundleMode == BundleAll && !ctx.args.external.Has(getPkgName(specifier)) && !implicitExternal.Has(specifier) {
-						pkgName := getPkgName(specifier)
+					if ctx.bundleMode == BundleAll && !ctx.args.external.Has(toPackageName(specifier)) && !implicitExternal.Has(specifier) {
+						pkgName := toPackageName(specifier)
 						_, ok := ctx.packageJson.PeerDependencies[pkgName]
 						if !ok {
 							return api.OnResolveResult{}, nil

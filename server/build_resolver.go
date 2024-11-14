@@ -728,7 +728,7 @@ func (ctx *BuildContext) resolveExternalModule(specifier string, kind api.Resolv
 	}
 
 	// check `?external`
-	if ctx.args.externalAll || ctx.args.external.Has(getPkgName(specifier)) {
+	if ctx.args.externalAll || ctx.args.external.Has(toPackageName(specifier)) {
 		resolvedPath = specifier
 		return
 	}
