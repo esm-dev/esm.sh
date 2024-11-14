@@ -1013,7 +1013,7 @@ func (ctx *BuildContext) resloveDTS(entry BuildEntry) (string, error) {
 }
 
 func (ctx *BuildContext) normalizePackageJSON(p *PackageJSON) {
-	if ctx.esm.GhPrefix {
+	if ctx.esm.GhPrefix || ctx.esm.PrPrefix {
 		// if the name in package.json is not the same as the repository name
 		if p.Name != ctx.esm.PkgName {
 			p.PkgName = p.Name
