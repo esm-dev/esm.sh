@@ -771,9 +771,15 @@ func esmRoutes(debug bool) rex.Handle {
 		} else if strings.HasPrefix(pathname, "/gh/*") {
 			asteriskPrefix = "*"
 			pathname = "/gh/" + pathname[5:]
+		} else if strings.HasPrefix(pathname, "/github.com/*") {
+			asteriskPrefix = "*"
+			pathname = "/gh/" + pathname[13:]
 		} else if strings.HasPrefix(pathname, "/pr/*") {
 			asteriskPrefix = "*"
 			pathname = "/pr/" + pathname[5:]
+		} else if strings.HasPrefix(pathname, "/pkg.pr.new/*") {
+			asteriskPrefix = "*"
+			pathname = "/pr/" + pathname[13:]
 		}
 
 		esm, extraQuery, isFixedVersion, isBuildPath, err := praseESMPath(npmrc, pathname)

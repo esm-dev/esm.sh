@@ -88,14 +88,23 @@ func praseESMPath(npmrc *NpmRC, pathname string) (esm ESMPath, extraQuery string
 		return
 	}
 
-	ghPrefix := strings.HasPrefix(pathname, "/gh/")
-	if ghPrefix {
-		if len(pathname) == 4 {
+	var ghPrefix bool
+	if strings.HasPrefix(pathname, "/gh/") {
+		if !strings.ContainsRune(pathname[4:], '/') {
 			err = errors.New("invalid path")
 			return
 		}
 		// add a leading `@` to the package name
 		pathname = "/@" + pathname[4:]
+		ghPrefix = true
+	} else if strings.HasPrefix(pathname, "/github.com/") {
+		if !strings.ContainsRune(pathname[12:], '/') {
+			err = errors.New("invalid path")
+			return
+		}
+		// add a leading `@` to the package name
+		pathname = "/@" + pathname[12:]
+		ghPrefix = true
 	} else if strings.HasPrefix(pathname, "/jsr/") {
 		segs := strings.Split(pathname[5:], "/")
 		if len(segs) < 2 || !strings.HasPrefix(segs[0], "@") {
