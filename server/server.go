@@ -133,7 +133,7 @@ func Serve(efs EmbedFS) {
 		rex.Header("Server", "esm.sh"),
 		rex.Optional(rex.Compress(), config.Compress),
 		auth(config.AuthSecret),
-		routes(debug),
+		esmRoutes(debug),
 	)
 
 	// start server
@@ -160,4 +160,13 @@ func Serve(efs EmbedFS) {
 	// release resources
 	log.FlushBuffer()
 	accessLogger.FlushBuffer()
+}
+
+func auth(secret string) rex.Handle {
+	return func(ctx *rex.Context) any {
+		if secret != "" && ctx.R.Header.Get("Authorization") != "Bearer "+secret {
+			return rex.Status(401, "Unauthorized")
+		}
+		return nil
+	}
 }
