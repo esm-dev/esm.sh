@@ -1581,8 +1581,13 @@ func auth(secret string) rex.Handle {
 
 func praseESMPath(npmrc *NpmRC, pathname string) (esm ESMPath, extraQuery string, isFixedVersion bool, isBuildPath bool, err error) {
 	// see https://pkg.pr.new
-	if strings.HasPrefix(pathname, "/pr/") {
-		pkgName, rest := utils.SplitByFirstByte(pathname[4:], '@')
+	if strings.HasPrefix(pathname, "/pr/") || strings.HasPrefix(pathname, "/pkg.pr.new/") {
+		if strings.HasPrefix(pathname, "/pr/") {
+			pathname = pathname[4:]
+		} else {
+			pathname = pathname[12:]
+		}
+		pkgName, rest := utils.SplitByFirstByte(pathname, '@')
 		if rest == "" {
 			err = errors.New("invalid path")
 			return
