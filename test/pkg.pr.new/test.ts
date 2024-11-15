@@ -25,12 +25,32 @@ Deno.test("pkg.pr.new routing", async () => {
     assertEquals(typeof Bench, "function");
   }
   {
+    const { Bench } = await import("http://localhost:8080/pr/tinylibs/tinybench@a832a55");
+    assertEquals(typeof Bench, "function");
+  }
+  {
     const { Bench } = await import("http://localhost:8080/pr/tinylibs/tinybench/tinybench@a832a55");
     assertEquals(typeof Bench, "function");
   }
   {
     const { Bench } = await import("http://localhost:8080/pkg.pr.new/tinybench@a832a55");
     assertEquals(typeof Bench, "function");
+  }
+  {
+    const { proxy } = await import("http://localhost:8080/pr/valtio@main");
+    assertEquals(typeof proxy, "function");
+  }
+  {
+    const { proxy } = await import("http://localhost:8080/pr/valtio@e21edb3");
+    assertEquals(typeof proxy, "function");
+  }
+  {
+    const { proxy } = await import("http://localhost:8080/pr/pmndrs/valtio@e21edb3");
+    assertEquals(typeof proxy, "function");
+  }
+  {
+    const { proxy } = await import("http://localhost:8080/pr/pmndrs/valtio/valtio@e21edb3");
+    assertEquals(typeof proxy, "function");
   }
 });
 
