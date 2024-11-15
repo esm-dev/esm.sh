@@ -72,7 +72,7 @@ func praseESMPath(npmrc *NpmRC, pathname string) (esm ESMPath, extraQuery string
 			return
 		}
 		version, subPath := utils.SplitByFirstByte(rest, '/')
-		if version == "" || !valid.IsHexString(version) {
+		if version == "" || !regexpVersion.MatchString(version) {
 			err = errors.New("invalid path")
 			return
 		}
