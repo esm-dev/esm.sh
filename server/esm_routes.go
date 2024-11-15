@@ -222,7 +222,7 @@ func esmRoutes(debug bool) rex.Handle {
 						"clients":   clientIps,
 						"createdAt": t.createdAt.Format(http.TimeFormat),
 						"inProcess": t.inProcess,
-						"path":      t.Pathname(),
+						"path":      t.Path(),
 						"stage":     t.stage,
 					}
 					if !t.startedAt.IsZero() {
@@ -1243,7 +1243,7 @@ func esmRoutes(debug bool) rex.Handle {
 		if resType == ESMBuild || resType == ESMDts {
 			a := strings.Split(esm.SubBareName, "/")
 			if len(a) > 1 && strings.HasPrefix(a[0], "X-") {
-				args, err := decodeBuildArgs(npmrc, strings.TrimPrefix(a[0], "X-"))
+				args, err := decodeBuildArgs(strings.TrimPrefix(a[0], "X-"))
 				if err != nil {
 					return rex.Status(500, "Invalid build args: "+a[0])
 				}
@@ -1282,7 +1282,7 @@ func esmRoutes(debug bool) rex.Handle {
 				if err != storage.ErrNotFound {
 					return rex.Status(500, err.Error())
 				}
-				buildCtx := NewBuildContext(zoneId, npmrc, esm, buildArgs, "types", BundleDefault, false)
+				buildCtx := NewBuildContext(zoneId, npmrc, esm, buildArgs, "types", false, BundleDefault, false)
 				c := buildQueue.Add(buildCtx, ctx.RemoteIP())
 				select {
 				case output := <-c.C:
@@ -1315,24 +1315,12 @@ func esmRoutes(debug bool) rex.Handle {
 		}
 
 		if !argsX {
-			// check `?jsx-rutnime` query
-			var jsxRuntime *ESMPath = nil
-			if v := query.Get("jsx-runtime"); v != "" {
-				m, _, _, _, err := praseESMPath(npmrc, v)
-				if err != nil {
-					return rex.Status(400, fmt.Sprintf("Invalid jsx-runtime query: %v not found", v))
-				}
-				jsxRuntime = &m
-			}
-
 			externalRequire := query.Has("external-require")
 			// workaround: force "unocss/preset-icons" to external `require` calls
 			if !externalRequire && esm.PkgName == "@unocss/preset-icons" {
 				externalRequire = true
 			}
-
 			buildArgs.externalRequire = externalRequire
-			buildArgs.jsxRuntime = jsxRuntime
 			buildArgs.keepNames = query.Has("keep-names")
 			buildArgs.ignoreAnnotations = query.Has("ignore-annotations")
 		}
@@ -1392,7 +1380,7 @@ func esmRoutes(debug bool) rex.Handle {
 			}
 		}
 
-		buildCtx := NewBuildContext(zoneId, npmrc, esm, buildArgs, target, bundleMode, isDev)
+		buildCtx := NewBuildContext(zoneId, npmrc, esm, buildArgs, target, !targetFromUA, bundleMode, isDev)
 		ret, err := buildCtx.Query()
 		if err != nil {
 			return rex.Status(500, err.Error())
@@ -1403,16 +1391,18 @@ func esmRoutes(debug bool) rex.Handle {
 			case output := <-c.C:
 				if output.err != nil {
 					msg := output.err.Error()
+					if strings.Contains(msg, "ERR_PNPM_FETCH_404") {
+						return rex.Status(404, "Package or version not found")
+					}
 					if strings.Contains(msg, "no such file or directory") ||
-						strings.Contains(msg, "is not exported from package") ||
-						strings.Contains(msg, "ERR_PNPM_FETCH_404") {
+						strings.Contains(msg, "is not exported from package") {
 						// redirect old build path (.js) to new build path (.mjs)
 						if strings.HasSuffix(esm.SubPath, "/"+esm.PkgName+".js") {
 							url := strings.TrimSuffix(ctx.R.URL.String(), ".js") + ".mjs"
 							return rex.Redirect(url, http.StatusFound)
 						}
 						ctx.SetHeader("Cache-Control", ccImmutable)
-						return rex.Status(404, "Package or version not found")
+						return rex.Status(404, "module not found")
 					}
 					if strings.HasSuffix(msg, " not found") {
 						return rex.Status(404, msg)
@@ -1446,7 +1436,7 @@ func esmRoutes(debug bool) rex.Handle {
 			if !ret.CSS {
 				return rex.Status(404, "Package CSS not found")
 			}
-			url := fmt.Sprintf("%s%s.css", cdnOrigin, strings.TrimSuffix(buildCtx.Pathname(), ".mjs"))
+			url := fmt.Sprintf("%s%s.css", cdnOrigin, strings.TrimSuffix(buildCtx.Path(), ".mjs"))
 			return rex.Redirect(url, 301)
 		}
 
@@ -1471,7 +1461,7 @@ func esmRoutes(debug bool) rex.Handle {
 				ctx.SetHeader("Content-Type", ctJavaScript)
 				if isWorker {
 					f.Close()
-					moduleUrl := cdnOrigin + buildCtx.Pathname()
+					moduleUrl := cdnOrigin + buildCtx.Path()
 					return fmt.Sprintf(
 						`export default function workerFactory(injectOrOptions) { const options = typeof injectOrOptions === "string" ? { inject: injectOrOptions }: injectOrOptions ?? {}; const { inject, name = "%s" } = options; const blob = new Blob(['import * as $module from "%s";', inject].filter(Boolean), { type: "application/javascript" }); return new Worker(URL.createObjectURL(blob), { type: "module", name })}`,
 						moduleUrl,
@@ -1486,7 +1476,7 @@ func esmRoutes(debug bool) rex.Handle {
 		fmt.Fprintf(buf, `/* esm.sh - %v */%s`, esm, EOL)
 
 		if isWorker {
-			moduleUrl := cdnOrigin + buildCtx.Pathname()
+			moduleUrl := cdnOrigin + buildCtx.Path()
 			fmt.Fprintf(buf,
 				`export default function workerFactory(injectOrOptions) { const options = typeof injectOrOptions === "string" ? { inject: injectOrOptions }: injectOrOptions ?? {}; const { inject, name = "%s" } = options; const blob = new Blob(['import * as $module from "%s";', inject].filter(Boolean), { type: "application/javascript" }); return new Worker(URL.createObjectURL(blob), { type: "module", name })}`,
 				moduleUrl,
@@ -1498,13 +1488,13 @@ func esmRoutes(debug bool) rex.Handle {
 					fmt.Fprintf(buf, `import "%s";%s`, dep, EOL)
 				}
 			}
-			ctx.SetHeader("X-ESM-Path", buildCtx.Pathname())
-			fmt.Fprintf(buf, `export * from "%s";%s`, buildCtx.Pathname(), EOL)
+			ctx.SetHeader("X-ESM-Path", buildCtx.Path())
+			fmt.Fprintf(buf, `export * from "%s";%s`, buildCtx.Path(), EOL)
 			if (ret.FromCJS || ret.HasDefaultExport) && (exports.Len() == 0 || exports.Has("default")) {
-				fmt.Fprintf(buf, `export { default } from "%s";%s`, buildCtx.Pathname(), EOL)
+				fmt.Fprintf(buf, `export { default } from "%s";%s`, buildCtx.Path(), EOL)
 			}
 			if ret.FromCJS && exports.Len() > 0 {
-				fmt.Fprintf(buf, `import __cjs_exports$ from "%s";%s`, buildCtx.Pathname(), EOL)
+				fmt.Fprintf(buf, `import __cjs_exports$ from "%s";%s`, buildCtx.Path(), EOL)
 				fmt.Fprintf(buf, `export const { %s } = __cjs_exports$;%s`, strings.Join(exports.Values(), ", "), EOL)
 			}
 		}

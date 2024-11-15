@@ -8,7 +8,6 @@ const assetMaxSize = 50 * 1024 * 1024 // limit asset size to 50mb
 var assetExts = map[string]bool{
 	"node":       true,
 	"wasm":       true,
-	"css":        true,
 	"less":       true,
 	"sass":       true,
 	"scss":       true,
@@ -32,8 +31,6 @@ var assetExts = map[string]bool{
 	"markdown":   true,
 	"html":       true,
 	"htm":        true,
-	"vue":        true,
-	"svelte":     true,
 	"svg":        true,
 	"png":        true,
 	"jpg":        true,

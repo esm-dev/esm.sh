@@ -115,9 +115,8 @@ func ghInstall(wd, name, hash string) (err error) {
 			continue
 		}
 		extname := path.Ext(fp)
-		if !(extname != "" && (assetExts[extname[1:]] || contains(moduleExts, extname))) {
-			// skip source files
-			// skip non-asset files
+		if !(extname != "" && (assetExts[extname[1:]] || contains(moduleExts, extname) || extname == ".map" || extname == ".css" || extname == ".svelte" || extname == ".vue")) {
+			// skip unsupported formats
 			continue
 		}
 		f, err := os.OpenFile(fp, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0644)

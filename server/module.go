@@ -34,18 +34,18 @@ func stripModuleExt(s string, exts ...string) string {
 
 func toModuleBareName(path string, stripIndexSuffix bool) string {
 	if path != "" {
-		subModule := path
-		if strings.HasSuffix(subModule, ".mjs") {
-			subModule = strings.TrimSuffix(subModule, ".mjs")
-		} else if strings.HasSuffix(subModule, ".cjs") {
-			subModule = strings.TrimSuffix(subModule, ".cjs")
+		barename := path
+		if strings.HasSuffix(path, ".mjs") {
+			barename = strings.TrimSuffix(path, ".mjs")
+		} else if strings.HasSuffix(path, ".cjs") {
+			barename = strings.TrimSuffix(path, ".cjs")
 		} else {
-			subModule = strings.TrimSuffix(subModule, ".js")
+			barename = strings.TrimSuffix(path, ".js")
 		}
 		if stripIndexSuffix {
-			subModule = strings.TrimSuffix(subModule, "/index")
+			barename = strings.TrimSuffix(barename, "/index")
 		}
-		return subModule
+		return barename
 	}
 	return ""
 }
@@ -201,13 +201,21 @@ func bundleHttpModule(npmrc *NpmRC, entry string, importMap common.ImportMap, co
 						case ".json":
 							loader = esbuild.LoaderJSON
 						case ".svelte":
-							ret, err := transformSvelte(npmrc, importMap, []string{args.Path, code})
+							svelteVersion, err := npmrc.getSvelteVersion(importMap)
+							if err != nil {
+								return esbuild.OnLoadResult{}, err
+							}
+							ret, err := transformSvelte(npmrc, svelteVersion, []string{args.Path, code})
 							if err != nil {
 								return esbuild.OnLoadResult{}, err
 							}
 							code = ret.Code
 						case ".vue":
-							ret, err := transformVue(npmrc, importMap, []string{args.Path, code})
+							vueVersion, err := npmrc.getVueVersion(importMap)
+							if err != nil {
+								return esbuild.OnLoadResult{}, err
+							}
+							ret, err := transformVue(npmrc, vueVersion, []string{args.Path, code})
 							if err != nil {
 								return esbuild.OnLoadResult{}, err
 							}
@@ -230,7 +238,11 @@ func bundleHttpModule(npmrc *NpmRC, entry string, importMap common.ImportMap, co
 								if err != nil {
 									return esbuild.OnLoadResult{}, err
 								}
-								ret, err := transformSvelte(npmrc, importMap, []string{args.Path, string(svelteCode)})
+								svelteVersion, err := npmrc.getSvelteVersion(importMap)
+								if err != nil {
+									return esbuild.OnLoadResult{}, err
+								}
+								ret, err := transformSvelte(npmrc, svelteVersion, []string{args.Path, string(svelteCode)})
 								if err != nil {
 									return esbuild.OnLoadResult{}, err
 								}
@@ -240,7 +252,11 @@ func bundleHttpModule(npmrc *NpmRC, entry string, importMap common.ImportMap, co
 								if err != nil {
 									return esbuild.OnLoadResult{}, err
 								}
-								ret, err := transformVue(npmrc, importMap, []string{args.Path, string(vueCode)})
+								vueVersion, err := npmrc.getVueVersion(importMap)
+								if err != nil {
+									return esbuild.OnLoadResult{}, err
+								}
+								ret, err := transformVue(npmrc, vueVersion, []string{args.Path, string(vueCode)})
 								if err != nil {
 									return esbuild.OnLoadResult{}, err
 								}

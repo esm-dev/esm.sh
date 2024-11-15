@@ -29,7 +29,6 @@ const allowedQueryKeys = new Set([
   "ignore-require",
   "im",
   "importer",
-  "jsx-runtime",
   "jsx",
   "keep-names",
   "name",

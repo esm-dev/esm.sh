@@ -195,7 +195,7 @@ func transformDTS(ctx *BuildContext, dts string, buildArgsPrefix string, marker 
 			external: NewStringSet(),
 			exports:  NewStringSet(),
 		}
-		b := NewBuildContext(ctx.zoneId, ctx.npmrc, dtsModule, args, "types", BundleFalse, false)
+		b := NewBuildContext(ctx.zoneId, ctx.npmrc, dtsModule, args, "types", false, BundleFalse, false)
 		err = b.install()
 		if err != nil {
 			return "", err
@@ -214,7 +214,7 @@ func transformDTS(ctx *BuildContext, dts string, buildArgsPrefix string, marker 
 			return fmt.Sprintf("{ESM_CDN_ORIGIN}/%s", dtsModule.String()), nil
 		}
 
-		return fmt.Sprintf("{ESM_CDN_ORIGIN}%s", b.Pathname()), nil
+		return fmt.Sprintf("{ESM_CDN_ORIGIN}%s", b.Path()), nil
 	})
 	if err != nil {
 		return

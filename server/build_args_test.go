@@ -23,14 +23,13 @@ func TestEncodeBuildArgs(t *testing.T) {
 			external:          external,
 			exports:           exports,
 			conditions:        conditions,
-			jsxRuntime:        &ESMPath{PkgVersion: "18.2.0", PkgName: "react"},
 			externalRequire:   true,
 			keepNames:         true,
 			ignoreAnnotations: true,
 		},
 		false,
 	)
-	args, err := decodeBuildArgs(nil, buildArgsString)
+	args, err := decodeBuildArgs(buildArgsString)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -48,9 +47,6 @@ func TestEncodeBuildArgs(t *testing.T) {
 	}
 	if len(args.conditions) != 1 || args.conditions[0] != "react-server" {
 		t.Fatal("invalid conditions")
-	}
-	if args.jsxRuntime.String() != "react@18.2.0" {
-		t.Fatal("invalid jsxRuntime")
 	}
 	if !args.externalRequire {
 		t.Fatal("ignoreRequire should be true")
