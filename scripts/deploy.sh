@@ -13,7 +13,7 @@ workDir=""
 
 if [ "$init" == "yes" ]; then
   echo "Server configuration:"
-  read -p "? http server port (default is ${port}): " v
+  read -p "? http server port (default is 80): " v
   if [ "$v" != "" ]; then
     port="$v"
   fi
@@ -52,9 +52,19 @@ if [ "$v" != "" ]; then
   sshPort="$v"
 fi
 
-cd $(dirname $0)
-sh build.sh
+read -p "? build GOOS (default is 'linux'): " goos
+read -p "? build GOARCH (default is 'amd64'): " goarch
+if [ "$goos" == "" ]; then
+  goos="linux"
+fi
+if [ "$goarch" == "" ]; then
+  goarch="amd64"
+fi
 
+echo "--- building(${goos}_$goarch)..."
+export GOOS=$goos
+export GOARCH=$goarch
+go build -o $(dirname $0)/esmd $(dirname $0)/../main.go
 if [ "$?" != "0" ]; then
   exit
 fi
@@ -69,7 +79,12 @@ if [ "$?" != "0" ]; then
 fi
 
 echo "--- installing..."
-ssh -p $sshPort $user@$host << EOF
+ssh -p $sshPort ${user}@${host} << EOF
+  if [ "$init" == "yes" ]; then
+    apt update
+    apt install -y supervisor git git-lfs
+  fi
+
   SVV=\$(supervisorctl version)
   if [ "\$?" != "0" ]; then
     echo "error: supervisor not installed!"
@@ -97,8 +112,12 @@ ssh -p $sshPort $user@$host << EOF
     if [ -f \$SVCONF ]; then
       rm -f \$SVCONF
     fi
-    mkdir -p /etc/esmd
-    echo "{\"port\":${port},\"tlsPort\":${tlsPort},\"workDir\":\"${workDir}\"}" >> /etc/esmd/config.json
+    wd=$workDir
+    if [ "$wd" == "" ]; then
+      wd=~/.esmd
+    fi
+    mkdir $wd
+    echo "{\"port\": ${port}, \"tlsPort\": ${tlsPort}, \"workDir\": \"${wd}\"}" >> /etc/esmd/config.json
     writeSVConfLine "[program:esmd]"
     writeSVConfLine "command=/usr/local/bin/esmd --config=/etc/esmd/config.json"
     writeSVConfLine "directory=/tmp"
