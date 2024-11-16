@@ -233,7 +233,8 @@ func installNodejs(installDir string, version string) (err error) {
 			break
 		}
 		if err == nil {
-			filePath := path.Join(installDir, header.Name)
+			_, name := utils.SplitByFirstByte(header.Name, '/') // strip the tarball root dir
+			filePath := path.Join(installDir, name)
 			if header.Typeflag == tar.TypeDir {
 				err = os.MkdirAll(filePath, 0755)
 			} else if header.Typeflag == tar.TypeReg {
