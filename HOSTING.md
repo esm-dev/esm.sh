@@ -1,7 +1,7 @@
 # Self-Hosting
 
-[esm.sh](https://esm.sh) provides a global fast CDN publicly which is powered by
-[Cloudflare](https://cloudflare.com). You can also host esm.sh service by yourself.
+[esm.sh](https://esm.sh) provides a global fast CDN publicly which is powered by [Cloudflare](https://cloudflare.com).
+You can also host esm.sh service by yourself. Please follow the instructions below.
 
 ## Clone the Source Code
 
@@ -19,16 +19,15 @@ To configure the server, create a `config.json` file then pass it to the server 
 {
   "port": 8080,
   "npmRegistry": "https://registry.npmjs.org/",
-  "npmToken": "xxxxxx"
+  "npmToken": "******"
 }
 ```
 
-You can find all the server options in [config.example.jsonc](./config.example.jsonc). (**Note**: the
-`config.example.jsonc` is not a valid JSON file, it's a JSONC file.)
+You can find all the server options in [config.example.jsonc](./config.example.jsonc).
 
 ## Run the Server Locally
 
-You will need [Go](https://golang.org/dl) 1.18+ to compile the server.
+You will need [Go](https://golang.org/dl) 1.22+ to compile and run the server.
 
 ```bash
 go run main.go --config=config.json
@@ -38,7 +37,7 @@ Then you can import `React` from <http://localhost:8080/react>.
 
 ## Deploy the Server to a Single Machine
 
-Ensure the [supervisor](http://supervisord.org/) has been installed on your host machine.
+We provide a bash script to deploy the server to a single machine.
 
 ```bash
 # first time deploy
@@ -49,7 +48,7 @@ Ensure the [supervisor](http://supervisord.org/) has been installed on your host
 
 Recommended host machine requirements:
 
-- Linux system with `git`, `git-lfs` and `supervisor` installed
+- Linux system (Debian/Ubuntu)
 - 4x CPU cores or more
 - 8GB RAM or more
 - 100GB disk space or more
@@ -70,7 +69,7 @@ Run the container:
 ```bash
 docker run -p 8080:8080 \
   -e NPM_REGISTRY=https://registry.npmjs.org/ \
-  -e NPM_TOKEN=xxxxxx \
+  -e NPM_TOKEN=****** \
   ghcr.io/esm-dev/esm.sh:latest
 ```
 
