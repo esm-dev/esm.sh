@@ -103,7 +103,7 @@ func DefaultConfig() *Config {
 
 func normalizeConfig(c *Config) {
 	if c.Port == 0 {
-		c.Port = 8080
+		c.Port = 80
 	}
 	if c.AuthSecret == "" {
 		c.AuthSecret = os.Getenv("AUTH_SECRET")
