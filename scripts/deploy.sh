@@ -83,6 +83,7 @@ ssh -p $sshPort ${user}@${host} << EOF
   if [ "$init" == "yes" ]; then
     apt update
     apt install -y supervisor git git-lfs
+    git lfs install
   fi
 
   SVV=\$(supervisorctl version)
@@ -91,11 +92,6 @@ ssh -p $sshPort ${user}@${host} << EOF
     exit
   fi
   echo "supervisor \$SVV"
-
-  SVCONF=/etc/supervisor/conf.d/esmd.conf
-  writeSVConfLine () {
-    echo "\$1" >> \$SVCONF
-  }
 
   cd /tmp
   tar -xzf esmd.tar.gz
@@ -109,23 +105,23 @@ ssh -p $sshPort ${user}@${host} << EOF
   if [ "$init" == "yes" ]; then
     echo "fs.inotify.max_user_watches=524288" | sudo tee -a /etc/sysctl.conf
     sudo sysctl -p
-    git lfs install
-    if [ -f \$SVCONF ]; then
-      rm -f \$SVCONF
-    fi
     wd=$workDir
-    if [ "$wd" == "" ]; then
+    if [ "\$wd" == "" ]; then
       wd=~/.esmd
     fi
-    mkdir $wd
-    echo "{\"port\": ${port}, \"tlsPort\": ${tlsPort}, \"workDir\": \"${wd}\"}" >> /etc/esmd/config.json
-    writeSVConfLine "[program:esmd]"
-    writeSVConfLine "command=/usr/local/bin/esmd --config=/etc/esmd/config.json"
-    writeSVConfLine "environment=USER=\"${USER}\",HOME=\"${HOME}\""
-    writeSVConfLine "directory=/tmp"
-    writeSVConfLine "user=$user"
-    writeSVConfLine "autostart=true"
-    writeSVConfLine "autorestart=true"
+    mkdir \$wd
+    echo "{\"port\": ${port}, \"tlsPort\": ${tlsPort}, \"workDir\": \"\${wd}\"}" >> /etc/esmd/config.json
+    svcf=/etc/supervisor/conf.d/esmd.conf
+    if [ -f \$svcf ]; then
+      rm -f \$svcf
+    fi
+    echo "[program:esmd]" >> \$svcf
+    echo "command=/usr/local/bin/esmd --config=/etc/esmd/config.json" >> \$svcf
+    echo "environment=USER=\"\${USER}\",HOME=\"\${HOME}\"" >> \$svcf
+    echo "user=\${USER}" >> \$svcf
+    echo "directory=/tmp" >> \$svcf
+    echo "autostart=true" >> \$svcf
+    echo "autorestart=true" >> \$svcf
     supervisorctl reload
   else
     supervisorctl start esmd
