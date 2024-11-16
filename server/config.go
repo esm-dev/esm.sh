@@ -94,7 +94,7 @@ func LoadConfig(filename string) (*Config, error) {
 func DefaultConfig() *Config {
 	homeDir, err := os.UserHomeDir()
 	if err != nil {
-		panic(err)
+		homeDir = "/home/esmd"
 	}
 	c := &Config{WorkDir: path.Join(homeDir, ".esmd")}
 	normalizeConfig(c)
