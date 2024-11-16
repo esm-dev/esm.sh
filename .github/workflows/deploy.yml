@@ -1,0 +1,28 @@
+name: Deploy
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  test:
+    name: Deploy to next.esm.sh
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+
+      - name: Install Go
+        uses: actions/setup-go@v3
+        with:
+          go-version: 1.22.x
+
+      - name: Run `deploy-ci.sh`
+        run: scripts/deploy-ci.sh
+        env:
+          GOOS: linux
+          GOARCH: ${{ secrets.DEPLOY_GOARCH }}
+          SSH_HOST_NAME: ${{ secrets.DEPLOY_SSH_HOST_NAME }}
+          SSH_USER: ${{ secrets.DEPLOY_SSH_USER }}
+          SSH_PRIVATE_KEY: ${{ secrets.DEPLOY_SSH_PRIVATE_KEY }}

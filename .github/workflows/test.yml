@@ -1,4 +1,4 @@
-name: CI
+name: Test
 
 on:
   push:
@@ -8,7 +8,7 @@ on:
 
 jobs:
   test:
-    name: Testing
+    name: Test
     runs-on: ubuntu-latest
 
     steps:
@@ -52,5 +52,5 @@ jobs:
       - name: Run `go test`
         run: go test ./server ./server/storage -v
 
-      - name: Run `deno test`
-        run: deno run -A test/bootstrap.ts
+      - name: Run `test/bootstrap.ts`
+        run: test/bootstrap.ts

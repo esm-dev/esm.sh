@@ -99,6 +99,7 @@ ssh -p $sshPort ${user}@${host} << EOF
 
   cd /tmp
   tar -xzf esmd.tar.gz
+  rm -rf esmd.tar.gz
 
   supervisorctl stop esmd
   rm -f /usr/local/bin/esmd
