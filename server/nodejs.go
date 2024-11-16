@@ -218,6 +218,9 @@ func installNodejs(installDir string, version string) (err error) {
 		}
 	}()
 
+	// clean up
+	os.RemoveAll(installDir)
+
 	// extract
 	gr, err := gzip.NewReader(resp.Body)
 	if err != nil {
