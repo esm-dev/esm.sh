@@ -1,8 +1,6 @@
 package server
 
 import (
-	"archive/tar"
-	"compress/gzip"
 	"errors"
 	"fmt"
 	"io"
@@ -197,7 +195,7 @@ func installNodejs(installDir string, version string) (err error) {
 		return
 	}
 
-	dlURL := fmt.Sprintf("https://nodejs.org/dist/%s/node-%s-%s-%s.tar.gz", version, version, goos, arch)
+	dlURL := fmt.Sprintf("https://nodejs.org/dist/%s/node-%s-%s-%s.tar.xz", version, version, goos, arch)
 	fmt.Println("Downloading", dlURL, "...")
 	resp, err := http.Get(dlURL)
 	if err != nil {
@@ -211,54 +209,27 @@ func installNodejs(installDir string, version string) (err error) {
 		return
 	}
 
-	defer func() {
-		if err != nil {
-			os.RemoveAll(installDir)
-			err = fmt.Errorf("extract %s: %v", path.Base(dlURL), err)
-		}
-	}()
-
-	// clean up
-	os.RemoveAll(installDir)
-
-	// extract
-	gr, err := gzip.NewReader(resp.Body)
+	_, tarFilename := utils.SplitByLastByte(dlURL, '/')
+	savePath := path.Join(os.TempDir(), tarFilename)
+	f, err := os.Create(savePath)
 	if err != nil {
 		return
 	}
-	defer gr.Close()
-	tr := tar.NewReader(gr)
-	for {
-		var header *tar.Header
-		header, err = tr.Next()
-		if err == io.EOF {
-			err = nil
-			break
-		}
-		if err == nil {
-			_, name := utils.SplitByFirstByte(header.Name, '/') // strip the tarball root dir
-			filePath := path.Join(installDir, name)
-			switch header.Typeflag {
-			case tar.TypeDir:
-				err = os.MkdirAll(filePath, 0755)
-			case tar.TypeReg:
-				var file *os.File
-				file, err = os.OpenFile(filePath, os.O_CREATE|os.O_WRONLY, os.FileMode(header.Mode))
-				if err == nil {
-					_, err = io.Copy(file, tr)
-					file.Close()
-				}
-			case tar.TypeLink:
-				_, linkname := utils.SplitByFirstByte(header.Linkname, '/')
-				err = os.Link(path.Join(installDir, linkname), filePath)
-			case tar.TypeSymlink:
-				_, linkname := utils.SplitByFirstByte(header.Linkname, '/')
-				err = os.Symlink(path.Join(installDir, linkname), filePath)
-			}
-		}
-		if err != nil {
-			break
-		}
+	defer f.Close()
+
+	_, err = io.Copy(f, resp.Body)
+	if err != nil {
+		return
 	}
+
+	_, err = run("tar", "-xJf", tarFilename)
+	if err != nil {
+		return
+	}
+
+	// remove the old installation if exists
+	os.RemoveAll(installDir)
+
+	_, err = run("mv", "-f", strings.TrimSuffix(tarFilename, ".tar.xz"), installDir)
 	return
 }
