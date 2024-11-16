@@ -9,6 +9,7 @@ fi
 mkdir -p ~/.ssh
 ssh-keyscan $SSH_HOST_NAME >> ~/.ssh/known_hosts
 echo "${SSH_PRIVATE_KEY}" >> ~/.ssh/id_ed25519
+chmod 600 ~/.ssh/id_ed25519
 echo "Host next.esm.sh" >> ~/.ssh/config
 echo "  HostName ${SSH_HOST_NAME}" >> ~/.ssh/config
 echo "  User ${SSH_USER}" >> ~/.ssh/config
