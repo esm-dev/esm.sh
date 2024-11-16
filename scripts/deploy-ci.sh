@@ -43,7 +43,7 @@ ssh next.esm.sh << EOF
   if [ ! -f \$svcf ]; then
     echo "[program:esmd]" >> \$svcf
     echo "command=/usr/local/bin/esmd" >> \$svcf
-    echo "environment=USER=\"${USER}\",HOME=\"${HOME}\",PATH=\"${PATH}\"" >> \$svcf
+    echo "environment=USER=\"${USER}\",HOME=\"${HOME}\"" >> \$svcf
     echo "directory=/tmp" >> \$svcf
     echo "user=${SSH_USER}" >> \$svcf
     echo "autostart=true" >> \$svcf

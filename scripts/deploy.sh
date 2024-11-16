@@ -121,7 +121,7 @@ ssh -p $sshPort ${user}@${host} << EOF
     echo "{\"port\": ${port}, \"tlsPort\": ${tlsPort}, \"workDir\": \"${wd}\"}" >> /etc/esmd/config.json
     writeSVConfLine "[program:esmd]"
     writeSVConfLine "command=/usr/local/bin/esmd --config=/etc/esmd/config.json"
-    writeSVConfLine "environment=USER=\"${USER}\",HOME=\"${HOME}\",PATH=\"${PATH}\""
+    writeSVConfLine "environment=USER=\"${USER}\",HOME=\"${HOME}\""
     writeSVConfLine "directory=/tmp"
     writeSVConfLine "user=$user"
     writeSVConfLine "autostart=true"
