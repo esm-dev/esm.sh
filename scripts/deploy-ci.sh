@@ -3,7 +3,7 @@
 echo "--- building..."
 go build -o esmd $(dirname $0)/../main.go
 if [ "$?" != "0" ]; then
-  exit $?
+  exit 1
 fi
 
 mkdir -p ~/.ssh
@@ -14,11 +14,14 @@ echo "  User ${SSH_USER}" >> ~/.ssh/config
 echo "  IdentityFile ~/.ssh/id_ed25519" >> ~/.ssh/config
 echo "  IdentitiesOnly yes" >> ~/.ssh/config
 
+echo ~/.ssh/id_ed25519
+echo ~/.ssh/config
+
 echo "--- uploading..."
 tar -czf esmd.tar.gz esmd
 scp esmd.tar.gz next.esm.sh:/tmp/esmd.tar.gz
 if [ "$?" != "0" ]; then
-  exit $?
+  exit 1
 fi
 
 echo "--- installing..."
@@ -59,4 +62,6 @@ ssh next.esm.sh << EOF
     supervisorctl start esmd
   fi
 EOF
-exit $?
+if [ "$?" != "0" ]; then
+  exit 1
+fi
