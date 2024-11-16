@@ -1379,7 +1379,6 @@ func esmRoutes(debug bool) rex.Handle {
 				}
 			}
 		}
-
 		buildCtx := NewBuildContext(zoneId, npmrc, esm, buildArgs, target, !targetFromUA, bundleMode, isDev)
 		ret, err := buildCtx.Query()
 		if err != nil {
