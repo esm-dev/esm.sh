@@ -238,15 +238,22 @@ func installNodejs(installDir string, version string) (err error) {
 		if err == nil {
 			_, name := utils.SplitByFirstByte(header.Name, '/') // strip the tarball root dir
 			filePath := path.Join(installDir, name)
-			if header.Typeflag == tar.TypeDir {
+			switch header.Typeflag {
+			case tar.TypeDir:
 				err = os.MkdirAll(filePath, 0755)
-			} else if header.Typeflag == tar.TypeReg {
+			case tar.TypeReg:
 				var file *os.File
 				file, err = os.OpenFile(filePath, os.O_CREATE|os.O_WRONLY, os.FileMode(header.Mode))
 				if err == nil {
 					_, err = io.Copy(file, tr)
 					file.Close()
 				}
+			case tar.TypeLink:
+				_, linkname := utils.SplitByFirstByte(header.Linkname, '/')
+				err = os.Link(path.Join(installDir, linkname), filePath)
+			case tar.TypeSymlink:
+				_, linkname := utils.SplitByFirstByte(header.Linkname, '/')
+				err = os.Symlink(path.Join(installDir, linkname), filePath)
 			}
 		}
 		if err != nil {
