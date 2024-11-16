@@ -48,9 +48,10 @@ ssh next.esm.sh << EOF
     echo "autostart=true" >> \$svcf
     echo "autorestart=true" >> \$svcf
     reload=yes
+  else
+    supervisorctl stop esmd
   fi
 
-  supervisorctl stop esmd
   rm -f /usr/local/bin/esmd
   mv -f esmd /usr/local/bin/esmd
   chmod +x /usr/local/bin/esmd
