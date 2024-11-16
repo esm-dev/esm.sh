@@ -1,5 +1,5 @@
 # Build Stage
-FROM golang:1.22-alpine AS build-stage
+FROM golang:1.23-alpine AS build-stage
 
 ENV ESM_SH_REPO https://github.com/esm-dev/esm.sh
 ENV ESM_SH_VERSION v136
