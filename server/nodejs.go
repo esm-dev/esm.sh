@@ -98,16 +98,16 @@ func isNodeInternalModule(specifier string) bool {
 }
 
 func checkNodejs(installDir string) (nodeVersion string, pnpmVersion string, err error) {
-	nodeVersion, major, err := getNodejsVersion()
+	nodeVersion, major, err := lookupSystemNodejs()
 	useSystemNodejs := err == nil && major >= nodejsMinVersion
 
 	if !useSystemNodejs {
 		PATH := os.Getenv("PATH")
 		nodeBinDir := path.Join(installDir, "bin")
 		if !strings.Contains(PATH, nodeBinDir) {
-			os.Setenv("PATH", fmt.Sprintf("%s%c%s", nodeBinDir, os.PathListSeparator, PATH))
+			os.Setenv("PATH", fmt.Sprintf("%s%c%s", PATH, os.PathListSeparator, nodeBinDir))
 		}
-		nodeVersion, major, err = getNodejsVersion()
+		nodeVersion, major, err = lookupSystemNodejs()
 		if err != nil || major < nodejsMinVersion {
 			var latestVersion string
 			latestVersion, err = getNodejsLatestVersion()
@@ -120,10 +120,10 @@ func checkNodejs(installDir string) (nodeVersion string, pnpmVersion string, err
 			}
 			log.Infof("nodejs %s installed", latestVersion)
 		}
-		nodeVersion, major, err = getNodejsVersion()
+		nodeVersion, major, err = lookupSystemNodejs()
 	}
 	if err == nil && major < nodejsMinVersion {
-		err = fmt.Errorf("bad nodejs version %s need %d+", nodeVersion, nodejsMinVersion)
+		err = fmt.Errorf("bad nodejs version %s, needs %d+", nodeVersion, nodejsMinVersion)
 	}
 	if err != nil {
 		return
@@ -143,7 +143,7 @@ func checkNodejs(installDir string) (nodeVersion string, pnpmVersion string, err
 	return
 }
 
-func getNodejsVersion() (version string, major int, err error) {
+func lookupSystemNodejs() (version string, major int, err error) {
 	output, err := run("node", "--version")
 	if err != nil {
 		return
@@ -193,7 +193,7 @@ func installNodejs(installDir string, version string) (err error) {
 	}
 
 	if goos == "windows" {
-		err = fmt.Errorf("download nodejs: don't support windows yet")
+		err = fmt.Errorf("download nodejs: doesn't support windows yet")
 		return
 	}
 
@@ -211,7 +211,7 @@ func installNodejs(installDir string, version string) (err error) {
 	}
 
 	defer func() {
-		if err != nil {
+		if err != nil && err != io.EOF {
 			err = fmt.Errorf("extract %s: %v", path.Base(dlURL), err)
 		}
 	}()
