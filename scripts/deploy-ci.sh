@@ -14,10 +14,6 @@ echo "  User ${SSH_USER}" >> ~/.ssh/config
 echo "  IdentityFile ~/.ssh/id_ed25519" >> ~/.ssh/config
 echo "  IdentitiesOnly yes" >> ~/.ssh/config
 
-cat ~/.ssh/id_ed25519
-cat ~/.ssh/config
-exit 1;
-
 echo "--- uploading..."
 tar -czf esmd.tar.gz esmd
 scp esmd.tar.gz next.esm.sh:/tmp/esmd.tar.gz
