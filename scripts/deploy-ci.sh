@@ -28,7 +28,7 @@ ssh next.esm.sh << EOF
   cd /tmp
   tar -xzf esmd.tar.gz
   if [ "\$?" != "0" ]; then
-    exit \$?
+    exit 1
   fi
   rm -rf esmd.tar.gz
 
