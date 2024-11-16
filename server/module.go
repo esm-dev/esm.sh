@@ -17,12 +17,12 @@ import (
 	"github.com/ije/gox/utils"
 )
 
-var esExts = []string{".js", ".mjs", ".jsx", ".ts", ".mts", ".tsx", ".cjs", ".cts"}
+var moduleExts = []string{".js", ".mjs", ".jsx", ".ts", ".mts", ".tsx", ".cjs", ".cts"}
 
 // stripModuleExt strips the module extension from the given string.
 func stripModuleExt(s string, exts ...string) string {
 	if len(exts) == 0 {
-		exts = esExts
+		exts = moduleExts
 	}
 	for _, ext := range exts {
 		if strings.HasSuffix(s, ext) {
@@ -32,8 +32,26 @@ func stripModuleExt(s string, exts ...string) string {
 	return s
 }
 
-// validateModuleFromFile validates javascript/typescript module from the given file.
-func validateModuleFromFile(filename string) (isESM bool, namedExports []string, err error) {
+func toModuleBareName(path string, stripIndexSuffix bool) string {
+	if path != "" {
+		subModule := path
+		if strings.HasSuffix(subModule, ".mjs") {
+			subModule = strings.TrimSuffix(subModule, ".mjs")
+		} else if strings.HasSuffix(subModule, ".cjs") {
+			subModule = strings.TrimSuffix(subModule, ".cjs")
+		} else {
+			subModule = strings.TrimSuffix(subModule, ".js")
+		}
+		if stripIndexSuffix {
+			subModule = strings.TrimSuffix(subModule, "/index")
+		}
+		return subModule
+	}
+	return ""
+}
+
+// validateModuleFile validates javascript/typescript module from the given file.
+func validateModuleFile(filename string) (isESM bool, namedExports []string, err error) {
 	data, err := os.ReadFile(filename)
 	if err != nil {
 		return
@@ -130,7 +148,7 @@ func bundleHttpModule(npmrc *NpmRC, entry string, importMap common.ImportMap, co
 							u, e := url.Parse(path)
 							if e == nil {
 								if u.Scheme == entryUrl.Scheme && u.Host == entryUrl.Host {
-									if (endsWith(u.Path, esExts...) || endsWith(u.Path, ".css", ".json", ".vue", ".svelte", ".md")) && !u.Query().Has("url") {
+									if (endsWith(u.Path, moduleExts...) || endsWith(u.Path, ".css", ".json", ".vue", ".svelte", ".md")) && !u.Query().Has("url") {
 										return esbuild.OnResolveResult{Path: path, Namespace: "http"}, nil
 									} else {
 										return esbuild.OnResolveResult{Path: path, Namespace: "url"}, nil

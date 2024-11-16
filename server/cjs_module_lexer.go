@@ -17,7 +17,7 @@ import (
 	"github.com/ije/gox/utils"
 )
 
-const cjsModuleLexerPkg = "@esm.sh/cjs-module-lexer@1.0.0"
+const cjsModuleLexerPkg = "@esm.sh/cjs-module-lexer@1.0.1"
 
 // use `require()` to get the module's exports that are not statically analyzable by @esm.sh/cjs-module-lexer
 var requireModeAllowList = []string{

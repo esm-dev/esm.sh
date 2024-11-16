@@ -103,7 +103,7 @@ func (a *PackageJSONRaw) ToNpmPackage() *PackageJSON {
 		if s, ok := a.SideEffects.(string); ok {
 			if s == "false" {
 				sideEffectsFalse = true
-			} else if endsWith(s, esExts...) {
+			} else if endsWith(s, moduleExts...) {
 				sideEffects = NewStringSet()
 				sideEffects.Add(s)
 			}
@@ -112,7 +112,7 @@ func (a *PackageJSONRaw) ToNpmPackage() *PackageJSON {
 		} else if m, ok := a.SideEffects.([]interface{}); ok && len(m) > 0 {
 			sideEffects = NewStringSet()
 			for _, v := range m {
-				if name, ok := v.(string); ok && endsWith(name, esExts...) {
+				if name, ok := v.(string); ok && endsWith(name, moduleExts...) {
 					sideEffects.Add(name)
 				}
 			}
@@ -500,7 +500,7 @@ func (rc *NpmRC) installPackage(esm ESMPath) (packageJson *PackageJSON, err erro
 	if esm.GhPrefix {
 		err = os.WriteFile(packageJsonRc, []byte(fmt.Sprintf(`{"dependencies":{"%s":"github:%s#%s"}}`, esm.PkgName, esm.PkgName, esm.PkgVersion)), 0644)
 		if err == nil {
-			err = rc.pnpmi(installDir)
+			err = rc.pnpmi(installDir, "--prefer-offline")
 		}
 		if err == nil {
 			// ensure 'package.json' file if not exists after installing from github
@@ -509,6 +509,11 @@ func (rc *NpmRC) installPackage(esm ESMPath) (packageJson *PackageJSON, err erro
 				packageJson := fmt.Sprintf(`{"name":"%s","version":"%s"}`, esm.PkgName, esm.PkgVersion)
 				err = os.WriteFile(packageJsonPath, []byte(packageJson), 0644)
 			}
+		}
+	} else if esm.PrPrefix {
+		err = os.WriteFile(packageJsonRc, []byte(fmt.Sprintf(`{"dependencies":{"%s":"https://pkg.pr.new/%s@%s"}}`, esm.PkgName, esm.PkgName, esm.PkgVersion)), 0644)
+		if err == nil {
+			err = rc.pnpmi(installDir, "--prefer-offline")
 		}
 	} else if regexpVersionStrict.MatchString(esm.PkgVersion) {
 		err = rc.pnpmi(installDir, "--prefer-offline", esm.PackageName())
@@ -614,11 +619,11 @@ func (rc *NpmRC) createDotNpmRcFile(dir string) error {
 	if rc.Registry != "" {
 		buf.WriteString(fmt.Sprintf("registry=%s\n", rc.Registry))
 		if rc.Token != "" {
-			authPerfix := removeHttpUrlProtocol(rc.Registry)
+			authPerfix := stripHttpScheme(rc.Registry)
 			buf.WriteString(fmt.Sprintf("%s:_authToken=${ESM_NPM_TOKEN}\n", authPerfix))
 		}
 		if rc.User != "" && rc.Password != "" {
-			authPerfix := removeHttpUrlProtocol(rc.Registry)
+			authPerfix := stripHttpScheme(rc.Registry)
 			buf.WriteString(fmt.Sprintf("%s:username=${ESM_NPM_USER}\n", authPerfix))
 			buf.WriteString(fmt.Sprintf("%s:_password=${ESM_NPM_PASSWORD}\n", authPerfix))
 		}
@@ -627,11 +632,11 @@ func (rc *NpmRC) createDotNpmRcFile(dir string) error {
 		if reg.Registry != "" {
 			buf.WriteString(fmt.Sprintf("%s:registry=%s\n", scope, reg.Registry))
 			if reg.Token != "" {
-				authPerfix := removeHttpUrlProtocol(reg.Registry)
+				authPerfix := stripHttpScheme(reg.Registry)
 				buf.WriteString(fmt.Sprintf("%s:_authToken=${ESM_NPM_TOKEN_%s}\n", authPerfix, toEnvName(scope[1:])))
 			}
 			if reg.User != "" && reg.Password != "" {
-				authPerfix := removeHttpUrlProtocol(reg.Registry)
+				authPerfix := stripHttpScheme(reg.Registry)
 				buf.WriteString(fmt.Sprintf("%s:username=${ESM_NPM_USER_%s}\n", authPerfix, toEnvName(scope[1:])))
 				buf.WriteString(fmt.Sprintf("%s:_password=${ESM_NPM_PASSWORD_%s}\n", authPerfix, toEnvName(scope[1:])))
 			}
@@ -707,9 +712,20 @@ func validatePackageName(pkgName string) bool {
 }
 
 // added by @jimisaacs
-func toTypesPkgName(pkgName string) string {
+func toTypesPackageName(pkgName string) string {
 	if strings.HasPrefix(pkgName, "@") {
 		pkgName = strings.Replace(pkgName[1:], "/", "__", 1)
 	}
 	return "@types/" + pkgName
+}
+
+// stripHttpScheme removes the `http[s]:` protocol from the given url.
+func stripHttpScheme(url string) string {
+	if strings.HasPrefix(url, "https://") {
+		return url[6:]
+	}
+	if strings.HasPrefix(url, "http://") {
+		return url[5:]
+	}
+	return url
 }

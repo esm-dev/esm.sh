@@ -187,7 +187,7 @@ func (ctx *BuildContext) existsPkgFile(fp ...string) bool {
 }
 
 func (ctx *BuildContext) lookupDep(specifier string, dts bool) (esm ESMPath, packageJson *PackageJSON, err error) {
-	pkgName, version, subpath, _ := splitPkgPath(specifier)
+	pkgName, version, subpath, _ := splitESMPath(specifier)
 lookup:
 	if v, ok := ctx.args.deps[pkgName]; ok {
 		packageJson, err = ctx.npmrc.getPackageInfo(pkgName, v)
@@ -219,7 +219,7 @@ lookup:
 	if version == "" {
 		if v, ok := ctx.packageJson.Dependencies[pkgName]; ok {
 			if strings.HasPrefix(v, "npm:") {
-				pkgName, version, _, _ = splitPkgPath(v[4:])
+				pkgName, version, _, _ = splitESMPath(v[4:])
 			} else {
 				version = v
 			}
@@ -239,7 +239,7 @@ lookup:
 		}
 	}
 	if err != nil && strings.HasSuffix(err.Error(), " not found") && dts && !strings.HasPrefix(pkgName, "@types/") {
-		pkgName = toTypesPkgName(pkgName)
+		pkgName = toTypesPackageName(pkgName)
 		goto lookup
 	}
 	return
@@ -728,7 +728,7 @@ func (ctx *BuildContext) resolveExternalModule(specifier string, kind api.Resolv
 	}
 
 	// check `?external`
-	if ctx.args.externalAll || ctx.args.external.Has(getPkgName(specifier)) {
+	if ctx.args.externalAll || ctx.args.external.Has(toPackageName(specifier)) {
 		resolvedPath = specifier
 		return
 	}
@@ -790,7 +790,7 @@ func (ctx *BuildContext) resolveExternalModule(specifier string, kind api.Resolv
 	}
 
 	// common npm dependency
-	pkgName, version, subpath, _ := splitPkgPath(specifier)
+	pkgName, version, subpath, _ := splitESMPath(specifier)
 	if version == "" {
 		if pkgName == ctx.esm.PkgName {
 			version = ctx.esm.PkgVersion
@@ -829,7 +829,7 @@ func (ctx *BuildContext) resolveExternalModule(specifier string, kind api.Resolv
 			return
 		}
 		if strings.HasPrefix(version, "npm:") {
-			module.PkgName, module.PkgVersion, _, _ = splitPkgPath(version[4:])
+			module.PkgName, module.PkgVersion, _, _ = splitESMPath(version[4:])
 		} else if strings.HasPrefix(version, "git+ssh://") || strings.HasPrefix(version, "git+https://") || strings.HasPrefix(version, "git://") {
 			gitUrl, e := url.Parse(version)
 			if e != nil || gitUrl.Hostname() != "github.com" {
@@ -974,7 +974,7 @@ func (ctx *BuildContext) resloveDTS(entry BuildEntry) (string, error) {
 			versionParts[0] + "." + versionParts[1], // major.minor
 			versionParts[0],                         // major
 		}
-		typesPkgName := toTypesPkgName(packageJson.Name)
+		typesPkgName := toTypesPackageName(packageJson.Name)
 		pkgVersion, ok := ctx.args.deps[typesPkgName]
 		if ok {
 			// use the version of the `?deps` query if it exists
@@ -1013,7 +1013,7 @@ func (ctx *BuildContext) resloveDTS(entry BuildEntry) (string, error) {
 }
 
 func (ctx *BuildContext) normalizePackageJSON(p *PackageJSON) {
-	if ctx.esm.GhPrefix {
+	if ctx.esm.GhPrefix || ctx.esm.PrPrefix {
 		// if the name in package.json is not the same as the repository name
 		if p.Name != ctx.esm.PkgName {
 			p.PkgName = p.Name
@@ -1090,7 +1090,7 @@ func (ctx *BuildContext) lexer(entry *BuildEntry, forceCjsOnly bool) (ret *Build
 		if isESM {
 			ret = &BuildMeta{
 				NamedExports:     namedExports,
-				HasDefaultExport: includes(namedExports, "default"),
+				HasDefaultExport: contains(namedExports, "default"),
 			}
 			return
 		}
@@ -1139,7 +1139,7 @@ func (ctx *BuildContext) cjsLexer(specifier string) (cjs cjsModuleLexerResult, e
 }
 
 func (ctx *BuildContext) esmLexer(specifier string) (isESM bool, namedExports []string, err error) {
-	isESM, namedExports, err = validateModuleFromFile(path.Join(ctx.wd, "node_modules", ctx.esm.PkgName, specifier))
+	isESM, namedExports, err = validateModuleFile(path.Join(ctx.wd, "node_modules", ctx.esm.PkgName, specifier))
 	if err != nil {
 		err = fmt.Errorf("esmLexer: %v", err)
 	}
@@ -1216,7 +1216,7 @@ func normalizeBuildEntry(ctx *BuildContext, entry *BuildEntry) {
 		}
 		// check if the cjs entry is an ESM
 		if entry.cjs != "" && strings.HasSuffix(entry.cjs, ".js") {
-			isESM, _, _ := validateModuleFromFile(path.Join(ctx.pkgDir, entry.cjs))
+			isESM, _, _ := validateModuleFile(path.Join(ctx.pkgDir, entry.cjs))
 			if isESM {
 				if entry.esm == "" {
 					entry.esm = entry.cjs

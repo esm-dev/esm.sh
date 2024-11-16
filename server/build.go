@@ -126,7 +126,7 @@ func (ctx *BuildContext) Build() (ret *BuildMeta, err error) {
 	}
 
 	// check if the package is deprecated
-	if ctx.deprecated == "" && !ctx.esm.GhPrefix && !strings.HasPrefix(ctx.esm.PkgName, "@jsr/") {
+	if ctx.deprecated == "" && !ctx.esm.GhPrefix && !ctx.esm.PrPrefix && !strings.HasPrefix(ctx.esm.PkgName, "@jsr/") {
 		var info *PackageJSON
 		info, err = ctx.npmrc.fetchPackageInfo(ctx.esm.PkgName, ctx.esm.PkgVersion)
 		if err != nil {
@@ -386,7 +386,7 @@ func (ctx *BuildContext) buildModule() (result *BuildMeta, err error) {
 
 					// resolve specifier by checking `?alias` query
 					if len(ctx.args.alias) > 0 && !isRelPathSpecifier(specifier) {
-						pkgName, _, subpath, _ := splitPkgPath(specifier)
+						pkgName, _, subpath, _ := splitESMPath(specifier)
 						if name, ok := ctx.args.alias[pkgName]; ok {
 							specifier = name
 							if subpath != "" {
@@ -452,7 +452,7 @@ func (ctx *BuildContext) buildModule() (result *BuildMeta, err error) {
 					// force to use `npm:` specifier for `denonext` target
 					if forceNpmSpecifiers[specifier] && ctx.target == "denonext" {
 						version := ""
-						pkgName, _, subPath, _ := splitPkgPath(specifier)
+						pkgName, _, subPath, _ := splitESMPath(specifier)
 						if pkgName == ctx.esm.PkgName {
 							version = ctx.esm.PkgVersion
 						} else if v, ok := ctx.packageJson.Dependencies[pkgName]; ok && regexpVersionStrict.MatchString(v) {
@@ -530,8 +530,8 @@ func (ctx *BuildContext) buildModule() (result *BuildMeta, err error) {
 					}
 
 					// bundles all dependencies in `bundle` mode, apart from peer dependencies and `?external` query]
-					if ctx.bundleMode == BundleAll && !ctx.args.external.Has(getPkgName(specifier)) && !implicitExternal.Has(specifier) {
-						pkgName := getPkgName(specifier)
+					if ctx.bundleMode == BundleAll && !ctx.args.external.Has(toPackageName(specifier)) && !implicitExternal.Has(specifier) {
+						pkgName := toPackageName(specifier)
 						_, ok := ctx.packageJson.PeerDependencies[pkgName]
 						if !ok {
 							return api.OnResolveResult{}, nil
@@ -823,7 +823,7 @@ func (ctx *BuildContext) buildModule() (result *BuildMeta, err error) {
 							ret.Errors = r.Errors
 							return
 						}
-						js := string(regexpGlobalIdent.ReplaceAllFunc(r.Code, func(b []byte) []byte {
+						js := string(regexpESMInternalIdent.ReplaceAllFunc(r.Code, func(b []byte) []byte {
 							id := string(b)
 							if id != "__filename$" && id != "__dirname$" {
 								return b
@@ -835,7 +835,7 @@ func (ctx *BuildContext) buildModule() (result *BuildMeta, err error) {
 									filename = a[1]
 								}
 							}
-							pkgName, _, subPath, _ := splitPkgPath(filename)
+							pkgName, _, subPath, _ := splitESMPath(filename)
 							pkgVersion := ""
 							if ctx.packageJson.Name == pkgName {
 								pkgVersion = ctx.packageJson.Version
@@ -1014,21 +1014,24 @@ rebuild:
 	for _, file := range ret.OutputFiles {
 		if strings.HasSuffix(file.Path, ".js") {
 			jsContent := file.Contents
-			extraBanner := ""
-			if ctx.dev {
-				extraBanner += " development"
+			header := bytes.NewBufferString("/* esm.sh - ")
+			if ctx.esm.GhPrefix {
+				header.WriteString("github:")
+			} else if ctx.esm.PrPrefix {
+				header.WriteString("pkg.pr.new/")
 			}
-			if ctx.bundleMode == BundleAll {
-				extraBanner += " bundle-all"
-			} else if ctx.bundleMode == BundleFalse {
-				extraBanner += " bundle-false"
+			header.WriteString(ctx.esm.PkgName)
+			if ctx.esm.GhPrefix {
+				header.WriteByte('#')
+			} else {
+				header.WriteByte('@')
 			}
-			header := bytes.NewBufferString(fmt.Sprintf(
-				"/* esm.sh - %s (%s%s) */\n",
-				ctx.esm.String(),
-				strings.ToLower(ctx.target),
-				extraBanner,
-			))
+			header.WriteString(ctx.esm.PkgVersion)
+			if ctx.esm.SubBareName != "" {
+				header.WriteByte('/')
+				header.WriteString(ctx.esm.SubBareName)
+			}
+			header.WriteString(" */\n")
 
 			// remove shebang
 			if bytes.HasPrefix(jsContent, []byte("#!/")) {
@@ -1039,7 +1042,7 @@ rebuild:
 			// add nodejs compatibility
 			if ctx.target != "node" {
 				ids := NewStringSet()
-				for _, r := range regexpGlobalIdent.FindAll(jsContent, -1) {
+				for _, r := range regexpESMInternalIdent.FindAll(jsContent, -1) {
 					ids.Add(string(r))
 				}
 				if ids.Has("__Process$") {
@@ -1135,7 +1138,7 @@ rebuild:
 					}
 					if !isRelPathSpecifier(specifier) && !isNodeInternalModule(specifier) {
 						if a := bytes.SplitN(jsContent, []byte(fmt.Sprintf(`("%s")`, specifier)), 2); len(a) >= 2 {
-							ret := regexpVarEqual.FindSubmatch(a[0])
+							ret := regexpVarDecl.FindSubmatch(a[0])
 							if len(ret) == 2 {
 								r, e := regexp.Compile(fmt.Sprintf(`[^\w$]%s(\(|\.default[^\w$=])`, string(ret[1])))
 								if e == nil {
@@ -1161,7 +1164,7 @@ rebuild:
 									entry := b.resolveEntry(esm)
 									if entry.esm == "" {
 										ret, _, e := b.lexer(&entry, true)
-										if e == nil && includes(ret.NamedExports, "__esModule") {
+										if e == nil && contains(ret.NamedExports, "__esModule") {
 											isEsModule[i] = true
 										}
 									}
