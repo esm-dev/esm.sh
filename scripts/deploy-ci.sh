@@ -7,15 +7,13 @@ if [ "$?" != "0" ]; then
 fi
 
 mkdir -p ~/.ssh
+ssh-keyscan $SSH_HOST_NAME >> ~/.ssh/known_hosts
 echo "${SSH_PRIVATE_KEY}" >> ~/.ssh/id_ed25519
 echo "Host next.esm.sh" >> ~/.ssh/config
 echo "  HostName ${SSH_HOST_NAME}" >> ~/.ssh/config
 echo "  User ${SSH_USER}" >> ~/.ssh/config
 echo "  IdentityFile ~/.ssh/id_ed25519" >> ~/.ssh/config
 echo "  IdentitiesOnly yes" >> ~/.ssh/config
-
-cat ~/.ssh/id_ed25519
-cat ~/.ssh/config
 
 echo "--- uploading..."
 tar -czf esmd.tar.gz esmd
