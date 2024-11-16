@@ -6,13 +6,6 @@ if [ "$?" != "0" ]; then
   exit $?
 fi
 
-echo "${GOOS}"
-echo "${GOARCH}"
-echo "${SSH_HOST_NAME}"
-echo "${SSH_USER}"
-echo "${SSH_PRIVATE_KEY}"
-exit 1
-
 mkdir -p ~/.ssh
 echo "${SSH_PRIVATE_KEY}" >> ~/.ssh/id_ed25519
 echo "Host next.esm.sh" >> ~/.ssh/config
