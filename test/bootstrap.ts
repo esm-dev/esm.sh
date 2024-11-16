@@ -5,6 +5,15 @@ async function startServer(onStart: () => Promise<void>, verbose: boolean) {
   if (!success) {
     Deno.exit(code);
   }
+  if (!(await existsFile("config.json"))) {
+    await Deno.writeTextFile(
+      "config.json",
+      JSON.stringify({
+        "port": 8080,
+        "workDir": ".esmd",
+      }),
+    );
+  }
   const p = new Deno.Command("./esmd", {
     args: ["--debug"],
     stdout: verbose ? "inherit" : "null",
