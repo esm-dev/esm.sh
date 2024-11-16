@@ -198,6 +198,7 @@ func installNodejs(installDir string, version string) (err error) {
 	}
 
 	dlURL := fmt.Sprintf("https://nodejs.org/dist/%s/node-%s-%s-%s.tar.gz", version, version, goos, arch)
+	fmt.Println("Downloading", dlURL, "...")
 	resp, err := http.Get(dlURL)
 	if err != nil {
 		err = fmt.Errorf("download nodejs: %v", err)
@@ -211,7 +212,8 @@ func installNodejs(installDir string, version string) (err error) {
 	}
 
 	defer func() {
-		if err != nil && err != io.EOF {
+		if err != nil {
+			os.RemoveAll(installDir)
 			err = fmt.Errorf("extract %s: %v", path.Base(dlURL), err)
 		}
 	}()
@@ -227,6 +229,7 @@ func installNodejs(installDir string, version string) (err error) {
 		var header *tar.Header
 		header, err = tr.Next()
 		if err == io.EOF {
+			err = nil
 			break
 		}
 		if err == nil {
@@ -243,7 +246,7 @@ func installNodejs(installDir string, version string) (err error) {
 			}
 		}
 		if err != nil {
-			return
+			break
 		}
 	}
 	return
