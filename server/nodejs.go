@@ -1,8 +1,6 @@
 package server
 
 import (
-	"archive/tar"
-	"compress/gzip"
 	"errors"
 	"fmt"
 	"io"
@@ -98,16 +96,16 @@ func isNodeInternalModule(specifier string) bool {
 }
 
 func checkNodejs(installDir string) (nodeVersion string, pnpmVersion string, err error) {
-	nodeVersion, major, err := getNodejsVersion()
+	nodeVersion, major, err := lookupSystemNodejs()
 	useSystemNodejs := err == nil && major >= nodejsMinVersion
 
 	if !useSystemNodejs {
 		PATH := os.Getenv("PATH")
 		nodeBinDir := path.Join(installDir, "bin")
 		if !strings.Contains(PATH, nodeBinDir) {
-			os.Setenv("PATH", fmt.Sprintf("%s%c%s", nodeBinDir, os.PathListSeparator, PATH))
+			os.Setenv("PATH", fmt.Sprintf("%s%c%s", PATH, os.PathListSeparator, nodeBinDir))
 		}
-		nodeVersion, major, err = getNodejsVersion()
+		nodeVersion, major, err = lookupSystemNodejs()
 		if err != nil || major < nodejsMinVersion {
 			var latestVersion string
 			latestVersion, err = getNodejsLatestVersion()
@@ -120,10 +118,10 @@ func checkNodejs(installDir string) (nodeVersion string, pnpmVersion string, err
 			}
 			log.Infof("nodejs %s installed", latestVersion)
 		}
-		nodeVersion, major, err = getNodejsVersion()
+		nodeVersion, major, err = lookupSystemNodejs()
 	}
 	if err == nil && major < nodejsMinVersion {
-		err = fmt.Errorf("bad nodejs version %s need %d+", nodeVersion, nodejsMinVersion)
+		err = fmt.Errorf("bad nodejs version %s, needs %d+", nodeVersion, nodejsMinVersion)
 	}
 	if err != nil {
 		return
@@ -143,7 +141,7 @@ func checkNodejs(installDir string) (nodeVersion string, pnpmVersion string, err
 	return
 }
 
-func getNodejsVersion() (version string, major int, err error) {
+func lookupSystemNodejs() (version string, major int, err error) {
 	output, err := run("node", "--version")
 	if err != nil {
 		return
@@ -193,11 +191,12 @@ func installNodejs(installDir string, version string) (err error) {
 	}
 
 	if goos == "windows" {
-		err = fmt.Errorf("download nodejs: don't support windows yet")
+		err = fmt.Errorf("download nodejs: doesn't support windows yet")
 		return
 	}
 
-	dlURL := fmt.Sprintf("https://nodejs.org/dist/%s/node-%s-%s-%s.tar.gz", version, version, goos, arch)
+	dlURL := fmt.Sprintf("https://nodejs.org/dist/%s/node-%s-%s-%s.tar.xz", version, version, goos, arch)
+	fmt.Println("Downloading", dlURL, "...")
 	resp, err := http.Get(dlURL)
 	if err != nil {
 		err = fmt.Errorf("download nodejs: %v", err)
@@ -210,41 +209,27 @@ func installNodejs(installDir string, version string) (err error) {
 		return
 	}
 
-	defer func() {
-		if err != nil {
-			err = fmt.Errorf("extract %s: %v", path.Base(dlURL), err)
-		}
-	}()
-
-	// extract
-	gr, err := gzip.NewReader(resp.Body)
+	_, tarFilename := utils.SplitByLastByte(dlURL, '/')
+	savePath := path.Join(os.TempDir(), tarFilename)
+	f, err := os.Create(savePath)
 	if err != nil {
 		return
 	}
-	defer gr.Close()
-	tr := tar.NewReader(gr)
-	for {
-		var header *tar.Header
-		header, err = tr.Next()
-		if err == io.EOF {
-			break
-		}
-		if err == nil {
-			filePath := path.Join(installDir, header.Name)
-			if header.Typeflag == tar.TypeDir {
-				err = os.MkdirAll(filePath, 0755)
-			} else if header.Typeflag == tar.TypeReg {
-				var file *os.File
-				file, err = os.OpenFile(filePath, os.O_CREATE|os.O_WRONLY, os.FileMode(header.Mode))
-				if err == nil {
-					_, err = io.Copy(file, tr)
-					file.Close()
-				}
-			}
-		}
-		if err != nil {
-			return
-		}
+	defer f.Close()
+
+	_, err = io.Copy(f, resp.Body)
+	if err != nil {
+		return
 	}
+
+	_, err = run("tar", "-xJf", tarFilename)
+	if err != nil {
+		return
+	}
+
+	// remove the old installation if exists
+	os.RemoveAll(installDir)
+
+	_, err = run("mv", "-f", strings.TrimSuffix(tarFilename, ".tar.xz"), installDir)
 	return
 }

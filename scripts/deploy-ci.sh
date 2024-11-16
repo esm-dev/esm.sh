@@ -1,16 +1,16 @@
 #!/bin/bash
 
-scriptDir=$(dirname $0)
-
 echo "--- building..."
-go build -o $scriptDir/esmd $scriptDir/../main.go
+go build -o esmd $(dirname $0)/../main.go
 if [ "$?" != "0" ]; then
-  exit
+  exit 1
 fi
 
 mkdir -p ~/.ssh
+ssh-keyscan $SSH_HOST_NAME >> ~/.ssh/known_hosts
 echo "${SSH_PRIVATE_KEY}" >> ~/.ssh/id_ed25519
-echo "next.esm.sh" >> ~/.ssh/config
+chmod 600 ~/.ssh/id_ed25519
+echo "Host next.esm.sh" >> ~/.ssh/config
 echo "  HostName ${SSH_HOST_NAME}" >> ~/.ssh/config
 echo "  User ${SSH_USER}" >> ~/.ssh/config
 echo "  IdentityFile ~/.ssh/id_ed25519" >> ~/.ssh/config
@@ -20,7 +20,7 @@ echo "--- uploading..."
 tar -czf esmd.tar.gz esmd
 scp esmd.tar.gz next.esm.sh:/tmp/esmd.tar.gz
 if [ "$?" != "0" ]; then
-  exit
+  exit 1
 fi
 
 echo "--- installing..."
@@ -28,7 +28,7 @@ ssh next.esm.sh << EOF
   cd /tmp
   tar -xzf esmd.tar.gz
   if [ "\$?" != "0" ]; then
-    exit
+    exit 1
   fi
   rm -rf esmd.tar.gz
 
@@ -43,20 +43,19 @@ ssh next.esm.sh << EOF
   if [ ! -f \$svcf ]; then
     echo "[program:esmd]" >> \$svcf
     echo "command=/usr/local/bin/esmd" >> \$svcf
+    echo "environment=USER=\"${USER}\",HOME=\"${HOME}\"" >> \$svcf
     echo "directory=/tmp" >> \$svcf
     echo "user=${SSH_USER}" >> \$svcf
     echo "autostart=true" >> \$svcf
     echo "autorestart=true" >> \$svcf
     reload=yes
-  if
+  else
+    supervisorctl stop esmd
+  fi
 
-  supervisorctl stop esmd
   rm -f /usr/local/bin/esmd
   mv -f esmd /usr/local/bin/esmd
   chmod +x /usr/local/bin/esmd
-    if [ "\$?" != "0" ]; then
-    exit
-  fi
 
   if [ "\$reload" == "yes" ]; then
     supervisorctl reload
@@ -64,3 +63,6 @@ ssh next.esm.sh << EOF
     supervisorctl start esmd
   fi
 EOF
+if [ "$?" != "0" ]; then
+  exit 1
+fi
