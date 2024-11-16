@@ -40,6 +40,15 @@ if [ "$host" == "" ]; then
   exit
 fi
 
+read -p "? host os (default is 'linux'): " goos
+read -p "? host architecture (default is 'amd64'): " goarch
+if [ "$goos" == "" ]; then
+  goos="linux"
+fi
+if [ "$goarch" == "" ]; then
+  goarch="amd64"
+fi
+
 user="root"
 read -p "? login user (default is 'root'): " v
 if [ "$v" != "" ]; then
@@ -52,19 +61,10 @@ if [ "$v" != "" ]; then
   sshPort="$v"
 fi
 
-read -p "? build GOOS (default is 'linux'): " goos
-read -p "? build GOARCH (default is 'amd64'): " goarch
-if [ "$goos" == "" ]; then
-  goos="linux"
-fi
-if [ "$goarch" == "" ]; then
-  goarch="amd64"
-fi
-
 echo "--- building(${goos}_$goarch)..."
 export GOOS=$goos
 export GOARCH=$goarch
-go build -o $(dirname $0)/esmd $(dirname $0)/../main.go
+go build -o esmd $(dirname $0)/../main.go
 if [ "$?" != "0" ]; then
   exit
 fi
