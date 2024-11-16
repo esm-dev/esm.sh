@@ -16,13 +16,12 @@ type BuildArgs struct {
 	external          *StringSet
 	exports           *StringSet
 	conditions        []string
-	jsxRuntime        *ESMPath
 	keepNames         bool
 	ignoreAnnotations bool
 	externalRequire   bool
 }
 
-func decodeBuildArgs(npmrc *NpmRC, argsString string) (args BuildArgs, err error) {
+func decodeBuildArgs(argsString string) (args BuildArgs, err error) {
 	s, err := atobUrl(argsString)
 	if err == nil {
 		args = BuildArgs{
@@ -57,11 +56,6 @@ func decodeBuildArgs(npmrc *NpmRC, argsString string) (args BuildArgs, err error
 				}
 			} else if strings.HasPrefix(p, "c") {
 				args.conditions = append(args.conditions, strings.Split(p[1:], ",")...)
-			} else if strings.HasPrefix(p, "x") {
-				p, _, _, _, e := praseESMPath(npmrc, p[1:])
-				if e == nil {
-					args.jsxRuntime = &p
-				}
 			} else {
 				switch p {
 				case "*":
@@ -147,9 +141,6 @@ func encodeBuildArgs(args BuildArgs, isDts bool) string {
 		if args.ignoreAnnotations {
 			lines = append(lines, "i")
 		}
-	}
-	if args.jsxRuntime != nil {
-		lines = append(lines, fmt.Sprintf("x%s", args.jsxRuntime.String()))
 	}
 	if len(lines) > 0 {
 		return btoaUrl(strings.Join(lines, "\n"))

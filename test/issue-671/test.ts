@@ -7,9 +7,9 @@ Deno.test("issue #671", async () => {
   await res.body?.cancel();
   const esmPath = res.headers.get("x-esm-path");
   const code = await fetch("http://localhost:8080" + esmPath).then((res) => res.text());
-  assertStringIncludes(code, 'from"/preact/compat/jsx-runtime?target=denonext"');
-  assertStringIncludes(code, 'from"/preact/compat?target=denonext"');
-  assertStringIncludes(code, 'hi?alias=react:preact/compat&target=denonext"');
+  assertStringIncludes(code, 'from"/preact/compat/jsx-runtime"');
+  assertStringIncludes(code, 'from"/preact/compat"');
+  assertStringIncludes(code, 'hi?alias=react:preact/compat"');
 
   const res2 = await fetch(
     "http://localhost:8080/flowbite-react@v0.4.9?alias=react:preact/compat,react-dom:preact/compat&deps=preact@10.0.0&target=es2020",

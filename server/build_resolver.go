@@ -78,24 +78,24 @@ func (entry *BuildEntry) resolve(ctx *BuildContext, mType string, condition inte
 	}
 }
 
-func (ctx *BuildContext) Pathname() string {
-	if ctx.pathname != "" {
-		return ctx.pathname
+func (ctx *BuildContext) Path() string {
+	if ctx.path != "" {
+		return ctx.path
 	}
 
 	esm := ctx.esm
 	if ctx.target == "types" {
 		if strings.HasSuffix(esm.SubPath, ".d.ts") {
-			ctx.pathname = fmt.Sprintf(
+			ctx.path = fmt.Sprintf(
 				"/%s/%s%s",
 				esm.PackageName(),
 				ctx.getBuildArgsPrefix(true),
 				esm.SubPath,
 			)
 		} else {
-			ctx.pathname = "/" + esm.String()
+			ctx.path = "/" + esm.String()
 		}
-		return ctx.pathname
+		return ctx.path
 	}
 
 	name := strings.TrimSuffix(path.Base(esm.PkgName), ".js")
@@ -118,7 +118,7 @@ func (ctx *BuildContext) Pathname() string {
 	} else if ctx.bundleMode == BundleFalse {
 		name += ".nobundle"
 	}
-	ctx.pathname = fmt.Sprintf(
+	ctx.path = fmt.Sprintf(
 		"/%s/%s%s/%s%s",
 		esm.PackageName(),
 		ctx.getBuildArgsPrefix(ctx.target == "types"),
@@ -126,7 +126,7 @@ func (ctx *BuildContext) Pathname() string {
 		name,
 		extname,
 	)
-	return ctx.pathname
+	return ctx.path
 }
 
 func (ctx *BuildContext) getImportPath(specifier ESMPath, buildArgsPrefix string) string {
@@ -154,7 +154,7 @@ func (ctx *BuildContext) getImportPath(specifier ESMPath, buildArgsPrefix string
 }
 
 func (ctx *BuildContext) getSavepath() string {
-	return normalizeSavePath(ctx.zoneId, path.Join("builds", ctx.Pathname()))
+	return normalizeSavePath(ctx.zoneId, path.Join("builds", ctx.Path()))
 }
 
 func (ctx *BuildContext) getBuildArgsPrefix(isDts bool) string {
@@ -186,7 +186,7 @@ func (ctx *BuildContext) existsPkgFile(fp ...string) bool {
 	return existsFile(path.Join(args...))
 }
 
-func (ctx *BuildContext) lookupDep(specifier string, dts bool) (esm ESMPath, packageJson *PackageJSON, err error) {
+func (ctx *BuildContext) lookupDep(specifier string, isDts bool) (esm ESMPath, packageJson *PackageJSON, err error) {
 	pkgName, version, subpath, _ := splitESMPath(specifier)
 lookup:
 	if v, ok := ctx.args.deps[pkgName]; ok {
@@ -224,7 +224,11 @@ lookup:
 				version = v
 			}
 		} else if v, ok = ctx.packageJson.PeerDependencies[pkgName]; ok {
-			version = v
+			if strings.HasPrefix(v, "npm:") {
+				pkgName, version, _, _ = splitESMPath(v[4:])
+			} else {
+				version = v
+			}
 		} else {
 			version = "latest"
 		}
@@ -238,7 +242,7 @@ lookup:
 			SubBareName: toModuleBareName(subpath, true),
 		}
 	}
-	if err != nil && strings.HasSuffix(err.Error(), " not found") && dts && !strings.HasPrefix(pkgName, "@types/") {
+	if err != nil && strings.HasSuffix(err.Error(), " not found") && isDts && !strings.HasPrefix(pkgName, "@types/") {
 		pkgName = toTypesPackageName(pkgName)
 		goto lookup
 	}
@@ -249,12 +253,12 @@ func (ctx *BuildContext) resolveEntry(esm ESMPath) (entry BuildEntry) {
 	pkgDir := ctx.pkgDir
 
 	if esm.SubBareName != "" {
-		if endsWith(esm.SubPath, ".d.ts", ".d.mts") {
+		if endsWith(esm.SubPath, ".d.ts", ".d.mts", ".d.cts") {
 			entry.dts = normalizeEntryPath(esm.SubPath)
 			return
 		}
 
-		if endsWith(esm.SubPath, ".jsx", ".ts", ".tsx") {
+		if endsWith(esm.SubPath, ".jsx", ".ts", ".tsx", ".mts", ".svelte", ".vue") {
 			entry.esm = normalizeEntryPath(esm.SubPath)
 			return
 		}
@@ -529,7 +533,7 @@ func (ctx *BuildContext) resolveEntry(esm ESMPath) (entry BuildEntry) {
 		versions = versions[:i]
 		if versions.Len() > 0 {
 			versions.Sort()
-			latestVersion := ctx.packageJson.TypesVersions[versions[versions.Len()-1]]
+			latestVersion := typesVersions[versions[versions.Len()-1]]
 			if mapping, ok := latestVersion.(map[string]interface{}); ok {
 				var paths interface{}
 				var matched bool
@@ -620,10 +624,10 @@ func (ctx *BuildContext) resolveEntry(esm ESMPath) (entry BuildEntry) {
 func (ctx *BuildContext) resolveConditionExportEntry(conditions *OrderedMap, mType string) (entry BuildEntry) {
 	entryKey := "esm"
 	switch mType {
-	case "module":
-		entryKey = "esm"
 	case "", "commonjs":
 		entryKey = "cjs"
+	case "module":
+		entryKey = "esm"
 	case "types":
 		entryKey = "dts"
 	}
@@ -688,7 +692,7 @@ func (ctx *BuildContext) resolveExternalModule(specifier string, kind api.Resolv
 			fullResolvedPath := resolvedPath
 			// use relative path for sub-module of current package
 			if strings.HasPrefix(specifier, ctx.packageJson.Name+"/") {
-				rp, err := relPath(path.Dir(ctx.Pathname()), resolvedPath)
+				rp, err := relPath(path.Dir(ctx.Path()), resolvedPath)
 				if err == nil {
 					resolvedPath = rp
 				}
@@ -761,7 +765,7 @@ func (ctx *BuildContext) resolveExternalModule(specifier string, kind api.Resolv
 			if ctx.bundleMode == BundleFalse {
 				b.bundleMode = BundleFalse
 			}
-			pathname := b.Pathname()
+			pathname := b.Path()
 			if !ctx.subBuilds.Has(pathname) {
 				ctx.subBuilds.Add(pathname)
 				ctx.wg.Add(1)
@@ -939,14 +943,18 @@ func (ctx *BuildContext) resolveExternalModule(specifier string, kind api.Resolv
 		conditions.Sort()
 		params = append(params, "conditions="+strings.Join(conditions, ","))
 	}
-	params = append(params, "target="+ctx.target)
+	if ctx.pinedTarget {
+		params = append(params, "target="+ctx.target)
+	}
 	if ctx.dev {
 		params = append(params, "dev")
 	}
 	if strings.HasSuffix(resolvedPath, ".json") {
 		params = append(params, "module")
 	}
-	resolvedPath += "?" + strings.Join(params, "&")
+	if len(params) > 0 {
+		resolvedPath += "?" + strings.Join(params, "&")
+	}
 	return
 }
 
@@ -989,7 +997,7 @@ func (ctx *BuildContext) resloveDTS(entry BuildEntry) (string, error) {
 					SubPath:     ctx.esm.SubPath,
 					SubBareName: ctx.esm.SubBareName,
 				}
-				b := NewBuildContext(ctx.zoneId, ctx.npmrc, dtsModule, ctx.args, "types", BundleFalse, false)
+				b := NewBuildContext(ctx.zoneId, ctx.npmrc, dtsModule, ctx.args, "types", false, BundleFalse, false)
 				err := b.install()
 				if err != nil {
 					if strings.Contains(err.Error(), "ERR_PNPM_NO_MATCHING_VERSION") {
@@ -1074,16 +1082,24 @@ func (ctx *BuildContext) normalizePackageJSON(p *PackageJSON) {
 		if isPkgMainModule {
 			ctx.esm.SubBareName = ""
 			ctx.esm.SubPath = ""
-			ctx.pathname = ""
+			ctx.path = ""
 		}
 	}
 }
 
 func (ctx *BuildContext) lexer(entry *BuildEntry, forceCjsOnly bool) (ret *BuildMeta, reexport string, err error) {
 	if entry.esm != "" && !forceCjsOnly {
-		isESM, namedExports, erro := ctx.esmLexer(entry.esm)
-		if erro != nil {
-			err = erro
+		if strings.HasSuffix(entry.esm, ".vue") || strings.HasSuffix(entry.esm, ".svelte") {
+			ret = &BuildMeta{
+				HasDefaultExport: true,
+				NamedExports:     []string{"default"},
+			}
+			return
+		}
+
+		isESM, namedExports, e := ctx.esmLexer(entry.esm)
+		if e != nil {
+			err = e
 			return
 		}
 

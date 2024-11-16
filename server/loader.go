@@ -9,10 +9,9 @@ import (
 	"os"
 	"os/exec"
 	"path"
+	"path/filepath"
 	"strings"
 	"time"
-
-	"github.com/esm-dev/esm.sh/server/common"
 )
 
 type LoaderOutput struct {
@@ -22,8 +21,8 @@ type LoaderOutput struct {
 }
 
 func runLoader(npmrc *NpmRC, loaderName string, args []string, mainDependency PackageId, extraDeps ...string) (output *LoaderOutput, err error) {
-	wd := path.Join(npmrc.StoreDir(), mainDependency.String())
-	loaderJsFilename := path.Join(wd, "loader.mjs")
+	wd := path.Join(npmrc.StoreDir(), "loader", strings.ReplaceAll(strings.Join(append([]string{mainDependency.String()}, extraDeps...), "+"), "/", "_"))
+	loaderJsFilename := path.Join(wd, fmt.Sprintf("loader-v%d.mjs", VERSION))
 	if !existsFile(loaderJsFilename) {
 		var loaderJS []byte
 		loaderJS, err = embedFS.ReadFile(fmt.Sprintf("server/embed/internal/%s_loader.js", loaderName))
@@ -55,7 +54,7 @@ func runLoader(npmrc *NpmRC, loaderName string, args []string, mainDependency Pa
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	cmd := exec.CommandContext(ctx, "node", "loader.mjs")
+	cmd := exec.CommandContext(ctx, "node", filepath.Base(loaderJsFilename))
 	cmd.Dir = wd
 	cmd.Stdin = stdin
 	cmd.Stdout = stdout
@@ -79,21 +78,11 @@ func runLoader(npmrc *NpmRC, loaderName string, args []string, mainDependency Pa
 	return &out, nil
 }
 
-func transformVue(npmrc *NpmRC, importMap common.ImportMap, args []string) (output *LoaderOutput, err error) {
-	var vueVersion string
-	vueVersion, err = npmrc.getVueVersion(importMap)
-	if err != nil {
-		return
-	}
+func transformVue(npmrc *NpmRC, vueVersion string, args []string) (output *LoaderOutput, err error) {
 	return runLoader(npmrc, "vue", args, PackageId{"@vue/compiler-sfc", vueVersion}, "@esm.sh/vue-loader@1.0.3")
 }
 
-func transformSvelte(npmrc *NpmRC, importMap common.ImportMap, args []string) (output *LoaderOutput, err error) {
-	var svelteVersion string
-	svelteVersion, err = npmrc.getSvelteVersion(importMap)
-	if err != nil {
-		return
-	}
+func transformSvelte(npmrc *NpmRC, svelteVersion string, args []string) (output *LoaderOutput, err error) {
 	return runLoader(npmrc, "svelte", args, PackageId{"svelte", svelteVersion})
 }
 
