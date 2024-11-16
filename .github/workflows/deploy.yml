@@ -21,7 +21,7 @@ jobs:
           go-version: 1.23.x
 
       - name: Run `deploy-ci.sh`
-        run: scripts/deploy-ci.sh
+        run: ./scripts/deploy-ci.sh
         env:
           GOOS: linux
           GOARCH: ${{ secrets.DEPLOY_HOST_ARCH }}
