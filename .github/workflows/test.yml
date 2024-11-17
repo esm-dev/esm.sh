@@ -15,12 +15,22 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v3
 
+      - name: Setup Go
+        uses: actions/setup-go@v3
+        with:
+          go-version: 1.23.x
+
+      - name: Setup Deno
+        uses: denoland/setup-deno@main
+        with:
+          deno-version: v1.x
+
       - name: Setup Node.js
         uses: actions/setup-node@v3
         with:
           node-version: 22
 
-      - name: Install pnpm
+      - name: Setup pnpm
         uses: pnpm/action-setup@v3
         with:
           version: 9
@@ -31,23 +41,13 @@ jobs:
         run: |
           echo "STORE_PATH=$(pnpm store path --silent)" >> $GITHUB_ENV
 
-      - uses: actions/cache@v3
-        name: Setup pnpm cache
+      - name: Restore pnpm store
+        uses: actions/cache@v3
         with:
           path: ${{ env.STORE_PATH }}
           key: ${{ runner.os }}-pnpm-store-${{ hashFiles('test/**') }}
           restore-keys: |
             ${{ runner.os }}-pnpm-store-
-
-      - name: Install Go
-        uses: actions/setup-go@v3
-        with:
-          go-version: 1.23.x
-
-      - name: Setup Deno
-        uses: denoland/setup-deno@main
-        with:
-          deno-version: v1.x
 
       - name: Run `go test`
         run: go test ./server ./server/storage -v
