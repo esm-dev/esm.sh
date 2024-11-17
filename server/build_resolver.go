@@ -898,8 +898,10 @@ func (ctx *BuildContext) resolveExternalModule(specifier string, kind api.Resolv
 	}
 
 	var isFixedVersion bool
-	if depPath.GhPrefix || depPath.PrPrefix {
+	if depPath.GhPrefix {
 		isFixedVersion = isCommitish(depPath.PkgVersion) || regexpVersionStrict.MatchString(strings.TrimPrefix(depPath.PkgVersion, "v"))
+	} else if depPath.PrPrefix {
+		isFixedVersion = true
 	} else {
 		isFixedVersion = regexpVersionStrict.MatchString(depPath.PkgVersion)
 	}
