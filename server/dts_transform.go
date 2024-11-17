@@ -18,7 +18,7 @@ func transformDTS(ctx *BuildContext, dts string, buildArgsPrefix string, marker 
 	if isEntry {
 		marker = NewStringSet()
 	}
-	dtsPath := path.Join("/"+ctx.esm.PackageName(), buildArgsPrefix, dts)
+	dtsPath := path.Join("/"+ctx.esmPath.PackageName(), buildArgsPrefix, dts)
 	if marker.Has(dtsPath) {
 		// don't transform repeatly
 		return
@@ -32,7 +32,7 @@ func transformDTS(ctx *BuildContext, dts string, buildArgsPrefix string, marker 
 		return
 	}
 
-	dtsFilePath := path.Join(ctx.wd, "node_modules", ctx.esm.PkgName, dts)
+	dtsFilePath := path.Join(ctx.wd, "node_modules", ctx.esmPath.PkgName, dts)
 	dtsWD := path.Dir(dtsFilePath)
 	dtsFile, err := os.Open(dtsFilePath)
 	if err != nil {
@@ -54,7 +54,7 @@ func transformDTS(ctx *BuildContext, dts string, buildArgsPrefix string, marker 
 	hasReferenceTypesNode := false
 
 	err = parseDts(dtsFile, buffer, func(specifier string, kind TsImportKind, position int) (string, error) {
-		if ctx.esm.PkgName == "@types/node" {
+		if ctx.esmPath.PkgName == "@types/node" {
 			return specifier, nil
 		}
 
@@ -120,25 +120,25 @@ func transformDTS(ctx *BuildContext, dts string, buildArgsPrefix string, marker 
 			specifier += "/" + subPath
 		}
 
-		if depPkgName == ctx.esm.PkgName {
+		if depPkgName == ctx.esmPath.PkgName {
 			if strings.ContainsRune(subPath, '*') {
 				return fmt.Sprintf(
 					"{ESM_CDN_ORIGIN}/%s/%s%s",
-					ctx.esm.PackageName(),
+					ctx.esmPath.PackageName(),
 					ctx.getBuildArgsPrefix(true),
 					subPath,
 				), nil
 			} else {
 				entry := ctx.resolveEntry(ESMPath{
 					PkgName:     depPkgName,
-					PkgVersion:  ctx.esm.PkgVersion,
+					PkgVersion:  ctx.esmPath.PkgVersion,
 					SubPath:     subPath,
 					SubBareName: subPath,
 				})
 				if entry.dts != "" {
 					return fmt.Sprintf(
 						"{ESM_CDN_ORIGIN}/%s/%s%s",
-						ctx.esm.PackageName(),
+						ctx.esmPath.PackageName(),
 						ctx.getBuildArgsPrefix(true),
 						strings.TrimPrefix(entry.dts, "./"),
 					), nil
