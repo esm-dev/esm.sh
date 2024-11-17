@@ -1,6 +1,5 @@
 #!/bin/bash
 
-echo "--- building..."
 go build -o esmd $(dirname $0)/../main.go
 if [ "$?" != "0" ]; then
   exit 1
@@ -16,14 +15,12 @@ echo "  User ${SSH_USER}" >> ~/.ssh/config
 echo "  IdentityFile ~/.ssh/id_ed25519" >> ~/.ssh/config
 echo "  IdentitiesOnly yes" >> ~/.ssh/config
 
-echo "--- uploading..."
 tar -czf esmd.tar.gz esmd
 scp esmd.tar.gz next.esm.sh:/tmp/esmd.tar.gz
 if [ "$?" != "0" ]; then
   exit 1
 fi
 
-echo "--- installing..."
 ssh next.esm.sh << EOF
   cd /tmp
   tar -xzf esmd.tar.gz
@@ -32,12 +29,14 @@ ssh next.esm.sh << EOF
   fi
   rm -rf esmd.tar.gz
 
-  supervisorctl version
+  svv=\$(supervisorctl version)
   if [ "\$?" != "0" ]; then
     apt update
     apt install -y supervisor git git-lfs
     git lfs install
+    svv=\$(supervisorctl version)
   fi
+  echo "supervisor \${svv}"
 
   svcf=/etc/supervisor/conf.d/esmd.conf
   reload=no
