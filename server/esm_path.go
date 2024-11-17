@@ -9,7 +9,6 @@ import (
 
 	"github.com/Masterminds/semver/v3"
 	"github.com/ije/gox/utils"
-	"github.com/ije/gox/valid"
 )
 
 type ESMPathKind uint8
@@ -66,7 +65,7 @@ func praseESMPath(npmrc *NpmRC, pathname string) (esm ESMPath, extraQuery string
 		} else {
 			pathname = pathname[12:]
 		}
-		pkgName, rest := utils.SplitByFirstByte(pathname, '@')
+		pkgName, rest := utils.SplitByLastByte(pathname, '@')
 		if rest == "" {
 			err = errors.New("invalid path")
 			return
@@ -147,7 +146,7 @@ func praseESMPath(npmrc *NpmRC, pathname string) (esm ESMPath, extraQuery string
 	}
 
 	if ghPrefix {
-		if (valid.IsHexString(esm.PkgVersion) && len(esm.PkgVersion) >= 7) || regexpVersionStrict.MatchString(strings.TrimPrefix(esm.PkgVersion, "v")) {
+		if isCommitish(esm.PkgVersion) || regexpVersionStrict.MatchString(strings.TrimPrefix(esm.PkgVersion, "v")) {
 			isFixedVersion = true
 			return
 		}

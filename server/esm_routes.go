@@ -286,6 +286,24 @@ func esmRoutes(debug bool) rex.Handle {
 					query.Get("name"),
 					query.Get("importer"),
 				))
+			case "unsupported-git-dependency":
+				return errorJS(ctx, fmt.Sprintf(
+					`Unsupported git dependency "%s" (Imported by "%s")`,
+					query.Get("name"),
+					query.Get("importer"),
+				))
+			case "invalid-jsr-dependency":
+				return errorJS(ctx, fmt.Sprintf(
+					`Invalid jsr dependency "%s" (Imported by "%s")`,
+					query.Get("name"),
+					query.Get("importer"),
+				))
+			case "invalid-http-dependency":
+				return errorJS(ctx, fmt.Sprintf(
+					`Invalid http dependency "%s" (Imported by "%s")`,
+					query.Get("name"),
+					query.Get("importer"),
+				))
 			default:
 				return rex.Status(500, "Unknown error")
 			}

@@ -78,6 +78,21 @@ func endsWith(s string, suffixs ...string) bool {
 	return false
 }
 
+// isCommitish returns true if the given string is a commit hash.
+func isCommitish(s string) bool {
+	return len(s) >= 7 && len(s) <= 40 && valid.IsHexString(s) && containsDigit(s)
+}
+
+// containsDigit returns true if the given string contains a digit.
+func containsDigit(s string) bool {
+	for _, r := range s {
+		if r >= '0' && r <= '9' {
+			return true
+		}
+	}
+	return false
+}
+
 // existsDir returns true if the given path is a directory.
 func existsDir(filepath string) bool {
 	fi, err := os.Lstat(filepath)
