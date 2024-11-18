@@ -2,7 +2,6 @@ package server
 
 import (
 	"crypto/sha1"
-	"encoding/base64"
 	"encoding/hex"
 	"fmt"
 	"net/url"
@@ -688,7 +687,7 @@ func (ctx *BuildContext) resolveConditionExportEntry(conditions *OrderedMap, mTy
 func (ctx *BuildContext) resolveExternalModule(specifier string, kind api.ResolveKind) (resolvedPath string, err error) {
 	defer func() {
 		if err == nil {
-			fullResolvedPath := resolvedPath
+			resolvedPathFull := resolvedPath
 			// use relative path for sub-module of current package
 			if strings.HasPrefix(specifier, ctx.packageJson.Name+"/") {
 				rp, err := relPath(path.Dir(ctx.Path()), resolvedPath)
@@ -698,11 +697,11 @@ func (ctx *BuildContext) resolveExternalModule(specifier string, kind api.Resolv
 			}
 			// mark the resolved path for _preload_
 			if kind != api.ResolveJSDynamicImport {
-				ctx.imports = append(ctx.imports, [2]string{fullResolvedPath, resolvedPath})
+				ctx.importMap = append(ctx.importMap, [2]string{resolvedPathFull, resolvedPath})
 			}
 			// if it's `require("module")` call
 			if kind == api.ResolveJSRequireCall {
-				ctx.requires = append(ctx.requires, [3]string{specifier, fullResolvedPath, resolvedPath})
+				ctx.cjsRequires = append(ctx.cjsRequires, [3]string{specifier, resolvedPathFull, resolvedPath})
 				resolvedPath = specifier
 			}
 		}
@@ -719,13 +718,13 @@ func (ctx *BuildContext) resolveExternalModule(specifier string, kind api.Resolv
 	}
 
 	// node builtin module
-	if isNodeInternalModule(specifier) {
+	if isNodeBuiltInModule(specifier) {
 		if ctx.args.externalAll || ctx.target == "node" || ctx.target == "denonext" || ctx.args.external.Has(specifier) {
 			resolvedPath = specifier
 		} else if ctx.target == "deno" {
 			resolvedPath = fmt.Sprintf("https://deno.land/std@0.177.1/node/%s.ts", specifier[5:])
 		} else {
-			resolvedPath = fmt.Sprintf("/node/%s.js", specifier[5:])
+			resolvedPath = fmt.Sprintf("/node/%s.mjs", specifier[5:])
 		}
 		return
 	}
@@ -779,16 +778,6 @@ func (ctx *BuildContext) resolveExternalModule(specifier string, kind api.Resolv
 			n, e := utils.SplitByLastByte(resolvedPath, '.')
 			resolvedPath = n + ".nobundle." + e
 		}
-		return
-	}
-
-	// replace some npm polyfills with native APIs
-	if data, ok := npmPolyfills[specifier]; ok {
-		resolvedPath = fmt.Sprintf("data:text/javascript;base64,%s", base64.StdEncoding.EncodeToString(data))
-		return
-	}
-	if specifier == "node-fetch" && ctx.target != "node" {
-		resolvedPath = "/node/fetch.js"
 		return
 	}
 

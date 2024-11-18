@@ -387,13 +387,19 @@ func esmRoutes(debug bool) rex.Handle {
 		}
 
 		// serve node libs
-		if strings.HasPrefix(pathname, "/node/") && strings.HasSuffix(pathname, ".js") {
-			lib, ok := nodeLibs[pathname[1:]]
-			if !ok {
-				// empty module
-				lib = "export default {}"
+		if strings.HasPrefix(pathname, "/node/") {
+			if !strings.HasSuffix(pathname, ".mjs") {
+				return rex.Status(404, "Not Found")
 			}
-			if strings.HasPrefix(pathname, "/node/chunk-") {
+			name := pathname[6:]
+			code, ok := unenvDist[name]
+			if !ok {
+				if !nodeBuiltinModules[name] {
+					return rex.Status(404, "Not Found")
+				}
+				code = []byte("export default {}")
+			}
+			if strings.HasPrefix(name, "chunk-") {
 				ctx.SetHeader("Cache-Control", ccImmutable)
 			} else {
 				ifNoneMatch := ctx.R.Header.Get("If-None-Match")
@@ -403,14 +409,8 @@ func esmRoutes(debug bool) rex.Handle {
 				ctx.SetHeader("Cache-Control", cc1day)
 				ctx.SetHeader("Etag", globalETag)
 			}
-			target := getBuildTargetByUA(ctx.UserAgent())
-			code, err := minify(lib, esbuild.LoaderJS, targets[target])
-			if err != nil {
-				return rex.Status(500, fmt.Sprintf("Transform error: %v", err))
-			}
 			ctx.SetHeader("Content-Type", ctJavaScript)
-			appendVaryHeader(ctx.W.Header(), "User-Agent")
-			return rex.Content(pathname, startTime, bytes.NewReader(code))
+			return code
 		}
 
 		var npmrc *NpmRC

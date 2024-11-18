@@ -21,7 +21,7 @@ const (
 	pnpmMinVersion   = "9.0.0"
 )
 
-var nodeInternalModules = map[string]bool{
+var nodeBuiltinModules = map[string]bool{
 	"assert":              true,
 	"assert/strict":       true,
 	"async_hooks":         true,
@@ -43,6 +43,7 @@ var nodeInternalModules = map[string]bool{
 	"http2":               true,
 	"https":               true,
 	"inspector":           true,
+	"inspector/promises":  true,
 	"module":              true,
 	"net":                 true,
 	"os":                  true,
@@ -54,6 +55,7 @@ var nodeInternalModules = map[string]bool{
 	"punycode":            true,
 	"querystring":         true,
 	"readline":            true,
+	"readline/promises":   true,
 	"repl":                true,
 	"stream":              true,
 	"stream/consumers":    true,
@@ -72,7 +74,6 @@ var nodeInternalModules = map[string]bool{
 	"v8":                  true,
 	"vm":                  true,
 	"wasi":                true,
-	"webcrypto":           true,
 	"worker_threads":      true,
 	"zlib":                true,
 }
@@ -85,14 +86,14 @@ func normalizeImportSpecifier(specifier string) string {
 	} else if specifier == ".." {
 		specifier = "../index"
 	}
-	if nodeInternalModules[specifier] {
+	if nodeBuiltinModules[specifier] {
 		return "node:" + specifier
 	}
 	return specifier
 }
 
-func isNodeInternalModule(specifier string) bool {
-	return strings.HasPrefix(specifier, "node:") && nodeInternalModules[specifier[5:]]
+func isNodeBuiltInModule(specifier string) bool {
+	return strings.HasPrefix(specifier, "node:") && nodeBuiltinModules[specifier[5:]]
 }
 
 func checkNodejs(installDir string) (nodeVersion string, pnpmVersion string, err error) {

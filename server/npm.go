@@ -22,11 +22,15 @@ import (
 	"github.com/ije/gox/valid"
 )
 
-const npmRegistry = "https://registry.npmjs.org/"
-const jsrRegistry = "https://npm.jsr.io/"
+const (
+	npmRegistry = "https://registry.npmjs.org/"
+	jsrRegistry = "https://npm.jsr.io/"
+)
 
-var installLocks sync.Map
-var npmNaming = valid.Validator{valid.Range{'a', 'z'}, valid.Range{'A', 'Z'}, valid.Range{'0', '9'}, valid.Eq('_'), valid.Eq('$'), valid.Eq('.'), valid.Eq('-'), valid.Eq('+'), valid.Eq('!'), valid.Eq('~'), valid.Eq('*'), valid.Eq('('), valid.Eq(')')}
+var (
+	installLocks = sync.Map{}
+	npmNaming    = valid.Validator{valid.Range{'a', 'z'}, valid.Range{'A', 'Z'}, valid.Range{'0', '9'}, valid.Eq('_'), valid.Eq('$'), valid.Eq('.'), valid.Eq('-'), valid.Eq('+'), valid.Eq('!'), valid.Eq('~'), valid.Eq('*'), valid.Eq('('), valid.Eq(')')}
+)
 
 type PackageId struct {
 	Name    string

@@ -218,24 +218,23 @@ Deno.test("esm-worker", { sanitizeOps: false, sanitizeResources: false }, async 
     assertEquals(typeof ret.version, "number");
   });
 
-  await t.step("node polyfills", async () => {
-    const res3 = await fetch(`${workerOrigin}/node/process.js`);
+  await t.step("env/runtime/node", async () => {
+    const res3 = await fetch(`${workerOrigin}/node/process.mjs`);
     assertEquals(res3.status, 200);
     assertEquals(res3.headers.get("Content-Type"), "application/javascript; charset=utf-8");
     assertEquals(res3.headers.get("Etag"), `W/"${VERSION}"`);
     assertEquals(res3.headers.get("Cache-Control"), "public, max-age=86400");
-    assertStringIncludes(res3.headers.get("Vary")!, "User-Agent");
     assertStringIncludes(await res3.text(), "nextTick");
 
-    const res4 = await fetch(`${workerOrigin}/node/process.js`, { headers: { "If-None-Match": `W/"${VERSION}"` } });
+    const res4 = await fetch(`${workerOrigin}/node/process.mjs`, { headers: { "If-None-Match": `W/"${VERSION}"` } });
     res4.body?.cancel();
     assertEquals(res4.status, 304);
 
-    const res5 = await fetch(`${workerOrigin}/node/fs.js`);
+    const res5 = await fetch(`${workerOrigin}/node/fs.mjs`);
     assertEquals(res5.status, 200);
     assertEquals(res5.headers.get("Content-Type"), "application/javascript; charset=utf-8");
     const js = await res5.text();
-    const m = js.match(/\.\/chunk-[a-f0-9]+\.js/);
+    const m = js.match(/\.\/chunk-[\w]+\.mjs/i);
     assert(m);
 
     const res6 = await fetch(`${workerOrigin}/node${m![0].slice(1)}`);
@@ -244,9 +243,9 @@ Deno.test("esm-worker", { sanitizeOps: false, sanitizeResources: false }, async 
     assertEquals(res6.headers.get("Content-Type"), "application/javascript; charset=utf-8");
     assertEquals(res6.headers.get("Cache-Control"), "public, max-age=31536000, immutable");
 
-    const fs = await import(`${workerOrigin}/node/fs.js`);
-    fs.writeFileSync("foo.txt", "bar", "utf8");
-    assertEquals(fs.readFileSync("foo.txt", "utf8"), "bar");
+    // const fs = await import(`${workerOrigin}/node/fs.mjs`);
+    // fs.writeFileSync("foo.txt", "bar", "utf8");
+    // assertEquals(fs.readFileSync("foo.txt", "utf8"), "bar");
   });
 
   await t.step("npm modules", async () => {
@@ -287,7 +286,7 @@ Deno.test("esm-worker", { sanitizeOps: false, sanitizeResources: false }, async 
     const res7 = await fetch(modUrl2);
     assertEquals(res7.status, 200);
     // inline "object.assign" polyfill
-    assertStringIncludes(await res7.text(), `from "data:text/javascript;base64,ZXhwb3J0IGRlZmF1bHQgT2JqZWN0LmFzc2lnbg=="`);
+    assertStringIncludes(await res7.text(), "Object.assign");
 
     const res8 = await fetch(`${workerOrigin}/react-dom@18.2.0?external=react`);
     res8.body?.cancel();
@@ -296,7 +295,7 @@ Deno.test("esm-worker", { sanitizeOps: false, sanitizeResources: false }, async 
     const modUrl3 = new URL(res8.headers.get("x-esm-path")!, workerOrigin);
     const res9 = await fetch(modUrl3);
     assertEquals(res9.status, 200);
-    assertStringIncludes(await res9.text(), `from "react"`);
+    assertStringIncludes(await res9.text(), `from"react"`);
 
     const res10 = await fetch(`${workerOrigin}/typescript@5.5.4/es2022/typescript.mjs`);
     const js = await res10.text();

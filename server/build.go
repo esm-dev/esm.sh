@@ -44,8 +44,8 @@ type BuildContext struct {
 	path        string
 	stage       string
 	deprecated  string
-	imports     [][2]string
-	requires    [][3]string
+	importMap   [][2]string
+	cjsRequires [][3]string
 	smOffset    int
 	subBuilds   *StringSet
 	wg          sync.WaitGroup
@@ -372,7 +372,6 @@ func (ctx *BuildContext) buildModule() (result *BuildMeta, err error) {
 		Loader:            loaders,
 		Outdir:            "/esbuild",
 		Write:             false,
-		// SourceRoot:        "/",
 	}
 	if input != nil {
 		options.Stdin = input
@@ -508,14 +507,6 @@ func (ctx *BuildContext) buildModule() (result *BuildMeta, err error) {
 						}
 					}
 
-					if data, ok := npmPolyfills[specifier]; ok && args.Kind == esbuild.ResolveJSImportStatement {
-						return esbuild.OnResolveResult{
-							Path:       args.Path,
-							PluginData: data,
-							Namespace:  "npm-replacement",
-						}, nil
-					}
-
 					// resolve specifier with package `browser` field
 					if !isRelPathSpecifier(specifier) && len(ctx.packageJson.Browser) > 0 && ctx.isBrowserTarget() {
 						if name, ok := ctx.packageJson.Browser[specifier]; ok {
@@ -527,15 +518,6 @@ func (ctx *BuildContext) buildModule() (result *BuildMeta, err error) {
 							}
 							specifier = name
 						}
-					}
-
-					// use the polyfilled 'fsevents' module for browser
-					if specifier == "fsevents" && ctx.isBrowserTarget() {
-						data := npmPolyfills[specifier]
-						return esbuild.OnResolveResult{
-							Path:     fmt.Sprintf("data:text/javascript;base64,%s", base64.StdEncoding.EncodeToString(data)),
-							External: true,
-						}, nil
 					}
 
 					// force to use `npm:` specifier for `denonext` target
@@ -622,8 +604,8 @@ func (ctx *BuildContext) buildModule() (result *BuildMeta, err error) {
 						}, nil
 					}
 
-					// it's nodejs internal module
-					if isNodeInternalModule(specifier) {
+					// it's nodejs builtin module
+					if isNodeBuiltInModule(specifier) {
 						externalPath, err := ctx.resolveExternalModule(specifier, args.Kind)
 						if err != nil {
 							return esbuild.OnResolveResult{}, err
@@ -846,6 +828,29 @@ func (ctx *BuildContext) buildModule() (result *BuildMeta, err error) {
 						}
 					}
 
+					// replace some npm modules with browser native APIs
+					if specifier != "fsevents" || ctx.isBrowserTarget() {
+						replacement, ok := npmReplacements[specifier]
+						if ok {
+							if args.Kind == esbuild.ResolveJSRequireCall || args.Kind == esbuild.ResolveJSRequireResolve {
+								ctx.cjsRequires = append(ctx.cjsRequires, [3]string{
+									"npm:" + specifier,
+									string(replacement.cjs),
+									"",
+								})
+								return esbuild.OnResolveResult{
+									Path:     "npm:" + specifier,
+									External: true,
+								}, nil
+							}
+							return esbuild.OnResolveResult{
+								Path:       specifier,
+								PluginData: replacement.esm,
+								Namespace:  "npm-replacement",
+							}, nil
+						}
+					}
+
 					// dynamic external
 					sideEffects := esbuild.SideEffectsFalse
 					if specifier == ctx.packageJson.Name || specifier == ctx.packageJson.PkgName || strings.HasPrefix(specifier, ctx.packageJson.Name+"/") || strings.HasPrefix(specifier, ctx.packageJson.Name+"/") {
@@ -863,21 +868,16 @@ func (ctx *BuildContext) buildModule() (result *BuildMeta, err error) {
 				},
 			)
 
-			// npm replacement
+			// npm replacement loader
 			build.OnLoad(
 				esbuild.OnLoadOptions{Filter: ".*", Namespace: "npm-replacement"},
 				func(args esbuild.OnLoadArgs) (ret esbuild.OnLoadResult, err error) {
-					data, ok := args.PluginData.([]byte)
-					if !ok {
-						err = fmt.Errorf("npm-replacement: invalid plugin data")
-						return
-					}
-					contents := string(data)
+					contents := string(args.PluginData.([]byte))
 					return esbuild.OnLoadResult{Contents: &contents, Loader: esbuild.LoaderJS}, nil
 				},
 			)
 
-			// browser exclude
+			// browser exclude loader
 			build.OnLoad(
 				esbuild.OnLoadOptions{Filter: ".*", Namespace: "browser-exclude"},
 				func(args esbuild.OnLoadArgs) (ret esbuild.OnLoadResult, err error) {
@@ -891,7 +891,7 @@ func (ctx *BuildContext) buildModule() (result *BuildMeta, err error) {
 				},
 			)
 
-			// wasm module exclude
+			// wasm module exclude loader
 			build.OnLoad(
 				esbuild.OnLoadOptions{Filter: ".*", Namespace: "wasm"},
 				func(args esbuild.OnLoadArgs) (ret esbuild.OnLoadResult, err error) {
@@ -905,7 +905,7 @@ func (ctx *BuildContext) buildModule() (result *BuildMeta, err error) {
 				},
 			)
 
-			// svelte component
+			// svelte component loader
 			build.OnLoad(
 				esbuild.OnLoadOptions{Filter: ".*", Namespace: "svelte"},
 				func(args esbuild.OnLoadArgs) (esbuild.OnLoadResult, error) {
@@ -939,7 +939,7 @@ func (ctx *BuildContext) buildModule() (result *BuildMeta, err error) {
 				},
 			)
 
-			// vue component
+			// vue component loader
 			build.OnLoad(
 				esbuild.OnLoadOptions{Filter: ".*", Namespace: "vue"},
 				func(args esbuild.OnLoadArgs) (esbuild.OnLoadResult, error) {
@@ -1071,8 +1071,8 @@ rebuild:
 								fmt.Fprintf(header, `const __Process$ = {env:{}};%s`, EOL)
 							}
 						} else {
-							fmt.Fprintf(header, `import __Process$ from "/node/process.js";%s`, EOL)
-							deps.Add("/node/process.js")
+							fmt.Fprintf(header, `import __Process$ from "/node/process.mjs";%s`, EOL)
+							deps.Add("/node/process.mjs")
 						}
 					} else if ctx.target == "denonext" {
 						fmt.Fprintf(header, `import __Process$ from "node:process";%s`, EOL)
@@ -1093,8 +1093,8 @@ rebuild:
 							}
 						}
 						if !browserExclude {
-							fmt.Fprintf(header, `import { Buffer as __Buffer$ } from "/node/buffer.js";%s`, EOL)
-							deps.Add("/node/buffer.js")
+							fmt.Fprintf(header, `import { Buffer as __Buffer$ } from "/node/buffer.mjs";%s`, EOL)
+							deps.Add("/node/buffer.mjs")
 						}
 					} else if ctx.target == "denonext" {
 						fmt.Fprintf(header, `import { Buffer as __Buffer$ } from "node:buffer";%s`, EOL)
@@ -1113,10 +1113,10 @@ rebuild:
 				}
 			}
 
-			if len(ctx.requires) > 0 {
-				requires := make([][3]string, 0, len(ctx.requires))
+			if len(ctx.cjsRequires) > 0 {
+				requires := make([][3]string, 0, len(ctx.cjsRequires))
 				mark := NewStringSet()
-				for _, r := range ctx.requires {
+				for _, r := range ctx.cjsRequires {
 					specifier := r[0]
 					if mark.Has(specifier) {
 						continue
@@ -1127,29 +1127,33 @@ rebuild:
 				isEsModule := make([]bool, len(requires))
 				for i, r := range requires {
 					specifier := r[0]
-					fmt.Fprintf(header, `import * as __%x$ from "%s";%s`, i, r[2], EOL)
-					deps.Add(r[1])
+					if strings.HasPrefix(specifier, "npm:") {
+						fmt.Fprintf(header, `var __%x$=(()=>{%s})();`, i, r[1])
+					} else {
+						fmt.Fprintf(header, `import*as __%x$ from"%s";`, i, r[2])
+						deps.Add(r[1])
+					}
+					// if `require("module").default` found
 					if bytes.Contains(jsContent, []byte(fmt.Sprintf(`("%s").default`, specifier))) {
-						// if `require("module").default` found
 						isEsModule[i] = true
 						continue
 					}
-					if !isRelPathSpecifier(specifier) && !isNodeInternalModule(specifier) {
-						if a := bytes.SplitN(jsContent, []byte(fmt.Sprintf(`("%s")`, specifier)), 2); len(a) >= 2 {
-							ret := regexpVarDecl.FindSubmatch(a[0])
-							if len(ret) == 2 {
-								r, e := regexp.Compile(fmt.Sprintf(`[^\w$]%s(\(|\.default[^\w$=])`, string(ret[1])))
-								if e == nil {
-									ret := r.FindSubmatch(jsContent)
-									if len(ret) == 2 {
-										// `var mod = require("module");...;mod()` -> cjs
-										// `var mod = require("module");...;mod.default` -> es module
-										isEsModule[i] = string(ret[1]) != "("
-										continue
-									}
+					// `var mod = require("module");...;mod()` -> cjs
+					// `var mod = require("module");...;mod.default` -> es module
+					if a := bytes.SplitN(jsContent, []byte(fmt.Sprintf(`("%s")`, specifier)), 2); len(a) >= 2 {
+						ret := regexpVarDecl.FindSubmatch(a[0])
+						if len(ret) == 2 {
+							r, e := regexp.Compile(fmt.Sprintf(`[^\w$]%s(\(|\.default[^\w$=])`, string(ret[1])))
+							if e == nil {
+								ret := r.FindSubmatch(jsContent)
+								if len(ret) == 2 {
+									isEsModule[i] = string(ret[1]) != "("
+									continue
 								}
 							}
 						}
+					}
+					if !isRelPathSpecifier(specifier) && !isNodeBuiltInModule(specifier) && !strings.HasPrefix(specifier, "npm:") {
 						esm, pkgJson, err := ctx.lookupDep(specifier, false)
 						if err == nil {
 							ctx.normalizePackageJSON(pkgJson)
@@ -1180,14 +1184,14 @@ rebuild:
 						fmt.Fprintf(header, `case"%s":return e(__%x$);`, specifier, i)
 					}
 				}
-				fmt.Fprintf(header, `default:console.error('module "+n+" not found');return null;}};%s`, EOL)
+				fmt.Fprintf(header, `default:console.error('module "'+n+'" not found');return null;}};%s`, EOL)
 			}
 
 			// check imports
-			for _, a := range ctx.imports {
-				fullpath, path := a[0], a[1]
-				if bytes.Contains(jsContent, []byte(fmt.Sprintf(`"%s"`, path))) {
-					deps.Add(fullpath)
+			for _, a := range ctx.importMap {
+				resolvedPathFull, resolvedPath := a[0], a[1]
+				if bytes.Contains(jsContent, []byte(fmt.Sprintf(`"%s"`, resolvedPath))) {
+					deps.Add(resolvedPathFull)
 				}
 			}
 

@@ -101,7 +101,6 @@ func minify(code string, loader esbuild.Loader, target esbuild.Target) ([]byte, 
 	if len(ret.Errors) > 0 {
 		return nil, errors.New(ret.Errors[0].Text)
 	}
-
 	return concatBytes(ret.LegalComments, ret.Code), nil
 }
 

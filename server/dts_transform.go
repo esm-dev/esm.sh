@@ -109,7 +109,7 @@ func transformDTS(ctx *BuildContext, dts string, buildArgsPrefix string, marker 
 			return fmt.Sprintf("{ESM_CDN_ORIGIN}/@types/node@%s/index.d.ts", nodeTypesVersion), nil
 		}
 
-		if specifier == "node" || isNodeInternalModule(specifier) {
+		if specifier == "node" || isNodeBuiltInModule(specifier) {
 			withNodeBuiltinModule = true
 			return specifier, nil
 		}

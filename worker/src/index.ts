@@ -288,7 +288,7 @@ function withESMWorker(middleware?: Middleware, cache: Cache = (caches as any).d
       pathname === "/run"
       || pathname === "/tsx"
       || pathname === "/uno"
-      || (pathname.startsWith("/node/") && pathname.endsWith(".js"))
+      || (pathname.startsWith("/node/") && pathname.endsWith(".mjs"))
     ) {
       const isChunkjs = pathname.startsWith("/node/chunk-");
       if (!isChunkjs) {
@@ -306,7 +306,7 @@ function withESMWorker(middleware?: Middleware, cache: Cache = (caches as any).d
           return fetchBuildDist(req, env, ctx, pathname, query);
         }
         return fetchOrigin(req, env, ctx, pathname, query);
-      }, { varyUA: true });
+      }, { varyUA: !pathname.startsWith("/node/") });
     }
 
     // esm.sh/run routes
