@@ -39,7 +39,7 @@ const (
 	ctHtml           = "text/html; charset=utf-8"
 )
 
-func esmRoutes(debug bool) rex.Handle {
+func esmRouter(debug bool) rex.Handle {
 	startTime := time.Now()
 	globalETag := fmt.Sprintf(`W/"v%d"`, VERSION)
 

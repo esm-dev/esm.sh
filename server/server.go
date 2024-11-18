@@ -133,7 +133,7 @@ func Serve(efs EmbedFS) {
 		rex.Header("Server", "esm.sh"),
 		rex.Optional(rex.Compress(), config.Compress),
 		auth(config.AuthSecret),
-		esmRoutes(debug),
+		esmRouter(debug),
 	)
 
 	// start server
