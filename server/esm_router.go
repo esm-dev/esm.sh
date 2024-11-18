@@ -40,8 +40,10 @@ const (
 )
 
 func esmRouter(debug bool) rex.Handle {
-	startTime := time.Now()
-	globalETag := fmt.Sprintf(`W/"v%d"`, VERSION)
+	var (
+		startTime  = time.Now()
+		globalETag = fmt.Sprintf(`W/"v%d"`, VERSION)
+	)
 
 	return func(ctx *rex.Context) any {
 		pathname := ctx.Pathname()
@@ -172,10 +174,14 @@ func esmRouter(debug bool) rex.Handle {
 			pathname = strings.TrimRight(pathname, "/")
 		}
 
-		cdnOrigin := ctx.R.Header.Get("X-Real-Origin")
+		cdnOrigin := ctx.GetHeader("X-Real-Origin")
 		if cdnOrigin == "" {
 			proto := "http"
-			if ctx.R.TLS != nil {
+			if cfVisitor := ctx.GetHeader("CF-Visitor"); cfVisitor != "" {
+				if strings.Contains(cfVisitor, "\"scheme\":\"https\"") {
+					proto = "https"
+				}
+			} else if ctx.R.TLS != nil {
 				proto = "https"
 			}
 			cdnOrigin = fmt.Sprintf("%s://%s", proto, ctx.R.Host)
@@ -184,7 +190,7 @@ func esmRouter(debug bool) rex.Handle {
 		// static routes
 		switch pathname {
 		case "/":
-			ifNoneMatch := ctx.R.Header.Get("If-None-Match")
+			ifNoneMatch := ctx.GetHeader("If-None-Match")
 			if ifNoneMatch != "" && ifNoneMatch == globalETag {
 				return rex.Status(http.StatusNotModified, nil)
 			}
@@ -340,7 +346,7 @@ func esmRouter(debug bool) rex.Handle {
 
 		// serve internal scripts
 		if pathname == "/run" || pathname == "/tsx" || pathname == "/uno" {
-			ifNoneMatch := ctx.R.Header.Get("If-None-Match")
+			ifNoneMatch := ctx.GetHeader("If-None-Match")
 			if ifNoneMatch == globalETag && !debug {
 				return rex.Status(http.StatusNotModified, nil)
 			}
@@ -402,7 +408,7 @@ func esmRouter(debug bool) rex.Handle {
 			if strings.HasPrefix(name, "chunk-") {
 				ctx.SetHeader("Cache-Control", ccImmutable)
 			} else {
-				ifNoneMatch := ctx.R.Header.Get("If-None-Match")
+				ifNoneMatch := ctx.GetHeader("If-None-Match")
 				if ifNoneMatch == globalETag && !debug {
 					return rex.Status(http.StatusNotModified, nil)
 				}
@@ -414,7 +420,7 @@ func esmRouter(debug bool) rex.Handle {
 		}
 
 		var npmrc *NpmRC
-		if rc := ctx.R.Header.Get("X-Npmrc"); rc != "" {
+		if rc := ctx.GetHeader("X-Npmrc"); rc != "" {
 			rc, err := NewNpmRcFromJSON([]byte(rc))
 			if err != nil {
 				return rex.Status(400, "Invalid Npmrc Header")
@@ -424,7 +430,7 @@ func esmRouter(debug bool) rex.Handle {
 			npmrc = NewNpmRcFromConfig()
 		}
 
-		zoneId := ctx.R.Header.Get("X-Zone-Id")
+		zoneId := ctx.GetHeader("X-Zone-Id")
 		if zoneId != "" {
 			if !valid.IsDomain(zoneId) {
 				zoneId = ""
