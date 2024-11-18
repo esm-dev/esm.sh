@@ -392,7 +392,7 @@ func esmRoutes(debug bool) rex.Handle {
 				return rex.Status(404, "Not Found")
 			}
 			name := pathname[6:]
-			code, ok := unenvDist[name]
+			code, ok := unenvNodeRuntimeBulid[name]
 			if !ok {
 				if !nodeBuiltinModules[name] {
 					return rex.Status(404, "Not Found")

@@ -97,11 +97,11 @@ func Serve(efs EmbedFS) {
 	}
 	log.Debugf("nodejs: v%s, pnpm: %s, registry: %s", nodeVer, pnpmVer, config.NpmRegistry)
 
-	err = buildUnenv()
+	err = buildUnenvNodeRuntime()
 	if err != nil {
-		log.Fatalf("build unenv: %v", err)
+		log.Fatalf("build unenv node runtime: %v", err)
 	}
-	log.Debugf("unenv built with %d dist files", len(unenvDist))
+	log.Debugf("unenv node runtime built with %d dist files", len(unenvNodeRuntimeBulid))
 
 	err = buildNpmReplacements(efs)
 	if err != nil {
