@@ -17,7 +17,9 @@ const (
 )
 
 var (
-	unenvNodeRuntimeBulid = map[string][]byte{}
+	unenvNodeRuntimeBulid = map[string][]byte{
+		"sys.mjs": []byte(`export*from '/node/util.mjs';export{default}from '/node/util.mjs';`),
+	}
 )
 
 func buildUnenvNodeRuntime() (err error) {
@@ -27,7 +29,6 @@ func buildUnenvNodeRuntime() (err error) {
 		return err
 	}
 
-	// ensure 'package.json' file to prevent read up-levels
 	packageJsonFp := path.Join(wd, "package.json")
 	if !existsFile(packageJsonFp) {
 		err = os.WriteFile(packageJsonFp, []byte(`{"dependencies":{"unenv":"github:unjs/unenv#`+unenvVersion+`"}}`), 0644)
@@ -46,12 +47,15 @@ func buildUnenvNodeRuntime() (err error) {
 
 	endpoints := make([]esbuild.EntryPoint, 0, len(nodeBuiltinModules))
 	for name := range nodeBuiltinModules {
-		filename := path.Join(wd, "node_modules", "unenv/runtime/node/"+name+"/index.mjs")
-		if existsFile(filename) {
-			endpoints = append(endpoints, esbuild.EntryPoint{
-				InputPath:  filename,
-				OutputPath: name,
-			})
+		// module "sys" is just a alias of "util", no need to build
+		if name != "sys" {
+			filename := path.Join(wd, "node_modules", "unenv/runtime/node/"+name+"/index.mjs")
+			if existsFile(filename) {
+				endpoints = append(endpoints, esbuild.EntryPoint{
+					InputPath:  filename,
+					OutputPath: name,
+				})
+			}
 		}
 	}
 
@@ -141,6 +145,5 @@ func buildUnenvNodeRuntime() (err error) {
 		}
 		unenvNodeRuntimeBulid[name] = ret.OutputFiles[0].Contents
 	}
-	unenvNodeRuntimeBulid["sys.mjs"] = []byte(`export*from '/node/util.mjs';export{default}from '/node/util.mjs';`)
 	return
 }
