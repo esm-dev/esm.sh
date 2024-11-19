@@ -29,19 +29,20 @@ func buildUnenvNodeRuntime() (err error) {
 		return err
 	}
 
-	packageJsonFp := path.Join(wd, "package.json")
-	if !existsFile(packageJsonFp) {
-		err = os.WriteFile(packageJsonFp, []byte(`{"dependencies":{"unenv":"github:unjs/unenv#`+unenvVersion+`"}}`), 0644)
-		if err != nil {
-			return
-		}
+	err = os.WriteFile(path.Join(wd, "package.json"), []byte(`{"dependencies":{"unenv":"github:unjs/unenv#`+unenvVersion+`"}}`), 0644)
+	if err != nil {
+		return
 	}
 
 	cmd := exec.Command("pnpm", "i", "--prefer-offline")
 	cmd.Dir = wd
-	err = cmd.Run()
+	output, err := cmd.CombinedOutput()
 	if err != nil {
-		err = fmt.Errorf("install unjs/unenv from github: %v", err)
+		msg := err.Error()
+		if len(output) > 0 {
+			msg = string(output)
+		}
+		err = fmt.Errorf("install unjs/unenv from github: %v", msg)
 		return
 	}
 
