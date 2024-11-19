@@ -97,11 +97,13 @@ func (ctx *BuildContext) Path() string {
 	}
 
 	name := strings.TrimSuffix(path.Base(esmPath.PkgName), ".js")
-	extname := ".mjs"
-
 	if esmPath.SubBareName != "" {
-		name = esmPath.SubBareName
-		extname = ".js"
+		if esmPath.SubBareName == name {
+			// if the sub-module name is same as the package name
+			name = "__" + esmPath.SubBareName
+		} else {
+			name = esmPath.SubBareName
+		}
 		// workaround for es5-ext "../#/.." path
 		if esmPath.PkgName == "es5-ext" {
 			name = strings.ReplaceAll(name, "/#/", "/%23/")
@@ -117,22 +119,24 @@ func (ctx *BuildContext) Path() string {
 		name += ".nobundle"
 	}
 	ctx.path = fmt.Sprintf(
-		"/%s/%s%s/%s%s",
+		"/%s/%s%s/%s.mjs",
 		esmPath.PackageName(),
 		ctx.getBuildArgsPrefix(ctx.target == "types"),
 		ctx.target,
 		name,
-		extname,
 	)
 	return ctx.path
 }
 
 func (ctx *BuildContext) getImportPath(esmPath ESMPath, buildArgsPrefix string) string {
 	name := strings.TrimSuffix(path.Base(esmPath.PkgName), ".js")
-	extname := ".mjs"
 	if esmPath.SubBareName != "" {
-		name = esmPath.SubBareName
-		extname = ".js"
+		if esmPath.SubBareName == name {
+			// if the sub-module name is same as the package name
+			name = "__" + esmPath.SubBareName
+		} else {
+			name = esmPath.SubBareName
+		}
 		// workaround for es5-ext "../#/.." path
 		if esmPath.PkgName == "es5-ext" {
 			name = strings.ReplaceAll(name, "/#/", "/%23/")
@@ -142,12 +146,11 @@ func (ctx *BuildContext) getImportPath(esmPath ESMPath, buildArgsPrefix string) 
 		name += ".development"
 	}
 	return fmt.Sprintf(
-		"/%s/%s%s/%s%s",
+		"/%s/%s%s/%s.mjs",
 		esmPath.PackageName(),
 		buildArgsPrefix,
 		ctx.target,
 		name,
-		extname,
 	)
 }
 
@@ -653,7 +656,7 @@ func (ctx *BuildContext) resolveConditionExportEntry(conditions *OrderedMap, mTy
 		}
 	} else if ctx.isDenoTarget() {
 		var condition interface{}
-		for _, conditionName := range []string{"deno", "workerd", "worker", "node"} {
+		for _, conditionName := range []string{"deno", "node"} {
 			condition = conditions.Get(conditionName)
 			if condition != nil {
 				// entry.ibc = conditionName != "browser"

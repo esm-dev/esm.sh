@@ -7,11 +7,11 @@ Deno.test("`?external` query", async () => {
 
   const res2 = await fetch("http://localhost:8080/*preact@10.23.2/jsx-runtime");
   const code2 = await res2.text();
-  assertStringIncludes(code2, '"/preact@10.23.2/X-Kg/denonext/jsx-runtime.js"');
+  assertStringIncludes(code2, '"/preact@10.23.2/X-Kg/denonext/jsx-runtime.mjs"');
 
   const res3 = await fetch("http://localhost:8080/preact@10.23.2/hooks?external=preact");
   const code3 = await res3.text();
-  assertStringIncludes(code3, '"/preact@10.23.2/X-ZXByZWFjdA/denonext/hooks.js"');
+  assertStringIncludes(code3, '"/preact@10.23.2/X-ZXByZWFjdA/denonext/hooks.mjs"');
 });
 
 Deno.test("drop invalid `?external`", async () => {

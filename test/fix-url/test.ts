@@ -7,7 +7,7 @@ Deno.test("query as version suffix", async () => {
   assertEquals(res.headers.get("cache-control"), "public, max-age=31536000, immutable");
   assertEquals(res.headers.get("content-type"), "application/javascript; charset=utf-8");
   assert(!res.headers.get("vary")!.includes("User-Agent"));
-  assertStringIncludes(code, "/react-dom@18.3.1/es2022/client.development.js");
+  assertStringIncludes(code, "/react-dom@18.3.1/es2022/client.development.mjs");
 });
 
 Deno.test("`/jsx-runtime` in query", async () => {
@@ -17,7 +17,7 @@ Deno.test("`/jsx-runtime` in query", async () => {
   assertEquals(res.headers.get("cache-control"), "public, max-age=31536000, immutable");
   assertEquals(res.headers.get("content-type"), "application/javascript; charset=utf-8");
   assert(!res.headers.get("vary")!.includes("User-Agent"));
-  assertStringIncludes(code, "/react@18.3.1/es2022/jsx-runtime.development.js");
+  assertStringIncludes(code, "/react@18.3.1/es2022/jsx-runtime.development.mjs");
 });
 
 Deno.test("redirect semver versioning module for deno target", async () => {
@@ -112,7 +112,7 @@ Deno.test("support `/#/` in path", async () => {
   assertEquals(res.status, 200);
   assertEquals(res.headers.get("content-type"), "application/javascript; charset=utf-8");
   assertEquals(res.headers.get("cache-control"), "public, max-age=31536000, immutable");
-  assertStringIncludes(await res.text(), "/denonext/string/%23/contains.js");
+  assertStringIncludes(await res.text(), "/denonext/string/%23/contains.mjs");
 });
 
 Deno.test("dts-transformer: support `.d` extension", async () => {

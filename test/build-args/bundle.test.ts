@@ -20,9 +20,9 @@ Deno.test("?bundle with ?external", async () => {
 Deno.test("?bundle=false", async () => {
   const res = await fetch("http://localhost:8080/@pyscript/core@0.3.4/dist/py-terminal-XWbSa71s?bundle=false&target=es2022");
   res.body?.cancel();
-  assertEquals(res.headers.get("x-esm-path")!, "/@pyscript/core@0.3.4/es2022/dist/py-terminal-XWbSa71s.nobundle.js");
+  assertEquals(res.headers.get("x-esm-path")!, "/@pyscript/core@0.3.4/es2022/dist/py-terminal-XWbSa71s.nobundle.mjs");
   const res2 = await fetch(new URL(res.headers.get("x-esm-path")!, "http://localhost:8080"));
   const code = await res2.text();
-  assertStringIncludes(code, "./core.nobundle.js");
-  assertStringIncludes(code, "./error-96hMSEw8.nobundle.js");
+  assertStringIncludes(code, "./core.nobundle.mjs");
+  assertStringIncludes(code, "./error-96hMSEw8.nobundle.mjs");
 });
