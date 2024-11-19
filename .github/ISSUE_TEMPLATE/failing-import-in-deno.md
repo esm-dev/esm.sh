@@ -24,5 +24,4 @@ After running `deno run` I got this:
 
 ## Additional info
 
-- **esm.sh version**:
 - **Deno version**:
