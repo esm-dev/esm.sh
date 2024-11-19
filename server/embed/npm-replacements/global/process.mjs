@@ -1,1 +1,1 @@
-export * from "/node/process.mjs";
+export default {}

@@ -830,7 +830,10 @@ func (ctx *BuildContext) buildModule() (result *BuildMeta, err error) {
 
 					// replace some npm modules with browser native APIs
 					if specifier != "fsevents" || ctx.isBrowserTarget() {
-						replacement, ok := npmReplacements[specifier]
+						replacement, ok := npmReplacements[specifier+"_"+ctx.target]
+						if !ok {
+							replacement, ok = npmReplacements[specifier]
+						}
 						if ok {
 							if args.Kind == esbuild.ResolveJSRequireCall || args.Kind == esbuild.ResolveJSRequireResolve {
 								ctx.cjsRequires = append(ctx.cjsRequires, [3]string{
