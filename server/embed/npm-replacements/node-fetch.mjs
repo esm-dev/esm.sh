@@ -1,13 +1,13 @@
 export const { Blob, fetch, File, FormData, Headers, Request, Response, AbortController } = globalThis;
-fetch.Promise = globalThis.Promise;
-fetch.isRedirect = isRedirect;
-export default fetch;
-
 export const AbortError = Error;
 export const FetchError = Error;
 
 const redirectStatus = /* @__PURE__ */ new Set([301, 302, 303, 307, 308]);
 export const isRedirect = (code) => redirectStatus.has(code);
+
+fetch.isRedirect = isRedirect;
+fetch.Promise = globalThis.Promise;
+export default fetch;
 
 export async function blobFrom(path, type) {
   if (typeof Deno !== "undefined") {
