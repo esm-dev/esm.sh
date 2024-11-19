@@ -76,7 +76,7 @@ func buildUnenvNodeRuntime() (err error) {
 		Outdir:              "/",
 		Plugins: []esbuild.Plugin{
 			{
-				Name: "unenv",
+				Name: "resolve-node-builtin-modules",
 				Setup: func(build esbuild.PluginBuild) {
 					build.OnResolve(esbuild.OnResolveOptions{Filter: `^node:`}, func(args esbuild.OnResolveArgs) (esbuild.OnResolveResult, error) {
 						return esbuild.OnResolveResult{Path: "/node/" + args.Path[5:] + ".mjs", External: true}, nil
@@ -119,7 +119,7 @@ func buildUnenvNodeRuntime() (err error) {
 			Outdir:            "/",
 			Plugins: []esbuild.Plugin{
 				{
-					Name: "unenv",
+					Name: "bundle-tiny-chunks",
 					Setup: func(build esbuild.PluginBuild) {
 						build.OnResolve(esbuild.OnResolveOptions{Filter: ".*"}, func(args esbuild.OnResolveArgs) (esbuild.OnResolveResult, error) {
 							if isRelPathSpecifier(args.Path) {
