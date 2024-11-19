@@ -53,6 +53,9 @@ ssh next.esm.sh << EOF
     supervisorctl stop esmd
   fi
 
+  mv -f ~/.esmd /tmp/.esmd
+  nohup rm -rf /tmp/.esmd &
+
   rm -f /usr/local/bin/esmd
   mv -f esmd /usr/local/bin/esmd
   chmod +x /usr/local/bin/esmd
