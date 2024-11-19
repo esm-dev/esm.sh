@@ -13,7 +13,7 @@ import (
 
 const (
 	// https://github.com/unjs/unenv
-	unenvVersion = "e666fcf"
+	unenvPkg = "unenv-nightly@2.0.0-20241111-080453-894aa31"
 )
 
 var (
@@ -23,13 +23,13 @@ var (
 )
 
 func buildUnenvNodeRuntime() (err error) {
-	wd := path.Join(config.WorkDir, "npm/gh/unjs/unenv@"+unenvVersion)
+	wd := path.Join(config.WorkDir, "npm/"+unenvPkg)
 	err = ensureDir(wd)
 	if err != nil {
 		return err
 	}
 
-	err = os.WriteFile(path.Join(wd, "package.json"), []byte(`{"dependencies":{"unenv":"github:unjs/unenv#`+unenvVersion+`"}}`), 0644)
+	err = os.WriteFile(path.Join(wd, "package.json"), []byte(`{"dependencies":{"unenv":"npm:`+unenvPkg+`"}}`), 0644)
 	if err != nil {
 		return
 	}
