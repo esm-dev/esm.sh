@@ -23,20 +23,25 @@ async function startServer(onStart: () => Promise<void>, verbose: boolean) {
     console.log("%cClosing esm.sh server...", "color: grey");
     p.kill("SIGINT");
   });
-  while (true) {
-    try {
-      await new Promise((resolve) => setTimeout(resolve, 100));
-      const res = await fetch("http://localhost:8080/status.json");
-      const ret = await res.json();
-      if (ret.version) {
-        console.log("esm.sh server started.");
-        onStart();
-        break;
+  await new Promise<void>((resolve, reject) => {
+    (async () => {
+      while (true) {
+        try {
+          await new Promise((resolve) => setTimeout(resolve, 100));
+          const status = await fetch("http://localhost:8080/status.json").then(res => res.json());
+          if (status.version) {
+            console.log("esm.sh server started.");
+            onStart();
+            resolve();
+            break;
+          }
+        } catch {
+          // continue
+        }
       }
-    } catch (_) {
-      // ignore
-    }
-  }
+    })();
+    setTimeout(() => reject(new Error("Timeout")), 15000);
+  });
   await p.status;
 }
 
@@ -56,9 +61,7 @@ async function runTest(name: string, retry?: boolean): Promise<number> {
     args.push("--config", dir + "deno.json");
   }
   args.push(dir);
-
   console.log(`\n[test ${name}]`);
-
   const { code, success } = await run(Deno.execPath(), ...args);
   if (!success) {
     if (!retry) {

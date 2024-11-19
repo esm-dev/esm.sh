@@ -86,18 +86,6 @@ func Serve(efs EmbedFS) {
 	}
 	log.Debugf("storage initialized, type: %s, endpoint: %s", config.Storage.Type, config.Storage.Endpoint)
 
-	err = loadNodeLibs(efs)
-	if err != nil {
-		log.Fatalf("load node libs: %v", err)
-	}
-	log.Debugf("%d node libs loaded", len(nodeLibs))
-
-	err = loadNpmPolyfills(efs)
-	if err != nil {
-		log.Fatalf("load npm polyfills: %v", err)
-	}
-	log.Debugf("%d npm polyfills loaded", len(npmPolyfills))
-
 	// check nodejs environment
 	nodejsInstallDir := os.Getenv("NODE_INSTALL_DIR")
 	if nodejsInstallDir == "" {
@@ -108,6 +96,18 @@ func Serve(efs EmbedFS) {
 		log.Fatalf("nodejs: %v", err)
 	}
 	log.Debugf("nodejs: v%s, pnpm: %s, registry: %s", nodeVer, pnpmVer, config.NpmRegistry)
+
+	err = buildUnenvNodeRuntime()
+	if err != nil {
+		log.Fatalf("build unenv node runtime: %v", err)
+	}
+	log.Debugf("unenv node runtime built with %d dist files", len(unenvNodeRuntimeBulid))
+
+	err = buildNpmReplacements(efs)
+	if err != nil {
+		log.Fatalf("build npm replacements: %v", err)
+	}
+	log.Debugf("%d npm repalcements loaded", len(npmReplacements))
 
 	// init cjs lexer
 	err = initCJSModuleLexer()
@@ -133,7 +133,7 @@ func Serve(efs EmbedFS) {
 		rex.Header("Server", "esm.sh"),
 		rex.Optional(rex.Compress(), config.Compress),
 		auth(config.AuthSecret),
-		esmRoutes(debug),
+		esmRouter(debug),
 	)
 
 	// start server

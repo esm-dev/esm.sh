@@ -52,20 +52,20 @@ func initCJSModuleLexer() (err error) {
 		return err
 	}
 
-	// ensure 'package.json' file to prevent read up-levels
-	packageJsonFp := path.Join(wd, "package.json")
-	if !existsFile(packageJsonFp) {
-		err = os.WriteFile(packageJsonFp, []byte("{}"), 0644)
-		if err != nil {
-			return
-		}
+	err = os.WriteFile(path.Join(wd, "package.json"), []byte(`{"dependencies":{"@esm.sh/cjs-module-lexer":"npm:`+cjsModuleLexerPkg+`"}}`), 0644)
+	if err != nil {
+		return
 	}
 
-	cmd := exec.Command("pnpm", "add", "--prefer-offline", cjsModuleLexerPkg)
+	cmd := exec.Command("pnpm", "i", "--prefer-offline")
 	cmd.Dir = wd
-	err = cmd.Run()
+	output, err := cmd.CombinedOutput()
 	if err != nil {
-		err = fmt.Errorf("install %s: %v", cjsModuleLexerPkg, err)
+		msg := err.Error()
+		if len(output) > 0 {
+			msg = string(output)
+		}
+		err = fmt.Errorf("install %s: %v", cjsModuleLexerPkg, msg)
 		return
 	}
 

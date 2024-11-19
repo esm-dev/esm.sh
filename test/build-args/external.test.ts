@@ -37,10 +37,10 @@ Deno.test("types with `?external`", async () => {
   assertStringIncludes(ts, 'import("react")');
 });
 
-Deno.test("external nodejs internal modules", async () => {
+Deno.test("external nodejs builtin modules", async () => {
   const res = await fetch("http://localhost:8080/cheerio@0.22.0/es2022/cheerio.mjs");
   assertEquals(res.status, 200);
-  assertStringIncludes(await res.text(), ` from "/node/buffer.js"`);
+  assertStringIncludes(await res.text(), ` from "/node/buffer.mjs"`);
 
   const res2 = await fetch("http://localhost:8080/cheerio@0.22.0?target=es2022&external=node:buffer");
   res2.body?.cancel();

@@ -14,7 +14,7 @@ Deno.test("?bundle with ?external", async () => {
   assertStringIncludes(res.headers.get("x-esm-path")!, "/X-ZWZhc3QtZGVlcC1lcXVhbA/");
   assertStringIncludes(res.headers.get("x-esm-path")!, "/ajv.bundle.mjs");
   const res2 = await fetch(new URL(res.headers.get("x-esm-path")!, "http://localhost:8080"));
-  assertStringIncludes(await res2.text(), `from "fast-deep-equal"`);
+  assertStringIncludes(await res2.text(), `from"fast-deep-equal"`);
 });
 
 Deno.test("?bundle=false", async () => {
