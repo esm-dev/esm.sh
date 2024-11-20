@@ -9,6 +9,6 @@ Deno.test("Transfrom SFC on fly", async () => {
     assertEquals(res.headers.get("content-type"), "application/javascript; charset=utf-8");
     const code = await res.text();
     assertStringIncludes(code, "/vue@3.5.8/");
-    assertStringIncludes(code, "/PhAirplay.vue.js");
+    assertStringIncludes(code, "/PhAirplay.vue.mjs");
   }
 });

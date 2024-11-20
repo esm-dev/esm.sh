@@ -302,7 +302,7 @@ Deno.test("esm-worker", { sanitizeOps: false, sanitizeResources: false }, async 
     assertEquals(res10.status, 200);
     assertEquals(res10.headers.get("Cache-Control"), "public, max-age=31536000, immutable");
     assertStringIncludes(js, `__Process$`);
-    assert(!js.includes("/node/process.js"));
+    assert(!js.includes("/node/process.mjs"));
 
     const res11 = await fetch(`${workerOrigin}/typescript@5.5.4/es2022/typescript.mjs.map`);
     assertEquals(res11.status, 200);
@@ -315,7 +315,7 @@ Deno.test("esm-worker", { sanitizeOps: false, sanitizeResources: false }, async 
       headers: { "User-Agent": "ES/2022" },
     });
     const modUrl = new URL(res.headers.get("x-esm-path")!, workerOrigin);
-    assert(modUrl.pathname.endsWith("/es2022/server.js"));
+    assert(modUrl.pathname.endsWith("/es2022/server.mjs"));
     assertEquals(res.status, 200);
     assertEquals(res.headers.get("Content-Type"), "application/javascript; charset=utf-8");
     assertEquals(res.headers.get("Cache-Control"), "public, max-age=3600");
@@ -401,7 +401,7 @@ Deno.test("esm-worker", { sanitizeOps: false, sanitizeResources: false }, async 
   await t.step("jsr", async () => {
     const res = await fetch(`${workerOrigin}/jsr/@std/encoding/base64`, { headers: { "User-Agent": "ES/2022" } });
     const modUrl = new URL(res.headers.get("x-esm-path")!, workerOrigin);
-    assert(modUrl.pathname.endsWith("/es2022/base64.js"));
+    assert(modUrl.pathname.endsWith("/es2022/base64.mjs"));
     assertEquals(res.status, 200);
     assertEquals(res.headers.get("Content-Type"), "application/javascript; charset=utf-8");
     assertEquals(res.headers.get("Cache-Control"), "public, max-age=3600");

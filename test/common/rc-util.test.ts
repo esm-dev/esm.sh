@@ -1,6 +1,6 @@
 import { assertExists } from "jsr:@std/assert";
 
-import * as dynamicCSS from "http://localhost:8080/rc-util@5.27.2/es/Dom/dynamicCSS.js";
+import * as dynamicCSS from "http://localhost:8080/rc-util@5.27.2/es/Dom/dynamicCSS.mjs";
 
 Deno.test("Export all members when the package is not a standard ES module", async () => {
   assertExists(dynamicCSS.updateCSS);

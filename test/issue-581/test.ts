@@ -1,7 +1,7 @@
 import { assertEquals } from "jsr:@std/assert";
 
 import dayjs from "http://localhost:8080/dayjs@1.11.7";
-import relativeTime from "http://localhost:8080/dayjs@1.11.7/plugin/relativeTime.js";
+import relativeTime from "http://localhost:8080/dayjs@1.11.7/plugin/relativeTime.mjs";
 
 dayjs.extend(relativeTime);
 

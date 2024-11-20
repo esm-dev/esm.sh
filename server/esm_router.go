@@ -1263,7 +1263,7 @@ func esmRouter(debug bool) rex.Handle {
 		}
 
 		// match path `PKG@VERSION/X-${args}/esnext/SUBPATH`
-		argsX := false
+		xArgs := false
 		if resType == ESMBuild || resType == ESMDts {
 			a := strings.Split(esm.SubBareName, "/")
 			if len(a) > 1 && strings.HasPrefix(a[0], "X-") {
@@ -1274,12 +1274,12 @@ func esmRouter(debug bool) rex.Handle {
 				esm.SubPath = strings.Join(strings.Split(esm.SubPath, "/")[1:], "/")
 				esm.SubBareName = toModuleBareName(esm.SubPath, true)
 				buildArgs = args
-				argsX = true
+				xArgs = true
 			}
 		}
 
 		// fix the build args that are from the query
-		if !argsX {
+		if !xArgs {
 			err := normalizeBuildArgs(npmrc, path.Join(npmrc.StoreDir(), esm.PackageName()), &buildArgs, esm)
 			if err != nil {
 				return rex.Status(500, err.Error())
@@ -1338,7 +1338,7 @@ func esmRouter(debug bool) rex.Handle {
 			return bytes.ReplaceAll(buffer, []byte("{ESM_CDN_ORIGIN}"), []byte(cdnOrigin))
 		}
 
-		if !argsX {
+		if !xArgs {
 			externalRequire := query.Has("external-require")
 			// workaround: force "unocss/preset-icons" to external `require` calls
 			if !externalRequire && esm.PkgName == "@unocss/preset-icons" {
@@ -1384,7 +1384,7 @@ func esmRouter(debug bool) rex.Handle {
 						isDev = true
 					}
 					basename := strings.TrimSuffix(path.Base(esm.PkgName), ".js")
-					if strings.HasSuffix(submodule, ".css") && !strings.HasSuffix(esm.SubPath, ".js") {
+					if strings.HasSuffix(submodule, ".css") && !strings.HasSuffix(esm.SubPath, ".mjs") {
 						if submodule == basename+".css" {
 							esm.SubBareName = ""
 							target = maybeTarget
@@ -1393,9 +1393,11 @@ func esmRouter(debug bool) rex.Handle {
 							return rex.Redirect(url, http.StatusFound)
 						}
 					} else {
-						isMjs := strings.HasSuffix(esm.SubPath, ".mjs")
-						if isMjs && submodule == basename {
+						if submodule == basename {
 							submodule = ""
+						} else if submodule == "__"+basename {
+							// the sub-module name is same as the package name
+							submodule = basename
 						}
 						esm.SubBareName = submodule
 						target = maybeTarget

@@ -24,5 +24,4 @@ After `onload` I got this:
 
 ## Additional info
 
-- **esm.sh version**:
-- **Browser version**:
+- **Browser info**:
