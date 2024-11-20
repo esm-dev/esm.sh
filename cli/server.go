@@ -803,28 +803,28 @@ func (d *DevServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 						return
 					}
 					if query.Has("jsx") {
-						jsxCode, err := common.RenderMarkdown(markdown, "jsx")
+						jsxCode, err := common.RenderMarkdown(markdown, common.MarkdownRenderKindJSX)
 						if err != nil {
 							http.Error(w, "Failed to render markdown to jsx", 500)
 							return
 						}
 						d.ServeModule(w, r, pathname+"?jsx", jsxCode)
 					} else if query.Has("svelte") {
-						svelteCode, err := common.RenderMarkdown(markdown, "svelte")
+						svelteCode, err := common.RenderMarkdown(markdown, common.MarkdownRenderKindSvelte)
 						if err != nil {
 							http.Error(w, "Failed to render markdown to svelte component", 500)
 							return
 						}
 						d.ServeModule(w, r, pathname+"?svelte", svelteCode)
 					} else if query.Has("vue") {
-						vueCode, err := common.RenderMarkdown(markdown, "vue")
+						vueCode, err := common.RenderMarkdown(markdown, common.MarkdownRenderKindVue)
 						if err != nil {
 							http.Error(w, "Failed to render markdown to vue component", 500)
 							return
 						}
 						d.ServeModule(w, r, pathname+"?vue", vueCode)
 					} else {
-						js, err := common.RenderMarkdown(markdown, "js")
+						js, err := common.RenderMarkdown(markdown, common.MarkdownRenderKindJS)
 						if err != nil {
 							http.Error(w, "Failed to render markdown", 500)
 							return

@@ -27,7 +27,17 @@ var gfm = goldmark.New(
 	),
 )
 
-func RenderMarkdown(md []byte, kind string) (code []byte, err error) {
+type MarkdownRenderKind uint8
+
+const (
+	MarkdownRenderKindHTML MarkdownRenderKind = iota
+	MarkdownRenderKindJS
+	MarkdownRenderKindJSX
+	MarkdownRenderKindSvelte
+	MarkdownRenderKindVue
+)
+
+func RenderMarkdown(md []byte, kind MarkdownRenderKind) (code []byte, err error) {
 	var unSafeHtmlBuf bytes.Buffer
 	var htmlBuf bytes.Buffer
 	var metaDataJS []byte
@@ -54,7 +64,7 @@ func RenderMarkdown(md []byte, kind string) (code []byte, err error) {
 		tt := tokenizer.Next()
 		if tt == html.ErrorToken {
 			if tokenizer.Err() != io.EOF {
-				return nil, fmt.Errorf("failed to transform markdown to %s: %v", kind, tokenizer.Err())
+				return nil, fmt.Errorf("failed to render markdown: %v", tokenizer.Err())
 			}
 			break
 		}
@@ -124,6 +134,16 @@ func RenderMarkdown(md []byte, kind string) (code []byte, err error) {
 		} else if tt == html.TextToken {
 			for _, b := range tokenizer.Text() {
 				switch b {
+				case '&':
+					htmlBuf.WriteString("&amp;")
+				case '<':
+					htmlBuf.WriteString("&lt;")
+				case '>':
+					htmlBuf.WriteString("&gt;")
+				case '"':
+					htmlBuf.WriteString("&quot;")
+				case '\'':
+					htmlBuf.WriteString("&#x27;")
 				case '{':
 					htmlBuf.WriteString("&lbrace;")
 				case '}':
@@ -135,25 +155,25 @@ func RenderMarkdown(md []byte, kind string) (code []byte, err error) {
 		}
 	}
 	switch kind {
-	case "jsx":
+	case MarkdownRenderKindJSX:
 		jsxBuf := bytes.NewBuffer(metaDataJS)
 		jsxBuf.Write([]byte("export default function Markdown() { return <>"))
 		htmlBuf.WriteTo(jsxBuf)
 		jsxBuf.Write([]byte("</>}"))
 		return jsxBuf.Bytes(), nil
-	case "svelte":
+	case MarkdownRenderKindSvelte:
 		htmlBuf.Write([]byte("<script module>"))
 		htmlBuf.Write(metaDataJS)
 		htmlBuf.Write([]byte("</script>"))
 		return htmlBuf.Bytes(), nil
-	case "vue":
+	case MarkdownRenderKindVue:
 		vueBuf := bytes.NewBuffer([]byte("<script>"))
 		vueBuf.Write(metaDataJS)
 		vueBuf.Write([]byte("</script><template>"))
 		htmlBuf.WriteTo(vueBuf)
 		vueBuf.Write([]byte("</template>"))
 		return vueBuf.Bytes(), nil
-	case "js":
+	case MarkdownRenderKindJS:
 		jsBuf := bytes.NewBuffer([]byte("export const html = "))
 		json.NewEncoder(jsBuf).Encode(htmlBuf.String())
 		jsBuf.Write([]byte{';'})
