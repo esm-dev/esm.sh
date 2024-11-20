@@ -139,7 +139,7 @@ func esmRouter(debug bool) rex.Handle {
 				if packageName == "" {
 					return rex.Err(400, "param `package` is required")
 				}
-				if version != "" && !regexpVersionStrict.MatchString(version) {
+				if version != "" && !regexpVersion.MatchString(version) {
 					return rex.Err(400, "invalid version")
 				}
 				prefix := ""
@@ -168,6 +168,19 @@ func esmRouter(debug bool) rex.Handle {
 		default:
 			return rex.Err(405, "Method Not Allowed")
 		}
+
+		// use legacy worker if the bild version is specified in the path or query
+		// if (env.LEGACY_WORKER) {
+		// 	if (
+		// 		pathname == "/build"
+		// 		|| pathname.startsWith("/stable/")
+		// 		|| (pathname.startsWith("/v") && regexpLegacyVersionPrefix.test(pathname))
+		// 		|| (pathname.startsWith("/~") && regexpLegacyBuild.test(pathname))
+		// 		|| url.searchParams.has("pin")
+		// 	) {
+		// 		return env.LEGACY_WORKER.fetch(req);
+		// 	}
+		// }
 
 		// strip trailing slash
 		if pathname != "/" && strings.HasSuffix(pathname, "/") {
@@ -205,12 +218,16 @@ func esmRouter(debug bool) rex.Handle {
 			readme = bytes.ReplaceAll(readme, []byte("./server/embed/"), []byte("/embed/"))
 			readme = bytes.ReplaceAll(readme, []byte("./HOSTING.md"), []byte("https://github.com/esm-dev/esm.sh/blob/main/HOSTING.md"))
 			readme = bytes.ReplaceAll(readme, []byte("https://esm.sh"), []byte(cdnOrigin))
-			readmeStrLit := utils.MustEncodeJSON(string(readme))
-			html := bytes.ReplaceAll(indexHTML, []byte("$README"), readmeStrLit)
-			html = bytes.ReplaceAll(html, []byte("{VERSION}"), []byte(fmt.Sprintf("%d", VERSION)))
+			readmeHtml, err := common.RenderMarkdown(readme, common.MarkdownRenderKindHTML)
+			if err != nil {
+				return rex.Err(500, "Failed to render readme")
+			}
+			indexHTML = bytes.ReplaceAll(indexHTML, []byte("{README}"), readmeHtml)
+			indexHTML = bytes.ReplaceAll(indexHTML, []byte("{VERSION}"), []byte(fmt.Sprintf("%d", VERSION)))
+			ctx.SetHeader("Content-Type", ctHtml)
 			ctx.SetHeader("Cache-Control", ccMustRevalidate)
 			ctx.SetHeader("Etag", globalETag)
-			return rex.Content("index.html", startTime, bytes.NewReader(html))
+			return indexHTML
 
 		case "/status.json":
 			q := make([]map[string]any, buildQueue.queue.Len())
