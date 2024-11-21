@@ -14,10 +14,10 @@ import (
 )
 
 var (
-	config     *Config
-	log        *logger.Logger
-	buildQueue *BuildQueue
-	esmStorage storage.Storage
+	config       *Config
+	log          *logger.Logger
+	buildQueue   *BuildQueue
+	buildStorage storage.Storage
 )
 
 // Serve serves the esm.sh server
@@ -80,7 +80,7 @@ func Serve(efs EmbedFS) {
 	// quite in terminal
 	accessLogger.SetQuite(true)
 
-	esmStorage, err = storage.New(&config.Storage)
+	buildStorage, err = storage.New(&config.Storage)
 	if err != nil {
 		log.Fatalf("failed to initialize build storage(%s): %v", config.Storage.Type, err)
 	}

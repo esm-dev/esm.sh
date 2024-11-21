@@ -120,3 +120,30 @@ Deno.test("dts-transformer: support `.d` extension", async () => {
   const dts = await res.text();
   assertStringIncludes(dts, "'./config.d.ts'");
 });
+
+Deno.test("legacy routes", async () => {
+  {
+    const res = await fetch("http://localhost:8080/stable/react@18.3.1/es2022/react.mjs", {
+      headers: { "User-Agent": "i'm a browser" },
+    });
+    assertEquals(res.status, 200);
+    assertEquals(res.headers.get("Content-Type"), "application/javascript; charset=utf-8");
+    assertStringIncludes(await res.text(), "createElement");
+  }
+  {
+    const res = await fetch("http://localhost:8080/v135/react-dom@18.3.1/es2022/client.js", {
+      headers: { "User-Agent": "i'm a browser" },
+    });
+    assertEquals(res.status, 200);
+    assertEquals(res.headers.get("Content-Type"), "application/javascript; charset=utf-8");
+    assertStringIncludes(await res.text(), "createRoot");
+  }
+  {
+    const res = await fetch("http://localhost:8080/v64/many-keys-weakmap@1.0.0/es2022/many-keys-weakmap.js", {
+      headers: { "User-Agent": "i'm a browser" },
+    });
+    assertEquals(res.status, 200);
+    assertEquals(res.headers.get("Content-Type"), "application/javascript; charset=utf-8");
+    assertStringIncludes(await res.text(), "ManyKeysWeakMap");
+  }
+});

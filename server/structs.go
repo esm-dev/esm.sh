@@ -5,8 +5,11 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"net/http"
+	"net/url"
 	"strings"
 	"sync"
+	"time"
 )
 
 type StringSet struct {
@@ -73,12 +76,25 @@ func (s *StringSet) Values() []string {
 
 type StringOrMap struct {
 	Str string
-	Map map[string]interface{}
+	Map map[string]any
+}
+
+func (a *StringOrMap) MarshalJSON() ([]byte, error) {
+	if a.Str != "" {
+		return json.Marshal(a.Str)
+	}
+	return json.Marshal(a.Map)
 }
 
 func (a *StringOrMap) UnmarshalJSON(b []byte) error {
-	if err := json.Unmarshal(b, &a.Str); err != nil {
-		return json.Unmarshal(b, &a.Map)
+	var s string
+	if json.Unmarshal(b, &s) == nil {
+		a.Str = s
+		return nil
+	}
+	var m map[string]any
+	if json.Unmarshal(b, &m) == nil {
+		a.Map = m
 	}
 	return nil
 }
@@ -88,10 +104,8 @@ func (a *StringOrMap) MainValue() string {
 		return a.Str
 	}
 	if a.Map != nil {
-		v, ok := a.Map["."]
-		if ok {
-			s, isStr := v.(string)
-			if isStr {
+		if v, ok := a.Map["."]; ok {
+			if s, isStr := v.(string); isStr {
 				return s
 			}
 		}
@@ -267,4 +281,31 @@ func handleDelim(t json.Token, dec *json.Decoder) (res interface{}, err error) {
 		}
 	}
 	return t, nil
+}
+
+type FetchClient struct {
+	*http.Client
+	userAgent string
+}
+
+func NewFetchClient(timeout time.Duration, userAgent string) *FetchClient {
+	return &FetchClient{
+		Client:    &http.Client{Timeout: timeout},
+		userAgent: userAgent,
+	}
+}
+
+func (f *FetchClient) Fetch(url *url.URL) (resp *http.Response, err error) {
+	req := &http.Request{
+		Method:     "GET",
+		URL:        url,
+		Host:       url.Host,
+		Proto:      "HTTP/1.1",
+		ProtoMajor: 1,
+		ProtoMinor: 1,
+		Header: http.Header{
+			"User-Agent": []string{f.userAgent},
+		},
+	}
+	return f.Do(req)
 }

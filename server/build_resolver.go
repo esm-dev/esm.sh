@@ -594,14 +594,12 @@ func (ctx *BuildContext) resolveEntry(esm ESMPath) (entry BuildEntry) {
 		// normalize the entry
 		normalizeBuildEntry(ctx, &entry)
 		if entry.esm != "" {
-			m, ok := ctx.packageJson.Browser[entry.esm]
-			if ok && isRelPathSpecifier(m) {
+			if m, ok := ctx.packageJson.Browser[entry.esm]; ok && isRelPathSpecifier(m) {
 				entry.esm = m
 			}
 		}
 		if entry.cjs != "" {
-			m, ok := ctx.packageJson.Browser[entry.cjs]
-			if ok && isRelPathSpecifier(m) {
+			if m, ok := ctx.packageJson.Browser[entry.cjs]; ok && isRelPathSpecifier(m) {
 				entry.cjs = m
 			}
 		}
