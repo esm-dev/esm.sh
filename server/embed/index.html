@@ -355,7 +355,7 @@
     import hljs from "/highlight.js@11.9.0/lib/core";
     import javascript from "/highlight.js@11.9.0/lib/languages/javascript";
     import json from "/highlight.js@11.9.0/lib/languages/json";
-    import xml from "/highlight.js@11.9.0/lib/languages/xml"; // for jsx syntax
+    import xml from "/highlight.js@11.9.0/lib/languages/xml"; // for html/jsx syntax
 
     // scroll to hashHeading
     const hashHeading = document.getElementById(location.hash.slice(1));
@@ -367,11 +367,6 @@
     hljs.registerLanguage("json", json);
     hljs.registerLanguage("jsonc", json);
     hljs.registerLanguage("xml", xml);
-    hljs.registerLanguage("bash", (hljs) => {
-      const l = bash(hljs);
-      l.keywords.built_in = "cd git sh";
-      return l;
-    });
     hljs.highlightAll();
   </script>
   <script nomodule>
