@@ -27,7 +27,7 @@ var (
 	regexpDomain              = regexp.MustCompile(`^[a-z0-9\-]+(\.[a-z0-9\-]+)*\.[a-z]+$`)
 	regexpSveltePath          = regexp.MustCompile(`/\*?svelte@([~\^]?[\w\+\-\.]+)(/|\?|&|$)`)
 	regexpVuePath             = regexp.MustCompile(`/\*?vue@([~\^]?[\w\+\-\.]+)(/|\?|&|$)`)
-	regexpLegacyVersionPrefix = regexp.MustCompile(`^/v(\d+)(/.+)?$`)
+	regexpLegacyVersionPrefix = regexp.MustCompile(`^/(v\d+)(/.+)?$`)
 )
 
 // isHttpSepcifier returns true if the specifier is a remote URL.

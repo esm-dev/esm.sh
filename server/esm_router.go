@@ -212,9 +212,9 @@ func esmRouter(debug bool) rex.Handle {
 			}
 		}
 		if legacyBuildVersion != "" && legacyBuildVersion != "stable" {
-			bv, _ := strconv.Atoi(legacyBuildVersion)
+			bv, _ := strconv.Atoi(legacyBuildVersion[1:])
 			if bv > 135 {
-				return rex.Status(403, "Invalid module path")
+				return rex.Status(400, "Invalid module path")
 			}
 		}
 
@@ -225,8 +225,9 @@ func esmRouter(debug bool) rex.Handle {
 			if err != nil {
 				return err
 			}
+			ctx.SetHeader("Content-Type", "image/x-icon")
 			ctx.SetHeader("Cache-Control", ccImmutable)
-			return rex.Content("favicon.ico", startTime, bytes.NewReader(favicon))
+			return favicon
 
 		case "/robots.txt":
 			return "User-agent: *\nAllow: /\n"
@@ -420,8 +421,9 @@ func esmRouter(debug bool) rex.Handle {
 			} else {
 				ctx.SetHeader("Content-Type", ctJavaScript)
 			}
+			ctx.SetHeader("Last-Modified", fi.ModTime().UTC().Format(http.TimeFormat))
 			ctx.SetHeader("Cache-Control", ccImmutable)
-			return rex.Content(savePath, fi.ModTime(), f) // auto closed
+			return f // auto closed
 		}
 
 		// legacy build artifact
@@ -469,18 +471,25 @@ func esmRouter(debug bool) rex.Handle {
 
 		// embed assets
 		if strings.HasPrefix(pathname, "/embed/") {
-			modTime := startTime
-			if fs, ok := embedFS.(*MockEmbedFS); ok {
-				if fi, err := fs.Lstat("server" + pathname); err == nil {
-					modTime = fi.ModTime()
-				}
-			}
 			data, err := embedFS.ReadFile("server" + pathname)
 			if err != nil {
 				return rex.Status(404, "not found")
 			}
-			ctx.SetHeader("Cache-Control", cc1day)
-			return rex.Content(pathname, modTime, bytes.NewReader(data))
+			if _, ok := embedFS.(*MockEmbedFS); ok {
+				ctx.SetHeader("Cache-Control", ccMustRevalidate)
+			} else {
+				etag := fmt.Sprintf(`W/"%d%d"`, startTime.Unix(), len(data))
+				if ifNoneMatch := ctx.GetHeader("If-None-Match"); ifNoneMatch == etag {
+					return rex.Status(http.StatusNotModified, nil)
+				}
+				ctx.SetHeader("Etag", etag)
+				ctx.SetHeader("Cache-Control", cc1day)
+			}
+			contentType := common.ContentType(pathname)
+			if contentType != "" {
+				ctx.SetHeader("Content-Type", contentType)
+			}
+			return data
 		}
 
 		var npmrc *NpmRC
@@ -1190,6 +1199,7 @@ func esmRouter(debug bool) rex.Handle {
 					} else {
 						ctx.SetHeader("Content-Type", ctJavaScript)
 					}
+					ctx.SetHeader("Last-Modified", stat.ModTime().UTC().Format(http.TimeFormat))
 					ctx.SetHeader("Cache-Control", ccImmutable)
 					if pathKind == ESMDts {
 						defer content.Close()
@@ -1199,7 +1209,7 @@ func esmRouter(debug bool) rex.Handle {
 						}
 						return bytes.ReplaceAll(buffer, []byte("{ESM_CDN_ORIGIN}"), []byte(cdnOrigin))
 					}
-					return rex.Content(savePath, stat.ModTime(), content) // auto closed
+					return content // auto closed
 				}
 			}
 		}
@@ -1472,7 +1482,7 @@ func esmRouter(debug bool) rex.Handle {
 								if legacyBuildVersion == "stable" {
 									submodule = basename
 								} else {
-									bv, _ := strconv.Atoi(legacyBuildVersion)
+									bv, _ := strconv.Atoi(legacyBuildVersion[1:])
 									if bv >= 112 {
 										submodule = basename
 									} else {
@@ -1563,10 +1573,11 @@ func esmRouter(debug bool) rex.Handle {
 				}
 				return rex.Status(500, err.Error())
 			}
+			ctx.SetHeader("Last-Modified", fi.ModTime().UTC().Format(http.TimeFormat))
 			ctx.SetHeader("Cache-Control", ccImmutable)
 			if endsWith(savePath, ".css") {
 				ctx.SetHeader("Content-Type", ctCSS)
-			} else if endsWith(savePath, ".mjs", ".js") {
+			} else {
 				ctx.SetHeader("Content-Type", ctJavaScript)
 				if isWorker {
 					f.Close()
@@ -1578,11 +1589,11 @@ func esmRouter(debug bool) rex.Handle {
 					)
 				}
 			}
-			return rex.Content(savePath, fi.ModTime(), f) // auto closed
+			return f // auto closed
 		}
 
 		buf := bytes.NewBuffer(nil)
-		fmt.Fprintf(buf, `/* esm.sh - %v */%s`, esm, EOL)
+		fmt.Fprintf(buf, "/* esm.sh - %v */\n", esm)
 
 		if isWorker {
 			moduleUrl := cdnOrigin + buildCtx.Path()
@@ -1594,17 +1605,18 @@ func esmRouter(debug bool) rex.Handle {
 		} else {
 			if len(ret.Deps) > 0 {
 				for _, dep := range ret.Deps {
-					fmt.Fprintf(buf, `import "%s";%s`, dep, EOL)
+					fmt.Fprintf(buf, "import \"%s\";\n", dep)
 				}
 			}
-			ctx.SetHeader("X-ESM-Path", buildCtx.Path())
-			fmt.Fprintf(buf, `export * from "%s";%s`, buildCtx.Path(), EOL)
+			esmPath := buildCtx.Path()
+			ctx.SetHeader("X-ESM-Path", esmPath)
+			fmt.Fprintf(buf, "export * from \"%s\";\n", esmPath)
 			if (ret.FromCJS || ret.HasDefaultExport) && (exports.Len() == 0 || exports.Has("default")) {
-				fmt.Fprintf(buf, `export { default } from "%s";%s`, buildCtx.Path(), EOL)
+				fmt.Fprintf(buf, "export { default } from \"%s\";\n", esmPath)
 			}
 			if ret.FromCJS && exports.Len() > 0 {
-				fmt.Fprintf(buf, `import __cjs_exports$ from "%s";%s`, buildCtx.Path(), EOL)
-				fmt.Fprintf(buf, `export const { %s } = __cjs_exports$;%s`, strings.Join(exports.Values(), ", "), EOL)
+				fmt.Fprintf(buf, "import __cjs_exports$ from \"%s\";\n", esmPath)
+				fmt.Fprintf(buf, "export const { %s } = __cjs_exports$;\n", strings.Join(exports.Values(), ", "))
 			}
 		}
 
