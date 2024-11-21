@@ -17,10 +17,12 @@ type CacheItem struct {
 
 func withCache[T any](key string, cacheTtl time.Duration, fetch func() (T, error)) (r T, err error) {
 	// check cache first
-	if v, ok := cacheStore.Load(key); ok {
-		item := v.(*CacheItem)
-		if item.exp.After(time.Now()) {
-			return item.data.(T), nil
+	if cacheTtl > 0 {
+		if v, ok := cacheStore.Load(key); ok {
+			item := v.(*CacheItem)
+			if item.exp.After(time.Now()) {
+				return item.data.(T), nil
+			}
 		}
 	}
 
@@ -31,10 +33,12 @@ func withCache[T any](key string, cacheTtl time.Duration, fetch func() (T, error
 	defer lock.(*sync.Mutex).Unlock()
 
 	// check cache again after lock
-	if v, ok := cacheStore.Load(key); ok {
-		item := v.(*CacheItem)
-		if item.exp.After(time.Now()) {
-			return item.data.(T), nil
+	if cacheTtl > 0 {
+		if v, ok := cacheStore.Load(key); ok {
+			item := v.(*CacheItem)
+			if item.exp.After(time.Now()) {
+				return item.data.(T), nil
+			}
 		}
 	}
 
@@ -43,10 +47,12 @@ func withCache[T any](key string, cacheTtl time.Duration, fetch func() (T, error
 		return
 	}
 
-	cacheStore.Store(key, &CacheItem{
-		data: r,
-		exp:  time.Now().Add(cacheTtl),
-	})
+	if cacheTtl > 0 {
+		cacheStore.Store(key, &CacheItem{
+			data: r,
+			exp:  time.Now().Add(cacheTtl),
+		})
+	}
 	return
 }
 

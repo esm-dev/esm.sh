@@ -14,6 +14,11 @@ import (
 	"github.com/esm-dev/esm.sh/server/storage"
 )
 
+var (
+	// global config
+	config Config
+)
+
 // Config represents the configuration of esm.sh server.
 type Config struct {
 	Port             uint16                 `json:"port"`

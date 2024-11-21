@@ -14,7 +14,6 @@ import (
 )
 
 var (
-	config       Config
 	log          *logger.Logger
 	buildQueue   *BuildQueue
 	buildStorage storage.Storage

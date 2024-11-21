@@ -26,7 +26,7 @@ type GitRef struct {
 
 // list repo refs using `git ls-remote repo`
 func listRepoRefs(repo string) (refs []GitRef, err error) {
-	return withCache(fmt.Sprintf("git ls-remote %s", repo), 10*time.Minute, func() ([]GitRef, error) {
+	return withCache(fmt.Sprintf("git ls-remote %s", repo), time.Duration(config.NpmQueryCacheTTL)*time.Second, func() ([]GitRef, error) {
 		cmd := exec.Command("git", "ls-remote", repo)
 		stdout := bytes.NewBuffer(nil)
 		errout := bytes.NewBuffer(nil)
