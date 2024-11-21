@@ -103,7 +103,7 @@ func NewBuildContext(zoneId string, npmrc *NpmRC, esm ESMPath, args BuildArgs, t
 
 func (ctx *BuildContext) Query() (*BuildMeta, error) {
 	key := ctx.getSavepath() + ".meta"
-	r, _, err := esmStorage.Get(key)
+	r, _, err := buildStorage.Get(key)
 	if err != nil && err != storage.ErrNotFound {
 		return nil, err
 	}
@@ -115,7 +115,7 @@ func (ctx *BuildContext) Query() (*BuildMeta, error) {
 			return &b, nil
 		}
 		// delete the invalid build meta
-		esmStorage.Delete(key)
+		buildStorage.Delete(key)
 	}
 	return nil, nil
 }
@@ -168,7 +168,7 @@ func (ctx *BuildContext) Build() (ret *BuildMeta, err error) {
 	if err != nil {
 		return
 	}
-	if e := esmStorage.Put(key, buf); e != nil {
+	if e := buildStorage.Put(key, buf); e != nil {
 		log.Errorf("db: %v", e)
 	}
 	return
@@ -205,7 +205,7 @@ func (ctx *BuildContext) buildModule() (result *BuildMeta, err error) {
 			}
 			buffer := bytes.NewBufferString("export default ")
 			buffer.Write(jsonData)
-			err = esmStorage.Put(ctx.getSavepath(), buffer)
+			err = buildStorage.Put(ctx.getSavepath(), buffer)
 			if err != nil {
 				return
 			}
@@ -218,7 +218,7 @@ func (ctx *BuildContext) buildModule() (result *BuildMeta, err error) {
 
 	entry := ctx.resolveEntry(ctx.esmPath)
 	if entry.isEmpty() {
-		err = fmt.Errorf("could not resolve build entry")
+		err = fmt.Errorf("could not resolve the build entry")
 		return
 	}
 	log.Debugf("build(%s): Entry%+v", ctx.esmPath, entry)
@@ -263,7 +263,7 @@ func (ctx *BuildContext) buildModule() (result *BuildMeta, err error) {
 			fmt.Fprintf(buf, "\n")
 			fmt.Fprintf(buf, `export { default } from "%s";`, importUrl)
 		}
-		err = esmStorage.Put(ctx.getSavepath(), buf)
+		err = buildStorage.Put(ctx.getSavepath(), buf)
 		if err != nil {
 			return
 		}
@@ -1216,7 +1216,7 @@ rebuild:
 				finalContent.WriteString(".map")
 			}
 
-			err = esmStorage.Put(ctx.getSavepath(), finalContent)
+			err = buildStorage.Put(ctx.getSavepath(), finalContent)
 			if err != nil {
 				return
 			}
@@ -1226,7 +1226,7 @@ rebuild:
 	for _, file := range ret.OutputFiles {
 		if strings.HasSuffix(file.Path, ".css") {
 			savePath := ctx.getSavepath()
-			err = esmStorage.Put(strings.TrimSuffix(savePath, path.Ext(savePath))+".css", bytes.NewReader(file.Contents))
+			err = buildStorage.Put(strings.TrimSuffix(savePath, path.Ext(savePath))+".css", bytes.NewReader(file.Contents))
 			if err != nil {
 				return
 			}
@@ -1244,7 +1244,7 @@ rebuild:
 				}
 				buf := bytes.NewBuffer(nil)
 				if json.NewEncoder(buf).Encode(sourceMap) == nil {
-					err = esmStorage.Put(ctx.getSavepath()+".map", buf)
+					err = buildStorage.Put(ctx.getSavepath()+".map", buf)
 					if err != nil {
 						return
 					}

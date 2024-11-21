@@ -19,15 +19,15 @@ const EOL = "\n"
 const MB = 1 << 20
 
 var (
-	regexpVersion          = regexp.MustCompile(`^[\w\+\-\.]+$`)
-	regexpVersionStrict    = regexp.MustCompile(`^\d+\.\d+\.\d+(-[\w\+\-\.]+)?$`)
-	regexpLocPath          = regexp.MustCompile(`:\d+:\d+$`)
-	regexpJSIdent          = regexp.MustCompile(`^[a-zA-Z_$][\w$]*$`)
-	regexpESMInternalIdent = regexp.MustCompile(`__[a-zA-Z]+\$`)
-	regexpVarDecl          = regexp.MustCompile(`var ([\w$]+)\s*=\s*[\w$]+$`)
-	regexpDomain           = regexp.MustCompile(`^[a-z0-9\-]+(\.[a-z0-9\-]+)*\.[a-z]+$`)
-	regexpSveltePath       = regexp.MustCompile(`/\*?svelte@([~\^]?[\w\+\-\.]+)(/|\?|&|$)`)
-	regexpVuePath          = regexp.MustCompile(`/\*?vue@([~\^]?[\w\+\-\.]+)(/|\?|&|$)`)
+	regexpVersion             = regexp.MustCompile(`^[\w\+\-\.]+$`)
+	regexpVersionStrict       = regexp.MustCompile(`^\d+\.\d+\.\d+(-[\w\+\-\.]+)?$`)
+	regexpJSIdent             = regexp.MustCompile(`^[a-zA-Z_$][\w$]*$`)
+	regexpESMInternalIdent    = regexp.MustCompile(`__[a-zA-Z]+\$`)
+	regexpVarDecl             = regexp.MustCompile(`var ([\w$]+)\s*=\s*[\w$]+$`)
+	regexpDomain              = regexp.MustCompile(`^[a-z0-9\-]+(\.[a-z0-9\-]+)*\.[a-z]+$`)
+	regexpSveltePath          = regexp.MustCompile(`/\*?svelte@([~\^]?[\w\+\-\.]+)(/|\?|&|$)`)
+	regexpVuePath             = regexp.MustCompile(`/\*?vue@([~\^]?[\w\+\-\.]+)(/|\?|&|$)`)
+	regexpLegacyVersionPrefix = regexp.MustCompile(`^/(v\d+)(/.+)?$`)
 )
 
 // isHttpSepcifier returns true if the specifier is a remote URL.
@@ -55,6 +55,11 @@ func isLocalhost(hostname string) bool {
 	return hostname == "localhost" || hostname == "127.0.0.1" || (valid.IsIPv4(hostname) && strings.HasPrefix(hostname, "192.168."))
 }
 
+// isCommitish returns true if the given string is a commit hash.
+func isCommitish(s string) bool {
+	return len(s) >= 7 && len(s) <= 40 && valid.IsHexString(s) && containsDigit(s)
+}
+
 // contains returns true if the given string is included in the given array.
 func contains(a []string, s string) bool {
 	if len(a) == 0 {
@@ -76,11 +81,6 @@ func endsWith(s string, suffixs ...string) bool {
 		}
 	}
 	return false
-}
-
-// isCommitish returns true if the given string is a commit hash.
-func isCommitish(s string) bool {
-	return len(s) >= 7 && len(s) <= 40 && valid.IsHexString(s) && containsDigit(s)
 }
 
 // containsDigit returns true if the given string contains a digit.

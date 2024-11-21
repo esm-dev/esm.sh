@@ -49,25 +49,25 @@ type NpmPackageVerions struct {
 
 // PackageJSONRaw defines the package.json of a NPM package
 type PackageJSONRaw struct {
-	Name             string                 `json:"name"`
-	Version          string                 `json:"version"`
-	Type             string                 `json:"type,omitempty"`
-	Main             string                 `json:"main,omitempty"`
-	Module           StringOrMap            `json:"module,omitempty"`
-	ES2015           StringOrMap            `json:"es2015,omitempty"`
-	JsNextMain       string                 `json:"jsnext:main,omitempty"`
-	Browser          StringOrMap            `json:"browser,omitempty"`
-	Types            string                 `json:"types,omitempty"`
-	Typings          string                 `json:"typings,omitempty"`
-	SideEffects      interface{}            `json:"sideEffects,omitempty"`
-	Dependencies     map[string]string      `json:"dependencies,omitempty"`
-	PeerDependencies map[string]string      `json:"peerDependencies,omitempty"`
-	Imports          map[string]interface{} `json:"imports,omitempty"`
-	TypesVersions    map[string]interface{} `json:"typesVersions,omitempty"`
-	Exports          json.RawMessage        `json:"exports,omitempty"`
-	Files            []string               `json:"files,omitempty"`
-	Deprecated       interface{}            `json:"deprecated,omitempty"`
-	Esmsh            interface{}            `json:"esm.sh,omitempty"`
+	Name             string            `json:"name"`
+	Version          string            `json:"version"`
+	Type             string            `json:"type,omitempty"`
+	Main             string            `json:"main,omitempty"`
+	Module           StringOrMap       `json:"module,omitempty"`
+	ES2015           StringOrMap       `json:"es2015,omitempty"`
+	JsNextMain       string            `json:"jsnext:main,omitempty"`
+	Browser          StringOrMap       `json:"browser,omitempty"`
+	Types            string            `json:"types,omitempty"`
+	Typings          string            `json:"typings,omitempty"`
+	SideEffects      any               `json:"sideEffects,omitempty"`
+	Dependencies     map[string]string `json:"dependencies,omitempty"`
+	PeerDependencies map[string]string `json:"peerDependencies,omitempty"`
+	Imports          map[string]any    `json:"imports,omitempty"`
+	TypesVersions    map[string]any    `json:"typesVersions,omitempty"`
+	Exports          json.RawMessage   `json:"exports,omitempty"`
+	Files            []string          `json:"files,omitempty"`
+	Deprecated       any               `json:"deprecated,omitempty"`
+	Esmsh            any               `json:"esm.sh,omitempty"`
 }
 
 // ToNpmPackage converts PackageJSONRaw to PackageJSON
@@ -95,9 +95,9 @@ func (a *PackageJSONRaw) ToNpmPackage() *PackageJSON {
 			deprecated = s
 		}
 	}
-	esmsh := map[string]interface{}{}
+	esmsh := map[string]any{}
 	if a.Esmsh != nil {
-		if v, ok := a.Esmsh.(map[string]interface{}); ok {
+		if v, ok := a.Esmsh.(map[string]any); ok {
 			esmsh = v
 		}
 	}
@@ -113,7 +113,7 @@ func (a *PackageJSONRaw) ToNpmPackage() *PackageJSON {
 			}
 		} else if b, ok := a.SideEffects.(bool); ok {
 			sideEffectsFalse = !b
-		} else if m, ok := a.SideEffects.([]interface{}); ok && len(m) > 0 {
+		} else if m, ok := a.SideEffects.([]any); ok && len(m) > 0 {
 			sideEffects = NewStringSet()
 			for _, v := range m {
 				if name, ok := v.(string); ok && endsWith(name, moduleExts...) {
@@ -122,15 +122,15 @@ func (a *PackageJSONRaw) ToNpmPackage() *PackageJSON {
 			}
 		}
 	}
-	var exports interface{} = nil
+	var exports any = nil
 	if rawExports := a.Exports; rawExports != nil {
-		var v interface{}
+		var v any
 		if json.Unmarshal(rawExports, &v) == nil {
 			if s, ok := v.(string); ok {
 				if len(s) > 0 {
 					exports = s
 				}
-			} else if _, ok := v.(map[string]interface{}); ok {
+			} else if _, ok := v.(map[string]any); ok {
 				om := newOrderedMap()
 				if om.UnmarshalJSON(rawExports) == nil {
 					exports = om
@@ -178,12 +178,12 @@ type PackageJSON struct {
 	Browser          map[string]string
 	Dependencies     map[string]string
 	PeerDependencies map[string]string
-	Imports          map[string]interface{}
-	TypesVersions    map[string]interface{}
-	Exports          interface{}
+	Imports          map[string]any
+	TypesVersions    map[string]any
+	Exports          any
 	Files            []string
 	Deprecated       string
-	Esmsh            map[string]interface{}
+	Esmsh            map[string]any
 }
 
 // UnmarshalJSON implements the json.Unmarshaler interface
@@ -348,10 +348,10 @@ func (npmrc *NpmRC) fetchPackageInfo(packageName string, semverOrDistTag string)
 		url += "/" + semverOrDistTag
 	}
 
-	body, err := fetchSync(url+token+user+password, 10*time.Minute, func() (body io.Reader, err error) {
+	return withCache(url+"@"+semverOrDistTag+","+token+","+user+":"+password, 10*time.Minute, func() (*PackageJSON, error) {
 		req, err := http.NewRequest("GET", url, nil)
 		if err != nil {
-			return
+			return nil, err
 		}
 
 		if token != "" {
@@ -372,106 +372,112 @@ func (npmrc *NpmRC) fetchPackageInfo(packageName string, semverOrDistTag string)
 				time.Sleep(time.Duration(retryTimes) * 100 * time.Millisecond)
 				goto do
 			}
-			return
+			return nil, err
 		}
+		defer resp.Body.Close()
 
 		if resp.StatusCode == 404 || resp.StatusCode == 401 {
-			resp.Body.Close()
 			if isFullVersionFromNpmjsOrg {
 				err = fmt.Errorf("version %s of '%s' not found", semverOrDistTag, packageName)
 			} else {
 				err = fmt.Errorf("package '%s' not found", packageName)
 			}
-			return
+			return nil, err
 		}
 
 		if resp.StatusCode != 200 {
-			ret, _ := io.ReadAll(resp.Body)
-			resp.Body.Close()
-			err = fmt.Errorf("could not get metadata of package '%s' (%s: %s)", packageName, resp.Status, string(ret))
-			return
+			msg, _ := io.ReadAll(resp.Body)
+			return nil, fmt.Errorf("could not get metadata of package '%s' (%s: %s)", packageName, resp.Status, string(msg))
 		}
 
-		body = resp.Body
-		return
-	})
-	if err != nil {
-		return
-	}
-
-	if isFullVersionFromNpmjsOrg {
-		var raw PackageJSONRaw
-		err = json.NewDecoder(body).Decode(&raw)
-		if err != nil {
-			return
-		}
-		packageJson = raw.ToNpmPackage()
-		return
-	}
-
-	var h NpmPackageVerions
-	err = json.NewDecoder(body).Decode(&h)
-	if err != nil {
-		return
-	}
-
-	if len(h.Versions) == 0 {
-		err = fmt.Errorf("missing `versions` field")
-		return
-	}
-
-	distVersion, ok := h.DistTags[semverOrDistTag]
-	if ok {
-		d := h.Versions[distVersion]
-		packageJson = d.ToNpmPackage()
-	} else {
-		var c *semver.Constraints
-		c, err = semver.NewConstraint(semverOrDistTag)
-		if err != nil && semverOrDistTag != "latest" {
-			return npmrc.fetchPackageInfo(packageName, "latest")
-		}
-		vs := make([]*semver.Version, len(h.Versions))
-		i := 0
-		for v := range h.Versions {
-			// ignore prerelease versions
-			if !strings.ContainsRune(semverOrDistTag, '-') && strings.ContainsRune(v, '-') {
-				continue
-			}
-			var ver *semver.Version
-			ver, err = semver.NewVersion(v)
+		if isFullVersionFromNpmjsOrg {
+			var h PackageJSONRaw
+			err = json.NewDecoder(resp.Body).Decode(&h)
 			if err != nil {
-				return
+				return nil, err
 			}
-			if c.Check(ver) {
-				vs[i] = ver
-				i++
-			}
+			return h.ToNpmPackage(), nil
 		}
-		if i > 0 {
-			vs = vs[:i]
-			if i > 1 {
-				sort.Sort(semver.Collection(vs))
-			}
-			d := h.Versions[vs[i-1].String()]
-			packageJson = d.ToNpmPackage()
-		}
-	}
 
-	if packageJson == nil {
-		err = fmt.Errorf("version %s of '%s' not found", semverOrDistTag, packageName)
-	}
-	return
+		var h NpmPackageVerions
+		err = json.NewDecoder(resp.Body).Decode(&h)
+		if err != nil {
+			return nil, err
+		}
+
+		if len(h.Versions) == 0 {
+			return nil, fmt.Errorf("version %s of '%s' not found", semverOrDistTag, packageName)
+		}
+
+	lookup:
+		distVersion, ok := h.DistTags[semverOrDistTag]
+		if ok {
+			raw, ok := h.Versions[distVersion]
+			if ok {
+				return raw.ToNpmPackage(), nil
+			}
+		} else {
+			if semverOrDistTag == "lastest" {
+				return nil, fmt.Errorf("version %s of '%s' not found", semverOrDistTag, packageName)
+			}
+			var c *semver.Constraints
+			c, err = semver.NewConstraint(semverOrDistTag)
+			if err != nil {
+				semverOrDistTag = "latest"
+				goto lookup
+			}
+			vs := make([]*semver.Version, len(h.Versions))
+			i := 0
+			for v := range h.Versions {
+				// ignore prerelease versions
+				if !strings.ContainsRune(semverOrDistTag, '-') && strings.ContainsRune(v, '-') {
+					continue
+				}
+				var ver *semver.Version
+				ver, err = semver.NewVersion(v)
+				if err != nil {
+					return nil, err
+				}
+				if c.Check(ver) {
+					vs[i] = ver
+					i++
+				}
+			}
+			if i > 0 {
+				vs = vs[:i]
+				if i > 1 {
+					sort.Sort(semver.Collection(vs))
+				}
+				raw, ok := h.Versions[vs[i-1].String()]
+				if ok {
+					return raw.ToNpmPackage(), nil
+				}
+			}
+		}
+		return nil, fmt.Errorf("version %s of '%s' not found", semverOrDistTag, packageName)
+	})
 }
 
 func (rc *NpmRC) installPackage(esm ESMPath) (packageJson *PackageJSON, err error) {
 	installDir := path.Join(rc.StoreDir(), esm.PackageName())
 	packageJsonPath := path.Join(installDir, "node_modules", esm.PkgName, "package.json")
 
+	// skip installation if the package has been installed
+	if existsFile(packageJsonPath) {
+		var raw PackageJSONRaw
+		err = utils.ParseJSONFile(packageJsonPath, &raw)
+		if err == nil {
+			packageJson = raw.ToNpmPackage()
+			return
+		}
+	}
+
 	// only one installation process allowed at the same time for the same package
 	v, _ := installLocks.LoadOrStore(esm.PackageName(), &sync.Mutex{})
-	lock := v.(*sync.Mutex)
-	lock.Lock()
-	defer lock.Unlock()
+	defer installLocks.Delete(esm.PackageName())
+
+	v.(*sync.Mutex).Lock()
+	defer v.(*sync.Mutex).Unlock()
 
 	// skip installation if the package has been installed
 	if existsFile(packageJsonPath) {

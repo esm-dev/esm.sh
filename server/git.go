@@ -26,44 +26,39 @@ type GitRef struct {
 
 // list repo refs using `git ls-remote repo`
 func listRepoRefs(repo string) (refs []GitRef, err error) {
-	ret, err := fetchSync(fmt.Sprintf("git ls-remote %s", repo), 10*time.Minute, func() (io.Reader, error) {
+	return withCache(fmt.Sprintf("git ls-remote %s", repo), 10*time.Minute, func() ([]GitRef, error) {
 		cmd := exec.Command("git", "ls-remote", repo)
-		out := bytes.NewBuffer(nil)
-		errOut := bytes.NewBuffer(nil)
-		cmd.Stdout = out
-		cmd.Stderr = errOut
+		stdout := bytes.NewBuffer(nil)
+		errout := bytes.NewBuffer(nil)
+		cmd.Stdout = stdout
+		cmd.Stderr = errout
 		err = cmd.Run()
 		if err != nil {
-			if errOut.Len() > 0 {
-				return nil, errors.New(errOut.String())
+			if errout.Len() > 0 {
+				return nil, errors.New(errout.String())
 			}
 			return nil, err
 		}
-		return out, nil
+		refs = make([]GitRef, 0)
+		r := bufio.NewReader(stdout)
+		for {
+			var line []byte
+			line, err = r.ReadBytes('\n')
+			if err == io.EOF {
+				err = nil
+				break
+			}
+			if err != nil {
+				return nil, err
+			}
+			sha, ref := utils.SplitByLastByte(string(bytes.TrimSpace(line)), '\t')
+			refs = append(refs, GitRef{
+				Ref: ref,
+				Sha: sha,
+			})
+		}
+		return refs, nil
 	})
-	if err != nil {
-		return
-	}
-
-	r := bufio.NewReader(ret)
-	for {
-		var line []byte
-		line, err = r.ReadBytes('\n')
-		if err == io.EOF {
-			err = nil
-			break
-		}
-		if err != nil {
-			refs = nil
-			return
-		}
-		sha, ref := utils.SplitByLastByte(string(bytes.TrimSpace(line)), '\t')
-		refs = append(refs, GitRef{
-			Ref: ref,
-			Sha: sha,
-		})
-	}
-	return
 }
 
 func ghInstall(wd, name, hash string) (err error) {

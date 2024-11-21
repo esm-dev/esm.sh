@@ -20,7 +20,7 @@ Deno.test("`/jsx-runtime` in query", async () => {
   assertStringIncludes(code, "/react@18.3.1/es2022/jsx-runtime.development.mjs");
 });
 
-Deno.test("redirect semver versioning module for deno target", async () => {
+Deno.test("redirect semantic versioning module for deno target", async () => {
   "deno target";
   {
     const res = await fetch("http://localhost:8080/preact", { redirect: "manual" });
@@ -119,4 +119,66 @@ Deno.test("dts-transformer: support `.d` extension", async () => {
   const res = await fetch("http://localhost:8080/tailwindcss@3.3.5/types/index.d.ts");
   const dts = await res.text();
   assertStringIncludes(dts, "'./config.d.ts'");
+});
+
+Deno.test("legacy routes", async () => {
+  {
+    const { esm, build, transform } = await import("http://localhost:8080/build");
+    assertEquals(typeof esm, "function");
+    assertEquals(typeof build, "function");
+    assertEquals(typeof transform, "function");
+    try {
+      esm``;
+    } catch (err) {
+      assertStringIncludes(err.message, "deprecated");
+    }
+    try {
+      await import("http://localhost:8080/");
+    } catch (err) {
+      assertStringIncludes(err.message, "deprecated");
+    }
+    try {
+      await import("http://localhost:8080/v135");
+    } catch (err) {
+      assertStringIncludes(err.message, "deprecated");
+    }
+  }
+  {
+    const res = await fetch("http://localhost:8080/stable/react@18.3.1/es2022/react.mjs", {
+      headers: { "User-Agent": "i'm a browser" },
+    });
+    assertEquals(res.status, 200);
+    assertEquals(res.headers.get("Content-Type"), "application/javascript; charset=utf-8");
+    assertStringIncludes(await res.text(), "createElement");
+  }
+  {
+    const res = await fetch("http://localhost:8080/v135/react-dom@18.3.1/es2022/client.js", {
+      headers: { "User-Agent": "i'm a browser" },
+    });
+    assertEquals(res.status, 200);
+    assertEquals(res.headers.get("Content-Type"), "application/javascript; charset=utf-8");
+    assertStringIncludes(await res.text(), "createRoot");
+  }
+  {
+    const res = await fetch("http://localhost:8080/v64/many-keys-weakmap@1.0.0/es2022/many-keys-weakmap.js", {
+      headers: { "User-Agent": "i'm a browser" },
+    });
+    assertEquals(res.status, 200);
+    assertEquals(res.headers.get("Content-Type"), "application/javascript; charset=utf-8");
+    assertStringIncludes(await res.text(), "ManyKeysWeakMap");
+  }
+  {
+    const res = await fetch("http://localhost:8080/v136/react-dom@18.3.1/es2022/client.js", {
+      headers: { "User-Agent": "i'm a browser" },
+    });
+    res.body?.cancel();
+    assertEquals(res.status, 400);
+  }
+  {
+    const res = await fetch("http://localhost:8080/react-dom@18.3.1/es2022/client.js", {
+      headers: { "User-Agent": "i'm a browser" },
+    });
+    res.body?.cancel();
+    assertEquals(res.status, 404);
+  }
 });

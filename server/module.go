@@ -105,7 +105,7 @@ func minify(code string, loader esbuild.Loader, target esbuild.Target) ([]byte, 
 }
 
 // bundleHttpModule bundles the http module and it's submodules.
-func bundleHttpModule(npmrc *NpmRC, entry string, importMap common.ImportMap, collectDependencies bool) (js []byte, jsx bool, css []byte, dependencyTree map[string][]byte, err error) {
+func bundleHttpModule(npmrc *NpmRC, entry string, importMap common.ImportMap, collectDependencies bool, fetchClient *FetchClient) (js []byte, jsx bool, css []byte, dependencyTree map[string][]byte, err error) {
 	if !isHttpSepcifier(entry) {
 		err = errors.New("require a http module")
 		return
@@ -166,7 +166,7 @@ func bundleHttpModule(npmrc *NpmRC, entry string, importMap common.ImportMap, co
 						if err != nil {
 							return esbuild.OnLoadResult{}, err
 						}
-						res, err := defaultFetchClient.Fetch(url)
+						res, err := fetchClient.Fetch(url)
 						if err != nil {
 							return esbuild.OnLoadResult{}, errors.New("failed to fetch module " + args.Path + ": " + err.Error())
 						}
@@ -225,7 +225,7 @@ func bundleHttpModule(npmrc *NpmRC, entry string, importMap common.ImportMap, co
 						case ".md":
 							query := url.Query()
 							if query.Has("jsx") {
-								jsxCode, err := common.RenderMarkdown([]byte(code), "jsx")
+								jsxCode, err := common.RenderMarkdown([]byte(code), common.MarkdownRenderKindJSX)
 								if err != nil {
 									return esbuild.OnLoadResult{}, err
 								}
@@ -233,7 +233,7 @@ func bundleHttpModule(npmrc *NpmRC, entry string, importMap common.ImportMap, co
 								loader = esbuild.LoaderJSX
 								jsx = true
 							} else if query.Has("svelte") {
-								svelteCode, err := common.RenderMarkdown([]byte(code), "svelte")
+								svelteCode, err := common.RenderMarkdown([]byte(code), common.MarkdownRenderKindSvelte)
 								if err != nil {
 									return esbuild.OnLoadResult{}, err
 								}
@@ -247,7 +247,7 @@ func bundleHttpModule(npmrc *NpmRC, entry string, importMap common.ImportMap, co
 								}
 								code = ret.Code
 							} else if query.Has("vue") {
-								vueCode, err := common.RenderMarkdown([]byte(code), "vue")
+								vueCode, err := common.RenderMarkdown([]byte(code), common.MarkdownRenderKindVue)
 								if err != nil {
 									return esbuild.OnLoadResult{}, err
 								}
@@ -261,7 +261,7 @@ func bundleHttpModule(npmrc *NpmRC, entry string, importMap common.ImportMap, co
 								}
 								code = ret.Code
 							} else {
-								js, err := common.RenderMarkdown([]byte(code), "js")
+								js, err := common.RenderMarkdown([]byte(code), common.MarkdownRenderKindJS)
 								if err != nil {
 									return esbuild.OnLoadResult{}, err
 								}
