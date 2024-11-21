@@ -14,7 +14,7 @@ import (
 )
 
 var (
-	config       *Config
+	config       Config
 	log          *logger.Logger
 	buildQueue   *BuildQueue
 	buildStorage storage.Storage
@@ -33,16 +33,17 @@ func Serve(efs EmbedFS) {
 	flag.Parse()
 
 	if !existsFile(cfile) {
-		config = DefaultConfig()
+		config = *DefaultConfig()
 		if cfile != "config.json" {
 			fmt.Println("Config file not found, use default config")
 		}
 	} else {
-		config, err = LoadConfig(cfile)
+		c, err := LoadConfig(cfile)
 		if err != nil {
 			fmt.Println(err.Error())
 			os.Exit(1)
 		}
+		config = *c
 		if debug {
 			fmt.Println("Config loaded from", cfile)
 		}

@@ -348,7 +348,7 @@ func (npmrc *NpmRC) fetchPackageInfo(packageName string, semverOrDistTag string)
 		url += "/" + semverOrDistTag
 	}
 
-	return withCache(url+"@"+semverOrDistTag+","+token+","+user+":"+password, 10*time.Minute, func() (*PackageJSON, error) {
+	return withCache(url+"@"+semverOrDistTag+","+token+","+user+":"+password, time.Duration(config.NpmQueryCacheTTL), func() (*PackageJSON, error) {
 		req, err := http.NewRequest("GET", url, nil)
 		if err != nil {
 			return nil, err

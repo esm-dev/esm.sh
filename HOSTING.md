@@ -89,6 +89,7 @@ Available environment variables:
 - `NPM_TOKEN`: The access token for the global NPM registry.
 - `NPM_USER`: The access user for the global NPM registry.
 - `NPM_PASSWORD`: The access password for the global NPM registry.
+- `NPM_QUERY_CACHE_TTL`: The cache TTL for NPM query, default is 10 minutes.
 
 You can also create your own Dockerfile based on `ghcr.io/esm-dev/esm.sh`:
 
