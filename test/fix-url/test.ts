@@ -132,6 +132,16 @@ Deno.test("legacy routes", async () => {
     } catch (err) {
       assertStringIncludes(err.message, "deprecated");
     }
+    try {
+      await import("http://localhost:8080/");
+    } catch (err) {
+      assertStringIncludes(err.message, "deprecated");
+    }
+    try {
+      await import("http://localhost:8080/v135");
+    } catch (err) {
+      assertStringIncludes(err.message, "deprecated");
+    }
   }
   {
     const res = await fetch("http://localhost:8080/stable/react@18.3.1/es2022/react.mjs", {
