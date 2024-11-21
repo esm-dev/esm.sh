@@ -20,7 +20,7 @@ Deno.test("`/jsx-runtime` in query", async () => {
   assertStringIncludes(code, "/react@18.3.1/es2022/jsx-runtime.development.mjs");
 });
 
-Deno.test("redirect semver versioning module for deno target", async () => {
+Deno.test("redirect semantic versioning module for deno target", async () => {
   "deno target";
   {
     const res = await fetch("http://localhost:8080/preact", { redirect: "manual" });
@@ -137,6 +137,13 @@ Deno.test("legacy routes", async () => {
     assertEquals(res.status, 200);
     assertEquals(res.headers.get("Content-Type"), "application/javascript; charset=utf-8");
     assertStringIncludes(await res.text(), "createRoot");
+  }
+  {
+    const res = await fetch("http://localhost:8080/react-dom@18.3.1/es2022/client.js", {
+      headers: { "User-Agent": "i'm a browser" },
+    });
+    res.body?.cancel();
+    assertEquals(res.status, 404);
   }
   {
     const res = await fetch("http://localhost:8080/v64/many-keys-weakmap@1.0.0/es2022/many-keys-weakmap.js", {

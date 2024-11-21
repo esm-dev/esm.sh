@@ -196,7 +196,7 @@ func esmRouter(debug bool) rex.Handle {
 		}
 
 		// legacy build version prefix
-		legacyBuildVersion := ""
+		var legacyBuildVersion string
 		if strings.HasPrefix(pathname, "/stable/") {
 			legacyBuildVersion = "stable"
 			pathname = pathname[7:]
@@ -1508,12 +1508,8 @@ func esmRouter(debug bool) rex.Handle {
 						return rex.Status(404, "Package or version not found")
 					}
 					if strings.Contains(msg, "no such file or directory") ||
-						strings.Contains(msg, "is not exported from package") {
-						// redirect old build path (.js) to new build path (.mjs)
-						if strings.HasSuffix(esm.SubPath, "/"+esm.PkgName+".js") {
-							url := strings.TrimSuffix(ctx.R.URL.String(), ".js") + ".mjs"
-							return rex.Redirect(url, http.StatusFound)
-						}
+						strings.Contains(msg, "is not exported from package") ||
+						strings.Contains(msg, "could not resolve the build entry") {
 						ctx.SetHeader("Cache-Control", ccImmutable)
 						return rex.Status(404, "module not found")
 					}

@@ -218,7 +218,7 @@ func (ctx *BuildContext) buildModule() (result *BuildMeta, err error) {
 
 	entry := ctx.resolveEntry(ctx.esmPath)
 	if entry.isEmpty() {
-		err = fmt.Errorf("could not resolve build entry")
+		err = fmt.Errorf("could not resolve the build entry")
 		return
 	}
 	log.Debugf("build(%s): Entry%+v", ctx.esmPath, entry)
