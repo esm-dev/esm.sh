@@ -8,9 +8,15 @@ import (
 	"path"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"strings"
 
 	"github.com/esm-dev/esm.sh/server/storage"
+)
+
+var (
+	// global config
+	config Config
 )
 
 // Config represents the configuration of esm.sh server.
@@ -32,6 +38,7 @@ type Config struct {
 	NpmUser          string                 `json:"npmUser"`
 	NpmPassword      string                 `json:"npmPassword"`
 	NpmRegistries    map[string]NpmRegistry `json:"npmRegistries"`
+	NpmQueryCacheTTL uint32                 `json:"npmQueryCacheTTL"`
 	MinifyRaw        json.RawMessage        `json:"minify"`
 	SourceMapRaw     json.RawMessage        `json:"sourceMap"`
 	CompressRaw      json.RawMessage        `json:"compress"`
@@ -178,6 +185,18 @@ func normalizeConfig(c *Config) {
 			}
 		}
 		c.NpmRegistries = regs
+	}
+	if c.NpmQueryCacheTTL == 0 {
+		v := os.Getenv("NPM_QUERY_CACHE_TTL")
+		if v != "" {
+			i, e := strconv.Atoi(v)
+			if e == nil && i >= 0 {
+				c.NpmQueryCacheTTL = uint32(i)
+			} else {
+				c.NpmQueryCacheTTL = 600
+			}
+		}
+		c.NpmQueryCacheTTL = 600
 	}
 	c.Compress = !(bytes.Equal(c.CompressRaw, []byte("false")) || os.Getenv("COMPRESS") == "false")
 	c.SourceMap = !(bytes.Equal(c.SourceMapRaw, []byte("false")) || (os.Getenv("SOURCEMAP") == "false" || os.Getenv("SOURCE_MAP") == "false"))
