@@ -123,6 +123,17 @@ Deno.test("dts-transformer: support `.d` extension", async () => {
 
 Deno.test("legacy routes", async () => {
   {
+    const { esm, build, transform } = await import("http://localhost:8080/build");
+    assertEquals(typeof esm, "function");
+    assertEquals(typeof build, "function");
+    assertEquals(typeof transform, "function");
+    try {
+      esm``;
+    } catch (err) {
+      assertStringIncludes(err.message, "deprecated");
+    }
+  }
+  {
     const res = await fetch("http://localhost:8080/stable/react@18.3.1/es2022/react.mjs", {
       headers: { "User-Agent": "i'm a browser" },
     });

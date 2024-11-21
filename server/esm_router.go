@@ -398,9 +398,9 @@ func esmRouter(debug bool) rex.Handle {
 			ctx.SetHeader("Cache-Control", ccImmutable)
 			return `
 			  const deprecated = new Error("[esm.sh] The build API has been deprecated.")
-			  export function build() { throw deprecated }
-				export function esm() { throw deprecated }
-				export function transform() { throw deprecated }
+			  export function build(_) { throw deprecated }
+				export function esm(_) { throw deprecated }
+				export function transform(_) { throw deprecated }
 				export default build
 			`
 		}
