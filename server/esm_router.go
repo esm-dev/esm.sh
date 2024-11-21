@@ -235,7 +235,7 @@ func esmRouter(debug bool) rex.Handle {
 		case "/":
 			if strings.HasPrefix(ctx.UserAgent(), "Deno/") {
 				ctx.SetHeader("Content-Type", ctJavaScript)
-				return `throw new Error("[esm.sh] The deno CL has been deprecated, please use our vscode extension instead: https://marketplace.visualstudio.com/items?itemName=ije.esm-vscode")`
+				return `throw new Error("[esm.sh] The deno CLI has been deprecated, please use our vscode extension instead: https://marketplace.visualstudio.com/items?itemName=ije.esm-vscode")`
 			}
 			ifNoneMatch := ctx.GetHeader("If-None-Match")
 			if ifNoneMatch != "" && ifNoneMatch == globalETag {
