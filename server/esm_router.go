@@ -5,7 +5,6 @@ import (
 	"crypto/sha1"
 	"encoding/hex"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -21,7 +20,6 @@ import (
 	"github.com/esm-dev/esm.sh/server/common"
 	"github.com/esm-dev/esm.sh/server/storage"
 	esbuild "github.com/evanw/esbuild/pkg/api"
-	"github.com/ije/gox/crypto/rs"
 	"github.com/ije/gox/utils"
 	"github.com/ije/gox/valid"
 	"github.com/ije/rex"
@@ -30,7 +28,6 @@ import (
 
 const (
 	ccMustRevalidate = "public, max-age=0, must-revalidate"
-	cc1hour          = "public, max-age=3600"
 	cc1day           = "public, max-age=86400"
 	ccImmutable      = "public, max-age=31536000, immutable"
 	ctJavaScript     = "application/javascript; charset=utf-8"
@@ -292,16 +289,18 @@ func esmRouter(debug bool) rex.Handle {
 			buildQueue.lock.RUnlock()
 
 			disk := "ok"
-			tmpFilepath := path.Join(os.TempDir(), rs.Hex.String(32))
-			err := os.WriteFile(tmpFilepath, make([]byte, MB), 0644)
-			if err != nil {
-				if errors.Is(err, syscall.ENOSPC) {
+			var stat syscall.Statfs_t
+			err := syscall.Statfs(config.WorkDir, &stat)
+			if err == nil {
+				avail := stat.Bavail * uint64(stat.Bsize)
+				if avail < 100*MB {
 					disk = "full"
-				} else {
-					disk = "error"
+				} else if avail < 1000*MB {
+					disk = "low"
 				}
+			} else {
+				disk = "error"
 			}
-			os.Remove(tmpFilepath)
 
 			ctx.SetHeader("Cache-Control", ccMustRevalidate)
 			return map[string]any{
@@ -1016,7 +1015,7 @@ func esmRouter(debug bool) rex.Handle {
 				if rawQuery != "" {
 					query = "?" + rawQuery
 				}
-				ctx.SetHeader("Cache-Control", cc1hour)
+				ctx.SetHeader("Cache-Control", fmt.Sprintf("public, max-age=%d", config.NpmQueryCacheTTL))
 				return rex.Redirect(fmt.Sprintf("%s/%s%s%s", cdnOrigin, esm.PackageName(), subPath, query), http.StatusFound)
 			}
 			if pathKind != ESMEntry {
@@ -1040,7 +1039,7 @@ func esmRouter(debug bool) rex.Handle {
 				if rawQuery != "" {
 					qs = "?" + rawQuery
 				}
-				ctx.SetHeader("Cache-Control", cc1hour)
+				ctx.SetHeader("Cache-Control", fmt.Sprintf("public, max-age=%d", config.NpmQueryCacheTTL))
 				return rex.Redirect(fmt.Sprintf("%s%s/%s%s@%s%s%s", cdnOrigin, registryPrefix, asteriskPrefix, pkgName, pkgVersion, subPath, qs), http.StatusFound)
 			}
 		} else {
@@ -1250,7 +1249,7 @@ func esmRouter(debug bool) rex.Handle {
 			if rawQuery != "" {
 				qs = "?" + rawQuery
 			}
-			ctx.SetHeader("Cache-Control", cc1hour)
+			ctx.SetHeader("Cache-Control", fmt.Sprintf("public, max-age=%d", config.NpmQueryCacheTTL))
 			if targetFromUA {
 				appendVaryHeader(ctx.W.Header(), "User-Agent")
 			}
@@ -1630,7 +1629,7 @@ func esmRouter(debug bool) rex.Handle {
 		if isFixedVersion {
 			ctx.SetHeader("Cache-Control", ccImmutable)
 		} else {
-			ctx.SetHeader("Cache-Control", cc1hour)
+			ctx.SetHeader("Cache-Control", fmt.Sprintf("public, max-age=%d", config.NpmQueryCacheTTL))
 		}
 		ctx.SetHeader("Content-Type", ctJavaScript)
 		if ctx.R.Method == http.MethodHead {
