@@ -3,6 +3,7 @@ package server
 import (
 	"flag"
 	"fmt"
+	"net/http"
 	"os"
 	"os/signal"
 	"path"
@@ -123,16 +124,9 @@ func Serve(efs EmbedFS) {
 	rex.Use(
 		rex.Logger(log),
 		rex.AccessLogger(accessLogger),
-		rex.Cors(rex.CorsOptions{
-			AllowedOrigins:   []string{"*"},
-			AllowedMethods:   []string{"HEAD", "GET", "POST"},
-			ExposedHeaders:   []string{"X-Esm-Path", "X-TypeScript-Types"},
-			MaxAge:           86400, // 24 hours
-			AllowCredentials: false,
-		}),
 		rex.Header("Server", "esm.sh"),
 		rex.Optional(rex.Compress(), config.Compress),
-		auth(config.AuthSecret),
+		cors(config.CorsAllowOrigins),
 		esmRouter(debug),
 	)
 
@@ -162,11 +156,40 @@ func Serve(efs EmbedFS) {
 	accessLogger.FlushBuffer()
 }
 
-func auth(secret string) rex.Handle {
+func cors(allowOrigins []string) rex.Handle {
+	allowList := NewStringSet(allowOrigins...)
 	return func(ctx *rex.Context) any {
-		if secret != "" && ctx.R.Header.Get("Authorization") != "Bearer "+secret {
-			return rex.Status(401, "Unauthorized")
+		origin := ctx.GetHeader("Origin")
+		isOptionsMethod := ctx.R.Method == "OPTIONS"
+		h := ctx.W.Header()
+		if allowList.Len() > 0 {
+			if origin != "" {
+				if !allowList.Has(origin) {
+					return rex.Status(403, "forbidden")
+				}
+				setCorsHeaders(h, isOptionsMethod, origin)
+			} else if isOptionsMethod {
+				// not a preflight request
+				return rex.Status(405, "method not allowed")
+			}
+			appendVaryHeader(h, "Origin")
+		} else {
+			setCorsHeaders(h, isOptionsMethod, "*")
+		}
+		if isOptionsMethod {
+			return rex.Status(204, nil)
 		}
 		return nil
+	}
+}
+
+func setCorsHeaders(h http.Header, isOptionsMethod bool, origin string) {
+	h.Set("Access-Control-Allow-Origin", origin)
+	h.Set("Access-Control-Allow-Methods", "HEAD, GET, POST")
+	if isOptionsMethod {
+		h.Set("Access-Control-Allow-Headers", "*")
+		h.Set("Access-Control-Max-Age", "86400")
+	} else {
+		h.Set("Access-Control-Expose-Headers", "X-Esm-Path, X-Typescript-Types")
 	}
 }

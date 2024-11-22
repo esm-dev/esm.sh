@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"net/url"
 	"os"
 	"path"
 	"path/filepath"
@@ -24,7 +25,7 @@ type Config struct {
 	Port             uint16                 `json:"port"`
 	TlsPort          uint16                 `json:"tlsPort"`
 	WorkDir          string                 `json:"workDir"`
-	AuthSecret       string                 `json:"authSecret"`
+	CorsAllowOrigins []string               `json:"corsAllowOrigins"`
 	AllowList        AllowList              `json:"allowList"`
 	BanList          BanList                `json:"banList"`
 	BuildConcurrency uint16                 `json:"buildConcurrency"`
@@ -112,8 +113,16 @@ func normalizeConfig(c *Config) {
 	if c.Port == 0 {
 		c.Port = 80
 	}
-	if c.AuthSecret == "" {
-		c.AuthSecret = os.Getenv("AUTH_SECRET")
+	if v := os.Getenv("CORS_ALLOW_ORIGINS"); v != "" {
+		for _, p := range strings.Split(v, ",") {
+			orig := strings.TrimSpace(p)
+			if orig != "" {
+				u, e := url.Parse(orig)
+				if e == nil && (u.Scheme == "http" || u.Scheme == "https") && u.Host != "" && u.Path == "/" {
+					c.CorsAllowOrigins = append(c.CorsAllowOrigins, u.Scheme+"://"+u.Host)
+				}
+			}
+		}
 	}
 	if c.BuildConcurrency == 0 {
 		c.BuildConcurrency = uint16(runtime.NumCPU())
