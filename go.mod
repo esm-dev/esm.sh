@@ -8,7 +8,7 @@ require (
 	github.com/gorilla/websocket v1.5.3
 	github.com/ije/esbuild-internal v0.24.0
 	github.com/ije/gox v0.9.1
-	github.com/ije/rex v1.13.6
+	github.com/ije/rex v1.13.7
 	github.com/yuin/goldmark v1.7.8
 	github.com/yuin/goldmark-meta v1.1.0
 	golang.org/x/net v0.31.0
@@ -21,5 +21,5 @@ require (
 	golang.org/x/crypto v0.29.0 // indirect
 	golang.org/x/sys v0.27.0 // indirect
 	golang.org/x/text v0.20.0 // indirect
-	gopkg.in/yaml.v2 v2.3.0 // indirect
+	gopkg.in/yaml.v2 v2.4.0 // indirect
 )
