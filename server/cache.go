@@ -59,9 +59,9 @@ func withCache[T any](key string, cacheTtl time.Duration, fetch func() (T, error
 func init() {
 	// cache GC
 	go func() {
+		tick := time.NewTicker(10 * time.Minute)
 		for {
-			time.Sleep(10 * time.Minute)
-			now := time.Now()
+			now := <-tick.C
 			expKeys := []any{}
 			cacheStore.Range(func(key, value any) bool {
 				item := value.(*CacheItem)
