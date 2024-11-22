@@ -118,7 +118,7 @@ func normalizeConfig(c *Config) {
 			orig := strings.TrimSpace(p)
 			if orig != "" {
 				u, e := url.Parse(orig)
-				if e == nil && (u.Scheme == "http" || u.Scheme == "https") && u.Host != "" && u.Path == "/" {
+				if e == nil && (u.Scheme == "http" || u.Scheme == "https") && u.Host != "" {
 					c.CorsAllowOrigins = append(c.CorsAllowOrigins, u.Scheme+"://"+u.Host)
 				}
 			}
