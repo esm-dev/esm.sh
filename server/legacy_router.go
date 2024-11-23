@@ -72,7 +72,7 @@ func esmLegacyRouter(ctx *rex.Context) any {
 
 	// build artifact of the `/build` API
 	if len(pathname) == 42 && strings.HasPrefix(pathname, "/~") && valid.IsHexString(pathname[2:]) {
-		return rex.Redirect(fmt.Sprintf("/v135%s@0.0.0/%s/mod.mjs", pathname, legacyGetBuildTargetByUA(ctx.UserAgent())), 301)
+		return redirect(ctx, fmt.Sprintf("/v135%s@0.0.0/%s/mod.mjs", pathname, legacyGetBuildTargetByUA(ctx.UserAgent())), true)
 	}
 
 	return nil // next
