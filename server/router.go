@@ -660,7 +660,7 @@ func esmRouter(debug bool) rex.Handle {
 			}
 			extname := path.Ext(u.Path)
 			if !(contains(moduleExts, extname) || extname == ".vue" || extname == ".svelte" || extname == ".md" || extname == ".css") {
-				return rex.Redirect(u.String(), http.StatusMovedPermanently)
+				return redirect(ctx, u.String(), true)
 			}
 			im := query.Get("im")
 			v := query.Get("v")
@@ -840,7 +840,7 @@ func esmRouter(debug bool) rex.Handle {
 		}
 
 		// redirect `/@types/PKG` to it's main dts file
-		if strings.HasPrefix(esm.PkgName, "@types/") && esm.SubBareName == "" {
+		if strings.HasPrefix(esm.PkgName, "@types/") && esm.SubPath == "" {
 			info, err := npmrc.getPackageInfo(esm.PkgName, esm.PkgVersion)
 			if err != nil {
 				return rex.Status(500, err.Error())
@@ -853,13 +853,13 @@ func esmRouter(debug bool) rex.Handle {
 			} else if info.Main != "" && strings.HasSuffix(info.Main, ".d.ts") {
 				types = info.Main
 			}
-			return rex.Redirect(fmt.Sprintf("%s/%s@%s%s", cdnOrigin, info.Name, info.Version, utils.NormalizePathname(types)), http.StatusFound)
+			return redirect(ctx, fmt.Sprintf("%s/%s@%s%s", cdnOrigin, info.Name, info.Version, utils.NormalizePathname(types)), isFixedVersion)
 		}
 
-		// redirect to main css path for CSS packages
+		// redirect to the main css path for CSS packages
 		if css := cssPackages[esm.PkgName]; css != "" && esm.SubBareName == "" {
 			url := fmt.Sprintf("%s/%s/%s", cdnOrigin, esm.String(), css)
-			return rex.Redirect(url, http.StatusFound)
+			return redirect(ctx, url, isFixedVersion)
 		}
 
 		// store the raw query
@@ -945,7 +945,7 @@ func esmRouter(debug bool) rex.Handle {
 					query = "?" + rawQuery
 				}
 				ctx.SetHeader("Cache-Control", fmt.Sprintf("public, max-age=%d", config.NpmQueryCacheTTL))
-				return rex.Redirect(fmt.Sprintf("%s/%s%s%s", cdnOrigin, esm.PackageName(), subPath, query), http.StatusFound)
+				return redirect(ctx, fmt.Sprintf("%s/%s%s%s", cdnOrigin, esm.PackageName(), subPath, query), false)
 			}
 			if pathKind != ESMEntry {
 				pkgName := esm.PkgName
@@ -969,7 +969,7 @@ func esmRouter(debug bool) rex.Handle {
 					qs = "?" + rawQuery
 				}
 				ctx.SetHeader("Cache-Control", fmt.Sprintf("public, max-age=%d", config.NpmQueryCacheTTL))
-				return rex.Redirect(fmt.Sprintf("%s%s/%s%s@%s%s%s", cdnOrigin, registryPrefix, asteriskPrefix, pkgName, pkgVersion, subPath, qs), http.StatusFound)
+				return redirect(ctx, fmt.Sprintf("%s%s/%s%s@%s%s%s", cdnOrigin, registryPrefix, asteriskPrefix, pkgName, pkgVersion, subPath, qs), false)
 			}
 		} else {
 			// `*.wasm` as an es6 module when `?module` query is set (requires `top-level-await` support)
@@ -1024,7 +1024,7 @@ func esmRouter(debug bool) rex.Handle {
 					return rex.Status(404, "File not found")
 				}
 				url := fmt.Sprintf("%s/%s@%s/%s", cdnOrigin, esm.PkgName, esm.PkgVersion, file)
-				return rex.Redirect(url, http.StatusMovedPermanently)
+				return redirect(ctx, url, true)
 			}
 
 			// package raw files
@@ -1182,7 +1182,7 @@ func esmRouter(debug bool) rex.Handle {
 			if targetFromUA {
 				appendVaryHeader(ctx.W.Header(), "User-Agent")
 			}
-			return rex.Redirect(fmt.Sprintf("%s%s/%s%s@%s%s%s", cdnOrigin, registryPrefix, asteriskPrefix, pkgName, pkgVersion, subPath, qs), http.StatusFound)
+			return redirect(ctx, fmt.Sprintf("%s%s/%s%s@%s%s%s", cdnOrigin, registryPrefix, asteriskPrefix, pkgName, pkgVersion, subPath, qs), false)
 		}
 
 		// check `?alias` query
@@ -1375,7 +1375,7 @@ func esmRouter(debug bool) rex.Handle {
 			isDev = true
 		}
 
-		// get rest build args from the pathname
+		// get build args from the pathname
 		if pathKind == ESMBuild {
 			a := strings.Split(esm.SubBareName, "/")
 			if len(a) > 0 {
@@ -1400,7 +1400,7 @@ func esmRouter(debug bool) rex.Handle {
 							target = maybeTarget
 						} else {
 							url := fmt.Sprintf("%s/%s", cdnOrigin, esm.String())
-							return rex.Redirect(url, http.StatusFound)
+							return redirect(ctx, url, isFixedVersion)
 						}
 					} else {
 						if submodule == basename {
@@ -1469,7 +1469,7 @@ func esmRouter(debug bool) rex.Handle {
 				return rex.Status(404, "Package CSS not found")
 			}
 			url := fmt.Sprintf("%s%s.css", cdnOrigin, strings.TrimSuffix(buildCtx.Path(), ".mjs"))
-			return rex.Redirect(url, 301)
+			return redirect(ctx, url, isFixedVersion)
 		}
 
 		// if the path kind is `ESMBuild`, return the build js/css content
@@ -1569,6 +1569,18 @@ func getCdnOrigin(ctx *rex.Context) string {
 		cdnOrigin = fmt.Sprintf("%s://%s", proto, ctx.R.Host)
 	}
 	return cdnOrigin
+}
+
+func redirect(ctx *rex.Context, url string, isMovedPermanently bool) any {
+	code := http.StatusFound
+	if isMovedPermanently {
+		code = http.StatusMovedPermanently
+		ctx.SetHeader("Cache-Control", ccImmutable)
+	} else {
+		ctx.SetHeader("Cache-Control", fmt.Sprintf("public, max-age=%d", config.NpmQueryCacheTTL))
+	}
+	ctx.SetHeader("Location", url)
+	return rex.Status(code, nil)
 }
 
 func errorJS(ctx *rex.Context, message string) any {

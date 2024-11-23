@@ -23,5 +23,5 @@ RUN chown node:node /bin/esmd
 
 USER node
 WORKDIR /tmp
-EXPOSE 8080
+EXPOSE 80
 CMD ["esmd"]
