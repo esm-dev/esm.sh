@@ -5,15 +5,25 @@ async function startServer(onStart: () => Promise<void>, verbose: boolean) {
   if (!success) {
     Deno.exit(code);
   }
-  if (!(await existsFile("config.json"))) {
-    await Deno.writeTextFile(
-      "config.json",
-      JSON.stringify({
+  let configJson = {};
+  try {
+    configJson = JSON.parse(await Deno.readTextFile("config.json"));
+  } catch {
+    // ignore
+  }
+  await Deno.writeTextFile(
+    "config.json",
+    JSON.stringify(
+      {
         "port": 8080,
         "workDir": ".esmd",
-      }),
-    );
-  }
+        "legacyServer": "https://legacy.esm.sh",
+        ...configJson,
+      },
+      undefined,
+      2,
+    ),
+  );
   const p = new Deno.Command("./esmd", {
     args: ["--debug"],
     stdout: verbose ? "inherit" : "null",
