@@ -149,10 +149,10 @@ func encodeBuildArgs(args BuildArgs, isDts bool) string {
 }
 
 // normalizeBuildArgs removes invalid alias, deps, external from the build args
-func normalizeBuildArgs(npmrc *NpmRC, installDir string, args *BuildArgs, url ESMPath) error {
+func normalizeBuildArgs(npmrc *NpmRC, installDir string, args *BuildArgs, esmPath ESMPath) error {
 	if len(args.alias) > 0 || len(args.deps) > 0 || args.external.Len() > 0 {
 		depsSet := NewStringSet()
-		err := walkDeps(npmrc, installDir, url, depsSet)
+		err := walkDeps(npmrc, installDir, esmPath, depsSet)
 		if err != nil {
 			return err
 		}
@@ -165,7 +165,7 @@ func normalizeBuildArgs(npmrc *NpmRC, installDir string, args *BuildArgs, url ES
 			}
 			for from, to := range alias {
 				pkgName, _, _, _ := splitESMPath(to)
-				if pkgName == url.PkgName {
+				if pkgName == esmPath.PkgName {
 					delete(alias, from)
 				} else {
 					depsSet.Add(pkgName)
@@ -176,14 +176,19 @@ func normalizeBuildArgs(npmrc *NpmRC, installDir string, args *BuildArgs, url ES
 		if len(args.deps) > 0 {
 			deps := map[string]string{}
 			for name, version := range args.deps {
-				if url.PkgName == "react-dom" && name == "react" {
-					// react version should be the same as react-dom
+				// The version of package "react" should be the same as "react-dom"
+				if esmPath.PkgName == "react-dom" && name == "react" {
 					continue
 				}
-				if depsSet.Has(name) {
-					if name != url.PkgName {
-						deps[name] = version
-					}
+				if name != esmPath.PkgName && depsSet.Has(name) {
+					deps[name] = version
+					continue
+				}
+				// fix some edge cases
+				// for example, the package "htm" doesn't declare 'preact' as a dependency explicitly
+				// as a workaround, we check if the package name is in the subPath of the package
+				if esmPath.SubBareName != "" && contains(strings.Split(esmPath.SubBareName, "/"), name) {
+					deps[name] = version
 				}
 			}
 			args.deps = deps
@@ -191,10 +196,19 @@ func normalizeBuildArgs(npmrc *NpmRC, installDir string, args *BuildArgs, url ES
 		if args.external.Len() > 0 {
 			external := NewStringSet()
 			for _, name := range args.external.Values() {
-				if strings.HasPrefix(name, "node:") || depsSet.Has(name) {
-					if name != url.PkgName || url.SubPath != "" {
+				if strings.HasPrefix(name, "node:") {
+					if nodeBuiltinModules[name[5:]] {
 						external.Add(name)
 					}
+					continue
+				}
+				// if the subModule externalizes the package entry
+				if name == esmPath.PkgName && esmPath.SubPath != "" {
+					external.Add(name)
+					continue
+				}
+				if name != esmPath.PkgName && depsSet.Has(name) {
+					external.Add(name)
 				}
 			}
 			args.external = external
@@ -203,15 +217,15 @@ func normalizeBuildArgs(npmrc *NpmRC, installDir string, args *BuildArgs, url ES
 	return nil
 }
 
-func walkDeps(npmrc *NpmRC, installDir string, esm ESMPath, mark *StringSet) (err error) {
-	if mark.Has(esm.PkgName) {
+func walkDeps(npmrc *NpmRC, installDir string, esmPath ESMPath, mark *StringSet) (err error) {
+	if mark.Has(esmPath.PkgName) {
 		return
 	}
-	mark.Add(esm.PkgName)
+	mark.Add(esmPath.PkgName)
 	var p *PackageJSON
-	pkgJsonPath := path.Join(installDir, "node_modules", ".pnpm", "node_modules", esm.PkgName, "package.json")
+	pkgJsonPath := path.Join(installDir, "node_modules", ".pnpm", "node_modules", esmPath.PkgName, "package.json")
 	if !existsFile(pkgJsonPath) {
-		pkgJsonPath = path.Join(installDir, "node_modules", esm.PkgName, "package.json")
+		pkgJsonPath = path.Join(installDir, "node_modules", esmPath.PkgName, "package.json")
 	}
 	if existsFile(pkgJsonPath) {
 		var raw PackageJSONRaw
@@ -219,8 +233,8 @@ func walkDeps(npmrc *NpmRC, installDir string, esm ESMPath, mark *StringSet) (er
 		if err == nil {
 			p = raw.ToNpmPackage()
 		}
-	} else if regexpVersionStrict.MatchString(esm.PkgVersion) || esm.GhPrefix {
-		p, err = npmrc.installPackage(esm)
+	} else if regexpVersionStrict.MatchString(esmPath.PkgVersion) || esmPath.GhPrefix {
+		p, err = npmrc.installPackage(esmPath)
 	} else {
 		return nil
 	}
@@ -235,7 +249,7 @@ func walkDeps(npmrc *NpmRC, installDir string, esm ESMPath, mark *StringSet) (er
 		pkgDeps[name] = version
 	}
 	for name, version := range pkgDeps {
-		if strings.HasPrefix(name, "@types/") || strings.HasPrefix(name, "@babel/") || strings.HasPrefix(name, "is-") {
+		if strings.HasPrefix(name, "@types/") || strings.HasPrefix(name, "@babel/") {
 			continue
 		}
 		err := walkDeps(npmrc, installDir, ESMPath{PkgName: name, PkgVersion: version}, mark)
