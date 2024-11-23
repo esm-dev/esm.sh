@@ -4,7 +4,7 @@
 
   // The port to listen server on for HTTPs requests, default is 0 (disabled). Change to 443 if you want to enable it.
   // You don't need to provide a certificate, the server uses ACME protocol to get a free certificate from Let's Encrypt.
-  // Note: if you are running the server in a docker container, you need to expose the port as `443:443`.
+  // Note: if you are running the server in a docker container, you need to expose port `443:443`.
   "tlsPort": 0,
 
   // allowed cors origins, default is allow all origins.
@@ -17,16 +17,16 @@
   // The wait time for incoming requests to wait for the build process to finish, default is 30 seconds.
   "buildWaitTime": 30,
 
-  // compress http response body with gzip/brotli, default is true.
+  // Compress http response body with gzip/brotli, default is true.
   "compress": true,
 
   // Enable minify for built js/css files, default is true,
   "minify": true,
 
-  // generate source map for built js/css files, default is true.
+  // Generate source map for built js/css files, default is true.
   "sourceMap": true,
 
-  // The storage options.
+  // The storage option.
   // Examples:
   // - Use local file system as the storage:
   //   "storage": {
@@ -100,11 +100,9 @@
   "npmScopedRegistries": {
     "@scope_name": {
       "registry": "https://your-registry.com/",
-      // add access token for authentication
-      "token": "***",
-      // or use basic authentication
-      "user": "username",
-      "password": "***"
+      "token": "",
+      "user": "",
+      "password": ""
     }
   },
 
