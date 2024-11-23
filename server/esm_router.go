@@ -1617,12 +1617,14 @@ func esmRouter(debug bool) rex.Handle {
 				fmt.Fprintf(buf, "import __cjs_exports$ from \"%s\";\n", esmPath)
 				fmt.Fprintf(buf, "export const { %s } = __cjs_exports$;\n", strings.Join(exports.Values(), ", "))
 			}
+			if !noDts && ret.Dts != "" {
+				ctx.SetHeader("X-TypeScript-Types", cdnOrigin+ret.Dts)
+				ctx.SetHeader("Access-Control-Expose-Headers", "X-ESM-Path, X-TypeScript-Types")
+			} else {
+				ctx.SetHeader("Access-Control-Expose-Headers", "X-ESM-Path")
+			}
 		}
 
-		if ret.Dts != "" && !noDts && !isWorker {
-			dtsUrl := cdnOrigin + ret.Dts
-			ctx.SetHeader("X-TypeScript-Types", dtsUrl)
-		}
 		if targetFromUA {
 			appendVaryHeader(ctx.W.Header(), "User-Agent")
 		}
@@ -1633,7 +1635,7 @@ func esmRouter(debug bool) rex.Handle {
 		}
 		ctx.SetHeader("Content-Type", ctJavaScript)
 		if ctx.R.Method == http.MethodHead {
-			return []byte{}
+			return rex.NoContent()
 		}
 		return buf.Bytes()
 	}
