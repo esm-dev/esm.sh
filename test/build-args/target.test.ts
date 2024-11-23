@@ -43,25 +43,25 @@ Deno.test("target from query", async () => {
   {
     const res = await fetch("http://localhost:8080/react@18.3.1?target=denonext");
     assertEquals(res.status, 200);
-    assert(!res.headers.get("Vary")!.includes("User-Agent"));
+    assert(!res.headers.get("Vary")?.includes("User-Agent"));
     assertStringIncludes(await res.text(), "/denonext/");
   }
   {
     const res = await fetch("http://localhost:8080/react@18.3.1?target=deno");
     assertEquals(res.status, 200);
-    assert(!res.headers.get("Vary")!.includes("User-Agent"));
+    assert(!res.headers.get("Vary")?.includes("User-Agent"));
     assertStringIncludes(await res.text(), "/deno/");
   }
   {
     const res = await fetch("http://localhost:8080/react@18.3.1?target=node");
     assertEquals(res.status, 200);
-    assert(!res.headers.get("Vary")!.includes("User-Agent"));
+    assert(!res.headers.get("Vary")?.includes("User-Agent"));
     assertStringIncludes(await res.text(), "/node/");
   }
   {
     const res = await fetch("http://localhost:8080/react@18.3.1?target=es2024");
     assertEquals(res.status, 200);
-    assert(!res.headers.get("Vary")!.includes("User-Agent"));
+    assert(!res.headers.get("Vary")?.includes("User-Agent"));
     assertStringIncludes(await res.text(), "/es2024/");
   }
 });

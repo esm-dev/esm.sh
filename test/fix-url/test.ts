@@ -6,7 +6,7 @@ Deno.test("query as version suffix", async () => {
   assertEquals(res.status, 200);
   assertEquals(res.headers.get("cache-control"), "public, max-age=31536000, immutable");
   assertEquals(res.headers.get("content-type"), "application/javascript; charset=utf-8");
-  assert(!res.headers.get("vary")!.includes("User-Agent"));
+  assert(!res.headers.get("vary")?.includes("User-Agent"));
   assertStringIncludes(code, "/react-dom@18.3.1/es2022/client.development.mjs");
 });
 
@@ -16,7 +16,7 @@ Deno.test("`/jsx-runtime` in query", async () => {
   assertEquals(res.status, 200);
   assertEquals(res.headers.get("cache-control"), "public, max-age=31536000, immutable");
   assertEquals(res.headers.get("content-type"), "application/javascript; charset=utf-8");
-  assert(!res.headers.get("vary")!.includes("User-Agent"));
+  assert(!res.headers.get("vary")?.includes("User-Agent"));
   assertStringIncludes(code, "/react@18.3.1/es2022/jsx-runtime.development.mjs");
 });
 
@@ -28,7 +28,7 @@ Deno.test("redirect semantic versioning module for deno target", async () => {
     assertEquals(res.status, 302);
     assertEquals(res.headers.get("cache-control"), "public, max-age=600");
     assertStringIncludes(res.headers.get("location")!, "http://localhost:8080/preact@");
-    assertStringIncludes(res.headers.get("vary")!, "User-Agent");
+    assertStringIncludes(res.headers.get("vary") ?? "", "User-Agent");
   }
 
   "browser target";
@@ -38,7 +38,7 @@ Deno.test("redirect semantic versioning module for deno target", async () => {
     assertEquals(res.status, 200);
     assertEquals(res.headers.get("cache-control"), "public, max-age=600");
     assertEquals(res.headers.get("content-type"), "application/javascript; charset=utf-8");
-    assertStringIncludes(res.headers.get("vary")!, "User-Agent");
+    assertStringIncludes(res.headers.get("vary") ?? "", "User-Agent");
     assertStringIncludes(code, "/preact@");
     assertStringIncludes(code, "/es2022/");
   }
