@@ -4,6 +4,7 @@ go build -o esmd $(dirname $0)/../main.go
 if [ "$?" != "0" ]; then
   exit 1
 fi
+du -h esmd
 
 mkdir -p ~/.ssh
 ssh-keyscan $SSH_HOST_NAME >> ~/.ssh/known_hosts
