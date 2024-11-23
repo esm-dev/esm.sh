@@ -19,15 +19,14 @@ const EOL = "\n"
 const MB = 1 << 20
 
 var (
-	regexpVersion             = regexp.MustCompile(`^[\w\+\-\.]+$`)
-	regexpVersionStrict       = regexp.MustCompile(`^\d+\.\d+\.\d+(-[\w\+\-\.]+)?$`)
-	regexpJSIdent             = regexp.MustCompile(`^[a-zA-Z_$][\w$]*$`)
-	regexpESMInternalIdent    = regexp.MustCompile(`__[a-zA-Z]+\$`)
-	regexpVarDecl             = regexp.MustCompile(`var ([\w$]+)\s*=\s*[\w$]+$`)
-	regexpDomain              = regexp.MustCompile(`^[a-z0-9\-]+(\.[a-z0-9\-]+)*\.[a-z]+$`)
-	regexpSveltePath          = regexp.MustCompile(`/\*?svelte@([~\^]?[\w\+\-\.]+)(/|\?|&|$)`)
-	regexpVuePath             = regexp.MustCompile(`/\*?vue@([~\^]?[\w\+\-\.]+)(/|\?|&|$)`)
-	regexpLegacyVersionPrefix = regexp.MustCompile(`^/(v\d+)(/.+)?$`)
+	regexpVersion          = regexp.MustCompile(`^[\w\+\-\.]+$`)
+	regexpVersionStrict    = regexp.MustCompile(`^\d+\.\d+\.\d+(-[\w\+\-\.]+)?$`)
+	regexpJSIdent          = regexp.MustCompile(`^[a-zA-Z_$][\w$]*$`)
+	regexpESMInternalIdent = regexp.MustCompile(`__[a-zA-Z]+\$`)
+	regexpVarDecl          = regexp.MustCompile(`var ([\w$]+)\s*=\s*[\w$]+$`)
+	regexpDomain           = regexp.MustCompile(`^[a-z0-9\-]+(\.[a-z0-9\-]+)*\.[a-z]+$`)
+	regexpSveltePath       = regexp.MustCompile(`/\*?svelte@([~\^]?[\w\+\-\.]+)(/|\?|&|$)`)
+	regexpVuePath          = regexp.MustCompile(`/\*?vue@([~\^]?[\w\+\-\.]+)(/|\?|&|$)`)
 )
 
 // isHttpSepcifier returns true if the specifier is a remote URL.

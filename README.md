@@ -35,7 +35,7 @@ With [import maps](https://github.com/WICG/import-maps), you can even use bare i
 </script>
 ```
 
-> More details about the import map usages can be found in the [**Using Import Maps**](#using-import-maps) section.
+> More usages about import maps can be found in the [**Using Import Maps**](#using-import-maps) section.
 
 ### Supported Registries
 
@@ -65,6 +65,7 @@ With [import maps](https://github.com/WICG/import-maps), you can even use bare i
   import { Bench } from "https://esm.sh/pr/tinylibs/tinybench/tinybench@a832a55";
   import { Bench } from "https://esm.sh/pr/tinybench@a832a55"; // --compact
   ```
+
 ### Specifying Dependencies
 
 By default, esm.sh rewrites import specifiers based on the package dependencies. To specify the version of these
@@ -88,19 +89,6 @@ in combination with `?deps`:
 ```js
 import useSWR from "https://esm.sh/swr?alias=react:preact/compat&deps=preact@10.5.14";
 ```
-
-### Tree Shaking
-
-By default, esm.sh exports a module with all its exported members. However, if you want to import only a specific set of
-members, you can specify them by adding a `?exports=foo,bar` query to the import statement.
-
-```js
-import { __await, __rest } from "https://esm.sh/tslib"; // 7.3KB
-import { __await, __rest } from "https://esm.sh/tslib?exports=__await,__rest"; // 489B
-```
-
-By using this feature, you can take advantage of tree shaking with esbuild and achieve a smaller bundle size. **Note,
-this feature doesn't work with CommonJS modules.**
 
 ### Bundling Strategy
 
@@ -130,6 +118,19 @@ esm.sh also supports `?bundle=all` query to bundle the module with all external 
 ```js
 import { Button } from "https://esm.sh/antd?bundle=all";
 ```
+
+### Tree Shaking
+
+By default, esm.sh exports a module with all its exported members. However, if you want to import only a specific set of
+members, you can specify them by adding a `?exports=foo,bar` query to the import statement.
+
+```js
+import { __await, __rest } from "https://esm.sh/tslib"; // 7.3KB
+import { __await, __rest } from "https://esm.sh/tslib?exports=__await,__rest"; // 489B
+```
+
+By using this feature, you can take advantage of tree shaking with esbuild and achieve a smaller bundle size. **Note,
+this feature doesn't work with CommonJS modules.**
 
 ### Development Mode
 
@@ -165,6 +166,17 @@ Other supported options of esbuild:
   import foo from "https://esm.sh/foo?ignore-annotations";
   ```
 
+### CSS-In-JS
+
+esm.sh supports importing CSS files in JS directly:
+
+```html
+<link rel="stylesheet" href="https://esm.sh/monaco-editor?css">
+```
+
+> [!IMPORTANT]
+> This only works when the package **imports CSS files in JS** directly.
+
 ### Web Worker
 
 esm.sh supports `?worker` query to load the module as a web worker:
@@ -199,27 +211,8 @@ worker.onmessage = (e) => console.log("hash is", e.data);
 worker.postMessage("The string that is being hashed");
 ```
 
-> Note: The `inject` parameter must be a valid JavaScript code, and it will be executed in the worker context.
-
-### Package CSS
-
-```html
-<link rel="stylesheet" href="https://esm.sh/monaco-editor?css">
-```
-
-This only works when the package **imports CSS files in JS** directly.
-
-### Importing WASM as Module
-
-esm.sh supports importing wasm modules in JS directly, to do that, you need to add `?module` query to the import URL:
-
-```js
-import wasm from "https://esm.sh/@dqbd/tiktoken@1.0.3/tiktoken_bg.wasm?module";
-
-const { exports } = new WebAssembly.Instance(wasm, imports);
-```
-
-> Note: The `*.wasm?module` pattern requires the [top-level-await](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Operators/await#top_level_await) feature to be supported by the browser.
+> [!IMPORTANT]
+> The `inject` parameter must be a valid JavaScript code, and it will be executed in the worker context.
 
 ## Using Import Maps
 
@@ -280,6 +273,7 @@ do so, you need to add a `?raw` query to the request URL.
 <script src="https://esm.sh/p5/lib/p5.min.js?raw"></script>
 ```
 
+> [!TIP]
 > You may alternatively use `raw.esm.sh/<PATH>` as the origin, which is equivalent to `esm.sh/<PATH>?raw`,
 > that transitive references in the raw assets will also be raw requests.
 

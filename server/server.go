@@ -22,6 +22,17 @@ var (
 	buildStorage storage.Storage
 )
 
+const (
+	cc1day           = "public, max-age=86400"
+	ccMustRevalidate = "public, max-age=0, must-revalidate"
+	ccImmutable      = "public, max-age=31536000, immutable"
+	ctJavaScript     = "application/javascript; charset=utf-8"
+	ctTypeScript     = "application/typescript; charset=utf-8"
+	ctJSON           = "application/json; charset=utf-8"
+	ctCSS            = "text/css; charset=utf-8"
+	ctHtml           = "text/html; charset=utf-8"
+)
+
 // Serve serves the esm.sh server
 func Serve(efs EmbedFS) {
 	var (
@@ -127,9 +138,10 @@ func Serve(efs EmbedFS) {
 		rex.Logger(log),
 		rex.AccessLogger(accessLogger),
 		rex.Header("Server", "esm.sh"),
-		rex.Optional(rex.Compress(), config.Compress),
 		cors(config.CorsAllowOrigins),
+		rex.Optional(rex.Compress(), config.Compress),
 		rex.Optional(customLandingPage(&config.CustomLandingPage), config.CustomLandingPage.Origin != ""),
+		rex.Optional(esmLegacyRouter, config.LegacyServer != ""),
 		esmRouter(debug),
 	)
 
@@ -197,7 +209,22 @@ func customLandingPage(options *LandingPageOptions) rex.Handle {
 			if query != "" {
 				query = "?" + query
 			}
-			res, err := http.Get(options.Origin + ctx.R.URL.Path + query)
+			url, err := ctx.R.URL.Parse(options.Origin + ctx.R.URL.Path + query)
+			if err != nil {
+				return rex.Err(http.StatusBadRequest, "Invalid url")
+			}
+			req := &http.Request{
+				Method:     "GET",
+				URL:        url,
+				Host:       url.Host,
+				Proto:      "HTTP/1.1",
+				ProtoMajor: 1,
+				ProtoMinor: 1,
+				Header: http.Header{
+					"User-Agent": []string{ctx.UserAgent()},
+				},
+			}
+			res, err := http.DefaultClient.Do(req)
 			if err != nil {
 				return rex.Err(http.StatusBadGateway, "Failed to fetch custom landing page")
 			}
