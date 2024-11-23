@@ -7,7 +7,9 @@ import (
 	"os"
 	"os/signal"
 	"path"
+	"strings"
 	"syscall"
+	"time"
 
 	"github.com/esm-dev/esm.sh/server/storage"
 	logger "github.com/ije/gox/log"
@@ -127,6 +129,7 @@ func Serve(efs EmbedFS) {
 		rex.Header("Server", "esm.sh"),
 		rex.Optional(rex.Compress(), config.Compress),
 		cors(config.CorsAllowOrigins),
+		rex.Optional(customLandingPage(&config.CustomLandingPage), config.CustomLandingPage.Origin != ""),
 		esmRouter(debug),
 	)
 
@@ -179,7 +182,53 @@ func cors(allowOrigins []string) rex.Handle {
 		if isOptionsMethod {
 			return rex.NoContent()
 		}
-		return nil
+		return nil // next
+	}
+}
+
+func customLandingPage(options *LandingPageOptions) rex.Handle {
+	assets := NewStringSet()
+	for _, p := range options.Assets {
+		assets.Add("/" + strings.TrimPrefix(p, "/"))
+	}
+	return func(ctx *rex.Context) any {
+		if ctx.R.URL.Path == "/" || assets.Has(ctx.R.URL.Path) {
+			query := ctx.R.URL.RawQuery
+			if query != "" {
+				query = "?" + query
+			}
+			res, err := http.Get(options.Origin + ctx.R.URL.Path + query)
+			if err != nil {
+				return rex.Err(http.StatusBadGateway, "Failed to fetch custom landing page")
+			}
+			etag := res.Header.Get("Etag")
+			if etag != "" {
+				if ctx.GetHeader("If-None-Match") == etag {
+					return rex.Status(http.StatusNotModified, nil)
+				}
+				ctx.SetHeader("Etag", etag)
+			} else {
+				lastModified := res.Header.Get("Last-Modified")
+				if lastModified != "" {
+					v := ctx.GetHeader("If-Modified-Since")
+					if v != "" {
+						timeIfModifiedSince, e1 := time.Parse(http.TimeFormat, v)
+						timeLastModified, e2 := time.Parse(http.TimeFormat, lastModified)
+						if e1 == nil && e2 == nil && !timeIfModifiedSince.After(timeLastModified) {
+							return rex.Status(http.StatusNotModified, nil)
+						}
+					}
+					ctx.SetHeader("Last-Modified", lastModified)
+				}
+			}
+			cacheCache := res.Header.Get("Cache-Control")
+			if cacheCache == "" {
+				ctx.SetHeader("Cache-Control", ccMustRevalidate)
+			}
+			ctx.SetHeader("Content-Type", res.Header.Get("Content-Type"))
+			return res.Body // auto closed
+		}
+		return nil // next
 	}
 }
 

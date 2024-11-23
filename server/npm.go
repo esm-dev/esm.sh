@@ -223,8 +223,8 @@ func NewNpmRcFromConfig() *NpmRC {
 			},
 		},
 	}
-	if len(config.NpmRegistries) > 0 {
-		for scope, reg := range config.NpmRegistries {
+	if len(config.NpmScopedRegistries) > 0 {
+		for scope, reg := range config.NpmScopedRegistries {
 			rc.Registries[scope] = NpmRegistry{
 				Registry: reg.Registry,
 				Token:    reg.Token,

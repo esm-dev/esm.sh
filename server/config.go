@@ -13,6 +13,7 @@ import (
 	"strings"
 
 	"github.com/esm-dev/esm.sh/server/storage"
+	"github.com/ije/gox/term"
 )
 
 var (
@@ -22,30 +23,36 @@ var (
 
 // Config represents the configuration of esm.sh server.
 type Config struct {
-	Port             uint16                 `json:"port"`
-	TlsPort          uint16                 `json:"tlsPort"`
-	WorkDir          string                 `json:"workDir"`
-	CorsAllowOrigins []string               `json:"corsAllowOrigins"`
-	AllowList        AllowList              `json:"allowList"`
-	BanList          BanList                `json:"banList"`
-	BuildConcurrency uint16                 `json:"buildConcurrency"`
-	BuildWaitTime    uint16                 `json:"buildWaitTime"`
-	Storage          storage.StorageOptions `json:"storage"`
-	CacheRawFile     bool                   `json:"cacheRawFile"`
-	LogDir           string                 `json:"logDir"`
-	LogLevel         string                 `json:"logLevel"`
-	NpmRegistry      string                 `json:"npmRegistry"`
-	NpmToken         string                 `json:"npmToken"`
-	NpmUser          string                 `json:"npmUser"`
-	NpmPassword      string                 `json:"npmPassword"`
-	NpmRegistries    map[string]NpmRegistry `json:"npmRegistries"`
-	NpmQueryCacheTTL uint32                 `json:"npmQueryCacheTTL"`
-	MinifyRaw        json.RawMessage        `json:"minify"`
-	SourceMapRaw     json.RawMessage        `json:"sourceMap"`
-	CompressRaw      json.RawMessage        `json:"compress"`
-	Minify           bool                   `json:"-"`
-	SourceMap        bool                   `json:"-"`
-	Compress         bool                   `json:"-"`
+	Port                uint16                 `json:"port"`
+	TlsPort             uint16                 `json:"tlsPort"`
+	CustomLandingPage   LandingPageOptions     `json:"customLandingPage"`
+	WorkDir             string                 `json:"workDir"`
+	CorsAllowOrigins    []string               `json:"corsAllowOrigins"`
+	AllowList           AllowList              `json:"allowList"`
+	BanList             BanList                `json:"banList"`
+	BuildConcurrency    uint16                 `json:"buildConcurrency"`
+	BuildWaitTime       uint16                 `json:"buildWaitTime"`
+	Storage             storage.StorageOptions `json:"storage"`
+	CacheRawFile        bool                   `json:"cacheRawFile"`
+	LogDir              string                 `json:"logDir"`
+	LogLevel            string                 `json:"logLevel"`
+	NpmRegistry         string                 `json:"npmRegistry"`
+	NpmToken            string                 `json:"npmToken"`
+	NpmUser             string                 `json:"npmUser"`
+	NpmPassword         string                 `json:"npmPassword"`
+	NpmScopedRegistries map[string]NpmRegistry `json:"npmScopedRegistries"`
+	NpmQueryCacheTTL    uint32                 `json:"npmQueryCacheTTL"`
+	MinifyRaw           json.RawMessage        `json:"minify"`
+	SourceMapRaw        json.RawMessage        `json:"sourceMap"`
+	CompressRaw         json.RawMessage        `json:"compress"`
+	Minify              bool                   `json:"-"`
+	SourceMap           bool                   `json:"-"`
+	Compress            bool                   `json:"-"`
+}
+
+type LandingPageOptions struct {
+	Origin string   `json:"origin"`
+	Assets []string `json:"assets"`
 }
 
 type BanList struct {
@@ -124,6 +131,30 @@ func normalizeConfig(c *Config) {
 			}
 		}
 	}
+	if c.CustomLandingPage.Origin == "" {
+		v := os.Getenv("CUSTOM_LANDING_PAGE_ORIGIN")
+		if v != "" {
+			c.CustomLandingPage.Origin = v
+			if v := os.Getenv("CUSTOM_LANDING_PAGE_ASSETS"); v != "" {
+				a := strings.Split(v, ",")
+				for _, p := range a {
+					p = strings.TrimSpace(p)
+					if p != "" {
+						c.CustomLandingPage.Assets = append(c.CustomLandingPage.Assets, p)
+					}
+				}
+			}
+		}
+	}
+	if origin := c.CustomLandingPage.Origin; origin != "" {
+		u, err := url.Parse(origin)
+		if err != nil || (u.Scheme != "http" && u.Scheme != "https") {
+			fmt.Println(term.Red("[error] invalid custom landing page origin: " + origin))
+			c.CustomLandingPage = LandingPageOptions{}
+		} else {
+			c.CustomLandingPage.Origin = u.Scheme + "://" + u.Host
+		}
+	}
 	if c.BuildConcurrency == 0 {
 		c.BuildConcurrency = uint16(runtime.NumCPU())
 	}
@@ -183,9 +214,9 @@ func normalizeConfig(c *Config) {
 	if c.NpmPassword == "" {
 		c.NpmPassword = os.Getenv("NPM_PASSWORD")
 	}
-	if len(c.NpmRegistries) > 0 {
+	if len(c.NpmScopedRegistries) > 0 {
 		regs := make(map[string]NpmRegistry)
-		for scope, rc := range c.NpmRegistries {
+		for scope, rc := range c.NpmScopedRegistries {
 			if strings.HasPrefix(scope, "@") && isHttpSepcifier(rc.Registry) {
 				rc.Registry = strings.TrimRight(rc.Registry, "/") + "/"
 				regs[scope] = rc
@@ -193,7 +224,7 @@ func normalizeConfig(c *Config) {
 				fmt.Printf("[error] invalid npm registry for scope %s: %s\n", scope, rc.Registry)
 			}
 		}
-		c.NpmRegistries = regs
+		c.NpmScopedRegistries = regs
 	}
 	if c.NpmQueryCacheTTL == 0 {
 		v := os.Getenv("NPM_QUERY_CACHE_TTL")

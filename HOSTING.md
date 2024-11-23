@@ -75,21 +75,23 @@ docker run -p 8080:8080 \
 
 Available environment variables:
 
-- `CORS_ALLOW_ORIGINS`: The CORS allow origins separated by comma(,), default is allow all origins.
 - `COMPRESS`: Compress http responses with gzip/brotli, default is `true`.
+- `CUSTOM_LANDING_PAGE_ORIGIN`: The custom landing page origin, default is empty.
+- `CUSTOM_LANDING_PAGE_ASSETS`: The custom landing page assets separated by comma(,), default is empty.
+- `CORS_ALLOW_ORIGINS`: The CORS allow origins separated by comma(,), default is allow all origins.
+- `LOG_LEVEL`: The log level, available values are ["debug", "info", "warn", "error"], default is "info".
 - `MINIFY`: Minify the built JS/CSS files, default is `true`.
+- `NPM_QUERY_CACHE_TTL`: The cache TTL for NPM query, default is 10 minutes.
+- `NPM_REGISTRY`: The global NPM registry, default is "https://registry.npmjs.org/".
+- `NPM_TOKEN`: The access token for the global NPM registry.
+- `NPM_USER`: The access user for the global NPM registry.
+- `NPM_PASSWORD`: The access password for the global NPM registry.
 - `SOURCEMAP`: Generate source map for built JS/CSS files, default is `true`.
 - `STORAGE_TYPE`: The storage type, available values are ["fs", "s3"], default is "fs".
 - `STORAGE_ENDPOINT`: The storage endpoint, default is "~/.esmd/storage".
 - `STORAGE_REGION`: The region for S3 storage.
 - `STORAGE_ACCESS_KEY_ID`: The access key for S3 storage.
 - `STORAGE_SECRET_ACCESS_KEY`: The secret key for S3 storage.
-- `NPM_REGISTRY`: The global NPM registry, default is "https://registry.npmjs.org/".
-- `NPM_TOKEN`: The access token for the global NPM registry.
-- `NPM_USER`: The access user for the global NPM registry.
-- `NPM_PASSWORD`: The access password for the global NPM registry.
-- `NPM_QUERY_CACHE_TTL`: The cache TTL for NPM query, default is 10 minutes.
-- `LOG_LEVEL`: The log level, available values are ["debug", "info", "warn", "error"], default is "info".
 
 You can also create your own Dockerfile based on `ghcr.io/esm-dev/esm.sh`:
 

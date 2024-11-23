@@ -17,6 +17,15 @@
   // The wait time for incoming requests to wait for the build process to finish, default is 30 seconds.
   "buildWaitTime": 30,
 
+  // compress http response body with gzip/brotli, default is true.
+  "compress": true,
+
+  // Enable minify for built js/css files, default is true,
+  "minify": true,
+
+  // generate source map for built js/css files, default is true.
+  "sourceMap": true,
+
   // The storage options.
   // Examples:
   // - Use local file system as the storage:
@@ -52,6 +61,17 @@
   // a S3-compatible storage.
   "cacheRawFile": false,
 
+  // The custom landing page, the server will proxy the `/` path to the `origin` if it's provided.
+  // If your custom landing page owns assets, you also need to provide the asset paths in the `assets` field.
+  "customLandingPage":  {
+    "origin": "https://example.com",
+    "assets": [
+      "favicon.ico",
+      "assets/app.js",
+      "assets/app.css"
+    ]
+  },
+
   // The work directory for the server, default is "~/.esmd".
   "workDir": "~/.esmd",
 
@@ -60,6 +80,9 @@
 
   // The log level, available values are ["debug", "info", "warn", "error"], default is "info".
   "logLevel": "info",
+
+  // The cache TTL for npm packages query, default is 600 seconds (10 minutes).
+  "npmQueryCacheTTL": 600,
 
   // The global npm registry, default is "https://registry.npmjs.org/".
   "npmRegistry": "https://registry.npmjs.org/",
@@ -74,7 +97,7 @@
 
   // Registries for scoped packages. This will ensure packages with these scopes get downloaded
   // from specific registry, default is empty.
-  "npmRegistries": {
+  "npmScopedRegistries": {
     "@scope_name": {
       "registry": "https://your-registry.com/",
       // add access token for authentication
@@ -84,18 +107,6 @@
       "password": "***"
     }
   },
-
-  // The cache TTL for npm packages query, default is 600 seconds (10 minutes).
-  "npmQueryCacheTTL": 600,
-
-  // compress http response body with gzip/brotli, default is true.
-  "compress": true,
-
-  // Enable minify for built js/css files, default is true,
-  "minify": true,
-
-  // generate source map for built js/css files, default is true.
-  "sourceMap": true,
 
   // The list to ban some packages or scopes, default no ban.
   "banList": {

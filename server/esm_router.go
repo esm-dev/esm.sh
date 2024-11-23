@@ -27,8 +27,8 @@ import (
 )
 
 const (
-	ccMustRevalidate = "public, max-age=0, must-revalidate"
 	cc1day           = "public, max-age=86400"
+	ccMustRevalidate = "public, max-age=0, must-revalidate"
 	ccImmutable      = "public, max-age=31536000, immutable"
 	ctJavaScript     = "application/javascript; charset=utf-8"
 	ctTypeScript     = "application/typescript; charset=utf-8"
@@ -44,7 +44,7 @@ func esmRouter(debug bool) rex.Handle {
 	)
 
 	return func(ctx *rex.Context) any {
-		pathname := ctx.Pathname()
+		pathname := ctx.R.URL.Path
 
 		// ban malicious requests
 		if strings.HasPrefix(pathname, "/.") || strings.HasSuffix(pathname, ".php") {
@@ -234,8 +234,7 @@ func esmRouter(debug bool) rex.Handle {
 				ctx.SetHeader("Content-Type", ctJavaScript)
 				return `throw new Error("[esm.sh] The deno CLI has been deprecated, please use our vscode extension instead: https://marketplace.visualstudio.com/items?itemName=ije.esm-vscode")`
 			}
-			ifNoneMatch := ctx.GetHeader("If-None-Match")
-			if ifNoneMatch != "" && ifNoneMatch == globalETag {
+			if ctx.GetHeader("If-None-Match") == globalETag {
 				return rex.Status(http.StatusNotModified, nil)
 			}
 			indexHTML, err := embedFS.ReadFile("server/embed/index.html")
