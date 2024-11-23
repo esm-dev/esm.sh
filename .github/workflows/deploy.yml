@@ -5,7 +5,7 @@ on:
     branches: [main]
 
 jobs:
-  test:
+  deploy:
     name: Deploy main branch to next.esm.sh
     runs-on: ubuntu-latest
 

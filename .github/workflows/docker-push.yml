@@ -6,8 +6,8 @@ on:
       - v*
 
 jobs:
-  push_image:
-    name: Push image to ghcr.io
+  push:
+    name: Push docker image to ghcr.io
     runs-on: ubuntu-latest
     permissions:
       packages: write

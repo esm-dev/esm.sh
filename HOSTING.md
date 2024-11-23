@@ -96,7 +96,7 @@ Available environment variables:
 You can also create your own Dockerfile based on `ghcr.io/esm-dev/esm.sh`:
 
 ```dockerfile
-FROM ghcr.io/esm-dev/esm.sh:v135_6
+FROM ghcr.io/esm-dev/esm.sh:latest
 ADD ./config.json /etc/esmd/config.json
 CMD ["esmd", "--config", "/etc/esmd/config.json"]
 ```
