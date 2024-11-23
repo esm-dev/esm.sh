@@ -9,6 +9,7 @@ require (
 	github.com/ije/esbuild-internal v0.24.0
 	github.com/ije/gox v0.9.1
 	github.com/ije/rex v1.13.8
+	github.com/mssola/useragent v1.0.0
 	github.com/yuin/goldmark v1.7.8
 	github.com/yuin/goldmark-meta v1.1.0
 	golang.org/x/net v0.31.0
@@ -17,7 +18,6 @@ require (
 
 require (
 	github.com/andybalholm/brotli v1.1.1 // indirect
-	github.com/mssola/useragent v1.0.0 // indirect
 	github.com/rs/cors v1.11.1 // indirect
 	golang.org/x/crypto v0.29.0 // indirect
 	golang.org/x/sys v0.27.0 // indirect
