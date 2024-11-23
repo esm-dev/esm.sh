@@ -177,7 +177,7 @@ func cors(allowOrigins []string) rex.Handle {
 			setCorsHeaders(h, isOptionsMethod, "*")
 		}
 		if isOptionsMethod {
-			return rex.Status(204, nil)
+			return rex.NoContent()
 		}
 		return nil
 	}
@@ -185,11 +185,8 @@ func cors(allowOrigins []string) rex.Handle {
 
 func setCorsHeaders(h http.Header, isOptionsMethod bool, origin string) {
 	h.Set("Access-Control-Allow-Origin", origin)
-	h.Set("Access-Control-Allow-Methods", "HEAD, GET, POST")
 	if isOptionsMethod {
 		h.Set("Access-Control-Allow-Headers", "*")
 		h.Set("Access-Control-Max-Age", "86400")
-	} else {
-		h.Set("Access-Control-Expose-Headers", "X-Esm-Path, X-Typescript-Types")
 	}
 }

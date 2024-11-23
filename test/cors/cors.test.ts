@@ -6,7 +6,6 @@ Deno.test("CORS", async () => {
     res.body?.cancel();
     assertEquals(res.status, 204);
     assertEquals(res.headers.get("Access-Control-Allow-Origin"), "*");
-    assertEquals(res.headers.get("Access-Control-Allow-Methods"), "HEAD, GET, POST");
     assertEquals(res.headers.get("Access-Control-Allow-Headers"), "*");
     assertEquals(res.headers.get("Access-Control-Max-Age"), "86400");
   }
@@ -14,8 +13,14 @@ Deno.test("CORS", async () => {
     const res = await fetch("http://localhost:8080/react@18.2.0");
     res.body?.cancel();
     assertEquals(res.headers.get("Access-Control-Allow-Origin"), "*");
-    assertEquals(res.headers.get("Access-Control-Allow-Methods"), "HEAD, GET, POST");
-    assertEquals(res.headers.get("Access-Control-Expose-Headers"), "X-Esm-Path, X-Typescript-Types");
+    assertEquals(res.headers.get("Access-Control-Expose-Headers"), "X-ESM-Path, X-TypeScript-Types");
+    assertEquals(res.headers.get("Vary"), "User-Agent");
+  }
+  {
+    const res = await fetch("http://localhost:8080/react@18.2.0?no-dts");
+    res.body?.cancel();
+    assertEquals(res.headers.get("Access-Control-Allow-Origin"), "*");
+    assertEquals(res.headers.get("Access-Control-Expose-Headers"), "X-ESM-Path");
     assertEquals(res.headers.get("Vary"), "User-Agent");
   }
   {
@@ -26,8 +31,7 @@ Deno.test("CORS", async () => {
     });
     res.body?.cancel();
     assertEquals(res.headers.get("Access-Control-Allow-Origin"), "*");
-    assertEquals(res.headers.get("Access-Control-Allow-Methods"), "HEAD, GET, POST");
-    assertEquals(res.headers.get("Access-Control-Expose-Headers"), "X-Esm-Path, X-Typescript-Types");
+    assertEquals(res.headers.get("Access-Control-Expose-Headers"), "X-ESM-Path, X-TypeScript-Types");
     assertEquals(res.headers.get("Vary"), "User-Agent");
   }
 });
