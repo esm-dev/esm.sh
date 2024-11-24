@@ -12,7 +12,6 @@ import (
 type BuildArgs struct {
 	alias             map[string]string
 	deps              map[string]string
-	externalAll       bool
 	external          *StringSet
 	exports           *StringSet
 	conditions        []string
@@ -58,8 +57,6 @@ func decodeBuildArgs(argsString string) (args BuildArgs, err error) {
 				args.conditions = append(args.conditions, strings.Split(p[1:], ",")...)
 			} else {
 				switch p {
-				case "*":
-					args.externalAll = true
 				case "r":
 					args.externalRequire = true
 				case "k":
@@ -95,9 +92,6 @@ func encodeBuildArgs(args BuildArgs, isDts bool) string {
 			ss.Sort()
 			lines = append(lines, fmt.Sprintf("d%s", strings.Join(ss, ",")))
 		}
-	}
-	if args.externalAll {
-		lines = append(lines, "*")
 	}
 	if args.external.Len() > 0 {
 		var ss sort.StringSlice
@@ -148,8 +142,8 @@ func encodeBuildArgs(args BuildArgs, isDts bool) string {
 	return ""
 }
 
-// normalizeBuildArgs removes invalid alias, deps, external from the build args
-func normalizeBuildArgs(npmrc *NpmRC, installDir string, args *BuildArgs, esmPath ESMPath) error {
+// resolveBuildArgs resolves `alias`, `deps`, `external` of the build args
+func resolveBuildArgs(npmrc *NpmRC, installDir string, args *BuildArgs, esmPath ESMPath) error {
 	if len(args.alias) > 0 || len(args.deps) > 0 || args.external.Len() > 0 {
 		depsSet := NewStringSet()
 		err := walkDeps(npmrc, installDir, esmPath, depsSet)
@@ -233,7 +227,7 @@ func walkDeps(npmrc *NpmRC, installDir string, esmPath ESMPath, mark *StringSet)
 		if err == nil {
 			p = raw.ToNpmPackage()
 		}
-	} else if regexpVersionStrict.MatchString(esmPath.PkgVersion) || esmPath.GhPrefix {
+	} else if regexpVersionStrict.MatchString(esmPath.PkgVersion) || esmPath.GhPrefix || esmPath.PrPrefix {
 		p, err = npmrc.installPackage(esmPath)
 	} else {
 		return nil

@@ -16,10 +16,10 @@ import (
 )
 
 func esmLegacyRouter(ctx *rex.Context) any {
-	pathname := ctx.R.URL.Path
 	method := ctx.R.Method
+	pathname := ctx.R.URL.Path
 
-	// Deprecated legacy build script
+	// build API (deprecated)
 	if pathname == "/build" {
 		if method == "POST" {
 			return rex.Status(403, "The `/build` API has been deprecated.")
@@ -38,39 +38,40 @@ func esmLegacyRouter(ctx *rex.Context) any {
 		return rex.Status(405, "Method Not Allowed")
 	}
 
-	// stable build artifact
+	// `/stable/react/es2022/react.mjs`
 	if strings.HasPrefix(pathname, "/stable/") {
-		if endsWith(pathname, ".js", ".mjs", ".map", ".css") && hasTargetSegment(pathname) {
+		pathname = pathname[7:]
+		if len(pathname) >= 14 && endsWith(pathname, ".js", ".mjs", ".map", ".css") && hasTargetSegment(pathname) {
 			return proxyLegacyBuildArtifact(ctx, false)
 		}
-		ctx.R.URL.Path = pathname[7:]
-		return nil
+		ctx.R.URL.Path = pathname
+		return nil // next
 	}
 
-	// build artifact
+	// `/v134/react-dom/es2022/react-dom.mjs`
 	if strings.HasPrefix(pathname, "/v") {
 		legacyBuildVersion, path := utils.SplitByFirstByte(pathname[2:], '/')
 		if valid.IsDigtalOnlyString(legacyBuildVersion) {
 			bv, _ := strconv.Atoi(legacyBuildVersion)
 			if bv <= 0 || bv > 135 {
-				return rex.Status(400, "Invalid module path")
-			}
-			if path == "" && strings.HasPrefix(ctx.UserAgent(), "Deno/") {
-				ctx.SetHeader("Content-Type", ctJavaScript)
-				return `throw new Error("[esm.sh] The deno CLI has been deprecated, please use our vscode extension instead: https://marketplace.visualstudio.com/items?itemName=ije.esm-vscode")`
-			}
-			if endsWith(pathname, ".js", ".mjs", ".map", ".css") && hasTargetSegment(pathname) {
-				return proxyLegacyBuildArtifact(ctx, false)
+				return rex.Status(400, "Invalid Module Path")
 			}
 			if path == "" {
 				path = "/"
 			}
+			if path == "/" && strings.HasPrefix(ctx.UserAgent(), "Deno/") {
+				ctx.SetHeader("Content-Type", ctJavaScript)
+				return `throw new Error("[esm.sh] The deno CLI has been deprecated, please use our vscode extension instead: https://marketplace.visualstudio.com/items?itemName=ije.esm-vscode")`
+			}
+			if len(path) >= 14 && endsWith(path, ".js", ".mjs", ".map", ".css") && hasTargetSegment(path) {
+				return proxyLegacyBuildArtifact(ctx, false)
+			}
 			ctx.R.URL.Path = path
-			return nil
+			return nil // next
 		}
 	}
 
-	// build artifact of the `/build` API
+	// packages created by the `/build` API
 	if len(pathname) == 42 && strings.HasPrefix(pathname, "/~") && valid.IsHexString(pathname[2:]) {
 		return redirect(ctx, fmt.Sprintf("/v135%s@0.0.0/%s/mod.mjs", pathname, legacyGetBuildTargetByUA(ctx.UserAgent())), true)
 	}

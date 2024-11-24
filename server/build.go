@@ -35,6 +35,7 @@ type BuildContext struct {
 	esmPath     ESMPath
 	args        BuildArgs
 	bundleMode  BundleMode
+	externalAll bool
 	target      string
 	pinedTarget bool
 	dev         bool
@@ -87,12 +88,13 @@ var loaders = map[string]esbuild.Loader{
 	".woff2":  esbuild.LoaderDataURL,
 }
 
-func NewBuildContext(zoneId string, npmrc *NpmRC, esm ESMPath, args BuildArgs, target string, pinedTarget bool, bundleMode BundleMode, dev bool) *BuildContext {
+func NewBuildContext(zoneId string, npmrc *NpmRC, esm ESMPath, args BuildArgs, externalAll bool, target string, pinedTarget bool, bundleMode BundleMode, dev bool) *BuildContext {
 	return &BuildContext{
 		zoneId:      zoneId,
 		npmrc:       npmrc,
 		esmPath:     esm,
 		args:        args,
+		externalAll: externalAll,
 		target:      target,
 		pinedTarget: pinedTarget,
 		dev:         dev,
@@ -246,7 +248,7 @@ func (ctx *BuildContext) buildModule() (result *BuildMeta, err error) {
 			return
 		}
 		// create a new build context to check if the reexported module has default export
-		b := NewBuildContext(ctx.zoneId, ctx.npmrc, mod, ctx.args, ctx.target, ctx.pinedTarget, BundleFalse, ctx.dev)
+		b := NewBuildContext(ctx.zoneId, ctx.npmrc, mod, ctx.args, ctx.externalAll, ctx.target, ctx.pinedTarget, BundleFalse, ctx.dev)
 		err = b.install()
 		if err != nil {
 			return
@@ -256,7 +258,7 @@ func (ctx *BuildContext) buildModule() (result *BuildMeta, err error) {
 		if err != nil {
 			return
 		}
-		importUrl := ctx.getImportPath(mod, ctx.getBuildArgsPrefix(false))
+		importUrl := ctx.getImportPath(mod, ctx.getBuildArgsPrefix(false), ctx.externalAll)
 		buf := bytes.NewBuffer(nil)
 		fmt.Fprintf(buf, `export * from "%s";`, importUrl)
 		if result.HasDefaultExport {
@@ -703,9 +705,9 @@ func (ctx *BuildContext) buildModule() (result *BuildMeta, err error) {
 							bareName := stripModuleExt(moduleSpecifier)
 
 							// split modules based on the `exports` field of package.json
-							if om, ok := ctx.packageJson.Exports.(*OrderedMap); ok {
-								for _, exportName := range om.keys {
-									v := om.Get(exportName)
+							if exports := ctx.packageJson.Exports; exports.Len() > 0 {
+								for _, exportName := range exports.keys {
+									v, _ := exports.Get(exportName)
 									if !(exportName == "." || strings.HasPrefix(exportName, "./")) {
 										continue
 									}
@@ -1060,7 +1062,7 @@ rebuild:
 					ids.Add(string(r))
 				}
 				if ids.Has("__Process$") {
-					if ctx.args.external.Has("node:process") || ctx.args.externalAll {
+					if ctx.args.external.Has("node:process") {
 						fmt.Fprintf(header, `import __Process$ from "node:process";%s`, EOL)
 					} else if ctx.isBrowserTarget() {
 						if len(ctx.packageJson.Browser) > 0 {
@@ -1084,7 +1086,7 @@ rebuild:
 					}
 				}
 				if ids.Has("__Buffer$") {
-					if ctx.args.external.Has("node:buffer") || ctx.args.externalAll {
+					if ctx.args.external.Has("node:buffer") {
 						fmt.Fprintf(header, `import { Buffer as __Buffer$ } from "node:buffer";%s`, EOL)
 					} else if ctx.isBrowserTarget() {
 						var browserExclude bool
@@ -1163,7 +1165,7 @@ rebuild:
 							if pkgJson.Type == "module" || pkgJson.Module != "" {
 								isEsModule[i] = true
 							} else {
-								b := NewBuildContext(ctx.zoneId, ctx.npmrc, esm, ctx.args, ctx.target, ctx.pinedTarget, BundleFalse, ctx.dev)
+								b := NewBuildContext(ctx.zoneId, ctx.npmrc, esm, ctx.args, ctx.externalAll, ctx.target, ctx.pinedTarget, BundleFalse, ctx.dev)
 								err = b.install()
 								if err == nil {
 									entry := b.resolveEntry(esm)

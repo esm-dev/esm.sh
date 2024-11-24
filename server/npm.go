@@ -49,25 +49,49 @@ type NpmPackageVerions struct {
 
 // PackageJSONRaw defines the package.json of a NPM package
 type PackageJSONRaw struct {
-	Name             string            `json:"name"`
-	Version          string            `json:"version"`
-	Type             string            `json:"type,omitempty"`
-	Main             string            `json:"main,omitempty"`
-	Module           StringOrMap       `json:"module,omitempty"`
-	ES2015           StringOrMap       `json:"es2015,omitempty"`
-	JsNextMain       string            `json:"jsnext:main,omitempty"`
-	Browser          StringOrMap       `json:"browser,omitempty"`
-	Types            string            `json:"types,omitempty"`
-	Typings          string            `json:"typings,omitempty"`
-	SideEffects      any               `json:"sideEffects,omitempty"`
-	Dependencies     map[string]string `json:"dependencies,omitempty"`
-	PeerDependencies map[string]string `json:"peerDependencies,omitempty"`
-	Imports          map[string]any    `json:"imports,omitempty"`
-	TypesVersions    map[string]any    `json:"typesVersions,omitempty"`
-	Exports          json.RawMessage   `json:"exports,omitempty"`
-	Files            []string          `json:"files,omitempty"`
-	Deprecated       any               `json:"deprecated,omitempty"`
-	Esmsh            any               `json:"esm.sh,omitempty"`
+	Name             string          `json:"name"`
+	Version          string          `json:"version"`
+	Type             string          `json:"type"`
+	Main             string          `json:"main"`
+	Module           StringOrMap     `json:"module"`
+	ES2015           StringOrMap     `json:"es2015"`
+	JsNextMain       StringOrMap     `json:"jsnext:main"`
+	Browser          StringOrMap     `json:"browser"`
+	Types            string          `json:"types"`
+	Typings          string          `json:"typings"`
+	SideEffects      any             `json:"sideEffects"`
+	Dependencies     any             `json:"dependencies"`
+	PeerDependencies any             `json:"peerDependencies"`
+	Imports          map[string]any  `json:"imports"`
+	TypesVersions    map[string]any  `json:"typesVersions"`
+	Exports          json.RawMessage `json:"exports"`
+	Files            []string        `json:"files"`
+	Esmsh            map[string]any  `json:"esm.sh"`
+	Deprecated       any             `json:"deprecated"`
+}
+
+// PackageJSON defines the package.json of a NPM package
+type PackageJSON struct {
+	Name             string
+	PkgName          string
+	Version          string
+	Type             string
+	Main             string
+	Module           string
+	ES2015           string
+	JsNextMain       string
+	Types            string
+	Typings          string
+	SideEffectsFalse bool
+	SideEffects      *StringSet
+	Browser          map[string]string
+	Dependencies     map[string]string
+	PeerDependencies map[string]string
+	Imports          map[string]any
+	TypesVersions    map[string]any
+	Exports          *OrderedMap
+	Esmsh            map[string]any
+	Deprecated       string
 }
 
 // ToNpmPackage converts PackageJSONRaw to PackageJSON
@@ -89,16 +113,32 @@ func (a *PackageJSONRaw) ToNpmPackage() *PackageJSON {
 			}
 		}
 	}
+	var dependencies map[string]string
+	if m, ok := a.Dependencies.(map[string]any); ok {
+		dependencies = make(map[string]string, len(m))
+		for k, v := range m {
+			if s, ok := v.(string); ok {
+				if k != "" && s != "" {
+					dependencies[k] = s
+				}
+			}
+		}
+	}
+	var peerDependencies map[string]string
+	if m, ok := a.PeerDependencies.(map[string]any); ok {
+		peerDependencies = make(map[string]string, len(m))
+		for k, v := range m {
+			if s, ok := v.(string); ok {
+				if k != "" && s != "" {
+					peerDependencies[k] = s
+				}
+			}
+		}
+	}
 	deprecated := ""
 	if a.Deprecated != nil {
 		if s, ok := a.Deprecated.(string); ok {
 			deprecated = s
-		}
-	}
-	esmsh := map[string]any{}
-	if a.Esmsh != nil {
-		if v, ok := a.Esmsh.(map[string]any); ok {
-			esmsh = v
 		}
 	}
 	var sideEffects *StringSet = nil
@@ -122,19 +162,16 @@ func (a *PackageJSONRaw) ToNpmPackage() *PackageJSON {
 			}
 		}
 	}
-	var exports any = nil
+	exports := newOrderedMap()
 	if rawExports := a.Exports; rawExports != nil {
 		var v any
 		if json.Unmarshal(rawExports, &v) == nil {
 			if s, ok := v.(string); ok {
 				if len(s) > 0 {
-					exports = s
+					exports.Set(".", s)
 				}
 			} else if _, ok := v.(map[string]any); ok {
-				om := newOrderedMap()
-				if om.UnmarshalJSON(rawExports) == nil {
-					exports = om
-				}
+				exports.UnmarshalJSON(rawExports)
 			}
 		}
 	}
@@ -145,45 +182,20 @@ func (a *PackageJSONRaw) ToNpmPackage() *PackageJSON {
 		Main:             a.Main,
 		Module:           a.Module.MainValue(),
 		ES2015:           a.ES2015.MainValue(),
-		JsNextMain:       a.JsNextMain,
+		JsNextMain:       a.JsNextMain.MainValue(),
 		Types:            a.Types,
 		Typings:          a.Typings,
 		Browser:          browser,
 		SideEffectsFalse: sideEffectsFalse,
 		SideEffects:      sideEffects,
-		Dependencies:     a.Dependencies,
-		PeerDependencies: a.PeerDependencies,
+		Dependencies:     dependencies,
+		PeerDependencies: peerDependencies,
 		Imports:          a.Imports,
 		TypesVersions:    a.TypesVersions,
 		Exports:          exports,
 		Deprecated:       deprecated,
-		Esmsh:            esmsh,
+		Esmsh:            a.Esmsh,
 	}
-}
-
-// PackageJSON defines defines the package.json of a NPM package
-type PackageJSON struct {
-	Name             string
-	PkgName          string
-	Version          string
-	Type             string
-	Main             string
-	Module           string
-	ES2015           string
-	JsNextMain       string
-	Types            string
-	Typings          string
-	SideEffectsFalse bool
-	SideEffects      *StringSet
-	Browser          map[string]string
-	Dependencies     map[string]string
-	PeerDependencies map[string]string
-	Imports          map[string]any
-	TypesVersions    map[string]any
-	Exports          any
-	Files            []string
-	Deprecated       string
-	Esmsh            map[string]any
 }
 
 // UnmarshalJSON implements the json.Unmarshaler interface

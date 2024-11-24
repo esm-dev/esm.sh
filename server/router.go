@@ -1178,7 +1178,6 @@ func esmRouter(debug bool) rex.Handle {
 			if rawQuery != "" {
 				qs = "?" + rawQuery
 			}
-			ctx.SetHeader("Cache-Control", fmt.Sprintf("public, max-age=%d", config.NpmQueryCacheTTL))
 			if targetFromUA {
 				appendVaryHeader(ctx.W.Header(), "User-Agent")
 			}
@@ -1263,12 +1262,11 @@ func esmRouter(debug bool) rex.Handle {
 		}
 
 		buildArgs := BuildArgs{
-			alias:       alias,
-			conditions:  conditions,
-			deps:        deps,
-			exports:     exports,
-			externalAll: externalAll,
-			external:    external,
+			alias:      alias,
+			conditions: conditions,
+			deps:       deps,
+			exports:    exports,
+			external:   external,
 		}
 
 		// match path `PKG@VERSION/X-${args}/esnext/SUBPATH`
@@ -1287,9 +1285,9 @@ func esmRouter(debug bool) rex.Handle {
 			}
 		}
 
-		// fix the build args that are from the query
+		// resolve `alias`, `deps`, `external` of the build args
 		if !xArgs {
-			err := normalizeBuildArgs(npmrc, path.Join(npmrc.StoreDir(), esm.PackageName()), &buildArgs, esm)
+			err := resolveBuildArgs(npmrc, path.Join(npmrc.StoreDir(), esm.PackageName()), &buildArgs, esm)
 			if err != nil {
 				return rex.Status(500, err.Error())
 			}
@@ -1315,7 +1313,7 @@ func esmRouter(debug bool) rex.Handle {
 				if err != storage.ErrNotFound {
 					return rex.Status(500, err.Error())
 				}
-				buildCtx := NewBuildContext(zoneId, npmrc, esm, buildArgs, "types", false, BundleDefault, false)
+				buildCtx := NewBuildContext(zoneId, npmrc, esm, buildArgs, externalAll, "types", false, BundleDefault, false)
 				c := buildQueue.Add(buildCtx, ctx.RemoteIP())
 				select {
 				case output := <-c.C:
@@ -1416,7 +1414,7 @@ func esmRouter(debug bool) rex.Handle {
 			}
 		}
 
-		buildCtx := NewBuildContext(zoneId, npmrc, esm, buildArgs, target, !targetFromUA, bundleMode, isDev)
+		buildCtx := NewBuildContext(zoneId, npmrc, esm, buildArgs, externalAll, target, !targetFromUA, bundleMode, isDev)
 		ret, err := buildCtx.Query()
 		if err != nil {
 			return rex.Status(500, err.Error())

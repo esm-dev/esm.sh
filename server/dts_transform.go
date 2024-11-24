@@ -166,7 +166,7 @@ func transformDTS(ctx *BuildContext, dts string, buildArgsPrefix string, marker 
 		}
 
 		// respect `?external` query
-		if ctx.args.externalAll || ctx.args.external.Has(depPkgName) {
+		if ctx.externalAll || ctx.args.external.Has(depPkgName) {
 			return specifier, nil
 		}
 
@@ -195,7 +195,7 @@ func transformDTS(ctx *BuildContext, dts string, buildArgsPrefix string, marker 
 			external: NewStringSet(),
 			exports:  NewStringSet(),
 		}
-		b := NewBuildContext(ctx.zoneId, ctx.npmrc, dtsModule, args, "types", false, BundleFalse, false)
+		b := NewBuildContext(ctx.zoneId, ctx.npmrc, dtsModule, args, false, "types", false, BundleFalse, false)
 		err = b.install()
 		if err != nil {
 			return "", err

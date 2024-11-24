@@ -134,7 +134,6 @@ func (a SortablePaths) Less(i, j int) bool {
 
 // copied from https://gitlab.com/c0b/go-ordered-json
 type OrderedMap struct {
-	lock sync.RWMutex
 	keys []string
 	m    map[string]interface{}
 }
@@ -146,21 +145,26 @@ func newOrderedMap() *OrderedMap {
 	}
 }
 
+func (om *OrderedMap) Len() int {
+	return len(om.keys)
+}
+
+func (om *OrderedMap) Keys() []string {
+	return om.keys
+}
+
+func (om *OrderedMap) Get(key string) (interface{}, bool) {
+	v, ok := om.m[key]
+	return v, ok
+}
+
 // Set sets value for particular key, this will remember the order of keys inserted
 // but if the key already exists, the order is not updated.
 func (om *OrderedMap) Set(key string, value interface{}) {
-	om.lock.Lock()
-	defer om.lock.Unlock()
 	if _, ok := om.m[key]; !ok {
 		om.keys = append(om.keys, key)
 	}
 	om.m[key] = value
-}
-
-func (om *OrderedMap) Get(key string) interface{} {
-	om.lock.RLock()
-	defer om.lock.RUnlock()
-	return om.m[key]
 }
 
 // UnmarshalJSON implements type json.Unmarshaler interface, so can be called in json.Unmarshal(data, om)
