@@ -67,7 +67,7 @@ docker pull ghcr.io/esm-dev/esm.sh:v135 # specific version
 Run the container:
 
 ```bash
-docker run -p 8080:8080 \
+docker run -p 8080:80 \
   -e NPM_REGISTRY=https://registry.npmjs.org/ \
   -e NPM_TOKEN=****** \
   ghcr.io/esm-dev/esm.sh:latest

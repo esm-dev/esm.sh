@@ -89,11 +89,10 @@ func LoadConfig(filename string) (*Config, error) {
 		return nil, fmt.Errorf("fail to parse config: %w", err)
 	}
 
-	// ensure `workDir`
 	if c.WorkDir == "" {
 		homeDir, err := os.UserHomeDir()
 		if err != nil {
-			return nil, fmt.Errorf("fail to get current user home directory: %w", err)
+			homeDir = "/home/esmd"
 		}
 		c.WorkDir = path.Join(homeDir, ".esmd")
 	} else {
