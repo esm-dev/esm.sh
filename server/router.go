@@ -132,7 +132,7 @@ func esmRouter(debug bool) rex.Handle {
 				if zoneId != "" {
 					prefix = zoneId + "/"
 				}
-				deletedBuildFiles, err := buildStorage.DeleteAll(prefix + "builds/" + packageName + "@" + version)
+				deletedBuildFiles, err := buildStorage.DeleteAll(prefix + "esm/" + packageName + "@" + version)
 				if err != nil {
 					return rex.Err(500, err.Error())
 				}
@@ -1096,7 +1096,7 @@ func esmRouter(debug bool) rex.Handle {
 				if pathKind == ESMDts {
 					savePath = path.Join("types", pathname)
 				} else {
-					savePath = path.Join("builds", pathname)
+					savePath = path.Join("esm", pathname)
 				}
 				savePath = normalizeSavePath(zoneId, savePath)
 				content, stat, err := buildStorage.Get(savePath)

@@ -167,7 +167,7 @@ func (ctx *BuildContext) getImportPath(esmPath ESMPath, buildArgsPrefix string, 
 }
 
 func (ctx *BuildContext) getSavepath() string {
-	return normalizeSavePath(ctx.zoneId, path.Join("builds", ctx.Path()))
+	return normalizeSavePath(ctx.zoneId, path.Join("esm", ctx.Path()))
 }
 
 func (ctx *BuildContext) getBuildArgsPrefix(isDts bool) string {
