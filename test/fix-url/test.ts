@@ -122,6 +122,16 @@ Deno.test("dts-transformer: support `.d` extension", async () => {
 });
 
 Deno.test("legacy routes", async () => {
+  try {
+    await import("http://localhost:8080/");
+  } catch (err) {
+    assertStringIncludes(err.message, "deprecated");
+  }
+  try {
+    await import("http://localhost:8080/v135");
+  } catch (err) {
+    assertStringIncludes(err.message, "deprecated");
+  }
   {
     const { esm, build, transform } = await import("http://localhost:8080/build");
     assertEquals(typeof esm, "function");
@@ -132,16 +142,97 @@ Deno.test("legacy routes", async () => {
     } catch (err) {
       assertStringIncludes(err.message, "deprecated");
     }
+  }
+  {
+    const { esm, build, transform } = await import("http://localhost:8080/v135/build");
+    assertEquals(typeof esm, "function");
+    assertEquals(typeof build, "function");
+    assertEquals(typeof transform, "function");
     try {
-      await import("http://localhost:8080/");
+      esm``;
     } catch (err) {
       assertStringIncludes(err.message, "deprecated");
     }
-    try {
-      await import("http://localhost:8080/v135");
-    } catch (err) {
-      assertStringIncludes(err.message, "deprecated");
-    }
+  }
+  {
+    const res = await fetch("http://localhost:8080/react-dom@18.3.1?pin=v135", {
+      headers: {
+        "User-Agent":
+          "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+      },
+    });
+    assertEquals(res.status, 200);
+    assertEquals(res.headers.get("Content-Type"), "application/javascript; charset=utf-8");
+    assertEquals(res.headers.get("X-Esm-Id"), "v135/react-dom@18.3.1/es2022/react-dom.mjs");
+    assertEquals(res.headers.get("X-TypeScript-Types"), "http://localhost:8080/v135/@types/react-dom@~18.3/index.d.ts");
+    assertStringIncludes(await res.text(), "/v135/react-dom@18.3.1/es2022/react-dom.mjs");
+  }
+  {
+    const res = await fetch("http://localhost:8080/react-dom@18.3.1/client?pin=v135", {
+      headers: {
+        "User-Agent":
+          "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+      },
+    });
+    assertEquals(res.status, 200);
+    assertEquals(res.headers.get("Content-Type"), "application/javascript; charset=utf-8");
+    assertEquals(res.headers.get("X-Esm-Id"), "v135/react-dom@18.3.1/es2022/client.js");
+    assertEquals(res.headers.get("X-TypeScript-Types"), "http://localhost:8080/v135/@types/react-dom@~18.3/client~.d.ts");
+    assertStringIncludes(await res.text(), "/v135/react-dom@18.3.1/es2022/client.js");
+  }
+  {
+    const res = await fetch("http://localhost:8080/stable/react@18.3.1", {
+      headers: {
+        "User-Agent":
+          "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+      },
+    });
+    assertEquals(res.status, 200);
+    assertEquals(res.headers.get("Content-Type"), "application/javascript; charset=utf-8");
+    assertEquals(res.headers.get("X-Esm-Id"), "stable/react@18.3.1/es2022/react.mjs");
+    assertEquals(res.headers.get("X-TypeScript-Types"), "http://localhost:8080/v128/@types/react@~18.3/index.d.ts");
+    assertStringIncludes(await res.text(), "/stable/react@18.3.1/es2022/react.mjs");
+  }
+  {
+    const res = await fetch("http://localhost:8080/v135/react-dom@18.3.1", {
+      headers: {
+        "User-Agent":
+          "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+      },
+    });
+    assertEquals(res.status, 200);
+    assertEquals(res.headers.get("Content-Type"), "application/javascript; charset=utf-8");
+    assertEquals(res.headers.get("X-Esm-Id"), "v135/react-dom@18.3.1/es2022/react-dom.mjs");
+    assertEquals(res.headers.get("X-TypeScript-Types"), "http://localhost:8080/v135/@types/react-dom@~18.3/index.d.ts");
+    assertStringIncludes(await res.text(), "/v135/react-dom@18.3.1/es2022/react-dom.mjs");
+  }
+  {
+    const res = await fetch("http://localhost:8080/v135/@types/react-dom@~18.3/index.d.ts", {
+      redirect: "manual",
+    });
+    res.body?.cancel();
+    assertEquals(res.status, 302);
+    assertEquals(res.headers.get("Location"), "http://localhost:8080/v135/@types/react-dom@18.3.1/index.d.ts");
+  }
+  {
+    const res = await fetch("http://localhost:8080/v135/@types/react-dom@18.3.1/index.d.ts");
+    assertEquals(res.status, 200);
+    assertEquals(res.headers.get("Content-Type"), "application/typescript; charset=utf-8");
+    assertStringIncludes(await res.text(), "https://esm.sh/v135/@types/react@18.");
+  }
+  {
+    const res = await fetch("http://localhost:8080/v135/@types/react-dom@~18.3/client~.d.ts", {
+      redirect: "manual",
+    });
+    res.body?.cancel();
+    assertEquals(res.status, 302);
+    assertEquals(res.headers.get("Location"), "http://localhost:8080/v135/@types/react-dom@18.3.1/client~.d.ts");
+  }
+  {
+    const res = await fetch("http://localhost:8080/v135/@types/react-dom@18.3.1/client~.d.ts");
+    assertEquals(res.status, 200);
+    assertEquals(res.headers.get("Content-Type"), "application/typescript; charset=utf-8");
+    assertStringIncludes(await res.text(), "createRoot");
   }
   {
     const res = await fetch("http://localhost:8080/stable/react@18.3.1/es2022/react.mjs", {

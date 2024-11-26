@@ -2,9 +2,12 @@ package server
 
 import (
 	"bytes"
+	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"path"
 	"strconv"
 	"strings"
@@ -19,6 +22,7 @@ func esmLegacyRouter(ctx *rex.Context) any {
 	method := ctx.R.Method
 	pathname := ctx.R.URL.Path
 
+Start:
 	// build API (deprecated)
 	if pathname == "/build" {
 		if method == "POST" {
@@ -40,15 +44,10 @@ func esmLegacyRouter(ctx *rex.Context) any {
 
 	// `/stable/react/es2022/react.mjs`
 	if strings.HasPrefix(pathname, "/stable/") {
-		pathname = pathname[7:]
-		if len(pathname) >= 14 && endsWith(pathname, ".js", ".mjs", ".map", ".css") && hasTargetSegment(pathname) {
-			return proxyLegacyBuildArtifact(ctx, false)
-		}
-		ctx.R.URL.Path = pathname
-		return nil // next
+		return legacyESM(ctx, pathname[7:])
 	}
 
-	// `/v134/react-dom/es2022/react-dom.mjs`
+	// `/v135/react-dom/es2022/react-dom.mjs`
 	if strings.HasPrefix(pathname, "/v") {
 		legacyBuildVersion, path := utils.SplitByFirstByte(pathname[2:], '/')
 		if valid.IsDigtalOnlyString(legacyBuildVersion) {
@@ -56,18 +55,30 @@ func esmLegacyRouter(ctx *rex.Context) any {
 			if bv <= 0 || bv > 135 {
 				return rex.Status(400, "Invalid Module Path")
 			}
-			if path == "" {
-				path = "/"
-			}
-			if path == "/" && strings.HasPrefix(ctx.UserAgent(), "Deno/") {
+			if path == "" && strings.HasPrefix(ctx.UserAgent(), "Deno/") {
 				ctx.SetHeader("Content-Type", ctJavaScript)
+				ctx.SetHeader("Cache-Control", ccImmutable)
 				return `throw new Error("[esm.sh] The deno CLI has been deprecated, please use our vscode extension instead: https://marketplace.visualstudio.com/items?itemName=ije.esm-vscode")`
 			}
-			if len(path) >= 14 && endsWith(path, ".js", ".mjs", ".map", ".css") && hasTargetSegment(path) {
-				return proxyLegacyBuildArtifact(ctx, false)
+			if path == "build" {
+				pathname = "/build"
+				goto Start
 			}
-			ctx.R.URL.Path = path
-			return nil // next
+			return legacyESM(ctx, "/"+path)
+		}
+	}
+
+	// `/react-dom?pin=v135`
+	if strings.Contains(ctx.R.URL.RawQuery, "pin=") {
+		query := ctx.R.URL.Query()
+		v := query.Get("pin")
+		if len(v) > 1 && v[0] == 'v' && valid.IsDigtalOnlyString(v[1:]) {
+			bv, _ := strconv.Atoi(v[1:])
+			if bv <= 0 || bv > 135 {
+				// ignore invalid pin query
+				return nil
+			}
+			return legacyESM(ctx, pathname)
 		}
 	}
 
@@ -79,47 +90,91 @@ func esmLegacyRouter(ctx *rex.Context) any {
 	return nil // next
 }
 
-func hasTargetSegment(pathname string) bool {
-	segments := strings.Split(pathname[1:], "/")
-	for _, s := range segments {
-		if targets[s] > 0 {
-			return true
+func legacyESM(ctx *rex.Context, pathname string) any {
+	query := ""
+	pkgName, pkgVersion, isBuildDist, err := splitLegacyESMPath(pathname)
+	if err != nil {
+		return rex.Status(400, err.Error())
+	}
+	isFixedVersion := regexpVersionStrict.MatchString(pkgVersion)
+	if !isFixedVersion {
+		if endsWith(pathname, ".d.ts", ".d.mts") {
+			npmrc := getDefaultNpmRC()
+			pkgInfo, err := npmrc.fetchPackageInfo(pkgName, pkgVersion)
+			if err != nil {
+				if strings.Contains(err.Error(), " not found") {
+					return rex.Status(404, err.Error())
+				}
+				return rex.Status(500, err.Error())
+			}
+			return redirect(ctx, getCdnOrigin(ctx)+strings.ReplaceAll(ctx.R.URL.Path, "@"+pkgVersion, "@"+pkgInfo.Version), false)
+		}
+		ctx.R.URL.Path = pathname
+		return nil // use next build
+	}
+	savePath := "legacy/" + normalizeSavePath("", ctx.R.URL.Path[1:])
+	if isBuildDist || endsWith(pathname, ".ts", ".mts") {
+		f, _, e := buildStorage.Get(savePath)
+		if e != nil && e != storage.ErrNotFound {
+			return rex.Status(500, "Storage Error")
+		}
+		if e == nil {
+			switch path.Ext(pathname) {
+			case ".js", ".mjs":
+				ctx.SetHeader("Content-Type", ctJavaScript)
+			case ".ts", ".mts":
+				ctx.SetHeader("Content-Type", ctTypeScript)
+			case ".map":
+				ctx.SetHeader("Content-Type", ctJSON)
+			case ".css":
+				ctx.SetHeader("Content-Type", ctCSS)
+			default:
+				f.Close()
+				return rex.Status(404, "Module Not Found")
+			}
+			ctx.SetHeader("Control-Cache", ccImmutable)
+			return f // auto closed
+		}
+	} else {
+		q := ctx.R.URL.Query()
+		target := q.Get("target")
+		if targets[target] == 0 {
+			target = legacyGetBuildTargetByUA(ctx.UserAgent())
+		} else {
+			query = "?target=" + target
+		}
+		savePath += "+" + target
+		if v := q.Get("pin"); v != "" {
+			if query == "" {
+				query = "?pin=" + v
+			} else {
+				query += "&pin=" + v
+			}
+			savePath += "+" + v
+		}
+		f, _, e := buildStorage.Get(savePath)
+		if e != nil && e != storage.ErrNotFound {
+			return rex.Status(500, "Storage Error")
+		}
+		if e == nil {
+			defer f.Close()
+			var ret []string
+			if json.NewDecoder(f).Decode(&ret) == nil && len(ret) >= 2 {
+				ctx.SetHeader("Content-Type", ctJavaScript)
+				ctx.SetHeader("Control-Cache", ccImmutable)
+				ctx.SetHeader("X-ESM-Id", ret[0])
+				if len(ret) == 3 {
+					ctx.SetHeader("X-TypeScript-Types", getCdnOrigin(ctx)+ret[1])
+					return ret[2]
+				}
+				return ret[1]
+			}
 		}
 	}
-	return false
-}
 
-func proxyLegacyBuildArtifact(ctx *rex.Context, varyUA bool) any {
-	pathname := ctx.R.URL.Path
-	switch path.Ext(pathname) {
-	case ".js", ".mjs":
-		ctx.SetHeader("Content-Type", ctJavaScript)
-	case ".map":
-		ctx.SetHeader("Content-Type", ctJSON)
-	case ".css":
-		ctx.SetHeader("Content-Type", ctCSS)
-	}
-	ctx.SetHeader("control-cache", ccImmutable)
-	if varyUA {
-		appendVaryHeader(ctx.W.Header(), "User-Agent")
-	}
-
-	savePath := "legacy" + pathname
-	if varyUA {
-		target := legacyGetBuildTargetByUA(ctx.UserAgent())
-		savePath += "." + target
-	}
-	f, _, e := buildStorage.Get(savePath)
-	if e == nil {
-		return f // auto closed
-	}
-	if e != storage.ErrNotFound {
-		return rex.Err(500, "Storage Error")
-	}
-
-	url, err := ctx.R.URL.Parse(config.LegacyServer + ctx.R.URL.Path)
+	url, err := ctx.R.URL.Parse(config.LegacyServer + ctx.R.URL.Path + query)
 	if err != nil {
-		return rex.Err(http.StatusBadRequest, "Invalid url")
+		return rex.Status(http.StatusBadRequest, "Invalid url")
 	}
 	req := &http.Request{
 		Method:     "GET",
@@ -134,22 +189,85 @@ func proxyLegacyBuildArtifact(ctx *rex.Context, varyUA bool) any {
 	}
 	res, err := http.DefaultClient.Do(req)
 	if err != nil {
-		return rex.Err(http.StatusBadGateway, "Failed to fetch lagecy server")
+		return rex.Status(http.StatusBadGateway, "Failed to connect the lagecy esm.sh server")
 	}
 	defer res.Body.Close()
 
 	if res.StatusCode != 200 {
-		if res.StatusCode == 404 {
-			return rex.Status(404, "Not Found")
+		data, err := io.ReadAll(res.Body)
+		if err != nil {
+			return rex.Status(500, "Failed to fetch data from the legacy esm.sh server")
 		}
-		return rex.Err(res.StatusCode, "Failed to fetch lagecy server: "+res.Status)
+		ctx.SetHeader("Cache-Control", "public, max-age=600")
+		return rex.Status(res.StatusCode, data)
 	}
 
-	buf := bytes.NewBuffer(nil)
-	err = buildStorage.Put(savePath, io.TeeReader(res.Body, buf))
-	if err != nil {
-		return rex.Err(500, "Storage Error")
+	if isBuildDist || endsWith(pathname, ".ts", ".mts") {
+		buf := bytes.NewBuffer(nil)
+		err := buildStorage.Put(savePath, io.TeeReader(res.Body, buf))
+		if err != nil {
+			return rex.Status(500, "Storage Error")
+		}
+		ctx.SetHeader("Content-Type", res.Header.Get("Content-Type"))
+		ctx.SetHeader("Control-Cache", ccImmutable)
+		return buf
+	} else {
+		code, err := io.ReadAll(res.Body)
+		if err != nil {
+			return rex.Status(500, "Failed to fetch data from the legacy esm.sh server")
+		}
+		esmId := res.Header.Get("X-Esm-Id")
+		if esmId == "" {
+			ctx.SetHeader("Cache-Control", "public, max-age=600")
+			return rex.Status(502, "Unexpected response from the legacy esm.sh server")
+		}
+		dts := res.Header.Get("X-TypeScript-Types")
+		if dts != "" {
+			u, err := url.Parse(dts)
+			if err != nil {
+				dts = ""
+			} else {
+				dts = u.Path
+			}
+		}
+		ret := []string{esmId}
+		if dts != "" {
+			ret = append(ret, dts)
+		}
+		ret = append(ret, string(code))
+		err = buildStorage.Put(savePath, bytes.NewReader(utils.MustEncodeJSON(ret)))
+		if err != nil {
+			return rex.Status(500, "Storage Error")
+		}
+		ctx.SetHeader("Content-Type", res.Header.Get("Content-Type"))
+		ctx.SetHeader("Control-Cache", ccImmutable)
+		ctx.SetHeader("X-ESM-Id", esmId)
+		if dts != "" {
+			ctx.SetHeader("X-TypeScript-Types", getCdnOrigin(ctx)+dts)
+		}
+		return code
+	}
+}
+
+func splitLegacyESMPath(pathname string) (pkgName string, version string, isBuildDist bool, err error) {
+	if strings.HasPrefix(pathname, "/gh/") {
+		if !strings.ContainsRune(pathname[4:], '/') {
+			err = errors.New("invalid path")
+			return
+		}
+		// add a leading `@` to the package name
+		pathname = "/@" + pathname[4:]
 	}
 
-	return buf
+	pkgName, maybeVersion, _, isBuildDist := splitESMPath(pathname)
+	if !validatePackageName(pkgName) {
+		err = fmt.Errorf("invalid package name '%s'", pkgName)
+		return
+	}
+
+	version, _ = utils.SplitByFirstByte(maybeVersion, '&')
+	if v, e := url.QueryUnescape(version); e == nil {
+		version = v
+	}
+	return
 }

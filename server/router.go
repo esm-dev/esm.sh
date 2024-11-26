@@ -427,14 +427,14 @@ func esmRouter(debug bool) rex.Handle {
 		}
 
 		var npmrc *NpmRC
-		if rc := ctx.GetHeader("X-Npmrc"); rc != "" {
-			rc, err := NewNpmRcFromJSON([]byte(rc))
+		if v := ctx.GetHeader("X-Npmrc"); v != "" {
+			rc, err := NewNpmRcFromJSON([]byte(v))
 			if err != nil {
 				return rex.Status(400, "Invalid Npmrc Header")
 			}
 			npmrc = rc
 		} else {
-			npmrc = NewNpmRcFromConfig()
+			npmrc = getDefaultNpmRC()
 		}
 
 		zoneId := ctx.GetHeader("X-Zone-Id")
@@ -814,7 +814,7 @@ func esmRouter(debug bool) rex.Handle {
 			pathname = "/pr/" + pathname[13:]
 		}
 
-		esm, extraQuery, isFixedVersion, isBuildPath, err := praseESMPath(npmrc, pathname)
+		esm, extraQuery, isFixedVersion, isBuildDist, err := praseESMPath(npmrc, pathname)
 		if err != nil {
 			status := 500
 			message := err.Error()
@@ -906,7 +906,7 @@ func esmRouter(debug bool) rex.Handle {
 			ext := path.Ext(esm.SubPath)
 			switch ext {
 			case ".mjs":
-				if isBuildPath {
+				if isBuildDist {
 					pathKind = ESMBuild
 				}
 			case ".ts", ".mts":
@@ -914,13 +914,13 @@ func esmRouter(debug bool) rex.Handle {
 					pathKind = ESMDts
 				}
 			case ".css":
-				if isBuildPath {
+				if isBuildDist {
 					pathKind = ESMBuild
 				} else {
 					pathKind = RawFile
 				}
 			case ".map":
-				if isBuildPath {
+				if isBuildDist {
 					pathKind = ESMSourceMap
 				} else {
 					pathKind = RawFile
@@ -937,7 +937,7 @@ func esmRouter(debug bool) rex.Handle {
 
 		// redirect to the url with fixed package version
 		if !isFixedVersion {
-			if isBuildPath {
+			if isBuildDist {
 				subPath := ""
 				query := ""
 				if esm.SubPath != "" {
@@ -986,7 +986,7 @@ func esmRouter(debug bool) rex.Handle {
 			}
 
 			// fix url that is related to `import.meta.url`
-			if pathKind == RawFile && isBuildPath && !query.Has("raw") {
+			if pathKind == RawFile && isBuildDist && !query.Has("raw") {
 				extname := path.Ext(esm.SubPath)
 				dir := path.Join(npmrc.StoreDir(), esm.PackageName())
 				if !existsDir(dir) {

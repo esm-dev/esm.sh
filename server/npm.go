@@ -213,8 +213,15 @@ type NpmRC struct {
 	zoneId     string
 }
 
-func NewNpmRcFromConfig() *NpmRC {
-	rc := &NpmRC{
+var (
+	defaultNpmRC *NpmRC
+)
+
+func getDefaultNpmRC() *NpmRC {
+	if defaultNpmRC != nil {
+		return defaultNpmRC
+	}
+	defaultNpmRC = &NpmRC{
 		NpmRegistry: NpmRegistry{
 			Registry: config.NpmRegistry,
 			Token:    config.NpmToken,
@@ -229,7 +236,7 @@ func NewNpmRcFromConfig() *NpmRC {
 	}
 	if len(config.NpmScopedRegistries) > 0 {
 		for scope, reg := range config.NpmScopedRegistries {
-			rc.Registries[scope] = NpmRegistry{
+			defaultNpmRC.Registries[scope] = NpmRegistry{
 				Registry: reg.Registry,
 				Token:    reg.Token,
 				User:     reg.User,
@@ -237,7 +244,7 @@ func NewNpmRcFromConfig() *NpmRC {
 			}
 		}
 	}
-	return rc
+	return defaultNpmRC
 }
 
 func NewNpmRcFromJSON(jsonData []byte) (npmrc *NpmRC, err error) {
