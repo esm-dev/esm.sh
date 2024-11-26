@@ -71,7 +71,7 @@ func init() {
 	mimeTypes = nil
 }
 
-// ContentType returns the MIME type for a given filename.
+// ContentType returns the MIME type for the given filename.
 func ContentType(filename string) string {
 	extname := path.Ext(filename)
 	if extname == ".gz" && strings.HasSuffix(filename, ".tar.gz") {
