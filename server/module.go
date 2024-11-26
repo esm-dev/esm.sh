@@ -2,6 +2,7 @@ package server
 
 import (
 	"errors"
+	"fmt"
 	"io"
 	"net/url"
 	"os"
@@ -102,6 +103,47 @@ func minify(code string, loader esbuild.Loader, target esbuild.Target) ([]byte, 
 		return nil, errors.New(ret.Errors[0].Text)
 	}
 	return concatBytes(ret.LegalComments, ret.Code), nil
+}
+
+func treeShake(code []byte, exports []string, target esbuild.Target) ([]byte, error) {
+	input := &esbuild.StdinOptions{
+		Contents: fmt.Sprintf(`export { %s } from '.';`, strings.Join(exports, ", ")),
+		Loader:   esbuild.LoaderJS,
+	}
+	plugins := []esbuild.Plugin{
+		{
+			Name: "tree-shaking",
+			Setup: func(build esbuild.PluginBuild) {
+				build.OnResolve(esbuild.OnResolveOptions{Filter: ".*"}, func(args esbuild.OnResolveArgs) (esbuild.OnResolveResult, error) {
+					if args.Path == "." {
+						return esbuild.OnResolveResult{Path: ".", Namespace: "memory", PluginData: code}, nil
+					}
+					return esbuild.OnResolveResult{External: true}, nil
+				})
+				build.OnLoad(esbuild.OnLoadOptions{Filter: ".*", Namespace: "memory"}, func(args esbuild.OnLoadArgs) (esbuild.OnLoadResult, error) {
+					contents := string(args.PluginData.([]byte))
+					return esbuild.OnLoadResult{Contents: &contents}, nil
+				})
+			},
+		},
+	}
+	ret := esbuild.Build(esbuild.BuildOptions{
+		Stdin:             input,
+		Bundle:            true,
+		Format:            esbuild.FormatESModule,
+		Target:            target,
+		Platform:          esbuild.PlatformBrowser,
+		MinifyWhitespace:  config.Minify,
+		MinifyIdentifiers: config.Minify,
+		MinifySyntax:      config.Minify,
+		Outdir:            "/esbuild",
+		Write:             false,
+		Plugins:           plugins,
+	})
+	if len(ret.Errors) > 0 {
+		return nil, errors.New(ret.Errors[0].Text)
+	}
+	return ret.OutputFiles[0].Contents, nil
 }
 
 // bundleHttpModule bundles the http module and it's submodules.

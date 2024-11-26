@@ -902,7 +902,6 @@ func (ctx *BuildContext) resolveExternalModule(specifier string, kind api.Resolv
 		deps:       ctx.args.deps,
 		external:   ctx.args.external,
 		conditions: ctx.args.conditions,
-		exports:    NewStringSet(),
 	}
 
 	err = resolveBuildArgs(ctx.npmrc, ctx.wd, &args, depPath)
@@ -1164,7 +1163,7 @@ func (ctx *BuildContext) lexer(entry *BuildEntry, forceCjsOnly bool) (ret *Build
 }
 
 func (ctx *BuildContext) cjsLexer(specifier string) (cjs cjsModuleLexerResult, err error) {
-	cjs, err = cjsModuleLexer(ctx.npmrc, ctx.esmPath.PkgName, ctx.wd, specifier, ctx.getNodeEnv())
+	cjs, err = cjsModuleLexer(ctx.wd, ctx.esmPath.PkgName, specifier, ctx.getNodeEnv())
 	if err == nil && cjs.Error != "" {
 		err = fmt.Errorf("cjsLexer: %s", cjs.Error)
 	}

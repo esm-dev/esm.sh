@@ -13,7 +13,6 @@ type BuildArgs struct {
 	alias             map[string]string
 	deps              map[string]string
 	external          *StringSet
-	exports           *StringSet
 	conditions        []string
 	keepNames         bool
 	ignoreAnnotations bool
@@ -25,7 +24,6 @@ func decodeBuildArgs(argsString string) (args BuildArgs, err error) {
 	if err == nil {
 		args = BuildArgs{
 			external: NewStringSet(),
-			exports:  NewStringSet(),
 		}
 		for _, p := range strings.Split(s, "\n") {
 			if strings.HasPrefix(p, "a") {
@@ -48,10 +46,6 @@ func decodeBuildArgs(argsString string) (args BuildArgs, err error) {
 			} else if strings.HasPrefix(p, "e") {
 				for _, name := range strings.Split(p[1:], ",") {
 					args.external.Add(name)
-				}
-			} else if strings.HasPrefix(p, "s") {
-				for _, name := range strings.Split(p[1:], ",") {
-					args.exports.Add(name)
 				}
 			} else if strings.HasPrefix(p, "c") {
 				args.conditions = append(args.conditions, strings.Split(p[1:], ",")...)
@@ -101,18 +95,6 @@ func encodeBuildArgs(args BuildArgs, isDts bool) string {
 		if len(ss) > 0 {
 			ss.Sort()
 			lines = append(lines, fmt.Sprintf("e%s", strings.Join(ss, ",")))
-		}
-	}
-	if !isDts {
-		if args.exports.Len() > 0 {
-			var ss sort.StringSlice
-			for _, name := range args.exports.Values() {
-				ss = append(ss, name)
-			}
-			if len(ss) > 0 {
-				ss.Sort()
-				lines = append(lines, fmt.Sprintf("s%s", strings.Join(ss, ",")))
-			}
 		}
 	}
 	if len(args.conditions) > 0 {

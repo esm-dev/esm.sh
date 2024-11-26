@@ -113,7 +113,7 @@ func transform(options *ResolvedTransformOptions) (out *TransformOutput, err err
 		Write:             false,
 		Plugins: []esbuild.Plugin{
 			{
-				Name: "resolver",
+				Name: "esm.sh",
 				Setup: func(build esbuild.PluginBuild) {
 					build.OnResolve(esbuild.OnResolveOptions{Filter: ".*"}, func(args esbuild.OnResolveArgs) (esbuild.OnResolveResult, error) {
 						path, _ := options.importMap.Resolve(args.Path)

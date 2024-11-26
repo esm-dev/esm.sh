@@ -133,21 +133,19 @@ func (ctx *BuildContext) Build() (ret *BuildMeta, err error) {
 		return
 	}
 
-	// check if the package is deprecated
-	if ctx.deprecated == "" && !ctx.esmPath.GhPrefix && !ctx.esmPath.PrPrefix && !strings.HasPrefix(ctx.esmPath.PkgName, "@jsr/") {
-		var info *PackageJSON
-		info, err = ctx.npmrc.fetchPackageInfo(ctx.esmPath.PkgName, ctx.esmPath.PkgVersion)
-		if err != nil {
-			return
-		}
-		ctx.deprecated = info.Deprecated
-	}
-
 	// install the package
 	ctx.stage = "install"
 	err = ctx.install()
 	if err != nil {
 		return
+	}
+
+	// check if the package is deprecated
+	if ctx.deprecated == "" && !ctx.esmPath.GhPrefix && !ctx.esmPath.PrPrefix {
+		ctx.deprecated, err = ctx.npmrc.isDeprecated(ctx.packageJson.Name, ctx.packageJson.Version)
+		if err != nil {
+			return
+		}
 	}
 
 	// query again after installation (in case the sub-module path has been changed by the `normalizePackageJSON` function)
@@ -297,15 +295,7 @@ func (ctx *BuildContext) buildModule() (result *BuildMeta, err error) {
 			Sourcefile: "entry.js",
 		}
 	} else {
-		if ctx.args.exports.Len() > 0 {
-			input = &esbuild.StdinOptions{
-				Contents:   fmt.Sprintf(`export { %s } from "%s";`, strings.Join(ctx.args.exports.Values(), ","), entryModuleSpecifier),
-				ResolveDir: ctx.wd,
-				Sourcefile: "entry.js",
-			}
-		} else {
-			entryPoint = path.Join(ctx.pkgDir, entry.esm)
-		}
+		entryPoint = path.Join(ctx.pkgDir, entry.esm)
 	}
 
 	pkgSideEffects := esbuild.SideEffectsTrue
@@ -403,7 +393,7 @@ func (ctx *BuildContext) buildModule() (result *BuildMeta, err error) {
 		}
 	}
 	options.Plugins = []esbuild.Plugin{{
-		Name: "esm",
+		Name: "esm.sh",
 		Setup: func(build esbuild.PluginBuild) {
 			build.OnResolve(
 				esbuild.OnResolveOptions{Filter: ".*"},
@@ -1208,7 +1198,7 @@ rebuild:
 			finalContent.Write(jsContent)
 
 			if ctx.deprecated != "" {
-				fmt.Fprintf(finalContent, `console.warn("%%c[esm.sh]%%c %%cdeprecated%%c %s@%s: %s", "color:grey", "", "color:red", "");%s`, ctx.esmPath.PkgName, ctx.esmPath.PkgVersion, strings.ReplaceAll(ctx.deprecated, "\"", "\\\""), "\n")
+				fmt.Fprintf(finalContent, `console.warn("%%c[esm.sh]%%c %%cdeprecated%%c %s@%s: " + %s, "color:grey", "", "color:red", "");%s`, ctx.esmPath.PkgName, ctx.esmPath.PkgVersion, utils.MustEncodeJSON(ctx.deprecated), "\n")
 			}
 
 			// add sourcemap Url

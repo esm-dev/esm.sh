@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -72,6 +73,12 @@ func (s *StringSet) Values() []string {
 		i++
 	}
 	return a
+}
+
+func (s *StringSet) SortedValues() []string {
+	slice := sort.StringSlice(s.Values())
+	slice.Sort()
+	return slice
 }
 
 type StringOrMap struct {

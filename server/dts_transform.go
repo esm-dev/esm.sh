@@ -193,7 +193,6 @@ func transformDTS(ctx *BuildContext, dts string, buildArgsPrefix string, marker 
 		}
 		args := BuildArgs{
 			external: NewStringSet(),
-			exports:  NewStringSet(),
 		}
 		b := NewBuildContext(ctx.zoneId, ctx.npmrc, dtsModule, args, false, "types", false, BundleFalse, false)
 		err = b.install()
