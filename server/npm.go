@@ -1,6 +1,7 @@
 package server
 
 import (
+	"bufio"
 	"bytes"
 	"encoding/base64"
 	"encoding/json"
@@ -67,7 +68,6 @@ type PackageJSONRaw struct {
 	Exports          json.RawMessage `json:"exports"`
 	Files            []string        `json:"files"`
 	Esmsh            map[string]any  `json:"esm.sh"`
-	Deprecated       any             `json:"deprecated"`
 }
 
 // PackageJSON defines the package.json of a NPM package
@@ -91,7 +91,6 @@ type PackageJSON struct {
 	TypesVersions    map[string]any
 	Exports          *OrderedMap
 	Esmsh            map[string]any
-	Deprecated       string
 }
 
 // ToNpmPackage converts PackageJSONRaw to PackageJSON
@@ -133,12 +132,6 @@ func (a *PackageJSONRaw) ToNpmPackage() *PackageJSON {
 					peerDependencies[k] = s
 				}
 			}
-		}
-	}
-	deprecated := ""
-	if a.Deprecated != nil {
-		if s, ok := a.Deprecated.(string); ok {
-			deprecated = s
 		}
 	}
 	var sideEffects *StringSet = nil
@@ -193,7 +186,6 @@ func (a *PackageJSONRaw) ToNpmPackage() *PackageJSON {
 		Imports:          a.Imports,
 		TypesVersions:    a.TypesVersions,
 		Exports:          exports,
-		Deprecated:       deprecated,
 		Esmsh:            a.Esmsh,
 	}
 }
@@ -538,7 +530,10 @@ func (rc *NpmRC) installPackage(esm ESMPath) (packageJson *PackageJSON, err erro
 			err = rc.pnpmi(installDir, "--prefer-offline")
 		}
 	} else if regexpVersionStrict.MatchString(esm.PkgVersion) {
-		err = rc.pnpmi(installDir, "--prefer-offline", esm.PackageName())
+		err = os.WriteFile(packageJsonRc, []byte(fmt.Sprintf(`{"dependencies":{"%s":"%s"}}`, esm.PkgName, esm.PkgVersion)), 0644)
+		if err == nil {
+			err = rc.pnpmi(installDir, "--prefer-offline")
+		}
 	} else {
 		err = rc.pnpmi(installDir, esm.PackageName())
 	}
@@ -571,27 +566,30 @@ func (rc *NpmRC) installPackage(esm ESMPath) (packageJson *PackageJSON, err erro
 }
 
 func (rc *NpmRC) pnpmi(dir string, packages ...string) (err error) {
+	start := time.Now()
+	stdout := &bytes.Buffer{}
+	stderr := &bytes.Buffer{}
 	args := []string{
 		"i",
-		"--no-lockfile",
-		"--no-color",
 		"--ignore-pnpmfile",
-		"--ignore-workspace",
 		"--ignore-scripts",
-		"--loglevel=error",
+		"--ignore-workspace",
+		"--loglevel=warn",
+		"--prod",
+		"--no-color",
+		"--no-lockfile",
+		"--no-optional",
+		"--no-verify-store-integrity",
 	}
 	if len(packages) > 0 {
 		args = append(args, packages...)
 	}
-	start := time.Now()
-	out := &bytes.Buffer{}
-	errout := &bytes.Buffer{}
 	cmd := exec.Command("pnpm", args...)
 	cmd.Env = os.Environ()
 	cmd.Dir = dir
-	cmd.Stdout = out
-	cmd.Stderr = errout
-	cmd.WaitDelay = 10 * time.Minute
+	cmd.Stdout = stdout
+	cmd.Stderr = stderr
+	cmd.WaitDelay = 30 * time.Second
 
 	// for security, we don't put token and password in the `.npmrc` file
 	// instead, we pass them as environment variables to the `pnpm` subprocess
@@ -621,18 +619,30 @@ func (rc *NpmRC) pnpmi(dir string, packages ...string) (err error) {
 			)
 		}
 	}
+
 	err = cmd.Run()
-	if err == nil && errout.Len() > 0 {
-		return fmt.Errorf("%s", errout.String())
-	}
 	if err != nil {
-		return fmt.Errorf("pnpm %s: %s", strings.Join(args, " "), out.String())
+		if stderr.Len() > 0 {
+			return fmt.Errorf("%s", stderr.String())
+		}
+		return err
 	}
-	if len(packages) > 0 {
-		log.Debug("pnpm add", strings.Join(packages, " "), "in", time.Since(start))
-	} else {
-		log.Debug("pnpm install in", time.Since(start))
+
+	// check 'deprecated' warning in the output
+	r := bufio.NewReader(stdout)
+	for {
+		line, err := r.ReadBytes('\n')
+		if err != nil {
+			break
+		}
+		t, m := utils.SplitByFirstByte(string(line), ':')
+		if strings.Contains(t, " deprecated ") {
+			os.WriteFile(path.Join(dir, "deprecated.txt"), []byte(strings.TrimSpace(m)), 0644)
+			break
+		}
 	}
+
+	log.Debug("pnpm i", strings.Join(packages, " "), "in", time.Since(start))
 	return
 }
 
@@ -669,6 +679,18 @@ func (rc *NpmRC) createDotNpmRcFile(dir string) error {
 		return err
 	}
 	return os.WriteFile(path.Join(dir, ".npmrc"), buf.Bytes(), 0644)
+}
+
+func (npmrc *NpmRC) isDeprecated(pkgName string, pkgVersion string) (string, error) {
+	installDir := path.Join(npmrc.StoreDir(), pkgName+"@"+pkgVersion)
+	data, err := os.ReadFile(path.Join(installDir, "deprecated.txt"))
+	if err != nil {
+		if os.IsNotExist(err) {
+			return "", nil
+		}
+		return "", err
+	}
+	return string(data), nil
 }
 
 func (npmrc *NpmRC) getSvelteVersion(importMap common.ImportMap) (svelteVersion string, err error) {
