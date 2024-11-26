@@ -91,11 +91,11 @@ func buildUnenvNodeRuntime() (err error) {
 		return
 	}
 
-	// bundle tiny chunks that are less than 1KB
+	// bundle tiny chunks that are less than 200 bytes
 	tinyChunks := make(map[string][]byte, 0)
 	for _, result := range ret.OutputFiles {
 		name := result.Path[1:]
-		if strings.HasPrefix(name, "chunk-") && len(result.Contents) < 1024 {
+		if strings.HasPrefix(name, "chunk-") && len(result.Contents) < 200 {
 			tinyChunks[name] = result.Contents
 		} else {
 			unenvNodeRuntimeBulid[name] = result.Contents
