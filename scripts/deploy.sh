@@ -7,25 +7,12 @@ if [ "$host" == "--init" ]; then
   host="$2"
 fi
 
-port="80"
-tlsPort="0"
-workDir=""
-
+config=""
 if [ "$init" == "yes" ]; then
-  echo "Server configuration:"
-  read -p "? http server port (default is 80): " v
+  read -p "? server configuration (JSON): " v
   if [ "$v" != "" ]; then
-    port="$v"
+    config="$v"
   fi
-  read -p "? enable https (y/N): " v
-  if [ "$v" == "y" ]; then
-    tlsPort="443"
-  fi
-  read -p "? workDir (ensure the user have the r/w permission of it, default is '~/.esmd'): " v
-  if [ "$v" != "" ]; then
-    workDir="$v"
-  fi
-  echo "---"
 fi
 
 if [ "$host" == "" ]; then
@@ -82,46 +69,43 @@ echo "--- installing..."
 ssh -p $sshPort ${user}@${host} << EOF
   if [ "$init" == "yes" ]; then
     apt update
-    apt install -y supervisor git git-lfs
+    apt install -y git git-lfs supervisor
     git lfs install
-  fi
-
-  SVV=\$(supervisorctl version)
-  if [ "\$?" != "0" ]; then
-    echo "error: supervisor not installed!"
-    exit
-  fi
-  echo "supervisor \$SVV"
-
-  cd /tmp
-  tar -xzf esmd.tar.gz
-  rm -rf esmd.tar.gz
-
-  supervisorctl stop esmd
-  rm -f /usr/local/bin/esmd
-  mv -f esmd /usr/local/bin/esmd
-  chmod +x /usr/local/bin/esmd
-
-  if [ "$init" == "yes" ]; then
-    echo "fs.inotify.max_user_watches=524288" | sudo tee -a /etc/sysctl.conf
-    sudo sysctl -p
-    wd=$workDir
-    if [ "\$wd" == "" ]; then
-      wd=~/.esmd
-    fi
-    mkdir \$wd
-    echo "{\"port\": ${port}, \"tlsPort\": ${tlsPort}, \"workDir\": \"\${wd}\"}" >> /etc/esmd/config.json
     svcf=/etc/supervisor/conf.d/esmd.conf
-    if [ -f \$svcf ]; then
-      rm -f \$svcf
-    fi
+    rm -f \$svcf
     echo "[program:esmd]" >> \$svcf
-    echo "command=/usr/local/bin/esmd --config=/etc/esmd/config.json" >> \$svcf
+    if [ "$config" == "" ]; then
+      echo "command=/usr/local/bin/esmd" >> \$svcf
+    else
+      mkdir -p /etc/esmd
+      rm -f /etc/esmd/config.json
+      echo "$config" >> /etc/esmd/config.json
+      echo "command=/usr/local/bin/esmd --config=/etc/esmd/config.json" >> \$svcf
+    fi
     echo "environment=USER=\"\${USER}\",HOME=\"\${HOME}\"" >> \$svcf
     echo "user=\${USER}" >> \$svcf
     echo "directory=/tmp" >> \$svcf
     echo "autostart=true" >> \$svcf
     echo "autorestart=true" >> \$svcf
+  else
+    SVV=\$(supervisorctl version)
+    if [ "\$?" != "0" ]; then
+      echo "error: supervisor not installed!"
+      exit
+    fi
+    echo "supervisor \$SVV"
+    supervisorctl stop esmd
+  fi
+
+  cd /tmp
+  tar -xzf esmd.tar.gz
+  rm -rf esmd.tar.gz
+
+  rm -f /usr/local/bin/esmd
+  mv -f esmd /usr/local/bin/esmd
+  chmod +x /usr/local/bin/esmd
+
+  if [ "$init" == "yes" ]; then
     supervisorctl reload
   else
     supervisorctl start esmd
