@@ -12,7 +12,6 @@ import (
 	"regexp"
 	"sort"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/esm-dev/esm.sh/server/storage"
@@ -44,17 +43,14 @@ type BuildContext struct {
 	pnpmPkgDir  string
 	path        string
 	stage       string
-	deprecated  string
-	importMap   [][2]string
+	esmImports  [][2]string
 	cjsRequires [][3]string
 	smOffset    int
-	subBuilds   *StringSet
-	wg          sync.WaitGroup
 }
 
 type BuildMeta struct {
-	CSS              bool     `json:"css,omitempty"`
-	FromCJS          bool     `json:"fromCJS,omitempty"`
+	CJS              bool     `json:"cjs,omitempty"`
+	HasCSS           bool     `json:"hasCSS,omitempty"`
 	TypesOnly        bool     `json:"typesOnly,omitempty"`
 	Dts              string   `json:"dts,omitempty"`
 	Deps             []string `json:"deps,omitempty"`
@@ -99,7 +95,6 @@ func NewBuildContext(zoneId string, npmrc *NpmRC, esm ESMPath, args BuildArgs, e
 		pinedTarget: pinedTarget,
 		dev:         dev,
 		bundleMode:  bundleMode,
-		subBuilds:   NewStringSet(),
 	}
 }
 
@@ -138,14 +133,6 @@ func (ctx *BuildContext) Build() (ret *BuildMeta, err error) {
 	err = ctx.install()
 	if err != nil {
 		return
-	}
-
-	// check if the package is deprecated
-	if ctx.deprecated == "" && !ctx.esmPath.GhPrefix && !ctx.esmPath.PrPrefix {
-		ctx.deprecated, err = ctx.npmrc.isDeprecated(ctx.packageJson.Name, ctx.packageJson.Version)
-		if err != nil {
-			return
-		}
 	}
 
 	// query again after installation (in case the sub-module path has been changed by the `normalizePackageJSON` function)
@@ -1183,7 +1170,7 @@ rebuild:
 			}
 
 			// check imports
-			for _, a := range ctx.importMap {
+			for _, a := range ctx.esmImports {
 				resolvedPathFull, resolvedPath := a[0], a[1]
 				if bytes.Contains(jsContent, []byte(fmt.Sprintf(`"%s"`, resolvedPath))) {
 					deps.Add(resolvedPathFull)
@@ -1197,8 +1184,12 @@ rebuild:
 			finalContent := bytes.NewBuffer(header.Bytes())
 			finalContent.Write(jsContent)
 
-			if ctx.deprecated != "" {
-				fmt.Fprintf(finalContent, `console.warn("%%c[esm.sh]%%c %%cdeprecated%%c %s@%s: " + %s, "color:grey", "", "color:red", "");%s`, ctx.esmPath.PkgName, ctx.esmPath.PkgVersion, utils.MustEncodeJSON(ctx.deprecated), "\n")
+			// check if the package is deprecated
+			if !ctx.esmPath.GhPrefix && !ctx.esmPath.PrPrefix {
+				deprecated, err := ctx.npmrc.isDeprecated(ctx.packageJson.Name, ctx.packageJson.Version)
+				if err == nil {
+					fmt.Fprintf(finalContent, `console.warn("%%c[esm.sh]%%c %%cdeprecated%%c %s@%s: " + %s, "color:grey", "", "color:red", "");%s`, ctx.esmPath.PkgName, ctx.esmPath.PkgVersion, utils.MustEncodeJSON(deprecated), "\n")
+				}
 			}
 
 			// add sourcemap Url
@@ -1222,7 +1213,7 @@ rebuild:
 			if err != nil {
 				return
 			}
-			result.CSS = true
+			result.HasCSS = true
 		} else if config.SourceMap && strings.HasSuffix(file.Path, ".js.map") {
 			var sourceMap map[string]interface{}
 			if json.Unmarshal(file.Contents, &sourceMap) == nil {
@@ -1244,9 +1235,6 @@ rebuild:
 			}
 		}
 	}
-
-	// wait for sub-builds
-	ctx.wg.Wait()
 
 	// filter and sort dependencies
 	sortedDeps := sort.StringSlice{}
@@ -1286,10 +1274,7 @@ func (ctx *BuildContext) buildTypes() (ret *BuildMeta, err error) {
 	ctx.stage = "build"
 	err = ctx.transformDTS(dts)
 	if err == nil {
-		ret = &BuildMeta{
-			Dts: "/" + ctx.esmPath.PackageName() + dts[1:],
-		}
-
+		ret = &BuildMeta{Dts: "/" + ctx.esmPath.PackageName() + dts[1:]}
 	}
 	return
 }

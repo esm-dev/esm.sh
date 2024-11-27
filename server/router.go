@@ -1496,7 +1496,7 @@ func esmRouter(debug bool) rex.Handle {
 
 		// redirect to package css from `?css`
 		if isPkgCss && esm.SubBareName == "" {
-			if !ret.CSS {
+			if !ret.HasCSS {
 				return rex.Status(404, "Package CSS not found")
 			}
 			url := fmt.Sprintf("%s%s.css", cdnOrigin, strings.TrimSuffix(buildCtx.Path(), ".mjs"))
@@ -1539,7 +1539,7 @@ func esmRouter(debug bool) rex.Handle {
 				if isWorker {
 					defer f.Close()
 					moduleUrl := cdnOrigin + buildCtx.Path()
-					if !ret.FromCJS && exports.Len() > 0 {
+					if !ret.CJS && exports.Len() > 0 {
 						moduleUrl += "?exports=" + strings.Join(exports.SortedValues(), ",")
 					}
 					return fmt.Sprintf(
@@ -1548,7 +1548,7 @@ func esmRouter(debug bool) rex.Handle {
 						moduleUrl,
 					)
 				}
-				if !ret.FromCJS && exports.Len() > 0 {
+				if !ret.CJS && exports.Len() > 0 {
 					defer f.Close()
 					xxh := xxhash.New()
 					xxh.Write([]byte(strings.Join(exports.SortedValues(), ",")))
@@ -1581,7 +1581,7 @@ func esmRouter(debug bool) rex.Handle {
 
 		if isWorker {
 			moduleUrl := cdnOrigin + buildCtx.Path()
-			if !ret.FromCJS && exports.Len() > 0 {
+			if !ret.CJS && exports.Len() > 0 {
 				moduleUrl += "?exports=" + strings.Join(exports.SortedValues(), ",")
 			}
 			fmt.Fprintf(buf,
@@ -1596,15 +1596,15 @@ func esmRouter(debug bool) rex.Handle {
 				}
 			}
 			esmPath := buildCtx.Path()
-			if !ret.FromCJS && exports.Len() > 0 {
+			if !ret.CJS && exports.Len() > 0 {
 				esmPath += "?exports=" + strings.Join(exports.SortedValues(), ",")
 			}
 			ctx.SetHeader("X-ESM-Path", esmPath)
 			fmt.Fprintf(buf, "export * from \"%s\";\n", esmPath)
-			if (ret.FromCJS || ret.HasDefaultExport) && (exports.Len() == 0 || exports.Has("default")) {
+			if (ret.CJS || ret.HasDefaultExport) && (exports.Len() == 0 || exports.Has("default")) {
 				fmt.Fprintf(buf, "export { default } from \"%s\";\n", esmPath)
 			}
-			if ret.FromCJS && exports.Len() > 0 {
+			if ret.CJS && exports.Len() > 0 {
 				fmt.Fprintf(buf, "import _ from \"%s\";\n", esmPath)
 				fmt.Fprintf(buf, "export const { %s } = _;\n", strings.Join(exports.SortedValues(), ", "))
 			}

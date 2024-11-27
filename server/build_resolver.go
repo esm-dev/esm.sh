@@ -50,8 +50,8 @@ func (entry *BuildEntry) updateEntry(entryType string, entryPath string) {
 	}
 }
 
-// resolve resolves the entrypoint of the given type
-func (entry *BuildEntry) resolve(ctx *BuildContext, mType string, condition interface{}, entryType string) {
+// resolve resolves the entrypoint of the given module type
+func (entry *BuildEntry) resolve(ctx *BuildContext, moduleType string, condition interface{}, entryType string) {
 	if entry.hasEntry(entryType) {
 		return
 	}
@@ -63,7 +63,7 @@ func (entry *BuildEntry) resolve(ctx *BuildContext, mType string, condition inte
 				entry.updateEntry(entryType, s)
 			}
 		}
-		e := ctx.resolveConditionExportEntry(om, mType)
+		e := ctx.resolveConditionExportEntry(om, moduleType)
 		if e.esm != "" && !entry.hasEntry("esm") {
 			entry.updateEntry("esm", e.esm)
 		}
@@ -700,7 +700,7 @@ func (ctx *BuildContext) resolveExternalModule(specifier string, kind api.Resolv
 			}
 			// mark the resolved path for _preload_
 			if kind != api.ResolveJSDynamicImport {
-				ctx.importMap = append(ctx.importMap, [2]string{resolvedPathFull, resolvedPath})
+				ctx.esmImports = append(ctx.esmImports, [2]string{resolvedPathFull, resolvedPath})
 			}
 			// if it's `require("module")` call
 			if kind == api.ResolveJSRequireCall {
@@ -742,39 +742,12 @@ func (ctx *BuildContext) resolveExternalModule(specifier string, kind api.Resolv
 	if strings.HasPrefix(specifier, ctx.packageJson.Name+"/") {
 		subPath := strings.TrimPrefix(specifier, ctx.packageJson.Name+"/")
 		subModule := ESMPath{
+			GhPrefix:    ctx.esmPath.GhPrefix,
+			PrPrefix:    ctx.esmPath.PrPrefix,
 			PkgName:     ctx.esmPath.PkgName,
 			PkgVersion:  ctx.esmPath.PkgVersion,
 			SubPath:     subPath,
 			SubBareName: toModuleBareName(subPath, false),
-			GhPrefix:    ctx.esmPath.GhPrefix,
-		}
-		if ctx.subBuilds != nil {
-			b := &BuildContext{
-				zoneId:      ctx.zoneId,
-				npmrc:       ctx.npmrc,
-				esmPath:     subModule,
-				packageJson: ctx.packageJson,
-				deprecated:  ctx.deprecated,
-				args:        ctx.args,
-				target:      ctx.target,
-				dev:         ctx.dev,
-				wd:          ctx.wd,
-				pkgDir:      ctx.pkgDir,
-				pnpmPkgDir:  ctx.pnpmPkgDir,
-				subBuilds:   ctx.subBuilds,
-			}
-			if ctx.bundleMode == BundleFalse {
-				b.bundleMode = BundleFalse
-			}
-			pathname := b.Path()
-			if !ctx.subBuilds.Has(pathname) {
-				ctx.subBuilds.Add(pathname)
-				ctx.wg.Add(1)
-				go func() {
-					defer ctx.wg.Done()
-					b.Build()
-				}()
-			}
 		}
 		resolvedPath = ctx.getImportPath(subModule, ctx.getBuildArgsPrefix(false), ctx.externalAll)
 		if ctx.bundleMode == BundleFalse {
@@ -1103,8 +1076,8 @@ func (ctx *BuildContext) normalizePackageJSON(p *PackageJSON) {
 	}
 }
 
-func (ctx *BuildContext) lexer(entry *BuildEntry, forceCjsOnly bool) (ret *BuildMeta, reexport string, err error) {
-	if entry.esm != "" && !forceCjsOnly {
+func (ctx *BuildContext) lexer(entry *BuildEntry, forceCjsModule bool) (ret *BuildMeta, reexport string, err error) {
+	if entry.esm != "" && !forceCjsModule {
 		if strings.HasSuffix(entry.esm, ".vue") || strings.HasSuffix(entry.esm, ".svelte") {
 			ret = &BuildMeta{
 				HasDefaultExport: true,
@@ -1113,12 +1086,12 @@ func (ctx *BuildContext) lexer(entry *BuildEntry, forceCjsOnly bool) (ret *Build
 			return
 		}
 
-		isESM, namedExports, e := ctx.esmLexer(entry.esm)
-		if e != nil {
-			err = e
+		var isESM bool
+		var namedExports []string
+		isESM, namedExports, err = validateModuleFile(path.Join(ctx.wd, "node_modules", ctx.esmPath.PkgName, entry.esm))
+		if err != nil {
 			return
 		}
-
 		if isESM {
 			ret = &BuildMeta{
 				NamedExports:     namedExports,
@@ -1126,11 +1099,10 @@ func (ctx *BuildContext) lexer(entry *BuildEntry, forceCjsOnly bool) (ret *Build
 			}
 			return
 		}
-
 		log.Warnf("fake ES module '%s' of '%s'", entry.esm, ctx.packageJson.Name)
 
 		var r cjsModuleLexerResult
-		r, err = ctx.cjsLexer(entry.esm)
+		r, err = cjsModuleLexer(ctx.wd, ctx.esmPath.PkgName, entry.esm, ctx.getNodeEnv())
 		if err != nil {
 			return
 		}
@@ -1138,7 +1110,7 @@ func (ctx *BuildContext) lexer(entry *BuildEntry, forceCjsOnly bool) (ret *Build
 		ret = &BuildMeta{
 			HasDefaultExport: r.HasDefaultExport,
 			NamedExports:     r.NamedExports,
-			FromCJS:          true,
+			CJS:              true,
 		}
 		entry.cjs = entry.esm
 		entry.esm = ""
@@ -1148,32 +1120,16 @@ func (ctx *BuildContext) lexer(entry *BuildEntry, forceCjsOnly bool) (ret *Build
 
 	if entry.cjs != "" {
 		var cjs cjsModuleLexerResult
-		cjs, err = ctx.cjsLexer(entry.cjs)
+		cjs, err = cjsModuleLexer(ctx.wd, ctx.esmPath.PkgName, entry.cjs, ctx.getNodeEnv())
 		if err != nil {
 			return
 		}
 		ret = &BuildMeta{
 			HasDefaultExport: cjs.HasDefaultExport,
 			NamedExports:     cjs.NamedExports,
-			FromCJS:          true,
+			CJS:              true,
 		}
 		reexport = cjs.ReExport
-	}
-	return
-}
-
-func (ctx *BuildContext) cjsLexer(specifier string) (cjs cjsModuleLexerResult, err error) {
-	cjs, err = cjsModuleLexer(ctx.wd, ctx.esmPath.PkgName, specifier, ctx.getNodeEnv())
-	if err == nil && cjs.Error != "" {
-		err = fmt.Errorf("cjsLexer: %s", cjs.Error)
-	}
-	return
-}
-
-func (ctx *BuildContext) esmLexer(specifier string) (isESM bool, namedExports []string, err error) {
-	isESM, namedExports, err = validateModuleFile(path.Join(ctx.wd, "node_modules", ctx.esmPath.PkgName, specifier))
-	if err != nil {
-		err = fmt.Errorf("esmLexer: %v", err)
 	}
 	return
 }
