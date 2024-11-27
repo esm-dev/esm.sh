@@ -621,9 +621,9 @@ func (ctx *BuildContext) resolveEntry(esm ESMPath) (entry BuildEntry) {
 }
 
 // see https://nodejs.org/api/packages.html#nested-conditions
-func (ctx *BuildContext) resolveConditionExportEntry(conditions *OrderedMap, mType string) (entry BuildEntry) {
+func (ctx *BuildContext) resolveConditionExportEntry(conditions *OrderedMap, moduleType string) (entry BuildEntry) {
 	entryKey := "esm"
-	switch mType {
+	switch moduleType {
 	case "", "commonjs":
 		entryKey = "cjs"
 	case "module":
@@ -636,7 +636,7 @@ func (ctx *BuildContext) resolveConditionExportEntry(conditions *OrderedMap, mTy
 		for _, conditionName := range ctx.args.conditions {
 			condition, ok := conditions.Get(conditionName)
 			if ok {
-				entry.resolve(ctx, mType, condition, entryKey)
+				entry.resolve(ctx, moduleType, condition, entryKey)
 			}
 		}
 	}
@@ -644,28 +644,28 @@ func (ctx *BuildContext) resolveConditionExportEntry(conditions *OrderedMap, mTy
 	if ctx.dev {
 		condition, ok := conditions.Get("development")
 		if ok {
-			entry.resolve(ctx, mType, condition, entryKey)
+			entry.resolve(ctx, moduleType, condition, entryKey)
 		}
 	}
 
 	if ctx.isBrowserTarget() {
 		condition, ok := conditions.Get("browser")
 		if ok {
-			entry.resolve(ctx, mType, condition, entryKey)
+			entry.resolve(ctx, moduleType, condition, entryKey)
 		}
 	} else if ctx.isDenoTarget() {
 		for _, conditionName := range []string{"deno", "node"} {
 			condition, ok := conditions.Get(conditionName)
 			if ok {
 				// entry.ibc = conditionName != "browser"
-				entry.resolve(ctx, mType, condition, entryKey)
+				entry.resolve(ctx, moduleType, condition, entryKey)
 				break
 			}
 		}
 	} else if ctx.target == "node" {
 		condition, ok := conditions.Get("node")
 		if ok {
-			entry.resolve(ctx, mType, condition, entryKey)
+			entry.resolve(ctx, moduleType, condition, entryKey)
 		}
 	}
 
@@ -680,10 +680,11 @@ func (ctx *BuildContext) resolveConditionExportEntry(conditions *OrderedMap, mTy
 			case "types", "typings":
 				entry.resolve(ctx, "types", condition, "dts")
 			case "default":
-				entry.resolve(ctx, mType, condition, entryKey)
+				entry.resolve(ctx, moduleType, condition, entryKey)
 			}
 		}
 	}
+
 	return
 }
 
@@ -1187,6 +1188,9 @@ func normalizeBuildEntry(ctx *BuildContext, entry *BuildEntry) {
 				entry.esm = entry.esm + "/index.js"
 			}
 		}
+		if !ctx.existsPkgFile(entry.esm) {
+			entry.esm = ""
+		}
 	}
 
 	if entry.cjs != "" {
@@ -1216,12 +1220,21 @@ func normalizeBuildEntry(ctx *BuildContext, entry *BuildEntry) {
 
 	if entry.esm != "" {
 		entry.esm = normalizeEntryPath(entry.esm)
+		if !ctx.existsPkgFile(entry.esm) {
+			entry.esm = ""
+		}
 	}
 	if entry.cjs != "" {
 		entry.cjs = normalizeEntryPath(entry.cjs)
+		if !ctx.existsPkgFile(entry.cjs) {
+			entry.cjs = ""
+		}
 	}
 	if entry.dts != "" {
 		entry.dts = normalizeEntryPath(entry.dts)
+		if !ctx.existsPkgFile(entry.dts) {
+			entry.dts = ""
+		}
 	}
 }
 
