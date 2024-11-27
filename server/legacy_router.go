@@ -2,6 +2,7 @@ package server
 
 import (
 	"bytes"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -13,6 +14,7 @@ import (
 	"strings"
 
 	"github.com/esm-dev/esm.sh/server/storage"
+	"github.com/ije/esbuild-internal/xxhash"
 	"github.com/ije/gox/utils"
 	"github.com/ije/gox/valid"
 	"github.com/ije/rex"
@@ -42,12 +44,32 @@ Start:
 		return rex.Status(405, "Method Not Allowed")
 	}
 
-	// `/stable/react/es2022/react.mjs`
+	// `/react-dom@18.3.1&pin=v135`
+	if strings.Contains(pathname, "&pin=") {
+		return legacyESM(ctx, pathname)
+	}
+
+	// `/react-dom@18.3.1?pin=v135`
+	if q := ctx.R.URL.RawQuery; strings.HasPrefix(q, "pin=") || strings.Contains(q, "&pin=") {
+		query := ctx.R.URL.Query()
+		v := query.Get("pin")
+		if len(v) > 1 && v[0] == 'v' && valid.IsDigtalOnlyString(v[1:]) {
+			bv, _ := strconv.Atoi(v[1:])
+			if bv <= 0 || bv > 135 {
+				return rex.Status(400, "Invalid `pin` query")
+			}
+			return legacyESM(ctx, pathname)
+		}
+	}
+
+	// `/stable/react@18.3.1?dev`
+	// `/stable/react@18.3.1/es2022/react.mjs`
 	if strings.HasPrefix(pathname, "/stable/") {
 		return legacyESM(ctx, pathname[7:])
 	}
 
-	// `/v135/react-dom/es2022/react-dom.mjs`
+	// `/v135/react-dom@18.3.1?dev`
+	// `/v135/react-dom@18.3.1/es2022/react-dom.mjs`
 	if strings.HasPrefix(pathname, "/v") {
 		legacyBuildVersion, path := utils.SplitByFirstByte(pathname[2:], '/')
 		if valid.IsDigtalOnlyString(legacyBuildVersion) {
@@ -68,20 +90,6 @@ Start:
 		}
 	}
 
-	// `/react-dom?pin=v135`
-	if strings.Contains(ctx.R.URL.RawQuery, "pin=") {
-		query := ctx.R.URL.Query()
-		v := query.Get("pin")
-		if len(v) > 1 && v[0] == 'v' && valid.IsDigtalOnlyString(v[1:]) {
-			bv, _ := strconv.Atoi(v[1:])
-			if bv <= 0 || bv > 135 {
-				// ignore invalid pin query
-				return nil
-			}
-			return legacyESM(ctx, pathname)
-		}
-	}
-
 	// packages created by the `/build` API
 	if len(pathname) == 42 && strings.HasPrefix(pathname, "/~") && valid.IsHexString(pathname[2:]) {
 		return redirect(ctx, fmt.Sprintf("/v135%s@0.0.0/%s/mod.mjs", pathname, legacyGetBuildTargetByUA(ctx.UserAgent())), true)
@@ -91,32 +99,31 @@ Start:
 }
 
 func legacyESM(ctx *rex.Context, pathname string) any {
-	query := ""
 	pkgName, pkgVersion, isBuildDist, err := splitLegacyESMPath(pathname)
 	if err != nil {
 		return rex.Status(400, err.Error())
 	}
+	query := ""
+	if ctx.R.URL.RawQuery != "" {
+		query = "?" + ctx.R.URL.RawQuery
+	}
 	isFixedVersion := regexpVersionStrict.MatchString(pkgVersion)
 	if !isFixedVersion {
-		if endsWith(pathname, ".d.ts", ".d.mts") {
-			npmrc := getDefaultNpmRC()
-			pkgInfo, err := npmrc.fetchPackageInfo(pkgName, pkgVersion)
-			if err != nil {
-				if strings.Contains(err.Error(), " not found") {
-					return rex.Status(404, err.Error())
-				}
-				return rex.Status(500, err.Error())
+		npmrc := getDefaultNpmRC()
+		pkgInfo, err := npmrc.fetchPackageInfo(pkgName, pkgVersion)
+		if err != nil {
+			if strings.Contains(err.Error(), " not found") {
+				return rex.Status(404, err.Error())
 			}
-			return redirect(ctx, getCdnOrigin(ctx)+strings.ReplaceAll(ctx.R.URL.Path, "@"+pkgVersion, "@"+pkgInfo.Version), false)
+			return rex.Status(500, err.Error())
 		}
-		ctx.R.URL.Path = pathname
-		return nil // use next build
+		return redirect(ctx, getCdnOrigin(ctx)+strings.Replace(ctx.R.URL.Path, "@"+pkgVersion, "@"+pkgInfo.Version, 1)+query, false)
 	}
 	savePath := "legacy/" + normalizeSavePath("", ctx.R.URL.Path[1:])
-	if isBuildDist || endsWith(pathname, ".ts", ".mts") {
+	if isBuildDist || endsWith(pathname, ".d.ts", ".d.mts") {
 		f, _, e := buildStorage.Get(savePath)
 		if e != nil && e != storage.ErrNotFound {
-			return rex.Status(500, "Storage Error")
+			return rex.Status(500, "Storage Error: "+e.Error())
 		}
 		if e == nil {
 			switch path.Ext(pathname) {
@@ -136,25 +143,20 @@ func legacyESM(ctx *rex.Context, pathname string) any {
 			return f // auto closed
 		}
 	} else {
-		q := ctx.R.URL.Query()
-		target := q.Get("target")
-		if targets[target] == 0 {
-			target = legacyGetBuildTargetByUA(ctx.UserAgent())
-		} else {
-			query = "?target=" + target
-		}
-		savePath += "+" + target
-		if v := q.Get("pin"); v != "" {
-			if query == "" {
-				query = "?pin=" + v
-			} else {
-				query += "&pin=" + v
+		varyUA := false
+		if query != "" {
+			if !ctx.R.URL.Query().Has("target") {
+				varyUA = true
+				savePath += "+" + legacyGetBuildTargetByUA(ctx.UserAgent())
 			}
-			savePath += "+" + v
+			h := xxhash.New()
+			h.Write([]byte(query))
+			savePath += "+" + base64.RawURLEncoding.EncodeToString(h.Sum(nil))
 		}
+		savePath += "+mjs"
 		f, _, e := buildStorage.Get(savePath)
 		if e != nil && e != storage.ErrNotFound {
-			return rex.Status(500, "Storage Error")
+			return rex.Status(500, "Storage Error: "+e.Error())
 		}
 		if e == nil {
 			defer f.Close()
@@ -163,6 +165,9 @@ func legacyESM(ctx *rex.Context, pathname string) any {
 				ctx.SetHeader("Content-Type", ctJavaScript)
 				ctx.SetHeader("Control-Cache", ccImmutable)
 				ctx.SetHeader("X-ESM-Id", ret[0])
+				if varyUA {
+					appendVaryHeader(ctx.W.Header(), "User-Agent")
+				}
 				if len(ret) == 3 {
 					ctx.SetHeader("X-TypeScript-Types", getCdnOrigin(ctx)+ret[1])
 					return ret[2]
@@ -202,7 +207,7 @@ func legacyESM(ctx *rex.Context, pathname string) any {
 		return rex.Status(res.StatusCode, data)
 	}
 
-	if isBuildDist || endsWith(pathname, ".ts", ".mts") {
+	if isBuildDist || endsWith(pathname, ".d.ts", ".d.mts") {
 		buf := bytes.NewBuffer(nil)
 		err := buildStorage.Put(savePath, io.TeeReader(res.Body, buf))
 		if err != nil {
@@ -242,6 +247,9 @@ func legacyESM(ctx *rex.Context, pathname string) any {
 		ctx.SetHeader("Content-Type", res.Header.Get("Content-Type"))
 		ctx.SetHeader("Control-Cache", ccImmutable)
 		ctx.SetHeader("X-ESM-Id", esmId)
+		if query != "" && !ctx.R.URL.Query().Has("target") {
+			appendVaryHeader(ctx.W.Header(), "User-Agent")
+		}
 		if dts != "" {
 			ctx.SetHeader("X-TypeScript-Types", getCdnOrigin(ctx)+dts)
 		}
