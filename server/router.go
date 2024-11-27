@@ -230,17 +230,20 @@ func esmRouter(debug bool) rex.Handle {
 			buildQueue.lock.RLock()
 			for el := buildQueue.queue.Front(); el != nil; el = el.Next() {
 				t, ok := el.Value.(*BuildTask)
-				clientIps := make([]string, len(t.clients))
-				for idx, c := range t.clients {
-					clientIps[idx] = c.IP
-				}
 				if ok {
+					clientIps := make([]string, len(t.clients))
+					for idx, c := range t.clients {
+						clientIps[idx] = c.IP
+					}
 					m := map[string]any{
 						"clients":   clientIps,
 						"createdAt": t.createdAt.Format(http.TimeFormat),
-						"inProcess": t.inProcess,
 						"path":      t.Path(),
-						"stage":     t.stage,
+					}
+					if !t.inProcess {
+						m["status"] = "pending"
+					} else {
+						m["status"] = t.stage
 					}
 					if !t.startedAt.IsZero() {
 						m["startedAt"] = t.startedAt.Format(http.TimeFormat)
