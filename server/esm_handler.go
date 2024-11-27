@@ -105,22 +105,21 @@ func esmHandler() rex.Handle {
 			for el := buildQueue.list.Front(); el != nil; el = el.Next() {
 				t, ok := el.Value.(*queueTask)
 				if ok {
-					m := map[string]interface{}{
-						"bundle":    t.BundleDeps,
-						"bv":        t.BuildVersion,
-						"consumers": t.consumers,
+					clientIps := make([]string, len(t.consumers))
+					for idx, c := range t.consumers {
+						clientIps[idx] = c.IP
+					}
+					m := map[string]any{
+						"clients":   clientIps,
 						"createdAt": t.createdAt.Format(http.TimeFormat),
-						"dev":       t.Dev,
-						"inProcess": t.inProcess,
-						"pkg":       t.Pkg.String(),
-						"stage":     t.stage,
-						"target":    t.Target,
+						"id":        t.ID(),
+						"status":    t.stage,
+					}
+					if !t.inProcess {
+						m["status"] = "pending"
 					}
 					if !t.startedAt.IsZero() {
 						m["startedAt"] = t.startedAt.Format(http.TimeFormat)
-					}
-					if len(t.Args.deps) > 0 {
-						m["deps"] = t.Args.deps.String()
 					}
 					q[i] = m
 					i++
