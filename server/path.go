@@ -75,15 +75,15 @@ func praseESMPath(npmrc *NpmRC, pathname string) (esm ESMPath, extraQuery string
 			err = errors.New("invalid path")
 			return
 		}
+		isBuildDist = validateBuildDist(strings.Split(subPath, "/"))
+		isFixedVersion = true
 		esm = ESMPath{
 			PkgName:     pkgName,
 			PkgVersion:  version,
 			SubPath:     subPath,
-			SubBareName: toModuleBareName(subPath, true),
+			SubBareName: toModuleBareName(subPath, !isBuildDist),
 			PrPrefix:    true,
 		}
-		isFixedVersion = true
-		isBuildDist = validateBuildDist(strings.Split(subPath, "/"))
 		return
 	}
 
@@ -136,7 +136,7 @@ func praseESMPath(npmrc *NpmRC, pathname string) (esm ESMPath, extraQuery string
 		PkgName:     pkgName,
 		PkgVersion:  version,
 		SubPath:     subPath,
-		SubBareName: toModuleBareName(subPath, true),
+		SubBareName: toModuleBareName(subPath, !isBuildDist),
 		GhPrefix:    ghPrefix,
 	}
 
