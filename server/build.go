@@ -1186,8 +1186,8 @@ rebuild:
 
 			// check if the package is deprecated
 			if !ctx.esmPath.GhPrefix && !ctx.esmPath.PrPrefix {
-				deprecated, err := ctx.npmrc.isDeprecated(ctx.packageJson.Name, ctx.packageJson.Version)
-				if err == nil {
+				deprecated, _ := ctx.npmrc.isDeprecated(ctx.packageJson.Name, ctx.packageJson.Version)
+				if deprecated != "" {
 					fmt.Fprintf(finalContent, `console.warn("%%c[esm.sh]%%c %%cdeprecated%%c %s@%s: " + %s, "color:grey", "", "color:red", "");%s`, ctx.esmPath.PkgName, ctx.esmPath.PkgVersion, utils.MustEncodeJSON(deprecated), "\n")
 				}
 			}
