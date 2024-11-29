@@ -1,7 +1,7 @@
 # Self-Hosting
 
 [esm.sh](https://esm.sh) provides a global fast CDN publicly which is powered by [Cloudflare](https://cloudflare.com).
-You can also host esm.sh service by yourself. Please follow the instructions below.
+You can also host esm.sh service by yourself. To do this, please follow the instructions below.
 
 ## Clone the Source Code
 
@@ -61,13 +61,13 @@ esm.sh provides a Docker image for deployment. You can pull the container image 
 
 ```bash
 docker pull ghcr.io/esm-dev/esm.sh      # latest version
-docker pull ghcr.io/esm-dev/esm.sh:v135 # specific version
+docker pull ghcr.io/esm-dev/esm.sh:v136 # specific version
 ```
 
 Run the container:
 
 ```bash
-docker run -p 8080:80 \
+docker run -p 80:80 \
   -e NPM_REGISTRY=https://registry.npmjs.org/ \
   -e NPM_TOKEN=****** \
   ghcr.io/esm-dev/esm.sh:latest

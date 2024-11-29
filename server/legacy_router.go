@@ -267,7 +267,7 @@ func splitLegacyESMPath(pathname string) (pkgName string, version string, isBuil
 		pathname = "/@" + pathname[4:]
 	}
 
-	pkgName, maybeVersion, _, isBuildDist := splitESMPath(pathname)
+	pkgName, maybeVersion, _, isBuildDist := splitEsmPath(pathname)
 	if !validatePackageName(pkgName) {
 		err = fmt.Errorf("invalid package name '%s'", pkgName)
 		return

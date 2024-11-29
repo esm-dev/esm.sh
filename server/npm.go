@@ -469,7 +469,7 @@ func (npmrc *NpmRC) fetchPackageInfo(packageName string, semverOrDistTag string)
 	})
 }
 
-func (rc *NpmRC) installPackage(esm ESMPath) (packageJson *PackageJSON, err error) {
+func (rc *NpmRC) installPackage(esm EsmPath) (packageJson *PackageJSON, err error) {
 	installDir := path.Join(rc.StoreDir(), esm.PackageName())
 	packageJsonPath := path.Join(installDir, "node_modules", esm.PkgName, "package.json")
 

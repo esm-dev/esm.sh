@@ -39,7 +39,7 @@ func decodeBuildArgs(argsString string) (args BuildArgs, err error) {
 			} else if strings.HasPrefix(p, "d") {
 				deps := map[string]string{}
 				for _, p := range strings.Split(p[1:], ",") {
-					pkgName, pkgVersion, _, _ := splitESMPath(p)
+					pkgName, pkgVersion, _, _ := splitEsmPath(p)
 					deps[pkgName] = pkgVersion
 				}
 				args.deps = deps
@@ -125,7 +125,7 @@ func encodeBuildArgs(args BuildArgs, isDts bool) string {
 }
 
 // resolveBuildArgs resolves `alias`, `deps`, `external` of the build args
-func resolveBuildArgs(npmrc *NpmRC, installDir string, args *BuildArgs, esmPath ESMPath) error {
+func resolveBuildArgs(npmrc *NpmRC, installDir string, args *BuildArgs, esmPath EsmPath) error {
 	if len(args.alias) > 0 || len(args.deps) > 0 || args.external.Len() > 0 {
 		depsSet := NewStringSet()
 		err := walkDeps(npmrc, installDir, esmPath, depsSet)
@@ -140,7 +140,7 @@ func resolveBuildArgs(npmrc *NpmRC, installDir string, args *BuildArgs, esmPath 
 				}
 			}
 			for from, to := range alias {
-				pkgName, _, _, _ := splitESMPath(to)
+				pkgName, _, _, _ := splitEsmPath(to)
 				if pkgName == esmPath.PkgName {
 					delete(alias, from)
 				} else {
@@ -163,7 +163,7 @@ func resolveBuildArgs(npmrc *NpmRC, installDir string, args *BuildArgs, esmPath 
 				// fix some edge cases
 				// for example, the package "htm" doesn't declare 'preact' as a dependency explicitly
 				// as a workaround, we check if the package name is in the subPath of the package
-				if esmPath.SubBareName != "" && contains(strings.Split(esmPath.SubBareName, "/"), name) {
+				if esmPath.SubModuleName != "" && contains(strings.Split(esmPath.SubModuleName, "/"), name) {
 					deps[name] = version
 				}
 			}
@@ -193,7 +193,7 @@ func resolveBuildArgs(npmrc *NpmRC, installDir string, args *BuildArgs, esmPath 
 	return nil
 }
 
-func walkDeps(npmrc *NpmRC, installDir string, esmPath ESMPath, mark *StringSet) (err error) {
+func walkDeps(npmrc *NpmRC, installDir string, esmPath EsmPath, mark *StringSet) (err error) {
 	if mark.Has(esmPath.PkgName) {
 		return
 	}
@@ -228,7 +228,7 @@ func walkDeps(npmrc *NpmRC, installDir string, esmPath ESMPath, mark *StringSet)
 		if strings.HasPrefix(name, "@types/") || strings.HasPrefix(name, "@babel/") {
 			continue
 		}
-		err := walkDeps(npmrc, installDir, ESMPath{PkgName: name, PkgVersion: version}, mark)
+		err := walkDeps(npmrc, installDir, EsmPath{PkgName: name, PkgVersion: version}, mark)
 		if err != nil {
 			return err
 		}

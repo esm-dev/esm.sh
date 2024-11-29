@@ -11,53 +11,37 @@ import (
 	"github.com/ije/gox/utils"
 )
 
-type ESMPathKind uint8
-
-const (
-	// module entry
-	ESMEntry ESMPathKind = iota
-	// js/css build
-	ESMBuild
-	// source map
-	ESMSourceMap
-	// *.d.ts
-	ESMDts
-	// package raw file
-	RawFile
-)
-
-type ESMPath struct {
-	GhPrefix    bool
-	PrPrefix    bool
-	PkgName     string
-	PkgVersion  string
-	SubPath     string
-	SubBareName string
+type EsmPath struct {
+	GhPrefix      bool
+	PrPrefix      bool
+	PkgName       string
+	PkgVersion    string
+	SubPath       string
+	SubModuleName string
 }
 
-func (path ESMPath) PackageName() string {
-	s := path.PkgName
-	if path.PkgVersion != "" && path.PkgVersion != "*" && path.PkgVersion != "latest" {
-		s += "@" + path.PkgVersion
+func (p EsmPath) PackageName() string {
+	s := p.PkgName
+	if p.PkgVersion != "" && p.PkgVersion != "*" && p.PkgVersion != "latest" {
+		s += "@" + p.PkgVersion
 	}
-	if path.GhPrefix {
+	if p.GhPrefix {
 		return "gh/" + s
 	}
-	if path.PrPrefix {
+	if p.PrPrefix {
 		return "pr/" + s
 	}
 	return s
 }
 
-func (path ESMPath) String() string {
-	s := path.PackageName()
-	if path.SubBareName != "" {
-		s += "/" + path.SubBareName
+func (p EsmPath) Specifier() string {
+	if p.SubModuleName != "" {
+		return p.PackageName() + "/" + p.SubModuleName
 	}
-	return s
+	return p.PackageName()
 }
 
-func praseESMPath(npmrc *NpmRC, pathname string) (esm ESMPath, extraQuery string, isFixedVersion bool, isBuildDist bool, err error) {
+func praseEsmPath(npmrc *NpmRC, pathname string) (esmPath EsmPath, extraQuery string, isFixedVersion bool, isBuildDist bool, err error) {
 	// see https://pkg.pr.new
 	if strings.HasPrefix(pathname, "/pr/") || strings.HasPrefix(pathname, "/pkg.pr.new/") {
 		if strings.HasPrefix(pathname, "/pr/") {
@@ -77,12 +61,12 @@ func praseESMPath(npmrc *NpmRC, pathname string) (esm ESMPath, extraQuery string
 		}
 		isBuildDist = validateBuildDist(strings.Split(subPath, "/"))
 		isFixedVersion = true
-		esm = ESMPath{
-			PkgName:     pkgName,
-			PkgVersion:  version,
-			SubPath:     subPath,
-			SubBareName: toModuleBareName(subPath, !isBuildDist),
-			PrPrefix:    true,
+		esmPath = EsmPath{
+			PkgName:       pkgName,
+			PkgVersion:    version,
+			SubPath:       subPath,
+			SubModuleName: toModuleBareName(subPath, !isBuildDist),
+			PrPrefix:      true,
 		}
 		return
 	}
@@ -116,7 +100,7 @@ func praseESMPath(npmrc *NpmRC, pathname string) (esm ESMPath, extraQuery string
 		}
 	}
 
-	pkgName, maybeVersion, subPath, isBuildDist := splitESMPath(pathname)
+	pkgName, maybeVersion, subPath, isBuildDist := splitEsmPath(pathname)
 	if !validatePackageName(pkgName) {
 		err = fmt.Errorf("invalid package name '%s'", pkgName)
 		return
@@ -132,47 +116,47 @@ func praseESMPath(npmrc *NpmRC, pathname string) (esm ESMPath, extraQuery string
 		version = v
 	}
 
-	esm = ESMPath{
-		PkgName:     pkgName,
-		PkgVersion:  version,
-		SubPath:     subPath,
-		SubBareName: toModuleBareName(subPath, !isBuildDist),
-		GhPrefix:    ghPrefix,
+	esmPath = EsmPath{
+		PkgName:       pkgName,
+		PkgVersion:    version,
+		SubPath:       subPath,
+		SubModuleName: toModuleBareName(subPath, !isBuildDist),
+		GhPrefix:      ghPrefix,
 	}
 
 	// workaround for es5-ext "../#/.." path
-	if esm.SubBareName != "" && esm.PkgName == "es5-ext" {
-		esm.SubBareName = strings.ReplaceAll(esm.SubBareName, "/%23/", "/#/")
+	if esmPath.SubModuleName != "" && esmPath.PkgName == "es5-ext" {
+		esmPath.SubModuleName = strings.ReplaceAll(esmPath.SubModuleName, "/%23/", "/#/")
 	}
 
 	if ghPrefix {
-		if isCommitish(esm.PkgVersion) || regexpVersionStrict.MatchString(strings.TrimPrefix(esm.PkgVersion, "v")) {
+		if isCommitish(esmPath.PkgVersion) || regexpVersionStrict.MatchString(strings.TrimPrefix(esmPath.PkgVersion, "v")) {
 			isFixedVersion = true
 			return
 		}
 		var refs []GitRef
-		refs, err = listRepoRefs(fmt.Sprintf("https://github.com/%s", esm.PkgName))
+		refs, err = listRepoRefs(fmt.Sprintf("https://github.com/%s", esmPath.PkgName))
 		if err != nil {
 			return
 		}
-		if esm.PkgVersion == "" {
+		if esmPath.PkgVersion == "" {
 			for _, ref := range refs {
 				if ref.Ref == "HEAD" {
-					esm.PkgVersion = ref.Sha[:7]
+					esmPath.PkgVersion = ref.Sha[:7]
 					return
 				}
 			}
 		} else {
 			// try to find the exact tag or branch
 			for _, ref := range refs {
-				if ref.Ref == "refs/tags/"+esm.PkgVersion || ref.Ref == "refs/heads/"+esm.PkgVersion {
-					esm.PkgVersion = ref.Sha[:7]
+				if ref.Ref == "refs/tags/"+esmPath.PkgVersion || ref.Ref == "refs/heads/"+esmPath.PkgVersion {
+					esmPath.PkgVersion = ref.Sha[:7]
 					return
 				}
 			}
 			// try to find the semver tag
 			var c *semver.Constraints
-			c, err = semver.NewConstraint(strings.TrimPrefix(esm.PkgVersion, "semver:"))
+			c, err = semver.NewConstraint(strings.TrimPrefix(esmPath.PkgVersion, "semver:"))
 			if err == nil {
 				vs := make([]*semver.Version, len(refs))
 				i := 0
@@ -190,7 +174,7 @@ func praseESMPath(npmrc *NpmRC, pathname string) (esm ESMPath, extraQuery string
 					if i > 1 {
 						sort.Sort(semver.Collection(vs))
 					}
-					esm.PkgVersion = vs[i-1].String()
+					esmPath.PkgVersion = vs[i-1].String()
 					return
 				}
 			}
@@ -199,18 +183,18 @@ func praseESMPath(npmrc *NpmRC, pathname string) (esm ESMPath, extraQuery string
 		return
 	}
 
-	isFixedVersion = regexpVersionStrict.MatchString(esm.PkgVersion)
+	isFixedVersion = regexpVersionStrict.MatchString(esmPath.PkgVersion)
 	if !isFixedVersion {
 		var p *PackageJSON
-		p, err = npmrc.fetchPackageInfo(pkgName, esm.PkgVersion)
+		p, err = npmrc.fetchPackageInfo(pkgName, esmPath.PkgVersion)
 		if err == nil {
-			esm.PkgVersion = p.Version
+			esmPath.PkgVersion = p.Version
 		}
 	}
 	return
 }
 
-func splitESMPath(pathname string) (pkgName string, version string, subPath string, isBuildDist bool) {
+func splitEsmPath(pathname string) (pkgName string, version string, subPath string, isBuildDist bool) {
 	a := strings.Split(strings.TrimPrefix(pathname, "/"), "/")
 	nameAndVersion := ""
 	if strings.HasPrefix(a[0], "@") && len(a) > 1 {
@@ -247,6 +231,6 @@ func validateBuildDist(segments []string) bool {
 }
 
 func toPackageName(specifier string) string {
-	name, _, _, _ := splitESMPath(specifier)
+	name, _, _, _ := splitEsmPath(specifier)
 	return name
 }
