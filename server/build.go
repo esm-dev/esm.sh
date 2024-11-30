@@ -210,8 +210,8 @@ func (ctx *BuildContext) buildModule() (result *BuildMeta, err error) {
 	}
 	log.Debugf("build(%s): Entry%+v", ctx.esmPath.Specifier(), entry)
 
-	typesOnly := strings.HasPrefix(ctx.packageJson.Name, "@types/") || (entry.esm == "" && entry.cjs == "" && entry.dts != "")
-	if typesOnly {
+	isTypesOnly := strings.HasPrefix(ctx.packageJson.Name, "@types/") || (entry.esm == "" && entry.cjs == "" && entry.dts != "")
+	if isTypesOnly {
 		result = &BuildMeta{
 			TypesOnly: true,
 			Dts:       "/" + ctx.esmPath.PackageName() + entry.dts[1:],
@@ -259,7 +259,6 @@ func (ctx *BuildContext) buildModule() (result *BuildMeta, err error) {
 	}
 
 	var entryPoint string
-	var input *esbuild.StdinOptions
 
 	entrySpecifier := ctx.esmPath.PkgName
 	if ctx.esmPath.SubModuleName != "" {
@@ -267,19 +266,21 @@ func (ctx *BuildContext) buildModule() (result *BuildMeta, err error) {
 	}
 
 	if entry.esm == "" {
-		buf := bytes.NewBuffer(nil)
-		fmt.Fprintf(buf, `import * as __module from "%s";`, entrySpecifier)
-		if len(result.NamedExports) > 0 {
-			fmt.Fprintf(buf, `export const { %s } = __module;`, strings.Join(result.NamedExports, ","))
-		}
-		fmt.Fprintf(buf, "const { default: __default, ...__rest } = __module;")
-		fmt.Fprintf(buf, "export default (__default !== undefined ? __default : __rest);")
-		// Default reexport all members from original module to prevent missing named exports members
-		fmt.Fprintf(buf, `export * from "%s";`, entrySpecifier)
-		input = &esbuild.StdinOptions{
-			Contents:   buf.String(),
-			ResolveDir: ctx.wd,
-			Sourcefile: "entry.js",
+		entryPoint = path.Join(ctx.wd, "cjs_endpoint_"+strings.ReplaceAll(entrySpecifier, "/", "_")+".js")
+		if !existsFile(entryPoint) {
+			buf := bytes.NewBuffer(nil)
+			fmt.Fprintf(buf, `import * as __module from "%s";`, entrySpecifier)
+			fmt.Fprintf(buf, `export * from "%s";`, entrySpecifier)
+			if len(result.NamedExports) > 0 {
+				fmt.Fprintf(buf, `export const { %s } = __module;`, strings.Join(result.NamedExports, ","))
+			}
+			fmt.Fprintf(buf, "const { default: __default, ...__rest } = __module;")
+			fmt.Fprintf(buf, "export default (__default !== undefined ? __default : __rest);")
+			err = os.WriteFile(entryPoint, buf.Bytes(), 0644)
+			if err != nil {
+				err = fmt.Errorf("create entry point: %v", err)
+				return
+			}
 		}
 	} else {
 		entryPoint = path.Join(ctx.pkgDir, entry.esm)
@@ -302,6 +303,7 @@ func (ctx *BuildContext) buildModule() (result *BuildMeta, err error) {
 	browserExclude := map[string]*StringSet{}
 	implicitExternal := NewStringSet()
 	deps := NewStringSet()
+	splitting := false
 
 	nodeEnv := ctx.getNodeEnv()
 	filename := ctx.Path()
@@ -335,13 +337,16 @@ func (ctx *BuildContext) buildModule() (result *BuildMeta, err error) {
 		conditions = append(conditions, "deno")
 	}
 	options := esbuild.BuildOptions{
-		Bundle:            true,
+		AbsWorkingDir:     ctx.wd,
+		EntryPoints:       []string{entryPoint},
 		Format:            esbuild.FormatESModule,
 		Target:            targets[ctx.target],
 		Platform:          esbuild.PlatformBrowser,
 		Define:            define,
 		JSX:               esbuild.JSXAutomatic,
 		JSXImportSource:   "react",
+		Bundle:            true,
+		Splitting:         splitting,
 		MinifyWhitespace:  config.Minify,
 		MinifyIdentifiers: config.Minify,
 		MinifySyntax:      config.Minify,
@@ -351,11 +356,6 @@ func (ctx *BuildContext) buildModule() (result *BuildMeta, err error) {
 		Loader:            loaders,
 		Outdir:            "/esbuild",
 		Write:             false,
-	}
-	if input != nil {
-		options.Stdin = input
-	} else if entryPoint != "" {
-		options.EntryPoints = []string{entryPoint}
 	}
 	if ctx.target == "node" {
 		options.Platform = esbuild.PlatformNode
