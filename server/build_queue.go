@@ -61,7 +61,7 @@ func (q *BuildQueue) Add(ctx *BuildContext, clientIp string) *QueueClient {
 		createdAt:    time.Now(),
 		clients:      []*QueueClient{client},
 	}
-	ctx.stage = "pending"
+	ctx.status = "pending"
 
 	q.lock.Lock()
 	t.el = q.queue.PushBack(t)

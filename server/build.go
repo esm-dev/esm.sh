@@ -41,8 +41,7 @@ type BuildContext struct {
 	wd          string
 	pkgDir      string
 	pnpmPkgDir  string
-	path        string
-	stage       string
+	status      string
 	esmImports  [][2]string
 	cjsRequires [][3]string
 	smOffset    int
@@ -95,6 +94,7 @@ func NewBuildContext(zoneId string, npmrc *NpmRC, esm EsmPath, args BuildArgs, e
 		pinedTarget: pinedTarget,
 		dev:         dev,
 		bundleMode:  bundleMode,
+		status:      "init",
 	}
 }
 
@@ -129,7 +129,7 @@ func (ctx *BuildContext) Build() (ret *BuildMeta, err error) {
 	}
 
 	// install the package
-	ctx.stage = "install"
+	ctx.status = "install"
 	err = ctx.install()
 	if err != nil {
 		return
@@ -142,7 +142,7 @@ func (ctx *BuildContext) Build() (ret *BuildMeta, err error) {
 	}
 
 	// build the module
-	ctx.stage = "build"
+	ctx.status = "build"
 	ret, err = ctx.buildModule()
 	if err != nil {
 		return
@@ -1253,7 +1253,7 @@ rebuild:
 
 func (ctx *BuildContext) buildTypes() (ret *BuildMeta, err error) {
 	// install the package
-	ctx.stage = "install"
+	ctx.status = "install"
 	err = ctx.install()
 	if err != nil {
 		return
@@ -1271,7 +1271,7 @@ func (ctx *BuildContext) buildTypes() (ret *BuildMeta, err error) {
 		dts = entry.dts
 	}
 
-	ctx.stage = "build"
+	ctx.status = "build"
 	err = ctx.transformDTS(dts)
 	if err == nil {
 		ret = &BuildMeta{Dts: "/" + ctx.esmPath.PackageName() + dts[1:]}

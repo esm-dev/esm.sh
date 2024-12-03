@@ -77,10 +77,6 @@ func (entry *BuildEntry) resolve(ctx *BuildContext, moduleType string, condition
 }
 
 func (ctx *BuildContext) Path() string {
-	if ctx.path != "" {
-		return ctx.path
-	}
-
 	asteriskPrefix := ""
 	if ctx.externalAll {
 		asteriskPrefix = "*"
@@ -89,17 +85,15 @@ func (ctx *BuildContext) Path() string {
 	esmPath := ctx.esmPath
 	if ctx.target == "types" {
 		if strings.HasSuffix(esmPath.SubPath, ".d.ts") {
-			ctx.path = fmt.Sprintf(
+			return fmt.Sprintf(
 				"/%s%s/%s%s",
 				asteriskPrefix,
 				esmPath.PackageName(),
 				ctx.getBuildArgsPrefix(true),
 				esmPath.SubPath,
 			)
-		} else {
-			ctx.path = "/" + esmPath.Specifier()
 		}
-		return ctx.path
+		return "/" + esmPath.Specifier()
 	}
 
 	name := strings.TrimSuffix(path.Base(esmPath.PkgName), ".js")
@@ -124,7 +118,7 @@ func (ctx *BuildContext) Path() string {
 	} else if ctx.bundleMode == BundleFalse {
 		name += ".nobundle"
 	}
-	ctx.path = fmt.Sprintf(
+	return fmt.Sprintf(
 		"/%s%s/%s%s/%s.mjs",
 		asteriskPrefix,
 		esmPath.PackageName(),
@@ -132,7 +126,6 @@ func (ctx *BuildContext) Path() string {
 		ctx.target,
 		name,
 	)
-	return ctx.path
 }
 
 func (ctx *BuildContext) getImportPath(esmPath EsmPath, buildArgsPrefix string, externalAll bool) string {
@@ -1044,15 +1037,15 @@ func (ctx *BuildContext) normalizePackageJSON(p *PackageJSON) {
 
 	// Check if the `SubPath` is the same as the `main` or `module` field of the package.json
 	if subModule := ctx.esmPath.SubModuleName; subModule != "" {
-		isPkgMainModule := false
+		isMainModule := false
 		check := func(s string) bool {
-			return isPkgMainModule || (s != "" && subModule == utils.NormalizePathname(stripModuleExt(s))[1:])
+			return isMainModule || (s != "" && subModule == utils.NormalizePathname(stripModuleExt(s))[1:])
 		}
 		if p.Exports.Len() > 0 {
 			if v, ok := p.Exports.Get("."); ok {
 				if s, ok := v.(string); ok {
 					// exports: { ".": "./index.js" }
-					isPkgMainModule = check(s)
+					isMainModule = check(s)
 				} else if om, ok := v.(*OrderedMap); ok {
 					// exports: { ".": { "require": "./cjs/index.js", "import": "./esm/index.js" } }
 					// exports: { ".": { "node": { "require": "./cjs/index.js", "import": "./esm/index.js" } } }
@@ -1060,20 +1053,19 @@ func (ctx *BuildContext) normalizePackageJSON(p *PackageJSON) {
 					paths := getAllExportsPaths(om)
 					for _, path := range paths {
 						if check(path) {
-							isPkgMainModule = true
+							isMainModule = true
 							break
 						}
 					}
 				}
 			}
 		}
-		if !isPkgMainModule {
-			isPkgMainModule = (p.Module != "" && check(p.Module)) || (p.Main != "" && check(p.Main))
+		if !isMainModule {
+			isMainModule = (p.Module != "" && check(p.Module)) || (p.Main != "" && check(p.Main))
 		}
-		if isPkgMainModule {
+		if isMainModule {
 			ctx.esmPath.SubModuleName = ""
 			ctx.esmPath.SubPath = ""
-			ctx.path = ""
 		}
 	}
 }

@@ -258,7 +258,7 @@ func esmRouter(debug bool) rex.Handle {
 					if !t.inProcess {
 						m["status"] = "pending"
 					} else {
-						m["status"] = t.stage
+						m["status"] = t.status
 					}
 					if !t.startedAt.IsZero() {
 						m["startedAt"] = t.startedAt.Format(http.TimeFormat)
