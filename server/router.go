@@ -1069,12 +1069,23 @@ func esmRouter(debug bool) rex.Handle {
 			if pathKind == RawFile {
 				var stat storage.Stat
 				var content io.ReadCloser
+				var etag string
 				var cachePath string
 				var cacheHit bool
 				if config.CacheRawFile {
 					cachePath = path.Join("raw", esmPath.PackageName(), esmPath.SubPath)
 					content, stat, err = buildStorage.Get(cachePath)
-					cacheHit = err == nil
+					if err != nil && err != storage.ErrNotFound {
+						return rex.Status(500, "storage error")
+					}
+					if err == nil {
+						etag = fmt.Sprintf(`W/"%x-%x"`, stat.ModTime().Unix(), stat.Size())
+						if ifNoneMatch := ctx.GetHeader("If-None-Match"); ifNoneMatch == etag {
+							defer content.Close()
+							return rex.Status(http.StatusNotModified, nil)
+						}
+						cacheHit = true
+					}
 				}
 				if !cacheHit {
 					filename := path.Join(npmrc.StoreDir(), esmPath.PackageName(), "node_modules", esmPath.PkgName, esmPath.SubPath)
@@ -1096,6 +1107,10 @@ func esmRouter(debug bool) rex.Handle {
 					// limit the file size up to 50MB
 					if stat.Size() > assetMaxSize {
 						return rex.Status(403, "File Too Large")
+					}
+					etag = fmt.Sprintf(`W/"%x-%x"`, stat.ModTime().Unix(), stat.Size())
+					if ifNoneMatch := ctx.GetHeader("If-None-Match"); ifNoneMatch == etag {
+						return rex.Status(http.StatusNotModified, nil)
 					}
 					content, err = os.Open(filename)
 					if err != nil {
@@ -1125,6 +1140,8 @@ func esmRouter(debug bool) rex.Handle {
 				if cacheHit {
 					ctx.SetHeader("X-Raw-File-Cache-Status", "HIT")
 				}
+				ctx.SetHeader("Etag", etag)
+				ctx.SetHeader("Last-Modified", stat.ModTime().UTC().Format(http.TimeFormat))
 				ctx.SetHeader("Cache-Control", ccImmutable)
 				if strings.HasSuffix(esmPath.SubPath, ".json") && query.Has("module") {
 					jsonData, err := io.ReadAll(content)
@@ -1134,7 +1151,7 @@ func esmRouter(debug bool) rex.Handle {
 					ctx.SetHeader("Content-Type", ctJavaScript)
 					return concatBytes([]byte("export default "), jsonData)
 				}
-				return rex.Content(esmPath.SubPath, stat.ModTime(), content) // auto closed
+				return content // auto closed
 			}
 
 			// build/dts files
