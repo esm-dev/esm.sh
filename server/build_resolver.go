@@ -1124,7 +1124,10 @@ func (ctx *BuildContext) lexer(entry *BuildEntry, forceCjsModule bool) (ret *Bui
 			CJS:              true,
 		}
 		reexport = cjs.ReExport
+		return
 	}
+
+	ret = &BuildMeta{}
 	return
 }
 
