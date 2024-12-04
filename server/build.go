@@ -532,40 +532,23 @@ func (ctx *BuildContext) buildModule() (result *BuildMeta, err error) {
 						fullFilepath = path.Join(ctx.wd, "node_modules", ".pnpm", "node_modules", specifier)
 					}
 
+					// it's nodejs builtin module
+					if isNodeBuiltInModule(specifier) {
+						externalPath, err := ctx.resolveExternalModule(specifier, args.Kind)
+						if err != nil {
+							return esbuild.OnResolveResult{}, err
+						}
+						return esbuild.OnResolveResult{
+							Path:     externalPath,
+							External: true,
+						}, nil
+					}
+
 					// node native modules do not work via http import
 					if strings.HasSuffix(fullFilepath, ".node") && existsFile(fullFilepath) {
 						return esbuild.OnResolveResult{
 							Path:     fmt.Sprintf("/error.js?type=unsupported-node-native-module&name=%s&importer=%s", path.Base(args.Path), ctx.esmPath.Specifier()),
 							External: true,
-						}, nil
-					}
-
-					// bundles json module
-					if strings.HasSuffix(fullFilepath, ".json") {
-						return esbuild.OnResolveResult{}, nil
-					}
-
-					// embed wasm as WebAssembly.Module
-					if strings.HasSuffix(fullFilepath, ".wasm") {
-						return esbuild.OnResolveResult{
-							Path:      fullFilepath,
-							Namespace: "wasm",
-						}, nil
-					}
-
-					// transfrom svelte component
-					if strings.HasSuffix(fullFilepath, ".svelte") {
-						return esbuild.OnResolveResult{
-							Path:      fullFilepath,
-							Namespace: "svelte",
-						}, nil
-					}
-
-					// transfrom Vue SFC
-					if strings.HasSuffix(fullFilepath, ".vue") {
-						return esbuild.OnResolveResult{
-							Path:      fullFilepath,
-							Namespace: "vue",
 						}, nil
 					}
 
@@ -583,18 +566,6 @@ func (ctx *BuildContext) buildModule() (result *BuildMeta, err error) {
 						}, nil
 					}
 
-					// it's nodejs builtin module
-					if isNodeBuiltInModule(specifier) {
-						externalPath, err := ctx.resolveExternalModule(specifier, args.Kind)
-						if err != nil {
-							return esbuild.OnResolveResult{}, err
-						}
-						return esbuild.OnResolveResult{
-							Path:     externalPath,
-							External: true,
-						}, nil
-					}
-
 					// bundles all dependencies in `bundle` mode, apart from peer dependencies and `?external` query]
 					if ctx.bundleMode == BundleAll && !ctx.args.external.Has(toPackageName(specifier)) && !implicitExternal.Has(specifier) {
 						pkgName := toPackageName(specifier)
@@ -609,6 +580,11 @@ func (ctx *BuildContext) buildModule() (result *BuildMeta, err error) {
 						return esbuild.OnResolveResult{}, nil
 					}
 
+					// bundles json module
+					if strings.HasSuffix(fullFilepath, ".json") && existsFile(fullFilepath) {
+						return esbuild.OnResolveResult{}, nil
+					}
+
 					if strings.HasPrefix(specifier, "/") || isRelPathSpecifier(specifier) {
 						specifier = strings.TrimPrefix(fullFilepath, path.Join(ctx.wd, "node_modules")+"/")
 						if strings.HasPrefix(specifier, ".pnpm") {
@@ -618,13 +594,13 @@ func (ctx *BuildContext) buildModule() (result *BuildMeta, err error) {
 							}
 						}
 						pkgName := ctx.packageJson.Name
-						isInternalModule := strings.HasPrefix(specifier, pkgName+"/")
-						if !isInternalModule && ctx.packageJson.PkgName != "" {
+						isPkgModule := strings.HasPrefix(specifier, pkgName+"/")
+						if !isPkgModule && ctx.packageJson.PkgName != "" {
 							// github packages may have different package name with the repository name
 							pkgName = ctx.packageJson.PkgName
-							isInternalModule = strings.HasPrefix(specifier, pkgName+"/")
+							isPkgModule = strings.HasPrefix(specifier, pkgName+"/")
 						}
-						if isInternalModule {
+						if isPkgModule {
 							// if meets scenarios of "./index.mjs" importing "./index.c?js"
 							// let esbuild to handle it
 							if stripModuleExt(fullFilepath) == stripModuleExt(args.Importer) {
@@ -762,18 +738,13 @@ func (ctx *BuildContext) buildModule() (result *BuildMeta, err error) {
 							}
 
 							// module file path
-							moduleFilepath := path.Join(ctx.pnpmPkgDir, moduleSpecifier)
-
-							// if it's the entry module
-							if moduleSpecifier == entry.cjs || moduleSpecifier == entry.esm {
-								return esbuild.OnResolveResult{Path: moduleFilepath}, nil
-							}
+							moduleFilename := path.Join(ctx.pnpmPkgDir, moduleSpecifier)
 
 							// split the module that is an alias of a dependency
 							// means this file just include a single line(js): `export * from "dep"`
-							fi, ioErr := os.Lstat(moduleFilepath)
+							fi, ioErr := os.Lstat(moduleFilename)
 							if ioErr == nil && fi.Size() < 128 {
-								data, ioErr := os.ReadFile(moduleFilepath)
+								data, ioErr := os.ReadFile(moduleFilename)
 								if ioErr == nil {
 									out, esbErr := minify(string(data), esbuild.LoaderJS, esbuild.ESNext)
 									if esbErr == nil {
@@ -796,12 +767,33 @@ func (ctx *BuildContext) buildModule() (result *BuildMeta, err error) {
 								}
 							}
 
-							// bundle the internal module if it's not a dynamic import or `?bundle=false` query present
-							if args.Kind != esbuild.ResolveJSDynamicImport && !noBundle {
-								if existsFile(moduleFilepath) {
-									return esbuild.OnResolveResult{Path: moduleFilepath}, nil
+							// bundle the package module if it's not a dynamic import or `?bundle=false` query present
+							if moduleSpecifier == entry.cjs || moduleSpecifier == entry.esm || (args.Kind != esbuild.ResolveJSDynamicImport && !noBundle) {
+								if existsFile(moduleFilename) {
+									// embed wasm as WebAssembly.Module
+									if strings.HasSuffix(moduleFilename, ".wasm") {
+										return esbuild.OnResolveResult{
+											Path:      moduleFilename,
+											Namespace: "wasm",
+										}, nil
+									}
+									// transfrom svelte component
+									if strings.HasSuffix(moduleFilename, ".svelte") {
+										return esbuild.OnResolveResult{
+											Path:      moduleFilename,
+											Namespace: "svelte",
+										}, nil
+									}
+									// transfrom Vue SFC
+									if strings.HasSuffix(moduleFilename, ".vue") {
+										return esbuild.OnResolveResult{
+											Path:      moduleFilename,
+											Namespace: "vue",
+										}, nil
+									}
+									return esbuild.OnResolveResult{Path: moduleFilename}, nil
 								}
-								// let esbuild to handle it
+								// otherwise, let esbuild to handle it
 								return esbuild.OnResolveResult{}, nil
 							}
 						}
