@@ -258,7 +258,8 @@ func (ctx *BuildContext) buildModule() (result *BuildMeta, err error) {
 		return
 	}
 
-	var entryPoint string
+	var entryPoints []string
+	var currentEntryPoint string
 
 	entrySpecifier := ctx.esmPath.PkgName
 	if ctx.esmPath.SubModuleName != "" {
@@ -266,8 +267,9 @@ func (ctx *BuildContext) buildModule() (result *BuildMeta, err error) {
 	}
 
 	if entry.esm == "" {
-		entryPoint = path.Join(ctx.wd, "cjs_endpoint_"+strings.ReplaceAll(entrySpecifier, "/", "_")+".js")
-		if !existsFile(entryPoint) {
+		currentEntryPoint = path.Join(ctx.wd, "cjs_endpoint_"+strings.ReplaceAll(entrySpecifier, "/", "_")+".js")
+		entryPoints = append(entryPoints, currentEntryPoint)
+		if !existsFile(currentEntryPoint) {
 			buf := bytes.NewBuffer(nil)
 			fmt.Fprintf(buf, `import * as __module from "%s";`, entrySpecifier)
 			fmt.Fprintf(buf, `export * from "%s";`, entrySpecifier)
@@ -276,14 +278,15 @@ func (ctx *BuildContext) buildModule() (result *BuildMeta, err error) {
 			}
 			fmt.Fprintf(buf, "const { default: __default, ...__rest } = __module;")
 			fmt.Fprintf(buf, "export default (__default !== undefined ? __default : __rest);")
-			err = os.WriteFile(entryPoint, buf.Bytes(), 0644)
+			err = os.WriteFile(currentEntryPoint, buf.Bytes(), 0644)
 			if err != nil {
 				err = fmt.Errorf("create entry point: %v", err)
 				return
 			}
 		}
 	} else {
-		entryPoint = path.Join(ctx.pkgDir, entry.esm)
+		currentEntryPoint = path.Join(ctx.pnpmPkgDir, entry.esm)
+		entryPoints = append(entryPoints, currentEntryPoint)
 	}
 
 	pkgSideEffects := esbuild.SideEffectsTrue
@@ -303,7 +306,7 @@ func (ctx *BuildContext) buildModule() (result *BuildMeta, err error) {
 	browserExclude := map[string]*StringSet{}
 	implicitExternal := NewStringSet()
 	deps := NewStringSet()
-	splitting := false
+	splitting := len(entryPoints) > 1
 
 	nodeEnv := ctx.getNodeEnv()
 	filename := ctx.Path()
@@ -338,7 +341,7 @@ func (ctx *BuildContext) buildModule() (result *BuildMeta, err error) {
 	}
 	options := esbuild.BuildOptions{
 		AbsWorkingDir:     ctx.wd,
-		EntryPoints:       []string{entryPoint},
+		EntryPoints:       entryPoints,
 		Format:            esbuild.FormatESModule,
 		Target:            targets[ctx.target],
 		Platform:          esbuild.PlatformBrowser,
@@ -386,7 +389,7 @@ func (ctx *BuildContext) buildModule() (result *BuildMeta, err error) {
 				esbuild.OnResolveOptions{Filter: ".*"},
 				func(args esbuild.OnResolveArgs) (esbuild.OnResolveResult, error) {
 					// if it's the entry module
-					if args.Path == entryPoint || args.Path == entrySpecifier {
+					if args.Path == currentEntryPoint || args.Path == entrySpecifier {
 						path := args.Path
 						if path == entrySpecifier {
 							if entry.esm != "" {
