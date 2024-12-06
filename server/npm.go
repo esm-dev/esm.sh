@@ -643,7 +643,7 @@ func (rc *NpmRC) pnpmi(dir string, packages ...string) (err error) {
 			break
 		}
 		t, m := utils.SplitByFirstByte(string(line), ':')
-		if strings.Contains(t, " deprecated ") {
+		if strings.Contains(t, " deprecated ") && !strings.Contains(t, " deprecated subdependencies ") {
 			os.WriteFile(path.Join(dir, "deprecated.txt"), []byte(strings.TrimSpace(m)), 0644)
 			break
 		}
