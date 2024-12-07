@@ -33,7 +33,7 @@ ssh next.esm.sh << EOF
   svv=\$(supervisorctl version)
   if [ "\$?" != "0" ]; then
     apt update
-    apt install -y supervisor git git-lfs
+    apt install -y git git-lfs supervisor
     git lfs install
     svv=\$(supervisorctl version)
   fi

@@ -91,24 +91,23 @@ type cjsModuleLexerResult struct {
 	Stack            string   `json:"stack"`
 }
 
-func cjsModuleLexer(npmrc *NpmRC, pkgName string, wd string, specifier string, nodeEnv string) (ret cjsModuleLexerResult, err error) {
+func cjsModuleLexer(installDir string, pkgName string, specifier string, nodeEnv string) (ret cjsModuleLexerResult, err error) {
 	h := sha256.New()
 	h.Write([]byte(cjsModuleLexerPkg))
 	h.Write([]byte(pkgName))
-	h.Write([]byte(wd))
 	h.Write([]byte(specifier))
 	h.Write([]byte(nodeEnv))
-	cacheFileName := path.Join(wd, ".cjs_module_lexer", base64.RawURLEncoding.EncodeToString(h.Sum(nil))+".json")
+	cacheFileName := path.Join(installDir, ".cjs_module_lexer", base64.RawURLEncoding.EncodeToString(h.Sum(nil))+".json")
 
 	// check the cache first
 	if existsFile(cacheFileName) && utils.ParseJSONFile(cacheFileName, &ret) == nil {
 		return
 	}
 
-	// change the args order carefully, the order is used in ./embed/cjs_module_lexer.js
+	// change the args order carefully, the order is used in ./embed/internal/cjs_module_lexer.js
 	args := []interface{}{
+		installDir,
 		pkgName,
-		wd,
 		specifier,
 		nodeEnv,
 	}
@@ -131,14 +130,16 @@ func cjsModuleLexer(npmrc *NpmRC, pkgName string, wd string, specifier string, n
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
+	cjsModuleLexerWd := path.Join(config.WorkDir, "npm", cjsModuleLexerPkg)
 	cmd := exec.CommandContext(
 		ctx,
 		"node",
 		"--experimental-permission",
-		"--allow-fs-read="+npmrc.StoreDir(),
+		"--allow-fs-read="+cjsModuleLexerWd,
+		"--allow-fs-read="+installDir,
 		"cjs_module_lexer.js",
 	)
-	cmd.Dir = path.Join(config.WorkDir, "npm", cjsModuleLexerPkg)
+	cmd.Dir = cjsModuleLexerWd
 	cmd.Stdin = stdin
 	cmd.Stdout = stdout
 	cmd.Stderr = stderr

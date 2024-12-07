@@ -181,7 +181,7 @@ function verifyExports(names) {
 }
 
 async function parseExports(input) {
-  const [buildPkgName, wd, specifier, nodeEnv, requireMode] = input;
+  const [wd, pkgName, specifier, nodeEnv, requireMode] = input;
   const exportNames = [];
   const entry = specifier.startsWith("/") ? specifier : resolve(specifier);
 
@@ -215,69 +215,69 @@ async function parseExports(input) {
       if (containingFilename) {
         return join(dirname(containingFilename), specifier);
       }
-      return join(wd, "node_modules", buildPkgName, specifier);
-    }
-    const segments = specifier.split("/");
-    let pkgName = segments[0];
-    let subModule = segments.slice(1).join("/");
-    if (specifier.startsWith("@") && segments.length > 1) {
-      pkgName = segments[0] + "/" + segments[1];
-      subModule = segments.slice(2).join("/");
-    }
-    let pkgDir = join(wd, "node_modules", pkgName);
-    let pkgJson = join(pkgDir, "package.json");
-    if (!existsSync(pkgJson)) {
-      if (wd.includes("/node_modules/.pnpm/")) {
-        pkgDir = join(wd.split("/node_modules/.pnpm/")[0], "node_modules", ".pnpm", "node_modules", pkgName);
-        pkgJson = join(pkgDir, "package.json");
-      } else {
-        pkgDir = join(wd, "node_modules", ".pnpm", "node_modules", pkgName);
-        pkgJson = join(pkgDir, "package.json");
+      return join(wd, "node_modules", pkgName, specifier);
+    } else {
+      const segments = specifier.split("/");
+      let pkgName = segments[0];
+      let subModule = segments.slice(1).join("/");
+      if (specifier.startsWith("@") && segments.length > 1) {
+        pkgName = segments[0] + "/" + segments[1];
+        subModule = segments.slice(2).join("/");
       }
-    }
-    if (existsSync(pkgJson)) {
-      if (subModule && existsSync(join(pkgDir, subModule, "package.json"))) {
-        pkgDir = join(pkgDir, subModule);
-        pkgJson = join(pkgDir, "package.json");
-        const pkg = JSON.parse(readFileSync(pkgJson, "utf-8"));
-        return join(pkgDir, pkg.main ?? "index.js");
-      }
-      const pkg = JSON.parse(readFileSync(pkgJson, "utf-8"));
-      if (subModule === "") {
-        if (isObject(pkg.exports) && pkg.exports["."]) {
-          const path = resolveConditions(pkg.exports["."]);
-          if (path) {
-            return join(pkgDir, path);
-          }
+      let pkgDir = join(wd, "node_modules", pkgName);
+      let pkgJson = join(pkgDir, "package.json");
+      if (!existsSync(pkgJson)) {
+        if (wd.includes("/node_modules/.pnpm/")) {
+          pkgDir = join(wd.split("/node_modules/.pnpm/")[0], "node_modules", ".pnpm", "node_modules", pkgName);
+          pkgJson = join(pkgDir, "package.json");
         } else {
+          pkgDir = join(wd, "node_modules", ".pnpm", "node_modules", pkgName);
+          pkgJson = join(pkgDir, "package.json");
+        }
+      }
+      if (existsSync(pkgJson)) {
+        if (subModule && existsSync(join(pkgDir, subModule, "package.json"))) {
+          pkgDir = join(pkgDir, subModule);
+          pkgJson = join(pkgDir, "package.json");
+          const pkg = JSON.parse(readFileSync(pkgJson, "utf-8"));
           return join(pkgDir, pkg.main ?? "index.js");
         }
-      } else {
-        if (isObject(pkg.exports)) {
-          if (pkg.exports["./" + subModule]) {
-            const path = resolveConditions(pkg.exports["./" + subModule]);
+        const pkg = JSON.parse(readFileSync(pkgJson, "utf-8"));
+        if (subModule === "") {
+          if (isObject(pkg.exports) && pkg.exports["."]) {
+            const path = resolveConditions(pkg.exports["."]);
             if (path) {
               return join(pkgDir, path);
             }
+          } else {
+            return join(pkgDir, pkg.main ?? "index.js");
           }
-          // exports: "./*": "./dist/*.js"
-          for (const key of Object.keys(pkg.exports)) {
-            if (key.startsWith("./") && key.endsWith("/*")) {
-              if (("./" + subModule).startsWith(key.slice(0, -1))) {
-                const path = resolveConditions(pkg.exports[key]);
-                if (path) {
-                  return join(pkgDir, path.replace("*", subModule.slice(2, -1)));
+        } else {
+          if (isObject(pkg.exports)) {
+            if (pkg.exports["./" + subModule]) {
+              const path = resolveConditions(pkg.exports["./" + subModule]);
+              if (path) {
+                return join(pkgDir, path);
+              }
+            }
+            // exports: "./*": "./dist/*.js"
+            for (const key of Object.keys(pkg.exports)) {
+              if (key.startsWith("./") && key.endsWith("/*")) {
+                if (("./" + subModule).startsWith(key.slice(0, -1))) {
+                  const path = resolveConditions(pkg.exports[key]);
+                  if (path) {
+                    return join(pkgDir, path.replace("*", subModule.slice(2, -1)));
+                  }
                 }
               }
             }
           }
+          return join(pkgDir, subModule);
         }
-        return join(pkgDir, subModule);
       }
     }
-
     throw new Error(
-      `Cannot resolve module '${specifier}'` + (containingFilename ? ` from '${containingFilename}' ` : "") + " in " + wd,
+      `Could not resolve module '${specifier}'` + (containingFilename ? ` from '${containingFilename}' ` : "") + " in " + wd,
     );
   }
 

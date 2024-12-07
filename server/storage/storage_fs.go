@@ -34,7 +34,7 @@ func (fs *fsStorage) Stat(key string) (stat Stat, err error) {
 	filename := filepath.Join(fs.root, key)
 	fi, err := os.Lstat(filename)
 	if err != nil {
-		if os.IsNotExist(err) {
+		if os.IsNotExist(err) || strings.HasSuffix(err.Error(), "not a directory") {
 			return nil, ErrNotFound
 		}
 		return nil, err
@@ -50,7 +50,7 @@ func (fs *fsStorage) List(prefix string) (keys []string, err error) {
 func (fs *fsStorage) Get(key string) (content io.ReadCloser, stat Stat, err error) {
 	filename := filepath.Join(fs.root, key)
 	file, err := os.Open(filename)
-	if err != nil && os.IsNotExist(err) {
+	if err != nil && (os.IsNotExist(err) || strings.HasSuffix(err.Error(), "not a directory")) {
 		err = ErrNotFound
 	}
 	if err == nil {

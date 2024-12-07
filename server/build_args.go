@@ -12,9 +12,7 @@ import (
 type BuildArgs struct {
 	alias             map[string]string
 	deps              map[string]string
-	externalAll       bool
 	external          *StringSet
-	exports           *StringSet
 	conditions        []string
 	keepNames         bool
 	ignoreAnnotations bool
@@ -26,7 +24,6 @@ func decodeBuildArgs(argsString string) (args BuildArgs, err error) {
 	if err == nil {
 		args = BuildArgs{
 			external: NewStringSet(),
-			exports:  NewStringSet(),
 		}
 		for _, p := range strings.Split(s, "\n") {
 			if strings.HasPrefix(p, "a") {
@@ -42,7 +39,7 @@ func decodeBuildArgs(argsString string) (args BuildArgs, err error) {
 			} else if strings.HasPrefix(p, "d") {
 				deps := map[string]string{}
 				for _, p := range strings.Split(p[1:], ",") {
-					pkgName, pkgVersion, _, _ := splitESMPath(p)
+					pkgName, pkgVersion, _, _ := splitEsmPath(p)
 					deps[pkgName] = pkgVersion
 				}
 				args.deps = deps
@@ -50,16 +47,10 @@ func decodeBuildArgs(argsString string) (args BuildArgs, err error) {
 				for _, name := range strings.Split(p[1:], ",") {
 					args.external.Add(name)
 				}
-			} else if strings.HasPrefix(p, "s") {
-				for _, name := range strings.Split(p[1:], ",") {
-					args.exports.Add(name)
-				}
 			} else if strings.HasPrefix(p, "c") {
 				args.conditions = append(args.conditions, strings.Split(p[1:], ",")...)
 			} else {
 				switch p {
-				case "*":
-					args.externalAll = true
 				case "r":
 					args.externalRequire = true
 				case "k":
@@ -96,9 +87,6 @@ func encodeBuildArgs(args BuildArgs, isDts bool) string {
 			lines = append(lines, fmt.Sprintf("d%s", strings.Join(ss, ",")))
 		}
 	}
-	if args.externalAll {
-		lines = append(lines, "*")
-	}
 	if args.external.Len() > 0 {
 		var ss sort.StringSlice
 		for _, name := range args.external.Values() {
@@ -107,18 +95,6 @@ func encodeBuildArgs(args BuildArgs, isDts bool) string {
 		if len(ss) > 0 {
 			ss.Sort()
 			lines = append(lines, fmt.Sprintf("e%s", strings.Join(ss, ",")))
-		}
-	}
-	if !isDts {
-		if args.exports.Len() > 0 {
-			var ss sort.StringSlice
-			for _, name := range args.exports.Values() {
-				ss = append(ss, name)
-			}
-			if len(ss) > 0 {
-				ss.Sort()
-				lines = append(lines, fmt.Sprintf("s%s", strings.Join(ss, ",")))
-			}
 		}
 	}
 	if len(args.conditions) > 0 {
@@ -148,8 +124,8 @@ func encodeBuildArgs(args BuildArgs, isDts bool) string {
 	return ""
 }
 
-// normalizeBuildArgs removes invalid alias, deps, external from the build args
-func normalizeBuildArgs(npmrc *NpmRC, installDir string, args *BuildArgs, esmPath ESMPath) error {
+// resolveBuildArgs resolves `alias`, `deps`, `external` of the build args
+func resolveBuildArgs(npmrc *NpmRC, installDir string, args *BuildArgs, esmPath EsmPath) error {
 	if len(args.alias) > 0 || len(args.deps) > 0 || args.external.Len() > 0 {
 		depsSet := NewStringSet()
 		err := walkDeps(npmrc, installDir, esmPath, depsSet)
@@ -164,7 +140,7 @@ func normalizeBuildArgs(npmrc *NpmRC, installDir string, args *BuildArgs, esmPat
 				}
 			}
 			for from, to := range alias {
-				pkgName, _, _, _ := splitESMPath(to)
+				pkgName, _, _, _ := splitEsmPath(to)
 				if pkgName == esmPath.PkgName {
 					delete(alias, from)
 				} else {
@@ -187,7 +163,7 @@ func normalizeBuildArgs(npmrc *NpmRC, installDir string, args *BuildArgs, esmPat
 				// fix some edge cases
 				// for example, the package "htm" doesn't declare 'preact' as a dependency explicitly
 				// as a workaround, we check if the package name is in the subPath of the package
-				if esmPath.SubBareName != "" && contains(strings.Split(esmPath.SubBareName, "/"), name) {
+				if esmPath.SubModuleName != "" && contains(strings.Split(esmPath.SubModuleName, "/"), name) {
 					deps[name] = version
 				}
 			}
@@ -217,7 +193,7 @@ func normalizeBuildArgs(npmrc *NpmRC, installDir string, args *BuildArgs, esmPat
 	return nil
 }
 
-func walkDeps(npmrc *NpmRC, installDir string, esmPath ESMPath, mark *StringSet) (err error) {
+func walkDeps(npmrc *NpmRC, installDir string, esmPath EsmPath, mark *StringSet) (err error) {
 	if mark.Has(esmPath.PkgName) {
 		return
 	}
@@ -233,7 +209,7 @@ func walkDeps(npmrc *NpmRC, installDir string, esmPath ESMPath, mark *StringSet)
 		if err == nil {
 			p = raw.ToNpmPackage()
 		}
-	} else if regexpVersionStrict.MatchString(esmPath.PkgVersion) || esmPath.GhPrefix {
+	} else if regexpVersionStrict.MatchString(esmPath.PkgVersion) || esmPath.GhPrefix || esmPath.PrPrefix {
 		p, err = npmrc.installPackage(esmPath)
 	} else {
 		return nil
@@ -252,7 +228,7 @@ func walkDeps(npmrc *NpmRC, installDir string, esmPath ESMPath, mark *StringSet)
 		if strings.HasPrefix(name, "@types/") || strings.HasPrefix(name, "@babel/") {
 			continue
 		}
-		err := walkDeps(npmrc, installDir, ESMPath{PkgName: name, PkgVersion: version}, mark)
+		err := walkDeps(npmrc, installDir, EsmPath{PkgName: name, PkgVersion: version}, mark)
 		if err != nil {
 			return err
 		}

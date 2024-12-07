@@ -51,6 +51,11 @@ jobs:
 
       - name: Run `go test`
         run: go test ./server ./server/storage -v
+        env:
+          GO_TEST_S3_ENDPOINT: ${{ secrets.GO_TEST_S3_ENDPOINT }}
+          GO_TEST_S3_REGION: ${{ secrets.GO_TEST_S3_REGION }}
+          GO_TEST_S3_ACCESS_KEY_ID: ${{ secrets.GO_TEST_S3_ACCESS_KEY_ID }}
+          GO_TEST_S3_SECRET_ACCESS_KEY: ${{ secrets.GO_TEST_S3_SECRET_ACCESS_KEY }}
 
       - name: Run `test/bootstrap.ts`
         run: test/bootstrap.ts

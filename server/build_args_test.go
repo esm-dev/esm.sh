@@ -6,12 +6,9 @@ import (
 
 func TestEncodeBuildArgs(t *testing.T) {
 	external := NewStringSet()
-	exports := NewStringSet()
 	conditions := []string{"react-server"}
 	external.Add("baz")
 	external.Add("bar")
-	exports.Add("baz")
-	exports.Add("bar")
 	buildArgsString := encodeBuildArgs(
 		BuildArgs{
 			alias: map[string]string{"a": "b"},
@@ -21,7 +18,6 @@ func TestEncodeBuildArgs(t *testing.T) {
 				"e": "1.0.0",
 			},
 			external:          external,
-			exports:           exports,
 			conditions:        conditions,
 			externalRequire:   true,
 			keepNames:         true,
@@ -41,9 +37,6 @@ func TestEncodeBuildArgs(t *testing.T) {
 	}
 	if args.external.Len() != 2 {
 		t.Fatal("invalid external")
-	}
-	if args.exports.Len() != 2 {
-		t.Fatal("invalid exports")
 	}
 	if len(args.conditions) != 1 || args.conditions[0] != "react-server" {
 		t.Fatal("invalid conditions")

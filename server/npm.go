@@ -1,6 +1,7 @@
 package server
 
 import (
+	"bufio"
 	"bytes"
 	"encoding/base64"
 	"encoding/json"
@@ -49,25 +50,45 @@ type NpmPackageVerions struct {
 
 // PackageJSONRaw defines the package.json of a NPM package
 type PackageJSONRaw struct {
-	Name             string            `json:"name"`
-	Version          string            `json:"version"`
-	Type             string            `json:"type,omitempty"`
-	Main             string            `json:"main,omitempty"`
-	Module           StringOrMap       `json:"module,omitempty"`
-	ES2015           StringOrMap       `json:"es2015,omitempty"`
-	JsNextMain       string            `json:"jsnext:main,omitempty"`
-	Browser          StringOrMap       `json:"browser,omitempty"`
-	Types            string            `json:"types,omitempty"`
-	Typings          string            `json:"typings,omitempty"`
-	SideEffects      any               `json:"sideEffects,omitempty"`
-	Dependencies     map[string]string `json:"dependencies,omitempty"`
-	PeerDependencies map[string]string `json:"peerDependencies,omitempty"`
-	Imports          map[string]any    `json:"imports,omitempty"`
-	TypesVersions    map[string]any    `json:"typesVersions,omitempty"`
-	Exports          json.RawMessage   `json:"exports,omitempty"`
-	Files            []string          `json:"files,omitempty"`
-	Deprecated       any               `json:"deprecated,omitempty"`
-	Esmsh            any               `json:"esm.sh,omitempty"`
+	Name             string          `json:"name"`
+	Version          string          `json:"version"`
+	Type             string          `json:"type"`
+	Main             JsonAny         `json:"main"`
+	Module           JsonAny         `json:"module"`
+	ES2015           JsonAny         `json:"es2015"`
+	JsNextMain       JsonAny         `json:"jsnext:main"`
+	Browser          JsonAny         `json:"browser"`
+	Types            JsonAny         `json:"types"`
+	Typings          JsonAny         `json:"typings"`
+	SideEffects      any             `json:"sideEffects"`
+	Dependencies     any             `json:"dependencies"`
+	PeerDependencies any             `json:"peerDependencies"`
+	Imports          any             `json:"imports"`
+	TypesVersions    any             `json:"typesVersions"`
+	Exports          json.RawMessage `json:"exports"`
+	Files            []string        `json:"files"`
+	Esmsh            any             `json:"esm.sh"`
+}
+
+// PackageJSON defines the package.json of a NPM package
+type PackageJSON struct {
+	Name             string
+	PkgName          string
+	Version          string
+	Type             string
+	Main             string
+	Module           string
+	Types            string
+	Typings          string
+	SideEffectsFalse bool
+	SideEffects      *StringSet
+	Browser          map[string]string
+	Dependencies     map[string]string
+	PeerDependencies map[string]string
+	Imports          map[string]any
+	TypesVersions    map[string]any
+	Exports          *OrderedMap
+	Esmsh            map[string]any
 }
 
 // ToNpmPackage converts PackageJSONRaw to PackageJSON
@@ -89,16 +110,26 @@ func (a *PackageJSONRaw) ToNpmPackage() *PackageJSON {
 			}
 		}
 	}
-	deprecated := ""
-	if a.Deprecated != nil {
-		if s, ok := a.Deprecated.(string); ok {
-			deprecated = s
+	var dependencies map[string]string
+	if m, ok := a.Dependencies.(map[string]any); ok {
+		dependencies = make(map[string]string, len(m))
+		for k, v := range m {
+			if s, ok := v.(string); ok {
+				if k != "" && s != "" {
+					dependencies[k] = s
+				}
+			}
 		}
 	}
-	esmsh := map[string]any{}
-	if a.Esmsh != nil {
-		if v, ok := a.Esmsh.(map[string]any); ok {
-			esmsh = v
+	var peerDependencies map[string]string
+	if m, ok := a.PeerDependencies.(map[string]any); ok {
+		peerDependencies = make(map[string]string, len(m))
+		for k, v := range m {
+			if s, ok := v.(string); ok {
+				if k != "" && s != "" {
+					peerDependencies[k] = s
+				}
+			}
 		}
 	}
 	var sideEffects *StringSet = nil
@@ -122,68 +153,48 @@ func (a *PackageJSONRaw) ToNpmPackage() *PackageJSON {
 			}
 		}
 	}
-	var exports any = nil
+	exports := newOrderedMap()
 	if rawExports := a.Exports; rawExports != nil {
-		var v any
-		if json.Unmarshal(rawExports, &v) == nil {
-			if s, ok := v.(string); ok {
-				if len(s) > 0 {
-					exports = s
-				}
-			} else if _, ok := v.(map[string]any); ok {
-				om := newOrderedMap()
-				if om.UnmarshalJSON(rawExports) == nil {
-					exports = om
-				}
+		var s string
+		if json.Unmarshal(rawExports, &s) == nil {
+			if len(s) > 0 {
+				exports.Set(".", s)
 			}
+		} else {
+			exports.UnmarshalJSON(rawExports)
 		}
 	}
-	return &PackageJSON{
+	p := &PackageJSON{
 		Name:             a.Name,
 		Version:          a.Version,
 		Type:             a.Type,
-		Main:             a.Main,
-		Module:           a.Module.MainValue(),
-		ES2015:           a.ES2015.MainValue(),
-		JsNextMain:       a.JsNextMain,
-		Types:            a.Types,
-		Typings:          a.Typings,
+		Main:             a.Main.String(),
+		Module:           a.Module.String(),
+		Types:            a.Types.String(),
+		Typings:          a.Typings.String(),
 		Browser:          browser,
 		SideEffectsFalse: sideEffectsFalse,
 		SideEffects:      sideEffects,
-		Dependencies:     a.Dependencies,
-		PeerDependencies: a.PeerDependencies,
-		Imports:          a.Imports,
-		TypesVersions:    a.TypesVersions,
+		Dependencies:     dependencies,
+		PeerDependencies: peerDependencies,
+		Imports:          toMap(a.Imports),
+		TypesVersions:    toMap(a.TypesVersions),
 		Exports:          exports,
-		Deprecated:       deprecated,
-		Esmsh:            esmsh,
+		Esmsh:            toMap(a.Esmsh),
 	}
-}
 
-// PackageJSON defines defines the package.json of a NPM package
-type PackageJSON struct {
-	Name             string
-	PkgName          string
-	Version          string
-	Type             string
-	Main             string
-	Module           string
-	ES2015           string
-	JsNextMain       string
-	Types            string
-	Typings          string
-	SideEffectsFalse bool
-	SideEffects      *StringSet
-	Browser          map[string]string
-	Dependencies     map[string]string
-	PeerDependencies map[string]string
-	Imports          map[string]any
-	TypesVersions    map[string]any
-	Exports          any
-	Files            []string
-	Deprecated       string
-	Esmsh            map[string]any
+	// normalize package module field
+	if p.Module == "" {
+		if es2015 := a.ES2015.String(); es2015 != "" {
+			p.Module = es2015
+		} else if jsNextMain := a.JsNextMain.String(); jsNextMain != "" {
+			p.Module = jsNextMain
+		} else if p.Main != "" && (p.Type == "module" || strings.HasSuffix(p.Main, ".mjs")) {
+			p.Module = p.Main
+			p.Main = ""
+		}
+	}
+	return p
 }
 
 // UnmarshalJSON implements the json.Unmarshaler interface
@@ -209,8 +220,15 @@ type NpmRC struct {
 	zoneId     string
 }
 
-func NewNpmRcFromConfig() *NpmRC {
-	rc := &NpmRC{
+var (
+	defaultNpmRC *NpmRC
+)
+
+func getDefaultNpmRC() *NpmRC {
+	if defaultNpmRC != nil {
+		return defaultNpmRC
+	}
+	defaultNpmRC = &NpmRC{
 		NpmRegistry: NpmRegistry{
 			Registry: config.NpmRegistry,
 			Token:    config.NpmToken,
@@ -225,7 +243,7 @@ func NewNpmRcFromConfig() *NpmRC {
 	}
 	if len(config.NpmScopedRegistries) > 0 {
 		for scope, reg := range config.NpmScopedRegistries {
-			rc.Registries[scope] = NpmRegistry{
+			defaultNpmRC.Registries[scope] = NpmRegistry{
 				Registry: reg.Registry,
 				Token:    reg.Token,
 				User:     reg.User,
@@ -233,7 +251,7 @@ func NewNpmRcFromConfig() *NpmRC {
 			}
 		}
 	}
-	return rc
+	return defaultNpmRC
 }
 
 func NewNpmRcFromJSON(jsonData []byte) (npmrc *NpmRC, err error) {
@@ -458,7 +476,7 @@ func (npmrc *NpmRC) fetchPackageInfo(packageName string, semverOrDistTag string)
 	})
 }
 
-func (rc *NpmRC) installPackage(esm ESMPath) (packageJson *PackageJSON, err error) {
+func (rc *NpmRC) installPackage(esm EsmPath) (packageJson *PackageJSON, err error) {
 	installDir := path.Join(rc.StoreDir(), esm.PackageName())
 	packageJsonPath := path.Join(installDir, "node_modules", esm.PkgName, "package.json")
 
@@ -526,7 +544,10 @@ func (rc *NpmRC) installPackage(esm ESMPath) (packageJson *PackageJSON, err erro
 			err = rc.pnpmi(installDir, "--prefer-offline")
 		}
 	} else if regexpVersionStrict.MatchString(esm.PkgVersion) {
-		err = rc.pnpmi(installDir, "--prefer-offline", esm.PackageName())
+		err = os.WriteFile(packageJsonRc, []byte(fmt.Sprintf(`{"dependencies":{"%s":"%s"}}`, esm.PkgName, esm.PkgVersion)), 0644)
+		if err == nil {
+			err = rc.pnpmi(installDir, "--prefer-offline")
+		}
 	} else {
 		err = rc.pnpmi(installDir, esm.PackageName())
 	}
@@ -559,27 +580,30 @@ func (rc *NpmRC) installPackage(esm ESMPath) (packageJson *PackageJSON, err erro
 }
 
 func (rc *NpmRC) pnpmi(dir string, packages ...string) (err error) {
+	start := time.Now()
+	stdout := &bytes.Buffer{}
+	stderr := &bytes.Buffer{}
 	args := []string{
 		"i",
-		"--no-lockfile",
-		"--no-color",
 		"--ignore-pnpmfile",
-		"--ignore-workspace",
 		"--ignore-scripts",
-		"--loglevel=error",
+		"--ignore-workspace",
+		"--loglevel=warn",
+		"--prod",
+		"--no-color",
+		"--no-lockfile",
+		"--no-optional",
+		"--no-verify-store-integrity",
 	}
 	if len(packages) > 0 {
 		args = append(args, packages...)
 	}
-	start := time.Now()
-	out := &bytes.Buffer{}
-	errout := &bytes.Buffer{}
 	cmd := exec.Command("pnpm", args...)
 	cmd.Env = os.Environ()
 	cmd.Dir = dir
-	cmd.Stdout = out
-	cmd.Stderr = errout
-	cmd.WaitDelay = 10 * time.Minute
+	cmd.Stdout = stdout
+	cmd.Stderr = stderr
+	cmd.WaitDelay = 30 * time.Second
 
 	// for security, we don't put token and password in the `.npmrc` file
 	// instead, we pass them as environment variables to the `pnpm` subprocess
@@ -609,18 +633,30 @@ func (rc *NpmRC) pnpmi(dir string, packages ...string) (err error) {
 			)
 		}
 	}
+
 	err = cmd.Run()
-	if err == nil && errout.Len() > 0 {
-		return fmt.Errorf("%s", errout.String())
-	}
 	if err != nil {
-		return fmt.Errorf("pnpm %s: %s", strings.Join(args, " "), out.String())
+		if stderr.Len() > 0 {
+			return fmt.Errorf("%s", stderr.String())
+		}
+		return err
 	}
-	if len(packages) > 0 {
-		log.Debug("pnpm add", strings.Join(packages, " "), "in", time.Since(start))
-	} else {
-		log.Debug("pnpm install in", time.Since(start))
+
+	// check 'deprecated' warning in the output
+	r := bufio.NewReader(stdout)
+	for {
+		line, err := r.ReadBytes('\n')
+		if err != nil {
+			break
+		}
+		t, m := utils.SplitByFirstByte(string(line), ':')
+		if strings.Contains(t, " deprecated ") && !strings.Contains(t, " deprecated subdependencies ") {
+			os.WriteFile(path.Join(dir, "deprecated.txt"), []byte(strings.TrimSpace(m)), 0644)
+			break
+		}
 	}
+
+	log.Debug("pnpm i", strings.Join(packages, " "), "in", time.Since(start))
 	return
 }
 
@@ -657,6 +693,18 @@ func (rc *NpmRC) createDotNpmRcFile(dir string) error {
 		return err
 	}
 	return os.WriteFile(path.Join(dir, ".npmrc"), buf.Bytes(), 0644)
+}
+
+func (npmrc *NpmRC) isDeprecated(pkgName string, pkgVersion string) (string, error) {
+	installDir := path.Join(npmrc.StoreDir(), pkgName+"@"+pkgVersion)
+	data, err := os.ReadFile(path.Join(installDir, "deprecated.txt"))
+	if err != nil {
+		if os.IsNotExist(err) {
+			return "", nil
+		}
+		return "", err
+	}
+	return string(data), nil
 }
 
 func (npmrc *NpmRC) getSvelteVersion(importMap common.ImportMap) (svelteVersion string, err error) {
@@ -727,6 +775,14 @@ func toTypesPackageName(pkgName string) string {
 		pkgName = strings.Replace(pkgName[1:], "/", "__", 1)
 	}
 	return "@types/" + pkgName
+}
+
+// toMap converts any value to a `map[string]any`
+func toMap(v any) map[string]any {
+	if m, ok := v.(map[string]any); ok {
+		return m
+	}
+	return nil
 }
 
 // stripHttpScheme removes the `http[s]:` protocol from the given url.

@@ -12,7 +12,6 @@ import (
 	"regexp"
 	"sort"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/esm-dev/esm.sh/server/storage"
@@ -32,28 +31,25 @@ type BuildContext struct {
 	zoneId      string
 	npmrc       *NpmRC
 	packageJson *PackageJSON
-	esmPath     ESMPath
+	esmPath     EsmPath
 	args        BuildArgs
 	bundleMode  BundleMode
+	externalAll bool
 	target      string
 	pinedTarget bool
 	dev         bool
 	wd          string
 	pkgDir      string
 	pnpmPkgDir  string
-	path        string
-	stage       string
-	deprecated  string
-	importMap   [][2]string
+	status      string
+	esmImports  [][2]string
 	cjsRequires [][3]string
 	smOffset    int
-	subBuilds   *StringSet
-	wg          sync.WaitGroup
 }
 
 type BuildMeta struct {
-	CSS              bool     `json:"css,omitempty"`
-	FromCJS          bool     `json:"fromCJS,omitempty"`
+	CJS              bool     `json:"cjs,omitempty"`
+	HasCSS           bool     `json:"hasCSS,omitempty"`
 	TypesOnly        bool     `json:"typesOnly,omitempty"`
 	Dts              string   `json:"dts,omitempty"`
 	Deps             []string `json:"deps,omitempty"`
@@ -87,17 +83,18 @@ var loaders = map[string]esbuild.Loader{
 	".woff2":  esbuild.LoaderDataURL,
 }
 
-func NewBuildContext(zoneId string, npmrc *NpmRC, esm ESMPath, args BuildArgs, target string, pinedTarget bool, bundleMode BundleMode, dev bool) *BuildContext {
+func NewBuildContext(zoneId string, npmrc *NpmRC, esm EsmPath, args BuildArgs, externalAll bool, target string, pinedTarget bool, bundleMode BundleMode, dev bool) *BuildContext {
 	return &BuildContext{
 		zoneId:      zoneId,
 		npmrc:       npmrc,
 		esmPath:     esm,
 		args:        args,
+		externalAll: externalAll,
 		target:      target,
 		pinedTarget: pinedTarget,
 		dev:         dev,
 		bundleMode:  bundleMode,
-		subBuilds:   NewStringSet(),
+		status:      "init",
 	}
 }
 
@@ -131,18 +128,8 @@ func (ctx *BuildContext) Build() (ret *BuildMeta, err error) {
 		return
 	}
 
-	// check if the package is deprecated
-	if ctx.deprecated == "" && !ctx.esmPath.GhPrefix && !ctx.esmPath.PrPrefix && !strings.HasPrefix(ctx.esmPath.PkgName, "@jsr/") {
-		var info *PackageJSON
-		info, err = ctx.npmrc.fetchPackageInfo(ctx.esmPath.PkgName, ctx.esmPath.PkgVersion)
-		if err != nil {
-			return
-		}
-		ctx.deprecated = info.Deprecated
-	}
-
 	// install the package
-	ctx.stage = "install"
+	ctx.status = "install"
 	err = ctx.install()
 	if err != nil {
 		return
@@ -155,7 +142,7 @@ func (ctx *BuildContext) Build() (ret *BuildMeta, err error) {
 	}
 
 	// build the module
-	ctx.stage = "build"
+	ctx.status = "build"
 	ret, err = ctx.buildModule()
 	if err != nil {
 		return
@@ -193,10 +180,10 @@ func (ctx *BuildContext) install() (err error) {
 }
 
 func (ctx *BuildContext) buildModule() (result *BuildMeta, err error) {
-	// build json
-	if strings.HasSuffix(ctx.esmPath.SubBareName, ".json") {
+	// json module
+	if strings.HasSuffix(ctx.esmPath.SubModuleName, ".json") {
 		nmDir := path.Join(ctx.wd, "node_modules")
-		jsonPath := path.Join(nmDir, ctx.esmPath.PkgName, ctx.esmPath.SubBareName)
+		jsonPath := path.Join(nmDir, ctx.esmPath.PkgName, ctx.esmPath.SubModuleName)
 		if existsFile(jsonPath) {
 			var jsonData []byte
 			jsonData, err = os.ReadFile(jsonPath)
@@ -221,10 +208,10 @@ func (ctx *BuildContext) buildModule() (result *BuildMeta, err error) {
 		err = fmt.Errorf("could not resolve the build entry")
 		return
 	}
-	log.Debugf("build(%s): Entry%+v", ctx.esmPath, entry)
+	log.Debugf("build(%s): Entry%+v", ctx.esmPath.Specifier(), entry)
 
-	typesOnly := strings.HasPrefix(ctx.packageJson.Name, "@types/") || (entry.esm == "" && entry.cjs == "" && entry.dts != "")
-	if typesOnly {
+	isTypesOnly := strings.HasPrefix(ctx.packageJson.Name, "@types/") || (entry.esm == "" && entry.cjs == "" && entry.dts != "")
+	if isTypesOnly {
 		result = &BuildMeta{
 			TypesOnly: true,
 			Dts:       "/" + ctx.esmPath.PackageName() + entry.dts[1:],
@@ -246,7 +233,7 @@ func (ctx *BuildContext) buildModule() (result *BuildMeta, err error) {
 			return
 		}
 		// create a new build context to check if the reexported module has default export
-		b := NewBuildContext(ctx.zoneId, ctx.npmrc, mod, ctx.args, ctx.target, ctx.pinedTarget, BundleFalse, ctx.dev)
+		b := NewBuildContext(ctx.zoneId, ctx.npmrc, mod, ctx.args, ctx.externalAll, ctx.target, ctx.pinedTarget, BundleFalse, ctx.dev)
 		err = b.install()
 		if err != nil {
 			return
@@ -256,7 +243,7 @@ func (ctx *BuildContext) buildModule() (result *BuildMeta, err error) {
 		if err != nil {
 			return
 		}
-		importUrl := ctx.getImportPath(mod, ctx.getBuildArgsPrefix(false))
+		importUrl := ctx.getImportPath(mod, ctx.getBuildArgsPrefix(false), ctx.externalAll)
 		buf := bytes.NewBuffer(nil)
 		fmt.Fprintf(buf, `export * from "%s";`, importUrl)
 		if result.HasDefaultExport {
@@ -271,40 +258,45 @@ func (ctx *BuildContext) buildModule() (result *BuildMeta, err error) {
 		return
 	}
 
-	var entryPoint string
-	var input *esbuild.StdinOptions
+	var entryPoints []string
+	var currentEntryPoint string
 
-	entryModuleSpecifier := ctx.esmPath.PkgName
-	if ctx.esmPath.SubBareName != "" {
-		entryModuleSpecifier += "/" + ctx.esmPath.SubBareName
+	entrySpecifier := ctx.esmPath.PkgName
+	if ctx.esmPath.SubModuleName != "" {
+		entrySpecifier += "/" + ctx.esmPath.SubModuleName
 	}
 
 	if entry.esm == "" {
-		buf := bytes.NewBuffer(nil)
-		fmt.Fprintf(buf, `import * as __module from "%s";`, entryModuleSpecifier)
-		if len(result.NamedExports) > 0 {
-			fmt.Fprintf(buf, `export const { %s } = __module;`, strings.Join(result.NamedExports, ","))
-		}
-		fmt.Fprintf(buf, "const { default: __default, ...__rest } = __module;")
-		fmt.Fprintf(buf, "export default (__default !== undefined ? __default : __rest);")
-		// Default reexport all members from original module to prevent missing named exports members
-		fmt.Fprintf(buf, `export * from "%s";`, entryModuleSpecifier)
-		input = &esbuild.StdinOptions{
-			Contents:   buf.String(),
-			ResolveDir: ctx.wd,
-			Sourcefile: "entry.js",
+		currentEntryPoint = path.Join(ctx.wd, "cjs_endpoint_"+strings.ReplaceAll(entrySpecifier, "/", "_")+".js")
+		entryPoints = append(entryPoints, currentEntryPoint)
+		if !existsFile(currentEntryPoint) {
+			buf := bytes.NewBuffer(nil)
+			fmt.Fprintf(buf, `import * as __module from "%s";`, entrySpecifier)
+			fmt.Fprintf(buf, `export * from "%s";`, entrySpecifier)
+			if len(result.NamedExports) > 0 {
+				fmt.Fprintf(buf, `export const { %s } = __module;`, strings.Join(result.NamedExports, ","))
+			}
+			fmt.Fprintf(buf, "const { default: __default, ...__rest } = __module;")
+			fmt.Fprintf(buf, "export default (__default !== undefined ? __default : __rest);")
+			err = os.WriteFile(currentEntryPoint, buf.Bytes(), 0644)
+			if err != nil {
+				err = fmt.Errorf("create entry point: %v", err)
+				return
+			}
 		}
 	} else {
-		if ctx.args.exports.Len() > 0 {
-			input = &esbuild.StdinOptions{
-				Contents:   fmt.Sprintf(`export { %s } from "%s";`, strings.Join(ctx.args.exports.Values(), ","), entryModuleSpecifier),
-				ResolveDir: ctx.wd,
-				Sourcefile: "entry.js",
-			}
-		} else {
-			entryPoint = path.Join(ctx.pkgDir, entry.esm)
-		}
+		currentEntryPoint = path.Join(ctx.pnpmPkgDir, entry.esm)
+		entryPoints = append(entryPoints, currentEntryPoint)
 	}
+
+	// if ctx.packageJson.Exports.Len() > 0 {
+	// 	var entryNames []string
+	// 	for _, exportName := range ctx.packageJson.Exports.Keys() {
+	// 		if (exportName == "." || strings.HasPrefix(exportName, "./")) && exportName != "./package.json" {
+	// 			entryNames = append(entryNames, exportName)
+	// 		}
+	// 	}
+	// }
 
 	pkgSideEffects := esbuild.SideEffectsTrue
 	if ctx.packageJson.SideEffectsFalse {
@@ -323,6 +315,7 @@ func (ctx *BuildContext) buildModule() (result *BuildMeta, err error) {
 	browserExclude := map[string]*StringSet{}
 	implicitExternal := NewStringSet()
 	deps := NewStringSet()
+	splitting := len(entryPoints) > 1
 
 	nodeEnv := ctx.getNodeEnv()
 	filename := ctx.Path()
@@ -356,13 +349,16 @@ func (ctx *BuildContext) buildModule() (result *BuildMeta, err error) {
 		conditions = append(conditions, "deno")
 	}
 	options := esbuild.BuildOptions{
-		Bundle:            true,
+		AbsWorkingDir:     ctx.wd,
+		EntryPoints:       entryPoints,
 		Format:            esbuild.FormatESModule,
 		Target:            targets[ctx.target],
 		Platform:          esbuild.PlatformBrowser,
 		Define:            define,
 		JSX:               esbuild.JSXAutomatic,
 		JSXImportSource:   "react",
+		Bundle:            true,
+		Splitting:         splitting,
 		MinifyWhitespace:  config.Minify,
 		MinifyIdentifiers: config.Minify,
 		MinifySyntax:      config.Minify,
@@ -372,11 +368,6 @@ func (ctx *BuildContext) buildModule() (result *BuildMeta, err error) {
 		Loader:            loaders,
 		Outdir:            "/esbuild",
 		Write:             false,
-	}
-	if input != nil {
-		options.Stdin = input
-	} else if entryPoint != "" {
-		options.EntryPoints = []string{entryPoint}
 	}
 	if ctx.target == "node" {
 		options.Platform = esbuild.PlatformNode
@@ -401,15 +392,15 @@ func (ctx *BuildContext) buildModule() (result *BuildMeta, err error) {
 		}
 	}
 	options.Plugins = []esbuild.Plugin{{
-		Name: "esm",
+		Name: "esm.sh",
 		Setup: func(build esbuild.PluginBuild) {
 			build.OnResolve(
 				esbuild.OnResolveOptions{Filter: ".*"},
 				func(args esbuild.OnResolveArgs) (esbuild.OnResolveResult, error) {
 					// if it's the entry module
-					if args.Path == entryPoint || args.Path == entryModuleSpecifier {
+					if args.Path == currentEntryPoint || args.Path == entrySpecifier {
 						path := args.Path
-						if path == entryModuleSpecifier {
+						if path == entrySpecifier {
 							if entry.esm != "" {
 								path = filepath.Join(ctx.pnpmPkgDir, entry.esm)
 							} else if entry.cjs != "" {
@@ -428,7 +419,7 @@ func (ctx *BuildContext) buildModule() (result *BuildMeta, err error) {
 					// ban file urls
 					if strings.HasPrefix(args.Path, "file:") {
 						return esbuild.OnResolveResult{
-							Path:     fmt.Sprintf("/error.js?type=unsupported-file-dependency&name=%s&importer=%s", strings.TrimPrefix(args.Path, "file:"), ctx.esmPath),
+							Path:     fmt.Sprintf("/error.js?type=unsupported-file-dependency&name=%s&importer=%s", strings.TrimPrefix(args.Path, "file:"), ctx.esmPath.Specifier()),
 							External: true,
 						}, nil
 					}
@@ -474,7 +465,7 @@ func (ctx *BuildContext) buildModule() (result *BuildMeta, err error) {
 
 					// resolve specifier by checking `?alias` query
 					if len(ctx.args.alias) > 0 && !isRelPathSpecifier(specifier) {
-						pkgName, _, subpath, _ := splitESMPath(specifier)
+						pkgName, _, subpath, _ := splitEsmPath(specifier)
 						if name, ok := ctx.args.alias[pkgName]; ok {
 							specifier = name
 							if subpath != "" {
@@ -523,7 +514,7 @@ func (ctx *BuildContext) buildModule() (result *BuildMeta, err error) {
 					// force to use `npm:` specifier for `denonext` target
 					if forceNpmSpecifiers[specifier] && ctx.target == "denonext" {
 						version := ""
-						pkgName, _, subPath, _ := splitESMPath(specifier)
+						pkgName, _, subPath, _ := splitEsmPath(specifier)
 						if pkgName == ctx.esmPath.PkgName {
 							version = ctx.esmPath.PkgVersion
 						} else if v, ok := ctx.packageJson.Dependencies[pkgName]; ok && regexpVersionStrict.MatchString(v) {
@@ -553,57 +544,6 @@ func (ctx *BuildContext) buildModule() (result *BuildMeta, err error) {
 						fullFilepath = path.Join(ctx.wd, "node_modules", ".pnpm", "node_modules", specifier)
 					}
 
-					// node native modules do not work via http import
-					if strings.HasSuffix(fullFilepath, ".node") && existsFile(fullFilepath) {
-						return esbuild.OnResolveResult{
-							Path:     fmt.Sprintf("/error.js?type=unsupported-node-native-module&name=%s&importer=%s", path.Base(args.Path), ctx.esmPath),
-							External: true,
-						}, nil
-					}
-
-					// bundles json module
-					if strings.HasSuffix(fullFilepath, ".json") {
-						return esbuild.OnResolveResult{}, nil
-					}
-
-					// embed wasm as WebAssembly.Module
-					if strings.HasSuffix(fullFilepath, ".wasm") {
-						return esbuild.OnResolveResult{
-							Path:      fullFilepath,
-							Namespace: "wasm",
-						}, nil
-					}
-
-					// transfrom svelte component
-					if strings.HasSuffix(fullFilepath, ".svelte") {
-						return esbuild.OnResolveResult{
-							Path:      fullFilepath,
-							Namespace: "svelte",
-						}, nil
-					}
-
-					// transfrom Vue SFC
-					if strings.HasSuffix(fullFilepath, ".vue") {
-						return esbuild.OnResolveResult{
-							Path:      fullFilepath,
-							Namespace: "vue",
-						}, nil
-					}
-
-					// externalize parent module
-					// e.g. "react/jsx-runtime" imports "react"
-					if ctx.esmPath.SubBareName != "" && specifier == ctx.esmPath.PkgName && ctx.bundleMode != BundleAll {
-						externalPath, err := ctx.resolveExternalModule(ctx.esmPath.PkgName, args.Kind)
-						if err != nil {
-							return esbuild.OnResolveResult{}, err
-						}
-						return esbuild.OnResolveResult{
-							Path:        externalPath,
-							External:    true,
-							SideEffects: pkgSideEffects,
-						}, nil
-					}
-
 					// it's nodejs builtin module
 					if isNodeBuiltInModule(specifier) {
 						externalPath, err := ctx.resolveExternalModule(specifier, args.Kind)
@@ -613,6 +553,28 @@ func (ctx *BuildContext) buildModule() (result *BuildMeta, err error) {
 						return esbuild.OnResolveResult{
 							Path:     externalPath,
 							External: true,
+						}, nil
+					}
+
+					// node native modules do not work via http import
+					if strings.HasSuffix(fullFilepath, ".node") && existsFile(fullFilepath) {
+						return esbuild.OnResolveResult{
+							Path:     fmt.Sprintf("/error.js?type=unsupported-node-native-module&name=%s&importer=%s", path.Base(args.Path), ctx.esmPath.Specifier()),
+							External: true,
+						}, nil
+					}
+
+					// externalize parent module
+					// e.g. "react/jsx-runtime" imports "react"
+					if ctx.esmPath.SubModuleName != "" && specifier == ctx.esmPath.PkgName && ctx.bundleMode != BundleAll {
+						externalPath, err := ctx.resolveExternalModule(ctx.esmPath.PkgName, args.Kind)
+						if err != nil {
+							return esbuild.OnResolveResult{}, err
+						}
+						return esbuild.OnResolveResult{
+							Path:        externalPath,
+							External:    true,
+							SideEffects: pkgSideEffects,
 						}, nil
 					}
 
@@ -630,6 +592,11 @@ func (ctx *BuildContext) buildModule() (result *BuildMeta, err error) {
 						return esbuild.OnResolveResult{}, nil
 					}
 
+					// bundles json module
+					if strings.HasSuffix(fullFilepath, ".json") && existsFile(fullFilepath) {
+						return esbuild.OnResolveResult{}, nil
+					}
+
 					if strings.HasPrefix(specifier, "/") || isRelPathSpecifier(specifier) {
 						specifier = strings.TrimPrefix(fullFilepath, path.Join(ctx.wd, "node_modules")+"/")
 						if strings.HasPrefix(specifier, ".pnpm") {
@@ -639,13 +606,13 @@ func (ctx *BuildContext) buildModule() (result *BuildMeta, err error) {
 							}
 						}
 						pkgName := ctx.packageJson.Name
-						isInternalModule := strings.HasPrefix(specifier, pkgName+"/")
-						if !isInternalModule && ctx.packageJson.PkgName != "" {
+						isPkgModule := strings.HasPrefix(specifier, pkgName+"/")
+						if !isPkgModule && ctx.packageJson.PkgName != "" {
 							// github packages may have different package name with the repository name
 							pkgName = ctx.packageJson.PkgName
-							isInternalModule = strings.HasPrefix(specifier, pkgName+"/")
+							isPkgModule = strings.HasPrefix(specifier, pkgName+"/")
 						}
-						if isInternalModule {
+						if isPkgModule {
 							// if meets scenarios of "./index.mjs" importing "./index.c?js"
 							// let esbuild to handle it
 							if stripModuleExt(fullFilepath) == stripModuleExt(args.Importer) {
@@ -656,11 +623,11 @@ func (ctx *BuildContext) buildModule() (result *BuildMeta, err error) {
 
 							if path.Ext(fullFilepath) == "" || !existsFile(fullFilepath) {
 								subPath := utils.NormalizePathname(moduleSpecifier)[1:]
-								entry := ctx.resolveEntry(ESMPath{
-									PkgName:     ctx.esmPath.PkgName,
-									PkgVersion:  ctx.esmPath.PkgVersion,
-									SubBareName: toModuleBareName(subPath, true),
-									SubPath:     subPath,
+								entry := ctx.resolveEntry(EsmPath{
+									PkgName:       ctx.esmPath.PkgName,
+									PkgVersion:    ctx.esmPath.PkgVersion,
+									SubModuleName: toModuleBareName(subPath, true),
+									SubPath:       subPath,
 								})
 								if args.Kind == esbuild.ResolveJSImportStatement || args.Kind == esbuild.ResolveJSDynamicImport {
 									if entry.esm != "" {
@@ -703,9 +670,9 @@ func (ctx *BuildContext) buildModule() (result *BuildMeta, err error) {
 							bareName := stripModuleExt(moduleSpecifier)
 
 							// split modules based on the `exports` field of package.json
-							if om, ok := ctx.packageJson.Exports.(*OrderedMap); ok {
-								for _, exportName := range om.keys {
-									v := om.Get(exportName)
+							if exports := ctx.packageJson.Exports; exports.Len() > 0 {
+								for _, exportName := range exports.keys {
+									v, _ := exports.Get(exportName)
 									if !(exportName == "." || strings.HasPrefix(exportName, "./")) {
 										continue
 									}
@@ -735,7 +702,7 @@ func (ctx *BuildContext) buildModule() (result *BuildMeta, err error) {
 										if match {
 											exportPrefix, _ := utils.SplitByLastByte(exportName, '*')
 											exportModuleName := path.Join(ctx.packageJson.Name, exportPrefix+strings.TrimPrefix(bareName, prefix))
-											if exportModuleName != entryModuleSpecifier && exportModuleName != entryModuleSpecifier+"/index" {
+											if exportModuleName != entrySpecifier && exportModuleName != entrySpecifier+"/index" {
 												externalPath, err := ctx.resolveExternalModule(exportModuleName, args.Kind)
 												if err != nil {
 													return esbuild.OnResolveResult{}, err
@@ -766,7 +733,7 @@ func (ctx *BuildContext) buildModule() (result *BuildMeta, err error) {
 										}
 										if match {
 											exportModuleName := path.Join(ctx.packageJson.Name, stripModuleExt(exportName))
-											if exportModuleName != entryModuleSpecifier && exportModuleName != entryModuleSpecifier+"/index" {
+											if exportModuleName != entrySpecifier && exportModuleName != entrySpecifier+"/index" {
 												externalPath, err := ctx.resolveExternalModule(exportModuleName, args.Kind)
 												if err != nil {
 													return esbuild.OnResolveResult{}, err
@@ -783,18 +750,13 @@ func (ctx *BuildContext) buildModule() (result *BuildMeta, err error) {
 							}
 
 							// module file path
-							moduleFilepath := path.Join(ctx.pnpmPkgDir, moduleSpecifier)
-
-							// if it's the entry module
-							if moduleSpecifier == entry.cjs || moduleSpecifier == entry.esm {
-								return esbuild.OnResolveResult{Path: moduleFilepath}, nil
-							}
+							moduleFilename := path.Join(ctx.pnpmPkgDir, moduleSpecifier)
 
 							// split the module that is an alias of a dependency
 							// means this file just include a single line(js): `export * from "dep"`
-							fi, ioErr := os.Lstat(moduleFilepath)
+							fi, ioErr := os.Lstat(moduleFilename)
 							if ioErr == nil && fi.Size() < 128 {
-								data, ioErr := os.ReadFile(moduleFilepath)
+								data, ioErr := os.ReadFile(moduleFilename)
 								if ioErr == nil {
 									out, esbErr := minify(string(data), esbuild.LoaderJS, esbuild.ESNext)
 									if esbErr == nil {
@@ -817,12 +779,33 @@ func (ctx *BuildContext) buildModule() (result *BuildMeta, err error) {
 								}
 							}
 
-							// bundle the internal module if it's not a dynamic import or `?bundle=false` query present
-							if args.Kind != esbuild.ResolveJSDynamicImport && !noBundle {
-								if existsFile(moduleFilepath) {
-									return esbuild.OnResolveResult{Path: moduleFilepath}, nil
+							// bundle the package module if it's not a dynamic import or `?bundle=false` query present
+							if moduleSpecifier == entry.cjs || moduleSpecifier == entry.esm || (args.Kind != esbuild.ResolveJSDynamicImport && !noBundle) {
+								if existsFile(moduleFilename) {
+									// embed wasm as WebAssembly.Module
+									if strings.HasSuffix(moduleFilename, ".wasm") {
+										return esbuild.OnResolveResult{
+											Path:      moduleFilename,
+											Namespace: "wasm",
+										}, nil
+									}
+									// transfrom svelte component
+									if strings.HasSuffix(moduleFilename, ".svelte") {
+										return esbuild.OnResolveResult{
+											Path:      moduleFilename,
+											Namespace: "svelte",
+										}, nil
+									}
+									// transfrom Vue SFC
+									if strings.HasSuffix(moduleFilename, ".vue") {
+										return esbuild.OnResolveResult{
+											Path:      moduleFilename,
+											Namespace: "vue",
+										}, nil
+									}
+									return esbuild.OnResolveResult{Path: moduleFilename}, nil
 								}
-								// let esbuild to handle it
+								// otherwise, let esbuild to handle it
 								return esbuild.OnResolveResult{}, nil
 							}
 						}
@@ -934,7 +917,7 @@ func (ctx *BuildContext) buildModule() (result *BuildMeta, err error) {
 					if semverLessThan(svelteVersion, "4.0.0") {
 						return esbuild.OnLoadResult{}, errors.New("svelte version must be greater than 4.0.0")
 					}
-					out, err := transformSvelte(ctx.npmrc, svelteVersion, []string{ctx.esmPath.String(), string(code)})
+					out, err := transformSvelte(ctx.npmrc, svelteVersion, []string{ctx.esmPath.Specifier(), string(code)})
 					if err != nil {
 						return esbuild.OnLoadResult{}, err
 					}
@@ -968,7 +951,7 @@ func (ctx *BuildContext) buildModule() (result *BuildMeta, err error) {
 					if semverLessThan(vueVersion, "3.0.0") {
 						return esbuild.OnLoadResult{}, errors.New("vue version must be greater than 3.0.0")
 					}
-					out, err := transformVue(ctx.npmrc, vueVersion, []string{ctx.esmPath.String(), string(code)})
+					out, err := transformVue(ctx.npmrc, vueVersion, []string{ctx.esmPath.Specifier(), string(code)})
 					if err != nil {
 						return esbuild.OnLoadResult{}, err
 					}
@@ -988,8 +971,8 @@ rebuild:
 		msg := ret.Errors[0].Text
 		if strings.HasPrefix(msg, "Could not resolve \"") {
 			// current module can not be marked as an external
-			if strings.HasPrefix(msg, fmt.Sprintf("Could not resolve \"%s\"", entryModuleSpecifier)) {
-				err = fmt.Errorf("could not resolve \"%s\"", entryModuleSpecifier)
+			if strings.HasPrefix(msg, fmt.Sprintf("Could not resolve \"%s\"", entrySpecifier)) {
+				err = fmt.Errorf("could not resolve \"%s\"", entrySpecifier)
 				return
 			}
 			name := strings.Split(msg, "\"")[1]
@@ -1041,9 +1024,9 @@ rebuild:
 				header.WriteByte('@')
 			}
 			header.WriteString(ctx.esmPath.PkgVersion)
-			if ctx.esmPath.SubBareName != "" {
+			if ctx.esmPath.SubModuleName != "" {
 				header.WriteByte('/')
-				header.WriteString(ctx.esmPath.SubBareName)
+				header.WriteString(ctx.esmPath.SubModuleName)
 			}
 			header.WriteString(" */\n")
 
@@ -1060,7 +1043,7 @@ rebuild:
 					ids.Add(string(r))
 				}
 				if ids.Has("__Process$") {
-					if ctx.args.external.Has("node:process") || ctx.args.externalAll {
+					if ctx.args.external.Has("node:process") {
 						fmt.Fprintf(header, `import __Process$ from "node:process";%s`, EOL)
 					} else if ctx.isBrowserTarget() {
 						if len(ctx.packageJson.Browser) > 0 {
@@ -1084,7 +1067,7 @@ rebuild:
 					}
 				}
 				if ids.Has("__Buffer$") {
-					if ctx.args.external.Has("node:buffer") || ctx.args.externalAll {
+					if ctx.args.external.Has("node:buffer") {
 						fmt.Fprintf(header, `import { Buffer as __Buffer$ } from "node:buffer";%s`, EOL)
 					} else if ctx.isBrowserTarget() {
 						var browserExclude bool
@@ -1163,7 +1146,7 @@ rebuild:
 							if pkgJson.Type == "module" || pkgJson.Module != "" {
 								isEsModule[i] = true
 							} else {
-								b := NewBuildContext(ctx.zoneId, ctx.npmrc, esm, ctx.args, ctx.target, ctx.pinedTarget, BundleFalse, ctx.dev)
+								b := NewBuildContext(ctx.zoneId, ctx.npmrc, esm, ctx.args, ctx.externalAll, ctx.target, ctx.pinedTarget, BundleFalse, ctx.dev)
 								err = b.install()
 								if err == nil {
 									entry := b.resolveEntry(esm)
@@ -1191,7 +1174,7 @@ rebuild:
 			}
 
 			// check imports
-			for _, a := range ctx.importMap {
+			for _, a := range ctx.esmImports {
 				resolvedPathFull, resolvedPath := a[0], a[1]
 				if bytes.Contains(jsContent, []byte(fmt.Sprintf(`"%s"`, resolvedPath))) {
 					deps.Add(resolvedPathFull)
@@ -1205,8 +1188,12 @@ rebuild:
 			finalContent := bytes.NewBuffer(header.Bytes())
 			finalContent.Write(jsContent)
 
-			if ctx.deprecated != "" {
-				fmt.Fprintf(finalContent, `console.warn("%%c[esm.sh]%%c %%cdeprecated%%c %s@%s: %s", "color:grey", "", "color:red", "");%s`, ctx.esmPath.PkgName, ctx.esmPath.PkgVersion, strings.ReplaceAll(ctx.deprecated, "\"", "\\\""), "\n")
+			// check if the package is deprecated
+			if !ctx.esmPath.GhPrefix && !ctx.esmPath.PrPrefix {
+				deprecated, _ := ctx.npmrc.isDeprecated(ctx.packageJson.Name, ctx.packageJson.Version)
+				if deprecated != "" {
+					fmt.Fprintf(finalContent, `console.warn("%%c[esm.sh]%%c %%cdeprecated%%c %s@%s: " + %s, "color:grey", "", "color:red", "");%s`, ctx.esmPath.PkgName, ctx.esmPath.PkgVersion, utils.MustEncodeJSON(deprecated), "\n")
+				}
 			}
 
 			// add sourcemap Url
@@ -1230,7 +1217,7 @@ rebuild:
 			if err != nil {
 				return
 			}
-			result.CSS = true
+			result.HasCSS = true
 		} else if config.SourceMap && strings.HasSuffix(file.Path, ".js.map") {
 			var sourceMap map[string]interface{}
 			if json.Unmarshal(file.Contents, &sourceMap) == nil {
@@ -1253,9 +1240,6 @@ rebuild:
 		}
 	}
 
-	// wait for sub-builds
-	ctx.wg.Wait()
-
 	// filter and sort dependencies
 	sortedDeps := sort.StringSlice{}
 	for _, url := range deps.Values() {
@@ -1273,7 +1257,7 @@ rebuild:
 
 func (ctx *BuildContext) buildTypes() (ret *BuildMeta, err error) {
 	// install the package
-	ctx.stage = "install"
+	ctx.status = "install"
 	err = ctx.install()
 	if err != nil {
 		return
@@ -1291,13 +1275,10 @@ func (ctx *BuildContext) buildTypes() (ret *BuildMeta, err error) {
 		dts = entry.dts
 	}
 
-	ctx.stage = "build"
+	ctx.status = "build"
 	err = ctx.transformDTS(dts)
 	if err == nil {
-		ret = &BuildMeta{
-			Dts: "/" + ctx.esmPath.PackageName() + dts[1:],
-		}
-
+		ret = &BuildMeta{Dts: "/" + ctx.esmPath.PackageName() + dts[1:]}
 	}
 	return
 }

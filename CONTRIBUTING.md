@@ -40,7 +40,7 @@ Then you can import `React` from "http://localhost:8080/react"
 
 ## Running Integration Tests
 
-We use [Deno](https://deno.land) to run all the integration testing cases. Make sure you have Deno installed on your machine.
+We use [Deno](https://deno.land) to run all the integration testing cases. Make sure you have Deno installed on your computer.
 
 ```bash
 # Run all tests

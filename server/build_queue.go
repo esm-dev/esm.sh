@@ -61,7 +61,7 @@ func (q *BuildQueue) Add(ctx *BuildContext, clientIp string) *QueueClient {
 		createdAt:    time.Now(),
 		clients:      []*QueueClient{client},
 	}
-	ctx.stage = "pending"
+	ctx.status = "pending"
 
 	q.lock.Lock()
 	t.el = q.queue.PushBack(t)
@@ -103,8 +103,6 @@ func (q *BuildQueue) build(t *BuildTask) {
 	if err == nil {
 		if t.target == "types" {
 			log.Infof("build '%s'(types) done in %v", t.Path(), time.Since(t.startedAt))
-		} else if t.subBuilds != nil && t.subBuilds.Len() > 0 {
-			log.Infof("build '%s'(%d sub-builds) done in %v", t.Path(), t.subBuilds.Len(), time.Since(t.startedAt))
 		} else {
 			log.Infof("build '%s' done in %v", t.Path(), time.Since(t.startedAt))
 		}
