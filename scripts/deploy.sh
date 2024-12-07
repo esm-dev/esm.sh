@@ -27,8 +27,8 @@ if [ "$host" == "" ]; then
   exit
 fi
 
-read -p "? host os (default is 'linux'): " goos
-read -p "? host architecture (default is 'amd64'): " goarch
+read -p "? host os (default is \"linux\"): " goos
+read -p "? host architecture (default is \"amd64\"): " goarch
 if [ "$goos" == "" ]; then
   goos="linux"
 fi
@@ -37,7 +37,7 @@ if [ "$goarch" == "" ]; then
 fi
 
 user="root"
-read -p "? login user (default is 'root'): " v
+read -p "? login user (default is \"root\"): " v
 if [ "$v" != "" ]; then
   user="$v"
 fi
@@ -67,49 +67,59 @@ fi
 
 echo "--- installing..."
 ssh -p $sshPort ${user}@${host} << EOF
-  if [ "$init" == "yes" ]; then
+  glv=\$(git lfs version)
+  if [ "\$?" != "0" ]; then
     apt update
-    apt install -y git git-lfs supervisor
+    apt install -y git git-lfs
     git lfs install
-    svcf=/etc/supervisor/conf.d/esmd.conf
-    rm -f \$svcf
-    echo "[program:esmd]" >> \$svcf
-    if [ "$config" == "" ]; then
-      echo "command=/usr/local/bin/esmd" >> \$svcf
-    else
+  fi
+  echo \$glv
+
+  if [ "$init" == "yes" ]; then
+    servicefn=/etc/systemd/system/esmd.service
+    if [ -f \$servicefn ]; then
+      rm -f servicefn
+    fi
+    echo "[Unit]" >> \$servicefn
+    echo "Description=esmd" >> \$servicefn
+    echo "After=network.target" >> \$servicefn
+    echo "StartLimitIntervalSec=0" >> \$servicefn
+    echo "[Service]" >> \$servicefn
+    echo "Type=simple" >> \$servicefn
+    if [ "$config" != "" ]; then
       mkdir -p /etc/esmd
       rm -f /etc/esmd/config.json
       echo "$config" >> /etc/esmd/config.json
-      echo "command=/usr/local/bin/esmd --config=/etc/esmd/config.json" >> \$svcf
+      echo "ExecStart=/usr/local/bin/esmd --config=/etc/esmd/config.json" >> \$servicefn
+    else
+      echo "ExecStart=/usr/local/bin/esmd" >> \$servicefn
     fi
-    echo "environment=USER=\"\${USER}\",HOME=\"\${HOME}\"" >> \$svcf
-    echo "user=\${USER}" >> \$svcf
-    echo "directory=/tmp" >> \$svcf
-    echo "autostart=true" >> \$svcf
-    echo "autorestart=true" >> \$svcf
+    echo "USER=\${USER}" >> \$servicefn
+    echo "Restart=always" >> \$servicefn
+    echo "RestartSec=5" >> \$servicefn
+    echo "Environment=\"USER=\${USER}\"" >> \$servicefn
+    echo "Environment=\"HOME=\${HOME}\"" >> \$servicefn
+    echo "[Install]" >> \$servicefn
+    echo "WantedBy=default.target" >> \$servicefn
   else
-    SVV=\$(supervisorctl version)
-    if [ "\$?" != "0" ]; then
-      echo "error: supervisor not installed!"
-      exit
-    fi
-    echo "supervisor \$SVV"
-    supervisorctl stop esmd
+    systemctl stop esmd.service
   fi
 
   cd /tmp
   tar -xzf esmd.tar.gz
-  rm -rf esmd.tar.gz
-
-  rm -f /usr/local/bin/esmd
+  if [ "\$?" != "0" ]; then
+    exit 1
+  fi
+  rm -f esmd.tar.gz
+  chmod +x esmd
   mv -f esmd /usr/local/bin/esmd
-  chmod +x /usr/local/bin/esmd
 
   if [ "$init" == "yes" ]; then
-    supervisorctl reload
-  else
-    supervisorctl start esmd
+    systemctl daemon-reload
+    systemctl enable esmd.service
   fi
+
+  systemctl start esmd.service
 EOF
 
 rm -f esmd
