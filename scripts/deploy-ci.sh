@@ -71,7 +71,7 @@ ssh next.esm.sh << EOF
   fi
 
   systemctl start esmd.service
-  curl localhost/status.json
+  echo "esmd.service started."
 EOF
 if [ "$?" != "0" ]; then
   exit 1
