@@ -53,21 +53,21 @@ type PackageJSONRaw struct {
 	Name             string          `json:"name"`
 	Version          string          `json:"version"`
 	Type             string          `json:"type"`
-	Main             string          `json:"main"`
-	Module           StringOrMap     `json:"module"`
-	ES2015           StringOrMap     `json:"es2015"`
-	JsNextMain       StringOrMap     `json:"jsnext:main"`
-	Browser          StringOrMap     `json:"browser"`
-	Types            string          `json:"types"`
-	Typings          string          `json:"typings"`
+	Main             JsonAny         `json:"main"`
+	Module           JsonAny         `json:"module"`
+	ES2015           JsonAny         `json:"es2015"`
+	JsNextMain       JsonAny         `json:"jsnext:main"`
+	Browser          JsonAny         `json:"browser"`
+	Types            JsonAny         `json:"types"`
+	Typings          JsonAny         `json:"typings"`
 	SideEffects      any             `json:"sideEffects"`
 	Dependencies     any             `json:"dependencies"`
 	PeerDependencies any             `json:"peerDependencies"`
-	Imports          map[string]any  `json:"imports"`
-	TypesVersions    map[string]any  `json:"typesVersions"`
+	Imports          any             `json:"imports"`
+	TypesVersions    any             `json:"typesVersions"`
 	Exports          json.RawMessage `json:"exports"`
 	Files            []string        `json:"files"`
-	Esmsh            map[string]any  `json:"esm.sh"`
+	Esmsh            any             `json:"esm.sh"`
 }
 
 // PackageJSON defines the package.json of a NPM package
@@ -78,8 +78,6 @@ type PackageJSON struct {
 	Type             string
 	Main             string
 	Module           string
-	ES2015           string
-	JsNextMain       string
 	Types            string
 	Typings          string
 	SideEffectsFalse bool
@@ -157,37 +155,46 @@ func (a *PackageJSONRaw) ToNpmPackage() *PackageJSON {
 	}
 	exports := newOrderedMap()
 	if rawExports := a.Exports; rawExports != nil {
-		var v any
-		if json.Unmarshal(rawExports, &v) == nil {
-			if s, ok := v.(string); ok {
-				if len(s) > 0 {
-					exports.Set(".", s)
-				}
-			} else if _, ok := v.(map[string]any); ok {
-				exports.UnmarshalJSON(rawExports)
+		var s string
+		if json.Unmarshal(rawExports, &s) == nil {
+			if len(s) > 0 {
+				exports.Set(".", s)
 			}
+		} else {
+			exports.UnmarshalJSON(rawExports)
 		}
 	}
-	return &PackageJSON{
+	p := &PackageJSON{
 		Name:             a.Name,
 		Version:          a.Version,
 		Type:             a.Type,
-		Main:             a.Main,
-		Module:           a.Module.MainValue(),
-		ES2015:           a.ES2015.MainValue(),
-		JsNextMain:       a.JsNextMain.MainValue(),
-		Types:            a.Types,
-		Typings:          a.Typings,
+		Main:             a.Main.String(),
+		Module:           a.Module.String(),
+		Types:            a.Types.String(),
+		Typings:          a.Typings.String(),
 		Browser:          browser,
 		SideEffectsFalse: sideEffectsFalse,
 		SideEffects:      sideEffects,
 		Dependencies:     dependencies,
 		PeerDependencies: peerDependencies,
-		Imports:          a.Imports,
-		TypesVersions:    a.TypesVersions,
+		Imports:          toMap(a.Imports),
+		TypesVersions:    toMap(a.TypesVersions),
 		Exports:          exports,
-		Esmsh:            a.Esmsh,
+		Esmsh:            toMap(a.Esmsh),
 	}
+
+	// normalize package module field
+	if p.Module == "" {
+		if es2015 := a.ES2015.String(); es2015 != "" {
+			p.Module = es2015
+		} else if jsNextMain := a.JsNextMain.String(); jsNextMain != "" {
+			p.Module = jsNextMain
+		} else if p.Main != "" && (p.Type == "module" || strings.HasSuffix(p.Main, ".mjs")) {
+			p.Module = p.Main
+			p.Main = ""
+		}
+	}
+	return p
 }
 
 // UnmarshalJSON implements the json.Unmarshaler interface
@@ -768,6 +775,14 @@ func toTypesPackageName(pkgName string) string {
 		pkgName = strings.Replace(pkgName[1:], "/", "__", 1)
 	}
 	return "@types/" + pkgName
+}
+
+// toMap converts any value to a `map[string]any`
+func toMap(v any) map[string]any {
+	if m, ok := v.(map[string]any); ok {
+		return m
+	}
+	return nil
 }
 
 // stripHttpScheme removes the `http[s]:` protocol from the given url.

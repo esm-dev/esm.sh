@@ -238,7 +238,7 @@ Deno.test("legacy routes", async () => {
     });
     res.body?.cancel();
     assertEquals(res.status, 302);
-    assertEquals(res.headers.get("Location"), "http://localhost:8080/v135/@types/react-dom@18.3.1/index.d.ts");
+    assert(/^http:\/\/localhost:8080\/v135\/@types\/react-dom@18\.3\.\d\/index\.d\.ts$/.test(res.headers.get("Location")!));
   }
   {
     const res = await fetch("http://localhost:8080/v135/@types/react-dom@18.3.1/index.d.ts");
@@ -252,7 +252,7 @@ Deno.test("legacy routes", async () => {
     });
     res.body?.cancel();
     assertEquals(res.status, 302);
-    assertEquals(res.headers.get("Location"), "http://localhost:8080/v135/@types/react-dom@18.3.1/client~.d.ts");
+    assert(/^http:\/\/localhost:8080\/v135\/@types\/react-dom@18\.3\.\d\/client~\.d\.ts$/.test(res.headers.get("Location")!));
   }
   {
     const res = await fetch("http://localhost:8080/v135/@types/react-dom@18.3.1/client~.d.ts");

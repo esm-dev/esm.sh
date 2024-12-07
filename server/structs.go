@@ -81,19 +81,20 @@ func (s *StringSet) SortedValues() []string {
 	return slice
 }
 
-type StringOrMap struct {
+type JsonAny struct {
 	Str string
 	Map map[string]any
+	Any any
 }
 
-func (a *StringOrMap) MarshalJSON() ([]byte, error) {
+func (a *JsonAny) MarshalJSON() ([]byte, error) {
 	if a.Str != "" {
 		return json.Marshal(a.Str)
 	}
 	return json.Marshal(a.Map)
 }
 
-func (a *StringOrMap) UnmarshalJSON(b []byte) error {
+func (a *JsonAny) UnmarshalJSON(b []byte) error {
 	var s string
 	if json.Unmarshal(b, &s) == nil {
 		a.Str = s
@@ -102,11 +103,12 @@ func (a *StringOrMap) UnmarshalJSON(b []byte) error {
 	var m map[string]any
 	if json.Unmarshal(b, &m) == nil {
 		a.Map = m
+		return nil
 	}
-	return nil
+	return json.Unmarshal(b, &a.Any)
 }
 
-func (a *StringOrMap) MainValue() string {
+func (a *JsonAny) String() string {
 	if a.Str != "" {
 		return a.Str
 	}
@@ -141,14 +143,14 @@ func (a SortablePaths) Less(i, j int) bool {
 
 // copied from https://gitlab.com/c0b/go-ordered-json
 type OrderedMap struct {
-	keys []string
-	m    map[string]interface{}
+	keys   []string
+	values map[string]interface{}
 }
 
 // Create a new orderedMap
 func newOrderedMap() *OrderedMap {
 	return &OrderedMap{
-		m: make(map[string]interface{}),
+		values: make(map[string]interface{}),
 	}
 }
 
@@ -161,17 +163,17 @@ func (om *OrderedMap) Keys() []string {
 }
 
 func (om *OrderedMap) Get(key string) (interface{}, bool) {
-	v, ok := om.m[key]
+	v, ok := om.values[key]
 	return v, ok
 }
 
 // Set sets value for particular key, this will remember the order of keys inserted
 // but if the key already exists, the order is not updated.
 func (om *OrderedMap) Set(key string, value interface{}) {
-	if _, ok := om.m[key]; !ok {
+	if _, ok := om.values[key]; !ok {
 		om.keys = append(om.keys, key)
 	}
-	om.m[key] = value
+	om.values[key] = value
 }
 
 // UnmarshalJSON implements type json.Unmarshaler interface, so can be called in json.Unmarshal(data, om)
@@ -228,7 +230,7 @@ func (om *OrderedMap) parseObject(dec *json.Decoder) (err error) {
 		}
 
 		om.keys = append(om.keys, key)
-		om.m[key] = value
+		om.values[key] = value
 	}
 
 	t, err = dec.Token()

@@ -68,11 +68,11 @@ func transformDTS(ctx *BuildContext, dts string, buildArgsPrefix string, marker 
 				var hasTypes bool
 				if utils.ParseJSONFile(path.Join(dtsWD, specifier, "package.json"), &p) == nil {
 					dir := path.Join("/", path.Dir(dts))
-					if p.Types != "" {
-						specifier, _ = relPath(dir, "/"+path.Join(dir, specifier, p.Types))
+					if types := p.Types.String(); types != "" {
+						specifier, _ = relPath(dir, "/"+path.Join(dir, specifier, types))
 						hasTypes = true
-					} else if p.Typings != "" {
-						specifier, _ = relPath(dir, "/"+path.Join(dir, specifier, p.Typings))
+					} else if typings := p.Typings.String(); typings != "" {
+						specifier, _ = relPath(dir, "/"+path.Join(dir, specifier, typings))
 						hasTypes = true
 					}
 				}

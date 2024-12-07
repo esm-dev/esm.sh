@@ -289,6 +289,15 @@ func (ctx *BuildContext) buildModule() (result *BuildMeta, err error) {
 		entryPoints = append(entryPoints, currentEntryPoint)
 	}
 
+	// if ctx.packageJson.Exports.Len() > 0 {
+	// 	var entryNames []string
+	// 	for _, exportName := range ctx.packageJson.Exports.Keys() {
+	// 		if (exportName == "." || strings.HasPrefix(exportName, "./")) && exportName != "./package.json" {
+	// 			entryNames = append(entryNames, exportName)
+	// 		}
+	// 	}
+	// }
+
 	pkgSideEffects := esbuild.SideEffectsTrue
 	if ctx.packageJson.SideEffectsFalse {
 		pkgSideEffects = esbuild.SideEffectsFalse
