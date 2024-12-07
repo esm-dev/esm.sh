@@ -120,6 +120,7 @@ ssh -p $sshPort ${user}@${host} << EOF
   fi
 
   systemctl start esmd.service
+  echo "esmd.service started."
 EOF
 
 rm -f esmd
