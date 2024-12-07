@@ -35,7 +35,7 @@ ssh next.esm.sh << EOF
   reload=no
   if [ ! -f \$servicefn ]; then
     echo "[Unit]" >> \$servicefn
-    echo "Description=esmd" >> \$servicefn
+    echo "Description=esm.sh service" >> \$servicefn
     echo "After=network.target" >> \$servicefn
     echo "StartLimitIntervalSec=0" >> \$servicefn
     echo "[Service]" >> \$servicefn
@@ -51,6 +51,7 @@ ssh next.esm.sh << EOF
     reload=yes
   else
     systemctl stop esmd.service
+    echo "Stopped esmd.service."
   fi
 
   mv -f ~/.esmd /tmp/.esmd
@@ -71,7 +72,7 @@ ssh next.esm.sh << EOF
   fi
 
   systemctl start esmd.service
-  echo "esmd.service started."
+  echo "Started esmd.service."
 EOF
 if [ "$?" != "0" ]; then
   exit 1
