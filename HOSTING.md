@@ -3,6 +3,13 @@
 [esm.sh](https://esm.sh) provides a global fast CDN publicly which is powered by [Cloudflare](https://cloudflare.com).
 You can also host esm.sh service by yourself. To do this, please follow the instructions below.
 
+## Recommended Host Machine Requirements
+
+- Linux system (Debian/Ubuntu)
+- 4x CPU cores or more
+- 8GB RAM or more
+- 100GB disk space or more
+
 ## Clone the Source Code
 
 ```bash
@@ -37,7 +44,7 @@ Then you can import `React` from <http://localhost:8080/react>.
 
 ## Deploy the Server to a Single Machine
 
-We provide a bash script to deploy the server to a single machine.
+You can deploy the server to a single machine with the [deploy.sh](./scripts/deploy.sh) script.
 
 ```bash
 # first time deploy
@@ -45,13 +52,6 @@ We provide a bash script to deploy the server to a single machine.
 # update the server
 ./scripts/deploy.sh
 ```
-
-Recommended host machine requirements:
-
-- Linux system (Debian/Ubuntu)
-- 4x CPU cores or more
-- 8GB RAM or more
-- 100GB disk space or more
 
 ## Deploy with Docker
 
