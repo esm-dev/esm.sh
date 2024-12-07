@@ -212,6 +212,7 @@ func run(cmd string, args ...string) (output []byte, err error) {
 	var outBuf bytes.Buffer
 	var errBuf bytes.Buffer
 	c := exec.Command(cmd, args...)
+	c.Dir = os.TempDir()
 	c.Stdout = &outBuf
 	c.Stderr = &errBuf
 	err = c.Run()

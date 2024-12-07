@@ -23,49 +23,56 @@ if [ "$?" != "0" ]; then
 fi
 
 ssh next.esm.sh << EOF
-  cd /tmp
-  tar -xzf esmd.tar.gz
-  if [ "\$?" != "0" ]; then
-    exit 1
-  fi
-  rm -rf esmd.tar.gz
-
-  svv=\$(supervisorctl version)
+  glv=\$(git lfs version)
   if [ "\$?" != "0" ]; then
     apt update
-    apt install -y git git-lfs supervisor
+    apt install -y git git-lfs
     git lfs install
-    svv=\$(supervisorctl version)
   fi
-  echo "supervisor \${svv}"
+  echo \$glv
 
-  svcf=/etc/supervisor/conf.d/esmd.conf
+  servicefn=/etc/systemd/system/esmd.service
   reload=no
-  if [ ! -f \$svcf ]; then
-    echo "[program:esmd]" >> \$svcf
-    echo "command=/usr/local/bin/esmd" >> \$svcf
-    echo "environment=USER=\"\${USER}\",HOME=\"\${HOME}\"" >> \$svcf
-    echo "user=\${USER}" >> \$svcf
-    echo "directory=/tmp" >> \$svcf
-    echo "autostart=true" >> \$svcf
-    echo "autorestart=true" >> \$svcf
+  if [ ! -f \$servicefn ]; then
+    echo "[Unit]" >> \$servicefn
+    echo "Description=esm.sh service" >> \$servicefn
+    echo "After=network.target" >> \$servicefn
+    echo "StartLimitIntervalSec=0" >> \$servicefn
+    echo "[Service]" >> \$servicefn
+    echo "Type=simple" >> \$servicefn
+    echo "ExecStart=/usr/local/bin/esmd" >> \$servicefn
+    echo "USER=\${USER}" >> \$servicefn
+    echo "Restart=always" >> \$servicefn
+    echo "RestartSec=5" >> \$servicefn
+    echo "Environment=\"USER=\${USER}\"" >> \$servicefn
+    echo "Environment=\"HOME=\${HOME}\"" >> \$servicefn
+    echo "[Install]" >> \$servicefn
+    echo "WantedBy=default.target" >> \$servicefn
     reload=yes
   else
-    supervisorctl stop esmd
+    systemctl stop esmd.service
+    echo "Stopped esmd.service."
   fi
 
   mv -f ~/.esmd /tmp/.esmd
   nohup rm -rf /tmp/.esmd &
 
-  rm -f /usr/local/bin/esmd
+  cd /tmp
+  tar -xzf esmd.tar.gz
+  if [ "\$?" != "0" ]; then
+    exit 1
+  fi
+  rm -f esmd.tar.gz
+  chmod +x esmd
   mv -f esmd /usr/local/bin/esmd
-  chmod +x /usr/local/bin/esmd
 
   if [ "\$reload" == "yes" ]; then
-    supervisorctl reload
-  else
-    supervisorctl start esmd
+    systemctl daemon-reload
+    systemctl enable esmd.service
   fi
+
+  systemctl start esmd.service
+  echo "Started esmd.service."
 EOF
 if [ "$?" != "0" ]; then
   exit 1

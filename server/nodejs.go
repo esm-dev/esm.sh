@@ -212,6 +212,8 @@ func installNodejs(installDir string, version string) (err error) {
 
 	_, tarFilename := utils.SplitByLastByte(dlURL, '/')
 	savePath := path.Join(os.TempDir(), tarFilename)
+	defer os.Remove(savePath)
+
 	f, err := os.Create(savePath)
 	if err != nil {
 		return
