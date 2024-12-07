@@ -1648,7 +1648,7 @@ func esmRouter(debug bool) rex.Handle {
 		}
 
 		buf := bytes.NewBuffer(nil)
-		fmt.Fprintf(buf, "/* esm.sh - %v */\n", esmPath)
+		fmt.Fprintf(buf, "/* esm.sh - %s */\n", esmPath.Specifier())
 
 		if isWorker {
 			moduleUrl := cdnOrigin + buildCtx.Path()
