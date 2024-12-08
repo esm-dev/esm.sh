@@ -65,7 +65,7 @@ func praseEsmPath(npmrc *NpmRC, pathname string) (esmPath EsmPath, extraQuery st
 			PkgName:       pkgName,
 			PkgVersion:    version,
 			SubPath:       subPath,
-			SubModuleName: toModuleBareName(subPath, !isBuildDist),
+			SubModuleName: stripEntryModuleExt(subPath),
 			PrPrefix:      true,
 		}
 		return
@@ -120,7 +120,7 @@ func praseEsmPath(npmrc *NpmRC, pathname string) (esmPath EsmPath, extraQuery st
 		PkgName:       pkgName,
 		PkgVersion:    version,
 		SubPath:       subPath,
-		SubModuleName: toModuleBareName(subPath, !isBuildDist),
+		SubModuleName: stripEntryModuleExt(subPath),
 		GhPrefix:      ghPrefix,
 	}
 

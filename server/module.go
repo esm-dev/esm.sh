@@ -21,11 +21,8 @@ import (
 var moduleExts = []string{".js", ".mjs", ".jsx", ".ts", ".mts", ".tsx", ".cjs", ".cts"}
 
 // stripModuleExt strips the module extension from the given string.
-func stripModuleExt(s string, exts ...string) string {
-	if len(exts) == 0 {
-		exts = moduleExts
-	}
-	for _, ext := range exts {
+func stripModuleExt(s string) string {
+	for _, ext := range moduleExts {
 		if strings.HasSuffix(s, ext) {
 			return s[:len(s)-len(ext)]
 		}
@@ -33,20 +30,13 @@ func stripModuleExt(s string, exts ...string) string {
 	return s
 }
 
-func toModuleBareName(path string, stripIndexSuffix bool) string {
-	if path != "" {
-		barename := path
-		if strings.HasSuffix(path, ".mjs") {
-			barename = strings.TrimSuffix(path, ".mjs")
-		} else if strings.HasSuffix(path, ".cjs") {
-			barename = strings.TrimSuffix(path, ".cjs")
-		} else {
-			barename = strings.TrimSuffix(path, ".js")
+// stripEntryModuleExt strips the entry module extension from the given string.
+func stripEntryModuleExt(s string) string {
+	if s != "" {
+		if strings.HasSuffix(s, ".mjs") || strings.HasSuffix(s, ".cjs") {
+			return s[:len(s)-4]
 		}
-		if stripIndexSuffix {
-			barename = strings.TrimSuffix(barename, "/index")
-		}
-		return barename
+		return strings.TrimSuffix(s, ".js")
 	}
 	return ""
 }
