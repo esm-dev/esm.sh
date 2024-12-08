@@ -202,7 +202,7 @@ lookup:
 				PkgName:       pkgName,
 				PkgVersion:    packageJson.Version,
 				SubPath:       subpath,
-				SubModuleName: toModuleBareName(subpath, true),
+				SubModuleName: stripEntryModuleExt(subpath),
 			}
 		}
 		return
@@ -217,7 +217,7 @@ lookup:
 			PkgName:       pkgName,
 			PkgVersion:    rawInfo.Version,
 			SubPath:       subpath,
-			SubModuleName: toModuleBareName(subpath, true),
+			SubModuleName: stripEntryModuleExt(subpath),
 		}
 		packageJson = rawInfo.ToNpmPackage()
 		return
@@ -245,7 +245,7 @@ lookup:
 			PkgName:       pkgName,
 			PkgVersion:    packageJson.Version,
 			SubPath:       subpath,
-			SubModuleName: toModuleBareName(subpath, true),
+			SubModuleName: stripEntryModuleExt(subpath),
 		}
 	}
 	if err != nil && strings.HasSuffix(err.Error(), " not found") && isDts && !strings.HasPrefix(pkgName, "@types/") {
@@ -279,7 +279,7 @@ func (ctx *BuildContext) resolveEntry(esmPath EsmPath) (entry BuildEntry) {
 			for _, name := range exports.keys {
 				conditions, ok := exports.Get(name)
 				if ok {
-					if name == "./"+subModuleName || stripModuleExt(name, ".js", ".cjs", ".mjs") == "./"+subModuleName {
+					if name == "./"+subModuleName || stripEntryModuleExt(name) == "./"+subModuleName {
 						if s, ok := conditions.(string); ok {
 							/**
 							exports: {
@@ -806,7 +806,7 @@ func (ctx *BuildContext) resolveExternalModule(specifier string, kind api.Resolv
 			PkgName:       ctx.esmPath.PkgName,
 			PkgVersion:    ctx.esmPath.PkgVersion,
 			SubPath:       subPath,
-			SubModuleName: toModuleBareName(subPath, false),
+			SubModuleName: stripEntryModuleExt(subPath),
 		}
 		resolvedPath = ctx.getImportPath(subModule, ctx.getBuildArgsPrefix(false), ctx.externalAll)
 		if ctx.bundleMode == BundleFalse {
@@ -841,7 +841,7 @@ func (ctx *BuildContext) resolveExternalModule(specifier string, kind api.Resolv
 		PkgName:       pkgName,
 		PkgVersion:    version,
 		SubPath:       subpath,
-		SubModuleName: toModuleBareName(subpath, true),
+		SubModuleName: stripEntryModuleExt(subpath),
 	}
 
 	// resolve alias in dependencies

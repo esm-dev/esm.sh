@@ -915,7 +915,7 @@ func esmRouter(debug bool) rex.Handle {
 		// use `?path=$PATH` query to override the pathname
 		if v := query.Get("path"); v != "" {
 			esmPath.SubPath = utils.NormalizePathname(v)[1:]
-			esmPath.SubModuleName = toModuleBareName(esmPath.SubPath, true)
+			esmPath.SubModuleName = stripEntryModuleExt(esmPath.SubPath)
 		}
 
 		// check the path kind
@@ -1383,7 +1383,7 @@ func esmRouter(debug bool) rex.Handle {
 					return rex.Status(500, "Invalid build args: "+a[0])
 				}
 				esmPath.SubPath = strings.Join(strings.Split(esmPath.SubPath, "/")[1:], "/")
-				esmPath.SubModuleName = toModuleBareName(esmPath.SubPath, true)
+				esmPath.SubModuleName = stripEntryModuleExt(esmPath.SubPath)
 				buildArgs = args
 				xArgs = true
 			}

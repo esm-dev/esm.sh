@@ -1,10 +1,10 @@
 #!/bin/bash
 
+echo "--- building..."
 go build -o esmd $(dirname $0)/../main.go
 if [ "$?" != "0" ]; then
   exit 1
 fi
-du -h esmd
 
 mkdir -p ~/.ssh
 ssh-keyscan $SSH_HOST_NAME >> ~/.ssh/known_hosts
@@ -16,12 +16,15 @@ echo "  User ${SSH_USER}" >> ~/.ssh/config
 echo "  IdentityFile ~/.ssh/id_ed25519" >> ~/.ssh/config
 echo "  IdentitiesOnly yes" >> ~/.ssh/config
 
+echo "--- uploading..."
+du -h esmd
 tar -czf esmd.tar.gz esmd
 scp esmd.tar.gz next.esm.sh:/tmp/esmd.tar.gz
 if [ "$?" != "0" ]; then
   exit 1
 fi
 
+echo "--- installing..."
 ssh next.esm.sh << EOF
   glv=\$(git lfs version)
   if [ "\$?" != "0" ]; then

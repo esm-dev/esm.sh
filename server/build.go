@@ -289,14 +289,24 @@ func (ctx *BuildContext) buildModule() (result *BuildMeta, err error) {
 		entryPoints = append(entryPoints, currentEntryPoint)
 	}
 
-	// if ctx.packageJson.Exports.Len() > 0 {
-	// 	var entryNames []string
-	// 	for _, exportName := range ctx.packageJson.Exports.Keys() {
-	// 		if (exportName == "." || strings.HasPrefix(exportName, "./")) && exportName != "./package.json" {
-	// 			entryNames = append(entryNames, exportName)
-	// 		}
-	// 	}
-	// }
+	if ctx.packageJson.Exports.Len() > 0 {
+		var exportNames []string
+		var exportAll bool
+		for _, exportName := range ctx.packageJson.Exports.Keys() {
+			exportName := stripModuleExt(exportName)
+			if (exportName == "." || strings.HasPrefix(exportName, "./")) && !endsWith(exportName, ".json", ".css") {
+				if exportName == "./*" {
+					exportAll = true
+					break
+				}
+				if strings.HasSuffix(exportName, "/*") {
+					fmt.Println("*", exportName)
+				}
+				exportNames = append(exportNames, exportName)
+			}
+		}
+		fmt.Println(exportNames, exportAll)
+	}
 
 	pkgSideEffects := esbuild.SideEffectsTrue
 	if ctx.packageJson.SideEffectsFalse {
@@ -626,7 +636,7 @@ func (ctx *BuildContext) buildModule() (result *BuildMeta, err error) {
 								entry := ctx.resolveEntry(EsmPath{
 									PkgName:       ctx.esmPath.PkgName,
 									PkgVersion:    ctx.esmPath.PkgVersion,
-									SubModuleName: toModuleBareName(subPath, true),
+									SubModuleName: stripEntryModuleExt(subPath),
 									SubPath:       subPath,
 								})
 								if args.Kind == esbuild.ResolveJSImportStatement || args.Kind == esbuild.ResolveJSDynamicImport {
