@@ -239,10 +239,30 @@ func esmRouter(debug bool) rex.Handle {
 			return indexHTML
 
 		case "/status.json":
-			q := make([]map[string]any, buildQueue.queue.Len())
+			buildQueue.lock.RLock()
+			defer buildQueue.lock.RUnlock()
+
+			q := make([]map[string]any, buildQueue.current.Len()+buildQueue.queue.Len())
 			i := 0
 
-			buildQueue.lock.RLock()
+			for el := buildQueue.current.Front(); el != nil; el = el.Next() {
+				t, ok := el.Value.(*BuildTask)
+				if ok {
+					clientIps := make([]string, len(t.clients))
+					for idx, c := range t.clients {
+						clientIps[idx] = c.IP
+					}
+					m := map[string]any{
+						"clients":   clientIps,
+						"createdAt": t.createdAt.Format(http.TimeFormat),
+						"startedAt": t.startedAt.Format(http.TimeFormat),
+						"path":      t.ctx.Path(),
+						"status":    t.ctx.status,
+					}
+					q[i] = m
+					i++
+				}
+			}
 			for el := buildQueue.queue.Front(); el != nil; el = el.Next() {
 				t, ok := el.Value.(*BuildTask)
 				if ok {
@@ -253,21 +273,13 @@ func esmRouter(debug bool) rex.Handle {
 					m := map[string]any{
 						"clients":   clientIps,
 						"createdAt": t.createdAt.Format(http.TimeFormat),
-						"path":      t.Path(),
-					}
-					if !t.inProcess {
-						m["status"] = "pending"
-					} else {
-						m["status"] = t.status
-					}
-					if !t.startedAt.IsZero() {
-						m["startedAt"] = t.startedAt.Format(http.TimeFormat)
+						"path":      t.ctx.Path(),
+						"status":    "pending",
 					}
 					q[i] = m
 					i++
 				}
 			}
-			buildQueue.lock.RUnlock()
 
 			disk := "ok"
 			var stat syscall.Statfs_t
