@@ -67,16 +67,18 @@ func (q *BuildQueue) Add(ctx *BuildContext, clientIp string) *QueueClient {
 	q.queue.PushBack(t)
 	q.lock.Unlock()
 
-	if q.current.Len() < q.concurrency {
-		q.next()
-	}
+	q.next()
 
 	return client
 }
 
 func (q *BuildQueue) next() {
+	var n *list.Element
+
 	q.lock.RLock()
-	n := q.queue.Front()
+	if q.current.Len() < q.concurrency {
+		n = q.queue.Front()
+	}
 	q.lock.RUnlock()
 
 	if n != nil {
