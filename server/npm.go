@@ -216,8 +216,8 @@ type NpmRegistry struct {
 
 type NpmRC struct {
 	NpmRegistry
-	Registries map[string]NpmRegistry `json:"registries"`
-	zoneId     string
+	ScopedRegistries map[string]NpmRegistry `json:"scopedRegistries"`
+	zoneId           string
 }
 
 var (
@@ -235,7 +235,7 @@ func getDefaultNpmRC() *NpmRC {
 			User:     config.NpmUser,
 			Password: config.NpmPassword,
 		},
-		Registries: map[string]NpmRegistry{
+		ScopedRegistries: map[string]NpmRegistry{
 			"@jsr": {
 				Registry: jsrRegistry,
 			},
@@ -243,7 +243,7 @@ func getDefaultNpmRC() *NpmRC {
 	}
 	if len(config.NpmScopedRegistries) > 0 {
 		for scope, reg := range config.NpmScopedRegistries {
-			defaultNpmRC.Registries[scope] = NpmRegistry{
+			defaultNpmRC.ScopedRegistries[scope] = NpmRegistry{
 				Registry: reg.Registry,
 				Token:    reg.Token,
 				User:     reg.User,
@@ -265,15 +265,15 @@ func NewNpmRcFromJSON(jsonData []byte) (npmrc *NpmRC, err error) {
 	} else if !strings.HasSuffix(rc.Registry, "/") {
 		rc.Registry += "/"
 	}
-	if rc.Registries == nil {
-		rc.Registries = map[string]NpmRegistry{}
+	if rc.ScopedRegistries == nil {
+		rc.ScopedRegistries = map[string]NpmRegistry{}
 	}
-	if _, ok := rc.Registries["@jsr"]; !ok {
-		rc.Registries["@jsr"] = NpmRegistry{
+	if _, ok := rc.ScopedRegistries["@jsr"]; !ok {
+		rc.ScopedRegistries["@jsr"] = NpmRegistry{
 			Registry: jsrRegistry,
 		}
 	}
-	for _, reg := range rc.Registries {
+	for _, reg := range rc.ScopedRegistries {
 		if reg.Registry != "" && !strings.HasSuffix(reg.Registry, "/") {
 			reg.Registry += "/"
 		}
@@ -350,7 +350,7 @@ func (npmrc *NpmRC) fetchPackageInfo(packageName string, semverOrDistTag string)
 
 	if strings.HasPrefix(packageName, "@") {
 		scope, _ := utils.SplitByFirstByte(packageName, '/')
-		reg, ok := npmrc.Registries[scope]
+		reg, ok := npmrc.ScopedRegistries[scope]
 		if ok {
 			url = reg.Registry + packageName
 			token = reg.Token
@@ -619,7 +619,7 @@ func (rc *NpmRC) pnpmi(dir string, packages ...string) (err error) {
 			"ESM_NPM_PASSWORD="+string(password),
 		)
 	}
-	for scope, reg := range rc.Registries {
+	for scope, reg := range rc.ScopedRegistries {
 		if reg.Token != "" {
 			cmd.Env = append(cmd.Environ(), fmt.Sprintf("ESM_NPM_TOKEN_%s=%s", toEnvName(scope[1:]), reg.Token))
 		} else if reg.User != "" && reg.Password != "" {
@@ -674,7 +674,7 @@ func (rc *NpmRC) createDotNpmRcFile(dir string) error {
 			buf.WriteString(fmt.Sprintf("%s:_password=${ESM_NPM_PASSWORD}\n", authPerfix))
 		}
 	}
-	for scope, reg := range rc.Registries {
+	for scope, reg := range rc.ScopedRegistries {
 		if reg.Registry != "" {
 			buf.WriteString(fmt.Sprintf("%s:registry=%s\n", scope, reg.Registry))
 			if reg.Token != "" {

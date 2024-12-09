@@ -477,7 +477,7 @@ func esmRouter(debug bool) rex.Handle {
 					scopeName = pkgName[:strings.Index(pkgName, "/")]
 				}
 				if scopeName != "" {
-					reg, ok := npmrc.Registries[scopeName]
+					reg, ok := npmrc.ScopedRegistries[scopeName]
 					if !ok || (reg.Registry == jsrRegistry && reg.Token == "" && (reg.User == "" || reg.Password == "")) {
 						zoneId = ""
 					}
