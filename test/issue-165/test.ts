@@ -7,4 +7,5 @@ Deno.test("issue #165", async () => {
   assertEquals(res.status, 200);
   const code = await res.text();
   assertStringIncludes(code, "/react@18.1.0/");
+  assertStringIncludes(code, "deps=react@18.1.0");
 });

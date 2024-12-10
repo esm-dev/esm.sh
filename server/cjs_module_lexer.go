@@ -57,7 +57,7 @@ func initCJSModuleLexer() (err error) {
 		return
 	}
 
-	cmd := exec.Command("pnpm", "i", "--prefer-offline")
+	cmd := exec.Command("npm", "i", "--no-package-lock")
 	cmd.Dir = wd
 	output, err := cmd.CombinedOutput()
 	if err != nil {
@@ -79,7 +79,7 @@ func initCJSModuleLexer() (err error) {
 		return
 	}
 
-	err = os.WriteFile(path.Join(wd, "cjs_module_lexer.js"), minJs, 0644)
+	err = os.WriteFile(path.Join(wd, "cjs_module_lexer.cjs"), minJs, 0644)
 	return
 }
 
@@ -91,58 +91,65 @@ type cjsModuleLexerResult struct {
 	Stack            string   `json:"stack"`
 }
 
-func cjsModuleLexer(installDir string, pkgName string, specifier string, nodeEnv string) (ret cjsModuleLexerResult, err error) {
+func (ctx *BuildContext) cjsModuleLexer(specifier string, nodeEnv string) (ret cjsModuleLexerResult, err error) {
 	h := sha256.New()
 	h.Write([]byte(cjsModuleLexerPkg))
-	h.Write([]byte(pkgName))
+	h.Write([]byte(ctx.esmPath.PkgName))
 	h.Write([]byte(specifier))
 	h.Write([]byte(nodeEnv))
-	cacheFileName := path.Join(installDir, ".cjs_module_lexer", base64.RawURLEncoding.EncodeToString(h.Sum(nil))+".json")
+	cacheFileName := path.Join(ctx.wd, ".cjs_module_lexer", base64.RawURLEncoding.EncodeToString(h.Sum(nil))+".json")
 
 	// check the cache first
 	if existsFile(cacheFileName) && utils.ParseJSONFile(cacheFileName, &ret) == nil {
 		return
 	}
 
-	// change the args order carefully, the order is used in ./embed/internal/cjs_module_lexer.js
-	args := []interface{}{
-		installDir,
-		pkgName,
-		specifier,
-		nodeEnv,
+	lexerWd := path.Join(config.WorkDir, "npm", cjsModuleLexerPkg)
+	if !existsFile(path.Join(lexerWd, "cjs_module_lexer.cjs")) {
+		err = initCJSModuleLexer()
+		if err != nil {
+			return
+		}
 	}
+
+	requireMode := false
 	for _, name := range requireModeAllowList {
-		if pkgName == name || specifier == name || strings.HasPrefix(specifier, name+"/") {
-			args = append(args, true)
+		if ctx.esmPath.PkgName == name || specifier == name || strings.HasPrefix(specifier, name+"/") {
+			requireMode = true
 			break
 		}
 	}
 
+	// change the args order carefully, the order is used in ./embed/internal/cjs_module_lexer.js
+	args := []interface{}{
+		ctx.wd,
+		ctx.esmPath.PkgName,
+		specifier,
+		nodeEnv,
+	}
+	nodeArgs := []string{
+		"--experimental-permission",
+		"--allow-fs-read=" + lexerWd,
+		"--allow-fs-read=" + ctx.npmrc.StoreDir(),
+		"cjs_module_lexer.cjs",
+	}
+	if requireMode {
+		args = append(args, true)
+		// install dependencies & peerDependencies for require mode
+		ctx.installDependencies(ctx.packageJson, true)
+	}
+	c, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	cmd := exec.CommandContext(c, "node", nodeArgs...)
 	stdin := bytes.NewBuffer(nil)
 	stdout := bytes.NewBuffer(nil)
 	stderr := bytes.NewBuffer(nil)
-	err = json.NewEncoder(stdin).Encode(args)
-	if err != nil {
-		return
-	}
-
-	start := time.Now()
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
-
-	cjsModuleLexerWd := path.Join(config.WorkDir, "npm", cjsModuleLexerPkg)
-	cmd := exec.CommandContext(
-		ctx,
-		"node",
-		"--experimental-permission",
-		"--allow-fs-read="+cjsModuleLexerWd,
-		"--allow-fs-read="+installDir,
-		"cjs_module_lexer.js",
-	)
-	cmd.Dir = cjsModuleLexerWd
+	cmd.Dir = lexerWd
 	cmd.Stdin = stdin
 	cmd.Stdout = stdout
 	cmd.Stderr = stderr
+	start := time.Now()
+	json.NewEncoder(stdin).Encode(args)
 	err = cmd.Run()
 	if err != nil {
 		if stderr.Len() > 0 {
@@ -168,8 +175,7 @@ func cjsModuleLexer(installDir string, pkgName string, specifier string, nodeEnv
 				os.WriteFile(cacheFileName, stdout.Bytes(), 0644)
 			}
 		}()
-		log.Debugf("[cjsModuleLexer] parse %s in %s", path.Join(pkgName, specifier), time.Since(start))
+		log.Debugf("[cjsModuleLexer] parse %s in %s", path.Join(ctx.esmPath.PkgName, specifier), time.Since(start))
 	}
-
 	return
 }

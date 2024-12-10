@@ -226,15 +226,6 @@ async function parseExports(input) {
       }
       let pkgDir = join(wd, "node_modules", pkgName);
       let pkgJson = join(pkgDir, "package.json");
-      if (!existsSync(pkgJson)) {
-        if (wd.includes("/node_modules/.pnpm/")) {
-          pkgDir = join(wd.split("/node_modules/.pnpm/")[0], "node_modules", ".pnpm", "node_modules", pkgName);
-          pkgJson = join(pkgDir, "package.json");
-        } else {
-          pkgDir = join(wd, "node_modules", ".pnpm", "node_modules", pkgName);
-          pkgJson = join(pkgDir, "package.json");
-        }
-      }
       if (existsSync(pkgJson)) {
         if (subModule && existsSync(join(pkgDir, subModule, "package.json"))) {
           pkgDir = join(pkgDir, subModule);

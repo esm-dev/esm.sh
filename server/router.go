@@ -239,10 +239,27 @@ func esmRouter(debug bool) rex.Handle {
 			return indexHTML
 
 		case "/status.json":
-			q := make([]map[string]any, buildQueue.queue.Len())
+			q := make([]map[string]any, buildQueue.current.Len()+buildQueue.queue.Len())
 			i := 0
 
-			buildQueue.lock.RLock()
+			for el := buildQueue.current.Front(); el != nil; el = el.Next() {
+				t, ok := el.Value.(*BuildTask)
+				if ok {
+					clientIps := make([]string, len(t.clients))
+					for idx, c := range t.clients {
+						clientIps[idx] = c.IP
+					}
+					m := map[string]any{
+						"clients":   clientIps,
+						"createdAt": t.createdAt.Format(http.TimeFormat),
+						"startedAt": t.startedAt.Format(http.TimeFormat),
+						"path":      t.Path(),
+						"status":    t.status,
+					}
+					q[i] = m
+					i++
+				}
+			}
 			for el := buildQueue.queue.Front(); el != nil; el = el.Next() {
 				t, ok := el.Value.(*BuildTask)
 				if ok {
@@ -254,20 +271,12 @@ func esmRouter(debug bool) rex.Handle {
 						"clients":   clientIps,
 						"createdAt": t.createdAt.Format(http.TimeFormat),
 						"path":      t.Path(),
-					}
-					if !t.inProcess {
-						m["status"] = "pending"
-					} else {
-						m["status"] = t.status
-					}
-					if !t.startedAt.IsZero() {
-						m["startedAt"] = t.startedAt.Format(http.TimeFormat)
+						"status":    "pending",
 					}
 					q[i] = m
 					i++
 				}
 			}
-			buildQueue.lock.RUnlock()
 
 			disk := "ok"
 			var stat syscall.Statfs_t
@@ -276,7 +285,7 @@ func esmRouter(debug bool) rex.Handle {
 				avail := stat.Bavail * uint64(stat.Bsize)
 				if avail < 100*MB {
 					disk = "full"
-				} else if avail < 1000*MB {
+				} else if avail < 1024*MB {
 					disk = "low"
 				}
 			} else {
@@ -465,7 +474,7 @@ func esmRouter(debug bool) rex.Handle {
 					scopeName = pkgName[:strings.Index(pkgName, "/")]
 				}
 				if scopeName != "" {
-					reg, ok := npmrc.Registries[scopeName]
+					reg, ok := npmrc.ScopedRegistries[scopeName]
 					if !ok || (reg.Registry == jsrRegistry && reg.Token == "" && (reg.User == "" || reg.Password == "")) {
 						zoneId = ""
 					}
@@ -637,7 +646,7 @@ func esmRouter(debug bool) rex.Handle {
 				}
 				out, err := generateUnoCSS(npmrc, []string{configCSS, strings.Join(content, "\n")})
 				if err != nil {
-					return rex.Status(500, "Failed to generate uno.css")
+					return rex.Status(500, "Failed to generate uno.css: "+err.Error())
 				}
 				ret := esbuild.Build(esbuild.BuildOptions{
 					Stdin: &esbuild.StdinOptions{
@@ -915,7 +924,7 @@ func esmRouter(debug bool) rex.Handle {
 		// use `?path=$PATH` query to override the pathname
 		if v := query.Get("path"); v != "" {
 			esmPath.SubPath = utils.NormalizePathname(v)[1:]
-			esmPath.SubModuleName = toModuleBareName(esmPath.SubPath, true)
+			esmPath.SubModuleName = stripEntryModuleExt(esmPath.SubPath)
 		}
 
 		// check the path kind
@@ -1026,7 +1035,7 @@ func esmRouter(debug bool) rex.Handle {
 				extname := path.Ext(esmPath.SubPath)
 				dir := path.Join(npmrc.StoreDir(), esmPath.PackageName())
 				if !existsDir(dir) {
-					_, err := npmrc.installPackage(esmPath)
+					_, err := npmrc.installPackage(esmPath.Package())
 					if err != nil {
 						return rex.Status(500, err.Error())
 					}
@@ -1092,7 +1101,7 @@ func esmRouter(debug bool) rex.Handle {
 					stat, err = os.Lstat(filename)
 					if err != nil && os.IsNotExist(err) {
 						// if the file not found, try to install the package and retry
-						_, err = npmrc.installPackage(esmPath)
+						_, err = npmrc.installPackage(esmPath.Package())
 						if err != nil {
 							return rex.Status(500, err.Error())
 						}
@@ -1383,7 +1392,7 @@ func esmRouter(debug bool) rex.Handle {
 					return rex.Status(500, "Invalid build args: "+a[0])
 				}
 				esmPath.SubPath = strings.Join(strings.Split(esmPath.SubPath, "/")[1:], "/")
-				esmPath.SubModuleName = toModuleBareName(esmPath.SubPath, true)
+				esmPath.SubModuleName = stripEntryModuleExt(esmPath.SubPath)
 				buildArgs = args
 				xArgs = true
 			}
@@ -1429,7 +1438,7 @@ func esmRouter(debug bool) rex.Handle {
 					}
 				case <-time.After(time.Duration(config.BuildWaitTime) * time.Second):
 					ctx.SetHeader("Cache-Control", ccMustRevalidate)
-					return rex.Status(http.StatusRequestTimeout, "timeout, we are transforming the types hardly, please try again later!")
+					return rex.Status(http.StatusRequestTimeout, "timeout, the types is waiting to be built, please try again later!")
 				}
 				content, _, err = readDts()
 			}
@@ -1463,7 +1472,7 @@ func esmRouter(debug bool) rex.Handle {
 		bundleMode := BundleDefault
 		if (query.Has("bundle") && query.Get("bundle") != "false") || query.Has("bundle-all") || query.Has("bundle-deps") || query.Has("standalone") {
 			bundleMode = BundleAll
-		} else if query.Get("bundle") == "false" || query.Has("no-bundle") {
+		} else if query.Has("no-bundle") || query.Get("bundle") == "false" {
 			bundleMode = BundleFalse
 		}
 
@@ -1529,9 +1538,6 @@ func esmRouter(debug bool) rex.Handle {
 			case output := <-c.C:
 				if output.err != nil {
 					msg := output.err.Error()
-					if strings.Contains(msg, "ERR_PNPM_FETCH_404") {
-						return rex.Status(404, "Package or version not found")
-					}
 					if strings.Contains(msg, "no such file or directory") ||
 						strings.Contains(msg, "is not exported from package") ||
 						strings.Contains(msg, "could not resolve the build entry") {
@@ -1541,15 +1547,12 @@ func esmRouter(debug bool) rex.Handle {
 					if strings.HasSuffix(msg, " not found") {
 						return rex.Status(404, msg)
 					}
-					if strings.Contains(msg, "ERR_PNPM") {
-						return rex.Status(500, "Failed to install package")
-					}
 					return rex.Status(500, msg)
 				}
 				ret = output.result
 			case <-time.After(time.Duration(config.BuildWaitTime) * time.Second):
 				ctx.SetHeader("Cache-Control", ccMustRevalidate)
-				return rex.Status(http.StatusRequestTimeout, "timeout, we are building the package hardly, please try again later!")
+				return rex.Status(http.StatusRequestTimeout, "timeout, the module is waiting to be built, please try again later!")
 			}
 		}
 

@@ -1,12 +1,10 @@
 package server
 
 import (
-	"errors"
 	"fmt"
 	"io"
 	"net/http"
 	"os"
-	"os/exec"
 	"path"
 	"runtime"
 	"strconv"
@@ -18,7 +16,6 @@ import (
 const (
 	nodejsMinVersion = 22
 	nodeTypesVersion = "22.9.0"
-	pnpmMinVersion   = "9.0.0"
 )
 
 var nodeBuiltinModules = map[string]bool{
@@ -96,7 +93,7 @@ func isNodeBuiltInModule(specifier string) bool {
 	return strings.HasPrefix(specifier, "node:") && nodeBuiltinModules[specifier[5:]]
 }
 
-func checkNodejs(installDir string) (nodeVersion string, pnpmVersion string, err error) {
+func checkNodejs(installDir string) (nodeVersion string, err error) {
 	nodeVersion, major, err := lookupSystemNodejs()
 	useSystemNodejs := err == nil && major >= nodejsMinVersion
 
@@ -123,21 +120,6 @@ func checkNodejs(installDir string) (nodeVersion string, pnpmVersion string, err
 	}
 	if err == nil && major < nodejsMinVersion {
 		err = fmt.Errorf("bad nodejs version %s, needs %d+", nodeVersion, nodejsMinVersion)
-	}
-	if err != nil {
-		return
-	}
-
-	pnpmOutput, err := run("pnpm", "-v")
-	if (err != nil && errors.Is(err, exec.ErrNotFound)) || (err == nil && semverLessThan(strings.TrimSpace(string(pnpmOutput)), pnpmMinVersion)) {
-		_, err = run("npm", "install", "pnpm", "-g")
-		if err != nil {
-			return
-		}
-		pnpmOutput, err = run("pnpm", "-v")
-	}
-	if err == nil {
-		pnpmVersion = strings.TrimSpace(string(pnpmOutput))
 	}
 	return
 }

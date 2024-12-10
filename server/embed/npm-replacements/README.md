@@ -1,5 +1,5 @@
 # npm replacements
 
-Using _native_ APIs instead of importing polyfills from NPM.
+Use _native_ Web APIs instead of npm packages to reduce http requests.
 
-The replacement follows https://github.com/es-tooling/module-replacements.
+The replacements follow https://github.com/es-tooling/module-replacements.

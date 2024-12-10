@@ -105,11 +105,11 @@ func Serve(efs EmbedFS) {
 	if nodejsInstallDir == "" {
 		nodejsInstallDir = path.Join(config.WorkDir, "nodejs")
 	}
-	nodeVer, pnpmVer, err := checkNodejs(nodejsInstallDir)
+	nodeVer, err := checkNodejs(nodejsInstallDir)
 	if err != nil {
 		log.Fatalf("nodejs: %v", err)
 	}
-	log.Debugf("nodejs: v%s, pnpm: %s, registry: %s", nodeVer, pnpmVer, config.NpmRegistry)
+	log.Debugf("nodejs: v%s, registry: %s", nodeVer, config.NpmRegistry)
 
 	err = buildUnenvNodeRuntime()
 	if err != nil {

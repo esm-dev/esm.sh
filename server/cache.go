@@ -10,16 +10,16 @@ var (
 	cacheStore sync.Map
 )
 
-type CacheItem struct {
+type cacheItem struct {
 	data any
 	exp  time.Time
 }
 
-func withCache[T any](key string, cacheTtl time.Duration, fetch func() (T, error)) (r T, err error) {
+func withCache[T any](key string, cacheTtl time.Duration, fetch func() (T, string, error)) (r T, err error) {
 	// check cache first
 	if cacheTtl > 0 {
 		if v, ok := cacheStore.Load(key); ok {
-			item := v.(*CacheItem)
+			item := v.(*cacheItem)
 			if item.exp.After(time.Now()) {
 				return item.data.(T), nil
 			}
@@ -35,23 +35,25 @@ func withCache[T any](key string, cacheTtl time.Duration, fetch func() (T, error
 	// check cache again after lock
 	if cacheTtl > 0 {
 		if v, ok := cacheStore.Load(key); ok {
-			item := v.(*CacheItem)
+			item := v.(*cacheItem)
 			if item.exp.After(time.Now()) {
 				return item.data.(T), nil
 			}
 		}
 	}
 
-	r, err = fetch()
+	var aliasKey string
+	r, aliasKey, err = fetch()
 	if err != nil {
 		return
 	}
 
 	if cacheTtl > 0 {
-		cacheStore.Store(key, &CacheItem{
-			data: r,
-			exp:  time.Now().Add(cacheTtl),
-		})
+		exp := time.Now().Add(cacheTtl)
+		cacheStore.Store(key, &cacheItem{r, exp})
+		if aliasKey != "" && aliasKey != key {
+			cacheStore.Store(aliasKey, &cacheItem{r, exp})
+		}
 	}
 	return
 }
@@ -64,7 +66,7 @@ func init() {
 			now := <-tick.C
 			expKeys := []any{}
 			cacheStore.Range(func(key, value any) bool {
-				item := value.(*CacheItem)
+				item := value.(*cacheItem)
 				if item.exp.Before(now) {
 					expKeys = append(expKeys, key)
 				}

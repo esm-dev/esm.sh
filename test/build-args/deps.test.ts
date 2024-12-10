@@ -2,7 +2,7 @@ import { assertStringIncludes } from "jsr:@std/assert";
 
 Deno.test("?deps", async () => {
   {
-    const res = await fetch("http://localhost:8080/@mui/material@5.16.7?deps=react@18.2.0,react-dom@18.2.0,foo@0.0.0&target=es2022");
+    const res = await fetch("http://localhost:8080/@mui/material@5.16.7?deps=react@18.2.0,react-dom@18.2.0&target=es2022");
     const code = await res.text();
     assertStringIncludes(code, 'import "/react-dom@18.2.0/es2022/react-dom.mjs"');
     assertStringIncludes(code, 'import "/react@18.2.0/es2022/jsx-runtime.mjs"');

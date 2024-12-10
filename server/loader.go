@@ -9,7 +9,6 @@ import (
 	"os"
 	"os/exec"
 	"path"
-	"path/filepath"
 	"strings"
 	"time"
 )
@@ -20,9 +19,9 @@ type LoaderOutput struct {
 	Error string `json:"error"`
 }
 
-func runLoader(npmrc *NpmRC, loaderName string, args []string, mainDependency PackageId, extraDeps ...string) (output *LoaderOutput, err error) {
-	wd := path.Join(npmrc.StoreDir(), "loader", strings.ReplaceAll(strings.Join(append([]string{mainDependency.String()}, extraDeps...), "+"), "/", "_"))
-	loaderJsFilename := path.Join(wd, fmt.Sprintf("loader-v%d.mjs", VERSION))
+func runLoader(npmrc *NpmRC, loaderName string, args []string, mainDependency Package, extraDeps ...string) (output *LoaderOutput, err error) {
+	wd := path.Join(npmrc.StoreDir(), fmt.Sprintf("loader-v%d", VERSION), strings.ReplaceAll(strings.Join(append([]string{mainDependency.String()}, extraDeps...), "+"), "/", "_"))
+	loaderJsFilename := path.Join(wd, "loader.mjs")
 	if !existsFile(loaderJsFilename) {
 		var loaderJS []byte
 		loaderJS, err = embedFS.ReadFile(fmt.Sprintf("server/embed/internal/%s_loader.js", loaderName))
@@ -30,15 +29,24 @@ func runLoader(npmrc *NpmRC, loaderName string, args []string, mainDependency Pa
 			err = fmt.Errorf("could not find loader: %s", loaderName)
 			return
 		}
+
 		ensureDir(wd)
-		err = os.WriteFile(loaderJsFilename, loaderJS, 0644)
+
+		stderr := bytes.NewBuffer(nil)
+		cmd := exec.Command("npm", append([]string{"i", "--ignore-scripts", "--no-bin-links", mainDependency.String()}, extraDeps...)...)
+		cmd.Dir = wd
+		cmd.Stderr = stderr
+		err = cmd.Run()
 		if err != nil {
-			err = fmt.Errorf("could not write loader.js")
+			if stderr.Len() > 0 {
+				err = fmt.Errorf("could not install %s %s: %s", mainDependency.String(), strings.Join(extraDeps, " "), stderr.String())
+			}
 			return
 		}
-		err = npmrc.pnpmi(wd, append([]string{"--prefer-offline", mainDependency.String()}, extraDeps...)...)
+
+		err = os.WriteFile(loaderJsFilename, loaderJS, 0755)
 		if err != nil {
-			err = errors.New("failed to install " + mainDependency.String() + " " + strings.Join(extraDeps, " "))
+			err = fmt.Errorf("could not write loader.js")
 			return
 		}
 	}
@@ -54,7 +62,7 @@ func runLoader(npmrc *NpmRC, loaderName string, args []string, mainDependency Pa
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	cmd := exec.CommandContext(ctx, "node", filepath.Base(loaderJsFilename))
+	cmd := exec.CommandContext(ctx, "node", "loader.mjs")
 	cmd.Dir = wd
 	cmd.Stdin = stdin
 	cmd.Stdout = stdout
@@ -79,13 +87,13 @@ func runLoader(npmrc *NpmRC, loaderName string, args []string, mainDependency Pa
 }
 
 func transformVue(npmrc *NpmRC, vueVersion string, args []string) (output *LoaderOutput, err error) {
-	return runLoader(npmrc, "vue", args, PackageId{"@vue/compiler-sfc", vueVersion}, "@esm.sh/vue-loader@1.0.3")
+	return runLoader(npmrc, "vue", args, Package{Name: "@vue/compiler-sfc", Version: vueVersion}, "@esm.sh/vue-loader@1.0.3")
 }
 
 func transformSvelte(npmrc *NpmRC, svelteVersion string, args []string) (output *LoaderOutput, err error) {
-	return runLoader(npmrc, "svelte", args, PackageId{"svelte", svelteVersion})
+	return runLoader(npmrc, "svelte", args, Package{Name: "svelte", Version: svelteVersion})
 }
 
 func generateUnoCSS(npmrc *NpmRC, args []string) (output *LoaderOutput, err error) {
-	return runLoader(npmrc, "unocss", args, PackageId{"@esm.sh/unocss", "0.2.2"}, "@iconify/json@2.2.271")
+	return runLoader(npmrc, "unocss", args, Package{Name: "@esm.sh/unocss", Version: "0.3.1"}, "@iconify/json@2.2.280")
 }

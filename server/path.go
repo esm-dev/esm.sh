@@ -20,6 +20,15 @@ type EsmPath struct {
 	SubModuleName string
 }
 
+func (p EsmPath) Package() Package {
+	return Package{
+		Github:   p.GhPrefix,
+		PkgPrNew: p.PrPrefix,
+		Name:     p.PkgName,
+		Version:  p.PkgVersion,
+	}
+}
+
 func (p EsmPath) PackageName() string {
 	s := p.PkgName
 	if p.PkgVersion != "" && p.PkgVersion != "*" && p.PkgVersion != "latest" {
@@ -65,7 +74,7 @@ func praseEsmPath(npmrc *NpmRC, pathname string) (esmPath EsmPath, extraQuery st
 			PkgName:       pkgName,
 			PkgVersion:    version,
 			SubPath:       subPath,
-			SubModuleName: toModuleBareName(subPath, !isBuildDist),
+			SubModuleName: stripEntryModuleExt(subPath),
 			PrPrefix:      true,
 		}
 		return
@@ -120,7 +129,7 @@ func praseEsmPath(npmrc *NpmRC, pathname string) (esmPath EsmPath, extraQuery st
 		PkgName:       pkgName,
 		PkgVersion:    version,
 		SubPath:       subPath,
-		SubModuleName: toModuleBareName(subPath, !isBuildDist),
+		SubModuleName: stripEntryModuleExt(subPath),
 		GhPrefix:      ghPrefix,
 	}
 
