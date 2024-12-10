@@ -48,6 +48,7 @@ func atobUrl(s string) (string, error) {
 	return string(data), nil
 }
 
+// parseCommandFlag parses the command flag.
 func parseCommandFlag() (string, []string) {
 	flag.CommandLine.Parse(os.Args[2:])
 
@@ -68,4 +69,14 @@ func parseCommandFlag() (string, []string) {
 		return "", nil
 	}
 	return args[0], args[1:]
+}
+
+// includes returns true if the given value is included in the array.
+func includes(arr []string, value string) bool {
+	for _, v := range arr {
+		if v == value {
+			return true
+		}
+	}
+	return false
 }
