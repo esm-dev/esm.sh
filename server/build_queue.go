@@ -8,7 +8,7 @@ import (
 
 // BuildQueue schedules build tasks of esm.sh
 type BuildQueue struct {
-	lock        sync.RWMutex
+	lock        sync.Mutex
 	concurrency int
 	current     *list.List
 	queue       *list.List
@@ -16,7 +16,7 @@ type BuildQueue struct {
 }
 
 type BuildTask struct {
-	ctx       *BuildContext
+	*BuildContext
 	clients   []*QueueClient
 	createdAt time.Time
 	startedAt time.Time
@@ -44,64 +44,55 @@ func NewBuildQueue(concurrency int) *BuildQueue {
 
 // Add adds a new build task to the queue.
 func (q *BuildQueue) Add(ctx *BuildContext, clientIp string) *QueueClient {
+	q.lock.Lock()
+	defer q.lock.Unlock()
+
 	client := &QueueClient{make(chan BuildOutput, 1), clientIp}
 
 	// check if the task is already in the queue
-	q.lock.RLock()
 	t, ok := q.tasks[ctx.Path()]
-	q.lock.RUnlock()
-
 	if ok {
 		t.clients = append(t.clients, client)
 		return client
 	}
 
 	t = &BuildTask{
-		ctx:       ctx,
-		createdAt: time.Now(),
-		clients:   []*QueueClient{client},
+		BuildContext: ctx,
+		createdAt:    time.Now(),
+		clients:      []*QueueClient{client},
 	}
-
-	q.lock.Lock()
 	q.tasks[ctx.Path()] = t
 	q.queue.PushBack(t)
-	q.lock.Unlock()
 
+	q.lock.Unlock()
 	q.next()
+	q.lock.Lock()
 
 	return client
 }
 
 func (q *BuildQueue) next() {
-	var n *list.Element
-
-	q.lock.RLock()
 	if q.current.Len() < q.concurrency {
-		n = q.queue.Front()
-	}
-	q.lock.RUnlock()
-
-	if n != nil {
-		task := n.Value.(*BuildTask)
-		q.lock.Lock()
-		q.queue.Remove(n)
-		el := q.current.PushBack(task)
-		q.lock.Unlock()
-		go q.build(task, el)
+		n := q.queue.Front()
+		if n != nil {
+			q.queue.Remove(n)
+			task := n.Value.(*BuildTask)
+			go q.build(task, q.current.PushBack(task))
+		}
 	}
 }
 
 func (q *BuildQueue) build(t *BuildTask, el *list.Element) {
 	t.startedAt = time.Now()
-	ret, err := t.ctx.Build()
+	ret, err := t.Build()
 	if err == nil {
-		if t.ctx.target == "types" {
-			log.Infof("build '%s'(types) done in %v", t.ctx.Path(), time.Since(t.startedAt))
+		if t.target == "types" {
+			log.Infof("build '%s'(types) done in %v", t.Path(), time.Since(t.startedAt))
 		} else {
-			log.Infof("build '%s' done in %v", t.ctx.Path(), time.Since(t.startedAt))
+			log.Infof("build '%s' done in %v", t.Path(), time.Since(t.startedAt))
 		}
 	} else {
-		log.Errorf("build '%s': %v", t.ctx.Path(), err)
+		log.Errorf("build '%s': %v", t.Path(), err)
 	}
 
 	output := BuildOutput{ret, err}
@@ -111,7 +102,7 @@ func (q *BuildQueue) build(t *BuildTask, el *list.Element) {
 
 	q.lock.Lock()
 	q.current.Remove(el)
-	delete(q.tasks, t.ctx.Path())
+	delete(q.tasks, t.Path())
 	q.lock.Unlock()
 
 	// call next task

@@ -127,10 +127,63 @@ func encodeBuildArgs(args BuildArgs, isDts bool) string {
 // resolveBuildArgs resolves `alias`, `deps`, `external` of the build args
 func resolveBuildArgs(npmrc *NpmRC, installDir string, args *BuildArgs, esmPath EsmPath) error {
 	if len(args.alias) > 0 || len(args.deps) > 0 || args.external.Len() > 0 {
-		depsSet := NewStringSet()
-		err := walkDeps(npmrc, installDir, esmPath, depsSet)
+		// quick check if the alias, deps, external are all in dependencies of the package
+		depsSet, err := func() (set *StringSet, err error) {
+			var p *PackageJSON
+			pkgJsonPath := path.Join(installDir, "node_modules", esmPath.PkgName, "package.json")
+			if existsFile(pkgJsonPath) {
+				var raw PackageJSONRaw
+				err = utils.ParseJSONFile(pkgJsonPath, &raw)
+				if err == nil {
+					p = raw.ToNpmPackage()
+				}
+			} else if esmPath.GhPrefix || esmPath.PrPrefix {
+				p, err = npmrc.installPackage(esmPath.Package())
+			} else {
+				p, err = npmrc.getPackageInfo(esmPath.PkgName, esmPath.PkgVersion)
+			}
+			if err != nil {
+				return
+			}
+			depsSet := NewStringSet()
+			for name := range p.Dependencies {
+				depsSet.Add(name)
+			}
+			for name := range p.PeerDependencies {
+				depsSet.Add(name)
+			}
+			if len(args.alias) > 0 {
+				for from := range args.alias {
+					if !depsSet.Has(from) {
+						return
+					}
+				}
+			}
+			if len(args.deps) > 0 {
+				for name := range args.deps {
+					if !depsSet.Has(name) {
+						return
+					}
+				}
+			}
+			if args.external.Len() > 0 {
+				for _, name := range args.external.Values() {
+					if !depsSet.Has(name) {
+						return
+					}
+				}
+			}
+			return depsSet, nil
+		}()
 		if err != nil {
 			return err
+		}
+		if depsSet == nil {
+			depsSet = NewStringSet()
+			err = walkDeps(npmrc, installDir, esmPath.Package(), depsSet)
+			if err != nil {
+				return err
+			}
 		}
 		if len(args.alias) > 0 {
 			alias := map[string]string{}
@@ -193,26 +246,23 @@ func resolveBuildArgs(npmrc *NpmRC, installDir string, args *BuildArgs, esmPath 
 	return nil
 }
 
-func walkDeps(npmrc *NpmRC, installDir string, esmPath EsmPath, mark *StringSet) (err error) {
-	if mark.Has(esmPath.PkgName) {
+func walkDeps(npmrc *NpmRC, installDir string, pkg Package, mark *StringSet) (err error) {
+	if mark.Has(pkg.Name) {
 		return
 	}
-	mark.Add(esmPath.PkgName)
+	mark.Add(pkg.Name)
 	var p *PackageJSON
-	pkgJsonPath := path.Join(installDir, "node_modules", ".pnpm", "node_modules", esmPath.PkgName, "package.json")
-	if !existsFile(pkgJsonPath) {
-		pkgJsonPath = path.Join(installDir, "node_modules", esmPath.PkgName, "package.json")
-	}
+	pkgJsonPath := path.Join(installDir, "node_modules", pkg.Name, "package.json")
 	if existsFile(pkgJsonPath) {
 		var raw PackageJSONRaw
 		err = utils.ParseJSONFile(pkgJsonPath, &raw)
 		if err == nil {
 			p = raw.ToNpmPackage()
 		}
-	} else if regexpVersionStrict.MatchString(esmPath.PkgVersion) || esmPath.GhPrefix || esmPath.PrPrefix {
-		p, err = npmrc.installPackage(esmPath)
+	} else if pkg.Github || pkg.PkgPrNew {
+		p, err = npmrc.installPackage(pkg)
 	} else {
-		return nil
+		p, err = npmrc.getPackageInfo(pkg.Name, pkg.Version)
 	}
 	if err != nil {
 		return
@@ -225,10 +275,12 @@ func walkDeps(npmrc *NpmRC, installDir string, esmPath EsmPath, mark *StringSet)
 		pkgDeps[name] = version
 	}
 	for name, version := range pkgDeps {
-		if strings.HasPrefix(name, "@types/") || strings.HasPrefix(name, "@babel/") {
-			continue
+		depPkg := Package{Name: name, Version: version}
+		p, e := resolveDependencyVersion(version)
+		if e == nil && p.Name != "" {
+			depPkg = p
 		}
-		err := walkDeps(npmrc, installDir, EsmPath{PkgName: name, PkgVersion: version}, mark)
+		err := walkDeps(npmrc, installDir, depPkg, mark)
 		if err != nil {
 			return err
 		}

@@ -239,9 +239,6 @@ func esmRouter(debug bool) rex.Handle {
 			return indexHTML
 
 		case "/status.json":
-			buildQueue.lock.RLock()
-			defer buildQueue.lock.RUnlock()
-
 			q := make([]map[string]any, buildQueue.current.Len()+buildQueue.queue.Len())
 			i := 0
 
@@ -256,8 +253,8 @@ func esmRouter(debug bool) rex.Handle {
 						"clients":   clientIps,
 						"createdAt": t.createdAt.Format(http.TimeFormat),
 						"startedAt": t.startedAt.Format(http.TimeFormat),
-						"path":      t.ctx.Path(),
-						"status":    t.ctx.status,
+						"path":      t.Path(),
+						"status":    t.status,
 					}
 					q[i] = m
 					i++
@@ -273,7 +270,7 @@ func esmRouter(debug bool) rex.Handle {
 					m := map[string]any{
 						"clients":   clientIps,
 						"createdAt": t.createdAt.Format(http.TimeFormat),
-						"path":      t.ctx.Path(),
+						"path":      t.Path(),
 						"status":    "pending",
 					}
 					q[i] = m
@@ -288,7 +285,7 @@ func esmRouter(debug bool) rex.Handle {
 				avail := stat.Bavail * uint64(stat.Bsize)
 				if avail < 100*MB {
 					disk = "full"
-				} else if avail < 1000*MB {
+				} else if avail < 1024*MB {
 					disk = "low"
 				}
 			} else {
@@ -649,7 +646,7 @@ func esmRouter(debug bool) rex.Handle {
 				}
 				out, err := generateUnoCSS(npmrc, []string{configCSS, strings.Join(content, "\n")})
 				if err != nil {
-					return rex.Status(500, "Failed to generate uno.css")
+					return rex.Status(500, "Failed to generate uno.css: "+err.Error())
 				}
 				ret := esbuild.Build(esbuild.BuildOptions{
 					Stdin: &esbuild.StdinOptions{
@@ -1038,7 +1035,7 @@ func esmRouter(debug bool) rex.Handle {
 				extname := path.Ext(esmPath.SubPath)
 				dir := path.Join(npmrc.StoreDir(), esmPath.PackageName())
 				if !existsDir(dir) {
-					_, err := npmrc.installPackage(esmPath)
+					_, err := npmrc.installPackage(esmPath.Package())
 					if err != nil {
 						return rex.Status(500, err.Error())
 					}
@@ -1104,7 +1101,7 @@ func esmRouter(debug bool) rex.Handle {
 					stat, err = os.Lstat(filename)
 					if err != nil && os.IsNotExist(err) {
 						// if the file not found, try to install the package and retry
-						_, err = npmrc.installPackage(esmPath)
+						_, err = npmrc.installPackage(esmPath.Package())
 						if err != nil {
 							return rex.Status(500, err.Error())
 						}
@@ -1441,7 +1438,7 @@ func esmRouter(debug bool) rex.Handle {
 					}
 				case <-time.After(time.Duration(config.BuildWaitTime) * time.Second):
 					ctx.SetHeader("Cache-Control", ccMustRevalidate)
-					return rex.Status(http.StatusRequestTimeout, "timeout, we are transforming the types hardly, please try again later!")
+					return rex.Status(http.StatusRequestTimeout, "timeout, the types is waiting to be built, please try again later!")
 				}
 				content, _, err = readDts()
 			}
@@ -1475,7 +1472,7 @@ func esmRouter(debug bool) rex.Handle {
 		bundleMode := BundleDefault
 		if (query.Has("bundle") && query.Get("bundle") != "false") || query.Has("bundle-all") || query.Has("bundle-deps") || query.Has("standalone") {
 			bundleMode = BundleAll
-		} else if query.Get("bundle") == "false" || query.Has("no-bundle") {
+		} else if query.Has("no-bundle") || query.Get("bundle") == "false" {
 			bundleMode = BundleFalse
 		}
 
@@ -1541,9 +1538,6 @@ func esmRouter(debug bool) rex.Handle {
 			case output := <-c.C:
 				if output.err != nil {
 					msg := output.err.Error()
-					if strings.Contains(msg, "ERR_PNPM_FETCH_404") {
-						return rex.Status(404, "Package or version not found")
-					}
 					if strings.Contains(msg, "no such file or directory") ||
 						strings.Contains(msg, "is not exported from package") ||
 						strings.Contains(msg, "could not resolve the build entry") {
@@ -1553,15 +1547,12 @@ func esmRouter(debug bool) rex.Handle {
 					if strings.HasSuffix(msg, " not found") {
 						return rex.Status(404, msg)
 					}
-					if strings.Contains(msg, "ERR_PNPM") {
-						return rex.Status(500, "Failed to install package")
-					}
 					return rex.Status(500, msg)
 				}
 				ret = output.result
 			case <-time.After(time.Duration(config.BuildWaitTime) * time.Second):
 				ctx.SetHeader("Cache-Control", ccMustRevalidate)
-				return rex.Status(http.StatusRequestTimeout, "timeout, we are building the package hardly, please try again later!")
+				return rex.Status(http.StatusRequestTimeout, "timeout, the module is waiting to be built, please try again later!")
 			}
 		}
 

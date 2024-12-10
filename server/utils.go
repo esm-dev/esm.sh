@@ -44,6 +44,15 @@ func isAbsPathSpecifier(specifier string) bool {
 	return strings.HasPrefix(specifier, "/") || strings.HasPrefix(specifier, "file://")
 }
 
+// isJsModuleSpecifier returns true if the specifier is a json module.
+func isJsonModuleSpecifier(specifier string) bool {
+	if !strings.HasSuffix(specifier, ".json") {
+		return false
+	}
+	_, _, subpath, _ := splitEsmPath(specifier)
+	return subpath != "" && strings.HasSuffix(subpath, ".json")
+}
+
 // semverLessThan returns true if the version a is less than the version b.
 func semverLessThan(a string, b string) bool {
 	return semver.MustParse(a).LessThan(semver.MustParse(b))
@@ -182,21 +191,6 @@ func appendVaryHeader(header http.Header, key string) {
 	} else {
 		header.Set("Vary", vary+", "+key)
 	}
-}
-
-// toEnvName converts the given string to an environment variable name.
-func toEnvName(s string) string {
-	runes := []rune(s)
-	for i, r := range runes {
-		if (r >= '0' && r <= '9') || (r >= 'A' && r <= 'Z') {
-			runes[i] = r
-		} else if r >= 'a' && r <= 'z' {
-			runes[i] = r - 'a' + 'A'
-		} else {
-			runes[i] = '_'
-		}
-	}
-	return string(runes)
 }
 
 // concatBytes concatenates two byte slices.

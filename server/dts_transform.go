@@ -7,10 +7,21 @@ import (
 	"path"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/esm-dev/esm.sh/server/storage"
 	"github.com/ije/gox/utils"
 )
+
+func (ctx *BuildContext) transformDTS(dts string) error {
+	start := time.Now()
+	n, err := transformDTS(ctx, dts, ctx.getBuildArgsPrefix(true), nil)
+	if err != nil {
+		return err
+	}
+	log.Debugf("transform dts '%s'(%d related dts files) in %v", dts, n, time.Since(start))
+	return nil
+}
 
 // transformDTS transforms a `.d.ts` file for deno/editor-lsp
 func transformDTS(ctx *BuildContext, dts string, buildArgsPrefix string, marker *StringSet) (n int, err error) {

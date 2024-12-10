@@ -15,7 +15,6 @@ FROM node:22-alpine AS release-stage
 
 RUN apk update && apk add --no-cache git git-lfs libcap-utils
 RUN git lfs install
-RUN npm i -g pnpm
 
 COPY --from=build-stage /tmp/esm.sh/esmd /bin/esmd
 RUN setcap cap_net_bind_service=ep /bin/esmd

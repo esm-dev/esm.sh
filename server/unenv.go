@@ -34,7 +34,7 @@ func buildUnenvNodeRuntime() (err error) {
 		return
 	}
 
-	cmd := exec.Command("pnpm", "i", "--prefer-offline")
+	cmd := exec.Command("npm", "i", "--no-package-lock")
 	cmd.Dir = wd
 	output, err := cmd.CombinedOutput()
 	if err != nil {
@@ -42,7 +42,7 @@ func buildUnenvNodeRuntime() (err error) {
 		if len(output) > 0 {
 			msg = string(output)
 		}
-		err = fmt.Errorf("install unjs/unenv from github: %v", msg)
+		err = fmt.Errorf("install %s: %s", unenvPkg, msg)
 		return
 	}
 

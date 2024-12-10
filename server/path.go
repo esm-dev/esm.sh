@@ -20,6 +20,15 @@ type EsmPath struct {
 	SubModuleName string
 }
 
+func (p EsmPath) Package() Package {
+	return Package{
+		Github:   p.GhPrefix,
+		PkgPrNew: p.PrPrefix,
+		Name:     p.PkgName,
+		Version:  p.PkgVersion,
+	}
+}
+
 func (p EsmPath) PackageName() string {
 	s := p.PkgName
 	if p.PkgVersion != "" && p.PkgVersion != "*" && p.PkgVersion != "latest" {

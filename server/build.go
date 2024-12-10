@@ -12,7 +12,7 @@ import (
 	"regexp"
 	"sort"
 	"strings"
-	"time"
+	"sync"
 
 	"github.com/esm-dev/esm.sh/server/storage"
 	esbuild "github.com/evanw/esbuild/pkg/api"
@@ -38,9 +38,9 @@ type BuildContext struct {
 	target      string
 	pinedTarget bool
 	dev         bool
+	path        string
 	wd          string
 	pkgDir      string
-	pnpmPkgDir  string
 	status      string
 	esmImports  [][2]string
 	cjsRequires [][3]string
@@ -135,7 +135,7 @@ func (ctx *BuildContext) Build() (ret *BuildMeta, err error) {
 		return
 	}
 
-	// query again after installation (in case the sub-module path has been changed by the `normalizePackageJSON` function)
+	// query again after installation (in case the sub-module path has been changed by the `install` function)
 	ret, err = ctx.Query()
 	if err != nil || ret != nil {
 		return
@@ -157,24 +157,6 @@ func (ctx *BuildContext) Build() (ret *BuildMeta, err error) {
 	}
 	if e := buildStorage.Put(key, buf); e != nil {
 		log.Errorf("db: %v", e)
-	}
-	return
-}
-
-func (ctx *BuildContext) install() (err error) {
-	if ctx.wd == "" || ctx.packageJson == nil {
-		ctx.packageJson, err = ctx.npmrc.installPackage(ctx.esmPath)
-		if err != nil {
-			return
-		}
-		ctx.normalizePackageJSON(ctx.packageJson)
-		ctx.wd = path.Join(ctx.npmrc.StoreDir(), ctx.esmPath.PackageName())
-		ctx.pkgDir = path.Join(ctx.wd, "node_modules", ctx.esmPath.PkgName)
-		if rp, e := os.Readlink(ctx.pkgDir); e == nil {
-			ctx.pnpmPkgDir = path.Join(path.Dir(ctx.pkgDir), rp)
-		} else {
-			ctx.pnpmPkgDir = ctx.pkgDir
-		}
 	}
 	return
 }
@@ -212,11 +194,14 @@ func (ctx *BuildContext) buildModule() (result *BuildMeta, err error) {
 
 	isTypesOnly := strings.HasPrefix(ctx.packageJson.Name, "@types/") || (entry.esm == "" && entry.cjs == "" && entry.dts != "")
 	if isTypesOnly {
+		err = ctx.transformDTS(entry.dts)
+		if err != nil {
+			return
+		}
 		result = &BuildMeta{
 			TypesOnly: true,
 			Dts:       "/" + ctx.esmPath.PackageName() + entry.dts[1:],
 		}
-		ctx.transformDTS(entry.dts)
 		return
 	}
 
@@ -285,7 +270,7 @@ func (ctx *BuildContext) buildModule() (result *BuildMeta, err error) {
 			}
 		}
 	} else {
-		currentEntryPoint = path.Join(ctx.pnpmPkgDir, entry.esm)
+		currentEntryPoint = path.Join(ctx.pkgDir, entry.esm)
 		entryPoints = append(entryPoints, currentEntryPoint)
 	}
 
@@ -412,9 +397,9 @@ func (ctx *BuildContext) buildModule() (result *BuildMeta, err error) {
 						path := args.Path
 						if path == entrySpecifier {
 							if entry.esm != "" {
-								path = filepath.Join(ctx.pnpmPkgDir, entry.esm)
+								path = filepath.Join(ctx.pkgDir, entry.esm)
 							} else if entry.cjs != "" {
-								path = filepath.Join(ctx.pnpmPkgDir, entry.cjs)
+								path = filepath.Join(ctx.pkgDir, entry.cjs)
 							}
 						}
 						if strings.HasSuffix(path, ".svelte") {
@@ -551,7 +536,7 @@ func (ctx *BuildContext) buildModule() (result *BuildMeta, err error) {
 					} else if isRelPathSpecifier(specifier) {
 						fullFilepath = path.Join(args.ResolveDir, specifier)
 					} else {
-						fullFilepath = path.Join(ctx.wd, "node_modules", ".pnpm", "node_modules", specifier)
+						fullFilepath = path.Join(ctx.wd, "node_modules", specifier)
 					}
 
 					// it's nodejs builtin module
@@ -602,19 +587,8 @@ func (ctx *BuildContext) buildModule() (result *BuildMeta, err error) {
 						return esbuild.OnResolveResult{}, nil
 					}
 
-					// bundles json module
-					if strings.HasSuffix(fullFilepath, ".json") && existsFile(fullFilepath) {
-						return esbuild.OnResolveResult{}, nil
-					}
-
 					if strings.HasPrefix(specifier, "/") || isRelPathSpecifier(specifier) {
 						specifier = strings.TrimPrefix(fullFilepath, path.Join(ctx.wd, "node_modules")+"/")
-						if strings.HasPrefix(specifier, ".pnpm") {
-							a := strings.Split(specifier, "/node_modules/")
-							if len(a) > 1 {
-								specifier = a[1]
-							}
-						}
 						pkgName := ctx.packageJson.Name
 						isPkgModule := strings.HasPrefix(specifier, pkgName+"/")
 						if !isPkgModule && ctx.packageJson.PkgName != "" {
@@ -760,7 +734,7 @@ func (ctx *BuildContext) buildModule() (result *BuildMeta, err error) {
 							}
 
 							// module file path
-							moduleFilename := path.Join(ctx.pnpmPkgDir, moduleSpecifier)
+							moduleFilename := path.Join(ctx.pkgDir, moduleSpecifier)
 
 							// split the module that is an alias of a dependency
 							// means this file just include a single line(js): `export * from "dep"`
@@ -1123,10 +1097,15 @@ rebuild:
 				isEsModule := make([]bool, len(requires))
 				for i, r := range requires {
 					specifier := r[0]
+					importUrl := r[2]
 					if strings.HasPrefix(specifier, "npm:") {
+						// npm replacements
 						fmt.Fprintf(header, `var __%x$=(()=>{%s})();`, i, r[1])
+					} else if isJsonModuleSpecifier(specifier) {
+						fmt.Fprintf(header, `import __%x$ from"%s";`, i, importUrl)
+						deps.Add(r[1])
 					} else {
-						fmt.Fprintf(header, `import*as __%x$ from"%s";`, i, r[2])
+						fmt.Fprintf(header, `import*as __%x$ from"%s";`, i, importUrl)
 						deps.Add(r[1])
 					}
 					// if `require("module").default` found
@@ -1149,10 +1128,9 @@ rebuild:
 							}
 						}
 					}
-					if !isRelPathSpecifier(specifier) && !isNodeBuiltInModule(specifier) && !strings.HasPrefix(specifier, "npm:") {
+					if !isRelPathSpecifier(specifier) && !isNodeBuiltInModule(specifier) && !strings.HasPrefix(specifier, "npm:") && !isJsonModuleSpecifier(specifier) {
 						esm, pkgJson, err := ctx.lookupDep(specifier, false)
 						if err == nil {
-							ctx.normalizePackageJSON(pkgJson)
 							if pkgJson.Type == "module" || pkgJson.Module != "" {
 								isEsModule[i] = true
 							} else {
@@ -1252,9 +1230,9 @@ rebuild:
 
 	// filter and sort dependencies
 	sortedDeps := sort.StringSlice{}
-	for _, url := range deps.Values() {
-		if strings.HasPrefix(url, "/") {
-			sortedDeps = append(sortedDeps, url)
+	for _, path := range deps.Values() {
+		if strings.HasPrefix(path, "/") {
+			sortedDeps = append(sortedDeps, path)
 		}
 	}
 	sortedDeps.Sort()
@@ -1287,19 +1265,154 @@ func (ctx *BuildContext) buildTypes() (ret *BuildMeta, err error) {
 
 	ctx.status = "build"
 	err = ctx.transformDTS(dts)
-	if err == nil {
-		ret = &BuildMeta{Dts: "/" + ctx.esmPath.PackageName() + dts[1:]}
+	if err != nil {
+		return
+	}
+
+	ret = &BuildMeta{Dts: "/" + ctx.esmPath.PackageName() + dts[1:]}
+	return
+}
+
+func (ctx *BuildContext) install() (err error) {
+	if ctx.wd == "" || ctx.packageJson == nil {
+		var p *PackageJSON
+		p, err = ctx.npmrc.installPackage(ctx.esmPath.Package())
+		if err != nil {
+			return
+		}
+
+		if ctx.esmPath.GhPrefix || ctx.esmPath.PrPrefix {
+			// if the name in package.json is not the same as the repository name
+			if p.Name != ctx.esmPath.PkgName {
+				p.PkgName = p.Name
+				p.Name = ctx.esmPath.PkgName
+			}
+			p.Version = ctx.esmPath.PkgVersion
+		} else {
+			p.Version = strings.TrimPrefix(p.Version, "v")
+		}
+
+		// Check if the `SubPath` is the same as the `main` or `module` field of the package.json
+		if subModule := ctx.esmPath.SubModuleName; subModule != "" && ctx.target != "types" {
+			isMainModule := false
+			check := func(s string) bool {
+				return isMainModule || (s != "" && subModule == utils.NormalizePathname(stripModuleExt(s))[1:])
+			}
+			if p.Exports.Len() > 0 {
+				if v, ok := p.Exports.Get("."); ok {
+					if s, ok := v.(string); ok {
+						// exports: { ".": "./index.js" }
+						isMainModule = check(s)
+					} else if om, ok := v.(*OrderedMap); ok {
+						// exports: { ".": { "require": "./cjs/index.js", "import": "./esm/index.js" } }
+						// exports: { ".": { "node": { "require": "./cjs/index.js", "import": "./esm/index.js" } } }
+						// ...
+						paths := getAllExportsPaths(om)
+						for _, path := range paths {
+							if check(path) {
+								isMainModule = true
+								break
+							}
+						}
+					}
+				}
+			}
+			if !isMainModule {
+				isMainModule = (p.Module != "" && check(p.Module)) || (p.Main != "" && check(p.Main))
+			}
+			if isMainModule {
+				ctx.esmPath.SubModuleName = ""
+				ctx.esmPath.SubPath = ""
+				ctx.path = ""
+			}
+		}
+
+		ctx.wd = path.Join(ctx.npmrc.StoreDir(), ctx.esmPath.PackageName())
+		ctx.pkgDir = path.Join(ctx.wd, "node_modules", ctx.esmPath.PkgName)
+		ctx.packageJson = p
+	}
+
+	// install dependencies in bundle mode
+	if ctx.bundleMode == BundleAll {
+		ctx.installDependencies(ctx.packageJson, false)
+	} else if v, ok := ctx.packageJson.Dependencies["@babel/runtime"]; ok {
+		// we bundle @babel/runtime modules even not in bundle mode
+		// install it if it's in the dependencies
+		ctx.installDependencies(&PackageJSON{Dependencies: map[string]string{"@babel/runtime": v}}, false)
 	}
 	return
 }
 
-func (ctx *BuildContext) transformDTS(types string) (err error) {
-	start := time.Now()
-	buildArgsPrefix := ctx.getBuildArgsPrefix(true)
-	n, err := transformDTS(ctx, types, buildArgsPrefix, nil)
-	if err != nil {
-		return
+func (ctx *BuildContext) installDependencies(pkgJson *PackageJSON, npmMode bool) {
+	ctx.installDependenciesInternal(pkgJson, npmMode, NewStringSet())
+}
+
+func (ctx *BuildContext) installDependenciesInternal(pkgJson *PackageJSON, npmMode bool, mark *StringSet) {
+	wg := sync.WaitGroup{}
+	dependencies := map[string]string{}
+	for name, version := range pkgJson.Dependencies {
+		dependencies[name] = version
 	}
-	log.Debugf("transform dts '%s'(%d related dts files) in %v", types, n, time.Since(start))
-	return
+	// install peer dependencies in _npm_ mode
+	if npmMode {
+		for name, version := range pkgJson.PeerDependencies {
+			dependencies[name] = version
+		}
+	}
+	for name, version := range dependencies {
+		wg.Add(1)
+		go func(name, version string) {
+			defer wg.Done()
+			pkg := Package{Name: name, Version: version}
+			p, err := resolveDependencyVersion(version)
+			if err != nil {
+				return
+			}
+			if p.Name != "" {
+				pkg = p
+			}
+			if v, ok := ctx.args.deps[pkg.Name]; ok {
+				pkg.Version = v
+			}
+			if !regexpVersionStrict.MatchString(pkg.Version) && !pkg.Github && !pkg.PkgPrNew {
+				p, e := ctx.npmrc.fetchPackageInfo(pkg.Name, pkg.Version)
+				if e != nil {
+					return
+				}
+				pkg.Version = p.Version
+			}
+			markId := fmt.Sprintf("%s@%s:%s:%v", pkgJson.Name, pkgJson.Version, pkg.String(), npmMode)
+			if mark.Has(markId) {
+				return
+			}
+			mark.Add(markId)
+			installed, err := ctx.npmrc.installPackage(pkg)
+			if err == nil {
+				// link the installed package to the node_modules directory of current build context
+				linkDir := path.Join(ctx.wd, "node_modules", name)
+				_, err = os.Lstat(linkDir)
+				if err != nil && os.IsNotExist(err) {
+					if strings.ContainsRune(name, '/') {
+						ensureDir(path.Dir(linkDir))
+					}
+					os.Symlink(path.Join(ctx.npmrc.StoreDir(), pkg.String(), "node_modules", pkg.Name), linkDir)
+				}
+				// link the installed package for all dependents in _npm_ mode
+				if npmMode && pkgJson.Name != ctx.packageJson.Name {
+					linkDir := path.Join(ctx.npmrc.StoreDir(), pkgJson.Name+"@"+pkgJson.Version, "node_modules", name)
+					_, err = os.Lstat(linkDir)
+					if err != nil && os.IsNotExist(err) {
+						if strings.ContainsRune(name, '/') {
+							ensureDir(path.Dir(linkDir))
+						}
+						os.Symlink(path.Join(ctx.npmrc.StoreDir(), pkg.String(), "node_modules", pkg.Name), linkDir)
+					}
+				}
+				if len(installed.Dependencies) > 0 || (len(installed.PeerDependencies) > 0 && npmMode) {
+					ctx.installDependenciesInternal(installed, npmMode, mark)
+				}
+			}
+		}(name, version)
+	}
+	wg.Wait()
 }
