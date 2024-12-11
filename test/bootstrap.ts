@@ -63,11 +63,11 @@ async function runTest(name: string, retry?: boolean): Promise<number> {
     "--unstable-fs",
     "--check",
     "--no-lock",
-    "--reload=http://localhost:8080,http://localhost:8081",
+    "--reload=http://localhost:8080",
     "--location=http://0.0.0.0/",
   ];
   const dir = `test/${name}/`;
-  if (await existsFile(dir + "deno.json")) {
+  if (await exists(dir + "deno.json")) {
     args.push("--config", dir + "deno.json");
   }
   args.push(dir);
@@ -94,10 +94,10 @@ function run(name: string, ...args: string[]) {
   return p.status;
 }
 
-async function existsFile(path: string): Promise<boolean> {
+async function exists(path: string): Promise<boolean> {
   try {
-    const fi = await Deno.lstat(path);
-    return fi.isFile;
+    await Deno.lstat(path);
+    return true;
   } catch (err) {
     if (err instanceof Deno.errors.NotFound) {
       return false;
@@ -119,6 +119,12 @@ if (import.meta.main) {
       ]);
     } catch (_) {
       // ignore
+    }
+  }
+  for (const testDir of tests) {
+    if (!(await exists(`test/${testDir}`))) {
+      console.error(`Test directory "${testDir}" not found.`);
+      Deno.exit(1);
     }
   }
   console.log("Starting esm.sh server...");
