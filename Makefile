@@ -1,6 +1,6 @@
 .PHONY: test
 test:
-	@./test/bootstrap.ts --clean ${case}
+	@./test/bootstrap.ts --clean ${dir}
 
 run: config.json
 	@rm -rf .esmd/storage
