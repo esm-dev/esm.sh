@@ -12,6 +12,14 @@ import (
 	"github.com/ije/gox/utils"
 )
 
+type BuildEntryKind uint8
+
+const (
+	BuildEntryKindCJS BuildEntryKind = iota
+	BuildEntryKindESM
+	BuildEntryKindDTS
+)
+
 // BuildEntry represents the build entrypoints of a module
 type BuildEntry struct {
 	esm string
@@ -24,54 +32,43 @@ func (entry *BuildEntry) isEmpty() bool {
 	return entry.esm == "" && entry.cjs == "" && entry.dts == ""
 }
 
-// hasEntry checks if the entrypoint of the given type exists
-func (entry *BuildEntry) hasEntry(entryType string) bool {
-	switch entryType {
-	case "esm":
+// has checks if the entrypoint of the given kind exists
+func (entry *BuildEntry) has(kind BuildEntryKind) bool {
+	switch kind {
+	case BuildEntryKindESM:
 		return entry.esm != ""
-	case "cjs":
+	case BuildEntryKindCJS:
 		return entry.cjs != ""
-	case "dts":
+	case BuildEntryKindDTS:
 		return entry.dts != ""
+	default:
+		return false
 	}
-	return false
 }
 
-// updateEntry updates the entrypoint of the given type
-func (entry *BuildEntry) updateEntry(entryType string, entryPath string) {
-	switch entryType {
-	case "esm":
+// hasEntry checks if the entrypoint of the given kind exists
+func (entry *BuildEntry) get(kind BuildEntryKind) string {
+	switch kind {
+	case BuildEntryKindESM:
+		return entry.esm
+	case BuildEntryKindCJS:
+		return entry.cjs
+	case BuildEntryKindDTS:
+		return entry.dts
+	default:
+		return ""
+	}
+}
+
+// update updates the entrypoint of the given type
+func (entry *BuildEntry) update(kind BuildEntryKind, entryPath string) {
+	switch kind {
+	case BuildEntryKindESM:
 		entry.esm = entryPath
-	case "cjs":
+	case BuildEntryKindCJS:
 		entry.cjs = entryPath
-	case "dts":
+	case BuildEntryKindDTS:
 		entry.dts = entryPath
-	}
-}
-
-// resolve resolves the entrypoint of the given module type
-func (entry *BuildEntry) resolve(ctx *BuildContext, moduleType string, condition interface{}, entryType string) {
-	if entry.hasEntry(entryType) {
-		return
-	}
-	if s, ok := condition.(string); ok {
-		entry.updateEntry(entryType, s)
-	} else if om, ok := condition.(*OrderedMap); ok {
-		if v, ok := om.values["default"]; ok {
-			if s, ok := v.(string); ok && s != "" {
-				entry.updateEntry(entryType, s)
-			}
-		}
-		e := ctx.resolveConditionExportEntry(om, moduleType)
-		if e.esm != "" && !entry.hasEntry("esm") {
-			entry.updateEntry("esm", e.esm)
-		}
-		if e.cjs != "" && !entry.hasEntry("cjs") {
-			entry.updateEntry("cjs", e.cjs)
-		}
-		if e.dts != "" && !entry.hasEntry("dts") {
-			entry.updateEntry("dts", e.dts)
-		}
 	}
 }
 
@@ -259,7 +256,6 @@ lookup:
 }
 
 func (ctx *BuildContext) resolveEntry(esmPath EsmPath) (entry BuildEntry) {
-	pkgDir := ctx.pkgDir
 	pkgJson := ctx.packageJson
 
 	if esmPath.SubModuleName != "" {
@@ -307,35 +303,42 @@ func (ctx *BuildContext) resolveEntry(esmPath EsmPath) (entry BuildEntry) {
 							exportEntry = ctx.resolveConditionExportEntry(om, pkgJson.Type)
 						}
 						break
-					} else if diff, ok := matchAsteriskExports(name, esmPath.SubModuleName); ok {
+					} else if diff, ok := matchAsteriskExports(name, subModuleName); ok {
 						if s, ok := conditions.(string); ok {
 							/**
 							exports: {
-								"./lib/foo/*": "./lib/foo/*.js",
+								"./lib/*": "./dist/lib/*.js",
 							}
 							*/
 							p := strings.ReplaceAll(s, "*", diff)
-							if pkgJson.Type == "module" || strings.HasSuffix(p, ".mjs") {
-								exportEntry.esm = p
-							} else {
-								exportEntry.cjs = p
+							if ctx.existsPkgFile(p) {
+								if pkgJson.Type == "module" || strings.HasSuffix(p, ".mjs") {
+									exportEntry.esm = p
+								} else {
+									exportEntry.cjs = p
+								}
+								break
 							}
 						} else if om, ok := conditions.(*OrderedMap); ok {
 							/**
 							exports: {
-								"./lib/foo/*": {
-									"require": "./lib/foo/*.js",
-									"import": "./esm/lib/foo/*.js",
-									"types": "./types/foo/*.d.ts"
+								"./lib/*": {
+									"require": ".dist/lib/dist/*.js",
+									"import": ".dist/lib/esm/*.js",
+									"types": ".dist/lib/types/*.d.ts"
 								},
 							}
 							*/
 							exportEntry = ctx.resolveConditionExportEntry(resloveAsteriskPathMapping(om, diff), pkgJson.Type)
+							ctx.finalizeBuildEntry(&exportEntry)
+							if !exportEntry.isEmpty() {
+								break
+							}
 						}
 					}
 				}
 			}
-			ctx.normalizeBuildEntry(&exportEntry)
+			ctx.finalizeBuildEntry(&exportEntry)
 			if exportEntry.esm != "" {
 				entry.esm = exportEntry.esm
 			}
@@ -347,13 +350,17 @@ func (ctx *BuildContext) resolveEntry(esmPath EsmPath) (entry BuildEntry) {
 			}
 		}
 
+		// check if the sub-module is a directory and has a package.json
 		var rawInfo PackageJSONRaw
-		if utils.ParseJSONFile(path.Join(pkgDir, subModuleName, "package.json"), &rawInfo) == nil {
+		if utils.ParseJSONFile(path.Join(ctx.pkgDir, subModuleName, "package.json"), &rawInfo) == nil {
 			p := rawInfo.ToNpmPackage()
 			if entry.esm == "" && p.Module != "" {
 				entry.esm = "./" + path.Join(subModuleName, p.Module)
 			}
-			if entry.cjs == "" && p.Main != "" {
+			if entry.esm == "" && p.Main != "" && p.Type == "module" {
+				entry.esm = "./" + path.Join(subModuleName, p.Main)
+			}
+			if entry.cjs == "" && p.Main != "" && p.Type != "module" {
 				entry.cjs = "./" + path.Join(subModuleName, p.Main)
 			}
 			if entry.dts == "" {
@@ -379,7 +386,7 @@ func (ctx *BuildContext) resolveEntry(esmPath EsmPath) (entry BuildEntry) {
 			}
 		}
 
-		if entry.cjs == "" {
+		if entry.cjs == "" && entry.esm == "" {
 			if ctx.existsPkgFile(subModuleName + ".cjs") {
 				entry.cjs = "./" + subModuleName + ".cjs"
 			} else if ctx.existsPkgFile(subModuleName, "index.cjs") {
@@ -428,7 +435,7 @@ func (ctx *BuildContext) resolveEntry(esmPath EsmPath) (entry BuildEntry) {
 						".": "./index.js"
 					}
 					*/
-					if pkgJson.Type == "module" {
+					if pkgJson.Type == "module" || strings.HasSuffix(s, ".mjs") {
 						exportEntry.esm = s
 					} else {
 						exportEntry.cjs = s
@@ -453,7 +460,7 @@ func (ctx *BuildContext) resolveEntry(esmPath EsmPath) (entry BuildEntry) {
 				*/
 				exportEntry = ctx.resolveConditionExportEntry(exports, pkgJson.Type)
 			}
-			ctx.normalizeBuildEntry(&exportEntry)
+			ctx.finalizeBuildEntry(&exportEntry)
 			if exportEntry.esm != "" {
 				entry.esm = exportEntry.esm
 			}
@@ -473,7 +480,7 @@ func (ctx *BuildContext) resolveEntry(esmPath EsmPath) (entry BuildEntry) {
 			}
 		}
 
-		if entry.cjs == "" {
+		if entry.cjs == "" && entry.esm == "" {
 			if pkgJson.Type != "module" && ctx.existsPkgFile("index.js") {
 				entry.cjs = "./index.js"
 			} else if ctx.existsPkgFile("index.cjs") {
@@ -488,6 +495,7 @@ func (ctx *BuildContext) resolveEntry(esmPath EsmPath) (entry BuildEntry) {
 				entry.dts = "./index.d.ts"
 			}
 		}
+
 		if entry.dts == "" && entry.esm != "" {
 			if ctx.existsPkgFile(stripModuleExt(entry.esm) + ".d.mts") {
 				entry.dts = stripModuleExt(entry.esm) + ".d.mts"
@@ -502,6 +510,7 @@ func (ctx *BuildContext) resolveEntry(esmPath EsmPath) (entry BuildEntry) {
 				}
 			}
 		}
+
 		if entry.dts == "" && entry.cjs != "" {
 			if ctx.existsPkgFile(stripModuleExt(entry.cjs) + ".d.mts") {
 				entry.dts = stripModuleExt(entry.cjs) + ".d.mts"
@@ -587,27 +596,26 @@ func (ctx *BuildContext) resolveEntry(esmPath EsmPath) (entry BuildEntry) {
 		}
 	}
 
-	// normalize the entry
-	ctx.normalizeBuildEntry(&entry)
+	ctx.finalizeBuildEntry(&entry)
 
 	// apply the `browser` field if it's a browser target
 	if len(pkgJson.Browser) > 0 && ctx.isBrowserTarget() {
 		if entry.esm != "" {
-			if m, ok := pkgJson.Browser[entry.esm]; ok && isRelPathSpecifier(m) {
-				entry.esm = m
+			if path, ok := pkgJson.Browser[entry.esm]; ok && isRelPathSpecifier(path) && ctx.existsPkgFile(path) {
+				entry.esm = path
 			}
 		}
 		if entry.cjs != "" {
-			if m, ok := pkgJson.Browser[entry.cjs]; ok && isRelPathSpecifier(m) {
-				entry.cjs = m
+			if path, ok := pkgJson.Browser[entry.cjs]; ok && isRelPathSpecifier(path) && ctx.existsPkgFile(path) {
+				entry.cjs = path
 			}
 		}
 		if esmPath.SubModuleName == "" {
-			if m, ok := pkgJson.Browser["."]; ok && isRelPathSpecifier(m) {
-				if strings.HasSuffix(m, ".mjs") {
-					entry.esm = m
+			if path, ok := pkgJson.Browser["."]; ok && isRelPathSpecifier(path) && ctx.existsPkgFile(path) {
+				if strings.HasSuffix(path, ".mjs") {
+					entry.esm = path
 				} else if entry.esm == "" {
-					entry.cjs = m
+					entry.cjs = path
 				}
 			}
 		}
@@ -616,8 +624,8 @@ func (ctx *BuildContext) resolveEntry(esmPath EsmPath) (entry BuildEntry) {
 	return
 }
 
-// make sure the entry is a relative specifier with extension
-func (ctx *BuildContext) normalizeBuildEntry(entry *BuildEntry) {
+// normalizes the build entry
+func (ctx *BuildContext) finalizeBuildEntry(entry *BuildEntry) {
 	if entry.esm != "" {
 		entry.esm = normalizeEntryPath(entry.esm)
 		if !endsWith(entry.esm, ".mjs", ".js") {
@@ -653,7 +661,7 @@ func (ctx *BuildContext) normalizeBuildEntry(entry *BuildEntry) {
 			entry.cjs = ""
 		} else {
 			// check if the cjs entry is an ESM
-			if entry.esm == "" && strings.HasSuffix(entry.cjs, ".js") {
+			if entry.esm == "" && !strings.HasSuffix(entry.cjs, ".cjs") {
 				isESM, _, _ := validateModuleFile(path.Join(ctx.pkgDir, entry.cjs))
 				if isESM {
 					entry.esm = entry.cjs
@@ -665,44 +673,94 @@ func (ctx *BuildContext) normalizeBuildEntry(entry *BuildEntry) {
 
 	if entry.dts != "" {
 		entry.dts = normalizeEntryPath(entry.dts)
-		if !ctx.existsPkgFile(entry.dts) {
-			if strings.HasPrefix(entry.dts, ".d") {
-				if ctx.existsPkgFile(entry.dts + ".ts") {
-					entry.dts += ".ts"
-				} else if ctx.existsPkgFile(entry.dts + ".mts") {
-					entry.dts += ".mts"
-				} else {
-					entry.dts = ""
-				}
-			} else {
-				entry.dts = ""
-			}
-		} else if endsWith(entry.dts, ".js", ".mjs", ".cjs") {
-			maybeDts := stripModuleExt(entry.dts) + ".d.ts"
+		if endsWith(entry.dts, ".js", ".mjs", ".cjs") {
+			maybeDts := stripModuleExt(entry.dts) + ".d.mts"
 			if ctx.existsPkgFile(maybeDts) {
 				entry.dts = maybeDts
+			} else {
+				maybeDts = stripModuleExt(entry.dts) + ".d.ts"
+				if ctx.existsPkgFile(maybeDts) {
+					entry.dts = maybeDts
+				}
+			}
+		} else if strings.HasPrefix(entry.dts, ".d") {
+			if ctx.existsPkgFile(entry.dts + ".mts") {
+				entry.dts += ".mts"
+			} else if ctx.existsPkgFile(entry.dts + ".ts") {
+				entry.dts += ".ts"
+			}
+		} else if !endsWith(entry.dts, ".d.ts", ".d.mts") {
+			if ctx.existsPkgFile(entry.dts + ".d.mts") {
+				entry.dts = entry.dts + ".d.mts"
+			} else if ctx.existsPkgFile(entry.dts + ".d.ts") {
+				entry.dts = entry.dts + ".d.ts"
+			} else if ctx.existsPkgFile(entry.dts + ".mts") {
+				entry.dts = entry.dts + ".mts"
+			} else if ctx.existsPkgFile(entry.dts + ".ts") {
+				entry.dts = entry.dts + ".ts"
+			} else if ctx.existsPkgFile(entry.dts, "index.d.mts") {
+				entry.dts = entry.dts + "/index.d.mts"
+			} else if ctx.existsPkgFile(entry.dts, "index.d.ts") {
+				entry.dts = entry.dts + "/index.d.ts"
+			} else if ctx.existsPkgFile(entry.dts, "index.mts") {
+				entry.dts = entry.dts + "/index.mts"
+			} else if ctx.existsPkgFile(entry.dts, "index.ts") {
+				entry.dts = entry.dts + "/index.ts"
 			}
 		}
 	}
 }
 
 // see https://nodejs.org/api/packages.html#nested-conditions
-func (ctx *BuildContext) resolveConditionExportEntry(conditions *OrderedMap, moduleType string) (entry BuildEntry) {
-	entryKind := "esm"
-	switch moduleType {
-	case "", "commonjs":
-		entryKind = "cjs"
-	case "module":
-		entryKind = "esm"
-	case "types":
-		entryKind = "dts"
-	}
-
-	if len(ctx.args.conditions) > 0 {
-		for _, conditionName := range ctx.args.conditions {
+func (ctx *BuildContext) resolveConditionExportEntry(conditions *OrderedMap, preferedModuleType string) (entry BuildEntry) {
+	if preferedModuleType == "types" {
+		for _, conditionName := range []string{"module", "import", "es2015", "default", "require"} {
 			condition, ok := conditions.Get(conditionName)
 			if ok {
-				entry.resolve(ctx, moduleType, condition, entryKind)
+				if s, ok := condition.(string); ok {
+					entry.update(BuildEntryKindDTS, s)
+				} else if om, ok := condition.(*OrderedMap); ok {
+					entry = ctx.resolveConditionExportEntry(om, "types")
+				}
+				break
+			}
+		}
+		return
+	}
+
+	entryKind := BuildEntryKindCJS
+	if preferedModuleType == "module" {
+		entryKind = BuildEntryKindESM
+	}
+
+	if ctx.isBrowserTarget() {
+		condition, ok := conditions.Get("browser")
+		if ok {
+			if s, ok := condition.(string); ok {
+				entry.update(entryKind, s)
+			} else if om, ok := condition.(*OrderedMap); ok {
+				entry = ctx.resolveConditionExportEntry(om, preferedModuleType)
+			}
+		}
+	} else if ctx.isDenoTarget() {
+		for _, conditionName := range []string{"deno", "default", "node"} {
+			condition, ok := conditions.Get(conditionName)
+			if ok {
+				if s, ok := condition.(string); ok {
+					entry.update(entryKind, s)
+				} else if om, ok := condition.(*OrderedMap); ok {
+					entry = ctx.resolveConditionExportEntry(om, preferedModuleType)
+				}
+				break
+			}
+		}
+	} else if ctx.target == "node" {
+		condition, ok := conditions.Get("node")
+		if ok {
+			if s, ok := condition.(string); ok {
+				entry.update(entryKind, s)
+			} else if om, ok := condition.(*OrderedMap); ok {
+				entry = ctx.resolveConditionExportEntry(om, preferedModuleType)
 			}
 		}
 	}
@@ -710,42 +768,61 @@ func (ctx *BuildContext) resolveConditionExportEntry(conditions *OrderedMap, mod
 	if ctx.dev {
 		condition, ok := conditions.Get("development")
 		if ok {
-			entry.resolve(ctx, moduleType, condition, entryKind)
+			if s, ok := condition.(string); ok {
+				entry.update(entryKind, s)
+			} else if om, ok := condition.(*OrderedMap); ok {
+				entry = ctx.resolveConditionExportEntry(om, preferedModuleType)
+			}
 		}
 	}
 
-	if ctx.isBrowserTarget() {
-		condition, ok := conditions.Get("browser")
-		if ok {
-			entry.resolve(ctx, moduleType, condition, entryKind)
-		}
-	} else if ctx.isDenoTarget() {
-		for _, conditionName := range []string{"deno", "node"} {
+	if len(ctx.args.conditions) > 0 {
+		for _, conditionName := range ctx.args.conditions {
 			condition, ok := conditions.Get(conditionName)
 			if ok {
-				entry.resolve(ctx, moduleType, condition, entryKind)
+				if s, ok := condition.(string); ok {
+					entry.update(entryKind, s)
+				} else if om, ok := condition.(*OrderedMap); ok {
+					entry = ctx.resolveConditionExportEntry(om, preferedModuleType)
+				}
 				break
 			}
 		}
-	} else if ctx.target == "node" {
-		condition, ok := conditions.Get("node")
-		if ok {
-			entry.resolve(ctx, moduleType, condition, entryKind)
-		}
 	}
 
+LOOP:
 	for _, conditionName := range conditions.keys {
-		condition, ok := conditions.Get(conditionName)
-		if ok {
-			switch conditionName {
-			case "module", "import", "es2015":
-				entry.resolve(ctx, "module", condition, "esm")
-			case "require":
-				entry.resolve(ctx, "commonjs", condition, "cjs")
-			case "types", "typings":
-				entry.resolve(ctx, "types", condition, "dts")
-			case "default":
-				entry.resolve(ctx, moduleType, condition, entryKind)
+		condition := conditions.values[conditionName]
+		kind := entryKind
+		prefered := preferedModuleType
+		switch conditionName {
+		case "module", "import", "es2015":
+			kind = BuildEntryKindESM
+			prefered = "module"
+		case "require":
+			kind = BuildEntryKindCJS
+			prefered = "commonjs"
+		case "types", "typings":
+			kind = BuildEntryKindDTS
+			prefered = "types"
+		case "default":
+			kind = entryKind
+			prefered = preferedModuleType
+		default:
+			// skip unknown condition
+			continue LOOP
+		}
+		if !entry.has(kind) {
+			if s, ok := condition.(string); ok {
+				entry.update(kind, s)
+			} else if om, ok := condition.(*OrderedMap); ok {
+				e := ctx.resolveConditionExportEntry(om, prefered)
+				if e.has(kind) {
+					entry.update(kind, e.get(kind))
+				}
+				if kind != BuildEntryKindDTS && e.has(BuildEntryKindDTS) {
+					entry.update(BuildEntryKindDTS, e.get(BuildEntryKindDTS))
+				}
 			}
 		}
 	}

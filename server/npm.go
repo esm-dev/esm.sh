@@ -574,10 +574,6 @@ func (rc *NpmRC) installPackage(pkg Package) (packageJson *PackageJSON, err erro
 			os.WriteFile(path.Join(installDir, "deprecated.txt"), []byte(info.Deprecated), 0644)
 		}
 		err = rc.downloadTarball(rc.getRegistryByPackageName(pkg.Name), installDir, info.Name, info.Dist.Tarball)
-		// if err == nil {
-		// 	packageJson = info
-		// 	return
-		// }
 	}
 	if err != nil {
 		return

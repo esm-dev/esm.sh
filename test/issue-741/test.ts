@@ -10,13 +10,13 @@ Deno.test("issue #741", async () => {
     const res = await fetch("http://localhost:8080/@sinclair/typebox@0.32.22?no-bundle");
     res.body?.cancel();
     assertEquals(res.ok, true);
-    assertEquals(res.headers.get("x-typescript-types"), "http://localhost:8080/@sinclair/typebox@0.32.22/build/require/index.d.ts");
+    assertEquals(res.headers.get("x-typescript-types"), "http://localhost:8080/@sinclair/typebox@0.32.22/build/import/index.d.mts");
   }
   {
     const res = await fetch("http://localhost:8080/@sinclair/typebox@0.32.22/value?no-bundle");
     res.body?.cancel();
     assertEquals(res.ok, true);
-    assertEquals(res.headers.get("x-typescript-types"), "http://localhost:8080/@sinclair/typebox@0.32.22/build/require/value/index.d.ts");
+    assertEquals(res.headers.get("x-typescript-types"), "http://localhost:8080/@sinclair/typebox@0.32.22/build/import/value/index.d.mts");
   }
   {
     const Foo = { [Kind]: "Foo" } as TSchema;

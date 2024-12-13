@@ -8,7 +8,7 @@ Deno.test("?bundle", async () => {
   assertStringIncludes(await res2.text(), `"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"`);
 });
 
-Deno.test("?bundle with ?external", async () => {
+Deno.test("?bundle&external", async () => {
   const res = await fetch("http://localhost:8080/ajv@8.12.0?bundle&external=fast-deep-equal");
   res.body?.cancel();
   assertStringIncludes(res.headers.get("x-esm-path")!, "/X-ZWZhc3QtZGVlcC1lcXVhbA/");
