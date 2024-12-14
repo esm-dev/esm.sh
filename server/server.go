@@ -45,12 +45,7 @@ func Serve(efs EmbedFS) {
 	flag.BoolVar(&debug, "debug", false, "run the server in DEUBG mode")
 	flag.Parse()
 
-	if !existsFile(cfile) {
-		config = *DefaultConfig()
-		if cfile != "config.json" {
-			fmt.Println("Config file not found, use default config")
-		}
-	} else {
+	if existsFile(cfile) {
 		c, err := LoadConfig(cfile)
 		if err != nil {
 			fmt.Println(err.Error())
@@ -111,11 +106,15 @@ func Serve(efs EmbedFS) {
 	}
 	log.Debugf("nodejs: v%s, registry: %s", nodeVer, config.NpmRegistry)
 
-	err = buildUnenvNodeRuntime()
+	err = loadUnenvNodeRuntime()
 	if err != nil {
-		log.Fatalf("build unenv node runtime: %v", err)
+		log.Fatalf("load unenv node runtime: %v", err)
 	}
-	log.Debugf("unenv node runtime built with %d dist files", len(unenvNodeRuntimeBulid))
+	totalSize := 0
+	for _, data := range unenvNodeRuntimeBulid {
+		totalSize += len(data)
+	}
+	log.Debugf("unenv node runtime loaded, %d files, total size: %d KB", len(unenvNodeRuntimeBulid), totalSize/1024)
 
 	err = buildNpmReplacements(efs)
 	if err != nil {

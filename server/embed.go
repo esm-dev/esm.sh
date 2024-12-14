@@ -21,19 +21,15 @@ type EmbedFS interface {
 }
 
 type MockEmbedFS struct {
-	cwd string
+	root string
 }
 
 func (fs MockEmbedFS) ReadDir(name string) ([]os.DirEntry, error) {
-	return os.ReadDir(path.Join(fs.cwd, name))
+	return os.ReadDir(path.Join(fs.root, name))
 }
 
 func (fs MockEmbedFS) ReadFile(name string) ([]byte, error) {
-	return os.ReadFile(path.Join(fs.cwd, name))
-}
-
-func (fs MockEmbedFS) Lstat(name string) (os.FileInfo, error) {
-	return os.Lstat(path.Join(fs.cwd, name))
+	return os.ReadFile(path.Join(fs.root, name))
 }
 
 func buildEmbedTS(filename string, target string, debug bool) (js []byte, err error) {

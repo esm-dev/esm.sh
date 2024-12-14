@@ -524,7 +524,7 @@ func (rc *NpmRC) installPackage(pkg Package) (packageJson *PackageJSON, err erro
 	installDir := path.Join(rc.StoreDir(), pkg.String())
 	packageJsonPath := path.Join(installDir, "node_modules", pkg.Name, "package.json")
 
-	// skip installation if the package has been installed
+	// check if the package has been installed
 	if existsFile(packageJsonPath) {
 		var raw PackageJSONRaw
 		if utils.ParseJSONFile(packageJsonPath, &raw) == nil {

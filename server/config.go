@@ -317,3 +317,7 @@ func isPackageExcluded(name string, excludes []string) bool {
 	}
 	return false
 }
+
+func init() {
+	config = *DefaultConfig()
+}

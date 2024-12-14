@@ -1371,9 +1371,9 @@ func (ctx *BuildContext) installDependenciesInternal(pkgJson *PackageJSON, npmMo
 			if p.Name != "" {
 				pkg = p
 			}
-			if v, ok := ctx.args.deps[pkg.Name]; ok {
-				pkg.Version = v
-			}
+			// if v, ok := ctx.args.deps[pkg.Name]; ok {
+			// 	pkg.Version = v
+			// }
 			if !regexpVersionStrict.MatchString(pkg.Version) && !pkg.Github && !pkg.PkgPrNew {
 				p, e := ctx.npmrc.fetchPackageInfo(pkg.Name, pkg.Version)
 				if e != nil {
@@ -1387,9 +1387,21 @@ func (ctx *BuildContext) installDependenciesInternal(pkgJson *PackageJSON, npmMo
 			}
 			mark.Add(markId)
 			installed, err := ctx.npmrc.installPackage(pkg)
-			if err == nil {
-				// link the installed package to the node_modules directory of current build context
-				linkDir := path.Join(ctx.wd, "node_modules", name)
+			if err != nil {
+				return
+			}
+			// link the installed package to the node_modules directory of current build context
+			linkDir := path.Join(ctx.wd, "node_modules", name)
+			_, err = os.Lstat(linkDir)
+			if err != nil && os.IsNotExist(err) {
+				if strings.ContainsRune(name, '/') {
+					ensureDir(path.Dir(linkDir))
+				}
+				os.Symlink(path.Join(ctx.npmrc.StoreDir(), pkg.String(), "node_modules", pkg.Name), linkDir)
+			}
+			// link the installed package for all dependents in _npm_ mode
+			if npmMode && pkgJson.Name != ctx.packageJson.Name {
+				linkDir := path.Join(ctx.npmrc.StoreDir(), pkgJson.Name+"@"+pkgJson.Version, "node_modules", name)
 				_, err = os.Lstat(linkDir)
 				if err != nil && os.IsNotExist(err) {
 					if strings.ContainsRune(name, '/') {
@@ -1397,20 +1409,10 @@ func (ctx *BuildContext) installDependenciesInternal(pkgJson *PackageJSON, npmMo
 					}
 					os.Symlink(path.Join(ctx.npmrc.StoreDir(), pkg.String(), "node_modules", pkg.Name), linkDir)
 				}
-				// link the installed package for all dependents in _npm_ mode
-				if npmMode && pkgJson.Name != ctx.packageJson.Name {
-					linkDir := path.Join(ctx.npmrc.StoreDir(), pkgJson.Name+"@"+pkgJson.Version, "node_modules", name)
-					_, err = os.Lstat(linkDir)
-					if err != nil && os.IsNotExist(err) {
-						if strings.ContainsRune(name, '/') {
-							ensureDir(path.Dir(linkDir))
-						}
-						os.Symlink(path.Join(ctx.npmrc.StoreDir(), pkg.String(), "node_modules", pkg.Name), linkDir)
-					}
-				}
-				if len(installed.Dependencies) > 0 || (len(installed.PeerDependencies) > 0 && npmMode) {
-					ctx.installDependenciesInternal(installed, npmMode, mark)
-				}
+			}
+			// install dependencies recursively
+			if len(installed.Dependencies) > 0 || (len(installed.PeerDependencies) > 0 && npmMode) {
+				ctx.installDependenciesInternal(installed, npmMode, mark)
 			}
 		}(name, version)
 	}
