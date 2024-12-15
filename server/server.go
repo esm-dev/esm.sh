@@ -16,12 +16,6 @@ import (
 	"github.com/ije/rex"
 )
 
-var (
-	log          *logger.Logger
-	buildQueue   *BuildQueue
-	buildStorage storage.Storage
-)
-
 const (
 	cc1day           = "public, max-age=86400"
 	ccMustRevalidate = "public, max-age=0, must-revalidate"
@@ -31,6 +25,12 @@ const (
 	ctJSON           = "application/json; charset=utf-8"
 	ctCSS            = "text/css; charset=utf-8"
 	ctHtml           = "text/html; charset=utf-8"
+)
+
+var (
+	log          *logger.Logger
+	buildQueue   *BuildQueue
+	buildStorage storage.Storage
 )
 
 // Serve serves the esm.sh server
@@ -53,7 +53,7 @@ func Serve(efs EmbedFS) {
 		}
 		config = *c
 		if debug {
-			fmt.Println("Config loaded from", cfile)
+			fmt.Printf("%s [info] Config loaded from %s\n", time.Now().Format("2006-01-02 15:04:05"), cfile)
 		}
 	}
 
@@ -122,12 +122,22 @@ func Serve(efs EmbedFS) {
 	}
 	log.Debugf("%d npm repalcements loaded", len(npmReplacements))
 
-	// init cjs lexer
-	err = initCJSModuleLexer()
+	// install loader runtime
+	err = installLoaderRuntime()
 	if err != nil {
-		log.Fatalf("failed to initialize cjs_lexer: %v", err)
+		log.Fatalf("failed to install loader runtime: %v", err)
 	}
-	log.Debugf("%s initialized", cjsModuleLexerPkg)
+	log.Debugf("loader runtime(%s@%s) installed", loaderRuntime, loaderRuntimeVersion)
+
+	// install cjs module lexer
+	err = installCommonJSModuleLexer()
+	if err != nil {
+		log.Fatalf("failed to install cjs-module-lexer: %v", err)
+	}
+	log.Debugf("cjs-module-lexer@%s installed", cjsModuleLexerVersion)
+
+	// add .esmd/bin to PATH
+	os.Setenv("PATH", fmt.Sprintf("%s%c%s", path.Join(config.WorkDir, "bin"), os.PathListSeparator, os.Getenv("PATH")))
 
 	// init build queue
 	buildQueue = NewBuildQueue(int(config.BuildConcurrency))

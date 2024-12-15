@@ -68,6 +68,15 @@ func isCommitish(s string) bool {
 	return len(s) >= 7 && len(s) <= 40 && valid.IsHexString(s) && containsDigit(s)
 }
 
+// isJsReservedWord returns true if the given string is a reserved word in JavaScript.
+func isJsReservedWord(word string) bool {
+	switch word {
+	case "abstract", "arguments", "await", "boolean", "break", "byte", "case", "catch", "char", "class", "const", "continue", "debugger", "default", "delete", "do", "double", "else", "enum", "eval", "export", "extends", "false", "final", "finally", "float", "for", "function", "goto", "if", "implements", "import", "in", "instanceof", "int", "interface", "let", "long", "native", "new", "null", "package", "private", "protected", "public", "return", "short", "static", "super", "switch", "synchronized", "this", "throw", "throws", "transient", "true", "try", "typeof", "var", "void", "volatile", "while", "with", "yield":
+		return true
+	}
+	return false
+}
+
 // contains returns true if the given string is included in the given array.
 func contains(a []string, s string) bool {
 	if len(a) == 0 {

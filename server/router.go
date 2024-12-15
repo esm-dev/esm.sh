@@ -1675,7 +1675,7 @@ func esmRouter(debug bool) rex.Handle {
 			}
 			ctx.SetHeader("X-ESM-Path", esmPath)
 			fmt.Fprintf(buf, "export * from \"%s\";\n", esmPath)
-			if (ret.CJS || ret.HasDefaultExport) && (exports.Len() == 0 || exports.Has("default")) {
+			if ret.HasDefaultExport && (exports.Len() == 0 || exports.Has("default")) {
 				fmt.Fprintf(buf, "export { default } from \"%s\";\n", esmPath)
 			}
 			if ret.CJS && exports.Len() > 0 {

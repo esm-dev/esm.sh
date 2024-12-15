@@ -1107,12 +1107,11 @@ func (ctx *BuildContext) resloveDTS(entry BuildEntry) (string, error) {
 	return "", nil
 }
 
-func (ctx *BuildContext) lexer(entry *BuildEntry, forceCjsModule bool) (ret *BuildMeta, reexport string, err error) {
+func (ctx *BuildContext) lexer(entry *BuildEntry, forceCjsModule bool) (ret *BuildMeta, cjsExports []string, cjsReexport string, err error) {
 	if entry.esm != "" && !forceCjsModule {
 		if strings.HasSuffix(entry.esm, ".vue") || strings.HasSuffix(entry.esm, ".svelte") {
 			ret = &BuildMeta{
 				HasDefaultExport: true,
-				NamedExports:     []string{"default"},
 			}
 			return
 		}
@@ -1125,42 +1124,41 @@ func (ctx *BuildContext) lexer(entry *BuildEntry, forceCjsModule bool) (ret *Bui
 		}
 		if isESM {
 			ret = &BuildMeta{
-				NamedExports:     namedExports,
 				HasDefaultExport: contains(namedExports, "default"),
 			}
 			return
 		}
 		log.Warnf("fake ES module '%s' of '%s'", entry.esm, ctx.packageJson.Name)
 
-		var r cjsModuleLexerResult
-		r, err = ctx.cjsModuleLexer(entry.esm, ctx.getNodeEnv())
+		var cjs cjsModuleLexerResult
+		cjs, err = ctx.cjsModuleLexer(entry.esm)
 		if err != nil {
 			return
 		}
 
 		ret = &BuildMeta{
-			HasDefaultExport: r.HasDefaultExport,
-			NamedExports:     r.NamedExports,
+			HasDefaultExport: true,
 			CJS:              true,
 		}
+		cjsExports = cjs.Exports
+		cjsReexport = cjs.Reexport
 		entry.cjs = entry.esm
 		entry.esm = ""
-		reexport = r.ReExport
 		return
 	}
 
 	if entry.cjs != "" {
 		var cjs cjsModuleLexerResult
-		cjs, err = ctx.cjsModuleLexer(entry.cjs, ctx.getNodeEnv())
+		cjs, err = ctx.cjsModuleLexer(entry.cjs)
 		if err != nil {
 			return
 		}
 		ret = &BuildMeta{
-			HasDefaultExport: cjs.HasDefaultExport,
-			NamedExports:     cjs.NamedExports,
+			HasDefaultExport: true,
 			CJS:              true,
 		}
-		reexport = cjs.ReExport
+		cjsExports = cjs.Exports
+		cjsReexport = cjs.Reexport
 		return
 	}
 

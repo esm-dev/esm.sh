@@ -1,16 +1,27 @@
 package server
 
 import (
+	"archive/zip"
 	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
+	"net/http"
 	"os"
 	"os/exec"
 	"path"
+	"runtime"
 	"strings"
 	"time"
+
+	"github.com/ije/gox/utils"
+)
+
+var (
+	loaderRuntime        = "deno"
+	loaderRuntimeVersion = "2.1.4"
 )
 
 type LoaderOutput struct {
@@ -96,4 +107,124 @@ func transformSvelte(npmrc *NpmRC, svelteVersion string, args []string) (output 
 
 func generateUnoCSS(npmrc *NpmRC, args []string) (output *LoaderOutput, err error) {
 	return runLoader(npmrc, "unocss", args, Package{Name: "@esm.sh/unocss", Version: "0.3.1"}, "@iconify/json@2.2.280")
+}
+
+func installLoaderRuntime() (err error) {
+	binDir := path.Join(config.WorkDir, "bin")
+	err = ensureDir(binDir)
+	if err != nil {
+		return err
+	}
+
+	// check local installed deno
+	installedRuntime, err := exec.LookPath(loaderRuntime)
+	if err == nil {
+		output, err := run(installedRuntime, "eval", "console.log(Deno.version.deno)")
+		if err == nil {
+			version := strings.TrimSpace(string(output))
+			if !semverLessThan(version, "1.45") {
+				_, err = utils.CopyFile(installedRuntime, path.Join(binDir, loaderRuntime))
+				if err == nil {
+					loaderRuntimeVersion = version
+				}
+				return err
+			}
+		}
+	}
+
+	if existsFile(path.Join(binDir, loaderRuntime)) {
+		output, err := run(path.Join(binDir, loaderRuntime), "eval", "console.log(Deno.version.deno)")
+		if err == nil {
+			version := strings.TrimSpace(string(output))
+			if !semverLessThan(version, loaderRuntimeVersion) {
+				return nil
+			}
+		}
+	}
+
+	url, err := getLoaderRuntimeDownloadURL()
+	if err != nil {
+		return
+	}
+
+	log.Debugf("downloading %s...", path.Base(url))
+
+	res, err := http.Get(url)
+	if err != nil {
+		return
+	}
+	defer res.Body.Close()
+
+	if res.StatusCode != 200 {
+		return fmt.Errorf("failed to download %s: %s", loaderRuntime, res.Status)
+	}
+
+	tmpFile := path.Join(binDir, loaderRuntime+".zip")
+	defer os.Remove(tmpFile)
+
+	f, err := os.OpenFile(tmpFile, os.O_CREATE|os.O_WRONLY, 0644)
+	if err != nil {
+		return
+	}
+	defer f.Close()
+
+	_, err = io.Copy(f, res.Body)
+	if err != nil {
+		return
+	}
+
+	zr, err := zip.OpenReader(tmpFile)
+	if err != nil {
+		return
+	}
+	defer zr.Close()
+
+	for _, zf := range zr.File {
+		if zf.Name == loaderRuntime {
+			r, err := zf.Open()
+			if err != nil {
+				return err
+			}
+			defer r.Close()
+
+			f, err := os.OpenFile(path.Join(binDir, loaderRuntime), os.O_CREATE|os.O_WRONLY, 0755)
+			if err != nil {
+				return err
+			}
+			defer f.Close()
+
+			_, err = io.Copy(f, r)
+			if err != nil {
+				return err
+			}
+			break
+		}
+	}
+
+	return
+}
+
+func getLoaderRuntimeDownloadURL() (string, error) {
+	var arch string
+	var os string
+
+	switch runtime.GOARCH {
+	case "arm64":
+		arch = "aarch64"
+	case "amd64", "386":
+		arch = "x86_64"
+	default:
+		return "", fmt.Errorf("unsupported architecture: %s", runtime.GOARCH)
+	}
+
+	switch runtime.GOOS {
+	case "darwin":
+		os = "apple-darwin"
+	case "linux":
+		os = "unknown-linux-gnu"
+	default:
+		return "", fmt.Errorf("unsupported os: %s", runtime.GOOS)
+	}
+
+	return fmt.Sprintf("https://github.com/denoland/deno/releases/download/v%s/%s-%s-%s.zip", loaderRuntimeVersion, loaderRuntime, arch, os), nil
 }

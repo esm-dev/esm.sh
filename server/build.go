@@ -54,7 +54,7 @@ type BuildMeta struct {
 	Dts              string   `json:"dts,omitempty"`
 	Deps             []string `json:"deps,omitempty"`
 	HasDefaultExport bool     `json:"hasDefaultExport,omitempty"`
-	NamedExports     []string `json:"-"`
+	// NamedExports     []string `json:"-"`
 }
 
 var loaders = map[string]esbuild.Loader{
@@ -205,14 +205,14 @@ func (ctx *BuildContext) buildModule() (result *BuildMeta, err error) {
 		return
 	}
 
-	result, reexport, err := ctx.lexer(&entry, false)
+	result, cjsExports, cjsReexport, err := ctx.lexer(&entry, false)
 	if err != nil && !strings.HasPrefix(err.Error(), "cjsLexer: Can't resolve") {
 		return
 	}
 
 	// cjs reexport
-	if reexport != "" {
-		mod, _, e := ctx.lookupDep(reexport, false)
+	if cjsReexport != "" {
+		mod, _, e := ctx.lookupDep(cjsReexport, false)
 		if e != nil {
 			err = e
 			return
@@ -224,7 +224,7 @@ func (ctx *BuildContext) buildModule() (result *BuildMeta, err error) {
 			return
 		}
 		entry := b.resolveEntry(mod)
-		result, _, err = b.lexer(&entry, false)
+		result, _, _, err = b.lexer(&entry, false)
 		if err != nil {
 			return
 		}
@@ -252,20 +252,19 @@ func (ctx *BuildContext) buildModule() (result *BuildMeta, err error) {
 	}
 
 	if entry.esm == "" {
-		currentEntryPoint = path.Join(ctx.wd, "cjs_endpoint_"+strings.ReplaceAll(entrySpecifier, "/", "_")+".js")
+		currentEntryPoint = path.Join(ctx.wd, "endpoint_"+strings.ReplaceAll(entrySpecifier, "/", "_")+".js")
 		entryPoints = append(entryPoints, currentEntryPoint)
 		if !existsFile(currentEntryPoint) {
 			buf := bytes.NewBuffer(nil)
-			fmt.Fprintf(buf, `import * as __module from "%s";`, entrySpecifier)
+			fmt.Fprintf(buf, `import * as exports from "%s";`, entrySpecifier)
 			fmt.Fprintf(buf, `export * from "%s";`, entrySpecifier)
-			if len(result.NamedExports) > 0 {
-				fmt.Fprintf(buf, `export const { %s } = __module;`, strings.Join(result.NamedExports, ","))
+			if len(cjsExports) > 0 {
+				fmt.Fprintf(buf, `export const { %s } = exports;`, strings.Join(cjsExports, ","))
 			}
-			fmt.Fprintf(buf, "const { default: __default, ...__rest } = __module;")
-			fmt.Fprintf(buf, "export default (__default !== undefined ? __default : __rest);")
+			fmt.Fprintf(buf, "export default exports.default ?? exports")
 			err = os.WriteFile(currentEntryPoint, buf.Bytes(), 0644)
 			if err != nil {
-				err = fmt.Errorf("create entry point: %v", err)
+				err = fmt.Errorf("create entry point for cjs module: %v", err)
 				return
 			}
 		}
@@ -1139,8 +1138,8 @@ rebuild:
 								if err == nil {
 									entry := b.resolveEntry(esm)
 									if entry.esm == "" {
-										ret, _, e := b.lexer(&entry, true)
-										if e == nil && contains(ret.NamedExports, "__esModule") {
+										ret, cjsNamedExports, _, e := b.lexer(&entry, true)
+										if e == nil && ret.CJS && contains(cjsNamedExports, "__esModule") {
 											isEsModule[i] = true
 										}
 									}
