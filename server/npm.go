@@ -372,17 +372,6 @@ func (npmrc *NpmRC) getRegistryByPackageName(packageName string) *NpmRegistry {
 }
 
 func (npmrc *NpmRC) fetchPackageInfo(packageName string, semverOrDistTag string) (packageJson *PackageJSON, err error) {
-	start := time.Now()
-	defer func() {
-		if packageJson != nil {
-			if semverOrDistTag == packageJson.Version {
-				log.Debugf("lookup package(%s@%s) in %v", packageName, semverOrDistTag, time.Since(start))
-			} else {
-				log.Debugf("lookup package(%s@%s → %s@%s) in %v", packageName, semverOrDistTag, packageName, packageJson.Version, time.Since(start))
-			}
-		}
-	}()
-
 	a := strings.Split(strings.Trim(packageName, "/"), "/")
 	packageName = a[0]
 	if strings.HasPrefix(packageName, "@") && len(a) > 1 {

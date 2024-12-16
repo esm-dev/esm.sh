@@ -1540,7 +1540,7 @@ func esmRouter(debug bool) rex.Handle {
 					msg := output.err.Error()
 					if strings.Contains(msg, "no such file or directory") ||
 						strings.Contains(msg, "is not exported from package") ||
-						strings.Contains(msg, "could not resolve the build entry") {
+						strings.Contains(msg, "could not resolve build entry") {
 						ctx.SetHeader("Cache-Control", ccImmutable)
 						return rex.Status(404, "module not found")
 					}

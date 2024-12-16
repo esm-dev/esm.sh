@@ -146,12 +146,12 @@ func transformDTS(ctx *BuildContext, dts string, buildArgsPrefix string, marker 
 					SubPath:       subPath,
 					SubModuleName: subPath,
 				})
-				if entry.dts != "" {
+				if entry.types != "" {
 					return fmt.Sprintf(
 						"{ESM_CDN_ORIGIN}/%s/%s%s",
 						ctx.esmPath.PackageName(),
 						ctx.getBuildArgsPrefix(true),
-						strings.TrimPrefix(entry.dts, "./"),
+						strings.TrimPrefix(entry.types, "./"),
 					), nil
 				}
 			}
