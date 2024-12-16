@@ -239,27 +239,9 @@ func esmRouter(debug bool) rex.Handle {
 			return indexHTML
 
 		case "/status.json":
-			q := make([]map[string]any, buildQueue.current.Len()+buildQueue.queue.Len())
+			q := make([]map[string]any, buildQueue.queue.Len())
 			i := 0
 
-			for el := buildQueue.current.Front(); el != nil; el = el.Next() {
-				t, ok := el.Value.(*BuildTask)
-				if ok {
-					clientIps := make([]string, len(t.clients))
-					for idx, c := range t.clients {
-						clientIps[idx] = c.IP
-					}
-					m := map[string]any{
-						"clients":   clientIps,
-						"createdAt": t.createdAt.Format(http.TimeFormat),
-						"startedAt": t.startedAt.Format(http.TimeFormat),
-						"path":      t.Path(),
-						"status":    t.status,
-					}
-					q[i] = m
-					i++
-				}
-			}
 			for el := buildQueue.queue.Front(); el != nil; el = el.Next() {
 				t, ok := el.Value.(*BuildTask)
 				if ok {

@@ -8,18 +8,19 @@ import (
 
 // BuildQueue schedules build tasks of esm.sh
 type BuildQueue struct {
-	lock        sync.Mutex
-	concurrency int
-	current     *list.List
-	queue       *list.List
-	tasks       map[string]*BuildTask
+	lock  sync.RWMutex
+	queue *list.List
+	tasks map[string]*BuildTask
+	idles int32
 }
 
 type BuildTask struct {
 	*BuildContext
+	el        *list.Element
 	clients   []*QueueClient
 	createdAt time.Time
 	startedAt time.Time
+	pending   bool
 }
 
 type BuildOutput struct {
@@ -34,10 +35,9 @@ type QueueClient struct {
 
 func NewBuildQueue(concurrency int) *BuildQueue {
 	q := &BuildQueue{
-		concurrency: concurrency,
-		current:     list.New(),
-		queue:       list.New(),
-		tasks:       map[string]*BuildTask{},
+		queue: list.New(),
+		tasks: map[string]*BuildTask{},
+		idles: int32(concurrency),
 	}
 	return q
 }
@@ -60,9 +60,12 @@ func (q *BuildQueue) Add(ctx *BuildContext, clientIp string) *QueueClient {
 		BuildContext: ctx,
 		createdAt:    time.Now(),
 		clients:      []*QueueClient{client},
+		pending:      true,
 	}
+	ctx.status = "pending"
+
+	t.el = q.queue.PushBack(t)
 	q.tasks[ctx.Path()] = t
-	q.queue.PushBack(t)
 
 	q.lock.Unlock()
 	q.next()
@@ -72,18 +75,31 @@ func (q *BuildQueue) Add(ctx *BuildContext, clientIp string) *QueueClient {
 }
 
 func (q *BuildQueue) next() {
-	if q.current.Len() < q.concurrency {
-		n := q.queue.Front()
-		if n != nil {
-			q.queue.Remove(n)
-			task := n.Value.(*BuildTask)
-			go q.build(task, q.current.PushBack(task))
+	var nextTask *BuildTask
+
+	q.lock.RLock()
+	if q.idles > 0 {
+		for el := q.queue.Front(); el != nil; el = el.Next() {
+			t, ok := el.Value.(*BuildTask)
+			if ok && t.pending {
+				nextTask = t
+				break
+			}
 		}
+	}
+	q.lock.RUnlock()
+
+	if nextTask != nil {
+		q.lock.Lock()
+		q.idles -= 1
+		nextTask.pending = false
+		nextTask.startedAt = time.Now()
+		q.lock.Unlock()
+		go q.build(nextTask)
 	}
 }
 
-func (q *BuildQueue) build(t *BuildTask, el *list.Element) {
-	t.startedAt = time.Now()
+func (q *BuildQueue) build(t *BuildTask) {
 	ret, err := t.Build()
 	if err == nil {
 		if t.target == "types" {
@@ -101,7 +117,8 @@ func (q *BuildQueue) build(t *BuildTask, el *list.Element) {
 	}
 
 	q.lock.Lock()
-	q.current.Remove(el)
+	q.idles += 1
+	q.queue.Remove(t.el)
 	delete(q.tasks, t.Path())
 	q.lock.Unlock()
 
