@@ -39,4 +39,4 @@ jobs:
           GO_TEST_S3_SECRET_ACCESS_KEY: ${{ secrets.GO_TEST_S3_SECRET_ACCESS_KEY }}
 
       - name: Run `test/bootstrap.ts`
-        run: test/bootstrap.ts
+        run: test/bootstrap.ts -q

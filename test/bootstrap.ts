@@ -65,7 +65,8 @@ async function runTest(name: string, retry?: boolean): Promise<number> {
     "--no-lock",
     "--reload=http://localhost:8080",
     "--location=http://0.0.0.0/",
-  ];
+    Deno.args.includes("-q") && "-q",
+  ].filter(Boolean);
   const dir = `test/${name}/`;
   if (await exists(dir + "deno.json")) {
     args.push("--config", dir + "deno.json");
@@ -109,23 +110,20 @@ async function exists(path: string): Promise<boolean> {
 if (import.meta.main) {
   Deno.chdir(new URL("../", import.meta.url).pathname);
   const tests = Deno.args.filter((arg) => !arg.startsWith("-"));
-  const clean = Deno.args.includes("--clean");
-  if (clean) {
-    try {
-      console.log("Cleaning up...");
-      await Promise.all([
-        Deno.remove(".esmd/log", { recursive: true }),
-        Deno.remove(".esmd/storage", { recursive: true }),
-      ]);
-    } catch (_) {
-      // ignore
-    }
-  }
   for (const testDir of tests) {
     if (!(await exists(`test/${testDir}`))) {
       console.error(`Test directory "${testDir}" not found.`);
       Deno.exit(1);
     }
+  }
+  try {
+    console.log("Cleaning up...");
+    await Promise.all([
+      Deno.remove(".esmd/log", { recursive: true }),
+      Deno.remove(".esmd/storage", { recursive: true }),
+    ]);
+  } catch (_) {
+    // ignore
   }
   console.log("Starting esm.sh server...");
   startServer(async () => {
