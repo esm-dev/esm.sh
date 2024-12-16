@@ -35,6 +35,156 @@ type DevServer struct {
 	loadCache sync.Map
 }
 
+func (d *DevServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	pathname := r.URL.Path
+	switch pathname {
+	case "/@hmr", "/@refresh", "/@prefresh", "/@vdr":
+		d.ServeInternalJS(w, r, pathname[2:])
+	case "/@uno.css":
+		d.ServeUnoCSS(w, r)
+	case "/@hmr-ws":
+		if d.watchData == nil {
+			d.watchData = make(map[*websocket.Conn]map[string]int64)
+			go d.watchFS()
+		}
+		d.ServeHmrWS(w, r)
+	default:
+		filename := filepath.Join(d.rootDir, pathname)
+		fi, err := os.Lstat(filename)
+		if err == nil && fi.IsDir() {
+			if pathname != "/" && !strings.HasSuffix(pathname, "/") {
+				http.Redirect(w, r, pathname+"/", http.StatusMovedPermanently)
+				return
+			}
+			pathname = strings.TrimSuffix(pathname, "/") + "/index.html"
+			filename = filepath.Join(d.rootDir, pathname)
+			fi, err = os.Lstat(filename)
+		}
+		if err != nil {
+			if os.IsNotExist(err) {
+				http.Error(w, "Not Found", 404)
+			} else {
+				http.Error(w, "Internal Server Error", 500)
+			}
+			return
+		}
+		if fi.IsDir() {
+			http.Error(w, "Forbidden", http.StatusForbidden)
+			return
+		}
+		query := r.URL.Query()
+		if query.Has("url") {
+			header := w.Header()
+			header.Set("Content-Type", "application/javascript; charset=utf-8")
+			header.Set("Cache-Control", "public, max-age=31536000, immutable")
+			w.Write([]byte(`const url = new URL(import.meta.url);url.searchParams.delete("url");export default url.href;`))
+			return
+		}
+		switch extname := filepath.Ext(filename); extname {
+		case ".html":
+			etag := fmt.Sprintf("w/\"%d-%d-%d\"", fi.ModTime().UnixMilli(), fi.Size(), VERSION)
+			if r.Header.Get("If-None-Match") == etag {
+				w.WriteHeader(http.StatusNotModified)
+				return
+			}
+			header := w.Header()
+			header.Set("Content-Type", "text/html; charset=utf-8")
+			header.Set("Cache-Control", "max-age=0, must-revalidate")
+			header.Set("Etag", etag)
+			d.ServeHtml(w, r, pathname)
+		case ".js", ".mjs", ".jsx", ".ts", ".mts", ".tsx", ".vue", ".svelte":
+			if !query.Has("raw") {
+				d.ServeModule(w, r, pathname, nil)
+				return
+			}
+			fallthrough
+		default:
+			if extname == ".css" {
+				if query.Has("module") {
+					d.ServeCSSModule(w, r, pathname, query)
+					return
+				}
+			}
+			if extname == ".md" {
+				if !query.Has("raw") {
+					markdown, err := os.ReadFile(filename)
+					if err != nil {
+						http.Error(w, "Internal Server Error", 500)
+						return
+					}
+					if query.Has("jsx") {
+						jsxCode, err := common.RenderMarkdown(markdown, common.MarkdownRenderKindJSX)
+						if err != nil {
+							http.Error(w, "Failed to render markdown to jsx", 500)
+							return
+						}
+						d.ServeModule(w, r, pathname+"?jsx", jsxCode)
+					} else if query.Has("svelte") {
+						svelteCode, err := common.RenderMarkdown(markdown, common.MarkdownRenderKindSvelte)
+						if err != nil {
+							http.Error(w, "Failed to render markdown to svelte component", 500)
+							return
+						}
+						d.ServeModule(w, r, pathname+"?svelte", svelteCode)
+					} else if query.Has("vue") {
+						vueCode, err := common.RenderMarkdown(markdown, common.MarkdownRenderKindVue)
+						if err != nil {
+							http.Error(w, "Failed to render markdown to vue component", 500)
+							return
+						}
+						d.ServeModule(w, r, pathname+"?vue", vueCode)
+					} else {
+						js, err := common.RenderMarkdown(markdown, common.MarkdownRenderKindJS)
+						if err != nil {
+							http.Error(w, "Failed to render markdown", 500)
+							return
+						}
+						etag := fmt.Sprintf("w/\"%d-%d-%d\"", fi.ModTime().UnixMilli(), fi.Size(), VERSION)
+						if r.Header.Get("If-None-Match") == etag && !query.Has("t") {
+							w.WriteHeader(http.StatusNotModified)
+							return
+						}
+						if r.Header.Get("If-None-Match") == etag && !query.Has("t") {
+							w.WriteHeader(http.StatusNotModified)
+							return
+						}
+						header := w.Header()
+						header.Set("Content-Type", "application/javascript; charset=utf-8")
+						if !query.Has("t") {
+							header.Set("Cache-Control", "max-age=0, must-revalidate")
+							header.Set("Etag", etag)
+						}
+						w.Write(js)
+					}
+					return
+				}
+			}
+			etag := fmt.Sprintf("w/\"%d-%d-%d\"", fi.ModTime().UnixMilli(), fi.Size(), VERSION)
+			if r.Header.Get("If-None-Match") == etag && !query.Has("t") {
+				w.WriteHeader(http.StatusNotModified)
+				return
+			}
+			file, err := os.Open(filename)
+			if err != nil {
+				http.Error(w, "Internal Server Error", 500)
+				return
+			}
+			defer file.Close()
+			contentType := common.ContentType(filename)
+			if contentType == "" {
+				contentType = "application/octet-stream"
+			}
+			header := w.Header()
+			header.Set("Content-Type", contentType)
+			if !query.Has("t") {
+				header.Set("Cache-Control", "max-age=0, must-revalidate")
+				header.Set("Etag", etag)
+			}
+			io.Copy(w, file)
+		}
+	}
+}
+
 func (d *DevServer) ServeHtml(w http.ResponseWriter, r *http.Request, pathname string) {
 	htmlFile, err := os.Open(filepath.Join(d.rootDir, pathname))
 	if err != nil {
@@ -421,10 +571,10 @@ func (d *DevServer) ServeUnoCSS(w http.ResponseWriter, r *http.Request) {
 					content = append(content, string(tokenizer.Text()))
 				} else {
 					if mainAttr != "" && isHttpSepcifier(srcAttr) {
-						if !isHttpSepcifier(mainAttr) && endsWith(mainAttr, moduleExts...) {
+						if !isHttpSepcifier(mainAttr) && endsWith(mainAttr, supportedModuleExts...) {
 							jsEntries[mainAttr] = struct{}{}
 						}
-					} else if !isHttpSepcifier(srcAttr) && endsWith(srcAttr, moduleExts...) {
+					} else if !isHttpSepcifier(srcAttr) && endsWith(srcAttr, supportedModuleExts...) {
 						jsEntries[srcAttr] = struct{}{}
 					}
 				}
@@ -610,7 +760,7 @@ func (d *DevServer) analyzeDependencyTree(entry string, importMap common.ImportM
 							return esbuild.OnResolveResult{Path: path, External: true}, nil
 						}
 						if resolved {
-							if endsWith(path, moduleExts...) {
+							if endsWith(path, supportedModuleExts...) {
 								return esbuild.OnResolveResult{Path: filepath.Join(d.rootDir, path), Namespace: "module", PluginData: path}, nil
 							}
 							return esbuild.OnResolveResult{Path: filepath.Join(d.rootDir, path)}, nil
@@ -722,156 +872,6 @@ func (d *DevServer) purgeLoadCache(filename string) {
 		d.loadCache.Delete(fmt.Sprintf("preload-%s", filename))
 		d.loadCache.Delete(fmt.Sprintf("preload-%s.etag", filename))
 		d.loadCache.Delete(fmt.Sprintf("preload-%s.lang", filename))
-	}
-}
-
-func (d *DevServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	pathname := r.URL.Path
-	switch pathname {
-	case "/@hmr", "/@refresh", "/@prefresh", "/@vdr":
-		d.ServeInternalJS(w, r, pathname[2:])
-	case "/@uno.css":
-		d.ServeUnoCSS(w, r)
-	case "/@hmr-ws":
-		if d.watchData == nil {
-			d.watchData = make(map[*websocket.Conn]map[string]int64)
-			go d.watchFS()
-		}
-		d.ServeHmrWS(w, r)
-	default:
-		filename := filepath.Join(d.rootDir, pathname)
-		fi, err := os.Lstat(filename)
-		if err == nil && fi.IsDir() {
-			if pathname != "/" && !strings.HasSuffix(pathname, "/") {
-				http.Redirect(w, r, pathname+"/", http.StatusMovedPermanently)
-				return
-			}
-			pathname = strings.TrimSuffix(pathname, "/") + "/index.html"
-			filename = filepath.Join(d.rootDir, pathname)
-			fi, err = os.Lstat(filename)
-		}
-		if err != nil {
-			if os.IsNotExist(err) {
-				http.Error(w, "Not Found", 404)
-			} else {
-				http.Error(w, "Internal Server Error", 500)
-			}
-			return
-		}
-		if fi.IsDir() {
-			http.Error(w, "Forbidden", http.StatusForbidden)
-			return
-		}
-		query := r.URL.Query()
-		if query.Has("url") {
-			header := w.Header()
-			header.Set("Content-Type", "application/javascript; charset=utf-8")
-			header.Set("Cache-Control", "public, max-age=31536000, immutable")
-			w.Write([]byte(`const url = new URL(import.meta.url);url.searchParams.delete("url");export default url.href;`))
-			return
-		}
-		switch extname := filepath.Ext(filename); extname {
-		case ".html":
-			etag := fmt.Sprintf("w/\"%d-%d-%d\"", fi.ModTime().UnixMilli(), fi.Size(), VERSION)
-			if r.Header.Get("If-None-Match") == etag {
-				w.WriteHeader(http.StatusNotModified)
-				return
-			}
-			header := w.Header()
-			header.Set("Content-Type", "text/html; charset=utf-8")
-			header.Set("Cache-Control", "max-age=0, must-revalidate")
-			header.Set("Etag", etag)
-			d.ServeHtml(w, r, pathname)
-		case ".js", ".mjs", ".jsx", ".ts", ".mts", ".tsx", ".vue", ".svelte":
-			if !query.Has("raw") {
-				d.ServeModule(w, r, pathname, nil)
-				return
-			}
-			fallthrough
-		default:
-			if extname == ".css" {
-				if query.Has("module") {
-					d.ServeCSSModule(w, r, pathname, query)
-					return
-				}
-			}
-			if extname == ".md" {
-				if !query.Has("raw") {
-					markdown, err := os.ReadFile(filename)
-					if err != nil {
-						http.Error(w, "Internal Server Error", 500)
-						return
-					}
-					if query.Has("jsx") {
-						jsxCode, err := common.RenderMarkdown(markdown, common.MarkdownRenderKindJSX)
-						if err != nil {
-							http.Error(w, "Failed to render markdown to jsx", 500)
-							return
-						}
-						d.ServeModule(w, r, pathname+"?jsx", jsxCode)
-					} else if query.Has("svelte") {
-						svelteCode, err := common.RenderMarkdown(markdown, common.MarkdownRenderKindSvelte)
-						if err != nil {
-							http.Error(w, "Failed to render markdown to svelte component", 500)
-							return
-						}
-						d.ServeModule(w, r, pathname+"?svelte", svelteCode)
-					} else if query.Has("vue") {
-						vueCode, err := common.RenderMarkdown(markdown, common.MarkdownRenderKindVue)
-						if err != nil {
-							http.Error(w, "Failed to render markdown to vue component", 500)
-							return
-						}
-						d.ServeModule(w, r, pathname+"?vue", vueCode)
-					} else {
-						js, err := common.RenderMarkdown(markdown, common.MarkdownRenderKindJS)
-						if err != nil {
-							http.Error(w, "Failed to render markdown", 500)
-							return
-						}
-						etag := fmt.Sprintf("w/\"%d-%d-%d\"", fi.ModTime().UnixMilli(), fi.Size(), VERSION)
-						if r.Header.Get("If-None-Match") == etag && !query.Has("t") {
-							w.WriteHeader(http.StatusNotModified)
-							return
-						}
-						if r.Header.Get("If-None-Match") == etag && !query.Has("t") {
-							w.WriteHeader(http.StatusNotModified)
-							return
-						}
-						header := w.Header()
-						header.Set("Content-Type", "application/javascript; charset=utf-8")
-						if !query.Has("t") {
-							header.Set("Cache-Control", "max-age=0, must-revalidate")
-							header.Set("Etag", etag)
-						}
-						w.Write(js)
-					}
-					return
-				}
-			}
-			etag := fmt.Sprintf("w/\"%d-%d-%d\"", fi.ModTime().UnixMilli(), fi.Size(), VERSION)
-			if r.Header.Get("If-None-Match") == etag && !query.Has("t") {
-				w.WriteHeader(http.StatusNotModified)
-				return
-			}
-			file, err := os.Open(filename)
-			if err != nil {
-				http.Error(w, "Internal Server Error", 500)
-				return
-			}
-			defer file.Close()
-			contentType := common.ContentType(filename)
-			if contentType == "" {
-				contentType = "application/octet-stream"
-			}
-			header := w.Header()
-			header.Set("Content-Type", contentType)
-			if !query.Has("t") {
-				header.Set("Cache-Control", "max-age=0, must-revalidate")
-				header.Set("Etag", etag)
-			}
-			io.Copy(w, file)
-		}
 	}
 }
 

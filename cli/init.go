@@ -37,33 +37,34 @@ func Init(efs *embed.FS) {
 	cssFramework := flag.String("css-framework", "", "CSS framework")
 	lang := flag.String("lang", "", "language")
 	projectName, _ := parseCommandFlag()
+	raw := &termRaw{}
 
 	if projectName == "" {
-		projectName = termInput("Project name:", "esm-app")
+		projectName = term.Input(raw, "Project name:", "esm-app")
 	}
 
 	if *framework == "" {
-		*framework = termSelect("Select a framework:", frameworks)
+		*framework = term.Select(raw, "Select a framework:", frameworks)
 	} else if !includes(frameworks, *framework) {
 		fmt.Println("Invalid framework: ", *framework)
 		os.Exit(1)
 	}
 
 	if *cssFramework == "" {
-		*cssFramework = termSelect("Select a CSS framework:", cssFrameworks)
+		*cssFramework = term.Select(raw, "Select a CSS framework:", cssFrameworks)
 	} else if !includes(cssFrameworks, *cssFramework) {
 		*cssFramework = cssFrameworks[0]
 	}
 
 	if *lang == "" {
-		*lang = termSelect("Select a variant:", langVariants)
+		*lang = term.Select(raw, "Select a variant:", langVariants)
 	} else if !includes(langVariants, *lang) {
 		*lang = langVariants[0]
 	}
 
 	_, err := os.Lstat(projectName)
 	if err == nil || os.IsExist(err) {
-		if !termConfirm("The directory already exists, do you want to overwrite it?") {
+		if !term.Confirm(raw, "The directory already exists, do you want to overwrite it?") {
 			fmt.Println(term.Dim("Canceled."))
 			return
 		}
