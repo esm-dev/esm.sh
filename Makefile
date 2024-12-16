@@ -1,3 +1,7 @@
+.PHONY: cli
+cli:
+	@go run cli/cmd/main.go
+
 .PHONY: test
 test:
 	@./test/bootstrap.ts ${dir}
