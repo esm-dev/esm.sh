@@ -25,11 +25,6 @@ jobs:
         with:
           deno-version: v1.x
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: 22
-
       - name: Run `go test`
         run: go test ./server ./server/storage -v
         env:
