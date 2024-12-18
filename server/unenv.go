@@ -10,7 +10,6 @@ import (
 	"os"
 	"path"
 	"strings"
-	"sync"
 	"time"
 
 	esbuild "github.com/evanw/esbuild/pkg/api"
@@ -69,36 +68,7 @@ func buildUnenvNodeRuntime() (err error) {
 	if err != nil {
 		return
 	}
-
-	wg := sync.WaitGroup{}
-	for _, name := range []string{"pathe", "ohash"} {
-		wg.Add(1)
-		go func(name string) {
-			defer wg.Done()
-			pkg := Package{Name: name, Version: pkgJson.Dependencies[name]}
-			if !regexpVersionStrict.MatchString(pkg.Version) {
-				p, e := rc.fetchPackageInfo(pkg.Name, pkg.Version)
-				if e != nil {
-					return
-				}
-				pkg.Version = p.Version
-			}
-			_, err := rc.installPackage(pkg)
-			if err != nil {
-				return
-			}
-			// link the installed package to the node_modules directory of current build context
-			linkDir := path.Join(wd, "node_modules", name)
-			_, err = os.Lstat(linkDir)
-			if err != nil && os.IsNotExist(err) {
-				if strings.ContainsRune(name, '/') {
-					ensureDir(path.Dir(linkDir))
-				}
-				os.Symlink(path.Join(rc.StoreDir(), pkg.String(), "node_modules", pkg.Name), linkDir)
-			}
-		}(name)
-	}
-	wg.Wait()
+	rc.installDependencies(wd, pkgJson, false, nil)
 
 	endpoints := make([]esbuild.EntryPoint, 0, len(nodeBuiltinModules))
 	for name := range nodeBuiltinModules {

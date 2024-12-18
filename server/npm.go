@@ -40,16 +40,6 @@ type Package struct {
 	Version  string
 }
 
-func (p *Package) FullName() string {
-	if p.Github {
-		return "gh/" + p.Name
-	}
-	if p.PkgPrNew {
-		return "pr/" + p.Name
-	}
-	return p.Name
-}
-
 func (p *Package) String() string {
 	s := p.Name + "@" + p.Version
 	if p.Github {
@@ -523,8 +513,8 @@ func (rc *NpmRC) installPackage(pkg Package) (packageJson *PackageJSON, err erro
 	}
 
 	// only one installation process is allowed at the same time for the same package
-	v, _ := installLocks.LoadOrStore(pkg.FullName(), &sync.Mutex{})
-	defer installLocks.Delete(pkg.FullName())
+	v, _ := installLocks.LoadOrStore(pkg.String(), &sync.Mutex{})
+	defer installLocks.Delete(pkg.String())
 
 	v.(*sync.Mutex).Lock()
 	defer v.(*sync.Mutex).Unlock()
@@ -577,6 +567,71 @@ func (rc *NpmRC) installPackage(pkg Package) (packageJson *PackageJSON, err erro
 
 	packageJson = raw.ToNpmPackage()
 	return
+}
+
+func (rc *NpmRC) installDependencies(wd string, pkgJson *PackageJSON, npmMode bool, mark *StringSet) {
+	wg := sync.WaitGroup{}
+	dependencies := map[string]string{}
+	for name, version := range pkgJson.Dependencies {
+		dependencies[name] = version
+	}
+	// install peer dependencies as well in _npm_ mode
+	if npmMode {
+		for name, version := range pkgJson.PeerDependencies {
+			dependencies[name] = version
+		}
+	}
+	if mark == nil {
+		mark = NewStringSet()
+	}
+	for name, version := range dependencies {
+		wg.Add(1)
+		go func(name, version string) {
+			defer wg.Done()
+			pkg := Package{Name: name, Version: version}
+			p, err := resolveDependencyVersion(version)
+			if err != nil {
+				return
+			}
+			if p.Name != "" {
+				pkg = p
+			}
+			if strings.HasSuffix(pkg.Name, "@types/") {
+				// skip installing `@types/*` packages
+				return
+			}
+			if !regexpVersionStrict.MatchString(pkg.Version) && !pkg.Github && !pkg.PkgPrNew {
+				p, e := rc.fetchPackageInfo(pkg.Name, pkg.Version)
+				if e != nil {
+					return
+				}
+				pkg.Version = p.Version
+			}
+			markId := fmt.Sprintf("%s@%s:%s:%v", pkgJson.Name, pkgJson.Version, pkg.String(), npmMode)
+			if mark.Has(markId) {
+				return
+			}
+			mark.Add(markId)
+			installed, err := rc.installPackage(pkg)
+			if err != nil {
+				return
+			}
+			// link the installed package to the node_modules directory of current build context
+			linkDir := path.Join(wd, "node_modules", name)
+			_, err = os.Lstat(linkDir)
+			if err != nil && os.IsNotExist(err) {
+				if strings.ContainsRune(name, '/') {
+					ensureDir(path.Dir(linkDir))
+				}
+				os.Symlink(path.Join(rc.StoreDir(), pkg.String(), "node_modules", pkg.Name), linkDir)
+			}
+			// install dependencies recursively
+			if len(installed.Dependencies) > 0 || (len(installed.PeerDependencies) > 0 && npmMode) {
+				rc.installDependencies(wd, installed, npmMode, mark)
+			}
+		}(name, version)
+	}
+	wg.Wait()
 }
 
 func (rc *NpmRC) downloadTarball(reg *NpmRegistry, installDir string, pkgName string, tarballUrl string) (err error) {

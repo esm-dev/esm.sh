@@ -236,7 +236,7 @@ func bundleHttpModule(npmrc *NpmRC, entry string, importMap common.ImportMap, co
 							if err != nil {
 								return esbuild.OnLoadResult{}, err
 							}
-							ret, err := transformSvelte(npmrc, svelteVersion, []string{args.Path, code})
+							ret, err := transformSvelte(npmrc, svelteVersion, args.Path, code)
 							if err != nil {
 								return esbuild.OnLoadResult{}, err
 							}
@@ -246,7 +246,7 @@ func bundleHttpModule(npmrc *NpmRC, entry string, importMap common.ImportMap, co
 							if err != nil {
 								return esbuild.OnLoadResult{}, err
 							}
-							ret, err := transformVue(npmrc, vueVersion, []string{args.Path, code})
+							ret, err := transformVue(npmrc, vueVersion, args.Path, code)
 							if err != nil {
 								return esbuild.OnLoadResult{}, err
 							}
@@ -273,7 +273,7 @@ func bundleHttpModule(npmrc *NpmRC, entry string, importMap common.ImportMap, co
 								if err != nil {
 									return esbuild.OnLoadResult{}, err
 								}
-								ret, err := transformSvelte(npmrc, svelteVersion, []string{args.Path, string(svelteCode)})
+								ret, err := transformSvelte(npmrc, svelteVersion, args.Path, string(svelteCode))
 								if err != nil {
 									return esbuild.OnLoadResult{}, err
 								}
@@ -287,7 +287,7 @@ func bundleHttpModule(npmrc *NpmRC, entry string, importMap common.ImportMap, co
 								if err != nil {
 									return esbuild.OnLoadResult{}, err
 								}
-								ret, err := transformVue(npmrc, vueVersion, []string{args.Path, string(vueCode)})
+								ret, err := transformVue(npmrc, vueVersion, args.Path, string(vueCode))
 								if err != nil {
 									return esbuild.OnLoadResult{}, err
 								}

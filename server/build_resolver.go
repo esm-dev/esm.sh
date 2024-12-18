@@ -44,7 +44,7 @@ func (ctx *BuildContext) Path() string {
 			ctx.path = fmt.Sprintf(
 				"/%s%s/%s%s",
 				asteriskPrefix,
-				esmPath.PackageName(),
+				esmPath.Name(),
 				ctx.getBuildArgsPrefix(true),
 				esmPath.SubPath,
 			)
@@ -79,7 +79,7 @@ func (ctx *BuildContext) Path() string {
 	ctx.path = fmt.Sprintf(
 		"/%s%s/%s%s/%s.mjs",
 		asteriskPrefix,
-		esmPath.PackageName(),
+		esmPath.Name(),
 		ctx.getBuildArgsPrefix(ctx.target == "types"),
 		ctx.target,
 		name,
@@ -111,7 +111,7 @@ func (ctx *BuildContext) getImportPath(esmPath EsmPath, buildArgsPrefix string, 
 	return fmt.Sprintf(
 		"/%s%s/%s%s/%s.mjs",
 		asteriskPrefix,
-		esmPath.PackageName(),
+		esmPath.Name(),
 		buildArgsPrefix,
 		ctx.target,
 		name,
@@ -962,7 +962,7 @@ func (ctx *BuildContext) resloveDTS(entry BuildEntry) (string, error) {
 		}
 		return fmt.Sprintf(
 			"/%s/%s%s",
-			ctx.esmPath.PackageName(),
+			ctx.esmPath.Name(),
 			ctx.getBuildArgsPrefix(true),
 			strings.TrimPrefix(entry.types, "./"),
 		), nil

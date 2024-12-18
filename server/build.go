@@ -12,7 +12,6 @@ import (
 	"regexp"
 	"sort"
 	"strings"
-	"sync"
 
 	"github.com/esm-dev/esm.sh/server/storage"
 	esbuild "github.com/evanw/esbuild/pkg/api"
@@ -200,7 +199,7 @@ func (ctx *BuildContext) buildModule() (result *BuildMeta, err error) {
 		}
 		result = &BuildMeta{
 			TypesOnly: true,
-			Dts:       "/" + ctx.esmPath.PackageName() + entry.types[1:],
+			Dts:       "/" + ctx.esmPath.Name() + entry.types[1:],
 		}
 		return
 	}
@@ -888,7 +887,7 @@ func (ctx *BuildContext) buildModule() (result *BuildMeta, err error) {
 					if semverLessThan(svelteVersion, "4.0.0") {
 						return esbuild.OnLoadResult{}, errors.New("svelte version must be greater than 4.0.0")
 					}
-					out, err := transformSvelte(ctx.npmrc, svelteVersion, []string{ctx.esmPath.Specifier(), string(code)})
+					out, err := transformSvelte(ctx.npmrc, svelteVersion, ctx.esmPath.Specifier(), string(code))
 					if err != nil {
 						return esbuild.OnLoadResult{}, err
 					}
@@ -922,7 +921,7 @@ func (ctx *BuildContext) buildModule() (result *BuildMeta, err error) {
 					if semverLessThan(vueVersion, "3.0.0") {
 						return esbuild.OnLoadResult{}, errors.New("vue version must be greater than 3.0.0")
 					}
-					out, err := transformVue(ctx.npmrc, vueVersion, []string{ctx.esmPath.Specifier(), string(code)})
+					out, err := transformVue(ctx.npmrc, vueVersion, ctx.esmPath.Specifier(), string(code))
 					if err != nil {
 						return esbuild.OnLoadResult{}, err
 					}
@@ -1257,7 +1256,7 @@ func (ctx *BuildContext) buildTypes() (ret *BuildMeta, err error) {
 		return
 	}
 
-	ret = &BuildMeta{Dts: "/" + ctx.esmPath.PackageName() + dts[1:]}
+	ret = &BuildMeta{Dts: "/" + ctx.esmPath.Name() + dts[1:]}
 	return
 }
 
@@ -1315,94 +1314,18 @@ func (ctx *BuildContext) install() (err error) {
 			}
 		}
 
-		ctx.wd = path.Join(ctx.npmrc.StoreDir(), ctx.esmPath.PackageName())
+		ctx.wd = path.Join(ctx.npmrc.StoreDir(), ctx.esmPath.Name())
 		ctx.pkgDir = path.Join(ctx.wd, "node_modules", ctx.esmPath.PkgName)
 		ctx.packageJson = p
 	}
 
 	// install dependencies in bundle mode
 	if ctx.bundleMode == BundleAll {
-		ctx.installDependencies(ctx.packageJson, false)
+		ctx.npmrc.installDependencies(ctx.wd, ctx.packageJson, false, nil)
 	} else if v, ok := ctx.packageJson.Dependencies["@babel/runtime"]; ok {
 		// we bundle @babel/runtime modules even not in bundle mode
 		// install it if it's in the dependencies
-		ctx.installDependencies(&PackageJSON{Dependencies: map[string]string{"@babel/runtime": v}}, false)
+		ctx.npmrc.installDependencies(ctx.wd, &PackageJSON{Dependencies: map[string]string{"@babel/runtime": v}}, false, nil)
 	}
 	return
-}
-
-func (ctx *BuildContext) installDependencies(pkgJson *PackageJSON, npmMode bool) {
-	ctx.installDependenciesInternal(pkgJson, npmMode, NewStringSet())
-}
-
-func (ctx *BuildContext) installDependenciesInternal(pkgJson *PackageJSON, npmMode bool, mark *StringSet) {
-	wg := sync.WaitGroup{}
-	dependencies := map[string]string{}
-	for name, version := range pkgJson.Dependencies {
-		dependencies[name] = version
-	}
-	// install peer dependencies in _npm_ mode
-	if npmMode {
-		for name, version := range pkgJson.PeerDependencies {
-			dependencies[name] = version
-		}
-	}
-	for name, version := range dependencies {
-		wg.Add(1)
-		go func(name, version string) {
-			defer wg.Done()
-			pkg := Package{Name: name, Version: version}
-			p, err := resolveDependencyVersion(version)
-			if err != nil {
-				return
-			}
-			if p.Name != "" {
-				pkg = p
-			}
-			// if v, ok := ctx.args.deps[pkg.Name]; ok {
-			// 	pkg.Version = v
-			// }
-			if !regexpVersionStrict.MatchString(pkg.Version) && !pkg.Github && !pkg.PkgPrNew {
-				p, e := ctx.npmrc.fetchPackageInfo(pkg.Name, pkg.Version)
-				if e != nil {
-					return
-				}
-				pkg.Version = p.Version
-			}
-			markId := fmt.Sprintf("%s@%s:%s:%v", pkgJson.Name, pkgJson.Version, pkg.String(), npmMode)
-			if mark.Has(markId) {
-				return
-			}
-			mark.Add(markId)
-			installed, err := ctx.npmrc.installPackage(pkg)
-			if err != nil {
-				return
-			}
-			// link the installed package to the node_modules directory of current build context
-			linkDir := path.Join(ctx.wd, "node_modules", name)
-			_, err = os.Lstat(linkDir)
-			if err != nil && os.IsNotExist(err) {
-				if strings.ContainsRune(name, '/') {
-					ensureDir(path.Dir(linkDir))
-				}
-				os.Symlink(path.Join(ctx.npmrc.StoreDir(), pkg.String(), "node_modules", pkg.Name), linkDir)
-			}
-			// link the installed package for all dependents in _npm_ mode
-			if npmMode && pkgJson.Name != ctx.packageJson.Name {
-				linkDir := path.Join(ctx.npmrc.StoreDir(), pkgJson.Name+"@"+pkgJson.Version, "node_modules", name)
-				_, err = os.Lstat(linkDir)
-				if err != nil && os.IsNotExist(err) {
-					if strings.ContainsRune(name, '/') {
-						ensureDir(path.Dir(linkDir))
-					}
-					os.Symlink(path.Join(ctx.npmrc.StoreDir(), pkg.String(), "node_modules", pkg.Name), linkDir)
-				}
-			}
-			// install dependencies recursively
-			if len(installed.Dependencies) > 0 || (len(installed.PeerDependencies) > 0 && npmMode) {
-				ctx.installDependenciesInternal(installed, npmMode, mark)
-			}
-		}(name, version)
-	}
-	wg.Wait()
 }

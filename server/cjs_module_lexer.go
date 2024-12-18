@@ -69,12 +69,12 @@ func (ctx *BuildContext) cjsModuleLexer(cjsEntry string) (ret cjsModuleLexerResu
 
 	if cjsModuleLexerIgnoredPackages.Has(ctx.esmPath.PkgName) {
 		js := path.Join(ctx.wd, "reveal_"+strings.ReplaceAll(cjsEntry[2:], "/", "_"))
-		err = os.WriteFile(js, []byte(fmt.Sprintf(`console.log(JSON.stringify(Object.keys((await import("npm:%s")).default)))`, path.Join(ctx.esmPath.PackageName(), cjsEntry))), 0644)
+		err = os.WriteFile(js, []byte(fmt.Sprintf(`console.log(JSON.stringify(Object.keys((await import("npm:%s")).default)))`, path.Join(ctx.esmPath.Name(), cjsEntry))), 0644)
 		if err != nil {
 			return
 		}
 		var data []byte
-		data, err = run(loaderRuntime, "run", "--no-config", "--no-lock", "--no-prompt", "--no-remote", "--node-modules-dir=false", "--quiet", js)
+		data, err = run("deno", "run", "--no-config", "--no-lock", "--no-prompt", "--quiet", js)
 		if err != nil {
 			return
 		}
@@ -114,7 +114,7 @@ RETRY:
 				if strings.HasPrefix(formattedMessage, "failed to resolve reexport: NotFound(") && worthToRetry {
 					worthToRetry = false
 					// install dependencies and retry
-					ctx.installDependencies(ctx.packageJson, true)
+					ctx.npmrc.installDependencies(ctx.wd, ctx.packageJson, true, nil)
 					goto RETRY
 				}
 				err = fmt.Errorf("cjsModuleLexer: %s", formattedMessage)

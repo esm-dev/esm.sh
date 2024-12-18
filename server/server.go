@@ -95,17 +95,6 @@ func Serve(efs EmbedFS) {
 	}
 	log.Debugf("storage initialized, type: %s, endpoint: %s", config.Storage.Type, config.Storage.Endpoint)
 
-	// check nodejs environment
-	nodejsInstallDir := os.Getenv("NODE_INSTALL_DIR")
-	if nodejsInstallDir == "" {
-		nodejsInstallDir = path.Join(config.WorkDir, "nodejs")
-	}
-	nodeVer, err := checkNodejs(nodejsInstallDir)
-	if err != nil {
-		log.Fatalf("nodejs: %v", err)
-	}
-	log.Debugf("nodejs: v%s, registry: %s", nodeVer, config.NpmRegistry)
-
 	err = loadUnenvNodeRuntime()
 	if err != nil {
 		log.Fatalf("load unenv node runtime: %v", err)
@@ -138,6 +127,9 @@ func Serve(efs EmbedFS) {
 
 	// add .esmd/bin to PATH
 	os.Setenv("PATH", fmt.Sprintf("%s%c%s", path.Join(config.WorkDir, "bin"), os.PathListSeparator, os.Getenv("PATH")))
+
+	// pre-comile uno generator in background
+	go generateUnoCSS(&NpmRC{NpmRegistry: NpmRegistry{Registry: "https://registry.npmjs.org/"}}, "", "")
 
 	// init build queue
 	buildQueue = NewBuildQueue(int(config.BuildConcurrency))

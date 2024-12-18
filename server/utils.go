@@ -3,7 +3,7 @@ package server
 import (
 	"bytes"
 	"encoding/base64"
-	"fmt"
+	"errors"
 	"net/http"
 	"os"
 	"os/exec"
@@ -27,6 +27,7 @@ var (
 	regexpDomain           = regexp.MustCompile(`^[a-z0-9\-]+(\.[a-z0-9\-]+)*\.[a-z]+$`)
 	regexpSveltePath       = regexp.MustCompile(`/\*?svelte@([~\^]?[\w\+\-\.]+)(/|\?|&|$)`)
 	regexpVuePath          = regexp.MustCompile(`/\*?vue@([~\^]?[\w\+\-\.]+)(/|\?|&|$)`)
+	regexpExportAsExpr     = regexp.MustCompile(`([\w$]+) as ([\w$]+)`)
 )
 
 // isHttpSepcifier returns true if the specifier is a remote URL.
@@ -51,6 +52,26 @@ func isJsonModuleSpecifier(specifier string) bool {
 	}
 	_, _, subpath, _ := splitEsmPath(specifier)
 	return subpath != "" && strings.HasSuffix(subpath, ".json")
+}
+
+// isJsModuleSpecifier checks if the given specifier is a node.js built-in module.
+func isNodeBuiltInModule(specifier string) bool {
+	return strings.HasPrefix(specifier, "node:") && nodeBuiltinModules[specifier[5:]]
+}
+
+// normalizeImportSpecifier normalizes the given specifier.
+func normalizeImportSpecifier(specifier string) string {
+	specifier = strings.TrimPrefix(specifier, "npm:")
+	specifier = strings.TrimPrefix(specifier, "./node_modules/")
+	if specifier == "." {
+		specifier = "./index"
+	} else if specifier == ".." {
+		specifier = "../index"
+	}
+	if nodeBuiltinModules[specifier] {
+		return "node:" + specifier
+	}
+	return specifier
 }
 
 // semverLessThan returns true if the version a is less than the version b.
@@ -221,12 +242,8 @@ func run(cmd string, args ...string) (output []byte, err error) {
 	err = c.Run()
 	if err != nil {
 		if errBuf.Len() > 0 {
-			err = fmt.Errorf("%s: %s", err, errBuf.String())
+			err = errors.New(errBuf.String())
 		}
-		return
-	}
-	if errBuf.Len() > 0 {
-		err = fmt.Errorf("%s", errBuf.String())
 		return
 	}
 	output = outBuf.Bytes()

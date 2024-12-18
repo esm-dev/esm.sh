@@ -197,7 +197,7 @@ func esmRouter(debug bool) rex.Handle {
 		// static routes
 		switch pathname {
 		case "/favicon.ico":
-			favicon, err := embedFS.ReadFile("server/embed/assets/favicon.ico")
+			favicon, err := embedFS.ReadFile("server/embed/favicon.ico")
 			if err != nil {
 				return err
 			}
@@ -626,7 +626,7 @@ func esmRouter(debug bool) rex.Handle {
 						}
 					}
 				}
-				out, err := generateUnoCSS(npmrc, []string{configCSS, strings.Join(content, "\n")})
+				out, err := generateUnoCSS(npmrc, configCSS, strings.Join(content, "\n"))
 				if err != nil {
 					return rex.Status(500, "Failed to generate uno.css: "+err.Error())
 				}
@@ -947,7 +947,7 @@ func esmRouter(debug bool) rex.Handle {
 		// redirect to the url with fixed package version
 		if !isFixedVersion {
 			if isBuildDist {
-				pkgName := esmPath.PackageName()
+				pkgName := esmPath.Name()
 				subPath := ""
 				query := ""
 				if asteriskPrefix {
@@ -1015,7 +1015,7 @@ func esmRouter(debug bool) rex.Handle {
 			// fix url that is related to `import.meta.url`
 			if pathKind == RawFile && isBuildDist && !query.Has("raw") {
 				extname := path.Ext(esmPath.SubPath)
-				dir := path.Join(npmrc.StoreDir(), esmPath.PackageName())
+				dir := path.Join(npmrc.StoreDir(), esmPath.Name())
 				if !existsDir(dir) {
 					_, err := npmrc.installPackage(esmPath.Package())
 					if err != nil {
@@ -1064,7 +1064,7 @@ func esmRouter(debug bool) rex.Handle {
 				var cachePath string
 				var cacheHit bool
 				if config.CacheRawFile {
-					cachePath = path.Join("raw", esmPath.PackageName(), esmPath.SubPath)
+					cachePath = path.Join("raw", esmPath.Name(), esmPath.SubPath)
 					content, stat, err = buildStorage.Get(cachePath)
 					if err != nil && err != storage.ErrNotFound {
 						return rex.Status(500, "storage error")
@@ -1079,7 +1079,7 @@ func esmRouter(debug bool) rex.Handle {
 					}
 				}
 				if !cacheHit {
-					filename := path.Join(npmrc.StoreDir(), esmPath.PackageName(), "node_modules", esmPath.PkgName, esmPath.SubPath)
+					filename := path.Join(npmrc.StoreDir(), esmPath.Name(), "node_modules", esmPath.PkgName, esmPath.SubPath)
 					stat, err = os.Lstat(filename)
 					if err != nil && os.IsNotExist(err) {
 						// if the file not found, try to install the package and retry
@@ -1382,7 +1382,7 @@ func esmRouter(debug bool) rex.Handle {
 
 		// resolve `alias`, `deps`, `external` of the build args
 		if !xArgs {
-			err := resolveBuildArgs(npmrc, path.Join(npmrc.StoreDir(), esmPath.PackageName()), &buildArgs, esmPath)
+			err := resolveBuildArgs(npmrc, path.Join(npmrc.StoreDir(), esmPath.Name()), &buildArgs, esmPath)
 			if err != nil {
 				return rex.Status(500, err.Error())
 			}
@@ -1397,7 +1397,7 @@ func esmRouter(debug bool) rex.Handle {
 				}
 				savePath := normalizeSavePath(zoneId, path.Join(fmt.Sprintf(
 					"types/%s/%s",
-					esmPath.PackageName(),
+					esmPath.Name(),
 					args,
 				), esmPath.SubPath))
 				content, stat, err = buildStorage.Get(savePath)

@@ -3,8 +3,6 @@ package server
 import (
 	"archive/zip"
 	"bytes"
-	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -14,14 +12,16 @@ import (
 	"path"
 	"runtime"
 	"strings"
-	"time"
+	"sync"
 
+	esbuild "github.com/evanw/esbuild/pkg/api"
 	"github.com/ije/gox/utils"
 )
 
 var (
 	loaderRuntime        = "deno"
 	loaderRuntimeVersion = "2.1.4"
+	loaderCompileLocks   = sync.Map{}
 )
 
 type LoaderOutput struct {
@@ -30,83 +30,78 @@ type LoaderOutput struct {
 	Error string `json:"error"`
 }
 
-func runLoader(npmrc *NpmRC, loaderName string, args []string, mainDependency Package, extraDeps ...string) (output *LoaderOutput, err error) {
-	wd := path.Join(npmrc.StoreDir(), fmt.Sprintf("loader-v%d", VERSION), strings.ReplaceAll(strings.Join(append([]string{mainDependency.String()}, extraDeps...), "+"), "/", "_"))
-	loaderJsFilename := path.Join(wd, "loader.mjs")
-	if !existsFile(loaderJsFilename) {
-		var loaderJS []byte
-		loaderJS, err = embedFS.ReadFile(fmt.Sprintf("server/embed/internal/%s_loader.js", loaderName))
-		if err != nil {
-			err = fmt.Errorf("could not find loader: %s", loaderName)
-			return
-		}
-
-		ensureDir(wd)
-
-		stderr := bytes.NewBuffer(nil)
-		cmd := exec.Command("npm", append([]string{"i", "--ignore-scripts", "--no-bin-links", mainDependency.String()}, extraDeps...)...)
-		cmd.Dir = wd
-		cmd.Stderr = stderr
-		err = cmd.Run()
-		if err != nil {
-			if stderr.Len() > 0 {
-				err = fmt.Errorf("could not install %s %s: %s", mainDependency.String(), strings.Join(extraDeps, " "), stderr.String())
-			}
-			return
-		}
-
-		err = os.WriteFile(loaderJsFilename, loaderJS, 0755)
-		if err != nil {
-			err = fmt.Errorf("could not write loader.js")
-			return
-		}
-	}
-
-	stdin := bytes.NewBuffer(nil)
-	stdout := bytes.NewBuffer(nil)
-	stderr := bytes.NewBuffer(nil)
-	err = json.NewEncoder(stdin).Encode(args)
+func runLoader(loaderExecPath string, filename string, code string) (output *LoaderOutput, err error) {
+	outBuf := new(bytes.Buffer)
+	errBuf := new(bytes.Buffer)
+	c := exec.Command(
+		loaderRuntime, "run",
+		"--no-config",
+		"--no-lock",
+		"--cached-only",
+		"--no-prompt",
+		"--allow-read=.",
+		"--quiet",
+		loaderExecPath, filename,
+	)
+	c.Dir = os.TempDir()
+	c.Stdin = strings.NewReader(code)
+	c.Stdout = outBuf
+	c.Stderr = errBuf
+	err = c.Run()
 	if err != nil {
-		return
-	}
-
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
-
-	cmd := exec.CommandContext(ctx, "node", "loader.mjs")
-	cmd.Dir = wd
-	cmd.Stdin = stdin
-	cmd.Stdout = stdout
-	cmd.Stderr = stderr
-	err = cmd.Run()
-	if err != nil {
-		if stderr.Len() > 0 {
-			err = fmt.Errorf("preLoad: %s", stderr.String())
+		if errBuf.Len() > 0 {
+			err = errors.New(errBuf.String())
 		}
 		return
 	}
-
-	var out LoaderOutput
-	err = json.NewDecoder(stdout).Decode(&out)
-	if err != nil {
+	if outBuf.Len() < 2 {
+		err = errors.New("bad loader output")
 		return
 	}
-	if out.Error != "" {
-		return nil, errors.New(out.Error)
+	data := outBuf.Bytes()
+	if data[0] != '1' && data[0] != '2' {
+		err = errors.New(string(data[2:]))
+		return
 	}
-	return &out, nil
+	lang := "js"
+	if data[0] == '2' {
+		lang = "ts"
+	}
+	return &LoaderOutput{Lang: lang, Code: string(data[2:])}, nil
 }
 
-func transformVue(npmrc *NpmRC, vueVersion string, args []string) (output *LoaderOutput, err error) {
-	return runLoader(npmrc, "vue", args, Package{Name: "@vue/compiler-sfc", Version: vueVersion}, "@esm.sh/vue-loader@1.0.3")
-}
-
-func transformSvelte(npmrc *NpmRC, svelteVersion string, args []string) (output *LoaderOutput, err error) {
-	return runLoader(npmrc, "svelte", args, Package{Name: "svelte", Version: svelteVersion})
-}
-
-func generateUnoCSS(npmrc *NpmRC, args []string) (output *LoaderOutput, err error) {
-	return runLoader(npmrc, "unocss", args, Package{Name: "@esm.sh/unocss", Version: "0.3.1"}, "@iconify/json@2.2.280")
+func buildLoader(wd, loaderJs, outfile string) (err error) {
+	ret := esbuild.Build(esbuild.BuildOptions{
+		Outfile:           outfile,
+		Stdin:             &esbuild.StdinOptions{Contents: loaderJs, ResolveDir: wd},
+		Platform:          esbuild.PlatformBrowser,
+		Format:            esbuild.FormatESModule,
+		Target:            esbuild.ESNext,
+		Bundle:            true,
+		MinifySyntax:      true,
+		MinifyWhitespace:  true,
+		MinifyIdentifiers: true,
+		Write:             true,
+		PreserveSymlinks:  true,
+		Plugins: []esbuild.Plugin{{
+			Name: "resolver",
+			Setup: func(build esbuild.PluginBuild) {
+				build.OnResolve(esbuild.OnResolveOptions{Filter: ".*"}, func(args esbuild.OnResolveArgs) (esbuild.OnResolveResult, error) {
+					if strings.HasPrefix(args.Path, "node:") || nodeBuiltinModules[args.Path] {
+						return esbuild.OnResolveResult{Path: "node:" + strings.TrimPrefix(args.Path, "node:"), External: true}, nil
+					}
+					if strings.HasPrefix(args.Path, "jsr:") {
+						return esbuild.OnResolveResult{Path: args.Path, External: true}, nil
+					}
+					return esbuild.OnResolveResult{}, nil
+				})
+			},
+		}},
+	})
+	if len(ret.Errors) > 0 {
+		err = fmt.Errorf("failed to build loader: %s", ret.Errors[0].Text)
+	}
+	return
 }
 
 func installLoaderRuntime() (err error) {
@@ -142,7 +137,7 @@ func installLoaderRuntime() (err error) {
 		}
 	}
 
-	url, err := getLoaderRuntimeDownloadURL()
+	url, err := getLoaderRuntimeInstallURL()
 	if err != nil {
 		return
 	}
@@ -204,7 +199,7 @@ func installLoaderRuntime() (err error) {
 	return
 }
 
-func getLoaderRuntimeDownloadURL() (string, error) {
+func getLoaderRuntimeInstallURL() (string, error) {
 	var arch string
 	var os string
 
@@ -222,6 +217,8 @@ func getLoaderRuntimeDownloadURL() (string, error) {
 		os = "apple-darwin"
 	case "linux":
 		os = "unknown-linux-gnu"
+	// case "windows":
+	// 	os = "pc-windows-msvc"
 	default:
 		return "", fmt.Errorf("unsupported os: %s", runtime.GOOS)
 	}
