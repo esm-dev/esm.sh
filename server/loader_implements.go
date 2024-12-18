@@ -225,8 +225,7 @@ func compileUnocssLoader(npmrc *NpmRC, loaderVersion string, loaderExecPath stri
 }
 
 func transformVue(npmrc *NpmRC, vueVersion string, filename string, code string) (output *LoaderOutput, err error) {
-	// runLoader(npmrc, "vue", args, Package{Name: "@vue/compiler-sfc", Version: vueVersion}, "@esm.sh/vue-compiler@1.0.3")
-	loaderVersion := "1.0.0"
+	loaderVersion := "1.0.1" // @esm.sh/vue-compiler
 	loaderExecPath := path.Join(npmrc.StoreDir(), "@vue/compiler-sfc@"+vueVersion, "loader-"+loaderVersion+".js")
 	if !existsFile(loaderExecPath) {
 		log.Debug("compiling vue loader...")

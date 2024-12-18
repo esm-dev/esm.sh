@@ -63,7 +63,7 @@ async function transformModule(filename, importMap, sourceCode) {
 }
 
 async function transformVue(filename, sourceCode, importMap, isDev) {
-  const { transform } = await import("npm:@esm.sh/vue-compiler@1.0.0");
+  const { transform } = await import("npm:@esm.sh/vue-compiler@1.0.1");
   const ret = await transform(filename, sourceCode, {
     imports: { "@vue/compiler-sfc": import("npm:@vue/compiler-sfc@" + getVueVersion(importMap)) },
     isDev,
