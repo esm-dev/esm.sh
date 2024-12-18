@@ -83,42 +83,37 @@ func LoadConfig(filename string) (*Config, error) {
 	}
 	defer file.Close()
 
-	var c Config
-	err = json.NewDecoder(file).Decode(&c)
+	var config Config
+	err = json.NewDecoder(file).Decode(&config)
 	if err != nil {
 		return nil, fmt.Errorf("fail to parse config: %w", err)
 	}
-
-	if c.WorkDir == "" {
-		homeDir, err := os.UserHomeDir()
-		if err != nil {
-			homeDir = "/home/esmd"
-		}
-		c.WorkDir = path.Join(homeDir, ".esmd")
-	} else {
-		c.WorkDir, err = filepath.Abs(c.WorkDir)
+	if config.WorkDir != "" && !filepath.IsAbs(config.WorkDir) {
+		config.WorkDir, err = filepath.Abs(config.WorkDir)
 		if err != nil {
 			return nil, fmt.Errorf("fail to get absolute path of the work directory: %w", err)
 		}
 	}
-
-	normalizeConfig(&c)
-	return &c, nil
+	normalizeConfig(&config)
+	return &config, nil
 }
 
 func DefaultConfig() *Config {
-	homeDir, err := os.UserHomeDir()
-	if err != nil {
-		homeDir = "/home/esmd"
-	}
-	c := &Config{WorkDir: path.Join(homeDir, ".esmd")}
-	normalizeConfig(c)
-	return c
+	config := &Config{}
+	normalizeConfig(config)
+	return config
 }
 
-func normalizeConfig(c *Config) {
-	if c.Port == 0 {
-		c.Port = 80
+func normalizeConfig(config *Config) {
+	if config.Port == 0 {
+		config.Port = 80
+	}
+	if config.WorkDir == "" {
+		homeDir, err := os.UserHomeDir()
+		if err != nil {
+			homeDir = "/home"
+		}
+		config.WorkDir = path.Join(homeDir, ".esmd")
 	}
 	if v := os.Getenv("CORS_ALLOW_ORIGINS"); v != "" {
 		for _, p := range strings.Split(v, ",") {
@@ -126,97 +121,97 @@ func normalizeConfig(c *Config) {
 			if orig != "" {
 				u, e := url.Parse(orig)
 				if e == nil && (u.Scheme == "http" || u.Scheme == "https") && u.Host != "" {
-					c.CorsAllowOrigins = append(c.CorsAllowOrigins, u.Scheme+"://"+u.Host)
+					config.CorsAllowOrigins = append(config.CorsAllowOrigins, u.Scheme+"://"+u.Host)
 				}
 			}
 		}
 	}
-	if c.CustomLandingPage.Origin == "" {
+	if config.CustomLandingPage.Origin == "" {
 		v := os.Getenv("CUSTOM_LANDING_PAGE_ORIGIN")
 		if v != "" {
-			c.CustomLandingPage.Origin = v
+			config.CustomLandingPage.Origin = v
 			if v := os.Getenv("CUSTOM_LANDING_PAGE_ASSETS"); v != "" {
 				a := strings.Split(v, ",")
 				for _, p := range a {
 					p = strings.TrimSpace(p)
 					if p != "" {
-						c.CustomLandingPage.Assets = append(c.CustomLandingPage.Assets, p)
+						config.CustomLandingPage.Assets = append(config.CustomLandingPage.Assets, p)
 					}
 				}
 			}
 		}
 	}
-	if origin := c.CustomLandingPage.Origin; origin != "" {
+	if origin := config.CustomLandingPage.Origin; origin != "" {
 		u, err := url.Parse(origin)
 		if err != nil || (u.Scheme != "http" && u.Scheme != "https") {
 			fmt.Println(term.Red("[error] invalid custom landing page origin: " + origin))
-			c.CustomLandingPage = LandingPageOptions{}
+			config.CustomLandingPage = LandingPageOptions{}
 		} else {
-			c.CustomLandingPage.Origin = u.Scheme + "://" + u.Host
+			config.CustomLandingPage.Origin = u.Scheme + "://" + u.Host
 		}
 	}
-	if c.BuildConcurrency == 0 {
-		c.BuildConcurrency = uint16(runtime.NumCPU())
+	if config.BuildConcurrency == 0 {
+		config.BuildConcurrency = uint16(runtime.NumCPU())
 	}
-	if c.BuildWaitTime == 0 {
-		c.BuildWaitTime = 30 // seconds
+	if config.BuildWaitTime == 0 {
+		config.BuildWaitTime = 30 // seconds
 	}
-	if c.Storage.Type == "" {
+	if config.Storage.Type == "" {
 		storageType := os.Getenv("STORAGE_TYPE")
 		if storageType == "" {
 			storageType = "fs"
 		}
-		c.Storage.Type = storageType
+		config.Storage.Type = storageType
 	}
-	if c.Storage.Endpoint == "" {
+	if config.Storage.Endpoint == "" {
 		storageEndpint := os.Getenv("STORAGE_ENDPOINT")
 		if storageEndpint == "" {
-			storageEndpint = path.Join(c.WorkDir, "storage")
+			storageEndpint = path.Join(config.WorkDir, "storage")
 		}
-		c.Storage.Endpoint = storageEndpint
+		config.Storage.Endpoint = storageEndpint
 	}
-	if c.Storage.Region == "" {
-		c.Storage.Region = os.Getenv("STORAGE_REGION")
+	if config.Storage.Region == "" {
+		config.Storage.Region = os.Getenv("STORAGE_REGION")
 	}
-	if c.Storage.AccessKeyID == "" {
-		c.Storage.AccessKeyID = os.Getenv("STORAGE_ACCESS_KEY_ID")
+	if config.Storage.AccessKeyID == "" {
+		config.Storage.AccessKeyID = os.Getenv("STORAGE_ACCESS_KEY_ID")
 	}
-	if c.Storage.SecretAccessKey == "" {
-		c.Storage.SecretAccessKey = os.Getenv("STORAGE_SECRET_ACCESS_KEY")
+	if config.Storage.SecretAccessKey == "" {
+		config.Storage.SecretAccessKey = os.Getenv("STORAGE_SECRET_ACCESS_KEY")
 	}
-	if c.LogDir == "" {
-		c.LogDir = path.Join(c.WorkDir, "log")
+	if config.LogDir == "" {
+		config.LogDir = path.Join(config.WorkDir, "log")
 	}
-	if c.LogLevel == "" {
-		c.LogLevel = os.Getenv("LOG_LEVEL")
-		if c.LogLevel == "" {
-			c.LogLevel = "info"
+	if config.LogLevel == "" {
+		config.LogLevel = os.Getenv("LOG_LEVEL")
+		if config.LogLevel == "" {
+			config.LogLevel = "info"
 		}
 	}
-	if c.NpmRegistry != "" {
-		if isHttpSepcifier(c.NpmRegistry) {
-			c.NpmRegistry = strings.TrimRight(c.NpmRegistry, "/") + "/"
+	if config.NpmRegistry != "" {
+		if isHttpSepcifier(config.NpmRegistry) {
+			config.NpmRegistry = strings.TrimRight(config.NpmRegistry, "/") + "/"
 		}
 	} else {
 		v := os.Getenv("NPM_REGISTRY")
 		if v != "" && isHttpSepcifier(v) {
-			c.NpmRegistry = strings.TrimRight(v, "/") + "/"
+			config.NpmRegistry = strings.TrimRight(v, "/") + "/"
 		} else {
-			c.NpmRegistry = npmRegistry
+			config.NpmRegistry = npmRegistry
 		}
 	}
-	if c.NpmToken == "" {
-		c.NpmToken = os.Getenv("NPM_TOKEN")
+	if config.NpmToken == "" {
+		config.NpmToken = os.Getenv("NPM_TOKEN")
 	}
-	if c.NpmUser == "" {
-		c.NpmUser = os.Getenv("NPM_USER")
+	if config.NpmUser == "" {
+		config.NpmUser = os.Getenv("NPM_USER")
 	}
-	if c.NpmPassword == "" {
-		c.NpmPassword = os.Getenv("NPM_PASSWORD")
+	if config.NpmPassword == "" {
+		config.NpmPassword = os.Getenv("NPM_PASSWORD")
 	}
-	if len(c.NpmScopedRegistries) > 0 {
+	if len(config.NpmScopedRegistries) > 0 {
 		regs := make(map[string]NpmRegistry)
-		for scope, rc := range c.NpmScopedRegistries {
+		for scope, rc := range config.NpmScopedRegistries {
 			if strings.HasPrefix(scope, "@") && isHttpSepcifier(rc.Registry) {
 				rc.Registry = strings.TrimRight(rc.Registry, "/") + "/"
 				regs[scope] = rc
@@ -224,23 +219,23 @@ func normalizeConfig(c *Config) {
 				fmt.Printf("[error] invalid npm registry for scope %s: %s\n", scope, rc.Registry)
 			}
 		}
-		c.NpmScopedRegistries = regs
+		config.NpmScopedRegistries = regs
 	}
-	if c.NpmQueryCacheTTL == 0 {
+	if config.NpmQueryCacheTTL == 0 {
 		v := os.Getenv("NPM_QUERY_CACHE_TTL")
 		if v != "" {
 			i, e := strconv.Atoi(v)
 			if e == nil && i >= 0 {
-				c.NpmQueryCacheTTL = uint32(i)
+				config.NpmQueryCacheTTL = uint32(i)
 			} else {
-				c.NpmQueryCacheTTL = 600
+				config.NpmQueryCacheTTL = 600
 			}
 		}
-		c.NpmQueryCacheTTL = 600
+		config.NpmQueryCacheTTL = 600
 	}
-	c.Compress = !(bytes.Equal(c.CompressRaw, []byte("false")) || os.Getenv("COMPRESS") == "false")
-	c.SourceMap = !(bytes.Equal(c.SourceMapRaw, []byte("false")) || (os.Getenv("SOURCEMAP") == "false" || os.Getenv("SOURCE_MAP") == "false"))
-	c.Minify = !(bytes.Equal(c.MinifyRaw, []byte("false")) || os.Getenv("MINIFY") == "false")
+	config.Compress = !(bytes.Equal(config.CompressRaw, []byte("false")) || os.Getenv("COMPRESS") == "false")
+	config.SourceMap = !(bytes.Equal(config.SourceMapRaw, []byte("false")) || (os.Getenv("SOURCEMAP") == "false" || os.Getenv("SOURCE_MAP") == "false"))
+	config.Minify = !(bytes.Equal(config.MinifyRaw, []byte("false")) || os.Getenv("MINIFY") == "false")
 }
 
 // extractPackageName Will take a packageName as input extract key parts and return them
@@ -316,4 +311,8 @@ func isPackageExcluded(name string, excludes []string) bool {
 		}
 	}
 	return false
+}
+
+func init() {
+	config = *DefaultConfig()
 }

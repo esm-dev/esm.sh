@@ -1,7 +1,11 @@
+.PHONY: cli
+cli:
+	@go run cli/cmd/main.go
+
 .PHONY: test
 test:
-	@./test/bootstrap.ts --clean
+	@./test/bootstrap.ts ${dir}
 
 run: config.json
 	@rm -rf .esmd/storage
-	@go run main.go --debug --config=config.json
+	@go run main.go --config=config.json --debug

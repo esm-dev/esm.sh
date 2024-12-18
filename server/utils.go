@@ -3,7 +3,7 @@ package server
 import (
 	"bytes"
 	"encoding/base64"
-	"fmt"
+	"errors"
 	"net/http"
 	"os"
 	"os/exec"
@@ -27,6 +27,7 @@ var (
 	regexpDomain           = regexp.MustCompile(`^[a-z0-9\-]+(\.[a-z0-9\-]+)*\.[a-z]+$`)
 	regexpSveltePath       = regexp.MustCompile(`/\*?svelte@([~\^]?[\w\+\-\.]+)(/|\?|&|$)`)
 	regexpVuePath          = regexp.MustCompile(`/\*?vue@([~\^]?[\w\+\-\.]+)(/|\?|&|$)`)
+	regexpExportAsExpr     = regexp.MustCompile(`([\w$]+) as ([\w$]+)`)
 )
 
 // isHttpSepcifier returns true if the specifier is a remote URL.
@@ -44,6 +45,35 @@ func isAbsPathSpecifier(specifier string) bool {
 	return strings.HasPrefix(specifier, "/") || strings.HasPrefix(specifier, "file://")
 }
 
+// isJsModuleSpecifier returns true if the specifier is a json module.
+func isJsonModuleSpecifier(specifier string) bool {
+	if !strings.HasSuffix(specifier, ".json") {
+		return false
+	}
+	_, _, subpath, _ := splitEsmPath(specifier)
+	return subpath != "" && strings.HasSuffix(subpath, ".json")
+}
+
+// isJsModuleSpecifier checks if the given specifier is a node.js built-in module.
+func isNodeBuiltInModule(specifier string) bool {
+	return strings.HasPrefix(specifier, "node:") && nodeBuiltinModules[specifier[5:]]
+}
+
+// normalizeImportSpecifier normalizes the given specifier.
+func normalizeImportSpecifier(specifier string) string {
+	specifier = strings.TrimPrefix(specifier, "npm:")
+	specifier = strings.TrimPrefix(specifier, "./node_modules/")
+	if specifier == "." {
+		specifier = "./index"
+	} else if specifier == ".." {
+		specifier = "../index"
+	}
+	if nodeBuiltinModules[specifier] {
+		return "node:" + specifier
+	}
+	return specifier
+}
+
 // semverLessThan returns true if the version a is less than the version b.
 func semverLessThan(a string, b string) bool {
 	return semver.MustParse(a).LessThan(semver.MustParse(b))
@@ -57,6 +87,15 @@ func isLocalhost(hostname string) bool {
 // isCommitish returns true if the given string is a commit hash.
 func isCommitish(s string) bool {
 	return len(s) >= 7 && len(s) <= 40 && valid.IsHexString(s) && containsDigit(s)
+}
+
+// isJsReservedWord returns true if the given string is a reserved word in JavaScript.
+func isJsReservedWord(word string) bool {
+	switch word {
+	case "abstract", "arguments", "await", "boolean", "break", "byte", "case", "catch", "char", "class", "const", "continue", "debugger", "default", "delete", "do", "double", "else", "enum", "eval", "export", "extends", "false", "final", "finally", "float", "for", "function", "goto", "if", "implements", "import", "in", "instanceof", "int", "interface", "let", "long", "native", "new", "null", "package", "private", "protected", "public", "return", "short", "static", "super", "switch", "synchronized", "this", "throw", "throws", "transient", "true", "try", "typeof", "var", "void", "volatile", "while", "with", "yield":
+		return true
+	}
+	return false
 }
 
 // contains returns true if the given string is included in the given array.
@@ -184,21 +223,6 @@ func appendVaryHeader(header http.Header, key string) {
 	}
 }
 
-// toEnvName converts the given string to an environment variable name.
-func toEnvName(s string) string {
-	runes := []rune(s)
-	for i, r := range runes {
-		if (r >= '0' && r <= '9') || (r >= 'A' && r <= 'Z') {
-			runes[i] = r
-		} else if r >= 'a' && r <= 'z' {
-			runes[i] = r - 'a' + 'A'
-		} else {
-			runes[i] = '_'
-		}
-	}
-	return string(runes)
-}
-
 // concatBytes concatenates two byte slices.
 func concatBytes(a, b []byte) []byte {
 	c := make([]byte, len(a)+len(b))
@@ -218,12 +242,8 @@ func run(cmd string, args ...string) (output []byte, err error) {
 	err = c.Run()
 	if err != nil {
 		if errBuf.Len() > 0 {
-			err = fmt.Errorf("%s: %s", err, errBuf.String())
+			err = errors.New(errBuf.String())
 		}
-		return
-	}
-	if errBuf.Len() > 0 {
-		err = fmt.Errorf("%s", errBuf.String())
 		return
 	}
 	output = outBuf.Bytes()

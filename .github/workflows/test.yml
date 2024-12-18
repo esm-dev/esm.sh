@@ -25,30 +25,6 @@ jobs:
         with:
           deno-version: v1.x
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: 22
-
-      - name: Setup pnpm
-        uses: pnpm/action-setup@v4
-        with:
-          version: 9
-          run_install: false
-
-      - name: Get pnpm store directory
-        shell: bash
-        run: |
-          echo "STORE_PATH=$(pnpm store path --silent)" >> $GITHUB_ENV
-
-      - name: Restore pnpm store
-        uses: actions/cache@v4
-        with:
-          path: ${{ env.STORE_PATH }}
-          key: ${{ runner.os }}-pnpm-store-${{ hashFiles('test/**') }}
-          restore-keys: |
-            ${{ runner.os }}-pnpm-store-
-
       - name: Run `go test`
         run: go test ./server ./server/storage -v
         env:
@@ -58,4 +34,4 @@ jobs:
           GO_TEST_S3_SECRET_ACCESS_KEY: ${{ secrets.GO_TEST_S3_SECRET_ACCESS_KEY }}
 
       - name: Run `test/bootstrap.ts`
-        run: test/bootstrap.ts
+        run: test/bootstrap.ts -q

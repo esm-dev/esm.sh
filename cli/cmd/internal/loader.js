@@ -5,7 +5,8 @@ const regexpVuePath = /^\/\*?vue@([~\^]?[\w\+\-\.]+)(\/|\?|&|$)/;
 const regexpSveltePath = /^\/\*?svelte@([~\^]?[\w\+\-\.]+)(\/|\?|&|$)/;
 const output = (type, data) => Deno.stdout.write(enc.encode(">>>" + type + ":" + JSON.stringify(data) + "\n"));
 
-let tsx, unoGenerators;
+let tsx
+let unoGenerators;
 
 async function transformModule(filename, importMap, sourceCode) {
   const imports = importMap?.imports;
@@ -62,7 +63,7 @@ async function transformModule(filename, importMap, sourceCode) {
 }
 
 async function transformVue(filename, sourceCode, importMap, isDev) {
-  const { transform } = await import("npm:@esm.sh/vue-loader@1.0.3");
+  const { transform } = await import("npm:@esm.sh/vue-compiler@1.0.1");
   const ret = await transform(filename, sourceCode, {
     imports: { "@vue/compiler-sfc": import("npm:@vue/compiler-sfc@" + getVueVersion(importMap)) },
     isDev,
@@ -73,7 +74,7 @@ async function transformVue(filename, sourceCode, importMap, isDev) {
 
 async function transformSvelte(filename, sourceCode, importMap, isDev) {
   const { compile, VERSION } = await import(`npm:svelte@${getSvelteVersion(importMap)}/compiler`);
-  const majorVersion = parseInt(VERSION.split(".")[0]);
+  const majorVersion = parseInt(VERSION.split(".", 1)[0]);
   if (majorVersion < 5) {
     throw new Error("Unsupported Svelte version: " + VERSION + ". Please use svelte@5 or higher.");
   }
@@ -120,12 +121,12 @@ async function unocss(config, content, id) {
   if (!unoGenerators) {
     unoGenerators = new Map();
   }
-  const generatorKey = config?.filename ?? ".";
-  let uno = unoGenerators.get(generatorKey);
+  const generatorId = config?.filename ?? ".";
+  let uno = unoGenerators.get(generatorId);
   if (!uno || uno.configCSS !== config?.css) {
-    uno = import("npm:@esm.sh/unocss@0.2.2").then(({ init }) => init(config?.css));
+    uno = import("npm:@esm.sh/unocss@0.4.1").then(({ init }) => init({ configCSS: config?.css }));
     uno.configCSS = config?.css;
-    unoGenerators.set(generatorKey, uno);
+    unoGenerators.set(generatorId, uno);
   }
   const { update, generate } = await uno;
   if (id) {

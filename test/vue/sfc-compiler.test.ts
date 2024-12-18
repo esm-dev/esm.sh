@@ -1,7 +1,7 @@
 import { assertEquals, assertStringIncludes } from "jsr:@std/assert";
 
-Deno.test("Vue SFC Transpiling", async () => {
-  const { transform } = await import("http://localhost:8080/@esm.sh/vue-loader@1.0.3");
+Deno.test("Transpiling Vue SFC", async () => {
+  const { transform } = await import("http://localhost:8080/@esm.sh/vue-compiler@1.0.1");
   const ret = await transform(
     "/src/App.tsx",
     `<script setup lang="ts">const msg = 'Hello World!';</script><template><h1>{{msg}}</h1></template><style>h1{font-size: 32px}</style>`,

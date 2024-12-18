@@ -20,7 +20,7 @@ type BuildTask struct {
 	clients   []*QueueClient
 	createdAt time.Time
 	startedAt time.Time
-	inProcess bool
+	pending   bool
 }
 
 type BuildOutput struct {
@@ -44,13 +44,13 @@ func NewBuildQueue(concurrency int) *BuildQueue {
 
 // Add adds a new build task to the queue.
 func (q *BuildQueue) Add(ctx *BuildContext, clientIp string) *QueueClient {
+	q.lock.Lock()
+	defer q.lock.Unlock()
+
 	client := &QueueClient{make(chan BuildOutput, 1), clientIp}
 
 	// check if the task is already in the queue
-	q.lock.RLock()
 	t, ok := q.tasks[ctx.Path()]
-	q.lock.RUnlock()
-
 	if ok {
 		t.clients = append(t.clients, client)
 		return client
@@ -60,15 +60,16 @@ func (q *BuildQueue) Add(ctx *BuildContext, clientIp string) *QueueClient {
 		BuildContext: ctx,
 		createdAt:    time.Now(),
 		clients:      []*QueueClient{client},
+		pending:      true,
 	}
 	ctx.status = "pending"
 
-	q.lock.Lock()
 	t.el = q.queue.PushBack(t)
 	q.tasks[ctx.Path()] = t
-	q.lock.Unlock()
 
+	q.lock.Unlock()
 	q.next()
+	q.lock.Lock()
 
 	return client
 }
@@ -80,7 +81,7 @@ func (q *BuildQueue) next() {
 	if q.idles > 0 {
 		for el := q.queue.Front(); el != nil; el = el.Next() {
 			t, ok := el.Value.(*BuildTask)
-			if ok && !t.inProcess {
+			if ok && t.pending {
 				nextTask = t
 				break
 			}
@@ -91,7 +92,7 @@ func (q *BuildQueue) next() {
 	if nextTask != nil {
 		q.lock.Lock()
 		q.idles -= 1
-		nextTask.inProcess = true
+		nextTask.pending = false
 		nextTask.startedAt = time.Now()
 		q.lock.Unlock()
 		go q.build(nextTask)

@@ -44,19 +44,16 @@ We use [Deno](https://deno.land) to run all the integration testing cases. Make 
 
 ```bash
 # Run all tests
-./test/bootstrap.ts
+make test
 
-# Run a test for a specific case (directory name)
-./test/bootstrap.ts react-18
-
-# Run tests with `clean` option (purge previous builds)
-./test/bootstrap.ts --clean
+# Run a specific test
+make dir=react-18
 ```
 
 To add a new integration test case, copy the [test/_template](./test/_template) directory and rename it to your case name.
 
 ```bash
-cp -r test/_template test/case_name
-nvim test/case_name/test.ts
-./test/bootstrap.ts case_name
+cp -r test/_template test/new_test
+nvim test/new_test/test.ts
+make dir=new_test
 ```

@@ -20,25 +20,34 @@ type EsmPath struct {
 	SubModuleName string
 }
 
-func (p EsmPath) PackageName() string {
-	s := p.PkgName
+func (p EsmPath) Package() Package {
+	return Package{
+		Github:   p.GhPrefix,
+		PkgPrNew: p.PrPrefix,
+		Name:     p.PkgName,
+		Version:  p.PkgVersion,
+	}
+}
+
+func (p EsmPath) Name() string {
+	name := p.PkgName
 	if p.PkgVersion != "" && p.PkgVersion != "*" && p.PkgVersion != "latest" {
-		s += "@" + p.PkgVersion
+		name += "@" + p.PkgVersion
 	}
 	if p.GhPrefix {
-		return "gh/" + s
+		return "gh/" + name
 	}
 	if p.PrPrefix {
-		return "pr/" + s
+		return "pr/" + name
 	}
-	return s
+	return name
 }
 
 func (p EsmPath) Specifier() string {
 	if p.SubModuleName != "" {
-		return p.PackageName() + "/" + p.SubModuleName
+		return p.Name() + "/" + p.SubModuleName
 	}
-	return p.PackageName()
+	return p.Name()
 }
 
 func praseEsmPath(npmrc *NpmRC, pathname string) (esmPath EsmPath, extraQuery string, isFixedVersion bool, isBuildDist bool, err error) {
@@ -65,7 +74,7 @@ func praseEsmPath(npmrc *NpmRC, pathname string) (esmPath EsmPath, extraQuery st
 			PkgName:       pkgName,
 			PkgVersion:    version,
 			SubPath:       subPath,
-			SubModuleName: toModuleBareName(subPath, !isBuildDist),
+			SubModuleName: stripEntryModuleExt(subPath),
 			PrPrefix:      true,
 		}
 		return
@@ -120,7 +129,7 @@ func praseEsmPath(npmrc *NpmRC, pathname string) (esmPath EsmPath, extraQuery st
 		PkgName:       pkgName,
 		PkgVersion:    version,
 		SubPath:       subPath,
-		SubModuleName: toModuleBareName(subPath, !isBuildDist),
+		SubModuleName: stripEntryModuleExt(subPath),
 		GhPrefix:      ghPrefix,
 	}
 

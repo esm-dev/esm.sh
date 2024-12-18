@@ -197,7 +197,7 @@ func esmRouter(debug bool) rex.Handle {
 		// static routes
 		switch pathname {
 		case "/favicon.ico":
-			favicon, err := embedFS.ReadFile("server/embed/assets/favicon.ico")
+			favicon, err := embedFS.ReadFile("server/embed/favicon.ico")
 			if err != nil {
 				return err
 			}
@@ -242,7 +242,6 @@ func esmRouter(debug bool) rex.Handle {
 			q := make([]map[string]any, buildQueue.queue.Len())
 			i := 0
 
-			buildQueue.lock.RLock()
 			for el := buildQueue.queue.Front(); el != nil; el = el.Next() {
 				t, ok := el.Value.(*BuildTask)
 				if ok {
@@ -254,20 +253,12 @@ func esmRouter(debug bool) rex.Handle {
 						"clients":   clientIps,
 						"createdAt": t.createdAt.Format(http.TimeFormat),
 						"path":      t.Path(),
-					}
-					if !t.inProcess {
-						m["status"] = "pending"
-					} else {
-						m["status"] = t.status
-					}
-					if !t.startedAt.IsZero() {
-						m["startedAt"] = t.startedAt.Format(http.TimeFormat)
+						"status":    "pending",
 					}
 					q[i] = m
 					i++
 				}
 			}
-			buildQueue.lock.RUnlock()
 
 			disk := "ok"
 			var stat syscall.Statfs_t
@@ -276,7 +267,7 @@ func esmRouter(debug bool) rex.Handle {
 				avail := stat.Bavail * uint64(stat.Bsize)
 				if avail < 100*MB {
 					disk = "full"
-				} else if avail < 1000*MB {
+				} else if avail < 1024*MB {
 					disk = "low"
 				}
 			} else {
@@ -465,7 +456,7 @@ func esmRouter(debug bool) rex.Handle {
 					scopeName = pkgName[:strings.Index(pkgName, "/")]
 				}
 				if scopeName != "" {
-					reg, ok := npmrc.Registries[scopeName]
+					reg, ok := npmrc.ScopedRegistries[scopeName]
 					if !ok || (reg.Registry == jsrRegistry && reg.Token == "" && (reg.User == "" || reg.Password == "")) {
 						zoneId = ""
 					}
@@ -635,9 +626,9 @@ func esmRouter(debug bool) rex.Handle {
 						}
 					}
 				}
-				out, err := generateUnoCSS(npmrc, []string{configCSS, strings.Join(content, "\n")})
+				out, err := generateUnoCSS(npmrc, configCSS, strings.Join(content, "\n"))
 				if err != nil {
-					return rex.Status(500, "Failed to generate uno.css")
+					return rex.Status(500, "Failed to generate uno.css: "+err.Error())
 				}
 				ret := esbuild.Build(esbuild.BuildOptions{
 					Stdin: &esbuild.StdinOptions{
@@ -915,7 +906,7 @@ func esmRouter(debug bool) rex.Handle {
 		// use `?path=$PATH` query to override the pathname
 		if v := query.Get("path"); v != "" {
 			esmPath.SubPath = utils.NormalizePathname(v)[1:]
-			esmPath.SubModuleName = toModuleBareName(esmPath.SubPath, true)
+			esmPath.SubModuleName = stripEntryModuleExt(esmPath.SubPath)
 		}
 
 		// check the path kind
@@ -956,7 +947,7 @@ func esmRouter(debug bool) rex.Handle {
 		// redirect to the url with fixed package version
 		if !isFixedVersion {
 			if isBuildDist {
-				pkgName := esmPath.PackageName()
+				pkgName := esmPath.Name()
 				subPath := ""
 				query := ""
 				if asteriskPrefix {
@@ -1024,9 +1015,9 @@ func esmRouter(debug bool) rex.Handle {
 			// fix url that is related to `import.meta.url`
 			if pathKind == RawFile && isBuildDist && !query.Has("raw") {
 				extname := path.Ext(esmPath.SubPath)
-				dir := path.Join(npmrc.StoreDir(), esmPath.PackageName())
+				dir := path.Join(npmrc.StoreDir(), esmPath.Name())
 				if !existsDir(dir) {
-					_, err := npmrc.installPackage(esmPath)
+					_, err := npmrc.installPackage(esmPath.Package())
 					if err != nil {
 						return rex.Status(500, err.Error())
 					}
@@ -1073,7 +1064,7 @@ func esmRouter(debug bool) rex.Handle {
 				var cachePath string
 				var cacheHit bool
 				if config.CacheRawFile {
-					cachePath = path.Join("raw", esmPath.PackageName(), esmPath.SubPath)
+					cachePath = path.Join("raw", esmPath.Name(), esmPath.SubPath)
 					content, stat, err = buildStorage.Get(cachePath)
 					if err != nil && err != storage.ErrNotFound {
 						return rex.Status(500, "storage error")
@@ -1088,11 +1079,11 @@ func esmRouter(debug bool) rex.Handle {
 					}
 				}
 				if !cacheHit {
-					filename := path.Join(npmrc.StoreDir(), esmPath.PackageName(), "node_modules", esmPath.PkgName, esmPath.SubPath)
+					filename := path.Join(npmrc.StoreDir(), esmPath.Name(), "node_modules", esmPath.PkgName, esmPath.SubPath)
 					stat, err = os.Lstat(filename)
 					if err != nil && os.IsNotExist(err) {
 						// if the file not found, try to install the package and retry
-						_, err = npmrc.installPackage(esmPath)
+						_, err = npmrc.installPackage(esmPath.Package())
 						if err != nil {
 							return rex.Status(500, err.Error())
 						}
@@ -1383,7 +1374,7 @@ func esmRouter(debug bool) rex.Handle {
 					return rex.Status(500, "Invalid build args: "+a[0])
 				}
 				esmPath.SubPath = strings.Join(strings.Split(esmPath.SubPath, "/")[1:], "/")
-				esmPath.SubModuleName = toModuleBareName(esmPath.SubPath, true)
+				esmPath.SubModuleName = stripEntryModuleExt(esmPath.SubPath)
 				buildArgs = args
 				xArgs = true
 			}
@@ -1391,7 +1382,7 @@ func esmRouter(debug bool) rex.Handle {
 
 		// resolve `alias`, `deps`, `external` of the build args
 		if !xArgs {
-			err := resolveBuildArgs(npmrc, path.Join(npmrc.StoreDir(), esmPath.PackageName()), &buildArgs, esmPath)
+			err := resolveBuildArgs(npmrc, path.Join(npmrc.StoreDir(), esmPath.Name()), &buildArgs, esmPath)
 			if err != nil {
 				return rex.Status(500, err.Error())
 			}
@@ -1406,7 +1397,7 @@ func esmRouter(debug bool) rex.Handle {
 				}
 				savePath := normalizeSavePath(zoneId, path.Join(fmt.Sprintf(
 					"types/%s/%s",
-					esmPath.PackageName(),
+					esmPath.Name(),
 					args,
 				), esmPath.SubPath))
 				content, stat, err = buildStorage.Get(savePath)
@@ -1429,7 +1420,7 @@ func esmRouter(debug bool) rex.Handle {
 					}
 				case <-time.After(time.Duration(config.BuildWaitTime) * time.Second):
 					ctx.SetHeader("Cache-Control", ccMustRevalidate)
-					return rex.Status(http.StatusRequestTimeout, "timeout, we are transforming the types hardly, please try again later!")
+					return rex.Status(http.StatusRequestTimeout, "timeout, the types is waiting to be built, please try again later!")
 				}
 				content, _, err = readDts()
 			}
@@ -1463,7 +1454,7 @@ func esmRouter(debug bool) rex.Handle {
 		bundleMode := BundleDefault
 		if (query.Has("bundle") && query.Get("bundle") != "false") || query.Has("bundle-all") || query.Has("bundle-deps") || query.Has("standalone") {
 			bundleMode = BundleAll
-		} else if query.Get("bundle") == "false" || query.Has("no-bundle") {
+		} else if query.Has("no-bundle") || query.Get("bundle") == "false" {
 			bundleMode = BundleFalse
 		}
 
@@ -1529,27 +1520,21 @@ func esmRouter(debug bool) rex.Handle {
 			case output := <-c.C:
 				if output.err != nil {
 					msg := output.err.Error()
-					if strings.Contains(msg, "ERR_PNPM_FETCH_404") {
-						return rex.Status(404, "Package or version not found")
-					}
 					if strings.Contains(msg, "no such file or directory") ||
 						strings.Contains(msg, "is not exported from package") ||
-						strings.Contains(msg, "could not resolve the build entry") {
+						strings.Contains(msg, "could not resolve build entry") {
 						ctx.SetHeader("Cache-Control", ccImmutable)
 						return rex.Status(404, "module not found")
 					}
 					if strings.HasSuffix(msg, " not found") {
 						return rex.Status(404, msg)
 					}
-					if strings.Contains(msg, "ERR_PNPM") {
-						return rex.Status(500, "Failed to install package")
-					}
 					return rex.Status(500, msg)
 				}
 				ret = output.result
 			case <-time.After(time.Duration(config.BuildWaitTime) * time.Second):
 				ctx.SetHeader("Cache-Control", ccMustRevalidate)
-				return rex.Status(http.StatusRequestTimeout, "timeout, we are building the package hardly, please try again later!")
+				return rex.Status(http.StatusRequestTimeout, "timeout, the module is waiting to be built, please try again later!")
 			}
 		}
 
@@ -1672,7 +1657,7 @@ func esmRouter(debug bool) rex.Handle {
 			}
 			ctx.SetHeader("X-ESM-Path", esmPath)
 			fmt.Fprintf(buf, "export * from \"%s\";\n", esmPath)
-			if (ret.CJS || ret.HasDefaultExport) && (exports.Len() == 0 || exports.Has("default")) {
+			if ret.HasDefaultExport && (exports.Len() == 0 || exports.Has("default")) {
 				fmt.Fprintf(buf, "export { default } from \"%s\";\n", esmPath)
 			}
 			if ret.CJS && exports.Len() > 0 {

@@ -1,56 +1,80 @@
 package server
 
 import (
+	"archive/tar"
+	"bytes"
+	"compress/gzip"
 	"errors"
 	"fmt"
+	"io"
 	"os"
-	"os/exec"
 	"path"
 	"strings"
+	"time"
 
 	esbuild "github.com/evanw/esbuild/pkg/api"
 )
 
-const (
-	// https://github.com/unjs/unenv
-	unenvPkg = "unenv-nightly@2.0.0-20241111-080453-894aa31"
-)
-
 var (
+	// https://github.com/unjs/unenv
+	unenvPkg = Package{
+		Name:    "unenv-nightly",
+		Version: "2.0.0-20241212-153011-af71c96",
+	}
 	unenvNodeRuntimeBulid = map[string][]byte{
-		"sys.mjs": []byte(`export*from '/node/util.mjs';export{default}from '/node/util.mjs';`),
+		"sys.mjs": []byte(`export*from "/node/util.mjs";export{default}from "/node/util.mjs";`),
 	}
 )
 
+func loadUnenvNodeRuntime() (err error) {
+	data, err := embedFS.ReadFile("server/embed/node-runtime.tgz")
+	if err == nil {
+		tarball, err := gzip.NewReader(bytes.NewReader(data))
+		if err == nil {
+			defer tarball.Close()
+			tr := tar.NewReader(tarball)
+			for {
+				header, err := tr.Next()
+				if err != nil {
+					break
+				}
+				if header.Typeflag == tar.TypeReg {
+					name := header.Name
+					data := make([]byte, header.Size)
+					n, err := io.ReadFull(tr, data)
+					if err == nil && int64(n) == header.Size {
+						unenvNodeRuntimeBulid[name] = data
+					}
+				}
+			}
+			return nil
+		}
+	}
+	fmt.Println("Building unenv node runtime...")
+	return buildUnenvNodeRuntime()
+}
+
 func buildUnenvNodeRuntime() (err error) {
-	wd := path.Join(config.WorkDir, "npm/"+unenvPkg)
+	wd := path.Join(config.WorkDir, "npm/"+unenvPkg.String())
 	err = ensureDir(wd)
 	if err != nil {
 		return err
 	}
 
-	err = os.WriteFile(path.Join(wd, "package.json"), []byte(`{"dependencies":{"unenv":"npm:`+unenvPkg+`"}}`), 0644)
+	rc := &NpmRC{
+		NpmRegistry: NpmRegistry{Registry: "https://registry.npmjs.org/"},
+	}
+	pkgJson, err := rc.installPackage(unenvPkg)
 	if err != nil {
 		return
 	}
-
-	cmd := exec.Command("pnpm", "i", "--prefer-offline")
-	cmd.Dir = wd
-	output, err := cmd.CombinedOutput()
-	if err != nil {
-		msg := err.Error()
-		if len(output) > 0 {
-			msg = string(output)
-		}
-		err = fmt.Errorf("install unjs/unenv from github: %v", msg)
-		return
-	}
+	rc.installDependencies(wd, pkgJson, false, nil)
 
 	endpoints := make([]esbuild.EntryPoint, 0, len(nodeBuiltinModules))
 	for name := range nodeBuiltinModules {
-		// module "sys" is just a alias of "util", no need to build
+		// currently the module "sys" is just a alias of "util", no need to build it
 		if name != "sys" {
-			filename := path.Join(wd, "node_modules", "unenv/runtime/node/"+name+"/index.mjs")
+			filename := path.Join(wd, "node_modules", unenvPkg.Name+"/runtime/node/"+name+"/index.mjs")
 			if existsFile(filename) {
 				endpoints = append(endpoints, esbuild.EntryPoint{
 					InputPath:  filename,
@@ -59,7 +83,6 @@ func buildUnenvNodeRuntime() (err error) {
 			}
 		}
 	}
-
 	ret := esbuild.Build(esbuild.BuildOptions{
 		AbsWorkingDir:       wd,
 		EntryPointsAdvanced: endpoints,
@@ -78,6 +101,10 @@ func buildUnenvNodeRuntime() (err error) {
 			{
 				Name: "resolve-node-builtin-modules",
 				Setup: func(build esbuild.PluginBuild) {
+					// https://github.com/unjs/unenv/issues/365
+					build.OnResolve(esbuild.OnResolveOptions{Filter: `^unenv/runtime/node/stream/index$`}, func(args esbuild.OnResolveArgs) (esbuild.OnResolveResult, error) {
+						return esbuild.OnResolveResult{Path: "/node/stream.mjs", External: true}, nil
+					})
 					build.OnResolve(esbuild.OnResolveOptions{Filter: `^node:`}, func(args esbuild.OnResolveArgs) (esbuild.OnResolveResult, error) {
 						return esbuild.OnResolveResult{Path: "/node/" + args.Path[5:] + ".mjs", External: true}, nil
 					})
@@ -91,16 +118,33 @@ func buildUnenvNodeRuntime() (err error) {
 		return
 	}
 
-	// bundle tiny chunks that are less than 200 bytes
+	// bundle tiny chunks that are less than 600 bytes
 	tinyChunks := make(map[string][]byte, 0)
 	for _, result := range ret.OutputFiles {
 		name := result.Path[1:]
-		if strings.HasPrefix(name, "chunk-") && len(result.Contents) < 200 {
+		if strings.HasPrefix(name, "chunk-") && len(result.Contents) < 600 {
 			tinyChunks[name] = result.Contents
 		} else {
 			unenvNodeRuntimeBulid[name] = result.Contents
 		}
 	}
+
+	var tarball *tar.Writer
+	if fs, ok := embedFS.(*MockEmbedFS); ok {
+		file, err := os.OpenFile(path.Join(fs.root, "server/embed/node-runtime.tgz"), os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0644)
+		if err != nil {
+			return err
+		}
+		defer file.Close()
+
+		gzipWriter := gzip.NewWriter(file)
+		defer gzipWriter.Close()
+
+		tarball = tar.NewWriter(gzipWriter)
+		defer tarball.Close()
+	}
+
+	now := time.Now()
 	for name, data := range unenvNodeRuntimeBulid {
 		ret := esbuild.Build(esbuild.BuildOptions{
 			Stdin: &esbuild.StdinOptions{
@@ -144,7 +188,17 @@ func buildUnenvNodeRuntime() (err error) {
 			err = errors.New(ret.Errors[0].Text)
 			return
 		}
-		unenvNodeRuntimeBulid[name] = ret.OutputFiles[0].Contents
+		js := ret.OutputFiles[0].Contents
+		if tarball != nil {
+			tarball.WriteHeader(&tar.Header{
+				Name:    name,
+				Size:    int64(len(js)),
+				Mode:    0644,
+				ModTime: now,
+			})
+			tarball.Write(js)
+		}
+		unenvNodeRuntimeBulid[name] = js
 	}
 	return
 }

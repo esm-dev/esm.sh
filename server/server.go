@@ -16,12 +16,6 @@ import (
 	"github.com/ije/rex"
 )
 
-var (
-	log          *logger.Logger
-	buildQueue   *BuildQueue
-	buildStorage storage.Storage
-)
-
 const (
 	cc1day           = "public, max-age=86400"
 	ccMustRevalidate = "public, max-age=0, must-revalidate"
@@ -31,6 +25,12 @@ const (
 	ctJSON           = "application/json; charset=utf-8"
 	ctCSS            = "text/css; charset=utf-8"
 	ctHtml           = "text/html; charset=utf-8"
+)
+
+var (
+	log          *logger.Logger
+	buildQueue   *BuildQueue
+	buildStorage storage.Storage
 )
 
 // Serve serves the esm.sh server
@@ -45,12 +45,7 @@ func Serve(efs EmbedFS) {
 	flag.BoolVar(&debug, "debug", false, "run the server in DEUBG mode")
 	flag.Parse()
 
-	if !existsFile(cfile) {
-		config = *DefaultConfig()
-		if cfile != "config.json" {
-			fmt.Println("Config file not found, use default config")
-		}
-	} else {
+	if existsFile(cfile) {
 		c, err := LoadConfig(cfile)
 		if err != nil {
 			fmt.Println(err.Error())
@@ -58,7 +53,7 @@ func Serve(efs EmbedFS) {
 		}
 		config = *c
 		if debug {
-			fmt.Println("Config loaded from", cfile)
+			fmt.Printf("%s [info] Config loaded from %s\n", time.Now().Format("2006-01-02 15:04:05"), cfile)
 		}
 	}
 
@@ -100,22 +95,15 @@ func Serve(efs EmbedFS) {
 	}
 	log.Debugf("storage initialized, type: %s, endpoint: %s", config.Storage.Type, config.Storage.Endpoint)
 
-	// check nodejs environment
-	nodejsInstallDir := os.Getenv("NODE_INSTALL_DIR")
-	if nodejsInstallDir == "" {
-		nodejsInstallDir = path.Join(config.WorkDir, "nodejs")
-	}
-	nodeVer, pnpmVer, err := checkNodejs(nodejsInstallDir)
+	err = loadUnenvNodeRuntime()
 	if err != nil {
-		log.Fatalf("nodejs: %v", err)
+		log.Fatalf("load unenv node runtime: %v", err)
 	}
-	log.Debugf("nodejs: v%s, pnpm: %s, registry: %s", nodeVer, pnpmVer, config.NpmRegistry)
-
-	err = buildUnenvNodeRuntime()
-	if err != nil {
-		log.Fatalf("build unenv node runtime: %v", err)
+	totalSize := 0
+	for _, data := range unenvNodeRuntimeBulid {
+		totalSize += len(data)
 	}
-	log.Debugf("unenv node runtime built with %d dist files", len(unenvNodeRuntimeBulid))
+	log.Debugf("unenv node runtime loaded, %d files, total size: %d KB", len(unenvNodeRuntimeBulid), totalSize/1024)
 
 	err = buildNpmReplacements(efs)
 	if err != nil {
@@ -123,12 +111,25 @@ func Serve(efs EmbedFS) {
 	}
 	log.Debugf("%d npm repalcements loaded", len(npmReplacements))
 
-	// init cjs lexer
-	err = initCJSModuleLexer()
+	// install loader runtime
+	err = installLoaderRuntime()
 	if err != nil {
-		log.Fatalf("failed to initialize cjs_lexer: %v", err)
+		log.Fatalf("failed to install loader runtime: %v", err)
 	}
-	log.Debugf("%s initialized", cjsModuleLexerPkg)
+	log.Debugf("loader runtime(%s@%s) installed", loaderRuntime, loaderRuntimeVersion)
+
+	// install cjs module lexer
+	err = installCommonJSModuleLexer()
+	if err != nil {
+		log.Fatalf("failed to install cjs-module-lexer: %v", err)
+	}
+	log.Debugf("cjs-module-lexer@%s installed", cjsModuleLexerVersion)
+
+	// add .esmd/bin to PATH
+	os.Setenv("PATH", fmt.Sprintf("%s%c%s", path.Join(config.WorkDir, "bin"), os.PathListSeparator, os.Getenv("PATH")))
+
+	// pre-comile uno generator in background
+	go generateUnoCSS(&NpmRC{NpmRegistry: NpmRegistry{Registry: "https://registry.npmjs.org/"}}, "", "")
 
 	// init build queue
 	buildQueue = NewBuildQueue(int(config.BuildConcurrency))

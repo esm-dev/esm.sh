@@ -5,9 +5,38 @@ import (
 	"flag"
 	"os"
 	"strings"
+
+	"golang.org/x/term"
 )
 
-var moduleExts = []string{".js", ".mjs", ".jsx", ".ts", ".mts", ".tsx", ".svelte", ".vue"}
+var (
+	supportedModuleExts = []string{".js", ".mjs", ".jsx", ".ts", ".mts", ".tsx", ".svelte", ".vue"}
+)
+
+// termRaw implements the github.com/ije/gox/term.Raw interface.
+type termRaw struct{}
+
+func (t *termRaw) Next() byte {
+	oldState, err := term.MakeRaw(int(os.Stdin.Fd()))
+	if err != nil {
+		panic(err)
+	}
+	defer term.Restore(int(os.Stdin.Fd()), oldState)
+
+	buf := make([]byte, 3)
+	n, err := os.Stdin.Read(buf)
+	if err != nil {
+		panic(err)
+	}
+
+	// The third byte is the key specific value we are looking for.
+	// See: https://en.wikipedia.org/wiki/ANSI_escape_code
+	if n == 3 {
+		return buf[2]
+	}
+
+	return buf[0]
+}
 
 // isHttpSepcifier returns true if the specifier is a remote URL.
 func isHttpSepcifier(specifier string) bool {
@@ -48,6 +77,7 @@ func atobUrl(s string) (string, error) {
 	return string(data), nil
 }
 
+// parseCommandFlag parses the command flag.
 func parseCommandFlag() (string, []string) {
 	flag.CommandLine.Parse(os.Args[2:])
 
@@ -68,4 +98,14 @@ func parseCommandFlag() (string, []string) {
 		return "", nil
 	}
 	return args[0], args[1:]
+}
+
+// includes returns true if the given value is included in the array.
+func includes(arr []string, value string) bool {
+	for _, v := range arr {
+		if v == value {
+			return true
+		}
+	}
+	return false
 }

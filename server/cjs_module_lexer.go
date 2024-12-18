@@ -1,175 +1,223 @@
 package server
 
 import (
+	"bufio"
 	"bytes"
+	"compress/gzip"
 	"context"
-	"crypto/sha256"
+	"crypto/sha1"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"io"
+	"net/http"
 	"os"
 	"os/exec"
 	"path"
+	"runtime"
 	"strings"
 	"time"
 
-	"github.com/evanw/esbuild/pkg/api"
 	"github.com/ije/gox/utils"
 )
 
-const cjsModuleLexerPkg = "@esm.sh/cjs-module-lexer@1.0.1"
-
-// use `require()` to get the module's exports that are not statically analyzable by @esm.sh/cjs-module-lexer
-var requireModeAllowList = []string{
+var cjsModuleLexerVersion = "1.0.6"
+var cjsModuleLexerIgnoredPackages = NewStringSet(
 	"@babel/types",
 	"cheerio",
 	"graceful-fs",
 	"he",
-	"jsbn",
-	"netmask",
-	"xml2js",
-	"keycode",
-	"lru_map",
 	"lz-string",
 	"maplibre-gl",
 	"pako",
 	"postcss-selector-parser",
 	"react-draggable",
-	"resolve",
 	"safe-buffer",
-	"seedrandom",
 	"stream-browserify",
-	"stream-http",
 	"typescript",
 	"vscode-oniguruma",
 	"web-streams-ponyfill",
-}
-
-func initCJSModuleLexer() (err error) {
-	wd := path.Join(config.WorkDir, "npm", cjsModuleLexerPkg)
-	err = ensureDir(wd)
-	if err != nil {
-		return err
-	}
-
-	err = os.WriteFile(path.Join(wd, "package.json"), []byte(`{"dependencies":{"@esm.sh/cjs-module-lexer":"npm:`+cjsModuleLexerPkg+`"}}`), 0644)
-	if err != nil {
-		return
-	}
-
-	cmd := exec.Command("pnpm", "i", "--prefer-offline")
-	cmd.Dir = wd
-	output, err := cmd.CombinedOutput()
-	if err != nil {
-		msg := err.Error()
-		if len(output) > 0 {
-			msg = string(output)
-		}
-		err = fmt.Errorf("install %s: %v", cjsModuleLexerPkg, msg)
-		return
-	}
-
-	js, err := embedFS.ReadFile("server/embed/internal/cjs_module_lexer.js")
-	if err != nil {
-		return
-	}
-
-	minJs, err := minify(string(js), api.LoaderJS, api.ESNext)
-	if err != nil {
-		return
-	}
-
-	err = os.WriteFile(path.Join(wd, "cjs_module_lexer.js"), minJs, 0644)
-	return
-}
+)
 
 type cjsModuleLexerResult struct {
-	ReExport         string   `json:"reexport"`
-	HasDefaultExport bool     `json:"hasDefaultExport"`
-	NamedExports     []string `json:"namedExports"`
-	Error            string   `json:"error"`
-	Stack            string   `json:"stack"`
+	Exports  []string `json:"exports,omitempty"`
+	Reexport string   `json:"reexport,omitempty"`
 }
 
-func cjsModuleLexer(installDir string, pkgName string, specifier string, nodeEnv string) (ret cjsModuleLexerResult, err error) {
-	h := sha256.New()
-	h.Write([]byte(cjsModuleLexerPkg))
-	h.Write([]byte(pkgName))
-	h.Write([]byte(specifier))
-	h.Write([]byte(nodeEnv))
-	cacheFileName := path.Join(installDir, ".cjs_module_lexer", base64.RawURLEncoding.EncodeToString(h.Sum(nil))+".json")
+func (ctx *BuildContext) cjsModuleLexer(cjsEntry string) (ret cjsModuleLexerResult, err error) {
+	h := sha1.New()
+	h.Write([]byte(cjsModuleLexerVersion))
+	h.Write([]byte(cjsEntry))
+	h.Write([]byte(ctx.getNodeEnv()))
+	cacheFileName := path.Join(ctx.wd, ".cache", "cml-"+base64.RawURLEncoding.EncodeToString(h.Sum(nil))+".json")
 
 	// check the cache first
 	if existsFile(cacheFileName) && utils.ParseJSONFile(cacheFileName, &ret) == nil {
 		return
 	}
 
-	// change the args order carefully, the order is used in ./embed/internal/cjs_module_lexer.js
-	args := []interface{}{
-		installDir,
-		pkgName,
-		specifier,
-		nodeEnv,
-	}
-	for _, name := range requireModeAllowList {
-		if pkgName == name || specifier == name || strings.HasPrefix(specifier, name+"/") {
-			args = append(args, true)
-			break
+	start := time.Now()
+	defer func() {
+		if err == nil {
+			log.Debugf("[cjsModuleLexer] parse %s in %s", path.Join(ctx.esmPath.PkgName, cjsEntry), time.Since(start))
+			if !existsFile(cacheFileName) {
+				ensureDir(path.Dir(cacheFileName))
+				utils.WriteJSONFile(cacheFileName, ret, "")
+			}
 		}
-	}
+	}()
 
-	stdin := bytes.NewBuffer(nil)
-	stdout := bytes.NewBuffer(nil)
-	stderr := bytes.NewBuffer(nil)
-	err = json.NewEncoder(stdin).Encode(args)
-	if err != nil {
+	if cjsModuleLexerIgnoredPackages.Has(ctx.esmPath.PkgName) {
+		js := path.Join(ctx.wd, "reveal_"+strings.ReplaceAll(cjsEntry[2:], "/", "_"))
+		err = os.WriteFile(js, []byte(fmt.Sprintf(`console.log(JSON.stringify(Object.keys((await import("npm:%s")).default)))`, path.Join(ctx.esmPath.Name(), cjsEntry))), 0644)
+		if err != nil {
+			return
+		}
+		var data []byte
+		data, err = run("deno", "run", "--no-config", "--no-lock", "--no-prompt", "--quiet", js)
+		if err != nil {
+			return
+		}
+		var namedExports []string
+		err = json.Unmarshal(data, &namedExports)
+		if err != nil {
+			return
+		}
+		for _, name := range namedExports {
+			if !isJsReservedWord(name) {
+				ret.Exports = append(ret.Exports, name)
+			}
+		}
 		return
 	}
 
-	start := time.Now()
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	worthToRetry := true
+RETRY:
+
+	c, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	cjsModuleLexerWd := path.Join(config.WorkDir, "npm", cjsModuleLexerPkg)
-	cmd := exec.CommandContext(
-		ctx,
-		"node",
-		"--experimental-permission",
-		"--allow-fs-read="+cjsModuleLexerWd,
-		"--allow-fs-read="+installDir,
-		"cjs_module_lexer.js",
-	)
-	cmd.Dir = cjsModuleLexerWd
-	cmd.Stdin = stdin
+	cmd := exec.CommandContext(c, "cjs-module-lexer", path.Join(ctx.esmPath.PkgName, cjsEntry))
+	stdout := bytes.NewBuffer(nil)
+	stderr := bytes.NewBuffer(nil)
+	cmd.Dir = ctx.wd
 	cmd.Stdout = stdout
 	cmd.Stderr = stderr
+	cmd.Env = []string{"NODE_ENV=" + ctx.getNodeEnv()}
+
 	err = cmd.Run()
 	if err != nil {
 		if stderr.Len() > 0 {
-			err = fmt.Errorf("cjsModuleLexer: %s", stderr.String())
+			msg := stderr.String()
+			if strings.HasPrefix(msg, "thread 'main' panicked at") {
+				formattedMessage := strings.Split(msg, "\n")[1]
+				if strings.HasPrefix(formattedMessage, "failed to resolve reexport: NotFound(") && worthToRetry {
+					worthToRetry = false
+					// install dependencies and retry
+					ctx.npmrc.installDependencies(ctx.wd, ctx.packageJson, true, nil)
+					goto RETRY
+				}
+				err = fmt.Errorf("cjsModuleLexer: %s", formattedMessage)
+			} else {
+				err = fmt.Errorf("cjsModuleLexer: %s", msg)
+			}
 		}
 		return
 	}
 
-	err = json.Unmarshal(stdout.Bytes(), &ret)
+	r := bufio.NewReader(stdout)
+	for {
+		line, e := r.ReadString('\n')
+		if e != nil {
+			break
+		}
+		line = strings.TrimSpace(line)
+		if strings.HasPrefix(line, "@") {
+			ret.Reexport = line[1:]
+			break
+		} else if regexpJSIdent.MatchString(line) && !isJsReservedWord(line) {
+			ret.Exports = append(ret.Exports, line)
+		}
+	}
+
+	return
+}
+
+func installCommonJSModuleLexer() (err error) {
+	binDir := path.Join(config.WorkDir, "bin")
+	err = ensureDir(binDir)
+	if err != nil {
+		return err
+	}
+
+	// use dev version of cjs-module-lexer if exists
+	// clone https://github.com/esm-dev/cjs-module-lexer to the same directory of esm.sh and run `cargo build --release -p native`
+	if devCML := "../cjs-module-lexer/target/release/native"; existsFile(devCML) {
+		_, err = utils.CopyFile(devCML, path.Join(binDir, "cjs-module-lexer"))
+		if err == nil {
+			cjsModuleLexerVersion = "dev"
+		}
+		return
+	}
+
+	if existsFile(path.Join(binDir, "cjs-module-lexer")) {
+		return
+	}
+
+	url, err := getCommonJSModuleLexerDownloadURL()
 	if err != nil {
 		return
 	}
 
-	if ret.Error != "" {
-		if ret.Stack != "" {
-			log.Errorf("[cjsModuleLexer] %s\n---\nArguments: %v\n%s\na---", ret.Error, args, ret.Stack)
-		} else {
-			log.Errorf("[cjsModuleLexer] %s\nArguments: %v", ret.Error, args)
-		}
-	} else {
-		go func() {
-			if ensureDir(path.Dir(cacheFileName)) == nil {
-				os.WriteFile(cacheFileName, stdout.Bytes(), 0644)
-			}
-		}()
-		log.Debugf("[cjsModuleLexer] parse %s in %s", path.Join(pkgName, specifier), time.Since(start))
+	log.Debugf("downloading %s...", path.Base(url))
+
+	res, err := http.Get(url)
+	if err != nil {
+		return
+	}
+	defer res.Body.Close()
+
+	if res.StatusCode != 200 {
+		return fmt.Errorf("failed to download cjs-module-lexer: %s", res.Status)
 	}
 
+	gr, err := gzip.NewReader(res.Body)
+	if err != nil {
+		return fmt.Errorf("failed to decompress cjs-module-lexer: %v", err)
+	}
+	defer gr.Close()
+
+	f, err := os.OpenFile(path.Join(binDir, "cjs-module-lexer"), os.O_CREATE|os.O_WRONLY, 0755)
+	if err != nil {
+		return fmt.Errorf("failed to create cjs-module-lexer: %v", err)
+	}
+	defer f.Close()
+
+	_, err = io.Copy(f, gr)
 	return
+}
+
+func getCommonJSModuleLexerDownloadURL() (string, error) {
+	var arch string
+	var os string
+
+	switch runtime.GOARCH {
+	case "arm64":
+		arch = "aarch64"
+	case "amd64", "386":
+		arch = "x86_64"
+	default:
+		return "", fmt.Errorf("unsupported architecture: %s", runtime.GOARCH)
+	}
+
+	switch runtime.GOOS {
+	case "darwin":
+		os = "apple-darwin"
+	case "linux":
+		os = "unknown-linux-gnu"
+	default:
+		return "", fmt.Errorf("unsupported os: %s", runtime.GOOS)
+	}
+
+	return fmt.Sprintf("https://github.com/esm-dev/cjs-module-lexer/releases/download/v%s/cjs-module-lexer-%s-%s.gz", cjsModuleLexerVersion, arch, os), nil
 }

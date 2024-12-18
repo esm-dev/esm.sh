@@ -7,10 +7,21 @@ import (
 	"path"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/esm-dev/esm.sh/server/storage"
 	"github.com/ije/gox/utils"
 )
+
+func (ctx *BuildContext) transformDTS(dts string) error {
+	start := time.Now()
+	n, err := transformDTS(ctx, dts, ctx.getBuildArgsPrefix(true), nil)
+	if err != nil {
+		return err
+	}
+	log.Debugf("transform dts '%s'(%d related dts files) in %v", dts, n, time.Since(start))
+	return nil
+}
 
 // transformDTS transforms a `.d.ts` file for deno/editor-lsp
 func transformDTS(ctx *BuildContext, dts string, buildArgsPrefix string, marker *StringSet) (n int, err error) {
@@ -18,7 +29,7 @@ func transformDTS(ctx *BuildContext, dts string, buildArgsPrefix string, marker 
 	if isEntry {
 		marker = NewStringSet()
 	}
-	dtsPath := path.Join("/"+ctx.esmPath.PackageName(), buildArgsPrefix, dts)
+	dtsPath := path.Join("/"+ctx.esmPath.Name(), buildArgsPrefix, dts)
 	if marker.Has(dtsPath) {
 		// don't transform repeatly
 		return
@@ -124,7 +135,7 @@ func transformDTS(ctx *BuildContext, dts string, buildArgsPrefix string, marker 
 			if strings.ContainsRune(subPath, '*') {
 				return fmt.Sprintf(
 					"{ESM_CDN_ORIGIN}/%s/%s%s",
-					ctx.esmPath.PackageName(),
+					ctx.esmPath.Name(),
 					ctx.getBuildArgsPrefix(true),
 					subPath,
 				), nil
@@ -135,12 +146,12 @@ func transformDTS(ctx *BuildContext, dts string, buildArgsPrefix string, marker 
 					SubPath:       subPath,
 					SubModuleName: subPath,
 				})
-				if entry.dts != "" {
+				if entry.types != "" {
 					return fmt.Sprintf(
 						"{ESM_CDN_ORIGIN}/%s/%s%s",
-						ctx.esmPath.PackageName(),
+						ctx.esmPath.Name(),
 						ctx.getBuildArgsPrefix(true),
-						strings.TrimPrefix(entry.dts, "./"),
+						strings.TrimPrefix(entry.types, "./"),
 					), nil
 				}
 			}
