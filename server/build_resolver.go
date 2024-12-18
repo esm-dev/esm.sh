@@ -329,6 +329,7 @@ func (ctx *BuildContext) resolveEntry(esmPath EsmPath) (entry BuildEntry) {
 			}
 		}
 
+		// get rid of invalid main and types, and lookup the entry from file system
 		ctx.finalizeBuildEntry(&entry)
 
 		// lookup esm entry from the sub-module directory if it's not defined in `package.json`
@@ -379,7 +380,7 @@ func (ctx *BuildContext) resolveEntry(esmPath EsmPath) (entry BuildEntry) {
 	} else {
 		entry = BuildEntry{
 			main:   pkgJson.Main,
-			module: pkgJson.Type == "module",
+			module: pkgJson.Main != "" && (pkgJson.Type == "module" || strings.HasSuffix(pkgJson.Main, ".mjs")),
 			types:  pkgJson.Types,
 		}
 		if pkgJson.Module != "" && ctx.existsPkgFile(pkgJson.Module) {
@@ -429,6 +430,7 @@ func (ctx *BuildContext) resolveEntry(esmPath EsmPath) (entry BuildEntry) {
 			}
 		}
 
+		// get rid of invalid main and types, and lookup the entry from file system
 		ctx.finalizeBuildEntry(&entry)
 
 		// lookup esm entry from the package directory if it's not defined in `package.json`
@@ -542,6 +544,7 @@ func (ctx *BuildContext) resolveEntry(esmPath EsmPath) (entry BuildEntry) {
 		}
 	}
 
+	ctx.finalizeBuildEntry(&entry)
 	return
 }
 
