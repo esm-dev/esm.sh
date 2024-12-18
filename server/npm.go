@@ -19,6 +19,7 @@ import (
 
 	"github.com/Masterminds/semver/v3"
 	"github.com/esm-dev/esm.sh/server/common"
+	esbuild "github.com/evanw/esbuild/pkg/api"
 	"github.com/ije/gox/utils"
 	"github.com/ije/gox/valid"
 )
@@ -29,15 +30,39 @@ const (
 )
 
 var (
-	installLocks = sync.Map{}
-	npmNaming    = valid.Validator{valid.Range{'a', 'z'}, valid.Range{'A', 'Z'}, valid.Range{'0', '9'}, valid.Eq('_'), valid.Eq('$'), valid.Eq('.'), valid.Eq('-'), valid.Eq('+'), valid.Eq('!'), valid.Eq('~'), valid.Eq('*'), valid.Eq('('), valid.Eq(')')}
+	npmNaming       = valid.Validator{valid.Range{'a', 'z'}, valid.Range{'A', 'Z'}, valid.Range{'0', '9'}, valid.Eq('_'), valid.Eq('$'), valid.Eq('.'), valid.Eq('-'), valid.Eq('+'), valid.Eq('!'), valid.Eq('~'), valid.Eq('*'), valid.Eq('('), valid.Eq(')')}
+	npmReplacements = map[string]npmReplacement{}
+	installLocks    = sync.Map{}
 )
 
+type npmReplacement struct {
+	esm  []byte
+	iife []byte
+}
+
+func buildNpmReplacements(efs EmbedFS) (err error) {
+	return walkEmbedFS(efs, "server/embed/npm-replacements", []string{".mjs"}, func(path string) error {
+		esm, err := efs.ReadFile(path)
+		if err != nil {
+			return err
+		}
+		code, err := minify(string(esm), esbuild.LoaderJS, esbuild.ES2022)
+		if err != nil {
+			return fmt.Errorf("%s: %w", path, err)
+		}
+		npmReplacements[strings.TrimSuffix(strings.TrimSuffix(strings.TrimPrefix(path, "server/embed/npm-replacements/"), ".mjs"), "/index")] = npmReplacement{
+			esm:  esm,
+			iife: concatBytes(concatBytes([]byte("(()=>{"), regexpExportAsExpr.ReplaceAll(bytes.ReplaceAll(bytes.TrimSpace(code), []byte("export{"), []byte("return{")), []byte("$2:$1"))), []byte("})()")),
+		}
+		return nil
+	})
+}
+
 type Package struct {
-	Github   bool
-	PkgPrNew bool
 	Name     string
 	Version  string
+	Github   bool
+	PkgPrNew bool
 }
 
 func (p *Package) String() string {
@@ -62,6 +87,29 @@ type NpmDist struct {
 	Tarball string `json:"tarball"`
 }
 
+// PackageJSON defines the package.json of a NPM package
+type PackageJSON struct {
+	Name             string
+	PkgName          string
+	Version          string
+	Type             string
+	Main             string
+	Module           string
+	Types            string
+	Typings          string
+	SideEffectsFalse bool
+	SideEffects      *StringSet
+	Browser          map[string]string
+	Dependencies     map[string]string
+	PeerDependencies map[string]string
+	Imports          map[string]any
+	TypesVersions    map[string]any
+	Exports          *OrderedMap
+	Esmsh            map[string]any
+	Dist             NpmDist
+	Deprecated       string
+}
+
 // PackageJSONRaw defines the package.json of a NPM package
 type PackageJSONRaw struct {
 	Name             string          `json:"name"`
@@ -84,29 +132,6 @@ type PackageJSONRaw struct {
 	Esmsh            any             `json:"esm.sh"`
 	Dist             json.RawMessage `json:"dist"`
 	Deprecated       any             `json:"deprecated"`
-}
-
-// PackageJSON defines the package.json of a NPM package
-type PackageJSON struct {
-	Name             string
-	PkgName          string
-	Version          string
-	Type             string
-	Main             string
-	Module           string
-	Types            string
-	Typings          string
-	SideEffectsFalse bool
-	SideEffects      *StringSet
-	Browser          map[string]string
-	Dependencies     map[string]string
-	PeerDependencies map[string]string
-	Imports          map[string]any
-	TypesVersions    map[string]any
-	Exports          *OrderedMap
-	Esmsh            map[string]any
-	Dist             NpmDist
-	Deprecated       string
 }
 
 // ToNpmPackage converts PackageJSONRaw to PackageJSON
@@ -256,7 +281,7 @@ var (
 	defaultNpmRC *NpmRC
 )
 
-func getDefaultNpmRC() *NpmRC {
+func DefaultNpmRC() *NpmRC {
 	if defaultNpmRC != nil {
 		return defaultNpmRC
 	}

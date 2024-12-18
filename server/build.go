@@ -791,7 +791,7 @@ func (ctx *BuildContext) buildModule() (result *BuildMeta, err error) {
 							if args.Kind == esbuild.ResolveJSRequireCall || args.Kind == esbuild.ResolveJSRequireResolve {
 								ctx.cjsRequires = append(ctx.cjsRequires, [3]string{
 									"npm:" + specifier,
-									string(replacement.cjs),
+									string(replacement.iife),
 									"",
 								})
 								return esbuild.OnResolveResult{
@@ -1072,14 +1072,13 @@ rebuild:
 
 			if len(ctx.cjsRequires) > 0 {
 				requires := make([][3]string, 0, len(ctx.cjsRequires))
-				mark := NewStringSet()
+				set := NewStringSet()
 				for _, r := range ctx.cjsRequires {
 					specifier := r[0]
-					if mark.Has(specifier) {
-						continue
+					if !set.Has(specifier) {
+						set.Add(specifier)
+						requires = append(requires, r)
 					}
-					mark.Add(specifier)
-					requires = append(requires, r)
 				}
 				isEsModule := make([]bool, len(requires))
 				for i, r := range requires {
@@ -1087,7 +1086,7 @@ rebuild:
 					importUrl := r[2]
 					if strings.HasPrefix(specifier, "npm:") {
 						// npm replacements
-						fmt.Fprintf(header, `var __%x$=(()=>{%s})();`, i, r[1])
+						fmt.Fprintf(header, `var __%x$=%s;`, i, r[1])
 					} else if isJsonModuleSpecifier(specifier) {
 						fmt.Fprintf(header, `import __%x$ from"%s";`, i, importUrl)
 						deps.Add(r[1])
