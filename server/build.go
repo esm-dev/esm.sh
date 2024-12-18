@@ -329,6 +329,13 @@ func (ctx *BuildContext) buildModule() (result *BuildMeta, err error) {
 			"global.process.env.NODE_ENV": fmt.Sprintf(`"%s"`, nodeEnv),
 		}
 	} else {
+		if ctx.isBrowserTarget() {
+			switch ctx.esmPath.PkgName {
+			case "react", "typescript":
+				// safe to reserve `process` for these packages
+				delete(define, "process")
+			}
+		}
 		for k, v := range define {
 			define["global."+k] = v
 		}
