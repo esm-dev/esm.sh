@@ -13,9 +13,9 @@ const helpMessage = "\033[30mesm.sh - The no-build CDN for modern web developmen
 Usage: esm.sh [command] [options]
 
 Commands:
-  add   Add NPM packages to the "importmap" script
-  init  Create a new esm.sh web app
-  run   Serve an esm.sh web app
+  add    Add NPM packages to the "importmap" script
+  init   Create a new esm.sh web app
+  serve  Serve an esm.sh web app
 `
 
 //go:embed internal
@@ -29,8 +29,8 @@ func main() {
 			cli.Init(&efs)
 		case "add":
 			cli.Add()
-		case "run":
-			cli.Run(&efs)
+		case "serve":
+			cli.Serve(&efs)
 		default:
 			fmt.Print(helpMessage)
 		}
