@@ -1,5 +1,5 @@
-cli/run:
-	@DEBUG=1 go run cli/cmd/main.go run cli/cmd/demo/${app}
+cli/serv:
+	@DEBUG=1 go run cli/cmd/main.go serve cli/cmd/demo/${app}
 
 serv: config.json
 	@rm -rf .esmd/storage
