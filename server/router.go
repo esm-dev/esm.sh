@@ -337,7 +337,7 @@ func esmRouter(debug bool) rex.Handle {
 			}
 
 		// builtin scripts
-		case "/run", "/tsx", "/uno":
+		case "/run", "/x", "/uno":
 			ifNoneMatch := ctx.GetHeader("If-None-Match")
 			if ifNoneMatch == globalETag && !debug {
 				return rex.Status(http.StatusNotModified, nil)

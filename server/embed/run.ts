@@ -1,37 +1,110 @@
-/*! 🚀 esm.sh/run - ts/jsx just works™️ in browser. */
+/*! 🚀 esm.sh/run
+ *
+ * Add `<script type="module" src="https://esm.sh/run"></script>` to run jsx/ts in browser without build step.
+ *
+ */
 
-((document) => {
-  const $ = document.querySelector;
-  const currentScript = document.currentScript as HTMLScriptElement | null;
-  const modUrl = currentScript?.src || import.meta.url;
-  const { hostname, href, pathname } = location;
+const d = document;
+const l = localStorage;
+const stringify = JSON.stringify;
+const loaders = new Set(["jsx", "ts", "tsx", "babel"]);
+const target = "$TARGET"; // `$TARGET` is injected at build time
+const hostname = location.hostname;
+const isLocalhost = hostname === "localhost" || hostname === "127.0.0.1" || /^192\.168\.\d+\.\d+$/.test(hostname);
 
-  // import the `main` module from esm.sh if it's provided.
-  // e.g. <script type="module" src="https://esm.sh/run" main="/main.tsx"></script>
-  const el = currentScript ?? $<HTMLScriptElement>("script[type=module][src='" + modUrl + "'][main]");
-  if (el) {
-    const main = el.getAttribute("main");
-    if (main) {
-      if (hostname === "localhost" || hostname === "127.0.0.1" || /^192\.168\.\d+\.\d+$/.test(hostname)) {
-        alert("Please serve your app with `esm.sh run` for local development.");
-        return;
-      }
-      const mainUrl = new URL(main, href);
-      const q = mainUrl.searchParams;
-      const v = $<HTMLMetaElement>("meta[name=version]")?.content;
-      mainUrl.search = "";
-      if ($("script[type=importmap]")) {
-        q.set("im", btoa(pathname).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, ""));
-      }
+function run() {
+  let tsxScripts: { el: HTMLElement; lang: string; code: string }[] = [];
+  let importMap: Record<string, object> = {};
+  let tsx: Promise<{ transform: (filename: string, code: string, options: Record<string, unknown>) => { code: string } }>;
+
+  // lookup import map and tsx scripts
+  d.querySelectorAll("script").forEach((el) => {
+    const { type, textContent: code } = el;
+    if (!code?.trim()) return;
+    if (type === "importmap") {
+      const v = JSON.parse(code!);
       if (v) {
-        q.set("v", v);
+        v.$support = HTMLScriptElement.supports("importmap");
+        importMap = v;
       }
-      import(new URL(modUrl).origin + "/" + mainUrl);
+    } else if (type.startsWith("text/")) {
+      const lang = type.slice(5);
+      if (loaders.has(lang)) {
+        if (code.length > 128 * 1024) {
+          throw new Error("[esm.sh/tsx] reach 128KB limit");
+        }
+        tsxScripts.push({ el, lang: lang === "babel" ? "tsx" : lang, code });
+      }
     }
-  }
+  });
 
-  // compatibility with esm.sh/run(v1) which has been renamed to 'esm.sh/tsx'
-  if ($<HTMLScriptElement>("script[type^='text/']")) {
-    import(new URL("/tsx", modUrl).href);
-  }
-})(document);
+  // transform and insert tsx scripts
+  tsxScripts.forEach(async ({ el, lang, code }, idx) => {
+    const buffer = new Uint8Array(
+      await crypto.subtle.digest(
+        "SHA-1",
+        new TextEncoder().encode(lang + code + target + stringify(importMap) + "true"),
+      ),
+    );
+    const hash = [...buffer].map((b) => b.toString(16).padStart(2, "0")).join("");
+    const jsCacheKey = "esm.sh/tsx." + idx;
+    const hashCacheKey = jsCacheKey + ".hash";
+    const script = d.createElement("script");
+    let js: string | null | undefined;
+    try {
+      js = l.getItem(jsCacheKey);
+      if (js && l.getItem(hashCacheKey) !== hash) {
+        js = null;
+      }
+    } catch {
+      // localStorage is disallowed
+    }
+    if (!js) {
+      if (isLocalhost) {
+        const { transform } = await (tsx ?? (tsx = initTsx()));
+        const ret = transform("script-" + idx + "." + lang, code, { target, importMap, minify: true, sourceMap: "inline" });
+        js = ret.code;
+      } else {
+        const res = await fetch(urlFrom(`/+${hash}.mjs`));
+        if (res.ok) {
+          js = await res.text();
+        } else {
+          const res = await fetch(urlFrom("/transform"), {
+            method: "POST",
+            body: stringify({ lang, code, target, importMap, minify: true }),
+          });
+          const ret: any = await res.json();
+          if (ret.error) {
+            throw new Error(ret.error.message);
+          }
+          js = ret.code;
+        }
+      }
+      try {
+        l.setItem(jsCacheKey, js!);
+        l.setItem(hashCacheKey, hash);
+      } catch {
+        // localStorage is disallowed
+      }
+    }
+    script.type = "module";
+    script.textContent = js!;
+    el.replaceWith(script);
+  });
+}
+
+async function initTsx() {
+  const pkg = "/@esm.sh/tsx@1.0.5";
+  const [m, w] = await Promise.all([
+    import(pkg + "/$TARGET/tsx.mjs"),
+    fetch(urlFrom(pkg + "/pkg/tsx_bg.wasm")),
+  ]);
+  await m.default(w);
+  return m;
+}
+
+function urlFrom(path: string) {
+  return new URL(path, import.meta.url);
+}
+
+run();

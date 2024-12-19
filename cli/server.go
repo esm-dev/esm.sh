@@ -237,9 +237,9 @@ func (d *DevServer) ServeHtml(w http.ResponseWriter, r *http.Request, pathname s
 					w.Write([]byte(">"))
 					continue
 				}
-				// replace `<script type="module" src="https://esm.sh/run" main="$main"></script>`
+				// replace `<script type="module" src="https://esm.sh/x" main="$main"></script>`
 				// with `<script type="module" src="$main"></script>`
-				if (strings.HasPrefix(srcAttr, "http://") || strings.HasPrefix(srcAttr, "https://")) && strings.HasSuffix(srcAttr, "/run") && mainAttr != "" {
+				if (strings.HasPrefix(srcAttr, "http://") || strings.HasPrefix(srcAttr, "https://")) && strings.HasSuffix(srcAttr, "/x") && mainAttr != "" {
 					w.Write([]byte("<script"))
 					for attrKey, attrVal := range attrs {
 						if attrKey != "main" {
@@ -323,7 +323,7 @@ func (d *DevServer) ServeHtml(w http.ResponseWriter, r *http.Request, pathname s
 		}
 	}
 	w.Write([]byte("</script>"))
-	fmt.Fprintf(w, `<script>console.log("%%c💚 Built with esm.sh/run, please uncheck \"Disable cache\" in Network tab for better DX!", "color:green")</script>`)
+	fmt.Fprintf(w, `<script>console.log("%%c💚 Built with esm.sh/x, please uncheck \"Disable cache\" in Network tab for better DX!", "color:green")</script>`)
 }
 
 func (d *DevServer) ServeModule(w http.ResponseWriter, r *http.Request, pathname string, sourceCode []byte) {
@@ -886,7 +886,7 @@ func (d *DevServer) getLoader() (loader *LoaderWorker, err error) {
 		return
 	}
 	loader = &LoaderWorker{}
-	err = loader.Start(loaderJs)
+	err = loader.Start(d.rootDir, loaderJs)
 	if err != nil {
 		return nil, err
 	}
