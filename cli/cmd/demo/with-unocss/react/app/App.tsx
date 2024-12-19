@@ -1,4 +1,4 @@
-import { ReactLogo } from "~/components/Logo.tsx";
+import { ReactLogo } from "./components/Logo.tsx";
 
 export function App() {
   return (

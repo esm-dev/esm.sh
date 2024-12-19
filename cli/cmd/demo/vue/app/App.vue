@@ -1,5 +1,5 @@
 <script setup lang="ts">
-  import VueLogo from "~/components/Logo.vue"
+  import VueLogo from "./components/Logo.vue"
 </script>
 
 <template>
