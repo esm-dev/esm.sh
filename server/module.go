@@ -232,7 +232,7 @@ func bundleHttpModule(npmrc *NpmRC, entry string, importMap common.ImportMap, co
 						case ".json":
 							loader = esbuild.LoaderJSON
 						case ".svelte":
-							svelteVersion, err := npmrc.getSvelteVersion(importMap)
+							svelteVersion, err := resolveSvelteVersion(npmrc, importMap)
 							if err != nil {
 								return esbuild.OnLoadResult{}, err
 							}
@@ -242,7 +242,7 @@ func bundleHttpModule(npmrc *NpmRC, entry string, importMap common.ImportMap, co
 							}
 							code = ret.Code
 						case ".vue":
-							vueVersion, err := npmrc.getVueVersion(importMap)
+							vueVersion, err := resolveVueVersion(npmrc, importMap)
 							if err != nil {
 								return esbuild.OnLoadResult{}, err
 							}
@@ -269,7 +269,7 @@ func bundleHttpModule(npmrc *NpmRC, entry string, importMap common.ImportMap, co
 								if err != nil {
 									return esbuild.OnLoadResult{}, err
 								}
-								svelteVersion, err := npmrc.getSvelteVersion(importMap)
+								svelteVersion, err := resolveSvelteVersion(npmrc, importMap)
 								if err != nil {
 									return esbuild.OnLoadResult{}, err
 								}
@@ -283,7 +283,7 @@ func bundleHttpModule(npmrc *NpmRC, entry string, importMap common.ImportMap, co
 								if err != nil {
 									return esbuild.OnLoadResult{}, err
 								}
-								vueVersion, err := npmrc.getVueVersion(importMap)
+								vueVersion, err := resolveVueVersion(npmrc, importMap)
 								if err != nil {
 									return esbuild.OnLoadResult{}, err
 								}

@@ -18,7 +18,6 @@ import (
 	"time"
 
 	"github.com/Masterminds/semver/v3"
-	"github.com/esm-dev/esm.sh/server/common"
 	esbuild "github.com/evanw/esbuild/pkg/api"
 	"github.com/ije/gox/utils"
 	"github.com/ije/gox/valid"
@@ -401,12 +400,11 @@ func (npmrc *NpmRC) fetchPackageInfo(packageName string, semverOrDistTag string)
 	}
 
 	reg := npmrc.getRegistryByPackageName(packageName)
-	genCacheKey := func(packageName string, packageVersion string) string {
+	getCacheKey := func(packageName string, packageVersion string) string {
 		return reg.Registry + packageName + "@" + packageVersion + "?auth=" + reg.Token + "|" + reg.User + ":" + reg.Password
 	}
-	cacheKey := genCacheKey(packageName, semverOrDistTag)
 
-	return withCache(cacheKey, time.Duration(config.NpmQueryCacheTTL)*time.Second, func() (*PackageJSON, string, error) {
+	return withCache(getCacheKey(packageName, semverOrDistTag), time.Duration(config.NpmQueryCacheTTL)*time.Second, func() (*PackageJSON, string, error) {
 		url := reg.Registry + packageName
 		isWellknownVersion := (regexpVersionStrict.MatchString(semverOrDistTag) || isDistTag(semverOrDistTag)) && strings.HasPrefix(url, npmRegistry)
 		if isWellknownVersion {
@@ -429,13 +427,13 @@ func (npmrc *NpmRC) fetchPackageInfo(packageName string, semverOrDistTag string)
 			Timeout: 15 * time.Second,
 		}
 		retryTimes := 0
-	do:
+	RETRY:
 		res, err := c.Do(req)
 		if err != nil {
 			if retryTimes < 3 {
 				retryTimes++
 				time.Sleep(time.Duration(retryTimes) * 100 * time.Millisecond)
-				goto do
+				goto RETRY
 			}
 			return nil, "", err
 		}
@@ -461,7 +459,7 @@ func (npmrc *NpmRC) fetchPackageInfo(packageName string, semverOrDistTag string)
 			if err != nil {
 				return nil, "", err
 			}
-			return raw.ToNpmPackage(), genCacheKey(packageName, raw.Version), nil
+			return raw.ToNpmPackage(), getCacheKey(packageName, raw.Version), nil
 		}
 
 		var h NpmPackageVerions
@@ -474,12 +472,12 @@ func (npmrc *NpmRC) fetchPackageInfo(packageName string, semverOrDistTag string)
 			return nil, "", fmt.Errorf("version %s of '%s' not found", semverOrDistTag, packageName)
 		}
 
-	lookup:
+	CHECK:
 		distVersion, ok := h.DistTags[semverOrDistTag]
 		if ok {
 			raw, ok := h.Versions[distVersion]
 			if ok {
-				return raw.ToNpmPackage(), genCacheKey(packageName, raw.Version), nil
+				return raw.ToNpmPackage(), getCacheKey(packageName, raw.Version), nil
 			}
 		} else {
 			if semverOrDistTag == "lastest" {
@@ -488,8 +486,9 @@ func (npmrc *NpmRC) fetchPackageInfo(packageName string, semverOrDistTag string)
 			var c *semver.Constraints
 			c, err = semver.NewConstraint(semverOrDistTag)
 			if err != nil {
+				// fallback to latest if semverOrDistTag is not a valid semver
 				semverOrDistTag = "latest"
-				goto lookup
+				goto CHECK
 			}
 			vs := make([]*semver.Version, len(h.Versions))
 			i := 0
@@ -515,7 +514,7 @@ func (npmrc *NpmRC) fetchPackageInfo(packageName string, semverOrDistTag string)
 				}
 				raw, ok := h.Versions[vs[i-1].String()]
 				if ok {
-					return raw.ToNpmPackage(), genCacheKey(packageName, raw.Version), nil
+					return raw.ToNpmPackage(), getCacheKey(packageName, raw.Version), nil
 				}
 			}
 		}
@@ -674,13 +673,13 @@ func (rc *NpmRC) downloadTarball(reg *NpmRegistry, installDir string, pkgName st
 		Timeout: 15 * time.Second,
 	}
 	retryTimes := 0
-do:
+RETRY:
 	res, err := c.Do(req)
 	if err != nil {
 		if retryTimes < 3 {
 			retryTimes++
 			time.Sleep(time.Duration(retryTimes) * 100 * time.Millisecond)
-			goto do
+			goto RETRY
 		}
 		return
 	}
@@ -701,6 +700,64 @@ do:
 	return
 }
 
+func extractPackageTarball(installDir string, packname string, tarball io.Reader) (err error) {
+	unziped, err := gzip.NewReader(tarball)
+	if err != nil {
+		return
+	}
+
+	rootDir := path.Join(installDir, "node_modules", packname)
+	defer func() {
+		if err != nil {
+			// remove the root dir if failed
+			os.RemoveAll(rootDir)
+		}
+	}()
+
+	// extract tarball
+	tr := tar.NewReader(unziped)
+	for {
+		h, err := tr.Next()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			return err
+		}
+		// strip tarball root dir
+		_, name := utils.SplitByFirstByte(h.Name, '/')
+		filename := path.Join(rootDir, name)
+		if h.Typeflag == tar.TypeDir {
+			ensureDir(filename)
+			continue
+		}
+		if h.Typeflag != tar.TypeReg {
+			continue
+		}
+		extname := path.Ext(filename)
+		if !(extname != "" && (assetExts[extname[1:]] || contains(moduleExts, extname) || extname == ".map" || extname == ".css" || extname == ".svelte" || extname == ".vue")) {
+			// skip unsupported formats
+			continue
+		}
+		f, err := os.OpenFile(filename, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0644)
+		if err != nil && os.IsNotExist(err) {
+			os.MkdirAll(path.Dir(filename), 0755)
+			f, err = os.OpenFile(filename, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0644)
+		}
+		if err != nil {
+			return err
+		}
+		_, err = io.Copy(f, tr)
+		f.Close()
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+// If the package is deprecated, a depreacted.txt file will be created by the `intallPackage` function
 func (npmrc *NpmRC) isDeprecated(pkgName string, pkgVersion string) (string, error) {
 	installDir := path.Join(npmrc.StoreDir(), pkgName+"@"+pkgVersion)
 	data, err := os.ReadFile(path.Join(installDir, "deprecated.txt"))
@@ -713,56 +770,11 @@ func (npmrc *NpmRC) isDeprecated(pkgName string, pkgVersion string) (string, err
 	return string(data), nil
 }
 
-func (npmrc *NpmRC) getSvelteVersion(importMap common.ImportMap) (svelteVersion string, err error) {
-	svelteVersion = "5"
-	if len(importMap.Imports) > 0 {
-		sveltePath, ok := importMap.Imports["svelte"]
-		if ok {
-			a := regexpSveltePath.FindAllStringSubmatch(sveltePath, 1)
-			if len(a) > 0 {
-				svelteVersion = a[0][1]
-			}
-		}
-	}
-	if !regexpVersionStrict.MatchString(svelteVersion) {
-		var info *PackageJSON
-		info, err = npmrc.getPackageInfo("svelte", svelteVersion)
-		if err != nil {
-			return
-		}
-		svelteVersion = info.Version
-	}
-	if semverLessThan(svelteVersion, "4.0.0") {
-		err = errors.New("unsupported svelte version, only 4.0.0+ is supported")
-	}
-	return
-}
-
-func (npmrc *NpmRC) getVueVersion(importMap common.ImportMap) (vueVersion string, err error) {
-	vueVersion = "3"
-	if len(importMap.Imports) > 0 {
-		vuePath, ok := importMap.Imports["vue"]
-		if ok {
-			a := regexpVuePath.FindAllStringSubmatch(vuePath, 1)
-			if len(a) > 0 {
-				vueVersion = a[0][1]
-			}
-		}
-	}
-	if !regexpVersionStrict.MatchString(vueVersion) {
-		var info *PackageJSON
-		info, err = npmrc.getPackageInfo("vue", vueVersion)
-		if err != nil {
-			return
-		}
-		vueVersion = info.Version
-	}
-	if semverLessThan(vueVersion, "3.0.0") {
-		err = errors.New("unsupported vue version, only 3.0.0+ is supported")
-	}
-	return
-}
-
+// resolveDependencyVersion resolves the version of a dependency
+// e.g. "react": "npm:react@19.0.0"
+// e.g. "react": "github:facebook/react#semver:19.0.0"
+// e.g. "flag": "jsr:@luca/flag@0.0.1"
+// e.g. "tinybench": "https://pkg.pr.new/tinybench@a832a55"
 func resolveDependencyVersion(v string) (Package, error) {
 	// ban file specifier
 	if strings.HasPrefix(v, "file:") {
@@ -844,6 +856,15 @@ func resolveDependencyVersion(v string) (Package, error) {
 	return Package{}, nil
 }
 
+func isDistTag(s string) bool {
+	switch s {
+	case "latest", "next", "beta", "alpha", "canary", "rc", "experimental":
+		return true
+	default:
+		return false
+	}
+}
+
 // based on https://github.com/npm/validate-npm-package-name
 func validatePackageName(pkgName string) bool {
 	if len(pkgName) > 214 {
@@ -869,71 +890,5 @@ func toMap(v any) map[string]any {
 	if m, ok := v.(map[string]any); ok {
 		return m
 	}
-	return nil
-}
-
-func isDistTag(s string) bool {
-	switch s {
-	case "latest", "next", "beta", "alpha", "canary", "rc", "experimental":
-		return true
-	default:
-		return false
-	}
-}
-
-func extractPackageTarball(installDir string, packname string, tarball io.Reader) (err error) {
-	unziped, err := gzip.NewReader(tarball)
-	if err != nil {
-		return
-	}
-
-	rootDir := path.Join(installDir, "node_modules", packname)
-	defer func() {
-		if err != nil {
-			// remove the root dir if failed
-			os.RemoveAll(rootDir)
-		}
-	}()
-
-	// extract tarball
-	tr := tar.NewReader(unziped)
-	for {
-		h, err := tr.Next()
-		if err == io.EOF {
-			break
-		}
-		if err != nil {
-			return err
-		}
-		// strip tarball root dir
-		_, name := utils.SplitByFirstByte(h.Name, '/')
-		filename := path.Join(rootDir, name)
-		if h.Typeflag == tar.TypeDir {
-			ensureDir(filename)
-			continue
-		}
-		if h.Typeflag != tar.TypeReg {
-			continue
-		}
-		extname := path.Ext(filename)
-		if !(extname != "" && (assetExts[extname[1:]] || contains(moduleExts, extname) || extname == ".map" || extname == ".css" || extname == ".svelte" || extname == ".vue")) {
-			// skip unsupported formats
-			continue
-		}
-		f, err := os.OpenFile(filename, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0644)
-		if err != nil && os.IsNotExist(err) {
-			os.MkdirAll(path.Dir(filename), 0755)
-			f, err = os.OpenFile(filename, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0644)
-		}
-		if err != nil {
-			return err
-		}
-		_, err = io.Copy(f, tr)
-		f.Close()
-		if err != nil {
-			return err
-		}
-	}
-
 	return nil
 }

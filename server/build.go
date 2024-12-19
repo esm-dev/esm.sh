@@ -868,7 +868,7 @@ func (ctx *BuildContext) buildModule() (result *BuildMeta, err error) {
 				},
 			)
 
-			// svelte component loader
+			// svelte SFC loader
 			build.OnLoad(
 				esbuild.OnLoadOptions{Filter: ".*", Namespace: "svelte"},
 				func(args esbuild.OnLoadArgs) (esbuild.OnLoadResult, error) {
@@ -902,7 +902,7 @@ func (ctx *BuildContext) buildModule() (result *BuildMeta, err error) {
 				},
 			)
 
-			// vue component loader
+			// vue SFC loader
 			build.OnLoad(
 				esbuild.OnLoadOptions{Filter: ".*", Namespace: "vue"},
 				func(args esbuild.OnLoadArgs) (esbuild.OnLoadResult, error) {

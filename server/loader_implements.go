@@ -10,6 +10,8 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+
+	"github.com/esm-dev/esm.sh/server/common"
 )
 
 func transformSvelte(npmrc *NpmRC, svelteVersion string, filename string, code string) (output *LoaderOutput, err error) {
@@ -62,6 +64,31 @@ func compileSvelteLoader(npmrc *NpmRC, svelteVersion string, loaderExecPath stri
 	  }
 	`
 	err = buildLoader(wd, loaderJS, loaderExecPath)
+	return
+}
+
+func resolveSvelteVersion(npmrc *NpmRC, importMap common.ImportMap) (svelteVersion string, err error) {
+	svelteVersion = "5"
+	if len(importMap.Imports) > 0 {
+		sveltePath, ok := importMap.Imports["svelte"]
+		if ok {
+			a := regexpSveltePath.FindAllStringSubmatch(sveltePath, 1)
+			if len(a) > 0 {
+				svelteVersion = a[0][1]
+			}
+		}
+	}
+	if !regexpVersionStrict.MatchString(svelteVersion) {
+		var info *PackageJSON
+		info, err = npmrc.getPackageInfo("svelte", svelteVersion)
+		if err != nil {
+			return
+		}
+		svelteVersion = info.Version
+	}
+	if semverLessThan(svelteVersion, "4.0.0") {
+		err = errors.New("unsupported svelte version, only 4.0.0+ is supported")
+	}
 	return
 }
 
@@ -273,5 +300,30 @@ func compileVueLoader(npmrc *NpmRC, vueVersion string, loaderVersion, loaderExec
 	  }
 	`
 	err = buildLoader(wd, loaderJS, loaderExecPath)
+	return
+}
+
+func resolveVueVersion(npmrc *NpmRC, importMap common.ImportMap) (vueVersion string, err error) {
+	vueVersion = "3"
+	if len(importMap.Imports) > 0 {
+		vuePath, ok := importMap.Imports["vue"]
+		if ok {
+			a := regexpVuePath.FindAllStringSubmatch(vuePath, 1)
+			if len(a) > 0 {
+				vueVersion = a[0][1]
+			}
+		}
+	}
+	if !regexpVersionStrict.MatchString(vueVersion) {
+		var info *PackageJSON
+		info, err = npmrc.getPackageInfo("vue", vueVersion)
+		if err != nil {
+			return
+		}
+		vueVersion = info.Version
+	}
+	if semverLessThan(vueVersion, "3.0.0") {
+		err = errors.New("unsupported vue version, only 3.0.0+ is supported")
+	}
 	return
 }
