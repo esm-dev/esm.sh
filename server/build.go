@@ -272,24 +272,24 @@ func (ctx *BuildContext) buildModule() (result *BuildMeta, err error) {
 		}
 	}
 
-	// if ctx.packageJson.Exports.Len() > 0 {
-	// 	var exportNames []string
-	// 	var exportAll bool
-	// 	for _, exportName := range ctx.packageJson.Exports.Keys() {
-	// 		exportName := stripModuleExt(exportName)
-	// 		if (exportName == "." || strings.HasPrefix(exportName, "./")) && !endsWith(exportName, ".json", ".css") {
-	// 			if exportName == "./*" {
-	// 				exportAll = true
-	// 				break
-	// 			}
-	// 			if strings.HasSuffix(exportName, "/*") {
-	// 				fmt.Println("*", exportName)
-	// 			}
-	// 			exportNames = append(exportNames, exportName)
-	// 		}
-	// 	}
-	// 	fmt.Println(exportNames, exportAll)
-	// }
+	if ctx.packageJson.Exports.Len() > 0 {
+		var exportNames []string
+		var exportAll bool
+		for _, exportName := range ctx.packageJson.Exports.Keys() {
+			exportName := stripModuleExt(exportName)
+			if (exportName == "." || strings.HasPrefix(exportName, "./")) && !endsWith(exportName, ".json", ".css") {
+				if exportName == "./*" {
+					exportAll = true
+					break
+				}
+				if strings.HasSuffix(exportName, "/*") {
+					fmt.Println("*", exportName)
+				}
+				exportNames = append(exportNames, exportName)
+			}
+		}
+		fmt.Println(exportNames, exportAll)
+	}
 
 	pkgSideEffects := esbuild.SideEffectsTrue
 	if ctx.packageJson.SideEffectsFalse {
@@ -331,7 +331,7 @@ func (ctx *BuildContext) buildModule() (result *BuildMeta, err error) {
 	} else {
 		if ctx.isBrowserTarget() {
 			switch ctx.esmPath.PkgName {
-			case "react", "typescript":
+			case "react", "react-dom", "typescript":
 				// safe to reserve `process` for these packages
 				delete(define, "process")
 			}

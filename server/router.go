@@ -494,6 +494,10 @@ func esmRouter(debug bool) rex.Handle {
 					return rex.Status(400, "Invalid context url")
 				}
 			}
+			v := query.Get("v")
+			if v != "" && (!regexpVersion.MatchString(v) || len(v) > 32) {
+				return rex.Status(400, "Invalid Version Param")
+			}
 			// determine build target by `?target` query or `User-Agent` header
 			target := strings.ToLower(query.Get("target"))
 			if targets[target] == 0 {
@@ -501,7 +505,7 @@ func esmRouter(debug bool) rex.Handle {
 			}
 			h := sha1.New()
 			h.Write([]byte(ctxUrlRaw))
-			h.Write([]byte(query.Get("v")))
+			h.Write([]byte(v))
 			h.Write([]byte(target))
 			savePath := normalizeSavePath(zoneId, path.Join("modules", hex.EncodeToString(h.Sum(nil))+".css"))
 			content, _, err := buildStorage.Get(savePath)

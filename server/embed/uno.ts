@@ -6,7 +6,7 @@
   const btoaUrl = (url: string) => btoa(url).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
   if (currentScript) {
     if (hostname === "localhost" || hostname === "127.0.0.1" || /^192\.168\.\d+\.\d+$/.test(hostname)) {
-      alert("Please serve your app with `esm.sh run` for local development.");
+      console.error("[esm.sh/uno] Please serve your app with `esm.sh serve` in development mode.");
       return;
     }
     const unocssUrl = new URL("/uno.css", currentScript.src);

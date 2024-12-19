@@ -408,9 +408,8 @@ func (npmrc *NpmRC) fetchPackageInfo(packageName string, semverOrDistTag string)
 
 	return withCache(cacheKey, time.Duration(config.NpmQueryCacheTTL)*time.Second, func() (*PackageJSON, string, error) {
 		url := reg.Registry + packageName
-		isFullVersion := regexpVersionStrict.MatchString(semverOrDistTag)
-		isFullVersionFromNpmjsOrg := isFullVersion && strings.HasPrefix(url, npmRegistry)
-		if isFullVersionFromNpmjsOrg {
+		isWellknownVersion := (regexpVersionStrict.MatchString(semverOrDistTag) || isDistTag(semverOrDistTag)) && strings.HasPrefix(url, npmRegistry)
+		if isWellknownVersion {
 			// npm registry supports url like `https://registry.npmjs.org/<name>/<version>`
 			url += "/" + semverOrDistTag
 		}
@@ -443,7 +442,7 @@ func (npmrc *NpmRC) fetchPackageInfo(packageName string, semverOrDistTag string)
 		defer res.Body.Close()
 
 		if res.StatusCode == 404 || res.StatusCode == 401 {
-			if isFullVersionFromNpmjsOrg {
+			if isWellknownVersion {
 				err = fmt.Errorf("version %s of '%s' not found", semverOrDistTag, packageName)
 			} else {
 				err = fmt.Errorf("package '%s' not found", packageName)
@@ -456,7 +455,7 @@ func (npmrc *NpmRC) fetchPackageInfo(packageName string, semverOrDistTag string)
 			return nil, "", fmt.Errorf("could not get metadata of package '%s' (%s: %s)", packageName, res.Status, string(msg))
 		}
 
-		if isFullVersionFromNpmjsOrg {
+		if isWellknownVersion {
 			var raw PackageJSONRaw
 			err = json.NewDecoder(res.Body).Decode(&raw)
 			if err != nil {
@@ -871,6 +870,15 @@ func toMap(v any) map[string]any {
 		return m
 	}
 	return nil
+}
+
+func isDistTag(s string) bool {
+	switch s {
+	case "latest", "next", "beta", "alpha", "canary", "rc", "experimental":
+		return true
+	default:
+		return false
+	}
 }
 
 func extractPackageTarball(installDir string, packname string, tarball io.Reader) (err error) {
