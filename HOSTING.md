@@ -3,13 +3,6 @@
 [esm.sh](https://esm.sh) provides a global fast CDN publicly which is powered by [Cloudflare](https://cloudflare.com).
 You can also host esm.sh service by yourself. To do this, please follow the instructions below.
 
-## Recommended Host Machine Requirements
-
-- Linux system (Debian/Ubuntu)
-- 4x CPU cores or more
-- 8GB RAM or more
-- 100GB disk space or more
-
 ## Clone the Source Code
 
 ```bash
@@ -53,11 +46,18 @@ You can deploy the server to a single machine with the [deploy.sh](./scripts/dep
 ./scripts/deploy.sh
 ```
 
+Recommended hosting requirements:
+
+- Linux system (Debian/Ubuntu)
+- 4x CPU cores or more
+- 8GB RAM or more
+- 100GB disk space or more
+
 ## Deploy with Docker
 
 [![Docker Image](https://img.shields.io/github/v/tag/esm-dev/esm.sh?label=Docker&display_name=tag&sort=semver&style=flat&colorA=232323&colorB=232323&logo=docker&logoColor=eeeeee)](https://github.com/esm-dev/esm.sh/pkgs/container/esm.sh)
 
-esm.sh provides a Docker image for deployment. You can pull the container image from <https://ghcr.io/esm-dev/esm.sh>.
+esm.sh provides a Docker image for fast deployment. You can pull the container image from <https://ghcr.io/esm-dev/esm.sh>.
 
 ```bash
 docker pull ghcr.io/esm-dev/esm.sh      # latest version
@@ -67,7 +67,7 @@ docker pull ghcr.io/esm-dev/esm.sh:v136 # specific version
 Run the container:
 
 ```bash
-docker run -p 80:80 \
+docker run -p 8080:80 \
   -e NPM_REGISTRY=https://registry.npmjs.org/ \
   -e NPM_TOKEN=****** \
   ghcr.io/esm-dev/esm.sh:latest
