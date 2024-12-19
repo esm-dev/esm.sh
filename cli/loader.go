@@ -27,16 +27,16 @@ type LoaderWorker struct {
 	outReader *bufio.Reader
 }
 
-func (l *LoaderWorker) Start(loaderjs []byte) (err error) {
+func (l *LoaderWorker) Start(wd string, loaderJS []byte) (err error) {
 	homeDir, err := os.UserHomeDir()
 	if err != nil {
 		return
 	}
 	jsPath := filepath.Join(homeDir, ".esm.sh", "run", fmt.Sprintf("loader@%d.js", VERSION))
 	fi, err := os.Stat(jsPath)
-	if (err != nil && os.IsNotExist(err)) || (err == nil && fi.Size() != int64(len(loaderjs))) || os.Getenv("DEBUG") == "1" {
+	if (err != nil && os.IsNotExist(err)) || (err == nil && fi.Size() != int64(len(loaderJS))) || os.Getenv("DEBUG") == "1" {
 		os.MkdirAll(filepath.Dir(jsPath), 0755)
-		err = os.WriteFile(jsPath, loaderjs, 0644)
+		err = os.WriteFile(jsPath, loaderJS, 0644)
 		if err != nil {
 			return
 		}
@@ -49,8 +49,10 @@ func (l *LoaderWorker) Start(loaderjs []byte) (err error) {
 	}
 
 	cmd := exec.Command(denoPath, "run", "--no-lock", "-A", jsPath)
+	cmd.Dir = wd
 	cmd.Stdin, l.stdin = io.Pipe()
 	l.stdout, cmd.Stdout = io.Pipe()
+
 	err = cmd.Start()
 	if err != nil {
 		l.stdin = nil

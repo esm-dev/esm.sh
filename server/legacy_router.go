@@ -109,7 +109,7 @@ func legacyESM(ctx *rex.Context, pathname string) any {
 	}
 	isFixedVersion := regexpVersionStrict.MatchString(pkgVersion)
 	if !isFixedVersion {
-		npmrc := getDefaultNpmRC()
+		npmrc := DefaultNpmRC()
 		pkgInfo, err := npmrc.fetchPackageInfo(pkgName, pkgVersion)
 		if err != nil {
 			if strings.Contains(err.Error(), " not found") {

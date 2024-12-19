@@ -3,10 +3,8 @@ package server
 import (
 	"bytes"
 	"embed"
-	"fmt"
 	"os"
 	"path"
-	"strings"
 	"sync"
 
 	esbuild "github.com/evanw/esbuild/pkg/api"
@@ -15,7 +13,6 @@ import (
 var (
 	embedFS         EmbedFS
 	embedBuildCache sync.Map
-	npmReplacements map[string]npmReplacement
 )
 
 type EmbedFS interface {
@@ -35,31 +32,7 @@ func (fs MockEmbedFS) ReadFile(name string) ([]byte, error) {
 	return os.ReadFile(path.Join(fs.root, name))
 }
 
-type npmReplacement struct {
-	esm []byte
-	cjs []byte
-}
-
-func buildNpmReplacements(fs EmbedFS) (err error) {
-	npmReplacements = make(map[string]npmReplacement)
-	return walkEmbedFS(fs, "server/embed/npm-replacements", []string{".mjs"}, func(path string) error {
-		esm, err := fs.ReadFile(path)
-		if err != nil {
-			return err
-		}
-		code, err := minify(string(esm), esbuild.LoaderJS, esbuild.ES2022)
-		if err != nil {
-			return fmt.Errorf("%s: %w", path, err)
-		}
-		npmReplacements[strings.TrimSuffix(strings.TrimSuffix(strings.TrimPrefix(path, "server/embed/npm-replacements/"), ".mjs"), "/index")] = npmReplacement{
-			esm: esm,
-			cjs: regexpExportAsExpr.ReplaceAll(bytes.ReplaceAll(bytes.TrimSuffix(bytes.TrimSpace(code), []byte{';'}), []byte("export{"), []byte("return{")), []byte("$2:$1")),
-		}
-		return nil
-	})
-}
-
-func buildEmbedTS(filename string, target string, debug bool) (js []byte, err error) {
+func buildEmbedTSModule(filename string, target string, debug bool) (js []byte, err error) {
 	cacheKey := filename + "?" + target
 	if data, ok := embedBuildCache.Load(cacheKey); ok {
 		return data.([]byte), nil
