@@ -34,7 +34,7 @@ func (l *LoaderWorker) Start(wd string, loaderJS []byte) (err error) {
 	}
 	jsPath := filepath.Join(homeDir, ".esm.sh", "run", fmt.Sprintf("loader@%d.js", VERSION))
 	fi, err := os.Stat(jsPath)
-	if (err != nil && os.IsNotExist(err)) || (err == nil && fi.Size() != int64(len(loaderJS))) || os.Getenv("DEBUG") == "1" {
+	if (err != nil && os.IsNotExist(err)) || (err == nil && fi.Size() != int64(len(loaderJS))) || debug {
 		os.MkdirAll(filepath.Dir(jsPath), 0755)
 		err = os.WriteFile(jsPath, loaderJS, 0644)
 		if err != nil {
@@ -59,7 +59,7 @@ func (l *LoaderWorker) Start(wd string, loaderJS []byte) (err error) {
 		l.stdout = nil
 	} else {
 		l.outReader = bufio.NewReader(l.stdout)
-		if os.Getenv("DEBUG") == "1" {
+		if debug {
 			denoVersion, _ := exec.Command(denoPath, "-v").Output()
 			fmt.Println(term.Dim(fmt.Sprintf("[debug] loader process started (runtime: %s)", strings.TrimSpace(string(denoVersion)))))
 		}
@@ -81,7 +81,7 @@ func (l *LoaderWorker) Load(loaderType string, args []any) (lang string, code st
 		return
 	}
 
-	if os.Getenv("DEBUG") == "1" {
+	if debug {
 		start := time.Now()
 		defer func() {
 			if loaderType == "unocss" {

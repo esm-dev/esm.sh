@@ -1,7 +1,7 @@
 #!/usr/bin/env -S deno run --allow-run --allow-read --allow-write --allow-net
 
 async function startServer(onStart: () => Promise<void>, verbose: boolean) {
-  const { code, success } = await run("go", "build", "-o", "esmd", "main.go");
+  const { code, success } = await run("go", "build", "-tags", "debug", "-o", "esmd", "main.go");
   if (!success) {
     Deno.exit(code);
   }
@@ -25,7 +25,6 @@ async function startServer(onStart: () => Promise<void>, verbose: boolean) {
     ),
   );
   const p = new Deno.Command("./esmd", {
-    args: ["--debug"],
     stdout: verbose ? "inherit" : "null",
     stderr: "inherit",
   }).spawn();

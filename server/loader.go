@@ -99,7 +99,7 @@ func buildLoader(wd, loaderJs, outfile string) (err error) {
 		}},
 	})
 	if len(ret.Errors) > 0 {
-		err = fmt.Errorf("failed to build loader: %s", ret.Errors[0].Text)
+		err = errors.New(ret.Errors[0].Text)
 	}
 	return
 }
@@ -142,7 +142,9 @@ func installLoaderRuntime() (err error) {
 		return
 	}
 
-	log.Debugf("downloading %s...", path.Base(url))
+	if debug {
+		log.Debugf("downloading %s...", path.Base(url))
+	}
 
 	res, err := http.Get(url)
 	if err != nil {
@@ -209,7 +211,7 @@ func getLoaderRuntimeInstallURL() (string, error) {
 	case "amd64", "386":
 		arch = "x86_64"
 	default:
-		return "", fmt.Errorf("unsupported architecture: %s", runtime.GOARCH)
+		return "", errors.New("unsupported architecture: " + runtime.GOARCH)
 	}
 
 	switch runtime.GOOS {
@@ -220,7 +222,7 @@ func getLoaderRuntimeInstallURL() (string, error) {
 	// case "windows":
 	// 	os = "pc-windows-msvc"
 	default:
-		return "", fmt.Errorf("unsupported os: %s", runtime.GOOS)
+		return "", errors.New("unsupported os: " + runtime.GOOS)
 	}
 
 	return fmt.Sprintf("https://github.com/denoland/deno/releases/download/v%s/%s-%s-%s.zip", loaderRuntimeVersion, loaderRuntime, arch, os), nil

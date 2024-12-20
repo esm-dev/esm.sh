@@ -197,7 +197,9 @@ func (ctx *BuildContext) buildModule() (result *BuildMeta, err error) {
 		err = fmt.Errorf("could not resolve build entry")
 		return
 	}
-	log.Debugf(`build(%s): Entry{main: "%s", module: %v, types: "%s"}`, ctx.esmPath.Specifier(), entry.main, entry.module, entry.types)
+	if debug {
+		log.Debugf(`build(%s): Entry{main: "%s", module: %v, types: "%s"}`, ctx.esmPath.Specifier(), entry.main, entry.module, entry.types)
+	}
 
 	isTypesOnly := strings.HasPrefix(ctx.packageJson.Name, "@types/") || (entry.main == "" && entry.types != "")
 	if isTypesOnly {

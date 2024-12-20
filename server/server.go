@@ -37,12 +37,10 @@ var (
 func Serve(efs EmbedFS) {
 	var (
 		cfile string
-		debug bool
 		err   error
 	)
 
 	flag.StringVar(&cfile, "config", "config.json", "the config file path")
-	flag.BoolVar(&debug, "debug", false, "run the server in DEUBG mode")
 	flag.Parse()
 
 	if existsFile(cfile) {
@@ -66,7 +64,8 @@ func Serve(efs EmbedFS) {
 		}
 		embedFS = &MockEmbedFS{cwd}
 	} else {
-		os.Setenv("NO_COLOR", "1") // disable log color in production
+		// disable log color in release build
+		os.Setenv("NO_COLOR", "1")
 		embedFS = efs
 	}
 
@@ -77,16 +76,11 @@ func Serve(efs EmbedFS) {
 	}
 	log.SetLevelByName(config.LogLevel)
 
-	var accessLogger *logger.Logger
-	if config.LogDir == "" {
-		accessLogger = &logger.Logger{}
-	} else {
-		accessLogger, err = logger.New(fmt.Sprintf("file:%s?buffer=32k&fileDateFormat=20060102", path.Join(config.LogDir, "access.log")))
-		if err != nil {
-			log.Fatalf("failed to initialize access logger: %v", err)
-		}
+	accessLogger, err := logger.New(fmt.Sprintf("file:%s?buffer=32k&fileDateFormat=20060102", path.Join(config.LogDir, "access.log")))
+	if err != nil {
+		log.Fatalf("failed to initialize access logger: %v", err)
 	}
-	// quite in terminal
+	// don't write log message to stdout
 	accessLogger.SetQuite(true)
 
 	buildStorage, err = storage.New(&config.Storage)
@@ -143,7 +137,7 @@ func Serve(efs EmbedFS) {
 		rex.Optional(rex.Compress(), config.Compress),
 		rex.Optional(customLandingPage(&config.CustomLandingPage), config.CustomLandingPage.Origin != ""),
 		rex.Optional(esmLegacyRouter, config.LegacyServer != ""),
-		esmRouter(debug),
+		esmRouter(),
 	)
 
 	// start server

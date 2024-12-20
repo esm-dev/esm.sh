@@ -32,7 +32,7 @@ func (fs MockEmbedFS) ReadFile(name string) ([]byte, error) {
 	return os.ReadFile(path.Join(fs.root, name))
 }
 
-func buildEmbedTSModule(filename string, target string, debug bool) (js []byte, err error) {
+func buildEmbedTSModule(filename string, target string) (js []byte, err error) {
 	cacheKey := filename + "?" + target
 	if data, ok := embedBuildCache.Load(cacheKey); ok {
 		return data.([]byte), nil

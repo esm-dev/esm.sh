@@ -8,6 +8,7 @@ import (
 	"crypto/sha1"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -59,7 +60,9 @@ func cjsModuleLexer(ctx *BuildContext, cjsEntry string) (ret cjsModuleLexerResul
 	start := time.Now()
 	defer func() {
 		if err == nil {
-			log.Debugf("[cjsModuleLexer] parse %s in %s", path.Join(ctx.esmPath.PkgName, cjsEntry), time.Since(start))
+			if debug {
+				log.Debugf("[cjsModuleLexer] parse %s in %s", path.Join(ctx.esmPath.PkgName, cjsEntry), time.Since(start))
+			}
 			if !existsFile(cacheFileName) {
 				ensureDir(path.Dir(cacheFileName))
 				utils.WriteJSONFile(cacheFileName, ret, "")
@@ -166,7 +169,9 @@ func installCommonJSModuleLexer() (err error) {
 		return
 	}
 
-	log.Debugf("downloading %s...", path.Base(url))
+	if debug {
+		log.Debugf("downloading %s...", path.Base(url))
+	}
 
 	res, err := http.Get(url)
 	if err != nil {
@@ -205,7 +210,7 @@ func getCommonJSModuleLexerDownloadURL() (string, error) {
 	case "amd64", "386":
 		arch = "x86_64"
 	default:
-		return "", fmt.Errorf("unsupported architecture: %s", runtime.GOARCH)
+		return "", errors.New("unsupported architecture: " + runtime.GOARCH)
 	}
 
 	switch runtime.GOOS {
@@ -214,7 +219,7 @@ func getCommonJSModuleLexerDownloadURL() (string, error) {
 	case "linux":
 		os = "unknown-linux-gnu"
 	default:
-		return "", fmt.Errorf("unsupported os: %s", runtime.GOOS)
+		return "", errors.New("unsupported os: " + runtime.GOOS)
 	}
 
 	return fmt.Sprintf("https://github.com/esm-dev/cjs-module-lexer/releases/download/v%s/cjs-module-lexer-%s-%s.gz", cjsModuleLexerVersion, arch, os), nil

@@ -343,3 +343,32 @@ func (m *KeyedMutex) Lock(key string) func() {
 		}
 	}
 }
+
+// Once is an object that will perform exactly one action.
+// Different from sync.Once, this implementation allows the once function
+// to return an error, that don't set the done flag.
+type Once struct {
+	done atomic.Uint32
+	lock sync.Mutex
+}
+
+func (o *Once) Do(f func() error) error {
+	if o.done.Load() == 0 {
+		// Outlined slow-path to allow inlining of the fast-path.
+		return o.doSlow(f)
+	}
+	return nil
+}
+
+func (o *Once) doSlow(f func() error) error {
+	o.lock.Lock()
+	defer o.lock.Unlock()
+	if o.done.Load() == 0 {
+		err := f()
+		if err == nil {
+			o.done.Store(1)
+		}
+		return err
+	}
+	return nil
+}

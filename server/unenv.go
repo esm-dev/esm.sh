@@ -5,7 +5,6 @@ import (
 	"bytes"
 	"compress/gzip"
 	"errors"
-	"fmt"
 	"io"
 	"os"
 	"path"
@@ -50,7 +49,7 @@ func loadUnenvNodeRuntime() (err error) {
 			return nil
 		}
 	}
-	fmt.Println("Building unenv node runtime...")
+	log.Info("Building unenv node runtime...")
 	return buildUnenvNodeRuntime()
 }
 

@@ -4,7 +4,7 @@ Welcome, and thank you for taking time in contributing to esm.sh project!
 
 ## Development Setup
 
-You will need [Golang](https://golang.org/)(1.22+) and [Deno](https://deno.land)(1.40+) installed on a Linux or macOS machine.
+You will need [Golang](https://golang.org/)(1.22+) and [Deno](https://deno.land)(1.45+) installed on a macOS or Linux-based machine.
 
 1. Fork this repository to your own GitHub account.
 2. Clone the repository to your local device.
@@ -33,7 +33,9 @@ More server options please check [config.exmaple.jsonc](./config.example.jsonc).
 ## Running the Server from Source Code
 
 ```bash
-go run main.go --debug
+go run -tags debug main.go
+# or
+make dev
 ```
 
 Then you can import `React` from "http://localhost:8080/react"
@@ -47,7 +49,7 @@ We use [Deno](https://deno.land) to run all the integration testing cases. Make 
 make test
 
 # Run a specific test
-make dir=react-18
+make test dir=react-18
 ```
 
 To add a new integration test case, copy the [test/_template](./test/_template) directory and rename it to your case name.

@@ -9,7 +9,6 @@ import (
 	"path"
 	"strconv"
 	"strings"
-	"sync"
 
 	"github.com/esm-dev/esm.sh/server/common"
 )
@@ -17,16 +16,18 @@ import (
 func transformSvelte(npmrc *NpmRC, svelteVersion string, filename string, code string) (output *LoaderOutput, err error) {
 	loaderExecPath := path.Join(npmrc.StoreDir(), "svelte@"+svelteVersion, "loader.js")
 
-	once, _ := compileSyncMap.LoadOrStore(loaderExecPath, &sync.Once{})
-	once.(*sync.Once).Do(func() {
+	once, _ := compileSyncMap.LoadOrStore(loaderExecPath, &Once{})
+	err = once.(*Once).Do(func() (err error) {
 		if !existsFile(loaderExecPath) {
 			log.Debug("compiling svelte loader...")
 			err = compileSvelteLoader(npmrc, svelteVersion, loaderExecPath)
-			if err != nil {
-				return
-			}
 		}
+		return
 	})
+	if err != nil {
+		err = errors.New("failed to compile svelte loader: " + err.Error())
+		return
+	}
 
 	return runLoader(loaderExecPath, filename, code)
 }
@@ -89,16 +90,18 @@ func generateUnoCSS(npmrc *NpmRC, configCSS string, content string) (output *Loa
 	loaderVersion := "0.4.1"
 	loaderExecPath := path.Join(config.WorkDir, "bin", "unocss-loader-"+loaderVersion)
 
-	once, _ := compileSyncMap.LoadOrStore(loaderExecPath, &sync.Once{})
-	once.(*sync.Once).Do(func() {
+	once, _ := compileSyncMap.LoadOrStore(loaderExecPath, &Once{})
+	err = once.(*Once).Do(func() (err error) {
 		if !existsFile(loaderExecPath) {
 			log.Debug("compiling unocss loader...")
 			err = compileUnocssLoader(npmrc, loaderVersion, loaderExecPath)
-			if err != nil {
-				return
-			}
 		}
+		return
 	})
+	if err != nil {
+		err = errors.New("failed to compile unocss engine: " + err.Error())
+		return
+	}
 
 	var outBuf bytes.Buffer
 	var errBuf bytes.Buffer
@@ -236,16 +239,18 @@ func transformVue(npmrc *NpmRC, vueVersion string, filename string, code string)
 	loaderVersion := "1.0.1" // @esm.sh/vue-compiler
 	loaderExecPath := path.Join(npmrc.StoreDir(), "@vue/compiler-sfc@"+vueVersion, "loader-"+loaderVersion+".js")
 
-	once, _ := compileSyncMap.LoadOrStore(loaderExecPath, &sync.Once{})
-	once.(*sync.Once).Do(func() {
+	once, _ := compileSyncMap.LoadOrStore(loaderExecPath, &Once{})
+	err = once.(*Once).Do(func() (err error) {
 		if !existsFile(loaderExecPath) {
 			log.Debug("compiling vue loader...")
 			err = compileVueLoader(npmrc, vueVersion, loaderVersion, loaderExecPath)
-			if err != nil {
-				return
-			}
 		}
+		return
 	})
+	if err != nil {
+		err = errors.New("failed to compile vue loader: " + err.Error())
+		return
+	}
 
 	return runLoader(loaderExecPath, filename, code)
 }

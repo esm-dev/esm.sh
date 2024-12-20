@@ -1,9 +1,9 @@
-cli/serv:
-	@DEBUG=1 go run cli/cmd/main.go serve cli/cmd/demo/${app}
+dev/cli:
+	@go run -tags debug cli/cmd/main.go serve cli/cmd/demo/${app}
 
-serv: config.json
+dev: config.json
 	@rm -rf .esmd/storage
-	@go run main.go --config=config.json --debug
+	@go run -tags debug main.go --config=config.json
 
 .PHONY: test
 test:

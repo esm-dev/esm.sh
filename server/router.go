@@ -42,7 +42,7 @@ const (
 	RawFile
 )
 
-func esmRouter(debug bool) rex.Handle {
+func esmRouter() rex.Handle {
 	var (
 		startTime  = time.Now()
 		globalETag = fmt.Sprintf(`W/"v%d"`, VERSION)
@@ -350,7 +350,7 @@ func esmRouter(debug bool) rex.Handle {
 				target = getBuildTargetByUA(ctx.UserAgent())
 			}
 
-			js, err := buildEmbedTSModule(pathname[1:]+".ts", target, debug)
+			js, err := buildEmbedTSModule(pathname[1:]+".ts", target)
 			if err != nil {
 				return rex.Status(500, fmt.Sprintf("Transform error: %v", err))
 			}
