@@ -1,6 +1,6 @@
 #!/usr/bin/env -S deno run --allow-run --allow-read --allow-write --allow-net
 
-async function startServer(onStart: () => Promise<void>, verbose: boolean) {
+async function startServer(onStart: () => Promise<void>) {
   const { code, success } = await run("go", "build", "-tags", "debug", "-o", "esmd", "main.go");
   if (!success) {
     Deno.exit(code);
@@ -25,7 +25,7 @@ async function startServer(onStart: () => Promise<void>, verbose: boolean) {
     ),
   );
   const p = new Deno.Command("./esmd", {
-    stdout: verbose ? "inherit" : "null",
+    stdout: Deno.args.includes("-q") ? "null" : "inherit",
     stderr: "inherit",
   }).spawn();
   addEventListener("unload", () => {
@@ -64,7 +64,7 @@ async function runTest(name: string, retry?: boolean): Promise<number> {
     "--no-lock",
     "--reload=http://localhost:8080",
     "--location=http://0.0.0.0/",
-    Deno.args.includes("-q") && "-q",
+    "-q",
   ].filter(Boolean);
   const dir = `test/${name}/`;
   if (await exists(dir + "deno.json")) {
@@ -148,5 +148,5 @@ if (import.meta.main) {
       "color: blue",
     );
     Deno.exit(0);
-  }, tests.length > 0);
+  });
 }
