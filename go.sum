@@ -2,12 +2,12 @@ github.com/Masterminds/semver/v3 v3.3.1 h1:QtNSWtVZ3nBfk8mAOu/B6v7FMJ+NHTIgUPi7r
 github.com/Masterminds/semver/v3 v3.3.1/go.mod h1:4V+yj/TJE1HU9XfppCwVMZq3I84lprf4nC11bSS5beM=
 github.com/andybalholm/brotli v1.1.1 h1:PR2pgnyFznKEugtsUo0xLdDop5SKXd5Qf5ysW+7XdTA=
 github.com/andybalholm/brotli v1.1.1/go.mod h1:05ib4cKhjx3OQYUY22hTVd34Bc8upXjOLL2rKwwZBoA=
-github.com/evanw/esbuild v0.24.0 h1:GZ78naTLp7FKr+K7eNuM/SLs5maeiHYRPsTg6kmdsSE=
-github.com/evanw/esbuild v0.24.0/go.mod h1:D2vIQZqV/vIf/VRHtViaUtViZmG7o+kKmlBfVQuRi48=
+github.com/evanw/esbuild v0.24.1 h1:3L4VuUtpbljA3H+0Ik20dr4xrBKtuJIUoiW+Us4GALM=
+github.com/evanw/esbuild v0.24.1/go.mod h1:D2vIQZqV/vIf/VRHtViaUtViZmG7o+kKmlBfVQuRi48=
 github.com/gorilla/websocket v1.5.3 h1:saDtZ6Pbx/0u+bgYQ3q96pZgCzfhKXGPqt7kZ72aNNg=
 github.com/gorilla/websocket v1.5.3/go.mod h1:YR8l580nyteQvAITg2hZ9XVh4b55+EU/adAjf1fMHhE=
-github.com/ije/esbuild-internal v0.24.0 h1:ekQilnTP0YQBpqHwaZwpIWH/YbehY4xctKW8gU+AmGQ=
-github.com/ije/esbuild-internal v0.24.0/go.mod h1:s7HvKZ4ZGifyzvgWpSwnJOQTr6b+bsgfNBZ8HAEwwSM=
+github.com/ije/esbuild-internal v0.24.1 h1:/Ye6RmiYmYhO0tasVP06t0pvZ6QSdB7Ux6/ZsvqS58w=
+github.com/ije/esbuild-internal v0.24.1/go.mod h1:s7HvKZ4ZGifyzvgWpSwnJOQTr6b+bsgfNBZ8HAEwwSM=
 github.com/ije/gox v0.9.3 h1:2JdnELIXaHF1JCojgS0ftq4ftF7koBcSO+PtVSWyZP8=
 github.com/ije/gox v0.9.3/go.mod h1:3GTaK8WXf6oxRbrViLqKNLTNcMR871Dz0zoujFNmG48=
 github.com/ije/rex v1.13.10 h1:Bg9MdrDj0qIgnKks8IEsJpmIXl3YgI7E4inBIw6b0QU=
