@@ -8,7 +8,7 @@ RUN apk update && apk add --no-cache git
 RUN git clone --branch $ESM_SH_VERSION --depth 1 $ESM_SH_REPO /tmp/esm.sh
 
 WORKDIR /tmp/esm.sh
-RUN CGO_ENABLED=0 GOOS=linux go build -o esmd main.go
+RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w" -o esmd main.go
 
 # 2. run the server
 FROM alpine AS server
