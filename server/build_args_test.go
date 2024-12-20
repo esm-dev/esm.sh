@@ -5,7 +5,7 @@ import (
 )
 
 func TestEncodeBuildArgs(t *testing.T) {
-	external := NewStringSet()
+	external := NewSet()
 	conditions := []string{"react-server"}
 	external.Add("baz")
 	external.Add("bar")

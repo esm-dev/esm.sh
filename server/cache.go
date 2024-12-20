@@ -6,7 +6,7 @@ import (
 )
 
 var (
-	cacheLocks sync.Map
+	cacheMutex KeyedMutex
 	cacheStore sync.Map
 )
 
@@ -26,11 +26,8 @@ func withCache[T any](key string, cacheTtl time.Duration, fetch func() (T, strin
 		}
 	}
 
-	lock, _ := cacheLocks.LoadOrStore(key, &sync.Mutex{})
-	defer cacheLocks.Delete(key)
-
-	lock.(*sync.Mutex).Lock()
-	defer lock.(*sync.Mutex).Unlock()
+	unlock := cacheMutex.Lock(key)
+	defer unlock()
 
 	// check cache again after lock
 	if cacheTtl > 0 {
@@ -55,6 +52,37 @@ func withCache[T any](key string, cacheTtl time.Duration, fetch func() (T, strin
 			cacheStore.Store(aliasKey, &cacheItem{r, exp})
 		}
 	}
+	return
+}
+
+func withLRUCache[T any](key string, fetch func() (T, error)) (r T, err error) {
+	cacheKey := "lru:" + key
+	cacheTtl := 24 * time.Hour
+
+	// check cache first
+	if v, ok := cacheStore.Load(cacheKey); ok {
+		item := v.(*cacheItem)
+		item.exp = time.Now().Add(cacheTtl)
+		return item.data.(T), nil
+
+	}
+
+	unlock := cacheMutex.Lock(key)
+	defer unlock()
+
+	// check cache again after lock
+	if v, ok := cacheStore.Load(cacheKey); ok {
+		item := v.(*cacheItem)
+		item.exp = time.Now().Add(cacheTtl)
+		return item.data.(T), nil
+	}
+
+	r, err = fetch()
+	if err != nil {
+		return
+	}
+
+	cacheStore.Store(cacheKey, &cacheItem{r, time.Now().Add(cacheTtl)})
 	return
 }
 

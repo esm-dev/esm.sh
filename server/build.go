@@ -97,23 +97,31 @@ func NewBuildContext(zoneId string, npmrc *NpmRC, esm EsmPath, args BuildArgs, e
 	}
 }
 
-func (ctx *BuildContext) Query() (*BuildMeta, error) {
+func (ctx *BuildContext) Exists() (*BuildMeta, bool, error) {
 	key := ctx.getSavepath() + ".meta"
-	r, _, err := buildStorage.Get(key)
-	if err != nil && err != storage.ErrNotFound {
-		return nil, err
-	}
-	if err == nil {
-		var b BuildMeta
-		err = json.NewDecoder(r).Decode(&b)
-		r.Close()
-		if err == nil {
-			return &b, nil
+	meta, err := withLRUCache(key, func() (*BuildMeta, error) {
+		r, _, err := buildStorage.Get(key)
+		if err != nil {
+			return nil, err
 		}
-		// delete the invalid build meta
+		defer r.Close()
+
+		var meta BuildMeta
+		if json.NewDecoder(r).Decode(&meta) == nil {
+			return &meta, nil
+		}
+
+		// delete the invalid meta file
 		buildStorage.Delete(key)
+		return nil, storage.ErrNotFound
+	})
+	if err != nil {
+		if err == storage.ErrNotFound {
+			return nil, false, nil
+		}
+		return nil, false, err
 	}
-	return nil, nil
+	return meta, true, nil
 }
 
 func (ctx *BuildContext) Build() (ret *BuildMeta, err error) {
@@ -121,9 +129,9 @@ func (ctx *BuildContext) Build() (ret *BuildMeta, err error) {
 		return ctx.buildTypes()
 	}
 
-	// query previous build
-	ret, err = ctx.Query()
-	if err != nil || ret != nil {
+	// check previous build
+	ret, ok, err := ctx.Exists()
+	if err != nil || ok {
 		return
 	}
 
@@ -134,9 +142,9 @@ func (ctx *BuildContext) Build() (ret *BuildMeta, err error) {
 		return
 	}
 
-	// query again after installation (in case the sub-module path has been changed by the `install` function)
-	ret, err = ctx.Query()
-	if err != nil || ret != nil {
+	// check previous build again after installation (in case the sub-module path has been changed by the `install` function)
+	ret, ok, err = ctx.Exists()
+	if err != nil || ok {
 		return
 	}
 
@@ -272,24 +280,68 @@ func (ctx *BuildContext) buildModule() (result *BuildMeta, err error) {
 		}
 	}
 
-	if ctx.packageJson.Exports.Len() > 0 {
-		var exportNames []string
-		var exportAll bool
-		for _, exportName := range ctx.packageJson.Exports.Keys() {
-			exportName := stripModuleExt(exportName)
-			if (exportName == "." || strings.HasPrefix(exportName, "./")) && !endsWith(exportName, ".json", ".css") {
-				if exportName == "./*" {
-					exportAll = true
-					break
-				}
-				if strings.HasSuffix(exportName, "/*") {
-					fmt.Println("*", exportName)
-				}
-				exportNames = append(exportNames, exportName)
-			}
-		}
-		fmt.Println(exportNames, exportAll)
-	}
+	// if ctx.packageJson.Exports.Len() > 0 {
+	// 	var exportNames []string
+	// 	var exportAll bool
+	// 	for _, exportName := range ctx.packageJson.Exports.keys {
+	// 		exportName := stripModuleExt(exportName)
+	// 		if (exportName == "." || strings.HasPrefix(exportName, "./")) && !endsWith(exportName, ".json", ".css") {
+	// 			if exportName == "./*" {
+	// 				exportAll = true
+	// 				break
+	// 			}
+	// 			if !strings.ContainsRune(exportName, '*') {
+	// 				v := ctx.packageJson.Exports.values[exportName]
+	// 				if om, ok := v.(*JsonObject); ok {
+	// 					// ignore types exports
+	// 					if len(om.keys) == 1 && om.keys[0] == "types" {
+	// 						continue
+	// 					}
+	// 				}
+	// 				if exportName == "." {
+	// 					exportNames = append(exportNames, ctx.esmPath.PkgName)
+	// 				} else {
+	// 					exportNames = append(exportNames, ctx.esmPath.PkgName+utils.NormalizePathname(exportName))
+	// 				}
+	// 			}
+	// 		}
+	// 	}
+	// 	if !exportAll {
+	// 		ret := esbuild.Build(esbuild.BuildOptions{
+	// 			AbsWorkingDir: ctx.wd,
+	// 			Outdir:        "/esbuild",
+	// 			EntryPoints:   exportNames,
+	// 			Format:        esbuild.FormatESModule,
+	// 			Target:        esbuild.ESNext,
+	// 			Platform:      esbuild.PlatformBrowser,
+	// 			Bundle:        true,
+	// 			Write:         false,
+	// 			Plugins: []esbuild.Plugin{{
+	// 				Name: "esm.sh",
+	// 				Setup: func(build esbuild.PluginBuild) {
+	// 					build.OnResolve(
+	// 						esbuild.OnResolveOptions{Filter: ".*"},
+	// 						func(args esbuild.OnResolveArgs) (esbuild.OnResolveResult, error) {
+	// 							if !isRelPathSpecifier(args.Path) && args.Path != ctx.esmPath.PkgName && !strings.HasPrefix(args.Path, ctx.esmPath.PkgName+"/") {
+	// 								return esbuild.OnResolveResult{External: true}, nil
+	// 							}
+	// 							p := args.Path
+	// 							if isRelPathSpecifier(p) {
+	// 							}
+	// 							fmt.Println("-", args)
+	// 							return esbuild.OnResolveResult{}, nil
+	// 						},
+	// 					)
+	// 				},
+	// 			}},
+	// 		})
+	// 		if len(ret.Errors) > 0 {
+	// 			for _, err := range ret.Errors {
+	// 				fmt.Println(err.Text)
+	// 			}
+	// 		}
+	// 	}
+	// }
 
 	pkgSideEffects := esbuild.SideEffectsTrue
 	if ctx.packageJson.SideEffectsFalse {
@@ -305,9 +357,9 @@ func (ctx *BuildContext) buildModule() (result *BuildMeta, err error) {
 		}
 	}
 
-	browserExclude := map[string]*StringSet{}
-	implicitExternal := NewStringSet()
-	deps := NewStringSet()
+	browserExclude := map[string]*Set{}
+	implicitExternal := NewSet()
+	deps := NewSet()
 	splitting := len(entryPoints) > 1
 
 	nodeEnv := ctx.getNodeEnv()
@@ -345,8 +397,12 @@ func (ctx *BuildContext) buildModule() (result *BuildMeta, err error) {
 	if ctx.dev {
 		conditions = append(conditions, "development")
 	}
-	if ctx.isDenoTarget() {
+	if ctx.isBrowserTarget() {
+		conditions = append(conditions, "browser")
+	} else if ctx.isDenoTarget() {
 		conditions = append(conditions, "deno")
+	} else if ctx.target == "node" {
+		conditions = append(conditions, "node")
 	}
 	options := esbuild.BuildOptions{
 		AbsWorkingDir:     ctx.wd,
@@ -661,7 +717,7 @@ func (ctx *BuildContext) buildModule() (result *BuildMeta, err error) {
 											// exports: "./*": "./dist/*.js"
 											prefix, suffix = utils.SplitByLastByte(s, '*')
 											match = strings.HasPrefix(stripModuleExt(moduleSpecifier), prefix) && (suffix == "" || strings.HasSuffix(moduleSpecifier, suffix))
-										} else if m, ok := v.(*OrderedMap); ok {
+										} else if m, ok := v.(*JsonObject); ok {
 											// exports: "./*": { "import": "./dist/*.js" }
 											// exports: "./*": { "import": { default: "./dist/*.js" } }
 											// ...
@@ -694,7 +750,7 @@ func (ctx *BuildContext) buildModule() (result *BuildMeta, err error) {
 										if s, ok := v.(string); ok && stripModuleExt(s) == stripModuleExt(moduleSpecifier) {
 											// exports: "./foo": "./foo.js"
 											match = true
-										} else if m, ok := v.(*OrderedMap); ok {
+										} else if m, ok := v.(*JsonObject); ok {
 											// exports: "./foo": { "import": "./foo.js" }
 											// exports: "./foo": { "import": { default: "./foo.js" } }
 											// ...
@@ -967,7 +1023,7 @@ rebuild:
 					path = strings.TrimPrefix(path, "browser-exclude:")
 					exports, ok := browserExclude[path]
 					if !ok {
-						exports = NewStringSet()
+						exports = NewSet()
 						browserExclude[path] = exports
 					}
 					if !exports.Has(exportName) {
@@ -1015,7 +1071,7 @@ rebuild:
 
 			// add nodejs compatibility
 			if ctx.target != "node" {
-				ids := NewStringSet()
+				ids := NewSet()
 				for _, r := range regexpESMInternalIdent.FindAll(jsContent, -1) {
 					ids.Add(string(r))
 				}
@@ -1079,7 +1135,7 @@ rebuild:
 
 			if len(ctx.cjsRequires) > 0 {
 				requires := make([][3]string, 0, len(ctx.cjsRequires))
-				set := NewStringSet()
+				set := NewSet()
 				for _, r := range ctx.cjsRequires {
 					specifier := r[0]
 					if !set.Has(specifier) {
@@ -1296,7 +1352,7 @@ func (ctx *BuildContext) install() (err error) {
 					if s, ok := v.(string); ok {
 						// exports: { ".": "./index.js" }
 						isMainModule = check(s)
-					} else if om, ok := v.(*OrderedMap); ok {
+					} else if om, ok := v.(*JsonObject); ok {
 						// exports: { ".": { "require": "./cjs/index.js", "import": "./esm/index.js" } }
 						// exports: { ".": { "node": { "require": "./cjs/index.js", "import": "./esm/index.js" } } }
 						// ...

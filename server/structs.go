@@ -10,30 +10,31 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
-type StringSet struct {
+type Set struct {
 	lock sync.RWMutex
 	set  map[string]struct{}
 }
 
-func NewStringSet(keys ...string) *StringSet {
+func NewSet(keys ...string) *Set {
 	set := make(map[string]struct{}, len(keys))
 	for _, key := range keys {
 		set[key] = struct{}{}
 	}
-	return &StringSet{set: set}
+	return &Set{set: set}
 }
 
-func (s *StringSet) Len() int {
+func (s *Set) Len() int {
 	s.lock.RLock()
 	defer s.lock.RUnlock()
 
 	return len(s.set)
 }
 
-func (s *StringSet) Has(key string) bool {
+func (s *Set) Has(key string) bool {
 	s.lock.RLock()
 	defer s.lock.RUnlock()
 
@@ -41,28 +42,28 @@ func (s *StringSet) Has(key string) bool {
 	return ok
 }
 
-func (s *StringSet) Add(key string) {
+func (s *Set) Add(key string) {
 	s.lock.Lock()
 	defer s.lock.Unlock()
 
 	s.set[key] = struct{}{}
 }
 
-func (s *StringSet) Remove(key string) {
+func (s *Set) Remove(key string) {
 	s.lock.Lock()
 	defer s.lock.Unlock()
 
 	delete(s.set, key)
 }
 
-func (s *StringSet) Reset() {
+func (s *Set) Reset() {
 	s.lock.Lock()
 	defer s.lock.Unlock()
 
 	s.set = map[string]struct{}{}
 }
 
-func (s *StringSet) Values() []string {
+func (s *Set) Values() []string {
 	s.lock.RLock()
 	defer s.lock.RUnlock()
 
@@ -75,7 +76,7 @@ func (s *StringSet) Values() []string {
 	return a
 }
 
-func (s *StringSet) SortedValues() []string {
+func (s *Set) SortedValues() []string {
 	slice := sort.StringSlice(s.Values())
 	slice.Sort()
 	return slice
@@ -141,35 +142,31 @@ func (a SortablePaths) Less(i, j int) bool {
 	return len(iParts) < len(jParts)
 }
 
-// copied from https://gitlab.com/c0b/go-ordered-json
-type OrderedMap struct {
+// based on https://gitlab.com/c0b/go-ordered-json
+type JsonObject struct {
 	keys   []string
 	values map[string]interface{}
 }
 
 // Create a new orderedMap
-func newOrderedMap() *OrderedMap {
-	return &OrderedMap{
+func newJSONObject() *JsonObject {
+	return &JsonObject{
 		values: make(map[string]interface{}),
 	}
 }
 
-func (om *OrderedMap) Len() int {
+func (om *JsonObject) Len() int {
 	return len(om.keys)
 }
 
-func (om *OrderedMap) Keys() []string {
-	return om.keys
-}
-
-func (om *OrderedMap) Get(key string) (interface{}, bool) {
+func (om *JsonObject) Get(key string) (interface{}, bool) {
 	v, ok := om.values[key]
 	return v, ok
 }
 
 // Set sets value for particular key, this will remember the order of keys inserted
 // but if the key already exists, the order is not updated.
-func (om *OrderedMap) Set(key string, value interface{}) {
+func (om *JsonObject) Set(key string, value interface{}) {
 	if _, ok := om.values[key]; !ok {
 		om.keys = append(om.keys, key)
 	}
@@ -177,7 +174,7 @@ func (om *OrderedMap) Set(key string, value interface{}) {
 }
 
 // UnmarshalJSON implements type json.Unmarshaler interface, so can be called in json.Unmarshal(data, om)
-func (om *OrderedMap) UnmarshalJSON(data []byte) error {
+func (om *JsonObject) UnmarshalJSON(data []byte) error {
 	dec := json.NewDecoder(bytes.NewReader(data))
 	dec.UseNumber()
 
@@ -190,7 +187,7 @@ func (om *OrderedMap) UnmarshalJSON(data []byte) error {
 		return fmt.Errorf("expect JSON object open with '{'")
 	}
 
-	err = om.parseObject(dec)
+	err = om.parse(dec)
 	if err != nil {
 		return err
 	}
@@ -203,7 +200,7 @@ func (om *OrderedMap) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
-func (om *OrderedMap) parseObject(dec *json.Decoder) (err error) {
+func (om *JsonObject) parse(dec *json.Decoder) (err error) {
 	var t json.Token
 	for dec.More() {
 		t, err = dec.Token()
@@ -276,8 +273,8 @@ func handleDelim(t json.Token, dec *json.Decoder) (res interface{}, err error) {
 	if delim, ok := t.(json.Delim); ok {
 		switch delim {
 		case '{':
-			om2 := newOrderedMap()
-			err = om2.parseObject(dec)
+			om2 := newJSONObject()
+			err = om2.parse(dec)
 			if err != nil {
 				return
 			}
@@ -296,19 +293,19 @@ func handleDelim(t json.Token, dec *json.Decoder) (res interface{}, err error) {
 	return t, nil
 }
 
-type FetchClient struct {
+type HttpClient struct {
 	*http.Client
 	userAgent string
 }
 
-func NewFetchClient(timeout time.Duration, userAgent string) *FetchClient {
-	return &FetchClient{
+func NewFetchClient(timeout time.Duration, userAgent string) *HttpClient {
+	return &HttpClient{
 		Client:    &http.Client{Timeout: timeout},
 		userAgent: userAgent,
 	}
 }
 
-func (f *FetchClient) Fetch(url *url.URL) (resp *http.Response, err error) {
+func (c *HttpClient) Fetch(url *url.URL) (resp *http.Response, err error) {
 	req := &http.Request{
 		Method:     "GET",
 		URL:        url,
@@ -317,8 +314,32 @@ func (f *FetchClient) Fetch(url *url.URL) (resp *http.Response, err error) {
 		ProtoMajor: 1,
 		ProtoMinor: 1,
 		Header: http.Header{
-			"User-Agent": []string{f.userAgent},
+			"User-Agent": []string{c.userAgent},
 		},
 	}
-	return f.Do(req)
+	return c.Do(req)
+}
+
+type KeyedMutex struct {
+	mutexes sync.Map
+}
+
+type KeyedMutexItem struct {
+	lock  sync.Mutex
+	count atomic.Int32
+}
+
+func (m *KeyedMutex) Lock(key string) func() {
+	value, _ := m.mutexes.LoadOrStore(key, &KeyedMutexItem{})
+	mtx := value.(*KeyedMutexItem)
+	mtx.count.Add(1)
+	mtx.lock.Lock()
+
+	return func() {
+		mtx.lock.Unlock()
+		mtx.count.Add(-1)
+		if mtx.count.Load() == 0 {
+			m.mutexes.Delete(key)
+		}
+	}
 }

@@ -1178,7 +1178,7 @@ func esmRouter(debug bool) rex.Handle {
 					} else {
 						ctx.SetHeader("Content-Type", ctJavaScript)
 						// check `?exports` query
-						exports := NewStringSet()
+						exports := NewSet()
 						if query.Has("exports") {
 							for _, p := range strings.Split(query.Get("exports"), ",") {
 								p = strings.TrimSpace(p)
@@ -1333,7 +1333,7 @@ func esmRouter(debug bool) rex.Handle {
 
 		// check `?conditions` query
 		var conditions []string
-		conditionsSet := NewStringSet()
+		conditionsSet := NewSet()
 		if query.Has("conditions") {
 			for _, p := range strings.Split(query.Get("conditions"), ",") {
 				p = strings.TrimSpace(p)
@@ -1345,7 +1345,7 @@ func esmRouter(debug bool) rex.Handle {
 		}
 
 		// check `?external` query
-		external := NewStringSet()
+		external := NewSet()
 		externalAll := asteriskPrefix
 		if !asteriskPrefix && query.Has("external") {
 			for _, p := range strings.Split(query.Get("external"), ",") {
@@ -1514,11 +1514,11 @@ func esmRouter(debug bool) rex.Handle {
 		}
 
 		buildCtx := NewBuildContext(zoneId, npmrc, esmPath, buildArgs, externalAll, target, !targetFromUA, bundleMode, isDev)
-		ret, err := buildCtx.Query()
+		ret, ok, err := buildCtx.Exists()
 		if err != nil {
 			return rex.Status(500, err.Error())
 		}
-		if ret == nil {
+		if !ok {
 			c := buildQueue.Add(buildCtx, ctx.RemoteIP())
 			select {
 			case output := <-c.C:
@@ -1564,7 +1564,7 @@ func esmRouter(debug bool) rex.Handle {
 		}
 
 		// check `?exports` query
-		exports := NewStringSet()
+		exports := NewSet()
 		if query.Has("exports") {
 			for _, p := range strings.Split(query.Get("exports"), ",") {
 				p = strings.TrimSpace(p)

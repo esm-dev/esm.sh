@@ -31,7 +31,7 @@ const (
 var (
 	npmNaming       = valid.Validator{valid.Range{'a', 'z'}, valid.Range{'A', 'Z'}, valid.Range{'0', '9'}, valid.Eq('_'), valid.Eq('$'), valid.Eq('.'), valid.Eq('-'), valid.Eq('+'), valid.Eq('!'), valid.Eq('~'), valid.Eq('*'), valid.Eq('('), valid.Eq(')')}
 	npmReplacements = map[string]npmReplacement{}
-	installLocks    = sync.Map{}
+	installMutex    = KeyedMutex{}
 )
 
 type npmReplacement struct {
@@ -75,38 +75,10 @@ func (p *Package) String() string {
 	return s
 }
 
-// NpmPackageVerions defines versions of a NPM package
-type NpmPackageVerions struct {
+// NpmPackageMetadata defines versions of a NPM package
+type NpmPackageMetadata struct {
 	DistTags map[string]string         `json:"dist-tags"`
 	Versions map[string]PackageJSONRaw `json:"versions"`
-}
-
-// NpmDist defines the dist field of a NPM package
-type NpmDist struct {
-	Tarball string `json:"tarball"`
-}
-
-// PackageJSON defines the package.json of a NPM package
-type PackageJSON struct {
-	Name             string
-	PkgName          string
-	Version          string
-	Type             string
-	Main             string
-	Module           string
-	Types            string
-	Typings          string
-	SideEffectsFalse bool
-	SideEffects      *StringSet
-	Browser          map[string]string
-	Dependencies     map[string]string
-	PeerDependencies map[string]string
-	Imports          map[string]any
-	TypesVersions    map[string]any
-	Exports          *OrderedMap
-	Esmsh            map[string]any
-	Dist             NpmDist
-	Deprecated       string
 }
 
 // PackageJSONRaw defines the package.json of a NPM package
@@ -133,6 +105,34 @@ type PackageJSONRaw struct {
 	Deprecated       any             `json:"deprecated"`
 }
 
+// NpmPackageDist defines the dist field of a NPM package
+type NpmPackageDist struct {
+	Tarball string `json:"tarball"`
+}
+
+// PackageJSON defines the package.json of a NPM package
+type PackageJSON struct {
+	Name             string
+	PkgName          string
+	Version          string
+	Type             string
+	Main             string
+	Module           string
+	Types            string
+	Typings          string
+	SideEffectsFalse bool
+	SideEffects      *Set
+	Browser          map[string]string
+	Dependencies     map[string]string
+	PeerDependencies map[string]string
+	Imports          map[string]any
+	TypesVersions    map[string]any
+	Exports          *JsonObject
+	Esmsh            map[string]any
+	Dist             NpmPackageDist
+	Deprecated       string
+}
+
 // ToNpmPackage converts PackageJSONRaw to PackageJSON
 func (a *PackageJSONRaw) ToNpmPackage() *PackageJSON {
 	browser := map[string]string{}
@@ -152,6 +152,7 @@ func (a *PackageJSONRaw) ToNpmPackage() *PackageJSON {
 			}
 		}
 	}
+
 	var dependencies map[string]string
 	if m, ok := a.Dependencies.(map[string]any); ok {
 		dependencies = make(map[string]string, len(m))
@@ -163,6 +164,7 @@ func (a *PackageJSONRaw) ToNpmPackage() *PackageJSON {
 			}
 		}
 	}
+
 	var peerDependencies map[string]string
 	if m, ok := a.PeerDependencies.(map[string]any); ok {
 		peerDependencies = make(map[string]string, len(m))
@@ -174,20 +176,21 @@ func (a *PackageJSONRaw) ToNpmPackage() *PackageJSON {
 			}
 		}
 	}
-	var sideEffects *StringSet = nil
+
+	var sideEffects *Set = nil
 	sideEffectsFalse := false
 	if a.SideEffects != nil {
 		if s, ok := a.SideEffects.(string); ok {
 			if s == "false" {
 				sideEffectsFalse = true
 			} else if endsWith(s, moduleExts...) {
-				sideEffects = NewStringSet()
+				sideEffects = NewSet()
 				sideEffects.Add(s)
 			}
 		} else if b, ok := a.SideEffects.(bool); ok {
 			sideEffectsFalse = !b
 		} else if m, ok := a.SideEffects.([]any); ok && len(m) > 0 {
-			sideEffects = NewStringSet()
+			sideEffects = NewSet()
 			for _, v := range m {
 				if name, ok := v.(string); ok && endsWith(name, moduleExts...) {
 					sideEffects.Add(name)
@@ -195,7 +198,8 @@ func (a *PackageJSONRaw) ToNpmPackage() *PackageJSON {
 			}
 		}
 	}
-	exports := newOrderedMap()
+
+	exports := newJSONObject()
 	if rawExports := a.Exports; rawExports != nil {
 		var s string
 		if json.Unmarshal(rawExports, &s) == nil {
@@ -206,13 +210,15 @@ func (a *PackageJSONRaw) ToNpmPackage() *PackageJSON {
 			exports.UnmarshalJSON(rawExports)
 		}
 	}
+
 	depreacted := ""
 	if a.Deprecated != nil {
 		if s, ok := a.Deprecated.(string); ok {
 			depreacted = s
 		}
 	}
-	var dist NpmDist
+
+	var dist NpmPackageDist
 	if a.Dist != nil {
 		json.Unmarshal(a.Dist, &dist)
 	}
@@ -255,11 +261,11 @@ func (a *PackageJSONRaw) ToNpmPackage() *PackageJSON {
 
 // UnmarshalJSON implements the json.Unmarshaler interface
 func (a *PackageJSON) UnmarshalJSON(b []byte) error {
-	var n PackageJSONRaw
-	if err := json.Unmarshal(b, &n); err != nil {
+	var raw PackageJSONRaw
+	if err := json.Unmarshal(b, &raw); err != nil {
 		return err
 	}
-	*a = *n.ToNpmPackage()
+	*a = *raw.ToNpmPackage()
 	return nil
 }
 
@@ -364,7 +370,7 @@ func (rc *NpmRC) getPackageInfo(name string, semver string) (info *PackageJSON, 
 	if regexpVersionStrict.MatchString(semver) {
 		var raw PackageJSONRaw
 		pkgJsonPath := path.Join(rc.StoreDir(), name+"@"+semver, "node_modules", name, "package.json")
-		if existsFile(pkgJsonPath) && utils.ParseJSONFile(pkgJsonPath, &raw) == nil {
+		if utils.ParseJSONFile(pkgJsonPath, &raw) == nil {
 			info = raw.ToNpmPackage()
 			return
 		}
@@ -462,20 +468,20 @@ func (npmrc *NpmRC) fetchPackageInfo(packageName string, semverOrDistTag string)
 			return raw.ToNpmPackage(), getCacheKey(packageName, raw.Version), nil
 		}
 
-		var h NpmPackageVerions
-		err = json.NewDecoder(res.Body).Decode(&h)
+		var metadata NpmPackageMetadata
+		err = json.NewDecoder(res.Body).Decode(&metadata)
 		if err != nil {
 			return nil, "", err
 		}
 
-		if len(h.Versions) == 0 {
+		if len(metadata.Versions) == 0 {
 			return nil, "", fmt.Errorf("version %s of '%s' not found", semverOrDistTag, packageName)
 		}
 
 	CHECK:
-		distVersion, ok := h.DistTags[semverOrDistTag]
+		distVersion, ok := metadata.DistTags[semverOrDistTag]
 		if ok {
-			raw, ok := h.Versions[distVersion]
+			raw, ok := metadata.Versions[distVersion]
 			if ok {
 				return raw.ToNpmPackage(), getCacheKey(packageName, raw.Version), nil
 			}
@@ -490,9 +496,9 @@ func (npmrc *NpmRC) fetchPackageInfo(packageName string, semverOrDistTag string)
 				semverOrDistTag = "latest"
 				goto CHECK
 			}
-			vs := make([]*semver.Version, len(h.Versions))
+			vs := make([]*semver.Version, len(metadata.Versions))
 			i := 0
-			for v := range h.Versions {
+			for v := range metadata.Versions {
 				// ignore prerelease versions
 				if !strings.ContainsRune(semverOrDistTag, '-') && strings.ContainsRune(v, '-') {
 					continue
@@ -512,7 +518,7 @@ func (npmrc *NpmRC) fetchPackageInfo(packageName string, semverOrDistTag string)
 				if i > 1 {
 					sort.Sort(semver.Collection(vs))
 				}
-				raw, ok := h.Versions[vs[i-1].String()]
+				raw, ok := metadata.Versions[vs[i-1].String()]
 				if ok {
 					return raw.ToNpmPackage(), getCacheKey(packageName, raw.Version), nil
 				}
@@ -527,32 +533,19 @@ func (rc *NpmRC) installPackage(pkg Package) (packageJson *PackageJSON, err erro
 	packageJsonPath := path.Join(installDir, "node_modules", pkg.Name, "package.json")
 
 	// check if the package has been installed
-	if existsFile(packageJsonPath) {
-		var raw PackageJSONRaw
-		if utils.ParseJSONFile(packageJsonPath, &raw) == nil {
-			packageJson = raw.ToNpmPackage()
-			return
-		}
+	var raw PackageJSONRaw
+	if utils.ParseJSONFile(packageJsonPath, &raw) == nil {
+		packageJson = raw.ToNpmPackage()
+		return
 	}
 
 	// only one installation process is allowed at the same time for the same package
-	v, _ := installLocks.LoadOrStore(pkg.String(), &sync.Mutex{})
-	defer installLocks.Delete(pkg.String())
+	unlock := installMutex.Lock(pkg.String())
+	defer unlock()
 
-	v.(*sync.Mutex).Lock()
-	defer v.(*sync.Mutex).Unlock()
-
-	// skip installation if the package has been installed
-	if existsFile(packageJsonPath) {
-		var raw PackageJSONRaw
-		if utils.ParseJSONFile(packageJsonPath, &raw) == nil {
-			packageJson = raw.ToNpmPackage()
-			return
-		}
-	}
-
-	err = ensureDir(installDir)
-	if err != nil {
+	// skip installation if the package has been installed by another request
+	if utils.ParseJSONFile(packageJsonPath, &raw) == nil {
+		packageJson = raw.ToNpmPackage()
 		return
 	}
 
@@ -581,7 +574,6 @@ func (rc *NpmRC) installPackage(pkg Package) (packageJson *PackageJSON, err erro
 		return
 	}
 
-	var raw PackageJSONRaw
 	err = utils.ParseJSONFile(packageJsonPath, &raw)
 	if err != nil {
 		err = fmt.Errorf("failed to install %s: %v", pkg.String(), err)
@@ -592,7 +584,7 @@ func (rc *NpmRC) installPackage(pkg Package) (packageJson *PackageJSON, err erro
 	return
 }
 
-func (rc *NpmRC) installDependencies(wd string, pkgJson *PackageJSON, npmMode bool, mark *StringSet) {
+func (rc *NpmRC) installDependencies(wd string, pkgJson *PackageJSON, npmMode bool, mark *Set) {
 	wg := sync.WaitGroup{}
 	dependencies := map[string]string{}
 	for name, version := range pkgJson.Dependencies {
@@ -605,7 +597,7 @@ func (rc *NpmRC) installDependencies(wd string, pkgJson *PackageJSON, npmMode bo
 		}
 	}
 	if mark == nil {
-		mark = NewStringSet()
+		mark = NewSet()
 	}
 	for name, version := range dependencies {
 		wg.Add(1)

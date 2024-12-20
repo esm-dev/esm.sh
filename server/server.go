@@ -173,7 +173,7 @@ func Serve(efs EmbedFS) {
 }
 
 func cors(allowOrigins []string) rex.Handle {
-	allowList := NewStringSet(allowOrigins...)
+	allowList := NewSet(allowOrigins...)
 	return func(ctx *rex.Context) any {
 		origin := ctx.GetHeader("Origin")
 		isOptionsMethod := ctx.R.Method == "OPTIONS"
@@ -200,7 +200,7 @@ func cors(allowOrigins []string) rex.Handle {
 }
 
 func customLandingPage(options *LandingPageOptions) rex.Handle {
-	assets := NewStringSet()
+	assets := NewSet()
 	for _, p := range options.Assets {
 		assets.Add("/" + strings.TrimPrefix(p, "/"))
 	}

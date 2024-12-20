@@ -16,30 +16,23 @@ import (
 
 func transformSvelte(npmrc *NpmRC, svelteVersion string, filename string, code string) (output *LoaderOutput, err error) {
 	loaderExecPath := path.Join(npmrc.StoreDir(), "svelte@"+svelteVersion, "loader.js")
-	if !existsFile(loaderExecPath) {
-		log.Debug("compiling svelte loader...")
-		err = compileSvelteLoader(npmrc, svelteVersion, loaderExecPath)
-		if err != nil {
-			return
+
+	once, _ := compileSyncMap.LoadOrStore(loaderExecPath, &sync.Once{})
+	once.(*sync.Once).Do(func() {
+		if !existsFile(loaderExecPath) {
+			log.Debug("compiling svelte loader...")
+			err = compileSvelteLoader(npmrc, svelteVersion, loaderExecPath)
+			if err != nil {
+				return
+			}
 		}
-	}
+	})
+
 	return runLoader(loaderExecPath, filename, code)
 }
 
 func compileSvelteLoader(npmrc *NpmRC, svelteVersion string, loaderExecPath string) (err error) {
 	wd := path.Join(npmrc.StoreDir(), "svelte@"+svelteVersion)
-
-	v, _ := loaderCompileLocks.LoadOrStore(wd, &sync.Mutex{})
-	defer loaderCompileLocks.Delete(wd)
-
-	// only one compile process is allowed at the same time
-	v.(*sync.Mutex).Lock()
-	defer v.(*sync.Mutex).Unlock()
-
-	// check if the loader has been compiled
-	if existsFile(loaderExecPath) {
-		return
-	}
 
 	// install svelte
 	pkgJson, err := npmrc.installPackage(Package{Name: "svelte", Version: svelteVersion})
@@ -95,13 +88,17 @@ func resolveSvelteVersion(npmrc *NpmRC, importMap common.ImportMap) (svelteVersi
 func generateUnoCSS(npmrc *NpmRC, configCSS string, content string) (output *LoaderOutput, err error) {
 	loaderVersion := "0.4.1"
 	loaderExecPath := path.Join(config.WorkDir, "bin", "unocss-loader-"+loaderVersion)
-	if !existsFile(loaderExecPath) {
-		log.Debug("compiling unocss loader...")
-		err = compileUnocssLoader(npmrc, loaderVersion, loaderExecPath)
-		if err != nil {
-			return
+
+	once, _ := compileSyncMap.LoadOrStore(loaderExecPath, &sync.Once{})
+	once.(*sync.Once).Do(func() {
+		if !existsFile(loaderExecPath) {
+			log.Debug("compiling unocss loader...")
+			err = compileUnocssLoader(npmrc, loaderVersion, loaderExecPath)
+			if err != nil {
+				return
+			}
 		}
-	}
+	})
 
 	var outBuf bytes.Buffer
 	var errBuf bytes.Buffer
@@ -131,18 +128,6 @@ func generateUnoCSS(npmrc *NpmRC, configCSS string, content string) (output *Loa
 
 func compileUnocssLoader(npmrc *NpmRC, loaderVersion string, loaderExecPath string) (err error) {
 	wd := path.Join(npmrc.StoreDir(), "@esm.sh/unocss@"+loaderVersion)
-
-	v, _ := loaderCompileLocks.LoadOrStore(wd, &sync.Mutex{})
-	defer loaderCompileLocks.Delete(wd)
-
-	// only one compile process is allowed at the same time
-	v.(*sync.Mutex).Lock()
-	defer v.(*sync.Mutex).Unlock()
-
-	// check if the loader has been compiled
-	if existsFile(loaderExecPath) {
-		return
-	}
 
 	// install @esm.sh/unocss
 	pkgJson, err := npmrc.installPackage(Package{Name: "@esm.sh/unocss", Version: loaderVersion})
@@ -250,30 +235,23 @@ func compileUnocssLoader(npmrc *NpmRC, loaderVersion string, loaderExecPath stri
 func transformVue(npmrc *NpmRC, vueVersion string, filename string, code string) (output *LoaderOutput, err error) {
 	loaderVersion := "1.0.1" // @esm.sh/vue-compiler
 	loaderExecPath := path.Join(npmrc.StoreDir(), "@vue/compiler-sfc@"+vueVersion, "loader-"+loaderVersion+".js")
-	if !existsFile(loaderExecPath) {
-		log.Debug("compiling vue loader...")
-		err = compileVueLoader(npmrc, vueVersion, loaderVersion, loaderExecPath)
-		if err != nil {
-			return
+
+	once, _ := compileSyncMap.LoadOrStore(loaderExecPath, &sync.Once{})
+	once.(*sync.Once).Do(func() {
+		if !existsFile(loaderExecPath) {
+			log.Debug("compiling vue loader...")
+			err = compileVueLoader(npmrc, vueVersion, loaderVersion, loaderExecPath)
+			if err != nil {
+				return
+			}
 		}
-	}
+	})
+
 	return runLoader(loaderExecPath, filename, code)
 }
 
 func compileVueLoader(npmrc *NpmRC, vueVersion string, loaderVersion, loaderExecPath string) (err error) {
 	wd := path.Join(npmrc.StoreDir(), "@vue/compiler-sfc@"+vueVersion)
-
-	v, _ := loaderCompileLocks.LoadOrStore(wd, &sync.Mutex{})
-	defer loaderCompileLocks.Delete(wd)
-
-	// only one compile process is allowed at the same time
-	v.(*sync.Mutex).Lock()
-	defer v.(*sync.Mutex).Unlock()
-
-	// check if the loader has been compiled
-	if existsFile(loaderExecPath) {
-		return
-	}
 
 	// install vue sfc compiler
 	pkgJson, err := npmrc.installPackage(Package{Name: "@vue/compiler-sfc", Version: vueVersion})

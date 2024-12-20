@@ -12,7 +12,7 @@ import (
 type BuildArgs struct {
 	alias             map[string]string
 	deps              map[string]string
-	external          *StringSet
+	external          *Set
 	conditions        []string
 	keepNames         bool
 	ignoreAnnotations bool
@@ -23,7 +23,7 @@ func decodeBuildArgs(argsString string) (args BuildArgs, err error) {
 	s, err := atobUrl(argsString)
 	if err == nil {
 		args = BuildArgs{
-			external: NewStringSet(),
+			external: NewSet(),
 		}
 		for _, p := range strings.Split(s, "\n") {
 			if strings.HasPrefix(p, "a") {
@@ -128,7 +128,7 @@ func encodeBuildArgs(args BuildArgs, isDts bool) string {
 func resolveBuildArgs(npmrc *NpmRC, installDir string, args *BuildArgs, esmPath EsmPath) error {
 	if len(args.alias) > 0 || len(args.deps) > 0 || args.external.Len() > 0 {
 		// quick check if the alias, deps, external are all in dependencies of the package
-		depsSet, err := func() (set *StringSet, err error) {
+		depsSet, err := func() (set *Set, err error) {
 			var p *PackageJSON
 			pkgJsonPath := path.Join(installDir, "node_modules", esmPath.PkgName, "package.json")
 			if existsFile(pkgJsonPath) {
@@ -145,7 +145,7 @@ func resolveBuildArgs(npmrc *NpmRC, installDir string, args *BuildArgs, esmPath 
 			if err != nil {
 				return
 			}
-			depsSet := NewStringSet()
+			depsSet := NewSet()
 			for name := range p.Dependencies {
 				depsSet.Add(name)
 			}
@@ -179,7 +179,7 @@ func resolveBuildArgs(npmrc *NpmRC, installDir string, args *BuildArgs, esmPath 
 			return err
 		}
 		if depsSet == nil {
-			depsSet = NewStringSet()
+			depsSet = NewSet()
 			err = walkDeps(npmrc, installDir, esmPath.Package(), depsSet)
 			if err != nil {
 				return err
@@ -223,7 +223,7 @@ func resolveBuildArgs(npmrc *NpmRC, installDir string, args *BuildArgs, esmPath 
 			args.deps = deps
 		}
 		if args.external.Len() > 0 {
-			external := NewStringSet()
+			external := NewSet()
 			for _, name := range args.external.Values() {
 				if strings.HasPrefix(name, "node:") {
 					if nodeBuiltinModules[name[5:]] {
@@ -246,7 +246,7 @@ func resolveBuildArgs(npmrc *NpmRC, installDir string, args *BuildArgs, esmPath 
 	return nil
 }
 
-func walkDeps(npmrc *NpmRC, installDir string, pkg Package, mark *StringSet) (err error) {
+func walkDeps(npmrc *NpmRC, installDir string, pkg Package, mark *Set) (err error) {
 	if mark.Has(pkg.Name) {
 		return
 	}

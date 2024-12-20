@@ -24,10 +24,10 @@ func (ctx *BuildContext) transformDTS(dts string) error {
 }
 
 // transformDTS transforms a `.d.ts` file for deno/editor-lsp
-func transformDTS(ctx *BuildContext, dts string, buildArgsPrefix string, marker *StringSet) (n int, err error) {
+func transformDTS(ctx *BuildContext, dts string, buildArgsPrefix string, marker *Set) (n int, err error) {
 	isEntry := marker == nil
 	if isEntry {
-		marker = NewStringSet()
+		marker = NewSet()
 	}
 	dtsPath := path.Join("/"+ctx.esmPath.Name(), buildArgsPrefix, dts)
 	if marker.Has(dtsPath) {
@@ -60,7 +60,7 @@ func transformDTS(ctx *BuildContext, dts string, buildArgsPrefix string, marker 
 	}
 
 	buffer := bytes.NewBuffer(nil)
-	internalDts := NewStringSet()
+	internalDts := NewSet()
 	withNodeBuiltinModule := false
 	hasReferenceTypesNode := false
 
@@ -203,7 +203,7 @@ func transformDTS(ctx *BuildContext, dts string, buildArgsPrefix string, marker 
 			SubModuleName: subPath,
 		}
 		args := BuildArgs{
-			external: NewStringSet(),
+			external: NewSet(),
 		}
 		b := NewBuildContext(ctx.zoneId, ctx.npmrc, dtsModule, args, false, "types", false, BundleFalse, false)
 		err = b.install()

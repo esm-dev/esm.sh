@@ -166,18 +166,20 @@ lookup:
 		}
 		return
 	}
+
+	var raw PackageJSONRaw
 	pkgJsonPath := path.Join(ctx.wd, "node_modules", pkgName, "package.json")
-	var rawInfo PackageJSONRaw
-	if existsFile(pkgJsonPath) && utils.ParseJSONFile(pkgJsonPath, &rawInfo) == nil {
+	if utils.ParseJSONFile(pkgJsonPath, &raw) == nil {
 		esm = EsmPath{
 			PkgName:       pkgName,
-			PkgVersion:    rawInfo.Version,
+			PkgVersion:    raw.Version,
 			SubPath:       subpath,
 			SubModuleName: stripEntryModuleExt(subpath),
 		}
-		packageJson = rawInfo.ToNpmPackage()
+		packageJson = raw.ToNpmPackage()
 		return
 	}
+
 	if version == "" {
 		if v, ok := ctx.packageJson.Dependencies[pkgName]; ok {
 			if strings.HasPrefix(v, "npm:") {
@@ -195,6 +197,7 @@ lookup:
 			version = "latest"
 		}
 	}
+
 	packageJson, err = ctx.npmrc.getPackageInfo(pkgName, version)
 	if err == nil {
 		esm = EsmPath{
@@ -256,7 +259,7 @@ func (ctx *BuildContext) resolveEntry(esmPath EsmPath) (entry BuildEntry) {
 							}
 							*/
 							exportEntry.update(s, pkgJson.Type == "module" || strings.HasSuffix(s, ".mjs"))
-						} else if om, ok := conditions.(*OrderedMap); ok {
+						} else if om, ok := conditions.(*JsonObject); ok {
 							/**
 							exports: {
 								"./lib/foo": {
@@ -281,7 +284,7 @@ func (ctx *BuildContext) resolveEntry(esmPath EsmPath) (entry BuildEntry) {
 								exportEntry.update(path, pkgJson.Type == "module" || strings.HasSuffix(path, ".mjs"))
 								break
 							}
-						} else if om, ok := conditions.(*OrderedMap); ok {
+						} else if om, ok := conditions.(*JsonObject); ok {
 							/**
 							exports: {
 								"./lib/*": {
@@ -401,7 +404,7 @@ func (ctx *BuildContext) resolveEntry(esmPath EsmPath) (entry BuildEntry) {
 					}
 					*/
 					exportEntry.update(s, pkgJson.Type == "module" || strings.HasSuffix(s, ".mjs"))
-				} else if om, ok := v.(*OrderedMap); ok {
+				} else if om, ok := v.(*JsonObject); ok {
 					/**
 					exports: {
 						".": {
@@ -619,14 +622,14 @@ func (ctx *BuildContext) finalizeBuildEntry(entry *BuildEntry) {
 }
 
 // see https://nodejs.org/api/packages.html#nested-conditions
-func (ctx *BuildContext) resolveConditionExportEntry(conditions *OrderedMap, preferedModuleType string) (entry BuildEntry) {
+func (ctx *BuildContext) resolveConditionExportEntry(conditions *JsonObject, preferedModuleType string) (entry BuildEntry) {
 	if preferedModuleType == "types" {
 		for _, conditionName := range []string{"module", "import", "es2015", "default", "require"} {
 			condition, ok := conditions.Get(conditionName)
 			if ok {
 				if s, ok := condition.(string); ok {
 					entry.types = s
-				} else if om, ok := condition.(*OrderedMap); ok {
+				} else if om, ok := condition.(*JsonObject); ok {
 					entry = ctx.resolveConditionExportEntry(om, "types")
 				}
 				break
@@ -640,7 +643,7 @@ func (ctx *BuildContext) resolveConditionExportEntry(conditions *OrderedMap, pre
 		if ok {
 			if s, ok := condition.(string); ok {
 				entry.update(s, preferedModuleType == "module")
-			} else if om, ok := condition.(*OrderedMap); ok {
+			} else if om, ok := condition.(*JsonObject); ok {
 				entry = ctx.resolveConditionExportEntry(om, preferedModuleType)
 			}
 		}
@@ -654,7 +657,7 @@ func (ctx *BuildContext) resolveConditionExportEntry(conditions *OrderedMap, pre
 		if ok {
 			if s, ok := condition.(string); ok {
 				entry.update(s, preferedModuleType == "module")
-			} else if om, ok := condition.(*OrderedMap); ok {
+			} else if om, ok := condition.(*JsonObject); ok {
 				entry = ctx.resolveConditionExportEntry(om, preferedModuleType)
 			}
 		}
@@ -663,7 +666,7 @@ func (ctx *BuildContext) resolveConditionExportEntry(conditions *OrderedMap, pre
 		if ok {
 			if s, ok := condition.(string); ok {
 				entry.update(s, preferedModuleType == "module")
-			} else if om, ok := condition.(*OrderedMap); ok {
+			} else if om, ok := condition.(*JsonObject); ok {
 				entry = ctx.resolveConditionExportEntry(om, preferedModuleType)
 			}
 		}
@@ -674,7 +677,7 @@ func (ctx *BuildContext) resolveConditionExportEntry(conditions *OrderedMap, pre
 		if ok {
 			if s, ok := condition.(string); ok {
 				entry.update(s, preferedModuleType == "module")
-			} else if om, ok := condition.(*OrderedMap); ok {
+			} else if om, ok := condition.(*JsonObject); ok {
 				entry = ctx.resolveConditionExportEntry(om, preferedModuleType)
 			}
 		}
@@ -686,7 +689,7 @@ func (ctx *BuildContext) resolveConditionExportEntry(conditions *OrderedMap, pre
 			if ok {
 				if s, ok := condition.(string); ok {
 					entry.update(s, preferedModuleType == "module")
-				} else if om, ok := condition.(*OrderedMap); ok {
+				} else if om, ok := condition.(*JsonObject); ok {
 					entry = ctx.resolveConditionExportEntry(om, preferedModuleType)
 				}
 				break
@@ -713,7 +716,7 @@ LOOP:
 			if entry.types == "" {
 				if s, ok := condition.(string); ok {
 					entry.types = s
-				} else if om, ok := condition.(*OrderedMap); ok {
+				} else if om, ok := condition.(*JsonObject); ok {
 					e := ctx.resolveConditionExportEntry(om, "types")
 					if e.types != "" {
 						entry.types = e.types
@@ -728,7 +731,7 @@ LOOP:
 		if entry.main == "" || (!entry.module && module) {
 			if s, ok := condition.(string); ok {
 				entry.update(s, module)
-			} else if om, ok := condition.(*OrderedMap); ok {
+			} else if om, ok := condition.(*JsonObject); ok {
 				e := ctx.resolveConditionExportEntry(om, prefered)
 				if e.main != "" {
 					entry.update(e.main, e.module)
@@ -1044,7 +1047,7 @@ func (ctx *BuildContext) lexer(entry *BuildEntry) (ret *BuildMeta, cjsExports []
 		log.Warnf("fake ES module '%s' of '%s'", entry.main, ctx.packageJson.Name)
 
 		var cjs cjsModuleLexerResult
-		cjs, err = ctx.cjsModuleLexer(entry.main)
+		cjs, err = cjsModuleLexer(ctx, entry.main)
 		if err != nil {
 			return
 		}
@@ -1061,7 +1064,7 @@ func (ctx *BuildContext) lexer(entry *BuildEntry) (ret *BuildMeta, cjsExports []
 
 	if entry.main != "" && !entry.module {
 		var cjs cjsModuleLexerResult
-		cjs, err = ctx.cjsModuleLexer(entry.main)
+		cjs, err = cjsModuleLexer(ctx, entry.main)
 		if err != nil {
 			return
 		}
@@ -1088,14 +1091,14 @@ func matchAsteriskExports(epxortsKey string, subModuleName string) (diff string,
 	return "", false
 }
 
-func resloveAsteriskPathMapping(om *OrderedMap, diff string) *OrderedMap {
-	reslovedConditions := newOrderedMap()
+func resloveAsteriskPathMapping(om *JsonObject, diff string) *JsonObject {
+	reslovedConditions := newJSONObject()
 	for _, key := range om.keys {
 		value, ok := om.Get(key)
 		if ok {
 			if s, ok := value.(string); ok {
 				reslovedConditions.Set(key, strings.ReplaceAll(s, "*", diff))
-			} else if om, ok := value.(*OrderedMap); ok {
+			} else if om, ok := value.(*JsonObject); ok {
 				reslovedConditions.Set(key, resloveAsteriskPathMapping(om, diff))
 			}
 		}
@@ -1103,13 +1106,13 @@ func resloveAsteriskPathMapping(om *OrderedMap, diff string) *OrderedMap {
 	return reslovedConditions
 }
 
-func getAllExportsPaths(exports *OrderedMap) []string {
+func getAllExportsPaths(exports *JsonObject) []string {
 	var values []string
 	for _, key := range exports.keys {
 		v := exports.values[key]
 		if s, ok := v.(string); ok {
 			values = append(values, s)
-		} else if condition, ok := v.(*OrderedMap); ok {
+		} else if condition, ok := v.(*JsonObject); ok {
 			values = append(values, getAllExportsPaths(condition)...)
 		}
 	}

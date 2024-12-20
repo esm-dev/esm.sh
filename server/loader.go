@@ -21,7 +21,7 @@ import (
 var (
 	loaderRuntime        = "deno"
 	loaderRuntimeVersion = "2.1.4"
-	loaderCompileLocks   = sync.Map{}
+	compileSyncMap       = sync.Map{}
 )
 
 type LoaderOutput struct {

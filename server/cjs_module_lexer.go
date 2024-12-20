@@ -22,7 +22,7 @@ import (
 )
 
 var cjsModuleLexerVersion = "1.0.6"
-var cjsModuleLexerIgnoredPackages = NewStringSet(
+var cjsModuleLexerIgnoredPackages = NewSet(
 	"@babel/types",
 	"cheerio",
 	"graceful-fs",
@@ -44,7 +44,7 @@ type cjsModuleLexerResult struct {
 	Reexport string   `json:"reexport,omitempty"`
 }
 
-func (ctx *BuildContext) cjsModuleLexer(cjsEntry string) (ret cjsModuleLexerResult, err error) {
+func cjsModuleLexer(ctx *BuildContext, cjsEntry string) (ret cjsModuleLexerResult, err error) {
 	h := sha1.New()
 	h.Write([]byte(cjsModuleLexerVersion))
 	h.Write([]byte(cjsEntry))
@@ -145,14 +145,11 @@ RETRY:
 
 func installCommonJSModuleLexer() (err error) {
 	binDir := path.Join(config.WorkDir, "bin")
-	err = ensureDir(binDir)
-	if err != nil {
-		return err
-	}
 
 	// use dev version of cjs-module-lexer if exists
 	// clone https://github.com/esm-dev/cjs-module-lexer to the same directory of esm.sh and run `cargo build --release -p native`
 	if devCML := "../cjs-module-lexer/target/release/native"; existsFile(devCML) {
+		ensureDir(binDir)
 		_, err = utils.CopyFile(devCML, path.Join(binDir, "cjs-module-lexer"))
 		if err == nil {
 			cjsModuleLexerVersion = "dev"
@@ -187,6 +184,7 @@ func installCommonJSModuleLexer() (err error) {
 	}
 	defer gr.Close()
 
+	ensureDir(binDir)
 	f, err := os.OpenFile(path.Join(binDir, "cjs-module-lexer"), os.O_CREATE|os.O_WRONLY, 0755)
 	if err != nil {
 		return fmt.Errorf("failed to create cjs-module-lexer: %v", err)
