@@ -66,7 +66,7 @@ func (l *LoaderWorker) Start(wd string, loaderJS []byte) (err error) {
 	}
 
 	// pre-install npm deps
-	cmd = exec.Command(denoPath, "cache", "npm:@esm.sh/unocss@0.4.1", "npm:@esm.sh/tsx@1.0.5", "npm:@esm.sh/vue-compiler@1.0.1")
+	cmd = exec.Command(denoPath, "cache", "npm:@esm.sh/unocss@0.4.2", "npm:@esm.sh/tsx@1.0.5", "npm:@esm.sh/vue-compiler@1.0.1")
 	cmd.Start()
 	return
 }

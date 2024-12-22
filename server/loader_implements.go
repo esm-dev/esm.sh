@@ -87,8 +87,8 @@ func resolveSvelteVersion(npmrc *NpmRC, importMap common.ImportMap) (svelteVersi
 }
 
 func generateUnoCSS(npmrc *NpmRC, configCSS string, content string) (output *LoaderOutput, err error) {
-	loaderVersion := "0.4.1"
-	loaderExecPath := path.Join(config.WorkDir, "bin", "unocss-loader-"+loaderVersion)
+	loaderVersion := "0.4.2"
+	loaderExecPath := path.Join(config.WorkDir, "bin", "unocss-"+loaderVersion)
 
 	once, _ := compileSyncMap.LoadOrStore(loaderExecPath, &Once{})
 	err = once.(*Once).Do(func() (err error) {
@@ -143,56 +143,33 @@ func compileUnocssLoader(npmrc *NpmRC, loaderVersion string, loaderExecPath stri
 	  import { generate } from "@esm.sh/unocss";
 	  const { stdin, stdout } = Deno;
 	  const write = data => stdout.write(new TextEncoder().encode(data));
-	  const customImport = (name) => {
-	    switch (name) {
-	      case "@unocss/preset-attributify":
-	        return import("@unocss/preset-attributify");
-	      case "@unocss/preset-icons/browser":
-	        return import("@unocss/preset-icons/browser");
-	      case "@unocss/preset-legacy-compat":
-	        return import("@unocss/preset-legacy-compat");
-	      case "@unocss/preset-mini":
-	        return import("@unocss/preset-mini");
-	      case "@unocss/preset-rem-to-px":
-	        return import("@unocss/preset-rem-to-px");
-	      case "@unocss/preset-tagify":
-	        return import("@unocss/preset-tagify");
-	      case "@unocss/preset-typography":
-	        return import("@unocss/preset-typography");
-	      case "@unocss/preset-uno":
-	        return import("@unocss/preset-uno");
-	      case "@unocss/preset-web-fonts":
-	        return import("@unocss/preset-web-fonts");
-	      case "@unocss/preset-wind":
-	        return import("@unocss/preset-wind");
-	      default:
-	        if (name.startsWith("https://esm.sh/@iconify-json/")) {
-	          const [_, cName, ...path] = name.slice(15).split("/")
-	          return (async () => {
-	            const { UntarStream } = await import("jsr:@std/tar/untar-stream");
-	            const jsonRes = await fetch("https://registry.npmjs.org/@iconify-json/" + cName + "/latest")
-	            if (jsonRes.status !== 200) {
-	              jsonRes.body.cancel()
-	              throw new Error("Failed to fetch @iconify-json/" + cName)
-	            }
-	            const { dist } = await jsonRes.json()
-	            const tgzRes = await fetch(dist.tarball)
-	            if (tgzRes.status !== 200) {
-	              tgzRes.body.cancel()
-	              throw new Error("Failed to fetch tarball of @iconify-json/" + cName)
-	            }
-	            for await (const entry of tgzRes.body.pipeThrough(new DecompressionStream("gzip")).pipeThrough(new UntarStream())) {
-	              if (entry.path === "package/" + path.join("/")) {
-	                return await new Response(entry.readable).json()
-	              } else {
-	                entry.readable.cancel()
-	              }
-	            }
-	            throw new Error("Failed to find " + path.join("/") + " in " + dist.tarball)
-	          })()
-	        }
-	        throw new Error("Unsupported import: " + name)
-	    }
+	  const iconLoader = (url) => {
+	    if (url.startsWith("https://esm.sh/@iconify-json/")) {
+				const [_, cName, ...path] = url.slice(15).split("/")
+				return (async () => {
+					const { UntarStream } = await import("jsr:@std/tar/untar-stream");
+					const jsonRes = await fetch("https://registry.npmjs.org/@iconify-json/" + cName + "/latest")
+					if (jsonRes.status !== 200) {
+						jsonRes.body.cancel()
+						throw new Error("Failed to fetch @iconify-json/" + cName)
+					}
+					const { dist } = await jsonRes.json()
+					const tgzRes = await fetch(dist.tarball)
+					if (tgzRes.status !== 200) {
+						tgzRes.body.cancel()
+						throw new Error("Failed to fetch tarball of @iconify-json/" + cName)
+					}
+					for await (const entry of tgzRes.body.pipeThrough(new DecompressionStream("gzip")).pipeThrough(new UntarStream())) {
+						if (entry.path === "package/" + path.join("/")) {
+							return await new Response(entry.readable).json()
+						} else {
+							entry.readable.cancel()
+						}
+					}
+					throw new Error("Failed to find " + path.join("/") + " in " + dist.tarball)
+				})()
+			}
+			throw new Error("Unsupported icon url: " + url)
 	  }
 	  try {
 	    let content = "";
@@ -205,7 +182,7 @@ func compileUnocssLoader(npmrc *NpmRC, loaderVersion string, loaderExecPath stri
 	      configCSS = content.slice(0, n);
 	      content = content.slice(n);
 	    }
-	    const code = await generate(content, { configCSS, customImport, customCacheDir: Deno.args[1] });
+	    const code = await generate(content, { configCSS, iconLoader, customCacheDir: Deno.args[1] });
 	    await write("1\n" + code);
 	  } catch (err) {
 	    await write("0\n" + err.message);
