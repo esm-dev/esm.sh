@@ -22,6 +22,7 @@ var (
 	loaderRuntime        = "deno"
 	loaderRuntimeVersion = "2.1.4"
 	compileSyncMap       = sync.Map{}
+	bufferPool           = sync.Pool{New: func() interface{} { return new(bytes.Buffer) }}
 )
 
 type LoaderOutput struct {
@@ -30,18 +31,25 @@ type LoaderOutput struct {
 	Error string `json:"error"`
 }
 
-func runLoader(loaderExecPath string, filename string, code string) (output *LoaderOutput, err error) {
-	outBuf := new(bytes.Buffer)
-	errBuf := new(bytes.Buffer)
+func runLoader(loaderJsPath string, filename string, code string) (output *LoaderOutput, err error) {
+	outBuf := bufferPool.Get().(*bytes.Buffer)
+	errBuf := bufferPool.Get().(*bytes.Buffer)
+	defer func() {
+		outBuf.Reset()
+		errBuf.Reset()
+		bufferPool.Put(outBuf)
+		bufferPool.Put(errBuf)
+	}()
 	c := exec.Command(
-		loaderRuntime, "run",
+		path.Join(config.WorkDir, "bin", loaderRuntime), "run",
 		"--no-config",
 		"--no-lock",
 		"--cached-only",
 		"--no-prompt",
 		"--allow-read=.",
 		"--quiet",
-		loaderExecPath, filename,
+		loaderJsPath,
+		filename, // args[0]
 	)
 	c.Dir = os.TempDir()
 	c.Stdin = strings.NewReader(code)

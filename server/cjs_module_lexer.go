@@ -61,7 +61,7 @@ func cjsModuleLexer(ctx *BuildContext, cjsEntry string) (ret cjsModuleLexerResul
 	defer func() {
 		if err == nil {
 			if debug {
-				log.Debugf("[cjsModuleLexer] parse %s in %s", path.Join(ctx.esmPath.PkgName, cjsEntry), time.Since(start))
+				log.Debugf("[cjsModuleLexer] parse %s in %s", path.Join(ctx.esm.PkgName, cjsEntry), time.Since(start))
 			}
 			if !existsFile(cacheFileName) {
 				ensureDir(path.Dir(cacheFileName))
@@ -70,9 +70,9 @@ func cjsModuleLexer(ctx *BuildContext, cjsEntry string) (ret cjsModuleLexerResul
 		}
 	}()
 
-	if cjsModuleLexerIgnoredPackages.Has(ctx.esmPath.PkgName) {
+	if cjsModuleLexerIgnoredPackages.Has(ctx.esm.PkgName) {
 		js := path.Join(ctx.wd, "reveal_"+strings.ReplaceAll(cjsEntry[2:], "/", "_"))
-		err = os.WriteFile(js, []byte(fmt.Sprintf(`console.log(JSON.stringify(Object.keys((await import("npm:%s")).default)))`, path.Join(ctx.esmPath.Name(), cjsEntry))), 0644)
+		err = os.WriteFile(js, []byte(fmt.Sprintf(`console.log(JSON.stringify(Object.keys((await import("npm:%s")).default)))`, path.Join(ctx.esm.Name(), cjsEntry))), 0644)
 		if err != nil {
 			return
 		}
@@ -100,7 +100,7 @@ RETRY:
 	c, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	cmd := exec.CommandContext(c, "cjs-module-lexer", path.Join(ctx.esmPath.PkgName, cjsEntry))
+	cmd := exec.CommandContext(c, "cjs-module-lexer", path.Join(ctx.esm.PkgName, cjsEntry))
 	stdout := bytes.NewBuffer(nil)
 	stderr := bytes.NewBuffer(nil)
 	cmd.Dir = ctx.wd
@@ -117,7 +117,7 @@ RETRY:
 				if strings.HasPrefix(formattedMessage, "failed to resolve reexport: NotFound(") && worthToRetry {
 					worthToRetry = false
 					// install dependencies and retry
-					ctx.npmrc.installDependencies(ctx.wd, ctx.packageJson, true, nil)
+					ctx.npmrc.installDependencies(ctx.wd, ctx.pkgJson, true, nil)
 					goto RETRY
 				}
 				err = fmt.Errorf("cjsModuleLexer: %s", formattedMessage)

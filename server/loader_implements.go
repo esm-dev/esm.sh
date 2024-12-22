@@ -103,13 +103,19 @@ func generateUnoCSS(npmrc *NpmRC, configCSS string, content string) (output *Loa
 		return
 	}
 
-	var outBuf bytes.Buffer
-	var errBuf bytes.Buffer
+	outBuf := bufferPool.Get().(*bytes.Buffer)
+	errBuf := bufferPool.Get().(*bytes.Buffer)
+	defer func() {
+		outBuf.Reset()
+		errBuf.Reset()
+		bufferPool.Put(outBuf)
+		bufferPool.Put(errBuf)
+	}()
 	c := exec.Command(loaderExecPath, strconv.Itoa(len(configCSS)), path.Join(config.WorkDir, "cache/unocss"))
 	c.Dir = os.TempDir()
 	c.Stdin = strings.NewReader(configCSS + content)
-	c.Stdout = &outBuf
-	c.Stderr = &errBuf
+	c.Stdout = outBuf
+	c.Stderr = errBuf
 	err = c.Run()
 	if err != nil {
 		if errBuf.Len() > 0 {

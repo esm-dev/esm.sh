@@ -125,22 +125,22 @@ func encodeBuildArgs(args BuildArgs, isDts bool) string {
 }
 
 // resolveBuildArgs resolves `alias`, `deps`, `external` of the build args
-func resolveBuildArgs(npmrc *NpmRC, installDir string, args *BuildArgs, esmPath EsmPath) error {
+func resolveBuildArgs(npmrc *NpmRC, installDir string, args *BuildArgs, esm Esm) error {
 	if len(args.alias) > 0 || len(args.deps) > 0 || args.external.Len() > 0 {
 		// quick check if the alias, deps, external are all in dependencies of the package
 		depsSet, err := func() (set *Set, err error) {
 			var p *PackageJSON
-			pkgJsonPath := path.Join(installDir, "node_modules", esmPath.PkgName, "package.json")
+			pkgJsonPath := path.Join(installDir, "node_modules", esm.PkgName, "package.json")
 			if existsFile(pkgJsonPath) {
 				var raw PackageJSONRaw
 				err = utils.ParseJSONFile(pkgJsonPath, &raw)
 				if err == nil {
 					p = raw.ToNpmPackage()
 				}
-			} else if esmPath.GhPrefix || esmPath.PrPrefix {
-				p, err = npmrc.installPackage(esmPath.Package())
+			} else if esm.GhPrefix || esm.PrPrefix {
+				p, err = npmrc.installPackage(esm.Package())
 			} else {
-				p, err = npmrc.getPackageInfo(esmPath.PkgName, esmPath.PkgVersion)
+				p, err = npmrc.getPackageInfo(esm.PkgName, esm.PkgVersion)
 			}
 			if err != nil {
 				return
@@ -180,7 +180,7 @@ func resolveBuildArgs(npmrc *NpmRC, installDir string, args *BuildArgs, esmPath 
 		}
 		if depsSet == nil {
 			depsSet = NewSet()
-			err = walkDeps(npmrc, installDir, esmPath.Package(), depsSet)
+			err = walkDeps(npmrc, installDir, esm.Package(), depsSet)
 			if err != nil {
 				return err
 			}
@@ -194,7 +194,7 @@ func resolveBuildArgs(npmrc *NpmRC, installDir string, args *BuildArgs, esmPath 
 			}
 			for from, to := range alias {
 				pkgName, _, _, _ := splitEsmPath(to)
-				if pkgName == esmPath.PkgName {
+				if pkgName == esm.PkgName {
 					delete(alias, from)
 				} else {
 					depsSet.Add(pkgName)
@@ -206,17 +206,17 @@ func resolveBuildArgs(npmrc *NpmRC, installDir string, args *BuildArgs, esmPath 
 			deps := map[string]string{}
 			for name, version := range args.deps {
 				// The version of package "react" should be the same as "react-dom"
-				if esmPath.PkgName == "react-dom" && name == "react" {
+				if esm.PkgName == "react-dom" && name == "react" {
 					continue
 				}
-				if name != esmPath.PkgName && depsSet.Has(name) {
+				if name != esm.PkgName && depsSet.Has(name) {
 					deps[name] = version
 					continue
 				}
 				// fix some edge cases
 				// for example, the package "htm" doesn't declare 'preact' as a dependency explicitly
 				// as a workaround, we check if the package name is in the subPath of the package
-				if esmPath.SubModuleName != "" && contains(strings.Split(esmPath.SubModuleName, "/"), name) {
+				if esm.SubModuleName != "" && contains(strings.Split(esm.SubModuleName, "/"), name) {
 					deps[name] = version
 				}
 			}
@@ -232,11 +232,11 @@ func resolveBuildArgs(npmrc *NpmRC, installDir string, args *BuildArgs, esmPath 
 					continue
 				}
 				// if the subModule externalizes the package entry
-				if name == esmPath.PkgName && esmPath.SubPath != "" {
+				if name == esm.PkgName && esm.SubPath != "" {
 					external.Add(name)
 					continue
 				}
-				if name != esmPath.PkgName && depsSet.Has(name) {
+				if name != esm.PkgName && depsSet.Has(name) {
 					external.Add(name)
 				}
 			}

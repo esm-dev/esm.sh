@@ -98,6 +98,16 @@ func isJsReservedWord(word string) bool {
 	return false
 }
 
+// endsWith returns true if the given string ends with any of the suffixes.
+func endsWith(s string, suffixs ...string) bool {
+	for _, suffix := range suffixs {
+		if strings.HasSuffix(s, suffix) {
+			return true
+		}
+	}
+	return false
+}
+
 // contains returns true if the given string is included in the given array.
 func contains(a []string, s string) bool {
 	if len(a) == 0 {
@@ -105,16 +115,6 @@ func contains(a []string, s string) bool {
 	}
 	for _, v := range a {
 		if v == s {
-			return true
-		}
-	}
-	return false
-}
-
-// endsWith returns true if the given string ends with any of the suffixes.
-func endsWith(s string, suffixs ...string) bool {
-	for _, suffix := range suffixs {
-		if strings.HasSuffix(s, suffix) {
 			return true
 		}
 	}
@@ -162,7 +162,7 @@ func relPath(basePath, targetPath string) (string, error) {
 }
 
 // findFiles returns a list of files in the given directory.
-func findFiles(root string, dir string, fn func(p string) bool) ([]string, error) {
+func findFiles(root string, dir string, filter func(filename string) bool) ([]string, error) {
 	rootDir, err := filepath.Abs(root)
 	if err != nil {
 		return nil, err
@@ -174,15 +174,15 @@ func findFiles(root string, dir string, fn func(p string) bool) ([]string, error
 	var files []string
 	for _, entry := range entries {
 		name := entry.Name()
-		path := name
+		filename := name
 		if dir != "" {
-			path = dir + "/" + name
+			filename = dir + "/" + name
 		}
 		if entry.IsDir() {
 			if name == "node_modules" {
 				continue
 			}
-			subFiles, err := findFiles(filepath.Join(rootDir, name), path, fn)
+			subFiles, err := findFiles(filepath.Join(rootDir, name), filename, filter)
 			if err != nil {
 				return nil, err
 			}
@@ -191,8 +191,8 @@ func findFiles(root string, dir string, fn func(p string) bool) ([]string, error
 			copy(newFiles[len(files):], subFiles)
 			files = newFiles
 		} else {
-			if fn(path) {
-				files = append(files, path)
+			if filter(filename) {
+				files = append(files, filename)
 			}
 		}
 	}
@@ -225,9 +225,16 @@ func appendVaryHeader(header http.Header, key string) {
 
 // concatBytes concatenates two byte slices.
 func concatBytes(a, b []byte) []byte {
-	c := make([]byte, len(a)+len(b))
+	al, bl := len(a), len(b)
+	if al == 0 {
+		return b[0:]
+	}
+	if bl == 0 {
+		return a[0:]
+	}
+	c := make([]byte, al+bl)
 	copy(c, a)
-	copy(c[len(a):], b)
+	copy(c[al:], b)
 	return c
 }
 
