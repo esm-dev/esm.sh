@@ -245,15 +245,11 @@ func esmRouter() rex.Handle {
 			for el := buildQueue.queue.Front(); el != nil; el = el.Next() {
 				t, ok := el.Value.(*BuildTask)
 				if ok {
-					clientIps := make([]string, len(t.clients))
-					for idx, c := range t.clients {
-						clientIps[idx] = c.IP
-					}
 					m := map[string]any{
-						"clients":   clientIps,
-						"createdAt": t.createdAt.Format(http.TimeFormat),
-						"path":      t.Path(),
-						"status":    "pending",
+						"waitClients": len(t.waitChans),
+						"createdAt":   t.createdAt.Format(http.TimeFormat),
+						"path":        t.Path(),
+						"status":      t.status,
 					}
 					q[i] = m
 					i++
@@ -514,7 +510,8 @@ func esmRouter() rex.Handle {
 			}
 			var body io.Reader = content
 			if err == storage.ErrNotFound {
-				fetchClient := NewFetchClient(30*time.Second, ctx.UserAgent())
+				fetchClient, recycle := NewFetchClient(30*time.Second, ctx.UserAgent())
+				defer recycle()
 				res, err := fetchClient.Fetch(ctxUrl)
 				if err != nil {
 					return rex.Status(500, "Failed to fetch page html")
@@ -700,7 +697,8 @@ func esmRouter() rex.Handle {
 			var body io.Reader = content
 			if err == storage.ErrNotFound {
 				importMap := common.ImportMap{}
-				fetchClient := NewFetchClient(30*time.Second, ctx.UserAgent())
+				fetchClient, recycle := NewFetchClient(30*time.Second, ctx.UserAgent())
+				defer recycle()
 				if len(im) > 0 {
 					imPath, err := atobUrl(im)
 					if err != nil {
@@ -1420,18 +1418,18 @@ func esmRouter() rex.Handle {
 					target:      "types",
 					zoneId:      zoneId,
 				}
-				c := buildQueue.Add(buildCtx, ctx.RemoteIP())
+				ch := buildQueue.Add(buildCtx)
 				select {
-				case output := <-c.C:
+				case output := <-ch:
 					if output.err != nil {
 						if output.err.Error() == "types not found" {
 							return rex.Status(404, "Types Not Found")
 						}
-						return rex.Status(500, "types: "+output.err.Error())
+						return rex.Status(500, "Failed to build types: "+output.err.Error())
 					}
 				case <-time.After(time.Duration(config.BuildWaitTime) * time.Second):
 					ctx.SetHeader("Cache-Control", ccMustRevalidate)
-					return rex.Status(http.StatusRequestTimeout, "timeout, the types is waiting to be built, please try again later!")
+					return rex.Status(http.StatusRequestTimeout, "timeout, the types is waiting to be built, please try refreshing the page.")
 				}
 				content, _, err = readDts()
 			}
@@ -1536,9 +1534,9 @@ func esmRouter() rex.Handle {
 			return rex.Status(500, err.Error())
 		}
 		if !ok {
-			c := buildQueue.Add(buildCtx, ctx.RemoteIP())
+			ch := buildQueue.Add(buildCtx)
 			select {
-			case output := <-c.C:
+			case output := <-ch:
 				if output.err != nil {
 					msg := output.err.Error()
 					if strings.Contains(msg, "no such file or directory") ||
@@ -1555,7 +1553,7 @@ func esmRouter() rex.Handle {
 				ret = output.result
 			case <-time.After(time.Duration(config.BuildWaitTime) * time.Second):
 				ctx.SetHeader("Cache-Control", ccMustRevalidate)
-				return rex.Status(http.StatusRequestTimeout, "timeout, the module is waiting to be built, please try again later!")
+				return rex.Status(http.StatusRequestTimeout, "timeout, the module is waiting to be built, please try refreshing the page.")
 			}
 		}
 

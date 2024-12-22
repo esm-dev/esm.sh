@@ -265,7 +265,7 @@ func (ctx *BuildContext) resolveEntry(esm Esm) (entry BuildEntry) {
 							}
 							*/
 							exportEntry.update(s, pkgJson.Type == "module" || strings.HasSuffix(s, ".mjs"))
-						} else if om, ok := conditions.(*JsonObject); ok {
+						} else if obj, ok := conditions.(*JSONObject); ok {
 							/**
 							exports: {
 								"./lib/foo": {
@@ -275,7 +275,7 @@ func (ctx *BuildContext) resolveEntry(esm Esm) (entry BuildEntry) {
 								}
 							}
 							*/
-							exportEntry = ctx.resolveConditionExportEntry(om, pkgJson.Type)
+							exportEntry = ctx.resolveConditionExportEntry(obj, pkgJson.Type)
 						}
 						break
 					} else if diff, ok := matchAsteriskExports(name, subModuleName); ok {
@@ -290,7 +290,7 @@ func (ctx *BuildContext) resolveEntry(esm Esm) (entry BuildEntry) {
 								exportEntry.update(path, pkgJson.Type == "module" || strings.HasSuffix(path, ".mjs"))
 								break
 							}
-						} else if om, ok := conditions.(*JsonObject); ok {
+						} else if obj, ok := conditions.(*JSONObject); ok {
 							/**
 							exports: {
 								"./lib/*": {
@@ -300,7 +300,7 @@ func (ctx *BuildContext) resolveEntry(esm Esm) (entry BuildEntry) {
 								},
 							}
 							*/
-							exportEntry = ctx.resolveConditionExportEntry(resloveAsteriskPathMapping(om, diff), pkgJson.Type)
+							exportEntry = ctx.resolveConditionExportEntry(resloveAsteriskPathMapping(obj, diff), pkgJson.Type)
 							ctx.finalizeBuildEntry(&exportEntry)
 							if !exportEntry.isEmpty() {
 								break
@@ -410,7 +410,7 @@ func (ctx *BuildContext) resolveEntry(esm Esm) (entry BuildEntry) {
 					}
 					*/
 					exportEntry.update(s, pkgJson.Type == "module" || strings.HasSuffix(s, ".mjs"))
-				} else if om, ok := v.(*JsonObject); ok {
+				} else if obj, ok := v.(*JSONObject); ok {
 					/**
 					exports: {
 						".": {
@@ -419,7 +419,7 @@ func (ctx *BuildContext) resolveEntry(esm Esm) (entry BuildEntry) {
 						}
 					}
 					*/
-					exportEntry = ctx.resolveConditionExportEntry(om, pkgJson.Type)
+					exportEntry = ctx.resolveConditionExportEntry(obj, pkgJson.Type)
 				}
 			} else {
 				/**
@@ -628,15 +628,15 @@ func (ctx *BuildContext) finalizeBuildEntry(entry *BuildEntry) {
 }
 
 // see https://nodejs.org/api/packages.html#nested-conditions
-func (ctx *BuildContext) resolveConditionExportEntry(conditions *JsonObject, preferedModuleType string) (entry BuildEntry) {
+func (ctx *BuildContext) resolveConditionExportEntry(conditions *JSONObject, preferedModuleType string) (entry BuildEntry) {
 	if preferedModuleType == "types" {
 		for _, conditionName := range []string{"module", "import", "es2015", "default", "require"} {
 			condition, ok := conditions.Get(conditionName)
 			if ok {
 				if s, ok := condition.(string); ok {
 					entry.types = s
-				} else if om, ok := condition.(*JsonObject); ok {
-					entry = ctx.resolveConditionExportEntry(om, "types")
+				} else if obj, ok := condition.(*JSONObject); ok {
+					entry = ctx.resolveConditionExportEntry(obj, "types")
 				}
 				break
 			}
@@ -649,8 +649,8 @@ func (ctx *BuildContext) resolveConditionExportEntry(conditions *JsonObject, pre
 		if ok {
 			if s, ok := condition.(string); ok {
 				entry.update(s, preferedModuleType == "module")
-			} else if om, ok := condition.(*JsonObject); ok {
-				entry = ctx.resolveConditionExportEntry(om, preferedModuleType)
+			} else if obj, ok := condition.(*JSONObject); ok {
+				entry = ctx.resolveConditionExportEntry(obj, preferedModuleType)
 			}
 		}
 	} else if ctx.isDenoTarget() {
@@ -663,8 +663,8 @@ func (ctx *BuildContext) resolveConditionExportEntry(conditions *JsonObject, pre
 		if ok {
 			if s, ok := condition.(string); ok {
 				entry.update(s, preferedModuleType == "module")
-			} else if om, ok := condition.(*JsonObject); ok {
-				entry = ctx.resolveConditionExportEntry(om, preferedModuleType)
+			} else if obj, ok := condition.(*JSONObject); ok {
+				entry = ctx.resolveConditionExportEntry(obj, preferedModuleType)
 			}
 		}
 	} else if ctx.target == "node" {
@@ -672,8 +672,8 @@ func (ctx *BuildContext) resolveConditionExportEntry(conditions *JsonObject, pre
 		if ok {
 			if s, ok := condition.(string); ok {
 				entry.update(s, preferedModuleType == "module")
-			} else if om, ok := condition.(*JsonObject); ok {
-				entry = ctx.resolveConditionExportEntry(om, preferedModuleType)
+			} else if obj, ok := condition.(*JSONObject); ok {
+				entry = ctx.resolveConditionExportEntry(obj, preferedModuleType)
 			}
 		}
 	}
@@ -683,8 +683,8 @@ func (ctx *BuildContext) resolveConditionExportEntry(conditions *JsonObject, pre
 		if ok {
 			if s, ok := condition.(string); ok {
 				entry.update(s, preferedModuleType == "module")
-			} else if om, ok := condition.(*JsonObject); ok {
-				entry = ctx.resolveConditionExportEntry(om, preferedModuleType)
+			} else if obj, ok := condition.(*JSONObject); ok {
+				entry = ctx.resolveConditionExportEntry(obj, preferedModuleType)
 			}
 		}
 	}
@@ -695,8 +695,8 @@ func (ctx *BuildContext) resolveConditionExportEntry(conditions *JsonObject, pre
 			if ok {
 				if s, ok := condition.(string); ok {
 					entry.update(s, preferedModuleType == "module")
-				} else if om, ok := condition.(*JsonObject); ok {
-					entry = ctx.resolveConditionExportEntry(om, preferedModuleType)
+				} else if obj, ok := condition.(*JSONObject); ok {
+					entry = ctx.resolveConditionExportEntry(obj, preferedModuleType)
 				}
 				break
 			}
@@ -722,8 +722,8 @@ LOOP:
 			if entry.types == "" {
 				if s, ok := condition.(string); ok {
 					entry.types = s
-				} else if om, ok := condition.(*JsonObject); ok {
-					e := ctx.resolveConditionExportEntry(om, "types")
+				} else if obj, ok := condition.(*JSONObject); ok {
+					e := ctx.resolveConditionExportEntry(obj, "types")
 					if e.types != "" {
 						entry.types = e.types
 					}
@@ -737,8 +737,8 @@ LOOP:
 		if entry.main == "" || (!entry.module && module) {
 			if s, ok := condition.(string); ok {
 				entry.update(s, module)
-			} else if om, ok := condition.(*JsonObject); ok {
-				e := ctx.resolveConditionExportEntry(om, prefered)
+			} else if obj, ok := condition.(*JSONObject); ok {
+				e := ctx.resolveConditionExportEntry(obj, prefered)
 				if e.main != "" {
 					entry.update(e.main, e.module)
 				}
@@ -1109,28 +1109,30 @@ func matchAsteriskExports(epxortsKey string, subModuleName string) (diff string,
 	return "", false
 }
 
-func resloveAsteriskPathMapping(om *JsonObject, diff string) *JsonObject {
-	reslovedConditions := newJSONObject()
+func resloveAsteriskPathMapping(om *JSONObject, diff string) *JSONObject {
+	reslovedConditions := &JSONObject{
+		values: make(map[string]interface{}),
+	}
 	for _, key := range om.keys {
 		value, ok := om.Get(key)
 		if ok {
 			if s, ok := value.(string); ok {
 				reslovedConditions.Set(key, strings.ReplaceAll(s, "*", diff))
-			} else if om, ok := value.(*JsonObject); ok {
-				reslovedConditions.Set(key, resloveAsteriskPathMapping(om, diff))
+			} else if obj, ok := value.(*JSONObject); ok {
+				reslovedConditions.Set(key, resloveAsteriskPathMapping(obj, diff))
 			}
 		}
 	}
 	return reslovedConditions
 }
 
-func getAllExportsPaths(exports *JsonObject) []string {
+func getAllExportsPaths(exports *JSONObject) []string {
 	var values []string
 	for _, key := range exports.keys {
 		v := exports.values[key]
 		if s, ok := v.(string); ok {
 			values = append(values, s)
-		} else if condition, ok := v.(*JsonObject); ok {
+		} else if condition, ok := v.(*JSONObject); ok {
 			values = append(values, getAllExportsPaths(condition)...)
 		}
 	}

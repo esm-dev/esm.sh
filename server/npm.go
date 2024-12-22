@@ -86,13 +86,13 @@ type PackageJSONRaw struct {
 	Name             string          `json:"name"`
 	Version          string          `json:"version"`
 	Type             string          `json:"type"`
-	Main             JsonAny         `json:"main"`
-	Module           JsonAny         `json:"module"`
-	ES2015           JsonAny         `json:"es2015"`
-	JsNextMain       JsonAny         `json:"jsnext:main"`
-	Browser          JsonAny         `json:"browser"`
-	Types            JsonAny         `json:"types"`
-	Typings          JsonAny         `json:"typings"`
+	Main             JSONAny         `json:"main"`
+	Module           JSONAny         `json:"module"`
+	ES2015           JSONAny         `json:"es2015"`
+	JsNextMain       JSONAny         `json:"jsnext:main"`
+	Browser          JSONAny         `json:"browser"`
+	Types            JSONAny         `json:"types"`
+	Typings          JSONAny         `json:"typings"`
 	SideEffects      any             `json:"sideEffects"`
 	Dependencies     any             `json:"dependencies"`
 	PeerDependencies any             `json:"peerDependencies"`
@@ -127,7 +127,7 @@ type PackageJSON struct {
 	PeerDependencies map[string]string
 	Imports          map[string]any
 	TypesVersions    map[string]any
-	Exports          *JsonObject
+	Exports          *JSONObject
 	Esmsh            map[string]any
 	Dist             NpmPackageDist
 	Deprecated       string
@@ -155,7 +155,7 @@ func (a *PackageJSONRaw) ToNpmPackage() *PackageJSON {
 
 	var dependencies map[string]string
 	if m, ok := a.Dependencies.(map[string]any); ok {
-		dependencies = make(map[string]string, len(m))
+		dependencies = make(map[string]string)
 		for k, v := range m {
 			if s, ok := v.(string); ok {
 				if k != "" && s != "" {
@@ -167,7 +167,7 @@ func (a *PackageJSONRaw) ToNpmPackage() *PackageJSON {
 
 	var peerDependencies map[string]string
 	if m, ok := a.PeerDependencies.(map[string]any); ok {
-		peerDependencies = make(map[string]string, len(m))
+		peerDependencies = make(map[string]string)
 		for k, v := range m {
 			if s, ok := v.(string); ok {
 				if k != "" && s != "" {
@@ -199,7 +199,9 @@ func (a *PackageJSONRaw) ToNpmPackage() *PackageJSON {
 		}
 	}
 
-	exports := newJSONObject()
+	exports := &JSONObject{
+		values: make(map[string]interface{}),
+	}
 	if rawExports := a.Exports; rawExports != nil {
 		var s string
 		if json.Unmarshal(rawExports, &s) == nil {

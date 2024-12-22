@@ -131,67 +131,67 @@ func (ctx *BuildContext) Build() (ret *BuildMeta, err error) {
 		return
 	}
 
-	// if ctx.pkgJson.Exports.Len() > 0 && ctx.bundleMode == BundleDefault {
-	// 	var exportNames []string
-	// 	var exportAll bool
-	// 	for _, exportName := range ctx.pkgJson.Exports.keys {
-	// 		exportName := stripModuleExt(exportName)
-	// 		if (exportName == "." || strings.HasPrefix(exportName, "./")) && !endsWith(exportName, ".json", ".css") {
-	// 			if exportName == "./*" {
-	// 				exportAll = true
-	// 				break
-	// 			}
-	// 			if !strings.ContainsRune(exportName, '*') {
-	// 				v := ctx.pkgJson.Exports.values[exportName]
-	// 				if om, ok := v.(*JsonObject); ok {
-	// 					// ignore types exports
-	// 					if len(om.keys) == 1 && om.keys[0] == "types" {
-	// 						continue
-	// 					}
-	// 				}
-	// 				if exportName == "." {
-	// 					exportNames = append(exportNames, "")
-	// 				} else if strings.HasPrefix(exportName, "./") {
-	// 					exportNames = append(exportNames, exportName[2:])
-	// 				}
-	// 			}
-	// 		}
-	// 	}
-	// 	if !exportAll {
-	// 		refs := map[string]uint16{}
-	// 		for _, exportName := range exportNames {
-	// 			esm := ctx.esm
-	// 			esm.SubPath = exportName
-	// 			esm.SubModuleName = stripEntryModuleExt(exportName)
-	// 			b := &BuildContext{
-	// 				esm:         esm,
-	// 				npmrc:       ctx.npmrc,
-	// 				args:        ctx.args,
-	// 				externalAll: ctx.externalAll,
-	// 				target:      ctx.target,
-	// 				pinedTarget: ctx.pinedTarget,
-	// 				dev:         ctx.dev,
-	// 				zoneId:      ctx.zoneId,
-	// 				wd:          ctx.wd,
-	// 				pkgJson:     ctx.pkgJson,
-	// 			}
-	// 			_, depTree, err := b.buildModule(true)
-	// 			if err == nil {
-	// 				for _, dep := range depTree.Values() {
-	// 					refs[dep]++
-	// 				}
-	// 			}
-	// 		}
-	// 		for p, n := range refs {
-	// 			if n > 1 {
-	// 				if ctx.splitting == nil {
-	// 					ctx.splitting = NewSet()
-	// 				}
-	// 				ctx.splitting.Add(p)
-	// 			}
-	// 		}
-	// 	}
-	// }
+	if ctx.pkgJson.Exports.Len() > 0 && ctx.bundleMode == BundleDefault {
+		var exportNames []string
+		var exportAll bool
+		for _, exportName := range ctx.pkgJson.Exports.keys {
+			exportName := stripModuleExt(exportName)
+			if (exportName == "." || strings.HasPrefix(exportName, "./")) && !endsWith(exportName, ".json", ".css") {
+				if exportName == "./*" {
+					exportAll = true
+					break
+				}
+				if !strings.ContainsRune(exportName, '*') {
+					v := ctx.pkgJson.Exports.values[exportName]
+					if obj, ok := v.(*JSONObject); ok {
+						// ignore types exports
+						if len(obj.keys) == 1 && obj.keys[0] == "types" {
+							continue
+						}
+					}
+					if exportName == "." {
+						exportNames = append(exportNames, "")
+					} else if strings.HasPrefix(exportName, "./") {
+						exportNames = append(exportNames, exportName[2:])
+					}
+				}
+			}
+		}
+		if !exportAll {
+			refs := map[string]uint16{}
+			for _, exportName := range exportNames {
+				esm := ctx.esm
+				esm.SubPath = exportName
+				esm.SubModuleName = stripEntryModuleExt(exportName)
+				b := &BuildContext{
+					esm:         esm,
+					npmrc:       ctx.npmrc,
+					args:        ctx.args,
+					externalAll: ctx.externalAll,
+					target:      ctx.target,
+					pinedTarget: ctx.pinedTarget,
+					dev:         ctx.dev,
+					zoneId:      ctx.zoneId,
+					wd:          ctx.wd,
+					pkgJson:     ctx.pkgJson,
+				}
+				_, depTree, err := b.buildModule(true)
+				if err == nil {
+					for _, dep := range depTree.Values() {
+						refs[dep]++
+					}
+				}
+			}
+			for p, n := range refs {
+				if n > 1 {
+					if ctx.splitting == nil {
+						ctx.splitting = NewSet()
+					}
+					ctx.splitting.Add(p)
+				}
+			}
+		}
+	}
 
 	// build the module
 	ctx.status = "build"
@@ -632,7 +632,7 @@ func (ctx *BuildContext) buildModule(analyzeMode bool) (meta *BuildMeta, depTree
 											// exports: "./*": "./dist/*.js"
 											prefix, suffix = utils.SplitByLastByte(s, '*')
 											match = strings.HasPrefix(stripModuleExt(moduleSpecifier), prefix) && (suffix == "" || strings.HasSuffix(moduleSpecifier, suffix))
-										} else if m, ok := v.(*JsonObject); ok {
+										} else if m, ok := v.(*JSONObject); ok {
 											// exports: "./*": { "import": "./dist/*.js" }
 											// exports: "./*": { "import": { default: "./dist/*.js" } }
 											// ...
@@ -665,7 +665,7 @@ func (ctx *BuildContext) buildModule(analyzeMode bool) (meta *BuildMeta, depTree
 										if s, ok := v.(string); ok && stripModuleExt(s) == stripModuleExt(moduleSpecifier) {
 											// exports: "./foo": "./foo.js"
 											match = true
-										} else if m, ok := v.(*JsonObject); ok {
+										} else if m, ok := v.(*JSONObject); ok {
 											// exports: "./foo": { "import": "./foo.js" }
 											// exports: "./foo": { "import": { default: "./foo.js" } }
 											// ...
@@ -1373,11 +1373,11 @@ func (ctx *BuildContext) install() (err error) {
 					if s, ok := v.(string); ok {
 						// exports: { ".": "./index.js" }
 						isMainModule = check(s)
-					} else if om, ok := v.(*JsonObject); ok {
+					} else if obj, ok := v.(*JSONObject); ok {
 						// exports: { ".": { "require": "./cjs/index.js", "import": "./esm/index.js" } }
 						// exports: { ".": { "node": { "require": "./cjs/index.js", "import": "./esm/index.js" } } }
 						// ...
-						paths := getAllExportsPaths(om)
+						paths := getAllExportsPaths(obj)
 						for _, path := range paths {
 							if check(path) {
 								isMainModule = true
