@@ -87,7 +87,7 @@ func resolveSvelteVersion(npmrc *NpmRC, importMap common.ImportMap) (svelteVersi
 }
 
 func generateUnoCSS(npmrc *NpmRC, configCSS string, content string) (output *LoaderOutput, err error) {
-	loaderVersion := "0.4.2"
+	loaderVersion := "0.4.3"
 	loaderExecPath := path.Join(config.WorkDir, "bin", "unocss-"+loaderVersion)
 
 	once, _ := compileSyncMap.LoadOrStore(loaderExecPath, &Once{})
@@ -143,33 +143,27 @@ func compileUnocssLoader(npmrc *NpmRC, loaderVersion string, loaderExecPath stri
 	  import { generate } from "@esm.sh/unocss";
 	  const { stdin, stdout } = Deno;
 	  const write = data => stdout.write(new TextEncoder().encode(data));
-	  const iconLoader = (url) => {
-	    if (url.startsWith("https://esm.sh/@iconify-json/")) {
-				const [_, cName, ...path] = url.slice(15).split("/")
-				return (async () => {
-					const { UntarStream } = await import("jsr:@std/tar/untar-stream");
-					const jsonRes = await fetch("https://registry.npmjs.org/@iconify-json/" + cName + "/latest")
-					if (jsonRes.status !== 200) {
-						jsonRes.body.cancel()
-						throw new Error("Failed to fetch @iconify-json/" + cName)
-					}
-					const { dist } = await jsonRes.json()
-					const tgzRes = await fetch(dist.tarball)
-					if (tgzRes.status !== 200) {
-						tgzRes.body.cancel()
-						throw new Error("Failed to fetch tarball of @iconify-json/" + cName)
-					}
-					for await (const entry of tgzRes.body.pipeThrough(new DecompressionStream("gzip")).pipeThrough(new UntarStream())) {
-						if (entry.path === "package/" + path.join("/")) {
-							return await new Response(entry.readable).json()
-						} else {
-							entry.readable.cancel()
-						}
-					}
-					throw new Error("Failed to find " + path.join("/") + " in " + dist.tarball)
-				})()
+	  const iconLoader = async (collectionName) => {
+	    const { UntarStream } = await import("jsr:@std/tar/untar-stream");
+			const jsonRes = await fetch("https://registry.npmjs.org/@iconify-json/" + collectionName + "/latest")
+			if (jsonRes.status !== 200) {
+				jsonRes.body.cancel()
+				throw new Error("Failed to fetch @iconify-json/" + collectionName)
 			}
-			throw new Error("Unsupported icon url: " + url)
+			const { dist } = await jsonRes.json()
+			const tgzRes = await fetch(dist.tarball)
+			if (tgzRes.status !== 200) {
+				tgzRes.body.cancel()
+				throw new Error("Failed to fetch tarball of @iconify-json/" + collectionName)
+			}
+			for await (const entry of tgzRes.body.pipeThrough(new DecompressionStream("gzip")).pipeThrough(new UntarStream())) {
+				if (entry.path === "package/icons.json" ) {
+					return await new Response(entry.readable).json()
+				} else {
+					entry.readable.cancel()
+				}
+			}
+			throw new Error("icons.json not found in @iconify-json/" + collectionName)
 	  }
 	  try {
 	    let content = "";
