@@ -33,7 +33,7 @@ You will need [Go](https://golang.org/dl) 1.22+ to compile and run the server.
 go run main.go --config=config.json
 ```
 
-Then you can import `React` from <http://localhost:8080/react>.
+Then you can import `React` from <http://localhost:808080/react>.
 
 ## Deploy the Server to a Single Machine
 
@@ -67,7 +67,7 @@ docker pull ghcr.io/esm-dev/esm.sh:v136 # specific version
 Run the container:
 
 ```bash
-docker run -p 8080:80 \
+docker run -p 8080:8080 \
   -e NPM_REGISTRY=https://registry.npmjs.org/ \
   -e NPM_TOKEN=****** \
   ghcr.io/esm-dev/esm.sh:latest
