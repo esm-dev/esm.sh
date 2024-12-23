@@ -1276,13 +1276,6 @@ func esmRouter() rex.Handle {
 			if extraQuery != "" {
 				pkgVersion += "&" + extraQuery
 			}
-			if rawQuery == "target="+target {
-				rawQuery = ""
-			} else if p := "&target=" + target; strings.Contains(rawQuery, p) {
-				rawQuery = strings.ReplaceAll(rawQuery, p, "")
-			} else if p := "target=" + target + "&"; strings.Contains(rawQuery, p) {
-				rawQuery = strings.ReplaceAll(rawQuery, p, "")
-			}
 			if rawQuery != "" {
 				qs = "?" + rawQuery
 			}
