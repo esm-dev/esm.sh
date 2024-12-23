@@ -13,8 +13,8 @@ RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w" -o esmd main.go
 
 FROM alpine:latest AS server
 
-# install git (use to fetch repo tags from Github)
-RUN apk update && apk add --no-cache git git-lfs && git lfs install
+# install tini & git (use to fetch repo tags from Github)
+RUN apk update && apk add --no-cache tini git git-lfs && git lfs install
 
 # deno desn't provider musl build yet, the hack below makes the gnu build working in alpine
 # see https://github.com/denoland/deno_docker/blob/main/alpine.dockerfile
@@ -32,6 +32,10 @@ COPY --from=denoland/deno:bin-2.1.4 --chown=esm:esm /deno /esmd/bin/deno
 
 ENV ESM_SERVER_PORT="8080"
 ENV ESM_SERVER_WORKDIR="/esmd"
+
+# use tini
+# see https://github.com/krallin/tini
+ENTRYPOINT ["/sbin/tini", "--"]
 
 USER esm
 WORKDIR /esmd
