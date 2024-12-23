@@ -78,6 +78,6 @@ func ghInstall(wd, name, tag string) (err error) {
 		return fmt.Errorf("fetch %s failed: %s", u, res.Status)
 	}
 
-	err = extractPackageTarball(wd, name, io.LimitReader(res.Body, 256*MB))
+	err = extractPackageTarball(wd, name, io.LimitReader(res.Body, maxPackageTarballSize))
 	return
 }

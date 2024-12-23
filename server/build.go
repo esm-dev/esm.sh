@@ -965,6 +965,7 @@ func (ctx *BuildContext) buildModule(analyzeMode bool) (meta *BuildMeta, depTree
 	}
 	options := esbuild.BuildOptions{
 		AbsWorkingDir:     ctx.wd,
+		PreserveSymlinks:  true,
 		Format:            esbuild.FormatESModule,
 		Target:            targets[ctx.target],
 		Platform:          esbuild.PlatformBrowser,

@@ -694,7 +694,7 @@ RETRY:
 		return
 	}
 
-	err = extractPackageTarball(installDir, pkgName, io.LimitReader(res.Body, 256*MB))
+	err = extractPackageTarball(installDir, pkgName, io.LimitReader(res.Body, maxPackageTarballSize))
 	return
 }
 
@@ -729,7 +729,7 @@ func extractPackageTarball(installDir string, packname string, tarball io.Reader
 			continue
 		}
 		// ignore large files
-		if h.Size > assetMaxSize {
+		if h.Size > maxAssetFileSize {
 			continue
 		}
 		extname := path.Ext(filename)

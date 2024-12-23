@@ -1098,7 +1098,7 @@ func esmRouter() rex.Handle {
 						return rex.Status(500, err.Error())
 					}
 					// limit the file size up to 50MB
-					if stat.Size() > assetMaxSize {
+					if stat.Size() > maxAssetFileSize {
 						return rex.Status(403, "File Too Large")
 					}
 					etag = fmt.Sprintf(`W/"%x-%x"`, stat.ModTime().Unix(), stat.Size())

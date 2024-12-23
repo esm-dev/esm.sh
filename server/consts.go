@@ -1,8 +1,12 @@
 package server
 
-const VERSION = 136
-const assetMaxSize = 50 * 1024 * 1024 // limit asset size to 50mb
-const nodeTypesVersion = "22.9.0"
+const (
+	VERSION               = 136
+	MB                    = 1 << 20
+	maxAssetFileSize      = 50 * MB
+	maxPackageTarballSize = 256 * MB
+	nodeTypesVersion      = "22.9.0"
+)
 
 // asset extensions
 var assetExts = map[string]bool{

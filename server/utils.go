@@ -17,8 +17,6 @@ import (
 	"github.com/ije/gox/valid"
 )
 
-const MB = 1 << 20
-
 var (
 	bufferPool       = sync.Pool{New: func() interface{} { return new(bytes.Buffer) }}
 	defaultUserAgent = "esmd/v" + strconv.Itoa(VERSION)
