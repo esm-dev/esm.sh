@@ -44,15 +44,16 @@ func Serve(efs EmbedFS) {
 	flag.Parse()
 
 	if existsFile(cfile) {
-		c, err := LoadConfig(cfile)
+		config, err = LoadConfig(cfile)
 		if err != nil {
 			fmt.Println(err.Error())
 			os.Exit(1)
 		}
-		config = *c
 		if debug {
 			fmt.Printf("%s [info] Config loaded from %s\n", time.Now().Format("2006-01-02 15:04:05"), cfile)
 		}
+	} else {
+		config = DefaultConfig()
 	}
 
 	if debug {

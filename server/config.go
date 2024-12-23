@@ -18,7 +18,7 @@ import (
 
 var (
 	// global config
-	config Config
+	config *Config
 )
 
 // Config represents the configuration of esm.sh server.
@@ -323,5 +323,5 @@ func isPackageExcluded(name string, excludes []string) bool {
 }
 
 func init() {
-	config = *DefaultConfig()
+	config = &Config{}
 }
