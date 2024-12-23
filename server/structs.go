@@ -267,14 +267,14 @@ func handleDelim(t json.Token, dec *json.Decoder) (res any, err error) {
 	if delim, ok := t.(json.Delim); ok {
 		switch delim {
 		case '{':
-			om2 := &JSONObject{
+			obj := &JSONObject{
 				values: make(map[string]any),
 			}
-			err = om2.parse(dec)
+			err = obj.parse(dec)
 			if err != nil {
 				return
 			}
-			return om2, nil
+			return obj, nil
 		case '[':
 			var value []any
 			value, err = parseArray(dec)

@@ -3,6 +3,7 @@ package server
 import (
 	"bytes"
 	"fmt"
+	"io"
 	"os"
 	"path"
 	"strings"
@@ -61,7 +62,8 @@ func transformDTS(ctx *BuildContext, dts string, buildArgsPrefix string, marker 
 		return
 	}
 
-	buffer := bytes.NewBuffer(nil)
+	buffer, recycle := NewBuffer()
+	defer recycle()
 	internalDts := NewSet()
 	withNodeBuiltinModule := false
 	hasReferenceTypesNode := false
@@ -240,11 +242,14 @@ func transformDTS(ctx *BuildContext, dts string, buildArgsPrefix string, marker 
 	dtsFile.Close()
 
 	if withNodeBuiltinModule && !hasReferenceTypesNode {
-		ref := []byte(fmt.Sprintf("/// <reference path=\"{ESM_CDN_ORIGIN}/@types/node@%s/index.d.ts\" />\n", nodeTypesVersion))
-		buffer = bytes.NewBuffer(concatBytes(ref, buffer.Bytes()))
+		buf, recycle := NewBuffer()
+		defer recycle()
+		fmt.Fprintf(buf, "/// <reference path=\"{ESM_CDN_ORIGIN}/@types/node@%s/index.d.ts\" />\n", nodeTypesVersion)
+		io.Copy(buf, buffer)
+		buffer = buf
 	}
 
-	err = buildStorage.Put(savePath, bytes.NewBuffer(ctx.rewriteDTS(dts, buffer.Bytes())))
+	err = buildStorage.Put(savePath, bytes.NewReader(ctx.rewriteDTS(dts, buffer.Bytes())))
 	if err != nil {
 		return
 	}

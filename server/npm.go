@@ -555,7 +555,8 @@ func (rc *NpmRC) installPackage(pkg Package) (packageJson *PackageJSON, err erro
 		err = ghInstall(installDir, pkg.Name, pkg.Version)
 		// ensure 'package.json' file if not exists after installing from github
 		if err == nil && !existsFile(packageJsonPath) {
-			buf := bytes.NewBuffer(nil)
+			buf, recycle := NewBuffer()
+			defer recycle()
 			fmt.Fprintf(buf, `{"name":"%s","version":"%s"}`, pkg.Name, pkg.Version)
 			err = os.WriteFile(packageJsonPath, buf.Bytes(), 0644)
 		}

@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path"
 	"regexp"
@@ -131,67 +132,67 @@ func (ctx *BuildContext) Build() (ret *BuildMeta, err error) {
 		return
 	}
 
-	if ctx.pkgJson.Exports.Len() > 0 && ctx.bundleMode == BundleDefault {
-		var exportNames []string
-		var exportAll bool
-		for _, exportName := range ctx.pkgJson.Exports.keys {
-			exportName := stripModuleExt(exportName)
-			if (exportName == "." || strings.HasPrefix(exportName, "./")) && !endsWith(exportName, ".json", ".css") {
-				if exportName == "./*" {
-					exportAll = true
-					break
-				}
-				if !strings.ContainsRune(exportName, '*') {
-					v := ctx.pkgJson.Exports.values[exportName]
-					if obj, ok := v.(*JSONObject); ok {
-						// ignore types exports
-						if len(obj.keys) == 1 && obj.keys[0] == "types" {
-							continue
-						}
-					}
-					if exportName == "." {
-						exportNames = append(exportNames, "")
-					} else if strings.HasPrefix(exportName, "./") {
-						exportNames = append(exportNames, exportName[2:])
-					}
-				}
-			}
-		}
-		if !exportAll {
-			refs := map[string]uint16{}
-			for _, exportName := range exportNames {
-				esm := ctx.esm
-				esm.SubPath = exportName
-				esm.SubModuleName = stripEntryModuleExt(exportName)
-				b := &BuildContext{
-					esm:         esm,
-					npmrc:       ctx.npmrc,
-					args:        ctx.args,
-					externalAll: ctx.externalAll,
-					target:      ctx.target,
-					pinedTarget: ctx.pinedTarget,
-					dev:         ctx.dev,
-					zoneId:      ctx.zoneId,
-					wd:          ctx.wd,
-					pkgJson:     ctx.pkgJson,
-				}
-				_, depTree, err := b.buildModule(true)
-				if err == nil {
-					for _, dep := range depTree.Values() {
-						refs[dep]++
-					}
-				}
-			}
-			for p, n := range refs {
-				if n > 1 {
-					if ctx.splitting == nil {
-						ctx.splitting = NewSet()
-					}
-					ctx.splitting.Add(p)
-				}
-			}
-		}
-	}
+	// if ctx.pkgJson.Exports.Len() > 0 && ctx.bundleMode == BundleDefault {
+	// 	var exportNames []string
+	// 	var exportAll bool
+	// 	for _, exportName := range ctx.pkgJson.Exports.keys {
+	// 		exportName := stripModuleExt(exportName)
+	// 		if (exportName == "." || strings.HasPrefix(exportName, "./")) && !endsWith(exportName, ".json", ".css") {
+	// 			if exportName == "./*" {
+	// 				exportAll = true
+	// 				break
+	// 			}
+	// 			if !strings.ContainsRune(exportName, '*') {
+	// 				v := ctx.pkgJson.Exports.values[exportName]
+	// 				if obj, ok := v.(*JSONObject); ok {
+	// 					// ignore types exports
+	// 					if len(obj.keys) == 1 && obj.keys[0] == "types" {
+	// 						continue
+	// 					}
+	// 				}
+	// 				if exportName == "." {
+	// 					exportNames = append(exportNames, "")
+	// 				} else if strings.HasPrefix(exportName, "./") {
+	// 					exportNames = append(exportNames, exportName[2:])
+	// 				}
+	// 			}
+	// 		}
+	// 	}
+	// 	if !exportAll {
+	// 		refs := map[string]uint16{}
+	// 		for _, exportName := range exportNames {
+	// 			esm := ctx.esm
+	// 			esm.SubPath = exportName
+	// 			esm.SubModuleName = stripEntryModuleExt(exportName)
+	// 			b := &BuildContext{
+	// 				esm:         esm,
+	// 				npmrc:       ctx.npmrc,
+	// 				args:        ctx.args,
+	// 				externalAll: ctx.externalAll,
+	// 				target:      ctx.target,
+	// 				pinedTarget: ctx.pinedTarget,
+	// 				dev:         ctx.dev,
+	// 				zoneId:      ctx.zoneId,
+	// 				wd:          ctx.wd,
+	// 				pkgJson:     ctx.pkgJson,
+	// 			}
+	// 			_, depTree, err := b.buildModule(true)
+	// 			if err == nil {
+	// 				for _, dep := range depTree.Values() {
+	// 					refs[dep]++
+	// 				}
+	// 			}
+	// 		}
+	// 		for p, n := range refs {
+	// 			if n > 1 {
+	// 				if ctx.splitting == nil {
+	// 					ctx.splitting = NewSet()
+	// 				}
+	// 				ctx.splitting.Add(p)
+	// 			}
+	// 		}
+	// 	}
+	// }
 
 	// build the module
 	ctx.status = "build"
@@ -202,7 +203,8 @@ func (ctx *BuildContext) Build() (ret *BuildMeta, err error) {
 
 	// save the build result into db
 	key := ctx.getSavepath() + ".meta"
-	buf := bytes.NewBuffer(nil)
+	buf, recycle := NewBuffer()
+	defer recycle()
 	err = json.NewEncoder(buf).Encode(ret)
 	if err != nil {
 		return
@@ -231,7 +233,9 @@ func (ctx *BuildContext) buildModule(analyzeMode bool) (meta *BuildMeta, depTree
 			if err != nil {
 				return
 			}
-			buffer := bytes.NewBufferString("export default ")
+			buffer, recycle := NewBuffer()
+			defer recycle()
+			buffer.WriteString("export default ")
 			buffer.Write(jsonData)
 			err = buildStorage.Put(ctx.getSavepath(), buffer)
 			if err != nil {
@@ -270,7 +274,6 @@ func (ctx *BuildContext) buildModule(analyzeMode bool) (meta *BuildMeta, depTree
 	}
 
 	var (
-		entryPoint  string
 		cjsReexport string
 		cjsExports  []string
 	)
@@ -328,22 +331,24 @@ func (ctx *BuildContext) buildModule(analyzeMode bool) (meta *BuildMeta, depTree
 		entrySpecifier += "/" + ctx.esm.SubModuleName
 	}
 
+	var (
+		entryPoint string
+		stdin      esbuild.StdinOptions
+	)
+
 	if entry.module {
 		entryPoint = entryModuleFilename
 	} else {
-		entryPoint = path.Join(ctx.wd, "endpoint_"+strings.ReplaceAll(entrySpecifier, "/", "_")+".js")
-		if !existsFile(entryPoint) {
-			buf := bytes.NewBuffer(nil)
-			fmt.Fprintf(buf, `import * as cjsm from "%s";`, entrySpecifier)
-			if len(cjsExports) > 0 {
-				fmt.Fprintf(buf, `export const { %s } = cjsm;`, strings.Join(cjsExports, ","))
-			}
-			fmt.Fprintf(buf, "export default cjsm.default ?? cjsm;")
-			err = os.WriteFile(entryPoint, buf.Bytes(), 0644)
-			if err != nil {
-				err = fmt.Errorf("create entry point for cjs module: %v", err)
-				return
-			}
+		buf, recycle := NewBuffer()
+		defer recycle()
+		fmt.Fprintf(buf, `import * as cjsm from "%s";`, entrySpecifier)
+		if len(cjsExports) > 0 {
+			fmt.Fprintf(buf, `export const { %s } = cjsm;`, strings.Join(cjsExports, ","))
+		}
+		buf.WriteString("export default cjsm.default ?? cjsm;")
+		stdin = esbuild.StdinOptions{
+			Sourcefile: "endpoint.js",
+			Contents:   buf.String(),
 		}
 	}
 
@@ -953,16 +958,13 @@ func (ctx *BuildContext) buildModule(analyzeMode bool) (meta *BuildMeta, depTree
 	if ctx.dev {
 		conditions = append(conditions, "development")
 	}
-	if ctx.isBrowserTarget() {
-		conditions = append(conditions, "browser")
-	} else if ctx.isDenoTarget() {
+	if ctx.isDenoTarget() {
 		conditions = append(conditions, "deno")
 	} else if ctx.target == "node" {
 		conditions = append(conditions, "node")
 	}
 	options := esbuild.BuildOptions{
 		AbsWorkingDir:     ctx.wd,
-		EntryPoints:       []string{entryPoint},
 		Format:            esbuild.FormatESModule,
 		Target:            targets[ctx.target],
 		Platform:          esbuild.PlatformBrowser,
@@ -980,6 +982,11 @@ func (ctx *BuildContext) buildModule(analyzeMode bool) (meta *BuildMeta, depTree
 		Plugins:           []esbuild.Plugin{corePlugin},
 		Outdir:            "/esbuild",
 		Write:             false,
+	}
+	if entryPoint != "" {
+		options.EntryPoints = []string{entryPoint}
+	} else {
+		options.Stdin = &stdin
 	}
 	if ctx.target == "node" {
 		options.Platform = esbuild.PlatformNode
@@ -1057,7 +1064,9 @@ rebuild:
 	for _, file := range ret.OutputFiles {
 		if strings.HasSuffix(file.Path, ".js") {
 			jsContent := file.Contents
-			header := bytes.NewBufferString("/* esm.sh - ")
+			header, recycle := NewBuffer()
+			defer recycle()
+			header.WriteString("/* esm.sh - ")
 			if ctx.esm.GhPrefix {
 				header.WriteString("github:")
 			} else if ctx.esm.PrPrefix {
@@ -1090,7 +1099,8 @@ rebuild:
 				}
 				if ids.Has("__Process$") {
 					if ctx.args.external.Has("node:process") {
-						fmt.Fprintf(header, `import __Process$ from "node:process";%s`, EOL)
+						header.WriteString(`import __Process$ from "node:process";`)
+						header.WriteByte('\n')
 					} else if ctx.isBrowserTarget() {
 						if len(ctx.pkgJson.Browser) > 0 {
 							var excluded bool
@@ -1100,22 +1110,27 @@ rebuild:
 								excluded = name == ""
 							}
 							if !excluded {
-								fmt.Fprintf(header, `import __Process$ from "/node/process.mjs";%s`, EOL)
+								header.WriteString(`import __Process$ from "/node/process.mjs";`)
+								header.WriteByte('\n')
 								imports.Add("/node/process.mjs")
 							}
 						} else {
-							fmt.Fprintf(header, `import __Process$ from "/node/process.mjs";%s`, EOL)
+							header.WriteString(`import __Process$ from "/node/process.mjs";`)
+							header.WriteByte('\n')
 							imports.Add("/node/process.mjs")
 						}
 					} else if ctx.target == "denonext" {
-						fmt.Fprintf(header, `import __Process$ from "node:process";%s`, EOL)
+						header.WriteString(`import __Process$ from "node:process";`)
+						header.WriteByte('\n')
 					} else if ctx.target == "deno" {
-						fmt.Fprintf(header, `import __Process$ from "https://deno.land/std@0.177.1/node/process.ts";%s`, EOL)
+						header.WriteString(`import __Process$ from "https://deno.land/std@0.177.1/node/process.ts";`)
+						header.WriteByte('\n')
 					}
 				}
 				if ids.Has("__Buffer$") {
 					if ctx.args.external.Has("node:buffer") {
-						fmt.Fprintf(header, `import { Buffer as __Buffer$ } from "node:buffer";%s`, EOL)
+						header.WriteString(`import { Buffer as __Buffer$ } from "node:buffer";`)
+						header.WriteByte('\n')
 					} else if ctx.isBrowserTarget() {
 						var excluded bool
 						if len(ctx.pkgJson.Browser) > 0 {
@@ -1126,23 +1141,29 @@ rebuild:
 							}
 						}
 						if !excluded {
-							fmt.Fprintf(header, `import { Buffer as __Buffer$ } from "/node/buffer.mjs";%s`, EOL)
+							header.WriteString(`import { Buffer as __Buffer$ } from "/node/buffer.mjs";`)
+							header.WriteByte('\n')
 							imports.Add("/node/buffer.mjs")
 						}
 					} else if ctx.target == "denonext" {
-						fmt.Fprintf(header, `import { Buffer as __Buffer$ } from "node:buffer";%s`, EOL)
+						header.WriteString(`import { Buffer as __Buffer$ } from "node:buffer";`)
+						header.WriteByte('\n')
 					} else if ctx.target == "deno" {
-						fmt.Fprintf(header, `import { Buffer as __Buffer$ } from "https://deno.land/std@0.177.1/node/buffer.ts";%s`, EOL)
+						header.WriteString(`import { Buffer as __Buffer$ } from "https://deno.land/std@0.177.1/node/buffer.ts";`)
+						header.WriteByte('\n')
 					}
 				}
 				if ids.Has("__global$") {
-					fmt.Fprintf(header, `var __global$ = globalThis || (typeof window !== "undefined" ? window : self);%s`, EOL)
+					header.WriteString(`var __global$ = globalThis || (typeof window !== "undefined" ? window : self);`)
+					header.WriteByte('\n')
 				}
 				if ids.Has("__setImmediate$") {
-					fmt.Fprintf(header, `var __setImmediate$ = (cb, ...args) => setTimeout(cb, 0, ...args);%s`, EOL)
+					header.WriteString(`var __setImmediate$ = (cb, ...args) => setTimeout(cb, 0, ...args);`)
+					header.WriteByte('\n')
 				}
 				if ids.Has("__rResolve$") {
-					fmt.Fprintf(header, `var __rResolve$ = p => p;%s`, EOL)
+					header.WriteString(`var __rResolve$ = p => p;`)
+					header.WriteByte('\n')
 				}
 			}
 
@@ -1221,7 +1242,7 @@ rebuild:
 						}
 					}
 				}
-				fmt.Fprint(header, `var require=n=>{const e=m=>typeof m.default<"u"?m.default:m,c=m=>Object.assign({__esModule:true},m);switch(n){`)
+				header.WriteString(`var require=n=>{const e=m=>typeof m.default<"u"?m.default:m,c=m=>Object.assign({__esModule:true},m);switch(n){`)
 				for i, r := range requires {
 					specifier := r[0]
 					if isEsModule[i] {
@@ -1230,7 +1251,8 @@ rebuild:
 						fmt.Fprintf(header, `case"%s":return e(__%x$);`, specifier, i)
 					}
 				}
-				fmt.Fprintf(header, `default:console.error('module "'+n+'" not found');return null;}};%s`, EOL)
+				header.WriteString(`default:console.error('module "'+n+'" not found');return null;}};`)
+				header.WriteByte('\n')
 			}
 
 			// apply esm imports
@@ -1242,28 +1264,33 @@ rebuild:
 			}
 
 			// to fix the source map
-			ctx.smOffset += strings.Count(header.String(), EOL)
+			ctx.smOffset += strings.Count(header.String(), "\n")
 
+			// apply rewrites
 			jsContent, dropSourceMap := ctx.rewriteJS(jsContent)
-			finalContent := bytes.NewBuffer(header.Bytes())
-			finalContent.Write(jsContent)
+
+			finalJS, recycle := NewBuffer()
+			defer recycle()
+
+			io.Copy(finalJS, header)
+			finalJS.Write(jsContent)
 
 			// check if the package is deprecated
 			if !ctx.esm.GhPrefix && !ctx.esm.PrPrefix {
 				deprecated, _ := ctx.npmrc.isDeprecated(ctx.pkgJson.Name, ctx.pkgJson.Version)
 				if deprecated != "" {
-					fmt.Fprintf(finalContent, `console.warn("%%c[esm.sh]%%c %%cdeprecated%%c %s@%s: " + %s, "color:grey", "", "color:red", "");%s`, ctx.esm.PkgName, ctx.esm.PkgVersion, utils.MustEncodeJSON(deprecated), "\n")
+					fmt.Fprintf(finalJS, `console.warn("%%c[esm.sh]%%c %%cdeprecated%%c %s@%s: " + %s, "color:grey", "", "color:red", "");%s`, ctx.esm.PkgName, ctx.esm.PkgVersion, utils.MustEncodeJSON(deprecated), "\n")
 				}
 			}
 
 			// add sourcemap Url
 			if config.SourceMap && !dropSourceMap {
-				finalContent.WriteString("//# sourceMappingURL=")
-				finalContent.WriteString(path.Base(ctx.Path()))
-				finalContent.WriteString(".map")
+				finalJS.WriteString("//# sourceMappingURL=")
+				finalJS.WriteString(path.Base(ctx.Path()))
+				finalJS.WriteString(".map")
 			}
 
-			err = buildStorage.Put(ctx.getSavepath(), finalContent)
+			err = buildStorage.Put(ctx.getSavepath(), finalJS)
 			if err != nil {
 				return
 			}
@@ -1289,7 +1316,8 @@ rebuild:
 					copy(fixedMapping[ctx.smOffset:], mapping)
 					sourceMap["mappings"] = string(fixedMapping)
 				}
-				buf := bytes.NewBuffer(nil)
+				buf, recycle := NewBuffer()
+				defer recycle()
 				if json.NewEncoder(buf).Encode(sourceMap) == nil {
 					err = buildStorage.Put(ctx.getSavepath()+".map", buf)
 					if err != nil {

@@ -10,12 +10,12 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+	"sync"
 
 	"github.com/Masterminds/semver/v3"
 	"github.com/ije/gox/valid"
 )
 
-const EOL = "\n"
 const MB = 1 << 20
 
 var (
@@ -220,6 +220,17 @@ func appendVaryHeader(header http.Header, key string) {
 		header.Set("Vary", key)
 	} else {
 		header.Set("Vary", vary+", "+key)
+	}
+}
+
+var bufferPool = sync.Pool{New: func() interface{} { return new(bytes.Buffer) }}
+
+// NewBuffer returns a new buffer from the buffer pool.
+func NewBuffer() (buffer *bytes.Buffer, recycle func()) {
+	buf := bufferPool.Get().(*bytes.Buffer)
+	return buf, func() {
+		buf.Reset()
+		bufferPool.Put(buf)
 	}
 }
 

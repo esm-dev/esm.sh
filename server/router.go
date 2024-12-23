@@ -1651,7 +1651,8 @@ func esmRouter() rex.Handle {
 			return f // auto closed
 		}
 
-		buf := bytes.NewBuffer(nil)
+		buf, recycle := NewBuffer()
+		defer recycle()
 		fmt.Fprintf(buf, "/* esm.sh - %s */\n", esm.Specifier())
 
 		if isWorker {
@@ -1736,7 +1737,8 @@ func redirect(ctx *rex.Context, url string, isMovedPermanently bool) any {
 }
 
 func errorJS(ctx *rex.Context, message string) any {
-	buf := bytes.NewBuffer(nil)
+	buf, recycle := NewBuffer()
+	defer recycle()
 	buf.WriteString("/* esm.sh - error */\n")
 	buf.WriteString("throw new Error(")
 	buf.Write(utils.MustEncodeJSON(message))
@@ -1744,5 +1746,5 @@ func errorJS(ctx *rex.Context, message string) any {
 	buf.WriteString("export default null;\n")
 	ctx.SetHeader("Content-Type", ctJavaScript)
 	ctx.SetHeader("Cache-Control", ccImmutable)
-	return buf
+	return buf.Bytes()
 }

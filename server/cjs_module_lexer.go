@@ -2,7 +2,6 @@ package server
 
 import (
 	"bufio"
-	"bytes"
 	"compress/gzip"
 	"context"
 	"crypto/sha1"
@@ -101,8 +100,10 @@ RETRY:
 	defer cancel()
 
 	cmd := exec.CommandContext(c, "cjs-module-lexer", path.Join(ctx.esm.PkgName, cjsEntry))
-	stdout := bytes.NewBuffer(nil)
-	stderr := bytes.NewBuffer(nil)
+	stdout, recycle := NewBuffer()
+	defer recycle()
+	stderr, recycle := NewBuffer()
+	defer recycle()
 	cmd.Dir = ctx.wd
 	cmd.Stdout = stdout
 	cmd.Stderr = stderr

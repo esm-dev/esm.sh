@@ -208,14 +208,15 @@ func legacyESM(ctx *rex.Context, pathname string) any {
 	}
 
 	if isBuildDist || endsWith(pathname, ".d.ts", ".d.mts") {
-		buf := bytes.NewBuffer(nil)
+		buf, recycle := NewBuffer()
+		defer recycle()
 		err := buildStorage.Put(savePath, io.TeeReader(res.Body, buf))
 		if err != nil {
 			return rex.Status(500, "Storage Error")
 		}
 		ctx.SetHeader("Content-Type", res.Header.Get("Content-Type"))
 		ctx.SetHeader("Control-Cache", ccImmutable)
-		return buf
+		return buf.Bytes()
 	} else {
 		code, err := io.ReadAll(res.Body)
 		if err != nil {

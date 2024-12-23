@@ -2,7 +2,6 @@ package server
 
 import (
 	"archive/zip"
-	"bytes"
 	"errors"
 	"fmt"
 	"io"
@@ -22,7 +21,6 @@ var (
 	loaderRuntime        = "deno"
 	loaderRuntimeVersion = "2.1.4"
 	compileSyncMap       = sync.Map{}
-	bufferPool           = sync.Pool{New: func() interface{} { return new(bytes.Buffer) }}
 )
 
 type LoaderOutput struct {
@@ -32,14 +30,10 @@ type LoaderOutput struct {
 }
 
 func runLoader(loaderJsPath string, filename string, code string) (output *LoaderOutput, err error) {
-	outBuf := bufferPool.Get().(*bytes.Buffer)
-	errBuf := bufferPool.Get().(*bytes.Buffer)
-	defer func() {
-		outBuf.Reset()
-		errBuf.Reset()
-		bufferPool.Put(outBuf)
-		bufferPool.Put(errBuf)
-	}()
+	stdout, recycle := NewBuffer()
+	defer recycle()
+	stderr, recycle := NewBuffer()
+	defer recycle()
 	c := exec.Command(
 		path.Join(config.WorkDir, "bin", loaderRuntime), "run",
 		"--no-config",
@@ -53,20 +47,20 @@ func runLoader(loaderJsPath string, filename string, code string) (output *Loade
 	)
 	c.Dir = os.TempDir()
 	c.Stdin = strings.NewReader(code)
-	c.Stdout = outBuf
-	c.Stderr = errBuf
+	c.Stdout = stdout
+	c.Stderr = stderr
 	err = c.Run()
 	if err != nil {
-		if errBuf.Len() > 0 {
-			err = errors.New(errBuf.String())
+		if stderr.Len() > 0 {
+			err = errors.New(stderr.String())
 		}
 		return
 	}
-	if outBuf.Len() < 2 {
+	if stdout.Len() < 2 {
 		err = errors.New("bad loader output")
 		return
 	}
-	data := outBuf.Bytes()
+	data := stdout.Bytes()
 	if data[0] != '1' && data[0] != '2' {
 		err = errors.New(string(data[2:]))
 		return
