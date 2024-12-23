@@ -14,7 +14,7 @@ RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w" -o esmd main.go
 FROM alpine:latest AS server
 
 # install tini & git (use to fetch repo tags from Github)
-RUN apk update && apk add --no-cache tini git git-lfs && git lfs install
+RUN apk update && apk add --no-cache tini git
 
 # deno desn't provider musl build yet, the hack below makes the gnu build working in alpine
 # see https://github.com/denoland/deno_docker/blob/main/alpine.dockerfile

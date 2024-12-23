@@ -67,13 +67,12 @@ fi
 
 echo "--- installing..."
 ssh -p $sshPort ${user}@${host} << EOF
-  glv=\$(git lfs version)
+  gv=\$(git version)
   if [ "\$?" != "0" ]; then
     apt update
-    apt install -y git git-lfs
-    git lfs install
+    apt install -y git
   fi
-  echo \$glv
+  echo \$gv
 
   if [ "$init" == "yes" ]; then
     servicefn=/etc/systemd/system/esmd.service

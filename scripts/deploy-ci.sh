@@ -26,13 +26,12 @@ fi
 
 echo "--- installing..."
 ssh next.esm.sh << EOF
-  glv=\$(git lfs version)
+  gv=\$(git version)
   if [ "\$?" != "0" ]; then
     apt update
-    apt install -y git git-lfs
-    git lfs install
+    apt install -y git
   fi
-  echo \$glv
+  echo \$gv
 
   servicefn=/etc/systemd/system/esmd.service
   reload=no
