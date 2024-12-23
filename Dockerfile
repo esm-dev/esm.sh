@@ -13,21 +13,24 @@ RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w" -o esmd main.go
 # server
 FROM alpine:latest AS server
 
-ENV SERVER_PORT 8080
-ENV SERVER_WORKDIR /esmd
+COPY --from=builder /tmp/esm.sh/esmd /bin/esmd
+
+# https://github.com/denoland/deno_docker/blob/main/alpine.dockerfile
+COPY --from=gcr.io/distroless/cc --chown=root:root --chmod=755 /lib/*-linux-gnu/* /usr/local/lib/
+COPY --from=gcr.io/distroless/cc --chown=root:root --chmod=755 /lib/ld-linux-* /lib/
+COPY --from=denoland/deno:bin-2.1.4 /deno /esmd/bin/deno
+RUN mkdir /lib64 && ln -s /usr/local/lib/ld-linux-* /lib64/
+ENV LD_LIBRARY_PATH="/usr/local/lib"
 
 RUN apk update && \
     apk add --no-cache git git-lfs && \
-    git lfs install
-
-COPY --from=builder /tmp/esm.sh/esmd /bin/esmd
-COPY --from=denoland/deno:bin-2.1.4 /deno /esmd/bin/deno
-
-# add esm(non-root) user
-RUN addgroup -g 1000 esm && \
+    git lfs install && \
+    addgroup -g 1000 esm && \
     adduser -u 1000 -G esm -D esm && \
     chown -R esm:esm /esmd
 
+ENV SERVER_PORT 8080
+ENV SERVER_WORKDIR /esmd
 USER esm
 WORKDIR /tmp
 EXPOSE 8080
