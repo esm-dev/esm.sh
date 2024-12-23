@@ -107,7 +107,7 @@ RETRY:
 	cmd.Dir = ctx.wd
 	cmd.Stdout = stdout
 	cmd.Stderr = stderr
-	cmd.Env = []string{"NODE_ENV=" + ctx.getNodeEnv()}
+	cmd.Env = append(os.Environ(), "NODE_ENV="+ctx.getNodeEnv())
 
 	err = cmd.Run()
 	if err != nil {

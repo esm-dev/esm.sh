@@ -34,7 +34,7 @@ func runLoader(loaderJsPath string, filename string, code string) (output *Loade
 	defer recycle()
 	stderr, recycle := NewBuffer()
 	defer recycle()
-	c := exec.Command(
+	cmd := exec.Command(
 		path.Join(config.WorkDir, "bin", loaderRuntime), "run",
 		"--no-config",
 		"--no-lock",
@@ -45,11 +45,11 @@ func runLoader(loaderJsPath string, filename string, code string) (output *Loade
 		loaderJsPath,
 		filename, // args[0]
 	)
-	c.Dir = os.TempDir()
-	c.Stdin = strings.NewReader(code)
-	c.Stdout = stdout
-	c.Stderr = stderr
-	err = c.Run()
+	cmd.Dir = os.TempDir()
+	cmd.Stdin = strings.NewReader(code)
+	cmd.Stdout = stdout
+	cmd.Stderr = stderr
+	err = cmd.Run()
 	if err != nil {
 		if stderr.Len() > 0 {
 			err = errors.New(stderr.String())
