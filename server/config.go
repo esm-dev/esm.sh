@@ -107,14 +107,14 @@ func DefaultConfig() *Config {
 func normalizeConfig(config *Config) {
 	if config.Port == 0 {
 		config.Port = 80
-		if v := os.Getenv("SERVER_PORT"); v != "" {
+		if v := os.Getenv("ESM_SERVER_PORT"); v != "" {
 			if p, e := strconv.Atoi(v); e == nil && p >= 80 && p < 65536 {
 				config.Port = uint16(p)
 			}
 		}
 	}
 	if config.WorkDir == "" {
-		if v := os.Getenv("SERVER_WORKDIR"); v != "" {
+		if v := os.Getenv("ESM_SERVER_WORKDIR"); v != "" {
 			config.WorkDir = v
 		} else {
 			homeDir, err := os.UserHomeDir()
@@ -323,5 +323,5 @@ func isPackageExcluded(name string, excludes []string) bool {
 }
 
 func init() {
-	config = &Config{}
+	config = DefaultConfig()
 }

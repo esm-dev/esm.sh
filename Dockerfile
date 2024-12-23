@@ -30,8 +30,8 @@ RUN mkdir /esmd && chown -R esm:esm /esmd
 
 COPY --from=denoland/deno:bin-2.1.4 --chown=esm:esm /deno /esmd/bin/deno
 
-ENV SERVER_PORT="8080"
-ENV SERVER_WORKDIR="/esmd"
+ENV ESM_SERVER_PORT="8080"
+ENV ESM_SERVER_WORKDIR="/esmd"
 ENV LD_LIBRARY_PATH="/usr/local/lib"
 
 USER esm
