@@ -122,9 +122,11 @@ func (q *BuildQueue) run(task *BuildTask) {
 	}
 
 	output := &BuildOutput{ret, err}
+	q.lock.RLock()
 	for _, ch := range task.waitChans {
 		ch <- output
 	}
+	q.lock.RUnlock()
 
 	q.lock.Lock()
 	q.queue.Remove(task.el)
