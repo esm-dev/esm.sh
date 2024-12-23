@@ -70,6 +70,7 @@ Run the container:
 docker run -p 8080:8080 \
   -e NPM_REGISTRY=https://registry.npmjs.org/ \
   -e NPM_TOKEN=****** \
+  -v MY_VOLUME:/esmd \
   ghcr.io/esm-dev/esm.sh:latest
 ```
 

@@ -35,6 +35,6 @@ ENV ESM_SERVER_WORKDIR="/esmd"
 ENV LD_LIBRARY_PATH="/usr/local/lib"
 
 USER esm
-WORKDIR /tmp
+WORKDIR /esmd
 EXPOSE 8080
 CMD ["esmd"]

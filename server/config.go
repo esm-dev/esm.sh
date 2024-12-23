@@ -114,7 +114,7 @@ func normalizeConfig(config *Config) {
 		}
 	}
 	if config.WorkDir == "" {
-		if v := os.Getenv("ESM_SERVER_WORKDIR"); v != "" {
+		if v := os.Getenv("ESM_SERVER_WORKDIR"); v != "" && existsDir(v) {
 			config.WorkDir = v
 		} else {
 			homeDir, err := os.UserHomeDir()
