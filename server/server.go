@@ -209,18 +209,9 @@ func customLandingPage(options *LandingPageOptions) rex.Handle {
 			if err != nil {
 				return rex.Err(http.StatusBadRequest, "Invalid url")
 			}
-			req := &http.Request{
-				Method:     "GET",
-				URL:        url,
-				Host:       url.Host,
-				Proto:      "HTTP/1.1",
-				ProtoMajor: 1,
-				ProtoMinor: 1,
-				Header: http.Header{
-					"User-Agent": []string{ctx.UserAgent()},
-				},
-			}
-			res, err := http.DefaultClient.Do(req)
+			fetchClient, recycle := NewFetchClient(15, ctx.UserAgent())
+			defer recycle()
+			res, err := fetchClient.Fetch(url, nil)
 			if err != nil {
 				return rex.Err(http.StatusBadGateway, "Failed to fetch custom landing page")
 			}

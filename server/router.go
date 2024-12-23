@@ -510,9 +510,9 @@ func esmRouter() rex.Handle {
 			}
 			var body io.Reader = content
 			if err == storage.ErrNotFound {
-				fetchClient, recycle := NewFetchClient(30*time.Second, ctx.UserAgent())
+				fetchClient, recycle := NewFetchClient(15, ctx.UserAgent())
 				defer recycle()
-				res, err := fetchClient.Fetch(ctxUrl)
+				res, err := fetchClient.Fetch(ctxUrl, nil)
 				if err != nil {
 					return rex.Status(500, "Failed to fetch page html")
 				}
@@ -594,13 +594,13 @@ func esmRouter() rex.Handle {
 					}
 				}
 				if configCSS == "" {
-					res, err := fetchClient.Fetch(ctxUrl.ResolveReference(&url.URL{Path: "./uno.css"}))
+					res, err := fetchClient.Fetch(ctxUrl.ResolveReference(&url.URL{Path: "./uno.css"}), nil)
 					if err != nil {
 						return rex.Status(500, "Failed to lookup config css")
 					}
 					if res.StatusCode == 404 {
 						res.Body.Close()
-						res, err = fetchClient.Fetch(ctxUrl.ResolveReference(&url.URL{Path: "/uno.css"}))
+						res, err = fetchClient.Fetch(ctxUrl.ResolveReference(&url.URL{Path: "/uno.css"}), nil)
 						if err != nil {
 							return rex.Status(500, "Failed to lookup config css")
 						}
@@ -697,7 +697,7 @@ func esmRouter() rex.Handle {
 			var body io.Reader = content
 			if err == storage.ErrNotFound {
 				importMap := common.ImportMap{}
-				fetchClient, recycle := NewFetchClient(30*time.Second, ctx.UserAgent())
+				fetchClient, recycle := NewFetchClient(15, ctx.UserAgent())
 				defer recycle()
 				if len(im) > 0 {
 					imPath, err := atobUrl(im)
@@ -708,7 +708,7 @@ func esmRouter() rex.Handle {
 					if err != nil {
 						return rex.Status(400, "Invalid `im` Param")
 					}
-					res, err := fetchClient.Fetch(imUrl)
+					res, err := fetchClient.Fetch(imUrl, nil)
 					if err != nil {
 						return rex.Status(500, "Failed to fetch import map")
 					}

@@ -198,7 +198,7 @@ func bundleHttpModule(npmrc *NpmRC, entry string, importMap common.ImportMap, co
 						if err != nil {
 							return esbuild.OnLoadResult{}, err
 						}
-						res, err := fetchClient.Fetch(url)
+						res, err := fetchClient.Fetch(url, nil)
 						if err != nil {
 							return esbuild.OnLoadResult{}, errors.New("failed to fetch module " + args.Path + ": " + err.Error())
 						}

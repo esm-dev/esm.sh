@@ -9,6 +9,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"strconv"
 	"strings"
 	"sync"
 
@@ -17,6 +18,11 @@ import (
 )
 
 const MB = 1 << 20
+
+var (
+	bufferPool       = sync.Pool{New: func() interface{} { return new(bytes.Buffer) }}
+	defaultUserAgent = "esmd/v" + strconv.Itoa(VERSION)
+)
 
 var (
 	regexpVersion          = regexp.MustCompile(`^[\w\+\-\.]+$`)
@@ -222,8 +228,6 @@ func appendVaryHeader(header http.Header, key string) {
 		header.Set("Vary", vary+", "+key)
 	}
 }
-
-var bufferPool = sync.Pool{New: func() interface{} { return new(bytes.Buffer) }}
 
 // NewBuffer returns a new buffer from the buffer pool.
 func NewBuffer() (buffer *bytes.Buffer, recycle func()) {

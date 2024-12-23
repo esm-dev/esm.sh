@@ -181,18 +181,9 @@ func legacyESM(ctx *rex.Context, pathname string) any {
 	if err != nil {
 		return rex.Status(http.StatusBadRequest, "Invalid url")
 	}
-	req := &http.Request{
-		Method:     "GET",
-		URL:        url,
-		Host:       url.Host,
-		Proto:      "HTTP/1.1",
-		ProtoMajor: 1,
-		ProtoMinor: 1,
-		Header: http.Header{
-			"User-Agent": []string{ctx.UserAgent()},
-		},
-	}
-	res, err := http.DefaultClient.Do(req)
+	fetchClient, recycle := NewFetchClient(30, ctx.UserAgent())
+	defer recycle()
+	res, err := fetchClient.Fetch(url, nil)
 	if err != nil {
 		return rex.Status(http.StatusBadGateway, "Failed to connect the lagecy esm.sh server")
 	}

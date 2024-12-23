@@ -4,6 +4,7 @@ import (
 	"archive/tar"
 	"bytes"
 	"compress/gzip"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -413,30 +414,31 @@ func (npmrc *NpmRC) fetchPackageInfo(packageName string, semverOrDistTag string)
 	}
 
 	return withCache(getCacheKey(packageName, semverOrDistTag), time.Duration(config.NpmQueryCacheTTL)*time.Second, func() (*PackageJSON, string, error) {
-		url := reg.Registry + packageName
-		isWellknownVersion := (regexpVersionStrict.MatchString(semverOrDistTag) || isDistTag(semverOrDistTag)) && strings.HasPrefix(url, npmRegistry)
+		regUrl := reg.Registry + packageName
+		isWellknownVersion := (regexpVersionStrict.MatchString(semverOrDistTag) || isDistTag(semverOrDistTag)) && strings.HasPrefix(regUrl, npmRegistry)
 		if isWellknownVersion {
 			// npm registry supports url like `https://registry.npmjs.org/<name>/<version>`
-			url += "/" + semverOrDistTag
+			regUrl += "/" + semverOrDistTag
 		}
 
-		req, err := http.NewRequest("GET", url, nil)
+		u, err := url.Parse(regUrl)
 		if err != nil {
 			return nil, "", err
 		}
 
+		header := http.Header{}
 		if reg.Token != "" {
-			req.Header.Set("Authorization", "Bearer "+reg.Token)
+			header.Set("Authorization", "Bearer "+reg.Token)
 		} else if reg.User != "" && reg.Password != "" {
-			req.SetBasicAuth(reg.User, reg.Password)
+			header.Set("Authorization", "Basic "+base64.StdEncoding.EncodeToString([]byte(reg.User+":"+reg.Password)))
 		}
 
-		c := &http.Client{
-			Timeout: 15 * time.Second,
-		}
+		fetchClient, recycle := NewFetchClient(15, defaultUserAgent)
+		defer recycle()
+
 		retryTimes := 0
 	RETRY:
-		res, err := c.Do(req)
+		res, err := fetchClient.Fetch(u, header)
 		if err != nil {
 			if retryTimes < 3 {
 				retryTimes++
@@ -653,23 +655,24 @@ func (rc *NpmRC) installDependencies(wd string, pkgJson *PackageJSON, npmMode bo
 }
 
 func (rc *NpmRC) downloadTarball(reg *NpmRegistry, installDir string, pkgName string, tarballUrl string) (err error) {
-	req, err := http.NewRequest("GET", tarballUrl, nil)
+	u, err := url.Parse(tarballUrl)
 	if err != nil {
 		return
 	}
 
+	header := http.Header{}
 	if reg.Token != "" {
-		req.Header.Set("Authorization", "Bearer "+reg.Token)
+		header.Set("Authorization", "Bearer "+reg.Token)
 	} else if reg.User != "" && reg.Password != "" {
-		req.SetBasicAuth(reg.User, reg.Password)
+		header.Set("Authorization", "Basic "+base64.StdEncoding.EncodeToString([]byte(reg.User+":"+reg.Password)))
 	}
 
-	c := &http.Client{
-		Timeout: 15 * time.Second,
-	}
+	fetchClient, recycle := NewFetchClient(30, defaultUserAgent)
+	defer recycle()
+
 	retryTimes := 0
 RETRY:
-	res, err := c.Do(req)
+	res, err := fetchClient.Fetch(u, header)
 	if err != nil {
 		if retryTimes < 3 {
 			retryTimes++
@@ -704,7 +707,7 @@ func extractPackageTarball(installDir string, packname string, tarball io.Reader
 	rootDir := path.Join(installDir, "node_modules", packname)
 	defer func() {
 		if err != nil {
-			// remove the root dir if failed
+			// remove the root dir if has error
 			os.RemoveAll(rootDir)
 		}
 	}()
@@ -722,23 +725,20 @@ func extractPackageTarball(installDir string, packname string, tarball io.Reader
 		// strip tarball root dir
 		_, name := utils.SplitByFirstByte(h.Name, '/')
 		filename := path.Join(rootDir, name)
-		if h.Typeflag == tar.TypeDir {
-			ensureDir(filename)
+		if h.Typeflag != tar.TypeReg {
 			continue
 		}
-		if h.Typeflag != tar.TypeReg {
+		// ignore large files
+		if h.Size > assetMaxSize {
 			continue
 		}
 		extname := path.Ext(filename)
 		if !(extname != "" && (assetExts[extname[1:]] || contains(moduleExts, extname) || extname == ".map" || extname == ".css" || extname == ".svelte" || extname == ".vue")) {
-			// skip unsupported formats
+			// ignore unsupported formats
 			continue
 		}
+		ensureDir(path.Dir(filename))
 		f, err := os.OpenFile(filename, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0644)
-		if err != nil && os.IsNotExist(err) {
-			os.MkdirAll(path.Dir(filename), 0755)
-			f, err = os.OpenFile(filename, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0644)
-		}
 		if err != nil {
 			return err
 		}

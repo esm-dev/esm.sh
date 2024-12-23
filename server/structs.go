@@ -300,16 +300,20 @@ type HttpClient struct {
 	userAgent string
 }
 
-func NewFetchClient(timeout time.Duration, userAgent string) (client *HttpClient, recycle func()) {
+func NewFetchClient(timeout int, userAgent string) (client *HttpClient, recycle func()) {
 	client = clientPool.Get().(*HttpClient)
-	client.Client.Timeout = timeout
+	client.Client.Timeout = time.Duration(timeout) * time.Second
 	client.userAgent = userAgent
-	return client, func() {
-		clientPool.Put(client)
-	}
+	return client, func() { clientPool.Put(client) }
 }
 
-func (c *HttpClient) Fetch(url *url.URL) (resp *http.Response, err error) {
+func (c *HttpClient) Fetch(url *url.URL, header http.Header) (resp *http.Response, err error) {
+	if c.userAgent != "" {
+		if header == nil {
+			header = make(http.Header)
+		}
+		header.Set("User-Agent", c.userAgent)
+	}
 	req := &http.Request{
 		Method:     "GET",
 		URL:        url,
@@ -317,9 +321,7 @@ func (c *HttpClient) Fetch(url *url.URL) (resp *http.Response, err error) {
 		Proto:      "HTTP/1.1",
 		ProtoMajor: 1,
 		ProtoMinor: 1,
-		Header: http.Header{
-			"User-Agent": []string{c.userAgent},
-		},
+		Header:     header,
 	}
 	return c.Do(req)
 }
