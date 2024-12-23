@@ -742,10 +742,13 @@ func extractPackageTarball(installDir string, packname string, tarball io.Reader
 		if err != nil {
 			return err
 		}
-		_, err = io.Copy(f, tr)
-		f.Close()
+		defer f.Close()
+		n, err := io.Copy(f, tr)
 		if err != nil {
 			return err
+		}
+		if n != h.Size {
+			return errors.New("extractPackageTarball: incomplete file: " + name)
 		}
 	}
 

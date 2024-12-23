@@ -123,7 +123,7 @@ func (ctx *BuildContext) getImportPath(esm Esm, buildArgsPrefix string, external
 }
 
 func (ctx *BuildContext) getSavepath() string {
-	return normalizeSavePath(ctx.zoneId, path.Join("esm", ctx.Path()))
+	return normalizeSavePath(ctx.zoneId, path.Join("modules", ctx.Path()))
 }
 
 func (ctx *BuildContext) getBuildArgsPrefix(isDts bool) string {
@@ -1144,6 +1144,12 @@ func normalizeEntryPath(path string) string {
 }
 
 func normalizeSavePath(zoneId string, pathname string) string {
+	if strings.HasPrefix(pathname, "modules/transform/") || strings.HasPrefix(pathname, "modules/x/") {
+		if zoneId != "" {
+			return zoneId + "/" + pathname
+		}
+		return pathname
+	}
 	segs := strings.Split(pathname, "/")
 	for i, seg := range segs {
 		if strings.HasPrefix(seg, "X-") && len(seg) > 42 {

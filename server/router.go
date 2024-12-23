@@ -91,7 +91,7 @@ func esmRouter() rex.Handle {
 				hash := hex.EncodeToString(h.Sum(nil))
 
 				// if previous build exists, return it directly
-				savePath := fmt.Sprintf("modules/%s.mjs", hash)
+				savePath := normalizeSavePath(ctx.GetHeader("X-Zone-Id"), fmt.Sprintf("modules/transform/%s.mjs", hash))
 				if file, _, err := buildStorage.Get(savePath); err == nil {
 					data, err := io.ReadAll(file)
 					file.Close()
@@ -366,7 +366,7 @@ func esmRouter() rex.Handle {
 			if len(hash) != 40 || !valid.IsHexString(hash) {
 				return rex.Status(404, "Not Found")
 			}
-			savePath := fmt.Sprintf("modules/%s.%s", hash, ext)
+			savePath := normalizeSavePath(ctx.GetHeader("X-Zone-Id"), fmt.Sprintf("modules/transform/%s.%s", hash, ext))
 			f, fi, err := buildStorage.Get(savePath)
 			if err != nil {
 				return rex.Status(500, err.Error())
@@ -442,10 +442,10 @@ func esmRouter() rex.Handle {
 			npmrc = DefaultNpmRC()
 		}
 
-		zoneId := ctx.GetHeader("X-Zone-Id")
-		if zoneId != "" {
-			if !valid.IsDomain(zoneId) {
-				zoneId = ""
+		zoneIdHeader := ctx.GetHeader("X-Zone-Id")
+		if zoneIdHeader != "" {
+			if !valid.IsDomain(zoneIdHeader) {
+				zoneIdHeader = ""
 			} else {
 				var scopeName string
 				if pkgName := toPackageName(pathname[1:]); strings.HasPrefix(pkgName, "@") {
@@ -454,15 +454,15 @@ func esmRouter() rex.Handle {
 				if scopeName != "" {
 					reg, ok := npmrc.ScopedRegistries[scopeName]
 					if !ok || (reg.Registry == jsrRegistry && reg.Token == "" && (reg.User == "" || reg.Password == "")) {
-						zoneId = ""
+						zoneIdHeader = ""
 					}
 				} else if npmrc.Registry == npmRegistry && npmrc.Token == "" && (npmrc.User == "" || npmrc.Password == "") {
-					zoneId = ""
+					zoneIdHeader = ""
 				}
 			}
 		}
-		if zoneId != "" {
-			npmrc.zoneId = zoneId
+		if zoneIdHeader != "" {
+			npmrc.zoneId = zoneIdHeader
 		}
 
 		if pathname == "/uno.css" {
@@ -503,7 +503,7 @@ func esmRouter() rex.Handle {
 			h.Write([]byte(ctxUrlRaw))
 			h.Write([]byte(v))
 			h.Write([]byte(target))
-			savePath := normalizeSavePath(zoneId, path.Join("modules", hex.EncodeToString(h.Sum(nil))+".css"))
+			savePath := normalizeSavePath(zoneIdHeader, path.Join("modules/x", hex.EncodeToString(h.Sum(nil))+".css"))
 			content, _, err := buildStorage.Get(savePath)
 			if err != nil && err != storage.ErrNotFound {
 				return rex.Status(500, err.Error())
@@ -689,7 +689,7 @@ func esmRouter() rex.Handle {
 			h.Write([]byte(im))
 			h.Write([]byte(v))
 			h.Write([]byte(target))
-			savePath := normalizeSavePath(zoneId, path.Join("modules", hex.EncodeToString(h.Sum(nil))+".mjs"))
+			savePath := normalizeSavePath(zoneIdHeader, path.Join("modules/x", hex.EncodeToString(h.Sum(nil))+".mjs"))
 			content, _, err := buildStorage.Get(savePath)
 			if err != nil && err != storage.ErrNotFound {
 				return rex.Status(500, err.Error())
@@ -1153,9 +1153,9 @@ func esmRouter() rex.Handle {
 				if pathKind == EsmDts {
 					savePath = path.Join("types", pathname)
 				} else {
-					savePath = path.Join("esm", pathname)
+					savePath = path.Join("modules", pathname)
 				}
-				savePath = normalizeSavePath(zoneId, savePath)
+				savePath = normalizeSavePath(npmrc.zoneId, savePath)
 				f, stat, err := buildStorage.Get(savePath)
 				if err != nil {
 					if err != storage.ErrNotFound {
@@ -1390,7 +1390,7 @@ func esmRouter() rex.Handle {
 				if a := encodeBuildArgs(buildArgs, true); a != "" {
 					args = "X-" + a
 				}
-				savePath := normalizeSavePath(zoneId, path.Join(fmt.Sprintf(
+				savePath := normalizeSavePath(npmrc.zoneId, path.Join(fmt.Sprintf(
 					"types/%s/%s",
 					esm.Name(),
 					args,
@@ -1409,7 +1409,7 @@ func esmRouter() rex.Handle {
 					args:        buildArgs,
 					externalAll: externalAll,
 					target:      "types",
-					zoneId:      zoneId,
+					zoneId:      zoneIdHeader,
 				}
 				ch := buildQueue.Add(buildCtx)
 				select {
@@ -1520,7 +1520,7 @@ func esmRouter() rex.Handle {
 			target:      target,
 			pinedTarget: !targetFromUA,
 			dev:         isDev,
-			zoneId:      zoneId,
+			zoneId:      zoneIdHeader,
 		}
 		ret, ok, err := buildCtx.Exists()
 		if err != nil {
