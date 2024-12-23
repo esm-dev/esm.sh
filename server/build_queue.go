@@ -6,18 +6,12 @@ import (
 	"time"
 )
 
-var taskPool = sync.Pool{
-	New: func() interface{} {
-		return &BuildTask{}
-	},
-}
-
 // BuildQueue schedules build tasks of esm.sh
 type BuildQueue struct {
 	lock  sync.RWMutex
 	tasks map[string]*BuildTask
 	queue *list.List
-	idles uint16
+	chann uint16
 }
 
 type BuildTask struct {
@@ -38,39 +32,39 @@ func NewBuildQueue(concurrency int) *BuildQueue {
 	return &BuildQueue{
 		queue: list.New(),
 		tasks: map[string]*BuildTask{},
-		idles: uint16(concurrency),
+		chann: uint16(concurrency),
 	}
 }
 
 // Add adds a new build task to the queue.
 func (q *BuildQueue) Add(ctx *BuildContext) chan *BuildOutput {
-	q.lock.Lock()
-	defer q.lock.Unlock()
-
 	ch := make(chan *BuildOutput, 1)
 
 	// check if the task is already in the queue
+	q.lock.Lock()
 	task, ok := q.tasks[ctx.Path()]
+	q.lock.Unlock()
 	if ok {
+		q.lock.Lock()
 		task.waitChans = append(task.waitChans, ch)
+		q.lock.Unlock()
 		return ch
 	}
 
+	task = &BuildTask{
+		BuildContext: ctx,
+		createdAt:    time.Now(),
+		waitChans:    []chan *BuildOutput{ch},
+		pending:      true,
+	}
 	ctx.status = "pending"
 
-	task = taskPool.Get().(*BuildTask)
-	task.BuildContext = ctx
-	task.el = q.queue.PushBack(task)
-	task.waitChans = []chan *BuildOutput{ch}
-	task.createdAt = time.Now()
-	task.startedAt = time.Time{}
-	task.pending = true
-
-	q.tasks[ctx.Path()] = task
-
-	q.lock.Unlock()
-	q.schedule()
 	q.lock.Lock()
+	task.el = q.queue.PushBack(task)
+	q.tasks[ctx.Path()] = task
+	q.lock.Unlock()
+
+	q.schedule()
 
 	return ch
 }
@@ -79,7 +73,7 @@ func (q *BuildQueue) schedule() {
 	var task *BuildTask
 
 	q.lock.RLock()
-	if q.idles > 0 {
+	if q.chann > 0 {
 		for el := q.queue.Front(); el != nil; el = el.Next() {
 			t, ok := el.Value.(*BuildTask)
 			if ok && t.pending {
@@ -90,24 +84,17 @@ func (q *BuildQueue) schedule() {
 	}
 	q.lock.RUnlock()
 
-	// no available task
-	if task == nil {
-		return
+	if task != nil {
+		q.lock.Lock()
+		q.chann -= 1
+		task.pending = false
+		task.startedAt = time.Now()
+		q.lock.Unlock()
+		go q.run(task)
 	}
-
-	q.lock.Lock()
-	q.idles -= 1
-	task.pending = false
-	task.startedAt = time.Now()
-	q.lock.Unlock()
-
-	go q.run(task)
 }
 
 func (q *BuildQueue) run(task *BuildTask) {
-	// reuse the task object
-	defer taskPool.Put(task)
-
 	ret, err := task.Build()
 	if err == nil {
 		task.status = "done"
@@ -131,7 +118,7 @@ func (q *BuildQueue) run(task *BuildTask) {
 	q.lock.Lock()
 	q.queue.Remove(task.el)
 	delete(q.tasks, task.Path())
-	q.idles += 1
+	q.chann += 1
 	q.lock.Unlock()
 
 	// schedule next task if have any
