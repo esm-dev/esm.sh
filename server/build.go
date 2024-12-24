@@ -81,9 +81,9 @@ var loaders = map[string]esbuild.Loader{
 	".woff2":  esbuild.LoaderDataURL,
 }
 
-func (ctx *BuildContext) Exists() (*BuildMeta, bool, error) {
+func (ctx *BuildContext) Exists() (meta *BuildMeta, ok bool, err error) {
 	key := ctx.getSavepath() + ".meta"
-	meta, err := withLRUCache(key, func() (*BuildMeta, error) {
+	meta, err = withLRUCache(key, func() (*BuildMeta, error) {
 		r, _, err := buildStorage.Get(key)
 		if err != nil {
 			return nil, err
@@ -95,26 +95,27 @@ func (ctx *BuildContext) Exists() (*BuildMeta, bool, error) {
 			return &meta, nil
 		}
 
-		// delete the invalid meta file
+		// delete the invalid meta file in the storage
 		buildStorage.Delete(key)
 		return nil, storage.ErrNotFound
 	})
 	if err != nil {
 		if err == storage.ErrNotFound {
-			return nil, false, nil
+			err = nil
 		}
 		return nil, false, err
 	}
-	return meta, true, nil
+	ok = true
+	return
 }
 
-func (ctx *BuildContext) Build() (ret *BuildMeta, err error) {
+func (ctx *BuildContext) Build() (meta *BuildMeta, err error) {
 	if ctx.target == "types" {
 		return ctx.buildTypes()
 	}
 
 	// check previous build
-	ret, ok, err := ctx.Exists()
+	meta, ok, err := ctx.Exists()
 	if err != nil || ok {
 		return
 	}
@@ -127,7 +128,7 @@ func (ctx *BuildContext) Build() (ret *BuildMeta, err error) {
 	}
 
 	// check previous build again after installation (in case the sub-module path has been changed by the `install` function)
-	ret, ok, err = ctx.Exists()
+	meta, ok, err = ctx.Exists()
 	if err != nil || ok {
 		return
 	}
@@ -196,7 +197,7 @@ func (ctx *BuildContext) Build() (ret *BuildMeta, err error) {
 
 	// build the module
 	ctx.status = "build"
-	ret, _, err = ctx.buildModule(false)
+	meta, _, err = ctx.buildModule(false)
 	if err != nil {
 		return
 	}
@@ -205,7 +206,7 @@ func (ctx *BuildContext) Build() (ret *BuildMeta, err error) {
 	key := ctx.getSavepath() + ".meta"
 	buf, recycle := NewBuffer()
 	defer recycle()
-	err = json.NewEncoder(buf).Encode(ret)
+	err = json.NewEncoder(buf).Encode(meta)
 	if err != nil {
 		return
 	}

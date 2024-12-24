@@ -17,15 +17,15 @@ type BuildQueue struct {
 type BuildTask struct {
 	*BuildContext
 	el        *list.Element
-	waitChans []chan *BuildOutput
+	waitChans []chan BuildOutput
 	createdAt time.Time
 	startedAt time.Time
 	pending   bool
 }
 
 type BuildOutput struct {
-	result *BuildMeta
-	err    error
+	meta BuildMeta
+	err  error
 }
 
 func NewBuildQueue(concurrency int) *BuildQueue {
@@ -37,8 +37,8 @@ func NewBuildQueue(concurrency int) *BuildQueue {
 }
 
 // Add adds a new build task to the queue.
-func (q *BuildQueue) Add(ctx *BuildContext) chan *BuildOutput {
-	ch := make(chan *BuildOutput, 1)
+func (q *BuildQueue) Add(ctx *BuildContext) chan BuildOutput {
+	ch := make(chan BuildOutput, 1)
 
 	// check if the task is already in the queue
 	q.lock.Lock()
@@ -54,7 +54,7 @@ func (q *BuildQueue) Add(ctx *BuildContext) chan *BuildOutput {
 	task = &BuildTask{
 		BuildContext: ctx,
 		createdAt:    time.Now(),
-		waitChans:    []chan *BuildOutput{ch},
+		waitChans:    []chan BuildOutput{ch},
 		pending:      true,
 	}
 	ctx.status = "pending"
@@ -95,7 +95,7 @@ func (q *BuildQueue) schedule() {
 }
 
 func (q *BuildQueue) run(task *BuildTask) {
-	ret, err := task.Build()
+	meta, err := task.Build()
 	if err == nil {
 		task.status = "done"
 		if task.target == "types" {
@@ -108,7 +108,7 @@ func (q *BuildQueue) run(task *BuildTask) {
 		log.Errorf("build '%s': %v", task.Path(), err)
 	}
 
-	output := &BuildOutput{ret, err}
+	output := BuildOutput{meta, err}
 	q.lock.RLock()
 	for _, ch := range task.waitChans {
 		ch <- output

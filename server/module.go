@@ -60,14 +60,14 @@ func validateModuleFile(filename string) (isESM bool, namedExports []string, err
 		Index:          0,
 		KeyPath:        logger.Path{Text: "<stdin>"},
 		PrettyPath:     "<stdin>",
-		Contents:       string(data),
 		IdentifierName: "stdin",
+		Contents:       string(data),
 	}, parserOpts)
 	if !pass {
 		err = errors.New("invalid syntax, require javascript/typescript")
 		return
 	}
-	isESM = ast.ExportsKind == js_ast.ExportsESM
+	isESM = ast.ExportsKind == js_ast.ExportsESM || ast.ExportsKind == js_ast.ExportsESMWithDynamicFallback
 	namedExports = make([]string, len(ast.NamedExports))
 	i := 0
 	for name := range ast.NamedExports {

@@ -1543,7 +1543,7 @@ func esmRouter() rex.Handle {
 					}
 					return rex.Status(500, msg)
 				}
-				ret = output.result
+				ret = output.meta
 			case <-time.After(time.Duration(config.BuildWaitTime) * time.Second):
 				ctx.SetHeader("Cache-Control", ccMustRevalidate)
 				return rex.Status(http.StatusRequestTimeout, "timeout, the module is waiting to be built, please try refreshing the page.")
