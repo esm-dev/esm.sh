@@ -6,16 +6,22 @@ import (
 	"time"
 )
 
+var taskPool = sync.Pool{
+	New: func() interface{} {
+		return &BuildTask{}
+	},
+}
+
 // BuildQueue schedules build tasks of esm.sh
 type BuildQueue struct {
-	lock  sync.RWMutex
+	lock  sync.Mutex
 	tasks map[string]*BuildTask
 	queue *list.List
 	chann uint16
 }
 
 type BuildTask struct {
-	*BuildContext
+	ctx       *BuildContext
 	el        *list.Element
 	waitChans []chan BuildOutput
 	createdAt time.Time
@@ -49,12 +55,11 @@ func (q *BuildQueue) Add(ctx *BuildContext) chan BuildOutput {
 		return ch
 	}
 
-	task = &BuildTask{
-		BuildContext: ctx,
-		createdAt:    time.Now(),
-		waitChans:    []chan BuildOutput{ch},
-		pending:      true,
-	}
+	task = taskPool.Get().(*BuildTask)
+	task.ctx = ctx
+	task.createdAt = time.Now()
+	task.waitChans = []chan BuildOutput{ch}
+	task.pending = true
 	ctx.status = "pending"
 
 	task.el = q.queue.PushBack(task)
@@ -66,9 +71,10 @@ func (q *BuildQueue) Add(ctx *BuildContext) chan BuildOutput {
 }
 
 func (q *BuildQueue) schedule() {
-	var task *BuildTask
+	q.lock.Lock()
+	defer q.lock.Unlock()
 
-	q.lock.RLock()
+	var task *BuildTask
 	if q.chann > 0 {
 		for el := q.queue.Front(); el != nil; el = el.Next() {
 			t, ok := el.Value.(*BuildTask)
@@ -78,47 +84,56 @@ func (q *BuildQueue) schedule() {
 			}
 		}
 	}
-	q.lock.RUnlock()
 
 	if task != nil {
-		q.lock.Lock()
 		q.chann -= 1
 		task.pending = false
 		task.startedAt = time.Now()
-		q.lock.Unlock()
-		q.run(task)
+		go q.run(task)
 	}
 }
 
 func (q *BuildQueue) run(task *BuildTask) {
-	meta, err := task.Build()
+	meta, err := task.ctx.Build()
 	if err == nil {
-		task.status = "done"
-		if task.target == "types" {
-			log.Infof("build '%s'(types) done in %v", task.Path(), time.Since(task.startedAt))
+		task.ctx.status = "done"
+		if task.ctx.target == "types" {
+			log.Infof("build '%s'(types) done in %v", task.ctx.Path(), time.Since(task.startedAt))
 		} else {
-			log.Infof("build '%s' done in %v", task.Path(), time.Since(task.startedAt))
+			log.Infof("build '%s' done in %v", task.ctx.Path(), time.Since(task.startedAt))
 		}
 	} else {
-		task.status = "error"
-		log.Errorf("build '%s': %v", task.Path(), err)
+		task.ctx.status = "error"
+		log.Errorf("build '%s': %v", task.ctx.Path(), err)
 	}
 
 	q.lock.Lock()
 	q.queue.Remove(task.el)
-	delete(q.tasks, task.Path())
+	delete(q.tasks, task.ctx.Path())
 	q.chann += 1
 	q.lock.Unlock()
 
+	waitChans := task.waitChans
+
+	// recycle the task object
+	task.ctx = nil
+	task.el = nil
+	task.waitChans = nil
+	task.createdAt = time.Time{}
+	task.startedAt = time.Time{}
+	task.pending = false
+	taskPool.Put(task)
+
+	// schedule next task if have any
+	go q.schedule()
+
+	// send the bulid output
 	output := BuildOutput{meta, err}
-	for _, ch := range task.waitChans {
+	for _, ch := range waitChans {
 		select {
 		case ch <- output:
 		default:
 			// drop
 		}
 	}
-
-	// schedule next task if have any
-	go q.schedule()
 }

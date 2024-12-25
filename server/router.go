@@ -247,8 +247,8 @@ func esmRouter() rex.Handle {
 					m := map[string]any{
 						"waitClients": len(t.waitChans),
 						"createdAt":   t.createdAt.Format(http.TimeFormat),
-						"path":        t.Path(),
-						"status":      t.status,
+						"path":        t.ctx.Path(),
+						"status":      t.ctx.status,
 					}
 					q[i] = m
 					i++
