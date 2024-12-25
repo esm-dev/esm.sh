@@ -1,11 +1,5 @@
 #!/bin/bash
 
-echo "--- building..."
-go build -o esmd $(dirname $0)/../main.go
-if [ "$?" != "0" ]; then
-  exit 1
-fi
-
 mkdir -p ~/.ssh
 ssh-keyscan $SSH_HOST_NAME >> ~/.ssh/known_hosts
 echo "${SSH_PRIVATE_KEY}" >> ~/.ssh/id_ed25519
@@ -15,6 +9,12 @@ echo "  HostName ${SSH_HOST_NAME}" >> ~/.ssh/config
 echo "  User ${SSH_USER}" >> ~/.ssh/config
 echo "  IdentityFile ~/.ssh/id_ed25519" >> ~/.ssh/config
 echo "  IdentitiesOnly yes" >> ~/.ssh/config
+
+echo "--- building..."
+go build -ldflags="-s -w" -o esmd $(dirname $0)/../main.go
+if [ "$?" != "0" ]; then
+  exit 1
+fi
 
 echo "--- uploading..."
 du -h esmd
@@ -26,13 +26,12 @@ fi
 
 echo "--- installing..."
 ssh next.esm.sh << EOF
-  glv=\$(git lfs version)
+  gv=\$(git version)
   if [ "\$?" != "0" ]; then
     apt update
-    apt install -y git git-lfs
-    git lfs install
+    apt install -y git
   fi
-  echo \$glv
+  echo \$gv
 
   servicefn=/etc/systemd/system/esmd.service
   reload=no

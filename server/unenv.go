@@ -5,7 +5,6 @@ import (
 	"bytes"
 	"compress/gzip"
 	"errors"
-	"fmt"
 	"io"
 	"os"
 	"path"
@@ -50,7 +49,7 @@ func loadUnenvNodeRuntime() (err error) {
 			return nil
 		}
 	}
-	fmt.Println("Building unenv node runtime...")
+	log.Info("Building unenv node runtime...")
 	return buildUnenvNodeRuntime()
 }
 
@@ -129,6 +128,7 @@ func buildUnenvNodeRuntime() (err error) {
 		}
 	}
 
+	// write the tarball to 'server/embed/' in DEBUG mode
 	var tarball *tar.Writer
 	if fs, ok := embedFS.(*MockEmbedFS); ok {
 		file, err := os.OpenFile(path.Join(fs.root, "server/embed/node-runtime.tgz"), os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0644)

@@ -1,4 +1,4 @@
-import "~/app.css";
+import "./app.css";
 
 const html = String.raw;
 

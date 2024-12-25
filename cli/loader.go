@@ -34,7 +34,7 @@ func (l *LoaderWorker) Start(wd string, loaderJS []byte) (err error) {
 	}
 	jsPath := filepath.Join(homeDir, ".esm.sh", "run", fmt.Sprintf("loader@%d.js", VERSION))
 	fi, err := os.Stat(jsPath)
-	if (err != nil && os.IsNotExist(err)) || (err == nil && fi.Size() != int64(len(loaderJS))) || os.Getenv("DEBUG") == "1" {
+	if (err != nil && os.IsNotExist(err)) || (err == nil && fi.Size() != int64(len(loaderJS))) || debug {
 		os.MkdirAll(filepath.Dir(jsPath), 0755)
 		err = os.WriteFile(jsPath, loaderJS, 0644)
 		if err != nil {
@@ -59,14 +59,14 @@ func (l *LoaderWorker) Start(wd string, loaderJS []byte) (err error) {
 		l.stdout = nil
 	} else {
 		l.outReader = bufio.NewReader(l.stdout)
-		if os.Getenv("DEBUG") == "1" {
+		if debug {
 			denoVersion, _ := exec.Command(denoPath, "-v").Output()
 			fmt.Println(term.Dim(fmt.Sprintf("[debug] loader process started (runtime: %s)", strings.TrimSpace(string(denoVersion)))))
 		}
 	}
 
 	// pre-install npm deps
-	cmd = exec.Command(denoPath, "cache", "npm:@esm.sh/unocss@0.4.1", "npm:@esm.sh/tsx@1.0.5", "npm:@esm.sh/vue-compiler@1.0.1")
+	cmd = exec.Command(denoPath, "cache", "npm:@esm.sh/unocss@0.4.3", "npm:@esm.sh/tsx@1.0.5", "npm:@esm.sh/vue-compiler@1.0.1")
 	cmd.Start()
 	return
 }
@@ -81,7 +81,7 @@ func (l *LoaderWorker) Load(loaderType string, args []any) (lang string, code st
 		return
 	}
 
-	if os.Getenv("DEBUG") == "1" {
+	if debug {
 		start := time.Now()
 		defer func() {
 			if loaderType == "unocss" {

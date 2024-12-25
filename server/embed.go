@@ -32,7 +32,7 @@ func (fs MockEmbedFS) ReadFile(name string) ([]byte, error) {
 	return os.ReadFile(path.Join(fs.root, name))
 }
 
-func buildEmbedTSModule(filename string, target string, debug bool) (js []byte, err error) {
+func buildEmbedTSModule(filename string, target string) (js []byte, err error) {
 	cacheKey := filename + "?" + target
 	if data, ok := embedBuildCache.Load(cacheKey); ok {
 		return data.([]byte), nil
@@ -47,30 +47,10 @@ func buildEmbedTSModule(filename string, target string, debug bool) (js []byte, 
 	data = bytes.ReplaceAll(data, []byte("$TARGET"), []byte(target))
 
 	js, err = minify(string(data), esbuild.LoaderTS, targets[target])
-	if err == nil && !debug {
+	if err == nil && !DEBUG {
 		embedBuildCache.Store(cacheKey, js)
 	}
 	return
-}
-
-func walkEmbedFS(fs EmbedFS, dir string, exts []string, fn func(path string) error) error {
-	entries, err := fs.ReadDir(dir)
-	if err != nil {
-		return err
-	}
-	for _, entry := range entries {
-		path := dir + "/" + entry.Name()
-		if entry.IsDir() {
-			if err := walkEmbedFS(fs, path, exts, fn); err != nil {
-				return err
-			}
-		} else if endsWith(path, exts...) {
-			if err := fn(path); err != nil {
-				return err
-			}
-		}
-	}
-	return nil
 }
 
 func init() {

@@ -2,7 +2,6 @@ package server
 
 import (
 	"archive/zip"
-	"bytes"
 	"errors"
 	"fmt"
 	"io"
@@ -21,7 +20,7 @@ import (
 var (
 	loaderRuntime        = "deno"
 	loaderRuntimeVersion = "2.1.4"
-	loaderCompileLocks   = sync.Map{}
+	compileSyncMap       = sync.Map{}
 )
 
 type LoaderOutput struct {
@@ -30,35 +29,38 @@ type LoaderOutput struct {
 	Error string `json:"error"`
 }
 
-func runLoader(loaderExecPath string, filename string, code string) (output *LoaderOutput, err error) {
-	outBuf := new(bytes.Buffer)
-	errBuf := new(bytes.Buffer)
-	c := exec.Command(
-		loaderRuntime, "run",
+func runLoader(loaderJsPath string, filename string, code string) (output *LoaderOutput, err error) {
+	stdout, recycle := NewBuffer()
+	defer recycle()
+	stderr, recycle := NewBuffer()
+	defer recycle()
+	cmd := exec.Command(
+		path.Join(config.WorkDir, "bin", loaderRuntime), "run",
 		"--no-config",
 		"--no-lock",
 		"--cached-only",
 		"--no-prompt",
 		"--allow-read=.",
 		"--quiet",
-		loaderExecPath, filename,
+		loaderJsPath,
+		filename, // args[0]
 	)
-	c.Dir = os.TempDir()
-	c.Stdin = strings.NewReader(code)
-	c.Stdout = outBuf
-	c.Stderr = errBuf
-	err = c.Run()
+	cmd.Dir = os.TempDir()
+	cmd.Stdin = strings.NewReader(code)
+	cmd.Stdout = stdout
+	cmd.Stderr = stderr
+	err = cmd.Run()
 	if err != nil {
-		if errBuf.Len() > 0 {
-			err = errors.New(errBuf.String())
+		if stderr.Len() > 0 {
+			err = errors.New(stderr.String())
 		}
 		return
 	}
-	if outBuf.Len() < 2 {
+	if stdout.Len() < 2 {
 		err = errors.New("bad loader output")
 		return
 	}
-	data := outBuf.Bytes()
+	data := stdout.Bytes()
 	if data[0] != '1' && data[0] != '2' {
 		err = errors.New(string(data[2:]))
 		return
@@ -99,7 +101,7 @@ func buildLoader(wd, loaderJs, outfile string) (err error) {
 		}},
 	})
 	if len(ret.Errors) > 0 {
-		err = fmt.Errorf("failed to build loader: %s", ret.Errors[0].Text)
+		err = errors.New(ret.Errors[0].Text)
 	}
 	return
 }
@@ -142,7 +144,9 @@ func installLoaderRuntime() (err error) {
 		return
 	}
 
-	log.Debugf("downloading %s...", path.Base(url))
+	if DEBUG {
+		log.Debugf("downloading %s...", path.Base(url))
+	}
 
 	res, err := http.Get(url)
 	if err != nil {
@@ -209,7 +213,7 @@ func getLoaderRuntimeInstallURL() (string, error) {
 	case "amd64", "386":
 		arch = "x86_64"
 	default:
-		return "", fmt.Errorf("unsupported architecture: %s", runtime.GOARCH)
+		return "", errors.New("unsupported architecture: " + runtime.GOARCH)
 	}
 
 	switch runtime.GOOS {
@@ -220,7 +224,7 @@ func getLoaderRuntimeInstallURL() (string, error) {
 	// case "windows":
 	// 	os = "pc-windows-msvc"
 	default:
-		return "", fmt.Errorf("unsupported os: %s", runtime.GOOS)
+		return "", errors.New("unsupported os: " + runtime.GOOS)
 	}
 
 	return fmt.Sprintf("https://github.com/denoland/deno/releases/download/v%s/%s-%s-%s.zip", loaderRuntimeVersion, loaderRuntime, arch, os), nil

@@ -1,79 +1,127 @@
 package server
 
 import (
+	"container/list"
+	"strings"
 	"sync"
 	"time"
 )
 
 var (
-	cacheLocks sync.Map
+	cacheMutex KeyedMutex
 	cacheStore sync.Map
+	cacheLRU   *list.List
 )
 
-type cacheItem struct {
-	data any
-	exp  time.Time
+type cacheRecord struct {
+	key   string
+	value any
 }
 
-func withCache[T any](key string, cacheTtl time.Duration, fetch func() (T, string, error)) (r T, err error) {
+type cacheItem struct {
+	exp  time.Time
+	data any
+}
+
+func withCache[T any](key string, cacheTtl time.Duration, fetch func() (T, string, error)) (data T, err error) {
 	// check cache first
-	if cacheTtl > 0 {
-		if v, ok := cacheStore.Load(key); ok {
-			item := v.(*cacheItem)
-			if item.exp.After(time.Now()) {
-				return item.data.(T), nil
-			}
+	if v, ok := cacheStore.Load(key); ok {
+		item := v.(*cacheItem)
+		if item.exp.After(time.Now()) {
+			return item.data.(T), nil
 		}
 	}
 
-	lock, _ := cacheLocks.LoadOrStore(key, &sync.Mutex{})
-	defer cacheLocks.Delete(key)
-
-	lock.(*sync.Mutex).Lock()
-	defer lock.(*sync.Mutex).Unlock()
+	unlock := cacheMutex.Lock(key)
+	defer unlock()
 
 	// check cache again after lock
-	if cacheTtl > 0 {
-		if v, ok := cacheStore.Load(key); ok {
-			item := v.(*cacheItem)
-			if item.exp.After(time.Now()) {
-				return item.data.(T), nil
-			}
+	if v, ok := cacheStore.Load(key); ok {
+		item := v.(*cacheItem)
+		if item.exp.After(time.Now()) {
+			return item.data.(T), nil
 		}
 	}
 
 	var aliasKey string
-	r, aliasKey, err = fetch()
+	data, aliasKey, err = fetch()
 	if err != nil {
 		return
 	}
 
-	if cacheTtl > 0 {
-		exp := time.Now().Add(cacheTtl)
-		cacheStore.Store(key, &cacheItem{r, exp})
-		if aliasKey != "" && aliasKey != key {
-			cacheStore.Store(aliasKey, &cacheItem{r, exp})
-		}
+	exp := time.Now().Add(cacheTtl)
+	cacheStore.Store(key, &cacheItem{exp, data})
+	if aliasKey != "" && aliasKey != key {
+		cacheStore.Store(aliasKey, &cacheItem{exp, data})
 	}
 	return
 }
 
+func withLRUCache[T any](key string, fetch func() (T, error)) (data T, err error) {
+	cacheKey := "lru:" + key
+	cacheTtl := 24 * time.Hour
+
+	// check cache first
+	if v, ok := cacheStore.Load(cacheKey); ok {
+		item := v.(*cacheItem)
+		item.exp = time.Now().Add(cacheTtl)
+		el := item.data.(*list.Element)
+		cacheLRU.MoveToBack(el)
+		return el.Value.(cacheRecord).value.(T), nil
+	}
+
+	unlock := cacheMutex.Lock(cacheKey)
+	defer unlock()
+
+	// check cache again after lock
+	if v, ok := cacheStore.Load(cacheKey); ok {
+		item := v.(*cacheItem)
+		el := item.data.(*list.Element)
+		return el.Value.(cacheRecord).value.(T), nil
+	}
+
+	data, err = fetch()
+	if err != nil {
+		return
+	}
+
+	el := cacheLRU.PushBack(cacheRecord{cacheKey, data})
+	cacheStore.Store(cacheKey, &cacheItem{time.Now().Add(cacheTtl), el})
+
+	// delete the oldest item if cache is full
+	if cacheLRU.Len() > 1000 {
+		el := cacheLRU.Front()
+		cacheLRU.Remove(el)
+		cacheStore.Delete(el.Value.(cacheRecord).key)
+	}
+
+	return
+}
+
 func init() {
+	cacheLRU = list.New()
 	// cache GC
 	go func() {
-		tick := time.NewTicker(10 * time.Minute)
+		tick := time.NewTicker(time.Minute)
 		for {
 			now := <-tick.C
-			expKeys := []any{}
+			expKeys := []string{}
 			cacheStore.Range(func(key, value any) bool {
 				item := value.(*cacheItem)
 				if item.exp.Before(now) {
-					expKeys = append(expKeys, key)
+					expKeys = append(expKeys, key.(string))
 				}
 				return true
 			})
 			for _, key := range expKeys {
-				cacheStore.Delete(key)
+				if strings.HasPrefix(key, "lru:") {
+					item, ok := cacheStore.LoadAndDelete(key)
+					if ok {
+						cacheLRU.Remove(item.(*cacheItem).data.(*list.Element))
+					}
+				} else {
+					cacheStore.Delete(key)
+				}
 			}
 		}
 	}()

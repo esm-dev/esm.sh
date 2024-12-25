@@ -9,35 +9,31 @@ import (
 	"path"
 	"strconv"
 	"strings"
-	"sync"
+
+	"github.com/esm-dev/esm.sh/server/common"
 )
 
 func transformSvelte(npmrc *NpmRC, svelteVersion string, filename string, code string) (output *LoaderOutput, err error) {
 	loaderExecPath := path.Join(npmrc.StoreDir(), "svelte@"+svelteVersion, "loader.js")
-	if !existsFile(loaderExecPath) {
-		log.Debug("compiling svelte loader...")
-		err = compileSvelteLoader(npmrc, svelteVersion, loaderExecPath)
-		if err != nil {
-			return
+
+	once, _ := compileSyncMap.LoadOrStore(loaderExecPath, &Once{})
+	err = once.(*Once).Do(func() (err error) {
+		if !existsFile(loaderExecPath) {
+			log.Debug("compiling svelte loader...")
+			err = compileSvelteLoader(npmrc, svelteVersion, loaderExecPath)
 		}
+		return
+	})
+	if err != nil {
+		err = errors.New("failed to compile svelte loader: " + err.Error())
+		return
 	}
+
 	return runLoader(loaderExecPath, filename, code)
 }
 
 func compileSvelteLoader(npmrc *NpmRC, svelteVersion string, loaderExecPath string) (err error) {
 	wd := path.Join(npmrc.StoreDir(), "svelte@"+svelteVersion)
-
-	v, _ := loaderCompileLocks.LoadOrStore(wd, &sync.Mutex{})
-	defer loaderCompileLocks.Delete(wd)
-
-	// only one compile process is allowed at the same time
-	v.(*sync.Mutex).Lock()
-	defer v.(*sync.Mutex).Unlock()
-
-	// check if the loader has been compiled
-	if existsFile(loaderExecPath) {
-		return
-	}
 
 	// install svelte
 	pkgJson, err := npmrc.installPackage(Package{Name: "svelte", Version: svelteVersion})
@@ -65,24 +61,61 @@ func compileSvelteLoader(npmrc *NpmRC, svelteVersion string, loaderExecPath stri
 	return
 }
 
-func generateUnoCSS(npmrc *NpmRC, configCSS string, content string) (output *LoaderOutput, err error) {
-	loaderVersion := "0.4.1"
-	loaderExecPath := path.Join(config.WorkDir, "bin", "unocss-loader-"+loaderVersion)
-	if !existsFile(loaderExecPath) {
-		log.Debug("compiling unocss loader...")
-		err = compileUnocssLoader(npmrc, loaderVersion, loaderExecPath)
+func resolveSvelteVersion(npmrc *NpmRC, importMap common.ImportMap) (svelteVersion string, err error) {
+	svelteVersion = "5"
+	if len(importMap.Imports) > 0 {
+		sveltePath, ok := importMap.Imports["svelte"]
+		if ok {
+			a := regexpSveltePath.FindAllStringSubmatch(sveltePath, 1)
+			if len(a) > 0 {
+				svelteVersion = a[0][1]
+			}
+		}
+	}
+	if !regexpVersionStrict.MatchString(svelteVersion) {
+		var info *PackageJSON
+		info, err = npmrc.getPackageInfo("svelte", svelteVersion)
 		if err != nil {
 			return
 		}
+		svelteVersion = info.Version
+	}
+	if semverLessThan(svelteVersion, "4.0.0") {
+		err = errors.New("unsupported svelte version, only 4.0.0+ is supported")
+	}
+	return
+}
+
+func generateUnoCSS(npmrc *NpmRC, configCSS string, content string) (output *LoaderOutput, err error) {
+	loaderVersion := "0.4.3"
+	loaderExecPath := path.Join(config.WorkDir, "bin", "unocss-"+loaderVersion)
+
+	once, _ := compileSyncMap.LoadOrStore(loaderExecPath, &Once{})
+	err = once.(*Once).Do(func() (err error) {
+		if !existsFile(loaderExecPath) {
+			log.Debug("compiling unocss loader...")
+			err = compileUnocssLoader(npmrc, loaderVersion, loaderExecPath)
+		}
+		return
+	})
+	if err != nil {
+		err = errors.New("failed to compile unocss engine: " + err.Error())
+		return
 	}
 
-	var outBuf bytes.Buffer
-	var errBuf bytes.Buffer
+	outBuf := bufferPool.Get().(*bytes.Buffer)
+	errBuf := bufferPool.Get().(*bytes.Buffer)
+	defer func() {
+		outBuf.Reset()
+		errBuf.Reset()
+		bufferPool.Put(outBuf)
+		bufferPool.Put(errBuf)
+	}()
 	c := exec.Command(loaderExecPath, strconv.Itoa(len(configCSS)), path.Join(config.WorkDir, "cache/unocss"))
 	c.Dir = os.TempDir()
 	c.Stdin = strings.NewReader(configCSS + content)
-	c.Stdout = &outBuf
-	c.Stderr = &errBuf
+	c.Stdout = outBuf
+	c.Stderr = errBuf
 	err = c.Run()
 	if err != nil {
 		if errBuf.Len() > 0 {
@@ -105,18 +138,6 @@ func generateUnoCSS(npmrc *NpmRC, configCSS string, content string) (output *Loa
 func compileUnocssLoader(npmrc *NpmRC, loaderVersion string, loaderExecPath string) (err error) {
 	wd := path.Join(npmrc.StoreDir(), "@esm.sh/unocss@"+loaderVersion)
 
-	v, _ := loaderCompileLocks.LoadOrStore(wd, &sync.Mutex{})
-	defer loaderCompileLocks.Delete(wd)
-
-	// only one compile process is allowed at the same time
-	v.(*sync.Mutex).Lock()
-	defer v.(*sync.Mutex).Unlock()
-
-	// check if the loader has been compiled
-	if existsFile(loaderExecPath) {
-		return
-	}
-
 	// install @esm.sh/unocss
 	pkgJson, err := npmrc.installPackage(Package{Name: "@esm.sh/unocss", Version: loaderVersion})
 	if err != nil {
@@ -128,56 +149,27 @@ func compileUnocssLoader(npmrc *NpmRC, loaderVersion string, loaderExecPath stri
 	  import { generate } from "@esm.sh/unocss";
 	  const { stdin, stdout } = Deno;
 	  const write = data => stdout.write(new TextEncoder().encode(data));
-	  const customImport = (name) => {
-	    switch (name) {
-	      case "@unocss/preset-attributify":
-	        return import("@unocss/preset-attributify");
-	      case "@unocss/preset-icons/browser":
-	        return import("@unocss/preset-icons/browser");
-	      case "@unocss/preset-legacy-compat":
-	        return import("@unocss/preset-legacy-compat");
-	      case "@unocss/preset-mini":
-	        return import("@unocss/preset-mini");
-	      case "@unocss/preset-rem-to-px":
-	        return import("@unocss/preset-rem-to-px");
-	      case "@unocss/preset-tagify":
-	        return import("@unocss/preset-tagify");
-	      case "@unocss/preset-typography":
-	        return import("@unocss/preset-typography");
-	      case "@unocss/preset-uno":
-	        return import("@unocss/preset-uno");
-	      case "@unocss/preset-web-fonts":
-	        return import("@unocss/preset-web-fonts");
-	      case "@unocss/preset-wind":
-	        return import("@unocss/preset-wind");
-	      default:
-	        if (name.startsWith("https://esm.sh/@iconify-json/")) {
-	          const [_, cName, ...path] = name.slice(15).split("/")
-	          return (async () => {
-	            const { UntarStream } = await import("jsr:@std/tar/untar-stream");
-	            const jsonRes = await fetch("https://registry.npmjs.org/@iconify-json/" + cName + "/latest")
-	            if (jsonRes.status !== 200) {
-	              jsonRes.body.cancel()
-	              throw new Error("Failed to fetch @iconify-json/" + cName)
-	            }
-	            const { dist } = await jsonRes.json()
-	            const tgzRes = await fetch(dist.tarball)
-	            if (tgzRes.status !== 200) {
-	              tgzRes.body.cancel()
-	              throw new Error("Failed to fetch tarball of @iconify-json/" + cName)
-	            }
-	            for await (const entry of tgzRes.body.pipeThrough(new DecompressionStream("gzip")).pipeThrough(new UntarStream())) {
-	              if (entry.path === "package/" + path.join("/")) {
-	                return await new Response(entry.readable).json()
-	              } else {
-	                entry.readable.cancel()
-	              }
-	            }
-	            throw new Error("Failed to find " + path.join("/") + " in " + dist.tarball)
-	          })()
-	        }
-	        throw new Error("Unsupported import: " + name)
-	    }
+	  const iconLoader = async (collectionName) => {
+	    const { UntarStream } = await import("jsr:@std/tar/untar-stream");
+			const jsonRes = await fetch("https://registry.npmjs.org/@iconify-json/" + collectionName + "/latest")
+			if (jsonRes.status !== 200) {
+				jsonRes.body.cancel()
+				throw new Error("Failed to fetch @iconify-json/" + collectionName)
+			}
+			const { dist } = await jsonRes.json()
+			const tgzRes = await fetch(dist.tarball)
+			if (tgzRes.status !== 200) {
+				tgzRes.body.cancel()
+				throw new Error("Failed to fetch tarball of @iconify-json/" + collectionName)
+			}
+			for await (const entry of tgzRes.body.pipeThrough(new DecompressionStream("gzip")).pipeThrough(new UntarStream())) {
+				if (entry.path === "package/icons.json" ) {
+					return await new Response(entry.readable).json()
+				} else {
+					entry.readable.cancel()
+				}
+			}
+			throw new Error("icons.json not found in @iconify-json/" + collectionName)
 	  }
 	  try {
 	    let content = "";
@@ -190,7 +182,7 @@ func compileUnocssLoader(npmrc *NpmRC, loaderVersion string, loaderExecPath stri
 	      configCSS = content.slice(0, n);
 	      content = content.slice(n);
 	    }
-	    const code = await generate(content, { configCSS, customImport, customCacheDir: Deno.args[1] });
+	    const code = await generate(content, { configCSS, iconLoader, customCacheDir: Deno.args[1] });
 	    await write("1\n" + code);
 	  } catch (err) {
 	    await write("0\n" + err.message);
@@ -223,30 +215,25 @@ func compileUnocssLoader(npmrc *NpmRC, loaderVersion string, loaderExecPath stri
 func transformVue(npmrc *NpmRC, vueVersion string, filename string, code string) (output *LoaderOutput, err error) {
 	loaderVersion := "1.0.1" // @esm.sh/vue-compiler
 	loaderExecPath := path.Join(npmrc.StoreDir(), "@vue/compiler-sfc@"+vueVersion, "loader-"+loaderVersion+".js")
-	if !existsFile(loaderExecPath) {
-		log.Debug("compiling vue loader...")
-		err = compileVueLoader(npmrc, vueVersion, loaderVersion, loaderExecPath)
-		if err != nil {
-			return
+
+	once, _ := compileSyncMap.LoadOrStore(loaderExecPath, &Once{})
+	err = once.(*Once).Do(func() (err error) {
+		if !existsFile(loaderExecPath) {
+			log.Debug("compiling vue loader...")
+			err = compileVueLoader(npmrc, vueVersion, loaderVersion, loaderExecPath)
 		}
+		return
+	})
+	if err != nil {
+		err = errors.New("failed to compile vue loader: " + err.Error())
+		return
 	}
+
 	return runLoader(loaderExecPath, filename, code)
 }
 
 func compileVueLoader(npmrc *NpmRC, vueVersion string, loaderVersion, loaderExecPath string) (err error) {
 	wd := path.Join(npmrc.StoreDir(), "@vue/compiler-sfc@"+vueVersion)
-
-	v, _ := loaderCompileLocks.LoadOrStore(wd, &sync.Mutex{})
-	defer loaderCompileLocks.Delete(wd)
-
-	// only one compile process is allowed at the same time
-	v.(*sync.Mutex).Lock()
-	defer v.(*sync.Mutex).Unlock()
-
-	// check if the loader has been compiled
-	if existsFile(loaderExecPath) {
-		return
-	}
 
 	// install vue sfc compiler
 	pkgJson, err := npmrc.installPackage(Package{Name: "@vue/compiler-sfc", Version: vueVersion})
@@ -273,5 +260,30 @@ func compileVueLoader(npmrc *NpmRC, vueVersion string, loaderVersion, loaderExec
 	  }
 	`
 	err = buildLoader(wd, loaderJS, loaderExecPath)
+	return
+}
+
+func resolveVueVersion(npmrc *NpmRC, importMap common.ImportMap) (vueVersion string, err error) {
+	vueVersion = "3"
+	if len(importMap.Imports) > 0 {
+		vuePath, ok := importMap.Imports["vue"]
+		if ok {
+			a := regexpVuePath.FindAllStringSubmatch(vuePath, 1)
+			if len(a) > 0 {
+				vueVersion = a[0][1]
+			}
+		}
+	}
+	if !regexpVersionStrict.MatchString(vueVersion) {
+		var info *PackageJSON
+		info, err = npmrc.getPackageInfo("vue", vueVersion)
+		if err != nil {
+			return
+		}
+		vueVersion = info.Version
+	}
+	if semverLessThan(vueVersion, "3.0.0") {
+		err = errors.New("unsupported vue version, only 3.0.0+ is supported")
+	}
 	return
 }

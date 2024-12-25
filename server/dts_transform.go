@@ -3,6 +3,7 @@ package server
 import (
 	"bytes"
 	"fmt"
+	"io"
 	"os"
 	"path"
 	"strings"
@@ -19,17 +20,19 @@ func (ctx *BuildContext) transformDTS(dts string) error {
 	if err != nil {
 		return err
 	}
-	log.Debugf("transform dts '%s'(%d related dts files) in %v", dts, n, time.Since(start))
+	if DEBUG {
+		log.Debugf("transform dts '%s'(%d related dts files) in %v", dts, n, time.Since(start))
+	}
 	return nil
 }
 
 // transformDTS transforms a `.d.ts` file for deno/editor-lsp
-func transformDTS(ctx *BuildContext, dts string, buildArgsPrefix string, marker *StringSet) (n int, err error) {
+func transformDTS(ctx *BuildContext, dts string, buildArgsPrefix string, marker *Set) (n int, err error) {
 	isEntry := marker == nil
 	if isEntry {
-		marker = NewStringSet()
+		marker = NewSet()
 	}
-	dtsPath := path.Join("/"+ctx.esmPath.Name(), buildArgsPrefix, dts)
+	dtsPath := path.Join("/"+ctx.esm.Name(), buildArgsPrefix, dts)
 	if marker.Has(dtsPath) {
 		// don't transform repeatly
 		return
@@ -43,7 +46,7 @@ func transformDTS(ctx *BuildContext, dts string, buildArgsPrefix string, marker 
 		return
 	}
 
-	dtsFilePath := path.Join(ctx.wd, "node_modules", ctx.esmPath.PkgName, dts)
+	dtsFilePath := path.Join(ctx.wd, "node_modules", ctx.esm.PkgName, dts)
 	dtsWD := path.Dir(dtsFilePath)
 	dtsFile, err := os.Open(dtsFilePath)
 	if err != nil {
@@ -59,13 +62,14 @@ func transformDTS(ctx *BuildContext, dts string, buildArgsPrefix string, marker 
 		return
 	}
 
-	buffer := bytes.NewBuffer(nil)
-	internalDts := NewStringSet()
+	buffer, recycle := NewBuffer()
+	defer recycle()
+	internalDts := NewSet()
 	withNodeBuiltinModule := false
 	hasReferenceTypesNode := false
 
 	err = parseDts(dtsFile, buffer, func(specifier string, kind TsImportKind, position int) (string, error) {
-		if ctx.esmPath.PkgName == "@types/node" {
+		if ctx.esm.PkgName == "@types/node" {
 			return specifier, nil
 		}
 
@@ -131,25 +135,25 @@ func transformDTS(ctx *BuildContext, dts string, buildArgsPrefix string, marker 
 			specifier += "/" + subPath
 		}
 
-		if depPkgName == ctx.esmPath.PkgName {
+		if depPkgName == ctx.esm.PkgName {
 			if strings.ContainsRune(subPath, '*') {
 				return fmt.Sprintf(
 					"{ESM_CDN_ORIGIN}/%s/%s%s",
-					ctx.esmPath.Name(),
+					ctx.esm.Name(),
 					ctx.getBuildArgsPrefix(true),
 					subPath,
 				), nil
 			} else {
-				entry := ctx.resolveEntry(EsmPath{
+				entry := ctx.resolveEntry(Esm{
 					PkgName:       depPkgName,
-					PkgVersion:    ctx.esmPath.PkgVersion,
+					PkgVersion:    ctx.esm.PkgVersion,
 					SubPath:       subPath,
 					SubModuleName: subPath,
 				})
 				if entry.types != "" {
 					return fmt.Sprintf(
 						"{ESM_CDN_ORIGIN}/%s/%s%s",
-						ctx.esmPath.Name(),
+						ctx.esm.Name(),
 						ctx.getBuildArgsPrefix(true),
 						strings.TrimPrefix(entry.types, "./"),
 					), nil
@@ -182,9 +186,9 @@ func transformDTS(ctx *BuildContext, dts string, buildArgsPrefix string, marker 
 		}
 
 		typesPkgName := toTypesPackageName(depPkgName)
-		if _, ok := ctx.packageJson.Dependencies[typesPkgName]; ok {
+		if _, ok := ctx.pkgJson.Dependencies[typesPkgName]; ok {
 			depPkgName = typesPkgName
-		} else if _, ok := ctx.packageJson.PeerDependencies[typesPkgName]; ok {
+		} else if _, ok := ctx.pkgJson.PeerDependencies[typesPkgName]; ok {
 			depPkgName = typesPkgName
 		}
 
@@ -196,16 +200,22 @@ func transformDTS(ctx *BuildContext, dts string, buildArgsPrefix string, marker 
 			return "", err
 		}
 
-		dtsModule := EsmPath{
+		dtsModule := Esm{
 			PkgName:       p.Name,
 			PkgVersion:    p.Version,
 			SubPath:       subPath,
 			SubModuleName: subPath,
 		}
 		args := BuildArgs{
-			external: NewStringSet(),
+			external: NewSet(),
 		}
-		b := NewBuildContext(ctx.zoneId, ctx.npmrc, dtsModule, args, false, "types", false, BundleFalse, false)
+		b := &BuildContext{
+			esm:    dtsModule,
+			npmrc:  ctx.npmrc,
+			args:   args,
+			target: "types",
+			zoneId: ctx.zoneId,
+		}
 		err = b.install()
 		if err != nil {
 			return "", err
@@ -232,11 +242,14 @@ func transformDTS(ctx *BuildContext, dts string, buildArgsPrefix string, marker 
 	dtsFile.Close()
 
 	if withNodeBuiltinModule && !hasReferenceTypesNode {
-		ref := []byte(fmt.Sprintf("/// <reference path=\"{ESM_CDN_ORIGIN}/@types/node@%s/index.d.ts\" />\n", nodeTypesVersion))
-		buffer = bytes.NewBuffer(concatBytes(ref, buffer.Bytes()))
+		buf, recycle := NewBuffer()
+		defer recycle()
+		fmt.Fprintf(buf, "/// <reference path=\"{ESM_CDN_ORIGIN}/@types/node@%s/index.d.ts\" />\n", nodeTypesVersion)
+		io.Copy(buf, buffer)
+		buffer = buf
 	}
 
-	err = buildStorage.Put(savePath, bytes.NewBuffer(ctx.rewriteDTS(dts, buffer.Bytes())))
+	err = buildStorage.Put(savePath, bytes.NewReader(ctx.rewriteDTS(dts, buffer.Bytes())))
 	if err != nil {
 		return
 	}

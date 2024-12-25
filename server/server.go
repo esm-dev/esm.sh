@@ -11,6 +11,7 @@ import (
 	"syscall"
 	"time"
 
+	npm_replacements "github.com/esm-dev/esm.sh/server/npm-replacements"
 	"github.com/esm-dev/esm.sh/server/storage"
 	logger "github.com/ije/gox/log"
 	"github.com/ije/rex"
@@ -37,27 +38,26 @@ var (
 func Serve(efs EmbedFS) {
 	var (
 		cfile string
-		debug bool
 		err   error
 	)
 
 	flag.StringVar(&cfile, "config", "config.json", "the config file path")
-	flag.BoolVar(&debug, "debug", false, "run the server in DEUBG mode")
 	flag.Parse()
 
 	if existsFile(cfile) {
-		c, err := LoadConfig(cfile)
+		config, err = LoadConfig(cfile)
 		if err != nil {
 			fmt.Println(err.Error())
 			os.Exit(1)
 		}
-		config = *c
-		if debug {
+		if DEBUG {
 			fmt.Printf("%s [info] Config loaded from %s\n", time.Now().Format("2006-01-02 15:04:05"), cfile)
 		}
+	} else {
+		config = DefaultConfig()
 	}
 
-	if debug {
+	if DEBUG {
 		config.LogLevel = "debug"
 		cwd, err := os.Getwd()
 		if err != nil {
@@ -66,7 +66,8 @@ func Serve(efs EmbedFS) {
 		}
 		embedFS = &MockEmbedFS{cwd}
 	} else {
-		os.Setenv("NO_COLOR", "1") // disable log color in production
+		// disable log color in release build
+		os.Setenv("NO_COLOR", "1")
 		embedFS = efs
 	}
 
@@ -77,16 +78,11 @@ func Serve(efs EmbedFS) {
 	}
 	log.SetLevelByName(config.LogLevel)
 
-	var accessLogger *logger.Logger
-	if config.LogDir == "" {
-		accessLogger = &logger.Logger{}
-	} else {
-		accessLogger, err = logger.New(fmt.Sprintf("file:%s?buffer=32k&fileDateFormat=20060102", path.Join(config.LogDir, "access.log")))
-		if err != nil {
-			log.Fatalf("failed to initialize access logger: %v", err)
-		}
+	accessLogger, err := logger.New(fmt.Sprintf("file:%s?buffer=32k&fileDateFormat=20060102", path.Join(config.LogDir, "access.log")))
+	if err != nil {
+		log.Fatalf("failed to initialize access logger: %v", err)
 	}
-	// quite in terminal
+	// don't write log message to stdout
 	accessLogger.SetQuite(true)
 
 	buildStorage, err = storage.New(&config.Storage)
@@ -105,11 +101,11 @@ func Serve(efs EmbedFS) {
 	}
 	log.Debugf("unenv node runtime loaded, %d files, total size: %d KB", len(unenvNodeRuntimeBulid), totalSize/1024)
 
-	err = buildNpmReplacements(efs)
+	n, err := npm_replacements.Build()
 	if err != nil {
 		log.Fatalf("build npm replacements: %v", err)
 	}
-	log.Debugf("%d npm repalcements loaded", len(npmReplacements))
+	log.Debugf("%d npm repalcements loaded", n)
 
 	// install loader runtime
 	err = installLoaderRuntime()
@@ -134,7 +130,7 @@ func Serve(efs EmbedFS) {
 	// init build queue
 	buildQueue = NewBuildQueue(int(config.BuildConcurrency))
 
-	// set rex middlewares
+	// setup rex server
 	rex.Use(
 		rex.Logger(log),
 		rex.AccessLogger(accessLogger),
@@ -143,7 +139,7 @@ func Serve(efs EmbedFS) {
 		rex.Optional(rex.Compress(), config.Compress),
 		rex.Optional(customLandingPage(&config.CustomLandingPage), config.CustomLandingPage.Origin != ""),
 		rex.Optional(esmLegacyRouter, config.LegacyServer != ""),
-		esmRouter(debug),
+		esmRouter(),
 	)
 
 	// start server
@@ -152,7 +148,7 @@ func Serve(efs EmbedFS) {
 		TLS: rex.TLSConfig{
 			Port: uint16(config.TlsPort),
 			AutoTLS: rex.AutoTLSConfig{
-				AcceptTOS: config.TlsPort > 0 && !debug,
+				AcceptTOS: config.TlsPort > 0 && !DEBUG,
 				CacheDir:  path.Join(config.WorkDir, "autotls"),
 			},
 		},
@@ -173,9 +169,9 @@ func Serve(efs EmbedFS) {
 }
 
 func cors(allowOrigins []string) rex.Handle {
-	allowList := NewStringSet(allowOrigins...)
+	allowList := NewSet(allowOrigins...)
 	return func(ctx *rex.Context) any {
-		origin := ctx.GetHeader("Origin")
+		origin := ctx.R.Header.Get("Origin")
 		isOptionsMethod := ctx.R.Method == "OPTIONS"
 		h := ctx.W.Header()
 		if allowList.Len() > 0 {
@@ -195,12 +191,12 @@ func cors(allowOrigins []string) rex.Handle {
 		if isOptionsMethod {
 			return rex.NoContent()
 		}
-		return nil // next
+		return ctx.Next()
 	}
 }
 
 func customLandingPage(options *LandingPageOptions) rex.Handle {
-	assets := NewStringSet()
+	assets := NewSet()
 	for _, p := range options.Assets {
 		assets.Add("/" + strings.TrimPrefix(p, "/"))
 	}
@@ -214,31 +210,22 @@ func customLandingPage(options *LandingPageOptions) rex.Handle {
 			if err != nil {
 				return rex.Err(http.StatusBadRequest, "Invalid url")
 			}
-			req := &http.Request{
-				Method:     "GET",
-				URL:        url,
-				Host:       url.Host,
-				Proto:      "HTTP/1.1",
-				ProtoMajor: 1,
-				ProtoMinor: 1,
-				Header: http.Header{
-					"User-Agent": []string{ctx.UserAgent()},
-				},
-			}
-			res, err := http.DefaultClient.Do(req)
+			fetchClient, recycle := NewFetchClient(15, ctx.UserAgent())
+			defer recycle()
+			res, err := fetchClient.Fetch(url, nil)
 			if err != nil {
 				return rex.Err(http.StatusBadGateway, "Failed to fetch custom landing page")
 			}
 			etag := res.Header.Get("Etag")
 			if etag != "" {
-				if ctx.GetHeader("If-None-Match") == etag {
+				if ctx.R.Header.Get("If-None-Match") == etag {
 					return rex.Status(http.StatusNotModified, nil)
 				}
-				ctx.SetHeader("Etag", etag)
+				ctx.Header.Set("Etag", etag)
 			} else {
 				lastModified := res.Header.Get("Last-Modified")
 				if lastModified != "" {
-					v := ctx.GetHeader("If-Modified-Since")
+					v := ctx.R.Header.Get("If-Modified-Since")
 					if v != "" {
 						timeIfModifiedSince, e1 := time.Parse(http.TimeFormat, v)
 						timeLastModified, e2 := time.Parse(http.TimeFormat, lastModified)
@@ -246,17 +233,17 @@ func customLandingPage(options *LandingPageOptions) rex.Handle {
 							return rex.Status(http.StatusNotModified, nil)
 						}
 					}
-					ctx.SetHeader("Last-Modified", lastModified)
+					ctx.Header.Set("Last-Modified", lastModified)
 				}
 			}
 			cacheCache := res.Header.Get("Cache-Control")
 			if cacheCache == "" {
-				ctx.SetHeader("Cache-Control", ccMustRevalidate)
+				ctx.Header.Set("Cache-Control", ccMustRevalidate)
 			}
-			ctx.SetHeader("Content-Type", res.Header.Get("Content-Type"))
+			ctx.Header.Set("Content-Type", res.Header.Get("Content-Type"))
 			return res.Body // auto closed
 		}
-		return nil // next
+		return ctx.Next()
 	}
 }
 

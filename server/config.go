@@ -18,7 +18,7 @@ import (
 
 var (
 	// global config
-	config Config
+	config *Config
 )
 
 // Config represents the configuration of esm.sh server.
@@ -107,13 +107,22 @@ func DefaultConfig() *Config {
 func normalizeConfig(config *Config) {
 	if config.Port == 0 {
 		config.Port = 80
+		if v := os.Getenv("ESM_SERVER_PORT"); v != "" {
+			if p, e := strconv.Atoi(v); e == nil && p >= 80 && p < 65536 {
+				config.Port = uint16(p)
+			}
+		}
 	}
 	if config.WorkDir == "" {
-		homeDir, err := os.UserHomeDir()
-		if err != nil {
-			homeDir = "/home"
+		if v := os.Getenv("ESM_SERVER_WORKDIR"); v != "" && existsDir(v) {
+			config.WorkDir = v
+		} else {
+			homeDir, err := os.UserHomeDir()
+			if err != nil {
+				homeDir = "/home"
+			}
+			config.WorkDir = path.Join(homeDir, ".esmd")
 		}
-		config.WorkDir = path.Join(homeDir, ".esmd")
 	}
 	if v := os.Getenv("CORS_ALLOW_ORIGINS"); v != "" {
 		for _, p := range strings.Split(v, ",") {
@@ -314,5 +323,5 @@ func isPackageExcluded(name string, excludes []string) bool {
 }
 
 func init() {
-	config = *DefaultConfig()
+	config = DefaultConfig()
 }

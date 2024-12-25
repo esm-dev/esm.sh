@@ -6,122 +6,134 @@ import (
 	"time"
 )
 
+var taskPool = sync.Pool{
+	New: func() interface{} {
+		return &BuildTask{}
+	},
+}
+
 // BuildQueue schedules build tasks of esm.sh
 type BuildQueue struct {
-	lock  sync.RWMutex
-	queue *list.List
+	lock  sync.Mutex
 	tasks map[string]*BuildTask
-	idles int32
+	queue *list.List
+	chann uint16
 }
 
 type BuildTask struct {
-	*BuildContext
+	ctx       *BuildContext
 	el        *list.Element
-	clients   []*QueueClient
+	waitChans []chan BuildOutput
 	createdAt time.Time
 	startedAt time.Time
 	pending   bool
 }
 
 type BuildOutput struct {
-	result *BuildMeta
-	err    error
-}
-
-type QueueClient struct {
-	C  chan BuildOutput
-	IP string
+	meta *BuildMeta
+	err  error
 }
 
 func NewBuildQueue(concurrency int) *BuildQueue {
-	q := &BuildQueue{
+	return &BuildQueue{
 		queue: list.New(),
 		tasks: map[string]*BuildTask{},
-		idles: int32(concurrency),
+		chann: uint16(concurrency),
 	}
-	return q
 }
 
 // Add adds a new build task to the queue.
-func (q *BuildQueue) Add(ctx *BuildContext, clientIp string) *QueueClient {
+func (q *BuildQueue) Add(ctx *BuildContext) chan BuildOutput {
 	q.lock.Lock()
 	defer q.lock.Unlock()
 
-	client := &QueueClient{make(chan BuildOutput, 1), clientIp}
+	ch := make(chan BuildOutput, 1)
 
-	// check if the task is already in the queue
-	t, ok := q.tasks[ctx.Path()]
+	task, ok := q.tasks[ctx.Path()]
 	if ok {
-		t.clients = append(t.clients, client)
-		return client
+		task.waitChans = append(task.waitChans, ch)
+		return ch
 	}
 
-	t = &BuildTask{
-		BuildContext: ctx,
-		createdAt:    time.Now(),
-		clients:      []*QueueClient{client},
-		pending:      true,
-	}
+	task = taskPool.Get().(*BuildTask)
+	task.ctx = ctx
+	task.createdAt = time.Now()
+	task.waitChans = []chan BuildOutput{ch}
+	task.pending = true
 	ctx.status = "pending"
 
-	t.el = q.queue.PushBack(t)
-	q.tasks[ctx.Path()] = t
+	task.el = q.queue.PushBack(task)
+	q.tasks[ctx.Path()] = task
 
-	q.lock.Unlock()
-	q.next()
-	q.lock.Lock()
+	go q.schedule()
 
-	return client
+	return ch
 }
 
-func (q *BuildQueue) next() {
-	var nextTask *BuildTask
+func (q *BuildQueue) schedule() {
+	q.lock.Lock()
+	defer q.lock.Unlock()
 
-	q.lock.RLock()
-	if q.idles > 0 {
+	var task *BuildTask
+	if q.chann > 0 {
 		for el := q.queue.Front(); el != nil; el = el.Next() {
 			t, ok := el.Value.(*BuildTask)
 			if ok && t.pending {
-				nextTask = t
+				task = t
 				break
 			}
 		}
 	}
-	q.lock.RUnlock()
 
-	if nextTask != nil {
-		q.lock.Lock()
-		q.idles -= 1
-		nextTask.pending = false
-		nextTask.startedAt = time.Now()
-		q.lock.Unlock()
-		go q.build(nextTask)
+	if task != nil {
+		q.chann -= 1
+		task.pending = false
+		task.startedAt = time.Now()
+		go q.run(task)
 	}
 }
 
-func (q *BuildQueue) build(t *BuildTask) {
-	ret, err := t.Build()
+func (q *BuildQueue) run(task *BuildTask) {
+	meta, err := task.ctx.Build()
 	if err == nil {
-		if t.target == "types" {
-			log.Infof("build '%s'(types) done in %v", t.Path(), time.Since(t.startedAt))
+		task.ctx.status = "done"
+		if task.ctx.target == "types" {
+			log.Infof("build '%s'(types) done in %v", task.ctx.Path(), time.Since(task.startedAt))
 		} else {
-			log.Infof("build '%s' done in %v", t.Path(), time.Since(t.startedAt))
+			log.Infof("build '%s' done in %v", task.ctx.Path(), time.Since(task.startedAt))
 		}
 	} else {
-		log.Errorf("build '%s': %v", t.Path(), err)
-	}
-
-	output := BuildOutput{ret, err}
-	for _, c := range t.clients {
-		c.C <- output
+		task.ctx.status = "error"
+		log.Errorf("build '%s': %v", task.ctx.Path(), err)
 	}
 
 	q.lock.Lock()
-	q.idles += 1
-	q.queue.Remove(t.el)
-	delete(q.tasks, t.Path())
+	q.queue.Remove(task.el)
+	delete(q.tasks, task.ctx.Path())
+	q.chann += 1
 	q.lock.Unlock()
 
-	// call next task
-	q.next()
+	waitChans := task.waitChans
+
+	// recycle the task object
+	task.ctx = nil
+	task.el = nil
+	task.waitChans = nil
+	task.createdAt = time.Time{}
+	task.startedAt = time.Time{}
+	task.pending = false
+	taskPool.Put(task)
+
+	// schedule next task if have any
+	go q.schedule()
+
+	// send the bulid output
+	output := BuildOutput{meta, err}
+	for _, ch := range waitChans {
+		select {
+		case ch <- output:
+		default:
+			// drop
+		}
+	}
 }

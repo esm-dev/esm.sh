@@ -42,10 +42,10 @@ const (
 	RawFile
 )
 
-func esmRouter(debug bool) rex.Handle {
+func esmRouter() rex.Handle {
 	var (
 		startTime  = time.Now()
-		globalETag = fmt.Sprintf(`W/"v%d"`, VERSION)
+		globalETag = fmt.Sprintf(`W/"%s"`, VERSION)
 	)
 
 	return func(ctx *rex.Context) any {
@@ -91,7 +91,7 @@ func esmRouter(debug bool) rex.Handle {
 				hash := hex.EncodeToString(h.Sum(nil))
 
 				// if previous build exists, return it directly
-				savePath := fmt.Sprintf("modules/%s.mjs", hash)
+				savePath := normalizeSavePath(ctx.R.Header.Get("X-Zone-Id"), fmt.Sprintf("modules/transform/%s.mjs", hash))
 				if file, _, err := buildStorage.Get(savePath); err == nil {
 					data, err := io.ReadAll(file)
 					file.Close()
@@ -132,7 +132,7 @@ func esmRouter(debug bool) rex.Handle {
 					go buildStorage.Put(savePath+".map", strings.NewReader(output.Map))
 				}
 				go buildStorage.Put(savePath, strings.NewReader(output.Code))
-				ctx.SetHeader("Cache-Control", ccMustRevalidate)
+				ctx.Header.Set("Cache-Control", ccMustRevalidate)
 				return output
 
 			case "/purge":
@@ -201,8 +201,8 @@ func esmRouter(debug bool) rex.Handle {
 			if err != nil {
 				return err
 			}
-			ctx.SetHeader("Content-Type", "image/x-icon")
-			ctx.SetHeader("Cache-Control", ccImmutable)
+			ctx.Header.Set("Content-Type", "image/x-icon")
+			ctx.Header.Set("Cache-Control", ccImmutable)
 			return favicon
 
 		case "/robots.txt":
@@ -210,10 +210,10 @@ func esmRouter(debug bool) rex.Handle {
 
 		case "/":
 			if strings.HasPrefix(ctx.UserAgent(), "Deno/") {
-				ctx.SetHeader("Content-Type", ctJavaScript)
+				ctx.Header.Set("Content-Type", ctJavaScript)
 				return `throw new Error("[esm.sh] The deno CLI has been deprecated, please use our vscode extension instead: https://marketplace.visualstudio.com/items?itemName=ije.esm-vscode")`
 			}
-			if ctx.GetHeader("If-None-Match") == globalETag {
+			if ctx.R.Header.Get("If-None-Match") == globalETag {
 				return rex.Status(http.StatusNotModified, nil)
 			}
 			indexHTML, err := embedFS.ReadFile("server/embed/index.html")
@@ -232,10 +232,9 @@ func esmRouter(debug bool) rex.Handle {
 				return rex.Err(500, "Failed to render readme")
 			}
 			indexHTML = bytes.ReplaceAll(indexHTML, []byte("{README}"), readmeHtml)
-			indexHTML = bytes.ReplaceAll(indexHTML, []byte("{VERSION}"), []byte(fmt.Sprintf("%d", VERSION)))
-			ctx.SetHeader("Content-Type", ctHtml)
-			ctx.SetHeader("Cache-Control", ccMustRevalidate)
-			ctx.SetHeader("Etag", globalETag)
+			ctx.Header.Set("Content-Type", ctHtml)
+			ctx.Header.Set("Cache-Control", ccMustRevalidate)
+			ctx.Header.Set("Etag", globalETag)
 			return indexHTML
 
 		case "/status.json":
@@ -245,15 +244,11 @@ func esmRouter(debug bool) rex.Handle {
 			for el := buildQueue.queue.Front(); el != nil; el = el.Next() {
 				t, ok := el.Value.(*BuildTask)
 				if ok {
-					clientIps := make([]string, len(t.clients))
-					for idx, c := range t.clients {
-						clientIps[idx] = c.IP
-					}
 					m := map[string]any{
-						"clients":   clientIps,
-						"createdAt": t.createdAt.Format(http.TimeFormat),
-						"path":      t.Path(),
-						"status":    "pending",
+						"waitClients": len(t.waitChans),
+						"createdAt":   t.createdAt.Format(http.TimeFormat),
+						"path":        t.ctx.Path(),
+						"status":      t.ctx.status,
 					}
 					q[i] = m
 					i++
@@ -274,7 +269,7 @@ func esmRouter(debug bool) rex.Handle {
 				disk = "error"
 			}
 
-			ctx.SetHeader("Cache-Control", ccMustRevalidate)
+			ctx.Header.Set("Cache-Control", ccMustRevalidate)
 			return map[string]any{
 				"buildQueue": q[:i],
 				"version":    VERSION,
@@ -338,8 +333,8 @@ func esmRouter(debug bool) rex.Handle {
 
 		// builtin scripts
 		case "/run", "/x", "/uno":
-			ifNoneMatch := ctx.GetHeader("If-None-Match")
-			if ifNoneMatch == globalETag && !debug {
+			ifNoneMatch := ctx.R.Header.Get("If-None-Match")
+			if ifNoneMatch == globalETag && !DEBUG {
 				return rex.Status(http.StatusNotModified, nil)
 			}
 
@@ -350,17 +345,17 @@ func esmRouter(debug bool) rex.Handle {
 				target = getBuildTargetByUA(ctx.UserAgent())
 			}
 
-			js, err := buildEmbedTSModule(pathname[1:]+".ts", target, debug)
+			js, err := buildEmbedTSModule(pathname[1:]+".ts", target)
 			if err != nil {
 				return rex.Status(500, fmt.Sprintf("Transform error: %v", err))
 			}
 
-			ctx.SetHeader("Cache-Control", cc1day)
-			ctx.SetHeader("Etag", globalETag)
+			ctx.Header.Set("Cache-Control", cc1day)
+			ctx.Header.Set("Etag", globalETag)
 			if targetFromUA {
 				appendVaryHeader(ctx.W.Header(), "User-Agent")
 			}
-			ctx.SetHeader("Content-Type", ctJavaScript)
+			ctx.Header.Set("Content-Type", ctJavaScript)
 			return js
 		}
 
@@ -370,18 +365,18 @@ func esmRouter(debug bool) rex.Handle {
 			if len(hash) != 40 || !valid.IsHexString(hash) {
 				return rex.Status(404, "Not Found")
 			}
-			savePath := fmt.Sprintf("modules/%s.%s", hash, ext)
+			savePath := normalizeSavePath(ctx.R.Header.Get("X-Zone-Id"), fmt.Sprintf("modules/transform/%s.%s", hash, ext))
 			f, fi, err := buildStorage.Get(savePath)
 			if err != nil {
 				return rex.Status(500, err.Error())
 			}
 			if strings.HasSuffix(pathname, ".map") {
-				ctx.SetHeader("Content-Type", ctJSON)
+				ctx.Header.Set("Content-Type", ctJSON)
 			} else {
-				ctx.SetHeader("Content-Type", ctJavaScript)
+				ctx.Header.Set("Content-Type", ctJavaScript)
 			}
-			ctx.SetHeader("Last-Modified", fi.ModTime().UTC().Format(http.TimeFormat))
-			ctx.SetHeader("Cache-Control", ccImmutable)
+			ctx.Header.Set("Last-Modified", fi.ModTime().UTC().Format(http.TimeFormat))
+			ctx.Header.Set("Cache-Control", ccImmutable)
 			return f // auto closed
 		}
 
@@ -399,16 +394,16 @@ func esmRouter(debug bool) rex.Handle {
 				code = []byte("export default {}")
 			}
 			if strings.HasPrefix(name, "chunk-") {
-				ctx.SetHeader("Cache-Control", ccImmutable)
+				ctx.Header.Set("Cache-Control", ccImmutable)
 			} else {
-				ifNoneMatch := ctx.GetHeader("If-None-Match")
-				if ifNoneMatch == globalETag && !debug {
+				ifNoneMatch := ctx.R.Header.Get("If-None-Match")
+				if ifNoneMatch == globalETag && !DEBUG {
 					return rex.Status(http.StatusNotModified, nil)
 				}
-				ctx.SetHeader("Cache-Control", cc1day)
-				ctx.SetHeader("Etag", globalETag)
+				ctx.Header.Set("Cache-Control", cc1day)
+				ctx.Header.Set("Etag", globalETag)
 			}
-			ctx.SetHeader("Content-Type", ctJavaScript)
+			ctx.Header.Set("Content-Type", ctJavaScript)
 			return code
 		}
 
@@ -419,24 +414,24 @@ func esmRouter(debug bool) rex.Handle {
 				return rex.Status(404, "not found")
 			}
 			if _, ok := embedFS.(*MockEmbedFS); ok {
-				ctx.SetHeader("Cache-Control", ccMustRevalidate)
+				ctx.Header.Set("Cache-Control", ccMustRevalidate)
 			} else {
 				etag := fmt.Sprintf(`W/"%d%d"`, startTime.Unix(), len(data))
-				if ifNoneMatch := ctx.GetHeader("If-None-Match"); ifNoneMatch == etag {
+				if ifNoneMatch := ctx.R.Header.Get("If-None-Match"); ifNoneMatch == etag {
 					return rex.Status(http.StatusNotModified, nil)
 				}
-				ctx.SetHeader("Etag", etag)
-				ctx.SetHeader("Cache-Control", cc1day)
+				ctx.Header.Set("Etag", etag)
+				ctx.Header.Set("Cache-Control", cc1day)
 			}
 			contentType := common.ContentType(pathname)
 			if contentType != "" {
-				ctx.SetHeader("Content-Type", contentType)
+				ctx.Header.Set("Content-Type", contentType)
 			}
 			return data
 		}
 
 		var npmrc *NpmRC
-		if v := ctx.GetHeader("X-Npmrc"); v != "" {
+		if v := ctx.R.Header.Get("X-Npmrc"); v != "" {
 			rc, err := NewNpmRcFromJSON([]byte(v))
 			if err != nil {
 				return rex.Status(400, "Invalid Npmrc Header")
@@ -446,10 +441,10 @@ func esmRouter(debug bool) rex.Handle {
 			npmrc = DefaultNpmRC()
 		}
 
-		zoneId := ctx.GetHeader("X-Zone-Id")
-		if zoneId != "" {
-			if !valid.IsDomain(zoneId) {
-				zoneId = ""
+		zoneIdHeader := ctx.R.Header.Get("X-Zone-Id")
+		if zoneIdHeader != "" {
+			if !valid.IsDomain(zoneIdHeader) {
+				zoneIdHeader = ""
 			} else {
 				var scopeName string
 				if pkgName := toPackageName(pathname[1:]); strings.HasPrefix(pkgName, "@") {
@@ -458,15 +453,15 @@ func esmRouter(debug bool) rex.Handle {
 				if scopeName != "" {
 					reg, ok := npmrc.ScopedRegistries[scopeName]
 					if !ok || (reg.Registry == jsrRegistry && reg.Token == "" && (reg.User == "" || reg.Password == "")) {
-						zoneId = ""
+						zoneIdHeader = ""
 					}
 				} else if npmrc.Registry == npmRegistry && npmrc.Token == "" && (npmrc.User == "" || npmrc.Password == "") {
-					zoneId = ""
+					zoneIdHeader = ""
 				}
 			}
 		}
-		if zoneId != "" {
-			npmrc.zoneId = zoneId
+		if zoneIdHeader != "" {
+			npmrc.zoneId = zoneIdHeader
 		}
 
 		if pathname == "/uno.css" {
@@ -484,15 +479,19 @@ func esmRouter(debug bool) rex.Handle {
 			}
 			hostname := ctxUrl.Hostname()
 			// disallow localhost or ip address for production
-			if !debug {
+			if !DEBUG {
 				if isLocalhost(hostname) {
-					ctx.SetHeader("Cache-Control", ccImmutable)
-					ctx.SetHeader("Content-Type", ctCSS)
+					ctx.Header.Set("Cache-Control", ccImmutable)
+					ctx.Header.Set("Content-Type", ctCSS)
 					return "body:after{position:fixed;top:0;left:0;z-index:9999;padding:18px 32px;width:100vw;content:'esm.sh/uno doesn't support local development, try serving your app with `esm.sh run`.';font-size:14px;background:rgba(255,232,232,.9);color:#f00;backdrop-filter:blur(8px)}"
 				}
 				if !regexpDomain.MatchString(hostname) || ctxUrl.Host == ctx.R.Host {
 					return rex.Status(400, "Invalid context url")
 				}
+			}
+			v := query.Get("v")
+			if v != "" && (!regexpVersion.MatchString(v) || len(v) > 32) {
+				return rex.Status(400, "Invalid Version Param")
 			}
 			// determine build target by `?target` query or `User-Agent` header
 			target := strings.ToLower(query.Get("target"))
@@ -501,17 +500,18 @@ func esmRouter(debug bool) rex.Handle {
 			}
 			h := sha1.New()
 			h.Write([]byte(ctxUrlRaw))
-			h.Write([]byte(query.Get("v")))
+			h.Write([]byte(v))
 			h.Write([]byte(target))
-			savePath := normalizeSavePath(zoneId, path.Join("modules", hex.EncodeToString(h.Sum(nil))+".css"))
+			savePath := normalizeSavePath(zoneIdHeader, path.Join("modules/x", hex.EncodeToString(h.Sum(nil))+".css"))
 			content, _, err := buildStorage.Get(savePath)
 			if err != nil && err != storage.ErrNotFound {
 				return rex.Status(500, err.Error())
 			}
 			var body io.Reader = content
 			if err == storage.ErrNotFound {
-				fetchClient := NewFetchClient(30*time.Second, ctx.UserAgent())
-				res, err := fetchClient.Fetch(ctxUrl)
+				fetchClient, recycle := NewFetchClient(15, ctx.UserAgent())
+				defer recycle()
+				res, err := fetchClient.Fetch(ctxUrl, nil)
 				if err != nil {
 					return rex.Status(500, "Failed to fetch page html")
 				}
@@ -593,13 +593,13 @@ func esmRouter(debug bool) rex.Handle {
 					}
 				}
 				if configCSS == "" {
-					res, err := fetchClient.Fetch(ctxUrl.ResolveReference(&url.URL{Path: "./uno.css"}))
+					res, err := fetchClient.Fetch(ctxUrl.ResolveReference(&url.URL{Path: "./uno.css"}), nil)
 					if err != nil {
 						return rex.Status(500, "Failed to lookup config css")
 					}
 					if res.StatusCode == 404 {
 						res.Body.Close()
-						res, err = fetchClient.Fetch(ctxUrl.ResolveReference(&url.URL{Path: "/uno.css"}))
+						res, err = fetchClient.Fetch(ctxUrl.ResolveReference(&url.URL{Path: "/uno.css"}), nil)
 						if err != nil {
 							return rex.Status(500, "Failed to lookup config css")
 						}
@@ -648,8 +648,8 @@ func esmRouter(debug bool) rex.Handle {
 				body = bytes.NewReader(css)
 				go buildStorage.Put(savePath, bytes.NewReader(css))
 			}
-			ctx.SetHeader("Cache-Control", ccImmutable)
-			ctx.SetHeader("Content-Type", ctCSS)
+			ctx.Header.Set("Cache-Control", ccImmutable)
+			ctx.Header.Set("Content-Type", ctCSS)
 			return body // auto closed
 		}
 
@@ -664,7 +664,7 @@ func esmRouter(debug bool) rex.Handle {
 			}
 			hostname := u.Hostname()
 			// disallow localhost or ip address for production
-			if !debug {
+			if !DEBUG {
 				if isLocalhost(hostname) || !regexpDomain.MatchString(hostname) || u.Host == ctx.R.Host {
 					return rex.Status(400, "Invalid URL")
 				}
@@ -688,7 +688,7 @@ func esmRouter(debug bool) rex.Handle {
 			h.Write([]byte(im))
 			h.Write([]byte(v))
 			h.Write([]byte(target))
-			savePath := normalizeSavePath(zoneId, path.Join("modules", hex.EncodeToString(h.Sum(nil))+".mjs"))
+			savePath := normalizeSavePath(zoneIdHeader, path.Join("modules/x", hex.EncodeToString(h.Sum(nil))+".mjs"))
 			content, _, err := buildStorage.Get(savePath)
 			if err != nil && err != storage.ErrNotFound {
 				return rex.Status(500, err.Error())
@@ -696,7 +696,8 @@ func esmRouter(debug bool) rex.Handle {
 			var body io.Reader = content
 			if err == storage.ErrNotFound {
 				importMap := common.ImportMap{}
-				fetchClient := NewFetchClient(30*time.Second, ctx.UserAgent())
+				fetchClient, recycle := NewFetchClient(15, ctx.UserAgent())
+				defer recycle()
 				if len(im) > 0 {
 					imPath, err := atobUrl(im)
 					if err != nil {
@@ -706,7 +707,7 @@ func esmRouter(debug bool) rex.Handle {
 					if err != nil {
 						return rex.Status(400, "Invalid `im` Param")
 					}
-					res, err := fetchClient.Fetch(imUrl)
+					res, err := fetchClient.Fetch(imUrl, nil)
 					if err != nil {
 						return rex.Status(500, "Failed to fetch import map")
 					}
@@ -795,11 +796,11 @@ func esmRouter(debug bool) rex.Handle {
 				}
 				body = strings.NewReader(fmt.Sprintf("var style = document.createElement('style');\nstyle.textContent = %s;\ndocument.head.appendChild(style);\nexport default null;", utils.MustEncodeJSON(string(css))))
 			}
-			ctx.SetHeader("Cache-Control", ccImmutable)
+			ctx.Header.Set("Cache-Control", ccImmutable)
 			if extname == ".css" {
-				ctx.SetHeader("Content-Type", ctCSS)
+				ctx.Header.Set("Content-Type", ctCSS)
 			} else {
-				ctx.SetHeader("Content-Type", ctJavaScript)
+				ctx.Header.Set("Content-Type", ctJavaScript)
 			}
 			return body // auto closed
 		}
@@ -823,7 +824,7 @@ func esmRouter(debug bool) rex.Handle {
 			pathname = "/pr/" + pathname[13:]
 		}
 
-		esmPath, extraQuery, isFixedVersion, isBuildDist, err := praseEsmPath(npmrc, pathname)
+		esm, extraQuery, isFixedVersion, isBuildDist, err := praseEsmPath(npmrc, pathname)
 		if err != nil {
 			status := 500
 			message := err.Error()
@@ -835,8 +836,8 @@ func esmRouter(debug bool) rex.Handle {
 			return rex.Status(status, message)
 		}
 
-		pkgAllowed := config.AllowList.IsPackageAllowed(esmPath.PkgName)
-		pkgBanned := config.BanList.IsPackageBanned(esmPath.PkgName)
+		pkgAllowed := config.AllowList.IsPackageAllowed(esm.PkgName)
+		pkgBanned := config.BanList.IsPackageBanned(esm.PkgName)
 		if !pkgAllowed || pkgBanned {
 			return rex.Status(403, "forbidden")
 		}
@@ -844,15 +845,15 @@ func esmRouter(debug bool) rex.Handle {
 		cdnOrigin := getCdnOrigin(ctx)
 
 		registryPrefix := ""
-		if esmPath.GhPrefix {
+		if esm.GhPrefix {
 			registryPrefix = "/gh"
-		} else if esmPath.PrPrefix {
+		} else if esm.PrPrefix {
 			registryPrefix = "/pr"
 		}
 
 		// redirect `/@types/PKG` to it's main dts file
-		if strings.HasPrefix(esmPath.PkgName, "@types/") && esmPath.SubPath == "" {
-			info, err := npmrc.getPackageInfo(esmPath.PkgName, esmPath.PkgVersion)
+		if strings.HasPrefix(esm.PkgName, "@types/") && esm.SubPath == "" {
+			info, err := npmrc.getPackageInfo(esm.PkgName, esm.PkgVersion)
 			if err != nil {
 				return rex.Status(500, err.Error())
 			}
@@ -868,8 +869,8 @@ func esmRouter(debug bool) rex.Handle {
 		}
 
 		// redirect to the main css path for CSS packages
-		if css := cssPackages[esmPath.PkgName]; css != "" && esmPath.SubModuleName == "" {
-			url := fmt.Sprintf("%s/%s/%s", cdnOrigin, esmPath.Specifier(), css)
+		if css := cssPackages[esm.PkgName]; css != "" && esm.SubModuleName == "" {
+			url := fmt.Sprintf("%s/%s/%s", cdnOrigin, esm.Specifier(), css)
 			return redirect(ctx, url, isFixedVersion)
 		}
 
@@ -879,13 +880,13 @@ func esmRouter(debug bool) rex.Handle {
 		// support `https://esm.sh/react?dev&target=es2020/jsx-runtime` pattern for jsx transformer
 		for _, jsxRuntime := range []string{"/jsx-runtime", "/jsx-dev-runtime"} {
 			if strings.HasSuffix(rawQuery, jsxRuntime) {
-				if esmPath.SubPath == "" {
-					esmPath.SubPath = jsxRuntime[1:]
+				if esm.SubPath == "" {
+					esm.SubPath = jsxRuntime[1:]
 				} else {
-					esmPath.SubPath = esmPath.SubPath + jsxRuntime
+					esm.SubPath = esm.SubPath + jsxRuntime
 				}
-				esmPath.SubModuleName = esmPath.SubPath
-				pathname = fmt.Sprintf("/%s/%s", esmPath.PkgName, esmPath.SubPath)
+				esm.SubModuleName = esm.SubPath
+				pathname = fmt.Sprintf("/%s/%s", esm.PkgName, esm.SubPath)
 				ctx.R.URL.RawQuery = strings.TrimSuffix(rawQuery, jsxRuntime)
 				break
 			}
@@ -905,14 +906,14 @@ func esmRouter(debug bool) rex.Handle {
 
 		// use `?path=$PATH` query to override the pathname
 		if v := query.Get("path"); v != "" {
-			esmPath.SubPath = utils.NormalizePathname(v)[1:]
-			esmPath.SubModuleName = stripEntryModuleExt(esmPath.SubPath)
+			esm.SubPath = utils.NormalizePathname(v)[1:]
+			esm.SubModuleName = stripEntryModuleExt(esm.SubPath)
 		}
 
 		// check the path kind
 		pathKind := EsmEntry
-		if esmPath.SubPath != "" {
-			ext := path.Ext(esmPath.SubPath)
+		if esm.SubPath != "" {
+			ext := path.Ext(esm.SubPath)
 			switch ext {
 			case ".mjs":
 				if isBuildDist {
@@ -947,11 +948,11 @@ func esmRouter(debug bool) rex.Handle {
 		// redirect to the url with fixed package version
 		if !isFixedVersion {
 			if isBuildDist {
-				pkgName := esmPath.Name()
+				pkgName := esm.Name()
 				subPath := ""
 				query := ""
 				if asteriskPrefix {
-					if esmPath.GhPrefix || esmPath.PrPrefix {
+					if esm.GhPrefix || esm.PrPrefix {
 						pkgName = pkgName[0:3] + "*" + pkgName[3:]
 					} else {
 						pkgName = "*" + pkgName
@@ -960,34 +961,34 @@ func esmRouter(debug bool) rex.Handle {
 				if extraQuery != "" {
 					pkgName += "&" + extraQuery
 				}
-				if esmPath.SubPath != "" {
-					subPath = "/" + esmPath.SubPath
+				if esm.SubPath != "" {
+					subPath = "/" + esm.SubPath
 				}
 				if rawQuery != "" {
 					query = "?" + rawQuery
 				}
-				ctx.SetHeader("Cache-Control", fmt.Sprintf("public, max-age=%d", config.NpmQueryCacheTTL))
+				ctx.Header.Set("Cache-Control", fmt.Sprintf("public, max-age=%d", config.NpmQueryCacheTTL))
 				return redirect(ctx, fmt.Sprintf("%s/%s%s%s", cdnOrigin, pkgName, subPath, query), false)
 			}
 			if pathKind != EsmEntry {
-				pkgName := esmPath.PkgName
-				pkgVersion := esmPath.PkgVersion
+				pkgName := esm.PkgName
+				pkgVersion := esm.PkgVersion
 				subPath := ""
 				qs := ""
 				if strings.HasPrefix(pkgName, "@jsr/") {
 					pkgName = "jsr/@" + strings.ReplaceAll(pkgName[5:], "__", "/")
 				}
 				if asteriskPrefix {
-					if esmPath.GhPrefix || esmPath.PrPrefix {
+					if esm.GhPrefix || esm.PrPrefix {
 						pkgName = pkgName[0:3] + "*" + pkgName[3:]
 					} else {
 						pkgName = "*" + pkgName
 					}
 				}
-				if esmPath.SubPath != "" {
-					subPath = "/" + esmPath.SubPath
+				if esm.SubPath != "" {
+					subPath = "/" + esm.SubPath
 					// workaround for es5-ext "../#/.." path
-					if esmPath.PkgName == "es5-ext" {
+					if esm.PkgName == "es5-ext" {
 						subPath = strings.ReplaceAll(subPath, "/#/", "/%23/")
 					}
 				}
@@ -997,32 +998,32 @@ func esmRouter(debug bool) rex.Handle {
 				if rawQuery != "" {
 					qs = "?" + rawQuery
 				}
-				ctx.SetHeader("Cache-Control", fmt.Sprintf("public, max-age=%d", config.NpmQueryCacheTTL))
+				ctx.Header.Set("Cache-Control", fmt.Sprintf("public, max-age=%d", config.NpmQueryCacheTTL))
 				return redirect(ctx, fmt.Sprintf("%s%s/%s@%s%s%s", cdnOrigin, registryPrefix, pkgName, pkgVersion, subPath, qs), false)
 			}
 		} else {
 			// `*.wasm` as an es6 module when `?module` query is set (requires `top-level-await` support)
-			if pathKind == RawFile && strings.HasSuffix(esmPath.SubPath, ".wasm") && query.Has("module") {
+			if pathKind == RawFile && strings.HasSuffix(esm.SubPath, ".wasm") && query.Has("module") {
 				buf := &bytes.Buffer{}
 				wasmUrl := cdnOrigin + pathname
 				fmt.Fprintf(buf, "/* esm.sh - wasm module */\n")
 				fmt.Fprintf(buf, "const data = await fetch(%s).then(r => r.arrayBuffer());\nexport default new WebAssembly.Module(data);", strings.TrimSpace(string(utils.MustEncodeJSON(wasmUrl))))
-				ctx.SetHeader("Content-Type", ctJavaScript)
-				ctx.SetHeader("Cache-Control", ccImmutable)
+				ctx.Header.Set("Content-Type", ctJavaScript)
+				ctx.Header.Set("Cache-Control", ccImmutable)
 				return buf
 			}
 
 			// fix url that is related to `import.meta.url`
 			if pathKind == RawFile && isBuildDist && !query.Has("raw") {
-				extname := path.Ext(esmPath.SubPath)
-				dir := path.Join(npmrc.StoreDir(), esmPath.Name())
+				extname := path.Ext(esm.SubPath)
+				dir := path.Join(npmrc.StoreDir(), esm.Name())
 				if !existsDir(dir) {
-					_, err := npmrc.installPackage(esmPath.Package())
+					_, err := npmrc.installPackage(esm.Package())
 					if err != nil {
 						return rex.Status(500, err.Error())
 					}
 				}
-				pkgRoot := path.Join(dir, "node_modules", esmPath.PkgName)
+				pkgRoot := path.Join(dir, "node_modules", esm.PkgName)
 				files, err := findFiles(pkgRoot, "", func(fp string) bool {
 					return strings.HasSuffix(fp, extname)
 				})
@@ -1035,14 +1036,14 @@ func esmRouter(debug bool) rex.Handle {
 				} else if l > 1 {
 					sort.Sort(sort.Reverse(SortablePaths(files)))
 					for _, f := range files {
-						if strings.HasSuffix(esmPath.SubPath, f) {
+						if strings.HasSuffix(esm.SubPath, f) {
 							file = f
 							break
 						}
 					}
 					if file == "" {
 						for _, f := range files {
-							if path.Base(esmPath.SubPath) == path.Base(f) {
+							if path.Base(esm.SubPath) == path.Base(f) {
 								file = f
 								break
 							}
@@ -1052,7 +1053,7 @@ func esmRouter(debug bool) rex.Handle {
 				if file == "" {
 					return rex.Status(404, "File not found")
 				}
-				url := fmt.Sprintf("%s/%s@%s/%s", cdnOrigin, esmPath.PkgName, esmPath.PkgVersion, file)
+				url := fmt.Sprintf("%s/%s@%s/%s", cdnOrigin, esm.PkgName, esm.PkgVersion, file)
 				return redirect(ctx, url, true)
 			}
 
@@ -1064,14 +1065,14 @@ func esmRouter(debug bool) rex.Handle {
 				var cachePath string
 				var cacheHit bool
 				if config.CacheRawFile {
-					cachePath = path.Join("raw", esmPath.Name(), esmPath.SubPath)
+					cachePath = path.Join("raw", esm.Name(), esm.SubPath)
 					content, stat, err = buildStorage.Get(cachePath)
 					if err != nil && err != storage.ErrNotFound {
 						return rex.Status(500, "storage error")
 					}
 					if err == nil {
 						etag = fmt.Sprintf(`W/"%x-%x"`, stat.ModTime().Unix(), stat.Size())
-						if ifNoneMatch := ctx.GetHeader("If-None-Match"); ifNoneMatch == etag {
+						if ifNoneMatch := ctx.R.Header.Get("If-None-Match"); ifNoneMatch == etag {
 							defer content.Close()
 							return rex.Status(http.StatusNotModified, nil)
 						}
@@ -1079,11 +1080,11 @@ func esmRouter(debug bool) rex.Handle {
 					}
 				}
 				if !cacheHit {
-					filename := path.Join(npmrc.StoreDir(), esmPath.Name(), "node_modules", esmPath.PkgName, esmPath.SubPath)
+					filename := path.Join(npmrc.StoreDir(), esm.Name(), "node_modules", esm.PkgName, esm.SubPath)
 					stat, err = os.Lstat(filename)
 					if err != nil && os.IsNotExist(err) {
 						// if the file not found, try to install the package and retry
-						_, err = npmrc.installPackage(esmPath.Package())
+						_, err = npmrc.installPackage(esm.Package())
 						if err != nil {
 							return rex.Status(500, err.Error())
 						}
@@ -1096,11 +1097,11 @@ func esmRouter(debug bool) rex.Handle {
 						return rex.Status(500, err.Error())
 					}
 					// limit the file size up to 50MB
-					if stat.Size() > assetMaxSize {
+					if stat.Size() > maxAssetFileSize {
 						return rex.Status(403, "File Too Large")
 					}
 					etag = fmt.Sprintf(`W/"%x-%x"`, stat.ModTime().Unix(), stat.Size())
-					if ifNoneMatch := ctx.GetHeader("If-None-Match"); ifNoneMatch == etag {
+					if ifNoneMatch := ctx.R.Header.Get("If-None-Match"); ifNoneMatch == etag {
 						return rex.Status(http.StatusNotModified, nil)
 					}
 					content, err = os.Open(filename)
@@ -1118,28 +1119,28 @@ func esmRouter(debug bool) rex.Handle {
 						}()
 					}
 				}
-				if endsWith(esmPath.SubPath, ".js", ".mjs", ".jsx") {
-					ctx.SetHeader("Content-Type", ctJavaScript)
-				} else if endsWith(esmPath.SubPath, ".ts", ".mts", ".tsx") {
-					ctx.SetHeader("Content-Type", ctTypeScript)
+				if endsWith(esm.SubPath, ".js", ".mjs", ".jsx") {
+					ctx.Header.Set("Content-Type", ctJavaScript)
+				} else if endsWith(esm.SubPath, ".ts", ".mts", ".tsx") {
+					ctx.Header.Set("Content-Type", ctTypeScript)
 				} else {
-					contentType := common.ContentType(esmPath.SubPath)
+					contentType := common.ContentType(esm.SubPath)
 					if contentType != "" {
-						ctx.SetHeader("Content-Type", contentType)
+						ctx.Header.Set("Content-Type", contentType)
 					}
 				}
 				if cacheHit {
-					ctx.SetHeader("X-Raw-File-Cache-Status", "HIT")
+					ctx.Header.Set("X-Raw-File-Cache-Status", "HIT")
 				}
-				ctx.SetHeader("Etag", etag)
-				ctx.SetHeader("Last-Modified", stat.ModTime().UTC().Format(http.TimeFormat))
-				ctx.SetHeader("Cache-Control", ccImmutable)
-				if strings.HasSuffix(esmPath.SubPath, ".json") && query.Has("module") {
+				ctx.Header.Set("Etag", etag)
+				ctx.Header.Set("Last-Modified", stat.ModTime().UTC().Format(http.TimeFormat))
+				ctx.Header.Set("Cache-Control", ccImmutable)
+				if strings.HasSuffix(esm.SubPath, ".json") && query.Has("module") {
 					jsonData, err := io.ReadAll(content)
 					if err != nil {
 						return rex.Status(500, err.Error())
 					}
-					ctx.SetHeader("Content-Type", ctJavaScript)
+					ctx.Header.Set("Content-Type", ctJavaScript)
 					return concatBytes([]byte("export default "), jsonData)
 				}
 				return content // auto closed
@@ -1151,9 +1152,9 @@ func esmRouter(debug bool) rex.Handle {
 				if pathKind == EsmDts {
 					savePath = path.Join("types", pathname)
 				} else {
-					savePath = path.Join("esm", pathname)
+					savePath = path.Join("modules", pathname)
 				}
-				savePath = normalizeSavePath(zoneId, savePath)
+				savePath = normalizeSavePath(npmrc.zoneId, savePath)
 				f, stat, err := buildStorage.Get(savePath)
 				if err != nil {
 					if err != storage.ErrNotFound {
@@ -1163,18 +1164,18 @@ func esmRouter(debug bool) rex.Handle {
 					}
 				}
 				if err == nil {
-					ctx.SetHeader("Last-Modified", stat.ModTime().UTC().Format(http.TimeFormat))
-					ctx.SetHeader("Cache-Control", ccImmutable)
+					ctx.Header.Set("Last-Modified", stat.ModTime().UTC().Format(http.TimeFormat))
+					ctx.Header.Set("Cache-Control", ccImmutable)
 					if pathKind == EsmDts {
-						ctx.SetHeader("Content-Type", ctTypeScript)
+						ctx.Header.Set("Content-Type", ctTypeScript)
 					} else if pathKind == EsmSourceMap {
-						ctx.SetHeader("Content-Type", ctJSON)
+						ctx.Header.Set("Content-Type", ctJSON)
 					} else if strings.HasSuffix(pathname, ".css") {
-						ctx.SetHeader("Content-Type", ctCSS)
+						ctx.Header.Set("Content-Type", ctCSS)
 					} else {
-						ctx.SetHeader("Content-Type", ctJavaScript)
+						ctx.Header.Set("Content-Type", ctJavaScript)
 						// check `?exports` query
-						exports := NewStringSet()
+						exports := NewSet()
 						if query.Has("exports") {
 							for _, p := range strings.Split(query.Get("exports"), ",") {
 								p = strings.TrimSpace(p)
@@ -1250,36 +1251,29 @@ func esmRouter(debug bool) rex.Handle {
 
 		// redirect to the url with fixed package version for `deno` and `denonext` target
 		if !isFixedVersion && (target == "denonext" || target == "deno") {
-			pkgName := esmPath.PkgName
-			pkgVersion := esmPath.PkgVersion
+			pkgName := esm.PkgName
+			pkgVersion := esm.PkgVersion
 			subPath := ""
 			qs := ""
 			if strings.HasPrefix(pkgName, "@jsr/") {
 				pkgName = "jsr/@" + strings.ReplaceAll(pkgName[5:], "__", "/")
 			}
 			if asteriskPrefix {
-				if esmPath.GhPrefix || esmPath.PrPrefix {
+				if esm.GhPrefix || esm.PrPrefix {
 					pkgName = pkgName[0:3] + "*" + pkgName[3:]
 				} else {
 					pkgName = "*" + pkgName
 				}
 			}
-			if esmPath.SubPath != "" {
-				subPath = "/" + esmPath.SubPath
+			if esm.SubPath != "" {
+				subPath = "/" + esm.SubPath
 				// workaround for es5-ext "../#/.." path
-				if esmPath.PkgName == "es5-ext" {
+				if esm.PkgName == "es5-ext" {
 					subPath = strings.ReplaceAll(subPath, "/#/", "/%23/")
 				}
 			}
 			if extraQuery != "" {
 				pkgVersion += "&" + extraQuery
-			}
-			if rawQuery == "target="+target {
-				rawQuery = ""
-			} else if p := "&target=" + target; strings.Contains(rawQuery, p) {
-				rawQuery = strings.ReplaceAll(rawQuery, p, "")
-			} else if p := "target=" + target + "&"; strings.Contains(rawQuery, p) {
-				rawQuery = strings.ReplaceAll(rawQuery, p, "")
 			}
 			if rawQuery != "" {
 				qs = "?" + rawQuery
@@ -1299,7 +1293,7 @@ func esmRouter(debug bool) rex.Handle {
 					name, to := utils.SplitByFirstByte(p, ':')
 					name = strings.TrimSpace(name)
 					to = strings.TrimSpace(to)
-					if name != "" && to != "" && name != esmPath.PkgName {
+					if name != "" && to != "" && name != esm.PkgName {
 						alias[name] = to
 					}
 				}
@@ -1316,11 +1310,11 @@ func esmRouter(debug bool) rex.Handle {
 					if err != nil {
 						return rex.Status(400, fmt.Sprintf("Invalid deps query: %v not found", v))
 					}
-					if esmPath.PkgName == "react-dom" && m.PkgName == "react" {
+					if esm.PkgName == "react-dom" && m.PkgName == "react" {
 						// make sure react-dom and react are in the same version
 						continue
 					}
-					if m.PkgName != esmPath.PkgName {
+					if m.PkgName != esm.PkgName {
 						deps[m.PkgName] = m.PkgVersion
 					}
 				}
@@ -1329,7 +1323,7 @@ func esmRouter(debug bool) rex.Handle {
 
 		// check `?conditions` query
 		var conditions []string
-		conditionsSet := NewStringSet()
+		conditionsSet := NewSet()
 		if query.Has("conditions") {
 			for _, p := range strings.Split(query.Get("conditions"), ",") {
 				p = strings.TrimSpace(p)
@@ -1341,7 +1335,7 @@ func esmRouter(debug bool) rex.Handle {
 		}
 
 		// check `?external` query
-		external := NewStringSet()
+		external := NewSet()
 		externalAll := asteriskPrefix
 		if !asteriskPrefix && query.Has("external") {
 			for _, p := range strings.Split(query.Get("external"), ",") {
@@ -1367,14 +1361,14 @@ func esmRouter(debug bool) rex.Handle {
 		// match path `PKG@VERSION/X-${args}/esnext/SUBPATH`
 		xArgs := false
 		if pathKind == EsmBuild || pathKind == EsmDts {
-			a := strings.Split(esmPath.SubModuleName, "/")
+			a := strings.Split(esm.SubModuleName, "/")
 			if len(a) > 1 && strings.HasPrefix(a[0], "X-") {
 				args, err := decodeBuildArgs(strings.TrimPrefix(a[0], "X-"))
 				if err != nil {
 					return rex.Status(500, "Invalid build args: "+a[0])
 				}
-				esmPath.SubPath = strings.Join(strings.Split(esmPath.SubPath, "/")[1:], "/")
-				esmPath.SubModuleName = stripEntryModuleExt(esmPath.SubPath)
+				esm.SubPath = strings.Join(strings.Split(esm.SubPath, "/")[1:], "/")
+				esm.SubModuleName = stripEntryModuleExt(esm.SubPath)
 				buildArgs = args
 				xArgs = true
 			}
@@ -1382,7 +1376,7 @@ func esmRouter(debug bool) rex.Handle {
 
 		// resolve `alias`, `deps`, `external` of the build args
 		if !xArgs {
-			err := resolveBuildArgs(npmrc, path.Join(npmrc.StoreDir(), esmPath.Name()), &buildArgs, esmPath)
+			err := resolveBuildArgs(npmrc, path.Join(npmrc.StoreDir(), esm.Name()), &buildArgs, esm)
 			if err != nil {
 				return rex.Status(500, err.Error())
 			}
@@ -1395,11 +1389,11 @@ func esmRouter(debug bool) rex.Handle {
 				if a := encodeBuildArgs(buildArgs, true); a != "" {
 					args = "X-" + a
 				}
-				savePath := normalizeSavePath(zoneId, path.Join(fmt.Sprintf(
+				savePath := normalizeSavePath(npmrc.zoneId, path.Join(fmt.Sprintf(
 					"types/%s/%s",
-					esmPath.Name(),
+					esm.Name(),
 					args,
-				), esmPath.SubPath))
+				), esm.SubPath))
 				content, stat, err = buildStorage.Get(savePath)
 				return
 			}
@@ -1408,19 +1402,26 @@ func esmRouter(debug bool) rex.Handle {
 				if err != storage.ErrNotFound {
 					return rex.Status(500, err.Error())
 				}
-				buildCtx := NewBuildContext(zoneId, npmrc, esmPath, buildArgs, externalAll, "types", false, BundleDefault, false)
-				c := buildQueue.Add(buildCtx, ctx.RemoteIP())
+				buildCtx := &BuildContext{
+					esm:         esm,
+					npmrc:       npmrc,
+					args:        buildArgs,
+					externalAll: externalAll,
+					target:      "types",
+					zoneId:      zoneIdHeader,
+				}
+				ch := buildQueue.Add(buildCtx)
 				select {
-				case output := <-c.C:
+				case output := <-ch:
 					if output.err != nil {
 						if output.err.Error() == "types not found" {
 							return rex.Status(404, "Types Not Found")
 						}
-						return rex.Status(500, "types: "+output.err.Error())
+						return rex.Status(500, "Failed to build types: "+output.err.Error())
 					}
 				case <-time.After(time.Duration(config.BuildWaitTime) * time.Second):
-					ctx.SetHeader("Cache-Control", ccMustRevalidate)
-					return rex.Status(http.StatusRequestTimeout, "timeout, the types is waiting to be built, please try again later!")
+					ctx.Header.Set("Cache-Control", ccMustRevalidate)
+					return rex.Status(http.StatusRequestTimeout, "timeout, the types is waiting to be built, please try refreshing the page.")
 				}
 				content, _, err = readDts()
 			}
@@ -1435,15 +1436,15 @@ func esmRouter(debug bool) rex.Handle {
 			if err != nil {
 				return rex.Status(500, err.Error())
 			}
-			ctx.SetHeader("Content-Type", ctTypeScript)
-			ctx.SetHeader("Cache-Control", ccImmutable)
+			ctx.Header.Set("Content-Type", ctTypeScript)
+			ctx.Header.Set("Cache-Control", ccImmutable)
 			return bytes.ReplaceAll(buffer, []byte("{ESM_CDN_ORIGIN}"), []byte(cdnOrigin))
 		}
 
 		if !xArgs {
 			externalRequire := query.Has("external-require")
 			// workaround: force "unocss/preset-icons" to external `require` calls
-			if !externalRequire && esmPath.PkgName == "@unocss/preset-icons" {
+			if !externalRequire && esm.PkgName == "@unocss/preset-icons" {
 				externalRequire = true
 			}
 			buildArgs.externalRequire = externalRequire
@@ -1464,13 +1465,13 @@ func esmRouter(debug bool) rex.Handle {
 		noDts := query.Has("no-dts") || query.Has("no-check")
 
 		// force react/jsx-dev-runtime and react-refresh into `dev` mode
-		if !isDev && ((esmPath.PkgName == "react" && esmPath.SubModuleName == "jsx-dev-runtime") || esmPath.PkgName == "react-refresh") {
+		if !isDev && ((esm.PkgName == "react" && esm.SubModuleName == "jsx-dev-runtime") || esm.PkgName == "react-refresh") {
 			isDev = true
 		}
 
 		// get build args from the pathname
 		if pathKind == EsmBuild {
-			a := strings.Split(esmPath.SubModuleName, "/")
+			a := strings.Split(esm.SubModuleName, "/")
 			if len(a) > 0 {
 				maybeTarget := a[0]
 				if _, ok := targets[maybeTarget]; ok {
@@ -1486,13 +1487,13 @@ func esmRouter(debug bool) rex.Handle {
 						submodule = strings.TrimSuffix(submodule, ".development")
 						isDev = true
 					}
-					basename := strings.TrimSuffix(path.Base(esmPath.PkgName), ".js")
-					if strings.HasSuffix(submodule, ".css") && !strings.HasSuffix(esmPath.SubPath, ".mjs") {
+					basename := strings.TrimSuffix(path.Base(esm.PkgName), ".js")
+					if strings.HasSuffix(submodule, ".css") && !strings.HasSuffix(esm.SubPath, ".mjs") {
 						if submodule == basename+".css" {
-							esmPath.SubModuleName = ""
+							esm.SubModuleName = ""
 							target = maybeTarget
 						} else {
-							url := fmt.Sprintf("%s/%s", cdnOrigin, esmPath.Specifier())
+							url := fmt.Sprintf("%s/%s", cdnOrigin, esm.Specifier())
 							return redirect(ctx, url, isFixedVersion)
 						}
 					} else {
@@ -1502,28 +1503,38 @@ func esmRouter(debug bool) rex.Handle {
 							// the sub-module name is same as the package name
 							submodule = basename
 						}
-						esmPath.SubModuleName = submodule
+						esm.SubModuleName = submodule
 						target = maybeTarget
 					}
 				}
 			}
 		}
 
-		buildCtx := NewBuildContext(zoneId, npmrc, esmPath, buildArgs, externalAll, target, !targetFromUA, bundleMode, isDev)
-		ret, err := buildCtx.Query()
+		buildCtx := &BuildContext{
+			esm:         esm,
+			npmrc:       npmrc,
+			args:        buildArgs,
+			bundleMode:  bundleMode,
+			externalAll: externalAll,
+			target:      target,
+			pinedTarget: !targetFromUA,
+			dev:         isDev,
+			zoneId:      zoneIdHeader,
+		}
+		ret, ok, err := buildCtx.Exists()
 		if err != nil {
 			return rex.Status(500, err.Error())
 		}
-		if ret == nil {
-			c := buildQueue.Add(buildCtx, ctx.RemoteIP())
+		if !ok {
+			ch := buildQueue.Add(buildCtx)
 			select {
-			case output := <-c.C:
+			case output := <-ch:
 				if output.err != nil {
 					msg := output.err.Error()
 					if strings.Contains(msg, "no such file or directory") ||
 						strings.Contains(msg, "is not exported from package") ||
 						strings.Contains(msg, "could not resolve build entry") {
-						ctx.SetHeader("Cache-Control", ccImmutable)
+						ctx.Header.Set("Cache-Control", ccImmutable)
 						return rex.Status(404, "module not found")
 					}
 					if strings.HasSuffix(msg, " not found") {
@@ -1531,19 +1542,19 @@ func esmRouter(debug bool) rex.Handle {
 					}
 					return rex.Status(500, msg)
 				}
-				ret = output.result
+				ret = output.meta
 			case <-time.After(time.Duration(config.BuildWaitTime) * time.Second):
-				ctx.SetHeader("Cache-Control", ccMustRevalidate)
-				return rex.Status(http.StatusRequestTimeout, "timeout, the module is waiting to be built, please try again later!")
+				ctx.Header.Set("Cache-Control", ccMustRevalidate)
+				return rex.Status(http.StatusRequestTimeout, "timeout, the module is waiting to be built, please try refreshing the page.")
 			}
 		}
 
 		// redirect to `*.d.ts` file
 		if ret.TypesOnly {
 			dtsUrl := cdnOrigin + ret.Dts
-			ctx.SetHeader("X-TypeScript-Types", dtsUrl)
-			ctx.SetHeader("Content-Type", ctJavaScript)
-			ctx.SetHeader("Cache-Control", ccImmutable)
+			ctx.Header.Set("X-TypeScript-Types", dtsUrl)
+			ctx.Header.Set("Content-Type", ctJavaScript)
+			ctx.Header.Set("Cache-Control", ccImmutable)
 			if ctx.R.Method == http.MethodHead {
 				return []byte{}
 			}
@@ -1551,7 +1562,7 @@ func esmRouter(debug bool) rex.Handle {
 		}
 
 		// redirect to package css from `?css`
-		if isPkgCss && esmPath.SubModuleName == "" {
+		if isPkgCss && esm.SubModuleName == "" {
 			if !ret.HasCSS {
 				return rex.Status(404, "Package CSS not found")
 			}
@@ -1560,7 +1571,7 @@ func esmRouter(debug bool) rex.Handle {
 		}
 
 		// check `?exports` query
-		exports := NewStringSet()
+		exports := NewSet()
 		if query.Has("exports") {
 			for _, p := range strings.Split(query.Get("exports"), ",") {
 				p = strings.TrimSpace(p)
@@ -1573,7 +1584,7 @@ func esmRouter(debug bool) rex.Handle {
 		// if the path is `ESMBuild`, return the built js/css content
 		if pathKind == EsmBuild {
 			savePath := buildCtx.getSavepath()
-			if strings.HasSuffix(esmPath.SubPath, ".css") {
+			if strings.HasSuffix(esm.SubPath, ".css") {
 				path, _ := utils.SplitByLastByte(savePath, '.')
 				savePath = path + ".css"
 			}
@@ -1584,14 +1595,14 @@ func esmRouter(debug bool) rex.Handle {
 				}
 				return rex.Status(500, err.Error())
 			}
-			ctx.SetHeader("Last-Modified", fi.ModTime().UTC().Format(http.TimeFormat))
-			ctx.SetHeader("Cache-Control", ccImmutable)
+			ctx.Header.Set("Last-Modified", fi.ModTime().UTC().Format(http.TimeFormat))
+			ctx.Header.Set("Cache-Control", ccImmutable)
 			if endsWith(savePath, ".css") {
-				ctx.SetHeader("Content-Type", ctCSS)
+				ctx.Header.Set("Content-Type", ctCSS)
 			} else if endsWith(savePath, ".map") {
-				ctx.SetHeader("Content-Type", ctJSON)
+				ctx.Header.Set("Content-Type", ctJSON)
 			} else {
-				ctx.SetHeader("Content-Type", ctJavaScript)
+				ctx.Header.Set("Content-Type", ctJavaScript)
 				if isWorker {
 					defer f.Close()
 					moduleUrl := cdnOrigin + buildCtx.Path()
@@ -1632,8 +1643,9 @@ func esmRouter(debug bool) rex.Handle {
 			return f // auto closed
 		}
 
-		buf := bytes.NewBuffer(nil)
-		fmt.Fprintf(buf, "/* esm.sh - %s */\n", esmPath.Specifier())
+		buf, recycle := NewBuffer()
+		defer recycle()
+		fmt.Fprintf(buf, "/* esm.sh - %s */\n", esm.Specifier())
 
 		if isWorker {
 			moduleUrl := cdnOrigin + buildCtx.Path()
@@ -1646,8 +1658,8 @@ func esmRouter(debug bool) rex.Handle {
 				moduleUrl,
 			)
 		} else {
-			if len(ret.Deps) > 0 {
-				for _, dep := range ret.Deps {
+			if len(ret.Imports) > 0 {
+				for _, dep := range ret.Imports {
 					fmt.Fprintf(buf, "import \"%s\";\n", dep)
 				}
 			}
@@ -1655,9 +1667,9 @@ func esmRouter(debug bool) rex.Handle {
 			if !ret.CJS && exports.Len() > 0 {
 				esmPath += "?exports=" + strings.Join(exports.SortedValues(), ",")
 			}
-			ctx.SetHeader("X-ESM-Path", esmPath)
+			ctx.Header.Set("X-ESM-Path", esmPath)
 			fmt.Fprintf(buf, "export * from \"%s\";\n", esmPath)
-			if ret.HasDefaultExport && (exports.Len() == 0 || exports.Has("default")) {
+			if ret.ExportDefault && (exports.Len() == 0 || exports.Has("default")) {
 				fmt.Fprintf(buf, "export { default } from \"%s\";\n", esmPath)
 			}
 			if ret.CJS && exports.Len() > 0 {
@@ -1665,10 +1677,10 @@ func esmRouter(debug bool) rex.Handle {
 				fmt.Fprintf(buf, "export const { %s } = _;\n", strings.Join(exports.SortedValues(), ", "))
 			}
 			if !noDts && ret.Dts != "" {
-				ctx.SetHeader("X-TypeScript-Types", cdnOrigin+ret.Dts)
-				ctx.SetHeader("Access-Control-Expose-Headers", "X-ESM-Path, X-TypeScript-Types")
+				ctx.Header.Set("X-TypeScript-Types", cdnOrigin+ret.Dts)
+				ctx.Header.Set("Access-Control-Expose-Headers", "X-ESM-Path, X-TypeScript-Types")
 			} else {
-				ctx.SetHeader("Access-Control-Expose-Headers", "X-ESM-Path")
+				ctx.Header.Set("Access-Control-Expose-Headers", "X-ESM-Path")
 			}
 		}
 
@@ -1676,11 +1688,11 @@ func esmRouter(debug bool) rex.Handle {
 			appendVaryHeader(ctx.W.Header(), "User-Agent")
 		}
 		if isFixedVersion {
-			ctx.SetHeader("Cache-Control", ccImmutable)
+			ctx.Header.Set("Cache-Control", ccImmutable)
 		} else {
-			ctx.SetHeader("Cache-Control", fmt.Sprintf("public, max-age=%d", config.NpmQueryCacheTTL))
+			ctx.Header.Set("Cache-Control", fmt.Sprintf("public, max-age=%d", config.NpmQueryCacheTTL))
 		}
-		ctx.SetHeader("Content-Type", ctJavaScript)
+		ctx.Header.Set("Content-Type", ctJavaScript)
 		if ctx.R.Method == http.MethodHead {
 			return rex.NoContent()
 		}
@@ -1689,10 +1701,10 @@ func esmRouter(debug bool) rex.Handle {
 }
 
 func getCdnOrigin(ctx *rex.Context) string {
-	cdnOrigin := ctx.GetHeader("X-Real-Origin")
+	cdnOrigin := ctx.R.Header.Get("X-Real-Origin")
 	if cdnOrigin == "" {
 		proto := "http"
-		if cfVisitor := ctx.GetHeader("CF-Visitor"); cfVisitor != "" {
+		if cfVisitor := ctx.R.Header.Get("CF-Visitor"); cfVisitor != "" {
 			if strings.Contains(cfVisitor, "\"scheme\":\"https\"") {
 				proto = "https"
 			}
@@ -1708,22 +1720,23 @@ func redirect(ctx *rex.Context, url string, isMovedPermanently bool) any {
 	code := http.StatusFound
 	if isMovedPermanently {
 		code = http.StatusMovedPermanently
-		ctx.SetHeader("Cache-Control", ccImmutable)
+		ctx.Header.Set("Cache-Control", ccImmutable)
 	} else {
-		ctx.SetHeader("Cache-Control", fmt.Sprintf("public, max-age=%d", config.NpmQueryCacheTTL))
+		ctx.Header.Set("Cache-Control", fmt.Sprintf("public, max-age=%d", config.NpmQueryCacheTTL))
 	}
-	ctx.SetHeader("Location", url)
+	ctx.Header.Set("Location", url)
 	return rex.Status(code, nil)
 }
 
 func errorJS(ctx *rex.Context, message string) any {
-	buf := bytes.NewBuffer(nil)
+	buf, recycle := NewBuffer()
+	defer recycle()
 	buf.WriteString("/* esm.sh - error */\n")
 	buf.WriteString("throw new Error(")
 	buf.Write(utils.MustEncodeJSON(message))
 	buf.WriteString(");\n")
 	buf.WriteString("export default null;\n")
-	ctx.SetHeader("Content-Type", ctJavaScript)
-	ctx.SetHeader("Cache-Control", ccImmutable)
-	return buf
+	ctx.Header.Set("Content-Type", ctJavaScript)
+	ctx.Header.Set("Cache-Control", ccImmutable)
+	return buf.Bytes()
 }

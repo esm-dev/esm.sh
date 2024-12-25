@@ -124,7 +124,7 @@ async function unocss(config, content, id) {
   const generatorId = config?.filename ?? ".";
   let uno = unoGenerators.get(generatorId);
   if (!uno || uno.configCSS !== config?.css) {
-    uno = import("npm:@esm.sh/unocss@0.4.1").then(({ init }) => init({ configCSS: config?.css }));
+    uno = import("npm:@esm.sh/unocss@0.4.3").then(({ init }) => init({ configCSS: config?.css }));
     uno.configCSS = config?.css;
     unoGenerators.set(generatorId, uno);
   }

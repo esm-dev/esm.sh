@@ -1,5 +1,5 @@
 <script lang="ts">
-  import SvelteLogo from "~/components/Logo.svelte"
+  import SvelteLogo from "./components/Logo.svelte"
 </script>
 
 <div class="center-box absolute bg">

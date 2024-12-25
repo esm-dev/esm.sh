@@ -60,14 +60,14 @@ func validateModuleFile(filename string) (isESM bool, namedExports []string, err
 		Index:          0,
 		KeyPath:        logger.Path{Text: "<stdin>"},
 		PrettyPath:     "<stdin>",
-		Contents:       string(data),
 		IdentifierName: "stdin",
+		Contents:       string(data),
 	}, parserOpts)
 	if !pass {
 		err = errors.New("invalid syntax, require javascript/typescript")
 		return
 	}
-	isESM = ast.ExportsKind == js_ast.ExportsESM
+	isESM = ast.ExportsKind == js_ast.ExportsESM || ast.ExportsKind == js_ast.ExportsESMWithDynamicFallback
 	namedExports = make([]string, len(ast.NamedExports))
 	i := 0
 	for name := range ast.NamedExports {
@@ -137,7 +137,7 @@ func treeShake(code []byte, exports []string, target esbuild.Target) ([]byte, er
 }
 
 // bundleHttpModule bundles the http module and it's submodules.
-func bundleHttpModule(npmrc *NpmRC, entry string, importMap common.ImportMap, collectDependencies bool, fetchClient *FetchClient) (js []byte, jsx bool, css []byte, dependencyTree map[string][]byte, err error) {
+func bundleHttpModule(npmrc *NpmRC, entry string, importMap common.ImportMap, collectDependencies bool, fetchClient *HttpClient) (js []byte, jsx bool, css []byte, dependencyTree map[string][]byte, err error) {
 	if !isHttpSepcifier(entry) {
 		err = errors.New("require a http module")
 		return
@@ -198,7 +198,7 @@ func bundleHttpModule(npmrc *NpmRC, entry string, importMap common.ImportMap, co
 						if err != nil {
 							return esbuild.OnLoadResult{}, err
 						}
-						res, err := fetchClient.Fetch(url)
+						res, err := fetchClient.Fetch(url, nil)
 						if err != nil {
 							return esbuild.OnLoadResult{}, errors.New("failed to fetch module " + args.Path + ": " + err.Error())
 						}
@@ -232,7 +232,7 @@ func bundleHttpModule(npmrc *NpmRC, entry string, importMap common.ImportMap, co
 						case ".json":
 							loader = esbuild.LoaderJSON
 						case ".svelte":
-							svelteVersion, err := npmrc.getSvelteVersion(importMap)
+							svelteVersion, err := resolveSvelteVersion(npmrc, importMap)
 							if err != nil {
 								return esbuild.OnLoadResult{}, err
 							}
@@ -242,7 +242,7 @@ func bundleHttpModule(npmrc *NpmRC, entry string, importMap common.ImportMap, co
 							}
 							code = ret.Code
 						case ".vue":
-							vueVersion, err := npmrc.getVueVersion(importMap)
+							vueVersion, err := resolveVueVersion(npmrc, importMap)
 							if err != nil {
 								return esbuild.OnLoadResult{}, err
 							}
@@ -269,7 +269,7 @@ func bundleHttpModule(npmrc *NpmRC, entry string, importMap common.ImportMap, co
 								if err != nil {
 									return esbuild.OnLoadResult{}, err
 								}
-								svelteVersion, err := npmrc.getSvelteVersion(importMap)
+								svelteVersion, err := resolveSvelteVersion(npmrc, importMap)
 								if err != nil {
 									return esbuild.OnLoadResult{}, err
 								}
@@ -283,7 +283,7 @@ func bundleHttpModule(npmrc *NpmRC, entry string, importMap common.ImportMap, co
 								if err != nil {
 									return esbuild.OnLoadResult{}, err
 								}
-								vueVersion, err := npmrc.getVueVersion(importMap)
+								vueVersion, err := resolveVueVersion(npmrc, importMap)
 								if err != nil {
 									return esbuild.OnLoadResult{}, err
 								}

@@ -3,11 +3,10 @@ package server
 import (
 	"bufio"
 	"bytes"
-	"context"
 	"errors"
 	"fmt"
 	"io"
-	"net/http"
+	"net/url"
 	"os/exec"
 	"time"
 
@@ -21,10 +20,12 @@ type GitRef struct {
 
 // list repo refs using `git ls-remote repo`
 func listRepoRefs(repo string) (refs []GitRef, err error) {
-	return withCache(fmt.Sprintf("git ls-remote %s", repo), time.Duration(config.NpmQueryCacheTTL)*time.Second, func() ([]GitRef, string, error) {
+	return withCache("git ls-remote "+repo, time.Duration(config.NpmQueryCacheTTL)*time.Second, func() ([]GitRef, string, error) {
+		stdout, recycle := NewBuffer()
+		defer recycle()
+		errout, recycle := NewBuffer()
+		defer recycle()
 		cmd := exec.Command("git", "ls-remote", repo)
-		stdout := bytes.NewBuffer(nil)
-		errout := bytes.NewBuffer(nil)
 		cmd.Stdout = stdout
 		cmd.Stderr = errout
 		err = cmd.Run()
@@ -57,14 +58,13 @@ func listRepoRefs(repo string) (refs []GitRef, err error) {
 }
 
 func ghInstall(wd, name, tag string) (err error) {
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
-	defer cancel()
-	url := fmt.Sprintf("https://codeload.github.com/%s/tar.gz/%s", name, tag)
-	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
+	u, err := url.Parse(fmt.Sprintf("https://codeload.github.com/%s/tar.gz/%s", name, tag))
 	if err != nil {
 		return
 	}
-	res, err := http.DefaultClient.Do(req)
+	fetchClient, recycle := NewFetchClient(30, defaultUserAgent)
+	defer recycle()
+	res, err := fetchClient.Fetch(u, nil)
 	if err != nil {
 		return
 	}
@@ -75,9 +75,9 @@ func ghInstall(wd, name, tag string) (err error) {
 	}
 
 	if res.StatusCode != 200 {
-		return fmt.Errorf("fetch %s failed: %s", url, res.Status)
+		return fmt.Errorf("fetch %s failed: %s", u, res.Status)
 	}
 
-	err = extractPackageTarball(wd, name, io.LimitReader(res.Body, 256*MB))
+	err = extractPackageTarball(wd, name, io.LimitReader(res.Body, maxPackageTarballSize))
 	return
 }

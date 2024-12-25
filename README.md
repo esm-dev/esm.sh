@@ -1,9 +1,9 @@
-![esm.sh](./server/embed/assets/og-image.svg)
+![esm.sh](./server/embed/images/banner.svg)
 
 <p align="left">
   <a href= "https://github.com/esm-dev/esm.sh/pkgs/container/esm.sh"><img src="https://img.shields.io/github/v/tag/esm-dev/esm.sh?label=Docker&display_name=tag&style=flat&colorA=232323&colorB=232323&logo=docker&logoColor=eeeeee" alt="Docker"></a>
   <a href="https://discord.gg/XDbjMeb7pb"><img src="https://img.shields.io/discord/1097820016893763684?style=flat&colorA=232323&colorB=232323&label=Discord&logo=&logoColor=eeeeee" alt="Discord"></a>
-  <a href="https://github.com/sponsors/ije"><img src="https://img.shields.io/github/sponsors/ije?label=Sponsors&style=flat&colorA=232323&colorB=232323&logo=&logoColor=eeeeee" alt="Sponsors"></a>
+  <a href="https://github.com/sponsors/esm-dev"><img src="https://img.shields.io/github/sponsors/esm-dev?label=Sponsors&style=flat&colorA=232323&colorB=232323&logo=&logoColor=eeeeee" alt="Sponsors"></a>
 </p>
 
 # esm.sh
@@ -296,7 +296,7 @@ Deno supports type definitions for modules with a `types` field in their `packag
 `X-TypeScript-Types` header. This makes it possible to have type checking and auto-completion when using those modules
 in Deno. ([link](https://deno.land/manual/typescript/types#using-x-typescript-types-header)).
 
-![Figure #1](./server/embed/assets/sceenshot-x-typescript-types.png)
+![Figure #1](./server/embed/images/fig-x-typescript-types.png)
 
 In case the type definitions provided by the `X-TypeScript-Types` header is incorrect, you can disable it by adding the
 `?no-dts` query to the module import URL:
@@ -316,7 +316,7 @@ We highly recommend [Reejs](https://ree.js.org/) as the runtime with esm.sh that
 
 ## Global CDN
 
-<img width="150" align="right" src="./server/embed/assets/cf-logo.svg" />
+<img width="150" align="right" src="./server/embed/images/cloudflare.svg" />
 
 The Global CDN of esm.sh is provided by [Cloudflare](https://cloudflare.com), one of the world's largest and fastest
 cloud network platforms.

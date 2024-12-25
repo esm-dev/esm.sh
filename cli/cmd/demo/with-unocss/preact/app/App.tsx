@@ -1,4 +1,4 @@
-import { PreactLogo } from "~/components/Logo.tsx";
+import { PreactLogo } from "./components/Logo.tsx";
 
 export function App() {
   return (

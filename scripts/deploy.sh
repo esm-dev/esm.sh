@@ -51,7 +51,7 @@ fi
 echo "--- building(${goos}_$goarch)..."
 export GOOS=$goos
 export GOARCH=$goarch
-go build -o esmd $(dirname $0)/../main.go
+go build -ldflags="-s -w" -o esmd $(dirname $0)/../main.go
 if [ "$?" != "0" ]; then
   exit
 fi
@@ -67,13 +67,12 @@ fi
 
 echo "--- installing..."
 ssh -p $sshPort ${user}@${host} << EOF
-  glv=\$(git lfs version)
+  gv=\$(git version)
   if [ "\$?" != "0" ]; then
     apt update
-    apt install -y git git-lfs
-    git lfs install
+    apt install -y git
   fi
-  echo \$glv
+  echo \$gv
 
   if [ "$init" == "yes" ]; then
     servicefn=/etc/systemd/system/esmd.service
