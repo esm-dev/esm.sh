@@ -13,7 +13,7 @@
     const main = el.getAttribute("main");
     if (main) {
       if (hostname === "localhost" || hostname === "127.0.0.1" || /^192\.168\.\d+\.\d+$/.test(hostname)) {
-        console.error("[esm.sh/x] Please serve your app with `esm.sh serve` in development mode.");
+        console.error("[esm.sh/x] Please serve your app with `npx esm.sh serve` in development mode.");
         return;
       }
       const mainUrl = new URL(main, href);
