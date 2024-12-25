@@ -735,7 +735,7 @@ func (ctx *BuildContext) buildModule(analyzeMode bool) (meta *BuildMeta, depTree
 								if existsFile(moduleFilename) {
 									pkgDir := path.Join(ctx.wd, "node_modules", ctx.esm.PkgName)
 									moduleName := strings.TrimPrefix(moduleSpecifier, pkgDir)[1:]
-									if analyzeMode && moduleFilename != entryModuleFilename {
+									if analyzeMode && moduleFilename != entryModuleFilename && strings.HasPrefix(args.Importer, pkgDir) {
 										depTree.lock.Lock()
 										depTree.refs[moduleName] = append(depTree.refs[moduleName], strings.TrimPrefix(args.Importer, pkgDir)[1:])
 										depTree.lock.Unlock()
