@@ -2,4 +2,5 @@
 
 package server
 
-const debug = true
+const DEBUG = true
+const VERSION = "dev"

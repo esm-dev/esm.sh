@@ -20,7 +20,7 @@ func (ctx *BuildContext) transformDTS(dts string) error {
 	if err != nil {
 		return err
 	}
-	if debug {
+	if DEBUG {
 		log.Debugf("transform dts '%s'(%d related dts files) in %v", dts, n, time.Since(start))
 	}
 	return nil

@@ -49,14 +49,14 @@ func Serve(efs EmbedFS) {
 			fmt.Println(err.Error())
 			os.Exit(1)
 		}
-		if debug {
+		if DEBUG {
 			fmt.Printf("%s [info] Config loaded from %s\n", time.Now().Format("2006-01-02 15:04:05"), cfile)
 		}
 	} else {
 		config = DefaultConfig()
 	}
 
-	if debug {
+	if DEBUG {
 		config.LogLevel = "debug"
 		cwd, err := os.Getwd()
 		if err != nil {
@@ -147,7 +147,7 @@ func Serve(efs EmbedFS) {
 		TLS: rex.TLSConfig{
 			Port: uint16(config.TlsPort),
 			AutoTLS: rex.AutoTLSConfig{
-				AcceptTOS: config.TlsPort > 0 && !debug,
+				AcceptTOS: config.TlsPort > 0 && !DEBUG,
 				CacheDir:  path.Join(config.WorkDir, "autotls"),
 			},
 		},
@@ -170,7 +170,7 @@ func Serve(efs EmbedFS) {
 func cors(allowOrigins []string) rex.Handle {
 	allowList := NewSet(allowOrigins...)
 	return func(ctx *rex.Context) any {
-		origin := ctx.GetHeader("Origin")
+		origin := ctx.R.Header.Get("Origin")
 		isOptionsMethod := ctx.R.Method == "OPTIONS"
 		h := ctx.W.Header()
 		if allowList.Len() > 0 {
@@ -190,7 +190,7 @@ func cors(allowOrigins []string) rex.Handle {
 		if isOptionsMethod {
 			return rex.NoContent()
 		}
-		return nil // next
+		return ctx.Next()
 	}
 }
 
@@ -217,14 +217,14 @@ func customLandingPage(options *LandingPageOptions) rex.Handle {
 			}
 			etag := res.Header.Get("Etag")
 			if etag != "" {
-				if ctx.GetHeader("If-None-Match") == etag {
+				if ctx.R.Header.Get("If-None-Match") == etag {
 					return rex.Status(http.StatusNotModified, nil)
 				}
-				ctx.SetHeader("Etag", etag)
+				ctx.Header.Set("Etag", etag)
 			} else {
 				lastModified := res.Header.Get("Last-Modified")
 				if lastModified != "" {
-					v := ctx.GetHeader("If-Modified-Since")
+					v := ctx.R.Header.Get("If-Modified-Since")
 					if v != "" {
 						timeIfModifiedSince, e1 := time.Parse(http.TimeFormat, v)
 						timeLastModified, e2 := time.Parse(http.TimeFormat, lastModified)
@@ -232,17 +232,17 @@ func customLandingPage(options *LandingPageOptions) rex.Handle {
 							return rex.Status(http.StatusNotModified, nil)
 						}
 					}
-					ctx.SetHeader("Last-Modified", lastModified)
+					ctx.Header.Set("Last-Modified", lastModified)
 				}
 			}
 			cacheCache := res.Header.Get("Cache-Control")
 			if cacheCache == "" {
-				ctx.SetHeader("Cache-Control", ccMustRevalidate)
+				ctx.Header.Set("Cache-Control", ccMustRevalidate)
 			}
-			ctx.SetHeader("Content-Type", res.Header.Get("Content-Type"))
+			ctx.Header.Set("Content-Type", res.Header.Get("Content-Type"))
 			return res.Body // auto closed
 		}
-		return nil // next
+		return ctx.Next()
 	}
 }
 

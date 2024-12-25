@@ -38,16 +38,14 @@ func NewBuildQueue(concurrency int) *BuildQueue {
 
 // Add adds a new build task to the queue.
 func (q *BuildQueue) Add(ctx *BuildContext) chan BuildOutput {
+	q.lock.Lock()
+	defer q.lock.Unlock()
+
 	ch := make(chan BuildOutput, 1)
 
-	// check if the task is already in the queue
-	q.lock.Lock()
 	task, ok := q.tasks[ctx.Path()]
-	q.lock.Unlock()
 	if ok {
-		q.lock.Lock()
 		task.waitChans = append(task.waitChans, ch)
-		q.lock.Unlock()
 		return ch
 	}
 
@@ -59,12 +57,10 @@ func (q *BuildQueue) Add(ctx *BuildContext) chan BuildOutput {
 	}
 	ctx.status = "pending"
 
-	q.lock.Lock()
 	task.el = q.queue.PushBack(task)
 	q.tasks[ctx.Path()] = task
-	q.lock.Unlock()
 
-	q.schedule()
+	go q.schedule()
 
 	return ch
 }
@@ -90,7 +86,7 @@ func (q *BuildQueue) schedule() {
 		task.pending = false
 		task.startedAt = time.Now()
 		q.lock.Unlock()
-		go q.run(task)
+		q.run(task)
 	}
 }
 
@@ -108,19 +104,17 @@ func (q *BuildQueue) run(task *BuildTask) {
 		log.Errorf("build '%s': %v", task.Path(), err)
 	}
 
-	output := BuildOutput{meta, err}
-	q.lock.RLock()
-	for _, ch := range task.waitChans {
-		ch <- output
-	}
-	q.lock.RUnlock()
-
 	q.lock.Lock()
 	q.queue.Remove(task.el)
 	delete(q.tasks, task.Path())
 	q.chann += 1
 	q.lock.Unlock()
 
+	output := BuildOutput{meta, err}
+	for _, ch := range task.waitChans {
+		ch <- output
+	}
+
 	// schedule next task if have any
-	q.schedule()
+	go q.schedule()
 }

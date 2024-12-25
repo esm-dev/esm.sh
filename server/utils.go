@@ -9,7 +9,6 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
-	"strconv"
 	"strings"
 	"sync"
 
@@ -19,7 +18,7 @@ import (
 
 var (
 	bufferPool       = sync.Pool{New: func() interface{} { return new(bytes.Buffer) }}
-	defaultUserAgent = "esmd/v" + strconv.Itoa(VERSION)
+	defaultUserAgent = "esmd/" + VERSION
 )
 
 var (

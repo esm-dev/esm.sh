@@ -59,7 +59,7 @@ func cjsModuleLexer(ctx *BuildContext, cjsEntry string) (ret cjsModuleLexerResul
 	start := time.Now()
 	defer func() {
 		if err == nil {
-			if debug {
+			if DEBUG {
 				log.Debugf("[cjsModuleLexer] parse %s in %s", path.Join(ctx.esm.PkgName, cjsEntry), time.Since(start))
 			}
 			if !existsFile(cacheFileName) {
@@ -170,7 +170,7 @@ func installCommonJSModuleLexer() (err error) {
 		return
 	}
 
-	if debug {
+	if DEBUG {
 		log.Debugf("downloading %s...", path.Base(url))
 	}
 

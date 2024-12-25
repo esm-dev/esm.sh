@@ -47,7 +47,7 @@ func buildEmbedTSModule(filename string, target string) (js []byte, err error) {
 	data = bytes.ReplaceAll(data, []byte("$TARGET"), []byte(target))
 
 	js, err = minify(string(data), esbuild.LoaderTS, targets[target])
-	if err == nil && !debug {
+	if err == nil && !DEBUG {
 		embedBuildCache.Store(cacheKey, js)
 	}
 	return

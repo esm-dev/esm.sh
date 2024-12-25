@@ -2,4 +2,5 @@
 
 package server
 
-const debug = false
+const DEBUG = false
+const VERSION = "v136"

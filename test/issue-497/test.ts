@@ -10,5 +10,5 @@ Deno.test("issue #497", async () => {
       resolve();
     });
   });
-  assertEquals(typeof status.version, "number");
+  assertEquals(typeof status.version, "string");
 });

@@ -1,7 +1,6 @@
 package server
 
 const (
-	VERSION               = 136
 	MB                    = 1 << 20
 	maxAssetFileSize      = 50 * MB
 	maxPackageTarballSize = 256 * MB

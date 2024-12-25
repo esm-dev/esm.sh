@@ -31,8 +31,8 @@ Start:
 			return rex.Status(403, "The `/build` API has been deprecated.")
 		}
 		if method == "GET" {
-			ctx.SetHeader("Content-Type", ctJavaScript)
-			ctx.SetHeader("Cache-Control", ccImmutable)
+			ctx.Header.Set("Content-Type", ctJavaScript)
+			ctx.Header.Set("Cache-Control", ccImmutable)
 			return `
 				const deprecated = new Error("[esm.sh] The build API has been deprecated.")
 				export function build(_) { throw deprecated }
@@ -78,8 +78,8 @@ Start:
 				return rex.Status(400, "Invalid Module Path")
 			}
 			if path == "" && strings.HasPrefix(ctx.UserAgent(), "Deno/") {
-				ctx.SetHeader("Content-Type", ctJavaScript)
-				ctx.SetHeader("Cache-Control", ccImmutable)
+				ctx.Header.Set("Content-Type", ctJavaScript)
+				ctx.Header.Set("Cache-Control", ccImmutable)
 				return `throw new Error("[esm.sh] The deno CLI has been deprecated, please use our vscode extension instead: https://marketplace.visualstudio.com/items?itemName=ije.esm-vscode")`
 			}
 			if path == "build" {
@@ -95,7 +95,7 @@ Start:
 		return redirect(ctx, fmt.Sprintf("/v135%s@0.0.0/%s/mod.mjs", pathname, legacyGetBuildTargetByUA(ctx.UserAgent())), true)
 	}
 
-	return nil // next
+	return ctx.Next()
 }
 
 func legacyESM(ctx *rex.Context, pathname string) any {
@@ -128,18 +128,18 @@ func legacyESM(ctx *rex.Context, pathname string) any {
 		if e == nil {
 			switch path.Ext(pathname) {
 			case ".js", ".mjs":
-				ctx.SetHeader("Content-Type", ctJavaScript)
+				ctx.Header.Set("Content-Type", ctJavaScript)
 			case ".ts", ".mts":
-				ctx.SetHeader("Content-Type", ctTypeScript)
+				ctx.Header.Set("Content-Type", ctTypeScript)
 			case ".map":
-				ctx.SetHeader("Content-Type", ctJSON)
+				ctx.Header.Set("Content-Type", ctJSON)
 			case ".css":
-				ctx.SetHeader("Content-Type", ctCSS)
+				ctx.Header.Set("Content-Type", ctCSS)
 			default:
 				f.Close()
 				return rex.Status(404, "Module Not Found")
 			}
-			ctx.SetHeader("Control-Cache", ccImmutable)
+			ctx.Header.Set("Control-Cache", ccImmutable)
 			return f // auto closed
 		}
 	} else {
@@ -162,14 +162,14 @@ func legacyESM(ctx *rex.Context, pathname string) any {
 			defer f.Close()
 			var ret []string
 			if json.NewDecoder(f).Decode(&ret) == nil && len(ret) >= 2 {
-				ctx.SetHeader("Content-Type", ctJavaScript)
-				ctx.SetHeader("Control-Cache", ccImmutable)
-				ctx.SetHeader("X-ESM-Id", ret[0])
+				ctx.Header.Set("Content-Type", ctJavaScript)
+				ctx.Header.Set("Control-Cache", ccImmutable)
+				ctx.Header.Set("X-ESM-Id", ret[0])
 				if varyUA {
 					appendVaryHeader(ctx.W.Header(), "User-Agent")
 				}
 				if len(ret) == 3 {
-					ctx.SetHeader("X-TypeScript-Types", getCdnOrigin(ctx)+ret[1])
+					ctx.Header.Set("X-TypeScript-Types", getCdnOrigin(ctx)+ret[1])
 					return ret[2]
 				}
 				return ret[1]
@@ -194,7 +194,7 @@ func legacyESM(ctx *rex.Context, pathname string) any {
 		if err != nil {
 			return rex.Status(500, "Failed to fetch data from the legacy esm.sh server")
 		}
-		ctx.SetHeader("Cache-Control", "public, max-age=600")
+		ctx.Header.Set("Cache-Control", "public, max-age=600")
 		return rex.Status(res.StatusCode, data)
 	}
 
@@ -205,8 +205,8 @@ func legacyESM(ctx *rex.Context, pathname string) any {
 		if err != nil {
 			return rex.Status(500, "Storage Error")
 		}
-		ctx.SetHeader("Content-Type", res.Header.Get("Content-Type"))
-		ctx.SetHeader("Control-Cache", ccImmutable)
+		ctx.Header.Set("Content-Type", res.Header.Get("Content-Type"))
+		ctx.Header.Set("Control-Cache", ccImmutable)
 		return buf.Bytes()
 	} else {
 		code, err := io.ReadAll(res.Body)
@@ -215,7 +215,7 @@ func legacyESM(ctx *rex.Context, pathname string) any {
 		}
 		esmId := res.Header.Get("X-Esm-Id")
 		if esmId == "" {
-			ctx.SetHeader("Cache-Control", "public, max-age=600")
+			ctx.Header.Set("Cache-Control", "public, max-age=600")
 			return rex.Status(502, "Unexpected response from the legacy esm.sh server")
 		}
 		dts := res.Header.Get("X-TypeScript-Types")
@@ -236,14 +236,14 @@ func legacyESM(ctx *rex.Context, pathname string) any {
 		if err != nil {
 			return rex.Status(500, "Storage Error")
 		}
-		ctx.SetHeader("Content-Type", res.Header.Get("Content-Type"))
-		ctx.SetHeader("Control-Cache", ccImmutable)
-		ctx.SetHeader("X-ESM-Id", esmId)
+		ctx.Header.Set("Content-Type", res.Header.Get("Content-Type"))
+		ctx.Header.Set("Control-Cache", ccImmutable)
+		ctx.Header.Set("X-ESM-Id", esmId)
 		if query != "" && !ctx.R.URL.Query().Has("target") {
 			appendVaryHeader(ctx.W.Header(), "User-Agent")
 		}
 		if dts != "" {
-			ctx.SetHeader("X-TypeScript-Types", getCdnOrigin(ctx)+dts)
+			ctx.Header.Set("X-TypeScript-Types", getCdnOrigin(ctx)+dts)
 		}
 		return code
 	}

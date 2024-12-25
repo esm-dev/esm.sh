@@ -144,7 +144,7 @@ func installLoaderRuntime() (err error) {
 		return
 	}
 
-	if debug {
+	if DEBUG {
 		log.Debugf("downloading %s...", path.Base(url))
 	}
 

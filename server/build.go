@@ -12,6 +12,7 @@ import (
 	"regexp"
 	"sort"
 	"strings"
+	"sync"
 
 	"github.com/esm-dev/esm.sh/server/storage"
 	esbuild "github.com/evanw/esbuild/pkg/api"
@@ -53,6 +54,11 @@ type BuildMeta struct {
 	ExportDefault bool     `json:"exportDefault,omitempty"`
 	Imports       []string `json:"imports,omitempty"`
 	Dts           string   `json:"dts,omitempty"`
+}
+
+type DepTree struct {
+	lock sync.RWMutex
+	refs map[string][]string
 }
 
 var loaders = map[string]esbuild.Loader{
@@ -160,7 +166,7 @@ func (ctx *BuildContext) Build() (meta *BuildMeta, err error) {
 	// 		}
 	// 	}
 	// 	if !exportAll {
-	// 		refs := map[string]uint16{}
+
 	// 		for _, exportName := range exportNames {
 	// 			esm := ctx.esm
 	// 			esm.SubPath = exportName
@@ -179,17 +185,9 @@ func (ctx *BuildContext) Build() (meta *BuildMeta, err error) {
 	// 			}
 	// 			_, depTree, err := b.buildModule(true)
 	// 			if err == nil {
-	// 				for _, dep := range depTree.Values() {
-	// 					refs[dep]++
+	// 				for module, importors := range depTree.refs {
+	// 					fmt.Println(exportName, module, importors)
 	// 				}
-	// 			}
-	// 		}
-	// 		for p, n := range refs {
-	// 			if n > 1 {
-	// 				if ctx.splitting == nil {
-	// 					ctx.splitting = NewSet()
-	// 				}
-	// 				ctx.splitting.Add(p)
 	// 			}
 	// 		}
 	// 	}
@@ -216,9 +214,9 @@ func (ctx *BuildContext) Build() (meta *BuildMeta, err error) {
 	return
 }
 
-func (ctx *BuildContext) buildModule(analyzeMode bool) (meta *BuildMeta, depTree *Set, err error) {
+func (ctx *BuildContext) buildModule(analyzeMode bool) (meta *BuildMeta, depTree DepTree, err error) {
 	if analyzeMode {
-		depTree = NewSet()
+		depTree.refs = map[string][]string{}
 	}
 
 	// json module
@@ -254,7 +252,7 @@ func (ctx *BuildContext) buildModule(analyzeMode bool) (meta *BuildMeta, depTree
 		err = fmt.Errorf("could not resolve build entry")
 		return
 	}
-	if debug && !analyzeMode {
+	if DEBUG && !analyzeMode {
 		log.Debugf(`build(%s): Entry{main: "%s", module: %v, types: "%s"}`, ctx.esm.Specifier(), entry.main, entry.module, entry.types)
 	}
 
@@ -367,8 +365,8 @@ func (ctx *BuildContext) buildModule(analyzeMode bool) (meta *BuildMeta, depTree
 			}
 		}
 	}
-	corePlugin := esbuild.Plugin{
-		Name: "core",
+	esmifyPlugin := esbuild.Plugin{
+		Name: "esmify",
 		Setup: func(build esbuild.PluginBuild) {
 			// resovler
 			build.OnResolve(
@@ -737,7 +735,9 @@ func (ctx *BuildContext) buildModule(analyzeMode bool) (meta *BuildMeta, depTree
 							if moduleSpecifier == entry.main || (exportSpecifier != "" && exportSpecifier == entrySpecifier) || (args.Kind != esbuild.ResolveJSDynamicImport && !noBundle) {
 								if existsFile(moduleFilename) {
 									if analyzeMode && moduleFilename != entryModuleFilename {
-										depTree.Add(moduleFilename)
+										depTree.lock.Lock()
+										depTree.refs[moduleFilename] = append(depTree.refs[moduleFilename], args.Importer)
+										depTree.lock.Unlock()
 									}
 									if !analyzeMode && ctx.splitting != nil && ctx.splitting.Has(moduleFilename) && !ctx.splitting.Has(entryModuleFilename) {
 										fmt.Println("splitting", moduleFilename)
@@ -981,7 +981,7 @@ func (ctx *BuildContext) buildModule(analyzeMode bool) (meta *BuildMeta, depTree
 		IgnoreAnnotations: ctx.args.ignoreAnnotations, // some libs maybe use wrong side-effect annotations
 		Conditions:        conditions,
 		Loader:            loaders,
-		Plugins:           []esbuild.Plugin{corePlugin},
+		Plugins:           []esbuild.Plugin{esmifyPlugin},
 		Outdir:            "/esbuild",
 		Write:             false,
 	}
