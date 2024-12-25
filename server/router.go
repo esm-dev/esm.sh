@@ -1411,7 +1411,6 @@ func esmRouter() rex.Handle {
 					zoneId:      zoneIdHeader,
 				}
 				ch := buildQueue.Add(buildCtx)
-				defer close(ch)
 				select {
 				case output := <-ch:
 					if output.err != nil {
@@ -1528,7 +1527,6 @@ func esmRouter() rex.Handle {
 		}
 		if !ok {
 			ch := buildQueue.Add(buildCtx)
-			defer close(ch)
 			select {
 			case output := <-ch:
 				if output.err != nil {
