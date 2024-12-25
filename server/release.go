@@ -3,4 +3,6 @@
 package server
 
 const DEBUG = false
-const VERSION = "v136"
+
+// may be changed by `-ldflags`
+var Version = "v136"

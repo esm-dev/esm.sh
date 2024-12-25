@@ -8,6 +8,7 @@ jobs:
   deploy:
     name: Deploy main branch to next.esm.sh
     runs-on: ubuntu-latest
+    environment: next
 
     steps:
       - name: Checkout
@@ -23,6 +24,8 @@ jobs:
         env:
           GOOS: linux
           GOARCH: ${{ secrets.DEPLOY_HOST_ARCH }}
-          SSH_HOST_NAME: ${{ secrets.DEPLOY_HOST_NAME }}
-          SSH_USER: ${{ secrets.DEPLOY_SSH_USER }}
-          SSH_PRIVATE_KEY: ${{ secrets.DEPLOY_SSH_PRIVATE_KEY }}
+          DEPLOY_HOST_NAME: ${{ secrets.DEPLOY_HOST_NAME }}
+          DEPLOY_HOST_PORT: ${{ secrets.DEPLOY_HOST_PORT }}
+          DEPLOY_SSH_USER: ${{ secrets.DEPLOY_SSH_USER }}
+          DEPLOY_SSH_PRIVATE_KEY: ${{ secrets.DEPLOY_SSH_PRIVATE_KEY }}
+          VERSION: ${{ github.sha }}

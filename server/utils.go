@@ -18,7 +18,7 @@ import (
 
 var (
 	bufferPool       = sync.Pool{New: func() interface{} { return new(bytes.Buffer) }}
-	defaultUserAgent = "esmd/" + VERSION
+	defaultUserAgent = "esmd/" + Version
 )
 
 var (
