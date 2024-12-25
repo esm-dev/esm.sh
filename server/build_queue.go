@@ -112,7 +112,11 @@ func (q *BuildQueue) run(task *BuildTask) {
 
 	output := BuildOutput{meta, err}
 	for _, ch := range task.waitChans {
-		ch <- output
+		select {
+		case ch <- output:
+		default:
+			// drop
+		}
 	}
 
 	// schedule next task if have any
