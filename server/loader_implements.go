@@ -197,7 +197,6 @@ func compileUnocssLoader(npmrc *NpmRC, loaderVersion string, loaderExecPath stri
 		"deno", "compile",
 		"--no-config",
 		"--no-lock",
-		"--cached-only",
 		"--no-check",
 		"--include=jsr:@std/tar/untar-stream",
 		"--no-prompt",
