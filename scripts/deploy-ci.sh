@@ -1,12 +1,13 @@
 #!/bin/bash
 
 mkdir -p ~/.ssh
-ssh-keyscan $SSH_HOST_NAME >> ~/.ssh/known_hosts
-echo "${SSH_PRIVATE_KEY}" >> ~/.ssh/id_ed25519
+ssh-keyscan $DEPLOY_HOST_NAME >> ~/.ssh/known_hosts
+echo "${DEPLOY_SSH_PRIVATE_KEY}" >> ~/.ssh/id_ed25519
 chmod 600 ~/.ssh/id_ed25519
 echo "Host next.esm.sh" >> ~/.ssh/config
-echo "  HostName ${SSH_HOST_NAME}" >> ~/.ssh/config
-echo "  User ${SSH_USER}" >> ~/.ssh/config
+echo "  HostName ${DEPLOY_HOST_NAME}" >> ~/.ssh/config
+echo "  Port ${DEPLOY_HOST_PORT}" >> ~/.ssh/config
+echo "  User ${DEPLOY_SSH_USER}" >> ~/.ssh/config
 echo "  IdentityFile ~/.ssh/id_ed25519" >> ~/.ssh/config
 echo "  IdentitiesOnly yes" >> ~/.ssh/config
 
