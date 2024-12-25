@@ -140,59 +140,58 @@ func (ctx *BuildContext) Build() (meta *BuildMeta, err error) {
 		return
 	}
 
-	if ctx.pkgJson.Exports.Len() > 0 && ctx.bundleMode == BundleDefault {
-		var exportNames []string
-		var exportAll bool
-		for _, exportName := range ctx.pkgJson.Exports.keys {
-			exportName := stripModuleExt(exportName)
-			if (exportName == "." || strings.HasPrefix(exportName, "./")) && !endsWith(exportName, ".json", ".css") {
-				if exportName == "./*" {
-					exportAll = true
-					break
-				}
-				if !strings.ContainsRune(exportName, '*') {
-					v := ctx.pkgJson.Exports.values[exportName]
-					if obj, ok := v.(*JSONObject); ok {
-						// ignore types exports
-						if len(obj.keys) == 1 && obj.keys[0] == "types" {
-							continue
-						}
-					}
-					if exportName == "." {
-						exportNames = append(exportNames, "")
-					} else if strings.HasPrefix(exportName, "./") {
-						exportNames = append(exportNames, exportName[2:])
-					}
-				}
-			}
-		}
-		if !exportAll {
-
-			for _, exportName := range exportNames {
-				esm := ctx.esm
-				esm.SubPath = exportName
-				esm.SubModuleName = stripEntryModuleExt(exportName)
-				b := &BuildContext{
-					esm:         esm,
-					npmrc:       ctx.npmrc,
-					args:        ctx.args,
-					externalAll: ctx.externalAll,
-					target:      ctx.target,
-					pinedTarget: ctx.pinedTarget,
-					dev:         ctx.dev,
-					zoneId:      ctx.zoneId,
-					wd:          ctx.wd,
-					pkgJson:     ctx.pkgJson,
-				}
-				_, depTree, err := b.buildModule(true)
-				if err == nil {
-					for module, importors := range depTree.refs {
-						fmt.Println(exportName, module, importors)
-					}
-				}
-			}
-		}
-	}
+	// if ctx.pkgJson.Exports.Len() > 0 && ctx.bundleMode == BundleDefault {
+	// 	var exportNames []string
+	// 	var exportAll bool
+	// 	for _, exportName := range ctx.pkgJson.Exports.keys {
+	// 		exportName := stripModuleExt(exportName)
+	// 		if (exportName == "." || strings.HasPrefix(exportName, "./")) && !endsWith(exportName, ".json", ".css") {
+	// 			if exportName == "./*" {
+	// 				exportAll = true
+	// 				break
+	// 			}
+	// 			if !strings.ContainsRune(exportName, '*') {
+	// 				v := ctx.pkgJson.Exports.values[exportName]
+	// 				if obj, ok := v.(*JSONObject); ok {
+	// 					// ignore types exports
+	// 					if len(obj.keys) == 1 && obj.keys[0] == "types" {
+	// 						continue
+	// 					}
+	// 				}
+	// 				if exportName == "." {
+	// 					exportNames = append(exportNames, "")
+	// 				} else if strings.HasPrefix(exportName, "./") {
+	// 					exportNames = append(exportNames, exportName[2:])
+	// 				}
+	// 			}
+	// 		}
+	// 	}
+	// 	if !exportAll {
+	// 		for _, exportName := range exportNames {
+	// 			esm := ctx.esm
+	// 			esm.SubPath = exportName
+	// 			esm.SubModuleName = stripEntryModuleExt(exportName)
+	// 			b := &BuildContext{
+	// 				esm:         esm,
+	// 				npmrc:       ctx.npmrc,
+	// 				args:        ctx.args,
+	// 				externalAll: ctx.externalAll,
+	// 				target:      ctx.target,
+	// 				pinedTarget: ctx.pinedTarget,
+	// 				dev:         ctx.dev,
+	// 				zoneId:      ctx.zoneId,
+	// 				wd:          ctx.wd,
+	// 				pkgJson:     ctx.pkgJson,
+	// 			}
+	// 			_, depTree, err := b.buildModule(true)
+	// 			if err == nil {
+	// 				for module, importors := range depTree.refs {
+	// 					fmt.Println(exportName, module, importors)
+	// 				}
+	// 			}
+	// 		}
+	// 	}
+	// }
 
 	// build the module
 	ctx.status = "build"
@@ -225,8 +224,7 @@ func (ctx *BuildContext) buildModule(analyzeMode bool) (meta *BuildMeta, depTree
 		if analyzeMode {
 			return
 		}
-		nmDir := path.Join(ctx.wd, "node_modules")
-		jsonPath := path.Join(nmDir, ctx.esm.PkgName, ctx.esm.SubModuleName)
+		jsonPath := path.Join(ctx.wd, "node_modules", ctx.esm.PkgName, ctx.esm.SubModuleName)
 		if existsFile(jsonPath) {
 			var jsonData []byte
 			jsonData, err = os.ReadFile(jsonPath)
@@ -735,13 +733,15 @@ func (ctx *BuildContext) buildModule(analyzeMode bool) (meta *BuildMeta, depTree
 							// - it's not a dynamic import and `?bundle=false` query is not present
 							if moduleSpecifier == entry.main || (exportSpecifier != "" && exportSpecifier == entrySpecifier) || (args.Kind != esbuild.ResolveJSDynamicImport && !noBundle) {
 								if existsFile(moduleFilename) {
+									pkgDir := path.Join(ctx.wd, "node_modules", ctx.esm.PkgName)
+									moduleName := strings.TrimPrefix(moduleSpecifier, pkgDir)[1:]
 									if analyzeMode && moduleFilename != entryModuleFilename {
 										depTree.lock.Lock()
-										depTree.refs[moduleFilename] = append(depTree.refs[moduleFilename], args.Importer)
+										depTree.refs[moduleName] = append(depTree.refs[moduleName], strings.TrimPrefix(args.Importer, pkgDir)[1:])
 										depTree.lock.Unlock()
 									}
-									if !analyzeMode && ctx.splitting != nil && ctx.splitting.Has(moduleFilename) && !ctx.splitting.Has(entryModuleFilename) {
-										fmt.Println("splitting", moduleFilename)
+									if !analyzeMode && ctx.splitting != nil && ctx.splitting.Has(moduleName) {
+										fmt.Println("splitting", moduleName)
 									}
 									// embed wasm as WebAssembly.Module
 									if strings.HasSuffix(moduleFilename, ".wasm") {
