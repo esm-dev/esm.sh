@@ -2,7 +2,6 @@ package server
 
 import (
 	"archive/tar"
-	"bytes"
 	"compress/gzip"
 	"encoding/base64"
 	"encoding/json"
@@ -19,7 +18,6 @@ import (
 	"time"
 
 	"github.com/Masterminds/semver/v3"
-	esbuild "github.com/evanw/esbuild/pkg/api"
 	"github.com/ije/gox/utils"
 	"github.com/ije/gox/valid"
 )
@@ -30,33 +28,9 @@ const (
 )
 
 var (
-	npmNaming       = valid.Validator{valid.Range{'a', 'z'}, valid.Range{'A', 'Z'}, valid.Range{'0', '9'}, valid.Eq('_'), valid.Eq('$'), valid.Eq('.'), valid.Eq('-'), valid.Eq('+'), valid.Eq('!'), valid.Eq('~'), valid.Eq('*'), valid.Eq('('), valid.Eq(')')}
-	npmReplacements = map[string]npmReplacement{}
-	installMutex    = KeyedMutex{}
+	npmNaming    = valid.Validator{valid.Range{'a', 'z'}, valid.Range{'A', 'Z'}, valid.Range{'0', '9'}, valid.Eq('_'), valid.Eq('$'), valid.Eq('.'), valid.Eq('-'), valid.Eq('+'), valid.Eq('!'), valid.Eq('~'), valid.Eq('*'), valid.Eq('('), valid.Eq(')')}
+	installMutex = KeyedMutex{}
 )
-
-type npmReplacement struct {
-	esm  []byte
-	iife []byte
-}
-
-func buildNpmReplacements(efs EmbedFS) (err error) {
-	return walkEmbedFS(efs, "server/embed/npm-replacements", []string{".mjs"}, func(path string) error {
-		esm, err := efs.ReadFile(path)
-		if err != nil {
-			return err
-		}
-		code, err := minify(string(esm), esbuild.LoaderJS, esbuild.ES2022)
-		if err != nil {
-			return fmt.Errorf("%s: %w", path, err)
-		}
-		npmReplacements[strings.TrimSuffix(strings.TrimSuffix(strings.TrimPrefix(path, "server/embed/npm-replacements/"), ".mjs"), "/index")] = npmReplacement{
-			esm:  esm,
-			iife: concatBytes(concatBytes([]byte("(()=>{"), regexpExportAsExpr.ReplaceAll(bytes.ReplaceAll(bytes.TrimSpace(code), []byte("export{"), []byte("return{")), []byte("$2:$1"))), []byte("})()")),
-		}
-		return nil
-	})
-}
 
 type Package struct {
 	Name     string

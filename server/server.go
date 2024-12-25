@@ -11,6 +11,7 @@ import (
 	"syscall"
 	"time"
 
+	npm_replacements "github.com/esm-dev/esm.sh/server/npm-replacements"
 	"github.com/esm-dev/esm.sh/server/storage"
 	logger "github.com/ije/gox/log"
 	"github.com/ije/rex"
@@ -100,11 +101,11 @@ func Serve(efs EmbedFS) {
 	}
 	log.Debugf("unenv node runtime loaded, %d files, total size: %d KB", len(unenvNodeRuntimeBulid), totalSize/1024)
 
-	err = buildNpmReplacements(efs)
+	n, err := npm_replacements.Build()
 	if err != nil {
 		log.Fatalf("build npm replacements: %v", err)
 	}
-	log.Debugf("%d npm repalcements loaded", len(npmReplacements))
+	log.Debugf("%d npm repalcements loaded", n)
 
 	// install loader runtime
 	err = installLoaderRuntime()
@@ -129,7 +130,7 @@ func Serve(efs EmbedFS) {
 	// init build queue
 	buildQueue = NewBuildQueue(int(config.BuildConcurrency))
 
-	// set rex middlewares
+	// setup rex server
 	rex.Use(
 		rex.Logger(log),
 		rex.AccessLogger(accessLogger),

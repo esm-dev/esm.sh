@@ -53,26 +53,6 @@ func buildEmbedTSModule(filename string, target string) (js []byte, err error) {
 	return
 }
 
-func walkEmbedFS(fs EmbedFS, dir string, exts []string, fn func(path string) error) error {
-	entries, err := fs.ReadDir(dir)
-	if err != nil {
-		return err
-	}
-	for _, entry := range entries {
-		path := dir + "/" + entry.Name()
-		if entry.IsDir() {
-			if err := walkEmbedFS(fs, path, exts, fn); err != nil {
-				return err
-			}
-		} else if endsWith(path, exts...) {
-			if err := fn(path); err != nil {
-				return err
-			}
-		}
-	}
-	return nil
-}
-
 func init() {
 	embedFS = &embed.FS{}
 }

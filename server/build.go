@@ -14,6 +14,7 @@ import (
 	"strings"
 	"sync"
 
+	npm_replacements "github.com/esm-dev/esm.sh/server/npm-replacements"
 	"github.com/esm-dev/esm.sh/server/storage"
 	esbuild "github.com/evanw/esbuild/pkg/api"
 	"github.com/ije/gox/utils"
@@ -773,15 +774,15 @@ func (ctx *BuildContext) buildModule(analyzeMode bool) (meta *BuildMeta, depTree
 
 					// replace some npm modules with browser native APIs
 					if specifier != "fsevents" || ctx.isBrowserTarget() {
-						replacement, ok := npmReplacements[specifier+"_"+ctx.target]
+						replacement, ok := npm_replacements.Get(specifier + "_" + ctx.target)
 						if !ok {
-							replacement, ok = npmReplacements[specifier]
+							replacement, ok = npm_replacements.Get(specifier)
 						}
 						if ok {
 							if args.Kind == esbuild.ResolveJSRequireCall || args.Kind == esbuild.ResolveJSRequireResolve {
 								ctx.cjsRequires = append(ctx.cjsRequires, [3]string{
 									"npm:" + specifier,
-									string(replacement.iife),
+									string(replacement.IIFE),
 									"",
 								})
 								return esbuild.OnResolveResult{
@@ -791,7 +792,7 @@ func (ctx *BuildContext) buildModule(analyzeMode bool) (meta *BuildMeta, depTree
 							}
 							return esbuild.OnResolveResult{
 								Path:       specifier,
-								PluginData: replacement.esm,
+								PluginData: replacement.ESM,
 								Namespace:  "npm-replacement",
 							}, nil
 						}
