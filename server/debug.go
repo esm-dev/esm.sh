@@ -3,4 +3,4 @@
 package server
 
 const DEBUG = true
-const VERSION = "dev"
+const Version = "DEV"

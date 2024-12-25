@@ -45,7 +45,7 @@ const (
 func esmRouter() rex.Handle {
 	var (
 		startTime  = time.Now()
-		globalETag = fmt.Sprintf(`W/"%s"`, VERSION)
+		globalETag = fmt.Sprintf(`W/"%s"`, Version)
 	)
 
 	return func(ctx *rex.Context) any {
@@ -272,7 +272,7 @@ func esmRouter() rex.Handle {
 			ctx.Header.Set("Cache-Control", ccMustRevalidate)
 			return map[string]any{
 				"buildQueue": q[:i],
-				"version":    VERSION,
+				"version":    Version,
 				"uptime":     time.Since(startTime).String(),
 				"disk":       disk,
 			}
