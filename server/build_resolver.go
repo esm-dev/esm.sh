@@ -42,7 +42,7 @@ func (ctx *BuildContext) Path() string {
 		asteriskPrefix = "*"
 	}
 
-	esm := ctx.esm
+	esm := ctx.esmPath
 	if ctx.target == "types" {
 		if strings.HasSuffix(esm.SubPath, ".d.ts") {
 			ctx.path = fmt.Sprintf(
@@ -91,7 +91,7 @@ func (ctx *BuildContext) Path() string {
 	return ctx.path
 }
 
-func (ctx *BuildContext) getImportPath(esm Esm, buildArgsPrefix string, externalAll bool) string {
+func (ctx *BuildContext) getImportPath(esm EsmPath, buildArgsPrefix string, externalAll bool) string {
 	asteriskPrefix := ""
 	if externalAll {
 		asteriskPrefix = "*"
@@ -152,18 +152,18 @@ func (ctx *BuildContext) existsPkgFile(fp ...string) bool {
 	args := make([]string, 3+len(fp))
 	args[0] = ctx.wd
 	args[1] = "node_modules"
-	args[2] = ctx.esm.PkgName
+	args[2] = ctx.esmPath.PkgName
 	copy(args[3:], fp)
 	return existsFile(path.Join(args...))
 }
 
-func (ctx *BuildContext) lookupDep(specifier string, isDts bool) (esm Esm, packageJson *PackageJSON, err error) {
+func (ctx *BuildContext) lookupDep(specifier string, isDts bool) (esm EsmPath, packageJson *PackageJSON, err error) {
 	pkgName, version, subpath, _ := splitEsmPath(specifier)
 lookup:
 	if v, ok := ctx.args.deps[pkgName]; ok {
 		packageJson, err = ctx.npmrc.getPackageInfo(pkgName, v)
 		if err == nil {
-			esm = Esm{
+			esm = EsmPath{
 				PkgName:       pkgName,
 				PkgVersion:    packageJson.Version,
 				SubPath:       subpath,
@@ -176,7 +176,7 @@ lookup:
 	var raw PackageJSONRaw
 	pkgJsonPath := path.Join(ctx.wd, "node_modules", pkgName, "package.json")
 	if utils.ParseJSONFile(pkgJsonPath, &raw) == nil {
-		esm = Esm{
+		esm = EsmPath{
 			PkgName:       pkgName,
 			PkgVersion:    raw.Version,
 			SubPath:       subpath,
@@ -206,7 +206,7 @@ lookup:
 
 	packageJson, err = ctx.npmrc.getPackageInfo(pkgName, version)
 	if err == nil {
-		esm = Esm{
+		esm = EsmPath{
 			PkgName:       pkgName,
 			PkgVersion:    packageJson.Version,
 			SubPath:       subpath,
@@ -220,7 +220,7 @@ lookup:
 	return
 }
 
-func (ctx *BuildContext) resolveEntry(esm Esm) (entry BuildEntry) {
+func (ctx *BuildContext) resolveEntry(esmPath EsmPath) (entry BuildEntry) {
 	pkgJson := ctx.pkgJson
 
 	// apply the `browser` field if it's a browser target
@@ -230,25 +230,25 @@ func (ctx *BuildContext) resolveEntry(esm Esm) (entry BuildEntry) {
 				entry.main = normalizeEntryPath(path)
 			}
 		}
-		if esm.SubModuleName == "" {
+		if esmPath.SubModuleName == "" {
 			if path, ok := pkgJson.Browser["."]; ok && ctx.existsPkgFile(path) {
 				entry.update(normalizeEntryPath(path), pkgJson.Type == "module" || strings.HasSuffix(path, ".mjs"))
 			}
 		}
 	}
 
-	if esm.SubModuleName != "" {
-		if endsWith(esm.SubPath, ".d.ts", ".d.mts", ".d.cts") {
-			entry.types = normalizeEntryPath(esm.SubPath)
+	if esmPath.SubModuleName != "" {
+		if endsWith(esmPath.SubPath, ".d.ts", ".d.mts", ".d.cts") {
+			entry.types = normalizeEntryPath(esmPath.SubPath)
 			return
 		}
 
-		if endsWith(esm.SubPath, ".jsx", ".ts", ".tsx", ".mts", ".svelte", ".vue") {
-			entry.update(normalizeEntryPath(esm.SubPath), true)
+		if endsWith(esmPath.SubPath, ".jsx", ".ts", ".tsx", ".mts", ".svelte", ".vue") {
+			entry.update(normalizeEntryPath(esmPath.SubPath), true)
 			return
 		}
 
-		subModuleName := esm.SubModuleName
+		subModuleName := esmPath.SubModuleName
 
 		// reslove sub-module using `exports` conditions if exists
 		// see https://nodejs.org/api/packages.html#package-entry-points
@@ -320,7 +320,7 @@ func (ctx *BuildContext) resolveEntry(esm Esm) (entry BuildEntry) {
 
 		// check if the sub-module is a directory and has a package.json
 		var rawInfo PackageJSONRaw
-		if utils.ParseJSONFile(path.Join(ctx.wd, "node_modules", ctx.esm.PkgName, subModuleName, "package.json"), &rawInfo) == nil {
+		if utils.ParseJSONFile(path.Join(ctx.wd, "node_modules", ctx.esmPath.PkgName, subModuleName, "package.json"), &rawInfo) == nil {
 			p := rawInfo.ToNpmPackage()
 			if entry.main == "" {
 				if p.Module != "" {
@@ -398,7 +398,6 @@ func (ctx *BuildContext) resolveEntry(esm Esm) (entry BuildEntry) {
 		if entry.types == "" && pkgJson.Typings != "" {
 			entry.types = pkgJson.Typings
 		}
-
 		if exports := pkgJson.Exports; exports.Len() > 0 {
 			exportEntry := BuildEntry{}
 			v, ok := exports.Get(".")
@@ -580,7 +579,7 @@ func (ctx *BuildContext) finalizeBuildEntry(entry *BuildEntry) {
 			entry.main = ""
 		} else if !entry.module && !strings.HasSuffix(entry.main, ".cjs") {
 			// check if the cjs entry is an ESM
-			isESM, _, err := validateModuleFile(path.Join(ctx.wd, "node_modules", ctx.esm.PkgName, entry.main))
+			isESM, _, err := validateModuleFile(path.Join(ctx.wd, "node_modules", ctx.esmPath.PkgName, entry.main))
 			if err == nil {
 				entry.module = isESM
 			}
@@ -644,70 +643,51 @@ func (ctx *BuildContext) resolveConditionExportEntry(conditions *JSONObject, pre
 		return
 	}
 
-	if ctx.isBrowserTarget() {
-		condition, ok := conditions.Get("browser")
-		if ok {
-			if s, ok := condition.(string); ok {
-				entry.update(s, preferedModuleType == "module")
-			} else if obj, ok := condition.(*JSONObject); ok {
-				entry = ctx.resolveConditionExportEntry(obj, preferedModuleType)
-			}
-		}
-	} else if ctx.isDenoTarget() {
-		conditionName := "deno"
-		// [workaround] to support ssr in Deno, use `node` condition for solid-js < 1.6.0
-		if ctx.esm.PkgName == "solid-js" && semverLessThan(ctx.esm.PkgVersion, "1.6.0") {
-			conditionName = "node"
-		}
+	applyCondition := func(conditionName string) bool {
 		condition, ok := conditions.Get(conditionName)
 		if ok {
 			if s, ok := condition.(string); ok {
-				entry.update(s, preferedModuleType == "module")
+				entry.update(s, preferedModuleType == "module" || strings.HasSuffix(s, ".mjs"))
+				return true
 			} else if obj, ok := condition.(*JSONObject); ok {
 				entry = ctx.resolveConditionExportEntry(obj, preferedModuleType)
+				return entry.main != ""
 			}
 		}
-	} else if ctx.target == "node" {
-		condition, ok := conditions.Get("node")
-		if ok {
-			if s, ok := condition.(string); ok {
-				entry.update(s, preferedModuleType == "module")
-			} else if obj, ok := condition.(*JSONObject); ok {
-				entry = ctx.resolveConditionExportEntry(obj, preferedModuleType)
-			}
-		}
+		return false
 	}
 
-	if ctx.dev {
-		condition, ok := conditions.Get("development")
-		if ok {
-			if s, ok := condition.(string); ok {
-				entry.update(s, preferedModuleType == "module")
-			} else if obj, ok := condition.(*JSONObject); ok {
-				entry = ctx.resolveConditionExportEntry(obj, preferedModuleType)
-			}
+	var conditionFound bool
+
+	if ctx.isBrowserTarget() {
+		conditionFound = applyCondition("browser")
+	} else if ctx.isDenoTarget() {
+		conditionName := "deno"
+		// [workaround] to support ssr in Deno, use `node` condition for solid-js < 1.6.0
+		if ctx.esmPath.PkgName == "solid-js" && semverLessThan(ctx.esmPath.PkgVersion, "1.6.0") {
+			conditionName = "node"
 		}
+		conditionFound = applyCondition(conditionName)
+	} else if ctx.target == "node" {
+		conditionFound = applyCondition("node")
 	}
 
 	if len(ctx.args.conditions) > 0 {
 		for _, conditionName := range ctx.args.conditions {
-			condition, ok := conditions.Get(conditionName)
-			if ok {
-				if s, ok := condition.(string); ok {
-					entry.update(s, preferedModuleType == "module")
-				} else if obj, ok := condition.(*JSONObject); ok {
-					entry = ctx.resolveConditionExportEntry(obj, preferedModuleType)
-				}
+			conditionFound = applyCondition(conditionName)
+			if conditionFound {
 				break
 			}
 		}
+	} else if ctx.dev {
+		conditionFound = applyCondition("development")
 	}
 
 LOOP:
 	for _, conditionName := range conditions.keys {
 		condition := conditions.values[conditionName]
 		module := false
-		prefered := preferedModuleType
+		prefered := ""
 		switch conditionName {
 		case "module", "import", "es2015":
 			module = true
@@ -716,15 +696,24 @@ LOOP:
 			module = false
 			prefered = "commonjs"
 		case "default":
-			module = preferedModuleType == "module"
 			prefered = preferedModuleType
+			if prefered != "module" {
+				if s, ok := condition.(string); ok && strings.HasSuffix(s, ".mjs") {
+					prefered = "module"
+				} else if _, ok := conditions.values["require"]; ok {
+					prefered = "module"
+				}
+			}
+			module = prefered == "module"
 		case "types", "typings":
-			if entry.types == "" {
-				if s, ok := condition.(string); ok {
+			if s, ok := condition.(string); ok {
+				if entry.types == "" || (!strings.HasSuffix(entry.types, ".d.mts") && strings.HasSuffix(s, ".d.mts")) {
 					entry.types = s
-				} else if obj, ok := condition.(*JSONObject); ok {
-					e := ctx.resolveConditionExportEntry(obj, "types")
-					if e.types != "" {
+				}
+			} else if obj, ok := condition.(*JSONObject); ok {
+				e := ctx.resolveConditionExportEntry(obj, "types")
+				if e.types != "" {
+					if entry.types == "" || (!strings.HasSuffix(entry.types, ".d.mts") && strings.HasSuffix(e.types, ".d.mts")) {
 						entry.types = e.types
 					}
 				}
@@ -734,7 +723,7 @@ LOOP:
 			// skip unknown condition
 			continue LOOP
 		}
-		if entry.main == "" || (!entry.module && module) {
+		if entry.main == "" || (!entry.module && module && !conditionFound) {
 			if s, ok := condition.(string); ok {
 				entry.update(s, module)
 			} else if obj, ok := condition.(*JSONObject); ok {
@@ -781,8 +770,8 @@ func (ctx *BuildContext) resolveExternalModule(specifier string, kind api.Resolv
 	}()
 
 	// it's the entry of current package from GitHub
-	if npm := ctx.pkgJson; ctx.esm.GhPrefix && (specifier == npm.Name || specifier == npm.PkgName) {
-		resolvedPath = ctx.getImportPath(Esm{
+	if npm := ctx.pkgJson; ctx.esmPath.GhPrefix && (specifier == npm.Name || specifier == npm.PkgName) {
+		resolvedPath = ctx.getImportPath(EsmPath{
 			PkgName:    npm.Name,
 			PkgVersion: npm.Version,
 			GhPrefix:   true,
@@ -811,11 +800,11 @@ func (ctx *BuildContext) resolveExternalModule(specifier string, kind api.Resolv
 	// it's a sub-module of current package
 	if strings.HasPrefix(specifier, ctx.pkgJson.Name+"/") {
 		subPath := strings.TrimPrefix(specifier, ctx.pkgJson.Name+"/")
-		subModule := Esm{
-			GhPrefix:      ctx.esm.GhPrefix,
-			PrPrefix:      ctx.esm.PrPrefix,
-			PkgName:       ctx.esm.PkgName,
-			PkgVersion:    ctx.esm.PkgVersion,
+		subModule := EsmPath{
+			GhPrefix:      ctx.esmPath.GhPrefix,
+			PrPrefix:      ctx.esmPath.PrPrefix,
+			PkgName:       ctx.esmPath.PkgName,
+			PkgVersion:    ctx.esmPath.PkgVersion,
 			SubPath:       subPath,
 			SubModuleName: stripEntryModuleExt(subPath),
 		}
@@ -830,8 +819,8 @@ func (ctx *BuildContext) resolveExternalModule(specifier string, kind api.Resolv
 	// common npm dependency
 	pkgName, version, subpath, _ := splitEsmPath(specifier)
 	if version == "" {
-		if pkgName == ctx.esm.PkgName {
-			version = ctx.esm.PkgVersion
+		if pkgName == ctx.esmPath.PkgName {
+			version = ctx.esmPath.PkgVersion
 		} else if pkgVerson, ok := ctx.args.deps[pkgName]; ok {
 			version = pkgVerson
 		} else if v, ok := ctx.pkgJson.Dependencies[pkgName]; ok {
@@ -844,11 +833,11 @@ func (ctx *BuildContext) resolveExternalModule(specifier string, kind api.Resolv
 	}
 
 	// force the version of 'react' (as dependency) equals to 'react-dom'
-	if ctx.esm.PkgName == "react-dom" && pkgName == "react" {
-		version = ctx.esm.PkgVersion
+	if ctx.esmPath.PkgName == "react-dom" && pkgName == "react" {
+		version = ctx.esmPath.PkgVersion
 	}
 
-	dep := Esm{
+	dep := EsmPath{
 		PkgName:       pkgName,
 		PkgVersion:    version,
 		SubPath:       subpath,
@@ -861,7 +850,7 @@ func (ctx *BuildContext) resolveExternalModule(specifier string, kind api.Resolv
 	// e.g. "react": "github:facebook/react#v18.2.0"
 	p, err := resolveDependencyVersion(version)
 	if err != nil {
-		resolvedPath = fmt.Sprintf("/error.js?type=%s&name=%s&importer=%s", strings.ReplaceAll(err.Error(), " ", "-"), pkgName, ctx.esm.Specifier())
+		resolvedPath = fmt.Sprintf("/error.js?type=%s&name=%s&importer=%s", strings.ReplaceAll(err.Error(), " ", "-"), pkgName, ctx.esmPath.Specifier())
 		return
 	}
 	if p.Name != "" {
@@ -979,13 +968,13 @@ func (ctx *BuildContext) resloveDTS(entry BuildEntry) (string, error) {
 		}
 		return fmt.Sprintf(
 			"/%s/%s%s",
-			ctx.esm.Name(),
+			ctx.esmPath.Name(),
 			ctx.getBuildArgsPrefix(true),
 			strings.TrimPrefix(entry.types, "./"),
 		), nil
 	}
 
-	if ctx.esm.SubPath != "" && (ctx.pkgJson.Types != "" || ctx.pkgJson.Typings != "") {
+	if ctx.esmPath.SubPath != "" && (ctx.pkgJson.Types != "" || ctx.pkgJson.Typings != "") {
 		return "", nil
 	}
 
@@ -1005,14 +994,14 @@ func (ctx *BuildContext) resloveDTS(entry BuildEntry) (string, error) {
 		for _, version := range versions {
 			p, err := ctx.npmrc.getPackageInfo(typesPkgName, version)
 			if err == nil {
-				dtsModule := Esm{
+				dtsModule := EsmPath{
 					PkgName:       typesPkgName,
 					PkgVersion:    p.Version,
-					SubPath:       ctx.esm.SubPath,
-					SubModuleName: ctx.esm.SubModuleName,
+					SubPath:       ctx.esmPath.SubPath,
+					SubModuleName: ctx.esmPath.SubModuleName,
 				}
 				b := &BuildContext{
-					esm:         dtsModule,
+					esmPath:     dtsModule,
 					npmrc:       ctx.npmrc,
 					args:        ctx.args,
 					externalAll: ctx.externalAll,
@@ -1052,7 +1041,7 @@ func (ctx *BuildContext) lexer(entry *BuildEntry) (ret *BuildMeta, cjsExports []
 
 		var isESM bool
 		var namedExports []string
-		isESM, namedExports, err = validateModuleFile(path.Join(ctx.wd, "node_modules", ctx.esm.PkgName, entry.main))
+		isESM, namedExports, err = validateModuleFile(path.Join(ctx.wd, "node_modules", ctx.esmPath.PkgName, entry.main))
 		if err != nil {
 			return
 		}

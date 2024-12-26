@@ -32,7 +32,7 @@ func transformDTS(ctx *BuildContext, dts string, buildArgsPrefix string, marker 
 	if isEntry {
 		marker = NewSet()
 	}
-	dtsPath := path.Join("/"+ctx.esm.Name(), buildArgsPrefix, dts)
+	dtsPath := path.Join("/"+ctx.esmPath.Name(), buildArgsPrefix, dts)
 	if marker.Has(dtsPath) {
 		// don't transform repeatly
 		return
@@ -46,7 +46,7 @@ func transformDTS(ctx *BuildContext, dts string, buildArgsPrefix string, marker 
 		return
 	}
 
-	dtsFilePath := path.Join(ctx.wd, "node_modules", ctx.esm.PkgName, dts)
+	dtsFilePath := path.Join(ctx.wd, "node_modules", ctx.esmPath.PkgName, dts)
 	dtsWD := path.Dir(dtsFilePath)
 	dtsFile, err := os.Open(dtsFilePath)
 	if err != nil {
@@ -69,7 +69,7 @@ func transformDTS(ctx *BuildContext, dts string, buildArgsPrefix string, marker 
 	hasReferenceTypesNode := false
 
 	err = parseDts(dtsFile, buffer, func(specifier string, kind TsImportKind, position int) (string, error) {
-		if ctx.esm.PkgName == "@types/node" {
+		if ctx.esmPath.PkgName == "@types/node" {
 			return specifier, nil
 		}
 
@@ -135,25 +135,25 @@ func transformDTS(ctx *BuildContext, dts string, buildArgsPrefix string, marker 
 			specifier += "/" + subPath
 		}
 
-		if depPkgName == ctx.esm.PkgName {
+		if depPkgName == ctx.esmPath.PkgName {
 			if strings.ContainsRune(subPath, '*') {
 				return fmt.Sprintf(
 					"{ESM_CDN_ORIGIN}/%s/%s%s",
-					ctx.esm.Name(),
+					ctx.esmPath.Name(),
 					ctx.getBuildArgsPrefix(true),
 					subPath,
 				), nil
 			} else {
-				entry := ctx.resolveEntry(Esm{
+				entry := ctx.resolveEntry(EsmPath{
 					PkgName:       depPkgName,
-					PkgVersion:    ctx.esm.PkgVersion,
+					PkgVersion:    ctx.esmPath.PkgVersion,
 					SubPath:       subPath,
 					SubModuleName: subPath,
 				})
 				if entry.types != "" {
 					return fmt.Sprintf(
 						"{ESM_CDN_ORIGIN}/%s/%s%s",
-						ctx.esm.Name(),
+						ctx.esmPath.Name(),
 						ctx.getBuildArgsPrefix(true),
 						strings.TrimPrefix(entry.types, "./"),
 					), nil
@@ -200,7 +200,7 @@ func transformDTS(ctx *BuildContext, dts string, buildArgsPrefix string, marker 
 			return "", err
 		}
 
-		dtsModule := Esm{
+		dtsModule := EsmPath{
 			PkgName:       p.Name,
 			PkgVersion:    p.Version,
 			SubPath:       subPath,
@@ -210,11 +210,11 @@ func transformDTS(ctx *BuildContext, dts string, buildArgsPrefix string, marker 
 			external: NewSet(),
 		}
 		b := &BuildContext{
-			esm:    dtsModule,
-			npmrc:  ctx.npmrc,
-			args:   args,
-			target: "types",
-			zoneId: ctx.zoneId,
+			esmPath: dtsModule,
+			npmrc:   ctx.npmrc,
+			args:    args,
+			target:  "types",
+			zoneId:  ctx.zoneId,
 		}
 		err = b.install()
 		if err != nil {

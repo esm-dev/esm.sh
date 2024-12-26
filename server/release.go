@@ -2,7 +2,9 @@
 
 package server
 
-const DEBUG = false
+const (
+	DEBUG = false
+)
 
 // may be changed by `-ldflags`
-var Version = "v136"
+var VERSION = "v136"

@@ -125,7 +125,7 @@ func encodeBuildArgs(args BuildArgs, isDts bool) string {
 }
 
 // resolveBuildArgs resolves `alias`, `deps`, `external` of the build args
-func resolveBuildArgs(npmrc *NpmRC, installDir string, args *BuildArgs, esm Esm) error {
+func resolveBuildArgs(npmrc *NpmRC, installDir string, args *BuildArgs, esm EsmPath) error {
 	if len(args.alias) > 0 || len(args.deps) > 0 || args.external.Len() > 0 {
 		// quick check if the alias, deps, external are all in dependencies of the package
 		depsSet, err := func() (set *Set, err error) {

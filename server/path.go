@@ -11,7 +11,7 @@ import (
 	"github.com/ije/gox/utils"
 )
 
-type Esm struct {
+type EsmPath struct {
 	GhPrefix      bool
 	PrPrefix      bool
 	PkgName       string
@@ -20,7 +20,7 @@ type Esm struct {
 	SubModuleName string
 }
 
-func (p Esm) Package() Package {
+func (p EsmPath) Package() Package {
 	return Package{
 		Github:   p.GhPrefix,
 		PkgPrNew: p.PrPrefix,
@@ -29,7 +29,7 @@ func (p Esm) Package() Package {
 	}
 }
 
-func (p Esm) Name() string {
+func (p EsmPath) Name() string {
 	name := p.PkgName
 	if p.PkgVersion != "" && p.PkgVersion != "*" && p.PkgVersion != "latest" {
 		name += "@" + p.PkgVersion
@@ -43,14 +43,14 @@ func (p Esm) Name() string {
 	return name
 }
 
-func (p Esm) Specifier() string {
+func (p EsmPath) Specifier() string {
 	if p.SubModuleName != "" {
 		return p.Name() + "/" + p.SubModuleName
 	}
 	return p.Name()
 }
 
-func praseEsmPath(npmrc *NpmRC, pathname string) (esm Esm, extraQuery string, isFixedVersion bool, isBuildDist bool, err error) {
+func praseEsmPath(npmrc *NpmRC, pathname string) (esmPath EsmPath, extraQuery string, isFixedVersion bool, isBuildDist bool, err error) {
 	// see https://pkg.pr.new
 	if strings.HasPrefix(pathname, "/pr/") || strings.HasPrefix(pathname, "/pkg.pr.new/") {
 		if strings.HasPrefix(pathname, "/pr/") {
@@ -70,7 +70,7 @@ func praseEsmPath(npmrc *NpmRC, pathname string) (esm Esm, extraQuery string, is
 		}
 		isBuildDist = validateBuildDist(strings.Split(subPath, "/"))
 		isFixedVersion = true
-		esm = Esm{
+		esmPath = EsmPath{
 			PkgName:       pkgName,
 			PkgVersion:    version,
 			SubPath:       subPath,
@@ -125,7 +125,7 @@ func praseEsmPath(npmrc *NpmRC, pathname string) (esm Esm, extraQuery string, is
 		version = v
 	}
 
-	esm = Esm{
+	esmPath = EsmPath{
 		PkgName:       pkgName,
 		PkgVersion:    version,
 		SubPath:       subPath,
@@ -134,38 +134,38 @@ func praseEsmPath(npmrc *NpmRC, pathname string) (esm Esm, extraQuery string, is
 	}
 
 	// workaround for es5-ext "../#/.." path
-	if esm.SubModuleName != "" && esm.PkgName == "es5-ext" {
-		esm.SubModuleName = strings.ReplaceAll(esm.SubModuleName, "/%23/", "/#/")
+	if esmPath.SubModuleName != "" && esmPath.PkgName == "es5-ext" {
+		esmPath.SubModuleName = strings.ReplaceAll(esmPath.SubModuleName, "/%23/", "/#/")
 	}
 
 	if ghPrefix {
-		if isCommitish(esm.PkgVersion) || regexpVersionStrict.MatchString(strings.TrimPrefix(esm.PkgVersion, "v")) {
+		if isCommitish(esmPath.PkgVersion) || regexpVersionStrict.MatchString(strings.TrimPrefix(esmPath.PkgVersion, "v")) {
 			isFixedVersion = true
 			return
 		}
 		var refs []GitRef
-		refs, err = listRepoRefs(fmt.Sprintf("https://github.com/%s", esm.PkgName))
+		refs, err = listRepoRefs(fmt.Sprintf("https://github.com/%s", esmPath.PkgName))
 		if err != nil {
 			return
 		}
-		if esm.PkgVersion == "" {
+		if esmPath.PkgVersion == "" {
 			for _, ref := range refs {
 				if ref.Ref == "HEAD" {
-					esm.PkgVersion = ref.Sha[:7]
+					esmPath.PkgVersion = ref.Sha[:7]
 					return
 				}
 			}
 		} else {
 			// try to find the exact tag or branch
 			for _, ref := range refs {
-				if ref.Ref == "refs/tags/"+esm.PkgVersion || ref.Ref == "refs/heads/"+esm.PkgVersion {
-					esm.PkgVersion = ref.Sha[:7]
+				if ref.Ref == "refs/tags/"+esmPath.PkgVersion || ref.Ref == "refs/heads/"+esmPath.PkgVersion {
+					esmPath.PkgVersion = ref.Sha[:7]
 					return
 				}
 			}
 			// try to find the semver tag
 			var c *semver.Constraints
-			c, err = semver.NewConstraint(strings.TrimPrefix(esm.PkgVersion, "semver:"))
+			c, err = semver.NewConstraint(strings.TrimPrefix(esmPath.PkgVersion, "semver:"))
 			if err == nil {
 				vs := make([]*semver.Version, len(refs))
 				i := 0
@@ -183,7 +183,7 @@ func praseEsmPath(npmrc *NpmRC, pathname string) (esm Esm, extraQuery string, is
 					if i > 1 {
 						sort.Sort(semver.Collection(vs))
 					}
-					esm.PkgVersion = vs[i-1].String()
+					esmPath.PkgVersion = vs[i-1].String()
 					return
 				}
 			}
@@ -192,12 +192,12 @@ func praseEsmPath(npmrc *NpmRC, pathname string) (esm Esm, extraQuery string, is
 		return
 	}
 
-	isFixedVersion = regexpVersionStrict.MatchString(esm.PkgVersion)
+	isFixedVersion = regexpVersionStrict.MatchString(esmPath.PkgVersion)
 	if !isFixedVersion {
 		var p *PackageJSON
-		p, err = npmrc.fetchPackageInfo(pkgName, esm.PkgVersion)
+		p, err = npmrc.fetchPackageInfo(pkgName, esmPath.PkgVersion)
 		if err == nil {
-			esm.PkgVersion = p.Version
+			esmPath.PkgVersion = p.Version
 		}
 	}
 	return

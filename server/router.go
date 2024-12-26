@@ -45,7 +45,7 @@ const (
 func esmRouter() rex.Handle {
 	var (
 		startTime  = time.Now()
-		globalETag = fmt.Sprintf(`W/"%s"`, Version)
+		globalETag = fmt.Sprintf(`W/"%s"`, VERSION)
 	)
 
 	return func(ctx *rex.Context) any {
@@ -272,7 +272,7 @@ func esmRouter() rex.Handle {
 			ctx.Header.Set("Cache-Control", ccMustRevalidate)
 			return map[string]any{
 				"buildQueue": q[:i],
-				"version":    Version,
+				"version":    VERSION,
 				"uptime":     time.Since(startTime).String(),
 				"disk":       disk,
 			}
@@ -485,7 +485,7 @@ func esmRouter() rex.Handle {
 					ctx.Header.Set("Content-Type", ctCSS)
 					return "body:after{position:fixed;top:0;left:0;z-index:9999;padding:18px 32px;width:100vw;content:'esm.sh/uno doesn't support local development, try serving your app with `esm.sh run`.';font-size:14px;background:rgba(255,232,232,.9);color:#f00;backdrop-filter:blur(8px)}"
 				}
-				if !regexpDomain.MatchString(hostname) || ctxUrl.Host == ctx.R.Host {
+				if !valid.IsDomain(hostname) || ctxUrl.Host == ctx.R.Host {
 					return rex.Status(400, "Invalid context url")
 				}
 			}
@@ -665,7 +665,7 @@ func esmRouter() rex.Handle {
 			hostname := u.Hostname()
 			// disallow localhost or ip address for production
 			if !DEBUG {
-				if isLocalhost(hostname) || !regexpDomain.MatchString(hostname) || u.Host == ctx.R.Host {
+				if isLocalhost(hostname) || !valid.IsDomain(hostname) || u.Host == ctx.R.Host {
 					return rex.Status(400, "Invalid URL")
 				}
 			}
@@ -1403,7 +1403,7 @@ func esmRouter() rex.Handle {
 					return rex.Status(500, err.Error())
 				}
 				buildCtx := &BuildContext{
-					esm:         esm,
+					esmPath:     esm,
 					npmrc:       npmrc,
 					args:        buildArgs,
 					externalAll: externalAll,
@@ -1511,7 +1511,7 @@ func esmRouter() rex.Handle {
 		}
 
 		buildCtx := &BuildContext{
-			esm:         esm,
+			esmPath:     esm,
 			npmrc:       npmrc,
 			args:        buildArgs,
 			bundleMode:  bundleMode,
