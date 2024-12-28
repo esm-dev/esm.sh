@@ -93,8 +93,8 @@ func endsWith(s string, suffixs ...string) bool {
 	return false
 }
 
-// contains returns true if the given string is included in the given array.
-func contains(a []string, s string) bool {
+// stringInSlice returns true if the given string is included in the given array.
+func stringInSlice(a []string, s string) bool {
 	if len(a) == 0 {
 		return false
 	}

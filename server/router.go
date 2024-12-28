@@ -21,6 +21,7 @@ import (
 	"github.com/esm-dev/esm.sh/server/storage"
 	esbuild "github.com/evanw/esbuild/pkg/api"
 	"github.com/ije/esbuild-internal/xxhash"
+	"github.com/ije/gox/set"
 	"github.com/ije/gox/utils"
 	"github.com/ije/gox/valid"
 	"github.com/ije/rex"
@@ -670,7 +671,7 @@ func esmRouter() rex.Handle {
 				}
 			}
 			extname := path.Ext(u.Path)
-			if !(contains(moduleExts, extname) || extname == ".vue" || extname == ".svelte" || extname == ".md" || extname == ".css") {
+			if !(stringInSlice(moduleExts, extname) || extname == ".vue" || extname == ".svelte" || extname == ".md" || extname == ".css") {
 				return redirect(ctx, u.String(), true)
 			}
 			im := query.Get("im")
@@ -1034,7 +1035,6 @@ func esmRouter() rex.Handle {
 				if l := len(files); l == 1 {
 					file = files[0]
 				} else if l > 1 {
-					sort.Sort(sort.Reverse(SortablePaths(files)))
 					for _, f := range files {
 						if strings.HasSuffix(esm.SubPath, f) {
 							file = f
@@ -1175,20 +1175,22 @@ func esmRouter() rex.Handle {
 					} else {
 						ctx.Header.Set("Content-Type", ctJavaScript)
 						// check `?exports` query
-						exports := NewSet()
+						jsIndentSet := set.New[string]()
 						if query.Has("exports") {
 							for _, p := range strings.Split(query.Get("exports"), ",") {
 								p = strings.TrimSpace(p)
 								if regexpJSIdent.MatchString(p) {
-									exports.Add(p)
+									jsIndentSet.Add(p)
 								}
 							}
 						}
+						exports := jsIndentSet.Values()
+						sort.Strings(exports)
 						if query.Has("worker") {
 							defer f.Close()
 							moduleUrl := cdnOrigin + pathname
-							if exports.Len() > 0 {
-								moduleUrl += "?exports=" + strings.Join(exports.SortedValues(), ",")
+							if len(exports) > 0 {
+								moduleUrl += "?exports=" + strings.Join(exports, ",")
 							}
 							return fmt.Sprintf(
 								`export default function workerFactory(injectOrOptions) { const options = typeof injectOrOptions === "string" ? { inject: injectOrOptions }: injectOrOptions ?? {}; const { inject, name = "%s" } = options; const blob = new Blob(['import * as $module from "%s";', inject].filter(Boolean), { type: "application/javascript" }); return new Worker(URL.createObjectURL(blob), { type: "module", name })}`,
@@ -1196,10 +1198,10 @@ func esmRouter() rex.Handle {
 								moduleUrl,
 							)
 						}
-						if exports.Len() > 0 {
+						if len(exports) > 0 {
 							defer f.Close()
 							xxh := xxhash.New()
-							xxh.Write([]byte(strings.Join(exports.SortedValues(), ",")))
+							xxh.Write([]byte(strings.Join(exports, ",")))
 							savePath = strings.TrimSuffix(savePath, ".mjs") + "_" + base64.RawURLEncoding.EncodeToString(xxh.Sum(nil)) + ".mjs"
 							f2, _, err := buildStorage.Get(savePath)
 							if err == nil {
@@ -1220,7 +1222,7 @@ func esmRouter() rex.Handle {
 									break
 								}
 							}
-							ret, err := treeShake(code, exports.SortedValues(), targets[target])
+							ret, err := treeShake(code, exports, targets[target])
 							if err != nil {
 								return rex.Status(500, err.Error())
 							}
@@ -1323,7 +1325,7 @@ func esmRouter() rex.Handle {
 
 		// check `?conditions` query
 		var conditions []string
-		conditionsSet := NewSet()
+		conditionsSet := set.New[string]()
 		if query.Has("conditions") {
 			for _, p := range strings.Split(query.Get("conditions"), ",") {
 				p = strings.TrimSpace(p)
@@ -1335,7 +1337,7 @@ func esmRouter() rex.Handle {
 		}
 
 		// check `?external` query
-		external := NewSet()
+		external := set.New[string]()
 		externalAll := asteriskPrefix
 		if !asteriskPrefix && query.Has("external") {
 			for _, p := range strings.Split(query.Get("external"), ",") {
@@ -1355,7 +1357,9 @@ func esmRouter() rex.Handle {
 			alias:      alias,
 			conditions: conditions,
 			deps:       deps,
-			external:   external,
+		}
+		if !externalAll && external.Len() > 0 {
+			buildArgs.external = *external.ReadOnly()
 		}
 
 		// match path `PKG@VERSION/X-${args}/esnext/SUBPATH`
@@ -1571,15 +1575,17 @@ func esmRouter() rex.Handle {
 		}
 
 		// check `?exports` query
-		exports := NewSet()
+		jsIdentSet := set.New[string]()
 		if query.Has("exports") {
 			for _, p := range strings.Split(query.Get("exports"), ",") {
 				p = strings.TrimSpace(p)
 				if regexpJSIdent.MatchString(p) {
-					exports.Add(p)
+					jsIdentSet.Add(p)
 				}
 			}
 		}
+		exports := jsIdentSet.Values()
+		sort.Strings(exports)
 
 		// if the path is `ESMBuild`, return the built js/css content
 		if pathKind == EsmBuild {
@@ -1606,8 +1612,8 @@ func esmRouter() rex.Handle {
 				if isWorker {
 					defer f.Close()
 					moduleUrl := cdnOrigin + buildCtx.Path()
-					if !ret.CJS && exports.Len() > 0 {
-						moduleUrl += "?exports=" + strings.Join(exports.SortedValues(), ",")
+					if !ret.CJS && len(exports) > 0 {
+						moduleUrl += "?exports=" + strings.Join(exports, ",")
 					}
 					return fmt.Sprintf(
 						`export default function workerFactory(injectOrOptions) { const options = typeof injectOrOptions === "string" ? { inject: injectOrOptions }: injectOrOptions ?? {}; const { inject, name = "%s" } = options; const blob = new Blob(['import * as $module from "%s";', inject].filter(Boolean), { type: "application/javascript" }); return new Worker(URL.createObjectURL(blob), { type: "module", name })}`,
@@ -1615,10 +1621,10 @@ func esmRouter() rex.Handle {
 						moduleUrl,
 					)
 				}
-				if !ret.CJS && exports.Len() > 0 {
+				if !ret.CJS && len(exports) > 0 {
 					defer f.Close()
 					xxh := xxhash.New()
-					xxh.Write([]byte(strings.Join(exports.SortedValues(), ",")))
+					xxh.Write([]byte(strings.Join(exports, ",")))
 					savePath = strings.TrimSuffix(savePath, ".mjs") + "_" + base64.RawURLEncoding.EncodeToString(xxh.Sum(nil)) + ".mjs"
 					f2, _, err := buildStorage.Get(savePath)
 					if err == nil {
@@ -1631,7 +1637,7 @@ func esmRouter() rex.Handle {
 					if err != nil {
 						return rex.Status(500, err.Error())
 					}
-					ret, err := treeShake(code, exports.SortedValues(), targets[target])
+					ret, err := treeShake(code, exports, targets[target])
 					if err != nil {
 						return rex.Status(500, err.Error())
 					}
@@ -1649,8 +1655,8 @@ func esmRouter() rex.Handle {
 
 		if isWorker {
 			moduleUrl := cdnOrigin + buildCtx.Path()
-			if !ret.CJS && exports.Len() > 0 {
-				moduleUrl += "?exports=" + strings.Join(exports.SortedValues(), ",")
+			if !ret.CJS && len(exports) > 0 {
+				moduleUrl += "?exports=" + strings.Join(exports, ",")
 			}
 			fmt.Fprintf(buf,
 				`export default function workerFactory(injectOrOptions) { const options = typeof injectOrOptions === "string" ? { inject: injectOrOptions }: injectOrOptions ?? {}; const { inject, name = "%s" } = options; const blob = new Blob(['import * as $module from "%s";', inject].filter(Boolean), { type: "application/javascript" }); return new Worker(URL.createObjectURL(blob), { type: "module", name })}`,
@@ -1664,17 +1670,17 @@ func esmRouter() rex.Handle {
 				}
 			}
 			esmPath := buildCtx.Path()
-			if !ret.CJS && exports.Len() > 0 {
-				esmPath += "?exports=" + strings.Join(exports.SortedValues(), ",")
+			if !ret.CJS && len(exports) > 0 {
+				esmPath += "?exports=" + strings.Join(exports, ",")
 			}
 			ctx.Header.Set("X-ESM-Path", esmPath)
 			fmt.Fprintf(buf, "export * from \"%s\";\n", esmPath)
-			if ret.ExportDefault && (exports.Len() == 0 || exports.Has("default")) {
+			if ret.ExportDefault && (len(exports) == 0 || stringInSlice(exports, "default")) {
 				fmt.Fprintf(buf, "export { default } from \"%s\";\n", esmPath)
 			}
-			if ret.CJS && exports.Len() > 0 {
+			if ret.CJS && len(exports) > 0 {
 				fmt.Fprintf(buf, "import _ from \"%s\";\n", esmPath)
-				fmt.Fprintf(buf, "export const { %s } = _;\n", strings.Join(exports.SortedValues(), ", "))
+				fmt.Fprintf(buf, "export const { %s } = _;\n", strings.Join(exports, ", "))
 			}
 			if !noDts && ret.Dts != "" {
 				ctx.Header.Set("X-TypeScript-Types", cdnOrigin+ret.Dts)

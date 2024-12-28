@@ -8,19 +8,9 @@ import (
 	"regexp"
 )
 
-var regReadTailwindPreflightCSS = regexp.MustCompile(`[a-zA-Z.]+\.readFileSync\(.+?/preflight\.css"\),\s*"utf-?8"\)`)
-
-// force to use `npm:` specifier for `denonext` target to support node native module or fix `createRequire` issue
-var forceNpmSpecifiers = map[string]bool{
-	"@achingbrain/ssdp": true,
-	"aws-crt":           true,
-	"default-gateway":   true,
-	"fsevent":           true,
-	"lightningcss":      true,
-	"re2":               true,
-	"zlib-sync":         true,
-	"css-tree":          true,
-}
+var (
+	regReadTailwindPreflightCSS = regexp.MustCompile(`[a-zA-Z.]+\.readFileSync\(.+?/preflight\.css"\),\s*"utf-?8"\)`)
+)
 
 func (ctx *BuildContext) rewriteJS(in []byte) (out []byte, dropSourceMap bool) {
 	switch ctx.esmPath.PkgName {

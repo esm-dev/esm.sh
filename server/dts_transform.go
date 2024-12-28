@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/esm-dev/esm.sh/server/storage"
+	"github.com/ije/gox/set"
 	"github.com/ije/gox/utils"
 )
 
@@ -27,10 +28,10 @@ func (ctx *BuildContext) transformDTS(dts string) error {
 }
 
 // transformDTS transforms a `.d.ts` file for deno/editor-lsp
-func transformDTS(ctx *BuildContext, dts string, buildArgsPrefix string, marker *Set) (n int, err error) {
+func transformDTS(ctx *BuildContext, dts string, buildArgsPrefix string, marker *set.Set[string]) (n int, err error) {
 	isEntry := marker == nil
 	if isEntry {
-		marker = NewSet()
+		marker = set.New[string]()
 	}
 	dtsPath := path.Join("/"+ctx.esmPath.Name(), buildArgsPrefix, dts)
 	if marker.Has(dtsPath) {
@@ -64,7 +65,7 @@ func transformDTS(ctx *BuildContext, dts string, buildArgsPrefix string, marker 
 
 	buffer, recycle := NewBuffer()
 	defer recycle()
-	internalDts := NewSet()
+	internalDts := set.New[string]()
 	withNodeBuiltinModule := false
 	hasReferenceTypesNode := false
 
@@ -83,10 +84,10 @@ func transformDTS(ctx *BuildContext, dts string, buildArgsPrefix string, marker 
 				var hasTypes bool
 				if utils.ParseJSONFile(path.Join(dtsWD, specifier, "package.json"), &p) == nil {
 					dir := path.Join("/", path.Dir(dts))
-					if types := p.Types.String(); types != "" {
+					if types := p.Types.MainString(); types != "" {
 						specifier, _ = relPath(dir, "/"+path.Join(dir, specifier, types))
 						hasTypes = true
-					} else if typings := p.Typings.String(); typings != "" {
+					} else if typings := p.Typings.MainString(); typings != "" {
 						specifier, _ = relPath(dir, "/"+path.Join(dir, specifier, typings))
 						hasTypes = true
 					}
@@ -206,9 +207,7 @@ func transformDTS(ctx *BuildContext, dts string, buildArgsPrefix string, marker 
 			SubPath:       subPath,
 			SubModuleName: subPath,
 		}
-		args := BuildArgs{
-			external: NewSet(),
-		}
+		args := BuildArgs{}
 		b := &BuildContext{
 			esmPath: dtsModule,
 			npmrc:   ctx.npmrc,

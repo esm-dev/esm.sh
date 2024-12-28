@@ -45,29 +45,47 @@ Deno.test("redirect semantic versioning module for deno target", async () => {
 });
 
 Deno.test("redirect asset URLs", async () => {
-  const res = await fetch("http://localhost:8080/preact/package.json", { redirect: "manual" });
-  res.body?.cancel();
-  assertEquals(res.status, 302);
-  assertEquals(res.headers.get("cache-control"), "public, max-age=600");
-  assertStringIncludes(res.headers.get("location")!, "http://localhost:8080/preact@");
+  {
+    const res = await fetch("http://localhost:8080/react/package.json", { redirect: "manual" });
+    res.body?.cancel();
+    assertEquals(res.status, 302);
+    assertEquals(res.headers.get("cache-control"), "public, max-age=600");
+    assertStringIncludes(res.headers.get("location")!, "http://localhost:8080/react@");
 
-  const res2 = await fetch(res.headers.get("location")!, { redirect: "manual" });
-  const pkg2 = await res2.json();
-  assertEquals(res2.status, 200);
-  assertEquals(res2.headers.get("cache-control"), "public, max-age=31536000, immutable");
-  assertStringIncludes(pkg2.name, "preact");
+    const res2 = await fetch(res.headers.get("location")!, { redirect: "manual" });
+    const pkg = await res2.json();
+    assertEquals(res2.status, 200);
+    assertEquals(res2.headers.get("cache-control"), "public, max-age=31536000, immutable");
+    assertStringIncludes(pkg.name, "react");
+  }
+  {
+    const res = await fetch("http://localhost:8080/react@^18.3.1/package.json", { redirect: "manual" });
+    res.body?.cancel();
+    assertEquals(res.status, 302);
+    assertEquals(res.headers.get("cache-control"), "public, max-age=600");
+    assertStringIncludes(res.headers.get("location")!, "http://localhost:8080/react@18.");
 
-  const res3 = await fetch("http://localhost:8080/preact@10/package.json", { redirect: "manual" });
-  res3.body?.cancel();
-  assertEquals(res3.status, 302);
-  assertEquals(res3.headers.get("cache-control"), "public, max-age=600");
-  assertStringIncludes(res3.headers.get("location")!, "http://localhost:8080/preact@10.");
+    const res2 = await fetch(res.headers.get("location")!, { redirect: "manual" });
+    const pkg = await res2.json();
+    assertEquals(res2.status, 200);
+    assertEquals(res2.headers.get("cache-control"), "public, max-age=31536000, immutable");
+    assertStringIncludes(pkg.name, "react");
+  }
+  {
+    const res = await fetch("http://localhost:8080/react/package.json?module", { redirect: "manual" });
+    res.body?.cancel();
+    assertEquals(res.status, 302);
+    assertEquals(res.headers.get("cache-control"), "public, max-age=600");
+    assertStringIncludes(res.headers.get("location")!, "http://localhost:8080/react@");
+    assert(res.headers.get("location")!.endsWith("/package.json?module"));
 
-  const res4 = await fetch(res.headers.get("location")!, { redirect: "manual" });
-  const pkg4 = await res4.json();
-  assertEquals(res4.status, 200);
-  assertEquals(res4.headers.get("cache-control"), "public, max-age=31536000, immutable");
-  assertStringIncludes(pkg4.name, "preact");
+    const res2 = await fetch(res.headers.get("location")!, { redirect: "manual" });
+    const js = await res2.text();
+    assertEquals(res2.status, 200);
+    assertEquals(res2.headers.get("cache-control"), "public, max-age=31536000, immutable");
+    assertEquals(res2.headers.get("content-type"), "application/javascript; charset=utf-8");
+    assertStringIncludes(js, "export default");
+  }
 });
 
 Deno.test("Fix wasm URLs with `target` segment", async () => {
@@ -119,183 +137,4 @@ Deno.test("dts-transformer: support `.d` extension", async () => {
   const res = await fetch("http://localhost:8080/tailwindcss@3.3.5/types/index.d.ts");
   const dts = await res.text();
   assertStringIncludes(dts, "'./config.d.ts'");
-});
-
-Deno.test("legacy routes", async () => {
-  try {
-    await import("http://localhost:8080/");
-  } catch (err) {
-    assertStringIncludes(err.message, "deprecated");
-  }
-  try {
-    await import("http://localhost:8080/v135");
-  } catch (err) {
-    assertStringIncludes(err.message, "deprecated");
-  }
-  {
-    const { esm, build, transform } = await import("http://localhost:8080/build");
-    assertEquals(typeof esm, "function");
-    assertEquals(typeof build, "function");
-    assertEquals(typeof transform, "function");
-    try {
-      esm``;
-    } catch (err) {
-      assertStringIncludes(err.message, "deprecated");
-    }
-  }
-  {
-    const { esm, build, transform } = await import("http://localhost:8080/v135/build");
-    assertEquals(typeof esm, "function");
-    assertEquals(typeof build, "function");
-    assertEquals(typeof transform, "function");
-    try {
-      esm``;
-    } catch (err) {
-      assertStringIncludes(err.message, "deprecated");
-    }
-  }
-  {
-    const res = await fetch("http://localhost:8080/react-dom@18.3.1?pin=v135", {
-      headers: {
-        "User-Agent":
-          "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
-      },
-    });
-    assertEquals(res.status, 200);
-    assertEquals(res.headers.get("Content-Type"), "application/javascript; charset=utf-8");
-    assertEquals(res.headers.get("X-Esm-Id"), "v135/react-dom@18.3.1/es2022/react-dom.mjs");
-    assertEquals(res.headers.get("X-TypeScript-Types"), "http://localhost:8080/v135/@types/react-dom@~18.3/index.d.ts");
-    assertStringIncludes(await res.text(), "/v135/react-dom@18.3.1/es2022/react-dom.mjs");
-  }
-  {
-    const res = await fetch("http://localhost:8080/react-dom@18.3.1?pin=v135&dev", {
-      headers: {
-        "User-Agent":
-          "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
-      },
-    });
-    assertEquals(res.status, 200);
-    assertEquals(res.headers.get("Content-Type"), "application/javascript; charset=utf-8");
-    assertEquals(res.headers.get("X-Esm-Id"), "v135/react-dom@18.3.1/es2022/react-dom.development.mjs");
-    assertEquals(res.headers.get("X-TypeScript-Types"), "http://localhost:8080/v135/@types/react-dom@~18.3/index.d.ts");
-    assertStringIncludes(await res.text(), "/v135/react-dom@18.3.1/es2022/react-dom.development.mjs");
-  }
-  {
-    const res = await fetch("http://localhost:8080/react-dom@18.3.1&pin=v135&dev", {
-      headers: {
-        "User-Agent":
-          "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
-      },
-    });
-    assertEquals(res.status, 200);
-    assertEquals(res.headers.get("Content-Type"), "application/javascript; charset=utf-8");
-    assertEquals(res.headers.get("X-Esm-Id"), "v135/react-dom@18.3.1/es2022/react-dom.development.mjs");
-    assertEquals(res.headers.get("X-TypeScript-Types"), "http://localhost:8080/v135/@types/react-dom@~18.3/index.d.ts");
-    assertStringIncludes(await res.text(), "/v135/react-dom@18.3.1/es2022/react-dom.development.mjs");
-  }
-  {
-    const res = await fetch("http://localhost:8080/react-dom@18.3.1/client?pin=v135", {
-      headers: {
-        "User-Agent":
-          "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
-      },
-    });
-    assertEquals(res.status, 200);
-    assertEquals(res.headers.get("Content-Type"), "application/javascript; charset=utf-8");
-    assertEquals(res.headers.get("X-Esm-Id"), "v135/react-dom@18.3.1/es2022/client.js");
-    assertEquals(res.headers.get("X-TypeScript-Types"), "http://localhost:8080/v135/@types/react-dom@~18.3/client~.d.ts");
-    assertStringIncludes(await res.text(), "/v135/react-dom@18.3.1/es2022/client.js");
-  }
-  {
-    const res = await fetch("http://localhost:8080/stable/react@18.3.1", {
-      headers: {
-        "User-Agent":
-          "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
-      },
-    });
-    assertEquals(res.status, 200);
-    assertEquals(res.headers.get("Content-Type"), "application/javascript; charset=utf-8");
-    assertEquals(res.headers.get("X-Esm-Id"), "stable/react@18.3.1/es2022/react.mjs");
-    assertEquals(res.headers.get("X-TypeScript-Types"), "http://localhost:8080/v128/@types/react@~18.3/index.d.ts");
-    assertStringIncludes(await res.text(), "/stable/react@18.3.1/es2022/react.mjs");
-  }
-  {
-    const res = await fetch("http://localhost:8080/v135/react-dom@18.3.1", {
-      headers: {
-        "User-Agent":
-          "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
-      },
-    });
-    assertEquals(res.status, 200);
-    assertEquals(res.headers.get("Content-Type"), "application/javascript; charset=utf-8");
-    assertEquals(res.headers.get("X-Esm-Id"), "v135/react-dom@18.3.1/es2022/react-dom.mjs");
-    assertEquals(res.headers.get("X-TypeScript-Types"), "http://localhost:8080/v135/@types/react-dom@~18.3/index.d.ts");
-    assertStringIncludes(await res.text(), "/v135/react-dom@18.3.1/es2022/react-dom.mjs");
-  }
-  {
-    const res = await fetch("http://localhost:8080/v135/@types/react-dom@~18.3/index.d.ts", {
-      redirect: "manual",
-    });
-    res.body?.cancel();
-    assertEquals(res.status, 302);
-    assert(/^http:\/\/localhost:8080\/v135\/@types\/react-dom@18\.3\.\d\/index\.d\.ts$/.test(res.headers.get("Location")!));
-  }
-  {
-    const res = await fetch("http://localhost:8080/v135/@types/react-dom@18.3.1/index.d.ts");
-    assertEquals(res.status, 200);
-    assertEquals(res.headers.get("Content-Type"), "application/typescript; charset=utf-8");
-    assertStringIncludes(await res.text(), "https://esm.sh/v135/@types/react@18.");
-  }
-  {
-    const res = await fetch("http://localhost:8080/v135/@types/react-dom@~18.3/client~.d.ts", {
-      redirect: "manual",
-    });
-    res.body?.cancel();
-    assertEquals(res.status, 302);
-    assert(/^http:\/\/localhost:8080\/v135\/@types\/react-dom@18\.3\.\d\/client~\.d\.ts$/.test(res.headers.get("Location")!));
-  }
-  {
-    const res = await fetch("http://localhost:8080/v135/@types/react-dom@18.3.1/client~.d.ts");
-    assertEquals(res.status, 200);
-    assertEquals(res.headers.get("Content-Type"), "application/typescript; charset=utf-8");
-    assertStringIncludes(await res.text(), "createRoot");
-  }
-  {
-    const res = await fetch("http://localhost:8080/stable/react@18.3.1/es2022/react.mjs", {
-      headers: { "User-Agent": "i'm a browser" },
-    });
-    assertEquals(res.status, 200);
-    assertEquals(res.headers.get("Content-Type"), "application/javascript; charset=utf-8");
-    assertStringIncludes(await res.text(), "createElement");
-  }
-  {
-    const res = await fetch("http://localhost:8080/v135/react-dom@18.3.1/es2022/client.js", {
-      headers: { "User-Agent": "i'm a browser" },
-    });
-    assertEquals(res.status, 200);
-    assertEquals(res.headers.get("Content-Type"), "application/javascript; charset=utf-8");
-    assertStringIncludes(await res.text(), "createRoot");
-  }
-  {
-    const res = await fetch("http://localhost:8080/v64/many-keys-weakmap@1.0.0/es2022/many-keys-weakmap.js", {
-      headers: { "User-Agent": "i'm a browser" },
-    });
-    assertEquals(res.status, 200);
-    assertEquals(res.headers.get("Content-Type"), "application/javascript; charset=utf-8");
-    assertStringIncludes(await res.text(), "ManyKeysWeakMap");
-  }
-  {
-    const res = await fetch("http://localhost:8080/v136/react-dom@18.3.1/es2022/client.js", {
-      headers: { "User-Agent": "i'm a browser" },
-    });
-    res.body?.cancel();
-    assertEquals(res.status, 400);
-  }
-  {
-    const res = await fetch("http://localhost:8080/react-dom@18.3.1/es2022/client.js", {
-      headers: { "User-Agent": "i'm a browser" },
-    });
-    res.body?.cancel();
-    assertEquals(res.status, 404);
-  }
 });

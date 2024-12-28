@@ -92,6 +92,9 @@ func (ctx *BuildContext) Path() string {
 }
 
 func (ctx *BuildContext) getImportPath(esm EsmPath, buildArgsPrefix string, externalAll bool) string {
+	if strings.HasSuffix(esm.SubPath, ".json") && ctx.existsPkgFile(esm.SubPath) {
+		return esm.Name() + "/" + esm.SubPath + "?module"
+	}
 	asteriskPrefix := ""
 	if externalAll {
 		asteriskPrefix = "*"
@@ -227,7 +230,7 @@ func (ctx *BuildContext) resolveEntry(esmPath EsmPath) (entry BuildEntry) {
 	if len(pkgJson.Browser) > 0 && ctx.isBrowserTarget() {
 		if entry.main != "" {
 			if path, ok := pkgJson.Browser[entry.main]; ok && ctx.existsPkgFile(path) {
-				entry.main = normalizeEntryPath(path)
+				entry.update(normalizeEntryPath(path), pkgJson.Type == "module" || strings.HasSuffix(path, ".mjs"))
 			}
 		}
 		if esmPath.SubModuleName == "" {
@@ -243,7 +246,7 @@ func (ctx *BuildContext) resolveEntry(esmPath EsmPath) (entry BuildEntry) {
 			return
 		}
 
-		if endsWith(esmPath.SubPath, ".jsx", ".ts", ".tsx", ".mts", ".svelte", ".vue") {
+		if endsWith(esmPath.SubPath, ".json", ".jsx", ".ts", ".tsx", ".mts", ".svelte", ".vue") {
 			entry.update(normalizeEntryPath(esmPath.SubPath), true)
 			return
 		}
@@ -265,7 +268,7 @@ func (ctx *BuildContext) resolveEntry(esmPath EsmPath) (entry BuildEntry) {
 							}
 							*/
 							exportEntry.update(s, pkgJson.Type == "module" || strings.HasSuffix(s, ".mjs"))
-						} else if obj, ok := conditions.(*JSONObject); ok {
+						} else if obj, ok := conditions.(JSONObject); ok {
 							/**
 							exports: {
 								"./lib/foo": {
@@ -290,7 +293,7 @@ func (ctx *BuildContext) resolveEntry(esmPath EsmPath) (entry BuildEntry) {
 								exportEntry.update(path, pkgJson.Type == "module" || strings.HasSuffix(path, ".mjs"))
 								break
 							}
-						} else if obj, ok := conditions.(*JSONObject); ok {
+						} else if obj, ok := conditions.(JSONObject); ok {
 							/**
 							exports: {
 								"./lib/*": {
@@ -409,7 +412,7 @@ func (ctx *BuildContext) resolveEntry(esmPath EsmPath) (entry BuildEntry) {
 					}
 					*/
 					exportEntry.update(s, pkgJson.Type == "module" || strings.HasSuffix(s, ".mjs"))
-				} else if obj, ok := v.(*JSONObject); ok {
+				} else if obj, ok := v.(JSONObject); ok {
 					/**
 					exports: {
 						".": {
@@ -627,14 +630,14 @@ func (ctx *BuildContext) finalizeBuildEntry(entry *BuildEntry) {
 }
 
 // see https://nodejs.org/api/packages.html#nested-conditions
-func (ctx *BuildContext) resolveConditionExportEntry(conditions *JSONObject, preferedModuleType string) (entry BuildEntry) {
+func (ctx *BuildContext) resolveConditionExportEntry(conditions JSONObject, preferedModuleType string) (entry BuildEntry) {
 	if preferedModuleType == "types" {
 		for _, conditionName := range []string{"module", "import", "es2015", "default", "require"} {
 			condition, ok := conditions.Get(conditionName)
 			if ok {
 				if s, ok := condition.(string); ok {
 					entry.types = s
-				} else if obj, ok := condition.(*JSONObject); ok {
+				} else if obj, ok := condition.(JSONObject); ok {
 					entry = ctx.resolveConditionExportEntry(obj, "types")
 				}
 				break
@@ -649,7 +652,7 @@ func (ctx *BuildContext) resolveConditionExportEntry(conditions *JSONObject, pre
 			if s, ok := condition.(string); ok {
 				entry.update(s, preferedModuleType == "module" || strings.HasSuffix(s, ".mjs"))
 				return true
-			} else if obj, ok := condition.(*JSONObject); ok {
+			} else if obj, ok := condition.(JSONObject); ok {
 				entry = ctx.resolveConditionExportEntry(obj, preferedModuleType)
 				return entry.main != ""
 			}
@@ -710,7 +713,7 @@ LOOP:
 				if entry.types == "" || (!strings.HasSuffix(entry.types, ".d.mts") && strings.HasSuffix(s, ".d.mts")) {
 					entry.types = s
 				}
-			} else if obj, ok := condition.(*JSONObject); ok {
+			} else if obj, ok := condition.(JSONObject); ok {
 				e := ctx.resolveConditionExportEntry(obj, "types")
 				if e.types != "" {
 					if entry.types == "" || (!strings.HasSuffix(entry.types, ".d.mts") && strings.HasSuffix(e.types, ".d.mts")) {
@@ -726,7 +729,7 @@ LOOP:
 		if entry.main == "" || (!entry.module && module && !conditionFound) {
 			if s, ok := condition.(string); ok {
 				entry.update(s, module)
-			} else if obj, ok := condition.(*JSONObject); ok {
+			} else if obj, ok := condition.(JSONObject); ok {
 				e := ctx.resolveConditionExportEntry(obj, prefered)
 				if e.main != "" {
 					entry.update(e.main, e.module)
@@ -770,10 +773,10 @@ func (ctx *BuildContext) resolveExternalModule(specifier string, kind api.Resolv
 	}()
 
 	// it's the entry of current package from GitHub
-	if npm := ctx.pkgJson; ctx.esmPath.GhPrefix && (specifier == npm.Name || specifier == npm.PkgName) {
+	if pkgJson := ctx.pkgJson; ctx.esmPath.GhPrefix && (specifier == pkgJson.Name || specifier == pkgJson.PkgName) {
 		resolvedPath = ctx.getImportPath(EsmPath{
-			PkgName:    npm.Name,
-			PkgVersion: npm.Version,
+			PkgName:    pkgJson.Name,
+			PkgVersion: pkgJson.Version,
 			GhPrefix:   true,
 		}, ctx.getBuildArgsPrefix(false), ctx.externalAll)
 		return
@@ -833,9 +836,9 @@ func (ctx *BuildContext) resolveExternalModule(specifier string, kind api.Resolv
 	}
 
 	// force the version of 'react' (as dependency) equals to 'react-dom'
-	if ctx.esmPath.PkgName == "react-dom" && pkgName == "react" {
-		version = ctx.esmPath.PkgVersion
-	}
+	// if ctx.esmPath.PkgName == "react-dom" && pkgName == "react" {
+	// 	version = ctx.esmPath.PkgVersion
+	// }
 
 	dep := EsmPath{
 		PkgName:       pkgName,
@@ -979,13 +982,13 @@ func (ctx *BuildContext) resloveDTS(entry BuildEntry) (string, error) {
 	}
 
 	// lookup types in @types scope
-	if packageJson := ctx.pkgJson; packageJson.Types == "" && !strings.HasPrefix(packageJson.Name, "@types/") && regexpVersionStrict.MatchString(packageJson.Version) {
-		versionParts := strings.Split(packageJson.Version, ".")
+	if pkgJson := ctx.pkgJson; pkgJson.Types == "" && !strings.HasPrefix(pkgJson.Name, "@types/") && regexpVersionStrict.MatchString(pkgJson.Version) {
+		versionParts := strings.Split(pkgJson.Version, ".")
 		versions := []string{
 			versionParts[0] + "." + versionParts[1], // major.minor
 			versionParts[0],                         // major
 		}
-		typesPkgName := toTypesPackageName(packageJson.Name)
+		typesPkgName := toTypesPackageName(pkgJson.Name)
 		pkgVersion, ok := ctx.args.deps[typesPkgName]
 		if ok {
 			// use the version of the `?deps` query if it exists
@@ -1047,7 +1050,7 @@ func (ctx *BuildContext) lexer(entry *BuildEntry) (ret *BuildMeta, cjsExports []
 		}
 		if isESM {
 			ret = &BuildMeta{
-				ExportDefault: contains(namedExports, "default"),
+				ExportDefault: stringInSlice(namedExports, "default"),
 			}
 			return
 		}
@@ -1098,30 +1101,32 @@ func matchAsteriskExports(epxortsKey string, subModuleName string) (diff string,
 	return "", false
 }
 
-func resloveAsteriskPathMapping(om *JSONObject, diff string) *JSONObject {
-	reslovedConditions := &JSONObject{
+func resloveAsteriskPathMapping(obj JSONObject, diff string) JSONObject {
+	reslovedConditions := JSONObject{
 		values: make(map[string]interface{}),
 	}
-	for _, key := range om.keys {
-		value, ok := om.Get(key)
+	for _, key := range obj.keys {
+		value, ok := obj.Get(key)
 		if ok {
 			if s, ok := value.(string); ok {
-				reslovedConditions.Set(key, strings.ReplaceAll(s, "*", diff))
-			} else if obj, ok := value.(*JSONObject); ok {
-				reslovedConditions.Set(key, resloveAsteriskPathMapping(obj, diff))
+				reslovedConditions.keys = append(reslovedConditions.keys, key)
+				reslovedConditions.values[key] = strings.ReplaceAll(s, "*", diff)
+			} else if obj, ok := value.(JSONObject); ok {
+				reslovedConditions.keys = append(reslovedConditions.keys, key)
+				reslovedConditions.values[key] = resloveAsteriskPathMapping(obj, diff)
 			}
 		}
 	}
 	return reslovedConditions
 }
 
-func getAllExportsPaths(exports *JSONObject) []string {
+func getAllExportsPaths(exports JSONObject) []string {
 	var values []string
 	for _, key := range exports.keys {
 		v := exports.values[key]
 		if s, ok := v.(string); ok {
 			values = append(values, s)
-		} else if condition, ok := v.(*JSONObject); ok {
+		} else if condition, ok := v.(JSONObject); ok {
 			values = append(values, getAllExportsPaths(condition)...)
 		}
 	}

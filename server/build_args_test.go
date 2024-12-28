@@ -2,13 +2,12 @@ package server
 
 import (
 	"testing"
+
+	"github.com/ije/gox/set"
 )
 
 func TestEncodeBuildArgs(t *testing.T) {
-	external := NewSet()
 	conditions := []string{"react-server"}
-	external.Add("baz")
-	external.Add("bar")
 	buildArgsString := encodeBuildArgs(
 		BuildArgs{
 			alias: map[string]string{"a": "b"},
@@ -17,7 +16,7 @@ func TestEncodeBuildArgs(t *testing.T) {
 				"d": "1.0.0",
 				"e": "1.0.0",
 			},
-			external:          external,
+			external:          *set.NewReadOnly("baz", "bar"),
 			conditions:        conditions,
 			externalRequire:   true,
 			keepNames:         true,

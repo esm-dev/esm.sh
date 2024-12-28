@@ -18,11 +18,12 @@ import (
 	"strings"
 	"time"
 
+	"github.com/ije/gox/set"
 	"github.com/ije/gox/utils"
 )
 
 var cjsModuleLexerVersion = "1.0.6"
-var cjsModuleLexerIgnoredPackages = NewSet(
+var cjsModuleLexerIgnoredPackages = set.New[string](
 	"@babel/types",
 	"cheerio",
 	"graceful-fs",

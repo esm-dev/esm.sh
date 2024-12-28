@@ -15,6 +15,7 @@ import (
 	npm_replacements "github.com/esm-dev/esm.sh/server/npm-replacements"
 	"github.com/esm-dev/esm.sh/server/storage"
 	logx "github.com/ije/gox/log"
+	"github.com/ije/gox/set"
 	"github.com/ije/rex"
 )
 
@@ -80,7 +81,7 @@ func Serve(efs EmbedFS) {
 
 	log, err = logx.New(fmt.Sprintf("file:%s?buffer=32k&fileDateFormat=20060102", path.Join(config.LogDir, "server.log")))
 	if err != nil {
-		fmt.Printf("initiate logger: %v\n", err)
+		fmt.Println("failed to initialize logger:", err)
 		os.Exit(1)
 	}
 	log.SetLevelByName(config.LogLevel)
@@ -176,7 +177,7 @@ func Serve(efs EmbedFS) {
 }
 
 func cors(allowOrigins []string) rex.Handle {
-	allowList := NewSet(allowOrigins...)
+	allowList := set.NewReadOnly[string](allowOrigins...)
 	return func(ctx *rex.Context) any {
 		origin := ctx.R.Header.Get("Origin")
 		isOptionsMethod := ctx.R.Method == "OPTIONS"
@@ -203,7 +204,7 @@ func cors(allowOrigins []string) rex.Handle {
 }
 
 func customLandingPage(options *LandingPageOptions) rex.Handle {
-	assets := NewSet()
+	assets := set.New[string]()
 	for _, p := range options.Assets {
 		assets.Add("/" + strings.TrimPrefix(p, "/"))
 	}

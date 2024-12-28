@@ -100,8 +100,8 @@ func parseCommandFlag() (string, []string) {
 	return args[0], args[1:]
 }
 
-// includes returns true if the given value is included in the array.
-func includes(arr []string, value string) bool {
+// stringInSlice returns true if the given value is included in the array.
+func stringInSlice(arr []string, value string) bool {
 	for _, v := range arr {
 		if v == value {
 			return true

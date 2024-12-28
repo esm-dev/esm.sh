@@ -6,13 +6,14 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/ije/gox/set"
 	"github.com/ije/gox/utils"
 )
 
 type BuildArgs struct {
 	alias             map[string]string
 	deps              map[string]string
-	external          *Set
+	external          set.ReadOnlySet[string]
 	conditions        []string
 	keepNames         bool
 	ignoreAnnotations bool
@@ -22,9 +23,7 @@ type BuildArgs struct {
 func decodeBuildArgs(argsString string) (args BuildArgs, err error) {
 	s, err := atobUrl(argsString)
 	if err == nil {
-		args = BuildArgs{
-			external: NewSet(),
-		}
+		args = BuildArgs{}
 		for _, p := range strings.Split(s, "\n") {
 			if strings.HasPrefix(p, "a") {
 				args.alias = map[string]string{}
@@ -44,9 +43,7 @@ func decodeBuildArgs(argsString string) (args BuildArgs, err error) {
 				}
 				args.deps = deps
 			} else if strings.HasPrefix(p, "e") {
-				for _, name := range strings.Split(p[1:], ",") {
-					args.external.Add(name)
-				}
+				args.external = *set.NewReadOnly[string](strings.Split(p[1:], ",")...)
 			} else if strings.HasPrefix(p, "c") {
 				args.conditions = append(args.conditions, strings.Split(p[1:], ",")...)
 			} else {
@@ -128,7 +125,7 @@ func encodeBuildArgs(args BuildArgs, isDts bool) string {
 func resolveBuildArgs(npmrc *NpmRC, installDir string, args *BuildArgs, esm EsmPath) error {
 	if len(args.alias) > 0 || len(args.deps) > 0 || args.external.Len() > 0 {
 		// quick check if the alias, deps, external are all in dependencies of the package
-		depsSet, err := func() (set *Set, err error) {
+		deps, ok, err := func() (deps *set.Set[string], ok bool, err error) {
 			var p *PackageJSON
 			pkgJsonPath := path.Join(installDir, "node_modules", esm.PkgName, "package.json")
 			if existsFile(pkgJsonPath) {
@@ -145,42 +142,42 @@ func resolveBuildArgs(npmrc *NpmRC, installDir string, args *BuildArgs, esm EsmP
 			if err != nil {
 				return
 			}
-			depsSet := NewSet()
+			deps = set.New[string]()
 			for name := range p.Dependencies {
-				depsSet.Add(name)
+				deps.Add(name)
 			}
 			for name := range p.PeerDependencies {
-				depsSet.Add(name)
+				deps.Add(name)
 			}
 			if len(args.alias) > 0 {
 				for from := range args.alias {
-					if !depsSet.Has(from) {
-						return
+					if !deps.Has(from) {
+						return nil, false, nil
 					}
 				}
 			}
 			if len(args.deps) > 0 {
 				for name := range args.deps {
-					if !depsSet.Has(name) {
-						return
+					if !deps.Has(name) {
+						return nil, false, nil
 					}
 				}
 			}
 			if args.external.Len() > 0 {
 				for _, name := range args.external.Values() {
-					if !depsSet.Has(name) {
-						return
+					if !deps.Has(name) {
+						return nil, false, nil
 					}
 				}
 			}
-			return depsSet, nil
+			return deps, true, nil
 		}()
 		if err != nil {
 			return err
 		}
-		if depsSet == nil {
-			depsSet = NewSet()
-			err = walkDeps(npmrc, installDir, esm.Package(), depsSet)
+		if !ok {
+			deps = set.New[string]()
+			err = walkDeps(npmrc, installDir, esm.Package(), deps)
 			if err != nil {
 				return err
 			}
@@ -188,7 +185,7 @@ func resolveBuildArgs(npmrc *NpmRC, installDir string, args *BuildArgs, esm EsmP
 		if len(args.alias) > 0 {
 			alias := map[string]string{}
 			for from, to := range args.alias {
-				if depsSet.Has(from) {
+				if deps.Has(from) {
 					alias[from] = to
 				}
 			}
@@ -197,56 +194,52 @@ func resolveBuildArgs(npmrc *NpmRC, installDir string, args *BuildArgs, esm EsmP
 				if pkgName == esm.PkgName {
 					delete(alias, from)
 				} else {
-					depsSet.Add(pkgName)
+					deps.Add(pkgName)
 				}
 			}
 			args.alias = alias
 		}
 		if len(args.deps) > 0 {
-			deps := map[string]string{}
+			depsArg := map[string]string{}
 			for name, version := range args.deps {
-				// The version of package "react" should be the same as "react-dom"
-				if esm.PkgName == "react-dom" && name == "react" {
-					continue
-				}
-				if name != esm.PkgName && depsSet.Has(name) {
-					deps[name] = version
+				if name != esm.PkgName && deps.Has(name) {
+					depsArg[name] = version
 					continue
 				}
 				// fix some edge cases
 				// for example, the package "htm" doesn't declare 'preact' as a dependency explicitly
 				// as a workaround, we check if the package name is in the subPath of the package
-				if esm.SubModuleName != "" && contains(strings.Split(esm.SubModuleName, "/"), name) {
-					deps[name] = version
+				if esm.SubModuleName != "" && stringInSlice(strings.Split(esm.SubModuleName, "/"), name) {
+					depsArg[name] = version
 				}
 			}
-			args.deps = deps
+			args.deps = depsArg
 		}
 		if args.external.Len() > 0 {
-			external := NewSet()
+			external := make([]string, 0, args.external.Len())
 			for _, name := range args.external.Values() {
 				if strings.HasPrefix(name, "node:") {
 					if nodeBuiltinModules[name[5:]] {
-						external.Add(name)
+						external = append(external, name)
 					}
 					continue
 				}
 				// if the subModule externalizes the package entry
 				if name == esm.PkgName && esm.SubPath != "" {
-					external.Add(name)
+					external = append(external, name)
 					continue
 				}
-				if name != esm.PkgName && depsSet.Has(name) {
-					external.Add(name)
+				if name != esm.PkgName && deps.Has(name) {
+					external = append(external, name)
 				}
 			}
-			args.external = external
+			args.external = *set.NewReadOnly[string](external...)
 		}
 	}
 	return nil
 }
 
-func walkDeps(npmrc *NpmRC, installDir string, pkg Package, mark *Set) (err error) {
+func walkDeps(npmrc *NpmRC, installDir string, pkg Package, mark *set.Set[string]) (err error) {
 	if mark.Has(pkg.Name) {
 		return
 	}

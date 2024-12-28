@@ -5,10 +5,12 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	syncx "github.com/ije/gox/sync"
 )
 
 var (
-	cacheMutex KeyedMutex
+	cacheMutex syncx.KeyedMutex
 	cacheStore sync.Map
 	cacheLRU   *list.List
 )
