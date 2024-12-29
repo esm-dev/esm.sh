@@ -75,31 +75,31 @@ ssh -p $sshPort ${user}@${host} << EOF
   echo \$gv
 
   if [ "$init" == "yes" ]; then
-    servicefn=/etc/systemd/system/esmd.service
-    if [ -f \$servicefn ]; then
-      rm -f servicefn
+    servicefile=/etc/systemd/system/esmd.service
+    if [ -f \$servicefile ]; then
+      rm -f servicefile
     fi
-    echo "[Unit]" >> \$servicefn
-    echo "Description=esm.sh service" >> \$servicefn
-    echo "After=network.target" >> \$servicefn
-    echo "StartLimitIntervalSec=0" >> \$servicefn
-    echo "[Service]" >> \$servicefn
-    echo "Type=simple" >> \$servicefn
+    echo "[Unit]" >> \$servicefile
+    echo "Description=esm.sh service" >> \$servicefile
+    echo "After=network.target" >> \$servicefile
+    echo "StartLimitIntervalSec=0" >> \$servicefile
+    echo "[Service]" >> \$servicefile
+    echo "Type=simple" >> \$servicefile
     if [ "$config" != "" ]; then
       mkdir -p /etc/esmd
       rm -f /etc/esmd/config.json
       echo "$config" >> /etc/esmd/config.json
-      echo "ExecStart=/usr/local/bin/esmd --config=/etc/esmd/config.json" >> \$servicefn
+      echo "ExecStart=/usr/local/bin/esmd --config=/etc/esmd/config.json" >> \$servicefile
     else
-      echo "ExecStart=/usr/local/bin/esmd" >> \$servicefn
+      echo "ExecStart=/usr/local/bin/esmd" >> \$servicefile
     fi
-    echo "USER=\${USER}" >> \$servicefn
-    echo "Restart=always" >> \$servicefn
-    echo "RestartSec=5" >> \$servicefn
-    echo "Environment=\"USER=\${USER}\"" >> \$servicefn
-    echo "Environment=\"HOME=\${HOME}\"" >> \$servicefn
-    echo "[Install]" >> \$servicefn
-    echo "WantedBy=default.target" >> \$servicefn
+    echo "USER=\${USER}" >> \$servicefile
+    echo "Restart=always" >> \$servicefile
+    echo "RestartSec=5" >> \$servicefile
+    echo "Environment=\"USER=\${USER}\"" >> \$servicefile
+    echo "Environment=\"HOME=\${HOME}\"" >> \$servicefile
+    echo "[Install]" >> \$servicefile
+    echo "WantedBy=default.target" >> \$servicefile
   else
     systemctl stop esmd.service
     echo "Stopped esmd.service."
