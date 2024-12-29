@@ -12,7 +12,7 @@ echo "  IdentityFile ~/.ssh/id_ed25519" >> ~/.ssh/config
 echo "  IdentitiesOnly yes" >> ~/.ssh/config
 
 echo "--- building..."
-go build -ldflags="-s -w -X 'github.com/esm-dev/esm.sh/server.Version=${VERSION}'" -o esmd $(dirname $0)/../main.go
+go build -ldflags="-s -w -X 'github.com/esm-dev/esm.sh/server.VERSION=${VERSION}'" -o esmd $(dirname $0)/../main.go
 if [ "$?" != "0" ]; then
   exit 1
 fi
