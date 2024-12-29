@@ -1,6 +1,7 @@
 package server
 
 import (
+	"bufio"
 	"bytes"
 	"encoding/base64"
 	"encoding/json"
@@ -11,6 +12,7 @@ import (
 	"path"
 	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 
 	npm_replacements "github.com/esm-dev/esm.sh/server/npm-replacements"
@@ -1425,7 +1427,7 @@ func (ctx *BuildContext) install() (err error) {
 }
 
 func (ctx *BuildContext) analyzeSplitting() (err error) {
-	if ctx.pkgJson.Exports.Len() > 1 && ctx.bundleMode == BundleDefault {
+	if ctx.bundleMode == BundleDefault && ctx.pkgJson.Exports.Len() > 1 {
 		exportNames := set.New[string]()
 		exportAll := false
 		for _, exportName := range ctx.pkgJson.Exports.keys {
@@ -1456,24 +1458,61 @@ func (ctx *BuildContext) analyzeSplitting() (err error) {
 			}
 		}
 		if !exportAll && exportNames.Len() > 1 {
-			splittingJsonPath := path.Join(ctx.wd, "splitting.json")
+			splittingTxtPath := path.Join(ctx.wd, "splitting.txt")
+			readSplittingTxt := func() bool {
+				f, err := os.Open(splittingTxtPath)
+				if err != nil {
+					return false
+				}
+				defer f.Close()
 
-			// check if the splitting has been installed
-			var splitting []string
-			if utils.ParseJSONFile(splittingJsonPath, &splitting) == nil {
-				fmt.Println("splitting.json found 1")
-				ctx.splitting = set.NewReadOnly[string](splitting...)
+				var a []string
+				var i int
+				var r = bufio.NewReader(f)
+				for {
+					line, readErr := r.ReadString('\n')
+					if readErr == nil || readErr == io.EOF {
+						line = strings.TrimSpace(line)
+						if line != "" {
+							if a == nil {
+								n, e := strconv.Atoi(line)
+								if e != nil {
+									break
+								}
+								a = make([]string, n+1)
+							}
+							a[i] = line
+							i++
+						}
+					}
+					if readErr != nil {
+						break
+					}
+				}
+				if len(a) > 1 {
+					n, e := strconv.Atoi(a[0])
+					if e == nil && n <= len(a)-1 {
+						ctx.splitting = set.NewReadOnly[string](a[1 : n+1]...)
+						if DEBUG {
+							log.Debugf("build(%s): splitting.txt found with %d shared modules", ctx.esmPath.Specifier(), ctx.splitting.Len())
+						}
+						return true
+					}
+				}
+				return false
+			}
+
+			// check if the splitting has been analyzed
+			if readSplittingTxt() {
 				return
 			}
 
 			// only one analyze process is allowed at the same time for the same package
-			unlock := installMutex.Lock(splittingJsonPath)
+			unlock := installMutex.Lock(splittingTxtPath)
 			defer unlock()
 
 			// skip analyze if the package has been analyzed by another request
-			if utils.ParseJSONFile(splittingJsonPath, &splitting) == nil {
-				fmt.Println("splitting.json found 2")
-				ctx.splitting = set.NewReadOnly[string](splitting...)
+			if readSplittingTxt() {
 				return
 			}
 
@@ -1482,7 +1521,22 @@ func (ctx *BuildContext) analyzeSplitting() (err error) {
 				if ctx.splitting != nil {
 					splitting = ctx.splitting.Values()
 				}
-				utils.WriteJSONFile(splittingJsonPath, splitting, "")
+				// write the splitting result to 'splitting.txt'
+				sizeStr := strconv.FormatUint(uint64(len(splitting)), 10)
+				bufSize := len(sizeStr) + 1
+				for _, s := range splitting {
+					bufSize += len(s) + 1
+				}
+				buf := make([]byte, bufSize)
+				i := copy(buf, sizeStr)
+				buf[i] = '\n'
+				i++
+				for _, s := range splitting {
+					i += copy(buf[i:], s)
+					buf[i] = '\n'
+					i++
+				}
+				os.WriteFile(splittingTxtPath, buf, 0644)
 			}()
 
 			refs := map[string]Ref{}
@@ -1527,8 +1581,7 @@ func (ctx *BuildContext) analyzeSplitting() (err error) {
 				hasMark := mark != nil
 				if !hasMark {
 					mark = set.New[string]()
-				}
-				if mark.Has(modulePath) {
+				} else if mark.Has(modulePath) {
 					return
 				}
 				mark.Add(modulePath)
@@ -1542,6 +1595,7 @@ func (ctx *BuildContext) analyzeSplitting() (err error) {
 						bubble(importer, f, mark)
 					}
 				} else {
+					// modulePath is an entry module
 					f(modulePath)
 				}
 			}
@@ -1549,11 +1603,7 @@ func (ctx *BuildContext) analyzeSplitting() (err error) {
 				splitting := set.New[string]()
 				for _, modulePath := range shared.Values() {
 					refBy := set.New[string]()
-					bubble(modulePath, func(importer string) {
-						if _, ok := refs[importer]; !ok || shared.Has(importer) {
-							refBy.Add(importer)
-						}
-					}, nil)
+					bubble(modulePath, func(importer string) { refBy.Add(importer) }, nil)
 					if refBy.Len() > 1 {
 						splitting.Add(modulePath)
 					}
