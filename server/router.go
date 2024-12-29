@@ -6,6 +6,7 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -165,12 +166,12 @@ func esmRouter() rex.Handle {
 				return map[string]any{"deleted": deleteKeys}
 
 			default:
-				return rex.Err(404, "not found")
+				return rex.Status(404, "not found")
 			}
 		case "GET", "HEAD":
 			// continue
 		default:
-			return rex.Err(405, "Method Not Allowed")
+			return rex.Status(405, "Method Not Allowed")
 		}
 
 		// strip trailing slash
@@ -198,7 +199,7 @@ func esmRouter() rex.Handle {
 		// static routes
 		switch pathname {
 		case "/favicon.ico":
-			favicon, err := embedFS.ReadFile("server/embed/favicon.ico")
+			favicon, err := embedFS.ReadFile("embed/favicon.ico")
 			if err != nil {
 				return err
 			}
@@ -217,22 +218,51 @@ func esmRouter() rex.Handle {
 			if ctx.R.Header.Get("If-None-Match") == globalETag {
 				return rex.Status(http.StatusNotModified, nil)
 			}
-			indexHTML, err := embedFS.ReadFile("server/embed/index.html")
-			if err != nil {
-				return err
+			cacheTtl := 31536000
+			if DEBUG {
+				cacheTtl = 0
 			}
-			readme, err := embedFS.ReadFile("README.md")
+			indexHTML, err := withCache("index.html", time.Duration(cacheTtl)*time.Second, func() (indexHTML []byte, _ string, err error) {
+				readme, err := os.ReadFile("README.md")
+				if err != nil {
+					fetchClient, recycle := NewFetchClient(15, ctx.UserAgent())
+					defer recycle()
+					readmeUrl, _ := url.Parse("https://raw.githubusercontent.com/esm-dev/esm.sh/refs/heads/main/README.md")
+					var res *http.Response
+					res, err = fetchClient.Fetch(readmeUrl, nil)
+					if err != nil {
+						err = errors.New("failed to fetch README.md from GitHub")
+						return
+					}
+					defer res.Body.Close()
+					if res.StatusCode != 200 {
+						err = errors.New("failed to fetch README.md from GitHub: " + res.Status)
+						return
+					}
+					readme, err = io.ReadAll(res.Body)
+				}
+				if err != nil {
+					err = errors.New("failed to read readme: " + err.Error())
+					return
+				}
+				readme = bytes.ReplaceAll(readme, []byte("./server/embed/"), []byte("/embed/"))
+				readme = bytes.ReplaceAll(readme, []byte("./HOSTING.md"), []byte("https://github.com/esm-dev/esm.sh/blob/main/HOSTING.md"))
+				readme = bytes.ReplaceAll(readme, []byte("https://esm.sh"), []byte(getCdnOrigin(ctx)))
+				readmeHtml, err := common.RenderMarkdown(readme, common.MarkdownRenderKindHTML)
+				if err != nil {
+					err = errors.New("failed to render readme: " + err.Error())
+					return
+				}
+				indexHTML, err = embedFS.ReadFile("embed/index.html")
+				if err != nil {
+					return
+				}
+				indexHTML = bytes.ReplaceAll(indexHTML, []byte("{README}"), readmeHtml)
+				return
+			})
 			if err != nil {
-				return err
+				return rex.Status(500, err.Error())
 			}
-			readme = bytes.ReplaceAll(readme, []byte("./server/embed/"), []byte("/embed/"))
-			readme = bytes.ReplaceAll(readme, []byte("./HOSTING.md"), []byte("https://github.com/esm-dev/esm.sh/blob/main/HOSTING.md"))
-			readme = bytes.ReplaceAll(readme, []byte("https://esm.sh"), []byte(getCdnOrigin(ctx)))
-			readmeHtml, err := common.RenderMarkdown(readme, common.MarkdownRenderKindHTML)
-			if err != nil {
-				return rex.Err(500, "Failed to render readme")
-			}
-			indexHTML = bytes.ReplaceAll(indexHTML, []byte("{README}"), readmeHtml)
 			ctx.Header.Set("Content-Type", ctHtml)
 			ctx.Header.Set("Cache-Control", ccMustRevalidate)
 			ctx.Header.Set("Etag", globalETag)
@@ -346,12 +376,29 @@ func esmRouter() rex.Handle {
 				target = getBuildTargetByUA(ctx.UserAgent())
 			}
 
-			js, err := buildEmbedTSModule(pathname[1:]+".ts", target)
-			if err != nil {
-				return rex.Status(500, fmt.Sprintf("Transform error: %v", err))
+			cacheTtl := 31536000
+			if DEBUG {
+				cacheTtl = 0
 			}
-
-			ctx.Header.Set("Cache-Control", cc1day)
+			filename := "embed/" + pathname[1:] + ".ts"
+			js, err := withCache(filename+"?"+target, time.Duration(cacheTtl)*time.Second, func() (js []byte, _ string, err error) {
+				data, err := embedFS.ReadFile(filename)
+				if err != nil {
+					return
+				}
+				// replace `$TARGET` with the target
+				data = bytes.ReplaceAll(data, []byte("$TARGET"), []byte(target))
+				js, err = minify(string(data), esbuild.LoaderTS, targets[target])
+				return
+			})
+			if err != nil {
+				return rex.Status(500, err.Error())
+			}
+			if DEBUG {
+				ctx.Header.Set("Cache-Control", ccMustRevalidate)
+			} else {
+				ctx.Header.Set("Cache-Control", cc1day)
+			}
 			ctx.Header.Set("Etag", globalETag)
 			if targetFromUA {
 				appendVaryHeader(ctx.W.Header(), "User-Agent")
@@ -410,11 +457,11 @@ func esmRouter() rex.Handle {
 
 		// embed assets
 		if strings.HasPrefix(pathname, "/embed/") {
-			data, err := embedFS.ReadFile("server" + pathname)
+			data, err := embedFS.ReadFile(pathname)
 			if err != nil {
 				return rex.Status(404, "not found")
 			}
-			if _, ok := embedFS.(*MockEmbedFS); ok {
+			if !DEBUG {
 				ctx.Header.Set("Cache-Control", ccMustRevalidate)
 			} else {
 				etag := fmt.Sprintf(`W/"%d%d"`, startTime.Unix(), len(data))

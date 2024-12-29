@@ -26,7 +26,7 @@ var (
 )
 
 func loadUnenvNodeRuntime() (err error) {
-	data, err := embedFS.ReadFile("server/embed/node-runtime.tgz")
+	data, err := embedFS.ReadFile("embed/node-runtime.tgz")
 	if err == nil {
 		tarball, err := gzip.NewReader(bytes.NewReader(data))
 		if err == nil {
@@ -130,8 +130,12 @@ func buildUnenvNodeRuntime() (err error) {
 
 	// write the tarball to 'server/embed/' in DEBUG mode
 	var tarball *tar.Writer
-	if fs, ok := embedFS.(*MockEmbedFS); ok {
-		file, err := os.OpenFile(path.Join(fs.root, "server/embed/node-runtime.tgz"), os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0644)
+	if DEBUG {
+		wd, err := os.Getwd()
+		if err != nil {
+			return err
+		}
+		file, err := os.OpenFile(path.Join(wd, "server/embed/node-runtime.tgz"), os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0644)
 		if err != nil {
 			return err
 		}
