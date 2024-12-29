@@ -12,7 +12,7 @@ import (
 	"syscall"
 	"time"
 
-	npm_replacements "github.com/esm-dev/esm.sh/server/npm-replacements"
+	"github.com/esm-dev/esm.sh/server/npm_replacements"
 	"github.com/esm-dev/esm.sh/server/storage"
 	logx "github.com/ije/gox/log"
 	"github.com/ije/gox/set"
