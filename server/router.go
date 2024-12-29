@@ -13,6 +13,7 @@ import (
 	"net/url"
 	"os"
 	"path"
+	"regexp"
 	"sort"
 	"strings"
 	"syscall"
@@ -42,6 +43,23 @@ const (
 	EsmDts
 	// package raw file
 	RawFile
+)
+
+const (
+	ccMustRevalidate = "public, max-age=0, must-revalidate"
+	ccOneDay         = "public, max-age=86400"
+	ccImmutable      = "public, max-age=31536000, immutable"
+	ctHTML           = "text/html; charset=utf-8"
+	ctCSS            = "text/css; charset=utf-8"
+	ctJSON           = "application/json; charset=utf-8"
+	ctJavaScript     = "application/javascript; charset=utf-8"
+	ctTypeScript     = "application/typescript; charset=utf-8"
+)
+
+var (
+	regexpVersion       = regexp.MustCompile(`^[\w\+\-\.]+$`)
+	regexpVersionStrict = regexp.MustCompile(`^\d+\.\d+\.\d+(-[\w\+\-\.]+)?$`)
+	regexpJSIdent       = regexp.MustCompile(`^[a-zA-Z_$][\w$]*$`)
 )
 
 func esmRouter() rex.Handle {
@@ -263,7 +281,7 @@ func esmRouter() rex.Handle {
 			if err != nil {
 				return rex.Status(500, err.Error())
 			}
-			ctx.Header.Set("Content-Type", ctHtml)
+			ctx.Header.Set("Content-Type", ctHTML)
 			ctx.Header.Set("Cache-Control", ccMustRevalidate)
 			ctx.Header.Set("Etag", globalETag)
 			return indexHTML
@@ -397,7 +415,7 @@ func esmRouter() rex.Handle {
 			if DEBUG {
 				ctx.Header.Set("Cache-Control", ccMustRevalidate)
 			} else {
-				ctx.Header.Set("Cache-Control", cc1day)
+				ctx.Header.Set("Cache-Control", ccOneDay)
 			}
 			ctx.Header.Set("Etag", globalETag)
 			if targetFromUA {
@@ -448,7 +466,7 @@ func esmRouter() rex.Handle {
 				if ifNoneMatch == globalETag && !DEBUG {
 					return rex.Status(http.StatusNotModified, nil)
 				}
-				ctx.Header.Set("Cache-Control", cc1day)
+				ctx.Header.Set("Cache-Control", ccOneDay)
 				ctx.Header.Set("Etag", globalETag)
 			}
 			ctx.Header.Set("Content-Type", ctJavaScript)
@@ -469,7 +487,7 @@ func esmRouter() rex.Handle {
 					return rex.Status(http.StatusNotModified, nil)
 				}
 				ctx.Header.Set("Etag", etag)
-				ctx.Header.Set("Cache-Control", cc1day)
+				ctx.Header.Set("Cache-Control", ccOneDay)
 			}
 			contentType := common.ContentType(pathname)
 			if contentType != "" {

@@ -7,7 +7,6 @@ import (
 	"os"
 	"os/signal"
 	"path"
-	"regexp"
 	"strings"
 	"syscall"
 	"time"
@@ -17,25 +16,6 @@ import (
 	logx "github.com/ije/gox/log"
 	"github.com/ije/gox/set"
 	"github.com/ije/rex"
-)
-
-const (
-	cc1day           = "public, max-age=86400"
-	ccMustRevalidate = "public, max-age=0, must-revalidate"
-	ccImmutable      = "public, max-age=31536000, immutable"
-	ctJavaScript     = "application/javascript; charset=utf-8"
-	ctTypeScript     = "application/typescript; charset=utf-8"
-	ctJSON           = "application/json; charset=utf-8"
-	ctCSS            = "text/css; charset=utf-8"
-	ctHtml           = "text/html; charset=utf-8"
-)
-
-var (
-	regexpVersion          = regexp.MustCompile(`^[\w\+\-\.]+$`)
-	regexpVersionStrict    = regexp.MustCompile(`^\d+\.\d+\.\d+(-[\w\+\-\.]+)?$`)
-	regexpJSIdent          = regexp.MustCompile(`^[a-zA-Z_$][\w$]*$`)
-	regexpESMInternalIdent = regexp.MustCompile(`__[a-zA-Z]+\$`)
-	regexpVarDecl          = regexp.MustCompile(`var ([\w$]+)\s*=\s*[\w$]+$`)
 )
 
 var (
