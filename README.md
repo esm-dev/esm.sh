@@ -8,7 +8,7 @@
 
 # esm.sh
 
-The _no-build_ content delivery network(CDN) for modern web development.
+A _no-build_ content delivery network(CDN) for modern web development.
 
 ## How to Use
 
@@ -92,17 +92,35 @@ import useSWR from "https://esm.sh/swr?alias=react:preact/compat&deps=preact@10.
 
 ### Bundling Strategy
 
-By default, esm.sh bundles sub-modules that ain't declared in the `exports` field.
+By default, esm.sh bundles sub-modules of a package that are not shared by entry modules defined in the `exports` field of `package.json`.
 
-Bundling sub-modules can reduce the number of network requests for performance. However, it may bundle shared modules
-repeatedly. In extreme case, it may break the side effects of the package, or change the `import.meta.url` semantics. To
-avoid this, you can add `?bundle=false` to disable the default bundling behavior:
+Bundling sub-modules can reduce the number of network requests, improving performance. However, it may result in repeated bundling of shared modules. In extreme cases, this can break package side effects or alter the `import.meta.url` semantics. To prevent this, you can disable the default bundling behavior by adding `?bundle=false`:
 
 ```js
 import "https://esm.sh/@pyscript/core?bundle=false";
 ```
 
-For package authors, you can override the bundling strategy by adding the `esm.sh` field to `package.json`:
+For package authors, it is recommended to define the `exports` field in `package.json`. This specifies the entry modules of the package, allowing esm.sh to accurately analyze the dependency tree and bundle the modules without duplication.
+
+```jsonc
+{
+  "name": "foo",
+  "exports": {
+    ".": {
+      "import": "./index.js",
+      "require": "./index.cjs",
+      "types": "./index.d.ts"
+    },
+    "./submodule": {
+      "import": "./submodule.js",
+      "require": "./submodule.cjs",
+      "types": "./submodule.d.ts"
+    }
+  }
+}
+```
+
+Or you can override the bundling strategy by adding the `esm.sh` field to your `package.json`:
 
 ```jsonc
 {
@@ -113,7 +131,7 @@ For package authors, you can override the bundling strategy by adding the `esm.s
 }
 ```
 
-esm.sh also supports `?bundle=all` query to bundle the module with all external dependencies(except in `peerDependencies`) into a single JS file.
+You can also use the `?bundle=all` query to bundle the module along with all its external dependencies (excluding those in `peerDependencies`) into a single JavaScript file.
 
 ```js
 import { Button } from "https://esm.sh/antd?bundle=all";

@@ -142,6 +142,7 @@ func (ctx *BuildContext) Build() (meta *BuildMeta, err error) {
 		return
 	}
 
+	// analyze splitting modules
 	ctx.status = "analyze"
 	err = ctx.analyzeSplitting()
 	if err != nil {
@@ -683,6 +684,7 @@ func (ctx *BuildContext) buildModule(analyzeMode bool) (meta *BuildMeta, include
 							// bundle the package module if
 							// - it's the entry module
 							// - it's not a dynamic import and `?bundle=false` query is not present
+							// - it's not in the `splitting` list
 							if moduleSpecifier == entry.main || (exportSpecifier != "" && exportSpecifier == entrySpecifier) || (args.Kind != esbuild.ResolveJSDynamicImport && !noBundle) {
 								if existsFile(moduleFilename) {
 									pkgDir := path.Join(ctx.wd, "node_modules", ctx.esmPath.PkgName)
