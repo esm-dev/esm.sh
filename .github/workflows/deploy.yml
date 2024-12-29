@@ -19,10 +19,10 @@ jobs:
         with:
           go-version: 1.23.x
 
-      - name: Run `deploy-ci.sh`
+      - name: Run Deploy Script
         run: ./scripts/deploy-ci.sh
         env:
-          GOOS: linux
+          GOOS: ${{ secrets.DEPLOY_HOST_OS }}
           GOARCH: ${{ secrets.DEPLOY_HOST_ARCH }}
           DEPLOY_HOST_NAME: ${{ secrets.DEPLOY_HOST_NAME }}
           DEPLOY_HOST_PORT: ${{ secrets.DEPLOY_HOST_PORT }}

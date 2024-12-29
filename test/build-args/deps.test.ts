@@ -4,7 +4,7 @@ Deno.test("?deps", async () => {
   {
     const res = await fetch("http://localhost:8080/@mui/material@5.16.7?deps=react@18.2.0,react-dom@18.2.0&target=es2022");
     const code = await res.text();
-    assertStringIncludes(code, 'import "/react-dom@18.2.0/es2022/react-dom.mjs"');
+    assertStringIncludes(code, 'import "/react-dom@18.2.0/X-ZHJlYWN0QDE4LjIuMA/es2022/react-dom.mjs"');
     assertStringIncludes(code, 'import "/react@18.2.0/es2022/jsx-runtime.mjs"');
     assertStringIncludes(code, 'import "/react@18.2.0/es2022/react.mjs"');
     assertStringIncludes(code, 'import "/react-transition-group@^4.4.5?deps=react-dom@18.2.0,react@18.2.0&target=es2022"');
@@ -15,7 +15,7 @@ Deno.test("?deps", async () => {
   {
     const res = await fetch("http://localhost:8080/@mui/material@5.16.7/X-ZHJlYWN0LWRvbUAxOC4yLjAscmVhY3RAMTguMi4w/es2022/material.mjs");
     const code = await res.text();
-    assertStringIncludes(code, 'from"/react-dom@18.2.0/es2022/react-dom.mjs"');
+    assertStringIncludes(code, 'from"/react-dom@18.2.0/X-ZHJlYWN0QDE4LjIuMA/es2022/react-dom.mjs"');
     assertStringIncludes(code, 'from"/react@18.2.0/es2022/jsx-runtime.mjs"');
     assertStringIncludes(code, 'from"/react@18.2.0/es2022/react.mjs"');
     assertStringIncludes(code, 'from"/react-transition-group@^4.4.5?deps=react-dom@18.2.0,react@18.2.0&target=es2022"');

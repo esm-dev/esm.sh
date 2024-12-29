@@ -1,6 +1,6 @@
 import { assert } from "jsr:@std/assert";
 
-import { minify } from "http://localhost:8080/terser";
+import { minify } from "http://localhost:8080/terser@5.37.0";
 
 Deno.test("terser", async () => {
   const code = "function add(first, second) { return first + second; }";

@@ -9,13 +9,13 @@ import (
 )
 
 var (
-	regexpImportFromExpr    = regexp.MustCompile(`^import(\s+type)?\s*('|"|[\w\$]+|\*|\{)`)
-	regexpExportFromExpr    = regexp.MustCompile(`^export(\s+type)?\s*(\*|\{)`)
+	regexpImportDecl        = regexp.MustCompile(`^import(\s+type)?\s*('|"|[\w\$]+|\*|\{)`)
+	regexpExportDecl        = regexp.MustCompile(`^export(\s+type)?\s*(\*|\{)`)
 	regexpFromExpr          = regexp.MustCompile(`(\}|\*|\s)from\s*['"]`)
-	regexpImportPathExpr    = regexp.MustCompile(`^import\s*['"]`)
+	regexpImportPathDecl    = regexp.MustCompile(`^import\s*['"]`)
 	regexpImportCallExpr    = regexp.MustCompile(`(import|require)\(['"][^'"]+['"]\)`)
-	regexpDeclareModuleExpr = regexp.MustCompile(`^declare\s+module\s*['"].+?['"]`)
-	regexpReferenceTag      = regexp.MustCompile(`^\s*<reference\s+(path|types)\s*=\s*['"](.+?)['"].+>`)
+	regexpDeclareModuleStmt = regexp.MustCompile(`^declare\s+module\s*['"].+?['"]`)
+	regexpTSReferenceTag    = regexp.MustCompile(`^\s*<reference\s+(path|types)\s*=\s*['"](.+?)['"].+>`)
 )
 
 var (
@@ -32,7 +32,7 @@ type TsImportKind uint8
 const (
 	TsReferenceTypes TsImportKind = iota
 	TsReferencePath
-	TsImportFrom
+	TsImportDecl
 	TsImportCall
 	TsDeclareModule
 )
@@ -40,7 +40,7 @@ const (
 // a simple dts lexer for resolving import path
 func parseDts(r io.Reader, w *bytes.Buffer, resolve func(specifier string, kind TsImportKind, position int) (resovledPath string, err error)) (err error) {
 	var multiLineComment bool
-	var importExportExpr bool
+	var importOrExportDeclFound bool
 	scanner := bufio.NewScanner(r)
 	for scanner.Scan() {
 		line, trimedSpaces := trimSpace(scanner.Bytes())
@@ -64,8 +64,8 @@ func parseDts(r io.Reader, w *bytes.Buffer, resolve func(specifier string, kind 
 			}
 		} else if bytes.HasPrefix(line, bytesStripleSlash) {
 			rest := bytes.TrimPrefix(line, bytesStripleSlash)
-			if regexpReferenceTag.Match(rest) {
-				a := regexpReferenceTag.FindAllSubmatch(rest, 1)
+			if regexpTSReferenceTag.Match(rest) {
+				a := regexpTSReferenceTag.FindAllSubmatch(rest, 1)
 				format := string(a[0][1])
 				path := string(a[0][2])
 				if format == "path" || format == "types" {
@@ -130,10 +130,10 @@ func parseDts(r io.Reader, w *bytes.Buffer, resolve func(specifier string, kind 
 						})
 					}
 
-					if !importExportExpr && (bytes.HasPrefix(expr, []byte("import")) && regexpImportFromExpr.Match(expr)) || (bytes.HasPrefix(expr, []byte("export")) && regexpExportFromExpr.Match(expr)) {
-						importExportExpr = true
+					if !importOrExportDeclFound && (bytes.HasPrefix(expr, []byte("import")) && regexpImportDecl.Match(expr)) || (bytes.HasPrefix(expr, []byte("export")) && regexpExportDecl.Match(expr)) {
+						importOrExportDeclFound = true
 					}
-					if bytes.HasPrefix(expr, []byte("declare")) && regexpDeclareModuleExpr.Match(expr) {
+					if bytes.HasPrefix(expr, []byte("declare")) && regexpDeclareModuleStmt.Match(expr) {
 						q := bytesSingleQoute
 						a := bytes.Split(expr, q)
 						if len(a) != 3 {
@@ -154,8 +154,8 @@ func parseDts(r io.Reader, w *bytes.Buffer, resolve func(specifier string, kind 
 						} else {
 							w.Write(expr)
 						}
-					} else if importExportExpr {
-						if regexpFromExpr.Match(expr) || (bytes.HasPrefix(expr, []byte("import")) && regexpImportPathExpr.Match(expr)) {
+					} else if importOrExportDeclFound {
+						if regexpFromExpr.Match(expr) || (bytes.HasPrefix(expr, []byte("import")) && regexpImportPathDecl.Match(expr)) {
 							q := bytesSingleQoute
 							a := bytes.Split(expr, q)
 							if len(a) != 3 {
@@ -166,7 +166,7 @@ func parseDts(r io.Reader, w *bytes.Buffer, resolve func(specifier string, kind 
 								w.Write(a[0])
 								w.Write(q)
 								var res string
-								res, err = resolve(string(a[1]), TsImportFrom, w.Len())
+								res, err = resolve(string(a[1]), TsImportDecl, w.Len())
 								if err != nil {
 									return
 								}
@@ -176,7 +176,7 @@ func parseDts(r io.Reader, w *bytes.Buffer, resolve func(specifier string, kind 
 							} else {
 								w.Write(expr)
 							}
-							importExportExpr = false
+							importOrExportDeclFound = false
 						} else {
 							w.Write(expr)
 						}

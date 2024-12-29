@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/esm-dev/esm.sh/server/storage"
+	"github.com/ije/gox/set"
 	"github.com/ije/gox/utils"
 )
 
@@ -27,12 +28,12 @@ func (ctx *BuildContext) transformDTS(dts string) error {
 }
 
 // transformDTS transforms a `.d.ts` file for deno/editor-lsp
-func transformDTS(ctx *BuildContext, dts string, buildArgsPrefix string, marker *Set) (n int, err error) {
+func transformDTS(ctx *BuildContext, dts string, buildArgsPrefix string, marker *set.Set[string]) (n int, err error) {
 	isEntry := marker == nil
 	if isEntry {
-		marker = NewSet()
+		marker = set.New[string]()
 	}
-	dtsPath := path.Join("/"+ctx.esm.Name(), buildArgsPrefix, dts)
+	dtsPath := path.Join("/"+ctx.esmPath.Name(), buildArgsPrefix, dts)
 	if marker.Has(dtsPath) {
 		// don't transform repeatly
 		return
@@ -46,7 +47,7 @@ func transformDTS(ctx *BuildContext, dts string, buildArgsPrefix string, marker 
 		return
 	}
 
-	dtsFilePath := path.Join(ctx.wd, "node_modules", ctx.esm.PkgName, dts)
+	dtsFilePath := path.Join(ctx.wd, "node_modules", ctx.esmPath.PkgName, dts)
 	dtsWD := path.Dir(dtsFilePath)
 	dtsFile, err := os.Open(dtsFilePath)
 	if err != nil {
@@ -64,12 +65,12 @@ func transformDTS(ctx *BuildContext, dts string, buildArgsPrefix string, marker 
 
 	buffer, recycle := NewBuffer()
 	defer recycle()
-	internalDts := NewSet()
+	internalDts := set.New[string]()
 	withNodeBuiltinModule := false
 	hasReferenceTypesNode := false
 
 	err = parseDts(dtsFile, buffer, func(specifier string, kind TsImportKind, position int) (string, error) {
-		if ctx.esm.PkgName == "@types/node" {
+		if ctx.esmPath.PkgName == "@types/node" {
 			return specifier, nil
 		}
 
@@ -83,10 +84,10 @@ func transformDTS(ctx *BuildContext, dts string, buildArgsPrefix string, marker 
 				var hasTypes bool
 				if utils.ParseJSONFile(path.Join(dtsWD, specifier, "package.json"), &p) == nil {
 					dir := path.Join("/", path.Dir(dts))
-					if types := p.Types.String(); types != "" {
+					if types := p.Types.MainString(); types != "" {
 						specifier, _ = relPath(dir, "/"+path.Join(dir, specifier, types))
 						hasTypes = true
-					} else if typings := p.Typings.String(); typings != "" {
+					} else if typings := p.Typings.MainString(); typings != "" {
 						specifier, _ = relPath(dir, "/"+path.Join(dir, specifier, typings))
 						hasTypes = true
 					}
@@ -135,25 +136,25 @@ func transformDTS(ctx *BuildContext, dts string, buildArgsPrefix string, marker 
 			specifier += "/" + subPath
 		}
 
-		if depPkgName == ctx.esm.PkgName {
+		if depPkgName == ctx.esmPath.PkgName {
 			if strings.ContainsRune(subPath, '*') {
 				return fmt.Sprintf(
 					"{ESM_CDN_ORIGIN}/%s/%s%s",
-					ctx.esm.Name(),
+					ctx.esmPath.Name(),
 					ctx.getBuildArgsPrefix(true),
 					subPath,
 				), nil
 			} else {
-				entry := ctx.resolveEntry(Esm{
+				entry := ctx.resolveEntry(EsmPath{
 					PkgName:       depPkgName,
-					PkgVersion:    ctx.esm.PkgVersion,
+					PkgVersion:    ctx.esmPath.PkgVersion,
 					SubPath:       subPath,
 					SubModuleName: subPath,
 				})
 				if entry.types != "" {
 					return fmt.Sprintf(
 						"{ESM_CDN_ORIGIN}/%s/%s%s",
-						ctx.esm.Name(),
+						ctx.esmPath.Name(),
 						ctx.getBuildArgsPrefix(true),
 						strings.TrimPrefix(entry.types, "./"),
 					), nil
@@ -200,21 +201,19 @@ func transformDTS(ctx *BuildContext, dts string, buildArgsPrefix string, marker 
 			return "", err
 		}
 
-		dtsModule := Esm{
+		dtsModule := EsmPath{
 			PkgName:       p.Name,
 			PkgVersion:    p.Version,
 			SubPath:       subPath,
 			SubModuleName: subPath,
 		}
-		args := BuildArgs{
-			external: NewSet(),
-		}
+		args := BuildArgs{}
 		b := &BuildContext{
-			esm:    dtsModule,
-			npmrc:  ctx.npmrc,
-			args:   args,
-			target: "types",
-			zoneId: ctx.zoneId,
+			esmPath: dtsModule,
+			npmrc:   ctx.npmrc,
+			args:    args,
+			target:  "types",
+			zoneId:  ctx.zoneId,
 		}
 		err = b.install()
 		if err != nil {

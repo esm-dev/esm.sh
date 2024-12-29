@@ -7,17 +7,24 @@ import (
 	"os"
 	"os/exec"
 	"path"
+	"regexp"
 	"strconv"
 	"strings"
 
 	"github.com/esm-dev/esm.sh/server/common"
+	"github.com/ije/gox/sync"
+)
+
+var (
+	regexpSveltePath = regexp.MustCompile(`/\*?svelte@([~\^]?[\w\+\-\.]+)(/|\?|&|$)`)
+	regexpVuePath    = regexp.MustCompile(`/\*?vue@([~\^]?[\w\+\-\.]+)(/|\?|&|$)`)
 )
 
 func transformSvelte(npmrc *NpmRC, svelteVersion string, filename string, code string) (output *LoaderOutput, err error) {
 	loaderExecPath := path.Join(npmrc.StoreDir(), "svelte@"+svelteVersion, "loader.js")
 
-	once, _ := compileSyncMap.LoadOrStore(loaderExecPath, &Once{})
-	err = once.(*Once).Do(func() (err error) {
+	once, _ := compileSyncMap.LoadOrStore(loaderExecPath, &sync.Once{})
+	err = once.(*sync.Once).Do(func() (err error) {
 		if !existsFile(loaderExecPath) {
 			log.Debug("compiling svelte loader...")
 			err = compileSvelteLoader(npmrc, svelteVersion, loaderExecPath)
@@ -90,8 +97,8 @@ func generateUnoCSS(npmrc *NpmRC, configCSS string, content string) (output *Loa
 	loaderVersion := "0.4.3"
 	loaderExecPath := path.Join(config.WorkDir, "bin", "unocss-"+loaderVersion)
 
-	once, _ := compileSyncMap.LoadOrStore(loaderExecPath, &Once{})
-	err = once.(*Once).Do(func() (err error) {
+	once, _ := compileSyncMap.LoadOrStore(loaderExecPath, &sync.Once{})
+	err = once.(*sync.Once).Do(func() (err error) {
 		if !existsFile(loaderExecPath) {
 			log.Debug("compiling unocss loader...")
 			err = compileUnocssLoader(npmrc, loaderVersion, loaderExecPath)
@@ -217,8 +224,8 @@ func transformVue(npmrc *NpmRC, vueVersion string, filename string, code string)
 	loaderVersion := "1.0.1" // @esm.sh/vue-compiler
 	loaderExecPath := path.Join(npmrc.StoreDir(), "@vue/compiler-sfc@"+vueVersion, "loader-"+loaderVersion+".js")
 
-	once, _ := compileSyncMap.LoadOrStore(loaderExecPath, &Once{})
-	err = once.(*Once).Do(func() (err error) {
+	once, _ := compileSyncMap.LoadOrStore(loaderExecPath, &sync.Once{})
+	err = once.(*sync.Once).Do(func() (err error) {
 		if !existsFile(loaderExecPath) {
 			log.Debug("compiling vue loader...")
 			err = compileVueLoader(npmrc, vueVersion, loaderVersion, loaderExecPath)

@@ -6,7 +6,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/ije/gox/crypto/rs"
+	"github.com/ije/gox/crypto/rand"
 )
 
 func TestListRepoRefs(t *testing.T) {
@@ -27,7 +27,7 @@ func TestListRepoRefs(t *testing.T) {
 }
 
 func TestGhInstall(t *testing.T) {
-	dir := filepath.Join(os.TempDir(), rs.Hex.String(8))
+	dir := filepath.Join(os.TempDir(), rand.Hex.String(8))
 	defer os.RemoveAll(dir)
 	err := ghInstall(dir, "esm-dev/esm.sh", "main")
 	if err != nil {

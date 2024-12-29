@@ -18,6 +18,8 @@ import (
 	"time"
 
 	"github.com/Masterminds/semver/v3"
+	"github.com/ije/gox/set"
+	syncx "github.com/ije/gox/sync"
 	"github.com/ije/gox/utils"
 	"github.com/ije/gox/valid"
 )
@@ -29,7 +31,7 @@ const (
 
 var (
 	npmNaming    = valid.Validator{valid.Range{'a', 'z'}, valid.Range{'A', 'Z'}, valid.Range{'0', '9'}, valid.Eq('_'), valid.Eq('$'), valid.Eq('.'), valid.Eq('-'), valid.Eq('+'), valid.Eq('!'), valid.Eq('~'), valid.Eq('*'), valid.Eq('('), valid.Eq(')')}
-	installMutex = KeyedMutex{}
+	installMutex = syncx.KeyedMutex{}
 )
 
 type Package struct {
@@ -96,13 +98,13 @@ type PackageJSON struct {
 	Types            string
 	Typings          string
 	SideEffectsFalse bool
-	SideEffects      *Set
+	SideEffects      set.ReadOnlySet[string]
 	Browser          map[string]string
 	Dependencies     map[string]string
 	PeerDependencies map[string]string
 	Imports          map[string]any
 	TypesVersions    map[string]any
-	Exports          *JSONObject
+	Exports          JSONObject
 	Esmsh            map[string]any
 	Dist             NpmPackageDist
 	Deprecated       string
@@ -152,20 +154,20 @@ func (a *PackageJSONRaw) ToNpmPackage() *PackageJSON {
 		}
 	}
 
-	var sideEffects *Set = nil
+	sideEffects := set.New[string]()
 	sideEffectsFalse := false
 	if a.SideEffects != nil {
 		if s, ok := a.SideEffects.(string); ok {
 			if s == "false" {
 				sideEffectsFalse = true
 			} else if endsWith(s, moduleExts...) {
-				sideEffects = NewSet()
+				sideEffects = set.New[string]()
 				sideEffects.Add(s)
 			}
 		} else if b, ok := a.SideEffects.(bool); ok {
 			sideEffectsFalse = !b
 		} else if m, ok := a.SideEffects.([]any); ok && len(m) > 0 {
-			sideEffects = NewSet()
+			sideEffects = set.New[string]()
 			for _, v := range m {
 				if name, ok := v.(string); ok && endsWith(name, moduleExts...) {
 					sideEffects.Add(name)
@@ -174,14 +176,15 @@ func (a *PackageJSONRaw) ToNpmPackage() *PackageJSON {
 		}
 	}
 
-	exports := &JSONObject{
-		values: make(map[string]interface{}),
-	}
+	exports := JSONObject{}
 	if rawExports := a.Exports; rawExports != nil {
 		var s string
 		if json.Unmarshal(rawExports, &s) == nil {
 			if len(s) > 0 {
-				exports.Set(".", s)
+				exports = JSONObject{
+					keys:   []string{"."},
+					values: map[string]any{".": s},
+				}
 			}
 		} else {
 			exports.UnmarshalJSON(rawExports)
@@ -204,13 +207,13 @@ func (a *PackageJSONRaw) ToNpmPackage() *PackageJSON {
 		Name:             a.Name,
 		Version:          a.Version,
 		Type:             a.Type,
-		Main:             a.Main.String(),
-		Module:           a.Module.String(),
-		Types:            a.Types.String(),
-		Typings:          a.Typings.String(),
+		Main:             a.Main.MainString(),
+		Module:           a.Module.MainString(),
+		Types:            a.Types.MainString(),
+		Typings:          a.Typings.MainString(),
 		Browser:          browser,
 		SideEffectsFalse: sideEffectsFalse,
-		SideEffects:      sideEffects,
+		SideEffects:      *sideEffects.ReadOnly(),
 		Dependencies:     dependencies,
 		PeerDependencies: peerDependencies,
 		Imports:          toMap(a.Imports),
@@ -223,9 +226,9 @@ func (a *PackageJSONRaw) ToNpmPackage() *PackageJSON {
 
 	// normalize package module field
 	if p.Module == "" {
-		if es2015 := a.ES2015.String(); es2015 != "" {
+		if es2015 := a.ES2015.MainString(); es2015 != "" {
 			p.Module = es2015
-		} else if jsNextMain := a.JsNextMain.String(); jsNextMain != "" {
+		} else if jsNextMain := a.JsNextMain.MainString(); jsNextMain != "" {
 			p.Module = jsNextMain
 		} else if p.Main != "" && (p.Type == "module" || strings.HasSuffix(p.Main, ".mjs")) {
 			p.Module = p.Main
@@ -407,7 +410,7 @@ func (npmrc *NpmRC) fetchPackageInfo(packageName string, semverOrDistTag string)
 			header.Set("Authorization", "Basic "+base64.StdEncoding.EncodeToString([]byte(reg.User+":"+reg.Password)))
 		}
 
-		fetchClient, recycle := NewFetchClient(15, defaultUserAgent)
+		fetchClient, recycle := NewFetchClient(15, "esmd/"+VERSION)
 		defer recycle()
 
 		retryTimes := 0
@@ -531,18 +534,20 @@ func (rc *NpmRC) installPackage(pkg Package) (packageJson *PackageJSON, err erro
 		err = ghInstall(installDir, pkg.Name, pkg.Version)
 		// ensure 'package.json' file if not exists after installing from github
 		if err == nil && !existsFile(packageJsonPath) {
-			buf, recycle := NewBuffer()
-			defer recycle()
-			fmt.Fprintf(buf, `{"name":"%s","version":"%s"}`, pkg.Name, pkg.Version)
-			err = os.WriteFile(packageJsonPath, buf.Bytes(), 0644)
+			var f *os.File
+			f, err = os.Create(packageJsonPath)
+			if err != nil {
+				return
+			}
+			defer f.Close()
+			fmt.Fprintf(f, `{"name":"%s","version":"%s"}`, pkg.Name, pkg.Version)
 		}
 	} else if pkg.PkgPrNew {
 		err = rc.downloadTarball(&NpmRegistry{}, installDir, pkg.Name, "https://pkg.pr.new/"+pkg.Name+"@"+pkg.Version)
 	} else {
-		var info *PackageJSON
-		info, err = rc.fetchPackageInfo(pkg.Name, pkg.Version)
-		if err != nil {
-			return nil, err
+		info, fetchErr := rc.fetchPackageInfo(pkg.Name, pkg.Version)
+		if fetchErr != nil {
+			return nil, fetchErr
 		}
 		if info.Deprecated != "" {
 			os.WriteFile(path.Join(installDir, "deprecated.txt"), []byte(info.Deprecated), 0644)
@@ -555,6 +560,7 @@ func (rc *NpmRC) installPackage(pkg Package) (packageJson *PackageJSON, err erro
 
 	err = utils.ParseJSONFile(packageJsonPath, &raw)
 	if err != nil {
+		os.RemoveAll(installDir)
 		err = fmt.Errorf("failed to install %s: %v", pkg.String(), err)
 		return
 	}
@@ -563,7 +569,7 @@ func (rc *NpmRC) installPackage(pkg Package) (packageJson *PackageJSON, err erro
 	return
 }
 
-func (rc *NpmRC) installDependencies(wd string, pkgJson *PackageJSON, npmMode bool, mark *Set) {
+func (rc *NpmRC) installDependencies(wd string, pkgJson *PackageJSON, npmMode bool, mark *set.Set[string]) {
 	wg := sync.WaitGroup{}
 	dependencies := map[string]string{}
 	for name, version := range pkgJson.Dependencies {
@@ -576,7 +582,7 @@ func (rc *NpmRC) installDependencies(wd string, pkgJson *PackageJSON, npmMode bo
 		}
 	}
 	if mark == nil {
-		mark = NewSet()
+		mark = set.New[string]()
 	}
 	for name, version := range dependencies {
 		wg.Add(1)
@@ -641,7 +647,7 @@ func (rc *NpmRC) downloadTarball(reg *NpmRegistry, installDir string, pkgName st
 		header.Set("Authorization", "Basic "+base64.StdEncoding.EncodeToString([]byte(reg.User+":"+reg.Password)))
 	}
 
-	fetchClient, recycle := NewFetchClient(30, defaultUserAgent)
+	fetchClient, recycle := NewFetchClient(30, "esmd/"+VERSION)
 	defer recycle()
 
 	retryTimes := 0
@@ -707,7 +713,7 @@ func extractPackageTarball(installDir string, packname string, tarball io.Reader
 			continue
 		}
 		extname := path.Ext(filename)
-		if !(extname != "" && (assetExts[extname[1:]] || contains(moduleExts, extname) || extname == ".map" || extname == ".css" || extname == ".svelte" || extname == ".vue")) {
+		if !(extname != "" && (assetExts[extname[1:]] || stringInSlice(moduleExts, extname) || extname == ".map" || extname == ".css" || extname == ".svelte" || extname == ".vue")) {
 			// ignore unsupported formats
 			continue
 		}

@@ -25,7 +25,7 @@ jobs:
         with:
           deno-version: v1.x
 
-      - name: Run `go test`
+      - name: Run Unit Tests
         run: go test ./server ./server/storage -v
         env:
           GO_TEST_S3_ENDPOINT: ${{ secrets.GO_TEST_S3_ENDPOINT }}
@@ -33,5 +33,5 @@ jobs:
           GO_TEST_S3_ACCESS_KEY_ID: ${{ secrets.GO_TEST_S3_ACCESS_KEY_ID }}
           GO_TEST_S3_SECRET_ACCESS_KEY: ${{ secrets.GO_TEST_S3_SECRET_ACCESS_KEY }}
 
-      - name: Run `test/bootstrap.ts`
+      - name: Run Integration Tests
         run: test/bootstrap.ts -q

@@ -18,11 +18,12 @@ import (
 	"strings"
 	"time"
 
+	"github.com/ije/gox/set"
 	"github.com/ije/gox/utils"
 )
 
 var cjsModuleLexerVersion = "1.0.6"
-var cjsModuleLexerIgnoredPackages = NewSet(
+var cjsModuleLexerIgnoredPackages = set.New[string](
 	"@babel/types",
 	"cheerio",
 	"graceful-fs",
@@ -60,7 +61,7 @@ func cjsModuleLexer(ctx *BuildContext, cjsEntry string) (ret cjsModuleLexerResul
 	defer func() {
 		if err == nil {
 			if DEBUG {
-				log.Debugf("[cjsModuleLexer] parse %s in %s", path.Join(ctx.esm.PkgName, cjsEntry), time.Since(start))
+				log.Debugf("[cjsModuleLexer] parse %s in %s", path.Join(ctx.esmPath.PkgName, cjsEntry), time.Since(start))
 			}
 			if !existsFile(cacheFileName) {
 				ensureDir(path.Dir(cacheFileName))
@@ -69,9 +70,9 @@ func cjsModuleLexer(ctx *BuildContext, cjsEntry string) (ret cjsModuleLexerResul
 		}
 	}()
 
-	if cjsModuleLexerIgnoredPackages.Has(ctx.esm.PkgName) {
+	if cjsModuleLexerIgnoredPackages.Has(ctx.esmPath.PkgName) {
 		js := path.Join(ctx.wd, "reveal_"+strings.ReplaceAll(cjsEntry[2:], "/", "_"))
-		err = os.WriteFile(js, []byte(fmt.Sprintf(`console.log(JSON.stringify(Object.keys((await import("npm:%s")).default)))`, path.Join(ctx.esm.Name(), cjsEntry))), 0644)
+		err = os.WriteFile(js, []byte(fmt.Sprintf(`console.log(JSON.stringify(Object.keys((await import("npm:%s")).default)))`, path.Join(ctx.esmPath.Name(), cjsEntry))), 0644)
 		if err != nil {
 			return
 		}
@@ -99,7 +100,7 @@ RETRY:
 	c, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	cmd := exec.CommandContext(c, "cjs-module-lexer", path.Join(ctx.esm.PkgName, cjsEntry))
+	cmd := exec.CommandContext(c, "cjs-module-lexer", path.Join(ctx.esmPath.PkgName, cjsEntry))
 	stdout, recycle := NewBuffer()
 	defer recycle()
 	stderr, recycle := NewBuffer()

@@ -34,23 +34,23 @@ ssh next.esm.sh << EOF
   fi
   echo \$gv
 
-  servicefn=/etc/systemd/system/esmd.service
+  servicefile=/etc/systemd/system/esmd.service
   reload=no
-  if [ ! -f \$servicefn ]; then
-    echo "[Unit]" >> \$servicefn
-    echo "Description=esm.sh service" >> \$servicefn
-    echo "After=network.target" >> \$servicefn
-    echo "StartLimitIntervalSec=0" >> \$servicefn
-    echo "[Service]" >> \$servicefn
-    echo "Type=simple" >> \$servicefn
-    echo "ExecStart=/usr/local/bin/esmd" >> \$servicefn
-    echo "USER=\${USER}" >> \$servicefn
-    echo "Restart=always" >> \$servicefn
-    echo "RestartSec=5" >> \$servicefn
-    echo "Environment=\"USER=\${USER}\"" >> \$servicefn
-    echo "Environment=\"HOME=\${HOME}\"" >> \$servicefn
-    echo "[Install]" >> \$servicefn
-    echo "WantedBy=default.target" >> \$servicefn
+  if [ ! -f \$servicefile ]; then
+    echo "[Unit]" >> \$servicefile
+    echo "Description=esm.sh service" >> \$servicefile
+    echo "After=network.target" >> \$servicefile
+    echo "StartLimitIntervalSec=0" >> \$servicefile
+    echo "[Service]" >> \$servicefile
+    echo "Type=simple" >> \$servicefile
+    echo "ExecStart=/usr/local/bin/esmd" >> \$servicefile
+    echo "USER=\${USER}" >> \$servicefile
+    echo "Restart=always" >> \$servicefile
+    echo "RestartSec=5" >> \$servicefile
+    echo "Environment=\"USER=\${USER}\"" >> \$servicefile
+    echo "Environment=\"HOME=\${HOME}\"" >> \$servicefile
+    echo "[Install]" >> \$servicefile
+    echo "WantedBy=default.target" >> \$servicefile
     reload=yes
   else
     systemctl stop esmd.service

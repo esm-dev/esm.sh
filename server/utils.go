@@ -8,28 +8,11 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"regexp"
 	"strings"
 	"sync"
 
 	"github.com/Masterminds/semver/v3"
 	"github.com/ije/gox/valid"
-)
-
-var (
-	bufferPool       = sync.Pool{New: func() interface{} { return new(bytes.Buffer) }}
-	defaultUserAgent = "esmd/" + Version
-)
-
-var (
-	regexpVersion          = regexp.MustCompile(`^[\w\+\-\.]+$`)
-	regexpVersionStrict    = regexp.MustCompile(`^\d+\.\d+\.\d+(-[\w\+\-\.]+)?$`)
-	regexpJSIdent          = regexp.MustCompile(`^[a-zA-Z_$][\w$]*$`)
-	regexpESMInternalIdent = regexp.MustCompile(`__[a-zA-Z]+\$`)
-	regexpVarDecl          = regexp.MustCompile(`var ([\w$]+)\s*=\s*[\w$]+$`)
-	regexpDomain           = regexp.MustCompile(`^[a-z0-9\-]+(\.[a-z0-9\-]+)*\.[a-z]+$`)
-	regexpSveltePath       = regexp.MustCompile(`/\*?svelte@([~\^]?[\w\+\-\.]+)(/|\?|&|$)`)
-	regexpVuePath          = regexp.MustCompile(`/\*?vue@([~\^]?[\w\+\-\.]+)(/|\?|&|$)`)
 )
 
 // isHttpSepcifier returns true if the specifier is a remote URL.
@@ -110,8 +93,8 @@ func endsWith(s string, suffixs ...string) bool {
 	return false
 }
 
-// contains returns true if the given string is included in the given array.
-func contains(a []string, s string) bool {
+// stringInSlice returns true if the given string is included in the given array.
+func stringInSlice(a []string, s string) bool {
 	if len(a) == 0 {
 		return false
 	}
@@ -224,6 +207,8 @@ func appendVaryHeader(header http.Header, key string) {
 		header.Set("Vary", vary+", "+key)
 	}
 }
+
+var bufferPool = sync.Pool{New: func() interface{} { return new(bytes.Buffer) }}
 
 // NewBuffer returns a new buffer from the buffer pool.
 func NewBuffer() (buffer *bytes.Buffer, recycle func()) {

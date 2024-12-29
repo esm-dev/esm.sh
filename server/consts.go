@@ -123,3 +123,15 @@ var cssPackages = map[string]string{
 	"modern-normalize": "modern-normalize.css",
 	"reset-css":        "reset.css",
 }
+
+// force to use `npm:` specifier for `denonext` target to support node native module or fix `createRequire` issue
+var forceNpmSpecifiers = map[string]bool{
+	"@achingbrain/ssdp": true,
+	"aws-crt":           true,
+	"default-gateway":   true,
+	"fsevents":          true,
+	"lightningcss":      true,
+	"re2":               true,
+	"zlib-sync":         true,
+	"css-tree":          true,
+}

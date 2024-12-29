@@ -32,13 +32,13 @@ func stripModuleExt(s string) string {
 
 // stripEntryModuleExt strips the entry module extension from the given string.
 func stripEntryModuleExt(s string) string {
-	if s != "" {
-		if strings.HasSuffix(s, ".mjs") || strings.HasSuffix(s, ".cjs") {
-			return s[:len(s)-4]
-		}
-		return strings.TrimSuffix(s, ".js")
+	if strings.HasSuffix(s, ".mjs") || strings.HasSuffix(s, ".cjs") {
+		return s[:len(s)-4]
 	}
-	return ""
+	if strings.HasSuffix(s, ".js") {
+		return s[:len(s)-3]
+	}
+	return s
 }
 
 // validateModuleFile validates javascript/typescript module from the given file.
@@ -137,7 +137,7 @@ func treeShake(code []byte, exports []string, target esbuild.Target) ([]byte, er
 }
 
 // bundleHttpModule bundles the http module and it's submodules.
-func bundleHttpModule(npmrc *NpmRC, entry string, importMap common.ImportMap, collectDependencies bool, fetchClient *HttpClient) (js []byte, jsx bool, css []byte, dependencyTree map[string][]byte, err error) {
+func bundleHttpModule(npmrc *NpmRC, entry string, importMap common.ImportMap, collectDependencies bool, fetchClient *FetchClient) (js []byte, jsx bool, css []byte, dependencyTree map[string][]byte, err error) {
 	if !isHttpSepcifier(entry) {
 		err = errors.New("require a http module")
 		return

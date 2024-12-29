@@ -7,13 +7,15 @@ import (
 	"os"
 	"os/signal"
 	"path"
+	"regexp"
 	"strings"
 	"syscall"
 	"time"
 
 	npm_replacements "github.com/esm-dev/esm.sh/server/npm-replacements"
 	"github.com/esm-dev/esm.sh/server/storage"
-	logger "github.com/ije/gox/log"
+	logx "github.com/ije/gox/log"
+	"github.com/ije/gox/set"
 	"github.com/ije/rex"
 )
 
@@ -29,17 +31,23 @@ const (
 )
 
 var (
-	log          *logger.Logger
+	regexpVersion          = regexp.MustCompile(`^[\w\+\-\.]+$`)
+	regexpVersionStrict    = regexp.MustCompile(`^\d+\.\d+\.\d+(-[\w\+\-\.]+)?$`)
+	regexpJSIdent          = regexp.MustCompile(`^[a-zA-Z_$][\w$]*$`)
+	regexpESMInternalIdent = regexp.MustCompile(`__[a-zA-Z]+\$`)
+	regexpVarDecl          = regexp.MustCompile(`var ([\w$]+)\s*=\s*[\w$]+$`)
+)
+
+var (
+	log          *logx.Logger
 	buildQueue   *BuildQueue
 	buildStorage storage.Storage
 )
 
 // Serve serves the esm.sh server
 func Serve(efs EmbedFS) {
-	var (
-		cfile string
-		err   error
-	)
+	var cfile string
+	var err error
 
 	flag.StringVar(&cfile, "config", "config.json", "the config file path")
 	flag.Parse()
@@ -71,14 +79,14 @@ func Serve(efs EmbedFS) {
 		embedFS = efs
 	}
 
-	log, err = logger.New(fmt.Sprintf("file:%s?buffer=32k&fileDateFormat=20060102", path.Join(config.LogDir, "server.log")))
+	log, err = logx.New(fmt.Sprintf("file:%s?buffer=32k&fileDateFormat=20060102", path.Join(config.LogDir, "server.log")))
 	if err != nil {
-		fmt.Printf("initiate logger: %v\n", err)
+		fmt.Println("failed to initialize logger:", err)
 		os.Exit(1)
 	}
 	log.SetLevelByName(config.LogLevel)
 
-	accessLogger, err := logger.New(fmt.Sprintf("file:%s?buffer=32k&fileDateFormat=20060102", path.Join(config.LogDir, "access.log")))
+	accessLogger, err := logx.New(fmt.Sprintf("file:%s?buffer=32k&fileDateFormat=20060102", path.Join(config.LogDir, "access.log")))
 	if err != nil {
 		log.Fatalf("failed to initialize access logger: %v", err)
 	}
@@ -169,7 +177,7 @@ func Serve(efs EmbedFS) {
 }
 
 func cors(allowOrigins []string) rex.Handle {
-	allowList := NewSet(allowOrigins...)
+	allowList := set.NewReadOnly[string](allowOrigins...)
 	return func(ctx *rex.Context) any {
 		origin := ctx.R.Header.Get("Origin")
 		isOptionsMethod := ctx.R.Method == "OPTIONS"
@@ -196,7 +204,7 @@ func cors(allowOrigins []string) rex.Handle {
 }
 
 func customLandingPage(options *LandingPageOptions) rex.Handle {
-	assets := NewSet()
+	assets := set.New[string]()
 	for _, p := range options.Assets {
 		assets.Add("/" + strings.TrimPrefix(p, "/"))
 	}
