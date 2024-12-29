@@ -12,7 +12,7 @@ import (
 	"syscall"
 	"time"
 
-	npm_replacements "github.com/esm-dev/esm.sh/server/npm-replacements"
+	"github.com/esm-dev/esm.sh/server/npm_replacements"
 	"github.com/esm-dev/esm.sh/server/storage"
 	logx "github.com/ije/gox/log"
 	"github.com/ije/gox/set"
@@ -45,7 +45,7 @@ var (
 )
 
 // Serve serves the esm.sh server
-func Serve(efs EmbedFS) {
+func Serve() {
 	var cfile string
 	var err error
 
@@ -67,16 +67,9 @@ func Serve(efs EmbedFS) {
 
 	if DEBUG {
 		config.LogLevel = "debug"
-		cwd, err := os.Getwd()
-		if err != nil {
-			fmt.Println(err)
-			os.Exit(1)
-		}
-		embedFS = &MockEmbedFS{cwd}
 	} else {
 		// disable log color in release build
 		os.Setenv("NO_COLOR", "1")
-		embedFS = efs
 	}
 
 	log, err = logx.New(fmt.Sprintf("file:%s?buffer=32k&fileDateFormat=20060102", path.Join(config.LogDir, "server.log")))

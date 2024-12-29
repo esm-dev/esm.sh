@@ -15,7 +15,7 @@ import (
 	"strconv"
 	"strings"
 
-	npm_replacements "github.com/esm-dev/esm.sh/server/npm-replacements"
+	"github.com/esm-dev/esm.sh/server/npm_replacements"
 	"github.com/esm-dev/esm.sh/server/storage"
 	esbuild "github.com/evanw/esbuild/pkg/api"
 	"github.com/ije/gox/set"
@@ -911,7 +911,7 @@ func (ctx *BuildContext) buildModule(analyzeMode bool) (meta *BuildMeta, include
 		"Buffer":               "__Buffer$",
 		"process":              "__Process$",
 		"setImmediate":         "__setImmediate$",
-		"clearImmediate":       "clearTimeout",
+		"clearImmediate":       "__clearImmediate$",
 		"require.resolve":      "__rResolve$",
 		"process.env.NODE_ENV": fmt.Sprintf(`"%s"`, nodeEnv),
 	}
@@ -1141,16 +1141,64 @@ REBUILD:
 						header.WriteByte('\n')
 					}
 				}
-				if ids.Has("__global$") {
-					header.WriteString(`var __global$ = globalThis || (typeof window !== "undefined" ? window : self);`)
-					header.WriteByte('\n')
-				}
 				if ids.Has("__setImmediate$") {
-					header.WriteString(`var __setImmediate$ = (cb, ...args) => setTimeout(cb, 0, ...args);`)
-					header.WriteByte('\n')
+					if ctx.args.external.Has("node:timers") {
+						header.WriteString(`import { setImmediate as __setImmediate$ } from "node:timers";`)
+						header.WriteByte('\n')
+					} else if ctx.isBrowserTarget() {
+						var excluded bool
+						if len(ctx.pkgJson.Browser) > 0 {
+							if name, ok := ctx.pkgJson.Browser["timers"]; ok {
+								excluded = name == ""
+							} else if name, ok := ctx.pkgJson.Browser["node:timers"]; ok {
+								excluded = name == ""
+							}
+						}
+						if !excluded {
+							header.WriteString(`import { setImmediate as __setImmediate$ } from "/node/timers.mjs";`)
+							header.WriteByte('\n')
+							imports.Add("/node/timers.mjs")
+						}
+					} else if ctx.target == "denonext" {
+						header.WriteString(`import { setImmediate as __setImmediate$ } from "node:timers";`)
+						header.WriteByte('\n')
+					} else if ctx.target == "deno" {
+						header.WriteString(`import { setImmediate as __setImmediate$ } from "https://deno.land/std@0.177.1/node/timers.ts";`)
+						header.WriteByte('\n')
+					}
+				}
+				if ids.Has("__clearImmediate$") {
+					if ctx.args.external.Has("node:timers") {
+						header.WriteString(`import { clearImmediate as __clearImmediate$ } from "node:timers";`)
+						header.WriteByte('\n')
+					} else if ctx.isBrowserTarget() {
+						var excluded bool
+						if len(ctx.pkgJson.Browser) > 0 {
+							if name, ok := ctx.pkgJson.Browser["timers"]; ok {
+								excluded = name == ""
+							} else if name, ok := ctx.pkgJson.Browser["node:timers"]; ok {
+								excluded = name == ""
+							}
+						}
+						if !excluded {
+							header.WriteString(`import { clearImmediate as __clearImmediate$ } from "/node/timers.mjs";`)
+							header.WriteByte('\n')
+							imports.Add("/node/timers.mjs")
+						}
+					} else if ctx.target == "denonext" {
+						header.WriteString(`import { clearImmediate as __clearImmediate$ } from "node:timers";`)
+						header.WriteByte('\n')
+					} else if ctx.target == "deno" {
+						header.WriteString(`import { clearImmediate as __clearImmediate$ } from "https://deno.land/std@0.177.1/node/timers.ts";`)
+						header.WriteByte('\n')
+					}
 				}
 				if ids.Has("__rResolve$") {
 					header.WriteString(`var __rResolve$ = p => p;`)
+					header.WriteByte('\n')
+				}
+				if ids.Has("__global$") {
+					header.WriteString(`var __global$ = globalThis || (typeof window !== "undefined" ? window : self);`)
 					header.WriteByte('\n')
 				}
 			}
