@@ -933,10 +933,14 @@ func (ctx *BuildContext) buildModule(analyzeMode bool) (meta *BuildMeta, include
 				delete(define, "process")
 			}
 		}
+		if ctx.isDenoTarget() {
+			// deno 2 has removed the `window` global object, let's replace it with `globalThis`
+			define["window"] = "globalThis"
+		}
 		for k, v := range define {
 			define["global."+k] = v
 		}
-		define["global"] = "__global$"
+		define["global"] = "globalThis"
 	}
 	conditions := ctx.args.conditions
 	if ctx.dev {
@@ -1195,10 +1199,6 @@ REBUILD:
 				}
 				if ids.Has("__rResolve$") {
 					header.WriteString(`var __rResolve$ = p => p;`)
-					header.WriteByte('\n')
-				}
-				if ids.Has("__global$") {
-					header.WriteString(`var __global$ = globalThis || (typeof window !== "undefined" ? window : self);`)
 					header.WriteByte('\n')
 				}
 			}

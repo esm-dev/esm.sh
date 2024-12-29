@@ -83,7 +83,11 @@ func parseDts(r io.Reader, w *bytes.Buffer, resolve func(specifier string, kind 
 					if err != nil {
 						return
 					}
-					fmt.Fprintf(w, `/// <reference %s="%s" />`, format, res)
+					if len(res) > 0 {
+						fmt.Fprintf(w, `/// <reference %s="%s" />`, format, res)
+					} else {
+						fmt.Fprintf(w, `// ignored <reference %s="%s" />`, format, path)
+					}
 				} else {
 					w.Write(line)
 				}
@@ -94,17 +98,17 @@ func parseDts(r io.Reader, w *bytes.Buffer, resolve func(specifier string, kind 
 			w.Write(line)
 		} else {
 			var i int
-			exprScanner := bufio.NewScanner(bytes.NewReader(line))
-			exprScanner.Split(splitExpr)
-			for exprScanner.Scan() {
+			stmtScanner := bufio.NewScanner(bytes.NewReader(line))
+			stmtScanner.Split(splitJSStmt)
+			for stmtScanner.Scan() {
 				if i > 0 {
 					w.WriteByte(';')
 				}
-				expr, trimedLeftSpaces := trimSpace(exprScanner.Bytes())
+				stmt, trimedLeftSpaces := trimSpace(stmtScanner.Bytes())
 				w.Write(trimedLeftSpaces)
-				if len(expr) > 0 {
-					if regexpImportCallExpr.Match(expr) {
-						expr = regexpImportCallExpr.ReplaceAllFunc(expr, func(importCallExpr []byte) []byte {
+				if len(stmt) > 0 {
+					if regexpImportCallExpr.Match(stmt) {
+						stmt = regexpImportCallExpr.ReplaceAllFunc(stmt, func(importCallExpr []byte) []byte {
 							q := bytesSingleQoute
 							a := bytes.Split(importCallExpr, q)
 							if len(a) != 3 {
@@ -130,15 +134,15 @@ func parseDts(r io.Reader, w *bytes.Buffer, resolve func(specifier string, kind 
 						})
 					}
 
-					if !importOrExportDeclFound && (bytes.HasPrefix(expr, []byte("import")) && regexpImportDecl.Match(expr)) || (bytes.HasPrefix(expr, []byte("export")) && regexpExportDecl.Match(expr)) {
+					if !importOrExportDeclFound && (bytes.HasPrefix(stmt, []byte("import")) && regexpImportDecl.Match(stmt)) || (bytes.HasPrefix(stmt, []byte("export")) && regexpExportDecl.Match(stmt)) {
 						importOrExportDeclFound = true
 					}
-					if bytes.HasPrefix(expr, []byte("declare")) && regexpDeclareModuleStmt.Match(expr) {
+					if bytes.HasPrefix(stmt, []byte("declare")) && regexpDeclareModuleStmt.Match(stmt) {
 						q := bytesSingleQoute
-						a := bytes.Split(expr, q)
+						a := bytes.Split(stmt, q)
 						if len(a) != 3 {
 							q = bytesDoubleQoute
-							a = bytes.Split(expr, q)
+							a = bytes.Split(stmt, q)
 						}
 						if len(a) == 3 {
 							w.Write(a[0])
@@ -152,15 +156,15 @@ func parseDts(r io.Reader, w *bytes.Buffer, resolve func(specifier string, kind 
 							w.Write(q)
 							w.Write(a[2])
 						} else {
-							w.Write(expr)
+							w.Write(stmt)
 						}
 					} else if importOrExportDeclFound {
-						if regexpFromExpr.Match(expr) || (bytes.HasPrefix(expr, []byte("import")) && regexpImportPathDecl.Match(expr)) {
+						if regexpFromExpr.Match(stmt) || (bytes.HasPrefix(stmt, []byte("import")) && regexpImportPathDecl.Match(stmt)) {
 							q := bytesSingleQoute
-							a := bytes.Split(expr, q)
+							a := bytes.Split(stmt, q)
 							if len(a) != 3 {
 								q = bytesDoubleQoute
-								a = bytes.Split(expr, q)
+								a = bytes.Split(stmt, q)
 							}
 							if len(a) == 3 {
 								w.Write(a[0])
@@ -174,19 +178,19 @@ func parseDts(r io.Reader, w *bytes.Buffer, resolve func(specifier string, kind 
 								w.Write(q)
 								w.Write(a[2])
 							} else {
-								w.Write(expr)
+								w.Write(stmt)
 							}
 							importOrExportDeclFound = false
 						} else {
-							w.Write(expr)
+							w.Write(stmt)
 						}
 					} else {
-						w.Write(expr)
+						w.Write(stmt)
 					}
 				}
 				i++
 			}
-			err = exprScanner.Err()
+			err = stmtScanner.Err()
 			if err != nil {
 				return
 			}
@@ -197,8 +201,8 @@ func parseDts(r io.Reader, w *bytes.Buffer, resolve func(specifier string, kind 
 	return
 }
 
-// A split function for a Scanner
-func splitExpr(data []byte, atEOF bool) (advance int, token []byte, err error) {
+// A split function for bufio.Scanner to split javascript statement
+func splitJSStmt(data []byte, atEOF bool) (advance int, token []byte, err error) {
 	var commentScope bool
 	var stringScope byte
 	for i := 0; i < len(data); i++ {
@@ -244,6 +248,7 @@ func splitExpr(data []byte, atEOF bool) (advance int, token []byte, err error) {
 	return 0, data, bufio.ErrFinalToken
 }
 
+// trimSpace trims leading and trailing spaces, tabs, newlines and carriage returns
 func trimSpace(line []byte) ([]byte, []byte) {
 	s := 0
 	l := len(line)

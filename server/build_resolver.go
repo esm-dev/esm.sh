@@ -636,7 +636,9 @@ func (ctx *BuildContext) resolveConditionExportEntry(conditions JSONObject, pref
 			condition, ok := conditions.Get(conditionName)
 			if ok {
 				if s, ok := condition.(string); ok {
-					entry.types = s
+					if entry.types == "" || endsWith(s, ".d.ts", ".d.mts", ".d") {
+						entry.types = s
+					}
 				} else if obj, ok := condition.(JSONObject); ok {
 					entry = ctx.resolveConditionExportEntry(obj, "types")
 				}

@@ -14,7 +14,7 @@ Deno.test("issue #649", async () => {
     await pusher.trigger("chat", "message", {
       message: ":)",
     });
-  } catch (e) {
+  } catch (e: any) {
     assertEquals(e.status, 404);
   }
 });
