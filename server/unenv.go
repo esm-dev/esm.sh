@@ -18,7 +18,7 @@ var (
 	// https://github.com/unjs/unenv
 	unenvPkg = Package{
 		Name:    "unenv-nightly",
-		Version: "2.0.0-20241212-153011-af71c96",
+		Version: "2.0.0-20241218-183400-5d6aec3",
 	}
 	unenvNodeRuntimeBulid = map[string][]byte{
 		"sys.mjs": []byte(`export*from "/node/util.mjs";export{default}from "/node/util.mjs";`),
