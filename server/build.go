@@ -1489,7 +1489,7 @@ func (ctx *BuildContext) analyzeSplitting() (err error) {
 						break
 					}
 				}
-				if len(a) > 1 {
+				if len(a) > 0 {
 					n, e := strconv.Atoi(a[0])
 					if e == nil && n <= len(a)-1 {
 						ctx.splitting = set.NewReadOnly[string](a[1 : n+1]...)
@@ -1536,7 +1536,7 @@ func (ctx *BuildContext) analyzeSplitting() (err error) {
 					buf[i] = '\n'
 					i++
 				}
-				os.WriteFile(splittingTxtPath, buf, 0644)
+				os.WriteFile(splittingTxtPath, buf[0:bufSize-1], 0644)
 			}()
 
 			refs := map[string]Ref{}
