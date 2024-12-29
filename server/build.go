@@ -18,6 +18,7 @@ import (
 	"github.com/esm-dev/esm.sh/server/npm_replacements"
 	"github.com/esm-dev/esm.sh/server/storage"
 	esbuild "github.com/evanw/esbuild/pkg/api"
+	"github.com/ije/gox/crypto/rand"
 	"github.com/ije/gox/set"
 	"github.com/ije/gox/utils"
 )
@@ -173,7 +174,16 @@ func (ctx *BuildContext) Build() (meta *BuildMeta, err error) {
 func (ctx *BuildContext) buildModule(analyzeMode bool) (meta *BuildMeta, includes [][2]string, err error) {
 	entry := ctx.resolveEntry(ctx.esmPath)
 	if entry.isEmpty() {
-		err = fmt.Errorf("could not resolve build entry")
+		if analyzeMode {
+			// ignore the empty entry in analyze mode
+			return
+		}
+		// the installation maybe not completed, move it to trash and delete it in the background
+		tmpDir := path.Join(os.TempDir(), "esm-trash-"+rand.Hex.String(32))
+		if os.Rename(ctx.wd, tmpDir) == nil {
+			go os.RemoveAll(tmpDir)
+		}
+		err = errors.New("could not resolve build entry")
 		return
 	}
 
@@ -1607,17 +1617,18 @@ func (ctx *BuildContext) analyzeSplitting() (err error) {
 					pkgJson:     ctx.pkgJson,
 				}
 				_, includes, err := b.buildModule(true)
-				if err == nil {
-					for _, include := range includes {
-						module, importer := include[0], include[1]
-						ref, ok := refs[module]
-						if !ok {
-							ref = Ref{entries: set.New[string](), importers: set.New[string]()}
-							refs[module] = ref
-						}
-						ref.importers.Add(importer)
-						ref.entries.Add(exportName)
+				if err != nil {
+					return fmt.Errorf("failed to analyze %s: %v", esmPath.Specifier(), err)
+				}
+				for _, include := range includes {
+					module, importer := include[0], include[1]
+					ref, ok := refs[module]
+					if !ok {
+						ref = Ref{entries: set.New[string](), importers: set.New[string]()}
+						refs[module] = ref
 					}
+					ref.importers.Add(importer)
+					ref.entries.Add(exportName)
 				}
 			}
 			shared := set.New[string]()
