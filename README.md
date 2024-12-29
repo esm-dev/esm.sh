@@ -328,9 +328,7 @@ specify the types for the imported module.
 
 ## Supporting Node.js/Bun
 
-Node.js and Bun don't currently support http modules.
-
-We highly recommend [Reejs](https://ree.js.org/) as the runtime with esm.sh that works both in Node.js and Bun.
+esm.sh is not supported by Node.js/Bun currently.
 
 ## Global CDN
 

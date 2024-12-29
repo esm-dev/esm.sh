@@ -40,16 +40,26 @@ func (ctx *BuildContext) rewriteJS(in []byte) (out []byte, dropSourceMap bool) {
 	return in, false
 }
 
-func (ctx *BuildContext) rewriteDTS(dts string, in []byte) []byte {
-	// fix preact/compat types
-	if ctx.esmPath.PkgName == "preact" && dts == "./compat/src/index.d.ts" {
-		if !bytes.Contains(in, []byte("export type PropsWithChildren")) {
-			return bytes.ReplaceAll(
-				in,
-				[]byte("export import ComponentProps = preact.ComponentProps;"),
-				[]byte("export import ComponentProps = preact.ComponentProps;\n\n// added by esm.sh\nexport type PropsWithChildren<P = unknown> = P & { children?: preact.ComponentChildren };"),
-			)
+func (ctx *BuildContext) rewriteDTS(filename string, dts []byte) []byte {
+	switch ctx.esmPath.PkgName {
+	case "preact":
+		// fix preact/compat types
+		if filename == "./compat/src/index.d.ts" {
+			if !bytes.Contains(dts, []byte("export type PropsWithChildren")) {
+				return bytes.ReplaceAll(
+					dts,
+					[]byte("export import ComponentProps = preact.ComponentProps;"),
+					[]byte("export import ComponentProps = preact.ComponentProps;\n\n// added by esm.sh\nexport type PropsWithChildren<P = unknown> = P & { children?: preact.ComponentChildren };"),
+				)
+			}
 		}
+	case "@rollup/plugin-commonjs":
+		// see https://github.com/denoland/deno/issues/27492
+		return bytes.ReplaceAll(
+			dts,
+			[]byte("[package: string]: ReadonlyArray<string>"),
+			[]byte("[name   : string]: ReadonlyArray<string>"),
+		)
 	}
-	return in
+	return dts
 }
