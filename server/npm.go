@@ -331,17 +331,7 @@ func (rc *NpmRC) StoreDir() string {
 }
 
 func (rc *NpmRC) getPackageInfo(name string, semver string) (info *PackageJSON, err error) {
-	// use fixed version for `@types/node`
-	// if name == "@types/node" {
-	// 	info = &PackageJSON{
-	// 		Name:    "@types/node",
-	// 		Version: nodeTypesVersion,
-	// 		Types:   "index.d.ts",
-	// 	}
-	// 	return
-	// }
-
-	// strip leading `=` or `v`
+	// strip leading `=` or `v` from semver
 	if (strings.HasPrefix(semver, "=") || strings.HasPrefix(semver, "v")) && regexpVersionStrict.MatchString(semver[1:]) {
 		semver = semver[1:]
 	}
