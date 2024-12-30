@@ -99,8 +99,8 @@ Deno.test("transform", async (t) => {
     assertEquals(res.headers.get("Content-Type"), "application/javascript; charset=utf-8");
     assertEquals(res.headers.get("Cache-Control"), "public, max-age=31536000, immutable");
     const js = await res.text();
-    assertStringIncludes(js, 'from"https://esm.sh/react-dom@18.3.1/client";');
-    assertStringIncludes(js, 'from"https://esm.sh/react@18.3.1/jsx-runtime";');
+    assertStringIncludes(js, 'from"https://esm.sh/react-dom@19.0.0/client";');
+    assertStringIncludes(js, 'from"https://esm.sh/react@19.0.0/jsx-runtime";');
     assertStringIncludes(js, '("h1",{style:{color:"#61DAFB"},children:"esm.sh"})');
   });
 
@@ -159,7 +159,7 @@ Deno.test("transform", async (t) => {
       assertEquals(res.headers.get("Content-Type"), "application/javascript; charset=utf-8");
       assertEquals(res.headers.get("Cache-Control"), "public, max-age=31536000, immutable");
       const js = await res.text();
-      assertStringIncludes(js, 'from"https://esm.sh/svelte@5.1.12/internal/client?no-bundle";');
+      assertStringIncludes(js, 'from"https://esm.sh/svelte@5.16.0/internal/client";');
       assertStringIncludes(js, "<svg ");
       assertStringIncludes(js, "color:#ff4000;");
       assertStringIncludes(js, ">esm.sh</h1>");
@@ -175,7 +175,7 @@ Deno.test("transform", async (t) => {
       assertEquals(res.headers.get("Content-Type"), "application/javascript; charset=utf-8");
       assertEquals(res.headers.get("Cache-Control"), "public, max-age=31536000, immutable");
       const js = await res.text();
-      assertStringIncludes(js, 'from"https://esm.sh/svelte@5.1.12/internal/client?no-bundle";');
+      assertStringIncludes(js, 'from"https://esm.sh/svelte@5.16.0/internal/client";');
       assertStringIncludes(js, "<svg ");
       assertStringIncludes(js, "color:#ff4000;");
       assertStringIncludes(js, ">esm.sh</h1>");
