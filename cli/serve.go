@@ -14,6 +14,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -273,40 +274,44 @@ func (d *DevServer) ServeHtml(w http.ResponseWriter, r *http.Request, pathname s
 					w.Write([]byte(">"))
 					continue
 				}
-				// replace `<script type="module" src="https://esm.sh/x" main="$main"></script>`
-				// with `<script type="module" src="$main"></script>`
-				if (strings.HasPrefix(srcAttr, "http://") || strings.HasPrefix(srcAttr, "https://")) && strings.HasSuffix(srcAttr, "/x") && mainAttr != "" {
-					w.Write([]byte("<script"))
-					for attrKey, attrVal := range attrs {
-						if attrKey != "main" {
-							if attrKey == "src" {
-								mainAttr, _ = utils.SplitByFirstByte(mainAttr, '?')
-								w.Write([]byte(fmt.Sprintf(` src="%s"`, mainAttr+"?im="+btoaUrl(pathname))))
-							} else {
-								if attrVal == "" {
-									w.Write([]byte(fmt.Sprintf(` %s`, attrKey)))
+				// replace `<script type="module" src="https://esm.sh/x" main="..."></script>`
+				// with `<script type="module" src="..."></script>`
+				if mainAttr != "" && (strings.HasPrefix(srcAttr, "https://") || strings.HasPrefix(srcAttr, "http://")) {
+					if srcUrl, parseErr := url.Parse(srcAttr); parseErr == nil && srcUrl.Path == "/x" {
+						w.Write([]byte("<script"))
+						for attrKey, attrVal := range attrs {
+							if attrKey != "main" {
+								if attrKey == "src" {
+									mainAttr, _ = utils.SplitByFirstByte(mainAttr, '?')
+									w.Write([]byte(fmt.Sprintf(` src="%s"`, mainAttr+"?im="+btoaUrl(pathname))))
 								} else {
-									w.Write([]byte(fmt.Sprintf(` %s="%s"`, attrKey, attrVal)))
+									if attrVal == "" {
+										w.Write([]byte(fmt.Sprintf(` %s`, attrKey)))
+									} else {
+										w.Write([]byte(fmt.Sprintf(` %s="%s"`, attrKey, attrVal)))
+									}
 								}
 							}
 						}
+						w.Write([]byte(">"))
+						continue
 					}
-					w.Write([]byte(">"))
-					continue
 				}
 				// replace `<script src="https://esm.sh/uno"></script>`
 				// with `<link rel="stylesheet" href="/@uno.css">`
-				if (strings.HasPrefix(srcAttr, "http://") || strings.HasPrefix(srcAttr, "https://")) && strings.HasSuffix(srcAttr, "/uno") {
-					unocss = "/@uno.css?ctx=" + btoaUrl(pathname)
-					w.Write([]byte(fmt.Sprintf(`<link id="@unocss" rel="stylesheet" href="%s">`, unocss)))
-					tok := tokenizer.Next()
-					if tok == html.TextToken {
-						tokenizer.Next()
+				if strings.HasPrefix(srcAttr, "http://") || strings.HasPrefix(srcAttr, "https://") {
+					if srcUrl, parseErr := url.Parse(srcAttr); parseErr == nil && srcUrl.Path == "/uno" {
+						unocss = "/@uno.css?ctx=" + btoaUrl(pathname)
+						w.Write([]byte(fmt.Sprintf(`<link id="@unocss" rel="stylesheet" href="%s">`, unocss)))
+						tok := tokenizer.Next()
+						if tok == html.TextToken {
+							tokenizer.Next()
+						}
+						if tok == html.ErrorToken {
+							break
+						}
+						continue
 					}
-					if tok == html.ErrorToken {
-						break
-					}
-					continue
 				}
 			case "style":
 				// strip `<style type="uno/css">...</style>`
@@ -551,7 +556,7 @@ func (d *DevServer) ServeUnoCSS(w http.ResponseWriter, r *http.Request) {
 	defer imHtmlFile.Close()
 	configCSS := ""
 	configFilename := ""
-	content := []string{}
+	contents := [][]byte{}
 	jsEntries := map[string]struct{}{}
 	importMap := common.ImportMap{}
 	tokenizer := html.NewTokenizer(imHtmlFile)
@@ -604,20 +609,20 @@ func (d *DevServer) ServeUnoCSS(w http.ResponseWriter, r *http.Request) {
 				} else if srcAttr == "" {
 					// inline script content
 					tokenizer.Next()
-					content = append(content, string(tokenizer.Text()))
+					contents = append(contents, tokenizer.Text())
 				} else {
 					if mainAttr != "" && isHttpSepcifier(srcAttr) {
-						if !isHttpSepcifier(mainAttr) && endsWith(mainAttr, supportedModuleExts...) {
+						if !isHttpSepcifier(mainAttr) && endsWith(mainAttr, moduleExts...) {
 							jsEntries[mainAttr] = struct{}{}
 						}
-					} else if !isHttpSepcifier(srcAttr) && endsWith(srcAttr, supportedModuleExts...) {
+					} else if !isHttpSepcifier(srcAttr) && endsWith(srcAttr, moduleExts...) {
 						jsEntries[srcAttr] = struct{}{}
 					}
 				}
 			case "link", "meta", "title", "base", "head", "noscript", "slot", "template", "option":
 				// ignore
 			default:
-				content = append(content, string(tokenizer.Raw()))
+				contents = append(contents, tokenizer.Raw())
 			}
 		}
 	}
@@ -636,21 +641,28 @@ func (d *DevServer) ServeUnoCSS(w http.ResponseWriter, r *http.Request) {
 			configCSS = string(data)
 		}
 	}
-	contentFiles := map[string]struct{}{}
+	tree := map[string][]byte{}
 	for entry := range jsEntries {
-		tree, err := d.analyzeDependencyTree(filepath.Join(filepath.Dir(imHtmlFilename), entry), importMap)
+		t, err := d.analyzeDependencyTree(filepath.Join(filepath.Dir(imHtmlFilename), entry), importMap)
 		if err == nil {
-			for filename, code := range tree {
-				if _, ok := contentFiles[filename]; !ok {
-					contentFiles[filename] = struct{}{}
-					content = append(content, string(code))
-				}
+			for filename, code := range t {
+				tree[filename] = code
 			}
 		}
 	}
 	sha := xxhash.New()
 	sha.Write([]byte(configCSS))
-	for _, s := range content {
+	keys := make([]string, 0, len(tree))
+	for k := range tree {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	for _, k := range keys {
+		code := tree[k]
+		contents = append(contents, code)
+		sha.Write(code)
+	}
+	for _, s := range contents {
 		sha.Write([]byte(s))
 	}
 	etag := fmt.Sprintf("w\"%x\"", sha.Sum(nil))
@@ -687,7 +699,7 @@ func (d *DevServer) ServeUnoCSS(w http.ResponseWriter, r *http.Request) {
 			"css":      configCSS,
 		}
 	}
-	_, css, err := loader.Load("unocss", []any{config, strings.Join(content, "\n")})
+	_, css, err := loader.Load("unocss", []any{config, string(bytes.Join(contents, []byte{'\n'}))})
 	if err != nil {
 		fmt.Println(err)
 		http.Error(w, "Internal Server Error", 500)
@@ -782,24 +794,24 @@ func (d *DevServer) analyzeDependencyTree(entry string, importMap common.ImportM
 		Format:           esbuild.FormatESModule,
 		Platform:         esbuild.PlatformBrowser,
 		JSX:              esbuild.JSXPreserve,
-		Bundle:           true,
 		MinifyWhitespace: true,
-		Outdir:           "/esbuild",
+		Bundle:           true,
 		Write:            false,
+		Outdir:           "/esbuild",
 		Plugins: []esbuild.Plugin{
 			{
 				Name: "loader",
 				Setup: func(build esbuild.PluginBuild) {
 					build.OnResolve(esbuild.OnResolveOptions{Filter: ".*"}, func(args esbuild.OnResolveArgs) (esbuild.OnResolveResult, error) {
-						path, resolved := importMap.Resolve(args.Path)
+						path, _ := importMap.Resolve(args.Path)
 						if isHttpSepcifier(path) || (!isRelPathSpecifier(path) && !isAbsPathSpecifier(path)) {
 							return esbuild.OnResolveResult{Path: path, External: true}, nil
 						}
-						if resolved {
-							if endsWith(path, supportedModuleExts...) {
-								return esbuild.OnResolveResult{Path: filepath.Join(d.rootDir, path), Namespace: "module", PluginData: path}, nil
+						if endsWith(path, moduleExts...) {
+							if isRelPathSpecifier(path) {
+								path = filepath.Join(filepath.Dir(args.Importer), path)
 							}
-							return esbuild.OnResolveResult{Path: filepath.Join(d.rootDir, path)}, nil
+							return esbuild.OnResolveResult{Path: path, Namespace: "module", PluginData: path}, nil
 						}
 						return esbuild.OnResolveResult{}, nil
 					})
