@@ -9,14 +9,14 @@
     import { encodeBase64 } from "https://esm.sh/jsr/@std/encoding@1.0.0/base64";
     import { Hono } from "https://esm.sh/jsr/@hono/hono@4";
     ```
-  * [pkg.pr.new](https://pkg.pr.new) - Continuous (Preview) Releases for your libraries, created by [StackBlitz Labs](https://github.com/stackblitz-labs) ([#904](https://github.com/esm-dev/esm.sh/issues/904), [#913](https://github.com/esm-dev/esm.sh/issues/913))
+  * [pkg.pr.new](https://pkg.pr.new) - Continuous (Preview) Releases for your libraries, created by [StackBlitz Labs](https://github.com/stackblitz-labs) ([#904](https://github.com/esm-dev/esm.sh/pull/904), [#913](https://github.com/esm-dev/esm.sh/pull/913))
     ```js
     // Examples
     import { Bench } from "https://esm.sh/pr/tinylibs/tinybench/tinybench@a832a55";
     import { Bench } from "https://esm.sh/pr/tinybench@a832a55"; // --compact
     ```
 
-* Respect sematic versioning for dependency resolving ([#875](https://github.com/esm-dev/esm.sh/issues/875))
+* Respect sematic versioning for dependency resolving ([#875](https://github.com/esm-dev/esm.sh/pull/875))
 
   Prior to v136, dependency resolution used fixed versions, which could lead to duplication issues when a package was updated. Now, we adhere to semantic versioning for dependencies.
 
@@ -27,15 +27,15 @@
   "react-dom@19.0.0" import "/react@^18.3.1?target=es2022";
   ```
 
-* Add built-in npm package manager ([#948](https://github.com/esm-dev/esm.sh/issues/948))
+* Add built-in npm package manager ([#948](https://github.com/esm-dev/esm.sh/pull/948))
 
   Implement a built-in npm package manager in Go to replace pnpm. This change reduces the CI test time from 12:15 to 4:30 (**~2.7x faster**) and eliminates the need for `nodejs` and `pnpm` dependencies.
 
-* Splitting modules by analyzing dependency tree when building ([#959](https://github.com/esm-dev/esm.sh/issues/959))
+* Splitting modules by analyzing dependency tree when building ([#959](https://github.com/esm-dev/esm.sh/pull/959))
 
   To improve build performance and reduce network requests, esm.sh bundles sub-modules of a package by default. However, this can lead to duplicate code in the build. In v136, the server will split the modules by analyzing the dependency tree during the build process if the package's `exports` field is defined.
 
-* Use [@pi0](https://github.com/pi0)'s [unenv](https://github.com/unjs/unenv) as the node runtime compatibility layer ([#914](https://github.com/esm-dev/esm.sh/issues/914))
+* Use [@pi0](https://github.com/pi0)'s [unenv](https://github.com/unjs/unenv) as the node runtime compatibility layer ([#914](https://github.com/esm-dev/esm.sh/pull/914))
 
   unenv provides a collection of Node.js and Web polyfills and mocking utilities with configurable presets for converting JavaScript code and libraries to be platform and runtime agnostic, working in any environment including Browsers, Workers, Node.js, Cloudflare Workers, Deno. unenv is also used by CloudFlare Workers: [blog](https://blog.cloudflare.com/more-npm-packages-on-cloudflare-workers-combining-polyfills-and-native-code/).
 
@@ -45,7 +45,7 @@
   import * from "https://esm.sh/node/fs.mjs";
   ```
 
-* Add [npm-replacements](./server/npm_replacements/src/) that follows [e18e](https://e18e.dev)'s [module-replacements](https://github.com/es-tooling/module-replacements). ([#914](https://github.com/esm-dev/esm.sh/issues/914))
+* Add [npm-replacements](./server/npm_replacements/src/) that follows [e18e](https://e18e.dev)'s [module-replacements](https://github.com/es-tooling/module-replacements). ([#914](https://github.com/esm-dev/esm.sh/pull/914))
 
   The `npm-replacements` package replaces certain polyfill packages on NPM with native modern APIs during the build process. For example, the `object-assign` package is replaced with `Object.assign`:
 
@@ -103,25 +103,24 @@
   ```
 
 * Experimental Features:
-  * Build `.vue` and `.svelte` files on the fly ([#906](https://github.com/esm-dev/esm.sh/issues/906))
+  * Build `.vue` and `.svelte` files on the fly ([#906](https://github.com/esm-dev/esm.sh/pull/906))
     ```js
     import "https://esm.sh/gh/phosphor-icons/vue@v2.2.0/src/icons/PhAirplay.vue?deps=vue@3.5.8"
     ```
-  * https://esm.sh/x - ts/jsx/vue/svelte just works™️ in browser. ([#886](https://github.com/esm-dev/esm.sh/issues/886))
+  * https://esm.sh/x - ts/jsx/vue/svelte just works™️ in browser. ([#886](https://github.com/esm-dev/esm.sh/pull/886))
 
 * Other Changes:
   * Upgrade esbuild to **0.24.2**
   * Use native [cjs-module-lexer@v1.0.7](https://github.com/esm-dev/cjs-module-lexer/releases/tag/v1.0.7)
-  * Use target `es2022` for browsers by default ([#903](https://github.com/esm-dev/esm.sh/issues/903))
-  * Replace `window` with `globalThis` to make Deno 2 happy ([#964](https://github.com/esm-dev/esm.sh/issues/964))
-  * Use `.mjs` extenstion for sub-module build (#917)
+  * Use target `es2022` for browsers by default ([#903](https://github.com/esm-dev/esm.sh/pull/903))
+  * Replace `window` with `globalThis` to make Deno 2 happy ([#964](https://github.com/esm-dev/esm.sh/pull/964))
+  * Use `.mjs` extenstion for sub-module build ([#917](https://github.com/esm-dev/esm.sh/pull/917))
   * dts-transformer: support `.d` extension
   * config: Add `corsAllowOrigins` config
-  * config: Add `customLandingPage` config (#928)
-  * config: Add `npmQueryCacheTTL` config (#921)
-  * config: Add npmQueryCacheTTL config (#921)
-  * config: Support **S3-compatible** storage (#886)
-
+  * config: Add `customLandingPage` config ([#928](https://github.com/esm-dev/esm.sh/pull/928))
+  * config: Add `npmQueryCacheTTL` config ([#921](https://github.com/esm-dev/esm.sh/pull/921))
+  * config: Add npmQueryCacheTTL config ([#921](https://github.com/esm-dev/esm.sh/pull/921))
+  * config: Support **S3-compatible** storage ([#886](https://github.com/esm-dev/esm.sh/pull/886))
 
 ## v135
 
@@ -129,35 +128,35 @@
 - worker: Use `raw.esm.sh` hostname for ?raw option
 - Add `?no-bundle` option
 - Support `esm.sh` field in package.json
-- Fix sub-module resolving (close #754, #743)
+- Fix sub-module resolving (close [#754](https://github.com/esm-dev/esm.sh/issues/754), [#743](https://github.com/esm-dev/esm.sh/issues/743))
 - Upgrade esbuild to **0.19.7**
 
 ## v134
 
 - Add `transformOnly` option for build api
-- Add `allowList` in config (#745 by @olekenneth)
-- Improved Deno CLI (#742 by @Kyiro)
+- Add `allowList` in config ([#745](https://github.com/esm-dev/esm.sh/pull/745) by @olekenneth)
+- Improved Deno CLI ([#742](https://github.com/esm-dev/esm.sh/pull/742) by @Kyiro)
 - Worker: fix dist version lookup
-- Fix exported names from a dependency (close #729, #750)
-- Fix: write `.npmrc` file if `NpmRegistry` is set (close #737) (#751 by @edeustace)
+- Fix exported names from a dependency (close [#729](https://github.com/esm-dev/esm.sh/issues/729), [#750](https://github.com/esm-dev/esm.sh/issues/750))
+- Fix: write `.npmrc` file if `NpmRegistry` is set (close [#737](https://github.com/esm-dev/esm.sh/pull/737)) ([#751](https://github.com/esm-dev/esm.sh/pull/751) by @edeustace)
 - Upgrade esbuild to **0.19.5**
 
 ## v133
 
-- Add `?raw` to support requests for raw package source files (#731 by @johnyanarella)
-- Add global `setMaxListeners` to `node:events` polyfill (#719)
-- cjs-lexer: resolving error now doesn't break build (close #738)
-- Fix `cwd` method of `node:process` polyfill (close #718)
-- Fix `applyConditions` function use `node` condition for browser (close #732)
-- Fix `*.css.js` path (close #728)
-- Fix some invalid _require_ imports (close #724)
+- Add `?raw` to support requests for raw package source files ([#731](https://github.com/esm-dev/esm.sh/pull/731) by @johnyanarella)
+- Add global `setMaxListeners` to `node:events` polyfill ([#719](https://github.com/esm-dev/esm.sh/pull/719))
+- cjs-lexer: resolving error now doesn't break build (close [#738](https://github.com/esm-dev/esm.sh/pull/738))
+- Fix `cwd` method of `node:process` polyfill (close [#718](https://github.com/esm-dev/esm.sh/pull/718))
+- Fix `applyConditions` function use `node` condition for browser (close [#732](https://github.com/esm-dev/esm.sh/pull/732))
+- Fix `*.css.js` path (close [#728](https://github.com/esm-dev/esm.sh/pull/728))
+- Fix some invalid _require_ imports (close [#724](https://github.com/esm-dev/esm.sh/pull/724))
 - Fix relative path resolving of `browser` in package.json
 - Upgrade esbuild to **0.19.4**
 
 ## v132
 
-- Resolve node internal modules when `?external=*` set (close #714)
-- Fix builds with `bigint` and `top-level-await` for all targets (close #711)
+- Resolve node internal modules when `?external=*` set (close [#714](https://github.com/esm-dev/esm.sh/pull/714))
+- Fix builds with `bigint` and `top-level-await` for all targets (close [#711](https://github.com/esm-dev/esm.sh/pull/711))
 - Fix `node:process` ployfill module mssing the `hrtime` method
 - Fix docker image missing `git` command
 - esm-worker: add `varyUA` option for polyfill modules
@@ -167,25 +166,25 @@
 - Add cache layer for the `/build` API
 - Fix dts transformer resolver ignoring `*.mjs` url
 - fix `?external` option ignoring sub-modules
-- Use raw order of the `exports` in package.json (close #705)
-- Redirect old build path (`.js`) to new build path (`.mjs`) (close #703)
+- Use raw order of the `exports` in package.json (close [#705](https://github.com/esm-dev/esm.sh/pull/705))
+- Redirect old build path (`.js`) to new build path (`.mjs`) (close [#703](https://github.com/esm-dev/esm.sh/pull/703))
 - Upgrade esbuild to **0.19.2**
 
 ## v130
 
-- esm-cjs-lexer: support minified UMD exports (#689)
-- Support sub `.mjs` module (close #691)
-- Fix `?bundle` mode ignores `node_process.js` (close #694)
+- esm-cjs-lexer: support minified UMD exports ([#689](https://github.com/esm-dev/esm.sh/pull/689))
+- Support sub `.mjs` module (close [#691](https://github.com/esm-dev/esm.sh/pull/691))
+- Fix `?bundle` mode ignores `node_process.js` (close [#694](https://github.com/esm-dev/esm.sh/pull/694))
 - Upgrade `@types/react@18` to **18.2.15**
 - Upgrade esbuild to **0.18.17**
 
 ## v129
 
-- BREAKING: Remove `x-esm-deps` header (close #683)
-- Sort `exports` of package.json when looping (close #683)
-- Don't replace `typeof window` for deno target (close #681)
+- BREAKING: Remove `x-esm-deps` header (close [#683](https://github.com/esm-dev/esm.sh/issues/683))
+- Sort `exports` of package.json when looping (close [#683](https://github.com/esm-dev/esm.sh/issues/683))
+- Don't replace `typeof window` for deno target (close [#681](https://github.com/esm-dev/esm.sh/issues/681))
 - Don't replace node global variable for `?target=node`
-- Fix **dts** transformer (close #670)
+- Fix **dts** transformer (close [#670](https://github.com/esm-dev/esm.sh/issues/670))
 - Fix depreacted message with `"`
 - esm-worker: Fix cacheKey with `x-real-origin` header
 
@@ -194,7 +193,7 @@
 - Add official Docker image: https://ghcr.io/esm-dev/esm.sh
 - Fix missed `?external` of deps
 - Fix duplicate `Access-Control-Expose-Headers` headers
-- Fix dts transform for imports with both default and named imports (#675 by @hayes)
+- Fix dts transform for imports with both default and named imports ([#675](https://github.com/esm-dev/esm.sh/pull/675) by @hayes)
 - Don't bundle dynamic imports
 - Upgrade _stableBuild_ to **v128**
 
@@ -202,10 +201,10 @@
 
 - Add `preload` imports
 - Add `modern-normalize` to the `cssPackages`
-- Fix subpath not be resovled with `?alias` (close #671)
-- Fix dts transformer for "*.d" path imports (close #660)
-- Fix source map mappings (close #668)
-- CLI: Fix update failure caused by gh module (#661 by @lifegpc)
+- Fix subpath not be resovled with `?alias` (close [#671](https://github.com/esm-dev/esm.sh/issues/671))
+- Fix dts transformer for "*.d" path imports (close [#660](https://github.com/esm-dev/esm.sh/issues/660))
+- Fix source map mappings (close [#668](https://github.com/esm-dev/esm.sh/issues/668))
+- CLI: Fix update failure caused by gh module ([#661](https://github.com/esm-dev/esm.sh/pull/661) by @lifegpc)
 - Upgrade esbuild to **0.18.10**
 
 ## v126
@@ -218,38 +217,38 @@
   `;
   console.log(mod.foo); // "bar"
   ```
-- cjs-lexer: support _annotated_ exports (close #659)
-- Add support for basic auth (#657 by @johnpangalos)
+- cjs-lexer: support _annotated_ exports (close [#659](https://github.com/esm-dev/esm.sh/issues/659))
+- Add support for basic auth ([#657](https://github.com/esm-dev/esm.sh/pull/657) by @johnpangalos)
 
 ## v125
 
-- Fix `node-fetch` import in cjs modules (close #649)
-- Add `node:worker_threads` polyfill(fake) (close #648)
-- Use `denonext` target for Deno >= 1.33.2 (close #646)
-- Fix `.json.js` path (close #645)
-- Fix cache missing content (close #641)
+- Fix `node-fetch` import in cjs modules (close [#649](https://github.com/esm-dev/esm.sh/issues/649))
+- Add `node:worker_threads` polyfill(fake) (close [#648](https://github.com/esm-dev/esm.sh/issues/648))
+- Use `denonext` target for Deno >= 1.33.2 (close [#646](https://github.com/esm-dev/esm.sh/issues/646))
+- Fix `.json.js` path (close [#645](https://github.com/esm-dev/esm.sh/issues/645))
+- Fix cache missing content (close [#641](https://github.com/esm-dev/esm.sh/issues/641))
 - Upgrade `deno/std` to **0.177.1**
 
 ## v124
 
-- Fix the dts walker (close #642)
+- Fix the dts walker (close [#642](https://github.com/esm-dev/esm.sh/issues/642))
 
 ## v123
 
 - Add `/server` endpoint for Deno to serve esm.sh locally
-- Add scope to config (#636 by @johnpangalos)
-- Fix `.d.ts` walker (close #640)
-- Fix packages with `v` prefix in `version` (close #639)
-- Fix `findFiles` function (close #638)
+- Add scope to config ([#636](https://github.com/esm-dev/esm.sh/pull/636) by @johnpangalos)
+- Fix `.d.ts` walker (close [#640](https://github.com/esm-dev/esm.sh/issues/640))
+- Fix packages with `v` prefix in `version` (close [#639](https://github.com/esm-dev/esm.sh/issues/639))
+- Fix `findFiles` function (close [#638](https://github.com/esm-dev/esm.sh/issues/638))
 
 ## v122
 
 - Use stable imports order
 - Support more asset extnames
 - esm-worker: Use `X-Real-Origin` and `X-Esm-Worker-Version` headers
-- Fix worker `CORS` issue (close #631)
-- Fix sub-module resolving (close #633)
-- Fix undefined content-type header (close #635)
+- Fix worker `CORS` issue (close [#631](https://github.com/esm-dev/esm.sh/issues/631))
+- Fix sub-module resolving (close [#633](https://github.com/esm-dev/esm.sh/issues/633))
+- Fix undefined content-type header (close [#635](https://github.com/esm-dev/esm.sh/issues/635))
 
 ## v121
 
@@ -265,8 +264,8 @@
   }
   ```
 - Fix redirects for `?css` and `GET /build`
-- Fix `*.js.js` module path (close #627)
-- Fix cjs imports (close #629, #626)
+- Fix `*.js.js` module path (close [#627](https://github.com/esm-dev/esm.sh/issues/627))
+- Fix cjs imports (close [#629](https://github.com/esm-dev/esm.sh/issues/629), [#626](https://github.com/esm-dev/esm.sh/issues/626))
 - Add `pako` to the `requireModeAllowList`
 
 ## v120
@@ -277,61 +276,61 @@
 - Fix bare path for css/custom build
 - Fixing type only packages missing the `X-Typescript-Types` header
 - Fix cjs-lexer `exports` resloving
-- Use empty object instead of `null` for browser exclude (close #613)
-- Add `zlib-sync` to nativeNodePackages (close #621)
+- Use empty object instead of `null` for browser exclude (close [#613](https://github.com/esm-dev/esm.sh/issues/613))
+- Add `zlib-sync` to nativeNodePackages (close [#621](https://github.com/esm-dev/esm.sh/issues/621))
 - Redirect invalid `*.json` url
 
 ## v119
 
-- Fix named import of cjs (close #620)
+- Fix named import of cjs (close [#620](https://github.com/esm-dev/esm.sh/issues/620))
 - Use `STABKE_VERSION` for dts build of `stableBuild`
 - Upgrade esbuild to **0.17.18**
 
 ## v118
 
-- feat: Publish system (#607)
-- **esm-cjs-lexer**: Support `__export(require("..."))` pattern (close #611)
+- feat: Publish system ([#607](https://github.com/esm-dev/esm.sh/pull/607))
+- **esm-cjs-lexer**: Support `__export(require("..."))` pattern (close [#611](https://github.com/esm-dev/esm.sh/issues/611))
 - Add `Auth` middleware
 - Upgrade `stableBuild` to v118
 - Remove **lit** from `stableBuild`
-- Fix submodule types (close #606)
-- Fix arch for darwin arm64 (#617 by @JLugagne)
+- Fix submodule types (close [#606](https://github.com/esm-dev/esm.sh/issues/606))
+- Fix arch for darwin arm64 ([#617](https://github.com/esm-dev/esm.sh/pull/617) by @JLugagne)
 
 ## v117
 
-- Fix Buffer polyfill for deno (close #574)
-- Fix dts transformer with submodule (close #599)
-- Fix importing `.json` as a module (close #601)
-- Fix `.wasm` module importing (close #602)
+- Fix Buffer polyfill for deno (close [#574](https://github.com/esm-dev/esm.sh/issues/574))
+- Fix dts transformer with submodule (close [#599](https://github.com/esm-dev/esm.sh/issues/599))
+- Fix importing `.json` as a module (close [#601](https://github.com/esm-dev/esm.sh/issues/601))
+- Fix `.wasm` module importing (close [#602](https://github.com/esm-dev/esm.sh/issues/602))
 - Fix path `/v100/PKG/TARGET/index.js`
 
 ## v116
 
-- Support modules/assets from Github repo (close #588)
-- Update `nativeNodePackages` (close #591)
-- Fix dep import url of cjs module (close #592)
-- Add support of resolving `typesVersions` (close #593)
-- Fix `exports` glob condition resloving (close #594)
-- Remove shebang (close #596)
-- Fix missed build version of dts files (close #589)
+- Support modules/assets from Github repo (close [#588](https://github.com/esm-dev/esm.sh/issues/588))
+- Update `nativeNodePackages` (close [#591](https://github.com/esm-dev/esm.sh/issues/591))
+- Fix dep import url of cjs module (close [#592](https://github.com/esm-dev/esm.sh/issues/592))
+- Add support of resolving `typesVersions` (close [#593](https://github.com/esm-dev/esm.sh/issues/593))
+- Fix `exports` glob condition resloving (close [#594](https://github.com/esm-dev/esm.sh/issues/594))
+- Remove shebang (close [#596](https://github.com/esm-dev/esm.sh/issues/596))
+- Fix missed build version of dts files (close [#589](https://github.com/esm-dev/esm.sh/issues/589))
 
 ## v115
 
 - Return JavaScript modules for `?module` query with `wasm` files
-- Fix types transformer (close #581)
-- Fix incorrect named import of cjs modules (close #583)
-- Fix sumodule path resolving (close #584)
+- Fix types transformer (close [#581](https://github.com/esm-dev/esm.sh/issues/581))
+- Fix incorrect named import of cjs modules (close [#583](https://github.com/esm-dev/esm.sh/issues/583))
+- Fix sumodule path resolving (close [#584](https://github.com/esm-dev/esm.sh/issues/584))
 - Upgrade `@types/node` to 18
 
 ## v114
 
 - Add `?conditions` query as esbuild option
 - Use **pnpm** to install packages instead of yarn (save the server disk space & improve the build performance)
-- Serve static files on local (#564 @Justinidlerz)
-- Support `.d.mts` extension (close #580)
-- Fix cjs transpiling (close #577)
-- Fix types bulid (close #572, #576)
-- Fix invalid type URL if submodule is main entry (#579 @marvinhagemeister)
+- Serve static files on local ([#564](https://github.com/esm-dev/esm.sh/pull/564) @Justinidlerz)
+- Support `.d.mts` extension (close [#580](https://github.com/esm-dev/esm.sh/issues/580))
+- Fix cjs transpiling (close [#577](https://github.com/esm-dev/esm.sh/issues/577))
+- Fix types bulid (close [#572](https://github.com/esm-dev/esm.sh/issues/572), [#576](https://github.com/esm-dev/esm.sh/issues/576))
+- Fix invalid type URL if submodule is main entry ([#579](https://github.com/esm-dev/esm.sh/pull/579) @marvinhagemeister)
 - Upgrade esbuild to 0.17.14
 
 ## v113
