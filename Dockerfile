@@ -1,20 +1,26 @@
-# --- build the server from source code
+# --- build server from source code
 FROM golang:1.23-alpine AS builder
 
-ENV ESM_SH_REPO https://github.com/esm-dev/esm.sh
-ENV ESM_SH_VERSION main
+ARG SERVER_VERSION="v136"
 
 RUN apk update && apk add --no-cache git
-RUN git clone --branch $ESM_SH_VERSION --depth 1 $ESM_SH_REPO /tmp/esm.sh
+RUN git clone --branch $SERVER_VERSION --depth 1 https://github.com/esm-dev/esm.sh /tmp/esm.sh
 
 WORKDIR /tmp/esm.sh
-RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w" -o esmd main.go
+RUN go build -ldflags="-s -w -X 'github.com/esm-dev/esm.sh/server.VERSION=${SERVER_VERSION}'" -o esmd main.go
 # ---
 
-FROM alpine:latest AS server
+FROM alpine:latest
 
-# install tini & git (use to fetch repo tags from Github)
-RUN apk update && apk add --no-cache tini git
+# install git (use to fetch repo tags from Github)
+RUN apk update && apk add --no-cache git
+
+# add user and working directory
+RUN addgroup -g 1000 esm && adduser -u 1000 -G esm -D esm && mkdir /esmd && chown -R esm:esm /esmd
+
+# copy esmd & deno build
+COPY --from=builder /tmp/esm.sh/esmd /bin/esmd
+COPY --from=denoland/deno:bin-2.1.4 --chown=esm:esm /deno /esmd/bin/deno
 
 # deno desn't provider musl build yet, the hack below makes the gnu build working in alpine
 # see https://github.com/denoland/deno_docker/blob/main/alpine.dockerfile
@@ -23,21 +29,13 @@ COPY --from=gcr.io/distroless/cc --chown=root:root --chmod=755 /lib/ld-linux-* /
 RUN mkdir /lib64 && ln -s /usr/local/lib/ld-linux-* /lib64/
 ENV LD_LIBRARY_PATH="/usr/local/lib"
 
-# don't run as root
-RUN addgroup -g 1000 esm && adduser -u 1000 -G esm -D esm
-RUN mkdir /esmd && chown -R esm:esm /esmd
-
-COPY --from=builder /tmp/esm.sh/esmd /bin/esmd
-COPY --from=denoland/deno:bin-2.1.4 --chown=esm:esm /deno /esmd/bin/deno
-
+# server configuration
 ENV ESM_SERVER_PORT="8080"
 ENV ESM_SERVER_WORKDIR="/esmd"
 
-# use tini
-# see https://github.com/krallin/tini
-ENTRYPOINT ["/sbin/tini", "--"]
-
+# switch to non-root user
 USER esm
-WORKDIR /esmd
+
 EXPOSE 8080
+WORKDIR /esmd
 CMD ["esmd"]
