@@ -1,32 +1,32 @@
 #!/bin/bash
 
 mkdir -p ~/.ssh
-ssh-keyscan $DEPLOY_HOST_NAME >> ~/.ssh/known_hosts
 echo "${DEPLOY_SSH_PRIVATE_KEY}" >> ~/.ssh/id_ed25519
 chmod 600 ~/.ssh/id_ed25519
-echo "Host next.esm.sh" >> ~/.ssh/config
+ssh-keyscan $DEPLOY_HOST_NAME >> ~/.ssh/known_hosts
+echo "Host d.esm.sh" >> ~/.ssh/config
 echo "  HostName ${DEPLOY_HOST_NAME}" >> ~/.ssh/config
 echo "  Port ${DEPLOY_HOST_PORT}" >> ~/.ssh/config
 echo "  User ${DEPLOY_SSH_USER}" >> ~/.ssh/config
 echo "  IdentityFile ~/.ssh/id_ed25519" >> ~/.ssh/config
 echo "  IdentitiesOnly yes" >> ~/.ssh/config
 
-echo "--- building..."
-go build -ldflags="-s -w -X 'github.com/esm-dev/esm.sh/server.VERSION=${VERSION}'" -o esmd $(dirname $0)/../main.go
+echo "--- building server..."
+go build -ldflags="-s -w -X 'github.com/esm-dev/esm.sh/server.VERSION=${SERVER_VERSION}'" -o esmd $(dirname $0)/../main.go
 if [ "$?" != "0" ]; then
   exit 1
 fi
-
-echo "--- uploading..."
 du -h esmd
+
+echo "--- uploading server build..."
 tar -czf esmd.tar.gz esmd
-scp esmd.tar.gz next.esm.sh:/tmp/esmd.tar.gz
+scp esmd.tar.gz d.esm.sh:/tmp/esmd.tar.gz
 if [ "$?" != "0" ]; then
   exit 1
 fi
 
-echo "--- installing..."
-ssh next.esm.sh << EOF
+echo "--- installing server..."
+ssh d.esm.sh << EOF
   gv=\$(git version)
   if [ "\$?" != "0" ]; then
     apt update
@@ -43,7 +43,7 @@ ssh next.esm.sh << EOF
     echo "StartLimitIntervalSec=0" >> \$servicefile
     echo "[Service]" >> \$servicefile
     echo "Type=simple" >> \$servicefile
-    echo "ExecStart=/usr/local/bin/esmd" >> \$servicefile
+    echo "ExecStart=/usr/local/bin/esmd --config=/etc/esmd/config.json" >> \$servicefile
     echo "USER=\${USER}" >> \$servicefile
     echo "Restart=always" >> \$servicefile
     echo "RestartSec=5" >> \$servicefile
@@ -57,8 +57,18 @@ ssh next.esm.sh << EOF
     echo "Stopped esmd.service."
   fi
 
-  mv -f ~/.esmd /tmp/.esmd
-  nohup rm -rf /tmp/.esmd &
+  mkdir -p /etc/esmd
+  rm -f /etc/esmd/config.json
+  if [ "$SERVER_CONFIG" != "" ]; then
+    echo "${SERVER_CONFIG}" >> /etc/esmd/config.json
+  else
+    echo "{}" >> /etc/esmd/config.json
+  fi
+
+  if [ "$RESET_ON_DEPLOY" == "yes" ]; then
+    mv -f ~/.esmd /tmp/.esmd
+    nohup rm -rf /tmp/.esmd &
+  fi
 
   cd /tmp
   tar -xzf esmd.tar.gz

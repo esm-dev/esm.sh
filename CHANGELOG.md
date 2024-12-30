@@ -1,9 +1,127 @@
 # Changelog
 
-## Unreleased
+## v136
 
-- Use semver versioning for depdency resolving
-- Introduce `esm.sh/run` v2
+* Add two builtin registries:
+  * [jsr](https://jsr.io) - The open-source package registry for modern JavaScript and TypeScript, created by the Deno team. ([32cd2bd](https://github.com/esm-dev/esm.sh/commit/32cd2bd931f33118cbc96ee89583f20718c58fbf))
+    ```js
+    // example
+    import { encodeBase64 } from "https://esm.sh/jsr/@std/encoding@1.0.0/base64";
+    import { Hono } from "https://esm.sh/jsr/@hono/hono@4";
+    ```
+  * [pkg.pr.new](https://pkg.pr.new) - Continuous (Preview) Releases for your libraries, created by [StackBlitz Labs](https://github.com/stackblitz-labs) ([#904](https://github.com/esm-dev/esm.sh/issues/904), [#913](https://github.com/esm-dev/esm.sh/issues/913))
+    ```js
+    // Examples
+    import { Bench } from "https://esm.sh/pr/tinylibs/tinybench/tinybench@a832a55";
+    import { Bench } from "https://esm.sh/pr/tinybench@a832a55"; // --compact
+    ```
+
+* Respect sematic versioning for dependency resolving ([#875](https://github.com/esm-dev/esm.sh/issues/875))
+
+  Prior to v136, dependency resolution used fixed versions, which could lead to duplication issues when a package was updated. Now, we adhere to semantic versioning for dependencies.
+
+  ```js
+  // before
+  "react-dom@19.0.0" import "/react@18.3.1/es2022/react.mjs";
+  // after
+  "react-dom@19.0.0" import "/react@^18.3.1?target=es2022";
+  ```
+
+* Add built-in npm package manager ([#948](https://github.com/esm-dev/esm.sh/issues/948))
+
+  Implement a built-in npm package manager in Go to replace pnpm. This change reduces the CI test time from 12:15 to 4:30 (**~2.7x faster**) and eliminates the need for `nodejs` and `pnpm` dependencies.
+
+* Splitting modules by analyzing dependency tree when building ([#959](https://github.com/esm-dev/esm.sh/issues/959))
+
+  To improve build performance and reduce network requests, esm.sh bundles sub-modules of a package by default. However, this can lead to duplicate code in the build. In v136, the server will split the modules by analyzing the dependency tree during the build process if the package's `exports` field is defined.
+
+* Use [@pi0](https://github.com/pi0)'s [unenv](https://github.com/unjs/unenv) as the node runtime compatibility layer ([#914](https://github.com/esm-dev/esm.sh/issues/914))
+
+  unenv provides a collection of Node.js and Web polyfills and mocking utilities with configurable presets for converting JavaScript code and libraries to be platform and runtime agnostic, working in any environment including Browsers, Workers, Node.js, Cloudflare Workers, Deno. unenv is also used by CloudFlare Workers: [blog](https://blog.cloudflare.com/more-npm-packages-on-cloudflare-workers-combining-polyfills-and-native-code/).
+
+  You can also access these `unenv` node runtime modules directly via `/node/[node-builtin-module-name].mjs` path, for example:
+
+  ```js
+  import * from "https://esm.sh/node/fs.mjs";
+  ```
+
+* Add [npm-replacements](./server/npm_replacements/src/) that follows [e18e](https://e18e.dev)'s [module-replacements](https://github.com/es-tooling/module-replacements). ([#914](https://github.com/esm-dev/esm.sh/issues/914))
+
+  The `npm-replacements` package replaces certain polyfill packages on NPM with native modern APIs during the build process. For example, the `object-assign` package is replaced with `Object.assign`:
+
+  ```js
+  import assign from "object-assign"; // replaced with "const assign = Object.assign"
+  ```
+
+* Remove the build version prefix of esm.sh in the module path
+
+  The build version prefix of esm.sh was introduced to avoid potential breaking changes caused by updates to the esm.sh server. However, it can lead to duplication issues when updating the server. In v136, we have removed the build version prefix from the module path, and the `?pin` query will be ignored. Paths with the build version prefix will continue to work as before, but the new default will be paths without the build version prefix.
+
+  ```js
+  // before
+  "react@19.0.0" -> "https://esm.sh/v135/react@19.0.0/es2022/react.mjs";
+  // after
+  "react@19.0.0" -> "https://esm.sh/react@19.0.0/es2022/react.mjs";
+  ```
+
+* Deprecate the `build` API
+  ```js
+  import { build } from "https://esm.sh/build";
+  build() // throws Error: The build API has been deprecated.
+  ```
+
+* Deprecate the Deno CLI script
+
+  Deno now includes its own built-in package manager, which can be used to manage `jsr:` nad `npm:` imports in your deno applications. So we decided to deprecate the Deno CLI script.
+
+  ```bash
+  # use
+  deno add npm:pract jsr:@std/encoding
+  Add npm:preact@10.25.4
+  Add jsr:@std/encoding@1.0.6
+
+  # do not use
+  deno run -A -r https://esm.sh init
+  error: The deno CLI has been deprecated.
+  ```
+
+* Add `npmScopedRegistries` config
+
+  The `npmScopedRegistries` configuration enables you to define the registry, token, user, and password for scoped npm packages. This allows you to import scoped packages using URLs like `https://your-esm-server.com/@scope_name/pkg@version`.
+
+  ```json
+  {
+    "npmScopedRegistries": {
+      "@scope_name": {
+        "registry": "https://your-registry.com/",
+        "token": "xxxxxx",
+        "user": "",
+        "password": ""
+      }
+    }
+  }
+  ```
+
+* Experimental Features:
+  * Build `.vue` and `.svelte` files on the fly ([#906](https://github.com/esm-dev/esm.sh/issues/906))
+    ```js
+    import "https://esm.sh/gh/phosphor-icons/vue@v2.2.0/src/icons/PhAirplay.vue?deps=vue@3.5.8"
+    ```
+  * https://esm.sh/x - ts/jsx/vue/svelte just works™️ in browser. ([#886](https://github.com/esm-dev/esm.sh/issues/886))
+
+* Other Changes:
+  * Upgrade esbuild to **0.24.2**
+  * Use native [cjs-module-lexer@v1.0.7](https://github.com/esm-dev/cjs-module-lexer/releases/tag/v1.0.7)
+  * Use target `es2022` for browsers by default ([#903](https://github.com/esm-dev/esm.sh/issues/903))
+  * Replace `window` with `globalThis` to make Deno 2 happy ([#964](https://github.com/esm-dev/esm.sh/issues/964))
+  * Use `.mjs` extenstion for sub-module build (#917)
+  * dts-transformer: support `.d` extension
+  * config: Add `corsAllowOrigins` config
+  * config: Add `customLandingPage` config (#928)
+  * config: Add `npmQueryCacheTTL` config (#921)
+  * config: Add npmQueryCacheTTL config (#921)
+  * config: Support **S3-compatible** storage (#886)
+
 
 ## v135
 
