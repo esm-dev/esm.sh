@@ -13,7 +13,7 @@ jobs:
 
     strategy:
         matrix:
-          environment: [production-node-1]
+          environment: [d1.esm.sh]
 
     steps:
       - name: Checkout

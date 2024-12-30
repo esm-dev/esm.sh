@@ -8,7 +8,7 @@ jobs:
   deploy:
     name: Deploy main branch to next.esm.sh
     runs-on: ubuntu-latest
-    environment: next
+    environment: next.esm.sh
 
     steps:
       - name: Checkout
