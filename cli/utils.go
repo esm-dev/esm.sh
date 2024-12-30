@@ -10,7 +10,7 @@ import (
 )
 
 var (
-	supportedModuleExts = []string{".js", ".mjs", ".jsx", ".ts", ".mts", ".tsx", ".svelte", ".vue"}
+	moduleExts = []string{".js", ".mjs", ".jsx", ".ts", ".mts", ".tsx", ".svelte", ".vue"}
 )
 
 // termRaw implements the github.com/ije/gox/term.Raw interface.
