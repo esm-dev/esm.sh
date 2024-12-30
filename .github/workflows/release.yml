@@ -33,7 +33,7 @@ jobs:
           DEPLOY_HOST_PORT: ${{ secrets.DEPLOY_HOST_PORT }}
           DEPLOY_SSH_USER: ${{ secrets.DEPLOY_SSH_USER }}
           DEPLOY_SSH_PRIVATE_KEY: ${{ secrets.DEPLOY_SSH_PRIVATE_KEY }}
-          SERVER_CONFIG: ${{ github.SERVER_CONFIG }}
+          SERVER_CONFIG: ${{ secrets.SERVER_CONFIG }}
           SERVER_VERSION: ${{ github.ref_name }}
 
   push_docker_image:
