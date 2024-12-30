@@ -35,21 +35,22 @@
 
   To improve build performance and reduce network requests, esm.sh bundles sub-modules of a package by default. However, this can lead to duplicate code in the build. In v136, the server will split the modules by analyzing the dependency tree during the build process if the package's `exports` field is defined.
 
-* Use [unenv](https://github.com/unjs/unenv) as the node runtime compatibility layer ([#914](https://github.com/esm-dev/esm.sh/issues/914))
+* Use [@pi0](https://github.com/pi0)'s [unenv](https://github.com/unjs/unenv) as the node runtime compatibility layer ([#914](https://github.com/esm-dev/esm.sh/issues/914))
 
-  The `unenv` project is created [@pi0](https://github.com/pi0), which also used by cloudflare workers: [blog](https://blog.cloudflare.com/more-npm-packages-on-cloudflare-workers-combining-polyfills-and-native-code/)
+ unenv provides a collection of Node.js and Web polyfills and mocking utilities with configurable presets for converting JavaScript code and libraries to be platform and runtime agnostic, working in any environment including Browsers, Workers, Node.js, Cloudflare Workers, Deno. unenv is also used by CloudFlare Workers: [blog](https://blog.cloudflare.com/more-npm-packages-on-cloudflare-workers-combining-polyfills-and-native-code/).
+
+  You can also access these `unenv` node runtime modules directly via `/node/[node-builtin-module-name].mjs` path, for example:
 
   ```js
-  // example
-  import { readFile } from "https://esm.sh/unenv/fs";
-  import { createServer } from "https://esm.sh/unenv/http";
+  import * from "https://esm.sh/node/fs.mjs";
   ```
 
-* Add npm-replacements that follows [e18e](https://e18e.dev)'s [module-replacements](https://github.com/es-tooling/module-replacements). ([#914](https://github.com/esm-dev/esm.sh/issues/914))
+* Add [npm-replacements](./server/npm_replacements/src/) that follows [e18e](https://e18e.dev)'s [module-replacements](https://github.com/es-tooling/module-replacements). ([#914](https://github.com/esm-dev/esm.sh/issues/914))
+
+  The `npm-replacements` package replaces certain polyfill packages on NPM with native modern APIs during the build process. For example, the `object-assign` package is replaced with `Object.assign`:
 
   ```js
-  // example
-  import "object-assign"; // replaced with "Object.assign"
+  import assign from "object-assign"; // replaced with "const assign = Object.assign"
   ```
 
 * Remove the build version prefix of esm.sh in the module path
