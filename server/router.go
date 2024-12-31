@@ -381,7 +381,7 @@ func esmRouter() rex.Handle {
 			}
 
 		// builtin scripts
-		case "/x", "/uno", "/run":
+		case "/x", "/run":
 			ifNoneMatch := ctx.R.Header.Get("If-None-Match")
 			if ifNoneMatch == globalETag && !DEBUG {
 				return rex.Status(http.StatusNotModified, nil)
@@ -530,66 +530,78 @@ func esmRouter() rex.Handle {
 			npmrc.zoneId = zoneIdHeader
 		}
 
-		if pathname == "/uno.css" {
+		if strings.HasPrefix(pathname, "/http://") || strings.HasPrefix(pathname, "/https://") {
 			query := ctx.Query()
-			ctxUrlRaw, err := atobUrl(query.Get("ctx"))
+			modUrl, err := url.Parse(pathname[1:])
 			if err != nil {
-				return rex.Status(400, "Invalid context url")
+				return rex.Status(400, "Invalid URL")
 			}
-			ctxUrl, err := url.Parse(ctxUrlRaw)
-			if err != nil {
-				return rex.Status(400, "Invalid context url")
+			if modUrl.Scheme != "http" && modUrl.Scheme != "https" {
+				return rex.Status(400, "Invalid URL")
 			}
-			if ctxUrl.Scheme != "http" && ctxUrl.Scheme != "https" {
-				return rex.Status(400, "Invalid context url")
-			}
-			hostname := ctxUrl.Hostname()
+			modUrlRaw := modUrl.String()
 			// disallow localhost or ip address for production
 			if !DEBUG {
-				if isLocalhost(hostname) {
-					ctx.Header.Set("Cache-Control", ccImmutable)
-					ctx.Header.Set("Content-Type", ctCSS)
-					return "body:after{position:fixed;top:0;left:0;z-index:9999;padding:18px 32px;width:100vw;content:'esm.sh/uno doesn't support local development, try serving your app with `esm.sh run`.';font-size:14px;background:rgba(255,232,232,.9);color:#f00;backdrop-filter:blur(8px)}"
+				hostname := modUrl.Hostname()
+				if isLocalhost(hostname) || !valid.IsDomain(hostname) || modUrl.Host == ctx.R.Host {
+					return rex.Status(400, "Invalid URL")
 				}
-				if !valid.IsDomain(hostname) || ctxUrl.Host == ctx.R.Host {
-					return rex.Status(400, "Invalid context url")
-				}
+			}
+			extname := path.Ext(modUrl.Path)
+			if !(stringInSlice(moduleExts, extname) || extname == ".vue" || extname == ".svelte" || extname == ".md" || extname == ".css") {
+				return redirect(ctx, modUrl.String(), true)
+			}
+			target := strings.ToLower(query.Get("target"))
+			if targets[target] == 0 {
+				target = "es2022"
 			}
 			v := query.Get("v")
 			if v != "" && (!regexpVersion.MatchString(v) || len(v) > 32) {
 				return rex.Status(400, "Invalid Version Param")
 			}
-			// determine build target by `?target` query or `User-Agent` header
-			target := strings.ToLower(query.Get("target"))
-			if targets[target] == 0 {
-				target = "es2022"
-			}
-			h := sha1.New()
-			h.Write([]byte(ctxUrlRaw))
-			h.Write([]byte(v))
-			h.Write([]byte(target))
-			savePath := normalizeSavePath(zoneIdHeader, path.Join("modules/x", hex.EncodeToString(h.Sum(nil))+".css"))
-			content, _, err := buildStorage.Get(savePath)
-			if err != nil && err != storage.ErrNotFound {
-				return rex.Status(500, err.Error())
-			}
-			var body io.Reader = content
-			if err == storage.ErrNotFound {
-				fetchClient, recycle := NewFetchClient(15, ctx.UserAgent())
-				defer recycle()
+			fetchClient, recycle := NewFetchClient(15, ctx.UserAgent())
+			defer recycle()
+			if strings.HasSuffix(modUrl.Path, "/uno.css") {
+				ctxParam := query.Get("ctx")
+				if ctxParam == "" {
+					return rex.Status(400, "Missing `ctx` Param")
+				}
+				ctxPath, err := atobUrl(ctxParam)
+				if err != nil {
+					return rex.Status(400, "Invalid `ctx` Param")
+				}
+				ctxUrlRaw := modUrl.Scheme + "://" + modUrl.Host + ctxPath
+				ctxUrl, err := url.Parse(ctxUrlRaw)
+				if err != nil {
+					return rex.Status(400, "Invalid `ctx` Param")
+				}
+				h := sha1.New()
+				h.Write([]byte(modUrlRaw))
+				h.Write([]byte(ctxParam))
+				h.Write([]byte(target))
+				h.Write([]byte(v))
+				savePath := normalizeSavePath(zoneIdHeader, path.Join("modules/x", hex.EncodeToString(h.Sum(nil))+".css"))
+				r, _, err := buildStorage.Get(savePath)
+				if err != nil && err != storage.ErrNotFound {
+					return rex.Status(500, err.Error())
+				}
+				if err == nil {
+					ctx.Header.Set("Cache-Control", ccImmutable)
+					ctx.Header.Set("Content-Type", ctCSS)
+					return r // auto closed
+				}
 				res, err := fetchClient.Fetch(ctxUrl, nil)
 				if err != nil {
-					return rex.Status(500, "Failed to fetch page html")
+					return rex.Status(500, "Failed to fetch unocss context page content")
 				}
 				defer res.Body.Close()
 				if res.StatusCode != 200 {
 					if res.StatusCode == 404 {
-						return rex.Status(404, "Page html not found")
+						return rex.Status(404, "Unocss context page not found")
 					}
-					return rex.Status(500, "Failed to fetch page html")
+					return rex.Status(500, "Failed to fetch unocss context page content")
 				}
-				tokenizer := html.NewTokenizer(io.LimitReader(res.Body, 2*MB))
-				configCSS := ""
+				tokenizer := html.NewTokenizer(io.LimitReader(res.Body, 5*MB))
 				content := []string{}
 				jsEntries := map[string]struct{}{}
 				importMap := common.ImportMap{}
@@ -601,32 +613,23 @@ func esmRouter() rex.Handle {
 					if tt == html.StartTagToken {
 						name, moreAttr := tokenizer.TagName()
 						switch string(name) {
-						case "style":
-							for moreAttr {
-								var key, val []byte
-								key, val, moreAttr = tokenizer.TagAttr()
-								if bytes.Equal(key, []byte("type")) && bytes.Equal(val, []byte("uno/css")) {
-									tokenizer.Next()
-									innerText := bytes.TrimSpace(tokenizer.Text())
-									if len(innerText) > 0 {
-										configCSS += string(innerText)
-									}
-									break
-								}
-							}
 						case "script":
-							srcAttr := ""
-							mainAttr := ""
-							typeAttr := ""
+							var (
+								typeAttr string
+								srcAttr  string
+								hrefAttr string
+							)
 							for moreAttr {
 								var key, val []byte
 								key, val, moreAttr = tokenizer.TagAttr()
-								if bytes.Equal(key, []byte("src")) {
-									srcAttr = string(val)
-								} else if bytes.Equal(key, []byte("main")) {
-									mainAttr = string(val)
-								} else if bytes.Equal(key, []byte("type")) {
-									typeAttr = string(val)
+								if len(val) > 0 {
+									if bytes.Equal(key, []byte("type")) {
+										typeAttr = string(val)
+									} else if bytes.Equal(key, []byte("src")) {
+										srcAttr = string(val)
+									} else if bytes.Equal(key, []byte("href")) {
+										hrefAttr = string(val)
+									}
 								}
 							}
 							if typeAttr == "importmap" {
@@ -643,11 +646,11 @@ func esmRouter() rex.Handle {
 								tokenizer.Next()
 								content = append(content, string(tokenizer.Text()))
 							} else {
-								if mainAttr != "" && isHttpSepcifier(srcAttr) {
-									if !isHttpSepcifier(mainAttr) && endsWith(mainAttr, moduleExts...) {
-										jsEntries[mainAttr] = struct{}{}
+								if hrefAttr != "" && isHttpSepcifier(srcAttr) {
+									if !isHttpSepcifier(hrefAttr) && endsWith(hrefAttr, moduleExts...) {
+										jsEntries[hrefAttr] = struct{}{}
 									}
-								} else if !isHttpSepcifier(srcAttr) && endsWith(srcAttr, moduleExts...) {
+								} else if !isHttpSepcifier(srcAttr) && endsWith(srcAttr, ".js", ".mjs") {
 									jsEntries[srcAttr] = struct{}{}
 								}
 							}
@@ -658,30 +661,20 @@ func esmRouter() rex.Handle {
 						}
 					}
 				}
-				if configCSS == "" {
-					res, err := fetchClient.Fetch(ctxUrl.ResolveReference(&url.URL{Path: "./uno.css"}), nil)
-					if err != nil {
-						return rex.Status(500, "Failed to lookup config css")
-					}
+				res, err = fetchClient.Fetch(modUrl, nil)
+				if err != nil {
+					return rex.Status(500, "Failed to fetch uno.css")
+				}
+				defer res.Body.Close()
+				if res.StatusCode != 200 {
 					if res.StatusCode == 404 {
-						res.Body.Close()
-						res, err = fetchClient.Fetch(ctxUrl.ResolveReference(&url.URL{Path: "/uno.css"}), nil)
-						if err != nil {
-							return rex.Status(500, "Failed to lookup config css")
-						}
+						return rex.Status(404, "uno.css not found")
 					}
-					defer res.Body.Close()
-					// ignore non-exist config css
-					if res.StatusCode != 404 {
-						if res.StatusCode != 200 {
-							return rex.Status(500, "Failed to fetch config css")
-						}
-						css, err := io.ReadAll(res.Body)
-						if err != nil {
-							return rex.Status(500, "Failed to fetch config css")
-						}
-						configCSS = string(css)
-					}
+					return rex.Status(500, "Failed to fetch uno.css: "+res.Status)
+				}
+				configCSS, err := io.ReadAll(io.LimitReader(res.Body, MB))
+				if err != nil {
+					return rex.Status(500, "Failed to fetch uno.css")
 				}
 				for src := range jsEntries {
 					url := ctxUrl.ResolveReference(&url.URL{Path: src})
@@ -692,7 +685,7 @@ func esmRouter() rex.Handle {
 						}
 					}
 				}
-				out, err := generateUnoCSS(npmrc, configCSS, strings.Join(content, "\n"))
+				out, err := generateUnoCSS(npmrc, string(configCSS), strings.Join(content, "\n"))
 				if err != nil {
 					return rex.Status(500, "Failed to generate uno.css: "+err.Error())
 				}
@@ -710,165 +703,133 @@ func esmRouter() rex.Handle {
 				if len(ret.Errors) > 0 {
 					return rex.Status(500, ret.Errors[0].Text)
 				}
-				css := ret.OutputFiles[0].Contents
-				body = bytes.NewReader(css)
-				go buildStorage.Put(savePath, bytes.NewReader(css))
-			}
-			ctx.Header.Set("Cache-Control", ccImmutable)
-			ctx.Header.Set("Content-Type", ctCSS)
-			return body // auto closed
-		}
-
-		if strings.HasPrefix(pathname, "/http://") || strings.HasPrefix(pathname, "/https://") {
-			query := ctx.Query()
-			u, err := url.Parse(pathname[1:])
-			if err != nil {
-				return rex.Status(400, "Invalid URL")
-			}
-			if u.Scheme != "http" && u.Scheme != "https" {
-				return rex.Status(400, "Invalid URL")
-			}
-			hostname := u.Hostname()
-			// disallow localhost or ip address for production
-			if !DEBUG {
-				if isLocalhost(hostname) || !valid.IsDomain(hostname) || u.Host == ctx.R.Host {
-					return rex.Status(400, "Invalid URL")
+				minifiedCSS := ret.OutputFiles[0].Contents
+				go buildStorage.Put(savePath, bytes.NewReader(minifiedCSS))
+				ctx.Header.Set("Cache-Control", ccImmutable)
+				ctx.Header.Set("Content-Type", ctCSS)
+				return minifiedCSS
+			} else {
+				im := query.Get("im")
+				h := sha1.New()
+				h.Write([]byte(modUrlRaw))
+				h.Write([]byte(im))
+				h.Write([]byte(target))
+				h.Write([]byte(v))
+				savePath := normalizeSavePath(zoneIdHeader, path.Join("modules/x", hex.EncodeToString(h.Sum(nil))+".mjs"))
+				content, _, err := buildStorage.Get(savePath)
+				if err != nil && err != storage.ErrNotFound {
+					return rex.Status(500, err.Error())
 				}
-			}
-			extname := path.Ext(u.Path)
-			if !(stringInSlice(moduleExts, extname) || extname == ".vue" || extname == ".svelte" || extname == ".md" || extname == ".css") {
-				return redirect(ctx, u.String(), true)
-			}
-			im := query.Get("im")
-			v := query.Get("v")
-			if v != "" && (!regexpVersion.MatchString(v) || len(v) > 32) {
-				return rex.Status(400, "Invalid Version Param")
-			}
-			// determine build target by `?target` query or `User-Agent` header
-			target := strings.ToLower(query.Get("target"))
-			if targets[target] == 0 {
-				target = "es2022"
-			}
-			h := sha1.New()
-			h.Write([]byte(u.String()))
-			h.Write([]byte(im))
-			h.Write([]byte(v))
-			h.Write([]byte(target))
-			savePath := normalizeSavePath(zoneIdHeader, path.Join("modules/x", hex.EncodeToString(h.Sum(nil))+".mjs"))
-			content, _, err := buildStorage.Get(savePath)
-			if err != nil && err != storage.ErrNotFound {
-				return rex.Status(500, err.Error())
-			}
-			var body io.Reader = content
-			if err == storage.ErrNotFound {
-				importMap := common.ImportMap{}
-				fetchClient, recycle := NewFetchClient(15, ctx.UserAgent())
-				defer recycle()
-				if len(im) > 0 {
-					imPath, err := atobUrl(im)
-					if err != nil {
-						return rex.Status(400, "Invalid `im` Param")
-					}
-					imUrl, err := url.Parse(u.Scheme + "://" + u.Host + imPath)
-					if err != nil {
-						return rex.Status(400, "Invalid `im` Param")
-					}
-					res, err := fetchClient.Fetch(imUrl, nil)
-					if err != nil {
-						return rex.Status(500, "Failed to fetch import map")
-					}
-					defer res.Body.Close()
-					if res.StatusCode != 200 {
-						return rex.Status(500, "Failed to fetch import map")
-					}
-					tokenizer := html.NewTokenizer(io.LimitReader(res.Body, 2*MB))
-					for {
-						tt := tokenizer.Next()
-						if tt == html.ErrorToken {
-							break
+				var body io.Reader = content
+				if err == storage.ErrNotFound {
+					importMap := common.ImportMap{}
+					if len(im) > 0 {
+						imPath, err := atobUrl(im)
+						if err != nil {
+							return rex.Status(400, "Invalid `im` Param")
 						}
-						if tt == html.StartTagToken {
-							name, moreAttr := tokenizer.TagName()
-							isImportMapScript := false
-							if bytes.Equal(name, []byte("script")) {
-								for moreAttr {
-									var key, val []byte
-									key, val, moreAttr = tokenizer.TagAttr()
-									if bytes.Equal(key, []byte("type")) && bytes.Equal(val, []byte("importmap")) {
-										isImportMapScript = true
-										break
+						imUrl, err := url.Parse(modUrl.Scheme + "://" + modUrl.Host + imPath)
+						if err != nil {
+							return rex.Status(400, "Invalid `im` Param")
+						}
+						res, err := fetchClient.Fetch(imUrl, nil)
+						if err != nil {
+							return rex.Status(500, "Failed to fetch import map")
+						}
+						defer res.Body.Close()
+						if res.StatusCode != 200 {
+							return rex.Status(500, "Failed to fetch import map")
+						}
+						tokenizer := html.NewTokenizer(io.LimitReader(res.Body, 5*MB))
+						for {
+							tt := tokenizer.Next()
+							if tt == html.ErrorToken {
+								break
+							}
+							if tt == html.StartTagToken {
+								name, moreAttr := tokenizer.TagName()
+								isImportMapScript := false
+								if bytes.Equal(name, []byte("script")) {
+									for moreAttr {
+										var key, val []byte
+										key, val, moreAttr = tokenizer.TagAttr()
+										if bytes.Equal(key, []byte("type")) && bytes.Equal(val, []byte("importmap")) {
+											isImportMapScript = true
+											break
+										}
 									}
+								}
+								if isImportMapScript {
+									tokenizer.Next()
+									innerText := bytes.TrimSpace(tokenizer.Text())
+									if len(innerText) > 0 {
+										err := json.Unmarshal(innerText, &importMap)
+										if err != nil {
+											return rex.Status(400, "Invalid import map")
+										}
+										importMap.Src, _ = atobUrl(im)
+									}
+									break
 								}
 							}
-							if isImportMapScript {
-								tokenizer.Next()
-								innerText := bytes.TrimSpace(tokenizer.Text())
-								if len(innerText) > 0 {
-									err := json.Unmarshal(innerText, &importMap)
-									if err != nil {
-										return rex.Status(400, "Invalid import map")
-									}
-									importMap.Src, _ = atobUrl(im)
-								}
+						}
+					}
+					if extname == ".md" {
+						for _, kind := range []string{"jsx", "svelte", "vue"} {
+							if query.Has(kind) {
+								modUrl.RawQuery = kind
+								modUrlRaw = modUrl.String()
 								break
 							}
 						}
 					}
-				}
-				if extname == ".md" {
-					for _, kind := range []string{"jsx", "svelte", "vue"} {
-						if query.Has(kind) {
-							u.RawQuery = kind
-							break
-						}
+					js, jsx, css, _, err := bundleHttpModule(npmrc, modUrlRaw, importMap, false, fetchClient)
+					if err != nil {
+						return rex.Status(500, "Failed to build module: "+err.Error())
 					}
+					code := string(js)
+					if len(css) > 0 {
+						code += fmt.Sprintf(`globalThis.document.head.insertAdjacentHTML("beforeend","<style>"+%s+"</style>")`, utils.MustEncodeJSON(string(css)))
+					}
+					lang := "js"
+					if jsx {
+						lang = "jsx"
+					}
+					out, err := transform(&ResolvedTransformOptions{
+						TransformOptions: TransformOptions{
+							Filename: modUrlRaw,
+							Lang:     lang,
+							Code:     code,
+							Target:   target,
+							Minify:   true,
+						},
+						importMap:     importMap,
+						globalVersion: v,
+					})
+					if err != nil {
+						return rex.Status(500, err.Error())
+					}
+					body = bytes.NewReader([]byte(out.Code))
+					go buildStorage.Put(savePath, strings.NewReader(out.Code))
 				}
-				js, jsx, css, _, err := bundleHttpModule(npmrc, u.String(), importMap, false, fetchClient)
-				if err != nil {
-					return rex.Status(500, "Failed to build module: "+err.Error())
+				if extname == ".css" && query.Has("module") {
+					css, err := io.ReadAll(body)
+					if closer, ok := body.(io.Closer); ok {
+						closer.Close()
+					}
+					if err != nil {
+						return rex.Status(500, "Failed to read css")
+					}
+					body = strings.NewReader(fmt.Sprintf("var style = document.createElement('style');\nstyle.textContent = %s;\ndocument.head.appendChild(style);\nexport default null;", utils.MustEncodeJSON(string(css))))
 				}
-				code := string(js)
-				if len(css) > 0 {
-					code += fmt.Sprintf(`globalThis.document.head.insertAdjacentHTML("beforeend","<style>"+%s+"</style>")`, utils.MustEncodeJSON(string(css)))
+				ctx.Header.Set("Cache-Control", ccImmutable)
+				if extname == ".css" {
+					ctx.Header.Set("Content-Type", ctCSS)
+				} else {
+					ctx.Header.Set("Content-Type", ctJavaScript)
 				}
-				lang := "js"
-				if jsx {
-					lang = "jsx"
-				}
-				out, err := transform(&ResolvedTransformOptions{
-					TransformOptions: TransformOptions{
-						Filename: u.String(),
-						Lang:     lang,
-						Code:     code,
-						Target:   target,
-						Minify:   true,
-					},
-					importMap:     importMap,
-					globalVersion: v,
-				})
-				if err != nil {
-					return rex.Status(500, err.Error())
-				}
-				body = bytes.NewReader([]byte(out.Code))
-				go buildStorage.Put(savePath, strings.NewReader(out.Code))
+				return body // auto closed
 			}
-			if extname == ".css" && query.Has("module") {
-				css, err := io.ReadAll(body)
-				if closer, ok := body.(io.Closer); ok {
-					closer.Close()
-				}
-				if err != nil {
-					return rex.Status(500, "Failed to read css")
-				}
-				body = strings.NewReader(fmt.Sprintf("var style = document.createElement('style');\nstyle.textContent = %s;\ndocument.head.appendChild(style);\nexport default null;", utils.MustEncodeJSON(string(css))))
-			}
-			ctx.Header.Set("Cache-Control", ccImmutable)
-			if extname == ".css" {
-				ctx.Header.Set("Content-Type", ctCSS)
-			} else {
-				ctx.Header.Set("Content-Type", ctJavaScript)
-			}
-			return body // auto closed
 		}
 
 		// check `/*pathname` pattern
