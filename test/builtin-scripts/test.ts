@@ -20,12 +20,4 @@ Deno.test("builtin scripts", async () => {
     assertStringIncludes(res.headers.get("Vary") ?? "", "User-Agent");
     assertStringIncludes(await res.text(), "esm.sh/run");
   }
-
-  {
-    const res = await fetch("http://localhost:8080/uno");
-    assertEquals(res.headers.get("Etag"), `W/"${VERSION}"`);
-    assertEquals(res.headers.get("Content-Type"), "application/javascript; charset=utf-8");
-    assertStringIncludes(res.headers.get("Vary") ?? "", "User-Agent");
-    assertStringIncludes(await res.text(), "esm.sh/uno");
-  }
 });

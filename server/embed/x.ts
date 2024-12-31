@@ -1,31 +1,35 @@
-/*! 🚀 esm.sh/x - ts/jsx/vue/svelte just works™️ in browser. */
+/*!
+ * ⚡️ esm.sh/x - ts/jsx/vue/svelte just works™️ in browser.
+ * Usage: <script src="app.tsx"> → <script src="https://esm.sh/x" href="app.tsx">
+ */
 
-((document) => {
-  const $: typeof document.querySelector = (s: string) => document.querySelector(s);
+((document, location) => {
+  const { hostname } = location;
   const currentScript = document.currentScript as HTMLScriptElement | null;
-  const modUrl = currentScript?.src || import.meta.url;
-  const { hostname, href, pathname, origin } = location;
-
-  // import the `main` module from esm.sh if it's provided.
-  // e.g. <script type="module" src="https://esm.sh/x" main="/main.tsx"></script>
-  const el = currentScript ?? $<HTMLScriptElement>("script[type=module][main][src='" + modUrl + "']");
-  if (el) {
-    const main = el.getAttribute("main");
-    if (main) {
-      if (hostname === "localhost" || hostname === "127.0.0.1" || /^192\.168\.\d+\.\d+$/.test(hostname)) {
-        console.error("[esm.sh/x] Please serve your app with `npx esm.sh serve` in development mode.");
-        return;
-      }
-      const mainUrl = new URL(main, href);
-      const q = mainUrl.searchParams;
-      const v = $<HTMLMetaElement>("meta[name=version]")?.content;
-      if ($("script[type=importmap]")) {
-        q.set("im", btoa(pathname).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, ""));
-      }
-      if (v) {
-        q.set("v", v);
-      }
-      import(mainUrl.origin === origin ? new URL(modUrl).origin + "/" + mainUrl : "" + mainUrl);
+  const $: typeof document.querySelector = (s: string) => document.querySelector(s);
+  if (hostname == "localhost" || hostname == "127.0.0.1" || /^192\.168\.\d+\.\d+$/.test(hostname)) {
+    console.error("[esm.sh/x] Please start your app with `npx esm.sh serve` in development env.");
+    return;
+  }
+  let main = currentScript?.getAttribute("href");
+  if (main) {
+    const mainUrl = new URL(main, location.href);
+    const { searchParams, pathname } = mainUrl;
+    const ctx = btoa(location.pathname).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+    const v = $<HTMLMetaElement>("meta[name=version]")?.content;
+    if (pathname == "/uno.css") {
+      searchParams.set("ctx", ctx);
+    } else if ($("script[type=importmap]")) {
+      searchParams.set("im", ctx);
+    }
+    if (v) {
+      searchParams.set("v", v);
+    }
+    main = new URL(currentScript!.src).origin + "/" + mainUrl;
+    if (pathname.endsWith(".css")) {
+      document.write(`<link rel="stylesheet" href="${main}">`);
+    } else {
+      import(main);
     }
   }
-})(document);
+})(document, location);
