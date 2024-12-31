@@ -5,7 +5,7 @@ const regexpVuePath = /^\/\*?vue@([~\^]?[\w\+\-\.]+)(\/|\?|&|$)/;
 const regexpSveltePath = /^\/\*?svelte@([~\^]?[\w\+\-\.]+)(\/|\?|&|$)/;
 const output = (type, data) => Deno.stdout.write(enc.encode(">>>" + type + ":" + JSON.stringify(data) + "\n"));
 
-let tsx
+let tsx;
 let unoGenerators;
 
 async function transformModule(filename, importMap, sourceCode) {
@@ -118,10 +118,10 @@ function isHttpSpecifier(specifier) {
 }
 
 async function unocss(config, content, id) {
+  const generatorId = config?.filename ?? ".";
   if (!unoGenerators) {
     unoGenerators = new Map();
   }
-  const generatorId = config?.filename ?? ".";
   let uno = unoGenerators.get(generatorId);
   if (!uno || uno.configCSS !== config?.css) {
     uno = import("npm:@esm.sh/unocss@0.4.3").then(({ init }) => init({ configCSS: config?.css }));
@@ -129,19 +129,7 @@ async function unocss(config, content, id) {
     unoGenerators.set(generatorId, uno);
   }
   const { update, generate } = await uno;
-  if (id) {
-    if (!(await update(content, id))) {
-      return "";
-    }
-  } else {
-    if (typeof content === "object" && content !== null) {
-      for (const [id, code] of Array.isArray(content) ? content : Object.entries(content)) {
-        await update(code, id);
-      }
-    } else if (typeof content === "string") {
-      await update(content);
-    }
-  }
+  await update(content, id);
   return await generate();
 }
 

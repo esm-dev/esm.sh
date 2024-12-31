@@ -3,7 +3,7 @@ import { contentType } from "jsr:@std/media-types";
 import { join } from "jsr:@std/path";
 
 Deno.test("transform", async (t) => {
-  await t.step("transform api", async () => {
+  await t.step("transform API", async () => {
     const options = {
       lang: "jsx",
       code: `
@@ -289,8 +289,8 @@ Deno.test("transform", async (t) => {
   await t.step("generate unocss", async () => {
     {
       const res = await fetch(
-        "http://localhost:8080/uno.css?ctx="
-          + btoaUrl("http://localhost:8083/with-unocss/vanilla/"),
+        "http://localhost:8080/http://localhost:8083/with-unocss/vanilla/uno.css?ctx="
+          + btoaUrl("/with-unocss/vanilla/"),
       );
       assertEquals(res.status, 200);
       assertEquals(res.headers.get("Content-Type"), "text/css; charset=utf-8");
@@ -311,8 +311,8 @@ Deno.test("transform", async (t) => {
     }
     {
       const res = await fetch(
-        "http://localhost:8080/uno.css?ctx="
-          + btoaUrl("http://localhost:8083/with-unocss/react/"),
+        "http://localhost:8080/http://localhost:8083/with-unocss/react/uno.css?ctx="
+          + btoaUrl("/with-unocss/react/"),
       );
       assertEquals(res.status, 200);
       assertEquals(res.headers.get("Content-Type"), "text/css; charset=utf-8");
@@ -333,8 +333,8 @@ Deno.test("transform", async (t) => {
     }
     {
       const res = await fetch(
-        "http://localhost:8080/uno.css?ctx="
-          + btoaUrl("http://localhost:8083/with-unocss/preact/"),
+        "http://localhost:8080/http://localhost:8083/with-unocss/preact/uno.css?ctx="
+          + btoaUrl("/with-unocss/preact/"),
       );
       assertEquals(res.status, 200);
       assertEquals(res.headers.get("Content-Type"), "text/css; charset=utf-8");
@@ -355,8 +355,8 @@ Deno.test("transform", async (t) => {
     }
     {
       const res = await fetch(
-        "http://localhost:8080/uno.css?ctx="
-          + btoaUrl("http://localhost:8083/with-unocss/vue/"),
+        "http://localhost:8080/http://localhost:8083/with-unocss/vue/uno.css?ctx="
+          + btoaUrl("/with-unocss/vue/"),
       );
       assertEquals(res.status, 200);
       assertEquals(res.headers.get("Content-Type"), "text/css; charset=utf-8");
@@ -377,8 +377,8 @@ Deno.test("transform", async (t) => {
     }
     {
       const res = await fetch(
-        "http://localhost:8080/uno.css?ctx="
-          + btoaUrl("http://localhost:8083/with-unocss/svelte/"),
+        "http://localhost:8080/http://localhost:8083/with-unocss/svelte/uno.css?ctx="
+          + btoaUrl("/with-unocss/svelte/"),
       );
       assertEquals(res.status, 200);
       assertEquals(res.headers.get("Content-Type"), "text/css; charset=utf-8");
