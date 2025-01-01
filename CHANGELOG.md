@@ -16,22 +16,22 @@
     import { Bench } from "https://esm.sh/pr/tinybench@a832a55"; // --compact
     ```
 
-* Respect sematic versioning for dependency resolving ([#875](https://github.com/esm-dev/esm.sh/pull/875))
+* Respect semantic versioning for dependency resolving ([#875](https://github.com/esm-dev/esm.sh/pull/875))
 
-  Prior to v136, dependency resolution used fixed versions, which could lead to duplication issues when a package was updated. Now, we adhere to semantic versioning for dependencies.
+  Previously, dependency resolution used fixed versions, which could cause duplication issues when packages were updated. Starting from v136, we now follow semantic versioning for dependencies.
 
   ```js
   // before
-  "react-dom@19.0.0" import "/react@18.3.1/es2022/react.mjs";
+  "react-dom@19.0.0" import "/react@19.0.0/es2022/react.mjs";
   // after
-  "react-dom@19.0.0" import "/react@^18.3.1?target=es2022";
+  "react-dom@19.0.0" import "/react@^19.0.0?target=es2022";
   ```
 
 * Add built-in npm package manager ([#948](https://github.com/esm-dev/esm.sh/pull/948))
 
   Implement a built-in npm package manager in Go to replace pnpm. This change reduces the CI test time from 12:15 to 4:30 (**~2.7x faster**) and eliminates the need for `nodejs` and `pnpm` dependencies.
 
-* Splitting modules by analyzing dependency tree when building ([#959](https://github.com/esm-dev/esm.sh/pull/959))
+* Split modules by analyzing the dependency tree during the build process ([#959](https://github.com/esm-dev/esm.sh/pull/959))
 
   To improve build performance and reduce network requests, esm.sh bundles sub-modules of a package by default. However, this can lead to duplicate code in the build. In v136, the server will split the modules by analyzing the dependency tree during the build process if the package's `exports` field is defined.
 
@@ -53,7 +53,7 @@
   import assign from "object-assign"; // replaced with "const assign = Object.assign"
   ```
 
-* Remove the build version prefix of esm.sh in the module path
+* Remove build version prefix from the module path
 
   The build version prefix of esm.sh was introduced to avoid potential breaking changes caused by updates to the esm.sh server. However, it can lead to duplication issues when updating the server. In v136, we have removed the build version prefix from the module path, and the `?pin` query will be ignored. Paths with the build version prefix will continue to work as before, but the new default will be paths without the build version prefix.
 
