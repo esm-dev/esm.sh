@@ -1,6 +1,6 @@
 {
   "name": "esm.sh",
-  "version": "0.*.0",
+  "version": "*",
   "description": "A no-build CDN for modern web development.",
   "repository": {
     "type": "git",
@@ -14,11 +14,11 @@
     "postinstall": "node install.mjs"
   },
   "optionalDependencies": {
-    "@esm.sh/cli-darwin-arm64": "0.*.0",
-    "@esm.sh/cli-darwin-amd64": "0.*.0",
-    "@esm.sh/cli-linux-arm64": "0.*.0",
-    "@esm.sh/cli-linux-amd64": "0.*.0",
-    "@esm.sh/cli-windows-amd64": "0.*.0"
+    "@esm.sh/cli-darwin-arm64": "*",
+    "@esm.sh/cli-darwin-amd64": "*",
+    "@esm.sh/cli-linux-arm64": "*",
+    "@esm.sh/cli-linux-amd64": "*",
+    "@esm.sh/cli-windows-amd64": "*"
   },
   "engines": {
     "node": ">=18"
