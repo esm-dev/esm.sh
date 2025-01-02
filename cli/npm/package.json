@@ -1,11 +1,26 @@
 {
   "name": "esm.sh",
-  "version": "0.136.0",
-  "description": "The CLI tool for esm.sh apps.",
+  "version": "0.*.0",
+  "description": "A no-build CDN for modern web development.",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/esm-dev/esm.sh.git"
+  },
+  "license": "MIT",
   "bin": {
     "esm.sh": "bin/esm.sh"
   },
   "scripts": {
     "postinstall": "node install.mjs"
+  },
+  "optionalDependencies": {
+    "@esm.sh/cli-darwin-arm64": "0.*.0",
+    "@esm.sh/cli-darwin-amd64": "0.*.0",
+    "@esm.sh/cli-linux-arm64": "0.*.0",
+    "@esm.sh/cli-linux-amd64": "0.*.0",
+    "@esm.sh/cli-windows-amd64": "0.*.0"
+  },
+  "engines": {
+    "node": ">=18"
   }
 }
