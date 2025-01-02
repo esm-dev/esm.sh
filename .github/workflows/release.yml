@@ -7,13 +7,9 @@ on:
 
 jobs:
   deploy:
-    name: Deploy server to esm.sh nodes
+    name: Deploy esm.sh to production
     runs-on: ubuntu-latest
-    environment: ${{ matrix.environment }}
-
-    strategy:
-        matrix:
-          environment: [d1.esm.sh]
+    environment: release
 
     steps:
       - name: Checkout
@@ -39,9 +35,10 @@ jobs:
   push_docker_image:
     name: Push docker image to ghcr.io
     runs-on: ubuntu-latest
+
     permissions:
-      packages: write
       contents: read
+      packages: write
 
     steps:
       - name: Checkout
@@ -71,19 +68,124 @@ jobs:
           build-args: |
             SERVER_VERSION=${{ github.ref_name }}
 
-  publish:
-    name: Publish
+  build_esmsh_cli:
+    name: Build esm.sh CLI
     runs-on: ubuntu-latest
-    needs: [deploy, push_docker_image]
+    environment: release
+
+    strategy:
+      matrix:
+        include:
+          - os: darwin
+            arch: arm64
+            ext: ''
+          - os: darwin
+            arch: amd64
+            ext: ''
+          - os: linux
+            arch: arm64
+            ext: ''
+          - os: linux
+            arch: amd64
+            ext: ''
+          - os: windows
+            arch: amd64
+            ext: '.exe'
+
+    permissions:
+      contents: read
+      id-token: write
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: 1.23.x
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Build CLI
+        run: go build -ldflags="-s -w -X 'github.com/esm-dev/esm.sh/server.VERSION=${github.ref_name}'" -o cli/bin/esm.sh${{ matrix.ext }} esmd cli/cmd/main.go
+        env:
+          GOOS: ${{ matrix.os }}
+          GOARCH: ${{ matrix.arch }}
+          CGO_ENABLED: "0"
+
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: esm.sh-cli-${{ matrix.os }}-${{ matrix.arch }}
+          path: cli/bin/esm.sh${{ matrix.ext }}
+          if-no-files-found: error
+
+      - name: Create package.json
+        run: echo "const p=JSON.parse(require('fs').readFileSync('npm/package.json','utf8'));console.log(JSON.stringify({...p,name:'@esm.sh/cli-${{ matrix.os }}-${{ matrix.arch }}',version:'0.'+('${{ github.ref_name }}'.slice(1))+'.0',os:['${{ matrix.os }}'],cpu:['${{ matrix.arch }}'.replace('amd','x')],files:['bin/'],bin:void 0,scripts:void 0,optionalDependencies:void 0}))" | node > package.json
+        working-directory: cli
+
+      - name: Publish Package
+        run: npm publish --provenance --access public
+        working-directory: cli
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+  publish_esmsh_to_npm:
+    name: Publish "esm.sh" to NPM
+    runs-on: ubuntu-latest
+    environment: release
+    needs: [build_esmsh_cli]
+
+    permissions:
+      contents: read
+      id-token: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Update Version
+        run: echo "const fs=require('fs');fs.writeFileSync('package.json',fs.readFileSync('package.json','utf8').replaceAll('*','${{ github.ref_name }}'.slice(1)),'utf8')" | node
+        working-directory: cli/npm
+
+      - name: Publish Package
+        run: npm publish --provenance --access public
+        working-directory: cli/npm
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+  release:
+    name: Release
+    runs-on: ubuntu-latest
+    needs: [deploy, push_docker_image, publish_esmsh_to_npm]
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download Artifact
+        uses: actions/download-artifact@v4
+        with:
+          merge-multiple: true
+          path: .artifact
+
+      - name: Gzip Artifact
+        run: gzip .artifact/*
+
       - name: Extract Release Note
         run: echo "console.log(require('fs').readFileSync('CHANGELOG.md','utf8').split('## ')[1].slice('${{ github.ref_name }}'.length).trim())" | node > release-note.txt
 
-      - name: Publish Release
+      - name: Create Release
         uses: softprops/action-gh-release@v2
         with:
           body_path: release-note.txt
+          files: .artifact/esm.sh-cli-*.gz

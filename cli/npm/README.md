@@ -1,16 +1,18 @@
 # esm.sh
 
-The CLI tool for esm.sh apps.
+A no-build CDN for modern web development.
+
+## Usage
 
 ```bash
 $ npx esm.sh
 
-esm.sh - The no-build CDN for modern web development.
+esm.sh - A no-build CDN for modern web development.
 
 Usage: esm.sh [command] [options]
 
 Commands:
-  init  Create a new esm.sh web app
-  run   Serve an esm.sh web app
-  add   Add NPM packages to the "importmap" script
+  add    Add dependencies to the "importmap" script
+  init   Create a new esm.sh web app
+  serve  Serve an esm.sh web app
 ```
