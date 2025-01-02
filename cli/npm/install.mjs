@@ -1,62 +1,57 @@
-import { chmodSync, cpSync, createWriteStream, existsSync, linkSync, mkdirSync, readFileSync, rmSync, statSync } from "node:fs";
+import { chmodSync, cpSync, createWriteStream, existsSync, linkSync, readFileSync, statSync, unlinkSync } from "node:fs";
 import { createRequire } from "node:module";
-import { arch, platform } from "node:os";
 import { Writable } from "node:stream";
+
+// 1. Attempt to resolve "@esm.sh/cli-{os}-{arch}", if not found, then try to download the binary from GitHub.
+// 2. On macOS/Linux, link "bin/esm.sh" to "@esm.sh/cli-{os}-{arch}/bin/esm.sh" if exists.
+install();
 
 async function install() {
   const binPath = toPackagePath("bin/esm.sh" + getBinExtension());
-  if (!existsSync(binPath)) {
+  try {
+    const nativeBinPath = resolveBinaryPath();
+    if (process.platform !== "win32") {
+      unlinkSync(binPath);
+      linkSync(nativeBinPath, binPath);
+      chmodAddX(binPath);
+    }
+  } catch {
     try {
-      // ensure bin directory exists
-      mkdirSync(toPackagePath("bin"));
-    } catch {}
-    try {
-      if (platform() !== "win32") {
-        linkSync(await resolveBinaryPath(), binPath);
-        // chmod +x
-        chmodSync(binPath, statSync(binPath).mode | 0o111);
-      } else {
-        cpSync(await resolveBinaryPath(), binPath);
-      }
-    } catch {
-      try {
-        const fileStream = createWriteStream(binPath);
-        console.log("Downloading esm.sh CLI binary from GitHub...");
-        await downloadBinaryFromGitHub(fileStream);
-      } catch (err) {
-        console.error("Failed to install esm.sh CLI binary:", err);
-        rmSync(toPackagePath("bin"), { recursive: true });
-        process.exit(1);
-      }
+      console.log("[esm.sh] Trying to download esm.sh binary from GitHub...");
+      const readable = await downloadBinaryFromGitHub();
+      await readable.pipeTo(Writable.toWeb(createWriteStream(binPath)));
+      chmodAddX(binPath);
+    } catch (err) {
+      console.error("[esm.sh] Failed to install esm.sh binary:", err);
+      throw err;
     }
   }
 }
 
-async function resolveBinaryPath() {
-  const cliBinPackage = `@esm.sh/cli-${getPlatform()}-${getArch()}`;
+function resolveBinaryPath() {
+  const cliBinPackage = `@esm.sh/cli-${getOS()}-${getArch()}`;
   const binPath = createRequire(import.meta.url).resolve(cliBinPackage + "/bin/esm.sh" + getBinExtension());
   if (!existsSync(binPath)) {
-    throw new Error(`Package '${cliBinPackage}' may be installed incorrectly`);
+    throw new Error(`Could not find the binary of '${cliBinPackage}'`);
   }
   return binPath;
 }
 
-async function downloadBinaryFromGitHub(w) {
+async function downloadBinaryFromGitHub() {
   const pkgInfo = JSON.parse(readFileSync(toPackagePath("package.json"), "utf8"));
-  const version = pkgInfo.version.split(".")[1];
-  const url = `https://github.com/esm-dev/esm.sh/releases/download/v${version}/esm.sh-cli-${getPlatform()}-${getArch()}.gz`;
+  const [_, minor, patch] = pkgInfo.version.split(".");
+  const tag = "v" + minor + (Number(patch) > 0 ? "_" + patch : "");
+  const url = `https://github.com/esm-dev/esm.sh/releases/download/${tag}/esm.sh-cli-${getOS()}-${getArch()}.gz`;
   const res = await fetch(url);
   if (!res.ok) {
-    res.body?.cancel?.();
+    res.body?.cancel();
     throw new Error(`Download ${url}: <${res.statusText}>`);
   }
-  await res.body.pipeThrough(new DecompressionStream("gzip")).pipeTo(Writable.toWeb(w));
+  return res.body.pipeThrough(new DecompressionStream("gzip"));
 }
 
-function getPlatform() {
-  let os = platform();
-  os = os === "win32" ? "windows" : os;
-  switch (os) {
+function getOS() {
+  switch (process.platform) {
     case "darwin":
       return "darwin";
     case "linux":
@@ -64,28 +59,29 @@ function getPlatform() {
     case "win32":
       return "windows";
     default:
-      throw new Error(`Unsupported platform: ${os}`);
+      throw new Error(`Unsupported platform: ${process.platform}`);
   }
 }
 
 function getArch() {
-  const a = arch();
-  switch (a) {
+  switch (process.arch) {
     case "arm64":
       return "arm64";
     case "x64":
       return "amd64";
     default:
-      throw new Error(`Unsupported architecture: ${a}`);
+      throw new Error(`Unsupported architecture: ${process.arch}`);
   }
 }
 
 function getBinExtension() {
-  return platform() === "win32" ? ".exe" : "";
+  return process.platform === "win32" ? ".exe" : "";
 }
 
 function toPackagePath(filename) {
   return new URL(filename, import.meta.url).pathname;
 }
 
-install();
+function chmodAddX(path) {
+  chmodSync(path, statSync(path).mode | 0o111);
+}

@@ -9,7 +9,7 @@ jobs:
   deploy:
     name: Deploy esm.sh to production
     runs-on: ubuntu-latest
-    environment: release
+    environment: production
 
     steps:
       - name: Checkout
@@ -111,7 +111,7 @@ jobs:
           node-version: 20
 
       - name: Build CLI
-        run: go build -ldflags="-s -w -X 'github.com/esm-dev/esm.sh/server.VERSION=${github.ref_name}'" -o cli/bin/esm.sh${{ matrix.ext }} esmd cli/cmd/main.go
+        run: go build -ldflags="-s -w -X 'github.com/esm-dev/esm.sh/server.VERSION=${github.ref_name}'" -o cli/tmp/bin/esm.sh${{ matrix.ext }} cli/cmd/main.go
         env:
           GOOS: ${{ matrix.os }}
           GOARCH: ${{ matrix.arch }}
@@ -121,16 +121,16 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: esm.sh-cli-${{ matrix.os }}-${{ matrix.arch }}
-          path: cli/bin/esm.sh${{ matrix.ext }}
+          path: cli/tmp/bin/esm.sh${{ matrix.ext }}
           if-no-files-found: error
 
       - name: Create package.json
-        run: echo "const p=JSON.parse(require('fs').readFileSync('npm/package.json','utf8'));console.log(JSON.stringify({...p,name:'@esm.sh/cli-${{ matrix.os }}-${{ matrix.arch }}',version:'0.'+('${{ github.ref_name }}'.slice(1))+'.0',os:['${{ matrix.os }}'],cpu:['${{ matrix.arch }}'.replace('amd','x')],files:['bin/'],bin:void 0,scripts:void 0,optionalDependencies:void 0}))" | node > package.json
-        working-directory: cli
+        run: echo "const[minor,patch='0']='${{ github.ref_name }}'.slice(1).split('_');const p=JSON.parse(require('fs').readFileSync('../npm/package.json','utf8'));console.log(JSON.stringify({...p,name:'@esm.sh/cli-${{ matrix.os }}-${{ matrix.arch }}',version:['0',minor,patch].join('.'),os:['${{ matrix.os }}'],cpu:['${{ matrix.arch }}'.replace('amd','x')],bin:void 0,scripts:void 0,optionalDependencies:void 0}))" | node > package.json
+        working-directory: cli/tmp
 
-      - name: Publish Package
+      - name: Publish Package to NPM
         run: npm publish --provenance --access public
-        working-directory: cli
+        working-directory: cli/tmp
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
@@ -154,7 +154,7 @@ jobs:
           node-version: 20
 
       - name: Update Version
-        run: echo "const fs=require('fs');fs.writeFileSync('package.json',fs.readFileSync('package.json','utf8').replaceAll('*','${{ github.ref_name }}'.slice(1)),'utf8')" | node
+        run: echo "const fs=require('fs');const[minor,patch='0']='${{ github.ref_name }}'.slice(1).split('_');fs.writeFileSync('package.json',fs.readFileSync('package.json','utf8').replaceAll('*',['0',minor,patch].join('.'),'utf8')" | node
         working-directory: cli/npm
 
       - name: Publish Package
