@@ -23,7 +23,7 @@ function resolveBinaryPath() {
   if (existsSync(exeBinPath)) {
     return exeBinPath;
   }
-  const cliBinPackage = `@esm.sh/cli-${getPlatform()}-${getArch()}`;
+  const cliBinPackage = `@esm.sh/cli-${getOS()}-${getArch()}`;
   const binPath = require.resolve(cliBinPackage + "/bin/esm.sh" + getBinExtension());
   if (!existsSync(binPath)) {
     throw new Error(`Could not find the binary of '${cliBinPackage}'`);
@@ -33,8 +33,9 @@ function resolveBinaryPath() {
 
 async function downloadBinaryFromGitHub() {
   const pkgInfo = JSON.parse(readFileSync(join(__dirname, "../package.json"), "utf8"));
-  const version = pkgInfo.version.split(".")[1];
-  const url = `https://github.com/esm-dev/esm.sh/releases/download/v${version}/esm.sh-cli-${getPlatform()}-${getArch()}.gz`;
+  const [_, minor, patch] = pkgInfo.version.split(".");
+  const tag = "v" + minor + (Number(patch) > 0 ? "_" + patch : "");
+  const url = `https://github.com/esm-dev/esm.sh/releases/download/${tag}/esm.sh-cli-${getOS()}-${getArch()}.gz`;
   const res = await fetch(url);
   if (!res.ok) {
     res.body?.cancel();
@@ -43,7 +44,7 @@ async function downloadBinaryFromGitHub() {
   return res.body.pipeThrough(new DecompressionStream("gzip"));
 }
 
-function getPlatform() {
+function getOS() {
   switch (process.platform) {
     case "darwin":
       return "darwin";
