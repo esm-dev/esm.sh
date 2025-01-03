@@ -45,7 +45,6 @@ ssh d.esm.sh << EOF
       exit 1
     fi
     mkdir /etc/esmd
-    chown esm:esm /etc/esmd
     echo "[Unit]" >> \$servicefile
     echo "Description=esm.sh service" >> \$servicefile
     echo "After=network.target" >> \$servicefile
@@ -54,7 +53,9 @@ ssh d.esm.sh << EOF
     echo "Type=simple" >> \$servicefile
     echo "ExecStart=/usr/local/bin/esmd --config=\$configfile" >> \$servicefile
     echo "WorkingDirectory=/esm" >> \$servicefile
-    echo "USER=esm" >> \$servicefile
+    echo "Group=esm" >> \$servicefile
+    echo "User=esm" >> \$servicefile
+    echo "AmbientCapabilities=CAP_NET_BIND_SERVICE" >> \$servicefile
     echo "Restart=always" >> \$servicefile
     echo "RestartSec=5" >> \$servicefile
     echo "Environment=\"ESMDIR=/esm\"" >> \$servicefile
@@ -72,7 +73,6 @@ ssh d.esm.sh << EOF
   else
     echo "{}" >> \$configfile
   fi
-  chown esm:esm \$configfile
 
   if [ "$RESET_ON_DEPLOY" == "yes" ]; then
     mkdir -p /tmp/.esm

@@ -82,6 +82,10 @@ ssh -p $sshPort ${user}@${host} << EOF
     fi
     addgroup esm
     adduser --ingroup esm --no-create-home --disabled-login --disabled-password --gecos "" esm
+    if [ "\$?" != "0" ]; then
+      echo "Failed to add user 'esm'"
+      exit 1
+    fi
     echo "[Unit]" >> \$servicefile
     echo "Description=esm.sh service" >> \$servicefile
     echo "After=network.target" >> \$servicefile
@@ -92,13 +96,14 @@ ssh -p $sshPort ${user}@${host} << EOF
       mkdir -p /etc/esmd
       rm -f \$configfile
       echo "$config" >> \$configfile
-      chown -R esm:esm /etc/esmd
       echo "ExecStart=/usr/local/bin/esmd --config=\$configfile" >> \$servicefile
     else
       echo "ExecStart=/usr/local/bin/esmd" >> \$servicefile
     fi
     echo "WorkingDirectory=/esm" >> \$servicefile
-    echo "USER=esm" >> \$servicefile
+    echo "Group=esm" >> \$servicefile
+    echo "User=esm" >> \$servicefile
+    echo "AmbientCapabilities=CAP_NET_BIND_SERVICE" >> \$servicefile
     echo "Restart=always" >> \$servicefile
     echo "RestartSec=5" >> \$servicefile
     echo "Environment=\"ESMDIR=/esm\"" >> \$servicefile
