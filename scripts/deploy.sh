@@ -75,10 +75,13 @@ ssh -p $sshPort ${user}@${host} << EOF
   echo \$gv
 
   if [ "$init" == "yes" ]; then
+    configfile=/etc/esmd/config.json
     servicefile=/etc/systemd/system/esmd.service
     if [ -f \$servicefile ]; then
       rm -f servicefile
     fi
+    addgroup esm
+    adduser --ingroup esm --no-create-home --disabled-login --disabled-password --gecos "" esm
     echo "[Unit]" >> \$servicefile
     echo "Description=esm.sh service" >> \$servicefile
     echo "After=network.target" >> \$servicefile
@@ -87,19 +90,20 @@ ssh -p $sshPort ${user}@${host} << EOF
     echo "Type=simple" >> \$servicefile
     if [ "$config" != "" ]; then
       mkdir -p /etc/esmd
-      rm -f /etc/esmd/config.json
-      echo "$config" >> /etc/esmd/config.json
-      echo "ExecStart=/usr/local/bin/esmd --config=/etc/esmd/config.json" >> \$servicefile
+      rm -f \$configfile
+      echo "$config" >> \$configfile
+      chown -R esm:esm /etc/esmd
+      echo "ExecStart=/usr/local/bin/esmd --config=\$configfile" >> \$servicefile
     else
       echo "ExecStart=/usr/local/bin/esmd" >> \$servicefile
     fi
-    echo "USER=\${USER}" >> \$servicefile
+    echo "WorkingDirectory=/esm" >> \$servicefile
+    echo "USER=esm" >> \$servicefile
     echo "Restart=always" >> \$servicefile
     echo "RestartSec=5" >> \$servicefile
-    echo "Environment=\"USER=\${USER}\"" >> \$servicefile
-    echo "Environment=\"HOME=\${HOME}\"" >> \$servicefile
+    echo "Environment=\"ESMDIR=/esm\"" >> \$servicefile
     echo "[Install]" >> \$servicefile
-    echo "WantedBy=default.target" >> \$servicefile
+    echo "WantedBy=multi-user.target" >> \$servicefile
   else
     systemctl stop esmd.service
     echo "Stopped esmd.service."

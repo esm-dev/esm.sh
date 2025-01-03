@@ -34,40 +34,50 @@ ssh d.esm.sh << EOF
   fi
   echo \$gv
 
+  configfile=/etc/esmd/config.json
   servicefile=/etc/systemd/system/esmd.service
   reload=no
   if [ ! -f \$servicefile ]; then
+    addgroup esm
+    adduser --ingroup esm --no-create-home --disabled-login --disabled-password --gecos "" esm
+    if [ "\$?" != "0" ]; then
+      echo "Failed to add user 'esm'"
+      exit 1
+    fi
+    mkdir /etc/esmd
+    chown esm:esm /etc/esmd
     echo "[Unit]" >> \$servicefile
     echo "Description=esm.sh service" >> \$servicefile
     echo "After=network.target" >> \$servicefile
     echo "StartLimitIntervalSec=0" >> \$servicefile
     echo "[Service]" >> \$servicefile
     echo "Type=simple" >> \$servicefile
-    echo "ExecStart=/usr/local/bin/esmd --config=/etc/esmd/config.json" >> \$servicefile
-    echo "USER=\${USER}" >> \$servicefile
+    echo "ExecStart=/usr/local/bin/esmd --config=\$configfile" >> \$servicefile
+    echo "WorkingDirectory=/esm" >> \$servicefile
+    echo "USER=esm" >> \$servicefile
     echo "Restart=always" >> \$servicefile
     echo "RestartSec=5" >> \$servicefile
-    echo "Environment=\"USER=\${USER}\"" >> \$servicefile
-    echo "Environment=\"HOME=\${HOME}\"" >> \$servicefile
+    echo "Environment=\"ESMDIR=/esm\"" >> \$servicefile
     echo "[Install]" >> \$servicefile
-    echo "WantedBy=default.target" >> \$servicefile
+    echo "WantedBy=multi-user.target" >> \$servicefile
     reload=yes
   else
     systemctl stop esmd.service
     echo "Stopped esmd.service."
   fi
 
-  mkdir -p /etc/esmd
-  rm -f /etc/esmd/config.json
+  rm -f \$configfile
   if [ "$SERVER_CONFIG" != "" ]; then
-    echo "${SERVER_CONFIG}" >> /etc/esmd/config.json
+    echo "${SERVER_CONFIG}" >> \$configfile
   else
-    echo "{}" >> /etc/esmd/config.json
+    echo "{}" >> \$configfile
   fi
+  chown esm:esm \$configfile
 
   if [ "$RESET_ON_DEPLOY" == "yes" ]; then
-    mv -f ~/.esmd /tmp/.esmd
-    nohup rm -rf /tmp/.esmd &
+    mkdir -p /tmp/.esm
+    mv -f /esm/* /tmp/.esm
+    nohup rm -rf /tmp/.esm &
   fi
 
   cd /tmp

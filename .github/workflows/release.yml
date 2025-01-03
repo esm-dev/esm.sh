@@ -65,8 +65,7 @@ jobs:
           push: true
           platforms: linux/amd64,linux/arm64
           tags: ghcr.io/esm-dev/esm.sh:latest,ghcr.io/esm-dev/esm.sh:${{ github.ref_name }}
-          build-args: |
-            SERVER_VERSION=${{ github.ref_name }}
+          build-args: SERVER_VERSION=${{ github.ref_name }}
 
   build_esmsh_cli:
     name: Build esm.sh CLI
