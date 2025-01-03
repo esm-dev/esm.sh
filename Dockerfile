@@ -30,8 +30,8 @@ RUN mkdir /lib64 && ln -s /usr/local/lib/ld-linux-* /lib64/
 ENV LD_LIBRARY_PATH="/usr/local/lib"
 
 # server configuration
-ENV ESM_SERVER_PORT="8080"
-ENV ESM_SERVER_WORKDIR="/esmd"
+ENV ESMPORT="8080"
+ENV ESMDIR="/esmd"
 
 # switch to non-root user
 USER esm
