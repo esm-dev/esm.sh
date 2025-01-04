@@ -50,7 +50,7 @@ func (p EsmPath) Specifier() string {
 	return p.Name()
 }
 
-func praseEsmPath(npmrc *NpmRC, pathname string) (esmPath EsmPath, extraQuery string, isFixedVersion bool, isBuildDist bool, err error) {
+func praseEsmPath(npmrc *NpmRC, pathname string) (esmPath EsmPath, extraQuery string, isFixedVersion bool, hasTargetSegment bool, err error) {
 	// see https://pkg.pr.new
 	if strings.HasPrefix(pathname, "/pr/") || strings.HasPrefix(pathname, "/pkg.pr.new/") {
 		if strings.HasPrefix(pathname, "/pr/") {
@@ -68,7 +68,7 @@ func praseEsmPath(npmrc *NpmRC, pathname string) (esmPath EsmPath, extraQuery st
 			err = errors.New("invalid path")
 			return
 		}
-		isBuildDist = validateBuildDist(strings.Split(subPath, "/"))
+		hasTargetSegment = validateTargetSegment(strings.Split(subPath, "/"))
 		isFixedVersion = true
 		esmPath = EsmPath{
 			PkgName:       pkgName,
@@ -109,7 +109,7 @@ func praseEsmPath(npmrc *NpmRC, pathname string) (esmPath EsmPath, extraQuery st
 		}
 	}
 
-	pkgName, maybeVersion, subPath, isBuildDist := splitEsmPath(pathname)
+	pkgName, maybeVersion, subPath, hasTargetSegment := splitEsmPath(pathname)
 	if !validatePackageName(pkgName) {
 		err = fmt.Errorf("invalid package name '%s'", pkgName)
 		return
@@ -203,17 +203,17 @@ func praseEsmPath(npmrc *NpmRC, pathname string) (esmPath EsmPath, extraQuery st
 	return
 }
 
-func splitEsmPath(pathname string) (pkgName string, version string, subPath string, isBuildDist bool) {
+func splitEsmPath(pathname string) (pkgName string, version string, subPath string, hasTargetSegment bool) {
 	a := strings.Split(strings.TrimPrefix(pathname, "/"), "/")
 	nameAndVersion := ""
 	if strings.HasPrefix(a[0], "@") && len(a) > 1 {
 		nameAndVersion = a[0] + "/" + a[1]
 		subPath = strings.Join(a[2:], "/")
-		isBuildDist = validateBuildDist(a[2:])
+		hasTargetSegment = validateTargetSegment(a[2:])
 	} else {
 		nameAndVersion = a[0]
 		subPath = strings.Join(a[1:], "/")
-		isBuildDist = validateBuildDist(a[1:])
+		hasTargetSegment = validateTargetSegment(a[1:])
 	}
 	if len(nameAndVersion) > 0 && nameAndVersion[0] == '@' {
 		pkgName, version = utils.SplitByFirstByte(nameAndVersion[1:], '@')
@@ -227,7 +227,7 @@ func splitEsmPath(pathname string) (pkgName string, version string, subPath stri
 	return
 }
 
-func validateBuildDist(segments []string) bool {
+func validateTargetSegment(segments []string) bool {
 	if len(segments) < 2 {
 		return false
 	}

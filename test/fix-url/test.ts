@@ -86,6 +86,13 @@ Deno.test("redirect asset URLs", async () => {
     assertEquals(res2.headers.get("content-type"), "application/javascript; charset=utf-8");
     assertStringIncludes(js, "export default");
   }
+  {
+    const res = await fetch("http://localhost:8080/@lezer/highlight@1.2.1?raw", { redirect: "manual" });
+    res.body?.cancel();
+    assertEquals(res.status, 301);
+    assertEquals(res.headers.get("cache-control"), "public, max-age=31536000, immutable");
+    assertEquals(res.headers.get("location")!, "http://localhost:8080/@lezer/highlight@1.2.1/dist/index.js?raw");
+  }
 });
 
 Deno.test("Fix wasm URLs with `target` segment", async () => {
