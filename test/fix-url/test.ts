@@ -7,7 +7,7 @@ Deno.test("query as version suffix", async () => {
   assertEquals(res.headers.get("cache-control"), "public, max-age=31536000, immutable");
   assertEquals(res.headers.get("content-type"), "application/javascript; charset=utf-8");
   assert(!res.headers.get("vary")?.includes("User-Agent"));
-  assertStringIncludes(code, "/react-dom@18.3.1/es2022/client.development.mjs");
+  assertStringIncludes(code, "/react-dom@18.3.1/X-ZHJlYWN0QDE4LjMuMQ/es2022/client.development.mjs");
 });
 
 Deno.test("`/jsx-runtime` in query", async () => {

@@ -1338,10 +1338,6 @@ func esmRouter() rex.Handle {
 					if err != nil {
 						return rex.Status(400, fmt.Sprintf("Invalid deps query: %v not found", v))
 					}
-					if esm.PkgName == "react-dom" && m.PkgName == "react" {
-						// make sure react-dom and react are in the same version
-						continue
-					}
 					if m.PkgName != esm.PkgName {
 						deps[m.PkgName] = m.PkgVersion
 					}
@@ -1433,7 +1429,7 @@ func esmRouter() rex.Handle {
 					return rex.Status(500, err.Error())
 				}
 				buildCtx := &BuildContext{
-					esmPath:     esm,
+					esm:         esm,
 					npmrc:       npmrc,
 					args:        buildArgs,
 					externalAll: externalAll,
@@ -1541,7 +1537,7 @@ func esmRouter() rex.Handle {
 		}
 
 		buildCtx := &BuildContext{
-			esmPath:     esm,
+			esm:         esm,
 			npmrc:       npmrc,
 			args:        buildArgs,
 			bundleMode:  bundleMode,

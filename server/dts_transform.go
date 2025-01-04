@@ -32,7 +32,7 @@ func transformDTS(ctx *BuildContext, dts string, buildArgsPrefix string, marker 
 	if isEntry {
 		marker = set.New[string]()
 	}
-	dtsPath := path.Join("/"+ctx.esmPath.Name(), buildArgsPrefix, dts)
+	dtsPath := path.Join("/"+ctx.esm.Name(), buildArgsPrefix, dts)
 	if marker.Has(dtsPath) {
 		// don't transform repeatly
 		return
@@ -46,7 +46,7 @@ func transformDTS(ctx *BuildContext, dts string, buildArgsPrefix string, marker 
 		return
 	}
 
-	dtsFilePath := path.Join(ctx.wd, "node_modules", ctx.esmPath.PkgName, dts)
+	dtsFilePath := path.Join(ctx.wd, "node_modules", ctx.esm.PkgName, dts)
 	dtsWd := path.Dir(dtsFilePath)
 	dtsFile, err := os.Open(dtsFilePath)
 	if err != nil {
@@ -68,7 +68,7 @@ func transformDTS(ctx *BuildContext, dts string, buildArgsPrefix string, marker 
 	internalDts := set.New[string]()
 
 	err = parseDts(dtsFile, buffer, func(specifier string, kind TsImportKind, position int) (string, error) {
-		if ctx.esmPath.PkgName == "@types/node" {
+		if ctx.esm.PkgName == "@types/node" {
 			if strings.HasPrefix(specifier, "node:") || nodeBuiltinModules[specifier] || isRelPathSpecifier(specifier) {
 				return specifier, nil
 			}
@@ -135,25 +135,25 @@ func transformDTS(ctx *BuildContext, dts string, buildArgsPrefix string, marker 
 			specifier += "/" + subPath
 		}
 
-		if depPkgName == ctx.esmPath.PkgName {
+		if depPkgName == ctx.esm.PkgName {
 			if strings.ContainsRune(subPath, '*') {
 				return fmt.Sprintf(
 					"{ESM_CDN_ORIGIN}/%s/%s%s",
-					ctx.esmPath.Name(),
+					ctx.esm.Name(),
 					ctx.getBuildArgsPrefix(true),
 					subPath,
 				), nil
 			} else {
 				entry := ctx.resolveEntry(EsmPath{
 					PkgName:       depPkgName,
-					PkgVersion:    ctx.esmPath.PkgVersion,
+					PkgVersion:    ctx.esm.PkgVersion,
 					SubPath:       subPath,
 					SubModuleName: subPath,
 				})
 				if entry.types != "" {
 					return fmt.Sprintf(
 						"{ESM_CDN_ORIGIN}/%s/%s%s",
-						ctx.esmPath.Name(),
+						ctx.esm.Name(),
 						ctx.getBuildArgsPrefix(true),
 						strings.TrimPrefix(entry.types, "./"),
 					), nil
@@ -208,11 +208,11 @@ func transformDTS(ctx *BuildContext, dts string, buildArgsPrefix string, marker 
 		}
 		args := BuildArgs{}
 		b := &BuildContext{
-			esmPath: dtsModule,
-			npmrc:   ctx.npmrc,
-			args:    args,
-			target:  "types",
-			zoneId:  ctx.zoneId,
+			esm:    dtsModule,
+			npmrc:  ctx.npmrc,
+			args:   args,
+			target: "types",
+			zoneId: ctx.zoneId,
 		}
 		err = b.install()
 		if err != nil {
