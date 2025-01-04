@@ -39,7 +39,7 @@ func transformDTS(ctx *BuildContext, dts string, buildArgsPrefix string, marker 
 	}
 	marker.Add(dtsPath)
 
-	savePath := normalizeSavePath(ctx.zoneId, path.Join("types", dtsPath))
+	savePath := normalizeSavePath(ctx.npmrc.zoneId, path.Join("types", dtsPath))
 	// check if the dts file has been transformed
 	_, err = buildStorage.Stat(savePath)
 	if err == nil || err != storage.ErrNotFound {
@@ -212,7 +212,6 @@ func transformDTS(ctx *BuildContext, dts string, buildArgsPrefix string, marker 
 			npmrc:  ctx.npmrc,
 			args:   args,
 			target: "types",
-			zoneId: ctx.zoneId,
 		}
 		err = b.install()
 		if err != nil {

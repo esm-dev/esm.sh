@@ -117,7 +117,7 @@ func legacyESM(ctx *rex.Context, pathname string) any {
 			}
 			return rex.Status(500, err.Error())
 		}
-		return redirect(ctx, getCdnOrigin(ctx)+strings.Replace(ctx.R.URL.Path, "@"+pkgVersion, "@"+pkgInfo.Version, 1)+query, false)
+		return redirect(ctx, getOrigin(ctx)+strings.Replace(ctx.R.URL.Path, "@"+pkgVersion, "@"+pkgInfo.Version, 1)+query, false)
 	}
 	savePath := "legacy/" + normalizeSavePath("", ctx.R.URL.Path[1:])
 	if isBuildDist || endsWith(pathname, ".d.ts", ".d.mts") {
@@ -169,7 +169,7 @@ func legacyESM(ctx *rex.Context, pathname string) any {
 					appendVaryHeader(ctx.W.Header(), "User-Agent")
 				}
 				if len(ret) == 3 {
-					ctx.Header.Set("X-TypeScript-Types", getCdnOrigin(ctx)+ret[1])
+					ctx.Header.Set("X-TypeScript-Types", getOrigin(ctx)+ret[1])
 					return ret[2]
 				}
 				return ret[1]
@@ -243,7 +243,7 @@ func legacyESM(ctx *rex.Context, pathname string) any {
 			appendVaryHeader(ctx.W.Header(), "User-Agent")
 		}
 		if dts != "" {
-			ctx.Header.Set("X-TypeScript-Types", getCdnOrigin(ctx)+dts)
+			ctx.Header.Set("X-TypeScript-Types", getOrigin(ctx)+dts)
 		}
 		return code
 	}

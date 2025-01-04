@@ -176,6 +176,14 @@ func cors(allowOrigins []string) rex.Handle {
 	}
 }
 
+func setCorsHeaders(h http.Header, isOptionsMethod bool, origin string) {
+	h.Set("Access-Control-Allow-Origin", origin)
+	if isOptionsMethod {
+		h.Set("Access-Control-Allow-Headers", "*")
+		h.Set("Access-Control-Max-Age", "86400")
+	}
+}
+
 func customLandingPage(options *LandingPageOptions) rex.Handle {
 	assets := set.New[string]()
 	for _, p := range options.Assets {
@@ -225,13 +233,5 @@ func customLandingPage(options *LandingPageOptions) rex.Handle {
 			return res.Body // auto closed
 		}
 		return ctx.Next()
-	}
-}
-
-func setCorsHeaders(h http.Header, isOptionsMethod bool, origin string) {
-	h.Set("Access-Control-Allow-Origin", origin)
-	if isOptionsMethod {
-		h.Set("Access-Control-Allow-Headers", "*")
-		h.Set("Access-Control-Max-Age", "86400")
 	}
 }
