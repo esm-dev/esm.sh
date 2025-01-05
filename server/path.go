@@ -107,6 +107,16 @@ func praseEsmPath(npmrc *NpmRC, pathname string) (esmPath EsmPath, extraQuery st
 		if len(segs) > 2 {
 			pathname += "/" + strings.Join(segs[2:], "/")
 		}
+	} else if strings.HasPrefix(pathname, "/jsr.io/") {
+		segs := strings.Split(pathname[8:], "/")
+		if len(segs) < 2 || !strings.HasPrefix(segs[0], "@") {
+			err = errors.New("invalid path")
+			return
+		}
+		pathname = "/@jsr/" + segs[0][1:] + "__" + segs[1]
+		if len(segs) > 2 {
+			pathname += "/" + strings.Join(segs[2:], "/")
+		}
 	}
 
 	pkgName, maybeVersion, subPath, hasTargetSegment := splitEsmPath(pathname)
