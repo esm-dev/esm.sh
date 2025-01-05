@@ -9,7 +9,7 @@ jobs:
   deploy:
     name: Deploy esm.sh to production
     runs-on: ubuntu-latest
-    environment: production
+    environment: esm.sh
 
     steps:
       - name: Checkout
