@@ -1029,8 +1029,7 @@ func esmRouter() rex.Handle {
 				return redirect(ctx, fmt.Sprintf("%s%s/%s@%s%s%s", origin, registryPrefix, pkgName, pkgVersion, subPath, query), false)
 			}
 		} else {
-
-			// `*.wasm` as an es6 module when `?module` query is set (requires `top-level-await` support)
+			// return wasm file as an es6 module when `?module` query is present (requires `top-level-await` support)
 			if pathKind == RawFile && strings.HasSuffix(esm.SubPath, ".wasm") && query.Has("module") {
 				buf := &bytes.Buffer{}
 				wasmUrl := origin + pathname
