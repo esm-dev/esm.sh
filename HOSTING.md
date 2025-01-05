@@ -33,7 +33,7 @@ You will need [Go](https://golang.org/dl) 1.22+ to compile and run the server.
 go run main.go --config=config.json
 ```
 
-Then you can import `React` from <http://localhost:808080/react>.
+Then you can import `React` from <http://localhost:8080/react>.
 
 ## Deploy the Server to a Single Machine
 
