@@ -93,6 +93,65 @@ var loaders = map[string]esbuild.Loader{
 	".woff2":  esbuild.LoaderDataURL,
 }
 
+func (ctx *BuildContext) Path() string {
+	if ctx.path != "" {
+		return ctx.path
+	}
+
+	asteriskPrefix := ""
+	if ctx.externalAll {
+		asteriskPrefix = "*"
+	}
+
+	esm := ctx.esm
+	if ctx.target == "types" {
+		if strings.HasSuffix(esm.SubPath, ".d.ts") {
+			ctx.path = fmt.Sprintf(
+				"/%s%s/%s%s",
+				asteriskPrefix,
+				esm.Name(),
+				ctx.getBuildArgsPrefix(true),
+				esm.SubPath,
+			)
+		} else {
+			ctx.path = "/" + esm.Specifier()
+		}
+		return ctx.path
+	}
+
+	name := strings.TrimSuffix(path.Base(esm.PkgName), ".js")
+	if esm.SubModuleName != "" {
+		if esm.SubModuleName == name {
+			// if the sub-module name is same as the package name
+			name = "__" + esm.SubModuleName
+		} else {
+			name = esm.SubModuleName
+		}
+		// workaround for es5-ext "../#/.." path
+		if esm.PkgName == "es5-ext" {
+			name = strings.ReplaceAll(name, "/#/", "/%23/")
+		}
+	}
+
+	if ctx.dev {
+		name += ".development"
+	}
+	if ctx.bundleMode == BundleAll {
+		name += ".bundle"
+	} else if ctx.bundleMode == BundleFalse {
+		name += ".nobundle"
+	}
+	ctx.path = fmt.Sprintf(
+		"/%s%s/%s%s/%s.mjs",
+		asteriskPrefix,
+		esm.Name(),
+		ctx.getBuildArgsPrefix(ctx.target == "types"),
+		ctx.target,
+		name,
+	)
+	return ctx.path
+}
+
 func (ctx *BuildContext) Exists() (meta *BuildMeta, ok bool, err error) {
 	key := ctx.getSavepath() + ".meta"
 	meta, err = withLRUCache(key, func() (*BuildMeta, error) {
