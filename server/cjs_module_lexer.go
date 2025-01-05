@@ -140,7 +140,7 @@ RETRY:
 		if strings.HasPrefix(line, "@") {
 			ret.Reexport = line[1:]
 			break
-		} else if regexpJSIdent.MatchString(line) && !isJsReservedWord(line) {
+		} else if isJsIdentifier(line) && !isJsReservedWord(line) {
 			ret.Exports = append(ret.Exports, line)
 		}
 	}

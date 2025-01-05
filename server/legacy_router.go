@@ -107,10 +107,9 @@ func legacyESM(ctx *rex.Context, pathname string) any {
 	if ctx.R.URL.RawQuery != "" {
 		query = "?" + ctx.R.URL.RawQuery
 	}
-	isFixedVersion := regexpVersionStrict.MatchString(pkgVersion)
-	if !isFixedVersion {
+	if !isExactVersion(pkgVersion) {
 		npmrc := DefaultNpmRC()
-		pkgInfo, err := npmrc.fetchPackageInfo(pkgName, pkgVersion)
+		pkgInfo, err := npmrc.getPackageInfo(pkgName, pkgVersion)
 		if err != nil {
 			if strings.Contains(err.Error(), " not found") {
 				return rex.Status(404, err.Error())

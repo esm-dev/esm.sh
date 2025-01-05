@@ -923,11 +923,11 @@ func (ctx *BuildContext) resolveExternalModule(specifier string, kind api.Resolv
 
 	var isFixedVersion bool
 	if dep.GhPrefix {
-		isFixedVersion = isCommitish(dep.PkgVersion) || regexpVersionStrict.MatchString(strings.TrimPrefix(dep.PkgVersion, "v"))
+		isFixedVersion = isCommitish(dep.PkgVersion) || isExactVersion(strings.TrimPrefix(dep.PkgVersion, "v"))
 	} else if dep.PrPrefix {
 		isFixedVersion = true
 	} else {
-		isFixedVersion = regexpVersionStrict.MatchString(dep.PkgVersion)
+		isFixedVersion = isExactVersion(dep.PkgVersion)
 	}
 	if isFixedVersion {
 		buildArgsPrefix := ""
@@ -1013,7 +1013,7 @@ func (ctx *BuildContext) resloveDTS(entry BuildEntry) (string, error) {
 	}
 
 	// lookup types in @types scope
-	if pkgJson := ctx.pkgJson; pkgJson.Types == "" && !strings.HasPrefix(pkgJson.Name, "@types/") && regexpVersionStrict.MatchString(pkgJson.Version) {
+	if pkgJson := ctx.pkgJson; pkgJson.Types == "" && !strings.HasPrefix(pkgJson.Name, "@types/") && isExactVersion(pkgJson.Version) {
 		versionParts := strings.Split(pkgJson.Version, ".")
 		versions := []string{
 			versionParts[0] + "." + versionParts[1], // major.minor
