@@ -50,7 +50,7 @@ func (p EsmPath) Specifier() string {
 	return p.Name()
 }
 
-func praseEsmPath(npmrc *NpmRC, pathname string) (esmPath EsmPath, extraQuery string, isFixedVersion bool, hasTargetSegment bool, err error) {
+func praseEsmPath(npmrc *NpmRC, pathname string) (esmPath EsmPath, extraQuery string, withExactVersion bool, hasTargetSegment bool, err error) {
 	// see https://pkg.pr.new
 	if strings.HasPrefix(pathname, "/pr/") || strings.HasPrefix(pathname, "/pkg.pr.new/") {
 		if strings.HasPrefix(pathname, "/pr/") {
@@ -64,12 +64,12 @@ func praseEsmPath(npmrc *NpmRC, pathname string) (esmPath EsmPath, extraQuery st
 			return
 		}
 		version, subPath := utils.SplitByFirstByte(rest, '/')
-		if version == "" || !regexpVersion.MatchString(version) {
+		if version == "" || !npmVersioning.Match(version) {
 			err = errors.New("invalid path")
 			return
 		}
+		withExactVersion = true
 		hasTargetSegment = validateTargetSegment(strings.Split(subPath, "/"))
-		isFixedVersion = true
 		esmPath = EsmPath{
 			PkgName:       pkgName,
 			PkgVersion:    version,
@@ -139,8 +139,8 @@ func praseEsmPath(npmrc *NpmRC, pathname string) (esmPath EsmPath, extraQuery st
 	}
 
 	if ghPrefix {
-		if isCommitish(esmPath.PkgVersion) || regexpVersionStrict.MatchString(strings.TrimPrefix(esmPath.PkgVersion, "v")) {
-			isFixedVersion = true
+		if isCommitish(esmPath.PkgVersion) || isExactVersion(strings.TrimPrefix(esmPath.PkgVersion, "v")) {
+			withExactVersion = true
 			return
 		}
 		var refs []GitRef
@@ -192,10 +192,10 @@ func praseEsmPath(npmrc *NpmRC, pathname string) (esmPath EsmPath, extraQuery st
 		return
 	}
 
-	isFixedVersion = regexpVersionStrict.MatchString(esmPath.PkgVersion)
-	if !isFixedVersion {
+	withExactVersion = isExactVersion(esmPath.PkgVersion)
+	if !withExactVersion {
 		var p *PackageJSON
-		p, err = npmrc.fetchPackageInfo(pkgName, esmPath.PkgVersion)
+		p, err = npmrc.getPackageInfo(pkgName, esmPath.PkgVersion)
 		if err == nil {
 			esmPath.PkgVersion = p.Version
 		}

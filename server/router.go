@@ -13,7 +13,6 @@ import (
 	"net/url"
 	"os"
 	"path"
-	"regexp"
 	"sort"
 	"strings"
 	"syscall"
@@ -54,12 +53,6 @@ const (
 	ctJSON           = "application/json; charset=utf-8"
 	ctJavaScript     = "application/javascript; charset=utf-8"
 	ctTypeScript     = "application/typescript; charset=utf-8"
-)
-
-var (
-	regexpVersion       = regexp.MustCompile(`^[\w\+\-\.]+$`)
-	regexpVersionStrict = regexp.MustCompile(`^\d+\.\d+\.\d+(-[\w\+\-\.]+)?$`)
-	regexpJSIdent       = regexp.MustCompile(`^[a-zA-Z_$][\w$]*$`)
 )
 
 func esmRouter() rex.Handle {
@@ -162,7 +155,7 @@ func esmRouter() rex.Handle {
 				if packageName == "" {
 					return rex.Err(400, "param `package` is required")
 				}
-				if version != "" && !regexpVersion.MatchString(version) {
+				if version != "" && !npmVersioning.Match(version) {
 					return rex.Err(400, "invalid version")
 				}
 				prefix := ""
@@ -556,7 +549,7 @@ func esmRouter() rex.Handle {
 				target = "es2022"
 			}
 			v := query.Get("v")
-			if v != "" && (!regexpVersion.MatchString(v) || len(v) > 32) {
+			if v != "" && (!npmVersioning.Match(v) || len(v) > 32) {
 				return rex.Status(400, "Invalid Version Param")
 			}
 			fetchClient, recycle := NewFetchClient(15, ctx.UserAgent())
@@ -851,7 +844,7 @@ func esmRouter() rex.Handle {
 			pathname = "/pr/" + pathname[13:]
 		}
 
-		esm, extraQuery, isFixedVersion, hasTargetSegment, err := praseEsmPath(npmrc, pathname)
+		esm, extraQuery, isExactVersion, hasTargetSegment, err := praseEsmPath(npmrc, pathname)
 		if err != nil {
 			status := 500
 			message := err.Error()
@@ -889,16 +882,21 @@ func esmRouter() rex.Handle {
 				types = info.Types
 			} else if info.Typings != "" {
 				types = info.Typings
-			} else if info.Main != "" && strings.HasSuffix(info.Main, ".d.ts") {
+			} else if info.Main != "" && endsWith(info.Main, ".d.ts", ".d.mts") {
 				types = info.Main
 			}
-			return redirect(ctx, fmt.Sprintf("%s/%s@%s%s", origin, info.Name, info.Version, utils.NormalizePathname(types)), isFixedVersion)
+			if strings.HasSuffix(types, ".d") {
+				types += ".ts"
+			} else if !endsWith(types, ".d.ts", ".d.mts") {
+				types += ".d.ts"
+			}
+			return redirect(ctx, fmt.Sprintf("%s/%s@%s%s", origin, info.Name, info.Version, utils.NormalizePathname(types)), isExactVersion)
 		}
 
 		// redirect to the main css path for CSS packages
 		if css := cssPackages[esm.PkgName]; css != "" && esm.SubModuleName == "" {
 			url := fmt.Sprintf("%s/%s/%s", origin, esm.Specifier(), css)
-			return redirect(ctx, url, isFixedVersion)
+			return redirect(ctx, url, isExactVersion)
 		}
 
 		// store the raw query
@@ -974,8 +972,8 @@ func esmRouter() rex.Handle {
 			pathKind = RawFile
 		}
 
-		// redirect to the url with fixed package version
-		if !isFixedVersion {
+		// redirect to the url with exact package version
+		if !isExactVersion {
 			if hasTargetSegment {
 				pkgName := esm.Name()
 				subPath := ""
@@ -1230,7 +1228,7 @@ func esmRouter() rex.Handle {
 						if query.Has("exports") {
 							for _, p := range strings.Split(query.Get("exports"), ",") {
 								p = strings.TrimSpace(p)
-								if regexpJSIdent.MatchString(p) {
+								if isJsIdentifier(p) {
 									jsIndentSet.Add(p)
 								}
 							}
@@ -1302,8 +1300,8 @@ func esmRouter() rex.Handle {
 			target = getBuildTargetByUA(ctx.UserAgent())
 		}
 
-		// redirect to the url with fixed package version for `deno` and `denonext` target
-		if !isFixedVersion && (target == "denonext" || target == "deno") {
+		// redirect to the url with exact package version for `deno` and `denonext` target
+		if !isExactVersion && (target == "denonext" || target == "deno") {
 			pkgName := esm.PkgName
 			pkgVersion := esm.PkgVersion
 			subPath := ""
@@ -1544,7 +1542,7 @@ func esmRouter() rex.Handle {
 							target = maybeTarget
 						} else {
 							url := fmt.Sprintf("%s/%s", origin, esm.Specifier())
-							return redirect(ctx, url, isFixedVersion)
+							return redirect(ctx, url, isExactVersion)
 						}
 					} else {
 						if submodule == basename {
@@ -1616,7 +1614,7 @@ func esmRouter() rex.Handle {
 				return rex.Status(404, "Package CSS not found")
 			}
 			url := fmt.Sprintf("%s%s.css", origin, strings.TrimSuffix(buildCtx.Path(), ".mjs"))
-			return redirect(ctx, url, isFixedVersion)
+			return redirect(ctx, url, isExactVersion)
 		}
 
 		// check `?exports` query
@@ -1624,7 +1622,7 @@ func esmRouter() rex.Handle {
 		if query.Has("exports") {
 			for _, p := range strings.Split(query.Get("exports"), ",") {
 				p = strings.TrimSpace(p)
-				if regexpJSIdent.MatchString(p) {
+				if isJsIdentifier(p) {
 					jsIdentSet.Add(p)
 				}
 			}
@@ -1738,7 +1736,7 @@ func esmRouter() rex.Handle {
 		if targetFromUA {
 			appendVaryHeader(ctx.W.Header(), "User-Agent")
 		}
-		if isFixedVersion {
+		if isExactVersion {
 			ctx.Header.Set("Cache-Control", ccImmutable)
 		} else {
 			ctx.Header.Set("Cache-Control", fmt.Sprintf("public, max-age=%d", config.NpmQueryCacheTTL))

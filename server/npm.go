@@ -30,8 +30,9 @@ const (
 )
 
 var (
-	npmNaming    = valid.Validator{valid.Range{'a', 'z'}, valid.Range{'A', 'Z'}, valid.Range{'0', '9'}, valid.Eq('_'), valid.Eq('$'), valid.Eq('.'), valid.Eq('-'), valid.Eq('+'), valid.Eq('!'), valid.Eq('~'), valid.Eq('*'), valid.Eq('('), valid.Eq(')')}
-	installMutex = syncx.KeyedMutex{}
+	npmNaming     = valid.Validator{valid.Range{'a', 'z'}, valid.Range{'A', 'Z'}, valid.Range{'0', '9'}, valid.Eq('_'), valid.Eq('.'), valid.Eq('-'), valid.Eq('+'), valid.Eq('$'), valid.Eq('!')}
+	npmVersioning = valid.Validator{valid.Range{'a', 'z'}, valid.Range{'A', 'Z'}, valid.Range{'0', '9'}, valid.Eq('_'), valid.Eq('.'), valid.Eq('-'), valid.Eq('+')}
+	installMutex  = syncx.KeyedMutex{}
 )
 
 type Package struct {
@@ -330,26 +331,6 @@ func (rc *NpmRC) StoreDir() string {
 	return path.Join(config.WorkDir, "npm")
 }
 
-func (rc *NpmRC) getPackageInfo(name string, semver string) (info *PackageJSON, err error) {
-	// strip leading `=` or `v` from semver
-	if (strings.HasPrefix(semver, "=") || strings.HasPrefix(semver, "v")) && regexpVersionStrict.MatchString(semver[1:]) {
-		semver = semver[1:]
-	}
-
-	// check if the package has been installed
-	if regexpVersionStrict.MatchString(semver) {
-		var raw PackageJSONRaw
-		pkgJsonPath := path.Join(rc.StoreDir(), name+"@"+semver, "node_modules", name, "package.json")
-		if utils.ParseJSONFile(pkgJsonPath, &raw) == nil {
-			info = raw.ToNpmPackage()
-			return
-		}
-	}
-
-	info, err = rc.fetchPackageInfo(name, semver)
-	return
-}
-
 func (npmrc *NpmRC) getRegistryByPackageName(packageName string) *NpmRegistry {
 	if strings.HasPrefix(packageName, "@") {
 		scope, _ := utils.SplitByFirstByte(packageName, '/')
@@ -361,31 +342,28 @@ func (npmrc *NpmRC) getRegistryByPackageName(packageName string) *NpmRegistry {
 	return &npmrc.NpmRegistry
 }
 
-func (npmrc *NpmRC) fetchPackageInfo(packageName string, semverOrDistTag string) (packageJson *PackageJSON, err error) {
-	a := strings.Split(strings.Trim(packageName, "/"), "/")
-	packageName = a[0]
-	if strings.HasPrefix(packageName, "@") && len(a) > 1 {
-		packageName = a[0] + "/" + a[1]
+func (npmrc *NpmRC) getPackageInfo(pkgName string, version string) (packageJson *PackageJSON, err error) {
+	reg := npmrc.getRegistryByPackageName(pkgName)
+	getCacheKey := func(pkgName string, pkgVersion string) string {
+		return reg.Registry + pkgName + "@" + pkgVersion
 	}
 
-	if semverOrDistTag == "" || semverOrDistTag == "*" {
-		semverOrDistTag = "latest"
-	} else if (strings.HasPrefix(semverOrDistTag, "=") || strings.HasPrefix(semverOrDistTag, "v")) && regexpVersionStrict.MatchString(semverOrDistTag[1:]) {
-		// strip leading `=` or `v` from semver
-		semverOrDistTag = semverOrDistTag[1:]
-	}
+	version = normalizePackageVersion(version)
+	return withCache(getCacheKey(pkgName, version), time.Duration(config.NpmQueryCacheTTL)*time.Second, func() (*PackageJSON, string, error) {
+		// check if the package has been installed
+		if !isDistTag(version) && isExactVersion(version) {
+			var raw PackageJSONRaw
+			pkgJsonPath := path.Join(npmrc.StoreDir(), pkgName+"@"+version, "node_modules", pkgName, "package.json")
+			if utils.ParseJSONFile(pkgJsonPath, &raw) == nil {
+				return raw.ToNpmPackage(), "", nil
+			}
+		}
 
-	reg := npmrc.getRegistryByPackageName(packageName)
-	getCacheKey := func(packageName string, packageVersion string) string {
-		return reg.Registry + packageName + "@" + packageVersion + "?auth=" + reg.Token + "|" + reg.User + ":" + reg.Password
-	}
-
-	return withCache(getCacheKey(packageName, semverOrDistTag), time.Duration(config.NpmQueryCacheTTL)*time.Second, func() (*PackageJSON, string, error) {
-		regUrl := reg.Registry + packageName
-		isWellknownVersion := (regexpVersionStrict.MatchString(semverOrDistTag) || isDistTag(semverOrDistTag)) && strings.HasPrefix(regUrl, npmRegistry)
+		regUrl := reg.Registry + pkgName
+		isWellknownVersion := (isExactVersion(version) || isDistTag(version)) && strings.HasPrefix(regUrl, npmRegistry)
 		if isWellknownVersion {
 			// npm registry supports url like `https://registry.npmjs.org/<name>/<version>`
-			regUrl += "/" + semverOrDistTag
+			regUrl += "/" + version
 		}
 
 		u, err := url.Parse(regUrl)
@@ -418,16 +396,16 @@ func (npmrc *NpmRC) fetchPackageInfo(packageName string, semverOrDistTag string)
 
 		if res.StatusCode == 404 || res.StatusCode == 401 {
 			if isWellknownVersion {
-				err = fmt.Errorf("version %s of '%s' not found", semverOrDistTag, packageName)
+				err = fmt.Errorf("version %s of '%s' not found", version, pkgName)
 			} else {
-				err = fmt.Errorf("package '%s' not found", packageName)
+				err = fmt.Errorf("package '%s' not found", pkgName)
 			}
 			return nil, "", err
 		}
 
 		if res.StatusCode != 200 {
 			msg, _ := io.ReadAll(res.Body)
-			return nil, "", fmt.Errorf("could not get metadata of package '%s' (%s: %s)", packageName, res.Status, string(msg))
+			return nil, "", fmt.Errorf("could not get metadata of package '%s' (%s: %s)", pkgName, res.Status, string(msg))
 		}
 
 		if isWellknownVersion {
@@ -436,7 +414,7 @@ func (npmrc *NpmRC) fetchPackageInfo(packageName string, semverOrDistTag string)
 			if err != nil {
 				return nil, "", err
 			}
-			return raw.ToNpmPackage(), getCacheKey(packageName, raw.Version), nil
+			return raw.ToNpmPackage(), getCacheKey(pkgName, raw.Version), nil
 		}
 
 		var metadata NpmPackageMetadata
@@ -446,32 +424,32 @@ func (npmrc *NpmRC) fetchPackageInfo(packageName string, semverOrDistTag string)
 		}
 
 		if len(metadata.Versions) == 0 {
-			return nil, "", fmt.Errorf("version %s of '%s' not found", semverOrDistTag, packageName)
+			return nil, "", fmt.Errorf("version %s of '%s' not found", version, pkgName)
 		}
 
 	CHECK:
-		distVersion, ok := metadata.DistTags[semverOrDistTag]
+		distVersion, ok := metadata.DistTags[version]
 		if ok {
 			raw, ok := metadata.Versions[distVersion]
 			if ok {
-				return raw.ToNpmPackage(), getCacheKey(packageName, raw.Version), nil
+				return raw.ToNpmPackage(), getCacheKey(pkgName, raw.Version), nil
 			}
 		} else {
-			if semverOrDistTag == "lastest" {
-				return nil, "", fmt.Errorf("version %s of '%s' not found", semverOrDistTag, packageName)
+			if version == "lastest" {
+				return nil, "", fmt.Errorf("version %s of '%s' not found", version, pkgName)
 			}
 			var c *semver.Constraints
-			c, err = semver.NewConstraint(semverOrDistTag)
+			c, err = semver.NewConstraint(version)
 			if err != nil {
 				// fallback to latest if semverOrDistTag is not a valid semver
-				semverOrDistTag = "latest"
+				version = "latest"
 				goto CHECK
 			}
 			vs := make([]*semver.Version, len(metadata.Versions))
 			i := 0
 			for v := range metadata.Versions {
 				// ignore prerelease versions
-				if !strings.ContainsRune(semverOrDistTag, '-') && strings.ContainsRune(v, '-') {
+				if !strings.ContainsRune(version, '-') && strings.ContainsRune(v, '-') {
 					continue
 				}
 				var ver *semver.Version
@@ -491,16 +469,16 @@ func (npmrc *NpmRC) fetchPackageInfo(packageName string, semverOrDistTag string)
 				}
 				raw, ok := metadata.Versions[vs[i-1].String()]
 				if ok {
-					return raw.ToNpmPackage(), getCacheKey(packageName, raw.Version), nil
+					return raw.ToNpmPackage(), getCacheKey(pkgName, raw.Version), nil
 				}
 			}
 		}
-		return nil, "", fmt.Errorf("version %s of '%s' not found", semverOrDistTag, packageName)
+		return nil, "", fmt.Errorf("version %s of '%s' not found", version, pkgName)
 	})
 }
 
-func (rc *NpmRC) installPackage(pkg Package) (packageJson *PackageJSON, err error) {
-	installDir := path.Join(rc.StoreDir(), pkg.String())
+func (npmrc *NpmRC) installPackage(pkg Package) (packageJson *PackageJSON, err error) {
+	installDir := path.Join(npmrc.StoreDir(), pkg.String())
 	packageJsonPath := path.Join(installDir, "node_modules", pkg.Name, "package.json")
 
 	// check if the package has been installed
@@ -533,16 +511,16 @@ func (rc *NpmRC) installPackage(pkg Package) (packageJson *PackageJSON, err erro
 			fmt.Fprintf(f, `{"name":"%s","version":"%s"}`, pkg.Name, pkg.Version)
 		}
 	} else if pkg.PkgPrNew {
-		err = rc.downloadTarball(&NpmRegistry{}, installDir, pkg.Name, "https://pkg.pr.new/"+pkg.Name+"@"+pkg.Version)
+		err = fetchPackageTarball(&NpmRegistry{}, installDir, pkg.Name, "https://pkg.pr.new/"+pkg.Name+"@"+pkg.Version)
 	} else {
-		info, fetchErr := rc.fetchPackageInfo(pkg.Name, pkg.Version)
+		info, fetchErr := npmrc.getPackageInfo(pkg.Name, pkg.Version)
 		if fetchErr != nil {
 			return nil, fetchErr
 		}
 		if info.Deprecated != "" {
 			os.WriteFile(path.Join(installDir, "deprecated.txt"), []byte(info.Deprecated), 0644)
 		}
-		err = rc.downloadTarball(rc.getRegistryByPackageName(pkg.Name), installDir, info.Name, info.Dist.Tarball)
+		err = fetchPackageTarball(npmrc.getRegistryByPackageName(pkg.Name), installDir, info.Name, info.Dist.Tarball)
 	}
 	if err != nil {
 		return
@@ -559,7 +537,7 @@ func (rc *NpmRC) installPackage(pkg Package) (packageJson *PackageJSON, err erro
 	return
 }
 
-func (rc *NpmRC) installDependencies(wd string, pkgJson *PackageJSON, npmMode bool, mark *set.Set[string]) {
+func (npmrc *NpmRC) installDependencies(wd string, pkgJson *PackageJSON, npmMode bool, mark *set.Set[string]) {
 	wg := sync.WaitGroup{}
 	dependencies := map[string]string{}
 	for name, version := range pkgJson.Dependencies {
@@ -590,8 +568,8 @@ func (rc *NpmRC) installDependencies(wd string, pkgJson *PackageJSON, npmMode bo
 				// skip installing `@types/*` packages
 				return
 			}
-			if !regexpVersionStrict.MatchString(pkg.Version) && !pkg.Github && !pkg.PkgPrNew {
-				p, e := rc.fetchPackageInfo(pkg.Name, pkg.Version)
+			if !isExactVersion(pkg.Version) && !pkg.Github && !pkg.PkgPrNew {
+				p, e := npmrc.getPackageInfo(pkg.Name, pkg.Version)
 				if e != nil {
 					return
 				}
@@ -602,7 +580,7 @@ func (rc *NpmRC) installDependencies(wd string, pkgJson *PackageJSON, npmMode bo
 				return
 			}
 			mark.Add(markId)
-			installed, err := rc.installPackage(pkg)
+			installed, err := npmrc.installPackage(pkg)
 			if err != nil {
 				return
 			}
@@ -613,18 +591,31 @@ func (rc *NpmRC) installDependencies(wd string, pkgJson *PackageJSON, npmMode bo
 				if strings.ContainsRune(name, '/') {
 					ensureDir(path.Dir(linkDir))
 				}
-				os.Symlink(path.Join(rc.StoreDir(), pkg.String(), "node_modules", pkg.Name), linkDir)
+				os.Symlink(path.Join(npmrc.StoreDir(), pkg.String(), "node_modules", pkg.Name), linkDir)
 			}
 			// install dependencies recursively
 			if len(installed.Dependencies) > 0 || (len(installed.PeerDependencies) > 0 && npmMode) {
-				rc.installDependencies(wd, installed, npmMode, mark)
+				npmrc.installDependencies(wd, installed, npmMode, mark)
 			}
 		}(name, version)
 	}
 	wg.Wait()
 }
 
-func (rc *NpmRC) downloadTarball(reg *NpmRegistry, installDir string, pkgName string, tarballUrl string) (err error) {
+// If the package is deprecated, a depreacted.txt file will be created by the `intallPackage` function
+func (npmrc *NpmRC) isDeprecated(pkgName string, pkgVersion string) (string, error) {
+	installDir := path.Join(npmrc.StoreDir(), pkgName+"@"+pkgVersion)
+	data, err := os.ReadFile(path.Join(installDir, "deprecated.txt"))
+	if err != nil {
+		if os.IsNotExist(err) {
+			return "", nil
+		}
+		return "", err
+	}
+	return string(data), nil
+}
+
+func fetchPackageTarball(reg *NpmRegistry, installDir string, pkgName string, tarballUrl string) (err error) {
 	u, err := url.Parse(tarballUrl)
 	if err != nil {
 		return
@@ -725,19 +716,6 @@ func extractPackageTarball(installDir string, packname string, tarball io.Reader
 	return nil
 }
 
-// If the package is deprecated, a depreacted.txt file will be created by the `intallPackage` function
-func (npmrc *NpmRC) isDeprecated(pkgName string, pkgVersion string) (string, error) {
-	installDir := path.Join(npmrc.StoreDir(), pkgName+"@"+pkgVersion)
-	data, err := os.ReadFile(path.Join(installDir, "deprecated.txt"))
-	if err != nil {
-		if os.IsNotExist(err) {
-			return "", nil
-		}
-		return "", err
-	}
-	return string(data), nil
-}
-
 // resolveDependencyVersion resolves the version of a dependency
 // e.g. "react": "npm:react@19.0.0"
 // e.g. "react": "github:facebook/react#semver:19.0.0"
@@ -803,7 +781,7 @@ func resolveDependencyVersion(v string) (Package, error) {
 			return Package{}, errors.New("unsupported http dependency")
 		}
 		version, _ := utils.SplitByFirstByte(rest, '/')
-		if version == "" || !regexpVersion.MatchString(version) {
+		if version == "" || !npmNaming.Match(version) {
 			return Package{}, errors.New("unsupported http dependency")
 		}
 		return Package{
@@ -822,6 +800,19 @@ func resolveDependencyVersion(v string) (Package, error) {
 		}, nil
 	}
 	return Package{}, nil
+}
+
+func normalizePackageVersion(version string) string {
+	// strip leading `=` or `v`
+	if strings.HasPrefix(version, "=") {
+		version = version[1:]
+	} else if strings.HasPrefix(version, "v") && isExactVersion(version[1:]) {
+		version = version[1:]
+	}
+	if version == "" || version == "*" {
+		return "latest"
+	}
+	return version
 }
 
 func isDistTag(s string) bool {

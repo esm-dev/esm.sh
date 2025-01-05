@@ -12,6 +12,7 @@ import (
 	"sync"
 
 	"github.com/Masterminds/semver/v3"
+	"github.com/ije/gox/utils"
 	"github.com/ije/gox/valid"
 )
 
@@ -59,6 +60,34 @@ func normalizeImportSpecifier(specifier string) string {
 	return specifier
 }
 
+// isExactVersion returns true if the given version is an exact version.
+func isExactVersion(version string) bool {
+	a := strings.SplitN(version, ".", 3)
+	if len(a) != 3 {
+		return false
+	}
+	if !valid.IsDigtalOnlyString(a[0]) || !valid.IsDigtalOnlyString(a[1]) {
+		return false
+	}
+	p := a[2]
+	if len(p) == 0 {
+		return false
+	}
+	d, e := utils.SplitByFirstByte(p, '-')
+	if !valid.IsDigtalOnlyString(d) {
+		return false
+	}
+	if e == "" {
+		return p[len(p)-1] != '-'
+	}
+	for _, c := range e {
+		if !((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '_' || c == '.' || c == '-' || c == '+') {
+			return false
+		}
+	}
+	return true
+}
+
 // semverLessThan returns true if the version a is less than the version b.
 func semverLessThan(a string, b string) bool {
 	return semver.MustParse(a).LessThan(semver.MustParse(b))
@@ -81,6 +110,24 @@ func isJsReservedWord(word string) bool {
 		return true
 	}
 	return false
+}
+
+// isJsIdentifier returns true if the given string is a valid JavaScript identifier.
+func isJsIdentifier(s string) bool {
+	if len(s) == 0 {
+		return false
+	}
+	leadingChar := s[0]
+	if !((leadingChar >= 'a' && leadingChar <= 'z') || (leadingChar >= 'A' && leadingChar <= 'Z') || leadingChar == '_' || leadingChar == '$') {
+		return false
+	}
+	for i := 1; i < len(s); i++ {
+		c := s[i]
+		if !((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '_' || c == '$') {
+			return false
+		}
+	}
+	return true
 }
 
 // endsWith returns true if the given string ends with any of the suffixes.
