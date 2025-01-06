@@ -398,7 +398,7 @@ func (ctx *BuildContext) finalizeBuildEntry(entry *BuildEntry) {
 		if entry.module {
 			preferedExt = ".mjs"
 		}
-		if !endsWith(entry.main, moduleExts...) {
+		if !endsWith(entry.main, moduleExts...) && !strings.HasSuffix(entry.main, ".json") {
 			if ctx.existsPkgFile(entry.main + preferedExt) {
 				entry.main = entry.main + preferedExt
 			} else if ctx.existsPkgFile(entry.main + ".js") {
@@ -412,7 +412,7 @@ func (ctx *BuildContext) finalizeBuildEntry(entry *BuildEntry) {
 			}
 		} else if !ctx.existsPkgFile(entry.main) {
 			entry.main = ""
-		} else if !entry.module && !endsWith(entry.main, ".cjs", ".cts") {
+		} else if !entry.module && endsWith(entry.main, ".js", ".ts") {
 			// check if the cjs entry is an ESM
 			isESM, _, err := validateModuleFile(path.Join(ctx.wd, "node_modules", ctx.esm.PkgName, entry.main))
 			if err == nil {
