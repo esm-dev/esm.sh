@@ -7,7 +7,7 @@ on:
 
 jobs:
   deploy:
-    name: Deploy esm.sh to production
+    name: Deploy server to production
     runs-on: ubuntu-latest
     environment: esm.sh
 
@@ -134,7 +134,7 @@ jobs:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
   publish_esmsh_to_npm:
-    name: Publish "esm.sh" to NPM
+    name: Publish package "esm.sh" to NPM
     runs-on: ubuntu-latest
     environment: release
     needs: [build_esmsh_cli]
@@ -183,7 +183,7 @@ jobs:
       - name: Extract Release Note
         run: echo "console.log(require('fs').readFileSync('CHANGELOG.md','utf8').split('## ')[1].slice('${{ github.ref_name }}'.length).trim())" | node > release-note.txt
 
-      - name: Create Release
+      - name: Release
         uses: softprops/action-gh-release@v2
         with:
           body_path: release-note.txt
