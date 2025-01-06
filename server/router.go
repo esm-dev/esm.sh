@@ -1612,7 +1612,7 @@ func esmRouter() rex.Handle {
 			if !ret.HasCSS {
 				return rex.Status(404, "Package CSS not found")
 			}
-			url := fmt.Sprintf("%s%s.css", origin, strings.TrimSuffix(buildCtx.Path(), ".mjs"))
+			url := origin + strings.TrimSuffix(buildCtx.Path(), ".mjs") + ".css"
 			return redirect(ctx, url, isExactVersion)
 		}
 
@@ -1631,6 +1631,18 @@ func esmRouter() rex.Handle {
 
 		// if the path is `ESMBuild`, return the built js/css content
 		if pathKind == EsmBuild {
+			// redirect the rewritten path
+			if buildCtx.Path() != pathname {
+				buf, recycle := NewBuffer()
+				defer recycle()
+				fmt.Fprintf(buf, "export * from \"%s\";\n", buildCtx.Path())
+				if ret.ExportDefault {
+					fmt.Fprintf(buf, "export { default } from \"%s\";\n", buildCtx.Path())
+				}
+				ctx.Header.Set("Content-Type", ctJavaScript)
+				ctx.Header.Set("Cache-Control", ccImmutable)
+				return buf.Bytes()
+			}
 			savePath := buildCtx.getSavepath()
 			if strings.HasSuffix(esm.SubPath, ".css") {
 				path, _ := utils.SplitByLastByte(savePath, '.')
