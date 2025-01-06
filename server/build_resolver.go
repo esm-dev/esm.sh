@@ -196,14 +196,20 @@ func (ctx *BuildContext) resolveEntry(esm EsmPath) (entry BuildEntry) {
 				entry.types = stripModuleExt(entry.main) + ".d.mts"
 			} else if entry.main != "" && ctx.existsPkgFile(stripModuleExt(entry.main)+".d.ts") {
 				entry.types = stripModuleExt(entry.main) + ".d.ts"
+			} else if entry.main != "" && ctx.existsPkgFile(stripModuleExt(entry.main)+".d.cts") {
+				entry.types = stripModuleExt(entry.main) + ".d.cts"
 			} else if ctx.existsPkgFile(subModuleName + ".d.mts") {
 				entry.types = "./" + subModuleName + ".d.mts"
 			} else if ctx.existsPkgFile(subModuleName + ".d.ts") {
 				entry.types = "./" + subModuleName + ".d.ts"
+			} else if ctx.existsPkgFile(subModuleName + ".d.cts") {
+				entry.types = "./" + subModuleName + ".d.cts"
 			} else if ctx.existsPkgFile(subModuleName, "index.d.mts") {
 				entry.types = "./" + subModuleName + "/index.d.mts"
 			} else if ctx.existsPkgFile(subModuleName, "index.d.ts") {
 				entry.types = "./" + subModuleName + "/index.d.ts"
+			} else if ctx.existsPkgFile(subModuleName, "index.d.cts") {
+				entry.types = "./" + subModuleName + "/index.d.cts"
 			}
 		}
 	} else {
@@ -289,6 +295,8 @@ func (ctx *BuildContext) resolveEntry(esm EsmPath) (entry BuildEntry) {
 				entry.types = "./index.d.mts"
 			} else if ctx.existsPkgFile("index.d.ts") {
 				entry.types = "./index.d.ts"
+			} else if ctx.existsPkgFile("index.d.cts") {
+				entry.types = "./index.d.cts"
 			}
 		}
 
@@ -297,12 +305,16 @@ func (ctx *BuildContext) resolveEntry(esm EsmPath) (entry BuildEntry) {
 				entry.types = stripModuleExt(entry.main) + ".d.mts"
 			} else if ctx.existsPkgFile(stripModuleExt(entry.main) + ".d.ts") {
 				entry.types = stripModuleExt(entry.main) + ".d.ts"
+			} else if ctx.existsPkgFile(stripModuleExt(entry.main) + ".d.cts") {
+				entry.types = stripModuleExt(entry.main) + ".d.cts"
 			} else if stripModuleExt(path.Base(entry.main)) == "index" {
 				dir, _ := utils.SplitByLastByte(entry.main, '/')
 				if ctx.existsPkgFile(dir, "index.d.mts") {
 					entry.types = dir + "/index.d.mts"
 				} else if ctx.existsPkgFile(dir, "index.d.ts") {
 					entry.types = dir + "/index.d.ts"
+				} else if ctx.existsPkgFile(dir, "index.d.cts") {
+					entry.types = dir + "/index.d.cts"
 				}
 			}
 		}
@@ -424,34 +436,39 @@ func (ctx *BuildContext) finalizeBuildEntry(entry *BuildEntry) {
 	if entry.types != "" {
 		entry.types = normalizeEntryPath(entry.types)
 		if endsWith(entry.types, ".js", ".mjs", ".cjs") {
-			maybeDts := stripModuleExt(entry.types) + ".d.mts"
-			if ctx.existsPkgFile(maybeDts) {
-				entry.types = maybeDts
+			bearName := stripModuleExt(entry.types)
+			if ctx.existsPkgFile(bearName + ".d.mts") {
+				entry.types += ".d.mts"
+			} else if ctx.existsPkgFile(bearName + ".d.ts") {
+				entry.types += ".d.ts"
+			} else if ctx.existsPkgFile(bearName + ".d.cts") {
+				entry.types += ".d.cts"
 			} else {
-				maybeDts = stripModuleExt(entry.types) + ".d.ts"
-				if ctx.existsPkgFile(maybeDts) {
-					entry.types = maybeDts
-				} else {
-					entry.types = ""
-				}
+				entry.types = ""
 			}
 		} else if strings.HasSuffix(entry.types, ".d") {
 			if ctx.existsPkgFile(entry.types + ".mts") {
 				entry.types += ".mts"
 			} else if ctx.existsPkgFile(entry.types + ".ts") {
 				entry.types += ".ts"
+			} else if ctx.existsPkgFile(entry.types + ".cts") {
+				entry.types += ".cts"
 			} else {
 				entry.types = ""
 			}
-		} else if !endsWith(entry.types, ".d.ts", ".d.mts") {
+		} else if !endsWith(entry.types, ".d.ts", ".d.mts", ".d.cts") {
 			if ctx.existsPkgFile(entry.types + ".d.mts") {
 				entry.types = entry.types + ".d.mts"
 			} else if ctx.existsPkgFile(entry.types + ".d.ts") {
 				entry.types = entry.types + ".d.ts"
+			} else if ctx.existsPkgFile(entry.types + ".d.cts") {
+				entry.types = entry.types + ".d.cts"
 			} else if ctx.existsPkgFile(entry.types, "index.d.mts") {
 				entry.types = entry.types + "/index.d.mts"
 			} else if ctx.existsPkgFile(entry.types, "index.d.ts") {
 				entry.types = entry.types + "/index.d.ts"
+			} else if ctx.existsPkgFile(entry.types, "index.d.cts") {
+				entry.types = entry.types + "/index.d.cts"
 			} else {
 				entry.types = ""
 			}
@@ -468,7 +485,7 @@ func (ctx *BuildContext) resolveConditionExportEntry(conditions JSONObject, pref
 			condition, ok := conditions.Get(conditionName)
 			if ok {
 				if s, ok := condition.(string); ok {
-					if entry.types == "" || endsWith(s, ".d.ts", ".d.mts", ".d") {
+					if entry.types == "" || endsWith(s, ".d.ts", ".d.mts", ".d.cts", ".d") {
 						entry.types = s
 					}
 				} else if obj, ok := condition.(JSONObject); ok {
@@ -1090,7 +1107,7 @@ func (ctx *BuildContext) analyzeSplitting() (err error) {
 		exportAll := false
 		for _, exportName := range ctx.pkgJson.Exports.keys {
 			exportName := stripEntryModuleExt(exportName)
-			if (exportName == "." || strings.HasPrefix(exportName, "./")) && !endsWith(exportName, ".json", ".css", ".wasm", ".d.ts", ".d.mts") {
+			if (exportName == "." || strings.HasPrefix(exportName, "./")) && !endsWith(exportName, ".json", ".css", ".wasm", ".d.ts", ".d.mts", ".d.cts") {
 				if exportName == "./*" {
 					exportAll = true
 					break
@@ -1098,7 +1115,7 @@ func (ctx *BuildContext) analyzeSplitting() (err error) {
 				if !strings.ContainsRune(exportName, '*') {
 					v := ctx.pkgJson.Exports.values[exportName]
 					if s, ok := v.(string); ok {
-						if endsWith(s, ".json", ".css", ".wasm", ".d.ts", ".d.mts") {
+						if endsWith(s, ".json", ".css", ".wasm", ".d.ts", ".d.mts", ".d.cts") {
 							continue
 						}
 					} else if obj, ok := v.(JSONObject); ok {
