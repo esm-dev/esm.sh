@@ -409,7 +409,7 @@ func (ctx *BuildContext) buildModule(analyzeMode bool) (meta *BuildMeta, include
 						return esbuild.OnResolveResult{Path: path}, nil
 					}
 
-					// ban file urls
+					// ban file: imports
 					if strings.HasPrefix(args.Path, "file:") {
 						return esbuild.OnResolveResult{
 							Path:     fmt.Sprintf("/error.js?type=unsupported-file-dependency&name=%s&importer=%s", strings.TrimPrefix(args.Path, "file:"), ctx.esm.Specifier()),
@@ -417,7 +417,7 @@ func (ctx *BuildContext) buildModule(analyzeMode bool) (meta *BuildMeta, include
 						}, nil
 					}
 
-					// skip dataurl/http modules
+					// skip data: and http: imports
 					if strings.HasPrefix(args.Path, "data:") || strings.HasPrefix(args.Path, "https:") || strings.HasPrefix(args.Path, "http:") {
 						return esbuild.OnResolveResult{
 							Path:     args.Path,
@@ -441,6 +441,7 @@ func (ctx *BuildContext) buildModule(analyzeMode bool) (meta *BuildMeta, include
 						}, nil
 					}
 
+					specifier := normalizeImportSpecifier(args.Path)
 					withTypeJSON := len(args.With) > 0 && args.With["type"] == "json"
 
 					// it's implicit external
@@ -455,9 +456,6 @@ func (ctx *BuildContext) buildModule(analyzeMode bool) (meta *BuildMeta, include
 						}, nil
 					}
 
-					// normalize specifier
-					specifier := normalizeImportSpecifier(args.Path)
-
 					// check `?alias` option
 					if len(ctx.args.alias) > 0 && !isRelPathSpecifier(specifier) {
 						pkgName, _, subpath, _ := splitEsmPath(specifier)
@@ -469,7 +467,7 @@ func (ctx *BuildContext) buildModule(analyzeMode bool) (meta *BuildMeta, include
 						}
 					}
 
-					// resolve specifier using the package `imports` field
+					// resolve specifier using the `imports` field of package.json
 					if len(ctx.pkgJson.Imports) > 0 {
 						if v, ok := ctx.pkgJson.Imports[specifier]; ok {
 							if s, ok := v.(string); ok {
@@ -493,7 +491,7 @@ func (ctx *BuildContext) buildModule(analyzeMode bool) (meta *BuildMeta, include
 						}
 					}
 
-					// resolve specifier using the `browser` field
+					// resolve specifier using the `browser` field of package.json
 					if !isRelPathSpecifier(specifier) && len(ctx.pkgJson.Browser) > 0 && ctx.isBrowserTarget() {
 						if name, ok := ctx.pkgJson.Browser[specifier]; ok {
 							if name == "" {
@@ -506,26 +504,14 @@ func (ctx *BuildContext) buildModule(analyzeMode bool) (meta *BuildMeta, include
 						}
 					}
 
-					// use `npm:` specifier for `denonext` target if the specifier is in the `forceNpmSpecifiers` list
-					if forceNpmSpecifiers[specifier] && ctx.target == "denonext" {
-						version := ""
-						pkgName, _, subPath, _ := splitEsmPath(specifier)
-						if pkgName == ctx.esm.PkgName {
-							version = ctx.esm.PkgVersion
-						} else if v, ok := ctx.pkgJson.Dependencies[pkgName]; ok && isExactVersion(v) {
-							version = v
-						} else if v, ok := ctx.pkgJson.PeerDependencies[pkgName]; ok && isExactVersion(v) {
-							version = v
-						}
-						p := pkgName
-						if version != "" {
-							p += "@" + version
-						}
-						if subPath != "" {
-							p += "/" + subPath
+					// nodejs builtin module
+					if isNodeBuiltInModule(specifier) {
+						externalPath, err := ctx.resolveExternalModule(specifier, args.Kind, withTypeJSON, analyzeMode)
+						if err != nil {
+							return esbuild.OnResolveResult{}, err
 						}
 						return esbuild.OnResolveResult{
-							Path:     fmt.Sprintf("npm:%s", p),
+							Path:     externalPath,
 							External: true,
 						}, nil
 					}
@@ -537,18 +523,6 @@ func (ctx *BuildContext) buildModule(analyzeMode bool) (meta *BuildMeta, include
 						fullFilepath = path.Join(args.ResolveDir, specifier)
 					} else {
 						fullFilepath = path.Join(ctx.wd, "node_modules", specifier)
-					}
-
-					// nodejs builtin module
-					if isNodeBuiltInModule(specifier) {
-						externalPath, err := ctx.resolveExternalModule(specifier, args.Kind, withTypeJSON, analyzeMode)
-						if err != nil {
-							return esbuild.OnResolveResult{}, err
-						}
-						return esbuild.OnResolveResult{
-							Path:     externalPath,
-							External: true,
-						}, nil
 					}
 
 					// node native modules do not work via http import
@@ -813,6 +787,30 @@ func (ctx *BuildContext) buildModule(analyzeMode bool) (meta *BuildMeta, include
 								return esbuild.OnResolveResult{}, nil
 							}
 						}
+					}
+
+					// use `npm:` specifier for `denonext` target if the specifier is in the `forceNpmSpecifiers` list
+					if forceNpmSpecifiers[specifier] && ctx.target == "denonext" {
+						version := ""
+						pkgName, _, subPath, _ := splitEsmPath(specifier)
+						if pkgName == ctx.esm.PkgName {
+							version = ctx.esm.PkgVersion
+						} else if v, ok := ctx.pkgJson.Dependencies[pkgName]; ok && isExactVersion(v) {
+							version = v
+						} else if v, ok := ctx.pkgJson.PeerDependencies[pkgName]; ok && isExactVersion(v) {
+							version = v
+						}
+						p := pkgName
+						if version != "" {
+							p += "@" + version
+						}
+						if subPath != "" {
+							p += "/" + subPath
+						}
+						return esbuild.OnResolveResult{
+							Path:     fmt.Sprintf("npm:%s", p),
+							External: true,
+						}, nil
 					}
 
 					// replace some npm modules with browser native APIs

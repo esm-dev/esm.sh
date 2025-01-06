@@ -181,9 +181,8 @@ func bundleHttpModule(npmrc *NpmRC, entry string, importMap common.ImportMap, co
 								if u.Scheme == entryUrl.Scheme && u.Host == entryUrl.Host {
 									if (endsWith(u.Path, moduleExts...) || endsWith(u.Path, ".css", ".json", ".vue", ".svelte", ".md")) && !u.Query().Has("url") {
 										return esbuild.OnResolveResult{Path: path, Namespace: "http"}, nil
-									} else {
-										return esbuild.OnResolveResult{Path: path, Namespace: "url"}, nil
 									}
+									return esbuild.OnResolveResult{Path: path, Namespace: "url"}, nil
 								}
 							}
 						}
