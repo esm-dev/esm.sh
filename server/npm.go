@@ -824,6 +824,48 @@ func isDistTag(s string) bool {
 	}
 }
 
+// isExactVersion returns true if the given version is an exact version.
+func isExactVersion(version string) bool {
+	a := strings.SplitN(version, ".", 3)
+	if len(a) != 3 {
+		return false
+	}
+	if len(a[0]) == 0 || !isNumericString(a[0]) || len(a[1]) == 0 || !isNumericString(a[1]) {
+		return false
+	}
+	p := a[2]
+	if len(p) == 0 {
+		return false
+	}
+	patchEnd := false
+	for i, c := range p {
+		if !patchEnd {
+			if c == '-' || c == '+' {
+				if i == 0 || i == len(p)-1 {
+					return false
+				}
+				patchEnd = true
+			} else if c < '0' || c > '9' {
+				return false
+			}
+		} else {
+			if !(c == '.' || c == '_' || c == '-' || c == '+' || (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9')) {
+				return false
+			}
+		}
+	}
+	return true
+}
+
+func isNumericString(s string) bool {
+	for _, c := range s {
+		if c < '0' || c > '9' {
+			return false
+		}
+	}
+	return true
+}
+
 // based on https://github.com/npm/validate-npm-package-name
 func validatePackageName(pkgName string) bool {
 	if len(pkgName) > 214 {

@@ -1711,17 +1711,17 @@ func esmRouter() rex.Handle {
 					fmt.Fprintf(buf, "import \"%s\";\n", dep)
 				}
 			}
-			esmPath := buildCtx.Path()
+			esm := buildCtx.Path()
 			if !ret.CJS && len(exports) > 0 {
-				esmPath += "?exports=" + strings.Join(exports, ",")
+				esm += "?exports=" + strings.Join(exports, ",")
 			}
-			ctx.Header.Set("X-ESM-Path", esmPath)
-			fmt.Fprintf(buf, "export * from \"%s\";\n", esmPath)
+			ctx.Header.Set("X-ESM-Path", esm)
+			fmt.Fprintf(buf, "export * from \"%s\";\n", esm)
 			if ret.ExportDefault && (len(exports) == 0 || stringInSlice(exports, "default")) {
-				fmt.Fprintf(buf, "export { default } from \"%s\";\n", esmPath)
+				fmt.Fprintf(buf, "export { default } from \"%s\";\n", esm)
 			}
 			if ret.CJS && len(exports) > 0 {
-				fmt.Fprintf(buf, "import _ from \"%s\";\n", esmPath)
+				fmt.Fprintf(buf, "import _ from \"%s\";\n", esm)
 				fmt.Fprintf(buf, "export const { %s } = _;\n", strings.Join(exports, ", "))
 			}
 			if !noDts && ret.Dts != "" {

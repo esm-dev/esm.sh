@@ -11,96 +11,12 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/Masterminds/semver/v3"
-	"github.com/ije/gox/utils"
 	"github.com/ije/gox/valid"
 )
-
-// isHttpSepcifier returns true if the specifier is a remote URL.
-func isHttpSepcifier(specifier string) bool {
-	return strings.HasPrefix(specifier, "https://") || strings.HasPrefix(specifier, "http://")
-}
-
-// isRelPathSpecifier returns true if the specifier is a local path.
-func isRelPathSpecifier(specifier string) bool {
-	return strings.HasPrefix(specifier, "./") || strings.HasPrefix(specifier, "../")
-}
-
-// isAbsPathSpecifier returns true if the specifier is an absolute path.
-func isAbsPathSpecifier(specifier string) bool {
-	return strings.HasPrefix(specifier, "/") || strings.HasPrefix(specifier, "file://")
-}
-
-// isJsModuleSpecifier returns true if the specifier is a json module.
-func isJsonModuleSpecifier(specifier string) bool {
-	if !strings.HasSuffix(specifier, ".json") {
-		return false
-	}
-	_, _, subpath, _ := splitEsmPath(specifier)
-	return subpath != "" && strings.HasSuffix(subpath, ".json")
-}
-
-// isJsModuleSpecifier checks if the given specifier is a node.js built-in module.
-func isNodeBuiltInModule(specifier string) bool {
-	return strings.HasPrefix(specifier, "node:") && nodeBuiltinModules[specifier[5:]]
-}
-
-// normalizeImportSpecifier normalizes the given specifier.
-func normalizeImportSpecifier(specifier string) string {
-	specifier = strings.TrimPrefix(specifier, "npm:")
-	specifier = strings.TrimPrefix(specifier, "./node_modules/")
-	if specifier == "." {
-		specifier = "./index"
-	} else if specifier == ".." {
-		specifier = "../index"
-	}
-	if nodeBuiltinModules[specifier] {
-		return "node:" + specifier
-	}
-	return specifier
-}
-
-// isExactVersion returns true if the given version is an exact version.
-func isExactVersion(version string) bool {
-	a := strings.SplitN(version, ".", 3)
-	if len(a) != 3 {
-		return false
-	}
-	if !valid.IsDigtalOnlyString(a[0]) || !valid.IsDigtalOnlyString(a[1]) {
-		return false
-	}
-	p := a[2]
-	if len(p) == 0 {
-		return false
-	}
-	d, e := utils.SplitByFirstByte(p, '-')
-	if !valid.IsDigtalOnlyString(d) {
-		return false
-	}
-	if e == "" {
-		return p[len(p)-1] != '-'
-	}
-	for _, c := range e {
-		if !((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '_' || c == '.' || c == '-' || c == '+') {
-			return false
-		}
-	}
-	return true
-}
-
-// semverLessThan returns true if the version a is less than the version b.
-func semverLessThan(a string, b string) bool {
-	return semver.MustParse(a).LessThan(semver.MustParse(b))
-}
 
 // checks if the given hostname is a local address.
 func isLocalhost(hostname string) bool {
 	return hostname == "localhost" || hostname == "127.0.0.1" || (valid.IsIPv4(hostname) && strings.HasPrefix(hostname, "192.168."))
-}
-
-// isCommitish returns true if the given string is a commit hash.
-func isCommitish(s string) bool {
-	return len(s) >= 7 && len(s) <= 40 && valid.IsHexString(s) && containsDigit(s)
 }
 
 // isJsReservedWord returns true if the given string is a reserved word in JavaScript.
