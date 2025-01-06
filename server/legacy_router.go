@@ -180,7 +180,7 @@ func legacyESM(ctx *rex.Context, pathname string) any {
 	if err != nil {
 		return rex.Status(http.StatusBadRequest, "Invalid url")
 	}
-	fetchClient, recycle := NewFetchClient(30, ctx.UserAgent())
+	fetchClient, recycle := NewFetchClient(60, ctx.UserAgent())
 	defer recycle()
 	res, err := fetchClient.Fetch(url, nil)
 	if err != nil {

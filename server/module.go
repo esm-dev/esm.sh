@@ -18,7 +18,7 @@ import (
 	"github.com/ije/gox/utils"
 )
 
-var moduleExts = []string{".js", ".mjs", ".jsx", ".ts", ".mts", ".tsx", ".cjs", ".cts"}
+var moduleExts = []string{".js", ".ts", ".mjs", ".mts", ".jsx", ".tsx", ".cjs", ".cts"}
 
 // stripModuleExt strips the module extension from the given string.
 func stripModuleExt(s string) string {
