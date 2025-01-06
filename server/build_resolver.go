@@ -332,8 +332,8 @@ func (ctx *BuildContext) resolveEntry(esm EsmPath) (entry BuildEntry) {
 		if versions.Len() > 0 {
 			versions.Sort()
 			latestVersion := typesVersions[versions[versions.Len()-1]]
-			if mapping, ok := latestVersion.(map[string]interface{}); ok {
-				var paths interface{}
+			if mapping, ok := latestVersion.(map[string]any); ok {
+				var paths any
 				var matched bool
 				var exact bool
 				var suffix string
@@ -363,7 +363,7 @@ func (ctx *BuildContext) resolveEntry(esm EsmPath) (entry BuildEntry) {
 					paths, matched = mapping["*"]
 				}
 				if matched {
-					if a, ok := paths.([]interface{}); ok && len(a) > 0 {
+					if a, ok := paths.([]any); ok && len(a) > 0 {
 						if path, ok := a[0].(string); ok {
 							path = normalizeEntryPath(path)
 							if exact {
@@ -1288,7 +1288,7 @@ func matchAsteriskExport(exportName string, subModuleName string) (diff string, 
 
 func resloveAsteriskPathMapping(obj JSONObject, diff string) JSONObject {
 	reslovedConditions := JSONObject{
-		values: make(map[string]interface{}),
+		values: make(map[string]any),
 	}
 	for _, key := range obj.keys {
 		value, ok := obj.Get(key)
