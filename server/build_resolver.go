@@ -217,6 +217,11 @@ func (ctx *BuildContext) resolveEntry(esm EsmPath) (entry BuildEntry) {
 		} else if pkgJson.Typings != "" {
 			entry.types = normalizeEntryPath(pkgJson.Typings)
 		}
+		if len(pkgJson.Browser) > 0 && ctx.isBrowserTarget() {
+			if path, ok := pkgJson.Browser["."]; ok && ctx.existsPkgFile(path) {
+				entry.update(normalizeEntryPath(path), pkgJson.Type == "module")
+			}
+		}
 
 		if exports := pkgJson.Exports; exports.Len() > 0 {
 			exportEntry := BuildEntry{}
@@ -303,21 +308,16 @@ func (ctx *BuildContext) resolveEntry(esm EsmPath) (entry BuildEntry) {
 		}
 	}
 
-	// apply the `browser` field if it's a browser target
+	// resolve entry main from `browser` field if it's defined
 	if len(pkgJson.Browser) > 0 && ctx.isBrowserTarget() {
 		if entry.main != "" {
 			if path, ok := pkgJson.Browser[entry.main]; ok && ctx.existsPkgFile(path) {
 				entry.update(normalizeEntryPath(path), pkgJson.Type == "module")
 			}
 		}
-		if esm.SubModuleName == "" {
-			if path, ok := pkgJson.Browser["."]; ok && ctx.existsPkgFile(path) {
-				entry.update(normalizeEntryPath(path), pkgJson.Type == "module")
-			}
-		}
 	}
 
-	// resovle dts from `typesVersions` field if it's defined
+	// resovle types from `typesVersions` field if it's defined
 	// see https://www.typescriptlang.org/docs/handbook/declaration-files/publishing.html#version-selection-with-typesversions
 	if typesVersions := pkgJson.TypesVersions; len(typesVersions) > 0 && entry.types != "" {
 		versions := make(sort.StringSlice, len(typesVersions))
