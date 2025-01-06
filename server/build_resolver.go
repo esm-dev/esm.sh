@@ -12,9 +12,11 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/Masterminds/semver/v3"
 	"github.com/evanw/esbuild/pkg/api"
 	"github.com/ije/gox/set"
 	"github.com/ije/gox/utils"
+	"github.com/ije/gox/valid"
 )
 
 // BuildEntry represents the build entrypoints of a module
@@ -1204,11 +1206,11 @@ func (ctx *BuildContext) analyzeSplitting() (err error) {
 
 			refs := map[string]Ref{}
 			for _, exportName := range exportNames.Values() {
-				esmPath := ctx.esm
-				esmPath.SubPath = exportName
-				esmPath.SubModuleName = stripEntryModuleExt(exportName)
+				esm := ctx.esm
+				esm.SubPath = exportName
+				esm.SubModuleName = stripEntryModuleExt(exportName)
 				b := &BuildContext{
-					esm:         esmPath,
+					esm:         esm,
 					npmrc:       ctx.npmrc,
 					args:        ctx.args,
 					externalAll: ctx.externalAll,
@@ -1220,7 +1222,7 @@ func (ctx *BuildContext) analyzeSplitting() (err error) {
 				}
 				_, includes, err := b.buildModule(true)
 				if err != nil {
-					return fmt.Errorf("failed to analyze %s: %v", esmPath.Specifier(), err)
+					return fmt.Errorf("failed to analyze %s: %v", esm.Specifier(), err)
 				}
 				for _, include := range includes {
 					module, importer := include[0], include[1]
@@ -1348,4 +1350,58 @@ func normalizeSavePath(zoneId string, pathname string) string {
 		return zoneId + "/" + strings.Join(segs, "/")
 	}
 	return strings.Join(segs, "/")
+}
+
+// normalizeImportSpecifier normalizes the given specifier.
+func normalizeImportSpecifier(specifier string) string {
+	specifier = strings.TrimPrefix(specifier, "npm:")
+	specifier = strings.TrimPrefix(specifier, "./node_modules/")
+	if specifier == "." {
+		specifier = "./index"
+	} else if specifier == ".." {
+		specifier = "../index"
+	}
+	if nodeBuiltinModules[specifier] {
+		return "node:" + specifier
+	}
+	return specifier
+}
+
+// isHttpSepcifier returns true if the specifier is a remote URL.
+func isHttpSepcifier(specifier string) bool {
+	return strings.HasPrefix(specifier, "https://") || strings.HasPrefix(specifier, "http://")
+}
+
+// isRelPathSpecifier returns true if the specifier is a local path.
+func isRelPathSpecifier(specifier string) bool {
+	return strings.HasPrefix(specifier, "./") || strings.HasPrefix(specifier, "../")
+}
+
+// isAbsPathSpecifier returns true if the specifier is an absolute path.
+func isAbsPathSpecifier(specifier string) bool {
+	return strings.HasPrefix(specifier, "/") || strings.HasPrefix(specifier, "file://")
+}
+
+// isJsModuleSpecifier returns true if the specifier is a json module.
+func isJsonModuleSpecifier(specifier string) bool {
+	if !strings.HasSuffix(specifier, ".json") {
+		return false
+	}
+	_, _, subpath, _ := splitEsmPath(specifier)
+	return subpath != "" && strings.HasSuffix(subpath, ".json")
+}
+
+// isJsModuleSpecifier checks if the given specifier is a node.js built-in module.
+func isNodeBuiltInModule(specifier string) bool {
+	return strings.HasPrefix(specifier, "node:") && nodeBuiltinModules[specifier[5:]]
+}
+
+// isCommitish returns true if the given string is a commit hash.
+func isCommitish(s string) bool {
+	return len(s) >= 7 && len(s) <= 40 && valid.IsHexString(s) && containsDigit(s)
+}
+
+// semverLessThan returns true if the version a is less than the version b.
+func semverLessThan(a string, b string) bool {
+	return semver.MustParse(a).LessThan(semver.MustParse(b))
 }
