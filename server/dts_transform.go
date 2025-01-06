@@ -79,7 +79,7 @@ func transformDTS(ctx *BuildContext, dts string, buildArgsPrefix string, marker 
 
 		if isRelPathSpecifier(specifier) {
 			specifier = strings.TrimSuffix(specifier, ".d")
-			if !endsWith(specifier, ".d.ts", ".d.mts") {
+			if !endsWith(specifier, ".d.ts", ".d.mts", ".d.cts") {
 				var p PackageJSONRaw
 				var hasTypes bool
 				if utils.ParseJSONFile(path.Join(dtsWd, specifier, "package.json"), &p) == nil {
@@ -97,22 +97,28 @@ func transformDTS(ctx *BuildContext, dts string, buildArgsPrefix string, marker 
 						specifier = specifier + ".d.mts"
 					} else if existsFile(path.Join(dtsWd, specifier+".d.ts")) {
 						specifier = specifier + ".d.ts"
+					} else if existsFile(path.Join(dtsWd, specifier+".d.cts")) {
+						specifier = specifier + ".d.cts"
 					} else if existsFile(path.Join(dtsWd, specifier, "index.d.mts")) {
 						specifier = strings.TrimSuffix(specifier, "/") + "/index.d.mts"
 					} else if existsFile(path.Join(dtsWd, specifier, "index.d.ts")) {
 						specifier = strings.TrimSuffix(specifier, "/") + "/index.d.ts"
+					} else if existsFile(path.Join(dtsWd, specifier, "index.d.cts")) {
+						specifier = strings.TrimSuffix(specifier, "/") + "/index.d.cts"
 					} else if endsWith(specifier, ".js", ".mjs", ".cjs") {
 						specifier = stripModuleExt(specifier)
 						if existsFile(path.Join(dtsWd, specifier+".d.mts")) {
 							specifier = specifier + ".d.mts"
 						} else if existsFile(path.Join(dtsWd, specifier+".d.ts")) {
 							specifier = specifier + ".d.ts"
+						} else if existsFile(path.Join(dtsWd, specifier+".d.cts")) {
+							specifier = specifier + ".d.cts"
 						}
 					}
 				}
 			}
 
-			if endsWith(specifier, ".d.ts", ".d.mts") {
+			if endsWith(specifier, ".d.ts", ".d.mts", ".d.cts") {
 				internalDts.Add(specifier)
 			} else {
 				specifier += ".d.ts"

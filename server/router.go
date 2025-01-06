@@ -882,12 +882,12 @@ func esmRouter() rex.Handle {
 				types = info.Types
 			} else if info.Typings != "" {
 				types = info.Typings
-			} else if info.Main != "" && endsWith(info.Main, ".d.ts", ".d.mts") {
+			} else if info.Main != "" && endsWith(info.Main, ".d.ts", ".d.mts", ".d.cts") {
 				types = info.Main
 			}
 			if strings.HasSuffix(types, ".d") {
 				types += ".ts"
-			} else if !endsWith(types, ".d.ts", ".d.mts") {
+			} else if !endsWith(types, ".d.ts", ".d.mts", ".d.cts") {
 				types += ".d.ts"
 			}
 			return redirect(ctx, fmt.Sprintf("%s/%s@%s%s", origin, info.Name, info.Version, utils.NormalizePathname(types)), isExactVersion)
@@ -945,7 +945,7 @@ func esmRouter() rex.Handle {
 					pathKind = EsmBuild
 				}
 			case ".ts", ".mts":
-				if endsWith(pathname, ".d.ts", ".d.mts") {
+				if endsWith(pathname, ".d.ts", ".d.mts", ".d.cts") {
 					pathKind = EsmDts
 				}
 			case ".css":
