@@ -589,6 +589,10 @@ func (ctx *BuildContext) resolveExternalModule(specifier string, kind api.Resolv
 		return specifier, nil
 	}
 
+	if ctx.externalAll {
+		return specifier, nil
+	}
+
 	defer func() {
 		if err == nil && !withTypeJSON {
 			resolvedPathFull := resolvedPath
