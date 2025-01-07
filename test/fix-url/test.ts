@@ -147,7 +147,9 @@ Deno.test("dts-transformer: support `.d` extension", async () => {
 });
 
 Deno.test("fix rewritten build path", async () => {
-  const res = await fetch("http://localhost:8080/@ucanto/core@10.0.1/denonext/src/lib.mjs");
-  const js = await res.text();
-  assertEquals(js.trim(), `export * from "/@ucanto/core@10.0.1/denonext/core.mjs";`);
+  for (let i = 0; i < 2; i++) {
+    const res = await fetch("http://localhost:8080/@ucanto/core@10.0.1/denonext/src/lib.mjs");
+    const js = await res.text();
+    assertEquals(js.trim(), `export * from "/@ucanto/core@10.0.1/denonext/core.mjs";`);
+  }
 });

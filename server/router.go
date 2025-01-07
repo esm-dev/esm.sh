@@ -186,25 +186,27 @@ func esmRouter() rex.Handle {
 		}
 
 		// strip trailing slash
-		if last := len(pathname) - 1; pathname != "/" && pathname[last] == '/' {
-			pathname = pathname[:last]
+		if pl := len(pathname); pl > 1 && pathname[pl-1] == '/' {
+			pathname = pathname[:pl-1]
 		}
 
 		// strip loc suffix
 		// e.g. https://esm.sh/react/es2022/react.mjs:2:3
-		i := len(pathname) - 1
-		j := 0
-		for {
-			if i < 0 || pathname[i] == '/' {
-				break
+		{
+			i := len(pathname) - 1
+			j := 0
+			for {
+				if i < 0 || pathname[i] == '/' {
+					break
+				}
+				if pathname[i] == ':' {
+					j = i
+				}
+				i--
 			}
-			if pathname[i] == ':' {
-				j = i
+			if j > 0 {
+				pathname = pathname[:j]
 			}
-			i--
-		}
-		if j > 0 {
-			pathname = pathname[:j]
 		}
 
 		// static routes
@@ -1631,8 +1633,8 @@ func esmRouter() rex.Handle {
 
 		// if the path is `ESMBuild`, return the built js/css content
 		if pathKind == EsmBuild {
-			// redirect the rewritten path
-			if buildCtx.Path() != pathname {
+			// if the build
+			if esm.SubPath != buildCtx.esm.SubPath {
 				buf, recycle := NewBuffer()
 				defer recycle()
 				fmt.Fprintf(buf, "export * from \"%s\";\n", buildCtx.Path())
