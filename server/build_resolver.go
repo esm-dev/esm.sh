@@ -80,22 +80,43 @@ func (ctx *BuildContext) resolveEntry(esm EsmPath) (entry BuildEntry) {
 		// reslove sub-module using `exports` conditions if exists
 		// see https://nodejs.org/api/packages.html#package-entry-points
 		if pkgJson.Exports.Len() > 0 {
-			exportEntry := BuildEntry{}
-			for _, name := range pkgJson.Exports.keys {
-				conditions, ok := pkgJson.Exports.values[name]
-				if ok {
-					if name == "./"+subModuleName || stripEntryModuleExt(name) == "./"+subModuleName {
+			var exportEntry BuildEntry
+			conditions, ok := pkgJson.Exports.Get("./" + subModuleName)
+			if ok {
+				if s, ok := conditions.(string); ok {
+					/**
+					exports: {
+						"./lib/foo": "./lib/foo.js"
+					}
+					*/
+					exportEntry.update(s, pkgJson.Type == "module")
+				} else if obj, ok := conditions.(JSONObject); ok {
+					/**
+					exports: {
+						"./lib/foo": {
+							"require": "./lib/foo.js",
+							"import": "./esm/foo.js",
+							"types": "./types/foo.d.ts"
+						}
+					}
+					*/
+					exportEntry = ctx.resolveConditionExportEntry(obj, pkgJson.Type)
+				}
+			} else {
+				for _, name := range pkgJson.Exports.keys {
+					conditions := pkgJson.Exports.values[name]
+					if stripEntryModuleExt(name) == "./"+subModuleName {
 						if s, ok := conditions.(string); ok {
 							/**
 							exports: {
-								"./lib/foo": "./lib/foo.js"
+								"./lib/foo.js": "./lib/foo.js"
 							}
 							*/
 							exportEntry.update(s, pkgJson.Type == "module")
 						} else if obj, ok := conditions.(JSONObject); ok {
 							/**
 							exports: {
-								"./lib/foo": {
+								"./lib/foo.js": {
 									"require": "./lib/foo.js",
 									"import": "./esm/foo.js",
 									"types": "./types/foo.d.ts"

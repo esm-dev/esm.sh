@@ -110,6 +110,10 @@ func (q *BuildQueue) run(task *BuildTask) {
 	q.lock.Lock()
 	q.queue.Remove(task.el)
 	delete(q.tasks, task.ctx.Path())
+	if task.ctx.rawPath != "" {
+		// the `Build` function may have changed the path
+		delete(q.tasks, task.ctx.rawPath)
+	}
 	q.chann += 1
 	q.lock.Unlock()
 

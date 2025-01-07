@@ -41,6 +41,7 @@ type BuildContext struct {
 	wd          string
 	pkgJson     *PackageJSON
 	path        string
+	rawPath     string
 	status      string
 	splitting   *set.ReadOnlySet[string]
 	esmImports  [][2]string
@@ -98,57 +99,7 @@ func (ctx *BuildContext) Path() string {
 		return ctx.path
 	}
 
-	asteriskPrefix := ""
-	if ctx.externalAll {
-		asteriskPrefix = "*"
-	}
-
-	esm := ctx.esm
-	if ctx.target == "types" {
-		if strings.HasSuffix(esm.SubPath, ".d.ts") {
-			ctx.path = fmt.Sprintf(
-				"/%s%s/%s%s",
-				asteriskPrefix,
-				esm.Name(),
-				ctx.getBuildArgsPrefix(true),
-				esm.SubPath,
-			)
-		} else {
-			ctx.path = "/" + esm.Specifier()
-		}
-		return ctx.path
-	}
-
-	name := strings.TrimSuffix(path.Base(esm.PkgName), ".js")
-	if esm.SubModuleName != "" {
-		if esm.SubModuleName == name {
-			// if the sub-module name is same as the package name
-			name = "__" + esm.SubModuleName
-		} else {
-			name = esm.SubModuleName
-		}
-		// workaround for es5-ext "../#/.." path
-		if esm.PkgName == "es5-ext" {
-			name = strings.ReplaceAll(name, "/#/", "/%23/")
-		}
-	}
-
-	if ctx.dev {
-		name += ".development"
-	}
-	if ctx.bundleMode == BundleAll {
-		name += ".bundle"
-	} else if ctx.bundleMode == BundleFalse {
-		name += ".nobundle"
-	}
-	ctx.path = fmt.Sprintf(
-		"/%s%s/%s%s/%s.mjs",
-		asteriskPrefix,
-		esm.Name(),
-		ctx.getBuildArgsPrefix(ctx.target == "types"),
-		ctx.target,
-		name,
-	)
+	ctx.buildPath()
 	return ctx.path
 }
 
@@ -230,6 +181,60 @@ func (ctx *BuildContext) Build() (meta *BuildMeta, err error) {
 		log.Errorf("db: %v", e)
 	}
 	return
+}
+
+func (ctx *BuildContext) buildPath() {
+	asteriskPrefix := ""
+	if ctx.externalAll {
+		asteriskPrefix = "*"
+	}
+
+	esm := ctx.esm
+	if ctx.target == "types" {
+		if strings.HasSuffix(esm.SubPath, ".d.ts") {
+			ctx.path = fmt.Sprintf(
+				"/%s%s/%s%s",
+				asteriskPrefix,
+				esm.Name(),
+				ctx.getBuildArgsPrefix(true),
+				esm.SubPath,
+			)
+		} else {
+			ctx.path = "/" + esm.Specifier()
+		}
+		return
+	}
+
+	name := strings.TrimSuffix(path.Base(esm.PkgName), ".js")
+	if esm.SubModuleName != "" {
+		if esm.SubModuleName == name {
+			// if the sub-module name is same as the package name
+			name = "__" + esm.SubModuleName
+		} else {
+			name = esm.SubModuleName
+		}
+		// workaround for es5-ext "../#/.." path
+		if esm.PkgName == "es5-ext" {
+			name = strings.ReplaceAll(name, "/#/", "/%23/")
+		}
+	}
+
+	if ctx.dev {
+		name += ".development"
+	}
+	if ctx.bundleMode == BundleAll {
+		name += ".bundle"
+	} else if ctx.bundleMode == BundleFalse {
+		name += ".nobundle"
+	}
+	ctx.path = fmt.Sprintf(
+		"/%s%s/%s%s/%s.mjs",
+		asteriskPrefix,
+		esm.Name(),
+		ctx.getBuildArgsPrefix(ctx.target == "types"),
+		ctx.target,
+		name,
+	)
 }
 
 func (ctx *BuildContext) buildModule(analyzeMode bool) (meta *BuildMeta, includes [][2]string, err error) {
@@ -1443,10 +1448,9 @@ func (ctx *BuildContext) buildTypes() (ret *BuildMeta, err error) {
 
 func (ctx *BuildContext) install() (err error) {
 	if ctx.wd == "" || ctx.pkgJson == nil {
-		var p *PackageJSON
-		p, err = ctx.npmrc.installPackage(ctx.esm.Package())
+		p, err := ctx.npmrc.installPackage(ctx.esm.Package())
 		if err != nil {
-			return
+			return err
 		}
 
 		if ctx.esm.GhPrefix || ctx.esm.PrPrefix {
@@ -1491,6 +1495,7 @@ func (ctx *BuildContext) install() (err error) {
 			if isMainModule {
 				ctx.esm.SubModuleName = ""
 				ctx.esm.SubPath = ""
+				ctx.rawPath = ctx.path
 				ctx.path = ""
 			}
 		}
