@@ -1343,14 +1343,14 @@ func resloveAsteriskPathMapping(obj JSONObject, diff string) JSONObject {
 	return reslovedConditions
 }
 
-func getAllExportsPaths(exports JSONObject) []string {
+func getExportConditionPaths(condition JSONObject) []string {
 	var values []string
-	for _, key := range exports.keys {
-		v := exports.values[key]
+	for _, key := range condition.keys {
+		v := condition.values[key]
 		if s, ok := v.(string); ok {
 			values = append(values, s)
 		} else if condition, ok := v.(JSONObject); ok {
-			values = append(values, getAllExportsPaths(condition)...)
+			values = append(values, getExportConditionPaths(condition)...)
 		}
 	}
 	return values
