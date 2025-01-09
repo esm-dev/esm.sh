@@ -946,7 +946,7 @@ func esmRouter() rex.Handle {
 				if hasTargetSegment {
 					pathKind = EsmBuild
 				}
-			case ".ts", ".mts":
+			case ".ts", ".mts", ".cts":
 				if endsWith(pathname, ".d.ts", ".d.mts", ".d.cts") {
 					pathKind = EsmDts
 				}
@@ -1169,10 +1169,12 @@ func esmRouter() rex.Handle {
 						}()
 					}
 				}
-				if endsWith(esm.SubPath, ".js", ".mjs", ".jsx") {
+				if endsWith(esm.SubPath, ".js", ".mjs", ".cjs") {
 					ctx.Header.Set("Content-Type", ctJavaScript)
-				} else if endsWith(esm.SubPath, ".ts", ".mts", ".tsx") {
+				} else if endsWith(esm.SubPath, ".ts", ".mts", ".cts", ".tsx") {
 					ctx.Header.Set("Content-Type", ctTypeScript)
+				} else if strings.HasSuffix(esm.SubPath, ".jsx") {
+					ctx.Header.Set("Content-Type", "text/jsx; charset=utf-8")
 				} else {
 					contentType := common.ContentType(esm.SubPath)
 					if contentType != "" {
