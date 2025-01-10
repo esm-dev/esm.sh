@@ -1379,7 +1379,6 @@ func normalizeSavePath(zoneId string, pathname string) string {
 // normalizeImportSpecifier normalizes the given specifier.
 func normalizeImportSpecifier(specifier string) string {
 	specifier = strings.TrimPrefix(specifier, "npm:")
-	specifier = strings.TrimPrefix(specifier, "./node_modules/")
 	if specifier == "." {
 		specifier = "./index"
 	} else if specifier == ".." {

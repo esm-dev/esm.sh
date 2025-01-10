@@ -24,7 +24,7 @@ type BundleMode uint8
 
 const (
 	BundleDefault BundleMode = iota
-	BundleAll
+	BundleDeps
 	BundleFalse
 )
 
@@ -221,7 +221,7 @@ func (ctx *BuildContext) buildPath() {
 	if ctx.dev {
 		name += ".development"
 	}
-	if ctx.bundleMode == BundleAll {
+	if ctx.bundleMode == BundleDeps {
 		name += ".bundle"
 	} else if ctx.bundleMode == BundleFalse {
 		name += ".nobundle"
@@ -531,7 +531,7 @@ func (ctx *BuildContext) buildModule(analyzeMode bool) (meta *BuildMeta, include
 
 					// externalize top-level module
 					// e.g. "react/jsx-runtime" imports "react"
-					if ctx.esm.SubModuleName != "" && specifier == ctx.esm.PkgName && ctx.bundleMode != BundleAll {
+					if ctx.esm.SubModuleName != "" && specifier == ctx.esm.PkgName && ctx.bundleMode != BundleDeps {
 						externalPath, err := ctx.resolveExternalModule(ctx.esm.PkgName, args.Kind, withTypeJSON, analyzeMode)
 						if err != nil {
 							return esbuild.OnResolveResult{}, err
@@ -544,7 +544,7 @@ func (ctx *BuildContext) buildModule(analyzeMode bool) (meta *BuildMeta, include
 					}
 
 					// bundles all dependencies in `bundle` mode, apart from peerDependencies and `?external` flag
-					if ctx.bundleMode == BundleAll && !ctx.args.external.Has(toPackageName(specifier)) && !implicitExternal.Has(specifier) {
+					if ctx.bundleMode == BundleDeps && !ctx.args.external.Has(toPackageName(specifier)) && !implicitExternal.Has(specifier) {
 						pkgName := toPackageName(specifier)
 						_, ok := pkgJson.PeerDependencies[pkgName]
 						if !ok {
@@ -553,13 +553,13 @@ func (ctx *BuildContext) buildModule(analyzeMode bool) (meta *BuildMeta, include
 					}
 
 					// bundle "@babel/runtime/*"
-					if (args.Kind != esbuild.ResolveJSDynamicImport && !noBundle) && pkgJson.Name != "@babel/runtime" && (strings.HasPrefix(specifier, "@babel/runtime/") || strings.Contains(args.Importer, "/@babel/runtime/")) {
+					if (args.Kind != esbuild.ResolveJSDynamicImport && !noBundle) && pkgJson.Name != "@babel/runtime" && pkgJson.Name != "@swc/helpers" && (strings.HasPrefix(specifier, "@babel/runtime/") || strings.Contains(args.Importer, "/@babel/runtime/") || strings.HasPrefix(specifier, "@swc/helpers/") || strings.Contains(args.Importer, "/@swc/helpers/")) {
 						return esbuild.OnResolveResult{}, nil
 					}
 
 					if strings.HasPrefix(specifier, "/") || isRelPathSpecifier(specifier) {
-						pkgName := ctx.esm.PkgName
 						specifier = strings.TrimPrefix(filename, path.Join(ctx.wd, "node_modules")+"/")
+						pkgName := ctx.esm.PkgName
 						isPkgModule := strings.HasPrefix(specifier, pkgName+"/")
 						if !isPkgModule && pkgJson.PkgName != "" {
 							// github packages may have different package name with the repository name
@@ -660,34 +660,46 @@ func (ctx *BuildContext) buildModule(analyzeMode bool) (meta *BuildMeta, include
 								}, nil
 							}
 
-							moduleFilename := path.Join(ctx.wd, "node_modules", ctx.esm.PkgName, modulePath)
+							filename = path.Join(ctx.wd, "node_modules", ctx.esm.PkgName, modulePath)
 
-							// split the module that is an alias of a dependency
-							// means this file just include a single line(js): `export * from "dep"`
-							if entry.module && len(pkgJson.Dependencies)+len(pkgJson.PeerDependencies) > 0 {
-								fi, err := os.Lstat(moduleFilename)
-								if err == nil && fi.Size() < 256 {
-									data, err := os.ReadFile(moduleFilename)
+							// split the module that includes `export * from "external"` statement
+							if entry.module && len(pkgJson.Dependencies)+len(pkgJson.PeerDependencies) > 0 && args.Kind == esbuild.ResolveJSImportStatement {
+								fi, err := os.Lstat(filename)
+								if err == nil && fi.Size() < 512 {
+									data, err := os.ReadFile(filename)
 									if err == nil {
-										var exportFrom string
+										var exportFrom []string
+										var moreStmt bool
 										for _, line := range bytes.Split(data, []byte{'\n'}) {
 											line = bytes.TrimSpace(line)
-											if strings.HasPrefix(string(line), "export * from") || strings.HasPrefix(string(line), "export*from") {
+											if len(line) == 0 || bytes.HasPrefix(line, []byte("//")) || (bytes.HasPrefix(line, []byte("/*")) && bytes.HasSuffix(line, []byte("*/"))) {
+												// skip comments
+												continue
+											} else if bytes.HasPrefix(line, []byte("export * from")) || bytes.HasPrefix(line, []byte("export*from")) || (bytes.HasPrefix(line, []byte("export")) && bytes.HasPrefix(bytes.ReplaceAll(line, []byte{' '}, []byte{}), []byte("export*from"))) {
 												a := bytes.Split(line, []byte{'"'})
 												if len(a) != 3 {
 													a = bytes.Split(line, []byte{'\''})
 												}
 												if len(a) == 3 {
-													exportFrom = string(a[1])
-													break
+													exportFrom = append(exportFrom, string(a[1]))
 												}
-											} else if !(bytes.HasPrefix(line, []byte("//")) || (bytes.HasPrefix(line, []byte("/*")) && bytes.HasSuffix(line, []byte("*/")))) {
-												exportFrom = ""
-												break
+											} else {
+												moreStmt = true
 											}
 										}
-										if exportFrom != "" && !isRelPathSpecifier(exportFrom) {
-											externalPath, err := ctx.resolveExternalModule(exportFrom, args.Kind, withTypeJSON, analyzeMode)
+										// single `export * from "external"` statement
+										if len(exportFrom) == 1 && !moreStmt && !isRelPathSpecifier(exportFrom[0]) {
+											externalPath, err := ctx.resolveExternalModule(exportFrom[0], args.Kind, withTypeJSON, analyzeMode)
+											if err != nil {
+												return esbuild.OnResolveResult{}, err
+											}
+											return esbuild.OnResolveResult{
+												Path:     externalPath,
+												External: true,
+											}, nil
+										}
+										if len(exportFrom) > 0 && moreStmt {
+											externalPath, err := ctx.resolveExternalModule(specifier, args.Kind, withTypeJSON, false)
 											if err != nil {
 												return esbuild.OnResolveResult{}, err
 											}
@@ -706,48 +718,46 @@ func (ctx *BuildContext) buildModule(analyzeMode bool) (meta *BuildMeta, include
 							// - it's not a dynamic import and the `?bundle=false` flag is not present
 							// - it's not in the `splitting` list
 							if modulePath == entry.main || (asExport != "" && asExport == entrySpecifier) || (args.Kind != esbuild.ResolveJSDynamicImport && !noBundle) {
-								if existsFile(moduleFilename) {
+								if existsFile(filename) {
 									pkgDir := path.Join(ctx.wd, "node_modules", ctx.esm.PkgName)
-									short := strings.TrimPrefix(moduleFilename, pkgDir)[1:]
-									if analyzeMode && moduleFilename != entryModuleFilename && strings.HasPrefix(args.Importer, pkgDir) {
+									short := strings.TrimPrefix(filename, pkgDir)[1:]
+									if analyzeMode && filename != entryModuleFilename && strings.HasPrefix(args.Importer, pkgDir) {
 										includes = append(includes, [2]string{short, strings.TrimPrefix(args.Importer, pkgDir)[1:]})
 									}
 									if !analyzeMode && ctx.splitting != nil && ctx.splitting.Has(short) {
-										asExport = pkgJson.Name + utils.NormalizePathname(stripEntryModuleExt(short))
-										if asExport != entrySpecifier && asExport != entrySpecifier+"/index" {
-											externalPath, err := ctx.resolveExternalModule(asExport, args.Kind, withTypeJSON, false)
-											if err != nil {
-												return esbuild.OnResolveResult{}, err
-											}
-											return esbuild.OnResolveResult{
-												Path:        externalPath,
-												External:    true,
-												SideEffects: pkgSideEffects,
-											}, nil
+										specifier = pkgJson.Name + utils.NormalizePathname(stripEntryModuleExt(short))
+										externalPath, err := ctx.resolveExternalModule(specifier, args.Kind, withTypeJSON, false)
+										if err != nil {
+											return esbuild.OnResolveResult{}, err
 										}
+										return esbuild.OnResolveResult{
+											Path:        externalPath,
+											External:    true,
+											SideEffects: pkgSideEffects,
+										}, nil
 									}
 									// embed wasm as WebAssembly.Module
-									if strings.HasSuffix(moduleFilename, ".wasm") {
+									if strings.HasSuffix(filename, ".wasm") {
 										return esbuild.OnResolveResult{
-											Path:      moduleFilename,
+											Path:      filename,
 											Namespace: "wasm",
 										}, nil
 									}
 									// transfrom svelte component
-									if strings.HasSuffix(moduleFilename, ".svelte") {
+									if strings.HasSuffix(filename, ".svelte") {
 										return esbuild.OnResolveResult{
-											Path:      moduleFilename,
+											Path:      filename,
 											Namespace: "svelte",
 										}, nil
 									}
 									// transfrom Vue SFC
-									if strings.HasSuffix(moduleFilename, ".vue") {
+									if strings.HasSuffix(filename, ".vue") {
 										return esbuild.OnResolveResult{
-											Path:      moduleFilename,
+											Path:      filename,
 											Namespace: "vue",
 										}, nil
 									}
-									return esbuild.OnResolveResult{Path: moduleFilename}, nil
+									return esbuild.OnResolveResult{Path: filename}, nil
 								}
 								// otherwise, let esbuild to handle it
 								return esbuild.OnResolveResult{}, nil
@@ -1465,13 +1475,17 @@ func (ctx *BuildContext) install() (err error) {
 		ctx.pkgJson = p
 	}
 
-	// install dependencies in bundle mode
-	if ctx.bundleMode == BundleAll {
+	// - install dependencies in `BundleDeps` mode
+	// - install '@babel/runtime' and '@swc/helpers' if they are present in the dependencies in `BundleDefault` mode
+	if ctx.bundleMode == BundleDeps {
 		ctx.npmrc.installDependencies(ctx.wd, ctx.pkgJson, false, nil)
-	} else if v, ok := ctx.pkgJson.Dependencies["@babel/runtime"]; ok {
-		// we bundle @babel/runtime modules even not in bundle mode
-		// install it if it's in the dependencies
-		ctx.npmrc.installDependencies(ctx.wd, &PackageJSON{Dependencies: map[string]string{"@babel/runtime": v}}, false, nil)
+	} else if ctx.bundleMode == BundleDefault {
+		if v, ok := ctx.pkgJson.Dependencies["@babel/runtime"]; ok {
+			ctx.npmrc.installDependencies(ctx.wd, &PackageJSON{Dependencies: map[string]string{"@babel/runtime": v}}, false, nil)
+		}
+		if v, ok := ctx.pkgJson.Dependencies["@swc/helpers"]; ok {
+			ctx.npmrc.installDependencies(ctx.wd, &PackageJSON{Dependencies: map[string]string{"@swc/helpers": v}}, false, nil)
+		}
 	}
 	return
 }

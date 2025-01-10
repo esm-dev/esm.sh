@@ -1505,7 +1505,7 @@ func esmRouter() rex.Handle {
 
 		bundleMode := BundleDefault
 		if (query.Has("bundle") && query.Get("bundle") != "false") || query.Has("bundle-all") || query.Has("bundle-deps") || query.Has("standalone") {
-			bundleMode = BundleAll
+			bundleMode = BundleDeps
 		} else if query.Has("no-bundle") || query.Get("bundle") == "false" {
 			bundleMode = BundleFalse
 		}
@@ -1529,7 +1529,7 @@ func esmRouter() rex.Handle {
 					submodule := strings.Join(a[1:], "/")
 					if strings.HasSuffix(submodule, ".bundle") {
 						submodule = strings.TrimSuffix(submodule, ".bundle")
-						bundleMode = BundleAll
+						bundleMode = BundleDeps
 					} else if strings.HasSuffix(submodule, ".nobundle") {
 						submodule = strings.TrimSuffix(submodule, ".nobundle")
 						bundleMode = BundleFalse

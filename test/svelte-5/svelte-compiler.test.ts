@@ -24,7 +24,7 @@ Deno.test("svelte compiler", async () => {
   );
 
   assertStringIncludes(ret.js.code, `import { onMount } from "svelte"`);
-  assertStringIncludes(ret.js.code, `"svelte/internal/client"`);
+  assertStringIncludes(ret.js.code, `svelte/internal/client`);
   assertStringIncludes(ret.js.code, "console.log('mounted')");
   assertStringIncludes(ret.js.code, "let name = 'world'");
   assertStringIncludes(ret.js.code, "template(`<h1> </h1>`)");
@@ -41,7 +41,7 @@ Deno.test("svelte compiler(SSR)", async () => {
   );
 
   assertStringIncludes(ret.js.code, `import { onMount } from "svelte"`);
-  assertStringIncludes(ret.js.code, `"svelte/internal/server"`);
+  assertStringIncludes(ret.js.code, `svelte/internal/server`);
   assertStringIncludes(ret.js.code, "let name = 'world'");
   assertStringIncludes(ret.js.code, "console.log('mounted')");
   assertStringIncludes(ret.js.code, "`<h1>Hello ");
