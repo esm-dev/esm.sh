@@ -28,6 +28,7 @@ var cjsModuleLexerIgnoredPackages = set.New[string](
 	"cheerio",
 	"graceful-fs",
 	"he",
+	"lodash",
 	"lz-string",
 	"maplibre-gl",
 	"pako",

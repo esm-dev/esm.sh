@@ -1125,35 +1125,28 @@ func (ctx *BuildContext) lexer(entry *BuildEntry) (ret *BuildMeta, cjsExports []
 func (ctx *BuildContext) analyzeSplitting() (err error) {
 	if ctx.bundleMode == BundleDefault && ctx.pkgJson.Exports.Len() > 1 {
 		exportNames := set.New[string]()
-		exportAll := false
 		for _, exportName := range ctx.pkgJson.Exports.keys {
 			exportName := stripEntryModuleExt(exportName)
-			if (exportName == "." || strings.HasPrefix(exportName, "./")) && !endsWith(exportName, ".json", ".css", ".wasm", ".d.ts", ".d.mts", ".d.cts") {
-				if exportName == "./*" {
-					exportAll = true
-					break
+			if (exportName == "." || (strings.HasPrefix(exportName, "./") && !strings.ContainsRune(exportName, '*'))) && !endsWith(exportName, ".json", ".css", ".wasm", ".d.ts", ".d.mts", ".d.cts") {
+				v := ctx.pkgJson.Exports.values[exportName]
+				if s, ok := v.(string); ok {
+					if endsWith(s, ".json", ".css", ".wasm", ".d.ts", ".d.mts", ".d.cts") {
+						continue
+					}
+				} else if obj, ok := v.(JSONObject); ok {
+					// ignore types only exports
+					if len(obj.keys) == 1 && obj.keys[0] == "types" {
+						continue
+					}
 				}
-				if !strings.ContainsRune(exportName, '*') {
-					v := ctx.pkgJson.Exports.values[exportName]
-					if s, ok := v.(string); ok {
-						if endsWith(s, ".json", ".css", ".wasm", ".d.ts", ".d.mts", ".d.cts") {
-							continue
-						}
-					} else if obj, ok := v.(JSONObject); ok {
-						// ignore types only exports
-						if len(obj.keys) == 1 && obj.keys[0] == "types" {
-							continue
-						}
-					}
-					if exportName == "." {
-						exportNames.Add("")
-					} else if strings.HasPrefix(exportName, "./") {
-						exportNames.Add(exportName[2:])
-					}
+				if exportName == "." {
+					exportNames.Add("")
+				} else if strings.HasPrefix(exportName, "./") {
+					exportNames.Add(exportName[2:])
 				}
 			}
 		}
-		if !exportAll && exportNames.Len() > 1 {
+		if exportNames.Len() > 1 {
 			splittingTxtPath := path.Join(ctx.wd, "splitting.txt")
 			readSplittingTxt := func() bool {
 				f, err := os.Open(splittingTxtPath)
@@ -1386,7 +1379,6 @@ func normalizeSavePath(zoneId string, pathname string) string {
 // normalizeImportSpecifier normalizes the given specifier.
 func normalizeImportSpecifier(specifier string) string {
 	specifier = strings.TrimPrefix(specifier, "npm:")
-	specifier = strings.TrimPrefix(specifier, "./node_modules/")
 	if specifier == "." {
 		specifier = "./index"
 	} else if specifier == ".." {
