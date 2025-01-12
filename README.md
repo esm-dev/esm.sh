@@ -131,10 +131,10 @@ Or you can override the bundling strategy by adding the `esm.sh` field to your `
 }
 ```
 
-You can also use the `?bundle=all` query to bundle the module along with all its external dependencies (excluding those in `peerDependencies`) into a single JavaScript file.
+You can also add the `?standalone` flag to bundle the module along with all its external dependencies (excluding those in `peerDependencies`) into a single JavaScript file.
 
 ```js
-import { Button } from "https://esm.sh/antd?bundle=all";
+import { Button } from "https://esm.sh/antd?standalone";
 ```
 
 ### Tree Shaking
@@ -150,23 +150,23 @@ import { __await, __rest } from "https://esm.sh/tslib?exports=__await,__rest"; /
 By using this feature, you can take advantage of tree shaking with esbuild and achieve a smaller bundle size. **Note,
 this feature doesn't work with CommonJS modules.**
 
-### Development Mode
+### Development Build
 
 ```js
 import React from "https://esm.sh/react?dev";
 ```
 
-With the `?dev` option, esm.sh builds a module with `process.env.NODE_ENV` set to `"development"` or based on the
+With the `?dev` query, esm.sh builds a module with `process.env.NODE_ENV` set to `"development"` or based on the
 condition `development` in the `exports` field. This is useful for libraries that have different behavior in development
 and production. For example, React uses a different warning message in development mode.
 
 ### ESBuild Options
 
 By default, esm.sh checks the `User-Agent` header to determine the build target. You can also specify the `target` by
-adding `?target`, available targets are: **es2015** - **es2022**, **esnext**, **deno**, **denonext**, and **node**.
+adding `?target`, available targets are: **es2015** - **es2024**, **esnext**, **deno**, **denonext**, and **node**.
 
 ```js
-import React from "https://esm.sh/react?target=esnext";
+import React from "https://esm.sh/react?target=es2022";
 ```
 
 Other supported options of esbuild:
