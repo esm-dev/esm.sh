@@ -35,7 +35,6 @@ type BuildContext struct {
 	bundleMode  BundleMode
 	externalAll bool
 	target      string
-	pinedTarget bool
 	dev         bool
 	wd          string
 	pkgJson     *PackageJSON
@@ -315,7 +314,6 @@ func (ctx *BuildContext) buildModule(analyzeMode bool) (meta *BuildMeta, include
 			args:        ctx.args,
 			externalAll: ctx.externalAll,
 			target:      ctx.target,
-			pinedTarget: ctx.pinedTarget,
 			dev:         ctx.dev,
 		}
 		err = b.install()
@@ -1271,7 +1269,6 @@ REBUILD:
 									args:        ctx.args,
 									externalAll: ctx.externalAll,
 									target:      ctx.target,
-									pinedTarget: ctx.pinedTarget,
 									dev:         ctx.dev,
 								}
 								err = b.install()

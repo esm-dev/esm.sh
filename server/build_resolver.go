@@ -1239,7 +1239,6 @@ func (ctx *BuildContext) analyzeSplitting() (err error) {
 					args:        ctx.args,
 					externalAll: ctx.externalAll,
 					target:      ctx.target,
-					pinedTarget: ctx.pinedTarget,
 					dev:         ctx.dev,
 					wd:          ctx.wd,
 					pkgJson:     ctx.pkgJson,
