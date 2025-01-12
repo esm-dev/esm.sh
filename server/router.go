@@ -145,7 +145,7 @@ func esmRouter() rex.Handle {
 					go buildStorage.Put(savePath+".map", strings.NewReader(output.Map))
 				}
 				go buildStorage.Put(savePath, strings.NewReader(output.Code))
-				ctx.Header.Set("Cache-Control", ccMustRevalidate)
+				ctx.SetHeader("Cache-Control", ccMustRevalidate)
 				return output
 
 			case "/purge":
@@ -216,8 +216,8 @@ func esmRouter() rex.Handle {
 			if err != nil {
 				return err
 			}
-			ctx.Header.Set("Content-Type", "image/x-icon")
-			ctx.Header.Set("Cache-Control", ccImmutable)
+			ctx.SetHeader("Content-Type", "image/x-icon")
+			ctx.SetHeader("Cache-Control", ccImmutable)
 			return favicon
 
 		case "/robots.txt":
@@ -225,7 +225,7 @@ func esmRouter() rex.Handle {
 
 		case "/":
 			if strings.HasPrefix(ctx.UserAgent(), "Deno/") {
-				ctx.Header.Set("Content-Type", ctJavaScript)
+				ctx.SetHeader("Content-Type", ctJavaScript)
 				return `throw new Error("[esm.sh] The deno CLI has been deprecated, please use our vscode extension instead: https://marketplace.visualstudio.com/items?itemName=ije.esm-vscode")`
 			}
 			if ctx.R.Header.Get("If-None-Match") == globalETag {
@@ -276,9 +276,9 @@ func esmRouter() rex.Handle {
 			if err != nil {
 				return rex.Status(500, err.Error())
 			}
-			ctx.Header.Set("Content-Type", ctHTML)
-			ctx.Header.Set("Cache-Control", ccMustRevalidate)
-			ctx.Header.Set("Etag", globalETag)
+			ctx.SetHeader("Content-Type", ctHTML)
+			ctx.SetHeader("Cache-Control", ccMustRevalidate)
+			ctx.SetHeader("Etag", globalETag)
 			return indexHTML
 
 		case "/status.json":
@@ -313,7 +313,7 @@ func esmRouter() rex.Handle {
 				disk = "error"
 			}
 
-			ctx.Header.Set("Cache-Control", ccMustRevalidate)
+			ctx.SetHeader("Cache-Control", ccMustRevalidate)
 			return map[string]any{
 				"buildQueue": q[:i],
 				"version":    VERSION,
@@ -408,15 +408,15 @@ func esmRouter() rex.Handle {
 				return rex.Status(500, err.Error())
 			}
 			if DEBUG {
-				ctx.Header.Set("Cache-Control", ccMustRevalidate)
+				ctx.SetHeader("Cache-Control", ccMustRevalidate)
 			} else {
-				ctx.Header.Set("Cache-Control", ccOneDay)
+				ctx.SetHeader("Cache-Control", ccOneDay)
 			}
-			ctx.Header.Set("Etag", globalETag)
+			ctx.SetHeader("Etag", globalETag)
 			if targetFromUA {
 				appendVaryHeader(ctx.W.Header(), "User-Agent")
 			}
-			ctx.Header.Set("Content-Type", ctJavaScript)
+			ctx.SetHeader("Content-Type", ctJavaScript)
 			return js
 		}
 
@@ -432,12 +432,12 @@ func esmRouter() rex.Handle {
 				return rex.Status(500, err.Error())
 			}
 			if strings.HasSuffix(pathname, ".map") {
-				ctx.Header.Set("Content-Type", ctJSON)
+				ctx.SetHeader("Content-Type", ctJSON)
 			} else {
-				ctx.Header.Set("Content-Type", ctJavaScript)
+				ctx.SetHeader("Content-Type", ctJavaScript)
 			}
-			ctx.Header.Set("Last-Modified", fi.ModTime().UTC().Format(http.TimeFormat))
-			ctx.Header.Set("Cache-Control", ccImmutable)
+			ctx.SetHeader("Last-Modified", fi.ModTime().UTC().Format(http.TimeFormat))
+			ctx.SetHeader("Cache-Control", ccImmutable)
 			return f // auto closed
 		}
 
@@ -455,16 +455,16 @@ func esmRouter() rex.Handle {
 				code = []byte("export default {}")
 			}
 			if strings.HasPrefix(name, "chunk-") {
-				ctx.Header.Set("Cache-Control", ccImmutable)
+				ctx.SetHeader("Cache-Control", ccImmutable)
 			} else {
 				ifNoneMatch := ctx.R.Header.Get("If-None-Match")
 				if ifNoneMatch == globalETag && !DEBUG {
 					return rex.Status(http.StatusNotModified, nil)
 				}
-				ctx.Header.Set("Cache-Control", ccOneDay)
-				ctx.Header.Set("Etag", globalETag)
+				ctx.SetHeader("Cache-Control", ccOneDay)
+				ctx.SetHeader("Etag", globalETag)
 			}
-			ctx.Header.Set("Content-Type", ctJavaScript)
+			ctx.SetHeader("Content-Type", ctJavaScript)
 			return code
 		}
 
@@ -475,18 +475,18 @@ func esmRouter() rex.Handle {
 				return rex.Status(404, "not found")
 			}
 			if !DEBUG {
-				ctx.Header.Set("Cache-Control", ccMustRevalidate)
+				ctx.SetHeader("Cache-Control", ccMustRevalidate)
 			} else {
 				etag := fmt.Sprintf(`W/"%d%d"`, startTime.Unix(), len(data))
 				if ifNoneMatch := ctx.R.Header.Get("If-None-Match"); ifNoneMatch == etag {
 					return rex.Status(http.StatusNotModified, nil)
 				}
-				ctx.Header.Set("Etag", etag)
-				ctx.Header.Set("Cache-Control", ccOneDay)
+				ctx.SetHeader("Etag", etag)
+				ctx.SetHeader("Cache-Control", ccOneDay)
 			}
 			contentType := common.ContentType(pathname)
 			if contentType != "" {
-				ctx.Header.Set("Content-Type", contentType)
+				ctx.SetHeader("Content-Type", contentType)
 			}
 			return data
 		}
@@ -581,8 +581,8 @@ func esmRouter() rex.Handle {
 					return rex.Status(500, err.Error())
 				}
 				if err == nil {
-					ctx.Header.Set("Cache-Control", ccImmutable)
-					ctx.Header.Set("Content-Type", ctCSS)
+					ctx.SetHeader("Cache-Control", ccImmutable)
+					ctx.SetHeader("Content-Type", ctCSS)
 					return r // auto closed
 				}
 				res, err := fetchClient.Fetch(ctxUrl, nil)
@@ -700,8 +700,8 @@ func esmRouter() rex.Handle {
 				}
 				minifiedCSS := ret.OutputFiles[0].Contents
 				go buildStorage.Put(savePath, bytes.NewReader(minifiedCSS))
-				ctx.Header.Set("Cache-Control", ccImmutable)
-				ctx.Header.Set("Content-Type", ctCSS)
+				ctx.SetHeader("Cache-Control", ccImmutable)
+				ctx.SetHeader("Content-Type", ctCSS)
 				return minifiedCSS
 			} else {
 				im := query.Get("im")
@@ -817,11 +817,11 @@ func esmRouter() rex.Handle {
 					}
 					body = strings.NewReader(fmt.Sprintf("var style = document.createElement('style');\nstyle.textContent = %s;\ndocument.head.appendChild(style);\nexport default null;", utils.MustEncodeJSON(string(css))))
 				}
-				ctx.Header.Set("Cache-Control", ccImmutable)
+				ctx.SetHeader("Cache-Control", ccImmutable)
 				if extname == ".css" {
-					ctx.Header.Set("Content-Type", ctCSS)
+					ctx.SetHeader("Content-Type", ctCSS)
 				} else {
-					ctx.Header.Set("Content-Type", ctJavaScript)
+					ctx.SetHeader("Content-Type", ctJavaScript)
 				}
 				return body // auto closed
 			}
@@ -996,7 +996,7 @@ func esmRouter() rex.Handle {
 				if rawQuery != "" {
 					query = "?" + rawQuery
 				}
-				ctx.Header.Set("Cache-Control", fmt.Sprintf("public, max-age=%d", config.NpmQueryCacheTTL))
+				ctx.SetHeader("Cache-Control", fmt.Sprintf("public, max-age=%d", config.NpmQueryCacheTTL))
 				return redirect(ctx, fmt.Sprintf("%s/%s%s%s", origin, pkgName, subPath, query), false)
 			}
 			if pathKind != EsmEntry {
@@ -1027,7 +1027,7 @@ func esmRouter() rex.Handle {
 				if rawQuery != "" {
 					query = "?" + rawQuery
 				}
-				ctx.Header.Set("Cache-Control", fmt.Sprintf("public, max-age=%d", config.NpmQueryCacheTTL))
+				ctx.SetHeader("Cache-Control", fmt.Sprintf("public, max-age=%d", config.NpmQueryCacheTTL))
 				return redirect(ctx, fmt.Sprintf("%s%s/%s@%s%s%s", origin, registryPrefix, pkgName, pkgVersion, subPath, query), false)
 			}
 		} else {
@@ -1037,8 +1037,8 @@ func esmRouter() rex.Handle {
 				wasmUrl := origin + pathname
 				fmt.Fprintf(buf, "/* esm.sh - wasm module */\n")
 				fmt.Fprintf(buf, "const data = await fetch(%s).then(r => r.arrayBuffer());\nexport default new WebAssembly.Module(data);", strings.TrimSpace(string(utils.MustEncodeJSON(wasmUrl))))
-				ctx.Header.Set("Content-Type", ctJavaScript)
-				ctx.Header.Set("Cache-Control", ccImmutable)
+				ctx.SetHeader("Content-Type", ctJavaScript)
+				ctx.SetHeader("Cache-Control", ccImmutable)
 				return buf
 			}
 
@@ -1170,29 +1170,29 @@ func esmRouter() rex.Handle {
 					}
 				}
 				if endsWith(esm.SubPath, ".js", ".mjs", ".cjs") {
-					ctx.Header.Set("Content-Type", ctJavaScript)
+					ctx.SetHeader("Content-Type", ctJavaScript)
 				} else if endsWith(esm.SubPath, ".ts", ".mts", ".cts", ".tsx") {
-					ctx.Header.Set("Content-Type", ctTypeScript)
+					ctx.SetHeader("Content-Type", ctTypeScript)
 				} else if strings.HasSuffix(esm.SubPath, ".jsx") {
-					ctx.Header.Set("Content-Type", "text/jsx; charset=utf-8")
+					ctx.SetHeader("Content-Type", "text/jsx; charset=utf-8")
 				} else {
 					contentType := common.ContentType(esm.SubPath)
 					if contentType != "" {
-						ctx.Header.Set("Content-Type", contentType)
+						ctx.SetHeader("Content-Type", contentType)
 					}
 				}
 				if cacheHit {
-					ctx.Header.Set("X-Raw-File-Cache-Status", "HIT")
+					ctx.SetHeader("X-Raw-File-Cache-Status", "HIT")
 				}
-				ctx.Header.Set("Etag", etag)
-				ctx.Header.Set("Last-Modified", stat.ModTime().UTC().Format(http.TimeFormat))
-				ctx.Header.Set("Cache-Control", ccImmutable)
+				ctx.SetHeader("Etag", etag)
+				ctx.SetHeader("Last-Modified", stat.ModTime().UTC().Format(http.TimeFormat))
+				ctx.SetHeader("Cache-Control", ccImmutable)
 				if strings.HasSuffix(esm.SubPath, ".json") && query.Has("module") {
 					jsonData, err := io.ReadAll(content)
 					if err != nil {
 						return rex.Status(500, err.Error())
 					}
-					ctx.Header.Set("Content-Type", ctJavaScript)
+					ctx.SetHeader("Content-Type", ctJavaScript)
 					return concatBytes([]byte("export default "), jsonData)
 				}
 				return content // auto closed
@@ -1216,16 +1216,16 @@ func esmRouter() rex.Handle {
 					}
 				}
 				if err == nil {
-					ctx.Header.Set("Last-Modified", stat.ModTime().UTC().Format(http.TimeFormat))
-					ctx.Header.Set("Cache-Control", ccImmutable)
+					ctx.SetHeader("Last-Modified", stat.ModTime().UTC().Format(http.TimeFormat))
+					ctx.SetHeader("Cache-Control", ccImmutable)
 					if pathKind == EsmDts {
-						ctx.Header.Set("Content-Type", ctTypeScript)
+						ctx.SetHeader("Content-Type", ctTypeScript)
 					} else if pathKind == EsmSourceMap {
-						ctx.Header.Set("Content-Type", ctJSON)
+						ctx.SetHeader("Content-Type", ctJSON)
 					} else if strings.HasSuffix(pathname, ".css") {
-						ctx.Header.Set("Content-Type", ctCSS)
+						ctx.SetHeader("Content-Type", ctCSS)
 					} else {
-						ctx.Header.Set("Content-Type", ctJavaScript)
+						ctx.SetHeader("Content-Type", ctJavaScript)
 						// check `?exports` query
 						jsIndentSet := set.New[string]()
 						if query.Has("exports") {
@@ -1471,7 +1471,7 @@ func esmRouter() rex.Handle {
 						return rex.Status(500, "Failed to build types: "+output.err.Error())
 					}
 				case <-time.After(time.Duration(config.BuildWaitTime) * time.Second):
-					ctx.Header.Set("Cache-Control", ccMustRevalidate)
+					ctx.SetHeader("Cache-Control", ccMustRevalidate)
 					return rex.Status(http.StatusRequestTimeout, "timeout, the types is waiting to be built, please try refreshing the page.")
 				}
 				content, _, err = readDts()
@@ -1487,8 +1487,8 @@ func esmRouter() rex.Handle {
 			if err != nil {
 				return rex.Status(500, err.Error())
 			}
-			ctx.Header.Set("Content-Type", ctTypeScript)
-			ctx.Header.Set("Cache-Control", ccImmutable)
+			ctx.SetHeader("Content-Type", ctTypeScript)
+			ctx.SetHeader("Cache-Control", ccImmutable)
 			return bytes.ReplaceAll(buffer, []byte("{ESM_CDN_ORIGIN}"), []byte(origin))
 		}
 
@@ -1568,7 +1568,6 @@ func esmRouter() rex.Handle {
 			bundleMode:  bundleMode,
 			externalAll: externalAll,
 			target:      target,
-			pinedTarget: !targetFromUA,
 			dev:         isDev,
 		}
 		ret, ok, err := buildCtx.Exists()
@@ -1581,10 +1580,8 @@ func esmRouter() rex.Handle {
 			case output := <-ch:
 				if output.err != nil {
 					msg := output.err.Error()
-					if strings.Contains(msg, "no such file or directory") ||
-						strings.Contains(msg, "is not exported from package") ||
-						strings.Contains(msg, "could not resolve build entry") {
-						ctx.Header.Set("Cache-Control", ccImmutable)
+					if strings.Contains(msg, "no such file or directory") || strings.Contains(msg, "is not exported from package") || strings.Contains(msg, "could not resolve build entry") {
+						ctx.SetHeader("Cache-Control", ccImmutable)
 						return rex.Status(404, "module not found")
 					}
 					if strings.HasSuffix(msg, " not found") {
@@ -1594,7 +1591,7 @@ func esmRouter() rex.Handle {
 				}
 				ret = output.meta
 			case <-time.After(time.Duration(config.BuildWaitTime) * time.Second):
-				ctx.Header.Set("Cache-Control", ccMustRevalidate)
+				ctx.SetHeader("Cache-Control", ccMustRevalidate)
 				return rex.Status(http.StatusRequestTimeout, "timeout, the module is waiting to be built, please try refreshing the page.")
 			}
 		}
@@ -1602,9 +1599,9 @@ func esmRouter() rex.Handle {
 		// redirect to `*.d.ts` file
 		if ret.TypesOnly {
 			dtsUrl := origin + ret.Dts
-			ctx.Header.Set("X-TypeScript-Types", dtsUrl)
-			ctx.Header.Set("Content-Type", ctJavaScript)
-			ctx.Header.Set("Cache-Control", ccImmutable)
+			ctx.SetHeader("X-TypeScript-Types", dtsUrl)
+			ctx.SetHeader("Content-Type", ctJavaScript)
+			ctx.SetHeader("Cache-Control", ccImmutable)
 			if ctx.R.Method == http.MethodHead {
 				return []byte{}
 			}
@@ -1643,8 +1640,8 @@ func esmRouter() rex.Handle {
 				if ret.ExportDefault {
 					fmt.Fprintf(buf, "export { default } from \"%s\";\n", buildCtx.Path())
 				}
-				ctx.Header.Set("Content-Type", ctJavaScript)
-				ctx.Header.Set("Cache-Control", ccImmutable)
+				ctx.SetHeader("Content-Type", ctJavaScript)
+				ctx.SetHeader("Cache-Control", ccImmutable)
 				return buf.Bytes()
 			}
 			savePath := buildCtx.getSavepath()
@@ -1659,14 +1656,14 @@ func esmRouter() rex.Handle {
 				}
 				return rex.Status(500, err.Error())
 			}
-			ctx.Header.Set("Last-Modified", fi.ModTime().UTC().Format(http.TimeFormat))
-			ctx.Header.Set("Cache-Control", ccImmutable)
+			ctx.SetHeader("Last-Modified", fi.ModTime().UTC().Format(http.TimeFormat))
+			ctx.SetHeader("Cache-Control", ccImmutable)
 			if endsWith(savePath, ".css") {
-				ctx.Header.Set("Content-Type", ctCSS)
+				ctx.SetHeader("Content-Type", ctCSS)
 			} else if endsWith(savePath, ".map") {
-				ctx.Header.Set("Content-Type", ctJSON)
+				ctx.SetHeader("Content-Type", ctJSON)
 			} else {
-				ctx.Header.Set("Content-Type", ctJavaScript)
+				ctx.SetHeader("Content-Type", ctJavaScript)
 				if isWorker {
 					defer f.Close()
 					moduleUrl := origin + buildCtx.Path()
@@ -1731,7 +1728,7 @@ func esmRouter() rex.Handle {
 			if !ret.CJS && len(exports) > 0 {
 				esm += "?exports=" + strings.Join(exports, ",")
 			}
-			ctx.Header.Set("X-ESM-Path", esm)
+			ctx.SetHeader("X-ESM-Path", esm)
 			fmt.Fprintf(buf, "export * from \"%s\";\n", esm)
 			if ret.ExportDefault && (len(exports) == 0 || stringInSlice(exports, "default")) {
 				fmt.Fprintf(buf, "export { default } from \"%s\";\n", esm)
@@ -1741,10 +1738,10 @@ func esmRouter() rex.Handle {
 				fmt.Fprintf(buf, "export const { %s } = _;\n", strings.Join(exports, ", "))
 			}
 			if !noDts && ret.Dts != "" {
-				ctx.Header.Set("X-TypeScript-Types", origin+ret.Dts)
-				ctx.Header.Set("Access-Control-Expose-Headers", "X-ESM-Path, X-TypeScript-Types")
+				ctx.SetHeader("X-TypeScript-Types", origin+ret.Dts)
+				ctx.SetHeader("Access-Control-Expose-Headers", "X-ESM-Path, X-TypeScript-Types")
 			} else {
-				ctx.Header.Set("Access-Control-Expose-Headers", "X-ESM-Path")
+				ctx.SetHeader("Access-Control-Expose-Headers", "X-ESM-Path")
 			}
 		}
 
@@ -1752,11 +1749,11 @@ func esmRouter() rex.Handle {
 			appendVaryHeader(ctx.W.Header(), "User-Agent")
 		}
 		if isExactVersion {
-			ctx.Header.Set("Cache-Control", ccImmutable)
+			ctx.SetHeader("Cache-Control", ccImmutable)
 		} else {
-			ctx.Header.Set("Cache-Control", fmt.Sprintf("public, max-age=%d", config.NpmQueryCacheTTL))
+			ctx.SetHeader("Cache-Control", fmt.Sprintf("public, max-age=%d", config.NpmQueryCacheTTL))
 		}
-		ctx.Header.Set("Content-Type", ctJavaScript)
+		ctx.SetHeader("Content-Type", ctJavaScript)
 		if ctx.R.Method == http.MethodHead {
 			return rex.NoContent()
 		}
@@ -1784,11 +1781,11 @@ func redirect(ctx *rex.Context, url string, isMovedPermanently bool) any {
 	code := http.StatusFound
 	if isMovedPermanently {
 		code = http.StatusMovedPermanently
-		ctx.Header.Set("Cache-Control", ccImmutable)
+		ctx.SetHeader("Cache-Control", ccImmutable)
 	} else {
-		ctx.Header.Set("Cache-Control", fmt.Sprintf("public, max-age=%d", config.NpmQueryCacheTTL))
+		ctx.SetHeader("Cache-Control", fmt.Sprintf("public, max-age=%d", config.NpmQueryCacheTTL))
 	}
-	ctx.Header.Set("Location", url)
+	ctx.SetHeader("Location", url)
 	return rex.Status(code, nil)
 }
 
@@ -1800,7 +1797,7 @@ func errorJS(ctx *rex.Context, message string) any {
 	buf.Write(utils.MustEncodeJSON(message))
 	buf.WriteString(");\n")
 	buf.WriteString("export default null;\n")
-	ctx.Header.Set("Content-Type", ctJavaScript)
-	ctx.Header.Set("Cache-Control", ccImmutable)
+	ctx.SetHeader("Content-Type", ctJavaScript)
+	ctx.SetHeader("Cache-Control", ccImmutable)
 	return buf.Bytes()
 }

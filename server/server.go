@@ -210,7 +210,7 @@ func customLandingPage(options *LandingPageOptions) rex.Handle {
 				if ctx.R.Header.Get("If-None-Match") == etag {
 					return rex.Status(http.StatusNotModified, nil)
 				}
-				ctx.Header.Set("Etag", etag)
+				ctx.SetHeader("Etag", etag)
 			} else {
 				lastModified := res.Header.Get("Last-Modified")
 				if lastModified != "" {
@@ -222,14 +222,14 @@ func customLandingPage(options *LandingPageOptions) rex.Handle {
 							return rex.Status(http.StatusNotModified, nil)
 						}
 					}
-					ctx.Header.Set("Last-Modified", lastModified)
+					ctx.SetHeader("Last-Modified", lastModified)
 				}
 			}
 			cacheCache := res.Header.Get("Cache-Control")
 			if cacheCache == "" {
-				ctx.Header.Set("Cache-Control", ccMustRevalidate)
+				ctx.SetHeader("Cache-Control", ccMustRevalidate)
 			}
-			ctx.Header.Set("Content-Type", res.Header.Get("Content-Type"))
+			ctx.SetHeader("Content-Type", res.Header.Get("Content-Type"))
 			return res.Body // auto closed
 		}
 		return ctx.Next()
