@@ -107,7 +107,7 @@ jobs:
 
       - name: Gzip Artifact
         run: |
-          ls .artifact
+          ls -hl .artifact
           gzip .artifact/*
-          ls .artifact
+          ls -hl .artifact
 
