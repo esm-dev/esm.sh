@@ -115,12 +115,13 @@
   * Use target `es2022` for browsers by default ([#903](https://github.com/esm-dev/esm.sh/pull/903))
   * Replace `window` with `globalThis` to make Deno 2 happy ([#964](https://github.com/esm-dev/esm.sh/pull/964))
   * Use `.mjs` extenstion for sub-module build ([#917](https://github.com/esm-dev/esm.sh/pull/917))
-  * dts-transformer: support `.d` extension
+  * dts-transformer: support `.d` and `d.cts` extension ([#987](https://github.com/esm-dev/esm.sh/pull/987))
+  * Support `major.minor.patch+build` versioning ([#985](https://github.com/esm-dev/esm.sh/pull/985))
+  * Support import attributes ([#976](https://github.com/esm-dev/esm.sh/pull/976))
+  * config: Support **S3-compatible** storage ([#886](https://github.com/esm-dev/esm.sh/pull/886))
   * config: Add `corsAllowOrigins` config
   * config: Add `customLandingPage` config ([#928](https://github.com/esm-dev/esm.sh/pull/928))
   * config: Add `npmQueryCacheTTL` config ([#921](https://github.com/esm-dev/esm.sh/pull/921))
-  * config: Add npmQueryCacheTTL config ([#921](https://github.com/esm-dev/esm.sh/pull/921))
-  * config: Support **S3-compatible** storage ([#886](https://github.com/esm-dev/esm.sh/pull/886))
 
 ## v135
 
