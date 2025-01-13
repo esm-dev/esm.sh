@@ -3,10 +3,10 @@
 mkdir -p ~/.ssh
 echo "${DEPLOY_SSH_PRIVATE_KEY}" >> ~/.ssh/id_ed25519
 chmod 600 ~/.ssh/id_ed25519
-ssh-keyscan $DEPLOY_HOST_NAME >> ~/.ssh/known_hosts
-echo "Host d.esm.sh" >> ~/.ssh/config
-echo "  HostName ${DEPLOY_HOST_NAME}" >> ~/.ssh/config
-echo "  Port ${DEPLOY_HOST_PORT}" >> ~/.ssh/config
+ssh-keyscan $DEPLOY_HOST >> ~/.ssh/known_hosts
+echo "Host esm.sh" >> ~/.ssh/config
+echo "  HostName ${DEPLOY_HOST}" >> ~/.ssh/config
+echo "  Port ${DEPLOY_SSH_PORT}" >> ~/.ssh/config
 echo "  User ${DEPLOY_SSH_USER}" >> ~/.ssh/config
 echo "  IdentityFile ~/.ssh/id_ed25519" >> ~/.ssh/config
 echo "  IdentitiesOnly yes" >> ~/.ssh/config
@@ -20,19 +20,23 @@ du -h esmd
 
 echo "--- uploading server build..."
 tar -czf esmd.tar.gz esmd
-scp esmd.tar.gz d.esm.sh:/tmp/esmd.tar.gz
+scp esmd.tar.gz esm.sh:/tmp/esmd.tar.gz
 if [ "$?" != "0" ]; then
   exit 1
 fi
 
 echo "--- installing server..."
-ssh d.esm.sh << EOF
-  gv=\$(git version)
-  if [ "\$?" != "0" ]; then
+ssh esm.sh << EOF
+  git version
+  if [ "\$?" == "127" ]; then
     apt update
     apt install -y git
   fi
-  echo \$gv
+
+  ufw version
+  if [ "\$?" == "0" ]; then
+    ufw allow http
+  fi
 
   configfile=/etc/esmd/config.json
   servicefile=/etc/systemd/system/esmd.service
