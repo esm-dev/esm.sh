@@ -29,8 +29,8 @@ echo "--- installing server..."
 ssh esm.sh << EOF
   git version
   if [ "\$?" == "127" ]; then
-    apt update
-    apt install -y git
+    apt-get update
+    apt-get install -y git
   fi
 
   ufw version
@@ -43,7 +43,7 @@ ssh esm.sh << EOF
   reload=no
   if [ ! -f \$servicefile ]; then
     addgroup esm
-    adduser --ingroup esm --no-create-home --disabled-login --disabled-password --gecos "" esm
+    adduser --ingroup esm --home /esm --disabled-login --disabled-password --gecos "" esm
     if [ "\$?" != "0" ]; then
       echo "Failed to add user 'esm'"
       exit 1
@@ -73,7 +73,7 @@ ssh esm.sh << EOF
 
   rm -f \$configfile
   if [ "$SERVER_CONFIG" != "" ]; then
-    echo "${SERVER_CONFIG}" >> \$configfile
+    echo '${SERVER_CONFIG}' >> \$configfile
   else
     echo "{}" >> \$configfile
   fi

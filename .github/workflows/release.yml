@@ -107,7 +107,7 @@ jobs:
           node-version: 20
 
       - name: Build CLI
-        run: go build -ldflags="-s -w -X 'github.com/esm-dev/esm.sh/server.VERSION=${github.ref_name}'" -o cli/tmp/bin/esm.sh${{ matrix.ext }} cli/cmd/main.go
+        run: go build -ldflags="-s -w -X 'github.com/esm-dev/esm.sh/server.VERSION=${{ github.ref_name }}'" -o cli/tmp/bin/esm.sh${{ matrix.ext }} cli/cmd/main.go
         env:
           GOOS: ${{ matrix.os }}
           GOARCH: ${{ matrix.arch }}

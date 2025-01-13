@@ -67,21 +67,19 @@ fi
 
 echo "--- installing..."
 ssh -p $sshPort ${user}@${host} << EOF
-  gv=\$(git version)
-  if [ "\$?" != "0" ]; then
-    apt update
-    apt install -y git
+  git version
+  if [ "\$?" == "127" ]; then
+    apt-get update
+    apt-get install -y git
   fi
-  echo \$gv
 
   if [ "$init" == "yes" ]; then
-    configfile=/etc/esmd/config.json
     servicefile=/etc/systemd/system/esmd.service
     if [ -f \$servicefile ]; then
       rm -f servicefile
     fi
     addgroup esm
-    adduser --ingroup esm --no-create-home --disabled-login --disabled-password --gecos "" esm
+    adduser --ingroup esm --home=/esm --disabled-login --disabled-password --gecos "" esm
     if [ "\$?" != "0" ]; then
       echo "Failed to add user 'esm'"
       exit 1
@@ -93,9 +91,10 @@ ssh -p $sshPort ${user}@${host} << EOF
     echo "[Service]" >> \$servicefile
     echo "Type=simple" >> \$servicefile
     if [ "$config" != "" ]; then
+      configfile=/etc/esmd/config.json
       mkdir -p /etc/esmd
       rm -f \$configfile
-      echo "$config" >> \$configfile
+      echo '$config' >> \$configfile
       echo "ExecStart=/usr/local/bin/esmd --config=\$configfile" >> \$servicefile
     else
       echo "ExecStart=/usr/local/bin/esmd" >> \$servicefile
