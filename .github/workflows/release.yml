@@ -25,8 +25,8 @@ jobs:
         env:
           GOOS: ${{ secrets.DEPLOY_HOST_OS }}
           GOARCH: ${{ secrets.DEPLOY_HOST_ARCH }}
-          DEPLOY_HOST_NAME: ${{ secrets.DEPLOY_HOST_NAME }}
-          DEPLOY_HOST_PORT: ${{ secrets.DEPLOY_HOST_PORT }}
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_SSH_PORT: ${{ secrets.DEPLOY_SSH_PORT }}
           DEPLOY_SSH_USER: ${{ secrets.DEPLOY_SSH_USER }}
           DEPLOY_SSH_PRIVATE_KEY: ${{ secrets.DEPLOY_SSH_PRIVATE_KEY }}
           SERVER_CONFIG: ${{ secrets.SERVER_CONFIG }}
@@ -87,9 +87,6 @@ jobs:
           - os: linux
             arch: amd64
             ext: ''
-          - os: windows
-            arch: amd64
-            ext: '.exe'
 
     permissions:
       contents: read
