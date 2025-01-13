@@ -1,73 +1,7 @@
 name: Release
 
-on:
-  push:
-    tags:
-      - v*
 
 jobs:
-  deploy:
-    name: Deploy server to production
-    runs-on: ubuntu-latest
-    environment: esm.sh
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Setup Go
-        uses: actions/setup-go@v5
-        with:
-          go-version: 1.23.x
-
-      - name: Run Deploy Script
-        run: ./scripts/deploy-ci.sh
-        env:
-          GOOS: ${{ secrets.DEPLOY_HOST_OS }}
-          GOARCH: ${{ secrets.DEPLOY_HOST_ARCH }}
-          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
-          DEPLOY_SSH_PORT: ${{ secrets.DEPLOY_SSH_PORT }}
-          DEPLOY_SSH_USER: ${{ secrets.DEPLOY_SSH_USER }}
-          DEPLOY_SSH_PRIVATE_KEY: ${{ secrets.DEPLOY_SSH_PRIVATE_KEY }}
-          SERVER_CONFIG: ${{ secrets.SERVER_CONFIG }}
-          SERVER_VERSION: ${{ github.ref_name }}
-
-  push_docker_image:
-    name: Push docker image to ghcr.io
-    runs-on: ubuntu-latest
-
-    permissions:
-      contents: read
-      packages: write
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@v3
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
-      - name: Login to GHCR
-        if: github.event_name != 'pull_request'
-        uses: docker/login-action@v3
-        with:
-          registry: ghcr.io
-          username: ${{ github.repository_owner }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Build and push
-        uses: docker/build-push-action@v6
-        with:
-          context: .
-          push: true
-          platforms: linux/amd64,linux/arm64
-          tags: ghcr.io/esm-dev/esm.sh:latest,ghcr.io/esm-dev/esm.sh:${{ github.ref_name }}
-          build-args: SERVER_VERSION=${{ github.ref_name }}
-        env:
-          DOCKER_BUILD_RECORD_UPLOAD: false
 
   build_esmsh_cli:
     name: Build esm.sh CLI
@@ -110,7 +44,7 @@ jobs:
           registry-url: 'https://registry.npmjs.org'
 
       - name: Build CLI
-        run: go build -ldflags="-s -w -X 'github.com/esm-dev/esm.sh/server.VERSION=${{ github.ref_name }}'" -o cli/tmp/bin/esm.sh${{ matrix.ext }} cli/cmd/main.go
+        run: go build -ldflags="-s -w -X 'github.com/esm-dev/esm.sh/server.VERSION=v136'" -o cli/tmp/bin/esm.sh${{ matrix.ext }} cli/cmd/main.go
         env:
           GOOS: ${{ matrix.os }}
           GOARCH: ${{ matrix.arch }}
@@ -124,7 +58,7 @@ jobs:
           if-no-files-found: error
 
       - name: Create package.json
-        run: echo "const[minor,patch='0']='${{ github.ref_name }}'.slice(1).split('_');const p=JSON.parse(require('fs').readFileSync('../npm/package.json','utf8'));console.log(JSON.stringify({...p,name:'@esm.sh/cli-${{ matrix.os }}-${{ matrix.arch }}',version:['0',minor,patch].join('.'),os:['${{ matrix.os }}'],cpu:['${{ matrix.arch }}'.replace('amd','x')],bin:void 0,scripts:void 0,optionalDependencies:void 0}))" | node > package.json
+        run: echo "const[minor,patch='0']='v136'.slice(1).split('_');const p=JSON.parse(require('fs').readFileSync('../npm/package.json','utf8'));console.log(JSON.stringify({...p,name:'@esm.sh/cli-${{ matrix.os }}-${{ matrix.arch }}',version:['0',minor,patch].join('.'),os:['${{ matrix.os }}'],cpu:['${{ matrix.arch }}'.replace('amd','x')],bin:void 0,scripts:void 0,optionalDependencies:void 0}))" | node > package.json
         working-directory: cli/tmp
 
   publish_esmsh_to_npm:
@@ -148,13 +82,13 @@ jobs:
           registry-url: 'https://registry.npmjs.org'
 
       - name: Update Version
-        run: echo "const fs=require('fs');const[minor,patch='0']='${{ github.ref_name }}'.slice(1).split('_');fs.writeFileSync('package.json',fs.readFileSync('package.json','utf8').replaceAll('*',['0',minor,patch].join('.')),'utf8')" | node
+        run: echo "const fs=require('fs');const[minor,patch='0']='v136'.slice(1).split('_');fs.writeFileSync('package.json',fs.readFileSync('package.json','utf8').replaceAll('*',['0',minor,patch].join('.')),'utf8')" | node
         working-directory: cli/npm
 
   release:
     name: Release
     runs-on: ubuntu-latest
-    needs: [deploy, push_docker_image, publish_esmsh_to_npm]
+    needs: [ publish_esmsh_to_npm]
 
     steps:
       - name: Checkout
@@ -167,13 +101,8 @@ jobs:
           path: .artifact
 
       - name: Gzip Artifact
-        run: gzip .artifact/*
+        run: |
+          ls .artifact
+          gzip .artifact/*
+          ls .artifact
 
-      - name: Extract Release Note
-        run: echo "console.log(require('fs').readFileSync('CHANGELOG.md','utf8').split('## ')[1].slice('${{ github.ref_name }}'.length).trim())" | node > release-note.txt
-
-      - name: Release
-        uses: softprops/action-gh-release@v2
-        with:
-          body_path: release-note.txt
-          files: .artifact/esm.sh-cli-*.gz
