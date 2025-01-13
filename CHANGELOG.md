@@ -1054,6 +1054,6 @@ For Deno:
 - Fix `__setImmediate$` is not defined
 - Support exports define in package.json
 - Support mjs extension
-- Improve NpmPackage resolve (**fix** [#41](https://github.com/esm-dev/esm.sh/issues/41))
+- Improve NpmPackage resolve (close [#41](https://github.com/esm-dev/esm.sh/issues/41))
 - Upgrade esbuild to **0.11.4**
 - Upgrade rex to **1.3.0**
