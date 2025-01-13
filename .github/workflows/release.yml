@@ -58,7 +58,7 @@ jobs:
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: esm.sh-cli-${{ matrix.os }}-${{ matrix.arch }}
+          name: esmsh-cli-${{ matrix.os }}-${{ matrix.arch }}
           path: cli/tmp/bin/esm.sh${{ matrix.ext }}
           if-no-files-found: error
 
