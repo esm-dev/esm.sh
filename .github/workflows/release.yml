@@ -110,7 +110,7 @@ jobs:
           registry-url: 'https://registry.npmjs.org'
 
       - name: Build CLI
-        run: go build -ldflags="-s -w -X 'github.com/esm-dev/esm.sh/server.VERSION=${{ github.ref_name }}'" -o cli/tmp/bin/esm.sh${{ matrix.ext }} cli/cmd/main.go
+        run: go build -ldflags="-s -w -X 'github.com/esm-dev/esm.sh/server.VERSION=${{ github.ref_name }}'" -o cli/tmp/bin/esm.sh-cli-${{ matrix.os }}-${{ matrix.arch }}${{ matrix.ext }} cli/cmd/main.go
         env:
           GOOS: ${{ matrix.os }}
           GOARCH: ${{ matrix.arch }}
@@ -118,9 +118,10 @@ jobs:
 
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
+        working-directory: cli/tmp/bin
         with:
           name: esm.sh-cli-${{ matrix.os }}-${{ matrix.arch }}
-          path: cli/tmp/bin/esm.sh${{ matrix.ext }}
+          path: esm.sh-cli-${{ matrix.os }}-${{ matrix.arch }}${{ matrix.ext }}
           if-no-files-found: error
 
       - name: Create package.json
