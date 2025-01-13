@@ -67,7 +67,7 @@ jobs:
           tags: ghcr.io/esm-dev/esm.sh:latest,ghcr.io/esm-dev/esm.sh:${{ github.ref_name }}
           build-args: SERVER_VERSION=${{ github.ref_name }}
 
-  build_and_publish_esmsh_cli:
+  build_esmsh_cli:
     name: Build esm.sh CLI
     runs-on: ubuntu-latest
     environment: release
@@ -121,21 +121,11 @@ jobs:
           path: cli/tmp/bin/esm.sh${{ matrix.ext }}
           if-no-files-found: error
 
-      - name: Create package.json
-        run: echo "const[minor,patch='0']='${{ github.ref_name }}'.slice(1).split('_');const p=JSON.parse(require('fs').readFileSync('../npm/package.json','utf8'));console.log(JSON.stringify({...p,name:'@esm.sh/cli-${{ matrix.os }}-${{ matrix.arch }}',version:['0',minor,patch].join('.'),os:['${{ matrix.os }}'],cpu:['${{ matrix.arch }}'.replace('amd','x')],bin:void 0,scripts:void 0,optionalDependencies:void 0}))" | node > package.json
-        working-directory: cli/tmp
-
-      - name: Publish Package to NPM
-        run: npm publish --provenance --access public
-        working-directory: cli/tmp
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-
   publish_esmsh_to_npm:
     name: Publish package "esm.sh" to NPM
     runs-on: ubuntu-latest
     environment: release
-    needs: [build_and_publish_esmsh_cli]
+    needs: [build_esmsh_cli]
 
     permissions:
       contents: read
