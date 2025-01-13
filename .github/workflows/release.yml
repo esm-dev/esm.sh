@@ -118,10 +118,9 @@ jobs:
 
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
-        working-directory: cli/tmp/bin
         with:
           name: esm.sh-cli-${{ matrix.os }}-${{ matrix.arch }}
-          path: esm.sh-cli-${{ matrix.os }}-${{ matrix.arch }}${{ matrix.ext }}
+          path: cli/tmp/bin/esm.sh-cli-${{ matrix.os }}-${{ matrix.arch }}${{ matrix.ext }}
           if-no-files-found: error
 
       - name: Create package.json
