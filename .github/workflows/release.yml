@@ -67,7 +67,7 @@ jobs:
           tags: ghcr.io/esm-dev/esm.sh:latest,ghcr.io/esm-dev/esm.sh:${{ github.ref_name }}
           build-args: SERVER_VERSION=${{ github.ref_name }}
 
-  build_esmsh_cli:
+  build_and_publish_esmsh_cli:
     name: Build esm.sh CLI
     runs-on: ubuntu-latest
     environment: release
@@ -135,7 +135,7 @@ jobs:
     name: Publish package "esm.sh" to NPM
     runs-on: ubuntu-latest
     environment: release
-    needs: [build_esmsh_cli]
+    needs: [build_and_publish_esmsh_cli]
 
     permissions:
       contents: read
@@ -152,7 +152,7 @@ jobs:
           registry-url: 'https://registry.npmjs.org'
 
       - name: Update Version
-        run: echo "const fs=require('fs');const[minor,patch='0']='${{ github.ref_name }}'.slice(1).split('_');fs.writeFileSync('package.json',fs.readFileSync('package.json','utf8').replaceAll('*',['0',minor,patch].join('.'),'utf8')" | node
+        run: echo "const fs=require('fs');const[minor,patch='0']='${{ github.ref_name }}'.slice(1).split('_');fs.writeFileSync('package.json',fs.readFileSync('package.json','utf8').replaceAll('*',['0',minor,patch].join('.')),'utf8')" | node
         working-directory: cli/npm
 
       - name: Publish Package
