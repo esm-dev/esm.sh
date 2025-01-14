@@ -470,7 +470,7 @@ func esmRouter(db DB, buildStorage storage.Storage) rex.Handle {
 
 		// embed assets
 		if strings.HasPrefix(pathname, "/embed/") {
-			data, err := embedFS.ReadFile(pathname)
+			data, err := embedFS.ReadFile(pathname[1:])
 			if err != nil {
 				return rex.Status(404, "not found")
 			}
