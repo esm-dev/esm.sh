@@ -101,30 +101,36 @@ func esmLegacyRouter(buildStorage storage.Storage) rex.Handle {
 }
 
 func legacyESM(ctx *rex.Context, buildStorage storage.Storage, modulePath string, hasBuildVersionPrefix bool) any {
-	pkgName, pkgVersion, hasTargetSegment, err := splitLegacyESMPath(modulePath)
-	if err != nil {
-		return rex.Status(400, err.Error())
-	}
 	query := ""
 	if ctx.R.URL.RawQuery != "" {
 		query = "?" + ctx.R.URL.RawQuery
 	}
-	if !isExactVersion(pkgVersion) {
-		npmrc := DefaultNpmRC()
-		pkgInfo, err := npmrc.getPackageInfo(pkgName, pkgVersion)
+	var isStatic bool
+	if strings.HasPrefix(modulePath, "/node_") && strings.HasSuffix(modulePath, ".js") {
+		isStatic = true
+	} else {
+		pkgName, pkgVersion, hasTargetSegment, err := splitLegacyESMPath(modulePath)
 		if err != nil {
-			if strings.Contains(err.Error(), " not found") {
-				return rex.Status(404, err.Error())
-			}
-			return rex.Status(500, err.Error())
+			return rex.Status(400, err.Error())
 		}
-		return redirect(ctx, getOrigin(ctx)+strings.Replace(ctx.R.URL.Path, "@"+pkgVersion, "@"+pkgInfo.Version, 1)+query, false)
+		if !isExactVersion(pkgVersion) {
+			npmrc := DefaultNpmRC()
+			pkgInfo, err := npmrc.getPackageInfo(pkgName, pkgVersion)
+			if err != nil {
+				if strings.Contains(err.Error(), " not found") {
+					return rex.Status(404, err.Error())
+				}
+				return rex.Status(500, err.Error())
+			}
+			return redirect(ctx, getOrigin(ctx)+strings.Replace(ctx.R.URL.Path, "@"+pkgVersion, "@"+pkgInfo.Version, 1)+query, false)
+		}
+		isStatic = hasTargetSegment
 	}
 	savePath := "legacy/" + normalizeSavePath("", ctx.R.URL.Path[1:])
-	if (hasBuildVersionPrefix && hasTargetSegment) || endsWith(modulePath, ".d.ts", ".d.mts") {
+	if (hasBuildVersionPrefix && isStatic) || endsWith(modulePath, ".d.ts", ".d.mts") {
 		f, _, e := buildStorage.Get(savePath)
 		if e != nil && e != storage.ErrNotFound {
-			return rex.Status(500, "Storage Error: "+e.Error())
+			return rex.Status(500, "Storage error: "+e.Error())
 		}
 		if e == nil {
 			switch path.Ext(modulePath) {
@@ -157,7 +163,7 @@ func legacyESM(ctx *rex.Context, buildStorage storage.Storage, modulePath string
 		savePath += "+mjs"
 		f, _, e := buildStorage.Get(savePath)
 		if e != nil && e != storage.ErrNotFound {
-			return rex.Status(500, "Storage Error: "+e.Error())
+			return rex.Status(500, "Storage error: "+e.Error())
 		}
 		if e == nil {
 			defer f.Close()
@@ -199,16 +205,18 @@ func legacyESM(ctx *rex.Context, buildStorage storage.Storage, modulePath string
 		return rex.Status(res.StatusCode, data)
 	}
 
-	if (hasBuildVersionPrefix && hasTargetSegment) || endsWith(modulePath, ".d.ts", ".d.mts") {
-		buf, recycle := NewBuffer()
-		defer recycle()
-		err := buildStorage.Put(savePath, io.TeeReader(res.Body, buf))
+	if (hasBuildVersionPrefix && isStatic) || endsWith(modulePath, ".d.ts", ".d.mts") {
+		data, err := io.ReadAll(res.Body)
 		if err != nil {
-			return rex.Status(500, "Storage Error")
+			return rex.Status(500, "Failed to fetch data from the legacy esm.sh server")
+		}
+		err = buildStorage.Put(savePath, bytes.NewReader(data))
+		if err != nil {
+			return rex.Status(500, "Storage error: "+err.Error())
 		}
 		ctx.SetHeader("Content-Type", res.Header.Get("Content-Type"))
 		ctx.SetHeader("Control-Cache", ccImmutable)
-		return buf.Bytes()
+		return data
 	} else {
 		code, err := io.ReadAll(res.Body)
 		if err != nil {
@@ -235,7 +243,7 @@ func legacyESM(ctx *rex.Context, buildStorage storage.Storage, modulePath string
 		ret = append(ret, string(code))
 		err = buildStorage.Put(savePath, bytes.NewReader(utils.MustEncodeJSON(ret)))
 		if err != nil {
-			return rex.Status(500, "Storage Error")
+			return rex.Status(500, "Storage error: "+err.Error())
 		}
 		ctx.SetHeader("Content-Type", res.Header.Get("Content-Type"))
 		ctx.SetHeader("Control-Cache", ccImmutable)
