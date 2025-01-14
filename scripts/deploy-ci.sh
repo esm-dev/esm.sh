@@ -27,6 +27,14 @@ fi
 
 echo "--- installing server..."
 ssh esm.sh << EOF
+  cd /tmp
+  tar -xzf esmd.tar.gz
+  if [ "\$?" != "0" ]; then
+    exit 1
+  fi
+  chmod +x esmd
+  rm -f esmd.tar.gz
+
   git version
   if [ "\$?" == "127" ]; then
     apt-get update
@@ -84,13 +92,6 @@ ssh esm.sh << EOF
     nohup rm -rf /tmp/.esm &
   fi
 
-  cd /tmp
-  tar -xzf esmd.tar.gz
-  if [ "\$?" != "0" ]; then
-    exit 1
-  fi
-  rm -f esmd.tar.gz
-  chmod +x esmd
   mv -f esmd /usr/local/bin/esmd
 
   if [ "\$reload" == "yes" ]; then
