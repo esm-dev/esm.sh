@@ -67,6 +67,14 @@ fi
 
 echo "--- installing..."
 ssh -p $sshPort ${user}@${host} << EOF
+  cd /tmp
+  tar -xzf esmd.tar.gz
+  if [ "\$?" != "0" ]; then
+    exit 1
+  fi
+  chmod +x esmd
+  rm -f esmd.tar.gz
+
   git version
   if [ "\$?" == "127" ]; then
     apt-get update
@@ -83,6 +91,10 @@ ssh -p $sshPort ${user}@${host} << EOF
     if [ "\$?" != "0" ]; then
       echo "Failed to add user 'esm'"
       exit 1
+    fi
+    ufw version
+    if [ "\$?" == "0" ]; then
+      ufw allow http
     fi
     echo "[Unit]" >> \$servicefile
     echo "Description=esm.sh service" >> \$servicefile
@@ -113,13 +125,6 @@ ssh -p $sshPort ${user}@${host} << EOF
     echo "Stopped esmd.service."
   fi
 
-  cd /tmp
-  tar -xzf esmd.tar.gz
-  if [ "\$?" != "0" ]; then
-    exit 1
-  fi
-  rm -f esmd.tar.gz
-  chmod +x esmd
   mv -f esmd /usr/local/bin/esmd
 
   if [ "$init" == "yes" ]; then
