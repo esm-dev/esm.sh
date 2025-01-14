@@ -65,7 +65,7 @@ func esmRouter(db DB, buildStorage storage.Storage) rex.Handle {
 		pathname := ctx.R.URL.Path
 
 		// ban malicious requests
-		if strings.HasPrefix(pathname, "/.") || strings.HasSuffix(pathname, ".php") {
+		if strings.HasPrefix(pathname, "/.") || strings.HasSuffix(pathname, ".env") || strings.HasSuffix(pathname, ".php") {
 			return rex.Status(404, "not found")
 		}
 
