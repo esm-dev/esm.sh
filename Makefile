@@ -3,6 +3,7 @@ dev/cli:
 
 dev: config.json
 	@rm -rf .esmd/storage
+	@rm -rf .esmd/esm.db
 	@go run -tags debug main.go --config=config.json
 
 .PHONY: test

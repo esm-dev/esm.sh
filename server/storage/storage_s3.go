@@ -85,17 +85,27 @@ type s3Error struct {
 	Message string
 }
 
-func parseS3Error(resp *http.Response) s3Error {
+func parseS3Error(resp *http.Response) error {
 	var s3Error s3Error
-	if xml.NewDecoder(resp.Body).Decode(&s3Error) != nil {
-		s3Error.Code = "error"
-		s3Error.Message = fmt.Sprintf("unexpected status code: %d", resp.StatusCode)
+	if xml.NewDecoder(resp.Body).Decode(&s3Error) != nil || s3Error.Code == "" {
+		if resp.StatusCode == 429 {
+			s3Error.Code = "TooManyRequests"
+		} else {
+			s3Error.Code = "UnexpectedStatusCode"
+		}
+		s3Error.Message = http.StatusText(resp.StatusCode)
+	}
+	if s3Error.Code == "NoSuchKey" {
+		return ErrNotFound
 	}
 	return s3Error
 }
 
 func (e s3Error) Error() string {
-	return e.Code + ": " + e.Message
+	if e.Message != "" {
+		return e.Code + ": " + e.Message
+	}
+	return e.Code
 }
 
 func (s3 *s3Storage) Stat(name string) (stat Stat, err error) {

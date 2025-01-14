@@ -20,85 +20,87 @@ import (
 	"github.com/ije/rex"
 )
 
-func esmLegacyRouter(ctx *rex.Context) any {
-	method := ctx.R.Method
-	pathname := ctx.R.URL.Path
+func esmLegacyRouter(buildStorage storage.Storage) rex.Handle {
+	return func(ctx *rex.Context) any {
+		method := ctx.R.Method
+		pathname := ctx.R.URL.Path
 
-START:
-	// build API (deprecated)
-	if pathname == "/build" {
-		if method == "POST" {
-			return rex.Status(403, "The `/build` API has been deprecated.")
-		}
-		if method == "GET" {
-			ctx.SetHeader("Content-Type", ctJavaScript)
-			ctx.SetHeader("Cache-Control", ccImmutable)
-			return `
-				const deprecated = new Error("[esm.sh] The build API has been deprecated.")
-				export function build(_) { throw deprecated }
-				export function esm(_) { throw deprecated }
-				export function transform(_) { throw deprecated }
-				export default build
-			`
-		}
-		return rex.Status(405, "Method Not Allowed")
-	}
-
-	// `/react-dom@18.3.1&pin=v135`
-	if strings.Contains(pathname, "&pin=") {
-		return legacyESM(ctx, pathname, false)
-	}
-
-	// `/react-dom@18.3.1?pin=v135`
-	if q := ctx.R.URL.RawQuery; strings.HasPrefix(q, "pin=") || strings.Contains(q, "&pin=") {
-		query := ctx.R.URL.Query()
-		v := query.Get("pin")
-		if len(v) > 1 && v[0] == 'v' && valid.IsDigtalOnlyString(v[1:]) {
-			bv, _ := strconv.Atoi(v[1:])
-			if bv <= 0 || bv > 135 {
-				return rex.Status(400, "Invalid `pin` query")
+	START:
+		// build API (deprecated)
+		if pathname == "/build" {
+			if method == "POST" {
+				return rex.Status(403, "The `/build` API has been deprecated.")
 			}
-			return legacyESM(ctx, pathname, false)
-		}
-	}
-
-	// `/stable/react@18.3.1?dev`
-	// `/stable/react@18.3.1/es2022/react.mjs`
-	if strings.HasPrefix(pathname, "/stable/") {
-		return legacyESM(ctx, pathname[7:], true)
-	}
-
-	// `/v135/react-dom@18.3.1?dev`
-	// `/v135/react-dom@18.3.1/es2022/react-dom.mjs`
-	if strings.HasPrefix(pathname, "/v") {
-		legacyBuildVersion, path := utils.SplitByFirstByte(pathname[2:], '/')
-		if valid.IsDigtalOnlyString(legacyBuildVersion) {
-			bv, _ := strconv.Atoi(legacyBuildVersion)
-			if bv <= 0 || bv > 135 {
-				return rex.Status(400, "Invalid Module Path")
-			}
-			if path == "" && strings.HasPrefix(ctx.UserAgent(), "Deno/") {
+			if method == "GET" {
 				ctx.SetHeader("Content-Type", ctJavaScript)
 				ctx.SetHeader("Cache-Control", ccImmutable)
-				return `throw new Error("[esm.sh] The deno CLI has been deprecated, please use our vscode extension instead: https://marketplace.visualstudio.com/items?itemName=ije.esm-vscode")`
+				return `
+					const deprecated = new Error("[esm.sh] The build API has been deprecated.")
+					export function build(_) { throw deprecated }
+					export function esm(_) { throw deprecated }
+					export function transform(_) { throw deprecated }
+					export default build
+				`
 			}
-			if path == "build" {
-				pathname = "/build"
-				goto START
-			}
-			return legacyESM(ctx, "/"+path, true)
+			return rex.Status(405, "Method Not Allowed")
 		}
-	}
 
-	// packages created by the `/build` API
-	if len(pathname) == 42 && strings.HasPrefix(pathname, "/~") && valid.IsHexString(pathname[2:]) {
-		return redirect(ctx, fmt.Sprintf("/v135%s@0.0.0/%s/mod.mjs", pathname, legacyGetBuildTargetByUA(ctx.UserAgent())), true)
-	}
+		// `/react-dom@18.3.1&pin=v135`
+		if strings.Contains(pathname, "&pin=") {
+			return legacyESM(ctx, buildStorage, pathname, false)
+		}
 
-	return ctx.Next()
+		// `/react-dom@18.3.1?pin=v135`
+		if q := ctx.R.URL.RawQuery; strings.HasPrefix(q, "pin=") || strings.Contains(q, "&pin=") {
+			query := ctx.R.URL.Query()
+			v := query.Get("pin")
+			if len(v) > 1 && v[0] == 'v' && valid.IsDigtalOnlyString(v[1:]) {
+				bv, _ := strconv.Atoi(v[1:])
+				if bv <= 0 || bv > 135 {
+					return rex.Status(400, "Invalid `pin` query")
+				}
+				return legacyESM(ctx, buildStorage, pathname, false)
+			}
+		}
+
+		// `/stable/react@18.3.1?dev`
+		// `/stable/react@18.3.1/es2022/react.mjs`
+		if strings.HasPrefix(pathname, "/stable/") {
+			return legacyESM(ctx, buildStorage, pathname[7:], true)
+		}
+
+		// `/v135/react-dom@18.3.1?dev`
+		// `/v135/react-dom@18.3.1/es2022/react-dom.mjs`
+		if strings.HasPrefix(pathname, "/v") {
+			legacyBuildVersion, path := utils.SplitByFirstByte(pathname[2:], '/')
+			if valid.IsDigtalOnlyString(legacyBuildVersion) {
+				bv, _ := strconv.Atoi(legacyBuildVersion)
+				if bv <= 0 || bv > 135 {
+					return rex.Status(400, "Invalid Module Path")
+				}
+				if path == "" && strings.HasPrefix(ctx.UserAgent(), "Deno/") {
+					ctx.SetHeader("Content-Type", ctJavaScript)
+					ctx.SetHeader("Cache-Control", ccImmutable)
+					return `throw new Error("[esm.sh] The deno CLI has been deprecated, please use our vscode extension instead: https://marketplace.visualstudio.com/items?itemName=ije.esm-vscode")`
+				}
+				if path == "build" {
+					pathname = "/build"
+					goto START
+				}
+				return legacyESM(ctx, buildStorage, "/"+path, true)
+			}
+		}
+
+		// packages created by the `/build` API
+		if len(pathname) == 42 && strings.HasPrefix(pathname, "/~") && valid.IsHexString(pathname[2:]) {
+			return redirect(ctx, fmt.Sprintf("/v135%s@0.0.0/%s/mod.mjs", pathname, legacyGetBuildTargetByUA(ctx.UserAgent())), true)
+		}
+
+		return ctx.Next()
+	}
 }
 
-func legacyESM(ctx *rex.Context, modulePath string, hasBuildVersionPrefix bool) any {
+func legacyESM(ctx *rex.Context, buildStorage storage.Storage, modulePath string, hasBuildVersionPrefix bool) any {
 	pkgName, pkgVersion, hasTargetSegment, err := splitLegacyESMPath(modulePath)
 	if err != nil {
 		return rex.Status(400, err.Error())

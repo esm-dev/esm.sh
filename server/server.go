@@ -19,9 +19,8 @@ import (
 )
 
 var (
-	log          *logx.Logger
-	buildQueue   *BuildQueue
-	buildStorage storage.Storage
+	log        *logx.Logger
+	buildQueue *BuildQueue
 )
 
 // Serve serves the esm.sh server
@@ -66,7 +65,12 @@ func Serve() {
 	// don't write log message to stdout
 	accessLogger.SetQuite(true)
 
-	buildStorage, err = storage.New(&config.Storage)
+	db, err := OpenDB(path.Join(config.WorkDir, "esm.db"))
+	if err != nil {
+		log.Fatalf("init db: %v", err)
+	}
+
+	buildStorage, err := storage.New(&config.Storage)
 	if err != nil {
 		log.Fatalf("failed to initialize build storage(%s): %v", config.Storage.Type, err)
 	}
@@ -119,8 +123,8 @@ func Serve() {
 		cors(config.CorsAllowOrigins),
 		rex.Optional(rex.Compress(), config.Compress),
 		rex.Optional(customLandingPage(&config.CustomLandingPage), config.CustomLandingPage.Origin != ""),
-		rex.Optional(esmLegacyRouter, config.LegacyServer != ""),
-		esmRouter(),
+		rex.Optional(esmLegacyRouter(buildStorage), config.LegacyServer != ""),
+		esmRouter(db, buildStorage),
 	)
 
 	// start server
@@ -145,6 +149,7 @@ func Serve() {
 	}
 
 	// release resources
+	db.Close()
 	log.FlushBuffer()
 	accessLogger.FlushBuffer()
 }

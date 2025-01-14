@@ -41,7 +41,7 @@ func transformDTS(ctx *BuildContext, dts string, buildArgsPrefix string, marker 
 
 	savePath := normalizeSavePath(ctx.npmrc.zoneId, path.Join("types", dtsPath))
 	// check if the dts file has been transformed
-	_, err = buildStorage.Stat(savePath)
+	_, err = ctx.storage.Stat(savePath)
 	if err == nil || err != storage.ErrNotFound {
 		return
 	}
@@ -214,8 +214,8 @@ func transformDTS(ctx *BuildContext, dts string, buildArgsPrefix string, marker 
 		}
 		args := BuildArgs{}
 		b := &BuildContext{
-			esm:    dtsModule,
 			npmrc:  ctx.npmrc,
+			esm:    dtsModule,
 			args:   args,
 			target: "types",
 		}
@@ -244,7 +244,7 @@ func transformDTS(ctx *BuildContext, dts string, buildArgsPrefix string, marker 
 	}
 	dtsFile.Close()
 
-	err = buildStorage.Put(savePath, bytes.NewReader(ctx.rewriteDTS(dts, buffer.Bytes())))
+	err = ctx.storage.Put(savePath, bytes.NewReader(ctx.rewriteDTS(dts, buffer.Bytes())))
 	if err != nil {
 		return
 	}
