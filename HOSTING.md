@@ -104,9 +104,9 @@ CMD ["esmd", "--config", "/etc/esmd/config.json"]
 
 ## Deploy with CloudFlare CDN
 
-To deploy the server with CloudFlare CDN, you need to create following cache rules in the CloudFlare dashboard, and each rule should be set to **"Eligible for cache"**:
+To deploy the server with CloudFlare CDN, you need to create following cache rules in the CloudFlare dashboard (see [link](https://developers.cloudflare.com/cache/how-to/cache-rules/create-dashboard/)), and each rule should be set to **"Eligible for cache"**:
 
-### 1. Cache `.d.ts` Files
+#### 1. Cache `.d.ts` Files
 
 ```ruby
 (ends_with(http.request.uri.path, ".d.ts")) or
@@ -114,13 +114,13 @@ To deploy the server with CloudFlare CDN, you need to create following cache rul
 (ends_with(http.request.uri.path, ".d.cts"))
 ```
 
-### 2. Cache Package Asset Files
+#### 2. Cache Package Assets
 
 ```ruby
 (http.request.uri.path.extension in {"node" "wasm" "less" "sass" "scss" "stylus" "styl" "json" "jsonc" "csv" "xml" "plist" "tmLanguage" "tmTheme" "yml" "yaml" "txt" "glsl" "frag" "vert" "md" "mdx" "markdown" "html" "htm" "svg" "png" "jpg" "jpeg" "webp" "gif" "ico" "eot" "ttf" "otf" "woff" "woff2" "m4a" "mp3" "m3a" "ogg" "oga" "wav" "weba" "gz" "tgz" "css" "map"})
 ```
 
-### 3. Cache `?target=*`
+#### 3. Cache `?target=*`
 
 ```ruby
 (http.request.uri.query contains "target=es2015") or
@@ -139,7 +139,7 @@ To deploy the server with CloudFlare CDN, you need to create following cache rul
 (http.request.uri.query contains "target=node")
 ```
 
-### 4. Cache "/(target)/"
+#### 4. Cache `/(target)/`
 
 ```ruby
 (http.request.uri.path contains "/es2015/" and http.request.uri.path.extension in {"mjs" "map" "css"}) or
@@ -158,7 +158,7 @@ To deploy the server with CloudFlare CDN, you need to create following cache rul
 (http.request.uri.path contains "/node/" and http.request.uri.path.extension in {"mjs" "map" "css"})
 ```
 
-### 5. Bypass Cache for Deno/Bun/Node
+#### 5. Bypass Cache for Deno/Bun/Node
 
 ```ruby
 (not starts_with(http.user_agent, "Deno/") and not starts_with(http.user_agent, "Bun/") and not starts_with(http.user_agent, "Node/") and not starts_with(http.user_agent, "Node.js/") and http.user_agent ne "undici")
