@@ -29,8 +29,10 @@ const (
 )
 
 type BuildContext struct {
-	esm         EsmPath
 	npmrc       *NpmRC
+	db          DB
+	storage     storage.Storage
+	esm         EsmPath
 	args        BuildArgs
 	bundleMode  BundleMode
 	externalAll bool
@@ -45,20 +47,6 @@ type BuildContext struct {
 	esmImports  [][2]string
 	cjsRequires [][3]string
 	smOffset    int
-}
-
-type BuildMeta struct {
-	CJS           bool     `json:"cjs,omitempty"`
-	HasCSS        bool     `json:"hasCSS,omitempty"`
-	TypesOnly     bool     `json:"typesOnly,omitempty"`
-	ExportDefault bool     `json:"exportDefault,omitempty"`
-	Imports       []string `json:"imports,omitempty"`
-	Dts           string   `json:"dts,omitempty"`
-}
-
-type Ref struct {
-	entries   *set.Set[string]
-	importers *set.Set[string]
 }
 
 var (
@@ -102,28 +90,29 @@ func (ctx *BuildContext) Path() string {
 }
 
 func (ctx *BuildContext) Exists() (meta *BuildMeta, ok bool, err error) {
-	key := ctx.getSavepath() + ".meta"
+	key := ctx.npmrc.zoneId + ":" + ctx.Path()
 	meta, err = withLRUCache(key, func() (*BuildMeta, error) {
-		r, _, err := buildStorage.Get(key)
+		metadata, err := ctx.db.Get(key)
 		if err != nil {
+			log.Errorf("db.get(%s): %v", key, err)
 			return nil, err
 		}
-		defer r.Close()
-
-		var meta BuildMeta
-		if json.NewDecoder(r).Decode(&meta) == nil {
-			return &meta, nil
+		if metadata == nil {
+			return nil, storage.ErrNotFound
 		}
-
-		// delete the invalid meta file in the storage
-		buildStorage.Delete(key)
-		return nil, storage.ErrNotFound
+		meta, err := decodeBuildMeta(metadata)
+		if err != nil {
+			// delete the invalid metadata
+			ctx.db.Delete(key)
+			return nil, storage.ErrNotFound
+		}
+		return meta, nil
 	})
 	if err != nil {
 		if err == storage.ErrNotFound {
 			err = nil
 		}
-		return nil, false, err
+		return
 	}
 	ok = true
 	return
@@ -167,16 +156,12 @@ func (ctx *BuildContext) Build() (meta *BuildMeta, err error) {
 		return
 	}
 
-	// save the build result into db
-	key := ctx.getSavepath() + ".meta"
-	buf, recycle := NewBuffer()
-	defer recycle()
-	err = json.NewEncoder(buf).Encode(meta)
+	// save the build result to the storage
+	key := ctx.npmrc.zoneId + ":" + ctx.Path()
+	err = ctx.db.Put(key, encodeBuildMeta(meta))
 	if err != nil {
-		return
-	}
-	if e := buildStorage.Put(key, buf); e != nil {
-		log.Errorf("db: %v", e)
+		log.Errorf("db.put(%s): %v", key, err)
+		err = errors.New("db: " + err.Error())
 	}
 	return
 }
@@ -278,13 +263,13 @@ func (ctx *BuildContext) buildModule(analyzeMode bool) (meta *BuildMeta, include
 			defer recycle()
 			buffer.WriteString("export default ")
 			buffer.Write(jsonData)
-			err = buildStorage.Put(ctx.getSavepath(), buffer)
+			err = ctx.storage.Put(ctx.getSavepath(), buffer)
 			if err != nil {
+				log.Errorf("storage.put(%s): %v", ctx.getSavepath(), err)
+				err = errors.New("storage: " + err.Error())
 				return
 			}
-			meta = &BuildMeta{
-				ExportDefault: true,
-			}
+			meta = &BuildMeta{ExportDefault: true}
 			return
 		}
 	}
@@ -309,8 +294,10 @@ func (ctx *BuildContext) buildModule(analyzeMode bool) (meta *BuildMeta, include
 			return
 		}
 		b := &BuildContext{
-			esm:         dep,
 			npmrc:       ctx.npmrc,
+			db:          ctx.db,
+			storage:     ctx.storage,
+			esm:         dep,
 			args:        ctx.args,
 			externalAll: ctx.externalAll,
 			target:      ctx.target,
@@ -331,8 +318,10 @@ func (ctx *BuildContext) buildModule(analyzeMode bool) (meta *BuildMeta, include
 		if meta.ExportDefault {
 			fmt.Fprintf(buf, `export { default } from "%s";`, importUrl)
 		}
-		err = buildStorage.Put(ctx.getSavepath(), buf)
+		err = ctx.storage.Put(ctx.getSavepath(), buf)
 		if err != nil {
+			log.Errorf("storage.put(%s): %v", ctx.getSavepath(), err)
+			err = errors.New("storage: " + err.Error())
 			return
 		}
 		meta.Dts, err = ctx.resloveDTS(entry)
@@ -1264,8 +1253,10 @@ REBUILD:
 								isEsModule[i] = true
 							} else {
 								b := &BuildContext{
-									esm:         dep,
 									npmrc:       ctx.npmrc,
+									db:          ctx.db,
+									storage:     ctx.storage,
+									esm:         dep,
 									args:        ctx.args,
 									externalAll: ctx.externalAll,
 									target:      ctx.target,
@@ -1333,8 +1324,10 @@ REBUILD:
 				finalJS.WriteString(".map")
 			}
 
-			err = buildStorage.Put(ctx.getSavepath(), finalJS)
+			err = ctx.storage.Put(ctx.getSavepath(), finalJS)
 			if err != nil {
+				log.Errorf("storage.put(%s): %v", ctx.getSavepath(), err)
+				err = errors.New("storage: " + err.Error())
 				return
 			}
 		}
@@ -1343,8 +1336,11 @@ REBUILD:
 	for _, file := range res.OutputFiles {
 		if strings.HasSuffix(file.Path, ".css") {
 			savePath := ctx.getSavepath()
-			err = buildStorage.Put(strings.TrimSuffix(savePath, path.Ext(savePath))+".css", bytes.NewReader(file.Contents))
+			savePath = strings.TrimSuffix(savePath, path.Ext(savePath)) + ".css"
+			err = ctx.storage.Put(savePath, bytes.NewReader(file.Contents))
 			if err != nil {
+				log.Errorf("storage.put(%s): %v", savePath, err)
+				err = errors.New("storage: " + err.Error())
 				return
 			}
 			meta.HasCSS = true
@@ -1362,8 +1358,10 @@ REBUILD:
 				buf, recycle := NewBuffer()
 				defer recycle()
 				if json.NewEncoder(buf).Encode(sourceMap) == nil {
-					err = buildStorage.Put(ctx.getSavepath()+".map", buf)
+					err = ctx.storage.Put(ctx.getSavepath()+".map", buf)
 					if err != nil {
+						log.Errorf("storage.put(%s): %v", ctx.getSavepath()+".map", err)
+						err = errors.New("storage: " + err.Error())
 						return
 					}
 				}

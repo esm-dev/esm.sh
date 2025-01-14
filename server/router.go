@@ -55,7 +55,7 @@ const (
 	ctTypeScript     = "application/typescript; charset=utf-8"
 )
 
-func esmRouter() rex.Handle {
+func esmRouter(db DB, buildStorage storage.Storage) rex.Handle {
 	var (
 		startTime  = time.Now()
 		globalETag = fmt.Sprintf(`W/"%s"`, VERSION)
@@ -1089,8 +1089,8 @@ func esmRouter() rex.Handle {
 			if pathKind == RawFile {
 				if esm.SubPath == "" {
 					b := &BuildContext{
-						esm:   esm,
 						npmrc: npmrc,
+						esm:   esm,
 					}
 					err = b.install()
 					if err != nil {
@@ -1455,8 +1455,10 @@ func esmRouter() rex.Handle {
 					return rex.Status(500, err.Error())
 				}
 				buildCtx := &BuildContext{
-					esm:         esm,
 					npmrc:       npmrc,
+					db:          db,
+					storage:     buildStorage,
+					esm:         esm,
 					args:        buildArgs,
 					externalAll: externalAll,
 					target:      "types",
@@ -1562,8 +1564,10 @@ func esmRouter() rex.Handle {
 		}
 
 		buildCtx := &BuildContext{
-			esm:         esm,
 			npmrc:       npmrc,
+			db:          db,
+			storage:     buildStorage,
+			esm:         esm,
 			args:        buildArgs,
 			bundleMode:  bundleMode,
 			externalAll: externalAll,
