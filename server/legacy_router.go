@@ -47,7 +47,7 @@ func esmLegacyRouter(buildStorage storage.Storage) rex.Handle {
 
 		// `/react-dom@18.3.1&pin=v135`
 		if strings.Contains(pathname, "&pin=v") {
-			return legacyESM(ctx, buildStorage, pathname, "")
+			return legacyESM(ctx, buildStorage, "")
 		}
 
 		// `/react-dom@18.3.1?pin=v135`
@@ -59,14 +59,14 @@ func esmLegacyRouter(buildStorage storage.Storage) rex.Handle {
 				if bv <= 0 || bv > 135 {
 					return rex.Status(400, "Invalid `pin` query")
 				}
-				return legacyESM(ctx, buildStorage, pathname, "")
+				return legacyESM(ctx, buildStorage, "")
 			}
 		}
 
 		// `/stable/react@18.3.1?dev`
 		// `/stable/react@18.3.1/es2022/react.mjs`
 		if strings.HasPrefix(pathname, "/stable/") {
-			return legacyESM(ctx, buildStorage, pathname[7:], "stable")
+			return legacyESM(ctx, buildStorage, "stable")
 		}
 
 		// `/v135/react-dom@18.3.1?dev`
@@ -87,7 +87,7 @@ func esmLegacyRouter(buildStorage storage.Storage) rex.Handle {
 					pathname = "/build"
 					goto START
 				}
-				return legacyESM(ctx, buildStorage, "/"+path, "v"+legacyBuildVersion)
+				return legacyESM(ctx, buildStorage, "v"+legacyBuildVersion)
 			}
 		}
 
@@ -100,16 +100,20 @@ func esmLegacyRouter(buildStorage storage.Storage) rex.Handle {
 	}
 }
 
-func legacyESM(ctx *rex.Context, buildStorage storage.Storage, modulePath string, buildVersionPrefix string) any {
+func legacyESM(ctx *rex.Context, buildStorage storage.Storage, buildVersionPrefix string) any {
+	pathname := ctx.R.URL.Path
+	if buildVersionPrefix != "" {
+		pathname = pathname[len(buildVersionPrefix)+1:]
+	}
 	query := ""
 	if ctx.R.URL.RawQuery != "" {
 		query = "?" + ctx.R.URL.RawQuery
 	}
 	var isStatic bool
-	if strings.HasPrefix(modulePath, "/node_") && strings.HasSuffix(modulePath, ".js") {
+	if strings.HasPrefix(pathname, "/node_") && strings.HasSuffix(pathname, ".js") {
 		isStatic = true
 	} else {
-		pkgName, pkgVersion, subPath, hasTargetSegment, err := splitLegacyESMPath(modulePath)
+		pkgName, pkgVersion, subPath, hasTargetSegment, err := splitLegacyESMPath(pathname)
 		if err != nil {
 			return rex.Status(400, err.Error())
 		}
@@ -142,13 +146,13 @@ func legacyESM(ctx *rex.Context, buildStorage storage.Storage, modulePath string
 		isStatic = hasTargetSegment
 	}
 	savePath := "legacy/" + normalizeSavePath("", ctx.R.URL.Path[1:])
-	if (buildVersionPrefix != "" && isStatic) || endsWith(modulePath, ".d.ts", ".d.mts") {
+	if (buildVersionPrefix != "" && isStatic) || endsWith(pathname, ".d.ts", ".d.mts") {
 		f, _, e := buildStorage.Get(savePath)
 		if e != nil && e != storage.ErrNotFound {
 			return rex.Status(500, "Storage error: "+e.Error())
 		}
 		if e == nil {
-			switch path.Ext(modulePath) {
+			switch path.Ext(pathname) {
 			case ".js", ".mjs":
 				ctx.SetHeader("Content-Type", ctJavaScript)
 			case ".ts", ".mts":
@@ -220,7 +224,7 @@ func legacyESM(ctx *rex.Context, buildStorage storage.Storage, modulePath string
 		return rex.Status(res.StatusCode, data)
 	}
 
-	if (buildVersionPrefix != "" && isStatic) || endsWith(modulePath, ".d.ts", ".d.mts") {
+	if (buildVersionPrefix != "" && isStatic) || endsWith(pathname, ".d.ts", ".d.mts") {
 		data, err := io.ReadAll(res.Body)
 		if err != nil {
 			return rex.Status(500, "Failed to fetch data from the legacy esm.sh server")
