@@ -112,6 +112,31 @@ Deno.test("legacy routes", async () => {
     assertStringIncludes(await res.text(), "/v135/react-dom@18.3.1/es2022/react-dom.mjs");
   }
   {
+    const res = await fetch("http://localhost:8080/stable/react", {
+      redirect: "manual",
+    });
+    res.body?.cancel();
+    assertEquals(res.status, 302);
+    assert(res.headers.get("Location")?.startsWith("http://localhost:8080/stable/react@"));
+  }
+  {
+    const res = await fetch("http://localhost:8080/v135/react", {
+      redirect: "manual",
+    });
+    res.body?.cancel();
+    assertEquals(res.status, 302);
+    assert(res.headers.get("Location")?.startsWith("http://localhost:8080/v135/react@"));
+  }
+  {
+    const res = await fetch("http://localhost:8080/v135/@emotion/sheet?external=react,react-dom", {
+      redirect: "manual",
+    });
+    res.body?.cancel();
+    assertEquals(res.status, 302);
+    assert(res.headers.get("Location")?.startsWith("http://localhost:8080/v135/@emotion/sheet@"));
+    assert(res.headers.get("Location")?.endsWith("?external=react,react-dom"));
+  }
+  {
     const res = await fetch("http://localhost:8080/v135/@types/react-dom@~18.3/index.d.ts", {
       redirect: "manual",
     });
