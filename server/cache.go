@@ -99,8 +99,10 @@ func withLRUCache[T any](key string, fetch func() (T, error)) (data T, err error
 	// delete the oldest item if cache is full
 	if cacheLRU.Len() > 1000 {
 		el := cacheLRU.Front()
-		cacheLRU.Remove(el)
-		cacheStore.Delete(el.Value.(cacheRecord).key)
+		if el != nil {
+			cacheLRU.Remove(el)
+			cacheStore.Delete(el.Value.(cacheRecord).key)
+		}
 	}
 
 	return
