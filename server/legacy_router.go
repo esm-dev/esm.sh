@@ -46,12 +46,12 @@ func esmLegacyRouter(buildStorage storage.Storage) rex.Handle {
 		}
 
 		// `/react-dom@18.3.1&pin=v135`
-		if strings.Contains(pathname, "&pin=") {
-			return legacyESM(ctx, buildStorage, pathname, false)
+		if strings.Contains(pathname, "&pin=v") {
+			return legacyESM(ctx, buildStorage, pathname, "")
 		}
 
 		// `/react-dom@18.3.1?pin=v135`
-		if q := ctx.R.URL.RawQuery; strings.HasPrefix(q, "pin=") || strings.Contains(q, "&pin=") {
+		if q := ctx.R.URL.RawQuery; strings.HasPrefix(q, "pin=v") || strings.Contains(q, "&pin=v") {
 			query := ctx.R.URL.Query()
 			v := query.Get("pin")
 			if len(v) > 1 && v[0] == 'v' && valid.IsDigtalOnlyString(v[1:]) {
@@ -59,14 +59,14 @@ func esmLegacyRouter(buildStorage storage.Storage) rex.Handle {
 				if bv <= 0 || bv > 135 {
 					return rex.Status(400, "Invalid `pin` query")
 				}
-				return legacyESM(ctx, buildStorage, pathname, false)
+				return legacyESM(ctx, buildStorage, pathname, "")
 			}
 		}
 
 		// `/stable/react@18.3.1?dev`
 		// `/stable/react@18.3.1/es2022/react.mjs`
 		if strings.HasPrefix(pathname, "/stable/") {
-			return legacyESM(ctx, buildStorage, pathname[7:], true)
+			return legacyESM(ctx, buildStorage, pathname[7:], "stable")
 		}
 
 		// `/v135/react-dom@18.3.1?dev`
@@ -87,7 +87,7 @@ func esmLegacyRouter(buildStorage storage.Storage) rex.Handle {
 					pathname = "/build"
 					goto START
 				}
-				return legacyESM(ctx, buildStorage, "/"+path, true)
+				return legacyESM(ctx, buildStorage, "/"+path, "v"+legacyBuildVersion)
 			}
 		}
 
@@ -100,7 +100,7 @@ func esmLegacyRouter(buildStorage storage.Storage) rex.Handle {
 	}
 }
 
-func legacyESM(ctx *rex.Context, buildStorage storage.Storage, modulePath string, hasBuildVersionPrefix bool) any {
+func legacyESM(ctx *rex.Context, buildStorage storage.Storage, modulePath string, buildVersionPrefix string) any {
 	query := ""
 	if ctx.R.URL.RawQuery != "" {
 		query = "?" + ctx.R.URL.RawQuery
@@ -109,7 +109,7 @@ func legacyESM(ctx *rex.Context, buildStorage storage.Storage, modulePath string
 	if strings.HasPrefix(modulePath, "/node_") && strings.HasSuffix(modulePath, ".js") {
 		isStatic = true
 	} else {
-		pkgName, pkgVersion, hasTargetSegment, err := splitLegacyESMPath(modulePath)
+		pkgName, pkgVersion, subPath, hasTargetSegment, err := splitLegacyESMPath(modulePath)
 		if err != nil {
 			return rex.Status(400, err.Error())
 		}
@@ -122,12 +122,27 @@ func legacyESM(ctx *rex.Context, buildStorage storage.Storage, modulePath string
 				}
 				return rex.Status(500, err.Error())
 			}
-			return redirect(ctx, getOrigin(ctx)+strings.Replace(ctx.R.URL.Path, "@"+pkgVersion, "@"+pkgInfo.Version, 1)+query, false)
+			var b strings.Builder
+			b.WriteString(getOrigin(ctx))
+			if buildVersionPrefix != "" {
+				b.WriteByte('/')
+				b.WriteString(buildVersionPrefix)
+			}
+			b.WriteByte('/')
+			b.WriteString(pkgName)
+			b.WriteByte('@')
+			b.WriteString(pkgInfo.Version)
+			if subPath != "" {
+				b.WriteByte('/')
+				b.WriteString(subPath)
+			}
+			b.WriteString(query)
+			return redirect(ctx, b.String(), false)
 		}
 		isStatic = hasTargetSegment
 	}
 	savePath := "legacy/" + normalizeSavePath("", ctx.R.URL.Path[1:])
-	if (hasBuildVersionPrefix && isStatic) || endsWith(modulePath, ".d.ts", ".d.mts") {
+	if (buildVersionPrefix != "" && isStatic) || endsWith(modulePath, ".d.ts", ".d.mts") {
 		f, _, e := buildStorage.Get(savePath)
 		if e != nil && e != storage.ErrNotFound {
 			return rex.Status(500, "Storage error: "+e.Error())
@@ -205,7 +220,7 @@ func legacyESM(ctx *rex.Context, buildStorage storage.Storage, modulePath string
 		return rex.Status(res.StatusCode, data)
 	}
 
-	if (hasBuildVersionPrefix && isStatic) || endsWith(modulePath, ".d.ts", ".d.mts") {
+	if (buildVersionPrefix != "" && isStatic) || endsWith(modulePath, ".d.ts", ".d.mts") {
 		data, err := io.ReadAll(res.Body)
 		if err != nil {
 			return rex.Status(500, "Failed to fetch data from the legacy esm.sh server")
@@ -258,7 +273,7 @@ func legacyESM(ctx *rex.Context, buildStorage storage.Storage, modulePath string
 	}
 }
 
-func splitLegacyESMPath(pathname string) (pkgName string, version string, hasTargetSegment bool, err error) {
+func splitLegacyESMPath(pathname string) (pkgName string, version string, subPath string, hasTargetSegment bool, err error) {
 	if strings.HasPrefix(pathname, "/gh/") {
 		if !strings.ContainsRune(pathname[4:], '/') {
 			err = errors.New("invalid path")
@@ -268,7 +283,7 @@ func splitLegacyESMPath(pathname string) (pkgName string, version string, hasTar
 		pathname = "/@" + pathname[4:]
 	}
 
-	pkgName, maybeVersion, _, hasTargetSegment := splitEsmPath(pathname)
+	pkgName, maybeVersion, subPath, hasTargetSegment := splitEsmPath(pathname)
 	if !validatePackageName(pkgName) {
 		err = fmt.Errorf("invalid package name '%s'", pkgName)
 		return
