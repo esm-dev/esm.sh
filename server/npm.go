@@ -656,22 +656,20 @@ RETRY:
 	}
 
 	err = extractPackageTarball(installDir, pkgName, io.LimitReader(res.Body, maxPackageTarballSize))
+	if err != nil {
+		// clear installDir if failed to extract tarball
+		os.RemoveAll(installDir)
+	}
 	return
 }
 
-func extractPackageTarball(installDir string, packname string, tarball io.Reader) (err error) {
+func extractPackageTarball(installDir string, pkgName string, tarball io.Reader) (err error) {
 	unziped, err := gzip.NewReader(tarball)
 	if err != nil {
 		return
 	}
 
-	rootDir := path.Join(installDir, "node_modules", packname)
-	defer func() {
-		if err != nil {
-			// remove the root dir if has error
-			os.RemoveAll(rootDir)
-		}
-	}()
+	pkgDir := path.Join(installDir, "node_modules", pkgName)
 
 	// extract tarball
 	tr := tar.NewReader(unziped)
@@ -685,7 +683,7 @@ func extractPackageTarball(installDir string, packname string, tarball io.Reader
 		}
 		// strip tarball root dir
 		_, name := utils.SplitByFirstByte(h.Name, '/')
-		filename := path.Join(rootDir, name)
+		filename := path.Join(pkgDir, name)
 		if h.Typeflag != tar.TypeReg {
 			continue
 		}

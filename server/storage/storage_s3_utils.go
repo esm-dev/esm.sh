@@ -1,37 +1,35 @@
 package storage
 
 import (
-	"bytes"
 	"crypto/hmac"
 	"crypto/sha256"
 	"encoding/hex"
-	"fmt"
+	"strings"
+	"unicode/utf8"
 )
-
-var noEscape [256]bool
-
-func init() {
-	for i := 0; i < len(noEscape); i++ {
-		// AWS expects every character except these to be escaped
-		noEscape[i] = (i >= 'A' && i <= 'Z') ||
-			(i >= 'a' && i <= 'z') ||
-			(i >= '0' && i <= '9') ||
-			i == '-' ||
-			i == '.' ||
-			i == '_' ||
-			i == '~'
-	}
-}
 
 // escapePath escapes part of a URL path in Amazon style.
 func escapePath(path string) string {
-	var buf bytes.Buffer
-	for i := 0; i < len(path); i++ {
-		c := path[i]
-		if c == '/' || noEscape[c] {
-			buf.WriteByte(c)
+	var buf strings.Builder
+	for _, c := range path {
+		if c == '/' || c == '-' || c == '_' || c == '.' || c == '~' {
+			buf.WriteRune(c)
+		} else if (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') {
+			buf.WriteRune(c)
+		} else if c == '+' {
+			buf.WriteString("%20")
 		} else {
-			fmt.Fprintf(&buf, "%%%02X", c)
+			l := utf8.RuneLen(c)
+			if l < 0 {
+				// if utf8 cannot convert return the same string as is
+				return path
+			}
+			u := make([]byte, l)
+			utf8.EncodeRune(u, c)
+			for _, r := range u {
+				hex := hex.EncodeToString([]byte{r})
+				buf.WriteString("%" + strings.ToUpper(hex))
+			}
 		}
 	}
 	return buf.String()

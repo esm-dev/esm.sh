@@ -173,13 +173,13 @@ func legacyESM(ctx *rex.Context, buildStorage storage.Storage, buildVersionPrefi
 		if query != "" {
 			if !ctx.R.URL.Query().Has("target") {
 				varyUA = true
-				savePath += "+" + legacyGetBuildTargetByUA(ctx.UserAgent())
+				savePath += "." + legacyGetBuildTargetByUA(ctx.UserAgent())
 			}
 			h := xxhash.New()
 			h.Write([]byte(query))
-			savePath += "+" + base64.RawURLEncoding.EncodeToString(h.Sum(nil))
+			savePath += "." + base64.RawURLEncoding.EncodeToString(h.Sum(nil))
 		}
-		savePath += "+mjs"
+		savePath += ".mjs"
 		f, _, e := buildStorage.Get(savePath)
 		if e != nil && e != storage.ErrNotFound {
 			return rex.Status(500, "Storage error: "+e.Error())
