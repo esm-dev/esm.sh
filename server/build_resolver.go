@@ -44,7 +44,7 @@ func (ctx *BuildContext) resolveEntry(esm EsmPath) (entry BuildEntry) {
 		}
 
 		if endsWith(subPath, ".ts", ".tsx", ".mts") {
-			entry.update(normalizeEntryPath(subPath), true)
+			entry.update(subPath, true)
 			// lookup jsr built dts
 			if strings.HasPrefix(esm.PkgName, "@jsr/") {
 				for _, v := range pkgJson.Exports.values {
@@ -66,7 +66,7 @@ func (ctx *BuildContext) resolveEntry(esm EsmPath) (entry BuildEntry) {
 		}
 
 		if endsWith(subPath, ".json", ".jsx", ".svelte", ".vue") {
-			entry.update(normalizeEntryPath(subPath), true)
+			entry.update(subPath, true)
 			return
 		}
 	}
@@ -230,9 +230,9 @@ func (ctx *BuildContext) resolveEntry(esm EsmPath) (entry BuildEntry) {
 		}
 	} else {
 		if pkgJson.Module != "" && ctx.existsPkgFile(pkgJson.Module) {
-			entry.update(normalizeEntryPath(pkgJson.Module), true)
+			entry.update(pkgJson.Module, true)
 		} else if pkgJson.Main != "" {
-			entry.update(normalizeEntryPath(pkgJson.Main), pkgJson.Type == "module")
+			entry.update(pkgJson.Main, pkgJson.Type == "module")
 		}
 		if pkgJson.Types != "" {
 			entry.types = normalizeEntryPath(pkgJson.Types)
@@ -241,7 +241,7 @@ func (ctx *BuildContext) resolveEntry(esm EsmPath) (entry BuildEntry) {
 		}
 		if len(pkgJson.Browser) > 0 && ctx.isBrowserTarget() {
 			if path, ok := pkgJson.Browser["."]; ok && ctx.existsPkgFile(path) {
-				entry.update(normalizeEntryPath(path), pkgJson.Type == "module")
+				entry.update(path, pkgJson.Type == "module")
 			}
 		}
 
@@ -340,7 +340,7 @@ func (ctx *BuildContext) resolveEntry(esm EsmPath) (entry BuildEntry) {
 	if len(pkgJson.Browser) > 0 && ctx.isBrowserTarget() {
 		if entry.main != "" {
 			if path, ok := pkgJson.Browser[entry.main]; ok && ctx.existsPkgFile(path) {
-				entry.update(normalizeEntryPath(path), pkgJson.Type == "module")
+				entry.update(path, pkgJson.Type == "module")
 			}
 		}
 	}
@@ -422,11 +422,11 @@ func (ctx *BuildContext) resolveEntry(esm EsmPath) (entry BuildEntry) {
 func (ctx *BuildContext) finalizeBuildEntry(entry *BuildEntry) {
 	if entry.main != "" {
 		entry.main = normalizeEntryPath(entry.main)
-		preferedExt := ".cjs"
-		if entry.module {
-			preferedExt = ".mjs"
-		}
-		if !endsWith(entry.main, moduleExts...) && !strings.HasSuffix(entry.main, ".json") {
+		if !ctx.existsPkgFile(entry.main) {
+			preferedExt := ".cjs"
+			if entry.module {
+				preferedExt = ".mjs"
+			}
 			if ctx.existsPkgFile(entry.main + preferedExt) {
 				entry.main = entry.main + preferedExt
 			} else if ctx.existsPkgFile(entry.main + ".js") {
@@ -438,8 +438,6 @@ func (ctx *BuildContext) finalizeBuildEntry(entry *BuildEntry) {
 			} else {
 				entry.main = ""
 			}
-		} else if !ctx.existsPkgFile(entry.main) {
-			entry.main = ""
 		} else if !entry.module && endsWith(entry.main, ".js", ".ts") {
 			// check if the cjs entry is an ESM
 			isESM, _, err := validateModuleFile(path.Join(ctx.wd, "node_modules", ctx.esm.PkgName, entry.main))
@@ -785,15 +783,15 @@ func (ctx *BuildContext) resolveExternalModule(specifier string, kind api.Resolv
 		return
 	}
 
-	var isFixedVersion bool
+	var exactVersion bool
 	if dep.GhPrefix {
-		isFixedVersion = isCommitish(dep.PkgVersion) || isExactVersion(strings.TrimPrefix(dep.PkgVersion, "v"))
+		exactVersion = isCommitish(dep.PkgVersion) || isExactVersion(strings.TrimPrefix(dep.PkgVersion, "v"))
 	} else if dep.PrPrefix {
-		isFixedVersion = true
+		exactVersion = true
 	} else {
-		isFixedVersion = isExactVersion(dep.PkgVersion)
+		exactVersion = isExactVersion(dep.PkgVersion)
 	}
-	if isFixedVersion {
+	if exactVersion {
 		buildArgsPrefix := ""
 		if a := encodeBuildArgs(args, false); a != "" {
 			buildArgsPrefix = "X-" + a + "/"

@@ -7,9 +7,10 @@ import (
 
 type BuildMeta struct {
 	CJS           bool
-	HasCSS        bool
+	CSSInJS       bool
 	TypesOnly     bool
 	ExportDefault bool
+	CSSEntry      string
 	Dts           string
 	Imports       []string
 }
@@ -17,10 +18,11 @@ type BuildMeta struct {
 func encodeBuildMeta(meta *BuildMeta) []byte {
 	buf, recycle := NewBuffer()
 	defer recycle()
+	buf.Write([]byte{'E', 'S', 'M', '\r', '\n'})
 	if meta.CJS {
 		buf.Write([]byte{'j', '\n'})
 	}
-	if meta.HasCSS {
+	if meta.CSSInJS {
 		buf.Write([]byte{'c', '\n'})
 	}
 	if meta.TypesOnly {
@@ -28,6 +30,11 @@ func encodeBuildMeta(meta *BuildMeta) []byte {
 	}
 	if meta.ExportDefault {
 		buf.Write([]byte{'e', '\n'})
+	}
+	if meta.CSSEntry != "" {
+		buf.Write([]byte{'.', ':'})
+		buf.WriteString(meta.CSSEntry)
+		buf.WriteByte('\n')
 	}
 	if meta.Dts != "" {
 		buf.Write([]byte{'d', ':'})
@@ -46,7 +53,10 @@ func encodeBuildMeta(meta *BuildMeta) []byte {
 
 func decodeBuildMeta(data []byte) (*BuildMeta, error) {
 	meta := &BuildMeta{}
-	lines := bytes.Split(data, []byte{'\n'})
+	if len(data) < 5 || !bytes.Equal(data[:5], []byte{'E', 'S', 'M', '\r', '\n'}) {
+		return nil, errors.New("invalid build meta")
+	}
+	lines := bytes.Split(data[5:], []byte{'\n'})
 	n := 0
 	for _, line := range lines {
 		if len(line) > 2 && line[0] == 'i' && line[1] == ':' {
@@ -63,11 +73,13 @@ func decodeBuildMeta(data []byte) (*BuildMeta, error) {
 		case ll == 1 && line[0] == 'j':
 			meta.CJS = true
 		case ll == 1 && line[0] == 'c':
-			meta.HasCSS = true
+			meta.CSSInJS = true
 		case ll == 1 && line[0] == 't':
 			meta.TypesOnly = true
 		case ll == 1 && line[0] == 'e':
 			meta.ExportDefault = true
+		case ll > 2 && line[0] == '.' && line[1] == ':':
+			meta.CSSEntry = string(line[2:])
 		case ll > 2 && line[0] == 'd' && line[1] == ':':
 			meta.Dts = string(line[2:])
 		case ll > 2 && line[0] == 'i' && line[1] == ':':

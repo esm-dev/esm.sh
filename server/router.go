@@ -897,7 +897,7 @@ func esmRouter(db DB, buildStorage storage.Storage) rex.Handle {
 
 		// redirect to the main css path for CSS packages
 		if css := cssPackages[esm.PkgName]; css != "" && esm.SubModuleName == "" {
-			url := fmt.Sprintf("%s/%s/%s", origin, esm.Specifier(), css)
+			url := fmt.Sprintf("%s/%s/%s", origin, esm.Name(), css)
 			return redirect(ctx, url, isExactVersion)
 		}
 
@@ -1601,6 +1601,11 @@ func esmRouter(db DB, buildStorage storage.Storage) rex.Handle {
 			}
 		}
 
+		if ret.CSSEntry != "" {
+			url := strings.Join([]string{origin, esm.Name(), ret.CSSEntry[2:]}, "/")
+			return redirect(ctx, url, isExactVersion)
+		}
+
 		// redirect to `*.d.ts` file
 		if ret.TypesOnly {
 			dtsUrl := origin + ret.Dts
@@ -1615,7 +1620,7 @@ func esmRouter(db DB, buildStorage storage.Storage) rex.Handle {
 
 		// redirect to package css from `?css`
 		if isPkgCss && esm.SubModuleName == "" {
-			if !ret.HasCSS {
+			if !ret.CSSInJS {
 				return rex.Status(404, "Package CSS not found")
 			}
 			url := origin + strings.TrimSuffix(buildCtx.Path(), ".mjs") + ".css"

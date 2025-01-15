@@ -247,31 +247,38 @@ func (ctx *BuildContext) buildModule(analyzeMode bool) (meta *BuildMeta, include
 		return
 	}
 
+	// css entry
+	if strings.HasSuffix(entry.main, ".css") {
+		if analyzeMode {
+			return
+		}
+		meta = &BuildMeta{CSSEntry: entry.main}
+		return
+	}
+
 	// json module
 	if strings.HasSuffix(entry.main, ".json") {
 		if analyzeMode {
 			return
 		}
+		var jsonData []byte
 		jsonPath := path.Join(ctx.wd, "node_modules", ctx.esm.PkgName, entry.main)
-		if existsFile(jsonPath) {
-			var jsonData []byte
-			jsonData, err = os.ReadFile(jsonPath)
-			if err != nil {
-				return
-			}
-			buffer, recycle := NewBuffer()
-			defer recycle()
-			buffer.WriteString("export default ")
-			buffer.Write(jsonData)
-			err = ctx.storage.Put(ctx.getSavepath(), buffer)
-			if err != nil {
-				log.Errorf("storage.put(%s): %v", ctx.getSavepath(), err)
-				err = errors.New("storage: " + err.Error())
-				return
-			}
-			meta = &BuildMeta{ExportDefault: true}
+		jsonData, err = os.ReadFile(jsonPath)
+		if err != nil {
 			return
 		}
+		buffer, recycle := NewBuffer()
+		defer recycle()
+		buffer.WriteString("export default ")
+		buffer.Write(jsonData)
+		err = ctx.storage.Put(ctx.getSavepath(), buffer)
+		if err != nil {
+			log.Errorf("storage.put(%s): %v", ctx.getSavepath(), err)
+			err = errors.New("storage: " + err.Error())
+			return
+		}
+		meta = &BuildMeta{ExportDefault: true}
+		return
 	}
 
 	var (
@@ -1343,7 +1350,7 @@ REBUILD:
 				err = errors.New("storage: " + err.Error())
 				return
 			}
-			meta.HasCSS = true
+			meta.CSSInJS = true
 		} else if config.SourceMap && strings.HasSuffix(file.Path, ".js.map") {
 			var sourceMap map[string]interface{}
 			if json.Unmarshal(file.Contents, &sourceMap) == nil {
