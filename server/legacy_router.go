@@ -101,8 +101,8 @@ func esmLegacyRouter(buildStorage storage.Storage) rex.Handle {
 }
 
 type LegacyBuildMeta struct {
-	EsmId string `json:"esmId"`
-	Dts   string `json:"dts"`
+	EsmId string `json:"esmId,omitempty"`
+	Dts   string `json:"dts,omitempty"`
 	Code  string `json:"code"`
 }
 
