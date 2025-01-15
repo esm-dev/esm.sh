@@ -100,6 +100,12 @@ func esmLegacyRouter(buildStorage storage.Storage) rex.Handle {
 	}
 }
 
+type LegacyBuildMeta struct {
+	EsmId string `json:"esmId"`
+	Dts   string `json:"dts"`
+	Code  string `json:"code"`
+}
+
 func legacyESM(ctx *rex.Context, buildStorage storage.Storage, buildVersionPrefix string) any {
 	pathname := ctx.R.URL.Path
 	if buildVersionPrefix != "" {
@@ -179,26 +185,27 @@ func legacyESM(ctx *rex.Context, buildStorage storage.Storage, buildVersionPrefi
 			h.Write([]byte(query))
 			savePath += "." + base64.RawURLEncoding.EncodeToString(h.Sum(nil))
 		}
-		savePath += ".mjs"
+		savePath += ".meta"
 		f, _, e := buildStorage.Get(savePath)
 		if e != nil && e != storage.ErrNotFound {
 			return rex.Status(500, "Storage error: "+e.Error())
 		}
 		if e == nil {
 			defer f.Close()
-			var ret []string
-			if json.NewDecoder(f).Decode(&ret) == nil && len(ret) >= 2 {
+			var ret LegacyBuildMeta
+			if json.NewDecoder(f).Decode(&ret) == nil {
 				ctx.SetHeader("Content-Type", ctJavaScript)
 				ctx.SetHeader("Control-Cache", ccImmutable)
-				ctx.SetHeader("X-ESM-Id", ret[0])
 				if varyUA {
 					appendVaryHeader(ctx.W.Header(), "User-Agent")
 				}
-				if len(ret) == 3 {
-					ctx.SetHeader("X-TypeScript-Types", getOrigin(ctx)+ret[1])
-					return ret[2]
+				if ret.EsmId != "" {
+					ctx.SetHeader("X-ESM-Id", ret.EsmId)
 				}
-				return ret[1]
+				if ret.Dts != "" {
+					ctx.SetHeader("X-TypeScript-Types", getOrigin(ctx)+ret.Dts)
+				}
+				return ret.Code
 			}
 		}
 	}
@@ -242,10 +249,6 @@ func legacyESM(ctx *rex.Context, buildStorage storage.Storage, buildVersionPrefi
 			return rex.Status(500, "Failed to fetch data from the legacy esm.sh server")
 		}
 		esmId := res.Header.Get("X-Esm-Id")
-		if esmId == "" {
-			ctx.SetHeader("Cache-Control", "public, max-age=600")
-			return rex.Status(502, "Unexpected response from the legacy esm.sh server")
-		}
 		dts := res.Header.Get("X-TypeScript-Types")
 		if dts != "" {
 			u, err := url.Parse(dts)
@@ -255,20 +258,22 @@ func legacyESM(ctx *rex.Context, buildStorage storage.Storage, buildVersionPrefi
 				dts = u.Path
 			}
 		}
-		ret := []string{esmId}
-		if dts != "" {
-			ret = append(ret, dts)
+		ret := LegacyBuildMeta{
+			EsmId: esmId,
+			Dts:   dts,
+			Code:  string(code),
 		}
-		ret = append(ret, string(code))
 		err = buildStorage.Put(savePath, bytes.NewReader(utils.MustEncodeJSON(ret)))
 		if err != nil {
 			return rex.Status(500, "Storage error: "+err.Error())
 		}
 		ctx.SetHeader("Content-Type", res.Header.Get("Content-Type"))
 		ctx.SetHeader("Control-Cache", ccImmutable)
-		ctx.SetHeader("X-ESM-Id", esmId)
 		if query != "" && !ctx.R.URL.Query().Has("target") {
 			appendVaryHeader(ctx.W.Header(), "User-Agent")
+		}
+		if esmId != "" {
+			ctx.SetHeader("X-ESM-Id", esmId)
 		}
 		if dts != "" {
 			ctx.SetHeader("X-TypeScript-Types", getOrigin(ctx)+dts)
