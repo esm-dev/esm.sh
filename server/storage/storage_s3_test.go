@@ -37,7 +37,7 @@ func TestS3Storage(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	err = s3.Put("test/%23/hello.txt", bytes.NewReader([]byte("Hello, world!")))
+	err = s3.Put("test/%23/hello+world!", bytes.NewReader([]byte("Hello, world!")))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -106,7 +106,7 @@ func TestS3Storage(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	err = s3.Delete("test/%23/hello.txt")
+	err = s3.Delete("test/%23/hello+world!")
 	if err != nil {
 		t.Fatal(err)
 	}
