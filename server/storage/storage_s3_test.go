@@ -37,12 +37,16 @@ func TestS3Storage(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	err = s3.Put("test/%23/hello.txt", bytes.NewReader([]byte("Hello, world!")))
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	keys, err := s3.List("test/")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(keys) != 2 {
+	if len(keys) != 3 {
 		t.Fatalf("invalid keys length(%d), expected 2", len(keys))
 	}
 
@@ -99,6 +103,10 @@ func TestS3Storage(t *testing.T) {
 	}
 
 	err = s3.Delete("test/hello.txt")
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = s3.Delete("test/%23/hello.txt")
 	if err != nil {
 		t.Fatal(err)
 	}

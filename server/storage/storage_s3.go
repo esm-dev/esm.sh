@@ -344,7 +344,7 @@ func (s3 *s3Storage) sign(req *http.Request) {
 			canonicalHeaders[i] = key + ":" + strings.Join(req.Header.Values(key), ",")
 		}
 	}
-	canonicalRequest := strings.Join([]string{req.Method, escapePath(req.URL.EscapedPath()), req.URL.Query().Encode(), strings.Join(canonicalHeaders, "\n") + "\n", strings.Join(signedHeaders, ";"), req.Header.Get("X-Amz-Content-Sha256")}, "\n")
+	canonicalRequest := strings.Join([]string{req.Method, escapePath(req.URL.Path), req.URL.Query().Encode(), strings.Join(canonicalHeaders, "\n") + "\n", strings.Join(signedHeaders, ";"), req.Header.Get("X-Amz-Content-Sha256")}, "\n")
 	stringToSign := strings.Join([]string{"AWS4-HMAC-SHA256", datetime, scope, toHex(sha256Sum(canonicalRequest))}, "\n")
 	signingKey := hmacSum(hmacSum(hmacSum(hmacSum([]byte("AWS4"+s3.secretAccessKey), date), s3.region), "s3"), "aws4_request")
 	signature := hmacSum(signingKey, stringToSign)
