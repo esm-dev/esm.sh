@@ -153,3 +153,10 @@ Deno.test("fix rewritten build path", async () => {
     assertEquals(js.trim(), `export * from "/@ucanto/core@10.0.1/denonext/core.mjs";`);
   }
 });
+
+Deno.test("redirect to css entry", async () => {
+  const res = await fetch("http://localhost:8080/@markprompt/css@0.33.0", { redirect: "manual" });
+  res.body?.cancel();
+  assertEquals(res.status, 301);
+  assertEquals(res.headers.get("location"), "http://localhost:8080/@markprompt/css@0.33.0/markprompt.css");
+});
