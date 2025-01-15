@@ -753,6 +753,11 @@ func (ctx *BuildContext) resolveExternalModule(specifier string, kind api.Resolv
 		}
 	}
 
+	// [workaround] force the dependency version of `react` equals to react-dom
+	if ctx.esm.PkgName == "react-dom" && dep.PkgName == "react" {
+		dep.PkgVersion = ctx.esm.PkgVersion
+	}
+
 	if withTypeJSON {
 		resolvedPath = "/" + dep.Specifier()
 		if subPath == "" || !strings.HasSuffix(subPath, ".json") {

@@ -160,3 +160,10 @@ Deno.test("redirect to css entry", async () => {
   assertEquals(res.status, 301);
   assertEquals(res.headers.get("location"), "http://localhost:8080/@markprompt/css@0.33.0/markprompt.css");
 });
+
+Deno.test("[workaround] force the dependency version of react equals to react-dom", async () => {
+  const res = await fetch("http://localhost:8080/react-dom@18.2.0?target=es2022");
+  assertEquals(res.status, 200);
+  const js = await res.text();
+  assertStringIncludes(js, '"/react@18.2.0/es2022/react.mjs"');
+});
