@@ -118,7 +118,7 @@ if (import.meta.main) {
   try {
     console.log("Cleaning up...");
     await Promise.all([
-      Deno.remove(".esmd/log", { recursive: true }),
+      Deno.remove(".esmd/esm.db"),
       Deno.remove(".esmd/storage", { recursive: true }),
     ]);
   } catch (_) {

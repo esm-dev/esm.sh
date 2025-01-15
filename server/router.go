@@ -1563,6 +1563,7 @@ func esmRouter(db DB, buildStorage storage.Storage) rex.Handle {
 			}
 		}
 
+	BUILD:
 		buildCtx := &BuildContext{
 			npmrc:       npmrc,
 			db:          db,
@@ -1636,7 +1637,6 @@ func esmRouter(db DB, buildStorage storage.Storage) rex.Handle {
 
 		// if the path is `ESMBuild`, return the built js/css content
 		if pathKind == EsmBuild {
-			// if the build
 			if esm.SubPath != buildCtx.esm.SubPath {
 				buf, recycle := NewBuffer()
 				defer recycle()
@@ -1656,7 +1656,13 @@ func esmRouter(db DB, buildStorage storage.Storage) rex.Handle {
 			f, fi, err := buildStorage.Get(savePath)
 			if err != nil {
 				if err == storage.ErrNotFound {
-					return rex.Status(404, "File not found")
+					// seem the build file is non-exist in the storage
+					// let's remove the build meta from the database and clear the cache
+					// then re-build the module
+					key := npmrc.zoneId + ":" + buildCtx.Path()
+					db.Delete(key)
+					cacheStore.Delete("lru:" + key)
+					goto BUILD
 				}
 				return rex.Status(500, err.Error())
 			}
