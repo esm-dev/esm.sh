@@ -1201,6 +1201,9 @@ func esmRouter(db DB, buildStorage storage.Storage) rex.Handle {
 			// build/dts files
 			if pathKind == EsmBuild || pathKind == EsmSourceMap || pathKind == EsmDts {
 				var savePath string
+				if asteriskPrefix {
+					pathname = "/*" + pathname[1:]
+				}
 				if pathKind == EsmDts {
 					savePath = path.Join("types", pathname)
 				} else {
@@ -1654,7 +1657,7 @@ func esmRouter(db DB, buildStorage storage.Storage) rex.Handle {
 				return buf.Bytes()
 			}
 			savePath := buildCtx.getSavepath()
-			if strings.HasSuffix(esm.SubPath, ".css") {
+			if strings.HasSuffix(esm.SubPath, ".css") && ret.CSSInJS {
 				path, _ := utils.SplitByLastByte(savePath, '.')
 				savePath = path + ".css"
 			}
