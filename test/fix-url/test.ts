@@ -167,3 +167,16 @@ Deno.test("[workaround] force the dependency version of react equals to react-do
   const js = await res.text();
   assertStringIncludes(js, '"/react@18.2.0/es2022/react.mjs"');
 });
+
+Deno.test("fix external save path", async () => {
+  // non-external module
+  {
+    const res = await fetch("http://localhost:8080/preact@10.25.4/es2022/hooks.mjs");
+    assertStringIncludes(await res.text(), 'from"/preact@10.25.4/es2022/preact.mjs"');
+  }
+  // in https://github.com/preactjs/preact-www/issues/1225, the module returns the non-external module
+  {
+    const res = await fetch("http://localhost:8080/*preact@10.25.4/es2022/hooks.mjs");
+    assertStringIncludes(await res.text(), 'from"preact"');
+  }
+});
