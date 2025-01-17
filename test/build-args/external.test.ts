@@ -21,6 +21,49 @@ Deno.test("`?external` query", async () => {
     const res = await fetch("http://localhost:8080/*preact@10.23.2/denonext/hooks.mjs");
     assertStringIncludes(await res.text(), 'from"preact"');
   }
+  {
+    // ?external=react
+    const res = await fetch("http://localhost:8080/react-dom@19.0.0/X-ZXJlYWN0/es2022/client.mjs");
+    const code = await res.text();
+    assertStringIncludes(code, 'from"react"');
+    assertStringIncludes(code, 'from"/react-dom@');
+    assertStringIncludes(code, 'from"/scheduler@');
+  }
+  {
+    // ?external=react,react-dom
+    const res = await fetch("http://localhost:8080/react-dom@19.0.0/X-ZXJlYWN0LHJlYWN0LWRvbQ/es2022/client.mjs");
+    const code = await res.text();
+    assertStringIncludes(code, 'from"react"');
+    assertStringIncludes(code, 'from"react-dom"');
+    assertStringIncludes(code, 'from"/scheduler@');
+  }
+  {
+    // ?external=react,react-dom,scheduler
+    const res = await fetch("http://localhost:8080/react-dom@19.0.0/X-ZXJlYWN0LHJlYWN0LWRvbSxzY2hlZHVsZXI/es2022/client.mjs");
+    const code = await res.text();
+    assertStringIncludes(code, 'from"react"');
+    assertStringIncludes(code, 'from"react-dom"');
+    assertStringIncludes(code, 'from"scheduler"');
+  }
+  {
+    const res = await fetch("http://localhost:8080/*react-dom@19.0.0/es2022/client.mjs");
+    const code = await res.text();
+    assertStringIncludes(code, 'from"react"');
+    assertStringIncludes(code, 'from"react-dom"');
+    assertStringIncludes(code, 'from"scheduler"');
+  }
+  {
+    const res = await fetch("http://localhost:8080/react-dom@19.0.0/client?external=react,react-dom,scheduler");
+    assertStringIncludes(await res.text(), '"/react-dom@19.0.0/X-ZXJlYWN0LHJlYWN0LWRvbSxzY2hlZHVsZXI/denonext/client.mjs"');
+  }
+  {
+    const res = await fetch("http://localhost:8080/react-dom@19.0.0/client?external=react,scheduler,react-dom");
+    assertStringIncludes(await res.text(), '"/react-dom@19.0.0/X-ZXJlYWN0LHJlYWN0LWRvbSxzY2hlZHVsZXI/denonext/client.mjs"');
+  }
+  {
+    const res = await fetch("http://localhost:8080/react-dom@19.0.0/client?external=scheduler,react,react-dom");
+    assertStringIncludes(await res.text(), '"/react-dom@19.0.0/X-ZXJlYWN0LHJlYWN0LWRvbSxzY2hlZHVsZXI/denonext/client.mjs"');
+  }
 });
 
 Deno.test("drop invalid `?external`", async () => {

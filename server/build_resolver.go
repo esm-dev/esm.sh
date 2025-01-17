@@ -615,10 +615,6 @@ func (ctx *BuildContext) resolveExternalModule(specifier string, kind api.Resolv
 		return specifier, nil
 	}
 
-	if ctx.externalAll {
-		return specifier, nil
-	}
-
 	defer func() {
 		if err == nil && !withTypeJSON {
 			resolvedPathFull := resolvedPath
@@ -641,6 +637,12 @@ func (ctx *BuildContext) resolveExternalModule(specifier string, kind api.Resolv
 		}
 	}()
 
+	// check `?external`
+	if ctx.externalAll || ctx.args.external.Has(toPackageName(specifier)) {
+		resolvedPath = specifier
+		return
+	}
+
 	// if  it's the main entry of current package
 	if pkgJson := ctx.pkgJson; specifier == pkgJson.Name || specifier == pkgJson.PkgName {
 		resolvedPath = ctx.getImportPath(EsmPath{
@@ -661,12 +663,6 @@ func (ctx *BuildContext) resolveExternalModule(specifier string, kind api.Resolv
 		} else {
 			resolvedPath = fmt.Sprintf("/node/%s.mjs", specifier[5:])
 		}
-		return
-	}
-
-	// check `?external`
-	if ctx.externalAll || ctx.args.external.Has(toPackageName(specifier)) {
-		resolvedPath = specifier
 		return
 	}
 
