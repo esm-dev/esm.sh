@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"encoding/base64"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -119,9 +118,28 @@ func legacyESM(ctx *rex.Context, buildStorage storage.Storage, buildVersionPrefi
 	if strings.HasPrefix(pathname, "/node_") && strings.HasSuffix(pathname, ".js") {
 		isStatic = true
 	} else {
-		pkgName, pkgVersion, subPath, hasTargetSegment, err := splitLegacyESMPath(pathname)
-		if err != nil {
-			return rex.Status(400, err.Error())
+		if strings.HasPrefix(pathname, "/gh/") {
+			if !strings.ContainsRune(pathname[4:], '/') {
+				return rex.Status(400, "invalid path")
+			}
+			// add a leading `@` to the package name
+			pathname = "/@" + pathname[4:]
+		}
+		pkgName, pkgVersion, subPath, hasTargetSegment := splitEsmPath(pathname)
+		var asteriskFlag bool
+		if len(pkgName) > 1 && pkgName[0] == '*' {
+			asteriskFlag = true
+			pkgName = pkgName[1:]
+		}
+		if !validatePackageName(pkgName) {
+			return rex.Status(400, "Invalid Package Name")
+		}
+		var extraQuery string
+		if pkgVersion != "" {
+			pkgVersion, extraQuery = utils.SplitByFirstByte(pkgVersion, '&')
+			if v, e := url.QueryUnescape(pkgVersion); e == nil {
+				pkgVersion = v
+			}
 		}
 		if !isExactVersion(pkgVersion) {
 			npmrc := DefaultNpmRC()
@@ -139,9 +157,16 @@ func legacyESM(ctx *rex.Context, buildStorage storage.Storage, buildVersionPrefi
 				b.WriteString(buildVersionPrefix)
 			}
 			b.WriteByte('/')
+			if asteriskFlag {
+				b.WriteByte('*')
+			}
 			b.WriteString(pkgName)
 			b.WriteByte('@')
 			b.WriteString(pkgInfo.Version)
+			if extraQuery != "" {
+				b.WriteByte('&')
+				b.WriteString(extraQuery)
+			}
 			if subPath != "" {
 				b.WriteByte('/')
 				b.WriteString(subPath)
@@ -280,27 +305,4 @@ func legacyESM(ctx *rex.Context, buildStorage storage.Storage, buildVersionPrefi
 		}
 		return code
 	}
-}
-
-func splitLegacyESMPath(pathname string) (pkgName string, version string, subPath string, hasTargetSegment bool, err error) {
-	if strings.HasPrefix(pathname, "/gh/") {
-		if !strings.ContainsRune(pathname[4:], '/') {
-			err = errors.New("invalid path")
-			return
-		}
-		// add a leading `@` to the package name
-		pathname = "/@" + pathname[4:]
-	}
-
-	pkgName, maybeVersion, subPath, hasTargetSegment := splitEsmPath(pathname)
-	if !validatePackageName(pkgName) {
-		err = fmt.Errorf("invalid package name '%s'", pkgName)
-		return
-	}
-
-	version, _ = utils.SplitByFirstByte(maybeVersion, '&')
-	if v, e := url.QueryUnescape(version); e == nil {
-		version = v
-	}
-	return
 }

@@ -73,6 +73,19 @@ Deno.test("legacy routes", async () => {
     assertStringIncludes(await res.text(), "/v135/react-dom@18.3.1/es2022/react-dom.development.mjs");
   }
   {
+    const res = await fetch("http://localhost:8080/react-dom@18&pin=v135&dev", {
+      redirect: "manual",
+      headers: {
+        "User-Agent":
+          "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+      },
+    });
+    res.body?.cancel();
+    assertEquals(res.status, 302);
+    assert(res.headers.get("Location")?.startsWith("http://localhost:8080/react-dom@18."));
+    assert(res.headers.get("Location")?.endsWith("&pin=v135&dev"));
+  }
+  {
     const res = await fetch("http://localhost:8080/react-dom@18.3.1/client?pin=v135", {
       headers: {
         "User-Agent":
@@ -135,6 +148,29 @@ Deno.test("legacy routes", async () => {
     assertEquals(res.status, 302);
     assert(res.headers.get("Location")?.startsWith("http://localhost:8080/v135/@emotion/sheet@"));
     assert(res.headers.get("Location")?.endsWith("?external=react,react-dom"));
+  }
+  {
+    const res = await fetch("http://localhost:8080/v135/react-dom@19.0.0/client?external=*");
+    assertEquals(res.status, 200);
+    assertStringIncludes(await res.text(), "/v135/react-dom@19.0.0/X-ZS8q/denonext/client.js");
+  }
+  {
+    const res = await fetch("http://localhost:8080/*react-dom@19.0.0/client?pin=v135");
+    assertEquals(res.status, 200);
+    assertStringIncludes(await res.text(), "/v135/react-dom@19.0.0/X-ZS8q/denonext/client.js");
+  }
+  {
+    const res = await fetch("http://localhost:8080/v135/*react-dom@19.0.0/client");
+    assertEquals(res.status, 200);
+    assertStringIncludes(await res.text(), "/v135/react-dom@19.0.0/X-ZS8q/denonext/client.js");
+  }
+  {
+    const res = await fetch("http://localhost:8080/v135/*react-dom@19/client", {
+      redirect: "manual",
+    });
+    res.body?.cancel();
+    assertEquals(res.status, 302);
+    assert(res.headers.get("Location")?.startsWith("http://localhost:8080/v135/*react-dom@19."));
   }
   {
     const res = await fetch("http://localhost:8080/v135/@types/react-dom@~18.3/index.d.ts", {

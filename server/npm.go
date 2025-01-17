@@ -866,7 +866,7 @@ func isNumericString(s string) bool {
 
 // based on https://github.com/npm/validate-npm-package-name
 func validatePackageName(pkgName string) bool {
-	if len(pkgName) > 214 {
+	if l := len(pkgName); l == 0 || l > 214 {
 		return false
 	}
 	if strings.HasPrefix(pkgName, "@") {
