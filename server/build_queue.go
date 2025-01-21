@@ -98,13 +98,13 @@ func (q *BuildQueue) run(task *BuildTask) {
 	if err == nil {
 		task.ctx.status = "done"
 		if task.ctx.target == "types" {
-			log.Infof("build '%s'(types) done in %v", task.ctx.Path(), time.Since(task.startedAt))
+			task.ctx.logger.Infof("build '%s'(types) done in %v", task.ctx.Path(), time.Since(task.startedAt))
 		} else {
-			log.Infof("build '%s' done in %v", task.ctx.Path(), time.Since(task.startedAt))
+			task.ctx.logger.Infof("build '%s' done in %v", task.ctx.Path(), time.Since(task.startedAt))
 		}
 	} else {
 		task.ctx.status = "error"
-		log.Errorf("build '%s': %v", task.ctx.Path(), err)
+		task.ctx.logger.Errorf("build '%s': %v", task.ctx.Path(), err)
 	}
 
 	q.lock.Lock()

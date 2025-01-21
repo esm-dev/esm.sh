@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"github.com/ije/gox/set"
+	"github.com/ije/gox/term"
 	"github.com/ije/gox/utils"
 )
 
@@ -62,7 +63,7 @@ func cjsModuleLexer(ctx *BuildContext, cjsEntry string) (ret cjsModuleLexerResul
 	defer func() {
 		if err == nil {
 			if DEBUG {
-				log.Debugf("[cjsModuleLexer] parse %s in %s", path.Join(ctx.esm.PkgName, cjsEntry), time.Since(start))
+				ctx.logger.Debugf("[cjsModuleLexer] parse %s in %s", path.Join(ctx.esm.PkgName, cjsEntry), time.Since(start))
 			}
 			if !existsFile(cacheFileName) {
 				ensureDir(path.Dir(cacheFileName))
@@ -173,7 +174,7 @@ func installCommonJSModuleLexer() (err error) {
 	}
 
 	if DEBUG {
-		log.Debugf("downloading %s...", path.Base(url))
+		fmt.Println(term.Dim(fmt.Sprintf("Downloading %s...", path.Base(url))))
 	}
 
 	res, err := http.Get(url)

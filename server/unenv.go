@@ -49,7 +49,6 @@ func loadUnenvNodeRuntime() (err error) {
 			return nil
 		}
 	}
-	log.Info("Building unenv node runtime...")
 	return buildUnenvNodeRuntime()
 }
 

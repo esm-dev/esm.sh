@@ -25,6 +25,7 @@ var (
 type Config struct {
 	Port                uint16                 `json:"port"`
 	TlsPort             uint16                 `json:"tlsPort"`
+	LegacyServer        string                 `json:"legacyServer"` // normally you don't need to set this
 	CustomLandingPage   LandingPageOptions     `json:"customLandingPage"`
 	WorkDir             string                 `json:"workDir"`
 	CorsAllowOrigins    []string               `json:"corsAllowOrigins"`
@@ -36,6 +37,7 @@ type Config struct {
 	CacheRawFile        bool                   `json:"cacheRawFile"`
 	LogDir              string                 `json:"logDir"`
 	LogLevel            string                 `json:"logLevel"`
+	AccessLog           bool                   `json:"accessLog"`
 	NpmRegistry         string                 `json:"npmRegistry"`
 	NpmToken            string                 `json:"npmToken"`
 	NpmUser             string                 `json:"npmUser"`
@@ -45,7 +47,6 @@ type Config struct {
 	MinifyRaw           json.RawMessage        `json:"minify"`
 	SourceMapRaw        json.RawMessage        `json:"sourceMap"`
 	CompressRaw         json.RawMessage        `json:"compress"`
-	LegacyServer        string                 `json:"legacyServer"` // normally you don't need to set this
 	Minify              bool                   `json:"-"`
 	SourceMap           bool                   `json:"-"`
 	Compress            bool                   `json:"-"`
@@ -196,6 +197,9 @@ func normalizeConfig(config *Config) {
 		if config.LogLevel == "" {
 			config.LogLevel = "info"
 		}
+	}
+	if !config.AccessLog {
+		config.AccessLog = os.Getenv("ACCESS_LOG") == "true"
 	}
 	if config.NpmRegistry != "" {
 		if isHttpSepcifier(config.NpmRegistry) {

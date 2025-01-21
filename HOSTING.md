@@ -81,6 +81,7 @@ Available environment variables:
 - `CUSTOM_LANDING_PAGE_ASSETS`: The custom landing page assets separated by comma(,), default is empty.
 - `CORS_ALLOW_ORIGINS`: The CORS allow origins separated by comma(,), default is allow all origins.
 - `LOG_LEVEL`: The log level, available values are ["debug", "info", "warn", "error"], default is "info".
+- `ACCESS_LOG`: Enable access log, default is `false`.
 - `MINIFY`: Minify the built JS/CSS files, default is `true`.
 - `NPM_QUERY_CACHE_TTL`: The cache TTL for NPM query, default is 10 minutes.
 - `NPM_REGISTRY`: The global NPM registry, default is "https://registry.npmjs.org/".

@@ -14,6 +14,7 @@ import (
 	"sync"
 
 	esbuild "github.com/evanw/esbuild/pkg/api"
+	"github.com/ije/gox/term"
 	"github.com/ije/gox/utils"
 )
 
@@ -145,7 +146,7 @@ func installLoaderRuntime() (err error) {
 	}
 
 	if DEBUG {
-		log.Debugf("downloading %s...", path.Base(url))
+		fmt.Println(term.Dim(fmt.Sprintf("Downloading %s...", path.Base(url))))
 	}
 
 	res, err := http.Get(url)
