@@ -13,6 +13,7 @@ import (
 
 	"github.com/esm-dev/esm.sh/server/common"
 	"github.com/ije/gox/sync"
+	"github.com/ije/gox/term"
 )
 
 var (
@@ -26,7 +27,9 @@ func transformSvelte(npmrc *NpmRC, svelteVersion string, filename string, code s
 	once, _ := compileSyncMap.LoadOrStore(loaderExecPath, &sync.Once{})
 	err = once.(*sync.Once).Do(func() (err error) {
 		if !existsFile(loaderExecPath) {
-			log.Debug("compiling svelte loader...")
+			if DEBUG {
+				fmt.Println(term.Dim("Compiling svelte loader..."))
+			}
 			err = compileSvelteLoader(npmrc, svelteVersion, loaderExecPath)
 		}
 		return
@@ -100,7 +103,9 @@ func generateUnoCSS(npmrc *NpmRC, configCSS string, content string) (output *Loa
 	once, _ := compileSyncMap.LoadOrStore(loaderExecPath, &sync.Once{})
 	err = once.(*sync.Once).Do(func() (err error) {
 		if !existsFile(loaderExecPath) {
-			log.Debug("compiling unocss loader...")
+			if DEBUG {
+				fmt.Println(term.Dim("Compiling unocss loader..."))
+			}
 			err = compileUnocssLoader(npmrc, loaderVersion, loaderExecPath)
 		}
 		return
@@ -227,7 +232,9 @@ func transformVue(npmrc *NpmRC, vueVersion string, filename string, code string)
 	once, _ := compileSyncMap.LoadOrStore(loaderExecPath, &sync.Once{})
 	err = once.(*sync.Once).Do(func() (err error) {
 		if !existsFile(loaderExecPath) {
-			log.Debug("compiling vue loader...")
+			if DEBUG {
+				fmt.Println(term.Dim("Compiling vue loader..."))
+			}
 			err = compileVueLoader(npmrc, vueVersion, loaderVersion, loaderExecPath)
 		}
 		return

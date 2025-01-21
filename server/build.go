@@ -16,6 +16,7 @@ import (
 	"github.com/esm-dev/esm.sh/server/npm_replacements"
 	"github.com/esm-dev/esm.sh/server/storage"
 	esbuild "github.com/evanw/esbuild/pkg/api"
+	"github.com/ije/gox/log"
 	"github.com/ije/gox/set"
 	"github.com/ije/gox/utils"
 )
@@ -30,6 +31,7 @@ const (
 
 type BuildContext struct {
 	npmrc       *NpmRC
+	logger      *log.Logger
 	db          DB
 	storage     storage.Storage
 	esm         EsmPath
@@ -94,7 +96,7 @@ func (ctx *BuildContext) Exists() (meta *BuildMeta, ok bool, err error) {
 	meta, err = withLRUCache(key, func() (*BuildMeta, error) {
 		metadata, err := ctx.db.Get(key)
 		if err != nil {
-			log.Errorf("db.get(%s): %v", key, err)
+			ctx.logger.Errorf("db.get(%s): %v", key, err)
 			return nil, err
 		}
 		if metadata == nil {
@@ -160,7 +162,7 @@ func (ctx *BuildContext) Build() (meta *BuildMeta, err error) {
 	key := ctx.npmrc.zoneId + ":" + ctx.Path()
 	err = ctx.db.Put(key, encodeBuildMeta(meta))
 	if err != nil {
-		log.Errorf("db.put(%s): %v", key, err)
+		ctx.logger.Errorf("db.put(%s): %v", key, err)
 		err = errors.New("db: " + err.Error())
 	}
 	return
@@ -228,7 +230,7 @@ func (ctx *BuildContext) buildModule(analyzeMode bool) (meta *BuildMeta, include
 	}
 
 	if DEBUG && !analyzeMode {
-		log.Debugf(`build(%s): Entry{main: "%s", module: %v, types: "%s"}`, ctx.esm.Specifier(), entry.main, entry.module, entry.types)
+		ctx.logger.Debugf(`build(%s): Entry{main: "%s", module: %v, types: "%s"}`, ctx.esm.Specifier(), entry.main, entry.module, entry.types)
 	}
 
 	isTypesOnly := strings.HasPrefix(ctx.pkgJson.Name, "@types/") || entry.isTypesOnly()
@@ -273,7 +275,7 @@ func (ctx *BuildContext) buildModule(analyzeMode bool) (meta *BuildMeta, include
 		buffer.Write(jsonData)
 		err = ctx.storage.Put(ctx.getSavepath(), buffer)
 		if err != nil {
-			log.Errorf("storage.put(%s): %v", ctx.getSavepath(), err)
+			ctx.logger.Errorf("storage.put(%s): %v", ctx.getSavepath(), err)
 			err = errors.New("storage: " + err.Error())
 			return
 		}
@@ -302,6 +304,7 @@ func (ctx *BuildContext) buildModule(analyzeMode bool) (meta *BuildMeta, include
 		}
 		b := &BuildContext{
 			npmrc:       ctx.npmrc,
+			logger:      ctx.logger,
 			db:          ctx.db,
 			storage:     ctx.storage,
 			esm:         dep,
@@ -327,7 +330,7 @@ func (ctx *BuildContext) buildModule(analyzeMode bool) (meta *BuildMeta, include
 		}
 		err = ctx.storage.Put(ctx.getSavepath(), buf)
 		if err != nil {
-			log.Errorf("storage.put(%s): %v", ctx.getSavepath(), err)
+			ctx.logger.Errorf("storage.put(%s): %v", ctx.getSavepath(), err)
 			err = errors.New("storage: " + err.Error())
 			return
 		}
@@ -1065,7 +1068,7 @@ REBUILD:
 			}
 			name := strings.Split(msg, "\"")[1]
 			if !implicitExternal.Has(name) {
-				log.Warnf("build(%s): implicit external '%s'", ctx.Path(), name)
+				ctx.logger.Warnf("build(%s): implicit external '%s'", ctx.Path(), name)
 				implicitExternal.Add(name)
 				goto REBUILD
 			}
@@ -1097,7 +1100,7 @@ REBUILD:
 	}
 
 	for _, w := range res.Warnings {
-		log.Warnf("esbuild(%s): %s", ctx.Path(), w.Text)
+		ctx.logger.Warnf("esbuild(%s): %s", ctx.Path(), w.Text)
 	}
 
 	imports := set.New[string]()
@@ -1261,6 +1264,7 @@ REBUILD:
 							} else {
 								b := &BuildContext{
 									npmrc:       ctx.npmrc,
+									logger:      ctx.logger,
 									db:          ctx.db,
 									storage:     ctx.storage,
 									esm:         dep,
@@ -1333,7 +1337,7 @@ REBUILD:
 
 			err = ctx.storage.Put(ctx.getSavepath(), finalJS)
 			if err != nil {
-				log.Errorf("storage.put(%s): %v", ctx.getSavepath(), err)
+				ctx.logger.Errorf("storage.put(%s): %v", ctx.getSavepath(), err)
 				err = errors.New("storage: " + err.Error())
 				return
 			}
@@ -1346,7 +1350,7 @@ REBUILD:
 			savePath = strings.TrimSuffix(savePath, path.Ext(savePath)) + ".css"
 			err = ctx.storage.Put(savePath, bytes.NewReader(file.Contents))
 			if err != nil {
-				log.Errorf("storage.put(%s): %v", savePath, err)
+				ctx.logger.Errorf("storage.put(%s): %v", savePath, err)
 				err = errors.New("storage: " + err.Error())
 				return
 			}
@@ -1367,7 +1371,7 @@ REBUILD:
 				if json.NewEncoder(buf).Encode(sourceMap) == nil {
 					err = ctx.storage.Put(ctx.getSavepath()+".map", buf)
 					if err != nil {
-						log.Errorf("storage.put(%s): %v", ctx.getSavepath()+".map", err)
+						ctx.logger.Errorf("storage.put(%s): %v", ctx.getSavepath()+".map", err)
 						err = errors.New("storage: " + err.Error())
 						return
 					}

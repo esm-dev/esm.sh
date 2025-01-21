@@ -82,6 +82,10 @@
   // The log level, available values are ["debug", "info", "warn", "error"], default is "info".
   "logLevel": "info",
 
+  // Enable access log, default is disabled.
+  // The access log will be written to the log directory with the name "access-<date>.log".
+  "accessLog": false,
+
   // The cache TTL for npm packages query, default is 600 seconds (10 minutes).
   "npmQueryCacheTTL": 600,
 

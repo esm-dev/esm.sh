@@ -22,6 +22,7 @@ import (
 	"github.com/esm-dev/esm.sh/server/storage"
 	esbuild "github.com/evanw/esbuild/pkg/api"
 	"github.com/ije/esbuild-internal/xxhash"
+	"github.com/ije/gox/log"
 	"github.com/ije/gox/set"
 	"github.com/ije/gox/utils"
 	"github.com/ije/gox/valid"
@@ -55,10 +56,11 @@ const (
 	ctTypeScript     = "application/typescript; charset=utf-8"
 )
 
-func esmRouter(db DB, buildStorage storage.Storage) rex.Handle {
+func esmRouter(db DB, buildStorage storage.Storage, logger *log.Logger) rex.Handle {
 	var (
 		startTime  = time.Now()
 		globalETag = fmt.Sprintf(`W/"%s"`, VERSION)
+		buildQueue = NewBuildQueue(int(config.BuildConcurrency))
 	)
 
 	return func(ctx *rex.Context) any {
@@ -173,7 +175,7 @@ func esmRouter(db DB, buildStorage storage.Storage) rex.Handle {
 				deleteKeys := make([]string, len(deletedBuildFiles)+len(deletedDTSFiles))
 				copy(deleteKeys, deletedBuildFiles)
 				copy(deleteKeys[len(deletedBuildFiles):], deletedDTSFiles)
-				log.Infof("Purged %d files for %s@%s (ip: %s)", len(deleteKeys), packageName, version, ctx.RemoteIP())
+				logger.Infof("Purged %d files for %s@%s (ip: %s)", len(deleteKeys), packageName, version, ctx.RemoteIP())
 				return map[string]any{"deleted": deleteKeys}
 
 			default:
@@ -1459,6 +1461,7 @@ func esmRouter(db DB, buildStorage storage.Storage) rex.Handle {
 				}
 				buildCtx := &BuildContext{
 					npmrc:       npmrc,
+					logger:      logger,
 					db:          db,
 					storage:     buildStorage,
 					esm:         esm,
@@ -1569,6 +1572,7 @@ func esmRouter(db DB, buildStorage storage.Storage) rex.Handle {
 	BUILD:
 		buildCtx := &BuildContext{
 			npmrc:       npmrc,
+			logger:      logger,
 			db:          db,
 			storage:     buildStorage,
 			esm:         esm,

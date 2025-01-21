@@ -758,8 +758,9 @@ func (ctx *BuildContext) resolveExternalModule(specifier string, kind api.Resolv
 		resolvedPath = "/" + dep.Specifier()
 		if subPath == "" || !strings.HasSuffix(subPath, ".json") {
 			b := &BuildContext{
-				npmrc: ctx.npmrc,
-				esm:   dep,
+				npmrc:  ctx.npmrc,
+				logger: ctx.logger,
+				esm:    dep,
 			}
 			err = b.install()
 			if err != nil {
@@ -899,6 +900,7 @@ func (ctx *BuildContext) resloveDTS(entry BuildEntry) (string, error) {
 				}
 				b := &BuildContext{
 					npmrc:       ctx.npmrc,
+					logger:      ctx.logger,
 					esm:         dtsModule,
 					args:        ctx.args,
 					externalAll: ctx.externalAll,
@@ -1079,12 +1081,15 @@ func (ctx *BuildContext) lexer(entry *BuildEntry) (ret *BuildMeta, cjsExports []
 			}
 			return
 		}
-		log.Warnf("fake ES module '%s' of '%s'", entry.main, ctx.pkgJson.Name)
 
 		var cjs cjsModuleLexerResult
 		cjs, err = cjsModuleLexer(ctx, entry.main)
 		if err != nil {
 			return
+		}
+
+		if DEBUG {
+			ctx.logger.Debugf("fake ES module '%s' of '%s'", entry.main, ctx.pkgJson.Name)
 		}
 
 		ret = &BuildMeta{

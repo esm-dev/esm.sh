@@ -21,7 +21,7 @@ func (ctx *BuildContext) transformDTS(dts string) error {
 		return err
 	}
 	if DEBUG {
-		log.Debugf("transform dts '%s'(%d related dts files) in %v", dts, n, time.Since(start))
+		ctx.logger.Debugf("transform dts '%s'(%d related dts files) in %v", dts, n, time.Since(start))
 	}
 	return nil
 }
@@ -55,7 +55,6 @@ func transformDTS(ctx *BuildContext, dts string, buildArgsPrefix string, marker 
 			if isEntry {
 				err = fmt.Errorf("types not found")
 			} else {
-				log.Warnf("dts not found: %s", dtsFilePath)
 				err = nil
 			}
 		}
@@ -215,6 +214,7 @@ func transformDTS(ctx *BuildContext, dts string, buildArgsPrefix string, marker 
 		args := BuildArgs{}
 		b := &BuildContext{
 			npmrc:  ctx.npmrc,
+			logger: ctx.logger,
 			esm:    dtsModule,
 			args:   args,
 			target: "types",

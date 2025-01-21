@@ -13,14 +13,9 @@ import (
 
 	"github.com/esm-dev/esm.sh/server/npm_replacements"
 	"github.com/esm-dev/esm.sh/server/storage"
-	logx "github.com/ije/gox/log"
+	"github.com/ije/gox/log"
 	"github.com/ije/gox/set"
 	"github.com/ije/rex"
-)
-
-var (
-	log        *logx.Logger
-	buildQueue *BuildQueue
 )
 
 // Serve serves the esm.sh server
@@ -51,60 +46,60 @@ func Serve() {
 		os.Setenv("NO_COLOR", "1")
 	}
 
-	log, err = logx.New(fmt.Sprintf("file:%s?buffer=32k&fileDateFormat=20060102", path.Join(config.LogDir, "server.log")))
+	logger, err := log.New(fmt.Sprintf("file:%s?buffer=32k&fileDateFormat=20060102", path.Join(config.LogDir, "server.log")))
 	if err != nil {
 		fmt.Println("failed to initialize logger:", err)
 		os.Exit(1)
 	}
-	log.SetLevelByName(config.LogLevel)
+	logger.SetLevelByName(config.LogLevel)
 
-	accessLogger, err := logx.New(fmt.Sprintf("file:%s?buffer=32k&fileDateFormat=20060102", path.Join(config.LogDir, "access.log")))
+	accessLogger, err := log.New(fmt.Sprintf("file:%s?buffer=32k&fileDateFormat=20060102", path.Join(config.LogDir, "access.log")))
 	if err != nil {
-		log.Fatalf("failed to initialize access logger: %v", err)
+		logger.Fatalf("failed to initialize access logger: %v", err)
 	}
 	// don't write log message to stdout
 	accessLogger.SetQuite(true)
 
 	db, err := OpenDB(path.Join(config.WorkDir, "esm.db"))
 	if err != nil {
-		log.Fatalf("init db: %v", err)
+		logger.Fatalf("init db: %v", err)
 	}
 
 	buildStorage, err := storage.New(&config.Storage)
 	if err != nil {
-		log.Fatalf("failed to initialize build storage(%s): %v", config.Storage.Type, err)
+		logger.Fatalf("failed to initialize build storage(%s): %v", config.Storage.Type, err)
 	}
-	log.Debugf("storage initialized, type: %s, endpoint: %s", config.Storage.Type, config.Storage.Endpoint)
+	logger.Debugf("storage initialized, type: %s, endpoint: %s", config.Storage.Type, config.Storage.Endpoint)
 
 	err = loadUnenvNodeRuntime()
 	if err != nil {
-		log.Fatalf("load unenv node runtime: %v", err)
+		logger.Fatalf("load unenv node runtime: %v", err)
 	}
 	totalSize := 0
 	for _, data := range unenvNodeRuntimeBulid {
 		totalSize += len(data)
 	}
-	log.Debugf("unenv node runtime loaded, %d files, total size: %d KB", len(unenvNodeRuntimeBulid), totalSize/1024)
+	logger.Debugf("unenv node runtime loaded, %d files, total size: %d KB", len(unenvNodeRuntimeBulid), totalSize/1024)
 
 	n, err := npm_replacements.Build()
 	if err != nil {
-		log.Fatalf("build npm replacements: %v", err)
+		logger.Fatalf("build npm replacements: %v", err)
 	}
-	log.Debugf("%d npm repalcements loaded", n)
+	logger.Debugf("%d npm repalcements loaded", n)
 
 	// install loader runtime
 	err = installLoaderRuntime()
 	if err != nil {
-		log.Fatalf("failed to install loader runtime: %v", err)
+		logger.Fatalf("failed to install loader runtime: %v", err)
 	}
-	log.Debugf("loader runtime(%s@%s) installed", loaderRuntime, loaderRuntimeVersion)
+	logger.Debugf("loader runtime(%s@%s) installed", loaderRuntime, loaderRuntimeVersion)
 
 	// install cjs module lexer
 	err = installCommonJSModuleLexer()
 	if err != nil {
-		log.Fatalf("failed to install cjs-module-lexer: %v", err)
+		logger.Fatalf("failed to install cjs-module-lexer: %v", err)
 	}
-	log.Debugf("cjs-module-lexer@%s installed", cjsModuleLexerVersion)
+	logger.Debugf("cjs-module-lexer@%s installed", cjsModuleLexerVersion)
 
 	// add .esmd/bin to PATH
 	os.Setenv("PATH", fmt.Sprintf("%s%c%s", path.Join(config.WorkDir, "bin"), os.PathListSeparator, os.Getenv("PATH")))
@@ -112,19 +107,16 @@ func Serve() {
 	// pre-comile uno generator in background
 	go generateUnoCSS(&NpmRC{NpmRegistry: NpmRegistry{Registry: "https://registry.npmjs.org/"}}, "", "")
 
-	// init build queue
-	buildQueue = NewBuildQueue(int(config.BuildConcurrency))
-
 	// setup rex server
 	rex.Use(
-		rex.Logger(log),
-		rex.AccessLogger(accessLogger),
 		rex.Header("Server", "esm.sh"),
 		cors(config.CorsAllowOrigins),
+		rex.Logger(logger),
+		rex.Optional(rex.AccessLogger(accessLogger), config.AccessLog),
 		rex.Optional(rex.Compress(), config.Compress),
 		rex.Optional(customLandingPage(&config.CustomLandingPage), config.CustomLandingPage.Origin != ""),
 		rex.Optional(esmLegacyRouter(buildStorage), config.LegacyServer != ""),
-		esmRouter(db, buildStorage),
+		esmRouter(db, buildStorage, logger),
 	)
 
 	// start server
@@ -138,19 +130,19 @@ func Serve() {
 			},
 		},
 	})
-	log.Infof("Server is ready on http://localhost:%d", config.Port)
+	logger.Infof("Server is ready on http://localhost:%d", config.Port)
 
 	c := make(chan os.Signal, 1)
 	signal.Notify(c, syscall.SIGTERM, syscall.SIGINT, syscall.SIGQUIT, syscall.SIGHUP, syscall.SIGABRT)
 	select {
 	case <-c:
 	case err = <-C:
-		log.Error(err)
+		logger.Error(err)
 	}
 
 	// release resources
 	db.Close()
-	log.FlushBuffer()
+	logger.FlushBuffer()
 	accessLogger.FlushBuffer()
 }
 
