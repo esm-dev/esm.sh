@@ -129,8 +129,28 @@ func (ctx *BuildContext) resolveEntry(esm EsmPath) (entry BuildEntry) {
 							}
 							*/
 							path := strings.ReplaceAll(s, "*", diff)
-							if ctx.existsPkgFile(path) {
-								exportEntry.update(path, pkgJson.Type == "module")
+							if endsWith(path, ".mjs", ".js", ".cjs") {
+								if ctx.existsPkgFile(path) {
+									exportEntry.update(path, pkgJson.Type == "module")
+									break
+								}
+							} else if p := path + ".mjs"; ctx.existsPkgFile(p) {
+								exportEntry.update(p, true)
+								break
+							} else if p := path + ".js"; ctx.existsPkgFile(p) {
+								exportEntry.update(p, pkgJson.Type == "module")
+								break
+							} else if p := path + ".cjs"; ctx.existsPkgFile(p) {
+								exportEntry.update(p, false)
+								break
+							} else if p := path + "/index.mjs"; ctx.existsPkgFile(p) {
+								exportEntry.update(p, true)
+								break
+							} else if p := path + "/index.js"; ctx.existsPkgFile(p) {
+								exportEntry.update(p, pkgJson.Type == "module")
+								break
+							} else if p := path + "/index.cjs"; ctx.existsPkgFile(p) {
+								exportEntry.update(p, false)
 								break
 							}
 						} else if obj, ok := conditions.(JSONObject); ok {
@@ -1131,19 +1151,19 @@ func matchAsteriskExport(exportName string, subModuleName string) (diff string, 
 	return "", false
 }
 
-func resloveAsteriskPathMapping(obj JSONObject, diff string) JSONObject {
+func resloveAsteriskPathMapping(conditions JSONObject, diff string) JSONObject {
 	reslovedConditions := JSONObject{
 		values: make(map[string]any),
 	}
-	for _, key := range obj.keys {
-		value, ok := obj.Get(key)
+	for _, key := range conditions.keys {
+		value, ok := conditions.Get(key)
 		if ok {
 			if s, ok := value.(string); ok {
 				reslovedConditions.keys = append(reslovedConditions.keys, key)
 				reslovedConditions.values[key] = strings.ReplaceAll(s, "*", diff)
-			} else if obj, ok := value.(JSONObject); ok {
+			} else if c, ok := value.(JSONObject); ok {
 				reslovedConditions.keys = append(reslovedConditions.keys, key)
-				reslovedConditions.values[key] = resloveAsteriskPathMapping(obj, diff)
+				reslovedConditions.values[key] = resloveAsteriskPathMapping(c, diff)
 			}
 		}
 	}
