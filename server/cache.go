@@ -26,7 +26,7 @@ type cacheItem struct {
 }
 
 func withCache[T any](key string, cacheTtl time.Duration, fetch func() (T, string, error)) (data T, err error) {
-	// check cache first
+	// check cache store first
 	if cacheTtl > time.Second {
 		if v, ok := cacheStore.Load(key); ok {
 			item := v.(*cacheItem)
@@ -39,7 +39,7 @@ func withCache[T any](key string, cacheTtl time.Duration, fetch func() (T, strin
 	unlock := cacheMutex.Lock(key)
 	defer unlock()
 
-	// check cache again after lock
+	// check cache store again after lock
 	if cacheTtl > time.Second {
 		if v, ok := cacheStore.Load(key); ok {
 			item := v.(*cacheItem)
@@ -67,13 +67,10 @@ func withCache[T any](key string, cacheTtl time.Duration, fetch func() (T, strin
 
 func withLRUCache[T any](key string, fetch func() (T, error)) (data T, err error) {
 	cacheKey := "lru:" + key
-	cacheTtl := 24 * time.Hour
 
-	// check cache first
+	// check cache store first
 	if v, ok := cacheStore.Load(cacheKey); ok {
-		item := v.(*cacheItem)
-		item.exp = time.Now().Add(cacheTtl)
-		el := item.data.(*list.Element)
+		el := v.(*cacheItem).data.(*list.Element)
 		cacheLRU.MoveToBack(el)
 		return el.Value.(cacheRecord).value.(T), nil
 	}
@@ -81,7 +78,7 @@ func withLRUCache[T any](key string, fetch func() (T, error)) (data T, err error
 	unlock := cacheMutex.Lock(cacheKey)
 	defer unlock()
 
-	// check cache again after lock
+	// check cache store again after lock
 	if v, ok := cacheStore.Load(cacheKey); ok {
 		item := v.(*cacheItem)
 		el := item.data.(*list.Element)
@@ -94,9 +91,9 @@ func withLRUCache[T any](key string, fetch func() (T, error)) (data T, err error
 	}
 
 	el := cacheLRU.PushBack(cacheRecord{cacheKey, data})
-	cacheStore.Store(cacheKey, &cacheItem{time.Now().Add(cacheTtl), el})
+	cacheStore.Store(cacheKey, &cacheItem{time.Time{}, el})
 
-	// delete the oldest item if cache is full
+	// delete the oldest item if cache store is full
 	if cacheLRU.Len() > 1000 {
 		el := cacheLRU.Front()
 		if el != nil {
@@ -117,21 +114,16 @@ func init() {
 			now := <-tick.C
 			expKeys := []string{}
 			cacheStore.Range(func(key, value any) bool {
-				item := value.(*cacheItem)
-				if item.exp.Before(now) {
-					expKeys = append(expKeys, key.(string))
+				if !strings.HasPrefix(key.(string), "lru:") {
+					item := value.(*cacheItem)
+					if item.exp.Before(now) {
+						expKeys = append(expKeys, key.(string))
+					}
 				}
 				return true
 			})
 			for _, key := range expKeys {
-				if strings.HasPrefix(key, "lru:") {
-					item, ok := cacheStore.LoadAndDelete(key)
-					if ok {
-						cacheLRU.Remove(item.(*cacheItem).data.(*list.Element))
-					}
-				} else {
-					cacheStore.Delete(key)
-				}
+				cacheStore.Delete(key)
 			}
 		}
 	}()
