@@ -8,14 +8,12 @@ const d = document;
 const l = localStorage;
 const stringify = JSON.stringify;
 const loaders = new Set(["jsx", "ts", "tsx", "babel"]);
-const target = "$TARGET"; // `$TARGET` is injected at build time
 const hostname = location.hostname;
-const isLocalhost = hostname === "localhost" || hostname === "127.0.0.1" || /^192\.168\.\d+\.\d+$/.test(hostname);
 
 function run() {
   let tsxScripts: { el: HTMLElement; lang: string; code: string }[] = [];
   let importMap: Record<string, object> = {};
-  let tsx: Promise<{ transform: (filename: string, code: string, options: Record<string, unknown>) => { code: string } }>;
+  let tsx: Promise<{ transform: (options: Record<string, unknown>) => { code: string } }>;
 
   // lookup import map and tsx scripts
   d.querySelectorAll("script").forEach((el) => {
@@ -40,6 +38,7 @@ function run() {
 
   // transform and insert tsx scripts
   tsxScripts.forEach(async ({ el, lang, code }, idx) => {
+    const target = "$TARGET"; // `$TARGET` is injected at build time
     const buffer = new Uint8Array(
       await crypto.subtle.digest(
         "SHA-1",
@@ -47,12 +46,12 @@ function run() {
       ),
     );
     const hash = [...buffer].map((b) => b.toString(16).padStart(2, "0")).join("");
-    const jsCacheKey = "esm.sh/tsx." + idx;
-    const hashCacheKey = jsCacheKey + ".hash";
+    const cacheKey = "esm.sh/tsx." + idx;
+    const hashCacheKey = cacheKey + ".hash";
     const script = d.createElement("script");
     let js: string | null | undefined;
     try {
-      js = l.getItem(jsCacheKey);
+      js = l.getItem(cacheKey);
       if (js && l.getItem(hashCacheKey) !== hash) {
         js = null;
       }
@@ -60,16 +59,16 @@ function run() {
       // localStorage is disallowed
     }
     if (!js) {
-      if (isLocalhost) {
+      if (hostname === "localhost" || hostname === "127.0.0.1") {
         const { transform } = await (tsx ?? (tsx = initTsx()));
-        const ret = transform("script-" + idx + "." + lang, code, { target, importMap, minify: true, sourceMap: "inline" });
+        const ret = transform({ filename: "script-" + idx + "." + lang, code, target, importMap, minify: true, sourceMap: "inline" });
         js = ret.code;
       } else {
-        const res = await fetch(urlFrom(`/+${hash}.mjs`));
+        const res = await fetch(esmshUrl(`/+${hash}.mjs`));
         if (res.ok) {
           js = await res.text();
         } else {
-          const res = await fetch(urlFrom("/transform"), {
+          const res = await fetch(esmshUrl("/transform"), {
             method: "POST",
             body: stringify({ lang, code, target, importMap, minify: true }),
           });
@@ -81,7 +80,7 @@ function run() {
         }
       }
       try {
-        l.setItem(jsCacheKey, js!);
+        l.setItem(cacheKey, js!);
         l.setItem(hashCacheKey, hash);
       } catch {
         // localStorage is disallowed
@@ -97,13 +96,13 @@ async function initTsx() {
   const pkg = "/@esm.sh/tsx@1.0.5";
   const [m, w] = await Promise.all([
     import(pkg + "/$TARGET/tsx.mjs"),
-    fetch(urlFrom(pkg + "/pkg/tsx_bg.wasm")),
+    fetch(esmshUrl(pkg + "/pkg/tsx_bg.wasm")),
   ]);
   await m.default(w);
   return m;
 }
 
-function urlFrom(path: string) {
+function esmshUrl(path: string) {
   return new URL(path, import.meta.url);
 }
 
