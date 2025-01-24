@@ -21,7 +21,7 @@ type cacheRecord struct {
 }
 
 type cacheItem struct {
-	exp  time.Time
+	exp  int64
 	data any
 }
 
@@ -30,7 +30,7 @@ func withCache[T any](key string, cacheTtl time.Duration, fetch func() (T, strin
 	if cacheTtl > time.Second {
 		if v, ok := cacheStore.Load(key); ok {
 			item := v.(*cacheItem)
-			if item.exp.After(time.Now()) {
+			if item.exp >= time.Now().Unix() {
 				return item.data.(T), nil
 			}
 		}
@@ -39,11 +39,11 @@ func withCache[T any](key string, cacheTtl time.Duration, fetch func() (T, strin
 	unlock := cacheMutex.Lock(key)
 	defer unlock()
 
-	// check cache store again after lock
+	// check cache store again after get lock
 	if cacheTtl > time.Second {
 		if v, ok := cacheStore.Load(key); ok {
 			item := v.(*cacheItem)
-			if item.exp.After(time.Now()) {
+			if item.exp >= time.Now().Unix() {
 				return item.data.(T), nil
 			}
 		}
@@ -57,9 +57,9 @@ func withCache[T any](key string, cacheTtl time.Duration, fetch func() (T, strin
 
 	if cacheTtl > time.Second {
 		exp := time.Now().Add(cacheTtl)
-		cacheStore.Store(key, &cacheItem{exp, data})
+		cacheStore.Store(key, &cacheItem{exp.Unix(), data})
 		if aliasKey != "" && aliasKey != key {
-			cacheStore.Store(aliasKey, &cacheItem{exp, data})
+			cacheStore.Store(aliasKey, &cacheItem{exp.Unix(), data})
 		}
 	}
 	return
@@ -71,14 +71,14 @@ func withLRUCache[T any](key string, fetch func() (T, error)) (data T, err error
 	// check cache store first
 	if v, ok := cacheStore.Load(cacheKey); ok {
 		el := v.(*cacheItem).data.(*list.Element)
-		cacheLRU.MoveToBack(el)
+		cacheLRU.MoveToFront(el)
 		return el.Value.(cacheRecord).value.(T), nil
 	}
 
 	unlock := cacheMutex.Lock(cacheKey)
 	defer unlock()
 
-	// check cache store again after lock
+	// check cache store again after get lock
 	if v, ok := cacheStore.Load(cacheKey); ok {
 		el := v.(*cacheItem).data.(*list.Element)
 		return el.Value.(cacheRecord).value.(T), nil
@@ -89,12 +89,12 @@ func withLRUCache[T any](key string, fetch func() (T, error)) (data T, err error
 		return
 	}
 
-	el := cacheLRU.PushBack(cacheRecord{cacheKey, data})
-	cacheStore.Store(cacheKey, &cacheItem{time.Time{}, el})
+	el := cacheLRU.PushFront(cacheRecord{cacheKey, data})
+	cacheStore.Store(cacheKey, &cacheItem{-1, el})
 
 	// delete the oldest item if cache store is full
 	if cacheLRU.Len() > 1000 {
-		el := cacheLRU.Front()
+		el := cacheLRU.Back()
 		if el != nil {
 			cacheLRU.Remove(el)
 			cacheStore.Delete(el.Value.(cacheRecord).key)
@@ -115,7 +115,7 @@ func init() {
 			cacheStore.Range(func(key, value any) bool {
 				if !strings.HasPrefix(key.(string), "lru:") {
 					item := value.(*cacheItem)
-					if item.exp.Before(now) {
+					if item.exp > 0 && item.exp < now.Unix() {
 						expKeys = append(expKeys, key.(string))
 					}
 				}
