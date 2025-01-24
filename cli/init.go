@@ -32,7 +32,7 @@ var langVariants = []string{
 }
 
 // Create a new esm.sh web app
-func Init(efs *embed.FS) {
+func Init(fs *embed.FS) {
 	framework := flag.String("framework", "", "javascript framework")
 	cssFramework := flag.String("css-framework", "", "CSS framework")
 	lang := flag.String("lang", "", "language")
@@ -74,12 +74,12 @@ func Init(efs *embed.FS) {
 	if *cssFramework == "UnoCSS" {
 		dir = "demo/with-unocss/" + strings.ToLower(*framework)
 	}
-	err = walkEFS(efs, dir, func(filename string) error {
+	err = walkEFS(fs, dir, func(filename string) error {
 		savePath := projectName + strings.TrimPrefix(filename, dir)
 		os.MkdirAll(filepath.Dir(savePath), 0755)
 		if *lang == "JavaScript" {
 			if (strings.HasSuffix(savePath, ".ts") || strings.HasSuffix(savePath, ".tsx")) && !strings.HasSuffix(savePath, ".d.ts") {
-				data, err := efs.ReadFile(filename)
+				data, err := fs.ReadFile(filename)
 				if err != nil {
 					return err
 				}
@@ -93,7 +93,7 @@ func Init(efs *embed.FS) {
 				data = bytes.ReplaceAll(data, []byte(".tsx\""), []byte(".jsx\""))
 				return os.WriteFile(savePath, data, 0644)
 			} else if strings.HasSuffix(savePath, ".html") {
-				data, err := efs.ReadFile(filename)
+				data, err := fs.ReadFile(filename)
 				if err != nil {
 					return err
 				}
@@ -101,7 +101,7 @@ func Init(efs *embed.FS) {
 				data = bytes.ReplaceAll(data, []byte(".tsx\""), []byte(".jsx\""))
 				return os.WriteFile(savePath, data, 0644)
 			} else if strings.HasSuffix(savePath, ".vue") || strings.HasSuffix(savePath, ".svelte") {
-				data, err := efs.ReadFile(filename)
+				data, err := fs.ReadFile(filename)
 				if err != nil {
 					return err
 				}
@@ -109,7 +109,7 @@ func Init(efs *embed.FS) {
 				return os.WriteFile(savePath, data, 0644)
 			}
 		}
-		f, err := efs.Open(filename)
+		f, err := fs.Open(filename)
 		if err != nil {
 			return err
 		}
@@ -129,9 +129,14 @@ func Init(efs *embed.FS) {
 
 	fmt.Println(" ")
 	fmt.Println(term.Dim("Project created successfully."))
-	fmt.Println(term.Dim("To start the development server:"))
+	fmt.Println(term.Dim("To start the app in development mode, run:"))
 	fmt.Println(" ")
-	fmt.Println(term.Dim("$ ") + "cd " + projectName + " && esm.sh run")
+	fmt.Print(term.Dim("$ ") + "cd " + projectName)
+	if strings.Contains(os.Args[0], "/node_modules/") {
+		fmt.Println(" && npx esm.sh serve")
+	} else {
+		fmt.Println(" && esm.sh serve")
+	}
 	fmt.Println(" ")
 }
 

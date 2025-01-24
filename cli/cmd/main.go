@@ -20,7 +20,7 @@ Commands:
 
 //go:embed internal
 //go:embed demo
-var efs embed.FS
+var fs embed.FS
 
 func main() {
 	if len(os.Args) > 1 {
@@ -28,9 +28,9 @@ func main() {
 		case "add":
 			cli.Add()
 		case "init":
-			cli.Init(&efs)
+			cli.Init(&fs)
 		case "serve":
-			cli.Serve(&efs)
+			cli.Serve(&fs)
 		default:
 			fmt.Print(helpMessage)
 		}
