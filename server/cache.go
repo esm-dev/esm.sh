@@ -80,8 +80,7 @@ func withLRUCache[T any](key string, fetch func() (T, error)) (data T, err error
 
 	// check cache store again after lock
 	if v, ok := cacheStore.Load(cacheKey); ok {
-		item := v.(*cacheItem)
-		el := item.data.(*list.Element)
+		el := v.(*cacheItem).data.(*list.Element)
 		return el.Value.(cacheRecord).value.(T), nil
 	}
 
@@ -109,7 +108,7 @@ func init() {
 	cacheLRU = list.New()
 	// cache GC
 	go func() {
-		tick := time.NewTicker(time.Minute)
+		tick := time.NewTicker(10 * time.Minute)
 		for {
 			now := <-tick.C
 			expKeys := []string{}
