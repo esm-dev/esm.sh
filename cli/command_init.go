@@ -31,7 +31,7 @@ var langVariants = []string{
 	"TypeScript",
 }
 
-// Create a new esm.sh web app
+// Create a new no-build web app with esm.sh CDN.
 func Init(fs *embed.FS) {
 	framework := flag.String("framework", "", "javascript framework")
 	cssFramework := flag.String("css-framework", "", "CSS framework")
@@ -129,7 +129,7 @@ func Init(fs *embed.FS) {
 
 	fmt.Println(" ")
 	fmt.Println(term.Dim("Project created successfully."))
-	fmt.Println(term.Dim("We highly commend to install our VS Code extension for better DX: "))
+	fmt.Println(term.Dim("We highly recommend installing our VS Code extension for a better DX: https://link.esm.sh/vsce"))
 	fmt.Println(term.Dim("To start the app in development mode, run:"))
 	fmt.Println(" ")
 	fmt.Print(term.Dim("$ ") + "cd " + projectName)

@@ -12,6 +12,7 @@ import (
 	"github.com/ije/gox/term"
 )
 
+// Serve a no-build web app with esm.sh CDN, HMR, transforming TS/Vue/Svelte on the fly.
 func Serve(fs *embed.FS) {
 	port := flag.Int("port", 3000, "port to serve on")
 	rootDir, _ := parseCommandFlag()

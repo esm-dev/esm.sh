@@ -16,7 +16,7 @@ Commands:
   i, add [...pakcage]   Alias as "esm.sh importmap add"
   im, importmap         Manage "importmap" script
   init                  Create a new no-build web app with esm.sh CDN.
-  serve                 Serve no-build web app with esm.sh CDN, HMR, transforming TS/Vue/Svelte on the fly.
+  serve                 Serve a no-build web app with esm.sh CDN, HMR, transforming TS/Vue/Svelte on the fly.
 `
 
 //go:embed cli/internal
