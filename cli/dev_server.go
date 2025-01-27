@@ -27,13 +27,13 @@ import (
 )
 
 type DevServer struct {
-	efs       *embed.FS
-	loader    *LoaderWorker
-	rootDir   string
-	watchData map[*websocket.Conn]map[string]int64
-	rwlock    sync.RWMutex
-	lock      sync.RWMutex
-	loadCache sync.Map
+	fs               *embed.FS
+	rootDir          string
+	watchData        map[*websocket.Conn]map[string]int64
+	watchDataMapLock sync.RWMutex
+	loaderWorker     *LoaderWorker
+	loaderInitLock   sync.Mutex
+	loaderCache      sync.Map
 }
 
 func (d *DevServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -403,8 +403,8 @@ func (d *DevServer) ServeModule(w http.ResponseWriter, r *http.Request, pathname
 	}
 	cacheKey := fmt.Sprintf("module-%s", pathname)
 	etagCacheKey := fmt.Sprintf("module-%s.etag", pathname)
-	if js, ok := d.loadCache.Load(cacheKey); ok {
-		if e, ok := d.loadCache.Load(etagCacheKey); ok {
+	if js, ok := d.loaderCache.Load(cacheKey); ok {
+		if e, ok := d.loaderCache.Load(etagCacheKey); ok {
 			if e.(string) == etag {
 				header := w.Header()
 				header.Set("Content-Type", "application/javascript; charset=utf-8")
@@ -433,8 +433,8 @@ func (d *DevServer) ServeModule(w http.ResponseWriter, r *http.Request, pathname
 		http.Error(w, "Internal Server Error", 500)
 		return
 	}
-	d.loadCache.Store(cacheKey, []byte(js))
-	d.loadCache.Store(etagCacheKey, etag)
+	d.loaderCache.Store(cacheKey, []byte(js))
+	d.loaderCache.Store(etagCacheKey, etag)
 	header := w.Header()
 	header.Set("Content-Type", "application/javascript; charset=utf-8")
 	if !query.Has("t") {
@@ -596,8 +596,8 @@ func (d *DevServer) ServeUnoCSS(w http.ResponseWriter, r *http.Request) {
 	}
 	cacheKey := fmt.Sprintf("unocss-%s", ctx)
 	etagCacheKey := fmt.Sprintf("unocss-%s.etag", ctx)
-	if css, ok := d.loadCache.Load(cacheKey); ok {
-		if e, ok := d.loadCache.Load(etagCacheKey); ok {
+	if css, ok := d.loaderCache.Load(cacheKey); ok {
+		if e, ok := d.loaderCache.Load(etagCacheKey); ok {
 			if e.(string) == etag {
 				header := w.Header()
 				header.Set("Content-Type", "text/css; charset=utf-8")
@@ -623,8 +623,8 @@ func (d *DevServer) ServeUnoCSS(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Internal Server Error", 500)
 		return
 	}
-	d.loadCache.Store(cacheKey, []byte(css))
-	d.loadCache.Store(etagCacheKey, etag)
+	d.loaderCache.Store(cacheKey, []byte(css))
+	d.loaderCache.Store(etagCacheKey, etag)
 	header := w.Header()
 	header.Set("Content-Type", "text/css; charset=utf-8")
 	if !query.Has("t") {
@@ -635,7 +635,7 @@ func (d *DevServer) ServeUnoCSS(w http.ResponseWriter, r *http.Request) {
 }
 
 func (d *DevServer) ServeInternalJS(w http.ResponseWriter, r *http.Request, name string) {
-	data, err := d.efs.ReadFile("internal/" + name + ".js")
+	data, err := d.fs.ReadFile("cli/internal/" + name + ".js")
 	if err != nil {
 		http.Error(w, "Internal Server Error", 500)
 		return
@@ -668,13 +668,13 @@ func (d *DevServer) ServeHmrWS(w http.ResponseWriter, r *http.Request) {
 	}
 	defer conn.Close()
 	watchList := make(map[string]int64)
-	d.rwlock.Lock()
+	d.watchDataMapLock.Lock()
 	d.watchData[conn] = watchList
-	d.rwlock.Unlock()
+	d.watchDataMapLock.Unlock()
 	defer func() {
-		d.rwlock.Lock()
+		d.watchDataMapLock.Lock()
 		delete(d.watchData, conn)
-		d.rwlock.Unlock()
+		d.watchDataMapLock.Unlock()
 	}()
 	for {
 		messageType, data, err := conn.ReadMessage()
@@ -757,11 +757,11 @@ func (d *DevServer) analyzeDependencyTree(entry string, importMap common.ImportM
 							cacheKey := fmt.Sprintf("preload-%s", pathname)
 							etagCacheKey := fmt.Sprintf("preload-%s.etag", pathname)
 							langCacheKey := fmt.Sprintf("preload-%s.lang", pathname)
-							if js, ok := d.loadCache.Load(cacheKey); ok {
-								if e, ok := d.loadCache.Load(etagCacheKey); ok {
+							if js, ok := d.loaderCache.Load(cacheKey); ok {
+								if e, ok := d.loaderCache.Load(etagCacheKey); ok {
 									if e.(string) == etag {
 										contents = string(js.([]byte))
-										if lang, ok := d.loadCache.Load(langCacheKey); ok {
+										if lang, ok := d.loaderCache.Load(langCacheKey); ok {
 											if lang.(string) == "ts" {
 												loader = esbuild.LoaderTS
 											}
@@ -778,9 +778,9 @@ func (d *DevServer) analyzeDependencyTree(entry string, importMap common.ImportM
 							if err != nil {
 								return esbuild.OnLoadResult{}, err
 							}
-							d.loadCache.Store(cacheKey, []byte(code))
-							d.loadCache.Store(etagCacheKey, etag)
-							d.loadCache.Store(langCacheKey, lang)
+							d.loaderCache.Store(cacheKey, []byte(code))
+							d.loaderCache.Store(etagCacheKey, etag)
+							d.loaderCache.Store(langCacheKey, lang)
 							contents = code
 							if lang == "ts" {
 								loader = esbuild.LoaderTS
@@ -802,7 +802,7 @@ func (d *DevServer) analyzeDependencyTree(entry string, importMap common.ImportM
 func (d *DevServer) watchFS() {
 	for {
 		time.Sleep(100 * time.Millisecond)
-		d.rwlock.RLock()
+		d.watchDataMapLock.RLock()
 		for conn, watchList := range d.watchData {
 			for pathname, mtime := range watchList {
 				filename, _ := utils.SplitByFirstByte(pathname, '?')
@@ -811,7 +811,7 @@ func (d *DevServer) watchFS() {
 					if os.IsNotExist(err) {
 						if watchList[pathname] > 0 {
 							watchList[pathname] = 0
-							d.purgeLoadCache(pathname)
+							d.purgeLoaderCache(pathname)
 							conn.WriteMessage(websocket.TextMessage, []byte("remove:"+pathname))
 						}
 					} else {
@@ -827,27 +827,27 @@ func (d *DevServer) watchFS() {
 				}
 			}
 		}
-		d.rwlock.RUnlock()
+		d.watchDataMapLock.RUnlock()
 	}
 }
 
-func (d *DevServer) purgeLoadCache(filename string) {
-	d.loadCache.Delete(fmt.Sprintf("module-%s", filename))
-	d.loadCache.Delete(fmt.Sprintf("module-%s.etag", filename))
+func (d *DevServer) purgeLoaderCache(filename string) {
+	d.loaderCache.Delete(fmt.Sprintf("module-%s", filename))
+	d.loaderCache.Delete(fmt.Sprintf("module-%s.etag", filename))
 	if strings.HasSuffix(filename, ".vue") || strings.HasSuffix(filename, ".svelte") {
-		d.loadCache.Delete(fmt.Sprintf("preload-%s", filename))
-		d.loadCache.Delete(fmt.Sprintf("preload-%s.etag", filename))
-		d.loadCache.Delete(fmt.Sprintf("preload-%s.lang", filename))
+		d.loaderCache.Delete(fmt.Sprintf("preload-%s", filename))
+		d.loaderCache.Delete(fmt.Sprintf("preload-%s.etag", filename))
+		d.loaderCache.Delete(fmt.Sprintf("preload-%s.lang", filename))
 	}
 }
 
 func (d *DevServer) getLoader() (loader *LoaderWorker, err error) {
-	d.lock.Lock()
-	defer d.lock.Unlock()
-	if d.loader != nil {
-		return d.loader, nil
+	d.loaderInitLock.Lock()
+	defer d.loaderInitLock.Unlock()
+	if d.loaderWorker != nil {
+		return d.loaderWorker, nil
 	}
-	loaderJs, err := d.efs.ReadFile("internal/loader.js")
+	loaderJs, err := d.fs.ReadFile("cli/internal/loader.js")
 	if err != nil {
 		return
 	}
@@ -856,6 +856,6 @@ func (d *DevServer) getLoader() (loader *LoaderWorker, err error) {
 	if err != nil {
 		return nil, err
 	}
-	d.loader = loader
+	d.loaderWorker = loader
 	return
 }

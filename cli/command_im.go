@@ -34,6 +34,7 @@ func ManageImportMap(subCommand string) {
 		}
 		fmt.Println(packages)
 	case "update":
+		fmt.Println(packages)
 	default:
 		fmt.Printf("Unkown sub command \"%s\"\n", subCommand)
 	}

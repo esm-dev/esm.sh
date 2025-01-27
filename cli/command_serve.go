@@ -36,7 +36,7 @@ func Serve(fs *embed.FS) {
 
 	serv := &http.Server{
 		Addr:    fmt.Sprintf(":%d", *port),
-		Handler: &DevServer{efs: fs, rootDir: rootDir},
+		Handler: &DevServer{fs: fs, rootDir: rootDir},
 	}
 	ln, err := net.Listen("tcp", serv.Addr)
 	if err != nil {

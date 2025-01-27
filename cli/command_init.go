@@ -70,11 +70,11 @@ func Init(fs *embed.FS) {
 		}
 	}
 
-	dir := "demo/" + strings.ToLower(*framework)
+	dir := "cli/demo/" + strings.ToLower(*framework)
 	if *cssFramework == "UnoCSS" {
-		dir = "demo/with-unocss/" + strings.ToLower(*framework)
+		dir = "cli/demo/with-unocss/" + strings.ToLower(*framework)
 	}
-	err = walkEFS(fs, dir, func(filename string) error {
+	err = walkEmbedFS(fs, dir, func(filename string) error {
 		savePath := projectName + strings.TrimPrefix(filename, dir)
 		os.MkdirAll(filepath.Dir(savePath), 0755)
 		if *lang == "JavaScript" {
@@ -141,14 +141,14 @@ func Init(fs *embed.FS) {
 	fmt.Println(" ")
 }
 
-func walkEFS(efs *embed.FS, dir string, cb func(filename string) error) error {
-	entries, err := efs.ReadDir(dir)
+func walkEmbedFS(fs *embed.FS, dir string, cb func(filename string) error) error {
+	entries, err := fs.ReadDir(dir)
 	if err != nil {
 		return err
 	}
 	for _, entry := range entries {
 		if entry.IsDir() {
-			err = walkEFS(efs, dir+"/"+entry.Name(), cb)
+			err = walkEmbedFS(fs, dir+"/"+entry.Name(), cb)
 			if err != nil {
 				return err
 			}

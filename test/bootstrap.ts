@@ -1,7 +1,7 @@
 #!/usr/bin/env -S deno run --allow-run --allow-read --allow-write --allow-net
 
 async function startServer(onStart: () => Promise<void>) {
-  const { code, success } = await run("go", "build", "-tags", "debug", "-o", "esmd", "main.go");
+  const { code, success } = await run("go", "build", "-tags", "debug", "-o", "esmd", "server/cmd/main.go");
   if (!success) {
     Deno.exit(code);
   }
