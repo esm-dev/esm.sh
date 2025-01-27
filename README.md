@@ -282,6 +282,37 @@ you to use query params with trailing slash: change the query prefix `?` to `&` 
 }
 ```
 
+### Using `esm.sh/run`
+
+`esm.sh/run` is a lightweight **1KB** script that allows you to write `JSX`/`TS` directly in HTML without any build steps. Your source code is sent to the server, compiled, cached at the edge, and served to the browser as a JavaScript module.
+
+```html
+<!DOCTYPE html>
+<html>
+<head>
+  <script type="importmap">
+    {
+      "imports": {
+        "@jsxImportSource": "https://esm.sh/react@18.2.0",
+        "react-dom/client": "https://esm.sh/react-dom@18.2.0/client"
+      }
+    }
+  </script>
+  <script type="module" src="https://esm.sh/run"></script>
+</head>
+<body>
+  <div id="root"></div>
+  <script type="text/babel">
+    import { createRoot } from "react-dom/client"
+    createRoot(root).render(<h1>Hello, World!</h1>)
+  </script>
+</body>
+</html>
+```
+
+> [!TIP]
+> The special `@jsxImportSource` in the `importmap` script is using for JSX transform, you can alternate it to your preferred runtime, for example https://esm.sh/preact@10.19.2.
+
 ## Escape Hatch: Raw Source Files
 
 In rare cases, you may want to request JS source files from packages, as-is, without transformation into ES modules. To
