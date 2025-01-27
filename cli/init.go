@@ -129,6 +129,7 @@ func Init(fs *embed.FS) {
 
 	fmt.Println(" ")
 	fmt.Println(term.Dim("Project created successfully."))
+	fmt.Println(term.Dim("We highly commend to install our VS Code extension for better DX: "))
 	fmt.Println(term.Dim("To start the app in development mode, run:"))
 	fmt.Println(" ")
 	fmt.Print(term.Dim("$ ") + "cd " + projectName)

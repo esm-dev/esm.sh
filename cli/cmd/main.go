@@ -10,12 +10,13 @@ import (
 
 const helpMessage = "\033[30mesm.sh - A no-build CDN for modern web development.\033[0m" + `
 
-Usage: esm.sh [command] [options]
+Usage: esm.sh [command] <options>
 
 Commands:
-  add    Add dependencies to the "importmap" script
-  init   Create a new esm.sh web app
-  serve  Serve an esm.sh web app
+  i, add [...pakcage]   Alias as "esm.sh importmap add"
+  im, importmap         Manage "importmap" script
+  init                  Create a new no-build web app with esm.sh CDN.
+  serve                 Serve no-build web app with esm.sh CDN, HMR, transforming TS/Vue/Svelte on the fly.
 `
 
 //go:embed internal
@@ -23,18 +24,20 @@ Commands:
 var fs embed.FS
 
 func main() {
-	if len(os.Args) > 1 {
-		switch os.Args[1] {
-		case "add":
-			cli.Add()
-		case "init":
-			cli.Init(&fs)
-		case "serve":
-			cli.Serve(&fs)
-		default:
-			fmt.Print(helpMessage)
-		}
-	} else {
+	if len(os.Args) < 2 {
+		fmt.Print(helpMessage)
+		return
+	}
+	switch command := os.Args[1]; command {
+	case "i", "add":
+		cli.ManageImportMap(command)
+	case "im", "importmap":
+		cli.ManageImportMap("")
+	case "init":
+		cli.Init(&fs)
+	case "serve":
+		cli.Serve(&fs)
+	default:
 		fmt.Print(helpMessage)
 	}
 }
