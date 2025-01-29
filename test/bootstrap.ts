@@ -135,7 +135,7 @@ if (import.meta.main) {
     } else {
       const dirs: string[] = [];
       for await (const entry of Deno.readDir("./test")) {
-        if (entry.isDirectory && !entry.name.startsWith("_")) {
+        if (entry.isDirectory && !entry.name.startsWith("_") && !entry.name.startsWith(".")) {
           dirs.push(entry.name);
         }
       }

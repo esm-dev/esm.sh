@@ -3,6 +3,7 @@ package cli
 import (
 	"bytes"
 	"embed"
+	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -242,7 +243,7 @@ func (d *DevServer) ServeHtml(w http.ResponseWriter, r *http.Request, pathname s
 						hrefAttr, _ = utils.SplitByFirstByte(hrefAttr, '?')
 						if hrefAttr == "uno.css" || strings.HasSuffix(hrefAttr, "/uno.css") {
 							w.Write([]byte("<link rel=\"stylesheet\" href=\""))
-							w.Write([]byte(hrefAttr + "?ctx=" + btoaUrl(pathname)))
+							w.Write([]byte(hrefAttr + "?ctx=" + base64.RawURLEncoding.EncodeToString([]byte(pathname))))
 							w.Write([]byte{'"', '>'})
 							overriding = "script"
 						} else {
@@ -254,7 +255,7 @@ func (d *DevServer) ServeHtml(w http.ResponseWriter, r *http.Request, pathname s
 								case "src":
 									hrefAttr, _ = utils.SplitByFirstByte(hrefAttr, '?')
 									w.Write([]byte(" src=\""))
-									w.Write([]byte(hrefAttr + "?im=" + btoaUrl(pathname)))
+									w.Write([]byte(hrefAttr + "?im=" + base64.RawURLEncoding.EncodeToString([]byte(pathname))))
 									w.Write([]byte{'"'})
 								default:
 									w.Write([]byte{' '})
@@ -314,12 +315,12 @@ func (d *DevServer) ServeHtml(w http.ResponseWriter, r *http.Request, pathname s
 
 func (d *DevServer) ServeModule(w http.ResponseWriter, r *http.Request, pathname string, sourceCode []byte) {
 	query := r.URL.Query()
-	im, err := atobUrl(query.Get("im"))
+	im, err := base64.RawURLEncoding.DecodeString(query.Get("im"))
 	if err != nil {
 		http.Error(w, "Bad Request", 400)
 		return
 	}
-	imHtmlFilename := filepath.Join(d.rootDir, im)
+	imHtmlFilename := filepath.Join(d.rootDir, string(im))
 	imHtmlFile, err := os.Open(imHtmlFilename)
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -358,7 +359,7 @@ func (d *DevServer) ServeModule(w http.ResponseWriter, r *http.Request, pathname
 						w.Write([]byte(`throw new Error("Failed to parse import map: invalid JSON")`))
 						return
 					}
-					importMap.Src = "file://" + im
+					importMap.Src = "file://" + string(im)
 					break
 				}
 			} else if string(tagName) == "body" {
@@ -483,12 +484,12 @@ func (d *DevServer) ServeCSSModule(w http.ResponseWriter, r *http.Request, pathn
 
 func (d *DevServer) ServeUnoCSS(w http.ResponseWriter, r *http.Request) {
 	query := r.URL.Query()
-	ctx, err := atobUrl(query.Get("ctx"))
+	ctx, err := base64.RawURLEncoding.DecodeString(query.Get("ctx"))
 	if err != nil {
 		http.Error(w, "Bad Request", 400)
 		return
 	}
-	imHtmlFilename := filepath.Join(d.rootDir, ctx)
+	imHtmlFilename := filepath.Join(d.rootDir, string(ctx))
 	imHtmlFile, err := os.Open(imHtmlFilename)
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -535,7 +536,7 @@ func (d *DevServer) ServeUnoCSS(w http.ResponseWriter, r *http.Request) {
 					if len(innerText) > 0 {
 						err := json.Unmarshal(innerText, &importMap)
 						if err == nil {
-							importMap.Src = ctx
+							importMap.Src = string(ctx)
 						}
 					}
 				} else if srcAttr == "" {

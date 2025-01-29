@@ -45,20 +45,20 @@ func Init(fs *embed.FS) {
 
 	if *framework == "" {
 		*framework = term.Select(raw, "Select a framework:", frameworks)
-	} else if !stringInSlice(frameworks, *framework) {
+	} else if !includes(frameworks, *framework) {
 		fmt.Println("Invalid framework: ", *framework)
 		os.Exit(1)
 	}
 
 	if *cssFramework == "" {
 		*cssFramework = term.Select(raw, "Select a CSS framework:", cssFrameworks)
-	} else if !stringInSlice(cssFrameworks, *cssFramework) {
+	} else if !includes(cssFrameworks, *cssFramework) {
 		*cssFramework = cssFrameworks[0]
 	}
 
 	if *lang == "" {
 		*lang = term.Select(raw, "Select a variant:", langVariants)
-	} else if !stringInSlice(langVariants, *lang) {
+	} else if !includes(langVariants, *lang) {
 		*lang = langVariants[0]
 	}
 

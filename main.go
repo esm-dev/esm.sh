@@ -13,8 +13,8 @@ const helpMessage = "\033[30mesm.sh - A no-build CDN for modern web development.
 Usage: esm.sh [command] <options>
 
 Commands:
-  i, add [...pakcage]   Alias as "esm.sh importmap add"
-  im, importmap         Manage "importmap" script
+  i, add [...pakcage]   Alias for 'esm.sh im add'.
+  im, importmap         Manage "importmap" script.
   init                  Create a new no-build web app with esm.sh CDN.
   serve                 Serve a no-build web app with esm.sh CDN, HMR, transforming TS/Vue/Svelte on the fly.
 `

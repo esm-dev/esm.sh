@@ -5,13 +5,13 @@ import (
 	"os"
 )
 
-const helpMessage = "\033[30mImport Maps Management CLI with esm.sh CDN.\033[0m" + `
+const helpMessage = "\033[30mImport Map Management CLI with esm.sh CDN.\033[0m" + `
 
-Usage: esm.sh im [sub-command] [options]
+Usage: esm.sh im [sub-command] <options>
 
 Sub Commands:
-  add [...packages]      Add packages to "importmap" script
-	update <...packages>   Update packages in "importmap" script
+  add    [...packages]   Add packages to "importmap" script
+  update [...packages]   Update packages in "importmap" script
 `
 
 // Manage `importmap` script
@@ -36,6 +36,6 @@ func ManageImportMap(subCommand string) {
 	case "update":
 		fmt.Println(packages)
 	default:
-		fmt.Printf("Unkown sub command \"%s\"\n", subCommand)
+		fmt.Printf("Unknown sub command \"%s\"\n", subCommand)
 	}
 }
