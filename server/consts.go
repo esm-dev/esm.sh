@@ -4,6 +4,7 @@ const (
 	MB                    = 1 << 20
 	maxAssetFileSize      = 50 * MB
 	maxPackageTarballSize = 256 * MB
+	lruCacheCapacity      = 10000
 )
 
 // asset extensions
