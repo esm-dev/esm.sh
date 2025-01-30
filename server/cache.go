@@ -1,24 +1,18 @@
 package server
 
 import (
-	"container/list"
-	"strings"
 	"sync"
 	"time"
 
+	lru "github.com/hashicorp/golang-lru/v2"
 	syncx "github.com/ije/gox/sync"
 )
 
 var (
 	cacheMutex syncx.KeyedMutex
 	cacheStore sync.Map
-	cacheLRU   *list.List
+	cacheLRU   *lru.Cache[string, any]
 )
-
-type cacheRecord struct {
-	key   string
-	value any
-}
 
 type cacheItem struct {
 	exp  int64
@@ -66,22 +60,17 @@ func withCache[T any](key string, cacheTtl time.Duration, fetch func() (T, strin
 }
 
 func withLRUCache[T any](key string, fetch func() (T, error)) (data T, err error) {
-	cacheKey := "lru:" + key
-
 	// check cache store first
-	if v, ok := cacheStore.Load(cacheKey); ok {
-		el := v.(*cacheItem).data.(*list.Element)
-		cacheLRU.MoveToFront(el)
-		return el.Value.(cacheRecord).value.(T), nil
+	if v, ok := cacheLRU.Get(key); ok {
+		return v.(T), nil
 	}
 
-	unlock := cacheMutex.Lock(cacheKey)
+	unlock := cacheMutex.Lock(key)
 	defer unlock()
 
 	// check cache store again after get lock
-	if v, ok := cacheStore.Load(cacheKey); ok {
-		el := v.(*cacheItem).data.(*list.Element)
-		return el.Value.(cacheRecord).value.(T), nil
+	if v, ok := cacheLRU.Get(key); ok {
+		return v.(T), nil
 	}
 
 	data, err = fetch()
@@ -89,29 +78,16 @@ func withLRUCache[T any](key string, fetch func() (T, error)) (data T, err error
 		return
 	}
 
-	el := cacheLRU.PushFront(cacheRecord{cacheKey, data})
-	cacheStore.Store(cacheKey, &cacheItem{-1, el})
-
-	// delete the oldest item if cache store is full
-	if cacheLRU.Len() > 1000 {
-		el := cacheLRU.Back()
-		if el != nil {
-			cacheLRU.Remove(el)
-			cacheStore.Delete(el.Value.(cacheRecord).key)
-		}
-	}
-
+	cacheLRU.Add(key, data)
 	return
 }
 
 func gc(now time.Time) {
 	expKeys := []string{}
 	cacheStore.Range(func(key, value any) bool {
-		if !strings.HasPrefix(key.(string), "lru:") {
-			item := value.(*cacheItem)
-			if item.exp > 0 && item.exp < now.UnixMilli() {
-				expKeys = append(expKeys, key.(string))
-			}
+		item := value.(*cacheItem)
+		if item.exp > 0 && item.exp < now.UnixMilli() {
+			expKeys = append(expKeys, key.(string))
 		}
 		return true
 	})
@@ -121,7 +97,11 @@ func gc(now time.Time) {
 }
 
 func init() {
-	cacheLRU = list.New()
+	var err error
+	cacheLRU, err = lru.New[string, any](lruCacheCapacity)
+	if err != nil {
+		panic(err)
+	}
 	// cache GC
 	go func() {
 		tick := time.NewTicker(10 * time.Minute)
