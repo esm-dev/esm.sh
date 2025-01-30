@@ -15,6 +15,7 @@ require (
 	go.etcd.io/bbolt v1.3.11
 	golang.org/x/net v0.34.0
 	golang.org/x/term v0.28.0
+	github.com/hashicorp/golang-lru/v2 v2.0.7
 )
 
 require (
