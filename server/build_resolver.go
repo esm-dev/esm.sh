@@ -646,7 +646,7 @@ func (ctx *BuildContext) resolveExternalModule(specifier string, kind api.Resolv
 				}
 			}
 			// mark the resolved path for _preload_
-			if kind != api.ResolveJSDynamicImport {
+			if kind == api.ResolveJSImportStatement && !withTypeJSON {
 				ctx.esmImports = append(ctx.esmImports, [2]string{resolvedPathFull, resolvedPath})
 			}
 			// if it's `require("module")` call
@@ -663,7 +663,7 @@ func (ctx *BuildContext) resolveExternalModule(specifier string, kind api.Resolv
 		return
 	}
 
-	// if  it's the main entry of current package
+	// if it's `main` entry of current package
 	if pkgJson := ctx.pkgJson; specifier == pkgJson.Name || specifier == pkgJson.PkgName {
 		resolvedPath = ctx.getImportPath(EsmPath{
 			PkgName:    pkgJson.Name,
