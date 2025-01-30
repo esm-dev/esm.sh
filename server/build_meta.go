@@ -3,6 +3,9 @@ package server
 import (
 	"bytes"
 	"errors"
+	"strings"
+
+	"github.com/ije/gox/utils"
 )
 
 type BuildMeta struct {
@@ -16,8 +19,7 @@ type BuildMeta struct {
 }
 
 func encodeBuildMeta(meta *BuildMeta) []byte {
-	buf, recycle := NewBuffer()
-	defer recycle()
+	buf := bytes.NewBuffer(nil)
 	buf.Write([]byte{'E', 'S', 'M', '\r', '\n'})
 	if meta.CJS {
 		buf.Write([]byte{'j', '\n'})
@@ -82,8 +84,18 @@ func decodeBuildMeta(data []byte) (*BuildMeta, error) {
 			meta.CSSEntry = string(line[2:])
 		case ll > 2 && line[0] == 'd' && line[1] == ':':
 			meta.Dts = string(line[2:])
+			if !endsWith(meta.Dts, ".ts", ".mts", ".cts") {
+				return nil, errors.New("invalid dts path")
+			}
 		case ll > 2 && line[0] == 'i' && line[1] == ':':
-			meta.Imports = append(meta.Imports, string(line[2:]))
+			importSepcifier := string(line[2:])
+			if !strings.HasSuffix(importSepcifier, ".mjs") {
+				_, q := utils.SplitByLastByte(importSepcifier, '?')
+				if q == "" || !strings.Contains(q, "target=") {
+					return nil, errors.New("invalid import specifier")
+				}
+			}
+			meta.Imports = append(meta.Imports, importSepcifier)
 		default:
 			return nil, errors.New("invalid build meta")
 		}
