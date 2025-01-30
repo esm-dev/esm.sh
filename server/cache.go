@@ -30,7 +30,7 @@ func withCache[T any](key string, cacheTtl time.Duration, fetch func() (T, strin
 		}
 	}
 
-	unlock := cacheMutex.Lock(key)
+	unlock := cacheMutex.Lock("lru:" + key)
 	defer unlock()
 
 	// check cache store again after get lock
