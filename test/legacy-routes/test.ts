@@ -3,12 +3,12 @@ import { assert, assertEquals, assertStringIncludes } from "jsr:@std/assert";
 Deno.test("legacy routes", async () => {
   try {
     await import("http://localhost:8080/");
-  } catch (err) {
+  } catch (err: any) {
     assertStringIncludes(err.message, "deprecated");
   }
   try {
     await import("http://localhost:8080/v135");
-  } catch (err) {
+  } catch (err: any) {
     assertStringIncludes(err.message, "deprecated");
   }
   {
@@ -18,7 +18,7 @@ Deno.test("legacy routes", async () => {
     assertEquals(typeof transform, "function");
     try {
       esm``;
-    } catch (err) {
+    } catch (err: any) {
       assertStringIncludes(err.message, "deprecated");
     }
   }
@@ -29,7 +29,7 @@ Deno.test("legacy routes", async () => {
     assertEquals(typeof transform, "function");
     try {
       esm``;
-    } catch (err) {
+    } catch (err: any) {
       assertStringIncludes(err.message, "deprecated");
     }
   }
@@ -185,6 +185,12 @@ Deno.test("legacy routes", async () => {
     assertEquals(res.status, 200);
     assertEquals(res.headers.get("Content-Type"), "application/typescript; charset=utf-8");
     assertStringIncludes(await res.text(), "https://esm.sh/v135/@types/react@18.");
+  }
+  {
+    const res = await fetch("http://localhost:8080/v135/@types/react-modal@3.16.3/X-ZS8q/index.d.ts");
+    assertEquals(res.status, 200);
+    assertEquals(res.headers.get("Content-Type"), "application/typescript; charset=utf-8");
+    assertStringIncludes(await res.text(), "https://esm.sh/v135/@types/react@");
   }
   {
     const res = await fetch("http://localhost:8080/v135/@types/react-dom@~18.3/client~.d.ts", {
