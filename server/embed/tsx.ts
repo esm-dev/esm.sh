@@ -1,6 +1,6 @@
-/*! 🚀 esm.sh/run
+/*! 🚀 esm.sh/tsx
  *
- * Add `<script type="module" src="https://esm.sh/run"></script>` to run jsx/ts in browser without build step.
+ * Add `<script type="module" src="https://esm.sh/tsx"></script>` to support TSX syntax in browser without build step.
  *
  */
 
