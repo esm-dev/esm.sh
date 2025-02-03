@@ -7,7 +7,7 @@ const (
 	lruCacheCapacity      = 10000
 )
 
-// asset extensions
+// asset file extensions
 var assetExts = map[string]bool{
 	"node":       true,
 	"wasm":       true,
@@ -27,6 +27,7 @@ var assetExts = map[string]bool{
 	"yaml":       true,
 	"txt":        true,
 	"glsl":       true,
+	"wgsl":       true,
 	"frag":       true,
 	"vert":       true,
 	"md":         true,
@@ -39,6 +40,7 @@ var assetExts = map[string]bool{
 	"jpg":        true,
 	"jpeg":       true,
 	"webp":       true,
+	"avif":       true,
 	"gif":        true,
 	"ico":        true,
 	"eot":        true,
