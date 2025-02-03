@@ -12,12 +12,22 @@ Deno.test("builtin scripts", async () => {
   }
 
   {
+    const res = await fetch("http://localhost:8080/tsx");
+    assert(res.ok);
+    assert(!res.redirected);
+    assertEquals(res.headers.get("Etag"), `W/"${VERSION}"`);
+    assertEquals(res.headers.get("Content-Type"), "application/javascript; charset=utf-8");
+    assertStringIncludes(res.headers.get("Vary") ?? "", "User-Agent");
+    assertStringIncludes(await res.text(), "esm.sh/tsx");
+  }
+
+  {
     const res = await fetch("http://localhost:8080/run");
     assert(res.ok);
     assert(!res.redirected);
     assertEquals(res.headers.get("Etag"), `W/"${VERSION}"`);
     assertEquals(res.headers.get("Content-Type"), "application/javascript; charset=utf-8");
     assertStringIncludes(res.headers.get("Vary") ?? "", "User-Agent");
-    assertStringIncludes(await res.text(), "esm.sh/run");
+    assertStringIncludes(await res.text(), "esm.sh/tsx");
   }
 });

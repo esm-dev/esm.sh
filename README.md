@@ -8,7 +8,7 @@
 
 # esm.sh
 
-A _no-build_ content delivery network(CDN) for modern web development.
+A _nobuild_ content delivery network(CDN) for modern web development.
 
 ## How to Use
 
@@ -65,6 +65,15 @@ With [import maps](https://github.com/WICG/import-maps), you can even use bare i
   import { Bench } from "https://esm.sh/pr/tinylibs/tinybench/tinybench@a832a55";
   import { Bench } from "https://esm.sh/pr/tinybench@a832a55"; // --compact
   ```
+
+### Transforming `.tsx`/`.vue`/`.svelte` on the Fly
+
+esm.sh allows you to import `.tsx`, `.vue`, and `.svelte` files directly in the browser without any build steps.
+
+```js
+import { Airplay } from "https://esm.sh/gh/phosphor-icons/react@v2.1.5/src/csr/Airplay.tsx?deps=react@18.2.0";
+import IconAirplay from "https://esm.sh/gh/phosphor-icons/vue@v2.2.0/src/icons/PhAirplay.vue?deps=vue@3.5.8";
+```
 
 ### Specifying Dependencies
 
@@ -211,7 +220,7 @@ const worker = createWorker({ inject: "self.onmessage = (e) => self.postMessage(
 ```
 
 You can import any module as a worker from esm.sh with the `?worker` query. Plus, you can access the module's exports in the
-`inject` code. For example, uing the `xxhash-wasm` to hash strings in a worker:
+`inject` code. For example, use the `xxhash-wasm` to hash strings in a worker:
 
 ```js
 import createWorker from "https://esm.sh/xxhash-wasm@1.0.2?worker";
@@ -282,9 +291,13 @@ you to use query params with trailing slash: change the query prefix `?` to `&` 
 }
 ```
 
-### Using `esm.sh/run`
+## Using `esm.sh/tsx`
 
-`esm.sh/run` is a lightweight **1KB** script that allows you to write `JSX`/`TS` directly in HTML without any build steps. Your source code is sent to the server, compiled, cached at the edge, and served to the browser as a JavaScript module.
+`esm.sh/tsx` is a lightweight **1KB** script that allows you to write `TSX` directly in HTML without any build steps. Your source code is sent to the server, compiled, cached at the edge, and served to the browser as a JavaScript module.
+
+`esm.sh/tsx` supports `<script>` tags with `type` set to `text/babel`, `text/jsx`, `text/ts`, or `text/tsx`.
+
+In development mode (open the page on localhost), `esm.sh/tsx` uses [@esm.sh/tsx](https://github.com/esm-dev/tsx) to transform JSX syntax into JavaScript.
 
 ```html
 <!DOCTYPE html>
@@ -293,12 +306,12 @@ you to use query params with trailing slash: change the query prefix `?` to `&` 
   <script type="importmap">
     {
       "imports": {
-        "@jsxImportSource": "https://esm.sh/react@18.2.0",
+        "react": "https://esm.sh/react@18.2.0",
         "react-dom/client": "https://esm.sh/react-dom@18.2.0/client"
       }
     }
   </script>
-  <script type="module" src="https://esm.sh/run"></script>
+  <script type="module" src="https://esm.sh/tsx"></script>
 </head>
 <body>
   <div id="root"></div>
@@ -311,7 +324,7 @@ you to use query params with trailing slash: change the query prefix `?` to `&` 
 ```
 
 > [!TIP]
-> The special `@jsxImportSource` in the `importmap` script is using for JSX transform, you can alternate it to your preferred runtime, for example https://esm.sh/preact@10.19.2.
+> By default, esm.sh transforms your JSX syntax with `jsxImportSource` set to `react` or `preact` which is specified in the `importmap`. To use a custom JSX runtime, add `@jsxRuntime` specifier in the `importmap` script. For example, [solid-js](https://esm.sh/solid-js/jsx-runtime).
 
 ## Escape Hatch: Raw Source Files
 
@@ -323,7 +336,7 @@ do so, you need to add a `?raw` query to the request URL.
 ```
 
 > [!TIP]
-> You may alternatively use `raw.esm.sh/<PATH>` as the origin, which is equivalent to `esm.sh/<PATH>?raw`,
+> You may alternatively use `https://raw.esm.sh/<PATH>`, which is equivalent to `https://esm.sh/<PATH>?raw`,
 > that transitive references in the raw assets will also be raw requests.
 
 ## Deno Compatibility
@@ -371,3 +384,7 @@ cloud network platforms.
 ## Self-Hosting
 
 To host esm.sh by yourself, check the [hosting](./HOSTING.md) documentation.
+
+## License
+
+Under the [MIT](./LICENSE) license.
