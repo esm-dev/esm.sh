@@ -378,7 +378,7 @@ func esmRouter(db DB, buildStorage storage.Storage, logger *log.Logger) rex.Hand
 			}
 
 		// builtin scripts
-		case "/x", "/run":
+		case "/x", "/tsx", "/run":
 			ifNoneMatch := ctx.R.Header.Get("If-None-Match")
 			if ifNoneMatch == globalETag && !DEBUG {
 				return rex.Status(http.StatusNotModified, nil)
@@ -396,6 +396,9 @@ func esmRouter(db DB, buildStorage storage.Storage, logger *log.Logger) rex.Hand
 				cacheTtl = 0
 			}
 			filename := "embed/" + pathname[1:] + ".ts"
+			if pathname == "/run" {
+				filename = "embed/tsx.ts"
+			}
 			js, err := withCache(filename+"?"+target, time.Duration(cacheTtl)*time.Second, func() (js []byte, _ string, err error) {
 				data, err := embedFS.ReadFile(filename)
 				if err != nil {
