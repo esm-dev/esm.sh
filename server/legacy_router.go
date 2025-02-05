@@ -239,13 +239,23 @@ func legacyESM(ctx *rex.Context, buildStorage storage.Storage, buildVersionPrefi
 	if err != nil {
 		return rex.Status(http.StatusBadRequest, "Invalid url")
 	}
-	fetchClient, recycle := NewFetchClient(60, ctx.UserAgent())
+
+	fetchClient, recycle := NewFetchClient(60, ctx.UserAgent(), true)
 	defer recycle()
+
 	res, err := fetchClient.Fetch(url, nil)
 	if err != nil {
 		return rex.Status(http.StatusBadGateway, "Failed to connect the lagecy esm.sh server")
 	}
 	defer res.Body.Close()
+
+	if res.StatusCode == 301 || res.StatusCode == 302 {
+		url := res.Header.Get("Location")
+		if strings.HasPrefix(url, "https://legacy.esm.sh") {
+			url = getOrigin(ctx) + strings.TrimPrefix(url, "https://legacy.esm.sh")
+		}
+		return redirect(ctx, url, res.StatusCode == 301)
+	}
 
 	if res.StatusCode != 200 {
 		data, err := io.ReadAll(res.Body)
@@ -262,7 +272,9 @@ func legacyESM(ctx *rex.Context, buildStorage storage.Storage, buildVersionPrefi
 			return rex.Status(500, "Failed to fetch data from the legacy esm.sh server")
 		}
 		if endsWith(pathname, ".d.ts", ".d.mts") {
-			data = bytes.ReplaceAll(data, []byte("https://legacy.esm.sh/"), []byte("https://esm.sh/"))
+			origin := getOrigin(ctx) + "/"
+			data = bytes.ReplaceAll(data, []byte("https://esm.sh/"), []byte(origin))
+			data = bytes.ReplaceAll(data, []byte("https://legacy.esm.sh/"), []byte(origin))
 		}
 		err = buildStorage.Put(savePath, bytes.NewReader(data))
 		if err != nil {

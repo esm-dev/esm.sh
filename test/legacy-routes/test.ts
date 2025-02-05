@@ -184,13 +184,13 @@ Deno.test("legacy routes", async () => {
     const res = await fetch("http://localhost:8080/v135/@types/react-dom@18.3.1/index.d.ts");
     assertEquals(res.status, 200);
     assertEquals(res.headers.get("Content-Type"), "application/typescript; charset=utf-8");
-    assertStringIncludes(await res.text(), "https://esm.sh/v135/@types/react@18.");
+    assertStringIncludes(await res.text(), "http://localhost:8080/v135/@types/react@18.");
   }
   {
     const res = await fetch("http://localhost:8080/v135/@types/react-modal@3.16.3/X-ZS8q/index.d.ts");
     assertEquals(res.status, 200);
     assertEquals(res.headers.get("Content-Type"), "application/typescript; charset=utf-8");
-    assertStringIncludes(await res.text(), "https://esm.sh/v135/@types/react@");
+    assertStringIncludes(await res.text(), "http://localhost:8080/v135/@types/react@");
   }
   {
     const res = await fetch("http://localhost:8080/v135/@types/react-dom@~18.3/client~.d.ts", {
@@ -245,5 +245,18 @@ Deno.test("legacy routes", async () => {
     });
     res.body?.cancel();
     assertEquals(res.status, 400);
+  }
+  {
+    // respect legacy redirects
+    const res = await fetch("http://localhost:8080/v135/@jitl/quickjs-ng-wasmfile-release-sync@0.31.0/es2022/emscripten-module.wasm", {
+      headers: { "User-Agent": "i'm a browser" },
+      redirect: "manual",
+    });
+    res.body?.cancel();
+    assertEquals(res.status, 301);
+    assertEquals(
+      res.headers.get("Location"),
+      "http://localhost:8080/@jitl/quickjs-ng-wasmfile-release-sync@0.31.0/dist/emscripten-module.wasm",
+    );
   }
 });
