@@ -272,9 +272,11 @@ func legacyESM(ctx *rex.Context, buildStorage storage.Storage, buildVersionPrefi
 			return rex.Status(500, "Failed to fetch data from the legacy esm.sh server")
 		}
 		if endsWith(pathname, ".d.ts", ".d.mts") {
-			origin := getOrigin(ctx) + "/"
-			data = bytes.ReplaceAll(data, []byte("https://esm.sh/"), []byte(origin))
-			data = bytes.ReplaceAll(data, []byte("https://legacy.esm.sh/"), []byte(origin))
+			origin := getOrigin(ctx)
+			if origin != "https://esm.sh" {
+				data = bytes.ReplaceAll(data, []byte("https://esm.sh"), []byte(origin))
+			}
+			data = bytes.ReplaceAll(data, []byte(config.LegacyServer), []byte(origin))
 		}
 		err = buildStorage.Put(savePath, bytes.NewReader(data))
 		if err != nil {
