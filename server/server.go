@@ -196,7 +196,7 @@ func customLandingPage(options *LandingPageOptions) rex.Handle {
 			if err != nil {
 				return rex.Err(http.StatusBadRequest, "Invalid url")
 			}
-			fetchClient, recycle := NewFetchClient(15, ctx.UserAgent())
+			fetchClient, recycle := NewFetchClient(15, ctx.UserAgent(), false)
 			defer recycle()
 			res, err := fetchClient.Fetch(url, nil)
 			if err != nil {
@@ -222,8 +222,10 @@ func customLandingPage(options *LandingPageOptions) rex.Handle {
 					ctx.SetHeader("Last-Modified", lastModified)
 				}
 			}
-			cacheCache := res.Header.Get("Cache-Control")
-			if cacheCache == "" {
+			cacheControl := res.Header.Get("Cache-Control")
+			if cacheControl != "" {
+				ctx.SetHeader("Cache-Control", cacheControl)
+			} else {
 				ctx.SetHeader("Cache-Control", ccMustRevalidate)
 			}
 			ctx.SetHeader("Content-Type", res.Header.Get("Content-Type"))
