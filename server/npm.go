@@ -378,7 +378,7 @@ func (npmrc *NpmRC) getPackageInfo(pkgName string, version string) (packageJson 
 			header.Set("Authorization", "Basic "+base64.StdEncoding.EncodeToString([]byte(reg.User+":"+reg.Password)))
 		}
 
-		fetchClient, recycle := NewFetchClient(15, "esmd/"+VERSION)
+		fetchClient, recycle := NewFetchClient(15, "esmd/"+VERSION, false)
 		defer recycle()
 
 		retryTimes := 0
@@ -628,7 +628,7 @@ func fetchPackageTarball(reg *NpmRegistry, installDir string, pkgName string, ta
 		header.Set("Authorization", "Basic "+base64.StdEncoding.EncodeToString([]byte(reg.User+":"+reg.Password)))
 	}
 
-	fetchClient, recycle := NewFetchClient(30, "esmd/"+VERSION)
+	fetchClient, recycle := NewFetchClient(30, "esmd/"+VERSION, false)
 	defer recycle()
 
 	retryTimes := 0

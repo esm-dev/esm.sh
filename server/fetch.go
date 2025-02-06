@@ -1,6 +1,7 @@
 package server
 
 import (
+	"errors"
 	"net/http"
 	"net/url"
 	"sync"
@@ -18,9 +19,18 @@ type FetchClient struct {
 	userAgent string
 }
 
-func NewFetchClient(timeout int, userAgent string) (client *FetchClient, recycle func()) {
+func NewFetchClient(timeout int, userAgent string, noRedirect bool) (client *FetchClient, recycle func()) {
 	client = fetchClientPool.Get().(*FetchClient)
-	client.Client.Timeout = time.Duration(timeout) * time.Second
+	client.Timeout = time.Duration(timeout) * time.Second
+	client.CheckRedirect = func(req *http.Request, via []*http.Request) error {
+		if noRedirect && len(via) > 0 {
+			return http.ErrUseLastResponse
+		}
+		if len(via) >= 3 {
+			return errors.New("stopped after 3 redirects")
+		}
+		return nil
+	}
 	client.userAgent = userAgent
 	return client, func() { fetchClientPool.Put(client) }
 }
