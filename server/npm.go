@@ -114,7 +114,7 @@ type PackageJSON struct {
 // ToNpmPackage converts PackageJSONRaw to PackageJSON
 func (a *PackageJSONRaw) ToNpmPackage() *PackageJSON {
 	browser := map[string]string{}
-	if a.Browser.Str != "" {
+	if a.Browser.Str != "" && endsWith(a.Browser.Str, moduleExts...) {
 		browser["."] = a.Browser.Str
 	}
 	if a.Browser.Map != nil {
