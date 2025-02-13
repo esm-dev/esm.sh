@@ -1153,7 +1153,10 @@ REBUILD:
 							} else if name, ok := ctx.pkgJson.Browser["node:process"]; ok {
 								excluded = name == ""
 							}
-							if !excluded {
+							if excluded {
+								header.WriteString(`const __Process$ = globalThis.process;`)
+								header.WriteByte('\n')
+							} else {
 								header.WriteString(`import __Process$ from "/node/process.mjs";`)
 								header.WriteByte('\n')
 								imports.Add("/node/process.mjs")
@@ -1184,7 +1187,10 @@ REBUILD:
 								excluded = name == ""
 							}
 						}
-						if !excluded {
+						if excluded {
+							header.WriteString(`const __Buffer$ = globalThis.Buffer;`)
+							header.WriteByte('\n')
+						} else {
 							header.WriteString(`import { Buffer as __Buffer$ } from "/node/buffer.mjs";`)
 							header.WriteByte('\n')
 							imports.Add("/node/buffer.mjs")
