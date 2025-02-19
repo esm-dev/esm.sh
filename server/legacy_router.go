@@ -115,7 +115,7 @@ func legacyESM(ctx *rex.Context, buildStorage storage.Storage, buildVersionPrefi
 		query = "?" + ctx.R.URL.RawQuery
 	}
 	var isStatic bool
-	if strings.HasPrefix(pathname, "/node_") && strings.HasSuffix(pathname, ".js") {
+	if (strings.HasPrefix(pathname, "/node_") && strings.HasSuffix(pathname, ".js")) || pathname == "/node.ns.d.ts" {
 		isStatic = true
 	} else {
 		if strings.HasPrefix(pathname, "/gh/") {
