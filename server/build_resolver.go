@@ -3,6 +3,7 @@ package server
 import (
 	"crypto/sha1"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"path"
 	"sort"
@@ -715,25 +716,37 @@ func (ctx *BuildContext) resolveExternalModule(specifier string, kind api.Resolv
 		return
 	}
 
-	// common npm dependency
-	pkgName, version, subPath, _ := splitEsmPath(specifier)
-	if version == "" {
+	var pkgName, pkgVersion, subPath string
+
+	// jsr dependency
+	if strings.HasPrefix(specifier, "jsr:") {
+		pkgName, pkgVersion, subPath, _ = splitEsmPath(specifier[4:])
+		if !strings.HasPrefix(pkgName, "@") || !strings.ContainsRune(pkgName, '/') {
+			return specifier, errors.New("invalid `jsr:` dependency:" + specifier)
+		}
+		scope, name := utils.SplitByFirstByte(pkgName, '/')
+		pkgName = "@jsr/" + scope[1:] + "__" + name
+	} else {
+		pkgName, pkgVersion, subPath, _ = splitEsmPath(specifier)
+	}
+
+	if pkgVersion == "" {
 		if pkgName == ctx.esm.PkgName {
-			version = ctx.esm.PkgVersion
+			pkgVersion = ctx.esm.PkgVersion
 		} else if pkgVerson, ok := ctx.args.deps[pkgName]; ok {
-			version = pkgVerson
+			pkgVersion = pkgVerson
 		} else if v, ok := ctx.pkgJson.Dependencies[pkgName]; ok {
-			version = strings.TrimSpace(v)
+			pkgVersion = strings.TrimSpace(v)
 		} else if v, ok := ctx.pkgJson.PeerDependencies[pkgName]; ok {
-			version = strings.TrimSpace(v)
+			pkgVersion = strings.TrimSpace(v)
 		} else {
-			version = "latest"
+			pkgVersion = "latest"
 		}
 	}
 
 	dep := EsmPath{
 		PkgName:       pkgName,
-		PkgVersion:    version,
+		PkgVersion:    pkgVersion,
 		SubPath:       subPath,
 		SubModuleName: stripEntryModuleExt(subPath),
 	}
@@ -742,7 +755,7 @@ func (ctx *BuildContext) resolveExternalModule(specifier string, kind api.Resolv
 	// e.g. "@mark/html": "npm:@jsr/mark__html@^1.0.0"
 	// e.g. "tslib": "git+https://github.com/microsoft/tslib.git#v2.3.0"
 	// e.g. "react": "github:facebook/react#v18.2.0"
-	p, err := resolveDependencyVersion(version)
+	p, err := resolveDependencyVersion(pkgVersion)
 	if err != nil {
 		resolvedPath = fmt.Sprintf("/error.js?type=%s&name=%s&importer=%s", strings.ReplaceAll(err.Error(), " ", "-"), pkgName, ctx.esm.Specifier())
 		return
@@ -825,7 +838,7 @@ func (ctx *BuildContext) resolveExternalModule(specifier string, kind api.Resolv
 	if strings.ContainsRune(dep.PkgVersion, '|') || strings.ContainsRune(dep.PkgVersion, ' ') {
 		// fetch the latest version of the package based on the semver range
 		var p *PackageJSON
-		_, p, err = ctx.lookupDep(pkgName+"@"+version, false)
+		_, p, err = ctx.lookupDep(pkgName+"@"+pkgVersion, false)
 		if err != nil {
 			return
 		}
