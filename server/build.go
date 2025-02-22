@@ -477,7 +477,7 @@ func (ctx *BuildContext) buildModule(analyzeMode bool) (meta *BuildMeta, include
 						}
 						if ok {
 							if s, ok := v.(string); ok {
-								specifier = s
+								specifier = normalizeImportSpecifier(s)
 							} else if m, ok := v.(map[string]interface{}); ok {
 								targets := []string{"browser", "module", "import", "default"}
 								if ctx.isDenoTarget() {
