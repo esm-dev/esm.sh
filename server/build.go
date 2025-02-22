@@ -460,9 +460,22 @@ func (ctx *BuildContext) buildModule(analyzeMode bool) (meta *BuildMeta, include
 						}
 					}
 
-					// resolve specifier using the `imports` field of package.json
+					// resolve specifier using the `imports` field of package.json/deno.json
 					if len(pkgJson.Imports) > 0 {
-						if v, ok := pkgJson.Imports[specifier]; ok {
+						var v any
+						var ok bool
+						v, ok = pkgJson.Imports[specifier]
+						if !ok {
+							// check tailing slash
+							pkgName, _, subPath, _ := splitEsmPath(specifier)
+							v, ok = pkgJson.Imports[pkgName]
+							if ok && subPath != "" {
+								if s, ok := v.(string); ok {
+									v = s + "/" + subPath
+								}
+							}
+						}
+						if ok {
 							if s, ok := v.(string); ok {
 								specifier = s
 							} else if m, ok := v.(map[string]interface{}); ok {

@@ -2,6 +2,7 @@ package server
 
 import (
 	"archive/tar"
+	"bytes"
 	"compress/gzip"
 	"encoding/base64"
 	"encoding/json"
@@ -18,6 +19,7 @@ import (
 	"time"
 
 	"github.com/Masterminds/semver/v3"
+	"github.com/esm-dev/esm.sh/server/common"
 	"github.com/ije/gox/set"
 	syncx "github.com/ije/gox/sync"
 	"github.com/ije/gox/utils"
@@ -502,13 +504,52 @@ func (npmrc *NpmRC) installPackage(pkg Package) (packageJson *PackageJSON, err e
 		err = ghInstall(installDir, pkg.Name, pkg.Version)
 		// ensure 'package.json' file if not exists after installing from github
 		if err == nil && !existsFile(packageJsonPath) {
-			var f *os.File
-			f, err = os.Create(packageJsonPath)
+			buf := bytes.NewBuffer(nil)
+			buf.WriteString(`{"name":"` + pkg.Name + `","version":"` + pkg.Version + `"`)
+			var denoJson *PackageJSON
+			if deonJsonPath := path.Join(installDir, "node_modules", pkg.Name, "deno.json"); existsFile(deonJsonPath) {
+				var raw PackageJSONRaw
+				if utils.ParseJSONFile(deonJsonPath, &raw) == nil {
+					denoJson = raw.ToNpmPackage()
+				}
+			} else if deonJsoncPath := path.Join(installDir, "node_modules", pkg.Name, "deno.jsonc"); existsFile(deonJsoncPath) {
+				data, err := os.ReadFile(deonJsoncPath)
+				if err == nil {
+					var raw PackageJSONRaw
+					if json.Unmarshal(common.StripJSONC(data), &raw) == nil {
+						denoJson = raw.ToNpmPackage()
+					}
+				}
+			}
+			if denoJson != nil {
+				if len(denoJson.Imports) > 0 {
+					buf.WriteString(`,"imports":{`)
+					for k, v := range denoJson.Imports {
+						if s, ok := v.(string); ok {
+							buf.WriteString(`"` + k + `":"` + s + `",`)
+						}
+					}
+					buf.Truncate(buf.Len() - 1)
+					buf.WriteByte('}')
+				}
+				if denoJson.Exports.Len() > 0 {
+					buf.WriteString(`,"exports":{`)
+					for _, k := range denoJson.Exports.keys {
+						if v, ok := denoJson.Exports.Get(k); ok {
+							if s, ok := v.(string); ok {
+								buf.WriteString(`"` + k + `":"` + s + `",`)
+							}
+						}
+					}
+					buf.Truncate(buf.Len() - 1)
+					buf.WriteByte('}')
+				}
+			}
+			buf.WriteByte('}')
+			err = os.WriteFile(packageJsonPath, buf.Bytes(), 0644)
 			if err != nil {
 				return
 			}
-			defer f.Close()
-			fmt.Fprintf(f, `{"name":"%s","version":"%s"}`, pkg.Name, pkg.Version)
 		}
 	} else if pkg.PkgPrNew {
 		err = fetchPackageTarball(&NpmRegistry{}, installDir, pkg.Name, "https://pkg.pr.new/"+pkg.Name+"@"+pkg.Version)
