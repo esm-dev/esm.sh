@@ -242,12 +242,14 @@ func (d *DevServer) ServeHtml(w http.ResponseWriter, r *http.Request, pathname s
 					if srcUrl, parseErr := url.Parse(srcAttr); parseErr == nil && srcUrl.Path == "/x" {
 						hrefAttr, _ = utils.SplitByFirstByte(hrefAttr, '?')
 						if hrefAttr == "uno.css" || strings.HasSuffix(hrefAttr, "/uno.css") {
-							unocssHref := hrefAttr + "?ctx=" + base64.RawURLEncoding.EncodeToString([]byte(pathname))
-							w.Write([]byte("<link rel=\"stylesheet\" href=\""))
-							w.Write([]byte(unocssHref))
-							w.Write([]byte{'"', '>'})
+							if unocss == "" {
+								unocssHref := hrefAttr + "?ctx=" + base64.RawURLEncoding.EncodeToString([]byte(pathname))
+								w.Write([]byte("<link rel=\"stylesheet\" href=\""))
+								w.Write([]byte(unocssHref))
+								w.Write([]byte{'"', '>'})
+								unocss = unocssHref
+							}
 							overriding = "script"
-							unocss = unocssHref
 						} else {
 							w.Write([]byte("<script type=\"module\""))
 							for attrKey, attrVal := range attrs {
