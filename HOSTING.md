@@ -30,7 +30,7 @@ You can find all the server options in [config.example.jsonc](./config.example.j
 You will need [Go](https://golang.org/dl) 1.22+ to compile and run the server.
 
 ```bash
-go run main.go --config=config.json
+go run server/cmd/main.go --config=config.json
 ```
 
 Then you can import `React` from <http://localhost:8080/react>.
@@ -40,7 +40,7 @@ Then you can import `React` from <http://localhost:8080/react>.
 You can deploy the server to a single machine with the [deploy.sh](./scripts/deploy.sh) script.
 
 ```bash
-# first time deploy
+# first time to deploy
 ./scripts/deploy.sh --init
 # update the server
 ./scripts/deploy.sh
@@ -48,7 +48,7 @@ You can deploy the server to a single machine with the [deploy.sh](./scripts/dep
 
 Recommended hosting requirements:
 
-- Linux system (Debian/Ubuntu)
+- Linux system with systemd installed
 - 4x CPU cores or more
 - 8GB RAM or more
 - 100GB disk space or more
@@ -164,3 +164,6 @@ To deploy the server with CloudFlare CDN, you need to create following cache rul
 ```ruby
 (not starts_with(http.user_agent, "Deno/") and not starts_with(http.user_agent, "Bun/") and not starts_with(http.user_agent, "Node/") and not starts_with(http.user_agent, "Node.js/") and http.user_agent ne "undici")
 ```
+
+> [!NOTE]
+> Since Cloudflare does not respect the `Vary` header, we need to bypass the cache for `Deno`/`Bun`/`Node` clients.
