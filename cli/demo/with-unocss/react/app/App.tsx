@@ -9,7 +9,7 @@ export function App() {
       <div className="center-box relative">
         <h1 className="font-sans text-5xl fw500 text-primary select-none">esm.sh</h1>
         <p className="font-sans text-lg fw400 text-gray-400 text-center">
-          The <span className="fw600">no-build</span> cdn for modern web development.
+          The <span className="fw600">nobuild</span> cdn for modern web development.
         </p>
         <div className="flex justify-center gap-3 mt2 text-2xl all:transition-300">
           <a className="logo i-tabler-world" href="https://esm.sh" target="_blank" title="Website" />

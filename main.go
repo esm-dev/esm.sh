@@ -8,15 +8,15 @@ import (
 	"github.com/esm-dev/esm.sh/cli"
 )
 
-const helpMessage = "\033[30mesm.sh - A no-build tool for modern web development.\033[0m" + `
+const helpMessage = "\033[30mesm.sh - A nobuild tool for modern web development.\033[0m" + `
 
 Usage: esm.sh [command] <options>
 
 Commands:
   i, add [...pakcage]   Alias to 'esm.sh im add'.
   im, importmap         Manage "importmap" script.
-  init                  Create a new no-build web app with esm.sh CDN.
-  serve                 Serve a no-build web app with esm.sh CDN, HMR, transforming TS/Vue/Svelte on the fly.
+  init                  Create a new nobuild web app with esm.sh CDN.
+  serve                 Serve a nobuild web app with esm.sh CDN, HMR, transforming TS/Vue/Svelte on the fly.
 `
 
 //go:embed cli/internal

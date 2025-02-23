@@ -9,7 +9,7 @@
 <div class="center-box relative">
   <h1 class="font-sans text-5xl fw500 text-primary select-none">esm.sh</h1>
   <p class="font-sans text-lg fw400 text-gray-400 text-center">
-    The <span class="fw600">no-build</span> cdn for modern web development.
+    The <span class="fw600">nobuild</span> cdn for modern web development.
   </p>
   <div class="flex justify-center gap-3 mt2 text-2xl all:transition-300">
     <a class="logo i-tabler-world" href="https://esm.sh" target="_blank" title="Website"> </a>

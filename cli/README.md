@@ -1,16 +1,16 @@
-# A CLI tool for no-build web apps with esm.sh CDN.
+# esm.sh CLI
 
-A CLI tool for no-build web apps with esm.sh CDN, written in Go.
+A _nobuild_ tool for modern web development.
 
 ## Installation
 
-You can install esm.sh CLI from source code:
+You can install `esm.sh` CLI from source code:
 
 ```bash
 go install github.com/esm-dev/esm.sh
 ```
 
-You can also install esm.sh CLI via `npm`:
+You can also install `esm.sh` CLI via `npm`:
 
 ```bash
 npm install -g esm.sh
@@ -31,7 +31,7 @@ Usage: esm.sh [command] <options>
 Commands:
   i, add [...pakcage]   Alias to 'esm.sh im add'.
   im, importmap         Manage "importmap" script.
-  init                  Create a new no-build web app with esm.sh CDN.
-  serve                 Serve a no-build web app with esm.sh CDN, HMR, transforming TS/Vue/Svelte on the fly.
-  build                 Build a no-build web app with esm.sh CDN.
+  init                  Create a new nobuild web app with esm.sh CDN.
+  serve                 Serve a nobuild web app with esm.sh CDN, HMR, transforming TS/Vue/Svelte on the fly.
+  build                 Build a nobuild web app with esm.sh CDN.
 ```
