@@ -12,7 +12,6 @@ import (
 	"regexp"
 	"sort"
 	"strings"
-	"time"
 
 	"github.com/esm-dev/esm.sh/server/npm_replacements"
 	"github.com/esm-dev/esm.sh/server/storage"
@@ -55,6 +54,7 @@ type BuildContext struct {
 var (
 	regexpESMInternalIdent = regexp.MustCompile(`__[a-zA-Z]+\$`)
 	regexpVarDecl          = regexp.MustCompile(`var ([\w$]+)\s*=\s*[\w$]+$`)
+	errorResolveEntry      = errors.New("could not resolve build entry")
 )
 
 var loaders = map[string]esbuild.Loader{
@@ -226,12 +226,7 @@ func (ctx *BuildContext) buildPath() {
 func (ctx *BuildContext) buildModule(analyzeMode bool) (meta *BuildMeta, includes [][2]string, err error) {
 	entry := ctx.resolveEntry(ctx.esm)
 	if entry.isEmpty() {
-		// another shot if failed
-		time.Sleep(100 * time.Millisecond)
-		entry = ctx.resolveEntry(ctx.esm)
-	}
-	if entry.isEmpty() {
-		err = errors.New("could not resolve build entry")
+		err = errorResolveEntry
 		return
 	}
 

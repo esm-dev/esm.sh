@@ -1573,7 +1573,7 @@ func esmRouter(db DB, buildStorage storage.Storage, logger *log.Logger) rex.Hand
 		}
 
 	BUILD:
-		buildCtx := &BuildContext{
+		build := &BuildContext{
 			npmrc:       npmrc,
 			logger:      logger,
 			db:          db,
@@ -1585,21 +1585,20 @@ func esmRouter(db DB, buildStorage storage.Storage, logger *log.Logger) rex.Hand
 			target:      target,
 			dev:         isDev,
 		}
-		ret, ok, err := buildCtx.Exists()
+		ret, ok, err := build.Exists()
 		if err != nil {
 			return rex.Status(500, err.Error())
 		}
 		if !ok {
-			ch := buildQueue.Add(buildCtx)
+			ch := buildQueue.Add(build)
 			select {
 			case output := <-ch:
 				if output.err != nil {
 					msg := output.err.Error()
-					if strings.Contains(msg, "no such file or directory") || strings.Contains(msg, "is not exported from package") || strings.Contains(msg, "could not resolve build entry") {
-						ctx.SetHeader("Cache-Control", ccImmutable)
+					if output.err == errorResolveEntry || strings.Contains(msg, "is not exported from package") {
 						return rex.Status(404, "module not found")
 					}
-					if strings.HasSuffix(msg, " not found") {
+					if strings.HasSuffix(msg, " not found") || strings.Contains(msg, "no such file or directory") {
 						return rex.Status(404, msg)
 					}
 					return rex.Status(500, msg)
@@ -1633,7 +1632,7 @@ func esmRouter(db DB, buildStorage storage.Storage, logger *log.Logger) rex.Hand
 			if !ret.CSSInJS {
 				return rex.Status(404, "Package CSS not found")
 			}
-			url := origin + strings.TrimSuffix(buildCtx.Path(), ".mjs") + ".css"
+			url := origin + strings.TrimSuffix(build.Path(), ".mjs") + ".css"
 			return redirect(ctx, url, isExactVersion)
 		}
 
@@ -1652,18 +1651,18 @@ func esmRouter(db DB, buildStorage storage.Storage, logger *log.Logger) rex.Hand
 
 		// if the path is `ESMBuild`, return the built js/css content
 		if pathKind == EsmBuild {
-			if esm.SubPath != buildCtx.esm.SubPath {
+			if esm.SubPath != build.esm.SubPath {
 				buf, recycle := NewBuffer()
 				defer recycle()
-				fmt.Fprintf(buf, "export * from \"%s\";\n", buildCtx.Path())
+				fmt.Fprintf(buf, "export * from \"%s\";\n", build.Path())
 				if ret.ExportDefault {
-					fmt.Fprintf(buf, "export { default } from \"%s\";\n", buildCtx.Path())
+					fmt.Fprintf(buf, "export { default } from \"%s\";\n", build.Path())
 				}
 				ctx.SetHeader("Content-Type", ctJavaScript)
 				ctx.SetHeader("Cache-Control", ccImmutable)
 				return buf.Bytes()
 			}
-			savePath := buildCtx.getSavepath()
+			savePath := build.getSavepath()
 			if strings.HasSuffix(esm.SubPath, ".css") && ret.CSSInJS {
 				path, _ := utils.SplitByLastByte(savePath, '.')
 				savePath = path + ".css"
@@ -1674,7 +1673,7 @@ func esmRouter(db DB, buildStorage storage.Storage, logger *log.Logger) rex.Hand
 					// seem the build file is non-exist in the storage
 					// let's remove the build meta from the database and clear the cache
 					// then re-build the module
-					key := npmrc.zoneId + ":" + buildCtx.Path()
+					key := npmrc.zoneId + ":" + build.Path()
 					db.Delete(key)
 					cacheStore.Delete("lru:" + key)
 					goto BUILD
@@ -1691,7 +1690,7 @@ func esmRouter(db DB, buildStorage storage.Storage, logger *log.Logger) rex.Hand
 				ctx.SetHeader("Content-Type", ctJavaScript)
 				if isWorker {
 					defer f.Close()
-					moduleUrl := origin + buildCtx.Path()
+					moduleUrl := origin + build.Path()
 					if !ret.CJS && len(exports) > 0 {
 						moduleUrl += "?exports=" + strings.Join(exports, ",")
 					}
@@ -1734,7 +1733,7 @@ func esmRouter(db DB, buildStorage storage.Storage, logger *log.Logger) rex.Hand
 		fmt.Fprintf(buf, "/* esm.sh - %s */\n", esm.Specifier())
 
 		if isWorker {
-			moduleUrl := origin + buildCtx.Path()
+			moduleUrl := origin + build.Path()
 			if !ret.CJS && len(exports) > 0 {
 				moduleUrl += "?exports=" + strings.Join(exports, ",")
 			}
@@ -1749,7 +1748,7 @@ func esmRouter(db DB, buildStorage storage.Storage, logger *log.Logger) rex.Hand
 					fmt.Fprintf(buf, "import \"%s\";\n", dep)
 				}
 			}
-			esm := buildCtx.Path()
+			esm := build.Path()
 			if !ret.CJS && len(exports) > 0 {
 				esm += "?exports=" + strings.Join(exports, ",")
 			}

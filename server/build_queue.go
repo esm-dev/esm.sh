@@ -95,6 +95,11 @@ func (q *BuildQueue) schedule() {
 
 func (q *BuildQueue) run(task *BuildTask) {
 	meta, err := task.ctx.Build()
+	if err == errorResolveEntry {
+		// another shot if failed to resolve build entry
+		time.Sleep(100 * time.Millisecond)
+		meta, err = task.ctx.Build()
+	}
 	if err == nil {
 		task.ctx.status = "done"
 		if task.ctx.target == "types" {
