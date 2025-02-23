@@ -64,7 +64,7 @@ func transformDTS(ctx *BuildContext, dts string, buildArgsPrefix string, marker 
 	buffer, recycle := NewBuffer()
 	defer recycle()
 
-	internalDts := set.New[string]()
+	deps := set.New[string]()
 
 	err = parseDts(dtsFile, buffer, func(specifier string, kind TsImportKind, position int) (string, error) {
 		if ctx.esm.PkgName == "@types/node" {
@@ -118,7 +118,7 @@ func transformDTS(ctx *BuildContext, dts string, buildArgsPrefix string, marker 
 			}
 
 			if endsWith(specifier, ".d.ts", ".d.mts", ".d.cts") {
-				internalDts.Add(specifier)
+				deps.Add(specifier)
 			} else {
 				specifier += ".d.ts"
 			}
@@ -164,7 +164,8 @@ func transformDTS(ctx *BuildContext, dts string, buildArgsPrefix string, marker 
 					), nil
 				}
 			}
-			return specifier, nil
+			// virtual module
+			return "https://esm.sh/" + specifier, nil
 		}
 
 		// respect `?alias` query
@@ -251,7 +252,7 @@ func transformDTS(ctx *BuildContext, dts string, buildArgsPrefix string, marker 
 
 	var wg sync.WaitGroup
 	var errors []error
-	for _, s := range internalDts.Values() {
+	for _, s := range deps.Values() {
 		wg.Add(1)
 		go func(s string) {
 			j, err := transformDTS(ctx, "./"+path.Join(path.Dir(dts), s), buildArgsPrefix, marker)
