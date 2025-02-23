@@ -23,26 +23,31 @@ func TestS3Storage(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// clear all files in 'test/' directory
-	_, err = s3.DeleteAll("test/")
+	dirname := os.Getenv("GO_TEST_S3_DIRNAME")
+	if dirname == "" {
+		dirname = "test"
+	}
+
+	// clean up
+	_, err = s3.DeleteAll(dirname + "/")
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	err = s3.Put("test/hello.txt", bytes.NewReader([]byte("Hello, world!")))
+	err = s3.Put(dirname+"/hello.txt", bytes.NewReader([]byte("Hello, world!")))
 	if err != nil {
 		t.Fatal(err)
 	}
-	err = s3.Put("test/foo/bar.txt", bytes.NewReader([]byte("abcdefghijklmnopqrstuvwxyz!")))
+	err = s3.Put(dirname+"/foo/bar.txt", bytes.NewReader([]byte("abcdefghijklmnopqrstuvwxyz!")))
 	if err != nil {
 		t.Fatal(err)
 	}
-	err = s3.Put("test/%23/hello+world!", bytes.NewReader([]byte("Hello, world!")))
+	err = s3.Put(dirname+"/%23/hello+world!", bytes.NewReader([]byte("Hello, world!")))
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	keys, err := s3.List("test/")
+	keys, err := s3.List(dirname + "/")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -50,7 +55,7 @@ func TestS3Storage(t *testing.T) {
 		t.Fatalf("invalid keys length(%d), expected 2", len(keys))
 	}
 
-	stat, err := s3.Stat("test/hello.txt")
+	stat, err := s3.Stat(dirname + "/hello.txt")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -58,7 +63,7 @@ func TestS3Storage(t *testing.T) {
 		t.Fatalf("invalid size(%d), expected 13", stat.Size())
 	}
 
-	r, stat, err := s3.Get("test/hello.txt")
+	r, stat, err := s3.Get(dirname + "/hello.txt")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -76,7 +81,7 @@ func TestS3Storage(t *testing.T) {
 		t.Fatalf("invalid content(%s), expected 'Hello, world!'", string(data))
 	}
 
-	stat, err = s3.Stat("test/foo/bar.txt")
+	stat, err = s3.Stat(dirname + "/foo/bar.txt")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -84,7 +89,7 @@ func TestS3Storage(t *testing.T) {
 		t.Fatalf("invalid size(%d), expected 27", stat.Size())
 	}
 
-	r, stat, err = s3.Get("test/foo/bar.txt")
+	r, stat, err = s3.Get(dirname + "/foo/bar.txt")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -102,16 +107,16 @@ func TestS3Storage(t *testing.T) {
 		t.Fatalf("invalid content(%s), expected 'abcdefghijklmnopqrstuvwxyz!'", string(data))
 	}
 
-	err = s3.Delete("test/hello.txt")
+	err = s3.Delete(dirname + "/hello.txt")
 	if err != nil {
 		t.Fatal(err)
 	}
-	err = s3.Delete("test/%23/hello+world!")
+	err = s3.Delete(dirname + "/%23/hello+world!")
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	keys, err = s3.List("test/")
+	keys, err = s3.List(dirname + "/")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -119,7 +124,7 @@ func TestS3Storage(t *testing.T) {
 		t.Fatalf("invalid keys length(%d), expected 1", len(keys))
 	}
 
-	deleted, err := s3.DeleteAll("test/")
+	deleted, err := s3.DeleteAll(dirname + "/")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -127,7 +132,7 @@ func TestS3Storage(t *testing.T) {
 		t.Fatalf("invalid deleted keys length(%d), expected 1", len(deleted))
 	}
 
-	keys, err = s3.List("test/")
+	keys, err = s3.List(dirname + "/")
 	if err != nil {
 		t.Fatal(err)
 	}
