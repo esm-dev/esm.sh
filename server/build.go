@@ -54,7 +54,6 @@ type BuildContext struct {
 var (
 	regexpESMInternalIdent = regexp.MustCompile(`__[a-zA-Z]+\$`)
 	regexpVarDecl          = regexp.MustCompile(`var ([\w$]+)\s*=\s*[\w$]+$`)
-	errorResolveEntry      = errors.New("could not resolve build entry")
 )
 
 var loaders = map[string]esbuild.Loader{
@@ -226,7 +225,7 @@ func (ctx *BuildContext) buildPath() {
 func (ctx *BuildContext) buildModule(analyzeMode bool) (meta *BuildMeta, includes [][2]string, err error) {
 	entry := ctx.resolveEntry(ctx.esm)
 	if entry.isEmpty() {
-		err = errorResolveEntry
+		err = errors.New("could not resolve build entry")
 		return
 	}
 

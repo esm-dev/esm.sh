@@ -1595,7 +1595,7 @@ func esmRouter(db DB, buildStorage storage.Storage, logger *log.Logger) rex.Hand
 			case output := <-ch:
 				if output.err != nil {
 					msg := output.err.Error()
-					if output.err == errorResolveEntry || strings.HasSuffix(msg, " not found") || strings.Contains(msg, "is not exported from package") || strings.Contains(msg, "no such file or directory") {
+					if msg == "could not resolve build entry" || strings.HasSuffix(msg, " not found") || strings.Contains(msg, "is not exported from package") || strings.Contains(msg, "no such file or directory") {
 						return rex.Status(404, msg)
 					}
 					return rex.Status(500, msg)
