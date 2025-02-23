@@ -60,17 +60,20 @@ func Serve() {
 	// don't write log message to stdout
 	accessLogger.SetQuite(true)
 
+	// open database
 	db, err := OpenDB(path.Join(config.WorkDir, "esm.db"))
 	if err != nil {
 		logger.Fatalf("init db: %v", err)
 	}
 
+	// initialize storage
 	buildStorage, err := storage.New(&config.Storage)
 	if err != nil {
 		logger.Fatalf("failed to initialize build storage(%s): %v", config.Storage.Type, err)
 	}
 	logger.Debugf("storage initialized, type: %s, endpoint: %s", config.Storage.Type, config.Storage.Endpoint)
 
+	// load unenv
 	err = loadUnenvNodeRuntime()
 	if err != nil {
 		logger.Fatalf("load unenv node runtime: %v", err)
@@ -81,13 +84,14 @@ func Serve() {
 	}
 	logger.Debugf("unenv node runtime loaded, %d files, total size: %d KB", len(unenvNodeRuntimeBulid), totalSize/1024)
 
+	// build npm replacements
 	n, err := npm_replacements.Build()
 	if err != nil {
 		logger.Fatalf("build npm replacements: %v", err)
 	}
 	logger.Debugf("%d npm repalcements loaded", n)
 
-	// add .esmd/bin to PATH
+	// add `.esmd/bin` to PATH
 	os.Setenv("PATH", fmt.Sprintf("%s%c%s", path.Join(config.WorkDir, "bin"), os.PathListSeparator, os.Getenv("PATH")))
 
 	// install deno
@@ -97,17 +101,17 @@ func Serve() {
 	}
 	logger.Debugf("deno v%s installed", denoVersion)
 
-	// install cjs module lexer
+	// install cjs-module-lexer
 	err = installCommonJSModuleLexer()
 	if err != nil {
 		logger.Fatalf("failed to install cjs-module-lexer: %v", err)
 	}
 	logger.Debugf("cjs-module-lexer@%s installed", cjsModuleLexerVersion)
 
-	// pre-comile uno generator in background
+	// pre-compile uno generator in background
 	go generateUnoCSS(&NpmRC{NpmRegistry: NpmRegistry{Registry: "https://registry.npmjs.org/"}}, "", "")
 
-	// setup rex server
+	// add middlewares
 	rex.Use(
 		rex.Header("Server", "esm.sh"),
 		cors(config.CorsAllowOrigins),
