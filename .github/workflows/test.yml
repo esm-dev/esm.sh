@@ -11,6 +11,10 @@ jobs:
     name: Test All
     runs-on: ubuntu-latest
 
+    strategy:
+      matrix:
+        deno-version: [1, 2]
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -23,7 +27,7 @@ jobs:
       - name: Setup Deno
         uses: denoland/setup-deno@main
         with:
-          deno-version: v1.x
+          deno-version: ${{ matrix.deno-version }}
 
       - name: Run Unit Tests
         run: go test ./server ./server/storage -v
