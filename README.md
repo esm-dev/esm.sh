@@ -57,7 +57,8 @@ With [import maps](https://github.com/WICG/import-maps), you can even use bare i
   ```js
   // Examples
   import tslib from "https://esm.sh/gh/microsoft/tslib"; // latest
-  import tslib from "https://esm.sh/gh/microsoft/tslib@2.6.0"; // the version '2.6.0' is a git tag
+  import tslib from "https://esm.sh/gh/microsoft/tslib@d72d6f7"; // with commit hash
+  import tslib from "https://esm.sh/gh/microsoft/tslib@v2.8.0"; // with tag
   ```
 - **[pkg.pr.new](https://pkg.pr.new)** (starts with `/pr/` or `/pkg.pr.new/`):
   ```js
@@ -66,9 +67,9 @@ With [import maps](https://github.com/WICG/import-maps), you can even use bare i
   import { Bench } from "https://esm.sh/pr/tinybench@a832a55"; // --compact
   ```
 
-### Transforming `.tsx`/`.vue`/`.svelte` on the Fly
+### Transforming `.ts(x)`/`.vue`/`.svelte` on the Fly
 
-esm.sh allows you to import `.tsx`, `.vue`, and `.svelte` files directly in the browser without any build steps.
+esm.sh allows you to import `.ts(x)`, `.vue`, and `.svelte` files directly in the browser without any build steps.
 
 ```js
 import { Airplay } from "https://esm.sh/gh/phosphor-icons/react@v2.1.5/src/csr/Airplay.tsx?deps=react@18.2.0";
