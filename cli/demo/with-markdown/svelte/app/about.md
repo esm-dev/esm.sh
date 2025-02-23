@@ -1,6 +1,6 @@
 # esm.sh
 
-The **no-build** cdn for modern web development.
+The **nobuild** cdn for modern web development.
 
 - [Website](https://esm.sh)
 - [Bluesky](https://bsky.app/profile/esm.sh)

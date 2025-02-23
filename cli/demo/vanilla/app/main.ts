@@ -6,7 +6,7 @@ document.body.innerHTML = html`
 <div class="center-box relative">
   <h1>esm.sh</h1>
   <p class="desc">
-    The <strong>no-build</strong> cdn for modern web development.
+    The <strong>nobuild</strong> cdn for modern web development.
   </p>
   <div class="links">
     <a href="https://esm.sh" target="_blank" title="Website">

@@ -1,18 +1,37 @@
-# esm.sh
+# esm.sh CLI
 
-A no-build CDN for modern web development.
+A _nobuild_ tool for modern web development.
 
-## Usage
+## Installation
+
+You can install `esm.sh` CLI from source code:
 
 ```bash
-$ npx esm.sh
+go install github.com/esm-dev/esm.sh
+```
 
-esm.sh - A no-build CDN for modern web development.
+You can also install `esm.sh` CLI via `npm`:
 
-Usage: esm.sh [command] [options]
+```bash
+npm install -g esm.sh
+```
+
+Or use `npx` without installation:
+
+```bash
+npx esm.sh [command]
+```
+
+### Usage
+
+```
+$ esm.sh --help
+Usage: esm.sh [command] <options>
 
 Commands:
-  add    Add dependencies to the "importmap" script
-  init   Create a new esm.sh web app
-  serve  Serve an esm.sh web app
+  i, add [...pakcage]   Alias to 'esm.sh im add'.
+  im, importmap         Manage "importmap" script.
+  init                  Create a new nobuild web app with esm.sh CDN.
+  serve                 Serve a nobuild web app with esm.sh CDN, HMR, transforming TS/Vue/Svelte on the fly.
+  build                 Build a nobuild web app with esm.sh CDN.
 ```

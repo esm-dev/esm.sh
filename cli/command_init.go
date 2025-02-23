@@ -31,7 +31,7 @@ var langVariants = []string{
 	"TypeScript",
 }
 
-// Create a new no-build web app with esm.sh CDN.
+// Create a new nobuild web app with esm.sh CDN.
 func Init(fs *embed.FS) {
 	framework := flag.String("framework", "", "javascript framework")
 	cssFramework := flag.String("css-framework", "", "CSS framework")

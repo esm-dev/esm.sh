@@ -9,7 +9,7 @@ export function App() {
       <div className="center-box relative">
         <h1 style={{ color: "#61DAFB" }}>esm.sh</h1>
         <p className="desc">
-          The <strong>no-build</strong> cdn for modern web development.
+          The <strong>nobuild</strong> cdn for modern web development.
         </p>
         <div className="links">
           <a href="https://esm.sh" target="_blank" title="Website">
