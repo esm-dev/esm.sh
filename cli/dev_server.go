@@ -202,8 +202,8 @@ func (d *DevServer) ServeHtml(w http.ResponseWriter, r *http.Request, pathname s
 	defer htmlFile.Close()
 
 	tokenizer := html.NewTokenizer(htmlFile)
-	unocss := ""
 	cssLinks := []string{}
+	unocss := ""
 	overriding := ""
 
 	for {
@@ -242,10 +242,12 @@ func (d *DevServer) ServeHtml(w http.ResponseWriter, r *http.Request, pathname s
 					if srcUrl, parseErr := url.Parse(srcAttr); parseErr == nil && srcUrl.Path == "/x" {
 						hrefAttr, _ = utils.SplitByFirstByte(hrefAttr, '?')
 						if hrefAttr == "uno.css" || strings.HasSuffix(hrefAttr, "/uno.css") {
+							unocssHref := hrefAttr + "?ctx=" + base64.RawURLEncoding.EncodeToString([]byte(pathname))
 							w.Write([]byte("<link rel=\"stylesheet\" href=\""))
-							w.Write([]byte(hrefAttr + "?ctx=" + base64.RawURLEncoding.EncodeToString([]byte(pathname))))
+							w.Write([]byte(unocssHref))
 							w.Write([]byte{'"', '>'})
 							overriding = "script"
+							unocss = unocssHref
 						} else {
 							w.Write([]byte("<script type=\"module\""))
 							for attrKey, attrVal := range attrs {
@@ -294,7 +296,7 @@ func (d *DevServer) ServeHtml(w http.ResponseWriter, r *http.Request, pathname s
 	}
 	// reload the unocss when the module dependency tree is changed
 	if unocss != "" {
-		fmt.Fprintf(w, `hot.watch("*",(kind,filename)=>{if(/\.(js|mjs|jsx|ts|mts|tsx|vue|svelte)$/i.test(filename)){document.getElementById("@unocss").href="%s&t="+Date.now().toString(36)}});`, unocss)
+		fmt.Fprintf(w, `hot.watch("*",(kind,filename)=>{if(/\.(js|mjs|jsx|ts|mts|tsx|vue|svelte)$/i.test(filename)){const link=document.head.querySelector("link[rel=stylesheet][href^='%s']");if(link)link.href="%s&t="+Date.now().toString(36)}});`, unocss, unocss)
 		u := &url.URL{Path: pathname}
 		u = u.ResolveReference(&url.URL{Path: "uno.css"})
 		filename := filepath.Join(d.rootDir, u.Path)
