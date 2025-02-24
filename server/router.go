@@ -56,7 +56,7 @@ const (
 	ctTypeScript     = "application/typescript; charset=utf-8"
 )
 
-func esmRouter(db DB, buildStorage storage.Storage, logger *log.Logger) rex.Handle {
+func esmRouter(db Database, buildStorage storage.Storage, logger *log.Logger) rex.Handle {
 	var (
 		startTime  = time.Now()
 		globalETag = fmt.Sprintf(`W/"%s"`, VERSION)

@@ -19,7 +19,6 @@ import (
 	"time"
 
 	"github.com/Masterminds/semver/v3"
-	"github.com/esm-dev/esm.sh/server/common"
 	"github.com/ije/gox/set"
 	syncx "github.com/ije/gox/sync"
 	"github.com/ije/gox/utils"
@@ -516,7 +515,7 @@ func (npmrc *NpmRC) installPackage(pkg Package) (packageJson *PackageJSON, err e
 				data, err := os.ReadFile(deonJsoncPath)
 				if err == nil {
 					var raw PackageJSONRaw
-					if json.Unmarshal(common.StripJSONC(data), &raw) == nil {
+					if json.Unmarshal(StripJSONC(data), &raw) == nil {
 						denoJson = raw.ToNpmPackage()
 					}
 				}
