@@ -35,8 +35,6 @@ func Serve() {
 		if DEBUG {
 			fmt.Printf("%s [info] Config loaded from %s\n", time.Now().Format("2006-01-02 15:04:05"), cfile)
 		}
-	} else {
-		config = DefaultConfig()
 	}
 
 	if DEBUG {
@@ -61,7 +59,7 @@ func Serve() {
 	accessLogger.SetQuite(true)
 
 	// open database
-	db, err := OpenDB(path.Join(config.WorkDir, "esm.db"))
+	db, err := OpenBoltDB(path.Join(config.WorkDir, "esm.db"))
 	if err != nil {
 		logger.Fatalf("init db: %v", err)
 	}
@@ -73,40 +71,8 @@ func Serve() {
 	}
 	logger.Debugf("storage initialized, type: %s, endpoint: %s", config.Storage.Type, config.Storage.Endpoint)
 
-	// load unenv
-	err = loadUnenvNodeRuntime()
-	if err != nil {
-		logger.Fatalf("load unenv node runtime: %v", err)
-	}
-	totalSize := 0
-	for _, data := range unenvNodeRuntimeBulid {
-		totalSize += len(data)
-	}
-	logger.Debugf("unenv node runtime loaded, %d files, total size: %d KB", len(unenvNodeRuntimeBulid), totalSize/1024)
-
-	// build npm replacements
-	n, err := npm_replacements.Build()
-	if err != nil {
-		logger.Fatalf("build npm replacements: %v", err)
-	}
-	logger.Debugf("%d npm repalcements loaded", n)
-
-	// add `.esmd/bin` to PATH
-	os.Setenv("PATH", fmt.Sprintf("%s%c%s", path.Join(config.WorkDir, "bin"), os.PathListSeparator, os.Getenv("PATH")))
-
-	// install deno
-	denoVersion, err := installDeno("2.2.1")
-	if err != nil {
-		logger.Fatalf("failed to install deno: %v", err)
-	}
-	logger.Debugf("deno v%s installed", denoVersion)
-
-	// install cjs-module-lexer
-	err = installCommonJSModuleLexer()
-	if err != nil {
-		logger.Fatalf("failed to install cjs-module-lexer: %v", err)
-	}
-	logger.Debugf("cjs-module-lexer@%s installed", cjsModuleLexerVersion)
+	// setup server
+	Setup(logger)
 
 	// pre-compile uno generator in background
 	go generateUnoCSS(&NpmRC{NpmRegistry: NpmRegistry{Registry: "https://registry.npmjs.org/"}}, "", "")
@@ -148,6 +114,44 @@ func Serve() {
 	db.Close()
 	logger.FlushBuffer()
 	accessLogger.FlushBuffer()
+}
+
+// Setup loads the necessary requirements for the server
+func Setup(logger *log.Logger) {
+	// add `.esmd/bin` to PATH
+	os.Setenv("PATH", fmt.Sprintf("%s%c%s", path.Join(config.WorkDir, "bin"), os.PathListSeparator, os.Getenv("PATH")))
+
+	// install cjs-module-lexer
+	err := installCommonJSModuleLexer()
+	if err != nil {
+		logger.Fatalf("failed to install cjs-module-lexer: %v", err)
+	}
+	logger.Debugf("cjs-module-lexer@%s installed", cjsModuleLexerVersion)
+
+	// load unenv
+	err = loadUnenvNodeRuntime()
+	if err != nil {
+		logger.Fatalf("load unenv node runtime: %v", err)
+	}
+	totalSize := 0
+	for _, data := range unenvNodeRuntimeBulid {
+		totalSize += len(data)
+	}
+	logger.Debugf("unenv node runtime loaded, %d files, total size: %d KB", len(unenvNodeRuntimeBulid), totalSize/1024)
+
+	// build npm replacements
+	n, err := npm_replacements.Build()
+	if err != nil {
+		logger.Fatalf("build npm replacements: %v", err)
+	}
+	logger.Debugf("%d npm repalcements loaded", n)
+
+	// install deno
+	denoVersion, err := installDeno("2.2.1")
+	if err != nil {
+		logger.Fatalf("failed to install deno: %v", err)
+	}
+	logger.Debugf("deno v%s installed", denoVersion)
 }
 
 func cors(allowOrigins []string) rex.Handle {

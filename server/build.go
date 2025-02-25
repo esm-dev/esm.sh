@@ -32,7 +32,7 @@ const (
 type BuildContext struct {
 	npmrc       *NpmRC
 	logger      *log.Logger
-	db          DB
+	db          Database
 	storage     storage.Storage
 	esm         EsmPath
 	args        BuildArgs
