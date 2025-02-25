@@ -469,15 +469,21 @@ func (ctx *BuildContext) buildModule(analyzeMode bool) (meta *BuildMeta, include
 							// check tailing slash
 							pkgName, _, subPath, _ := splitEsmPath(specifier)
 							v, ok = pkgJson.Imports[pkgName]
+							if !ok {
+								v, ok = pkgJson.Imports[pkgName+"/"]
+							}
 							if ok && subPath != "" {
 								if s, ok := v.(string); ok {
-									v = s + "/" + subPath
+									v = strings.TrimSuffix(s, "/") + "/" + subPath
 								}
 							}
 						}
 						if ok {
 							if s, ok := v.(string); ok {
 								specifier = normalizeImportSpecifier(s)
+								if isRelPathSpecifier(specifier) {
+									specifier = ctx.esm.PkgName + "/" + strings.TrimPrefix(specifier, "./")
+								}
 							} else if m, ok := v.(map[string]interface{}); ok {
 								targets := []string{"browser", "module", "import", "default"}
 								if ctx.isDenoTarget() {
