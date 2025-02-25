@@ -1572,7 +1572,6 @@ func esmRouter(db Database, buildStorage storage.Storage, logger *log.Logger) re
 			}
 		}
 
-	BUILD:
 		build := &BuildContext{
 			npmrc:       npmrc,
 			logger:      logger,
@@ -1673,7 +1672,7 @@ func esmRouter(db Database, buildStorage storage.Storage, logger *log.Logger) re
 					key := npmrc.zoneId + ":" + build.Path()
 					db.Delete(key)
 					cacheStore.Delete("lru:" + key)
-					goto BUILD
+					return rex.Status(500, "Storage error")
 				}
 				return rex.Status(500, err.Error())
 			}
