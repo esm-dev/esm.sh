@@ -646,14 +646,11 @@ func (ctx *BuildContext) resolveExternalModule(specifier string, kind api.Resolv
 					resolvedPath = rp
 				}
 			}
-			// mark the resolved path for _preload_
-			if kind == api.ResolveJSImportStatement && !withTypeJSON {
-				ctx.esmImports = append(ctx.esmImports, [2]string{resolvedPathFull, resolvedPath})
-			}
-			// if it's `require("module")` call
 			if kind == api.ResolveJSRequireCall {
 				ctx.cjsRequires = append(ctx.cjsRequires, [3]string{specifier, resolvedPathFull, resolvedPath})
 				resolvedPath = specifier
+			} else if kind == api.ResolveJSImportStatement && !withTypeJSON {
+				ctx.esmImports = append(ctx.esmImports, [2]string{resolvedPathFull, resolvedPath})
 			}
 		}
 	}()
