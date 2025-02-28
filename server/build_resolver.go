@@ -38,20 +38,20 @@ func (entry *BuildEntry) update(main string, module bool) {
 func (ctx *BuildContext) resolveEntry(esm EsmPath) (entry BuildEntry) {
 	pkgJson := ctx.pkgJson
 
-	if subPath := esm.SubPath; subPath != "" {
-		if endsWith(subPath, ".d.ts", ".d.mts", ".d.cts") {
-			entry.types = normalizeEntryPath(subPath)
+	if subModuleName := esm.SubModuleName; subModuleName != "" {
+		if endsWith(subModuleName, ".d.ts", ".d.mts", ".d.cts") {
+			entry.types = normalizeEntryPath(subModuleName)
 			return
 		}
 
-		if endsWith(subPath, ".ts", ".tsx", ".mts") {
-			entry.update(subPath, true)
+		if endsWith(subModuleName, ".ts", ".tsx", ".mts") {
+			entry.update(subModuleName, true)
 			// lookup jsr built dts
 			if strings.HasPrefix(esm.PkgName, "@jsr/") {
 				for _, v := range pkgJson.Exports.values {
 					if obj, ok := v.(JSONObject); ok {
 						if v, ok := obj.Get("default"); ok {
-							if s, ok := v.(string); ok && s == "./"+stripModuleExt(subPath)+".js" {
+							if s, ok := v.(string); ok && s == "./"+stripModuleExt(subModuleName)+".js" {
 								if v, ok := obj.Get("types"); ok {
 									if s, ok := v.(string); ok {
 										entry.types = normalizeEntryPath(s)
@@ -66,8 +66,8 @@ func (ctx *BuildContext) resolveEntry(esm EsmPath) (entry BuildEntry) {
 			return
 		}
 
-		if endsWith(subPath, ".json", ".jsx", ".svelte", ".vue") {
-			entry.update(subPath, true)
+		if endsWith(subModuleName, ".json", ".jsx", ".svelte", ".vue") {
+			entry.update(subModuleName, true)
 			return
 		}
 	}
@@ -202,28 +202,31 @@ func (ctx *BuildContext) resolveEntry(esm EsmPath) (entry BuildEntry) {
 
 		// lookup entry from the sub-module directory if it's not defined in `package.json`
 		if entry.main == "" {
-			if ctx.existsPkgFile(subModuleName + ".mjs") {
-				entry.update("./"+subModuleName+".mjs", true)
-			} else if ctx.existsPkgFile(subModuleName, "index.mjs") {
-				entry.update("./"+subModuleName+"/index.mjs", true)
-			} else if ctx.existsPkgFile(subModuleName + ".js") {
-				entry.update("./"+subModuleName+".js", pkgJson.Type == "module")
-			} else if ctx.existsPkgFile(subModuleName, "index.js") {
-				entry.update("./"+subModuleName+"/index.js", pkgJson.Type == "module")
-			} else if ctx.existsPkgFile(subModuleName + ".cjs") {
-				entry.update("./"+subModuleName+".cjs", false)
-			} else if ctx.existsPkgFile(subModuleName, "index.cjs") {
-				entry.update("./"+subModuleName+"/index.cjs", false)
+			for _, ext := range []string{"mjs", "js", "mts", "ts", "cjs", "cts"} {
+				isModule := ext == "mjs" || ext == "mts" || ext == "ts" || (ext == "js" && pkgJson.Type == "module")
+				if filename := "./" + subModuleName + "." + ext; ctx.existsPkgFile(filename) {
+					entry.update(filename, isModule)
+					break
+				} else if filename := "./" + subModuleName + "/index." + ext; ctx.existsPkgFile(filename) {
+					entry.update(filename, isModule)
+					break
+				}
 			}
 		}
 
-		// lookup entry main from the src directory
-		if entry.main == "" {
-			for _, ext := range []string{"mts", "ts", "mjs", "js"} {
-				filename := "./" + subModuleName + "/src/index." + ext
-				if ctx.existsPkgFile(filename) {
-					entry.update(filename, true)
-					break
+		if entry.main == "" && len(ctx.pkgJson.Imports) > 0 {
+			if v, ok := ctx.pkgJson.Imports[ctx.pkgJson.PkgName+"/*"]; ok {
+				if s, ok := v.(string); ok && strings.HasSuffix(s, "/*") {
+					for _, ext := range []string{"mjs", "js", "mts", "ts", "cjs", "cts"} {
+						isModule := ext == "mjs" || ext == "mts" || ext == "ts" || (ext == "js" && pkgJson.Type == "module")
+						if filename := strings.TrimSuffix(s, "*") + subModuleName + "." + ext; ctx.existsPkgFile(filename) {
+							entry.update(filename, isModule)
+							break
+						} else if filename := strings.TrimSuffix(s, "*") + subModuleName + "/index." + ext; ctx.existsPkgFile(filename) {
+							entry.update(filename, isModule)
+							break
+						}
+					}
 				}
 			}
 		}
@@ -318,10 +321,10 @@ func (ctx *BuildContext) resolveEntry(esm EsmPath) (entry BuildEntry) {
 
 		// lookup entry main from the src directory
 		if entry.main == "" {
-			for _, ext := range []string{"mts", "ts", "mjs", "js"} {
+			for _, ext := range []string{"mjs", "js", "mts", "ts", "cjs", "cts"} {
 				filename := "./src/index." + ext
 				if ctx.existsPkgFile(filename) {
-					entry.update(filename, true)
+					entry.update(filename, ext != "cjs" && ext != "cts")
 					break
 				}
 			}
@@ -694,6 +697,11 @@ func (ctx *BuildContext) resolveExternalModule(specifier string, kind api.Resolv
 			PkgVersion:    ctx.esm.PkgVersion,
 			SubPath:       subPath,
 			SubModuleName: stripEntryModuleExt(subPath),
+		}
+		if strings.HasSuffix(ctx.esm.SubModuleName, ".ts") && !strings.HasSuffix(subModule.SubModuleName, ".ts") {
+			if ctx.existsPkgFile(subModule.SubModuleName + ".ts") {
+				subModule.SubModuleName += ".ts"
+			}
 		}
 		if withTypeJSON {
 			resolvedPath = "/" + subModule.Specifier()

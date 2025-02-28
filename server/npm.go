@@ -78,7 +78,6 @@ type PackageJSONRaw struct {
 	Imports          any             `json:"imports"`
 	TypesVersions    any             `json:"typesVersions"`
 	Exports          json.RawMessage `json:"exports"`
-	Files            []string        `json:"files"`
 	Esmsh            any             `json:"esm.sh"`
 	Dist             json.RawMessage `json:"dist"`
 	Deprecated       any             `json:"deprecated"`
