@@ -1521,14 +1521,10 @@ func esmRouter(db Database, buildStorage storage.Storage, logger *log.Logger) re
 			bundleMode = BundleFalse
 		}
 
-		isDev := query.Has("dev")
-		isPkgCss := query.Has("css")
-		isWorker := query.Has("worker")
-		noDts := query.Has("no-dts") || query.Has("no-check")
-
+		dev := query.Has("dev")
 		// force react/jsx-dev-runtime and react-refresh into `dev` mode
-		if !isDev && ((esm.PkgName == "react" && esm.SubModuleName == "jsx-dev-runtime") || esm.PkgName == "react-refresh") {
-			isDev = true
+		if !dev && ((esm.PkgName == "react" && esm.SubModuleName == "jsx-dev-runtime") || esm.PkgName == "react-refresh") {
+			dev = true
 		}
 
 		// get build args from the pathname
@@ -1547,7 +1543,7 @@ func esmRouter(db Database, buildStorage storage.Storage, logger *log.Logger) re
 					}
 					if strings.HasSuffix(submodule, ".development") {
 						submodule = strings.TrimSuffix(submodule, ".development")
-						isDev = true
+						dev = true
 					}
 					basename := strings.TrimSuffix(path.Base(esm.PkgName), ".js")
 					if strings.HasSuffix(submodule, ".css") && !strings.HasSuffix(esm.SubPath, ".mjs") {
@@ -1582,7 +1578,7 @@ func esmRouter(db Database, buildStorage storage.Storage, logger *log.Logger) re
 			bundleMode:  bundleMode,
 			externalAll: externalAll,
 			target:      target,
-			dev:         isDev,
+			dev:         dev,
 		}
 		ret, ok, err := build.Exists()
 		if err != nil {
@@ -1624,7 +1620,7 @@ func esmRouter(db Database, buildStorage storage.Storage, logger *log.Logger) re
 		}
 
 		// redirect to package css from `?css`
-		if isPkgCss && esm.SubModuleName == "" {
+		if query.Has("css") && esm.SubModuleName == "" {
 			if !ret.CSSInJS {
 				return rex.Status(404, "Package CSS not found")
 			}
@@ -1684,7 +1680,7 @@ func esmRouter(db Database, buildStorage storage.Storage, logger *log.Logger) re
 				ctx.SetHeader("Content-Type", ctJSON)
 			} else {
 				ctx.SetHeader("Content-Type", ctJavaScript)
-				if isWorker {
+				if query.Has("worker") {
 					defer f.Close()
 					moduleUrl := origin + build.Path()
 					if !ret.CJS && len(exports) > 0 {
@@ -1728,7 +1724,7 @@ func esmRouter(db Database, buildStorage storage.Storage, logger *log.Logger) re
 		defer recycle()
 		fmt.Fprintf(buf, "/* esm.sh - %s */\n", esm.Specifier())
 
-		if isWorker {
+		if query.Has("worker") {
 			moduleUrl := origin + build.Path()
 			if !ret.CJS && len(exports) > 0 {
 				moduleUrl += "?exports=" + strings.Join(exports, ",")
@@ -1757,7 +1753,7 @@ func esmRouter(db Database, buildStorage storage.Storage, logger *log.Logger) re
 				fmt.Fprintf(buf, "import _ from \"%s\";\n", esm)
 				fmt.Fprintf(buf, "export const { %s } = _;\n", strings.Join(exports, ", "))
 			}
-			if !noDts && ret.Dts != "" {
+			if noDts := query.Has("no-dts") || query.Has("no-check"); !noDts && ret.Dts != "" {
 				ctx.SetHeader("X-TypeScript-Types", origin+ret.Dts)
 				ctx.SetHeader("Access-Control-Expose-Headers", "X-ESM-Path, X-TypeScript-Types")
 			} else {

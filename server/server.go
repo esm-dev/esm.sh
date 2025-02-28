@@ -147,7 +147,7 @@ func Setup(logger *log.Logger) {
 	logger.Debugf("%d npm repalcements loaded", n)
 
 	// install deno
-	denoVersion, err := installDeno("2.2.1")
+	denoVersion, err := InstallDeno("2.2.1")
 	if err != nil {
 		logger.Fatalf("failed to install deno: %v", err)
 	}
@@ -155,7 +155,7 @@ func Setup(logger *log.Logger) {
 }
 
 func cors(allowOrigins []string) rex.Handle {
-	allowList := set.NewReadOnly[string](allowOrigins...)
+	allowList := set.NewReadOnly(allowOrigins...)
 	return func(ctx *rex.Context) any {
 		origin := ctx.R.Header.Get("Origin")
 		isOptionsMethod := ctx.R.Method == "OPTIONS"

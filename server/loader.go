@@ -14,6 +14,7 @@ import (
 
 	esbuild "github.com/evanw/esbuild/pkg/api"
 	"github.com/ije/gox/term"
+	"github.com/ije/gox/utils"
 )
 
 type LoaderOutput struct {
@@ -99,34 +100,43 @@ func buildLoader(wd, loaderJs, outfile string) (err error) {
 	return
 }
 
-func installDeno(version string) (installedVersion string, err error) {
+func InstallDeno(version string) (installedVersion string, err error) {
 	binDir := path.Join(config.WorkDir, "bin")
 	err = ensureDir(binDir)
 	if err != nil {
 		return
 	}
 
-	// check local installed deno
-	installedDeno, err := exec.LookPath("deno")
-	if err == nil {
-		output, err := run(installedDeno, "eval", "console.log(Deno.version.deno)")
+	installPath := path.Join(binDir, "deno")
+	if runtime.GOOS == "windows" {
+		installPath += ".exe"
+	}
+
+	if existsFile(installPath) {
+		output, err := run(installPath, "eval", "console.log(Deno.version.deno)")
 		if err == nil {
-			v := strings.TrimSpace(string(output))
-			if !semverLessThan(v, "1.45") {
-				err = os.Symlink(installedDeno, path.Join(binDir, "deno"))
-				if err != nil && !os.IsExist(err) {
-					return "", err
-				}
-				return v, nil
+			version := strings.TrimSpace(string(output))
+			if !semverLessThan(version, version) {
+				return version, nil
 			}
 		}
 	}
 
-	if existsFile(path.Join(binDir, "deno")) {
-		output, err := run(path.Join(binDir, "deno"), "eval", "console.log(Deno.version.deno)")
+	// check local installed deno
+	systemDenoPath, err := exec.LookPath("deno")
+	if err == nil {
+		output, err := run(systemDenoPath, "eval", "console.log(Deno.version.deno)")
 		if err == nil {
 			version := strings.TrimSpace(string(output))
-			if !semverLessThan(version, version) {
+			if !semverLessThan(version, "1.45") {
+				if runtime.GOOS == "windows" {
+					_, err = utils.CopyFile(systemDenoPath, installPath)
+				} else {
+					err = os.Symlink(systemDenoPath, installPath)
+				}
+				if err != nil {
+					return "", err
+				}
 				return version, nil
 			}
 		}
@@ -151,10 +161,10 @@ func installDeno(version string) (installedVersion string, err error) {
 		return "", fmt.Errorf("failed to download Deno install package: %s", res.Status)
 	}
 
-	tmpFile := path.Join(binDir, "deno.zip")
-	defer os.Remove(tmpFile)
+	zipFilename := path.Join(binDir, "deno.zip")
+	defer os.Remove(zipFilename)
 
-	f, err := os.OpenFile(tmpFile, os.O_CREATE|os.O_WRONLY, 0644)
+	f, err := os.OpenFile(zipFilename, os.O_CREATE|os.O_WRONLY, 0644)
 	if err != nil {
 		return
 	}
@@ -165,21 +175,21 @@ func installDeno(version string) (installedVersion string, err error) {
 		return
 	}
 
-	zr, err := zip.OpenReader(tmpFile)
+	zr, err := zip.OpenReader(zipFilename)
 	if err != nil {
 		return
 	}
 	defer zr.Close()
 
 	for _, zf := range zr.File {
-		if zf.Name == "deno" {
+		if zf.Name == "deno" || zf.Name == "deno.exe" {
 			r, err := zf.Open()
 			if err != nil {
 				return "", err
 			}
 			defer r.Close()
 
-			f, err := os.OpenFile(path.Join(binDir, "deno"), os.O_CREATE|os.O_WRONLY, 0755)
+			f, err := os.OpenFile(installPath, os.O_CREATE|os.O_WRONLY, 0755)
 			if err != nil {
 				return "", err
 			}
@@ -214,8 +224,8 @@ func getDenoInstallURL(version string) (string, error) {
 		os = "apple-darwin"
 	case "linux":
 		os = "unknown-linux-gnu"
-	// case "windows":
-	// 	os = "pc-windows-msvc"
+	case "windows":
+		os = "pc-windows-msvc"
 	default:
 		return "", errors.New("unsupported os: " + runtime.GOOS)
 	}
