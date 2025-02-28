@@ -1753,7 +1753,7 @@ func esmRouter(db Database, buildStorage storage.Storage, logger *log.Logger) re
 				fmt.Fprintf(buf, "import _ from \"%s\";\n", esm)
 				fmt.Fprintf(buf, "export const { %s } = _;\n", strings.Join(exports, ", "))
 			}
-			if noDts := query.Has("no-dts") || query.Has("no-check"); !(noDts) && ret.Dts != "" {
+			if noDts := query.Has("no-dts") || query.Has("no-check"); !noDts && ret.Dts != "" {
 				ctx.SetHeader("X-TypeScript-Types", origin+ret.Dts)
 				ctx.SetHeader("Access-Control-Expose-Headers", "X-ESM-Path, X-TypeScript-Types")
 			} else {
