@@ -231,6 +231,20 @@ func (ctx *BuildContext) resolveEntry(esm EsmPath) (entry BuildEntry) {
 			}
 		}
 
+		// lookup entry main from `src` directory
+		if entry.main == "" {
+			for _, ext := range []string{"mjs", "js", "mts", "ts", "cjs", "cts"} {
+				isModule := ext == "mjs" || ext == "mts" || ext == "ts" || (ext == "js" && pkgJson.Type == "module")
+				if filename := "./src/" + subModuleName + "/index." + ext; ctx.existsPkgFile(filename) {
+					entry.update(filename, isModule)
+					break
+				} else if filename := "./" + subModuleName + "/src/index." + ext; ctx.existsPkgFile(filename) {
+					entry.update(filename, isModule)
+					break
+				}
+			}
+		}
+
 		if entry.types == "" {
 			if entry.main != "" && ctx.existsPkgFile(stripModuleExt(entry.main)+".d.mts") {
 				entry.types = stripModuleExt(entry.main) + ".d.mts"
@@ -319,7 +333,7 @@ func (ctx *BuildContext) resolveEntry(esm EsmPath) (entry BuildEntry) {
 			}
 		}
 
-		// lookup entry main from the src directory
+		// lookup entry main from `src` directory
 		if entry.main == "" {
 			for _, ext := range []string{"mjs", "js", "mts", "ts", "cjs", "cts"} {
 				filename := "./src/index." + ext
