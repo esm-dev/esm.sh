@@ -38,20 +38,20 @@ func (entry *BuildEntry) update(main string, module bool) {
 func (ctx *BuildContext) resolveEntry(esm EsmPath) (entry BuildEntry) {
 	pkgJson := ctx.pkgJson
 
-	if subModuleName := esm.SubModuleName; subModuleName != "" {
-		if endsWith(subModuleName, ".d.ts", ".d.mts", ".d.cts") {
-			entry.types = normalizeEntryPath(subModuleName)
+	if subPath := esm.SubPath; subPath != "" {
+		if endsWith(subPath, ".d.ts", ".d.mts", ".d.cts") {
+			entry.types = normalizeEntryPath(subPath)
 			return
 		}
 
-		if endsWith(subModuleName, ".ts", ".tsx", ".mts") {
-			entry.update(subModuleName, true)
+		if endsWith(subPath, ".ts", ".tsx", ".mts") {
+			entry.update(subPath, true)
 			// lookup jsr built dts
 			if strings.HasPrefix(esm.PkgName, "@jsr/") {
 				for _, v := range pkgJson.Exports.values {
 					if obj, ok := v.(JSONObject); ok {
 						if v, ok := obj.Get("default"); ok {
-							if s, ok := v.(string); ok && s == "./"+stripModuleExt(subModuleName)+".js" {
+							if s, ok := v.(string); ok && s == "./"+stripModuleExt(subPath)+".js" {
 								if v, ok := obj.Get("types"); ok {
 									if s, ok := v.(string); ok {
 										entry.types = normalizeEntryPath(s)
@@ -66,8 +66,8 @@ func (ctx *BuildContext) resolveEntry(esm EsmPath) (entry BuildEntry) {
 			return
 		}
 
-		if endsWith(subModuleName, ".json", ".jsx", ".svelte", ".vue") {
-			entry.update(subModuleName, true)
+		if endsWith(subPath, ".json", ".jsx", ".svelte", ".vue") {
+			entry.update(subPath, true)
 			return
 		}
 	}
