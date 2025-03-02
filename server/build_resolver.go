@@ -716,11 +716,6 @@ func (ctx *BuildContext) resolveExternalModule(specifier string, kind api.Resolv
 			SubPath:       subPath,
 			SubModuleName: stripEntryModuleExt(subPath),
 		}
-		if strings.HasSuffix(ctx.esm.SubModuleName, ".ts") && !strings.HasSuffix(subModule.SubModuleName, ".ts") {
-			if ctx.existsPkgFile(subModule.SubModuleName + ".ts") {
-				subModule.SubModuleName += ".ts"
-			}
-		}
 		if withTypeJSON {
 			resolvedPath = "/" + subModule.Specifier()
 			if !strings.HasSuffix(subPath, ".json") {
