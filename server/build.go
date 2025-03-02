@@ -334,7 +334,7 @@ func (ctx *BuildContext) buildModule(analyzeMode bool) (meta *BuildMeta, include
 			err = errors.New("storage: " + err.Error())
 			return
 		}
-		meta.Dts, err = ctx.resloveDTS(entry)
+		meta.Dts, err = ctx.resolveDTS(entry)
 		return
 	}
 
@@ -1414,7 +1414,7 @@ REBUILD:
 	sort.Strings(meta.Imports)
 
 	// resolve types(dts)
-	meta.Dts, err = ctx.resloveDTS(entry)
+	meta.Dts, err = ctx.resolveDTS(entry)
 	return
 }
 
@@ -1427,7 +1427,7 @@ func (ctx *BuildContext) buildTypes() (ret *BuildMeta, err error) {
 	}
 
 	var dts string
-	if endsWith(ctx.esm.SubPath, ".d.ts", "d.mts") {
+	if endsWith(ctx.esm.SubPath, ".ts", ".mts", ".tsx", ".cts") {
 		dts = "./" + ctx.esm.SubPath
 	} else {
 		entry := ctx.resolveEntry(ctx.esm)

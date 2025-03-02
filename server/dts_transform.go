@@ -1,7 +1,6 @@
 package server
 
 import (
-	"bytes"
 	"fmt"
 	"os"
 	"path"
@@ -28,13 +27,14 @@ func (ctx *BuildContext) transformDTS(dts string) error {
 
 // transformDTS transforms a `.d.ts` file for deno/editor-lsp
 func transformDTS(ctx *BuildContext, dts string, buildArgsPrefix string, marker *set.Set[string]) (n int, err error) {
-	isEntry := marker == nil
-	if isEntry {
+	entry := marker == nil
+	if entry {
 		marker = set.New[string]()
 	}
+
 	dtsPath := path.Join("/"+ctx.esm.Name(), buildArgsPrefix, dts)
 	if marker.Has(dtsPath) {
-		// don't transform repeatly
+		// already transformed
 		return
 	}
 	marker.Add(dtsPath)
@@ -46,13 +46,12 @@ func transformDTS(ctx *BuildContext, dts string, buildArgsPrefix string, marker 
 		return
 	}
 
-	dtsFilePath := path.Join(ctx.wd, "node_modules", ctx.esm.PkgName, dts)
-	dtsWd := path.Dir(dtsFilePath)
-	dtsFile, err := os.Open(dtsFilePath)
+	dtsFilename := path.Join(ctx.wd, "node_modules", ctx.esm.PkgName, dts)
+	dtsContent, err := os.Open(dtsFilename)
 	if err != nil {
 		// if the dts file does not exist, print a warning but continue to build
 		if os.IsNotExist(err) {
-			if isEntry {
+			if entry {
 				err = fmt.Errorf("types not found")
 			} else {
 				err = nil
@@ -60,13 +59,14 @@ func transformDTS(ctx *BuildContext, dts string, buildArgsPrefix string, marker 
 		}
 		return
 	}
+	defer dtsContent.Close()
 
 	buffer, recycle := NewBuffer()
 	defer recycle()
 
 	deps := set.New[string]()
 
-	err = parseDts(dtsFile, buffer, func(specifier string, kind TsImportKind, position int) (string, error) {
+	err = parseDts(dtsContent, buffer, func(specifier string, kind TsImportKind, position int) (string, error) {
 		if ctx.esm.PkgName == "@types/node" {
 			if strings.HasPrefix(specifier, "node:") || nodeBuiltinModules[specifier] || isRelPathSpecifier(specifier) {
 				return specifier, nil
@@ -77,11 +77,12 @@ func transformDTS(ctx *BuildContext, dts string, buildArgsPrefix string, marker 
 		specifier = normalizeImportSpecifier(specifier)
 
 		if isRelPathSpecifier(specifier) {
+			dtsDir := path.Dir(dtsFilename)
 			specifier = strings.TrimSuffix(specifier, ".d")
 			if !endsWith(specifier, ".d.ts", ".d.mts", ".d.cts") {
 				var p PackageJSONRaw
 				var hasTypes bool
-				if utils.ParseJSONFile(path.Join(dtsWd, specifier, "package.json"), &p) == nil {
+				if utils.ParseJSONFile(path.Join(dtsDir, specifier, "package.json"), &p) == nil {
 					dir := path.Join("/", path.Dir(dts))
 					if types := p.Types.MainString(); types != "" {
 						specifier, _ = relPath(dir, "/"+path.Join(dir, specifier, types))
@@ -92,25 +93,25 @@ func transformDTS(ctx *BuildContext, dts string, buildArgsPrefix string, marker 
 					}
 				}
 				if !hasTypes {
-					if existsFile(path.Join(dtsWd, specifier+".d.mts")) {
+					if existsFile(path.Join(dtsDir, specifier+".d.mts")) {
 						specifier = specifier + ".d.mts"
-					} else if existsFile(path.Join(dtsWd, specifier+".d.ts")) {
+					} else if existsFile(path.Join(dtsDir, specifier+".d.ts")) {
 						specifier = specifier + ".d.ts"
-					} else if existsFile(path.Join(dtsWd, specifier+".d.cts")) {
+					} else if existsFile(path.Join(dtsDir, specifier+".d.cts")) {
 						specifier = specifier + ".d.cts"
-					} else if existsFile(path.Join(dtsWd, specifier, "index.d.mts")) {
+					} else if existsFile(path.Join(dtsDir, specifier, "index.d.mts")) {
 						specifier = strings.TrimSuffix(specifier, "/") + "/index.d.mts"
-					} else if existsFile(path.Join(dtsWd, specifier, "index.d.ts")) {
+					} else if existsFile(path.Join(dtsDir, specifier, "index.d.ts")) {
 						specifier = strings.TrimSuffix(specifier, "/") + "/index.d.ts"
-					} else if existsFile(path.Join(dtsWd, specifier, "index.d.cts")) {
+					} else if existsFile(path.Join(dtsDir, specifier, "index.d.cts")) {
 						specifier = strings.TrimSuffix(specifier, "/") + "/index.d.cts"
 					} else if endsWith(specifier, ".js", ".mjs", ".cjs") {
 						specifier = stripModuleExt(specifier)
-						if existsFile(path.Join(dtsWd, specifier+".d.mts")) {
+						if existsFile(path.Join(dtsDir, specifier+".d.mts")) {
 							specifier = specifier + ".d.mts"
-						} else if existsFile(path.Join(dtsWd, specifier+".d.ts")) {
+						} else if existsFile(path.Join(dtsDir, specifier+".d.ts")) {
 							specifier = specifier + ".d.ts"
-						} else if existsFile(path.Join(dtsWd, specifier+".d.cts")) {
+						} else if existsFile(path.Join(dtsDir, specifier+".d.cts")) {
 							specifier = specifier + ".d.cts"
 						}
 					}
@@ -225,7 +226,7 @@ func transformDTS(ctx *BuildContext, dts string, buildArgsPrefix string, marker 
 			return "", err
 		}
 
-		dtsPath, err := b.resloveDTS(b.resolveEntry(dtsModule))
+		dtsPath, err := b.resolveDTS(b.resolveEntry(dtsModule))
 		if err != nil {
 			return "", err
 		}
@@ -243,9 +244,8 @@ func transformDTS(ctx *BuildContext, dts string, buildArgsPrefix string, marker 
 	if err != nil {
 		return
 	}
-	dtsFile.Close()
 
-	err = ctx.storage.Put(savePath, bytes.NewReader(ctx.rewriteDTS(dts, buffer.Bytes())))
+	err = ctx.storage.Put(savePath, ctx.rewriteDTS(dts, buffer))
 	if err != nil {
 		return
 	}

@@ -122,7 +122,7 @@ func Setup(logger *log.Logger) {
 	os.Setenv("PATH", fmt.Sprintf("%s%c%s", path.Join(config.WorkDir, "bin"), os.PathListSeparator, os.Getenv("PATH")))
 
 	// install cjs-module-lexer
-	err := installCommonJSModuleLexer()
+	err := installCjsModuleLexer()
 	if err != nil {
 		logger.Fatalf("failed to install cjs-module-lexer: %v", err)
 	}

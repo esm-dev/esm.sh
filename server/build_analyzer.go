@@ -76,7 +76,7 @@ func (ctx *BuildContext) analyzeSplitting() (err error) {
 				if len(a) > 0 {
 					n, e := strconv.Atoi(a[0])
 					if e == nil && n <= len(a)-1 {
-						ctx.splitting = set.NewReadOnly[string](a[1 : n+1]...)
+						ctx.splitting = set.NewReadOnly(a[1 : n+1]...)
 						if DEBUG {
 							ctx.logger.Debugf("build(%s): splitting.txt found with %d shared modules", ctx.esm.Specifier(), ctx.splitting.Len())
 						}
