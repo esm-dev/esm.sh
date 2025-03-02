@@ -47,7 +47,7 @@ func (ctx *BuildContext) resolveEntry(esm EsmPath) (entry BuildEntry) {
 		switch ext := path.Ext(subPath); ext {
 		case ".mts", ".ts", ".tsx", ".cts":
 			entry.update(subPath, true)
-			// entry.types = strings.TrimSuffix(subPath, ext) + ".d" + ext
+			// entry.types = strings.TrimSuffix(subPath, ext) + ".d" + strings.TrimSuffix(ext,"x")
 			// lookup jsr built dts
 			if strings.HasPrefix(esm.PkgName, "@jsr/") {
 				for _, v := range pkgJson.Exports.values {
@@ -59,16 +59,19 @@ func (ctx *BuildContext) resolveEntry(esm EsmPath) (entry BuildEntry) {
 										entry.types = normalizeEntryPath(s)
 									}
 								}
-								return
+								break
 							}
 						}
 					}
 				}
 			}
+			return
 		case ".json", ".jsx", ".svelte", ".vue":
 			entry.update(subPath, true)
+			return
+		default:
+			// continue
 		}
-		return
 	}
 
 	if subModuleName := esm.SubModuleName; subModuleName != "" {
@@ -527,7 +530,7 @@ func (ctx *BuildContext) finalizeBuildEntry(entry *BuildEntry) {
 			entry.types = ""
 		}
 	} else if ext := path.Ext(entry.main); ext == ".mts" || ext == ".ts" || ext == ".tsx" || ext == ".cts" {
-		// entry.types = strings.TrimSuffix(entry.main, ext) + ".d" + ext
+		// entry.types = strings.TrimSuffix(entry.main, ext) + ".d" + strings.TrimSuffix(ext,"x")
 	}
 }
 
