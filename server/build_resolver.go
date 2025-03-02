@@ -44,8 +44,10 @@ func (ctx *BuildContext) resolveEntry(esm EsmPath) (entry BuildEntry) {
 			return
 		}
 
-		if endsWith(subPath, ".ts", ".tsx", ".mts") {
+		switch ext := path.Ext(subPath); ext {
+		case ".mts", ".ts", ".tsx", ".cts":
 			entry.update(subPath, true)
+			entry.types = strings.TrimSuffix(subPath, ext) + ".d" + ext
 			// lookup jsr built dts
 			if strings.HasPrefix(esm.PkgName, "@jsr/") {
 				for _, v := range pkgJson.Exports.values {
@@ -63,13 +65,10 @@ func (ctx *BuildContext) resolveEntry(esm EsmPath) (entry BuildEntry) {
 					}
 				}
 			}
-			return
-		}
-
-		if endsWith(subPath, ".json", ".jsx", ".svelte", ".vue") {
+		case ".json", ".jsx", ".svelte", ".vue":
 			entry.update(subPath, true)
-			return
 		}
+		return
 	}
 
 	if subModuleName := esm.SubModuleName; subModuleName != "" {
@@ -202,7 +201,7 @@ func (ctx *BuildContext) resolveEntry(esm EsmPath) (entry BuildEntry) {
 
 		// lookup entry from the sub-module directory if it's not defined in `package.json`
 		if entry.main == "" {
-			for _, ext := range []string{"mjs", "js", "mts", "ts", "cjs", "cts"} {
+			for _, ext := range []string{"mjs", "js", "cjs", "mts", "ts", "tsx", "cts"} {
 				isModule := ext == "mjs" || ext == "mts" || ext == "ts" || (ext == "js" && pkgJson.Type == "module")
 				if filename := "./" + subModuleName + "." + ext; ctx.existsPkgFile(filename) {
 					entry.update(filename, isModule)
@@ -217,7 +216,7 @@ func (ctx *BuildContext) resolveEntry(esm EsmPath) (entry BuildEntry) {
 		if entry.main == "" && len(ctx.pkgJson.Imports) > 0 {
 			if v, ok := ctx.pkgJson.Imports[ctx.pkgJson.PkgName+"/*"]; ok {
 				if s, ok := v.(string); ok && strings.HasSuffix(s, "/*") {
-					for _, ext := range []string{"mjs", "js", "mts", "ts", "cjs", "cts"} {
+					for _, ext := range []string{"mjs", "js", "cjs", "mts", "ts", "tsx", "cts"} {
 						isModule := ext == "mjs" || ext == "mts" || ext == "ts" || (ext == "js" && pkgJson.Type == "module")
 						if filename := strings.TrimSuffix(s, "*") + subModuleName + "." + ext; ctx.existsPkgFile(filename) {
 							entry.update(filename, isModule)
@@ -232,9 +231,9 @@ func (ctx *BuildContext) resolveEntry(esm EsmPath) (entry BuildEntry) {
 		}
 
 		// lookup entry main from `src` directory
-		if entry.main == "" {
-			for _, ext := range []string{"mjs", "js", "mts", "ts", "cjs", "cts"} {
-				isModule := ext == "mjs" || ext == "mts" || ext == "ts" || (ext == "js" && pkgJson.Type == "module")
+		if entry.main == "" && esm.GhPrefix {
+			for _, ext := range []string{"mts", "ts", "mjs", "js", "tsx", "cts", "cjs"} {
+				isModule := ext != "cjs" && ext != "cts"
 				if filename := "./src/" + subModuleName + "/index." + ext; ctx.existsPkgFile(filename) {
 					entry.update(filename, isModule)
 					break
@@ -334,8 +333,8 @@ func (ctx *BuildContext) resolveEntry(esm EsmPath) (entry BuildEntry) {
 		}
 
 		// lookup entry main from `src` directory
-		if entry.main == "" {
-			for _, ext := range []string{"mjs", "js", "mts", "ts", "cjs", "cts"} {
+		if entry.main == "" && esm.GhPrefix {
+			for _, ext := range []string{"mts", "ts", "mjs", "js", "tsx", "cts", "cjs"} {
 				filename := "./src/index." + ext
 				if ctx.existsPkgFile(filename) {
 					entry.update(filename, ext != "cjs" && ext != "cts")
@@ -383,7 +382,7 @@ func (ctx *BuildContext) resolveEntry(esm EsmPath) (entry BuildEntry) {
 		}
 	}
 
-	// resovle types from `typesVersions` field if it's defined
+	// resolve types from `typesVersions` field if it's defined
 	// see https://www.typescriptlang.org/docs/handbook/declaration-files/publishing.html#version-selection-with-typesversions
 	if typesVersions := pkgJson.TypesVersions; len(typesVersions) > 0 && entry.types != "" {
 		versions := make(sort.StringSlice, len(typesVersions))
@@ -527,6 +526,8 @@ func (ctx *BuildContext) finalizeBuildEntry(entry *BuildEntry) {
 		} else if !ctx.existsPkgFile(entry.types) {
 			entry.types = ""
 		}
+	} else if ext := path.Ext(entry.main); ext == ".mts" || ext == ".ts" || ext == ".tsx" || ext == ".cts" {
+		entry.types = strings.TrimSuffix(entry.main, ext) + ".d" + ext
 	}
 }
 
@@ -911,16 +912,13 @@ func (ctx *BuildContext) resolveExternalModule(specifier string, kind api.Resolv
 	return
 }
 
-func (ctx *BuildContext) resloveDTS(entry BuildEntry) (string, error) {
+func (ctx *BuildContext) resolveDTS(entry BuildEntry) (string, error) {
 	if entry.types != "" {
-		if !ctx.existsPkgFile(entry.types) {
-			return "", nil
-		}
 		return fmt.Sprintf(
 			"/%s/%s%s",
 			ctx.esm.Name(),
 			ctx.getBuildArgsPrefix(true),
-			strings.TrimPrefix(entry.types, "./"),
+			entry.types,
 		), nil
 	}
 
@@ -965,7 +963,7 @@ func (ctx *BuildContext) resloveDTS(entry BuildEntry) (string, error) {
 					}
 					return "", err
 				}
-				dts, err := b.resloveDTS(b.resolveEntry(dtsModule))
+				dts, err := b.resolveDTS(b.resolveEntry(dtsModule))
 				if err != nil {
 					return "", err
 				}
