@@ -24,7 +24,7 @@ import (
 )
 
 var cjsModuleLexerVersion = "1.0.6"
-var cjsModuleLexerIgnoredPackages = set.New[string](
+var cjsModuleLexerIgnoredPackages = set.New(
 	"@babel/types",
 	"cheerio",
 	"graceful-fs",
@@ -47,12 +47,12 @@ type cjsModuleLexerResult struct {
 	Reexport string   `json:"reexport,omitempty"`
 }
 
-func cjsModuleLexer(ctx *BuildContext, cjsEntry string) (ret cjsModuleLexerResult, err error) {
+func cjsModuleLexer(b *BuildContext, cjsEntry string) (ret cjsModuleLexerResult, err error) {
 	h := sha1.New()
 	h.Write([]byte(cjsModuleLexerVersion))
 	h.Write([]byte(cjsEntry))
-	h.Write([]byte(ctx.getNodeEnv()))
-	cacheFileName := path.Join(ctx.wd, ".cache", "cml-"+base64.RawURLEncoding.EncodeToString(h.Sum(nil))+".json")
+	h.Write([]byte(b.getNodeEnv()))
+	cacheFileName := path.Join(b.wd, ".cache", "cml-"+base64.RawURLEncoding.EncodeToString(h.Sum(nil))+".json")
 
 	// check the cache first
 	if existsFile(cacheFileName) && utils.ParseJSONFile(cacheFileName, &ret) == nil {
@@ -63,7 +63,7 @@ func cjsModuleLexer(ctx *BuildContext, cjsEntry string) (ret cjsModuleLexerResul
 	defer func() {
 		if err == nil {
 			if DEBUG {
-				ctx.logger.Debugf("[cjsModuleLexer] parse %s in %s", path.Join(ctx.esm.PkgName, cjsEntry), time.Since(start))
+				b.logger.Debugf("[cjsModuleLexer] parse %s in %s", path.Join(b.esm.PkgName, cjsEntry), time.Since(start))
 			}
 			if !existsFile(cacheFileName) {
 				ensureDir(path.Dir(cacheFileName))
@@ -72,9 +72,9 @@ func cjsModuleLexer(ctx *BuildContext, cjsEntry string) (ret cjsModuleLexerResul
 		}
 	}()
 
-	if cjsModuleLexerIgnoredPackages.Has(ctx.esm.PkgName) {
-		js := path.Join(ctx.wd, "reveal_"+strings.ReplaceAll(cjsEntry[2:], "/", "_"))
-		err = os.WriteFile(js, []byte(fmt.Sprintf(`console.log(JSON.stringify(Object.keys((await import("npm:%s")).default)))`, path.Join(ctx.esm.Name(), cjsEntry))), 0644)
+	if cjsModuleLexerIgnoredPackages.Has(b.esm.PkgName) {
+		js := path.Join(b.wd, "reveal_"+strings.ReplaceAll(cjsEntry[2:], "/", "_"))
+		err = os.WriteFile(js, []byte(fmt.Sprintf(`console.log(JSON.stringify(Object.keys((await import("npm:%s")).default)))`, path.Join(b.esm.Name(), cjsEntry))), 0644)
 		if err != nil {
 			return
 		}
@@ -99,18 +99,18 @@ func cjsModuleLexer(ctx *BuildContext, cjsEntry string) (ret cjsModuleLexerResul
 	worthToRetry := true
 RETRY:
 
-	c, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	stdout, recycle1 := NewBuffer()
+	stderr, recycle2 := NewBuffer()
 	defer cancel()
+	defer recycle1()
+	defer recycle2()
 
-	cmd := exec.CommandContext(c, "cjs-module-lexer", path.Join(ctx.esm.PkgName, cjsEntry))
-	stdout, recycle := NewBuffer()
-	defer recycle()
-	stderr, recycle := NewBuffer()
-	defer recycle()
-	cmd.Dir = ctx.wd
+	cmd := exec.CommandContext(ctx, "cjs-module-lexer", path.Join(b.esm.PkgName, cjsEntry))
+	cmd.Dir = b.wd
 	cmd.Stdout = stdout
 	cmd.Stderr = stderr
-	cmd.Env = append(os.Environ(), "NODE_ENV="+ctx.getNodeEnv())
+	cmd.Env = append(os.Environ(), "NODE_ENV="+b.getNodeEnv())
 
 	err = cmd.Run()
 	if err != nil {
@@ -121,7 +121,7 @@ RETRY:
 				if strings.HasPrefix(formattedMessage, "failed to resolve reexport: NotFound(") && worthToRetry {
 					worthToRetry = false
 					// install dependencies and retry
-					ctx.npmrc.installDependencies(ctx.wd, ctx.pkgJson, true, nil)
+					b.npmrc.installDependencies(b.wd, b.pkgJson, true, nil)
 					goto RETRY
 				}
 				err = fmt.Errorf("cjsModuleLexer: %s", formattedMessage)
@@ -150,7 +150,7 @@ RETRY:
 	return
 }
 
-func installCommonJSModuleLexer() (err error) {
+func installCjsModuleLexer() (err error) {
 	binDir := path.Join(config.WorkDir, "bin")
 
 	// use dev version of cjs-module-lexer if exists
@@ -168,7 +168,7 @@ func installCommonJSModuleLexer() (err error) {
 		return
 	}
 
-	url, err := getCommonJSModuleLexerDownloadURL()
+	url, err := getCjsModuleLexerDownloadURL()
 	if err != nil {
 		return
 	}
@@ -204,7 +204,7 @@ func installCommonJSModuleLexer() (err error) {
 	return
 }
 
-func getCommonJSModuleLexerDownloadURL() (string, error) {
+func getCjsModuleLexerDownloadURL() (string, error) {
 	var arch string
 	var os string
 

@@ -951,8 +951,8 @@ func esmRouter(db Database, buildStorage storage.Storage, logger *log.Logger) re
 				if hasTargetSegment {
 					pathKind = EsmBuild
 				}
-			case ".ts", ".mts", ".cts":
-				if endsWith(pathname, ".d.ts", ".d.mts", ".d.cts") {
+			case ".ts", ".mts", ".cts", ".tsx":
+				if strings.HasSuffix(strings.TrimSuffix(pathname, ext), ".d") || query.Has("dts") {
 					pathKind = EsmDts
 				}
 			case ".css":

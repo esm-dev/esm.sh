@@ -43,7 +43,7 @@ func decodeBuildArgs(argsString string) (args BuildArgs, err error) {
 				}
 				args.deps = deps
 			} else if strings.HasPrefix(p, "e") {
-				args.external = *set.NewReadOnly[string](strings.Split(p[1:], ",")...)
+				args.external = *set.NewReadOnly(strings.Split(p[1:], ",")...)
 			} else if strings.HasPrefix(p, "c") {
 				args.conditions = append(args.conditions, strings.Split(p[1:], ",")...)
 			} else {
@@ -233,7 +233,7 @@ func resolveBuildArgs(npmrc *NpmRC, installDir string, args *BuildArgs, esm EsmP
 					external = append(external, name)
 				}
 			}
-			args.external = *set.NewReadOnly[string](external...)
+			args.external = *set.NewReadOnly(external...)
 		}
 	}
 	return nil
