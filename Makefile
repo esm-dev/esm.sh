@@ -17,7 +17,7 @@ dev/server: config.json
 	@rm -rf .esmd/log
 	@rm -rf .esmd/storage
 	@rm -rf .esmd/esm.db
-	@go run -tags debug server/cmd/main.go --config=config.json
+	@go run -tags debug server/esmd/main.go --config=config.json
 
 test/server:
 	@./test/bootstrap.ts ${dir}
