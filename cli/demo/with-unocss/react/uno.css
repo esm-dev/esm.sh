@@ -1,5 +1,5 @@
-@import "@unocss/reset/eric-meyer.css";
-@import "@unocss/preset-uno";
+@import "@unocss/reset/tailwind.css";
+@import "@unocss/preset-wind4";
 @import "@unocss/preset-icons";
 @import "@unocss/preset-web-fonts";
 
