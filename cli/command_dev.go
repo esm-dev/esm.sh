@@ -12,8 +12,8 @@ import (
 	"github.com/ije/gox/term"
 )
 
-// Serve a web app.
-func Serve(efs *embed.FS) {
+// Serve a web app in development mode.
+func Dev(efs *embed.FS) {
 	port := flag.Int("port", 3000, "port to serve on")
 	rootDir, _ := parseCommandFlag()
 
@@ -37,7 +37,7 @@ func Serve(efs *embed.FS) {
 
 	serv := &http.Server{
 		Addr:    fmt.Sprintf(":%d", *port),
-		Handler: &Server{efs: efs, rootDir: rootDir},
+		Handler: &Server{efs: efs, rootDir: rootDir, dev: true},
 	}
 	ln, err := net.Listen("tcp", serv.Addr)
 	if err != nil {

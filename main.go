@@ -13,10 +13,11 @@ const helpMessage = "\033[30mesm.sh - A nobuild tool for modern web development.
 Usage: esm.sh [command] <options>
 
 Commands:
-  i, add [...pakcage]   Alias to 'esm.sh im add'.
-  im, importmap         Manage "importmap" script.
-  init                  Create a new nobuild web app with esm.sh CDN.
-  serve                 Serve a nobuild web app with esm.sh CDN, HMR, transforming TS/Vue/Svelte on the fly.
+  add, i [...packages]  Alias to 'importmap add'.
+  importmap, im         Manage "importmap" script.
+  init                  Create a new web app.
+  serve                 Serve a web app.
+	dev									  Serve a web app in development mode.
 `
 
 //go:embed cli/internal
@@ -29,14 +30,16 @@ func main() {
 		return
 	}
 	switch command := os.Args[1]; command {
-	case "i", "add":
+	case "add", "i":
 		cli.ManageImportMap("add")
-	case "im", "importmap":
+	case "importmap", "im":
 		cli.ManageImportMap("")
 	case "init":
 		cli.Init(&fs)
 	case "serve":
 		cli.Serve(&fs)
+	case "dev":
+		cli.Dev(&fs)
 	default:
 		fmt.Print(helpMessage)
 	}

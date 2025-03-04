@@ -8,30 +8,31 @@ const output = (type, data) => Deno.stdout.write(enc.encode(">>>" + type + ":" +
 let tsx;
 let unoGenerators;
 
-async function transformModule(filename, importMap, sourceCode) {
+async function transformModule(filename, importMap, sourceCode, isDev) {
   const imports = importMap?.imports;
-  if (imports) {
-    for (const [specifier, resolved] of Object.entries(imports)) {
+  if (imports && isDev) {
+    // add `?dev` query to `react-dom` and `vue` imports for development mode
+    for (const [specifier, url] of Object.entries(imports)) {
       if (
         (specifier === "react-dom" || specifier === "react-dom/client" || specifier === "vue")
-        && (resolved.startsWith("https://") || resolved.startsWith("http://"))
+        && (url.startsWith("https://") || url.startsWith("http://"))
       ) {
-        const url = new URL(resolved);
-        const query = url.searchParams;
-        if (!query.has("dev")) {
-          query.set("dev", "true");
-          imports[specifier] = url.origin + url.pathname + url.search.replace("dev=true", "dev");
+        const u = new URL(url);
+        const q = u.searchParams;
+        if (!q.has("dev")) {
+          q.set("dev", "true");
+          imports[specifier] = u.origin + u.pathname + u.search.replace("dev=true", "dev");
         }
       }
     }
   }
   let lang = filename.endsWith(".md?jsx") ? "jsx" : undefined;
   let code = sourceCode ?? await Deno.readTextFile("." + filename);
-  let preprocessSM = undefined;
+  let map = undefined;
   if (filename.endsWith(".svelte") || filename.endsWith(".md?svelte")) {
-    [lang, code, preprocessSM] = await transformSvelte(filename, code, importMap, true);
+    [lang, code, map] = await transformSvelte(filename, code, importMap, true);
   } else if (filename.endsWith(".vue") || filename.endsWith(".md?vue")) {
-    [lang, code, preprocessSM] = await transformVue(filename, code, importMap, true);
+    [lang, code, map] = await transformVue(filename, code, importMap, true);
   }
   if (!tsx) {
     tsx = import("npm:@esm.sh/tsx@1.0.5").then(async ({ init, transform }) => {
@@ -45,16 +46,18 @@ async function transformModule(filename, importMap, sourceCode) {
     lang,
     code,
     importMap,
-    sourceMap: preprocessSM ? "external" : "inline",
-    dev: {
-      hmr: { runtime: "/@hmr" },
-      refresh: imports?.react && !imports?.preact ? { runtime: "/@refresh" } : undefined,
-      prefresh: imports?.preact ? { runtime: "/@prefresh" } : undefined,
-    },
+    sourceMap: map ? "external" : "inline",
+    dev: isDev
+      ? {
+        hmr: { runtime: "/@hmr" },
+        refresh: imports?.react && !imports?.preact ? { runtime: "/@refresh" } : undefined,
+        prefresh: imports?.preact ? { runtime: "/@prefresh" } : undefined,
+      }
+      : undefined,
   });
   let js = ret.code;
   if (ret.map) {
-    if (preprocessSM) {
+    if (map) {
       // todo: merge preprocess source map
     }
     js += "\n//# sourceMappingURL=data:application/json;base64," + btoa(ret.map);
@@ -137,9 +140,6 @@ for await (const line of Deno.stdin.readable.pipeThrough(new TextDecoderStream()
   try {
     const [type, ...args] = JSON.parse(line);
     switch (type) {
-      case "unocss":
-        output("css", await unocss(...args));
-        break;
       case "module":
         output("js", await transformModule(...args));
         break;
@@ -153,6 +153,9 @@ for await (const line of Deno.stdin.readable.pipeThrough(new TextDecoderStream()
         output(lang, code);
         break;
       }
+      case "unocss":
+        output("css", await unocss(...args));
+        break;
       default:
         output("error", "Unknown loader type: " + type);
     }
