@@ -93,12 +93,12 @@ function run() {
 }
 
 async function initTsx() {
-  const pkg = "/@esm.sh/tsx@1.0.5";
+  const pkg = "/@esm.sh/tsx@1.0.7";
   const [m, w] = await Promise.all([
     import(pkg + "/$TARGET/tsx.mjs"),
     fetch(esmshUrl(pkg + "/pkg/tsx_bg.wasm")),
   ]);
-  await m.default(w);
+  await m.init(w);
   return m;
 }
 
