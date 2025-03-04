@@ -98,7 +98,7 @@ func resolveSvelteVersion(npmrc *NpmRC, importMap common.ImportMap) (svelteVersi
 }
 
 func generateUnoCSS(npmrc *NpmRC, configCSS string, content string) (output *LoaderOutput, err error) {
-	loaderVersion := "0.4.3"
+	loaderVersion := "0.5.0-beta.2"
 	loaderExecPath := path.Join(config.WorkDir, "bin", "unocss-"+loaderVersion)
 
 	once, _ := compileSyncMap.LoadOrStore(loaderExecPath, &sync.Once{})

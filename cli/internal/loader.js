@@ -35,7 +35,7 @@ async function transformModule(filename, importMap, sourceCode, isDev) {
     [lang, code, map] = await transformVue(filename, code, importMap, true);
   }
   if (!tsx) {
-    tsx = import("npm:@esm.sh/tsx@1.0.5").then(async ({ init, transform }) => {
+    tsx = import("npm:@esm.sh/tsx@1.0.7").then(async ({ init, transform }) => {
       await init();
       return { transform };
     });
@@ -45,8 +45,8 @@ async function transformModule(filename, importMap, sourceCode, isDev) {
     filename,
     lang,
     code,
-    importMap,
-    sourceMap: map ? "external" : "inline",
+    importMap: importMap ?? undefined,
+    sourceMap: isDev ? (map ? "external" : "inline") : undefined,
     dev: isDev
       ? {
         hmr: { runtime: "/@hmr" },
@@ -120,19 +120,19 @@ function isHttpSpecifier(specifier) {
   return typeof specifier === "string" && specifier.startsWith("https://") || specifier.startsWith("http://");
 }
 
-async function unocss(config, content, id) {
+async function unocss(_id, content, config) {
   const generatorId = config?.filename ?? ".";
   if (!unoGenerators) {
     unoGenerators = new Map();
   }
   let uno = unoGenerators.get(generatorId);
   if (!uno || uno.configCSS !== config?.css) {
-    uno = import("npm:@esm.sh/unocss@0.4.3").then(({ init }) => init({ configCSS: config?.css }));
+    uno = import("npm:@esm.sh/unocss@0.5.0-beta.2").then(({ init }) => init({ configCSS: config?.css }));
     uno.configCSS = config?.css;
     unoGenerators.set(generatorId, uno);
   }
   const { update, generate } = await uno;
-  await update(content, id);
+  await update(content);
   return await generate();
 }
 

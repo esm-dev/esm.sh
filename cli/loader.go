@@ -61,34 +61,27 @@ func (l *LoaderWorker) Start(wd string, loaderJS []byte) (err error) {
 		l.outReader = bufio.NewReader(l.stdout)
 		if debug {
 			denoVersion, _ := exec.Command(denoPath, "-v").Output()
-			fmt.Println(term.Dim(fmt.Sprintf("[debug] loader process started (runtime: %s)", strings.TrimSpace(string(denoVersion)))))
+			fmt.Println(term.Dim(fmt.Sprintf("[debug] loader worker started (runtime: %s)", strings.TrimSpace(string(denoVersion)))))
 		}
 	}
 
-	// pre-install npm deps
-	cmd = exec.Command(denoPath, "cache", "npm:@esm.sh/unocss@0.4.3", "npm:@esm.sh/tsx@1.0.5", "npm:@esm.sh/vue-compiler@1.0.1")
-	cmd.Start()
 	return
 }
 
 func (l *LoaderWorker) Load(loaderType string, args []any) (lang string, code string, err error) {
-	// only one load can be invoked at a time
+	// only one load call can be invoked at a time
 	l.lock.Lock()
 	defer l.lock.Unlock()
 
 	if l.outReader == nil {
-		err = errors.New("loader not started")
+		err = errors.New("loader worker not started")
 		return
 	}
 
 	if debug {
 		start := time.Now()
 		defer func() {
-			if loaderType == "unocss" {
-				fmt.Println(term.Dim(fmt.Sprintf("[debug] load '/@uno.css' in %s (loader: unocss)", time.Since(start))))
-			} else {
-				fmt.Println(term.Dim(fmt.Sprintf("[debug] load '%s' in %s (loader: %s)", args[0], time.Since(start), loaderType)))
-			}
+			fmt.Println(term.Dim(fmt.Sprintf("[debug] load '%s' in %s (loader: %s)", args[0], time.Since(start), loaderType)))
 		}()
 	}
 

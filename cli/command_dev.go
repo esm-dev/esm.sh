@@ -35,18 +35,21 @@ func Dev(efs *embed.FS) {
 		return
 	}
 
-	serv := &http.Server{
+	handler := &Server{dev: true, efs: efs, rootDir: rootDir}
+	go handler.startLoaderWorker()
+
+	s := &http.Server{
 		Addr:    fmt.Sprintf(":%d", *port),
-		Handler: &Server{efs: efs, rootDir: rootDir, dev: true},
+		Handler: handler,
 	}
-	ln, err := net.Listen("tcp", serv.Addr)
+	ln, err := net.Listen("tcp", s.Addr)
 	if err != nil {
 		os.Stderr.WriteString(term.Red(err.Error()))
 		return
 	}
 
 	fmt.Printf(term.Green("Server is ready on http://localhost:%d\n"), *port)
-	err = serv.Serve(ln)
+	err = s.Serve(ln)
 	if err != nil {
 		os.Stderr.WriteString(term.Red(err.Error()))
 		return

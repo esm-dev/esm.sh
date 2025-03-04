@@ -34,7 +34,6 @@ type Server struct {
 	watchData        map[*websocket.Conn]map[string]int64
 	watchDataMapLock sync.RWMutex
 	loaderWorker     *LoaderWorker
-	loaderInitLock   sync.Mutex
 	loaderCache      sync.Map
 }
 
@@ -316,7 +315,7 @@ func (s *Server) ServeHtml(w http.ResponseWriter, r *http.Request, pathname stri
 			}
 		}
 		w.Write([]byte("</script>"))
-		w.Write([]byte(`<script>console.log("%c💚 Built with esm.sh/x, please uncheck \"Disable cache\" in Network tab for better DX!", "color:green")</script>`))
+		w.Write([]byte(`<script>console.log("%c💚 Built with esm.sh, please uncheck \"Disable cache\" in Network tab for better DX!", "color:green")</script>`))
 	}
 }
 
@@ -425,17 +424,15 @@ func (s *Server) ServeModule(w http.ResponseWriter, r *http.Request, pathname st
 			}
 		}
 	}
-	loader, err := s.getLoader()
-	if err != nil {
-		fmt.Println(term.Red("[error] failed to start loader process: " + err.Error()))
-		http.Error(w, "Internal Server Error", 500)
+	if s.loaderWorker == nil {
+		http.Error(w, "Loader worker not started", 500)
 		return
 	}
 	args := []any{pathname, importMap, nil, s.dev}
 	if sourceCode != nil {
 		args[2] = string(sourceCode)
 	}
-	_, js, err := loader.Load("module", args)
+	_, js, err := s.loaderWorker.Load("module", args)
 	if err != nil {
 		fmt.Println(term.Red("[error] " + err.Error()))
 		http.Error(w, "Internal Server Error", 500)
@@ -622,14 +619,12 @@ func (s *Server) ServeUnoCSS(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	}
-	loader, err := s.getLoader()
-	if err != nil {
-		fmt.Println(term.Red("[error] failed to start loader process: " + err.Error()))
-		http.Error(w, "Internal Server Error", 500)
+	if s.loaderWorker == nil {
+		http.Error(w, "Loader worker not started", 500)
 		return
 	}
 	config := map[string]any{"filename": r.URL.Path, "css": string(configCSS)}
-	_, css, err := loader.Load("unocss", []any{config, string(bytes.Join(contents, []byte{'\n'}))})
+	_, css, err := s.loaderWorker.Load("unocss", []any{r.URL.Path + r.URL.RawQuery, string(bytes.Join(contents, []byte{'\n'})), config})
 	if err != nil {
 		fmt.Println(term.Red("[error] " + err.Error()))
 		http.Error(w, "Internal Server Error", 500)
@@ -782,11 +777,10 @@ func (s *Server) analyzeDependencyTree(entry string, importMap common.ImportMap)
 									}
 								}
 							}
-							preloader, err := s.getLoader()
-							if err != nil {
-								return esbuild.OnLoadResult{}, err
+							if s.loaderWorker == nil {
+								return esbuild.OnLoadResult{}, errors.New("loader worker not started")
 							}
-							lang, code, err := preloader.Load(ext[1:], []any{pathname, contents, importMap})
+							lang, code, err := s.loaderWorker.Load(ext[1:], []any{pathname, contents, importMap})
 							if err != nil {
 								return esbuild.OnLoadResult{}, err
 							}
@@ -853,21 +847,30 @@ func (s *Server) purgeLoaderCache(filename string) {
 	}
 }
 
-func (s *Server) getLoader() (loader *LoaderWorker, err error) {
-	s.loaderInitLock.Lock()
-	defer s.loaderInitLock.Unlock()
+func (s *Server) startLoaderWorker() (err error) {
 	if s.loaderWorker != nil {
-		return s.loaderWorker, nil
+		return nil
 	}
 	loaderJs, err := s.efs.ReadFile("cli/internal/loader.js")
 	if err != nil {
 		return
 	}
-	loader = &LoaderWorker{}
-	err = loader.Start(s.rootDir, loaderJs)
+	worker := &LoaderWorker{}
+	err = worker.Start(s.rootDir, loaderJs)
 	if err != nil {
-		return nil, err
+		return err
 	}
-	s.loaderWorker = loader
+	go worker.Load("module", []any{"_.tsx", nil, "", false})
+	go func() {
+		entries, err := os.ReadDir(s.rootDir)
+		if err == nil {
+			for _, entry := range entries {
+				if entry.Type().IsRegular() && entry.Name() == "uno.css" {
+					go worker.Load("unocss", []any{"_uno.css", "flex"})
+				}
+			}
+		}
+	}()
+	s.loaderWorker = worker
 	return
 }
