@@ -1434,14 +1434,6 @@ func esmRouter(db Database, buildStorage storage.Storage, logger *log.Logger) re
 			}
 		}
 
-		// resolve `alias`, `deps`, `external` of the build args
-		if !xArgs {
-			err := resolveBuildArgs(npmrc, path.Join(npmrc.StoreDir(), esm.Name()), &buildArgs, esm)
-			if err != nil {
-				return rex.Status(500, err.Error())
-			}
-		}
-
 		// build and return the types(.d.ts) file
 		if pathKind == EsmDts {
 			readDts := func() (content io.ReadCloser, stat storage.Stat, err error) {
