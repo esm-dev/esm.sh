@@ -661,7 +661,7 @@ func (ctx *BuildContext) resolveExternalModule(specifier string, kind api.Resolv
 		if err == nil && !withTypeJSON {
 			resolvedPathFull := resolvedPath
 			// use relative path for sub-module of current package
-			if strings.HasPrefix(specifier, ctx.pkgJson.Name+"/") {
+			if pkgJson := ctx.pkgJson; specifier == pkgJson.Name || strings.HasPrefix(specifier, pkgJson.Name+"/") {
 				rp, err := relPath(path.Dir(ctx.Path()), resolvedPath)
 				if err == nil {
 					resolvedPath = rp
@@ -682,17 +682,6 @@ func (ctx *BuildContext) resolveExternalModule(specifier string, kind api.Resolv
 		return
 	}
 
-	// if it's `main` entry of current package
-	if pkgJson := ctx.pkgJson; specifier == pkgJson.Name || specifier == pkgJson.PkgName {
-		resolvedPath = ctx.getImportPath(EsmPath{
-			PkgName:    pkgJson.Name,
-			PkgVersion: pkgJson.Version,
-			GhPrefix:   ctx.esm.GhPrefix,
-			PrPrefix:   ctx.esm.PrPrefix,
-		}, ctx.getBuildArgsPrefix(false), ctx.externalAll)
-		return
-	}
-
 	// if it's a node builtin module
 	if isNodeBuiltInModule(specifier) {
 		if ctx.externalAll || ctx.target == "node" || ctx.target == "denonext" || ctx.args.external.Has(specifier) {
@@ -702,6 +691,17 @@ func (ctx *BuildContext) resolveExternalModule(specifier string, kind api.Resolv
 		} else {
 			resolvedPath = fmt.Sprintf("/node/%s.mjs", specifier[5:])
 		}
+		return
+	}
+
+	// if it's `main` entry of current package
+	if pkgJson := ctx.pkgJson; specifier == pkgJson.Name || specifier == pkgJson.PkgName {
+		resolvedPath = ctx.getImportPath(EsmPath{
+			PkgName:    pkgJson.Name,
+			PkgVersion: pkgJson.Version,
+			GhPrefix:   ctx.esm.GhPrefix,
+			PrPrefix:   ctx.esm.PrPrefix,
+		}, ctx.getBuildArgsPrefix(false), ctx.externalAll)
 		return
 	}
 

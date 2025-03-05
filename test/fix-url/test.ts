@@ -172,7 +172,7 @@ Deno.test("fix external save path", async () => {
   // non-external module
   {
     const res = await fetch("http://localhost:8080/preact@10.25.4/es2022/hooks.mjs");
-    assertStringIncludes(await res.text(), 'from"/preact@10.25.4/es2022/preact.mjs"');
+    assertStringIncludes(await res.text(), 'from"./preact.mjs"');
   }
   // in https://github.com/preactjs/preact-www/issues/1225, the module returns the non-external module
   {
