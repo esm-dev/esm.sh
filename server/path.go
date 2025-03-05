@@ -50,7 +50,7 @@ func (p EsmPath) Specifier() string {
 	return p.Name()
 }
 
-func praseEsmPath(npmrc *NpmRC, pathname string) (esm EsmPath, extraQuery string, withExactVersion bool, hasTargetSegment bool, err error) {
+func praseEsmPath(npmrc *NpmRC, pathname string) (esm EsmPath, extraQuery string, exactVersion bool, hasTargetSegment bool, err error) {
 	// see https://pkg.pr.new
 	if strings.HasPrefix(pathname, "/pr/") || strings.HasPrefix(pathname, "/pkg.pr.new/") {
 		if strings.HasPrefix(pathname, "/pr/") {
@@ -68,7 +68,7 @@ func praseEsmPath(npmrc *NpmRC, pathname string) (esm EsmPath, extraQuery string
 			err = errors.New("invalid path")
 			return
 		}
-		withExactVersion = true
+		exactVersion = true
 		hasTargetSegment = validateTargetSegment(strings.Split(subPath, "/"))
 		esm = EsmPath{
 			PkgName:       pkgName,
@@ -149,8 +149,8 @@ func praseEsmPath(npmrc *NpmRC, pathname string) (esm EsmPath, extraQuery string
 	}
 
 	if ghPrefix {
-		if isCommitish(esm.PkgVersion) || isExactVersion(strings.TrimPrefix(esm.PkgVersion, "v")) {
-			withExactVersion = true
+		if isExactVersion(strings.TrimPrefix(esm.PkgVersion, "v")) {
+			exactVersion = true
 			return
 		}
 		var refs []GitRef
@@ -173,37 +173,41 @@ func praseEsmPath(npmrc *NpmRC, pathname string) (esm EsmPath, extraQuery string
 					return
 				}
 			}
-			// try to find the semver tag
-			var c *semver.Constraints
-			c, err = semver.NewConstraint(strings.TrimPrefix(esm.PkgVersion, "semver:"))
-			if err == nil {
-				vs := make([]*semver.Version, len(refs))
+			// try to find the 'semver' tag
+			if semv, erro := semver.NewConstraint(strings.TrimPrefix(esm.PkgVersion, "semver:")); erro == nil {
+				semtags := make([]*semver.Version, len(refs))
 				i := 0
 				for _, ref := range refs {
 					if strings.HasPrefix(ref.Ref, "refs/tags/") {
 						v, e := semver.NewVersion(strings.TrimPrefix(ref.Ref, "refs/tags/"))
-						if e == nil && c.Check(v) {
-							vs[i] = v
+						if e == nil && semv.Check(v) {
+							semtags[i] = v
 							i++
 						}
 					}
 				}
 				if i > 0 {
-					vs = vs[:i]
+					semtags = semtags[:i]
 					if i > 1 {
-						sort.Sort(semver.Collection(vs))
+						sort.Sort(semver.Collection(semtags))
 					}
-					esm.PkgVersion = vs[i-1].String()
+					esm.PkgVersion = semtags[i-1].String()
 					return
 				}
 			}
 		}
-		err = errors.New("tag or branch not found")
+
+		if !isCommitish(esm.PkgVersion) {
+			err = errors.New("git: tag or branch not found")
+			return
+		}
+
+		exactVersion = true
 		return
 	}
 
-	withExactVersion = len(esm.PkgVersion) > 0 && isExactVersion(esm.PkgVersion)
-	if !withExactVersion {
+	exactVersion = len(esm.PkgVersion) > 0 && isExactVersion(esm.PkgVersion)
+	if !exactVersion {
 		var p *PackageJSON
 		p, err = npmrc.getPackageInfo(pkgName, esm.PkgVersion)
 		if err == nil {
