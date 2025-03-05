@@ -1284,7 +1284,7 @@ func isNodeBuiltInModule(specifier string) bool {
 
 // isCommitish returns true if the given string is a commit hash.
 func isCommitish(s string) bool {
-	return len(s) >= 7 && len(s) <= 40 && valid.IsHexString(s) && containsDigit(s)
+	return len(s) >= 7 && len(s) <= 40 && valid.IsHexString(s)
 }
 
 // semverLessThan returns true if the version a is less than the version b.

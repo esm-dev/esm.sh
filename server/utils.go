@@ -69,16 +69,6 @@ func stringInSlice(a []string, s string) bool {
 	return false
 }
 
-// containsDigit returns true if the given string contains a digit.
-func containsDigit(s string) bool {
-	for _, r := range s {
-		if r >= '0' && r <= '9' {
-			return true
-		}
-	}
-	return false
-}
-
 // existsDir returns true if the given path is a directory.
 func existsDir(filepath string) bool {
 	fi, err := os.Lstat(filepath)
