@@ -27,25 +27,25 @@ import (
 )
 
 type Config struct {
-	RootDir string
-	Tag     string
-	Dev     bool
+	AppDir   string
+	Fallback string
+	Dev      bool
 }
 
 type WebServer struct {
 	config           *Config
-	watchData        map[*websocket.Conn]map[string]int64
-	watchDataMapLock sync.RWMutex
 	loaderWorker     *LoaderWorker
 	loaderCache      sync.Map
+	watchDataMapLock sync.RWMutex
+	watchData        map[*websocket.Conn]map[string]int64
 }
 
 func New(config Config) *WebServer {
-	if config.RootDir == "" {
-		config.RootDir, _ = os.Getwd()
+	if config.AppDir == "" {
+		config.AppDir, _ = os.Getwd()
 	}
-	if config.Tag == "" {
-		config.Tag = fmt.Sprintf("v%d", VERSION)
+	if config.Fallback == "" {
+		config.Fallback = "/index.html"
 	}
 	s := &WebServer{config: &config}
 	go func() {
@@ -69,7 +69,7 @@ func (s *WebServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 		s.ServeHmrWS(w, r)
 	default:
-		filename := filepath.Join(s.config.RootDir, pathname)
+		filename := filepath.Join(s.config.AppDir, pathname)
 		fi, err := os.Lstat(filename)
 		if err == nil && fi.IsDir() {
 			if pathname != "/" && !strings.HasSuffix(pathname, "/") {
@@ -77,7 +77,12 @@ func (s *WebServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 			pathname = strings.TrimSuffix(pathname, "/") + "/index.html"
-			filename = filepath.Join(s.config.RootDir, pathname)
+			filename = filepath.Join(s.config.AppDir, pathname)
+			fi, err = os.Lstat(filename)
+		}
+		if err != nil && os.IsNotExist(err) {
+			pathname = s.config.Fallback
+			filename = filepath.Join(s.config.AppDir, pathname)
 			fi, err = os.Lstat(filename)
 		}
 		if err != nil {
@@ -102,7 +107,7 @@ func (s *WebServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 		switch extname := filepath.Ext(filename); extname {
 		case ".html":
-			etag := fmt.Sprintf("w/\"%x-%x-%s\"", fi.ModTime().UnixMilli(), fi.Size(), s.config.Tag)
+			etag := fmt.Sprintf("w/\"%x-%x-v%d\"", fi.ModTime().UnixMilli(), fi.Size(), VERSION)
 			if r.Header.Get("If-None-Match") == etag {
 				w.WriteHeader(http.StatusNotModified)
 				return
@@ -162,7 +167,7 @@ func (s *WebServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 						http.Error(w, "Failed to render markdown", 500)
 						return
 					}
-					etag := fmt.Sprintf("w/\"%x-%x-%s\"", fi.ModTime().UnixMilli(), fi.Size(), s.config.Tag)
+					etag := fmt.Sprintf("w/\"%x-%x-v%d\"", fi.ModTime().UnixMilli(), fi.Size(), VERSION)
 					if r.Header.Get("If-None-Match") == etag && !query.Has("t") {
 						w.WriteHeader(http.StatusNotModified)
 						return
@@ -210,7 +215,7 @@ func (s *WebServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *WebServer) ServeHtml(w http.ResponseWriter, r *http.Request, pathname string) {
-	htmlFile, err := os.Open(filepath.Join(s.config.RootDir, pathname))
+	htmlFile, err := os.Open(filepath.Join(s.config.AppDir, pathname))
 	if err != nil {
 		if os.IsNotExist(err) {
 			http.Error(w, "Not Found", 404)
@@ -221,6 +226,7 @@ func (s *WebServer) ServeHtml(w http.ResponseWriter, r *http.Request, pathname s
 	}
 	defer htmlFile.Close()
 
+	u := url.URL{Path: pathname}
 	tokenizer := html.NewTokenizer(htmlFile)
 	cssLinks := []string{}
 	unocss := ""
@@ -256,11 +262,34 @@ func (s *WebServer) ServeHtml(w http.ResponseWriter, r *http.Request, pathname s
 			case "script":
 				srcAttr := attrs["src"]
 				hrefAttr := attrs["href"]
-				// replace `<script src="https://esm.sh/x" href="..."></script>`
-				// with `<script type="module" src="..."></script>`
-				if hrefAttr != "" && isHttpSepcifier(srcAttr) {
+				if !isHttpSepcifier(srcAttr) {
+					srcAttr, _ = utils.SplitByFirstByte(srcAttr, '?')
+					srcAttr = u.ResolveReference(&url.URL{Path: srcAttr}).Path
+					w.Write([]byte("<script"))
+					for attrKey, attrVal := range attrs {
+						switch attrKey {
+						case "src":
+							w.Write([]byte(" src=\""))
+							w.Write([]byte(srcAttr + "?im=" + base64.RawURLEncoding.EncodeToString([]byte(pathname))))
+							w.Write([]byte{'"'})
+						default:
+							w.Write([]byte{' '})
+							w.Write([]byte(attrKey))
+							if attrVal != "" {
+								w.Write([]byte{'=', '"'})
+								w.Write([]byte(attrVal))
+								w.Write([]byte{'"'})
+							}
+						}
+					}
+					w.Write([]byte{'>'})
+					continue
+				} else if hrefAttr != "" {
+					// replace `<script src="https://esm.sh/x" href="..."></script>`
+					// with `<script type="module" src="..."></script>`
 					if srcUrl, parseErr := url.Parse(srcAttr); parseErr == nil && srcUrl.Path == "/x" {
 						hrefAttr, _ = utils.SplitByFirstByte(hrefAttr, '?')
+						hrefAttr = u.ResolveReference(&url.URL{Path: hrefAttr}).Path
 						if hrefAttr == "uno.css" || strings.HasSuffix(hrefAttr, "/uno.css") {
 							if unocss == "" {
 								unocssHref := hrefAttr + "?ctx=" + base64.RawURLEncoding.EncodeToString([]byte(pathname))
@@ -277,7 +306,6 @@ func (s *WebServer) ServeHtml(w http.ResponseWriter, r *http.Request, pathname s
 								case "href", "type":
 									// strip
 								case "src":
-									hrefAttr, _ = utils.SplitByFirstByte(hrefAttr, '?')
 									w.Write([]byte(" src=\""))
 									w.Write([]byte(hrefAttr + "?im=" + base64.RawURLEncoding.EncodeToString([]byte(pathname))))
 									w.Write([]byte{'"'})
@@ -297,21 +325,40 @@ func (s *WebServer) ServeHtml(w http.ResponseWriter, r *http.Request, pathname s
 					}
 				}
 			case "link":
-				if attrs["rel"] == "stylesheet" {
-					if href := attrs["href"]; !isHttpSepcifier(href) {
-						if href == "uno.css" || strings.HasSuffix(href, "/uno.css") {
-							if unocss == "" {
-								href = href + "?ctx=" + base64.RawURLEncoding.EncodeToString([]byte(pathname))
-								w.Write([]byte("<link rel=\"stylesheet\" href=\""))
-								w.Write([]byte(href))
-								w.Write([]byte{'"', '>'})
-								unocss = href
+				href := attrs["href"]
+				if !isHttpSepcifier(href) {
+					href = u.ResolveReference(&url.URL{Path: href}).Path
+					if href == "uno.css" || strings.HasSuffix(href, "/uno.css") {
+						if unocss == "" {
+							href = href + "?ctx=" + base64.RawURLEncoding.EncodeToString([]byte(pathname))
+							w.Write([]byte("<link rel=\"stylesheet\" href=\""))
+							w.Write([]byte(href))
+							w.Write([]byte{'"', '>'})
+							unocss = href
+						}
+						continue
+					} else {
+						cssLinks = append(cssLinks, href)
+					}
+					w.Write([]byte("<link"))
+					for attrKey, attrVal := range attrs {
+						switch attrKey {
+						case "href":
+							w.Write([]byte(" href=\""))
+							w.Write([]byte(href))
+							w.Write([]byte{'"'})
+						default:
+							w.Write([]byte{' '})
+							w.Write([]byte(attrKey))
+							if attrVal != "" {
+								w.Write([]byte{'=', '"'})
+								w.Write([]byte(attrVal))
+								w.Write([]byte{'"'})
 							}
-							continue
-						} else {
-							cssLinks = append(cssLinks, href)
 						}
 					}
+					w.Write([]byte{'>'})
+					continue
 				}
 			}
 		}
@@ -333,10 +380,10 @@ func (s *WebServer) ServeHtml(w http.ResponseWriter, r *http.Request, pathname s
 			fmt.Fprintf(w, `hot.watch("*",(kind,filename)=>{if(/\.(js|mjs|jsx|ts|mts|tsx|vue|svelte)$/i.test(filename)){const link=document.head.querySelector("link[rel=stylesheet][href^='%s']");if(link)link.href="%s&t="+Date.now().toString(36)}});`, unocss, unocss)
 			u := &url.URL{Path: pathname}
 			u = u.ResolveReference(&url.URL{Path: "uno.css"})
-			filename := filepath.Join(s.config.RootDir, u.Path)
+			filename := filepath.Join(s.config.AppDir, u.Path)
 			if _, err := os.Stat(filename); err != nil && os.IsNotExist(err) {
 				u = &url.URL{Path: "/uno.css"}
-				filename = filepath.Join(s.config.RootDir, u.Path)
+				filename = filepath.Join(s.config.AppDir, u.Path)
 			}
 			if _, err := os.Stat(filename); err == nil || os.IsExist(err) {
 				// reload the page when the uno.css file is modified
@@ -357,7 +404,7 @@ func (s *WebServer) ServeModule(w http.ResponseWriter, r *http.Request, pathname
 		http.Error(w, "Bad Request", 400)
 		return
 	}
-	imHtmlFilename := filepath.Join(s.config.RootDir, string(im))
+	imHtmlFilename := filepath.Join(s.config.AppDir, string(im))
 	imHtmlFile, err := os.Open(imHtmlFilename)
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -417,7 +464,7 @@ func (s *WebServer) ServeModule(w http.ResponseWriter, r *http.Request, pathname
 		modTime = sha.Sum64()
 		size = int64(len(sourceCode))
 	} else {
-		fi, err := os.Lstat(filepath.Join(s.config.RootDir, pathname))
+		fi, err := os.Lstat(filepath.Join(s.config.AppDir, pathname))
 		if err != nil {
 			if os.IsNotExist(err) {
 				http.Error(w, "Not Found", 404)
@@ -429,7 +476,7 @@ func (s *WebServer) ServeModule(w http.ResponseWriter, r *http.Request, pathname
 		modTime = uint64(fi.ModTime().UnixMilli())
 		size = fi.Size()
 	}
-	etag := fmt.Sprintf("w/\"%x-%x-%s\"", modTime, size, s.config.Tag)
+	etag := fmt.Sprintf("w/\"%x-%x-v%d\"", modTime, size, VERSION)
 	if r.Header.Get("If-None-Match") == etag && !query.Has("t") {
 		w.WriteHeader(http.StatusNotModified)
 		return
@@ -477,7 +524,7 @@ func (s *WebServer) ServeModule(w http.ResponseWriter, r *http.Request, pathname
 
 func (s *WebServer) ServeCSSModule(w http.ResponseWriter, r *http.Request, pathname string, query url.Values) {
 	ret := esbuild.Build(esbuild.BuildOptions{
-		EntryPoints:      []string{filepath.Join(s.config.RootDir, pathname)},
+		EntryPoints:      []string{filepath.Join(s.config.AppDir, pathname)},
 		Write:            false,
 		MinifyWhitespace: true,
 		MinifySyntax:     true,
@@ -492,7 +539,7 @@ func (s *WebServer) ServeCSSModule(w http.ResponseWriter, r *http.Request, pathn
 	css := bytes.TrimSpace(ret.OutputFiles[0].Contents)
 	sha := xxhash.New()
 	sha.Write(css)
-	etag := fmt.Sprintf("w/\"%x-%s\"", sha.Sum(nil), s.config.Tag)
+	etag := fmt.Sprintf("w/\"%x-v%d\"", sha.Sum(nil), VERSION)
 	if r.Header.Get("If-None-Match") == etag && !query.Has("t") {
 		w.WriteHeader(http.StatusNotModified)
 		return
@@ -523,7 +570,7 @@ func (s *WebServer) ServeUnoCSS(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Bad Request", 400)
 		return
 	}
-	imHtmlFilename := filepath.Join(s.config.RootDir, string(ctx))
+	imHtmlFilename := filepath.Join(s.config.AppDir, string(ctx))
 	imHtmlFile, err := os.Open(imHtmlFilename)
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -594,7 +641,7 @@ func (s *WebServer) ServeUnoCSS(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	configCSS, err := os.ReadFile(filepath.Join(s.config.RootDir, r.URL.Path))
+	configCSS, err := os.ReadFile(filepath.Join(s.config.AppDir, r.URL.Path))
 	if err != nil {
 		if os.IsNotExist(err) {
 			http.Error(w, "Not Found", 404)
@@ -624,7 +671,7 @@ func (s *WebServer) ServeUnoCSS(w http.ResponseWriter, r *http.Request) {
 		contents = append(contents, code)
 		sha.Write(code)
 	}
-	etag := fmt.Sprintf("w/\"%x-%s\"", sha.Sum(nil), s.config.Tag)
+	etag := fmt.Sprintf("w/\"%x-v%d\"", sha.Sum(nil), VERSION)
 	if r.Header.Get("If-None-Match") == etag && !query.Has("t") {
 		w.WriteHeader(http.StatusNotModified)
 		return
@@ -722,7 +769,7 @@ func (s *WebServer) ServeHmrWS(w http.ResponseWriter, r *http.Request) {
 				pathname := msg[6:]
 				if pathname != "" {
 					filename, _ := utils.SplitByFirstByte(pathname, '?')
-					fi, err := os.Lstat(filepath.Join(s.config.RootDir, filename))
+					fi, err := os.Lstat(filepath.Join(s.config.AppDir, filename))
 					if err != nil {
 						if os.IsNotExist(err) {
 							// file not found, watch if it's created
@@ -840,7 +887,7 @@ func (s *WebServer) watchFS() {
 		for conn, watchList := range s.watchData {
 			for pathname, mtime := range watchList {
 				filename, _ := utils.SplitByFirstByte(pathname, '?')
-				fi, err := os.Lstat(filepath.Join(s.config.RootDir, filename))
+				fi, err := os.Lstat(filepath.Join(s.config.AppDir, filename))
 				if err != nil {
 					if os.IsNotExist(err) {
 						if watchList[pathname] > 0 {
@@ -884,13 +931,13 @@ func (s *WebServer) startLoaderWorker() (err error) {
 		return
 	}
 	worker := &LoaderWorker{}
-	err = worker.Start(s.config.RootDir, loaderJs)
+	err = worker.Start(s.config.AppDir, loaderJs)
 	if err != nil {
 		return err
 	}
 	go worker.Load("module", []any{"_.tsx", nil, "", false})
 	go func() {
-		entries, err := os.ReadDir(s.config.RootDir)
+		entries, err := os.ReadDir(s.config.AppDir)
 		if err == nil {
 			for _, entry := range entries {
 				if entry.Type().IsRegular() && entry.Name() == "uno.css" {

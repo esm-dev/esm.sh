@@ -15,18 +15,18 @@ import (
 // Serve a web app.
 func Serve() {
 	port := flag.Int("port", 3000, "port to serve on")
-	rootDir, _ := parseCommandFlag()
+	appDir, _ := parseCommandFlag()
 
 	var err error
-	if rootDir == "" {
-		rootDir, err = os.Getwd()
+	if appDir == "" {
+		appDir, err = os.Getwd()
 	} else {
-		rootDir, err = filepath.Abs(rootDir)
+		appDir, err = filepath.Abs(appDir)
 		if err == nil {
 			var fi os.FileInfo
-			fi, err = os.Stat(rootDir)
+			fi, err = os.Stat(appDir)
 			if err == nil && !fi.IsDir() {
-				err = fmt.Errorf("stat %s: not a directory", rootDir)
+				err = fmt.Errorf("stat %s: not a directory", appDir)
 			}
 		}
 	}
@@ -37,7 +37,7 @@ func Serve() {
 
 	s := &http.Server{
 		Addr:    fmt.Sprintf(":%d", *port),
-		Handler: web.New(web.Config{RootDir: rootDir}),
+		Handler: web.New(web.Config{AppDir: appDir}),
 	}
 	ln, err := net.Listen("tcp", s.Addr)
 	if err != nil {
