@@ -1,4 +1,4 @@
-import { TextLineStream } from "jsr:@std/streams@1.0.7/text-line-stream";
+import { TextLineStream } from "jsr:@std/streams@1.0.9/text-line-stream";
 
 const enc = new TextEncoder();
 const regexpVuePath = /^\/\*?vue@([~\^]?[\w\+\-\.]+)(\/|\?|&|$)/;
@@ -153,11 +153,13 @@ for await (const line of Deno.stdin.readable.pipeThrough(new TextDecoderStream()
         output(lang, code);
         break;
       }
-      case "unocss":
+      case "unocss": {
         output("css", await unocss(...args));
         break;
-      default:
+      }
+      default: {
         output("error", "Unknown loader type: " + type);
+      }
     }
   } catch (e) {
     output("error", e.message);

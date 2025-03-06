@@ -3,6 +3,38 @@ import { contentType } from "jsr:@std/media-types";
 import { join } from "jsr:@std/path";
 
 Deno.test("transform", async (t) => {
+  const modUrl = new URL(import.meta.url);
+  const demoRootDir = join(modUrl.pathname, "../../../cli/demo");
+  const ac = new AbortController();
+
+  Deno.serve({
+    port: 8083,
+    signal: ac.signal,
+  }, async req => {
+    let { pathname } = new URL(req.url);
+    if (pathname.endsWith("/")) {
+      pathname += "index.html";
+    }
+    try {
+      const file = join(demoRootDir, pathname);
+      const f = await Deno.open(file);
+      return new Response(f.readable, {
+        headers: {
+          "Content-Type": contentType(pathname) ?? "application/octet-stream",
+          "User-Agent": "es/2022",
+        },
+      });
+    } catch (e) {
+      if (e instanceof Deno.errors.NotFound) {
+        return new Response("Not Found", { status: 404 });
+      }
+      return new Response("Internal Server Error", { status: 500 });
+    }
+  });
+
+  // wait for the server(8083) to ready
+  await new Promise((resolve) => setTimeout(resolve, 100));
+
   await t.step("transform API", async () => {
     const options = {
       lang: "jsx",
@@ -48,39 +80,7 @@ Deno.test("transform", async (t) => {
     assertEquals(map, transformOut.map);
   });
 
-  const modUrl = new URL(import.meta.url);
-  const demoRootDir = join(modUrl.pathname, "../../../cli/demo");
-  const ac = new AbortController();
-
-  Deno.serve({
-    port: 8083,
-    signal: ac.signal,
-  }, async req => {
-    let { pathname } = new URL(req.url);
-    if (pathname.endsWith("/")) {
-      pathname += "index.html";
-    }
-    try {
-      const file = join(demoRootDir, pathname);
-      const f = await Deno.open(file);
-      return new Response(f.readable, {
-        headers: {
-          "Content-Type": contentType(pathname) ?? "application/octet-stream",
-          "User-Agent": "es/2022",
-        },
-      });
-    } catch (e) {
-      if (e instanceof Deno.errors.NotFound) {
-        return new Response("Not Found", { status: 404 });
-      }
-      return new Response("Internal Server Error", { status: 500 });
-    }
-  });
-
-  // wait for the server(8083) to ready
-  await new Promise((resolve) => setTimeout(resolve, 100));
-
-  await t.step("transform http module: vanilla", async () => {
+  await t.step("transform module: vanilla", async () => {
     const im = btoaUrl("/vanilla/");
     const res = await fetch(`http://localhost:8080/http://localhost:8083/vanilla/app/main.ts?im=${im}`);
     assertEquals(res.status, 200);
@@ -92,7 +92,7 @@ Deno.test("transform", async (t) => {
     assertStringIncludes(js, 'globalThis.document.head.insertAdjacentHTML("beforeend",`<style>*{margin:0;padding:0;box-sizing:border-box}');
   });
 
-  await t.step("transform http module: react", async () => {
+  await t.step("transform module: react", async () => {
     const im = btoaUrl("/react/");
     const res = await fetch(`http://localhost:8080/http://localhost:8083/react/app/main.tsx?im=${im}`);
     assertEquals(res.status, 200);
@@ -104,7 +104,7 @@ Deno.test("transform", async (t) => {
     assertStringIncludes(js, '("h1",{style:{color:"#61DAFB"},children:"esm.sh"})');
   });
 
-  await t.step("transform http module: preact", async () => {
+  await t.step("transform module: preact", async () => {
     const im = btoaUrl("/preact/");
     const res = await fetch(`http://localhost:8080/http://localhost:8083/preact/app/main.tsx?im=${im}`);
     assertEquals(res.status, 200);
@@ -116,7 +116,7 @@ Deno.test("transform", async (t) => {
     assertStringIncludes(js, '("h1",{style:{color:"#673AB8"},children:"esm.sh"})');
   });
 
-  await t.step("transform http module: vue", async () => {
+  await t.step("transform module: vue", async () => {
     {
       const im = btoaUrl("/vue/");
       const res = await fetch(`http://localhost:8080/http://localhost:8083/vue/app/main.ts?im=${im}`);
@@ -151,7 +151,7 @@ Deno.test("transform", async (t) => {
     }
   });
 
-  await t.step("transform http module: svelte", async () => {
+  await t.step("transform module: svelte", async () => {
     {
       const im = btoaUrl("/svelte/");
       const res = await fetch(`http://localhost:8080/http://localhost:8083/svelte/app/main.ts?im=${im}`);
@@ -182,7 +182,7 @@ Deno.test("transform", async (t) => {
     }
   });
 
-  await t.step("transform http module: markdown", async () => {
+  await t.step("transform module: markdown", async () => {
     {
       const im = btoaUrl("/with-markdown/vanilla/");
       const res = await fetch(`http://localhost:8080/http://localhost:8083/with-markdown/vanilla/app/about.md?im=${im}`);

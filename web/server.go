@@ -640,7 +640,7 @@ func (s *WebServer) ServeUnoCSS(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	config := map[string]any{"filename": r.URL.Path, "css": string(configCSS)}
-	_, css, err := s.loaderWorker.Load("unocss", []any{r.URL.Path + r.URL.RawQuery, string(bytes.Join(contents, []byte{'\n'})), config})
+	_, css, err := s.loaderWorker.Load("unocss", []any{r.URL.Path + "?" + r.URL.RawQuery, string(bytes.Join(contents, []byte{'\n'})), config})
 	if err != nil {
 		fmt.Println(term.Red("[error] " + err.Error()))
 		http.Error(w, "Internal Server Error", 500)

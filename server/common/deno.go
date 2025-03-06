@@ -88,11 +88,10 @@ func installDeno(installPath string, version string) (err error) {
 		return fmt.Errorf("failed to download Deno install package: %s", res.Status)
 	}
 
-	tmpDir := os.TempDir()
-	zipFilename := filepath.Join(tmpDir, "deno.zip")
-	defer os.Remove(zipFilename)
+	tmpFile := filepath.Join(os.TempDir(), "deno.zip")
+	defer os.Remove(tmpFile)
 
-	f, err := os.OpenFile(zipFilename, os.O_CREATE|os.O_WRONLY, 0644)
+	f, err := os.OpenFile(tmpFile, os.O_CREATE|os.O_WRONLY, 0644)
 	if err != nil {
 		return
 	}
@@ -103,7 +102,7 @@ func installDeno(installPath string, version string) (err error) {
 		return
 	}
 
-	zr, err := zip.OpenReader(zipFilename)
+	zr, err := zip.OpenReader(tmpFile)
 	if err != nil {
 		return
 	}
