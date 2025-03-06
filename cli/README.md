@@ -31,7 +31,7 @@ Usage: esm.sh [command] <options>
 Commands:
   add, i [...packages]  Alias to 'importmap add'.
   importmap, im         Manage "importmap" script.
-  init                  Create a new web app.
-  serve                 Serve a web app.
+  init                  Create a new web application.
+  serve                 Serve a web application.
   dev                   Serve a web app in development mode.
 ```
