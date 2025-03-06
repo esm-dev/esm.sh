@@ -13,6 +13,7 @@ import (
 	"net/url"
 	"os"
 	"path"
+	"slices"
 	"sort"
 	"strings"
 	"syscall"
@@ -452,12 +453,12 @@ func esmRouter(db Database, buildStorage storage.Storage, logger *log.Logger) re
 				return rex.Status(404, "Not Found")
 			}
 			name := pathname[6:]
-			code, ok := unenvNodeRuntimeBulid[name]
+			js, ok := GetNodeRuntimeJS(name)
 			if !ok {
 				if !nodeBuiltinModules[name] {
 					return rex.Status(404, "Not Found")
 				}
-				code = []byte("export default {}")
+				js = []byte("export default {}")
 			}
 			if strings.HasPrefix(name, "chunk-") {
 				ctx.SetHeader("Cache-Control", ccImmutable)
@@ -470,7 +471,7 @@ func esmRouter(db Database, buildStorage storage.Storage, logger *log.Logger) re
 				ctx.SetHeader("Etag", globalETag)
 			}
 			ctx.SetHeader("Content-Type", ctJavaScript)
-			return code
+			return js
 		}
 
 		// embed assets
@@ -548,7 +549,7 @@ func esmRouter(db Database, buildStorage storage.Storage, logger *log.Logger) re
 				}
 			}
 			extname := path.Ext(modUrl.Path)
-			if !(stringInSlice(moduleExts, extname) || extname == ".vue" || extname == ".svelte" || extname == ".md" || extname == ".css") {
+			if !(slices.Contains(moduleExts, extname) || extname == ".vue" || extname == ".svelte" || extname == ".md" || extname == ".css") {
 				return redirect(ctx, modUrl.String(), true)
 			}
 			target := strings.ToLower(query.Get("target"))
@@ -1636,7 +1637,7 @@ func esmRouter(db Database, buildStorage storage.Storage, logger *log.Logger) re
 		// if the path is `ESMBuild`, return the built js/css content
 		if pathKind == EsmBuild {
 			if esm.SubPath != build.esm.SubPath {
-				buf, recycle := NewBuffer()
+				buf, recycle := newBuffer()
 				defer recycle()
 				fmt.Fprintf(buf, "export * from \"%s\";\n", build.Path())
 				if ret.ExportDefault {
@@ -1712,7 +1713,7 @@ func esmRouter(db Database, buildStorage storage.Storage, logger *log.Logger) re
 			return f // auto closed
 		}
 
-		buf, recycle := NewBuffer()
+		buf, recycle := newBuffer()
 		defer recycle()
 		fmt.Fprintf(buf, "/* esm.sh - %s */\n", esm.Specifier())
 
@@ -1738,7 +1739,7 @@ func esmRouter(db Database, buildStorage storage.Storage, logger *log.Logger) re
 			}
 			ctx.SetHeader("X-ESM-Path", esm)
 			fmt.Fprintf(buf, "export * from \"%s\";\n", esm)
-			if ret.ExportDefault && (len(exports) == 0 || stringInSlice(exports, "default")) {
+			if ret.ExportDefault && (len(exports) == 0 || slices.Contains(exports, "default")) {
 				fmt.Fprintf(buf, "export { default } from \"%s\";\n", esm)
 			}
 			if ret.CJS && len(exports) > 0 {
@@ -1798,7 +1799,7 @@ func redirect(ctx *rex.Context, url string, isMovedPermanently bool) any {
 }
 
 func errorJS(ctx *rex.Context, message string) any {
-	buf, recycle := NewBuffer()
+	buf, recycle := newBuffer()
 	defer recycle()
 	buf.WriteString("/* esm.sh - error */\n")
 	buf.WriteString("throw new Error(")

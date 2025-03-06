@@ -18,12 +18,12 @@ type GitRef struct {
 	Sha string
 }
 
-// list repo refs using `git ls-remote repo`
-func listRepoRefs(repo string) (refs []GitRef, err error) {
+// list refs of a github repository using `git ls-remote repo`
+func listGhRepoRefs(repo string) (refs []GitRef, err error) {
 	return withCache("git ls-remote "+repo, time.Duration(config.NpmQueryCacheTTL)*time.Second, func() ([]GitRef, string, error) {
-		stdout, recycle := NewBuffer()
+		stdout, recycle := newBuffer()
 		defer recycle()
-		errout, recycle := NewBuffer()
+		errout, recycle := newBuffer()
 		defer recycle()
 		cmd := exec.Command("git", "ls-remote", repo)
 		cmd.Stdout = stdout

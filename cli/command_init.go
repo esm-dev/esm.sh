@@ -7,6 +7,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 
 	"github.com/ije/gox/term"
@@ -44,20 +45,20 @@ func Init() {
 
 	if *framework == "" {
 		*framework = term.Select(raw, "Select a framework:", frameworks)
-	} else if !includes(frameworks, *framework) {
+	} else if !slices.Contains(frameworks, *framework) {
 		fmt.Println("Invalid framework: ", *framework)
 		os.Exit(1)
 	}
 
 	if *cssFramework == "" {
 		*cssFramework = term.Select(raw, "Select a CSS framework:", cssFrameworks)
-	} else if !includes(cssFrameworks, *cssFramework) {
+	} else if !slices.Contains(cssFrameworks, *cssFramework) {
 		*cssFramework = cssFrameworks[0]
 	}
 
 	if *lang == "" {
 		*lang = term.Select(raw, "Select a variant:", langVariants)
-	} else if !includes(langVariants, *lang) {
+	} else if !slices.Contains(langVariants, *lang) {
 		*lang = langVariants[0]
 	}
 

@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"path"
+	"slices"
 	"sort"
 	"strings"
 
@@ -788,7 +789,7 @@ func (ctx *BuildContext) resolveExternalModule(specifier string, kind api.Resolv
 	// fetch the latest tag as the version of the repository
 	if dep.GhPrefix && dep.PkgVersion == "" {
 		var refs []GitRef
-		refs, err = listRepoRefs(fmt.Sprintf("https://github.com/%s", dep.PkgName))
+		refs, err = listGhRepoRefs(fmt.Sprintf("https://github.com/%s", dep.PkgName))
 		if err != nil {
 			return
 		}
@@ -1125,7 +1126,7 @@ func (ctx *BuildContext) lexer(entry *BuildEntry) (ret *BuildMeta, cjsExports []
 		}
 		if isESM {
 			ret = &BuildMeta{
-				ExportDefault: stringInSlice(namedExports, "default"),
+				ExportDefault: slices.Contains(namedExports, "default"),
 			}
 			return
 		}

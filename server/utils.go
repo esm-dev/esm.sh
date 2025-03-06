@@ -1,15 +1,11 @@
 package server
 
 import (
-	"bytes"
 	"encoding/base64"
-	"errors"
 	"net/http"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
-	"sync"
 
 	"github.com/ije/gox/valid"
 )
@@ -50,19 +46,6 @@ func isJsIdentifier(s string) bool {
 func endsWith(s string, suffixs ...string) bool {
 	for _, suffix := range suffixs {
 		if strings.HasSuffix(s, suffix) {
-			return true
-		}
-	}
-	return false
-}
-
-// stringInSlice returns true if the given string is included in the given array.
-func stringInSlice(a []string, s string) bool {
-	if len(a) == 0 {
-		return false
-	}
-	for _, v := range a {
-		if v == s {
 			return true
 		}
 	}
@@ -161,17 +144,6 @@ func appendVaryHeader(header http.Header, key string) {
 	}
 }
 
-var bufferPool = sync.Pool{New: func() interface{} { return new(bytes.Buffer) }}
-
-// NewBuffer returns a new buffer from the buffer pool.
-func NewBuffer() (buffer *bytes.Buffer, recycle func()) {
-	buf := bufferPool.Get().(*bytes.Buffer)
-	return buf, func() {
-		buf.Reset()
-		bufferPool.Put(buf)
-	}
-}
-
 // concatBytes concatenates two byte slices.
 func concatBytes(a, b []byte) []byte {
 	al, bl := len(a), len(b)
@@ -185,23 +157,4 @@ func concatBytes(a, b []byte) []byte {
 	copy(c, a)
 	copy(c[al:], b)
 	return c
-}
-
-// run executes the given command and returns the output.
-func run(cmd string, args ...string) (output []byte, err error) {
-	var outBuf bytes.Buffer
-	var errBuf bytes.Buffer
-	c := exec.Command(cmd, args...)
-	c.Dir = os.TempDir()
-	c.Stdout = &outBuf
-	c.Stderr = &errBuf
-	err = c.Run()
-	if err != nil {
-		if errBuf.Len() > 0 {
-			err = errors.New(errBuf.String())
-		}
-		return
-	}
-	output = outBuf.Bytes()
-	return
 }

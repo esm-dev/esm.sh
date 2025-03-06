@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/esm-dev/esm.sh/web"
 	"github.com/ije/gox/term"
 )
 
@@ -34,12 +35,9 @@ func Serve() {
 		return
 	}
 
-	handler := &Server{rootDir: rootDir}
-	go handler.startLoaderWorker()
-
 	s := &http.Server{
 		Addr:    fmt.Sprintf(":%d", *port),
-		Handler: handler,
+		Handler: web.New(web.Config{RootDir: rootDir}),
 	}
 	ln, err := net.Listen("tcp", s.Addr)
 	if err != nil {

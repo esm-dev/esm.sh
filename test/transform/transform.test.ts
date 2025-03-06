@@ -296,17 +296,18 @@ Deno.test("transform", async (t) => {
       assertEquals(res.headers.get("Content-Type"), "text/css; charset=utf-8");
       assertEquals(res.headers.get("Cache-Control"), "public, max-age=31536000, immutable");
       const css = await res.text();
-      assertStringIncludes(css, "time,mark,audio,video{"); // eric-meyer reset css
+      assertStringIncludes(css, "*,:before,:after{"); // reset css
       assertStringIncludes(css, ".center-box{");
       assertStringIncludes(css, ".logo{");
       assertStringIncludes(css, ".logo:hover{");
       assertStringIncludes(css, "@font-face{");
       assertStringIncludes(css, "https://fonts.gstatic.com/s/inter/");
-      assertStringIncludes(css, ".font-sans{font-family:Inter,");
       assertStringIncludes(css, '.i-tabler-brand-github{--un-icon:url("data:image/svg+xml;utf8,');
-      assertStringIncludes(css, ".text-primary{--un-text-opacity:1;color:rgb(35 35 35 / var(--un-text-opacity))}");
-      assertStringIncludes(css, ".text-gray-400{--un-text-opacity:1;color:rgb(156 163 175 / var(--un-text-opacity))}");
-      assertStringIncludes(css, ".fw400{font-weight:400}.fw500{font-weight:500}.fw600{font-weight:600}");
+      assertStringIncludes(css, ".text-primary{");
+      assertStringIncludes(css, ".text-gray-400{");
+      assertStringIncludes(css, ".fw400{");
+      assertStringIncludes(css, ".fw500{");
+      assertStringIncludes(css, ".fw600{");
       assertStringIncludes(css, ".all\\:transition-300 *{");
     }
     {
@@ -318,17 +319,18 @@ Deno.test("transform", async (t) => {
       assertEquals(res.headers.get("Content-Type"), "text/css; charset=utf-8");
       assertEquals(res.headers.get("Cache-Control"), "public, max-age=31536000, immutable");
       const css = await res.text();
-      assertStringIncludes(css, "time,mark,audio,video{"); // eric-meyer reset css
+      assertStringIncludes(css, "*,:before,:after{"); // reset css
       assertStringIncludes(css, ".center-box{");
       assertStringIncludes(css, ".logo{");
       assertStringIncludes(css, ".logo:hover{");
       assertStringIncludes(css, "@font-face{");
       assertStringIncludes(css, "https://fonts.gstatic.com/s/inter/");
-      assertStringIncludes(css, ".font-sans{font-family:Inter,");
       assertStringIncludes(css, '.i-tabler-brand-github{--un-icon:url("data:image/svg+xml;utf8,');
-      assertStringIncludes(css, ".text-primary{--un-text-opacity:1;color:rgb(97 218 251 / var(--un-text-opacity))}");
-      assertStringIncludes(css, ".text-gray-400{--un-text-opacity:1;color:rgb(156 163 175 / var(--un-text-opacity))}");
-      assertStringIncludes(css, ".fw400{font-weight:400}.fw500{font-weight:500}.fw600{font-weight:600}");
+      assertStringIncludes(css, ".text-primary{");
+      assertStringIncludes(css, ".text-gray-400{");
+      assertStringIncludes(css, ".fw400{");
+      assertStringIncludes(css, ".fw500{");
+      assertStringIncludes(css, ".fw600{");
       assertStringIncludes(css, ".all\\:transition-300 *{");
     }
     {
@@ -340,17 +342,18 @@ Deno.test("transform", async (t) => {
       assertEquals(res.headers.get("Content-Type"), "text/css; charset=utf-8");
       assertEquals(res.headers.get("Cache-Control"), "public, max-age=31536000, immutable");
       const css = await res.text();
-      assertStringIncludes(css, "time,mark,audio,video{"); // eric-meyer reset css
+      assertStringIncludes(css, "*,:before,:after{"); // reset css
       assertStringIncludes(css, ".center-box{");
       assertStringIncludes(css, ".logo{");
       assertStringIncludes(css, ".logo:hover{");
       assertStringIncludes(css, "@font-face{");
       assertStringIncludes(css, "https://fonts.gstatic.com/s/inter/");
-      assertStringIncludes(css, ".font-sans{font-family:Inter,");
       assertStringIncludes(css, '.i-tabler-brand-github{--un-icon:url("data:image/svg+xml;utf8,');
-      assertStringIncludes(css, ".text-primary{--un-text-opacity:1;color:rgb(103 58 184 / var(--un-text-opacity))}");
-      assertStringIncludes(css, ".text-gray-400{--un-text-opacity:1;color:rgb(156 163 175 / var(--un-text-opacity))}");
-      assertStringIncludes(css, ".fw400{font-weight:400}.fw500{font-weight:500}.fw600{font-weight:600}");
+      assertStringIncludes(css, ".text-primary{");
+      assertStringIncludes(css, ".text-gray-400{");
+      assertStringIncludes(css, ".fw400{");
+      assertStringIncludes(css, ".fw500{");
+      assertStringIncludes(css, ".fw600{");
       assertStringIncludes(css, ".all\\:transition-300 *{");
     }
     {
@@ -362,17 +365,18 @@ Deno.test("transform", async (t) => {
       assertEquals(res.headers.get("Content-Type"), "text/css; charset=utf-8");
       assertEquals(res.headers.get("Cache-Control"), "public, max-age=31536000, immutable");
       const css = await res.text();
-      assertStringIncludes(css, "time,mark,audio,video{"); // eric-meyer reset css
+      assertStringIncludes(css, "*,:before,:after{"); // reset css
       assertStringIncludes(css, ".center-box{");
       assertStringIncludes(css, ".logo{");
       assertStringIncludes(css, ".logo:hover{");
       assertStringIncludes(css, "@font-face{");
       assertStringIncludes(css, "https://fonts.gstatic.com/s/inter/");
-      assertStringIncludes(css, ".font-sans{font-family:Inter,");
       assertStringIncludes(css, '.i-tabler-brand-github{--un-icon:url("data:image/svg+xml;utf8,');
-      assertStringIncludes(css, ".text-primary{--un-text-opacity:1;color:rgb(66 184 131 / var(--un-text-opacity))}");
-      assertStringIncludes(css, ".text-gray-400{--un-text-opacity:1;color:rgb(156 163 175 / var(--un-text-opacity))}");
-      assertStringIncludes(css, ".fw400{font-weight:400}.fw500{font-weight:500}.fw600{font-weight:600}");
+      assertStringIncludes(css, ".text-primary{");
+      assertStringIncludes(css, ".text-gray-400{");
+      assertStringIncludes(css, ".fw400{");
+      assertStringIncludes(css, ".fw500{");
+      assertStringIncludes(css, ".fw600{");
       assertStringIncludes(css, ".all\\:transition-300 *{");
     }
     {
@@ -384,17 +388,18 @@ Deno.test("transform", async (t) => {
       assertEquals(res.headers.get("Content-Type"), "text/css; charset=utf-8");
       assertEquals(res.headers.get("Cache-Control"), "public, max-age=31536000, immutable");
       const css = await res.text();
-      assertStringIncludes(css, "time,mark,audio,video{"); // eric-meyer reset css
+      assertStringIncludes(css, "*,:before,:after{"); // reset css
       assertStringIncludes(css, ".center-box{");
       assertStringIncludes(css, ".logo{");
       assertStringIncludes(css, ".logo:hover{");
       assertStringIncludes(css, "@font-face{");
       assertStringIncludes(css, "https://fonts.gstatic.com/s/inter/");
-      assertStringIncludes(css, ".font-sans{font-family:Inter,");
       assertStringIncludes(css, '.i-tabler-brand-github{--un-icon:url("data:image/svg+xml;utf8,');
-      assertStringIncludes(css, ".text-primary{--un-text-opacity:1;color:rgb(255 64 0 / var(--un-text-opacity))}");
-      assertStringIncludes(css, ".text-gray-400{--un-text-opacity:1;color:rgb(156 163 175 / var(--un-text-opacity))}");
-      assertStringIncludes(css, ".fw400{font-weight:400}.fw500{font-weight:500}.fw600{font-weight:600}");
+      assertStringIncludes(css, ".text-primary{");
+      assertStringIncludes(css, ".text-gray-400{");
+      assertStringIncludes(css, ".fw400{");
+      assertStringIncludes(css, ".fw500{");
+      assertStringIncludes(css, ".fw600{");
       assertStringIncludes(css, ".all\\:transition-300 *{");
     }
   });

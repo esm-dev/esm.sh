@@ -3,6 +3,7 @@ package server
 import (
 	"fmt"
 	"path"
+	"slices"
 	"sort"
 	"strings"
 
@@ -209,7 +210,7 @@ func resolveBuildArgs(npmrc *NpmRC, installDir string, args *BuildArgs, esm EsmP
 				// fix some edge cases
 				// for example, the package "htm" doesn't declare 'preact' as a dependency explicitly
 				// as a workaround, we check if the package name is in the subPath of the package
-				if esm.SubModuleName != "" && stringInSlice(strings.Split(esm.SubModuleName, "/"), name) {
+				if esm.SubModuleName != "" && slices.Contains(strings.Split(esm.SubModuleName, "/"), name) {
 					depsArg[name] = version
 				}
 			}

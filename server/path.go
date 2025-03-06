@@ -154,7 +154,7 @@ func praseEsmPath(npmrc *NpmRC, pathname string) (esm EsmPath, extraQuery string
 			return
 		}
 		var refs []GitRef
-		refs, err = listRepoRefs(fmt.Sprintf("https://github.com/%s", esm.PkgName))
+		refs, err = listGhRepoRefs(fmt.Sprintf("https://github.com/%s", esm.PkgName))
 		if err != nil {
 			return
 		}

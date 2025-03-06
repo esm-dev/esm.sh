@@ -10,6 +10,7 @@ import (
 	"os"
 	"path"
 	"regexp"
+	"slices"
 	"sort"
 	"strings"
 
@@ -269,7 +270,7 @@ func (ctx *BuildContext) buildModule(analyzeMode bool) (meta *BuildMeta, include
 		if err != nil {
 			return
 		}
-		buffer, recycle := NewBuffer()
+		buffer, recycle := newBuffer()
 		defer recycle()
 		buffer.WriteString("export default ")
 		buffer.Write(jsonData)
@@ -352,7 +353,7 @@ func (ctx *BuildContext) buildModule(analyzeMode bool) (meta *BuildMeta, include
 	if entry.module {
 		entryPoint = entryModuleFilename
 	} else {
-		buf, recycle := NewBuffer()
+		buf, recycle := newBuffer()
 		defer recycle()
 		fmt.Fprintf(buf, `import * as cjsm from "%s";`, entrySpecifier)
 		if len(cjsExports) > 0 {
@@ -1127,7 +1128,7 @@ REBUILD:
 	for _, file := range res.OutputFiles {
 		if strings.HasSuffix(file.Path, ".js") {
 			jsContent := file.Contents
-			header, recycle := NewBuffer()
+			header, recycle := newBuffer()
 			defer recycle()
 			header.WriteString("/* esm.sh - ")
 			if ctx.esm.GhPrefix {
@@ -1303,7 +1304,7 @@ REBUILD:
 									entry := b.resolveEntry(dep)
 									if !entry.module {
 										ret, cjsNamedExports, _, e := b.lexer(&entry)
-										if e == nil && ret.CJS && stringInSlice(cjsNamedExports, "__esModule") {
+										if e == nil && ret.CJS && slices.Contains(cjsNamedExports, "__esModule") {
 											isEsModule[i] = true
 										}
 									}
@@ -1339,7 +1340,7 @@ REBUILD:
 			// apply rewrites
 			jsContent, dropSourceMap := ctx.rewriteJS(jsContent)
 
-			finalJS, recycle := NewBuffer()
+			finalJS, recycle := newBuffer()
 			defer recycle()
 
 			io.Copy(finalJS, header)
@@ -1391,7 +1392,7 @@ REBUILD:
 					copy(fixedMapping[ctx.smOffset:], mapping)
 					sourceMap["mappings"] = string(fixedMapping)
 				}
-				buf, recycle := NewBuffer()
+				buf, recycle := newBuffer()
 				defer recycle()
 				if json.NewEncoder(buf).Encode(sourceMap) == nil {
 					err = ctx.storage.Put(ctx.getSavepath()+".map", buf)

@@ -1,4 +1,4 @@
-package cli
+package web
 
 import (
 	"bufio"
@@ -7,15 +7,14 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
-	"runtime"
 	"strings"
 	"sync"
 	"time"
 
+	"github.com/esm-dev/esm.sh/server/common"
 	"github.com/ije/gox/term"
 	"github.com/ije/gox/utils"
 )
@@ -32,9 +31,10 @@ func (l *LoaderWorker) Start(wd string, loaderJS []byte) (err error) {
 	if err != nil {
 		return
 	}
-	jsPath := filepath.Join(homeDir, ".esm.sh", "run", fmt.Sprintf("loader@%d.js", VERSION))
+
+	jsPath := filepath.Join(homeDir, ".esmd", "run", fmt.Sprintf("loader@%d.js", VERSION))
 	fi, err := os.Stat(jsPath)
-	if (err != nil && os.IsNotExist(err)) || (err == nil && fi.Size() != int64(len(loaderJS))) || debug {
+	if (err != nil && os.IsNotExist(err)) || (err == nil && fi.Size() != int64(len(loaderJS))) || DEBUG {
 		os.MkdirAll(filepath.Dir(jsPath), 0755)
 		err = os.WriteFile(jsPath, loaderJS, 0644)
 		if err != nil {
@@ -42,13 +42,13 @@ func (l *LoaderWorker) Start(wd string, loaderJS []byte) (err error) {
 		}
 	}
 
-	denoPath, err := getDenoPath()
+	denoPath, err := common.GetDenoPath("")
 	if err != nil {
 		err = errors.New("deno not found, please install deno first")
 		return
 	}
 
-	cmd := exec.Command(denoPath, "run", "--no-lock", "-A", jsPath)
+	cmd := exec.Command(denoPath, "run", "--no-config", "--no-lock", "-A", "--quiet", jsPath)
 	cmd.Dir = wd
 	cmd.Stdin, l.stdin = io.Pipe()
 	l.stdout, cmd.Stdout = io.Pipe()
@@ -59,7 +59,7 @@ func (l *LoaderWorker) Start(wd string, loaderJS []byte) (err error) {
 		l.stdout = nil
 	} else {
 		l.outReader = bufio.NewReader(l.stdout)
-		if debug {
+		if DEBUG {
 			denoVersion, _ := exec.Command(denoPath, "-v").Output()
 			fmt.Println(term.Dim(fmt.Sprintf("[debug] loader worker started (runtime: %s)", strings.TrimSpace(string(denoVersion)))))
 		}
@@ -78,7 +78,7 @@ func (l *LoaderWorker) Load(loaderType string, args []any) (lang string, code st
 		return
 	}
 
-	if debug {
+	if DEBUG {
 		start := time.Now()
 		defer func() {
 			fmt.Println(term.Dim(fmt.Sprintf("[debug] load '%s' in %s (loader: %s)", args[0], time.Since(start), loaderType)))
@@ -120,57 +120,4 @@ func (l *LoaderWorker) Load(loaderType string, args []any) (lang string, code st
 			}
 		}
 	}
-}
-
-var lock sync.Mutex
-
-func getDenoPath() (denoPath string, err error) {
-	lock.Lock()
-	defer lock.Unlock()
-
-	denoPath, err = exec.LookPath("deno")
-	if err != nil {
-		fmt.Println("Installing deno...")
-		denoPath, err = installDeno()
-	}
-	return
-}
-
-func installDeno() (string, error) {
-	isWin := runtime.GOOS == "windows"
-	homeDir, err := os.UserHomeDir()
-	if err != nil {
-		return "", err
-	}
-	if !isWin {
-		denoPath := filepath.Join(homeDir, ".deno/bin/deno")
-		fi, err := os.Stat(denoPath)
-		if err == nil && fi.Mode().IsRegular() {
-			return denoPath, nil
-		}
-	}
-	installScriptUrl := "https://deno.land/install.sh"
-	scriptExe := "sh"
-	if isWin {
-		installScriptUrl = "https://deno.land/install.ps1"
-		scriptExe = "iex"
-	}
-	res, err := http.Get(installScriptUrl)
-	if err != nil {
-		return "", err
-	}
-	if res.StatusCode != 200 {
-		return "", errors.New("failed to get latest deno version")
-	}
-	defer res.Body.Close()
-	cmd := exec.Command(scriptExe)
-	cmd.Stdin = res.Body
-	err = cmd.Run()
-	if err != nil {
-		return "", err
-	}
-	if isWin {
-		return exec.LookPath("deno")
-	}
-	return filepath.Join(homeDir, ".deno/bin/deno"), nil
 }

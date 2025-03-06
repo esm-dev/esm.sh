@@ -1,15 +1,33 @@
 package server
 
 import (
-	"sync"
+	"bytes"
 	"time"
 
 	lru "github.com/hashicorp/golang-lru/v2"
-	syncx "github.com/ije/gox/sync"
+	"github.com/ije/gox/sync"
 )
 
+var bufferPool = sync.Pool{New: func() interface{} { return new(bytes.Buffer) }}
+
+// newBuffer returns a new buffer from the buffer pool.
+func newBuffer() (buffer *bytes.Buffer, recycle func()) {
+	buf := bufferPool.Get().(*bytes.Buffer)
+	return buf, func() {
+		buf.Reset()
+		bufferPool.Put(buf)
+	}
+}
+
+var onceMap = sync.Map{}
+
+func doOnce(id string, fn func() error) (err error) {
+	once, _ := onceMap.LoadOrStore(id, &sync.Once{})
+	return once.(*sync.Once).Do(fn)
+}
+
 var (
-	cacheMutex syncx.KeyedMutex
+	cacheMutex sync.KeyedMutex
 	cacheStore sync.Map
 	cacheLRU   *lru.Cache[string, any]
 )

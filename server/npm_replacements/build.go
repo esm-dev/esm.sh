@@ -6,6 +6,7 @@ import (
 	"errors"
 	"regexp"
 	"strings"
+	"sync"
 
 	esbuild "github.com/evanw/esbuild/pkg/api"
 )
@@ -13,7 +14,10 @@ import (
 //go:embed src
 var efs embed.FS
 
-var npmReplacements = map[string]NpmReplacement{}
+var (
+	once            sync.Once
+	npmReplacements = map[string]NpmReplacement{}
+)
 
 type NpmReplacement struct {
 	ESM  []byte
@@ -22,14 +26,17 @@ type NpmReplacement struct {
 
 // Get returns the npm replacement by the given name.
 func Get(name string) (NpmReplacement, bool) {
+	once.Do(func() {
+		build()
+	})
 	ret, ok := npmReplacements[name]
 	return ret, ok
 }
 
 // Build builds the npm replacements.
-func Build() (n int, err error) {
+func build() (err error) {
 	regexpExportAsExpr := regexp.MustCompile(`([\w$]+) as ([\w$]+)`)
-	err = walkEmbedFS("src", func(path string) error {
+	return walkEmbedFS("src", func(path string) error {
 		sourceCode, err := efs.ReadFile(path)
 		if err != nil {
 			return err
@@ -53,10 +60,6 @@ func Build() (n int, err error) {
 		}
 		return nil
 	})
-	if err != nil {
-		return
-	}
-	return len(npmReplacements), nil
 }
 
 // concatBytes concatenates two byte slices.

@@ -2,7 +2,6 @@ package cli
 
 import "embed"
 
-//go:embed internal
 //go:embed demo
 var efs embed.FS
 

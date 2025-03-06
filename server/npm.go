@@ -13,6 +13,7 @@ import (
 	"net/url"
 	"os"
 	"path"
+	"slices"
 	"sort"
 	"strings"
 	"sync"
@@ -731,7 +732,7 @@ func extractPackageTarball(installDir string, pkgName string, tarball io.Reader)
 			continue
 		}
 		extname := path.Ext(filename)
-		if !(extname != "" && (assetExts[extname[1:]] || stringInSlice(moduleExts, extname) || extname == ".map" || extname == ".css" || extname == ".svelte" || extname == ".vue")) {
+		if !(extname != "" && (assetExts[extname[1:]] || slices.Contains(moduleExts, extname) || extname == ".map" || extname == ".css" || extname == ".svelte" || extname == ".vue")) {
 			// ignore unsupported formats
 			continue
 		}

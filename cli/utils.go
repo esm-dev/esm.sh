@@ -8,10 +8,6 @@ import (
 	"golang.org/x/term"
 )
 
-var (
-	moduleExts = []string{".js", ".mjs", ".jsx", ".ts", ".mts", ".tsx", ".svelte", ".vue"}
-)
-
 // termRaw implements the github.com/ije/gox/term.Raw interface.
 type termRaw struct{}
 
@@ -37,31 +33,6 @@ func (t *termRaw) Next() byte {
 	return buf[0]
 }
 
-// isHttpSepcifier returns true if the specifier is a remote URL.
-func isHttpSepcifier(specifier string) bool {
-	return strings.HasPrefix(specifier, "https://") || strings.HasPrefix(specifier, "http://")
-}
-
-// isRelPathSpecifier returns true if the specifier is a local path.
-func isRelPathSpecifier(specifier string) bool {
-	return strings.HasPrefix(specifier, "./") || strings.HasPrefix(specifier, "../")
-}
-
-// isAbsPathSpecifier returns true if the specifier is an absolute path.
-func isAbsPathSpecifier(specifier string) bool {
-	return strings.HasPrefix(specifier, "/") || strings.HasPrefix(specifier, "file://")
-}
-
-// endsWith returns true if the given string ends with any of the suffixes.
-func endsWith(s string, suffixs ...string) bool {
-	for _, suffix := range suffixs {
-		if strings.HasSuffix(s, suffix) {
-			return true
-		}
-	}
-	return false
-}
-
 // parseCommandFlag parses the command flag.
 func parseCommandFlag() (string, []string) {
 	flag.CommandLine.Parse(os.Args[2:])
@@ -83,14 +54,4 @@ func parseCommandFlag() (string, []string) {
 		return "", nil
 	}
 	return args[0], args[1:]
-}
-
-// includes returns true if the given value is included in the array.
-func includes(arr []string, value string) bool {
-	for _, v := range arr {
-		if v == value {
-			return true
-		}
-	}
-	return false
 }

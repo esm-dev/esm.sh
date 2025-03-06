@@ -1,7 +1,7 @@
 // Fast-refresh for React!
 // @see https://github.com/facebook/react/issues/16604#issuecomment-528663101
 
-import RefreshRuntime from "https://esm.sh/react-refresh@0.14.0/runtime";
+import RefreshRuntime from "https://esm.sh/react-refresh@0.16.0/es2022/react-refresh.development.mjs";
 
 let timer;
 

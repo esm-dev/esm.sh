@@ -61,7 +61,7 @@ func transformDTS(ctx *BuildContext, dts string, buildArgsPrefix string, marker 
 	}
 	defer dtsContent.Close()
 
-	buffer, recycle := NewBuffer()
+	buffer, recycle := newBuffer()
 	defer recycle()
 
 	deps := set.New[string]()
