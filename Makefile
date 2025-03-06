@@ -1,19 +1,19 @@
-dev/cli/dev:
+debug/cli/dev:
 	@go run -tags debug main.go dev cli/demo/${app}
 
-dev/cli/serve:
+debug/cli/serve:
 	@go run -tags debug main.go serve cli/demo/${app}
 
-dev/cli/init:
+debug/cli/init:
 	@go run -tags debug main.go init
 
-dev/cli/importmap/add:
-	@go run -tags debug main.go im add ${package}
+debug/cli/add:
+	@go run -tags debug main.go add ${package}
 
-dev/cli/importmap/update:
-	@go run -tags debug main.go im update ${package}
+debug/cli/importmap:
+	@go run -tags debug main.go importmap ${command}
 
-dev/server: config.json
+debug/server: config.json
 	@rm -rf .esmd/log
 	@rm -rf .esmd/storage
 	@rm -rf .esmd/esm.db

@@ -1,7 +1,6 @@
 package cli
 
 import (
-	"embed"
 	"flag"
 	"fmt"
 	"net"
@@ -13,7 +12,7 @@ import (
 )
 
 // Serve a web app in development mode.
-func Dev(efs *embed.FS) {
+func Dev() {
 	port := flag.Int("port", 3000, "port to serve on")
 	rootDir, _ := parseCommandFlag()
 
@@ -35,7 +34,7 @@ func Dev(efs *embed.FS) {
 		return
 	}
 
-	handler := &Server{dev: true, efs: efs, rootDir: rootDir}
+	handler := &Server{dev: true, rootDir: rootDir}
 	go handler.startLoaderWorker()
 
 	s := &http.Server{

@@ -1,7 +1,6 @@
 package main
 
 import (
-	"embed"
 	"fmt"
 	"os"
 
@@ -20,10 +19,6 @@ Commands:
 	dev									  Serve a web app in development mode.
 `
 
-//go:embed cli/internal
-//go:embed cli/demo
-var fs embed.FS
-
 func main() {
 	if len(os.Args) < 2 {
 		fmt.Print(helpMessage)
@@ -35,11 +30,11 @@ func main() {
 	case "importmap", "im":
 		cli.ManageImportMap("")
 	case "init":
-		cli.Init(&fs)
+		cli.Init()
 	case "serve":
-		cli.Serve(&fs)
+		cli.Serve()
 	case "dev":
-		cli.Dev(&fs)
+		cli.Dev()
 	default:
 		fmt.Print(helpMessage)
 	}

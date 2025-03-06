@@ -1,7 +1,6 @@
 package cli
 
 import (
-	"embed"
 	"flag"
 	"fmt"
 	"net"
@@ -13,7 +12,7 @@ import (
 )
 
 // Serve a web app.
-func Serve(efs *embed.FS) {
+func Serve() {
 	port := flag.Int("port", 3000, "port to serve on")
 	rootDir, _ := parseCommandFlag()
 
@@ -35,7 +34,7 @@ func Serve(efs *embed.FS) {
 		return
 	}
 
-	handler := &Server{efs: efs, rootDir: rootDir}
+	handler := &Server{rootDir: rootDir}
 	go handler.startLoaderWorker()
 
 	s := &http.Server{

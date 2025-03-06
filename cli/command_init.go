@@ -2,7 +2,6 @@ package cli
 
 import (
 	"bytes"
-	"embed"
 	"flag"
 	"fmt"
 	"io"
@@ -32,7 +31,7 @@ var langVariants = []string{
 }
 
 // Create a new nobuild web app with esm.sh CDN.
-func Init(fs *embed.FS) {
+func Init() {
 	framework := flag.String("framework", "", "javascript framework")
 	cssFramework := flag.String("css-framework", "", "CSS framework")
 	lang := flag.String("lang", "", "language")
@@ -70,16 +69,16 @@ func Init(fs *embed.FS) {
 		}
 	}
 
-	dir := "cli/demo/" + strings.ToLower(*framework)
+	dir := "demo/" + strings.ToLower(*framework)
 	if *cssFramework == "UnoCSS" {
-		dir = "cli/demo/with-unocss/" + strings.ToLower(*framework)
+		dir = "demo/with-unocss/" + strings.ToLower(*framework)
 	}
-	err = walkEmbedFS(fs, dir, func(filename string) error {
+	err = walkEmbedFS(dir, func(filename string) error {
 		savePath := projectName + strings.TrimPrefix(filename, dir)
 		os.MkdirAll(filepath.Dir(savePath), 0755)
 		if *lang == "JavaScript" {
 			if (strings.HasSuffix(savePath, ".ts") || strings.HasSuffix(savePath, ".tsx")) && !strings.HasSuffix(savePath, ".d.ts") {
-				data, err := fs.ReadFile(filename)
+				data, err := efs.ReadFile(filename)
 				if err != nil {
 					return err
 				}
@@ -93,7 +92,7 @@ func Init(fs *embed.FS) {
 				data = bytes.ReplaceAll(data, []byte(".tsx\""), []byte(".jsx\""))
 				return os.WriteFile(savePath, data, 0644)
 			} else if strings.HasSuffix(savePath, ".html") {
-				data, err := fs.ReadFile(filename)
+				data, err := efs.ReadFile(filename)
 				if err != nil {
 					return err
 				}
@@ -101,7 +100,7 @@ func Init(fs *embed.FS) {
 				data = bytes.ReplaceAll(data, []byte(".tsx\""), []byte(".jsx\""))
 				return os.WriteFile(savePath, data, 0644)
 			} else if strings.HasSuffix(savePath, ".vue") || strings.HasSuffix(savePath, ".svelte") {
-				data, err := fs.ReadFile(filename)
+				data, err := efs.ReadFile(filename)
 				if err != nil {
 					return err
 				}
@@ -109,7 +108,7 @@ func Init(fs *embed.FS) {
 				return os.WriteFile(savePath, data, 0644)
 			}
 		}
-		f, err := fs.Open(filename)
+		f, err := efs.Open(filename)
 		if err != nil {
 			return err
 		}
@@ -139,25 +138,4 @@ func Init(fs *embed.FS) {
 		fmt.Println(" && esm.sh serve")
 	}
 	fmt.Println(" ")
-}
-
-func walkEmbedFS(fs *embed.FS, dir string, cb func(filename string) error) error {
-	entries, err := fs.ReadDir(dir)
-	if err != nil {
-		return err
-	}
-	for _, entry := range entries {
-		if entry.IsDir() {
-			err = walkEmbedFS(fs, dir+"/"+entry.Name(), cb)
-			if err != nil {
-				return err
-			}
-		} else {
-			err = cb(dir + "/" + entry.Name())
-			if err != nil {
-				return err
-			}
-		}
-	}
-	return nil
 }

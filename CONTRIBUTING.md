@@ -30,10 +30,10 @@ Create a `config.json` file in the project root directory following the example 
 
 More server options please check [config.exmaple.jsonc](./config.example.jsonc).
 
-## Running the Server from Source Code
+## Running the Server in Debug Mode
 
 ```bash
-make dev/server
+make debug/server
 ```
 
 Then you can import `React` from "http://localhost:8080/react"

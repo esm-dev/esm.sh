@@ -2,7 +2,6 @@ package cli
 
 import (
 	"bytes"
-	"embed"
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
@@ -29,7 +28,6 @@ import (
 
 type Server struct {
 	dev              bool
-	efs              *embed.FS
 	rootDir          string
 	watchData        map[*websocket.Conn]map[string]int64
 	watchDataMapLock sync.RWMutex
@@ -642,7 +640,7 @@ func (s *Server) ServeUnoCSS(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) ServeInternalJS(w http.ResponseWriter, r *http.Request, name string) {
-	data, err := s.efs.ReadFile("cli/internal/" + name + ".js")
+	data, err := efs.ReadFile("internal/" + name + ".js")
 	if err != nil {
 		http.Error(w, "Internal Server Error", 500)
 		return
@@ -851,7 +849,7 @@ func (s *Server) startLoaderWorker() (err error) {
 	if s.loaderWorker != nil {
 		return nil
 	}
-	loaderJs, err := s.efs.ReadFile("cli/internal/loader.js")
+	loaderJs, err := efs.ReadFile("internal/loader.js")
 	if err != nil {
 		return
 	}
