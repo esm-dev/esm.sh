@@ -37,7 +37,7 @@ func Dev() {
 
 	s := &http.Server{
 		Addr:    fmt.Sprintf(":%d", *port),
-		Handler: web.New(web.Config{AppDir: appDir, Dev: true}),
+		Handler: web.NewHandler(web.Config{AppDir: appDir, Dev: true}),
 	}
 	ln, err := net.Listen("tcp", s.Addr)
 	if err != nil {

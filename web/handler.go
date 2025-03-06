@@ -32,7 +32,7 @@ type Config struct {
 	Dev      bool
 }
 
-type WebServer struct {
+type Handler struct {
 	config           *Config
 	loaderWorker     *LoaderWorker
 	loaderCache      sync.Map
@@ -40,14 +40,14 @@ type WebServer struct {
 	watchData        map[*websocket.Conn]map[string]int64
 }
 
-func New(config Config) *WebServer {
+func NewHandler(config Config) *Handler {
 	if config.AppDir == "" {
 		config.AppDir, _ = os.Getwd()
 	}
 	if config.Fallback == "" {
 		config.Fallback = "/index.html"
 	}
-	s := &WebServer{config: &config}
+	s := &Handler{config: &config}
 	go func() {
 		err := s.startLoaderWorker()
 		if err != nil {
@@ -57,7 +57,7 @@ func New(config Config) *WebServer {
 	return s
 }
 
-func (s *WebServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+func (s *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	pathname := r.URL.Path
 	switch pathname {
 	case "/@hmr", "/@refresh", "/@prefresh", "/@vdr":
@@ -214,7 +214,7 @@ func (s *WebServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func (s *WebServer) ServeHtml(w http.ResponseWriter, r *http.Request, pathname string) {
+func (s *Handler) ServeHtml(w http.ResponseWriter, r *http.Request, pathname string) {
 	htmlFile, err := os.Open(filepath.Join(s.config.AppDir, pathname))
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -397,7 +397,7 @@ func (s *WebServer) ServeHtml(w http.ResponseWriter, r *http.Request, pathname s
 	}
 }
 
-func (s *WebServer) ServeModule(w http.ResponseWriter, r *http.Request, pathname string, sourceCode []byte) {
+func (s *Handler) ServeModule(w http.ResponseWriter, r *http.Request, pathname string, sourceCode []byte) {
 	query := r.URL.Query()
 	im, err := base64.RawURLEncoding.DecodeString(query.Get("im"))
 	if err != nil {
@@ -522,7 +522,7 @@ func (s *WebServer) ServeModule(w http.ResponseWriter, r *http.Request, pathname
 	w.Write([]byte(js))
 }
 
-func (s *WebServer) ServeCSSModule(w http.ResponseWriter, r *http.Request, pathname string, query url.Values) {
+func (s *Handler) ServeCSSModule(w http.ResponseWriter, r *http.Request, pathname string, query url.Values) {
 	ret := esbuild.Build(esbuild.BuildOptions{
 		EntryPoints:      []string{filepath.Join(s.config.AppDir, pathname)},
 		Write:            false,
@@ -563,7 +563,7 @@ func (s *WebServer) ServeCSSModule(w http.ResponseWriter, r *http.Request, pathn
 	w.Write([]byte(`export default CSS;`))
 }
 
-func (s *WebServer) ServeUnoCSS(w http.ResponseWriter, r *http.Request) {
+func (s *Handler) ServeUnoCSS(w http.ResponseWriter, r *http.Request) {
 	query := r.URL.Query()
 	ctx, err := base64.RawURLEncoding.DecodeString(query.Get("ctx"))
 	if err != nil {
@@ -714,7 +714,7 @@ func (s *WebServer) ServeUnoCSS(w http.ResponseWriter, r *http.Request) {
 	w.Write([]byte(css))
 }
 
-func (s *WebServer) ServeInternalJS(w http.ResponseWriter, r *http.Request, name string) {
+func (s *Handler) ServeInternalJS(w http.ResponseWriter, r *http.Request, name string) {
 	data, err := efs.ReadFile("internal/" + name + ".js")
 	if err != nil {
 		http.Error(w, "Internal Server Error", 500)
@@ -734,7 +734,7 @@ func (s *WebServer) ServeInternalJS(w http.ResponseWriter, r *http.Request, name
 	w.Write(data)
 }
 
-func (s *WebServer) ServeHmrWS(w http.ResponseWriter, r *http.Request) {
+func (s *Handler) ServeHmrWS(w http.ResponseWriter, r *http.Request) {
 	if r.Header.Get("Upgrade") != "websocket" {
 		http.Error(w, "Bad Request", 400)
 		return
@@ -786,7 +786,7 @@ func (s *WebServer) ServeHmrWS(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func (s *WebServer) analyzeDependencyTree(entry string, importMap common.ImportMap) (tree map[string][]byte, err error) {
+func (s *Handler) analyzeDependencyTree(entry string, importMap common.ImportMap) (tree map[string][]byte, err error) {
 	tree = make(map[string][]byte)
 	ret := esbuild.Build(esbuild.BuildOptions{
 		EntryPoints:      []string{entry},
@@ -880,7 +880,7 @@ func (s *WebServer) analyzeDependencyTree(entry string, importMap common.ImportM
 	return
 }
 
-func (s *WebServer) watchFS() {
+func (s *Handler) watchFS() {
 	for {
 		time.Sleep(100 * time.Millisecond)
 		s.watchDataMapLock.RLock()
@@ -912,7 +912,7 @@ func (s *WebServer) watchFS() {
 	}
 }
 
-func (s *WebServer) purgeLoaderCache(filename string) {
+func (s *Handler) purgeLoaderCache(filename string) {
 	s.loaderCache.Delete(fmt.Sprintf("module-%s", filename))
 	s.loaderCache.Delete(fmt.Sprintf("module-%s.etag", filename))
 	if strings.HasSuffix(filename, ".vue") || strings.HasSuffix(filename, ".svelte") {
@@ -922,7 +922,7 @@ func (s *WebServer) purgeLoaderCache(filename string) {
 	}
 }
 
-func (s *WebServer) startLoaderWorker() (err error) {
+func (s *Handler) startLoaderWorker() (err error) {
 	if s.loaderWorker != nil {
 		return nil
 	}
