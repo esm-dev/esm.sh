@@ -14,15 +14,15 @@ require (
 	github.com/yuin/goldmark v1.7.8
 	github.com/yuin/goldmark-meta v1.1.0
 	go.etcd.io/bbolt v1.4.0
-	golang.org/x/net v0.35.0
-	golang.org/x/term v0.29.0
+	golang.org/x/net v0.37.0
+	golang.org/x/term v0.30.0
 )
 
 require (
 	github.com/andybalholm/brotli v1.1.1 // indirect
 	github.com/rs/cors v1.11.1 // indirect
-	golang.org/x/crypto v0.34.0 // indirect
-	golang.org/x/sys v0.30.0 // indirect
-	golang.org/x/text v0.22.0 // indirect
+	golang.org/x/crypto v0.36.0 // indirect
+	golang.org/x/sys v0.31.0 // indirect
+	golang.org/x/text v0.23.0 // indirect
 	gopkg.in/yaml.v2 v2.4.0 // indirect
 )
