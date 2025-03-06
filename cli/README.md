@@ -29,9 +29,9 @@ $ esm.sh --help
 Usage: esm.sh [command] <options>
 
 Commands:
-  i, add [...pakcage]   Alias to 'esm.sh im add'.
-  im, importmap         Manage "importmap" script.
-  init                  Create a new nobuild web app with esm.sh CDN.
-  serve                 Serve a nobuild web app with esm.sh CDN, HMR, transforming TS/Vue/Svelte on the fly.
-  build                 Build a nobuild web app with esm.sh CDN.
+  add, i [...packages]  Alias to 'importmap add'.
+  importmap, im         Manage "importmap" script.
+  init                  Create a new web app.
+  serve                 Serve a web app.
+  dev                   Serve a web app in development mode.
 ```

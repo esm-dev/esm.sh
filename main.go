@@ -16,7 +16,7 @@ Commands:
   importmap, im         Manage "importmap" script.
   init                  Create a new web app.
   serve                 Serve a web app.
-	dev									  Serve a web app in development mode.
+  dev                   Serve a web app in development mode.
 `
 
 func main() {
