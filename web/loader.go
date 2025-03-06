@@ -32,14 +32,11 @@ func (l *LoaderWorker) Start(wd string, loaderJS []byte) (err error) {
 		return
 	}
 
-	jsPath := filepath.Join(homeDir, ".esmd", "run", fmt.Sprintf("loader@%d.js", VERSION))
-	fi, err := os.Stat(jsPath)
-	if (err != nil && os.IsNotExist(err)) || (err == nil && fi.Size() != int64(len(loaderJS))) || DEBUG {
-		os.MkdirAll(filepath.Dir(jsPath), 0755)
-		err = os.WriteFile(jsPath, loaderJS, 0644)
-		if err != nil {
-			return
-		}
+	jsPath := filepath.Join(homeDir, ".esmd/bin/loader.mjs")
+	os.MkdirAll(filepath.Dir(jsPath), 0755)
+	err = os.WriteFile(jsPath, loaderJS, 0644)
+	if err != nil {
+		return
 	}
 
 	denoPath, err := common.GetDenoPath("")

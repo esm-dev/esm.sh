@@ -28,6 +28,7 @@ import (
 
 type Config struct {
 	RootDir string
+	Tag     string
 	Dev     bool
 }
 
@@ -42,6 +43,9 @@ type WebServer struct {
 func New(config Config) *WebServer {
 	if config.RootDir == "" {
 		config.RootDir, _ = os.Getwd()
+	}
+	if config.Tag == "" {
+		config.Tag = fmt.Sprintf("v%d", VERSION)
 	}
 	s := &WebServer{config: &config}
 	go func() {
@@ -98,7 +102,7 @@ func (s *WebServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 		switch extname := filepath.Ext(filename); extname {
 		case ".html":
-			etag := fmt.Sprintf("w/\"%d-%d-%d\"", fi.ModTime().UnixMilli(), fi.Size(), VERSION)
+			etag := fmt.Sprintf("w/\"%x-%x-%s\"", fi.ModTime().UnixMilli(), fi.Size(), s.config.Tag)
 			if r.Header.Get("If-None-Match") == etag {
 				w.WriteHeader(http.StatusNotModified)
 				return
@@ -125,7 +129,7 @@ func (s *WebServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			}
 			fallthrough
 		case ".md":
-			if extname == ".md" && !query.Has("raw") {
+			if !query.Has("raw") {
 				markdown, err := os.ReadFile(filename)
 				if err != nil {
 					http.Error(w, "Internal Server Error", 500)
@@ -158,7 +162,7 @@ func (s *WebServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 						http.Error(w, "Failed to render markdown", 500)
 						return
 					}
-					etag := fmt.Sprintf("w/\"%d-%d-%d\"", fi.ModTime().UnixMilli(), fi.Size(), VERSION)
+					etag := fmt.Sprintf("w/\"%x-%x-%s\"", fi.ModTime().UnixMilli(), fi.Size(), s.config.Tag)
 					if r.Header.Get("If-None-Match") == etag && !query.Has("t") {
 						w.WriteHeader(http.StatusNotModified)
 						return
@@ -179,7 +183,7 @@ func (s *WebServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			}
 			fallthrough
 		default:
-			etag := fmt.Sprintf("w/\"%d-%d-%d\"", fi.ModTime().UnixMilli(), fi.Size(), VERSION)
+			etag := fmt.Sprintf("w/\"%x-%x\"", fi.ModTime().UnixMilli(), fi.Size())
 			if r.Header.Get("If-None-Match") == etag && !query.Has("t") {
 				w.WriteHeader(http.StatusNotModified)
 				return
@@ -254,7 +258,7 @@ func (s *WebServer) ServeHtml(w http.ResponseWriter, r *http.Request, pathname s
 				hrefAttr := attrs["href"]
 				// replace `<script src="https://esm.sh/x" href="..."></script>`
 				// with `<script type="module" src="..."></script>`
-				if hrefAttr != "" && (strings.HasPrefix(srcAttr, "https://") || strings.HasPrefix(srcAttr, "http://")) {
+				if hrefAttr != "" && isHttpSepcifier(srcAttr) {
 					if srcUrl, parseErr := url.Parse(srcAttr); parseErr == nil && srcUrl.Path == "/x" {
 						hrefAttr, _ = utils.SplitByFirstByte(hrefAttr, '?')
 						if hrefAttr == "uno.css" || strings.HasSuffix(hrefAttr, "/uno.css") {
@@ -294,8 +298,19 @@ func (s *WebServer) ServeHtml(w http.ResponseWriter, r *http.Request, pathname s
 				}
 			case "link":
 				if attrs["rel"] == "stylesheet" {
-					if src := attrs["href"]; isAbsPathSpecifier(src) || isRelPathSpecifier(src) {
-						cssLinks = append(cssLinks, src)
+					if href := attrs["href"]; !isHttpSepcifier(href) {
+						if href == "uno.css" || strings.HasSuffix(href, "/uno.css") {
+							if unocss == "" {
+								href = href + "?ctx=" + base64.RawURLEncoding.EncodeToString([]byte(pathname))
+								w.Write([]byte("<link rel=\"stylesheet\" href=\""))
+								w.Write([]byte(href))
+								w.Write([]byte{'"', '>'})
+								unocss = href
+							}
+							continue
+						} else {
+							cssLinks = append(cssLinks, href)
+						}
 					}
 				}
 			}
@@ -414,12 +429,7 @@ func (s *WebServer) ServeModule(w http.ResponseWriter, r *http.Request, pathname
 		modTime = uint64(fi.ModTime().UnixMilli())
 		size = fi.Size()
 	}
-	sha := xxhash.New()
-	if json.NewEncoder(sha).Encode(importMap) != nil {
-		http.Error(w, "Internal Server Error", 500)
-		return
-	}
-	etag := fmt.Sprintf("w/\"%d-%d-%d-%x\"", modTime, size, VERSION, sha.Sum(nil))
+	etag := fmt.Sprintf("w/\"%x-%x-%s\"", modTime, size, s.config.Tag)
 	if r.Header.Get("If-None-Match") == etag && !query.Has("t") {
 		w.WriteHeader(http.StatusNotModified)
 		return
@@ -482,7 +492,7 @@ func (s *WebServer) ServeCSSModule(w http.ResponseWriter, r *http.Request, pathn
 	css := bytes.TrimSpace(ret.OutputFiles[0].Contents)
 	sha := xxhash.New()
 	sha.Write(css)
-	etag := fmt.Sprintf("w/\"%x-%d\"", sha.Sum(nil), VERSION)
+	etag := fmt.Sprintf("w/\"%x-%s\"", sha.Sum(nil), s.config.Tag)
 	if r.Header.Get("If-None-Match") == etag && !query.Has("t") {
 		w.WriteHeader(http.StatusNotModified)
 		return
@@ -602,8 +612,8 @@ func (s *WebServer) ServeUnoCSS(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	}
-	xh := xxhash.New()
-	xh.Write([]byte(configCSS))
+	sha := xxhash.New()
+	sha.Write([]byte(configCSS))
 	keys := make([]string, 0, len(tree))
 	for k := range tree {
 		keys = append(keys, k)
@@ -612,9 +622,9 @@ func (s *WebServer) ServeUnoCSS(w http.ResponseWriter, r *http.Request) {
 	for _, k := range keys {
 		code := tree[k]
 		contents = append(contents, code)
-		xh.Write(code)
+		sha.Write(code)
 	}
-	etag := fmt.Sprintf("w\"%x\"", xh.Sum(nil))
+	etag := fmt.Sprintf("w/\"%x-%s\"", sha.Sum(nil), s.config.Tag)
 	if r.Header.Get("If-None-Match") == etag && !query.Has("t") {
 		w.WriteHeader(http.StatusNotModified)
 		return
@@ -663,7 +673,9 @@ func (s *WebServer) ServeInternalJS(w http.ResponseWriter, r *http.Request, name
 		http.Error(w, "Internal Server Error", 500)
 		return
 	}
-	etag := fmt.Sprintf("w/\"%d\"", VERSION)
+	sha := xxhash.New()
+	sha.Write(data)
+	etag := fmt.Sprintf("w/\"%x\"", sha.Sum(nil))
 	if r.Header.Get("If-None-Match") == etag {
 		w.WriteHeader(http.StatusNotModified)
 		return

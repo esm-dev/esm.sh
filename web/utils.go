@@ -1,10 +1,6 @@
 package web
 
 import (
-	"bytes"
-	"errors"
-	"os"
-	"os/exec"
 	"strings"
 )
 
@@ -35,23 +31,4 @@ func endsWith(s string, suffixs ...string) bool {
 		}
 	}
 	return false
-}
-
-// run executes the given command and returns the output.
-func run(cmd string, args ...string) (output []byte, err error) {
-	var outBuf bytes.Buffer
-	var errBuf bytes.Buffer
-	c := exec.Command(cmd, args...)
-	c.Dir = os.TempDir()
-	c.Stdout = &outBuf
-	c.Stderr = &errBuf
-	err = c.Run()
-	if err != nil {
-		if errBuf.Len() > 0 {
-			err = errors.New(errBuf.String())
-		}
-		return
-	}
-	output = outBuf.Bytes()
-	return
 }
