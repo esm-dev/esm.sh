@@ -34,6 +34,7 @@ type Config struct {
 
 type Handler struct {
 	config           *Config
+	etagSuffix       string
 	loaderWorker     *LoaderWorker
 	loaderCache      sync.Map
 	watchDataMapLock sync.RWMutex
@@ -44,10 +45,11 @@ func NewHandler(config Config) *Handler {
 	if config.AppDir == "" {
 		config.AppDir, _ = os.Getwd()
 	}
-	if config.Fallback == "" {
-		config.Fallback = "/index.html"
-	}
 	s := &Handler{config: &config}
+	s.etagSuffix = fmt.Sprintf("-v%d", VERSION)
+	if s.config.Dev {
+		s.etagSuffix += "-dev"
+	}
 	go func() {
 		err := s.startLoaderWorker()
 		if err != nil {
@@ -81,9 +83,20 @@ func (s *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			fi, err = os.Lstat(filename)
 		}
 		if err != nil && os.IsNotExist(err) {
-			pathname = s.config.Fallback
-			filename = filepath.Join(s.config.AppDir, pathname)
-			fi, err = os.Lstat(filename)
+			if s.config.Fallback != "" {
+				pathname = "/" + strings.TrimPrefix(s.config.Fallback, "/")
+				filename = filepath.Join(s.config.AppDir, pathname)
+				fi, err = os.Lstat(filename)
+			} else {
+				pathname = "/404.html"
+				filename = filepath.Join(s.config.AppDir, pathname)
+				fi, err = os.Lstat(filename)
+				if err != nil && os.IsNotExist(err) {
+					pathname = "/index.html"
+					filename = filepath.Join(s.config.AppDir, pathname)
+					fi, err = os.Lstat(filename)
+				}
+			}
 		}
 		if err != nil {
 			if os.IsNotExist(err) {
@@ -107,7 +120,7 @@ func (s *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 		switch extname := filepath.Ext(filename); extname {
 		case ".html":
-			etag := fmt.Sprintf("w/\"%x-%x-v%d\"", fi.ModTime().UnixMilli(), fi.Size(), VERSION)
+			etag := fmt.Sprintf("w/\"%x-%x%s\"", fi.ModTime().UnixMilli(), fi.Size(), s.etagSuffix)
 			if r.Header.Get("If-None-Match") == etag {
 				w.WriteHeader(http.StatusNotModified)
 				return
@@ -167,7 +180,7 @@ func (s *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 						http.Error(w, "Failed to render markdown", 500)
 						return
 					}
-					etag := fmt.Sprintf("w/\"%x-%x-v%d\"", fi.ModTime().UnixMilli(), fi.Size(), VERSION)
+					etag := fmt.Sprintf("w/\"%x-%x%s\"", fi.ModTime().UnixMilli(), fi.Size(), s.etagSuffix)
 					if r.Header.Get("If-None-Match") == etag && !query.Has("t") {
 						w.WriteHeader(http.StatusNotModified)
 						return
@@ -228,7 +241,7 @@ func (s *Handler) ServeHtml(w http.ResponseWriter, r *http.Request, pathname str
 
 	u := url.URL{Path: pathname}
 	tokenizer := html.NewTokenizer(htmlFile)
-	cssLinks := []string{}
+	hotLinks := []string{}
 	unocss := ""
 	overriding := ""
 
@@ -325,6 +338,7 @@ func (s *Handler) ServeHtml(w http.ResponseWriter, r *http.Request, pathname str
 					}
 				}
 			case "link":
+				rel := attrs["rel"]
 				href := attrs["href"]
 				if !isHttpSepcifier(href) {
 					href = u.ResolveReference(&url.URL{Path: href}).Path
@@ -337,8 +351,8 @@ func (s *Handler) ServeHtml(w http.ResponseWriter, r *http.Request, pathname str
 							unocss = href
 						}
 						continue
-					} else {
-						cssLinks = append(cssLinks, href)
+					} else if rel == "stylesheet" || rel == "icon" {
+						hotLinks = append(hotLinks, href)
 					}
 					w.Write([]byte("<link"))
 					for attrKey, attrVal := range attrs {
@@ -366,31 +380,33 @@ func (s *Handler) ServeHtml(w http.ResponseWriter, r *http.Request, pathname str
 	}
 	if s.config.Dev {
 		// reload the page when the html file is modified
-		fmt.Fprintf(w, `<script type="module">import createHotContext from"/@hmr";const hot=createHotContext("%s");hot.watch(()=>location.reload());`, pathname)
-		// reload the page when the css file is modified
-		if len(cssLinks) > 0 {
-			for _, cssLink := range cssLinks {
-				u := &url.URL{Path: pathname}
-				u = u.ResolveReference(&url.URL{Path: cssLink})
-				fmt.Fprintf(w, `const linkEl=document.querySelector('link[rel="stylesheet"][href="%s"]');hot.watch("%s",(kind,filename)=>{if(kind==="modify")linkEl.href=filename+"?t="+Date.now().toString(36)});`, cssLink, u.Path)
+		w.Write([]byte(`<script type="module">import createHotContext from"/@hmr";const hot=createHotContext("`))
+		w.Write([]byte(pathname))
+		w.Write([]byte(`"),$=p=>document.querySelector(p);hot.watch(()=>location.reload());`))
+		// reload icon/style links when the file is modified
+		if len(hotLinks) > 0 {
+			w.Write([]byte("for(const href of ["))
+			for i, href := range hotLinks {
+				if i > 0 {
+					w.Write([]byte(","))
+				}
+				w.Write([]byte{'"'})
+				w.Write([]byte(href))
+				w.Write([]byte{'"'})
 			}
+			w.Write([]byte(`]){const el=$("link[href='"+href+"']");hot.watch(href,kind=>{if(kind==="modify")el.href=href+"?t="+Date.now().toString(36)})}`))
 		}
 		// reload the unocss when the module dependency tree is changed
 		if unocss != "" {
-			fmt.Fprintf(w, `hot.watch("*",(kind,filename)=>{if(/\.(js|mjs|jsx|ts|mts|tsx|vue|svelte)$/i.test(filename)){const link=document.head.querySelector("link[rel=stylesheet][href^='%s']");if(link)link.href="%s&t="+Date.now().toString(36)}});`, unocss, unocss)
-			u := &url.URL{Path: pathname}
-			u = u.ResolveReference(&url.URL{Path: "uno.css"})
-			filename := filepath.Join(s.config.AppDir, u.Path)
-			if _, err := os.Stat(filename); err != nil && os.IsNotExist(err) {
-				u = &url.URL{Path: "/uno.css"}
-				filename = filepath.Join(s.config.AppDir, u.Path)
-			}
-			if _, err := os.Stat(filename); err == nil || os.IsExist(err) {
-				// reload the page when the uno.css file is modified
-				w.Write([]byte("hot.watch(\""))
-				w.Write([]byte(u.Path))
-				w.Write([]byte("\",()=>location.reload());"))
-			}
+			w.Write([]byte(`const uno="`))
+			w.Write([]byte(unocss))
+			w.Write([]byte(`",unoEl=$("link[href='"+uno+"']");`))
+			w.Write([]byte(`hot.watch("*",(kind,filename)=>{if(/\.(js|mjs|jsx|ts|mts|tsx|vue|svelte)$/i.test(filename)){unoEl.href=uno+"&t="+Date.now().toString(36)}});`))
+			// reload the page when the uno.css file is modified
+			filename, _ := utils.SplitByFirstByte(unocss, '?')
+			w.Write([]byte("hot.watch(\""))
+			w.Write([]byte(filename))
+			w.Write([]byte("\",()=>location.reload());"))
 		}
 		w.Write([]byte("</script>"))
 		w.Write([]byte(`<script>console.log("%c💚 Built with esm.sh, please uncheck \"Disable cache\" in Network tab for better DX!", "color:green")</script>`))
@@ -476,7 +492,7 @@ func (s *Handler) ServeModule(w http.ResponseWriter, r *http.Request, pathname s
 		modTime = uint64(fi.ModTime().UnixMilli())
 		size = fi.Size()
 	}
-	etag := fmt.Sprintf("w/\"%x-%x-v%d\"", modTime, size, VERSION)
+	etag := fmt.Sprintf("w/\"%x-%x%s\"", modTime, size, s.etagSuffix)
 	if r.Header.Get("If-None-Match") == etag && !query.Has("t") {
 		w.WriteHeader(http.StatusNotModified)
 		return
@@ -539,7 +555,7 @@ func (s *Handler) ServeCSSModule(w http.ResponseWriter, r *http.Request, pathnam
 	css := bytes.TrimSpace(ret.OutputFiles[0].Contents)
 	sha := xxhash.New()
 	sha.Write(css)
-	etag := fmt.Sprintf("w/\"%x-v%d\"", sha.Sum(nil), VERSION)
+	etag := fmt.Sprintf("w/\"%x%s\"", sha.Sum(nil), s.etagSuffix)
 	if r.Header.Get("If-None-Match") == etag && !query.Has("t") {
 		w.WriteHeader(http.StatusNotModified)
 		return
@@ -671,7 +687,7 @@ func (s *Handler) ServeUnoCSS(w http.ResponseWriter, r *http.Request) {
 		contents = append(contents, code)
 		sha.Write(code)
 	}
-	etag := fmt.Sprintf("w/\"%x-v%d\"", sha.Sum(nil), VERSION)
+	etag := fmt.Sprintf("w/\"%x%s\"", sha.Sum(nil), s.etagSuffix)
 	if r.Header.Get("If-None-Match") == etag && !query.Has("t") {
 		w.WriteHeader(http.StatusNotModified)
 		return

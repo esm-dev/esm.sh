@@ -30,7 +30,7 @@ import (
 func main() {
   http.Handle("GET /", web.NewHandler(web.Config{
     AppDir: "/path/to/webapp",
-    Fallback: "index.html", // fallback to index.html for SPA
+    Fallback: "/index.html", // fallback to root index.html for SPA
     Dev: false, // change to true to enable HMR
   }))
   log.Fatal(http.ListenAndServe(":8080", nil))
