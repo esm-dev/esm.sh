@@ -566,17 +566,21 @@ func (s *Handler) ServeCSSModule(w http.ResponseWriter, r *http.Request, pathnam
 		header.Set("Cache-Control", "max-age=0, must-revalidate")
 		header.Set("Etag", etag)
 	}
-	fmt.Fprintf(w, `const CSS=%s;`, string(utils.MustEncodeJSON(string(css))))
-	w.Write([]byte(`let styleEl;`))
-	w.Write([]byte(`function applyCSS(css){if(styleEl)styleEl.textContent=css;else{styleEl=document.createElement("style");styleEl.textContent=css;document.head.appendChild(styleEl);}}`))
 	if s.config.Dev {
-		w.Write([]byte(`!(new URL(import.meta.url)).searchParams.has("t")&&applyCSS(CSS);`))
 		w.Write([]byte(`import createHotContext from"/@hmr";`))
-		fmt.Fprintf(w, `createHotContext("%s").accept(m=>applyCSS(m.default));`, pathname)
-	} else {
-		w.Write([]byte(`applyCSS(CSS);`))
 	}
-	w.Write([]byte(`export default CSS;`))
+	w.Write([]byte("export const css=\""))
+	w.Write(bytes.ReplaceAll(css, []byte{'"'}, []byte{'\\', '"'}))
+	w.Write([]byte("\";let style,"))
+	w.Write([]byte(`applyCSS=css=>{(style??(style=document.head.appendChild(document.createElement("style")))).textContent=css};`))
+	if s.config.Dev {
+		w.Write([]byte(`!(new URL(import.meta.url)).searchParams.has("t")&&applyCSS(css);`))
+		w.Write([]byte(`createHotContext("`))
+		w.Write([]byte(pathname))
+		w.Write([]byte(`").accept(m=>applyCSS(m.css));`))
+	} else {
+		w.Write([]byte(`applyCSS(css);`))
+	}
 }
 
 func (s *Handler) ServeUnoCSS(w http.ResponseWriter, r *http.Request) {
