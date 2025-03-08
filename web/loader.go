@@ -2,7 +2,6 @@ package web
 
 import (
 	"bufio"
-	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -90,31 +89,29 @@ func (l *LoaderWorker) Load(loaderType string, args []any) (lang string, code st
 		return
 	}
 	for {
-		var line []byte
-		line, err = l.outReader.ReadBytes('\n')
+		var line string
+		line, err = l.outReader.ReadString('\n')
 		if err != nil {
 			return
 		}
-		if len(line) > 3 {
-			if bytes.HasPrefix(line, []byte(">>>")) {
-				var s string
-				t, d := utils.SplitByFirstByte(string(line[3:]), ':')
-				err = json.Unmarshal([]byte(d), &s)
-				if err != nil {
-					return
-				}
-				if t == "debug" {
-					fmt.Println(term.Dim(s))
-					continue
-				}
-				if t == "error" {
-					err = errors.New(s)
-				} else {
-					lang = t
-					code = s
-				}
+		if len(line) > 3 && strings.HasPrefix(line, ">>>") {
+			var s string
+			t, d := utils.SplitByFirstByte(line[3:], ':')
+			err = json.Unmarshal([]byte(d), &s)
+			if err != nil {
 				return
 			}
+			if t == "debug" {
+				fmt.Println(term.Dim(s))
+				continue
+			}
+			if t == "error" {
+				err = errors.New(s)
+			} else {
+				lang = t
+				code = s
+			}
+			return
 		}
 	}
 }

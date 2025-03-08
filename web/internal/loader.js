@@ -29,9 +29,9 @@ async function transformModule(filename, importMap, sourceCode, isDev) {
   let code = sourceCode ?? await Deno.readTextFile("." + filename);
   let map = undefined;
   if (filename.endsWith(".svelte") || filename.endsWith(".md?svelte")) {
-    [lang, code, map] = await transformSvelte(filename, code, importMap, true);
+    [lang, code, map] = await transformSvelte(filename, code, importMap, isDev);
   } else if (filename.endsWith(".vue") || filename.endsWith(".md?vue")) {
-    [lang, code, map] = await transformVue(filename, code, importMap, true);
+    [lang, code, map] = await transformVue(filename, code, importMap, isDev);
   }
   if (!tsx) {
     tsx = import("npm:@esm.sh/tsx@1.1.0").then(async ({ init, transform }) => {
@@ -64,16 +64,6 @@ async function transformModule(filename, importMap, sourceCode, isDev) {
   return js;
 }
 
-async function transformVue(filename, sourceCode, importMap, isDev) {
-  const { transform } = await import("npm:@esm.sh/vue-compiler@1.0.1");
-  const ret = await transform(filename, sourceCode, {
-    imports: { "@vue/compiler-sfc": import("npm:@vue/compiler-sfc@" + getVueVersion(importMap)) },
-    isDev,
-    devRuntime: isDev ? "/@vdr" : undefined,
-  });
-  return [ret.lang, ret.code, ret.map];
-}
-
 async function transformSvelte(filename, sourceCode, importMap, isDev) {
   const { compile, VERSION } = await import(`npm:svelte@${getSvelteVersion(importMap)}/compiler`);
   const majorVersion = parseInt(VERSION.split(".", 1)[0]);
@@ -89,17 +79,14 @@ async function transformSvelte(filename, sourceCode, importMap, isDev) {
   return ["js", js.code, js.map];
 }
 
-function getVueVersion(importMap) {
-  const vueUrl = importMap?.imports?.vue;
-  if (vueUrl && isHttpSpecifier(vueUrl)) {
-    const url = new URL(vueUrl);
-    const m = url.pathname.match(regexpModulePath);
-    if (m) {
-      return m[2];
-    }
-  }
-  // default to vue@3
-  return "3";
+async function transformVue(filename, sourceCode, importMap, isDev) {
+  const { transform } = await import("npm:@esm.sh/vue-compiler@1.0.1");
+  const ret = await transform(filename, sourceCode, {
+    imports: { "@vue/compiler-sfc": import("npm:@vue/compiler-sfc@" + getVueVersion(importMap)) },
+    isDev,
+    devRuntime: isDev ? "/@vdr" : undefined,
+  });
+  return [ret.lang, ret.code, ret.map];
 }
 
 function getSvelteVersion(importMap) {
@@ -113,6 +100,19 @@ function getSvelteVersion(importMap) {
   }
   // default to svelte@5
   return "5";
+}
+
+function getVueVersion(importMap) {
+  const vueUrl = importMap?.imports?.vue;
+  if (vueUrl && isHttpSpecifier(vueUrl)) {
+    const url = new URL(vueUrl);
+    const m = url.pathname.match(regexpModulePath);
+    if (m) {
+      return m[2];
+    }
+  }
+  // default to vue@3
+  return "3";
 }
 
 function isHttpSpecifier(specifier) {
@@ -142,13 +142,13 @@ for await (const line of Deno.stdin.readable.pipeThrough(new TextDecoderStream()
       case "module":
         output("js", await transformModule(...args));
         break;
-      case "vue": {
-        const [lang, code] = await transformVue(...args);
+      case "svelte": {
+        const [lang, code] = await transformSvelte(...args);
         output(lang, code);
         break;
       }
-      case "svelte": {
-        const [lang, code] = await transformSvelte(...args);
+      case "vue": {
+        const [lang, code] = await transformVue(...args);
         output(lang, code);
         break;
       }

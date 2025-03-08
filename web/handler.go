@@ -946,22 +946,22 @@ func (s *Handler) startLoaderWorker() (err error) {
 	if err != nil {
 		return
 	}
-	worker := &LoaderWorker{}
-	err = worker.Start(s.config.AppDir, loaderJs)
+	loaderWorker := &LoaderWorker{}
+	err = loaderWorker.Start(s.config.AppDir, loaderJs)
 	if err != nil {
 		return err
 	}
-	go worker.Load("module", []any{"_.tsx", nil, "", false})
+	go loaderWorker.Load("module", []any{"_.tsx", nil, "", false})
 	go func() {
 		entries, err := os.ReadDir(s.config.AppDir)
 		if err == nil {
 			for _, entry := range entries {
 				if entry.Type().IsRegular() && entry.Name() == "uno.css" {
-					go worker.Load("unocss", []any{"_uno.css", "flex"})
+					go loaderWorker.Load("unocss", []any{"_uno.css", "flex"})
 				}
 			}
 		}
 	}()
-	s.loaderWorker = worker
+	s.loaderWorker = loaderWorker
 	return
 }
