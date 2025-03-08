@@ -566,21 +566,17 @@ func (s *Handler) ServeCSSModule(w http.ResponseWriter, r *http.Request, pathnam
 		header.Set("Cache-Control", "max-age=0, must-revalidate")
 		header.Set("Etag", etag)
 	}
-	if s.config.Dev {
-		w.Write([]byte(`import createHotContext from"/@hmr";`))
-	}
-	w.Write([]byte("export const css=\""))
+	w.Write([]byte("const css=\""))
 	w.Write(bytes.ReplaceAll(css, []byte{'"'}, []byte{'\\', '"'}))
 	w.Write([]byte("\";let style,"))
 	w.Write([]byte(`applyCSS=css=>{(style??(style=document.head.appendChild(document.createElement("style")))).textContent=css};`))
 	if s.config.Dev {
-		w.Write([]byte(`!(new URL(import.meta.url)).searchParams.has("t")&&applyCSS(css);`))
-		w.Write([]byte(`createHotContext("`))
-		w.Write([]byte(pathname))
-		w.Write([]byte(`").accept(m=>applyCSS(m.css));`))
+		w.Write([]byte(`import createHot from"/@hmr";`))
+		w.Write([]byte("const hot=createHot(import.meta.url);hot.accept(_=>applyCSS(_.default));!hot.locked&&applyCSS(css);"))
 	} else {
-		w.Write([]byte(`applyCSS(css);`))
+		w.Write([]byte("applyCSS(css);"))
 	}
+	w.Write([]byte("export default css;"))
 }
 
 func (s *Handler) ServeUnoCSS(w http.ResponseWriter, r *http.Request) {
