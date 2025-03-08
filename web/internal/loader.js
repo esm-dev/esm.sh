@@ -35,7 +35,7 @@ async function transformModule(filename, importMap, sourceCode, isDev) {
     [lang, code, map] = await transformVue(filename, code, importMap, true);
   }
   if (!tsx) {
-    tsx = import("npm:@esm.sh/tsx@1.0.7").then(async ({ init, transform }) => {
+    tsx = import("npm:@esm.sh/tsx@1.1.0").then(async ({ init, transform }) => {
       await init();
       return { transform };
     });

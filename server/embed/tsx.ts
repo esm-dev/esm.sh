@@ -61,7 +61,7 @@ function run() {
     if (!js) {
       if (hostname === "localhost" || hostname === "127.0.0.1") {
         const { transform } = await (tsx ?? (tsx = initTsx()));
-        const ret = transform({ filename: "script-" + idx + "." + lang, code, target, importMap, minify: true, sourceMap: "inline" });
+        const ret = transform({ filename: "script-" + idx + "." + lang, code, target, importMap, sourceMap: "inline" });
         js = ret.code;
       } else {
         const res = await fetch(esmshUrl(`/+${hash}.mjs`));
@@ -93,7 +93,7 @@ function run() {
 }
 
 async function initTsx() {
-  const pkg = "/@esm.sh/tsx@1.0.7";
+  const pkg = "/@esm.sh/tsx@1.1.0";
   const [m, w] = await Promise.all([
     import(pkg + "/$TARGET/tsx.mjs"),
     fetch(esmshUrl(pkg + "/pkg/tsx_bg.wasm")),
