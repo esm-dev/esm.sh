@@ -1,8 +1,7 @@
 import { TextLineStream } from "jsr:@std/streams@1.0.9/text-line-stream";
 
 const enc = new TextEncoder();
-const regexpVuePath = /^\/\*?vue@([~\^]?[\w\+\-\.]+)(\/|\?|&|$)/;
-const regexpSveltePath = /^\/\*?svelte@([~\^]?[\w\+\-\.]+)(\/|\?|&|$)/;
+const regexpModulePath = /^\/\*?(svelte|vue)@([~\^]?[\w\+\-\.]+)(\/|\?|&|$)/;
 const output = (type, data) => Deno.stdout.write(enc.encode(">>>" + type + ":" + JSON.stringify(data) + "\n"));
 
 let tsx;
@@ -94,9 +93,9 @@ function getVueVersion(importMap) {
   const vueUrl = importMap?.imports?.vue;
   if (vueUrl && isHttpSpecifier(vueUrl)) {
     const url = new URL(vueUrl);
-    const m = url.pathname.match(regexpVuePath);
+    const m = url.pathname.match(regexpModulePath);
     if (m) {
-      return m[1];
+      return m[2];
     }
   }
   // default to vue@3
@@ -107,9 +106,9 @@ function getSvelteVersion(importMap) {
   const svelteUrl = importMap?.imports?.svelte;
   if (svelteUrl && isHttpSpecifier(svelteUrl)) {
     const url = new URL(svelteUrl);
-    const m = url.pathname.match(regexpSveltePath);
+    const m = url.pathname.match(regexpModulePath);
     if (m) {
-      return m[1];
+      return m[2];
     }
   }
   // default to svelte@5
