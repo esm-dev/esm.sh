@@ -5,8 +5,7 @@ import (
 	"strings"
 )
 
-// MIME types for web
-var mimeTypes = map[string][]string{
+var mimeExts = map[string][]string{
 	"application/gzip":        {"gz"},
 	"application/javascript;": {"js", "mjs", "cjs"},
 	"application/json;":       {"json", "map"},
@@ -57,25 +56,25 @@ var mimeTypes = map[string][]string{
 	"video/ogg":               {"ogv"},
 	"video/webm":              {"webm"},
 }
-var mimeTypesMap = map[string]string{}
+var mineMap = map[string]string{}
 
 func init() {
-	for k, v := range mimeTypes {
+	for k, v := range mimeExts {
 		if strings.HasSuffix(k, ";") || strings.HasPrefix(k, "text/") {
 			k = strings.TrimSuffix(k, ";") + "; charset=utf-8"
 		}
 		for _, ext := range v {
-			mimeTypesMap["."+ext] = k
+			mineMap["."+ext] = k
 		}
 	}
-	mimeTypes = nil
+	mimeExts = nil
 }
 
-// ContentType returns the MIME type for the given filename.
-func ContentType(filename string) string {
+// GetContentType returns the MIME type of the file with the given filename.
+func GetContentType(filename string) string {
 	extname := path.Ext(filename)
 	if extname == ".gz" && strings.HasSuffix(filename, ".tar.gz") {
 		extname = ".tar.gz"
 	}
-	return mimeTypesMap[extname]
+	return mineMap[extname]
 }

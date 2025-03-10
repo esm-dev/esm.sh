@@ -212,7 +212,7 @@ func (s *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 			defer file.Close()
-			contentType := common.ContentType(filename)
+			contentType := common.GetContentType(filename)
 			if contentType == "" {
 				contentType = "application/octet-stream"
 			}

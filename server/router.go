@@ -490,7 +490,7 @@ func esmRouter(db Database, buildStorage storage.Storage, logger *log.Logger) re
 				ctx.SetHeader("Etag", etag)
 				ctx.SetHeader("Cache-Control", ccOneDay)
 			}
-			contentType := common.ContentType(pathname)
+			contentType := common.GetContentType(pathname)
 			if contentType != "" {
 				ctx.SetHeader("Content-Type", contentType)
 			}
@@ -1182,7 +1182,7 @@ func esmRouter(db Database, buildStorage storage.Storage, logger *log.Logger) re
 				} else if strings.HasSuffix(esm.SubPath, ".jsx") {
 					ctx.SetHeader("Content-Type", "text/jsx; charset=utf-8")
 				} else {
-					contentType := common.ContentType(esm.SubPath)
+					contentType := common.GetContentType(esm.SubPath)
 					if contentType != "" {
 						ctx.SetHeader("Content-Type", contentType)
 					}

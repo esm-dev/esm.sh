@@ -1,9 +1,10 @@
-# esm.sh/web
+# ESM App Handler for Go
 
 A golang `http.Handler` that serves _nobuild_ web applications.
 
 - Web applications are served _as-is_ without any build step.
 - Transpiles TypeScript, JSX, Vue, Svelte _on-the-fly_.
+- Staic files are served with _correct MIME types_.
 - Built-in [UnoCSS](https://unocss.dev) generator.
 - Hot Module Replacement (HMR) for development.
 
