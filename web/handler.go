@@ -227,8 +227,8 @@ func (s *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func (s *Handler) ServeHtml(w http.ResponseWriter, r *http.Request, pathname string) {
-	htmlFile, err := os.Open(filepath.Join(s.config.AppDir, pathname))
+func (s *Handler) ServeHtml(w http.ResponseWriter, r *http.Request, filename string) {
+	htmlFile, err := os.Open(filepath.Join(s.config.AppDir, filename))
 	if err != nil {
 		if os.IsNotExist(err) {
 			http.Error(w, "Not Found", 404)
@@ -239,7 +239,7 @@ func (s *Handler) ServeHtml(w http.ResponseWriter, r *http.Request, pathname str
 	}
 	defer htmlFile.Close()
 
-	u := url.URL{Path: pathname}
+	u := url.URL{Path: filename}
 	tokenizer := html.NewTokenizer(htmlFile)
 	hotLinks := []string{}
 	unocss := ""
@@ -283,7 +283,7 @@ func (s *Handler) ServeHtml(w http.ResponseWriter, r *http.Request, pathname str
 						switch attrKey {
 						case "src":
 							w.Write([]byte(" src=\""))
-							w.Write([]byte(srcAttr + "?im=" + base64.RawURLEncoding.EncodeToString([]byte(pathname))))
+							w.Write([]byte(srcAttr + "?im=" + base64.RawURLEncoding.EncodeToString([]byte(filename))))
 							w.Write([]byte{'"'})
 						default:
 							w.Write([]byte{' '})
@@ -305,7 +305,7 @@ func (s *Handler) ServeHtml(w http.ResponseWriter, r *http.Request, pathname str
 						hrefAttr = u.ResolveReference(&url.URL{Path: hrefAttr}).Path
 						if hrefAttr == "uno.css" || strings.HasSuffix(hrefAttr, "/uno.css") {
 							if unocss == "" {
-								unocssHref := hrefAttr + "?ctx=" + base64.RawURLEncoding.EncodeToString([]byte(pathname))
+								unocssHref := hrefAttr + "?ctx=" + base64.RawURLEncoding.EncodeToString([]byte(filename))
 								w.Write([]byte("<link rel=\"stylesheet\" href=\""))
 								w.Write([]byte(unocssHref))
 								w.Write([]byte{'"', '>'})
@@ -320,7 +320,7 @@ func (s *Handler) ServeHtml(w http.ResponseWriter, r *http.Request, pathname str
 									// strip
 								case "src":
 									w.Write([]byte(" src=\""))
-									w.Write([]byte(hrefAttr + "?im=" + base64.RawURLEncoding.EncodeToString([]byte(pathname))))
+									w.Write([]byte(hrefAttr + "?im=" + base64.RawURLEncoding.EncodeToString([]byte(filename))))
 									w.Write([]byte{'"'})
 								default:
 									w.Write([]byte{' '})
@@ -344,7 +344,7 @@ func (s *Handler) ServeHtml(w http.ResponseWriter, r *http.Request, pathname str
 					href = u.ResolveReference(&url.URL{Path: href}).Path
 					if href == "uno.css" || strings.HasSuffix(href, "/uno.css") {
 						if unocss == "" {
-							href = href + "?ctx=" + base64.RawURLEncoding.EncodeToString([]byte(pathname))
+							href = href + "?ctx=" + base64.RawURLEncoding.EncodeToString([]byte(filename))
 							w.Write([]byte("<link rel=\"stylesheet\" href=\""))
 							w.Write([]byte(href))
 							w.Write([]byte{'"', '>'})
@@ -381,7 +381,7 @@ func (s *Handler) ServeHtml(w http.ResponseWriter, r *http.Request, pathname str
 	if s.config.Dev {
 		// reload the page when the html file is modified
 		w.Write([]byte(`<script type="module">import createHotContext from"/@hmr";const hot=createHotContext("`))
-		w.Write([]byte(pathname))
+		w.Write([]byte(filename))
 		w.Write([]byte(`"),$=p=>document.querySelector(p);hot.watch(()=>location.reload());`))
 		// reload icon/style links when the file is modified
 		if len(hotLinks) > 0 {
@@ -431,6 +431,8 @@ func (s *Handler) ServeModule(w http.ResponseWriter, r *http.Request, pathname s
 		return
 	}
 	defer imHtmlFile.Close()
+
+	var importMapRaw []byte
 	var importMap common.ImportMap
 	tokenizer := html.NewTokenizer(imHtmlFile)
 	for {
@@ -452,7 +454,8 @@ func (s *Handler) ServeModule(w http.ResponseWriter, r *http.Request, pathname s
 				}
 				if typeAttr == "importmap" {
 					tokenizer.Next()
-					if json.Unmarshal(tokenizer.Text(), &importMap) != nil {
+					importMapRaw = tokenizer.Text()
+					if json.Unmarshal(importMapRaw, &importMap) != nil {
 						header := w.Header()
 						header.Set("Content-Type", "application/javascript; charset=utf-8")
 						header.Set("Cache-Control", "max-age=0, must-revalidate")
@@ -460,6 +463,7 @@ func (s *Handler) ServeModule(w http.ResponseWriter, r *http.Request, pathname s
 						return
 					}
 					importMap.Src = "file://" + string(im)
+					// todo: cache parsed import map
 					break
 				}
 			} else if string(tagName) == "body" {
@@ -475,9 +479,9 @@ func (s *Handler) ServeModule(w http.ResponseWriter, r *http.Request, pathname s
 	var modTime uint64
 	var size int64
 	if sourceCode != nil {
-		sha := xxhash.New()
-		sha.Write(sourceCode)
-		modTime = sha.Sum64()
+		xx := xxhash.New()
+		xx.Write(sourceCode)
+		modTime = xx.Sum64()
 		size = int64(len(sourceCode))
 	} else {
 		fi, err := os.Lstat(filepath.Join(s.config.AppDir, pathname))
@@ -492,7 +496,9 @@ func (s *Handler) ServeModule(w http.ResponseWriter, r *http.Request, pathname s
 		modTime = uint64(fi.ModTime().UnixMilli())
 		size = fi.Size()
 	}
-	etag := fmt.Sprintf("w/\"%x-%x%s\"", modTime, size, s.etagSuffix)
+	xx := xxhash.New()
+	xx.Write([]byte(importMapRaw))
+	etag := fmt.Sprintf("w/\"%x-%x-%x%s\"", modTime, size, xx.Sum(nil), s.etagSuffix)
 	if r.Header.Get("If-None-Match") == etag && !query.Has("t") {
 		w.WriteHeader(http.StatusNotModified)
 		return
@@ -553,9 +559,9 @@ func (s *Handler) ServeCSSModule(w http.ResponseWriter, r *http.Request, pathnam
 		return
 	}
 	css := bytes.TrimSpace(ret.OutputFiles[0].Contents)
-	sha := xxhash.New()
-	sha.Write(css)
-	etag := fmt.Sprintf("w/\"%x%s\"", sha.Sum(nil), s.etagSuffix)
+	xx := xxhash.New()
+	xx.Write(css)
+	etag := fmt.Sprintf("w/\"%x%s\"", xx.Sum(nil), s.etagSuffix)
 	if r.Header.Get("If-None-Match") == etag && !query.Has("t") {
 		w.WriteHeader(http.StatusNotModified)
 		return
@@ -675,8 +681,8 @@ func (s *Handler) ServeUnoCSS(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	}
-	sha := xxhash.New()
-	sha.Write([]byte(configCSS))
+	xx := xxhash.New()
+	xx.Write([]byte(configCSS))
 	keys := make([]string, 0, len(tree))
 	for k := range tree {
 		keys = append(keys, k)
@@ -685,9 +691,9 @@ func (s *Handler) ServeUnoCSS(w http.ResponseWriter, r *http.Request) {
 	for _, k := range keys {
 		code := tree[k]
 		contents = append(contents, code)
-		sha.Write(code)
+		xx.Write(code)
 	}
-	etag := fmt.Sprintf("w/\"%x%s\"", sha.Sum(nil), s.etagSuffix)
+	etag := fmt.Sprintf("w/\"%x%s\"", xx.Sum(nil), s.etagSuffix)
 	if r.Header.Get("If-None-Match") == etag && !query.Has("t") {
 		w.WriteHeader(http.StatusNotModified)
 		return
@@ -736,9 +742,9 @@ func (s *Handler) ServeInternalJS(w http.ResponseWriter, r *http.Request, name s
 		http.Error(w, "Internal Server Error", 500)
 		return
 	}
-	sha := xxhash.New()
-	sha.Write(data)
-	etag := fmt.Sprintf("w/\"%x\"", sha.Sum(nil))
+	xx := xxhash.New()
+	xx.Write(data)
+	etag := fmt.Sprintf("w/\"%x\"", xx.Sum(nil))
 	if r.Header.Get("If-None-Match") == etag {
 		w.WriteHeader(http.StatusNotModified)
 		return
@@ -849,9 +855,9 @@ func (s *Handler) analyzeDependencyTree(entry string, importMap common.ImportMap
 						case ".tsx":
 							loader = esbuild.LoaderTSX
 						case ".vue", ".svelte":
-							sha := xxhash.New()
-							sha.Write(data)
-							etag := hex.EncodeToString(sha.Sum(nil))
+							xx := xxhash.New()
+							xx.Write(data)
+							etag := hex.EncodeToString(xx.Sum(nil))
 							cacheKey := fmt.Sprintf("preload-%s", pathname)
 							etagCacheKey := fmt.Sprintf("preload-%s.etag", pathname)
 							langCacheKey := fmt.Sprintf("preload-%s.lang", pathname)

@@ -13,7 +13,7 @@ async function transformModule(filename, importMap, sourceCode, isDev) {
     // add `?dev` query to `react-dom` and `vue` imports for development mode
     for (const [specifier, url] of Object.entries(imports)) {
       if (
-        (specifier === "react-dom" || specifier === "react-dom/client" || specifier === "vue")
+        (specifier === "react" || specifier === "react-dom" || specifier === "react-dom/client" || specifier === "vue")
         && (url.startsWith("https://") || url.startsWith("http://"))
       ) {
         const u = new URL(url);
@@ -40,6 +40,8 @@ async function transformModule(filename, importMap, sourceCode, isDev) {
     });
   }
   const { transform } = await tsx;
+  const react = imports?.react;
+  const preact = imports?.preact;
   const ret = transform({
     filename,
     lang,
@@ -49,8 +51,9 @@ async function transformModule(filename, importMap, sourceCode, isDev) {
     dev: isDev
       ? {
         hmr: { runtime: "/@hmr" },
-        refresh: imports?.react && !imports?.preact ? { runtime: "/@refresh" } : undefined,
-        prefresh: imports?.preact ? { runtime: "/@prefresh" } : undefined,
+        refresh: react && !preact ? { runtime: "/@refresh" } : undefined,
+        prefresh: preact && !react ? { runtime: "/@prefresh" } : undefined,
+        jsxSource: (react || preact) ? { fileName: Deno.cwd() + filename } : undefined,
       }
       : undefined,
   });

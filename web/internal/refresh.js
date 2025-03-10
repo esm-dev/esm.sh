@@ -1,30 +1,26 @@
 // Fast-refresh for React!
 // @see https://github.com/facebook/react/issues/16604#issuecomment-528663101
 
-import RefreshRuntime from "https://esm.sh/react-refresh@0.16.0/es2022/react-refresh.development.mjs";
+import Refresh from "https://esm.sh/react-refresh@0.16.0/es2022/react-refresh.development.mjs";
 
 let timer;
 
-const __REFRESH_RUNTIME__ = {
-  register: (specifier) => {
-    return (type, id) => {
-      RefreshRuntime.register(type, specifier + " " + id);
-    };
-  },
-  sign: RefreshRuntime.createSignatureFunctionForTransform,
+export const __REFRESH_RUNTIME__ = {
+  register: (specifier) => (type, id) => Refresh.register(type, specifier + " " + id),
+  sign: Refresh.createSignatureFunctionForTransform,
 };
-const __REFRESH__ = () => {
+
+export const __REFRESH__ = (module) => {
+  console.log(module)
   if (timer !== null) {
     clearTimeout(timer);
   }
   timer = setTimeout(() => {
     timer = null;
-    RefreshRuntime.performReactRefresh();
+    Refresh.performReactRefresh();
   }, 30);
 };
 
-RefreshRuntime.injectIntoGlobalHook(globalThis);
+Refresh.injectIntoGlobalHook(globalThis);
 globalThis.$RefreshReg$ = () => {};
 globalThis.$RefreshSig$ = () => type => type;
-
-export { __REFRESH__, __REFRESH_RUNTIME__ };
