@@ -711,6 +711,14 @@ func esmRouter(db Database, buildStorage storage.Storage, logger *log.Logger) re
 				return minifiedCSS
 			} else {
 				im := query.Get("im")
+				if extname == ".md" {
+					for _, kind := range []string{"jsx", "svelte", "vue"} {
+						if query.Has(kind) {
+							modUrlRaw += "?" + kind
+							break
+						}
+					}
+				}
 				h := sha1.New()
 				h.Write([]byte(modUrlRaw))
 				h.Write([]byte(im))
@@ -772,15 +780,6 @@ func esmRouter(db Database, buildStorage storage.Storage, logger *log.Logger) re
 									}
 									break
 								}
-							}
-						}
-					}
-					if extname == ".md" {
-						for _, kind := range []string{"jsx", "svelte", "vue"} {
-							if query.Has(kind) {
-								modUrl.RawQuery = kind
-								modUrlRaw = modUrl.String()
-								break
 							}
 						}
 					}
@@ -1095,8 +1094,8 @@ func esmRouter(db Database, buildStorage storage.Storage, logger *log.Logger) re
 			if pathKind == RawFile {
 				if esm.SubPath == "" {
 					b := &BuildContext{
-						npmrc: npmrc,
-						esm:   esm,
+						npmrc:   npmrc,
+						esmPath: esm,
 					}
 					err = b.install()
 					if err != nil {
@@ -1411,12 +1410,12 @@ func esmRouter(db Database, buildStorage storage.Storage, logger *log.Logger) re
 		}
 
 		buildArgs := BuildArgs{
-			alias:      alias,
-			conditions: conditions,
-			deps:       deps,
+			Alias:      alias,
+			Conditions: conditions,
+			Deps:       deps,
 		}
 		if !externalAll && external.Len() > 0 {
-			buildArgs.external = *external.ReadOnly()
+			buildArgs.External = *external.ReadOnly()
 		}
 
 		// match path `PKG@VERSION/X-${args}/esnext/SUBPATH`
@@ -1460,7 +1459,7 @@ func esmRouter(db Database, buildStorage storage.Storage, logger *log.Logger) re
 					logger:      logger,
 					db:          db,
 					storage:     buildStorage,
-					esm:         esm,
+					esmPath:     esm,
 					args:        buildArgs,
 					externalAll: externalAll,
 					target:      "types",
@@ -1502,9 +1501,9 @@ func esmRouter(db Database, buildStorage storage.Storage, logger *log.Logger) re
 			if !externalRequire && esm.PkgName == "@unocss/preset-icons" {
 				externalRequire = true
 			}
-			buildArgs.externalRequire = externalRequire
-			buildArgs.keepNames = query.Has("keep-names")
-			buildArgs.ignoreAnnotations = query.Has("ignore-annotations")
+			buildArgs.ExternalRequire = externalRequire
+			buildArgs.KeepNames = query.Has("keep-names")
+			buildArgs.IgnoreAnnotations = query.Has("ignore-annotations")
 		}
 
 		bundleMode := BundleDefault
@@ -1566,7 +1565,7 @@ func esmRouter(db Database, buildStorage storage.Storage, logger *log.Logger) re
 			logger:      logger,
 			db:          db,
 			storage:     buildStorage,
-			esm:         esm,
+			esmPath:     esm,
 			args:        buildArgs,
 			bundleMode:  bundleMode,
 			externalAll: externalAll,
@@ -1636,7 +1635,7 @@ func esmRouter(db Database, buildStorage storage.Storage, logger *log.Logger) re
 
 		// if the path is `ESMBuild`, return the built js/css content
 		if pathKind == EsmBuild {
-			if esm.SubPath != build.esm.SubPath {
+			if esm.SubPath != build.esmPath.SubPath {
 				buf, recycle := newBuffer()
 				defer recycle()
 				fmt.Fprintf(buf, "export * from \"%s\";\n", build.Path())

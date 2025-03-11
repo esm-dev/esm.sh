@@ -5,16 +5,21 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"os"
 	"path"
 	"slices"
 	"sort"
 	"strings"
 
-	"github.com/Masterminds/semver/v3"
 	"github.com/evanw/esbuild/pkg/api"
+	esbuild_config "github.com/ije/esbuild-internal/config"
+	"github.com/ije/esbuild-internal/js_ast"
+	"github.com/ije/esbuild-internal/js_parser"
+	"github.com/ije/esbuild-internal/logger"
 	"github.com/ije/gox/utils"
-	"github.com/ije/gox/valid"
 )
+
+var moduleExts = []string{".js", ".ts", ".mjs", ".mts", ".jsx", ".tsx", ".cjs", ".cts"}
 
 // BuildEntry represents the build entrypoints of a module
 type BuildEntry struct {
@@ -185,7 +190,7 @@ func (ctx *BuildContext) resolveEntry(esm EsmPath) (entry BuildEntry) {
 
 		// check if the sub-module is a directory and has a package.json
 		var rawInfo PackageJSONRaw
-		if utils.ParseJSONFile(path.Join(ctx.wd, "node_modules", ctx.esm.PkgName, subModuleName, "package.json"), &rawInfo) == nil {
+		if utils.ParseJSONFile(path.Join(ctx.wd, "node_modules", ctx.esmPath.PkgName, subModuleName, "package.json"), &rawInfo) == nil {
 			p := rawInfo.ToNpmPackage()
 			if entry.main == "" {
 				if p.Module != "" && ctx.existsPkgFile(subModuleName, p.Module) {
@@ -481,7 +486,7 @@ func (ctx *BuildContext) finalizeBuildEntry(entry *BuildEntry) {
 			}
 		} else if !entry.module && endsWith(entry.main, ".js", ".ts") {
 			// check if the cjs entry is an ESM
-			isESM, _, err := validateModuleFile(path.Join(ctx.wd, "node_modules", ctx.esm.PkgName, entry.main))
+			isESM, _, err := validateJSFile(path.Join(ctx.wd, "node_modules", ctx.esmPath.PkgName, entry.main))
 			if err == nil {
 				entry.module = isESM
 			}
@@ -575,7 +580,7 @@ func (ctx *BuildContext) resolveConditionExportEntry(conditions JSONObject, pref
 	} else if ctx.isDenoTarget() {
 		conditionName := "deno"
 		// [workaround] to support ssr in Deno, use `node` condition for solid-js < 1.6.0
-		if ctx.esm.PkgName == "solid-js" && semverLessThan(ctx.esm.PkgVersion, "1.6.0") {
+		if ctx.esmPath.PkgName == "solid-js" && semverLessThan(ctx.esmPath.PkgVersion, "1.6.0") {
 			conditionName = "node"
 		}
 		conditionFound = applyCondition(conditionName)
@@ -583,8 +588,8 @@ func (ctx *BuildContext) resolveConditionExportEntry(conditions JSONObject, pref
 		conditionFound = applyCondition("node")
 	}
 
-	if len(ctx.args.conditions) > 0 {
-		for _, conditionName := range ctx.args.conditions {
+	if len(ctx.args.Conditions) > 0 {
+		for _, conditionName := range ctx.args.Conditions {
 			conditionFound = applyCondition(conditionName)
 			if conditionFound {
 				break
@@ -678,14 +683,14 @@ func (ctx *BuildContext) resolveExternalModule(specifier string, kind api.Resolv
 	}()
 
 	// check `?external`
-	if ctx.externalAll || ctx.args.external.Has(toPackageName(specifier)) {
+	if ctx.externalAll || ctx.args.External.Has(toPackageName(specifier)) {
 		resolvedPath = specifier
 		return
 	}
 
 	// if it's a node builtin module
-	if isNodeBuiltInModule(specifier) {
-		if ctx.externalAll || ctx.target == "node" || ctx.target == "denonext" || ctx.args.external.Has(specifier) {
+	if isNodeBuiltinSpecifier(specifier) {
+		if ctx.externalAll || ctx.target == "node" || ctx.target == "denonext" || ctx.args.External.Has(specifier) {
 			resolvedPath = specifier
 		} else if ctx.target == "deno" {
 			resolvedPath = fmt.Sprintf("https://deno.land/std@0.177.1/node/%s.ts", specifier[5:])
@@ -700,8 +705,8 @@ func (ctx *BuildContext) resolveExternalModule(specifier string, kind api.Resolv
 		resolvedPath = ctx.getImportPath(EsmPath{
 			PkgName:    pkgJson.Name,
 			PkgVersion: pkgJson.Version,
-			GhPrefix:   ctx.esm.GhPrefix,
-			PrPrefix:   ctx.esm.PrPrefix,
+			GhPrefix:   ctx.esmPath.GhPrefix,
+			PrPrefix:   ctx.esmPath.PrPrefix,
 		}, ctx.getBuildArgsPrefix(false), ctx.externalAll)
 		return
 	}
@@ -710,10 +715,10 @@ func (ctx *BuildContext) resolveExternalModule(specifier string, kind api.Resolv
 	if strings.HasPrefix(specifier, ctx.pkgJson.Name+"/") {
 		subPath := strings.TrimPrefix(specifier, ctx.pkgJson.Name+"/")
 		subModule := EsmPath{
-			GhPrefix:      ctx.esm.GhPrefix,
-			PrPrefix:      ctx.esm.PrPrefix,
-			PkgName:       ctx.esm.PkgName,
-			PkgVersion:    ctx.esm.PkgVersion,
+			GhPrefix:      ctx.esmPath.GhPrefix,
+			PrPrefix:      ctx.esmPath.PrPrefix,
+			PkgName:       ctx.esmPath.PkgName,
+			PkgVersion:    ctx.esmPath.PkgVersion,
 			SubPath:       subPath,
 			SubModuleName: stripEntryModuleExt(subPath),
 		}
@@ -750,9 +755,9 @@ func (ctx *BuildContext) resolveExternalModule(specifier string, kind api.Resolv
 	}
 
 	if pkgVersion == "" {
-		if pkgName == ctx.esm.PkgName {
-			pkgVersion = ctx.esm.PkgVersion
-		} else if pkgVerson, ok := ctx.args.deps[pkgName]; ok {
+		if pkgName == ctx.esmPath.PkgName {
+			pkgVersion = ctx.esmPath.PkgVersion
+		} else if pkgVerson, ok := ctx.args.Deps[pkgName]; ok {
 			pkgVersion = pkgVerson
 		} else if v, ok := ctx.pkgJson.Dependencies[pkgName]; ok {
 			pkgVersion = strings.TrimSpace(v)
@@ -776,7 +781,7 @@ func (ctx *BuildContext) resolveExternalModule(specifier string, kind api.Resolv
 	// e.g. "react": "github:facebook/react#v18.2.0"
 	p, err := resolveDependencyVersion(pkgVersion)
 	if err != nil {
-		resolvedPath = fmt.Sprintf("/error.js?type=%s&name=%s&importer=%s", strings.ReplaceAll(err.Error(), " ", "-"), pkgName, ctx.esm.Specifier())
+		resolvedPath = fmt.Sprintf("/error.js?type=%s&name=%s&importer=%s", strings.ReplaceAll(err.Error(), " ", "-"), pkgName, ctx.esmPath.Specifier())
 		return
 	}
 	if p.Name != "" {
@@ -802,17 +807,17 @@ func (ctx *BuildContext) resolveExternalModule(specifier string, kind api.Resolv
 	}
 
 	// [workaround] force the dependency version of `react` equals to react-dom
-	if ctx.esm.PkgName == "react-dom" && dep.PkgName == "react" {
-		dep.PkgVersion = ctx.esm.PkgVersion
+	if ctx.esmPath.PkgName == "react-dom" && dep.PkgName == "react" {
+		dep.PkgVersion = ctx.esmPath.PkgVersion
 	}
 
 	if withTypeJSON {
 		resolvedPath = "/" + dep.Specifier()
 		if subPath == "" || !strings.HasSuffix(subPath, ".json") {
 			b := &BuildContext{
-				npmrc:  ctx.npmrc,
-				logger: ctx.logger,
-				esm:    dep,
+				npmrc:   ctx.npmrc,
+				logger:  ctx.logger,
+				esmPath: dep,
 			}
 			err = b.install()
 			if err != nil {
@@ -827,10 +832,10 @@ func (ctx *BuildContext) resolveExternalModule(specifier string, kind api.Resolv
 	}
 
 	args := BuildArgs{
-		alias:      ctx.args.alias,
-		deps:       ctx.args.deps,
-		external:   ctx.args.external,
-		conditions: ctx.args.conditions,
+		Alias:      ctx.args.Alias,
+		Deps:       ctx.args.Deps,
+		External:   ctx.args.External,
+		Conditions: ctx.args.Conditions,
 	}
 	err = resolveBuildArgs(ctx.npmrc, ctx.wd, &args, dep)
 	if err != nil {
@@ -870,32 +875,32 @@ func (ctx *BuildContext) resolveExternalModule(specifier string, kind api.Resolv
 		resolvedPath = strings.ReplaceAll(resolvedPath, "/#/", "/%23/")
 	}
 	params := []string{}
-	if len(args.alias) > 0 {
+	if len(args.Alias) > 0 {
 		var alias []string
-		for k, v := range args.alias {
+		for k, v := range args.Alias {
 			alias = append(alias, fmt.Sprintf("%s:%s", k, v))
 		}
 		params = append(params, "alias="+strings.Join(alias, ","))
 	}
-	if len(args.deps) > 0 {
+	if len(args.Deps) > 0 {
 		var deps sort.StringSlice
-		for n, v := range args.deps {
+		for n, v := range args.Deps {
 			deps = append(deps, n+"@"+v)
 		}
 		deps.Sort()
 		params = append(params, "deps="+strings.Join(deps, ","))
 	}
-	if args.external.Len() > 0 {
-		external := make(sort.StringSlice, args.external.Len())
-		for i, e := range args.external.Values() {
+	if args.External.Len() > 0 {
+		external := make(sort.StringSlice, args.External.Len())
+		for i, e := range args.External.Values() {
 			external[i] = e
 		}
 		external.Sort()
 		params = append(params, "external="+strings.Join(external, ","))
 	}
-	if len(args.conditions) > 0 {
-		conditions := make(sort.StringSlice, len(args.conditions))
-		copy(conditions, args.conditions)
+	if len(args.Conditions) > 0 {
+		conditions := make(sort.StringSlice, len(args.Conditions))
+		copy(conditions, args.Conditions)
 		conditions.Sort()
 		params = append(params, "conditions="+strings.Join(conditions, ","))
 	}
@@ -915,13 +920,13 @@ func (ctx *BuildContext) resolveDTS(entry BuildEntry) (string, error) {
 	if entry.types != "" {
 		return fmt.Sprintf(
 			"/%s/%s%s",
-			ctx.esm.Name(),
+			ctx.esmPath.Name(),
 			ctx.getBuildArgsPrefix(true),
 			strings.TrimPrefix(entry.types, "./"),
 		), nil
 	}
 
-	if ctx.esm.SubPath != "" && (ctx.pkgJson.Types != "" || ctx.pkgJson.Typings != "") {
+	if ctx.esmPath.SubPath != "" && (ctx.pkgJson.Types != "" || ctx.pkgJson.Typings != "") {
 		return "", nil
 	}
 
@@ -933,7 +938,7 @@ func (ctx *BuildContext) resolveDTS(entry BuildEntry) (string, error) {
 			versionParts[0],                         // major
 		}
 		typesPkgName := toTypesPackageName(pkgJson.Name)
-		pkgVersion, ok := ctx.args.deps[typesPkgName]
+		pkgVersion, ok := ctx.args.Deps[typesPkgName]
 		if ok {
 			// use the version of the `?deps` query if it exists
 			versions = append([]string{pkgVersion}, versions...)
@@ -944,13 +949,13 @@ func (ctx *BuildContext) resolveDTS(entry BuildEntry) (string, error) {
 				dtsModule := EsmPath{
 					PkgName:       typesPkgName,
 					PkgVersion:    p.Version,
-					SubPath:       ctx.esm.SubPath,
-					SubModuleName: ctx.esm.SubModuleName,
+					SubPath:       ctx.esmPath.SubPath,
+					SubModuleName: ctx.esmPath.SubModuleName,
 				}
 				b := &BuildContext{
 					npmrc:       ctx.npmrc,
 					logger:      ctx.logger,
-					esm:         dtsModule,
+					esmPath:     dtsModule,
 					args:        ctx.args,
 					externalAll: ctx.externalAll,
 					target:      "types",
@@ -1041,7 +1046,7 @@ func (ctx *BuildContext) existsPkgFile(fp ...string) bool {
 	args := make([]string, 3+len(fp))
 	args[0] = ctx.wd
 	args[1] = "node_modules"
-	args[2] = ctx.esm.PkgName
+	args[2] = ctx.esmPath.PkgName
 	copy(args[3:], fp)
 	return existsFile(path.Join(args...))
 }
@@ -1049,7 +1054,7 @@ func (ctx *BuildContext) existsPkgFile(fp ...string) bool {
 func (ctx *BuildContext) lookupDep(specifier string, isDts bool) (esm EsmPath, packageJson *PackageJSON, err error) {
 	pkgName, version, subpath, _ := splitEsmPath(specifier)
 lookup:
-	if v, ok := ctx.args.deps[pkgName]; ok {
+	if v, ok := ctx.args.Deps[pkgName]; ok {
 		packageJson, err = ctx.npmrc.getPackageInfo(pkgName, v)
 		if err == nil {
 			esm = EsmPath{
@@ -1120,7 +1125,7 @@ func (ctx *BuildContext) lexer(entry *BuildEntry) (ret *BuildMeta, cjsExports []
 
 		var isESM bool
 		var namedExports []string
-		isESM, namedExports, err = validateModuleFile(path.Join(ctx.wd, "node_modules", ctx.esm.PkgName, entry.main))
+		isESM, namedExports, err = validateJSFile(path.Join(ctx.wd, "node_modules", ctx.esmPath.PkgName, entry.main))
 		if err != nil {
 			return
 		}
@@ -1212,6 +1217,27 @@ func getExportConditionPaths(condition JSONObject) []string {
 	return values
 }
 
+// stripModuleExt strips the module extension from the given string.
+func stripModuleExt(s string) string {
+	for _, ext := range moduleExts {
+		if strings.HasSuffix(s, ext) {
+			return s[:len(s)-len(ext)]
+		}
+	}
+	return s
+}
+
+// stripEntryModuleExt strips the entry module extension from the given string.
+func stripEntryModuleExt(s string) string {
+	if strings.HasSuffix(s, ".mjs") || strings.HasSuffix(s, ".cjs") {
+		return s[:len(s)-4]
+	}
+	if strings.HasSuffix(s, ".js") {
+		return s[:len(s)-3]
+	}
+	return s
+}
+
 func normalizeEntryPath(path string) string {
 	return "." + utils.NormalizePathname(path)
 }
@@ -1254,41 +1280,38 @@ func normalizeImportSpecifier(specifier string) string {
 	return specifier
 }
 
-// isHttpSepcifier returns true if the specifier is a remote URL.
-func isHttpSepcifier(specifier string) bool {
-	return strings.HasPrefix(specifier, "https://") || strings.HasPrefix(specifier, "http://")
-}
-
-// isRelPathSpecifier returns true if the specifier is a local path.
-func isRelPathSpecifier(specifier string) bool {
-	return strings.HasPrefix(specifier, "./") || strings.HasPrefix(specifier, "../")
-}
-
-// isAbsPathSpecifier returns true if the specifier is an absolute path.
-func isAbsPathSpecifier(specifier string) bool {
-	return strings.HasPrefix(specifier, "/") || strings.HasPrefix(specifier, "file://")
-}
-
-// isJsModuleSpecifier returns true if the specifier is a json module.
-func isJsonModuleSpecifier(specifier string) bool {
-	if !strings.HasSuffix(specifier, ".json") {
-		return false
+// validateJSFile validates javascript/typescript module from the given file.
+func validateJSFile(filename string) (isESM bool, namedExports []string, err error) {
+	data, err := os.ReadFile(filename)
+	if err != nil {
+		return
 	}
-	_, _, subpath, _ := splitEsmPath(specifier)
-	return subpath != "" && strings.HasSuffix(subpath, ".json")
-}
-
-// isJsModuleSpecifier checks if the given specifier is a node.js built-in module.
-func isNodeBuiltInModule(specifier string) bool {
-	return strings.HasPrefix(specifier, "node:") && nodeBuiltinModules[specifier[5:]]
-}
-
-// isCommitish returns true if the given string is a commit hash.
-func isCommitish(s string) bool {
-	return len(s) >= 7 && len(s) <= 40 && valid.IsHexString(s)
-}
-
-// semverLessThan returns true if the version a is less than the version b.
-func semverLessThan(a string, b string) bool {
-	return semver.MustParse(a).LessThan(semver.MustParse(b))
+	log := logger.NewDeferLog(logger.DeferLogNoVerboseOrDebug, nil)
+	parserOpts := js_parser.OptionsFromConfig(&esbuild_config.Options{
+		JSX: esbuild_config.JSXOptions{
+			Parse: endsWith(filename, ".jsx", ".tsx"),
+		},
+		TS: esbuild_config.TSOptions{
+			Parse: endsWith(filename, ".ts", ".mts", ".cts", ".tsx"),
+		},
+	})
+	ast, pass := js_parser.Parse(log, logger.Source{
+		Index:          0,
+		KeyPath:        logger.Path{Text: "<stdin>"},
+		PrettyPath:     "<stdin>",
+		IdentifierName: "stdin",
+		Contents:       string(data),
+	}, parserOpts)
+	if !pass {
+		err = errors.New("invalid syntax, require javascript/typescript")
+		return
+	}
+	isESM = ast.ExportsKind == js_ast.ExportsESM || ast.ExportsKind == js_ast.ExportsESMWithDynamicFallback
+	namedExports = make([]string, len(ast.NamedExports))
+	i := 0
+	for name := range ast.NamedExports {
+		namedExports[i] = name
+		i++
+	}
+	return
 }

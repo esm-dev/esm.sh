@@ -35,7 +35,7 @@ type BuildContext struct {
 	logger      *log.Logger
 	db          Database
 	storage     storage.Storage
-	esm         EsmPath
+	esmPath     EsmPath
 	args        BuildArgs
 	bundleMode  BundleMode
 	externalAll bool
@@ -175,7 +175,7 @@ func (ctx *BuildContext) buildPath() {
 		asteriskPrefix = "*"
 	}
 
-	esm := ctx.esm
+	esm := ctx.esmPath
 	if ctx.target == "types" {
 		if strings.HasSuffix(esm.SubPath, ".d.ts") {
 			ctx.path = fmt.Sprintf(
@@ -224,14 +224,14 @@ func (ctx *BuildContext) buildPath() {
 }
 
 func (ctx *BuildContext) buildModule(analyzeMode bool) (meta *BuildMeta, includes [][2]string, err error) {
-	entry := ctx.resolveEntry(ctx.esm)
+	entry := ctx.resolveEntry(ctx.esmPath)
 	if entry.isEmpty() {
 		err = errors.New("could not resolve build entry")
 		return
 	}
 
 	if DEBUG && !analyzeMode {
-		ctx.logger.Debugf(`build(%s): Entry{main: "%s", module: %v, types: "%s"}`, ctx.esm.Specifier(), entry.main, entry.module, entry.types)
+		ctx.logger.Debugf(`build(%s): Entry{main: "%s", module: %v, types: "%s"}`, ctx.esmPath.Specifier(), entry.main, entry.module, entry.types)
 	}
 
 	isTypesOnly := strings.HasPrefix(ctx.pkgJson.Name, "@types/") || entry.isTypesOnly()
@@ -245,7 +245,7 @@ func (ctx *BuildContext) buildModule(analyzeMode bool) (meta *BuildMeta, include
 		}
 		meta = &BuildMeta{
 			TypesOnly: true,
-			Dts:       "/" + ctx.esm.Name() + entry.types[1:],
+			Dts:       "/" + ctx.esmPath.Name() + entry.types[1:],
 		}
 		return
 	}
@@ -265,7 +265,7 @@ func (ctx *BuildContext) buildModule(analyzeMode bool) (meta *BuildMeta, include
 			return
 		}
 		var jsonData []byte
-		jsonPath := path.Join(ctx.wd, "node_modules", ctx.esm.PkgName, entry.main)
+		jsonPath := path.Join(ctx.wd, "node_modules", ctx.esmPath.PkgName, entry.main)
 		jsonData, err = os.ReadFile(jsonPath)
 		if err != nil {
 			return
@@ -308,7 +308,7 @@ func (ctx *BuildContext) buildModule(analyzeMode bool) (meta *BuildMeta, include
 			logger:      ctx.logger,
 			db:          ctx.db,
 			storage:     ctx.storage,
-			esm:         dep,
+			esmPath:     dep,
 			args:        ctx.args,
 			externalAll: ctx.externalAll,
 			target:      ctx.target,
@@ -339,10 +339,10 @@ func (ctx *BuildContext) buildModule(analyzeMode bool) (meta *BuildMeta, include
 		return
 	}
 
-	entryModuleFilename := path.Join(ctx.wd, "node_modules", ctx.esm.PkgName, entry.main)
-	entrySpecifier := ctx.esm.PkgName
-	if ctx.esm.SubModuleName != "" {
-		entrySpecifier += "/" + ctx.esm.SubModuleName
+	entryModuleFilename := path.Join(ctx.wd, "node_modules", ctx.esmPath.PkgName, entry.main)
+	entrySpecifier := ctx.esmPath.PkgName
+	if ctx.esmPath.SubModuleName != "" {
+		entrySpecifier += "/" + ctx.esmPath.SubModuleName
 	}
 
 	var (
@@ -405,7 +405,7 @@ func (ctx *BuildContext) buildModule(analyzeMode bool) (meta *BuildMeta, include
 					// ban file: imports
 					if strings.HasPrefix(args.Path, "file:") {
 						return esbuild.OnResolveResult{
-							Path:     fmt.Sprintf("/error.js?type=unsupported-file-dependency&name=%s&importer=%s", strings.TrimPrefix(args.Path, "file:"), ctx.esm.Specifier()),
+							Path:     fmt.Sprintf("/error.js?type=unsupported-file-dependency&name=%s&importer=%s", strings.TrimPrefix(args.Path, "file:"), ctx.esmPath.Specifier()),
 							External: true,
 						}, nil
 					}
@@ -419,7 +419,7 @@ func (ctx *BuildContext) buildModule(analyzeMode bool) (meta *BuildMeta, include
 					}
 
 					// if `?external-require` present, ignore specifier that is a require call
-					if ctx.args.externalRequire && args.Kind == esbuild.ResolveJSRequireCall && entry.module {
+					if ctx.args.ExternalRequire && args.Kind == esbuild.ResolveJSRequireCall && entry.module {
 						return esbuild.OnResolveResult{
 							Path:     args.Path,
 							External: true,
@@ -451,9 +451,9 @@ func (ctx *BuildContext) buildModule(analyzeMode bool) (meta *BuildMeta, include
 					}
 
 					// check `?alias` option
-					if len(ctx.args.alias) > 0 && !isRelPathSpecifier(specifier) {
+					if len(ctx.args.Alias) > 0 && !isRelPathSpecifier(specifier) {
 						pkgName, _, subpath, _ := splitEsmPath(specifier)
-						if name, ok := ctx.args.alias[pkgName]; ok {
+						if name, ok := ctx.args.Alias[pkgName]; ok {
 							specifier = name
 							if subpath != "" {
 								specifier += "/" + subpath
@@ -483,7 +483,7 @@ func (ctx *BuildContext) buildModule(analyzeMode bool) (meta *BuildMeta, include
 							if s, ok := v.(string); ok {
 								specifier = normalizeImportSpecifier(s)
 								if isRelPathSpecifier(specifier) {
-									specifier = ctx.esm.PkgName + "/" + strings.TrimPrefix(specifier, "./")
+									specifier = ctx.esmPath.PkgName + "/" + strings.TrimPrefix(specifier, "./")
 								}
 							} else if m, ok := v.(map[string]interface{}); ok {
 								targets := []string{"browser", "module", "import", "default"}
@@ -518,7 +518,7 @@ func (ctx *BuildContext) buildModule(analyzeMode bool) (meta *BuildMeta, include
 					}
 
 					// nodejs builtin module
-					if isNodeBuiltInModule(specifier) {
+					if isNodeBuiltinSpecifier(specifier) {
 						externalPath, err := ctx.resolveExternalModule(specifier, args.Kind, withTypeJSON, analyzeMode)
 						if err != nil {
 							return esbuild.OnResolveResult{}, err
@@ -541,15 +541,15 @@ func (ctx *BuildContext) buildModule(analyzeMode bool) (meta *BuildMeta, include
 					// node native modules do not work via http import
 					if strings.HasSuffix(filename, ".node") && existsFile(filename) {
 						return esbuild.OnResolveResult{
-							Path:     fmt.Sprintf("/error.js?type=unsupported-node-native-module&name=%s&importer=%s", path.Base(args.Path), ctx.esm.Specifier()),
+							Path:     fmt.Sprintf("/error.js?type=unsupported-node-native-module&name=%s&importer=%s", path.Base(args.Path), ctx.esmPath.Specifier()),
 							External: true,
 						}, nil
 					}
 
 					// externalize top-level module
 					// e.g. "react/jsx-runtime" imports "react"
-					if ctx.esm.SubModuleName != "" && specifier == ctx.esm.PkgName && ctx.bundleMode != BundleDeps {
-						externalPath, err := ctx.resolveExternalModule(ctx.esm.PkgName, args.Kind, withTypeJSON, analyzeMode)
+					if ctx.esmPath.SubModuleName != "" && specifier == ctx.esmPath.PkgName && ctx.bundleMode != BundleDeps {
+						externalPath, err := ctx.resolveExternalModule(ctx.esmPath.PkgName, args.Kind, withTypeJSON, analyzeMode)
 						if err != nil {
 							return esbuild.OnResolveResult{}, err
 						}
@@ -561,7 +561,7 @@ func (ctx *BuildContext) buildModule(analyzeMode bool) (meta *BuildMeta, include
 					}
 
 					// bundles all dependencies in `bundle` mode, apart from peerDependencies and `?external` flag
-					if ctx.bundleMode == BundleDeps && !ctx.args.external.Has(toPackageName(specifier)) && !implicitExternal.Has(specifier) {
+					if ctx.bundleMode == BundleDeps && !ctx.args.External.Has(toPackageName(specifier)) && !implicitExternal.Has(specifier) {
 						pkgName := toPackageName(specifier)
 						_, ok := pkgJson.PeerDependencies[pkgName]
 						if !ok {
@@ -576,7 +576,7 @@ func (ctx *BuildContext) buildModule(analyzeMode bool) (meta *BuildMeta, include
 
 					if strings.HasPrefix(specifier, "/") || isRelPathSpecifier(specifier) {
 						specifier = strings.TrimPrefix(filename, path.Join(ctx.wd, "node_modules")+"/")
-						pkgName := ctx.esm.PkgName
+						pkgName := ctx.esmPath.PkgName
 						isPkgModule := strings.HasPrefix(specifier, pkgName+"/")
 						if !isPkgModule && pkgJson.PkgName != "" {
 							// github packages may have different package name with the repository name
@@ -595,8 +595,8 @@ func (ctx *BuildContext) buildModule(analyzeMode bool) (meta *BuildMeta, include
 							if path.Ext(filename) == "" || !existsFile(filename) {
 								subPath := utils.NormalizePathname(modulePath)[1:]
 								entry := ctx.resolveEntry(EsmPath{
-									PkgName:       ctx.esm.PkgName,
-									PkgVersion:    ctx.esm.PkgVersion,
+									PkgName:       ctx.esmPath.PkgName,
+									PkgVersion:    ctx.esmPath.PkgVersion,
 									SubModuleName: stripEntryModuleExt(subPath),
 									SubPath:       subPath,
 								})
@@ -671,13 +671,13 @@ func (ctx *BuildContext) buildModule(analyzeMode bool) (meta *BuildMeta, include
 
 							if len(args.With) > 0 && args.With["type"] == "css" {
 								return esbuild.OnResolveResult{
-									Path:        "/" + ctx.esm.Name() + utils.NormalizePathname(modulePath),
+									Path:        "/" + ctx.esmPath.Name() + utils.NormalizePathname(modulePath),
 									External:    true,
 									SideEffects: esbuild.SideEffectsFalse,
 								}, nil
 							}
 
-							filename = path.Join(ctx.wd, "node_modules", ctx.esm.PkgName, modulePath)
+							filename = path.Join(ctx.wd, "node_modules", ctx.esmPath.PkgName, modulePath)
 
 							// split the module that includes `export * from "external"` statement
 							if entry.module && len(pkgJson.Dependencies)+len(pkgJson.PeerDependencies) > 0 && args.Kind == esbuild.ResolveJSImportStatement {
@@ -736,7 +736,7 @@ func (ctx *BuildContext) buildModule(analyzeMode bool) (meta *BuildMeta, include
 							// - it's not in the `splitting` list
 							if modulePath == entry.main || (asExport != "" && asExport == entrySpecifier) || (args.Kind != esbuild.ResolveJSDynamicImport && !noBundle) {
 								if existsFile(filename) {
-									pkgDir := path.Join(ctx.wd, "node_modules", ctx.esm.PkgName)
+									pkgDir := path.Join(ctx.wd, "node_modules", ctx.esmPath.PkgName)
 									short := strings.TrimPrefix(filename, pkgDir)[1:]
 									if analyzeMode && filename != entryModuleFilename && strings.HasPrefix(args.Importer, pkgDir) {
 										includes = append(includes, [2]string{short, strings.TrimPrefix(args.Importer, pkgDir)[1:]})
@@ -786,8 +786,8 @@ func (ctx *BuildContext) buildModule(analyzeMode bool) (meta *BuildMeta, include
 					if forceNpmSpecifiers[specifier] && ctx.target == "denonext" {
 						version := ""
 						pkgName, _, subPath, _ := splitEsmPath(specifier)
-						if pkgName == ctx.esm.PkgName {
-							version = ctx.esm.PkgVersion
+						if pkgName == ctx.esmPath.PkgName {
+							version = ctx.esmPath.PkgVersion
 						} else if v, ok := pkgJson.Dependencies[pkgName]; ok && isExactVersion(v) {
 							version = v
 						} else if v, ok := pkgJson.PeerDependencies[pkgName]; ok && isExactVersion(v) {
@@ -909,7 +909,7 @@ func (ctx *BuildContext) buildModule(analyzeMode bool) (meta *BuildMeta, include
 						return esbuild.OnLoadResult{}, err
 					}
 					svelteVersion := "5"
-					if version, ok := ctx.args.deps["svelte"]; ok {
+					if version, ok := ctx.args.Deps["svelte"]; ok {
 						svelteVersion = version
 					} else if version, ok := ctx.pkgJson.Dependencies["svelte"]; ok {
 						svelteVersion = version
@@ -926,7 +926,7 @@ func (ctx *BuildContext) buildModule(analyzeMode bool) (meta *BuildMeta, include
 					if semverLessThan(svelteVersion, "4.0.0") {
 						return esbuild.OnLoadResult{}, errors.New("svelte version must be greater than 4.0.0")
 					}
-					out, err := transformSvelte(ctx.npmrc, svelteVersion, ctx.esm.Specifier(), string(code))
+					out, err := transformSvelte(ctx.npmrc, svelteVersion, ctx.esmPath.Specifier(), string(code))
 					if err != nil {
 						return esbuild.OnLoadResult{}, err
 					}
@@ -943,7 +943,7 @@ func (ctx *BuildContext) buildModule(analyzeMode bool) (meta *BuildMeta, include
 						return esbuild.OnLoadResult{}, err
 					}
 					vueVersion := "3"
-					if version, ok := ctx.args.deps["vue"]; ok {
+					if version, ok := ctx.args.Deps["vue"]; ok {
 						vueVersion = version
 					} else if version, ok := ctx.pkgJson.Dependencies["vue"]; ok {
 						vueVersion = version
@@ -960,7 +960,7 @@ func (ctx *BuildContext) buildModule(analyzeMode bool) (meta *BuildMeta, include
 					if semverLessThan(vueVersion, "3.0.0") {
 						return esbuild.OnLoadResult{}, errors.New("vue version must be greater than 3.0.0")
 					}
-					out, err := transformVue(ctx.npmrc, vueVersion, ctx.esm.Specifier(), string(code))
+					out, err := transformVue(ctx.npmrc, vueVersion, ctx.esmPath.Specifier(), string(code))
 					if err != nil {
 						return esbuild.OnLoadResult{}, err
 					}
@@ -998,7 +998,7 @@ func (ctx *BuildContext) buildModule(analyzeMode bool) (meta *BuildMeta, include
 		}
 	} else {
 		if ctx.isBrowserTarget() {
-			switch ctx.esm.PkgName {
+			switch ctx.esmPath.PkgName {
 			case "react", "react-dom", "typescript":
 				// safe to reserve `process` for these packages
 				delete(define, "process")
@@ -1014,7 +1014,7 @@ func (ctx *BuildContext) buildModule(analyzeMode bool) (meta *BuildMeta, include
 		}
 		define["global"] = "globalThis"
 	}
-	conditions := ctx.args.conditions
+	conditions := ctx.args.Conditions
 	if ctx.dev {
 		conditions = append(conditions, "development")
 	}
@@ -1037,8 +1037,8 @@ func (ctx *BuildContext) buildModule(analyzeMode bool) (meta *BuildMeta, include
 		MinifyWhitespace:  config.Minify,
 		MinifyIdentifiers: config.Minify,
 		MinifySyntax:      config.Minify,
-		KeepNames:         ctx.args.keepNames,         // prevent class/function names erasing
-		IgnoreAnnotations: ctx.args.ignoreAnnotations, // some libs maybe use wrong side-effect annotations
+		KeepNames:         ctx.args.KeepNames,         // prevent class/function names erasing
+		IgnoreAnnotations: ctx.args.IgnoreAnnotations, // some libs maybe use wrong side-effect annotations
 		Conditions:        conditions,
 		Loader:            loaders,
 		Plugins:           []esbuild.Plugin{esmifyPlugin},
@@ -1131,21 +1131,21 @@ REBUILD:
 			header, recycle := newBuffer()
 			defer recycle()
 			header.WriteString("/* esm.sh - ")
-			if ctx.esm.GhPrefix {
+			if ctx.esmPath.GhPrefix {
 				header.WriteString("github:")
-			} else if ctx.esm.PrPrefix {
+			} else if ctx.esmPath.PrPrefix {
 				header.WriteString("pkg.pr.new/")
 			}
-			header.WriteString(ctx.esm.PkgName)
-			if ctx.esm.GhPrefix {
+			header.WriteString(ctx.esmPath.PkgName)
+			if ctx.esmPath.GhPrefix {
 				header.WriteByte('#')
 			} else {
 				header.WriteByte('@')
 			}
-			header.WriteString(ctx.esm.PkgVersion)
-			if ctx.esm.SubModuleName != "" {
+			header.WriteString(ctx.esmPath.PkgVersion)
+			if ctx.esmPath.SubModuleName != "" {
 				header.WriteByte('/')
-				header.WriteString(ctx.esm.SubModuleName)
+				header.WriteString(ctx.esmPath.SubModuleName)
 			}
 			header.WriteString(" */\n")
 
@@ -1162,7 +1162,7 @@ REBUILD:
 					ids.Add(string(r))
 				}
 				if ids.Has("__Process$") {
-					if ctx.args.external.Has("node:process") {
+					if ctx.args.External.Has("node:process") {
 						header.WriteString(`import __Process$ from "node:process";`)
 						header.WriteByte('\n')
 					} else if ctx.isBrowserTarget() {
@@ -1195,7 +1195,7 @@ REBUILD:
 					}
 				}
 				if ids.Has("__Buffer$") {
-					if ctx.args.external.Has("node:buffer") {
+					if ctx.args.External.Has("node:buffer") {
 						header.WriteString(`import { Buffer as __Buffer$ } from "node:buffer";`)
 						header.WriteByte('\n')
 					} else if ctx.isBrowserTarget() {
@@ -1282,7 +1282,7 @@ REBUILD:
 							}
 						}
 					}
-					if !isRelPathSpecifier(specifier) && !isNodeBuiltInModule(specifier) && !strings.HasPrefix(specifier, "npm:") && !isJsonModuleSpecifier(specifier) {
+					if !isRelPathSpecifier(specifier) && !isNodeBuiltinSpecifier(specifier) && !strings.HasPrefix(specifier, "npm:") && !isJsonModuleSpecifier(specifier) {
 						dep, pkgJson, err := ctx.lookupDep(specifier, false)
 						if err == nil {
 							if pkgJson.Type == "module" || pkgJson.Module != "" {
@@ -1293,7 +1293,7 @@ REBUILD:
 									logger:      ctx.logger,
 									db:          ctx.db,
 									storage:     ctx.storage,
-									esm:         dep,
+									esmPath:     dep,
 									args:        ctx.args,
 									externalAll: ctx.externalAll,
 									target:      ctx.target,
@@ -1347,10 +1347,10 @@ REBUILD:
 			finalJS.Write(jsContent)
 
 			// check if the package is deprecated
-			if !ctx.esm.GhPrefix && !ctx.esm.PrPrefix {
+			if !ctx.esmPath.GhPrefix && !ctx.esmPath.PrPrefix {
 				deprecated, _ := ctx.npmrc.isDeprecated(ctx.pkgJson.Name, ctx.pkgJson.Version)
 				if deprecated != "" {
-					fmt.Fprintf(finalJS, `console.warn("%%c[esm.sh]%%c %%cdeprecated%%c %s@%s: " + %s, "color:grey", "", "color:red", "");%s`, ctx.esm.PkgName, ctx.esm.PkgVersion, utils.MustEncodeJSON(deprecated), "\n")
+					fmt.Fprintf(finalJS, `console.warn("%%c[esm.sh]%%c %%cdeprecated%%c %s@%s: " + %s, "color:grey", "", "color:red", "");%s`, ctx.esmPath.PkgName, ctx.esmPath.PkgVersion, utils.MustEncodeJSON(deprecated), "\n")
 				}
 			}
 
@@ -1428,10 +1428,10 @@ func (ctx *BuildContext) buildTypes() (ret *BuildMeta, err error) {
 	}
 
 	var dts string
-	if endsWith(ctx.esm.SubPath, ".ts", ".mts", ".tsx", ".cts") {
-		dts = "./" + ctx.esm.SubPath
+	if endsWith(ctx.esmPath.SubPath, ".ts", ".mts", ".tsx", ".cts") {
+		dts = "./" + ctx.esmPath.SubPath
 	} else {
-		entry := ctx.resolveEntry(ctx.esm)
+		entry := ctx.resolveEntry(ctx.esmPath)
 		if entry.types == "" {
 			err = errors.New("types not found")
 			return
@@ -1445,30 +1445,30 @@ func (ctx *BuildContext) buildTypes() (ret *BuildMeta, err error) {
 		return
 	}
 
-	ret = &BuildMeta{Dts: "/" + ctx.esm.Name() + dts[1:]}
+	ret = &BuildMeta{Dts: "/" + ctx.esmPath.Name() + dts[1:]}
 	return
 }
 
 func (ctx *BuildContext) install() (err error) {
 	if ctx.wd == "" || ctx.pkgJson == nil {
-		p, err := ctx.npmrc.installPackage(ctx.esm.Package())
+		p, err := ctx.npmrc.installPackage(ctx.esmPath.Package())
 		if err != nil {
 			return err
 		}
 
-		if ctx.esm.GhPrefix || ctx.esm.PrPrefix {
+		if ctx.esmPath.GhPrefix || ctx.esmPath.PrPrefix {
 			// if the name in package.json is not the same as the repository name
-			if p.Name != ctx.esm.PkgName {
+			if p.Name != ctx.esmPath.PkgName {
 				p.PkgName = p.Name
-				p.Name = ctx.esm.PkgName
+				p.Name = ctx.esmPath.PkgName
 			}
-			p.Version = ctx.esm.PkgVersion
+			p.Version = ctx.esmPath.PkgVersion
 		} else {
 			p.Version = strings.TrimPrefix(p.Version, "v")
 		}
 
 		// Check if the `SubPath` is the same as the `main` or `module` field of the package.json
-		if subModule := ctx.esm.SubModuleName; subModule != "" && ctx.target != "types" {
+		if subModule := ctx.esmPath.SubModuleName; subModule != "" && ctx.target != "types" {
 			isMainModule := false
 			check := func(s string) bool {
 				return isMainModule || (s != "" && subModule == utils.NormalizePathname(stripModuleExt(s))[1:])
@@ -1496,14 +1496,14 @@ func (ctx *BuildContext) install() (err error) {
 				isMainModule = (p.Module != "" && check(p.Module)) || (p.Main != "" && check(p.Main))
 			}
 			if isMainModule {
-				ctx.esm.SubModuleName = ""
-				ctx.esm.SubPath = ""
+				ctx.esmPath.SubModuleName = ""
+				ctx.esmPath.SubPath = ""
 				ctx.rawPath = ctx.path
 				ctx.path = ""
 			}
 		}
 
-		ctx.wd = path.Join(ctx.npmrc.StoreDir(), ctx.esm.Name())
+		ctx.wd = path.Join(ctx.npmrc.StoreDir(), ctx.esmPath.Name())
 		ctx.pkgJson = p
 	}
 

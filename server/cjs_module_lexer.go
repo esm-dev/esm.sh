@@ -72,7 +72,7 @@ func cjsModuleLexer(b *BuildContext, cjsEntry string) (ret cjsModuleLexerResult,
 	defer func() {
 		if err == nil {
 			if DEBUG {
-				b.logger.Debugf("[cjsModuleLexer] parse %s in %s", path.Join(b.esm.PkgName, cjsEntry), time.Since(start))
+				b.logger.Debugf("[cjsModuleLexer] parse %s in %s", path.Join(b.esmPath.PkgName, cjsEntry), time.Since(start))
 			}
 			if !existsFile(cacheFileName) {
 				ensureDir(path.Dir(cacheFileName))
@@ -81,7 +81,7 @@ func cjsModuleLexer(b *BuildContext, cjsEntry string) (ret cjsModuleLexerResult,
 		}
 	}()
 
-	if cjsModuleLexerIgnoredPackages.Has(b.esm.PkgName) {
+	if cjsModuleLexerIgnoredPackages.Has(b.esmPath.PkgName) {
 		err = doOnce("check-deno", func() (err error) {
 			_, err = common.GetDenoPath(config.WorkDir)
 			return err
@@ -90,7 +90,7 @@ func cjsModuleLexer(b *BuildContext, cjsEntry string) (ret cjsModuleLexerResult,
 			return
 		}
 		js := path.Join(b.wd, "reveal_"+strings.ReplaceAll(cjsEntry[2:], "/", "_"))
-		err = os.WriteFile(js, []byte(fmt.Sprintf(`console.log(JSON.stringify(Object.keys((await import("npm:%s")).default)))`, path.Join(b.esm.Name(), cjsEntry))), 0644)
+		err = os.WriteFile(js, []byte(fmt.Sprintf(`console.log(JSON.stringify(Object.keys((await import("npm:%s")).default)))`, path.Join(b.esmPath.Name(), cjsEntry))), 0644)
 		if err != nil {
 			return
 		}
@@ -122,7 +122,7 @@ RETRY:
 	defer recycle1()
 	defer recycle2()
 
-	cmd := exec.CommandContext(ctx, path.Join(config.WorkDir, "bin/cjs-module-lexer"), path.Join(b.esm.PkgName, cjsEntry))
+	cmd := exec.CommandContext(ctx, path.Join(config.WorkDir, "bin/cjs-module-lexer"), path.Join(b.esmPath.PkgName, cjsEntry))
 	cmd.Dir = b.wd
 	cmd.Stdout = stdout
 	cmd.Stderr = stderr

@@ -3,19 +3,14 @@ package server
 import (
 	"errors"
 	"fmt"
+	"net/url"
 	"os/exec"
 	"path"
-	"regexp"
 	"strconv"
 	"strings"
 
 	"github.com/esm-dev/esm.sh/server/common"
 	"github.com/ije/gox/term"
-)
-
-var (
-	regexpSveltePath = regexp.MustCompile(`/\*?svelte@([~\^]?[\w\+\-\.]+)(/|\?|&|$)`)
-	regexpVuePath    = regexp.MustCompile(`/\*?vue@([~\^]?[\w\+\-\.]+)(/|\?|&|$)`)
 )
 
 func transformSvelte(npmrc *NpmRC, svelteVersion string, filename string, code string) (output *LoaderOutput, err error) {
@@ -70,11 +65,14 @@ func compileSvelteLoader(npmrc *NpmRC, svelteVersion string, loaderExecPath stri
 func resolveSvelteVersion(npmrc *NpmRC, importMap common.ImportMap) (svelteVersion string, err error) {
 	svelteVersion = "5"
 	if len(importMap.Imports) > 0 {
-		sveltePath, ok := importMap.Imports["svelte"]
-		if ok {
-			a := regexpSveltePath.FindAllStringSubmatch(sveltePath, 1)
-			if len(a) > 0 {
-				svelteVersion = a[0][1]
+		svelteUrl, ok := importMap.Imports["svelte"]
+		if ok && isHttpSepcifier(svelteUrl) {
+			u, e := url.Parse(svelteUrl)
+			if e == nil {
+				_, v, _, _ := splitEsmPath(u.Path)
+				if len(v) > 0 {
+					svelteVersion = v
+				}
 			}
 		}
 	}
@@ -147,11 +145,14 @@ func compileVueLoader(npmrc *NpmRC, vueVersion string, loaderVersion, loaderExec
 func resolveVueVersion(npmrc *NpmRC, importMap common.ImportMap) (vueVersion string, err error) {
 	vueVersion = "3"
 	if len(importMap.Imports) > 0 {
-		vuePath, ok := importMap.Imports["vue"]
-		if ok {
-			a := regexpVuePath.FindAllStringSubmatch(vuePath, 1)
-			if len(a) > 0 {
-				vueVersion = a[0][1]
+		vueUrl, ok := importMap.Imports["vue"]
+		if ok && isHttpSepcifier(vueUrl) {
+			u, e := url.Parse(vueUrl)
+			if e == nil {
+				_, v, _, _ := splitEsmPath(u.Path)
+				if len(v) > 0 {
+					vueVersion = v
+				}
 			}
 		}
 	}

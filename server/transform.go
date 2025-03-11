@@ -1,139 +1,151 @@
 package server
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"net/url"
-	"os"
 	"path"
 	"strings"
 
 	"github.com/esm-dev/esm.sh/server/common"
 	esbuild "github.com/evanw/esbuild/pkg/api"
-	esbuild_config "github.com/ije/esbuild-internal/config"
-	"github.com/ije/esbuild-internal/js_ast"
-	"github.com/ije/esbuild-internal/js_parser"
-	"github.com/ije/esbuild-internal/logger"
 	"github.com/ije/gox/utils"
 )
 
-var moduleExts = []string{".js", ".ts", ".mjs", ".mts", ".jsx", ".tsx", ".cjs", ".cts"}
+type TransformOptions struct {
+	Filename        string          `json:"filename"`
+	Lang            string          `json:"lang"`
+	Code            string          `json:"code"`
+	ImportMap       json.RawMessage `json:"importMap"`
+	JsxImportSource string          `json:"jsxImportSource"`
+	Target          string          `json:"target"`
+	SourceMap       string          `json:"sourceMap"`
+	Minify          bool            `json:"minify"`
+}
 
-// stripModuleExt strips the module extension from the given string.
-func stripModuleExt(s string) string {
-	for _, ext := range moduleExts {
-		if strings.HasSuffix(s, ext) {
-			return s[:len(s)-len(ext)]
+type ResolvedTransformOptions struct {
+	TransformOptions
+	importMap     common.ImportMap
+	globalVersion string
+}
+
+type TransformOutput struct {
+	Code string `json:"code"`
+	Map  string `json:"map"`
+}
+
+// transform transforms the given code with the given options.
+func transform(options *ResolvedTransformOptions) (out *TransformOutput, err error) {
+	target := esbuild.ESNext
+	if options.Target != "" {
+		if t, ok := targets[options.Target]; ok {
+			target = t
+		} else {
+			err = errors.New("invalid target")
+			return
 		}
 	}
-	return s
-}
 
-// stripEntryModuleExt strips the entry module extension from the given string.
-func stripEntryModuleExt(s string) string {
-	if strings.HasSuffix(s, ".mjs") || strings.HasSuffix(s, ".cjs") {
-		return s[:len(s)-4]
-	}
-	if strings.HasSuffix(s, ".js") {
-		return s[:len(s)-3]
-	}
-	return s
-}
+	loader := esbuild.LoaderJS
+	sourceCode := options.Code
+	jsxImportSource := options.JsxImportSource
 
-// validateModuleFile validates javascript/typescript module from the given file.
-func validateModuleFile(filename string) (isESM bool, namedExports []string, err error) {
-	data, err := os.ReadFile(filename)
-	if err != nil {
+	if options.Lang == "" && options.Filename != "" {
+		filename, _ := utils.SplitByFirstByte(options.Filename, '?')
+		_, basename := utils.SplitByLastByte(filename, '/')
+		_, options.Lang = utils.SplitByLastByte(basename, '.')
+	}
+	switch options.Lang {
+	case "js":
+		loader = esbuild.LoaderJS
+	case "jsx":
+		loader = esbuild.LoaderJSX
+	case "ts":
+		loader = esbuild.LoaderTS
+	case "tsx":
+		loader = esbuild.LoaderTSX
+	case "css":
+		loader = esbuild.LoaderCSS
+	default:
+		err = errors.New("unsupported language:" + options.Lang)
 		return
 	}
-	log := logger.NewDeferLog(logger.DeferLogNoVerboseOrDebug, nil)
-	parserOpts := js_parser.OptionsFromConfig(&esbuild_config.Options{
-		JSX: esbuild_config.JSXOptions{
-			Parse: endsWith(filename, ".jsx", ".tsx"),
-		},
-		TS: esbuild_config.TSOptions{
-			Parse: endsWith(filename, ".ts", ".mts", ".cts", ".tsx"),
-		},
-	})
-	ast, pass := js_parser.Parse(log, logger.Source{
-		Index:          0,
-		KeyPath:        logger.Path{Text: "<stdin>"},
-		PrettyPath:     "<stdin>",
-		IdentifierName: "stdin",
-		Contents:       string(data),
-	}, parserOpts)
-	if !pass {
-		err = errors.New("invalid syntax, require javascript/typescript")
-		return
-	}
-	isESM = ast.ExportsKind == js_ast.ExportsESM || ast.ExportsKind == js_ast.ExportsESMWithDynamicFallback
-	namedExports = make([]string, len(ast.NamedExports))
-	i := 0
-	for name := range ast.NamedExports {
-		namedExports[i] = name
-		i++
-	}
-	return
-}
 
-// minify minifies the given javascript code.
-func minify(code string, loader esbuild.Loader, target esbuild.Target) ([]byte, error) {
-	ret := esbuild.Transform(code, esbuild.TransformOptions{
-		Target:            target,
-		Format:            esbuild.FormatESModule,
+	if jsxImportSource == "" && (loader == esbuild.LoaderJSX || loader == esbuild.LoaderTSX) {
+		var ok bool
+		for _, key := range []string{"@jsxRuntime", "@jsxImportSource", "preact", "react"} {
+			jsxImportSource, ok = options.importMap.Resolve(key)
+			if ok {
+				break
+			}
+		}
+		if !ok {
+			jsxImportSource = "react"
+		}
+	}
+
+	sourceMap := esbuild.SourceMapNone
+	if options.SourceMap == "external" {
+		sourceMap = esbuild.SourceMapExternal
+	} else if options.SourceMap == "inline" {
+		sourceMap = esbuild.SourceMapInline
+	}
+
+	filename := options.Filename
+	if filename == "" {
+		filename = "source." + options.Lang
+	}
+	stdin := &esbuild.StdinOptions{
+		Sourcefile: filename,
+		Contents:   sourceCode,
+		Loader:     loader,
+	}
+	opts := esbuild.BuildOptions{
+		Stdin:             stdin,
 		Platform:          esbuild.PlatformBrowser,
-		MinifyWhitespace:  true,
-		MinifyIdentifiers: true,
-		MinifySyntax:      true,
-		LegalComments:     esbuild.LegalCommentsExternal,
-		Loader:            loader,
-	})
-	if len(ret.Errors) > 0 {
-		return nil, errors.New(ret.Errors[0].Text)
-	}
-	return concatBytes(ret.LegalComments, ret.Code), nil
-}
-
-func treeShake(code []byte, exports []string, target esbuild.Target) ([]byte, error) {
-	input := &esbuild.StdinOptions{
-		Contents: fmt.Sprintf(`export { %s } from '.';`, strings.Join(exports, ", ")),
-		Loader:   esbuild.LoaderJS,
-	}
-	plugins := []esbuild.Plugin{
-		{
-			Name: "tree-shaking",
-			Setup: func(build esbuild.PluginBuild) {
-				build.OnResolve(esbuild.OnResolveOptions{Filter: ".*"}, func(args esbuild.OnResolveArgs) (esbuild.OnResolveResult, error) {
-					if args.Path == "." {
-						return esbuild.OnResolveResult{Path: ".", Namespace: "memory", PluginData: code}, nil
-					}
-					return esbuild.OnResolveResult{External: true}, nil
-				})
-				build.OnLoad(esbuild.OnLoadOptions{Filter: ".*", Namespace: "memory"}, func(args esbuild.OnLoadArgs) (esbuild.OnLoadResult, error) {
-					contents := string(args.PluginData.([]byte))
-					return esbuild.OnLoadResult{Contents: &contents}, nil
-				})
+		Format:            esbuild.FormatESModule,
+		Target:            target,
+		JSX:               esbuild.JSXAutomatic,
+		JSXImportSource:   strings.TrimSuffix(jsxImportSource, "/"),
+		MinifyWhitespace:  options.Minify,
+		MinifySyntax:      options.Minify,
+		MinifyIdentifiers: options.Minify,
+		Sourcemap:         sourceMap,
+		Bundle:            true,
+		Outdir:            "/esbuild",
+		Write:             false,
+		Plugins: []esbuild.Plugin{
+			{
+				Name: "resolver",
+				Setup: func(build esbuild.PluginBuild) {
+					build.OnResolve(esbuild.OnResolveOptions{Filter: ".*"}, func(args esbuild.OnResolveArgs) (esbuild.OnResolveResult, error) {
+						path, _ := options.importMap.Resolve(args.Path)
+						return esbuild.OnResolveResult{Path: path, External: true}, nil
+					})
+				},
 			},
 		},
 	}
-	ret := esbuild.Build(esbuild.BuildOptions{
-		Stdin:             input,
-		Bundle:            true,
-		Format:            esbuild.FormatESModule,
-		Target:            target,
-		Platform:          esbuild.PlatformBrowser,
-		MinifyWhitespace:  config.Minify,
-		MinifyIdentifiers: config.Minify,
-		MinifySyntax:      config.Minify,
-		Outdir:            "/esbuild",
-		Write:             false,
-		Plugins:           plugins,
-	})
+	ret := esbuild.Build(opts)
 	if len(ret.Errors) > 0 {
-		return nil, errors.New(ret.Errors[0].Text)
+		err = errors.New("failed to validate code: " + ret.Errors[0].Text)
+		return
 	}
-	return ret.OutputFiles[0].Contents, nil
+	if len(ret.OutputFiles) == 0 {
+		err = errors.New("failed to validate code: no output files")
+		return
+	}
+	out = &TransformOutput{}
+	for _, file := range ret.OutputFiles {
+		if strings.HasSuffix(file.Path, ".js") || strings.HasSuffix(file.Path, ".css") {
+			out.Code = string(file.Contents)
+		} else if strings.HasSuffix(file.Path, ".map") {
+			out.Map = string(file.Contents)
+		}
+	}
+	return
 }
 
 // bundleHttpModule bundles the http module and it's submodules.
@@ -317,4 +329,64 @@ func bundleHttpModule(npmrc *NpmRC, entry string, importMap common.ImportMap, co
 		}
 	}
 	return
+}
+
+// treeShake tree-shakes the given javascript code with the given exports.
+func treeShake(code []byte, exports []string, target esbuild.Target) ([]byte, error) {
+	input := &esbuild.StdinOptions{
+		Contents: fmt.Sprintf(`export { %s } from '.';`, strings.Join(exports, ", ")),
+		Loader:   esbuild.LoaderJS,
+	}
+	plugins := []esbuild.Plugin{
+		{
+			Name: "tree-shaking",
+			Setup: func(build esbuild.PluginBuild) {
+				build.OnResolve(esbuild.OnResolveOptions{Filter: ".*"}, func(args esbuild.OnResolveArgs) (esbuild.OnResolveResult, error) {
+					if args.Path == "." {
+						return esbuild.OnResolveResult{Path: ".", Namespace: "memory", PluginData: code}, nil
+					}
+					return esbuild.OnResolveResult{External: true}, nil
+				})
+				build.OnLoad(esbuild.OnLoadOptions{Filter: ".*", Namespace: "memory"}, func(args esbuild.OnLoadArgs) (esbuild.OnLoadResult, error) {
+					contents := string(args.PluginData.([]byte))
+					return esbuild.OnLoadResult{Contents: &contents}, nil
+				})
+			},
+		},
+	}
+	ret := esbuild.Build(esbuild.BuildOptions{
+		Stdin:             input,
+		Bundle:            true,
+		Format:            esbuild.FormatESModule,
+		Target:            target,
+		Platform:          esbuild.PlatformBrowser,
+		MinifyWhitespace:  config.Minify,
+		MinifyIdentifiers: config.Minify,
+		MinifySyntax:      config.Minify,
+		Outdir:            "/esbuild",
+		Write:             false,
+		Plugins:           plugins,
+	})
+	if len(ret.Errors) > 0 {
+		return nil, errors.New(ret.Errors[0].Text)
+	}
+	return ret.OutputFiles[0].Contents, nil
+}
+
+// minify minifies the given javascript code.
+func minify(code string, loader esbuild.Loader, target esbuild.Target) ([]byte, error) {
+	ret := esbuild.Transform(code, esbuild.TransformOptions{
+		Target:            target,
+		Format:            esbuild.FormatESModule,
+		Platform:          esbuild.PlatformBrowser,
+		MinifyWhitespace:  true,
+		MinifyIdentifiers: true,
+		MinifySyntax:      true,
+		LegalComments:     esbuild.LegalCommentsExternal,
+		Loader:            loader,
+	})
+	if len(ret.Errors) > 0 {
+		return nil, errors.New(ret.Errors[0].Text)
+	}
+	return concatBytes(ret.LegalComments, ret.Code), nil
 }

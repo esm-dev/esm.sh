@@ -78,7 +78,7 @@ func (ctx *BuildContext) analyzeSplitting() (err error) {
 					if e == nil && n <= len(a)-1 {
 						ctx.splitting = set.NewReadOnly(a[1 : n+1]...)
 						if DEBUG {
-							ctx.logger.Debugf("build(%s): splitting.txt found with %d shared modules", ctx.esm.Specifier(), ctx.splitting.Len())
+							ctx.logger.Debugf("build(%s): splitting.txt found with %d shared modules", ctx.esmPath.Specifier(), ctx.splitting.Len())
 						}
 						return true
 					}
@@ -125,7 +125,7 @@ func (ctx *BuildContext) analyzeSplitting() (err error) {
 
 			refs := map[string]Ref{}
 			for _, exportName := range exportNames.Values() {
-				esm := ctx.esm
+				esm := ctx.esmPath
 				esm.SubPath = exportName
 				esm.SubModuleName = stripEntryModuleExt(exportName)
 				b := &BuildContext{
@@ -133,7 +133,7 @@ func (ctx *BuildContext) analyzeSplitting() (err error) {
 					logger:      ctx.logger,
 					db:          ctx.db,
 					storage:     ctx.storage,
-					esm:         esm,
+					esmPath:     esm,
 					args:        ctx.args,
 					externalAll: ctx.externalAll,
 					target:      ctx.target,
@@ -196,7 +196,7 @@ func (ctx *BuildContext) analyzeSplitting() (err error) {
 				}
 				ctx.splitting = splitting.ReadOnly()
 				if DEBUG {
-					ctx.logger.Debugf("build(%s): found %d shared modules from %d modules", ctx.esm.Specifier(), shared.Len(), len(refs))
+					ctx.logger.Debugf("build(%s): found %d shared modules from %d modules", ctx.esmPath.Specifier(), shared.Len(), len(refs))
 				}
 			}
 		}

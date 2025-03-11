@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/Masterminds/semver/v3"
 	"github.com/ije/gox/valid"
 )
 
@@ -40,6 +41,50 @@ func isJsIdentifier(s string) bool {
 		}
 	}
 	return true
+}
+
+// isCommitish returns true if the given string is a commit hash.
+func isCommitish(s string) bool {
+	return len(s) >= 7 && len(s) <= 40 && valid.IsHexString(s)
+}
+
+// isNodeBuiltinSpecifier checks if the given specifier is a node.js built-in module.
+func isNodeBuiltinSpecifier(specifier string) bool {
+	return strings.HasPrefix(specifier, "node:") && nodeBuiltinModules[specifier[5:]]
+}
+
+// isJsonModuleSpecifier returns true if the specifier is a json module.
+func isJsonModuleSpecifier(specifier string) bool {
+	if !strings.HasSuffix(specifier, ".json") {
+		return false
+	}
+	_, _, subpath, _ := splitEsmPath(specifier)
+	return subpath != "" && strings.HasSuffix(subpath, ".json")
+}
+
+// isHttpSepcifier returns true if the specifier is a remote URL.
+func isHttpSepcifier(specifier string) bool {
+	return strings.HasPrefix(specifier, "https://") || strings.HasPrefix(specifier, "http://")
+}
+
+// isRelPathSpecifier returns true if the specifier is a local path.
+func isRelPathSpecifier(specifier string) bool {
+	return strings.HasPrefix(specifier, "./") || strings.HasPrefix(specifier, "../")
+}
+
+// isAbsPathSpecifier returns true if the specifier is an absolute path.
+func isAbsPathSpecifier(specifier string) bool {
+	return strings.HasPrefix(specifier, "/") || strings.HasPrefix(specifier, "file://")
+}
+
+// semverLessThan returns true if the version a is less than the version b.
+func semverLessThan(a string, b string) bool {
+	va, err1 := semver.NewVersion(a)
+	if err1 != nil {
+		return false
+	}
+	vb, err2 := semver.NewVersion(b)
+	return err2 == nil && va.LessThan(vb)
 }
 
 // endsWith returns true if the given string ends with any of the suffixes.

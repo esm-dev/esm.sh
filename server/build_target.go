@@ -7,8 +7,6 @@ import (
 	esbuild "github.com/evanw/esbuild/pkg/api"
 )
 
-var v1_33_2 = semver.MustParse("1.33.2")
-
 var targets = map[string]esbuild.Target{
 	"es2015":   esbuild.ES2015,
 	"es2016":   esbuild.ES2016,
@@ -34,8 +32,9 @@ func getBuildTargetByUA(ua string) string {
 		}
 	}
 	if strings.HasPrefix(ua, "Deno/") {
-		uaVersion, err := semver.NewVersion(ua[5:])
-		if err == nil && uaVersion.LessThan(v1_33_2) {
+		version, err := semver.NewVersion(ua[5:])
+		// legacy target "deno" (< 1.33.2) doesn't support `node:` specific features
+		if err == nil && !(version.Major() > 1 || (version.Major() == 1 && (version.Minor() > 33 || (version.Minor() == 33 && version.Patch() >= 2)))) {
 			return "deno"
 		}
 		return "denonext"
