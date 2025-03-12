@@ -2,10 +2,11 @@ package server
 
 import (
 	"bytes"
-	"encoding/json"
 	"os"
 	"path"
 	"regexp"
+
+	"github.com/goccy/go-json"
 )
 
 var (

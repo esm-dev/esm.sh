@@ -3,7 +3,6 @@ package server
 import (
 	"bytes"
 	"encoding/base64"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -17,6 +16,7 @@ import (
 	"github.com/esm-dev/esm.sh/server/npm_replacements"
 	"github.com/esm-dev/esm.sh/server/storage"
 	esbuild "github.com/evanw/esbuild/pkg/api"
+	"github.com/goccy/go-json"
 	"github.com/ije/gox/log"
 	"github.com/ije/gox/set"
 	"github.com/ije/gox/utils"

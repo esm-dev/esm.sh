@@ -54,7 +54,6 @@ func Serve() {
 	if err != nil {
 		logger.Fatalf("failed to initialize access logger: %v", err)
 	}
-	// don't write log message to stdout
 	accessLogger.SetQuite(true)
 
 	// open database

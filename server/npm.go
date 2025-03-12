@@ -5,7 +5,6 @@ import (
 	"bytes"
 	"compress/gzip"
 	"encoding/base64"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -20,6 +19,7 @@ import (
 	"time"
 
 	"github.com/Masterminds/semver/v3"
+	"github.com/goccy/go-json"
 	"github.com/ije/gox/set"
 	syncx "github.com/ije/gox/sync"
 	"github.com/ije/gox/utils"

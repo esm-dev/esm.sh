@@ -2,10 +2,10 @@ package common
 
 import (
 	"bytes"
-	"encoding/json"
 	"fmt"
 	"io"
 
+	"github.com/goccy/go-json"
 	"github.com/yuin/goldmark"
 	meta "github.com/yuin/goldmark-meta"
 	"github.com/yuin/goldmark/extension"

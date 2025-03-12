@@ -2,7 +2,6 @@ package server
 
 import (
 	"bytes"
-	"encoding/json"
 	"fmt"
 	"net/url"
 	"os"
@@ -13,6 +12,7 @@ import (
 	"strings"
 
 	"github.com/esm-dev/esm.sh/server/storage"
+	"github.com/goccy/go-json"
 	"github.com/ije/gox/term"
 )
 

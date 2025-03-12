@@ -2,9 +2,10 @@ package server
 
 import (
 	"bytes"
-	"encoding/json"
 	"fmt"
 	"io"
+
+	"github.com/goccy/go-json"
 )
 
 // JSONObject represents a JSON object with ordered keys
@@ -27,6 +28,8 @@ func (obj *JSONObject) Get(key string) (any, bool) {
 // UnmarshalJSON implements type json.Unmarshaler interface
 func (obj *JSONObject) UnmarshalJSON(data []byte) error {
 	dec := json.NewDecoder(bytes.NewReader(data))
+
+	// don't convert number to float64
 	dec.UseNumber()
 
 	t, err := dec.Token()

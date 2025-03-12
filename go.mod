@@ -5,6 +5,7 @@ go 1.23.0
 require (
 	github.com/Masterminds/semver/v3 v3.3.1
 	github.com/evanw/esbuild v0.25.0
+	github.com/goccy/go-json v0.10.5
 	github.com/gorilla/websocket v1.5.3
 	github.com/hashicorp/golang-lru/v2 v2.0.7
 	github.com/ije/esbuild-internal v0.25.0

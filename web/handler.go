@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"encoding/base64"
 	"encoding/hex"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -19,6 +18,7 @@ import (
 
 	"github.com/esm-dev/esm.sh/server/common"
 	esbuild "github.com/evanw/esbuild/pkg/api"
+	"github.com/goccy/go-json"
 	"github.com/gorilla/websocket"
 	"github.com/ije/esbuild-internal/xxhash"
 	"github.com/ije/gox/term"

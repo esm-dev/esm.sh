@@ -2,7 +2,6 @@ package web
 
 import (
 	"bufio"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -14,6 +13,7 @@ import (
 	"time"
 
 	"github.com/esm-dev/esm.sh/server/common"
+	"github.com/goccy/go-json"
 	"github.com/ije/gox/term"
 	"github.com/ije/gox/utils"
 )
