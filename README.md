@@ -18,7 +18,7 @@ esm.sh allows you to import [JavaScript modules](https://developer.mozilla.org/e
 import * as mod from "https://esm.sh/PKG[@SEMVER][/PATH]";
 ```
 
-With [import maps](https://github.com/WICG/import-maps), you can even use bare import specifiers intead of URLs:
+With [import maps](https://developer.mozilla.org/en-US/docs/Web/HTML/Element/script/type/importmap), you can even use bare import specifiers intead of URLs:
 
 ```html
 <script type="importmap">
@@ -244,7 +244,7 @@ worker.postMessage("The string that is being hashed");
 
 ## Using Import Maps
 
-[**Import Maps**](https://github.com/WICG/import-maps) has been supported by most modern browsers and Deno natively.
+[**Import Maps**](https://developer.mozilla.org/en-US/docs/Web/HTML/Element/script/type/importmap) has been supported by most modern browsers and Deno natively.
 This allows _**bare import specifiers**_, such as `import React from "react"`, to work.
 
 esm.sh introduces the `?external` for specifying external dependencies. By employing this query, esm.sh maintains the import specifier intact, leaving it to the browser/Deno to resolve based on the import map. For example:
@@ -279,7 +279,7 @@ Alternatively, you can **mark all dependencies as external** by adding a `*` pre
 }
 ```
 
-Import maps supports [**trailing slash**](https://github.com/WICG/import-maps#packages-via-trailing-slashes) that can
+Import maps supports [**trailing slash**](https://developer.mozilla.org/en-US/docs/Web/HTML/Element/script/type/importmap#packages-via-trailing-slashes) that can
 not work with URL search params friendly. To fix this issue, esm.sh provides a special format for import URL that allows
 you to use query params with trailing slash: change the query prefix `?` to `&` and put it after the package version.
 
