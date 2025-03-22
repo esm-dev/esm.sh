@@ -96,27 +96,42 @@ Deno.test("redirect asset URLs", async () => {
 });
 
 Deno.test("Fix wasm URLs with `target` segment", async () => {
-  const res = await fetch(
-    "http://localhost:8080/lightningcss-wasm@1.19.0/deno/lightningcss_node.wasm",
-    { redirect: "manual" },
-  );
-  res.body?.cancel();
-  assertEquals(res.status, 301);
-  assertEquals(
-    res.headers.get("location"),
-    "http://localhost:8080/lightningcss-wasm@1.19.0/lightningcss_node.wasm",
-  );
-
-  const res2 = await fetch(
-    "http://localhost:8080/esm-compiler@0.7.2/es2024/esm_compiler_bg.wasm",
-    { redirect: "manual" },
-  );
-  res2.body?.cancel();
-  assertEquals(res2.status, 301);
-  assertEquals(
-    res2.headers.get("location"),
-    "http://localhost:8080/esm-compiler@0.7.2/pkg/esm_compiler_bg.wasm",
-  );
+  {
+    const res = await fetch(
+      "http://localhost:8080/lightningcss-wasm@1.19.0/deno/lightningcss_node.wasm",
+      { redirect: "manual" },
+    );
+    res.body?.cancel();
+    assertEquals(res.status, 301);
+    assertEquals(
+      res.headers.get("location"),
+      "http://localhost:8080/lightningcss-wasm@1.19.0/lightningcss_node.wasm",
+    );
+  }
+  {
+    const res = await fetch(
+      "http://localhost:8080/esm-compiler@0.7.2/es2024/esm_compiler_bg.wasm",
+      { redirect: "manual" },
+    );
+    res.body?.cancel();
+    assertEquals(res.status, 301);
+    assertEquals(
+      res.headers.get("location"),
+      "http://localhost:8080/esm-compiler@0.7.2/pkg/esm_compiler_bg.wasm",
+    );
+  }
+  {
+    const res = await fetch(
+      "http://localhost:8080/gh/oxc-project/oxc@7d785c3/es2022/napi/parser/parser.wasm32-wasi.wasm",
+      { redirect: "manual" },
+    );
+    res.body?.cancel();
+    assertEquals(res.status, 301);
+    assertEquals(
+      res.headers.get("location"),
+      "http://localhost:8080/gh/oxc-project/oxc@7d785c3/napi/parser/parser.wasm32-wasi.wasm",
+    );
+  }
 });
 
 Deno.test("Fix json URLs with `target` segment", async () => {
