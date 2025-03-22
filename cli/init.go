@@ -2,6 +2,7 @@ package cli
 
 import (
 	"bytes"
+	"embed"
 	"flag"
 	"fmt"
 	"io"
@@ -12,6 +13,20 @@ import (
 
 	"github.com/ije/gox/term"
 )
+
+//go:embed demo
+var efs embed.FS
+
+const initHelpMessage = "\033[30mesm.sh - A nobuild tool for modern web development.\033[0m" + `
+
+Usage: esm.sh init <project-name> <options>
+
+Options:
+  --framework        JavaScript framework, Available options: Vanilla, React, Preact, Vue, Svelte
+  --css-framework    CSS framework, Available options: Vanilla, UnoCSS
+  --typescript       Use TypeScript, default is false
+  --help             Show help message
+`
 
 var frameworks = []string{
 	"Vanilla",
@@ -26,18 +41,19 @@ var cssFrameworks = []string{
 	"UnoCSS",
 }
 
-var langVariants = []string{
-	"JavaScript",
-	"TypeScript",
-}
-
 // Create a new nobuild web app with esm.sh CDN.
 func Init() {
-	framework := flag.String("framework", "", "javascript framework")
+	framework := flag.String("framework", "", "JavaScript framework")
 	cssFramework := flag.String("css-framework", "", "CSS framework")
-	lang := flag.String("lang", "", "language")
-	projectName, _ := parseCommandFlag()
+	typescript := flag.Bool("typescript", false, "Use TypeScript")
+	help := flag.Bool("help", false, "Show help message")
+	projectName, _ := parseCommandFlag(2)
 	raw := &termRaw{}
+
+	if *help {
+		fmt.Print(initHelpMessage)
+		return
+	}
 
 	if projectName == "" {
 		projectName = term.Input(raw, "Project name:", "esm-app")
@@ -56,10 +72,8 @@ func Init() {
 		*cssFramework = cssFrameworks[0]
 	}
 
-	if *lang == "" {
-		*lang = term.Select(raw, "Select a variant:", langVariants)
-	} else if !slices.Contains(langVariants, *lang) {
-		*lang = langVariants[0]
+	if !slices.Contains(os.Args, "--typescript") {
+		*typescript = term.Select(raw, "Select a variant:", []string{"JavaScript", "TypeScript"}) == "TypeScript"
 	}
 
 	_, err := os.Lstat(projectName)
@@ -74,10 +88,10 @@ func Init() {
 	if *cssFramework == "UnoCSS" {
 		dir = "demo/with-unocss/" + strings.ToLower(*framework)
 	}
-	err = walkEmbedFS(dir, func(filename string) error {
+	err = walkEmbedFS(&efs, dir, func(filename string) error {
 		savePath := projectName + strings.TrimPrefix(filename, dir)
 		os.MkdirAll(filepath.Dir(savePath), 0755)
-		if *lang == "JavaScript" {
+		if !*typescript {
 			if (strings.HasSuffix(savePath, ".ts") || strings.HasSuffix(savePath, ".tsx")) && !strings.HasSuffix(savePath, ".d.ts") {
 				data, err := efs.ReadFile(filename)
 				if err != nil {
@@ -132,11 +146,11 @@ func Init() {
 	fmt.Println(term.Dim("We highly recommend installing our VS Code extension for a better DX: https://link.esm.sh/vsce"))
 	fmt.Println(term.Dim("To start the app in development mode, run:"))
 	fmt.Println(" ")
-	fmt.Print(term.Dim("$ ") + "cd " + projectName)
+	fmt.Println(term.Dim("$ ") + "cd " + projectName)
 	if strings.Contains(os.Args[0], "/node_modules/") {
-		fmt.Println(" && npx esm.sh serve")
+		fmt.Println(term.Dim("$ ") + "npx esm.sh dev")
 	} else {
-		fmt.Println(" && esm.sh serve")
+		fmt.Println(term.Dim("$ ") + "esm.sh dev")
 	}
 	fmt.Println(" ")
 }
