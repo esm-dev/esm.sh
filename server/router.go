@@ -1086,7 +1086,7 @@ func esmRouter(db Database, buildStorage storage.Storage, logger *log.Logger) re
 				if file == "" {
 					return rex.Status(404, "File not found")
 				}
-				url := fmt.Sprintf("%s/%s@%s/%s", origin, esm.PkgName, esm.PkgVersion, file)
+				url := fmt.Sprintf("%s%s/%s@%s/%s", origin, registryPrefix, esm.PkgName, esm.PkgVersion, file)
 				return redirect(ctx, url, true)
 			}
 
