@@ -7,6 +7,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/esm-dev/esm.sh/server/common"
 	"github.com/ije/gox/set"
 	"github.com/ije/gox/utils"
 )
@@ -240,7 +241,7 @@ func resolveBuildArgs(npmrc *NpmRC, installDir string, args *BuildArgs, esm EsmP
 	return nil
 }
 
-func walkDeps(npmrc *NpmRC, installDir string, pkg Package, mark *set.Set[string]) (err error) {
+func walkDeps(npmrc *NpmRC, installDir string, pkg common.Package, mark *set.Set[string]) (err error) {
 	if mark.Has(pkg.Name) {
 		return
 	}
@@ -269,8 +270,8 @@ func walkDeps(npmrc *NpmRC, installDir string, pkg Package, mark *set.Set[string
 		pkgDeps[name] = version
 	}
 	for name, version := range pkgDeps {
-		depPkg := Package{Name: name, Version: version}
-		p, e := resolveDependencyVersion(version)
+		depPkg := common.Package{Name: name, Version: version}
+		p, e := common.ResolveDependencyVersion(version)
 		if e == nil && p.Name != "" {
 			depPkg = p
 		}

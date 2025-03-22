@@ -13,6 +13,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/esm-dev/esm.sh/server/common"
 	"github.com/esm-dev/esm.sh/server/npm_replacements"
 	"github.com/esm-dev/esm.sh/server/storage"
 	esbuild "github.com/evanw/esbuild/pkg/api"
@@ -788,9 +789,9 @@ func (ctx *BuildContext) buildModule(analyzeMode bool) (meta *BuildMeta, include
 						pkgName, _, subPath, _ := splitEsmPath(specifier)
 						if pkgName == ctx.esmPath.PkgName {
 							version = ctx.esmPath.PkgVersion
-						} else if v, ok := pkgJson.Dependencies[pkgName]; ok && isExactVersion(v) {
+						} else if v, ok := pkgJson.Dependencies[pkgName]; ok && common.IsExactVersion(v) {
 							version = v
-						} else if v, ok := pkgJson.PeerDependencies[pkgName]; ok && isExactVersion(v) {
+						} else if v, ok := pkgJson.PeerDependencies[pkgName]; ok && common.IsExactVersion(v) {
 							version = v
 						}
 						p := pkgName
@@ -916,7 +917,7 @@ func (ctx *BuildContext) buildModule(analyzeMode bool) (meta *BuildMeta, include
 					} else if version, ok := ctx.pkgJson.PeerDependencies["svelte"]; ok {
 						svelteVersion = version
 					}
-					if !isExactVersion(svelteVersion) {
+					if !common.IsExactVersion(svelteVersion) {
 						info, err := ctx.npmrc.getPackageInfo("svelte", svelteVersion)
 						if err != nil {
 							return esbuild.OnLoadResult{}, errors.New("failed to get svelte package info")
@@ -950,7 +951,7 @@ func (ctx *BuildContext) buildModule(analyzeMode bool) (meta *BuildMeta, include
 					} else if version, ok := ctx.pkgJson.PeerDependencies["vue"]; ok {
 						vueVersion = version
 					}
-					if !isExactVersion(vueVersion) {
+					if !common.IsExactVersion(vueVersion) {
 						info, err := ctx.npmrc.getPackageInfo("vue", vueVersion)
 						if err != nil {
 							return esbuild.OnLoadResult{}, errors.New("failed to get vue package info")

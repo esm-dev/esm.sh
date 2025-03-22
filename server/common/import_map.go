@@ -8,10 +8,12 @@ import (
 )
 
 type ImportMap struct {
-	Src     string                       `json:"$src,omitempty"`
-	Imports map[string]string            `json:"imports,omitempty"`
-	Scopes  map[string]map[string]string `json:"scopes,omitempty"`
-	srcUrl  *url.URL
+	Src       string                       `json:"$src,omitempty"`
+	Imports   map[string]string            `json:"imports,omitempty"`
+	Scopes    map[string]map[string]string `json:"scopes,omitempty"`
+	Integrity map[string]string            `json:"integrity,omitempty"`
+	Routes    map[string]string            `json:"routes,omitempty"`
+	srcUrl    *url.URL
 }
 
 func (m ImportMap) Resolve(path string) (string, bool) {

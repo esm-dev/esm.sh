@@ -11,12 +11,13 @@ import (
 	"strings"
 	"time"
 
+	"github.com/esm-dev/esm.sh/server/common"
 	esbuild "github.com/evanw/esbuild/pkg/api"
 )
 
 var (
 	// https://github.com/unjs/unenv
-	unenvPkg = Package{
+	unenvPkg = common.Package{
 		Name:    "unenv-nightly",
 		Version: "2.0.0-20241218-183400-5d6aec3",
 	}

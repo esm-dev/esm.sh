@@ -12,11 +12,15 @@ const helpMessage = "\033[30mesm.sh - A nobuild tool for modern web development.
 Usage: esm.sh [command] <options>
 
 Commands:
-  add, i [...packages]  Alias to 'importmap add'.
-  importmap, im         Manage "importmap" script.
-  init                  Create a new web application.
-  serve                 Serve a web application.
-  dev                   Serve a web app in development mode.
+  add, i [...packages]    Add packages to "importmap" script
+  update                  Update packages in "importmap" script
+  tidy                    Tidy up "importmap" script
+  init                    Create a new web application
+  serve, x                Serve a web application
+  dev                     Serve a web application in development mode
+
+Options:
+  --help                  Show help message
 `
 
 func main() {
@@ -26,15 +30,17 @@ func main() {
 	}
 	switch command := os.Args[1]; command {
 	case "add", "i":
-		cli.ManageImportMap("add")
-	case "importmap", "im":
-		cli.ManageImportMap("")
+		cli.Add()
+	case "update":
+		cli.Update()
+	case "tidy":
+		cli.Tidy()
 	case "init":
 		cli.Init()
-	case "serve":
-		cli.Serve()
+	case "serve", "x":
+		cli.Serve(false)
 	case "dev":
-		cli.Dev()
+		cli.Serve(true)
 	default:
 		fmt.Print(helpMessage)
 	}

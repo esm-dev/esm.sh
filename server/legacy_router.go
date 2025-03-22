@@ -11,6 +11,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/esm-dev/esm.sh/server/common"
 	"github.com/esm-dev/esm.sh/server/storage"
 	"github.com/goccy/go-json"
 	"github.com/ije/esbuild-internal/xxhash"
@@ -141,7 +142,7 @@ func legacyESM(ctx *rex.Context, buildStorage storage.Storage, buildVersionPrefi
 				pkgVersion = v
 			}
 		}
-		if !isExactVersion(pkgVersion) {
+		if !common.IsExactVersion(pkgVersion) {
 			npmrc := DefaultNpmRC()
 			pkgInfo, err := npmrc.getPackageInfo(pkgName, pkgVersion)
 			if err != nil {

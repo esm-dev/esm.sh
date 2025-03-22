@@ -37,7 +37,7 @@ func compileSvelteLoader(npmrc *NpmRC, svelteVersion string, loaderExecPath stri
 	wd := path.Join(npmrc.StoreDir(), "svelte@"+svelteVersion)
 
 	// install svelte
-	pkgJson, err := npmrc.installPackage(Package{Name: "svelte", Version: svelteVersion})
+	pkgJson, err := npmrc.installPackage(common.Package{Name: "svelte", Version: svelteVersion})
 	if err != nil {
 		return
 	}
@@ -76,7 +76,7 @@ func resolveSvelteVersion(npmrc *NpmRC, importMap common.ImportMap) (svelteVersi
 			}
 		}
 	}
-	if !isExactVersion(svelteVersion) {
+	if !common.IsExactVersion(svelteVersion) {
 		var info *PackageJSON
 		info, err = npmrc.getPackageInfo("svelte", svelteVersion)
 		if err != nil {
@@ -115,7 +115,7 @@ func compileVueLoader(npmrc *NpmRC, vueVersion string, loaderVersion, loaderExec
 	wd := path.Join(npmrc.StoreDir(), "@vue/compiler-sfc@"+vueVersion)
 
 	// install vue sfc compiler
-	pkgJson, err := npmrc.installPackage(Package{Name: "@vue/compiler-sfc", Version: vueVersion})
+	pkgJson, err := npmrc.installPackage(common.Package{Name: "@vue/compiler-sfc", Version: vueVersion})
 	if err != nil {
 		return
 	}
@@ -156,7 +156,7 @@ func resolveVueVersion(npmrc *NpmRC, importMap common.ImportMap) (vueVersion str
 			}
 		}
 	}
-	if !isExactVersion(vueVersion) {
+	if !common.IsExactVersion(vueVersion) {
 		var info *PackageJSON
 		info, err = npmrc.getPackageInfo("vue", vueVersion)
 		if err != nil {
@@ -209,7 +209,7 @@ func compileUnocssLoader(npmrc *NpmRC, loaderVersion string, loaderExecPath stri
 	wd := path.Join(npmrc.StoreDir(), "@esm.sh/unocss@"+loaderVersion)
 
 	// install @esm.sh/unocss
-	pkgJson, err := npmrc.installPackage(Package{Name: "@esm.sh/unocss", Version: loaderVersion})
+	pkgJson, err := npmrc.installPackage(common.Package{Name: "@esm.sh/unocss", Version: loaderVersion})
 	if err != nil {
 		return
 	}

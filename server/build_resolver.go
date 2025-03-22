@@ -11,7 +11,8 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/evanw/esbuild/pkg/api"
+	"github.com/esm-dev/esm.sh/server/common"
+	esbuild "github.com/evanw/esbuild/pkg/api"
 	esbuild_config "github.com/ije/esbuild-internal/config"
 	"github.com/ije/esbuild-internal/js_ast"
 	"github.com/ije/esbuild-internal/js_parser"
@@ -657,7 +658,7 @@ LOOP:
 	return
 }
 
-func (ctx *BuildContext) resolveExternalModule(specifier string, kind api.ResolveKind, withTypeJSON bool, analyzeMode bool) (resolvedPath string, err error) {
+func (ctx *BuildContext) resolveExternalModule(specifier string, kind esbuild.ResolveKind, withTypeJSON bool, analyzeMode bool) (resolvedPath string, err error) {
 	// return the specifier directly in analyze mode
 	if analyzeMode {
 		return specifier, nil
@@ -673,10 +674,10 @@ func (ctx *BuildContext) resolveExternalModule(specifier string, kind api.Resolv
 					resolvedPath = rp
 				}
 			}
-			if kind == api.ResolveJSRequireCall {
+			if kind == esbuild.ResolveJSRequireCall {
 				ctx.cjsRequires = append(ctx.cjsRequires, [3]string{specifier, resolvedPathFull, resolvedPath})
 				resolvedPath = specifier
-			} else if kind == api.ResolveJSImportStatement && !withTypeJSON {
+			} else if kind == esbuild.ResolveJSImportStatement && !withTypeJSON {
 				ctx.esmImports = append(ctx.esmImports, [2]string{resolvedPathFull, resolvedPath})
 			}
 		}
@@ -779,7 +780,7 @@ func (ctx *BuildContext) resolveExternalModule(specifier string, kind api.Resolv
 	// e.g. "@mark/html": "npm:@jsr/mark__html@^1.0.0"
 	// e.g. "tslib": "git+https://github.com/microsoft/tslib.git#v2.3.0"
 	// e.g. "react": "github:facebook/react#v18.2.0"
-	p, err := resolveDependencyVersion(pkgVersion)
+	p, err := common.ResolveDependencyVersion(pkgVersion)
 	if err != nil {
 		resolvedPath = fmt.Sprintf("/error.js?type=%s&name=%s&importer=%s", strings.ReplaceAll(err.Error(), " ", "-"), pkgName, ctx.esmPath.Specifier())
 		return
@@ -844,11 +845,11 @@ func (ctx *BuildContext) resolveExternalModule(specifier string, kind api.Resolv
 
 	var exactVersion bool
 	if dep.GhPrefix {
-		exactVersion = isCommitish(dep.PkgVersion) || isExactVersion(strings.TrimPrefix(dep.PkgVersion, "v"))
+		exactVersion = isCommitish(dep.PkgVersion) || common.IsExactVersion(strings.TrimPrefix(dep.PkgVersion, "v"))
 	} else if dep.PrPrefix {
 		exactVersion = true
 	} else {
-		exactVersion = isExactVersion(dep.PkgVersion)
+		exactVersion = common.IsExactVersion(dep.PkgVersion)
 	}
 	if exactVersion {
 		buildArgsPrefix := ""
@@ -931,7 +932,7 @@ func (ctx *BuildContext) resolveDTS(entry BuildEntry) (string, error) {
 	}
 
 	// lookup types in @types scope
-	if pkgJson := ctx.pkgJson; pkgJson.Types == "" && !strings.HasPrefix(pkgJson.Name, "@types/") && isExactVersion(pkgJson.Version) {
+	if pkgJson := ctx.pkgJson; pkgJson.Types == "" && !strings.HasPrefix(pkgJson.Name, "@types/") && common.IsExactVersion(pkgJson.Version) {
 		versionParts := strings.Split(pkgJson.Version, ".")
 		versions := []string{
 			versionParts[0] + "." + versionParts[1], // major.minor

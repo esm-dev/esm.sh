@@ -48,7 +48,7 @@ func withCache[T any](key string, cacheTtl time.Duration, fetch func() (T, strin
 		}
 	}
 
-	unlock := cacheMutex.Lock("lru:" + key)
+	unlock := cacheMutex.Lock(key)
 	defer unlock()
 
 	// check cache store again after get lock
@@ -83,7 +83,7 @@ func withLRUCache[T any](key string, fetch func() (T, error)) (data T, err error
 		return v.(T), nil
 	}
 
-	unlock := cacheMutex.Lock(key)
+	unlock := cacheMutex.Lock("lru:" + key)
 	defer unlock()
 
 	// check cache store again after get lock

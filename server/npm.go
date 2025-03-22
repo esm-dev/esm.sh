@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"github.com/Masterminds/semver/v3"
+	"github.com/esm-dev/esm.sh/server/common"
 	"github.com/goccy/go-json"
 	"github.com/ije/gox/set"
 	syncx "github.com/ije/gox/sync"
@@ -36,24 +37,6 @@ var (
 	npmVersioning = valid.Validator{valid.Range{'a', 'z'}, valid.Range{'A', 'Z'}, valid.Range{'0', '9'}, valid.Eq('_'), valid.Eq('.'), valid.Eq('-'), valid.Eq('+')}
 	installMutex  = syncx.KeyedMutex{}
 )
-
-type Package struct {
-	Name     string
-	Version  string
-	Github   bool
-	PkgPrNew bool
-}
-
-func (p *Package) String() string {
-	s := p.Name + "@" + p.Version
-	if p.Github {
-		return "gh/" + s
-	}
-	if p.PkgPrNew {
-		return "pr/" + s
-	}
-	return s
-}
 
 // NpmPackageMetadata defines versions of a NPM package
 type NpmPackageMetadata struct {
@@ -352,7 +335,7 @@ func (npmrc *NpmRC) getPackageInfo(pkgName string, version string) (packageJson 
 	version = normalizePackageVersion(version)
 	return withCache(getCacheKey(pkgName, version), time.Duration(config.NpmQueryCacheTTL)*time.Second, func() (*PackageJSON, string, error) {
 		// check if the package has been installed
-		if !isDistTag(version) && isExactVersion(version) {
+		if !isDistTag(version) && common.IsExactVersion(version) {
 			var raw PackageJSONRaw
 			pkgJsonPath := path.Join(npmrc.StoreDir(), pkgName+"@"+version, "node_modules", pkgName, "package.json")
 			if utils.ParseJSONFile(pkgJsonPath, &raw) == nil {
@@ -361,7 +344,7 @@ func (npmrc *NpmRC) getPackageInfo(pkgName string, version string) (packageJson 
 		}
 
 		regUrl := reg.Registry + pkgName
-		isWellknownVersion := (isExactVersion(version) || isDistTag(version)) && strings.HasPrefix(regUrl, npmRegistry)
+		isWellknownVersion := (common.IsExactVersion(version) || isDistTag(version)) && strings.HasPrefix(regUrl, npmRegistry)
 		if isWellknownVersion {
 			// npm registry supports url like `https://registry.npmjs.org/<name>/<version>`
 			regUrl += "/" + version
@@ -478,7 +461,7 @@ func (npmrc *NpmRC) getPackageInfo(pkgName string, version string) (packageJson 
 	})
 }
 
-func (npmrc *NpmRC) installPackage(pkg Package) (packageJson *PackageJSON, err error) {
+func (npmrc *NpmRC) installPackage(pkg common.Package) (packageJson *PackageJSON, err error) {
 	installDir := path.Join(npmrc.StoreDir(), pkg.String())
 	packageJsonPath := path.Join(installDir, "node_modules", pkg.Name, "package.json")
 
@@ -596,8 +579,8 @@ func (npmrc *NpmRC) installDependencies(wd string, pkgJson *PackageJSON, npmMode
 		wg.Add(1)
 		go func(name, version string) {
 			defer wg.Done()
-			pkg := Package{Name: name, Version: version}
-			p, err := resolveDependencyVersion(version)
+			pkg := common.Package{Name: name, Version: version}
+			p, err := common.ResolveDependencyVersion(version)
 			if err != nil {
 				return
 			}
@@ -608,7 +591,7 @@ func (npmrc *NpmRC) installDependencies(wd string, pkgJson *PackageJSON, npmMode
 				// skip installing `@types/*` packages
 				return
 			}
-			if !isExactVersion(pkg.Version) && !pkg.Github && !pkg.PkgPrNew {
+			if !common.IsExactVersion(pkg.Version) && !pkg.Github && !pkg.PkgPrNew {
 				p, e := npmrc.getPackageInfo(pkg.Name, pkg.Version)
 				if e != nil {
 					return
@@ -754,97 +737,11 @@ func extractPackageTarball(installDir string, pkgName string, tarball io.Reader)
 	return nil
 }
 
-// resolveDependencyVersion resolves the version of a dependency
-// e.g. "react": "npm:react@19.0.0"
-// e.g. "react": "github:facebook/react#semver:19.0.0"
-// e.g. "flag": "jsr:@luca/flag@0.0.1"
-// e.g. "tinybench": "https://pkg.pr.new/tinybench@a832a55"
-func resolveDependencyVersion(v string) (Package, error) {
-	// ban file specifier
-	if strings.HasPrefix(v, "file:") {
-		return Package{}, errors.New("unsupported file dependency")
-	}
-	if strings.HasPrefix(v, "npm:") {
-		pkgName, pkgVersion, _, _ := splitEsmPath(v[4:])
-		if !validatePackageName(pkgName) {
-			return Package{}, errors.New("invalid npm dependency")
-		}
-		return Package{
-			Name:    pkgName,
-			Version: pkgVersion,
-		}, nil
-	}
-	if strings.HasPrefix(v, "jsr:") {
-		pkgName, pkgVersion, _, _ := splitEsmPath(v[4:])
-		if !strings.HasPrefix(pkgName, "@") || !strings.ContainsRune(pkgName, '/') {
-			return Package{}, errors.New("invalid jsr dependency")
-		}
-		scope, name := utils.SplitByFirstByte(pkgName, '/')
-		return Package{
-			Name:    "@jsr/" + scope[1:] + "__" + name,
-			Version: pkgVersion,
-		}, nil
-	}
-	if strings.HasPrefix(v, "github:") {
-		repo, fragment := utils.SplitByLastByte(strings.TrimPrefix(v, "github:"), '#')
-		return Package{
-			Github:  true,
-			Name:    repo,
-			Version: strings.TrimPrefix(url.QueryEscape(fragment), "semver:"),
-		}, nil
-	}
-	if strings.HasPrefix(v, "git+ssh://") || strings.HasPrefix(v, "git+https://") || strings.HasPrefix(v, "git://") {
-		gitUrl, e := url.Parse(v)
-		if e != nil || gitUrl.Hostname() != "github.com" {
-			return Package{}, errors.New("unsupported git dependency")
-		}
-		repo := strings.TrimSuffix(gitUrl.Path[1:], ".git")
-		if gitUrl.Scheme == "git+ssh" {
-			repo = gitUrl.Port() + "/" + repo
-		}
-		return Package{
-			Github:  true,
-			Name:    repo,
-			Version: strings.TrimPrefix(url.QueryEscape(gitUrl.Fragment), "semver:"),
-		}, nil
-	}
-	// https://pkg.pr.new
-	if strings.HasPrefix(v, "https://") || strings.HasPrefix(v, "http://") {
-		u, e := url.Parse(v)
-		if e != nil || u.Host != "pkg.pr.new" {
-			return Package{}, errors.New("unsupported http dependency")
-		}
-		pkgName, rest := utils.SplitByLastByte(u.Path[1:], '@')
-		if rest == "" {
-			return Package{}, errors.New("unsupported http dependency")
-		}
-		version, _ := utils.SplitByFirstByte(rest, '/')
-		if version == "" || !npmNaming.Match(version) {
-			return Package{}, errors.New("unsupported http dependency")
-		}
-		return Package{
-			PkgPrNew: true,
-			Name:     pkgName,
-			Version:  version,
-		}, nil
-	}
-	// see https://docs.npmjs.com/cli/v10/configuring-npm/package-json#git-urls-as-dependencies
-	if !strings.HasPrefix(v, "@") && strings.ContainsRune(v, '/') {
-		repo, fragment := utils.SplitByLastByte(v, '#')
-		return Package{
-			Github:  true,
-			Name:    repo,
-			Version: strings.TrimPrefix(url.QueryEscape(fragment), "semver:"),
-		}, nil
-	}
-	return Package{}, nil
-}
-
 func normalizePackageVersion(version string) string {
 	// strip leading `=` or `v`
 	if strings.HasPrefix(version, "=") {
 		version = version[1:]
-	} else if strings.HasPrefix(version, "v") && isExactVersion(version[1:]) {
+	} else if strings.HasPrefix(version, "v") && common.IsExactVersion(version[1:]) {
 		version = version[1:]
 	}
 	if version == "" || version == "*" {
@@ -860,48 +757,6 @@ func isDistTag(s string) bool {
 	default:
 		return false
 	}
-}
-
-// isExactVersion returns true if the given version is an exact version.
-func isExactVersion(version string) bool {
-	a := strings.SplitN(version, ".", 3)
-	if len(a) != 3 {
-		return false
-	}
-	if len(a[0]) == 0 || !isNumericString(a[0]) || len(a[1]) == 0 || !isNumericString(a[1]) {
-		return false
-	}
-	p := a[2]
-	if len(p) == 0 {
-		return false
-	}
-	patchEnd := false
-	for i, c := range p {
-		if !patchEnd {
-			if c == '-' || c == '+' {
-				if i == 0 || i == len(p)-1 {
-					return false
-				}
-				patchEnd = true
-			} else if c < '0' || c > '9' {
-				return false
-			}
-		} else {
-			if !(c == '.' || c == '_' || c == '-' || c == '+' || (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9')) {
-				return false
-			}
-		}
-	}
-	return true
-}
-
-func isNumericString(s string) bool {
-	for _, c := range s {
-		if c < '0' || c > '9' {
-			return false
-		}
-	}
-	return true
 }
 
 // based on https://github.com/npm/validate-npm-package-name

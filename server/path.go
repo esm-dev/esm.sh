@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/Masterminds/semver/v3"
+	"github.com/esm-dev/esm.sh/server/common"
 	"github.com/ije/gox/utils"
 )
 
@@ -20,8 +21,8 @@ type EsmPath struct {
 	SubModuleName string
 }
 
-func (p EsmPath) Package() Package {
-	return Package{
+func (p EsmPath) Package() common.Package {
+	return common.Package{
 		Github:   p.GhPrefix,
 		PkgPrNew: p.PrPrefix,
 		Name:     p.PkgName,
@@ -149,7 +150,7 @@ func praseEsmPath(npmrc *NpmRC, pathname string) (esm EsmPath, extraQuery string
 	}
 
 	if ghPrefix {
-		if isExactVersion(strings.TrimPrefix(esm.PkgVersion, "v")) {
+		if common.IsExactVersion(strings.TrimPrefix(esm.PkgVersion, "v")) {
 			exactVersion = true
 			return
 		}
@@ -206,7 +207,7 @@ func praseEsmPath(npmrc *NpmRC, pathname string) (esm EsmPath, extraQuery string
 		return
 	}
 
-	exactVersion = len(esm.PkgVersion) > 0 && isExactVersion(esm.PkgVersion)
+	exactVersion = len(esm.PkgVersion) > 0 && common.IsExactVersion(esm.PkgVersion)
 	if !exactVersion {
 		var p *PackageJSON
 		p, err = npmrc.getPackageInfo(pkgName, esm.PkgVersion)
