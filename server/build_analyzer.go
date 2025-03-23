@@ -19,6 +19,7 @@ type Ref struct {
 
 func (ctx *BuildContext) analyzeSplitting() (err error) {
 	exportNames := set.New[string]()
+
 	for _, exportName := range ctx.pkgJson.Exports.keys {
 		exportName := stripEntryModuleExt(exportName)
 		if (exportName == "." || (strings.HasPrefix(exportName, "./") && !strings.ContainsRune(exportName, '*'))) && !endsWith(exportName, ".json", ".css", ".wasm", ".d.ts", ".d.mts", ".d.cts") {
@@ -40,6 +41,7 @@ func (ctx *BuildContext) analyzeSplitting() (err error) {
 			}
 		}
 	}
+
 	if exportNames.Len() > 1 {
 		splittingTxtPath := path.Join(ctx.wd, "splitting.txt")
 		readSplittingTxt := func() bool {
@@ -199,5 +201,6 @@ func (ctx *BuildContext) analyzeSplitting() (err error) {
 			}
 		}
 	}
+
 	return
 }
