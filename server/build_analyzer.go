@@ -28,131 +28,16 @@ func (ctx *BuildContext) analyzeSplitting() (err error) {
 				if endsWith(s, ".json", ".css", ".wasm", ".d.ts", ".d.mts", ".d.cts") {
 					continue
 				}
-				if len(a) > 0 {
-					n, e := strconv.Atoi(a[0])
-					if e == nil && n <= len(a)-1 {
-						ctx.splitting = set.NewReadOnly(a[1 : n+1]...)
-						if DEBUG {
-							ctx.logger.Debugf("build(%s): splitting.txt found with %d shared modules", ctx.esmPath.Specifier(), ctx.splitting.Len())
-						}
-						return true
-					}
-				}
-				return false
-			}
-
-			// check if the splitting has been analyzed
-			if readSplittingTxt() {
-				return
-			}
-
-			// only one analyze process is allowed at the same time for the same package
-			unlock := installMutex.Lock(splittingTxtPath)
-			defer unlock()
-
-			// skip analyze if the package has been analyzed by another request
-			if readSplittingTxt() {
-				return
-			}
-
-			defer func() {
-				splitting := []string{}
-				if ctx.splitting != nil {
-					splitting = ctx.splitting.Values()
-				}
-				// write the splitting result to 'splitting.txt'
-				sizeStr := strconv.FormatUint(uint64(len(splitting)), 10)
-				bufSize := len(sizeStr) + 1
-				for _, s := range splitting {
-					bufSize += len(s) + 1
-				}
-				buf := make([]byte, bufSize)
-				i := copy(buf, sizeStr)
-				buf[i] = '\n'
-				i++
-				for _, s := range splitting {
-					i += copy(buf[i:], s)
-					buf[i] = '\n'
-					i++
-				}
-				os.WriteFile(splittingTxtPath, buf[0:bufSize-1], 0644)
-			}()
-
-			refs := map[string]Ref{}
-			for _, exportName := range exportNames.Values() {
-				esm := ctx.esmPath
-				esm.SubPath = exportName
-				esm.SubModuleName = stripEntryModuleExt(exportName)
-				b := &BuildContext{
-					npmrc:       ctx.npmrc,
-					logger:      ctx.logger,
-					db:          ctx.db,
-					storage:     ctx.storage,
-					esmPath:     esm,
-					args:        ctx.args,
-					externalAll: ctx.externalAll,
-					target:      ctx.target,
-					dev:         ctx.dev,
-					wd:          ctx.wd,
-					pkgJson:     ctx.pkgJson,
-				}
-				_, includes, err := b.buildModule(true)
-				if err != nil {
-					return fmt.Errorf("failed to analyze %s: %v", esm.Specifier(), err)
-				}
-				for _, include := range includes {
-					module, importer := include[0], include[1]
-					ref, ok := refs[module]
-					if !ok {
-						ref = Ref{entries: set.New[string](), importers: set.New[string]()}
-						refs[module] = ref
-					}
-					ref.importers.Add(importer)
-					ref.entries.Add(exportName)
+			} else if obj, ok := v.(JSONObject); ok {
+				// ignore types only exports
+				if len(obj.keys) == 1 && obj.keys[0] == "types" {
+					continue
 				}
 			}
-			shared := set.New[string]()
-			for mod, ref := range refs {
-				if ref.entries.Len() > 1 && ref.importers.Len() > 1 {
-					shared.Add(mod)
-				}
-			}
-			var bubble func(modulePath string, f func(string), mark *set.Set[string])
-			bubble = func(modulePath string, f func(string), mark *set.Set[string]) {
-				hasMark := mark != nil
-				if !hasMark {
-					mark = set.New[string]()
-				} else if mark.Has(modulePath) {
-					return
-				}
-				mark.Add(modulePath)
-				ref, ok := refs[modulePath]
-				if ok {
-					if shared.Has(modulePath) && hasMark {
-						f(modulePath)
-						return
-					}
-					for _, importer := range ref.importers.Values() {
-						bubble(importer, f, mark)
-					}
-				} else {
-					// modulePath is an entry module
-					f(modulePath)
-				}
-			}
-			if shared.Len() > 0 {
-				splitting := set.New[string]()
-				for _, modulePath := range shared.Values() {
-					refBy := set.New[string]()
-					bubble(modulePath, func(importer string) { refBy.Add(importer) }, nil)
-					if refBy.Len() > 1 {
-						splitting.Add(modulePath)
-					}
-				}
-				ctx.splitting = splitting.ReadOnly()
-				if DEBUG {
-					ctx.logger.Debugf("build(%s): found %d shared modules from %d modules", ctx.esmPath.Specifier(), shared.Len(), len(refs))
-				}
+			if exportName == "." {
+				exportNames.Add("")
+			} else if strings.HasPrefix(exportName, "./") {
+				exportNames.Add(exportName[2:])
 			}
 		}
 	}
@@ -194,7 +79,7 @@ func (ctx *BuildContext) analyzeSplitting() (err error) {
 				if e == nil && n <= len(a)-1 {
 					ctx.splitting = set.NewReadOnly(a[1 : n+1]...)
 					if DEBUG {
-						ctx.logger.Debugf("build(%s): splitting.txt found with %d shared modules", ctx.esm.Specifier(), ctx.splitting.Len())
+						ctx.logger.Debugf("build(%s): splitting.txt found with %d shared modules", ctx.esmPath.Specifier(), ctx.splitting.Len())
 					}
 					return true
 				}
@@ -241,15 +126,15 @@ func (ctx *BuildContext) analyzeSplitting() (err error) {
 
 		refs := map[string]Ref{}
 		for _, exportName := range exportNames.Values() {
-			esm := ctx.esm
-			esm.SubPath = exportName
-			esm.SubModuleName = stripEntryModuleExt(exportName)
+			esmPath := ctx.esmPath
+			esmPath.SubPath = exportName
+			esmPath.SubModuleName = stripEntryModuleExt(exportName)
 			b := &BuildContext{
 				npmrc:       ctx.npmrc,
 				logger:      ctx.logger,
 				db:          ctx.db,
 				storage:     ctx.storage,
-				esm:         esm,
+				esmPath:     esmPath,
 				args:        ctx.args,
 				externalAll: ctx.externalAll,
 				target:      ctx.target,
@@ -259,7 +144,7 @@ func (ctx *BuildContext) analyzeSplitting() (err error) {
 			}
 			_, includes, err := b.buildModule(true)
 			if err != nil {
-				return fmt.Errorf("failed to analyze %s: %v", esm.Specifier(), err)
+				return fmt.Errorf("failed to analyze %s: %v", esmPath.Specifier(), err)
 			}
 			for _, include := range includes {
 				module, importer := include[0], include[1]
@@ -312,7 +197,7 @@ func (ctx *BuildContext) analyzeSplitting() (err error) {
 			}
 			ctx.splitting = splitting.ReadOnly()
 			if DEBUG {
-				ctx.logger.Debugf("build(%s): found %d shared modules from %d modules", ctx.esm.Specifier(), shared.Len(), len(refs))
+				ctx.logger.Debugf("build(%s): found %d shared modules from %d modules", ctx.esmPath.Specifier(), shared.Len(), len(refs))
 			}
 		}
 	}
