@@ -145,10 +145,12 @@ func (ctx *BuildContext) Build() (meta *BuildMeta, err error) {
 	}
 
 	// analyze splitting modules
-	ctx.status = "analyze"
-	err = ctx.analyzeSplitting()
-	if err != nil {
-		return
+	if !ctx.pkgJson.SideEffectsFalse && ctx.bundleMode == BundleDefault && ctx.pkgJson.Exports.Len() > 1 {
+		ctx.status = "analyze"
+		err = ctx.analyzeSplitting()
+		if err != nil {
+			return
+		}
 	}
 
 	// build the module
