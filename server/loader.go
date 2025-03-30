@@ -6,7 +6,7 @@ import (
 	"path"
 	"strings"
 
-	"github.com/esm-dev/esm.sh/server/common"
+	"github.com/esm-dev/esm.sh/internal/jsruntime"
 	esbuild "github.com/evanw/esbuild/pkg/api"
 )
 
@@ -18,7 +18,7 @@ type LoaderOutput struct {
 
 func runLoader(loaderJsPath string, filename string, code string) (out *LoaderOutput, err error) {
 	err = doOnce("check-deno", func() (err error) {
-		_, err = common.GetDenoPath(config.WorkDir)
+		_, err = jsruntime.GetDenoPath(config.WorkDir)
 		return err
 	})
 	if err != nil {

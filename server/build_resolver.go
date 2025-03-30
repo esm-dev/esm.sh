@@ -11,7 +11,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/esm-dev/esm.sh/server/common"
+	"github.com/esm-dev/esm.sh/internal/npm"
 	esbuild "github.com/evanw/esbuild/pkg/api"
 	esbuild_config "github.com/ije/esbuild-internal/config"
 	"github.com/ije/esbuild-internal/js_ast"
@@ -57,8 +57,8 @@ func (ctx *BuildContext) resolveEntry(esm EsmPath) (entry BuildEntry) {
 			// entry.types = strings.TrimSuffix(subPath, ext) + ".d" + strings.TrimSuffix(ext,"x")
 			// lookup jsr built dts
 			if strings.HasPrefix(esm.PkgName, "@jsr/") {
-				for _, v := range pkgJson.Exports.values {
-					if obj, ok := v.(JSONObject); ok {
+				for _, v := range pkgJson.Exports.Values() {
+					if obj, ok := v.(npm.JSONObject); ok {
 						if v, ok := obj.Get("default"); ok {
 							if s, ok := v.(string); ok && s == "./"+stripModuleExt(subPath)+".js" {
 								if v, ok := obj.Get("types"); ok {
@@ -95,7 +95,7 @@ func (ctx *BuildContext) resolveEntry(esm EsmPath) (entry BuildEntry) {
 					}
 					*/
 					exportEntry.update(s, pkgJson.Type == "module")
-				} else if obj, ok := conditions.(JSONObject); ok {
+				} else if obj, ok := conditions.(npm.JSONObject); ok {
 					/**
 					exports: {
 						"./lib/foo": {
@@ -108,8 +108,8 @@ func (ctx *BuildContext) resolveEntry(esm EsmPath) (entry BuildEntry) {
 					exportEntry = ctx.resolveConditionExportEntry(obj, pkgJson.Type)
 				}
 			} else {
-				for _, name := range pkgJson.Exports.keys {
-					conditions := pkgJson.Exports.values[name]
+				for _, name := range pkgJson.Exports.Keys() {
+					conditions, _ := pkgJson.Exports.Get(name)
 					if stripEntryModuleExt(name) == "./"+subModuleName {
 						if s, ok := conditions.(string); ok {
 							/**
@@ -118,7 +118,7 @@ func (ctx *BuildContext) resolveEntry(esm EsmPath) (entry BuildEntry) {
 							}
 							*/
 							exportEntry.update(s, pkgJson.Type == "module")
-						} else if obj, ok := conditions.(JSONObject); ok {
+						} else if obj, ok := conditions.(npm.JSONObject); ok {
 							/**
 							exports: {
 								"./lib/foo.js": {
@@ -163,7 +163,7 @@ func (ctx *BuildContext) resolveEntry(esm EsmPath) (entry BuildEntry) {
 								exportEntry.update(p, false)
 								break
 							}
-						} else if obj, ok := conditions.(JSONObject); ok {
+						} else if obj, ok := conditions.(npm.JSONObject); ok {
 							/**
 							exports: {
 								"./lib/*": {
@@ -190,7 +190,7 @@ func (ctx *BuildContext) resolveEntry(esm EsmPath) (entry BuildEntry) {
 		}
 
 		// check if the sub-module is a directory and has a package.json
-		var rawInfo PackageJSONRaw
+		var rawInfo npm.PackageJSONRaw
 		if utils.ParseJSONFile(path.Join(ctx.wd, "node_modules", ctx.esmPath.PkgName, subModuleName, "package.json"), &rawInfo) == nil {
 			p := rawInfo.ToNpmPackage()
 			if entry.main == "" {
@@ -303,7 +303,7 @@ func (ctx *BuildContext) resolveEntry(esm EsmPath) (entry BuildEntry) {
 					}
 					*/
 					exportEntry.update(s, pkgJson.Type == "module")
-				} else if obj, ok := v.(JSONObject); ok {
+				} else if obj, ok := v.(npm.JSONObject); ok {
 					/**
 					exports: {
 						".": {
@@ -542,7 +542,7 @@ func (ctx *BuildContext) finalizeBuildEntry(entry *BuildEntry) {
 }
 
 // see https://nodejs.org/api/packages.html#nested-conditions
-func (ctx *BuildContext) resolveConditionExportEntry(conditions JSONObject, preferedModuleType string) (entry BuildEntry) {
+func (ctx *BuildContext) resolveConditionExportEntry(conditions npm.JSONObject, preferedModuleType string) (entry BuildEntry) {
 	if preferedModuleType == "types" {
 		for _, conditionName := range []string{"module", "import", "es2015", "default", "require"} {
 			condition, ok := conditions.Get(conditionName)
@@ -551,7 +551,7 @@ func (ctx *BuildContext) resolveConditionExportEntry(conditions JSONObject, pref
 					if entry.types == "" || endsWith(s, ".d.ts", ".d.mts", ".d.cts", ".d") {
 						entry.types = s
 					}
-				} else if obj, ok := condition.(JSONObject); ok {
+				} else if obj, ok := condition.(npm.JSONObject); ok {
 					entry = ctx.resolveConditionExportEntry(obj, "types")
 				}
 				break
@@ -566,7 +566,7 @@ func (ctx *BuildContext) resolveConditionExportEntry(conditions JSONObject, pref
 			if s, ok := condition.(string); ok {
 				entry.update(s, preferedModuleType == "module")
 				return true
-			} else if obj, ok := condition.(JSONObject); ok {
+			} else if obj, ok := condition.(npm.JSONObject); ok {
 				entry = ctx.resolveConditionExportEntry(obj, preferedModuleType)
 				return entry.main != ""
 			}
@@ -601,8 +601,8 @@ func (ctx *BuildContext) resolveConditionExportEntry(conditions JSONObject, pref
 	}
 
 LOOP:
-	for _, conditionName := range conditions.keys {
-		condition := conditions.values[conditionName]
+	for _, conditionName := range conditions.Keys() {
+		condition, _ := conditions.Get(conditionName)
 		module := false
 		prefered := ""
 		switch conditionName {
@@ -617,7 +617,7 @@ LOOP:
 			if prefered != "module" {
 				if s, ok := condition.(string); ok && strings.HasSuffix(s, ".mjs") {
 					prefered = "module"
-				} else if _, ok := conditions.values["require"]; ok {
+				} else if _, ok := conditions.Get("require"); ok {
 					prefered = "module"
 				}
 			}
@@ -627,7 +627,7 @@ LOOP:
 				if entry.types == "" || (!strings.HasSuffix(entry.types, ".d.mts") && strings.HasSuffix(s, ".d.mts")) {
 					entry.types = s
 				}
-			} else if obj, ok := condition.(JSONObject); ok {
+			} else if obj, ok := condition.(npm.JSONObject); ok {
 				e := ctx.resolveConditionExportEntry(obj, "types")
 				if e.types != "" {
 					if entry.types == "" || (!strings.HasSuffix(entry.types, ".d.mts") && strings.HasSuffix(e.types, ".d.mts")) {
@@ -643,7 +643,7 @@ LOOP:
 		if entry.main == "" || (!entry.module && module && !conditionFound) {
 			if s, ok := condition.(string); ok {
 				entry.update(s, module)
-			} else if obj, ok := condition.(JSONObject); ok {
+			} else if obj, ok := condition.(npm.JSONObject); ok {
 				e := ctx.resolveConditionExportEntry(obj, prefered)
 				if e.main != "" {
 					entry.update(e.main, e.module)
@@ -780,7 +780,7 @@ func (ctx *BuildContext) resolveExternalModule(specifier string, kind esbuild.Re
 	// e.g. "@mark/html": "npm:@jsr/mark__html@^1.0.0"
 	// e.g. "tslib": "git+https://github.com/microsoft/tslib.git#v2.3.0"
 	// e.g. "react": "github:facebook/react#v18.2.0"
-	p, err := common.ResolveDependencyVersion(pkgVersion)
+	p, err := npm.ResolveDependencyVersion(pkgVersion)
 	if err != nil {
 		resolvedPath = fmt.Sprintf("/error.js?type=%s&name=%s&importer=%s", strings.ReplaceAll(err.Error(), " ", "-"), pkgName, ctx.esmPath.Specifier())
 		return
@@ -845,11 +845,11 @@ func (ctx *BuildContext) resolveExternalModule(specifier string, kind esbuild.Re
 
 	var exactVersion bool
 	if dep.GhPrefix {
-		exactVersion = isCommitish(dep.PkgVersion) || common.IsExactVersion(strings.TrimPrefix(dep.PkgVersion, "v"))
+		exactVersion = isCommitish(dep.PkgVersion) || npm.IsExactVersion(strings.TrimPrefix(dep.PkgVersion, "v"))
 	} else if dep.PrPrefix {
 		exactVersion = true
 	} else {
-		exactVersion = common.IsExactVersion(dep.PkgVersion)
+		exactVersion = npm.IsExactVersion(dep.PkgVersion)
 	}
 	if exactVersion {
 		buildArgsPrefix := ""
@@ -862,7 +862,7 @@ func (ctx *BuildContext) resolveExternalModule(specifier string, kind esbuild.Re
 
 	if strings.ContainsRune(dep.PkgVersion, '|') || strings.ContainsRune(dep.PkgVersion, ' ') {
 		// fetch the latest version of the package based on the semver range
-		var p *PackageJSON
+		var p *npm.PackageJSON
 		_, p, err = ctx.lookupDep(pkgName+"@"+pkgVersion, false)
 		if err != nil {
 			return
@@ -932,13 +932,13 @@ func (ctx *BuildContext) resolveDTS(entry BuildEntry) (string, error) {
 	}
 
 	// lookup types in @types scope
-	if pkgJson := ctx.pkgJson; pkgJson.Types == "" && !strings.HasPrefix(pkgJson.Name, "@types/") && common.IsExactVersion(pkgJson.Version) {
+	if pkgJson := ctx.pkgJson; pkgJson.Types == "" && !strings.HasPrefix(pkgJson.Name, "@types/") && npm.IsExactVersion(pkgJson.Version) {
 		versionParts := strings.Split(pkgJson.Version, ".")
 		versions := []string{
 			versionParts[0] + "." + versionParts[1], // major.minor
 			versionParts[0],                         // major
 		}
-		typesPkgName := toTypesPackageName(pkgJson.Name)
+		typesPkgName := npm.ToTypesPackageName(pkgJson.Name)
 		pkgVersion, ok := ctx.args.Deps[typesPkgName]
 		if ok {
 			// use the version of the `?deps` query if it exists
@@ -1052,7 +1052,7 @@ func (ctx *BuildContext) existsPkgFile(fp ...string) bool {
 	return existsFile(path.Join(args...))
 }
 
-func (ctx *BuildContext) lookupDep(specifier string, isDts bool) (esm EsmPath, packageJson *PackageJSON, err error) {
+func (ctx *BuildContext) lookupDep(specifier string, isDts bool) (esm EsmPath, packageJson *npm.PackageJSON, err error) {
 	pkgName, version, subpath, _ := splitEsmPath(specifier)
 lookup:
 	if v, ok := ctx.args.Deps[pkgName]; ok {
@@ -1068,7 +1068,7 @@ lookup:
 		return
 	}
 
-	var raw PackageJSONRaw
+	var raw npm.PackageJSONRaw
 	pkgJsonPath := path.Join(ctx.wd, "node_modules", pkgName, "package.json")
 	if utils.ParseJSONFile(pkgJsonPath, &raw) == nil {
 		esm = EsmPath{
@@ -1109,7 +1109,7 @@ lookup:
 		}
 	}
 	if err != nil && strings.HasSuffix(err.Error(), " not found") && isDts && !strings.HasPrefix(pkgName, "@types/") {
-		pkgName = toTypesPackageName(pkgName)
+		pkgName = npm.ToTypesPackageName(pkgName)
 		goto lookup
 	}
 	return
@@ -1186,32 +1186,31 @@ func matchAsteriskExport(exportName string, subModuleName string) (diff string, 
 	return "", false
 }
 
-func resloveAsteriskPathMapping(conditions JSONObject, diff string) JSONObject {
-	reslovedConditions := JSONObject{
-		values: make(map[string]any),
-	}
-	for _, key := range conditions.keys {
+func resloveAsteriskPathMapping(conditions npm.JSONObject, diff string) npm.JSONObject {
+	var keys []string
+	var values = map[string]any{}
+	for _, key := range conditions.Keys() {
 		value, ok := conditions.Get(key)
 		if ok {
 			if s, ok := value.(string); ok {
-				reslovedConditions.keys = append(reslovedConditions.keys, key)
-				reslovedConditions.values[key] = strings.ReplaceAll(s, "*", diff)
-			} else if c, ok := value.(JSONObject); ok {
-				reslovedConditions.keys = append(reslovedConditions.keys, key)
-				reslovedConditions.values[key] = resloveAsteriskPathMapping(c, diff)
+				keys = append(keys, key)
+				values[key] = strings.ReplaceAll(s, "*", diff)
+			} else if c, ok := value.(npm.JSONObject); ok {
+				keys = append(keys, key)
+				values[key] = resloveAsteriskPathMapping(c, diff)
 			}
 		}
 	}
-	return reslovedConditions
+	return npm.NewJSONObject(keys, values)
 }
 
-func getExportConditionPaths(condition JSONObject) []string {
+func getExportConditionPaths(condition npm.JSONObject) []string {
 	var values []string
-	for _, key := range condition.keys {
-		v := condition.values[key]
+	for _, key := range condition.Keys() {
+		v, _ := condition.Get(key)
 		if s, ok := v.(string); ok {
 			values = append(values, s)
-		} else if condition, ok := v.(JSONObject); ok {
+		} else if condition, ok := v.(npm.JSONObject); ok {
 			values = append(values, getExportConditionPaths(condition)...)
 		}
 	}

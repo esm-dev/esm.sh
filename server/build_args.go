@@ -7,7 +7,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/esm-dev/esm.sh/server/common"
+	"github.com/esm-dev/esm.sh/internal/npm"
 	"github.com/ije/gox/set"
 	"github.com/ije/gox/utils"
 )
@@ -128,10 +128,10 @@ func resolveBuildArgs(npmrc *NpmRC, installDir string, args *BuildArgs, esm EsmP
 	if len(args.Alias) > 0 || len(args.Deps) > 0 || args.External.Len() > 0 {
 		// quick check if the alias, deps, external are all in dependencies of the package
 		deps, ok, err := func() (deps *set.Set[string], ok bool, err error) {
-			var p *PackageJSON
+			var p *npm.PackageJSON
 			pkgJsonPath := path.Join(installDir, "node_modules", esm.PkgName, "package.json")
 			if existsFile(pkgJsonPath) {
-				var raw PackageJSONRaw
+				var raw npm.PackageJSONRaw
 				err = utils.ParseJSONFile(pkgJsonPath, &raw)
 				if err == nil {
 					p = raw.ToNpmPackage()
@@ -241,15 +241,15 @@ func resolveBuildArgs(npmrc *NpmRC, installDir string, args *BuildArgs, esm EsmP
 	return nil
 }
 
-func walkDeps(npmrc *NpmRC, installDir string, pkg common.Package, mark *set.Set[string]) (err error) {
+func walkDeps(npmrc *NpmRC, installDir string, pkg npm.Package, mark *set.Set[string]) (err error) {
 	if mark.Has(pkg.Name) {
 		return
 	}
 	mark.Add(pkg.Name)
-	var p *PackageJSON
+	var p *npm.PackageJSON
 	pkgJsonPath := path.Join(installDir, "node_modules", pkg.Name, "package.json")
 	if existsFile(pkgJsonPath) {
-		var raw PackageJSONRaw
+		var raw npm.PackageJSONRaw
 		err = utils.ParseJSONFile(pkgJsonPath, &raw)
 		if err == nil {
 			p = raw.ToNpmPackage()
@@ -270,8 +270,8 @@ func walkDeps(npmrc *NpmRC, installDir string, pkg common.Package, mark *set.Set
 		pkgDeps[name] = version
 	}
 	for name, version := range pkgDeps {
-		depPkg := common.Package{Name: name, Version: version}
-		p, e := common.ResolveDependencyVersion(version)
+		depPkg := npm.Package{Name: name, Version: version}
+		p, e := npm.ResolveDependencyVersion(version)
 		if e == nil && p.Name != "" {
 			depPkg = p
 		}

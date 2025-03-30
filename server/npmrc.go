@@ -19,12 +19,12 @@ import (
 	"time"
 
 	"github.com/Masterminds/semver/v3"
-	"github.com/esm-dev/esm.sh/server/common"
+	"github.com/esm-dev/esm.sh/internal/jsonc"
+	"github.com/esm-dev/esm.sh/internal/npm"
 	"github.com/goccy/go-json"
 	"github.com/ije/gox/set"
 	syncx "github.com/ije/gox/sync"
 	"github.com/ije/gox/utils"
-	"github.com/ije/gox/valid"
 )
 
 const (
@@ -33,206 +33,9 @@ const (
 )
 
 var (
-	npmNaming     = valid.Validator{valid.Range{'a', 'z'}, valid.Range{'A', 'Z'}, valid.Range{'0', '9'}, valid.Eq('_'), valid.Eq('.'), valid.Eq('-'), valid.Eq('+'), valid.Eq('$'), valid.Eq('!')}
-	npmVersioning = valid.Validator{valid.Range{'a', 'z'}, valid.Range{'A', 'Z'}, valid.Range{'0', '9'}, valid.Eq('_'), valid.Eq('.'), valid.Eq('-'), valid.Eq('+')}
-	installMutex  = syncx.KeyedMutex{}
+	defaultNpmRC *NpmRC
+	installMutex syncx.KeyedMutex
 )
-
-// NpmPackageMetadata defines versions of a NPM package
-type NpmPackageMetadata struct {
-	DistTags map[string]string         `json:"dist-tags"`
-	Versions map[string]PackageJSONRaw `json:"versions"`
-}
-
-// PackageJSONRaw defines the package.json of a NPM package
-type PackageJSONRaw struct {
-	Name             string          `json:"name"`
-	Version          string          `json:"version"`
-	Type             string          `json:"type"`
-	Main             JSONAny         `json:"main"`
-	Module           JSONAny         `json:"module"`
-	ES2015           JSONAny         `json:"es2015"`
-	JsNextMain       JSONAny         `json:"jsnext:main"`
-	Browser          JSONAny         `json:"browser"`
-	Types            JSONAny         `json:"types"`
-	Typings          JSONAny         `json:"typings"`
-	SideEffects      any             `json:"sideEffects"`
-	Dependencies     any             `json:"dependencies"`
-	PeerDependencies any             `json:"peerDependencies"`
-	Imports          any             `json:"imports"`
-	TypesVersions    any             `json:"typesVersions"`
-	Exports          json.RawMessage `json:"exports"`
-	Esmsh            any             `json:"esm.sh"`
-	Dist             json.RawMessage `json:"dist"`
-	Deprecated       any             `json:"deprecated"`
-}
-
-// NpmPackageDist defines the dist field of a NPM package
-type NpmPackageDist struct {
-	Tarball string `json:"tarball"`
-}
-
-// PackageJSON defines the package.json of a NPM package
-type PackageJSON struct {
-	Name             string
-	PkgName          string
-	Version          string
-	Type             string
-	Main             string
-	Module           string
-	Types            string
-	Typings          string
-	SideEffectsFalse bool
-	SideEffects      set.ReadOnlySet[string]
-	Browser          map[string]string
-	Dependencies     map[string]string
-	PeerDependencies map[string]string
-	Imports          map[string]any
-	TypesVersions    map[string]any
-	Exports          JSONObject
-	Esmsh            map[string]any
-	Dist             NpmPackageDist
-	Deprecated       string
-}
-
-// ToNpmPackage converts PackageJSONRaw to PackageJSON
-func (a *PackageJSONRaw) ToNpmPackage() *PackageJSON {
-	browser := map[string]string{}
-	if a.Browser.Str != "" && endsWith(a.Browser.Str, moduleExts...) {
-		browser["."] = a.Browser.Str
-	}
-	if a.Browser.Map != nil {
-		for k, v := range a.Browser.Map {
-			s, isStr := v.(string)
-			if isStr {
-				browser[k] = s
-			} else {
-				b, ok := v.(bool)
-				if ok && !b {
-					browser[k] = ""
-				}
-			}
-		}
-	}
-
-	var dependencies map[string]string
-	if m, ok := a.Dependencies.(map[string]any); ok {
-		dependencies = make(map[string]string)
-		for k, v := range m {
-			if s, ok := v.(string); ok {
-				if k != "" && s != "" {
-					dependencies[k] = s
-				}
-			}
-		}
-	}
-
-	var peerDependencies map[string]string
-	if m, ok := a.PeerDependencies.(map[string]any); ok {
-		peerDependencies = make(map[string]string)
-		for k, v := range m {
-			if s, ok := v.(string); ok {
-				if k != "" && s != "" {
-					peerDependencies[k] = s
-				}
-			}
-		}
-	}
-
-	sideEffects := set.New[string]()
-	sideEffectsFalse := false
-	if a.SideEffects != nil {
-		if s, ok := a.SideEffects.(string); ok {
-			if s == "false" {
-				sideEffectsFalse = true
-			} else if endsWith(s, moduleExts...) {
-				sideEffects = set.New[string]()
-				sideEffects.Add(s)
-			}
-		} else if b, ok := a.SideEffects.(bool); ok {
-			sideEffectsFalse = !b
-		} else if m, ok := a.SideEffects.([]any); ok && len(m) > 0 {
-			sideEffects = set.New[string]()
-			for _, v := range m {
-				if name, ok := v.(string); ok && endsWith(name, moduleExts...) {
-					sideEffects.Add(name)
-				}
-			}
-		}
-	}
-
-	exports := JSONObject{}
-	if rawExports := a.Exports; rawExports != nil {
-		var s string
-		if json.Unmarshal(rawExports, &s) == nil {
-			if len(s) > 0 {
-				exports = JSONObject{
-					keys:   []string{"."},
-					values: map[string]any{".": s},
-				}
-			}
-		} else {
-			exports.UnmarshalJSON(rawExports)
-		}
-	}
-
-	depreacted := ""
-	if a.Deprecated != nil {
-		if s, ok := a.Deprecated.(string); ok {
-			depreacted = s
-		}
-	}
-
-	var dist NpmPackageDist
-	if a.Dist != nil {
-		json.Unmarshal(a.Dist, &dist)
-	}
-
-	p := &PackageJSON{
-		Name:             a.Name,
-		Version:          a.Version,
-		Type:             a.Type,
-		Main:             a.Main.MainString(),
-		Module:           a.Module.MainString(),
-		Types:            a.Types.MainString(),
-		Typings:          a.Typings.MainString(),
-		Browser:          browser,
-		SideEffectsFalse: sideEffectsFalse,
-		SideEffects:      *sideEffects.ReadOnly(),
-		Dependencies:     dependencies,
-		PeerDependencies: peerDependencies,
-		Imports:          toMap(a.Imports),
-		TypesVersions:    toMap(a.TypesVersions),
-		Exports:          exports,
-		Esmsh:            toMap(a.Esmsh),
-		Deprecated:       depreacted,
-		Dist:             dist,
-	}
-
-	// normalize package module field
-	if p.Module == "" {
-		if es2015 := a.ES2015.MainString(); es2015 != "" {
-			p.Module = es2015
-		} else if jsNextMain := a.JsNextMain.MainString(); jsNextMain != "" {
-			p.Module = jsNextMain
-		} else if p.Main != "" && (p.Type == "module" || strings.HasSuffix(p.Main, ".mjs")) {
-			p.Module = p.Main
-			p.Main = ""
-		}
-	}
-
-	return p
-}
-
-// UnmarshalJSON implements the json.Unmarshaler interface
-func (a *PackageJSON) UnmarshalJSON(b []byte) error {
-	var raw PackageJSONRaw
-	if err := json.Unmarshal(b, &raw); err != nil {
-		return err
-	}
-	*a = *raw.ToNpmPackage()
-	return nil
-}
 
 type NpmRegistry struct {
 	Registry string `json:"registry"`
@@ -246,10 +49,6 @@ type NpmRC struct {
 	ScopedRegistries map[string]NpmRegistry `json:"scopedRegistries"`
 	zoneId           string
 }
-
-var (
-	defaultNpmRC *NpmRC
-)
 
 func DefaultNpmRC() *NpmRC {
 	if defaultNpmRC != nil {
@@ -326,17 +125,17 @@ func (npmrc *NpmRC) getRegistryByPackageName(packageName string) *NpmRegistry {
 	return &npmrc.NpmRegistry
 }
 
-func (npmrc *NpmRC) getPackageInfo(pkgName string, version string) (packageJson *PackageJSON, err error) {
+func (npmrc *NpmRC) getPackageInfo(pkgName string, version string) (packageJson *npm.PackageJSON, err error) {
 	reg := npmrc.getRegistryByPackageName(pkgName)
 	getCacheKey := func(pkgName string, pkgVersion string) string {
 		return reg.Registry + pkgName + "@" + pkgVersion
 	}
 
-	version = normalizePackageVersion(version)
-	return withCache(getCacheKey(pkgName, version), time.Duration(config.NpmQueryCacheTTL)*time.Second, func() (*PackageJSON, string, error) {
+	version = npm.NormalizePackageVersion(version)
+	return withCache(getCacheKey(pkgName, version), time.Duration(config.NpmQueryCacheTTL)*time.Second, func() (*npm.PackageJSON, string, error) {
 		// check if the package has been installed
-		if !isDistTag(version) && common.IsExactVersion(version) {
-			var raw PackageJSONRaw
+		if !npm.IsDistTag(version) && npm.IsExactVersion(version) {
+			var raw npm.PackageJSONRaw
 			pkgJsonPath := path.Join(npmrc.StoreDir(), pkgName+"@"+version, "node_modules", pkgName, "package.json")
 			if utils.ParseJSONFile(pkgJsonPath, &raw) == nil {
 				return raw.ToNpmPackage(), "", nil
@@ -344,7 +143,7 @@ func (npmrc *NpmRC) getPackageInfo(pkgName string, version string) (packageJson 
 		}
 
 		regUrl := reg.Registry + pkgName
-		isWellknownVersion := (common.IsExactVersion(version) || isDistTag(version)) && strings.HasPrefix(regUrl, npmRegistry)
+		isWellknownVersion := (npm.IsExactVersion(version) || npm.IsDistTag(version)) && strings.HasPrefix(regUrl, npmRegistry)
 		if isWellknownVersion {
 			// npm registry supports url like `https://registry.npmjs.org/<name>/<version>`
 			regUrl += "/" + version
@@ -393,7 +192,7 @@ func (npmrc *NpmRC) getPackageInfo(pkgName string, version string) (packageJson 
 		}
 
 		if isWellknownVersion {
-			var raw PackageJSONRaw
+			var raw npm.PackageJSONRaw
 			err = json.NewDecoder(res.Body).Decode(&raw)
 			if err != nil {
 				return nil, "", err
@@ -401,7 +200,7 @@ func (npmrc *NpmRC) getPackageInfo(pkgName string, version string) (packageJson 
 			return raw.ToNpmPackage(), getCacheKey(pkgName, raw.Version), nil
 		}
 
-		var metadata NpmPackageMetadata
+		var metadata npm.PackageMetadata
 		err = json.NewDecoder(res.Body).Decode(&metadata)
 		if err != nil {
 			return nil, "", err
@@ -461,12 +260,12 @@ func (npmrc *NpmRC) getPackageInfo(pkgName string, version string) (packageJson 
 	})
 }
 
-func (npmrc *NpmRC) installPackage(pkg common.Package) (packageJson *PackageJSON, err error) {
+func (npmrc *NpmRC) installPackage(pkg npm.Package) (packageJson *npm.PackageJSON, err error) {
 	installDir := path.Join(npmrc.StoreDir(), pkg.String())
 	packageJsonPath := path.Join(installDir, "node_modules", pkg.Name, "package.json")
 
 	// check if the package has been installed
-	var raw PackageJSONRaw
+	var raw npm.PackageJSONRaw
 	if utils.ParseJSONFile(packageJsonPath, &raw) == nil {
 		packageJson = raw.ToNpmPackage()
 		return
@@ -488,17 +287,17 @@ func (npmrc *NpmRC) installPackage(pkg common.Package) (packageJson *PackageJSON
 		if err == nil && !existsFile(packageJsonPath) {
 			buf := bytes.NewBuffer(nil)
 			buf.WriteString(`{"name":"` + pkg.Name + `","version":"` + pkg.Version + `"`)
-			var denoJson *PackageJSON
+			var denoJson *npm.PackageJSON
 			if deonJsonPath := path.Join(installDir, "node_modules", pkg.Name, "deno.json"); existsFile(deonJsonPath) {
-				var raw PackageJSONRaw
+				var raw npm.PackageJSONRaw
 				if utils.ParseJSONFile(deonJsonPath, &raw) == nil {
 					denoJson = raw.ToNpmPackage()
 				}
 			} else if deonJsoncPath := path.Join(installDir, "node_modules", pkg.Name, "deno.jsonc"); existsFile(deonJsoncPath) {
 				data, err := os.ReadFile(deonJsoncPath)
 				if err == nil {
-					var raw PackageJSONRaw
-					if json.Unmarshal(StripJSONC(data), &raw) == nil {
+					var raw npm.PackageJSONRaw
+					if json.Unmarshal(jsonc.StripJSONC(data), &raw) == nil {
 						denoJson = raw.ToNpmPackage()
 					}
 				}
@@ -516,7 +315,7 @@ func (npmrc *NpmRC) installPackage(pkg common.Package) (packageJson *PackageJSON
 				}
 				if denoJson.Exports.Len() > 0 {
 					buf.WriteString(`,"exports":{`)
-					for _, k := range denoJson.Exports.keys {
+					for _, k := range denoJson.Exports.Keys() {
 						if v, ok := denoJson.Exports.Get(k); ok {
 							if s, ok := v.(string); ok {
 								buf.WriteString(`"` + k + `":"` + s + `",`)
@@ -560,7 +359,7 @@ func (npmrc *NpmRC) installPackage(pkg common.Package) (packageJson *PackageJSON
 	return
 }
 
-func (npmrc *NpmRC) installDependencies(wd string, pkgJson *PackageJSON, npmMode bool, mark *set.Set[string]) {
+func (npmrc *NpmRC) installDependencies(wd string, pkgJson *npm.PackageJSON, npmMode bool, mark *set.Set[string]) {
 	wg := sync.WaitGroup{}
 	dependencies := map[string]string{}
 	for name, version := range pkgJson.Dependencies {
@@ -579,8 +378,8 @@ func (npmrc *NpmRC) installDependencies(wd string, pkgJson *PackageJSON, npmMode
 		wg.Add(1)
 		go func(name, version string) {
 			defer wg.Done()
-			pkg := common.Package{Name: name, Version: version}
-			p, err := common.ResolveDependencyVersion(version)
+			pkg := npm.Package{Name: name, Version: version}
+			p, err := npm.ResolveDependencyVersion(version)
 			if err != nil {
 				return
 			}
@@ -591,7 +390,7 @@ func (npmrc *NpmRC) installDependencies(wd string, pkgJson *PackageJSON, npmMode
 				// skip installing `@types/*` packages
 				return
 			}
-			if !common.IsExactVersion(pkg.Version) && !pkg.Github && !pkg.PkgPrNew {
+			if !npm.IsExactVersion(pkg.Version) && !pkg.Github && !pkg.PkgPrNew {
 				p, e := npmrc.getPackageInfo(pkg.Name, pkg.Version)
 				if e != nil {
 					return
@@ -734,55 +533,5 @@ func extractPackageTarball(installDir string, pkgName string, tarball io.Reader)
 		}
 	}
 
-	return nil
-}
-
-func normalizePackageVersion(version string) string {
-	// strip leading `=` or `v`
-	if strings.HasPrefix(version, "=") {
-		version = version[1:]
-	} else if strings.HasPrefix(version, "v") && common.IsExactVersion(version[1:]) {
-		version = version[1:]
-	}
-	if version == "" || version == "*" {
-		return "latest"
-	}
-	return version
-}
-
-func isDistTag(s string) bool {
-	switch s {
-	case "latest", "next", "beta", "alpha", "canary", "rc", "experimental":
-		return true
-	default:
-		return false
-	}
-}
-
-// based on https://github.com/npm/validate-npm-package-name
-func validatePackageName(pkgName string) bool {
-	if l := len(pkgName); l == 0 || l > 214 {
-		return false
-	}
-	if strings.HasPrefix(pkgName, "@") {
-		scope, name := utils.SplitByFirstByte(pkgName, '/')
-		return npmNaming.Match(scope[1:]) && npmNaming.Match(name)
-	}
-	return npmNaming.Match(pkgName)
-}
-
-// added by @jimisaacs
-func toTypesPackageName(pkgName string) string {
-	if strings.HasPrefix(pkgName, "@") {
-		pkgName = strings.Replace(pkgName[1:], "/", "__", 1)
-	}
-	return "@types/" + pkgName
-}
-
-// toMap converts any value to a `map[string]any`
-func toMap(v any) map[string]any {
-	if m, ok := v.(map[string]any); ok {
-		return m
-	}
 	return nil
 }

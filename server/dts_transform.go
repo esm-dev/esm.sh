@@ -8,6 +8,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/esm-dev/esm.sh/internal/npm"
 	"github.com/esm-dev/esm.sh/server/storage"
 	"github.com/ije/gox/set"
 	"github.com/ije/gox/utils"
@@ -80,7 +81,7 @@ func transformDTS(ctx *BuildContext, dts string, buildArgsPrefix string, marker 
 			dtsDir := path.Dir(dtsFilename)
 			specifier = strings.TrimSuffix(specifier, ".d")
 			if !endsWith(specifier, ".d.ts", ".d.mts", ".d.cts") {
-				var p PackageJSONRaw
+				var p npm.PackageJSONRaw
 				var hasTypes bool
 				if utils.ParseJSONFile(path.Join(dtsDir, specifier, "package.json"), &p) == nil {
 					dir := path.Join("/", path.Dir(dts))
@@ -192,7 +193,7 @@ func transformDTS(ctx *BuildContext, dts string, buildArgsPrefix string, marker 
 			return specifier, nil
 		}
 
-		typesPkgName := toTypesPackageName(depPkgName)
+		typesPkgName := npm.ToTypesPackageName(depPkgName)
 		if _, ok := ctx.pkgJson.Dependencies[typesPkgName]; ok {
 			depPkgName = typesPkgName
 		} else if _, ok := ctx.pkgJson.PeerDependencies[typesPkgName]; ok {

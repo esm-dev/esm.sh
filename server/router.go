@@ -18,7 +18,10 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/esm-dev/esm.sh/server/common"
+	"github.com/esm-dev/esm.sh/internal/gfm"
+	"github.com/esm-dev/esm.sh/internal/importmap"
+	"github.com/esm-dev/esm.sh/internal/mime"
+	"github.com/esm-dev/esm.sh/internal/npm"
 	"github.com/esm-dev/esm.sh/server/storage"
 	esbuild "github.com/evanw/esbuild/pkg/api"
 	"github.com/goccy/go-json"
@@ -128,7 +131,7 @@ func esmRouter(db Database, buildStorage storage.Storage, logger *log.Logger) re
 					return output
 				}
 
-				importMap := common.ImportMap{Imports: map[string]string{}}
+				importMap := importmap.ImportMap{Imports: map[string]string{}}
 				if len(options.ImportMap) > 0 {
 					err = json.Unmarshal(options.ImportMap, &importMap)
 					if err != nil {
@@ -158,7 +161,7 @@ func esmRouter(db Database, buildStorage storage.Storage, logger *log.Logger) re
 				if packageName == "" {
 					return rex.Err(400, "param `package` is required")
 				}
-				if version != "" && !npmVersioning.Match(version) {
+				if version != "" && !npm.Versioning.Match(version) {
 					return rex.Err(400, "invalid version")
 				}
 				prefix := ""
@@ -264,7 +267,7 @@ func esmRouter(db Database, buildStorage storage.Storage, logger *log.Logger) re
 				readme = bytes.ReplaceAll(readme, []byte("./server/embed/"), []byte("/embed/"))
 				readme = bytes.ReplaceAll(readme, []byte("./HOSTING.md"), []byte("https://github.com/esm-dev/esm.sh/blob/main/HOSTING.md"))
 				readme = bytes.ReplaceAll(readme, []byte("https://esm.sh"), []byte(getOrigin(ctx)))
-				readmeHtml, err := common.RenderMarkdown(readme, common.MarkdownRenderKindHTML)
+				readmeHtml, err := gfm.RenderMarkdown(readme, gfm.MarkdownRenderKindHTML)
 				if err != nil {
 					err = errors.New("failed to render readme: " + err.Error())
 					return
@@ -490,7 +493,7 @@ func esmRouter(db Database, buildStorage storage.Storage, logger *log.Logger) re
 				ctx.SetHeader("Etag", etag)
 				ctx.SetHeader("Cache-Control", ccOneDay)
 			}
-			contentType := common.GetContentType(pathname)
+			contentType := mime.GetContentType(pathname)
 			if contentType != "" {
 				ctx.SetHeader("Content-Type", contentType)
 			}
@@ -557,7 +560,7 @@ func esmRouter(db Database, buildStorage storage.Storage, logger *log.Logger) re
 				target = "es2022"
 			}
 			v := query.Get("v")
-			if v != "" && (!npmVersioning.Match(v) || len(v) > 32) {
+			if v != "" && (!npm.Versioning.Match(v) || len(v) > 32) {
 				return rex.Status(400, "Invalid Version Param")
 			}
 			fetchClient, recycle := NewFetchClient(15, ctx.UserAgent(), false)
@@ -605,7 +608,7 @@ func esmRouter(db Database, buildStorage storage.Storage, logger *log.Logger) re
 				tokenizer := html.NewTokenizer(io.LimitReader(res.Body, 5*MB))
 				content := []string{}
 				jsEntries := map[string]struct{}{}
-				importMap := common.ImportMap{}
+				importMap := importmap.ImportMap{}
 				for {
 					tt := tokenizer.Next()
 					if tt == html.ErrorToken {
@@ -731,7 +734,7 @@ func esmRouter(db Database, buildStorage storage.Storage, logger *log.Logger) re
 				}
 				var body io.Reader = content
 				if err == storage.ErrNotFound {
-					importMap := common.ImportMap{}
+					importMap := importmap.ImportMap{}
 					if len(im) > 0 {
 						imPath, err := atobUrl(im)
 						if err != nil {
@@ -1181,7 +1184,7 @@ func esmRouter(db Database, buildStorage storage.Storage, logger *log.Logger) re
 				} else if strings.HasSuffix(esm.SubPath, ".jsx") {
 					ctx.SetHeader("Content-Type", "text/jsx; charset=utf-8")
 				} else {
-					contentType := common.GetContentType(esm.SubPath)
+					contentType := mime.GetContentType(esm.SubPath)
 					if contentType != "" {
 						ctx.SetHeader("Content-Type", contentType)
 					}

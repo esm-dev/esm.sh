@@ -13,7 +13,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/esm-dev/esm.sh/server/common"
+	"github.com/esm-dev/esm.sh/internal/npm"
 	"github.com/esm-dev/esm.sh/server/npm_replacements"
 	"github.com/esm-dev/esm.sh/server/storage"
 	esbuild "github.com/evanw/esbuild/pkg/api"
@@ -43,7 +43,7 @@ type BuildContext struct {
 	target      string
 	dev         bool
 	wd          string
-	pkgJson     *PackageJSON
+	pkgJson     *npm.PackageJSON
 	path        string
 	rawPath     string
 	status      string
@@ -635,14 +635,14 @@ func (ctx *BuildContext) buildModule(analyzeMode bool) (meta *BuildMeta, include
 
 							// split modules based on the `exports` field of package.json
 							if exports := pkgJson.Exports; exports.Len() > 0 {
-								for _, exportName := range exports.keys {
-									v := exports.values[exportName]
+								for _, exportName := range exports.Keys() {
+									v, _ := exports.Get(exportName)
 									if exportName == "." || (strings.HasPrefix(exportName, "./") && !strings.ContainsRune(exportName, '*')) {
 										match := false
 										if s, ok := v.(string); ok && stripModuleExt(s) == stripModuleExt(modulePath) {
 											// exports: "./foo": "./foo.js"
 											match = true
-										} else if m, ok := v.(JSONObject); ok {
+										} else if m, ok := v.(npm.JSONObject); ok {
 											// exports: "./foo": { "import": "./foo.js" }
 											// exports: "./foo": { "import": { default: "./foo.js" } }
 											// ...
@@ -791,9 +791,9 @@ func (ctx *BuildContext) buildModule(analyzeMode bool) (meta *BuildMeta, include
 						pkgName, _, subPath, _ := splitEsmPath(specifier)
 						if pkgName == ctx.esmPath.PkgName {
 							version = ctx.esmPath.PkgVersion
-						} else if v, ok := pkgJson.Dependencies[pkgName]; ok && common.IsExactVersion(v) {
+						} else if v, ok := pkgJson.Dependencies[pkgName]; ok && npm.IsExactVersion(v) {
 							version = v
-						} else if v, ok := pkgJson.PeerDependencies[pkgName]; ok && common.IsExactVersion(v) {
+						} else if v, ok := pkgJson.PeerDependencies[pkgName]; ok && npm.IsExactVersion(v) {
 							version = v
 						}
 						p := pkgName
@@ -919,7 +919,7 @@ func (ctx *BuildContext) buildModule(analyzeMode bool) (meta *BuildMeta, include
 					} else if version, ok := ctx.pkgJson.PeerDependencies["svelte"]; ok {
 						svelteVersion = version
 					}
-					if !common.IsExactVersion(svelteVersion) {
+					if !npm.IsExactVersion(svelteVersion) {
 						info, err := ctx.npmrc.getPackageInfo("svelte", svelteVersion)
 						if err != nil {
 							return esbuild.OnLoadResult{}, errors.New("failed to get svelte package info")
@@ -953,7 +953,7 @@ func (ctx *BuildContext) buildModule(analyzeMode bool) (meta *BuildMeta, include
 					} else if version, ok := ctx.pkgJson.PeerDependencies["vue"]; ok {
 						vueVersion = version
 					}
-					if !common.IsExactVersion(vueVersion) {
+					if !npm.IsExactVersion(vueVersion) {
 						info, err := ctx.npmrc.getPackageInfo("vue", vueVersion)
 						if err != nil {
 							return esbuild.OnLoadResult{}, errors.New("failed to get vue package info")
@@ -1481,7 +1481,7 @@ func (ctx *BuildContext) install() (err error) {
 					if s, ok := v.(string); ok {
 						// exports: { ".": "./index.js" }
 						isMainModule = check(s)
-					} else if obj, ok := v.(JSONObject); ok {
+					} else if obj, ok := v.(npm.JSONObject); ok {
 						// exports: { ".": { "require": "./cjs/index.js", "import": "./esm/index.js" } }
 						// exports: { ".": { "node": { "require": "./cjs/index.js", "import": "./esm/index.js" } } }
 						// ...
@@ -1516,10 +1516,10 @@ func (ctx *BuildContext) install() (err error) {
 		ctx.npmrc.installDependencies(ctx.wd, ctx.pkgJson, false, nil)
 	} else if ctx.bundleMode == BundleDefault {
 		if v, ok := ctx.pkgJson.Dependencies["@babel/runtime"]; ok {
-			ctx.npmrc.installDependencies(ctx.wd, &PackageJSON{Dependencies: map[string]string{"@babel/runtime": v}}, false, nil)
+			ctx.npmrc.installDependencies(ctx.wd, &npm.PackageJSON{Dependencies: map[string]string{"@babel/runtime": v}}, false, nil)
 		}
 		if v, ok := ctx.pkgJson.Dependencies["@swc/helpers"]; ok {
-			ctx.npmrc.installDependencies(ctx.wd, &PackageJSON{Dependencies: map[string]string{"@swc/helpers": v}}, false, nil)
+			ctx.npmrc.installDependencies(ctx.wd, &npm.PackageJSON{Dependencies: map[string]string{"@swc/helpers": v}}, false, nil)
 		}
 	}
 	return

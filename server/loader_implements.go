@@ -9,7 +9,9 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/esm-dev/esm.sh/server/common"
+	"github.com/esm-dev/esm.sh/internal/importmap"
+	"github.com/esm-dev/esm.sh/internal/jsruntime"
+	"github.com/esm-dev/esm.sh/internal/npm"
 	"github.com/ije/gox/term"
 )
 
@@ -37,7 +39,7 @@ func compileSvelteLoader(npmrc *NpmRC, svelteVersion string, loaderExecPath stri
 	wd := path.Join(npmrc.StoreDir(), "svelte@"+svelteVersion)
 
 	// install svelte
-	pkgJson, err := npmrc.installPackage(common.Package{Name: "svelte", Version: svelteVersion})
+	pkgJson, err := npmrc.installPackage(npm.Package{Name: "svelte", Version: svelteVersion})
 	if err != nil {
 		return
 	}
@@ -62,7 +64,7 @@ func compileSvelteLoader(npmrc *NpmRC, svelteVersion string, loaderExecPath stri
 	return
 }
 
-func resolveSvelteVersion(npmrc *NpmRC, importMap common.ImportMap) (svelteVersion string, err error) {
+func resolveSvelteVersion(npmrc *NpmRC, importMap importmap.ImportMap) (svelteVersion string, err error) {
 	svelteVersion = "5"
 	if len(importMap.Imports) > 0 {
 		svelteUrl, ok := importMap.Imports["svelte"]
@@ -76,8 +78,8 @@ func resolveSvelteVersion(npmrc *NpmRC, importMap common.ImportMap) (svelteVersi
 			}
 		}
 	}
-	if !common.IsExactVersion(svelteVersion) {
-		var info *PackageJSON
+	if !npm.IsExactVersion(svelteVersion) {
+		var info *npm.PackageJSON
 		info, err = npmrc.getPackageInfo("svelte", svelteVersion)
 		if err != nil {
 			return
@@ -115,12 +117,12 @@ func compileVueLoader(npmrc *NpmRC, vueVersion string, loaderVersion, loaderExec
 	wd := path.Join(npmrc.StoreDir(), "@vue/compiler-sfc@"+vueVersion)
 
 	// install vue sfc compiler
-	pkgJson, err := npmrc.installPackage(common.Package{Name: "@vue/compiler-sfc", Version: vueVersion})
+	pkgJson, err := npmrc.installPackage(npm.Package{Name: "@vue/compiler-sfc", Version: vueVersion})
 	if err != nil {
 		return
 	}
 	npmrc.installDependencies(wd, pkgJson, false, nil)
-	npmrc.installDependencies(wd, &PackageJSON{Dependencies: map[string]string{"@esm.sh/vue-compiler": loaderVersion}}, false, nil)
+	npmrc.installDependencies(wd, &npm.PackageJSON{Dependencies: map[string]string{"@esm.sh/vue-compiler": loaderVersion}}, false, nil)
 
 	loaderJS := `
 	  import * as vueCompilerSFC from "@vue/compiler-sfc";
@@ -142,7 +144,7 @@ func compileVueLoader(npmrc *NpmRC, vueVersion string, loaderVersion, loaderExec
 	return
 }
 
-func resolveVueVersion(npmrc *NpmRC, importMap common.ImportMap) (vueVersion string, err error) {
+func resolveVueVersion(npmrc *NpmRC, importMap importmap.ImportMap) (vueVersion string, err error) {
 	vueVersion = "3"
 	if len(importMap.Imports) > 0 {
 		vueUrl, ok := importMap.Imports["vue"]
@@ -156,8 +158,8 @@ func resolveVueVersion(npmrc *NpmRC, importMap common.ImportMap) (vueVersion str
 			}
 		}
 	}
-	if !common.IsExactVersion(vueVersion) {
-		var info *PackageJSON
+	if !npm.IsExactVersion(vueVersion) {
+		var info *npm.PackageJSON
 		info, err = npmrc.getPackageInfo("vue", vueVersion)
 		if err != nil {
 			return
@@ -209,7 +211,7 @@ func compileUnocssLoader(npmrc *NpmRC, loaderVersion string, loaderExecPath stri
 	wd := path.Join(npmrc.StoreDir(), "@esm.sh/unocss@"+loaderVersion)
 
 	// install @esm.sh/unocss
-	pkgJson, err := npmrc.installPackage(common.Package{Name: "@esm.sh/unocss", Version: loaderVersion})
+	pkgJson, err := npmrc.installPackage(npm.Package{Name: "@esm.sh/unocss", Version: loaderVersion})
 	if err != nil {
 		return
 	}
@@ -264,7 +266,7 @@ func compileUnocssLoader(npmrc *NpmRC, loaderVersion string, loaderExecPath stri
 	}
 
 	err = doOnce("check-deno", func() (err error) {
-		_, err = common.GetDenoPath(config.WorkDir)
+		_, err = jsruntime.GetDenoPath(config.WorkDir)
 		return err
 	})
 	if err != nil {

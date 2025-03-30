@@ -1,4 +1,4 @@
-package common
+package npm
 
 import (
 	"errors"
@@ -6,7 +6,26 @@ import (
 	"strings"
 
 	"github.com/ije/gox/utils"
+	"github.com/ije/gox/valid"
 )
+
+var (
+	Naming     = valid.Validator{valid.Range{'a', 'z'}, valid.Range{'A', 'Z'}, valid.Range{'0', '9'}, valid.Eq('_'), valid.Eq('.'), valid.Eq('-'), valid.Eq('+'), valid.Eq('$'), valid.Eq('!')}
+	Versioning = valid.Validator{valid.Range{'a', 'z'}, valid.Range{'A', 'Z'}, valid.Range{'0', '9'}, valid.Eq('_'), valid.Eq('.'), valid.Eq('-'), valid.Eq('+')}
+)
+
+// ValidatePackageName validates the package name.
+// based on https://github.com/npm/validate-npm-package-name
+func ValidatePackageName(pkgName string) bool {
+	if l := len(pkgName); l == 0 || l > 214 {
+		return false
+	}
+	if strings.HasPrefix(pkgName, "@") {
+		scope, name := utils.SplitByFirstByte(pkgName, '/')
+		return Naming.Match(scope[1:]) && Naming.Match(name)
+	}
+	return Naming.Match(pkgName)
+}
 
 type Package struct {
 	Name     string
@@ -122,6 +141,17 @@ func splitPackageVersion(v string) (string, string) {
 	return v, ""
 }
 
+// IsDistTag returns true if the given version is a distribution tag.
+// https://docs.npmjs.com/cli/v9/commands/npm-dist-tag
+func IsDistTag(s string) bool {
+	switch s {
+	case "latest", "next", "beta", "alpha", "canary", "rc", "experimental":
+		return true
+	default:
+		return false
+	}
+}
+
 // IsExactVersion returns true if the given version is an exact version.
 func IsExactVersion(version string) bool {
 	a := strings.SplitN(version, ".", 3)
@@ -162,4 +192,28 @@ func isNumericString(s string) bool {
 		}
 	}
 	return true
+}
+
+// NormalizePackageVersion normalizes the package version.
+// It removes the leading `=` or `v` and returns "latest" for empty or "*" versions.
+func NormalizePackageVersion(version string) string {
+	// strip leading `=` or `v`
+	if strings.HasPrefix(version, "=") {
+		version = version[1:]
+	} else if strings.HasPrefix(version, "v") && IsExactVersion(version[1:]) {
+		version = version[1:]
+	}
+	if version == "" || version == "*" {
+		return "latest"
+	}
+	return version
+}
+
+// ToTypesPackageName converts a package name to a types package name.
+// If the package name is scoped, it returns "@types/@scope__name".
+func ToTypesPackageName(pkgName string) string {
+	if strings.HasPrefix(pkgName, "@") {
+		pkgName = strings.Replace(pkgName[1:], "/", "__", 1)
+	}
+	return "@types/" + pkgName
 }

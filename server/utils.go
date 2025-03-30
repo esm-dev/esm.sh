@@ -203,3 +203,11 @@ func concatBytes(a, b []byte) []byte {
 	copy(c[al:], b)
 	return c
 }
+
+// toMap converts any value to a `map[string]any`
+func toMap(v any) map[string]any {
+	if m, ok := v.(map[string]any); ok {
+		return m
+	}
+	return nil
+}

@@ -12,7 +12,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/esm-dev/esm.sh/server/common"
+	"github.com/esm-dev/esm.sh/internal/jsruntime"
 	"github.com/goccy/go-json"
 	"github.com/ije/gox/term"
 	"github.com/ije/gox/utils"
@@ -38,7 +38,7 @@ func (l *LoaderWorker) Start(wd string, loaderJS []byte) (err error) {
 		return
 	}
 
-	denoPath, err := common.GetDenoPath("")
+	denoPath, err := jsruntime.GetDenoPath("")
 	if err != nil {
 		err = errors.New("deno not found, please install deno first")
 		return

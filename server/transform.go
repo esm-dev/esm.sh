@@ -8,7 +8,8 @@ import (
 	"path"
 	"strings"
 
-	"github.com/esm-dev/esm.sh/server/common"
+	"github.com/esm-dev/esm.sh/internal/gfm"
+	"github.com/esm-dev/esm.sh/internal/importmap"
 	esbuild "github.com/evanw/esbuild/pkg/api"
 	"github.com/goccy/go-json"
 	"github.com/ije/gox/utils"
@@ -27,7 +28,7 @@ type TransformOptions struct {
 
 type ResolvedTransformOptions struct {
 	TransformOptions
-	importMap     common.ImportMap
+	importMap     importmap.ImportMap
 	globalVersion string
 }
 
@@ -149,7 +150,7 @@ func transform(options *ResolvedTransformOptions) (out *TransformOutput, err err
 }
 
 // bundleHttpModule bundles the http module and it's submodules.
-func bundleHttpModule(npmrc *NpmRC, entry string, importMap common.ImportMap, collectDependencies bool, fetchClient *FetchClient) (js []byte, jsx bool, css []byte, dependencyTree map[string][]byte, err error) {
+func bundleHttpModule(npmrc *NpmRC, entry string, importMap importmap.ImportMap, collectDependencies bool, fetchClient *FetchClient) (js []byte, jsx bool, css []byte, dependencyTree map[string][]byte, err error) {
 	if !isHttpSepcifier(entry) {
 		err = errors.New("require a http module")
 		return
@@ -268,7 +269,7 @@ func bundleHttpModule(npmrc *NpmRC, entry string, importMap common.ImportMap, co
 						case ".md":
 							query := url.Query()
 							if query.Has("jsx") {
-								jsxCode, err := common.RenderMarkdown([]byte(code), common.MarkdownRenderKindJSX)
+								jsxCode, err := gfm.RenderMarkdown([]byte(code), gfm.MarkdownRenderKindJSX)
 								if err != nil {
 									return esbuild.OnLoadResult{}, err
 								}
@@ -276,7 +277,7 @@ func bundleHttpModule(npmrc *NpmRC, entry string, importMap common.ImportMap, co
 								loader = esbuild.LoaderJSX
 								jsx = true
 							} else if query.Has("svelte") {
-								svelteCode, err := common.RenderMarkdown([]byte(code), common.MarkdownRenderKindSvelte)
+								svelteCode, err := gfm.RenderMarkdown([]byte(code), gfm.MarkdownRenderKindSvelte)
 								if err != nil {
 									return esbuild.OnLoadResult{}, err
 								}
@@ -290,7 +291,7 @@ func bundleHttpModule(npmrc *NpmRC, entry string, importMap common.ImportMap, co
 								}
 								code = ret.Code
 							} else if query.Has("vue") {
-								vueCode, err := common.RenderMarkdown([]byte(code), common.MarkdownRenderKindVue)
+								vueCode, err := gfm.RenderMarkdown([]byte(code), gfm.MarkdownRenderKindVue)
 								if err != nil {
 									return esbuild.OnLoadResult{}, err
 								}
@@ -304,7 +305,7 @@ func bundleHttpModule(npmrc *NpmRC, entry string, importMap common.ImportMap, co
 								}
 								code = ret.Code
 							} else {
-								js, err := common.RenderMarkdown([]byte(code), common.MarkdownRenderKindJS)
+								js, err := gfm.RenderMarkdown([]byte(code), gfm.MarkdownRenderKindJS)
 								if err != nil {
 									return esbuild.OnLoadResult{}, err
 								}

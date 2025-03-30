@@ -16,7 +16,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/esm-dev/esm.sh/server/common"
+	"github.com/esm-dev/esm.sh/internal/gfm"
+	"github.com/esm-dev/esm.sh/internal/importmap"
+	"github.com/esm-dev/esm.sh/internal/mime"
 	esbuild "github.com/evanw/esbuild/pkg/api"
 	"github.com/goccy/go-json"
 	"github.com/gorilla/websocket"
@@ -154,28 +156,28 @@ func (s *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 					return
 				}
 				if query.Has("jsx") {
-					jsxCode, err := common.RenderMarkdown(markdown, common.MarkdownRenderKindJSX)
+					jsxCode, err := gfm.RenderMarkdown(markdown, gfm.MarkdownRenderKindJSX)
 					if err != nil {
 						http.Error(w, "Failed to render markdown to jsx", 500)
 						return
 					}
 					s.ServeModule(w, r, pathname+"?jsx", jsxCode)
 				} else if query.Has("svelte") {
-					svelteCode, err := common.RenderMarkdown(markdown, common.MarkdownRenderKindSvelte)
+					svelteCode, err := gfm.RenderMarkdown(markdown, gfm.MarkdownRenderKindSvelte)
 					if err != nil {
 						http.Error(w, "Failed to render markdown to svelte component", 500)
 						return
 					}
 					s.ServeModule(w, r, pathname+"?svelte", svelteCode)
 				} else if query.Has("vue") {
-					vueCode, err := common.RenderMarkdown(markdown, common.MarkdownRenderKindVue)
+					vueCode, err := gfm.RenderMarkdown(markdown, gfm.MarkdownRenderKindVue)
 					if err != nil {
 						http.Error(w, "Failed to render markdown to vue component", 500)
 						return
 					}
 					s.ServeModule(w, r, pathname+"?vue", vueCode)
 				} else {
-					js, err := common.RenderMarkdown(markdown, common.MarkdownRenderKindJS)
+					js, err := gfm.RenderMarkdown(markdown, gfm.MarkdownRenderKindJS)
 					if err != nil {
 						http.Error(w, "Failed to render markdown", 500)
 						return
@@ -212,7 +214,7 @@ func (s *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 			defer file.Close()
-			contentType := common.GetContentType(filename)
+			contentType := mime.GetContentType(filename)
 			if contentType == "" {
 				contentType = "application/octet-stream"
 			}
@@ -433,7 +435,7 @@ func (s *Handler) ServeModule(w http.ResponseWriter, r *http.Request, pathname s
 	defer imHtmlFile.Close()
 
 	var importMapRaw []byte
-	var importMap common.ImportMap
+	var importMap importmap.ImportMap
 	tokenizer := html.NewTokenizer(imHtmlFile)
 	for {
 		tt := tokenizer.Next()
@@ -606,7 +608,7 @@ func (s *Handler) ServeUnoCSS(w http.ResponseWriter, r *http.Request) {
 
 	contents := [][]byte{}
 	jsEntries := map[string]struct{}{}
-	importMap := common.ImportMap{}
+	importMap := importmap.ImportMap{}
 	tokenizer := html.NewTokenizer(imHtmlFile)
 	for {
 		tt := tokenizer.Next()
@@ -808,7 +810,7 @@ func (s *Handler) ServeHmrWS(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func (s *Handler) analyzeDependencyTree(entry string, importMap common.ImportMap) (tree map[string][]byte, err error) {
+func (s *Handler) analyzeDependencyTree(entry string, importMap importmap.ImportMap) (tree map[string][]byte, err error) {
 	tree = make(map[string][]byte)
 	ret := esbuild.Build(esbuild.BuildOptions{
 		EntryPoints:      []string{entry},

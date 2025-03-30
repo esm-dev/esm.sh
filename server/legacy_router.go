@@ -11,7 +11,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/esm-dev/esm.sh/server/common"
+	"github.com/esm-dev/esm.sh/internal/npm"
 	"github.com/esm-dev/esm.sh/server/storage"
 	"github.com/goccy/go-json"
 	"github.com/ije/esbuild-internal/xxhash"
@@ -132,7 +132,7 @@ func legacyESM(ctx *rex.Context, buildStorage storage.Storage, buildVersionPrefi
 			asteriskFlag = true
 			pkgName = pkgName[1:]
 		}
-		if !validatePackageName(pkgName) {
+		if !npm.ValidatePackageName(pkgName) {
 			return rex.Status(400, "Invalid Package Name")
 		}
 		var extraQuery string
@@ -142,7 +142,7 @@ func legacyESM(ctx *rex.Context, buildStorage storage.Storage, buildVersionPrefi
 				pkgVersion = v
 			}
 		}
-		if !common.IsExactVersion(pkgVersion) {
+		if !npm.IsExactVersion(pkgVersion) {
 			npmrc := DefaultNpmRC()
 			pkgInfo, err := npmrc.getPackageInfo(pkgName, pkgVersion)
 			if err != nil {
